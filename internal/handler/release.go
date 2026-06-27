@@ -252,3 +252,112 @@ func (h *ReleaseHandler) GetRelease(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
+
+func (h *ReleaseHandler) RefreshRelease(w http.ResponseWriter, r *http.Request) {
+	projectID, err := parseProjectID(r)
+	if err != nil {
+		http.Error(w, "Invalid project ID", http.StatusBadRequest)
+		return
+	}
+
+	releaseIDStr := chi.URLParam(r, "releaseId")
+	releaseID, err := strconv.ParseInt(releaseIDStr, 10, 64)
+	if err != nil {
+		http.Error(w, "Invalid release ID", http.StatusBadRequest)
+		return
+	}
+
+	// Verify release exists and belongs to project
+	release, err := h.repo.Queries.GetRelease(r.Context(), releaseID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			http.Error(w, "Release not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if release.ProjectID != projectID {
+		http.Error(w, "Release not found", http.StatusNotFound)
+		return
+	}
+
+	// Fetch current steps and serialize
+	steps, err := h.repo.Queries.ListStepsByProject(r.Context(), projectID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	type stepSnapshot struct {
+		Name       string `json:"name"`
+		ScriptBody string `json:"script_body"`
+		SortOrder  int64  `json:"sort_order"`
+	}
+	snapshots := make([]stepSnapshot, len(steps))
+	for i, step := range steps {
+		snapshots[i] = stepSnapshot{
+			Name:       step.Name,
+			ScriptBody: step.ScriptBody,
+			SortOrder:  step.SortOrder,
+		}
+	}
+	stepsJSON, err := json.Marshal(snapshots)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Start transaction
+	tx, err := h.repo.DB.BeginTx(r.Context(), nil)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
+
+	qtx := h.repo.Queries.WithTx(tx)
+
+	// Update steps_json
+	if _, err := qtx.UpdateRelease(r.Context(), db.UpdateReleaseParams{
+		ID:         releaseID,
+		ProjectID:  projectID,
+		Version:    release.Version,
+		StepsJson:  string(stepsJSON),
+	}); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Delete existing release variables
+	if err := qtx.DeleteReleaseVariablesByRelease(r.Context(), releaseID); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Re-insert current variables
+	variables, err := h.repo.Queries.ListVariablesByProject(r.Context(), projectID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	for _, v := range variables {
+		if _, err := qtx.CreateReleaseVariable(r.Context(), db.CreateReleaseVariableParams{
+			ReleaseID:     releaseID,
+			Name:          v.Name,
+			Value:         v.Value,
+			EnvironmentID: v.EnvironmentID,
+		}); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	http.Redirect(w, r, fmt.Sprintf("/projects/%d/releases/%d", projectID, releaseID), http.StatusSeeOther)
+}

@@ -81,6 +81,7 @@ func NewRouter(repo *repository.Repository, rnr *runner.DeploymentRunner) *chi.M
 	r.Get("/projects/{id}/releases", rh.ListReleases)
 	r.Post("/projects/{id}/releases", rh.CreateRelease)
 	r.Get("/projects/{id}/releases/{releaseId}", rh.GetRelease)
+	r.Post("/projects/{id}/releases/{releaseId}/refresh", rh.RefreshRelease)
 
 	dh := handler.NewDeploymentHandler(repo, rnr)
 	r.Get("/deployments", dh.ListDeployments)

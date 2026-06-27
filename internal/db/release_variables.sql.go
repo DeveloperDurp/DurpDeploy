@@ -49,6 +49,15 @@ func (q *Queries) DeleteReleaseVariable(ctx context.Context, id int64) error {
 	return err
 }
 
+const deleteReleaseVariablesByRelease = `-- name: DeleteReleaseVariablesByRelease :exec
+DELETE FROM release_variables WHERE release_id = ?
+`
+
+func (q *Queries) DeleteReleaseVariablesByRelease(ctx context.Context, releaseID int64) error {
+	_, err := q.db.ExecContext(ctx, deleteReleaseVariablesByRelease, releaseID)
+	return err
+}
+
 const getReleaseVariable = `-- name: GetReleaseVariable :one
 SELECT id, release_id, name, value, environment_id, created_at FROM release_variables WHERE id = ?
 `

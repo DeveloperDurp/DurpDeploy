@@ -12,3 +12,6 @@ UPDATE release_variables SET release_id = ?, name = ?, value = ?, environment_id
 
 -- name: DeleteReleaseVariable :exec
 DELETE FROM release_variables WHERE id = ?;
+
+-- name: DeleteReleaseVariablesByRelease :exec
+DELETE FROM release_variables WHERE release_id = ?;
