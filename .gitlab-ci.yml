@@ -1,0 +1,38 @@
+image: golang:1.25-alpine
+
+stages:
+  - lint
+  - test
+  - build
+
+lint:
+  stage: lint
+  before_script:
+    - go install github.com/a-h/templ/cmd/templ@latest
+    - templ generate
+  script:
+    - go vet ./...
+    - test -z "$(gofmt -l .)"
+  allow_failure: false
+
+test:
+  stage: test
+  before_script:
+    - go install github.com/a-h/templ/cmd/templ@latest
+    - templ generate
+  script:
+    - go test -v -count=1 ./...
+  coverage: '/\d+\.\d+% of statements/'
+
+build:
+  stage: build
+  before_script:
+    - go install github.com/a-h/templ/cmd/templ@latest
+    - templ generate
+  script:
+    - go build -o durpdeploy ./cmd/server
+  artifacts:
+    paths:
+      - durpdeploy
+    expire_in: 1 week
+  needs: ["lint", "test"]
