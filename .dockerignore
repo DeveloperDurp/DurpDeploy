@@ -1,0 +1,35 @@
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+*.exe
+*.dll
+*.so
+*.dylib
+durpdeploy
+
+# Test files
+*_test.go
+**/*_test.go
+
+# Documentation
+*.md
+LICENSE
+
+# Screenshots
+screenshots/
+
+# Local database
+*.db
+*.db-*
