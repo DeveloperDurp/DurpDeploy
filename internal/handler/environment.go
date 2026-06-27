@@ -79,7 +79,7 @@ func (h *EnvironmentHandler) CreateEnvironment(w http.ResponseWriter, r *http.Re
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		pages.EnvironmentsList(envs, r.URL.Path).Render(r.Context(), w)
+		pages.EnvironmentsListContent(envs).Render(r.Context(), w)
 	} else {
 		http.Redirect(w, r, "/environments", http.StatusSeeOther)
 	}
@@ -156,7 +156,7 @@ func (h *EnvironmentHandler) UpdateEnvironment(w http.ResponseWriter, r *http.Re
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		pages.EnvironmentsList(envs, r.URL.Path).Render(r.Context(), w)
+		pages.EnvironmentsListContent(envs).Render(r.Context(), w)
 	} else {
 		http.Redirect(w, r, "/environments", http.StatusSeeOther)
 	}

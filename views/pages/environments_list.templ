@@ -18,7 +18,7 @@ templ EnvironmentsList(envs []db.Environment, currentPath string) {
 }
 
 templ EnvironmentsListContent(envs []db.Environment) {
-	<div class="space-y-4">
+	<div id="environments-content" class="space-y-4">
 		<div class="flex justify-between items-center">
 			<h1 class="text-3xl font-bold">Environments</h1>
 			<a href="/environments/new" class="btn btn-primary">New Environment</a>

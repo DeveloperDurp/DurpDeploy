@@ -31,7 +31,7 @@ templ EnvironmentFormContent(env *db.Environment, isNew bool, errorMsg string) {
 			} else {
 				hx-put={ "/environments/" + strconv.FormatInt(env.ID, 10) }
 			}
-			hx-target="#form-container"
+			hx-target="#environments-content"
 			class="space-y-4"
 		>
 			<div class="form-control">
