@@ -3,7 +3,7 @@
 BINARY_NAME=durpdeploy
 MAIN_PATH=cmd/server/main.go
 
-build: templ-generate
+build: templ-generate tailwind-build
 	go build -o $(BINARY_NAME) $(MAIN_PATH)
 
 dev:
@@ -15,7 +15,7 @@ templ-generate:
 	templ generate
 
 tailwind-build:
-	@echo "Tailwind CSS build not yet configured. Using CDN for development."
+	npx tailwindcss -i static/css/input.css -o static/css/tailwind.min.css --minify
 
 clean:
 	rm -f $(BINARY_NAME)
