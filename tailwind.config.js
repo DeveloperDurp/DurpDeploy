@@ -41,6 +41,7 @@ module.exports = {
   ],
   daisyui: {
     themes: [
+      "light",
       {
         mocha: {
           "primary": "#89b4fa",      // blue

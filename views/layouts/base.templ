@@ -15,27 +15,33 @@ func activeClass(currentPath, prefix string) string {
 
 templ Base(title string, currentPath string) {
 	<!DOCTYPE html>
-	<html lang="en" data-theme="mocha">
+	<html lang="en">
 		<head>
 			<meta charset="UTF-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 			<title>{ title }</title>
 			<link rel="stylesheet" href="/static/css/tailwind.min.css"/>
+			<style>[data-theme="mocha"] .theme-light{display:none}[data-theme="light"] .theme-dark{display:none}</style>
+			<script>document.documentElement.setAttribute('data-theme',localStorage.getItem('theme')||'mocha')</script>
 			<script src="/static/js/htmx.min.js" defer></script>
 			<script src="/static/js/alpine.min.js" defer></script>
 		</head>
 		<body class="bg-base-100 text-base-content min-h-screen">
-			<div class="navbar bg-base-200 border-b border-base-300">
+			<div class="navbar bg-base-200 border-b border-base-300" x-data="{ theme: localStorage.getItem('theme') || 'mocha' }" x-init="document.documentElement.setAttribute('data-theme', theme); $watch('theme', val => { document.documentElement.setAttribute('data-theme', val); localStorage.setItem('theme', val) })">
 				<div class="container mx-auto">
 					<div class="flex-1">
 						<a href="/" class="btn btn-ghost text-xl">DurpDeploy</a>
 					</div>
-					<div class="flex-none">
+					<div class="flex-none flex items-center gap-2">
 						<ul class="menu menu-horizontal px-1">
 							<li><a href="/projects" class={ activeClass(currentPath, "/projects") }>Projects</a></li>
 							<li><a href="/environments" class={ activeClass(currentPath, "/environments") }>Environments</a></li>
 							<li><a href="/deployments" class={ activeClass(currentPath, "/deployments") }>Deployments</a></li>
 						</ul>
+						<button class="btn btn-ghost btn-sm" @click="theme = theme === 'mocha' ? 'light' : 'mocha'">
+							<span class="theme-dark">☀️</span>
+							<span class="theme-light">🌙</span>
+						</button>
 					</div>
 				</div>
 			</div>
