@@ -49,6 +49,8 @@ templ ProjectsList(projects []db.Project) {
 										hx-target="#projects-list"
 										hx-swap="outerHTML"
 										hx-confirm="Delete this project?"
+										data-toast-success="Project deleted"
+										data-toast-error="Failed to delete project"
 									>
 										Delete
 									</button>

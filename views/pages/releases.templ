@@ -66,6 +66,8 @@ templ ReleaseForm(projectID int64, errorMsg string) {
 			hx-post={ fmt.Sprintf("/projects/%d/releases", projectID) }
 			hx-target="#releases-content"
 			hx-swap="outerHTML"
+			data-toast-success="Release created"
+			data-toast-error="Failed to create release"
 			class="flex flex-wrap gap-4 items-end"
 		>
 			<div class="form-control flex-1 min-w-[200px]">

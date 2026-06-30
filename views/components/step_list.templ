@@ -74,15 +74,24 @@ templ StepRow(step db.Step, projectID int64, isFirst bool, isLast bool) {
 			>
 				Edit
 			</button>
-			<button
-				class="btn btn-xs btn-error"
-				hx-delete={ fmt.Sprintf("/projects/%d/steps/%d", projectID, step.ID) }
-				hx-target="#step-list"
-				hx-swap="innerHTML"
-				hx-confirm="Delete this step?"
-			>
-				Delete
-			</button>
+		<button
+			class="btn btn-xs btn-outline"
+			hx-post={ fmt.Sprintf("/projects/%d/steps/%d/save-as-template", projectID, step.ID) }
+			hx-target="#step-list"
+			hx-swap="innerHTML"
+			hx-confirm="Save this step as template?"
+		>
+			Save as Template
+		</button>
+		<button
+			class="btn btn-xs btn-error"
+			hx-delete={ fmt.Sprintf("/projects/%d/steps/%d", projectID, step.ID) }
+			hx-target="#step-list"
+			hx-swap="innerHTML"
+			hx-confirm="Delete this step?"
+		>
+			Delete
+		</button>
 		</td>
 	</tr>
 }

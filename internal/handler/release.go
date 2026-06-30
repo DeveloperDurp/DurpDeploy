@@ -320,10 +320,10 @@ func (h *ReleaseHandler) RefreshRelease(w http.ResponseWriter, r *http.Request) 
 
 	// Update steps_json
 	if _, err := qtx.UpdateRelease(r.Context(), db.UpdateReleaseParams{
-		ID:         releaseID,
-		ProjectID:  projectID,
-		Version:    release.Version,
-		StepsJson:  string(stepsJSON),
+		ID:        releaseID,
+		ProjectID: projectID,
+		Version:   release.Version,
+		StepsJson: string(stepsJSON),
 	}); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

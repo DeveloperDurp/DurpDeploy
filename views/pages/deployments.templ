@@ -148,6 +148,8 @@ templ DeploymentDetail(project db.Project, release db.Release, environment db.En
 						hx-post={ fmt.Sprintf("/deployments/%d/cancel", deployment.ID) }
 						hx-target="#status-badge"
 						hx-swap="outerHTML"
+						data-toast-success="Deployment cancelled"
+						data-toast-error="Failed to cancel deployment"
 					>
 						Cancel
 					</button>

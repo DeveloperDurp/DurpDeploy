@@ -2,6 +2,7 @@
 module.exports = {
   content: [
     "./views/**/*.templ",
+    "./static/js/**/*.js",
   ],
   theme: {
     extend: {

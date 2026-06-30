@@ -33,6 +33,8 @@ templ EnvironmentFormContent(env *db.Environment, isNew bool, errorMsg string) {
 				hx-put={ "/environments/" + strconv.FormatInt(env.ID, 10) }
 				hx-target="#form-container"
 				hx-swap="innerHTML"
+				data-toast-success="Environment updated"
+				data-toast-error="Failed to update environment"
 			}
 			class="space-y-4"
 		>

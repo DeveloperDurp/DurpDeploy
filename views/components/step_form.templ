@@ -18,7 +18,11 @@ templ StepForm(step db.Step, projectID int64, isNew bool, errorMsg string) {
 			hx-swap="innerHTML"
 			if isNew {
 				hx-on::after-request="if(event.detail.successful) this.reset()"
+				data-toast-success="Step added"
+			} else {
+				data-toast-success="Step updated"
 			}
+			data-toast-error="Failed to save step"
 			class="space-y-4"
 		>
 			<div class="form-control">
@@ -62,6 +66,8 @@ templ StepEditRow(step db.Step, projectID int64, errorMsg string) {
 				hx-put={ fmt.Sprintf("/projects/%d/steps/%d", projectID, step.ID) }
 				hx-target="#step-list"
 				hx-swap="innerHTML"
+				data-toast-success="Step updated"
+				data-toast-error="Failed to update step"
 				class="flex gap-4 items-end"
 			>
 				<div class="form-control flex-1">

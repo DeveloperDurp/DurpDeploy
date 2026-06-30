@@ -20,6 +20,8 @@ templ ProjectForm(project db.Project, isEdit bool, errorMsg string) {
 				hx-put={ fmt.Sprintf("/projects/%d", project.ID) }
 				hx-target="#form-container"
 				hx-swap="innerHTML"
+				data-toast-success="Project updated"
+				data-toast-error="Failed to update project"
 			} else {
 				method="post"
 				action="/projects"

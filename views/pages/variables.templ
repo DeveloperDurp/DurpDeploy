@@ -75,6 +75,8 @@ templ VariableForm(projectID int64, environments []db.Environment, errorMsg stri
 			hx-post={ fmt.Sprintf("/projects/%d/variables", projectID) }
 			hx-target="#variables-content"
 			hx-swap="outerHTML"
+			data-toast-success="Variable created"
+			data-toast-error="Failed to create variable"
 			class="flex flex-wrap gap-4 items-end"
 		>
 			<div class="form-control flex-1 min-w-[200px]">
@@ -179,6 +181,8 @@ templ VariableRow(projectID int64, variable db.Variable, environments []db.Envir
 				hx-target="#variables-content"
 				hx-swap="outerHTML"
 				hx-confirm="Delete this variable?"
+				data-toast-success="Variable deleted"
+				data-toast-error="Failed to delete variable"
 			>
 				Delete
 			</button>
@@ -193,6 +197,8 @@ templ VariableEditRow(projectID int64, variable db.Variable, environments []db.E
 				hx-put={ fmt.Sprintf("/projects/%d/variables/%d", projectID, variable.ID) }
 				hx-target="#variables-content"
 				hx-swap="outerHTML"
+				data-toast-success="Variable updated"
+				data-toast-error="Failed to update variable"
 				class="flex flex-wrap gap-4 items-end"
 			>
 				<div class="form-control flex-1 min-w-[200px]">

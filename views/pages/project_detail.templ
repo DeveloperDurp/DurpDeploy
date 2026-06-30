@@ -37,7 +37,16 @@ templ ProjectDetail(project db.Project, steps []db.Step) {
 				>
 					Add Step
 				</button>
+				<button
+					class="btn btn-secondary btn-sm"
+					hx-get={ fmt.Sprintf("/projects/%d/templates-picker", project.ID) }
+					hx-target="#template-picker"
+					hx-swap="innerHTML"
+				>
+					Insert from Template
+				</button>
 				<div id="add-step-form" class="mt-4"></div>
+				<div id="template-picker" class="mt-4"></div>
 			</div>
 		</div>
 	</div>

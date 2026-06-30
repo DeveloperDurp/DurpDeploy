@@ -1,0 +1,68 @@
+package pages
+
+import (
+	"durpdeploy/internal/db"
+	"durpdeploy/views/layouts"
+	"strconv"
+)
+
+templ TemplateForm(tpl *db.StepTemplate, isNew bool, errorMsg string, currentPath string) {
+	@layouts.Base("Template", currentPath) {
+		@TemplateFormContent(tpl, isNew, errorMsg)
+	}
+}
+
+templ TemplateFormFragment(tpl *db.StepTemplate, isNew bool, errorMsg string) {
+	@TemplateFormContent(tpl, isNew, errorMsg)
+}
+
+templ TemplateFormContent(tpl *db.StepTemplate, isNew bool, errorMsg string) {
+	<div class="max-w-2xl mx-auto">
+		<h1 class="text-3xl font-bold mb-6">
+			if isNew {
+				New Template
+			} else {
+				Edit Template
+			}
+		</h1>
+		<form
+			if isNew {
+				method="post"
+				action="/templates"
+			} else {
+				hx-put={ "/templates/" + strconv.FormatInt(tpl.ID, 10) }
+				hx-target="#form-container"
+				hx-swap="innerHTML"
+				data-toast-success="Template updated"
+				data-toast-error="Failed to update template"
+			}
+			class="space-y-4"
+		>
+			<div class="form-control">
+				<label class="label">
+					<span class="label-text">Name</span>
+				</label>
+				<input type="text" name="name" value={ tpl.Name } class="input input-bordered" required/>
+				if errorMsg != "" {
+					<span class="text-error text-sm mt-1">{ errorMsg }</span>
+				}
+			</div>
+			<div class="form-control">
+				<label class="label">
+					<span class="label-text">Script</span>
+				</label>
+				<textarea name="script_body" class="textarea textarea-bordered" rows="6">{ tpl.ScriptBody }</textarea>
+			</div>
+			<div class="flex gap-2">
+				<button type="submit" class="btn btn-primary">
+					if isNew {
+						Create
+					} else {
+						Update
+					}
+				</button>
+				<a href="/templates" class="btn btn-ghost">Cancel</a>
+			</div>
+		</form>
+	</div>
+}

@@ -70,6 +70,17 @@ func NewRouter(repo *repository.Repository, rnr *runner.DeploymentRunner) *chi.M
 	r.Delete("/projects/{id}/steps/{stepId}", sh.DeleteStep)
 	r.Patch("/projects/{id}/steps/reorder", sh.ReorderStep)
 
+	sth := handler.NewStepTemplateHandler(repo)
+	r.Get("/templates", sth.ListTemplates)
+	r.Get("/templates/new", sth.NewTemplateForm)
+	r.Post("/templates", sth.CreateTemplate)
+	r.Get("/templates/{id}/edit", sth.EditTemplateForm)
+	r.Put("/templates/{id}", sth.UpdateTemplate)
+	r.Delete("/templates/{id}", sth.DeleteTemplate)
+	r.Get("/projects/{id}/templates-picker", sth.TemplatesPicker)
+	r.Post("/projects/{id}/steps/from-template/{templateId}", sth.InsertTemplate)
+	r.Post("/projects/{id}/steps/{stepId}/save-as-template", sth.SaveStepAsTemplate)
+
 	vh := handler.NewVariableHandler(repo)
 	r.Get("/projects/{id}/variables", vh.ListVariables)
 	r.Post("/projects/{id}/variables", vh.CreateVariable)

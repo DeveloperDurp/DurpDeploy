@@ -67,6 +67,8 @@ templ EnvironmentRow(env db.Environment) {
 				hx-swap="innerHTML"
 				hx-confirm="Delete this environment?"
 				class="btn btn-sm btn-error"
+				data-toast-success="Environment deleted"
+				data-toast-error="Failed to delete environment"
 			>
 				Delete
 			</button>

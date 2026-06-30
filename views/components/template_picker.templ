@@ -1,0 +1,39 @@
+package components
+
+import (
+	"durpdeploy/internal/db"
+	"fmt"
+)
+
+templ TemplatePicker(templates []db.StepTemplate, projectID int64) {
+	if len(templates) == 0 {
+		<p class="text-gray-400">No templates available. Create one first.</p>
+	} else {
+		<div class="space-y-2">
+			for _, tpl := range templates {
+				<div class="flex items-center justify-between p-2 bg-base-200 rounded">
+					<div>
+						<span class="font-medium">{ tpl.Name }</span>
+						<code class="text-sm ml-2 text-gray-400">
+							if len(tpl.ScriptBody) > 40 {
+								{ tpl.ScriptBody[:40] + "..." }
+							} else {
+								{ tpl.ScriptBody }
+							}
+						</code>
+					</div>
+					<button
+						class="btn btn-xs btn-primary"
+						hx-post={ fmt.Sprintf("/projects/%d/steps/from-template/%d", projectID, tpl.ID) }
+						hx-target="#step-list"
+						hx-swap="innerHTML"
+						data-toast-success="Step added from template"
+						data-toast-error="Failed to add step from template"
+					>
+						Insert
+					</button>
+				</div>
+			}
+		</div>
+	}
+}

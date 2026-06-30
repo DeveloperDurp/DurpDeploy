@@ -195,6 +195,10 @@ func (h *StepHandler) DeleteStep(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if r.Header.Get("HX-Request") == "true" {
+		SetToastSuccess(w, "Step deleted")
+	}
+
 	steps, err := h.repo.Queries.ListStepsByProject(r.Context(), projectID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

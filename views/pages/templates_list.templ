@@ -1,0 +1,83 @@
+package pages
+
+import (
+	"durpdeploy/internal/db"
+	"durpdeploy/views/components"
+	"durpdeploy/views/layouts"
+	"strconv"
+)
+
+templ TemplatesList(templates []db.StepTemplate, currentPath string) {
+	@layouts.Base("Templates", currentPath) {
+		@components.Breadcrumbs([]components.Crumb{
+			{Label: "Home", Href: "/"},
+			{Label: "Templates"},
+		})
+		@TemplatesListContent(templates)
+	}
+}
+
+templ TemplatesListContent(templates []db.StepTemplate) {
+	<div id="templates-content" class="space-y-4">
+		<div class="flex justify-between items-center">
+			<h1 class="text-3xl font-bold">Templates</h1>
+			<a href="/templates/new" class="btn btn-primary">New Template</a>
+		</div>
+		@TemplatesListFragment(templates)
+	</div>
+}
+
+templ TemplatesListFragment(templates []db.StepTemplate) {
+	<div id="templates-list">
+		if len(templates) == 0 {
+			<div class="card bg-base-200 p-8 text-center">
+				<p class="text-gray-400 mb-4">No templates yet. Create your first template to reuse deployment steps.</p>
+				<a href="/templates/new" class="btn btn-primary">New Template</a>
+			</div>
+		} else {
+			<table class="table table-zebra w-full">
+				<thead>
+					<tr>
+						<th>Name</th>
+						<th>Script</th>
+						<th>Actions</th>
+					</tr>
+				</thead>
+				<tbody>
+					for _, tpl := range templates {
+						@TemplateRow(tpl)
+					}
+				</tbody>
+			</table>
+		}
+	</div>
+}
+
+templ TemplateRow(tpl db.StepTemplate) {
+	<tr>
+		<td>{ tpl.Name }</td>
+		<td>
+			<code class="text-sm bg-base-200 px-2 py-1 rounded">
+				if len(tpl.ScriptBody) > 60 {
+					{ tpl.ScriptBody[:60] + "..." }
+				} else {
+					{ tpl.ScriptBody }
+				}
+			</code>
+		</td>
+		<td class="flex gap-2">
+			<a href={ templ.SafeURL("/templates/" + strconv.FormatInt(tpl.ID, 10) + "/edit") } class="btn btn-sm btn-ghost">Edit</a>
+			<button
+				hx-delete={ "/templates/" + strconv.FormatInt(tpl.ID, 10) }
+				hx-target="#form-container"
+				hx-swap="innerHTML"
+				hx-confirm="Delete this template?"
+				class="btn btn-sm btn-error"
+				data-toast-success="Template deleted"
+				data-toast-error="Failed to delete template"
+			>
+				Delete
+			</button>
+		</td>
+	</tr>
+}
