@@ -45,6 +45,34 @@ CI stage order: `lint` (`go vet ./...` + `gofmt -l .` must be empty) → `test` 
 - **Releases are immutable snapshots** of steps + variables (stored as `steps_json`); a release does not track later edits to steps/variables. Refresh endpoint re-snapshots.
 - Templ tags render to HTMX swaps; handlers return 303 for POST redirects, 422 for validation failures (see `e2e_test.sh` for the contract).
 
+## UI design — table layout conventions
+
+All pages with data tables **must** follow this pattern. Tables scale with the browser window and have consistent column widths across pages.
+
+**Table base class**: `table table-zebra table-fixed w-full`
+
+- `table-fixed` makes columns respect percentage widths (without it, browser auto-sizes to content)
+- `w-full` makes the table fill its container
+- Custom CSS in `static/css/input.css` enforces `width: 100% !important; table-layout: fixed` on all `.table` elements
+
+**Column width pattern** — use percentage widths on `<th>` so columns scale with window:
+
+| Columns | Pattern |
+|---|---|
+| 3 cols | `w-1/4` + `w-auto` + `w-1/4` (or fixed for last) |
+| 4 cols | `w-1/5` + `w-2/5` + `w-1/5` + `w-1/5` |
+| 6 cols | `w-1/6` × 6 |
+| Steps (Order, Name, Script) | `w-16` + `w-1/5` + `w-auto` |
+| Steps (Order, Name, Script, Actions) | `w-16` + `w-1/5` + `w-auto` + `w-96` |
+
+**Actions column**: `w-96` (24rem) for tables with 5 buttons (↑, ↓, Edit, Save Template, Delete), `w-48` (12rem) for tables with 2 buttons.
+
+**Cell overflow**: Add `truncate` to `<td>` cells with text content. Add `whitespace-nowrap` to date/timestamp cells. Buttons in actions cells use `whitespace-nowrap` to stay in one row.
+
+**Layout container**: Use `w-full px-4 sm:px-6 lg:px-8` (no `max-w-screen-*` — tables fill the full viewport). Never use Tailwind's `container` class for the main content area.
+
+**Button text in tables**: Keep short to fit one row. "Save as Template" → "Save Template". Use `btn-xs` for table row buttons.
+
 ## Ponytail (lazy senior) rules — active by default
 
 Lazy = efficient, not careless. Read the whole flow first, then pick the highest rung that holds:
