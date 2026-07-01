@@ -28,7 +28,26 @@ func formatUnixTime(ts int64) string {
 	return time.Unix(ts, 0).Format("2006-01-02 15:04:05")
 }
 
-templ ReleasesPage(project db.Project, releases []db.Release, environments []db.Environment, errorMsg string, currentPath string) {
+// AvailableEnv is the per-env data the releases table needs. Exported so the
+// handler can build the same shape.
+type AvailableEnv struct {
+	Environment db.Environment
+	State       GateState
+}
+
+type GateState struct {
+	Deployable bool
+	Reason     string
+	Bypassable bool
+}
+
+// ReleaseView is the per-row data for the releases table.
+type ReleaseView struct {
+	Release db.Release
+	Envs    []AvailableEnv
+}
+
+templ ReleasesPage(project db.Project, releases []ReleaseView, errorMsg string, currentPath string) {
 	@layouts.Base("Releases", currentPath) {
 		@components.Breadcrumbs([]components.Crumb{
 			{Label: "Home", Href: "/"},
@@ -36,11 +55,12 @@ templ ReleasesPage(project db.Project, releases []db.Release, environments []db.
 			{Label: project.Name, Href: fmt.Sprintf("/projects/%d", project.ID)},
 			{Label: "Releases"},
 		})
-		@ReleasesContent(project, releases, environments, errorMsg)
+		@ReleasesContent(project, releases, errorMsg)
+		@DeployFormScript()
 	}
 }
 
-templ ReleasesContent(project db.Project, releases []db.Release, environments []db.Environment, errorMsg string) {
+templ ReleasesContent(project db.Project, releases []ReleaseView, errorMsg string) {
 	<div class="space-y-6">
 		<div class="flex justify-between items-center">
 			<div>
@@ -48,14 +68,14 @@ templ ReleasesContent(project db.Project, releases []db.Release, environments []
 				<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost btn-sm mt-2">Back to Project</a>
 			</div>
 		</div>
-		@ReleasesFragment(project, releases, environments, errorMsg)
+		@ReleasesFragment(project, releases, errorMsg)
 	</div>
 }
 
-templ ReleasesFragment(project db.Project, releases []db.Release, environments []db.Environment, errorMsg string) {
+templ ReleasesFragment(project db.Project, releases []ReleaseView, errorMsg string) {
 	<div id="releases-content">
 		@ReleaseForm(project.ID, errorMsg)
-		@ReleasesTable(project, releases, environments)
+		@ReleasesTable(project, releases)
 	</div>
 }
 
@@ -84,7 +104,7 @@ templ ReleaseForm(projectID int64, errorMsg string) {
 	</div>
 }
 
-templ ReleasesTable(project db.Project, releases []db.Release, environments []db.Environment) {
+templ ReleasesTable(project db.Project, releases []ReleaseView) {
 	<table class="table table-zebra table-fixed w-full">
 		<thead>
 			<tr>
@@ -99,34 +119,159 @@ templ ReleasesTable(project db.Project, releases []db.Release, environments []db
 					<td colspan="3" class="text-gray-500 italic text-center py-4">No releases yet.</td>
 				</tr>
 			} else {
-				for _, release := range releases {
-					@ReleaseRow(project.ID, release, environments)
+				for _, rv := range releases {
+					@ReleaseRow(project.ID, rv)
 				}
 			}
 		</tbody>
 	</table>
 }
 
-templ ReleaseRow(projectID int64, release db.Release, environments []db.Environment) {
+templ ReleaseRow(projectID int64, rv ReleaseView) {
+	@ReleaseRowImpl(projectID, rv.Release, rv.Envs)
+}
+
+templ ReleaseRowImpl(projectID int64, release db.Release, envs []AvailableEnv) {
 	<tr id={ fmt.Sprintf("release-row-%d", release.ID) }>
 		<td class="font-medium truncate">
 			<a href={ fmt.Sprintf("/projects/%d/releases/%d", projectID, release.ID) } class="link link-primary">{ release.Version }</a>
 		</td>
 		<td class="whitespace-nowrap">{ formatUnixTime(release.CreatedAt) }</td>
-		<td class="flex gap-2">
-			<a href={ fmt.Sprintf("/projects/%d/releases/%d", projectID, release.ID) } class="btn btn-sm btn-secondary">View</a>
-		<form method="post" action="/deployments" class="inline">
-			<input type="hidden" name="release_id" value={ strconv.FormatInt(release.ID, 10) }/>
-			<select name="environment_id" class="select select-sm select-bordered mr-2" required>
-				<option value="">Select env</option>
-				for _, env := range environments {
-					<option value={ strconv.FormatInt(env.ID, 10) }>{ env.Name }</option>
-				}
-			</select>
-			<button type="submit" class="btn btn-sm btn-accent">Deploy</button>
-		</form>
+		<td>
+			@DeployForm(projectID, release, envs)
 		</td>
 	</tr>
+}
+
+// DeployForm renders the per-release deploy UI:
+//   - Always shows envs whose gate is currently satisfied (deployable=true).
+//   - Envs whose gate is bypassable are hidden until the user ticks "Force".
+//   - Hard-blocked envs (not in lifecycle) are never shown.
+//   - Ticking the Force checkbox adds a hidden force=true field and reveals
+//     the bypassable envs in the dropdown. The button is the same; the gate
+//     check on the server is what enforces the rule.
+templ DeployForm(projectID int64, release db.Release, envs []AvailableEnv) {
+	if len(envs) == 0 {
+		<span class="text-gray-500 italic text-sm">No environments available</span>
+		return
+	}
+	<div class="flex flex-col gap-2">
+		<form
+			method="post"
+			action="/deployments"
+			class="flex flex-wrap gap-2 items-center"
+			data-deploy-form={ strconv.FormatInt(release.ID, 10) }
+			onsubmit="return confirmSubmit(this)"
+		>
+			<input type="hidden" name="release_id" value={ strconv.FormatInt(release.ID, 10) }/>
+			<select
+				name="environment_id"
+				class="select select-sm select-bordered"
+				required
+			>
+				<option value="">Select env</option>
+				for _, e := range envs {
+					if e.State.Deployable {
+						<option
+							value={ strconv.FormatInt(e.Environment.ID, 10) }
+							data-gate="ok"
+						>{ e.Environment.Name }</option>
+					}
+				}
+				if hasForceable(envs) {
+					<optgroup label="Needs force" data-gate-group="forceable">
+						for _, e := range envs {
+							if !e.State.Deployable && e.State.Bypassable {
+								<option
+									value={ strconv.FormatInt(e.Environment.ID, 10) }
+									data-gate="forceable"
+									title={ e.State.Reason }
+								>{ e.Environment.Name }</option>
+							}
+						}
+					</optgroup>
+				}
+			</select>
+			if hasForceable(envs) {
+				<label class="label cursor-pointer gap-1 px-2">
+					<input
+						type="checkbox"
+						name="force_check"
+						value="true"
+						class="checkbox checkbox-xs"
+						data-force-toggle={ strconv.FormatInt(release.ID, 10) }
+						onchange="toggleForce(this)"
+					/>
+					<span class="label-text text-xs">Force</span>
+				</label>
+			}
+			<button type="submit" class="btn btn-sm btn-accent whitespace-nowrap">Deploy</button>
+		</form>
+	</div>
+}
+
+// hasForceable reports whether the env list contains any env whose gate can be
+// bypassed with force=true. Used to decide whether to render the Force checkbox.
+func hasForceable(envs []AvailableEnv) bool {
+	for _, e := range envs {
+		if !e.State.Deployable && e.State.Bypassable {
+			return true
+		}
+	}
+	return false
+}
+
+// DeployFormScript is the small bit of JS that wires up the Force checkbox
+// behavior. It hides/shows the <optgroup data-gate-group="forceable"> and
+// injects/removes a hidden force=true field on submit. Inline rather than a
+// separate bundle because the toggle is page-specific and tiny.
+templ DeployFormScript() {
+	<script>
+		function toggleForce(cb) {
+			var form = cb.closest('form');
+			if (!form) return;
+			var checked = cb.checked;
+			form.querySelectorAll('optgroup[data-gate-group="forceable"]').forEach(function(g) {
+				g.hidden = !checked;
+			});
+			// Disable the forceable options when unchecked so they can't be
+			// picked via keyboard. Re-enable when checked.
+			form.querySelectorAll('option[data-gate="forceable"]').forEach(function(o) {
+				o.disabled = !checked;
+			});
+			var hidden = form.querySelector('input[name="force"][type="hidden"]');
+			if (checked && !hidden) {
+				hidden = document.createElement('input');
+				hidden.type = 'hidden';
+				hidden.name = 'force';
+				hidden.value = 'true';
+				form.appendChild(hidden);
+			} else if (!checked && hidden) {
+				hidden.remove();
+			}
+		}
+		function confirmSubmit(form) {
+			var hidden = form.querySelector('input[name="force"][type="hidden"]');
+			if (hidden) {
+				var sel = form.querySelector('select[name="environment_id"]');
+				var opt = sel.options[sel.selectedIndex];
+				return confirm('Bypass the promotion gate and deploy to ' + opt.text + '? This deployment will be marked as forced.');
+			}
+			return true;
+		}
+		// On load, hide forceable optgroups and disable their options so they
+		// can't be selected until the user ticks Force.
+		document.addEventListener('DOMContentLoaded', function() {
+			document.querySelectorAll('form[data-deploy-form]').forEach(function(form) {
+				form.querySelectorAll('optgroup[data-gate-group="forceable"]').forEach(function(g) {
+					g.hidden = true;
+				});
+				form.querySelectorAll('option[data-gate="forceable"]').forEach(function(o) {
+					o.disabled = true;
+				});
+			});
+		});
+	</script>
 }
 
 templ ReleaseDetailPage(project db.Project, release db.Release, variables []db.ReleaseVariable, environments []db.Environment, currentPath string) {

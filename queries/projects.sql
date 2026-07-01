@@ -12,3 +12,9 @@ UPDATE projects SET name = ?, description = ? WHERE id = ? RETURNING *;
 
 -- name: DeleteProject :exec
 DELETE FROM projects WHERE id = ?;
+
+-- name: SetProjectLifecycle :exec
+UPDATE projects SET lifecycle_id = ? WHERE id = ?;
+
+-- name: ClearProjectLifecycle :exec
+UPDATE projects SET lifecycle_id = NULL WHERE id = ?;

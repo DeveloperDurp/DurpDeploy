@@ -11,7 +11,7 @@ import (
 )
 
 const createDeployment = `-- name: CreateDeployment :one
-INSERT INTO deployments (release_id, environment_id, status, started_at, finished_at) VALUES (?, ?, ?, ?, ?) RETURNING id, release_id, environment_id, status, started_at, finished_at, created_at
+INSERT INTO deployments (release_id, environment_id, status, started_at, finished_at, forced) VALUES (?, ?, ?, ?, ?, ?) RETURNING id, release_id, environment_id, status, started_at, finished_at, created_at, forced
 `
 
 type CreateDeploymentParams struct {
@@ -20,6 +20,7 @@ type CreateDeploymentParams struct {
 	Status        string        `json:"status"`
 	StartedAt     sql.NullInt64 `json:"started_at"`
 	FinishedAt    sql.NullInt64 `json:"finished_at"`
+	Forced        int64         `json:"forced"`
 }
 
 func (q *Queries) CreateDeployment(ctx context.Context, arg CreateDeploymentParams) (Deployment, error) {
@@ -29,6 +30,7 @@ func (q *Queries) CreateDeployment(ctx context.Context, arg CreateDeploymentPara
 		arg.Status,
 		arg.StartedAt,
 		arg.FinishedAt,
+		arg.Forced,
 	)
 	var i Deployment
 	err := row.Scan(
@@ -39,6 +41,7 @@ func (q *Queries) CreateDeployment(ctx context.Context, arg CreateDeploymentPara
 		&i.StartedAt,
 		&i.FinishedAt,
 		&i.CreatedAt,
+		&i.Forced,
 	)
 	return i, err
 }
@@ -53,7 +56,7 @@ func (q *Queries) DeleteDeployment(ctx context.Context, id int64) error {
 }
 
 const getDeployment = `-- name: GetDeployment :one
-SELECT id, release_id, environment_id, status, started_at, finished_at, created_at FROM deployments WHERE id = ?
+SELECT id, release_id, environment_id, status, started_at, finished_at, created_at, forced FROM deployments WHERE id = ?
 `
 
 func (q *Queries) GetDeployment(ctx context.Context, id int64) (Deployment, error) {
@@ -67,12 +70,83 @@ func (q *Queries) GetDeployment(ctx context.Context, id int64) (Deployment, erro
 		&i.StartedAt,
 		&i.FinishedAt,
 		&i.CreatedAt,
+		&i.Forced,
+	)
+	return i, err
+}
+
+const getLatestDeploymentForReleaseEnv = `-- name: GetLatestDeploymentForReleaseEnv :one
+SELECT id, release_id, environment_id, status, started_at, finished_at, created_at, forced FROM deployments WHERE release_id = ? AND environment_id = ? ORDER BY created_at DESC LIMIT 1
+`
+
+type GetLatestDeploymentForReleaseEnvParams struct {
+	ReleaseID     int64 `json:"release_id"`
+	EnvironmentID int64 `json:"environment_id"`
+}
+
+func (q *Queries) GetLatestDeploymentForReleaseEnv(ctx context.Context, arg GetLatestDeploymentForReleaseEnvParams) (Deployment, error) {
+	row := q.db.QueryRowContext(ctx, getLatestDeploymentForReleaseEnv, arg.ReleaseID, arg.EnvironmentID)
+	var i Deployment
+	err := row.Scan(
+		&i.ID,
+		&i.ReleaseID,
+		&i.EnvironmentID,
+		&i.Status,
+		&i.StartedAt,
+		&i.FinishedAt,
+		&i.CreatedAt,
+		&i.Forced,
+	)
+	return i, err
+}
+
+const getLatestSuccessfulDeploymentForEnv = `-- name: GetLatestSuccessfulDeploymentForEnv :one
+SELECT id, release_id, environment_id, status, started_at, finished_at, created_at, forced FROM deployments WHERE environment_id = ? AND status = 'succeeded' ORDER BY created_at DESC LIMIT 1
+`
+
+func (q *Queries) GetLatestSuccessfulDeploymentForEnv(ctx context.Context, environmentID int64) (Deployment, error) {
+	row := q.db.QueryRowContext(ctx, getLatestSuccessfulDeploymentForEnv, environmentID)
+	var i Deployment
+	err := row.Scan(
+		&i.ID,
+		&i.ReleaseID,
+		&i.EnvironmentID,
+		&i.Status,
+		&i.StartedAt,
+		&i.FinishedAt,
+		&i.CreatedAt,
+		&i.Forced,
+	)
+	return i, err
+}
+
+const getLatestSuccessfulDeploymentForReleaseEnv = `-- name: GetLatestSuccessfulDeploymentForReleaseEnv :one
+SELECT id, release_id, environment_id, status, started_at, finished_at, created_at, forced FROM deployments WHERE release_id = ? AND environment_id = ? AND status = 'succeeded' ORDER BY created_at DESC LIMIT 1
+`
+
+type GetLatestSuccessfulDeploymentForReleaseEnvParams struct {
+	ReleaseID     int64 `json:"release_id"`
+	EnvironmentID int64 `json:"environment_id"`
+}
+
+func (q *Queries) GetLatestSuccessfulDeploymentForReleaseEnv(ctx context.Context, arg GetLatestSuccessfulDeploymentForReleaseEnvParams) (Deployment, error) {
+	row := q.db.QueryRowContext(ctx, getLatestSuccessfulDeploymentForReleaseEnv, arg.ReleaseID, arg.EnvironmentID)
+	var i Deployment
+	err := row.Scan(
+		&i.ID,
+		&i.ReleaseID,
+		&i.EnvironmentID,
+		&i.Status,
+		&i.StartedAt,
+		&i.FinishedAt,
+		&i.CreatedAt,
+		&i.Forced,
 	)
 	return i, err
 }
 
 const listDeployments = `-- name: ListDeployments :many
-SELECT id, release_id, environment_id, status, started_at, finished_at, created_at FROM deployments ORDER BY created_at DESC
+SELECT id, release_id, environment_id, status, started_at, finished_at, created_at, forced FROM deployments ORDER BY created_at DESC
 `
 
 func (q *Queries) ListDeployments(ctx context.Context) ([]Deployment, error) {
@@ -92,6 +166,7 @@ func (q *Queries) ListDeployments(ctx context.Context) ([]Deployment, error) {
 			&i.StartedAt,
 			&i.FinishedAt,
 			&i.CreatedAt,
+			&i.Forced,
 		); err != nil {
 			return nil, err
 		}
@@ -107,7 +182,7 @@ func (q *Queries) ListDeployments(ctx context.Context) ([]Deployment, error) {
 }
 
 const listDeploymentsByRelease = `-- name: ListDeploymentsByRelease :many
-SELECT id, release_id, environment_id, status, started_at, finished_at, created_at FROM deployments WHERE release_id = ? ORDER BY created_at DESC
+SELECT id, release_id, environment_id, status, started_at, finished_at, created_at, forced FROM deployments WHERE release_id = ? ORDER BY created_at DESC
 `
 
 func (q *Queries) ListDeploymentsByRelease(ctx context.Context, releaseID int64) ([]Deployment, error) {
@@ -127,6 +202,7 @@ func (q *Queries) ListDeploymentsByRelease(ctx context.Context, releaseID int64)
 			&i.StartedAt,
 			&i.FinishedAt,
 			&i.CreatedAt,
+			&i.Forced,
 		); err != nil {
 			return nil, err
 		}
@@ -142,7 +218,7 @@ func (q *Queries) ListDeploymentsByRelease(ctx context.Context, releaseID int64)
 }
 
 const listRecentDeployments = `-- name: ListRecentDeployments :many
-SELECT id, release_id, environment_id, status, started_at, finished_at, created_at FROM deployments ORDER BY created_at DESC LIMIT ?
+SELECT id, release_id, environment_id, status, started_at, finished_at, created_at, forced FROM deployments ORDER BY created_at DESC LIMIT ?
 `
 
 func (q *Queries) ListRecentDeployments(ctx context.Context, limit int64) ([]Deployment, error) {
@@ -162,6 +238,48 @@ func (q *Queries) ListRecentDeployments(ctx context.Context, limit int64) ([]Dep
 			&i.StartedAt,
 			&i.FinishedAt,
 			&i.CreatedAt,
+			&i.Forced,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRecentDeploymentsForEnv = `-- name: ListRecentDeploymentsForEnv :many
+SELECT id, release_id, environment_id, status, started_at, finished_at, created_at, forced FROM deployments WHERE environment_id = ? ORDER BY created_at DESC LIMIT ?
+`
+
+type ListRecentDeploymentsForEnvParams struct {
+	EnvironmentID int64 `json:"environment_id"`
+	Limit         int64 `json:"limit"`
+}
+
+func (q *Queries) ListRecentDeploymentsForEnv(ctx context.Context, arg ListRecentDeploymentsForEnvParams) ([]Deployment, error) {
+	rows, err := q.db.QueryContext(ctx, listRecentDeploymentsForEnv, arg.EnvironmentID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Deployment
+	for rows.Next() {
+		var i Deployment
+		if err := rows.Scan(
+			&i.ID,
+			&i.ReleaseID,
+			&i.EnvironmentID,
+			&i.Status,
+			&i.StartedAt,
+			&i.FinishedAt,
+			&i.CreatedAt,
+			&i.Forced,
 		); err != nil {
 			return nil, err
 		}
@@ -177,7 +295,7 @@ func (q *Queries) ListRecentDeployments(ctx context.Context, limit int64) ([]Dep
 }
 
 const updateDeployment = `-- name: UpdateDeployment :one
-UPDATE deployments SET release_id = ?, environment_id = ?, status = ?, started_at = ?, finished_at = ? WHERE id = ? RETURNING id, release_id, environment_id, status, started_at, finished_at, created_at
+UPDATE deployments SET release_id = ?, environment_id = ?, status = ?, started_at = ?, finished_at = ? WHERE id = ? RETURNING id, release_id, environment_id, status, started_at, finished_at, created_at, forced
 `
 
 type UpdateDeploymentParams struct {
@@ -207,6 +325,7 @@ func (q *Queries) UpdateDeployment(ctx context.Context, arg UpdateDeploymentPara
 		&i.StartedAt,
 		&i.FinishedAt,
 		&i.CreatedAt,
+		&i.Forced,
 	)
 	return i, err
 }

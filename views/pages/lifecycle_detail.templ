@@ -1,0 +1,120 @@
+package pages
+
+import (
+	"durpdeploy/internal/db"
+	"durpdeploy/views/components"
+	"durpdeploy/views/layouts"
+	"strconv"
+)
+
+templ LifecycleDetailPage(lc db.Lifecycle, stages []LifecycleStageView, availableEnvs []db.Environment, errorMsg string, currentPath string) {
+	@layouts.Base("Lifecycle: "+lc.Name, currentPath) {
+		@components.Breadcrumbs([]components.Crumb{
+			{Label: "Home", Href: "/"},
+			{Label: "Lifecycles", Href: "/lifecycles"},
+			{Label: lc.Name},
+		})
+		@LifecycleDetail(lc, stages, availableEnvs, errorMsg)
+	}
+}
+
+templ LifecycleDetail(lc db.Lifecycle, stages []LifecycleStageView, availableEnvs []db.Environment, errorMsg string) {
+	<div class="space-y-6">
+		<div class="flex justify-between items-start">
+			<div>
+				<h1 class="text-3xl font-bold">{ lc.Name }</h1>
+				if lc.Description.Valid {
+					<p class="text-gray-400 mt-1">{ lc.Description.String }</p>
+				}
+			</div>
+			<div class="flex gap-2">
+				<a href={ templ.SafeURL("/lifecycles/" + strconv.FormatInt(lc.ID, 10) + "/edit") } class="btn btn-ghost btn-sm">Edit</a>
+				<a href="/lifecycles" class="btn btn-ghost btn-sm">Back</a>
+			</div>
+		</div>
+
+		<div class="card bg-base-200 p-4">
+			<h2 class="text-xl font-bold mb-4">Promotion Order</h2>
+			if errorMsg != "" {
+				<p class="text-error mb-2">{ errorMsg }</p>
+			}
+			<p class="text-sm text-gray-400 mb-4">Releases must deploy successfully to each stage before they can be promoted to the next.</p>
+			@LifecycleStageList(lc, stages, availableEnvs)
+		</div>
+	</div>
+}
+
+templ LifecycleStageList(lc db.Lifecycle, stages []LifecycleStageView, availableEnvs []db.Environment) {
+	<div id="lifecycle-stages">
+		if len(stages) == 0 {
+			<p class="text-gray-500 italic">No stages yet. Add an environment below to begin.</p>
+		} else {
+			<table class="table table-zebra table-fixed w-full">
+				<thead>
+					<tr>
+						<th class="w-16">Order</th>
+						<th class="w-1/3">Environment</th>
+						<th class="w-96">Actions</th>
+					</tr>
+				</thead>
+				<tbody>
+					for i, s := range stages {
+						@LifecycleStageRow(lc, i, len(stages), s)
+					}
+				</tbody>
+			</table>
+		}
+		if len(availableEnvs) > 0 {
+			@LifecycleAddStageForm(lc, availableEnvs)
+		} else {
+			<p class="text-sm text-gray-400 mt-4">All environments are already in this lifecycle. Create more environments to extend the chain.</p>
+		}
+	</div>
+}
+
+templ LifecycleStageRow(lc db.Lifecycle, index int, total int, s LifecycleStageView) {
+	<tr>
+		<td>{ strconv.Itoa(index + 1) }</td>
+		<td class="font-medium truncate">{ s.Environment.Name }</td>
+		<td class="flex gap-2 whitespace-nowrap">
+			if index > 0 {
+				<form method="post" action={ templ.SafeURL("/lifecycles/" + strconv.FormatInt(lc.ID, 10) + "/stages/reorder") }>
+					<input type="hidden" name="stage_id" value={ strconv.FormatInt(s.Stage.ID, 10) }/>
+					<input type="hidden" name="direction" value="up"/>
+					<button type="submit" class="btn btn-xs">↑</button>
+				</form>
+			}
+			if index < total-1 {
+				<form method="post" action={ templ.SafeURL("/lifecycles/" + strconv.FormatInt(lc.ID, 10) + "/stages/reorder") }>
+					<input type="hidden" name="stage_id" value={ strconv.FormatInt(s.Stage.ID, 10) }/>
+					<input type="hidden" name="direction" value="down"/>
+					<button type="submit" class="btn btn-xs">↓</button>
+				</form>
+			}
+			<form method="post" action={ templ.SafeURL("/lifecycles/" + strconv.FormatInt(lc.ID, 10) + "/stages/" + strconv.FormatInt(s.Stage.ID, 10) + "/delete") } onsubmit="return confirm('Remove this stage from the lifecycle?')">
+				<button type="submit" class="btn btn-xs btn-error">Delete</button>
+			</form>
+		</td>
+	</tr>
+}
+
+templ LifecycleAddStageForm(lc db.Lifecycle, availableEnvs []db.Environment) {
+	<form
+		method="post"
+		action={ templ.SafeURL("/lifecycles/" + strconv.FormatInt(lc.ID, 10) + "/stages") }
+		class="flex flex-wrap gap-4 items-end mt-4"
+	>
+		<div class="form-control flex-1 min-w-[200px]">
+			<label class="label">
+				<span class="label-text">Add environment to next stage</span>
+			</label>
+			<select name="environment_id" class="select select-bordered" required>
+				<option value="">Select env</option>
+				for _, env := range availableEnvs {
+					<option value={ strconv.FormatInt(env.ID, 10) }>{ env.Name }</option>
+				}
+			</select>
+		</div>
+		<button type="submit" class="btn btn-primary">Add Stage</button>
+	</form>
+}

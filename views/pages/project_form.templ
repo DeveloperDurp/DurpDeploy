@@ -4,9 +4,10 @@ import (
 	"durpdeploy/internal/db"
 	"durpdeploy/views/layouts"
 	"fmt"
+	"strconv"
 )
 
-templ ProjectForm(project db.Project, isEdit bool, errorMsg string) {
+templ ProjectForm(project db.Project, isEdit bool, errorMsg string, lifecycles []db.Lifecycle) {
 	<div class="max-w-2xl mx-auto">
 		<h1 class="text-3xl font-bold mb-6">
 			if isEdit {
@@ -43,6 +44,25 @@ templ ProjectForm(project db.Project, isEdit bool, errorMsg string) {
 				</label>
 				<textarea name="description" class="textarea textarea-bordered" rows="4">{ project.Description.String }</textarea>
 			</div>
+			<div class="form-control">
+				<label class="label">
+					<span class="label-text">Lifecycle</span>
+					<span class="label-text-alt text-gray-500">Optional. Gates deployments to environments in order.</span>
+				</label>
+				<select name="lifecycle_id" class="select select-bordered">
+					<option value="">— No lifecycle —</option>
+					for _, lc := range lifecycles {
+						<option
+							value={ strconv.FormatInt(lc.ID, 10) }
+							if project.LifecycleID.Valid && project.LifecycleID.Int64 == lc.ID {
+								selected
+							}
+						>
+							{ lc.Name }
+						</option>
+					}
+				</select>
+			</div>
 			<div class="flex gap-2">
 				<button type="submit" class="btn btn-primary">
 					if isEdit {
@@ -57,8 +77,8 @@ templ ProjectForm(project db.Project, isEdit bool, errorMsg string) {
 	</div>
 }
 
-templ ProjectFormPage(project db.Project, isEdit bool, errorMsg string, currentPath string) {
+templ ProjectFormPage(project db.Project, isEdit bool, errorMsg string, lifecycles []db.Lifecycle, currentPath string) {
 	@layouts.Base("Project Form", currentPath) {
-		@ProjectForm(project, isEdit, errorMsg)
+		@ProjectForm(project, isEdit, errorMsg, lifecycles)
 	}
 }

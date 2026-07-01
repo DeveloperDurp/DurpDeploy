@@ -10,8 +10,17 @@ import (
 	"database/sql"
 )
 
+const clearProjectLifecycle = `-- name: ClearProjectLifecycle :exec
+UPDATE projects SET lifecycle_id = NULL WHERE id = ?
+`
+
+func (q *Queries) ClearProjectLifecycle(ctx context.Context, id int64) error {
+	_, err := q.db.ExecContext(ctx, clearProjectLifecycle, id)
+	return err
+}
+
 const createProject = `-- name: CreateProject :one
-INSERT INTO projects (name, description) VALUES (?, ?) RETURNING id, name, description, created_at
+INSERT INTO projects (name, description) VALUES (?, ?) RETURNING id, name, description, created_at, lifecycle_id
 `
 
 type CreateProjectParams struct {
@@ -27,6 +36,7 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (P
 		&i.Name,
 		&i.Description,
 		&i.CreatedAt,
+		&i.LifecycleID,
 	)
 	return i, err
 }
@@ -41,7 +51,7 @@ func (q *Queries) DeleteProject(ctx context.Context, id int64) error {
 }
 
 const getProject = `-- name: GetProject :one
-SELECT id, name, description, created_at FROM projects WHERE id = ?
+SELECT id, name, description, created_at, lifecycle_id FROM projects WHERE id = ?
 `
 
 func (q *Queries) GetProject(ctx context.Context, id int64) (Project, error) {
@@ -52,12 +62,13 @@ func (q *Queries) GetProject(ctx context.Context, id int64) (Project, error) {
 		&i.Name,
 		&i.Description,
 		&i.CreatedAt,
+		&i.LifecycleID,
 	)
 	return i, err
 }
 
 const listProjects = `-- name: ListProjects :many
-SELECT id, name, description, created_at FROM projects ORDER BY created_at DESC
+SELECT id, name, description, created_at, lifecycle_id FROM projects ORDER BY created_at DESC
 `
 
 func (q *Queries) ListProjects(ctx context.Context) ([]Project, error) {
@@ -74,6 +85,7 @@ func (q *Queries) ListProjects(ctx context.Context) ([]Project, error) {
 			&i.Name,
 			&i.Description,
 			&i.CreatedAt,
+			&i.LifecycleID,
 		); err != nil {
 			return nil, err
 		}
@@ -88,8 +100,22 @@ func (q *Queries) ListProjects(ctx context.Context) ([]Project, error) {
 	return items, nil
 }
 
+const setProjectLifecycle = `-- name: SetProjectLifecycle :exec
+UPDATE projects SET lifecycle_id = ? WHERE id = ?
+`
+
+type SetProjectLifecycleParams struct {
+	LifecycleID sql.NullInt64 `json:"lifecycle_id"`
+	ID          int64         `json:"id"`
+}
+
+func (q *Queries) SetProjectLifecycle(ctx context.Context, arg SetProjectLifecycleParams) error {
+	_, err := q.db.ExecContext(ctx, setProjectLifecycle, arg.LifecycleID, arg.ID)
+	return err
+}
+
 const updateProject = `-- name: UpdateProject :one
-UPDATE projects SET name = ?, description = ? WHERE id = ? RETURNING id, name, description, created_at
+UPDATE projects SET name = ?, description = ? WHERE id = ? RETURNING id, name, description, created_at, lifecycle_id
 `
 
 type UpdateProjectParams struct {
@@ -106,6 +132,7 @@ func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (P
 		&i.Name,
 		&i.Description,
 		&i.CreatedAt,
+		&i.LifecycleID,
 	)
 	return i, err
 }

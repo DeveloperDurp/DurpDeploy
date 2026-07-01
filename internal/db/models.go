@@ -16,6 +16,7 @@ type Deployment struct {
 	StartedAt     sql.NullInt64 `json:"started_at"`
 	FinishedAt    sql.NullInt64 `json:"finished_at"`
 	CreatedAt     int64         `json:"created_at"`
+	Forced        int64         `json:"forced"`
 }
 
 type DeploymentLog struct {
@@ -34,11 +35,26 @@ type Environment struct {
 	CreatedAt   int64          `json:"created_at"`
 }
 
+type Lifecycle struct {
+	ID          int64          `json:"id"`
+	Name        string         `json:"name"`
+	Description sql.NullString `json:"description"`
+	CreatedAt   int64          `json:"created_at"`
+}
+
+type LifecycleStage struct {
+	ID            int64 `json:"id"`
+	LifecycleID   int64 `json:"lifecycle_id"`
+	EnvironmentID int64 `json:"environment_id"`
+	SortOrder     int64 `json:"sort_order"`
+}
+
 type Project struct {
 	ID          int64          `json:"id"`
 	Name        string         `json:"name"`
 	Description sql.NullString `json:"description"`
 	CreatedAt   int64          `json:"created_at"`
+	LifecycleID sql.NullInt64  `json:"lifecycle_id"`
 }
 
 type Release struct {

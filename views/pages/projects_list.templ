@@ -7,7 +7,7 @@ import (
 	"fmt"
 )
 
-templ ProjectsList(projects []db.Project) {
+templ ProjectsList(projects []db.Project, panels []LifecyclePanel) {
 	<div id="projects-list">
 		<div class="flex justify-between items-center mb-4">
 			<h1 class="text-2xl font-bold">Projects</h1>
@@ -24,38 +24,14 @@ templ ProjectsList(projects []db.Project) {
 					<thead>
 						<tr>
 							<th class="w-1/4">Name</th>
-							<th class="w-auto">Description</th>
+							<th class="w-1/4">Description</th>
+							<th class="w-1/3">Deployments</th>
 							<th class="w-48">Actions</th>
 						</tr>
 					</thead>
 					<tbody>
-						for _, p := range projects {
-							<tr>
-								<td class="truncate">
-									<a href={ fmt.Sprintf("/projects/%d", p.ID) } class="link link-primary">{ p.Name }</a>
-								</td>
-								<td class="truncate">
-									if p.Description.Valid {
-										{ p.Description.String }
-									} else {
-										<span class="text-gray-500">-</span>
-									}
-								</td>
-								<td class="flex gap-2">
-									<a href={ fmt.Sprintf("/projects/%d/edit", p.ID) } class="btn btn-sm btn-secondary">Edit</a>
-									<button
-										class="btn btn-sm btn-error"
-										hx-delete={ fmt.Sprintf("/projects/%d", p.ID) }
-										hx-target="#projects-list"
-										hx-swap="outerHTML"
-										hx-confirm="Delete this project?"
-										data-toast-success="Project deleted"
-										data-toast-error="Failed to delete project"
-									>
-										Delete
-									</button>
-								</td>
-							</tr>
+						for i, p := range projects {
+							@ProjectsListRow(p, panels[i])
 						}
 					</tbody>
 				</table>
@@ -64,12 +40,95 @@ templ ProjectsList(projects []db.Project) {
 	</div>
 }
 
-templ ProjectsListPage(projects []db.Project, currentPath string) {
+templ ProjectsListRow(p db.Project, panel LifecyclePanel) {
+	<tr>
+		<td class="truncate">
+			<a href={ fmt.Sprintf("/projects/%d", p.ID) } class="link link-primary">{ p.Name }</a>
+		</td>
+		<td class="truncate">
+			if p.Description.Valid {
+				{ p.Description.String }
+			} else {
+				<span class="text-gray-500">-</span>
+			}
+		</td>
+		<td>
+			@ProjectsListDeployments(panel)
+		</td>
+		<td class="flex gap-2">
+			<a href={ fmt.Sprintf("/projects/%d/edit", p.ID) } class="btn btn-sm btn-secondary">Edit</a>
+			<button
+				class="btn btn-sm btn-error"
+				hx-delete={ fmt.Sprintf("/projects/%d", p.ID) }
+				hx-target="#projects-list"
+				hx-swap="outerHTML"
+				hx-confirm="Delete this project?"
+				data-toast-success="Project deleted"
+				data-toast-error="Failed to delete project"
+			>
+				Delete
+			</button>
+		</td>
+	</tr>
+}
+
+// ProjectsListDeployments renders a mini-table with one column per env.
+// The env name is the column header and the version pill (or em-dash for
+// untouched) sits below. Lifecycle-bound projects show every stage in the
+// lifecycle, including untouched ones, so the user can see the full chain
+// at a glance. Free-floating projects show only envs with at least one
+// deployment. Empty projects show a muted "no envs" hint.
+templ ProjectsListDeployments(panel LifecyclePanel) {
+	if len(panel.Stages) == 0 {
+		<span class="text-gray-500 italic text-sm">No environments</span>
+	} else {
+		<table class="table table-xs">
+			<thead>
+				<tr>
+					for _, s := range panel.Stages {
+						<th class="text-xs font-medium text-gray-500 normal-case">{ s.Environment.Name }</th>
+					}
+				</tr>
+			</thead>
+			<tbody>
+				<tr>
+					for _, s := range panel.Stages {
+						<td>
+							if s.LatestAttempt == nil {
+								<span class="badge badge-sm bg-base-300 text-base-content border-0 font-mono">—</span>
+							} else {
+								@VersionPill(*s.LatestAttempt, s.AttemptVersion)
+							}
+						</td>
+					}
+				</tr>
+			</tbody>
+		</table>
+	}
+}
+
+// VersionPill renders a small colored badge containing the version. The
+// color encodes the deployment status; the version is centered inside.
+templ VersionPill(d db.Deployment, version string) {
+	<span
+		class={
+			templ.KV("badge badge-sm font-mono", true),
+			templ.KV("bg-success text-success-content border-0", d.Status == "succeeded"),
+			templ.KV("bg-error text-error-content border-0", d.Status == "failed"),
+			templ.KV("bg-warning text-warning-content border-0", d.Status == "cancelled"),
+			templ.KV("bg-info text-info-content border-0 animate-pulse", d.Status == "running"),
+			templ.KV("bg-base-300 text-base-content border-0", d.Status == "pending" || (d.Status != "succeeded" && d.Status != "failed" && d.Status != "cancelled" && d.Status != "running")),
+		}
+		title={ d.Status }
+	>{ version }</span>
+}
+
+templ ProjectsListPage(projects []db.Project, panels []LifecyclePanel, currentPath string) {
 	@layouts.Base("Projects", currentPath) {
 		@components.Breadcrumbs([]components.Crumb{
 			{Label: "Home", Href: "/"},
 			{Label: "Projects"},
 		})
-		@ProjectsList(projects)
+		@ProjectsList(projects, panels)
 	}
 }

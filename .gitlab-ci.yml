@@ -1,14 +1,22 @@
 image: golang:1.25-alpine
 
+# Tests spin up real bash via os/exec to run deployment scripts. The alpine
+# base image doesn't ship bash by default, so install it before any stage
+# that runs the test suite.
 stages:
   - lint
   - test
   - build
   - docker
 
+default:
+  before_script:
+    - apk add --no-cache bash
+
 lint:
   stage: lint
   before_script:
+    - apk add --no-cache bash
     - go install github.com/a-h/templ/cmd/templ@latest
     - templ generate
   script:
@@ -19,6 +27,7 @@ lint:
 test:
   stage: test
   before_script:
+    - apk add --no-cache bash
     - go install github.com/a-h/templ/cmd/templ@latest
     - templ generate
   script:
