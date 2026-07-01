@@ -52,6 +52,17 @@ func NewRouter(repo *repository.Repository, rnr *runner.DeploymentRunner) *chi.M
 	r.Put("/environments/{id}", envHandler.UpdateEnvironment)
 	r.Delete("/environments/{id}", envHandler.DeleteEnvironment)
 
+	lifecycleH := handler.NewLifecycleHandler(repo)
+	r.Get("/lifecycles", lifecycleH.ListLifecycles)
+	r.Get("/lifecycles/new", lifecycleH.NewLifecycle)
+	r.Post("/lifecycles", lifecycleH.CreateLifecycle)
+	r.Get("/lifecycles/{id}", lifecycleH.GetLifecycle)
+	r.Get("/lifecycles/{id}/edit", lifecycleH.EditLifecycle)
+	r.Post("/lifecycles/{id}", lifecycleH.SaveLifecycle)
+	r.Post("/lifecycles/{id}/stages", lifecycleH.AddStage)
+	r.Post("/lifecycles/{id}/stages/reorder", lifecycleH.ReorderStage)
+	r.Post("/lifecycles/{id}/stages/{stageId}/delete", lifecycleH.DeleteStage)
+
 	ph := handler.NewProjectHandler(repo)
 	r.Get("/projects", ph.ListProjects)
 	r.Get("/projects/new", ph.NewProject)

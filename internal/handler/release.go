@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -46,21 +47,45 @@ func (h *ReleaseHandler) ListReleases(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	environments, err := h.repo.Queries.ListEnvironments(r.Context())
+	// Build one entry per (release, env) pair with the current gate state, so
+	// the template can decide which envs to show and what tooltip to render.
+	views, err := buildReleaseViews(r.Context(), h.repo, project, releases)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	if r.Header.Get("HX-Request") == "true" {
-		if err := pages.ReleasesFragment(project, releases, environments, "").Render(r.Context(), w); err != nil {
+		if err := pages.ReleasesFragment(project, views, "").Render(r.Context(), w); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	} else {
-		if err := pages.ReleasesPage(project, releases, environments, "", r.URL.Path).Render(r.Context(), w); err != nil {
+		if err := pages.ReleasesPage(project, views, "", r.URL.Path).Render(r.Context(), w); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	}
+}
+
+// buildReleaseViews turns a list of releases into the per-row data the releases
+// table needs (release + per-env gate state). One query per release to evaluate
+// the gate, which is fine for the small N this app handles.
+func buildReleaseViews(ctx context.Context, repo *repository.Repository, project db.Project, releases []db.Release) ([]pages.ReleaseView, error) {
+	views := make([]pages.ReleaseView, len(releases))
+	for i, rel := range releases {
+		envs, err := availableEnvsForRelease(ctx, repo, project, rel)
+		if err != nil {
+			return nil, err
+		}
+		pageEnvs := make([]pages.AvailableEnv, len(envs))
+		for j, e := range envs {
+			pageEnvs[j] = pages.AvailableEnv{
+				Environment: e.Environment,
+				State:       pages.GateState{Deployable: e.State.deployable, Reason: e.State.reason, Bypassable: e.State.bypassable},
+			}
+		}
+		views[i] = pages.ReleaseView{Release: rel, Envs: pageEnvs}
+	}
+	return views, nil
 }
 
 func (h *ReleaseHandler) CreateRelease(w http.ResponseWriter, r *http.Request) {
@@ -80,8 +105,8 @@ func (h *ReleaseHandler) CreateRelease(w http.ResponseWriter, r *http.Request) {
 	if version == "" {
 		project, _ := h.repo.Queries.GetProject(r.Context(), projectID)
 		releases, _ := h.repo.Queries.ListReleasesByProject(r.Context(), projectID)
-		environments, _ := h.repo.Queries.ListEnvironments(r.Context())
-		WriteFormError(w, r, pages.ReleaseForm(projectID, "Version is required"), pages.ReleasesPage(project, releases, environments, "Version is required", r.URL.Path))
+		views, _ := buildReleaseViews(r.Context(), h.repo, project, releases)
+		WriteFormError(w, r, pages.ReleaseForm(projectID, "Version is required"), pages.ReleasesPage(project, views, "Version is required", r.URL.Path))
 		return
 	}
 
@@ -136,8 +161,8 @@ func (h *ReleaseHandler) CreateRelease(w http.ResponseWriter, r *http.Request) {
 		if IsUniqueViolation(err) {
 			project, _ := h.repo.Queries.GetProject(r.Context(), projectID)
 			releases, _ := h.repo.Queries.ListReleasesByProject(r.Context(), projectID)
-			environments, _ := h.repo.Queries.ListEnvironments(r.Context())
-			WriteFormError(w, r, pages.ReleaseForm(projectID, "A release with this version already exists"), pages.ReleasesPage(project, releases, environments, "A release with this version already exists", r.URL.Path))
+			views, _ := buildReleaseViews(r.Context(), h.repo, project, releases)
+			WriteFormError(w, r, pages.ReleaseForm(projectID, "A release with this version already exists"), pages.ReleasesPage(project, views, "A release with this version already exists", r.URL.Path))
 			return
 		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -182,13 +207,13 @@ func (h *ReleaseHandler) CreateRelease(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		environments, err := h.repo.Queries.ListEnvironments(r.Context())
+		views, err := buildReleaseViews(r.Context(), h.repo, project, releases)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		if err := pages.ReleasesFragment(project, releases, environments, "").Render(r.Context(), w); err != nil {
+		if err := pages.ReleasesFragment(project, views, "").Render(r.Context(), w); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	} else {

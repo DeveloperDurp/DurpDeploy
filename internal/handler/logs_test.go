@@ -11,10 +11,10 @@ import (
 	"time"
 
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/migrate"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/runner"
 	"github.com/go-chi/chi/v5"
-	_ "modernc.org/sqlite"
 )
 
 func TestStreamLogs_ReplaysHistoricalLogs(t *testing.T) {
@@ -22,7 +22,6 @@ func TestStreamLogs_ReplaysHistoricalLogs(t *testing.T) {
 	repo := setupTestRepo(t)
 	h := NewLogHandler(broker, repo)
 
-	// Create test data
 	project, err := repo.Queries.CreateProject(context.Background(), db.CreateProjectParams{
 		Name:        "test-project",
 		Description: sql.NullString{},
@@ -55,12 +54,12 @@ func TestStreamLogs_ReplaysHistoricalLogs(t *testing.T) {
 		Status:        "running",
 		StartedAt:     sql.NullInt64{Int64: time.Now().Unix(), Valid: true},
 		FinishedAt:    sql.NullInt64{},
+		Forced:        0,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// Write historical logs
 	_, err = repo.Queries.CreateDeploymentLog(context.Background(), db.CreateDeploymentLogParams{
 		DeploymentID: deployment.ID,
 		StepName:     sql.NullString{String: "Step1", Valid: true},
@@ -79,13 +78,11 @@ func TestStreamLogs_ReplaysHistoricalLogs(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Set up SSE handler
 	r := chi.NewRouter()
 	r.Get("/deployments/{id}/logs/stream", h.StreamLogs)
 	srv := httptest.NewServer(r)
 	defer srv.Close()
 
-	// Connect to SSE
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
@@ -104,7 +101,6 @@ func TestStreamLogs_ReplaysHistoricalLogs(t *testing.T) {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
 	}
 
-	// Read historical logs
 	scanner := bufio.NewScanner(resp.Body)
 	var lines []string
 	for scanner.Scan() {
@@ -128,7 +124,6 @@ func TestStreamLogs_ReplaysHistoricalLogs(t *testing.T) {
 		t.Errorf("expected 'data: historical log 2', got %q", lines[1])
 	}
 
-	// Now broadcast a new log and verify it's received
 	go func() {
 		time.Sleep(50 * time.Millisecond)
 		broker.Broadcast(deployment.ID, "live log")
@@ -137,69 +132,27 @@ func TestStreamLogs_ReplaysHistoricalLogs(t *testing.T) {
 	for scanner.Scan() {
 		line := scanner.Text()
 		if line == "data: live log" {
-			return // Success
+			return
 		}
 	}
 
 	t.Fatal("did not receive live log after historical logs")
 }
 
+// setupTestRepo opens a temp-file SQLite, runs the real migrations via the
+// goose migration runner, and returns a Repository pointing at it. Using
+// migrate.Run keeps the schema in lockstep with the rest of the app so adding
+// a column to migrations/003_*.sql doesn't require editing every test.
 func setupTestRepo(t *testing.T) *repository.Repository {
 	t.Helper()
-	sqlDB, err := sql.Open("sqlite", ":memory:")
+	dir := t.TempDir()
+	dsn := fmt.Sprintf("file:%s/test.db?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)", dir)
+	sqlDB, err := migrate.Run(dsn)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("migrate: %v", err)
 	}
-	t.Cleanup(func() { sqlDB.Close() })
-
-	if err := runMigrations(sqlDB); err != nil {
-		t.Fatal(err)
-	}
-
+	t.Cleanup(func() { _ = sqlDB.Close() })
 	return repository.New(sqlDB)
-}
-
-func runMigrations(db *sql.DB) error {
-	_, err := db.Exec(`
-		CREATE TABLE IF NOT EXISTS projects (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			name TEXT NOT NULL UNIQUE,
-			description TEXT,
-			created_at INTEGER NOT NULL DEFAULT (unixepoch())
-		);
-		CREATE TABLE IF NOT EXISTS environments (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			name TEXT NOT NULL UNIQUE,
-			description TEXT,
-			tags TEXT,
-			created_at INTEGER NOT NULL DEFAULT (unixepoch())
-		);
-		CREATE TABLE IF NOT EXISTS releases (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-			version TEXT NOT NULL,
-			steps_json TEXT NOT NULL,
-			created_at INTEGER NOT NULL DEFAULT (unixepoch()),
-			UNIQUE(project_id, version)
-		);
-		CREATE TABLE IF NOT EXISTS deployments (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			release_id INTEGER NOT NULL REFERENCES releases(id) ON DELETE CASCADE,
-			environment_id INTEGER NOT NULL REFERENCES environments(id) ON DELETE CASCADE,
-			status TEXT NOT NULL DEFAULT 'pending',
-			started_at INTEGER,
-			finished_at INTEGER,
-			created_at INTEGER NOT NULL DEFAULT (unixepoch())
-		);
-		CREATE TABLE IF NOT EXISTS deployment_logs (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			deployment_id INTEGER NOT NULL REFERENCES deployments(id) ON DELETE CASCADE,
-			step_name TEXT,
-			line TEXT NOT NULL,
-			created_at INTEGER NOT NULL DEFAULT (unixepoch())
-		);
-	`)
-	return err
 }
 
 func TestStreamLogs_BadID(t *testing.T) {
@@ -292,10 +245,8 @@ func TestStreamLogs_ClientDisconnect(t *testing.T) {
 		close(done)
 	}()
 
-	// Wait for subscription
 	time.Sleep(50 * time.Millisecond)
 
-	// Client disconnects
 	cancel()
 
 	select {
@@ -304,6 +255,5 @@ func TestStreamLogs_ClientDisconnect(t *testing.T) {
 		t.Fatal("handler did not return after context cancel")
 	}
 
-	// Broadcast after disconnect should not panic
 	broker.Broadcast(1, "after disconnect")
 }

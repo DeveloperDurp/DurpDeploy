@@ -1,0 +1,145 @@
+package pages
+
+import (
+	"durpdeploy/internal/db"
+	"durpdeploy/views/components"
+	"durpdeploy/views/layouts"
+	"strconv"
+)
+
+type LifecycleRow struct {
+	Lifecycle  db.Lifecycle
+	StageCount int64
+}
+
+type LifecycleStageView struct {
+	Stage       db.LifecycleStage
+	Environment db.Environment
+}
+
+templ LifecyclesListPage(rows []LifecycleRow, currentPath string) {
+	@layouts.Base("Lifecycles", currentPath) {
+		@components.Breadcrumbs([]components.Crumb{
+			{Label: "Home", Href: "/"},
+			{Label: "Lifecycles"},
+		})
+		@LifecyclesListContent(rows)
+	}
+}
+
+templ LifecyclesListContent(rows []LifecycleRow) {
+	<div class="space-y-4">
+		<div class="flex justify-between items-center">
+			<h1 class="text-3xl font-bold">Lifecycles</h1>
+			<a href="/lifecycles/new" class="btn btn-primary">New Lifecycle</a>
+		</div>
+		@LifecyclesListFragment(rows)
+	</div>
+}
+
+templ LifecyclesListFragment(rows []LifecycleRow) {
+	<div id="lifecycles-list">
+		if len(rows) == 0 {
+			<div class="card bg-base-200 p-8 text-center">
+				<p class="text-gray-400 mb-4">No lifecycles yet. A lifecycle defines the order in which releases can be promoted across environments (e.g. dev → test → prod).</p>
+				<a href="/lifecycles/new" class="btn btn-primary">New Lifecycle</a>
+			</div>
+		} else {
+			<table class="table table-zebra table-fixed w-full">
+				<thead>
+					<tr>
+						<th class="w-1/4">Name</th>
+						<th class="w-1/2">Description</th>
+						<th class="w-1/6">Stages</th>
+						<th class="w-48">Actions</th>
+					</tr>
+				</thead>
+				<tbody>
+					for _, row := range rows {
+						@LifecycleListRow(row)
+					}
+				</tbody>
+			</table>
+		}
+	</div>
+}
+
+templ LifecycleListRow(row LifecycleRow) {
+	<tr>
+		<td class="truncate font-medium">
+			<a href={ templ.SafeURL("/lifecycles/" + strconv.FormatInt(row.Lifecycle.ID, 10)) } class="link link-primary">{ row.Lifecycle.Name }</a>
+		</td>
+		<td class="truncate">
+			if row.Lifecycle.Description.Valid {
+				{ row.Lifecycle.Description.String }
+			} else {
+				<span class="text-gray-500">-</span>
+			}
+		</td>
+		<td class="whitespace-nowrap">{ strconv.FormatInt(row.StageCount, 10) }</td>
+		<td class="flex gap-2">
+			<a href={ templ.SafeURL("/lifecycles/" + strconv.FormatInt(row.Lifecycle.ID, 10) + "/edit") } class="btn btn-sm btn-ghost">Edit</a>
+			<form method="post" action={ templ.SafeURL("/lifecycles/" + strconv.FormatInt(row.Lifecycle.ID, 10)) } onsubmit="return confirm('Delete this lifecycle? Projects using it will be unset.')">
+				<input type="hidden" name="_method" value="delete"/>
+				<button type="submit" class="btn btn-sm btn-error">Delete</button>
+			</form>
+		</td>
+	</tr>
+}
+
+templ LifecycleForm(lc db.Lifecycle, isEdit bool, errorMsg string) {
+	<div class="max-w-2xl mx-auto">
+		<h1 class="text-3xl font-bold mb-6">
+			if isEdit {
+				Edit Lifecycle
+			} else {
+				New Lifecycle
+			}
+		</h1>
+		<form
+			if isEdit {
+				method="post"
+				action={ templ.SafeURL("/lifecycles/" + strconv.FormatInt(lc.ID, 10)) }
+			} else {
+				method="post"
+				action="/lifecycles"
+			}
+			class="space-y-4"
+		>
+			if isEdit {
+				<input type="hidden" name="_method" value="put"/>
+			}
+			<div class="form-control">
+				<label class="label">
+					<span class="label-text">Name</span>
+				</label>
+				<input type="text" name="name" class="input input-bordered" value={ lc.Name } required/>
+				if errorMsg != "" {
+					<span class="text-error text-sm mt-1">{ errorMsg }</span>
+				}
+			</div>
+			<div class="form-control">
+				<label class="label">
+					<span class="label-text">Description</span>
+				</label>
+				<textarea name="description" class="textarea textarea-bordered" rows="3">{ lc.Description.String }</textarea>
+			</div>
+			<div class="flex gap-2">
+				<button type="submit" class="btn btn-primary">
+					if isEdit {
+						Update
+					} else {
+						Create
+					}
+				</button>
+				<a href="/lifecycles" class="btn btn-ghost">Cancel</a>
+			</div>
+		</form>
+	</div>
+}
+
+templ LifecycleFormPage(lc db.Lifecycle, isEdit bool, errorMsg string, currentPath string) {
+	@layouts.Base("Lifecycle", currentPath) {
+		@LifecycleForm(lc, isEdit, errorMsg)
+	}
+}
