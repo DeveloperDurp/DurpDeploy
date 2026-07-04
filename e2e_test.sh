@@ -151,6 +151,40 @@ RERUN_PAGE=$(curl_body "$BASE/deployments/$NEW_DEP")
 echo "$RERUN_PAGE" | grep -q "Re-run of #$TIMEOUT_DEP" || { echo "FAIL: re-run note missing lineage text"; exit 1; }
 echo "  Re-run note records lineage: OK"
 
+echo "=== F3.2d: Step Retry on Failure ==="
+# A step with max_retries=2 and script_body=exit+1 should be retried twice,
+# logging attempt and retry messages, before the deployment fails.
+STEPS_PAGE=$(curl_body "$BASE/projects/$PROJECT_ID/steps-page")
+TIMEOUT_STEP_ID=$(echo "$STEPS_PAGE" | grep -oP 'step-row-\K[0-9]+' | sort -n | tail -1)
+if [[ -n "$TIMEOUT_STEP_ID" ]]; then
+  curl -s -o /dev/null -X DELETE "$BASE/projects/$PROJECT_ID/steps/$TIMEOUT_STEP_ID"
+fi
+
+CODE=$(curl_silent -X POST -d "name=RetryStep&script_body=exit+1&max_retries=2" "$BASE/projects/$PROJECT_ID/steps")
+[[ "$CODE" == "200" ]] || { echo "FAIL: create retry step got $CODE"; exit 1; }
+
+CODE=$(curl_silent -X POST -d "version=1.0.4" "$BASE/projects/$PROJECT_ID/releases")
+[[ "$CODE" == "303" ]] || { echo "FAIL: create retry release got $CODE"; exit 1; }
+RETRY_REL=$(curl_body "$BASE/projects/$PROJECT_ID/releases" | grep -oP 'href="/projects/'$PROJECT_ID'/releases/\K[0-9]+' | sort -n | tail -1)
+echo "Retry Release ID: $RETRY_REL"
+
+RETRY_URL=$(curl -s -D - -o /dev/null -X POST -d "release_id=$RETRY_REL&environment_id=$ENV_ID" "$BASE/deployments" | grep -i "^location:" | awk '{print $2}' | tr -d '\r')
+RETRY_DEP=$(echo "$RETRY_URL" | grep -oP '/deployments/\K[0-9]+')
+[[ -n "$RETRY_DEP" ]] || { echo "FAIL: retry deployment did not redirect"; exit 1; }
+echo "Retry Deployment ID: $RETRY_DEP"
+
+for i in {1..100}; do
+  RETRY_STATUS=$(curl_body "$BASE/deployments/$RETRY_DEP/status")
+  if echo "$RETRY_STATUS" | grep -qE 'failed|succeeded|cancelled'; then break; fi
+  sleep 0.2
+done
+echo "$RETRY_STATUS" | grep -q 'failed' || { echo "FAIL: retry deploy did not fail, got status: $RETRY_STATUS"; exit 1; }
+
+LOG_LINES=$(sqlite3 durpdeploy.db "SELECT line FROM deployment_logs WHERE deployment_id=$RETRY_DEP ORDER BY id;")
+echo "$LOG_LINES" | grep -q "attempt 1" || { echo "FAIL: retry log missing attempt 1"; exit 1; }
+echo "$LOG_LINES" | grep -q "retrying" || { echo "FAIL: retry log missing retrying"; exit 1; }
+echo "  Step retry loop ran: OK"
+
 echo "=== F3.3: Validation Path ==="
 CODE=$(curl_silent -X POST -d "name=" "$BASE/projects")
 [[ "$CODE" == "422" ]] || { echo "FAIL: empty project name should be 422, got $CODE"; exit 1; }
@@ -244,6 +278,94 @@ V2_REL_ID=$(curl_body "$BASE/projects/$LC_PROJECT_ID/releases" | grep -oP 'href=
 CODE=$(curl_silent -X POST -d "release_id=$V2_REL_ID&environment_id=$LC_PROD_ID" "$BASE/deployments")
 [[ "$CODE" == "422" ]] || { echo "FAIL: deploy v2 to prod (no chain) got $CODE, want 422"; exit 1; }
 echo "  New version without chain: blocked (422)"
+
+echo "=== F3.5b: Approval Gate ==="
+# A separate lifecycle where the prod stage requires approval. Deployments
+# to prod should pause at pending_approval until explicitly approved.
+for E in app-dev app-staging app-prod; do
+  CODE=$(curl_silent -X POST -d "name=$E" "$BASE/environments")
+  [[ "$CODE" == "303" ]] || { echo "FAIL: create env $E got $CODE"; exit 1; }
+done
+APP_DEV_ID=$(sqlite3 durpdeploy.db "SELECT id FROM environments WHERE name='app-dev';")
+APP_STAGING_ID=$(sqlite3 durpdeploy.db "SELECT id FROM environments WHERE name='app-staging';")
+APP_PROD_ID=$(sqlite3 durpdeploy.db "SELECT id FROM environments WHERE name='app-prod';")
+echo "App Env IDs: dev=$APP_DEV_ID staging=$APP_STAGING_ID prod=$APP_PROD_ID"
+
+CODE=$(curl_silent -X POST -d "name=app-lifecycle" "$BASE/lifecycles")
+[[ "$CODE" == "303" ]] || { echo "FAIL: create app-lifecycle got $CODE"; exit 1; }
+APP_LC_ID=$(sqlite3 durpdeploy.db "SELECT id FROM lifecycles WHERE name='app-lifecycle';")
+echo "App Lifecycle ID: $APP_LC_ID"
+
+for EID in "$APP_DEV_ID" "$APP_STAGING_ID" "$APP_PROD_ID"; do
+  CODE=$(curl_silent -X POST -d "environment_id=$EID" "$BASE/lifecycles/$APP_LC_ID/stages")
+  [[ "$CODE" == "303" ]] || { echo "FAIL: add stage env=$EID got $CODE"; exit 1; }
+done
+
+APP_PROD_STAGE_ID=$(sqlite3 durpdeploy.db "SELECT id FROM lifecycle_stages WHERE lifecycle_id=$APP_LC_ID AND environment_id=$APP_PROD_ID;")
+CODE=$(curl_silent -X PATCH -d "requires_approval=1" "$BASE/lifecycles/$APP_LC_ID/stages/$APP_PROD_STAGE_ID")
+[[ "$CODE" == "303" ]] || { echo "FAIL: patch prod stage got $CODE"; exit 1; }
+
+CODE=$(curl_silent -X POST -d "name=AppProject" "$BASE/projects")
+[[ "$CODE" == "303" ]] || { echo "FAIL: create app project got $CODE"; exit 1; }
+APP_PROJ_ID=$(sqlite3 durpdeploy.db "SELECT id FROM projects WHERE name='AppProject';")
+echo "App Project ID: $APP_PROJ_ID"
+
+CODE=$(curl_silent -X PUT -d "name=AppProject&description=&lifecycle_id=$APP_LC_ID" "$BASE/projects/$APP_PROJ_ID")
+[[ "$CODE" == "303" ]] || { echo "FAIL: assign lifecycle to app project got $CODE"; exit 1; }
+
+CODE=$(curl_silent -X POST -d "name=app-step&script_body=exit+0" "$BASE/projects/$APP_PROJ_ID/steps")
+[[ "$CODE" == "200" ]] || { echo "FAIL: create app step got $CODE"; exit 1; }
+CODE=$(curl_silent -X POST -d "version=1.0.0" "$BASE/projects/$APP_PROJ_ID/releases")
+[[ "$CODE" == "303" ]] || { echo "FAIL: create app release got $CODE"; exit 1; }
+APP_REL_ID=$(curl_body "$BASE/projects/$APP_PROJ_ID/releases" | grep -oP 'href="/projects/'$APP_PROJ_ID'/releases/\K[0-9]+' | sort -n | tail -1)
+echo "App Release ID: $APP_REL_ID"
+
+# Deploy to dev -> should succeed
+DEV_URL=$(curl -s -D - -o /dev/null -X POST -d "release_id=$APP_REL_ID&environment_id=$APP_DEV_ID" "$BASE/deployments" | grep -i "^location:" | awk '{print $2}' | tr -d '\r')
+DEV_DEP=$(echo "$DEV_URL" | grep -oP '/deployments/\K[0-9]+')
+[[ -n "$DEV_DEP" ]] || { echo "FAIL: dev deployment did not redirect"; exit 1; }
+echo "Dev Deployment ID: $DEV_DEP"
+for i in {1..50}; do
+  if curl_body "$BASE/deployments/$DEV_DEP/status" | grep -q 'succeeded'; then break; fi
+  sleep 0.1
+done
+echo "  Dev deploy succeeded: OK"
+
+# Deploy to staging -> should succeed
+STAGING_URL=$(curl -s -D - -o /dev/null -X POST -d "release_id=$APP_REL_ID&environment_id=$APP_STAGING_ID" "$BASE/deployments" | grep -i "^location:" | awk '{print $2}' | tr -d '\r')
+STAGING_DEP=$(echo "$STAGING_URL" | grep -oP '/deployments/\K[0-9]+')
+[[ -n "$STAGING_DEP" ]] || { echo "FAIL: staging deployment did not redirect"; exit 1; }
+echo "Staging Deployment ID: $STAGING_DEP"
+for i in {1..50}; do
+  if curl_body "$BASE/deployments/$STAGING_DEP/status" | grep -q 'succeeded'; then break; fi
+  sleep 0.1
+done
+echo "  Staging deploy succeeded: OK"
+
+# Deploy to prod -> should be pending_approval
+PROD_URL=$(curl -s -D - -o /dev/null -X POST -d "release_id=$APP_REL_ID&environment_id=$APP_PROD_ID" "$BASE/deployments" | grep -i "^location:" | awk '{print $2}' | tr -d '\r')
+PROD_DEP=$(echo "$PROD_URL" | grep -oP '/deployments/\K[0-9]+')
+[[ -n "$PROD_DEP" ]] || { echo "FAIL: prod deployment did not redirect"; exit 1; }
+echo "Prod Deployment ID: $PROD_DEP"
+
+PROD_STATUS=$(curl_body "$BASE/deployments/$PROD_DEP/status")
+echo "$PROD_STATUS" | grep -q "pending_approval" || { echo "FAIL: prod deployment not pending_approval"; exit 1; }
+echo "  Prod deploy pending_approval: OK"
+
+# Approve and run
+CODE=$(curl_silent -X POST -d "approved_by=alice" "$BASE/deployments/$PROD_DEP/approve")
+[[ "$CODE" == "303" ]] || { echo "FAIL: approve prod deploy got $CODE"; exit 1; }
+
+for i in {1..100}; do
+  PROD_STATUS=$(curl_body "$BASE/deployments/$PROD_DEP/status")
+  if echo "$PROD_STATUS" | grep -qE 'failed|succeeded|cancelled'; then break; fi
+  sleep 0.2
+done
+echo "$PROD_STATUS" | grep -q 'succeeded' || { echo "FAIL: prod deploy did not succeed after approval, got status: $PROD_STATUS"; exit 1; }
+echo "  Prod deploy succeeded after approval: OK"
+
+sqlite3 durpdeploy.db "SELECT approved_by FROM approvals WHERE deployment_id=$PROD_DEP;" | grep -q "alice" || { echo "FAIL: approval not recorded"; exit 1; }
+echo "  Approval recorded for alice: OK"
 
 echo "=== F3.6: Force Deploy ==="
 # Create v3 release, deploy directly to Prod with force=true -> 303

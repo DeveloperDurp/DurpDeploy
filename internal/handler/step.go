@@ -129,12 +129,46 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 		timeoutSeconds = t
 	}
 
+	maxRetriesStr := strings.TrimSpace(r.FormValue("max_retries"))
+	var maxRetries int64
+	if maxRetriesStr != "" {
+		m, err := strconv.ParseInt(maxRetriesStr, 10, 64)
+		if err != nil || m < 0 {
+			step := db.Step{
+				ProjectID:      projectID,
+				Name:           name,
+				ScriptBody:     script,
+				TimeoutSeconds: timeoutSeconds,
+				MaxRetries:     maxRetries,
+			}
+			WriteFormError(
+				w,
+				r,
+				components.StepForm(
+					step,
+					projectID,
+					true,
+					"Max retries must be a non-negative integer",
+				),
+				components.StepForm(
+					step,
+					projectID,
+					true,
+					"Max retries must be a non-negative integer",
+				),
+			)
+			return
+		}
+		maxRetries = m
+	}
+
 	if name == "" {
 		step := db.Step{
 			ProjectID:      projectID,
 			Name:           name,
 			ScriptBody:     script,
 			TimeoutSeconds: timeoutSeconds,
+			MaxRetries:     maxRetries,
 		}
 		WriteFormError(
 			w,
@@ -163,6 +197,7 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 		ScriptBody:     script,
 		SortOrder:      sortOrder,
 		TimeoutSeconds: timeoutSeconds,
+		MaxRetries:     maxRetries,
 	}
 
 	_, err = h.repo.Queries.CreateStep(r.Context(), params)
@@ -258,6 +293,39 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 		timeoutSeconds = t
 	}
 
+	maxRetriesStr := strings.TrimSpace(r.FormValue("max_retries"))
+	var maxRetries int64
+	if maxRetriesStr != "" {
+		m, err := strconv.ParseInt(maxRetriesStr, 10, 64)
+		if err != nil || m < 0 {
+			step := db.Step{
+				ID:             stepID,
+				ProjectID:      projectID,
+				Name:           name,
+				ScriptBody:     script,
+				SortOrder:      sortOrder,
+				TimeoutSeconds: timeoutSeconds,
+				MaxRetries:     maxRetries,
+			}
+			WriteFormError(
+				w,
+				r,
+				components.StepEditRow(
+					step,
+					projectID,
+					"Max retries must be a non-negative integer",
+				),
+				components.StepEditRow(
+					step,
+					projectID,
+					"Max retries must be a non-negative integer",
+				),
+			)
+			return
+		}
+		maxRetries = m
+	}
+
 	if name == "" {
 		step := db.Step{
 			ID:             stepID,
@@ -266,6 +334,7 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 			ScriptBody:     script,
 			SortOrder:      sortOrder,
 			TimeoutSeconds: timeoutSeconds,
+			MaxRetries:     maxRetries,
 		}
 		WriteFormError(
 			w,
@@ -282,6 +351,7 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 		ScriptBody:     script,
 		SortOrder:      sortOrder,
 		TimeoutSeconds: timeoutSeconds,
+		MaxRetries:     maxRetries,
 	}
 
 	_, err = h.repo.Queries.UpdateStep(r.Context(), params)
@@ -402,6 +472,7 @@ func (h *StepHandler) ReorderStep(w http.ResponseWriter, r *http.Request) {
 					ScriptBody:     s.ScriptBody,
 					SortOrder:      s.SortOrder + 1,
 					TimeoutSeconds: s.TimeoutSeconds,
+					MaxRetries:     s.MaxRetries,
 				}
 				if _, err := qtx.UpdateStep(r.Context(), p); err != nil {
 					http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -421,6 +492,7 @@ func (h *StepHandler) ReorderStep(w http.ResponseWriter, r *http.Request) {
 					ScriptBody:     s.ScriptBody,
 					SortOrder:      s.SortOrder - 1,
 					TimeoutSeconds: s.TimeoutSeconds,
+					MaxRetries:     s.MaxRetries,
 				}
 				if _, err := qtx.UpdateStep(r.Context(), p); err != nil {
 					http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -436,6 +508,7 @@ func (h *StepHandler) ReorderStep(w http.ResponseWriter, r *http.Request) {
 		ScriptBody:     target.ScriptBody,
 		SortOrder:      newOrder,
 		TimeoutSeconds: target.TimeoutSeconds,
+		MaxRetries:     target.MaxRetries,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

@@ -20,10 +20,10 @@ SELECT * FROM lifecycle_stages WHERE lifecycle_id = ? ORDER BY sort_order;
 SELECT * FROM lifecycle_stages WHERE id = ?;
 
 -- name: CreateLifecycleStage :one
-INSERT INTO lifecycle_stages (lifecycle_id, environment_id, sort_order) VALUES (?, ?, ?) RETURNING *;
+INSERT INTO lifecycle_stages (lifecycle_id, environment_id, sort_order, requires_approval) VALUES (?, ?, ?, ?) RETURNING *;
 
 -- name: UpdateLifecycleStage :one
-UPDATE lifecycle_stages SET environment_id = ?, sort_order = ? WHERE id = ? RETURNING *;
+UPDATE lifecycle_stages SET environment_id = ?, sort_order = ?, requires_approval = ? WHERE id = ? RETURNING *;
 
 -- name: DeleteLifecycleStage :exec
 DELETE FROM lifecycle_stages WHERE id = ?;

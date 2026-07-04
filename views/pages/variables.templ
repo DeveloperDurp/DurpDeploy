@@ -46,6 +46,7 @@ templ VariablesPage(project db.Project, variables []db.Variable, environments []
 			{Label: "Variables"},
 		})
 		@VariablesContent(project, variables, environments, errorMsg)
+		@VariablesPageScript()
 	}
 }
 
@@ -131,7 +132,7 @@ templ VariablesTable(project db.Project, variables []db.Variable, environments [
 		</thead>
 		<tbody>
 			<tr class="bg-base-300">
-				<td colspan="5" class="font-bold">Unscoped Variables</td>
+				<td colspan="5" class="font-bold">Global Defaults</td>
 			</tr>
 			if len(filterUnscoped(variables)) == 0 {
 				<tr>
@@ -143,7 +144,7 @@ templ VariablesTable(project db.Project, variables []db.Variable, environments [
 				}
 			}
 			<tr class="bg-base-300">
-				<td colspan="5" class="font-bold">Environment-Scoped Variables</td>
+				<td colspan="5" class="font-bold">Per-Environment Overrides</td>
 			</tr>
 			if len(filterScoped(variables)) == 0 {
 				<tr>
@@ -170,19 +171,28 @@ templ VariableRow(projectID int64, variable db.Variable, environments []db.Envir
 				<span class="text-gray-500 italic">(empty)</span>
 			}
 		</td>
-		<td class="truncate">
-			if variable.EnvironmentID.Valid {
-				{ envNameForID(environments, variable.EnvironmentID.Int64) }
-			} else {
-				<span class="text-gray-500">Unscoped</span>
-			}
-		</td>
+<td class="truncate">
+		if variable.EnvironmentID.Valid {
+			{ envNameForID(environments, variable.EnvironmentID.Int64) }
+		} else {
+			<span class="badge badge-ghost badge-sm">Global</span>
+		}
+	</td>
 		<td class="truncate">
 			if variable.Secret != 0 {
 				<span class="badge badge-warning badge-sm">secret</span>
 			}
 		</td>
 		<td class="flex gap-2">
+			if !variable.EnvironmentID.Valid {
+				<button
+					type="button"
+					class="btn btn-sm btn-ghost"
+					data-override-for={ variable.Name }
+				>
+					Override
+				</button>
+			}
 			<button
 				class="btn btn-sm btn-ghost"
 				hx-get={ fmt.Sprintf("/projects/%d/variables/%d/edit", projectID, variable.ID) }
@@ -248,4 +258,26 @@ templ VariableEditRow(projectID int64, variable db.Variable, environments []db.E
 			<button type="submit" form={ fmt.Sprintf("variable-edit-form-%d", variable.ID) } class="btn btn-primary btn-sm whitespace-nowrap">Save</button>
 		</td>
 	</tr>
+}
+
+templ VariablesPageScript() {
+	<script>
+		document.addEventListener('click', function(e) {
+			var btn = e.target.closest('[data-override-for]');
+			if (!btn) return;
+			var name = btn.getAttribute('data-override-for');
+			var form = document.querySelector('#variables-content form');
+			if (!form) return;
+			var nameInput = form.querySelector('input[name="name"]');
+			var envSelect = form.querySelector('select[name="environment_id"]');
+			if (nameInput) {
+				nameInput.value = name;
+				nameInput.focus();
+			}
+			if (envSelect) {
+				envSelect.focus();
+			}
+			form.scrollIntoView({behavior: 'smooth', block: 'start'});
+		});
+	</script>
 }

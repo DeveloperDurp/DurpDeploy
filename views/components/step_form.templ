@@ -46,7 +46,13 @@ templ StepForm(step db.Step, projectID int64, isNew bool, errorMsg string) {
 				</label>
 				<input type="number" name="timeout_seconds" min="0" value={ strconv.FormatInt(step.TimeoutSeconds, 10) } class="input input-bordered"/>
 			</div>
-			<input type="hidden" name="sort_order" value={ strconv.FormatInt(step.SortOrder, 10) }/>
+			<div class="form-control">
+				<label class="label">
+					<span class="label-text">Max retries on failure (0 = no retry)</span>
+			</label>
+			<input type="number" name="max_retries" min="0" value={ strconv.FormatInt(step.MaxRetries, 10) } class="input input-bordered"/>
+		</div>
+		<input type="hidden" name="sort_order" value={ strconv.FormatInt(step.SortOrder, 10) }/>
 			<div class="flex gap-2">
 				<button type="submit" class="btn btn-primary btn-sm">
 					if isNew {
@@ -67,7 +73,7 @@ templ StepForm(step db.Step, projectID int64, isNew bool, errorMsg string) {
 
 templ StepEditRow(step db.Step, projectID int64, errorMsg string) {
 	<tr id={ fmt.Sprintf("step-row-%d", step.ID) }>
-		<td colspan="5">
+		<td colspan="6">
 			<form
 				hx-put={ fmt.Sprintf("/projects/%d/steps/%d", projectID, step.ID) }
 				hx-target="#step-list"
@@ -85,19 +91,19 @@ templ StepEditRow(step db.Step, projectID int64, errorMsg string) {
 						<span class="text-error text-sm mt-1">{ errorMsg }</span>
 					}
 				</div>
-				<div class="form-control flex-[2]">
+				<div class="form-control flex-1">
 					<label class="label">
 						<span class="label-text">Script Body (Bash)</span>
 					</label>
-					<textarea name="script_body" class="textarea textarea-bordered textarea-sm" rows="2">{ step.ScriptBody }</textarea>
+					<textarea name="script_body" class="textarea textarea-bordered textarea-sm resize-y" rows="2">{ step.ScriptBody }</textarea>
 				</div>
 				<div class="form-control flex-1">
 					<label class="label">
-						<span class="label-text">Timeout (s)</span>
-					</label>
-					<input type="number" name="timeout_seconds" min="0" value={ strconv.FormatInt(step.TimeoutSeconds, 10) } class="input input-bordered input-sm"/>
-				</div>
-				<input type="hidden" name="sort_order" value={ strconv.FormatInt(step.SortOrder, 10) }/>
+					<span class="label-text">Max retries</span>
+				</label>
+				<input type="number" name="max_retries" min="0" value={ strconv.FormatInt(step.MaxRetries, 10) } class="input input-bordered input-sm"/>
+			</div>
+			<input type="hidden" name="sort_order" value={ strconv.FormatInt(step.SortOrder, 10) }/>
 				<div class="flex gap-2 pb-1">
 					<button type="submit" class="btn btn-primary btn-sm">Update</button>
 					<button type="button" class="btn btn-ghost btn-sm" hx-get={ fmt.Sprintf("/projects/%d/steps", projectID) } hx-target="#step-list" hx-swap="innerHTML">Cancel</button>

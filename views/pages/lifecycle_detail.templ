@@ -4,8 +4,16 @@ import (
 	"durpdeploy/internal/db"
 	"durpdeploy/views/components"
 	"durpdeploy/views/layouts"
+	"fmt"
 	"strconv"
 )
+
+func ternaryNext(current int64) string {
+	if current == 0 {
+		return "true"
+	}
+	return "false"
+}
 
 templ LifecycleDetailPage(lc db.Lifecycle, stages []LifecycleStageView, availableEnvs []db.Environment, errorMsg string, currentPath string) {
 	@layouts.Base("Lifecycle: "+lc.Name, currentPath) {
@@ -54,7 +62,8 @@ templ LifecycleStageList(lc db.Lifecycle, stages []LifecycleStageView, available
 					<tr>
 						<th class="w-16">Order</th>
 						<th class="w-1/3">Environment</th>
-						<th class="w-96">Actions</th>
+					<th class="w-1/3">Requires approval</th>
+					<th class="w-96">Actions</th>
 					</tr>
 				</thead>
 				<tbody>
@@ -76,6 +85,20 @@ templ LifecycleStageRow(lc db.Lifecycle, index int, total int, s LifecycleStageV
 	<tr>
 		<td>{ strconv.Itoa(index + 1) }</td>
 		<td class="font-medium truncate">{ s.Environment.Name }</td>
+		<td>
+			<label class="cursor-pointer flex items-center gap-1">
+				<input
+					type="checkbox"
+					class="checkbox checkbox-sm"
+					hx-patch={ templ.SafeURL("/lifecycles/" + strconv.FormatInt(lc.ID, 10) + "/stages/" + strconv.FormatInt(s.Stage.ID, 10)) }
+					hx-vals={ fmt.Sprintf(`{"requires_approval":%q}`, ternaryNext(s.Stage.RequiresApproval)) }
+					hx-target="#lifecycle-stages"
+					hx-swap="outerHTML"
+					checked?={ s.Stage.RequiresApproval != 0 }
+				/>
+				<span class="text-sm">Required</span>
+			</label>
+		</td>
 		<td class="flex gap-2 whitespace-nowrap">
 			if index > 0 {
 				<form method="post" action={ templ.SafeURL("/lifecycles/" + strconv.FormatInt(lc.ID, 10) + "/stages/reorder") }>

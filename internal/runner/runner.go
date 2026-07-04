@@ -75,6 +75,106 @@ func (r *DeploymentRunner) Cancel(deploymentID int64) error {
 	)
 }
 
+func (r *DeploymentRunner) runStepAttempt(
+	ctx context.Context,
+	runCtx context.Context,
+	deploymentID int64,
+	step struct {
+		Name           string `json:"name"`
+		ScriptBody     string `json:"script_body"`
+		SortOrder      int64  `json:"sort_order"`
+		TimeoutSeconds int64  `json:"timeout_seconds"`
+		MaxRetries     int64  `json:"max_retries"`
+	},
+	logWriter *broadcastWriter,
+	envMap map[string]string,
+	secretValues []string,
+	attempt int,
+) error {
+	d := defaultStepTimeout
+	if step.TimeoutSeconds > 0 {
+		d = time.Duration(step.TimeoutSeconds) * time.Second
+	}
+	stepCtx, stepCancel := context.WithTimeout(runCtx, d)
+	defer stepCancel()
+
+	tmpDir, err := os.MkdirTemp(
+		"",
+		fmt.Sprintf("durpdeploy-%d-*", deploymentID),
+	)
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(tmpDir)
+
+	scriptPath := tmpDir + "/script.sh"
+	if err := os.WriteFile(
+		scriptPath,
+		[]byte(step.ScriptBody),
+		0755,
+	); err != nil {
+		return err
+	}
+
+	cmd := exec.CommandContext(stepCtx, "bash", scriptPath)
+	cmd.Dir = tmpDir
+	cmd.Env = os.Environ()
+	for k, v := range envMap {
+		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
+	}
+	cmd.WaitDelay = 15 * time.Second
+
+	var buf bytes.Buffer
+	cmd.Stdout = io.MultiWriter(&buf, logWriter)
+	cmd.Stderr = io.MultiWriter(&buf, logWriter)
+
+	if err := cmd.Start(); err != nil {
+		logWriter.Flush()
+		return err
+	}
+
+	go func() {
+		<-stepCtx.Done()
+		time.Sleep(10 * time.Second)
+		if cmd.Process != nil {
+			_ = cmd.Process.Kill()
+		}
+	}()
+
+	err = cmd.Wait()
+	logWriter.Flush()
+
+	timedOut := stepCtx.Err() == context.DeadlineExceeded
+	if err != nil {
+		if timedOut {
+			logWriter.Write(
+				[]byte(
+					fmt.Sprintf(
+						"step %q: attempt %d timed out after %s\n",
+						step.Name,
+						attempt,
+						d,
+					),
+				),
+			)
+		} else {
+			logWriter.Write(
+				[]byte(
+					fmt.Sprintf(
+						"step %q: attempt %d failed: %v\n",
+						step.Name,
+						attempt,
+						err,
+					),
+				),
+			)
+		}
+		logWriter.Flush()
+	}
+
+	return err
+}
+
 func (r *DeploymentRunner) Run(
 	ctx context.Context,
 	deploymentID, releaseID, environmentID int64,
@@ -105,6 +205,7 @@ func (r *DeploymentRunner) Run(
 		ScriptBody     string `json:"script_body"`
 		SortOrder      int64  `json:"sort_order"`
 		TimeoutSeconds int64  `json:"timeout_seconds"`
+		MaxRetries     int64  `json:"max_retries"`
 	}
 	if err := json.Unmarshal([]byte(release.StepsJson), &steps); err != nil {
 		_ = r.failUnlessCancelled(ctx, deploymentID)
@@ -134,43 +235,6 @@ func (r *DeploymentRunner) Run(
 	}
 
 	for _, step := range steps {
-		d := defaultStepTimeout
-		if step.TimeoutSeconds > 0 {
-			d = time.Duration(step.TimeoutSeconds) * time.Second
-		}
-		stepCtx, stepCancel := context.WithTimeout(runCtx, d)
-
-		tmpDir, err := os.MkdirTemp(
-			"",
-			fmt.Sprintf("durpdeploy-%d-*", deploymentID),
-		)
-		if err != nil {
-			stepCancel()
-			_ = r.failUnlessCancelled(ctx, deploymentID)
-			return
-		}
-
-		scriptPath := tmpDir + "/script.sh"
-		if err := os.WriteFile(
-			scriptPath,
-			[]byte(step.ScriptBody),
-			0755,
-		); err != nil {
-			os.RemoveAll(tmpDir)
-			stepCancel()
-			_ = r.failUnlessCancelled(ctx, deploymentID)
-			return
-		}
-
-		cmd := exec.CommandContext(stepCtx, "bash", scriptPath)
-		cmd.Dir = tmpDir
-		cmd.Env = os.Environ()
-		for k, v := range envMap {
-			cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
-		}
-		cmd.WaitDelay = 15 * time.Second
-
-		var buf bytes.Buffer
 		logWriter := &broadcastWriter{
 			broker:       r.broker,
 			repo:         r.repo,
@@ -179,47 +243,39 @@ func (r *DeploymentRunner) Run(
 			ctx:          ctx,
 			secretValues: secretValues,
 		}
-		cmd.Stdout = io.MultiWriter(&buf, logWriter)
-		cmd.Stderr = io.MultiWriter(&buf, logWriter)
 
-		if err := cmd.Start(); err != nil {
-			logWriter.Flush()
-			os.RemoveAll(tmpDir)
-			stepCancel()
-			_ = r.failUnlessCancelled(ctx, deploymentID)
-			return
-		}
-
-		go func() {
-			<-stepCtx.Done()
-			time.Sleep(10 * time.Second)
-			if cmd.Process != nil {
-				_ = cmd.Process.Kill()
+		var lastErr error
+		maxAttempts := int(step.MaxRetries) + 1
+		for attempt := 1; attempt <= maxAttempts; attempt++ {
+			lastErr = r.runStepAttempt(
+				ctx, runCtx, deploymentID, step,
+				logWriter, envMap, secretValues, attempt,
+			)
+			if lastErr == nil {
+				break
 			}
-		}()
 
-		err = cmd.Wait()
-		logWriter.Flush()
-		os.RemoveAll(tmpDir)
-		stepCancel()
+			dep, _ := r.repo.Queries.GetDeployment(ctx, deploymentID)
+			if dep.Status == "cancelled" {
+				return
+			}
 
-		if err != nil {
-			if stepCtx.Err() == context.DeadlineExceeded {
+			if attempt < maxAttempts {
 				logWriter.Write(
 					[]byte(
 						fmt.Sprintf(
-							"step %q timed out after %s\n",
+							"step %q: retrying (attempt %d of %d)\n",
 							step.Name,
-							d,
+							attempt+1,
+							maxAttempts,
 						),
 					),
 				)
 				logWriter.Flush()
 			}
-			dep, _ := r.repo.Queries.GetDeployment(ctx, deploymentID)
-			if dep.Status == "cancelled" {
-				return
-			}
+		}
+
+		if lastErr != nil {
 			_ = r.repo.Queries.UpdateDeploymentStatus(
 				ctx,
 				db.UpdateDeploymentStatusParams{

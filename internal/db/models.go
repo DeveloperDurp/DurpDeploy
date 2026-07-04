@@ -8,6 +8,13 @@ import (
 	"database/sql"
 )
 
+type Approval struct {
+	ID           int64  `json:"id"`
+	DeploymentID int64  `json:"deployment_id"`
+	ApprovedBy   string `json:"approved_by"`
+	ApprovedAt   int64  `json:"approved_at"`
+}
+
 type Deployment struct {
 	ID            int64          `json:"id"`
 	ReleaseID     int64          `json:"release_id"`
@@ -44,10 +51,11 @@ type Lifecycle struct {
 }
 
 type LifecycleStage struct {
-	ID            int64 `json:"id"`
-	LifecycleID   int64 `json:"lifecycle_id"`
-	EnvironmentID int64 `json:"environment_id"`
-	SortOrder     int64 `json:"sort_order"`
+	ID               int64 `json:"id"`
+	LifecycleID      int64 `json:"lifecycle_id"`
+	EnvironmentID    int64 `json:"environment_id"`
+	SortOrder        int64 `json:"sort_order"`
+	RequiresApproval int64 `json:"requires_approval"`
 }
 
 type Project struct {
@@ -84,6 +92,7 @@ type Step struct {
 	SortOrder      int64  `json:"sort_order"`
 	CreatedAt      int64  `json:"created_at"`
 	TimeoutSeconds int64  `json:"timeout_seconds"`
+	MaxRetries     int64  `json:"max_retries"`
 }
 
 type StepTemplate struct {

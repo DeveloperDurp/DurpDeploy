@@ -1084,9 +1084,12 @@ func TestNewDeploymentPage_ReleaseAwareGateState(t *testing.T) {
 	// Scope the assertion to the env select so the release dropdown's
 	// matching value=1 doesn't trip us.
 	envSelect := envSelectFromPage(page)
-	if strings.Contains(envSelect, fmt.Sprintf("value=\"%d\"", dev.ID)) {
+	// dev already has v1 deployed -> appears in the "Already deployed
+	// at this version" optgroup, not hidden. This lets the user re-run
+	// the same release to a stage that's already at that version.
+	if !strings.Contains(envSelect, fmt.Sprintf("value=\"%d\"", dev.ID)) {
 		t.Errorf(
-			"dev should be hidden after v1 deploys there; env select: %s",
+			"dev should appear in the Already-deployed optgroup after v1 deploys there; env select: %s",
 			envSelect,
 		)
 	}
