@@ -5,10 +5,10 @@ SELECT * FROM steps WHERE project_id = ? ORDER BY sort_order ASC, created_at ASC
 SELECT * FROM steps WHERE id = ?;
 
 -- name: CreateStep :one
-INSERT INTO steps (project_id, name, script_body, sort_order) VALUES (?, ?, ?, ?) RETURNING *;
+INSERT INTO steps (project_id, name, script_body, sort_order, timeout_seconds) VALUES (?, ?, ?, ?, ?) RETURNING *;
 
 -- name: UpdateStep :one
-UPDATE steps SET name = ?, script_body = ?, sort_order = ? WHERE id = ? RETURNING *;
+UPDATE steps SET name = ?, script_body = ?, sort_order = ?, timeout_seconds = ? WHERE id = ? RETURNING *;
 
 -- name: DeleteStep :exec
 DELETE FROM steps WHERE id = ?;

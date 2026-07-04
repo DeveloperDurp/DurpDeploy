@@ -145,17 +145,19 @@ func (h *ReleaseHandler) CreateRelease(w http.ResponseWriter, r *http.Request) {
 
 	// Serialize steps to JSON
 	type stepSnapshot struct {
-		Name       string `json:"name"`
-		ScriptBody string `json:"script_body"`
-		SortOrder  int64  `json:"sort_order"`
+		Name           string `json:"name"`
+		ScriptBody     string `json:"script_body"`
+		SortOrder      int64  `json:"sort_order"`
+		TimeoutSeconds int64  `json:"timeout_seconds"`
 	}
 
 	snapshots := make([]stepSnapshot, len(steps))
 	for i, step := range steps {
 		snapshots[i] = stepSnapshot{
-			Name:       step.Name,
-			ScriptBody: step.ScriptBody,
-			SortOrder:  step.SortOrder,
+			Name:           step.Name,
+			ScriptBody:     step.ScriptBody,
+			SortOrder:      step.SortOrder,
+			TimeoutSeconds: step.TimeoutSeconds,
 		}
 	}
 
@@ -385,16 +387,18 @@ func (h *ReleaseHandler) RefreshRelease(
 	}
 
 	type stepSnapshot struct {
-		Name       string `json:"name"`
-		ScriptBody string `json:"script_body"`
-		SortOrder  int64  `json:"sort_order"`
+		Name           string `json:"name"`
+		ScriptBody     string `json:"script_body"`
+		SortOrder      int64  `json:"sort_order"`
+		TimeoutSeconds int64  `json:"timeout_seconds"`
 	}
 	snapshots := make([]stepSnapshot, len(steps))
 	for i, step := range steps {
 		snapshots[i] = stepSnapshot{
-			Name:       step.Name,
-			ScriptBody: step.ScriptBody,
-			SortOrder:  step.SortOrder,
+			Name:           step.Name,
+			ScriptBody:     step.ScriptBody,
+			SortOrder:      step.SortOrder,
+			TimeoutSeconds: step.TimeoutSeconds,
 		}
 	}
 	stepsJSON, err := json.Marshal(snapshots)

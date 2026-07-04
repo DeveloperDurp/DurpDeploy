@@ -97,8 +97,24 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimSpace(r.FormValue("name"))
 	script := r.FormValue("script_body")
 
+	timeoutStr := strings.TrimSpace(r.FormValue("timeout_seconds"))
+	var timeoutSeconds int64
+	if timeoutStr != "" {
+		t, err := strconv.ParseInt(timeoutStr, 10, 64)
+		if err != nil || t < 0 {
+			step := db.Step{ProjectID: projectID, Name: name, ScriptBody: script, TimeoutSeconds: timeoutSeconds}
+			WriteFormError(
+				w, r,
+				components.StepForm(step, projectID, true, "Timeout must be a non-negative integer"),
+				components.StepForm(step, projectID, true, "Timeout must be a non-negative integer"),
+			)
+			return
+		}
+		timeoutSeconds = t
+	}
+
 	if name == "" {
-		step := db.Step{ProjectID: projectID, Name: name, ScriptBody: script}
+		step := db.Step{ProjectID: projectID, Name: name, ScriptBody: script, TimeoutSeconds: timeoutSeconds}
 		WriteFormError(
 			w,
 			r,
@@ -121,10 +137,11 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 	}
 
 	params := db.CreateStepParams{
-		ProjectID:  projectID,
-		Name:       name,
-		ScriptBody: script,
-		SortOrder:  sortOrder,
+		ProjectID:      projectID,
+		Name:           name,
+		ScriptBody:     script,
+		SortOrder:      sortOrder,
+		TimeoutSeconds: timeoutSeconds,
 	}
 
 	_, err = h.repo.Queries.CreateStep(r.Context(), params)
@@ -188,13 +205,37 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 	script := r.FormValue("script_body")
 	sortOrder, _ := strconv.ParseInt(r.FormValue("sort_order"), 10, 64)
 
+	timeoutStr := strings.TrimSpace(r.FormValue("timeout_seconds"))
+	var timeoutSeconds int64
+	if timeoutStr != "" {
+		t, err := strconv.ParseInt(timeoutStr, 10, 64)
+		if err != nil || t < 0 {
+			step := db.Step{
+				ID:             stepID,
+				ProjectID:      projectID,
+				Name:           name,
+				ScriptBody:     script,
+				SortOrder:      sortOrder,
+				TimeoutSeconds: timeoutSeconds,
+			}
+			WriteFormError(
+				w, r,
+				components.StepEditRow(step, projectID, "Timeout must be a non-negative integer"),
+				components.StepEditRow(step, projectID, "Timeout must be a non-negative integer"),
+			)
+			return
+		}
+		timeoutSeconds = t
+	}
+
 	if name == "" {
 		step := db.Step{
-			ID:         stepID,
-			ProjectID:  projectID,
-			Name:       name,
-			ScriptBody: script,
-			SortOrder:  sortOrder,
+			ID:             stepID,
+			ProjectID:      projectID,
+			Name:           name,
+			ScriptBody:     script,
+			SortOrder:      sortOrder,
+			TimeoutSeconds: timeoutSeconds,
 		}
 		WriteFormError(
 			w,
@@ -206,10 +247,11 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 	}
 
 	params := db.UpdateStepParams{
-		ID:         stepID,
-		Name:       name,
-		ScriptBody: script,
-		SortOrder:  sortOrder,
+		ID:             stepID,
+		Name:           name,
+		ScriptBody:     script,
+		SortOrder:      sortOrder,
+		TimeoutSeconds: timeoutSeconds,
 	}
 
 	_, err = h.repo.Queries.UpdateStep(r.Context(), params)
@@ -325,10 +367,11 @@ func (h *StepHandler) ReorderStep(w http.ResponseWriter, r *http.Request) {
 			}
 			if s.SortOrder >= newOrder && s.SortOrder < oldOrder {
 				p := db.UpdateStepParams{
-					ID:         s.ID,
-					Name:       s.Name,
-					ScriptBody: s.ScriptBody,
-					SortOrder:  s.SortOrder + 1,
+					ID:             s.ID,
+					Name:           s.Name,
+					ScriptBody:     s.ScriptBody,
+					SortOrder:      s.SortOrder + 1,
+					TimeoutSeconds: s.TimeoutSeconds,
 				}
 				if _, err := qtx.UpdateStep(r.Context(), p); err != nil {
 					http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -343,10 +386,11 @@ func (h *StepHandler) ReorderStep(w http.ResponseWriter, r *http.Request) {
 			}
 			if s.SortOrder > oldOrder && s.SortOrder <= newOrder {
 				p := db.UpdateStepParams{
-					ID:         s.ID,
-					Name:       s.Name,
-					ScriptBody: s.ScriptBody,
-					SortOrder:  s.SortOrder - 1,
+					ID:             s.ID,
+					Name:           s.Name,
+					ScriptBody:     s.ScriptBody,
+					SortOrder:      s.SortOrder - 1,
+					TimeoutSeconds: s.TimeoutSeconds,
 				}
 				if _, err := qtx.UpdateStep(r.Context(), p); err != nil {
 					http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -357,10 +401,11 @@ func (h *StepHandler) ReorderStep(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_, err = qtx.UpdateStep(r.Context(), db.UpdateStepParams{
-		ID:         target.ID,
-		Name:       target.Name,
-		ScriptBody: target.ScriptBody,
-		SortOrder:  newOrder,
+		ID:             target.ID,
+		Name:           target.Name,
+		ScriptBody:     target.ScriptBody,
+		SortOrder:      newOrder,
+		TimeoutSeconds: target.TimeoutSeconds,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
