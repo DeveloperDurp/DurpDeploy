@@ -139,9 +139,26 @@ templ DeploymentDetail(project db.Project, release db.Release, environment db.En
 				<p class="text-gray-400">
 					Project: { project.Name } | Release: { release.Version } | Environment: { environment.Name }
 				</p>
+				if deployment.Note.Valid {
+					<blockquote class="border-l-4 border-accent pl-3 mt-2 text-sm text-gray-300 italic">
+						{ deployment.Note.String }
+					</blockquote>
+				}
 				<a href={ fmt.Sprintf("/projects/%d/releases/%d", project.ID, release.ID) } class="btn btn-ghost btn-sm mt-2">Back to Release</a>
 			</div>
 			<div class="flex items-center gap-2">
+				if isTerminalStatus(deployment.Status) {
+					<button
+						class="btn btn-sm btn-primary"
+						hx-post={ fmt.Sprintf("/deployments/%d/redeploy", deployment.ID) }
+						hx-confirm={ fmt.Sprintf("Re-run this deployment with the same release (%s) and environment (%s)?", release.Version, environment.Name) }
+						hx-disable-elt
+						data-toast-success="Re-run started"
+						data-toast-error="Failed to re-run"
+					>
+						Re-run
+					</button>
+				}
 				if deployment.Status == "running" {
 					<button
 						class="btn btn-sm btn-error"

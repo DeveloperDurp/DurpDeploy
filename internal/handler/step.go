@@ -102,11 +102,27 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 	if timeoutStr != "" {
 		t, err := strconv.ParseInt(timeoutStr, 10, 64)
 		if err != nil || t < 0 {
-			step := db.Step{ProjectID: projectID, Name: name, ScriptBody: script, TimeoutSeconds: timeoutSeconds}
+			step := db.Step{
+				ProjectID:      projectID,
+				Name:           name,
+				ScriptBody:     script,
+				TimeoutSeconds: timeoutSeconds,
+			}
 			WriteFormError(
-				w, r,
-				components.StepForm(step, projectID, true, "Timeout must be a non-negative integer"),
-				components.StepForm(step, projectID, true, "Timeout must be a non-negative integer"),
+				w,
+				r,
+				components.StepForm(
+					step,
+					projectID,
+					true,
+					"Timeout must be a non-negative integer",
+				),
+				components.StepForm(
+					step,
+					projectID,
+					true,
+					"Timeout must be a non-negative integer",
+				),
 			)
 			return
 		}
@@ -114,7 +130,12 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if name == "" {
-		step := db.Step{ProjectID: projectID, Name: name, ScriptBody: script, TimeoutSeconds: timeoutSeconds}
+		step := db.Step{
+			ProjectID:      projectID,
+			Name:           name,
+			ScriptBody:     script,
+			TimeoutSeconds: timeoutSeconds,
+		}
 		WriteFormError(
 			w,
 			r,
@@ -219,9 +240,18 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 				TimeoutSeconds: timeoutSeconds,
 			}
 			WriteFormError(
-				w, r,
-				components.StepEditRow(step, projectID, "Timeout must be a non-negative integer"),
-				components.StepEditRow(step, projectID, "Timeout must be a non-negative integer"),
+				w,
+				r,
+				components.StepEditRow(
+					step,
+					projectID,
+					"Timeout must be a non-negative integer",
+				),
+				components.StepEditRow(
+					step,
+					projectID,
+					"Timeout must be a non-negative integer",
+				),
 			)
 			return
 		}

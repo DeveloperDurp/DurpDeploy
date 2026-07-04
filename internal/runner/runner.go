@@ -206,7 +206,13 @@ func (r *DeploymentRunner) Run(
 		if err != nil {
 			if stepCtx.Err() == context.DeadlineExceeded {
 				logWriter.Write(
-					[]byte(fmt.Sprintf("step %q timed out after %s\n", step.Name, d)),
+					[]byte(
+						fmt.Sprintf(
+							"step %q timed out after %s\n",
+							step.Name,
+							d,
+						),
+					),
 				)
 				logWriter.Flush()
 			}

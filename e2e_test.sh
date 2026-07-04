@@ -48,6 +48,27 @@ echo "Deployment ID: $DEP_ID"
 CODE=$(curl_silent "$BASE/deployments/$DEP_ID")
 [[ "$CODE" == "200" ]] || { echo "FAIL: deployment page got $CODE"; exit 1; }
 
+echo "=== F3.1b: Deployment Note ==="
+# Submit a second deployment with a note via the project-scoped deploy page.
+curl -s -o /dev/null -X POST \
+    -d "release_id=$RELEASE_ID&environment_id=$ENV_ID&note=smoke-test-audit" \
+    "$BASE/projects/$PROJECT_ID/deploy"
+
+# Extract the new deployment ID from the deployments list (latest).
+NOTE_DEP=$(curl_body "$BASE/deployments" | grep -oP 'href="/deployments/\K[0-9]+' | sort -n | tail -1)
+[[ -n "$NOTE_DEP" ]] || { echo "FAIL: could not extract note deployment ID"; exit 1; }
+echo "Note Deployment ID: $NOTE_DEP"
+
+# The new deployment's detail page must contain the note text.
+NOTE_PAGE=$(curl_body "$BASE/deployments/$NOTE_DEP")
+echo "$NOTE_PAGE" | grep -q "smoke-test-audit" || { echo "FAIL: note text missing from deployment detail"; exit 1; }
+echo "  Note appears on deployment detail: OK"
+
+# The first deployment (F3.1) has no note — prove notes are per-deployment.
+FIRST_PAGE=$(curl_body "$BASE/deployments/$DEP_ID")
+echo "$FIRST_PAGE" | grep -q "smoke-test-audit" && { echo "FAIL: first deployment should not have note text"; exit 1; } || true
+echo "  First deployment lacks note: OK"
+
 echo "=== F3.2: Cancel Path ==="
 curl -s -o /dev/null -X POST -d "name=LongStep&script_body=sleep+10" "$BASE/projects/$PROJECT_ID/steps"
 curl -s -o /dev/null -X POST -d "version=1.0.1" "$BASE/projects/$PROJECT_ID/releases"
@@ -105,6 +126,30 @@ ELAPSED=$((END - START))
 echo "$STATUS_BODY" | grep -q 'failed' || { echo "FAIL: timeout deploy did not fail, got status: $STATUS_BODY"; exit 1; }
 [[ $ELAPSED -lt 25 ]] || { echo "FAIL: timeout deploy took ${ELAPSED}s, expected <25s"; exit 1; }
 echo "  Per-step timeout killed long sleep: OK (failed in ${ELAPSED}s)"
+
+echo "=== F3.2c: Re-run ==="
+# Re-run the failed timeout deployment. The endpoint bypasses the gate and
+# creates a new deployment with the same release + env.
+REDIR=$(curl -s -D - -o /dev/null -X POST "$BASE/deployments/$TIMEOUT_DEP/redeploy" | grep -i "^location:" | awk '{print $2}' | tr -d '\r')
+NEW_DEP=$(echo "$REDIR" | grep -oP '/deployments/\K[0-9]+')
+[[ -n "$NEW_DEP" ]] || { echo "FAIL: redeploy did not redirect"; exit 1; }
+[[ "$NEW_DEP" != "$TIMEOUT_DEP" ]] || { echo "FAIL: redeploy returned same deployment ID $NEW_DEP"; exit 1; }
+echo "Re-run Deployment ID: $NEW_DEP"
+
+# Poll the new deployment until it reaches a terminal state (same sleep/timeout
+# step, so it will also fail).
+for i in {1..100}; do
+  RERUN_STATUS=$(curl_body "$BASE/deployments/$NEW_DEP/status")
+  if echo "$RERUN_STATUS" | grep -qE 'failed|succeeded|cancelled'; then break; fi
+  sleep 0.2
+done
+echo "$RERUN_STATUS" | grep -q 'failed' || { echo "FAIL: re-run deploy did not fail, got status: $RERUN_STATUS"; exit 1; }
+echo "  Re-run deployment failed as expected: OK"
+
+# The new deployment's note should record the lineage.
+RERUN_PAGE=$(curl_body "$BASE/deployments/$NEW_DEP")
+echo "$RERUN_PAGE" | grep -q "Re-run of #$TIMEOUT_DEP" || { echo "FAIL: re-run note missing lineage text"; exit 1; }
+echo "  Re-run note records lineage: OK"
 
 echo "=== F3.3: Validation Path ==="
 CODE=$(curl_silent -X POST -d "name=" "$BASE/projects")

@@ -1,4 +1,4 @@
-.PHONY: build dev templ-generate tailwind-build js-build npm-install clean
+.PHONY: build dev templ-generate tailwind-build js-build npm-install golines golines-check clean
 
 BINARY_NAME=durpdeploy
 MAIN_PATH=cmd/server/main.go
@@ -23,6 +23,14 @@ tailwind-build: npm-install
 
 js-build: npm-install
 	npx esbuild static/js/app.js --bundle --minify --outfile=static/js/app.bundle.js
+
+# Reformat Go source to 80-char width. Skips sqlc- and templ-generated files.
+golines:
+	golines --max-len=80 --ignore-generated -w .
+
+# Dry-run: print a diff of what golines would change.
+golines-check:
+	golines --max-len=80 --ignore-generated --dry-run .
 
 clean:
 	rm -f $(BINARY_NAME)
