@@ -122,12 +122,15 @@ func TestSmoke(t *testing.T) {
 	}
 
 	// release_variables
-	rv, err := queries.CreateReleaseVariable(ctx, db.CreateReleaseVariableParams{
-		ReleaseID:     release.ID,
-		Name:          "test-rv",
-		Value:         sql.NullString{String: "rv-val", Valid: true},
-		EnvironmentID: sql.NullInt64{Int64: env.ID, Valid: true},
-	})
+	rv, err := queries.CreateReleaseVariable(
+		ctx,
+		db.CreateReleaseVariableParams{
+			ReleaseID:     release.ID,
+			Name:          "test-rv",
+			Value:         sql.NullString{String: "rv-val", Valid: true},
+			EnvironmentID: sql.NullInt64{Int64: env.ID, Valid: true},
+		},
+	)
 	if err != nil {
 		t.Fatalf("create release variable: %v", err)
 	}

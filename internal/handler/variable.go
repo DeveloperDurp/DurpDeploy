@@ -27,7 +27,10 @@ func NewVariableHandler(repo *repository.Repository) *VariableHandler {
 	return &VariableHandler{repo: repo}
 }
 
-func (h *VariableHandler) ListVariables(w http.ResponseWriter, r *http.Request) {
+func (h *VariableHandler) ListVariables(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	projectID, err := parseProjectID(r)
 	if err != nil {
 		http.Error(w, "Invalid project ID", http.StatusBadRequest)
@@ -44,7 +47,10 @@ func (h *VariableHandler) ListVariables(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	variables, err := h.repo.Queries.ListVariablesByProject(r.Context(), projectID)
+	variables, err := h.repo.Queries.ListVariablesByProject(
+		r.Context(),
+		projectID,
+	)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -57,13 +63,18 @@ func (h *VariableHandler) ListVariables(w http.ResponseWriter, r *http.Request) 
 	}
 
 	if r.Header.Get("HX-Request") == "true" {
-		pages.VariablesFragment(project, variables, environments, "").Render(r.Context(), w)
+		pages.VariablesFragment(project, variables, environments, "").
+			Render(r.Context(), w)
 	} else {
-		pages.VariablesPage(project, variables, environments, "", r.URL.Path).Render(r.Context(), w)
+		pages.VariablesPage(project, variables, environments, "", r.URL.Path).
+			Render(r.Context(), w)
 	}
 }
 
-func (h *VariableHandler) CreateVariable(w http.ResponseWriter, r *http.Request) {
+func (h *VariableHandler) CreateVariable(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -78,12 +89,30 @@ func (h *VariableHandler) CreateVariable(w http.ResponseWriter, r *http.Request)
 	name := strings.TrimSpace(r.FormValue("name"))
 	value := r.FormValue("value")
 	envIDStr := r.FormValue("environment_id")
+	var secret int64
+	if r.FormValue("secret") == "on" {
+		secret = 1
+	}
 
 	if name == "" {
 		environments, _ := h.repo.Queries.ListEnvironments(r.Context())
 		project, _ := h.repo.Queries.GetProject(r.Context(), projectID)
-		variables, _ := h.repo.Queries.ListVariablesByProject(r.Context(), projectID)
-		WriteFormError(w, r, pages.VariableForm(projectID, environments, "Name is required"), pages.VariablesPage(project, variables, environments, "Name is required", r.URL.Path))
+		variables, _ := h.repo.Queries.ListVariablesByProject(
+			r.Context(),
+			projectID,
+		)
+		WriteFormError(
+			w,
+			r,
+			pages.VariableForm(projectID, environments, "Name is required"),
+			pages.VariablesPage(
+				project,
+				variables,
+				environments,
+				"Name is required",
+				r.URL.Path,
+			),
+		)
 		return
 	}
 
@@ -102,6 +131,7 @@ func (h *VariableHandler) CreateVariable(w http.ResponseWriter, r *http.Request)
 		Name:          name,
 		Value:         sql.NullString{String: value, Valid: value != ""},
 		EnvironmentID: envID,
+		Secret:        secret,
 	}
 
 	_, err = h.repo.Queries.CreateVariable(r.Context(), params)
@@ -109,8 +139,26 @@ func (h *VariableHandler) CreateVariable(w http.ResponseWriter, r *http.Request)
 		if IsUniqueViolation(err) {
 			environments, _ := h.repo.Queries.ListEnvironments(r.Context())
 			project, _ := h.repo.Queries.GetProject(r.Context(), projectID)
-			variables, _ := h.repo.Queries.ListVariablesByProject(r.Context(), projectID)
-			WriteFormError(w, r, pages.VariableForm(projectID, environments, "A variable with this name and scope already exists"), pages.VariablesPage(project, variables, environments, "A variable with this name and scope already exists", r.URL.Path))
+			variables, _ := h.repo.Queries.ListVariablesByProject(
+				r.Context(),
+				projectID,
+			)
+			WriteFormError(
+				w,
+				r,
+				pages.VariableForm(
+					projectID,
+					environments,
+					"A variable with this name and scope already exists",
+				),
+				pages.VariablesPage(
+					project,
+					variables,
+					environments,
+					"A variable with this name and scope already exists",
+					r.URL.Path,
+				),
+			)
 			return
 		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -120,7 +168,12 @@ func (h *VariableHandler) CreateVariable(w http.ResponseWriter, r *http.Request)
 	if r.Header.Get("HX-Request") == "true" {
 		h.renderVariablesFragment(w, r, projectID)
 	} else {
-		http.Redirect(w, r, fmt.Sprintf("/projects/%d/variables", projectID), http.StatusSeeOther)
+		http.Redirect(
+			w,
+			r,
+			fmt.Sprintf("/projects/%d/variables", projectID),
+			http.StatusSeeOther,
+		)
 	}
 }
 
@@ -150,10 +203,14 @@ func (h *VariableHandler) EditVariable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pages.VariableEditRow(projectID, variable, environments, "").Render(r.Context(), w)
+	pages.VariableEditRow(projectID, variable, environments, "").
+		Render(r.Context(), w)
 }
 
-func (h *VariableHandler) UpdateVariable(w http.ResponseWriter, r *http.Request) {
+func (h *VariableHandler) UpdateVariable(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -175,17 +232,45 @@ func (h *VariableHandler) UpdateVariable(w http.ResponseWriter, r *http.Request)
 	name := strings.TrimSpace(r.FormValue("name"))
 	value := r.FormValue("value")
 	envIDStr := r.FormValue("environment_id")
+	var secret int64
+	if r.FormValue("secret") == "on" {
+		secret = 1
+	}
 
 	if name == "" {
-		variable := db.Variable{ID: varID, ProjectID: projectID, Name: name, Value: sql.NullString{String: value, Valid: value != ""}}
+		variable := db.Variable{
+			ID:        varID,
+			ProjectID: projectID,
+			Name:      name,
+			Value:     sql.NullString{String: value, Valid: value != ""},
+		}
 		environments, _ := h.repo.Queries.ListEnvironments(r.Context())
 		if envIDStr != "" {
 			id, _ := strconv.ParseInt(envIDStr, 10, 64)
 			variable.EnvironmentID = sql.NullInt64{Int64: id, Valid: true}
 		}
 		project, _ := h.repo.Queries.GetProject(r.Context(), projectID)
-		variables, _ := h.repo.Queries.ListVariablesByProject(r.Context(), projectID)
-		WriteFormError(w, r, pages.VariableEditRow(projectID, variable, environments, "Name is required"), pages.VariablesPage(project, variables, environments, "Name is required", r.URL.Path))
+		variables, _ := h.repo.Queries.ListVariablesByProject(
+			r.Context(),
+			projectID,
+		)
+		WriteFormError(
+			w,
+			r,
+			pages.VariableEditRow(
+				projectID,
+				variable,
+				environments,
+				"Name is required",
+			),
+			pages.VariablesPage(
+				project,
+				variables,
+				environments,
+				"Name is required",
+				r.URL.Path,
+			),
+		)
 		return
 	}
 
@@ -204,16 +289,45 @@ func (h *VariableHandler) UpdateVariable(w http.ResponseWriter, r *http.Request)
 		Name:          name,
 		Value:         sql.NullString{String: value, Valid: value != ""},
 		EnvironmentID: envID,
+		Secret:        secret,
 	}
 
 	_, err = h.repo.Queries.UpdateVariable(r.Context(), params)
 	if err != nil {
 		if IsUniqueViolation(err) {
-			variable := db.Variable{ID: varID, ProjectID: projectID, Name: name, Value: sql.NullString{String: value, Valid: value != ""}, EnvironmentID: envID}
+			variable := db.Variable{
+				ID:        varID,
+				ProjectID: projectID,
+				Name:      name,
+				Value: sql.NullString{
+					String: value,
+					Valid:  value != "",
+				},
+				EnvironmentID: envID,
+			}
 			environments, _ := h.repo.Queries.ListEnvironments(r.Context())
 			project, _ := h.repo.Queries.GetProject(r.Context(), projectID)
-			variables, _ := h.repo.Queries.ListVariablesByProject(r.Context(), projectID)
-			WriteFormError(w, r, pages.VariableEditRow(projectID, variable, environments, "A variable with this name and scope already exists"), pages.VariablesPage(project, variables, environments, "A variable with this name and scope already exists", r.URL.Path))
+			variables, _ := h.repo.Queries.ListVariablesByProject(
+				r.Context(),
+				projectID,
+			)
+			WriteFormError(
+				w,
+				r,
+				pages.VariableEditRow(
+					projectID,
+					variable,
+					environments,
+					"A variable with this name and scope already exists",
+				),
+				pages.VariablesPage(
+					project,
+					variables,
+					environments,
+					"A variable with this name and scope already exists",
+					r.URL.Path,
+				),
+			)
 			return
 		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -223,11 +337,19 @@ func (h *VariableHandler) UpdateVariable(w http.ResponseWriter, r *http.Request)
 	if r.Header.Get("HX-Request") == "true" {
 		h.renderVariablesFragment(w, r, projectID)
 	} else {
-		http.Redirect(w, r, fmt.Sprintf("/projects/%d/variables", projectID), http.StatusSeeOther)
+		http.Redirect(
+			w,
+			r,
+			fmt.Sprintf("/projects/%d/variables", projectID),
+			http.StatusSeeOther,
+		)
 	}
 }
 
-func (h *VariableHandler) DeleteVariable(w http.ResponseWriter, r *http.Request) {
+func (h *VariableHandler) DeleteVariable(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	projectID, err := parseProjectID(r)
 	if err != nil {
 		http.Error(w, "Invalid project ID", http.StatusBadRequest)
@@ -249,14 +371,21 @@ func (h *VariableHandler) DeleteVariable(w http.ResponseWriter, r *http.Request)
 	h.renderVariablesFragment(w, r, projectID)
 }
 
-func (h *VariableHandler) renderVariablesFragment(w http.ResponseWriter, r *http.Request, projectID int64) {
+func (h *VariableHandler) renderVariablesFragment(
+	w http.ResponseWriter,
+	r *http.Request,
+	projectID int64,
+) {
 	project, err := h.repo.Queries.GetProject(r.Context(), projectID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	variables, err := h.repo.Queries.ListVariablesByProject(r.Context(), projectID)
+	variables, err := h.repo.Queries.ListVariablesByProject(
+		r.Context(),
+		projectID,
+	)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -268,5 +397,6 @@ func (h *VariableHandler) renderVariablesFragment(w http.ResponseWriter, r *http
 		return
 	}
 
-	pages.VariablesFragment(project, variables, environments, "").Render(r.Context(), w)
+	pages.VariablesFragment(project, variables, environments, "").
+		Render(r.Context(), w)
 }

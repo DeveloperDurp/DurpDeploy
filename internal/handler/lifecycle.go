@@ -21,7 +21,10 @@ func NewLifecycleHandler(repo *repository.Repository) *LifecycleHandler {
 	return &LifecycleHandler{repo: repo}
 }
 
-func (h *LifecycleHandler) ListLifecycles(w http.ResponseWriter, r *http.Request) {
+func (h *LifecycleHandler) ListLifecycles(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	lifecycles, err := h.repo.Queries.ListLifecycles(r.Context())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -35,21 +38,32 @@ func (h *LifecycleHandler) ListLifecycles(w http.ResponseWriter, r *http.Request
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		rows[i] = pages.LifecycleRow{Lifecycle: lc, StageCount: int64(len(stages))}
+		rows[i] = pages.LifecycleRow{
+			Lifecycle:  lc,
+			StageCount: int64(len(stages)),
+		}
 	}
 
-	if err := pages.LifecyclesListPage(rows, r.URL.Path).Render(r.Context(), w); err != nil {
+	if err := pages.LifecyclesListPage(rows, r.URL.Path).
+		Render(r.Context(), w); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
-func (h *LifecycleHandler) NewLifecycle(w http.ResponseWriter, r *http.Request) {
-	if err := pages.LifecycleFormPage(db.Lifecycle{}, false, "", r.URL.Path).Render(r.Context(), w); err != nil {
+func (h *LifecycleHandler) NewLifecycle(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	if err := pages.LifecycleFormPage(db.Lifecycle{}, false, "", r.URL.Path).
+		Render(r.Context(), w); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
-func (h *LifecycleHandler) CreateLifecycle(w http.ResponseWriter, r *http.Request) {
+func (h *LifecycleHandler) CreateLifecycle(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -58,19 +72,41 @@ func (h *LifecycleHandler) CreateLifecycle(w http.ResponseWriter, r *http.Reques
 	name := strings.TrimSpace(r.FormValue("name"))
 	if name == "" {
 		lc := db.Lifecycle{Name: name}
-		WriteFormError(w, r, pages.LifecycleForm(lc, false, "Name is required"), pages.LifecycleFormPage(lc, false, "Name is required", r.URL.Path))
+		WriteFormError(
+			w,
+			r,
+			pages.LifecycleForm(lc, false, "Name is required"),
+			pages.LifecycleFormPage(lc, false, "Name is required", r.URL.Path),
+		)
 		return
 	}
 
 	desc := r.FormValue("description")
-	_, err := h.repo.Queries.CreateLifecycle(r.Context(), db.CreateLifecycleParams{
-		Name:        name,
-		Description: sql.NullString{String: desc, Valid: desc != ""},
-	})
+	_, err := h.repo.Queries.CreateLifecycle(
+		r.Context(),
+		db.CreateLifecycleParams{
+			Name:        name,
+			Description: sql.NullString{String: desc, Valid: desc != ""},
+		},
+	)
 	if err != nil {
 		if IsUniqueViolation(err) {
 			lc := db.Lifecycle{Name: name}
-			WriteFormError(w, r, pages.LifecycleForm(lc, false, "A lifecycle with this name already exists"), pages.LifecycleFormPage(lc, false, "A lifecycle with this name already exists", r.URL.Path))
+			WriteFormError(
+				w,
+				r,
+				pages.LifecycleForm(
+					lc,
+					false,
+					"A lifecycle with this name already exists",
+				),
+				pages.LifecycleFormPage(
+					lc,
+					false,
+					"A lifecycle with this name already exists",
+					r.URL.Path,
+				),
+			)
 			return
 		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -80,7 +116,10 @@ func (h *LifecycleHandler) CreateLifecycle(w http.ResponseWriter, r *http.Reques
 	http.Redirect(w, r, "/lifecycles", http.StatusSeeOther)
 }
 
-func (h *LifecycleHandler) GetLifecycle(w http.ResponseWriter, r *http.Request) {
+func (h *LifecycleHandler) GetLifecycle(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	id, err := parseLifecycleID(r)
 	if err != nil {
 		http.Error(w, "Invalid lifecycle ID", http.StatusBadRequest)
@@ -133,12 +172,16 @@ func (h *LifecycleHandler) GetLifecycle(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	if err := pages.LifecycleDetailPage(lc, stageViews, availableEnvs, "", r.URL.Path).Render(r.Context(), w); err != nil {
+	if err := pages.LifecycleDetailPage(lc, stageViews, availableEnvs, "", r.URL.Path).
+		Render(r.Context(), w); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
-func (h *LifecycleHandler) EditLifecycle(w http.ResponseWriter, r *http.Request) {
+func (h *LifecycleHandler) EditLifecycle(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	id, err := parseLifecycleID(r)
 	if err != nil {
 		http.Error(w, "Invalid lifecycle ID", http.StatusBadRequest)
@@ -155,7 +198,8 @@ func (h *LifecycleHandler) EditLifecycle(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if err := pages.LifecycleFormPage(lc, true, "", r.URL.Path).Render(r.Context(), w); err != nil {
+	if err := pages.LifecycleFormPage(lc, true, "", r.URL.Path).
+		Render(r.Context(), w); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
@@ -164,7 +208,10 @@ func (h *LifecycleHandler) EditLifecycle(w http.ResponseWriter, r *http.Request)
 // based on the _method form field. HTML forms cannot send PUT/DELETE natively, so
 // we use POST with a hidden _method override. The dispatch is per-request, so
 // the route stays a single POST.
-func (h *LifecycleHandler) SaveLifecycle(w http.ResponseWriter, r *http.Request) {
+func (h *LifecycleHandler) SaveLifecycle(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	id, err := parseLifecycleID(r)
 	if err != nil {
 		http.Error(w, "Invalid lifecycle ID", http.StatusBadRequest)
@@ -187,25 +234,57 @@ func (h *LifecycleHandler) SaveLifecycle(w http.ResponseWriter, r *http.Request)
 		name := strings.TrimSpace(r.FormValue("name"))
 		if name == "" {
 			lc := db.Lifecycle{ID: id, Name: name}
-			WriteFormError(w, r, pages.LifecycleForm(lc, true, "Name is required"), pages.LifecycleFormPage(lc, true, "Name is required", r.URL.Path))
+			WriteFormError(
+				w,
+				r,
+				pages.LifecycleForm(lc, true, "Name is required"),
+				pages.LifecycleFormPage(
+					lc,
+					true,
+					"Name is required",
+					r.URL.Path,
+				),
+			)
 			return
 		}
 		desc := r.FormValue("description")
-		_, err := h.repo.Queries.UpdateLifecycle(r.Context(), db.UpdateLifecycleParams{
-			ID:          id,
-			Name:        name,
-			Description: sql.NullString{String: desc, Valid: desc != ""},
-		})
+		_, err := h.repo.Queries.UpdateLifecycle(
+			r.Context(),
+			db.UpdateLifecycleParams{
+				ID:          id,
+				Name:        name,
+				Description: sql.NullString{String: desc, Valid: desc != ""},
+			},
+		)
 		if err != nil {
 			if IsUniqueViolation(err) {
 				lc := db.Lifecycle{ID: id, Name: name}
-				WriteFormError(w, r, pages.LifecycleForm(lc, true, "A lifecycle with this name already exists"), pages.LifecycleFormPage(lc, true, "A lifecycle with this name already exists", r.URL.Path))
+				WriteFormError(
+					w,
+					r,
+					pages.LifecycleForm(
+						lc,
+						true,
+						"A lifecycle with this name already exists",
+					),
+					pages.LifecycleFormPage(
+						lc,
+						true,
+						"A lifecycle with this name already exists",
+						r.URL.Path,
+					),
+				)
 				return
 			}
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		http.Redirect(w, r, "/lifecycles/"+strconv.FormatInt(id, 10), http.StatusSeeOther)
+		http.Redirect(
+			w,
+			r,
+			"/lifecycles/"+strconv.FormatInt(id, 10),
+			http.StatusSeeOther,
+		)
 	default:
 		http.Error(w, "Unknown method", http.StatusBadRequest)
 	}
@@ -236,7 +315,11 @@ func (h *LifecycleHandler) AddStage(w http.ResponseWriter, r *http.Request) {
 	}
 	for _, s := range stages {
 		if s.EnvironmentID == envID {
-			http.Error(w, "Environment already in this lifecycle", http.StatusBadRequest)
+			http.Error(
+				w,
+				"Environment already in this lifecycle",
+				http.StatusBadRequest,
+			)
 			return
 		}
 	}
@@ -248,16 +331,24 @@ func (h *LifecycleHandler) AddStage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if _, err := h.repo.Queries.CreateLifecycleStage(r.Context(), db.CreateLifecycleStageParams{
-		LifecycleID:   id,
-		EnvironmentID: envID,
-		SortOrder:     nextOrder,
-	}); err != nil {
+	if _, err := h.repo.Queries.CreateLifecycleStage(
+		r.Context(),
+		db.CreateLifecycleStageParams{
+			LifecycleID:   id,
+			EnvironmentID: envID,
+			SortOrder:     nextOrder,
+		},
+	); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	http.Redirect(w, r, "/lifecycles/"+strconv.FormatInt(id, 10), http.StatusSeeOther)
+	http.Redirect(
+		w,
+		r,
+		"/lifecycles/"+strconv.FormatInt(id, 10),
+		http.StatusSeeOther,
+	)
 }
 
 func (h *LifecycleHandler) DeleteStage(w http.ResponseWriter, r *http.Request) {
@@ -273,15 +364,26 @@ func (h *LifecycleHandler) DeleteStage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.repo.Queries.DeleteLifecycleStage(r.Context(), stageID); err != nil {
+	if err := h.repo.Queries.DeleteLifecycleStage(
+		r.Context(),
+		stageID,
+	); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	http.Redirect(w, r, "/lifecycles/"+strconv.FormatInt(id, 10), http.StatusSeeOther)
+	http.Redirect(
+		w,
+		r,
+		"/lifecycles/"+strconv.FormatInt(id, 10),
+		http.StatusSeeOther,
+	)
 }
 
-func (h *LifecycleHandler) ReorderStage(w http.ResponseWriter, r *http.Request) {
+func (h *LifecycleHandler) ReorderStage(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	id, err := parseLifecycleID(r)
 	if err != nil {
 		http.Error(w, "Invalid lifecycle ID", http.StatusBadRequest)
@@ -327,7 +429,12 @@ func (h *LifecycleHandler) ReorderStage(w http.ResponseWriter, r *http.Request) 
 		swapIdx = targetIdx + 1
 	}
 	if swapIdx < 0 || swapIdx >= len(stages) {
-		http.Redirect(w, r, "/lifecycles/"+strconv.FormatInt(id, 10), http.StatusSeeOther)
+		http.Redirect(
+			w,
+			r,
+			"/lifecycles/"+strconv.FormatInt(id, 10),
+			http.StatusSeeOther,
+		)
 		return
 	}
 
@@ -341,19 +448,25 @@ func (h *LifecycleHandler) ReorderStage(w http.ResponseWriter, r *http.Request) 
 
 	a := stages[targetIdx]
 	b := stages[swapIdx]
-	if _, err := qtx.UpdateLifecycleStage(r.Context(), db.UpdateLifecycleStageParams{
-		ID:            a.ID,
-		EnvironmentID: a.EnvironmentID,
-		SortOrder:     b.SortOrder,
-	}); err != nil {
+	if _, err := qtx.UpdateLifecycleStage(
+		r.Context(),
+		db.UpdateLifecycleStageParams{
+			ID:            a.ID,
+			EnvironmentID: a.EnvironmentID,
+			SortOrder:     b.SortOrder,
+		},
+	); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if _, err := qtx.UpdateLifecycleStage(r.Context(), db.UpdateLifecycleStageParams{
-		ID:            b.ID,
-		EnvironmentID: b.EnvironmentID,
-		SortOrder:     a.SortOrder,
-	}); err != nil {
+	if _, err := qtx.UpdateLifecycleStage(
+		r.Context(),
+		db.UpdateLifecycleStageParams{
+			ID:            b.ID,
+			EnvironmentID: b.EnvironmentID,
+			SortOrder:     a.SortOrder,
+		},
+	); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -362,7 +475,12 @@ func (h *LifecycleHandler) ReorderStage(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	http.Redirect(w, r, "/lifecycles/"+strconv.FormatInt(id, 10), http.StatusSeeOther)
+	http.Redirect(
+		w,
+		r,
+		"/lifecycles/"+strconv.FormatInt(id, 10),
+		http.StatusSeeOther,
+	)
 }
 
 func parseLifecycleID(r *http.Request) (int64, error) {

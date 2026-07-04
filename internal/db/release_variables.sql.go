@@ -11,7 +11,7 @@ import (
 )
 
 const createReleaseVariable = `-- name: CreateReleaseVariable :one
-INSERT INTO release_variables (release_id, name, value, environment_id) VALUES (?, ?, ?, ?) RETURNING id, release_id, name, value, environment_id, created_at
+INSERT INTO release_variables (release_id, name, value, environment_id, secret) VALUES (?, ?, ?, ?, ?) RETURNING id, release_id, name, value, environment_id, created_at, secret
 `
 
 type CreateReleaseVariableParams struct {
@@ -19,6 +19,7 @@ type CreateReleaseVariableParams struct {
 	Name          string         `json:"name"`
 	Value         sql.NullString `json:"value"`
 	EnvironmentID sql.NullInt64  `json:"environment_id"`
+	Secret        int64          `json:"secret"`
 }
 
 func (q *Queries) CreateReleaseVariable(ctx context.Context, arg CreateReleaseVariableParams) (ReleaseVariable, error) {
@@ -27,6 +28,7 @@ func (q *Queries) CreateReleaseVariable(ctx context.Context, arg CreateReleaseVa
 		arg.Name,
 		arg.Value,
 		arg.EnvironmentID,
+		arg.Secret,
 	)
 	var i ReleaseVariable
 	err := row.Scan(
@@ -36,6 +38,7 @@ func (q *Queries) CreateReleaseVariable(ctx context.Context, arg CreateReleaseVa
 		&i.Value,
 		&i.EnvironmentID,
 		&i.CreatedAt,
+		&i.Secret,
 	)
 	return i, err
 }
@@ -59,7 +62,7 @@ func (q *Queries) DeleteReleaseVariablesByRelease(ctx context.Context, releaseID
 }
 
 const getReleaseVariable = `-- name: GetReleaseVariable :one
-SELECT id, release_id, name, value, environment_id, created_at FROM release_variables WHERE id = ?
+SELECT id, release_id, name, value, environment_id, created_at, secret FROM release_variables WHERE id = ?
 `
 
 func (q *Queries) GetReleaseVariable(ctx context.Context, id int64) (ReleaseVariable, error) {
@@ -72,12 +75,13 @@ func (q *Queries) GetReleaseVariable(ctx context.Context, id int64) (ReleaseVari
 		&i.Value,
 		&i.EnvironmentID,
 		&i.CreatedAt,
+		&i.Secret,
 	)
 	return i, err
 }
 
 const listReleaseVariablesByRelease = `-- name: ListReleaseVariablesByRelease :many
-SELECT id, release_id, name, value, environment_id, created_at FROM release_variables WHERE release_id = ? ORDER BY created_at DESC
+SELECT id, release_id, name, value, environment_id, created_at, secret FROM release_variables WHERE release_id = ? ORDER BY created_at DESC
 `
 
 func (q *Queries) ListReleaseVariablesByRelease(ctx context.Context, releaseID int64) ([]ReleaseVariable, error) {
@@ -96,6 +100,7 @@ func (q *Queries) ListReleaseVariablesByRelease(ctx context.Context, releaseID i
 			&i.Value,
 			&i.EnvironmentID,
 			&i.CreatedAt,
+			&i.Secret,
 		); err != nil {
 			return nil, err
 		}
@@ -111,7 +116,7 @@ func (q *Queries) ListReleaseVariablesByRelease(ctx context.Context, releaseID i
 }
 
 const updateReleaseVariable = `-- name: UpdateReleaseVariable :one
-UPDATE release_variables SET release_id = ?, name = ?, value = ?, environment_id = ? WHERE id = ? RETURNING id, release_id, name, value, environment_id, created_at
+UPDATE release_variables SET release_id = ?, name = ?, value = ?, environment_id = ? WHERE id = ? RETURNING id, release_id, name, value, environment_id, created_at, secret
 `
 
 type UpdateReleaseVariableParams struct {
@@ -138,6 +143,7 @@ func (q *Queries) UpdateReleaseVariable(ctx context.Context, arg UpdateReleaseVa
 		&i.Value,
 		&i.EnvironmentID,
 		&i.CreatedAt,
+		&i.Secret,
 	)
 	return i, err
 }

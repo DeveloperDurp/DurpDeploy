@@ -1,0 +1,189 @@
+package pages
+
+import (
+	"durpdeploy/internal/db"
+	"durpdeploy/views/components"
+	"durpdeploy/views/layouts"
+	"fmt"
+	"strconv"
+)
+
+// DeployFormPage is the dedicated full page for selecting a release and
+// environment to deploy. Reached from the "Deploy" button on the
+// projects list. The inline deploy form on the releases page is still
+// available as a quick alternative.
+templ DeployFormPage(project db.Project, releases []db.Release, selectedRelease *db.Release, envs []AvailableEnv, currentPath string) {
+	@layouts.Base("Deploy - "+project.Name, currentPath) {
+		@components.Breadcrumbs([]components.Crumb{
+			{Label: "Home", Href: "/"},
+			{Label: "Projects", Href: "/projects"},
+			{Label: project.Name, Href: fmt.Sprintf("/projects/%d", project.ID)},
+			{Label: "Deploy"},
+		})
+		@DeployFormContent(project, releases, selectedRelease, envs)
+		@DeployPageFormScript()
+	}
+}
+
+templ DeployFormContent(project db.Project, releases []db.Release, selectedRelease *db.Release, envs []AvailableEnv) {
+	<div class="space-y-6">
+		<div>
+			<h1 class="text-3xl font-bold">Deploy { project.Name }</h1>
+			<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost btn-sm mt-2">Back to Project</a>
+		</div>
+		if len(releases) == 0 {
+			<div class="card bg-base-200 p-6 text-center">
+				<p class="text-gray-400 mb-4">No releases yet for this project. Create a release to enable deployments.</p>
+				<a href={ fmt.Sprintf("/projects/%d/releases", project.ID) } class="btn btn-primary">Go to releases</a>
+			</div>
+		} else {
+			<div class="card bg-base-200 p-4">
+				<form
+					method="post"
+					action={ fmt.Sprintf("/projects/%d/deploy", project.ID) }
+					class="space-y-4"
+				>
+				<div class="form-control">
+					<label class="label">
+						<span class="label-text">Release</span>
+					</label>
+					<select
+						name="release_id"
+						class="select select-bordered"
+						required
+						onchange="window.location.href = '?release_id=' + this.value"
+					>
+						<option value="">Select release</option>
+						for _, rel := range releases {
+							<option
+								value={ strconv.FormatInt(rel.ID, 10) }
+								if selectedRelease != nil && rel.ID == selectedRelease.ID {
+									selected
+								}
+							>
+								{ rel.Version }
+							</option>
+						}
+					</select>
+					if selectedRelease != nil {
+						<p class="text-xs text-gray-500 mt-1">
+							Showing envs allowed for { selectedRelease.Version } based on the lifecycle.
+						</p>
+					} else {
+						<p class="text-xs text-gray-500 mt-1">
+							Pick a release to see which envs it's currently allowed to deploy to.
+						</p>
+					}
+				</div>
+				<div class="form-control">
+					<label class="label">
+						<span class="label-text">Environment</span>
+					</label>
+					if len(envs) == 0 {
+						<p class="text-gray-500 italic text-sm">
+							if selectedRelease != nil {
+								No envs available for { selectedRelease.Version } — every lifecycle stage is already at this version.
+							} else {
+								No environments available.
+							}
+						</p>
+					} else {
+						<select name="environment_id" class="select select-bordered" required>
+							<option value="">Select env</option>
+							for _, e := range envs {
+								if e.State.Deployable {
+									<option
+										value={ strconv.FormatInt(e.Environment.ID, 10) }
+										data-gate="ok"
+									>{ e.Environment.Name }</option>
+								}
+							}
+							if hasForceableEnvs(envs) {
+								<optgroup label="Needs force" data-gate-group="forceable">
+									for _, e := range envs {
+										if !e.State.Deployable && e.State.Bypassable {
+											<option
+												value={ strconv.FormatInt(e.Environment.ID, 10) }
+												data-gate="forceable"
+												title={ e.State.Reason }
+											>{ e.Environment.Name }</option>
+										}
+									}
+								</optgroup>
+							}
+						</select>
+					}
+				</div>
+				if hasForceableEnvs(envs) {
+					<label class="label cursor-pointer gap-2 justify-start">
+						<input
+							type="checkbox"
+							name="force_check"
+							value="true"
+							class="checkbox checkbox-sm"
+							data-force-toggle="deploy-form"
+							onchange="toggleDeployForce(this)"
+						/>
+						<span class="label-text">Force deploy (bypass the promotion gate)</span>
+					</label>
+				}
+				<div class="flex gap-2 justify-end">
+					<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost">Cancel</a>
+					<button type="submit" class="btn btn-primary">Deploy</button>
+				</div>
+				</form>
+			</div>
+		}
+	</div>
+}
+
+// hasForceableEnvs reports whether the env list contains any env whose
+// gate can be bypassed with force=true. The page shows the Force
+// checkbox only when at least one env needs it.
+func hasForceableEnvs(envs []AvailableEnv) bool {
+	for _, e := range envs {
+		if !e.State.Deployable && e.State.Bypassable {
+			return true
+		}
+	}
+	return false
+}
+
+// DeployPageFormScript is the small JS that wires up the Force
+// checkbox on the deploy page. The releases page has its own copy of
+// the same logic; they could be merged into a shared util later.
+templ DeployPageFormScript() {
+	<script>
+		function toggleDeployForce(cb) {
+			var form = cb.closest('form');
+			if (!form) return;
+			var checked = cb.checked;
+			form.querySelectorAll('optgroup[data-gate-group="forceable"]').forEach(function(g) {
+				g.hidden = !checked;
+			});
+			form.querySelectorAll('option[data-gate="forceable"]').forEach(function(o) {
+				o.disabled = !checked;
+			});
+			var hidden = form.querySelector('input[name="force"][type="hidden"]');
+			if (checked && !hidden) {
+				hidden = document.createElement('input');
+				hidden.type = 'hidden';
+				hidden.name = 'force';
+				hidden.value = 'true';
+				form.appendChild(hidden);
+			} else if (!cb.checked && hidden) {
+				hidden.remove();
+			}
+		}
+		document.addEventListener('DOMContentLoaded', function() {
+			document.querySelectorAll('form[action$="/deploy"]').forEach(function(form) {
+				form.querySelectorAll('optgroup[data-gate-group="forceable"]').forEach(function(g) {
+					g.hidden = true;
+				});
+				form.querySelectorAll('option[data-gate="forceable"]').forEach(function(o) {
+					o.disabled = true;
+				});
+			});
+		});
+	</script>
+}

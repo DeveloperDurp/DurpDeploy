@@ -53,7 +53,7 @@ templ VariablesContent(project db.Project, variables []db.Variable, environments
 	<div class="space-y-6">
 		<div class="flex justify-between items-center">
 			<div>
-				<h1 class="text-3xl font-bold">Variables for Project: { project.Name }</h1>
+				<h1 class="text-3xl font-bold">Variables — { project.Name }</h1>
 				<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost btn-sm mt-2">Back to Project</a>
 			</div>
 		</div>
@@ -88,24 +88,32 @@ templ VariableForm(projectID int64, environments []db.Environment, errorMsg stri
 					<span class="text-error text-sm mt-1">{ errorMsg }</span>
 				}
 			</div>
-			<div class="form-control flex-1 min-w-[200px]">
-				<label class="label">
-					<span class="label-text">Value</span>
-				</label>
-				<input type="text" name="value" class="input input-bordered"/>
-			</div>
-			<div class="form-control flex-1 min-w-[200px]">
-				<label class="label">
-					<span class="label-text">Environment</span>
-				</label>
-				<select name="environment_id" class="select select-bordered">
-					<option value="">Unscoped</option>
-					for _, env := range environments {
-						<option value={ strconv.FormatInt(env.ID, 10) }>{ env.Name }</option>
-					}
-				</select>
-			</div>
-			<button type="submit" class="btn btn-primary">Create</button>
+ 		<div class="flex flex-wrap gap-4 items-end" x-data="{ secret: false }">
+ 			<div class="form-control flex-1 min-w-[200px]">
+ 				<label class="label">
+ 					<span class="label-text">Value</span>
+ 				</label>
+ 				<input :type="secret ? 'password' : 'text'" name="value" :placeholder="secret ? '••••••••' : ''" class="input input-bordered"/>
+ 			</div>
+ 			<div class="form-control flex-1 min-w-[200px]">
+ 				<label class="label">
+ 					<span class="label-text">Environment</span>
+ 				</label>
+ 				<select name="environment_id" class="select select-bordered">
+ 					<option value="">Unscoped</option>
+ 					for _, env := range environments {
+ 						<option value={ strconv.FormatInt(env.ID, 10) }>{ env.Name }</option>
+ 					}
+ 				</select>
+ 			</div>
+  		<div class="form-control justify-end pb-1">
+ 			<label class="cursor-pointer flex items-center gap-1">
+ 				<input type="checkbox" name="secret" class="checkbox checkbox-sm" x-model="secret"/>
+ 				<span class="text-sm">Secret</span>
+ 				</label>
+ 			</div>
+ 			<button type="submit" class="btn btn-primary">Add Variable</button>
+ 		</div>
 		</form>
 	</div>
 }
@@ -115,18 +123,19 @@ templ VariablesTable(project db.Project, variables []db.Variable, environments [
 		<thead>
 			<tr>
 				<th class="w-1/5">Name</th>
-				<th class="w-2/5">Value</th>
-				<th class="w-1/5">Environment</th>
+				<th class="w-1/4">Value</th>
+				<th class="w-1/6">Environment</th>
+				<th class="w-1/6">Secret</th>
 				<th class="w-1/5">Actions</th>
 			</tr>
 		</thead>
 		<tbody>
 			<tr class="bg-base-300">
-				<td colspan="4" class="font-bold">Unscoped Variables</td>
+				<td colspan="5" class="font-bold">Unscoped Variables</td>
 			</tr>
 			if len(filterUnscoped(variables)) == 0 {
 				<tr>
-					<td colspan="4" class="text-gray-500 italic text-center py-4">No unscoped variables.</td>
+					<td colspan="5" class="text-gray-500 italic text-center py-4">No unscoped variables.</td>
 				</tr>
 			} else {
 				for _, v := range filterUnscoped(variables) {
@@ -134,11 +143,11 @@ templ VariablesTable(project db.Project, variables []db.Variable, environments [
 				}
 			}
 			<tr class="bg-base-300">
-				<td colspan="4" class="font-bold">Environment-Scoped Variables</td>
+				<td colspan="5" class="font-bold">Environment-Scoped Variables</td>
 			</tr>
 			if len(filterScoped(variables)) == 0 {
 				<tr>
-					<td colspan="4" class="text-gray-500 italic text-center py-4">No environment-scoped variables.</td>
+					<td colspan="5" class="text-gray-500 italic text-center py-4">No environment-scoped variables.</td>
 				</tr>
 			} else {
 				for _, v := range filterScoped(variables) {
@@ -152,8 +161,10 @@ templ VariablesTable(project db.Project, variables []db.Variable, environments [
 templ VariableRow(projectID int64, variable db.Variable, environments []db.Environment) {
 	<tr id={ fmt.Sprintf("variable-row-%d", variable.ID) }>
 		<td class="font-medium truncate">{ variable.Name }</td>
-		<td class="truncate">
-			if variable.Value.Valid {
+ 	<td class="truncate">
+			if variable.Secret != 0 {
+				<span class="text-gray-500 italic">••••••••</span>
+			} else if variable.Value.Valid {
 				{ variable.Value.String }
 			} else {
 				<span class="text-gray-500 italic">(empty)</span>
@@ -164,6 +175,11 @@ templ VariableRow(projectID int64, variable db.Variable, environments []db.Envir
 				{ envNameForID(environments, variable.EnvironmentID.Int64) }
 			} else {
 				<span class="text-gray-500">Unscoped</span>
+			}
+		</td>
+		<td class="truncate">
+			if variable.Secret != 0 {
+				<span class="badge badge-warning badge-sm">secret</span>
 			}
 		</td>
 		<td class="flex gap-2">
@@ -191,51 +207,45 @@ templ VariableRow(projectID int64, variable db.Variable, environments []db.Envir
 }
 
 templ VariableEditRow(projectID int64, variable db.Variable, environments []db.Environment, errorMsg string) {
-	<tr id={ fmt.Sprintf("variable-row-%d", variable.ID) }>
-		<td colspan="4">
+	<tr id={ fmt.Sprintf("variable-row-%d", variable.ID) } x-data={ fmt.Sprintf("{ secret: %v }", variable.Secret != 0) }>
+		<td class="font-medium">
 			<form
+				id={ fmt.Sprintf("variable-edit-form-%d", variable.ID) }
 				hx-put={ fmt.Sprintf("/projects/%d/variables/%d", projectID, variable.ID) }
 				hx-target="#variables-content"
 				hx-swap="outerHTML"
 				data-toast-success="Variable updated"
 				data-toast-error="Failed to update variable"
-				class="flex flex-wrap gap-4 items-end"
-			>
-				<div class="form-control flex-1 min-w-[200px]">
-					<label class="label">
-						<span class="label-text">Name</span>
-					</label>
-					<input type="text" name="name" value={ variable.Name } class="input input-bordered input-sm w-full" required/>
-					if errorMsg != "" {
-						<span class="text-error text-sm mt-1">{ errorMsg }</span>
+			></form>
+			<input type="text" name="name" value={ variable.Name } form={ fmt.Sprintf("variable-edit-form-%d", variable.ID) } class="input input-bordered input-sm w-full" required/>
+			if errorMsg != "" {
+				<span class="text-error text-sm mt-1">{ errorMsg }</span>
+			}
+		</td>
+		<td>
+			<input :type="secret ? 'password' : 'text'" name="value" value={ variable.Value.String } :placeholder="secret ? '••••••••' : ''" form={ fmt.Sprintf("variable-edit-form-%d", variable.ID) } class="input input-bordered input-sm w-full"/>
+		</td>
+		<td>
+			<select name="environment_id" form={ fmt.Sprintf("variable-edit-form-%d", variable.ID) } class="select select-bordered select-sm w-full">
+				<option value="">Unscoped</option>
+				for _, env := range environments {
+					if variable.EnvironmentID.Valid && env.ID == variable.EnvironmentID.Int64 {
+						<option value={ strconv.FormatInt(env.ID, 10) } selected>{ env.Name }</option>
+					} else {
+						<option value={ strconv.FormatInt(env.ID, 10) }>{ env.Name }</option>
 					}
-				</div>
-				<div class="form-control flex-1 min-w-[200px]">
-					<label class="label">
-						<span class="label-text">Value</span>
-					</label>
-					<input type="text" name="value" value={ variable.Value.String } class="input input-bordered input-sm w-full"/>
-				</div>
-				<div class="form-control flex-1 min-w-[200px]">
-					<label class="label">
-						<span class="label-text">Environment</span>
-					</label>
-					<select name="environment_id" class="select select-bordered select-sm w-full">
-						<option value="">Unscoped</option>
-						for _, env := range environments {
-							if variable.EnvironmentID.Valid && env.ID == variable.EnvironmentID.Int64 {
-								<option value={ strconv.FormatInt(env.ID, 10) } selected>{ env.Name }</option>
-							} else {
-								<option value={ strconv.FormatInt(env.ID, 10) }>{ env.Name }</option>
-							}
-						}
-					</select>
-				</div>
-				<div class="flex gap-2 pb-1">
-					<button type="submit" class="btn btn-primary btn-sm">Save</button>
-					<button type="button" class="btn btn-ghost btn-sm" hx-get={ fmt.Sprintf("/projects/%d/variables", projectID) } hx-target="#variables-content" hx-swap="outerHTML">Cancel</button>
-				</div>
-			</form>
+				}
+			</select>
+		</td>
+		<td>
+			<label class="cursor-pointer flex items-center gap-1">
+				<input type="checkbox" name="secret" form={ fmt.Sprintf("variable-edit-form-%d", variable.ID) } class="checkbox checkbox-sm" x-model="secret"/>
+				<span class="text-sm">Secret</span>
+			</label>
+		</td>
+		<td class="flex gap-2">
+			<button type="button" class="btn btn-ghost btn-sm whitespace-nowrap" hx-get={ fmt.Sprintf("/projects/%d/variables", projectID) } hx-target="#variables-content" hx-swap="outerHTML">Cancel</button>
+			<button type="submit" form={ fmt.Sprintf("variable-edit-form-%d", variable.ID) } class="btn btn-primary btn-sm whitespace-nowrap">Save</button>
 		</td>
 	</tr>
 }

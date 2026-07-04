@@ -72,6 +72,7 @@ type ReleaseVariable struct {
 	Value         sql.NullString `json:"value"`
 	EnvironmentID sql.NullInt64  `json:"environment_id"`
 	CreatedAt     int64          `json:"created_at"`
+	Secret        int64          `json:"secret"`
 }
 
 type Step struct {
@@ -97,4 +98,5 @@ type Variable struct {
 	Value         sql.NullString `json:"value"`
 	EnvironmentID sql.NullInt64  `json:"environment_id"`
 	CreatedAt     int64          `json:"created_at"`
+	Secret        int64          `json:"secret"`
 }

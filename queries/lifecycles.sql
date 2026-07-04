@@ -32,4 +32,4 @@ DELETE FROM lifecycle_stages WHERE id = ?;
 DELETE FROM lifecycle_stages WHERE lifecycle_id = ?;
 
 -- name: ListLifecycleStageEnvironmentIDs :many
-SELECT environment_id FROM lifecycle_stages WHERE lifecycle_id = ?;
+SELECT environment_id FROM lifecycle_stages WHERE lifecycle_id = ? ORDER BY sort_order ASC, id ASC;

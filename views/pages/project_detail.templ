@@ -22,11 +22,19 @@ type LifecyclePanelStage struct {
 	RecentAttempts   []db.Deployment
 }
 
-templ ProjectDetail(project db.Project, steps []db.Step, panel LifecyclePanel) {
+// variablesPreviewCap is the max number of variable rows shown per
+// sub-table in the project overview. Keeps the page from scrolling forever
+// when a project has dozens of variables; full list is on /variables.
+const variablesPreviewCap = 6
+
+templ ProjectDetail(project db.Project, panel LifecyclePanel, vars []db.Variable, envs []db.Environment) {
 	<div id="project-detail">
 		<div class="flex justify-between items-center mb-4">
-			<h1 class="text-2xl font-bold">{ project.Name }</h1>
-			<a href="/projects" class="btn btn-ghost btn-sm">Back to Projects</a>
+			<h1 class="text-3xl font-bold">{ project.Name }</h1>
+			<div class="flex gap-2">
+				<a href={ fmt.Sprintf("/projects/%d/edit", project.ID) } class="btn btn-secondary btn-sm">Edit</a>
+				<a href="/projects" class="btn btn-ghost btn-sm">Back</a>
+			</div>
 		</div>
 		<p class="mb-6 text-gray-400">
 			if project.Description.Valid {
@@ -35,42 +43,20 @@ templ ProjectDetail(project db.Project, steps []db.Step, panel LifecyclePanel) {
 				<span>No description</span>
 			}
 		</p>
-		<div class="flex gap-4">
-			<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-primary">Steps</a>
+		<div class="flex gap-4 flex-wrap">
+			<a href={ fmt.Sprintf("/projects/%d/steps-page", project.ID) } class="btn btn-primary">Steps</a>
 			<a href={ fmt.Sprintf("/projects/%d/variables", project.ID) } class="btn btn-secondary">Variables</a>
 			<a href={ fmt.Sprintf("/projects/%d/releases", project.ID) } class="btn btn-accent">Releases</a>
+			<a href={ fmt.Sprintf("/projects/%d/deploy", project.ID) } class="btn btn-primary">Deploy</a>
 		</div>
 		@LifecyclePanelSection(project, panel)
-		<div class="mt-8">
-			<h2 class="text-xl font-bold mb-4">Deployment Process</h2>
-			@components.StepList(steps, project.ID)
-			<div class="mt-4">
-				<button
-					class="btn btn-primary btn-sm"
-					hx-get={ fmt.Sprintf("/projects/%d/steps/new", project.ID) }
-					hx-target="#add-step-form"
-					hx-swap="innerHTML"
-				>
-					Add Step
-				</button>
-				<button
-					class="btn btn-secondary btn-sm"
-					hx-get={ fmt.Sprintf("/projects/%d/templates-picker", project.ID) }
-					hx-target="#template-picker"
-					hx-swap="innerHTML"
-				>
-					Insert from Template
-				</button>
-				<div id="add-step-form" class="mt-4"></div>
-				<div id="template-picker" class="mt-4"></div>
-			</div>
-		</div>
+		@VariablesPreviewSection(project, vars, envs)
 	</div>
 }
 
 templ LifecyclePanelSection(project db.Project, panel LifecyclePanel) {
 	<div class="mt-8">
-		<div class="flex justify-between items-center mb-2">
+		<div class="flex items-center mb-2">
 			<h2 class="text-xl font-bold">
 				if panel.Lifecycle.ID == 0 {
 					Environments
@@ -78,7 +64,6 @@ templ LifecyclePanelSection(project db.Project, panel LifecyclePanel) {
 					Lifecycle
 				}
 			</h2>
-			<a href={ fmt.Sprintf("/projects/%d/edit", project.ID) } class="btn btn-ghost btn-sm">Change</a>
 		</div>
 		if panel.Lifecycle.ID == 0 {
 			<div class="text-sm text-gray-400 mb-2">No lifecycle — this project can deploy to any environment without promotion gates.</div>
@@ -121,8 +106,6 @@ templ LifecyclePanelRow(index int, s LifecyclePanelStage) {
 	@LifecyclePanelRowImpl(index, s, true)
 }
 
-// hasLifecycle toggles the Order column. Lifecycle stages get a 1/2/3 column;
-// free-floating rows skip it.
 templ LifecyclePanelRowImpl(index int, s LifecyclePanelStage, hasLifecycle bool) {
 	<tr>
 		if hasLifecycle {
@@ -175,13 +158,96 @@ templ AttemptDot(d db.Deployment) {
 	></span>
 }
 
-templ ProjectDetailPage(project db.Project, steps []db.Step, panel LifecyclePanel, currentPath string) {
+// VariablesPreviewSection renders a read-only summary of the project's
+// variables below the env panel. Scoped and unscoped are shown in two
+// sub-tables so a project with many env-scoped vars doesn't drown the
+// unscoped ones. Each sub-table is capped at variablesPreviewCap rows;
+// the full list is on /variables.
+templ VariablesPreviewSection(project db.Project, vars []db.Variable, envs []db.Environment) {
+	<div class="mt-8">
+		<div class="flex justify-between items-center mb-2">
+			<h2 class="text-xl font-bold">Variables</h2>
+			<a href={ fmt.Sprintf("/projects/%d/variables", project.ID) } class="btn btn-ghost btn-sm">Manage →</a>
+		</div>
+		<div class="card bg-base-200 p-4 space-y-4">
+			if len(filterUnscoped(vars)) == 0 && len(filterScoped(vars)) == 0 {
+				<p class="text-gray-500 italic text-sm">No variables yet.</p>
+			}
+			@VariablesPreviewTable(project, "Unscoped", filterUnscoped(vars), envs, len(vars) > variablesPreviewCap)
+			@VariablesPreviewTable(project, "Environment-scoped", filterScoped(vars), envs, len(vars) > variablesPreviewCap)
+		</div>
+	</div>
+}
+
+templ VariablesPreviewTable(project db.Project, label string, vars []db.Variable, envs []db.Environment, showMoreLink bool) {
+	if len(vars) > 0 {
+		<div>
+			<div class="text-xs uppercase tracking-wide text-gray-500 mb-1">{ label }</div>
+			<table class="table table-sm table-zebra w-full">
+				<thead>
+					<tr>
+						<th class="w-1/3">Name</th>
+						<th class="w-1/2">Value</th>
+						<th class="w-1/6">Environment</th>
+					</tr>
+				</thead>
+				<tbody>
+					@VariablesPreviewRows(vars, envs)
+					if showMoreLink && len(vars) > variablesPreviewCap {
+						<tr>
+							<td colspan="3" class="text-center text-xs text-gray-500 italic py-1">
+								{ fmt.Sprintf("showing %d of %d —", variablesPreviewCap, len(vars)) }
+								<a href={ fmt.Sprintf("/projects/%d/variables", project.ID) } class="link link-primary">manage all</a>
+							</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		</div>
+	}
+}
+
+// VariablesPreviewRows is split out so the cap logic lives in Go, not in
+// the templ body (templ doesn't allow `limit := ...; if ...; vars[:limit]`).
+templ VariablesPreviewRows(vars []db.Variable, envs []db.Environment) {
+	if len(vars) > variablesPreviewCap {
+		for _, v := range vars[:variablesPreviewCap] {
+			@VariablePreviewRow(v, envs)
+		}
+	} else {
+		for _, v := range vars {
+			@VariablePreviewRow(v, envs)
+		}
+	}
+}
+
+templ VariablePreviewRow(v db.Variable, envs []db.Environment) {
+	<tr>
+		<td class="font-medium truncate">{ v.Name }</td>
+		<td class="truncate font-mono text-xs">
+			if v.Value.Valid {
+				{ v.Value.String }
+			} else {
+				<span class="text-gray-500 italic">(empty)</span>
+			}
+		</td>
+		<td class="truncate text-sm">
+			if v.EnvironmentID.Valid {
+				{ envNameForID(envs, v.EnvironmentID.Int64) }
+			} else {
+				<span class="text-gray-500">Unscoped</span>
+			}
+		</td>
+	</tr>
+}
+
+templ ProjectDetailPage(project db.Project, panel LifecyclePanel, vars []db.Variable, envs []db.Environment, currentPath string) {
 	@layouts.Base(project.Name, currentPath) {
 		@components.Breadcrumbs([]components.Crumb{
 			{Label: "Home", Href: "/"},
 			{Label: "Projects", Href: "/projects"},
 			{Label: project.Name},
 		})
-		@ProjectDetail(project, steps, panel)
+		@ProjectDetail(project, panel, vars, envs)
 	}
 }

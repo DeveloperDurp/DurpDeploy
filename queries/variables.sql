@@ -5,10 +5,10 @@ SELECT * FROM variables WHERE project_id = ? ORDER BY created_at DESC;
 SELECT * FROM variables WHERE id = ?;
 
 -- name: CreateVariable :one
-INSERT INTO variables (project_id, name, value, environment_id) VALUES (?, ?, ?, ?) RETURNING *;
+INSERT INTO variables (project_id, name, value, environment_id, secret) VALUES (?, ?, ?, ?, ?) RETURNING *;
 
 -- name: UpdateVariable :one
-UPDATE variables SET name = ?, value = ?, environment_id = ? WHERE id = ? RETURNING *;
+UPDATE variables SET name = ?, value = ?, environment_id = ?, secret = ? WHERE id = ? RETURNING *;
 
 -- name: DeleteVariable :exec
 DELETE FROM variables WHERE id = ?;

@@ -20,7 +20,10 @@ type DeploymentHandler struct {
 	runner *runner.DeploymentRunner
 }
 
-func NewDeploymentHandler(repo *repository.Repository, runner *runner.DeploymentRunner) *DeploymentHandler {
+func NewDeploymentHandler(
+	repo *repository.Repository,
+	runner *runner.DeploymentRunner,
+) *DeploymentHandler {
 	return &DeploymentHandler{repo: repo, runner: runner}
 }
 
@@ -33,7 +36,231 @@ type gateViolation struct {
 	bypassable bool // true = force=true can override; false = hard restriction
 }
 
-func (h *DeploymentHandler) CreateDeployment(w http.ResponseWriter, r *http.Request) {
+// NewDeploymentPage renders the dedicated /projects/{id}/deploy page.
+// Loads the project, its releases (newest first), and the per-env gate
+// state for the env dropdown. 404s on missing project.
+//
+// Optional query: ?release_id=N pre-selects the release and computes
+// release-aware gate state (an env is deployable only when its prior
+// stage has succeeded with the same release). Without release_id, every
+// lifecycle stage is shown as deployable.
+func (h *DeploymentHandler) NewDeploymentPage(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	projectID, err := parseProjectID(r)
+	if err != nil {
+		http.Error(w, "Invalid project ID", http.StatusBadRequest)
+		return
+	}
+
+	project, err := h.repo.Queries.GetProject(r.Context(), projectID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			http.Error(w, "Project not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	releases, err := h.repo.Queries.ListReleasesByProject(
+		r.Context(),
+		projectID,
+	)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	var selectedRelease *db.Release
+	if ridStr := r.URL.Query().Get("release_id"); ridStr != "" {
+		if rid, err := strconv.ParseInt(ridStr, 10, 64); err == nil {
+			for i := range releases {
+				if releases[i].ID == rid {
+					selectedRelease = &releases[i]
+					break
+				}
+			}
+		}
+	}
+
+	envs, err := h.availableEnvsForDeployPage(r, project, selectedRelease)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if err := pages.DeployFormPage(project, releases, selectedRelease, envs, r.URL.Path).
+		Render(r.Context(), w); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+// availableEnvsForDeployPage computes the per-env gate state for the
+// deploy page's env dropdown. The behaviour splits three ways:
+//   - Free-floating project (no lifecycle): every env is deployable.
+//   - Lifecycle-bound, no release picked: every lifecycle stage is
+//     shown as deployable. The user has to pick a release first; once
+//     they do, the URL reloads with ?release_id= and the per-release
+//     gate is applied.
+//   - Lifecycle-bound, release picked: only stages whose prior stage
+//     has succeeded with this release (or which is the first stage)
+//     are deployable. Other stages are bypassable via force. Stages
+//     already at this version are hidden — there's nothing to do.
+//
+// On a lifecycle-bound project the envs are returned in lifecycle stage
+// order (dev before test before prod) so the dropdown reads as a deploy
+// path. Non-stage envs are always hidden.
+func (h *DeploymentHandler) availableEnvsForDeployPage(
+	r *http.Request,
+	project db.Project,
+	release *db.Release,
+) ([]pages.AvailableEnv, error) {
+	if !project.LifecycleID.Valid {
+		all, err := h.repo.Queries.ListEnvironments(r.Context())
+		if err != nil {
+			return nil, err
+		}
+		out := make([]pages.AvailableEnv, len(all))
+		for i, e := range all {
+			out[i] = pages.AvailableEnv{
+				Environment: e,
+				State:       pages.GateState{Deployable: true},
+			}
+		}
+		return out, nil
+	}
+
+	stageIDs, err := h.repo.Queries.ListLifecycleStageEnvironmentIDs(
+		r.Context(),
+		project.LifecycleID.Int64,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	all, err := h.repo.Queries.ListEnvironments(r.Context())
+	if err != nil {
+		return nil, err
+	}
+	envByID := make(map[int64]db.Environment, len(all))
+	for _, e := range all {
+		envByID[e.ID] = e
+	}
+
+	stageEnvs := make([]db.Environment, 0, len(stageIDs))
+	for _, id := range stageIDs {
+		if e, ok := envByID[id]; ok {
+			stageEnvs = append(stageEnvs, e)
+		}
+	}
+
+	// No release selected: every stage is deployable.
+	if release == nil {
+		out := make([]pages.AvailableEnv, len(stageEnvs))
+		for i, e := range stageEnvs {
+			out[i] = pages.AvailableEnv{
+				Environment: e,
+				State:       pages.GateState{Deployable: true},
+			}
+		}
+		return out, nil
+	}
+
+	// Release selected: compute per-stage gate state. Stage 0 is always
+	// deployable. Stage n is deployable when stage n-1 has a successful
+	// deployment of this release.
+	out := make([]pages.AvailableEnv, 0, len(stageEnvs))
+	for i, e := range stageEnvs {
+		state := h.stageGateStateForRelease(
+			r,
+			project,
+			release,
+			i,
+			stageEnvs,
+			e,
+		)
+		if state.AlreadyDeployed {
+			// Skip — this env already has this release.
+			continue
+		}
+		out = append(out, pages.AvailableEnv{Environment: e, State: state})
+	}
+	return out, nil
+}
+
+// stageGateStateForRelease computes the gate state for one lifecycle
+// stage given a chosen release. Returns AlreadyDeployed=true if this
+// stage already has a successful deployment of the release (the env
+// shouldn't appear in the dropdown at all in that case).
+func (h *DeploymentHandler) stageGateStateForRelease(
+	r *http.Request,
+	project db.Project,
+	release *db.Release,
+	index int,
+	stageEnvs []db.Environment,
+	e db.Environment,
+) pages.GateState {
+	// Has this stage already seen this release? If yes, hide from the
+	// dropdown (nothing to do). Checked for every stage including the
+	// first — you wouldn't redeploy to a stage that's already at this
+	// version.
+	deployed, err := h.repo.Queries.GetLatestSuccessfulDeploymentForReleaseEnv(
+		r.Context(),
+		db.GetLatestSuccessfulDeploymentForReleaseEnvParams{
+			ReleaseID:     release.ID,
+			EnvironmentID: e.ID,
+		},
+	)
+	if err == nil && deployed.ReleaseID == release.ID {
+		return pages.GateState{AlreadyDeployed: true}
+	}
+
+	// First stage with no prior: always deployable (assuming not already
+	// deployed, which we just checked).
+	if index == 0 {
+		return pages.GateState{Deployable: true}
+	}
+
+	// Has the prior stage seen this release?
+	prior := stageEnvs[index-1]
+	priorDep, err := h.repo.Queries.GetLatestSuccessfulDeploymentForReleaseEnv(
+		r.Context(),
+		db.GetLatestSuccessfulDeploymentForReleaseEnvParams{
+			ReleaseID:     release.ID,
+			EnvironmentID: prior.ID,
+		},
+	)
+	if err == nil && priorDep.ReleaseID == release.ID {
+		return pages.GateState{Deployable: true}
+	}
+	return pages.GateState{
+		Deployable: false,
+		Bypassable: true,
+		Reason: fmt.Sprintf(
+			"%s has not been successfully deployed to %s yet. Tick Force to deploy anyway.",
+			release.Version,
+			prior.Name,
+		),
+	}
+}
+
+// ScheduleDeployment handles POST /projects/{id}/deploy. The body is
+// {release_id, environment_id, force}. It validates the release belongs
+// to this project, runs the existing promotion gate (with force as the
+// override), and creates + dispatches a deployment just like
+// CreateDeployment — but reached via a project-scoped URL.
+func (h *DeploymentHandler) ScheduleDeployment(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	projectID, err := parseProjectID(r)
+	if err != nil {
+		http.Error(w, "Invalid project ID", http.StatusBadRequest)
+		return
+	}
+
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -45,7 +272,144 @@ func (h *DeploymentHandler) CreateDeployment(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	environmentID, err := strconv.ParseInt(r.FormValue("environment_id"), 10, 64)
+	environmentID, err := strconv.ParseInt(
+		r.FormValue("environment_id"),
+		10,
+		64,
+	)
+	if err != nil {
+		http.Error(w, "Invalid environment ID", http.StatusBadRequest)
+		return
+	}
+
+	force := isTruthy(r.FormValue("force"))
+
+	release, err := h.repo.Queries.GetRelease(r.Context(), releaseID)
+	if err != nil {
+		http.Error(w, "Release not found", http.StatusBadRequest)
+		return
+	}
+
+	if release.ProjectID != projectID {
+		http.Error(
+			w,
+			"Release does not belong to this project",
+			http.StatusBadRequest,
+		)
+		return
+	}
+
+	project, err := h.repo.Queries.GetProject(r.Context(), projectID)
+	if err != nil {
+		http.Error(w, "Project not found", http.StatusBadRequest)
+		return
+	}
+
+	violation, blocked := h.checkPromotionGate(
+		r,
+		project,
+		release,
+		environmentID,
+	)
+	if blocked {
+		// Hard restriction: force cannot bypass.
+		if !violation.bypassable {
+			h.renderDeployGateError(w, r, project, release, violation.reason)
+			return
+		}
+		// Bypassable: force is required to proceed.
+		if !force {
+			h.renderDeployGateError(w, r, project, release, violation.reason)
+			return
+		}
+	}
+
+	forcedFlag := int64(0)
+	if force && violation != nil && violation.bypassable {
+		forcedFlag = 1
+	}
+
+	deployment, err := h.repo.Queries.CreateDeployment(
+		r.Context(),
+		db.CreateDeploymentParams{
+			ReleaseID:     releaseID,
+			EnvironmentID: environmentID,
+			Status:        "pending",
+			StartedAt:     sql.NullInt64{},
+			FinishedAt:    sql.NullInt64{},
+			Forced:        forcedFlag,
+		},
+	)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	go h.runner.Run(
+		context.Background(),
+		deployment.ID,
+		releaseID,
+		environmentID,
+	)
+
+	http.Redirect(
+		w,
+		r,
+		fmt.Sprintf("/deployments/%d", deployment.ID),
+		http.StatusSeeOther,
+	)
+}
+
+// renderDeployGateError renders a 422 with the deploy page re-shown and
+// the gate reason. Re-renders the same page so the user can fix their
+// selection (or tick Force) without losing the form state.
+func (h *DeploymentHandler) renderDeployGateError(
+	w http.ResponseWriter,
+	r *http.Request,
+	project db.Project,
+	release db.Release,
+	reason string,
+) {
+	releases, err := h.repo.Queries.ListReleasesByProject(
+		r.Context(),
+		project.ID,
+	)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	envs, err := h.availableEnvsForDeployPage(r, project, &release)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusUnprocessableEntity)
+	if err := pages.DeployFormPage(project, releases, &release, envs, r.URL.Path).
+		Render(r.Context(), w); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func (h *DeploymentHandler) CreateDeployment(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	releaseID, err := strconv.ParseInt(r.FormValue("release_id"), 10, 64)
+	if err != nil {
+		http.Error(w, "Invalid release ID", http.StatusBadRequest)
+		return
+	}
+
+	environmentID, err := strconv.ParseInt(
+		r.FormValue("environment_id"),
+		10,
+		64,
+	)
 	if err != nil {
 		http.Error(w, "Invalid environment ID", http.StatusBadRequest)
 		return
@@ -65,16 +429,35 @@ func (h *DeploymentHandler) CreateDeployment(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	violation, blocked := h.checkPromotionGate(r, project, release, environmentID)
+	violation, blocked := h.checkPromotionGate(
+		r,
+		project,
+		release,
+		environmentID,
+	)
 	if blocked {
 		// Hard restriction: force cannot bypass.
 		if !violation.bypassable {
-			h.renderGateError(w, r, project, release, environmentID, violation.reason)
+			h.renderGateError(
+				w,
+				r,
+				project,
+				release,
+				environmentID,
+				violation.reason,
+			)
 			return
 		}
 		// Bypassable: force is required to proceed.
 		if !force {
-			h.renderGateError(w, r, project, release, environmentID, violation.reason)
+			h.renderGateError(
+				w,
+				r,
+				project,
+				release,
+				environmentID,
+				violation.reason,
+			)
 			return
 		}
 	}
@@ -84,22 +467,35 @@ func (h *DeploymentHandler) CreateDeployment(w http.ResponseWriter, r *http.Requ
 		forcedFlag = 1
 	}
 
-	deployment, err := h.repo.Queries.CreateDeployment(r.Context(), db.CreateDeploymentParams{
-		ReleaseID:     releaseID,
-		EnvironmentID: environmentID,
-		Status:        "pending",
-		StartedAt:     sql.NullInt64{},
-		FinishedAt:    sql.NullInt64{},
-		Forced:        forcedFlag,
-	})
+	deployment, err := h.repo.Queries.CreateDeployment(
+		r.Context(),
+		db.CreateDeploymentParams{
+			ReleaseID:     releaseID,
+			EnvironmentID: environmentID,
+			Status:        "pending",
+			StartedAt:     sql.NullInt64{},
+			FinishedAt:    sql.NullInt64{},
+			Forced:        forcedFlag,
+		},
+	)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	go h.runner.Run(context.Background(), deployment.ID, releaseID, environmentID)
+	go h.runner.Run(
+		context.Background(),
+		deployment.ID,
+		releaseID,
+		environmentID,
+	)
 
-	http.Redirect(w, r, fmt.Sprintf("/deployments/%d", deployment.ID), http.StatusSeeOther)
+	http.Redirect(
+		w,
+		r,
+		fmt.Sprintf("/deployments/%d", deployment.ID),
+		http.StatusSeeOther,
+	)
 }
 
 // checkPromotionGate enforces two rules when a project has a lifecycle:
@@ -108,8 +504,19 @@ func (h *DeploymentHandler) CreateDeployment(w http.ResponseWriter, r *http.Requ
 //
 // Returns the violation (for the message) and true if blocked. Returns nil, false if
 // the deploy is allowed. Free-floating projects (no lifecycle) always return nil, false.
-func (h *DeploymentHandler) checkPromotionGate(r *http.Request, project db.Project, release db.Release, environmentID int64) (*gateViolation, bool) {
-	state, err := evaluateGate(r.Context(), h.repo, project, release, environmentID)
+func (h *DeploymentHandler) checkPromotionGate(
+	r *http.Request,
+	project db.Project,
+	release db.Release,
+	environmentID int64,
+) (*gateViolation, bool) {
+	state, err := evaluateGate(
+		r.Context(),
+		h.repo,
+		project,
+		release,
+		environmentID,
+	)
 	if err != nil {
 		return &gateViolation{
 			project:    project,
@@ -129,8 +536,18 @@ func (h *DeploymentHandler) checkPromotionGate(r *http.Request, project db.Proje
 
 // renderGateError renders a 422 page that re-displays the releases table with
 // the gate violation message, so the user can see the error and re-attempt with force.
-func (h *DeploymentHandler) renderGateError(w http.ResponseWriter, r *http.Request, project db.Project, release db.Release, environmentID int64, reason string) {
-	releases, err := h.repo.Queries.ListReleasesByProject(r.Context(), project.ID)
+func (h *DeploymentHandler) renderGateError(
+	w http.ResponseWriter,
+	r *http.Request,
+	project db.Project,
+	release db.Release,
+	environmentID int64,
+	reason string,
+) {
+	releases, err := h.repo.Queries.ListReleasesByProject(
+		r.Context(),
+		project.ID,
+	)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -142,19 +559,24 @@ func (h *DeploymentHandler) renderGateError(w http.ResponseWriter, r *http.Reque
 	}
 	w.WriteHeader(http.StatusUnprocessableEntity)
 	if r.Header.Get("HX-Request") == "true" {
-		if err := pages.ReleasesFragment(project, views, reason).Render(r.Context(), w); err != nil {
+		if err := pages.ReleasesFragment(project, views, reason).
+			Render(r.Context(), w); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 		return
 	}
-	if err := pages.ReleasesPage(project, views, reason, r.URL.Path).Render(r.Context(), w); err != nil {
+	if err := pages.ReleasesPage(project, views, reason, r.URL.Path).
+		Render(r.Context(), w); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
 // availableEnvironmentsForProject returns the envs a project may deploy to:
 // lifecycle stages if it has a lifecycle, otherwise all envs.
-func (h *DeploymentHandler) availableEnvironmentsForProject(r *http.Request, project db.Project) ([]db.Environment, error) {
+func (h *DeploymentHandler) availableEnvironmentsForProject(
+	r *http.Request,
+	project db.Project,
+) ([]db.Environment, error) {
 	all, err := h.repo.Queries.ListEnvironments(r.Context())
 	if err != nil {
 		return nil, err
@@ -162,7 +584,10 @@ func (h *DeploymentHandler) availableEnvironmentsForProject(r *http.Request, pro
 	if !project.LifecycleID.Valid {
 		return all, nil
 	}
-	stageIDs, err := h.repo.Queries.ListLifecycleStageEnvironmentIDs(r.Context(), project.LifecycleID.Int64)
+	stageIDs, err := h.repo.Queries.ListLifecycleStageEnvironmentIDs(
+		r.Context(),
+		project.LifecycleID.Int64,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -187,7 +612,10 @@ func isTruthy(s string) bool {
 	return false
 }
 
-func (h *DeploymentHandler) GetDeployment(w http.ResponseWriter, r *http.Request) {
+func (h *DeploymentHandler) GetDeployment(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
@@ -217,7 +645,10 @@ func (h *DeploymentHandler) GetDeployment(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	environment, err := h.repo.Queries.GetEnvironment(r.Context(), deployment.EnvironmentID)
+	environment, err := h.repo.Queries.GetEnvironment(
+		r.Context(),
+		deployment.EnvironmentID,
+	)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -230,17 +661,22 @@ func (h *DeploymentHandler) GetDeployment(w http.ResponseWriter, r *http.Request
 	}
 
 	if r.Header.Get("HX-Request") == "true" {
-		if err := pages.DeploymentDetail(project, release, environment, deployment, logs).Render(r.Context(), w); err != nil {
+		if err := pages.DeploymentDetail(project, release, environment, deployment, logs).
+			Render(r.Context(), w); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	} else {
-		if err := pages.DeploymentDetailPage(project, release, environment, deployment, logs, r.URL.Path).Render(r.Context(), w); err != nil {
+		if err := pages.DeploymentDetailPage(project, release, environment, deployment, logs, r.URL.Path).
+			Render(r.Context(), w); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	}
 }
 
-func (h *DeploymentHandler) GetDeploymentStatus(w http.ResponseWriter, r *http.Request) {
+func (h *DeploymentHandler) GetDeploymentStatus(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
@@ -258,12 +694,16 @@ func (h *DeploymentHandler) GetDeploymentStatus(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	if err := pages.StatusBadgeContainer(deployment).Render(r.Context(), w); err != nil {
+	if err := pages.StatusBadgeContainer(deployment).
+		Render(r.Context(), w); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
-func (h *DeploymentHandler) CancelDeployment(w http.ResponseWriter, r *http.Request) {
+func (h *DeploymentHandler) CancelDeployment(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
@@ -298,15 +738,24 @@ func (h *DeploymentHandler) CancelDeployment(w http.ResponseWriter, r *http.Requ
 	}
 
 	if r.Header.Get("HX-Request") == "true" {
-		if err := pages.StatusBadgeContainer(deployment).Render(r.Context(), w); err != nil {
+		if err := pages.StatusBadgeContainer(deployment).
+			Render(r.Context(), w); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	} else {
-		http.Redirect(w, r, fmt.Sprintf("/deployments/%d", deployment.ID), http.StatusSeeOther)
+		http.Redirect(
+			w,
+			r,
+			fmt.Sprintf("/deployments/%d", deployment.ID),
+			http.StatusSeeOther,
+		)
 	}
 }
 
-func (h *DeploymentHandler) ListDeployments(w http.ResponseWriter, r *http.Request) {
+func (h *DeploymentHandler) ListDeployments(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	deployments, err := h.repo.Queries.ListDeployments(r.Context())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -320,7 +769,10 @@ func (h *DeploymentHandler) ListDeployments(w http.ResponseWriter, r *http.Reque
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		project, err := h.repo.Queries.GetProject(r.Context(), release.ProjectID)
+		project, err := h.repo.Queries.GetProject(
+			r.Context(),
+			release.ProjectID,
+		)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -339,11 +791,13 @@ func (h *DeploymentHandler) ListDeployments(w http.ResponseWriter, r *http.Reque
 	}
 
 	if r.Header.Get("HX-Request") == "true" {
-		if err := pages.DeploymentsList(items).Render(r.Context(), w); err != nil {
+		if err := pages.DeploymentsList(items).
+			Render(r.Context(), w); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	} else {
-		if err := pages.DeploymentsListPage(items, r.URL.Path).Render(r.Context(), w); err != nil {
+		if err := pages.DeploymentsListPage(items, r.URL.Path).
+			Render(r.Context(), w); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	}
