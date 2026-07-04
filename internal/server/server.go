@@ -67,6 +67,7 @@ func NewRouter(
 	r.Post("/lifecycles/{id}", lifecycleH.SaveLifecycle)
 	r.Post("/lifecycles/{id}/stages", lifecycleH.AddStage)
 	r.Post("/lifecycles/{id}/stages/reorder", lifecycleH.ReorderStage)
+	r.Patch("/lifecycles/{id}/stages/{stageId}", lifecycleH.UpdateLifecycleStage)
 	r.Post("/lifecycles/{id}/stages/{stageId}/delete", lifecycleH.DeleteStage)
 
 	ph := handler.NewProjectHandler(repo)
@@ -124,6 +125,7 @@ func NewRouter(
 	r.Get("/deployments/{id}", dh.GetDeployment)
 	r.Get("/deployments/{id}/status", dh.GetDeploymentStatus)
 	r.Post("/deployments/{id}/cancel", dh.CancelDeployment)
+	r.Post("/deployments/{id}/approve", dh.ApproveDeployment)
 	r.Post("/deployments/{id}/redeploy", dh.RedeployDeployment)
 	r.Get("/projects/{id}/deploy", dh.NewDeploymentPage)
 	r.Post("/projects/{id}/deploy", dh.ScheduleDeployment)

@@ -10,7 +10,7 @@ import (
 )
 
 const createStep = `-- name: CreateStep :one
-INSERT INTO steps (project_id, name, script_body, sort_order, timeout_seconds) VALUES (?, ?, ?, ?, ?) RETURNING id, project_id, name, script_body, sort_order, created_at, timeout_seconds
+INSERT INTO steps (project_id, name, script_body, sort_order, timeout_seconds, max_retries) VALUES (?, ?, ?, ?, ?, ?) RETURNING id, project_id, name, script_body, sort_order, created_at, timeout_seconds, max_retries
 `
 
 type CreateStepParams struct {
@@ -19,6 +19,7 @@ type CreateStepParams struct {
 	ScriptBody     string `json:"script_body"`
 	SortOrder      int64  `json:"sort_order"`
 	TimeoutSeconds int64  `json:"timeout_seconds"`
+	MaxRetries     int64  `json:"max_retries"`
 }
 
 func (q *Queries) CreateStep(ctx context.Context, arg CreateStepParams) (Step, error) {
@@ -28,6 +29,7 @@ func (q *Queries) CreateStep(ctx context.Context, arg CreateStepParams) (Step, e
 		arg.ScriptBody,
 		arg.SortOrder,
 		arg.TimeoutSeconds,
+		arg.MaxRetries,
 	)
 	var i Step
 	err := row.Scan(
@@ -38,6 +40,7 @@ func (q *Queries) CreateStep(ctx context.Context, arg CreateStepParams) (Step, e
 		&i.SortOrder,
 		&i.CreatedAt,
 		&i.TimeoutSeconds,
+		&i.MaxRetries,
 	)
 	return i, err
 }
@@ -52,7 +55,7 @@ func (q *Queries) DeleteStep(ctx context.Context, id int64) error {
 }
 
 const getStep = `-- name: GetStep :one
-SELECT id, project_id, name, script_body, sort_order, created_at, timeout_seconds FROM steps WHERE id = ?
+SELECT id, project_id, name, script_body, sort_order, created_at, timeout_seconds, max_retries FROM steps WHERE id = ?
 `
 
 func (q *Queries) GetStep(ctx context.Context, id int64) (Step, error) {
@@ -66,12 +69,13 @@ func (q *Queries) GetStep(ctx context.Context, id int64) (Step, error) {
 		&i.SortOrder,
 		&i.CreatedAt,
 		&i.TimeoutSeconds,
+		&i.MaxRetries,
 	)
 	return i, err
 }
 
 const listStepsByProject = `-- name: ListStepsByProject :many
-SELECT id, project_id, name, script_body, sort_order, created_at, timeout_seconds FROM steps WHERE project_id = ? ORDER BY sort_order ASC, created_at ASC
+SELECT id, project_id, name, script_body, sort_order, created_at, timeout_seconds, max_retries FROM steps WHERE project_id = ? ORDER BY sort_order ASC, created_at ASC
 `
 
 func (q *Queries) ListStepsByProject(ctx context.Context, projectID int64) ([]Step, error) {
@@ -91,6 +95,7 @@ func (q *Queries) ListStepsByProject(ctx context.Context, projectID int64) ([]St
 			&i.SortOrder,
 			&i.CreatedAt,
 			&i.TimeoutSeconds,
+			&i.MaxRetries,
 		); err != nil {
 			return nil, err
 		}
@@ -106,7 +111,7 @@ func (q *Queries) ListStepsByProject(ctx context.Context, projectID int64) ([]St
 }
 
 const updateStep = `-- name: UpdateStep :one
-UPDATE steps SET name = ?, script_body = ?, sort_order = ?, timeout_seconds = ? WHERE id = ? RETURNING id, project_id, name, script_body, sort_order, created_at, timeout_seconds
+UPDATE steps SET name = ?, script_body = ?, sort_order = ?, timeout_seconds = ?, max_retries = ? WHERE id = ? RETURNING id, project_id, name, script_body, sort_order, created_at, timeout_seconds, max_retries
 `
 
 type UpdateStepParams struct {
@@ -114,6 +119,7 @@ type UpdateStepParams struct {
 	ScriptBody     string `json:"script_body"`
 	SortOrder      int64  `json:"sort_order"`
 	TimeoutSeconds int64  `json:"timeout_seconds"`
+	MaxRetries     int64  `json:"max_retries"`
 	ID             int64  `json:"id"`
 }
 
@@ -123,6 +129,7 @@ func (q *Queries) UpdateStep(ctx context.Context, arg UpdateStepParams) (Step, e
 		arg.ScriptBody,
 		arg.SortOrder,
 		arg.TimeoutSeconds,
+		arg.MaxRetries,
 		arg.ID,
 	)
 	var i Step
@@ -134,6 +141,7 @@ func (q *Queries) UpdateStep(ctx context.Context, arg UpdateStepParams) (Step, e
 		&i.SortOrder,
 		&i.CreatedAt,
 		&i.TimeoutSeconds,
+		&i.MaxRetries,
 	)
 	return i, err
 }

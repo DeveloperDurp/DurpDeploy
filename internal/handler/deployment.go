@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 
@@ -170,7 +171,10 @@ func (h *DeploymentHandler) availableEnvsForDeployPage(
 
 	// Release selected: compute per-stage gate state. Stage 0 is always
 	// deployable. Stage n is deployable when stage n-1 has a successful
-	// deployment of this release.
+	// deployment of this release. Stages that already have this release
+	// are still included (with AlreadyDeployed=true) so the user can
+	// re-run; the view renders them in a separate "Already deployed"
+	// optgroup with a warning.
 	out := make([]pages.AvailableEnv, 0, len(stageEnvs))
 	for i, e := range stageEnvs {
 		state := h.stageGateStateForRelease(
@@ -181,10 +185,6 @@ func (h *DeploymentHandler) availableEnvsForDeployPage(
 			stageEnvs,
 			e,
 		)
-		if state.AlreadyDeployed {
-			// Skip — this env already has this release.
-			continue
-		}
 		out = append(out, pages.AvailableEnv{Environment: e, State: state})
 	}
 	return out, nil
@@ -326,6 +326,16 @@ func (h *DeploymentHandler) ScheduleDeployment(
 		}
 	}
 
+	requiresApproval, err := h.stageRequiresApproval(r, project, environmentID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	initialStatus := "pending"
+	if requiresApproval {
+		initialStatus = "pending_approval"
+	}
+
 	forcedFlag := int64(0)
 	if force && violation != nil && violation.bypassable {
 		forcedFlag = 1
@@ -336,7 +346,7 @@ func (h *DeploymentHandler) ScheduleDeployment(
 		db.CreateDeploymentParams{
 			ReleaseID:     releaseID,
 			EnvironmentID: environmentID,
-			Status:        "pending",
+			Status:        initialStatus,
 			StartedAt:     sql.NullInt64{},
 			FinishedAt:    sql.NullInt64{},
 			Forced:        forcedFlag,
@@ -348,12 +358,14 @@ func (h *DeploymentHandler) ScheduleDeployment(
 		return
 	}
 
-	go h.runner.Run(
-		context.Background(),
-		deployment.ID,
-		releaseID,
-		environmentID,
-	)
+	if initialStatus == "pending" {
+		go h.runner.Run(
+			context.Background(),
+			deployment.ID,
+			releaseID,
+			environmentID,
+		)
+	}
 
 	http.Redirect(
 		w,
@@ -467,6 +479,16 @@ func (h *DeploymentHandler) CreateDeployment(
 		}
 	}
 
+	requiresApproval, err := h.stageRequiresApproval(r, project, environmentID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	initialStatus := "pending"
+	if requiresApproval {
+		initialStatus = "pending_approval"
+	}
+
 	forcedFlag := int64(0)
 	if force && violation != nil && violation.bypassable {
 		forcedFlag = 1
@@ -477,7 +499,7 @@ func (h *DeploymentHandler) CreateDeployment(
 		db.CreateDeploymentParams{
 			ReleaseID:     releaseID,
 			EnvironmentID: environmentID,
-			Status:        "pending",
+			Status:        initialStatus,
 			StartedAt:     sql.NullInt64{},
 			FinishedAt:    sql.NullInt64{},
 			Forced:        forcedFlag,
@@ -489,12 +511,14 @@ func (h *DeploymentHandler) CreateDeployment(
 		return
 	}
 
-	go h.runner.Run(
-		context.Background(),
-		deployment.ID,
-		releaseID,
-		environmentID,
-	)
+	if initialStatus == "pending" {
+		go h.runner.Run(
+			context.Background(),
+			deployment.ID,
+			releaseID,
+			environmentID,
+		)
+	}
 
 	http.Redirect(
 		w,
@@ -608,6 +632,28 @@ func (h *DeploymentHandler) availableEnvironmentsForProject(
 		}
 	}
 	return out, nil
+}
+
+func (h *DeploymentHandler) stageRequiresApproval(
+	r *http.Request,
+	project db.Project,
+	environmentID int64,
+) (bool, error) {
+	if !project.LifecycleID.Valid {
+		return false, nil
+	}
+	stages, err := h.repo.Queries.ListLifecycleStages(
+		r.Context(), project.LifecycleID.Int64,
+	)
+	if err != nil {
+		return false, err
+	}
+	for _, s := range stages {
+		if s.EnvironmentID == environmentID {
+			return s.RequiresApproval != 0, nil
+		}
+	}
+	return false, nil
 }
 
 func isTruthy(s string) bool {
@@ -727,8 +773,8 @@ func (h *DeploymentHandler) CancelDeployment(
 		return
 	}
 
-	if deployment.Status != "running" {
-		http.Error(w, "Deployment is not running", http.StatusBadRequest)
+	if deployment.Status != "running" && deployment.Status != "pending_approval" {
+		http.Error(w, "Deployment cannot be cancelled in its current state", http.StatusBadRequest)
 		return
 	}
 
@@ -756,6 +802,84 @@ func (h *DeploymentHandler) CancelDeployment(
 			http.StatusSeeOther,
 		)
 	}
+}
+
+// ApproveDeployment handles POST /deployments/{id}/approve. Marks the
+// deployment as approved and dispatches the runner. Only valid when
+// the deployment is in pending_approval status.
+func (h *DeploymentHandler) ApproveDeployment(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	idStr := chi.URLParam(r, "id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		http.Error(w, "Invalid deployment ID", http.StatusBadRequest)
+		return
+	}
+
+	deployment, err := h.repo.Queries.GetDeployment(r.Context(), id)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			http.Error(w, "Deployment not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if deployment.Status != "pending_approval" {
+		http.Error(w, "Deployment is not pending approval", http.StatusConflict)
+		return
+	}
+
+	approvedBy := strings.TrimSpace(r.FormValue("approved_by"))
+	if approvedBy == "" {
+		approvedBy = "anonymous"
+	}
+
+	if _, err := h.repo.Queries.CreateApproval(
+		r.Context(),
+		db.CreateApprovalParams{
+			DeploymentID: id,
+			ApprovedBy:   approvedBy,
+		},
+	); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Transition to "pending" so the runner picks it up via the normal path.
+	if err := h.repo.Queries.UpdateDeploymentStatus(
+		r.Context(),
+		db.UpdateDeploymentStatusParams{
+			ID:     id,
+			Status: "pending",
+		},
+	); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	go h.runner.Run(
+		context.Background(),
+		id,
+		deployment.ReleaseID,
+		deployment.EnvironmentID,
+	)
+
+	if r.Header.Get("HX-Request") == "true" {
+		w.Header().Set(
+			"HX-Redirect",
+			fmt.Sprintf("/deployments/%d", id),
+		)
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	http.Redirect(
+		w, r, fmt.Sprintf("/deployments/%d", id),
+		http.StatusSeeOther,
+	)
 }
 
 func (h *DeploymentHandler) RedeployDeployment(

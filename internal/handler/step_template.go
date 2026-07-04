@@ -262,7 +262,8 @@ func (h *StepTemplateHandler) InsertTemplate(
 		Name:       tpl.Name,
 		ScriptBody: tpl.ScriptBody,
 		SortOrder:  sortOrder,
-		// ponytail: StepTemplate has no timeout field yet; new step inherits default (0).
+		// ponytail: StepTemplate has no timeout or max_retries field yet;
+		// new step inherits defaults (0/0).
 	}
 
 	if _, err := h.repo.Queries.CreateStep(r.Context(), params); err != nil {

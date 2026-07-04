@@ -2,6 +2,7 @@ package handler
 
 import (
 	"database/sql"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -479,6 +480,81 @@ func (h *LifecycleHandler) ReorderStage(
 		w,
 		r,
 		"/lifecycles/"+strconv.FormatInt(id, 10),
+		http.StatusSeeOther,
+	)
+}
+
+func (h *LifecycleHandler) UpdateLifecycleStage(
+	w http.ResponseWriter, r *http.Request,
+) {
+	idStr := chi.URLParam(r, "stageId")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	requires := isTruthy(r.FormValue("requires_approval"))
+	var reqApproval int64
+	if requires {
+		reqApproval = 1
+	}
+
+	stage, err := h.repo.Queries.GetLifecycleStage(r.Context(), id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if _, err := h.repo.Queries.UpdateLifecycleStage(
+		r.Context(),
+		db.UpdateLifecycleStageParams{
+			ID:               id,
+			EnvironmentID:    stage.EnvironmentID,
+			SortOrder:        stage.SortOrder,
+			RequiresApproval: reqApproval,
+		},
+	); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if r.Header.Get("HX-Request") == "true" {
+		lc, err := h.repo.Queries.GetLifecycle(r.Context(), stage.LifecycleID)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		stages, err := h.repo.Queries.ListLifecycleStages(
+			r.Context(), lc.ID,
+		)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		idx := 0
+		for i, s := range stages {
+			if s.ID == id {
+				idx = i
+				break
+			}
+		}
+		env, err := h.repo.Queries.GetEnvironment(r.Context(), stage.EnvironmentID)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		view := pages.LifecycleStageView{Stage: stage, Environment: env}
+		pages.LifecycleStageRow(lc, idx, len(stages), view).
+			Render(r.Context(), w)
+		return
+	}
+	http.Redirect(
+		w, r,
+		fmt.Sprintf("/lifecycles/%d", stage.LifecycleID),
 		http.StatusSeeOther,
 	)
 }

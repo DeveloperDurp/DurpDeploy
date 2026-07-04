@@ -32,23 +32,30 @@ func (q *Queries) CreateLifecycle(ctx context.Context, arg CreateLifecycleParams
 }
 
 const createLifecycleStage = `-- name: CreateLifecycleStage :one
-INSERT INTO lifecycle_stages (lifecycle_id, environment_id, sort_order) VALUES (?, ?, ?) RETURNING id, lifecycle_id, environment_id, sort_order
+INSERT INTO lifecycle_stages (lifecycle_id, environment_id, sort_order, requires_approval) VALUES (?, ?, ?, ?) RETURNING id, lifecycle_id, environment_id, sort_order, requires_approval
 `
 
 type CreateLifecycleStageParams struct {
-	LifecycleID   int64 `json:"lifecycle_id"`
-	EnvironmentID int64 `json:"environment_id"`
-	SortOrder     int64 `json:"sort_order"`
+	LifecycleID      int64 `json:"lifecycle_id"`
+	EnvironmentID    int64 `json:"environment_id"`
+	SortOrder        int64 `json:"sort_order"`
+	RequiresApproval int64 `json:"requires_approval"`
 }
 
 func (q *Queries) CreateLifecycleStage(ctx context.Context, arg CreateLifecycleStageParams) (LifecycleStage, error) {
-	row := q.db.QueryRowContext(ctx, createLifecycleStage, arg.LifecycleID, arg.EnvironmentID, arg.SortOrder)
+	row := q.db.QueryRowContext(ctx, createLifecycleStage,
+		arg.LifecycleID,
+		arg.EnvironmentID,
+		arg.SortOrder,
+		arg.RequiresApproval,
+	)
 	var i LifecycleStage
 	err := row.Scan(
 		&i.ID,
 		&i.LifecycleID,
 		&i.EnvironmentID,
 		&i.SortOrder,
+		&i.RequiresApproval,
 	)
 	return i, err
 }
@@ -97,7 +104,7 @@ func (q *Queries) GetLifecycle(ctx context.Context, id int64) (Lifecycle, error)
 }
 
 const getLifecycleStage = `-- name: GetLifecycleStage :one
-SELECT id, lifecycle_id, environment_id, sort_order FROM lifecycle_stages WHERE id = ?
+SELECT id, lifecycle_id, environment_id, sort_order, requires_approval FROM lifecycle_stages WHERE id = ?
 `
 
 func (q *Queries) GetLifecycleStage(ctx context.Context, id int64) (LifecycleStage, error) {
@@ -108,6 +115,7 @@ func (q *Queries) GetLifecycleStage(ctx context.Context, id int64) (LifecycleSta
 		&i.LifecycleID,
 		&i.EnvironmentID,
 		&i.SortOrder,
+		&i.RequiresApproval,
 	)
 	return i, err
 }
@@ -140,7 +148,7 @@ func (q *Queries) ListLifecycleStageEnvironmentIDs(ctx context.Context, lifecycl
 }
 
 const listLifecycleStages = `-- name: ListLifecycleStages :many
-SELECT id, lifecycle_id, environment_id, sort_order FROM lifecycle_stages WHERE lifecycle_id = ? ORDER BY sort_order
+SELECT id, lifecycle_id, environment_id, sort_order, requires_approval FROM lifecycle_stages WHERE lifecycle_id = ? ORDER BY sort_order
 `
 
 func (q *Queries) ListLifecycleStages(ctx context.Context, lifecycleID int64) ([]LifecycleStage, error) {
@@ -157,6 +165,7 @@ func (q *Queries) ListLifecycleStages(ctx context.Context, lifecycleID int64) ([
 			&i.LifecycleID,
 			&i.EnvironmentID,
 			&i.SortOrder,
+			&i.RequiresApproval,
 		); err != nil {
 			return nil, err
 		}
@@ -226,23 +235,30 @@ func (q *Queries) UpdateLifecycle(ctx context.Context, arg UpdateLifecycleParams
 }
 
 const updateLifecycleStage = `-- name: UpdateLifecycleStage :one
-UPDATE lifecycle_stages SET environment_id = ?, sort_order = ? WHERE id = ? RETURNING id, lifecycle_id, environment_id, sort_order
+UPDATE lifecycle_stages SET environment_id = ?, sort_order = ?, requires_approval = ? WHERE id = ? RETURNING id, lifecycle_id, environment_id, sort_order, requires_approval
 `
 
 type UpdateLifecycleStageParams struct {
-	EnvironmentID int64 `json:"environment_id"`
-	SortOrder     int64 `json:"sort_order"`
-	ID            int64 `json:"id"`
+	EnvironmentID    int64 `json:"environment_id"`
+	SortOrder        int64 `json:"sort_order"`
+	RequiresApproval int64 `json:"requires_approval"`
+	ID               int64 `json:"id"`
 }
 
 func (q *Queries) UpdateLifecycleStage(ctx context.Context, arg UpdateLifecycleStageParams) (LifecycleStage, error) {
-	row := q.db.QueryRowContext(ctx, updateLifecycleStage, arg.EnvironmentID, arg.SortOrder, arg.ID)
+	row := q.db.QueryRowContext(ctx, updateLifecycleStage,
+		arg.EnvironmentID,
+		arg.SortOrder,
+		arg.RequiresApproval,
+		arg.ID,
+	)
 	var i LifecycleStage
 	err := row.Scan(
 		&i.ID,
 		&i.LifecycleID,
 		&i.EnvironmentID,
 		&i.SortOrder,
+		&i.RequiresApproval,
 	)
 	return i, err
 }

@@ -77,6 +77,8 @@ func statusBadgeClass(status string) string {
 	switch status {
 	case "pending":
 		return "badge-primary"
+	case "pending_approval":
+		return "badge-info"
 	case "running":
 		return "badge-warning"
 	case "succeeded":
@@ -156,10 +158,22 @@ templ DeploymentDetail(project db.Project, release db.Release, environment db.En
 						data-toast-success="Re-run started"
 						data-toast-error="Failed to re-run"
 					>
-						Re-run
-					</button>
-				}
-				if deployment.Status == "running" {
+Re-run
+				</button>
+			}
+			if deployment.Status == "pending_approval" {
+				<button
+					class="btn btn-sm btn-success"
+					hx-post={ fmt.Sprintf("/deployments/%d/approve", deployment.ID) }
+					hx-confirm="Approve this deployment and start the runner?"
+					hx-disable-elt
+					data-toast-success="Deployment approved"
+					data-toast-error="Failed to approve"
+				>
+					Approve
+				</button>
+			}
+			if deployment.Status == "running" || deployment.Status == "pending_approval" {
 					<button
 						class="btn btn-sm btn-error"
 						hx-post={ fmt.Sprintf("/deployments/%d/cancel", deployment.ID) }

@@ -80,14 +80,13 @@ templ DeployFormContent(project db.Project, releases []db.Release, selectedRelea
 						<span class="label-text">Environment</span>
 					</label>
 					if len(envs) == 0 {
-						<p class="text-gray-500 italic text-sm">
-							if selectedRelease != nil {
-								No envs available for { selectedRelease.Version } — every lifecycle stage is already at this version.
-							} else {
-								No environments available.
-							}
-						</p>
+						<p class="text-gray-500 italic text-sm">No environments available.</p>
 					} else {
+						if hasAlreadyDeployedEnvs(envs) {
+							<div class="alert alert-warning text-sm mb-2">
+								<span>This version is already deployed to some environments. Re-deploying will run the steps again.</span>
+							</div>
+						}
 						<select name="environment_id" class="select select-bordered" required>
 							<option value="">Select env</option>
 							for _, e := range envs {
@@ -106,6 +105,18 @@ templ DeployFormContent(project db.Project, releases []db.Release, selectedRelea
 												value={ strconv.FormatInt(e.Environment.ID, 10) }
 												data-gate="forceable"
 												title={ e.State.Reason }
+											>{ e.Environment.Name }</option>
+										}
+									}
+								</optgroup>
+							}
+							if hasAlreadyDeployedEnvs(envs) {
+								<optgroup label="Already deployed at this version" data-gate-group="already-deployed">
+									for _, e := range envs {
+										if e.State.AlreadyDeployed {
+											<option
+												value={ strconv.FormatInt(e.Environment.ID, 10) }
+												data-gate="already-deployed"
 											>{ e.Environment.Name }</option>
 										}
 									}
@@ -149,6 +160,18 @@ templ DeployFormContent(project db.Project, releases []db.Release, selectedRelea
 func hasForceableEnvs(envs []AvailableEnv) bool {
 	for _, e := range envs {
 		if !e.State.Deployable && e.State.Bypassable {
+			return true
+		}
+	}
+	return false
+}
+
+// hasAlreadyDeployedEnvs reports whether any env in the list already
+// has the selected release deployed. The page shows a warning banner
+// and a separate "Already deployed" optgroup when at least one does.
+func hasAlreadyDeployedEnvs(envs []AvailableEnv) bool {
+	for _, e := range envs {
+		if e.State.AlreadyDeployed {
 			return true
 		}
 	}

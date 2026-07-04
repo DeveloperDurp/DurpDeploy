@@ -149,6 +149,7 @@ func (h *ReleaseHandler) CreateRelease(w http.ResponseWriter, r *http.Request) {
 		ScriptBody     string `json:"script_body"`
 		SortOrder      int64  `json:"sort_order"`
 		TimeoutSeconds int64  `json:"timeout_seconds"`
+		MaxRetries     int64  `json:"max_retries"`
 	}
 
 	snapshots := make([]stepSnapshot, len(steps))
@@ -158,6 +159,7 @@ func (h *ReleaseHandler) CreateRelease(w http.ResponseWriter, r *http.Request) {
 			ScriptBody:     step.ScriptBody,
 			SortOrder:      step.SortOrder,
 			TimeoutSeconds: step.TimeoutSeconds,
+			MaxRetries:     step.MaxRetries,
 		}
 	}
 
@@ -391,6 +393,7 @@ func (h *ReleaseHandler) RefreshRelease(
 		ScriptBody     string `json:"script_body"`
 		SortOrder      int64  `json:"sort_order"`
 		TimeoutSeconds int64  `json:"timeout_seconds"`
+		MaxRetries     int64  `json:"max_retries"`
 	}
 	snapshots := make([]stepSnapshot, len(steps))
 	for i, step := range steps {
@@ -399,6 +402,7 @@ func (h *ReleaseHandler) RefreshRelease(
 			ScriptBody:     step.ScriptBody,
 			SortOrder:      step.SortOrder,
 			TimeoutSeconds: step.TimeoutSeconds,
+			MaxRetries:     step.MaxRetries,
 		}
 	}
 	stepsJSON, err := json.Marshal(snapshots)

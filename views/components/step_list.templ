@@ -14,9 +14,10 @@ templ StepList(steps []db.Step, projectID int64) {
 				<tr>
 					<th class="w-16">Order</th>
 					<th class="w-1/5">Name</th>
-					<th class="w-auto">Script</th>
-					<th class="w-24">Timeout</th>
-					<th class="w-96">Actions</th>
+				<th class="w-auto">Script</th>
+				<th class="w-20">Timeout</th>
+				<th class="w-20">Retries</th>
+				<th class="w-96">Actions</th>
 				</tr>
 			</thead>
 			<tbody>
@@ -43,6 +44,9 @@ templ StepRow(step db.Step, projectID int64, isFirst bool, isLast bool) {
 		</td>
 		<td class="whitespace-nowrap text-sm">
 			@timeoutCell(step.TimeoutSeconds)
+		</td>
+		<td class="whitespace-nowrap text-sm">
+			@retriesCell(step.MaxRetries)
 		</td>
 		<td class="flex gap-1 whitespace-nowrap">
 			<button
@@ -106,5 +110,13 @@ templ timeoutCell(sec int64) {
 		default
 	} else {
 		{ (time.Duration(sec) * time.Second).String() }
+	}
+}
+
+templ retriesCell(n int64) {
+	if n <= 0 {
+		default
+	} else {
+		{ strconv.FormatInt(n, 10) }
 	}
 }
