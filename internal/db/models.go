@@ -9,14 +9,15 @@ import (
 )
 
 type Deployment struct {
-	ID            int64         `json:"id"`
-	ReleaseID     int64         `json:"release_id"`
-	EnvironmentID int64         `json:"environment_id"`
-	Status        string        `json:"status"`
-	StartedAt     sql.NullInt64 `json:"started_at"`
-	FinishedAt    sql.NullInt64 `json:"finished_at"`
-	CreatedAt     int64         `json:"created_at"`
-	Forced        int64         `json:"forced"`
+	ID            int64          `json:"id"`
+	ReleaseID     int64          `json:"release_id"`
+	EnvironmentID int64          `json:"environment_id"`
+	Status        string         `json:"status"`
+	StartedAt     sql.NullInt64  `json:"started_at"`
+	FinishedAt    sql.NullInt64  `json:"finished_at"`
+	CreatedAt     int64          `json:"created_at"`
+	Forced        int64          `json:"forced"`
+	Note          sql.NullString `json:"note"`
 }
 
 type DeploymentLog struct {

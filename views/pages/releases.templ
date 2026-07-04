@@ -139,6 +139,7 @@ templ ReleaseRow(projectID int64, rv ReleaseView) {
 			} else {
 				<form method="post" action={ fmt.Sprintf("/projects/%d/deploy", projectID) } class="flex flex-wrap gap-2 items-center">
 					<input type="hidden" name="release_id" value={ strconv.FormatInt(rv.Release.ID, 10) }/>
+					<input type="hidden" name="note" value=""/>
 					<select name="environment_id" class="select select-bordered select-xs" required>
 						<option value="">Select env</option>
 						for _, e := range rv.Envs {

@@ -124,6 +124,7 @@ func NewRouter(
 	r.Get("/deployments/{id}", dh.GetDeployment)
 	r.Get("/deployments/{id}/status", dh.GetDeploymentStatus)
 	r.Post("/deployments/{id}/cancel", dh.CancelDeployment)
+	r.Post("/deployments/{id}/redeploy", dh.RedeployDeployment)
 	r.Get("/projects/{id}/deploy", dh.NewDeploymentPage)
 	r.Post("/projects/{id}/deploy", dh.ScheduleDeployment)
 

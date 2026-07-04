@@ -283,6 +283,8 @@ func (h *DeploymentHandler) ScheduleDeployment(
 	}
 
 	force := isTruthy(r.FormValue("force"))
+	note := r.FormValue("note")
+	noteParam := sql.NullString{String: note, Valid: note != ""}
 
 	release, err := h.repo.Queries.GetRelease(r.Context(), releaseID)
 	if err != nil {
@@ -338,6 +340,7 @@ func (h *DeploymentHandler) ScheduleDeployment(
 			StartedAt:     sql.NullInt64{},
 			FinishedAt:    sql.NullInt64{},
 			Forced:        forcedFlag,
+			Note:          noteParam,
 		},
 	)
 	if err != nil {
@@ -416,6 +419,8 @@ func (h *DeploymentHandler) CreateDeployment(
 	}
 
 	force := isTruthy(r.FormValue("force"))
+	note := r.FormValue("note")
+	noteParam := sql.NullString{String: note, Valid: note != ""}
 
 	release, err := h.repo.Queries.GetRelease(r.Context(), releaseID)
 	if err != nil {
@@ -476,6 +481,7 @@ func (h *DeploymentHandler) CreateDeployment(
 			StartedAt:     sql.NullInt64{},
 			FinishedAt:    sql.NullInt64{},
 			Forced:        forcedFlag,
+			Note:          noteParam,
 		},
 	)
 	if err != nil {
@@ -752,41 +758,118 @@ func (h *DeploymentHandler) CancelDeployment(
 	}
 }
 
-func (h *DeploymentHandler) ListDeployments(
+func (h *DeploymentHandler) RedeployDeployment(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	deployments, err := h.repo.Queries.ListDeployments(r.Context())
+	idStr := chi.URLParam(r, "id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		http.Error(w, "Invalid deployment ID", http.StatusBadRequest)
+		return
+	}
+
+	source, err := h.repo.Queries.GetDeployment(r.Context(), id)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			http.Error(w, "Deployment not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if source.Status != "succeeded" && source.Status != "failed" &&
+		source.Status != "cancelled" {
+		http.Error(
+			w,
+			"Source deployment is not in a terminal state",
+			http.StatusConflict,
+		)
+		return
+	}
+
+	_, err = h.repo.Queries.GetRelease(r.Context(), source.ReleaseID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			http.Error(w, "Release not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	note := sql.NullString{
+		String: fmt.Sprintf("Re-run of #%d", source.ID),
+		Valid:  true,
+	}
+	deployment, err := h.repo.Queries.CreateDeployment(
+		r.Context(),
+		db.CreateDeploymentParams{
+			ReleaseID:     source.ReleaseID,
+			EnvironmentID: source.EnvironmentID,
+			Status:        "pending",
+			StartedAt:     sql.NullInt64{},
+			FinishedAt:    sql.NullInt64{},
+			Forced:        0,
+			Note:          note,
+		},
+	)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	items := make([]pages.DeploymentListItem, len(deployments))
-	for i, d := range deployments {
-		release, err := h.repo.Queries.GetRelease(r.Context(), d.ReleaseID)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		project, err := h.repo.Queries.GetProject(
-			r.Context(),
-			release.ProjectID,
-		)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		env, err := h.repo.Queries.GetEnvironment(r.Context(), d.EnvironmentID)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
+	go h.runner.Run(
+		context.Background(),
+		deployment.ID,
+		source.ReleaseID,
+		source.EnvironmentID,
+	)
+
+	if r.Header.Get("HX-Request") == "true" {
+		// HX-Redirect (not 303) so the client does a full-page nav; a
+		// body swap would clobber the nav bar's Alpine.js state.
+		w.Header().
+			Set("HX-Redirect", fmt.Sprintf("/deployments/%d", deployment.ID))
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	http.Redirect(
+		w,
+		r,
+		fmt.Sprintf("/deployments/%d", deployment.ID),
+		http.StatusSeeOther,
+	)
+}
+
+func (h *DeploymentHandler) ListDeployments(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	rows, err := h.repo.Queries.ListDeploymentsWithRefs(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	items := make([]pages.DeploymentListItem, len(rows))
+	for i, row := range rows {
 		items[i] = pages.DeploymentListItem{
-			Deployment:      d,
-			ProjectName:     project.Name,
-			ReleaseVersion:  release.Version,
-			EnvironmentName: env.Name,
+			Deployment: db.Deployment{
+				ID:            row.ID,
+				ReleaseID:     row.ReleaseID,
+				EnvironmentID: row.EnvironmentID,
+				Status:        row.Status,
+				StartedAt:     row.StartedAt,
+				FinishedAt:    row.FinishedAt,
+				CreatedAt:     row.CreatedAt,
+				Forced:        row.Forced,
+				Note:          row.Note,
+			},
+			ProjectName:     row.ProjectName,
+			ReleaseVersion:  row.ReleaseVersion,
+			EnvironmentName: row.EnvironmentName,
 		}
 	}
 

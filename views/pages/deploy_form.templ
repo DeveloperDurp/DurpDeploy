@@ -127,10 +127,16 @@ templ DeployFormContent(project db.Project, releases []db.Release, selectedRelea
 						<span class="label-text">Force deploy (bypass the promotion gate)</span>
 					</label>
 				}
-				<div class="flex gap-2 justify-end">
-					<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost">Cancel</a>
-					<button type="submit" class="btn btn-primary">Deploy</button>
+				<div class="form-control">
+					<label class="label">
+						<span class="label-text">Note (optional — why this deploy, ticket #, etc.)</span>
+					</label>
+					<textarea name="note" class="textarea textarea-bordered" rows="2" placeholder=""></textarea>
 				</div>
+			<div class="flex gap-2 justify-end">
+				<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost">Cancel</a>
+				<button type="submit" class="btn btn-primary">Deploy</button>
+			</div>
 				</form>
 			</div>
 		}
