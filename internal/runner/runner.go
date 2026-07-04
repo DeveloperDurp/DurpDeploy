@@ -17,6 +17,8 @@ import (
 	"durpdeploy/internal/repository"
 )
 
+const defaultStepTimeout = 5 * time.Minute
+
 type DeploymentRunner struct {
 	repo    *repository.Repository
 	broker  *LogBroker
@@ -99,9 +101,10 @@ func (r *DeploymentRunner) Run(
 	}
 
 	var steps []struct {
-		Name       string `json:"name"`
-		ScriptBody string `json:"script_body"`
-		SortOrder  int64  `json:"sort_order"`
+		Name           string `json:"name"`
+		ScriptBody     string `json:"script_body"`
+		SortOrder      int64  `json:"sort_order"`
+		TimeoutSeconds int64  `json:"timeout_seconds"`
 	}
 	if err := json.Unmarshal([]byte(release.StepsJson), &steps); err != nil {
 		_ = r.failUnlessCancelled(ctx, deploymentID)
@@ -131,7 +134,11 @@ func (r *DeploymentRunner) Run(
 	}
 
 	for _, step := range steps {
-		stepCtx, stepCancel := context.WithTimeout(runCtx, 5*time.Minute)
+		d := defaultStepTimeout
+		if step.TimeoutSeconds > 0 {
+			d = time.Duration(step.TimeoutSeconds) * time.Second
+		}
+		stepCtx, stepCancel := context.WithTimeout(runCtx, d)
 
 		tmpDir, err := os.MkdirTemp(
 			"",
@@ -197,6 +204,12 @@ func (r *DeploymentRunner) Run(
 		stepCancel()
 
 		if err != nil {
+			if stepCtx.Err() == context.DeadlineExceeded {
+				logWriter.Write(
+					[]byte(fmt.Sprintf("step %q timed out after %s\n", step.Name, d)),
+				)
+				logWriter.Flush()
+			}
 			dep, _ := r.repo.Queries.GetDeployment(ctx, deploymentID)
 			if dep.Status == "cancelled" {
 				return

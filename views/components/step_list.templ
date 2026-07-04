@@ -4,6 +4,7 @@ import (
 	"durpdeploy/internal/db"
 	"fmt"
 	"strconv"
+	"time"
 )
 
 templ StepList(steps []db.Step, projectID int64) {
@@ -14,6 +15,7 @@ templ StepList(steps []db.Step, projectID int64) {
 					<th class="w-16">Order</th>
 					<th class="w-1/5">Name</th>
 					<th class="w-auto">Script</th>
+					<th class="w-24">Timeout</th>
 					<th class="w-96">Actions</th>
 				</tr>
 			</thead>
@@ -38,6 +40,9 @@ templ StepRow(step db.Step, projectID int64, isFirst bool, isLast bool) {
 					{ step.ScriptBody }
 				}
 			</code>
+		</td>
+		<td class="whitespace-nowrap text-sm">
+			@timeoutCell(step.TimeoutSeconds)
 		</td>
 		<td class="flex gap-1 whitespace-nowrap">
 			<button
@@ -94,4 +99,12 @@ templ StepRow(step db.Step, projectID int64, isFirst bool, isLast bool) {
 		</button>
 		</td>
 	</tr>
+}
+
+templ timeoutCell(sec int64) {
+	if sec <= 0 {
+		default
+	} else {
+		{ (time.Duration(sec) * time.Second).String() }
+	}
 }

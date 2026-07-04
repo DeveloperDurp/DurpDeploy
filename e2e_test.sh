@@ -66,6 +66,46 @@ done
 CODE=$(curl_silent -X POST "$BASE/deployments/$CANCEL_DEP/cancel")
 [[ "$CODE" == "303" ]] || { echo "FAIL: cancel got $CODE"; exit 1; }
 
+echo "=== F3.2b: Per-Step Timeout ==="
+# A step with a 1-second timeout running a 10-second sleep should fail
+# instead of hanging for the 5-minute default. We delete the LongStep
+# from the cancel path so this test doesn't first run a 10s sleep.
+# The runner's pre-existing cleanup (cmd.WaitDelay=15s + a 10s goroutine
+# sleep) means the deployment status flips to 'failed' ~15s after the
+# 1s timeout fires; we poll for 20s and assert < 25s elapsed (still
+# well under the 5-minute default).
+STEPS_PAGE=$(curl_body "$BASE/projects/$PROJECT_ID/steps-page")
+LONG_STEP_ID=$(echo "$STEPS_PAGE" | grep -oP 'step-row-\K[0-9]+' | sort -n | tail -1)
+if [[ -n "$LONG_STEP_ID" ]]; then
+  curl -s -o /dev/null -X DELETE "$BASE/projects/$PROJECT_ID/steps/$LONG_STEP_ID"
+fi
+
+CODE=$(curl_silent -X POST -d "name=TimeoutStep&script_body=sleep+10&timeout_seconds=1" "$BASE/projects/$PROJECT_ID/steps")
+[[ "$CODE" == "200" ]] || { echo "FAIL: create timeout step got $CODE"; exit 1; }
+
+CODE=$(curl_silent -X POST -d "version=1.0.2" "$BASE/projects/$PROJECT_ID/releases")
+[[ "$CODE" == "303" ]] || { echo "FAIL: create timeout release got $CODE"; exit 1; }
+TIMEOUT_REL=$(curl_body "$BASE/projects/$PROJECT_ID/releases" | grep -oP 'href="/projects/'$PROJECT_ID'/releases/\K[0-9]+' | sort -n | tail -1)
+echo "Timeout Release ID: $TIMEOUT_REL"
+
+TIMEOUT_URL=$(curl -s -D - -o /dev/null -X POST -d "release_id=$TIMEOUT_REL&environment_id=$ENV_ID" "$BASE/deployments" | grep -i "^location:" | awk '{print $2}' | tr -d '\r')
+TIMEOUT_DEP=$(echo "$TIMEOUT_URL" | grep -oP '/deployments/\K[0-9]+')
+[[ -n "$TIMEOUT_DEP" ]] || { echo "FAIL: timeout deployment did not redirect"; exit 1; }
+echo "Timeout Deployment ID: $TIMEOUT_DEP"
+
+START=$(date +%s)
+for i in {1..100}; do
+  STATUS_BODY=$(curl_body "$BASE/deployments/$TIMEOUT_DEP/status")
+  if echo "$STATUS_BODY" | grep -qE 'failed|succeeded|cancelled'; then break; fi
+  sleep 0.2
+done
+END=$(date +%s)
+ELAPSED=$((END - START))
+
+echo "$STATUS_BODY" | grep -q 'failed' || { echo "FAIL: timeout deploy did not fail, got status: $STATUS_BODY"; exit 1; }
+[[ $ELAPSED -lt 25 ]] || { echo "FAIL: timeout deploy took ${ELAPSED}s, expected <25s"; exit 1; }
+echo "  Per-step timeout killed long sleep: OK (failed in ${ELAPSED}s)"
+
 echo "=== F3.3: Validation Path ==="
 CODE=$(curl_silent -X POST -d "name=" "$BASE/projects")
 [[ "$CODE" == "422" ]] || { echo "FAIL: empty project name should be 422, got $CODE"; exit 1; }

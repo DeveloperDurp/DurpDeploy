@@ -76,12 +76,13 @@ type ReleaseVariable struct {
 }
 
 type Step struct {
-	ID         int64  `json:"id"`
-	ProjectID  int64  `json:"project_id"`
-	Name       string `json:"name"`
-	ScriptBody string `json:"script_body"`
-	SortOrder  int64  `json:"sort_order"`
-	CreatedAt  int64  `json:"created_at"`
+	ID             int64  `json:"id"`
+	ProjectID      int64  `json:"project_id"`
+	Name           string `json:"name"`
+	ScriptBody     string `json:"script_body"`
+	SortOrder      int64  `json:"sort_order"`
+	CreatedAt      int64  `json:"created_at"`
+	TimeoutSeconds int64  `json:"timeout_seconds"`
 }
 
 type StepTemplate struct {
