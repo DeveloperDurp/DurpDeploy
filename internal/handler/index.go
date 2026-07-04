@@ -41,7 +41,10 @@ func (h *IndexHandler) Index(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		project, err := h.repo.Queries.GetProject(r.Context(), release.ProjectID)
+		project, err := h.repo.Queries.GetProject(
+			r.Context(),
+			release.ProjectID,
+		)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -59,7 +62,8 @@ func (h *IndexHandler) Index(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if err := pages.IndexPage(r.URL.Path, len(projects), len(envs), len(items), items).Render(r.Context(), w); err != nil {
+	if err := pages.IndexPage(r.URL.Path, len(projects), len(envs), len(items), items).
+		Render(r.Context(), w); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }

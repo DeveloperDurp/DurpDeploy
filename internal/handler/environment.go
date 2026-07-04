@@ -21,7 +21,10 @@ func NewEnvironmentHandler(repo *repository.Repository) *EnvironmentHandler {
 	return &EnvironmentHandler{Repo: repo}
 }
 
-func (h *EnvironmentHandler) ListEnvironments(w http.ResponseWriter, r *http.Request) {
+func (h *EnvironmentHandler) ListEnvironments(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	envs, err := h.Repo.Queries.ListEnvironments(r.Context())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -30,15 +33,23 @@ func (h *EnvironmentHandler) ListEnvironments(w http.ResponseWriter, r *http.Req
 	pages.EnvironmentsList(envs, r.URL.Path).Render(r.Context(), w)
 }
 
-func (h *EnvironmentHandler) NewEnvironment(w http.ResponseWriter, r *http.Request) {
+func (h *EnvironmentHandler) NewEnvironment(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	if r.Header.Get("HX-Request") == "true" {
-		pages.EnvironmentFormFragment(&db.Environment{}, true, "").Render(r.Context(), w)
+		pages.EnvironmentFormFragment(&db.Environment{}, true, "").
+			Render(r.Context(), w)
 	} else {
-		pages.EnvironmentForm(&db.Environment{}, true, "", r.URL.Path).Render(r.Context(), w)
+		pages.EnvironmentForm(&db.Environment{}, true, "", r.URL.Path).
+			Render(r.Context(), w)
 	}
 }
 
-func (h *EnvironmentHandler) CreateEnvironment(w http.ResponseWriter, r *http.Request) {
+func (h *EnvironmentHandler) CreateEnvironment(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -46,7 +57,21 @@ func (h *EnvironmentHandler) CreateEnvironment(w http.ResponseWriter, r *http.Re
 
 	name := strings.TrimSpace(r.FormValue("name"))
 	if name == "" {
-		WriteFormError(w, r, pages.EnvironmentFormFragment(&db.Environment{}, true, "Name is required"), pages.EnvironmentForm(&db.Environment{}, true, "Name is required", r.URL.Path))
+		WriteFormError(
+			w,
+			r,
+			pages.EnvironmentFormFragment(
+				&db.Environment{},
+				true,
+				"Name is required",
+			),
+			pages.EnvironmentForm(
+				&db.Environment{},
+				true,
+				"Name is required",
+				r.URL.Path,
+			),
+		)
 		return
 	}
 
@@ -66,7 +91,21 @@ func (h *EnvironmentHandler) CreateEnvironment(w http.ResponseWriter, r *http.Re
 	if err != nil {
 		if IsUniqueViolation(err) {
 			env := &db.Environment{Name: name}
-			WriteFormError(w, r, pages.EnvironmentFormFragment(env, true, "An environment with this name already exists"), pages.EnvironmentForm(env, true, "An environment with this name already exists", r.URL.Path))
+			WriteFormError(
+				w,
+				r,
+				pages.EnvironmentFormFragment(
+					env,
+					true,
+					"An environment with this name already exists",
+				),
+				pages.EnvironmentForm(
+					env,
+					true,
+					"An environment with this name already exists",
+					r.URL.Path,
+				),
+			)
 			return
 		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -85,7 +124,10 @@ func (h *EnvironmentHandler) CreateEnvironment(w http.ResponseWriter, r *http.Re
 	}
 }
 
-func (h *EnvironmentHandler) EditEnvironment(w http.ResponseWriter, r *http.Request) {
+func (h *EnvironmentHandler) EditEnvironment(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
@@ -102,11 +144,15 @@ func (h *EnvironmentHandler) EditEnvironment(w http.ResponseWriter, r *http.Requ
 	if r.Header.Get("HX-Request") == "true" {
 		pages.EnvironmentFormFragment(&env, false, "").Render(r.Context(), w)
 	} else {
-		pages.EnvironmentForm(&env, false, "", r.URL.Path).Render(r.Context(), w)
+		pages.EnvironmentForm(&env, false, "", r.URL.Path).
+			Render(r.Context(), w)
 	}
 }
 
-func (h *EnvironmentHandler) UpdateEnvironment(w http.ResponseWriter, r *http.Request) {
+func (h *EnvironmentHandler) UpdateEnvironment(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
@@ -122,7 +168,12 @@ func (h *EnvironmentHandler) UpdateEnvironment(w http.ResponseWriter, r *http.Re
 	name := strings.TrimSpace(r.FormValue("name"))
 	if name == "" {
 		env := &db.Environment{ID: id, Name: name}
-		WriteFormError(w, r, pages.EnvironmentFormFragment(env, false, "Name is required"), pages.EnvironmentForm(env, false, "Name is required", r.URL.Path))
+		WriteFormError(
+			w,
+			r,
+			pages.EnvironmentFormFragment(env, false, "Name is required"),
+			pages.EnvironmentForm(env, false, "Name is required", r.URL.Path),
+		)
 		return
 	}
 
@@ -143,7 +194,21 @@ func (h *EnvironmentHandler) UpdateEnvironment(w http.ResponseWriter, r *http.Re
 	if err != nil {
 		if IsUniqueViolation(err) {
 			env := &db.Environment{ID: id, Name: name}
-			WriteFormError(w, r, pages.EnvironmentFormFragment(env, false, "An environment with this name already exists"), pages.EnvironmentForm(env, false, "An environment with this name already exists", r.URL.Path))
+			WriteFormError(
+				w,
+				r,
+				pages.EnvironmentFormFragment(
+					env,
+					false,
+					"An environment with this name already exists",
+				),
+				pages.EnvironmentForm(
+					env,
+					false,
+					"An environment with this name already exists",
+					r.URL.Path,
+				),
+			)
 			return
 		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -162,7 +227,10 @@ func (h *EnvironmentHandler) UpdateEnvironment(w http.ResponseWriter, r *http.Re
 	}
 }
 
-func (h *EnvironmentHandler) DeleteEnvironment(w http.ResponseWriter, r *http.Request) {
+func (h *EnvironmentHandler) DeleteEnvironment(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {

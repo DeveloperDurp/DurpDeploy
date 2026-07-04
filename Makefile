@@ -6,10 +6,11 @@ MAIN_PATH=cmd/server/main.go
 build: templ-generate tailwind-build js-build
 	go build -o $(BINARY_NAME) $(MAIN_PATH)
 
+# Hot-reload dev server. Watches .go/.templ/.sql in cmd, internal, views, migrations.
+# ponytail: CSS/JS source changes need a separate `make tailwind-build && make js-build`
+# and the air build to retrigger. Add a second air include_dir entry when that hurts.
 dev:
-	@echo "Install air or entr for hot-reload, or use:"
-	@echo "  watch -n 1 'make build && ./$(BINARY_NAME)'"
-	@echo "Or use templ generate --watch and go run $(MAIN_PATH)"
+	go run github.com/air-verse/air@latest
 
 templ-generate:
 	templ generate

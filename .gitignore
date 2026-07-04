@@ -39,6 +39,7 @@ Thumbs.db
 # Build artifacts
 dist/
 bin/
+tmp/
 
 # OpenCode session state
 .omo/
@@ -48,3 +49,4 @@ bin/
 *.db
 *.db-shm
 *.db-wal
+.junie/

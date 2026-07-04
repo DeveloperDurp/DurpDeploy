@@ -28,13 +28,19 @@ func requestLogger(next http.Handler) http.Handler {
 	})
 }
 
-func NewRouter(repo *repository.Repository, rnr *runner.DeploymentRunner) *chi.Mux {
+func NewRouter(
+	repo *repository.Repository,
+	rnr *runner.DeploymentRunner,
+) *chi.Mux {
 	r := chi.NewRouter()
 	r.Use(requestLogger)
 	r.Use(handler.PanicRecoveryMiddleware)
 
 	// Serve static files from embedded assets
-	r.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.FS(static.Assets))))
+	r.Handle(
+		"/static/*",
+		http.StripPrefix("/static/", http.FileServer(http.FS(static.Assets))),
+	)
 
 	errorHandler := handler.NewErrorHandler()
 	r.NotFound(errorHandler.NotFound)
@@ -74,6 +80,7 @@ func NewRouter(repo *repository.Repository, rnr *runner.DeploymentRunner) *chi.M
 
 	sh := handler.NewStepHandler(repo)
 	r.Get("/projects/{id}/steps", sh.ListSteps)
+	r.Get("/projects/{id}/steps-page", sh.StepsPage)
 	r.Get("/projects/{id}/steps/new", sh.NewStepForm)
 	r.Post("/projects/{id}/steps", sh.CreateStep)
 	r.Get("/projects/{id}/steps/{stepId}/edit", sh.EditStepForm)
@@ -89,8 +96,14 @@ func NewRouter(repo *repository.Repository, rnr *runner.DeploymentRunner) *chi.M
 	r.Put("/templates/{id}", sth.UpdateTemplate)
 	r.Delete("/templates/{id}", sth.DeleteTemplate)
 	r.Get("/projects/{id}/templates-picker", sth.TemplatesPicker)
-	r.Post("/projects/{id}/steps/from-template/{templateId}", sth.InsertTemplate)
-	r.Post("/projects/{id}/steps/{stepId}/save-as-template", sth.SaveStepAsTemplate)
+	r.Post(
+		"/projects/{id}/steps/from-template/{templateId}",
+		sth.InsertTemplate,
+	)
+	r.Post(
+		"/projects/{id}/steps/{stepId}/save-as-template",
+		sth.SaveStepAsTemplate,
+	)
 
 	vh := handler.NewVariableHandler(repo)
 	r.Get("/projects/{id}/variables", vh.ListVariables)
@@ -111,6 +124,8 @@ func NewRouter(repo *repository.Repository, rnr *runner.DeploymentRunner) *chi.M
 	r.Get("/deployments/{id}", dh.GetDeployment)
 	r.Get("/deployments/{id}/status", dh.GetDeploymentStatus)
 	r.Post("/deployments/{id}/cancel", dh.CancelDeployment)
+	r.Get("/projects/{id}/deploy", dh.NewDeploymentPage)
+	r.Post("/projects/{id}/deploy", dh.ScheduleDeployment)
 
 	lh := handler.NewLogHandler(rnr.Broker(), repo)
 	r.Get("/deployments/{id}/logs/stream", lh.StreamLogs)

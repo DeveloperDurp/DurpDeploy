@@ -18,12 +18,14 @@ templ ProjectForm(project db.Project, isEdit bool, errorMsg string, lifecycles [
 		</h1>
 		<form
 			if isEdit {
+				id={ fmt.Sprintf("project-form-%d", project.ID) }
 				hx-put={ fmt.Sprintf("/projects/%d", project.ID) }
 				hx-target="#form-container"
 				hx-swap="innerHTML"
 				data-toast-success="Project updated"
 				data-toast-error="Failed to update project"
 			} else {
+				id="project-form-new"
 				method="post"
 				action="/projects"
 			}
@@ -63,17 +65,42 @@ templ ProjectForm(project db.Project, isEdit bool, errorMsg string, lifecycles [
 					}
 				</select>
 			</div>
-			<div class="flex gap-2">
-				<button type="submit" class="btn btn-primary">
-					if isEdit {
-						Update
-					} else {
-						Create
-					}
-				</button>
-				<a href="/projects" class="btn btn-ghost">Cancel</a>
-			</div>
 		</form>
+		// Both action rows live below the form tag: the destructive Delete
+		// section first, then the primary Update + Cancel. This puts the
+		// safe action at the very bottom where the eye lands after editing
+		// a field, with the danger zone visually separated above it.
+		if isEdit {
+			<div class="mt-8 pt-6 border-t border-base-300 flex items-center justify-between">
+				<div>
+					<div class="font-medium">Delete this project</div>
+					<div class="text-sm text-gray-500">Steps, variables, and releases will be deleted too.</div>
+				</div>
+				<button
+					class="btn btn-error"
+					hx-delete={ fmt.Sprintf("/projects/%d", project.ID) }
+					hx-confirm="Delete this project? Steps, variables, and releases will also be deleted."
+					data-toast-success="Project deleted"
+					data-toast-error="Failed to delete project"
+				>
+					Delete project
+				</button>
+			</div>
+		}
+		<div class="mt-8 pt-6 border-t border-base-300 flex gap-2 justify-end">
+			<button type="submit" form={ fmt.Sprintf("project-form-%d", project.ID) } class="btn btn-primary">
+				if isEdit {
+					Update
+				} else {
+					Create
+				}
+			</button>
+			if isEdit {
+				<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost">Cancel</a>
+			} else {
+				<a href="/projects" class="btn btn-ghost">Cancel</a>
+			}
+		</div>
 	</div>
 }
 

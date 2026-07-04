@@ -15,7 +15,10 @@ type LogHandler struct {
 	repo   *repository.Repository
 }
 
-func NewLogHandler(broker *runner.LogBroker, repo *repository.Repository) *LogHandler {
+func NewLogHandler(
+	broker *runner.LogBroker,
+	repo *repository.Repository,
+) *LogHandler {
 	return &LogHandler{broker: broker, repo: repo}
 }
 
@@ -39,7 +42,10 @@ func (h *LogHandler) StreamLogs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Replay historical logs first
-	logs, err := h.repo.Queries.ListDeploymentLogsByDeployment(r.Context(), deploymentID)
+	logs, err := h.repo.Queries.ListDeploymentLogsByDeployment(
+		r.Context(),
+		deploymentID,
+	)
 	if err == nil {
 		for _, log := range logs {
 			fmt.Fprintf(w, "data: %s\n\n", log.Line)

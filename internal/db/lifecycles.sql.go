@@ -113,7 +113,7 @@ func (q *Queries) GetLifecycleStage(ctx context.Context, id int64) (LifecycleSta
 }
 
 const listLifecycleStageEnvironmentIDs = `-- name: ListLifecycleStageEnvironmentIDs :many
-SELECT environment_id FROM lifecycle_stages WHERE lifecycle_id = ?
+SELECT environment_id FROM lifecycle_stages WHERE lifecycle_id = ? ORDER BY sort_order ASC, id ASC
 `
 
 func (q *Queries) ListLifecycleStageEnvironmentIDs(ctx context.Context, lifecycleID int64) ([]int64, error) {

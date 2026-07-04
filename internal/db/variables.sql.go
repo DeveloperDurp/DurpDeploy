@@ -11,7 +11,7 @@ import (
 )
 
 const createVariable = `-- name: CreateVariable :one
-INSERT INTO variables (project_id, name, value, environment_id) VALUES (?, ?, ?, ?) RETURNING id, project_id, name, value, environment_id, created_at
+INSERT INTO variables (project_id, name, value, environment_id, secret) VALUES (?, ?, ?, ?, ?) RETURNING id, project_id, name, value, environment_id, created_at, secret
 `
 
 type CreateVariableParams struct {
@@ -19,6 +19,7 @@ type CreateVariableParams struct {
 	Name          string         `json:"name"`
 	Value         sql.NullString `json:"value"`
 	EnvironmentID sql.NullInt64  `json:"environment_id"`
+	Secret        int64          `json:"secret"`
 }
 
 func (q *Queries) CreateVariable(ctx context.Context, arg CreateVariableParams) (Variable, error) {
@@ -27,6 +28,7 @@ func (q *Queries) CreateVariable(ctx context.Context, arg CreateVariableParams) 
 		arg.Name,
 		arg.Value,
 		arg.EnvironmentID,
+		arg.Secret,
 	)
 	var i Variable
 	err := row.Scan(
@@ -36,6 +38,7 @@ func (q *Queries) CreateVariable(ctx context.Context, arg CreateVariableParams) 
 		&i.Value,
 		&i.EnvironmentID,
 		&i.CreatedAt,
+		&i.Secret,
 	)
 	return i, err
 }
@@ -50,7 +53,7 @@ func (q *Queries) DeleteVariable(ctx context.Context, id int64) error {
 }
 
 const getVariable = `-- name: GetVariable :one
-SELECT id, project_id, name, value, environment_id, created_at FROM variables WHERE id = ?
+SELECT id, project_id, name, value, environment_id, created_at, secret FROM variables WHERE id = ?
 `
 
 func (q *Queries) GetVariable(ctx context.Context, id int64) (Variable, error) {
@@ -63,12 +66,13 @@ func (q *Queries) GetVariable(ctx context.Context, id int64) (Variable, error) {
 		&i.Value,
 		&i.EnvironmentID,
 		&i.CreatedAt,
+		&i.Secret,
 	)
 	return i, err
 }
 
 const listVariablesByProject = `-- name: ListVariablesByProject :many
-SELECT id, project_id, name, value, environment_id, created_at FROM variables WHERE project_id = ? ORDER BY created_at DESC
+SELECT id, project_id, name, value, environment_id, created_at, secret FROM variables WHERE project_id = ? ORDER BY created_at DESC
 `
 
 func (q *Queries) ListVariablesByProject(ctx context.Context, projectID int64) ([]Variable, error) {
@@ -87,6 +91,7 @@ func (q *Queries) ListVariablesByProject(ctx context.Context, projectID int64) (
 			&i.Value,
 			&i.EnvironmentID,
 			&i.CreatedAt,
+			&i.Secret,
 		); err != nil {
 			return nil, err
 		}
@@ -102,13 +107,14 @@ func (q *Queries) ListVariablesByProject(ctx context.Context, projectID int64) (
 }
 
 const updateVariable = `-- name: UpdateVariable :one
-UPDATE variables SET name = ?, value = ?, environment_id = ? WHERE id = ? RETURNING id, project_id, name, value, environment_id, created_at
+UPDATE variables SET name = ?, value = ?, environment_id = ?, secret = ? WHERE id = ? RETURNING id, project_id, name, value, environment_id, created_at, secret
 `
 
 type UpdateVariableParams struct {
 	Name          string         `json:"name"`
 	Value         sql.NullString `json:"value"`
 	EnvironmentID sql.NullInt64  `json:"environment_id"`
+	Secret        int64          `json:"secret"`
 	ID            int64          `json:"id"`
 }
 
@@ -117,6 +123,7 @@ func (q *Queries) UpdateVariable(ctx context.Context, arg UpdateVariableParams) 
 		arg.Name,
 		arg.Value,
 		arg.EnvironmentID,
+		arg.Secret,
 		arg.ID,
 	)
 	var i Variable
@@ -127,6 +134,7 @@ func (q *Queries) UpdateVariable(ctx context.Context, arg UpdateVariableParams) 
 		&i.Value,
 		&i.EnvironmentID,
 		&i.CreatedAt,
+		&i.Secret,
 	)
 	return i, err
 }

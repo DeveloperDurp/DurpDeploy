@@ -22,58 +22,76 @@ func TestStreamLogs_ReplaysHistoricalLogs(t *testing.T) {
 	repo := setupTestRepo(t)
 	h := NewLogHandler(broker, repo)
 
-	project, err := repo.Queries.CreateProject(context.Background(), db.CreateProjectParams{
-		Name:        "test-project",
-		Description: sql.NullString{},
-	})
+	project, err := repo.Queries.CreateProject(
+		context.Background(),
+		db.CreateProjectParams{
+			Name:        "test-project",
+			Description: sql.NullString{},
+		},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	env, err := repo.Queries.CreateEnvironment(context.Background(), db.CreateEnvironmentParams{
-		Name:        "test-env",
-		Description: sql.NullString{},
-		Tags:        sql.NullString{},
-	})
+	env, err := repo.Queries.CreateEnvironment(
+		context.Background(),
+		db.CreateEnvironmentParams{
+			Name:        "test-env",
+			Description: sql.NullString{},
+			Tags:        sql.NullString{},
+		},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	release, err := repo.Queries.CreateRelease(context.Background(), db.CreateReleaseParams{
-		ProjectID: project.ID,
-		Version:   "1.0.0",
-		StepsJson: "[]",
-	})
+	release, err := repo.Queries.CreateRelease(
+		context.Background(),
+		db.CreateReleaseParams{
+			ProjectID: project.ID,
+			Version:   "1.0.0",
+			StepsJson: "[]",
+		},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	deployment, err := repo.Queries.CreateDeployment(context.Background(), db.CreateDeploymentParams{
-		ReleaseID:     release.ID,
-		EnvironmentID: env.ID,
-		Status:        "running",
-		StartedAt:     sql.NullInt64{Int64: time.Now().Unix(), Valid: true},
-		FinishedAt:    sql.NullInt64{},
-		Forced:        0,
-	})
+	deployment, err := repo.Queries.CreateDeployment(
+		context.Background(),
+		db.CreateDeploymentParams{
+			ReleaseID:     release.ID,
+			EnvironmentID: env.ID,
+			Status:        "running",
+			StartedAt:     sql.NullInt64{Int64: time.Now().Unix(), Valid: true},
+			FinishedAt:    sql.NullInt64{},
+			Forced:        0,
+		},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	_, err = repo.Queries.CreateDeploymentLog(context.Background(), db.CreateDeploymentLogParams{
-		DeploymentID: deployment.ID,
-		StepName:     sql.NullString{String: "Step1", Valid: true},
-		Line:         "historical log 1",
-	})
+	_, err = repo.Queries.CreateDeploymentLog(
+		context.Background(),
+		db.CreateDeploymentLogParams{
+			DeploymentID: deployment.ID,
+			StepName:     sql.NullString{String: "Step1", Valid: true},
+			Line:         "historical log 1",
+		},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	_, err = repo.Queries.CreateDeploymentLog(context.Background(), db.CreateDeploymentLogParams{
-		DeploymentID: deployment.ID,
-		StepName:     sql.NullString{String: "Step1", Valid: true},
-		Line:         "historical log 2",
-	})
+	_, err = repo.Queries.CreateDeploymentLog(
+		context.Background(),
+		db.CreateDeploymentLogParams{
+			DeploymentID: deployment.ID,
+			StepName:     sql.NullString{String: "Step1", Valid: true},
+			Line:         "historical log 2",
+		},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +104,12 @@ func TestStreamLogs_ReplaysHistoricalLogs(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/deployments/%d/logs/stream", srv.URL, deployment.ID), nil)
+	req, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodGet,
+		fmt.Sprintf("%s/deployments/%d/logs/stream", srv.URL, deployment.ID),
+		nil,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +137,11 @@ func TestStreamLogs_ReplaysHistoricalLogs(t *testing.T) {
 	}
 
 	if len(lines) < 2 {
-		t.Fatalf("expected at least 2 historical logs, got %d: %v", len(lines), lines)
+		t.Fatalf(
+			"expected at least 2 historical logs, got %d: %v",
+			len(lines),
+			lines,
+		)
 	}
 
 	if lines[0] != "data: historical log 1" {
@@ -146,7 +173,10 @@ func TestStreamLogs_ReplaysHistoricalLogs(t *testing.T) {
 func setupTestRepo(t *testing.T) *repository.Repository {
 	t.Helper()
 	dir := t.TempDir()
-	dsn := fmt.Sprintf("file:%s/test.db?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)", dir)
+	dsn := fmt.Sprintf(
+		"file:%s/test.db?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)",
+		dir,
+	)
 	sqlDB, err := migrate.Run(dsn)
 	if err != nil {
 		t.Fatalf("migrate: %v", err)
@@ -160,7 +190,11 @@ func TestStreamLogs_BadID(t *testing.T) {
 	repo := setupTestRepo(t)
 	h := NewLogHandler(broker, repo)
 
-	req := httptest.NewRequest(http.MethodGet, "/deployments/abc/logs/stream", nil)
+	req := httptest.NewRequest(
+		http.MethodGet,
+		"/deployments/abc/logs/stream",
+		nil,
+	)
 	rr := httptest.NewRecorder()
 	h.StreamLogs(rr, req)
 
@@ -187,7 +221,12 @@ func TestStreamLogs_RealServer(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/deployments/1/logs/stream", srv.URL), nil)
+	req, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodGet,
+		fmt.Sprintf("%s/deployments/1/logs/stream", srv.URL),
+		nil,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -233,7 +272,11 @@ func TestStreamLogs_ClientDisconnect(t *testing.T) {
 	repo := setupTestRepo(t)
 	h := NewLogHandler(broker, repo)
 
-	req := httptest.NewRequest(http.MethodGet, "/deployments/1/logs/stream", nil)
+	req := httptest.NewRequest(
+		http.MethodGet,
+		"/deployments/1/logs/stream",
+		nil,
+	)
 	rr := httptest.NewRecorder()
 
 	ctx, cancel := context.WithCancel(req.Context())

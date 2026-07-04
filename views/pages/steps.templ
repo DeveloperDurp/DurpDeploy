@@ -1,0 +1,68 @@
+package pages
+
+import (
+	"durpdeploy/internal/db"
+	"durpdeploy/views/components"
+	"durpdeploy/views/layouts"
+	"fmt"
+)
+
+// StepsPage is the dedicated full page for a project's step list. The
+// underlying StepList component is unchanged; this just wraps it in a
+// layout with breadcrumbs and the "Add Step" / "Insert from Template"
+// buttons that used to live on the project overview.
+templ StepsPage(project db.Project, steps []db.Step, currentPath string) {
+	@layouts.Base("Steps - "+project.Name, currentPath) {
+		@components.Breadcrumbs([]components.Crumb{
+			{Label: "Home", Href: "/"},
+			{Label: "Projects", Href: "/projects"},
+			{Label: project.Name, Href: fmt.Sprintf("/projects/%d", project.ID)},
+			{Label: "Steps"},
+		})
+		@StepsContent(project, steps)
+	}
+}
+
+templ StepsContent(project db.Project, steps []db.Step) {
+	<div class="space-y-6">
+		<div class="flex justify-between items-center">
+			<div>
+				<h1 class="text-3xl font-bold">Steps for { project.Name }</h1>
+				<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost btn-sm mt-2">Back to Project</a>
+			</div>
+		</div>
+		<div class="card bg-base-200 p-4">
+			<div class="flex justify-between items-center mb-2">
+				<h2 class="text-lg font-bold">Deployment Process</h2>
+				<span class="text-xs text-gray-500">
+					if len(steps) == 0 {
+						no steps yet
+					} else {
+						{ fmt.Sprintf("%d step(s)", len(steps)) }
+					}
+				</span>
+			</div>
+			@components.StepList(steps, project.ID)
+			<div class="mt-4 flex gap-2">
+				<button
+					class="btn btn-primary btn-sm"
+					hx-get={ fmt.Sprintf("/projects/%d/steps/new", project.ID) }
+					hx-target="#add-step-form"
+					hx-swap="innerHTML"
+				>
+					Add Step
+				</button>
+				<button
+					class="btn btn-secondary btn-sm"
+					hx-get={ fmt.Sprintf("/projects/%d/templates-picker", project.ID) }
+					hx-target="#template-picker"
+					hx-swap="innerHTML"
+				>
+					Insert from Template
+				</button>
+			</div>
+			<div id="add-step-form" class="mt-4"></div>
+			<div id="template-picker" class="mt-4"></div>
+		</div>
+	</div>
+}

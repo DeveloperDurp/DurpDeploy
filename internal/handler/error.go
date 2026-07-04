@@ -12,10 +12,16 @@ import (
 )
 
 func IsUniqueViolation(err error) bool {
-	return err != nil && strings.Contains(err.Error(), "UNIQUE constraint failed")
+	return err != nil &&
+		strings.Contains(err.Error(), "UNIQUE constraint failed")
 }
 
-func WriteFormError(w http.ResponseWriter, r *http.Request, fragment templ.Component, page templ.Component) {
+func WriteFormError(
+	w http.ResponseWriter,
+	r *http.Request,
+	fragment templ.Component,
+	page templ.Component,
+) {
 	if r.Header.Get("HX-Request") == "true" {
 		w.Header().Set("HX-Retarget", "#form-container")
 		w.Header().Set("HX-Reswap", "innerHTML")
@@ -39,14 +45,19 @@ func NewErrorHandler() *ErrorHandler {
 
 func (h *ErrorHandler) NotFound(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotFound)
-	if err := pages.ErrorPage("Not Found", "The page you are looking for does not exist.", r.URL.Path).Render(r.Context(), w); err != nil {
+	if err := pages.ErrorPage("Not Found", "The page you are looking for does not exist.", r.URL.Path).
+		Render(r.Context(), w); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
-func (h *ErrorHandler) MethodNotAllowed(w http.ResponseWriter, r *http.Request) {
+func (h *ErrorHandler) MethodNotAllowed(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	w.WriteHeader(http.StatusMethodNotAllowed)
-	if err := pages.ErrorPage("Method Not Allowed", "The requested method is not allowed for this resource.", r.URL.Path).Render(r.Context(), w); err != nil {
+	if err := pages.ErrorPage("Method Not Allowed", "The requested method is not allowed for this resource.", r.URL.Path).
+		Render(r.Context(), w); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
@@ -63,8 +74,13 @@ func PanicRecoveryMiddleware(next http.Handler) http.Handler {
 				)
 				if ww.Status() == 0 {
 					w.WriteHeader(http.StatusInternalServerError)
-					if err := pages.ErrorPage("Internal Server Error", "Something went wrong. Please try again later.", r.URL.Path).Render(r.Context(), w); err != nil {
-						http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+					if err := pages.ErrorPage("Internal Server Error", "Something went wrong. Please try again later.", r.URL.Path).
+						Render(r.Context(), w); err != nil {
+						http.Error(
+							w,
+							http.StatusText(http.StatusInternalServerError),
+							http.StatusInternalServerError,
+						)
 					}
 				}
 			}

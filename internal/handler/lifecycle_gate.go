@@ -21,7 +21,13 @@ type gateState struct {
 // evaluateGate returns the gate state for a single env. Pure function: no
 // receiver, no I/O outside the repository. Used both by the deploy handler
 // (block on violation) and the releases page (filter the dropdown).
-func evaluateGate(ctx context.Context, repo *repository.Repository, project db.Project, release db.Release, environmentID int64) (gateState, error) {
+func evaluateGate(
+	ctx context.Context,
+	repo *repository.Repository,
+	project db.Project,
+	release db.Release,
+	environmentID int64,
+) (gateState, error) {
 	if !project.LifecycleID.Valid {
 		return gateState{deployable: true}, nil
 	}
@@ -50,7 +56,11 @@ func evaluateGate(ctx context.Context, repo *repository.Repository, project db.P
 		}
 		return gateState{
 			deployable: false,
-			reason:     fmt.Sprintf("%s is not part of the lifecycle %q. Projects with a lifecycle can only deploy to their lifecycle stages.", envName, lc.Name),
+			reason: fmt.Sprintf(
+				"%s is not part of the lifecycle %q. Projects with a lifecycle can only deploy to their lifecycle stages.",
+				envName,
+				lc.Name,
+			),
 			bypassable: false,
 		}, nil
 	}
@@ -59,10 +69,13 @@ func evaluateGate(ctx context.Context, repo *repository.Repository, project db.P
 	}
 
 	prev := stages[idx-1]
-	dep, err := repo.Queries.GetLatestSuccessfulDeploymentForReleaseEnv(ctx, db.GetLatestSuccessfulDeploymentForReleaseEnvParams{
-		ReleaseID:     release.ID,
-		EnvironmentID: prev.EnvironmentID,
-	})
+	dep, err := repo.Queries.GetLatestSuccessfulDeploymentForReleaseEnv(
+		ctx,
+		db.GetLatestSuccessfulDeploymentForReleaseEnvParams{
+			ReleaseID:     release.ID,
+			EnvironmentID: prev.EnvironmentID,
+		},
+	)
 	if err != nil && err != sql.ErrNoRows {
 		return gateState{}, err
 	}
@@ -74,7 +87,11 @@ func evaluateGate(ctx context.Context, repo *repository.Repository, project db.P
 		}
 		return gateState{
 			deployable: false,
-			reason:     fmt.Sprintf("%s has not been successfully deployed to %s yet. Tick Force to deploy anyway.", release.Version, prevName),
+			reason: fmt.Sprintf(
+				"%s has not been successfully deployed to %s yet. Tick Force to deploy anyway.",
+				release.Version,
+				prevName,
+			),
 			bypassable: true,
 		}, nil
 	}
@@ -89,7 +106,12 @@ type availableEnv struct {
 	State       gateState
 }
 
-func availableEnvsForRelease(ctx context.Context, repo *repository.Repository, project db.Project, release db.Release) ([]availableEnv, error) {
+func availableEnvsForRelease(
+	ctx context.Context,
+	repo *repository.Repository,
+	project db.Project,
+	release db.Release,
+) ([]availableEnv, error) {
 	allEnvs, err := repo.Queries.ListEnvironments(ctx)
 	if err != nil {
 		return nil, err
@@ -98,11 +120,17 @@ func availableEnvsForRelease(ctx context.Context, repo *repository.Repository, p
 		// Free-floating project: every env is deployable, no gate to evaluate.
 		out := make([]availableEnv, len(allEnvs))
 		for i, e := range allEnvs {
-			out[i] = availableEnv{Environment: e, State: gateState{deployable: true}}
+			out[i] = availableEnv{
+				Environment: e,
+				State:       gateState{deployable: true},
+			}
 		}
 		return out, nil
 	}
-	stageIDs, err := repo.Queries.ListLifecycleStageEnvironmentIDs(ctx, project.LifecycleID.Int64)
+	stageIDs, err := repo.Queries.ListLifecycleStageEnvironmentIDs(
+		ctx,
+		project.LifecycleID.Int64,
+	)
 	if err != nil {
 		return nil, err
 	}

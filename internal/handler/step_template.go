@@ -21,7 +21,10 @@ func NewStepTemplateHandler(repo *repository.Repository) *StepTemplateHandler {
 	return &StepTemplateHandler{repo: repo}
 }
 
-func (h *StepTemplateHandler) ListTemplates(w http.ResponseWriter, r *http.Request) {
+func (h *StepTemplateHandler) ListTemplates(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	templates, err := h.repo.Queries.ListStepTemplates(r.Context())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -29,24 +32,33 @@ func (h *StepTemplateHandler) ListTemplates(w http.ResponseWriter, r *http.Reque
 	}
 
 	if r.Header.Get("HX-Request") == "true" {
-		if err := pages.TemplatesListContent(templates).Render(r.Context(), w); err != nil {
+		if err := pages.TemplatesListContent(templates).
+			Render(r.Context(), w); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	} else {
-		if err := pages.TemplatesList(templates, r.URL.Path).Render(r.Context(), w); err != nil {
+		if err := pages.TemplatesList(templates, r.URL.Path).
+			Render(r.Context(), w); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	}
 }
 
-func (h *StepTemplateHandler) NewTemplateForm(w http.ResponseWriter, r *http.Request) {
+func (h *StepTemplateHandler) NewTemplateForm(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	tpl := &db.StepTemplate{}
-	if err := pages.TemplateForm(tpl, true, "", r.URL.Path).Render(r.Context(), w); err != nil {
+	if err := pages.TemplateForm(tpl, true, "", r.URL.Path).
+		Render(r.Context(), w); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
-func (h *StepTemplateHandler) CreateTemplate(w http.ResponseWriter, r *http.Request) {
+func (h *StepTemplateHandler) CreateTemplate(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -57,7 +69,12 @@ func (h *StepTemplateHandler) CreateTemplate(w http.ResponseWriter, r *http.Requ
 
 	if name == "" {
 		tpl := &db.StepTemplate{Name: name, ScriptBody: script}
-		WriteFormError(w, r, pages.TemplateFormFragment(tpl, true, "Name is required"), pages.TemplateForm(tpl, true, "Name is required", r.URL.Path))
+		WriteFormError(
+			w,
+			r,
+			pages.TemplateFormFragment(tpl, true, "Name is required"),
+			pages.TemplateForm(tpl, true, "Name is required", r.URL.Path),
+		)
 		return
 	}
 
@@ -66,10 +83,27 @@ func (h *StepTemplateHandler) CreateTemplate(w http.ResponseWriter, r *http.Requ
 		ScriptBody: script,
 	}
 
-	if _, err := h.repo.Queries.CreateStepTemplate(r.Context(), params); err != nil {
+	if _, err := h.repo.Queries.CreateStepTemplate(
+		r.Context(),
+		params,
+	); err != nil {
 		if IsUniqueViolation(err) {
 			tpl := &db.StepTemplate{Name: name, ScriptBody: script}
-			WriteFormError(w, r, pages.TemplateFormFragment(tpl, true, "A template with this name already exists"), pages.TemplateForm(tpl, true, "A template with this name already exists", r.URL.Path))
+			WriteFormError(
+				w,
+				r,
+				pages.TemplateFormFragment(
+					tpl,
+					true,
+					"A template with this name already exists",
+				),
+				pages.TemplateForm(
+					tpl,
+					true,
+					"A template with this name already exists",
+					r.URL.Path,
+				),
+			)
 			return
 		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -79,7 +113,10 @@ func (h *StepTemplateHandler) CreateTemplate(w http.ResponseWriter, r *http.Requ
 	http.Redirect(w, r, "/templates", http.StatusSeeOther)
 }
 
-func (h *StepTemplateHandler) EditTemplateForm(w http.ResponseWriter, r *http.Request) {
+func (h *StepTemplateHandler) EditTemplateForm(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
@@ -93,12 +130,16 @@ func (h *StepTemplateHandler) EditTemplateForm(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	if err := pages.TemplateForm(&tpl, false, "", r.URL.Path).Render(r.Context(), w); err != nil {
+	if err := pages.TemplateForm(&tpl, false, "", r.URL.Path).
+		Render(r.Context(), w); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
-func (h *StepTemplateHandler) UpdateTemplate(w http.ResponseWriter, r *http.Request) {
+func (h *StepTemplateHandler) UpdateTemplate(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -116,7 +157,12 @@ func (h *StepTemplateHandler) UpdateTemplate(w http.ResponseWriter, r *http.Requ
 
 	if name == "" {
 		tpl := &db.StepTemplate{ID: id, Name: name, ScriptBody: script}
-		WriteFormError(w, r, pages.TemplateFormFragment(tpl, false, "Name is required"), pages.TemplateForm(tpl, false, "Name is required", r.URL.Path))
+		WriteFormError(
+			w,
+			r,
+			pages.TemplateFormFragment(tpl, false, "Name is required"),
+			pages.TemplateForm(tpl, false, "Name is required", r.URL.Path),
+		)
 		return
 	}
 
@@ -126,10 +172,27 @@ func (h *StepTemplateHandler) UpdateTemplate(w http.ResponseWriter, r *http.Requ
 		ScriptBody: script,
 	}
 
-	if _, err := h.repo.Queries.UpdateStepTemplate(r.Context(), params); err != nil {
+	if _, err := h.repo.Queries.UpdateStepTemplate(
+		r.Context(),
+		params,
+	); err != nil {
 		if IsUniqueViolation(err) {
 			tpl := &db.StepTemplate{ID: id, Name: name, ScriptBody: script}
-			WriteFormError(w, r, pages.TemplateFormFragment(tpl, false, "A template with this name already exists"), pages.TemplateForm(tpl, false, "A template with this name already exists", r.URL.Path))
+			WriteFormError(
+				w,
+				r,
+				pages.TemplateFormFragment(
+					tpl,
+					false,
+					"A template with this name already exists",
+				),
+				pages.TemplateForm(
+					tpl,
+					false,
+					"A template with this name already exists",
+					r.URL.Path,
+				),
+			)
 			return
 		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -139,7 +202,10 @@ func (h *StepTemplateHandler) UpdateTemplate(w http.ResponseWriter, r *http.Requ
 	http.Redirect(w, r, "/templates", http.StatusSeeOther)
 }
 
-func (h *StepTemplateHandler) DeleteTemplate(w http.ResponseWriter, r *http.Request) {
+func (h *StepTemplateHandler) DeleteTemplate(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
@@ -155,7 +221,10 @@ func (h *StepTemplateHandler) DeleteTemplate(w http.ResponseWriter, r *http.Requ
 	http.Redirect(w, r, "/templates", http.StatusSeeOther)
 }
 
-func (h *StepTemplateHandler) InsertTemplate(w http.ResponseWriter, r *http.Request) {
+func (h *StepTemplateHandler) InsertTemplate(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	projectID, err := parseProjectID(r)
 	if err != nil {
 		http.Error(w, "Invalid project ID", http.StatusBadRequest)
@@ -209,7 +278,10 @@ func (h *StepTemplateHandler) InsertTemplate(w http.ResponseWriter, r *http.Requ
 	components.StepList(steps, projectID).Render(r.Context(), w)
 }
 
-func (h *StepTemplateHandler) SaveStepAsTemplate(w http.ResponseWriter, r *http.Request) {
+func (h *StepTemplateHandler) SaveStepAsTemplate(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	projectID, err := parseProjectID(r)
 	if err != nil {
 		http.Error(w, "Invalid project ID", http.StatusBadRequest)
@@ -234,22 +306,33 @@ func (h *StepTemplateHandler) SaveStepAsTemplate(w http.ResponseWriter, r *http.
 		ScriptBody: step.ScriptBody,
 	}
 
-	if _, err := h.repo.Queries.CreateStepTemplate(r.Context(), params); err != nil {
+	if _, err := h.repo.Queries.CreateStepTemplate(
+		r.Context(),
+		params,
+	); err != nil {
 		if IsUniqueViolation(err) {
 			if r.Header.Get("HX-Request") == "true" {
 				SetToastError(w, "A template with this name already exists")
 				w.WriteHeader(http.StatusConflict)
-				steps, err := h.repo.Queries.ListStepsByProject(r.Context(), projectID)
+				steps, err := h.repo.Queries.ListStepsByProject(
+					r.Context(),
+					projectID,
+				)
 				if err != nil {
 					http.Error(w, err.Error(), http.StatusInternalServerError)
 					return
 				}
-				if err := components.StepList(steps, projectID).Render(r.Context(), w); err != nil {
+				if err := components.StepList(steps, projectID).
+					Render(r.Context(), w); err != nil {
 					http.Error(w, err.Error(), http.StatusInternalServerError)
 				}
 				return
 			}
-			http.Error(w, "A template with this name already exists", http.StatusConflict)
+			http.Error(
+				w,
+				"A template with this name already exists",
+				http.StatusConflict,
+			)
 			return
 		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -263,7 +346,8 @@ func (h *StepTemplateHandler) SaveStepAsTemplate(w http.ResponseWriter, r *http.
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		if err := components.StepList(steps, projectID).Render(r.Context(), w); err != nil {
+		if err := components.StepList(steps, projectID).
+			Render(r.Context(), w); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 		return
@@ -272,7 +356,10 @@ func (h *StepTemplateHandler) SaveStepAsTemplate(w http.ResponseWriter, r *http.
 	http.Redirect(w, r, "/templates", http.StatusSeeOther)
 }
 
-func (h *StepTemplateHandler) TemplatesPicker(w http.ResponseWriter, r *http.Request) {
+func (h *StepTemplateHandler) TemplatesPicker(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	projectID, err := parseProjectID(r)
 	if err != nil {
 		http.Error(w, "Invalid project ID", http.StatusBadRequest)

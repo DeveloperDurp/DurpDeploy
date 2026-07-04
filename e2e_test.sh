@@ -28,6 +28,10 @@ echo "Env ID: $ENV_ID"
 CODE=$(curl_silent -X POST -d "name=Step1&script_body=echo+hello" "$BASE/projects/$PROJECT_ID/steps")
 [[ "$CODE" == "200" ]] || { echo "FAIL: create step got $CODE"; exit 1; }
 
+# Verify the dedicated steps page renders.
+CODE=$(curl_silent "$BASE/projects/$PROJECT_ID/steps-page")
+[[ "$CODE" == "200" ]] || { echo "FAIL: steps-page got $CODE"; exit 1; }
+
 CODE=$(curl_silent -X POST -d "name=VAR1&value=hello&environment_id=$ENV_ID" "$BASE/projects/$PROJECT_ID/variables")
 [[ "$CODE" == "303" ]] || { echo "FAIL: create variable got $CODE"; exit 1; }
 
@@ -174,5 +178,45 @@ echo "  Deploy to non-lifecycle env (no force): blocked (422)"
 CODE=$(curl_silent -X POST -d "release_id=$V3_REL_ID&environment_id=$LC_OUT_ID&force=true" "$BASE/deployments")
 [[ "$CODE" == "422" ]] || { echo "FAIL: force deploy to non-lifecycle env got $CODE, want 422"; exit 1; }
 echo "  Force deploy to non-lifecycle env: still blocked (422)"
+
+echo "=== F3.8: Deploy Page ==="
+# Verify the dedicated deploy page renders for the existing TestProject
+# (free-floating, has release 1.0.0 and env TestEnv). A second test exercises
+# the lifecycle-bound case via the LC project.
+CODE=$(curl_silent "$BASE/projects/$PROJECT_ID/deploy")
+[[ "$CODE" == "200" ]] || { echo "FAIL: GET /projects/$PROJECT_ID/deploy got $CODE"; exit 1; }
+echo "  Free-floating deploy page renders: OK (200)"
+
+# Page should contain the form with the release version and env name.
+PAGE=$(curl_body "$BASE/projects/$PROJECT_ID/deploy")
+echo "$PAGE" | grep -q "1.0.0" || { echo "FAIL: release 1.0.0 missing from deploy page"; exit 1; }
+echo "$PAGE" | grep -q "TestEnv" || { echo "FAIL: TestEnv missing from deploy page"; exit 1; }
+echo "$PAGE" | grep -q "action=\"/projects/$PROJECT_ID/deploy\"" || { echo "FAIL: form action missing"; exit 1; }
+
+# Lifecycle-bound deploy page: only stage envs should appear.
+CODE=$(curl_silent "$BASE/projects/$LC_PROJECT_ID/deploy")
+[[ "$CODE" == "200" ]] || { echo "FAIL: GET lifecycle deploy page got $CODE"; exit 1; }
+LCPAGE=$(curl_body "$BASE/projects/$LC_PROJECT_ID/deploy")
+echo "$LCPAGE" | grep -q "LC-Dev-$LC_TS" || { echo "FAIL: LC-Dev not in lifecycle deploy page"; exit 1; }
+echo "$LCPAGE" | grep -q "LC-Test-$LC_TS" || { echo "FAIL: LC-Test not in lifecycle deploy page"; exit 1; }
+echo "$LCPAGE" | grep -q "LC-Prod-$LC_TS" || { echo "FAIL: LC-Prod not in lifecycle deploy page"; exit 1; }
+echo "$LCPAGE" | grep -q "LC-Out-$LC_TS" && { echo "FAIL: LC-Out should NOT appear in lifecycle deploy page"; exit 1; } || true
+echo "  Lifecycle deploy page filters non-stage envs: OK"
+
+# F3.9: POST to the deploy page — env restriction. Try to deploy an
+# existing release to a non-lifecycle env via the new page -> 422. The
+# success path is already covered by the existing F3.1 inline-form test
+# and by the unit tests; the page-specific path is the gate behavior.
+CODE=$(curl_silent -X POST -d "release_id=$LC_REL_ID&environment_id=$LC_OUT_ID" "$BASE/projects/$LC_PROJECT_ID/deploy")
+[[ "$CODE" == "422" ]] || { echo "FAIL: deploy page gate-block got $CODE, want 422"; exit 1; }
+echo "  Deploy page env restriction: blocked (422)"
+
+# F3.10: cross-project release rejected (400) — the project-scoped route
+# validates that the release belongs to this project.
+curl -s -o /dev/null -X POST -d "name=DP-cross-proj" "$BASE/projects"
+CROSS_PROJ_ID=$(curl_body "$BASE/projects" | grep -oP 'href="/projects/\K[0-9]+' | sort -n | tail -1)
+CODE=$(curl_silent -X POST -d "release_id=$LC_REL_ID&environment_id=$LC_DEV_ID" "$BASE/projects/$CROSS_PROJ_ID/deploy")
+[[ "$CODE" == "400" ]] || { echo "FAIL: cross-project deploy got $CODE, want 400"; exit 1; }
+echo "  Cross-project release rejected: 400"
 
 echo "=== ALL E2E CHECKS PASSED ==="

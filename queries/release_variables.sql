@@ -5,7 +5,7 @@ SELECT * FROM release_variables WHERE release_id = ? ORDER BY created_at DESC;
 SELECT * FROM release_variables WHERE id = ?;
 
 -- name: CreateReleaseVariable :one
-INSERT INTO release_variables (release_id, name, value, environment_id) VALUES (?, ?, ?, ?) RETURNING *;
+INSERT INTO release_variables (release_id, name, value, environment_id, secret) VALUES (?, ?, ?, ?, ?) RETURNING *;
 
 -- name: UpdateReleaseVariable :one
 UPDATE release_variables SET release_id = ?, name = ?, value = ?, environment_id = ? WHERE id = ? RETURNING *;

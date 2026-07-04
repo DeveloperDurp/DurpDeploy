@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"database/sql"
 	"net/http"
 	"strconv"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/repository"
 	"durpdeploy/views/components"
+	"durpdeploy/views/pages"
 )
 
 type StepHandler struct {
@@ -34,6 +36,39 @@ func (h *StepHandler) ListSteps(w http.ResponseWriter, r *http.Request) {
 	}
 
 	components.StepList(steps, projectID).Render(r.Context(), w)
+}
+
+// StepsPage renders the dedicated full page for a project's steps. The
+// project overview links here from its "Steps" button; the page hosts
+// the same add/reorder/save-as-template UI that used to live inline on
+// the project detail page.
+func (h *StepHandler) StepsPage(w http.ResponseWriter, r *http.Request) {
+	projectID, err := parseProjectID(r)
+	if err != nil {
+		http.Error(w, "Invalid project ID", http.StatusBadRequest)
+		return
+	}
+
+	project, err := h.repo.Queries.GetProject(r.Context(), projectID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			http.Error(w, "Project not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	steps, err := h.repo.Queries.ListStepsByProject(r.Context(), projectID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if err := pages.StepsPage(project, steps, r.URL.Path).
+		Render(r.Context(), w); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }
 
 func (h *StepHandler) NewStepForm(w http.ResponseWriter, r *http.Request) {
@@ -64,7 +99,12 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 
 	if name == "" {
 		step := db.Step{ProjectID: projectID, Name: name, ScriptBody: script}
-		WriteFormError(w, r, components.StepForm(step, projectID, true, "Name is required"), components.StepForm(step, projectID, true, "Name is required"))
+		WriteFormError(
+			w,
+			r,
+			components.StepForm(step, projectID, true, "Name is required"),
+			components.StepForm(step, projectID, true, "Name is required"),
+		)
 		return
 	}
 
@@ -149,8 +189,19 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 	sortOrder, _ := strconv.ParseInt(r.FormValue("sort_order"), 10, 64)
 
 	if name == "" {
-		step := db.Step{ID: stepID, ProjectID: projectID, Name: name, ScriptBody: script, SortOrder: sortOrder}
-		WriteFormError(w, r, components.StepEditRow(step, projectID, "Name is required"), components.StepEditRow(step, projectID, "Name is required"))
+		step := db.Step{
+			ID:         stepID,
+			ProjectID:  projectID,
+			Name:       name,
+			ScriptBody: script,
+			SortOrder:  sortOrder,
+		}
+		WriteFormError(
+			w,
+			r,
+			components.StepEditRow(step, projectID, "Name is required"),
+			components.StepEditRow(step, projectID, "Name is required"),
+		)
 		return
 	}
 
