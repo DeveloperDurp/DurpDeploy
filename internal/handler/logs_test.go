@@ -5,8 +5,10 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -299,4 +301,180 @@ func TestStreamLogs_ClientDisconnect(t *testing.T) {
 	}
 
 	broker.Broadcast(1, "after disconnect")
+}
+
+func TestExportLogs(t *testing.T) {
+	broker := runner.NewLogBroker()
+	repo := setupTestRepo(t)
+	h := NewLogHandler(broker, repo)
+
+	project, err := repo.Queries.CreateProject(context.Background(), db.CreateProjectParams{
+		Name:        "test-project",
+		Description: sql.NullString{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	env, err := repo.Queries.CreateEnvironment(context.Background(), db.CreateEnvironmentParams{
+		Name:        "test-env",
+		Description: sql.NullString{},
+		Tags:        sql.NullString{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	release, err := repo.Queries.CreateRelease(context.Background(), db.CreateReleaseParams{
+		ProjectID: project.ID,
+		Version:   "1.0.0",
+		StepsJson: "[]",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	now := time.Now().Unix()
+	deployment, err := repo.Queries.CreateDeployment(context.Background(), db.CreateDeploymentParams{
+		ReleaseID:     release.ID,
+		EnvironmentID: env.ID,
+		Status:        "succeeded",
+		StartedAt:     sql.NullInt64{Int64: now, Valid: true},
+		FinishedAt:    sql.NullInt64{Int64: now, Valid: true},
+		Forced:        0,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = repo.Queries.CreateDeploymentLog(context.Background(), db.CreateDeploymentLogParams{
+		DeploymentID: deployment.ID,
+		StepName:     sql.NullString{String: "build", Valid: true},
+		Line:         "starting build",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = repo.Queries.CreateDeploymentLog(context.Background(), db.CreateDeploymentLogParams{
+		DeploymentID: deployment.ID,
+		StepName:     sql.NullString{},
+		Line:         "some line without step",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	r := chi.NewRouter()
+	r.Get("/deployments/{id}/logs.txt", h.ExportLogs)
+	srv := httptest.NewServer(r)
+	defer srv.Close()
+
+	req, err := http.NewRequestWithContext(
+		context.Background(),
+		http.MethodGet,
+		fmt.Sprintf("%s/deployments/%d/logs.txt", srv.URL, deployment.ID),
+		nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	if ct := resp.Header.Get("Content-Type"); ct != "text/plain; charset=utf-8" {
+		t.Errorf("expected text/plain; charset=utf-8, got %s", ct)
+	}
+
+	expectedCD := fmt.Sprintf(`attachment; filename="deployment-%d.log"`, deployment.ID)
+	if cd := resp.Header.Get("Content-Disposition"); cd != expectedCD {
+		t.Errorf("expected Content-Disposition %q, got %q", expectedCD, cd)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	bodyStr := string(body)
+
+	expectedHeader := fmt.Sprintf(
+		"=== deployment #%d | project=test-project | release=1.0.0 | env=test-env | status=succeeded ===\n",
+		deployment.ID,
+	)
+	if !strings.Contains(bodyStr, expectedHeader) {
+		t.Errorf("expected header %q in body, got:\n%s", expectedHeader, bodyStr)
+	}
+
+	if !strings.Contains(bodyStr, "starting build") {
+		t.Errorf("expected 'starting build' in body, got:\n%s", bodyStr)
+	}
+	if !strings.Contains(bodyStr, "some line without step") {
+		t.Errorf("expected 'some line without step' in body, got:\n%s", bodyStr)
+	}
+
+	if !strings.Contains(bodyStr, "[build]") {
+		t.Errorf("expected '[build]' step label in body, got:\n%s", bodyStr)
+	}
+
+	if !strings.Contains(bodyStr, "[202") {
+		t.Errorf("expected a timestamp in [YYYY format in body, got:\n%s", bodyStr)
+	}
+
+	if !strings.HasSuffix(bodyStr, "\n") {
+		t.Errorf("expected body to end with newline")
+	}
+}
+
+func TestExportLogs_NotFound(t *testing.T) {
+	broker := runner.NewLogBroker()
+	repo := setupTestRepo(t)
+	h := NewLogHandler(broker, repo)
+
+	r := chi.NewRouter()
+	r.Get("/deployments/{id}/logs.txt", h.ExportLogs)
+	srv := httptest.NewServer(r)
+	defer srv.Close()
+
+	req, err := http.NewRequestWithContext(
+		context.Background(),
+		http.MethodGet,
+		fmt.Sprintf("%s/deployments/99999/logs.txt", srv.URL),
+		nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("expected 404, got %d", resp.StatusCode)
+	}
+}
+
+func TestExportLogs_BadID(t *testing.T) {
+	broker := runner.NewLogBroker()
+	repo := setupTestRepo(t)
+	h := NewLogHandler(broker, repo)
+
+	req := httptest.NewRequest(http.MethodGet, "/deployments/abc/logs.txt", nil)
+	rr := httptest.NewRecorder()
+	h.ExportLogs(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", rr.Code)
+	}
 }

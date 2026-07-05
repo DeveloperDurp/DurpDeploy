@@ -48,6 +48,10 @@ func NewRouter(
 	r.NotFound(errorHandler.NotFound)
 	r.MethodNotAllowed(errorHandler.MethodNotAllowed)
 
+	// System endpoints
+	healthH := handler.NewHealthHandler(repo)
+	r.Get("/healthz", healthH.Healthz)
+
 	// Home page
 	indexHandler := handler.NewIndexHandler(repo)
 	r.Get("/", indexHandler.Index)
@@ -98,6 +102,7 @@ func NewRouter(
 	r.Get("/templates/{id}/edit", sth.EditTemplateForm)
 	r.Put("/templates/{id}", sth.UpdateTemplate)
 	r.Delete("/templates/{id}", sth.DeleteTemplate)
+	r.Get("/templates/{id}/history", sth.ListTemplateHistory)
 	r.Get("/projects/{id}/templates-picker", sth.TemplatesPicker)
 	r.Post(
 		"/projects/{id}/steps/from-template/{templateId}",
@@ -143,6 +148,7 @@ func NewRouter(
 
 	lh := handler.NewLogHandler(rnr.Broker(), repo)
 	r.Get("/deployments/{id}/logs/stream", lh.StreamLogs)
+	r.Get("/deployments/{id}/logs.txt", lh.ExportLogs)
 
 	return r
 }

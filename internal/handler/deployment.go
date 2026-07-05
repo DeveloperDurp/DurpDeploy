@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -971,7 +972,20 @@ func (h *DeploymentHandler) ListDeployments(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	rows, err := h.repo.Queries.ListDeploymentsWithRefs(r.Context())
+	f := parseDeploymentsFilter(r)
+
+	rows, err := h.repo.Queries.ListDeploymentsWithRefsFiltered(
+		r.Context(),
+		db.ListDeploymentsWithRefsFilteredParams{
+			FProjectID: f.ProjectID,
+			FEnvID:     f.EnvID,
+			FStatus:    f.Status,
+			FFromUnix:  f.FromUnix,
+			FToUnix:    f.ToUnix,
+			PageOffset: f.Offset,
+			PageLimit:  f.Limit,
+		},
+	)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -997,15 +1011,153 @@ func (h *DeploymentHandler) ListDeployments(
 		}
 	}
 
+	total, err := h.repo.Queries.CountDeploymentsWithRefsFiltered(
+		r.Context(),
+		db.CountDeploymentsWithRefsFilteredParams{
+			FProjectID: f.ProjectID,
+			FEnvID:     f.EnvID,
+			FStatus:    f.Status,
+			FFromUnix:  f.FromUnix,
+			FToUnix:    f.ToUnix,
+		},
+	)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	if r.Header.Get("HX-Request") == "true" {
-		if err := pages.DeploymentsList(items).
+		view := pages.DeploymentsView{
+			Items:         items,
+			Total:         total,
+			Limit:         f.Limit,
+			Offset:        f.Offset,
+			FilterProject: f.ProjectID,
+			FilterEnv:     f.EnvID,
+			FilterStatus:  f.Status,
+			FilterFrom:    f.FromUnix,
+			FilterTo:      f.ToUnix,
+		}
+		if err := pages.DeploymentsList(view, true).
 			Render(r.Context(), w); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
-	} else {
-		if err := pages.DeploymentsListPage(items, r.URL.Path).
-			Render(r.Context(), w); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	projects, err := h.repo.Queries.ListProjects(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	envs, err := h.repo.Queries.ListEnvironments(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	view := pages.DeploymentsView{
+		Items:         items,
+		Total:         total,
+		Limit:         f.Limit,
+		Offset:        f.Offset,
+		FilterProject: f.ProjectID,
+		FilterEnv:     f.EnvID,
+		FilterStatus:  f.Status,
+		FilterFrom:    f.FromUnix,
+		FilterTo:      f.ToUnix,
+		Projects:      projects,
+		Envs:          envs,
+	}
+	if err := pages.DeploymentsListPage(view, r.URL.Path).
+		Render(r.Context(), w); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+// ponytail: matches the StatusBadge switch; adding a new status here means
+// adding it to the switch in views/pages/deployments.templ too.
+var allowedStatuses = map[string]struct{}{
+	"pending":          {},
+	"running":          {},
+	"succeeded":        {},
+	"failed":           {},
+	"cancelled":        {},
+	"pending_approval": {},
+}
+
+const (
+	deploymentsDefaultLimit = 10
+	deploymentsMaxLimit     = 100
+)
+
+type deploymentsFilter struct {
+	ProjectID sql.NullInt64
+	EnvID     sql.NullInt64
+	Status    sql.NullString
+	FromUnix  sql.NullInt64
+	ToUnix    sql.NullInt64
+	Limit     int64
+	Offset    int64
+}
+
+func parseDeploymentsFilter(r *http.Request) deploymentsFilter {
+	q := r.URL.Query()
+	f := deploymentsFilter{Limit: deploymentsDefaultLimit, Offset: 0}
+
+	if s := strings.TrimSpace(q.Get("project_id")); s != "" {
+		if v, err := strconv.ParseInt(s, 10, 64); err == nil && v > 0 {
+			f.ProjectID = sql.NullInt64{Int64: v, Valid: true}
 		}
 	}
+	if s := strings.TrimSpace(q.Get("env_id")); s != "" {
+		if v, err := strconv.ParseInt(s, 10, 64); err == nil && v > 0 {
+			f.EnvID = sql.NullInt64{Int64: v, Valid: true}
+		}
+	}
+	if s := strings.TrimSpace(q.Get("status")); s != "" {
+		if _, ok := allowedStatuses[s]; ok {
+			f.Status = sql.NullString{String: s, Valid: true}
+		}
+	}
+	if s := strings.TrimSpace(q.Get("from")); s != "" {
+		if t, ok := parseDateStart(s); ok {
+			f.FromUnix = sql.NullInt64{Int64: t, Valid: true}
+		}
+	}
+	if s := strings.TrimSpace(q.Get("to")); s != "" {
+		if t, ok := parseDateEnd(s); ok {
+			f.ToUnix = sql.NullInt64{Int64: t, Valid: true}
+		}
+	}
+	if s := strings.TrimSpace(q.Get("limit")); s != "" {
+		if v, err := strconv.ParseInt(s, 10, 64); err == nil && v > 0 {
+			if v > deploymentsMaxLimit {
+				v = deploymentsMaxLimit
+			}
+			f.Limit = v
+		}
+	}
+	if s := strings.TrimSpace(q.Get("offset")); s != "" {
+		if v, err := strconv.ParseInt(s, 10, 64); err == nil && v >= 0 {
+			f.Offset = v
+		}
+	}
+	return f
+}
+
+func parseDateStart(s string) (int64, bool) {
+	t, err := time.Parse("2006-01-02", s)
+	if err != nil {
+		return 0, false
+	}
+	return t.UTC().Unix(), true
+}
+
+func parseDateEnd(s string) (int64, bool) {
+	t, err := time.Parse("2006-01-02", s)
+	if err != nil {
+		return 0, false
+	}
+	return t.UTC().Add(24*time.Hour - time.Second).Unix(), true
 }

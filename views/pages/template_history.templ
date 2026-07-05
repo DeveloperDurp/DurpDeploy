@@ -1,0 +1,94 @@
+package pages
+
+import (
+	"time"
+
+	"durpdeploy/internal/db"
+	"durpdeploy/views/components"
+	"durpdeploy/views/layouts"
+	"strconv"
+)
+
+templ TemplateHistoryPage(
+	template db.StepTemplate,
+	versions []db.StepTemplateVersion,
+	currentPath string,
+) {
+	@layouts.Base("Template History: "+template.Name, currentPath) {
+		@components.Breadcrumbs([]components.Crumb{
+			{Label: "Home", Href: "/"},
+			{Label: "Templates", Href: "/templates"},
+			{Label: "History: " + template.Name},
+		})
+		@TemplateHistoryContent(template, versions)
+	}
+}
+
+templ TemplateHistoryContent(
+	template db.StepTemplate,
+	versions []db.StepTemplateVersion,
+) {
+	<div class="space-y-4">
+		<div class="flex justify-between items-center">
+			<h1 class="text-3xl font-bold">{ template.Name }</h1>
+			<a href="/templates" class="btn btn-ghost btn-sm">Back to templates</a>
+		</div>
+		@TemplateHistoryFragment(template, versions)
+	</div>
+}
+
+templ TemplateHistoryFragment(
+	template db.StepTemplate,
+	versions []db.StepTemplateVersion,
+) {
+	<div id="template-history">
+		if len(versions) == 0 {
+			<p class="italic text-gray-500">No history yet.</p>
+		} else {
+			<table class="table table-zebra table-fixed w-full">
+				<thead>
+					<tr>
+						<th class="w-20">Version</th>
+						<th class="w-1/4">Name</th>
+						<th>Script</th>
+						<th class="w-1/4">Date</th>
+						<th class="w-24">Actions</th>
+					</tr>
+				</thead>
+				<tbody>
+					for i, v := range versions {
+						@TemplateHistoryRow(template, v, i == 0)
+					}
+				</tbody>
+			</table>
+		}
+	</div>
+}
+
+templ TemplateHistoryRow(
+	template db.StepTemplate,
+	v db.StepTemplateVersion,
+	isCurrent bool,
+) {
+	<tr>
+		<td class="whitespace-nowrap">v{ strconv.FormatInt(v.VersionNumber, 10) }</td>
+		<td class="truncate">{ v.Name }</td>
+		<td>
+			<code class="text-sm bg-base-200 px-2 py-1 rounded">
+				if len(v.ScriptBody) > 60 {
+					{ v.ScriptBody[:60] + "..." }
+				} else {
+					{ v.ScriptBody }
+				}
+			</code>
+		</td>
+		<td class="whitespace-nowrap">
+			{ time.Unix(v.CreatedAt, 0).UTC().Format("2006-01-02 15:04") }
+		</td>
+		<td class="whitespace-nowrap">
+			if isCurrent {
+				<span class="badge badge-primary">current</span>
+			}
+		</td>
+	</tr>
+}

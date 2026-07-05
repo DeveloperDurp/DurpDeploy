@@ -5,9 +5,17 @@ import (
 	"strconv"
 )
 
-templ IndexPage(currentPath string, projectCount int, envCount int, deploymentCount int, recentDeployments []DeploymentListItem) {
+templ IndexPage(
+	currentPath string,
+	projectCount int,
+	envCount int,
+	deploymentsToday int64,
+	recentDeployments []DeploymentListItem,
+	runningDeployments []DeploymentListItem,
+	latestPerReleaseEnv []DeploymentListItem,
+) {
 	@layouts.Base("DurpDeploy", currentPath) {
-		if projectCount == 0 && envCount == 0 && deploymentCount == 0 {
+		if projectCount == 0 && envCount == 0 && len(recentDeployments) == 0 && len(runningDeployments) == 0 {
 			<div class="hero min-h-[50vh]">
 				<div class="hero-content text-center">
 					<div class="max-w-md">
@@ -38,7 +46,17 @@ templ IndexPage(currentPath string, projectCount int, envCount int, deploymentCo
 					</div>
 					<div class="stat">
 						<div class="stat-title">Deployments</div>
-						<div class="stat-value">{ strconv.Itoa(deploymentCount) }</div>
+						<div class="stat-value">{ strconv.FormatInt(deploymentsToday, 10) }</div>
+					</div>
+				</div>
+				<div class="stats stats-vertical lg:stats-horizontal shadow">
+					<div class="stat">
+						<div class="stat-title">Deployments today</div>
+						<div class="stat-value">{ strconv.FormatInt(deploymentsToday, 10) }</div>
+					</div>
+					<div class="stat">
+						<div class="stat-title">Currently running</div>
+						<div class="stat-value">{ strconv.Itoa(len(runningDeployments)) }</div>
 					</div>
 				</div>
 				<div class="flex gap-4">
@@ -46,31 +64,97 @@ templ IndexPage(currentPath string, projectCount int, envCount int, deploymentCo
 					<a href="/environments/new" class="btn btn-secondary">Create Environment</a>
 				</div>
 				<div>
-					<h2 class="text-xl font-bold mb-4">Recent Deployments</h2>
-					if len(recentDeployments) == 0 {
-						<p class="text-gray-500 italic">No deployments yet.</p>
+					<h2 class="text-xl font-bold mb-4">Currently running</h2>
+					if len(runningDeployments) == 0 {
+						<p class="text-gray-500 italic">No deployments in progress.</p>
 					} else {
- 					<div class="overflow-x-auto">
- 						<table class="table table-zebra table-fixed w-full">
-							<thead>
-								<tr>
-									<th class="w-1/5">Project</th>
-									<th class="w-1/5">Version</th>
-									<th class="w-1/5">Environment</th>
-									<th class="w-1/5">Status</th>
-									<th class="w-1/5">Date</th>
-								</tr>
-							</thead>
+						<div class="overflow-x-auto">
+							<table class="table table-zebra table-fixed w-full">
+								<thead>
+									<tr>
+										<th class="w-1/5">Project</th>
+										<th class="w-1/5">Version</th>
+										<th class="w-1/5">Environment</th>
+										<th class="w-1/5">Status</th>
+										<th class="w-1/5">Date</th>
+									</tr>
+								</thead>
 								<tbody>
-									for _, item := range recentDeployments {
+									for _, item := range runningDeployments {
 										<tr>
-											<td>{ item.ProjectName }</td>
-											<td>{ item.ReleaseVersion }</td>
-											<td>{ item.EnvironmentName }</td>
+											<td class="truncate">{ item.ProjectName }</td>
+											<td class="truncate">{ item.ReleaseVersion }</td>
+											<td class="truncate">{ item.EnvironmentName }</td>
 											<td>
 												@StatusBadge(item.Deployment)
 											</td>
-											<td>{ formatUnixTime(item.Deployment.CreatedAt) }</td>
+											<td class="whitespace-nowrap">{ formatUnixTime(item.Deployment.CreatedAt) }</td>
+										</tr>
+									}
+								</tbody>
+							</table>
+						</div>
+					}
+				</div>
+				<div>
+					<h2 class="text-xl font-bold mb-4">Latest per release / environment</h2>
+					if len(latestPerReleaseEnv) == 0 {
+						<p class="text-gray-500 italic">No deployments yet.</p>
+					} else {
+						<div class="overflow-x-auto">
+							<table class="table table-zebra table-fixed w-full">
+								<thead>
+									<tr>
+										<th class="w-1/5">Project</th>
+										<th class="w-1/5">Version</th>
+										<th class="w-1/5">Environment</th>
+										<th class="w-1/5">Status</th>
+										<th class="w-1/5">Date</th>
+									</tr>
+								</thead>
+								<tbody>
+									for _, item := range latestPerReleaseEnv {
+										<tr>
+											<td class="truncate">{ item.ProjectName }</td>
+											<td class="truncate">{ item.ReleaseVersion }</td>
+											<td class="truncate">{ item.EnvironmentName }</td>
+											<td>
+												@StatusBadge(item.Deployment)
+											</td>
+											<td class="whitespace-nowrap">{ formatUnixTime(item.Deployment.CreatedAt) }</td>
+										</tr>
+									}
+								</tbody>
+							</table>
+						</div>
+					}
+				</div>
+				<div>
+					<h2 class="text-xl font-bold mb-4">Recent deployments</h2>
+					if len(recentDeployments) == 0 {
+						<p class="text-gray-500 italic">No deployments yet.</p>
+					} else {
+						<div class="overflow-x-auto">
+							<table class="table table-zebra table-fixed w-full">
+								<thead>
+									<tr>
+										<th class="w-1/5">Project</th>
+										<th class="w-1/5">Version</th>
+										<th class="w-1/5">Environment</th>
+										<th class="w-1/5">Status</th>
+										<th class="w-1/5">Date</th>
+									</tr>
+								</thead>
+								<tbody>
+									for _, item := range recentDeployments {
+										<tr>
+											<td class="truncate">{ item.ProjectName }</td>
+											<td class="truncate">{ item.ReleaseVersion }</td>
+											<td class="truncate">{ item.EnvironmentName }</td>
+											<td>
+												@StatusBadge(item.Deployment)
+											</td>
+											<td class="whitespace-nowrap">{ formatUnixTime(item.Deployment.CreatedAt) }</td>
 										</tr>
 									}
 								</tbody>
