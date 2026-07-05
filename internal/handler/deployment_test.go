@@ -1179,3 +1179,155 @@ func (h *projectHarness) waitForDeploymentToSucceed(
 		time.Sleep(50 * time.Millisecond)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// /deployments filter + pagination tests
+// ---------------------------------------------------------------------------
+
+// rowCount counts the deployment data rows in a page response. Each data
+// row renders exactly one "View" button; the thead has no such button,
+// the Export link uses a different label, and the OOB region (in HX
+// responses) uses hx-get, not an anchor.
+func rowCount(body string) int {
+	return strings.Count(body, ">View</a>")
+}
+
+func TestListDeployments_FilterAndPaginate(t *testing.T) {
+	h := newProjectHarness(t)
+	ctx := context.Background()
+
+	proj := h.makeProject("filter-proj")
+	dev := h.makeEnv("FP-Dev")
+	prod := h.makeEnv("FP-Prod")
+	makeStepGlobal(t, h, proj.ID, "s", "exit 0")
+	rel := h.makeRelease(proj.ID, "1.0.0", "exit 0")
+
+	// 5 deployments with mixed statuses (3 succeeded, 1 failed, 1 cancelled).
+	statuses := []string{
+		"succeeded", "succeeded", "succeeded", "failed", "cancelled",
+	}
+	for i, s := range statuses {
+		_, err := h.repo.Queries.CreateDeployment(
+			ctx,
+			db.CreateDeploymentParams{
+				ReleaseID:     rel.ID,
+				EnvironmentID: dev.ID,
+				Status:        s,
+				StartedAt:     sql.NullInt64{},
+				FinishedAt:    sql.NullInt64{},
+			},
+		)
+		if err != nil {
+			t.Fatalf("create deployment #%d: %v", i, err)
+		}
+	}
+	_ = prod
+
+	// First page: status=succeeded, limit=2 -> 2 rows, Load more visible.
+	resp1, err := http.Get(
+		fmt.Sprintf("%s/deployments?status=succeeded&limit=2", h.server.URL),
+	)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp1.Body.Close()
+	if resp1.StatusCode != 200 {
+		t.Fatalf("status: got %d, want 200", resp1.StatusCode)
+	}
+	buf := new(bytes.Buffer)
+	buf.ReadFrom(resp1.Body)
+	page1 := buf.String()
+
+	if !strings.Contains(page1, "filter-proj") {
+		t.Errorf("first page missing project name")
+	}
+	if !strings.Contains(page1, `value="succeeded" selected`) {
+		t.Errorf("first page filter bar should show status=succeeded selected")
+	}
+	if got := rowCount(page1); got != 2 {
+		t.Errorf("first page row count: got %d, want 2", got)
+	}
+	if !strings.Contains(page1, "Load more") {
+		t.Errorf("first page should show Load more button (3 succeeded > 2 limit)")
+	}
+
+	// Second page: status=succeeded, limit=2, offset=2 -> 1 row, no Load more.
+	resp2, err := http.Get(
+		fmt.Sprintf(
+			"%s/deployments?status=succeeded&limit=2&offset=2",
+			h.server.URL,
+		),
+	)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp2.Body.Close()
+	if resp2.StatusCode != 200 {
+		t.Fatalf("status: got %d, want 200", resp2.StatusCode)
+	}
+	buf.Reset()
+	buf.ReadFrom(resp2.Body)
+	page2 := buf.String()
+
+	if got := rowCount(page2); got != 1 {
+		t.Errorf("second page row count: got %d, want 1", got)
+	}
+	if strings.Contains(page2, "Load more") {
+		t.Errorf("second page should NOT show Load more (only 1 left, fits in page)")
+	}
+}
+
+func TestListDeployments_HTMXPartialReturnsRowsAndOOBButton(t *testing.T) {
+	h := newProjectHarness(t)
+	ctx := context.Background()
+
+	proj := h.makeProject("htmx-proj")
+	env := h.makeEnv("HX-Env")
+	makeStepGlobal(t, h, proj.ID, "s", "exit 0")
+	rel := h.makeRelease(proj.ID, "1.0.0", "exit 0")
+
+	for i := 0; i < 3; i++ {
+		_, err := h.repo.Queries.CreateDeployment(
+			ctx,
+			db.CreateDeploymentParams{
+				ReleaseID:     rel.ID,
+				EnvironmentID: env.ID,
+				Status:        "succeeded",
+				StartedAt:     sql.NullInt64{},
+				FinishedAt:    sql.NullInt64{},
+			},
+		)
+		if err != nil {
+			t.Fatalf("create deployment #%d: %v", i, err)
+		}
+	}
+
+	// HX request with limit=2, offset=0 -> 2 <tr> rows + OOB region.
+	req, _ := http.NewRequest(
+		"GET",
+		fmt.Sprintf("%s/deployments?limit=2", h.server.URL),
+		nil,
+	)
+	req.Header.Set("HX-Request", "true")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("status: got %d, want 200", resp.StatusCode)
+	}
+	buf := new(bytes.Buffer)
+	buf.ReadFrom(resp.Body)
+	body := buf.String()
+
+	if got := rowCount(body); got != 2 {
+		t.Errorf("HX partial row count: got %d, want 2", got)
+	}
+	if !strings.Contains(body, `id="load-more-region"`) {
+		t.Errorf("HX partial should include OOB load-more-region")
+	}
+	if !strings.Contains(body, "Load more") {
+		t.Errorf("HX partial OOB should include Load more button (3 > 2)")
+	}
+}

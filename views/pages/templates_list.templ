@@ -67,6 +67,7 @@ templ TemplateRow(tpl db.StepTemplate) {
 		</td>
 		<td class="flex gap-2">
 			<a href={ templ.SafeURL("/templates/" + strconv.FormatInt(tpl.ID, 10) + "/edit") } class="btn btn-sm btn-ghost">Edit</a>
+			<a href={ templ.SafeURL("/templates/" + strconv.FormatInt(tpl.ID, 10) + "/history") } class="btn btn-xs">History</a>
 			<button
 				hx-delete={ "/templates/" + strconv.FormatInt(tpl.ID, 10) }
 				hx-target="#form-container"

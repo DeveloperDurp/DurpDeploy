@@ -10,6 +10,51 @@ import (
 	"database/sql"
 )
 
+const countDeploymentsToday = `-- name: CountDeploymentsToday :one
+SELECT COUNT(*) FROM deployments WHERE created_at >= strftime('%s','now','start of day')
+`
+
+func (q *Queries) CountDeploymentsToday(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countDeploymentsToday)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countDeploymentsWithRefsFiltered = `-- name: CountDeploymentsWithRefsFiltered :one
+SELECT COUNT(*)
+FROM deployments d
+JOIN releases r ON d.release_id = r.id
+JOIN projects p ON r.project_id = p.id
+JOIN environments e ON d.environment_id = e.id
+WHERE (CAST(?1 AS INTEGER) IS NULL OR d.release_id IN (SELECT id FROM releases WHERE project_id = CAST(?1 AS INTEGER)))
+  AND (CAST(?2     AS INTEGER) IS NULL OR d.environment_id = CAST(?2 AS INTEGER))
+  AND (CAST(?3     AS TEXT)    IS NULL OR d.status = CAST(?3 AS TEXT))
+  AND (CAST(?4  AS INTEGER) IS NULL OR d.created_at >= CAST(?4 AS INTEGER))
+  AND (CAST(?5    AS INTEGER) IS NULL OR d.created_at <= CAST(?5 AS INTEGER))
+`
+
+type CountDeploymentsWithRefsFilteredParams struct {
+	FProjectID sql.NullInt64  `json:"f_project_id"`
+	FEnvID     sql.NullInt64  `json:"f_env_id"`
+	FStatus    sql.NullString `json:"f_status"`
+	FFromUnix  sql.NullInt64  `json:"f_from_unix"`
+	FToUnix    sql.NullInt64  `json:"f_to_unix"`
+}
+
+func (q *Queries) CountDeploymentsWithRefsFiltered(ctx context.Context, arg CountDeploymentsWithRefsFilteredParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countDeploymentsWithRefsFiltered,
+		arg.FProjectID,
+		arg.FEnvID,
+		arg.FStatus,
+		arg.FFromUnix,
+		arg.FToUnix,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createDeployment = `-- name: CreateDeployment :one
 INSERT INTO deployments (release_id, environment_id, status, started_at, finished_at, forced, note) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id, release_id, environment_id, status, started_at, finished_at, created_at, forced, note
 `
@@ -291,6 +336,159 @@ func (q *Queries) ListDeploymentsWithRefs(ctx context.Context) ([]ListDeployment
 	return items, nil
 }
 
+const listDeploymentsWithRefsFiltered = `-- name: ListDeploymentsWithRefsFiltered :many
+SELECT
+    d.id, d.release_id, d.environment_id, d.status,
+    d.started_at, d.finished_at, d.created_at, d.forced, d.note,
+    p.name AS project_name,
+    r.version AS release_version,
+    e.name AS environment_name
+FROM deployments d
+JOIN releases r ON d.release_id = r.id
+JOIN projects p ON r.project_id = p.id
+JOIN environments e ON d.environment_id = e.id
+WHERE (CAST(?1 AS INTEGER) IS NULL OR d.release_id IN (SELECT id FROM releases WHERE project_id = CAST(?1 AS INTEGER)))
+  AND (CAST(?2     AS INTEGER) IS NULL OR d.environment_id = CAST(?2 AS INTEGER))
+  AND (CAST(?3     AS TEXT)    IS NULL OR d.status = CAST(?3 AS TEXT))
+  AND (CAST(?4  AS INTEGER) IS NULL OR d.created_at >= CAST(?4 AS INTEGER))
+  AND (CAST(?5    AS INTEGER) IS NULL OR d.created_at <= CAST(?5 AS INTEGER))
+ORDER BY d.created_at DESC
+LIMIT ?7 OFFSET ?6
+`
+
+type ListDeploymentsWithRefsFilteredParams struct {
+	FProjectID sql.NullInt64  `json:"f_project_id"`
+	FEnvID     sql.NullInt64  `json:"f_env_id"`
+	FStatus    sql.NullString `json:"f_status"`
+	FFromUnix  sql.NullInt64  `json:"f_from_unix"`
+	FToUnix    sql.NullInt64  `json:"f_to_unix"`
+	PageOffset int64          `json:"page_offset"`
+	PageLimit  int64          `json:"page_limit"`
+}
+
+type ListDeploymentsWithRefsFilteredRow struct {
+	ID              int64          `json:"id"`
+	ReleaseID       int64          `json:"release_id"`
+	EnvironmentID   int64          `json:"environment_id"`
+	Status          string         `json:"status"`
+	StartedAt       sql.NullInt64  `json:"started_at"`
+	FinishedAt      sql.NullInt64  `json:"finished_at"`
+	CreatedAt       int64          `json:"created_at"`
+	Forced          int64          `json:"forced"`
+	Note            sql.NullString `json:"note"`
+	ProjectName     string         `json:"project_name"`
+	ReleaseVersion  string         `json:"release_version"`
+	EnvironmentName string         `json:"environment_name"`
+}
+
+func (q *Queries) ListDeploymentsWithRefsFiltered(ctx context.Context, arg ListDeploymentsWithRefsFilteredParams) ([]ListDeploymentsWithRefsFilteredRow, error) {
+	rows, err := q.db.QueryContext(ctx, listDeploymentsWithRefsFiltered,
+		arg.FProjectID,
+		arg.FEnvID,
+		arg.FStatus,
+		arg.FFromUnix,
+		arg.FToUnix,
+		arg.PageOffset,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDeploymentsWithRefsFilteredRow
+	for rows.Next() {
+		var i ListDeploymentsWithRefsFilteredRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ReleaseID,
+			&i.EnvironmentID,
+			&i.Status,
+			&i.StartedAt,
+			&i.FinishedAt,
+			&i.CreatedAt,
+			&i.Forced,
+			&i.Note,
+			&i.ProjectName,
+			&i.ReleaseVersion,
+			&i.EnvironmentName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLatestDeploymentPerReleaseEnv = `-- name: ListLatestDeploymentPerReleaseEnv :many
+SELECT id, release_id, environment_id, status, started_at, finished_at, created_at, forced, note, project_name, release_version, environment_name
+FROM (
+    SELECT d.id, d.release_id, d.environment_id, d.status, d.started_at, d.finished_at, d.created_at, d.forced, d.note,
+           p.name AS project_name, r.version AS release_version, e.name AS environment_name,
+           ROW_NUMBER() OVER (PARTITION BY d.release_id, d.environment_id ORDER BY d.created_at DESC) AS rn
+    FROM deployments d
+    JOIN releases r ON d.release_id = r.id
+    JOIN projects p ON r.project_id = p.id
+    JOIN environments e ON d.environment_id = e.id
+) WHERE rn = 1 ORDER BY created_at DESC
+`
+
+type ListLatestDeploymentPerReleaseEnvRow struct {
+	ID              int64          `json:"id"`
+	ReleaseID       int64          `json:"release_id"`
+	EnvironmentID   int64          `json:"environment_id"`
+	Status          string         `json:"status"`
+	StartedAt       sql.NullInt64  `json:"started_at"`
+	FinishedAt      sql.NullInt64  `json:"finished_at"`
+	CreatedAt       int64          `json:"created_at"`
+	Forced          int64          `json:"forced"`
+	Note            sql.NullString `json:"note"`
+	ProjectName     string         `json:"project_name"`
+	ReleaseVersion  string         `json:"release_version"`
+	EnvironmentName string         `json:"environment_name"`
+}
+
+func (q *Queries) ListLatestDeploymentPerReleaseEnv(ctx context.Context) ([]ListLatestDeploymentPerReleaseEnvRow, error) {
+	rows, err := q.db.QueryContext(ctx, listLatestDeploymentPerReleaseEnv)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListLatestDeploymentPerReleaseEnvRow
+	for rows.Next() {
+		var i ListLatestDeploymentPerReleaseEnvRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ReleaseID,
+			&i.EnvironmentID,
+			&i.Status,
+			&i.StartedAt,
+			&i.FinishedAt,
+			&i.CreatedAt,
+			&i.Forced,
+			&i.Note,
+			&i.ProjectName,
+			&i.ReleaseVersion,
+			&i.EnvironmentName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRecentDeployments = `-- name: ListRecentDeployments :many
 SELECT id, release_id, environment_id, status, started_at, finished_at, created_at, forced, note FROM deployments ORDER BY created_at DESC LIMIT ?
 `
@@ -356,6 +554,72 @@ func (q *Queries) ListRecentDeploymentsForEnv(ctx context.Context, arg ListRecen
 			&i.CreatedAt,
 			&i.Forced,
 			&i.Note,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRunningDeploymentsWithRefs = `-- name: ListRunningDeploymentsWithRefs :many
+SELECT
+    d.id, d.release_id, d.environment_id, d.status,
+    d.started_at, d.finished_at, d.created_at, d.forced, d.note,
+    p.name AS project_name,
+    r.version AS release_version,
+    e.name AS environment_name
+FROM deployments d
+JOIN releases r ON d.release_id = r.id
+JOIN projects p ON r.project_id = p.id
+JOIN environments e ON d.environment_id = e.id
+WHERE d.status IN ('pending','running')
+ORDER BY d.created_at DESC
+`
+
+type ListRunningDeploymentsWithRefsRow struct {
+	ID              int64          `json:"id"`
+	ReleaseID       int64          `json:"release_id"`
+	EnvironmentID   int64          `json:"environment_id"`
+	Status          string         `json:"status"`
+	StartedAt       sql.NullInt64  `json:"started_at"`
+	FinishedAt      sql.NullInt64  `json:"finished_at"`
+	CreatedAt       int64          `json:"created_at"`
+	Forced          int64          `json:"forced"`
+	Note            sql.NullString `json:"note"`
+	ProjectName     string         `json:"project_name"`
+	ReleaseVersion  string         `json:"release_version"`
+	EnvironmentName string         `json:"environment_name"`
+}
+
+func (q *Queries) ListRunningDeploymentsWithRefs(ctx context.Context) ([]ListRunningDeploymentsWithRefsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listRunningDeploymentsWithRefs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRunningDeploymentsWithRefsRow
+	for rows.Next() {
+		var i ListRunningDeploymentsWithRefsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ReleaseID,
+			&i.EnvironmentID,
+			&i.Status,
+			&i.StartedAt,
+			&i.FinishedAt,
+			&i.CreatedAt,
+			&i.Forced,
+			&i.Note,
+			&i.ProjectName,
+			&i.ReleaseVersion,
+			&i.EnvironmentName,
 		); err != nil {
 			return nil, err
 		}

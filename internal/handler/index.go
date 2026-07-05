@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 
+	"durpdeploy/internal/db"
 	"durpdeploy/internal/repository"
 	"durpdeploy/views/pages"
 )
@@ -62,8 +63,71 @@ func (h *IndexHandler) Index(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if err := pages.IndexPage(r.URL.Path, len(projects), len(envs), len(items), items).
-		Render(r.Context(), w); err != nil {
+	deploymentsToday, err := h.repo.Queries.CountDeploymentsToday(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	runningRows, err := h.repo.Queries.ListRunningDeploymentsWithRefs(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	runningDeployments := make([]pages.DeploymentListItem, len(runningRows))
+	for i, row := range runningRows {
+		runningDeployments[i] = pages.DeploymentListItem{
+			Deployment: db.Deployment{
+				ID:            row.ID,
+				ReleaseID:     row.ReleaseID,
+				EnvironmentID: row.EnvironmentID,
+				Status:        row.Status,
+				StartedAt:     row.StartedAt,
+				FinishedAt:    row.FinishedAt,
+				CreatedAt:     row.CreatedAt,
+				Forced:        row.Forced,
+				Note:          row.Note,
+			},
+			ProjectName:     row.ProjectName,
+			ReleaseVersion:  row.ReleaseVersion,
+			EnvironmentName: row.EnvironmentName,
+		}
+	}
+
+	latestRows, err := h.repo.Queries.ListLatestDeploymentPerReleaseEnv(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	latestPerReleaseEnv := make([]pages.DeploymentListItem, len(latestRows))
+	for i, row := range latestRows {
+		latestPerReleaseEnv[i] = pages.DeploymentListItem{
+			Deployment: db.Deployment{
+				ID:            row.ID,
+				ReleaseID:     row.ReleaseID,
+				EnvironmentID: row.EnvironmentID,
+				Status:        row.Status,
+				StartedAt:     row.StartedAt,
+				FinishedAt:    row.FinishedAt,
+				CreatedAt:     row.CreatedAt,
+				Forced:        row.Forced,
+				Note:          row.Note,
+			},
+			ProjectName:     row.ProjectName,
+			ReleaseVersion:  row.ReleaseVersion,
+			EnvironmentName: row.EnvironmentName,
+		}
+	}
+
+	if err := pages.IndexPage(
+		r.URL.Path,
+		len(projects),
+		len(envs),
+		deploymentsToday,
+		items,
+		runningDeployments,
+		latestPerReleaseEnv,
+	).Render(r.Context(), w); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }

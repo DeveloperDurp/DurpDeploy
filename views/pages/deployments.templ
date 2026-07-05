@@ -1,11 +1,14 @@
 package pages
 
 import (
+	"database/sql"
 	"durpdeploy/internal/db"
 	"durpdeploy/views/components"
 	"durpdeploy/views/layouts"
 	"fmt"
+	"net/url"
 	"strconv"
+	"time"
 )
 
 type DeploymentListItem struct {
@@ -15,62 +18,211 @@ type DeploymentListItem struct {
 	EnvironmentName string
 }
 
-templ DeploymentsListPage(items []DeploymentListItem, currentPath string) {
+// DeploymentsView is the full state the deployments page needs to render the
+// filter bar, table, and "Load more" affordance. Handler builds this once.
+type DeploymentsView struct {
+	Items         []DeploymentListItem
+	Total         int64
+	Limit         int64
+	Offset        int64
+	FilterProject sql.NullInt64
+	FilterEnv     sql.NullInt64
+	FilterStatus  sql.NullString
+	FilterFrom    sql.NullInt64
+	FilterTo      sql.NullInt64
+	Projects      []db.Project
+	Envs          []db.Environment
+}
+
+templ DeploymentsListPage(view DeploymentsView, currentPath string) {
 	@layouts.Base("Deployments", currentPath) {
 		@components.Breadcrumbs([]components.Crumb{
 			{Label: "Home", Href: "/"},
 			{Label: "Deployments"},
 		})
-		@DeploymentsContent(items)
+		@DeploymentsContent(view)
 	}
 }
 
-templ DeploymentsContent(items []DeploymentListItem) {
+templ DeploymentsContent(view DeploymentsView) {
 	<div class="space-y-6">
 		<div class="flex justify-between items-center">
 			<h1 class="text-3xl font-bold">Deployments</h1>
 		</div>
-		@DeploymentsList(items)
+		@DeploymentsFilterBar(view)
+		@DeploymentsList(view, false)
 	</div>
 }
 
-templ DeploymentsList(items []DeploymentListItem) {
-	<div id="deployments-content">
-		if len(items) == 0 {
-			<div class="card bg-base-200 p-8 text-center">
-				<p class="text-gray-400">No deployments yet. Deploy a release to see results here.</p>
-			</div>
-		} else {
-			<table class="table table-zebra table-fixed w-full">
-				<thead>
-					<tr>
-						<th class="w-1/6">Project</th>
-						<th class="w-1/6">Version</th>
-						<th class="w-1/6">Environment</th>
-						<th class="w-1/6">Status</th>
-						<th class="w-1/6">Date</th>
-						<th class="w-1/6">Actions</th>
-					</tr>
-				</thead>
-				<tbody>
-					for _, item := range items {
-						<tr>
-							<td class="truncate">{ item.ProjectName }</td>
-							<td class="truncate">{ item.ReleaseVersion }</td>
-							<td class="truncate">{ item.EnvironmentName }</td>
-							<td>
-								@StatusBadge(item.Deployment)
-							</td>
-							<td class="whitespace-nowrap">{ formatUnixTime(item.Deployment.CreatedAt) }</td>
-							<td>
-								<a href={ fmt.Sprintf("/deployments/%d", item.Deployment.ID) } class="btn btn-sm btn-secondary">View</a>
-							</td>
-						</tr>
-					}
-				</tbody>
-			</table>
+templ DeploymentsFilterBar(view DeploymentsView) {
+	<form method="get" action="/deployments" class="flex flex-wrap gap-2 items-end">
+		<label class="form-control">
+			<span class="label-text">Project</span>
+			<select name="project_id" class="select select-bordered select-sm">
+				<option value="">All</option>
+				for _, p := range view.Projects {
+					<option value={ strconv.FormatInt(p.ID, 10) } if view.FilterProject.Valid && view.FilterProject.Int64 == p.ID { selected }>{ p.Name }</option>
+				}
+			</select>
+		</label>
+		<label class="form-control">
+			<span class="label-text">Environment</span>
+			<select name="env_id" class="select select-bordered select-sm">
+				<option value="">All</option>
+				for _, e := range view.Envs {
+					<option value={ strconv.FormatInt(e.ID, 10) } if view.FilterEnv.Valid && view.FilterEnv.Int64 == e.ID { selected }>{ e.Name }</option>
+				}
+			</select>
+		</label>
+		<label class="form-control">
+			<span class="label-text">Status</span>
+			<select name="status" class="select select-bordered select-sm">
+				<option value="">All</option>
+				<option value="pending" if view.FilterStatus.String == "pending" { selected }>pending</option>
+				<option value="running" if view.FilterStatus.String == "running" { selected }>running</option>
+				<option value="succeeded" if view.FilterStatus.String == "succeeded" { selected }>succeeded</option>
+				<option value="failed" if view.FilterStatus.String == "failed" { selected }>failed</option>
+				<option value="cancelled" if view.FilterStatus.String == "cancelled" { selected }>cancelled</option>
+			</select>
+		</label>
+		<label class="form-control">
+			<span class="label-text">From</span>
+			<input type="date" name="from" value={ filterFromDate(view.FilterFrom) } class="input input-bordered input-sm"/>
+		</label>
+		<label class="form-control">
+			<span class="label-text">To</span>
+			<input type="date" name="to" value={ filterToDate(view.FilterTo) } class="input input-bordered input-sm"/>
+		</label>
+		<button type="submit" class="btn btn-sm btn-primary">Filter</button>
+		<a href="/deployments" class="btn btn-sm btn-ghost">Clear</a>
+	</form>
+}
+
+templ DeploymentsList(view DeploymentsView, appendRows bool) {
+	if appendRows {
+		for _, item := range view.Items {
+			@DeploymentListRow(item)
+		}
+		@LoadMoreRegionOOB(view)
+	} else {
+		<div id="deployments-content">
+			if len(view.Items) == 0 {
+				<div class="card bg-base-200 p-8 text-center">
+					<p class="text-gray-400">No deployments yet. Deploy a release to see results here.</p>
+				</div>
+			} else {
+				@DeploymentListTable(view)
+			}
+		</div>
+	}
+}
+
+templ DeploymentListTable(view DeploymentsView) {
+	<table class="table table-zebra table-fixed w-full">
+		<thead>
+			<tr>
+				<th class="w-1/6">Project</th>
+				<th class="w-1/6">Version</th>
+				<th class="w-1/6">Environment</th>
+				<th class="w-1/6">Status</th>
+				<th class="w-1/6">Date</th>
+				<th class="w-1/6">Actions</th>
+			</tr>
+		</thead>
+		<tbody id="deployments-tbody">
+			for _, item := range view.Items {
+				@DeploymentListRow(item)
+			}
+		</tbody>
+	</table>
+	<div id="load-more-region">
+		if hasMoreDeployments(view) {
+			@LoadMoreButton(loadMoreURL(view))
 		}
 	</div>
+}
+
+templ DeploymentListRow(item DeploymentListItem) {
+	<tr>
+		<td class="truncate">{ item.ProjectName }</td>
+		<td class="truncate">{ item.ReleaseVersion }</td>
+		<td class="truncate">{ item.EnvironmentName }</td>
+		<td>
+			@StatusBadge(item.Deployment)
+		</td>
+		<td class="whitespace-nowrap">{ formatUnixTime(item.Deployment.CreatedAt) }</td>
+		<td class="whitespace-nowrap">
+			<a href={ fmt.Sprintf("/deployments/%d", item.Deployment.ID) } class="btn btn-sm btn-secondary">View</a>
+			<a href={ fmt.Sprintf("/deployments/%d/logs.txt", item.Deployment.ID) } class="btn btn-sm btn-ghost">Export</a>
+		</td>
+	</tr>
+}
+
+templ LoadMoreButton(url string) {
+	<button
+		class="btn btn-sm btn-ghost mt-2"
+		hx-get={ templ.URL(url) }
+		hx-target="#deployments-tbody"
+		hx-swap="beforeend"
+		hx-trigger="click"
+		hx-indicator="#load-more-spinner"
+	>
+		Load more
+	</button>
+	<span id="load-more-spinner" class="loading loading-spinner loading-sm ml-2 htmx-indicator"></span>
+}
+
+templ LoadMoreRegionOOB(view DeploymentsView) {
+	<div id="load-more-region" hx-swap-oob="outerHTML">
+		if hasMoreDeployments(view) {
+			@LoadMoreButton(loadMoreURL(view))
+		}
+	</div>
+}
+
+func hasMoreDeployments(view DeploymentsView) bool {
+	return view.Offset+int64(len(view.Items)) < view.Total
+}
+
+func loadMoreURL(view DeploymentsView) string {
+	v := url.Values{}
+	if view.FilterProject.Valid {
+		v.Set("project_id", strconv.FormatInt(view.FilterProject.Int64, 10))
+	}
+	if view.FilterEnv.Valid {
+		v.Set("env_id", strconv.FormatInt(view.FilterEnv.Int64, 10))
+	}
+	if view.FilterStatus.Valid {
+		v.Set("status", view.FilterStatus.String)
+	}
+	if view.FilterFrom.Valid {
+		v.Set("from", unixToDate(view.FilterFrom.Int64))
+	}
+	if view.FilterTo.Valid {
+		v.Set("to", unixToDate(view.FilterTo.Int64))
+	}
+	v.Set("limit", strconv.FormatInt(view.Limit, 10))
+	v.Set("offset", strconv.FormatInt(view.Offset+view.Limit, 10))
+	return "/deployments?" + v.Encode()
+}
+
+func filterFromDate(v sql.NullInt64) string {
+	if !v.Valid {
+		return ""
+	}
+	return time.Unix(v.Int64, 0).UTC().Format("2006-01-02")
+}
+
+func filterToDate(v sql.NullInt64) string {
+	if !v.Valid {
+		return ""
+	}
+	// Stored as end-of-day; render the calendar day it covers.
+	return time.Unix(v.Int64, 0).UTC().Format("2006-01-02")
+}
+
+func unixToDate(t int64) string {
+	return time.Unix(t, 0).UTC().Format("2006-01-02")
 }
 
 func statusBadgeClass(status string) string {
@@ -149,6 +301,7 @@ templ DeploymentDetail(project db.Project, release db.Release, environment db.En
 				<a href={ fmt.Sprintf("/projects/%d/releases/%d", project.ID, release.ID) } class="btn btn-ghost btn-sm mt-2">Back to Release</a>
 			</div>
 			<div class="flex items-center gap-2">
+				<a href={ fmt.Sprintf("/deployments/%d/logs.txt", deployment.ID) } class="btn btn-sm btn-ghost">Export</a>
 				if isTerminalStatus(deployment.Status) {
 					<button
 						class="btn btn-sm btn-primary"

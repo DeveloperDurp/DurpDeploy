@@ -116,6 +116,15 @@ type StepTemplate struct {
 	CreatedAt  int64  `json:"created_at"`
 }
 
+type StepTemplateVersion struct {
+	ID            int64  `json:"id"`
+	TemplateID    int64  `json:"template_id"`
+	VersionNumber int64  `json:"version_number"`
+	Name          string `json:"name"`
+	ScriptBody    string `json:"script_body"`
+	CreatedAt     int64  `json:"created_at"`
+}
+
 type Variable struct {
 	ID            int64          `json:"id"`
 	ProjectID     int64          `json:"project_id"`

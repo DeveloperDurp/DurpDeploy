@@ -30,6 +30,36 @@ func (q *Queries) CreateStepTemplate(ctx context.Context, arg CreateStepTemplate
 	return i, err
 }
 
+const createStepTemplateVersion = `-- name: CreateStepTemplateVersion :one
+INSERT INTO step_template_versions (template_id, version_number, name, script_body) VALUES (?, ?, ?, ?) RETURNING id, template_id, version_number, name, script_body, created_at
+`
+
+type CreateStepTemplateVersionParams struct {
+	TemplateID    int64  `json:"template_id"`
+	VersionNumber int64  `json:"version_number"`
+	Name          string `json:"name"`
+	ScriptBody    string `json:"script_body"`
+}
+
+func (q *Queries) CreateStepTemplateVersion(ctx context.Context, arg CreateStepTemplateVersionParams) (StepTemplateVersion, error) {
+	row := q.db.QueryRowContext(ctx, createStepTemplateVersion,
+		arg.TemplateID,
+		arg.VersionNumber,
+		arg.Name,
+		arg.ScriptBody,
+	)
+	var i StepTemplateVersion
+	err := row.Scan(
+		&i.ID,
+		&i.TemplateID,
+		&i.VersionNumber,
+		&i.Name,
+		&i.ScriptBody,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const deleteStepTemplate = `-- name: DeleteStepTemplate :exec
 DELETE FROM step_templates WHERE id = ?
 `
@@ -37,6 +67,17 @@ DELETE FROM step_templates WHERE id = ?
 func (q *Queries) DeleteStepTemplate(ctx context.Context, id int64) error {
 	_, err := q.db.ExecContext(ctx, deleteStepTemplate, id)
 	return err
+}
+
+const getLatestStepTemplateVersionNumber = `-- name: GetLatestStepTemplateVersionNumber :one
+SELECT COALESCE(MAX(version_number), 0) FROM step_template_versions WHERE template_id = ?
+`
+
+func (q *Queries) GetLatestStepTemplateVersionNumber(ctx context.Context, templateID int64) (interface{}, error) {
+	row := q.db.QueryRowContext(ctx, getLatestStepTemplateVersionNumber, templateID)
+	var coalesce interface{}
+	err := row.Scan(&coalesce)
+	return coalesce, err
 }
 
 const getStepTemplate = `-- name: GetStepTemplate :one
@@ -53,6 +94,58 @@ func (q *Queries) GetStepTemplate(ctx context.Context, id int64) (StepTemplate, 
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const getStepTemplateVersion = `-- name: GetStepTemplateVersion :one
+SELECT id, template_id, version_number, name, script_body, created_at FROM step_template_versions WHERE id = ?
+`
+
+func (q *Queries) GetStepTemplateVersion(ctx context.Context, id int64) (StepTemplateVersion, error) {
+	row := q.db.QueryRowContext(ctx, getStepTemplateVersion, id)
+	var i StepTemplateVersion
+	err := row.Scan(
+		&i.ID,
+		&i.TemplateID,
+		&i.VersionNumber,
+		&i.Name,
+		&i.ScriptBody,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const listStepTemplateVersions = `-- name: ListStepTemplateVersions :many
+SELECT id, template_id, version_number, name, script_body, created_at FROM step_template_versions WHERE template_id = ? ORDER BY version_number DESC
+`
+
+func (q *Queries) ListStepTemplateVersions(ctx context.Context, templateID int64) ([]StepTemplateVersion, error) {
+	rows, err := q.db.QueryContext(ctx, listStepTemplateVersions, templateID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []StepTemplateVersion
+	for rows.Next() {
+		var i StepTemplateVersion
+		if err := rows.Scan(
+			&i.ID,
+			&i.TemplateID,
+			&i.VersionNumber,
+			&i.Name,
+			&i.ScriptBody,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listStepTemplates = `-- name: ListStepTemplates :many

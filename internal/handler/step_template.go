@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"database/sql"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -83,22 +85,23 @@ func (h *StepTemplateHandler) CreateTemplate(
 		ScriptBody: script,
 	}
 
-	if _, err := h.repo.Queries.CreateStepTemplate(
+	tpl, err := h.repo.Queries.CreateStepTemplate(
 		r.Context(),
 		params,
-	); err != nil {
+	)
+	if err != nil {
 		if IsUniqueViolation(err) {
-			tpl := &db.StepTemplate{Name: name, ScriptBody: script}
+			tplErr := &db.StepTemplate{Name: name, ScriptBody: script}
 			WriteFormError(
 				w,
 				r,
 				pages.TemplateFormFragment(
-					tpl,
+					tplErr,
 					true,
 					"A template with this name already exists",
 				),
 				pages.TemplateForm(
-					tpl,
+					tplErr,
 					true,
 					"A template with this name already exists",
 					r.URL.Path,
@@ -106,6 +109,22 @@ func (h *StepTemplateHandler) CreateTemplate(
 			)
 			return
 		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// ponytail: best-effort v1 snapshot. The template row already exists;
+	// a failed version insert here leaves the template history-less but
+	// usable. Acceptable for shadow history.
+	if _, err := h.repo.Queries.CreateStepTemplateVersion(
+		r.Context(),
+		db.CreateStepTemplateVersionParams{
+			TemplateID:    tpl.ID,
+			VersionNumber: 1,
+			Name:          tpl.Name,
+			ScriptBody:    tpl.ScriptBody,
+		},
+	); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -172,10 +191,16 @@ func (h *StepTemplateHandler) UpdateTemplate(
 		ScriptBody: script,
 	}
 
-	if _, err := h.repo.Queries.UpdateStepTemplate(
-		r.Context(),
-		params,
-	); err != nil {
+	tx, err := h.repo.DB.BeginTx(r.Context(), nil)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
+	qtx := h.repo.Queries.WithTx(tx)
+
+	updated, err := qtx.UpdateStepTemplate(r.Context(), params)
+	if err != nil {
 		if IsUniqueViolation(err) {
 			tpl := &db.StepTemplate{ID: id, Name: name, ScriptBody: script}
 			WriteFormError(
@@ -195,6 +220,49 @@ func (h *StepTemplateHandler) UpdateTemplate(
 			)
 			return
 		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	latest, err := qtx.GetLatestStepTemplateVersionNumber(r.Context(), id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	// sqlc scans MAX(...)+COALESCE into interface{}; the value is always
+	// int64 (SQLite stores INTEGER as int64). Defensive type-switch would
+	// hide real bugs from the test suite — fail loud.
+	var nextVersion int64
+	switch v := latest.(type) {
+	case int64:
+		nextVersion = v + 1
+	case int:
+		nextVersion = int64(v) + 1
+	case nil:
+		nextVersion = 1
+	default:
+		http.Error(
+			w,
+			"unexpected version_number type from DB",
+			http.StatusInternalServerError,
+		)
+		return
+	}
+
+	if _, err := qtx.CreateStepTemplateVersion(
+		r.Context(),
+		db.CreateStepTemplateVersionParams{
+			TemplateID:    updated.ID,
+			VersionNumber: nextVersion,
+			Name:          updated.Name,
+			ScriptBody:    updated.ScriptBody,
+		},
+	); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -219,6 +287,51 @@ func (h *StepTemplateHandler) DeleteTemplate(
 	}
 
 	http.Redirect(w, r, "/templates", http.StatusSeeOther)
+}
+
+func (h *StepTemplateHandler) ListTemplateHistory(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	idStr := chi.URLParam(r, "id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		http.Error(w, "Invalid template ID", http.StatusBadRequest)
+		return
+	}
+
+	tpl, err := h.repo.Queries.GetStepTemplate(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			http.Error(
+				w,
+				"Template not found",
+				http.StatusNotFound,
+			)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	versions, err := h.repo.Queries.ListStepTemplateVersions(r.Context(), id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if r.Header.Get("HX-Request") == "true" {
+		if err := pages.TemplateHistoryContent(tpl, versions).
+			Render(r.Context(), w); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
+
+	if err := pages.TemplateHistoryPage(tpl, versions, r.URL.Path).
+		Render(r.Context(), w); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }
 
 func (h *StepTemplateHandler) InsertTemplate(
