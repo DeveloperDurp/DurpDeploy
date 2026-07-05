@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/robfig/cron/v3"
 
 	"durpdeploy/internal/handler"
 	"durpdeploy/internal/repository"
@@ -31,6 +32,7 @@ func requestLogger(next http.Handler) http.Handler {
 func NewRouter(
 	repo *repository.Repository,
 	rnr *runner.DeploymentRunner,
+	parser cron.Parser,
 ) *chi.Mux {
 	r := chi.NewRouter()
 	r.Use(requestLogger)
@@ -129,6 +131,15 @@ func NewRouter(
 	r.Post("/deployments/{id}/redeploy", dh.RedeployDeployment)
 	r.Get("/projects/{id}/deploy", dh.NewDeploymentPage)
 	r.Post("/projects/{id}/deploy", dh.ScheduleDeployment)
+
+	sdh := handler.NewScheduledDeploymentHandler(repo, parser)
+	r.Get("/projects/{id}/schedules", sdh.List)
+	r.Get("/projects/{id}/schedules/new", sdh.NewForm)
+	r.Post("/projects/{id}/schedules", sdh.Create)
+	r.Get("/projects/{id}/schedules/{schedId}/edit", sdh.EditForm)
+	r.Put("/projects/{id}/schedules/{schedId}", sdh.Update)
+	r.Delete("/projects/{id}/schedules/{schedId}", sdh.Delete)
+	r.Post("/projects/{id}/schedules/{schedId}/toggle", sdh.Toggle)
 
 	lh := handler.NewLogHandler(rnr.Broker(), repo)
 	r.Get("/deployments/{id}/logs/stream", lh.StreamLogs)

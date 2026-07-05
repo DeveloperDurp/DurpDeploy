@@ -48,6 +48,7 @@ templ ProjectDetail(project db.Project, panel LifecyclePanel, vars []db.Variable
 			<a href={ fmt.Sprintf("/projects/%d/variables", project.ID) } class="btn btn-secondary">Variables</a>
 			<a href={ fmt.Sprintf("/projects/%d/releases", project.ID) } class="btn btn-accent">Releases</a>
 			<a href={ fmt.Sprintf("/projects/%d/deploy", project.ID) } class="btn btn-primary">Deploy</a>
+			<a href={ fmt.Sprintf("/projects/%d/schedules", project.ID) } class="btn btn-secondary">Schedules</a>
 		</div>
 		@LifecyclePanelSection(project, panel)
 		@VariablesPreviewSection(project, vars, envs)

@@ -84,6 +84,20 @@ type ReleaseVariable struct {
 	Secret        int64          `json:"secret"`
 }
 
+type ScheduledDeployment struct {
+	ID            int64          `json:"id"`
+	ProjectID     int64          `json:"project_id"`
+	ReleaseID     int64          `json:"release_id"`
+	EnvironmentID int64          `json:"environment_id"`
+	Cron          string         `json:"cron"`
+	NextRunAt     int64          `json:"next_run_at"`
+	Enabled       int64          `json:"enabled"`
+	LastFiredAt   sql.NullInt64  `json:"last_fired_at"`
+	Note          sql.NullString `json:"note"`
+	CreatedAt     int64          `json:"created_at"`
+	UpdatedAt     int64          `json:"updated_at"`
+}
+
 type Step struct {
 	ID             int64  `json:"id"`
 	ProjectID      int64  `json:"project_id"`

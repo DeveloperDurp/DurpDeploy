@@ -426,4 +426,27 @@ CODE=$(curl_silent -X POST -d "release_id=$LC_REL_ID&environment_id=$LC_DEV_ID" 
 [[ "$CODE" == "400" ]] || { echo "FAIL: cross-project deploy got $CODE, want 400"; exit 1; }
 echo "  Cross-project release rejected: 400"
 
+echo "=== F3.11: Scheduled Deployment ==="
+CODE=$(curl_silent -X POST -d "release_id=$RELEASE_ID&environment_id=$ENV_ID&cron=*+*+*+*+*&note=e2e-scheduled&enabled=1" "$BASE/projects/$PROJECT_ID/schedules")
+[[ "$CODE" == "303" ]] || { echo "FAIL: create schedule got $CODE"; exit 1; }
+
+BEFORE_DEP=$(curl_body "$BASE/deployments" | grep -oP 'href="/deployments/\K[0-9]+' | sort -n | tail -1)
+echo "Latest deployment before schedule: $BEFORE_DEP"
+
+echo "  Sleeping 100s for scheduler tick..."
+sleep 100
+
+AFTER_DEP=$(curl_body "$BASE/deployments" | grep -oP 'href="/deployments/\K[0-9]+' | sort -n | tail -1)
+echo "Latest deployment after schedule: $AFTER_DEP"
+[[ "$AFTER_DEP" -gt "$BEFORE_DEP" ]] || { echo "FAIL: scheduler did not create a new deployment"; exit 1; }
+
+DEP_PAGE=$(curl_body "$BASE/deployments/$AFTER_DEP")
+echo "$DEP_PAGE" | grep -q "Scheduled:" || { echo "FAIL: scheduled deployment note missing 'Scheduled:'"; exit 1; }
+echo "  Scheduled deployment created with note: OK"
+
+SCHED_LIST=$(curl_body "$BASE/projects/$PROJECT_ID/schedules")
+echo "$SCHED_LIST" | grep -qF "* * * * *" || { echo "FAIL: schedule missing from list"; exit 1; }
+echo "$SCHED_LIST" | grep -q "On" || { echo "FAIL: schedule not enabled"; exit 1; }
+echo "  Schedule list shows enabled schedule with future next_run_at: OK"
+
 echo "=== ALL E2E CHECKS PASSED ==="

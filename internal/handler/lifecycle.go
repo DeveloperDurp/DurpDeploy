@@ -449,12 +449,14 @@ func (h *LifecycleHandler) ReorderStage(
 
 	a := stages[targetIdx]
 	b := stages[swapIdx]
+	// 3-step swap via a temporary negative sort_order so the UNIQUE
+	// constraint on (lifecycle_id, sort_order) is never violated.
 	if _, err := qtx.UpdateLifecycleStage(
 		r.Context(),
 		db.UpdateLifecycleStageParams{
 			ID:            a.ID,
 			EnvironmentID: a.EnvironmentID,
-			SortOrder:     b.SortOrder,
+			SortOrder:     -1,
 		},
 	); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -466,6 +468,17 @@ func (h *LifecycleHandler) ReorderStage(
 			ID:            b.ID,
 			EnvironmentID: b.EnvironmentID,
 			SortOrder:     a.SortOrder,
+		},
+	); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if _, err := qtx.UpdateLifecycleStage(
+		r.Context(),
+		db.UpdateLifecycleStageParams{
+			ID:            a.ID,
+			EnvironmentID: a.EnvironmentID,
+			SortOrder:     b.SortOrder,
 		},
 	); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
