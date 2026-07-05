@@ -1,0 +1,299 @@
+package pages
+
+import (
+	"durpdeploy/internal/db"
+	"durpdeploy/views/components"
+	"durpdeploy/views/layouts"
+	"fmt"
+	"strconv"
+)
+
+// ScheduledDeploymentListItem carries the schedule row plus the display
+// names the table needs (release version + environment name). Mirrors
+// DeploymentListItem in deployments.templ.
+type ScheduledDeploymentListItem struct {
+	Schedule        db.ScheduledDeployment
+	ReleaseVersion  string
+	EnvironmentName string
+}
+
+templ ScheduledDeploymentsListPage(project db.Project, items []ScheduledDeploymentListItem, currentPath string) {
+	@layouts.Base("Schedules - "+project.Name, currentPath) {
+		@components.Breadcrumbs([]components.Crumb{
+			{Label: "Home", Href: "/"},
+			{Label: "Projects", Href: "/projects"},
+			{Label: project.Name, Href: fmt.Sprintf("/projects/%d", project.ID)},
+			{Label: "Schedules"},
+		})
+		@ScheduledDeploymentsContent(project, items)
+	}
+}
+
+templ ScheduledDeploymentsContent(project db.Project, items []ScheduledDeploymentListItem) {
+	<div class="space-y-6">
+		<div class="flex justify-between items-center">
+			<div>
+				<h1 class="text-3xl font-bold">Schedules — { project.Name }</h1>
+				<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost btn-sm mt-2">Back to Project</a>
+			</div>
+			<a href={ fmt.Sprintf("/projects/%d/schedules/new", project.ID) } class="btn btn-primary">New Schedule</a>
+		</div>
+		@ScheduledDeploymentsList(project, items)
+	</div>
+}
+
+templ ScheduledDeploymentsList(project db.Project, items []ScheduledDeploymentListItem) {
+	<div id="schedules-content">
+		if len(items) == 0 {
+			<div class="card bg-base-200 p-8 text-center">
+				<p class="text-gray-400">No schedules yet. Create one to run a release on a cron.</p>
+			</div>
+		} else {
+			<table class="table table-zebra table-fixed w-full">
+				<thead>
+					<tr>
+						<th class="w-2/5">Schedule</th>
+						<th class="w-1/5">Cron</th>
+						<th class="w-1/5">Next run</th>
+						<th class="w-1/5">Enabled</th>
+						<th class="w-96">Actions</th>
+					</tr>
+				</thead>
+				<tbody>
+					for _, item := range items {
+						@ScheduledDeploymentRow(project.ID, item)
+					}
+				</tbody>
+			</table>
+		}
+	</div>
+}
+
+templ ScheduledDeploymentRow(projectID int64, item ScheduledDeploymentListItem) {
+	<tr id={ fmt.Sprintf("schedule-row-%d", item.Schedule.ID) }>
+		<td class="truncate">
+			<span class="font-medium">{ item.ReleaseVersion }</span>
+			<span class="text-gray-500"> → </span>
+			{ item.EnvironmentName }
+		</td>
+		<td class="truncate font-mono text-sm">{ item.Schedule.Cron }</td>
+		<td class="whitespace-nowrap">{ formatUnixTime(item.Schedule.NextRunAt) }</td>
+		<td>
+			if item.Schedule.Enabled == 1 {
+				<span class="badge badge-success">On</span>
+			} else {
+				<span class="badge badge-ghost">Off</span>
+			}
+		</td>
+		<td class="whitespace-nowrap">
+			<button
+				class="btn btn-xs btn-ghost"
+				hx-get={ fmt.Sprintf("/projects/%d/schedules/%d/edit", projectID, item.Schedule.ID) }
+				hx-target={ fmt.Sprintf("#schedule-row-%d", item.Schedule.ID) }
+				hx-swap="outerHTML"
+			>
+				Edit
+			</button>
+			<button
+				class="btn btn-xs btn-primary"
+				hx-post={ fmt.Sprintf("/projects/%d/schedules/%d/toggle", projectID, item.Schedule.ID) }
+				hx-target="#schedules-content"
+				hx-swap="outerHTML"
+				data-toast-success="Schedule toggled"
+				data-toast-error="Failed to toggle schedule"
+			>
+				if item.Schedule.Enabled == 1 {
+					Disable
+				} else {
+					Enable
+				}
+			</button>
+			<button
+				class="btn btn-xs btn-error"
+				hx-delete={ fmt.Sprintf("/projects/%d/schedules/%d", projectID, item.Schedule.ID) }
+				hx-target="#schedules-content"
+				hx-swap="outerHTML"
+				hx-confirm="Delete this schedule?"
+				data-toast-success="Schedule deleted"
+				data-toast-error="Failed to delete schedule"
+			>
+				Delete
+			</button>
+		</td>
+	</tr>
+}
+
+templ ScheduledDeploymentFormPage(project db.Project, releases []db.Release, envs []AvailableEnv, schedule *db.ScheduledDeployment, errorMsg string, currentPath string) {
+	@layouts.Base("Schedule - "+project.Name, currentPath) {
+		@components.Breadcrumbs([]components.Crumb{
+			{Label: "Home", Href: "/"},
+			{Label: "Projects", Href: "/projects"},
+			{Label: project.Name, Href: fmt.Sprintf("/projects/%d", project.ID)},
+			{Label: "Schedules", Href: fmt.Sprintf("/projects/%d/schedules", project.ID)},
+			{Label: scheduleLabel(schedule)},
+		})
+		@ScheduledDeploymentForm(project, releases, envs, schedule, errorMsg)
+	}
+}
+
+templ ScheduledDeploymentForm(project db.Project, releases []db.Release, envs []AvailableEnv, schedule *db.ScheduledDeployment, errorMsg string) {
+	<div id="form-container" class="card bg-base-200 p-4">
+		<h3 class="text-lg font-bold mb-4">{ scheduleHeading(schedule) }</h3>
+		if errorMsg != "" {
+			<div class="alert alert-error mb-4">{ errorMsg }</div>
+		}
+		<form method="post" action={ scheduleFormAction(project, schedule) } class="space-y-4">
+			<div class="form-control">
+				<label class="label"><span class="label-text">Release</span></label>
+				<select name="release_id" class="select select-bordered" required>
+					<option value="">Select release</option>
+					for _, rel := range releases {
+						<option
+							value={ strconv.FormatInt(rel.ID, 10) }
+							if schedule != nil && rel.ID == schedule.ReleaseID {
+								selected
+							}
+						>
+							{ rel.Version }
+						</option>
+					}
+				</select>
+			</div>
+			<div class="form-control">
+				<label class="label"><span class="label-text">Environment</span></label>
+				<select name="environment_id" class="select select-bordered" required>
+					<option value="">Select env</option>
+					for _, e := range envs {
+						<option
+							value={ strconv.FormatInt(e.Environment.ID, 10) }
+							if schedule != nil && e.Environment.ID == schedule.EnvironmentID {
+								selected
+							}
+						>
+							{ e.Environment.Name }
+						</option>
+					}
+				</select>
+			</div>
+			<div class="form-control">
+				<label class="label"><span class="label-text">Cron</span></label>
+				if schedule != nil {
+					<input type="text" name="cron" class="input input-bordered" placeholder="0 0 * * *" required value={ schedule.Cron }/>
+				} else {
+					<input type="text" name="cron" class="input input-bordered" placeholder="0 0 * * *" required/>
+				}
+				<label class="label"><span class="label-text-alt">5-field standard cron (minute hour day month weekday). No descriptors, no TZ prefix.</span></label>
+			</div>
+			<div class="form-control">
+				<label class="label"><span class="label-text">Note (optional)</span></label>
+				<textarea name="note" class="textarea textarea-bordered" rows="2">{ scheduleNoteValue(schedule) }</textarea>
+			</div>
+			<div class="form-control">
+				<label class="label cursor-pointer gap-2 justify-start">
+					if schedule == nil || schedule.Enabled == 1 {
+						<input type="checkbox" name="enabled" class="checkbox checkbox-sm" value="true" checked/>
+					} else {
+						<input type="checkbox" name="enabled" class="checkbox checkbox-sm" value="true"/>
+					}
+					<span class="label-text">Enabled</span>
+				</label>
+			</div>
+			<div class="flex gap-2 justify-end">
+				<a href={ fmt.Sprintf("/projects/%d/schedules", project.ID) } class="btn btn-ghost">Cancel</a>
+				<button type="submit" class="btn btn-primary">Save</button>
+			</div>
+		</form>
+	</div>
+}
+
+// ScheduledDeploymentEditRow is the inline edit form rendered in place of
+// a schedule row. Mirrors VariableEditRow in variables.templ: a single
+// <form> with id, inputs reference it via the form= attribute so the row
+// layout stays intact.
+templ ScheduledDeploymentEditRow(projectID int64, item ScheduledDeploymentListItem, releases []db.Release, envs []AvailableEnv, errorMsg string) {
+	<tr id={ fmt.Sprintf("schedule-row-%d", item.Schedule.ID) }>
+		<td>
+			<form
+				id={ fmt.Sprintf("schedule-edit-form-%d", item.Schedule.ID) }
+				hx-put={ fmt.Sprintf("/projects/%d/schedules/%d", projectID, item.Schedule.ID) }
+				hx-target="#schedules-content"
+				hx-swap="outerHTML"
+				data-toast-success="Schedule updated"
+				data-toast-error="Failed to update schedule"
+			></form>
+			<select name="release_id" form={ fmt.Sprintf("schedule-edit-form-%d", item.Schedule.ID) } class="select select-bordered select-sm w-full" required>
+				for _, rel := range releases {
+					<option
+						value={ strconv.FormatInt(rel.ID, 10) }
+						if rel.ID == item.Schedule.ReleaseID {
+							selected
+						}
+					>
+						{ rel.Version }
+					</option>
+				}
+			</select>
+			<select name="environment_id" form={ fmt.Sprintf("schedule-edit-form-%d", item.Schedule.ID) } class="select select-bordered select-sm w-full mt-1" required>
+				for _, e := range envs {
+					<option
+						value={ strconv.FormatInt(e.Environment.ID, 10) }
+						if e.Environment.ID == item.Schedule.EnvironmentID {
+							selected
+						}
+					>
+						{ e.Environment.Name }
+					</option>
+				}
+			</select>
+			if errorMsg != "" {
+				<span class="text-error text-sm mt-1 block">{ errorMsg }</span>
+			}
+		</td>
+		<td>
+			<input type="text" name="cron" form={ fmt.Sprintf("schedule-edit-form-%d", item.Schedule.ID) } class="input input-bordered input-sm w-full" required value={ item.Schedule.Cron }/>
+		</td>
+		<td class="whitespace-nowrap text-sm text-gray-500">{ formatUnixTime(item.Schedule.NextRunAt) }</td>
+		<td>
+			<label class="cursor-pointer flex items-center gap-1">
+				if item.Schedule.Enabled == 1 {
+					<input type="checkbox" name="enabled" form={ fmt.Sprintf("schedule-edit-form-%d", item.Schedule.ID) } class="checkbox checkbox-sm" value="true" checked/>
+				} else {
+					<input type="checkbox" name="enabled" form={ fmt.Sprintf("schedule-edit-form-%d", item.Schedule.ID) } class="checkbox checkbox-sm" value="true"/>
+				}
+				<span class="text-sm">On</span>
+			</label>
+		</td>
+		<td class="whitespace-nowrap">
+			<button type="button" class="btn btn-ghost btn-xs" hx-get={ fmt.Sprintf("/projects/%d/schedules", projectID) } hx-target="#schedules-content" hx-swap="outerHTML">Cancel</button>
+			<button type="submit" form={ fmt.Sprintf("schedule-edit-form-%d", item.Schedule.ID) } class="btn btn-primary btn-xs">Save</button>
+		</td>
+	</tr>
+}
+
+func scheduleLabel(schedule *db.ScheduledDeployment) string {
+	if schedule != nil {
+		return "Edit"
+	}
+	return "New"
+}
+
+func scheduleHeading(schedule *db.ScheduledDeployment) string {
+	if schedule != nil {
+		return "Edit Schedule"
+	}
+	return "New Schedule"
+}
+
+func scheduleFormAction(project db.Project, schedule *db.ScheduledDeployment) string {
+	if schedule != nil {
+		return fmt.Sprintf("/projects/%d/schedules/%d", project.ID, schedule.ID)
+	}
+	return fmt.Sprintf("/projects/%d/schedules", project.ID)
+}
+
+func scheduleNoteValue(schedule *db.ScheduledDeployment) string {
+	if schedule != nil && schedule.Note.Valid {
+		return schedule.Note.String
+	}
+	return ""
+}

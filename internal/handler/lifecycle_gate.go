@@ -2,10 +2,9 @@ package handler
 
 import (
 	"context"
-	"database/sql"
-	"fmt"
 
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/gate"
 	"durpdeploy/internal/repository"
 )
 
@@ -28,74 +27,39 @@ func evaluateGate(
 	release db.Release,
 	environmentID int64,
 ) (gateState, error) {
-	if !project.LifecycleID.Valid {
-		return gateState{deployable: true}, nil
-	}
-
-	lc, err := repo.Queries.GetLifecycle(ctx, project.LifecycleID.Int64)
+	state, err := gate.Evaluate(ctx, repo, project, release, environmentID)
 	if err != nil {
 		return gateState{}, err
 	}
-	stages, err := repo.Queries.ListLifecycleStages(ctx, lc.ID)
-	if err != nil {
-		return gateState{}, err
-	}
+	return gateState{
+		deployable: state.Deployable,
+		reason:     state.Reason,
+		bypassable: state.Bypassable,
+	}, nil
+}
 
-	idx := -1
-	for i, s := range stages {
-		if s.EnvironmentID == environmentID {
-			idx = i
-			break
-		}
-	}
-	if idx < 0 {
-		env, _ := repo.Queries.GetEnvironment(ctx, environmentID)
-		envName := "(unknown)"
-		if env.ID != 0 {
-			envName = env.Name
-		}
-		return gateState{
-			deployable: false,
-			reason: fmt.Sprintf(
-				"%s is not part of the lifecycle %q. Projects with a lifecycle can only deploy to their lifecycle stages.",
-				envName,
-				lc.Name,
-			),
-			bypassable: false,
-		}, nil
-	}
-	if idx == 0 {
-		return gateState{deployable: true}, nil
-	}
+// EvaluateGate returns the gate state for a single env. Exported so the
+// scheduler (and any other caller) can reuse the same logic.
+func EvaluateGate(
+	ctx context.Context,
+	repo *repository.Repository,
+	project db.Project,
+	release db.Release,
+	environmentID int64,
+) (gateState, error) {
+	return evaluateGate(ctx, repo, project, release, environmentID)
+}
 
-	prev := stages[idx-1]
-	dep, err := repo.Queries.GetLatestSuccessfulDeploymentForReleaseEnv(
-		ctx,
-		db.GetLatestSuccessfulDeploymentForReleaseEnvParams{
-			ReleaseID:     release.ID,
-			EnvironmentID: prev.EnvironmentID,
-		},
-	)
-	if err != nil && err != sql.ErrNoRows {
-		return gateState{}, err
-	}
-	if err == sql.ErrNoRows || dep.ReleaseID == 0 {
-		prevEnv, _ := repo.Queries.GetEnvironment(ctx, prev.EnvironmentID)
-		prevName := "(unknown)"
-		if prevEnv.ID != 0 {
-			prevName = prevEnv.Name
-		}
-		return gateState{
-			deployable: false,
-			reason: fmt.Sprintf(
-				"%s has not been successfully deployed to %s yet. Tick Force to deploy anyway.",
-				release.Version,
-				prevName,
-			),
-			bypassable: true,
-		}, nil
-	}
-	return gateState{deployable: true}, nil
+// CheckPromotionGate returns whether the deployment is blocked and the reason.
+// Exported for the scheduler; handlers that need bypassable should use EvaluateGate.
+func CheckPromotionGate(
+	ctx context.Context,
+	repo *repository.Repository,
+	project db.Project,
+	release db.Release,
+	environmentID int64,
+) (blocked bool, reason string) {
+	return gate.Check(ctx, repo, project, release, environmentID)
 }
 
 // availableEnvsForRelease returns one entry per env the project is allowed to

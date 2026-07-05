@@ -20,6 +20,8 @@ import (
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/runner"
 	"durpdeploy/internal/server"
+
+	"github.com/robfig/cron/v3"
 )
 
 // testHarness holds a full-stack server backed by an on-disk SQLite and a real
@@ -56,7 +58,8 @@ func newHarness(t *testing.T) *testHarness {
 	repo := repository.New(conn)
 	broker := runner.NewLogBroker()
 	rnr := runner.New(repo, broker)
-	srv := httptest.NewServer(server.NewRouter(repo, rnr))
+	parser := cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
+	srv := httptest.NewServer(server.NewRouter(repo, rnr, parser))
 	t.Cleanup(srv.Close)
 
 	return &testHarness{repo: repo, rnr: rnr, server: srv, dbPath: dbPath}

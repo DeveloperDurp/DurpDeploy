@@ -1,14 +1,18 @@
 package main
 
 import (
+	"context"
 	"log"
 	"log/slog"
 	"net/http"
 	"os"
 
+	"github.com/robfig/cron/v3"
+
 	"durpdeploy/internal/migrate"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/runner"
+	"durpdeploy/internal/scheduler"
 	"durpdeploy/internal/server"
 )
 
@@ -34,7 +38,13 @@ func main() {
 	repo := repository.New(db)
 	broker := runner.NewLogBroker()
 	rnr := runner.New(repo, broker)
-	r := server.NewRouter(repo, rnr)
+	parser := cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
+	sched := scheduler.New(repo, rnr)
+	ctx, cancel := context.WithCancel(context.Background())
+	sched.Start(ctx)
+	defer sched.Stop()
+	defer cancel()
+	r := server.NewRouter(repo, rnr, parser)
 	slog.Info("server starting", "addr", ":8080")
 	if err := http.ListenAndServe(":8080", r); err != nil {
 		log.Fatalf("server failed: %v", err)

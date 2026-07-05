@@ -77,14 +77,18 @@ templ LifecycleStageRow(lc db.Lifecycle, index int, total int, s LifecycleStageV
 		<td>{ strconv.Itoa(index + 1) }</td>
 		<td class="font-medium truncate">{ s.Environment.Name }</td>
 		<td class="flex gap-2 whitespace-nowrap">
-			if index > 0 {
+			if index == 0 {
+				<span class="btn btn-xs invisible" aria-hidden="true">↑</span>
+			} else {
 				<form method="post" action={ templ.SafeURL("/lifecycles/" + strconv.FormatInt(lc.ID, 10) + "/stages/reorder") }>
 					<input type="hidden" name="stage_id" value={ strconv.FormatInt(s.Stage.ID, 10) }/>
 					<input type="hidden" name="direction" value="up"/>
 					<button type="submit" class="btn btn-xs">↑</button>
 				</form>
 			}
-			if index < total-1 {
+			if index == total-1 {
+				<span class="btn btn-xs invisible" aria-hidden="true">↓</span>
+			} else {
 				<form method="post" action={ templ.SafeURL("/lifecycles/" + strconv.FormatInt(lc.ID, 10) + "/stages/reorder") }>
 					<input type="hidden" name="stage_id" value={ strconv.FormatInt(s.Stage.ID, 10) }/>
 					<input type="hidden" name="direction" value="down"/>
