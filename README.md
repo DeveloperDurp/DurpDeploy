@@ -85,9 +85,28 @@ make build
 make dev
 ```
 
+## Production Deploy
+
+For a small team deployment, DurpDeploy runs as a single Go process behind
+Caddy, which terminates HTTPS and reverse-proxies to `localhost:8080`. The
+binary ships with argon2id password hashing, session-based auth, CSRF
+protection, and an audit log. See [`docs/deploy.md`](docs/deploy.md) for the
+full runbook — provisioning a fresh Debian 12 VM end to end takes about 20
+minutes.
+
+The first admin user is created with a one-shot CLI command (no server running
+required):
+
+```bash
+durpdeploy admin create --email admin@example.com --password '<strong-password>'
+```
+
+The database path is configurable via the `DURPDEPLOY_DB` env var; it defaults
+to `durpdeploy.db` in the current directory for local dev. Production sets it
+to `/var/lib/durpdeploy/durpdeploy.db` via the systemd unit.
+
 ## What It Does Not Do
 
-- No authentication (single-user local tool)
 - No remote deployment targets or SSH
 - No parallel step execution
 - No CI/build features

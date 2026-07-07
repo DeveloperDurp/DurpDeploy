@@ -15,6 +15,16 @@ type Approval struct {
 	ApprovedAt   int64  `json:"approved_at"`
 }
 
+type AuditLog struct {
+	ID         int64          `json:"id"`
+	UserID     sql.NullInt64  `json:"user_id"`
+	Action     string         `json:"action"`
+	EntityType string         `json:"entity_type"`
+	EntityID   sql.NullInt64  `json:"entity_id"`
+	Details    sql.NullString `json:"details"`
+	CreatedAt  int64          `json:"created_at"`
+}
+
 type Deployment struct {
 	ID            int64          `json:"id"`
 	ReleaseID     int64          `json:"release_id"`
@@ -98,6 +108,16 @@ type ScheduledDeployment struct {
 	UpdatedAt     int64          `json:"updated_at"`
 }
 
+type Session struct {
+	ID        string         `json:"id"`
+	UserID    int64          `json:"user_id"`
+	CsrfToken string         `json:"csrf_token"`
+	CreatedAt int64          `json:"created_at"`
+	ExpiresAt int64          `json:"expires_at"`
+	IpAddress sql.NullString `json:"ip_address"`
+	UserAgent sql.NullString `json:"user_agent"`
+}
+
 type Step struct {
 	ID             int64  `json:"id"`
 	ProjectID      int64  `json:"project_id"`
@@ -123,6 +143,17 @@ type StepTemplateVersion struct {
 	Name          string `json:"name"`
 	ScriptBody    string `json:"script_body"`
 	CreatedAt     int64  `json:"created_at"`
+}
+
+type User struct {
+	ID           int64         `json:"id"`
+	Email        string        `json:"email"`
+	PasswordHash string        `json:"password_hash"`
+	Name         string        `json:"name"`
+	Role         string        `json:"role"`
+	CreatedAt    int64         `json:"created_at"`
+	UpdatedAt    int64         `json:"updated_at"`
+	LastLoginAt  sql.NullInt64 `json:"last_login_at"`
 }
 
 type Variable struct {

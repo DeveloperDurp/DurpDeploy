@@ -1,0 +1,87 @@
+package pages
+
+import (
+	"durpdeploy/internal/db"
+	"durpdeploy/views/layouts"
+	"strconv"
+)
+
+templ AuditLogPage(entries []db.AuditLog, currentPath string, currentUser *db.User) {
+	@layouts.Base("Audit Log", currentPath) {
+		<div class="flex justify-between items-center mb-4">
+			<h1 class="text-3xl font-bold">Audit Log</h1>
+		</div>
+		<form method="get" action="/admin/audit" class="flex flex-wrap gap-2 mb-4 items-end">
+			<div class="form-control">
+				<label class="label">
+					<span class="label-text">User ID</span>
+				</label>
+				<input type="number" name="user_id" class="input input-bordered input-sm w-32"/>
+			</div>
+			<div class="form-control">
+				<label class="label">
+					<span class="label-text">Action</span>
+				</label>
+				<input type="text" name="action" class="input input-bordered input-sm w-40"/>
+			</div>
+			<div class="form-control">
+				<label class="label">
+					<span class="label-text">Entity Type</span>
+				</label>
+				<input type="text" name="entity_type" class="input input-bordered input-sm w-40"/>
+			</div>
+			<button type="submit" class="btn btn-primary btn-sm">Filter</button>
+			<a href="/admin/audit" class="btn btn-ghost btn-sm">Clear</a>
+		</form>
+		if len(entries) == 0 {
+			<div class="card bg-base-200 p-8 text-center">
+				<p class="text-gray-400">No audit entries match the filter.</p>
+			</div>
+		} else {
+			<div class="overflow-x-auto">
+				<table class="table table-zebra table-fixed w-full">
+					<thead>
+						<tr>
+							<th class="w-1/5">Time</th>
+							<th class="w-1/6">User</th>
+							<th class="w-1/5">Action</th>
+							<th class="w-1/6">Entity</th>
+							<th class="w-1/6">Entity ID</th>
+							<th class="w-auto">Details</th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, entry := range entries {
+							@AuditLogRow(entry)
+						}
+					</tbody>
+				</table>
+			</div>
+		}
+	}
+}
+
+templ AuditLogRow(entry db.AuditLog) {
+	<tr>
+		<td class="whitespace-nowrap">{ formatUnixTime(entry.CreatedAt) }</td>
+		<td>
+			if entry.UserID.Valid {
+				{ strconv.FormatInt(entry.UserID.Int64, 10) }
+			} else {
+				<span class="text-gray-500">-</span>
+			}
+		</td>
+		<td class="truncate">{ entry.Action }</td>
+		<td class="truncate">{ entry.EntityType }</td>
+		<td>
+			if entry.EntityID.Valid {
+				{ strconv.FormatInt(entry.EntityID.Int64, 10) }
+			} else {
+				<span class="text-gray-500">-</span>
+			}
+		</td>
+		<td class="truncate">
+			<code class="text-xs">{ entry.Details.String }</code>
+		</td>
+	</tr>
+}

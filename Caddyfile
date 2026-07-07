@@ -1,0 +1,38 @@
+# DurpDeploy reverse proxy — AIO container config.
+#
+# The site address is read from the DURPDEPLOY_URL env var (default
+# `http://localhost`). The scheme matters: `http://` means Caddy serves
+# plain HTTP on port 80; `https://` means Caddy serves TLS on port 443
+# with auto-issued Let's Encrypt certs (host must have DNS A record +
+# open 80/443 inbound).
+#
+# Examples:
+#   dev:    DURPDEPLOY_URL=http://localhost
+#   prod:   DURPDEPLOY_URL=https://durpdeploy.example.com
+#
+# ponytail: no `rate_limit` block. The stock `caddy:2-alpine` image
+# does not include the rate_limit module (it requires a custom build
+# with `xcaddy build --with github.com/mholt/caddy-ratelimit`). The
+# primary brute-force mitigation is argon2id's computational cost
+# (P0-2) — each wrong-password guess is ~100ms of CPU on the server.
+# Add a custom Caddy build + a /login rate_limit block here if you
+# need edge-level throttling.
+
+{$DURPDEPLOY_URL:http://localhost} {
+	# Proxy to the Go server. The Go process listens on localhost:8080 only
+	# (HTTP, no TLS — Caddy terminates TLS here).
+	reverse_proxy localhost:8080 {
+		# Pass the original client IP through so the audit log records the
+		# real requester, not Caddy's loopback address.
+		header_up X-Real-IP {remote_host}
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Forwarded-Proto {scheme}
+	}
+
+	# Access log to stdout so `docker logs` captures it (no in-container
+	# log file that would grow without rotation).
+	log {
+		output stdout
+		level INFO
+	}
+}

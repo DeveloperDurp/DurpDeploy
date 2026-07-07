@@ -64,6 +64,23 @@ JOIN environments e ON d.environment_id = e.id
 WHERE d.status IN ('pending','running')
 ORDER BY d.created_at DESC;
 
+-- name: ListPendingDeployments :many
+-- Used by startup recovery to re-launch runners for deployments that
+-- were created but never picked up (e.g. process restart between
+-- handler-launched goroutine and first runner step).
+SELECT
+    d.id, d.release_id, d.environment_id, d.status,
+    d.started_at, d.finished_at, d.created_at, d.forced, d.note,
+    p.name AS project_name,
+    r.version AS release_version,
+    e.name AS environment_name
+FROM deployments d
+JOIN releases r ON d.release_id = r.id
+JOIN projects p ON r.project_id = p.id
+JOIN environments e ON d.environment_id = e.id
+WHERE d.status = 'pending'
+ORDER BY d.created_at ASC;
+
 -- name: ListLatestDeploymentPerReleaseEnv :many
 SELECT id, release_id, environment_id, status, started_at, finished_at, created_at, forced, note, project_name, release_version, environment_name
 FROM (

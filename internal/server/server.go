@@ -9,6 +9,8 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/robfig/cron/v3"
 
+	"durpdeploy/internal/audit"
+	"durpdeploy/internal/auth"
 	"durpdeploy/internal/handler"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/runner"
@@ -33,12 +35,13 @@ func NewRouter(
 	repo *repository.Repository,
 	rnr *runner.DeploymentRunner,
 	parser cron.Parser,
+	authHandler *handler.AuthHandler,
 ) *chi.Mux {
 	r := chi.NewRouter()
 	r.Use(requestLogger)
 	r.Use(handler.PanicRecoveryMiddleware)
 
-	// Serve static files from embedded assets
+	// Serve static files from embedded assets (public).
 	r.Handle(
 		"/static/*",
 		http.StripPrefix("/static/", http.FileServer(http.FS(static.Assets))),
@@ -48,107 +51,131 @@ func NewRouter(
 	r.NotFound(errorHandler.NotFound)
 	r.MethodNotAllowed(errorHandler.MethodNotAllowed)
 
-	// System endpoints
+	// System endpoints (public).
 	healthH := handler.NewHealthHandler(repo)
 	r.Get("/healthz", healthH.Healthz)
 
-	// Home page
-	indexHandler := handler.NewIndexHandler(repo)
-	r.Get("/", indexHandler.Index)
+	// Auth endpoints (public).
+	r.Get("/login", authHandler.LoginGet)
+	r.Post("/login", authHandler.LoginPost)
+	r.Post("/logout", authHandler.LogoutPost)
 
-	envHandler := handler.NewEnvironmentHandler(repo)
-	r.Get("/environments", envHandler.ListEnvironments)
-	r.Get("/environments/new", envHandler.NewEnvironment)
-	r.Post("/environments", envHandler.CreateEnvironment)
-	r.Get("/environments/{id}/edit", envHandler.EditEnvironment)
-	r.Put("/environments/{id}", envHandler.UpdateEnvironment)
-	r.Delete("/environments/{id}", envHandler.DeleteEnvironment)
+	// Protected routes: every request must carry a valid session cookie
+	// and state-changing requests must carry the CSRF token.
+	// ponytail: single group covers all protected routes; P1 may add
+	// per-route RequireRole middleware for finer-grained authorization.
+	r.Group(func(pr chi.Router) {
+		pr.Use(auth.AuthMiddleware(repo))
+		pr.Use(auth.CSRFMiddleware())
+		pr.Use(audit.Middleware(repo))
 
-	lifecycleH := handler.NewLifecycleHandler(repo)
-	r.Get("/lifecycles", lifecycleH.ListLifecycles)
-	r.Get("/lifecycles/new", lifecycleH.NewLifecycle)
-	r.Post("/lifecycles", lifecycleH.CreateLifecycle)
-	r.Get("/lifecycles/{id}", lifecycleH.GetLifecycle)
-	r.Get("/lifecycles/{id}/edit", lifecycleH.EditLifecycle)
-	r.Post("/lifecycles/{id}", lifecycleH.SaveLifecycle)
-	r.Post("/lifecycles/{id}/stages", lifecycleH.AddStage)
-	r.Post("/lifecycles/{id}/stages/reorder", lifecycleH.ReorderStage)
-	r.Patch("/lifecycles/{id}/stages/{stageId}", lifecycleH.UpdateLifecycleStage)
-	r.Post("/lifecycles/{id}/stages/{stageId}/delete", lifecycleH.DeleteStage)
+		// Home page
+		indexHandler := handler.NewIndexHandler(repo)
+		pr.Get("/", indexHandler.Index)
 
-	ph := handler.NewProjectHandler(repo)
-	r.Get("/projects", ph.ListProjects)
-	r.Get("/projects/new", ph.NewProject)
-	r.Post("/projects", ph.CreateProject)
-	r.Get("/projects/{id}", ph.GetProject)
-	r.Get("/projects/{id}/edit", ph.EditProject)
-	r.Put("/projects/{id}", ph.UpdateProject)
-	r.Delete("/projects/{id}", ph.DeleteProject)
+		envHandler := handler.NewEnvironmentHandler(repo)
+		pr.Get("/environments", envHandler.ListEnvironments)
+		pr.Get("/environments/new", envHandler.NewEnvironment)
+		pr.Post("/environments", envHandler.CreateEnvironment)
+		pr.Get("/environments/{id}/edit", envHandler.EditEnvironment)
+		pr.Put("/environments/{id}", envHandler.UpdateEnvironment)
+		pr.Delete("/environments/{id}", envHandler.DeleteEnvironment)
 
-	sh := handler.NewStepHandler(repo)
-	r.Get("/projects/{id}/steps", sh.ListSteps)
-	r.Get("/projects/{id}/steps-page", sh.StepsPage)
-	r.Get("/projects/{id}/steps/new", sh.NewStepForm)
-	r.Post("/projects/{id}/steps", sh.CreateStep)
-	r.Get("/projects/{id}/steps/{stepId}/edit", sh.EditStepForm)
-	r.Put("/projects/{id}/steps/{stepId}", sh.UpdateStep)
-	r.Delete("/projects/{id}/steps/{stepId}", sh.DeleteStep)
-	r.Patch("/projects/{id}/steps/reorder", sh.ReorderStep)
+		lifecycleH := handler.NewLifecycleHandler(repo)
+		pr.Get("/lifecycles", lifecycleH.ListLifecycles)
+		pr.Get("/lifecycles/new", lifecycleH.NewLifecycle)
+		pr.Post("/lifecycles", lifecycleH.CreateLifecycle)
+		pr.Get("/lifecycles/{id}", lifecycleH.GetLifecycle)
+		pr.Get("/lifecycles/{id}/edit", lifecycleH.EditLifecycle)
+		pr.Post("/lifecycles/{id}", lifecycleH.SaveLifecycle)
+		pr.Post("/lifecycles/{id}/stages", lifecycleH.AddStage)
+		pr.Post("/lifecycles/{id}/stages/reorder", lifecycleH.ReorderStage)
+		pr.Patch("/lifecycles/{id}/stages/{stageId}", lifecycleH.UpdateLifecycleStage)
+		pr.Post("/lifecycles/{id}/stages/{stageId}/delete", lifecycleH.DeleteStage)
 
-	sth := handler.NewStepTemplateHandler(repo)
-	r.Get("/templates", sth.ListTemplates)
-	r.Get("/templates/new", sth.NewTemplateForm)
-	r.Post("/templates", sth.CreateTemplate)
-	r.Get("/templates/{id}/edit", sth.EditTemplateForm)
-	r.Put("/templates/{id}", sth.UpdateTemplate)
-	r.Delete("/templates/{id}", sth.DeleteTemplate)
-	r.Get("/templates/{id}/history", sth.ListTemplateHistory)
-	r.Get("/projects/{id}/templates-picker", sth.TemplatesPicker)
-	r.Post(
-		"/projects/{id}/steps/from-template/{templateId}",
-		sth.InsertTemplate,
-	)
-	r.Post(
-		"/projects/{id}/steps/{stepId}/save-as-template",
-		sth.SaveStepAsTemplate,
-	)
+		ph := handler.NewProjectHandler(repo)
+		pr.Get("/projects", ph.ListProjects)
+		pr.Get("/projects/new", ph.NewProject)
+		pr.Post("/projects", ph.CreateProject)
+		pr.Get("/projects/{id}", ph.GetProject)
+		pr.Get("/projects/{id}/edit", ph.EditProject)
+		pr.Put("/projects/{id}", ph.UpdateProject)
+		pr.Delete("/projects/{id}", ph.DeleteProject)
 
-	vh := handler.NewVariableHandler(repo)
-	r.Get("/projects/{id}/variables", vh.ListVariables)
-	r.Post("/projects/{id}/variables", vh.CreateVariable)
-	r.Get("/projects/{id}/variables/{varId}/edit", vh.EditVariable)
-	r.Put("/projects/{id}/variables/{varId}", vh.UpdateVariable)
-	r.Delete("/projects/{id}/variables/{varId}", vh.DeleteVariable)
+		sh := handler.NewStepHandler(repo)
+		pr.Get("/projects/{id}/steps", sh.ListSteps)
+		pr.Get("/projects/{id}/steps-page", sh.StepsPage)
+		pr.Get("/projects/{id}/steps/new", sh.NewStepForm)
+		pr.Post("/projects/{id}/steps", sh.CreateStep)
+		pr.Get("/projects/{id}/steps/{stepId}/edit", sh.EditStepForm)
+		pr.Put("/projects/{id}/steps/{stepId}", sh.UpdateStep)
+		pr.Delete("/projects/{id}/steps/{stepId}", sh.DeleteStep)
+		pr.Patch("/projects/{id}/steps/reorder", sh.ReorderStep)
 
-	rh := handler.NewReleaseHandler(repo)
-	r.Get("/projects/{id}/releases", rh.ListReleases)
-	r.Post("/projects/{id}/releases", rh.CreateRelease)
-	r.Get("/projects/{id}/releases/{releaseId}", rh.GetRelease)
-	r.Post("/projects/{id}/releases/{releaseId}/refresh", rh.RefreshRelease)
+		sth := handler.NewStepTemplateHandler(repo)
+		pr.Get("/templates", sth.ListTemplates)
+		pr.Get("/templates/new", sth.NewTemplateForm)
+		pr.Post("/templates", sth.CreateTemplate)
+		pr.Get("/templates/{id}/edit", sth.EditTemplateForm)
+		pr.Put("/templates/{id}", sth.UpdateTemplate)
+		pr.Delete("/templates/{id}", sth.DeleteTemplate)
+		pr.Get("/templates/{id}/history", sth.ListTemplateHistory)
+		pr.Get("/projects/{id}/templates-picker", sth.TemplatesPicker)
+		pr.Post(
+			"/projects/{id}/steps/from-template/{templateId}",
+			sth.InsertTemplate,
+		)
+		pr.Post(
+			"/projects/{id}/steps/{stepId}/save-as-template",
+			sth.SaveStepAsTemplate,
+		)
 
-	dh := handler.NewDeploymentHandler(repo, rnr)
-	r.Get("/deployments", dh.ListDeployments)
-	r.Post("/deployments", dh.CreateDeployment)
-	r.Get("/deployments/{id}", dh.GetDeployment)
-	r.Get("/deployments/{id}/status", dh.GetDeploymentStatus)
-	r.Post("/deployments/{id}/cancel", dh.CancelDeployment)
-	r.Post("/deployments/{id}/approve", dh.ApproveDeployment)
-	r.Post("/deployments/{id}/redeploy", dh.RedeployDeployment)
-	r.Get("/projects/{id}/deploy", dh.NewDeploymentPage)
-	r.Post("/projects/{id}/deploy", dh.ScheduleDeployment)
+		vh := handler.NewVariableHandler(repo)
+		pr.Get("/projects/{id}/variables", vh.ListVariables)
+		pr.Post("/projects/{id}/variables", vh.CreateVariable)
+		pr.Get("/projects/{id}/variables/{varId}/edit", vh.EditVariable)
+		pr.Put("/projects/{id}/variables/{varId}", vh.UpdateVariable)
+		pr.Delete("/projects/{id}/variables/{varId}", vh.DeleteVariable)
 
-	sdh := handler.NewScheduledDeploymentHandler(repo, parser)
-	r.Get("/projects/{id}/schedules", sdh.List)
-	r.Get("/projects/{id}/schedules/new", sdh.NewForm)
-	r.Post("/projects/{id}/schedules", sdh.Create)
-	r.Get("/projects/{id}/schedules/{schedId}/edit", sdh.EditForm)
-	r.Put("/projects/{id}/schedules/{schedId}", sdh.Update)
-	r.Delete("/projects/{id}/schedules/{schedId}", sdh.Delete)
-	r.Post("/projects/{id}/schedules/{schedId}/toggle", sdh.Toggle)
+		rh := handler.NewReleaseHandler(repo)
+		pr.Get("/projects/{id}/releases", rh.ListReleases)
+		pr.Post("/projects/{id}/releases", rh.CreateRelease)
+		pr.Get("/projects/{id}/releases/{releaseId}", rh.GetRelease)
+		pr.Post("/projects/{id}/releases/{releaseId}/refresh", rh.RefreshRelease)
 
-	lh := handler.NewLogHandler(rnr.Broker(), repo)
-	r.Get("/deployments/{id}/logs/stream", lh.StreamLogs)
-	r.Get("/deployments/{id}/logs.txt", lh.ExportLogs)
+		dh := handler.NewDeploymentHandler(repo, rnr)
+		pr.Get("/deployments", dh.ListDeployments)
+		pr.Post("/deployments", dh.CreateDeployment)
+		pr.Get("/deployments/{id}", dh.GetDeployment)
+		pr.Get("/deployments/{id}/status", dh.GetDeploymentStatus)
+		pr.Post("/deployments/{id}/cancel", dh.CancelDeployment)
+		pr.Post("/deployments/{id}/approve", dh.ApproveDeployment)
+		pr.Post("/deployments/{id}/redeploy", dh.RedeployDeployment)
+		pr.Get("/projects/{id}/deploy", dh.NewDeploymentPage)
+		pr.Post("/projects/{id}/deploy", dh.ScheduleDeployment)
+
+		sdh := handler.NewScheduledDeploymentHandler(repo, parser)
+		pr.Get("/projects/{id}/schedules", sdh.List)
+		pr.Get("/projects/{id}/schedules/new", sdh.NewForm)
+		pr.Post("/projects/{id}/schedules", sdh.Create)
+		pr.Get("/projects/{id}/schedules/{schedId}/edit", sdh.EditForm)
+		pr.Put("/projects/{id}/schedules/{schedId}", sdh.Update)
+		pr.Delete("/projects/{id}/schedules/{schedId}", sdh.Delete)
+		pr.Post("/projects/{id}/schedules/{schedId}/toggle", sdh.Toggle)
+
+		lh := handler.NewLogHandler(rnr.Broker(), repo)
+		pr.Get("/deployments/{id}/logs/stream", lh.StreamLogs)
+		pr.Get("/deployments/{id}/logs.txt", lh.ExportLogs)
+
+		// Admin-only audit log viewer. RequireRole gates the sub-group
+		// so non-admin roles get 403 on /admin/* without touching the
+		// audit handler.
+		pr.Group(func(ar chi.Router) {
+			ar.Use(auth.RequireRole("admin"))
+			adminH := handler.NewAdminHandler(repo)
+			ar.Get("/admin/audit", adminH.ListAudit)
+		})
+	})
 
 	return r
 }
