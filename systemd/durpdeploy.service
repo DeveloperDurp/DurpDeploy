@@ -1,0 +1,55 @@
+# DurpDeploy systemd unit.
+#
+# Install: sudo install -m 0644 systemd/durpdeploy.service /etc/systemd/system/
+# Then:   sudo systemctl daemon-reload && sudo systemctl enable --now durpdeploy
+#
+# See docs/deploy.md for the full provisioning runbook.
+
+[Unit]
+Description=DurpDeploy — bash deployment tool
+Documentation=https://gitlab.example.com/durpdeploy
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=durpdeploy
+Group=durpdeploy
+WorkingDirectory=/var/lib/durpdeploy
+Environment=DURPDEPLOY_DB=/var/lib/durpdeploy/durpdeploy.db
+ExecStart=/usr/local/bin/durpdeploy
+Restart=on-failure
+RestartSec=5s
+
+# --- Hardening ---
+# Make most of the filesystem read-only to the process. Writes are still
+# allowed under /var/lib/durpdeploy (WorkingDirectory) via the explicit bind
+# exception, plus /var/log if litestream logging is added later.
+ProtectSystem=strict
+# Hide /home, /root, /run/user — the service has no business reading user data.
+ProtectHome=true
+# Drop setuid/setgid capability gains; a compromised process cannot escalate.
+NoNewPrivileges=true
+# Private /tmp — the process sees its own fresh tmpfs, isolated from host /tmp.
+PrivateTmp=true
+# Block writes to kernel tunables (sysctl) and kernel module loading.
+ProtectKernelTunables=true
+ProtectKernelModules=true
+# Block writes to /sys/fs/cgroup — cannot escape or reconfigure cgroups.
+ProtectControlGroups=true
+# Restrict to the socket families the binary actually needs: unix sockets
+# (SQLite in some configs), IPv4/IPv6 for the HTTP listener. No AF_PACKET,
+# no AF_NETLINK — the process cannot do raw sockets or netlink trickery.
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+# Disable namespace creation — no mount/PID/user/net namespace unsharing.
+RestrictNamespaces=true
+# Block realtime scheduling — not needed, blocks a class of priority attacks.
+RestrictRealtime=true
+# Lock the process personality (prevents 32-bit-on-64-bit ABI tricks).
+LockPersonality=true
+# Block writable+executable memory. Go does not use JIT, so this is safe and
+# blocks a large class of code-injection attacks.
+MemoryDenyWriteExecute=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,6 +1,10 @@
 package layouts
 
-import "strings"
+import (
+	"strings"
+
+	"durpdeploy/internal/auth"
+)
 
 func isActive(currentPath, prefix string) bool {
 	return currentPath == prefix || strings.HasPrefix(currentPath, prefix+"/")
@@ -23,11 +27,37 @@ templ Base(title string, currentPath string) {
 			<link rel="stylesheet" href="/static/css/tailwind.min.css"/>
 			<style>[data-theme="mocha"] .theme-light{display:none}[data-theme="light"] .theme-dark{display:none}</style>
 			<script>document.documentElement.setAttribute('data-theme',localStorage.getItem('theme')||'mocha')</script>
+			if sess := auth.SessionFromContext(ctx); sess != nil && sess.CsrfToken != "" {
+				<meta name="csrf-token" content={ sess.CsrfToken }/>
+			}
+			<script>
+				// htmx:configRequest bubbles up to document, so listen there
+				// (the script runs in <head> where document.body is null).
+				document.addEventListener('htmx:configRequest', function(evt) {
+					var meta = document.querySelector('meta[name="csrf-token"]');
+					if (meta) { evt.detail.headers['X-CSRF-Token'] = meta.content; }
+				});
+				// Inject a hidden csrf_token input into any form that
+				// doesn't already have one. Capture phase so the input is
+				// appended before HTMX or the browser reads the form.
+				document.addEventListener('submit', function(evt) {
+					var form = evt.target;
+					if (!form || form.tagName !== 'FORM') return;
+					if (form.querySelector('input[name="csrf_token"]')) return;
+					var meta = document.querySelector('meta[name="csrf-token"]');
+					if (!meta) return;
+					var input = document.createElement('input');
+					input.type = 'hidden';
+					input.name = 'csrf_token';
+					input.value = meta.content;
+					form.appendChild(input);
+				}, true);
+			</script>
 			<script src="/static/js/app.bundle.js" defer></script>
 		</head>
 		<body class="bg-base-100 text-base-content min-h-screen">
 			<div class="navbar bg-base-200 border-b border-base-300" x-data="{ theme: localStorage.getItem('theme') || 'mocha' }" x-init="document.documentElement.setAttribute('data-theme', theme); $watch('theme', val => { document.documentElement.setAttribute('data-theme', val); localStorage.setItem('theme', val) })">
-				<div class="w-full px-4 sm:px-6 lg:px-8">
+				<div class="w-full px-4 sm:px-6 lg:px-8 flex items-center">
 					<div class="flex-1">
 						<a href="/" class="btn btn-ghost text-xl">DurpDeploy</a>
 					</div>
@@ -43,6 +73,14 @@ templ Base(title string, currentPath string) {
 							<span class="theme-dark">☀️</span>
 							<span class="theme-light">🌙</span>
 						</button>
+						if user := auth.UserFromContext(ctx); user != nil {
+							<span class="text-sm opacity-70 whitespace-nowrap">{ user.Name } ({ user.Role })</span>
+							<form method="post" action="/logout" class="inline">
+								<button type="submit" class="btn btn-ghost btn-sm">Logout</button>
+							</form>
+						} else {
+							<a href="/login" class="btn btn-ghost btn-sm">Sign in</a>
+						}
 					</div>
 				</div>
 			</div>

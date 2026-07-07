@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/handler"
 	"durpdeploy/internal/migrate"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/runner"
@@ -26,11 +27,13 @@ import (
 )
 
 // projectHarness wraps a full-stack server with helpers to create a project,
-// a lifecycle, envs, releases, and to drive deployments.
+// a lifecycle, envs, releases, and to drive deployments. Every request goes
+// through an authenticated admin session (P0-4 requirement).
 type projectHarness struct {
 	t      *testing.T
 	repo   *repository.Repository
 	server *httptest.Server
+	sess   *authedSession
 }
 
 func newProjectHarness(t *testing.T) *projectHarness {
@@ -50,9 +53,29 @@ func newProjectHarness(t *testing.T) *projectHarness {
 	broker := runner.NewLogBroker()
 	rnr := runner.New(repo, broker)
 	parser := cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
-	srv := httptest.NewServer(server.NewRouter(repo, rnr, parser))
+	authHandler := handler.NewAuthHandler(repo)
+	srv := httptest.NewServer(server.NewRouter(repo, rnr, parser, authHandler))
 	t.Cleanup(srv.Close)
-	return &projectHarness{t: t, repo: repo, server: srv}
+	h := &projectHarness{t: t, repo: repo, server: srv}
+	h.sess = seedSession(t, repo, srv.URL, "admin")
+	return h
+}
+
+// setRole swaps the harness session for a new user with the given role.
+// Used by tests that need to act as a non-admin (e.g. viewer).
+func (h *projectHarness) setRole(role string) {
+	h.t.Helper()
+	h.sess = seedSession(h.t, h.repo, h.server.URL, role)
+}
+
+// csrfToken returns the current session's CSRF token for form helpers.
+func (h *projectHarness) csrfToken() string {
+	return h.sess.csrfToken
+}
+
+// authedClient returns the cookie-jarred HTTP client for this harness.
+func (h *projectHarness) authedClient() *http.Client {
+	return h.sess.client
 }
 
 func (h *projectHarness) makeProject(name string) db.Project {
@@ -190,14 +213,12 @@ func (h *projectHarness) postDeploy(releaseID, envID int64) (int, int64) {
 	form := map[string]string{
 		"release_id":     fmt.Sprintf("%d", releaseID),
 		"environment_id": fmt.Sprintf("%d", envID),
+		"csrf_token":     h.csrfToken(),
 	}
 	body := strings.NewReader(formEncode(form))
 	req, _ := http.NewRequest("POST", h.server.URL+"/deployments", body)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	client := &http.Client{
-		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
-	}
-	resp, err := client.Do(req)
+	resp, err := h.authedClient().Do(req)
 	if err != nil {
 		h.t.Fatalf("POST: %v", err)
 	}
@@ -226,7 +247,7 @@ func formEncode(m map[string]string) string {
 
 func (h *projectHarness) getProjectPage(projectID int64) string {
 	h.t.Helper()
-	resp, err := http.Get(
+	resp, err := h.authedClient().Get(
 		fmt.Sprintf("%s/projects/%d", h.server.URL, projectID),
 	)
 	if err != nil {
@@ -463,7 +484,7 @@ func TestProjectsList_LifecycleShowsAllStagesIncludingUntouched(t *testing.T) {
 
 func (h *projectHarness) getProjectsList() string {
 	h.t.Helper()
-	resp, err := http.Get(h.server.URL + "/projects")
+	resp, err := h.authedClient().Get(h.server.URL + "/projects")
 	if err != nil {
 		h.t.Fatalf("GET /projects: %v", err)
 	}
@@ -508,7 +529,9 @@ func TestStepsPage_RendersFullPage(t *testing.T) {
 	makeStepGlobal(t, h, proj.ID, "first-step", "echo+a")
 	makeStepGlobal(t, h, proj.ID, "second-step", "echo+b")
 
-	resp, err := http.Get(
+	// ponytail: use authedClient so the session cookie is sent; bare
+	// http.Get gets 303-redirected to /login by the auth middleware.
+	resp, err := h.authedClient().Get(
 		fmt.Sprintf("%s/projects/%d/steps-page", h.server.URL, proj.ID),
 	)
 	if err != nil {
@@ -575,9 +598,11 @@ func makeStepGlobal(
 	name, body string,
 ) {
 	t.Helper()
-	resp, err := http.PostForm(
+	form := url.Values{"name": {name}, "script_body": {body}}
+	form.Set("csrf_token", h.csrfToken())
+	resp, err := h.authedClient().PostForm(
 		fmt.Sprintf("%s/projects/%d/steps", h.server.URL, pid),
-		url.Values{"name": {name}, "script_body": {body}},
+		form,
 	)
 	if err != nil {
 		t.Fatalf("create step %s: %v", name, err)
@@ -595,10 +620,11 @@ func makeVariableGlobal(
 ) {
 	t.Helper()
 	form := url.Values{"name": {name}, "value": {value}}
+	form.Set("csrf_token", h.csrfToken())
 	if envID != "" {
 		form.Set("environment_id", envID)
 	}
-	resp, err := http.PostForm(
+	resp, err := h.authedClient().PostForm(
 		fmt.Sprintf("%s/projects/%d/variables", h.server.URL, pid),
 		form,
 	)
@@ -617,7 +643,7 @@ func TestUpdateProject_AfterSubmitLandsOnProject(t *testing.T) {
 	proj := h.makeProject("nav-redirect")
 
 	// Cancel link on the edit form should point to the project's detail page.
-	editPage, err := http.Get(
+	editPage, err := h.authedClient().Get(
 		fmt.Sprintf("%s/projects/%d/edit", h.server.URL, proj.ID),
 	)
 	if err != nil {
@@ -639,10 +665,10 @@ func TestUpdateProject_AfterSubmitLandsOnProject(t *testing.T) {
 	// page; the non-HX path (curl without HX-Request) should 303 to it.
 	hxReq, _ := http.NewRequest("PUT",
 		fmt.Sprintf("%s/projects/%d", h.server.URL, proj.ID),
-		strings.NewReader("name=renamed&description=&lifecycle_id="))
+		strings.NewReader("name=renamed&description=&lifecycle_id=&csrf_token="+h.csrfToken()))
 	hxReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	hxReq.Header.Set("HX-Request", "true")
-	hxResp, err := http.DefaultClient.Do(hxReq)
+	hxResp, err := h.authedClient().Do(hxReq)
 	if err != nil {
 		t.Fatalf("PUT (HX): %v", err)
 	}
@@ -653,12 +679,9 @@ func TestUpdateProject_AfterSubmitLandsOnProject(t *testing.T) {
 
 	nonHxReq, _ := http.NewRequest("PUT",
 		fmt.Sprintf("%s/projects/%d", h.server.URL, proj.ID),
-		strings.NewReader("name=renamed-2&description=&lifecycle_id="))
+		strings.NewReader("name=renamed-2&description=&lifecycle_id=&csrf_token="+h.csrfToken()))
 	nonHxReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	client := &http.Client{
-		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
-	}
-	nonHxResp, err := client.Do(nonHxReq)
+	nonHxResp, err := h.authedClient().Do(nonHxReq)
 	if err != nil {
 		t.Fatalf("PUT (non-HX): %v", err)
 	}
@@ -683,7 +706,7 @@ func TestProjectPage_EditOnDetailDeleteOnEditForm(t *testing.T) {
 
 	listPage := h.getProjectsList()
 	detailPage := h.getProjectPage(proj.ID)
-	editPage, err := http.Get(
+	editPage, err := h.authedClient().Get(
 		fmt.Sprintf("%s/projects/%d/edit", h.server.URL, proj.ID),
 	)
 	if err != nil {
@@ -740,14 +763,17 @@ func TestProjectDelete_FromProjectPageNavigatesAway(t *testing.T) {
 	proj := h.makeProject("delete-from-detail")
 
 	// HX path.
+	// ponytail: Go's ParseForm ignores DELETE bodies, so the CSRF token
+	// must go in the X-CSRF-Token header (the middleware's fallback).
 	hxReq, _ := http.NewRequest(
 		"DELETE",
 		fmt.Sprintf("%s/projects/%d", h.server.URL, proj.ID),
-		nil,
+		strings.NewReader("csrf_token="+h.csrfToken()),
 	)
+	hxReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	hxReq.Header.Set("X-CSRF-Token", h.csrfToken())
 	hxReq.Header.Set("HX-Request", "true")
-	hxClient := &http.Client{}
-	hxResp, err := hxClient.Do(hxReq)
+	hxResp, err := h.authedClient().Do(hxReq)
 	if err != nil {
 		t.Fatalf("DELETE (HX): %v", err)
 	}
@@ -769,12 +795,11 @@ func TestProjectDelete_FromProjectPageNavigatesAway(t *testing.T) {
 	nonHxReq, _ := http.NewRequest(
 		"DELETE",
 		fmt.Sprintf("%s/projects/%s", h.server.URL, idStr),
-		nil,
+		strings.NewReader("csrf_token="+h.csrfToken()),
 	)
-	nonHxClient := &http.Client{
-		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
-	}
-	nonHxResp, err := nonHxClient.Do(nonHxReq)
+	nonHxReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	nonHxReq.Header.Set("X-CSRF-Token", h.csrfToken())
+	nonHxResp, err := h.authedClient().Do(nonHxReq)
 	if err != nil {
 		t.Fatalf("DELETE (non-HX): %v", err)
 	}

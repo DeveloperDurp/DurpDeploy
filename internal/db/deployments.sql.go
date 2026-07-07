@@ -489,6 +489,75 @@ func (q *Queries) ListLatestDeploymentPerReleaseEnv(ctx context.Context) ([]List
 	return items, nil
 }
 
+const listPendingDeployments = `-- name: ListPendingDeployments :many
+SELECT
+    d.id, d.release_id, d.environment_id, d.status,
+    d.started_at, d.finished_at, d.created_at, d.forced, d.note,
+    p.name AS project_name,
+    r.version AS release_version,
+    e.name AS environment_name
+FROM deployments d
+JOIN releases r ON d.release_id = r.id
+JOIN projects p ON r.project_id = p.id
+JOIN environments e ON d.environment_id = e.id
+WHERE d.status = 'pending'
+ORDER BY d.created_at ASC
+`
+
+type ListPendingDeploymentsRow struct {
+	ID              int64          `json:"id"`
+	ReleaseID       int64          `json:"release_id"`
+	EnvironmentID   int64          `json:"environment_id"`
+	Status          string         `json:"status"`
+	StartedAt       sql.NullInt64  `json:"started_at"`
+	FinishedAt      sql.NullInt64  `json:"finished_at"`
+	CreatedAt       int64          `json:"created_at"`
+	Forced          int64          `json:"forced"`
+	Note            sql.NullString `json:"note"`
+	ProjectName     string         `json:"project_name"`
+	ReleaseVersion  string         `json:"release_version"`
+	EnvironmentName string         `json:"environment_name"`
+}
+
+// Used by startup recovery to re-launch runners for deployments that
+// were created but never picked up (e.g. process restart between
+// handler-launched goroutine and first runner step).
+func (q *Queries) ListPendingDeployments(ctx context.Context) ([]ListPendingDeploymentsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listPendingDeployments)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPendingDeploymentsRow
+	for rows.Next() {
+		var i ListPendingDeploymentsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ReleaseID,
+			&i.EnvironmentID,
+			&i.Status,
+			&i.StartedAt,
+			&i.FinishedAt,
+			&i.CreatedAt,
+			&i.Forced,
+			&i.Note,
+			&i.ProjectName,
+			&i.ReleaseVersion,
+			&i.EnvironmentName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRecentDeployments = `-- name: ListRecentDeployments :many
 SELECT id, release_id, environment_id, status, started_at, finished_at, created_at, forced, note FROM deployments ORDER BY created_at DESC LIMIT ?
 `

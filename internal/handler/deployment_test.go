@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/handler"
 	"durpdeploy/internal/migrate"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/runner"
@@ -36,6 +37,7 @@ type testHarness struct {
 	rnr    *runner.DeploymentRunner
 	server *httptest.Server
 	dbPath string
+	sess   *authedSession
 }
 
 func newHarness(t *testing.T) *testHarness {
@@ -59,10 +61,23 @@ func newHarness(t *testing.T) *testHarness {
 	broker := runner.NewLogBroker()
 	rnr := runner.New(repo, broker)
 	parser := cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
-	srv := httptest.NewServer(server.NewRouter(repo, rnr, parser))
+	authHandler := handler.NewAuthHandler(repo)
+	srv := httptest.NewServer(server.NewRouter(repo, rnr, parser, authHandler))
 	t.Cleanup(srv.Close)
 
-	return &testHarness{repo: repo, rnr: rnr, server: srv, dbPath: dbPath}
+	h := &testHarness{repo: repo, rnr: rnr, server: srv, dbPath: dbPath}
+	h.sess = seedSession(t, repo, srv.URL, "admin")
+	return h
+}
+
+// csrfToken returns the current session's CSRF token for form helpers.
+func (h *testHarness) csrfToken() string {
+	return h.sess.csrfToken
+}
+
+// authedClient returns the cookie-jarred HTTP client for this harness.
+func (h *testHarness) authedClient() *http.Client {
+	return h.sess.client
 }
 
 type harnessCtx struct {
@@ -206,15 +221,11 @@ func (hc *harnessCtx) postDeploy(
 	form := url.Values{}
 	form.Set("release_id", fmt.Sprintf("%d", releaseID))
 	form.Set("environment_id", fmt.Sprintf("%d", envID))
+	form.Set("csrf_token", hc.h.csrfToken())
 	if force {
 		form.Set("force", "true")
 	}
-	client := &http.Client{
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-	}
-	resp, err := client.PostForm(hc.h.server.URL+"/deployments", form)
+	resp, err := hc.h.authedClient().PostForm(hc.h.server.URL+"/deployments", form)
 	if err != nil {
 		t.Fatalf("POST /deployments: %v", err)
 	}
@@ -503,7 +514,9 @@ func TestReleasesPage_OnlyShowsDeployableEnvsByDefault(t *testing.T) {
 	hc := h.setupProjectWithLifecycle(t, []string{"Alpha", "Beta"})
 	rel := hc.makeRelease(t, "1.0.0", "exit 0")
 
-	resp, err := http.Get(
+	// ponytail: use authedClient so the session cookie is sent; bare
+	// http.Get gets 303-redirected to /login by the auth middleware.
+	resp, err := h.authedClient().Get(
 		fmt.Sprintf("%s/projects/%d/releases", h.server.URL, hc.project.ID),
 	)
 	if err != nil {
@@ -548,7 +561,7 @@ func TestReleasesPage_HidesNonLifecycleEnvs(t *testing.T) {
 
 	rel := hc.makeRelease(t, "1.0.0", "exit 0")
 
-	resp, err := http.Get(
+	resp, err := h.authedClient().Get(
 		fmt.Sprintf("%s/projects/%d/releases", h.server.URL, hc.project.ID),
 	)
 	if err != nil {
@@ -578,7 +591,8 @@ func TestGate_RenderError_ContainsReasonText(t *testing.T) {
 	form := url.Values{}
 	form.Set("release_id", fmt.Sprintf("%d", rel.ID))
 	form.Set("environment_id", fmt.Sprintf("%d", hc.envs["Beta"].ID))
-	resp, err := http.PostForm(h.server.URL+"/deployments", form)
+	form.Set("csrf_token", h.csrfToken())
+	resp, err := h.authedClient().PostForm(h.server.URL+"/deployments", form)
 	if err != nil {
 		t.Fatalf("POST: %v", err)
 	}
@@ -631,23 +645,18 @@ func firstDeployment(
 // Deploy page tests
 // ---------------------------------------------------------------------------
 
-func postDeployPage(
-	t *testing.T,
-	base, projectID, releaseID, envID, force string,
-) int {
-	t.Helper()
+func (h *projectHarness) postDeployPage(projectID, releaseID, envID, force string) int {
+	h.t.Helper()
 	form := url.Values{}
 	form.Set("release_id", releaseID)
 	form.Set("environment_id", envID)
+	form.Set("csrf_token", h.csrfToken())
 	if force != "" {
 		form.Set("force", force)
 	}
-	client := &http.Client{
-		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
-	}
-	resp, err := client.PostForm(base+"/projects/"+projectID+"/deploy", form)
+	resp, err := h.authedClient().PostForm(h.server.URL+"/projects/"+projectID+"/deploy", form)
 	if err != nil {
-		t.Fatalf("POST: %v", err)
+		h.t.Fatalf("POST: %v", err)
 	}
 	defer resp.Body.Close()
 	return resp.StatusCode
@@ -660,7 +669,7 @@ func TestNewDeploymentPage_RendersForm(t *testing.T) {
 	makeStepGlobal(t, h, proj.ID, "s", "true")
 	h.makeRelease(proj.ID, "1.0.0", "true")
 
-	resp, err := http.Get(
+	resp, err := h.authedClient().Get(
 		fmt.Sprintf("%s/projects/%d/deploy", h.server.URL, proj.ID),
 	)
 	if err != nil {
@@ -693,7 +702,7 @@ func TestNewDeploymentPage_NoReleasesShowsEmptyState(t *testing.T) {
 	h := newProjectHarness(t)
 	proj := h.makeProject("no-rel")
 
-	resp, err := http.Get(
+	resp, err := h.authedClient().Get(
 		fmt.Sprintf("%s/projects/%d/deploy", h.server.URL, proj.ID),
 	)
 	if err != nil {
@@ -717,7 +726,7 @@ func TestNewDeploymentPage_NoReleasesShowsEmptyState(t *testing.T) {
 
 func TestNewDeploymentPage_NonExistentProject404(t *testing.T) {
 	h := newProjectHarness(t)
-	resp, err := http.Get(fmt.Sprintf("%s/projects/9999/deploy", h.server.URL))
+	resp, err := h.authedClient().Get(fmt.Sprintf("%s/projects/9999/deploy", h.server.URL))
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
@@ -738,7 +747,7 @@ func TestNewDeploymentPage_LifecycleFiltersEnvs(t *testing.T) {
 	makeStepGlobal(t, h, proj.ID, "s", "true")
 	h.makeRelease(proj.ID, "1.0.0", "true")
 
-	resp, err := http.Get(
+	resp, err := h.authedClient().Get(
 		fmt.Sprintf("%s/projects/%d/deploy", h.server.URL, proj.ID),
 	)
 	if err != nil {
@@ -764,9 +773,7 @@ func TestScheduleDeployment_Success(t *testing.T) {
 	makeStepGlobal(t, h, proj.ID, "s", "true")
 	rel := h.makeRelease(proj.ID, "1.0.0", "true")
 
-	code := postDeployPage(
-		t,
-		h.server.URL,
+	code := h.postDeployPage(
 		fmt.Sprintf("%d", proj.ID),
 		fmt.Sprintf("%d", rel.ID),
 		fmt.Sprintf("%d", envA.ID),
@@ -803,9 +810,7 @@ func TestScheduleDeployment_CrossProjectReleaseIsRejected(t *testing.T) {
 	_ = h.makeRelease(projB.ID, "1.0.0", "true")
 
 	// Try to deploy projA's release via projB's deploy endpoint.
-	code := postDeployPage(
-		t,
-		h.server.URL,
+	code := h.postDeployPage(
 		fmt.Sprintf("%d", projB.ID),
 		fmt.Sprintf("%d", relA.ID),
 		fmt.Sprintf("%d", envA.ID),
@@ -828,9 +833,7 @@ func TestScheduleDeployment_GateViolation422(t *testing.T) {
 	rel := h.makeRelease(proj.ID, "1.0.0", "true")
 
 	// Deploy to a non-lifecycle env without force -> 422.
-	code := postDeployPage(
-		t,
-		h.server.URL,
+	code := h.postDeployPage(
 		fmt.Sprintf("%d", proj.ID),
 		fmt.Sprintf("%d", rel.ID),
 		fmt.Sprintf("%d", out.ID),
@@ -852,9 +855,7 @@ func TestScheduleDeployment_ForceBypasses(t *testing.T) {
 	rel := h.makeRelease(proj.ID, "1.0.0", "true")
 
 	// First deploy to dev so the gate would let v1.0.0 through.
-	code := postDeployPage(
-		t,
-		h.server.URL,
+	code := h.postDeployPage(
 		fmt.Sprintf("%d", proj.ID),
 		fmt.Sprintf("%d", rel.ID),
 		fmt.Sprintf("%d", dev.ID),
@@ -875,9 +876,7 @@ func TestScheduleDeployment_ForceBypasses(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	// Now force to prod (skipping the gate would block).
-	code = postDeployPage(
-		t,
-		h.server.URL,
+	code = h.postDeployPage(
 		fmt.Sprintf("%d", proj.ID),
 		fmt.Sprintf("%d", rel.ID),
 		fmt.Sprintf("%d", prod.ID),
@@ -959,7 +958,7 @@ func TestNewDeploymentPage_LifecycleOnlyShowsEmptyStateWhenNoStages(
 	// This is the project page, not the deploy page. But the user said
 	// "I still see all environments" which we read as the deploy page.
 	// Check the deploy page directly.
-	resp, err := http.Get(
+	resp, err := h.authedClient().Get(
 		fmt.Sprintf("%s/projects/%d/deploy", h.server.URL, proj.ID),
 	)
 	if err != nil {
@@ -1005,7 +1004,7 @@ func TestNewDeploymentPage_ReleaseAwareGateState(t *testing.T) {
 	// With ?release_id=v1 on a 3-stage lifecycle, stage 0 (dev) is
 	// deployable (no prior required); stages 1 and 2 (test, prod) are
 	// force-bypassable because their prior stage hasn't seen v1 yet.
-	resp, err := http.Get(
+	resp, err := h.authedClient().Get(
 		fmt.Sprintf(
 			"%s/projects/%d/deploy?release_id=%d",
 			h.server.URL,
@@ -1055,7 +1054,7 @@ func TestNewDeploymentPage_ReleaseAwareGateState(t *testing.T) {
 	}
 	h.waitForDeploymentToSucceed(proj.ID, v1.ID, dev.ID)
 
-	resp, err = http.Get(
+	resp, err = h.authedClient().Get(
 		fmt.Sprintf(
 			"%s/projects/%d/deploy?release_id=%d",
 			h.server.URL,
@@ -1144,16 +1143,14 @@ func (h *projectHarness) postDeployRelease(
 	form := url.Values{}
 	form.Set("release_id", fmt.Sprintf("%d", releaseID))
 	form.Set("environment_id", fmt.Sprintf("%d", envID))
-	client := &http.Client{
-		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
-	}
+	form.Set("csrf_token", h.csrfToken())
 	req, _ := http.NewRequest(
 		"POST",
 		fmt.Sprintf("%s/projects/%d/deploy", h.server.URL, projectID),
 		strings.NewReader(form.Encode()),
 	)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	resp, err := client.Do(req)
+	resp, err := h.authedClient().Do(req)
 	if err != nil {
 		return 0, err
 	}
@@ -1224,7 +1221,7 @@ func TestListDeployments_FilterAndPaginate(t *testing.T) {
 	_ = prod
 
 	// First page: status=succeeded, limit=2 -> 2 rows, Load more visible.
-	resp1, err := http.Get(
+	resp1, err := h.authedClient().Get(
 		fmt.Sprintf("%s/deployments?status=succeeded&limit=2", h.server.URL),
 	)
 	if err != nil {
@@ -1252,7 +1249,7 @@ func TestListDeployments_FilterAndPaginate(t *testing.T) {
 	}
 
 	// Second page: status=succeeded, limit=2, offset=2 -> 1 row, no Load more.
-	resp2, err := http.Get(
+	resp2, err := h.authedClient().Get(
 		fmt.Sprintf(
 			"%s/deployments?status=succeeded&limit=2&offset=2",
 			h.server.URL,
@@ -1309,7 +1306,7 @@ func TestListDeployments_HTMXPartialReturnsRowsAndOOBButton(t *testing.T) {
 		nil,
 	)
 	req.Header.Set("HX-Request", "true")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := h.authedClient().Do(req)
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}

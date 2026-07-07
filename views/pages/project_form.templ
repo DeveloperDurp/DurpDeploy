@@ -7,6 +7,18 @@ import (
 	"strconv"
 )
 
+// projectFormID returns the form's id attribute. The submit button
+// rendered below the form uses the same id so its `form=` attribute
+// actually binds to the form — without this, clicking Create on the
+// "new" page is a no-op (the button references "project-form-0" while
+// the form is "project-form-new").
+func projectFormID(project db.Project, isEdit bool) string {
+	if isEdit {
+		return fmt.Sprintf("project-form-%d", project.ID)
+	}
+	return "project-form-new"
+}
+
 templ ProjectForm(project db.Project, isEdit bool, errorMsg string, lifecycles []db.Lifecycle) {
 	<div class="max-w-2xl mx-auto">
 		<h1 class="text-3xl font-bold mb-6">
@@ -18,14 +30,14 @@ templ ProjectForm(project db.Project, isEdit bool, errorMsg string, lifecycles [
 		</h1>
 		<form
 			if isEdit {
-				id={ fmt.Sprintf("project-form-%d", project.ID) }
+				id={ projectFormID(project, isEdit) }
 				hx-put={ fmt.Sprintf("/projects/%d", project.ID) }
 				hx-target="#form-container"
 				hx-swap="innerHTML"
 				data-toast-success="Project updated"
 				data-toast-error="Failed to update project"
 			} else {
-				id="project-form-new"
+				id={ projectFormID(project, isEdit) }
 				method="post"
 				action="/projects"
 			}
@@ -88,7 +100,7 @@ templ ProjectForm(project db.Project, isEdit bool, errorMsg string, lifecycles [
 			</div>
 		}
 		<div class="mt-8 pt-6 border-t border-base-300 flex gap-2 justify-end">
-			<button type="submit" form={ fmt.Sprintf("project-form-%d", project.ID) } class="btn btn-primary">
+			<button type="submit" form={ projectFormID(project, isEdit) } class="btn btn-primary">
 				if isEdit {
 					Update
 				} else {
