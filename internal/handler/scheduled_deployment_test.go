@@ -48,7 +48,9 @@ func newScheduledHarness(t *testing.T) *scheduledHarness {
 	repo := repository.New(conn)
 	broker := runner.NewLogBroker()
 	rnr := runner.New(repo, broker)
-	parser := cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
+	parser := cron.NewParser(
+		cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow,
+	)
 	sdh := handler.NewScheduledDeploymentHandler(repo, parser)
 
 	// Also mount deployment handler so we can reuse availableEnvsForDeployPage
@@ -167,7 +169,12 @@ func (h *scheduledHarness) putSchedule(
 	}
 	req, _ := http.NewRequest(
 		"PUT",
-		fmt.Sprintf("%s/projects/%d/schedules/%d", h.server.URL, projectID, schedID),
+		fmt.Sprintf(
+			"%s/projects/%d/schedules/%d",
+			h.server.URL,
+			projectID,
+			schedID,
+		),
 		strings.NewReader(form.Encode()),
 	)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -187,7 +194,12 @@ func (h *scheduledHarness) putSchedule(
 func (h *scheduledHarness) toggleSchedule(projectID, schedID int64) int {
 	h.t.Helper()
 	resp, err := http.Post(
-		fmt.Sprintf("%s/projects/%d/schedules/%d/toggle", h.server.URL, projectID, schedID),
+		fmt.Sprintf(
+			"%s/projects/%d/schedules/%d/toggle",
+			h.server.URL,
+			projectID,
+			schedID,
+		),
 		"",
 		nil,
 	)
@@ -202,7 +214,12 @@ func (h *scheduledHarness) deleteSchedule(projectID, schedID int64) int {
 	h.t.Helper()
 	req, _ := http.NewRequest(
 		"DELETE",
-		fmt.Sprintf("%s/projects/%d/schedules/%d", h.server.URL, projectID, schedID),
+		fmt.Sprintf(
+			"%s/projects/%d/schedules/%d",
+			h.server.URL,
+			projectID,
+			schedID,
+		),
 		nil,
 	)
 	client := &http.Client{
@@ -224,7 +241,14 @@ func TestCreateScheduled_Valid(t *testing.T) {
 	env := h.makeEnv("dev")
 	rel := h.makeRelease(proj.ID, "1.0.0", "true")
 
-	code := h.postSchedule(proj.ID, rel.ID, env.ID, "0 0 * * *", "nightly", true)
+	code := h.postSchedule(
+		proj.ID,
+		rel.ID,
+		env.ID,
+		"0 0 * * *",
+		"nightly",
+		true,
+	)
 	if code != http.StatusSeeOther {
 		t.Fatalf("expected 303, got %d", code)
 	}
@@ -283,7 +307,14 @@ func TestCreateScheduled_CrossProject_400(t *testing.T) {
 	relA := h.makeRelease(projA.ID, "1.0.0", "true")
 	_ = h.makeRelease(projB.ID, "1.0.0", "true")
 
-	code := h.postSchedule(projB.ID, relA.ID, env.ID, "0 0 * * *", "nightly", true)
+	code := h.postSchedule(
+		projB.ID,
+		relA.ID,
+		env.ID,
+		"0 0 * * *",
+		"nightly",
+		true,
+	)
 	if code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", code)
 	}
@@ -311,12 +342,23 @@ func TestUpdateScheduled_RecomputesNextRun(t *testing.T) {
 	s := schedules[0]
 	oldNextRun := s.NextRunAt
 
-	code := h.putSchedule(proj.ID, s.ID, rel.ID, env.ID, "0 12 * * *", "daily noon", true)
+	code := h.putSchedule(
+		proj.ID,
+		s.ID,
+		rel.ID,
+		env.ID,
+		"0 12 * * *",
+		"daily noon",
+		true,
+	)
 	if code != http.StatusSeeOther {
 		t.Fatalf("expected 303, got %d", code)
 	}
 
-	updated, err := h.repo.Queries.GetScheduledDeployment(context.Background(), s.ID)
+	updated, err := h.repo.Queries.GetScheduledDeployment(
+		context.Background(),
+		s.ID,
+	)
 	if err != nil {
 		t.Fatalf("get scheduled: %v", err)
 	}
@@ -360,7 +402,10 @@ func TestToggleScheduled_Advances(t *testing.T) {
 		t.Logf("toggle returned %d (accepting any 2xx)", code)
 	}
 
-	updated, err := h.repo.Queries.GetScheduledDeployment(context.Background(), s.ID)
+	updated, err := h.repo.Queries.GetScheduledDeployment(
+		context.Background(),
+		s.ID,
+	)
 	if err != nil {
 		t.Fatalf("get scheduled: %v", err)
 	}
@@ -368,7 +413,11 @@ func TestToggleScheduled_Advances(t *testing.T) {
 		t.Errorf("expected enabled=1 after toggle, got %d", updated.Enabled)
 	}
 	if updated.NextRunAt <= oldNextRun {
-		t.Errorf("next_run_at should be recomputed to future when enabling, got %d (was %d)", updated.NextRunAt, oldNextRun)
+		t.Errorf(
+			"next_run_at should be recomputed to future when enabling, got %d (was %d)",
+			updated.NextRunAt,
+			oldNextRun,
+		)
 	}
 }
 
@@ -414,7 +463,14 @@ func TestCreateScheduled_TZPrefixRejected(t *testing.T) {
 	env := h.makeEnv("dev")
 	rel := h.makeRelease(proj.ID, "1.0.0", "true")
 
-	code := h.postSchedule(proj.ID, rel.ID, env.ID, "TZ=America/New_York 0 0 * * *", "nightly", true)
+	code := h.postSchedule(
+		proj.ID,
+		rel.ID,
+		env.ID,
+		"TZ=America/New_York 0 0 * * *",
+		"nightly",
+		true,
+	)
 	if code != http.StatusUnprocessableEntity {
 		t.Fatalf("expected 422 for TZ= prefix, got %d", code)
 	}

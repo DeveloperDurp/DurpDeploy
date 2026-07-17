@@ -76,6 +76,13 @@ type Project struct {
 	LifecycleID sql.NullInt64  `json:"lifecycle_id"`
 }
 
+type ProjectMember struct {
+	ProjectID int64  `json:"project_id"`
+	UserID    int64  `json:"user_id"`
+	Role      string `json:"role"`
+	CreatedAt int64  `json:"created_at"`
+}
+
 type Release struct {
 	ID        int64  `json:"id"`
 	ProjectID int64  `json:"project_id"`

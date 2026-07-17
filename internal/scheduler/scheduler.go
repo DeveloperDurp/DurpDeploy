@@ -48,15 +48,21 @@ func WithLogger(l *slog.Logger) Option {
 }
 
 // New creates a Scheduler with a 60s tick interval and the standard 5-field cron parser.
-func New(repo *repository.Repository, rnr *runner.DeploymentRunner, opts ...Option) *Scheduler {
+func New(
+	repo *repository.Repository,
+	rnr *runner.DeploymentRunner,
+	opts ...Option,
+) *Scheduler {
 	s := &Scheduler{
 		repo:     repo,
 		runner:   rnr,
 		runFunc:  rnr.Run,
 		interval: 60 * time.Second,
 		now:      time.Now,
-		parser:   cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow),
-		log:      slog.Default(),
+		parser: cron.NewParser(
+			cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow,
+		),
+		log: slog.Default(),
 	}
 	for _, o := range opts {
 		o(s)
@@ -65,7 +71,9 @@ func New(repo *repository.Repository, rnr *runner.DeploymentRunner, opts ...Opti
 }
 
 // SetRunFunc replaces the runner function (tests use this to avoid real bash processes).
-func (s *Scheduler) SetRunFunc(fn func(ctx context.Context, deploymentID, releaseID, environmentID int64)) {
+func (s *Scheduler) SetRunFunc(
+	fn func(ctx context.Context, deploymentID, releaseID, environmentID int64),
+) {
 	s.runFunc = fn
 }
 
@@ -129,21 +137,56 @@ func (s *Scheduler) fireOne(ctx context.Context, row db.ScheduledDeployment) {
 	}
 
 	// overlap check
-	overlap, err := s.repo.Queries.GetLatestDeploymentForReleaseEnv(ctx, db.GetLatestDeploymentForReleaseEnvParams{
-		ReleaseID:     row.ReleaseID,
-		EnvironmentID: row.EnvironmentID,
-	})
+	overlap, err := s.repo.Queries.GetLatestDeploymentForReleaseEnv(
+		ctx,
+		db.GetLatestDeploymentForReleaseEnvParams{
+			ReleaseID:     row.ReleaseID,
+			EnvironmentID: row.EnvironmentID,
+		},
+	)
 	if err != nil && err != sql.ErrNoRows {
-		s.log.Error("overlap check failed", "schedule_id", row.ID, "project_id", row.ProjectID, "error", err)
+		s.log.Error(
+			"overlap check failed",
+			"schedule_id",
+			row.ID,
+			"project_id",
+			row.ProjectID,
+			"error",
+			err,
+		)
 		if err := s.advance(ctx, row, next); err != nil {
-			s.log.Error("advance failed", "schedule_id", row.ID, "project_id", row.ProjectID, "error", err)
+			s.log.Error(
+				"advance failed",
+				"schedule_id",
+				row.ID,
+				"project_id",
+				row.ProjectID,
+				"error",
+				err,
+			)
 		}
 		return
 	}
 	if err == nil && overlap.Status == "running" {
-		s.log.Info("skipped_overlap", "schedule_id", row.ID, "project_id", row.ProjectID, "reason", "running deployment exists")
+		s.log.Info(
+			"skipped_overlap",
+			"schedule_id",
+			row.ID,
+			"project_id",
+			row.ProjectID,
+			"reason",
+			"running deployment exists",
+		)
 		if err := s.advance(ctx, row, next); err != nil {
-			s.log.Error("advance failed", "schedule_id", row.ID, "project_id", row.ProjectID, "error", err)
+			s.log.Error(
+				"advance failed",
+				"schedule_id",
+				row.ID,
+				"project_id",
+				row.ProjectID,
+				"error",
+				err,
+			)
 		}
 		return
 	}
@@ -151,72 +194,196 @@ func (s *Scheduler) fireOne(ctx context.Context, row db.ScheduledDeployment) {
 	// gate check
 	project, err := s.repo.Queries.GetProject(ctx, row.ProjectID)
 	if err != nil {
-		s.log.Error("gate check failed: get project", "schedule_id", row.ID, "project_id", row.ProjectID, "error", err)
+		s.log.Error(
+			"gate check failed: get project",
+			"schedule_id",
+			row.ID,
+			"project_id",
+			row.ProjectID,
+			"error",
+			err,
+		)
 		if err := s.advance(ctx, row, next); err != nil {
-			s.log.Error("advance failed", "schedule_id", row.ID, "project_id", row.ProjectID, "error", err)
+			s.log.Error(
+				"advance failed",
+				"schedule_id",
+				row.ID,
+				"project_id",
+				row.ProjectID,
+				"error",
+				err,
+			)
 		}
 		return
 	}
 	release, err := s.repo.Queries.GetRelease(ctx, row.ReleaseID)
 	if err != nil {
-		s.log.Error("gate check failed: get release", "schedule_id", row.ID, "project_id", row.ProjectID, "error", err)
+		s.log.Error(
+			"gate check failed: get release",
+			"schedule_id",
+			row.ID,
+			"project_id",
+			row.ProjectID,
+			"error",
+			err,
+		)
 		if err := s.advance(ctx, row, next); err != nil {
-			s.log.Error("advance failed", "schedule_id", row.ID, "project_id", row.ProjectID, "error", err)
+			s.log.Error(
+				"advance failed",
+				"schedule_id",
+				row.ID,
+				"project_id",
+				row.ProjectID,
+				"error",
+				err,
+			)
 		}
 		return
 	}
-	blocked, reason := gate.Check(ctx, s.repo, project, release, row.EnvironmentID)
+	blocked, reason := gate.Check(
+		ctx,
+		s.repo,
+		project,
+		release,
+		row.EnvironmentID,
+	)
 	if blocked {
-		s.log.Info("skipped_gate", "schedule_id", row.ID, "project_id", row.ProjectID, "reason", reason)
+		s.log.Info(
+			"skipped_gate",
+			"schedule_id",
+			row.ID,
+			"project_id",
+			row.ProjectID,
+			"reason",
+			reason,
+		)
 		if err := s.advance(ctx, row, next); err != nil {
-			s.log.Error("advance failed", "schedule_id", row.ID, "project_id", row.ProjectID, "error", err)
+			s.log.Error(
+				"advance failed",
+				"schedule_id",
+				row.ID,
+				"project_id",
+				row.ProjectID,
+				"error",
+				err,
+			)
 		}
 		return
 	}
 
 	// create deployment
 	note := fmt.Sprintf("Scheduled: %d - %s", row.ID, row.Note.String)
-	deployment, err := s.repo.Queries.CreateDeployment(ctx, db.CreateDeploymentParams{
-		ReleaseID:     row.ReleaseID,
-		EnvironmentID: row.EnvironmentID,
-		Status:        "pending",
-		StartedAt:     sql.NullInt64{},
-		FinishedAt:    sql.NullInt64{},
-		Forced:        0,
-		Note:          sql.NullString{String: note, Valid: true},
-	})
+	deployment, err := s.repo.Queries.CreateDeployment(
+		ctx,
+		db.CreateDeploymentParams{
+			ReleaseID:     row.ReleaseID,
+			EnvironmentID: row.EnvironmentID,
+			Status:        "pending",
+			StartedAt:     sql.NullInt64{},
+			FinishedAt:    sql.NullInt64{},
+			Forced:        0,
+			Note:          sql.NullString{String: note, Valid: true},
+		},
+	)
 	if err != nil {
-		s.log.Error("create deployment failed", "schedule_id", row.ID, "project_id", row.ProjectID, "error", err)
+		s.log.Error(
+			"create deployment failed",
+			"schedule_id",
+			row.ID,
+			"project_id",
+			row.ProjectID,
+			"error",
+			err,
+		)
 		if err := s.advance(ctx, row, next); err != nil {
-			s.log.Error("advance failed", "schedule_id", row.ID, "project_id", row.ProjectID, "error", err)
+			s.log.Error(
+				"advance failed",
+				"schedule_id",
+				row.ID,
+				"project_id",
+				row.ProjectID,
+				"error",
+				err,
+			)
 		}
 		return
 	}
 
-	s.log.Info("fired", "schedule_id", row.ID, "project_id", row.ProjectID, "deployment_id", deployment.ID)
+	s.log.Info(
+		"fired",
+		"schedule_id",
+		row.ID,
+		"project_id",
+		row.ProjectID,
+		"deployment_id",
+		deployment.ID,
+	)
 
 	// spawn runner without blocking the ticker
-	go s.runFunc(context.Background(), deployment.ID, row.ReleaseID, row.EnvironmentID)
+	go s.runFunc(
+		context.Background(),
+		deployment.ID,
+		row.ReleaseID,
+		row.EnvironmentID,
+	)
 
 	if err := s.advance(ctx, row, next); err != nil {
-		s.log.Error("advance failed", "schedule_id", row.ID, "project_id", row.ProjectID, "error", err)
+		s.log.Error(
+			"advance failed",
+			"schedule_id",
+			row.ID,
+			"project_id",
+			row.ProjectID,
+			"error",
+			err,
+		)
 	}
 }
 
-func (s *Scheduler) park(ctx context.Context, row db.ScheduledDeployment, reason string) {
+func (s *Scheduler) park(
+	ctx context.Context,
+	row db.ScheduledDeployment,
+	reason string,
+) {
 	parkedAt := s.now().Add(10 * 365 * 24 * time.Hour).Unix()
-	if err := s.repo.Queries.UpdateScheduledDeploymentNextRun(ctx, db.UpdateScheduledDeploymentNextRunParams{
-		NextRunAt: parkedAt,
-		ID:        row.ID,
-	}); err != nil {
-		s.log.Error("park failed", "schedule_id", row.ID, "project_id", row.ProjectID, "error", err)
+	if err := s.repo.Queries.UpdateScheduledDeploymentNextRun(
+		ctx,
+		db.UpdateScheduledDeploymentNextRunParams{
+			NextRunAt: parkedAt,
+			ID:        row.ID,
+		},
+	); err != nil {
+		s.log.Error(
+			"park failed",
+			"schedule_id",
+			row.ID,
+			"project_id",
+			row.ProjectID,
+			"error",
+			err,
+		)
 	}
-	s.log.Info("parked", "schedule_id", row.ID, "project_id", row.ProjectID, "reason", reason)
+	s.log.Info(
+		"parked",
+		"schedule_id",
+		row.ID,
+		"project_id",
+		row.ProjectID,
+		"reason",
+		reason,
+	)
 }
 
-func (s *Scheduler) advance(ctx context.Context, row db.ScheduledDeployment, next time.Time) error {
-	return s.repo.Queries.UpdateScheduledDeploymentNextRun(ctx, db.UpdateScheduledDeploymentNextRunParams{
-		NextRunAt: next.Unix(),
-		ID:        row.ID,
-	})
+func (s *Scheduler) advance(
+	ctx context.Context,
+	row db.ScheduledDeployment,
+	next time.Time,
+) error {
+	return s.repo.Queries.UpdateScheduledDeploymentNextRun(
+		ctx,
+		db.UpdateScheduledDeploymentNextRunParams{
+			NextRunAt: next.Unix(),
+			ID:        row.ID,
+		},
+	)
 }

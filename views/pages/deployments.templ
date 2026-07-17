@@ -302,41 +302,43 @@ templ DeploymentDetail(project db.Project, release db.Release, environment db.En
 			</div>
 			<div class="flex items-center gap-2">
 				<a href={ fmt.Sprintf("/deployments/%d/logs.txt", deployment.ID) } class="btn btn-sm btn-ghost">Export</a>
-				if isTerminalStatus(deployment.Status) {
-					<button
-						class="btn btn-sm btn-primary"
-						hx-post={ fmt.Sprintf("/deployments/%d/redeploy", deployment.ID) }
-						hx-confirm={ fmt.Sprintf("Re-run this deployment with the same release (%s) and environment (%s)?", release.Version, environment.Name) }
-						hx-disable-elt
-						data-toast-success="Re-run started"
-						data-toast-error="Failed to re-run"
-					>
-Re-run
-				</button>
-			}
-			if deployment.Status == "pending_approval" {
-				<button
-					class="btn btn-sm btn-success"
-					hx-post={ fmt.Sprintf("/deployments/%d/approve", deployment.ID) }
-					hx-confirm="Approve this deployment and start the runner?"
-					hx-disable-elt
-					data-toast-success="Deployment approved"
-					data-toast-error="Failed to approve"
-				>
-					Approve
-				</button>
-			}
-			if deployment.Status == "running" || deployment.Status == "pending_approval" {
-					<button
-						class="btn btn-sm btn-error"
-						hx-post={ fmt.Sprintf("/deployments/%d/cancel", deployment.ID) }
-						hx-target="#status-badge"
-						hx-swap="outerHTML"
-						data-toast-success="Deployment cancelled"
-						data-toast-error="Failed to cancel deployment"
-					>
-						Cancel
+				if CanWrite(ctx) {
+					if isTerminalStatus(deployment.Status) {
+						<button
+							class="btn btn-sm btn-primary"
+							hx-post={ fmt.Sprintf("/deployments/%d/redeploy", deployment.ID) }
+							hx-confirm={ fmt.Sprintf("Re-run this deployment with the same release (%s) and environment (%s)?", release.Version, environment.Name) }
+							hx-disable-elt
+							data-toast-success="Re-run started"
+							data-toast-error="Failed to re-run"
+						>
+				Re-run
 					</button>
+				}
+				if deployment.Status == "pending_approval" {
+					<button
+						class="btn btn-sm btn-success"
+						hx-post={ fmt.Sprintf("/deployments/%d/approve", deployment.ID) }
+						hx-confirm="Approve this deployment and start the runner?"
+						hx-disable-elt
+						data-toast-success="Deployment approved"
+						data-toast-error="Failed to approve"
+					>
+						Approve
+					</button>
+				}
+				if deployment.Status == "running" || deployment.Status == "pending_approval" {
+						<button
+							class="btn btn-sm btn-error"
+							hx-post={ fmt.Sprintf("/deployments/%d/cancel", deployment.ID) }
+							hx-target="#status-badge"
+							hx-swap="outerHTML"
+							data-toast-success="Deployment cancelled"
+							data-toast-error="Failed to cancel deployment"
+						>
+							Cancel
+						</button>
+					}
 				}
 				@StatusBadgeContainer(deployment)
 			</div>

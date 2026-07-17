@@ -90,27 +90,21 @@ func NewRouter(
 		pr.Post("/lifecycles/{id}", lifecycleH.SaveLifecycle)
 		pr.Post("/lifecycles/{id}/stages", lifecycleH.AddStage)
 		pr.Post("/lifecycles/{id}/stages/reorder", lifecycleH.ReorderStage)
-		pr.Patch("/lifecycles/{id}/stages/{stageId}", lifecycleH.UpdateLifecycleStage)
-		pr.Post("/lifecycles/{id}/stages/{stageId}/delete", lifecycleH.DeleteStage)
+		pr.Patch(
+			"/lifecycles/{id}/stages/{stageId}",
+			lifecycleH.UpdateLifecycleStage,
+		)
+		pr.Post(
+			"/lifecycles/{id}/stages/{stageId}/delete",
+			lifecycleH.DeleteStage,
+		)
 
 		ph := handler.NewProjectHandler(repo)
 		pr.Get("/projects", ph.ListProjects)
 		pr.Get("/projects/new", ph.NewProject)
 		pr.Post("/projects", ph.CreateProject)
-		pr.Get("/projects/{id}", ph.GetProject)
-		pr.Get("/projects/{id}/edit", ph.EditProject)
-		pr.Put("/projects/{id}", ph.UpdateProject)
-		pr.Delete("/projects/{id}", ph.DeleteProject)
 
 		sh := handler.NewStepHandler(repo)
-		pr.Get("/projects/{id}/steps", sh.ListSteps)
-		pr.Get("/projects/{id}/steps-page", sh.StepsPage)
-		pr.Get("/projects/{id}/steps/new", sh.NewStepForm)
-		pr.Post("/projects/{id}/steps", sh.CreateStep)
-		pr.Get("/projects/{id}/steps/{stepId}/edit", sh.EditStepForm)
-		pr.Put("/projects/{id}/steps/{stepId}", sh.UpdateStep)
-		pr.Delete("/projects/{id}/steps/{stepId}", sh.DeleteStep)
-		pr.Patch("/projects/{id}/steps/reorder", sh.ReorderStep)
 
 		sth := handler.NewStepTemplateHandler(repo)
 		pr.Get("/templates", sth.ListTemplates)
@@ -120,60 +114,111 @@ func NewRouter(
 		pr.Put("/templates/{id}", sth.UpdateTemplate)
 		pr.Delete("/templates/{id}", sth.DeleteTemplate)
 		pr.Get("/templates/{id}/history", sth.ListTemplateHistory)
-		pr.Get("/projects/{id}/templates-picker", sth.TemplatesPicker)
-		pr.Post(
-			"/projects/{id}/steps/from-template/{templateId}",
-			sth.InsertTemplate,
-		)
-		pr.Post(
-			"/projects/{id}/steps/{stepId}/save-as-template",
-			sth.SaveStepAsTemplate,
-		)
 
 		vh := handler.NewVariableHandler(repo)
-		pr.Get("/projects/{id}/variables", vh.ListVariables)
-		pr.Post("/projects/{id}/variables", vh.CreateVariable)
-		pr.Get("/projects/{id}/variables/{varId}/edit", vh.EditVariable)
-		pr.Put("/projects/{id}/variables/{varId}", vh.UpdateVariable)
-		pr.Delete("/projects/{id}/variables/{varId}", vh.DeleteVariable)
 
 		rh := handler.NewReleaseHandler(repo)
-		pr.Get("/projects/{id}/releases", rh.ListReleases)
-		pr.Post("/projects/{id}/releases", rh.CreateRelease)
-		pr.Get("/projects/{id}/releases/{releaseId}", rh.GetRelease)
-		pr.Post("/projects/{id}/releases/{releaseId}/refresh", rh.RefreshRelease)
 
 		dh := handler.NewDeploymentHandler(repo, rnr)
 		pr.Get("/deployments", dh.ListDeployments)
-		pr.Post("/deployments", dh.CreateDeployment)
-		pr.Get("/deployments/{id}", dh.GetDeployment)
-		pr.Get("/deployments/{id}/status", dh.GetDeploymentStatus)
-		pr.Post("/deployments/{id}/cancel", dh.CancelDeployment)
-		pr.Post("/deployments/{id}/approve", dh.ApproveDeployment)
-		pr.Post("/deployments/{id}/redeploy", dh.RedeployDeployment)
-		pr.Get("/projects/{id}/deploy", dh.NewDeploymentPage)
-		pr.Post("/projects/{id}/deploy", dh.ScheduleDeployment)
 
 		sdh := handler.NewScheduledDeploymentHandler(repo, parser)
-		pr.Get("/projects/{id}/schedules", sdh.List)
-		pr.Get("/projects/{id}/schedules/new", sdh.NewForm)
-		pr.Post("/projects/{id}/schedules", sdh.Create)
-		pr.Get("/projects/{id}/schedules/{schedId}/edit", sdh.EditForm)
-		pr.Put("/projects/{id}/schedules/{schedId}", sdh.Update)
-		pr.Delete("/projects/{id}/schedules/{schedId}", sdh.Delete)
-		pr.Post("/projects/{id}/schedules/{schedId}/toggle", sdh.Toggle)
 
 		lh := handler.NewLogHandler(rnr.Broker(), repo)
-		pr.Get("/deployments/{id}/logs/stream", lh.StreamLogs)
-		pr.Get("/deployments/{id}/logs.txt", lh.ExportLogs)
 
-		// Admin-only audit log viewer. RequireRole gates the sub-group
-		// so non-admin roles get 403 on /admin/* without touching the
-		// audit handler.
+		// Deployment detail/action/log routes: the `{id}` param is a
+		// deployment id, not a project id, so membership is enforced via
+		// RequireDeploymentProjectAccess (resolves deployment -> release
+		// -> project) rather than RequireProjectAccess.
+		pr.Group(func(dpr chi.Router) {
+			dpr.Use(auth.RequireDeploymentProjectAccess(repo))
+
+			dpr.Get("/deployments/{id}", dh.GetDeployment)
+			dpr.Get("/deployments/{id}/status", dh.GetDeploymentStatus)
+			dpr.Post("/deployments/{id}/cancel", dh.CancelDeployment)
+			dpr.Post("/deployments/{id}/approve", dh.ApproveDeployment)
+			dpr.Post("/deployments/{id}/redeploy", dh.RedeployDeployment)
+
+			dpr.Get("/deployments/{id}/logs/stream", lh.StreamLogs)
+			dpr.Get("/deployments/{id}/logs.txt", lh.ExportLogs)
+		})
+
+		// Project-scoped routes: every /projects/{id}/... request must
+		// pass the per-project membership check (global admins bypass).
+		// Routes that are NOT under /projects/{id}/ (project list/new,
+		// templates, deployments, logs) stay on pr above.
+		pr.Group(func(ppr chi.Router) {
+			ppr.Use(auth.RequireProjectAccess(repo))
+
+			ppr.Get("/projects/{id}", ph.GetProject)
+			ppr.Get("/projects/{id}/edit", ph.EditProject)
+			ppr.Put("/projects/{id}", ph.UpdateProject)
+			ppr.Delete("/projects/{id}", ph.DeleteProject)
+
+			ppr.Get("/projects/{id}/steps", sh.ListSteps)
+			ppr.Get("/projects/{id}/steps-page", sh.StepsPage)
+			ppr.Get("/projects/{id}/steps/new", sh.NewStepForm)
+			ppr.Post("/projects/{id}/steps", sh.CreateStep)
+			ppr.Get("/projects/{id}/steps/{stepId}/edit", sh.EditStepForm)
+			ppr.Put("/projects/{id}/steps/{stepId}", sh.UpdateStep)
+			ppr.Delete("/projects/{id}/steps/{stepId}", sh.DeleteStep)
+			ppr.Patch("/projects/{id}/steps/reorder", sh.ReorderStep)
+
+			ppr.Get("/projects/{id}/templates-picker", sth.TemplatesPicker)
+			ppr.Post(
+				"/projects/{id}/steps/from-template/{templateId}",
+				sth.InsertTemplate,
+			)
+			ppr.Post(
+				"/projects/{id}/steps/{stepId}/save-as-template",
+				sth.SaveStepAsTemplate,
+			)
+
+			ppr.Get("/projects/{id}/variables", vh.ListVariables)
+			ppr.Post("/projects/{id}/variables", vh.CreateVariable)
+			ppr.Get("/projects/{id}/variables/{varId}/edit", vh.EditVariable)
+			ppr.Put("/projects/{id}/variables/{varId}", vh.UpdateVariable)
+			ppr.Delete("/projects/{id}/variables/{varId}", vh.DeleteVariable)
+
+			ppr.Get("/projects/{id}/releases", rh.ListReleases)
+			ppr.Post("/projects/{id}/releases", rh.CreateRelease)
+			ppr.Get("/projects/{id}/releases/{releaseId}", rh.GetRelease)
+			ppr.Post(
+				"/projects/{id}/releases/{releaseId}/refresh",
+				rh.RefreshRelease,
+			)
+
+			ppr.Get("/projects/{id}/deploy", dh.NewDeploymentPage)
+			ppr.Post("/projects/{id}/deploy", dh.ScheduleDeployment)
+
+			ppr.Get("/projects/{id}/schedules", sdh.List)
+			ppr.Get("/projects/{id}/schedules/new", sdh.NewForm)
+			ppr.Post("/projects/{id}/schedules", sdh.Create)
+			ppr.Get("/projects/{id}/schedules/{schedId}/edit", sdh.EditForm)
+			ppr.Put("/projects/{id}/schedules/{schedId}", sdh.Update)
+			ppr.Delete("/projects/{id}/schedules/{schedId}", sdh.Delete)
+			ppr.Post("/projects/{id}/schedules/{schedId}/toggle", sdh.Toggle)
+
+			mh := handler.NewProjectMembersHandler(repo)
+			ppr.Get("/projects/{id}/members", mh.ListMembers)
+			ppr.Post("/projects/{id}/members", mh.AddMember)
+			ppr.Delete("/projects/{id}/members/{userId}", mh.RemoveMember)
+		})
+
+		// Admin-only sub-group. RequireRole gates every /admin/* route so
+		// non-admin roles get 403 without touching the handlers.
 		pr.Group(func(ar chi.Router) {
 			ar.Use(auth.RequireRole("admin"))
 			adminH := handler.NewAdminHandler(repo)
 			ar.Get("/admin/audit", adminH.ListAudit)
+
+			usersH := handler.NewUsersHandler(repo)
+			ar.Get("/admin/users", usersH.ListUsers)
+			ar.Get("/admin/users/new", usersH.NewUserForm)
+			ar.Post("/admin/users", usersH.CreateUser)
+			ar.Get("/admin/users/{id}/edit", usersH.EditUserForm)
+			ar.Put("/admin/users/{id}", usersH.UpdateUser)
+			ar.Delete("/admin/users/{id}", usersH.DeleteUser)
 		})
 	})
 

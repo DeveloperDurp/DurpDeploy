@@ -41,9 +41,50 @@ CI stage order: `lint` (`go vet ./...` + `gofmt -l .` must be empty) → `test` 
 - **Add routes in `internal/server/server.go` only.** All chi routes are registered there; handlers live in `internal/handler/*`.
 - **`internal/handler/logs_test.go` has its own inline SQL schema** (stale — missing `step_templates`). New tests should use `migrate.Run(":memory:?_pragma=foreign_keys(1)")` like `internal/db/smoke_test.go`, not duplicate the schema inline.
 - **DSN is fixed** in `cmd/server/main.go`: `durpdeploy.db?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)`. Database file, WAL, and SHM are gitignored.
-- **Deployment runner** (`internal/runner/runner.go`) runs bash steps sequentially via `os/exec`, streams logs through `LogBroker` (SSE). Tracks in-flight cancels in a `map[int64]context.CancelFunc` keyed by deployment ID. No parallel step execution, no auth, bash only.
+- **Deployment runner** (`internal/runner/runner.go`) runs bash steps sequentially via `os/exec`, streams logs through `LogBroker` (SSE). Tracks in-flight cancels in a `map[int64]context.CancelFunc` keyed by deployment ID. **Auth is at the HTTP boundary, not the runner** — the runner still executes as the server's user; per-step sandbox lands in P1-3. No parallel step execution, bash only.
 - **Releases are immutable snapshots** of steps + variables (stored as `steps_json`); a release does not track later edits to steps/variables. Refresh endpoint re-snapshots.
 - Templ tags render to HTMX swaps; handlers return 303 for POST redirects, 422 for validation failures (see `e2e_test.sh` for the contract).
+
+## Viewer role — UI gating pattern
+
+Viewers (`role = "viewer"`) are read-only. Defense is **two layers**, both required:
+
+1. **CSRF middleware** (`internal/auth/csrf.go`) — rejects any state-changing request from a viewer at the protocol layer.
+   - HTMX requests: returns `200` + `HX-Trigger` carrying a `makeToast` event (so the same red toast the rest of the app uses fires, and the page stays put — no error overlay, no full reload).
+   - Non-HTMX form submits: returns `403` + a self-contained styled page (back link, no broken browser error screen).
+2. **CanWrite templ guard** — hides write affordances so viewers never have a reason to hit the middleware.
+   - Helper: `pages.CanWrite(ctx)` (and the parallel `components.canWrite(ctx)` for the components package). Returns `false` for viewers.
+   - Buttons: wrap each write affordance in `if CanWrite(ctx) { <button>...</button> }`. Affects New / Edit / Delete / Reorder / Save Template / Approve / Cancel / Re-run / Toggle buttons across every page.
+   - Form pages: wrap the entire form in `if CanWrite(ctx) { @FormBody(...) } else { @ViewerForbiddenMessage(...) }`. The `ViewerForbiddenMessage` is in `views/pages/permissions.templ` and takes `(title, action, what, backHref, currentPath)`.
+
+**Why both layers?** The CSRF middleware is the security boundary (always fires on the actual write attempt). The CanWrite templ guard is the UX layer (so a viewer never sees a useless "New Project" form, never clicks a button that would just toast-block them). Skipping the templ guard leaves working dead-end UI; skipping the middleware leaves a security hole. Both are required.
+
+**What about routes that are already admin-gated or project-gated?** Those still get the CanWrite guard for defense in depth. For example, `/admin/users/*` is gated by `RequireRole("admin")` so a viewer never reaches the form; the CanWrite guard is belt-and-suspenders. For routes a viewer can actually reach (`/environments/new`, `/lifecycles/new`, `/templates/new`), the CanWrite guard IS the defensive layer — without it, a viewer would see a working-looking form that toasts on submit.
+
+**Pattern for new form pages:** the `UserFormPage`, `ProjectFormPage`, `EnvironmentForm`, `LifecycleFormPage`, `TemplateForm`, `ScheduledDeploymentFormPage`, `DeployFormPage`, and the `StepForm`/`StepEditRow` components are the reference. Each follows the same shape: outer `if !CanWrite(ctx) { @ViewerForbiddenMessage(...) } else { @Base + @FormBody }`.
+
+**Tests:** `TestAuth_ViewerHTMXReturnsToast` (HTMX toast path), `TestAuth_ViewerCannotPost` (non-HTMX 403 path), `TestUsers_ViewerSeesForbiddenOnFormPages` (templ guard renders the message on /environments/new, /lifecycles/new, /templates/new).
+
+## Security model
+
+P0 shipped a multi-user model that is **not optional**. Every protected route in `internal/server/server.go` goes through three middleware, in this order, on the protected group:
+
+1. `auth.AuthMiddleware(repo)` — session cookie → user in context. Redirects to `/login` on miss.
+2. `auth.CSRFMiddleware()` — rejects POST/PUT/PATCH/DELETE without a valid CSRF token, and rejects any `viewer`-role user (read-only by design). Viewer rejections are surfaced as a toast (HTMX) or a styled 403 page (non-HTMX) — see "Viewer role — UI gating pattern" below.
+3. `audit.Middleware(repo)` — records every *successful* state change to `audit_log`. CSRF rejections and 4xx responses are **not** audited (intentional — failed logins should not be enumerable).
+
+New state-changing routes **must** be added to the `actionMap` in `internal/audit/audit.go` so the audit log gets a stable action name. The fallback heuristic (method + first path segment) is lossy.
+
+**What we defend against:** unauthenticated deploys, CSRF on a teammate's browser, replay-with-stolen-CSRF (tokens are per-session random 16 bytes), password DB leak (argon2id), accidental writes by a viewer (UI gating + CSRF gate). See `docs/attack-drill.md` for the live drill.
+
+**What we do NOT defend against yet (P1 work):**
+- ~~Per-project authorization~~ — **shipped (P1-1).** `RequireProjectAccess` middleware (admin bypass; 404 on missing project to hide existence; 403 on non-member; 200 on member). `CreateProject` auto-adds creator as project admin. `ListProjects` filters by membership for non-admins.
+- Secret encryption at rest — P1-2. `release_variables.value` (and the `variables` table generally) is plaintext; a DB read leaks secrets.
+- Runner sandboxing — P1-3. A step can read the server's DB and `rm -rf` the host because the runner executes as the server's user.
+
+Until P1 lands, the practical threat model is "the same access as you" — a malicious authenticated teammate has the same power as the operator. That is the contract for a small-team tool. See `docs/roles.md` for the role matrix and `docs/attack-drill.md` for the concrete failure modes.
+
+**Do not "simplify" by:** removing the CSRF check, inlining `VerifyPassword`, replacing argon2id with bcrypt/SHA, putting the session token in a URL parameter, skipping the `audit_log` insert on a new route, or merging `audit.Record` into a handler without going through the middleware. Each of these is a documented attack vector in `docs/attack-drill.md`.
 
 ## UI design — table layout conventions
 

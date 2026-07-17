@@ -13,15 +13,25 @@ import (
 // projects list. The inline deploy form on the releases page is still
 // available as a quick alternative.
 templ DeployFormPage(project db.Project, releases []db.Release, selectedRelease *db.Release, envs []AvailableEnv, currentPath string) {
-	@layouts.Base("Deploy - "+project.Name, currentPath) {
-		@components.Breadcrumbs([]components.Crumb{
-			{Label: "Home", Href: "/"},
-			{Label: "Projects", Href: "/projects"},
-			{Label: project.Name, Href: fmt.Sprintf("/projects/%d", project.ID)},
-			{Label: "Deploy"},
-		})
-		@DeployFormContent(project, releases, selectedRelease, envs)
-		@DeployPageFormScript()
+	if !CanWrite(ctx) {
+		@ViewerForbiddenMessage(
+			"Deploy "+project.Name,
+			"create",
+			"a deployment",
+			fmt.Sprintf("/projects/%d", project.ID),
+			currentPath,
+		)
+	} else {
+		@layouts.Base("Deploy - "+project.Name, currentPath) {
+			@components.Breadcrumbs([]components.Crumb{
+				{Label: "Home", Href: "/"},
+				{Label: "Projects", Href: "/projects"},
+				{Label: project.Name, Href: fmt.Sprintf("/projects/%d", project.ID)},
+				{Label: "Deploy"},
+			})
+			@DeployFormContent(project, releases, selectedRelease, envs)
+			@DeployPageFormScript()
+		}
 	}
 }
 

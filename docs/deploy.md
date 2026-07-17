@@ -12,28 +12,36 @@ Caddy with automatic HTTPS. At the end you will have:
 
 ---
 
-## Quick start: Docker (AIO)
+## Quick start: Docker (binary image)
 
-The AIO image bundles the Go server and Caddy in one container. A bash
-entrypoint bootstraps the first admin on a fresh database, starts the Go
-server in the background, waits for its healthz, then `exec`s Caddy as PID 1.
+The `Dockerfile` builds a static binary in a `scratch` image — there is no
+shell, no package manager, and no Caddy in the image. It is a binary
+distribution target, not a full AIO container. For local dev there is no
+reason to use it (`make build && ./durpdeploy` is faster). For production
+the Debian 12 runbook below is the recommended path; that runbook installs
+Caddy and the systemd service as separate, well-understood units.
+
+If you do want to run the binary in a container (e.g. behind a separate
+Caddy container), the image runs as root by default with the binary at
+`/durpdeploy` and CWD `/data` (mount a volume there for the SQLite file):
 
 ```bash
-docker run -d --name durpdeploy \
-  -p 80:80 -p 443:443 \
+docker build -t durpdeploy .
+docker run -d --name durpdeploy -p 8080:8080 \
   -v durpdeploy-data:/data \
-  -e DURPDEPLOY_ADMIN_PASSWORD='<strong-password>' \
-  -e DURPDEPLOY_DOMAIN=durpdeploy.example.com \
-  durpdeploy:aio
+  -e DURPDEPLOY_DB=/data/durpdeploy.db \
+  durpdeploy
 ```
 
-For local dev, drop `DURPDEPLOY_DOMAIN` (it defaults to `localhost`, which
-makes Caddy serve HTTP only) and open `http://localhost/`. For production
-with a real domain, ensure the host's ports 80/443 are open inbound and the
-DNS A record points at the host — Caddy auto-issues a Let's Encrypt cert on
-first request. The easiest local path is `docker compose up -d` using the
-repo's `docker-compose.yml`. The Debian 12 runbook below is the advanced /
-non-Docker path.
+You still have to bootstrap the first admin with the CLI — there is no
+env-var shortcut:
+
+```bash
+docker exec -it durpdeploy /durpdeploy admin create \
+  --email admin@example.com --password '<strong-password>'
+```
+
+The Debian 12 runbook below is the recommended production path.
 
 ---
 

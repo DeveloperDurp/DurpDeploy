@@ -69,6 +69,15 @@ templ Base(title string, currentPath string) {
 							<li><a href="/deployments" class={ activeClass(currentPath, "/deployments") }>Deployments</a></li>
 							<li><a href="/templates" class={ activeClass(currentPath, "/templates") }>Templates</a></li>
 						</ul>
+						if user := auth.UserFromContext(ctx); user != nil && user.Role == "admin" {
+							<details class="dropdown dropdown-end">
+								<summary class="btn btn-ghost btn-sm">Admin</summary>
+								<ul class="dropdown-content menu bg-base-200 rounded-box z-[1] w-44 p-2 shadow">
+									<li><a href="/admin/audit">Audit log</a></li>
+									<li><a href="/admin/users">Users</a></li>
+								</ul>
+							</details>
+						}
 						<button class="btn btn-ghost btn-sm" @click="theme = theme === 'mocha' ? 'light' : 'mocha'">
 							<span class="theme-dark">☀️</span>
 							<span class="theme-light">🌙</span>

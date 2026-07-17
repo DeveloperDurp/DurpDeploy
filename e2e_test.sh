@@ -489,4 +489,89 @@ echo "$SCHED_LIST" | grep -qF "* * * * *" || { echo "FAIL: schedule missing from
 echo "$SCHED_LIST" | grep -q "On" || { echo "FAIL: schedule not enabled"; exit 1; }
 echo "  Schedule list shows enabled schedule with future next_run_at: OK"
 
+echo "=== F3.12: User Management (P1-2) ==="
+# List the seed admin in /admin/users.
+CODE=$(curl_silent "$BASE/admin/users")
+[[ "$CODE" == "200" ]] || { echo "FAIL: admin GET /admin/users got $CODE, want 200"; exit 1; }
+USERS_PAGE=$(curl_body "$BASE/admin/users")
+echo "$USERS_PAGE" | grep -qF "$ADMIN_EMAIL" || { echo "FAIL: admin user not in /admin/users list"; exit 1; }
+echo "  Admin lists /admin/users with seed admin: OK"
+
+# Create a new deployer via POST /admin/users.
+NEW_EMAIL="e2e-newdeployer@test.local"
+NEW_PASS="newdeployer-pass-1234"
+REDIR=$(curl -s -b "$COOKIES" -D - -o /dev/null \
+    -X POST -d "email=$NEW_EMAIL&name=NewDeployer&role=deployer&password=$NEW_PASS&csrf_token=$CSRF" \
+    "$BASE/admin/users" | grep -i "^location:" | awk '{print $2}' | tr -d '\r')
+[[ "$REDIR" == /admin/users?new_user_id=* ]] || { echo "FAIL: create user redirect = $REDIR, want /admin/users?new_user_id=..."; exit 1; }
+echo "  POST /admin/users created user + flashed password: OK"
+
+# Follow the redirect and confirm the password banner shows the plaintext.
+BANNER=$(curl -s -b "$COOKIES" "$BASE$REDIR")
+echo "$BANNER" | grep -qF "$NEW_PASS" || { echo "FAIL: banner missing the new password"; exit 1; }
+echo "  Banner shows the new password: OK"
+
+# The new user can log in with the chosen password.
+NEW_LOGIN=$(mktemp)
+CODE=$(curl -s -c "$NEW_LOGIN" -o /dev/null -w "%{http_code}" \
+    -X POST -d "email=$NEW_EMAIL&password=$NEW_PASS" "$BASE/login")
+[[ "$CODE" == "303" ]] || { echo "FAIL: new user login got $CODE, want 303"; exit 1; }
+echo "  New user can log in: OK"
+
+# The freshly-created deployer cannot access /admin/users.
+CODE=$(curl -s -b "$NEW_LOGIN" -o /dev/null -w "%{http_code}" "$BASE/admin/users")
+[[ "$CODE" == "403" ]] || { echo "FAIL: non-admin GET /admin/users got $CODE, want 403"; exit 1; }
+echo "  Non-admin gets 403 on /admin/users: OK"
+
+# Refresh the admin CSRF (the original $CSRF is still valid; we re-pull
+# from the DB to mirror the existing test idiom).
+ADMIN_SESSION_ID=$(awk '$6 == "session" { print $7 }' "$COOKIES")
+ADMIN_CSRF=$(sqlite3 durpdeploy.db "SELECT csrf_token FROM sessions WHERE id='$ADMIN_SESSION_ID';")
+
+# Promote the new user to admin via PUT /admin/users/{id}.
+NEW_USER_ID=$(sqlite3 durpdeploy.db "SELECT id FROM users WHERE email='$NEW_EMAIL';")
+CODE=$(curl -s -b "$COOKIES" -o /dev/null -w "%{http_code}" \
+    -H "X-CSRF-Token: $ADMIN_CSRF" \
+    -X PUT -d "name=NewDeployer&role=admin" \
+    "$BASE/admin/users/$NEW_USER_ID")
+[[ "$CODE" == "303" || "$CODE" == "200" ]] || { echo "FAIL: PUT /admin/users/{id} got $CODE, want 303/200"; exit 1; }
+NEW_ROLE=$(sqlite3 durpdeploy.db "SELECT role FROM users WHERE id=$NEW_USER_ID;")
+[[ "$NEW_ROLE" == "admin" ]] || { echo "FAIL: user role = $NEW_ROLE, want admin"; exit 1; }
+echo "  PUT /admin/users/{id} promotes deployer to admin: OK"
+
+# The new user's previous session should be deleted (role change).
+NEW_SESSION_ID=$(awk '$6 == "session" { print $7 }' "$NEW_LOGIN")
+SESSION_EXISTS=$(sqlite3 durpdeploy.db "SELECT COUNT(*) FROM sessions WHERE id='$NEW_SESSION_ID' AND user_id=$NEW_USER_ID;")
+[[ "$SESSION_EXISTS" == "0" ]] || { echo "FAIL: new user's session still exists after role change"; exit 1; }
+echo "  Role change invalidated new user's session: OK"
+
+# Admin cannot delete themselves.
+ADMIN_ID=$(sqlite3 durpdeploy.db "SELECT id FROM users WHERE email='$ADMIN_EMAIL';")
+CODE=$(curl -s -b "$COOKIES" -o /dev/null -w "%{http_code}" \
+    -H "X-CSRF-Token: $ADMIN_CSRF" \
+    -X DELETE "$BASE/admin/users/$ADMIN_ID")
+[[ "$CODE" == "422" ]] || { echo "FAIL: self-delete got $CODE, want 422"; exit 1; }
+echo "  Self-delete rejected: OK"
+
+# Demote the new user back to deployer and delete them (no project membership).
+CODE=$(curl -s -b "$COOKIES" -o /dev/null -w "%{http_code}" \
+    -H "X-CSRF-Token: $ADMIN_CSRF" \
+    -X PUT -d "name=NewDeployer&role=deployer" \
+    "$BASE/admin/users/$NEW_USER_ID")
+[[ "$CODE" == "303" || "$CODE" == "200" ]] || { echo "FAIL: demote got $CODE, want 303/200"; exit 1; }
+CODE=$(curl -s -b "$COOKIES" -o /dev/null -w "%{http_code}" \
+    -H "X-CSRF-Token: $ADMIN_CSRF" \
+    -X DELETE "$BASE/admin/users/$NEW_USER_ID")
+[[ "$CODE" == "303" || "$CODE" == "200" ]] || { echo "FAIL: delete got $CODE, want 303/200"; exit 1; }
+USER_GONE=$(sqlite3 durpdeploy.db "SELECT COUNT(*) FROM users WHERE id=$NEW_USER_ID;")
+[[ "$USER_GONE" == "0" ]] || { echo "FAIL: deleted user still in DB"; exit 1; }
+echo "  Admin can delete the new user: OK"
+
+# Audit log captured the user-management actions.
+USER_AUDIT=$(sqlite3 durpdeploy.db "SELECT COUNT(*) FROM audit_log WHERE action IN ('create_user','update_user','delete_user');")
+[[ "$USER_AUDIT" -ge 4 ]] || { echo "FAIL: expected >=4 user audit rows, got $USER_AUDIT"; exit 1; }
+echo "  Audit log captured create/update/delete_user: OK"
+
+rm -f "$NEW_LOGIN"
+
 echo "=== ALL E2E CHECKS PASSED ==="

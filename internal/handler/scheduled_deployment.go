@@ -59,13 +59,21 @@ func (h *ScheduledDeploymentHandler) List(
 		return
 	}
 
-	releases, err := h.repo.Queries.ListReleasesByProject(r.Context(), projectID)
+	releases, err := h.repo.Queries.ListReleasesByProject(
+		r.Context(),
+		projectID,
+	)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	items, err := h.buildScheduleListItems(r.Context(), projectID, schedules, releases)
+	items, err := h.buildScheduleListItems(
+		r.Context(),
+		projectID,
+		schedules,
+		releases,
+	)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -108,7 +116,10 @@ func (h *ScheduledDeploymentHandler) NewForm(
 		return
 	}
 
-	releases, err := h.repo.Queries.ListReleasesByProject(r.Context(), projectID)
+	releases, err := h.repo.Queries.ListReleasesByProject(
+		r.Context(),
+		projectID,
+	)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -173,16 +184,27 @@ func (h *ScheduledDeploymentHandler) Create(
 			"Cron expression is required.")
 		return
 	}
-	if strings.HasPrefix(cronExpr, "TZ=") || strings.HasPrefix(cronExpr, "CRON_TZ=") {
-		h.renderFormError(w, r, projectID, nil,
-			"TZ= and CRON_TZ= prefixes are not supported. Use server local time only.")
+	if strings.HasPrefix(cronExpr, "TZ=") ||
+		strings.HasPrefix(cronExpr, "CRON_TZ=") {
+		h.renderFormError(
+			w,
+			r,
+			projectID,
+			nil,
+			"TZ= and CRON_TZ= prefixes are not supported. Use server local time only.",
+		)
 		return
 	}
 
 	sched, err := h.parser.Parse(cronExpr)
 	if err != nil {
-		h.renderFormError(w, r, projectID, nil,
-			"Invalid cron expression. Use 5-field standard cron (minute hour day month weekday). Descriptors like @hourly and TZ= prefixes are not supported.")
+		h.renderFormError(
+			w,
+			r,
+			projectID,
+			nil,
+			"Invalid cron expression. Use 5-field standard cron (minute hour day month weekday). Descriptors like @hourly and TZ= prefixes are not supported.",
+		)
 		return
 	}
 
@@ -287,7 +309,10 @@ func (h *ScheduledDeploymentHandler) EditForm(
 		return
 	}
 
-	releases, err := h.repo.Queries.ListReleasesByProject(r.Context(), projectID)
+	releases, err := h.repo.Queries.ListReleasesByProject(
+		r.Context(),
+		projectID,
+	)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -358,16 +383,27 @@ func (h *ScheduledDeploymentHandler) Update(
 			"Cron expression is required.")
 		return
 	}
-	if strings.HasPrefix(cronExpr, "TZ=") || strings.HasPrefix(cronExpr, "CRON_TZ=") {
-		h.renderFormError(w, r, projectID, &db.ScheduledDeployment{ID: schedID},
-			"TZ= and CRON_TZ= prefixes are not supported. Use server local time only.")
+	if strings.HasPrefix(cronExpr, "TZ=") ||
+		strings.HasPrefix(cronExpr, "CRON_TZ=") {
+		h.renderFormError(
+			w,
+			r,
+			projectID,
+			&db.ScheduledDeployment{ID: schedID},
+			"TZ= and CRON_TZ= prefixes are not supported. Use server local time only.",
+		)
 		return
 	}
 
 	sched, err := h.parser.Parse(cronExpr)
 	if err != nil {
-		h.renderFormError(w, r, projectID, &db.ScheduledDeployment{ID: schedID},
-			"Invalid cron expression. Use 5-field standard cron (minute hour day month weekday). Descriptors like @hourly and TZ= prefixes are not supported.")
+		h.renderFormError(
+			w,
+			r,
+			projectID,
+			&db.ScheduledDeployment{ID: schedID},
+			"Invalid cron expression. Use 5-field standard cron (minute hour day month weekday). Descriptors like @hourly and TZ= prefixes are not supported.",
+		)
 		return
 	}
 
@@ -481,7 +517,10 @@ func (h *ScheduledDeploymentHandler) Delete(
 		return
 	}
 
-	if err := h.repo.Queries.DeleteScheduledDeployment(r.Context(), schedID); err != nil {
+	if err := h.repo.Queries.DeleteScheduledDeployment(
+		r.Context(),
+		schedID,
+	); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -572,12 +611,20 @@ func (h *ScheduledDeploymentHandler) Toggle(
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		releases, err := h.repo.Queries.ListReleasesByProject(r.Context(), projectID)
+		releases, err := h.repo.Queries.ListReleasesByProject(
+			r.Context(),
+			projectID,
+		)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		items, err := h.buildScheduleListItems(r.Context(), projectID, schedules, releases)
+		items, err := h.buildScheduleListItems(
+			r.Context(),
+			projectID,
+			schedules,
+			releases,
+		)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -612,7 +659,10 @@ func (h *ScheduledDeploymentHandler) renderFormError(
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	releases, err := h.repo.Queries.ListReleasesByProject(r.Context(), projectID)
+	releases, err := h.repo.Queries.ListReleasesByProject(
+		r.Context(),
+		projectID,
+	)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -625,7 +675,13 @@ func (h *ScheduledDeploymentHandler) renderFormError(
 	WriteFormError(
 		w,
 		r,
-		pages.ScheduledDeploymentForm(project, releases, envs, schedule, errorMsg),
+		pages.ScheduledDeploymentForm(
+			project,
+			releases,
+			envs,
+			schedule,
+			errorMsg,
+		),
 		pages.ScheduledDeploymentFormPage(
 			project, releases, envs, schedule, errorMsg, r.URL.Path,
 		),

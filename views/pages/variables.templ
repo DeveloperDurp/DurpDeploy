@@ -64,7 +64,9 @@ templ VariablesContent(project db.Project, variables []db.Variable, environments
 
 templ VariablesFragment(project db.Project, variables []db.Variable, environments []db.Environment, errorMsg string) {
 	<div id="variables-content">
-		@VariableForm(project.ID, environments, errorMsg)
+		if CanWrite(ctx) {
+			@VariableForm(project.ID, environments, errorMsg)
+		}
 		@VariablesTable(project, variables, environments)
 	</div>
 }
@@ -184,34 +186,36 @@ templ VariableRow(projectID int64, variable db.Variable, environments []db.Envir
 			}
 		</td>
 		<td class="flex gap-2">
-			if !variable.EnvironmentID.Valid {
+			if CanWrite(ctx) {
+				if !variable.EnvironmentID.Valid {
+					<button
+						type="button"
+						class="btn btn-sm btn-ghost"
+						data-override-for={ variable.Name }
+					>
+						Override
+					</button>
+				}
 				<button
-					type="button"
 					class="btn btn-sm btn-ghost"
-					data-override-for={ variable.Name }
+					hx-get={ fmt.Sprintf("/projects/%d/variables/%d/edit", projectID, variable.ID) }
+					hx-target={ fmt.Sprintf("#variable-row-%d", variable.ID) }
+					hx-swap="outerHTML"
 				>
-					Override
+					Edit
+				</button>
+				<button
+					class="btn btn-sm btn-error"
+					hx-delete={ fmt.Sprintf("/projects/%d/variables/%d", projectID, variable.ID) }
+					hx-target="#variables-content"
+					hx-swap="outerHTML"
+					hx-confirm="Delete this variable?"
+					data-toast-success="Variable deleted"
+					data-toast-error="Failed to delete variable"
+				>
+					Delete
 				</button>
 			}
-			<button
-				class="btn btn-sm btn-ghost"
-				hx-get={ fmt.Sprintf("/projects/%d/variables/%d/edit", projectID, variable.ID) }
-				hx-target={ fmt.Sprintf("#variable-row-%d", variable.ID) }
-				hx-swap="outerHTML"
-			>
-				Edit
-			</button>
-			<button
-				class="btn btn-sm btn-error"
-				hx-delete={ fmt.Sprintf("/projects/%d/variables/%d", projectID, variable.ID) }
-				hx-target="#variables-content"
-				hx-swap="outerHTML"
-				hx-confirm="Delete this variable?"
-				data-toast-success="Variable deleted"
-				data-toast-error="Failed to delete variable"
-			>
-				Delete
-			</button>
 		</td>
 	</tr>
 }

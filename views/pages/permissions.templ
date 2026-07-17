@@ -1,0 +1,32 @@
+package pages
+
+import "durpdeploy/views/layouts"
+
+// ViewerForbiddenMessage is the standard "viewers can't do this"
+// page. Rendered in place of a form when a viewer navigates to a
+// write URL by hand (the New / Edit buttons that would normally
+// lead here are already hidden by CanWrite, so this is the
+// "you typed the URL" path). action is the verb the viewer tried
+// ("create", "edit"), what is the noun ("a project", "a step"),
+// backHref is the URL of the parent list page they should be on.
+//
+// ponytail: one component instead of one-per-form so the message
+// wording stays consistent and the "Go back" affordance is uniform.
+templ ViewerForbiddenMessage(title string, action string, what string, backHref string, currentPath string) {
+	@layouts.Base(title, currentPath) {
+		<div class="max-w-xl">
+			<div class="card bg-base-200 shadow">
+				<div class="card-body">
+					<h1 class="card-title text-2xl">{ title }</h1>
+					<p>
+						Viewers cannot { action } { what }. Ask an admin to change your role on the
+						<a class="link" href="/admin/users">Users</a> page if you need write access.
+					</p>
+					<div class="card-actions justify-end">
+						<a href={ templ.SafeURL(backHref) } class="btn btn-ghost btn-sm">Go back</a>
+					</div>
+				</div>
+			</div>
+		</div>
+	}
+}

@@ -52,7 +52,9 @@ func newProjectHarness(t *testing.T) *projectHarness {
 	repo := repository.New(conn)
 	broker := runner.NewLogBroker()
 	rnr := runner.New(repo, broker)
-	parser := cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
+	parser := cron.NewParser(
+		cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow,
+	)
 	authHandler := handler.NewAuthHandler(repo)
 	srv := httptest.NewServer(server.NewRouter(repo, rnr, parser, authHandler))
 	t.Cleanup(srv.Close)
@@ -208,7 +210,9 @@ func (h *projectHarness) waitForDeploymentStatus(
 	return dep
 }
 
-func (h *projectHarness) postDeploy(releaseID, envID int64) (int, int64) {
+func (h *projectHarness) postDeploy(
+	projectID, releaseID, envID int64,
+) (int, int64) {
 	h.t.Helper()
 	form := map[string]string{
 		"release_id":     fmt.Sprintf("%d", releaseID),
@@ -216,7 +220,11 @@ func (h *projectHarness) postDeploy(releaseID, envID int64) (int, int64) {
 		"csrf_token":     h.csrfToken(),
 	}
 	body := strings.NewReader(formEncode(form))
-	req, _ := http.NewRequest("POST", h.server.URL+"/deployments", body)
+	req, _ := http.NewRequest(
+		"POST",
+		fmt.Sprintf("%s/projects/%d/deploy", h.server.URL, projectID),
+		body,
+	)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	resp, err := h.authedClient().Do(req)
 	if err != nil {
@@ -275,7 +283,7 @@ func TestProjectPanel_FailedAttemptIsVisible(t *testing.T) {
 	h.assignLifecycle(proj.ID, lc.ID)
 
 	v1 := h.makeRelease(proj.ID, "1.0.0", "exit 1") // fails
-	_, depID := h.postDeploy(v1.ID, dev.ID)
+	_, depID := h.postDeploy(proj.ID, v1.ID, dev.ID)
 	h.waitForDeploymentStatus(depID, "failed")
 
 	page := h.getProjectPage(proj.ID)
@@ -309,7 +317,7 @@ func TestProjectPanel_StreakStrip(t *testing.T) {
 	// streak colors, not the version numbers.
 	for i := 0; i < 3; i++ {
 		rel := h.makeRelease(proj.ID, fmt.Sprintf("1.0.%d", i), "exit 0")
-		_, depID := h.postDeploy(rel.ID, dev.ID)
+		_, depID := h.postDeploy(proj.ID, rel.ID, dev.ID)
 		h.waitForDeploymentStatus(depID, "succeeded")
 	}
 	// Patch the 2nd-most-recent deployment's status to "failed" so we can
@@ -373,7 +381,7 @@ func TestProjectsList_ShowsPerEnvStatusDots(t *testing.T) {
 	h.assignLifecycle(projA.ID, lc.ID)
 
 	vA := h.makeRelease(projA.ID, "1.0.0", "exit 0")
-	_, depA1 := h.postDeploy(vA.ID, envDev.ID)
+	_, depA1 := h.postDeploy(projA.ID, vA.ID, envDev.ID)
 	h.waitForDeploymentStatus(depA1, "succeeded")
 
 	// Create a deployment row for prod (without running the gate) by directly
@@ -412,7 +420,7 @@ func TestProjectsList_ShowsPerEnvStatusDots(t *testing.T) {
 	projC := h.makeProject("C")
 	envC := h.makeEnv("C-env")
 	vC := h.makeRelease(projC.ID, "1.0.0", "exit 0")
-	_, depC := h.postDeploy(vC.ID, envC.ID)
+	_, depC := h.postDeploy(projC.ID, vC.ID, envC.ID)
 	h.waitForDeploymentStatus(depC, "succeeded")
 
 	page := h.getProjectsList()
@@ -459,7 +467,7 @@ func TestProjectsList_LifecycleShowsAllStagesIncludingUntouched(t *testing.T) {
 
 	// Deploy only to L-A. L-B and L-C remain untouched.
 	rel := h.makeRelease(proj.ID, "1.0.0", "exit 0")
-	_, depID := h.postDeploy(rel.ID, envA.ID)
+	_, depID := h.postDeploy(proj.ID, rel.ID, envA.ID)
 	h.waitForDeploymentStatus(depID, "succeeded")
 
 	page := h.getProjectsList()
@@ -504,7 +512,7 @@ func TestProjectPanel_FreeFloating(t *testing.T) {
 	// No lifecycle assigned.
 
 	v1 := h.makeRelease(proj.ID, "1.0.0", "exit 0")
-	_, depID := h.postDeploy(v1.ID, envA.ID)
+	_, depID := h.postDeploy(proj.ID, v1.ID, envA.ID)
 	h.waitForDeploymentStatus(depID, "succeeded")
 
 	page := h.getProjectPage(proj.ID)
@@ -663,9 +671,13 @@ func TestUpdateProject_AfterSubmitLandsOnProject(t *testing.T) {
 
 	// Submit the form. The HX path should set HX-Redirect to the project
 	// page; the non-HX path (curl without HX-Request) should 303 to it.
-	hxReq, _ := http.NewRequest("PUT",
+	hxReq, _ := http.NewRequest(
+		"PUT",
 		fmt.Sprintf("%s/projects/%d", h.server.URL, proj.ID),
-		strings.NewReader("name=renamed&description=&lifecycle_id=&csrf_token="+h.csrfToken()))
+		strings.NewReader(
+			"name=renamed&description=&lifecycle_id=&csrf_token="+h.csrfToken(),
+		),
+	)
 	hxReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	hxReq.Header.Set("HX-Request", "true")
 	hxResp, err := h.authedClient().Do(hxReq)
@@ -677,9 +689,13 @@ func TestUpdateProject_AfterSubmitLandsOnProject(t *testing.T) {
 		t.Errorf("HX-Redirect: got %q, want %q", got, wantRedirect)
 	}
 
-	nonHxReq, _ := http.NewRequest("PUT",
+	nonHxReq, _ := http.NewRequest(
+		"PUT",
 		fmt.Sprintf("%s/projects/%d", h.server.URL, proj.ID),
-		strings.NewReader("name=renamed-2&description=&lifecycle_id=&csrf_token="+h.csrfToken()))
+		strings.NewReader(
+			"name=renamed-2&description=&lifecycle_id=&csrf_token="+h.csrfToken(),
+		),
+	)
 	nonHxReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	nonHxResp, err := h.authedClient().Do(nonHxReq)
 	if err != nil {

@@ -32,7 +32,14 @@ func HashPassword(password string) (string, error) {
 		return "", fmt.Errorf("generate salt: %w", err)
 	}
 
-	hash := argon2.IDKey([]byte(password), salt, argon2Time, argon2Memory, argon2Threads, argon2KeyLen)
+	hash := argon2.IDKey(
+		[]byte(password),
+		salt,
+		argon2Time,
+		argon2Memory,
+		argon2Threads,
+		argon2KeyLen,
+	)
 
 	b64Salt := base64.RawStdEncoding.EncodeToString(salt)
 	b64Hash := base64.RawStdEncoding.EncodeToString(hash)
@@ -100,7 +107,14 @@ func VerifyPassword(hash, password string) bool {
 	}
 	keyLen := uint32(len(expectedHash))
 
-	computedHash := argon2.IDKey([]byte(password), salt, time, mem, threads, keyLen)
+	computedHash := argon2.IDKey(
+		[]byte(password),
+		salt,
+		time,
+		mem,
+		threads,
+		keyLen,
+	)
 
 	return subtle.ConstantTimeCompare(computedHash, expectedHash) == 1
 }

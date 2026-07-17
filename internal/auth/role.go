@@ -32,7 +32,7 @@ func RequireRole(roles ...string) func(http.Handler) http.Handler {
 				return
 			}
 			if _, ok := allowed[u.Role]; !ok {
-				http.Error(w, "Forbidden", http.StatusForbidden)
+				RenderUnauthorized(w, r)
 				return
 			}
 			next.ServeHTTP(w, r)

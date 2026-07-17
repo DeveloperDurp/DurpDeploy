@@ -555,7 +555,10 @@ func (h *LifecycleHandler) UpdateLifecycleStage(
 				break
 			}
 		}
-		env, err := h.repo.Queries.GetEnvironment(r.Context(), stage.EnvironmentID)
+		env, err := h.repo.Queries.GetEnvironment(
+			r.Context(),
+			stage.EnvironmentID,
+		)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return

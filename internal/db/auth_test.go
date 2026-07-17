@@ -251,10 +251,19 @@ func TestSessions_DeleteExpired(t *testing.T) {
 		t.Fatalf("delete expired: %v", err)
 	}
 
-	if _, err := q.GetSession(ctx, db.GetSessionParams{ID: "valid", ExpiresAt: now}); err != nil {
+	if _, err := q.GetSession(
+		ctx,
+		db.GetSessionParams{ID: "valid", ExpiresAt: now},
+	); err != nil {
 		t.Fatalf("valid session should remain: %v", err)
 	}
-	if _, err := q.GetSession(ctx, db.GetSessionParams{ID: "expired", ExpiresAt: now}); !errors.Is(err, sql.ErrNoRows) {
+	if _, err := q.GetSession(
+		ctx,
+		db.GetSessionParams{ID: "expired", ExpiresAt: now},
+	); !errors.Is(
+		err,
+		sql.ErrNoRows,
+	) {
 		t.Fatalf("expired session should be gone, got %v", err)
 	}
 }
@@ -282,15 +291,31 @@ func TestSessions_DeleteCascadeOnUserDelete(t *testing.T) {
 		t.Fatalf("create session: %v", err)
 	}
 
-	if _, err := q.GetSession(ctx, db.GetSessionParams{ID: "casc1", ExpiresAt: now}); err != nil {
+	if _, err := q.GetSession(
+		ctx,
+		db.GetSessionParams{ID: "casc1", ExpiresAt: now},
+	); err != nil {
 		t.Fatalf("pre-delete get: %v", err)
 	}
 
-	if _, err := dbConn.ExecContext(ctx, "DELETE FROM users WHERE id = ?", user.ID); err != nil {
+	if _, err := dbConn.ExecContext(
+		ctx,
+		"DELETE FROM users WHERE id = ?",
+		user.ID,
+	); err != nil {
 		t.Fatalf("delete user: %v", err)
 	}
 
-	if _, err := q.GetSession(ctx, db.GetSessionParams{ID: "casc1", ExpiresAt: now}); !errors.Is(err, sql.ErrNoRows) {
-		t.Fatalf("session should be gone after user delete (CASCADE), got %v", err)
+	if _, err := q.GetSession(
+		ctx,
+		db.GetSessionParams{ID: "casc1", ExpiresAt: now},
+	); !errors.Is(
+		err,
+		sql.ErrNoRows,
+	) {
+		t.Fatalf(
+			"session should be gone after user delete (CASCADE), got %v",
+			err,
+		)
 	}
 }

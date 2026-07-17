@@ -171,7 +171,11 @@ func TestStepTemplate_VersioningShadowHistory(t *testing.T) {
 	}
 
 	// 2. Update to "echo 2": expect 2 versions, newest first.
-	if code := h.updateTemplate(id, "T1", "echo 2"); code != http.StatusSeeOther {
+	if code := h.updateTemplate(
+		id,
+		"T1",
+		"echo 2",
+	); code != http.StatusSeeOther {
 		t.Fatalf("update T1->echo 2: expected 303, got %d", code)
 	}
 	versions, err = h.repo.Queries.ListStepTemplateVersions(ctx, id)
@@ -197,7 +201,11 @@ func TestStepTemplate_VersioningShadowHistory(t *testing.T) {
 	}
 
 	// 3. Update to "echo 3": expect 3 versions.
-	if code := h.updateTemplate(id, "T1", "echo 3"); code != http.StatusSeeOther {
+	if code := h.updateTemplate(
+		id,
+		"T1",
+		"echo 3",
+	); code != http.StatusSeeOther {
 		t.Fatalf("update T1->echo 3: expected 303, got %d", code)
 	}
 	versions, err = h.repo.Queries.ListStepTemplateVersions(ctx, id)
@@ -241,10 +249,18 @@ func TestStepTemplate_VersioningShadowHistory(t *testing.T) {
 	if code := h.deleteTemplate(id); code != http.StatusSeeOther {
 		t.Fatalf("delete T1: expected 303, got %d", code)
 	}
-	if remaining, err := h.repo.Queries.ListStepTemplateVersions(ctx, id); err != nil {
+	if remaining, err := h.repo.Queries.ListStepTemplateVersions(
+		ctx,
+		id,
+	); err != nil {
 		t.Fatalf("list versions after delete: %v", err)
-	} else if len(remaining) != 0 {
-		t.Fatalf("CASCADE failed: expected 0 versions after delete, got %d", len(remaining))
+	} else if len(
+		remaining,
+	) != 0 {
+		t.Fatalf(
+			"CASCADE failed: expected 0 versions after delete, got %d",
+			len(remaining),
+		)
 	}
 	if code, body := h.getHistory(id); code != http.StatusNotFound {
 		t.Errorf(

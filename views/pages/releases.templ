@@ -74,7 +74,9 @@ templ ReleasesContent(project db.Project, releases []ReleaseView, errorMsg strin
 
 templ ReleasesFragment(project db.Project, releases []ReleaseView, errorMsg string) {
 	<div id="releases-content">
-		@ReleaseForm(project.ID, errorMsg)
+		if CanWrite(ctx) {
+			@ReleaseForm(project.ID, errorMsg)
+		}
 		@ReleasesTable(project, releases)
 	</div>
 }
@@ -136,7 +138,7 @@ templ ReleaseRow(projectID int64, rv ReleaseView) {
 		<td>
 			if len(rv.Envs) == 0 {
 				<span class="text-gray-500 italic text-sm">No envs available</span>
-			} else {
+			} else if CanWrite(ctx) {
 				<form method="post" action={ fmt.Sprintf("/projects/%d/deploy", projectID) } class="flex flex-wrap gap-2 items-center">
 					<input type="hidden" name="release_id" value={ strconv.FormatInt(rv.Release.ID, 10) }/>
 					<input type="hidden" name="note" value=""/>
@@ -192,9 +194,11 @@ templ ReleaseDetail(project db.Project, release db.Release, variables []db.Relea
 				<p class="text-gray-400">Project: { project.Name }</p>
 				<a href={ fmt.Sprintf("/projects/%d/releases", project.ID) } class="btn btn-ghost btn-sm mt-2">Back to Releases</a>
 			</div>
-			<form method="post" action={ fmt.Sprintf("/projects/%d/releases/%d/refresh", project.ID, release.ID) }>
-				<button type="submit" class="btn btn-outline btn-warning btn-sm" onclick="return confirm('Refresh this release with the latest steps and variables?')">Refresh</button>
-			</form>
+			if CanWrite(ctx) {
+				<form method="post" action={ fmt.Sprintf("/projects/%d/releases/%d/refresh", project.ID, release.ID) }>
+					<button type="submit" class="btn btn-outline btn-warning btn-sm" onclick="return confirm('Refresh this release with the latest steps and variables?')">Refresh</button>
+				</form>
+			}
 		</div>
 		<div class="card bg-base-200 p-4">
 			<h2 class="text-xl font-bold mb-4">Snapshotted Steps</h2>

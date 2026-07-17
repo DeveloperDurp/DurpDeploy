@@ -308,59 +308,77 @@ func TestExportLogs(t *testing.T) {
 	repo := setupTestRepo(t)
 	h := NewLogHandler(broker, repo)
 
-	project, err := repo.Queries.CreateProject(context.Background(), db.CreateProjectParams{
-		Name:        "test-project",
-		Description: sql.NullString{},
-	})
+	project, err := repo.Queries.CreateProject(
+		context.Background(),
+		db.CreateProjectParams{
+			Name:        "test-project",
+			Description: sql.NullString{},
+		},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	env, err := repo.Queries.CreateEnvironment(context.Background(), db.CreateEnvironmentParams{
-		Name:        "test-env",
-		Description: sql.NullString{},
-		Tags:        sql.NullString{},
-	})
+	env, err := repo.Queries.CreateEnvironment(
+		context.Background(),
+		db.CreateEnvironmentParams{
+			Name:        "test-env",
+			Description: sql.NullString{},
+			Tags:        sql.NullString{},
+		},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	release, err := repo.Queries.CreateRelease(context.Background(), db.CreateReleaseParams{
-		ProjectID: project.ID,
-		Version:   "1.0.0",
-		StepsJson: "[]",
-	})
+	release, err := repo.Queries.CreateRelease(
+		context.Background(),
+		db.CreateReleaseParams{
+			ProjectID: project.ID,
+			Version:   "1.0.0",
+			StepsJson: "[]",
+		},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	now := time.Now().Unix()
-	deployment, err := repo.Queries.CreateDeployment(context.Background(), db.CreateDeploymentParams{
-		ReleaseID:     release.ID,
-		EnvironmentID: env.ID,
-		Status:        "succeeded",
-		StartedAt:     sql.NullInt64{Int64: now, Valid: true},
-		FinishedAt:    sql.NullInt64{Int64: now, Valid: true},
-		Forced:        0,
-	})
+	deployment, err := repo.Queries.CreateDeployment(
+		context.Background(),
+		db.CreateDeploymentParams{
+			ReleaseID:     release.ID,
+			EnvironmentID: env.ID,
+			Status:        "succeeded",
+			StartedAt:     sql.NullInt64{Int64: now, Valid: true},
+			FinishedAt:    sql.NullInt64{Int64: now, Valid: true},
+			Forced:        0,
+		},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	_, err = repo.Queries.CreateDeploymentLog(context.Background(), db.CreateDeploymentLogParams{
-		DeploymentID: deployment.ID,
-		StepName:     sql.NullString{String: "build", Valid: true},
-		Line:         "starting build",
-	})
+	_, err = repo.Queries.CreateDeploymentLog(
+		context.Background(),
+		db.CreateDeploymentLogParams{
+			DeploymentID: deployment.ID,
+			StepName:     sql.NullString{String: "build", Valid: true},
+			Line:         "starting build",
+		},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	_, err = repo.Queries.CreateDeploymentLog(context.Background(), db.CreateDeploymentLogParams{
-		DeploymentID: deployment.ID,
-		StepName:     sql.NullString{},
-		Line:         "some line without step",
-	})
+	_, err = repo.Queries.CreateDeploymentLog(
+		context.Background(),
+		db.CreateDeploymentLogParams{
+			DeploymentID: deployment.ID,
+			StepName:     sql.NullString{},
+			Line:         "some line without step",
+		},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -390,11 +408,16 @@ func TestExportLogs(t *testing.T) {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
 	}
 
-	if ct := resp.Header.Get("Content-Type"); ct != "text/plain; charset=utf-8" {
+	if ct := resp.Header.Get(
+		"Content-Type",
+	); ct != "text/plain; charset=utf-8" {
 		t.Errorf("expected text/plain; charset=utf-8, got %s", ct)
 	}
 
-	expectedCD := fmt.Sprintf(`attachment; filename="deployment-%d.log"`, deployment.ID)
+	expectedCD := fmt.Sprintf(
+		`attachment; filename="deployment-%d.log"`,
+		deployment.ID,
+	)
 	if cd := resp.Header.Get("Content-Disposition"); cd != expectedCD {
 		t.Errorf("expected Content-Disposition %q, got %q", expectedCD, cd)
 	}
@@ -411,7 +434,11 @@ func TestExportLogs(t *testing.T) {
 		deployment.ID,
 	)
 	if !strings.Contains(bodyStr, expectedHeader) {
-		t.Errorf("expected header %q in body, got:\n%s", expectedHeader, bodyStr)
+		t.Errorf(
+			"expected header %q in body, got:\n%s",
+			expectedHeader,
+			bodyStr,
+		)
 	}
 
 	if !strings.Contains(bodyStr, "starting build") {
@@ -426,7 +453,10 @@ func TestExportLogs(t *testing.T) {
 	}
 
 	if !strings.Contains(bodyStr, "[202") {
-		t.Errorf("expected a timestamp in [YYYY format in body, got:\n%s", bodyStr)
+		t.Errorf(
+			"expected a timestamp in [YYYY format in body, got:\n%s",
+			bodyStr,
+		)
 	}
 
 	if !strings.HasSuffix(bodyStr, "\n") {

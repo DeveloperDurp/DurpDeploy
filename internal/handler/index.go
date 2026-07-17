@@ -69,7 +69,9 @@ func (h *IndexHandler) Index(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	runningRows, err := h.repo.Queries.ListRunningDeploymentsWithRefs(r.Context())
+	runningRows, err := h.repo.Queries.ListRunningDeploymentsWithRefs(
+		r.Context(),
+	)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -94,7 +96,9 @@ func (h *IndexHandler) Index(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	latestRows, err := h.repo.Queries.ListLatestDeploymentPerReleaseEnv(r.Context())
+	latestRows, err := h.repo.Queries.ListLatestDeploymentPerReleaseEnv(
+		r.Context(),
+	)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

@@ -1,0 +1,129 @@
+package pages
+
+import (
+	"durpdeploy/internal/db"
+	"durpdeploy/views/layouts"
+	"fmt"
+)
+
+// UsersListPage renders the /admin/users table plus an optional
+// "newly created user" banner that displays the one-time plaintext
+// password. The banner only renders when newUserID > 0 — the URL
+// query that triggers it is set by the CreateUser handler and
+// cleared by clicking the "Got it" button (which navigates back to
+// /admin/users with no query string).
+templ UsersListPage(
+	users []db.ListUsersRow,
+	newUserID int64,
+	newUserEmail string,
+	newPassword string,
+	updated bool,
+	currentUser *db.User,
+	currentPath string,
+) {
+	@layouts.Base("Users", currentPath) {
+		<div class="flex justify-between items-center mb-4">
+			<h1 class="text-3xl font-bold">Users</h1>
+			if CanWrite(ctx) {
+				<a href="/admin/users/new" class="btn btn-primary btn-sm">New user</a>
+			}
+		</div>
+		if newUserID > 0 {
+			if newPassword != "" && newUserEmail != "" {
+				if updated {
+					@NewUserPasswordBanner("Password updated.", newUserEmail, newPassword)
+				} else {
+					@NewUserPasswordBanner("User created.", newUserEmail, newPassword)
+				}
+			}
+		}
+		if len(users) == 0 {
+			<div class="card bg-base-200 p-8 text-center">
+				<p class="text-gray-400">No users yet.</p>
+			</div>
+		} else {
+			<div class="overflow-x-auto">
+				<table class="table table-zebra table-fixed w-full">
+					<thead>
+						<tr>
+							<th class="w-1/4">Email</th>
+							<th class="w-1/5">Name</th>
+							<th class="w-1/6">Role</th>
+							<th class="w-1/6">Created</th>
+							<th class="w-1/6">Last login</th>
+							<th class="w-48">Actions</th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, u := range users {
+							@usersListRow(u, currentUser)
+						}
+					</tbody>
+				</table>
+			</div>
+		}
+	}
+}
+
+templ usersListRow(u db.ListUsersRow, currentUser *db.User) {
+	<tr>
+		<td class="truncate font-mono text-sm">{ u.Email }</td>
+		<td class="truncate">{ u.Name }</td>
+		<td>
+			<span class="badge badge-outline">{ u.Role }</span>
+		</td>
+		<td class="whitespace-nowrap text-sm">
+			{ formatUnixTime(u.CreatedAt) }
+		</td>
+		<td class="whitespace-nowrap text-sm">
+			if u.LastLoginAt.Valid {
+				{ formatUnixTime(u.LastLoginAt.Int64) }
+			} else {
+				<span class="text-gray-500">never</span>
+			}
+		</td>
+		<td class="whitespace-nowrap">
+			if CanWrite(ctx) {
+				<a href={ fmt.Sprintf("/admin/users/%d/edit", u.ID) } class="btn btn-ghost btn-xs">Edit</a>
+				if currentUser == nil || currentUser.ID != u.ID {
+					<button
+						class="btn btn-error btn-xs"
+						hx-delete={ fmt.Sprintf("/admin/users/%d", u.ID) }
+						hx-confirm={ fmt.Sprintf("Delete user %s? They will be unable to log in.", u.Email) }
+						data-toast-success="User deleted"
+						data-toast-error="Failed to delete user"
+					>
+						Delete
+					</button>
+				}
+			}
+		</td>
+	</tr>
+}
+
+// NewUserPasswordBanner shows the freshly-created user's initial
+// password. The admin must copy it and click "Got it" (which
+// navigates to /admin/users with no query), so the password lives
+// in the URL for one page load only.
+//
+// ponytail: warning color + monospace makes the password unmissable.
+// The whole card is bordered so it stands out from the user table
+// below.
+templ NewUserPasswordBanner(title string, email string, password string) {
+	<div class="alert alert-warning mb-4 flex-col items-start gap-2">
+		<div class="flex items-center gap-2 w-full">
+			<span class="font-bold">{ title }</span>
+			<span>
+				Share this initial password with <span class="font-mono">{ email }</span>. They will need it to log in.
+			</span>
+		</div>
+		<div class="w-full">
+			<code class="block bg-base-300 text-base-content p-2 rounded font-mono select-all">
+				{ password }
+			</code>
+		</div>
+		<div class="flex justify-end w-full">
+			<a href="/admin/users" class="btn btn-sm">Got it — don't show this again</a>
+		</div>
+	</div>
+}

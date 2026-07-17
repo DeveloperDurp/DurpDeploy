@@ -77,7 +77,7 @@ var actionMap = map[string]string{
 	"POST /projects/{id}/variables":                    "create_variable",
 	"PUT /projects/{id}/variables/{varId}":             "update_variable",
 	"DELETE /projects/{id}/variables/{varId}":          "delete_variable",
-	"POST /deployments":                                "create_deployment",
+	"POST /projects/{id}/deploy":                       "create_deployment",
 	"POST /deployments/{id}/cancel":                    "cancel_deployment",
 	"POST /deployments/{id}/approve":                   "approve_deployment",
 	"POST /deployments/{id}/redeploy":                  "redeploy_deployment",
@@ -87,9 +87,14 @@ var actionMap = map[string]string{
 	"PUT /projects/{id}/schedules/{schedId}":           "update_schedule",
 	"DELETE /projects/{id}/schedules/{schedId}":        "delete_schedule",
 	"POST /projects/{id}/schedules/{schedId}/toggle":   "toggle_schedule",
+	"POST /projects/{id}/members":                      "add_project_member",
+	"DELETE /projects/{id}/members/{userId}":           "remove_project_member",
 	"POST /templates":                                  "create_template",
 	"PUT /templates/{id}":                              "update_template",
 	"DELETE /templates/{id}":                           "delete_template",
+	"POST /admin/users":                                "create_user",
+	"PUT /admin/users/{id}":                            "update_user",
+	"DELETE /admin/users/{id}":                         "delete_user",
 }
 
 // entityIDRe captures the first numeric path segment, e.g. /projects/42

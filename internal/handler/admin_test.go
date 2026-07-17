@@ -77,10 +77,13 @@ func TestAudit_CreateProjectRecorded(t *testing.T) {
 	if sessionToken == "" {
 		t.Fatal("no session cookie after login")
 	}
-	sess, err := h.repo.Queries.GetSession(context.Background(), db.GetSessionParams{
-		ID:        sessionToken,
-		ExpiresAt: 0,
-	})
+	sess, err := h.repo.Queries.GetSession(
+		context.Background(),
+		db.GetSessionParams{
+			ID:        sessionToken,
+			ExpiresAt: 0,
+		},
+	)
 	if err != nil {
 		t.Fatalf("get session: %v", err)
 	}
@@ -214,7 +217,10 @@ func TestAudit_FailedLoginNotLogged(t *testing.T) {
 		t.Fatalf("list audit: %v", err)
 	}
 	if len(rows) != 0 {
-		t.Fatalf("audit rows = %d, want 0 (failed login must not be logged)", len(rows))
+		t.Fatalf(
+			"audit rows = %d, want 0 (failed login must not be logged)",
+			len(rows),
+		)
 	}
 }
 
@@ -244,7 +250,10 @@ func TestAudit_GetCSRFRejectionNotLogged(t *testing.T) {
 		t.Fatalf("list audit: %v", err)
 	}
 	if len(rows) != 0 {
-		t.Fatalf("audit rows = %d, want 0 (CSRF rejection must not be logged)", len(rows))
+		t.Fatalf(
+			"audit rows = %d, want 0 (CSRF rejection must not be logged)",
+			len(rows),
+		)
 	}
 }
 
@@ -282,7 +291,8 @@ func TestAudit_FilterByUser(t *testing.T) {
 
 	// Filter by the admin user's id.
 	adminID := h.sess.user.ID
-	auditResp, err := h.authedClient().Get(h.server.URL + "/admin/audit?user_id=" + itoa(adminID))
+	auditResp, err := h.authedClient().
+		Get(h.server.URL + "/admin/audit?user_id=" + itoa(adminID))
 	if err != nil {
 		t.Fatalf("get /admin/audit: %v", err)
 	}

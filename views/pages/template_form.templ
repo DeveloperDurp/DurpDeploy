@@ -7,9 +7,33 @@ import (
 )
 
 templ TemplateForm(tpl *db.StepTemplate, isNew bool, errorMsg string, currentPath string) {
-	@layouts.Base("Template", currentPath) {
-		@TemplateFormContent(tpl, isNew, errorMsg)
+	if !CanWrite(ctx) {
+		@ViewerForbiddenMessage(
+			tplFormTitle(isNew),
+			tplFormAction(isNew),
+			"a template",
+			"/templates",
+			currentPath,
+		)
+	} else {
+		@layouts.Base("Template", currentPath) {
+			@TemplateFormContent(tpl, isNew, errorMsg)
+		}
 	}
+}
+
+func tplFormTitle(isNew bool) string {
+	if isNew {
+		return "New template"
+	}
+	return "Edit template"
+}
+
+func tplFormAction(isNew bool) string {
+	if isNew {
+		return "create"
+	}
+	return "edit"
 }
 
 templ TemplateFormFragment(tpl *db.StepTemplate, isNew bool, errorMsg string) {

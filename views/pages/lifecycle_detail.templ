@@ -36,7 +36,9 @@ templ LifecycleDetail(lc db.Lifecycle, stages []LifecycleStageView, availableEnv
 				}
 			</div>
 			<div class="flex gap-2">
-				<a href={ templ.SafeURL("/lifecycles/" + strconv.FormatInt(lc.ID, 10) + "/edit") } class="btn btn-ghost btn-sm">Edit</a>
+				if CanWrite(ctx) {
+					<a href={ templ.SafeURL("/lifecycles/" + strconv.FormatInt(lc.ID, 10) + "/edit") } class="btn btn-ghost btn-sm">Edit</a>
+				}
 				<a href="/lifecycles" class="btn btn-ghost btn-sm">Back</a>
 			</div>
 		</div>
@@ -73,10 +75,12 @@ templ LifecycleStageList(lc db.Lifecycle, stages []LifecycleStageView, available
 				</tbody>
 			</table>
 		}
-		if len(availableEnvs) > 0 {
-			@LifecycleAddStageForm(lc, availableEnvs)
-		} else {
-			<p class="text-sm text-gray-400 mt-4">All environments are already in this lifecycle. Create more environments to extend the chain.</p>
+		if CanWrite(ctx) {
+			if len(availableEnvs) > 0 {
+				@LifecycleAddStageForm(lc, availableEnvs)
+			} else {
+				<p class="text-sm text-gray-400 mt-4">All environments are already in this lifecycle. Create more environments to extend the chain.</p>
+			}
 		}
 	</div>
 }
@@ -86,41 +90,53 @@ templ LifecycleStageRow(lc db.Lifecycle, index int, total int, s LifecycleStageV
 		<td>{ strconv.Itoa(index + 1) }</td>
 		<td class="font-medium truncate">{ s.Environment.Name }</td>
 		<td>
-			<label class="cursor-pointer flex items-center gap-1">
-				<input
-					type="checkbox"
-					class="checkbox checkbox-sm"
-					hx-patch={ templ.SafeURL("/lifecycles/" + strconv.FormatInt(lc.ID, 10) + "/stages/" + strconv.FormatInt(s.Stage.ID, 10)) }
-					hx-vals={ fmt.Sprintf(`{"requires_approval":%q}`, ternaryNext(s.Stage.RequiresApproval)) }
-					hx-target="#lifecycle-stages"
-					hx-swap="outerHTML"
-					checked?={ s.Stage.RequiresApproval != 0 }
-				/>
-				<span class="text-sm">Required</span>
-			</label>
+			if CanWrite(ctx) {
+				<label class="cursor-pointer flex items-center gap-1">
+					<input
+						type="checkbox"
+						class="checkbox checkbox-sm"
+						hx-patch={ templ.SafeURL("/lifecycles/" + strconv.FormatInt(lc.ID, 10) + "/stages/" + strconv.FormatInt(s.Stage.ID, 10)) }
+						hx-vals={ fmt.Sprintf(`{"requires_approval":%q}`, ternaryNext(s.Stage.RequiresApproval)) }
+						hx-target="#lifecycle-stages"
+						hx-swap="outerHTML"
+						checked?={ s.Stage.RequiresApproval != 0 }
+					/>
+					<span class="text-sm">Required</span>
+				</label>
+			} else {
+				<span class="text-sm">
+					if s.Stage.RequiresApproval != 0 {
+						Required
+					} else {
+						Not required
+					}
+				</span>
+			}
 		</td>
 		<td class="flex gap-2 whitespace-nowrap">
-			if index == 0 {
-				<span class="btn btn-xs invisible" aria-hidden="true">↑</span>
-			} else {
-				<form method="post" action={ templ.SafeURL("/lifecycles/" + strconv.FormatInt(lc.ID, 10) + "/stages/reorder") }>
-					<input type="hidden" name="stage_id" value={ strconv.FormatInt(s.Stage.ID, 10) }/>
-					<input type="hidden" name="direction" value="up"/>
-					<button type="submit" class="btn btn-xs">↑</button>
+			if CanWrite(ctx) {
+				if index == 0 {
+					<span class="btn btn-xs invisible" aria-hidden="true">↑</span>
+				} else {
+					<form method="post" action={ templ.SafeURL("/lifecycles/" + strconv.FormatInt(lc.ID, 10) + "/stages/reorder") }>
+						<input type="hidden" name="stage_id" value={ strconv.FormatInt(s.Stage.ID, 10) }/>
+						<input type="hidden" name="direction" value="up"/>
+						<button type="submit" class="btn btn-xs">↑</button>
+					</form>
+				}
+				if index == total-1 {
+					<span class="btn btn-xs invisible" aria-hidden="true">↓</span>
+				} else {
+					<form method="post" action={ templ.SafeURL("/lifecycles/" + strconv.FormatInt(lc.ID, 10) + "/stages/reorder") }>
+						<input type="hidden" name="stage_id" value={ strconv.FormatInt(s.Stage.ID, 10) }/>
+						<input type="hidden" name="direction" value="down"/>
+						<button type="submit" class="btn btn-xs">↓</button>
+					</form>
+				}
+				<form method="post" action={ templ.SafeURL("/lifecycles/" + strconv.FormatInt(lc.ID, 10) + "/stages/" + strconv.FormatInt(s.Stage.ID, 10) + "/delete") } onsubmit="return confirm('Remove this stage from the lifecycle?')">
+					<button type="submit" class="btn btn-xs btn-error">Delete</button>
 				</form>
 			}
-			if index == total-1 {
-				<span class="btn btn-xs invisible" aria-hidden="true">↓</span>
-			} else {
-				<form method="post" action={ templ.SafeURL("/lifecycles/" + strconv.FormatInt(lc.ID, 10) + "/stages/reorder") }>
-					<input type="hidden" name="stage_id" value={ strconv.FormatInt(s.Stage.ID, 10) }/>
-					<input type="hidden" name="direction" value="down"/>
-					<button type="submit" class="btn btn-xs">↓</button>
-				</form>
-			}
-			<form method="post" action={ templ.SafeURL("/lifecycles/" + strconv.FormatInt(lc.ID, 10) + "/stages/" + strconv.FormatInt(s.Stage.ID, 10) + "/delete") } onsubmit="return confirm('Remove this stage from the lifecycle?')">
-				<button type="submit" class="btn btn-xs btn-error">Delete</button>
-			</form>
 		</td>
 	</tr>
 }

@@ -406,129 +406,6 @@ func (h *DeploymentHandler) renderDeployGateError(
 	}
 }
 
-func (h *DeploymentHandler) CreateDeployment(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	releaseID, err := strconv.ParseInt(r.FormValue("release_id"), 10, 64)
-	if err != nil {
-		http.Error(w, "Invalid release ID", http.StatusBadRequest)
-		return
-	}
-
-	environmentID, err := strconv.ParseInt(
-		r.FormValue("environment_id"),
-		10,
-		64,
-	)
-	if err != nil {
-		http.Error(w, "Invalid environment ID", http.StatusBadRequest)
-		return
-	}
-
-	force := isTruthy(r.FormValue("force"))
-	note := r.FormValue("note")
-	noteParam := sql.NullString{String: note, Valid: note != ""}
-
-	release, err := h.repo.Queries.GetRelease(r.Context(), releaseID)
-	if err != nil {
-		http.Error(w, "Release not found", http.StatusBadRequest)
-		return
-	}
-
-	project, err := h.repo.Queries.GetProject(r.Context(), release.ProjectID)
-	if err != nil {
-		http.Error(w, "Project not found", http.StatusBadRequest)
-		return
-	}
-
-	violation, blocked := h.checkPromotionGate(
-		r,
-		project,
-		release,
-		environmentID,
-	)
-	if blocked {
-		// Hard restriction: force cannot bypass.
-		if !violation.bypassable {
-			h.renderGateError(
-				w,
-				r,
-				project,
-				release,
-				environmentID,
-				violation.reason,
-			)
-			return
-		}
-		// Bypassable: force is required to proceed.
-		if !force {
-			h.renderGateError(
-				w,
-				r,
-				project,
-				release,
-				environmentID,
-				violation.reason,
-			)
-			return
-		}
-	}
-
-	requiresApproval, err := h.stageRequiresApproval(r, project, environmentID)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	initialStatus := "pending"
-	if requiresApproval {
-		initialStatus = "pending_approval"
-	}
-
-	forcedFlag := int64(0)
-	if force && violation != nil && violation.bypassable {
-		forcedFlag = 1
-	}
-
-	deployment, err := h.repo.Queries.CreateDeployment(
-		r.Context(),
-		db.CreateDeploymentParams{
-			ReleaseID:     releaseID,
-			EnvironmentID: environmentID,
-			Status:        initialStatus,
-			StartedAt:     sql.NullInt64{},
-			FinishedAt:    sql.NullInt64{},
-			Forced:        forcedFlag,
-			Note:          noteParam,
-		},
-	)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	if initialStatus == "pending" {
-		go h.runner.Run(
-			context.Background(),
-			deployment.ID,
-			releaseID,
-			environmentID,
-		)
-	}
-
-	http.Redirect(
-		w,
-		r,
-		fmt.Sprintf("/deployments/%d", deployment.ID),
-		http.StatusSeeOther,
-	)
-}
-
 // checkPromotionGate enforces two rules when a project has a lifecycle:
 //  1. The target environment must be a stage in the lifecycle (force cannot bypass).
 //  2. There must be a successful deployment of the same release to the previous stage.
@@ -563,43 +440,6 @@ func (h *DeploymentHandler) checkPromotionGate(
 		reason:     state.reason,
 		bypassable: state.bypassable,
 	}, true
-}
-
-// renderGateError renders a 422 page that re-displays the releases table with
-// the gate violation message, so the user can see the error and re-attempt with force.
-func (h *DeploymentHandler) renderGateError(
-	w http.ResponseWriter,
-	r *http.Request,
-	project db.Project,
-	release db.Release,
-	environmentID int64,
-	reason string,
-) {
-	releases, err := h.repo.Queries.ListReleasesByProject(
-		r.Context(),
-		project.ID,
-	)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	views, err := buildReleaseViews(r.Context(), h.repo, project, releases)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.WriteHeader(http.StatusUnprocessableEntity)
-	if r.Header.Get("HX-Request") == "true" {
-		if err := pages.ReleasesFragment(project, views, reason).
-			Render(r.Context(), w); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-		return
-	}
-	if err := pages.ReleasesPage(project, views, reason, r.URL.Path).
-		Render(r.Context(), w); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
 }
 
 // availableEnvironmentsForProject returns the envs a project may deploy to:
@@ -774,8 +614,13 @@ func (h *DeploymentHandler) CancelDeployment(
 		return
 	}
 
-	if deployment.Status != "running" && deployment.Status != "pending_approval" {
-		http.Error(w, "Deployment cannot be cancelled in its current state", http.StatusBadRequest)
+	if deployment.Status != "running" &&
+		deployment.Status != "pending_approval" {
+		http.Error(
+			w,
+			"Deployment cannot be cancelled in its current state",
+			http.StatusBadRequest,
+		)
 		return
 	}
 

@@ -1,0 +1,225 @@
+package pages
+
+import (
+	"durpdeploy/internal/db"
+	"durpdeploy/views/layouts"
+	"fmt"
+	"strconv"
+)
+
+// UserFormPage renders the create or edit user form, depending on
+// whether user is nil. errorMsg renders in an alert at the top of the
+// form. The same templ component is used by the HTMX fragment path
+// (the form-container swap) and the full-page path.
+//
+// ponytail: the edit form uses hx-put and the destructive action uses
+// hx-delete, both below the form via the form= attribute. The base
+// form is the same shell; only the per-action attrs differ. Same
+// shape as ProjectForm / TemplateForm.
+templ UserFormPage(user *db.User, errorMsg string, currentPath string) {
+	if !CanWrite(ctx) {
+		@ViewerForbiddenMessage(
+			formTitle(user),
+			userFormAction(user),
+			"a user",
+			"/admin/users",
+			currentPath,
+		)
+	} else {
+		@layouts.Base(formTitle(user), currentPath) {
+			<div class="max-w-xl">
+				<h1 class="text-3xl font-bold mb-4">{ formTitle(user) }</h1>
+				if errorMsg != "" {
+					<div class="alert alert-error mb-4" id="form-error">
+						<span>{ errorMsg }</span>
+					</div>
+				}
+				<div class="card bg-base-200 shadow">
+					<div class="card-body">
+						@UserFormContent(user, errorMsg)
+					</div>
+				</div>
+			</div>
+		}
+	}
+}
+
+// userFormAction returns the verb ("create" or "edit") for the
+// ViewerForbiddenMessage on the user form. Keeps the inline literal
+// out of the call site.
+func userFormAction(user *db.User) string {
+	if user == nil {
+		return "create"
+	}
+	return "edit"
+}
+
+// UserFormFragment is the form-only view, used by HTMX 422 retargets
+// via WriteFormError. isNew picks the action URL and the submit label.
+templ UserFormFragment(user *db.User, errorMsg string, isNew bool) {
+	@UserFormContent(user, errorMsg)
+}
+
+templ UserFormContent(user *db.User, errorMsg string) {
+	if user != nil {
+		<div class="text-sm opacity-70 mb-2">
+			Editing <span class="font-mono">{ user.Email }</span>
+		</div>
+	}
+	<form
+		id={ userFormID(user) }
+		if user == nil {
+			method="post"
+			action="/admin/users"
+		} else {
+			hx-put={ fmt.Sprintf("/admin/users/%d", user.ID) }
+			hx-target="#form-container"
+			hx-swap="innerHTML"
+			data-toast-success="User updated"
+			data-toast-error="Failed to update user"
+		}
+		class="space-y-4"
+	>
+		if user == nil {
+			<div class="form-control">
+				<label class="label">
+					<span class="label-text">Email</span>
+				</label>
+				<input
+					type="email"
+					name="email"
+					class="input input-bordered"
+					required
+				/>
+			</div>
+		}
+		<div class="form-control">
+			<label class="label">
+				<span class="label-text">Name</span>
+			</label>
+			<input
+				type="text"
+				name="name"
+				value={ fieldValue(user, "name") }
+				class="input input-bordered"
+				required
+			/>
+		</div>
+		<div class="form-control">
+			<label class="label">
+				<span class="label-text">Role</span>
+			</label>
+			<select name="role" class="select select-bordered" required>
+				for _, role := range userRoleOptions(user) {
+					<option value={ role } if selectedRole(user) == role { selected }>{ role }</option>
+				}
+			</select>
+		</div>
+		<div class="form-control">
+			<label class="label">
+				<span class="label-text">
+					if user == nil {
+						Password
+					} else {
+						New password <span class="text-xs opacity-60">(blank = keep current)</span>
+					}
+				</span>
+			</label>
+			<input
+				type="password"
+				name="password"
+				class="input input-bordered"
+				if user == nil {
+					required
+				}
+				autocomplete="new-password"
+			/>
+		</div>
+	</form>
+	if user != nil {
+		<div class="mt-6 pt-4 border-t border-base-300 flex items-center justify-between">
+			<div>
+				<div class="font-medium">Delete this user</div>
+				<div class="text-sm text-gray-500">Removes the account and invalidates all of their sessions.</div>
+			</div>
+			<button
+				class="btn btn-error"
+				hx-delete={ fmt.Sprintf("/admin/users/%d", user.ID) }
+				hx-confirm="Delete this user? They will be unable to log in."
+				data-toast-success="User deleted"
+				data-toast-error="Failed to delete user"
+			>
+				Delete user
+			</button>
+		</div>
+	}
+	<div class="mt-6 pt-4 border-t border-base-300 flex gap-2 justify-end">
+		<button type="submit" form={ userFormID(user) } class="btn btn-primary">
+			if user == nil {
+				Create user
+			} else {
+				Save changes
+			}
+		</button>
+		<a href="/admin/users" class="btn btn-ghost">Cancel</a>
+	</div>
+}
+
+func formTitle(user *db.User) string {
+	if user == nil {
+		return "New user"
+	}
+	return "Edit user"
+}
+
+// userFormID is the form's id attribute. The submit button rendered
+// below the form uses the same id via form= so clicking Save changes
+// actually submits the form. Pattern matches projectFormID.
+func userFormID(user *db.User) string {
+	if user == nil {
+		return "user-form-new"
+	}
+	return "user-form-" + strconv.FormatInt(user.ID, 10)
+}
+
+// userRoleOptions returns the role values to render in the select.
+// For a new user we show "admin" first (sensible default); for an
+// existing user we show the existing role first so a 422 (re-render
+// after a validation failure) keeps the same ordering.
+func userRoleOptions(user *db.User) []string {
+	if user == nil {
+		return []string{"admin", "deployer", "viewer"}
+	}
+	switch user.Role {
+	case "deployer":
+		return []string{"deployer", "admin", "viewer"}
+	case "viewer":
+		return []string{"viewer", "admin", "deployer"}
+	}
+	return []string{"admin", "deployer", "viewer"}
+}
+
+// selectedRole is the role that should be marked selected. For a
+// new user with no submission yet, "admin" is the default.
+func selectedRole(user *db.User) string {
+	if user == nil {
+		return "admin"
+	}
+	return user.Role
+}
+
+// fieldValue returns the current value for a form input. The form is
+// repopulated after a 422 with whatever the user submitted; for new
+// users (user == nil) the empty string is the right default.
+func fieldValue(user *db.User, field string) string {
+	if user == nil {
+		return ""
+	}
+	switch field {
+	case "email":
+		return user.Email
+	case "name":
+		return user.Name
+	}
+	return ""
+}

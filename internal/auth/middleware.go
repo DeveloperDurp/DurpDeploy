@@ -40,7 +40,9 @@ func SessionFromContext(ctx context.Context) *db.Session {
 // Applied only to the protected route group in server.NewRouter; public
 // routes (/login, /static/*, /healthz, /logout) are mounted on the root
 // mux and never reach this middleware.
-func AuthMiddleware(repo *repository.Repository) func(http.Handler) http.Handler {
+func AuthMiddleware(
+	repo *repository.Repository,
+) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			cookie, err := r.Cookie("session")
@@ -49,10 +51,13 @@ func AuthMiddleware(repo *repository.Repository) func(http.Handler) http.Handler
 				return
 			}
 
-			session, err := repo.Queries.GetSession(r.Context(), db.GetSessionParams{
-				ID:        cookie.Value,
-				ExpiresAt: time.Now().Unix(),
-			})
+			session, err := repo.Queries.GetSession(
+				r.Context(),
+				db.GetSessionParams{
+					ID:        cookie.Value,
+					ExpiresAt: time.Now().Unix(),
+				},
+			)
 			if err != nil {
 				http.Redirect(w, r, "/login", http.StatusSeeOther)
 				return

@@ -31,7 +31,9 @@ func TestHashPassword_DifferentSalts(t *testing.T) {
 		t.Fatalf("second hash: %v", err)
 	}
 	if h1 == h2 {
-		t.Fatal("expected two hashes of the same password to differ (different random salts)")
+		t.Fatal(
+			"expected two hashes of the same password to differ (different random salts)",
+		)
 	}
 	if !auth.VerifyPassword(h1, "same") {
 		t.Fatal("expected h1 to verify as same")
