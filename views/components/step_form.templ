@@ -1,12 +1,42 @@
 package components
 
 import (
+	"context"
+
+	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
 	"fmt"
 	"strconv"
 )
 
+// canWrite mirrors views/pages.CanWrite but lives in this package.
+// False for viewers. The context.Context is passed in by the caller
+// (templ component body) because Go helper functions don't share the
+// implicit `ctx` that templ injects into component scope.
+func canWrite(ctx context.Context) bool {
+	u := auth.UserFromContext(ctx)
+	return u == nil || u.Role != "viewer"
+}
+
+// ViewerStepFormMessage is the inline "viewers can't edit steps"
+// fragment. Rendered in place of StepForm when a viewer hits a
+// direct URL that the Add Step / Edit buttons would have produced.
+// (The Add Step / Edit buttons are already hidden by views/pages'
+// CanWrite guards; this is the typed-URL fallback.)
+//
+// ponytail: inline fragment, not a full page — StepForm is rendered
+// into a #add-step-form or #step-row-{id} div via HTMX swap, not as
+// a standalone page.
+templ ViewerStepFormMessage() {
+	<div class="p-4 border border-base-300 rounded bg-base-200 text-sm text-gray-400 italic">
+		Viewers cannot create or edit steps.
+	</div>
+}
+
 templ StepForm(step db.Step, projectID int64, isNew bool, errorMsg string) {
+	if !canWrite(ctx) {
+		@ViewerStepFormMessage()
+	} else {
 	<div class="p-4 border border-base-300 rounded bg-base-200">
 		<form
 			if isNew {
@@ -69,9 +99,13 @@ templ StepForm(step db.Step, projectID int64, isNew bool, errorMsg string) {
 			</div>
 		</form>
 	</div>
+	}
 }
 
 templ StepEditRow(step db.Step, projectID int64, errorMsg string) {
+	if !canWrite(ctx) {
+		@ViewerStepFormMessage()
+	} else {
 	<tr id={ fmt.Sprintf("step-row-%d", step.ID) }>
 		<td colspan="6">
 			<form
@@ -111,4 +145,5 @@ templ StepEditRow(step db.Step, projectID int64, errorMsg string) {
 			</form>
 		</td>
 	</tr>
+	}
 }

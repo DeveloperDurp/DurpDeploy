@@ -21,11 +21,13 @@ templ IndexPage(
 					<div class="max-w-md">
 						<h1 class="text-4xl font-bold">Welcome to DurpDeploy</h1>
 						<p class="py-6 text-gray-400">Simple deployment tool for bash scripts</p>
-						<p class="py-4">Get started by creating your first project or environment</p>
-						<div class="flex gap-4 justify-center">
-							<a href="/projects/new" class="btn btn-primary">Create Project</a>
-							<a href="/environments/new" class="btn btn-secondary">Create Environment</a>
-						</div>
+						if CanWrite(ctx) {
+							<p class="py-4">Get started by creating your first project or environment</p>
+							<div class="flex gap-4 justify-center">
+								<a href="/projects/new" class="btn btn-primary">Create Project</a>
+								<a href="/environments/new" class="btn btn-secondary">Create Environment</a>
+							</div>
+						}
 					</div>
 				</div>
 			</div>
@@ -59,10 +61,12 @@ templ IndexPage(
 						<div class="stat-value">{ strconv.Itoa(len(runningDeployments)) }</div>
 					</div>
 				</div>
-				<div class="flex gap-4">
-					<a href="/projects/new" class="btn btn-primary">Create Project</a>
-					<a href="/environments/new" class="btn btn-secondary">Create Environment</a>
-				</div>
+				if CanWrite(ctx) {
+					<div class="flex gap-4">
+						<a href="/projects/new" class="btn btn-primary">Create Project</a>
+						<a href="/environments/new" class="btn btn-secondary">Create Environment</a>
+					</div>
+				}
 				<div>
 					<h2 class="text-xl font-bold mb-4">Currently running</h2>
 					if len(runningDeployments) == 0 {

@@ -43,24 +43,26 @@ templ StepsContent(project db.Project, steps []db.Step) {
 				</span>
 			</div>
 			@components.StepList(steps, project.ID)
-			<div class="mt-4 flex gap-2">
-				<button
-					class="btn btn-primary btn-sm"
-					hx-get={ fmt.Sprintf("/projects/%d/steps/new", project.ID) }
-					hx-target="#add-step-form"
-					hx-swap="innerHTML"
-				>
-					Add Step
-				</button>
-				<button
-					class="btn btn-secondary btn-sm"
-					hx-get={ fmt.Sprintf("/projects/%d/templates-picker", project.ID) }
-					hx-target="#template-picker"
-					hx-swap="innerHTML"
-				>
-					Insert from Template
-				</button>
-			</div>
+			if CanWrite(ctx) {
+				<div class="mt-4 flex gap-2">
+					<button
+						class="btn btn-primary btn-sm"
+						hx-get={ fmt.Sprintf("/projects/%d/steps/new", project.ID) }
+						hx-target="#add-step-form"
+						hx-swap="innerHTML"
+					>
+						Add Step
+					</button>
+					<button
+						class="btn btn-secondary btn-sm"
+						hx-get={ fmt.Sprintf("/projects/%d/templates-picker", project.ID) }
+						hx-target="#template-picker"
+						hx-swap="innerHTML"
+					>
+						Insert from Template
+					</button>
+				</div>
+			}
 			<div id="add-step-form" class="mt-4"></div>
 			<div id="template-picker" class="mt-4"></div>
 		</div>

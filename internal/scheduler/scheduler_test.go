@@ -58,7 +58,12 @@ func newFixture(t *testing.T) *testFixture {
 	rnr := runner.New(repo, broker)
 
 	logBuf := &bytes.Buffer{}
-	logger := slog.New(slog.NewTextHandler(logBuf, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	logger := slog.New(
+		slog.NewTextHandler(
+			logBuf,
+			&slog.HandlerOptions{Level: slog.LevelInfo},
+		),
+	)
 
 	now := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
 
@@ -109,11 +114,14 @@ func (f *testFixture) createRelease(projectID int64) db.Release {
 
 func (f *testFixture) createEnvironment(name string) db.Environment {
 	f.t.Helper()
-	e, err := f.repo.Queries.CreateEnvironment(f.ctx(), db.CreateEnvironmentParams{
-		Name:        name,
-		Description: sql.NullString{},
-		Tags:        sql.NullString{},
-	})
+	e, err := f.repo.Queries.CreateEnvironment(
+		f.ctx(),
+		db.CreateEnvironmentParams{
+			Name:        name,
+			Description: sql.NullString{},
+			Tags:        sql.NullString{},
+		},
+	)
 	if err != nil {
 		f.t.Fatalf("create environment: %v", err)
 	}
@@ -134,56 +142,80 @@ func (f *testFixture) createLifecycle(name string) db.Lifecycle {
 
 func (f *testFixture) attachLifecycle(projectID, lifecycleID int64) {
 	f.t.Helper()
-	err := f.repo.Queries.SetProjectLifecycle(f.ctx(), db.SetProjectLifecycleParams{
-		ID:          projectID,
-		LifecycleID: sql.NullInt64{Int64: lifecycleID, Valid: true},
-	})
+	err := f.repo.Queries.SetProjectLifecycle(
+		f.ctx(),
+		db.SetProjectLifecycleParams{
+			ID:          projectID,
+			LifecycleID: sql.NullInt64{Int64: lifecycleID, Valid: true},
+		},
+	)
 	if err != nil {
 		f.t.Fatalf("attach lifecycle: %v", err)
 	}
 }
 
-func (f *testFixture) addLifecycleStage(lifecycleID, envID int64, sortOrder int64) {
+func (f *testFixture) addLifecycleStage(
+	lifecycleID, envID int64,
+	sortOrder int64,
+) {
 	f.t.Helper()
-	_, err := f.repo.Queries.CreateLifecycleStage(f.ctx(), db.CreateLifecycleStageParams{
-		LifecycleID:   lifecycleID,
-		EnvironmentID: envID,
-		SortOrder:     sortOrder,
-	})
+	_, err := f.repo.Queries.CreateLifecycleStage(
+		f.ctx(),
+		db.CreateLifecycleStageParams{
+			LifecycleID:   lifecycleID,
+			EnvironmentID: envID,
+			SortOrder:     sortOrder,
+		},
+	)
 	if err != nil {
 		f.t.Fatalf("create lifecycle stage: %v", err)
 	}
 }
 
-func (f *testFixture) createSchedule(projectID, releaseID, envID int64, cronExpr string, nextRunAt time.Time, enabled int64, note string) db.ScheduledDeployment {
+func (f *testFixture) createSchedule(
+	projectID, releaseID, envID int64,
+	cronExpr string,
+	nextRunAt time.Time,
+	enabled int64,
+	note string,
+) db.ScheduledDeployment {
 	f.t.Helper()
-	s, err := f.repo.Queries.CreateScheduledDeployment(f.ctx(), db.CreateScheduledDeploymentParams{
-		ProjectID:     projectID,
-		ReleaseID:     releaseID,
-		EnvironmentID: envID,
-		Cron:          cronExpr,
-		NextRunAt:     nextRunAt.Unix(),
-		Enabled:       enabled,
-		LastFiredAt:   sql.NullInt64{},
-		Note:          sql.NullString{String: note, Valid: true},
-	})
+	s, err := f.repo.Queries.CreateScheduledDeployment(
+		f.ctx(),
+		db.CreateScheduledDeploymentParams{
+			ProjectID:     projectID,
+			ReleaseID:     releaseID,
+			EnvironmentID: envID,
+			Cron:          cronExpr,
+			NextRunAt:     nextRunAt.Unix(),
+			Enabled:       enabled,
+			LastFiredAt:   sql.NullInt64{},
+			Note:          sql.NullString{String: note, Valid: true},
+		},
+	)
 	if err != nil {
 		f.t.Fatalf("create scheduled deployment: %v", err)
 	}
 	return s
 }
 
-func (f *testFixture) createDeployment(releaseID, envID int64, status string) db.Deployment {
+func (f *testFixture) createDeployment(
+	releaseID, envID int64,
+	status string,
+) db.Deployment {
 	f.t.Helper()
-	d, err := f.repo.Queries.CreateDeployment(f.ctx(), db.CreateDeploymentParams{
-		ReleaseID:     releaseID,
-		EnvironmentID: envID,
-		Status:        status,
-		StartedAt:     sql.NullInt64{},
-		FinishedAt:    sql.NullInt64{},
-		Forced:        0,
-		Note:          sql.NullString{},
-	})
+	d, err := f.repo.Queries.CreateDeployment(
+		f.ctx(),
+		db.CreateDeploymentParams{
+			ReleaseID:     releaseID,
+			EnvironmentID: envID,
+			Status:        status,
+			StartedAt:     sql.NullInt64{},
+			FinishedAt:    sql.NullInt64{},
+			Forced:        0,
+			Note:          sql.NullString{},
+		},
+	)
 	if err != nil {
 		f.t.Fatalf("create deployment: %v", err)
 	}
@@ -198,11 +230,20 @@ func (f *testFixture) captureRunCalls() *[]struct{ DeploymentID, ReleaseID, Envi
 	f.t.Helper()
 	var mu sync.Mutex
 	calls := []struct{ DeploymentID, ReleaseID, EnvironmentID int64 }{}
-	f.sched.SetRunFunc(func(ctx context.Context, deploymentID, releaseID, environmentID int64) {
-		mu.Lock()
-		defer mu.Unlock()
-		calls = append(calls, struct{ DeploymentID, ReleaseID, EnvironmentID int64 }{deploymentID, releaseID, environmentID})
-	})
+	f.sched.SetRunFunc(
+		func(ctx context.Context, deploymentID, releaseID, environmentID int64) {
+			mu.Lock()
+			defer mu.Unlock()
+			calls = append(
+				calls,
+				struct{ DeploymentID, ReleaseID, EnvironmentID int64 }{
+					deploymentID,
+					releaseID,
+					environmentID,
+				},
+			)
+		},
+	)
 	return &calls
 }
 
@@ -213,7 +254,15 @@ func TestTick_DueRow_FiresAndAdvances(t *testing.T) {
 	proj := f.createProject()
 	rel := f.createRelease(proj.ID)
 	env := f.createEnvironment("dev")
-	sched := f.createSchedule(proj.ID, rel.ID, env.ID, "* * * * *", f.now.Add(-time.Minute), 1, "nightly")
+	sched := f.createSchedule(
+		proj.ID,
+		rel.ID,
+		env.ID,
+		"* * * * *",
+		f.now.Add(-time.Minute),
+		1,
+		"nightly",
+	)
 
 	calls := f.captureRunCalls()
 
@@ -250,7 +299,11 @@ func TestTick_DueRow_FiresAndAdvances(t *testing.T) {
 		t.Fatalf("get scheduled: %v", err)
 	}
 	if updated.NextRunAt <= f.now.Unix() {
-		t.Fatalf("next_run_at not advanced: %d <= %d", updated.NextRunAt, f.now.Unix())
+		t.Fatalf(
+			"next_run_at not advanced: %d <= %d",
+			updated.NextRunAt,
+			f.now.Unix(),
+		)
 	}
 
 	// assert log contains fired action
@@ -268,7 +321,15 @@ func TestTick_BadCron_ParksAndLogs(t *testing.T) {
 	proj := f.createProject()
 	rel := f.createRelease(proj.ID)
 	env := f.createEnvironment("dev")
-	sched := f.createSchedule(proj.ID, rel.ID, env.ID, "bogus", f.now.Add(-time.Minute), 1, "bad")
+	sched := f.createSchedule(
+		proj.ID,
+		rel.ID,
+		env.ID,
+		"bogus",
+		f.now.Add(-time.Minute),
+		1,
+		"bad",
+	)
 
 	f.sched.Tick(f.ctx())
 
@@ -282,7 +343,11 @@ func TestTick_BadCron_ParksAndLogs(t *testing.T) {
 	updated, _ := f.repo.Queries.GetScheduledDeployment(f.ctx(), sched.ID)
 	wantParked := f.now.Add(10 * 365 * 24 * time.Hour).Unix()
 	if updated.NextRunAt < wantParked-60 || updated.NextRunAt > wantParked+60 {
-		t.Fatalf("expected next_run_at near %d, got %d", wantParked, updated.NextRunAt)
+		t.Fatalf(
+			"expected next_run_at near %d, got %d",
+			wantParked,
+			updated.NextRunAt,
+		)
 	}
 
 	logs := f.logBuf.String()
@@ -300,7 +365,15 @@ func TestTick_UnsatisfiableCron_ParksAndLogs(t *testing.T) {
 	rel := f.createRelease(proj.ID)
 	env := f.createEnvironment("dev")
 	// Feb 30 never happens
-	sched := f.createSchedule(proj.ID, rel.ID, env.ID, "0 0 30 2 *", f.now.Add(-time.Minute), 1, "impossible")
+	sched := f.createSchedule(
+		proj.ID,
+		rel.ID,
+		env.ID,
+		"0 0 30 2 *",
+		f.now.Add(-time.Minute),
+		1,
+		"impossible",
+	)
 
 	f.sched.Tick(f.ctx())
 
@@ -312,7 +385,11 @@ func TestTick_UnsatisfiableCron_ParksAndLogs(t *testing.T) {
 	updated, _ := f.repo.Queries.GetScheduledDeployment(f.ctx(), sched.ID)
 	wantParked := f.now.Add(10 * 365 * 24 * time.Hour).Unix()
 	if updated.NextRunAt < wantParked-60 || updated.NextRunAt > wantParked+60 {
-		t.Fatalf("expected next_run_at near %d, got %d", wantParked, updated.NextRunAt)
+		t.Fatalf(
+			"expected next_run_at near %d, got %d",
+			wantParked,
+			updated.NextRunAt,
+		)
 	}
 
 	logs := f.logBuf.String()
@@ -331,7 +408,15 @@ func TestTick_Overlap_SkipsAndAdvances(t *testing.T) {
 	env := f.createEnvironment("dev")
 	// existing running deployment for same release+env
 	f.createDeployment(rel.ID, env.ID, "running")
-	sched := f.createSchedule(proj.ID, rel.ID, env.ID, "* * * * *", f.now.Add(-time.Minute), 1, "overlap")
+	sched := f.createSchedule(
+		proj.ID,
+		rel.ID,
+		env.ID,
+		"* * * * *",
+		f.now.Add(-time.Minute),
+		1,
+		"overlap",
+	)
 
 	calls := f.captureRunCalls()
 	f.sched.Tick(f.ctx())
@@ -349,7 +434,11 @@ func TestTick_Overlap_SkipsAndAdvances(t *testing.T) {
 	// assert next_run_at advanced
 	updated, _ := f.repo.Queries.GetScheduledDeployment(f.ctx(), sched.ID)
 	if updated.NextRunAt <= f.now.Unix() {
-		t.Fatalf("next_run_at not advanced: %d <= %d", updated.NextRunAt, f.now.Unix())
+		t.Fatalf(
+			"next_run_at not advanced: %d <= %d",
+			updated.NextRunAt,
+			f.now.Unix(),
+		)
 	}
 
 	logs := f.logBuf.String()
@@ -371,7 +460,15 @@ func TestTick_GateBlock_SkipsAndAdvances(t *testing.T) {
 
 	rel := f.createRelease(proj.ID)
 	// no successful deployment to dev, so prod is gated
-	sched := f.createSchedule(proj.ID, rel.ID, prod.ID, "* * * * *", f.now.Add(-time.Minute), 1, "gate")
+	sched := f.createSchedule(
+		proj.ID,
+		rel.ID,
+		prod.ID,
+		"* * * * *",
+		f.now.Add(-time.Minute),
+		1,
+		"gate",
+	)
 
 	calls := f.captureRunCalls()
 	f.sched.Tick(f.ctx())
@@ -387,7 +484,11 @@ func TestTick_GateBlock_SkipsAndAdvances(t *testing.T) {
 
 	updated, _ := f.repo.Queries.GetScheduledDeployment(f.ctx(), sched.ID)
 	if updated.NextRunAt <= f.now.Unix() {
-		t.Fatalf("next_run_at not advanced: %d <= %d", updated.NextRunAt, f.now.Unix())
+		t.Fatalf(
+			"next_run_at not advanced: %d <= %d",
+			updated.NextRunAt,
+			f.now.Unix(),
+		)
 	}
 
 	logs := f.logBuf.String()
@@ -401,7 +502,15 @@ func TestTick_Disabled_NotInDueList(t *testing.T) {
 	proj := f.createProject()
 	rel := f.createRelease(proj.ID)
 	env := f.createEnvironment("dev")
-	sched := f.createSchedule(proj.ID, rel.ID, env.ID, "* * * * *", f.now.Add(-time.Minute), 0, "disabled")
+	sched := f.createSchedule(
+		proj.ID,
+		rel.ID,
+		env.ID,
+		"* * * * *",
+		f.now.Add(-time.Minute),
+		0,
+		"disabled",
+	)
 
 	calls := f.captureRunCalls()
 	f.sched.Tick(f.ctx())
@@ -412,7 +521,11 @@ func TestTick_Disabled_NotInDueList(t *testing.T) {
 
 	updated, _ := f.repo.Queries.GetScheduledDeployment(f.ctx(), sched.ID)
 	if updated.NextRunAt != sched.NextRunAt {
-		t.Fatalf("next_run_at changed for disabled schedule: %d != %d", updated.NextRunAt, sched.NextRunAt)
+		t.Fatalf(
+			"next_run_at changed for disabled schedule: %d != %d",
+			updated.NextRunAt,
+			sched.NextRunAt,
+		)
 	}
 }
 
@@ -422,7 +535,15 @@ func TestTick_NoDueRows_Noop(t *testing.T) {
 	rel := f.createRelease(proj.ID)
 	env := f.createEnvironment("dev")
 	// schedule in the future, not due
-	f.createSchedule(proj.ID, rel.ID, env.ID, "* * * * *", f.now.Add(time.Hour), 1, "future")
+	f.createSchedule(
+		proj.ID,
+		rel.ID,
+		env.ID,
+		"* * * * *",
+		f.now.Add(time.Hour),
+		1,
+		"future",
+	)
 
 	calls := f.captureRunCalls()
 	f.sched.Tick(f.ctx())
@@ -469,7 +590,15 @@ func TestTick_GatePass_Fires(t *testing.T) {
 	rel := f.createRelease(proj.ID)
 	// successful deployment to dev unlocks prod
 	f.createDeployment(rel.ID, dev.ID, "succeeded")
-	_ = f.createSchedule(proj.ID, rel.ID, prod.ID, "* * * * *", f.now.Add(-time.Minute), 1, "gate-pass")
+	_ = f.createSchedule(
+		proj.ID,
+		rel.ID,
+		prod.ID,
+		"* * * * *",
+		f.now.Add(-time.Minute),
+		1,
+		"gate-pass",
+	)
 
 	calls := f.captureRunCalls()
 	f.sched.Tick(f.ctx())
@@ -490,7 +619,15 @@ func TestTick_ParseError_ParksAndLogs(t *testing.T) {
 	rel := f.createRelease(proj.ID)
 	env := f.createEnvironment("dev")
 	// 6-field cron (with seconds) is rejected by the 5-field parser
-	sched := f.createSchedule(proj.ID, rel.ID, env.ID, "0 * * * * *", f.now.Add(-time.Minute), 1, "6field")
+	sched := f.createSchedule(
+		proj.ID,
+		rel.ID,
+		env.ID,
+		"0 * * * * *",
+		f.now.Add(-time.Minute),
+		1,
+		"6field",
+	)
 
 	f.sched.Tick(f.ctx())
 
@@ -502,7 +639,11 @@ func TestTick_ParseError_ParksAndLogs(t *testing.T) {
 	updated, _ := f.repo.Queries.GetScheduledDeployment(f.ctx(), sched.ID)
 	wantParked := f.now.Add(10 * 365 * 24 * time.Hour).Unix()
 	if updated.NextRunAt < wantParked-60 || updated.NextRunAt > wantParked+60 {
-		t.Fatalf("expected next_run_at near %d, got %d", wantParked, updated.NextRunAt)
+		t.Fatalf(
+			"expected next_run_at near %d, got %d",
+			wantParked,
+			updated.NextRunAt,
+		)
 	}
 
 	logs := f.logBuf.String()

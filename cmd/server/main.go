@@ -40,7 +40,9 @@ func main() {
 			fmt.Println("durpdeploy dev")
 			os.Exit(0)
 		case "help", "--help", "-h":
-			fmt.Println("Usage: durpdeploy [admin create --email X --password Y] [version] [help]")
+			fmt.Println(
+				"Usage: durpdeploy [admin create --email X --password Y] [version] [help]",
+			)
 			fmt.Println("With no subcommand, starts the HTTP server.")
 			os.Exit(0)
 		}
@@ -79,7 +81,9 @@ func runServer() {
 	repo := repository.New(dbConn)
 	broker := runner.NewLogBroker()
 	rnr := runner.New(repo, broker)
-	parser := cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
+	parser := cron.NewParser(
+		cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow,
+	)
 	sched := scheduler.New(repo, rnr)
 	ctx, cancel := context.WithCancel(context.Background())
 	sched.Start(ctx)
@@ -114,19 +118,39 @@ func runServer() {
 // at boot, before any HTTP handler is reachable — but the race
 // remains in the contract. Fix with a conditional UPDATE (WHERE
 // status='pending') if the startup window ever overlaps with traffic.
-func recoverPendingDeployments(ctx context.Context, rnr *runner.DeploymentRunner, repo *repository.Repository) {
+func recoverPendingDeployments(
+	ctx context.Context,
+	rnr *runner.DeploymentRunner,
+	repo *repository.Repository,
+) {
 	pending, err := repo.Queries.ListPendingDeployments(ctx)
 	if err != nil {
-		slog.Error("startup recovery: list pending deployments failed", "err", err)
+		slog.Error(
+			"startup recovery: list pending deployments failed",
+			"err",
+			err,
+		)
 		return
 	}
 	if len(pending) == 0 {
 		return
 	}
-	slog.Info("startup recovery: re-launching runners for pending deployments", "count", len(pending))
+	slog.Info(
+		"startup recovery: re-launching runners for pending deployments",
+		"count",
+		len(pending),
+	)
 	for _, d := range pending {
 		d := d // capture
-		slog.Info("startup recovery: re-launching", "deployment_id", d.ID, "project", d.ProjectName, "env", d.EnvironmentName)
+		slog.Info(
+			"startup recovery: re-launching",
+			"deployment_id",
+			d.ID,
+			"project",
+			d.ProjectName,
+			"env",
+			d.EnvironmentName,
+		)
 		go rnr.Run(context.Background(), d.ID, d.ReleaseID, d.EnvironmentID)
 	}
 }
@@ -149,11 +173,18 @@ func runAdmin(args []string) int {
 	_ = fs.Parse(args) // consumes the leading "admin" already stripped by main
 
 	if fs.NArg() == 0 {
-		fmt.Fprintln(os.Stderr, "Usage: durpdeploy admin create --email X --password Y")
+		fmt.Fprintln(
+			os.Stderr,
+			"Usage: durpdeploy admin create --email X --password Y",
+		)
 		return 1
 	}
 	if fs.Arg(0) != "create" {
-		fmt.Fprintf(os.Stderr, "unknown admin subcommand %q; only \"create\" is supported\n", fs.Arg(0))
+		fmt.Fprintf(
+			os.Stderr,
+			"unknown admin subcommand %q; only \"create\" is supported\n",
+			fs.Arg(0),
+		)
 		return 1
 	}
 
@@ -173,7 +204,11 @@ func runAdmin(args []string) int {
 		return 1
 	}
 	if !strings.Contains(email, "@") {
-		fmt.Fprintf(os.Stderr, "error: --email %q does not look like an email (missing '@')\n", email)
+		fmt.Fprintf(
+			os.Stderr,
+			"error: --email %q does not look like an email (missing '@')\n",
+			email,
+		)
 		return 1
 	}
 	if password == "" {
@@ -181,7 +216,12 @@ func runAdmin(args []string) int {
 		return 1
 	}
 	if len(password) < minAdminPasswordLen {
-		fmt.Fprintf(os.Stderr, "warning: password is %d chars, shorter than recommended %d; proceeding\n", len(password), minAdminPasswordLen)
+		fmt.Fprintf(
+			os.Stderr,
+			"warning: password is %d chars, shorter than recommended %d; proceeding\n",
+			len(password),
+			minAdminPasswordLen,
+		)
 	}
 
 	ctx := context.Background()

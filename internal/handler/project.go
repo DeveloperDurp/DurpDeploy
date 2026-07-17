@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/repository"
 	"durpdeploy/views/pages"
@@ -35,7 +36,7 @@ func (h *ProjectHandler) renderProjectsList(
 	w http.ResponseWriter,
 	r *http.Request,
 ) error {
-	projects, err := h.repo.Queries.ListProjects(r.Context())
+	projects, err := h.projectsForUser(r)
 	if err != nil {
 		return err
 	}
@@ -54,13 +55,29 @@ func (h *ProjectHandler) renderProjectsList(
 		Render(r.Context(), w)
 }
 
+// projectsForUser returns all projects for a global admin, or only the
+// projects the user is a member of for any other role. P1-1: non-admins
+// no longer see every project in the system.
+func (h *ProjectHandler) projectsForUser(
+	r *http.Request,
+) ([]db.Project, error) {
+	user := auth.UserFromContext(r.Context())
+	if user == nil {
+		return nil, nil
+	}
+	if user.Role == "admin" {
+		return h.repo.Queries.ListProjects(r.Context())
+	}
+	return h.repo.Queries.ListProjectsForUser(r.Context(), user.ID)
+}
+
 func (h *ProjectHandler) NewProject(w http.ResponseWriter, r *http.Request) {
 	lifecycles, err := h.repo.Queries.ListLifecycles(r.Context())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if err := pages.ProjectFormPage(db.Project{}, false, "", lifecycles, r.URL.Path).
+	if err := pages.ProjectFormPage(db.Project{}, false, "", lifecycles, nil, nil, false, r.URL.Path).
 		Render(r.Context(), w); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -80,12 +97,14 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 				false,
 				"Name is required",
 				lifecycles,
+				nil, nil, false,
 			),
 			pages.ProjectFormPage(
 				db.Project{},
 				false,
 				"Name is required",
 				lifecycles,
+				nil, nil, false,
 				r.URL.Path,
 			),
 		)
@@ -100,7 +119,29 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	created, err := h.repo.Queries.CreateProject(r.Context(), params)
+	// Create the project and add the creator as a per-project admin in a
+	// single transaction, so a failed membership insert can't leave an
+	// orphaned project the creator can't access (RequireProjectAccess
+	// would 403 a creator without a membership row).
+	var created db.Project
+	err := h.repo.WithTx(r.Context(), func(q *db.Queries) error {
+		var txErr error
+		created, txErr = q.CreateProject(r.Context(), params)
+		if txErr != nil {
+			return txErr
+		}
+		if user := auth.UserFromContext(r.Context()); user != nil {
+			txErr = q.AddProjectMember(
+				r.Context(),
+				db.AddProjectMemberParams{
+					ProjectID: created.ID,
+					UserID:    user.ID,
+					Role:      "admin",
+				},
+			)
+		}
+		return txErr
+	})
 	if err != nil {
 		if IsUniqueViolation(err) {
 			lifecycles, _ := h.repo.Queries.ListLifecycles(r.Context())
@@ -112,12 +153,14 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 					false,
 					"A project with this name already exists",
 					lifecycles,
+					nil, nil, false,
 				),
 				pages.ProjectFormPage(
 					db.Project{Name: name},
 					false,
 					"A project with this name already exists",
 					lifecycles,
+					nil, nil, false,
 					r.URL.Path,
 				),
 			)
@@ -349,10 +392,17 @@ func (h *ProjectHandler) releasesByID(
 }
 
 func (h *ProjectHandler) EditProject(w http.ResponseWriter, r *http.Request) {
-	id, err := parseProjectID(r)
-	if err != nil {
-		http.Error(w, "Invalid project ID", http.StatusBadRequest)
-		return
+	// The RequireProjectAccess middleware already validated and injected
+	// the project id; fall back to re-parsing only if it's missing (e.g.
+	// a misconfigured route not behind that middleware).
+	id, ok := auth.ProjectIDFromContext(r.Context())
+	if !ok {
+		var err error
+		id, err = parseProjectID(r)
+		if err != nil {
+			http.Error(w, "Invalid project ID", http.StatusBadRequest)
+			return
+		}
 	}
 
 	project, err := h.repo.Queries.GetProject(r.Context(), id)
@@ -371,7 +421,9 @@ func (h *ProjectHandler) EditProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := pages.ProjectFormPage(project, true, "", lifecycles, r.URL.Path).
+	members, available, canManage := h.loadMembersContext(r, id)
+
+	if err := pages.ProjectFormPage(project, true, "", lifecycles, members, available, canManage, r.URL.Path).
 		Render(r.Context(), w); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -395,15 +447,25 @@ func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 	if name == "" {
 		project := db.Project{ID: id, Name: name}
 		lifecycles, _ := h.repo.Queries.ListLifecycles(r.Context())
+		members, available, canManage := h.loadMembersContext(r, id)
 		WriteFormError(
 			w,
 			r,
-			pages.ProjectForm(project, true, "Name is required", lifecycles),
+			pages.ProjectForm(
+				project,
+				true,
+				"Name is required",
+				lifecycles,
+				members,
+				available,
+				canManage,
+			),
 			pages.ProjectFormPage(
 				project,
 				true,
 				"Name is required",
 				lifecycles,
+				members, available, canManage,
 				r.URL.Path,
 			),
 		)
@@ -423,6 +485,7 @@ func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 		if IsUniqueViolation(err) {
 			project := db.Project{ID: id, Name: name}
 			lifecycles, _ := h.repo.Queries.ListLifecycles(r.Context())
+			members, available, canManage := h.loadMembersContext(r, id)
 			WriteFormError(
 				w,
 				r,
@@ -431,12 +494,14 @@ func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 					true,
 					"A project with this name already exists",
 					lifecycles,
+					members, available, canManage,
 				),
 				pages.ProjectFormPage(
 					project,
 					true,
 					"A project with this name already exists",
 					lifecycles,
+					members, available, canManage,
 					r.URL.Path,
 				),
 			)

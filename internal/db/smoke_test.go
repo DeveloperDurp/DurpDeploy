@@ -188,16 +188,22 @@ func TestSmoke(t *testing.T) {
 	}
 
 	// scheduled_deployments
-	sched, err := queries.CreateScheduledDeployment(ctx, db.CreateScheduledDeploymentParams{
-		ProjectID:     proj.ID,
-		ReleaseID:     release.ID,
-		EnvironmentID: env.ID,
-		Cron:          "0 9 * * *",
-		NextRunAt:     1234567890,
-		Enabled:       1,
-		LastFiredAt:   sql.NullInt64{Valid: false},
-		Note:          sql.NullString{String: "morning deploy", Valid: true},
-	})
+	sched, err := queries.CreateScheduledDeployment(
+		ctx,
+		db.CreateScheduledDeploymentParams{
+			ProjectID:     proj.ID,
+			ReleaseID:     release.ID,
+			EnvironmentID: env.ID,
+			Cron:          "0 9 * * *",
+			NextRunAt:     1234567890,
+			Enabled:       1,
+			LastFiredAt:   sql.NullInt64{Valid: false},
+			Note: sql.NullString{
+				String: "morning deploy",
+				Valid:  true,
+			},
+		},
+	)
 	if err != nil {
 		t.Fatalf("create scheduled deployment: %v", err)
 	}
@@ -212,9 +218,15 @@ func TestSmoke(t *testing.T) {
 		t.Fatalf("scheduled deployment cron mismatch: got %q", sched2.Cron)
 	}
 	if sched2.NextRunAt != sched.NextRunAt {
-		t.Fatalf("scheduled deployment next_run_at mismatch: got %d", sched2.NextRunAt)
+		t.Fatalf(
+			"scheduled deployment next_run_at mismatch: got %d",
+			sched2.NextRunAt,
+		)
 	}
 	if sched2.Enabled != sched.Enabled {
-		t.Fatalf("scheduled deployment enabled mismatch: got %d", sched2.Enabled)
+		t.Fatalf(
+			"scheduled deployment enabled mismatch: got %d",
+			sched2.Enabled,
+		)
 	}
 }

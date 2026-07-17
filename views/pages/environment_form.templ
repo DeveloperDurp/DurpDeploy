@@ -7,9 +7,33 @@ import (
 )
 
 templ EnvironmentForm(env *db.Environment, isNew bool, errorMsg string, currentPath string) {
-	@layouts.Base("Environment", currentPath) {
-		@EnvironmentFormContent(env, isNew, errorMsg)
+	if !CanWrite(ctx) {
+		@ViewerForbiddenMessage(
+			envFormTitle(isNew),
+			envFormAction(isNew),
+			"an environment",
+			"/environments",
+			currentPath,
+		)
+	} else {
+		@layouts.Base("Environment", currentPath) {
+			@EnvironmentFormContent(env, isNew, errorMsg)
+		}
 	}
+}
+
+func envFormTitle(isNew bool) string {
+	if isNew {
+		return "New environment"
+	}
+	return "Edit environment"
+}
+
+func envFormAction(isNew bool) string {
+	if isNew {
+		return "create"
+	}
+	return "edit"
 }
 
 templ EnvironmentFormFragment(env *db.Environment, isNew bool, errorMsg string) {

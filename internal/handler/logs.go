@@ -100,13 +100,19 @@ func (h *LogHandler) ExportLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	environment, err := h.repo.Queries.GetEnvironment(r.Context(), deployment.EnvironmentID)
+	environment, err := h.repo.Queries.GetEnvironment(
+		r.Context(),
+		deployment.EnvironmentID,
+	)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	logs, err := h.repo.Queries.ListDeploymentLogsByDeployment(r.Context(), deploymentID)
+	logs, err := h.repo.Queries.ListDeploymentLogsByDeployment(
+		r.Context(),
+		deploymentID,
+	)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -114,7 +120,11 @@ func (h *LogHandler) ExportLogs(w http.ResponseWriter, r *http.Request) {
 
 	header := fmt.Sprintf(
 		"=== deployment #%d | project=%s | release=%s | env=%s | status=%s ===\n",
-		deploymentID, project.Name, release.Version, environment.Name, deployment.Status,
+		deploymentID,
+		project.Name,
+		release.Version,
+		environment.Name,
+		deployment.Status,
 	)
 
 	var buf strings.Builder
@@ -124,7 +134,9 @@ func (h *LogHandler) ExportLogs(w http.ResponseWriter, r *http.Request) {
 		lg := logs[i]
 		ts := time.Unix(lg.CreatedAt, 0).UTC().Format("2006-01-02 15:04:05")
 		if lg.StepName.Valid {
-			buf.WriteString(fmt.Sprintf("[%s] [%s] %s\n", ts, lg.StepName.String, lg.Line))
+			buf.WriteString(
+				fmt.Sprintf("[%s] [%s] %s\n", ts, lg.StepName.String, lg.Line),
+			)
 		} else {
 			buf.WriteString(fmt.Sprintf("[%s] %s\n", ts, lg.Line))
 		}
@@ -132,7 +144,10 @@ func (h *LogHandler) ExportLogs(w http.ResponseWriter, r *http.Request) {
 	buf.WriteByte('\n')
 
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="deployment-%d.log"`, deploymentID))
+	w.Header().
+		Set("Content-Disposition", fmt.Sprintf(`attachment; filename="deployment-%d.log"`, deploymentID))
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(buf.String())) // ponytail: builds full body in memory; chunked for 100k+ lines if needed later
+	w.Write(
+		[]byte(buf.String()),
+	) // ponytail: builds full body in memory; chunked for 100k+ lines if needed later
 }

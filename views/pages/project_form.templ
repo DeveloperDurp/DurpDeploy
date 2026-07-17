@@ -19,7 +19,7 @@ func projectFormID(project db.Project, isEdit bool) string {
 	return "project-form-new"
 }
 
-templ ProjectForm(project db.Project, isEdit bool, errorMsg string, lifecycles []db.Lifecycle) {
+templ ProjectForm(project db.Project, isEdit bool, errorMsg string, lifecycles []db.Lifecycle, members []db.ListProjectMembersRow, availableUsers []db.ListUsersRow, canManage bool) {
 	<div class="max-w-2xl mx-auto">
 		<h1 class="text-3xl font-bold mb-6">
 			if isEdit {
@@ -98,6 +98,7 @@ templ ProjectForm(project db.Project, isEdit bool, errorMsg string, lifecycles [
 					Delete project
 				</button>
 			</div>
+			@ProjectMembersSection(project, members, availableUsers, canManage)
 		}
 		<div class="mt-8 pt-6 border-t border-base-300 flex gap-2 justify-end">
 			<button type="submit" form={ projectFormID(project, isEdit) } class="btn btn-primary">
@@ -116,8 +117,38 @@ templ ProjectForm(project db.Project, isEdit bool, errorMsg string, lifecycles [
 	</div>
 }
 
-templ ProjectFormPage(project db.Project, isEdit bool, errorMsg string, lifecycles []db.Lifecycle, currentPath string) {
-	@layouts.Base("Project Form", currentPath) {
-		@ProjectForm(project, isEdit, errorMsg, lifecycles)
+templ ProjectFormPage(project db.Project, isEdit bool, errorMsg string, lifecycles []db.Lifecycle, members []db.ListProjectMembersRow, availableUsers []db.ListUsersRow, canManage bool, currentPath string) {
+	if !CanWrite(ctx) {
+		@ViewerForbiddenMessage(
+			projectFormTitle(isEdit),
+			projectFormAction(isEdit),
+			"a project",
+			projectFormBackHref(isEdit),
+			currentPath,
+		)
+	} else {
+		@layouts.Base("Project Form", currentPath) {
+			@ProjectForm(project, isEdit, errorMsg, lifecycles, members, availableUsers, canManage)
+		}
 	}
+}
+
+func projectFormTitle(isEdit bool) string {
+	if isEdit {
+		return "Edit project"
+	}
+	return "New project"
+}
+
+func projectFormAction(isEdit bool) string {
+	if isEdit {
+		return "edit"
+	}
+	return "create"
+}
+
+func projectFormBackHref(isEdit bool) string {
+	// Both new and edit land back on the project list; on the new
+	// path there's no project detail to return to.
+	return "/projects"
 }

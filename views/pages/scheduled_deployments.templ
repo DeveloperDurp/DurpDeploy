@@ -36,7 +36,9 @@ templ ScheduledDeploymentsContent(project db.Project, items []ScheduledDeploymen
 				<h1 class="text-3xl font-bold">Schedules — { project.Name }</h1>
 				<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost btn-sm mt-2">Back to Project</a>
 			</div>
-			<a href={ fmt.Sprintf("/projects/%d/schedules/new", project.ID) } class="btn btn-primary">New Schedule</a>
+			if CanWrite(ctx) {
+				<a href={ fmt.Sprintf("/projects/%d/schedules/new", project.ID) } class="btn btn-primary">New Schedule</a>
+			}
 		</div>
 		@ScheduledDeploymentsList(project, items)
 	</div>
@@ -86,54 +88,80 @@ templ ScheduledDeploymentRow(projectID int64, item ScheduledDeploymentListItem) 
 			}
 		</td>
 		<td class="whitespace-nowrap">
-			<button
-				class="btn btn-xs btn-ghost"
-				hx-get={ fmt.Sprintf("/projects/%d/schedules/%d/edit", projectID, item.Schedule.ID) }
-				hx-target={ fmt.Sprintf("#schedule-row-%d", item.Schedule.ID) }
-				hx-swap="outerHTML"
-			>
-				Edit
-			</button>
-			<button
-				class="btn btn-xs btn-primary"
-				hx-post={ fmt.Sprintf("/projects/%d/schedules/%d/toggle", projectID, item.Schedule.ID) }
-				hx-target="#schedules-content"
-				hx-swap="outerHTML"
-				data-toast-success="Schedule toggled"
-				data-toast-error="Failed to toggle schedule"
-			>
-				if item.Schedule.Enabled == 1 {
-					Disable
-				} else {
-					Enable
-				}
-			</button>
-			<button
-				class="btn btn-xs btn-error"
-				hx-delete={ fmt.Sprintf("/projects/%d/schedules/%d", projectID, item.Schedule.ID) }
-				hx-target="#schedules-content"
-				hx-swap="outerHTML"
-				hx-confirm="Delete this schedule?"
-				data-toast-success="Schedule deleted"
-				data-toast-error="Failed to delete schedule"
-			>
-				Delete
-			</button>
+			if CanWrite(ctx) {
+				<button
+					class="btn btn-xs btn-ghost"
+					hx-get={ fmt.Sprintf("/projects/%d/schedules/%d/edit", projectID, item.Schedule.ID) }
+					hx-target={ fmt.Sprintf("#schedule-row-%d", item.Schedule.ID) }
+					hx-swap="outerHTML"
+				>
+					Edit
+				</button>
+				<button
+					class="btn btn-xs btn-primary"
+					hx-post={ fmt.Sprintf("/projects/%d/schedules/%d/toggle", projectID, item.Schedule.ID) }
+					hx-target="#schedules-content"
+					hx-swap="outerHTML"
+					data-toast-success="Schedule toggled"
+					data-toast-error="Failed to toggle schedule"
+				>
+					if item.Schedule.Enabled == 1 {
+						Disable
+					} else {
+						Enable
+					}
+				</button>
+				<button
+					class="btn btn-xs btn-error"
+					hx-delete={ fmt.Sprintf("/projects/%d/schedules/%d", projectID, item.Schedule.ID) }
+					hx-target="#schedules-content"
+					hx-swap="outerHTML"
+					hx-confirm="Delete this schedule?"
+					data-toast-success="Schedule deleted"
+					data-toast-error="Failed to delete schedule"
+				>
+					Delete
+				</button>
+			}
 		</td>
 	</tr>
 }
 
 templ ScheduledDeploymentFormPage(project db.Project, releases []db.Release, envs []AvailableEnv, schedule *db.ScheduledDeployment, errorMsg string, currentPath string) {
-	@layouts.Base("Schedule - "+project.Name, currentPath) {
-		@components.Breadcrumbs([]components.Crumb{
-			{Label: "Home", Href: "/"},
-			{Label: "Projects", Href: "/projects"},
-			{Label: project.Name, Href: fmt.Sprintf("/projects/%d", project.ID)},
-			{Label: "Schedules", Href: fmt.Sprintf("/projects/%d/schedules", project.ID)},
-			{Label: scheduleLabel(schedule)},
-		})
-		@ScheduledDeploymentForm(project, releases, envs, schedule, errorMsg)
+	if !CanWrite(ctx) {
+		@ViewerForbiddenMessage(
+			scheduleFormPageTitle(schedule),
+			scheduleFormPageVerb(schedule),
+			"a schedule",
+			fmt.Sprintf("/projects/%d/schedules", project.ID),
+			currentPath,
+		)
+	} else {
+		@layouts.Base("Schedule - "+project.Name, currentPath) {
+			@components.Breadcrumbs([]components.Crumb{
+				{Label: "Home", Href: "/"},
+				{Label: "Projects", Href: "/projects"},
+				{Label: project.Name, Href: fmt.Sprintf("/projects/%d", project.ID)},
+				{Label: "Schedules", Href: fmt.Sprintf("/projects/%d/schedules", project.ID)},
+				{Label: scheduleLabel(schedule)},
+			})
+			@ScheduledDeploymentForm(project, releases, envs, schedule, errorMsg)
+		}
 	}
+}
+
+func scheduleFormPageTitle(schedule *db.ScheduledDeployment) string {
+	if schedule == nil {
+		return "New schedule"
+	}
+	return "Edit schedule"
+}
+
+func scheduleFormPageVerb(schedule *db.ScheduledDeployment) string {
+	if schedule == nil {
+		return "create"
+	}
+	return "edit"
 }
 
 templ ScheduledDeploymentForm(project db.Project, releases []db.Release, envs []AvailableEnv, schedule *db.ScheduledDeployment, errorMsg string) {
@@ -211,6 +239,13 @@ templ ScheduledDeploymentForm(project db.Project, releases []db.Release, envs []
 // <form> with id, inputs reference it via the form= attribute so the row
 // layout stays intact.
 templ ScheduledDeploymentEditRow(projectID int64, item ScheduledDeploymentListItem, releases []db.Release, envs []AvailableEnv, errorMsg string) {
+	if !CanWrite(ctx) {
+		<tr>
+			<td colspan="5" class="text-sm text-gray-400 italic p-2">
+				Viewers cannot edit schedules.
+			</td>
+		</tr>
+	} else {
 	<tr id={ fmt.Sprintf("schedule-row-%d", item.Schedule.ID) }>
 		<td>
 			<form
@@ -268,6 +303,7 @@ templ ScheduledDeploymentEditRow(projectID int64, item ScheduledDeploymentListIt
 			<button type="submit" form={ fmt.Sprintf("schedule-edit-form-%d", item.Schedule.ID) } class="btn btn-primary btn-xs">Save</button>
 		</td>
 	</tr>
+	}
 }
 
 func scheduleLabel(schedule *db.ScheduledDeployment) string {

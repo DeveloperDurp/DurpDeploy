@@ -48,7 +48,8 @@ func (h *AdminHandler) ListAudit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user := auth.UserFromContext(r.Context())
-	if err := pages.AuditLogPage(entries, r.URL.Path, user).Render(r.Context(), w); err != nil {
+	if err := pages.AuditLogPage(entries, r.URL.Path, user).
+		Render(r.Context(), w); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }

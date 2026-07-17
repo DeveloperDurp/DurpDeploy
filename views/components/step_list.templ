@@ -49,58 +49,60 @@ templ StepRow(step db.Step, projectID int64, isFirst bool, isLast bool) {
 			@retriesCell(step.MaxRetries)
 		</td>
 		<td class="flex gap-1 whitespace-nowrap">
-			if isFirst {
-				<span class="btn btn-xs btn-ghost invisible" aria-hidden="true">↑</span>
-			} else {
+			if canWrite(ctx) {
+				if isFirst {
+					<span class="btn btn-xs btn-ghost invisible" aria-hidden="true">↑</span>
+				} else {
+					<button
+						class="btn btn-xs btn-ghost"
+						hx-patch={ fmt.Sprintf("/projects/%d/steps/reorder", projectID) }
+						hx-vals={ fmt.Sprintf("{\"step_id\":%d,\"new_order\":%d}", step.ID, step.SortOrder-1) }
+						hx-target="#step-list"
+						hx-swap="innerHTML"
+					>
+						↑
+					</button>
+				}
+				if isLast {
+					<span class="btn btn-xs btn-ghost invisible" aria-hidden="true">↓</span>
+				} else {
+					<button
+						class="btn btn-xs btn-ghost"
+						hx-patch={ fmt.Sprintf("/projects/%d/steps/reorder", projectID) }
+						hx-vals={ fmt.Sprintf("{\"step_id\":%d,\"new_order\":%d}", step.ID, step.SortOrder+1) }
+						hx-target="#step-list"
+						hx-swap="innerHTML"
+					>
+						↓
+					</button>
+				}
 				<button
-					class="btn btn-xs btn-ghost"
-					hx-patch={ fmt.Sprintf("/projects/%d/steps/reorder", projectID) }
-					hx-vals={ fmt.Sprintf("{\"step_id\":%d,\"new_order\":%d}", step.ID, step.SortOrder-1) }
-					hx-target="#step-list"
-					hx-swap="innerHTML"
+					class="btn btn-xs btn-secondary"
+					hx-get={ fmt.Sprintf("/projects/%d/steps/%d/edit", projectID, step.ID) }
+					hx-target={ fmt.Sprintf("#step-row-%d", step.ID) }
+					hx-swap="outerHTML"
 				>
-					↑
+					Edit
 				</button>
-			}
-			if isLast {
-				<span class="btn btn-xs btn-ghost invisible" aria-hidden="true">↓</span>
-			} else {
 				<button
-					class="btn btn-xs btn-ghost"
-					hx-patch={ fmt.Sprintf("/projects/%d/steps/reorder", projectID) }
-					hx-vals={ fmt.Sprintf("{\"step_id\":%d,\"new_order\":%d}", step.ID, step.SortOrder+1) }
+					class="btn btn-xs btn-error"
+					hx-delete={ fmt.Sprintf("/projects/%d/steps/%d", projectID, step.ID) }
 					hx-target="#step-list"
 					hx-swap="innerHTML"
+					hx-confirm="Delete this step?"
 				>
-					↓
+					Delete
 				</button>
 			}
 			<button
-				class="btn btn-xs btn-secondary"
-				hx-get={ fmt.Sprintf("/projects/%d/steps/%d/edit", projectID, step.ID) }
-				hx-target={ fmt.Sprintf("#step-row-%d", step.ID) }
-				hx-swap="outerHTML"
+				class="btn btn-xs btn-outline"
+				hx-post={ fmt.Sprintf("/projects/%d/steps/%d/save-as-template", projectID, step.ID) }
+				hx-target="#step-list"
+				hx-swap="innerHTML"
+				hx-confirm="Save this step as template?"
 			>
-				Edit
+				Save Template
 			</button>
-		<button
-			class="btn btn-xs btn-outline"
-			hx-post={ fmt.Sprintf("/projects/%d/steps/%d/save-as-template", projectID, step.ID) }
-			hx-target="#step-list"
-			hx-swap="innerHTML"
-			hx-confirm="Save this step as template?"
-		>
-			Save Template
-		</button>
-		<button
-			class="btn btn-xs btn-error"
-			hx-delete={ fmt.Sprintf("/projects/%d/steps/%d", projectID, step.ID) }
-			hx-target="#step-list"
-			hx-swap="innerHTML"
-			hx-confirm="Delete this step?"
-		>
-			Delete
-		</button>
 		</td>
 	</tr>
 }

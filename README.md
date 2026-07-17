@@ -89,13 +89,14 @@ make dev
 
 For a small team deployment, DurpDeploy runs as a single Go process behind
 Caddy, which terminates HTTPS and reverse-proxies to `localhost:8080`. The
-binary ships with argon2id password hashing, session-based auth, CSRF
-protection, and an audit log. See [`docs/deploy.md`](docs/deploy.md) for the
-full runbook — provisioning a fresh Debian 12 VM end to end takes about 20
-minutes.
+binary ships with argon2id password hashing, DB-backed session auth, CSRF
+protection on every state-changing request, and an audit log. See
+[`docs/deploy.md`](docs/deploy.md) for the full runbook — provisioning a fresh
+Debian 12 VM end to end takes about 20 minutes.
 
 The first admin user is created with a one-shot CLI command (no server running
-required):
+required). The password is hashed with argon2id and stored in the `users`
+table; nothing in the DB is plaintext:
 
 ```bash
 durpdeploy admin create --email admin@example.com --password '<strong-password>'
@@ -104,6 +105,33 @@ durpdeploy admin create --email admin@example.com --password '<strong-password>'
 The database path is configurable via the `DURPDEPLOY_DB` env var; it defaults
 to `durpdeploy.db` in the current directory for local dev. Production sets it
 to `/var/lib/durpdeploy/durpdeploy.db` via the systemd unit.
+
+## Roles
+
+Three roles, set at user-creation time and stored in `users.role`:
+
+| Role       | Reads                          | Writes                                                | Sees audit log |
+|------------|--------------------------------|-------------------------------------------------------|----------------|
+| `admin`    | Everything                     | Everything                                            | Yes (`/admin/audit`) |
+| `deployer` | Everything                     | Everything — same writes as `admin`                   | No             |
+| `viewer`   | Everything                     | Nothing — every POST/PUT/PATCH/DELETE returns 403     | No             |
+
+**Until P1-1 lands, any `deployer` can deploy to any project** — there is no
+per-project membership check yet. The practical "least privilege" is to make
+non-admins `viewer` if they don't need to trigger deploys. Full details in
+[`docs/roles.md`](docs/roles.md).
+
+## Security
+
+The threat model — what DurpDeploy defends against, what it doesn't, and the
+five-minute hands-on attack drill — is documented in
+[`docs/attack-drill.md`](docs/attack-drill.md). The summary:
+
+- **Defends against:** unauthenticated deploys, CSRF on a teammate's browser,
+  password DB leak (argon2id, per-user salt, ~100ms per guess).
+- **Does NOT defend against yet:** per-project authorization (P1-1), secret
+  encryption at rest (P1-2, `release_variables.value` is plaintext today),
+  runner sandboxing (P1-3, steps run as the server's user).
 
 ## What It Does Not Do
 

@@ -11,12 +11,16 @@ templ ProjectsList(projects []db.Project, panels []LifecyclePanel) {
 	<div id="projects-list">
 		<div class="flex justify-between items-center mb-4">
 			<h1 class="text-3xl font-bold">Projects</h1>
-			<a href="/projects/new" class="btn btn-primary">New Project</a>
+			if CanWrite(ctx) {
+				<a href="/projects/new" class="btn btn-primary">New Project</a>
+			}
 		</div>
 		if len(projects) == 0 {
 			<div class="card bg-base-200 p-8 text-center">
 				<p class="text-gray-400 mb-4">No projects yet. Create your first project to get started.</p>
-				<a href="/projects/new" class="btn btn-primary">New Project</a>
+				if CanWrite(ctx) {
+					<a href="/projects/new" class="btn btn-primary">New Project</a>
+				}
 			</div>
 		} else {
 			<div class="overflow-x-auto">

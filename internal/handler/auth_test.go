@@ -51,7 +51,9 @@ func newAuthHarness(t *testing.T) *authHarness {
 	repo := repository.New(conn)
 	broker := runner.NewLogBroker()
 	rnr := runner.New(repo, broker)
-	parser := cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
+	parser := cron.NewParser(
+		cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow,
+	)
 	authHandler := handler.NewAuthHandler(repo)
 	srv := httptest.NewServer(server.NewRouter(repo, rnr, parser, authHandler))
 	t.Cleanup(srv.Close)
@@ -64,12 +66,15 @@ func (h *authHarness) seedUser(t *testing.T, email, password string) db.User {
 	if err != nil {
 		t.Fatalf("hash password: %v", err)
 	}
-	u, err := h.repo.Queries.CreateUser(context.Background(), db.CreateUserParams{
-		Email:        email,
-		PasswordHash: hash,
-		Name:         "Test User",
-		Role:         "admin",
-	})
+	u, err := h.repo.Queries.CreateUser(
+		context.Background(),
+		db.CreateUserParams{
+			Email:        email,
+			PasswordHash: hash,
+			Name:         "Test User",
+			Role:         "admin",
+		},
+	)
 	if err != nil {
 		t.Fatalf("create user: %v", err)
 	}
@@ -223,10 +228,13 @@ func TestLogin_Post_ValidCredentials(t *testing.T) {
 		t.Fatalf("Path = %q, want %q", c.Path, "/")
 	}
 
-	_, err = h.repo.Queries.GetSession(context.Background(), db.GetSessionParams{
-		ID:        c.Value,
-		ExpiresAt: 0,
-	})
+	_, err = h.repo.Queries.GetSession(
+		context.Background(),
+		db.GetSessionParams{
+			ID:        c.Value,
+			ExpiresAt: 0,
+		},
+	)
 	if err != nil {
 		t.Fatalf("session row missing after login: %v", err)
 	}
@@ -369,10 +377,13 @@ func TestLogout(t *testing.T) {
 		}
 	}
 
-	_, err = h.repo.Queries.GetSession(context.Background(), db.GetSessionParams{
-		ID:        sessionToken,
-		ExpiresAt: 0,
-	})
+	_, err = h.repo.Queries.GetSession(
+		context.Background(),
+		db.GetSessionParams{
+			ID:        sessionToken,
+			ExpiresAt: 0,
+		},
+	)
 	if err == nil {
 		t.Fatal("session row still exists after logout")
 	}
@@ -473,6 +484,54 @@ func TestAuth_ViewerCannotPost(t *testing.T) {
 	body, _ := io.ReadAll(resp.Body)
 	if !strings.Contains(string(body), "Viewers cannot") {
 		t.Fatalf("body should contain viewer error message; got: %s", body)
+	}
+}
+
+// TestAuth_ViewerHTMXReturnsToast: when a viewer makes a write via
+// HTMX, the middleware responds with 200 + HX-Trigger carrying a
+// makeToast event. The static/js/app.js makeToast handler turns the
+// event into the same red toast the rest of the app uses; the page
+// stays put (no full reload, no error overlay). This is the path
+// the user actually hits in the UI (every form on the site uses
+// HTMX), and it's the path that needs the polish.
+func TestAuth_ViewerHTMXReturnsToast(t *testing.T) {
+	h := newProjectHarness(t)
+	h.setRole("viewer")
+
+	form := url.Values{
+		"name":        {"viewer-htmx"},
+		"description": {""},
+	}
+	form.Set("csrf_token", h.csrfToken())
+	req, _ := http.NewRequestWithContext(
+		context.Background(),
+		http.MethodPost,
+		h.server.URL+"/projects",
+		strings.NewReader(form.Encode()),
+	)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	req.Header.Set("X-CSRF-Token", h.csrfToken())
+	resp, err := h.authedClient().Do(req)
+	if err != nil {
+		t.Fatalf("POST /projects (HTMX): %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf(
+			"status = %d, want 200 (HTMX path returns 200 + HX-Trigger)",
+			resp.StatusCode,
+		)
+	}
+	trigger := resp.Header.Get("HX-Trigger")
+	if trigger == "" {
+		t.Fatal("HX-Trigger header missing on HTMX viewer write")
+	}
+	if !strings.Contains(trigger, `"makeToast"`) {
+		t.Fatalf("HX-Trigger missing makeToast: %s", trigger)
+	}
+	if !strings.Contains(trigger, "Viewers cannot") {
+		t.Fatalf("HX-Trigger missing viewer error message: %s", trigger)
 	}
 }
 

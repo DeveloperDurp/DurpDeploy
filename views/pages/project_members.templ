@@ -1,0 +1,80 @@
+package pages
+
+import (
+	"durpdeploy/internal/db"
+	"fmt"
+)
+
+// ProjectMembersSection renders the Members panel on the project edit
+// page. The member list is visible to all project members (the
+// RequireProjectAccess middleware already gated entry); the add/remove
+// controls are only rendered when canManage is true (global admin or
+// per-project admin). Server-side enforcement lives in the handlers —
+// the UI gate is convenience, not security.
+templ ProjectMembersSection(project db.Project, members []db.ListProjectMembersRow, availableUsers []db.ListUsersRow, canManage bool) {
+	<div class="mt-8 pt-6 border-t border-base-300">
+		<h2 class="text-xl font-bold mb-4">Members</h2>
+		<div class="overflow-x-auto">
+			<table class="table table-zebra table-fixed w-full">
+				<thead>
+					<tr>
+						<th class="w-1/4">Name</th>
+						<th class="w-2/5">Email</th>
+						<th class="w-1/6">Role</th>
+						<th class="w-48">Actions</th>
+					</tr>
+				</thead>
+				<tbody>
+					for _, m := range members {
+						<tr>
+							<td class="truncate">{ m.Name }</td>
+							<td class="truncate">{ m.Email }</td>
+							<td>{ m.Role }</td>
+					<td class="whitespace-nowrap">
+						if canManage && CanWrite(ctx) {
+							<button
+								class="btn btn-error btn-xs"
+								hx-delete={ fmt.Sprintf("/projects/%d/members/%d", project.ID, m.UserID) }
+								hx-confirm={ fmt.Sprintf("Remove %s from this project?", m.Name) }
+								data-toast-success="Member removed"
+								data-toast-error="Failed to remove member"
+							>
+								Remove
+							</button>
+						}
+					</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		</div>
+		if canManage && CanWrite(ctx) && len(availableUsers) > 0 {
+			<form
+				method="post"
+				action={ fmt.Sprintf("/projects/%d/members", project.ID) }
+				class="flex flex-wrap gap-2 mt-4 items-end"
+			>
+				<div class="form-control">
+					<label class="label">
+						<span class="label-text">User</span>
+					</label>
+					<select name="user_id" class="select select-bordered select-sm">
+						for _, u := range availableUsers {
+							<option value={ fmt.Sprintf("%d", u.ID) }>{ u.Name } ({ u.Email })</option>
+						}
+					</select>
+				</div>
+				<div class="form-control">
+					<label class="label">
+						<span class="label-text">Role</span>
+					</label>
+					<select name="role" class="select select-bordered select-sm">
+						<option value="deployer">deployer</option>
+						<option value="admin">admin</option>
+					</select>
+				</div>
+				<button type="submit" class="btn btn-primary btn-sm">Add member</button>
+			</form>
+		}
+	</div>
+}

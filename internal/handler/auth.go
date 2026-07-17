@@ -23,7 +23,8 @@ func NewAuthHandler(repo *repository.Repository) *AuthHandler {
 }
 
 func (h *AuthHandler) LoginGet(w http.ResponseWriter, r *http.Request) {
-	if err := pages.LoginPage(r.URL.Path, "").Render(r.Context(), w); err != nil {
+	if err := pages.LoginPage(r.URL.Path, "").
+		Render(r.Context(), w); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
@@ -40,7 +41,8 @@ func (h *AuthHandler) LoginPost(w http.ResponseWriter, r *http.Request) {
 	user, err := h.repo.Queries.GetUserByEmail(r.Context(), email)
 	if err != nil || !auth.VerifyPassword(user.PasswordHash, password) {
 		w.WriteHeader(http.StatusUnprocessableEntity)
-		_ = pages.LoginPage(r.URL.Path, "Invalid email or password").Render(r.Context(), w)
+		_ = pages.LoginPage(r.URL.Path, "Invalid email or password").
+			Render(r.Context(), w)
 		return
 	}
 
@@ -81,10 +83,13 @@ func (h *AuthHandler) LoginPost(w http.ResponseWriter, r *http.Request) {
 		Expires:  time.Unix(expiresAt, 0),
 	})
 
-	_ = h.repo.Queries.UpdateUserLastLogin(r.Context(), db.UpdateUserLastLoginParams{
-		LastLoginAt: sql.NullInt64{Int64: time.Now().Unix(), Valid: true},
-		ID:          user.ID,
-	})
+	_ = h.repo.Queries.UpdateUserLastLogin(
+		r.Context(),
+		db.UpdateUserLastLoginParams{
+			LastLoginAt: sql.NullInt64{Int64: time.Now().Unix(), Valid: true},
+			ID:          user.ID,
+		},
+	)
 
 	// Audit successful login. Failed logins are deliberately NOT logged
 	// (privacy / enumeration). The details JSON carries IP + user agent
@@ -106,10 +111,13 @@ func (h *AuthHandler) LogoutPost(w http.ResponseWriter, r *http.Request) {
 		// Attribute the logout to a user before deleting the session.
 		// If the session is gone or expired, skip the audit entry —
 		// there is no user to attribute it to.
-		if sess, serr := h.repo.Queries.GetSession(r.Context(), db.GetSessionParams{
-			ID:        cookie.Value,
-			ExpiresAt: 0,
-		}); serr == nil {
+		if sess, serr := h.repo.Queries.GetSession(
+			r.Context(),
+			db.GetSessionParams{
+				ID:        cookie.Value,
+				ExpiresAt: 0,
+			},
+		); serr == nil {
 			audit.Record(r.Context(), h.repo, audit.Entry{
 				UserID:     sql.NullInt64{Int64: sess.UserID, Valid: true},
 				Action:     "logout",
@@ -141,6 +149,8 @@ func loginDetails(r *http.Request) string {
 	if idx := strings.LastIndex(ip, ":"); idx != -1 {
 		ip = ip[:idx]
 	}
-	b, _ := json.Marshal(map[string]string{"ip": ip, "user_agent": r.UserAgent()})
+	b, _ := json.Marshal(
+		map[string]string{"ip": ip, "user_agent": r.UserAgent()},
+	)
 	return string(b)
 }

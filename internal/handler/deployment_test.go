@@ -60,7 +60,9 @@ func newHarness(t *testing.T) *testHarness {
 	repo := repository.New(conn)
 	broker := runner.NewLogBroker()
 	rnr := runner.New(repo, broker)
-	parser := cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
+	parser := cron.NewParser(
+		cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow,
+	)
 	authHandler := handler.NewAuthHandler(repo)
 	srv := httptest.NewServer(server.NewRouter(repo, rnr, parser, authHandler))
 	t.Cleanup(srv.Close)
@@ -225,9 +227,13 @@ func (hc *harnessCtx) postDeploy(
 	if force {
 		form.Set("force", "true")
 	}
-	resp, err := hc.h.authedClient().PostForm(hc.h.server.URL+"/deployments", form)
+	resp, err := hc.h.authedClient().
+		PostForm(
+			fmt.Sprintf("%s/projects/%d/deploy", hc.h.server.URL, hc.project.ID),
+			form,
+		)
 	if err != nil {
-		t.Fatalf("POST /deployments: %v", err)
+		t.Fatalf("POST /projects/%d/deploy: %v", hc.project.ID, err)
 	}
 	defer resp.Body.Close()
 	return resp.StatusCode
@@ -592,7 +598,10 @@ func TestGate_RenderError_ContainsReasonText(t *testing.T) {
 	form.Set("release_id", fmt.Sprintf("%d", rel.ID))
 	form.Set("environment_id", fmt.Sprintf("%d", hc.envs["Beta"].ID))
 	form.Set("csrf_token", h.csrfToken())
-	resp, err := h.authedClient().PostForm(h.server.URL+"/deployments", form)
+	resp, err := h.authedClient().PostForm(
+		fmt.Sprintf("%s/projects/%d/deploy", h.server.URL, hc.project.ID),
+		form,
+	)
 	if err != nil {
 		t.Fatalf("POST: %v", err)
 	}
@@ -645,7 +654,9 @@ func firstDeployment(
 // Deploy page tests
 // ---------------------------------------------------------------------------
 
-func (h *projectHarness) postDeployPage(projectID, releaseID, envID, force string) int {
+func (h *projectHarness) postDeployPage(
+	projectID, releaseID, envID, force string,
+) int {
 	h.t.Helper()
 	form := url.Values{}
 	form.Set("release_id", releaseID)
@@ -654,7 +665,8 @@ func (h *projectHarness) postDeployPage(projectID, releaseID, envID, force strin
 	if force != "" {
 		form.Set("force", force)
 	}
-	resp, err := h.authedClient().PostForm(h.server.URL+"/projects/"+projectID+"/deploy", form)
+	resp, err := h.authedClient().
+		PostForm(h.server.URL+"/projects/"+projectID+"/deploy", form)
 	if err != nil {
 		h.t.Fatalf("POST: %v", err)
 	}
@@ -726,7 +738,8 @@ func TestNewDeploymentPage_NoReleasesShowsEmptyState(t *testing.T) {
 
 func TestNewDeploymentPage_NonExistentProject404(t *testing.T) {
 	h := newProjectHarness(t)
-	resp, err := h.authedClient().Get(fmt.Sprintf("%s/projects/9999/deploy", h.server.URL))
+	resp, err := h.authedClient().
+		Get(fmt.Sprintf("%s/projects/9999/deploy", h.server.URL))
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
@@ -1245,7 +1258,9 @@ func TestListDeployments_FilterAndPaginate(t *testing.T) {
 		t.Errorf("first page row count: got %d, want 2", got)
 	}
 	if !strings.Contains(page1, "Load more") {
-		t.Errorf("first page should show Load more button (3 succeeded > 2 limit)")
+		t.Errorf(
+			"first page should show Load more button (3 succeeded > 2 limit)",
+		)
 	}
 
 	// Second page: status=succeeded, limit=2, offset=2 -> 1 row, no Load more.
@@ -1270,7 +1285,9 @@ func TestListDeployments_FilterAndPaginate(t *testing.T) {
 		t.Errorf("second page row count: got %d, want 1", got)
 	}
 	if strings.Contains(page2, "Load more") {
-		t.Errorf("second page should NOT show Load more (only 1 left, fits in page)")
+		t.Errorf(
+			"second page should NOT show Load more (only 1 left, fits in page)",
+		)
 	}
 }
 

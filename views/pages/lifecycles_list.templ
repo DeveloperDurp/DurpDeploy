@@ -31,7 +31,9 @@ templ LifecyclesListContent(rows []LifecycleRow) {
 	<div class="space-y-4">
 		<div class="flex justify-between items-center">
 			<h1 class="text-3xl font-bold">Lifecycles</h1>
-			<a href="/lifecycles/new" class="btn btn-primary">New Lifecycle</a>
+			if CanWrite(ctx) {
+				<a href="/lifecycles/new" class="btn btn-primary">New Lifecycle</a>
+			}
 		</div>
 		@LifecyclesListFragment(rows)
 	</div>
@@ -42,7 +44,9 @@ templ LifecyclesListFragment(rows []LifecycleRow) {
 		if len(rows) == 0 {
 			<div class="card bg-base-200 p-8 text-center">
 				<p class="text-gray-400 mb-4">No lifecycles yet. A lifecycle defines the order in which releases can be promoted across environments (e.g. dev → test → prod).</p>
-				<a href="/lifecycles/new" class="btn btn-primary">New Lifecycle</a>
+				if CanWrite(ctx) {
+					<a href="/lifecycles/new" class="btn btn-primary">New Lifecycle</a>
+				}
 			</div>
 		} else {
 			<table class="table table-zebra table-fixed w-full">
@@ -78,11 +82,13 @@ templ LifecycleListRow(row LifecycleRow) {
 		</td>
 		<td class="whitespace-nowrap">{ strconv.FormatInt(row.StageCount, 10) }</td>
 		<td class="flex gap-2">
- 		<a href={ templ.SafeURL("/lifecycles/" + strconv.FormatInt(row.Lifecycle.ID, 10) + "/edit") } class="btn btn-sm btn-ghost">Edit</a>
- 		<form method="post" action={ templ.SafeURL("/lifecycles/" + strconv.FormatInt(row.Lifecycle.ID, 10)) }>
- 			<input type="hidden" name="_method" value="delete"/>
- 			<button type="submit" class="btn btn-sm btn-error" hx-confirm="Delete this lifecycle? Projects using it will be unset.">Delete</button>
- 		</form>
+			if CanWrite(ctx) {
+				<a href={ templ.SafeURL("/lifecycles/" + strconv.FormatInt(row.Lifecycle.ID, 10) + "/edit") } class="btn btn-sm btn-ghost">Edit</a>
+				<form method="post" action={ templ.SafeURL("/lifecycles/" + strconv.FormatInt(row.Lifecycle.ID, 10)) }>
+					<input type="hidden" name="_method" value="delete"/>
+					<button type="submit" class="btn btn-sm btn-error" hx-confirm="Delete this lifecycle? Projects using it will be unset.">Delete</button>
+				</form>
+			}
 		</td>
 	</tr>
 }
@@ -142,16 +148,40 @@ templ LifecycleForm(lc db.Lifecycle, isEdit bool, errorMsg string) {
 }
 
 templ LifecycleFormPage(lc db.Lifecycle, isEdit bool, errorMsg string, currentPath string) {
-	@layouts.Base("Lifecycle", currentPath) {
-		{{ lastCrumb := "New Lifecycle" }}
-		if isEdit {
-			{{ lastCrumb = "Edit Lifecycle" }}
+	if !CanWrite(ctx) {
+		@ViewerForbiddenMessage(
+			lcFormTitle(isEdit),
+			lcFormAction(isEdit),
+			"a lifecycle",
+			"/lifecycles",
+			currentPath,
+		)
+	} else {
+		@layouts.Base("Lifecycle", currentPath) {
+			{{ lastCrumb := "New Lifecycle" }}
+			if isEdit {
+				{{ lastCrumb = "Edit Lifecycle" }}
+			}
+			@components.Breadcrumbs([]components.Crumb{
+				{Label: "Home", Href: "/"},
+				{Label: "Lifecycles", Href: "/lifecycles"},
+				{Label: lastCrumb},
+			})
+			@LifecycleForm(lc, isEdit, errorMsg)
 		}
-		@components.Breadcrumbs([]components.Crumb{
-			{Label: "Home", Href: "/"},
-			{Label: "Lifecycles", Href: "/lifecycles"},
-			{Label: lastCrumb},
-		})
-		@LifecycleForm(lc, isEdit, errorMsg)
 	}
+}
+
+func lcFormTitle(isEdit bool) string {
+	if isEdit {
+		return "Edit lifecycle"
+	}
+	return "New lifecycle"
+}
+
+func lcFormAction(isEdit bool) string {
+	if isEdit {
+		return "edit"
+	}
+	return "create"
 }

@@ -21,7 +21,9 @@ templ EnvironmentsListContent(envs []db.Environment) {
 	<div id="environments-content" class="space-y-4">
 		<div class="flex justify-between items-center">
 			<h1 class="text-3xl font-bold">Environments</h1>
-			<a href="/environments/new" class="btn btn-primary">New Environment</a>
+			if CanWrite(ctx) {
+				<a href="/environments/new" class="btn btn-primary">New Environment</a>
+			}
 		</div>
 		@EnvironmentsListFragment(envs)
 	</div>
@@ -32,7 +34,9 @@ templ EnvironmentsListFragment(envs []db.Environment) {
 		if len(envs) == 0 {
 			<div class="card bg-base-200 p-8 text-center">
 				<p class="text-gray-400 mb-4">No environments yet. Create your first environment to define deployment targets.</p>
-				<a href="/environments/new" class="btn btn-primary">New Environment</a>
+				if CanWrite(ctx) {
+					<a href="/environments/new" class="btn btn-primary">New Environment</a>
+				}
 			</div>
 		} else {
 			<table class="table table-zebra table-fixed w-full">
@@ -60,18 +64,20 @@ templ EnvironmentRow(env db.Environment) {
 		<td class="truncate">{ env.Description.String }</td>
 		<td class="truncate">{ env.Tags.String }</td>
 		<td class="flex gap-2">
-			<a href={ templ.SafeURL("/environments/" + strconv.FormatInt(env.ID, 10) + "/edit") } class="btn btn-sm btn-ghost">Edit</a>
-			<button
-				hx-delete={ "/environments/" + strconv.FormatInt(env.ID, 10) }
-				hx-target="#form-container"
-				hx-swap="innerHTML"
-				hx-confirm="Delete this environment?"
-				class="btn btn-sm btn-error"
-				data-toast-success="Environment deleted"
-				data-toast-error="Failed to delete environment"
-			>
-				Delete
-			</button>
+			if CanWrite(ctx) {
+				<a href={ templ.SafeURL("/environments/" + strconv.FormatInt(env.ID, 10) + "/edit") } class="btn btn-sm btn-ghost">Edit</a>
+				<button
+					hx-delete={ "/environments/" + strconv.FormatInt(env.ID, 10) }
+					hx-target="#form-container"
+					hx-swap="innerHTML"
+					hx-confirm="Delete this environment?"
+					class="btn btn-sm btn-error"
+					data-toast-success="Environment deleted"
+					data-toast-error="Failed to delete environment"
+				>
+					Delete
+				</button>
+			}
 		</td>
 	</tr>
 }

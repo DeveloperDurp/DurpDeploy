@@ -51,7 +51,9 @@ func TestRunAdminCreate_success(t *testing.T) {
 	password := "supersecret123" // 15 chars, >= minAdminPasswordLen
 
 	// When: the CLI creates the admin user.
-	code := runAdmin([]string{"create", "--email", email, "--password", password})
+	code := runAdmin(
+		[]string{"create", "--email", email, "--password", password},
+	)
 
 	// Then: exit code 0, and the user exists with role=admin and an argon2id hash.
 	if code != 0 {
@@ -78,7 +80,10 @@ func TestRunAdminCreate_success(t *testing.T) {
 		t.Errorf("PasswordHash not stored as a hash: %q", user.PasswordHash)
 	}
 	if len(user.PasswordHash) < 20 {
-		t.Errorf("PasswordHash looks too short to be a PHC-encoded argon2id string: len=%d", len(user.PasswordHash))
+		t.Errorf(
+			"PasswordHash looks too short to be a PHC-encoded argon2id string: len=%d",
+			len(user.PasswordHash),
+		)
 	}
 }
 
@@ -89,16 +94,22 @@ func TestRunAdminCreate_duplicateRejected(t *testing.T) {
 	email := "admin@example.com"
 	password := "supersecret123"
 
-	if code := runAdmin([]string{"create", "--email", email, "--password", password}); code != 0 {
+	if code := runAdmin(
+		[]string{"create", "--email", email, "--password", password},
+	); code != 0 {
 		t.Fatalf("first create exit code = %d, want 0", code)
 	}
 
 	// When: the same email is created a second time.
-	code := runAdmin([]string{"create", "--email", email, "--password", "differentpassword"})
+	code := runAdmin(
+		[]string{"create", "--email", email, "--password", "differentpassword"},
+	)
 
 	// Then: it must fail non-zero with "user already exists".
 	if code == 0 {
-		t.Fatal("second create exit code = 0, want non-zero (duplicate should be rejected)")
+		t.Fatal(
+			"second create exit code = 0, want non-zero (duplicate should be rejected)",
+		)
 	}
 }
 
@@ -109,9 +120,24 @@ func TestRunAdminCreate_validationErrors(t *testing.T) {
 		name string
 		args []string
 	}{
-		{"missing email", []string{"create", "--email", "", "--password", "supersecret123"}},
-		{"missing password", []string{"create", "--email", "x@example.com", "--password", ""}},
-		{"email without at", []string{"create", "--email", "not-an-email", "--password", "supersecret123"}},
+		{
+			"missing email",
+			[]string{"create", "--email", "", "--password", "supersecret123"},
+		},
+		{
+			"missing password",
+			[]string{"create", "--email", "x@example.com", "--password", ""},
+		},
+		{
+			"email without at",
+			[]string{
+				"create",
+				"--email",
+				"not-an-email",
+				"--password",
+				"supersecret123",
+			},
+		},
 		{"unknown subcommand", []string{"delete", "--email", "x@example.com"}},
 		{"no subcommand", []string{}},
 	}
@@ -132,12 +158,17 @@ func TestRunAdminCreate_shortPasswordWarnsButSucceeds(t *testing.T) {
 	password := "shortpw" // 7 chars
 
 	// When: the CLI creates the user.
-	code := runAdmin([]string{"create", "--email", email, "--password", password})
+	code := runAdmin(
+		[]string{"create", "--email", email, "--password", password},
+	)
 
 	// Then: it warns (stderr, not asserted here) but still exits 0 — the hard
 	// requirement is non-empty, ≥12 is only a recommendation.
 	if code != 0 {
-		t.Fatalf("runAdmin short-password exit code = %d, want 0 (warn but proceed)", code)
+		t.Fatalf(
+			"runAdmin short-password exit code = %d, want 0 (warn but proceed)",
+			code,
+		)
 	}
 
 	// Verify the user was actually created.
@@ -147,7 +178,10 @@ func TestRunAdminCreate_shortPasswordWarnsButSucceeds(t *testing.T) {
 	}
 	defer conn.Close()
 	repo := repository.New(conn)
-	if _, err := repo.Queries.GetUserByEmail(context.Background(), email); err != nil {
+	if _, err := repo.Queries.GetUserByEmail(
+		context.Background(),
+		email,
+	); err != nil {
 		t.Fatalf("GetUserByEmail after short-password create: %v", err)
 	}
 }
@@ -157,7 +191,9 @@ func TestRunAdminCreate_shortPasswordWarnsButSucceeds(t *testing.T) {
 // changes shape.
 var _ = db.CreateUserParams{}
 
-func TestRecoverPendingDeployments_launchesRunnerForOrphanedDeployment(t *testing.T) {
+func TestRecoverPendingDeployments_launchesRunnerForOrphanedDeployment(
+	t *testing.T,
+) {
 	// Given: a deployment left in "pending" status — the goroutine that
 	// the HTTP handler launched died with a previous process start.
 	// This is the failure mode a container restart, OOM kill, or panic
@@ -189,16 +225,22 @@ func TestRecoverPendingDeployments_launchesRunnerForOrphanedDeployment(t *testin
 	if err != nil {
 		t.Fatalf("create release: %v", err)
 	}
-	deployment, err := repo.Queries.CreateDeployment(ctx, db.CreateDeploymentParams{
-		ReleaseID: release.ID, EnvironmentID: env.ID, Status: "pending",
-		StartedAt: sql.NullInt64{}, FinishedAt: sql.NullInt64{}, Forced: 0, Note: sql.NullString{},
-	})
+	deployment, err := repo.Queries.CreateDeployment(
+		ctx,
+		db.CreateDeploymentParams{
+			ReleaseID: release.ID, EnvironmentID: env.ID, Status: "pending",
+			StartedAt: sql.NullInt64{}, FinishedAt: sql.NullInt64{}, Forced: 0, Note: sql.NullString{},
+		},
+	)
 	if err != nil {
 		t.Fatalf("create deployment: %v", err)
 	}
 
 	// Sanity: it really is pending.
-	if got, _ := repo.Queries.GetDeployment(ctx, deployment.ID); got.Status != "pending" {
+	if got, _ := repo.Queries.GetDeployment(
+		ctx,
+		deployment.ID,
+	); got.Status != "pending" {
 		t.Fatalf("precondition: status = %q, want pending", got.Status)
 	}
 
@@ -223,10 +265,15 @@ func TestRecoverPendingDeployments_launchesRunnerForOrphanedDeployment(t *testin
 		time.Sleep(50 * time.Millisecond)
 	}
 	if finalStatus == "" {
-		t.Fatalf("deployment stayed in pending for 5s after recoverPendingDeployments")
+		t.Fatalf(
+			"deployment stayed in pending for 5s after recoverPendingDeployments",
+		)
 	}
 	if finalStatus != "succeeded" {
-		t.Errorf("final status = %q, want succeeded (empty steps_json = no-op success)", finalStatus)
+		t.Errorf(
+			"final status = %q, want succeeded (empty steps_json = no-op success)",
+			finalStatus,
+		)
 	}
 }
 
