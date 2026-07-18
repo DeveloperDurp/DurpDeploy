@@ -221,7 +221,7 @@ func (h *ReleaseHandler) CreateRelease(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Query current variables for project and snapshot them
-	variables, err := h.repo.Queries.ListVariablesByProject(
+	variables, err := h.repo.ListVariablesByProject(
 		r.Context(),
 		projectID,
 	)
@@ -231,10 +231,17 @@ func (h *ReleaseHandler) CreateRelease(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for _, variable := range variables {
+		// variable.Value was decrypted by ListVariablesByProject above;
+		// re-encrypt it before writing the release snapshot (P1-3).
+		encValue, err := h.repo.EncryptValue(variable.Value)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 		varParams := db.CreateReleaseVariableParams{
 			ReleaseID:     release.ID,
 			Name:          variable.Name,
-			Value:         variable.Value,
+			Value:         encValue,
 			EnvironmentID: variable.EnvironmentID,
 			Secret:        variable.Secret,
 		}
@@ -328,7 +335,7 @@ func (h *ReleaseHandler) GetRelease(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	variables, err := h.repo.Queries.ListReleaseVariablesByRelease(
+	variables, err := h.repo.ListReleaseVariablesByRelease(
 		r.Context(),
 		releaseID,
 	)
@@ -442,7 +449,7 @@ func (h *ReleaseHandler) RefreshRelease(
 	}
 
 	// Re-insert current variables
-	variables, err := h.repo.Queries.ListVariablesByProject(
+	variables, err := h.repo.ListVariablesByProject(
 		r.Context(),
 		projectID,
 	)
@@ -452,12 +459,19 @@ func (h *ReleaseHandler) RefreshRelease(
 	}
 
 	for _, v := range variables {
+		// v.Value was decrypted by ListVariablesByProject above;
+		// re-encrypt it before writing the release snapshot (P1-3).
+		encValue, err := h.repo.EncryptValue(v.Value)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 		if _, err := qtx.CreateReleaseVariable(
 			r.Context(),
 			db.CreateReleaseVariableParams{
 				ReleaseID:     releaseID,
 				Name:          v.Name,
-				Value:         v.Value,
+				Value:         encValue,
 				EnvironmentID: v.EnvironmentID,
 				Secret:        v.Secret,
 			},

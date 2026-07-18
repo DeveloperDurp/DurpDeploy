@@ -195,7 +195,7 @@ func (h *ProjectHandler) GetProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	variables, err := h.repo.Queries.ListVariablesByProject(r.Context(), id)
+	variables, err := h.repo.ListVariablesByProject(r.Context(), id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

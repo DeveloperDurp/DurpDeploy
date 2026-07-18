@@ -80,6 +80,41 @@ func (q *Queries) GetReleaseVariable(ctx context.Context, id int64) (ReleaseVari
 	return i, err
 }
 
+const listAllReleaseVariables = `-- name: ListAllReleaseVariables :many
+SELECT id, release_id, name, value, environment_id, created_at, secret FROM release_variables ORDER BY id
+`
+
+func (q *Queries) ListAllReleaseVariables(ctx context.Context) ([]ReleaseVariable, error) {
+	rows, err := q.db.QueryContext(ctx, listAllReleaseVariables)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ReleaseVariable
+	for rows.Next() {
+		var i ReleaseVariable
+		if err := rows.Scan(
+			&i.ID,
+			&i.ReleaseID,
+			&i.Name,
+			&i.Value,
+			&i.EnvironmentID,
+			&i.CreatedAt,
+			&i.Secret,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listReleaseVariablesByRelease = `-- name: ListReleaseVariablesByRelease :many
 SELECT id, release_id, name, value, environment_id, created_at, secret FROM release_variables WHERE release_id = ? ORDER BY created_at DESC
 `
@@ -146,4 +181,18 @@ func (q *Queries) UpdateReleaseVariable(ctx context.Context, arg UpdateReleaseVa
 		&i.Secret,
 	)
 	return i, err
+}
+
+const updateReleaseVariableValue = `-- name: UpdateReleaseVariableValue :exec
+UPDATE release_variables SET value = ? WHERE id = ?
+`
+
+type UpdateReleaseVariableValueParams struct {
+	Value sql.NullString `json:"value"`
+	ID    int64          `json:"id"`
+}
+
+func (q *Queries) UpdateReleaseVariableValue(ctx context.Context, arg UpdateReleaseVariableValueParams) error {
+	_, err := q.db.ExecContext(ctx, updateReleaseVariableValue, arg.Value, arg.ID)
+	return err
 }

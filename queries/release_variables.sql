@@ -15,3 +15,9 @@ DELETE FROM release_variables WHERE id = ?;
 
 -- name: DeleteReleaseVariablesByRelease :exec
 DELETE FROM release_variables WHERE release_id = ?;
+
+-- name: ListAllReleaseVariables :many
+SELECT * FROM release_variables ORDER BY id;
+
+-- name: UpdateReleaseVariableValue :exec
+UPDATE release_variables SET value = ? WHERE id = ?;

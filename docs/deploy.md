@@ -122,7 +122,26 @@ sudo install -m 0755 /tmp/durpdeploy /usr/local/bin/durpdeploy
 
 ---
 
-## Step 4 — Install the systemd unit
+## Step 4 — Generate the secret encryption key
+
+`variables`/`release_variables.value` is encrypted at rest (AES-256-GCM,
+see `docs/security.md`). The server **refuses to boot** without a key, so
+this has to exist before the first start:
+
+```bash
+sudo install -d -o durpdeploy -g durpdeploy -m 0750 /etc/durpdeploy
+openssl rand -base64 32 | sudo -u durpdeploy tee /etc/durpdeploy/key >/dev/null
+sudo chmod 0600 /etc/durpdeploy/key
+```
+
+(Alternatively set `DURPDEPLOY_SECRET_KEY` — same base64, 32-byte value —
+in the systemd unit's `Environment=` instead of a file; the file is
+checked first if both are present.) Losing this key makes every stored
+secret unrecoverable — back it up alongside the DB.
+
+---
+
+## Step 5 — Install the systemd unit
 
 ```bash
 sudo install -m 0644 ./systemd/durpdeploy.service /etc/systemd/system/durpdeploy.service
@@ -142,7 +161,7 @@ database is created in the right place on first start (migrations auto-run).
 
 ---
 
-## Step 5 — Install the Caddyfile
+## Step 6 — Install the Caddyfile
 
 Edit `./Caddyfile` on your workstation and replace
 `durpdeploy.example.com` with your real hostname, then:
@@ -171,7 +190,7 @@ sudo journalctl -u caddy -n 50 --no-pager
 
 ---
 
-## Step 6 — Create the first admin user
+## Step 7 — Create the first admin user
 
 Run the CLI as the `durpdeploy` user so the DB file permissions stay correct:
 
@@ -197,7 +216,7 @@ reset without DB access — see Troubleshooting below.
 
 ---
 
-## Step 7 — Verify
+## Step 8 — Verify
 
 From your workstation:
 
@@ -311,4 +330,6 @@ key `ON DELETE CASCADE`.)
 Check the runner logs — the deploy runs `bash` steps via `os/exec`, inheriting
 the `durpdeploy` user's environment. If a step needs a tool not in the
 `durpdeploy` user's `PATH`, install it system-wide or set the variable in the
-project's variables. P1-3 will harden the sandbox further.
+project's variables. Steps run in their own process group and are fully
+reaped on timeout, cancel, or server shutdown (P1-3); OS-level sandboxing
+(chroot/namespaces/seccomp) is still future work.

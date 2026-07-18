@@ -19,13 +19,16 @@ What we defend against:
 - Accidental writes by a viewer (UI gating + CSRF gate)
 - Cross-project access by a non-member (per-project authorization middleware)
 - Roster tampering by a non-admin project member (per-project admin gate on member add/remove)
+- A leaked `variables`/`release_variables` DB file, on its own, does not disclose secret values (AES-256-GCM at rest)
 
 What we do **not** defend against yet (see Known Gaps):
 
-- Secret encryption at rest
-- Runner sandboxing
 - Rate limiting on the login endpoint
 - Audit log retention / tamper-proofing
+
+Runner orphan cleanup on shutdown/timeout is handled (process-group SIGKILL,
+see "Runner cleanup" below); per-step OS-level sandboxing
+(chroot/namespaces/seccomp) is still future work.
 
 ---
 
@@ -256,11 +259,88 @@ deployment row.
 
 The runner is dispatched with `context.Background()` rather than the request
 context. This is intentional (the deploy must outlive the HTTP request), but
-it means the only cancellation path is `runner.Cancel(id)`. If the server
-process is killed mid-deploy, the child bash process may be orphaned.
+it means the only cancellation path is `runner.Cancel(id)`.
 
-**Recommended fix (P1-3):** Use a process group and `SIGKILL` the group on
-server shutdown, or track the PID and clean up on startup.
+**Fix (P1-3, shipped):** Each step now runs in its own process group
+(`cmd.SysProcAttr.Setpgid`, `internal/runner/runner.go`). Step timeout and
+`Cancel` SIGKILL the whole group (`-pid`), not just the bash PID, so
+grandchildren spawned by a script are reaped too. `cmd/server/main.go` now
+traps `SIGINT`/`SIGTERM`, drains the HTTP server, and calls
+`DeploymentRunner.KillAll` to SIGKILL every in-flight step's process group
+before exiting — a server restart no longer orphans a running bash tree.
+
+---
+
+## Secret encryption at rest (P1-3)
+
+**Implementation:** `internal/secret/secret.go`, `internal/repository/repository.go`
+
+The `value` column of both `variables` and `release_variables` is
+AES-256-GCM encrypted before it ever reaches SQLite:
+
+- **Key source:** `/etc/durpdeploy/key` (file, checked first) or
+  `DURPDEPLOY_SECRET_KEY` (env, base64-encoded 32 bytes). The server calls
+  `secret.LoadKey()` at startup and **refuses to boot** (`log.Fatalf`) if
+  neither is configured — there is no "run with plaintext secrets" mode.
+- **Encrypt path:** `Repository.CreateVariable` / `UpdateVariable` encrypt
+  `value` before the INSERT/UPDATE. Release snapshot creation
+  (`ReleaseHandler.CreateRelease` / `RefreshRelease`) re-encrypts each
+  variable's value via `Repository.EncryptValue` before writing the
+  `release_variables` row (values are never round-tripped through the DB
+  in plaintext).
+- **Decrypt path:** `Repository.GetVariable` / `ListVariablesByProject` /
+  `GetReleaseVariable` / `ListReleaseVariablesByRelease` decrypt into a
+  transient Go string on read. The plaintext is never written back to the
+  DB, logged, or included in an error message — `secret.Box.Decrypt`
+  returns only static error strings (`"authentication failed"`, etc.), never
+  the ciphertext or plaintext.
+- **Runner:** `DeploymentRunner.Run` still receives plaintext via the
+  decrypting `ListReleaseVariablesByRelease` — the runner needs real values
+  to inject as env vars — and the P0 log-redaction logic
+  (`broadcastWriter.redact`, `secretValues`) is unchanged.
+- **Acceptance check:** `sqlite3 durpdeploy.db 'select * from variables'`
+  shows only base64 ciphertext in `value`; the app reads/writes normally
+  through the UI because the repository layer decrypts/encrypts
+  transparently.
+
+### Key rotation runbook
+
+```bash
+# 1. Back up the DB first (see Backup below) — rotation is transactional
+#    but a backup is cheap insurance.
+sudo -u durpdeploy /usr/local/bin/durpdeploy secret-key rotate
+```
+
+This one-shot command (`cmd/server/main.go: runSecretKey`):
+
+1. Loads the **current** key via `secret.LoadKey()` (same file/env lookup
+   the server uses).
+2. Generates a fresh random 32-byte key.
+3. Inside a single DB transaction, decrypts every `variables` and
+   `release_variables` row with the old key and re-encrypts it with the
+   new one (`ListAllVariables`/`UpdateVariableValue`,
+   `ListAllReleaseVariables`/`UpdateReleaseVariableValue`). A failure at
+   any row rolls back the whole transaction — the DB is left entirely on
+   the old key, never half-migrated.
+4. Prints the new key (base64) to stdout.
+
+After it prints successfully:
+
+```bash
+# install the new key (pick one)
+echo '<printed-key>' | sudo -u durpdeploy tee /etc/durpdeploy/key >/dev/null
+sudo chmod 0600 /etc/durpdeploy/key
+# — or —
+# update DURPDEPLOY_SECRET_KEY=<printed-key> in the systemd unit / env file
+
+sudo systemctl restart durpdeploy
+```
+
+Until the server is restarted with the new key installed, **do not discard
+the old key** — the rotate command already re-encrypted every row with the
+new one, so the running server (still holding the old key in memory) will
+fail to decrypt on its next read. Restart promptly after a successful
+rotation.
 
 ---
 
@@ -268,8 +348,9 @@ server shutdown, or track the PID and clean up on startup.
 
 | Gap | Risk | Planned |
 |-----|------|---------|
-| **Secret encryption at rest** | `release_variables.value` is plaintext; a DB read leaks secrets | P1-2 |
-| **Runner sandboxing** | A step can read the server's DB and `rm -rf` the host (runs as server user) | P1-3 |
+| ~~**Secret encryption at rest**~~ | ~~`release_variables.value` is plaintext; a DB read leaks secrets~~ | **shipped (P1-3)** |
+| ~~**Runner orphan cleanup**~~ | ~~Killed/restarted server left orphaned bash children~~ | **shipped** |
+| **Runner OS-level sandboxing** | A step still runs as the server's user with full DB/filesystem access (chroot/namespaces/seccomp not implemented) | future work |
 | **Login rate limiting** | No rate limit on `/login`; argon2id cost is the only brute-force defense | P2 (custom Caddy build) |
 | **Audit log retention** | No retention policy or tamper-proofing on `audit_log` | P2-5 |
 | **Password reset flow** | No self-service reset; admin must delete + recreate the user | P2 |

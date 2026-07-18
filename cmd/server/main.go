@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
+	"encoding/base64"
 	"errors"
 	"flag"
 	"fmt"
@@ -10,7 +12,11 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
 	"strings"
+	"sync"
+	"syscall"
+	"time"
 
 	"github.com/robfig/cron/v3"
 
@@ -21,6 +27,7 @@ import (
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/runner"
 	"durpdeploy/internal/scheduler"
+	"durpdeploy/internal/secret"
 	"durpdeploy/internal/server"
 )
 
@@ -36,12 +43,14 @@ func main() {
 		switch os.Args[1] {
 		case "admin":
 			os.Exit(runAdmin(os.Args[2:]))
+		case "secret-key":
+			os.Exit(runSecretKey(os.Args[2:]))
 		case "version", "--version", "-v":
 			fmt.Println("durpdeploy dev")
 			os.Exit(0)
 		case "help", "--help", "-h":
 			fmt.Println(
-				"Usage: durpdeploy [admin create --email X --password Y] [version] [help]",
+				"Usage: durpdeploy [admin create --email X --password Y] [secret-key rotate [--plaintext]] [version] [help]",
 			)
 			fmt.Println("With no subcommand, starts the HTTP server.")
 			os.Exit(0)
@@ -62,6 +71,13 @@ func loadDSN() string {
 
 // runServer starts the HTTP server. This is the body of the former main().
 func runServer() {
+	// Registered before anything else (migrations, recovery) so a signal
+	// arriving during startup is queued on the channel instead of being
+	// handled by Go's default disposition (immediate process termination),
+	// which would skip the KillAll cleanup below.
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+
 	slog.SetDefault(
 		slog.New(
 			slog.NewJSONHandler(
@@ -71,6 +87,15 @@ func runServer() {
 		),
 	)
 
+	key, err := secret.LoadKey()
+	if err != nil {
+		log.Fatalf("secret key: %v", err)
+	}
+	box, err := secret.NewBox(key)
+	if err != nil {
+		log.Fatalf("secret key: %v", err)
+	}
+
 	dbConn, err := migrate.Run(loadDSN())
 	if err != nil {
 		log.Fatalf("migration failed: %v", err)
@@ -79,6 +104,7 @@ func runServer() {
 	slog.Info("database ready")
 
 	repo := repository.New(dbConn)
+	repo.SetSecretBox(box)
 	broker := runner.NewLogBroker()
 	rnr := runner.New(repo, broker)
 	parser := cron.NewParser(
@@ -99,10 +125,36 @@ func runServer() {
 	// that goroutine dies with the process.
 	recoverPendingDeployments(ctx, rnr, repo)
 
+	srv := &http.Server{Addr: ":8080", Handler: r}
+
+	// Graceful shutdown: on SIGINT/SIGTERM, stop accepting new connections
+	// and SIGKILL any in-flight deploy step's process group so a restart
+	// never leaves an orphaned bash tree running as the server's user
+	// (P1-3). The runner keeps running in the background (its context is
+	// context.Background(), not tied to srv's lifetime) — KillAll is what
+	// actually stops the child processes. The WaitGroup ensures runServer
+	// (and thus main) does not return until KillAll has finished, so the
+	// process doesn't exit mid-cleanup and leave orphaned children behind.
+	var shutdownWG sync.WaitGroup
+	shutdownWG.Add(1)
+	go func() {
+		defer shutdownWG.Done()
+		<-stop
+		slog.Info("shutdown signal received, draining")
+		shutdownCtx, shutdownCancel := context.WithTimeout(
+			context.Background(),
+			10*time.Second,
+		)
+		defer shutdownCancel()
+		_ = srv.Shutdown(shutdownCtx)
+		rnr.KillAll()
+	}()
+
 	slog.Info("server starting", "addr", ":8080")
-	if err := http.ListenAndServe(":8080", r); err != nil {
+	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatalf("server failed: %v", err)
 	}
+	shutdownWG.Wait()
 }
 
 // recoverPendingDeployments scans for deployments left in "pending"
@@ -259,5 +311,174 @@ func runAdmin(args []string) int {
 	}
 
 	fmt.Printf("Created admin user: %s\n", email)
+	return 0
+}
+
+// runSecretKey implements `durpdeploy secret-key rotate [--plaintext]`. It
+// generates a fresh 32-byte key, decrypts every variables/release_variables
+// row with the currently configured key (secret.LoadKey), and re-encrypts it
+// with the new one — all inside a single transaction, so a crash mid-rotation
+// leaves the DB entirely on the old key, never half-migrated. The new key
+// is printed to stdout; the operator must install it (file or env) and
+// restart the server before the old key can be discarded. See
+// docs/security.md for the full runbook.
+//
+// --plaintext migrates a pre-P1-2 database whose variables/release_variables
+// values were stored unencrypted: it skips the oldBox.Decrypt step and
+// treats the stored value itself as the plaintext to encrypt. No oldKey is
+// required or loaded in that mode.
+func runSecretKey(args []string) int {
+	fs := flag.NewFlagSet("secret-key", flag.ExitOnError)
+	plaintext := fs.Bool(
+		"plaintext",
+		false,
+		"treat existing values as unencrypted plaintext (first-time migration to encryption at rest)",
+	)
+	_ = fs.Parse(args)
+
+	if fs.NArg() == 0 || fs.Arg(0) != "rotate" {
+		fmt.Fprintln(os.Stderr, "Usage: durpdeploy secret-key rotate [--plaintext]")
+		return 1
+	}
+
+	var oldBox *secret.Box
+	if !*plaintext {
+		oldKey, err := secret.LoadKey()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: load current secret key: %v\n", err)
+			return 1
+		}
+		oldBox, err = secret.NewBox(oldKey)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			return 1
+		}
+	}
+
+	newKey := make([]byte, 32)
+	if _, err := rand.Read(newKey); err != nil {
+		fmt.Fprintf(os.Stderr, "error: generate new key: %v\n", err)
+		return 1
+	}
+	newBox, err := secret.NewBox(newKey)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 1
+	}
+
+	ctx := context.Background()
+	dbConn, err := migrate.Run(loadDSN())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: open database: %v\n", err)
+		return 1
+	}
+	defer dbConn.Close()
+
+	q := db.New(dbConn)
+
+	tx, err := dbConn.BeginTx(ctx, nil)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: begin transaction: %v\n", err)
+		return 1
+	}
+	defer tx.Rollback()
+	qtx := q.WithTx(tx)
+
+	vars, err := qtx.ListAllVariables(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: list variables: %v\n", err)
+		return 1
+	}
+	for _, v := range vars {
+		if !v.Value.Valid || v.Value.String == "" {
+			continue
+		}
+		plain := v.Value.String
+		if !*plaintext {
+			var err error
+			plain, err = oldBox.Decrypt(v.Value.String)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "error: decrypt variable %d: %v\n", v.ID, err)
+				return 1
+			}
+		}
+		reenc, err := newBox.Encrypt(plain)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: encrypt variable %d: %v\n", v.ID, err)
+			return 1
+		}
+		if err := qtx.UpdateVariableValue(ctx, db.UpdateVariableValueParams{
+			Value: sql.NullString{String: reenc, Valid: true},
+			ID:    v.ID,
+		}); err != nil {
+			fmt.Fprintf(os.Stderr, "error: update variable %d: %v\n", v.ID, err)
+			return 1
+		}
+	}
+
+	relVars, err := qtx.ListAllReleaseVariables(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: list release variables: %v\n", err)
+		return 1
+	}
+	for _, v := range relVars {
+		if !v.Value.Valid || v.Value.String == "" {
+			continue
+		}
+		plain := v.Value.String
+		if !*plaintext {
+			var err error
+			plain, err = oldBox.Decrypt(v.Value.String)
+			if err != nil {
+				fmt.Fprintf(
+					os.Stderr,
+					"error: decrypt release variable %d: %v\n",
+					v.ID, err,
+				)
+				return 1
+			}
+		}
+		reenc, err := newBox.Encrypt(plain)
+		if err != nil {
+			fmt.Fprintf(
+				os.Stderr,
+				"error: encrypt release variable %d: %v\n",
+				v.ID, err,
+			)
+			return 1
+		}
+		if err := qtx.UpdateReleaseVariableValue(
+			ctx,
+			db.UpdateReleaseVariableValueParams{
+				Value: sql.NullString{String: reenc, Valid: true},
+				ID:    v.ID,
+			},
+		); err != nil {
+			fmt.Fprintf(
+				os.Stderr,
+				"error: update release variable %d: %v\n",
+				v.ID, err,
+			)
+			return 1
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		fmt.Fprintf(os.Stderr, "error: commit: %v\n", err)
+		return 1
+	}
+
+	fmt.Printf(
+		"Rotated %d variable(s) and %d release variable(s) to a new key.\n",
+		len(vars), len(relVars),
+	)
+	fmt.Println()
+	fmt.Println("New key (base64) — install it BEFORE restarting the server:")
+	fmt.Println(base64.StdEncoding.EncodeToString(newKey))
+	fmt.Println()
+	fmt.Println("Either write it to /etc/durpdeploy/key (0600, owned by the")
+	fmt.Println("durpdeploy user) or set DURPDEPLOY_SECRET_KEY to the value")
+	fmt.Println("above, then restart durpdeploy. The old key must not be")
+	fmt.Println("reused: every row above was just re-encrypted with the new one.")
 	return 0
 }

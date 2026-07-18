@@ -24,6 +24,12 @@ type DeploymentRunner struct {
 	broker  *LogBroker
 	mu      sync.Mutex
 	cancels map[int64]context.CancelFunc
+	// pgids tracks the process group of every step currently executing,
+	// keyed by deployment ID. Populated in runStepAttempt, cleared when
+	// the step exits. Used by KillAll to reap orphans on server shutdown.
+	// ponytail: one entry per deployment (steps run sequentially, no
+	// parallel step execution), so a plain map is enough.
+	pgids map[int64]int
 }
 
 func New(repo *repository.Repository, broker *LogBroker) *DeploymentRunner {
@@ -31,11 +37,41 @@ func New(repo *repository.Repository, broker *LogBroker) *DeploymentRunner {
 		repo:    repo,
 		broker:  broker,
 		cancels: make(map[int64]context.CancelFunc),
+		pgids:   make(map[int64]int),
+	}
+}
+
+// KillAll SIGKILLs the process group of every step currently running,
+// reaping their bash children so a server shutdown/restart never leaves
+// orphaned deploy processes behind (P1-3). Safe to call with no deployments
+// running.
+func (r *DeploymentRunner) KillAll() {
+	r.mu.Lock()
+	pgids := make([]int, 0, len(r.pgids))
+	for _, pgid := range r.pgids {
+		pgids = append(pgids, pgid)
+	}
+	r.mu.Unlock()
+
+	for _, pgid := range pgids {
+		killProcessGroup(pgid)
 	}
 }
 
 func (r *DeploymentRunner) Broker() *LogBroker {
 	return r.broker
+}
+
+func (r *DeploymentRunner) trackProcessGroup(deploymentID int64, pgid int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.pgids[deploymentID] = pgid
+}
+
+func (r *DeploymentRunner) untrackProcessGroup(deploymentID int64) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.pgids, deploymentID)
 }
 
 func (r *DeploymentRunner) RegisterCancel(
@@ -123,6 +159,12 @@ func (r *DeploymentRunner) runStepAttempt(
 		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
 	}
 	cmd.WaitDelay = 15 * time.Second
+	// Run the step in its own process group so a timeout/cancel/shutdown
+	// can kill the whole tree (bash + anything it spawned) instead of just
+	// the bash PID, which otherwise leaves grandchildren orphaned (P1-3).
+	// setPgid/killProcessGroup are platform-specific (see procgroup_unix.go
+	// / procgroup_other.go) so this package builds on non-Unix targets too.
+	setPgid(cmd)
 
 	var buf bytes.Buffer
 	cmd.Stdout = io.MultiWriter(&buf, logWriter)
@@ -133,11 +175,14 @@ func (r *DeploymentRunner) runStepAttempt(
 		return err
 	}
 
+	r.trackProcessGroup(deploymentID, cmd.Process.Pid)
+	defer r.untrackProcessGroup(deploymentID)
+
 	go func() {
 		<-stepCtx.Done()
 		time.Sleep(10 * time.Second)
 		if cmd.Process != nil {
-			_ = cmd.Process.Kill()
+			killProcessGroup(cmd.Process.Pid)
 		}
 	}()
 
@@ -212,7 +257,7 @@ func (r *DeploymentRunner) Run(
 		return
 	}
 
-	vars, err := r.repo.Queries.ListReleaseVariablesByRelease(ctx, releaseID)
+	vars, err := r.repo.ListReleaseVariablesByRelease(ctx, releaseID)
 	if err != nil {
 		_ = r.failUnlessCancelled(ctx, deploymentID)
 		return
