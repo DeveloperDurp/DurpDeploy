@@ -295,7 +295,7 @@ Keep at least 7 days of retention.
 Litestream streams the SQLite WAL to S3-compatible storage continuously, so
 you lose at most a few seconds of data on a crash. See
 [litestream.io](https://litestream.io/) and `docs/backup-restore.md`
-(planned P1-5). This is the recommended path for a team deployment.
+(planned P1-6). This is the recommended path for a team deployment.
 
 ---
 
