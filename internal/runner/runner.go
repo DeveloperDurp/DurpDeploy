@@ -342,6 +342,8 @@ func (r *DeploymentRunner) Run(
 		}
 	}
 
+	scrubber := NewScrubber(secretValues)
+
 	for _, step := range steps {
 		logWriter := &broadcastWriter{
 			broker:       r.broker,
@@ -349,7 +351,7 @@ func (r *DeploymentRunner) Run(
 			deploymentID: deploymentID,
 			stepName:     step.Name,
 			ctx:          ctx,
-			secretValues: secretValues,
+			scrubber:     scrubber,
 		}
 
 		var lastErr error
@@ -438,36 +440,38 @@ type broadcastWriter struct {
 	stepName     string
 	ctx          context.Context
 	buf          bytes.Buffer
-	secretValues []string
+	scrubber     *Scrubber
 }
 
-func (w *broadcastWriter) redact(s string) string {
-	for _, secret := range w.secretValues {
-		s = strings.ReplaceAll(s, secret, "[REDACTED]")
-	}
-	return s
-}
-
+// Write buffers output and scrubs everything up to the last newline before
+// broadcasting/persisting it. Scrubbing the whole buffer (instead of a single
+// line at a time) lets the Scrubber catch secrets that span multiple Write
+// calls or contain embedded newlines (e.g. a multi-line SSH key).
 func (w *broadcastWriter) Write(p []byte) (n int, err error) {
 	w.buf.Write(p)
-	for {
-		idx := bytes.IndexByte(w.buf.Bytes(), '\n')
-		if idx == -1 {
-			break
-		}
-		line := string(w.buf.Next(idx + 1))
-		line = strings.TrimSuffix(line, "\n")
-		line = w.redact(line)
+	data := w.buf.Bytes()
+	lastNL := bytes.LastIndexByte(data, '\n')
+	if lastNL == -1 {
+		return len(p), nil
+	}
+
+	toScrub := string(data[:lastNL+1])
+	scrubbed := w.scrubber.Scrub(toScrub)
+
+	lines := strings.Split(strings.TrimSuffix(scrubbed, "\n"), "\n")
+	for _, line := range lines {
 		w.broker.Broadcast(w.deploymentID, line)
 		w.writeLine(line)
 	}
+
+	w.buf.Next(lastNL + 1)
 	return len(p), nil
 }
 
 func (w *broadcastWriter) Flush() {
 	remaining := w.buf.String()
 	if remaining != "" {
-		remaining = w.redact(remaining)
+		remaining = w.scrubber.Scrub(remaining)
 		w.broker.Broadcast(w.deploymentID, remaining)
 		w.writeLine(remaining)
 		w.buf.Reset()

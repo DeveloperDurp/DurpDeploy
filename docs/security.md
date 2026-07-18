@@ -261,7 +261,7 @@ The runner is dispatched with `context.Background()` rather than the request
 context. This is intentional (the deploy must outlive the HTTP request), but
 it means the only cancellation path is `runner.Cancel(id)`.
 
-**Fix (P1-3, shipped):** Each step now runs in its own process group
+**Fix (P1-4, shipped):** Each step now runs in its own process group
 (`cmd.SysProcAttr.Setpgid`, `internal/runner/runner.go`). Step timeout and
 `Cancel` SIGKILL the whole group (`-pid`), not just the bash PID, so
 grandchildren spawned by a script are reaped too. `cmd/server/main.go` now
@@ -296,8 +296,8 @@ AES-256-GCM encrypted before it ever reaches SQLite:
   the ciphertext or plaintext.
 - **Runner:** `DeploymentRunner.Run` still receives plaintext via the
   decrypting `ListReleaseVariablesByRelease` — the runner needs real values
-  to inject as env vars — and the P0 log-redaction logic
-  (`broadcastWriter.redact`, `secretValues`) is unchanged.
+  to inject as env vars — and feeds them into the regex-based `Scrubber`
+  described below (P1-5).
 - **Acceptance check:** `sqlite3 durpdeploy.db 'select * from variables'`
   shows only base64 ciphertext in `value`; the app reads/writes normally
   through the UI because the repository layer decrypts/encrypts
@@ -344,13 +344,48 @@ rotation.
 
 ---
 
+## Log redaction (P1-5)
+
+**Implementation:** `internal/runner/scrubber.go`, `internal/runner/runner.go`
+
+Deployment logs are scrubbed before they are broadcast over SSE
+(`LogBroker.Broadcast`) or persisted to `deployment_logs`. The old
+redactor did a per-line `strings.ReplaceAll` for each literal secret value —
+it missed common credential formats entirely and couldn't catch a secret
+that was split across two `Write` calls or contained an embedded newline
+(e.g. a multi-line SSH key).
+
+`broadcastWriter` now delegates to a `Scrubber` (`internal/runner/scrubber.go`),
+built once per deployment run from that environment's secret variable
+values:
+
+- **Single compiled regex:** every literal secret (escaped with
+  `regexp.QuoteMeta`, sorted longest-first so a superstring secret is
+  redacted whole rather than leaving a suffix behind) plus a set of common
+  credential patterns — Bearer tokens, GitHub PATs (`ghp_...`), AWS access
+  keys (`AKIA...`), Slack tokens (`xox[bap]-...`), and `password=`/`token=`/
+  `key=` assignments — are joined into one `(?s)(...)` alternation, so RE2
+  matching stays linear time even on large logs.
+- **Configurable patterns:** Additional regex patterns can be added via the
+  `DURPDEPLOY_EXTRA_SCRUB_PATTERNS` environment variable (comma-separated).
+  These are appended to the common credential patterns at startup.
+- **Buffered, not line-by-line:** `broadcastWriter.Write` scrubs everything
+  up to the last newline in its buffer (instead of one line at a time),
+  so a secret split across two `Write` calls, or one containing a literal
+  newline, is still caught before it reaches the broker or the DB.
+- **Best-effort:** this catches known secret values and a handful of common
+  token shapes, not every possible secret format. **Redaction is
+  best-effort. Do not paste secrets into your script body; use environment
+  variables marked Secret.**
+
 ## Known gaps (P1 / future work)
 
 | Gap | Risk | Planned |
 |-----|------|---------|
 | ~~**Secret encryption at rest**~~ | ~~`release_variables.value` is plaintext; a DB read leaks secrets~~ | **shipped (P1-3)** |
 | ~~**Runner orphan cleanup**~~ | ~~Killed/restarted server left orphaned bash children~~ | **shipped** |
-| **Runner OS-level sandboxing** | A step still runs as the server's user with full DB/filesystem access (chroot/namespaces/seccomp not implemented) | future work |
+| ~~**Log redaction hardening**~~ | ~~Naive per-line `strings.ReplaceAll` missed common credential formats and multi-line/split secrets~~ | **shipped (P1-5)** |
+| ~~**Runner OS-level sandboxing**~~ | ~~Steps run as a low-privilege user in a chroot'd scratch directory with cgroup limits~~ | **shipped (P1-4)** |
 | **Login rate limiting** | No rate limit on `/login`; argon2id cost is the only brute-force defense | P2 (custom Caddy build) |
 | **Audit log retention** | No retention policy or tamper-proofing on `audit_log` | P2-5 |
 | **Password reset flow** | No self-service reset; admin must delete + recreate the user | P2 |
