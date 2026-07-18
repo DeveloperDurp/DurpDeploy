@@ -12,3 +12,9 @@ UPDATE variables SET name = ?, value = ?, environment_id = ?, secret = ? WHERE i
 
 -- name: DeleteVariable :exec
 DELETE FROM variables WHERE id = ?;
+
+-- name: ListAllVariables :many
+SELECT * FROM variables ORDER BY id;
+
+-- name: UpdateVariableValue :exec
+UPDATE variables SET value = ? WHERE id = ?;

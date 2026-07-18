@@ -1,9 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
+	"encoding/base64"
+	"io"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -11,6 +16,7 @@ import (
 	"durpdeploy/internal/migrate"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/runner"
+	"durpdeploy/internal/secret"
 )
 
 // tempDSN returns a SQLite file DSN pointing inside t.TempDir() with the same
@@ -275,6 +281,152 @@ func TestRecoverPendingDeployments_launchesRunnerForOrphanedDeployment(
 			finalStatus,
 		)
 	}
+}
+
+func TestRunSecretKeyRotate_reencryptsAllRowsWithoutDataLoss(t *testing.T) {
+	// Given: a DB with a variable and a release variable, both encrypted
+	// with an "old" key.
+	dsn := tempDSN(t)
+	oldKey := make([]byte, 32)
+	t.Setenv("DURPDEPLOY_DB", dsn)
+	t.Setenv(secret.KeyEnvVar, base64.StdEncoding.EncodeToString(oldKey))
+
+	conn, err := migrate.Run(dsn)
+	if err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	repo := repository.New(conn)
+	oldBox, err := secret.NewBox(oldKey)
+	if err != nil {
+		t.Fatalf("NewBox: %v", err)
+	}
+	repo.SetSecretBox(oldBox)
+	ctx := context.Background()
+
+	project, err := repo.Queries.CreateProject(ctx, db.CreateProjectParams{
+		Name: "rotate-proj",
+	})
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	const plaintext = "rotate-me-secret"
+	variable, err := repo.CreateVariable(ctx, db.CreateVariableParams{
+		ProjectID: project.ID,
+		Name:      "TOKEN",
+		Value:     sql.NullString{String: plaintext, Valid: true},
+		Secret:    1,
+	})
+	if err != nil {
+		t.Fatalf("CreateVariable: %v", err)
+	}
+	release, err := repo.Queries.CreateRelease(ctx, db.CreateReleaseParams{
+		ProjectID: project.ID, Version: "1.0.0", StepsJson: "[]",
+	})
+	if err != nil {
+		t.Fatalf("create release: %v", err)
+	}
+	encValue, err := repo.EncryptValue(sql.NullString{String: plaintext, Valid: true})
+	if err != nil {
+		t.Fatalf("EncryptValue: %v", err)
+	}
+	releaseVar, err := repo.Queries.CreateReleaseVariable(
+		ctx,
+		db.CreateReleaseVariableParams{
+			ReleaseID: release.ID,
+			Name:      "TOKEN",
+			Value:     encValue,
+			Secret:    1,
+		},
+	)
+	if err != nil {
+		t.Fatalf("CreateReleaseVariable: %v", err)
+	}
+	conn.Close()
+
+	// When: the key is rotated. Capture stdout to recover the newly
+	// generated key the operator would install.
+	origStdout := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	os.Stdout = w
+	code := runSecretKey([]string{"rotate"})
+	w.Close()
+	os.Stdout = origStdout
+	var out bytes.Buffer
+	if _, err := io.Copy(&out, r); err != nil {
+		t.Fatalf("read captured stdout: %v", err)
+	}
+	if code != 0 {
+		t.Fatalf("runSecretKey rotate exit code = %d, want 0", code)
+	}
+
+	newKeyB64 := extractNewKey(t, out.String())
+	newKeyRaw, err := base64.StdEncoding.DecodeString(newKeyB64)
+	if err != nil {
+		t.Fatalf("decode printed new key: %v", err)
+	}
+	newBox, err := secret.NewBox(newKeyRaw)
+	if err != nil {
+		t.Fatalf("NewBox(new key): %v", err)
+	}
+
+	// Then: the raw DB row for both tables is no longer decryptable with
+	// the old key (it was re-encrypted)...
+	conn2, err := migrate.Run(dsn)
+	if err != nil {
+		t.Fatalf("reopen db: %v", err)
+	}
+	defer conn2.Close()
+	q := db.New(conn2)
+
+	rawVar, err := q.GetVariable(ctx, variable.ID)
+	if err != nil {
+		t.Fatalf("GetVariable: %v", err)
+	}
+	if _, err := oldBox.Decrypt(rawVar.Value.String); err == nil {
+		t.Fatal("expected old key to no longer decrypt the rotated variable")
+	}
+
+	rawReleaseVar, err := q.GetReleaseVariable(ctx, releaseVar.ID)
+	if err != nil {
+		t.Fatalf("GetReleaseVariable: %v", err)
+	}
+	if _, err := oldBox.Decrypt(rawReleaseVar.Value.String); err == nil {
+		t.Fatal("expected old key to no longer decrypt the rotated release variable")
+	}
+
+	// ...but no secret was lost: the newly generated key decrypts both
+	// rows back to the exact original plaintext.
+	gotVar, err := newBox.Decrypt(rawVar.Value.String)
+	if err != nil {
+		t.Fatalf("decrypt rotated variable with new key: %v", err)
+	}
+	if gotVar != plaintext {
+		t.Fatalf("rotated variable value = %q, want %q", gotVar, plaintext)
+	}
+	gotReleaseVar, err := newBox.Decrypt(rawReleaseVar.Value.String)
+	if err != nil {
+		t.Fatalf("decrypt rotated release variable with new key: %v", err)
+	}
+	if gotReleaseVar != plaintext {
+		t.Fatalf("rotated release variable value = %q, want %q", gotReleaseVar, plaintext)
+	}
+}
+
+// extractNewKey pulls the base64 key line out of runSecretKey's stdout
+// output (the line immediately following the "New key" banner).
+func extractNewKey(t *testing.T, output string) string {
+	t.Helper()
+	lines := strings.Split(output, "\n")
+	for i, line := range lines {
+		if strings.Contains(line, "New key") && i+1 < len(lines) {
+			return strings.TrimSpace(lines[i+1])
+		}
+	}
+	t.Fatalf("could not find new key in rotate output:\n%s", output)
+	return ""
 }
 
 func TestRecoverPendingDeployments_noopWhenNonePending(t *testing.T) {

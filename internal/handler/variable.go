@@ -47,7 +47,7 @@ func (h *VariableHandler) ListVariables(
 		return
 	}
 
-	variables, err := h.repo.Queries.ListVariablesByProject(
+	variables, err := h.repo.ListVariablesByProject(
 		r.Context(),
 		projectID,
 	)
@@ -97,7 +97,7 @@ func (h *VariableHandler) CreateVariable(
 	if name == "" {
 		environments, _ := h.repo.Queries.ListEnvironments(r.Context())
 		project, _ := h.repo.Queries.GetProject(r.Context(), projectID)
-		variables, _ := h.repo.Queries.ListVariablesByProject(
+		variables, _ := h.repo.ListVariablesByProject(
 			r.Context(),
 			projectID,
 		)
@@ -134,12 +134,12 @@ func (h *VariableHandler) CreateVariable(
 		Secret:        secret,
 	}
 
-	_, err = h.repo.Queries.CreateVariable(r.Context(), params)
+	_, err = h.repo.CreateVariable(r.Context(), params)
 	if err != nil {
 		if IsUniqueViolation(err) {
 			environments, _ := h.repo.Queries.ListEnvironments(r.Context())
 			project, _ := h.repo.Queries.GetProject(r.Context(), projectID)
-			variables, _ := h.repo.Queries.ListVariablesByProject(
+			variables, _ := h.repo.ListVariablesByProject(
 				r.Context(),
 				projectID,
 			)
@@ -191,7 +191,7 @@ func (h *VariableHandler) EditVariable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	variable, err := h.repo.Queries.GetVariable(r.Context(), varID)
+	variable, err := h.repo.GetVariable(r.Context(), varID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -250,7 +250,7 @@ func (h *VariableHandler) UpdateVariable(
 			variable.EnvironmentID = sql.NullInt64{Int64: id, Valid: true}
 		}
 		project, _ := h.repo.Queries.GetProject(r.Context(), projectID)
-		variables, _ := h.repo.Queries.ListVariablesByProject(
+		variables, _ := h.repo.ListVariablesByProject(
 			r.Context(),
 			projectID,
 		)
@@ -292,7 +292,7 @@ func (h *VariableHandler) UpdateVariable(
 		Secret:        secret,
 	}
 
-	_, err = h.repo.Queries.UpdateVariable(r.Context(), params)
+	_, err = h.repo.UpdateVariable(r.Context(), params)
 	if err != nil {
 		if IsUniqueViolation(err) {
 			variable := db.Variable{
@@ -307,7 +307,7 @@ func (h *VariableHandler) UpdateVariable(
 			}
 			environments, _ := h.repo.Queries.ListEnvironments(r.Context())
 			project, _ := h.repo.Queries.GetProject(r.Context(), projectID)
-			variables, _ := h.repo.Queries.ListVariablesByProject(
+			variables, _ := h.repo.ListVariablesByProject(
 				r.Context(),
 				projectID,
 			)
@@ -382,7 +382,7 @@ func (h *VariableHandler) renderVariablesFragment(
 		return
 	}
 
-	variables, err := h.repo.Queries.ListVariablesByProject(
+	variables, err := h.repo.ListVariablesByProject(
 		r.Context(),
 		projectID,
 	)

@@ -71,6 +71,41 @@ func (q *Queries) GetVariable(ctx context.Context, id int64) (Variable, error) {
 	return i, err
 }
 
+const listAllVariables = `-- name: ListAllVariables :many
+SELECT id, project_id, name, value, environment_id, created_at, secret FROM variables ORDER BY id
+`
+
+func (q *Queries) ListAllVariables(ctx context.Context) ([]Variable, error) {
+	rows, err := q.db.QueryContext(ctx, listAllVariables)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Variable
+	for rows.Next() {
+		var i Variable
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.Name,
+			&i.Value,
+			&i.EnvironmentID,
+			&i.CreatedAt,
+			&i.Secret,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listVariablesByProject = `-- name: ListVariablesByProject :many
 SELECT id, project_id, name, value, environment_id, created_at, secret FROM variables WHERE project_id = ? ORDER BY created_at DESC
 `
@@ -137,4 +172,18 @@ func (q *Queries) UpdateVariable(ctx context.Context, arg UpdateVariableParams) 
 		&i.Secret,
 	)
 	return i, err
+}
+
+const updateVariableValue = `-- name: UpdateVariableValue :exec
+UPDATE variables SET value = ? WHERE id = ?
+`
+
+type UpdateVariableValueParams struct {
+	Value sql.NullString `json:"value"`
+	ID    int64          `json:"id"`
+}
+
+func (q *Queries) UpdateVariableValue(ctx context.Context, arg UpdateVariableValueParams) error {
+	_, err := q.db.ExecContext(ctx, updateVariableValue, arg.Value, arg.ID)
+	return err
 }
