@@ -77,10 +77,12 @@ New state-changing routes **must** be added to the `actionMap` in `internal/audi
 
 **What we defend against:** unauthenticated deploys, CSRF on a teammate's browser, replay-with-stolen-CSRF (tokens are per-session random 16 bytes), password DB leak (argon2id), accidental writes by a viewer (UI gating + CSRF gate). See `docs/attack-drill.md` for the live drill.
 
-**What we do NOT defend against yet (P1 work):**
-- ~~Per-project authorization~~ — **shipped (P1-1).** `RequireProjectAccess` middleware (admin bypass; 404 on missing project to hide existence; 403 on non-member; 200 on member). `CreateProject` auto-adds creator as project admin. `ListProjects` filters by membership for non-admins.
-- Secret encryption at rest — P1-2. `release_variables.value` (and the `variables` table generally) is plaintext; a DB read leaks secrets.
-- Runner sandboxing — P1-3. A step can read the server's DB and `rm -rf` the host because the runner executes as the server's user.
+**What we defend against (P0 + P1):**
+- ~~Per-project authorization~~ — **shipped (P1-1).**
+- ~~Admin users management~~ — **shipped (P1-2).**
+- ~~Secret encryption at rest~~ — **shipped (P1-3).**
+- ~~Runner sandboxing~~ — **shipped (P1-4).**
+- Log redaction — **P1-5 (next).** Naive string replacement is in; regex-based scrubber is next.
 
 Until P1 lands, the practical threat model is "the same access as you" — a malicious authenticated teammate has the same power as the operator. That is the contract for a small-team tool. See `docs/roles.md` for the role matrix and `docs/attack-drill.md` for the concrete failure modes.
 

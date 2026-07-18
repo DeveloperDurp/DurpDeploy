@@ -19,6 +19,24 @@ import (
 
 const defaultStepTimeout = 5 * time.Minute
 
+// baseStepEnv returns the minimal environment passed to every step (P1-4)
+// instead of inheriting the server's os.Environ(), which would otherwise
+// leak DURPDEPLOY_DB, DURPDEPLOY_SECRET_KEY, and anything else the server
+// process holds. Project/step variables are appended by the caller.
+func baseStepEnv() []string {
+	env := []string{
+		"PATH=/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin",
+		"HOME=/nonexistent",
+		"USER=" + runnerUsername,
+		"LOGNAME=" + runnerUsername,
+		"TERM=xterm",
+	}
+	if lang := os.Getenv("LANG"); lang != "" {
+		env = append(env, "LANG="+lang)
+	}
+	return env
+}
+
 type DeploymentRunner struct {
 	repo    *repository.Repository
 	broker  *LogBroker
@@ -30,6 +48,10 @@ type DeploymentRunner struct {
 	// ponytail: one entry per deployment (steps run sequentially, no
 	// parallel step execution), so a plain map is enough.
 	pgids map[int64]int
+	// sandbox drops each step's process to the low-privileged
+	// durpdeploy-runner user (P1-4). Resolved once at startup; a no-op if
+	// that account/platform isn't available (see sandbox_linux.go).
+	sandbox *Sandbox
 }
 
 func New(repo *repository.Repository, broker *LogBroker) *DeploymentRunner {
@@ -38,6 +60,7 @@ func New(repo *repository.Repository, broker *LogBroker) *DeploymentRunner {
 		broker:  broker,
 		cancels: make(map[int64]context.CancelFunc),
 		pgids:   make(map[int64]int),
+		sandbox: newSandbox(),
 	}
 }
 
@@ -152,9 +175,29 @@ func (r *DeploymentRunner) runStepAttempt(
 		return err
 	}
 
-	cmd := exec.CommandContext(stepCtx, "bash", scriptPath)
-	cmd.Dir = tmpDir
-	cmd.Env = os.Environ()
+	// Bind-mount /bin, /usr, /lib, /lib64 (read-only) into tmpDir and chroot
+	// the step into it (P1-4), so a step cannot see the rest of the host
+	// filesystem (the DB, secret key, other projects' scratch dirs, ...).
+	// Falls back to running un-chrooted (same as before P1-4) if bind
+	// mounts aren't permitted, e.g. local dev without CAP_SYS_ADMIN.
+	chrooted := r.sandbox.setupChroot(tmpDir)
+	defer r.sandbox.teardownChroot(tmpDir)
+
+	var cmd *exec.Cmd
+	if chrooted {
+		// Paths are relative to the chroot: the script lands at /script.sh,
+		// bash at /bin/bash (bind-mounted above).
+		cmd = exec.CommandContext(stepCtx, "/bin/bash", "/script.sh")
+		cmd.Dir = "/"
+		r.sandbox.applyChroot(cmd, tmpDir)
+	} else {
+		cmd = exec.CommandContext(stepCtx, "bash", scriptPath)
+		cmd.Dir = tmpDir
+	}
+	// Minimal, whitelisted environment (P1-4) instead of inheriting the
+	// server's own os.Environ() — a step must not see DURPDEPLOY_DB,
+	// DURPDEPLOY_SECRET_KEY, or anything else the server process holds.
+	cmd.Env = baseStepEnv()
 	for k, v := range envMap {
 		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
 	}
@@ -165,6 +208,19 @@ func (r *DeploymentRunner) runStepAttempt(
 	// setPgid/killProcessGroup are platform-specific (see procgroup_unix.go
 	// / procgroup_other.go) so this package builds on non-Unix targets too.
 	setPgid(cmd)
+	// Drop to the durpdeploy-runner UID/GID (P1-4); no-op if that account
+	// isn't provisioned or the platform doesn't support it.
+	r.sandbox.applyCredential(cmd)
+
+	// Allow the durpdeploy-runner user to enter the scratch directory (P1-4).
+	// MkdirTemp creates it as 0700; we need 0711 (+x) at minimum.
+	if err := os.Chmod(tmpDir, 0711); err != nil {
+		return err
+	}
+
+	// Create the deployment's cgroup up front so the process can be moved
+	// into it right after Start(); "" if cgroups aren't set up (P1-4).
+	cgroup := r.sandbox.createCgroup(deploymentID)
 
 	var buf bytes.Buffer
 	cmd.Stdout = io.MultiWriter(&buf, logWriter)
@@ -172,11 +228,18 @@ func (r *DeploymentRunner) runStepAttempt(
 
 	if err := cmd.Start(); err != nil {
 		logWriter.Flush()
+		r.sandbox.removeCgroup(cgroup)
 		return err
 	}
 
 	r.trackProcessGroup(deploymentID, cmd.Process.Pid)
 	defer r.untrackProcessGroup(deploymentID)
+
+	// Move the process into its cgroup right after Start() (the PID must
+	// exist first), and drop the cgroup once the step exits so cgroups
+	// don't accumulate across deployments (P1-4).
+	r.sandbox.addProcess(cgroup, cmd.Process.Pid)
+	defer r.sandbox.removeCgroup(cgroup)
 
 	go func() {
 		<-stepCtx.Done()

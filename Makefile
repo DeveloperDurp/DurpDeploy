@@ -1,4 +1,4 @@
-.PHONY: build dev templ-generate tailwind-build js-build npm-install golines golines-check clean
+.PHONY: build dev templ-generate tailwind-build js-build npm-install golines golines-check clean test e2e-test
 
 BINARY_NAME=durpdeploy
 MAIN_PATH=cmd/server/main.go
@@ -35,3 +35,13 @@ golines-check:
 clean:
 	rm -f $(BINARY_NAME)
 	rm -f *_templ.go
+
+# Go unit/integration tests (mirrors CI's exact command).
+test: templ-generate
+	go test -v -count=1 ./...
+
+# Bash end-to-end test: builds, runs the server, curls happy/cancel/validation
+# paths. Auto-generates a throwaway DURPDEPLOY_SECRET_KEY if one isn't already
+# set in the environment.
+e2e-test: build
+	DURPDEPLOY_SECRET_KEY=$${DURPDEPLOY_SECRET_KEY:-$$(openssl rand -base64 32)} ./e2e_test.sh
