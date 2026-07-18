@@ -80,7 +80,7 @@ CODE=$(curl_silent -X POST -d "version=1.0.0&release_notes=first&csrf_token=$CSR
 RELEASE_ID=$(curl_body "$BASE/projects/$PROJECT_ID/releases" | grep -oP 'href="/projects/'$PROJECT_ID'/releases/\K[0-9]+' | sort -n | tail -1)
 echo "Release ID: $RELEASE_ID"
 
-DEP_URL=$(curl -s -b "$COOKIES" -D - -o /dev/null -X POST -d "release_id=$RELEASE_ID&environment_id=$ENV_ID&csrf_token=$CSRF" "$BASE/deployments" | grep -i "^location:" | awk '{print $2}' | tr -d '\r')
+DEP_URL=$(curl -s -b "$COOKIES" -D - -o /dev/null -X POST -d "release_id=$RELEASE_ID&environment_id=$ENV_ID&csrf_token=$CSRF" "$BASE/projects/$PROJECT_ID/deploy" | grep -i "^location:" | awk '{print $2}' | tr -d '\r')
 DEP_ID=$(echo "$DEP_URL" | grep -oP '/deployments/\K[0-9]+')
 [[ -n "$DEP_ID" ]] || { echo "FAIL: create deployment did not redirect"; exit 1; }
 echo "Deployment ID: $DEP_ID"
@@ -115,7 +115,7 @@ curl -s -b "$COOKIES" -o /dev/null -X POST -d "version=1.0.1&csrf_token=$CSRF" "
 CANCEL_REL=$(curl_body "$BASE/projects/$PROJECT_ID/releases" | grep -oP 'href="/projects/'$PROJECT_ID'/releases/\K[0-9]+' | sort -n | tail -1)
 echo "Cancel Release ID: $CANCEL_REL"
 
-CANCEL_URL=$(curl -s -b "$COOKIES" -D - -o /dev/null -X POST -d "release_id=$CANCEL_REL&environment_id=$ENV_ID&csrf_token=$CSRF" "$BASE/deployments" | grep -i "^location:" | awk '{print $2}' | tr -d '\r')
+CANCEL_URL=$(curl -s -b "$COOKIES" -D - -o /dev/null -X POST -d "release_id=$CANCEL_REL&environment_id=$ENV_ID&csrf_token=$CSRF" "$BASE/projects/$PROJECT_ID/deploy" | grep -i "^location:" | awk '{print $2}' | tr -d '\r')
 CANCEL_DEP=$(echo "$CANCEL_URL" | grep -oP '/deployments/\K[0-9]+')
 [[ -n "$CANCEL_DEP" ]] || { echo "FAIL: cancel deployment did not redirect"; exit 1; }
 echo "Cancel Deployment ID: $CANCEL_DEP"
@@ -149,7 +149,7 @@ CODE=$(curl_silent -X POST -d "version=1.0.2&csrf_token=$CSRF" "$BASE/projects/$
 TIMEOUT_REL=$(curl_body "$BASE/projects/$PROJECT_ID/releases" | grep -oP 'href="/projects/'$PROJECT_ID'/releases/\K[0-9]+' | sort -n | tail -1)
 echo "Timeout Release ID: $TIMEOUT_REL"
 
-TIMEOUT_URL=$(curl -s -b "$COOKIES" -D - -o /dev/null -X POST -d "release_id=$TIMEOUT_REL&environment_id=$ENV_ID&csrf_token=$CSRF" "$BASE/deployments" | grep -i "^location:" | awk '{print $2}' | tr -d '\r')
+TIMEOUT_URL=$(curl -s -b "$COOKIES" -D - -o /dev/null -X POST -d "release_id=$TIMEOUT_REL&environment_id=$ENV_ID&csrf_token=$CSRF" "$BASE/projects/$PROJECT_ID/deploy" | grep -i "^location:" | awk '{print $2}' | tr -d '\r')
 TIMEOUT_DEP=$(echo "$TIMEOUT_URL" | grep -oP '/deployments/\K[0-9]+')
 [[ -n "$TIMEOUT_DEP" ]] || { echo "FAIL: timeout deployment did not redirect"; exit 1; }
 echo "Timeout Deployment ID: $TIMEOUT_DEP"
@@ -208,7 +208,7 @@ CODE=$(curl_silent -X POST -d "version=1.0.4&csrf_token=$CSRF" "$BASE/projects/$
 RETRY_REL=$(curl_body "$BASE/projects/$PROJECT_ID/releases" | grep -oP 'href="/projects/'$PROJECT_ID'/releases/\K[0-9]+' | sort -n | tail -1)
 echo "Retry Release ID: $RETRY_REL"
 
-RETRY_URL=$(curl -s -b "$COOKIES" -D - -o /dev/null -X POST -d "release_id=$RETRY_REL&environment_id=$ENV_ID&csrf_token=$CSRF" "$BASE/deployments" | grep -i "^location:" | awk '{print $2}' | tr -d '\r')
+RETRY_URL=$(curl -s -b "$COOKIES" -D - -o /dev/null -X POST -d "release_id=$RETRY_REL&environment_id=$ENV_ID&csrf_token=$CSRF" "$BASE/projects/$PROJECT_ID/deploy" | grep -i "^location:" | awk '{print $2}' | tr -d '\r')
 RETRY_DEP=$(echo "$RETRY_URL" | grep -oP '/deployments/\K[0-9]+')
 [[ -n "$RETRY_DEP" ]] || { echo "FAIL: retry deployment did not redirect"; exit 1; }
 echo "Retry Deployment ID: $RETRY_DEP"
@@ -233,7 +233,7 @@ echo "=== F3.4: Variable Fallback ==="
 curl -s -b "$COOKIES" -o /dev/null -X POST -d "name=StepMissing&script=echo+%24%7BMISSING%7D&csrf_token=$CSRF" "$BASE/projects/$PROJECT_ID/steps"
 curl -s -b "$COOKIES" -o /dev/null -X POST -d "version=2.0.0&csrf_token=$CSRF" "$BASE/projects/$PROJECT_ID/releases"
 NEW_REL=$(curl_body "$BASE/projects/$PROJECT_ID/releases" | grep -oP 'href="/projects/'$PROJECT_ID'/releases/\K[0-9]+' | sort -n | tail -1)
-curl -s -b "$COOKIES" -o /dev/null -X POST -d "release_id=$NEW_REL&environment_id=$ENV_ID&csrf_token=$CSRF" "$BASE/deployments"
+curl -s -b "$COOKIES" -o /dev/null -X POST -d "release_id=$NEW_REL&environment_id=$ENV_ID&csrf_token=$CSRF" "$BASE/projects/$PROJECT_ID/deploy"
 
 echo "=== F3.5: Lifecycle Gate ==="
 # Separate project + envs + lifecycle so the F3.1 project stays free-floating.
@@ -288,7 +288,7 @@ LC_REL_ID=$(curl_body "$BASE/projects/$LC_PROJECT_ID/releases" | grep -oP 'href=
 echo "LC Release ID: $LC_REL_ID"
 
 # Deploy v1 to Dev -> 303
-CODE=$(curl_silent -X POST -d "release_id=$LC_REL_ID&environment_id=$LC_DEV_ID&csrf_token=$CSRF" "$BASE/deployments")
+CODE=$(curl_silent -X POST -d "release_id=$LC_REL_ID&environment_id=$LC_DEV_ID&csrf_token=$CSRF" "$BASE/projects/$LC_PROJECT_ID/deploy")
 [[ "$CODE" == "303" ]] || { echo "FAIL: deploy v1 to dev got $CODE, want 303"; exit 1; }
 # Wait for the dev deploy to finish (status endpoint polling).
 for i in {1..50}; do
@@ -297,17 +297,17 @@ for i in {1..50}; do
 done
 
 # Now deploy v1 to Prod directly (skipping Test) -> 422
-CODE=$(curl_silent -X POST -d "release_id=$LC_REL_ID&environment_id=$LC_PROD_ID&csrf_token=$CSRF" "$BASE/deployments")
+CODE=$(curl_silent -X POST -d "release_id=$LC_REL_ID&environment_id=$LC_PROD_ID&csrf_token=$CSRF" "$BASE/projects/$LC_PROJECT_ID/deploy")
 [[ "$CODE" == "422" ]] || { echo "FAIL: deploy v1 to prod (skipping test) got $CODE, want 422"; exit 1; }
 echo "  Dev->Prod skip blocked: OK (422)"
 
 # Deploy v1 to Test -> 303
-CODE=$(curl_silent -X POST -d "release_id=$LC_REL_ID&environment_id=$LC_TEST_ID&csrf_token=$CSRF" "$BASE/deployments")
+CODE=$(curl_silent -X POST -d "release_id=$LC_REL_ID&environment_id=$LC_TEST_ID&csrf_token=$CSRF" "$BASE/projects/$LC_PROJECT_ID/deploy")
 [[ "$CODE" == "303" ]] || { echo "FAIL: deploy v1 to test got $CODE, want 303"; exit 1; }
 sleep 0.5
 
 # Deploy v1 to Prod after Test succeeded -> 303
-CODE=$(curl_silent -X POST -d "release_id=$LC_REL_ID&environment_id=$LC_PROD_ID&csrf_token=$CSRF" "$BASE/deployments")
+CODE=$(curl_silent -X POST -d "release_id=$LC_REL_ID&environment_id=$LC_PROD_ID&csrf_token=$CSRF" "$BASE/projects/$LC_PROJECT_ID/deploy")
 [[ "$CODE" == "303" ]] || { echo "FAIL: deploy v1 to prod after test got $CODE, want 303"; exit 1; }
 echo "  Full Dev->Test->Prod chain: OK (303)"
 
@@ -315,7 +315,7 @@ echo "  Full Dev->Test->Prod chain: OK (303)"
 CODE=$(curl_silent -X POST -d "version=2.0.0&csrf_token=$CSRF" "$BASE/projects/$LC_PROJECT_ID/releases")
 [[ "$CODE" == "303" ]] || { echo "FAIL: create v2 got $CODE"; exit 1; }
 V2_REL_ID=$(curl_body "$BASE/projects/$LC_PROJECT_ID/releases" | grep -oP 'href="/projects/'$LC_PROJECT_ID'/releases/\K[0-9]+' | sort -n | tail -1)
-CODE=$(curl_silent -X POST -d "release_id=$V2_REL_ID&environment_id=$LC_PROD_ID&csrf_token=$CSRF" "$BASE/deployments")
+CODE=$(curl_silent -X POST -d "release_id=$V2_REL_ID&environment_id=$LC_PROD_ID&csrf_token=$CSRF" "$BASE/projects/$LC_PROJECT_ID/deploy")
 [[ "$CODE" == "422" ]] || { echo "FAIL: deploy v2 to prod (no chain) got $CODE, want 422"; exit 1; }
 echo "  New version without chain: blocked (422)"
 
@@ -361,7 +361,7 @@ APP_REL_ID=$(curl_body "$BASE/projects/$APP_PROJ_ID/releases" | grep -oP 'href="
 echo "App Release ID: $APP_REL_ID"
 
 # Deploy to dev -> should succeed
-DEV_URL=$(curl -s -b "$COOKIES" -D - -o /dev/null -X POST -d "release_id=$APP_REL_ID&environment_id=$APP_DEV_ID&csrf_token=$CSRF" "$BASE/deployments" | grep -i "^location:" | awk '{print $2}' | tr -d '\r')
+DEV_URL=$(curl -s -b "$COOKIES" -D - -o /dev/null -X POST -d "release_id=$APP_REL_ID&environment_id=$APP_DEV_ID&csrf_token=$CSRF" "$BASE/projects/$APP_PROJ_ID/deploy" | grep -i "^location:" | awk '{print $2}' | tr -d '\r')
 DEV_DEP=$(echo "$DEV_URL" | grep -oP '/deployments/\K[0-9]+')
 [[ -n "$DEV_DEP" ]] || { echo "FAIL: dev deployment did not redirect"; exit 1; }
 echo "Dev Deployment ID: $DEV_DEP"
@@ -372,7 +372,7 @@ done
 echo "  Dev deploy succeeded: OK"
 
 # Deploy to staging -> should succeed
-STAGING_URL=$(curl -s -b "$COOKIES" -D - -o /dev/null -X POST -d "release_id=$APP_REL_ID&environment_id=$APP_STAGING_ID&csrf_token=$CSRF" "$BASE/deployments" | grep -i "^location:" | awk '{print $2}' | tr -d '\r')
+STAGING_URL=$(curl -s -b "$COOKIES" -D - -o /dev/null -X POST -d "release_id=$APP_REL_ID&environment_id=$APP_STAGING_ID&csrf_token=$CSRF" "$BASE/projects/$APP_PROJ_ID/deploy" | grep -i "^location:" | awk '{print $2}' | tr -d '\r')
 STAGING_DEP=$(echo "$STAGING_URL" | grep -oP '/deployments/\K[0-9]+')
 [[ -n "$STAGING_DEP" ]] || { echo "FAIL: staging deployment did not redirect"; exit 1; }
 echo "Staging Deployment ID: $STAGING_DEP"
@@ -383,7 +383,7 @@ done
 echo "  Staging deploy succeeded: OK"
 
 # Deploy to prod -> should be pending_approval
-PROD_URL=$(curl -s -b "$COOKIES" -D - -o /dev/null -X POST -d "release_id=$APP_REL_ID&environment_id=$APP_PROD_ID&csrf_token=$CSRF" "$BASE/deployments" | grep -i "^location:" | awk '{print $2}' | tr -d '\r')
+PROD_URL=$(curl -s -b "$COOKIES" -D - -o /dev/null -X POST -d "release_id=$APP_REL_ID&environment_id=$APP_PROD_ID&csrf_token=$CSRF" "$BASE/projects/$APP_PROJ_ID/deploy" | grep -i "^location:" | awk '{print $2}' | tr -d '\r')
 PROD_DEP=$(echo "$PROD_URL" | grep -oP '/deployments/\K[0-9]+')
 [[ -n "$PROD_DEP" ]] || { echo "FAIL: prod deployment did not redirect"; exit 1; }
 echo "Prod Deployment ID: $PROD_DEP"
@@ -412,17 +412,17 @@ echo "=== F3.6: Force Deploy ==="
 CODE=$(curl_silent -X POST -d "version=3.0.0&csrf_token=$CSRF" "$BASE/projects/$LC_PROJECT_ID/releases")
 [[ "$CODE" == "303" ]] || { echo "FAIL: create v3 got $CODE"; exit 1; }
 V3_REL_ID=$(curl_body "$BASE/projects/$LC_PROJECT_ID/releases" | grep -oP 'href="/projects/'$LC_PROJECT_ID'/releases/\K[0-9]+' | sort -n | tail -1)
-CODE=$(curl_silent -X POST -d "release_id=$V3_REL_ID&environment_id=$LC_PROD_ID&force=true&csrf_token=$CSRF" "$BASE/deployments")
+CODE=$(curl_silent -X POST -d "release_id=$V3_REL_ID&environment_id=$LC_PROD_ID&force=true&csrf_token=$CSRF" "$BASE/projects/$LC_PROJECT_ID/deploy")
 [[ "$CODE" == "303" ]] || { echo "FAIL: force deploy v3 to prod got $CODE, want 303"; exit 1; }
 echo "  Force deploy to prod: OK (303)"
 
 echo "=== F3.7: Env Restriction ==="
 # Project is bound to lifecycle. Try to deploy v3 to the "out" env (not in lifecycle).
 # Force should NOT bypass this restriction.
-CODE=$(curl_silent -X POST -d "release_id=$V3_REL_ID&environment_id=$LC_OUT_ID&csrf_token=$CSRF" "$BASE/deployments")
+CODE=$(curl_silent -X POST -d "release_id=$V3_REL_ID&environment_id=$LC_OUT_ID&csrf_token=$CSRF" "$BASE/projects/$LC_PROJECT_ID/deploy")
 [[ "$CODE" == "422" ]] || { echo "FAIL: deploy to non-lifecycle env got $CODE, want 422"; exit 1; }
 echo "  Deploy to non-lifecycle env (no force): blocked (422)"
-CODE=$(curl_silent -X POST -d "release_id=$V3_REL_ID&environment_id=$LC_OUT_ID&force=true&csrf_token=$CSRF" "$BASE/deployments")
+CODE=$(curl_silent -X POST -d "release_id=$V3_REL_ID&environment_id=$LC_OUT_ID&force=true&csrf_token=$CSRF" "$BASE/projects/$LC_PROJECT_ID/deploy")
 [[ "$CODE" == "422" ]] || { echo "FAIL: force deploy to non-lifecycle env got $CODE, want 422"; exit 1; }
 echo "  Force deploy to non-lifecycle env: still blocked (422)"
 

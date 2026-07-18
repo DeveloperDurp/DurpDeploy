@@ -141,7 +141,37 @@ secret unrecoverable — back it up alongside the DB.
 
 ---
 
-## Step 5 — Install the systemd unit
+## Step 5 — Set up the runner sandbox (durpdeploy-runner user + cgroups)
+
+Deployment steps no longer run as the `durpdeploy` user directly (P1-4). A
+low-privileged `durpdeploy-runner` account is used instead, so a buggy or
+malicious step script cannot read the SQLite DB, the secret key, or write
+outside its own scratch chroot.
+
+```bash
+# Dedicated, unprivileged, no-login user for running step scripts.
+sudo useradd --system --no-create-home --shell /usr/sbin/nologin durpdeploy-runner
+```
+
+Cgroup v2 is used to cap CPU/memory/PIDs per deployment. Create the parent
+cgroup and hand ownership to `durpdeploy` so it can create/remove the
+per-deployment sub-cgroups without root:
+
+```bash
+sudo mkdir -p /sys/fs/cgroup/durpdeploy
+sudo chown -R durpdeploy:durpdeploy /sys/fs/cgroup/durpdeploy
+# Let durpdeploy write the controllers it needs in sub-cgroups it creates.
+echo '+cpu +memory +pids' | sudo tee /sys/fs/cgroup/durpdeploy/cgroup.subtree_control
+```
+
+This directory does not survive a reboot (cgroupfs is virtual) — re-run the
+above after every reboot, or add a small `systemd-tmpfiles` rule / oneshot
+unit if you want it automated. `durpdeploy` degrades gracefully (logs a
+warning, skips resource limiting) if this directory is missing.
+
+---
+
+## Step 6 — Install the systemd unit
 
 ```bash
 sudo install -m 0644 ./systemd/durpdeploy.service /etc/systemd/system/durpdeploy.service
@@ -161,7 +191,7 @@ database is created in the right place on first start (migrations auto-run).
 
 ---
 
-## Step 6 — Install the Caddyfile
+## Step 7 — Install the Caddyfile
 
 Edit `./Caddyfile` on your workstation and replace
 `durpdeploy.example.com` with your real hostname, then:
@@ -190,7 +220,7 @@ sudo journalctl -u caddy -n 50 --no-pager
 
 ---
 
-## Step 7 — Create the first admin user
+## Step 8 — Create the first admin user
 
 Run the CLI as the `durpdeploy` user so the DB file permissions stay correct:
 
@@ -216,7 +246,7 @@ reset without DB access — see Troubleshooting below.
 
 ---
 
-## Step 8 — Verify
+## Step 9 — Verify
 
 From your workstation:
 
@@ -332,4 +362,4 @@ the `durpdeploy` user's environment. If a step needs a tool not in the
 `durpdeploy` user's `PATH`, install it system-wide or set the variable in the
 project's variables. Steps run in their own process group and are fully
 reaped on timeout, cancel, or server shutdown (P1-3); OS-level sandboxing
-(chroot/namespaces/seccomp) is still future work.
+(chroot/namespaces/cgroups) is enabled by default if provisioned per Step 5.
