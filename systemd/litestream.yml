@@ -1,0 +1,50 @@
+# Litestream configuration template for durpdeploy.
+#
+# Install: sudo install -m 0640 -o root -g durpdeploy systemd/litestream.yml /etc/litestream.yml
+# Then fill in the placeholders below (bucket, endpoint, credentials).
+#
+# See docs/backup-restore.md for the full setup/verify/restore runbook.
+
+dbs:
+  - path: /var/lib/durpdeploy/durpdeploy.db
+
+    replicas:
+      - type: s3
+
+        # S3 bucket name. Required.
+        bucket: REPLACE_WITH_YOUR_BUCKET
+
+        # Key prefix inside the bucket. Lets you share one bucket across
+        # multiple durpdeploy instances/environments.
+        path: durpdeploy
+
+        # AWS region. Required for real AWS S3; any value works for most
+        # S3-compatible stores (they usually ignore it or want "us-east-1").
+        region: us-east-1
+
+        # Only needed for S3-compatible stores that are NOT AWS S3, e.g.:
+        #   MinIO:            http://minio.internal:9000
+        #   Cloudflare R2:    https://<account-id>.r2.cloudflarestorage.com
+        #   Backblaze B2:     https://s3.us-west-002.backblazeb2.com
+        # Leave commented out for real AWS S3.
+        # endpoint: https://REPLACE_WITH_YOUR_ENDPOINT
+
+        # Credentials. Prefer setting AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
+        # as Environment= lines in litestream.service instead of plaintext
+        # here — uncomment only if you have no other way to inject them.
+        # access-key-id: REPLACE_WITH_ACCESS_KEY
+        # secret-access-key: REPLACE_WITH_SECRET_KEY
+
+        # How often to sync the WAL to the replica. Litestream's default is
+        # 1s; the docs runbook assumes this value ("seconds of data loss").
+        sync-interval: 1s
+
+        # How often to take a full snapshot (vs. incremental WAL segments).
+        # Snapshots make restores faster; more frequent = faster restore,
+        # more storage used.
+        snapshot-interval: 24h
+
+        # How long to keep old snapshots/WAL segments before Litestream
+        # prunes them. Point-in-time restore only works back to the oldest
+        # retained snapshot.
+        retention: 168h # 7 days

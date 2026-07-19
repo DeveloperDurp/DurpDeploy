@@ -3,7 +3,9 @@
 # Install: sudo install -m 0644 systemd/durpdeploy.service /etc/systemd/system/
 # Then:   sudo systemctl daemon-reload && sudo systemctl enable --now durpdeploy
 #
-# See docs/deploy.md for the full provisioning runbook.
+# See docs/deploy.md for the full provisioning runbook, and
+# docs/backup-restore.md + systemd/litestream.service for continuous backup
+# of the SQLite database this service writes to.
 
 [Unit]
 Description=DurpDeploy — bash deployment tool

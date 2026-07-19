@@ -1,0 +1,42 @@
+# Litestream continuous replication service for the durpdeploy SQLite DB.
+#
+# Install: sudo install -m 0644 systemd/litestream.service /etc/systemd/system/
+# Then:   sudo systemctl daemon-reload && sudo systemctl enable --now litestream
+#
+# See docs/backup-restore.md for the full setup/verify/restore runbook and
+# systemd/litestream.yml for the config template this unit reads.
+
+[Unit]
+Description=Litestream replication for durpdeploy.db
+Documentation=https://litestream.io/
+After=network-online.target durpdeploy.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=durpdeploy
+Group=durpdeploy
+ExecStart=/usr/local/bin/litestream replicate -config /etc/litestream.yml
+Restart=on-failure
+RestartSec=5s
+
+# --- Hardening (mirrors systemd/durpdeploy.service) ---
+ProtectSystem=strict
+ProtectHome=true
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=true
+RestrictRealtime=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+
+# Litestream only needs read access to /var/lib/durpdeploy (the db + WAL) and
+# to /etc/litestream.yml; ProtectSystem=strict already makes the rest of the
+# filesystem read-only so no extra ReadWritePaths are needed here.
+
+[Install]
+WantedBy=multi-user.target

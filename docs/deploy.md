@@ -276,7 +276,12 @@ sudo -u durpdeploy sqlite3 /var/lib/durpdeploy/durpdeploy.db \
 ## Backup
 
 SQLite WAL mode makes a live `sqlite3 .backup` safe (it takes a consistent
-snapshot without stopping the server). Two options:
+snapshot without stopping the server). **See
+[`docs/backup-restore.md`](backup-restore.md) for the full setup, verification,
+and restore runbook** — it covers both options below in detail, plus the
+systemd unit/config templates (`systemd/litestream.service`,
+`systemd/litestream.yml`) and the `scripts/test-backup-restore.sh` acceptance
+test. The short version:
 
 ### Option A — daily cron with `sqlite3 .backup` (simplest)
 
@@ -290,12 +295,14 @@ echo '0 3 * * * durpdeploy sqlite3 /var/lib/durpdeploy/durpdeploy.db ".backup /v
 Then rsync `/var/backups/durpdeploy/` offsite (to S3, a NAS, another VM).
 Keep at least 7 days of retention.
 
-### Option B — litestream (continuous, point-in-time restore)
+### Option B — litestream (continuous, point-in-time restore) — recommended
 
 Litestream streams the SQLite WAL to S3-compatible storage continuously, so
-you lose at most a few seconds of data on a crash. See
-[litestream.io](https://litestream.io/) and `docs/backup-restore.md`
-(planned P1-6). This is the recommended path for a team deployment.
+you lose at most a few seconds of data on a crash. This is the recommended
+path for a team deployment — follow the "Litestream" section of
+[`docs/backup-restore.md`](backup-restore.md) for install, configuration,
+verification (`litestream ltx`), and restore (`litestream restore`)
+steps.
 
 ---
 
