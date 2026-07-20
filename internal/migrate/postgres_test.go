@@ -39,7 +39,9 @@ func TestPostgres_MigrationsRun(t *testing.T) {
 	}
 	defer db.Close()
 
-	rows, err := db.Query("SELECT table_name FROM information_schema.tables WHERE table_schema='public' ORDER BY table_name")
+	rows, err := db.Query(
+		"SELECT table_name FROM information_schema.tables WHERE table_schema='public' ORDER BY table_name",
+	)
 	if err != nil {
 		t.Fatalf("query: %v", err)
 	}
@@ -55,14 +57,16 @@ func TestPostgres_MigrationsRun(t *testing.T) {
 	// Exercise a real query using ? placeholders + unixepoch() default,
 	// mirroring what sqlc-generated code does.
 	var id int64
-	err = db.QueryRow(`INSERT INTO projects (name, description) VALUES (?, ?) RETURNING id`, "demo", "desc").Scan(&id)
+	err = db.QueryRow(`INSERT INTO projects (name, description) VALUES (?, ?) RETURNING id`, "demo", "desc").
+		Scan(&id)
 	if err != nil {
 		t.Fatalf("insert: %v", err)
 	}
 	t.Logf("inserted project id=%d", id)
 
 	var cnt int64
-	if err := db.QueryRow(`SELECT COUNT(*) FROM deployments WHERE created_at >= strftime('%s','now','start of day')`).Scan(&cnt); err != nil {
+	if err := db.QueryRow(`SELECT COUNT(*) FROM deployments WHERE created_at >= strftime('%s','now','start of day')`).
+		Scan(&cnt); err != nil {
 		t.Fatalf("strftime query: %v", err)
 	}
 	t.Logf("today count=%d", cnt)

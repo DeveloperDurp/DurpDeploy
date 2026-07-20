@@ -55,7 +55,10 @@ func TestVariables_EncryptedAtRest(t *testing.T) {
 		t.Fatalf("CreateVariable: %v", err)
 	}
 	if created.Value.String != plaintext {
-		t.Fatalf("wrapper should return plaintext, got %q", created.Value.String)
+		t.Fatalf(
+			"wrapper should return plaintext, got %q",
+			created.Value.String,
+		)
 	}
 
 	// Inspect the raw row exactly like `sqlite3 durpdeploy.db 'select * from
@@ -117,6 +120,9 @@ func TestVariables_NoSecretBoxIsPlaintextPassthrough(t *testing.T) {
 		t.Fatalf("raw GetVariable: %v", err)
 	}
 	if raw.Value.String != "plain-value" {
-		t.Fatalf("expected plaintext passthrough without a box, got %q", raw.Value.String)
+		t.Fatalf(
+			"expected plaintext passthrough without a box, got %q",
+			raw.Value.String,
+		)
 	}
 }

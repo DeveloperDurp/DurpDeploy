@@ -11,7 +11,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/gate"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/runner"
 	"durpdeploy/views/pages"
@@ -134,7 +136,7 @@ func (h *DeploymentHandler) availableEnvsForDeployPage(
 		return out, nil
 	}
 
-	stageIDs, err := h.repo.Queries.ListLifecycleStageEnvironmentIDs(
+	stages, err := h.repo.Queries.ListLifecycleStages(
 		r.Context(),
 		project.LifecycleID.Int64,
 	)
@@ -151,11 +153,13 @@ func (h *DeploymentHandler) availableEnvsForDeployPage(
 		envByID[e.ID] = e
 	}
 
-	stageEnvs := make([]db.Environment, 0, len(stageIDs))
-	for _, id := range stageIDs {
-		if e, ok := envByID[id]; ok {
+	stageEnvs := make([]db.Environment, 0, len(stages))
+	approvalByEnv := make(map[int64]bool, len(stages))
+	for _, s := range stages {
+		if e, ok := envByID[s.EnvironmentID]; ok {
 			stageEnvs = append(stageEnvs, e)
 		}
+		approvalByEnv[s.EnvironmentID] = s.RequiresApproval != 0
 	}
 
 	// No release selected: every stage is deployable.
@@ -164,7 +168,10 @@ func (h *DeploymentHandler) availableEnvsForDeployPage(
 		for i, e := range stageEnvs {
 			out[i] = pages.AvailableEnv{
 				Environment: e,
-				State:       pages.GateState{Deployable: true},
+				State: pages.GateState{
+					Deployable:       true,
+					RequiresApproval: approvalByEnv[e.ID],
+				},
 			}
 		}
 		return out, nil
@@ -186,6 +193,7 @@ func (h *DeploymentHandler) availableEnvsForDeployPage(
 			stageEnvs,
 			e,
 		)
+		state.RequiresApproval = approvalByEnv[e.ID]
 		out = append(out, pages.AvailableEnv{Environment: e, State: state})
 	}
 	return out, nil
@@ -327,7 +335,12 @@ func (h *DeploymentHandler) ScheduleDeployment(
 		}
 	}
 
-	requiresApproval, err := h.stageRequiresApproval(r, project, environmentID)
+	requiresApproval, err := gate.RequiresApproval(
+		r.Context(),
+		h.repo,
+		project,
+		environmentID,
+	)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -455,46 +468,24 @@ func (h *DeploymentHandler) availableEnvironmentsForProject(
 	if !project.LifecycleID.Valid {
 		return all, nil
 	}
-	stageIDs, err := h.repo.Queries.ListLifecycleStageEnvironmentIDs(
+	stages, err := h.repo.Queries.ListLifecycleStages(
 		r.Context(),
 		project.LifecycleID.Int64,
 	)
 	if err != nil {
 		return nil, err
 	}
-	idSet := make(map[int64]bool, len(stageIDs))
-	for _, id := range stageIDs {
-		idSet[id] = true
+	idSet := make(map[int64]bool, len(stages))
+	for _, s := range stages {
+		idSet[s.EnvironmentID] = true
 	}
-	out := make([]db.Environment, 0, len(stageIDs))
+	out := make([]db.Environment, 0, len(stages))
 	for _, e := range all {
 		if idSet[e.ID] {
 			out = append(out, e)
 		}
 	}
 	return out, nil
-}
-
-func (h *DeploymentHandler) stageRequiresApproval(
-	r *http.Request,
-	project db.Project,
-	environmentID int64,
-) (bool, error) {
-	if !project.LifecycleID.Valid {
-		return false, nil
-	}
-	stages, err := h.repo.Queries.ListLifecycleStages(
-		r.Context(), project.LifecycleID.Int64,
-	)
-	if err != nil {
-		return false, err
-	}
-	for _, s := range stages {
-		if s.EnvironmentID == environmentID {
-			return s.RequiresApproval != 0, nil
-		}
-	}
-	return false, nil
 }
 
 func isTruthy(s string) bool {
@@ -679,16 +670,25 @@ func (h *DeploymentHandler) ApproveDeployment(
 		return
 	}
 
-	approvedBy := strings.TrimSpace(r.FormValue("approved_by"))
-	if approvedBy == "" {
-		approvedBy = "anonymous"
+	// ponytail: any project member reaching this route (write access +
+	// CSRF gate, enforced by the group middleware) may approve; the
+	// stored required_approver_role is descriptive only. Enforcing a
+	// specific approver role would need a per-project role model finer
+	// than today's project_members.role, add if teams need it.
+	approvedBy := "anonymous"
+	var approverUserID sql.NullInt64
+	if u := auth.UserFromContext(r.Context()); u != nil {
+		approvedBy = u.Name
+		approverUserID = sql.NullInt64{Int64: u.ID, Valid: true}
 	}
 
 	if _, err := h.repo.Queries.CreateApproval(
 		r.Context(),
 		db.CreateApprovalParams{
-			DeploymentID: id,
-			ApprovedBy:   approvedBy,
+			DeploymentID:         id,
+			ApprovedBy:           approvedBy,
+			ApproverUserID:       approverUserID,
+			RequiredApproverRole: "admin",
 		},
 	); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

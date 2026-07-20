@@ -325,7 +325,9 @@ func TestRunSecretKeyRotate_reencryptsAllRowsWithoutDataLoss(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create release: %v", err)
 	}
-	encValue, err := repo.EncryptValue(sql.NullString{String: plaintext, Valid: true})
+	encValue, err := repo.EncryptValue(
+		sql.NullString{String: plaintext, Valid: true},
+	)
 	if err != nil {
 		t.Fatalf("EncryptValue: %v", err)
 	}
@@ -394,7 +396,9 @@ func TestRunSecretKeyRotate_reencryptsAllRowsWithoutDataLoss(t *testing.T) {
 		t.Fatalf("GetReleaseVariable: %v", err)
 	}
 	if _, err := oldBox.Decrypt(rawReleaseVar.Value.String); err == nil {
-		t.Fatal("expected old key to no longer decrypt the rotated release variable")
+		t.Fatal(
+			"expected old key to no longer decrypt the rotated release variable",
+		)
 	}
 
 	// ...but no secret was lost: the newly generated key decrypts both
@@ -411,7 +415,11 @@ func TestRunSecretKeyRotate_reencryptsAllRowsWithoutDataLoss(t *testing.T) {
 		t.Fatalf("decrypt rotated release variable with new key: %v", err)
 	}
 	if gotReleaseVar != plaintext {
-		t.Fatalf("rotated release variable value = %q, want %q", gotReleaseVar, plaintext)
+		t.Fatalf(
+			"rotated release variable value = %q, want %q",
+			gotReleaseVar,
+			plaintext,
+		)
 	}
 }
 

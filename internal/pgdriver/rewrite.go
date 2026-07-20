@@ -25,10 +25,14 @@ import (
 const DriverName = "pgx-qmark"
 
 var (
-	autoIncrementRe = regexp.MustCompile(`(?i)INTEGER\s+PRIMARY\s+KEY\s+AUTOINCREMENT`)
+	autoIncrementRe = regexp.MustCompile(
+		`(?i)INTEGER\s+PRIMARY\s+KEY\s+AUTOINCREMENT`,
+	)
 	integerRe       = regexp.MustCompile(`\bINTEGER\b`)
 	unixepochRe     = regexp.MustCompile(`(?i)unixepoch\(\)`)
-	strftimeTodayRe = regexp.MustCompile(`(?i)strftime\('%s',\s*'now',\s*'start of day'\)`)
+	strftimeTodayRe = regexp.MustCompile(
+		`(?i)strftime\('%s',\s*'now',\s*'start of day'\)`,
+	)
 )
 
 // RewriteSQL translates a single SQLite-flavored SQL statement into
@@ -39,10 +43,16 @@ func RewriteSQL(query string) string {
 		query = integerRe.ReplaceAllString(query, "BIGINT")
 	}
 	if strings.Contains(query, "unixepoch") {
-		query = unixepochRe.ReplaceAllString(query, "extract(epoch from now())::bigint")
+		query = unixepochRe.ReplaceAllString(
+			query,
+			"extract(epoch from now())::bigint",
+		)
 	}
 	if strings.Contains(query, "strftime") {
-		query = strftimeTodayRe.ReplaceAllString(query, "extract(epoch from date_trunc('day', now()))::bigint")
+		query = strftimeTodayRe.ReplaceAllString(
+			query,
+			"extract(epoch from date_trunc('day', now()))::bigint",
+		)
 	}
 	if strings.ContainsRune(query, '?') {
 		query = rewritePlaceholders(query)

@@ -111,7 +111,10 @@ func (r *Repository) UpdateVariable(
 }
 
 // GetVariable returns the variable with its value decrypted.
-func (r *Repository) GetVariable(ctx context.Context, id int64) (db.Variable, error) {
+func (r *Repository) GetVariable(
+	ctx context.Context,
+	id int64,
+) (db.Variable, error) {
 	v, err := r.Queries.GetVariable(ctx, id)
 	if err != nil {
 		return db.Variable{}, err

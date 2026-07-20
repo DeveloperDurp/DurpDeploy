@@ -1291,6 +1291,111 @@ func TestListDeployments_FilterAndPaginate(t *testing.T) {
 	}
 }
 
+// TestApproval_RequiresApprovalStage_PausesThenApproveRuns exercises the
+// full manual approval workflow: a lifecycle stage marked requires_approval
+// pauses the deployment in "pending_approval" instead of running it; hitting
+// the approve endpoint records who approved it and lets the runner proceed.
+func TestApproval_RequiresApprovalStage_PausesThenApproveRuns(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	hc := h.setupProjectWithLifecycle(t, []string{"Prod"})
+	rel := hc.makeRelease(t, "1.0.0", "exit 0")
+
+	stages, err := h.repo.Queries.ListLifecycleStages(ctx, hc.lifecycle.ID)
+	if err != nil || len(stages) != 1 {
+		t.Fatalf("list lifecycle stages: %v (n=%d)", err, len(stages))
+	}
+	if _, err := h.repo.Queries.UpdateLifecycleStage(
+		ctx,
+		db.UpdateLifecycleStageParams{
+			ID:               stages[0].ID,
+			EnvironmentID:    stages[0].EnvironmentID,
+			SortOrder:        stages[0].SortOrder,
+			RequiresApproval: 1,
+		},
+	); err != nil {
+		t.Fatalf("update lifecycle stage: %v", err)
+	}
+
+	prod := hc.envs["Prod"]
+	if got := hc.postDeploy(
+		t,
+		rel.ID,
+		prod.ID,
+		false,
+	); got != http.StatusSeeOther {
+		t.Fatalf("postDeploy: got %d, want 303", got)
+	}
+
+	dep, err := h.repo.Queries.GetLatestDeploymentForReleaseEnv(
+		ctx,
+		db.GetLatestDeploymentForReleaseEnvParams{
+			ReleaseID:     rel.ID,
+			EnvironmentID: prod.ID,
+		},
+	)
+	if err != nil {
+		t.Fatalf("get deployment: %v", err)
+	}
+	if dep.Status != "pending_approval" {
+		t.Fatalf(
+			"expected status pending_approval before approval, got %q",
+			dep.Status,
+		)
+	}
+
+	form := url.Values{}
+	form.Set("csrf_token", hc.h.csrfToken())
+	resp, err := h.authedClient().PostForm(
+		fmt.Sprintf("%s/deployments/%d/approve", h.server.URL, dep.ID),
+		form,
+	)
+	if err != nil {
+		t.Fatalf("POST approve: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("approve: got %d, want 303", resp.StatusCode)
+	}
+
+	hc.waitForDeploymentStatus(t, rel.ID, prod.ID, "succeeded", "failed")
+
+	approval, err := h.repo.Queries.GetApprovalByDeployment(ctx, dep.ID)
+	if err != nil {
+		t.Fatalf("get approval: %v", err)
+	}
+	if !approval.ApproverUserID.Valid {
+		t.Errorf("expected approver_user_id to be recorded")
+	}
+	if approval.ApprovedBy == "" || approval.ApprovedBy == "anonymous" {
+		t.Errorf(
+			"expected approved_by to be the authenticated user's name, got %q",
+			approval.ApprovedBy,
+		)
+	}
+	if approval.RequiredApproverRole != "admin" {
+		t.Errorf(
+			"expected required_approver_role admin, got %q",
+			approval.RequiredApproverRole,
+		)
+	}
+
+	logs, err := h.repo.Queries.ListAuditLogs(ctx, 10)
+	if err != nil {
+		t.Fatalf("list audit log: %v", err)
+	}
+	found := false
+	for _, l := range logs {
+		if l.Action == "approve_deployment" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected an approve_deployment entry in the audit log")
+	}
+}
+
 func TestListDeployments_HTMXPartialReturnsRowsAndOOBButton(t *testing.T) {
 	h := newProjectHarness(t)
 	ctx := context.Background()

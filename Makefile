@@ -1,4 +1,4 @@
-.PHONY: build dev templ-generate tailwind-build js-build npm-install golines golines-check clean test e2e-test
+.PHONY: build dev check-openssl templ-generate tailwind-build js-build npm-install golines golines-check clean test e2e-test
 
 BINARY_NAME=durpdeploy
 MAIN_PATH=cmd/server/main.go
@@ -7,10 +7,20 @@ build: templ-generate tailwind-build js-build
 	go build -o $(BINARY_NAME) $(MAIN_PATH)
 
 # Hot-reload dev server. Watches .go/.templ/.sql in cmd, internal, views, migrations.
+# Auto-generates a throwaway DURPDEPLOY_SECRET_KEY if one isn't already set in
+# the environment, same as `make e2e-test` — the app refuses to start without one.
 # ponytail: CSS/JS source changes need a separate `make tailwind-build && make js-build`
 # and the air build to retrigger. Add a second air include_dir entry when that hurts.
-dev:
-	go run github.com/air-verse/air@latest
+dev: check-openssl
+	DURPDEPLOY_SECRET_KEY=$${DURPDEPLOY_SECRET_KEY:-$$(openssl rand -base64 32)} go run github.com/air-verse/air@latest
+
+# Fails with a clear message instead of a cryptic "command not found" if
+# openssl is missing and DURPDEPLOY_SECRET_KEY isn't already set.
+check-openssl:
+	@if [ -z "$$DURPDEPLOY_SECRET_KEY" ] && ! command -v openssl >/dev/null 2>&1; then \
+		echo "ERROR: openssl not found. Install openssl, or set DURPDEPLOY_SECRET_KEY yourself." >&2; \
+		exit 1; \
+	fi
 
 templ-generate:
 	templ generate
@@ -43,5 +53,5 @@ test: templ-generate
 # Bash end-to-end test: builds, runs the server, curls happy/cancel/validation
 # paths. Auto-generates a throwaway DURPDEPLOY_SECRET_KEY if one isn't already
 # set in the environment.
-e2e-test: build
+e2e-test: build check-openssl
 	DURPDEPLOY_SECRET_KEY=$${DURPDEPLOY_SECRET_KEY:-$$(openssl rand -base64 32)} ./e2e_test.sh

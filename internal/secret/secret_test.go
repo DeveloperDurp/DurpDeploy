@@ -32,7 +32,10 @@ func TestEncryptDecrypt_RoundTrip(t *testing.T) {
 		t.Fatalf("Encrypt: %v", err)
 	}
 	if ciphertext == plaintext || strings.Contains(ciphertext, plaintext) {
-		t.Fatalf("ciphertext must not contain the plaintext, got %q", ciphertext)
+		t.Fatalf(
+			"ciphertext must not contain the plaintext, got %q",
+			ciphertext,
+		)
 	}
 
 	got, err := box.Decrypt(ciphertext)
@@ -52,7 +55,10 @@ func TestEncrypt_EmptyStringPassesThrough(t *testing.T) {
 		t.Fatalf("Encrypt: %v", err)
 	}
 	if ciphertext != "" {
-		t.Fatalf("expected empty ciphertext for empty plaintext, got %q", ciphertext)
+		t.Fatalf(
+			"expected empty ciphertext for empty plaintext, got %q",
+			ciphertext,
+		)
 	}
 
 	plaintext, err := box.Decrypt("")
@@ -60,7 +66,10 @@ func TestEncrypt_EmptyStringPassesThrough(t *testing.T) {
 		t.Fatalf("Decrypt: %v", err)
 	}
 	if plaintext != "" {
-		t.Fatalf("expected empty plaintext for empty ciphertext, got %q", plaintext)
+		t.Fatalf(
+			"expected empty plaintext for empty ciphertext, got %q",
+			plaintext,
+		)
 	}
 }
 
