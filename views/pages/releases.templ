@@ -40,6 +40,7 @@ type GateState struct {
 	Reason         string
 	Bypassable     bool
 	AlreadyDeployed bool // true = this env already has this release; caller hides the row
+	RequiresApproval bool // true = the target lifecycle stage requires manual approval before running
 }
 
 // ReleaseView is the per-row data for the releases table.

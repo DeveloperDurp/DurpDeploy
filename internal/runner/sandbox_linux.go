@@ -129,8 +129,18 @@ func (s *Sandbox) createCgroup(deploymentID int64) string {
 		"cpu.max":    cgroupCPUMax,
 	}
 	for file, value := range limits {
-		if err := os.WriteFile(filepath.Join(dir, file), []byte(value), 0644); err != nil {
-			fmt.Fprintf(os.Stderr, "runner: setting %s on %s: %v\n", file, dir, err)
+		if err := os.WriteFile(
+			filepath.Join(dir, file),
+			[]byte(value),
+			0644,
+		); err != nil {
+			fmt.Fprintf(
+				os.Stderr,
+				"runner: setting %s on %s: %v\n",
+				file,
+				dir,
+				err,
+			)
 		}
 	}
 	return dir
@@ -144,7 +154,13 @@ func (s *Sandbox) addProcess(cgroup string, pid int) {
 	}
 	procs := filepath.Join(cgroup, "cgroup.procs")
 	if err := os.WriteFile(procs, []byte(strconv.Itoa(pid)), 0644); err != nil {
-		fmt.Fprintf(os.Stderr, "runner: adding pid %d to cgroup %s: %v\n", pid, cgroup, err)
+		fmt.Fprintf(
+			os.Stderr,
+			"runner: adding pid %d to cgroup %s: %v\n",
+			pid,
+			cgroup,
+			err,
+		)
 	}
 }
 
@@ -175,19 +191,32 @@ func (s *Sandbox) setupChroot(scratchRoot string) bool {
 		if err := os.MkdirAll(dst, 0755); err != nil {
 			continue
 		}
-		if err := syscall.Mount(src, dst, "", syscall.MS_BIND|syscall.MS_REC, ""); err != nil {
+		if err := syscall.Mount(
+			src,
+			dst,
+			"",
+			syscall.MS_BIND|syscall.MS_REC,
+			"",
+		); err != nil {
 			if s.chrootWarned.CompareAndSwap(false, true) {
 				fmt.Fprintf(
 					os.Stderr,
 					"runner: bind-mounting %s: %v (steps run without chroot isolation, see docs/deploy.md Step 5)\n",
-					src, err,
+					src,
+					err,
 				)
 			}
 			continue
 		}
 		// Remount read-only; the step must not be able to modify the
 		// host's /bin, /usr, /lib, /lib64 through the bind mount.
-		_ = syscall.Mount("", dst, "", syscall.MS_BIND|syscall.MS_REMOUNT|syscall.MS_RDONLY, "")
+		_ = syscall.Mount(
+			"",
+			dst,
+			"",
+			syscall.MS_BIND|syscall.MS_REMOUNT|syscall.MS_RDONLY,
+			"",
+		)
 		mounted = true
 	}
 	return mounted

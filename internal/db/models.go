@@ -8,13 +8,6 @@ import (
 	"database/sql"
 )
 
-type Approval struct {
-	ID           int64  `json:"id"`
-	DeploymentID int64  `json:"deployment_id"`
-	ApprovedBy   string `json:"approved_by"`
-	ApprovedAt   int64  `json:"approved_at"`
-}
-
 type AuditLog struct {
 	ID         int64          `json:"id"`
 	UserID     sql.NullInt64  `json:"user_id"`
@@ -35,6 +28,15 @@ type Deployment struct {
 	CreatedAt     int64          `json:"created_at"`
 	Forced        int64          `json:"forced"`
 	Note          sql.NullString `json:"note"`
+}
+
+type DeploymentApproval struct {
+	ID                   int64         `json:"id"`
+	DeploymentID         int64         `json:"deployment_id"`
+	ApprovedBy           string        `json:"approved_by"`
+	ApprovedAt           int64         `json:"approved_at"`
+	ApproverUserID       sql.NullInt64 `json:"approver_user_id"`
+	RequiredApproverRole string        `json:"required_approver_role"`
 }
 
 type DeploymentLog struct {

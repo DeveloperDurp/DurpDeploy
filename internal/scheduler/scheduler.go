@@ -240,13 +240,39 @@ func (s *Scheduler) fireOne(ctx context.Context, row db.ScheduledDeployment) {
 		}
 		return
 	}
-	blocked, reason := gate.Check(
+	// Combines the deployability gate and the requires-approval check
+	// (same lifecycle-stage gate the manual deploy handler enforces) into
+	// a single call so the lifecycle stages are only loaded once.
+	blocked, reason, requiresApproval, err := gate.CheckAndApproval(
 		ctx,
 		s.repo,
 		project,
 		release,
 		row.EnvironmentID,
 	)
+	if err != nil {
+		s.log.Error(
+			"gate check failed",
+			"schedule_id",
+			row.ID,
+			"project_id",
+			row.ProjectID,
+			"error",
+			err,
+		)
+		if err := s.advance(ctx, row, next); err != nil {
+			s.log.Error(
+				"advance failed",
+				"schedule_id",
+				row.ID,
+				"project_id",
+				row.ProjectID,
+				"error",
+				err,
+			)
+		}
+		return
+	}
 	if blocked {
 		s.log.Info(
 			"skipped_gate",
@@ -270,6 +296,10 @@ func (s *Scheduler) fireOne(ctx context.Context, row db.ScheduledDeployment) {
 		}
 		return
 	}
+	initialStatus := "pending"
+	if requiresApproval {
+		initialStatus = "pending_approval"
+	}
 
 	// create deployment
 	note := fmt.Sprintf("Scheduled: %d - %s", row.ID, row.Note.String)
@@ -278,7 +308,7 @@ func (s *Scheduler) fireOne(ctx context.Context, row db.ScheduledDeployment) {
 		db.CreateDeploymentParams{
 			ReleaseID:     row.ReleaseID,
 			EnvironmentID: row.EnvironmentID,
-			Status:        "pending",
+			Status:        initialStatus,
 			StartedAt:     sql.NullInt64{},
 			FinishedAt:    sql.NullInt64{},
 			Forced:        0,
@@ -317,15 +347,19 @@ func (s *Scheduler) fireOne(ctx context.Context, row db.ScheduledDeployment) {
 		row.ProjectID,
 		"deployment_id",
 		deployment.ID,
+		"status",
+		initialStatus,
 	)
 
-	// spawn runner without blocking the ticker
-	go s.runFunc(
-		context.Background(),
-		deployment.ID,
-		row.ReleaseID,
-		row.EnvironmentID,
-	)
+	if initialStatus == "pending" {
+		// spawn runner without blocking the ticker
+		go s.runFunc(
+			context.Background(),
+			deployment.ID,
+			row.ReleaseID,
+			row.EnvironmentID,
+		)
+	}
 
 	if err := s.advance(ctx, row, next); err != nil {
 		s.log.Error(

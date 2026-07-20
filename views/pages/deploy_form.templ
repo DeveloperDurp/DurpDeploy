@@ -97,13 +97,14 @@ templ DeployFormContent(project db.Project, releases []db.Release, selectedRelea
 								<span>This version is already deployed to some environments. Re-deploying will run the steps again.</span>
 							</div>
 						}
-						<select name="environment_id" class="select select-bordered" required>
+ 					<select name="environment_id" class="select select-bordered" required onchange="toggleDeploySubmitLabel(this)">
 							<option value="">Select env</option>
 							for _, e := range envs {
 								if e.State.Deployable {
 									<option
 										value={ strconv.FormatInt(e.Environment.ID, 10) }
 										data-gate="ok"
+										data-requires-approval={ strconv.FormatBool(e.State.RequiresApproval) }
 									>{ e.Environment.Name }</option>
 								}
 							}
@@ -114,6 +115,7 @@ templ DeployFormContent(project db.Project, releases []db.Release, selectedRelea
 											<option
 												value={ strconv.FormatInt(e.Environment.ID, 10) }
 												data-gate="forceable"
+												data-requires-approval={ strconv.FormatBool(e.State.RequiresApproval) }
 												title={ e.State.Reason }
 											>{ e.Environment.Name }</option>
 										}
@@ -127,6 +129,7 @@ templ DeployFormContent(project db.Project, releases []db.Release, selectedRelea
 											<option
 												value={ strconv.FormatInt(e.Environment.ID, 10) }
 												data-gate="already-deployed"
+												data-requires-approval={ strconv.FormatBool(e.State.RequiresApproval) }
 											>{ e.Environment.Name }</option>
 										}
 									}
@@ -156,7 +159,7 @@ templ DeployFormContent(project db.Project, releases []db.Release, selectedRelea
 				</div>
 			<div class="flex gap-2 justify-end">
 				<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost">Cancel</a>
-				<button type="submit" class="btn btn-primary">Deploy</button>
+				<button type="submit" class="btn btn-primary" data-submit-label="deploy-form">Deploy</button>
 			</div>
 				</form>
 			</div>
@@ -193,6 +196,15 @@ func hasAlreadyDeployedEnvs(envs []AvailableEnv) bool {
 // the same logic; they could be merged into a shared util later.
 templ DeployPageFormScript() {
 	<script>
+		function toggleDeploySubmitLabel(select) {
+			var form = select.closest('form');
+			if (!form) return;
+			var btn = form.querySelector('button[data-submit-label="deploy-form"]');
+			if (!btn) return;
+			var opt = select.options[select.selectedIndex];
+			var requiresApproval = opt && opt.dataset.requiresApproval === 'true';
+			btn.textContent = requiresApproval ? 'Request Approval' : 'Deploy';
+		}
 		function toggleDeployForce(cb) {
 			var form = cb.closest('form');
 			if (!form) return;
@@ -222,6 +234,10 @@ templ DeployPageFormScript() {
 				form.querySelectorAll('option[data-gate="forceable"]').forEach(function(o) {
 					o.disabled = true;
 				});
+				var select = form.querySelector('select[name="environment_id"]');
+				if (select) {
+					toggleDeploySubmitLabel(select);
+				}
 			});
 		});
 	</script>

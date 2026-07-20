@@ -151,7 +151,8 @@ func runServer() {
 	}()
 
 	slog.Info("server starting", "addr", ":8080")
-	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+	if err := srv.ListenAndServe(); err != nil &&
+		!errors.Is(err, http.ErrServerClosed) {
 		log.Fatalf("server failed: %v", err)
 	}
 	shutdownWG.Wait()
@@ -337,7 +338,10 @@ func runSecretKey(args []string) int {
 	_ = fs.Parse(args)
 
 	if fs.NArg() == 0 || fs.Arg(0) != "rotate" {
-		fmt.Fprintln(os.Stderr, "Usage: durpdeploy secret-key rotate [--plaintext]")
+		fmt.Fprintln(
+			os.Stderr,
+			"Usage: durpdeploy secret-key rotate [--plaintext]",
+		)
 		return 1
 	}
 
@@ -398,13 +402,23 @@ func runSecretKey(args []string) int {
 			var err error
 			plain, err = oldBox.Decrypt(v.Value.String)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "error: decrypt variable %d: %v\n", v.ID, err)
+				fmt.Fprintf(
+					os.Stderr,
+					"error: decrypt variable %d: %v\n",
+					v.ID,
+					err,
+				)
 				return 1
 			}
 		}
 		reenc, err := newBox.Encrypt(plain)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "error: encrypt variable %d: %v\n", v.ID, err)
+			fmt.Fprintf(
+				os.Stderr,
+				"error: encrypt variable %d: %v\n",
+				v.ID,
+				err,
+			)
 			return 1
 		}
 		if err := qtx.UpdateVariableValue(ctx, db.UpdateVariableValueParams{
@@ -479,6 +493,8 @@ func runSecretKey(args []string) int {
 	fmt.Println("Either write it to /etc/durpdeploy/key (0600, owned by the")
 	fmt.Println("durpdeploy user) or set DURPDEPLOY_SECRET_KEY to the value")
 	fmt.Println("above, then restart durpdeploy. The old key must not be")
-	fmt.Println("reused: every row above was just re-encrypted with the new one.")
+	fmt.Println(
+		"reused: every row above was just re-encrypted with the new one.",
+	)
 	return 0
 }

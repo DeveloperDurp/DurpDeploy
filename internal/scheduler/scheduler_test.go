@@ -172,6 +172,25 @@ func (f *testFixture) addLifecycleStage(
 	}
 }
 
+func (f *testFixture) addLifecycleStageWithApproval(
+	lifecycleID, envID int64,
+	sortOrder int64,
+) {
+	f.t.Helper()
+	_, err := f.repo.Queries.CreateLifecycleStage(
+		f.ctx(),
+		db.CreateLifecycleStageParams{
+			LifecycleID:      lifecycleID,
+			EnvironmentID:    envID,
+			SortOrder:        sortOrder,
+			RequiresApproval: 1,
+		},
+	)
+	if err != nil {
+		f.t.Fatalf("create lifecycle stage: %v", err)
+	}
+}
+
 func (f *testFixture) createSchedule(
 	projectID, releaseID, envID int64,
 	cronExpr string,
@@ -610,6 +629,48 @@ func TestTick_GatePass_Fires(t *testing.T) {
 	deps, _ := f.repo.Queries.ListDeploymentsByRelease(f.ctx(), rel.ID)
 	if len(deps) != 2 {
 		t.Fatalf("expected 2 deployments (dev + scheduled), got %d", len(deps))
+	}
+}
+
+// TestTick_RequiresApproval_CreatesPendingApprovalWithoutFiring verifies a
+// scheduled fire into a stage marked requires_approval creates the
+// deployment in "pending_approval" and does NOT dispatch the runner —
+// matching the manual deploy handler's behavior for the same stage.
+func TestTick_RequiresApproval_CreatesPendingApprovalWithoutFiring(
+	t *testing.T,
+) {
+	f := newFixture(t)
+	proj := f.createProject()
+	lc := f.createLifecycle("prod-lc")
+	f.attachLifecycle(proj.ID, lc.ID)
+
+	prod := f.createEnvironment("prod")
+	f.addLifecycleStageWithApproval(lc.ID, prod.ID, 0)
+
+	rel := f.createRelease(proj.ID)
+	_ = f.createSchedule(
+		proj.ID,
+		rel.ID,
+		prod.ID,
+		"* * * * *",
+		f.now.Add(-time.Minute),
+		1,
+		"requires-approval",
+	)
+
+	calls := f.captureRunCalls()
+	f.sched.Tick(f.ctx())
+
+	if len(*calls) != 0 {
+		t.Fatalf("expected 0 run calls, got %d", len(*calls))
+	}
+
+	deps, _ := f.repo.Queries.ListDeploymentsByRelease(f.ctx(), rel.ID)
+	if len(deps) != 1 {
+		t.Fatalf("expected 1 deployment, got %d", len(deps))
+	}
+	if deps[0].Status != "pending_approval" {
+		t.Fatalf("expected status pending_approval, got %q", deps[0].Status)
 	}
 }
 

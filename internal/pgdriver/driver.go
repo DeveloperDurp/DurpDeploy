@@ -35,7 +35,10 @@ func (c *wrappedConn) Prepare(query string) (driver.Stmt, error) {
 	return c.Conn.Prepare(RewriteSQL(query))
 }
 
-func (c *wrappedConn) PrepareContext(ctx context.Context, query string) (driver.Stmt, error) {
+func (c *wrappedConn) PrepareContext(
+	ctx context.Context,
+	query string,
+) (driver.Stmt, error) {
 	query = RewriteSQL(query)
 	if p, ok := c.Conn.(driver.ConnPrepareContext); ok {
 		return p.PrepareContext(ctx, query)
@@ -43,7 +46,11 @@ func (c *wrappedConn) PrepareContext(ctx context.Context, query string) (driver.
 	return c.Conn.Prepare(query)
 }
 
-func (c *wrappedConn) ExecContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
+func (c *wrappedConn) ExecContext(
+	ctx context.Context,
+	query string,
+	args []driver.NamedValue,
+) (driver.Result, error) {
 	e, ok := c.Conn.(driver.ExecerContext)
 	if !ok {
 		return nil, driver.ErrSkip
@@ -51,7 +58,11 @@ func (c *wrappedConn) ExecContext(ctx context.Context, query string, args []driv
 	return e.ExecContext(ctx, RewriteSQL(query), args)
 }
 
-func (c *wrappedConn) QueryContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
+func (c *wrappedConn) QueryContext(
+	ctx context.Context,
+	query string,
+	args []driver.NamedValue,
+) (driver.Rows, error) {
 	q, ok := c.Conn.(driver.QueryerContext)
 	if !ok {
 		return nil, driver.ErrSkip
@@ -59,7 +70,10 @@ func (c *wrappedConn) QueryContext(ctx context.Context, query string, args []dri
 	return q.QueryContext(ctx, RewriteSQL(query), args)
 }
 
-func (c *wrappedConn) BeginTx(ctx context.Context, opts driver.TxOptions) (driver.Tx, error) {
+func (c *wrappedConn) BeginTx(
+	ctx context.Context,
+	opts driver.TxOptions,
+) (driver.Tx, error) {
 	if b, ok := c.Conn.(driver.ConnBeginTx); ok {
 		return b.BeginTx(ctx, opts)
 	}

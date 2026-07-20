@@ -534,6 +534,7 @@ func (h *LifecycleHandler) UpdateLifecycleStage(
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	stage.RequiresApproval = reqApproval
 
 	if r.Header.Get("HX-Request") == "true" {
 		lc, err := h.repo.Queries.GetLifecycle(r.Context(), stage.LifecycleID)

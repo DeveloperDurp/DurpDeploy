@@ -97,7 +97,7 @@ templ LifecycleStageRow(lc db.Lifecycle, index int, total int, s LifecycleStageV
 						class="checkbox checkbox-sm"
 						hx-patch={ templ.SafeURL("/lifecycles/" + strconv.FormatInt(lc.ID, 10) + "/stages/" + strconv.FormatInt(s.Stage.ID, 10)) }
 						hx-vals={ fmt.Sprintf(`{"requires_approval":%q}`, ternaryNext(s.Stage.RequiresApproval)) }
-						hx-target="#lifecycle-stages"
+						hx-target="closest tr"
 						hx-swap="outerHTML"
 						checked?={ s.Stage.RequiresApproval != 0 }
 					/>

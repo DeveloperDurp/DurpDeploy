@@ -46,14 +46,23 @@ func TestPostgres_RepositoryWithTx(t *testing.T) {
 
 	repo := New(conn)
 
-	p, err := repo.Queries.CreateProject(ctx, db.CreateProjectParams{Name: "repo-test", Description: sql.NullString{String: "desc", Valid: true}})
+	p, err := repo.Queries.CreateProject(
+		ctx,
+		db.CreateProjectParams{
+			Name:        "repo-test",
+			Description: sql.NullString{String: "desc", Valid: true},
+		},
+	)
 	if err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
 	t.Logf("created project %d %s", p.ID, p.Name)
 
 	err = repo.WithTx(ctx, func(q *db.Queries) error {
-		_, err := q.CreateEnvironment(ctx, db.CreateEnvironmentParams{Name: "repo-test-env"})
+		_, err := q.CreateEnvironment(
+			ctx,
+			db.CreateEnvironmentParams{Name: "repo-test-env"},
+		)
 		return err
 	})
 	if err != nil {
