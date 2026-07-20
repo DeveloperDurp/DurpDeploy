@@ -45,6 +45,33 @@ The Debian 12 runbook below is the recommended production path.
 
 ---
 
+## Database: SQLite (default) or PostgreSQL
+
+DurpDeploy runs on SQLite out of the box — no separate database server to
+provision, and the recommended choice for a single-instance install (see
+`docs/backup-restore.md` for the Litestream-based backup story).
+
+PostgreSQL is also fully supported, for teams that already run Postgres and
+want the app's data alongside everything else. The driver is picked
+automatically from `DURPDEPLOY_DB`: a `postgres://` or `postgresql://` URL
+talks to PostgreSQL, anything else is treated as a SQLite file path (the
+default). Both use the exact same migrations and queries — no separate
+schema to maintain.
+
+```bash
+# SQLite (default)
+export DURPDEPLOY_DB=/var/lib/durpdeploy/durpdeploy.db
+
+# PostgreSQL
+export DURPDEPLOY_DB="postgres://durpdeploy:<password>@localhost:5432/durpdeploy?sslmode=disable"
+```
+
+Migrations run automatically on startup against whichever database
+`DURPDEPLOY_DB` points at, same as SQLite. There is no dump/import path
+between the two — pick one per environment.
+
+---
+
 ## Prerequisites
 
 - A Debian 12 VM with a **public IP** and root/sudo access.
