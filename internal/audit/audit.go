@@ -96,6 +96,7 @@ var actionMap = map[string]string{
 	"POST /templates":                                  "create_template",
 	"PUT /templates/{id}":                              "update_template",
 	"DELETE /templates/{id}":                           "delete_template",
+	"POST /admin/notifications/settings":               "update_global_notifications",
 	"POST /admin/users":                                "create_user",
 	"PUT /admin/users/{id}":                            "update_user",
 	"DELETE /admin/users/{id}":                         "delete_user",

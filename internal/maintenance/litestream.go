@@ -9,17 +9,17 @@ import (
 	"time"
 
 	"durpdeploy/internal/events"
-	"durpdeploy/internal/repository"
 )
 
 // StartLitestreamCheck begins a background goroutine that periodically executes
 // a command to verify backup health. If the command fails, it publishes a
-// BackupUnhealthy event to the event bus for all projects.
+// single global BackupUnhealthy event (backup health is a system-wide
+// concern, routed through global_notifications, not per-project settings).
 //
 // Configuration via environment variables:
 // - DURPDEPLOY_LITESTREAM_CHECK_COMMAND: the shell command to run (e.g. "litestream ltx ...")
 // - DURPDEPLOY_LITESTREAM_CHECK_INTERVAL: how often to check (default 1h)
-func StartLitestreamCheck(ctx context.Context, repo *repository.Repository, bus *events.Bus) {
+func StartLitestreamCheck(ctx context.Context, bus *events.Bus) {
 	command := os.Getenv("DURPDEPLOY_LITESTREAM_CHECK_COMMAND")
 	if command == "" {
 		return
@@ -46,11 +46,11 @@ func StartLitestreamCheck(ctx context.Context, repo *repository.Repository, bus 
 				err := runCheck(ctx, command)
 				if err != nil {
 					slog.Error("litestream health check failed", "err", err)
-					publishBackupEvent(ctx, repo, bus, events.BackupUnhealthy, fmt.Sprintf("Litestream backup health check failed: %v", err))
+					publishBackupEvent(ctx, bus, events.BackupUnhealthy, fmt.Sprintf("Litestream backup health check failed: %v", err))
 					wasUnhealthy = true
 				} else if wasUnhealthy {
 					slog.Info("litestream health check recovered")
-					publishBackupEvent(ctx, repo, bus, events.BackupHealthy, "Litestream backup health check recovered")
+					publishBackupEvent(ctx, bus, events.BackupHealthy, "Litestream backup health check recovered")
 					wasUnhealthy = false
 				}
 			}
@@ -68,29 +68,13 @@ func runCheck(ctx context.Context, command string) error {
 	return nil
 }
 
-func publishBackupEvent(ctx context.Context, repo *repository.Repository, bus *events.Bus, typ events.Type, message string) {
-	projects, err := repo.Queries.ListProjects(ctx)
-	if err != nil {
-		slog.Error("failed to list projects for backup notification", "err", err)
-		return
-	}
-
-	if len(projects) == 0 {
-		// No projects yet, just record to history with no associated project.
-		// It won't reach any Slack/Email notifiers since they are project-scoped,
-		// but admins can see it in /admin/notifications.
-		bus.Publish(ctx, events.Event{
-			Type:    typ,
-			Message: message,
-		})
-		return
-	}
-
-	for _, p := range projects {
-		bus.Publish(ctx, events.Event{
-			Type:      typ,
-			ProjectID: p.ID,
-			Message:   message,
-		})
-	}
+// publishBackupEvent publishes a single project-less event. Backup health
+// is a system-wide concern, not a per-project one, so it is routed through
+// the global_notifications settings (ProjectID left at its zero value)
+// instead of fanning out to every project as before.
+func publishBackupEvent(ctx context.Context, bus *events.Bus, typ events.Type, message string) {
+	bus.Publish(ctx, events.Event{
+		Type:    typ,
+		Message: message,
+	})
 }

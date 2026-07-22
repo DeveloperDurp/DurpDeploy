@@ -12,6 +12,7 @@ templ NotificationsPage(entries []db.ListNotificationEventsRow, currentPath stri
 	@layouts.Base("Notifications", currentPath) {
 		<div class="flex justify-between items-center mb-4">
 			<h1 class="text-3xl font-bold">Notifications</h1>
+			<a href="/admin/notifications/settings" class="btn btn-ghost btn-sm">Settings</a>
 		</div>
 		<p class="text-sm text-gray-500 mb-4">
 			Recent deployment events published to the internal event bus, and

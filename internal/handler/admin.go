@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
@@ -73,4 +74,67 @@ func (h *AdminHandler) ListNotifications(
 		Render(r.Context(), w); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
+}
+
+// GetNotificationSettings renders /admin/notifications/settings: the
+// global_notifications singleton form used for project-less/system-wide
+// events (e.g. litestream backup health). Admin role required (see
+// ListAudit above).
+func (h *AdminHandler) GetNotificationSettings(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	global, err := h.repo.Queries.GetGlobalNotifications(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if err := pages.GlobalNotificationsPage(global, r.URL.Path).
+		Render(r.Context(), w); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+// UpdateNotificationSettings saves the global Slack webhook URL,
+// comma-separated notify_emails list, Gotify server URL/token, and/or
+// Discord webhook URL. Any field may be blank to disable that notifier.
+func (h *AdminHandler) UpdateNotificationSettings(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	webhook := strings.TrimSpace(r.FormValue("slack_webhook_url"))
+	emails := strings.TrimSpace(r.FormValue("notify_emails"))
+	gotifyURL := strings.TrimSpace(r.FormValue("gotify_url"))
+	gotifyToken := strings.TrimSpace(r.FormValue("gotify_token"))
+	discordWebhook := strings.TrimSpace(r.FormValue("discord_webhook_url"))
+
+	_, err := h.repo.Queries.UpdateGlobalNotifications(
+		r.Context(),
+		db.UpdateGlobalNotificationsParams{
+			SlackWebhookUrl: sql.NullString{
+				String: webhook,
+				Valid:  webhook != "",
+			},
+			NotifyEmails: sql.NullString{String: emails, Valid: emails != ""},
+			GotifyUrl: sql.NullString{
+				String: gotifyURL,
+				Valid:  gotifyURL != "",
+			},
+			GotifyToken: sql.NullString{
+				String: gotifyToken,
+				Valid:  gotifyToken != "",
+			},
+			DiscordWebhookUrl: sql.NullString{
+				String: discordWebhook,
+				Valid:  discordWebhook != "",
+			},
+		},
+	)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	http.Redirect(w, r, "/admin/notifications/settings", http.StatusSeeOther)
 }

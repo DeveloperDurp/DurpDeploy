@@ -217,6 +217,14 @@ func NewRouter(
 			adminH := handler.NewAdminHandler(repo)
 			ar.Get("/admin/audit", adminH.ListAudit)
 			ar.Get("/admin/notifications", adminH.ListNotifications)
+			ar.Get(
+				"/admin/notifications/settings",
+				adminH.GetNotificationSettings,
+			)
+			ar.Post(
+				"/admin/notifications/settings",
+				adminH.UpdateNotificationSettings,
+			)
 
 			usersH := handler.NewUsersHandler(repo)
 			ar.Get("/admin/users", usersH.ListUsers)
