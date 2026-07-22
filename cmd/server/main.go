@@ -22,8 +22,10 @@ import (
 
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/events"
 	"durpdeploy/internal/handler"
 	"durpdeploy/internal/migrate"
+	"durpdeploy/internal/notify"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/runner"
 	"durpdeploy/internal/scheduler"
@@ -107,6 +109,17 @@ func runServer() {
 	repo.SetSecretBox(box)
 	broker := runner.NewLogBroker()
 	rnr := runner.New(repo, broker)
+
+	// Event bus for Slack/email/Gotify notifications on deployment
+	// start/success/failure (Stage 3). Every event is recorded to
+	// notification_events regardless of whether any notifier is actually
+	// configured, so /admin/notifications is useful even with nothing set up.
+	bus := events.NewBus(repo)
+	bus.Register(notify.NewSlackNotifier())
+	bus.Register(notify.NewEmailNotifier(notify.LoadSMTPConfigFromEnv()))
+	bus.Register(notify.NewGotifyNotifier())
+	bus.Register(notify.NewDiscordNotifier())
+	rnr.SetEventBus(bus)
 	parser := cron.NewParser(
 		cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow,
 	)

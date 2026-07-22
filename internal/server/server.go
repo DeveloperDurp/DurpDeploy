@@ -154,6 +154,11 @@ func NewRouter(
 			ppr.Get("/projects/{id}/edit", ph.EditProject)
 			ppr.Put("/projects/{id}", ph.UpdateProject)
 			ppr.Delete("/projects/{id}", ph.DeleteProject)
+			ppr.Get("/projects/{id}/notifications", ph.GetProjectNotifications)
+			ppr.Post(
+				"/projects/{id}/notifications",
+				ph.UpdateProjectNotifications,
+			)
 
 			ppr.Get("/projects/{id}/steps", sh.ListSteps)
 			ppr.Get("/projects/{id}/steps-page", sh.StepsPage)
@@ -211,6 +216,7 @@ func NewRouter(
 			ar.Use(auth.RequireRole("admin"))
 			adminH := handler.NewAdminHandler(repo)
 			ar.Get("/admin/audit", adminH.ListAudit)
+			ar.Get("/admin/notifications", adminH.ListNotifications)
 
 			usersH := handler.NewUsersHandler(repo)
 			ar.Get("/admin/users", usersH.ListUsers)

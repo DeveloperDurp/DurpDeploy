@@ -273,7 +273,15 @@ reset without DB access — see Troubleshooting below.
 
 ---
 
-## Step 9 — Verify
+## Step 9 — Configure notifications (optional)
+
+DurpDeploy supports event-driven Slack, Email, Gotify, and Discord notifications.
+
+See [**`docs/notifications.md`**](notifications.md) for the full configuration guide, environment variables, and per-project setup steps.
+
+---
+
+## Step 10 — Verify
 
 From your workstation:
 

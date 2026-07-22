@@ -49,6 +49,7 @@ templ ProjectDetail(project db.Project, panel LifecyclePanel, vars []db.Variable
 			<a href={ fmt.Sprintf("/projects/%d/steps-page", project.ID) } class="btn btn-primary">Steps</a>
 			<a href={ fmt.Sprintf("/projects/%d/variables", project.ID) } class="btn btn-secondary">Variables</a>
 			<a href={ fmt.Sprintf("/projects/%d/releases", project.ID) } class="btn btn-accent">Releases</a>
+			<a href={ fmt.Sprintf("/projects/%d/notifications", project.ID) } class="btn btn-secondary">Notifications</a>
 			if CanWrite(ctx) {
 				<a href={ fmt.Sprintf("/projects/%d/deploy", project.ID) } class="btn btn-primary">Deploy</a>
 				<a href={ fmt.Sprintf("/projects/%d/schedules", project.ID) } class="btn btn-secondary">Schedules</a>
@@ -56,6 +57,148 @@ templ ProjectDetail(project db.Project, panel LifecyclePanel, vars []db.Variable
 		</div>
 		@LifecyclePanelSection(project, panel)
 		@VariablesPreviewSection(project, vars, envs)
+	</div>
+}
+
+// NotificationSettingsSection renders the Slack/Email/Gotify/Discord cards
+// (Stage 3): a Slack incoming webhook URL, a comma-separated list of email
+// recipients, a Gotify server URL + app token, and/or a Discord incoming
+// webhook URL. Any of these can be left blank to skip that notifier. It
+// does not render its own <form> or Save button — ProjectNotificationsPage
+// wraps it in a form so the Save button can live in the page header next
+// to Back.
+templ NotificationSettingsSection(project db.Project) {
+	<div class="mt-8">
+		<div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+			@SlackNotificationCard(project)
+			@EmailNotificationCard(project)
+			@GotifyNotificationCard(project)
+			@DiscordNotificationCard(project)
+		</div>
+	</div>
+}
+
+templ SlackNotificationCard(project db.Project) {
+	<div class="card bg-base-200 p-4">
+		<h3 class="font-bold mb-2">Slack</h3>
+		if CanWrite(ctx) {
+			<div class="form-control">
+				<label class="label">
+					<span class="label-text">Webhook URL</span>
+				</label>
+				<input
+					type="text"
+					name="slack_webhook_url"
+					value={ project.SlackWebhookUrl.String }
+					placeholder="https://hooks.slack.com/services/..."
+					class="input input-bordered input-sm w-full"
+				/>
+			</div>
+		} else {
+			<p class="text-sm text-gray-400">
+				if project.SlackWebhookUrl.String != "" {
+					configured
+				} else {
+					not configured
+				}
+			</p>
+		}
+	</div>
+}
+
+templ EmailNotificationCard(project db.Project) {
+	<div class="card bg-base-200 p-4">
+		<h3 class="font-bold mb-2">Email</h3>
+		if CanWrite(ctx) {
+			<div class="form-control">
+				<label class="label">
+					<span class="label-text">Notify emails (comma-separated)</span>
+				</label>
+				<input
+					type="text"
+					name="notify_emails"
+					value={ project.NotifyEmails.String }
+					placeholder="alice@example.com, bob@example.com"
+					class="input input-bordered input-sm w-full"
+				/>
+			</div>
+		} else {
+			<p class="text-sm text-gray-400">
+				if project.NotifyEmails.String != "" {
+					{ project.NotifyEmails.String }
+				} else {
+					not configured
+				}
+			</p>
+		}
+	</div>
+}
+
+templ GotifyNotificationCard(project db.Project) {
+	<div class="card bg-base-200 p-4">
+		<h3 class="font-bold mb-2">Gotify</h3>
+		if CanWrite(ctx) {
+			<div class="form-control">
+				<label class="label">
+					<span class="label-text">Server URL</span>
+				</label>
+				<input
+					type="text"
+					name="gotify_url"
+					value={ project.GotifyUrl.String }
+					placeholder="https://gotify.example.com"
+					class="input input-bordered input-sm w-full"
+				/>
+			</div>
+			<div class="form-control">
+				<label class="label">
+					<span class="label-text">App token</span>
+				</label>
+				<input
+					type="text"
+					name="gotify_token"
+					value={ project.GotifyToken.String }
+					placeholder="AbCdEf123..."
+					class="input input-bordered input-sm w-full"
+				/>
+			</div>
+		} else {
+			<p class="text-sm text-gray-400">
+				if project.GotifyUrl.String != "" {
+					configured
+				} else {
+					not configured
+				}
+			</p>
+		}
+	</div>
+}
+
+templ DiscordNotificationCard(project db.Project) {
+	<div class="card bg-base-200 p-4">
+		<h3 class="font-bold mb-2">Discord</h3>
+		if CanWrite(ctx) {
+			<div class="form-control">
+				<label class="label">
+					<span class="label-text">Webhook URL</span>
+				</label>
+				<input
+					type="text"
+					name="discord_webhook_url"
+					value={ project.DiscordWebhookUrl.String }
+					placeholder="https://discord.com/api/webhooks/..."
+					class="input input-bordered input-sm w-full"
+				/>
+			</div>
+		} else {
+			<p class="text-sm text-gray-400">
+				if project.DiscordWebhookUrl.String != "" {
+					configured
+				} else {
+					not configured
+				}
+			</p>
+		}
 	</div>
 }
 
@@ -254,5 +397,42 @@ templ ProjectDetailPage(project db.Project, panel LifecyclePanel, vars []db.Vari
 			{Label: project.Name},
 		})
 		@ProjectDetail(project, panel, vars, envs)
+	}
+}
+
+// ProjectNotificationsPage is the dedicated page for a project's Slack/
+// email/Gotify notification settings, linked from the project overview's
+// "Notifications" button. The whole page is one form so a single Save
+// button (kept next to Back in the header) submits all three channels
+// at once.
+templ ProjectNotificationsPage(project db.Project, currentPath string) {
+	@layouts.Base(project.Name+" Notifications", currentPath) {
+		@components.Breadcrumbs([]components.Crumb{
+			{Label: "Home", Href: "/"},
+			{Label: "Projects", Href: "/projects"},
+			{Label: project.Name, Href: fmt.Sprintf("/projects/%d", project.ID)},
+			{Label: "Notifications"},
+		})
+		if CanWrite(ctx) {
+			<form
+				method="post"
+				action={ templ.SafeURL(fmt.Sprintf("/projects/%d/notifications", project.ID)) }
+			>
+				<div class="flex justify-between items-center mb-4">
+					<h1 class="text-3xl font-bold">Notifications</h1>
+					<div class="flex gap-2">
+						<button type="submit" class="btn btn-primary btn-sm">Save</button>
+						<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost btn-sm">Back</a>
+					</div>
+				</div>
+				@NotificationSettingsSection(project)
+			</form>
+		} else {
+			<div class="flex justify-between items-center mb-4">
+				<h1 class="text-3xl font-bold">Notifications</h1>
+				<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost btn-sm">Back</a>
+			</div>
+			@NotificationSettingsSection(project)
+		}
 	}
 }

@@ -309,6 +309,57 @@ func TestAudit_FilterByUser(t *testing.T) {
 	}
 }
 
+// TestNotifications_AdminCanView: an admin session can GET
+// /admin/notifications and sees published events with their delivery
+// status rendered.
+func TestNotifications_AdminCanView(t *testing.T) {
+	h := newProjectHarness(t)
+
+	_, err := h.repo.Queries.CreateNotificationEvent(
+		context.Background(),
+		db.CreateNotificationEventParams{
+			EventType: "deployment_started",
+			Message:   "Deployment #1 started on prod",
+			Results:   `{"slack":"ok","email":"skipped"}`,
+		},
+	)
+	if err != nil {
+		t.Fatalf("create notification event: %v", err)
+	}
+
+	resp, err := h.authedClient().Get(h.server.URL + "/admin/notifications")
+	if err != nil {
+		t.Fatalf("get /admin/notifications: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), "Deployment #1 started on prod") {
+		t.Fatalf("body missing event message: %s", body)
+	}
+	if !strings.Contains(string(body), "slack: ok") {
+		t.Fatalf("body missing slack delivery status: %s", body)
+	}
+}
+
+// TestNotifications_DeployerForbidden: a deployer session gets 403 on
+// /admin/notifications, same as /admin/audit.
+func TestNotifications_DeployerForbidden(t *testing.T) {
+	h := newProjectHarness(t)
+	h.setRole("deployer")
+
+	resp, err := h.authedClient().Get(h.server.URL + "/admin/notifications")
+	if err != nil {
+		t.Fatalf("get /admin/notifications: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403", resp.StatusCode)
+	}
+}
+
 func mustURL(s string) *url.URL {
 	u, err := url.Parse(s)
 	if err != nil {

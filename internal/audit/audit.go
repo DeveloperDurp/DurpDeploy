@@ -66,6 +66,7 @@ var actionMap = map[string]string{
 	"POST /projects":                                   "create_project",
 	"PUT /projects/{id}":                               "update_project",
 	"DELETE /projects/{id}":                            "delete_project",
+	"POST /projects/{id}/notifications":                "update_project_notifications",
 	"POST /environments":                               "create_environment",
 	"PUT /environments/{id}":                           "update_environment",
 	"DELETE /environments/{id}":                        "delete_environment",

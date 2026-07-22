@@ -270,6 +270,23 @@ func (h *projectHarness) getProjectPage(projectID int64) string {
 	return buf.String()
 }
 
+func (h *projectHarness) getProjectNotificationsPage(projectID int64) string {
+	h.t.Helper()
+	resp, err := h.authedClient().Get(
+		fmt.Sprintf("%s/projects/%d/notifications", h.server.URL, projectID),
+	)
+	if err != nil {
+		h.t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		h.t.Fatalf("status %d", resp.StatusCode)
+	}
+	buf := new(bytes.Buffer)
+	buf.ReadFrom(resp.Body)
+	return buf.String()
+}
+
 // TestProjectPanel_FailedAttemptIsVisible verifies that a deployment which
 // failed (and never succeeded) still shows up in the panel's Status column
 // and Last Deployed column. This is the user-visible fix: "I deployed v1.0.0
@@ -707,6 +724,96 @@ func TestUpdateProject_AfterSubmitLandsOnProject(t *testing.T) {
 	}
 	if loc := nonHxResp.Header.Get("Location"); loc != wantRedirect {
 		t.Errorf("non-HX Location: got %q, want %q", loc, wantRedirect)
+	}
+}
+
+// TestProject_UpdateNotifications verifies the Slack webhook URL,
+// notify_emails, and Gotify URL/token saved through the notification
+// settings form persist and are reflected on the dedicated notifications page.
+func TestProject_UpdateNotifications(t *testing.T) {
+	h := newProjectHarness(t)
+	proj := h.makeProject("notif-settings")
+
+	form := url.Values{
+		"slack_webhook_url":   {"https://hooks.slack.example/abc"},
+		"notify_emails":       {"a@example.com, b@example.com"},
+		"gotify_url":          {"https://gotify.example.com"},
+		"gotify_token":        {"tok123"},
+		"discord_webhook_url": {"https://discord.com/api/webhooks/xyz"},
+		"csrf_token":          {h.csrfToken()},
+	}
+	resp, err := h.authedClient().PostForm(
+		fmt.Sprintf("%s/projects/%d/notifications", h.server.URL, proj.ID),
+		form,
+	)
+	if err != nil {
+		t.Fatalf("post notifications: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("status = %d, want 303", resp.StatusCode)
+	}
+	wantLoc := fmt.Sprintf("/projects/%d/notifications", proj.ID)
+	if loc := resp.Header.Get("Location"); loc != wantLoc {
+		t.Errorf("Location = %q, want %q", loc, wantLoc)
+	}
+
+	updated, err := h.repo.Queries.GetProject(context.Background(), proj.ID)
+	if err != nil {
+		t.Fatalf("get project: %v", err)
+	}
+	if updated.SlackWebhookUrl.String != "https://hooks.slack.example/abc" {
+		t.Fatalf("slack webhook = %q", updated.SlackWebhookUrl.String)
+	}
+	if updated.NotifyEmails.String != "a@example.com, b@example.com" {
+		t.Fatalf("notify emails = %q", updated.NotifyEmails.String)
+	}
+	if updated.GotifyUrl.String != "https://gotify.example.com" {
+		t.Fatalf("gotify url = %q", updated.GotifyUrl.String)
+	}
+	if updated.GotifyToken.String != "tok123" {
+		t.Fatalf("gotify token = %q", updated.GotifyToken.String)
+	}
+	if updated.DiscordWebhookUrl.String != "https://discord.com/api/webhooks/xyz" {
+		t.Fatalf("discord webhook = %q", updated.DiscordWebhookUrl.String)
+	}
+
+	notifPage := h.getProjectNotificationsPage(proj.ID)
+	if !strings.Contains(notifPage, "https://hooks.slack.example/abc") {
+		t.Errorf("notifications page should show the saved webhook URL")
+	}
+	if !strings.Contains(notifPage, "a@example.com, b@example.com") {
+		t.Errorf("notifications page should show the saved notify emails")
+	}
+	if !strings.Contains(notifPage, "https://gotify.example.com") {
+		t.Errorf("notifications page should show the saved Gotify URL")
+	}
+	if !strings.Contains(notifPage, "tok123") {
+		t.Errorf("notifications page should show the saved Gotify token")
+	}
+	if !strings.Contains(notifPage, "https://discord.com/api/webhooks/xyz") {
+		t.Errorf("notifications page should show the saved Discord webhook URL")
+	}
+	for _, section := range []string{"Slack", "Email", "Gotify", "Discord"} {
+		if !strings.Contains(notifPage, ">"+section+"<") {
+			t.Errorf(
+				"notifications page should have a dedicated %s section",
+				section,
+			)
+		}
+	}
+
+	detailPage := h.getProjectPage(proj.ID)
+	if !strings.Contains(
+		detailPage,
+		fmt.Sprintf(`href="/projects/%d/notifications"`, proj.ID),
+	) {
+		t.Errorf("project detail page should link to the notifications page")
+	}
+	if strings.Contains(detailPage, "https://hooks.slack.example/abc") {
+		t.Errorf(
+			"project detail page should no longer show notification settings inline",
+		)
 	}
 }
 

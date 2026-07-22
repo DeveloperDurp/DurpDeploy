@@ -111,7 +111,7 @@ func (q *Queries) ListProjectMembers(ctx context.Context, projectID int64) ([]Li
 }
 
 const listProjectsForUser = `-- name: ListProjectsForUser :many
-SELECT p.id, p.name, p.description, p.created_at, p.lifecycle_id FROM projects p
+SELECT p.id, p.name, p.description, p.created_at, p.lifecycle_id, p.slack_webhook_url, p.notify_emails, p.gotify_url, p.gotify_token, p.discord_webhook_url FROM projects p
 JOIN project_members pm ON pm.project_id = p.id
 WHERE pm.user_id = ?
 ORDER BY p.created_at DESC
@@ -132,6 +132,11 @@ func (q *Queries) ListProjectsForUser(ctx context.Context, userID int64) ([]Proj
 			&i.Description,
 			&i.CreatedAt,
 			&i.LifecycleID,
+			&i.SlackWebhookUrl,
+			&i.NotifyEmails,
+			&i.GotifyUrl,
+			&i.GotifyToken,
+			&i.DiscordWebhookUrl,
 		); err != nil {
 			return nil, err
 		}

@@ -1,0 +1,166 @@
+package pages
+
+import (
+	"durpdeploy/internal/db"
+	"durpdeploy/views/layouts"
+	"encoding/json"
+	"fmt"
+	"sort"
+)
+
+templ NotificationsPage(entries []db.ListNotificationEventsRow, currentPath string, currentUser *db.User) {
+	@layouts.Base("Notifications", currentPath) {
+		<div class="flex justify-between items-center mb-4">
+			<h1 class="text-3xl font-bold">Notifications</h1>
+		</div>
+		<p class="text-sm text-gray-500 mb-4">
+			Recent deployment events published to the internal event bus, and
+			the delivery status of each configured notifier (Slack, email).
+			Click a row to see the full details.
+		</p>
+		if len(entries) == 0 {
+			<div class="card bg-base-200 p-8 text-center">
+				<p class="text-gray-400">No notification events yet.</p>
+			</div>
+		} else {
+			<div class="overflow-x-auto">
+				<table class="table table-zebra table-fixed w-full">
+					<thead>
+						<tr>
+							<th class="w-32 sm:w-44">Time</th>
+							<th class="hidden sm:table-cell w-32">Event</th>
+							<th class="hidden md:table-cell w-32">Project</th>
+							<th class="hidden md:table-cell w-32">Environment</th>
+							<th class="w-auto">Message</th>
+							<th class="w-24 sm:w-56">Delivery</th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, entry := range entries {
+							@NotificationEventRow(entry)
+						}
+					</tbody>
+				</table>
+			</div>
+			for _, entry := range entries {
+				@NotificationEventModal(entry)
+			}
+		}
+	}
+}
+
+templ NotificationEventRow(entry db.ListNotificationEventsRow) {
+	<tr
+		class="cursor-pointer hover"
+		data-modal-target={ fmt.Sprintf("notification_modal_%d", entry.ID) }
+		onclick="document.getElementById(this.dataset.modalTarget).showModal()"
+	>
+		<td class="truncate text-xs sm:text-sm" title={ formatUnixTime(entry.CreatedAt) }>{ formatUnixTime(entry.CreatedAt) }</td>
+		<td class="hidden sm:table-cell truncate">{ entry.EventType }</td>
+		<td class="hidden md:table-cell truncate" title={ entry.ProjectName.String }>
+			if entry.ProjectName.Valid {
+				{ entry.ProjectName.String }
+			} else {
+				<span class="text-gray-500">-</span>
+			}
+		</td>
+		<td class="hidden md:table-cell truncate" title={ entry.EnvironmentName.String }>
+			if entry.EnvironmentName.Valid {
+				{ entry.EnvironmentName.String }
+			} else {
+				<span class="text-gray-500">-</span>
+			}
+		</td>
+		<td class="truncate">{ entry.Message }</td>
+		<td class="truncate">
+			<div class="flex gap-1 overflow-hidden whitespace-nowrap">
+				for _, r := range deliveryResults(entry.Results) {
+					<span class={ "badge badge-sm shrink-0 " + deliveryBadgeClass(r.status) }>
+						{ r.notifier }: { r.status }
+					</span>
+				}
+			</div>
+		</td>
+	</tr>
+}
+
+templ NotificationEventModal(entry db.ListNotificationEventsRow) {
+	<dialog id={ fmt.Sprintf("notification_modal_%d", entry.ID) } class="modal">
+		<div class="modal-box w-11/12 max-w-2xl rounded-2xl shadow-2xl border border-base-300 bg-base-200">
+			<h3 class="text-lg font-bold mb-4">Notification Event</h3>
+			<dl class="grid grid-cols-1 sm:grid-cols-[8rem_1fr] gap-y-2 text-sm">
+				<dt class="text-gray-500">Time</dt>
+				<dd>{ formatUnixTime(entry.CreatedAt) }</dd>
+				<dt class="text-gray-500">Event</dt>
+				<dd>{ entry.EventType }</dd>
+				<dt class="text-gray-500">Project</dt>
+				<dd>
+					if entry.ProjectName.Valid {
+						{ entry.ProjectName.String }
+					} else {
+						<span class="text-gray-500">-</span>
+					}
+				</dd>
+				<dt class="text-gray-500">Environment</dt>
+				<dd>
+					if entry.EnvironmentName.Valid {
+						{ entry.EnvironmentName.String }
+					} else {
+						<span class="text-gray-500">-</span>
+					}
+				</dd>
+				<dt class="text-gray-500">Message</dt>
+				<dd class="whitespace-normal break-words">{ entry.Message }</dd>
+				<dt class="text-gray-500">Delivery</dt>
+				<dd>
+					<div class="flex flex-wrap gap-1">
+						for _, r := range deliveryResults(entry.Results) {
+							<span class={ "badge badge-sm " + deliveryBadgeClass(r.status) }>
+								{ r.notifier }: { r.status }
+							</span>
+						}
+					</div>
+				</dd>
+			</dl>
+			<div class="modal-action">
+				<form method="dialog">
+					<button class="btn">Close</button>
+				</form>
+			</div>
+		</div>
+		<form method="dialog" class="modal-backdrop">
+			<button class="cursor-default" aria-label="Close"></button>
+		</form>
+	</dialog>
+}
+
+type deliveryResult struct {
+	notifier string
+	status   string
+}
+
+// deliveryResults parses the notification_events.results JSON blob
+// (map[notifier]status) into a stable, sorted slice for rendering.
+func deliveryResults(resultsJSON string) []deliveryResult {
+	var m map[string]string
+	if err := json.Unmarshal([]byte(resultsJSON), &m); err != nil {
+		return nil
+	}
+	out := make([]deliveryResult, 0, len(m))
+	for k, v := range m {
+		out = append(out, deliveryResult{notifier: k, status: v})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].notifier < out[j].notifier })
+	return out
+}
+
+func deliveryBadgeClass(status string) string {
+	switch {
+	case status == "ok":
+		return "badge-success"
+	case status == "skipped":
+		return "badge-ghost"
+	default:
+		return "badge-error"
+	}
+}
