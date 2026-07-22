@@ -70,12 +70,28 @@ type LifecycleStage struct {
 	RequiresApproval int64 `json:"requires_approval"`
 }
 
+type NotificationEvent struct {
+	ID            int64         `json:"id"`
+	EventType     string        `json:"event_type"`
+	DeploymentID  sql.NullInt64 `json:"deployment_id"`
+	ProjectID     sql.NullInt64 `json:"project_id"`
+	EnvironmentID sql.NullInt64 `json:"environment_id"`
+	Message       string        `json:"message"`
+	Results       string        `json:"results"`
+	CreatedAt     int64         `json:"created_at"`
+}
+
 type Project struct {
-	ID          int64          `json:"id"`
-	Name        string         `json:"name"`
-	Description sql.NullString `json:"description"`
-	CreatedAt   int64          `json:"created_at"`
-	LifecycleID sql.NullInt64  `json:"lifecycle_id"`
+	ID                int64          `json:"id"`
+	Name              string         `json:"name"`
+	Description       sql.NullString `json:"description"`
+	CreatedAt         int64          `json:"created_at"`
+	LifecycleID       sql.NullInt64  `json:"lifecycle_id"`
+	SlackWebhookUrl   sql.NullString `json:"slack_webhook_url"`
+	NotifyEmails      sql.NullString `json:"notify_emails"`
+	GotifyUrl         sql.NullString `json:"gotify_url"`
+	GotifyToken       sql.NullString `json:"gotify_token"`
+	DiscordWebhookUrl sql.NullString `json:"discord_webhook_url"`
 }
 
 type ProjectMember struct {

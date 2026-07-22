@@ -14,6 +14,8 @@ A single-binary deployment tool for running bash scripts against environments. D
 - **Variables** - Key/value pairs scoped to environments, resolved at deploy time
 - **Releases** - Immutable snapshots of steps + variables with version numbers
 - **Deployments** - Execute releases against environments with live SSE log streaming
+- **Approvals** - Manual gate for production deployments requiring admin sign-off
+- **Notifications** - Event-driven Slack, Email, Gotify, and Discord alerts for deployment status
 - **Cancel** - Stop running deployments mid-execution
 
 ## Quick Start

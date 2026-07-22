@@ -20,7 +20,7 @@ func (q *Queries) ClearProjectLifecycle(ctx context.Context, id int64) error {
 }
 
 const createProject = `-- name: CreateProject :one
-INSERT INTO projects (name, description) VALUES (?, ?) RETURNING id, name, description, created_at, lifecycle_id
+INSERT INTO projects (name, description) VALUES (?, ?) RETURNING id, name, description, created_at, lifecycle_id, slack_webhook_url, notify_emails, gotify_url, gotify_token, discord_webhook_url
 `
 
 type CreateProjectParams struct {
@@ -37,6 +37,11 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (P
 		&i.Description,
 		&i.CreatedAt,
 		&i.LifecycleID,
+		&i.SlackWebhookUrl,
+		&i.NotifyEmails,
+		&i.GotifyUrl,
+		&i.GotifyToken,
+		&i.DiscordWebhookUrl,
 	)
 	return i, err
 }
@@ -51,7 +56,7 @@ func (q *Queries) DeleteProject(ctx context.Context, id int64) error {
 }
 
 const getProject = `-- name: GetProject :one
-SELECT id, name, description, created_at, lifecycle_id FROM projects WHERE id = ?
+SELECT id, name, description, created_at, lifecycle_id, slack_webhook_url, notify_emails, gotify_url, gotify_token, discord_webhook_url FROM projects WHERE id = ?
 `
 
 func (q *Queries) GetProject(ctx context.Context, id int64) (Project, error) {
@@ -63,12 +68,17 @@ func (q *Queries) GetProject(ctx context.Context, id int64) (Project, error) {
 		&i.Description,
 		&i.CreatedAt,
 		&i.LifecycleID,
+		&i.SlackWebhookUrl,
+		&i.NotifyEmails,
+		&i.GotifyUrl,
+		&i.GotifyToken,
+		&i.DiscordWebhookUrl,
 	)
 	return i, err
 }
 
 const listProjects = `-- name: ListProjects :many
-SELECT id, name, description, created_at, lifecycle_id FROM projects ORDER BY created_at DESC
+SELECT id, name, description, created_at, lifecycle_id, slack_webhook_url, notify_emails, gotify_url, gotify_token, discord_webhook_url FROM projects ORDER BY created_at DESC
 `
 
 func (q *Queries) ListProjects(ctx context.Context) ([]Project, error) {
@@ -86,6 +96,11 @@ func (q *Queries) ListProjects(ctx context.Context) ([]Project, error) {
 			&i.Description,
 			&i.CreatedAt,
 			&i.LifecycleID,
+			&i.SlackWebhookUrl,
+			&i.NotifyEmails,
+			&i.GotifyUrl,
+			&i.GotifyToken,
+			&i.DiscordWebhookUrl,
 		); err != nil {
 			return nil, err
 		}
@@ -115,7 +130,7 @@ func (q *Queries) SetProjectLifecycle(ctx context.Context, arg SetProjectLifecyc
 }
 
 const updateProject = `-- name: UpdateProject :one
-UPDATE projects SET name = ?, description = ? WHERE id = ? RETURNING id, name, description, created_at, lifecycle_id
+UPDATE projects SET name = ?, description = ? WHERE id = ? RETURNING id, name, description, created_at, lifecycle_id, slack_webhook_url, notify_emails, gotify_url, gotify_token, discord_webhook_url
 `
 
 type UpdateProjectParams struct {
@@ -133,6 +148,36 @@ func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (P
 		&i.Description,
 		&i.CreatedAt,
 		&i.LifecycleID,
+		&i.SlackWebhookUrl,
+		&i.NotifyEmails,
+		&i.GotifyUrl,
+		&i.GotifyToken,
+		&i.DiscordWebhookUrl,
 	)
 	return i, err
+}
+
+const updateProjectNotifications = `-- name: UpdateProjectNotifications :exec
+UPDATE projects SET slack_webhook_url = ?, notify_emails = ?, gotify_url = ?, gotify_token = ?, discord_webhook_url = ? WHERE id = ?
+`
+
+type UpdateProjectNotificationsParams struct {
+	SlackWebhookUrl   sql.NullString `json:"slack_webhook_url"`
+	NotifyEmails      sql.NullString `json:"notify_emails"`
+	GotifyUrl         sql.NullString `json:"gotify_url"`
+	GotifyToken       sql.NullString `json:"gotify_token"`
+	DiscordWebhookUrl sql.NullString `json:"discord_webhook_url"`
+	ID                int64          `json:"id"`
+}
+
+func (q *Queries) UpdateProjectNotifications(ctx context.Context, arg UpdateProjectNotificationsParams) error {
+	_, err := q.db.ExecContext(ctx, updateProjectNotifications,
+		arg.SlackWebhookUrl,
+		arg.NotifyEmails,
+		arg.GotifyUrl,
+		arg.GotifyToken,
+		arg.DiscordWebhookUrl,
+		arg.ID,
+	)
+	return err
 }

@@ -53,3 +53,24 @@ func (h *AdminHandler) ListAudit(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
+
+// ListNotifications renders /admin/notifications: the last 100 events
+// published to the internal EventBus, along with each notifier's delivery
+// status (ok/skipped/failed), so admins can observe that Slack/email
+// notifications actually fire. Admin role required (see ListAudit above).
+func (h *AdminHandler) ListNotifications(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	entries, err := h.repo.Queries.ListNotificationEvents(r.Context(), 100)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	user := auth.UserFromContext(r.Context())
+	if err := pages.NotificationsPage(entries, r.URL.Path, user).
+		Render(r.Context(), w); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}

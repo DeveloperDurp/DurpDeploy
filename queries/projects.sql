@@ -18,3 +18,6 @@ UPDATE projects SET lifecycle_id = ? WHERE id = ?;
 
 -- name: ClearProjectLifecycle :exec
 UPDATE projects SET lifecycle_id = NULL WHERE id = ?;
+
+-- name: UpdateProjectNotifications :exec
+UPDATE projects SET slack_webhook_url = ?, notify_emails = ?, gotify_url = ?, gotify_token = ?, discord_webhook_url = ? WHERE id = ?;

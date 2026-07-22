@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/events"
 	"durpdeploy/internal/repository"
 )
 
@@ -52,6 +53,11 @@ type DeploymentRunner struct {
 	// durpdeploy-runner user (P1-4). Resolved once at startup; a no-op if
 	// that account/platform isn't available (see sandbox_linux.go).
 	sandbox *Sandbox
+	// bus publishes deployment_started/succeeded/failed events for the
+	// Slack/email notifiers (Stage 3). Nil until SetEventBus is called —
+	// existing callers (tests, recovery path) that never call it simply
+	// get no notifications, no other behavior change.
+	bus *events.Bus
 }
 
 func New(repo *repository.Repository, broker *LogBroker) *DeploymentRunner {
@@ -62,6 +68,13 @@ func New(repo *repository.Repository, broker *LogBroker) *DeploymentRunner {
 		pgids:   make(map[int64]int),
 		sandbox: newSandbox(),
 	}
+}
+
+// SetEventBus wires the runner to publish deployment lifecycle events. Kept
+// as a setter (instead of a New parameter) so every existing call site does
+// not need to change; only cmd/server/main.go's real server startup calls it.
+func (r *DeploymentRunner) SetEventBus(bus *events.Bus) {
+	r.bus = bus
 }
 
 // KillAll SIGKILLs the process group of every step currently running,
@@ -308,6 +321,22 @@ func (r *DeploymentRunner) Run(
 		return
 	}
 
+	envName := "unknown environment"
+	if env, err := r.repo.Queries.GetEnvironment(
+		ctx,
+		environmentID,
+	); err == nil {
+		envName = env.Name
+	}
+	r.publish(
+		ctx,
+		events.DeploymentStarted,
+		deploymentID,
+		release.ProjectID,
+		environmentID,
+		fmt.Sprintf("Deployment #%d started on %s", deploymentID, envName),
+	)
+
 	var steps []struct {
 		Name           string `json:"name"`
 		ScriptBody     string `json:"script_body"`
@@ -397,6 +426,19 @@ func (r *DeploymentRunner) Run(
 					},
 				},
 			)
+			r.publish(
+				ctx,
+				events.DeploymentFailed,
+				deploymentID,
+				release.ProjectID,
+				environmentID,
+				fmt.Sprintf(
+					"Deployment #%d failed on %s: %v",
+					deploymentID,
+					envName,
+					lastErr,
+				),
+			)
 			return
 		}
 	}
@@ -413,6 +455,34 @@ func (r *DeploymentRunner) Run(
 			FinishedAt: sql.NullInt64{Int64: time.Now().Unix(), Valid: true},
 		},
 	)
+	r.publish(
+		ctx,
+		events.DeploymentSucceeded,
+		deploymentID,
+		release.ProjectID,
+		environmentID,
+		fmt.Sprintf("Deployment #%d succeeded on %s", deploymentID, envName),
+	)
+}
+
+// publish is a no-op when the runner has no event bus wired (SetEventBus
+// never called), so tests and the recovery path don't need a bus.
+func (r *DeploymentRunner) publish(
+	ctx context.Context,
+	typ events.Type,
+	deploymentID, projectID, environmentID int64,
+	message string,
+) {
+	if r.bus == nil {
+		return
+	}
+	r.bus.Publish(ctx, events.Event{
+		Type:          typ,
+		DeploymentID:  deploymentID,
+		ProjectID:     projectID,
+		EnvironmentID: environmentID,
+		Message:       message,
+	})
 }
 
 func (r *DeploymentRunner) failUnlessCancelled(

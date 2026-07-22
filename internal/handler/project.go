@@ -178,6 +178,93 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/projects", http.StatusSeeOther)
 }
 
+// UpdateProjectNotifications saves the project's Slack webhook URL,
+// comma-separated notify_emails list, Gotify server URL/token, and/or
+// Discord webhook URL (Stage 3). Any field may be blank to disable that
+// notifier; there's no separate validation beyond trimming since a
+// malformed webhook URL, email, or Gotify URL just fails/skips at delivery
+// time.
+func (h *ProjectHandler) UpdateProjectNotifications(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	id, err := parseProjectID(r)
+	if err != nil {
+		http.Error(w, "Invalid project ID", http.StatusBadRequest)
+		return
+	}
+
+	webhook := strings.TrimSpace(r.FormValue("slack_webhook_url"))
+	emails := strings.TrimSpace(r.FormValue("notify_emails"))
+	gotifyURL := strings.TrimSpace(r.FormValue("gotify_url"))
+	gotifyToken := strings.TrimSpace(r.FormValue("gotify_token"))
+	discordWebhook := strings.TrimSpace(r.FormValue("discord_webhook_url"))
+
+	err = h.repo.Queries.UpdateProjectNotifications(
+		r.Context(),
+		db.UpdateProjectNotificationsParams{
+			SlackWebhookUrl: sql.NullString{
+				String: webhook,
+				Valid:  webhook != "",
+			},
+			NotifyEmails: sql.NullString{String: emails, Valid: emails != ""},
+			GotifyUrl: sql.NullString{
+				String: gotifyURL,
+				Valid:  gotifyURL != "",
+			},
+			GotifyToken: sql.NullString{
+				String: gotifyToken,
+				Valid:  gotifyToken != "",
+			},
+			DiscordWebhookUrl: sql.NullString{
+				String: discordWebhook,
+				Valid:  discordWebhook != "",
+			},
+			ID: id,
+		},
+	)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	http.Redirect(
+		w,
+		r,
+		fmt.Sprintf("/projects/%d/notifications", id),
+		http.StatusSeeOther,
+	)
+}
+
+// GetProjectNotifications renders the dedicated notifications settings page
+// for a project (moved off the project overview so the overview stays
+// focused on lifecycle/variables).
+func (h *ProjectHandler) GetProjectNotifications(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	id, err := parseProjectID(r)
+	if err != nil {
+		http.Error(w, "Invalid project ID", http.StatusBadRequest)
+		return
+	}
+
+	project, err := h.repo.Queries.GetProject(r.Context(), id)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			http.Error(w, "Project not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if err := pages.ProjectNotificationsPage(project, r.URL.Path).
+		Render(r.Context(), w); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
 func (h *ProjectHandler) GetProject(w http.ResponseWriter, r *http.Request) {
 	id, err := parseProjectID(r)
 	if err != nil {
