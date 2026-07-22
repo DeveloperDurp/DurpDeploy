@@ -24,6 +24,7 @@ import (
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/events"
 	"durpdeploy/internal/handler"
+	"durpdeploy/internal/maintenance"
 	"durpdeploy/internal/migrate"
 	"durpdeploy/internal/notify"
 	"durpdeploy/internal/repository"
@@ -45,6 +46,8 @@ func main() {
 		switch os.Args[1] {
 		case "admin":
 			os.Exit(runAdmin(os.Args[2:]))
+		case "audit":
+			os.Exit(runAudit(os.Args[2:]))
 		case "secret-key":
 			os.Exit(runSecretKey(os.Args[2:]))
 		case "version", "--version", "-v":
@@ -52,7 +55,7 @@ func main() {
 			os.Exit(0)
 		case "help", "--help", "-h":
 			fmt.Println(
-				"Usage: durpdeploy [admin create --email X --password Y] [secret-key rotate [--plaintext]] [version] [help]",
+				"Usage: durpdeploy [admin create --email X --password Y] [audit prune --days N] [secret-key rotate [--plaintext]] [version] [help]",
 			)
 			fmt.Println("With no subcommand, starts the HTTP server.")
 			os.Exit(0)
@@ -125,6 +128,7 @@ func runServer() {
 	)
 	sched := scheduler.New(repo, rnr)
 	ctx, cancel := context.WithCancel(context.Background())
+	maintenance.StartLitestreamCheck(ctx, repo, bus)
 	sched.Start(ctx)
 	defer sched.Stop()
 	defer cancel()
@@ -325,6 +329,63 @@ func runAdmin(args []string) int {
 	}
 
 	fmt.Printf("Created admin user: %s\n", email)
+	return 0
+}
+
+// runAudit implements `durpdeploy audit prune --days N`.
+// It opens the same database the server uses and deletes audit_log rows
+// older than the specified retention period.
+func runAudit(args []string) int {
+	fs := flag.NewFlagSet("audit", flag.ExitOnError)
+	_ = fs.Parse(args)
+
+	if fs.NArg() == 0 {
+		fmt.Fprintln(os.Stderr, "Usage: durpdeploy audit prune --days N")
+		return 1
+	}
+
+	if fs.Arg(0) != "prune" {
+		fmt.Fprintf(
+			os.Stderr,
+			"unknown audit subcommand %q; only \"prune\" is supported\n",
+			fs.Arg(0),
+		)
+		return 1
+	}
+
+	pruneCmd := flag.NewFlagSet("prune", flag.ExitOnError)
+	daysPtr := pruneCmd.Int("days", 0, "retention in days")
+	if err := pruneCmd.Parse(fs.Args()[1:]); err != nil {
+		return 1
+	}
+
+	days := *daysPtr
+	if days <= 0 {
+		fmt.Fprintln(os.Stderr, "error: --days must be greater than 0")
+		return 1
+	}
+
+	ctx := context.Background()
+	dbConn, err := migrate.Run(loadDSN())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: open database: %v\n", err)
+		return 1
+	}
+	defer dbConn.Close()
+
+	repo := repository.New(dbConn)
+	cutoff := time.Now().AddDate(0, 0, -days).Unix()
+
+	if err := repo.Queries.PruneAuditLogs(ctx, cutoff); err != nil {
+		fmt.Fprintf(os.Stderr, "error: prune audit logs: %v\n", err)
+		return 1
+	}
+
+	fmt.Printf(
+		"Pruned audit logs older than %d days (cutoff: %s)\n",
+		days,
+		time.Unix(cutoff, 0).Format(time.RFC3339),
+	)
 	return 0
 }
 
