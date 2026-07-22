@@ -17,3 +17,6 @@ LIMIT sqlc.arg(page_limit);
 
 -- name: CountAuditLogs :one
 SELECT COUNT(*) FROM audit_log;
+
+-- name: PruneAuditLogs :exec
+DELETE FROM audit_log WHERE created_at < ?;

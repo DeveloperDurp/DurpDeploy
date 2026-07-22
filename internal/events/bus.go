@@ -23,6 +23,8 @@ const (
 	DeploymentStarted   Type = "deployment_started"
 	DeploymentSucceeded Type = "deployment_succeeded"
 	DeploymentFailed    Type = "deployment_failed"
+	BackupUnhealthy     Type = "backup_unhealthy"
+	BackupHealthy       Type = "backup_healthy"
 )
 
 // Event carries everything a Notifier needs to describe and deliver a

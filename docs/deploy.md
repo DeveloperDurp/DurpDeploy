@@ -308,6 +308,48 @@ sudo -u durpdeploy sqlite3 /var/lib/durpdeploy/durpdeploy.db \
 
 ---
 
+## Maintenance
+
+### Audit Log Pruning
+
+The `audit_log` table can grow large on busy instances. Use the CLI to prune logs older than a specified number of days:
+
+```bash
+# Prune logs older than 90 days
+sudo -u durpdeploy /usr/local/bin/durpdeploy audit prune --days 90
+```
+
+You can automate this with a daily cron job:
+
+```bash
+# /etc/cron.d/durpdeploy-prune
+0 4 * * * durpdeploy /usr/local/bin/durpdeploy audit prune --days 90
+```
+
+### Backup Health Monitoring (Litestream)
+
+If you are using Litestream (Option B below), you can enable an automated health check that triggers a notification (Slack, Discord, Gotify, or Email) if replication stops or falls behind.
+
+1. Configure the check command and interval via environment variables in your systemd unit or environment file:
+
+   ```ini
+   # This command should exit with code 0 if healthy.
+   # The example below checks if 'litestream ltx' returns any replication files.
+   Environment=DURPDEPLOY_LITESTREAM_CHECK_COMMAND="litestream ltx -config /etc/litestream.yml /var/lib/durpdeploy/durpdeploy.db | grep -q ."
+   Environment=DURPDEPLOY_LITESTREAM_CHECK_INTERVAL=1h
+   ```
+
+2. Reload and restart:
+
+   ```bash
+   sudo systemctl daemon-reload
+   sudo systemctl restart durpdeploy
+   ```
+
+When the check command fails, a `backup_unhealthy` event is published to all projects that have notifications configured. A `backup_healthy` event is published once the command succeeds again. All health check events are also visible to admins at `/admin/notifications`.
+
+---
+
 ## Backup
 
 SQLite WAL mode makes a live `sqlite3 .backup` safe (it takes a consistent

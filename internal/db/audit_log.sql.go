@@ -143,3 +143,12 @@ func (q *Queries) ListAuditLogsFiltered(ctx context.Context, arg ListAuditLogsFi
 	}
 	return items, nil
 }
+
+const pruneAuditLogs = `-- name: PruneAuditLogs :exec
+DELETE FROM audit_log WHERE created_at < ?
+`
+
+func (q *Queries) PruneAuditLogs(ctx context.Context, createdAt int64) error {
+	_, err := q.db.ExecContext(ctx, pruneAuditLogs, createdAt)
+	return err
+}
