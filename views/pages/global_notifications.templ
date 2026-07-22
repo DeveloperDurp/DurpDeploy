@@ -1,0 +1,161 @@
+package pages
+
+import (
+	"durpdeploy/internal/db"
+	"durpdeploy/views/components"
+	"durpdeploy/views/layouts"
+)
+
+// GlobalNotificationCards renders the Slack/Email/Gotify/Discord cards for
+// the global_notifications singleton, reusing the same field names as the
+// per-project NotificationSettingsSection (project.go) so the same POST
+// handler shape (webhook/emails/gotify url+token/discord webhook) applies.
+templ GlobalNotificationCards(global db.GlobalNotification) {
+	<div class="mt-8">
+		<div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+			<div class="card bg-base-200 p-4">
+				<h3 class="font-bold mb-2">Slack</h3>
+				if CanWrite(ctx) {
+					<div class="form-control">
+						<label class="label">
+							<span class="label-text">Webhook URL</span>
+						</label>
+						<input
+							type="text"
+							name="slack_webhook_url"
+							value={ global.SlackWebhookUrl.String }
+							placeholder="https://hooks.slack.com/services/..."
+							class="input input-bordered input-sm w-full"
+						/>
+					</div>
+				} else {
+					<p class="text-sm text-gray-400">
+						if global.SlackWebhookUrl.String != "" {
+							configured
+						} else {
+							not configured
+						}
+					</p>
+				}
+			</div>
+			<div class="card bg-base-200 p-4">
+				<h3 class="font-bold mb-2">Email</h3>
+				if CanWrite(ctx) {
+					<div class="form-control">
+						<label class="label">
+							<span class="label-text">Notify emails (comma-separated)</span>
+						</label>
+						<input
+							type="text"
+							name="notify_emails"
+							value={ global.NotifyEmails.String }
+							placeholder="alice@example.com, bob@example.com"
+							class="input input-bordered input-sm w-full"
+						/>
+					</div>
+				} else {
+					<p class="text-sm text-gray-400">
+						if global.NotifyEmails.String != "" {
+							{ global.NotifyEmails.String }
+						} else {
+							not configured
+						}
+					</p>
+				}
+			</div>
+			<div class="card bg-base-200 p-4">
+				<h3 class="font-bold mb-2">Gotify</h3>
+				if CanWrite(ctx) {
+					<div class="form-control">
+						<label class="label">
+							<span class="label-text">Server URL</span>
+						</label>
+						<input
+							type="text"
+							name="gotify_url"
+							value={ global.GotifyUrl.String }
+							placeholder="https://gotify.example.com"
+							class="input input-bordered input-sm w-full"
+						/>
+					</div>
+					<div class="form-control">
+						<label class="label">
+							<span class="label-text">App token</span>
+						</label>
+						<input
+							type="text"
+							name="gotify_token"
+							value={ global.GotifyToken.String }
+							placeholder="AbCdEf123..."
+							class="input input-bordered input-sm w-full"
+						/>
+					</div>
+				} else {
+					<p class="text-sm text-gray-400">
+						if global.GotifyUrl.String != "" {
+							configured
+						} else {
+							not configured
+						}
+					</p>
+				}
+			</div>
+			<div class="card bg-base-200 p-4">
+				<h3 class="font-bold mb-2">Discord</h3>
+				if CanWrite(ctx) {
+					<div class="form-control">
+						<label class="label">
+							<span class="label-text">Webhook URL</span>
+						</label>
+						<input
+							type="text"
+							name="discord_webhook_url"
+							value={ global.DiscordWebhookUrl.String }
+							placeholder="https://discord.com/api/webhooks/..."
+							class="input input-bordered input-sm w-full"
+						/>
+					</div>
+				} else {
+					<p class="text-sm text-gray-400">
+						if global.DiscordWebhookUrl.String != "" {
+							configured
+						} else {
+							not configured
+						}
+					</p>
+				}
+			</div>
+		</div>
+	</div>
+}
+
+// GlobalNotificationsPage is the admin-only page for configuring the
+// global_notifications singleton used by project-less/system-wide events
+// (e.g. litestream backup health). Mirrors ProjectNotificationsPage
+// (project_detail.templ) — one form, one Save button next to Back.
+templ GlobalNotificationsPage(global db.GlobalNotification, currentPath string) {
+	@layouts.Base("Notification Settings", currentPath) {
+		@components.Breadcrumbs([]components.Crumb{
+			{Label: "Home", Href: "/"},
+			{Label: "Notification Settings"},
+		})
+		if CanWrite(ctx) {
+			<form method="post" action="/admin/notifications/settings">
+				<div class="flex justify-between items-center mb-4">
+					<h1 class="text-3xl font-bold">Notification Settings</h1>
+					<div class="flex gap-2">
+						<button type="submit" class="btn btn-primary btn-sm">Save</button>
+						<a href="/admin/notifications" class="btn btn-ghost btn-sm">Back</a>
+					</div>
+				</div>
+				@GlobalNotificationCards(global)
+			</form>
+		} else {
+			<div class="flex justify-between items-center mb-4">
+				<h1 class="text-3xl font-bold">Notification Settings</h1>
+				<a href="/admin/notifications" class="btn btn-ghost btn-sm">Back</a>
+			</div>
+			@GlobalNotificationCards(global)
+		}
+	}
+}

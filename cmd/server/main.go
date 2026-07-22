@@ -128,7 +128,7 @@ func runServer() {
 	)
 	sched := scheduler.New(repo, rnr)
 	ctx, cancel := context.WithCancel(context.Background())
-	maintenance.StartLitestreamCheck(ctx, repo, bus)
+	maintenance.StartLitestreamCheck(ctx, bus)
 	sched.Start(ctx)
 	defer sched.Stop()
 	defer cancel()

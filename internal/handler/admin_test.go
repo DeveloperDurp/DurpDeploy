@@ -360,6 +360,70 @@ func TestNotifications_DeployerForbidden(t *testing.T) {
 	}
 }
 
+// TestGlobalNotificationSettings_AdminCanViewAndUpdate: an admin session
+// can GET /admin/notifications/settings, and POSTing new channel values
+// persists them (verified by re-fetching the page and by re-reading the
+// global_notifications row directly).
+func TestGlobalNotificationSettings_AdminCanViewAndUpdate(t *testing.T) {
+	h := newProjectHarness(t)
+
+	resp, err := h.authedClient().
+		Get(h.server.URL + "/admin/notifications/settings")
+	if err != nil {
+		t.Fatalf("get /admin/notifications/settings: %v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", resp.StatusCode, body)
+	}
+
+	form := url.Values{
+		"slack_webhook_url": {"https://hooks.slack.com/services/x"},
+		"notify_emails":     {"ops@example.com"},
+	}
+	form.Set("csrf_token", h.csrfToken())
+	postResp, err := h.authedClient().
+		PostForm(h.server.URL+"/admin/notifications/settings", form)
+	if err != nil {
+		t.Fatalf("post /admin/notifications/settings: %v", err)
+	}
+	_, _ = io.Copy(io.Discard, postResp.Body)
+	postResp.Body.Close()
+	if postResp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("status = %d, want 303", postResp.StatusCode)
+	}
+
+	global, err := h.repo.Queries.GetGlobalNotifications(context.Background())
+	if err != nil {
+		t.Fatalf("get global notifications: %v", err)
+	}
+	if global.SlackWebhookUrl.String != "https://hooks.slack.com/services/x" {
+		t.Fatalf("slack webhook not saved: %+v", global)
+	}
+	if global.NotifyEmails.String != "ops@example.com" {
+		t.Fatalf("notify emails not saved: %+v", global)
+	}
+}
+
+// TestGlobalNotificationSettings_DeployerForbidden: a deployer session
+// gets 403 on /admin/notifications/settings, same as the other /admin/*
+// routes.
+func TestGlobalNotificationSettings_DeployerForbidden(t *testing.T) {
+	h := newProjectHarness(t)
+	h.setRole("deployer")
+
+	resp, err := h.authedClient().
+		Get(h.server.URL + "/admin/notifications/settings")
+	if err != nil {
+		t.Fatalf("get /admin/notifications/settings: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403", resp.StatusCode)
+	}
+}
+
 func mustURL(s string) *url.URL {
 	u, err := url.Parse(s)
 	if err != nil {

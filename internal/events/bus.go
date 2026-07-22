@@ -72,25 +72,45 @@ func (b *Bus) Register(n Notifier) {
 	b.notifiers = append(b.notifiers, n)
 }
 
+// splitEmails parses a comma-separated notify_emails column into a
+// trimmed, non-empty slice. Shared between the project and global
+// notification-settings lookups in Publish.
+func splitEmails(v sql.NullString) []string {
+	if !v.Valid || v.String == "" {
+		return nil
+	}
+	var emails []string
+	for _, p := range strings.Split(v.String, ",") {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			emails = append(emails, p)
+		}
+	}
+	return emails
+}
+
 // Publish loads the target project's notification settings, runs every
 // registered notifier, and records the event plus each notifier's outcome.
 // Errors loading the project or writing the history row are swallowed
 // (best-effort observability; must never fail the deployment itself).
 func (b *Bus) Publish(ctx context.Context, evt Event) {
-	if project, err := b.repo.Queries.GetProject(
+	if evt.ProjectID == 0 {
+		// Project-less/system-wide event (e.g. backup health): load
+		// channels from the global_notifications singleton instead of a
+		// project row.
+		if global, err := b.repo.Queries.GetGlobalNotifications(ctx); err == nil {
+			evt.SlackWebhookURL = global.SlackWebhookUrl.String
+			evt.NotifyEmails = splitEmails(global.NotifyEmails)
+			evt.GotifyURL = global.GotifyUrl.String
+			evt.GotifyToken = global.GotifyToken.String
+			evt.DiscordWebhookURL = global.DiscordWebhookUrl.String
+		}
+	} else if project, err := b.repo.Queries.GetProject(
 		ctx,
 		evt.ProjectID,
 	); err == nil {
 		evt.SlackWebhookURL = project.SlackWebhookUrl.String
-		if project.NotifyEmails.Valid && project.NotifyEmails.String != "" {
-			parts := strings.Split(project.NotifyEmails.String, ",")
-			for _, p := range parts {
-				p = strings.TrimSpace(p)
-				if p != "" {
-					evt.NotifyEmails = append(evt.NotifyEmails, p)
-				}
-			}
-		}
+		evt.NotifyEmails = splitEmails(project.NotifyEmails)
 		evt.GotifyURL = project.GotifyUrl.String
 		evt.GotifyToken = project.GotifyToken.String
 		evt.DiscordWebhookURL = project.DiscordWebhookUrl.String

@@ -55,6 +55,16 @@ type Environment struct {
 	CreatedAt   int64          `json:"created_at"`
 }
 
+type GlobalNotification struct {
+	ID                int64          `json:"id"`
+	SlackWebhookUrl   sql.NullString `json:"slack_webhook_url"`
+	NotifyEmails      sql.NullString `json:"notify_emails"`
+	GotifyUrl         sql.NullString `json:"gotify_url"`
+	GotifyToken       sql.NullString `json:"gotify_token"`
+	DiscordWebhookUrl sql.NullString `json:"discord_webhook_url"`
+	UpdatedAt         int64          `json:"updated_at"`
+}
+
 type Lifecycle struct {
 	ID          int64          `json:"id"`
 	Name        string         `json:"name"`
