@@ -39,6 +39,19 @@ func CSRFMiddleware() func(http.Handler) http.Handler {
 				return
 			}
 
+			// /api/lint is a read-only linting action, exempt from CSRF
+			// and the viewer write-block, but a valid session is still
+			// required (AuthMiddleware runs first and sets it).
+			if path == "/api/lint" {
+				sess := SessionFromContext(r.Context())
+				if sess == nil {
+					http.Error(w, "Unauthorized", http.StatusUnauthorized)
+					return
+				}
+				next.ServeHTTP(w, r)
+				return
+			}
+
 			sess := SessionFromContext(r.Context())
 			if sess == nil {
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)

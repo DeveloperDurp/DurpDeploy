@@ -64,11 +64,84 @@ templ StepForm(step db.Step, projectID int64, isNew bool, errorMsg string) {
 					<span class="text-error text-sm mt-1">{ errorMsg }</span>
 				}
 			</div>
-			<div class="form-control">
+			<div
+				x-data="{
+					script: '',
+					diagnostics: [],
+					lineNumbers: '1',
+					modalOpen: false,
+					lint() {
+						fetch('/api/lint', {
+							method: 'POST',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({ script: this.script })
+						})
+							.then(res => res.json())
+							.then(data => { this.diagnostics = data.diagnostics || []; })
+							.catch(() => {});
+					},
+					updateLineNumbers() {
+						const count = this.script.split('\n').length;
+						this.lineNumbers = Array.from({ length: count }, (_, i) => i + 1).join('\n');
+					},
+					syncScroll() {
+						this.$refs.gutter.scrollTop = this.$refs.textarea.scrollTop;
+					},
+					syncModalScroll() {
+						this.$refs.modalGutter.scrollTop = this.$refs.modalTextarea.scrollTop;
+					}
+				}"
+				x-init="script = $refs.textarea.value; lint(); updateLineNumbers(); $watch('script', () => { lint(); updateLineNumbers(); })"
+				class="form-control"
+			>
 				<label class="label">
 					<span class="label-text">Script Body (Bash)</span>
+					<button type="button" class="btn btn-ghost btn-xs" x-on:click="modalOpen = true; $nextTick(() => { $refs.modal.showModal(); $refs.modalTextarea.focus(); })">Fullscreen</button>
 				</label>
-				<textarea name="script_body" class="textarea textarea-bordered" rows="4">{ step.ScriptBody }</textarea>
+				<div class="flex font-mono text-sm border border-base-300 rounded bg-base-100 overflow-hidden">
+					<pre x-ref="gutter" x-text="lineNumbers" class="select-none text-right px-2 py-2 text-gray-500 bg-base-200 overflow-hidden" rows="4" style="line-height:1.5rem"></pre>
+					<textarea x-model.debounce.300ms="script" x-ref="textarea" x-on:scroll="syncScroll()" x-on:input="updateLineNumbers()" name="script_body" class="textarea textarea-bordered rounded-none border-0 flex-1 !bg-base-100 !text-base-content" style="line-height:1.5rem; color: var(--fallback-bc, oklch(var(--bc) / 1)) !important; -webkit-text-fill-color: var(--fallback-bc, oklch(var(--bc) / 1)) !important" rows="4">{ step.ScriptBody }</textarea>
+				</div>
+				<dialog x-cloak x-show="modalOpen" x-ref="modal" x-on:close="modalOpen = false" class="fixed inset-0 z-50 bg-base-100 text-base-content p-4 flex flex-col gap-4 w-screen h-screen max-w-none max-h-none">
+					<div class="flex items-center justify-between gap-4">
+						<h3 class="text-lg font-semibold">Script Body (Bash)</h3>
+						<button type="button" class="btn btn-sm" x-on:click="$refs.modal.close(); modalOpen = false">Close</button>
+					</div>
+					<div class="flex min-h-0 flex-1 font-mono text-sm border border-base-300 rounded bg-base-100 overflow-hidden">
+						<pre x-ref="modalGutter" x-text="lineNumbers" class="select-none text-right px-3 py-3 text-base-content bg-base-200 overflow-hidden" style="line-height:1.5rem"></pre>
+						<textarea x-model.debounce.300ms="script" x-ref="modalTextarea" x-on:scroll="syncModalScroll()" x-on:input="updateLineNumbers()" class="textarea textarea-bordered rounded-none border-0 flex-1 h-full resize-none !bg-base-100 !text-base-content" style="line-height:1.5rem; color: var(--fallback-bc, oklch(var(--bc) / 1)) !important; -webkit-text-fill-color: var(--fallback-bc, oklch(var(--bc) / 1)) !important; background-color: var(--fallback-b1, oklch(var(--b1) / 1)) !important" spellcheck="false"></textarea>
+					</div>
+					<div class="max-h-40 overflow-y-auto text-xs space-y-1" x-show="diagnostics.length > 0">
+						<template x-for="d in diagnostics">
+							<div
+								:class="{
+									'text-error': d.level === 'error',
+									'text-warning': d.level === 'warning',
+									'text-info': d.level === 'info' || d.level === 'style'
+								}"
+							>
+								<span class="font-semibold" x-text="'Line ' + d.line + ': '"></span>
+								<span x-text="d.message"></span>
+								<span class="opacity-75" x-text="' (SC' + d.code + ')'"></span>
+							</div>
+						</template>
+					</div>
+				</dialog>
+				<div class="mt-2 text-xs space-y-1" x-show="diagnostics.length > 0">
+					<template x-for="d in diagnostics">
+						<div
+							:class="{
+								'text-error': d.level === 'error',
+								'text-warning': d.level === 'warning',
+								'text-info': d.level === 'info' || d.level === 'style'
+							}"
+						>
+							<span class="font-semibold" x-text="'Line ' + d.line + ': '"></span>
+							<span x-text="d.message"></span>
+							<span class="opacity-75" x-text="' (SC' + d.code + ')'"></span>
+						</div>
+					</template>
+				</div>
 			</div>
 			<div class="form-control">
 				<label class="label">
@@ -114,7 +187,7 @@ templ StepEditRow(step db.Step, projectID int64, errorMsg string) {
 				hx-swap="innerHTML"
 				data-toast-success="Step updated"
 				data-toast-error="Failed to update step"
-				class="flex gap-4 items-end"
+				class="grid grid-cols-[minmax(10rem,1fr)_minmax(18rem,2fr)_minmax(8rem,1fr)_auto] gap-4 items-start"
 			>
 				<div class="form-control flex-1">
 					<label class="label">
@@ -125,11 +198,84 @@ templ StepEditRow(step db.Step, projectID int64, errorMsg string) {
 						<span class="text-error text-sm mt-1">{ errorMsg }</span>
 					}
 				</div>
-				<div class="form-control flex-1">
+				<div
+					x-data="{
+						script: '',
+						diagnostics: [],
+						lineNumbers: '1',
+						modalOpen: false,
+						lint() {
+							fetch('/api/lint', {
+								method: 'POST',
+								headers: { 'Content-Type': 'application/json' },
+								body: JSON.stringify({ script: this.script })
+							})
+								.then(res => res.json())
+								.then(data => { this.diagnostics = data.diagnostics || []; })
+								.catch(() => {});
+						},
+						updateLineNumbers() {
+							const count = this.script.split('\n').length;
+							this.lineNumbers = Array.from({ length: count }, (_, i) => i + 1).join('\n');
+						},
+						syncScroll() {
+							this.$refs.gutter.scrollTop = this.$refs.textarea.scrollTop;
+						},
+						syncModalScroll() {
+							this.$refs.modalGutter.scrollTop = this.$refs.modalTextarea.scrollTop;
+						}
+					}"
+					x-init="script = $refs.textarea.value; lint(); updateLineNumbers(); $watch('script', () => { lint(); updateLineNumbers(); })"
+					class="form-control flex-1"
+				>
 					<label class="label">
 						<span class="label-text">Script Body (Bash)</span>
+						<button type="button" class="btn btn-ghost btn-xs" x-on:click="modalOpen = true; $nextTick(() => { $refs.modal.showModal(); $refs.modalTextarea.focus(); })">Fullscreen</button>
 					</label>
-					<textarea name="script_body" class="textarea textarea-bordered textarea-sm resize-y" rows="2">{ step.ScriptBody }</textarea>
+					<div class="flex font-mono text-xs border border-base-300 rounded bg-base-100 overflow-hidden">
+						<pre x-ref="gutter" x-text="lineNumbers" class="select-none text-right px-2 py-2 text-gray-500 bg-base-200 overflow-hidden" style="line-height:1.25rem"></pre>
+					<textarea x-model.debounce.300ms="script" x-ref="textarea" x-on:scroll="syncScroll()" x-on:input="updateLineNumbers()" name="script_body" class="textarea textarea-bordered textarea-sm resize-y rounded-none border-0 flex-1 !bg-base-100 !text-base-content" style="line-height:1.25rem; color: var(--fallback-bc, oklch(var(--bc) / 1)) !important; -webkit-text-fill-color: var(--fallback-bc, oklch(var(--bc) / 1)) !important" rows="2">{ step.ScriptBody }</textarea>
+					</div>
+					<dialog x-cloak x-show="modalOpen" x-ref="modal" x-on:close="modalOpen = false" class="fixed inset-0 z-50 bg-base-100 text-base-content p-4 flex flex-col gap-4 w-screen h-screen max-w-none max-h-none">
+						<div class="flex items-center justify-between gap-4">
+							<h3 class="text-lg font-semibold">Script Body (Bash)</h3>
+							<button type="button" class="btn btn-sm" x-on:click="$refs.modal.close(); modalOpen = false">Close</button>
+						</div>
+						<div class="flex min-h-0 flex-1 font-mono text-sm border border-base-300 rounded bg-base-100 overflow-hidden">
+							<pre x-ref="modalGutter" x-text="lineNumbers" class="select-none text-right px-3 py-3 text-base-content bg-base-200 overflow-hidden" style="line-height:1.5rem"></pre>
+						<textarea x-model.debounce.300ms="script" x-ref="modalTextarea" x-on:scroll="syncModalScroll()" x-on:input="updateLineNumbers()" class="textarea textarea-bordered rounded-none border-0 flex-1 h-full resize-none !bg-base-100 !text-base-content" style="line-height:1.5rem; color: var(--fallback-bc, oklch(var(--bc) / 1)) !important; -webkit-text-fill-color: var(--fallback-bc, oklch(var(--bc) / 1)) !important; background-color: var(--fallback-b1, oklch(var(--b1) / 1)) !important" spellcheck="false"></textarea>
+						</div>
+						<div class="max-h-40 overflow-y-auto text-xs space-y-1" x-show="diagnostics.length > 0">
+							<template x-for="d in diagnostics">
+								<div
+									:class="{
+										'text-error': d.level === 'error',
+										'text-warning': d.level === 'warning',
+										'text-info': d.level === 'info' || d.level === 'style'
+									}"
+								>
+									<span class="font-semibold" x-text="'Line ' + d.line + ': '"></span>
+									<span x-text="d.message"></span>
+									<span class="opacity-75" x-text="' (SC' + d.code + ')'"></span>
+								</div>
+							</template>
+						</div>
+					</dialog>
+					<div class="mt-2 text-xs space-y-1" x-show="diagnostics.length > 0">
+						<template x-for="d in diagnostics">
+							<div
+								:class="{
+									'text-error': d.level === 'error',
+									'text-warning': d.level === 'warning',
+									'text-info': d.level === 'info' || d.level === 'style'
+								}"
+							>
+								<span class="font-semibold" x-text="'Line ' + d.line + ': '"></span>
+								<span x-text="d.message"></span>
+								<span class="opacity-75" x-text="' (SC' + d.code + ')'"></span>
+							</div>
+						</template>
+					</div>
 				</div>
 				<div class="form-control flex-1">
 					<label class="label">
@@ -138,7 +284,7 @@ templ StepEditRow(step db.Step, projectID int64, errorMsg string) {
 				<input type="number" name="max_retries" min="0" value={ strconv.FormatInt(step.MaxRetries, 10) } class="input input-bordered input-sm"/>
 			</div>
 			<input type="hidden" name="sort_order" value={ strconv.FormatInt(step.SortOrder, 10) }/>
-				<div class="flex gap-2 pb-1">
+				<div class="flex gap-2 pt-9">
 					<button type="submit" class="btn btn-primary btn-sm">Update</button>
 					<button type="button" class="btn btn-ghost btn-sm" hx-get={ fmt.Sprintf("/projects/%d/steps", projectID) } hx-target="#step-list" hx-swap="innerHTML">Cancel</button>
 				</div>

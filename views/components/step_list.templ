@@ -81,6 +81,7 @@ templ StepRow(step db.Step, projectID int64, isFirst bool, isLast bool) {
 					hx-get={ fmt.Sprintf("/projects/%d/steps/%d/edit", projectID, step.ID) }
 					hx-target={ fmt.Sprintf("#step-row-%d", step.ID) }
 					hx-swap="outerHTML"
+					hx-on::before-request="document.getElementById('add-step-form').innerHTML = ''"
 				>
 					Edit
 				</button>

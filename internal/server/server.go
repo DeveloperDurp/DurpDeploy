@@ -122,6 +122,9 @@ func NewRouter(
 		dh := handler.NewDeploymentHandler(repo, rnr)
 		pr.Get("/deployments", dh.ListDeployments)
 
+		lhH := handler.NewLintHandler()
+		pr.Post("/api/lint", lhH.LintScript)
+
 		sdh := handler.NewScheduledDeploymentHandler(repo, parser)
 
 		lh := handler.NewLogHandler(rnr.Broker(), repo)

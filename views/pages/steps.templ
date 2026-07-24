@@ -50,6 +50,7 @@ templ StepsContent(project db.Project, steps []db.Step) {
 						hx-get={ fmt.Sprintf("/projects/%d/steps/new", project.ID) }
 						hx-target="#add-step-form"
 						hx-swap="innerHTML"
+						hx-on::before-request="htmx.ajax('GET', this.getAttribute('hx-get').replace('/new', ''), {target: '#step-list', swap: 'innerHTML'})"
 					>
 						Add Step
 					</button>
