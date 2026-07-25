@@ -121,6 +121,13 @@ jobs:
       - name: Install templ
         run: go install github.com/a-h/templ/cmd/templ@v0.3.1020
 
+      # ponytail: must run before any go command. Without it, internal/handler
+      # packages that import `durpdeploy/views/components` fail to resolve
+      # because the generated *_templ.go files don't exist (the same
+      # requirement documented in AGENTS.md for local `go vet`/`go test`).
+      - name: Generate templ files
+        run: templ generate
+
       # CI's exact command — keep this in sync with AGENTS.md.
       - name: go test
         run: go test -v -count=1 ./...
