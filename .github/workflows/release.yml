@@ -185,11 +185,15 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          # Registry cache: mode=max keeps the per-stage blobs in
-          # addition to the final image, so a single arch re-build is
-          # fast.
-          cache-from: type=registry,ref=ghcr.io/${{ env.REGISTRY_OWNER }}/${{ env.IMAGE_NAME }}:cache
-          cache-to: type=registry,ref=ghcr.io/${{ env.REGISTRY_OWNER }}/${{ env.IMAGE_NAME }}:cache,mode=max
+          # ponytail: scope the cache to the SHA so each push gets an
+          # isolated cache slot. A shared `cache` tag was created during
+          # the early broken-state runs (mixed-case owner, partial
+          # pushes) and is now corrupted — pulling it back triggers
+          # "package.json: not found" in buildx's cache-key calculation.
+          # Per-SHA cache tags also let concurrent branches run without
+          # racing on the same tag.
+          cache-from: type=registry,ref=ghcr.io/${{ env.REGISTRY_OWNER }}/${{ env.IMAGE_NAME }}:cache-${{ github.sha }}
+          cache-to: type=registry,ref=ghcr.io/${{ env.REGISTRY_OWNER }}/${{ env.IMAGE_NAME }}:cache-${{ github.sha }},mode=max
 
       - name: Trivy scan
         # ponytail: aquasec org was renamed to aquasecurity; 0.28.0 is one
