@@ -33,3 +33,13 @@ screenshots/
 # Local database
 *.db
 *.db-*
+
+# Node
+node_modules/
+
+# Generated templ files (rebuilt in the Dockerfile builder)
+*_templ.go
+
+# Compose artifacts
+compose.yml
+compose.override.yml

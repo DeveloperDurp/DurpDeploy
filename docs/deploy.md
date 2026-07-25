@@ -12,24 +12,61 @@ Caddy with automatic HTTPS. At the end you will have:
 
 ---
 
-## Quick start: Docker (binary image)
+## Quick start: Docker Compose (recommended for self-hosting)
 
-The `Dockerfile` builds a static binary in a `scratch` image — there is no
-shell, no package manager, and no Caddy in the image. It is a binary
-distribution target, not a full AIO container. For local dev there is no
-reason to use it (`make build && ./durpdeploy` is faster). For production
-the Debian 12 runbook below is the recommended path; that runbook installs
-Caddy and the systemd service as separate, well-understood units.
+A Docker Compose stack ships the app, Caddy (reverse proxy + Let's Encrypt
+TLS), and Litestream (continuous SQLite backup to S3) in three services.
+The image is Alpine-based and runs as a non-root user; Caddy and Litestream
+are the official upstream images.
 
-If you do want to run the binary in a container (e.g. behind a separate
-Caddy container), the image runs as root by default with the binary at
-`/durpdeploy` and CWD `/data` (mount a volume there for the SQLite file):
+```bash
+# 1. Clone and prep
+git clone <repo> durpdeploy && cd durpdeploy
+cp compose.example.yml compose.yml
+cp deploy/litestream.example.yml deploy/litestream.yml
+$EDITOR deploy/litestream.yml   # fill in S3 bucket, path, region, etc.
+
+# 2. Generate the encryption key (32 random bytes, base64)
+mkdir -p secrets
+openssl rand -base64 32 > secrets/durpdeploy_key
+chmod 0600 secrets/durpdeploy_key
+
+# 3. Create your .env file
+cat > .env <<'EOF'
+DURPDEPLOY_URL=https://durpdeploy.example.com
+LITESTREAM_S3_BUCKET=my-durpdeploy-backups
+AWS_ACCESS_KEY_ID=AKIA...
+AWS_SECRET_ACCESS_KEY=...
+EOF
+
+# 4. Build and start
+docker compose up -d --build
+
+# 5. Bootstrap the first admin
+docker compose exec app admin create \
+  --email admin@example.com --password '<strong-password>'
+```
+
+DNS must be pointed at the host (port 80/443 open inbound) before the first
+`docker compose up` — Caddy issues Let's Encrypt certs on first request.
+See [`docs/backup-restore.md`](backup-restore.md) for the Litestream
+restore drill and [`docs/security.md`](security.md) for the threat model.
+
+The Debian 12 bare-metal runbook below is the alternative if you want full
+control of the host (cgroup v2 sandbox for step scripts, custom kernel
+tuning, etc.). Most small teams will be fine with compose.
+
+### Plain Docker (binary distribution only)
+
+If you want to run the binary behind your own reverse proxy, the image is
+also runnable directly:
 
 ```bash
 docker build -t durpdeploy .
 docker run -d --name durpdeploy -p 8080:8080 \
   -v durpdeploy-data:/data \
   -e DURPDEPLOY_DB=/data/durpdeploy.db \
+  -e DURPDEPLOY_SECRET_KEY=$(openssl rand -base64 32) \
   durpdeploy
 ```
 
@@ -37,11 +74,11 @@ You still have to bootstrap the first admin with the CLI — there is no
 env-var shortcut:
 
 ```bash
-docker exec -it durpdeploy /durpdeploy admin create \
+docker exec -it durpdeploy /usr/local/bin/durpdeploy admin create \
   --email admin@example.com --password '<strong-password>'
 ```
 
-The Debian 12 runbook below is the recommended production path.
+Caddy, TLS, and Litestream are NOT included — bring your own.
 
 ---
 

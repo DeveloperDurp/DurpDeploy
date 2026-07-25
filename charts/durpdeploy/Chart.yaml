@@ -1,0 +1,20 @@
+apiVersion: v2
+name: durpdeploy
+description: Single-binary deploy runner for bash scripts against environments.
+type: application
+# Chart version — bump on any change to templates/values.
+version: 0.1.0
+# App version — matches the binary's `durpdeploy version` output.
+# "dev" matches what `make build` produces; operators overriding
+# image.tag should also override this.
+appVersion: "dev"
+keywords:
+  - deploy
+  - ci
+  - deployment
+  - bash
+home: https://github.com/example/durpdeploy
+maintainers:
+  - name: durpdeploy
+sources:
+  - https://github.com/example/durpdeploy

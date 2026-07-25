@@ -1,0 +1,80 @@
+DurpDeploy has been installed.
+
+Release name: {{ .Release.Name }}
+Namespace:    {{ .Release.Namespace }}
+
+================================================================
+STEP 1 — Encryption key
+================================================================
+The chart rendered a Secret named {{ include "durpdeploy.secretKeyName" . }}.
+The durpdeploy binary refuses to start without a valid 32-byte key.
+
+If you brought your own Secret (secretKey.existingSecret), skip this step.
+
+Otherwise, generate one and patch it in:
+
+  openssl rand -base64 32 | kubectl create secret generic \
+    {{ include "durpdeploy.secretKeyName" . }} \
+    --from-literal=secret-key=/dev/stdin \
+    --dry-run=client -o yaml | kubectl apply -f -
+
+The Deployment has a checksum annotation on the Secret, so the pod will
+roll automatically.
+
+================================================================
+STEP 2 — Postgres
+================================================================
+The chart does NOT install Postgres. You are responsible for a working
+server reachable as:
+
+  {{ .Values.externalPostgres.host }}:{{ .Values.externalPostgres.port }}
+  database: {{ .Values.externalPostgres.database }}
+  user:     {{ .Values.externalPostgres.username }}
+
+{{- if and .Values.postgres.enabled (not .Values.postgres.existingSecret) }}
+
+The chart rendered a Secret named {{ include "durpdeploy.postgresSecretName" . }}
+holding the password. Set the same password in your Postgres server, then
+restart the Deployment:
+
+  PGPASSWORD=$(kubectl get secret {{ include "durpdeploy.postgresSecretName" . }} \
+    -o jsonpath='{.data.password}' | base64 -d)
+  # ... configure Postgres with that password
+  kubectl rollout restart deploy/{{ include "durpdeploy.fullname" . }}
+{{- else if .Values.postgres.existingSecret }}
+
+The chart is using existing Secret {{ .Values.postgres.existingSecret }} for
+the Postgres password. Make sure it contains a key named `password`.
+{{- end }}
+
+================================================================
+STEP 3 — Create the first admin user
+================================================================
+Once the pod is Running, exec in and run:
+
+  ADMIN_PASS='<strong-password>'
+  kubectl exec deploy/{{ include "durpdeploy.fullname" . }} -n {{ .Release.Namespace }} -- \
+    durpdeploy admin create --email admin@example.com --password "$ADMIN_PASS"
+
+(Or use the durable approach: a one-shot Job with the same command — see
+the chart README.)
+
+================================================================
+STEP 4 — Reach the UI
+================================================================
+{{- if .Values.ingress.enabled }}
+
+Ingress enabled. Visit:
+{{- range .Values.ingress.hosts }}
+  https://{{ .host }}
+{{- end }}
+{{- else }}
+
+Ingress is not enabled. To reach the UI from outside the cluster:
+
+  kubectl port-forward svc/{{ include "durpdeploy.fullname" . }} 8080:{{ .Values.service.port }}
+  open http://localhost:8080
+{{- end }}
+
+For TLS termination and rate limiting, front the Service with an Ingress
+or a managed load balancer — the binary speaks plain HTTP on :8080.

@@ -19,9 +19,13 @@
 # need edge-level throttling.
 
 {$DURPDEPLOY_URL:http://localhost} {
-	# Proxy to the Go server. The Go process listens on localhost:8080 only
-	# (HTTP, no TLS — Caddy terminates TLS here).
-	reverse_proxy localhost:8080 {
+	# Proxy to the Go server. The Go process listens on port 8080
+	# (HTTP, no TLS — Caddy terminates TLS here). The default backend is
+	# `localhost:8080`, which matches the systemd deploy (Go binary on
+	# the same host as Caddy). In the Docker Compose stack, the Caddy
+	# service sets `BACKEND=app:8080` so the reverse proxy reaches the
+	# app over the compose network rather than its own loopback.
+	reverse_proxy {$BACKEND:localhost:8080} {
 		# Pass the original client IP through so the audit log records the
 		# real requester, not Caddy's loopback address.
 		header_up X-Real-IP {remote_host}

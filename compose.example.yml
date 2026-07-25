@@ -1,0 +1,175 @@
+# DurpDeploy example Compose stack.
+#
+# What this is:
+#   A Docker Compose v2 stack that runs durpdeploy (Go + SQLite) behind the
+#   Caddy reverse proxy, with Litestream continuously replicating the SQLite
+#   database to S3-compatible storage.
+#
+# How to bootstrap:
+#   1. Copy this file to compose.yml:
+#        cp compose.example.yml compose.yml
+#   2. Create a .env file in this directory with the variables below.
+#   3. Generate an encryption key and keep it secret:
+#        mkdir -p secrets
+#        openssl rand -base64 32 > secrets/durpdeploy_key
+#        chmod 0600 secrets/durpdeploy_key
+#   4. Create a Litestream config at deploy/litestream.example.yml (see
+#      systemd/litestream.yml for a starting template). At minimum set the
+#      S3 bucket, path, region, and credentials.
+#   5. If your Caddyfile still proxies to `localhost:8080`, change the
+#      `reverse_proxy` line to `app:8080` so Caddy can reach the app container.
+#   6. Build and start the stack:
+#        docker compose up -d --build
+#
+# Required environment variables:
+#   DURPDEPLOY_URL            - public URL (scheme matters for Caddy TLS)
+#   LITESTREAM_S3_BUCKET      - S3 bucket for SQLite backups
+#   AWS_ACCESS_KEY_ID         - S3 access key
+#   AWS_SECRET_ACCESS_KEY     - S3 secret key
+#
+# Optional environment variables (one of these is required for the encryption key):
+#   DURPDEPLOY_SECRET_KEY     - base64 32-byte AES key
+#                              Default key source is the mounted secret file at
+#                              secrets/durpdeploy_key → /etc/durpdeploy/key;
+#                              secret/secret.go reads file first, env fallback.
+#                              Set DURPDEPLOY_SECRET_KEY only when you cannot
+#                              mount a secret file (k8s, swarm, etc.).
+#   DURPDEPLOY_LITESTREAM_CHECK_COMMAND  - shell command to poll backup health
+#   DURPDEPLOY_LITESTREAM_CHECK_INTERVAL - how often to run the check (default 1h)
+#   LITESTREAM_S3_ENDPOINT               - required for non-AWS S3 stores
+#
+# Database:
+#   This stack uses SQLite via the named volume `durpdeploy-data`. The
+#   DURPDEPLOY_DB env var supports `postgres://` if you prefer Postgres, but
+#   SQLite is the default and is what Litestream replicates.
+#
+# .env.example:
+#   # Required
+#   DURPDEPLOY_URL=https://durpdeploy.example.com
+#   LITESTREAM_S3_BUCKET=my-durpdeploy-backups
+#   AWS_ACCESS_KEY_ID=AKIA...
+#   AWS_SECRET_ACCESS_KEY=...
+#   # Optional — only set if you are NOT using secrets/durpdeploy_key
+#   DURPDEPLOY_SECRET_KEY=REPLACE_WITH_BASE64_32_BYTE_KEY
+#   # Optional
+#   LITESTREAM_S3_ENDPOINT=https://s3.example.com
+#   DURPDEPLOY_LITESTREAM_CHECK_COMMAND=
+#   DURPDEPLOY_LITESTREAM_CHECK_INTERVAL=1h
+
+services:
+  app:
+    # The Go binary image built from ./Dockerfile.
+    build: .
+    image: durpdeploy:latest
+    restart: unless-stopped
+    # Port 8080 is internal only — Caddy talks to it over the compose network.
+    # Don't publish it to the host.
+    environment:
+      DURPDEPLOY_DB: /data/durpdeploy.db
+      # Encryption key: the mounted secret file at /etc/durpdeploy/key is the
+      # primary source (generated via: openssl rand -base64 32 > secrets/durpdeploy_key
+      # && chmod 0600 secrets/durpdeploy_key). Set DURPDEPLOY_SECRET_KEY only when
+      # you cannot mount a secret file (k8s, swarm, etc.).
+      DURPDEPLOY_SECRET_KEY: ${DURPDEPLOY_SECRET_KEY:-}
+      DURPDEPLOY_LITESTREAM_CHECK_COMMAND: ${DURPDEPLOY_LITESTREAM_CHECK_COMMAND:-}  # e.g. "litestream ltx /data/durpdeploy.db"
+      DURPDEPLOY_LITESTREAM_CHECK_INTERVAL: ${DURPDEPLOY_LITESTREAM_CHECK_INTERVAL:-1h}  # e.g. 1h, 30m
+    volumes:
+      - durpdeploy-data:/data
+    secrets:
+      - source: durpdeploy_key
+        target: /etc/durpdeploy/key
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/login"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 256
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DURPDEPLOY_URL: ${DURPDEPLOY_URL:?}  # required, e.g. https://durpdeploy.example.com
+      # Backend address for the reverse_proxy directive in Caddyfile.
+      # Defaults to localhost:8080 (the systemd deploy); the compose
+      # stack overrides to `app:8080` to use the compose DNS.
+      BACKEND: ${BACKEND:-app:8080}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      app:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    cap_add:
+      - NET_BIND_SERVICE
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m
+    mem_limit: 256m
+    cpus: 0.5
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  litestream:
+    image: litestream/litestream:0.3
+    restart: unless-stopped
+    command: replicate -config /etc/litestream.yml
+    volumes:
+      - durpdeploy-data:/data
+      - ./deploy/litestream.example.yml:/etc/litestream.yml:ro
+    environment:
+      LITESTREAM_S3_BUCKET: ${LITESTREAM_S3_BUCKET:?}  # required for S3 replication, e.g. my-durpdeploy-backups
+      LITESTREAM_S3_ENDPOINT: ${LITESTREAM_S3_ENDPOINT:-}  # e.g. https://s3.example.com (leave empty for AWS)
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}  # e.g. AKIA...
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}  # e.g. wJalrXU...
+    depends_on:
+      app:
+        condition: service_healthy
+    # Note: Litestream 0.3's `replicate` command does not expose an HTTP monitor
+    # by default. If you want DURPDEPLOY_LITESTREAM_CHECK_COMMAND to poll live
+    # status, run `litestream monitor -http :9720` as a second command in the
+    # litestream service (or set up a separate sidecar). The default empty value
+    # means the app skips backup health checks.
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    mem_limit: 128m
+    cpus: 0.25
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  durpdeploy-data:
+  caddy-data:
+  caddy-config:
+
+secrets:
+  durpdeploy_key:
+    file: ./secrets/durpdeploy_key  # operator creates this file with: openssl rand -base64 32 > secrets/durpdeploy_key && chmod 0600 secrets/durpdeploy_key

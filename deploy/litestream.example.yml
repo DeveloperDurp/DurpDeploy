@@ -1,0 +1,58 @@
+# Container-friendly Litestream configuration for durpdeploy.
+#
+# Mount at /etc/litestream.yml in the litestream sidecar (the Docker Compose
+# stack does this automatically).  Database path matches the volume mount
+# at /data.
+#
+# Credentials are pulled from environment variables — set AWS_ACCESS_KEY_ID /
+# AWS_SECRET_ACCESS_KEY (Litestream reads these by default), or use the
+# LITESTREAM_S3_* vars below if you need a different credential pair.
+#
+# See docs/backup-restore.md for the full backup/restore runbook.
+
+dbs:
+  - path: /data/durpdeploy.db
+
+    replicas:
+      - type: s3
+
+        # S3 bucket name. Required. Use bucket name directly or env var.
+        bucket: ${LITESTREAM_S3_BUCKET}
+
+        # Key prefix inside the bucket. Lets you share one bucket across
+        # multiple durpdeploy instances/environments.
+        path: durpdeploy
+
+        # AWS region. Required for AWS S3; most S3-compatible stores accept
+        # any value (they usually want "us-east-1").
+        region: us-east-1
+
+        # S3-compatible endpoint. Required for non-AWS S3 stores, e.g.:
+        #   MinIO:            http://minio.internal:9000
+        #   Cloudflare R2:    https://<account-id>.r2.cloudflarestorage.com
+        #   Backblaze B2:     https://s3.us-west-002.backblazeb2.com
+        # The compose stack passes LITESTREAM_S3_ENDPOINT into the container;
+        # leave it empty in your .env for AWS S3 (Litestream uses the default
+        # regional AWS endpoint when this value is empty).
+        endpoint: ${LITESTREAM_S3_ENDPOINT:-}
+
+        # Credentials. Litestream reads AWS_ACCESS_KEY_ID /
+        # AWS_SECRET_ACCESS_KEY from the environment by default — that is the
+        # recommended approach in containers.  Uncomment only if you need
+        # a different credential pair from the container's env.
+        # access-key-id: ${LITESTREAM_S3_ACCESS_KEY_ID:-}
+        # secret-access-key: ${LITESTREAM_S3_SECRET_ACCESS_KEY:-}
+
+        # How often to sync the WAL to the replica. Litestream's default is
+        # 1s; the docs runbook assumes this value ("seconds of data loss").
+        sync-interval: 1s
+
+        # How often to take a full snapshot (vs. incremental WAL segments).
+        # Snapshots make restores faster; more frequent = faster restore,
+        # more storage used.
+        snapshot-interval: 24h
+
+        # How long to keep old snapshots/WAL segments before Litestream
+        # prunes them. Point-in-time restore only works back to the oldest
+        # retained snapshot.
+        retention: 168h # 7 days
