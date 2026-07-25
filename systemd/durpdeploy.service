@@ -22,6 +22,13 @@ Environment=DURPDEPLOY_DB=/var/lib/durpdeploy/durpdeploy.db
 ExecStart=/usr/local/bin/durpdeploy
 Restart=on-failure
 RestartSec=5s
+
+# The server WRITES to the SQLite database under /var/lib/durpdeploy
+# (deploys, audit_log inserts, WAL/SHM sidecars). ProtectSystem=strict
+# makes the entire filesystem read-only, so /var/lib/durpdeploy must be
+# explicitly carved out as writable. Same pattern as the audit-prune
+# service; see systemd/durpdeploy-audit-prune.service.
+ReadWritePaths=/var/lib/durpdeploy
 # Let the process manage its own cgroup sub-tree under
 # /sys/fs/cgroup/durpdeploy — required so the runner sandbox (P1-4) can
 # create a per-deployment cgroup and apply cpu/memory/pids limits.

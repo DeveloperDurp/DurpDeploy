@@ -118,10 +118,12 @@ Three roles, set at user-creation time and stored in `users.role`:
 | `deployer` | Everything                     | Everything — same writes as `admin`                   | No             |
 | `viewer`   | Everything                     | Nothing — every POST/PUT/PATCH/DELETE returns 403     | No             |
 
-**Until P1-1 lands, any `deployer` can deploy to any project** — there is no
-per-project membership check yet. The practical "least privilege" is to make
-non-admins `viewer` if they don't need to trigger deploys. Full details in
-[`docs/roles.md`](docs/roles.md).
+**Per-project authorization is enforced** — every project has a `project_members`
+row for each user who can read or write to it. Global admins bypass the
+check; non-admins must be a member. A non-member hitting a project-scoped
+route gets 404 (to hide existence) or 403 (depending on the route). The
+practical "least privilege" is to make non-admins `viewer` if they don't
+need to trigger deploys. Full details in [`docs/roles.md`](docs/roles.md).
 
 ## Security
 
@@ -130,10 +132,23 @@ five-minute hands-on attack drill — is documented in
 [`docs/attack-drill.md`](docs/attack-drill.md). The summary:
 
 - **Defends against:** unauthenticated deploys, CSRF on a teammate's browser,
-  password DB leak (argon2id, per-user salt, ~100ms per guess).
-- **Does NOT defend against yet:** per-project authorization (P1-1), secret
-  encryption at rest (P1-2, `release_variables.value` is plaintext today),
-  runner sandboxing (P1-3, steps run as the server's user).
+  password DB leak (argon2id, per-user salt, ~100ms per guess), cross-project
+  write access (per-project `project_members` — P1-1), secret-at-rest
+  exposure (AES-256-GCM for `variables` and `release_variables.value` —
+  P1-3), rogue step scripts (dedicated user + cgroup sandbox + minimal env
+  — P1-4), naive log redaction (regex-based scrubber for literal secrets,
+  common credential patterns, and split writes — P1-5), unrecoverable
+  data loss (Litestream continuous WAL replication + monthly restore drill
+  — P1-6), and unauthorized approval of `pending_approval` deployments
+  (admin-only gate on `/deployments/{id}/approve` — P2-1; the stored
+  `required_approver_role` is descriptive only, the real gate is the handler
+  check).
+- **Partially defends against:** backup monitoring (P2-4 — the binary polls
+  a user-supplied check command and fires `BackupUnhealthy` on failure,
+  but does not enforce the originally planned 36h age threshold). Audit
+  retention (P2-5 — `audit prune --days N` ships and preserves rows tied
+  to live deployments/releases, but the default 180-day window and the
+  daily systemd timer are operator-deployed, not auto-installed).
 
 ## What It Does Not Do
 

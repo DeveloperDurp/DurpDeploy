@@ -437,6 +437,122 @@ func extractNewKey(t *testing.T, output string) string {
 	return ""
 }
 
+func TestPruneAuditLogs_preservesLiveDeploymentAndReleaseRows(t *testing.T) {
+	// Given: a live deployment and release, plus three audit rows backdated
+	// well past the prune cutoff — two tied to live entities (must survive)
+	// and one tied to a dead project ID (must be deleted).
+	dsn := tempDSN(t)
+	conn, err := migrate.Run(dsn)
+	if err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	defer conn.Close()
+	repo := repository.New(conn)
+	ctx := context.Background()
+
+	project, err := repo.Queries.CreateProject(ctx, db.CreateProjectParams{
+		Name: "prune-proj",
+	})
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	env, err := repo.Queries.CreateEnvironment(ctx, db.CreateEnvironmentParams{
+		Name: "Dev", Description: sql.NullString{}, Tags: sql.NullString{},
+	})
+	if err != nil {
+		t.Fatalf("create env: %v", err)
+	}
+	release, err := repo.Queries.CreateRelease(ctx, db.CreateReleaseParams{
+		ProjectID: project.ID, Version: "1.0.0", StepsJson: "[]",
+	})
+	if err != nil {
+		t.Fatalf("create release: %v", err)
+	}
+	deployment, err := repo.Queries.CreateDeployment(
+		ctx,
+		db.CreateDeploymentParams{
+			ReleaseID: release.ID, EnvironmentID: env.ID, Status: "succeeded",
+			StartedAt: sql.NullInt64{}, FinishedAt: sql.NullInt64{}, Forced: 0, Note: sql.NullString{},
+		},
+	)
+	if err != nil {
+		t.Fatalf("create deployment: %v", err)
+	}
+
+	// Insert three audit rows, then backdate created_at to well before now.
+	oldTS := time.Now().Unix() - 30*24*60*60 // 30 days ago
+	rows := []struct {
+		action     string
+		entityType string
+		entityID   sql.NullInt64
+	}{
+		{
+			"create_deployment",
+			"deployment",
+			sql.NullInt64{Int64: deployment.ID, Valid: true},
+		},
+		{
+			"create_release",
+			"release",
+			sql.NullInt64{Int64: release.ID, Valid: true},
+		},
+		{"update_project", "project", sql.NullInt64{Int64: 99999, Valid: true}},
+	}
+	var ids []int64
+	for _, r := range rows {
+		a, err := repo.Queries.CreateAuditLog(ctx, db.CreateAuditLogParams{
+			UserID:     sql.NullInt64{},
+			Action:     r.action,
+			EntityType: r.entityType,
+			EntityID:   r.entityID,
+			Details:    sql.NullString{},
+		})
+		if err != nil {
+			t.Fatalf("CreateAuditLog %s: %v", r.action, err)
+		}
+		ids = append(ids, a.ID)
+	}
+	for _, id := range ids {
+		if _, err := conn.ExecContext(
+			ctx, "UPDATE audit_log SET created_at = ? WHERE id = ?", oldTS, id,
+		); err != nil {
+			t.Fatalf("backdate audit row %d: %v", id, err)
+		}
+	}
+
+	// When: prune everything older than now.
+	if err := repo.Queries.PruneAuditLogs(ctx, time.Now().Unix()); err != nil {
+		t.Fatalf("PruneAuditLogs: %v", err)
+	}
+
+	// Then: the two live-entity rows survive, the dead-entity row is gone.
+	for i, id := range ids {
+		var exists int
+		err := conn.QueryRowContext(
+			ctx, "SELECT 1 FROM audit_log WHERE id = ?", id,
+		).Scan(&exists)
+		if i < 2 {
+			if err != nil {
+				t.Errorf(
+					"live-entity audit row %d (entity=%s) was pruned, want preserved: %v",
+					id,
+					rows[i].entityType,
+					err,
+				)
+			}
+		} else {
+			if err == nil {
+				t.Errorf(
+					"dead-entity audit row %d (entity=%s id=%d) survived, want pruned",
+					id,
+					rows[i].entityType,
+					rows[i].entityID.Int64,
+				)
+			}
+		}
+	}
+}
+
 func TestRecoverPendingDeployments_noopWhenNonePending(t *testing.T) {
 	// Given: a fresh DB with no deployments.
 	dsn := tempDSN(t)

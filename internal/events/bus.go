@@ -98,7 +98,9 @@ func (b *Bus) Publish(ctx context.Context, evt Event) {
 		// Project-less/system-wide event (e.g. backup health): load
 		// channels from the global_notifications singleton instead of a
 		// project row.
-		if global, err := b.repo.Queries.GetGlobalNotifications(ctx); err == nil {
+		if global, err := b.repo.Queries.GetGlobalNotifications(
+			ctx,
+		); err == nil {
 			evt.SlackWebhookURL = global.SlackWebhookUrl.String
 			evt.NotifyEmails = splitEmails(global.NotifyEmails)
 			evt.GotifyURL = global.GotifyUrl.String

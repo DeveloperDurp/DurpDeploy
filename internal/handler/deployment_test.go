@@ -1396,6 +1396,95 @@ func TestApproval_RequiresApprovalStage_PausesThenApproveRuns(t *testing.T) {
 	}
 }
 
+// TestApproval_DeployerCannotApprove verifies the P2-1 role gate: a deployer
+// (non-admin) hitting the approve endpoint is rejected with 403 before any
+// DB write, while the admin harness user can still approve the same deployment.
+func TestApproval_DeployerCannotApprove(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	hc := h.setupProjectWithLifecycle(t, []string{"Prod"})
+	rel := hc.makeRelease(t, "1.0.0", "exit 0")
+
+	stages, err := h.repo.Queries.ListLifecycleStages(ctx, hc.lifecycle.ID)
+	if err != nil || len(stages) != 1 {
+		t.Fatalf("list lifecycle stages: %v (n=%d)", err, len(stages))
+	}
+	if _, err := h.repo.Queries.UpdateLifecycleStage(
+		ctx,
+		db.UpdateLifecycleStageParams{
+			ID:               stages[0].ID,
+			EnvironmentID:    stages[0].EnvironmentID,
+			SortOrder:        stages[0].SortOrder,
+			RequiresApproval: 1,
+		},
+	); err != nil {
+		t.Fatalf("update lifecycle stage: %v", err)
+	}
+
+	prod := hc.envs["Prod"]
+	if got := hc.postDeploy(
+		t,
+		rel.ID,
+		prod.ID,
+		false,
+	); got != http.StatusSeeOther {
+		t.Fatalf("postDeploy: got %d, want 303", got)
+	}
+
+	dep, err := h.repo.Queries.GetLatestDeploymentForReleaseEnv(
+		ctx,
+		db.GetLatestDeploymentForReleaseEnvParams{
+			ReleaseID:     rel.ID,
+			EnvironmentID: prod.ID,
+		},
+	)
+	if err != nil {
+		t.Fatalf("get deployment: %v", err)
+	}
+	if dep.Status != "pending_approval" {
+		t.Fatalf("expected pending_approval, got %q", dep.Status)
+	}
+
+	// Deployer must be rejected with 403.
+	deployer := seedSession(t, h.repo, h.server.URL, "deployer")
+	form := url.Values{}
+	form.Set("csrf_token", deployer.csrfToken)
+	resp, err := deployer.client.PostForm(
+		fmt.Sprintf("%s/deployments/%d/approve", h.server.URL, dep.ID),
+		form,
+	)
+	if err != nil {
+		t.Fatalf("POST approve as deployer: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("deployer approve: got %d, want 403", resp.StatusCode)
+	}
+
+	// No approval row should have been written.
+	if _, err := h.repo.Queries.GetApprovalByDeployment(
+		ctx,
+		dep.ID,
+	); err == nil {
+		t.Fatalf("expected no approval row after deployer rejection")
+	}
+
+	// Admin can still approve the same deployment.
+	adminForm := url.Values{}
+	adminForm.Set("csrf_token", h.csrfToken())
+	adminResp, err := h.authedClient().PostForm(
+		fmt.Sprintf("%s/deployments/%d/approve", h.server.URL, dep.ID),
+		adminForm,
+	)
+	if err != nil {
+		t.Fatalf("POST approve as admin: %v", err)
+	}
+	defer adminResp.Body.Close()
+	if adminResp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("admin approve: got %d, want 303", adminResp.StatusCode)
+	}
+}
+
 func TestListDeployments_HTMXPartialReturnsRowsAndOOBButton(t *testing.T) {
 	h := newProjectHarness(t)
 	ctx := context.Background()
