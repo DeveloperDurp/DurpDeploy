@@ -32,7 +32,10 @@ env:
   IMAGE_NAME: durpdeploy
   # ghcr.io/<owner>/charts/durpdeploy — OCI chart repos live at any path
   # under the owner namespace, charts/durpdeploy mirrors the repo layout.
-  CHART_REPO: charts/durpdeploy
+  # ghcr.io's OCI handler treats the first path segment as the repo name;
+  # nested paths (charts/durpdeploy) are rejected with
+  # "invalid_reference: invalid repository". One segment, lowercase.
+  CHART_REPO: charts
 
 jobs:
   # ----- Compute version once, share with downstream jobs ----------------
@@ -187,7 +190,9 @@ jobs:
         # ponytail: aquasec org was renamed to aquasecurity; 0.28.0 is one
         # of the 76 tags compromised in the March 2026 supply-chain
         # attack — only 0.35.0+ are post-incident, and 0.36.0 is current.
-        uses: aquasecurity/trivy-action@0.36.0
+        # GitHub Actions requires the `v` prefix on bare SemVer tags —
+        # `aquasecurity/trivy-action@0.36.0` 404s, `@v0.36.0` resolves.
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ needs.version.outputs.version }}
           format: 'table'
