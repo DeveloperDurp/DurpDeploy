@@ -30,8 +30,13 @@ permissions:
 
 env:
   IMAGE_NAME: durpdeploy
-  # ghcr.io/<owner>/charts/durpdeploy — OCI chart repos live at any path
-  # under the owner namespace, charts/durpdeploy mirrors the repo layout.
+  # ghcr.io requires the repository owner segment to be all lowercase.
+  # Mixed-case GitHub usernames (e.g. DeveloperDurp) fail the cache
+  # exporter with "repository name (X) must be lowercase". GitHub Actions
+  # has no `lower` filter on workflow expressions — the `| lower` syntax
+  # renders the literal github.repository_owner unchanged, so hardcode
+  # the lowercase form. Forkers must edit this line.
+  REGISTRY_OWNER: developerdurp
   # ghcr.io's OCI handler treats the first path segment as the repo name;
   # nested paths (charts/durpdeploy) are rejected with
   # "invalid_reference: invalid repository". One segment, lowercase.
@@ -164,7 +169,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v6
         with:
-          images: ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+          images: ghcr.io/${{ env.REGISTRY_OWNER }}/${{ env.IMAGE_NAME }}
           # Only the primary version is interesting here; ghcr retains
           # the multi-tag history under digest refs.
           tags: |
@@ -183,8 +188,8 @@ jobs:
           # Registry cache: mode=max keeps the per-stage blobs in
           # addition to the final image, so a single arch re-build is
           # fast.
-          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:cache
-          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:cache,mode=max
+          cache-from: type=registry,ref=ghcr.io/${{ env.REGISTRY_OWNER }}/${{ env.IMAGE_NAME }}:cache
+          cache-to: type=registry,ref=ghcr.io/${{ env.REGISTRY_OWNER }}/${{ env.IMAGE_NAME }}:cache,mode=max
 
       - name: Trivy scan
         # ponytail: aquasec org was renamed to aquasecurity; 0.28.0 is one
@@ -194,7 +199,7 @@ jobs:
         # `aquasecurity/trivy-action@0.36.0` 404s, `@v0.36.0` resolves.
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ needs.version.outputs.version }}
+          image-ref: ghcr.io/${{ env.REGISTRY_OWNER }}/${{ env.IMAGE_NAME }}:${{ needs.version.outputs.version }}
           format: 'table'
           exit-code: '0'
           ignore-unfixed: true
@@ -257,4 +262,4 @@ jobs:
           CHART_NAME: durpdeploy-${{ needs.version.outputs.chart_version }}.tgz
         run: |
           helm push "${CHART_NAME}" \
-            oci://ghcr.io/${{ github.repository_owner }}/${{ env.CHART_REPO }}
+            oci://ghcr.io/${{ env.REGISTRY_OWNER }}/${{ env.CHART_REPO }}
