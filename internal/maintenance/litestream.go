@@ -26,14 +26,22 @@ func StartLitestreamCheck(ctx context.Context, bus *events.Bus) {
 	}
 
 	interval := time.Hour
-	if d, err := time.ParseDuration(os.Getenv("DURPDEPLOY_LITESTREAM_CHECK_INTERVAL")); err == nil {
+	if d, err := time.ParseDuration(
+		os.Getenv("DURPDEPLOY_LITESTREAM_CHECK_INTERVAL"),
+	); err == nil {
 		interval = d
 	}
 
 	go func() {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
-		slog.Info("litestream health check started", "interval", interval, "command", command)
+		slog.Info(
+			"litestream health check started",
+			"interval",
+			interval,
+			"command",
+			command,
+		)
 
 		// track last state to avoid spamming "healthy" notifications
 		wasUnhealthy := false
@@ -46,11 +54,24 @@ func StartLitestreamCheck(ctx context.Context, bus *events.Bus) {
 				err := runCheck(ctx, command)
 				if err != nil {
 					slog.Error("litestream health check failed", "err", err)
-					publishBackupEvent(ctx, bus, events.BackupUnhealthy, fmt.Sprintf("Litestream backup health check failed: %v", err))
+					publishBackupEvent(
+						ctx,
+						bus,
+						events.BackupUnhealthy,
+						fmt.Sprintf(
+							"Litestream backup health check failed: %v",
+							err,
+						),
+					)
 					wasUnhealthy = true
 				} else if wasUnhealthy {
 					slog.Info("litestream health check recovered")
-					publishBackupEvent(ctx, bus, events.BackupHealthy, "Litestream backup health check recovered")
+					publishBackupEvent(
+						ctx,
+						bus,
+						events.BackupHealthy,
+						"Litestream backup health check recovered",
+					)
 					wasUnhealthy = false
 				}
 			}
@@ -72,7 +93,12 @@ func runCheck(ctx context.Context, command string) error {
 // is a system-wide concern, not a per-project one, so it is routed through
 // the global_notifications settings (ProjectID left at its zero value)
 // instead of fanning out to every project as before.
-func publishBackupEvent(ctx context.Context, bus *events.Bus, typ events.Type, message string) {
+func publishBackupEvent(
+	ctx context.Context,
+	bus *events.Bus,
+	typ events.Type,
+	message string,
+) {
 	bus.Publish(ctx, events.Event{
 		Type:    typ,
 		Message: message,

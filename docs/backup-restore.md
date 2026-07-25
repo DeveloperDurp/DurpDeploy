@@ -214,3 +214,45 @@ bucket is a bigger lift than accepting daily-granularity backups.
   half-written `durpdeploy.db` in place. For the cron fallback, `cp` is not
   atomic — if you interrupt a restore mid-`cp`, re-run the `cp` from a known
   good backup file before starting the service.
+
+---
+
+## Audit log retention
+
+The `audit_log` table grows forever unless something prunes it. `durpdeploy
+audit prune` deletes rows older than a retention period (default 180 days)
+while preserving rows tied to live deployments/releases (P2-5). A systemd
+timer runs it daily at 03:17.
+
+### Install the timer
+
+```bash
+sudo install -m 0644 systemd/durpdeploy-audit-prune.{service,timer} /etc/systemd/system/ \
+  && sudo systemctl daemon-reload \
+  && sudo systemctl enable --now durpdeploy-audit-prune.timer
+```
+
+### Override the default retention
+
+The prune resolves retention in this order: `--days N` flag (if passed),
+`DURPDEPLOY_AUDIT_RETENTION_DAYS` env var, then 180. To override on the
+systemd unit, set the env var in the shared env file the service reads:
+
+```bash
+# /etc/durpdeploy/durpdeploy.env
+DURPDEPLOY_AUDIT_RETENTION_DAYS=90
+```
+
+The service unit loads this file via `EnvironmentFile=-/etc/durpdeploy/durpdeploy.env`
+(the leading `-` means a missing file is OK). The same file can hold
+`DURPDEPLOY_DB` if you want the main `durpdeploy.service` to share it.
+
+### Verify the timer is active
+
+```bash
+systemctl list-timers durpdeploy-audit-prune.timer
+```
+
+You should see the next trigger (03:17 the following day) and the last run.
+`journalctl -u durpdeploy-audit-prune.service` shows the prune output
+(rows pruned + cutoff timestamp).

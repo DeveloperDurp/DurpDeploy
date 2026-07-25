@@ -55,7 +55,7 @@ func main() {
 			os.Exit(0)
 		case "help", "--help", "-h":
 			fmt.Println(
-				"Usage: durpdeploy [admin create --email X --password Y] [audit prune --days N] [secret-key rotate [--plaintext]] [version] [help]",
+				"Usage: durpdeploy [admin create --email X --password Y] [audit prune [--days N]] [secret-key rotate [--plaintext]] [version] [help]",
 			)
 			fmt.Println("With no subcommand, starts the HTTP server.")
 			os.Exit(0)
@@ -332,15 +332,25 @@ func runAdmin(args []string) int {
 	return 0
 }
 
-// runAudit implements `durpdeploy audit prune --days N`.
+// defaultAuditRetentionDays is the fallback retention period for
+// `audit prune` when neither --days nor DURPDEPLOY_AUDIT_RETENTION_DAYS is
+// set. 180 days keeps roughly half a year of audit history by default.
+const defaultAuditRetentionDays = 180
+
+// runAudit implements `durpdeploy audit prune [--days N]`.
 // It opens the same database the server uses and deletes audit_log rows
-// older than the specified retention period.
+// older than the specified retention period. The retention days resolve in
+// this order: --days flag (if > 0), DURPDEPLOY_AUDIT_RETENTION_DAYS env (if
+// set and > 0), then defaultAuditRetentionDays.
 func runAudit(args []string) int {
 	fs := flag.NewFlagSet("audit", flag.ExitOnError)
 	_ = fs.Parse(args)
 
 	if fs.NArg() == 0 {
-		fmt.Fprintln(os.Stderr, "Usage: durpdeploy audit prune --days N")
+		fmt.Fprintln(
+			os.Stderr,
+			"Usage: durpdeploy audit prune [--days N]   (DURPDEPLOY_AUDIT_RETENTION_DAYS env, default 180)",
+		)
 		return 1
 	}
 
@@ -354,15 +364,43 @@ func runAudit(args []string) int {
 	}
 
 	pruneCmd := flag.NewFlagSet("prune", flag.ExitOnError)
-	daysPtr := pruneCmd.Int("days", 0, "retention in days")
+	daysPtr := pruneCmd.Int(
+		"days",
+		0,
+		"retention in days (overrides DURPDEPLOY_AUDIT_RETENTION_DAYS; default 180)",
+	)
 	if err := pruneCmd.Parse(fs.Args()[1:]); err != nil {
 		return 1
 	}
 
 	days := *daysPtr
+	daysExplicit := false
+	pruneCmd.Visit(func(f *flag.Flag) {
+		if f.Name == "days" {
+			daysExplicit = true
+		}
+	})
 	if days <= 0 {
-		fmt.Fprintln(os.Stderr, "error: --days must be greater than 0")
-		return 1
+		if daysExplicit {
+			fmt.Fprintln(os.Stderr, "error: --days must be greater than 0")
+			return 1
+		}
+		// Fall back to env, then to the hard-coded default.
+		if envDays := os.Getenv(
+			"DURPDEPLOY_AUDIT_RETENTION_DAYS",
+		); envDays != "" {
+			n, err := fmt.Sscanf(envDays, "%d", &days)
+			if err != nil || n != 1 || days <= 0 {
+				fmt.Fprintf(
+					os.Stderr,
+					"error: DURPDEPLOY_AUDIT_RETENTION_DAYS=%q is not a positive integer\n",
+					envDays,
+				)
+				return 1
+			}
+		} else {
+			days = defaultAuditRetentionDays
+		}
 	}
 
 	ctx := context.Background()

@@ -1,0 +1,22 @@
+# DurpDeploy audit-log prune timer (P2-5).
+#
+# Runs durpdeploy-audit-prune.service daily at 03:17. Persistent=true means
+# a missed run (e.g. host was off) is caught up on next boot.
+#
+# Install: sudo install -m 0644 systemd/durpdeploy-audit-prune.timer /etc/systemd/system/
+# Then:   sudo systemctl daemon-reload && sudo systemctl enable --now durpdeploy-audit-prune.timer
+#
+# Check:  systemctl list-timers durpdeploy-audit-prune.timer
+# See docs/backup-restore.md for the retention/override runbook.
+
+[Unit]
+Description=Daily DurpDeploy audit-log prune at 03:17
+Documentation=https://gitlab.example.com/durpdeploy
+
+[Timer]
+OnCalendar=*-*-* 03:17:00
+Persistent=true
+Unit=durpdeploy-audit-prune.service
+
+[Install]
+WantedBy=timers.target

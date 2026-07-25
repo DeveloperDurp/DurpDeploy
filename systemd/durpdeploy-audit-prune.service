@@ -1,0 +1,50 @@
+# DurpDeploy audit-log prune service (P2-5).
+#
+# Runs `durpdeploy audit prune` once a day via the companion timer
+# (systemd/durpdeploy-audit-prune.timer). The prune deletes audit_log rows
+# older than the retention period (default 180 days, override via
+# DURPDEPLOY_AUDIT_RETENTION_DAYS in /etc/durpdeploy/durpdeploy.env) while
+# preserving rows tied to live deployments/releases.
+#
+# Install: sudo install -m 0644 systemd/durpdeploy-audit-prune.service /etc/systemd/system/
+# Then:   sudo systemctl daemon-reload && sudo systemctl enable --now durpdeploy-audit-prune.timer
+#
+# See docs/backup-restore.md for the retention/override runbook.
+
+[Unit]
+Description=DurpDeploy audit-log prune (oneshot)
+Documentation=https://gitlab.example.com/durpdeploy
+After=network-online.target durpdeploy.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=durpdeploy
+Group=durpdeploy
+ExecStart=/usr/local/bin/durpdeploy audit prune
+Environment=DURPDEPLOY_DB=/var/lib/durpdeploy/durpdeploy.db
+EnvironmentFile=-/etc/durpdeploy/durpdeploy.env
+
+# The prune WRITES (DELETE on audit_log, plus SQLite WAL/SHM sidecars),
+# so /var/lib/durpdeploy must be writable despite ProtectSystem=strict.
+ReadWritePaths=/var/lib/durpdeploy
+
+# --- Hardening (mirrors systemd/litestream.service) ---
+ProtectSystem=strict
+ProtectHome=true
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=true
+RestrictRealtime=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+
+# Hardening makes the rest of the filesystem read-only; ReadWritePaths above
+# carves out the single writable directory the prune needs.
+
+[Install]
+WantedBy=multi-user.target

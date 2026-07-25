@@ -670,17 +670,19 @@ func (h *DeploymentHandler) ApproveDeployment(
 		return
 	}
 
-	// ponytail: any project member reaching this route (write access +
-	// CSRF gate, enforced by the group middleware) may approve; the
-	// stored required_approver_role is descriptive only. Enforcing a
-	// specific approver role would need a per-project role model finer
-	// than today's project_members.role, add if teams need it.
-	approvedBy := "anonymous"
-	var approverUserID sql.NullInt64
-	if u := auth.UserFromContext(r.Context()); u != nil {
-		approvedBy = u.Name
-		approverUserID = sql.NullInt64{Int64: u.ID, Valid: true}
+	// Gate: only admins can approve. The stored `required_approver_role` in
+	// `deployment_approvals` is descriptive only — the real gate is here.
+	u := auth.UserFromContext(r.Context())
+	if u == nil || u.Role != "admin" {
+		http.Error(
+			w,
+			"only admins can approve deployments",
+			http.StatusForbidden,
+		)
+		return
 	}
+	approvedBy := u.Name
+	approverUserID := sql.NullInt64{Int64: u.ID, Valid: true}
 
 	if _, err := h.repo.Queries.CreateApproval(
 		r.Context(),

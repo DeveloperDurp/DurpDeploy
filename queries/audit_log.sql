@@ -19,4 +19,8 @@ LIMIT sqlc.arg(page_limit);
 SELECT COUNT(*) FROM audit_log;
 
 -- name: PruneAuditLogs :exec
-DELETE FROM audit_log WHERE created_at < ?;
+-- ponytail: preserve rows tied to live deployments/releases; entity_type is singular. Add more NOT EXISTS guards as the audit entity set grows.
+DELETE FROM audit_log
+WHERE created_at < ?
+  AND NOT EXISTS (SELECT 1 FROM deployments WHERE audit_log.entity_type = 'deployment' AND id = audit_log.entity_id)
+  AND NOT EXISTS (SELECT 1 FROM releases WHERE audit_log.entity_type = 'release' AND id = audit_log.entity_id)
