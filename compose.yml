@@ -1,0 +1,121 @@
+# DurpDeploy — containerized production stack.
+#
+# Services:
+#   app        : durpdeploy Go binary (built from ./Dockerfile)
+#   caddy      : reverse proxy + TLS termination
+#   litestream : continuous SQLite WAL replication to S3-compatible storage
+#
+# Copy compose.example.yml to compose.yml and edit the environment variables,
+# or source them from a .env file before running `docker compose up -d`.
+
+services:
+  app:
+    # The Go binary image built from ./Dockerfile.
+    build: .
+    image: durpdeploy:latest
+    restart: unless-stopped
+    # Port 8080 is internal only — Caddy talks to it over the compose network.
+    # Don't publish it to the host.
+    environment:
+      DURPDEPLOY_DB: /data/durpdeploy.db
+      # Optional. The mounted secret file at /etc/durpdeploy/key is the
+      # primary path; secret/secret.go reads file first, env fallback. Set
+      # this only when delivering the key via env (k8s, swarm, etc.).
+      DURPDEPLOY_SECRET_KEY: ${DURPDEPLOY_SECRET_KEY:-}
+      DURPDEPLOY_LITESTREAM_CHECK_COMMAND: ${DURPDEPLOY_LITESTREAM_CHECK_COMMAND:-}
+      DURPDEPLOY_LITESTREAM_CHECK_INTERVAL: ${DURPDEPLOY_LITESTREAM_CHECK_INTERVAL:-1h}
+    volumes:
+      - durpdeploy-data:/data
+    secrets:
+      - source: durpdeploy_key
+        target: /etc/durpdeploy/key
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/login"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 256
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DURPDEPLOY_URL: ${DURPDEPLOY_URL:?}  # required, e.g. https://durpdeploy.example.com
+      # Backend address for the reverse_proxy directive in Caddyfile.
+      # Defaults to localhost:8080 (the systemd deploy); the compose
+      # stack overrides to `app:8080` to use the compose DNS.
+      BACKEND: ${BACKEND:-app:8080}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      app:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    cap_add:
+      - NET_BIND_SERVICE
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m
+    mem_limit: 256m
+    cpus: 0.5
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  litestream:
+    image: litestream/litestream:0.3
+    restart: unless-stopped
+    command: replicate -config /etc/litestream.yml
+    volumes:
+      - durpdeploy-data:/data
+      - ./deploy/litestream.example.yml:/etc/litestream.yml:ro
+    environment:
+      LITESTREAM_S3_BUCKET: ${LITESTREAM_S3_BUCKET:?}  # required for S3 replication
+      LITESTREAM_S3_ENDPOINT: ${LITESTREAM_S3_ENDPOINT:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+    depends_on:
+      app:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    mem_limit: 128m
+    cpus: 0.25
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  durpdeploy-data:
+  caddy-data:
+  caddy-config:
+
+secrets:
+  durpdeploy_key:
+    file: ./secrets/durpdeploy_key  # operator creates this file with: openssl rand -base64 32 > secrets/durpdeploy_key && chmod 0600 secrets/durpdeploy_key

@@ -1,0 +1,101 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "durpdeploy.fullname" . }}
+  labels:
+    {{- include "durpdeploy.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "durpdeploy.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        # Force pod restart when the secret-key Secret content changes.
+        # The binary reads the key on every boot, so a key rotation
+        # becomes a rolling restart.
+        checksum/secret-key: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        # Same trick for the Postgres password — pgx reads it on every
+        # new connection but the binary opens a pool once at boot, so
+        # the pod needs to roll for a new password to take effect.
+        checksum/postgres-secret: {{ include (print $.Template.BasePath "/postgres-secret.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "durpdeploy.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "durpdeploy.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: durpdeploy
+          image: {{ include "durpdeploy.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.targetPort }}
+              protocol: TCP
+          env:
+            # --- Database (Postgres DSN) ---
+            # postgres://user:password@host:port/db?sslmode=...
+            # ponytail: assembled inline rather than via a Secret+envFrom
+            # because pgx accepts the full DSN as a single string and we
+            # already pay the cost of building it once.
+            - name: DURPDEPLOY_DB
+              value: "postgres://{{ .Values.externalPostgres.username }}:$(DURPDEPLOY_PG_PASSWORD)@{{ .Values.externalPostgres.host }}:{{ .Values.externalPostgres.port }}/{{ .Values.externalPostgres.database }}?sslmode={{ .Values.externalPostgres.sslmode }}"
+            - name: DURPDEPLOY_PG_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "durpdeploy.postgresSecretName" . }}
+                  key: password
+            # --- Encryption key ---
+            - name: DURPDEPLOY_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "durpdeploy.secretKeyName" . }}
+                  key: secret-key
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          livenessProbe:
+            {{- toYaml .Values.probes.liveness | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.probes.readiness | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          # /tmp is needed by the runner for tmp files; /data is a
+          # historical volume for SQLite (unused on Postgres but kept
+          # for parity with the systemd unit).
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: data
+          emptyDir: {}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

@@ -1,0 +1,181 @@
+# Default values for durpdeploy.
+# Override per-install with `-f my-values.yaml` or `--set key=value`.
+
+# -- Number of pod replicas. The runner executes bash on the host and the
+# startup recovery path has a non-atomic claim (see cmd/server/main.go
+# comment on recoverPendingDeployments) — keep this at 1 unless you
+# understand the deploy-creation race.
+replicaCount: 1
+
+image:
+  # -- Container image repository.
+  repository: durpdeploy
+  # -- Image pull policy.
+  pullPolicy: IfNotPresent
+  # -- Image tag. Defaults to the chart's appVersion.
+  tag: ""
+
+# -- Image pull secrets for private registries.
+imagePullSecrets: []
+# -- Override the chart-level name (used in resource names and labels).
+nameOverride: ""
+# -- Override the fully-qualified app name.
+fullnameOverride: ""
+
+serviceAccount:
+  # -- Whether to create a ServiceAccount.
+  create: true
+  # -- Annotations to add to the ServiceAccount.
+  annotations: {}
+  # -- ServiceAccount name. If unset, one is generated.
+  name: ""
+
+# -- Pod-level annotations.
+podAnnotations: {}
+# --- Autoscaling ---------------------------------------------------------
+# Disabled by default. The runner executes bash on the host and the
+# startup recovery path has a non-atomic claim — scaling up introduces
+# deploy-creation races. Only enable if you have moved the queue out
+# of the process.
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 1
+  targetCPUUtilizationPercentage: 80
+
+# -- Pod-level security context.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  capabilities:
+    drop:
+      - ALL
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8080
+
+# -- Resource requests/limits for the durpdeploy container.
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: "1"
+    memory: 512Mi
+
+# -- Optional nodeSelector, tolerations, affinity for scheduling.
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# -- Liveness/readiness probes hit /login, which returns 303 when the server
+# is up. Matches the Dockerfile HEALTHCHECK.
+probes:
+  liveness:
+    httpGet:
+      path: /login
+      port: http
+    initialDelaySeconds: 30
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readiness:
+    httpGet:
+      path: /login
+      port: http
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+# --- Database (Postgres) -------------------------------------------------
+# The chart does NOT bundle a Postgres server. Point externalPostgres at
+# your managed instance (RDS, Cloud SQL, Aurora, supabase, Crunchy, etc.)
+# or set postgres.enabled: true to create the in-cluster *Secret* (you
+# still run Postgres elsewhere — see README).
+postgres:
+  # -- When true, the chart renders a Secret holding the Postgres
+  # password. You still need to point externalPostgres at a real server.
+  enabled: false
+  # -- Existing Secret containing POSTGRES_PASSWORD (key: password).
+  # If set, the chart does not render its own Secret and uses this one.
+  existingSecret: ""
+  # -- Used only when the chart renders the Secret (no existingSecret).
+  # Leave empty — the operator MUST set it after install. Stored in
+  # stringData (not data), so it can be applied verbatim.
+  password: ""
+
+# -- Postgres connection. The DSN is built from these fields and exposed
+# to the pod as DURPDEPLOY_DB. Required.
+externalPostgres:
+  host: postgres
+  port: 5432
+  database: durpdeploy
+  username: durpdeploy
+  # -- SSL mode passed to pgx. Default `require` encrypts the connection
+  # but does not verify the server certificate. For production against
+  # a managed Postgres with a public CA, use `verify-full` and set
+  # `sslrootcert` via extraEnv (DURPDEPLOY_DB accepts the full DSN, so
+  # you can override it directly if you need stricter checks).
+  sslmode: require
+
+# --- Encryption key ------------------------------------------------------
+# The chart renders a Secret durpdeploy-secret-key with a key the
+# operator fills in. Encryption uses AES-256-GCM (see internal/secret);
+# the key is read from DURPDEPLOY_SECRET_KEY, which is populated from
+# this Secret at boot. The chart will refuse to start with an empty
+# value — the Secret is rendered but the pod's startup probe will
+# fail and Helm will surface it.
+secretKey:
+  # -- When true, render a Secret named durpdeploy-secret-key. Set
+  # existingSecret to bring your own.
+  create: true
+  # -- Use an existing Secret with key `secret-key`. Mutually exclusive
+  # with secretKey.create.
+  existingSecret: ""
+  # -- Optional pre-filled key (base64, 32 bytes). Leave empty — the
+  # operator must generate it post-install:
+  #   openssl rand -base64 32
+  # and `kubectl patch secret` or `kubectl edit secret` it in.
+  value: ""
+
+# --- Ingress -------------------------------------------------------------
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: durpdeploy.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+# --- Optional env (SMTP, notifications, etc.) ---------------------------
+# Free-form env to surface to the container. The chart wires the
+# DSN and secret key automatically — everything else goes here.
+# Example:
+#   extraEnv:
+#     - name: DURPDEPLOY_SMTP_HOST
+#       value: smtp.example.com
+extraEnv: []
+
+# --- Pod disruption budget ----------------------------------------------
+# Disabled by default — single replica means a PDB can only block
+# voluntary disruption indefinitely.
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
