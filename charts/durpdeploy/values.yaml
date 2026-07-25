@@ -8,8 +8,10 @@
 replicaCount: 1
 
 image:
-  # -- Container image repository.
-  repository: durpdeploy
+  # -- Container image repository. Defaults to the ghcr.io path the
+  # release pipeline pushes to. Override with --set image.repository=...
+  # for an internal mirror or a fork.
+  repository: ghcr.io/developerdurp/durpdeploy
   # -- Image pull policy.
   pullPolicy: IfNotPresent
   # -- Image tag. Defaults to the chart's appVersion.

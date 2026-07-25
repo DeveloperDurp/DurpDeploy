@@ -13,8 +13,8 @@ keywords:
   - ci
   - deployment
   - bash
-home: https://github.com/example/durpdeploy
+home: https://github.com/DeveloperDurp/DurpDeploy
 maintainers:
   - name: durpdeploy
 sources:
-  - https://github.com/example/durpdeploy
+  - https://github.com/DeveloperDurp/DurpDeploy
