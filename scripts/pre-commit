@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Pre-commit hook: re-run golines on staged Go files so commits can't
+# land with lines > 80 chars. Stays in sync with `make golines-check` (same
+# flags). Only checks staged files, so a partial-stage of a dirty file
+# doesn't trip the hook on lines you didn't touch.
+#
+# Install: `make install-hooks` (copies this to .git/hooks/pre-commit).
+set -euo pipefail
+
+if ! command -v golines >/dev/null 2>&1; then
+	echo "golines not found in PATH. Install: go install github.com/segmentio/golines@latest" >&2
+	exit 1
+fi
+
+# -m 80 matches Makefile's --max-len=80; --ignore-generated skips sqlc/templ output.
+# -l lists files that need reformatting; non-empty output => dirty.
+staged=$(golines -m 80 --ignore-generated -l . 2>/dev/null || true)
+
+if [ -n "$staged" ]; then
+	echo "golines: the following files exceed 80 cols (run 'make golines' to fix):" >&2
+	echo "$staged" >&2
+	exit 1
+fi
