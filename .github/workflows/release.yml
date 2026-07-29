@@ -94,6 +94,13 @@ jobs:
       - name: Install templ
         run: go install github.com/a-h/templ/cmd/templ@v0.3.1020
 
+      # ponytail: static/swagger-ui/ is gitignored (build artifacts from
+      # node_modules/swagger-ui-dist), so the //go:embed pattern in
+      # static/static.go finds no files on a fresh checkout. Materialize
+      # them before any go command that walks the import graph.
+      - name: Materialize static/swagger-ui/
+        run: make swagger-ui-copy
+
       - name: go vet
         run: templ generate && go vet ./...
 
@@ -135,6 +142,11 @@ jobs:
       # requirement documented in AGENTS.md for local `go vet`/`go test`).
       - name: Generate templ files
         run: templ generate
+
+      # ponytail: static/swagger-ui/ is gitignored; materialize it before
+      # the test build walks the import graph (same reason as the lint job).
+      - name: Materialize static/swagger-ui/
+        run: make swagger-ui-copy
 
       # CI's exact command — keep this in sync with AGENTS.md.
       - name: go test

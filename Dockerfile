@@ -27,11 +27,17 @@ RUN npm ci
 # Copy the full source tree (views, static, migrations, queries, etc.).
 COPY . .
 
-# Generate templ files, build CSS/JS bundles, then compile the Go binary in
-# the same layer. CGO_ENABLED=0 is required because the project uses
-# modernc.org/sqlite, which is pure Go and does not need CGO. -w -s strips
-# debug info and the symbol table; -trimpath removes build paths.
-RUN make templ-generate tailwind-build js-build && \
+# Generate templ files, build CSS/JS bundles + swagger-ui assets, then
+# compile the Go binary in the same layer. CGO_ENABLED=0 is required because
+# the project uses modernc.org/sqlite, which is pure Go and does not need
+# CGO. -w -s strips debug info and the symbol table; -trimpath removes build
+# paths.
+#
+# ponytail: swagger-ui-copy is the only step that materializes
+# static/swagger-ui/ (the //go:embed pattern in static/static.go needs the
+# files at build time; the directory is .gitignore'd). tailwind-build and
+# js-build do not produce it.
+RUN make templ-generate tailwind-build js-build swagger-ui-copy && \
     CGO_ENABLED=0 GOOS=linux go build -ldflags='-w -s' -trimpath -o /out/durpdeploy ./cmd/server
 
 # Stage 2: runtime
