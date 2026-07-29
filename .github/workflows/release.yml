@@ -41,6 +41,14 @@ env:
   # nested paths (charts/durpdeploy) are rejected with
   # "invalid_reference: invalid repository". One segment, lowercase.
   CHART_REPO: charts
+  # Buildx cache lives in its OWN ghcr package, not alongside the image.
+  # Caching into the same package pollutes it with `cache-<sha>` tags
+  # whose manifest is `application/vnd.buildkit.cacheconfig.v0` — not an
+  # OCI image — so `docker run`/`podman run` against that tag fails with
+  # "unsupported image-specific operation on artifact with type
+  # application/vnd.buildkit.cacheconfig.v0". The first run after this
+  # change will not have a cache to import; subsequent runs reuse it.
+  CACHE_IMAGE_NAME: durpdeploy-cache
 
 jobs:
   # ----- Compute version once, share with downstream jobs ----------------
@@ -197,15 +205,15 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          # ponytail: scope the cache to the SHA so each push gets an
-          # isolated cache slot. A shared `cache` tag was created during
-          # the early broken-state runs (mixed-case owner, partial
-          # pushes) and is now corrupted — pulling it back triggers
-          # "package.json: not found" in buildx's cache-key calculation.
-          # Per-SHA cache tags also let concurrent branches run without
-          # racing on the same tag.
-          cache-from: type=registry,ref=ghcr.io/${{ env.REGISTRY_OWNER }}/${{ env.IMAGE_NAME }}:cache-${{ github.sha }}
-          cache-to: type=registry,ref=ghcr.io/${{ env.REGISTRY_OWNER }}/${{ env.IMAGE_NAME }}:cache-${{ github.sha }},mode=max
+          # ponytail: cache lives in its own package (CACHE_IMAGE_NAME),
+          # not in the image package — see env comment. mode=max on push
+          # so all intermediate layers are exported; cache-from mode=max
+          # so all of them are pulled back in. Per-SHA refs let concurrent
+          # branches run without racing on the same tag and avoid the
+          # "package.json: not found" cache-key error that a shared `cache`
+          # tag hit during the early mixed-case-owner runs.
+          cache-from: type=registry,ref=ghcr.io/${{ env.REGISTRY_OWNER }}/${{ env.CACHE_IMAGE_NAME }}:cache-${{ github.sha }},mode=max
+          cache-to: type=registry,ref=ghcr.io/${{ env.REGISTRY_OWNER }}/${{ env.CACHE_IMAGE_NAME }}:cache-${{ github.sha }},mode=max
 
       - name: Trivy scan
         # ponytail: aquasec org was renamed to aquasecurity; 0.28.0 is one
