@@ -41,6 +41,8 @@ CI stage order: `lint` (`go vet ./...` + `gofmt -l .` must be empty) → `test` 
 
 ## Conventions agents get wrong
 
+- **Pre-commit: run `make install-hooks` once per clone.** It copies `scripts/pre-commit` to `.git/hooks/pre-commit`, which runs `golines -m 80 --ignore-generated -l .` on staged Go files and blocks the commit if any line exceeds 80 cols. The Makefile target `golines-check` does the same dry-run for the whole tree. CI re-runs the same check in the `lint` stage, so `--no-verify` doesn't bypass the gate.
+
 - **Add routes in `internal/server/server.go` only.** All chi routes are registered there; handlers live in `internal/handler/*`.
 - **`internal/handler/logs_test.go` has its own inline SQL schema** (stale — missing `step_templates`). New tests should use `migrate.Run(":memory:?_pragma=foreign_keys(1)")` like `internal/db/smoke_test.go`, not duplicate the schema inline.
 - **DSN is fixed** in `cmd/server/main.go`: `durpdeploy.db?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)`. Database file, WAL, and SHM are gitignored.
