@@ -7,6 +7,13 @@ SELECT * FROM scheduled_deployments WHERE id = ?;
 -- name: ListScheduledDeploymentsByProject :many
 SELECT * FROM scheduled_deployments WHERE project_id = ? ORDER BY created_at DESC;
 
+-- name: ListScheduledDeploymentsByProjectPaginated :many
+SELECT * FROM scheduled_deployments WHERE project_id = ? ORDER BY created_at DESC
+LIMIT ? OFFSET ?;
+
+-- name: CountScheduledDeploymentsByProject :one
+SELECT COUNT(*) FROM scheduled_deployments WHERE project_id = ?;
+
 -- name: ListDueScheduledDeployments :many
 SELECT * FROM scheduled_deployments WHERE next_run_at <= ? AND enabled = 1 ORDER BY next_run_at ASC;
 

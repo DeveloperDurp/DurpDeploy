@@ -26,6 +26,39 @@ func (q *Queries) AddProjectMember(ctx context.Context, arg AddProjectMemberPara
 	return err
 }
 
+const countProjectMembers = `-- name: CountProjectMembers :one
+SELECT COUNT(*) FROM project_members WHERE project_id = ?
+`
+
+func (q *Queries) CountProjectMembers(ctx context.Context, projectID int64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countProjectMembers, projectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countProjectsForUser = `-- name: CountProjectsForUser :one
+SELECT COUNT(*) FROM project_members WHERE user_id = ?
+`
+
+func (q *Queries) CountProjectsForUser(ctx context.Context, userID int64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countProjectsForUser, userID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countUsers = `-- name: CountUsers :one
+SELECT COUNT(*) FROM users
+`
+
+func (q *Queries) CountUsers(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countUsers)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const getProjectMember = `-- name: GetProjectMember :one
 SELECT project_id, user_id, role, created_at FROM project_members WHERE project_id = ? AND user_id = ?
 `
@@ -110,6 +143,60 @@ func (q *Queries) ListProjectMembers(ctx context.Context, projectID int64) ([]Li
 	return items, nil
 }
 
+const listProjectMembersPaginated = `-- name: ListProjectMembersPaginated :many
+SELECT pm.project_id, pm.user_id, pm.role, pm.created_at, u.email, u.name
+FROM project_members pm
+JOIN users u ON u.id = pm.user_id
+WHERE pm.project_id = ?
+ORDER BY pm.created_at ASC
+LIMIT ? OFFSET ?
+`
+
+type ListProjectMembersPaginatedParams struct {
+	ProjectID int64 `json:"project_id"`
+	Limit     int64 `json:"limit"`
+	Offset    int64 `json:"offset"`
+}
+
+type ListProjectMembersPaginatedRow struct {
+	ProjectID int64  `json:"project_id"`
+	UserID    int64  `json:"user_id"`
+	Role      string `json:"role"`
+	CreatedAt int64  `json:"created_at"`
+	Email     string `json:"email"`
+	Name      string `json:"name"`
+}
+
+func (q *Queries) ListProjectMembersPaginated(ctx context.Context, arg ListProjectMembersPaginatedParams) ([]ListProjectMembersPaginatedRow, error) {
+	rows, err := q.db.QueryContext(ctx, listProjectMembersPaginated, arg.ProjectID, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListProjectMembersPaginatedRow
+	for rows.Next() {
+		var i ListProjectMembersPaginatedRow
+		if err := rows.Scan(
+			&i.ProjectID,
+			&i.UserID,
+			&i.Role,
+			&i.CreatedAt,
+			&i.Email,
+			&i.Name,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listProjectsForUser = `-- name: ListProjectsForUser :many
 SELECT p.id, p.name, p.description, p.created_at, p.lifecycle_id, p.slack_webhook_url, p.notify_emails, p.gotify_url, p.gotify_token, p.discord_webhook_url FROM projects p
 JOIN project_members pm ON pm.project_id = p.id
@@ -119,6 +206,54 @@ ORDER BY p.created_at DESC
 
 func (q *Queries) ListProjectsForUser(ctx context.Context, userID int64) ([]Project, error) {
 	rows, err := q.db.QueryContext(ctx, listProjectsForUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Project
+	for rows.Next() {
+		var i Project
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Description,
+			&i.CreatedAt,
+			&i.LifecycleID,
+			&i.SlackWebhookUrl,
+			&i.NotifyEmails,
+			&i.GotifyUrl,
+			&i.GotifyToken,
+			&i.DiscordWebhookUrl,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProjectsForUserPaginated = `-- name: ListProjectsForUserPaginated :many
+SELECT p.id, p.name, p.description, p.created_at, p.lifecycle_id, p.slack_webhook_url, p.notify_emails, p.gotify_url, p.gotify_token, p.discord_webhook_url FROM projects p
+JOIN project_members pm ON pm.project_id = p.id
+WHERE pm.user_id = ?
+ORDER BY p.created_at DESC
+LIMIT ? OFFSET ?
+`
+
+type ListProjectsForUserPaginatedParams struct {
+	UserID int64 `json:"user_id"`
+	Limit  int64 `json:"limit"`
+	Offset int64 `json:"offset"`
+}
+
+func (q *Queries) ListProjectsForUserPaginated(ctx context.Context, arg ListProjectsForUserPaginatedParams) ([]Project, error) {
+	rows, err := q.db.QueryContext(ctx, listProjectsForUserPaginated, arg.UserID, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
@@ -174,6 +309,57 @@ func (q *Queries) ListUsers(ctx context.Context) ([]ListUsersRow, error) {
 	var items []ListUsersRow
 	for rows.Next() {
 		var i ListUsersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Email,
+			&i.Name,
+			&i.Role,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.LastLoginAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUsersPaginated = `-- name: ListUsersPaginated :many
+SELECT id, email, name, role, created_at, updated_at, last_login_at FROM users ORDER BY email
+LIMIT ? OFFSET ?
+`
+
+type ListUsersPaginatedParams struct {
+	Limit  int64 `json:"limit"`
+	Offset int64 `json:"offset"`
+}
+
+type ListUsersPaginatedRow struct {
+	ID          int64         `json:"id"`
+	Email       string        `json:"email"`
+	Name        string        `json:"name"`
+	Role        string        `json:"role"`
+	CreatedAt   int64         `json:"created_at"`
+	UpdatedAt   int64         `json:"updated_at"`
+	LastLoginAt sql.NullInt64 `json:"last_login_at"`
+}
+
+func (q *Queries) ListUsersPaginated(ctx context.Context, arg ListUsersPaginatedParams) ([]ListUsersPaginatedRow, error) {
+	rows, err := q.db.QueryContext(ctx, listUsersPaginated, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUsersPaginatedRow
+	for rows.Next() {
+		var i ListUsersPaginatedRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Email,

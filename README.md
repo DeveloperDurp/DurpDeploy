@@ -53,6 +53,22 @@ Server starts on `http://localhost:8080`. A `durpdeploy.db` SQLite file is creat
 5. **Create a release** - On the project detail page, click Releases. Enter a version (e.g., `1.0.0`)
 6. **Deploy** - On the release, select an environment and click Deploy. Watch logs stream in real time.
 
+## API
+
+DurpDeploy exposes a JSON REST API at `/api/v1/*`. All requests must authenticate with a bearer token:
+
+```bash
+curl -H "Authorization: Bearer ddp_pat_<token>" http://localhost:8080/api/v1/projects
+```
+
+API tokens are created per-user from the `/settings/tokens` page or via the CLI:
+
+```bash
+durpdeploy tokens create --user admin@example.com --name ci
+```
+
+The full API reference is available at `/api/swagger/` in a running server (no auth required).
+
 ## Architecture
 
 ```

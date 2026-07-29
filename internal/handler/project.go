@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"net/http"
@@ -630,10 +631,24 @@ func (h *ProjectHandler) applyLifecycleSelection(
 	if err != nil {
 		return err
 	}
-	return h.repo.Queries.SetProjectLifecycle(
-		r.Context(),
+	return ApplyLifecycleSelection(r.Context(), h.repo, projectID, id)
+}
+
+// ApplyLifecycleSelection sets or clears a project's lifecycle. It is exported
+// so the JSON API handler can reuse the same logic without duplicating it.
+func ApplyLifecycleSelection(
+	ctx context.Context,
+	repo *repository.Repository,
+	projectID int64,
+	lifecycleID int64,
+) error {
+	if lifecycleID <= 0 {
+		return repo.Queries.ClearProjectLifecycle(ctx, projectID)
+	}
+	return repo.Queries.SetProjectLifecycle(
+		ctx,
 		db.SetProjectLifecycleParams{
-			LifecycleID: sql.NullInt64{Int64: id, Valid: true},
+			LifecycleID: sql.NullInt64{Int64: lifecycleID, Valid: true},
 			ID:          projectID,
 		},
 	)

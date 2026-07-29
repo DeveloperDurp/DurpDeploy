@@ -819,7 +819,7 @@ func (h *DeploymentHandler) ListDeployments(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	f := parseDeploymentsFilter(r)
+	f := ParseDeploymentsFilter(r)
 
 	rows, err := h.repo.Queries.ListDeploymentsWithRefsFiltered(
 		r.Context(),
@@ -938,7 +938,9 @@ const (
 	deploymentsMaxLimit     = 100
 )
 
-type deploymentsFilter struct {
+// DeploymentsFilter is the parsed query-parameter filter for the deployments
+// list endpoint. Exported so the JSON API handler can reuse the same parsing.
+type DeploymentsFilter struct {
 	ProjectID sql.NullInt64
 	EnvID     sql.NullInt64
 	Status    sql.NullString
@@ -948,9 +950,11 @@ type deploymentsFilter struct {
 	Offset    int64
 }
 
-func parseDeploymentsFilter(r *http.Request) deploymentsFilter {
+// ParseDeploymentsFilter parses deployments list query parameters into a
+// typed filter. Exported for use by the JSON API handler.
+func ParseDeploymentsFilter(r *http.Request) DeploymentsFilter {
 	q := r.URL.Query()
-	f := deploymentsFilter{Limit: deploymentsDefaultLimit, Offset: 0}
+	f := DeploymentsFilter{Limit: deploymentsDefaultLimit, Offset: 0}
 
 	if s := strings.TrimSpace(q.Get("project_id")); s != "" {
 		if v, err := strconv.ParseInt(s, 10, 64); err == nil && v > 0 {

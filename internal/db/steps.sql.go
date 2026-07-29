@@ -9,6 +9,17 @@ import (
 	"context"
 )
 
+const countStepsByProject = `-- name: CountStepsByProject :one
+SELECT COUNT(*) FROM steps WHERE project_id = ?
+`
+
+func (q *Queries) CountStepsByProject(ctx context.Context, projectID int64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countStepsByProject, projectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createStep = `-- name: CreateStep :one
 INSERT INTO steps (project_id, name, script_body, sort_order, timeout_seconds, max_retries) VALUES (?, ?, ?, ?, ?, ?) RETURNING id, project_id, name, script_body, sort_order, created_at, timeout_seconds, max_retries
 `
@@ -80,6 +91,49 @@ SELECT id, project_id, name, script_body, sort_order, created_at, timeout_second
 
 func (q *Queries) ListStepsByProject(ctx context.Context, projectID int64) ([]Step, error) {
 	rows, err := q.db.QueryContext(ctx, listStepsByProject, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Step
+	for rows.Next() {
+		var i Step
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.Name,
+			&i.ScriptBody,
+			&i.SortOrder,
+			&i.CreatedAt,
+			&i.TimeoutSeconds,
+			&i.MaxRetries,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listStepsByProjectPaginated = `-- name: ListStepsByProjectPaginated :many
+SELECT id, project_id, name, script_body, sort_order, created_at, timeout_seconds, max_retries FROM steps WHERE project_id = ? ORDER BY sort_order ASC, created_at ASC
+LIMIT ? OFFSET ?
+`
+
+type ListStepsByProjectPaginatedParams struct {
+	ProjectID int64 `json:"project_id"`
+	Limit     int64 `json:"limit"`
+	Offset    int64 `json:"offset"`
+}
+
+func (q *Queries) ListStepsByProjectPaginated(ctx context.Context, arg ListStepsByProjectPaginatedParams) ([]Step, error) {
+	rows, err := q.db.QueryContext(ctx, listStepsByProjectPaginated, arg.ProjectID, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}

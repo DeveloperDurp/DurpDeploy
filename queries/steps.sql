@@ -1,6 +1,13 @@
 -- name: ListStepsByProject :many
 SELECT * FROM steps WHERE project_id = ? ORDER BY sort_order ASC, created_at ASC;
 
+-- name: ListStepsByProjectPaginated :many
+SELECT * FROM steps WHERE project_id = ? ORDER BY sort_order ASC, created_at ASC
+LIMIT ? OFFSET ?;
+
+-- name: CountStepsByProject :one
+SELECT COUNT(*) FROM steps WHERE project_id = ?;
+
 -- name: GetStep :one
 SELECT * FROM steps WHERE id = ?;
 

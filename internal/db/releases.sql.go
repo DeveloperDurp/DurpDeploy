@@ -9,6 +9,17 @@ import (
 	"context"
 )
 
+const countReleasesByProject = `-- name: CountReleasesByProject :one
+SELECT COUNT(*) FROM releases WHERE project_id = ?
+`
+
+func (q *Queries) CountReleasesByProject(ctx context.Context, projectID int64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countReleasesByProject, projectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createRelease = `-- name: CreateRelease :one
 INSERT INTO releases (project_id, version, steps_json) VALUES (?, ?, ?) RETURNING id, project_id, version, steps_json, created_at
 `
@@ -64,6 +75,46 @@ SELECT id, project_id, version, steps_json, created_at FROM releases WHERE proje
 
 func (q *Queries) ListReleasesByProject(ctx context.Context, projectID int64) ([]Release, error) {
 	rows, err := q.db.QueryContext(ctx, listReleasesByProject, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Release
+	for rows.Next() {
+		var i Release
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.Version,
+			&i.StepsJson,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listReleasesByProjectPaginated = `-- name: ListReleasesByProjectPaginated :many
+SELECT id, project_id, version, steps_json, created_at FROM releases WHERE project_id = ? ORDER BY created_at DESC
+LIMIT ? OFFSET ?
+`
+
+type ListReleasesByProjectPaginatedParams struct {
+	ProjectID int64 `json:"project_id"`
+	Limit     int64 `json:"limit"`
+	Offset    int64 `json:"offset"`
+}
+
+func (q *Queries) ListReleasesByProjectPaginated(ctx context.Context, arg ListReleasesByProjectPaginatedParams) ([]Release, error) {
+	rows, err := q.db.QueryContext(ctx, listReleasesByProjectPaginated, arg.ProjectID, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}

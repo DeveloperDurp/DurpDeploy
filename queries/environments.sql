@@ -1,6 +1,13 @@
 -- name: ListEnvironments :many
 SELECT * FROM environments ORDER BY created_at DESC;
 
+-- name: ListEnvironmentsPaginated :many
+SELECT * FROM environments ORDER BY created_at DESC
+LIMIT ? OFFSET ?;
+
+-- name: CountEnvironments :one
+SELECT COUNT(*) FROM environments;
+
 -- name: GetEnvironment :one
 SELECT * FROM environments WHERE id = ?;
 

@@ -136,57 +136,7 @@ func (h *ReleaseHandler) CreateRelease(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Query current steps for project
-	steps, err := h.repo.Queries.ListStepsByProject(r.Context(), projectID)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	// Serialize steps to JSON
-	type stepSnapshot struct {
-		Name           string `json:"name"`
-		ScriptBody     string `json:"script_body"`
-		SortOrder      int64  `json:"sort_order"`
-		TimeoutSeconds int64  `json:"timeout_seconds"`
-		MaxRetries     int64  `json:"max_retries"`
-	}
-
-	snapshots := make([]stepSnapshot, len(steps))
-	for i, step := range steps {
-		snapshots[i] = stepSnapshot{
-			Name:           step.Name,
-			ScriptBody:     step.ScriptBody,
-			SortOrder:      step.SortOrder,
-			TimeoutSeconds: step.TimeoutSeconds,
-			MaxRetries:     step.MaxRetries,
-		}
-	}
-
-	stepsJSON, err := json.Marshal(snapshots)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	// Start transaction
-	tx, err := h.repo.DB.BeginTx(r.Context(), nil)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	defer tx.Rollback()
-
-	qtx := h.repo.Queries.WithTx(tx)
-
-	// Insert release
-	releaseParams := db.CreateReleaseParams{
-		ProjectID: projectID,
-		Version:   version,
-		StepsJson: string(stepsJSON),
-	}
-
-	release, err := qtx.CreateRelease(r.Context(), releaseParams)
+	_, err = CreateReleaseSnapshot(r.Context(), h.repo, projectID, version)
 	if err != nil {
 		if IsUniqueViolation(err) {
 			project, _ := h.repo.Queries.GetProject(r.Context(), projectID)
@@ -216,45 +166,6 @@ func (h *ReleaseHandler) CreateRelease(w http.ResponseWriter, r *http.Request) {
 			)
 			return
 		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	// Query current variables for project and snapshot them
-	variables, err := h.repo.ListVariablesByProject(
-		r.Context(),
-		projectID,
-	)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	for _, variable := range variables {
-		// variable.Value was decrypted by ListVariablesByProject above;
-		// re-encrypt it before writing the release snapshot (P1-3).
-		encValue, err := h.repo.EncryptValue(variable.Value)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		varParams := db.CreateReleaseVariableParams{
-			ReleaseID:     release.ID,
-			Name:          variable.Name,
-			Value:         encValue,
-			EnvironmentID: variable.EnvironmentID,
-			Secret:        variable.Secret,
-		}
-		if _, err := qtx.CreateReleaseVariable(
-			r.Context(),
-			varParams,
-		); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-	}
-
-	if err := tx.Commit(); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -492,4 +403,89 @@ func (h *ReleaseHandler) RefreshRelease(
 		fmt.Sprintf("/projects/%d/releases/%d", projectID, releaseID),
 		http.StatusSeeOther,
 	)
+}
+
+// CreateReleaseSnapshot snapshots the project's current steps and variables
+// into a new release. Exported so the JSON API handler can reuse the same
+// transaction logic as the web form handler.
+func CreateReleaseSnapshot(
+	ctx context.Context,
+	repo *repository.Repository,
+	projectID int64,
+	version string,
+) (db.Release, error) {
+	steps, err := repo.Queries.ListStepsByProject(ctx, projectID)
+	if err != nil {
+		return db.Release{}, err
+	}
+
+	type stepSnapshot struct {
+		Name           string `json:"name"`
+		ScriptBody     string `json:"script_body"`
+		SortOrder      int64  `json:"sort_order"`
+		TimeoutSeconds int64  `json:"timeout_seconds"`
+		MaxRetries     int64  `json:"max_retries"`
+	}
+
+	snapshots := make([]stepSnapshot, len(steps))
+	for i, step := range steps {
+		snapshots[i] = stepSnapshot{
+			Name:           step.Name,
+			ScriptBody:     step.ScriptBody,
+			SortOrder:      step.SortOrder,
+			TimeoutSeconds: step.TimeoutSeconds,
+			MaxRetries:     step.MaxRetries,
+		}
+	}
+
+	stepsJSON, err := json.Marshal(snapshots)
+	if err != nil {
+		return db.Release{}, err
+	}
+
+	tx, err := repo.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return db.Release{}, err
+	}
+	defer tx.Rollback()
+
+	qtx := repo.Queries.WithTx(tx)
+
+	release, err := qtx.CreateRelease(ctx, db.CreateReleaseParams{
+		ProjectID: projectID,
+		Version:   version,
+		StepsJson: string(stepsJSON),
+	})
+	if err != nil {
+		return db.Release{}, err
+	}
+
+	variables, err := repo.ListVariablesByProject(ctx, projectID)
+	if err != nil {
+		return db.Release{}, err
+	}
+
+	for _, variable := range variables {
+		encValue, err := repo.EncryptValue(variable.Value)
+		if err != nil {
+			return db.Release{}, err
+		}
+		if _, err := qtx.CreateReleaseVariable(
+			ctx,
+			db.CreateReleaseVariableParams{
+				ReleaseID:     release.ID,
+				Name:          variable.Name,
+				Value:         encValue,
+				EnvironmentID: variable.EnvironmentID,
+				Secret:        variable.Secret,
+			},
+		); err != nil {
+			return db.Release{}, err
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return db.Release{}, err
+	}
+	return release, nil
 }

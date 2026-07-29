@@ -1,6 +1,6 @@
 # DurpDeploy — Attack drill
 
-Five-minute hands-on walkthrough of the three most likely attacks against
+Five-minute hands-on walkthrough of the most likely attacks against
 the deployed instance, with the expected failure mode for each. Run this
 after every deploy to a new VM, and again quarterly, to confirm the
 defenses are still in place.
@@ -8,7 +8,7 @@ defenses are still in place.
 The drills assume you have a running instance reachable at
 `https://durpdeploy.example.com` and you have shell access to the server's
 SQLite database (via `sudo -u durpdeploy sqlite3 ...`). The server-side
-queries in drill 3 require shell access to the box; drills 1 and 2 only
+queries in drill 4 require shell access to the box; drills 1, 2 and 3 only
 need `curl`.
 
 ---
@@ -113,7 +113,52 @@ double-clicks). A flood of 403s from many IPs is a probing attack.
 
 ---
 
-## 3. Direct DB read (stolen backup / server compromise)
+## 3. API token leak
+
+**Attack.** A developer accidentally commits an API token to a public git
+repository.
+
+**What happens.** The bearer token grants the same access the user had. If
+the user is an admin, the leaked token can deploy, create users, and modify
+projects.
+
+```bash
+# Token found in a public repo
+TOKEN=ddp_pat_xxxxxxxxxxxxxxxxxxxxxxxx
+BASE=https://durpdeploy.example.com
+
+# List projects
+curl -s -H "Authorization: Bearer $TOKEN" "$BASE/api/v1/projects"
+
+# Trigger a deployment
+curl -s -X POST -H "Authorization: Bearer $TOKEN" \
+  -d "release_id=1&environment_id=1" "$BASE/api/v1/deployments"
+```
+
+**Expected.** The token works until it is revoked. There is no automatic
+expiration.
+
+**Mitigation:**
+
+1. Revoke the token immediately from `/admin/tokens` or via the CLI:
+   ```bash
+   durpdeploy tokens revoke <prefix>
+   ```
+2. Rotate the server secret key (`durpdeploy secret-key rotate`) if the
+   leaked token had access to encrypted variables.
+3. Audit the user's actions in `/admin/audit` between the token creation and
+   revocation.
+
+**Design defense.** Bearer tokens are hashed (SHA-256) at rest; the plaintext
+is shown exactly once at creation. The request logger records `r.URL.Path`
+only — headers, including `Authorization`, are never written to logs.
+
+**Avoid putting tokens in version control.** Use environment variables or a
+secrets manager for CI/CD pipelines.
+
+---
+
+## 4. Direct DB read (stolen backup / server compromise)
 
 **Attack.** An attacker gets a copy of the SQLite database — via a
 misconfigured backup, a stolen drive, a compromised admin account, an

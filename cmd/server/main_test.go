@@ -197,6 +197,216 @@ func TestRunAdminCreate_shortPasswordWarnsButSucceeds(t *testing.T) {
 // changes shape.
 var _ = db.CreateUserParams{}
 
+func createTestAdmin(t *testing.T, email, password string) {
+	t.Helper()
+	if code := runAdmin(
+		[]string{"create", "--email", email, "--password", password},
+	); code != 0 {
+		t.Fatalf("createTestAdmin %q exit code = %d, want 0", email, code)
+	}
+}
+
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+	origStdout := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	os.Stdout = w
+	fn()
+	w.Close()
+	os.Stdout = origStdout
+	var out bytes.Buffer
+	if _, err := io.Copy(&out, r); err != nil {
+		t.Fatalf("read captured stdout: %v", err)
+	}
+	return strings.TrimSpace(out.String())
+}
+
+func TestRunTokensCreate_success(t *testing.T) {
+	dsn := tempDSN(t)
+	t.Setenv("DURPDEPLOY_DB", dsn)
+	email := "tokens@example.com"
+	createTestAdmin(t, email, "supersecret123")
+
+	out := captureStdout(t, func() {
+		if code := runTokens(
+			[]string{"create", "--user", email, "--name", "ci token"},
+		); code != 0 {
+			t.Fatalf("runTokens create exit code = %d, want 0", code)
+		}
+	})
+
+	if !strings.HasPrefix(out, "ddp_pat_") {
+		t.Fatalf("token plaintext does not start with ddp_pat_: %q", out)
+	}
+
+	conn, err := migrate.Run(dsn)
+	if err != nil {
+		t.Fatalf("reopen db: %v", err)
+	}
+	defer conn.Close()
+	repo := repository.New(conn)
+	ctx := context.Background()
+
+	rows, err := repo.Queries.ListApiTokensByUser(ctx, 1)
+	if err != nil {
+		t.Fatalf("ListApiTokensByUser: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("token count = %d, want 1", len(rows))
+	}
+	if rows[0].Name != "ci token" {
+		t.Errorf("token name = %q, want %q", rows[0].Name, "ci token")
+	}
+	if rows[0].TokenPrefix != out[:12] {
+		t.Errorf("token prefix = %q, want %q", rows[0].TokenPrefix, out[:12])
+	}
+}
+
+func TestRunTokensCreate_missingFlags(t *testing.T) {
+	t.Setenv("DURPDEPLOY_DB", tempDSN(t))
+	cases := []struct {
+		name string
+		args []string
+	}{
+		{"no subcommand", []string{}},
+		{"missing user", []string{"create", "--name", "ci token"}},
+		{"missing name", []string{"create", "--user", "x@example.com"}},
+		{"unknown subcommand", []string{"delete"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if code := runTokens(tc.args); code == 0 {
+				t.Fatalf("runTokens(%v) exit = 0, want non-zero", tc.args)
+			}
+		})
+	}
+}
+
+func TestRunTokensCreate_userNotFound(t *testing.T) {
+	t.Setenv("DURPDEPLOY_DB", tempDSN(t))
+	code := runTokens(
+		[]string{
+			"create",
+			"--user",
+			"missing@example.com",
+			"--name",
+			"ci token",
+		},
+	)
+	if code == 0 {
+		t.Fatal("runTokens create for missing user exit = 0, want non-zero")
+	}
+}
+
+func TestRunTokensList_allAndByUser(t *testing.T) {
+	dsn := tempDSN(t)
+	t.Setenv("DURPDEPLOY_DB", dsn)
+	createTestAdmin(t, "alice@example.com", "supersecret123")
+	createTestAdmin(t, "bob@example.com", "supersecret123")
+
+	if code := runTokens(
+		[]string{
+			"create",
+			"--user",
+			"alice@example.com",
+			"--name",
+			"alice-token",
+		},
+	); code != 0 {
+		t.Fatalf("create alice token exit code = %d, want 0", code)
+	}
+	if code := runTokens(
+		[]string{"create", "--user", "bob@example.com", "--name", "bob-token"},
+	); code != 0 {
+		t.Fatalf("create bob token exit code = %d, want 0", code)
+	}
+
+	allOut := captureStdout(t, func() {
+		if code := runTokens([]string{"list"}); code != 0 {
+			t.Fatalf("runTokens list exit code = %d, want 0", code)
+		}
+	})
+	if !strings.Contains(allOut, "alice-token") ||
+		!strings.Contains(allOut, "bob-token") {
+		t.Fatalf("list all output missing tokens:\n%s", allOut)
+	}
+	if !strings.Contains(allOut, "USER_EMAIL") {
+		t.Fatalf("list all output missing USER_EMAIL header:\n%s", allOut)
+	}
+
+	aliceOut := captureStdout(t, func() {
+		if code := runTokens(
+			[]string{"list", "--user", "alice@example.com"},
+		); code != 0 {
+			t.Fatalf("runTokens list --user exit code = %d, want 0", code)
+		}
+	})
+	if !strings.Contains(aliceOut, "alice-token") {
+		t.Fatalf("list --user output missing alice-token:\n%s", aliceOut)
+	}
+	if strings.Contains(aliceOut, "bob-token") {
+		t.Fatalf("list --user output contained bob-token:\n%s", aliceOut)
+	}
+	if strings.Contains(aliceOut, "USER_EMAIL") {
+		t.Fatalf(
+			"list --user output should not contain USER_EMAIL header:\n%s",
+			aliceOut,
+		)
+	}
+}
+
+func TestRunTokensRevoke_successAndNoMatch(t *testing.T) {
+	dsn := tempDSN(t)
+	t.Setenv("DURPDEPLOY_DB", dsn)
+	email := "revoke@example.com"
+	createTestAdmin(t, email, "supersecret123")
+
+	var prefix string
+	captureStdout(t, func() {
+		if code := runTokens(
+			[]string{"create", "--user", email, "--name", "revoke-me"},
+		); code != 0 {
+			t.Fatalf("create token exit code = %d, want 0", code)
+		}
+	})
+
+	conn, err := migrate.Run(dsn)
+	if err != nil {
+		t.Fatalf("reopen db: %v", err)
+	}
+	defer conn.Close()
+	repo := repository.New(conn)
+	ctx := context.Background()
+
+	rows, err := repo.Queries.ListApiTokensByUser(ctx, 1)
+	if err != nil {
+		t.Fatalf("ListApiTokensByUser: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("token count = %d, want 1", len(rows))
+	}
+	prefix = rows[0].TokenPrefix
+
+	if code := runTokens([]string{"revoke", prefix}); code != 0 {
+		t.Fatalf("runTokens revoke exit code = %d, want 0", code)
+	}
+
+	rows, err = repo.Queries.ListApiTokensByUser(ctx, 1)
+	if err != nil {
+		t.Fatalf("ListApiTokensByUser after revoke: %v", err)
+	}
+	if len(rows) != 1 || !rows[0].RevokedAt.Valid {
+		t.Fatalf("token was not revoked: %+v", rows[0])
+	}
+
+	if code := runTokens([]string{"revoke", "ddp_pat_0000"}); code == 0 {
+		t.Fatal("runTokens revoke no-match exit = 0, want non-zero")
+	}
+}
+
 func TestRecoverPendingDeployments_launchesRunnerForOrphanedDeployment(
 	t *testing.T,
 ) {

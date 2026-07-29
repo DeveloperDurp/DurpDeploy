@@ -10,6 +10,17 @@ import (
 	"database/sql"
 )
 
+const countLifecycles = `-- name: CountLifecycles :one
+SELECT COUNT(*) FROM lifecycles
+`
+
+func (q *Queries) CountLifecycles(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countLifecycles)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createLifecycle = `-- name: CreateLifecycle :one
 INSERT INTO lifecycles (name, description) VALUES (?, ?) RETURNING id, name, description, created_at
 `
@@ -186,6 +197,44 @@ SELECT id, name, description, created_at FROM lifecycles ORDER BY name
 
 func (q *Queries) ListLifecycles(ctx context.Context) ([]Lifecycle, error) {
 	rows, err := q.db.QueryContext(ctx, listLifecycles)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Lifecycle
+	for rows.Next() {
+		var i Lifecycle
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Description,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLifecyclesPaginated = `-- name: ListLifecyclesPaginated :many
+SELECT id, name, description, created_at FROM lifecycles ORDER BY name
+LIMIT ? OFFSET ?
+`
+
+type ListLifecyclesPaginatedParams struct {
+	Limit  int64 `json:"limit"`
+	Offset int64 `json:"offset"`
+}
+
+func (q *Queries) ListLifecyclesPaginated(ctx context.Context, arg ListLifecyclesPaginatedParams) ([]Lifecycle, error) {
+	rows, err := q.db.QueryContext(ctx, listLifecyclesPaginated, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}

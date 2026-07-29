@@ -1,6 +1,13 @@
 -- name: ListReleasesByProject :many
 SELECT * FROM releases WHERE project_id = ? ORDER BY created_at DESC;
 
+-- name: ListReleasesByProjectPaginated :many
+SELECT * FROM releases WHERE project_id = ? ORDER BY created_at DESC
+LIMIT ? OFFSET ?;
+
+-- name: CountReleasesByProject :one
+SELECT COUNT(*) FROM releases WHERE project_id = ?;
+
 -- name: GetRelease :one
 SELECT * FROM releases WHERE id = ?;
 

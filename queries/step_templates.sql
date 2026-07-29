@@ -1,6 +1,13 @@
 -- name: ListStepTemplates :many
 SELECT * FROM step_templates ORDER BY name ASC;
 
+-- name: ListStepTemplatesPaginated :many
+SELECT * FROM step_templates ORDER BY name ASC
+LIMIT ? OFFSET ?;
+
+-- name: CountStepTemplates :one
+SELECT COUNT(*) FROM step_templates;
+
 -- name: GetStepTemplate :one
 SELECT * FROM step_templates WHERE id = ?;
 

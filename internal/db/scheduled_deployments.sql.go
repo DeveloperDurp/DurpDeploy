@@ -10,6 +10,17 @@ import (
 	"database/sql"
 )
 
+const countScheduledDeploymentsByProject = `-- name: CountScheduledDeploymentsByProject :one
+SELECT COUNT(*) FROM scheduled_deployments WHERE project_id = ?
+`
+
+func (q *Queries) CountScheduledDeploymentsByProject(ctx context.Context, projectID int64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countScheduledDeploymentsByProject, projectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createScheduledDeployment = `-- name: CreateScheduledDeployment :one
 INSERT INTO scheduled_deployments (project_id, release_id, environment_id, cron, next_run_at, enabled, last_fired_at, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id, project_id, release_id, environment_id, cron, next_run_at, enabled, last_fired_at, note, created_at, updated_at
 `
@@ -130,6 +141,52 @@ SELECT id, project_id, release_id, environment_id, cron, next_run_at, enabled, l
 
 func (q *Queries) ListScheduledDeploymentsByProject(ctx context.Context, projectID int64) ([]ScheduledDeployment, error) {
 	rows, err := q.db.QueryContext(ctx, listScheduledDeploymentsByProject, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ScheduledDeployment
+	for rows.Next() {
+		var i ScheduledDeployment
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.ReleaseID,
+			&i.EnvironmentID,
+			&i.Cron,
+			&i.NextRunAt,
+			&i.Enabled,
+			&i.LastFiredAt,
+			&i.Note,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listScheduledDeploymentsByProjectPaginated = `-- name: ListScheduledDeploymentsByProjectPaginated :many
+SELECT id, project_id, release_id, environment_id, cron, next_run_at, enabled, last_fired_at, note, created_at, updated_at FROM scheduled_deployments WHERE project_id = ? ORDER BY created_at DESC
+LIMIT ? OFFSET ?
+`
+
+type ListScheduledDeploymentsByProjectPaginatedParams struct {
+	ProjectID int64 `json:"project_id"`
+	Limit     int64 `json:"limit"`
+	Offset    int64 `json:"offset"`
+}
+
+func (q *Queries) ListScheduledDeploymentsByProjectPaginated(ctx context.Context, arg ListScheduledDeploymentsByProjectPaginatedParams) ([]ScheduledDeployment, error) {
+	rows, err := q.db.QueryContext(ctx, listScheduledDeploymentsByProjectPaginated, arg.ProjectID, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}

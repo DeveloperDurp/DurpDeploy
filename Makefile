@@ -1,9 +1,9 @@
-.PHONY: build dev check-openssl templ-generate tailwind-build js-build npm-install golines golines-check clean test e2e-test
+.PHONY: build dev check-openssl templ-generate tailwind-build js-build npm-install golines golines-check clean test e2e-test swagger-spec
 
 BINARY_NAME=durpdeploy
 MAIN_PATH=cmd/server/main.go
 
-build: templ-generate tailwind-build js-build
+build: swagger-spec swagger-ui-copy templ-generate tailwind-build js-build
 	go build -o $(BINARY_NAME) $(MAIN_PATH)
 
 # Hot-reload dev server. Watches .go/.templ/.sql in cmd, internal, views, migrations.
@@ -24,6 +24,17 @@ check-openssl:
 
 templ-generate:
 	templ generate
+
+swagger-spec:
+	swagger generate spec -m -o internal/swagger/spec.json ./internal/handler/api
+
+swagger-ui-copy: npm-install
+	@mkdir -p static/swagger-ui
+	cp node_modules/swagger-ui-dist/swagger-ui-bundle.js static/swagger-ui/
+	cp node_modules/swagger-ui-dist/swagger-ui-standalone-preset.js static/swagger-ui/
+	cp node_modules/swagger-ui-dist/swagger-ui.css static/swagger-ui/
+	cp node_modules/swagger-ui-dist/favicon-32x32.png static/swagger-ui/
+	cp node_modules/swagger-ui-dist/favicon-16x16.png static/swagger-ui/
 
 npm-install:
 	npm install
