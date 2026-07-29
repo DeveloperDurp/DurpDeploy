@@ -404,7 +404,7 @@ done
 echo "$PROD_STATUS" | grep -q 'succeeded' || { echo "FAIL: prod deploy did not succeed after approval, got status: $PROD_STATUS"; exit 1; }
 echo "  Prod deploy succeeded after approval: OK"
 
-sqlite3 durpdeploy.db "SELECT approved_by FROM approvals WHERE deployment_id=$PROD_DEP;" | grep -q "alice" || { echo "FAIL: approval not recorded"; exit 1; }
+sqlite3 durpdeploy.db "SELECT approved_by FROM deployment_approvals WHERE deployment_id=$PROD_DEP;" | grep -q "$ADMIN_EMAIL" || { echo "FAIL: approval not recorded"; exit 1; }
 echo "  Approval recorded for alice: OK"
 
 echo "=== F3.6: Force Deploy ==="
@@ -573,5 +573,147 @@ USER_AUDIT=$(sqlite3 durpdeploy.db "SELECT COUNT(*) FROM audit_log WHERE action 
 echo "  Audit log captured create/update/delete_user: OK"
 
 rm -f "$NEW_LOGIN"
+
+echo "=== API tests ==="
+# API helpers. The admin session from the web tests is still valid; use it
+# to mint a fresh API token via the web form, then exercise the JSON API
+# surface with Bearer authentication.
+
+api_get() { curl -s -H "Authorization: Bearer $API_TOKEN" "$@"; }
+api_get_code() { curl -s -H "Authorization: Bearer $API_TOKEN" -o /dev/null -w "%{http_code}" "$@"; }
+api_post() { curl -s -H "Authorization: Bearer $API_TOKEN" -H "Content-Type: application/json" -X POST -d "$1" "$2"; }
+api_post_code() { curl -s -H "Authorization: Bearer $API_TOKEN" -H "Content-Type: application/json" -X POST -d "$1" -o /dev/null -w "%{http_code}" "$2"; }
+api_post_noauth() { curl -s -H "Content-Type: application/json" -X POST -d "$1" -o /dev/null -w "%{http_code}" "$2"; }
+
+# A1: Mint an admin API token via the web UI (existing session + CSRF).
+API_TOKEN_REDIRECT=$(curl -s -b "$COOKIES" -D - -o /dev/null \
+    -X POST -d "name=e2e-api&csrf_token=$CSRF" \
+    "$BASE/settings/tokens" | grep -i "^location:" | awk '{print $2}' | tr -d '\r')
+API_TOKEN=$(echo "$API_TOKEN_REDIRECT" | python3 -c "
+import sys, urllib.parse
+url = sys.stdin.read().strip()
+qs = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
+print(urllib.parse.unquote(qs.get('new_token', [''])[0]))
+")
+[[ -n "$API_TOKEN" ]] || { echo "FAIL: could not mint API token (redirect=$API_TOKEN_REDIRECT)"; exit 1; }
+echo "  API token minted via /settings/tokens: OK"
+
+# A2: Health check is public; authenticated call also succeeds.
+CODE=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/api/v1/healthz")
+[[ "$CODE" == "200" ]] || { echo "FAIL: public health check got $CODE, want 200"; exit 1; }
+CODE=$(curl -s -H "Authorization: Bearer $API_TOKEN" -o /dev/null -w "%{http_code}" "$BASE/api/v1/healthz")
+[[ "$CODE" == "200" ]] || { echo "FAIL: authenticated health check got $CODE, want 200"; exit 1; }
+echo "  Health check: OK"
+
+# A3: Project CRUD.
+API_PROJECT=$(api_post '{"name":"e2e-api-project"}' "$BASE/api/v1/projects")
+API_PROJECT_ID=$(echo "$API_PROJECT" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+[[ -n "$API_PROJECT_ID" ]] || { echo "FAIL: create project did not return id: $API_PROJECT"; exit 1; }
+CODE=$(api_get_code "$BASE/api/v1/projects")
+[[ "$CODE" == "200" ]] || { echo "FAIL: list projects got $CODE, want 200"; exit 1; }
+API_PROJECT_NAME=$(api_get "$BASE/api/v1/projects/$API_PROJECT_ID" | python3 -c "import sys,json; print(json.load(sys.stdin)['name'])")
+[[ "$API_PROJECT_NAME" == "e2e-api-project" ]] || { echo "FAIL: project name = $API_PROJECT_NAME"; exit 1; }
+echo "  Project CRUD: OK ($API_PROJECT_ID)"
+
+# A4: Environment CRUD.
+API_ENV=$(api_post '{"name":"dev"}' "$BASE/api/v1/environments")
+API_ENV_ID=$(echo "$API_ENV" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+[[ -n "$API_ENV_ID" ]] || { echo "FAIL: create env did not return id: $API_ENV"; exit 1; }
+echo "  Environment CRUD: OK ($API_ENV_ID)"
+
+# A5: Step CRUD.
+API_STEP=$(api_post '{"name":"long-step","script_body":"sleep 10"}' "$BASE/api/v1/projects/$API_PROJECT_ID/steps")
+API_STEP_ID=$(echo "$API_STEP" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+[[ -n "$API_STEP_ID" ]] || { echo "FAIL: create step did not return id: $API_STEP"; exit 1; }
+echo "  Step CRUD: OK ($API_STEP_ID)"
+
+# A6: Release CRUD.
+API_RELEASE=$(api_post '{"version":"v1"}' "$BASE/api/v1/projects/$API_PROJECT_ID/releases")
+API_RELEASE_ID=$(echo "$API_RELEASE" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+[[ -n "$API_RELEASE_ID" ]] || { echo "FAIL: create release did not return id: $API_RELEASE"; exit 1; }
+echo "  Release CRUD: OK ($API_RELEASE_ID)"
+
+# A7: Deployment create + status + cancel.
+API_DEP=$(api_post "{\"release_id\":$API_RELEASE_ID,\"environment_id\":$API_ENV_ID}" \
+    "$BASE/api/v1/projects/$API_PROJECT_ID/deployments")
+API_DEP_ID=$(echo "$API_DEP" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+[[ -n "$API_DEP_ID" ]] || { echo "FAIL: create deployment did not return id: $API_DEP"; exit 1; }
+for i in {1..50}; do
+    API_DEP_STATUS=$(api_get "$BASE/api/v1/deployments/$API_DEP_ID/status" | python3 -c "import sys,json; print(json.load(sys.stdin)['status'])")
+    [[ "$API_DEP_STATUS" == "running" ]] && break
+    sleep 0.1
+done
+[[ "$API_DEP_STATUS" == "running" ]] || { echo "FAIL: deployment did not reach running, status=$API_DEP_STATUS"; exit 1; }
+echo "  Deployment reached running: OK ($API_DEP_ID)"
+
+CODE=$(curl -s -H "Authorization: Bearer $API_TOKEN" -X POST -o /dev/null -w "%{http_code}" \
+    "$BASE/api/v1/deployments/$API_DEP_ID/cancel")
+[[ "$CODE" == "200" ]] || { echo "FAIL: cancel deployment got $CODE, want 200"; exit 1; }
+for i in {1..50}; do
+    API_DEP_STATUS=$(api_get "$BASE/api/v1/deployments/$API_DEP_ID/status" | python3 -c "import sys,json; print(json.load(sys.stdin)['status'])")
+    [[ "$API_DEP_STATUS" == "cancelled" ]] && break
+    sleep 0.1
+done
+[[ "$API_DEP_STATUS" == "cancelled" ]] || { echo "FAIL: deployment did not cancel, status=$API_DEP_STATUS"; exit 1; }
+echo "  Deployment cancelled: OK"
+
+# A8: Log streaming (ndjson). Use a fresh step + release + deployment so we can
+# read at least one line from the live stream and then cancel it.
+API_LOG_STEP=$(api_post '{"name":"streamer","script_body":"for i in 1 2 3; do echo api-line-$i; sleep 0.1; done"}' \
+    "$BASE/api/v1/projects/$API_PROJECT_ID/steps")
+API_LOG_RELEASE=$(api_post '{"version":"v2"}' "$BASE/api/v1/projects/$API_PROJECT_ID/releases")
+API_LOG_RELEASE_ID=$(echo "$API_LOG_RELEASE" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+API_LOG_DEP=$(api_post "{\"release_id\":$API_LOG_RELEASE_ID,\"environment_id\":$API_ENV_ID}" \
+    "$BASE/api/v1/projects/$API_PROJECT_ID/deployments")
+API_LOG_DEP_ID=$(echo "$API_LOG_DEP" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+
+for i in {1..100}; do
+    API_LOG_STATUS=$(api_get "$BASE/api/v1/deployments/$API_LOG_DEP_ID/status" | python3 -c "import sys,json; print(json.load(sys.stdin)['status'])")
+    if [[ "$API_LOG_STATUS" =~ ^(failed|succeeded|cancelled)$ ]]; then break; fi
+    sleep 0.1
+done
+
+# Read the ndjson stream. The stream replays historical logs first, so we should
+# get a line almost immediately; cap the connection at 5s to avoid hanging.
+LOGS=$(curl -s -m 5 -H "Authorization: Bearer $API_TOKEN" \
+    "$BASE/api/v1/deployments/$API_LOG_DEP_ID/logs/stream?format=ndjson") || true
+LOG_LINE=$(echo "$LOGS" | head -1)
+echo "$LOG_LINE" | python3 -c "import sys,json; d=json.load(sys.stdin); assert 'line' in d; print('ndjson line OK')"
+echo "  Log streaming (ndjson): OK"
+
+# A9: Failure paths.
+# 401 without token.
+CODE=$(api_post_noauth '{"name":"noauth"}' "$BASE/api/v1/projects")
+[[ "$CODE" == "401" ]] || { echo "FAIL: no-auth create project got $CODE, want 401"; exit 1; }
+echo "  401 without token: OK"
+
+# 404 missing project.
+CODE=$(api_get_code "$BASE/api/v1/projects/9999")
+[[ "$CODE" == "404" ]] || { echo "FAIL: missing project got $CODE, want 404"; exit 1; }
+echo "  404 missing project: OK"
+
+# 403 viewer write block.
+VIEWER_EMAIL="e2e-viewer@test.local"
+VIEWER_PASS="e2e-viewer-pass-1234"
+VIEWER_CREATE=$(api_post "{\"email\":\"$VIEWER_EMAIL\",\"name\":\"E2E Viewer\",\"role\":\"viewer\",\"password\":\"$VIEWER_PASS\"}" \
+    "$BASE/api/v1/admin/users")
+VIEWER_USER_ID=$(echo "$VIEWER_CREATE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))")
+[[ -n "$VIEWER_USER_ID" ]] || { echo "FAIL: viewer user create did not return id: $VIEWER_CREATE"; exit 1; }
+# Mint a token for the viewer via the CLI (web session for the viewer is not needed).
+VIEWER_TOKEN=$(DURPDEPLOY_DB=durpdeploy.db "$TMP/durpdeploy" tokens create --user "$VIEWER_EMAIL" --name e2e-viewer 2>/dev/null | grep '^ddp_pat_' | head -1)
+[[ -n "$VIEWER_TOKEN" ]] || { echo "FAIL: could not mint viewer token"; exit 1; }
+CODE=$(curl -s -H "Authorization: Bearer $VIEWER_TOKEN" -H "Content-Type: application/json" \
+    -X POST -d '{"name":"viewer-proj"}' -o /dev/null -w "%{http_code}" "$BASE/api/v1/projects")
+[[ "$CODE" == "403" ]] || { echo "FAIL: viewer create project got $CODE, want 403"; exit 1; }
+echo "  403 viewer write block: OK"
+
+# A10: Swagger endpoints.
+CODE=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/api/swagger/")
+[[ "$CODE" == "200" ]] || { echo "FAIL: swagger redirect got $CODE, want 200"; exit 1; }
+CODE=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/api/swagger/index.html")
+[[ "$CODE" == "200" ]] || { echo "FAIL: swagger UI got $CODE, want 200"; exit 1; }
+SWAGGER=$(curl -s "$BASE/api/swagger/spec")
+echo "$SWAGGER" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d['swagger']=='2.0'; print('swagger spec OK')"
+echo "  Swagger UI + spec: OK"
 
 echo "=== ALL E2E CHECKS PASSED ==="

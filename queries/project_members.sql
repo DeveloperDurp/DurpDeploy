@@ -24,5 +24,33 @@ JOIN project_members pm ON pm.project_id = p.id
 WHERE pm.user_id = ?
 ORDER BY p.created_at DESC;
 
+-- name: ListProjectsForUserPaginated :many
+SELECT p.* FROM projects p
+JOIN project_members pm ON pm.project_id = p.id
+WHERE pm.user_id = ?
+ORDER BY p.created_at DESC
+LIMIT ? OFFSET ?;
+
+-- name: CountProjectsForUser :one
+SELECT COUNT(*) FROM project_members WHERE user_id = ?;
+
+-- name: ListUsersPaginated :many
+SELECT id, email, name, role, created_at, updated_at, last_login_at FROM users ORDER BY email
+LIMIT ? OFFSET ?;
+
+-- name: CountUsers :one
+SELECT COUNT(*) FROM users;
+
+-- name: ListProjectMembersPaginated :many
+SELECT pm.project_id, pm.user_id, pm.role, pm.created_at, u.email, u.name
+FROM project_members pm
+JOIN users u ON u.id = pm.user_id
+WHERE pm.project_id = ?
+ORDER BY pm.created_at ASC
+LIMIT ? OFFSET ?;
+
+-- name: CountProjectMembers :one
+SELECT COUNT(*) FROM project_members WHERE project_id = ?;
+
 -- name: ListUsers :many
 SELECT id, email, name, role, created_at, updated_at, last_login_at FROM users ORDER BY email;

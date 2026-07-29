@@ -28,10 +28,10 @@ func NewProjectMembersHandler(
 	return &ProjectMembersHandler{repo: repo}
 }
 
-// canManageProject returns true if the user is a global admin or a
+// CanManageProject returns true if the user is a global admin or a
 // per-project admin of the given project. Used by both the project
 // form (to gate the UI) and the members handlers (to gate writes).
-func canManageProject(
+func CanManageProject(
 	ctx context.Context,
 	repo *repository.Repository,
 	user *db.User,
@@ -62,7 +62,7 @@ func (h *ProjectHandler) loadMembersContext(
 	projectID int64,
 ) ([]db.ListProjectMembersRow, []db.ListUsersRow, bool) {
 	user := auth.UserFromContext(r.Context())
-	canManage := canManageProject(r.Context(), h.repo, user, projectID)
+	canManage := CanManageProject(r.Context(), h.repo, user, projectID)
 
 	members, err := h.repo.Queries.ListProjectMembers(r.Context(), projectID)
 	if err != nil {
@@ -129,7 +129,7 @@ func (h *ProjectMembersHandler) AddMember(
 	}
 
 	user := auth.UserFromContext(r.Context())
-	if !canManageProject(r.Context(), h.repo, user, id) {
+	if !CanManageProject(r.Context(), h.repo, user, id) {
 		auth.RenderUnauthorized(w, r)
 		return
 	}
@@ -199,7 +199,7 @@ func (h *ProjectMembersHandler) RemoveMember(
 	}
 
 	user := auth.UserFromContext(r.Context())
-	if !canManageProject(r.Context(), h.repo, user, id) {
+	if !CanManageProject(r.Context(), h.repo, user, id) {
 		auth.RenderUnauthorized(w, r)
 		return
 	}

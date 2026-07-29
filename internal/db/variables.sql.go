@@ -10,6 +10,26 @@ import (
 	"database/sql"
 )
 
+const countVariablesByProject = `-- name: CountVariablesByProject :one
+SELECT COUNT(*) FROM variables
+WHERE project_id = ?1
+  AND (?2 IS NULL OR environment_id = ?2)
+  AND (?3 IS NULL OR secret = ?3)
+`
+
+type CountVariablesByProjectParams struct {
+	ProjectID      int64       `json:"project_id"`
+	FEnvironmentID interface{} `json:"f_environment_id"`
+	FSecretOnly    interface{} `json:"f_secret_only"`
+}
+
+func (q *Queries) CountVariablesByProject(ctx context.Context, arg CountVariablesByProjectParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countVariablesByProject, arg.ProjectID, arg.FEnvironmentID, arg.FSecretOnly)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createVariable = `-- name: CreateVariable :one
 INSERT INTO variables (project_id, name, value, environment_id, secret) VALUES (?, ?, ?, ?, ?) RETURNING id, project_id, name, value, environment_id, created_at, secret
 `
@@ -112,6 +132,60 @@ SELECT id, project_id, name, value, environment_id, created_at, secret FROM vari
 
 func (q *Queries) ListVariablesByProject(ctx context.Context, projectID int64) ([]Variable, error) {
 	rows, err := q.db.QueryContext(ctx, listVariablesByProject, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Variable
+	for rows.Next() {
+		var i Variable
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.Name,
+			&i.Value,
+			&i.EnvironmentID,
+			&i.CreatedAt,
+			&i.Secret,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listVariablesByProjectPaginated = `-- name: ListVariablesByProjectPaginated :many
+SELECT id, project_id, name, value, environment_id, created_at, secret FROM variables
+WHERE project_id = ?1
+  AND (?2 IS NULL OR environment_id = ?2)
+  AND (?3 IS NULL OR secret = ?3)
+ORDER BY created_at DESC
+LIMIT ?5 OFFSET ?4
+`
+
+type ListVariablesByProjectPaginatedParams struct {
+	ProjectID      int64       `json:"project_id"`
+	FEnvironmentID interface{} `json:"f_environment_id"`
+	FSecretOnly    interface{} `json:"f_secret_only"`
+	PageOffset     int64       `json:"page_offset"`
+	PageLimit      int64       `json:"page_limit"`
+}
+
+func (q *Queries) ListVariablesByProjectPaginated(ctx context.Context, arg ListVariablesByProjectPaginatedParams) ([]Variable, error) {
+	rows, err := q.db.QueryContext(ctx, listVariablesByProjectPaginated,
+		arg.ProjectID,
+		arg.FEnvironmentID,
+		arg.FSecretOnly,
+		arg.PageOffset,
+		arg.PageLimit,
+	)
 	if err != nil {
 		return nil, err
 	}

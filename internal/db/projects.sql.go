@@ -19,6 +19,17 @@ func (q *Queries) ClearProjectLifecycle(ctx context.Context, id int64) error {
 	return err
 }
 
+const countProjects = `-- name: CountProjects :one
+SELECT COUNT(*) FROM projects
+`
+
+func (q *Queries) CountProjects(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countProjects)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createProject = `-- name: CreateProject :one
 INSERT INTO projects (name, description) VALUES (?, ?) RETURNING id, name, description, created_at, lifecycle_id, slack_webhook_url, notify_emails, gotify_url, gotify_token, discord_webhook_url
 `
@@ -83,6 +94,50 @@ SELECT id, name, description, created_at, lifecycle_id, slack_webhook_url, notif
 
 func (q *Queries) ListProjects(ctx context.Context) ([]Project, error) {
 	rows, err := q.db.QueryContext(ctx, listProjects)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Project
+	for rows.Next() {
+		var i Project
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Description,
+			&i.CreatedAt,
+			&i.LifecycleID,
+			&i.SlackWebhookUrl,
+			&i.NotifyEmails,
+			&i.GotifyUrl,
+			&i.GotifyToken,
+			&i.DiscordWebhookUrl,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProjectsPaginated = `-- name: ListProjectsPaginated :many
+SELECT id, name, description, created_at, lifecycle_id, slack_webhook_url, notify_emails, gotify_url, gotify_token, discord_webhook_url FROM projects ORDER BY created_at DESC
+LIMIT ? OFFSET ?
+`
+
+type ListProjectsPaginatedParams struct {
+	Limit  int64 `json:"limit"`
+	Offset int64 `json:"offset"`
+}
+
+func (q *Queries) ListProjectsPaginated(ctx context.Context, arg ListProjectsPaginatedParams) ([]Project, error) {
+	rows, err := q.db.QueryContext(ctx, listProjectsPaginated, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}

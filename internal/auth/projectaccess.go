@@ -11,16 +11,23 @@ import (
 	"durpdeploy/internal/repository"
 )
 
-// projectAccessKey is an unexported context-key type so callers can't
-// collide with string keys. Handlers downstream read the resolved
-// project id via ProjectIDFromContext instead of re-parsing the chi
-// URL param.
-type projectAccessKey struct{}
+// ProjectAccessKey is the context-key type used to store the project
+// id injected by RequireProjectAccess. It is exported so tests that
+// call project-scoped handlers directly (without going through the
+// router) can populate it the same way the middleware would.
+//
+// ponytail: a string key would be smaller, but Go convention is
+// "unexported is the unexported key, exported is for cases where the
+// type needs to be nameable by other packages." Production code
+// should still go through RequireProjectAccess; this type is only
+// here for tests and for the project-scoped handlers in the api
+// package that read it via ProjectIDFromContext.
+type ProjectAccessKey struct{}
 
 // ProjectIDFromContext returns the project id injected by
 // RequireProjectAccess, or 0 (and false) if absent.
 func ProjectIDFromContext(ctx context.Context) (int64, bool) {
-	id, ok := ctx.Value(projectAccessKey{}).(int64)
+	id, ok := ctx.Value(ProjectAccessKey{}).(int64)
 	return id, ok
 }
 
@@ -78,7 +85,7 @@ func RequireProjectAccess(
 				}
 			}
 
-			ctx := context.WithValue(r.Context(), projectAccessKey{}, projectID)
+			ctx := context.WithValue(r.Context(), ProjectAccessKey{}, projectID)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

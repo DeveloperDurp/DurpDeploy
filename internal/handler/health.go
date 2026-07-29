@@ -34,3 +34,11 @@ func (h *HealthHandler) Healthz(w http.ResponseWriter, r *http.Request) {
 		"db":     "ok",
 	})
 }
+
+// HealthzAPI is the public API health probe. It returns a minimal {"ok":true}
+// response without requiring authentication.
+func (h *HealthHandler) HealthzAPI(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+}

@@ -1,6 +1,13 @@
 -- name: ListProjects :many
 SELECT * FROM projects ORDER BY created_at DESC;
 
+-- name: ListProjectsPaginated :many
+SELECT * FROM projects ORDER BY created_at DESC
+LIMIT ? OFFSET ?;
+
+-- name: CountProjects :one
+SELECT COUNT(*) FROM projects;
+
 -- name: GetProject :one
 SELECT * FROM projects WHERE id = ?;
 

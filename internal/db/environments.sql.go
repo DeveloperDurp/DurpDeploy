@@ -10,6 +10,17 @@ import (
 	"database/sql"
 )
 
+const countEnvironments = `-- name: CountEnvironments :one
+SELECT COUNT(*) FROM environments
+`
+
+func (q *Queries) CountEnvironments(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countEnvironments)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createEnvironment = `-- name: CreateEnvironment :one
 INSERT INTO environments (name, description, tags) VALUES (?, ?, ?) RETURNING id, name, description, tags, created_at
 `
@@ -65,6 +76,45 @@ SELECT id, name, description, tags, created_at FROM environments ORDER BY create
 
 func (q *Queries) ListEnvironments(ctx context.Context) ([]Environment, error) {
 	rows, err := q.db.QueryContext(ctx, listEnvironments)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Environment
+	for rows.Next() {
+		var i Environment
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Description,
+			&i.Tags,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEnvironmentsPaginated = `-- name: ListEnvironmentsPaginated :many
+SELECT id, name, description, tags, created_at FROM environments ORDER BY created_at DESC
+LIMIT ? OFFSET ?
+`
+
+type ListEnvironmentsPaginatedParams struct {
+	Limit  int64 `json:"limit"`
+	Offset int64 `json:"offset"`
+}
+
+func (q *Queries) ListEnvironmentsPaginated(ctx context.Context, arg ListEnvironmentsPaginatedParams) ([]Environment, error) {
+	rows, err := q.db.QueryContext(ctx, listEnvironmentsPaginated, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}

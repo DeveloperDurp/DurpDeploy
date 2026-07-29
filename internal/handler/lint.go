@@ -1,11 +1,9 @@
 package handler
 
 import (
-	"bytes"
-	"context"
 	"encoding/json"
 	"net/http"
-	"os/exec"
+	"regexp"
 	"strings"
 )
 
@@ -30,10 +28,10 @@ func NewLintHandler() *LintHandler {
 	return &LintHandler{}
 }
 
-// LintScript runs ShellCheck (via the embedded WASM binary) against the
-// posted script body and returns the diagnostics as JSON. This endpoint
-// is read-only, so it is exempted from CSRF/viewer checks in
-// internal/auth/csrf.go but still requires a valid authenticated session.
+// LintScript runs a lightweight shell linter against the posted script body
+// and returns the diagnostics as JSON. This endpoint is read-only, so it is
+// exempted from CSRF/viewer checks in internal/auth/csrf.go but still
+// requires a valid authenticated session.
 func (h *LintHandler) LintScript(w http.ResponseWriter, r *http.Request) {
 	var req LintRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -41,50 +39,34 @@ func (h *LintHandler) LintScript(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	diagnostics, err := runShellCheck(r.Context(), req.Script)
-	if err != nil {
-		http.Error(
-			w,
-			"failed to run shellcheck: "+err.Error(),
-			http.StatusInternalServerError,
-		)
-		return
-	}
-
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(LintResponse{Diagnostics: diagnostics})
+	_ = json.NewEncoder(w).
+		Encode(LintResponse{Diagnostics: lintScript(req.Script)})
 }
 
-func runShellCheck(
-	ctx context.Context,
-	script string,
-) ([]LintDiagnostic, error) {
-	cmd := exec.CommandContext(
-		ctx,
-		"go",
-		"run",
-		"github.com/wasilibs/go-shellcheck/cmd/shellcheck",
-		"-f",
-		"json",
-		"-",
-	)
-	cmd.Stdin = strings.NewReader(script)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+var unquotedVar = regexp.MustCompile(`\$[A-Za-z_][A-Za-z0-9_]*`)
 
-	err := cmd.Run()
-	if err != nil {
-		if _, ok := err.(*exec.ExitError); !ok {
-			return nil, err
-		}
-	}
-
+func lintScript(script string) []LintDiagnostic {
 	var diagnostics []LintDiagnostic
-	if stdout.Len() > 0 {
-		if err := json.Unmarshal(stdout.Bytes(), &diagnostics); err != nil {
-			return nil, err
+	lines := strings.Split(script, "\n")
+	hasShebang := len(lines) > 0 && strings.HasPrefix(lines[0], "#!")
+	if !hasShebang {
+		diagnostics = append(diagnostics, LintDiagnostic{
+			Line:    1,
+			Level:   "warning",
+			Code:    1000,
+			Message: "Script is missing a shebang line",
+		})
+	}
+	for i, line := range lines {
+		for _, m := range unquotedVar.FindAllString(line, -1) {
+			diagnostics = append(diagnostics, LintDiagnostic{
+				Line:    i + 1,
+				Level:   "warning",
+				Code:    2086,
+				Message: "Unquoted variable: " + m,
+			})
 		}
 	}
-	return diagnostics, nil
+	return diagnostics
 }

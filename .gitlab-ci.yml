@@ -18,6 +18,12 @@ lint:
   before_script:
     - go install github.com/a-h/templ/cmd/templ@latest
     - templ generate
+    # ponytail: static/swagger-ui/ is gitignored (build artifacts from
+    # node_modules/swagger-ui-dist), so the //go:embed pattern in
+    # static/static.go finds no files on a fresh CI checkout. Run the
+    # make target to materialize them before go vet walks the import graph.
+    - apk add --no-cache make nodejs npm
+    - make swagger-ui-copy
   script:
     - go vet ./...
     - test -z "$(gofmt -l .)"
@@ -35,9 +41,11 @@ test:
   stage: test
   before_script:
     # ponytail: tests spawn the deployment runner, which exec's `bash` to run step scripts. The `default.before_script` doesn't reliably run in this Kubernetes executor, so install explicitly.
-    - apk add --no-cache bash
+    - apk add --no-cache bash make nodejs npm
     - go install github.com/a-h/templ/cmd/templ@latest
     - templ generate
+    # ponytail: static/swagger-ui/ is gitignored; materialize it before the test build walks the import graph.
+    - make swagger-ui-copy
   script:
     # ponytail: regex captures only the last package's coverage; use `go tool cover -func coverage.txt` for the cumulative number.
     - go test -v -count=1 -cover -coverprofile=coverage.txt ./...
@@ -52,6 +60,9 @@ build:
   before_script:
     - go install github.com/a-h/templ/cmd/templ@latest
     - templ generate
+    # ponytail: static/swagger-ui/ is gitignored; materialize it before the build.
+    - apk add --no-cache make nodejs npm
+    - make swagger-ui-copy
   script:
     - go build -o durpdeploy ./cmd/server
  # artifacts:

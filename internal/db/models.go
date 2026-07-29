@@ -8,6 +8,19 @@ import (
 	"database/sql"
 )
 
+type ApiToken struct {
+	ID          string        `json:"id"`
+	UserID      int64         `json:"user_id"`
+	Name        string        `json:"name"`
+	TokenPrefix string        `json:"token_prefix"`
+	TokenHash   string        `json:"token_hash"`
+	Scope       string        `json:"scope"`
+	LastUsedAt  sql.NullInt64 `json:"last_used_at"`
+	ExpiresAt   sql.NullInt64 `json:"expires_at"`
+	CreatedAt   int64         `json:"created_at"`
+	RevokedAt   sql.NullInt64 `json:"revoked_at"`
+}
+
 type AuditLog struct {
 	ID         int64          `json:"id"`
 	UserID     sql.NullInt64  `json:"user_id"`

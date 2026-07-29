@@ -1,0 +1,242 @@
+package pages
+
+import (
+	"durpdeploy/internal/db"
+	"durpdeploy/views/layouts"
+)
+
+// TokensSettings renders /settings/tokens — the user's own API tokens.
+// The newToken/newName query params render a one-time banner showing
+// the freshly-created plaintext token (cleared by clicking "Got it",
+// which navigates back to /settings/tokens with no query string).
+//
+// ponytail: viewer gate wraps the whole page so a viewer who types
+// the URL sees the forbidden message instead of a half-working form.
+// The CSRF middleware is the real security boundary; this is the UX
+// layer (see AGENTS.md "Viewer role — UI gating pattern").
+templ TokensSettings(
+	tokens []db.ListApiTokensByUserRow,
+	newToken string,
+	newName string,
+	errorMsg string,
+	currentPath string,
+) {
+	if !CanWrite(ctx) {
+		@ViewerForbiddenMessage(
+			"API tokens",
+			"create",
+			"an API token",
+			"/settings/tokens",
+			currentPath,
+		)
+	} else {
+		@layouts.Base("API tokens", currentPath) {
+			<h1 class="text-3xl font-bold mb-4">API tokens</h1>
+			<p class="mb-4 text-sm opacity-70">
+				Tokens authenticate API access (e.g. <span class="font-mono">curl</span> deploys).
+				Treat them like passwords — copy once, store securely.
+			</p>
+			if errorMsg != "" {
+				<div class="alert alert-error mb-4">
+					<span>{ errorMsg }</span>
+				</div>
+			}
+			if newToken != "" {
+				@NewTokenBanner(newToken, newName)
+			}
+			<div class="card bg-base-200 shadow mb-6">
+				<div class="card-body">
+					<h2 class="card-title">New token</h2>
+					<form method="post" action="/settings/tokens" class="flex gap-2 items-end">
+						<div class="form-control flex-1">
+							<label class="label" for="token-name">
+								<span class="label-text">Name</span>
+							</label>
+							<input
+								id="token-name"
+								type="text"
+								name="name"
+								class="input input-bordered"
+								placeholder="e.g. ci-deploy"
+								required
+							/>
+						</div>
+						<button type="submit" class="btn btn-primary">Create token</button>
+					</form>
+				</div>
+			</div>
+			if len(tokens) == 0 {
+				<div class="card bg-base-200 p-8 text-center">
+					<p class="text-gray-400">No tokens yet.</p>
+				</div>
+			} else {
+				<div class="overflow-x-auto">
+					<table class="table table-zebra table-fixed w-full">
+						<thead>
+							<tr>
+								<th class="w-1/5">Name</th>
+								<th class="w-1/6">Prefix</th>
+								<th class="w-1/6">Created</th>
+								<th class="w-1/6">Last used</th>
+								<th class="w-1/6">Expires</th>
+								<th class="w-1/6">Status</th>
+								<th class="w-48">Actions</th>
+							</tr>
+						</thead>
+						<tbody>
+							for _, t := range tokens {
+								@tokensSettingsRow(t)
+							}
+						</tbody>
+					</table>
+				</div>
+			}
+		}
+	}
+}
+
+templ tokensSettingsRow(t db.ListApiTokensByUserRow) {
+	<tr>
+		<td class="truncate">{ t.Name }</td>
+		<td class="truncate font-mono text-sm">{ t.TokenPrefix }…</td>
+		<td class="whitespace-nowrap text-sm">{ formatUnixTime(t.CreatedAt) }</td>
+		<td class="whitespace-nowrap text-sm">
+			if t.LastUsedAt.Valid {
+				{ formatUnixTime(t.LastUsedAt.Int64) }
+			} else {
+				<span class="text-gray-500">never</span>
+			}
+		</td>
+		<td class="whitespace-nowrap text-sm">
+			if t.ExpiresAt.Valid {
+				{ formatUnixTime(t.ExpiresAt.Int64) }
+			} else {
+				<span class="text-gray-500">never</span>
+			}
+		</td>
+		<td>
+			if t.RevokedAt.Valid {
+				<span class="badge badge-error badge-outline">Revoked</span>
+			} else {
+				<span class="badge badge-success badge-outline">Active</span>
+			}
+		</td>
+		<td class="whitespace-nowrap">
+			if CanWrite(ctx) {
+				if !t.RevokedAt.Valid {
+					<button
+						class="btn btn-error btn-xs"
+						hx-post={ "/settings/tokens/" + t.ID + "/revoke" }
+						hx-confirm={ "Revoke token " + t.Name + "? It can no longer be used." }
+						data-toast-success="Token revoked"
+						data-toast-error="Failed to revoke token"
+					>
+						Revoke
+					</button>
+				}
+			}
+		</td>
+	</tr>
+}
+
+// AdminTokensPage renders /admin/tokens — every API token across all
+// users. Admin-only (RequireRole("admin") gates the sub-group), so no
+// CanWrite guard: admins always have write.
+templ AdminTokensPage(
+	tokens []db.ListAllApiTokensRow,
+	currentPath string,
+) {
+	@layouts.Base("API tokens (admin)", currentPath) {
+		<div class="flex justify-between items-center mb-4">
+			<h1 class="text-3xl font-bold">API tokens</h1>
+		</div>
+		if len(tokens) == 0 {
+			<div class="card bg-base-200 p-8 text-center">
+				<p class="text-gray-400">No tokens yet.</p>
+			</div>
+		} else {
+			<div class="overflow-x-auto">
+				<table class="table table-zebra table-fixed w-full">
+					<thead>
+						<tr>
+							<th class="w-1/6">Name</th>
+							<th class="w-1/6">Prefix</th>
+							<th class="w-1/4">User</th>
+							<th class="w-1/6">Created</th>
+							<th class="w-1/6">Last used</th>
+							<th class="w-1/6">Status</th>
+							<th class="w-48">Actions</th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, t := range tokens {
+							@adminTokensRow(t)
+						}
+					</tbody>
+				</table>
+			</div>
+		}
+	}
+}
+
+templ adminTokensRow(t db.ListAllApiTokensRow) {
+	<tr>
+		<td class="truncate">{ t.Name }</td>
+		<td class="truncate font-mono text-sm">{ t.TokenPrefix }…</td>
+		<td class="truncate font-mono text-sm">{ t.Email }</td>
+		<td class="whitespace-nowrap text-sm">{ formatUnixTime(t.CreatedAt) }</td>
+		<td class="whitespace-nowrap text-sm">
+			if t.LastUsedAt.Valid {
+				{ formatUnixTime(t.LastUsedAt.Int64) }
+			} else {
+				<span class="text-gray-500">never</span>
+			}
+		</td>
+		<td>
+			if t.RevokedAt.Valid {
+				<span class="badge badge-error badge-outline">Revoked</span>
+			} else {
+				<span class="badge badge-success badge-outline">Active</span>
+			}
+		</td>
+		<td class="whitespace-nowrap">
+			if !t.RevokedAt.Valid {
+				<button
+					class="btn btn-error btn-xs"
+					hx-post={ "/admin/tokens/" + t.ID + "/revoke" }
+					hx-confirm={ "Revoke token " + t.Name + " (owned by " + t.Email + ")?" }
+					data-toast-success="Token revoked"
+					data-toast-error="Failed to revoke token"
+				>
+					Revoke
+				</button>
+			}
+		</td>
+	</tr>
+}
+
+// NewTokenBanner shows the freshly-created token's plaintext. The
+// user must copy it and click "Got it" (which navigates to
+// /settings/tokens with no query), so the plaintext lives in the URL
+// for one page load only. Pattern matches NewUserPasswordBanner.
+//
+// ponytail: warning color + monospace makes the token unmissable.
+templ NewTokenBanner(token string, name string) {
+	<div class="alert alert-warning mb-4 flex-col items-start gap-2">
+		<div class="flex items-center gap-2 w-full">
+			<span class="font-bold">Token created.</span>
+			<span>
+				Copy <span class="font-mono">{ name }</span> now — this is the only time it will be shown.
+			</span>
+		</div>
+		<div class="w-full">
+			<code class="block bg-base-300 text-base-content p-2 rounded font-mono select-all break-all">
+				{ token }
+			</code>
+		</div>
+		<div class="flex justify-end w-full">
+			<a href="/settings/tokens" class="btn btn-sm">Got it — don't show this again</a>
+		</div>
+	</div>
+}
+

@@ -18,6 +18,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/robfig/cron/v3"
 
 	"durpdeploy/internal/auth"
@@ -50,12 +51,14 @@ func main() {
 			os.Exit(runAudit(os.Args[2:]))
 		case "secret-key":
 			os.Exit(runSecretKey(os.Args[2:]))
+		case "tokens":
+			os.Exit(runTokens(os.Args[2:]))
 		case "version", "--version", "-v":
 			fmt.Println("durpdeploy dev")
 			os.Exit(0)
 		case "help", "--help", "-h":
 			fmt.Println(
-				"Usage: durpdeploy [admin create --email X --password Y] [audit prune [--days N]] [secret-key rotate [--plaintext]] [version] [help]",
+				"Usage: durpdeploy [admin create --email X --password Y] [audit prune [--days N]] [secret-key rotate [--plaintext]] [tokens create/list/revoke] [version] [help]",
 			)
 			fmt.Println("With no subcommand, starts the HTTP server.")
 			os.Exit(0)
@@ -609,4 +612,205 @@ func runSecretKey(args []string) int {
 		"reused: every row above was just re-encrypted with the new one.",
 	)
 	return 0
+}
+
+// runTokens implements `durpdeploy tokens create/list/revoke`.
+func runTokens(args []string) int {
+	fs := flag.NewFlagSet("tokens", flag.ExitOnError)
+	_ = fs.Parse(args)
+
+	if fs.NArg() == 0 {
+		fmt.Fprintln(
+			os.Stderr,
+			"Usage: durpdeploy tokens create --user <email> --name <label> | durpdeploy tokens list [--user <email>] | durpdeploy tokens revoke <token_prefix>",
+		)
+		return 1
+	}
+
+	ctx := context.Background()
+	dbConn, err := migrate.Run(loadDSN())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: open database: %v\n", err)
+		return 1
+	}
+	defer dbConn.Close()
+	repo := repository.New(dbConn)
+
+	fmtTime := func(ts int64) string {
+		return time.Unix(ts, 0).Format(time.RFC3339)
+	}
+	fmtNullTime := func(n sql.NullInt64) string {
+		if !n.Valid {
+			return ""
+		}
+		return time.Unix(n.Int64, 0).Format(time.RFC3339)
+	}
+
+	switch fs.Arg(0) {
+	case "create":
+		createCmd := flag.NewFlagSet("tokens create", flag.ExitOnError)
+		userEmail := createCmd.String("user", "", "user email")
+		name := createCmd.String("name", "", "token name")
+		if err := createCmd.Parse(fs.Args()[1:]); err != nil {
+			return 1
+		}
+		if *userEmail == "" {
+			fmt.Fprintln(os.Stderr, "error: --user is required")
+			return 1
+		}
+		if *name == "" {
+			fmt.Fprintln(os.Stderr, "error: --name is required")
+			return 1
+		}
+
+		user, err := repo.Queries.GetUserByEmail(ctx, *userEmail)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				fmt.Fprintf(
+					os.Stderr,
+					"error: user not found: %s\n",
+					*userEmail,
+				)
+				return 1
+			}
+			fmt.Fprintf(os.Stderr, "error: lookup user: %v\n", err)
+			return 1
+		}
+
+		full, prefix, hash, err := auth.MintApiToken()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: mint token: %v\n", err)
+			return 1
+		}
+
+		if _, err := repo.Queries.CreateApiToken(ctx, db.CreateApiTokenParams{
+			ID:          uuid.NewString(),
+			UserID:      user.ID,
+			Name:        *name,
+			TokenPrefix: prefix,
+			TokenHash:   hash,
+			Scope:       "global",
+			ExpiresAt:   sql.NullInt64{Valid: false},
+		}); err != nil {
+			fmt.Fprintf(os.Stderr, "error: create token: %v\n", err)
+			return 1
+		}
+
+		fmt.Println(full)
+		fmt.Fprintln(
+			os.Stderr,
+			"warning: this is the only time the plaintext token is shown",
+		)
+		return 0
+
+	case "list":
+		listCmd := flag.NewFlagSet("tokens list", flag.ExitOnError)
+		userEmail := listCmd.String("user", "", "user email")
+		if err := listCmd.Parse(fs.Args()[1:]); err != nil {
+			return 1
+		}
+
+		if *userEmail != "" {
+			user, err := repo.Queries.GetUserByEmail(ctx, *userEmail)
+			if err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					fmt.Fprintf(
+						os.Stderr,
+						"error: user not found: %s\n",
+						*userEmail,
+					)
+					return 1
+				}
+				fmt.Fprintf(os.Stderr, "error: lookup user: %v\n", err)
+				return 1
+			}
+			rows, err := repo.Queries.ListApiTokensByUser(ctx, user.ID)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "error: list tokens: %v\n", err)
+				return 1
+			}
+			fmt.Println(
+				"PREFIX\tNAME\tCREATED_AT\tLAST_USED_AT\tEXPIRES_AT\tREVOKED_AT",
+			)
+			for _, r := range rows {
+				fmt.Printf(
+					"%s\t%s\t%s\t%s\t%s\t%s\n",
+					r.TokenPrefix,
+					r.Name,
+					fmtTime(r.CreatedAt),
+					fmtNullTime(r.LastUsedAt),
+					fmtNullTime(r.ExpiresAt),
+					fmtNullTime(r.RevokedAt),
+				)
+			}
+			return 0
+		}
+
+		rows, err := repo.Queries.ListAllApiTokens(ctx)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: list tokens: %v\n", err)
+			return 1
+		}
+		fmt.Println(
+			"PREFIX\tNAME\tUSER_EMAIL\tCREATED_AT\tLAST_USED_AT\tEXPIRES_AT\tREVOKED_AT",
+		)
+		for _, r := range rows {
+			fmt.Printf(
+				"%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+				r.TokenPrefix,
+				r.Name,
+				r.Email,
+				fmtTime(r.CreatedAt),
+				fmtNullTime(r.LastUsedAt),
+				fmtNullTime(r.ExpiresAt),
+				fmtNullTime(r.RevokedAt),
+			)
+		}
+		return 0
+
+	case "revoke":
+		if fs.NArg() < 2 {
+			fmt.Fprintln(
+				os.Stderr,
+				"Usage: durpdeploy tokens revoke <token_prefix>",
+			)
+			return 1
+		}
+		prefix := fs.Arg(1)
+
+		rows, err := repo.Queries.ListAllApiTokens(ctx)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: list tokens: %v\n", err)
+			return 1
+		}
+		var targetID string
+		for _, r := range rows {
+			if r.TokenPrefix == prefix && !r.RevokedAt.Valid {
+				targetID = r.ID
+				break
+			}
+		}
+		if targetID == "" {
+			fmt.Fprintf(
+				os.Stderr,
+				"error: no active token with prefix %q\n",
+				prefix,
+			)
+			return 1
+		}
+		if err := repo.Queries.RevokeApiToken(ctx, targetID); err != nil {
+			fmt.Fprintf(os.Stderr, "error: revoke token: %v\n", err)
+			return 1
+		}
+		fmt.Printf("Revoked token with prefix %s\n", prefix)
+		return 0
+
+	default:
+		fmt.Fprintf(
+			os.Stderr,
+			"unknown tokens subcommand %q; supported: create, list, revoke\n",
+			fs.Arg(0),
+		)
+		return 1
+	}
 }

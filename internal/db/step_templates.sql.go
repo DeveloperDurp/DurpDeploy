@@ -9,6 +9,17 @@ import (
 	"context"
 )
 
+const countStepTemplates = `-- name: CountStepTemplates :one
+SELECT COUNT(*) FROM step_templates
+`
+
+func (q *Queries) CountStepTemplates(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countStepTemplates)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createStepTemplate = `-- name: CreateStepTemplate :one
 INSERT INTO step_templates (name, script_body) VALUES (?, ?) RETURNING id, name, script_body, created_at
 `
@@ -154,6 +165,44 @@ SELECT id, name, script_body, created_at FROM step_templates ORDER BY name ASC
 
 func (q *Queries) ListStepTemplates(ctx context.Context) ([]StepTemplate, error) {
 	rows, err := q.db.QueryContext(ctx, listStepTemplates)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []StepTemplate
+	for rows.Next() {
+		var i StepTemplate
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.ScriptBody,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listStepTemplatesPaginated = `-- name: ListStepTemplatesPaginated :many
+SELECT id, name, script_body, created_at FROM step_templates ORDER BY name ASC
+LIMIT ? OFFSET ?
+`
+
+type ListStepTemplatesPaginatedParams struct {
+	Limit  int64 `json:"limit"`
+	Offset int64 `json:"offset"`
+}
+
+func (q *Queries) ListStepTemplatesPaginated(ctx context.Context, arg ListStepTemplatesPaginatedParams) ([]StepTemplate, error) {
+	rows, err := q.db.QueryContext(ctx, listStepTemplatesPaginated, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
