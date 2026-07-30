@@ -300,3 +300,19 @@ func TestTokens_AdminNavVisible(t *testing.T) {
 		t.Fatalf("admin nav should contain Tokens link: %s", body)
 	}
 }
+
+// TestTokens_AdminDropdownLinks: the admin dropdown contains a link
+// to /admin/tokens so admins can find the global token list.
+func TestTokens_AdminDropdownLinks(t *testing.T) {
+	h := newProjectHarness(t)
+
+	resp, err := h.authedClient().Get(h.server.URL + "/")
+	if err != nil {
+		t.Fatalf("GET /: %v", err)
+	}
+	defer resp.Body.Close()
+	body := readBody(t, resp)
+	if !strings.Contains(body, `href="/admin/tokens"`) {
+		t.Fatalf("admin dropdown should link to /admin/tokens: %s", body)
+	}
+}
