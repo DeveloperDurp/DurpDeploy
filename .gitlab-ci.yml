@@ -1,4 +1,4 @@
-image: golang:1.25-alpine
+image: golang:1.26-alpine
 
 # Tests spin up real bash via os/exec to run deployment scripts. The alpine
 # base image doesn't ship bash by default, so install it before any stage
