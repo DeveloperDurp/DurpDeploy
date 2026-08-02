@@ -23,6 +23,20 @@ type VariableHandler struct {
 	repo *repository.Repository
 }
 
+func (h *VariableHandler) getProjectVariable(
+	r *http.Request,
+	projectID, variableID int64,
+) (db.Variable, error) {
+	variable, err := h.repo.Queries.GetVariable(r.Context(), variableID)
+	if err != nil || variable.ProjectID != projectID {
+		if err == nil {
+			err = sql.ErrNoRows
+		}
+		return db.Variable{}, err
+	}
+	return h.repo.GetVariable(r.Context(), variableID)
+}
+
 func NewVariableHandler(repo *repository.Repository) *VariableHandler {
 	return &VariableHandler{repo: repo}
 }
@@ -191,8 +205,12 @@ func (h *VariableHandler) EditVariable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	variable, err := h.repo.GetVariable(r.Context(), varID)
+	variable, err := h.getProjectVariable(r, projectID, varID)
 	if err != nil {
+		if err == sql.ErrNoRows {
+			http.NotFound(w, r)
+			return
+		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -226,6 +244,14 @@ func (h *VariableHandler) UpdateVariable(
 	varID, err := strconv.ParseInt(varIDStr, 10, 64)
 	if err != nil {
 		http.Error(w, "Invalid variable ID", http.StatusBadRequest)
+		return
+	}
+	if _, err := h.getProjectVariable(r, projectID, varID); err != nil {
+		if err == sql.ErrNoRows {
+			http.NotFound(w, r)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -360,6 +386,14 @@ func (h *VariableHandler) DeleteVariable(
 	varID, err := strconv.ParseInt(varIDStr, 10, 64)
 	if err != nil {
 		http.Error(w, "Invalid variable ID", http.StatusBadRequest)
+		return
+	}
+	if _, err := h.getProjectVariable(r, projectID, varID); err != nil {
+		if err == sql.ErrNoRows {
+			http.NotFound(w, r)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
