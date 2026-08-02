@@ -215,6 +215,8 @@ outside its own scratch chroot.
 ```bash
 # Dedicated, unprivileged, no-login user for running step scripts.
 sudo useradd --system --no-create-home --shell /usr/sbin/nologin durpdeploy-runner
+# setpriv clears the service's sandbox-management capabilities before Bash.
+command -v setpriv >/dev/null # provided by Debian/Ubuntu's util-linux package
 ```
 
 Cgroup v2 is used to cap CPU/memory/PIDs per deployment. Create the parent
