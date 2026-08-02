@@ -52,6 +52,10 @@ type Sandbox struct {
 	chrootWarned atomic.Bool
 }
 
+func (s *Sandbox) isolated(chrooted bool) bool {
+	return s.enabled && chrooted
+}
+
 // newSandbox looks up the durpdeploy-runner account. If it does not exist
 // (e.g. local dev/CI where docs/deploy.md Step 5 was never run), the
 // sandbox is disabled and steps keep running as the server's own user —
