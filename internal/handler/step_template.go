@@ -415,6 +415,10 @@ func (h *StepTemplateHandler) SaveStepAsTemplate(
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	if step.ProjectID != projectID {
+		http.NotFound(w, r)
+		return
+	}
 
 	params := db.CreateStepTemplateParams{
 		Name:       step.Name,
