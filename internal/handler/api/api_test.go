@@ -661,6 +661,60 @@ func TestRedeployDeployment_NotTerminal(t *testing.T) {
 	}
 }
 
+func TestRedeployDeployment_EnforcesLifecycleGate(t *testing.T) {
+	h := newAPIHarness(t)
+	u := seedAPIUser(t, h.repo, "admin@example.com", "admin")
+	p := seedProject(t, h.repo)
+	target := seedEnv(t, h.repo)
+	stage := seedEnv(t, h.repo)
+	r := seedRelease(t, h.repo, p.ID)
+	d := seedDeployment(t, h.repo, r.ID, target.ID, "succeeded")
+
+	lifecycle, err := h.repo.Queries.CreateLifecycle(
+		context.Background(),
+		db.CreateLifecycleParams{Name: "restricted"},
+	)
+	if err != nil {
+		t.Fatalf("create lifecycle: %v", err)
+	}
+	if _, err := h.repo.Queries.CreateLifecycleStage(
+		context.Background(),
+		db.CreateLifecycleStageParams{
+			LifecycleID:   lifecycle.ID,
+			EnvironmentID: stage.ID,
+			SortOrder:     1,
+		},
+	); err != nil {
+		t.Fatalf("create lifecycle stage: %v", err)
+	}
+	if err := h.repo.Queries.SetProjectLifecycle(
+		context.Background(),
+		db.SetProjectLifecycleParams{
+			ID: p.ID,
+			LifecycleID: sql.NullInt64{
+				Int64: lifecycle.ID,
+				Valid: true,
+			},
+		},
+	); err != nil {
+		t.Fatalf("set project lifecycle: %v", err)
+	}
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		fmt.Sprintf("/api/v1/deployments/%d/redeploy", d.ID),
+		nil,
+	)
+	req = withAPIUser(req, u)
+	req = withAPIURLParam(req, "id", fmt.Sprint(d.ID))
+	rec := httptest.NewRecorder()
+
+	api.NewDeploymentHandler(h.repo, h.runner).RedeployDeployment(rec, req)
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestListSchedules(t *testing.T) {
 	h := newAPIHarness(t)
 	u := seedAPIUser(t, h.repo, "admin@example.com", "admin")
