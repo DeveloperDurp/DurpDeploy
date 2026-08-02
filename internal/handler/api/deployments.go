@@ -11,6 +11,7 @@ import (
 
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/gate"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/runner"
 )
@@ -97,6 +98,11 @@ func (h *DeploymentHandler) CreateDeployment(
 		RespondError(w, http.StatusNotFound, "Release not found")
 		return
 	}
+	project, err := h.repo.Queries.GetProject(r.Context(), projectID)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 
 	if _, err := h.repo.Queries.GetEnvironment(
 		r.Context(),
@@ -110,12 +116,28 @@ func (h *DeploymentHandler) CreateDeployment(
 		return
 	}
 
+	blocked, reason, requiresApproval, err := gate.CheckAndApproval(
+		r.Context(), h.repo, project, release, req.EnvironmentID,
+	)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if blocked {
+		RespondError(w, http.StatusUnprocessableEntity, reason)
+		return
+	}
+	status := "pending"
+	if requiresApproval {
+		status = "pending_approval"
+	}
+
 	deployment, err := h.repo.Queries.CreateDeployment(
 		r.Context(),
 		db.CreateDeploymentParams{
 			ReleaseID:     req.ReleaseID,
 			EnvironmentID: req.EnvironmentID,
-			Status:        "pending",
+			Status:        status,
 		},
 	)
 	if err != nil {
@@ -123,12 +145,14 @@ func (h *DeploymentHandler) CreateDeployment(
 		return
 	}
 
-	go h.runner.Run(
-		context.Background(),
-		deployment.ID,
-		release.ID,
-		req.EnvironmentID,
-	)
+	if status == "pending" {
+		go h.runner.Run(
+			context.Background(),
+			deployment.ID,
+			release.ID,
+			req.EnvironmentID,
+		)
+	}
 
 	RespondJSON(w, http.StatusCreated, deployment)
 }
