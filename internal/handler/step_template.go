@@ -410,8 +410,16 @@ func (h *StepTemplateHandler) SaveStepAsTemplate(
 		return
 	}
 
-	step, err := h.repo.Queries.GetStep(r.Context(), stepID)
+	step, err := (&StepHandler{repo: h.repo}).getProjectStep(
+		r,
+		projectID,
+		stepID,
+	)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			http.NotFound(w, r)
+			return
+		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

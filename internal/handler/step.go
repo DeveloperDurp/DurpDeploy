@@ -18,6 +18,17 @@ type StepHandler struct {
 	repo *repository.Repository
 }
 
+func (h *StepHandler) getProjectStep(
+	r *http.Request,
+	projectID, stepID int64,
+) (db.Step, error) {
+	step, err := h.repo.Queries.GetStep(r.Context(), stepID)
+	if err == nil && step.ProjectID != projectID {
+		err = sql.ErrNoRows
+	}
+	return step, err
+}
+
 func NewStepHandler(repo *repository.Repository) *StepHandler {
 	return &StepHandler{repo: repo}
 }
@@ -229,8 +240,12 @@ func (h *StepHandler) EditStepForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	step, err := h.repo.Queries.GetStep(r.Context(), stepID)
+	step, err := h.getProjectStep(r, projectID, stepID)
 	if err != nil {
+		if err == sql.ErrNoRows {
+			http.NotFound(w, r)
+			return
+		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -254,6 +269,14 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 	stepID, err := strconv.ParseInt(stepIDStr, 10, 64)
 	if err != nil {
 		http.Error(w, "Invalid step ID", http.StatusBadRequest)
+		return
+	}
+	if _, err := h.getProjectStep(r, projectID, stepID); err != nil {
+		if err == sql.ErrNoRows {
+			http.NotFound(w, r)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -380,6 +403,14 @@ func (h *StepHandler) DeleteStep(w http.ResponseWriter, r *http.Request) {
 	stepID, err := strconv.ParseInt(stepIDStr, 10, 64)
 	if err != nil {
 		http.Error(w, "Invalid step ID", http.StatusBadRequest)
+		return
+	}
+	if _, err := h.getProjectStep(r, projectID, stepID); err != nil {
+		if err == sql.ErrNoRows {
+			http.NotFound(w, r)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
