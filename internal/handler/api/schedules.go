@@ -181,15 +181,17 @@ func (h *ScheduleHandler) CreateSchedule(
 		return
 	}
 
-	if _, err := h.repo.Queries.GetRelease(
-		r.Context(),
-		req.ReleaseID,
-	); err != nil {
+	release, err := h.repo.Queries.GetRelease(r.Context(), req.ReleaseID)
+	if err != nil {
 		if err == sql.ErrNoRows {
 			RespondError(w, http.StatusNotFound, "Release not found")
 			return
 		}
 		RespondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if release.ProjectID != projectID {
+		RespondError(w, http.StatusNotFound, "Release not found")
 		return
 	}
 	if _, err := h.repo.Queries.GetEnvironment(
@@ -362,6 +364,19 @@ func (h *ScheduleHandler) UpdateSchedule(
 			http.StatusUnprocessableEntity,
 			"release_id, environment_id, and cron are required",
 		)
+		return
+	}
+	release, err := h.repo.Queries.GetRelease(r.Context(), req.ReleaseID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			RespondError(w, http.StatusNotFound, "Release not found")
+			return
+		}
+		RespondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if release.ProjectID != projectID {
+		RespondError(w, http.StatusNotFound, "Release not found")
 		return
 	}
 	sched, err := parseAndValidateCron(cronExpr)

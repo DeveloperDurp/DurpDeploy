@@ -744,6 +744,80 @@ func TestCreateSchedule(t *testing.T) {
 	}
 }
 
+func TestCreateScheduleRejectsForeignRelease(t *testing.T) {
+	h := newAPIHarness(t)
+	project := seedProject(t, h.repo)
+	foreignProject := seedProject(t, h.repo)
+	env := seedEnv(t, h.repo)
+	release := seedRelease(t, h.repo, foreignProject.ID)
+	body := strings.NewReader(fmt.Sprintf(
+		`{"release_id":%d,"environment_id":%d,"cron":"0 9 * * *"}`,
+		release.ID, env.ID,
+	))
+	req := httptest.NewRequest(http.MethodPost, "/", body)
+	req = withAPIURLParam(req, "id", fmt.Sprint(project.ID))
+	rec := httptest.NewRecorder()
+
+	api.NewScheduleHandler(h.repo).CreateSchedule(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestCreateDeploymentRequiresApproval(t *testing.T) {
+	h := newAPIHarness(t)
+	project := seedProject(t, h.repo)
+	env := seedEnv(t, h.repo)
+	release := seedRelease(t, h.repo, project.ID)
+	lifecycle, err := h.repo.Queries.CreateLifecycle(
+		context.Background(),
+		db.CreateLifecycleParams{Name: "protected"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h.repo.Queries.SetProjectLifecycle(
+		context.Background(),
+		db.SetProjectLifecycleParams{
+			ID: project.ID,
+			LifecycleID: sql.NullInt64{
+				Int64: lifecycle.ID,
+				Valid: true,
+			},
+		},
+	); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.repo.Queries.CreateLifecycleStage(
+		context.Background(),
+		db.CreateLifecycleStageParams{
+			LifecycleID:      lifecycle.ID,
+			EnvironmentID:    env.ID,
+			SortOrder:        0,
+			RequiresApproval: 1,
+		},
+	); err != nil {
+		t.Fatal(err)
+	}
+	body := strings.NewReader(fmt.Sprintf(
+		`{"release_id":%d,"environment_id":%d}`,
+		release.ID, env.ID,
+	))
+	req := httptest.NewRequest(http.MethodPost, "/", body)
+	req = withAPIURLParam(req, "id", fmt.Sprint(project.ID))
+	rec := httptest.NewRecorder()
+
+	api.NewDeploymentHandler(h.repo, h.runner).CreateDeployment(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var deployment db.Deployment
+	mustDecode(t, rec.Body, &deployment)
+	if deployment.Status != "pending_approval" {
+		t.Fatalf("expected pending_approval, got %q", deployment.Status)
+	}
+}
+
 func TestCreateSchedule_InvalidCron(t *testing.T) {
 	h := newAPIHarness(t)
 	u := seedAPIUser(t, h.repo, "admin@example.com", "admin")
@@ -878,6 +952,39 @@ func TestUpdateSchedule(t *testing.T) {
 	}
 	if resp["enabled"] != float64(0) {
 		t.Fatalf("expected disabled, got %v", resp["enabled"])
+	}
+}
+
+func TestUpdateScheduleRejectsForeignRelease(t *testing.T) {
+	h := newAPIHarness(t)
+	project := seedProject(t, h.repo)
+	foreignProject := seedProject(t, h.repo)
+	env := seedEnv(t, h.repo)
+	release := seedRelease(t, h.repo, project.ID)
+	foreignRelease := seedRelease(t, h.repo, foreignProject.ID)
+	schedule, err := h.repo.Queries.CreateScheduledDeployment(
+		context.Background(),
+		db.CreateScheduledDeploymentParams{
+			ProjectID: project.ID, ReleaseID: release.ID,
+			EnvironmentID: env.ID, Cron: "0 9 * * *",
+			NextRunAt: time.Now().Add(time.Hour).Unix(),
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := strings.NewReader(fmt.Sprintf(
+		`{"release_id":%d,"environment_id":%d,"cron":"0 10 * * *"}`,
+		foreignRelease.ID, env.ID,
+	))
+	req := httptest.NewRequest(http.MethodPut, "/", body)
+	req = withAPIURLParam(req, "schedId", fmt.Sprint(schedule.ID))
+	req = withAPIProjectID(req, project.ID)
+	rec := httptest.NewRecorder()
+
+	api.NewScheduleHandler(h.repo).UpdateSchedule(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
 

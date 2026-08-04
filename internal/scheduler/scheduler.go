@@ -240,6 +240,18 @@ func (s *Scheduler) fireOne(ctx context.Context, row db.ScheduledDeployment) {
 		}
 		return
 	}
+	if release.ProjectID != project.ID {
+		s.log.Error(
+			"gate check failed: release belongs to another project",
+			"schedule_id", row.ID,
+			"project_id", row.ProjectID,
+			"release_id", row.ReleaseID,
+		)
+		if err := s.advance(ctx, row, next); err != nil {
+			s.log.Error("advance failed", "schedule_id", row.ID, "error", err)
+		}
+		return
+	}
 	// Combines the deployability gate and the requires-approval check
 	// (same lifecycle-stage gate the manual deploy handler enforces) into
 	// a single call so the lifecycle stages are only loaded once.
