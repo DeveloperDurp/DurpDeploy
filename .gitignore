@@ -51,3 +51,5 @@ static/swagger-ui/
 *.db-shm
 *.db-wal
 .junie/
+artifacts/
+.env
