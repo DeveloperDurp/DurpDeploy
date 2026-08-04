@@ -498,25 +498,56 @@ func (h *DeploymentHandler) RedeployDeployment(
 		)
 		return
 	}
+	release, err := h.repo.Queries.GetRelease(r.Context(), deployment.ReleaseID)
+	if err != nil {
+		RespondError(w, http.StatusNotFound, "Release not found")
+		return
+	}
+	project, err := h.repo.Queries.GetProject(r.Context(), release.ProjectID)
+	if err != nil {
+		RespondError(w, http.StatusNotFound, "Project not found")
+		return
+	}
+	blocked, reason, requiresApproval, err := gate.CheckAndApproval(
+		r.Context(),
+		h.repo,
+		project,
+		release,
+		deployment.EnvironmentID,
+	)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if blocked {
+		RespondError(w, http.StatusUnprocessableEntity, reason)
+		return
+	}
 
+	initialStatus := "pending"
+	if requiresApproval {
+		initialStatus = "pending_approval"
+	}
 	newDeployment, err := h.repo.Queries.CreateDeployment(
 		r.Context(),
 		db.CreateDeploymentParams{
 			ReleaseID:     deployment.ReleaseID,
 			EnvironmentID: deployment.EnvironmentID,
-			Status:        "pending",
+			Status:        initialStatus,
 		},
 	)
 	if err != nil {
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	go h.runner.Run(
-		r.Context(),
-		newDeployment.ID,
-		newDeployment.ReleaseID,
-		newDeployment.EnvironmentID,
-	)
+	if initialStatus == "pending" {
+		go h.runner.Run(
+			context.Background(),
+			newDeployment.ID,
+			newDeployment.ReleaseID,
+			newDeployment.EnvironmentID,
+		)
+	}
 	RespondJSON(w, http.StatusCreated, newDeployment)
 }
 

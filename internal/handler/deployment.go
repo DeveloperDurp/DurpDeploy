@@ -761,7 +761,7 @@ func (h *DeploymentHandler) RedeployDeployment(
 		return
 	}
 
-	_, err = h.repo.Queries.GetRelease(r.Context(), source.ReleaseID)
+	release, err := h.repo.Queries.GetRelease(r.Context(), source.ReleaseID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			http.Error(w, "Release not found", http.StatusNotFound)
@@ -770,17 +770,41 @@ func (h *DeploymentHandler) RedeployDeployment(
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	project, err := h.repo.Queries.GetProject(r.Context(), release.ProjectID)
+	if err != nil {
+		http.Error(w, "Project not found", http.StatusNotFound)
+		return
+	}
+	blocked, reason, requiresApproval, err := gate.CheckAndApproval(
+		r.Context(),
+		h.repo,
+		project,
+		release,
+		source.EnvironmentID,
+	)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if blocked {
+		http.Error(w, reason, http.StatusUnprocessableEntity)
+		return
+	}
 
 	note := sql.NullString{
 		String: fmt.Sprintf("Re-run of #%d", source.ID),
 		Valid:  true,
+	}
+	initialStatus := "pending"
+	if requiresApproval {
+		initialStatus = "pending_approval"
 	}
 	deployment, err := h.repo.Queries.CreateDeployment(
 		r.Context(),
 		db.CreateDeploymentParams{
 			ReleaseID:     source.ReleaseID,
 			EnvironmentID: source.EnvironmentID,
-			Status:        "pending",
+			Status:        initialStatus,
 			StartedAt:     sql.NullInt64{},
 			FinishedAt:    sql.NullInt64{},
 			Forced:        0,
@@ -792,12 +816,14 @@ func (h *DeploymentHandler) RedeployDeployment(
 		return
 	}
 
-	go h.runner.Run(
-		context.Background(),
-		deployment.ID,
-		source.ReleaseID,
-		source.EnvironmentID,
-	)
+	if initialStatus == "pending" {
+		go h.runner.Run(
+			context.Background(),
+			deployment.ID,
+			source.ReleaseID,
+			source.EnvironmentID,
+		)
+	}
 
 	if r.Header.Get("HX-Request") == "true" {
 		// HX-Redirect (not 303) so the client does a full-page nav; a
