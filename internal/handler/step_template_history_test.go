@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"durpdeploy/internal/db"
 	"durpdeploy/internal/handler"
 	"durpdeploy/internal/migrate"
 	"durpdeploy/internal/repository"
@@ -44,6 +45,10 @@ func newStepTemplateHarness(t *testing.T) *stepTemplateHarness {
 	r.Put("/templates/{id}", sth.UpdateTemplate)
 	r.Delete("/templates/{id}", sth.DeleteTemplate)
 	r.Get("/templates/{id}/history", sth.ListTemplateHistory)
+	r.Post(
+		"/projects/{id}/steps/{stepId}/save-as-template",
+		sth.SaveStepAsTemplate,
+	)
 
 	srv := httptest.NewServer(r)
 	t.Cleanup(srv.Close)
@@ -56,6 +61,62 @@ func newStepTemplateHarness(t *testing.T) *stepTemplateHarness {
 				return http.ErrUseLastResponse
 			},
 		},
+	}
+}
+
+func TestStepTemplate_SaveRejectsStepFromAnotherProject(t *testing.T) {
+	h := newStepTemplateHarness(t)
+	ctx := context.Background()
+
+	projectA, err := h.repo.Queries.CreateProject(
+		ctx,
+		db.CreateProjectParams{Name: "project-a"},
+	)
+	if err != nil {
+		t.Fatalf("create project A: %v", err)
+	}
+	projectB, err := h.repo.Queries.CreateProject(
+		ctx,
+		db.CreateProjectParams{Name: "project-b"},
+	)
+	if err != nil {
+		t.Fatalf("create project B: %v", err)
+	}
+	step, err := h.repo.Queries.CreateStep(
+		ctx,
+		db.CreateStepParams{
+			ProjectID:  projectB.ID,
+			Name:       "private-step",
+			ScriptBody: "echo project-b-secret",
+		},
+	)
+	if err != nil {
+		t.Fatalf("create project B step: %v", err)
+	}
+
+	resp, err := h.client.Post(
+		fmt.Sprintf(
+			"%s/projects/%d/steps/%d/save-as-template",
+			h.server.URL,
+			projectA.ID,
+			step.ID,
+		),
+		"application/x-www-form-urlencoded",
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("save cross-project step as template: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", resp.StatusCode)
+	}
+	templates, err := h.repo.Queries.ListStepTemplates(ctx)
+	if err != nil {
+		t.Fatalf("list templates: %v", err)
+	}
+	if len(templates) != 0 {
+		t.Fatalf("expected no copied templates, got %d", len(templates))
 	}
 }
 
