@@ -224,6 +224,9 @@ func (r *DeploymentRunner) runStepAttempt(
 	// Drop to the durpdeploy-runner UID/GID (P1-4); no-op if that account
 	// isn't provisioned or the platform doesn't support it.
 	r.sandbox.applyCredential(cmd)
+	if err := r.sandbox.clearCapabilities(cmd, chrooted); err != nil {
+		return err
+	}
 
 	// Allow the durpdeploy-runner user to enter the scratch directory (P1-4).
 	// MkdirTemp creates it as 0700; we need 0711 (+x) at minimum.

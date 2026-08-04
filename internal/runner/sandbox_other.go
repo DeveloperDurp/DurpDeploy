@@ -18,6 +18,10 @@ func newSandbox() *Sandbox { return &Sandbox{} }
 
 func (s *Sandbox) applyCredential(cmd *exec.Cmd) {}
 
+func (s *Sandbox) clearCapabilities(cmd *exec.Cmd, chrooted bool) error {
+	return nil
+}
+
 func (s *Sandbox) createCgroup(deploymentID int64) string { return "" }
 
 func (s *Sandbox) addProcess(cgroup string, pid int) {}

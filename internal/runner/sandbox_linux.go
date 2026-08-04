@@ -102,6 +102,36 @@ func (s *Sandbox) applyCredential(cmd *exec.Cmd) {
 	}
 }
 
+// clearCapabilities makes setpriv the immediate child and has it remove every
+// inherited capability before it execs the attacker-controlled step. Changing
+// UID alone is insufficient when the service has ambient capabilities.
+func (s *Sandbox) clearCapabilities(cmd *exec.Cmd, chrooted bool) error {
+	if !s.enabled {
+		return nil
+	}
+	setpriv := "/usr/bin/setpriv"
+	if !chrooted {
+		path, err := exec.LookPath("setpriv")
+		if err != nil {
+			return fmt.Errorf("runner sandbox requires setpriv: %w", err)
+		}
+		setpriv = path
+	} else if _, err := os.Stat(setpriv); err != nil {
+		return fmt.Errorf("runner sandbox requires %s: %w", setpriv, err)
+	}
+	args := append([]string{
+		"setpriv",
+		"--bounding-set=-all",
+		"--inh-caps=-all",
+		"--ambient-caps=-all",
+		"--no-new-privs",
+		"--",
+	}, cmd.Args...)
+	cmd.Path = setpriv
+	cmd.Args = args
+	return nil
+}
+
 // createCgroup creates a fresh cgroup v2 directory for this deployment
 // under cgroupRoot and writes the default cpu/memory/pids limits. Returns
 // "" (no error) if cgroupRoot isn't set up (docs/deploy.md Step 5 wasn't
