@@ -16,6 +16,8 @@ type Sandbox struct{}
 
 func newSandbox() *Sandbox { return &Sandbox{} }
 
+func (s *Sandbox) isolated(chrooted bool) bool { return false }
+
 func (s *Sandbox) applyCredential(cmd *exec.Cmd) {}
 
 func (s *Sandbox) clearCapabilities(cmd *exec.Cmd, chrooted bool) error {

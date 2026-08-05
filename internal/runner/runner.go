@@ -195,6 +195,12 @@ func (r *DeploymentRunner) runStepAttempt(
 	// mounts aren't permitted, e.g. local dev without CAP_SYS_ADMIN.
 	chrooted := r.sandbox.setupChroot(tmpDir)
 	defer r.sandbox.teardownChroot(tmpDir)
+	if os.Getenv("DURPDEPLOY_REQUIRE_SANDBOX") == "1" &&
+		!r.sandbox.isolated(chrooted) {
+		return fmt.Errorf(
+			"runner sandbox is required but credential and chroot isolation are unavailable",
+		)
+	}
 
 	var cmd *exec.Cmd
 	if chrooted {

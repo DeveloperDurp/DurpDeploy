@@ -18,6 +18,9 @@ services:
     # Don't publish it to the host.
     environment:
       DURPDEPLOY_DB: /data/durpdeploy.db
+      # Fail closed: this profile does not grant the privileges needed for
+      # chroot isolation, so deployment scripts must never run beside the DB.
+      DURPDEPLOY_REQUIRE_SANDBOX: "1"
       # Optional. The mounted secret file at /etc/durpdeploy/key is the
       # primary path; secret/secret.go reads file first, env fallback. Set
       # this only when delivering the key via env (k8s, swarm, etc.).

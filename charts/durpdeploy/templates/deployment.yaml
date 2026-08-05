@@ -47,6 +47,10 @@ spec:
               containerPort: {{ .Values.service.targetPort }}
               protocol: TCP
           env:
+            # This pod intentionally has no mount capabilities. Refuse to run
+            # deployment scripts rather than exposing pod credentials.
+            - name: DURPDEPLOY_REQUIRE_SANDBOX
+              value: "1"
             # --- Database (Postgres DSN) ---
             # postgres://user:password@host:port/db?sslmode=...
             # ponytail: assembled inline rather than via a Secret+envFrom
