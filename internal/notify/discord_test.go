@@ -37,7 +37,7 @@ func TestDiscordNotifier_PostsMessageToWebhook(t *testing.T) {
 	)
 	defer srv.Close()
 
-	n := notify.NewDiscordNotifier()
+	n := notify.NewDiscordNotifierWithClient(srv.Client())
 	skipped, err := n.Notify(context.Background(), events.Event{
 		Message:           "Deployment #1 started",
 		DiscordWebhookURL: srv.URL,
@@ -61,7 +61,7 @@ func TestDiscordNotifier_ErrorsOnNonSuccessStatus(t *testing.T) {
 	)
 	defer srv.Close()
 
-	n := notify.NewDiscordNotifier()
+	n := notify.NewDiscordNotifierWithClient(srv.Client())
 	_, err := n.Notify(context.Background(), events.Event{
 		Message:           "x",
 		DiscordWebhookURL: srv.URL,

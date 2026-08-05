@@ -37,7 +37,7 @@ func TestSlackNotifier_PostsMessageToWebhook(t *testing.T) {
 	)
 	defer srv.Close()
 
-	n := notify.NewSlackNotifier()
+	n := notify.NewSlackNotifierWithClient(srv.Client())
 	skipped, err := n.Notify(context.Background(), events.Event{
 		Message:         "Deployment #1 started",
 		SlackWebhookURL: srv.URL,
@@ -61,7 +61,7 @@ func TestSlackNotifier_ErrorsOnNonSuccessStatus(t *testing.T) {
 	)
 	defer srv.Close()
 
-	n := notify.NewSlackNotifier()
+	n := notify.NewSlackNotifierWithClient(srv.Client())
 	_, err := n.Notify(context.Background(), events.Event{
 		Message:         "x",
 		SlackWebhookURL: srv.URL,
