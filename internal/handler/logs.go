@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
+	"durpdeploy/internal/db"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/runner"
 	"github.com/go-chi/chi/v5"
@@ -109,16 +109,15 @@ func (h *LogHandler) ExportLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logs, err := h.repo.Queries.ListDeploymentLogsByDeployment(
-		r.Context(),
-		deploymentID,
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set(
+		"Content-Disposition",
+		fmt.Sprintf(`attachment; filename="deployment-%d.log"`, deploymentID),
 	)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+	w.WriteHeader(http.StatusOK)
 
-	header := fmt.Sprintf(
+	fmt.Fprintf(
+		w,
 		"=== deployment #%d | project=%s | release=%s | env=%s | status=%s ===\n",
 		deploymentID,
 		project.Name,
@@ -126,28 +125,28 @@ func (h *LogHandler) ExportLogs(w http.ResponseWriter, r *http.Request) {
 		environment.Name,
 		deployment.Status,
 	)
-
-	var buf strings.Builder
-	buf.WriteString(header)
-
-	for i := len(logs) - 1; i >= 0; i-- {
-		lg := logs[i]
-		ts := time.Unix(lg.CreatedAt, 0).UTC().Format("2006-01-02 15:04:05")
-		if lg.StepName.Valid {
-			buf.WriteString(
-				fmt.Sprintf("[%s] [%s] %s\n", ts, lg.StepName.String, lg.Line),
-			)
-		} else {
-			buf.WriteString(fmt.Sprintf("[%s] %s\n", ts, lg.Line))
-		}
+	err = h.repo.ForEachDeploymentLogByDeploymentAsc(
+		r.Context(),
+		deploymentID,
+		func(lg db.DeploymentLog) error {
+			ts := time.Unix(lg.CreatedAt, 0).UTC().Format("2006-01-02 15:04:05")
+			if lg.StepName.Valid {
+				_, err := fmt.Fprintf(
+					w,
+					"[%s] [%s] %s\n",
+					ts,
+					lg.StepName.String,
+					lg.Line,
+				)
+				return err
+			}
+			_, err := fmt.Fprintf(w, "[%s] %s\n", ts, lg.Line)
+			return err
+		},
+	)
+	if err != nil {
+		return
 	}
-	buf.WriteByte('\n')
+	_, _ = fmt.Fprintln(w)
 
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.Header().
-		Set("Content-Disposition", fmt.Sprintf(`attachment; filename="deployment-%d.log"`, deploymentID))
-	w.WriteHeader(http.StatusOK)
-	w.Write(
-		[]byte(buf.String()),
-	) // ponytail: builds full body in memory; chunked for 100k+ lines if needed later
 }
