@@ -12,6 +12,7 @@ import (
 
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/notify"
 	"durpdeploy/internal/repository"
 	"durpdeploy/views/pages"
 )
@@ -181,10 +182,9 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 
 // UpdateProjectNotifications saves the project's Slack webhook URL,
 // comma-separated notify_emails list, Gotify server URL/token, and/or
-// Discord webhook URL (Stage 3). Any field may be blank to disable that
-// notifier; there's no separate validation beyond trimming since a
-// malformed webhook URL, email, or Gotify URL just fails/skips at delivery
-// time.
+// Discord webhook URL. Any field may be blank to disable that
+// notifier. Notification URLs are validated before storage so deploy events
+// cannot make server-side POSTs to local or private-network services.
 func (h *ProjectHandler) UpdateProjectNotifications(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -200,6 +200,11 @@ func (h *ProjectHandler) UpdateProjectNotifications(
 	gotifyURL := strings.TrimSpace(r.FormValue("gotify_url"))
 	gotifyToken := strings.TrimSpace(r.FormValue("gotify_token"))
 	discordWebhook := strings.TrimSpace(r.FormValue("discord_webhook_url"))
+
+	if err := validateNotificationURLs(webhook, gotifyURL, discordWebhook); err != nil {
+		http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+		return
+	}
 
 	err = h.repo.Queries.UpdateProjectNotifications(
 		r.Context(),
@@ -681,4 +686,13 @@ func (h *ProjectHandler) DeleteProject(w http.ResponseWriter, r *http.Request) {
 func parseProjectID(r *http.Request) (int64, error) {
 	idStr := chi.URLParam(r, "id")
 	return strconv.ParseInt(idStr, 10, 64)
+}
+
+func validateNotificationURLs(urls ...string) error {
+	for _, raw := range urls {
+		if err := notify.ValidateEndpointURL(raw); err != nil {
+			return err
+		}
+	}
+	return nil
 }
