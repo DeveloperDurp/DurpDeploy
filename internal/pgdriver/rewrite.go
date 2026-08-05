@@ -60,8 +60,10 @@ func RewriteSQL(query string) string {
 	return query
 }
 
-// rewritePlaceholders renumbers `?` placeholders to `$1, $2, ...`, skipping
-// `?` characters that appear inside single- or double-quoted literals.
+// rewritePlaceholders renumbers SQLite placeholders to PostgreSQL
+// placeholders, skipping `?` characters that appear inside single- or
+// double-quoted literals. It preserves sqlc/SQLite numbered placeholders
+// (`?1` -> `$1`) so repeated references keep pointing at the same arg.
 func rewritePlaceholders(query string) string {
 	var b strings.Builder
 	b.Grow(len(query) + 8)
@@ -87,6 +89,23 @@ func rewritePlaceholders(query string) string {
 			inDouble = true
 			b.WriteByte(c)
 		case c == '?':
+			start := i + 1
+			end := start
+			for end < len(query) && query[end] >= '0' && query[end] <= '9' {
+				end++
+			}
+			if end > start {
+				idx, err := strconv.Atoi(query[start:end])
+				if err == nil && idx > 0 {
+					if idx > n {
+						n = idx
+					}
+					b.WriteByte('$')
+					b.WriteString(strconv.Itoa(idx))
+					i = end - 1
+					continue
+				}
+			}
 			n++
 			b.WriteByte('$')
 			b.WriteString(strconv.Itoa(n))
