@@ -63,7 +63,7 @@ COPY --from=builder /out/durpdeploy /usr/local/bin/durpdeploy
 RUN chmod 0755 /usr/local/bin/durpdeploy
 
 # Drop to the non-root user for all subsequent instructions and runtime.
-USER durpdeploy
+USER 10001
 
 # The application listens on port 8080 (hardcoded in cmd/server/main.go).
 EXPOSE 8080
@@ -76,4 +76,4 @@ ENTRYPOINT ["/usr/local/bin/durpdeploy"]
 # Probe the /login endpoint. It returns a 303 redirect when the server is alive,
 # which is enough for an orchestrator to consider the container healthy.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-  CMD wget -q -O /dev/null http://localhost:8080/login || exit 1
+  CMD-SHELL ["wget", "-q", "-O", "/dev/null", "http://localhost:8080/login"]

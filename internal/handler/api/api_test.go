@@ -94,7 +94,7 @@ func seedEnv(t *testing.T, repo *repository.Repository) db.Environment {
 	e, err := repo.Queries.CreateEnvironment(
 		context.Background(),
 		db.CreateEnvironmentParams{
-			Name:        "prod",
+			Name:        fmt.Sprintf("prod-%d", time.Now().UnixNano()),
 			Description: sql.NullString{},
 			Tags:        sql.NullString{},
 		},
