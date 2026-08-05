@@ -76,4 +76,4 @@ ENTRYPOINT ["/usr/local/bin/durpdeploy"]
 # Probe the /login endpoint. It returns a 303 redirect when the server is alive,
 # which is enough for an orchestrator to consider the container healthy.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-  CMD-SHELL ["wget", "-q", "-O", "/dev/null", "http://localhost:8080/login"]
+  CMD ["wget", "-q", "-O", "/dev/null", "http://localhost:8080/login"]
