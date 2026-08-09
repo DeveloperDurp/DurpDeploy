@@ -25,7 +25,14 @@ DB_PATH="$WORKDIR/durpdeploy.db"
 LITESTREAM_CONF="$WORKDIR/litestream.yml"
 SERVER_LOG="$WORKDIR/server.log"
 LITESTREAM_LOG="$WORKDIR/litestream.log"
-BASE="http://localhost:8080"
+SERVER_ADDR="127.0.0.1:$(python3 - <<'PY'
+import socket
+with socket.socket() as s:
+    s.bind(("127.0.0.1", 0))
+    print(s.getsockname()[1])
+PY
+)"
+BASE="http://$SERVER_ADDR"
 COOKIES="$WORKDIR/cookies.txt"
 
 cleanup() {
@@ -57,16 +64,28 @@ EOF
 
 echo "=== Seeding admin user ==="
 ADMIN_EMAIL="backup-test@test.local"
-ADMIN_PASS="backup-test-password-1234"
+ADMIN_PASS="$(openssl rand -base64 32)"
 DURPDEPLOY_DB="$DB_PATH" "$WORKDIR/durpdeploy" admin create \
     --email "$ADMIN_EMAIL" --password "$ADMIN_PASS" >/dev/null
 
-echo "=== Starting server on :8080 ==="
-DURPDEPLOY_DB="$DB_PATH" \
+echo "=== Starting server on $SERVER_ADDR ==="
+DURPDEPLOY_DB="$DB_PATH" DURPDEPLOY_ADDR="$SERVER_ADDR" \
     "$WORKDIR/durpdeploy" >"$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
 for _ in $(seq 1 30); do
-    curl -s -o /dev/null "$BASE/" && break
+    if curl -s -o /dev/null "$BASE/"; then
+        kill -0 "$SERVER_PID" 2>/dev/null || {
+            echo "FAIL: server exited while waiting for $BASE"
+            cat "$SERVER_LOG"
+            exit 1
+        }
+        break
+    fi
+    kill -0 "$SERVER_PID" 2>/dev/null || {
+        echo "FAIL: server exited before binding $SERVER_ADDR"
+        cat "$SERVER_LOG"
+        exit 1
+    }
     sleep 0.5
 done
 
@@ -147,11 +166,23 @@ litestream restore -config "$LITESTREAM_CONF" -o "$DB_PATH" "$DB_PATH"
 [[ -f "$DB_PATH" ]] || { echo "FAIL: restore did not produce a db file"; exit 1; }
 
 echo "=== Restarting server and verifying data ==="
-DURPDEPLOY_DB="$DB_PATH" \
+DURPDEPLOY_DB="$DB_PATH" DURPDEPLOY_ADDR="$SERVER_ADDR" \
     "$WORKDIR/durpdeploy" >>"$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
 for _ in $(seq 1 30); do
-    curl -s -o /dev/null "$BASE/" && break
+    if curl -s -o /dev/null "$BASE/"; then
+        kill -0 "$SERVER_PID" 2>/dev/null || {
+            echo "FAIL: server exited while waiting for $BASE"
+            cat "$SERVER_LOG"
+            exit 1
+        }
+        break
+    fi
+    kill -0 "$SERVER_PID" 2>/dev/null || {
+        echo "FAIL: server exited before binding $SERVER_ADDR"
+        cat "$SERVER_LOG"
+        exit 1
+    }
     sleep 0.5
 done
 
