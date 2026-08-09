@@ -45,7 +45,7 @@ test:
   stage: test
   before_script:
     # ponytail: tests spawn the deployment runner, which exec's `bash` to run step scripts. The `default.before_script` doesn't reliably run in this Kubernetes executor, so install explicitly.
-    - apk add --no-cache bash make nodejs npm
+    - apk add --no-cache bash make nodejs npm util-linux
     - go install github.com/a-h/templ/cmd/templ@latest
     - templ generate
     # ponytail: static/swagger-ui/ is gitignored; materialize it before the test build walks the import graph.

@@ -11,7 +11,7 @@ import (
 func TestClearCapabilitiesWrapsStepWithSetpriv(t *testing.T) {
 	cmd := exec.Command("bash", "/script.sh")
 	sandbox := &Sandbox{enabled: true}
-	if err := sandbox.clearCapabilities(cmd, true); err != nil {
+	if err := sandbox.clearCapabilities(cmd, false); err != nil {
 		t.Fatal(err)
 	}
 

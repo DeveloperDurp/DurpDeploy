@@ -1,27 +1,54 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BASE="http://localhost:8080"
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+ROOT_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
+CLIENT_ONLY=${DURPDEPLOY_E2E_CLIENT_ONLY:-0}
 TMP=$(mktemp -d)
 COOKIES=$(mktemp)
-trap "rm -rf $TMP; rm -f $COOKIES; kill %1 2>/dev/null || true" EXIT
+SERVER_PID=""
 
-echo "=== Building and starting server ==="
-rm -f durpdeploy.db durpdeploy.db-shm durpdeploy.db-wal
-go build -o "$TMP/durpdeploy" ./cmd/server
+cleanup() {
+    rm -rf "$TMP"
+    rm -f "$COOKIES"
+    if [[ -n "$SERVER_PID" ]]; then
+        kill "$SERVER_PID" 2>/dev/null || true
+        wait "$SERVER_PID" 2>/dev/null || true
+    fi
+}
+trap cleanup EXIT
 
-# Seed the first admin user via the CLI. The CLI runs migrations on its
-# own, so the server's startup migration is a no-op. This mirrors the
-# production flow described in docs/deploy.md.
-ADMIN_EMAIL="e2e-admin@test.local"
-ADMIN_PASS="e2e-admin-password-1234"
-DURPDEPLOY_DB=durpdeploy.db "$TMP/durpdeploy" admin create \
-    --email "$ADMIN_EMAIL" --password "$ADMIN_PASS" >/dev/null
+ADMIN_EMAIL="${DURPDEPLOY_ADMIN_EMAIL:-e2e-admin@test.local}"
+ADMIN_PASS="${DURPDEPLOY_ADMIN_PASSWORD:-e2e-admin-password-1234}"
 
-# Start the server. The migrations it would normally run are a no-op
-# because the admin CLI just created the schema.
-"$TMP/durpdeploy" &
-sleep 2
+if [[ "$CLIENT_ONLY" == "1" ]]; then
+    BASE="${DURPDEPLOY_BASE_URL:-http://localhost:8080}"
+    BASE="${BASE%/}"
+    echo "=== Running client-only E2E assertions against $BASE ==="
+    if ! curl -fsS "$BASE/healthz" >/dev/null; then
+        echo "FAIL: DurpDeploy server is unavailable at $BASE (set DURPDEPLOY_BASE_URL)" >&2
+        exit 1
+    fi
+else
+    BASE="http://localhost:8080"
+    cd "$ROOT_DIR"
+
+    echo "=== Building and starting server ==="
+    rm -f durpdeploy.db durpdeploy.db-shm durpdeploy.db-wal
+    go build -o "$TMP/durpdeploy" ./cmd/server
+
+    # Seed the first admin user via the CLI. The CLI runs migrations on its
+    # own, so the server's startup migration is a no-op. This mirrors the
+    # production flow described in docs/deploy.md.
+    DURPDEPLOY_DB=durpdeploy.db "$TMP/durpdeploy" admin create \
+        --email "$ADMIN_EMAIL" --password "$ADMIN_PASS" >/dev/null
+
+    # Start the server. The migrations it would normally run are a no-op
+    # because the admin CLI just created the schema.
+    "$TMP/durpdeploy" &
+    SERVER_PID=$!
+    sleep 2
+fi
 
 # Helpers. All helpers pass -b $COOKIES so the session cookie is
 # attached automatically. State-changing methods append csrf_token=$CSRF
@@ -31,17 +58,71 @@ sleep 2
 curl_silent() { curl -s -b "$COOKIES" -o /dev/null -w "%{http_code}" "$@"; }
 curl_body() { curl -s -b "$COOKIES" "$@"; }
 do_delete() { curl -s -b "$COOKIES" -H "X-CSRF-Token: $CSRF" -o /dev/null -w "%{http_code}" -X DELETE "$1"; }
+csrf_from_cookies() {
+    curl -s -b "$1" "$BASE/" \
+        | grep -oP '<meta name="csrf-token" content="\K[^"]+' \
+        | head -1
+}
 
-# Log in. Captures the session cookie into $COOKIES and pulls the CSRF
-# token out of the DB. Asserts a 303 redirect (success).
+# Log in. Captures the session cookie into $COOKIES and gets the CSRF
+# token from the authenticated page metadata. Asserts a 303 redirect (success).
 echo "=== F0: Login ==="
 CODE=$(curl -s -c "$COOKIES" -o /dev/null -w "%{http_code}" \
     -X POST -d "email=$ADMIN_EMAIL&password=$ADMIN_PASS" "$BASE/login")
 [[ "$CODE" == "303" ]] || { echo "FAIL: login got $CODE, want 303"; exit 1; }
-SESSION_ID=$(awk '$6 == "session" { print $7 }' "$COOKIES")
-CSRF=$(sqlite3 durpdeploy.db "SELECT csrf_token FROM sessions WHERE id='$SESSION_ID';")
-[[ -n "$CSRF" ]] || { echo "FAIL: no CSRF token in DB for session $SESSION_ID"; exit 1; }
+CSRF=$(csrf_from_cookies "$COOKIES")
+[[ -n "$CSRF" ]] || { echo "FAIL: no CSRF token on authenticated page"; exit 1; }
 echo "  Login + CSRF retrieved: OK"
+
+api_get() { curl -s -H "Authorization: Bearer $API_TOKEN" "$@"; }
+api_get_code() { curl -s -H "Authorization: Bearer $API_TOKEN" -o /dev/null -w "%{http_code}" "$@"; }
+api_post() { curl -s -H "Authorization: Bearer $API_TOKEN" -H "Content-Type: application/json" -X POST -d "$1" "$2"; }
+api_post_code() { curl -s -H "Authorization: Bearer $API_TOKEN" -H "Content-Type: application/json" -X POST -d "$1" -o /dev/null -w "%{http_code}" "$2"; }
+api_post_noauth() { curl -s -H "Content-Type: application/json" -X POST -d "$1" -o /dev/null -w "%{http_code}" "$2"; }
+api_item_id_by_name() {
+    local url=$1
+    local name=$2
+    api_get "$url?limit=1000" | python3 -c '
+import json
+import sys
+
+name = sys.argv[1]
+for item in json.load(sys.stdin)["items"]:
+    if item["name"] == name:
+        print(item["id"])
+        break
+' "$name"
+}
+api_lifecycle_stage_id() {
+    local lifecycle_id=$1
+    local environment_id=$2
+    api_get "$BASE/api/v1/lifecycles/$lifecycle_id" | python3 -c '
+import json
+import sys
+
+environment_id = int(sys.argv[1])
+for stage in json.load(sys.stdin)["stages"]:
+    if stage["environment_id"] == environment_id:
+        print(stage["id"])
+        break
+' "$environment_id"
+}
+
+API_TOKEN_REDIRECT=$(curl -s -b "$COOKIES" -D - -o /dev/null \
+    -X POST -d "name=e2e-api&csrf_token=$CSRF" \
+    "$BASE/settings/tokens" | grep -i "^location:" | awk '{print $2}' | tr -d '\r')
+API_TOKEN=$(echo "$API_TOKEN_REDIRECT" | python3 -c '
+import sys
+import urllib.parse
+
+url = sys.stdin.read().strip()
+qs = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
+print(urllib.parse.unquote(qs.get("new_token", [""])[0]))
+')
+[[ -n "$API_TOKEN" ]] || { echo "FAIL: could not mint API token (redirect=$API_TOKEN_REDIRECT)"; exit 1; }
+ADMIN_ID=$(api_get "$BASE/api/v1/users/me" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+[[ -n "$ADMIN_ID" ]] || { echo "FAIL: could not resolve current admin user"; exit 1; }
+echo "  API token minted via /settings/tokens: OK"
 
 # A request with no cookie must redirect to /login.
 CODE=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/")
@@ -220,7 +301,7 @@ for i in {1..100}; do
 done
 echo "$RETRY_STATUS" | grep -q 'failed' || { echo "FAIL: retry deploy did not fail, got status: $RETRY_STATUS"; exit 1; }
 
-LOG_LINES=$(sqlite3 durpdeploy.db "SELECT line FROM deployment_logs WHERE deployment_id=$RETRY_DEP ORDER BY id;")
+LOG_LINES=$(curl_body "$BASE/deployments/$RETRY_DEP/logs.txt")
 echo "$LOG_LINES" | grep -q "attempt 1" || { echo "FAIL: retry log missing attempt 1"; exit 1; }
 echo "$LOG_LINES" | grep -q "retrying" || { echo "FAIL: retry log missing retrying"; exit 1; }
 echo "  Step retry loop ran: OK"
@@ -326,14 +407,14 @@ for E in app-dev app-staging app-prod; do
   CODE=$(curl_silent -X POST -d "name=$E&csrf_token=$CSRF" "$BASE/environments")
   [[ "$CODE" == "303" ]] || { echo "FAIL: create env $E got $CODE"; exit 1; }
 done
-APP_DEV_ID=$(sqlite3 durpdeploy.db "SELECT id FROM environments WHERE name='app-dev';")
-APP_STAGING_ID=$(sqlite3 durpdeploy.db "SELECT id FROM environments WHERE name='app-staging';")
-APP_PROD_ID=$(sqlite3 durpdeploy.db "SELECT id FROM environments WHERE name='app-prod';")
+APP_DEV_ID=$(api_item_id_by_name "$BASE/api/v1/environments" "app-dev")
+APP_STAGING_ID=$(api_item_id_by_name "$BASE/api/v1/environments" "app-staging")
+APP_PROD_ID=$(api_item_id_by_name "$BASE/api/v1/environments" "app-prod")
 echo "App Env IDs: dev=$APP_DEV_ID staging=$APP_STAGING_ID prod=$APP_PROD_ID"
 
 CODE=$(curl_silent -X POST -d "name=app-lifecycle&csrf_token=$CSRF" "$BASE/lifecycles")
 [[ "$CODE" == "303" ]] || { echo "FAIL: create app-lifecycle got $CODE"; exit 1; }
-APP_LC_ID=$(sqlite3 durpdeploy.db "SELECT id FROM lifecycles WHERE name='app-lifecycle';")
+APP_LC_ID=$(api_item_id_by_name "$BASE/api/v1/lifecycles" "app-lifecycle")
 echo "App Lifecycle ID: $APP_LC_ID"
 
 for EID in "$APP_DEV_ID" "$APP_STAGING_ID" "$APP_PROD_ID"; do
@@ -341,13 +422,13 @@ for EID in "$APP_DEV_ID" "$APP_STAGING_ID" "$APP_PROD_ID"; do
   [[ "$CODE" == "303" ]] || { echo "FAIL: add stage env=$EID got $CODE"; exit 1; }
 done
 
-APP_PROD_STAGE_ID=$(sqlite3 durpdeploy.db "SELECT id FROM lifecycle_stages WHERE lifecycle_id=$APP_LC_ID AND environment_id=$APP_PROD_ID;")
+APP_PROD_STAGE_ID=$(api_lifecycle_stage_id "$APP_LC_ID" "$APP_PROD_ID")
 CODE=$(curl_silent -X PATCH -d "requires_approval=1&csrf_token=$CSRF" "$BASE/lifecycles/$APP_LC_ID/stages/$APP_PROD_STAGE_ID")
 [[ "$CODE" == "303" ]] || { echo "FAIL: patch prod stage got $CODE"; exit 1; }
 
 CODE=$(curl_silent -X POST -d "name=AppProject&csrf_token=$CSRF" "$BASE/projects")
 [[ "$CODE" == "303" ]] || { echo "FAIL: create app project got $CODE"; exit 1; }
-APP_PROJ_ID=$(sqlite3 durpdeploy.db "SELECT id FROM projects WHERE name='AppProject';")
+APP_PROJ_ID=$(api_item_id_by_name "$BASE/api/v1/projects" "AppProject")
 echo "App Project ID: $APP_PROJ_ID"
 
 CODE=$(curl_silent -X PUT -d "name=AppProject&description=&lifecycle_id=$APP_LC_ID&csrf_token=$CSRF" "$BASE/projects/$APP_PROJ_ID")
@@ -404,7 +485,20 @@ done
 echo "$PROD_STATUS" | grep -q 'succeeded' || { echo "FAIL: prod deploy did not succeed after approval, got status: $PROD_STATUS"; exit 1; }
 echo "  Prod deploy succeeded after approval: OK"
 
-sqlite3 durpdeploy.db "SELECT approved_by FROM deployment_approvals WHERE deployment_id=$PROD_DEP;" | grep -q "$ADMIN_EMAIL" || { echo "FAIL: approval not recorded"; exit 1; }
+APPROVAL_RECORDED=$(api_get "$BASE/api/v1/admin/audit?action=approve_deployment" | python3 -c '
+import json
+import sys
+
+admin_id = int(sys.argv[1])
+for item in json.load(sys.stdin)["items"]:
+    user_id = item.get("user_id")
+    if isinstance(user_id, dict):
+        user_id = user_id.get("Int64") if user_id.get("Valid") else None
+    if item["action"] == "approve_deployment" and user_id == admin_id:
+        print("1")
+        break
+' "$ADMIN_ID")
+[[ "$APPROVAL_RECORDED" == "1" ]] || { echo "FAIL: approval not recorded"; exit 1; }
 echo "  Approval recorded for alice: OK"
 
 echo "=== F3.6: Force Deploy ==="
@@ -523,80 +617,58 @@ CODE=$(curl -s -b "$NEW_LOGIN" -o /dev/null -w "%{http_code}" "$BASE/admin/users
 [[ "$CODE" == "403" ]] || { echo "FAIL: non-admin GET /admin/users got $CODE, want 403"; exit 1; }
 echo "  Non-admin gets 403 on /admin/users: OK"
 
-# Refresh the admin CSRF (the original $CSRF is still valid; we re-pull
-# from the DB to mirror the existing test idiom).
-ADMIN_SESSION_ID=$(awk '$6 == "session" { print $7 }' "$COOKIES")
-ADMIN_CSRF=$(sqlite3 durpdeploy.db "SELECT csrf_token FROM sessions WHERE id='$ADMIN_SESSION_ID';")
-
 # Promote the new user to admin via PUT /admin/users/{id}.
-NEW_USER_ID=$(sqlite3 durpdeploy.db "SELECT id FROM users WHERE email='$NEW_EMAIL';")
+NEW_USER_ID=$(echo "$REDIR" | grep -oP 'new_user_id=\K[0-9]+')
+[[ -n "$NEW_USER_ID" ]] || { echo "FAIL: create user redirect had no user ID"; exit 1; }
 CODE=$(curl -s -b "$COOKIES" -o /dev/null -w "%{http_code}" \
-    -H "X-CSRF-Token: $ADMIN_CSRF" \
+    -H "X-CSRF-Token: $CSRF" \
     -X PUT -d "name=NewDeployer&role=admin" \
     "$BASE/admin/users/$NEW_USER_ID")
 [[ "$CODE" == "303" || "$CODE" == "200" ]] || { echo "FAIL: PUT /admin/users/{id} got $CODE, want 303/200"; exit 1; }
-NEW_ROLE=$(sqlite3 durpdeploy.db "SELECT role FROM users WHERE id=$NEW_USER_ID;")
+NEW_ROLE=$(api_get "$BASE/api/v1/admin/users/$NEW_USER_ID" | python3 -c "import sys,json; print(json.load(sys.stdin)['role'])")
 [[ "$NEW_ROLE" == "admin" ]] || { echo "FAIL: user role = $NEW_ROLE, want admin"; exit 1; }
 echo "  PUT /admin/users/{id} promotes deployer to admin: OK"
 
 # The new user's previous session should be deleted (role change).
-NEW_SESSION_ID=$(awk '$6 == "session" { print $7 }' "$NEW_LOGIN")
-SESSION_EXISTS=$(sqlite3 durpdeploy.db "SELECT COUNT(*) FROM sessions WHERE id='$NEW_SESSION_ID' AND user_id=$NEW_USER_ID;")
-[[ "$SESSION_EXISTS" == "0" ]] || { echo "FAIL: new user's session still exists after role change"; exit 1; }
+CODE=$(curl -s -b "$NEW_LOGIN" -o /dev/null -w "%{http_code}" "$BASE/")
+[[ "$CODE" == "303" ]] || { echo "FAIL: new user's session still exists after role change"; exit 1; }
 echo "  Role change invalidated new user's session: OK"
 
 # Admin cannot delete themselves.
-ADMIN_ID=$(sqlite3 durpdeploy.db "SELECT id FROM users WHERE email='$ADMIN_EMAIL';")
 CODE=$(curl -s -b "$COOKIES" -o /dev/null -w "%{http_code}" \
-    -H "X-CSRF-Token: $ADMIN_CSRF" \
+    -H "X-CSRF-Token: $CSRF" \
     -X DELETE "$BASE/admin/users/$ADMIN_ID")
 [[ "$CODE" == "422" ]] || { echo "FAIL: self-delete got $CODE, want 422"; exit 1; }
 echo "  Self-delete rejected: OK"
 
 # Demote the new user back to deployer and delete them (no project membership).
 CODE=$(curl -s -b "$COOKIES" -o /dev/null -w "%{http_code}" \
-    -H "X-CSRF-Token: $ADMIN_CSRF" \
+    -H "X-CSRF-Token: $CSRF" \
     -X PUT -d "name=NewDeployer&role=deployer" \
     "$BASE/admin/users/$NEW_USER_ID")
 [[ "$CODE" == "303" || "$CODE" == "200" ]] || { echo "FAIL: demote got $CODE, want 303/200"; exit 1; }
 CODE=$(curl -s -b "$COOKIES" -o /dev/null -w "%{http_code}" \
-    -H "X-CSRF-Token: $ADMIN_CSRF" \
+    -H "X-CSRF-Token: $CSRF" \
     -X DELETE "$BASE/admin/users/$NEW_USER_ID")
 [[ "$CODE" == "303" || "$CODE" == "200" ]] || { echo "FAIL: delete got $CODE, want 303/200"; exit 1; }
-USER_GONE=$(sqlite3 durpdeploy.db "SELECT COUNT(*) FROM users WHERE id=$NEW_USER_ID;")
-[[ "$USER_GONE" == "0" ]] || { echo "FAIL: deleted user still in DB"; exit 1; }
+CODE=$(api_get_code "$BASE/api/v1/admin/users/$NEW_USER_ID")
+[[ "$CODE" == "404" ]] || { echo "FAIL: deleted user still exists"; exit 1; }
 echo "  Admin can delete the new user: OK"
 
 # Audit log captured the user-management actions.
-USER_AUDIT=$(sqlite3 durpdeploy.db "SELECT COUNT(*) FROM audit_log WHERE action IN ('create_user','update_user','delete_user');")
+USER_AUDIT=$(api_get "$BASE/api/v1/admin/audit?limit=1000" | python3 -c '
+import json
+import sys
+
+actions = {"create_user", "update_user", "delete_user"}
+print(sum(item["action"] in actions for item in json.load(sys.stdin)["items"]))
+')
 [[ "$USER_AUDIT" -ge 4 ]] || { echo "FAIL: expected >=4 user audit rows, got $USER_AUDIT"; exit 1; }
 echo "  Audit log captured create/update/delete_user: OK"
 
 rm -f "$NEW_LOGIN"
 
 echo "=== API tests ==="
-# API helpers. The admin session from the web tests is still valid; use it
-# to mint a fresh API token via the web form, then exercise the JSON API
-# surface with Bearer authentication.
-
-api_get() { curl -s -H "Authorization: Bearer $API_TOKEN" "$@"; }
-api_get_code() { curl -s -H "Authorization: Bearer $API_TOKEN" -o /dev/null -w "%{http_code}" "$@"; }
-api_post() { curl -s -H "Authorization: Bearer $API_TOKEN" -H "Content-Type: application/json" -X POST -d "$1" "$2"; }
-api_post_code() { curl -s -H "Authorization: Bearer $API_TOKEN" -H "Content-Type: application/json" -X POST -d "$1" -o /dev/null -w "%{http_code}" "$2"; }
-api_post_noauth() { curl -s -H "Content-Type: application/json" -X POST -d "$1" -o /dev/null -w "%{http_code}" "$2"; }
-
-# A1: Mint an admin API token via the web UI (existing session + CSRF).
-API_TOKEN_REDIRECT=$(curl -s -b "$COOKIES" -D - -o /dev/null \
-    -X POST -d "name=e2e-api&csrf_token=$CSRF" \
-    "$BASE/settings/tokens" | grep -i "^location:" | awk '{print $2}' | tr -d '\r')
-API_TOKEN=$(echo "$API_TOKEN_REDIRECT" | python3 -c "
-import sys, urllib.parse
-url = sys.stdin.read().strip()
-qs = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
-print(urllib.parse.unquote(qs.get('new_token', [''])[0]))
-")
-[[ -n "$API_TOKEN" ]] || { echo "FAIL: could not mint API token (redirect=$API_TOKEN_REDIRECT)"; exit 1; }
-echo "  API token minted via /settings/tokens: OK"
 
 # A2: Health check is public; authenticated call also succeeds.
 CODE=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/api/v1/healthz")
@@ -695,13 +767,34 @@ echo "  404 missing project: OK"
 # 403 viewer write block.
 VIEWER_EMAIL="e2e-viewer@test.local"
 VIEWER_PASS="e2e-viewer-pass-1234"
-VIEWER_CREATE=$(api_post "{\"email\":\"$VIEWER_EMAIL\",\"name\":\"E2E Viewer\",\"role\":\"viewer\",\"password\":\"$VIEWER_PASS\"}" \
+VIEWER_CREATE=$(api_post "{\"email\":\"$VIEWER_EMAIL\",\"name\":\"E2E Viewer\",\"role\":\"deployer\",\"password\":\"$VIEWER_PASS\"}" \
     "$BASE/api/v1/admin/users")
 VIEWER_USER_ID=$(echo "$VIEWER_CREATE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))")
 [[ -n "$VIEWER_USER_ID" ]] || { echo "FAIL: viewer user create did not return id: $VIEWER_CREATE"; exit 1; }
-# Mint a token for the viewer via the CLI (web session for the viewer is not needed).
-VIEWER_TOKEN=$(DURPDEPLOY_DB=durpdeploy.db "$TMP/durpdeploy" tokens create --user "$VIEWER_EMAIL" --name e2e-viewer 2>/dev/null | grep '^ddp_pat_' | head -1)
+VIEWER_LOGIN="$TMP/viewer-cookies"
+CODE=$(curl -s -c "$VIEWER_LOGIN" -o /dev/null -w "%{http_code}" \
+    -X POST -d "email=$VIEWER_EMAIL&password=$VIEWER_PASS" "$BASE/login")
+[[ "$CODE" == "303" ]] || { echo "FAIL: viewer login got $CODE, want 303"; exit 1; }
+VIEWER_CSRF=$(csrf_from_cookies "$VIEWER_LOGIN")
+[[ -n "$VIEWER_CSRF" ]] || { echo "FAIL: no CSRF token for viewer"; exit 1; }
+VIEWER_TOKEN_REDIRECT=$(curl -s -b "$VIEWER_LOGIN" -D - -o /dev/null \
+    -X POST -d "name=e2e-viewer&csrf_token=$VIEWER_CSRF" \
+    "$BASE/settings/tokens" | grep -i "^location:" | awk '{print $2}' | tr -d '\r')
+VIEWER_TOKEN=$(echo "$VIEWER_TOKEN_REDIRECT" | python3 -c '
+import sys
+import urllib.parse
+
+url = sys.stdin.read().strip()
+qs = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
+print(urllib.parse.unquote(qs.get("new_token", [""])[0]))
+')
 [[ -n "$VIEWER_TOKEN" ]] || { echo "FAIL: could not mint viewer token"; exit 1; }
+VIEWER_UPDATE=$(curl -s -H "Authorization: Bearer $API_TOKEN" \
+    -H "Content-Type: application/json" -X PUT \
+    -d '{"name":"E2E Viewer","role":"viewer"}' \
+    "$BASE/api/v1/admin/users/$VIEWER_USER_ID")
+VIEWER_ROLE=$(echo "$VIEWER_UPDATE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('role',''))")
+[[ "$VIEWER_ROLE" == "viewer" ]] || { echo "FAIL: viewer role = $VIEWER_ROLE, want viewer"; exit 1; }
 CODE=$(curl -s -H "Authorization: Bearer $VIEWER_TOKEN" -H "Content-Type: application/json" \
     -X POST -d '{"name":"viewer-proj"}' -o /dev/null -w "%{http_code}" "$BASE/api/v1/projects")
 [[ "$CODE" == "403" ]] || { echo "FAIL: viewer create project got $CODE, want 403"; exit 1; }
