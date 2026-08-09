@@ -256,7 +256,9 @@ templ ReleaseDetail(project db.Project, release db.Release, variables []db.Relea
 							<tr>
 								<td class="font-medium truncate">{ v.Name }</td>
 								<td class="truncate">
-									if v.Value.Valid {
+									if v.Secret != 0 {
+										<span class="text-gray-500 italic">••••••••</span>
+									} else if v.Value.Valid {
 										{ v.Value.String }
 									} else {
 										<span class="text-gray-500 italic">(empty)</span>
