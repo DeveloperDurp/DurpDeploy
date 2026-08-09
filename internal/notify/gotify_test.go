@@ -54,7 +54,7 @@ func TestGotifyNotifier_PostsMessage(t *testing.T) {
 	)
 	defer srv.Close()
 
-	n := notify.NewGotifyNotifier()
+	n := notify.NewGotifyNotifierWithClient(srv.Client())
 	skipped, err := n.Notify(context.Background(), events.Event{
 		Message:     "Deployment #1 started",
 		GotifyURL:   srv.URL,
@@ -85,7 +85,7 @@ func TestGotifyNotifier_ErrorsOnNonSuccessStatus(t *testing.T) {
 	)
 	defer srv.Close()
 
-	n := notify.NewGotifyNotifier()
+	n := notify.NewGotifyNotifierWithClient(srv.Client())
 	_, err := n.Notify(context.Background(), events.Event{
 		Message:     "x",
 		GotifyURL:   srv.URL,

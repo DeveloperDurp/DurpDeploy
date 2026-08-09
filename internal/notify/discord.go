@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"time"
 
 	"durpdeploy/internal/events"
 )
@@ -19,7 +18,11 @@ type DiscordNotifier struct {
 }
 
 func NewDiscordNotifier() *DiscordNotifier {
-	return &DiscordNotifier{httpClient: &http.Client{Timeout: 10 * time.Second}}
+	return NewDiscordNotifierWithClient(NewHTTPClient())
+}
+
+func NewDiscordNotifierWithClient(client *http.Client) *DiscordNotifier {
+	return &DiscordNotifier{httpClient: client}
 }
 
 func (d *DiscordNotifier) Name() string { return "discord" }

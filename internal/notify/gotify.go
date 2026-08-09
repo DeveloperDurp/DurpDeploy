@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"time"
 
 	"durpdeploy/internal/events"
 )
@@ -20,7 +19,11 @@ type GotifyNotifier struct {
 }
 
 func NewGotifyNotifier() *GotifyNotifier {
-	return &GotifyNotifier{httpClient: &http.Client{Timeout: 10 * time.Second}}
+	return NewGotifyNotifierWithClient(NewHTTPClient())
+}
+
+func NewGotifyNotifierWithClient(client *http.Client) *GotifyNotifier {
+	return &GotifyNotifier{httpClient: client}
 }
 
 func (g *GotifyNotifier) Name() string { return "gotify" }
