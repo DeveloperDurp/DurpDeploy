@@ -38,6 +38,17 @@ func TestRewriteSQL(t *testing.T) {
 			query: "SELECT 1 WHERE name = 'a?b' AND id = ?",
 			want:  "SELECT 1 WHERE name = 'a?b' AND id = $1",
 		},
+
+		{
+			name:  "numbered placeholders preserved",
+			query: "SELECT ?1, ?1, ?2, ?7, ?",
+			want:  "SELECT $1, $1, $2, $7, $8",
+		},
+		{
+			name:  "numbered placeholder inside string literal untouched",
+			query: "SELECT '?1' AS literal, ?1 AS arg",
+			want:  "SELECT '?1' AS literal, $1 AS arg",
+		},
 		{
 			name:  "no-op when nothing to rewrite",
 			query: "SELECT * FROM projects",
