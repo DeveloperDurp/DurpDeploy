@@ -900,6 +900,49 @@ func TestScheduleDeployment_ForceBypasses(t *testing.T) {
 	}
 }
 
+func TestScheduleDeployment_DeployerCannotForceBypassGate(t *testing.T) {
+	h := newProjectHarness(t)
+	proj := h.makeProject("force-deployer-denied")
+	dev := h.makeEnv("FDD")
+	prod := h.makeEnv("FDP")
+	lc := h.makeLifecycle("dp", dev.ID, prod.ID)
+	h.assignLifecycle(proj.ID, lc.ID)
+	makeStepGlobal(t, h, proj.ID, "s", "true")
+	rel := h.makeRelease(proj.ID, "1.0.0", "true")
+
+	h.setRole("deployer")
+	if err := h.repo.Queries.AddProjectMember(
+		context.Background(),
+		db.AddProjectMemberParams{
+			ProjectID: proj.ID,
+			UserID:    h.sess.user.ID,
+			Role:      "deployer",
+		},
+	); err != nil {
+		t.Fatalf("add project member: %v", err)
+	}
+
+	code := h.postDeployPage(
+		fmt.Sprintf("%d", proj.ID),
+		fmt.Sprintf("%d", rel.ID),
+		fmt.Sprintf("%d", prod.ID),
+		"true",
+	)
+	if code != http.StatusForbidden {
+		t.Fatalf("deployer force deploy got %d, want 403", code)
+	}
+
+	if _, err := h.repo.Queries.GetLatestDeploymentForReleaseEnv(
+		context.Background(),
+		db.GetLatestDeploymentForReleaseEnvParams{
+			ReleaseID:     rel.ID,
+			EnvironmentID: prod.ID,
+		},
+	); err != sql.ErrNoRows {
+		t.Fatalf("prod deployment err = %v, want sql.ErrNoRows", err)
+	}
+}
+
 // projName returns the name of a project (used in test assertions). It
 // looks up the name in the harness repo to avoid a raw-id string in
 // the body content check.
