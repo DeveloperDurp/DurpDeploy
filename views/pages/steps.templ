@@ -26,9 +26,9 @@ templ StepsPage(project db.Project, steps []db.Step, currentPath string) {
 templ StepsContent(project db.Project, steps []db.Step) {
 	<div class="space-y-6">
 		<div class="flex justify-between items-center">
-			<div>
-				<h1 class="text-3xl font-bold">Steps for { project.Name }</h1>
-				<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost btn-sm mt-2">Back to Project</a>
+			<h1 class="text-3xl font-bold">Steps for { project.Name }</h1>
+			<div class="flex gap-2">
+				<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost btn-sm">Back</a>
 			</div>
 		</div>
 		<div class="card bg-base-200 p-4">

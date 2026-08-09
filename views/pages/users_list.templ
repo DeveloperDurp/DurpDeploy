@@ -49,8 +49,8 @@ templ UsersListPage(
 							<th class="w-1/4">Email</th>
 							<th class="w-1/5">Name</th>
 							<th class="w-1/6">Role</th>
-							<th class="w-1/6">Created</th>
-							<th class="w-1/6">Last login</th>
+							<th class="w-1/6 hidden sm:table-cell">Created</th>
+							<th class="w-1/6 hidden md:table-cell">Last login</th>
 							<th class="w-48">Actions</th>
 						</tr>
 					</thead>
@@ -72,10 +72,10 @@ templ usersListRow(u db.ListUsersRow, currentUser *db.User) {
 		<td>
 			<span class="badge badge-outline">{ u.Role }</span>
 		</td>
-		<td class="whitespace-nowrap text-sm">
+		<td class="whitespace-nowrap text-sm hidden sm:table-cell">
 			{ formatUnixTime(u.CreatedAt) }
 		</td>
-		<td class="whitespace-nowrap text-sm">
+		<td class="whitespace-nowrap text-sm hidden md:table-cell">
 			if u.LastLoginAt.Valid {
 				{ formatUnixTime(u.LastLoginAt.Int64) }
 			} else {

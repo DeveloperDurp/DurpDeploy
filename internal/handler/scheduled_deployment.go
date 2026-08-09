@@ -178,37 +178,52 @@ func (h *ScheduledDeploymentHandler) Create(
 		return
 	}
 
-	cronExpr := strings.TrimSpace(r.FormValue("cron"))
-	if cronExpr == "" {
-		h.renderFormError(w, r, projectID, nil,
+	_, noteSubmitted := r.Form["note"]
+	submitted := &db.ScheduledDeployment{
+		ProjectID:     projectID,
+		ReleaseID:     releaseID,
+		EnvironmentID: environmentID,
+		Cron:          strings.TrimSpace(r.FormValue("cron")),
+		Enabled:       0,
+		Note: sql.NullString{
+			String: r.FormValue("note"),
+			Valid:  noteSubmitted,
+		},
+	}
+	if isTruthy(r.FormValue("enabled")) {
+		submitted.Enabled = 1
+	}
+
+	if submitted.Cron == "" {
+		h.renderFormError(w, r, projectID, submitted,
 			"Cron expression is required.")
 		return
 	}
-	if strings.HasPrefix(cronExpr, "TZ=") ||
-		strings.HasPrefix(cronExpr, "CRON_TZ=") {
+	if strings.HasPrefix(submitted.Cron, "TZ=") ||
+		strings.HasPrefix(submitted.Cron, "CRON_TZ=") {
 		h.renderFormError(
 			w,
 			r,
 			projectID,
-			nil,
+			submitted,
 			"TZ= and CRON_TZ= prefixes are not supported. Use server local time only.",
 		)
 		return
 	}
 
-	sched, err := h.parser.Parse(cronExpr)
+	sched, err := h.parser.Parse(submitted.Cron)
 	if err != nil {
 		h.renderFormError(
 			w,
 			r,
 			projectID,
-			nil,
+			submitted,
 			"Invalid cron expression. Use 5-field standard cron (minute hour day month weekday). Descriptors like @hourly and TZ= prefixes are not supported.",
 		)
 		return
 	}
 
-	release, err := h.repo.Queries.GetRelease(r.Context(), releaseID)
+	release, err := h.repo.Queries.GetRelease(r.Context(), submitted.ReleaseID)
 	if err != nil {
 		http.Error(w, "Release not found", http.StatusBadRequest)
 		return
@@ -224,29 +239,25 @@ func (h *ScheduledDeploymentHandler) Create(
 
 	nextRun := sched.Next(time.Now())
 	if nextRun.IsZero() {
-		h.renderFormError(w, r, projectID, nil,
+		h.renderFormError(w, r, projectID, submitted,
 			"Cron expression is unsatisfiable (never fires).")
 		return
 	}
 
 	note := sql.NullString{
-		String: r.FormValue("note"),
-		Valid:  r.FormValue("note") != "",
-	}
-	enabled := int64(1)
-	if !isTruthy(r.FormValue("enabled")) {
-		enabled = 0
+		String: submitted.Note.String,
+		Valid:  submitted.Note.String != "",
 	}
 
 	_, err = h.repo.Queries.CreateScheduledDeployment(
 		r.Context(),
 		db.CreateScheduledDeploymentParams{
 			ProjectID:     projectID,
-			ReleaseID:     releaseID,
-			EnvironmentID: environmentID,
-			Cron:          cronExpr,
+			ReleaseID:     submitted.ReleaseID,
+			EnvironmentID: submitted.EnvironmentID,
+			Cron:          submitted.Cron,
 			NextRunAt:     nextRun.Unix(),
-			Enabled:       enabled,
+			Enabled:       submitted.Enabled,
 			LastFiredAt:   sql.NullInt64{},
 			Note:          note,
 		},
@@ -377,37 +388,53 @@ func (h *ScheduledDeploymentHandler) Update(
 		return
 	}
 
-	cronExpr := strings.TrimSpace(r.FormValue("cron"))
-	if cronExpr == "" {
-		h.renderFormError(w, r, projectID, &db.ScheduledDeployment{ID: schedID},
+	_, noteSubmitted := r.Form["note"]
+	submitted := &db.ScheduledDeployment{
+		ID:            schedID,
+		ProjectID:     projectID,
+		ReleaseID:     releaseID,
+		EnvironmentID: environmentID,
+		Cron:          strings.TrimSpace(r.FormValue("cron")),
+		Enabled:       0,
+		Note: sql.NullString{
+			String: r.FormValue("note"),
+			Valid:  noteSubmitted,
+		},
+	}
+	if isTruthy(r.FormValue("enabled")) {
+		submitted.Enabled = 1
+	}
+
+	if submitted.Cron == "" {
+		h.renderFormError(w, r, projectID, submitted,
 			"Cron expression is required.")
 		return
 	}
-	if strings.HasPrefix(cronExpr, "TZ=") ||
-		strings.HasPrefix(cronExpr, "CRON_TZ=") {
+	if strings.HasPrefix(submitted.Cron, "TZ=") ||
+		strings.HasPrefix(submitted.Cron, "CRON_TZ=") {
 		h.renderFormError(
 			w,
 			r,
 			projectID,
-			&db.ScheduledDeployment{ID: schedID},
+			submitted,
 			"TZ= and CRON_TZ= prefixes are not supported. Use server local time only.",
 		)
 		return
 	}
 
-	sched, err := h.parser.Parse(cronExpr)
+	sched, err := h.parser.Parse(submitted.Cron)
 	if err != nil {
 		h.renderFormError(
 			w,
 			r,
 			projectID,
-			&db.ScheduledDeployment{ID: schedID},
+			submitted,
 			"Invalid cron expression. Use 5-field standard cron (minute hour day month weekday). Descriptors like @hourly and TZ= prefixes are not supported.",
 		)
 		return
 	}
 
-	release, err := h.repo.Queries.GetRelease(r.Context(), releaseID)
+	release, err := h.repo.Queries.GetRelease(r.Context(), submitted.ReleaseID)
 	if err != nil {
 		http.Error(w, "Release not found", http.StatusBadRequest)
 		return
@@ -423,7 +450,7 @@ func (h *ScheduledDeploymentHandler) Update(
 
 	nextRun := sched.Next(time.Now())
 	if nextRun.IsZero() {
-		h.renderFormError(w, r, projectID, &db.ScheduledDeployment{ID: schedID},
+		h.renderFormError(w, r, projectID, submitted,
 			"Cron expression is unsatisfiable (never fires).")
 		return
 	}
@@ -447,23 +474,19 @@ func (h *ScheduledDeploymentHandler) Update(
 	}
 
 	note := sql.NullString{
-		String: r.FormValue("note"),
-		Valid:  r.FormValue("note") != "",
-	}
-	enabled := int64(1)
-	if !isTruthy(r.FormValue("enabled")) {
-		enabled = 0
+		String: submitted.Note.String,
+		Valid:  submitted.Note.String != "",
 	}
 
 	_, err = h.repo.Queries.UpdateScheduledDeployment(
 		r.Context(),
 		db.UpdateScheduledDeploymentParams{
 			ProjectID:     projectID,
-			ReleaseID:     releaseID,
-			EnvironmentID: environmentID,
-			Cron:          cronExpr,
+			ReleaseID:     submitted.ReleaseID,
+			EnvironmentID: submitted.EnvironmentID,
+			Cron:          submitted.Cron,
 			NextRunAt:     nextRun.Unix(),
-			Enabled:       enabled,
+			Enabled:       submitted.Enabled,
 			LastFiredAt:   existing.LastFiredAt,
 			Note:          note,
 			ID:            schedID,

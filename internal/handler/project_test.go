@@ -545,6 +545,78 @@ func TestProjectPanel_FreeFloating(t *testing.T) {
 	}
 }
 
+func TestProjectPages_RenderExpectedBackControls(t *testing.T) {
+	// Given
+	h := newProjectHarness(t)
+	proj := h.makeProject("back-controls")
+	viewer := seedSession(t, h.repo, h.server.URL, "viewer")
+	if err := h.repo.Queries.AddProjectMember(
+		context.Background(),
+		db.AddProjectMemberParams{
+			ProjectID: proj.ID,
+			UserID:    viewer.user.ID,
+			Role:      "deployer",
+		},
+	); err != nil {
+		t.Fatalf("add viewer project member: %v", err)
+	}
+	projectBack := `<a href="/projects" class="btn btn-ghost btn-sm">Back</a>`
+	notificationBack := fmt.Sprintf(
+		`<a href="/projects/%d" class="btn btn-ghost btn-sm">Back</a>`,
+		proj.ID,
+	)
+
+	// When
+	projectPage := h.getProjectPage(proj.ID)
+	notificationPage := h.getProjectNotificationsPage(proj.ID)
+	h.sess = viewer
+	viewerNotificationPage := h.getProjectNotificationsPage(proj.ID)
+
+	// Then
+	if strings.Count(projectPage, projectBack) != 1 {
+		t.Errorf(
+			"project back control = %q, want exactly one %q",
+			projectPage,
+			projectBack,
+		)
+	}
+	requireHTMLPattern(
+		t,
+		projectPage,
+		`(?s)<div class="flex flex-wrap justify-between items-center gap-2 mb-4">\s*<h1 class="text-3xl font-bold">back-controls</h1>\s*<div class="flex gap-2 ml-auto">.*?`+projectBack,
+	)
+	if strings.Count(notificationPage, notificationBack) != 1 {
+		t.Errorf(
+			"notification back control = %q, want exactly one %q",
+			notificationPage,
+			notificationBack,
+		)
+	}
+	if !strings.Contains(notificationPage, `>Save</button>`) {
+		t.Error("writer notification page missing Save control")
+	}
+	requireHTMLPattern(
+		t,
+		notificationPage,
+		`(?s)<div class="flex justify-between items-center mb-4">\s*<h1 class="text-3xl font-bold">Notifications</h1>\s*<div class="flex gap-2">\s*<button type="submit" class="btn btn-primary btn-sm">Save</button>\s*`+notificationBack,
+	)
+	if strings.Count(viewerNotificationPage, notificationBack) != 1 {
+		t.Errorf(
+			"viewer notification back control = %q, want exactly one %q",
+			viewerNotificationPage,
+			notificationBack,
+		)
+	}
+	if strings.Contains(viewerNotificationPage, `>Save</button>`) {
+		t.Error("viewer notification page should not render Save control")
+	}
+	requireHTMLPattern(
+		t,
+		viewerNotificationPage,
+		`(?s)<div class="flex justify-between items-center mb-4">\s*<h1 class="text-3xl font-bold">Notifications</h1>\s*<div class="flex gap-2">\s*`+notificationBack,
+	)
+}
+
 // TestStepsPage_RendersFullPage verifies the new dedicated /steps-page
 // route renders both step names, an Add Step button, and breadcrumbs
 // pointing back to the project.
@@ -574,12 +646,23 @@ func TestStepsPage_RendersFullPage(t *testing.T) {
 		"first-step", "echo+a",
 		"second-step", "echo+b",
 		"Add Step", "Insert from Template",
-		fmt.Sprintf("href=\"/projects/%d\"", proj.ID), // breadcrumb
+		fmt.Sprintf(
+			`<a href="/projects/%d" class="btn btn-ghost btn-sm">Back</a>`,
+			proj.ID,
+		),
 	} {
 		if !strings.Contains(body, marker) {
 			t.Errorf("steps page missing %q", marker)
 		}
 	}
+	requireHTMLPattern(
+		t,
+		body,
+		fmt.Sprintf(
+			`(?s)<div class="flex justify-between items-center">\s*<h1 class="text-3xl font-bold">Steps for .*?</h1>\s*<div class="flex gap-2">\s*<a href="/projects/%d" class="btn btn-ghost btn-sm">Back</a>`,
+			proj.ID,
+		),
+	)
 }
 
 // TestVariablesPreview_ShowsTopVarsAndManageLink verifies the project
@@ -682,6 +765,9 @@ func TestUpdateProject_AfterSubmitLandsOnProject(t *testing.T) {
 	cancelHref := fmt.Sprintf(`href="/projects/%d"`, proj.ID)
 	if !strings.Contains(body, cancelHref) {
 		t.Errorf("edit form Cancel link should contain %s", cancelHref)
+	}
+	if !strings.Contains(body, `>Cancel</a>`) {
+		t.Error("edit form Cancel control should remain distinct from Back")
 	}
 
 	wantRedirect := fmt.Sprintf("/projects/%d", proj.ID)

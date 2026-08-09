@@ -47,7 +47,7 @@ templ TokensSettings(
 			<div class="card bg-base-200 shadow mb-6">
 				<div class="card-body">
 					<h2 class="card-title">New token</h2>
-					<form method="post" action="/settings/tokens" class="flex gap-2 items-end">
+					<form method="post" action="/settings/tokens" class="flex flex-wrap gap-2 items-end">
 						<div class="form-control flex-1">
 							<label class="label" for="token-name">
 								<span class="label-text">Name</span>
@@ -77,8 +77,8 @@ templ TokensSettings(
 								<th class="w-1/5">Name</th>
 								<th class="w-1/6">Prefix</th>
 								<th class="w-1/6">Created</th>
-								<th class="w-1/6">Last used</th>
-								<th class="w-1/6">Expires</th>
+								<th class="w-1/6 hidden md:table-cell">Last used</th>
+								<th class="w-1/6 hidden md:table-cell">Expires</th>
 								<th class="w-1/6">Status</th>
 								<th class="w-48">Actions</th>
 							</tr>
@@ -100,14 +100,14 @@ templ tokensSettingsRow(t db.ListApiTokensByUserRow) {
 		<td class="truncate">{ t.Name }</td>
 		<td class="truncate font-mono text-sm">{ t.TokenPrefix }…</td>
 		<td class="whitespace-nowrap text-sm">{ formatUnixTime(t.CreatedAt) }</td>
-		<td class="whitespace-nowrap text-sm">
+		<td class="whitespace-nowrap text-sm hidden md:table-cell">
 			if t.LastUsedAt.Valid {
 				{ formatUnixTime(t.LastUsedAt.Int64) }
 			} else {
 				<span class="text-gray-500">never</span>
 			}
 		</td>
-		<td class="whitespace-nowrap text-sm">
+		<td class="whitespace-nowrap text-sm hidden md:table-cell">
 			if t.ExpiresAt.Valid {
 				{ formatUnixTime(t.ExpiresAt.Int64) }
 			} else {
@@ -163,7 +163,7 @@ templ AdminTokensPage(
 							<th class="w-1/6">Prefix</th>
 							<th class="w-1/4">User</th>
 							<th class="w-1/6">Created</th>
-							<th class="w-1/6">Last used</th>
+							<th class="w-1/6 hidden md:table-cell">Last used</th>
 							<th class="w-1/6">Status</th>
 							<th class="w-48">Actions</th>
 						</tr>
@@ -185,7 +185,7 @@ templ adminTokensRow(t db.ListAllApiTokensRow) {
 		<td class="truncate font-mono text-sm">{ t.TokenPrefix }…</td>
 		<td class="truncate font-mono text-sm">{ t.Email }</td>
 		<td class="whitespace-nowrap text-sm">{ formatUnixTime(t.CreatedAt) }</td>
-		<td class="whitespace-nowrap text-sm">
+		<td class="whitespace-nowrap text-sm hidden md:table-cell">
 			if t.LastUsedAt.Valid {
 				{ formatUnixTime(t.LastUsedAt.Int64) }
 			} else {
@@ -239,4 +239,3 @@ templ NewTokenBanner(token string, name string) {
 		</div>
 	</div>
 }
-

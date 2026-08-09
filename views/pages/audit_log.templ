@@ -45,8 +45,8 @@ templ AuditLogPage(entries []db.AuditLog, currentPath string, currentUser *db.Us
 							<th class="w-1/5">Time</th>
 							<th class="w-1/6">User</th>
 							<th class="w-1/5">Action</th>
-							<th class="w-1/6">Entity</th>
-							<th class="w-1/6">Entity ID</th>
+							<th class="w-1/6 hidden sm:table-cell">Entity</th>
+							<th class="w-1/6 hidden md:table-cell">Entity ID</th>
 							<th class="w-auto">Details</th>
 						</tr>
 					</thead>
@@ -72,16 +72,19 @@ templ AuditLogRow(entry db.AuditLog) {
 			}
 		</td>
 		<td class="truncate">{ entry.Action }</td>
-		<td class="truncate">{ entry.EntityType }</td>
-		<td>
+		<td class="truncate hidden sm:table-cell">{ entry.EntityType }</td>
+		<td class="hidden md:table-cell">
 			if entry.EntityID.Valid {
 				{ strconv.FormatInt(entry.EntityID.Int64, 10) }
 			} else {
 				<span class="text-gray-500">-</span>
 			}
 		</td>
-		<td class="truncate">
-			<code class="text-xs">{ entry.Details.String }</code>
+		<td>
+			<details class="text-sm" data-disclosure="audit-details">
+				<summary class="cursor-pointer text-primary">View details</summary>
+				<pre class="mt-2 whitespace-pre-wrap break-words rounded bg-base-100 p-3 text-xs"><code>{ entry.Details.String }</code></pre>
+			</details>
 		</td>
 	</tr>
 }

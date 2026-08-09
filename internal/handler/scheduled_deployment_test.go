@@ -5,10 +5,12 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -233,6 +235,359 @@ func (h *scheduledHarness) deleteSchedule(projectID, schedID int64) int {
 	}
 	defer resp.Body.Close()
 	return resp.StatusCode
+}
+
+func scheduleFormOptionSelected(body, field string, id int64) bool {
+	pattern := fmt.Sprintf(
+		`(?s)<select[^>]*name="%s"[^>]*>.*?<option\s+value="%d"\s+selected`,
+		regexp.QuoteMeta(field),
+		id,
+	)
+	return regexp.MustCompile(pattern).MatchString(body)
+}
+
+func scheduleFormEnabled(body string) bool {
+	return regexp.MustCompile(
+		`(?s)<input[^>]*name="enabled"[^>]*checked`,
+	).MatchString(body)
+}
+
+func (h *scheduledHarness) scheduleRequest(
+	method, path string,
+	form url.Values,
+) (int, string) {
+	h.t.Helper()
+	var bodyReader io.Reader
+	if form != nil {
+		bodyReader = strings.NewReader(form.Encode())
+	}
+	req, err := http.NewRequest(method, h.server.URL+path, bodyReader)
+	if err != nil {
+		h.t.Fatalf("new %s request: %v", method, err)
+	}
+	if form != nil {
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	}
+
+	client := &http.Client{
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		h.t.Fatalf("%s %s: %v", method, path, err)
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		h.t.Fatalf("read %s %s response: %v", method, path, err)
+	}
+	return resp.StatusCode, string(body)
+}
+
+func TestScheduledQuickEdit_retains_note_when_form_round_trips(
+	t *testing.T,
+) {
+	// Given
+	h := newScheduledHarness(t)
+	project := h.makeProject("quick-edit-note-round-trip")
+	environment := h.makeEnv("quick-edit-env")
+	release := h.makeRelease(project.ID, "1.0.0", "true")
+	const note = "keep this quick-edit note"
+	if code := h.postSchedule(
+		project.ID,
+		release.ID,
+		environment.ID,
+		"0 0 * * *",
+		note,
+		true,
+	); code != http.StatusSeeOther {
+		t.Fatalf("create schedule: got %d, want %d", code, http.StatusSeeOther)
+	}
+	schedules, err := h.repo.Queries.ListScheduledDeploymentsByProject(
+		context.Background(),
+		project.ID,
+	)
+	if err != nil {
+		t.Fatalf("list schedules: %v", err)
+	}
+	if len(schedules) != 1 {
+		t.Fatalf("list schedules: got %d, want 1", len(schedules))
+	}
+
+	// When
+	status, listHTML := h.scheduleRequest(
+		http.MethodGet,
+		fmt.Sprintf("/projects/%d/schedules", project.ID),
+		nil,
+	)
+
+	// Then
+	if status != http.StatusOK {
+		t.Fatalf("get schedules: got %d, want %d", status, http.StatusOK)
+	}
+	if !strings.Contains(
+		listHTML,
+		`name="note" value="keep this quick-edit note"`,
+	) {
+		t.Fatal("quick edit form did not include the existing note")
+	}
+	if code := h.putSchedule(
+		project.ID,
+		schedules[0].ID,
+		release.ID,
+		environment.ID,
+		"0 12 * * *",
+		note,
+		true,
+	); code != http.StatusSeeOther {
+		t.Fatalf("update schedule: got %d, want %d", code, http.StatusSeeOther)
+	}
+	updated, err := h.repo.Queries.GetScheduledDeployment(
+		context.Background(),
+		schedules[0].ID,
+	)
+	if err != nil {
+		t.Fatalf("get updated schedule: %v", err)
+	}
+	if !updated.Note.Valid || updated.Note.String != note {
+		t.Errorf("note: got %#v, want %q", updated.Note, note)
+	}
+}
+
+func TestCreateScheduled_retains_submitted_fields_when_cron_invalid(
+	t *testing.T,
+) {
+	// Given
+	h := newScheduledHarness(t)
+	project := h.makeProject("invalid-create-retention")
+	environment := h.makeEnv("invalid-create-env")
+	release := h.makeRelease(project.ID, "1.0.0", "true")
+	form := url.Values{
+		"release_id":     {fmt.Sprintf("%d", release.ID)},
+		"environment_id": {fmt.Sprintf("%d", environment.ID)},
+		"cron":           {"bad cron"},
+		"note":           {"draft create note"},
+	}
+
+	// When
+	status, formHTML := h.scheduleRequest(
+		http.MethodPost,
+		fmt.Sprintf("/projects/%d/schedules", project.ID),
+		form,
+	)
+
+	// Then
+	if status != http.StatusUnprocessableEntity {
+		t.Fatalf(
+			"post schedule: got %d, want %d",
+			status,
+			http.StatusUnprocessableEntity,
+		)
+	}
+	if !scheduleFormOptionSelected(formHTML, "release_id", release.ID) {
+		t.Fatal("release selection was not retained")
+	}
+	if !scheduleFormOptionSelected(formHTML, "environment_id", environment.ID) {
+		t.Fatal("environment selection was not retained")
+	}
+	if !strings.Contains(formHTML, `value="bad cron"`) {
+		t.Fatal("cron value was not retained")
+	}
+	if !strings.Contains(formHTML, "draft create note") {
+		t.Fatal("note value was not retained")
+	}
+	if scheduleFormEnabled(formHTML) {
+		t.Fatal("enabled state was not retained as disabled")
+	}
+	schedules, err := h.repo.Queries.ListScheduledDeploymentsByProject(
+		context.Background(),
+		project.ID,
+	)
+	if err != nil {
+		t.Fatalf("list schedules: %v", err)
+	}
+	if len(schedules) != 0 {
+		t.Errorf(
+			"created %d schedules after a 422 response, want 0",
+			len(schedules),
+		)
+	}
+}
+
+func TestUpdateScheduled_retains_submitted_fields_when_timezone_prefix_invalid(
+	t *testing.T,
+) {
+	// Given
+	h := newScheduledHarness(t)
+	project := h.makeProject("invalid-update-retention")
+	originalEnvironment := h.makeEnv("original-update-env")
+	updatedEnvironment := h.makeEnv("updated-update-env")
+	originalRelease := h.makeRelease(project.ID, "1.0.0", "true")
+	updatedRelease := h.makeRelease(project.ID, "2.0.0", "true")
+	if code := h.postSchedule(
+		project.ID,
+		originalRelease.ID,
+		originalEnvironment.ID,
+		"0 0 * * *",
+		"saved original note",
+		true,
+	); code != http.StatusSeeOther {
+		t.Fatalf("create schedule: got %d, want %d", code, http.StatusSeeOther)
+	}
+	schedules, err := h.repo.Queries.ListScheduledDeploymentsByProject(
+		context.Background(),
+		project.ID,
+	)
+	if err != nil {
+		t.Fatalf("list schedules: %v", err)
+	}
+	if len(schedules) != 1 {
+		t.Fatalf("list schedules: got %d, want 1", len(schedules))
+	}
+	original := schedules[0]
+	form := url.Values{
+		"release_id":     {fmt.Sprintf("%d", updatedRelease.ID)},
+		"environment_id": {fmt.Sprintf("%d", updatedEnvironment.ID)},
+		"cron":           {"TZ=America/Los_Angeles 15 14 * * *"},
+		"note":           {"draft update note"},
+	}
+
+	// When
+	status, formHTML := h.scheduleRequest(
+		http.MethodPut,
+		fmt.Sprintf("/projects/%d/schedules/%d", project.ID, original.ID),
+		form,
+	)
+
+	// Then
+	if status != http.StatusUnprocessableEntity {
+		t.Fatalf(
+			"update schedule: got %d, want %d",
+			status,
+			http.StatusUnprocessableEntity,
+		)
+	}
+	if !scheduleFormOptionSelected(formHTML, "release_id", updatedRelease.ID) {
+		t.Fatal("updated release selection was not retained")
+	}
+	if !scheduleFormOptionSelected(
+		formHTML,
+		"environment_id",
+		updatedEnvironment.ID,
+	) {
+		t.Fatal("updated environment selection was not retained")
+	}
+	if !strings.Contains(
+		formHTML,
+		`value="TZ=America/Los_Angeles 15 14 * * *"`,
+	) {
+		t.Fatal("timezone-prefixed cron value was not retained")
+	}
+	if !strings.Contains(formHTML, "draft update note") {
+		t.Fatal("updated note value was not retained")
+	}
+	if scheduleFormEnabled(formHTML) {
+		t.Fatal("updated enabled state was not retained as disabled")
+	}
+	persisted, err := h.repo.Queries.GetScheduledDeployment(
+		context.Background(),
+		original.ID,
+	)
+	if err != nil {
+		t.Fatalf("get persisted schedule: %v", err)
+	}
+	if persisted.ReleaseID != original.ReleaseID {
+		t.Errorf(
+			"release_id: got %d, want %d",
+			persisted.ReleaseID,
+			original.ReleaseID,
+		)
+	}
+	if persisted.EnvironmentID != original.EnvironmentID {
+		t.Errorf(
+			"environment_id: got %d, want %d",
+			persisted.EnvironmentID,
+			original.EnvironmentID,
+		)
+	}
+	if persisted.Cron != original.Cron {
+		t.Errorf("cron: got %q, want %q", persisted.Cron, original.Cron)
+	}
+	if persisted.Enabled != original.Enabled {
+		t.Errorf(
+			"enabled: got %d, want %d",
+			persisted.Enabled,
+			original.Enabled,
+		)
+	}
+	if persisted.Note != original.Note {
+		t.Errorf("note: got %#v, want %#v", persisted.Note, original.Note)
+	}
+}
+
+func TestUpdateScheduled_clears_note_when_note_is_explicitly_empty(
+	t *testing.T,
+) {
+	// Given
+	h := newScheduledHarness(t)
+	project := h.makeProject("explicit-empty-note")
+	environment := h.makeEnv("explicit-empty-note-env")
+	release := h.makeRelease(project.ID, "1.0.0", "true")
+	if code := h.postSchedule(
+		project.ID,
+		release.ID,
+		environment.ID,
+		"0 0 * * *",
+		"remove this note",
+		true,
+	); code != http.StatusSeeOther {
+		t.Fatalf("create schedule: got %d, want %d", code, http.StatusSeeOther)
+	}
+	schedules, err := h.repo.Queries.ListScheduledDeploymentsByProject(
+		context.Background(),
+		project.ID,
+	)
+	if err != nil {
+		t.Fatalf("list schedules: %v", err)
+	}
+	if len(schedules) != 1 {
+		t.Fatalf("list schedules: got %d, want 1", len(schedules))
+	}
+	form := url.Values{
+		"release_id":     {fmt.Sprintf("%d", release.ID)},
+		"environment_id": {fmt.Sprintf("%d", environment.ID)},
+		"cron":           {"0 12 * * *"},
+		"note":           {""},
+		"enabled":        {"true"},
+	}
+
+	// When
+	status, _ := h.scheduleRequest(
+		http.MethodPut,
+		fmt.Sprintf("/projects/%d/schedules/%d", project.ID, schedules[0].ID),
+		form,
+	)
+
+	// Then
+	if status != http.StatusSeeOther {
+		t.Fatalf(
+			"update schedule: got %d, want %d",
+			status,
+			http.StatusSeeOther,
+		)
+	}
+	updated, err := h.repo.Queries.GetScheduledDeployment(
+		context.Background(),
+		schedules[0].ID,
+	)
+	if err != nil {
+		t.Fatalf("get updated schedule: %v", err)
+	}
+	if updated.Note.Valid || updated.Note.String != "" {
+		t.Errorf("note: got %#v, want an explicit cleared note", updated.Note)
+	}
 }
 
 func TestCreateScheduled_Valid(t *testing.T) {

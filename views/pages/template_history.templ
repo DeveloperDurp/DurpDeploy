@@ -29,9 +29,11 @@ templ TemplateHistoryContent(
 	versions []db.StepTemplateVersion,
 ) {
 	<div class="space-y-4">
-		<div class="flex justify-between items-center">
+		<div class="flex flex-wrap justify-between items-center gap-2">
 			<h1 class="text-3xl font-bold">{ template.Name }</h1>
-			<a href="/templates" class="btn btn-ghost btn-sm">Back to templates</a>
+			<div class="flex gap-2 ml-auto">
+				<a href="/templates" class="btn btn-ghost btn-sm">Back</a>
+			</div>
 		</div>
 		@TemplateHistoryFragment(template, versions)
 	</div>
@@ -49,8 +51,7 @@ templ TemplateHistoryFragment(
 				<thead>
 					<tr>
 						<th class="w-20">Version</th>
-						<th class="w-1/4">Name</th>
-						<th>Script</th>
+						<th class="w-auto">Name</th>
 						<th class="w-1/4">Date</th>
 						<th class="w-24">Actions</th>
 					</tr>
@@ -72,15 +73,12 @@ templ TemplateHistoryRow(
 ) {
 	<tr>
 		<td class="whitespace-nowrap">v{ strconv.FormatInt(v.VersionNumber, 10) }</td>
-		<td class="truncate">{ v.Name }</td>
-		<td>
-			<code class="text-sm bg-base-200 px-2 py-1 rounded">
-				if len(v.ScriptBody) > 60 {
-					{ v.ScriptBody[:60] + "..." }
-				} else {
-					{ v.ScriptBody }
-				}
-			</code>
+		<td class="min-w-0">
+			<p class="break-words">{ v.Name }</p>
+			<details class="mt-1 text-sm" data-disclosure="template-history-script">
+				<summary class="cursor-pointer text-primary">View full script</summary>
+				<pre class="mt-2 whitespace-pre-wrap break-words rounded bg-base-100 p-3 text-xs"><code>{ v.ScriptBody }</code></pre>
+			</details>
 		</td>
 		<td class="whitespace-nowrap">
 			{ time.Unix(v.CreatedAt, 0).UTC().Format("2006-01-02 15:04") }

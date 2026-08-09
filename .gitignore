@@ -26,6 +26,7 @@ static/css/output.css
 # IDE
 .idea/
 .vscode/
+.env
 *.swp
 *.swo
 *~
@@ -52,4 +53,3 @@ static/swagger-ui/
 *.db-wal
 .junie/
 artifacts/
-.env

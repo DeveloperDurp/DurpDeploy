@@ -33,6 +33,34 @@ else
     BASE="http://localhost:8080"
     cd "$ROOT_DIR"
 
+    # Read the shell-compatible DURPDEPLOY_SECRET_KEY assignment from
+    # DURPDEPLOY_ENV_FILE, defaulting to .env. The precedence is .env,
+    # inherited environment, then a generated key; other assignments stay
+    # in the subshell.
+    ENV_FILE="${DURPDEPLOY_ENV_FILE:-.env}"
+    ENV_SECRET_KEY=$(
+        (
+            unset DURPDEPLOY_SECRET_KEY
+            if [[ -f "$ENV_FILE" ]]; then
+                # shellcheck disable=SC1090
+                . "$ENV_FILE"
+            fi
+            printf '%s' "${DURPDEPLOY_SECRET_KEY:-}"
+        )
+    )
+    if [[ -n "$ENV_SECRET_KEY" ]]; then
+        DURPDEPLOY_SECRET_KEY="$ENV_SECRET_KEY"
+        export DURPDEPLOY_SECRET_KEY
+    fi
+    if [[ -z "${DURPDEPLOY_SECRET_KEY:-}" ]]; then
+        if ! command -v openssl >/dev/null 2>&1; then
+            echo "ERROR: openssl not found. Install openssl, or set DURPDEPLOY_SECRET_KEY yourself." >&2
+            exit 1
+        fi
+        DURPDEPLOY_SECRET_KEY=$(openssl rand -base64 32)
+        export DURPDEPLOY_SECRET_KEY
+    fi
+
     echo "=== Building and starting server ==="
     rm -f durpdeploy.db durpdeploy.db-shm durpdeploy.db-wal
     go build -o "$TMP/durpdeploy" ./cmd/server

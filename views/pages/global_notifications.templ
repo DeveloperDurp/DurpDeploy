@@ -153,7 +153,9 @@ templ GlobalNotificationsPage(global db.GlobalNotification, currentPath string) 
 		} else {
 			<div class="flex justify-between items-center mb-4">
 				<h1 class="text-3xl font-bold">Notification Settings</h1>
-				<a href="/admin/notifications" class="btn btn-ghost btn-sm">Back</a>
+				<div class="flex gap-2">
+					<a href="/admin/notifications" class="btn btn-ghost btn-sm">Back</a>
+				</div>
 			</div>
 			@GlobalNotificationCards(global)
 		}

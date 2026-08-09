@@ -60,9 +60,9 @@ templ VariablesPage(project db.Project, variables []db.Variable, environments []
 templ VariablesContent(project db.Project, variables []db.Variable, environments []db.Environment, errorMsg string) {
 	<div class="space-y-6">
 		<div class="flex justify-between items-center">
-			<div>
-				<h1 class="text-3xl font-bold">Variables — { project.Name }</h1>
-				<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost btn-sm mt-2">Back to Project</a>
+			<h1 class="text-3xl font-bold">Variables — { project.Name }</h1>
+			<div class="flex gap-2">
+				<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost btn-sm">Back</a>
 			</div>
 		</div>
 		@VariablesFragment(project, variables, environments, errorMsg)
@@ -89,7 +89,7 @@ templ VariableForm(projectID int64, environments []db.Environment, errorMsg stri
 			data-toast-error="Failed to create variable"
 			class="flex flex-wrap gap-4 items-end"
 		>
-			<div class="form-control flex-1 min-w-[200px]">
+			<div class="form-control flex-1 min-w-0 basis-48">
 				<label class="label">
 					<span class="label-text">Name</span>
 				</label>
@@ -98,18 +98,18 @@ templ VariableForm(projectID int64, environments []db.Environment, errorMsg stri
 					<span class="text-error text-sm mt-1">{ errorMsg }</span>
 				}
 			</div>
- 		<div class="flex flex-wrap gap-4 items-end" x-data="{ secret: false }">
+		<div class="flex flex-wrap gap-4 items-end w-full min-w-0" x-data="{ secret: false }">
  			<div class="form-control flex-1 min-w-[200px]">
  				<label class="label">
  					<span class="label-text">Value</span>
  				</label>
- 				<input :type="secret ? 'password' : 'text'" name="value" :placeholder="secret ? '••••••••' : ''" class="input input-bordered"/>
+				<input :type="secret ? 'password' : 'text'" name="value" :placeholder="secret ? '••••••••' : ''" class="input input-bordered w-full min-w-0"/>
  			</div>
- 			<div class="form-control flex-1 min-w-[200px]">
+			<div class="form-control flex-1 min-w-0 basis-48">
  				<label class="label">
  					<span class="label-text">Environment</span>
  				</label>
- 				<select name="environment_id" class="select select-bordered">
+				<select name="environment_id" class="select select-bordered w-full min-w-0">
  					<option value="">Unscoped</option>
  					for _, env := range environments {
  						<option value={ strconv.FormatInt(env.ID, 10) }>{ env.Name }</option>
@@ -129,13 +129,13 @@ templ VariableForm(projectID int64, environments []db.Environment, errorMsg stri
 }
 
 templ VariablesTable(project db.Project, variables []db.Variable, environments []db.Environment) {
-	<table class="table table-zebra table-fixed w-full">
+	<table class="hidden md:table table-zebra table-fixed w-full">
 		<thead>
 			<tr>
 				<th class="w-1/5">Name</th>
 				<th class="w-1/4">Value</th>
 				<th class="w-1/6">Environment</th>
-				<th class="w-1/6">Secret</th>
+				<th class="hidden md:table-cell w-1/6">Secret</th>
 				<th class="w-1/5">Actions</th>
 			</tr>
 		</thead>
@@ -166,10 +166,36 @@ templ VariablesTable(project db.Project, variables []db.Variable, environments [
 			}
 		</tbody>
 	</table>
+	<div class="space-y-6 md:hidden" data-mobile-variable-list>
+		<section class="space-y-3" aria-labelledby="mobile-global-variables">
+			<h2 id="mobile-global-variables" class="font-bold">Global Defaults</h2>
+			if len(filterUnscoped(variables)) == 0 {
+				<p class="text-gray-500 italic text-center py-4">No unscoped variables.</p>
+			} else {
+				<ul class="space-y-3" aria-label="Global variables">
+					for _, variable := range filterUnscoped(variables) {
+						@VariableMobileRecord(project.ID, variable, environments)
+					}
+				</ul>
+			}
+		</section>
+		<section class="space-y-3" aria-labelledby="mobile-scoped-variables">
+			<h2 id="mobile-scoped-variables" class="font-bold">Per-Environment Overrides</h2>
+			if len(filterScoped(variables)) == 0 {
+				<p class="text-gray-500 italic text-center py-4">No environment-scoped variables.</p>
+			} else {
+				<ul class="space-y-3" aria-label="Environment-scoped variables">
+					for _, variable := range filterScoped(variables) {
+						@VariableMobileRecord(project.ID, variable, environments)
+					}
+				</ul>
+			}
+		</section>
+	</div>
 }
 
 templ VariableRow(projectID int64, variable db.Variable, environments []db.Environment) {
-	<tr id={ fmt.Sprintf("variable-row-%d", variable.ID) }>
+	<tr id={ fmt.Sprintf("variable-row-%d", variable.ID) } x-data={ fmt.Sprintf("{ editing: false, secret: %v }", variable.Secret != 0) }>
 		<td class="font-medium truncate">{ variable.Name }</td>
  	<td class="truncate">
 			if variable.Secret != 0 {
@@ -187,17 +213,18 @@ templ VariableRow(projectID int64, variable db.Variable, environments []db.Envir
 			<span class="badge badge-ghost badge-sm">Global</span>
 		}
 	</td>
-		<td class="truncate">
+		<td class="hidden md:table-cell truncate">
 			if variable.Secret != 0 {
 				<span class="badge badge-warning badge-sm">secret</span>
 			}
 		</td>
-		<td class="flex gap-2">
+		<td class="flex flex-wrap gap-2 min-w-0">
 			if CanWrite(ctx) {
 				if !variable.EnvironmentID.Valid {
 					<button
 						type="button"
 						class="btn btn-sm btn-ghost"
+						data-variable-action="override"
 						data-override-for={ variable.Name }
 					>
 						Override
@@ -205,6 +232,8 @@ templ VariableRow(projectID int64, variable db.Variable, environments []db.Envir
 				}
 				<button
 					class="btn btn-sm btn-ghost"
+					data-variable-action="edit"
+					x-on:click.capture="editing = true; $event.stopImmediatePropagation()"
 					hx-get={ fmt.Sprintf("/projects/%d/variables/%d/edit", projectID, variable.ID) }
 					hx-target={ fmt.Sprintf("#variable-row-%d", variable.ID) }
 					hx-swap="outerHTML"
@@ -213,6 +242,7 @@ templ VariableRow(projectID int64, variable db.Variable, environments []db.Envir
 				</button>
 				<button
 					class="btn btn-sm btn-error"
+					data-variable-action="delete"
 					hx-delete={ fmt.Sprintf("/projects/%d/variables/%d", projectID, variable.ID) }
 					hx-target="#variables-content"
 					hx-swap="outerHTML"
@@ -223,8 +253,133 @@ templ VariableRow(projectID int64, variable db.Variable, environments []db.Envir
 					Delete
 				</button>
 			}
+			if CanWrite(ctx) {
+				<div x-show="editing" data-desktop-variable-edit={ strconv.FormatInt(variable.ID, 10) } class="basis-full mt-2">
+					@VariableQuickEditForm(projectID, variable, environments)
+				</div>
+			}
 		</td>
 	</tr>
+}
+
+templ VariableQuickEditForm(projectID int64, variable db.Variable, environments []db.Environment) {
+	<form
+		hx-put={ fmt.Sprintf("/projects/%d/variables/%d", projectID, variable.ID) }
+		hx-target="#variables-content"
+		hx-swap="outerHTML"
+		data-toast-success="Variable updated"
+		data-toast-error="Failed to update variable"
+		class="space-y-3"
+	>
+		<div class="form-control">
+			<label class="label"><span class="label-text">Name</span></label>
+			<input type="text" name="name" value={ variable.Name } class="input input-bordered input-sm w-full" required/>
+		</div>
+		<div class="form-control">
+			<label class="label"><span class="label-text">Value</span></label>
+			<input :type="secret ? 'password' : 'text'" name="value" value={ variableEditValue(variable) } :placeholder="secret ? 'Leave blank to keep existing secret' : ''" class="input input-bordered input-sm w-full"/>
+		</div>
+		<div class="form-control">
+			<label class="label"><span class="label-text">Environment</span></label>
+			<select name="environment_id" class="select select-bordered select-sm w-full">
+				<option value="">Unscoped</option>
+				for _, env := range environments {
+					if variable.EnvironmentID.Valid && env.ID == variable.EnvironmentID.Int64 {
+						<option value={ strconv.FormatInt(env.ID, 10) } selected>{ env.Name }</option>
+					} else {
+						<option value={ strconv.FormatInt(env.ID, 10) }>{ env.Name }</option>
+					}
+				}
+			</select>
+		</div>
+		<label class="cursor-pointer flex items-center gap-2">
+			<input type="checkbox" name="secret" class="checkbox checkbox-sm" x-model="secret"/>
+			<span class="text-sm">Secret</span>
+		</label>
+		<div class="flex flex-wrap gap-2">
+			<button type="button" class="btn btn-ghost btn-sm" x-on:click="editing = false">Cancel</button>
+			<button type="submit" class="btn btn-primary btn-sm">Save</button>
+		</div>
+	</form>
+}
+
+templ VariableMobileRecord(projectID int64, variable db.Variable, environments []db.Environment) {
+	<li class="card bg-base-200 p-4 space-y-3" data-mobile-variable={ strconv.FormatInt(variable.ID, 10) } x-data={ fmt.Sprintf("{ editing: false, secret: %v }", variable.Secret != 0) }>
+		<div class="min-w-0">
+			<p class="text-sm text-gray-400">Variable</p>
+			<h3 class="font-medium break-words">{ variable.Name }</h3>
+		</div>
+		<dl class="space-y-2 text-sm">
+			<div>
+				<dt class="text-gray-400">Value</dt>
+				<dd class="font-mono break-all">
+					if variable.Secret != 0 {
+						<span class="text-gray-500 italic">••••••••</span>
+					} else if variable.Value.Valid {
+						{ variable.Value.String }
+					} else {
+						<span class="text-gray-500 italic">(empty)</span>
+					}
+				</dd>
+			</div>
+			<div>
+				<dt class="text-gray-400">Environment</dt>
+				<dd class="break-words">
+					if variable.EnvironmentID.Valid {
+						{ envNameForID(environments, variable.EnvironmentID.Int64) }
+					} else {
+						<span class="badge badge-ghost badge-sm">Global</span>
+					}
+				</dd>
+			</div>
+			if variable.Secret != 0 {
+				<div>
+					<dt class="text-gray-400">Secret</dt>
+					<dd><span class="badge badge-warning badge-sm">secret</span></dd>
+				</div>
+			}
+		</dl>
+		if CanWrite(ctx) {
+			<div class="flex flex-wrap gap-2">
+				if !variable.EnvironmentID.Valid {
+					<button
+						type="button"
+						class="btn btn-sm btn-ghost"
+						data-variable-action="override"
+						data-override-for={ variable.Name }
+					>
+						Override
+					</button>
+				}
+				<button
+					type="button"
+					class="btn btn-sm btn-ghost"
+					data-variable-action="edit"
+					x-on:click.capture="editing = true; $event.stopImmediatePropagation()"
+					hx-get={ fmt.Sprintf("/projects/%d/variables/%d/edit", projectID, variable.ID) }
+					hx-target={ fmt.Sprintf("#variable-row-%d", variable.ID) }
+					hx-swap="outerHTML"
+				>
+					Edit
+				</button>
+				<button
+					class="btn btn-sm btn-error"
+					data-variable-action="delete"
+					hx-delete={ fmt.Sprintf("/projects/%d/variables/%d", projectID, variable.ID) }
+					hx-target="#variables-content"
+					hx-swap="outerHTML"
+					hx-confirm="Delete this variable?"
+					data-toast-success="Variable deleted"
+					data-toast-error="Failed to delete variable"
+				>
+					Delete
+				</button>
+			</div>
+			<div x-show="editing" data-mobile-variable-edit={ strconv.FormatInt(variable.ID, 10) } class="card bg-base-100 p-3">
+				@VariableQuickEditForm(projectID, variable, environments)
+			</div>
+		}
+	</li>
 }
 
 templ VariableEditRow(projectID int64, variable db.Variable, environments []db.Environment, errorMsg string) {
@@ -264,7 +419,7 @@ templ VariableEditRow(projectID int64, variable db.Variable, environments []db.E
 				<span class="text-sm">Secret</span>
 			</label>
 		</td>
-		<td class="flex gap-2">
+		<td class="flex flex-wrap gap-2 min-w-0">
 			<button type="button" class="btn btn-ghost btn-sm whitespace-nowrap" hx-get={ fmt.Sprintf("/projects/%d/variables", projectID) } hx-target="#variables-content" hx-swap="outerHTML">Cancel</button>
 			<button type="submit" form={ fmt.Sprintf("variable-edit-form-%d", variable.ID) } class="btn btn-primary btn-sm whitespace-nowrap">Save</button>
 		</td>

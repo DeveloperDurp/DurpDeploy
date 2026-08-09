@@ -31,14 +31,14 @@ templ ScheduledDeploymentsListPage(project db.Project, items []ScheduledDeployme
 
 templ ScheduledDeploymentsContent(project db.Project, items []ScheduledDeploymentListItem) {
 	<div class="space-y-6">
-		<div class="flex justify-between items-center">
-			<div>
-				<h1 class="text-3xl font-bold">Schedules — { project.Name }</h1>
-				<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost btn-sm mt-2">Back to Project</a>
+		<div class="flex flex-wrap items-center justify-between gap-2">
+			<h1 class="text-3xl font-bold">Schedules — { project.Name }</h1>
+			<div class="flex gap-2 ml-auto">
+				if CanWrite(ctx) {
+					<a href={ fmt.Sprintf("/projects/%d/schedules/new", project.ID) } class="btn btn-primary btn-sm">New Schedule</a>
+				}
+				<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost btn-sm">Back</a>
 			</div>
-			if CanWrite(ctx) {
-				<a href={ fmt.Sprintf("/projects/%d/schedules/new", project.ID) } class="btn btn-primary">New Schedule</a>
-			}
 		</div>
 		@ScheduledDeploymentsList(project, items)
 	</div>
@@ -51,14 +51,14 @@ templ ScheduledDeploymentsList(project db.Project, items []ScheduledDeploymentLi
 				<p class="text-gray-400">No schedules yet. Create one to run a release on a cron.</p>
 			</div>
 		} else {
-			<table class="table table-zebra table-fixed w-full">
+			<table class="hidden md:table table-zebra table-fixed w-full">
 				<thead>
 					<tr>
-						<th class="w-2/5">Schedule</th>
-						<th class="w-1/5">Cron</th>
-						<th class="w-1/5">Next run</th>
-						<th class="w-1/5">Enabled</th>
-						<th class="w-96">Actions</th>
+						<th class="w-1/4 md:w-2/5">Schedule</th>
+						<th class="w-1/4 md:w-1/5">Cron</th>
+						<th class="hidden md:table-cell w-1/5">Next run</th>
+						<th class="w-1/4 md:w-1/5">Enabled</th>
+						<th class="w-1/4 md:w-96">Actions</th>
 					</tr>
 				</thead>
 				<tbody>
@@ -67,19 +67,24 @@ templ ScheduledDeploymentsList(project db.Project, items []ScheduledDeploymentLi
 					}
 				</tbody>
 			</table>
+			<ul class="space-y-3 md:hidden" aria-label="Schedules" data-mobile-schedule-list>
+				for _, item := range items {
+					@ScheduledDeploymentMobileRecord(project.ID, item)
+				}
+			</ul>
 		}
 	</div>
 }
 
 templ ScheduledDeploymentRow(projectID int64, item ScheduledDeploymentListItem) {
-	<tr id={ fmt.Sprintf("schedule-row-%d", item.Schedule.ID) }>
+	<tr id={ fmt.Sprintf("schedule-row-%d", item.Schedule.ID) } x-data="{ editing: false }">
 		<td class="truncate">
 			<span class="font-medium">{ item.ReleaseVersion }</span>
 			<span class="text-gray-500"> → </span>
 			{ item.EnvironmentName }
 		</td>
 		<td class="truncate font-mono text-sm">{ item.Schedule.Cron }</td>
-		<td class="whitespace-nowrap">{ formatUnixTime(item.Schedule.NextRunAt) }</td>
+		<td class="hidden md:table-cell whitespace-nowrap">{ formatUnixTime(item.Schedule.NextRunAt) }</td>
 		<td>
 			if item.Schedule.Enabled == 1 {
 				<span class="badge badge-success">On</span>
@@ -87,10 +92,12 @@ templ ScheduledDeploymentRow(projectID int64, item ScheduledDeploymentListItem) 
 				<span class="badge badge-ghost">Off</span>
 			}
 		</td>
-		<td class="whitespace-nowrap">
+		<td class="flex flex-wrap gap-2">
 			if CanWrite(ctx) {
 				<button
 					class="btn btn-xs btn-ghost"
+					data-schedule-action="edit"
+					x-on:click.capture="editing = true; $event.stopImmediatePropagation()"
 					hx-get={ fmt.Sprintf("/projects/%d/schedules/%d/edit", projectID, item.Schedule.ID) }
 					hx-target={ fmt.Sprintf("#schedule-row-%d", item.Schedule.ID) }
 					hx-swap="outerHTML"
@@ -99,6 +106,7 @@ templ ScheduledDeploymentRow(projectID int64, item ScheduledDeploymentListItem) 
 				</button>
 				<button
 					class="btn btn-xs btn-primary"
+					data-schedule-action="toggle"
 					hx-post={ fmt.Sprintf("/projects/%d/schedules/%d/toggle", projectID, item.Schedule.ID) }
 					hx-target="#schedules-content"
 					hx-swap="outerHTML"
@@ -113,6 +121,7 @@ templ ScheduledDeploymentRow(projectID int64, item ScheduledDeploymentListItem) 
 				</button>
 				<button
 					class="btn btn-xs btn-error"
+					data-schedule-action="delete"
 					hx-delete={ fmt.Sprintf("/projects/%d/schedules/%d", projectID, item.Schedule.ID) }
 					hx-target="#schedules-content"
 					hx-swap="outerHTML"
@@ -123,8 +132,118 @@ templ ScheduledDeploymentRow(projectID int64, item ScheduledDeploymentListItem) 
 					Delete
 				</button>
 			}
+			if CanWrite(ctx) {
+				<div x-show="editing" data-desktop-schedule-edit={ strconv.FormatInt(item.Schedule.ID, 10) } class="basis-full mt-2">
+					@ScheduledDeploymentQuickEditForm(projectID, item)
+				</div>
+			}
 		</td>
 	</tr>
+}
+
+templ ScheduledDeploymentQuickEditForm(projectID int64, item ScheduledDeploymentListItem) {
+	<form
+		hx-put={ fmt.Sprintf("/projects/%d/schedules/%d", projectID, item.Schedule.ID) }
+		hx-target="#schedules-content"
+		hx-swap="outerHTML"
+		data-toast-success="Schedule updated"
+		data-toast-error="Failed to update schedule"
+		class="space-y-3"
+	>
+		<input type="hidden" name="release_id" value={ strconv.FormatInt(item.Schedule.ReleaseID, 10) }/>
+		<input type="hidden" name="environment_id" value={ strconv.FormatInt(item.Schedule.EnvironmentID, 10) }/>
+		<input type="hidden" name="note" value={ item.Schedule.Note.String }/>
+		<div class="form-control">
+			<label class="label"><span class="label-text">Cron</span></label>
+			<input type="text" name="cron" class="input input-bordered input-sm w-full" required value={ item.Schedule.Cron }/>
+		</div>
+		<label class="cursor-pointer flex items-center gap-2">
+			if item.Schedule.Enabled == 1 {
+				<input type="checkbox" name="enabled" class="checkbox checkbox-sm" value="true" checked/>
+			} else {
+				<input type="checkbox" name="enabled" class="checkbox checkbox-sm" value="true"/>
+			}
+			<span class="text-sm">Enabled</span>
+		</label>
+		<div class="flex flex-wrap gap-2">
+			<button type="button" class="btn btn-ghost btn-xs" x-on:click="editing = false">Cancel</button>
+			<button type="submit" class="btn btn-primary btn-xs">Save</button>
+		</div>
+	</form>
+}
+
+templ ScheduledDeploymentMobileRecord(projectID int64, item ScheduledDeploymentListItem) {
+	<li class="card bg-base-200 p-4 space-y-3" data-mobile-schedule={ strconv.FormatInt(item.Schedule.ID, 10) } x-data="{ editing: false }">
+		<div class="min-w-0">
+			<p class="text-sm text-gray-400">Schedule</p>
+			<h2 class="font-medium break-words">{ item.ReleaseVersion } → { item.EnvironmentName }</h2>
+		</div>
+		<dl class="space-y-2 text-sm">
+			<div>
+				<dt class="text-gray-400">Cron</dt>
+				<dd class="font-mono break-all">{ item.Schedule.Cron }</dd>
+			</div>
+			<div>
+				<dt class="text-gray-400">Next run</dt>
+				<dd>{ formatUnixTime(item.Schedule.NextRunAt) }</dd>
+			</div>
+			<div>
+				<dt class="text-gray-400">Enabled</dt>
+				<dd>
+					if item.Schedule.Enabled == 1 {
+						<span class="badge badge-success">On</span>
+					} else {
+						<span class="badge badge-ghost">Off</span>
+					}
+				</dd>
+			</div>
+		</dl>
+		if CanWrite(ctx) {
+			<div class="flex flex-wrap gap-2">
+				<button
+					type="button"
+					class="btn btn-xs btn-ghost"
+					data-schedule-action="edit"
+					x-on:click.capture="editing = true; $event.stopImmediatePropagation()"
+					hx-get={ fmt.Sprintf("/projects/%d/schedules/%d/edit", projectID, item.Schedule.ID) }
+					hx-target={ fmt.Sprintf("#schedule-row-%d", item.Schedule.ID) }
+					hx-swap="outerHTML"
+				>
+					Edit
+				</button>
+				<button
+					class="btn btn-xs btn-primary"
+					data-schedule-action="toggle"
+					hx-post={ fmt.Sprintf("/projects/%d/schedules/%d/toggle", projectID, item.Schedule.ID) }
+					hx-target="#schedules-content"
+					hx-swap="outerHTML"
+					data-toast-success="Schedule toggled"
+					data-toast-error="Failed to toggle schedule"
+				>
+					if item.Schedule.Enabled == 1 {
+						Disable
+					} else {
+						Enable
+					}
+				</button>
+				<button
+					class="btn btn-xs btn-error"
+					data-schedule-action="delete"
+					hx-delete={ fmt.Sprintf("/projects/%d/schedules/%d", projectID, item.Schedule.ID) }
+					hx-target="#schedules-content"
+					hx-swap="outerHTML"
+					hx-confirm="Delete this schedule?"
+					data-toast-success="Schedule deleted"
+					data-toast-error="Failed to delete schedule"
+				>
+					Delete
+				</button>
+			</div>
+			<div x-show="editing" data-mobile-schedule-edit={ strconv.FormatInt(item.Schedule.ID, 10) } class="card bg-base-100 p-3">
+				@ScheduledDeploymentQuickEditForm(projectID, item)
+			</div>
+		}
+	</li>
 }
 
 templ ScheduledDeploymentFormPage(project db.Project, releases []db.Release, envs []AvailableEnv, schedule *db.ScheduledDeployment, errorMsg string, currentPath string) {
@@ -151,14 +270,14 @@ templ ScheduledDeploymentFormPage(project db.Project, releases []db.Release, env
 }
 
 func scheduleFormPageTitle(schedule *db.ScheduledDeployment) string {
-	if schedule == nil {
+	if !isEditingSchedule(schedule) {
 		return "New schedule"
 	}
 	return "Edit schedule"
 }
 
 func scheduleFormPageVerb(schedule *db.ScheduledDeployment) string {
-	if schedule == nil {
+	if !isEditingSchedule(schedule) {
 		return "create"
 	}
 	return "edit"
@@ -287,7 +406,7 @@ templ ScheduledDeploymentEditRow(projectID int64, item ScheduledDeploymentListIt
 		<td>
 			<input type="text" name="cron" form={ fmt.Sprintf("schedule-edit-form-%d", item.Schedule.ID) } class="input input-bordered input-sm w-full" required value={ item.Schedule.Cron }/>
 		</td>
-		<td class="whitespace-nowrap text-sm text-gray-500">{ formatUnixTime(item.Schedule.NextRunAt) }</td>
+		<td class="hidden md:table-cell whitespace-nowrap text-sm text-gray-500">{ formatUnixTime(item.Schedule.NextRunAt) }</td>
 		<td>
 			<label class="cursor-pointer flex items-center gap-1">
 				if item.Schedule.Enabled == 1 {
@@ -298,7 +417,7 @@ templ ScheduledDeploymentEditRow(projectID int64, item ScheduledDeploymentListIt
 				<span class="text-sm">On</span>
 			</label>
 		</td>
-		<td class="whitespace-nowrap">
+		<td class="flex flex-wrap gap-2">
 			<button type="button" class="btn btn-ghost btn-xs" hx-get={ fmt.Sprintf("/projects/%d/schedules", projectID) } hx-target="#schedules-content" hx-swap="outerHTML">Cancel</button>
 			<button type="submit" form={ fmt.Sprintf("schedule-edit-form-%d", item.Schedule.ID) } class="btn btn-primary btn-xs">Save</button>
 		</td>
@@ -307,24 +426,28 @@ templ ScheduledDeploymentEditRow(projectID int64, item ScheduledDeploymentListIt
 }
 
 func scheduleLabel(schedule *db.ScheduledDeployment) string {
-	if schedule != nil {
+	if isEditingSchedule(schedule) {
 		return "Edit"
 	}
 	return "New"
 }
 
 func scheduleHeading(schedule *db.ScheduledDeployment) string {
-	if schedule != nil {
+	if isEditingSchedule(schedule) {
 		return "Edit Schedule"
 	}
 	return "New Schedule"
 }
 
 func scheduleFormAction(project db.Project, schedule *db.ScheduledDeployment) string {
-	if schedule != nil {
+	if isEditingSchedule(schedule) {
 		return fmt.Sprintf("/projects/%d/schedules/%d", project.ID, schedule.ID)
 	}
 	return fmt.Sprintf("/projects/%d/schedules", project.ID)
+}
+
+func isEditingSchedule(schedule *db.ScheduledDeployment) bool {
+	return schedule != nil && schedule.ID != 0
 }
 
 func scheduleNoteValue(schedule *db.ScheduledDeployment) string {
