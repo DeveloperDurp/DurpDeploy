@@ -122,11 +122,11 @@ templ DeploymentListTable(view DeploymentsView) {
 		<thead>
 			<tr>
 				<th class="w-1/6">Project</th>
-				<th class="w-1/6">Version</th>
+				<th class="w-1/6 hidden md:table-cell">Version</th>
 				<th class="w-1/6">Environment</th>
 				<th class="w-1/6">Status</th>
 				<th class="w-1/6">Date</th>
-				<th class="w-1/6">Actions</th>
+				<th class="w-1/4 md:w-1/6">Actions</th>
 			</tr>
 		</thead>
 		<tbody id="deployments-tbody">
@@ -145,13 +145,13 @@ templ DeploymentListTable(view DeploymentsView) {
 templ DeploymentListRow(item DeploymentListItem) {
 	<tr>
 		<td class="truncate">{ item.ProjectName }</td>
-		<td class="truncate">{ item.ReleaseVersion }</td>
+		<td class="truncate hidden md:table-cell">{ item.ReleaseVersion }</td>
 		<td class="truncate">{ item.EnvironmentName }</td>
 		<td>
 			@StatusBadge(item.Deployment)
 		</td>
-		<td class="whitespace-nowrap">{ formatUnixTime(item.Deployment.CreatedAt) }</td>
-		<td class="whitespace-nowrap">
+		<td class="truncate md:whitespace-nowrap">{ formatUnixTime(item.Deployment.CreatedAt) }</td>
+		<td class="flex flex-wrap gap-1">
 			<a href={ fmt.Sprintf("/deployments/%d", item.Deployment.ID) } class="btn btn-sm btn-secondary">View</a>
 			<a href={ fmt.Sprintf("/deployments/%d/logs.txt", item.Deployment.ID) } class="btn btn-sm btn-ghost">Export</a>
 		</td>
@@ -287,7 +287,7 @@ templ DeploymentDetailPage(project db.Project, release db.Release, environment d
 
 templ DeploymentDetail(project db.Project, release db.Release, environment db.Environment, deployment db.Deployment, logs []db.DeploymentLog) {
 	<div class="space-y-6">
-		<div class="flex justify-between items-center">
+		<div class="flex flex-wrap justify-between items-center gap-2">
 			<div>
 				<h1 class="text-3xl font-bold">Deployment #{ strconv.FormatInt(deployment.ID, 10) }</h1>
 				<p class="text-gray-400">
@@ -298,9 +298,8 @@ templ DeploymentDetail(project db.Project, release db.Release, environment db.En
 						{ deployment.Note.String }
 					</blockquote>
 				}
-				<a href={ fmt.Sprintf("/projects/%d/releases/%d", project.ID, release.ID) } class="btn btn-ghost btn-sm mt-2">Back to Release</a>
 			</div>
-			<div class="flex items-center gap-2">
+			<div class="flex flex-wrap items-center gap-2 ml-auto">
 				<a href={ fmt.Sprintf("/deployments/%d/logs.txt", deployment.ID) } class="btn btn-sm btn-ghost">Export</a>
 				if CanWrite(ctx) {
 					if isTerminalStatus(deployment.Status) {
@@ -341,6 +340,7 @@ templ DeploymentDetail(project db.Project, release db.Release, environment db.En
 					}
 				}
 				@StatusBadgeContainer(deployment)
+				<a href={ fmt.Sprintf("/projects/%d/releases/%d", project.ID, release.ID) } class="btn btn-ghost btn-sm">Back</a>
 			</div>
 		</div>
 		<div class="card bg-base-200 p-4">
@@ -350,7 +350,7 @@ templ DeploymentDetail(project db.Project, release db.Release, environment db.En
 					<tr>
 						<th class="w-16">Order</th>
 						<th class="w-1/4">Name</th>
-						<th class="w-auto">Script</th>
+						<th class="w-auto hidden sm:table-cell">Script</th>
 					</tr>
 				</thead>
 				<tbody>
@@ -363,7 +363,7 @@ templ DeploymentDetail(project db.Project, release db.Release, environment db.En
 							<tr>
 								<td>{ strconv.FormatInt(step.SortOrder, 10) }</td>
 								<td class="font-medium truncate">{ step.Name }</td>
-								<td class="truncate">
+								<td class="truncate hidden sm:table-cell">
 									<code class="text-sm bg-base-300 px-2 py-1 rounded">
 										if len(step.ScriptBody) > 60 {
 											{ step.ScriptBody[:60] + "..." }

@@ -7,17 +7,24 @@ import (
 	"time"
 )
 
+func stepReorderLabel(step db.Step, direction string) string {
+	if step.Name == "" {
+		return fmt.Sprintf("Move step ID %d %s", step.ID, direction)
+	}
+	return fmt.Sprintf("Move step %s (ID %d) %s", step.Name, step.ID, direction)
+}
+
 templ StepList(steps []db.Step, projectID int64) {
 	<div id="step-list">
-		<table class="table table-zebra table-fixed w-full">
+		<table class="hidden md:table table-zebra table-fixed w-full">
 			<thead>
 				<tr>
 					<th class="w-16">Order</th>
 					<th class="w-1/5">Name</th>
-				<th class="w-auto">Script</th>
-				<th class="w-20">Timeout</th>
-				<th class="w-20">Retries</th>
-				<th class="w-96">Actions</th>
+					<th class="hidden md:table-cell w-auto">Script</th>
+					<th class="hidden md:table-cell w-20">Timeout</th>
+					<th class="hidden md:table-cell w-20">Retries</th>
+					<th class="w-1/2 md:w-96">Actions</th>
 				</tr>
 			</thead>
 			<tbody>
@@ -26,6 +33,11 @@ templ StepList(steps []db.Step, projectID int64) {
 				}
 			</tbody>
 		</table>
+		<ol class="space-y-3 md:hidden" aria-label="Deployment steps" data-mobile-step-list>
+			for i, step := range steps {
+				@StepMobileRecord(step, projectID, i == 0, i == len(steps)-1)
+			}
+		</ol>
 	</div>
 }
 
@@ -33,7 +45,7 @@ templ StepRow(step db.Step, projectID int64, isFirst bool, isLast bool) {
 	<tr id={ fmt.Sprintf("step-row-%d", step.ID) }>
 		<td>{ strconv.FormatInt(step.SortOrder, 10) }</td>
 		<td class="font-medium truncate">{ step.Name }</td>
-		<td class="truncate">
+		<td class="hidden md:table-cell truncate">
 			<code class="text-sm bg-base-200 px-2 py-1 rounded">
 				if len(step.ScriptBody) > 60 {
 					{ step.ScriptBody[:60] + "..." }
@@ -42,19 +54,21 @@ templ StepRow(step db.Step, projectID int64, isFirst bool, isLast bool) {
 				}
 			</code>
 		</td>
-		<td class="whitespace-nowrap text-sm">
+		<td class="hidden md:table-cell whitespace-nowrap text-sm">
 			@timeoutCell(step.TimeoutSeconds)
 		</td>
-		<td class="whitespace-nowrap text-sm">
+		<td class="hidden md:table-cell whitespace-nowrap text-sm">
 			@retriesCell(step.MaxRetries)
 		</td>
-		<td class="flex gap-1 whitespace-nowrap">
+		<td class="flex flex-wrap gap-1">
 			if canWrite(ctx) {
 				if isFirst {
 					<span class="btn btn-xs btn-ghost invisible" aria-hidden="true">↑</span>
 				} else {
 					<button
 						class="btn btn-xs btn-ghost"
+						data-step-action="move-up"
+						aria-label={ stepReorderLabel(step, "up") }
 						hx-patch={ fmt.Sprintf("/projects/%d/steps/reorder", projectID) }
 						hx-vals={ fmt.Sprintf("{\"step_id\":%d,\"new_order\":%d}", step.ID, step.SortOrder-1) }
 						hx-target="#step-list"
@@ -68,6 +82,8 @@ templ StepRow(step db.Step, projectID int64, isFirst bool, isLast bool) {
 				} else {
 					<button
 						class="btn btn-xs btn-ghost"
+						data-step-action="move-down"
+						aria-label={ stepReorderLabel(step, "down") }
 						hx-patch={ fmt.Sprintf("/projects/%d/steps/reorder", projectID) }
 						hx-vals={ fmt.Sprintf("{\"step_id\":%d,\"new_order\":%d}", step.ID, step.SortOrder+1) }
 						hx-target="#step-list"
@@ -78,6 +94,7 @@ templ StepRow(step db.Step, projectID int64, isFirst bool, isLast bool) {
 				}
 				<button
 					class="btn btn-xs btn-secondary"
+					data-step-action="edit"
 					hx-get={ fmt.Sprintf("/projects/%d/steps/%d/edit", projectID, step.ID) }
 					hx-target={ fmt.Sprintf("#step-row-%d", step.ID) }
 					hx-swap="outerHTML"
@@ -87,6 +104,7 @@ templ StepRow(step db.Step, projectID int64, isFirst bool, isLast bool) {
 				</button>
 				<button
 					class="btn btn-xs btn-error"
+					data-step-action="delete"
 					hx-delete={ fmt.Sprintf("/projects/%d/steps/%d", projectID, step.ID) }
 					hx-target="#step-list"
 					hx-swap="innerHTML"
@@ -94,18 +112,104 @@ templ StepRow(step db.Step, projectID int64, isFirst bool, isLast bool) {
 				>
 					Delete
 				</button>
+				<button
+					class="btn btn-xs btn-outline"
+					data-step-action="save-template"
+					hx-post={ fmt.Sprintf("/projects/%d/steps/%d/save-as-template", projectID, step.ID) }
+					hx-target="#step-list"
+					hx-swap="innerHTML"
+					hx-confirm="Save this step as template?"
+				>
+					Save Template
+				</button>
 			}
-			<button
-				class="btn btn-xs btn-outline"
-				hx-post={ fmt.Sprintf("/projects/%d/steps/%d/save-as-template", projectID, step.ID) }
-				hx-target="#step-list"
-				hx-swap="innerHTML"
-				hx-confirm="Save this step as template?"
-			>
-				Save Template
-			</button>
 		</td>
 	</tr>
+}
+
+templ StepMobileRecord(step db.Step, projectID int64, isFirst bool, isLast bool) {
+	<li class="card bg-base-200 p-4 space-y-3" data-mobile-step={ strconv.FormatInt(step.ID, 10) } x-data="{ editing: false }">
+		<div class="flex items-start justify-between gap-3">
+			<div class="min-w-0">
+				<p class="text-sm text-gray-400">Step { strconv.FormatInt(step.SortOrder, 10) }</p>
+				<h3 class="font-medium break-words">{ step.Name }</h3>
+			</div>
+			<dl class="shrink-0 text-right text-xs text-gray-400">
+				<div><dt class="sr-only">Timeout</dt><dd>@timeoutCell(step.TimeoutSeconds)</dd></div>
+				<div><dt class="sr-only">Retries</dt><dd>{ "Retries: " }@retriesCell(step.MaxRetries)</dd></div>
+			</dl>
+		</div>
+		<details class="text-sm">
+			<summary class="cursor-pointer text-primary">View script</summary>
+			<pre class="mt-2 whitespace-pre-wrap break-words rounded bg-base-100 p-3 text-xs"><code>{ step.ScriptBody }</code></pre>
+		</details>
+		if canWrite(ctx) {
+			<div class="flex flex-wrap gap-2">
+				if !isFirst {
+					<button
+						class="btn btn-xs btn-ghost"
+						data-step-action="move-up"
+						aria-label={ stepReorderLabel(step, "up") }
+						hx-patch={ fmt.Sprintf("/projects/%d/steps/reorder", projectID) }
+						hx-vals={ fmt.Sprintf("{\"step_id\":%d,\"new_order\":%d}", step.ID, step.SortOrder-1) }
+						hx-target="#step-list"
+						hx-swap="innerHTML"
+					>
+						↑
+					</button>
+				}
+				if !isLast {
+					<button
+						class="btn btn-xs btn-ghost"
+						data-step-action="move-down"
+						aria-label={ stepReorderLabel(step, "down") }
+						hx-patch={ fmt.Sprintf("/projects/%d/steps/reorder", projectID) }
+						hx-vals={ fmt.Sprintf("{\"step_id\":%d,\"new_order\":%d}", step.ID, step.SortOrder+1) }
+						hx-target="#step-list"
+						hx-swap="innerHTML"
+					>
+						↓
+					</button>
+				}
+				<button
+					type="button"
+					class="btn btn-xs btn-secondary"
+					data-step-action="edit"
+					x-on:click="editing = true"
+				>
+					Edit
+				</button>
+				<button
+					class="btn btn-xs btn-error"
+					data-step-action="delete"
+					hx-delete={ fmt.Sprintf("/projects/%d/steps/%d", projectID, step.ID) }
+					hx-target="#step-list"
+					hx-swap="innerHTML"
+					hx-confirm="Delete this step?"
+				>
+					Delete
+				</button>
+				<button
+					class="btn btn-xs btn-outline"
+					data-step-action="save-template"
+					hx-post={ fmt.Sprintf("/projects/%d/steps/%d/save-as-template", projectID, step.ID) }
+					hx-target="#step-list"
+					hx-swap="innerHTML"
+					hx-confirm="Save this step as template?"
+				>
+					Save Template
+				</button>
+			</div>
+			<div
+				id={ fmt.Sprintf("mobile-step-edit-%d", step.ID) }
+				data-mobile-step-editor={ strconv.FormatInt(step.ID, 10) }
+				x-cloak
+				x-show="editing"
+			>
+				@StepForm(step, projectID, false, "")
+			</div>
+		}
+	</li>
 }
 
 templ timeoutCell(sec int64) {

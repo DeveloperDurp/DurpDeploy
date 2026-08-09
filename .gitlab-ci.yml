@@ -59,6 +59,70 @@ test:
 #      - coverage.txt
 #    expire_in: 1 week
 
+# The browser image is built from Dockerfile.mobile-browser for this job. The
+# Docker-in-Docker daemon cannot bind-mount the checkout, so copy it into a
+# created container and copy only its secret-free artifacts back afterward.
+mobile:browser:
+  stage: test
+  image: docker:24
+  services:
+    - name: docker:24-dind
+      alias: docker
+      command: ["--tls=false"]
+  resource_group: mobile-browser
+  variables:
+    DOCKER_TLS_CERTDIR: ""
+    DOCKER_HOST: tcp://docker:2375
+    MOBILE_BROWSER_IMAGE: "$CI_REGISTRY_IMAGE/mobile-browser:$CI_COMMIT_SHA"
+    MOBILE_BROWSER_CONTAINER: "mobile-browser-$CI_JOB_ID"
+  before_script:
+    - |
+      for attempt in $(seq 1 30); do
+        if docker info >/dev/null 2>&1; then
+          break
+        fi
+        if [ "$attempt" -eq 30 ]; then
+          echo 'mobile:browser: Docker daemon did not become ready after 30 seconds' >&2
+          docker info 2>&1 || true
+          exit 1
+        fi
+        sleep 1
+      done
+    - docker build -f Dockerfile.mobile-browser -t "$MOBILE_BROWSER_IMAGE" .
+    - >-
+      docker create --name "$MOBILE_BROWSER_CONTAINER"
+      --entrypoint /usr/local/bin/mobile-browser-container
+      -e MOBILE_RUN_ID="gitlab-$CI_JOB_ID"
+      -e MOBILE_ARTIFACT_DIR=/artifacts
+      "$MOBILE_BROWSER_IMAGE"
+    - docker cp "$CI_PROJECT_DIR/." "$MOBILE_BROWSER_CONTAINER:/workspace"
+  script:
+    - docker start -a "$MOBILE_BROWSER_CONTAINER"
+  after_script:
+    - |
+      set +e
+      mkdir -p artifacts/mobile
+      if ! docker info >/tmp/mobile-browser-docker-info 2>&1; then
+        echo 'mobile:browser after_script: Docker daemon unavailable; skipping artifact copy and container cleanup.' >&2
+        cat /tmp/mobile-browser-docker-info >&2
+        rm -f /tmp/mobile-browser-docker-info
+        exit 0
+      fi
+      if docker container inspect "$MOBILE_BROWSER_CONTAINER" >/dev/null 2>&1; then
+        docker cp "$MOBILE_BROWSER_CONTAINER:/artifacts/." artifacts/mobile/ ||
+          echo 'mobile:browser after_script: artifact copy failed.' >&2
+        docker rm -f "$MOBILE_BROWSER_CONTAINER" ||
+          echo 'mobile:browser after_script: container cleanup failed.' >&2
+      else
+        echo "mobile:browser after_script: container $MOBILE_BROWSER_CONTAINER was not found; nothing to copy or remove." >&2
+      fi
+      rm -f /tmp/mobile-browser-docker-info
+  artifacts:
+    when: always
+    paths:
+      - artifacts/mobile/
+    expire_in: 1 week
+
 build:
   stage: build
   before_script:

@@ -305,6 +305,15 @@ func TestStepTemplate_VersioningShadowHistory(t *testing.T) {
 	if !strings.Contains(body, "T1") {
 		t.Errorf("history body missing template name %q\nbody=%s", "T1", body)
 	}
+	const back = `<a href="/templates" class="btn btn-ghost btn-sm">Back</a>`
+	if strings.Count(body, back) != 1 {
+		t.Errorf("history back control = %q, want exactly one %q", body, back)
+	}
+	requireHTMLPattern(
+		t,
+		body,
+		`(?s)<div class="flex flex-wrap justify-between items-center gap-2">\s*<h1 class="text-3xl font-bold">T1</h1>\s*<div class="flex gap-2 ml-auto">\s*`+back,
+	)
 
 	// 5. Delete the template; CASCADE should drop versions. History -> 404.
 	if code := h.deleteTemplate(id); code != http.StatusSeeOther {

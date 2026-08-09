@@ -35,11 +35,13 @@ templ DeployFormPage(project db.Project, releases []db.Release, selectedRelease 
 	}
 }
 
-templ DeployFormContent(project db.Project, releases []db.Release, selectedRelease *db.Release, envs []AvailableEnv) {
+	templ DeployFormContent(project db.Project, releases []db.Release, selectedRelease *db.Release, envs []AvailableEnv) {
 	<div class="space-y-6">
-		<div>
+		<div class="flex justify-between items-center">
 			<h1 class="text-3xl font-bold">Deploy { project.Name }</h1>
-			<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost btn-sm mt-2">Back to Project</a>
+			<div class="flex gap-2">
+				<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost btn-sm">Back</a>
+			</div>
 		</div>
 		if len(releases) == 0 {
 			<div class="card bg-base-200 p-6 text-center">

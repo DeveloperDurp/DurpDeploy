@@ -1,4 +1,4 @@
-.PHONY: build dev dev-postgres dev-mssql e2e-postgres e2e-mssql check-openssl templ-generate tailwind-build js-build npm-install golines golines-check clean test e2e-test swagger-spec
+.PHONY: build dev dev-postgres dev-mssql e2e-postgres e2e-mssql check-openssl templ-generate tailwind-build js-build npm-install golines golines-check clean test e2e-test swagger-spec mobile-browser-container
 
 BINARY_NAME=durpdeploy
 MAIN_PATH=cmd/server/main.go
@@ -11,12 +11,22 @@ build: swagger-spec swagger-ui-copy templ-generate tailwind-build js-build
 	go build -o $(BINARY_NAME) $(MAIN_PATH)
 
 # Hot-reload dev server. Watches .go/.templ/.sql in cmd, internal, views, migrations.
-# Auto-generates a throwaway DURPDEPLOY_SECRET_KEY if one isn't already set in
-# the environment, same as `make e2e-test` — the app refuses to start without one.
+# Reads the shell-compatible DURPDEPLOY_SECRET_KEY assignment from ENV_FILE
+# (default repository/.env), then uses inherited DURPDEPLOY_SECRET_KEY, then
+# generates a throwaway key if needed. Other .env assignments stay in the
+# subshell.
 # ponytail: CSS/JS source changes need a separate `make tailwind-build && make js-build`
 # and the air build to retrigger. Add a second air include_dir entry when that hurts.
+MAKEFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
+ENV_FILE ?= $(MAKEFILE_DIR).env
+
 dev: check-openssl
-	DURPDEPLOY_SECRET_KEY=$${DURPDEPLOY_SECRET_KEY:-$$(openssl rand -base64 32)} go run github.com/air-verse/air@latest
+	env_secret_key=$$(unset DURPDEPLOY_SECRET_KEY; \
+		if [ -f "$(ENV_FILE)" ]; then . "$(ENV_FILE)"; fi; \
+		printf '%s' "$${DURPDEPLOY_SECRET_KEY:-}"); \
+	if [ -n "$$env_secret_key" ]; then DURPDEPLOY_SECRET_KEY="$$env_secret_key"; fi; \
+	DURPDEPLOY_SECRET_KEY=$${DURPDEPLOY_SECRET_KEY:-$$(openssl rand -base64 32)} \
+	DURPDEPLOY_ENV_FILE="$(ENV_FILE)" go run github.com/air-verse/air@latest
 
 # Disposable database containers for manual backend testing. Stop them with
 # `docker stop $(DEV_POSTGRES_CONTAINER)` or `docker stop $(DEV_MSSQL_CONTAINER)`.
@@ -86,7 +96,11 @@ e2e-mssql:
 # Fails with a clear message instead of a cryptic "command not found" if
 # openssl is missing and DURPDEPLOY_SECRET_KEY isn't already set.
 check-openssl:
-	@if [ -z "$$DURPDEPLOY_SECRET_KEY" ] && ! command -v openssl >/dev/null 2>&1; then \
+	@env_secret_key=$$(unset DURPDEPLOY_SECRET_KEY; \
+		if [ -f "$(ENV_FILE)" ]; then . "$(ENV_FILE)"; fi; \
+		printf '%s' "$${DURPDEPLOY_SECRET_KEY:-}"); \
+	if [ -n "$$env_secret_key" ]; then DURPDEPLOY_SECRET_KEY="$$env_secret_key"; fi; \
+	if [ -z "$$DURPDEPLOY_SECRET_KEY" ] && ! command -v openssl >/dev/null 2>&1; then \
 		echo "ERROR: openssl not found. Install openssl, or set DURPDEPLOY_SECRET_KEY yourself." >&2; \
 		exit 1; \
 	fi
@@ -132,7 +146,28 @@ test: templ-generate
 	go test -v -count=1 ./...
 
 # Bash end-to-end test: builds, runs the server, curls happy/cancel/validation
-# paths. Auto-generates a throwaway DURPDEPLOY_SECRET_KEY if one isn't already
-# set in the environment.
+# paths. Reads the shell-compatible DURPDEPLOY_SECRET_KEY assignment from
+# ENV_FILE (default repository/.env) before inherited/generated-key fallback.
 e2e-test: build check-openssl
-	DURPDEPLOY_SECRET_KEY=$${DURPDEPLOY_SECRET_KEY:-$$(openssl rand -base64 32)} ./scripts/e2e_test.sh
+	env_secret_key=$$(unset DURPDEPLOY_SECRET_KEY; \
+		if [ -f "$(ENV_FILE)" ]; then . "$(ENV_FILE)"; fi; \
+		printf '%s' "$${DURPDEPLOY_SECRET_KEY:-}"); \
+	if [ -n "$$env_secret_key" ]; then DURPDEPLOY_SECRET_KEY="$$env_secret_key"; fi; \
+	DURPDEPLOY_SECRET_KEY=$${DURPDEPLOY_SECRET_KEY:-$$(openssl rand -base64 32)} \
+	DURPDEPLOY_ENV_FILE="$(ENV_FILE)" ./scripts/e2e_test.sh
+
+# Runs the strict Playwright browser contract in the shared CI image. The source checkout
+# and secret-free evidence directory stay on the host; Docker owns the browser.
+MOBILE_BROWSER_IMAGE ?= durpdeploy-mobile-browser:local
+MOBILE_BROWSER_RUN_ID ?= local-$$(date -u +%Y%m%dT%H%M%SZ)-$$$$
+
+mobile-browser-container:
+	mkdir -p artifacts/mobile
+	docker build -f Dockerfile.mobile-browser -t $(MOBILE_BROWSER_IMAGE) .
+	docker run --rm --init \
+		--entrypoint /usr/local/bin/mobile-browser-container \
+		-e MOBILE_RUN_ID="$(MOBILE_BROWSER_RUN_ID)" \
+		-e MOBILE_ARTIFACT_DIR=/artifacts \
+		-v "$(CURDIR):/workspace" \
+		-v "$(CURDIR)/artifacts/mobile:/artifacts" \
+		$(MOBILE_BROWSER_IMAGE)

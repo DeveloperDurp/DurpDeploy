@@ -4,11 +4,14 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
 
+	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
+	"durpdeploy/views/pages"
 )
 
 // TestAudit_LoginRecorded: POST /login with valid creds produces one
@@ -403,6 +406,78 @@ func TestGlobalNotificationSettings_AdminCanViewAndUpdate(t *testing.T) {
 	}
 	if global.NotifyEmails.String != "ops@example.com" {
 		t.Fatalf("notify emails not saved: %+v", global)
+	}
+}
+
+func TestGlobalNotificationSettings_RendersBackForBothPageBranches(
+	t *testing.T,
+) {
+	// Given
+	h := newProjectHarness(t)
+	viewer := seedSession(t, h.repo, h.server.URL, "viewer")
+	renderer := httptest.NewServer(auth.AuthMiddleware(h.repo)(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			global, err := h.repo.Queries.GetGlobalNotifications(r.Context())
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			if err := pages.GlobalNotificationsPage(global, r.URL.Path).
+				Render(r.Context(), w); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+		}),
+	))
+	t.Cleanup(renderer.Close)
+
+	cases := []struct {
+		name     string
+		session  *authedSession
+		wantSave bool
+	}{
+		{name: "writer", session: h.sess, wantSave: true},
+		{name: "viewer", session: viewer, wantSave: false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			// When
+			resp, err := tc.session.client.Get(renderer.URL + "/settings")
+			if err != nil {
+				t.Fatalf("GET settings: %v", err)
+			}
+			defer resp.Body.Close()
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				t.Fatalf("read settings body: %v", err)
+			}
+
+			// Then
+			if resp.StatusCode != http.StatusOK {
+				t.Fatalf("status = %d, want 200", resp.StatusCode)
+			}
+			const back = `<a href="/admin/notifications" class="btn btn-ghost btn-sm">Back</a>`
+			if strings.Count(string(body), back) != 1 {
+				t.Fatalf("back control = %q, want exactly one %q", body, back)
+			}
+			if tc.wantSave {
+				requireHTMLPattern(
+					t,
+					string(body),
+					`(?s)<div class="flex justify-between items-center mb-4">\s*<h1 class="text-3xl font-bold">Notification Settings</h1>\s*<div class="flex gap-2">\s*<button type="submit" class="btn btn-primary btn-sm">Save</button>\s*`+back,
+				)
+			} else {
+				requireHTMLPattern(
+					t,
+					string(body),
+					`(?s)<div class="flex justify-between items-center mb-4">\s*<h1 class="text-3xl font-bold">Notification Settings</h1>\s*<div class="flex gap-2">\s*`+back,
+				)
+			}
+			hasSave := strings.Contains(string(body), `>Save</button>`)
+			if hasSave != tc.wantSave {
+				t.Errorf("Save rendered = %t, want %t", hasSave, tc.wantSave)
+			}
+		})
 	}
 }
 

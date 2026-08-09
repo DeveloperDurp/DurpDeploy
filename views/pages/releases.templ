@@ -64,9 +64,9 @@ templ ReleasesPage(project db.Project, releases []ReleaseView, errorMsg string, 
 templ ReleasesContent(project db.Project, releases []ReleaseView, errorMsg string) {
 	<div class="space-y-6">
 		<div class="flex justify-between items-center">
-			<div>
-				<h1 class="text-3xl font-bold">Releases — { project.Name }</h1>
-				<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost btn-sm mt-2">Back to Project</a>
+			<h1 class="text-3xl font-bold">Releases — { project.Name }</h1>
+			<div class="flex gap-2">
+				<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost btn-sm">Back</a>
 			</div>
 		</div>
 		@ReleasesFragment(project, releases, errorMsg)
@@ -193,13 +193,15 @@ templ ReleaseDetail(project db.Project, release db.Release, variables []db.Relea
 			<div>
 				<h1 class="text-3xl font-bold">Release { release.Version }</h1>
 				<p class="text-gray-400">Project: { project.Name }</p>
-				<a href={ fmt.Sprintf("/projects/%d/releases", project.ID) } class="btn btn-ghost btn-sm mt-2">Back to Releases</a>
 			</div>
-			if CanWrite(ctx) {
-				<form method="post" action={ fmt.Sprintf("/projects/%d/releases/%d/refresh", project.ID, release.ID) }>
-					<button type="submit" class="btn btn-outline btn-warning btn-sm" onclick="return confirm('Refresh this release with the latest steps and variables?')">Refresh</button>
-				</form>
-			}
+			<div class="flex gap-2">
+				if CanWrite(ctx) {
+					<form method="post" action={ fmt.Sprintf("/projects/%d/releases/%d/refresh", project.ID, release.ID) }>
+						<button type="submit" class="btn btn-outline btn-warning btn-sm" onclick="return confirm('Refresh this release with the latest steps and variables?')">Refresh</button>
+					</form>
+				}
+				<a href={ fmt.Sprintf("/projects/%d/releases", project.ID) } class="btn btn-ghost btn-sm">Back</a>
+			</div>
 		</div>
 		<div class="card bg-base-200 p-4">
 			<h2 class="text-xl font-bold mb-4">Snapshotted Steps</h2>

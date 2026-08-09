@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -702,11 +703,119 @@ func TestNewDeploymentPage_RendersForm(t *testing.T) {
 		"<form",
 		`action="/projects/` + fmt.Sprintf("%d", proj.ID) + `/deploy"`,
 		`>Deploy<`,
-		`>Cancel<`,
+		fmt.Sprintf(
+			`<a href="/projects/%d" class="btn btn-ghost btn-sm">Back</a>`,
+			proj.ID,
+		),
+		fmt.Sprintf(
+			`<a href="/projects/%d" class="btn btn-ghost">Cancel</a>`,
+			proj.ID,
+		),
 	} {
 		if !strings.Contains(body, marker) {
 			t.Errorf("deploy page missing %q", marker)
 		}
+	}
+	requireHTMLPattern(
+		t,
+		body,
+		fmt.Sprintf(
+			`(?s)<div class="flex justify-between items-center">\s*<h1 class="text-3xl font-bold">Deploy .*?</h1>\s*<div class="flex gap-2">\s*<a href="/projects/%d" class="btn btn-ghost btn-sm">Back</a>`,
+			proj.ID,
+		),
+	)
+}
+
+func TestReleaseAndDeploymentPages_RenderBackControls(t *testing.T) {
+	// Given
+	h := newHarness(t)
+	hc := h.setupProjectWithLifecycle(t, []string{"Back"})
+	release := hc.makeRelease(t, "1.0.0", "exit 0")
+	deployment, err := h.repo.Queries.CreateDeployment(
+		context.Background(),
+		db.CreateDeploymentParams{
+			ReleaseID:     release.ID,
+			EnvironmentID: hc.envs["Back"].ID,
+			Status:        "succeeded",
+		},
+	)
+	if err != nil {
+		t.Fatalf("create deployment: %v", err)
+	}
+
+	pages := []struct {
+		name          string
+		path          string
+		backHref      string
+		headerPattern string
+	}{
+		{
+			name:     "releases",
+			path:     fmt.Sprintf("/projects/%d/releases", hc.project.ID),
+			backHref: fmt.Sprintf("/projects/%d", hc.project.ID),
+			headerPattern: fmt.Sprintf(
+				`(?s)<div class="flex justify-between items-center">\s*<h1 class="text-3xl font-bold">Releases.*?</h1>\s*<div class="flex gap-2">\s*<a href="/projects/%d" class="btn btn-ghost btn-sm">Back</a>`,
+				hc.project.ID,
+			),
+		},
+		{
+			name: "release detail",
+			path: fmt.Sprintf(
+				"/projects/%d/releases/%d",
+				hc.project.ID,
+				release.ID,
+			),
+			backHref: fmt.Sprintf("/projects/%d/releases", hc.project.ID),
+			headerPattern: fmt.Sprintf(
+				`(?s)<div class="flex gap-2">\s*<form[^>]*action="/projects/%d/releases/%d/refresh"[^>]*>.*?Refresh.*?</form>\s*<a href="/projects/%d/releases" class="btn btn-ghost btn-sm">Back</a>`,
+				hc.project.ID,
+				release.ID,
+				hc.project.ID,
+			),
+		},
+		{
+			name: "deployment detail",
+			path: fmt.Sprintf("/deployments/%d", deployment.ID),
+			backHref: fmt.Sprintf(
+				"/projects/%d/releases/%d",
+				hc.project.ID,
+				release.ID,
+			),
+			headerPattern: fmt.Sprintf(
+				`(?s)<div class="flex flex-wrap items-center gap-2 ml-auto">\s*<a href="/deployments/%d/logs.txt" class="btn btn-sm btn-ghost">Export</a>.*?<a href="/projects/%d/releases/%d" class="btn btn-ghost btn-sm">Back</a>`,
+				deployment.ID,
+				hc.project.ID,
+				release.ID,
+			),
+		},
+	}
+
+	for _, page := range pages {
+		t.Run(page.name, func(t *testing.T) {
+			// When
+			resp, err := h.authedClient().Get(h.server.URL + page.path)
+			if err != nil {
+				t.Fatalf("GET %s: %v", page.path, err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				t.Fatalf("GET %s: status %d", page.path, resp.StatusCode)
+			}
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				t.Fatalf("read GET %s: %v", page.path, err)
+			}
+
+			// Then
+			want := fmt.Sprintf(
+				`<a href="%s" class="btn btn-ghost btn-sm">Back</a>`,
+				page.backHref,
+			)
+			if got := strings.Count(string(body), want); got != 1 {
+				t.Errorf("back control count = %d, want 1 for %q", got, want)
+			}
+			requireHTMLPattern(t, string(body), page.headerPattern)
+		})
 	}
 }
 

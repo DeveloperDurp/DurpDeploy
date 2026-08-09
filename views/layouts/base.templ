@@ -57,26 +57,74 @@ templ Base(title string, currentPath string) {
 		</head>
 		<body class="bg-base-100 text-base-content min-h-screen">
 			<div class="navbar bg-base-200 border-b border-base-300" x-data="{ theme: localStorage.getItem('theme') || 'mocha' }" x-init="document.documentElement.setAttribute('data-theme', theme); $watch('theme', val => { document.documentElement.setAttribute('data-theme', val); localStorage.setItem('theme', val) })">
-				<div class="w-full px-4 sm:px-6 lg:px-8 flex items-center">
+				<div class="w-full px-4 sm:px-6 lg:px-8 flex flex-wrap items-center gap-y-2">
 					<div class="flex-1">
 						<a href="/" class="btn btn-ghost text-xl">DurpDeploy</a>
 					</div>
-					<div class="flex-none flex items-center gap-2">
-						<ul class="menu menu-horizontal px-1">
-							<li><a href="/projects" class={ activeClass(currentPath, "/projects") }>Projects</a></li>
-							<li><a href="/environments" class={ activeClass(currentPath, "/environments") }>Environments</a></li>
-							<li><a href="/lifecycles" class={ activeClass(currentPath, "/lifecycles") }>Lifecycles</a></li>
-							<li><a href="/deployments" class={ activeClass(currentPath, "/deployments") }>Deployments</a></li>
-							<li><a href="/templates" class={ activeClass(currentPath, "/templates") }>Templates</a></li>
-							// ponytail: inline viewer check instead of pages.CanWrite
-							// to avoid a layouts→pages→layouts import cycle.
-							// Mirrors CanWrite's `u == nil || u.Role != "viewer"`.
-							if user := auth.UserFromContext(ctx); user == nil || user.Role != "viewer" {
-								<li><a href="/settings/tokens" class={ activeClass(currentPath, "/settings/tokens") }>Tokens</a></li>
-							}
-						</ul>
+					<div class="flex items-center gap-2 md:w-full md:flex-wrap md:justify-end">
+						<details data-mobile-nav="true" class="dropdown dropdown-end ml-auto md:hidden" @keydown.escape.window="$el.open = false" @click.outside="$el.open = false">
+							<summary class="btn btn-ghost btn-sm" aria-label="Open navigation">
+								<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+								</svg>
+							</summary>
+							<ul class="dropdown-content menu bg-base-200 rounded-box z-[1] w-52 p-2 shadow">
+								<li><a href="/projects" class={ activeClass(currentPath, "/projects") }>Projects</a></li>
+								<li><a href="/environments" class={ activeClass(currentPath, "/environments") }>Environments</a></li>
+								<li><a href="/lifecycles" class={ activeClass(currentPath, "/lifecycles") }>Lifecycles</a></li>
+								<li><a href="/deployments" class={ activeClass(currentPath, "/deployments") }>Deployments</a></li>
+								<li><a href="/templates" class={ activeClass(currentPath, "/templates") }>Templates</a></li>
+								if user := auth.UserFromContext(ctx); user == nil || user.Role != "viewer" {
+									<li><a href="/settings/tokens" class={ activeClass(currentPath, "/settings/tokens") }>Tokens</a></li>
+								}
+								if user := auth.UserFromContext(ctx); user != nil && user.Role == "admin" {
+									<li>
+										<details>
+											<summary>Admin</summary>
+											<ul>
+												<li><a href="/admin/audit">Audit log</a></li>
+												<li><a href="/admin/notifications">Notifications</a></li>
+												<li><a href="/admin/tokens">API tokens</a></li>
+												<li><a href="/admin/users">Users</a></li>
+											</ul>
+										</details>
+									</li>
+								}
+								<li>
+									<button class="btn btn-ghost btn-sm w-full justify-start" @click="theme = theme === 'mocha' ? 'light' : 'mocha'">
+										<span class="theme-dark">☀️</span>
+										<span class="theme-light">🌙</span>
+									</button>
+								</li>
+								if user := auth.UserFromContext(ctx); user != nil {
+									<li><span class="px-4 py-2 text-sm opacity-70 whitespace-nowrap">{ user.Name } ({ user.Role })</span></li>
+									<li>
+										<form method="post" action="/logout">
+											<button type="submit" class="btn btn-ghost btn-sm w-full justify-start">Logout</button>
+										</form>
+									</li>
+								} else {
+									<li><a href="/login">Sign in</a></li>
+								}
+							</ul>
+						</details>
+						<div class="hidden min-w-0 flex-1 md:flex">
+							<ul class="menu menu-horizontal flex-wrap justify-end px-1">
+								<li><a href="/projects" class={ activeClass(currentPath, "/projects") }>Projects</a></li>
+								<li><a href="/environments" class={ activeClass(currentPath, "/environments") }>Environments</a></li>
+								<li><a href="/lifecycles" class={ activeClass(currentPath, "/lifecycles") }>Lifecycles</a></li>
+								<li><a href="/deployments" class={ activeClass(currentPath, "/deployments") }>Deployments</a></li>
+								<li><a href="/templates" class={ activeClass(currentPath, "/templates") }>Templates</a></li>
+								// ponytail: inline viewer check instead of pages.CanWrite
+								// to avoid a layouts→pages→layouts import cycle.
+								// Mirrors CanWrite's `u == nil || u.Role != "viewer"`.
+								if user := auth.UserFromContext(ctx); user == nil || user.Role != "viewer" {
+									<li><a href="/settings/tokens" class={ activeClass(currentPath, "/settings/tokens") }>Tokens</a></li>
+								}
+							</ul>
+						</div>
 						if user := auth.UserFromContext(ctx); user != nil && user.Role == "admin" {
-							<details class="dropdown dropdown-end">
+							<details class="dropdown dropdown-end hidden md:block">
 								<summary class="btn btn-ghost btn-sm">Admin</summary>
 								<ul class="dropdown-content menu bg-base-200 rounded-box z-[1] w-44 p-2 shadow">
 									<li><a href="/admin/audit">Audit log</a></li>
@@ -86,18 +134,20 @@ templ Base(title string, currentPath string) {
 								</ul>
 							</details>
 						}
-						<button class="btn btn-ghost btn-sm" @click="theme = theme === 'mocha' ? 'light' : 'mocha'">
-							<span class="theme-dark">☀️</span>
-							<span class="theme-light">🌙</span>
-						</button>
-						if user := auth.UserFromContext(ctx); user != nil {
-							<span class="text-sm opacity-70 whitespace-nowrap">{ user.Name } ({ user.Role })</span>
-							<form method="post" action="/logout" class="inline">
-								<button type="submit" class="btn btn-ghost btn-sm">Logout</button>
-							</form>
-						} else {
-							<a href="/login" class="btn btn-ghost btn-sm">Sign in</a>
-						}
+						<div class="hidden items-center gap-2 md:flex">
+							<button class="btn btn-ghost btn-sm" @click="theme = theme === 'mocha' ? 'light' : 'mocha'">
+								<span class="theme-dark">☀️</span>
+								<span class="theme-light">🌙</span>
+							</button>
+							if user := auth.UserFromContext(ctx); user != nil {
+								<span class="text-sm opacity-70 whitespace-nowrap">{ user.Name } ({ user.Role })</span>
+								<form method="post" action="/logout" class="inline">
+									<button type="submit" class="btn btn-ghost btn-sm">Logout</button>
+								</form>
+							} else {
+								<a href="/login" class="btn btn-ghost btn-sm">Sign in</a>
+							}
+						</div>
 					</div>
 				</div>
 			</div>

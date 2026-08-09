@@ -39,12 +39,12 @@ templ TemplatesListFragment(templates []db.StepTemplate) {
 				}
 			</div>
 		} else {
-			<table class="table table-zebra w-full">
+			<div class="overflow-x-auto">
+				<table class="table table-zebra table-fixed w-full">
 				<thead>
 					<tr>
-						<th>Name</th>
-						<th>Script</th>
-						<th>Actions</th>
+						<th class="w-auto">Name</th>
+						<th class="w-48">Actions</th>
 					</tr>
 				</thead>
 				<tbody>
@@ -52,22 +52,20 @@ templ TemplatesListFragment(templates []db.StepTemplate) {
 						@TemplateRow(tpl)
 					}
 				</tbody>
-			</table>
+				</table>
+			</div>
 		}
 	</div>
 }
 
 templ TemplateRow(tpl db.StepTemplate) {
 	<tr>
-		<td>{ tpl.Name }</td>
-		<td>
-			<code class="text-sm bg-base-200 px-2 py-1 rounded">
-				if len(tpl.ScriptBody) > 60 {
-					{ tpl.ScriptBody[:60] + "..." }
-				} else {
-					{ tpl.ScriptBody }
-				}
-			</code>
+		<td class="min-w-0">
+			<p class="break-words">{ tpl.Name }</p>
+			<details class="mt-1 text-sm" data-disclosure={ "template-script-" + strconv.FormatInt(tpl.ID, 10) }>
+				<summary class="cursor-pointer text-primary">View full script</summary>
+				<pre class="mt-2 whitespace-pre-wrap break-words rounded bg-base-100 p-3 text-xs"><code>{ tpl.ScriptBody }</code></pre>
+			</details>
 		</td>
 		<td class="flex gap-2">
 			if CanWrite(ctx) {

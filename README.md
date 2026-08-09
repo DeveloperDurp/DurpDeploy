@@ -2,8 +2,6 @@
 
 A single-binary deployment tool for running bash scripts against environments. Define projects, write deployment steps, manage environment-scoped variables, create immutable releases, and deploy them with live log streaming in the browser.
 
-*** This Application is a test of "Vibe Coding" and what can and cannot be done with AI ***
-
 ![Main Screen](screenshots/main_screen.png)
 
 ## Features

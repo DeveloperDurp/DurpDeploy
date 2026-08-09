@@ -1,0 +1,31 @@
+# syntax=docker/dockerfile:1
+# Go 1.26 is copied into Playwright's pinned runtime image so its bundled
+# Chromium and Linux dependencies match package-lock.json's Playwright 1.61.1.
+FROM golang:1.26-bookworm AS go
+
+FROM mcr.microsoft.com/playwright:v1.61.1-noble
+
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+
+# hadolint ignore=DL3008
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        ca-certificates \
+        git \
+        make && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY --from=go /usr/local/go /usr/local/go
+ENV PATH=/go/bin:/usr/local/go/bin:${PATH}
+
+RUN GOBIN=/usr/local/bin go install github.com/a-h/templ/cmd/templ@v0.3.1020
+
+WORKDIR /opt/mobile-browser
+COPY package.json package-lock.json ./
+RUN npm ci
+
+COPY scripts/mobile-browser-container.sh /usr/local/bin/mobile-browser-container
+RUN chmod 0755 /usr/local/bin/mobile-browser-container
+
+WORKDIR /workspace
+ENTRYPOINT ["/usr/local/bin/mobile-browser-container"]

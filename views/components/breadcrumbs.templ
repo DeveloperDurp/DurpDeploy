@@ -7,7 +7,7 @@ type Crumb struct {
 
 templ Breadcrumbs(crumbs []Crumb) {
 	<div class="breadcrumbs text-sm">
-		<ul>
+		<ul class="flex-wrap text-xs sm:text-sm">
 			for _, c := range crumbs {
 				<li>
 					if c.Href != "" {
