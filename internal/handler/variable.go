@@ -246,7 +246,8 @@ func (h *VariableHandler) UpdateVariable(
 		http.Error(w, "Invalid variable ID", http.StatusBadRequest)
 		return
 	}
-	if _, err := h.getProjectVariable(r, projectID, varID); err != nil {
+	variable, err := h.getProjectVariable(r, projectID, varID)
+	if err != nil {
 		if err == sql.ErrNoRows {
 			http.NotFound(w, r)
 			return
@@ -269,6 +270,7 @@ func (h *VariableHandler) UpdateVariable(
 			ProjectID: projectID,
 			Name:      name,
 			Value:     sql.NullString{String: value, Valid: value != ""},
+			Secret:    secret,
 		}
 		environments, _ := h.repo.Queries.ListEnvironments(r.Context())
 		if envIDStr != "" {
@@ -310,10 +312,15 @@ func (h *VariableHandler) UpdateVariable(
 		envID = sql.NullInt64{Int64: id, Valid: true}
 	}
 
+	variableValue := sql.NullString{String: value, Valid: value != ""}
+	if secret != 0 && value == "" && variable.Secret != 0 {
+		variableValue = variable.Value
+	}
+
 	params := db.UpdateVariableParams{
 		ID:            varID,
 		Name:          name,
-		Value:         sql.NullString{String: value, Valid: value != ""},
+		Value:         variableValue,
 		EnvironmentID: envID,
 		Secret:        secret,
 	}
@@ -330,6 +337,7 @@ func (h *VariableHandler) UpdateVariable(
 					Valid:  value != "",
 				},
 				EnvironmentID: envID,
+				Secret:        secret,
 			}
 			environments, _ := h.repo.Queries.ListEnvironments(r.Context())
 			project, _ := h.repo.Queries.GetProject(r.Context(), projectID)

@@ -37,6 +37,13 @@ func envNameForID(environments []db.Environment, id int64) string {
 	return ""
 }
 
+func variableEditValue(variable db.Variable) string {
+	if variable.Secret != 0 {
+		return ""
+	}
+	return variable.Value.String
+}
+
 templ VariablesPage(project db.Project, variables []db.Variable, environments []db.Environment, errorMsg string, currentPath string) {
 	@layouts.Base("Variables", currentPath) {
 		@components.Breadcrumbs([]components.Crumb{
@@ -237,7 +244,7 @@ templ VariableEditRow(projectID int64, variable db.Variable, environments []db.E
 			}
 		</td>
 		<td>
-			<input :type="secret ? 'password' : 'text'" name="value" value={ variable.Value.String } :placeholder="secret ? '••••••••' : ''" form={ fmt.Sprintf("variable-edit-form-%d", variable.ID) } class="input input-bordered input-sm w-full"/>
+			<input :type="secret ? 'password' : 'text'" name="value" value={ variableEditValue(variable) } :placeholder="secret ? 'Leave blank to keep existing secret' : ''" form={ fmt.Sprintf("variable-edit-form-%d", variable.ID) } class="input input-bordered input-sm w-full"/>
 		</td>
 		<td>
 			<select name="environment_id" form={ fmt.Sprintf("variable-edit-form-%d", variable.ID) } class="select select-bordered select-sm w-full">
