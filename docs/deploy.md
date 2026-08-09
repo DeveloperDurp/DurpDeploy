@@ -82,18 +82,18 @@ Caddy, TLS, and Litestream are NOT included — bring your own.
 
 ---
 
-## Database: SQLite (default) or PostgreSQL
+## Database: SQLite (default), PostgreSQL, or SQL Server
 
 DurpDeploy runs on SQLite out of the box — no separate database server to
 provision, and the recommended choice for a single-instance install (see
 `docs/backup-restore.md` for the Litestream-based backup story).
 
-PostgreSQL is also fully supported, for teams that already run Postgres and
-want the app's data alongside everything else. The driver is picked
-automatically from `DURPDEPLOY_DB`: a `postgres://` or `postgresql://` URL
-talks to PostgreSQL, anything else is treated as a SQLite file path (the
-default). Both use the exact same migrations and queries — no separate
-schema to maintain.
+PostgreSQL and SQL Server are also supported for teams that already operate
+those databases. The driver is selected from `DURPDEPLOY_DB`: `postgres://`
+and `postgresql://` URLs use PostgreSQL, while `sqlserver://` URLs use SQL
+Server. Any other value is treated as a SQLite file path (the default).
+PostgreSQL shares the SQLite migrations; SQL Server applies the embedded native
+MSSQL migrations while using the same generated query API.
 
 ```bash
 # SQLite (default)
@@ -101,11 +101,14 @@ export DURPDEPLOY_DB=/var/lib/durpdeploy/durpdeploy.db
 
 # PostgreSQL
 export DURPDEPLOY_DB="postgres://durpdeploy:<password>@localhost:5432/durpdeploy?sslmode=disable"
+
+# SQL Server (TLS is required by default; use a certificate trusted by the host)
+export DURPDEPLOY_DB="sqlserver://durpdeploy:<password>@sqlserver.example.com:1433?database=durpdeploy"
 ```
 
 Migrations run automatically on startup against whichever database
-`DURPDEPLOY_DB` points at, same as SQLite. There is no dump/import path
-between the two — pick one per environment.
+`DURPDEPLOY_DB` points at. There is no dump/import path between database
+engines — pick one per environment.
 
 ---
 

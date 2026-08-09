@@ -45,10 +45,10 @@ FROM alpine:3.20
 
 # Install runtime essentials (CA certificates for HTTPS notifications, bash
 # because the deployment runner executes step scripts via os/exec and Alpine
-# base only provides busybox /bin/sh), then create a non-root user with a
-# stable UID. No shell, no home, no password.
+# base only provides busybox /bin/sh, and util-linux for setpriv), then create
+# a non-root user with a stable UID. No shell, no home, no password.
 # hadolint ignore=DL3018
-RUN apk add --no-cache ca-certificates bash && \
+RUN apk add --no-cache ca-certificates bash util-linux && \
     adduser -D -u 10001 durpdeploy
 
 # Data directory for the SQLite database and WAL files. Chown to the runtime
@@ -76,4 +76,4 @@ ENTRYPOINT ["/usr/local/bin/durpdeploy"]
 # Probe the /login endpoint. It returns a 303 redirect when the server is alive,
 # which is enough for an orchestrator to consider the container healthy.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-  CMD-SHELL ["wget", "-q", "-O", "/dev/null", "http://localhost:8080/login"]
+  CMD ["wget", "-q", "-O", "/dev/null", "http://localhost:8080/login"]

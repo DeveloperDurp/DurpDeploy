@@ -331,9 +331,24 @@ func (h *AdminHandler) Maintenance(w http.ResponseWriter, r *http.Request) {
 //	  403: body:ForbiddenError
 //	  500: body:ServerError
 func (h *AdminHandler) DbTables(w http.ResponseWriter, r *http.Request) {
+	query := "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+	if _, err := h.repo.DB.ExecContext(
+		r.Context(),
+		"SELECT sqlite_version()",
+	); err != nil {
+		if r.Context().Err() != nil {
+			RespondError(
+				w,
+				http.StatusInternalServerError,
+				r.Context().Err().Error(),
+			)
+			return
+		}
+		query = "SELECT table_name FROM information_schema.tables WHERE table_type = 'BASE TABLE' AND table_schema NOT IN ('information_schema', 'sys') ORDER BY table_name"
+	}
 	rows, err := h.repo.DB.QueryContext(
 		r.Context(),
-		"SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'",
+		query,
 	)
 	if err != nil {
 		RespondError(w, http.StatusInternalServerError, err.Error())
@@ -349,6 +364,10 @@ func (h *AdminHandler) DbTables(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		tables = append(tables, name)
+	}
+	if err := rows.Err(); err != nil {
+		RespondError(w, http.StatusInternalServerError, err.Error())
+		return
 	}
 	RespondJSON(w, http.StatusOK, tables)
 }

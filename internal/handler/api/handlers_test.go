@@ -102,6 +102,7 @@ func newHarness(t *testing.T) *testHarness {
 				adminH.UpdateNotificationSettings,
 			)
 			aar.Get("/api/v1/admin/audit", adminH.ListAuditLogs)
+			aar.Get("/api/v1/admin/db-tables", adminH.DbTables)
 
 			usersH := api.NewUsersHandler(repo)
 			aar.Get("/api/v1/admin/users", usersH.ListUsers)
@@ -1301,6 +1302,22 @@ func TestAdmin_AuditLogs(t *testing.T) {
 	list := decodeList(t, rec)
 	if len(list) == 0 {
 		t.Fatal("expected audit logs, got none")
+	}
+}
+
+func TestAdmin_DbTables(t *testing.T) {
+	h := newHarness(t)
+	token := h.adminToken(t)
+
+	rec := h.request(t, http.MethodGet, "/api/v1/admin/db-tables", token, "")
+	h.assertStatus(t, rec, http.StatusOK)
+
+	var tables []string
+	if err := json.Unmarshal(rec.Body.Bytes(), &tables); err != nil {
+		t.Fatalf("decode tables: %v", err)
+	}
+	if len(tables) == 0 {
+		t.Fatal("expected migrated database tables, got none")
 	}
 }
 

@@ -34,7 +34,7 @@ CI runs `templ generate` as `before_script` for every stage — mirror that for 
 ./durpdeploy                       # listens on :8080 (hardcoded), creates durpdeploy.db in CWD
 go test -v -count=1 ./...          # CI's exact command
 go test -run TestName ./internal/handler/...   # single test, single package
-./e2e_test.sh                      # bash end-to-end: builds, runs server, curl happy/cancel/validation paths (~10s+)
+./scripts/e2e_test.sh              # bash end-to-end: builds, runs server, curl happy/cancel/validation paths (~10s+)
 ```
 
 CI stage order: `lint` (`go vet ./...` + `gofmt -l .` must be empty) → `test` → `build`. Go fails CI if any file isn't gofmt'd.
@@ -48,7 +48,7 @@ CI stage order: `lint` (`go vet ./...` + `gofmt -l .` must be empty) → `test` 
 - **DSN is fixed** in `cmd/server/main.go`: `durpdeploy.db?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)`. Database file, WAL, and SHM are gitignored.
 - **Deployment runner** (`internal/runner/runner.go`) runs bash steps sequentially via `os/exec`, streams logs through `LogBroker` (SSE). Tracks in-flight cancels in a `map[int64]context.CancelFunc` keyed by deployment ID. **Auth is at the HTTP boundary, not the runner** — the runner still executes as the server's user; per-step sandbox lands in P1-3. No parallel step execution, bash only.
 - **Releases are immutable snapshots** of steps + variables (stored as `steps_json`); a release does not track later edits to steps/variables. Refresh endpoint re-snapshots.
-- Templ tags render to HTMX swaps; handlers return 303 for POST redirects, 422 for validation failures (see `e2e_test.sh` for the contract).
+- Templ tags render to HTMX swaps; handlers return 303 for POST redirects, 422 for validation failures (see `scripts/e2e_test.sh` for the contract).
 
 ## Viewer role — UI gating pattern
 
@@ -145,6 +145,6 @@ Rules:
 - Two stdlib options, same size? Take the one correct on edge cases. Lazy = less code, not flimsier algorithm.
 - Output: code first, then at most three short lines — what was skipped, when to add it. No essays, no feature tours.
 
-Never lazy away: input validation at trust boundaries (HTTP handlers, `e2e_test.sh` contract), error handling that prevents data loss (release snapshots, deployment cancel), security, accessibility basics, anything explicitly requested.
+Never lazy away: input validation at trust boundaries (HTTP handlers, `scripts/e2e_test.sh` contract), error handling that prevents data loss (release snapshots, deployment cancel), security, accessibility basics, anything explicitly requested.
 
 Never lazy about understanding the problem — the ladder shortens the solution, never the reading. Trace the whole flow end to end first, then climb.
