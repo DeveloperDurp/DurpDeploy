@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -188,42 +187,46 @@ func (h *LogHandler) ExportLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logs, err := h.repo.Queries.ListDeploymentLogsByDeployment(
-		r.Context(),
-		depID,
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set(
+		"Content-Disposition",
+		fmt.Sprintf(`attachment; filename="deployment-%d.log"`, depID),
 	)
-	if err != nil {
-		RespondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
+	w.WriteHeader(http.StatusOK)
 
-	var buf strings.Builder
-	buf.WriteString(fmt.Sprintf(
+	fmt.Fprintf(
+		w,
 		"=== deployment #%d | project=%s | release=%s | env=%s | status=%s ===\n",
 		depID,
 		project.Name,
 		release.Version,
 		environment.Name,
 		deployment.Status,
-	))
-	for i := len(logs) - 1; i >= 0; i-- {
-		lg := logs[i]
-		ts := time.Unix(lg.CreatedAt, 0).UTC().Format("2006-01-02 15:04:05")
-		if lg.StepName.Valid {
-			buf.WriteString(
-				fmt.Sprintf("[%s] [%s] %s\n", ts, lg.StepName.String, lg.Line),
-			)
-		} else {
-			buf.WriteString(fmt.Sprintf("[%s] %s\n", ts, lg.Line))
-		}
+	)
+	err = h.repo.ForEachDeploymentLogByDeploymentAsc(
+		r.Context(),
+		depID,
+		func(lg db.DeploymentLog) error {
+			ts := time.Unix(lg.CreatedAt, 0).UTC().Format("2006-01-02 15:04:05")
+			if lg.StepName.Valid {
+				_, err := fmt.Fprintf(
+					w,
+					"[%s] [%s] %s\n",
+					ts,
+					lg.StepName.String,
+					lg.Line,
+				)
+				return err
+			}
+			_, err := fmt.Fprintf(w, "[%s] %s\n", ts, lg.Line)
+			return err
+		},
+	)
+	if err != nil {
+		return
 	}
-	buf.WriteByte('\n')
+	_, _ = fmt.Fprintln(w)
 
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.Header().
-		Set("Content-Disposition", fmt.Sprintf(`attachment; filename="deployment-%d.log"`, depID))
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(buf.String()))
 }
 
 // GetLog returns a single deployment log entry.
