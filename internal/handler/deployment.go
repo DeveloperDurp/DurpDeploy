@@ -334,7 +334,10 @@ func (h *DeploymentHandler) ScheduleDeployment(
 			h.renderDeployGateError(w, r, project, release, violation.reason)
 			return
 		}
-		if u := auth.UserFromContext(r.Context()); u == nil || u.Role != "admin" {
+		if u := auth.UserFromContext(
+			r.Context(),
+		); u == nil ||
+			u.Role != "admin" {
 			http.Error(
 				w,
 				"only admins can force deployments past lifecycle gates",

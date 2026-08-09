@@ -206,7 +206,9 @@ func requireMobileBrowserPrerequisites(t *testing.T, root string) {
 }
 
 func mobileBrowserNodeModules(root string) string {
-	if nodeModules := os.Getenv("MOBILE_BROWSER_NODE_MODULES"); nodeModules != "" {
+	if nodeModules := os.Getenv(
+		"MOBILE_BROWSER_NODE_MODULES",
+	); nodeModules != "" {
 		return nodeModules
 	}
 	return filepath.Join(root, "node_modules")
