@@ -106,7 +106,7 @@ swagger-ui-copy: npm-install
 	cp node_modules/swagger-ui-dist/favicon-16x16.png static/swagger-ui/
 
 npm-install:
-	npm install
+	npm ci --ignore-scripts
 
 tailwind-build: npm-install
 	npx tailwindcss -i static/css/input.css -o static/css/tailwind.min.css --minify
