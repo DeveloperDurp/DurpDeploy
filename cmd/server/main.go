@@ -77,6 +77,16 @@ func loadDSN() string {
 	return defaultDSN
 }
 
+// loadAddr returns the HTTP listen address. The default preserves the
+// historical :8080 behavior; tests can bind 127.0.0.1:0-style addresses by
+// setting DURPDEPLOY_ADDR.
+func loadAddr() string {
+	if addr := os.Getenv("DURPDEPLOY_ADDR"); addr != "" {
+		return addr
+	}
+	return ":8080"
+}
+
 // runServer starts the HTTP server. This is the body of the former main().
 func runServer() {
 	// Registered before anything else (migrations, recovery) so a signal
@@ -145,7 +155,8 @@ func runServer() {
 	// that goroutine dies with the process.
 	recoverPendingDeployments(ctx, rnr, repo)
 
-	srv := &http.Server{Addr: ":8080", Handler: r}
+	addr := loadAddr()
+	srv := &http.Server{Addr: addr, Handler: r}
 
 	// Graceful shutdown: on SIGINT/SIGTERM, stop accepting new connections
 	// and SIGKILL any in-flight deploy step's process group so a restart
@@ -170,7 +181,7 @@ func runServer() {
 		rnr.KillAll()
 	}()
 
-	slog.Info("server starting", "addr", ":8080")
+	slog.Info("server starting", "addr", addr)
 	if err := srv.ListenAndServe(); err != nil &&
 		!errors.Is(err, http.ErrServerClosed) {
 		log.Fatalf("server failed: %v", err)
