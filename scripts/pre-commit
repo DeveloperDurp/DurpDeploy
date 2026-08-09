@@ -8,7 +8,7 @@
 set -euo pipefail
 
 if ! command -v golines >/dev/null 2>&1; then
-	echo "golines not found in PATH. Install: go install github.com/segmentio/golines@latest" >&2
+	echo "golines not found in PATH. Install: go install github.com/segmentio/golines@v0.12.2" >&2
 	exit 1
 fi
 

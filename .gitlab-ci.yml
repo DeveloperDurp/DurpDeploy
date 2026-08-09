@@ -29,7 +29,7 @@ lint:
     - test -z "$(gofmt -l .)"
     # ponytail: same gate as scripts/pre-commit. --no-verify bypasses the
     # local hook but can't bypass CI; line-width drift is caught here.
-    - go install github.com/segmentio/golines@latest
+    - go install github.com/segmentio/golines@v0.12.2
     - test -z "$(golines -m 80 --ignore-generated -l .)"
   allow_failure: false
 
