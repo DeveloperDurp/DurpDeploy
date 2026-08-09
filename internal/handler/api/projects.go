@@ -8,6 +8,7 @@ import (
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/handler"
+	"durpdeploy/internal/notify"
 	"durpdeploy/internal/repository"
 )
 
@@ -499,28 +500,36 @@ func (h *ProjectHandler) UpdateProjectNotifications(
 		return
 	}
 
+	webhook := trimSpace(req.SlackWebhookURL)
+	gotifyURL := trimSpace(req.GotifyURL)
+	discordWebhook := trimSpace(req.DiscordWebhookURL)
+	if err := validateNotificationURLs(webhook, gotifyURL, discordWebhook); err != nil {
+		RespondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
 	err = h.repo.Queries.UpdateProjectNotifications(
 		r.Context(),
 		db.UpdateProjectNotificationsParams{
 			SlackWebhookUrl: sql.NullString{
-				String: trimSpace(req.SlackWebhookURL),
-				Valid:  trimSpace(req.SlackWebhookURL) != "",
+				String: webhook,
+				Valid:  webhook != "",
 			},
 			NotifyEmails: sql.NullString{
 				String: trimSpace(req.NotifyEmails),
 				Valid:  trimSpace(req.NotifyEmails) != "",
 			},
 			GotifyUrl: sql.NullString{
-				String: trimSpace(req.GotifyURL),
-				Valid:  trimSpace(req.GotifyURL) != "",
+				String: gotifyURL,
+				Valid:  gotifyURL != "",
 			},
 			GotifyToken: sql.NullString{
 				String: trimSpace(req.GotifyToken),
 				Valid:  trimSpace(req.GotifyToken) != "",
 			},
 			DiscordWebhookUrl: sql.NullString{
-				String: trimSpace(req.DiscordWebhookURL),
-				Valid:  trimSpace(req.DiscordWebhookURL) != "",
+				String: discordWebhook,
+				Valid:  discordWebhook != "",
 			},
 			ID: id,
 		},
@@ -537,4 +546,13 @@ func (h *ProjectHandler) UpdateProjectNotifications(
 	}
 
 	RespondJSON(w, http.StatusOK, toProjectNotificationResponse(project))
+}
+
+func validateNotificationURLs(urls ...string) error {
+	for _, raw := range urls {
+		if err := notify.ValidateEndpointURL(raw); err != nil {
+			return err
+		}
+	}
+	return nil
 }

@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"time"
 
 	"durpdeploy/internal/events"
 )
@@ -22,7 +21,11 @@ type SlackNotifier struct {
 }
 
 func NewSlackNotifier() *SlackNotifier {
-	return &SlackNotifier{httpClient: &http.Client{Timeout: 10 * time.Second}}
+	return NewSlackNotifierWithClient(NewHTTPClient())
+}
+
+func NewSlackNotifierWithClient(client *http.Client) *SlackNotifier {
+	return &SlackNotifier{httpClient: client}
 }
 
 func (s *SlackNotifier) Name() string { return "slack" }

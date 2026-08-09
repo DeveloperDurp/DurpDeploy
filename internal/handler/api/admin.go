@@ -212,28 +212,36 @@ func (h *AdminHandler) UpdateNotificationSettings(
 		return
 	}
 
+	webhook := trimSpace(req.SlackWebhookURL)
+	gotifyURL := trimSpace(req.GotifyURL)
+	discordWebhook := trimSpace(req.DiscordWebhookURL)
+	if err := validateNotificationURLs(webhook, gotifyURL, discordWebhook); err != nil {
+		RespondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
 	settings, err := h.repo.Queries.UpdateGlobalNotifications(
 		r.Context(),
 		db.UpdateGlobalNotificationsParams{
 			SlackWebhookUrl: sql.NullString{
-				String: req.SlackWebhookURL,
-				Valid:  req.SlackWebhookURL != "",
+				String: webhook,
+				Valid:  webhook != "",
 			},
 			NotifyEmails: sql.NullString{
 				String: req.NotifyEmails,
 				Valid:  req.NotifyEmails != "",
 			},
 			GotifyUrl: sql.NullString{
-				String: req.GotifyURL,
-				Valid:  req.GotifyURL != "",
+				String: gotifyURL,
+				Valid:  gotifyURL != "",
 			},
 			GotifyToken: sql.NullString{
 				String: req.GotifyToken,
 				Valid:  req.GotifyToken != "",
 			},
 			DiscordWebhookUrl: sql.NullString{
-				String: req.DiscordWebhookURL,
-				Valid:  req.DiscordWebhookURL != "",
+				String: discordWebhook,
+				Valid:  discordWebhook != "",
 			},
 		},
 	)
