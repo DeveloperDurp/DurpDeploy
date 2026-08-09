@@ -1,4 +1,4 @@
-image: golang:1.26-alpine
+image: golang:1.26-alpine@sha256:0178a641fbb4858c5f1b48e34bdaabe0350a330a1b1149aabd498d0699ff5fb2
 
 # Tests spin up real bash via os/exec to run deployment scripts. The alpine
 # base image doesn't ship bash by default, so install it before any stage
@@ -16,7 +16,7 @@ default:
 lint:
   stage: lint
   before_script:
-    - go install github.com/a-h/templ/cmd/templ@latest
+    - go install github.com/a-h/templ/cmd/templ@v0.3.1020
     - templ generate
     # ponytail: static/swagger-ui/ is gitignored (build artifacts from
     # node_modules/swagger-ui-dist), so the //go:embed pattern in
@@ -46,7 +46,7 @@ test:
   before_script:
     # ponytail: tests spawn the deployment runner, which exec's `bash` to run step scripts. The `default.before_script` doesn't reliably run in this Kubernetes executor, so install explicitly.
     - apk add --no-cache bash make nodejs npm util-linux
-    - go install github.com/a-h/templ/cmd/templ@latest
+    - go install github.com/a-h/templ/cmd/templ@v0.3.1020
     - templ generate
     # ponytail: static/swagger-ui/ is gitignored; materialize it before the test build walks the import graph.
     - make swagger-ui-copy
@@ -62,7 +62,7 @@ test:
 build:
   stage: build
   before_script:
-    - go install github.com/a-h/templ/cmd/templ@latest
+    - go install github.com/a-h/templ/cmd/templ@v0.3.1020
     - templ generate
     # ponytail: static/swagger-ui/ is gitignored; materialize it before the build.
     - apk add --no-cache make nodejs npm
