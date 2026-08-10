@@ -4,12 +4,12 @@ go 1.25.7
 
 require (
 	github.com/a-h/templ v0.3.1020
+	github.com/pressly/goose/v3 v3.27.2
 	github.com/go-chi/chi/v5 v5.3.1
 	github.com/go-openapi/runtime v0.32.6
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/microsoft/go-mssqldb v1.10.0
-	github.com/pressly/goose/v3 v3.27.1
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/testcontainers/testcontainers-go v0.43.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.43.0
