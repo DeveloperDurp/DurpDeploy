@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 
 	"durpdeploy/internal/db"
@@ -36,45 +37,86 @@ func (r *Repository) notifyRemoteWork() {
 }
 
 // ForEachDeploymentLogByDeploymentAsc streams deployment log rows oldest-first
-// without materializing the full result set in memory.
+// in bounded batches. The rows are closed before fn is called so a slow export
+// client cannot pin a database connection.
 func (r *Repository) ForEachDeploymentLogByDeploymentAsc(
 	ctx context.Context,
 	deploymentID int64,
 	fn func(db.DeploymentLog) error,
 ) error {
-	rows, err := r.DB.QueryContext(ctx, `
-SELECT l.id, l.deployment_id, l.step_name, l.line, l.created_at
-FROM deployment_logs l
-LEFT JOIN deployment_log_scopes s ON s.log_id = l.id
-WHERE l.deployment_id = ?
-ORDER BY CASE
-    WHEN s.step_index IS NULL AND s.attempt IS NULL THEN 0 ELSE 1
-END,
-CASE
-    WHEN s.step_index IS NULL AND s.attempt IS NULL THEN s.sequence
-END,
-l.created_at ASC, l.id ASC`, deploymentID)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
+	const batchSize = 256
+	var lastScopeSequence, lastCreatedAt, lastID int64
+	lastScopeGroup := int64(-1)
+	for {
+		rows, err := r.DB.QueryContext(ctx, `
+WITH ordered_logs AS (
+    SELECT l.id, l.deployment_id, l.step_name, l.line, l.created_at,
+        CASE
+            WHEN s.step_index IS NULL AND s.attempt IS NULL THEN 0 ELSE 1
+        END AS scope_group,
+        CASE
+            WHEN s.step_index IS NULL AND s.attempt IS NULL
+                THEN COALESCE(s.sequence, -1)
+            ELSE -1
+        END AS scope_sequence
+    FROM deployment_logs l
+    LEFT JOIN deployment_log_scopes s ON s.log_id = l.id
+    WHERE l.deployment_id = ?
+)
+SELECT id, deployment_id, step_name, line, created_at,
+    scope_group, scope_sequence
+FROM ordered_logs
+WHERE scope_group > ?
+    OR (scope_group = ? AND scope_sequence > ?)
+    OR (scope_group = ? AND scope_sequence = ? AND created_at > ?)
+    OR (scope_group = ? AND scope_sequence = ? AND created_at = ? AND id > ?)
+ORDER BY scope_group ASC, scope_sequence ASC, created_at ASC, id ASC
+LIMIT ?`,
+			deploymentID,
+			lastScopeGroup,
+			lastScopeGroup, lastScopeSequence,
+			lastScopeGroup, lastScopeSequence, lastCreatedAt,
+			lastScopeGroup, lastScopeSequence, lastCreatedAt, lastID,
+			batchSize,
+		)
+		if err != nil {
+			return err
+		}
 
-	for rows.Next() {
-		var log db.DeploymentLog
-		if err := rows.Scan(
-			&log.ID,
-			&log.DeploymentID,
-			&log.StepName,
-			&log.Line,
-			&log.CreatedAt,
-		); err != nil {
+		logs := make([]db.DeploymentLog, 0, batchSize)
+		for rows.Next() {
+			var log db.DeploymentLog
+			if err := rows.Scan(
+				&log.ID,
+				&log.DeploymentID,
+				&log.StepName,
+				&log.Line,
+				&log.CreatedAt,
+				&lastScopeGroup,
+				&lastScopeSequence,
+			); err != nil {
+				return errors.Join(err, rows.Close())
+			}
+			logs = append(logs, log)
+		}
+		if err := rows.Err(); err != nil {
+			return errors.Join(err, rows.Close())
+		}
+		if err := rows.Close(); err != nil {
 			return err
 		}
-		if err := fn(log); err != nil {
-			return err
+
+		for _, log := range logs {
+			if err := fn(log); err != nil {
+				return err
+			}
 		}
+		if len(logs) < batchSize {
+			return nil
+		}
+		last := logs[len(logs)-1]
+		lastCreatedAt, lastID = last.CreatedAt, last.ID
 	}
-	return rows.Err()
 }
 
 // SetSecretBox configures the AES-GCM box used to encrypt/decrypt the
