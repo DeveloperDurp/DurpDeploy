@@ -5,12 +5,91 @@ import (
 	"database/sql"
 	"strings"
 	"testing"
+	"time"
 
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/migrate"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/secret"
 )
+
+func TestDeploymentLogIterationReleasesConnectionBeforeCallback(t *testing.T) {
+	repo := newTestRepo(t)
+	repo.DB.SetMaxOpenConns(1)
+	ctx := context.Background()
+
+	project, err := repo.Queries.CreateProject(ctx, db.CreateProjectParams{
+		Name: "export-project",
+	})
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	environment, err := repo.Queries.CreateEnvironment(
+		ctx,
+		db.CreateEnvironmentParams{Name: "export-environment"},
+	)
+	if err != nil {
+		t.Fatalf("create environment: %v", err)
+	}
+	release, err := repo.Queries.CreateRelease(ctx, db.CreateReleaseParams{
+		ProjectID: project.ID,
+		Version:   "export-release",
+		StepsJson: "[]",
+	})
+	if err != nil {
+		t.Fatalf("create release: %v", err)
+	}
+	deployment, err := repo.Queries.CreateDeployment(
+		ctx,
+		db.CreateDeploymentParams{
+			ReleaseID:     release.ID,
+			EnvironmentID: environment.ID,
+			Status:        "success",
+		},
+	)
+	if err != nil {
+		t.Fatalf("create deployment: %v", err)
+	}
+	if _, err := repo.Queries.CreateDeploymentLog(
+		ctx,
+		db.CreateDeploymentLogParams{
+			DeploymentID: deployment.ID,
+			Line:         "export log",
+		},
+	); err != nil {
+		t.Fatalf("create deployment log: %v", err)
+	}
+
+	callbackStarted := make(chan struct{})
+	releaseCallback := make(chan struct{})
+	iterationDone := make(chan error, 1)
+	go func() {
+		iterationDone <- repo.ForEachDeploymentLogByDeploymentAsc(
+			ctx,
+			deployment.ID,
+			func(db.DeploymentLog) error {
+				close(callbackStarted)
+				<-releaseCallback
+				return nil
+			},
+		)
+	}()
+	<-callbackStarted
+
+	queryCtx, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+	var count int
+	if err := repo.DB.QueryRowContext(
+		queryCtx,
+		"SELECT COUNT(*) FROM projects",
+	).Scan(&count); err != nil {
+		t.Fatalf("query while callback is blocked: %v", err)
+	}
+	close(releaseCallback)
+	if err := <-iterationDone; err != nil {
+		t.Fatalf("iterate deployment logs: %v", err)
+	}
+}
 
 func newTestRepo(t *testing.T) *repository.Repository {
 	t.Helper()
