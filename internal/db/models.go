@@ -93,6 +93,41 @@ type LifecycleStage struct {
 	RequiresApproval int64 `json:"requires_approval"`
 }
 
+type MfaChallenge struct {
+	TokenHash    []byte         `json:"token_hash"`
+	UserID       int64          `json:"user_id"`
+	SessionID    sql.NullString `json:"session_id"`
+	Purpose      string         `json:"purpose"`
+	CsrfHash     []byte         `json:"csrf_hash"`
+	CeremonyJson string         `json:"ceremony_json"`
+	Attempts     int64          `json:"attempts"`
+	ExpiresAt    int64          `json:"expires_at"`
+	CreatedAt    int64          `json:"created_at"`
+}
+
+type MfaRateLimit struct {
+	UserID          int64         `json:"user_id"`
+	WindowStartedAt int64         `json:"window_started_at"`
+	FailureCount    int64         `json:"failure_count"`
+	BlockedUntil    sql.NullInt64 `json:"blocked_until"`
+}
+
+type MfaRecoveryCode struct {
+	ID        string        `json:"id"`
+	UserID    int64         `json:"user_id"`
+	CodeHash  []byte        `json:"code_hash"`
+	UsedAt    sql.NullInt64 `json:"used_at"`
+	CreatedAt int64         `json:"created_at"`
+}
+
+type MfaTotp struct {
+	UserID           int64         `json:"user_id"`
+	EncryptedSeed    []byte        `json:"encrypted_seed"`
+	LastAcceptedStep sql.NullInt64 `json:"last_accepted_step"`
+	CreatedAt        int64         `json:"created_at"`
+	UpdatedAt        int64         `json:"updated_at"`
+}
+
 type NotificationEvent struct {
 	ID            int64         `json:"id"`
 	EventType     string        `json:"event_type"`
@@ -157,13 +192,14 @@ type ScheduledDeployment struct {
 }
 
 type Session struct {
-	ID        string         `json:"id"`
-	UserID    int64          `json:"user_id"`
-	CsrfToken string         `json:"csrf_token"`
-	CreatedAt int64          `json:"created_at"`
-	ExpiresAt int64          `json:"expires_at"`
-	IpAddress sql.NullString `json:"ip_address"`
-	UserAgent sql.NullString `json:"user_agent"`
+	ID                string         `json:"id"`
+	UserID            int64          `json:"user_id"`
+	CsrfToken         string         `json:"csrf_token"`
+	CreatedAt         int64          `json:"created_at"`
+	ExpiresAt         int64          `json:"expires_at"`
+	IpAddress         sql.NullString `json:"ip_address"`
+	UserAgent         sql.NullString `json:"user_agent"`
+	ReauthenticatedAt sql.NullInt64  `json:"reauthenticated_at"`
 }
 
 type Step struct {
@@ -212,4 +248,33 @@ type Variable struct {
 	EnvironmentID sql.NullInt64  `json:"environment_id"`
 	CreatedAt     int64          `json:"created_at"`
 	Secret        int64          `json:"secret"`
+}
+
+type WebauthnCredential struct {
+	CredentialID                  []byte         `json:"credential_id"`
+	UserID                        int64          `json:"user_id"`
+	Name                          string         `json:"name"`
+	PublicKey                     []byte         `json:"public_key"`
+	Aaguid                        []byte         `json:"aaguid"`
+	TransportsJson                string         `json:"transports_json"`
+	Flags                         int64          `json:"flags"`
+	SignCount                     int64          `json:"sign_count"`
+	CloneWarning                  int64          `json:"clone_warning"`
+	Attachment                    sql.NullString `json:"attachment"`
+	CreatedAt                     int64          `json:"created_at"`
+	UpdatedAt                     int64          `json:"updated_at"`
+	AttestationType               string         `json:"attestation_type"`
+	AttestationFormat             string         `json:"attestation_format"`
+	AttestationClientDataJson     []byte         `json:"attestation_client_data_json"`
+	AttestationClientDataHash     []byte         `json:"attestation_client_data_hash"`
+	AttestationAuthenticatorData  []byte         `json:"attestation_authenticator_data"`
+	AttestationPublicKeyAlgorithm int64          `json:"attestation_public_key_algorithm"`
+	AttestationObject             []byte         `json:"attestation_object"`
+}
+
+type WebauthnUser struct {
+	UserID     int64  `json:"user_id"`
+	RpID       string `json:"rp_id"`
+	UserHandle []byte `json:"user_handle"`
+	CreatedAt  int64  `json:"created_at"`
 }

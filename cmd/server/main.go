@@ -26,6 +26,7 @@ import (
 	"durpdeploy/internal/events"
 	"durpdeploy/internal/handler"
 	"durpdeploy/internal/maintenance"
+	"durpdeploy/internal/mfa"
 	"durpdeploy/internal/migrate"
 	"durpdeploy/internal/notify"
 	"durpdeploy/internal/repository"
@@ -105,6 +106,16 @@ func runServer() {
 		),
 	)
 
+	mfaConfig, err := mfa.LoadConfig()
+	if err != nil {
+		log.Fatalf("mfa config: %v", err)
+	}
+	slog.Info(
+		"MFA configuration loaded",
+		"webauthn_enabled", mfaConfig.WebAuthn.Enabled,
+		"cookie_secure", mfaConfig.CookieSecure,
+	)
+
 	key, err := secret.LoadKey()
 	if err != nil {
 		log.Fatalf("secret key: %v", err)
@@ -113,6 +124,7 @@ func runServer() {
 	if err != nil {
 		log.Fatalf("secret key: %v", err)
 	}
+	mfaService := mfa.NewService(mfaConfig, box)
 
 	dbConn, err := migrate.Run(loadDSN())
 	if err != nil {
@@ -146,6 +158,7 @@ func runServer() {
 	defer sched.Stop()
 	defer cancel()
 	authHandler := handler.NewAuthHandler(repo)
+	authHandler.SetMFAService(mfaService)
 	r := server.NewRouter(repo, rnr, parser, authHandler)
 
 	// Recover deployments that were created but never picked up by a

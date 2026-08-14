@@ -3,6 +3,7 @@ package auth
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 )
 
 // viewerWriteBlockMessage is the single source of truth for the
@@ -34,7 +35,7 @@ func CSRFMiddleware() func(http.Handler) http.Handler {
 			}
 
 			path := r.URL.Path
-			if path == "/login" || path == "/logout" {
+			if path == "/login" {
 				next.ServeHTTP(w, r)
 				return
 			}
@@ -58,8 +59,8 @@ func CSRFMiddleware() func(http.Handler) http.Handler {
 				return
 			}
 
-			// Role gate: viewers cannot perform write operations.
-			if RoleFromContext(r.Context()) == "viewer" {
+			if RoleFromContext(r.Context()) == "viewer" &&
+				!viewerSecurityWrite(r.URL.Path) {
 				blockViewerWrite(w, r)
 				return
 			}
@@ -77,6 +78,10 @@ func CSRFMiddleware() func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+func viewerSecurityWrite(path string) bool {
+	return strings.HasPrefix(path, "/settings/security/")
 }
 
 // blockViewerWrite responds to a viewer's write attempt. Two paths:

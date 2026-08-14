@@ -1,0 +1,178 @@
+package pages
+
+import "durpdeploy/views/layouts"
+
+templ SecurityReauthPage(currentPath, csrf, errorMsg string) {
+	@layouts.Base("Reauthenticate", currentPath) {
+		<div class="w-full px-4 sm:px-6 lg:px-8 py-12">
+			<div class="max-w-md mx-auto">
+				<div class="card bg-base-200 shadow-xl">
+					<div class="card-body">
+						<h1 class="card-title text-2xl font-bold">Confirm your password</h1>
+						<p class="text-sm opacity-70">Confirm your identity before changing security settings.</p>
+						if errorMsg != "" {
+							<div class="alert alert-error" role="alert"><span>{ errorMsg }</span></div>
+						}
+						<form method="post" action="/settings/security/reauth" class="space-y-4">
+							<input type="hidden" name="csrf_token" value={ csrf }/>
+							<div class="form-control">
+								<label class="label" for="reauth-password"><span class="label-text">Password</span></label>
+								<input id="reauth-password" type="password" name="password" class="input input-bordered" autocomplete="current-password" required/>
+							</div>
+							<button type="submit" class="btn btn-primary w-full">Continue</button>
+						</form>
+					</div>
+				</div>
+			</div>
+		</div>
+	}
+}
+
+templ SecurityReauthMFAPage(currentPath, csrf, token, challengeCSRF, errorMsg string) {
+	@layouts.Base("Verify reauthentication", currentPath) {
+		<div class="w-full px-4 sm:px-6 lg:px-8 py-12">
+			<div class="max-w-md mx-auto space-y-4">
+				<div class="card bg-base-200 shadow-xl">
+					<div class="card-body">
+						<h1 class="card-title text-2xl font-bold">Verify your factor</h1>
+						if errorMsg != "" {
+							<div class="alert alert-error" role="alert"><span>{ errorMsg }</span></div>
+						}
+						<form method="post" action="/settings/security/reauth/totp" class="space-y-4">
+							<input type="hidden" name="csrf_token" value={ csrf }/>
+							<input type="hidden" name="challenge_token" value={ token }/>
+							<input type="hidden" name="challenge_csrf" value={ challengeCSRF }/>
+							<div class="form-control">
+								<label class="label" for="reauth-totp-code"><span class="label-text">Authenticator code</span></label>
+								<input id="reauth-totp-code" type="text" name="code" class="input input-bordered" inputmode="numeric" autocomplete="one-time-code" required/>
+							</div>
+							<button type="submit" class="btn btn-primary w-full">Continue</button>
+						</form>
+						<form method="post" action="/settings/security/reauth/recovery" class="space-y-4">
+							<input type="hidden" name="csrf_token" value={ csrf }/>
+							<input type="hidden" name="challenge_token" value={ token }/>
+							<input type="hidden" name="challenge_csrf" value={ challengeCSRF }/>
+							<div class="form-control">
+								<label class="label" for="reauth-recovery-code"><span class="label-text">Recovery code</span></label>
+								<input id="reauth-recovery-code" type="text" name="code" class="input input-bordered" autocomplete="one-time-code" required/>
+							</div>
+							<button type="submit" class="btn btn-outline w-full">Use recovery code</button>
+						</form>
+						<div class="space-y-2" data-webauthn-container>
+							<h2 class="font-medium">Passkey</h2>
+							<button type="button" class="btn btn-outline w-full" data-webauthn-authenticate data-webauthn-begin="/settings/security/reauth/webauthn/begin" data-webauthn-finish="/settings/security/reauth/webauthn/finish">Use a passkey</button>
+							<p data-webauthn-status role="status" aria-live="polite" class="text-sm"></p>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	}
+}
+
+templ TOTPEnrollmentPage(currentPath, csrf, token, challengeCSRF, manualKey, qrBase64, errorMsg string) {
+	@layouts.Base("Set up authenticator", currentPath) {
+		<div class="w-full px-4 sm:px-6 lg:px-8 py-12">
+			<div class="max-w-md mx-auto">
+				<div class="card bg-base-200 shadow-xl">
+					<div class="card-body space-y-4">
+						<h1 class="card-title text-2xl font-bold">Set up authenticator</h1>
+						<p class="text-sm opacity-70">Scan this code or enter the key in your authenticator app. It is shown only once.</p>
+						<img src={ "data:image/png;base64," + qrBase64 } alt="Authenticator setup QR code" width="200" height="200" class="mx-auto"/>
+						<code id="totp-manual-key" class="block bg-base-300 p-2 rounded break-all select-all">{ manualKey }</code>
+						if errorMsg != "" {
+							<div class="alert alert-error" role="alert"><span>{ errorMsg }</span></div>
+						}
+						<form method="post" action="/settings/security/totp/confirm" class="space-y-4">
+							<input type="hidden" name="csrf_token" value={ csrf }/>
+							<input type="hidden" name="challenge_token" value={ token }/>
+							<input type="hidden" name="challenge_csrf" value={ challengeCSRF }/>
+							<div class="form-control">
+								<label class="label" for="totp-confirm-code"><span class="label-text">Authenticator code</span></label>
+								<input id="totp-confirm-code" type="text" name="code" class="input input-bordered" inputmode="numeric" autocomplete="one-time-code" required/>
+							</div>
+							<button type="submit" class="btn btn-primary w-full">Confirm authenticator</button>
+						</form>
+					</div>
+				</div>
+			</div>
+		</div>
+	}
+}
+
+templ PasskeyVerificationPage(currentPath, csrf, token, challengeCSRF, errorMsg string) {
+	@layouts.Base("Test passkey", currentPath) {
+		<div class="w-full px-4 sm:px-6 lg:px-8 py-12">
+			<div class="max-w-md mx-auto">
+				<div class="card bg-base-200 shadow-xl" data-passkey-test-page data-webauthn-container>
+					<div class="card-body space-y-4">
+						<div data-passkey-test>
+							<h1 class="card-title text-2xl font-bold">Test your passkey</h1>
+							<p class="text-sm opacity-70">Use the new passkey once to finish setup.</p>
+							if errorMsg != "" {
+								<div class="alert alert-error" role="alert"><span>{ errorMsg }</span></div>
+							}
+							<form method="post" action="/settings/security/passkeys/test/begin" class="space-y-4">
+								<input type="hidden" name="csrf_token" value={ csrf }/>
+								<button type="button" class="btn btn-primary w-full" data-webauthn-authenticate data-webauthn-begin="/settings/security/passkeys/test/begin" data-webauthn-finish="/settings/security/passkeys/test/finish" data-webauthn-token={ token } data-webauthn-challenge-csrf={ challengeCSRF }>Verify passkey</button>
+								<p data-webauthn-status role="status" aria-live="polite" class="text-sm"></p>
+							</form>
+							<form method="post" action="/settings/security/passkeys/test/cancel">
+								<input type="hidden" name="csrf_token" value={ csrf }/>
+								<input type="hidden" name="challenge_token" value={ token }/>
+								<input type="hidden" name="challenge_csrf" value={ challengeCSRF }/>
+								<button type="submit" class="btn btn-ghost w-full">Cancel</button>
+							</form>
+						</div>
+						<div data-recovery-handoff>
+							<h1 class="card-title text-2xl font-bold">Save your recovery codes</h1>
+							<div data-webauthn-recovery class="space-y-2"></div>
+					<form method="post" action="/settings/security/recovery/continue">
+						<input type="hidden" name="csrf_token" value={ csrf }/>
+						<button type="submit" class="btn btn-primary w-full">Continue</button>
+					</form>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+		<style>
+			[data-recovery-handoff] { display: none; }
+			[data-passkey-test-page]:has(.recovery-code) [data-passkey-test] { display: none; }
+			[data-passkey-test-page]:has(.recovery-code) [data-recovery-handoff] { display: block; }
+		</style>
+	}
+}
+
+templ RecoveryCodesPage(
+	currentPath string,
+	codes []string,
+	csrf string,
+	continueToLogin bool,
+) {
+	@layouts.Base("Recovery codes", currentPath) {
+		<div class="w-full px-4 sm:px-6 lg:px-8 py-12">
+			<div class="max-w-md mx-auto">
+				<div class="card bg-base-200 shadow-xl">
+					<div class="card-body space-y-4">
+						<h1 class="card-title text-2xl font-bold">Save your recovery codes</h1>
+						<p class="text-sm opacity-70">Each code works once. They will not be shown again.</p>
+						<ul class="grid grid-cols-2 gap-2 font-mono">
+							for _, code := range codes {
+								<li class="recovery-code bg-base-300 p-2 rounded">{ code }</li>
+							}
+						</ul>
+				if continueToLogin {
+					<form method="post" action="/settings/security/recovery/continue">
+						<input type="hidden" name="csrf_token" value={ csrf }/>
+						<button type="submit" class="btn btn-primary w-full">Continue</button>
+					</form>
+				} else {
+					<a href="/settings/security" class="btn btn-primary w-full">Back to Security</a>
+				}
+			</div>
+				</div>
+			</div>
+		</div>
+	}
+}

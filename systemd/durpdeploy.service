@@ -19,6 +19,7 @@ User=durpdeploy
 Group=durpdeploy
 WorkingDirectory=/var/lib/durpdeploy
 Environment=DURPDEPLOY_DB=/var/lib/durpdeploy/durpdeploy.db
+Environment=DURPDEPLOY_URL=https://durpdeploy.example.com
 ExecStart=/usr/local/bin/durpdeploy
 Restart=on-failure
 RestartSec=5s

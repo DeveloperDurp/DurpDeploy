@@ -78,13 +78,14 @@ func AuthMiddleware(
 			r = SetUser(r, user)
 
 			sess := &db.Session{
-				ID:        session.ID,
-				UserID:    session.UserID,
-				CsrfToken: session.CsrfToken,
-				CreatedAt: session.CreatedAt,
-				ExpiresAt: session.ExpiresAt,
-				IpAddress: session.IpAddress,
-				UserAgent: session.UserAgent,
+				ID:                session.ID,
+				UserID:            session.UserID,
+				CsrfToken:         session.CsrfToken,
+				CreatedAt:         session.CreatedAt,
+				ExpiresAt:         session.ExpiresAt,
+				IpAddress:         session.IpAddress,
+				UserAgent:         session.UserAgent,
+				ReauthenticatedAt: session.ReauthenticatedAt,
 			}
 			r = r.WithContext(context.WithValue(r.Context(), sessionKey, sess))
 

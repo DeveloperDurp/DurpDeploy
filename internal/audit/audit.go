@@ -53,104 +53,35 @@ func Record(ctx context.Context, repo *repository.Repository, e Entry) {
 }
 
 // actionMap maps "METHOD /route/pattern" → audit action. Patterns use
-// chi's {param} form so they match the resolved RoutePattern, not the
-// raw URL. Routes not in this map fall back to the method+segment
-// heuristic below.
-//
-// ponytail: explicit map over reflection. Covers every state-changing
-// route registered in server.go. New routes need one map entry; the
-// fallback heuristic catches anything missed with a lossy name.
-var actionMap = map[string]string{
-	"POST /login":                                      "login",
-	"POST /logout":                                     "logout",
-	"POST /projects":                                   "create_project",
-	"PUT /projects/{id}":                               "update_project",
-	"DELETE /projects/{id}":                            "delete_project",
-	"POST /projects/{id}/notifications":                "update_project_notifications",
-	"POST /environments":                               "create_environment",
-	"PUT /environments/{id}":                           "update_environment",
-	"DELETE /environments/{id}":                        "delete_environment",
-	"POST /projects/{id}/steps":                        "create_step",
-	"PUT /projects/{id}/steps/{stepId}":                "update_step",
-	"DELETE /projects/{id}/steps/{stepId}":             "delete_step",
-	"POST /projects/{id}/releases":                     "create_release",
-	"POST /projects/{id}/releases/{releaseId}/refresh": "refresh_release",
-	"POST /projects/{id}/variables":                    "create_variable",
-	"PUT /projects/{id}/variables/{varId}":             "update_variable",
-	"DELETE /projects/{id}/variables/{varId}":          "delete_variable",
-	"POST /projects/{id}/deploy":                       "create_deployment",
-	"POST /deployments/{id}/cancel":                    "cancel_deployment",
-	"POST /deployments/{id}/approve":                   "approve_deployment",
-	"POST /deployments/{id}/redeploy":                  "redeploy_deployment",
-	"POST /lifecycles":                                 "create_lifecycle",
-	"POST /lifecycles/{id}/stages":                     "create_lifecycle_stage",
-	"POST /lifecycles/{id}/stages/reorder":             "reorder_lifecycle_stage",
-	"PATCH /lifecycles/{id}/stages/{stageId}":          "update_lifecycle_stage",
-	"POST /lifecycles/{id}/stages/{stageId}/delete":    "delete_lifecycle_stage",
-	"POST /projects/{id}/schedules":                    "create_schedule",
-	"PUT /projects/{id}/schedules/{schedId}":           "update_schedule",
-	"DELETE /projects/{id}/schedules/{schedId}":        "delete_schedule",
-	"POST /projects/{id}/schedules/{schedId}/toggle":   "toggle_schedule",
+type requestStateKey struct{}
 
-	"GET /api/v1/deployments":                               "list_deployments",
-	"POST /api/v1/tokens":                                   "create_api_token",
-	"DELETE /api/v1/tokens/{id}":                            "revoke_api_token",
-	"DELETE /api/v1/admin/tokens/{id}":                      "revoke_any_token",
-	"POST /api/v1/projects/{id}/releases":                   "create_release",
-	"POST /api/v1/projects/{id}/releases/{relId}/refresh":   "refresh_release",
-	"POST /api/v1/projects/{id}/deploy":                     "create_deployment",
-	"POST /api/v1/deployments/{id}/cancel":                  "cancel_deployment",
-	"POST /api/v1/deployments/{id}/approve":                 "approve_deployment",
-	"POST /api/v1/deployments/{id}/redeploy":                "redeploy_deployment",
-	"POST /api/v1/projects/{id}/schedules":                  "create_schedule",
-	"PUT /api/v1/projects/{id}/schedules/{schedId}":         "update_schedule",
-	"DELETE /api/v1/projects/{id}/schedules/{schedId}":      "delete_schedule",
-	"POST /api/v1/projects/{id}/schedules/{schedId}/toggle": "toggle_schedule",
+type requestState struct {
+	suppress   bool
+	overridden *actionOverride
+}
 
-	"POST /api/v1/projects":                                "create_project",
-	"PUT /api/v1/projects/{id}":                            "update_project",
-	"DELETE /api/v1/projects/{id}":                         "delete_project",
-	"PUT /api/v1/projects/{id}/notifications":              "update_project_notifications",
-	"POST /api/v1/environments":                            "create_environment",
-	"PUT /api/v1/environments/{id}":                        "update_environment",
-	"DELETE /api/v1/environments/{id}":                     "delete_environment",
-	"POST /api/v1/lifecycles":                              "create_lifecycle",
-	"POST /api/v1/lifecycles/{id}/save":                    "update_lifecycle",
-	"POST /api/v1/lifecycles/{id}/stages":                  "create_lifecycle_stage",
-	"POST /api/v1/lifecycles/{id}/stages/reorder":          "reorder_lifecycle_stage",
-	"PATCH /api/v1/lifecycles/{id}/stages/{stageId}":       "update_lifecycle_stage",
-	"POST /api/v1/lifecycles/{id}/stages/{stageId}/delete": "delete_lifecycle_stage",
-	"POST /api/v1/projects/{id}/steps":                     "create_step",
-	"PUT /api/v1/projects/{id}/steps/{stepId}":             "update_step",
-	"DELETE /api/v1/projects/{id}/steps/{stepId}":          "delete_step",
-	"PATCH /api/v1/projects/{id}/steps/reorder":            "reorder_step",
-	"POST /api/v1/projects/{id}/variables":                 "create_variable",
-	"PUT /api/v1/projects/{id}/variables/{varId}":          "update_variable",
-	"DELETE /api/v1/projects/{id}/variables/{varId}":       "delete_variable",
-	"POST /api/v1/projects/{id}/members":                   "add_project_member",
-	"DELETE /api/v1/projects/{id}/members/{userId}":        "remove_project_member",
-	"POST /api/v1/templates":                               "create_template",
-	"PUT /api/v1/templates/{id}":                           "update_template",
-	"DELETE /api/v1/templates/{id}":                        "delete_template",
-	"POST /api/v1/admin/users":                             "create_user",
-	"PUT /api/v1/admin/users/{id}":                         "update_user",
-	"DELETE /api/v1/admin/users/{id}":                      "delete_user",
-	"PUT /api/v1/admin/notifications/settings":             "update_global_notifications",
-	"POST /projects/{id}/members":                          "add_project_member",
-	"DELETE /projects/{id}/members/{userId}":               "remove_project_member",
-	"POST /templates":                                      "create_template",
-	"PUT /templates/{id}":                                  "update_template",
-	"DELETE /templates/{id}":                               "delete_template",
-	"POST /admin/notifications/settings":                   "update_global_notifications",
-	"POST /admin/users":                                    "create_user",
-	"PUT /admin/users/{id}":                                "update_user",
-	"DELETE /admin/users/{id}":                             "delete_user",
-	"POST /tokens":                                         "create_api_token",
-	"DELETE /tokens/{id}":                                  "revoke_api_token",
-	"DELETE /admin/tokens/{id}":                            "revoke_api_token",
-	"POST /settings/tokens":                                "create_api_token",
-	"POST /settings/tokens/{id}/revoke":                    "revoke_api_token",
-	"POST /admin/tokens/{id}/revoke":                       "revoke_api_token",
+type actionOverride struct {
+	action     string
+	entityType string
+	entityID   sql.NullInt64
+	reason     string
+}
+
+func Suppress(r *http.Request) {
+	if state, ok := r.Context().Value(requestStateKey{}).(*requestState); ok {
+		state.suppress = true
+	}
+}
+
+func SetMFAAdminReset(r *http.Request, targetID int64, reason string) {
+	if state, ok := r.Context().Value(requestStateKey{}).(*requestState); ok {
+		state.overridden = &actionOverride{
+			action:     "mfa_admin_reset",
+			entityType: "admin_reset",
+			entityID:   sql.NullInt64{Int64: targetID, Valid: true},
+			reason:     reason,
+		}
+	}
 }
 
 // entityIDRe captures the first numeric path segment, e.g. /projects/42
@@ -180,9 +111,16 @@ var methodVerb = map[string]string{
 func Middleware(repo *repository.Repository) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			state := &requestState{}
+			r = r.WithContext(
+				context.WithValue(r.Context(), requestStateKey{}, state),
+			)
 			ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
 			next.ServeHTTP(ww, r)
 
+			if state.suppress {
+				return
+			}
 			if !isStateChanging(r.Method) {
 				return
 			}
@@ -201,10 +139,21 @@ func Middleware(repo *repository.Repository) func(http.Handler) http.Handler {
 			}
 
 			var entityID sql.NullInt64
-			if m := entityIDRe.FindStringSubmatch(r.URL.Path); m != nil {
+			if routeID := chi.URLParam(r, "id"); routeID != "" {
+				if v, err := strconv.ParseInt(routeID, 10, 64); err == nil {
+					entityID = sql.NullInt64{Int64: v, Valid: true}
+				}
+			} else if m := entityIDRe.FindStringSubmatch(r.URL.Path); m != nil {
 				if v, err := strconv.ParseInt(m[1], 10, 64); err == nil {
 					entityID = sql.NullInt64{Int64: v, Valid: true}
 				}
+			}
+			reason := ""
+			if state.overridden != nil {
+				action = state.overridden.action
+				entityType = state.overridden.entityType
+				entityID = state.overridden.entityID
+				reason = state.overridden.reason
 			}
 
 			Record(r.Context(), repo, Entry{
@@ -212,7 +161,7 @@ func Middleware(repo *repository.Repository) func(http.Handler) http.Handler {
 				Action:     action,
 				EntityType: entityType,
 				EntityID:   entityID,
-				Details:    buildDetails(r, ww.Status()),
+				Details:    buildDetails(r, ww.Status(), action, reason),
 			})
 		})
 	}
@@ -305,7 +254,12 @@ func singularize(seg string) string {
 // variable values and passwords are never logged here. If a future
 // route puts a secret in a field literally named "name", gate it in
 // actionMap instead.
-func buildDetails(r *http.Request, status int) string {
+func buildDetails(
+	r *http.Request,
+	status int,
+	action string,
+	canonicalReason string,
+) string {
 	ip := r.RemoteAddr
 	if idx := strings.LastIndex(ip, ":"); idx != -1 {
 		ip = ip[:idx]
@@ -319,6 +273,13 @@ func buildDetails(r *http.Request, status int) string {
 	}
 	if name := r.FormValue("name"); name != "" {
 		details["name"] = name
+	}
+	if action == "mfa_admin_reset" {
+		reason := canonicalReason
+		if reason == "" {
+			reason = r.PostFormValue("reason")
+		}
+		details["reason"] = reason
 	}
 	b, err := json.Marshal(details)
 	if err != nil {

@@ -19,6 +19,11 @@ func TestRewriteSQL(t *testing.T) {
 			want:  "project_id BIGINT NOT NULL REFERENCES projects(id)",
 		},
 		{
+			name:  "binary column",
+			query: "encrypted_seed BLOB NOT NULL",
+			want:  "encrypted_seed BYTEA NOT NULL",
+		},
+		{
 			name:  "unixepoch default",
 			query: "created_at INTEGER NOT NULL DEFAULT (unixepoch())",
 			want:  "created_at BIGINT NOT NULL DEFAULT (extract(epoch from now())::bigint)",

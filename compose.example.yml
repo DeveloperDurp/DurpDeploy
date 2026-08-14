@@ -66,6 +66,7 @@ services:
     # Don't publish it to the host.
     environment:
       DURPDEPLOY_DB: /data/durpdeploy.db
+      DURPDEPLOY_URL: ${DURPDEPLOY_URL:?}
       # Encryption key: the mounted secret file at /etc/durpdeploy/key is the
       # primary source (generated via: openssl rand -base64 32 > secrets/durpdeploy_key
       # && chmod 0600 secrets/durpdeploy_key). Set DURPDEPLOY_SECRET_KEY only when

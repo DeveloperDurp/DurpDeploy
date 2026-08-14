@@ -65,6 +65,9 @@ API tokens are created per-user from the `/settings/tokens` page or via the CLI:
 durpdeploy tokens create --user admin@example.com --name ci
 ```
 
+Browser MFA protects browser sessions only. API tokens remain single bearer
+credentials and are not MFA-protected; an MFA reset does not revoke them.
+
 The full API reference is available at `/api/swagger/` in a running server (no auth required).
 
 ## Architecture
@@ -97,9 +100,39 @@ make tailwind-build
 # Full build
 make build
 
-# Run with hot-reload (requires air or similar)
+# Run with hot-reload behind an ephemeral Caddy HTTPS proxy (requires Docker)
 make dev
 ```
+
+`make dev`, `make dev-postgres`, and `make dev-mssql` keep the app on
+`http://localhost:8080` and expose it through `https://localhost:8443`. The
+proxy uses Caddy's self-signed internal CA, so accept the local browser warning
+or use `curl -k`. It is removed automatically when the dev command exits.
+
+Configure the ephemeral proxy without installing Caddy on the host:
+
+```bash
+DEV_HTTPS_PROXY_CONTAINER=my-dev-proxy \
+DEV_HTTPS_PROXY_PORT=9443 \
+DEV_HTTPS_PROXY_BACKEND=host.docker.internal:8080 make dev
+```
+
+The Linux Docker daemon must support `host-gateway`; startup fails clearly if
+the host backend cannot be reached through that mapping.
+
+`make e2e-test` exercises the SQLite database of an already-running server; it
+does not build or start one. Override the target with
+`DURPDEPLOY_BASE_URL=https://localhost:8443 make e2e-test` (the local internal
+CA is accepted automatically) or set `DURPDEPLOY_DB` when the running SQLite
+server uses a non-default database path. The harness expects the configured
+`E2E_ADMIN_EMAIL` to already be an `admin`; if it is missing, it will use
+`durpdeploy admin create` through `DURPDEPLOY_E2E_CLI` (defaulting to
+`./durpdeploy` when that binary is executable). If the CLI path is unavailable,
+build DurpDeploy first and set `DURPDEPLOY_E2E_CLI` to an executable binary.
+For SQLite, start the server with WAL and `busy_timeout` enabled as in the
+default DSN. Use
+`make e2e-test-isolated` for the previous clean-room build-and-start workflow
+used by CI.
 
 ## Production Deploy
 
@@ -121,6 +154,11 @@ durpdeploy admin create --email admin@example.com --password '<strong-password>'
 The database path is configurable via the `DURPDEPLOY_DB` env var; it defaults
 to `durpdeploy.db` in the current directory for local dev. Production sets it
 to `/var/lib/durpdeploy/durpdeploy.db` via the systemd unit.
+
+Set `DURPDEPLOY_URL=https://durpdeploy.example.com` in production. This is the
+fixed browser origin and passkey RP identity; changing its hostname or origin
+invalidates existing passkeys. Users can optionally enroll browser MFA from
+Security and must store one-time recovery codes securely when displayed.
 
 ## Roles
 

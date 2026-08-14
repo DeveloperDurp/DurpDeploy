@@ -717,7 +717,12 @@ async function mobileInteractionFailure(page, target, viewport) {
 			if ((await nativeNavigation.locator(":scope > li > a").count()) < 5) {
 				return "navbar native navigation is missing read links";
 			}
-			const visibleLogoutCount = await page
+			const accountMenu = page.locator("[data-account-menu]:visible");
+			if ((await accountMenu.count()) !== 1) {
+				return "navbar desktop account menu is missing or ambiguous";
+			}
+			await accountMenu.locator(":scope > summary").click();
+			const visibleLogoutCount = await accountMenu
 				.locator('form[action="/logout"]')
 				.evaluateAll(
 					(elements) =>
@@ -726,6 +731,7 @@ async function mobileInteractionFailure(page, target, viewport) {
 			if (visibleLogoutCount !== 1) {
 				return "navbar desktop logout is not visible exactly once";
 			}
+			await page.keyboard.press("Escape");
 			await writeNavbarScreenshot(page, viewport, "desktop");
 			return null;
 		} catch (error) {

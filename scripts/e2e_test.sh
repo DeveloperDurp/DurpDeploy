@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+umask 077
+
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 ROOT_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
 CLIENT_ONLY=${DURPDEPLOY_E2E_CLIENT_ONLY:-0}
 TMP=$(mktemp -d)
-COOKIES=$(mktemp)
+COOKIES="$TMP/admin-cookies"
 SERVER_PID=""
 
 cleanup() {
     rm -rf "$TMP"
-    rm -f "$COOKIES"
     if [[ -n "$SERVER_PID" ]]; then
         kill "$SERVER_PID" 2>/dev/null || true
         wait "$SERVER_PID" 2>/dev/null || true
@@ -33,49 +34,48 @@ else
     BASE="http://localhost:8080"
     cd "$ROOT_DIR"
 
-    # Read the shell-compatible DURPDEPLOY_SECRET_KEY assignment from
-    # DURPDEPLOY_ENV_FILE, defaulting to .env. The precedence is .env,
-    # inherited environment, then a generated key; other assignments stay
-    # in the subshell.
-    ENV_FILE="${DURPDEPLOY_ENV_FILE:-.env}"
-    ENV_SECRET_KEY=$(
-        (
-            unset DURPDEPLOY_SECRET_KEY
-            if [[ -f "$ENV_FILE" ]]; then
-                # shellcheck disable=SC1090
-                . "$ENV_FILE"
-            fi
-            printf '%s' "${DURPDEPLOY_SECRET_KEY:-}"
-        )
-    )
-    if [[ -n "$ENV_SECRET_KEY" ]]; then
-        DURPDEPLOY_SECRET_KEY="$ENV_SECRET_KEY"
-        export DURPDEPLOY_SECRET_KEY
+    DB_DSN="$TMP/durpdeploy.db?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)"
+
+    if ! command -v openssl >/dev/null 2>&1; then
+        echo "ERROR: openssl not found." >&2
+        exit 1
     fi
-    if [[ -z "${DURPDEPLOY_SECRET_KEY:-}" ]]; then
-        if ! command -v openssl >/dev/null 2>&1; then
-            echo "ERROR: openssl not found. Install openssl, or set DURPDEPLOY_SECRET_KEY yourself." >&2
-            exit 1
-        fi
-        DURPDEPLOY_SECRET_KEY=$(openssl rand -base64 32)
-        export DURPDEPLOY_SECRET_KEY
-    fi
+    DURPDEPLOY_SECRET_KEY=$(openssl rand -base64 32)
+    export DURPDEPLOY_SECRET_KEY
 
     echo "=== Building and starting server ==="
-    rm -f durpdeploy.db durpdeploy.db-shm durpdeploy.db-wal
     go build -o "$TMP/durpdeploy" ./cmd/server
 
     # Seed the first admin user via the CLI. The CLI runs migrations on its
     # own, so the server's startup migration is a no-op. This mirrors the
     # production flow described in docs/deploy.md.
-    DURPDEPLOY_DB=durpdeploy.db "$TMP/durpdeploy" admin create \
+    DURPDEPLOY_DB="$DB_DSN" "$TMP/durpdeploy" admin create \
         --email "$ADMIN_EMAIL" --password "$ADMIN_PASS" >/dev/null
 
     # Start the server. The migrations it would normally run are a no-op
     # because the admin CLI just created the schema.
-    "$TMP/durpdeploy" &
+    DURPDEPLOY_ADDR=127.0.0.1:8080 \
+        DURPDEPLOY_DB="$DB_DSN" \
+        DURPDEPLOY_URL="$BASE" \
+        "$TMP/durpdeploy" >"$TMP/server.log" 2>&1 &
     SERVER_PID=$!
     sleep 2
+fi
+
+if [[ "${DURPDEPLOY_AUTH_MFA_HTTP_MATRIX:-0}" == "1" ]]; then
+    if [[ "$CLIENT_ONLY" == "1" ]]; then
+        echo "FAIL: the auth/MFA HTTP matrix requires the isolated E2E lifecycle" >&2
+        exit 2
+    fi
+    DURPDEPLOY_AUTH_MFA_HTTP_MATRIX_CLIENT_ONLY=1 \
+        DURPDEPLOY_BASE_URL="$BASE" \
+        DURPDEPLOY_AUTH_MFA_DB="$TMP/durpdeploy.db" \
+        DURPDEPLOY_AUTH_MFA_SERVER_LOG="$TMP/server.log" \
+        DURPDEPLOY_AUTH_MFA_ADMIN_EMAIL="$ADMIN_EMAIL" \
+        DURPDEPLOY_AUTH_MFA_ADMIN_PASSWORD="$ADMIN_PASS" \
+        "${DURPDEPLOY_AUTH_MFA_HTTP_MATRIX_SCRIPT:-$SCRIPT_DIR/auth_mfa_sqlite_http_matrix.sh}" \
+        ${DURPDEPLOY_AUTH_MFA_HTTP_MATRIX_ARGS:-}
+    exit $?
 fi
 
 # Helpers. All helpers pass -b $COOKIES so the session cookie is
@@ -147,7 +147,7 @@ url = sys.stdin.read().strip()
 qs = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
 print(urllib.parse.unquote(qs.get("new_token", [""])[0]))
 ')
-[[ -n "$API_TOKEN" ]] || { echo "FAIL: could not mint API token (redirect=$API_TOKEN_REDIRECT)"; exit 1; }
+[[ -n "$API_TOKEN" ]] || { echo "FAIL: could not mint API token"; exit 1; }
 ADMIN_ID=$(api_get "$BASE/api/v1/users/me" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
 [[ -n "$ADMIN_ID" ]] || { echo "FAIL: could not resolve current admin user"; exit 1; }
 echo "  API token minted via /settings/tokens: OK"
@@ -233,6 +233,11 @@ for i in {1..50}; do
   if curl_body "$BASE/deployments/$CANCEL_DEP/status" | grep -q 'running'; then break; fi
   sleep 0.1
 done
+CANCEL_STATUS=$(curl_body "$BASE/deployments/$CANCEL_DEP/status")
+CANCEL_STATE=$(echo "$CANCEL_STATUS" | grep -oP 'badge [^"]+">\K[a-z_]+' | head -1)
+echo "$CANCEL_STATUS" | grep -q 'running' || {
+  echo "FAIL: cancel deployment did not reach running (state=${CANCEL_STATE:-unknown})"; exit 1;
+}
 CODE=$(curl_silent -X POST -d "csrf_token=$CSRF" "$BASE/deployments/$CANCEL_DEP/cancel")
 [[ "$CODE" == "303" ]] || { echo "FAIL: cancel got $CODE"; exit 1; }
 
@@ -837,4 +842,97 @@ SWAGGER=$(curl -s "$BASE/api/swagger/spec")
 echo "$SWAGGER" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d['swagger']=='2.0'; print('swagger spec OK')"
 echo "  Swagger UI + spec: OK"
 
+echo "=== APPLICATION E2E CHECKS PASSED ==="
+
+echo "=== MFA HTTP contracts ==="
+
+# The initial login above proves the unenrolled contract. Enrolling this admin
+# must invalidate that browser session, and the second factor must create a new
+# one. Values below are deliberately never printed.
+CODE=$(curl_silent -X POST -d "password=$ADMIN_PASS&csrf_token=$CSRF" \
+    "$BASE/settings/security/reauth")
+[[ "$CODE" == "303" ]] || { echo "FAIL: MFA reauthentication got $CODE"; exit 1; }
+CSRF=$(csrf_from_cookies "$COOKIES")
+TOTP_PAGE="$TMP/totp-enrollment.html"
+CODE=$(curl -s -b "$COOKIES" -o "$TOTP_PAGE" -w "%{http_code}" \
+    -X POST -d "csrf_token=$CSRF" "$BASE/settings/security/totp/begin")
+[[ "$CODE" == "200" ]] || { echo "FAIL: TOTP enrollment begin got $CODE"; exit 1; }
+TOTP_SEED=$(grep -oP 'id="totp-manual-key"[^>]*>\K[^<]+' "$TOTP_PAGE")
+TOTP_CHALLENGE=$(grep -oP 'name="challenge_token" value="\K[^"]+' "$TOTP_PAGE" | head -1)
+TOTP_CHALLENGE_CSRF=$(grep -oP 'name="challenge_csrf" value="\K[^"]+' "$TOTP_PAGE" | head -1)
+[[ -n "$TOTP_SEED" && -n "$TOTP_CHALLENGE" && -n "$TOTP_CHALLENGE_CSRF" ]] || {
+    echo "FAIL: TOTP enrollment response omitted required state"; exit 1;
+}
+totp_code() {
+    python3 -c '
+import base64
+import hashlib
+import hmac
+import struct
+import sys
+import time
+
+seed = sys.argv[1]
+counter = int(time.time()) // 30
+digest = hmac.new(base64.b32decode(seed), struct.pack(">Q", counter), hashlib.sha1).digest()
+offset = digest[-1] & 15
+value = (struct.unpack(">I", digest[offset:offset + 4])[0] & 0x7fffffff) % 1000000
+print(f"{value:06d}")
+' "$1"
+}
+TOTP_CODE=$(totp_code "$TOTP_SEED")
+RECOVERY_PAGE="$TMP/recovery-codes.html"
+CODE=$(curl -s -b "$COOKIES" -c "$COOKIES" -o "$RECOVERY_PAGE" -w "%{http_code}" \
+    -X POST -d "csrf_token=$CSRF&challenge_token=$TOTP_CHALLENGE&challenge_csrf=$TOTP_CHALLENGE_CSRF&code=$TOTP_CODE" \
+    "$BASE/settings/security/totp/confirm")
+[[ "$CODE" == "200" ]] || { echo "FAIL: TOTP enrollment confirm got $CODE"; exit 1; }
+RECOVERY_CODE_COUNT=$(grep -o 'class="recovery-code' "$RECOVERY_PAGE" | wc -l)
+[[ "$RECOVERY_CODE_COUNT" == "10" ]] || { echo "FAIL: recovery code count got $RECOVERY_CODE_COUNT, want 10"; exit 1; }
+RECOVERY_CODE=$(grep -oP 'class="recovery-code[^>]*>\K[^<]+' "$RECOVERY_PAGE" | head -1)
+[[ -n "$RECOVERY_CODE" ]] || { echo "FAIL: recovery verification omitted codes"; exit 1; }
+CODE=$(curl -s -b "$COOKIES" -c "$COOKIES" -o /dev/null -w "%{http_code}" \
+    -X POST "$BASE/settings/security/recovery/continue")
+[[ "$CODE" == "303" ]] || { echo "FAIL: recovery continue got $CODE, want 303"; exit 1; }
+
+MFA_COOKIES="$TMP/mfa-cookies"
+CODE=$(curl -s -c "$MFA_COOKIES" -o /dev/null -w "%{http_code}" \
+    -X POST -d "email=$ADMIN_EMAIL&password=$ADMIN_PASS" "$BASE/login")
+[[ "$CODE" == "303" ]] || { echo "FAIL: enrolled password login got $CODE"; exit 1; }
+LOCATION=$(curl -s -b "$MFA_COOKIES" -D - -o /dev/null "$BASE/login/mfa" | awk '/^Location:/ {print $2}' | tr -d '\r')
+[[ -z "$LOCATION" ]] || { echo "FAIL: pending MFA unexpectedly redirected"; exit 1; }
+CODE=$(curl -s -b "$MFA_COOKIES" -o /dev/null -w "%{http_code}" "$BASE/")
+[[ "$CODE" == "303" ]] || { echo "FAIL: enrolled password created a browser session"; exit 1; }
+MFA_PAGE="$TMP/mfa-login.html"
+curl -s -b "$MFA_COOKIES" -o "$MFA_PAGE" "$BASE/login/mfa"
+MFA_CSRF=$(grep -oP 'name="csrf_token" value="\K[^"]+' "$MFA_PAGE" | head -1)
+[[ -n "$MFA_CSRF" ]] || { echo "FAIL: MFA page omitted CSRF state"; exit 1; }
+sleep $((31 - $(date +%s) % 30))
+TOTP_CODE=$(totp_code "$TOTP_SEED")
+CODE=$(curl -s -b "$MFA_COOKIES" -c "$MFA_COOKIES" -o /dev/null -w "%{http_code}" \
+    -X POST -d "csrf_token=$MFA_CSRF&code=$TOTP_CODE" "$BASE/login/mfa/totp")
+[[ "$CODE" == "303" ]] || { echo "FAIL: TOTP login completion got $CODE"; exit 1; }
+grep -q $'\tsession\t' "$MFA_COOKIES" || { echo "FAIL: TOTP did not issue a browser session"; exit 1; }
+
+MFA_LOGIN_PAGE="$TMP/mfa-login-recovery.html"
+curl -s -b "$MFA_COOKIES" -c "$MFA_COOKIES" -o /dev/null -X POST \
+    -d "csrf_token=$(csrf_from_cookies "$MFA_COOKIES")" "$BASE/logout"
+CODE=$(curl -s -c "$MFA_COOKIES" -o /dev/null -w "%{http_code}" \
+    -X POST -d "email=$ADMIN_EMAIL&password=$ADMIN_PASS" "$BASE/login")
+[[ "$CODE" == "303" ]] || { echo "FAIL: recovery password login got $CODE"; exit 1; }
+curl -s -b "$MFA_COOKIES" -o "$MFA_LOGIN_PAGE" "$BASE/login/mfa"
+MFA_CSRF=$(grep -oP 'name="csrf_token" value="\K[^"]+' "$MFA_LOGIN_PAGE" | head -1)
+CODE=$(curl -s -b "$MFA_COOKIES" -c "$MFA_COOKIES" -o /dev/null -w "%{http_code}" \
+    -X POST -d "csrf_token=$MFA_CSRF&code=$RECOVERY_CODE" "$BASE/login/mfa/recovery")
+[[ "$CODE" == "303" ]] || { echo "FAIL: recovery login completion got $CODE"; exit 1; }
+
+curl -s -b "$MFA_COOKIES" -c "$MFA_COOKIES" -o /dev/null -X POST \
+    -d "csrf_token=$(csrf_from_cookies "$MFA_COOKIES")" "$BASE/logout"
+curl -s -c "$MFA_COOKIES" -o /dev/null -X POST \
+    -d "email=$ADMIN_EMAIL&password=$ADMIN_PASS" "$BASE/login"
+curl -s -b "$MFA_COOKIES" -o "$MFA_LOGIN_PAGE" "$BASE/login/mfa"
+MFA_CSRF=$(grep -oP 'name="csrf_token" value="\K[^"]+' "$MFA_LOGIN_PAGE" | head -1)
+CODE=$(curl -s -b "$MFA_COOKIES" -o /dev/null -w "%{http_code}" \
+    -X POST -d "csrf_token=$MFA_CSRF&code=$RECOVERY_CODE" "$BASE/login/mfa/recovery")
+[[ "$CODE" == "422" ]] || { echo "FAIL: reused recovery code got $CODE"; exit 1; }
+echo "  Unenrolled, pending-password, TOTP, recovery, and recovery-replay contracts: OK"
 echo "=== ALL E2E CHECKS PASSED ==="

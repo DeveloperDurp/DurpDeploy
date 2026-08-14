@@ -49,6 +49,30 @@ func TestLoadDSN_respectsEnvOverride(t *testing.T) {
 	}
 }
 
+func TestLoadAddr_defaultsAndRespectsEnvOverride(t *testing.T) {
+	t.Run("default", func(t *testing.T) {
+		// Given: DURPDEPLOY_ADDR is unset.
+		t.Setenv("DURPDEPLOY_ADDR", "")
+		// When:
+		addr := loadAddr()
+		// Then: the historical listener remains unchanged.
+		if addr != ":8080" {
+			t.Fatalf("loadAddr() = %q, want %q", addr, ":8080")
+		}
+	})
+
+	t.Run("override", func(t *testing.T) {
+		// Given: a test-safe ephemeral listener override.
+		t.Setenv("DURPDEPLOY_ADDR", "127.0.0.1:0")
+		// When:
+		addr := loadAddr()
+		// Then: the override wins.
+		if addr != "127.0.0.1:0" {
+			t.Fatalf("loadAddr() = %q, want override", addr)
+		}
+	})
+}
+
 func TestRunAdminCreate_success(t *testing.T) {
 	// Given: a fresh temp DB.
 	dsn := tempDSN(t)
