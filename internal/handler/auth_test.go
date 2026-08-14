@@ -17,18 +17,21 @@ import (
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/handler"
+	"durpdeploy/internal/mfa"
 	"durpdeploy/internal/migrate"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/runner"
+	"durpdeploy/internal/secret"
 	"durpdeploy/internal/server"
 
 	"github.com/robfig/cron/v3"
 )
 
 type authHarness struct {
-	t      *testing.T
-	repo   *repository.Repository
-	server string
+	t           *testing.T
+	repo        *repository.Repository
+	server      string
+	authHandler *handler.AuthHandler
 }
 
 func newAuthHarness(t *testing.T) *authHarness {
@@ -57,7 +60,12 @@ func newAuthHarness(t *testing.T) *authHarness {
 	authHandler := handler.NewAuthHandler(repo)
 	srv := httptest.NewServer(server.NewRouter(repo, rnr, parser, authHandler))
 	t.Cleanup(srv.Close)
-	return &authHarness{t: t, repo: repo, server: srv.URL}
+	return &authHarness{
+		t:           t,
+		repo:        repo,
+		server:      srv.URL,
+		authHandler: authHandler,
+	}
 }
 
 func (h *authHarness) seedUser(t *testing.T, email, password string) db.User {
@@ -227,6 +235,9 @@ func TestLogin_Post_ValidCredentials(t *testing.T) {
 	if c.Path != "/" {
 		t.Fatalf("Path = %q, want %q", c.Path, "/")
 	}
+	if c.Secure {
+		t.Fatal("cookie Secure = true, want false by default")
+	}
 
 	_, err = h.repo.Queries.GetSession(
 		context.Background(),
@@ -237,6 +248,36 @@ func TestLogin_Post_ValidCredentials(t *testing.T) {
 	)
 	if err != nil {
 		t.Fatalf("session row missing after login: %v", err)
+	}
+}
+
+func TestLogin_Post_SetsSecureCookieWhenConfigured(t *testing.T) {
+	// Given: a handler configured for an HTTPS public origin.
+	h := newAuthHarness(t)
+	box, err := secret.NewBox(make([]byte, 32))
+	if err != nil {
+		t.Fatalf("secret.NewBox(): %v", err)
+	}
+	h.authHandler.SetMFAService(mfa.NewService(mfa.Config{
+		CookieSecure: true,
+	}, box))
+	h.seedUser(t, "secure@example.com", "hunter2")
+
+	// When: valid credentials create a browser session.
+	client := newJar(t)
+	resp, err := client.PostForm(h.server+"/login", url.Values{
+		"email":    {"secure@example.com"},
+		"password": {"hunter2"},
+	})
+	if err != nil {
+		t.Fatalf("post /login: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// Then: the session cookie is marked Secure.
+	cookies := resp.Cookies()
+	if len(cookies) != 1 || !cookies[0].Secure {
+		t.Fatalf("session cookie Secure = false, want true")
 	}
 }
 
@@ -357,8 +398,17 @@ func TestLogout(t *testing.T) {
 	if sessionToken == "" {
 		t.Fatal("no session cookie after login")
 	}
+	session, err := h.repo.Queries.GetSession(
+		context.Background(),
+		db.GetSessionParams{ID: sessionToken, ExpiresAt: 0},
+	)
+	if err != nil {
+		t.Fatalf("get session after login: %v", err)
+	}
 
-	logoutResp, err := client.PostForm(h.server+"/logout", nil)
+	logoutResp, err := client.PostForm(h.server+"/logout", url.Values{
+		"csrf_token": {session.CsrfToken},
+	})
 	if err != nil {
 		t.Fatalf("post /logout: %v", err)
 	}
@@ -386,6 +436,30 @@ func TestLogout(t *testing.T) {
 	)
 	if err == nil {
 		t.Fatal("session row still exists after logout")
+	}
+}
+
+func TestLogout_RequiresCSRFToken(t *testing.T) {
+	// Given
+	h := newAuthHarness(t)
+	session := seedSession(t, h.repo, h.server, "admin")
+
+	// When
+	response, err := session.client.PostForm(h.server+"/logout", nil)
+	if err != nil {
+		t.Fatalf("post /logout: %v", err)
+	}
+	defer response.Body.Close()
+
+	// Then
+	if response.StatusCode != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403", response.StatusCode)
+	}
+	if _, err := h.repo.Queries.GetSession(
+		context.Background(),
+		db.GetSessionParams{ID: session.sessionToken, ExpiresAt: 0},
+	); err != nil {
+		t.Fatal("logout without CSRF token deleted the session")
 	}
 }
 

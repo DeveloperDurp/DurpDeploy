@@ -3,6 +3,7 @@ package repository_test
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"strings"
 	"testing"
 
@@ -12,20 +13,6 @@ import (
 	"durpdeploy/internal/secret"
 )
 
-func newTestRepo(t *testing.T) *repository.Repository {
-	t.Helper()
-	conn, err := migrate.Run(":memory:?_pragma=foreign_keys(1)")
-	if err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
-	t.Cleanup(func() { _ = conn.Close() })
-	return repository.New(conn)
-}
-
-// TestVariables_EncryptedAtRest verifies the acceptance criterion from
-// P1-3: raw column reads via a fresh *db.Queries (i.e. what
-// `sqlite3 durpdeploy.db` would see) return ciphertext only, while the
-// Repository wrapper transparently returns the plaintext.
 func TestVariables_EncryptedAtRest(t *testing.T) {
 	repo := newTestRepo(t)
 
@@ -61,8 +48,6 @@ func TestVariables_EncryptedAtRest(t *testing.T) {
 		)
 	}
 
-	// Inspect the raw row exactly like `sqlite3 durpdeploy.db 'select * from
-	// variables'` would — no encryption-aware wrapper involved.
 	raw, err := repo.Queries.GetVariable(ctx, created.ID)
 	if err != nil {
 		t.Fatalf("raw GetVariable: %v", err)
@@ -74,7 +59,6 @@ func TestVariables_EncryptedAtRest(t *testing.T) {
 		t.Fatalf("raw DB row must not contain the plaintext substring")
 	}
 
-	// The Repository wrapper decrypts transparently.
 	decrypted, err := repo.GetVariable(ctx, created.ID)
 	if err != nil {
 		t.Fatalf("GetVariable: %v", err)
@@ -92,9 +76,6 @@ func TestVariables_EncryptedAtRest(t *testing.T) {
 	}
 }
 
-// TestVariables_NoSecretBoxIsPlaintextPassthrough documents that when no
-// box is configured (e.g. most existing tests), values pass through
-// unchanged rather than erroring.
 func TestVariables_NoSecretBoxIsPlaintextPassthrough(t *testing.T) {
 	repo := newTestRepo(t)
 	ctx := context.Background()
@@ -125,4 +106,43 @@ func TestVariables_NoSecretBoxIsPlaintextPassthrough(t *testing.T) {
 			raw.Value.String,
 		)
 	}
+}
+
+func TestRepository_WithTx_rollsBackAllWritesWhenCallbackFails(t *testing.T) {
+	// Given: a migrated repository and a transaction callback that returns an error.
+	repo := newTestRepo(t)
+	ctx := context.Background()
+	wantErr := errors.New("stop transaction")
+
+	// When: the callback writes a user and then fails.
+	err := repo.WithTx(ctx, func(queries *db.Queries) error {
+		_, err := queries.CreateUser(ctx, db.CreateUserParams{
+			Email: "rollback@example.com", PasswordHash: "hash", Name: "Rollback", Role: "admin",
+		})
+		if err != nil {
+			return err
+		}
+		return wantErr
+	})
+
+	// Then: the callback error survives and the write is not committed.
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("WithTx error = %v, want %v", err, wantErr)
+	}
+	_, err = repo.Queries.GetUserByEmail(ctx, "rollback@example.com")
+	if !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("rolled back user lookup error = %v, want sql.ErrNoRows", err)
+	}
+}
+
+func newTestRepo(t *testing.T) *repository.Repository {
+	t.Helper()
+	conn, err := migrate.Run(
+		"file:" + t.TempDir() + "/repository.db?_pragma=foreign_keys(1)",
+	)
+	if err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+	return repository.New(conn)
 }

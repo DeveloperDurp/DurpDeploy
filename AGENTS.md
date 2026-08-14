@@ -30,6 +30,10 @@ CI runs `templ generate` as `before_script` for every stage — mirror that for 
 
 ## Running / testing
 
+All applicable Go and end-to-end tests must pass before work is complete. Run
+the full relevant suites only at final verification; use focused tests while
+working. Do not treat focused tests as a substitute for final verification.
+
 ```bash
 ./durpdeploy                       # listens on :8080 (hardcoded), creates durpdeploy.db in CWD
 go test -v -count=1 ./...          # CI's exact command

@@ -138,6 +138,10 @@ curl -s -X POST -H "Authorization: Bearer $TOKEN" \
 **Expected.** The token works until it is revoked. There is no automatic
 expiration.
 
+Browser MFA does not add a factor to this API request: API tokens are single
+bearer factors. MFA reset does not revoke API tokens. Revoke the token itself
+if its bearer value is exposed.
+
 **Mitigation:**
 
 1. Revoke the token immediately from `/admin/tokens` or via the CLI:

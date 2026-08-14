@@ -109,7 +109,11 @@ func (h *AdminHandler) UpdateNotificationSettings(
 	gotifyToken := strings.TrimSpace(r.FormValue("gotify_token"))
 	discordWebhook := strings.TrimSpace(r.FormValue("discord_webhook_url"))
 
-	if err := validateNotificationURLs(webhook, gotifyURL, discordWebhook); err != nil {
+	if err := validateNotificationURLs(
+		webhook,
+		gotifyURL,
+		discordWebhook,
+	); err != nil {
 		http.Error(w, err.Error(), http.StatusUnprocessableEntity)
 		return
 	}

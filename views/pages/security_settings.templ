@@ -1,0 +1,273 @@
+package pages
+
+import (
+	"encoding/base64"
+
+	"durpdeploy/internal/auth"
+	"durpdeploy/internal/db"
+	"durpdeploy/views/layouts"
+)
+
+func securityCredentialID(credentialID []byte) string {
+	return base64.RawURLEncoding.EncodeToString(credentialID)
+}
+
+func securityPasskeyDeleteDialogID(credentialID []byte) string {
+	return "passkey-delete-dialog-" + securityCredentialID(credentialID)
+}
+
+templ SecurityPage(
+	credentials []db.WebauthnCredential,
+	hasTOTP bool,
+	hasPasskeys bool,
+	factorCount int64,
+	fresh bool,
+	currentPath string,
+) {
+	@layouts.Base("Security", currentPath) {
+		<div class="space-y-6">
+			<div>
+				<h1 class="text-3xl font-bold">Security</h1>
+				<p class="text-sm opacity-70">Manage your sign-in factors and recovery options.</p>
+			</div>
+			<div class="card bg-base-200 shadow">
+				<div class="card-body">
+					<h2 class="card-title">Factor status</h2>
+					if factorCount == 0 {
+						<p>No factors enrolled. Add an authenticator or passkey to enable MFA.</p>
+					} else {
+						<p>MFA is enabled with { factorCount } factor(s).</p>
+					}
+					<div class="flex flex-wrap gap-2">
+						if hasTOTP {
+							<span class="badge badge-success badge-outline">Authenticator app enrolled</span>
+						} else {
+							<span class="badge badge-outline">No authenticator app</span>
+						}
+						if hasPasskeys {
+							<span class="badge badge-success badge-outline">{ len(credentials) } passkey(s)</span>
+						} else {
+							<span class="badge badge-outline">No passkeys</span>
+						}
+					</div>
+				</div>
+			</div>
+			<div class="card bg-base-200 shadow">
+				<div class="card-body space-y-4">
+					<h2 class="card-title">Recent authentication</h2>
+					if fresh {
+						<p class="text-sm opacity-70">Your security session is fresh for the next few minutes.</p>
+					} else {
+						<p class="text-sm opacity-70">Confirm your password before changing security settings.</p>
+					}
+					<div class="card-actions justify-end">
+						<a href="/settings/security/reauth" class="btn btn-outline btn-sm">Reauthenticate</a>
+					</div>
+				</div>
+			</div>
+			<div class="grid gap-6 lg:grid-cols-2">
+				<div class="card bg-base-200 shadow" data-webauthn-container>
+					<div class="card-body space-y-4">
+						<h2 class="card-title">Authenticator app</h2>
+						<p class="text-sm opacity-70">Use a six-digit code from your authenticator app.</p>
+						if hasTOTP {
+							<p id="totp-enrollment-state" class="text-sm opacity-70">Authenticator already configured.</p>
+						}
+						<form method="post" action="/settings/security/totp/begin">
+							if hasTOTP {
+								<button type="submit" class="btn btn-primary btn-sm" disabled aria-describedby="totp-enrollment-state">Set up authenticator</button>
+							} else {
+								<button type="submit" class="btn btn-primary btn-sm">Set up authenticator</button>
+							}
+						</form>
+					</div>
+				</div>
+				<div class="card bg-base-200 shadow">
+					<div class="card-body space-y-4">
+						<h2 class="card-title">Add passkey</h2>
+						<p class="text-sm opacity-70">Name this device so you can manage it later.</p>
+						if hasPasskeys {
+							<p id="passkey-enrollment-state" class="text-sm opacity-70">Passkey already configured.</p>
+						}
+						<form method="post" action="/settings/security/passkeys/begin" data-webauthn-register data-webauthn-finish="/settings/security/passkeys/finish" class="flex flex-wrap gap-2 items-end">
+							<div class="form-control flex-1">
+								<label class="label" for="passkey-name"><span class="label-text">Passkey name</span></label>
+								<input id="passkey-name" type="text" name="name" class="input input-bordered" placeholder="e.g. Work laptop" required/>
+							</div>
+							if hasPasskeys {
+								<button type="submit" class="btn btn-primary btn-sm" disabled aria-describedby="passkey-enrollment-state">Add passkey</button>
+							} else {
+								<button type="submit" class="btn btn-primary btn-sm">Add passkey</button>
+							}
+						</form>
+						<p data-webauthn-status role="status" aria-live="polite" class="text-sm"></p>
+						<div data-webauthn-recovery class="space-y-2"></div>
+					</div>
+				</div>
+			</div>
+			<div class="card bg-base-200 shadow">
+				<div class="card-body space-y-4">
+					<h2 class="card-title">Passkeys</h2>
+					if len(credentials) == 0 {
+						<p class="text-sm opacity-70">No passkeys enrolled.</p>
+					} else {
+						<div class="space-y-4">
+							for _, credential := range credentials {
+								<div class="flex flex-wrap gap-2 items-end">
+									<form method="post" action="/settings/security/passkeys/rename" class="flex flex-1 flex-wrap gap-2 items-end">
+										<input type="hidden" name="credential_id" value={ securityCredentialID(credential.CredentialID) }/>
+										<div class="form-control flex-1">
+											<label class="label"><span class="label-text">Passkey name</span></label>
+											<input type="text" name="name" value={ credential.Name } class="input input-bordered input-sm" required/>
+										</div>
+										<button type="submit" class="btn btn-ghost btn-sm">Rename</button>
+									</form>
+									<form
+										method="post"
+										action="/settings/security/passkeys/delete"
+										data-passkey-delete-dialog={ securityPasskeyDeleteDialogID(credential.CredentialID) }
+									>
+										if sess := auth.SessionFromContext(ctx); sess != nil && sess.CsrfToken != "" {
+											<input type="hidden" name="csrf_token" value={ sess.CsrfToken }/>
+										}
+										<input type="hidden" name="credential_id" value={ securityCredentialID(credential.CredentialID) }/>
+										if factorCount == 1 {
+											<button type="submit" class="btn btn-error btn-sm" disabled aria-describedby="last-passkey-delete-help" data-passkey-delete-opener>Delete</button>
+											<p id="last-passkey-delete-help" class="text-sm opacity-70">Keep another factor configured before deleting this passkey.</p>
+										} else {
+											<button type="submit" class="btn btn-error btn-sm" data-passkey-delete-opener>Delete</button>
+										}
+									</form>
+									if factorCount > 1 {
+										@PasskeyDeleteConfirmationDialog(credential)
+									}
+								</div>
+							}
+						</div>
+					}
+				</div>
+			</div>
+			if factorCount > 0 {
+				<div class="grid gap-6 lg:grid-cols-2">
+					<div class="card bg-base-200 shadow">
+						<div class="card-body space-y-4">
+							<h2 class="card-title">Recovery codes</h2>
+							<p class="text-sm opacity-70">Replace your unused recovery codes and save the new set.</p>
+							<form method="post" action="/settings/security/recovery/regenerate">
+								<button type="submit" class="btn btn-outline btn-sm">Regenerate recovery codes</button>
+							</form>
+						</div>
+					</div>
+					<div class="card bg-base-200 shadow">
+						<div class="card-body space-y-4">
+							<h2 class="card-title">Disable MFA</h2>
+							<p class="text-sm opacity-70">This removes all of your factors and recovery codes.</p>
+							<form
+								method="post"
+								action="/settings/security/disable"
+								data-security-disable-dialog="security-disable-mfa-dialog"
+							>
+								if sess := auth.SessionFromContext(ctx); sess != nil && sess.CsrfToken != "" {
+									<input type="hidden" name="csrf_token" value={ sess.CsrfToken }/>
+								}
+								<button type="submit" class="btn btn-error btn-sm" data-security-disable-opener>Disable MFA</button>
+							</form>
+							@SecurityDisableConfirmationDialog()
+						</div>
+					</div>
+				</div>
+			}
+		</div>
+	}
+}
+
+templ PasskeyDeleteConfirmationDialog(credential db.WebauthnCredential) {
+	<dialog
+		id={ securityPasskeyDeleteDialogID(credential.CredentialID) }
+		class="modal"
+		aria-labelledby={ securityPasskeyDeleteDialogID(credential.CredentialID) + "-title" }
+		aria-describedby={ securityPasskeyDeleteDialogID(credential.CredentialID) + "-description" }
+		data-passkey-delete-confirmation-dialog
+	>
+		<div class="modal-box w-11/12 max-w-lg bg-base-200">
+			<h2 id={ securityPasskeyDeleteDialogID(credential.CredentialID) + "-title" } class="text-lg font-bold">
+				Delete passkey
+			</h2>
+			<p id={ securityPasskeyDeleteDialogID(credential.CredentialID) + "-description" } class="mt-2 text-sm opacity-70">
+				This permanently removes the passkey named { credential.Name } from your account.
+			</p>
+			<form
+				id={ securityPasskeyDeleteDialogID(credential.CredentialID) + "-form" }
+				method="post"
+				action="/settings/security/passkeys/delete"
+				data-passkey-delete-confirmation
+			>
+				if sess := auth.SessionFromContext(ctx); sess != nil && sess.CsrfToken != "" {
+					<input type="hidden" name="csrf_token" value={ sess.CsrfToken }/>
+				}
+				<input type="hidden" name="credential_id" value={ securityCredentialID(credential.CredentialID) }/>
+			</form>
+			<div class="modal-action">
+				<form method="dialog">
+					<button type="submit" class="btn btn-ghost" autofocus>Cancel</button>
+				</form>
+				<button
+					type="submit"
+					form={ securityPasskeyDeleteDialogID(credential.CredentialID) + "-form" }
+					class="btn btn-error"
+					data-passkey-delete-confirm
+				>
+					Confirm delete
+				</button>
+			</div>
+		</div>
+		<form method="dialog" class="modal-backdrop">
+			<button type="submit" aria-label="Cancel passkey deletion"></button>
+		</form>
+	</dialog>
+}
+
+templ SecurityDisableConfirmationDialog() {
+	<dialog
+		id="security-disable-mfa-dialog"
+		class="modal"
+		aria-labelledby="security-disable-mfa-dialog-title"
+		aria-describedby="security-disable-mfa-dialog-description"
+		data-security-disable-confirmation-dialog
+	>
+		<div class="modal-box w-11/12 max-w-lg bg-base-200">
+			<h2 id="security-disable-mfa-dialog-title" class="text-lg font-bold">
+				Disable MFA
+			</h2>
+			<p id="security-disable-mfa-dialog-description" class="mt-2 text-sm opacity-70">
+				This permanently removes all of your factors and recovery codes. You will need to enroll MFA again.
+			</p>
+			<form
+				id="security-disable-mfa-form"
+				method="post"
+				action="/settings/security/disable"
+				data-security-disable-confirmation
+			>
+				if sess := auth.SessionFromContext(ctx); sess != nil && sess.CsrfToken != "" {
+					<input type="hidden" name="csrf_token" value={ sess.CsrfToken }/>
+				}
+			</form>
+			<div class="modal-action">
+				<form method="dialog">
+					<button type="submit" class="btn btn-ghost" autofocus>Cancel</button>
+				</form>
+				<button
+					type="submit"
+					form="security-disable-mfa-form"
+					class="btn btn-error"
+					data-security-disable-confirm
+				>
+					Confirm disable
+				</button>
+			</div>
+		</div>
+		<form method="dialog" class="modal-backdrop">
+			<button type="submit" aria-label="Cancel MFA disable"></button>
+		</form>
+	</dialog>
+}

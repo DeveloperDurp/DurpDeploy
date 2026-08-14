@@ -52,6 +52,25 @@ DNS must be pointed at the host (port 80/443 open inbound) before the first
 See [`docs/backup-restore.md`](backup-restore.md) for the Litestream
 restore drill and [`docs/security.md`](security.md) for the threat model.
 
+### Browser MFA and public URL
+
+Set `DURPDEPLOY_URL` to one absolute public origin, for example
+`DURPDEPLOY_URL=https://durpdeploy.example.com`. Production must use HTTPS;
+HTTP is accepted only for `localhost` or loopback development. The app derives
+the WebAuthn RP ID from this hostname and does not trust request Host or
+forwarded-host headers. Changing the hostname or origin invalidates existing
+passkeys. Keep the same URL through restores and migrations, or have affected
+users enroll new passkeys.
+
+Browser MFA is optional. After the first admin signs in, each user can enroll
+a TOTP authenticator or passkey from **Security**. Recovery codes are shown
+once when the first factor is activated or regenerated; store them in an
+approved password manager or offline secure storage, never in tickets, chat,
+or source control. An administrator can reset another user's MFA from user
+management after fresh reauthentication. Resetting MFA removes that user's
+browser sessions, challenges, factors, and recovery codes; it preserves API
+tokens, which are separate single-bearer credentials.
+
 The Debian 12 bare-metal runbook below is the alternative if you want full
 control of the host (cgroup v2 sandbox for step scripts, custom kernel
 tuning, etc.). Most small teams will be fine with compose.
@@ -109,6 +128,12 @@ export DURPDEPLOY_DB="sqlserver://durpdeploy:<password>@sqlserver.example.com:14
 Migrations run automatically on startup against whichever database
 `DURPDEPLOY_DB` points at. There is no dump/import path between database
 engines — pick one per environment.
+
+Back up and restore the database together with the server secret key. MFA
+records, browser sessions, recovery-code hashes, and encrypted TOTP material
+are database state; restoring one without the matching key can make encrypted
+TOTP material unusable. A restore does not change the configured origin, so a
+hostname change still requires passkey re-enrollment.
 
 ---
 

@@ -10,16 +10,24 @@ import (
 	"durpdeploy/internal/audit"
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/mfa"
 	"durpdeploy/internal/repository"
 	"durpdeploy/views/pages"
 )
 
 type AuthHandler struct {
-	repo *repository.Repository
+	repo         *repository.Repository
+	mfaService   *mfa.Service
+	cookieSecure bool
 }
 
 func NewAuthHandler(repo *repository.Repository) *AuthHandler {
 	return &AuthHandler{repo: repo}
+}
+
+func (h *AuthHandler) SetMFAService(service *mfa.Service) {
+	h.mfaService = service
+	h.cookieSecure = service.CookieSecure()
 }
 
 func (h *AuthHandler) LoginGet(w http.ResponseWriter, r *http.Request) {
@@ -45,62 +53,34 @@ func (h *AuthHandler) LoginPost(w http.ResponseWriter, r *http.Request) {
 			Render(r.Context(), w)
 		return
 	}
-
-	token, csrf, err := auth.NewSessionToken()
+	factors, err := h.repo.Queries.CountMFAFactors(r.Context(), user.ID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
-	expiresAt := time.Now().Add(24 * time.Hour).Unix()
-
-	ip := r.RemoteAddr
-	if idx := strings.LastIndex(ip, ":"); idx != -1 {
-		ip = ip[:idx]
-	}
-	ua := r.UserAgent()
-
-	_, err = h.repo.Queries.CreateSession(r.Context(), db.CreateSessionParams{
-		ID:        token,
-		UserID:    user.ID,
-		CsrfToken: csrf,
-		ExpiresAt: expiresAt,
-		IpAddress: sql.NullString{String: ip, Valid: true},
-		UserAgent: sql.NullString{String: ua, Valid: true},
-	})
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	if factors > 0 {
+		setNoStore(w)
+		pending, err := h.challengeService().
+			Issue(r.Context(), mfa.ChallengeIssue{
+				UserID:  user.ID,
+				Purpose: mfa.ChallengePurposeLoginMFA,
+			})
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		h.setPendingMFACookies(w, pending)
+		http.Redirect(w, r, "/login/mfa", http.StatusSeeOther)
 		return
 	}
 
-	http.SetCookie(w, &http.Cookie{
-		Name:     "session",
-		Value:    token,
-		Path:     "/",
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-		Secure:   false,
-		Expires:  time.Unix(expiresAt, 0),
-	})
-
-	_ = h.repo.Queries.UpdateUserLastLogin(
-		r.Context(),
-		db.UpdateUserLastLoginParams{
-			LastLoginAt: sql.NullInt64{Int64: time.Now().Unix(), Valid: true},
-			ID:          user.ID,
-		},
-	)
-
-	// Audit successful login. Failed logins are deliberately NOT logged
-	// (privacy / enumeration). The details JSON carries IP + user agent
-	// only — never the password.
-	audit.Record(r.Context(), h.repo, audit.Entry{
-		UserID:     sql.NullInt64{Int64: user.ID, Valid: true},
-		Action:     "login",
-		EntityType: "user",
-		EntityID:   sql.NullInt64{Int64: user.ID, Valid: true},
-		Details:    loginDetails(r),
-	})
+	if err := h.issueFinalBrowserSession(w, r, finalSessionIssue{
+		UserID: user.ID,
+		Factor: finalLoginPassword,
+	}); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
@@ -123,7 +103,7 @@ func (h *AuthHandler) LogoutPost(w http.ResponseWriter, r *http.Request) {
 				Action:     "logout",
 				EntityType: "user",
 				EntityID:   sql.NullInt64{Int64: sess.UserID, Valid: true},
-				Details:    loginDetails(r),
+				Details:    loginDetails(r, ""),
 			})
 		}
 		_ = h.repo.Queries.DeleteSession(r.Context(), cookie.Value)
@@ -137,6 +117,7 @@ func (h *AuthHandler) LogoutPost(w http.ResponseWriter, r *http.Request) {
 		Expires:  time.Unix(0, 0),
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
+		Secure:   h.cookieSecure,
 	})
 
 	http.Redirect(w, r, "/login", http.StatusSeeOther)
@@ -144,13 +125,15 @@ func (h *AuthHandler) LogoutPost(w http.ResponseWriter, r *http.Request) {
 
 // loginDetails returns a JSON string with IP + user agent for audit
 // entries. It never includes form values (passwords, emails).
-func loginDetails(r *http.Request) string {
+func loginDetails(r *http.Request, factor finalLoginFactor) string {
 	ip := r.RemoteAddr
 	if idx := strings.LastIndex(ip, ":"); idx != -1 {
 		ip = ip[:idx]
 	}
-	b, _ := json.Marshal(
-		map[string]string{"ip": ip, "user_agent": r.UserAgent()},
-	)
+	details := map[string]string{"ip": ip, "user_agent": r.UserAgent()}
+	if factor != "" {
+		details["factor"] = string(factor)
+	}
+	b, _ := json.Marshal(details)
 	return string(b)
 }

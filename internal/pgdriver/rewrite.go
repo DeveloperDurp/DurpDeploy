@@ -29,6 +29,7 @@ var (
 		`(?i)INTEGER\s+PRIMARY\s+KEY\s+AUTOINCREMENT`,
 	)
 	integerRe       = regexp.MustCompile(`\bINTEGER\b`)
+	blobRe          = regexp.MustCompile(`\bBLOB\b`)
 	unixepochRe     = regexp.MustCompile(`(?i)unixepoch\(\)`)
 	strftimeTodayRe = regexp.MustCompile(
 		`(?i)strftime\('%s',\s*'now',\s*'start of day'\)`,
@@ -41,6 +42,9 @@ func RewriteSQL(query string) string {
 	if strings.Contains(strings.ToUpper(query), "INTEGER") {
 		query = autoIncrementRe.ReplaceAllString(query, "BIGSERIAL PRIMARY KEY")
 		query = integerRe.ReplaceAllString(query, "BIGINT")
+	}
+	if strings.Contains(strings.ToUpper(query), "BLOB") {
+		query = blobRe.ReplaceAllString(query, "BYTEA")
 	}
 	if strings.Contains(query, "unixepoch") {
 		query = unixepochRe.ReplaceAllString(

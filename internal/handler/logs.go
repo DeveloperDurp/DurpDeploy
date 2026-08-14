@@ -44,16 +44,17 @@ func (h *LogHandler) StreamLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Replay historical logs first
-	logs, err := h.repo.Queries.ListDeploymentLogsByDeployment(
+	// Replay historical logs first.
+	if err := h.repo.ForEachDeploymentLogByDeploymentAsc(
 		r.Context(),
 		deploymentID,
-	)
-	if err == nil {
-		for _, log := range logs {
+		func(log db.DeploymentLog) error {
 			fmt.Fprintf(w, "data: %s\n\n", log.Line)
 			flusher.Flush()
-		}
+			return nil
+		},
+	); err != nil {
+		return
 	}
 
 	ch := h.broker.Subscribe(deploymentID)

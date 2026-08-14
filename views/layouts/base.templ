@@ -56,13 +56,13 @@ templ Base(title string, currentPath string) {
 			<script src="/static/js/app.bundle.js" defer></script>
 		</head>
 		<body class="bg-base-100 text-base-content min-h-screen">
-			<div class="navbar bg-base-200 border-b border-base-300" x-data="{ theme: localStorage.getItem('theme') || 'mocha' }" x-init="document.documentElement.setAttribute('data-theme', theme); $watch('theme', val => { document.documentElement.setAttribute('data-theme', val); localStorage.setItem('theme', val) })">
-				<div class="w-full px-4 sm:px-6 lg:px-8 flex flex-wrap items-center gap-y-2">
-					<div class="flex-1">
-						<a href="/" class="btn btn-ghost text-xl">DurpDeploy</a>
+			<div class="navbar bg-base-200 border-b border-base-300" x-data="navbar" @keydown.escape.window="closeFocusedMenu($event)" @click.window="closeOutsideMenu($event)">
+				<div class="w-full px-4 sm:px-6 lg:px-8 flex flex-nowrap items-center gap-2">
+					<div class="min-w-0 shrink-0">
+						<a href="/" class="btn btn-ghost text-xl whitespace-nowrap">DurpDeploy</a>
 					</div>
-					<div class="flex items-center gap-2 md:w-full md:flex-wrap md:justify-end">
-						<details data-mobile-nav="true" class="dropdown dropdown-end ml-auto md:hidden" @keydown.escape.window="$el.open = false" @click.outside="$el.open = false">
+					<div class="flex min-w-0 flex-1 items-center gap-2">
+						<details data-mobile-nav="true" data-focus-menu class="dropdown dropdown-end ml-auto shrink-0 md:hidden">
 							<summary class="btn btn-ghost btn-sm" aria-label="Open navigation">
 								<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
@@ -74,12 +74,9 @@ templ Base(title string, currentPath string) {
 								<li><a href="/lifecycles" class={ activeClass(currentPath, "/lifecycles") }>Lifecycles</a></li>
 								<li><a href="/deployments" class={ activeClass(currentPath, "/deployments") }>Deployments</a></li>
 								<li><a href="/templates" class={ activeClass(currentPath, "/templates") }>Templates</a></li>
-								if user := auth.UserFromContext(ctx); user == nil || user.Role != "viewer" {
-									<li><a href="/settings/tokens" class={ activeClass(currentPath, "/settings/tokens") }>Tokens</a></li>
-								}
 								if user := auth.UserFromContext(ctx); user != nil && user.Role == "admin" {
 									<li>
-										<details>
+										<details data-focus-menu>
 											<summary>Admin</summary>
 											<ul>
 												<li><a href="/admin/audit">Audit log</a></li>
@@ -97,34 +94,42 @@ templ Base(title string, currentPath string) {
 									</button>
 								</li>
 								if user := auth.UserFromContext(ctx); user != nil {
-									<li><span class="px-4 py-2 text-sm opacity-70 whitespace-nowrap">{ user.Name } ({ user.Role })</span></li>
 									<li>
-										<form method="post" action="/logout">
-											<button type="submit" class="btn btn-ghost btn-sm w-full justify-start">Logout</button>
-										</form>
+									<details data-account-menu data-focus-menu class="dropdown dropdown-end w-full min-w-0">
+										<summary class={ "btn btn-ghost btn-sm w-full min-w-0 justify-start truncate " + activeClass(currentPath, "/settings") } title={ user.Name + " (" + user.Role + ")" } aria-label={ user.Name + " (" + user.Role + ")" }>{ user.Name } ({ user.Role })</summary>
+											<ul class="menu bg-base-200 rounded-box p-2">
+												<li><a href="/settings/security" class={ activeClass(currentPath, "/settings/security") }>Security</a></li>
+												if user.Role != "viewer" {
+													<li><a href="/settings/tokens" class={ activeClass(currentPath, "/settings/tokens") }>Tokens</a></li>
+												}
+												<li class="menu-title"><hr/></li>
+												<li>
+													<form method="post" action="/logout">
+														if sess := auth.SessionFromContext(ctx); sess != nil && sess.CsrfToken != "" {
+															<input type="hidden" name="csrf_token" value={ sess.CsrfToken }/>
+														}
+														<button type="submit" class="btn btn-ghost btn-sm w-full justify-start">Logout</button>
+													</form>
+												</li>
+											</ul>
+										</details>
 									</li>
 								} else {
 									<li><a href="/login">Sign in</a></li>
 								}
 							</ul>
 						</details>
-						<div class="hidden min-w-0 flex-1 md:flex">
-							<ul class="menu menu-horizontal flex-wrap justify-end px-1">
+						<div class="hidden min-w-0 flex-1 overflow-x-auto md:flex">
+							<ul class="menu menu-horizontal flex-nowrap whitespace-nowrap px-1">
 								<li><a href="/projects" class={ activeClass(currentPath, "/projects") }>Projects</a></li>
 								<li><a href="/environments" class={ activeClass(currentPath, "/environments") }>Environments</a></li>
 								<li><a href="/lifecycles" class={ activeClass(currentPath, "/lifecycles") }>Lifecycles</a></li>
 								<li><a href="/deployments" class={ activeClass(currentPath, "/deployments") }>Deployments</a></li>
 								<li><a href="/templates" class={ activeClass(currentPath, "/templates") }>Templates</a></li>
-								// ponytail: inline viewer check instead of pages.CanWrite
-								// to avoid a layouts→pages→layouts import cycle.
-								// Mirrors CanWrite's `u == nil || u.Role != "viewer"`.
-								if user := auth.UserFromContext(ctx); user == nil || user.Role != "viewer" {
-									<li><a href="/settings/tokens" class={ activeClass(currentPath, "/settings/tokens") }>Tokens</a></li>
-								}
 							</ul>
 						</div>
 						if user := auth.UserFromContext(ctx); user != nil && user.Role == "admin" {
-							<details class="dropdown dropdown-end hidden md:block">
+							<details data-focus-menu class="dropdown dropdown-end hidden shrink-0 md:block">
 								<summary class="btn btn-ghost btn-sm">Admin</summary>
 								<ul class="dropdown-content menu bg-base-200 rounded-box z-[1] w-44 p-2 shadow">
 									<li><a href="/admin/audit">Audit log</a></li>
@@ -134,16 +139,30 @@ templ Base(title string, currentPath string) {
 								</ul>
 							</details>
 						}
-						<div class="hidden items-center gap-2 md:flex">
+						<div class="hidden shrink-0 items-center gap-2 md:flex">
 							<button class="btn btn-ghost btn-sm" @click="theme = theme === 'mocha' ? 'light' : 'mocha'">
 								<span class="theme-dark">☀️</span>
 								<span class="theme-light">🌙</span>
 							</button>
 							if user := auth.UserFromContext(ctx); user != nil {
-								<span class="text-sm opacity-70 whitespace-nowrap">{ user.Name } ({ user.Role })</span>
-								<form method="post" action="/logout" class="inline">
-									<button type="submit" class="btn btn-ghost btn-sm">Logout</button>
-								</form>
+								<details data-account-menu data-focus-menu class="dropdown dropdown-end shrink-0">
+									<summary class={ "btn btn-ghost btn-sm w-40 min-w-0 truncate whitespace-nowrap " + activeClass(currentPath, "/settings") } title={ user.Name + " (" + user.Role + ")" } aria-label={ user.Name + " (" + user.Role + ")" }>{ user.Name } ({ user.Role })</summary>
+									<ul class="dropdown-content menu bg-base-200 rounded-box z-[1] w-52 p-2 shadow">
+										<li><a href="/settings/security" class={ activeClass(currentPath, "/settings/security") }>Security</a></li>
+										if user.Role != "viewer" {
+											<li><a href="/settings/tokens" class={ activeClass(currentPath, "/settings/tokens") }>Tokens</a></li>
+										}
+										<li class="menu-title"><hr/></li>
+										<li>
+											<form method="post" action="/logout">
+												if sess := auth.SessionFromContext(ctx); sess != nil && sess.CsrfToken != "" {
+													<input type="hidden" name="csrf_token" value={ sess.CsrfToken }/>
+												}
+												<button type="submit" class="btn btn-ghost btn-sm w-full justify-start">Logout</button>
+											</form>
+										</li>
+									</ul>
+								</details>
 							} else {
 								<a href="/login" class="btn btn-ghost btn-sm">Sign in</a>
 							}

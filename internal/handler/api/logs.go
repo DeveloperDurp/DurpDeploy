@@ -84,14 +84,15 @@ func (h *LogHandler) StreamLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logs, err := h.repo.Queries.ListDeploymentLogsByDeployment(
+	if err := h.repo.ForEachDeploymentLogByDeploymentAsc(
 		r.Context(),
 		depID,
-	)
-	if err == nil {
-		for _, log := range logs {
+		func(log db.DeploymentLog) error {
 			h.writeLogLine(w, flusher, log, ndjson)
-		}
+			return nil
+		},
+	); err != nil {
+		return
 	}
 
 	ch := h.broker.Subscribe(depID)

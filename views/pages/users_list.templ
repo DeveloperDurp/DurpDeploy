@@ -1,6 +1,7 @@
 package pages
 
 import (
+	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
 	"durpdeploy/views/layouts"
 	"fmt"
@@ -61,6 +62,13 @@ templ UsersListPage(
 					</tbody>
 				</table>
 			</div>
+			if CanWrite(ctx) {
+				for _, u := range users {
+					if currentUser == nil || currentUser.ID != u.ID {
+						@MFAResetConfirmationDialog(u)
+					}
+				}
+			}
 		}
 	}
 }
@@ -86,6 +94,24 @@ templ usersListRow(u db.ListUsersRow, currentUser *db.User) {
 			if CanWrite(ctx) {
 				<a href={ fmt.Sprintf("/admin/users/%d/edit", u.ID) } class="btn btn-ghost btn-xs">Edit</a>
 				if currentUser == nil || currentUser.ID != u.ID {
+					<form
+						method="post"
+						action={ fmt.Sprintf("/admin/users/%d/mfa-reset", u.ID) }
+						class="inline"
+						data-mfa-reset-dialog={ fmt.Sprintf("mfa-reset-dialog-%d", u.ID) }
+					>
+						if sess := auth.SessionFromContext(ctx); sess != nil && sess.CsrfToken != "" {
+							<input type="hidden" name="csrf_token" value={ sess.CsrfToken }/>
+						}
+						<input type="hidden" name="reason" value="administrative_reset"/>
+						<button
+							type="submit"
+							class="btn btn-warning btn-xs"
+							data-mfa-reset-opener
+						>
+							Reset MFA
+						</button>
+					</form>
 					<button
 						class="btn btn-error btn-xs"
 						hx-delete={ fmt.Sprintf("/admin/users/%d", u.ID) }
@@ -99,6 +125,55 @@ templ usersListRow(u db.ListUsersRow, currentUser *db.User) {
 			}
 		</td>
 	</tr>
+}
+
+templ MFAResetConfirmationDialog(u db.ListUsersRow) {
+	<dialog
+		id={ fmt.Sprintf("mfa-reset-dialog-%d", u.ID) }
+		class="modal"
+		aria-labelledby={ fmt.Sprintf("mfa-reset-title-%d", u.ID) }
+		aria-describedby={ fmt.Sprintf("mfa-reset-description-%d", u.ID) }
+		data-mfa-reset-confirmation-dialog
+	>
+		<div class="modal-box w-11/12 max-w-lg bg-base-200">
+			<h2 id={ fmt.Sprintf("mfa-reset-title-%d", u.ID) } class="text-lg font-bold">
+				Reset MFA for { u.Name }
+			</h2>
+			<p id={ fmt.Sprintf("mfa-reset-description-%d", u.ID) } class="mt-2 text-sm opacity-70">
+				This removes the user's authenticator factors and recovery codes. They will need to enroll MFA again.
+			</p>
+			<p class="mt-4 text-sm">
+				Target: <span class="font-mono">{ u.Email }</span>
+			</p>
+			<form
+				id={ fmt.Sprintf("mfa-reset-confirm-form-%d", u.ID) }
+				method="post"
+				action={ fmt.Sprintf("/admin/users/%d/mfa-reset", u.ID) }
+				data-mfa-reset-confirmation
+			>
+				if sess := auth.SessionFromContext(ctx); sess != nil && sess.CsrfToken != "" {
+					<input type="hidden" name="csrf_token" value={ sess.CsrfToken }/>
+				}
+				<input type="hidden" name="reason" value="administrative_reset"/>
+			</form>
+			<div class="modal-action">
+				<form method="dialog">
+					<button type="submit" class="btn btn-ghost" autofocus>Cancel</button>
+				</form>
+				<button
+					type="submit"
+					form={ fmt.Sprintf("mfa-reset-confirm-form-%d", u.ID) }
+					class="btn btn-error"
+					data-mfa-reset-confirm
+				>
+					Confirm reset
+				</button>
+			</div>
+		</div>
+		<form method="dialog" class="modal-backdrop">
+			<button type="submit" aria-label="Cancel MFA reset"></button>
+		</form>
+	</dialog>
 }
 
 // NewUserPasswordBanner shows the freshly-created user's initial

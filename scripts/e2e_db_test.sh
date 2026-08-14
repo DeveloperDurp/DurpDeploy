@@ -1,7 +1,70 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BASE="http://localhost:8080"
+BASE="${DURPDEPLOY_BASE_URL:-http://localhost:8080}"
+BASE="${BASE%/}"
+curl_options=()
+if [[ "$BASE" == https://* ]]; then
+    # The local Caddy proxy deliberately uses an internal CA.
+    curl_options=(-k)
+fi
+curl() { command curl "${curl_options[@]}" "$@"; }
+
+E2E_CLI="${DURPDEPLOY_E2E_CLI:-./durpdeploy}"
+
+E2E_TASK3_ADMIN_EMAIL="admin@durp.info"
+E2E_TASK3_ADMIN_PASSWORD="password"
+
+query_user_role() {
+    local email=$1
+    db_query "SELECT LTRIM(RTRIM(role)) FROM users WHERE email='${email}';"
+}
+
+ensure_admin_account_via_cli() {
+    local email=$1
+    local password=$2
+
+    if [[ ! -x "$E2E_CLI" ]]; then
+        echo "FAIL: failed to bootstrap admin: executable CLI not found: $E2E_CLI" >&2
+        echo "Set DURPDEPLOY_E2E_CLI to a built durpdeploy binary, or run 'make build' before this harness." >&2
+        exit 1
+    fi
+
+    if ! DURPDEPLOY_DB="$DB_DSN" "$E2E_CLI" admin create --email "$email" --password "$password" >/dev/null; then
+        echo "FAIL: failed to create admin $email via CLI ($E2E_CLI)" >&2
+        echo "Check credentials or CLI compatibility, and verify the database path is reachable." >&2
+        exit 1
+    fi
+}
+
+ensure_test_admin() {
+    local email=$1
+    local password=$2
+    local label=$3
+
+    local role
+    role="$(query_user_role "$email" || true)"
+
+    case "$role" in
+    "")
+        echo "Preparing bootstrap admin account $label via CLI ($E2E_CLI)"
+        ensure_admin_account_via_cli "$email" "$password"
+        role="$(query_user_role "$email" || true)"
+        [[ "$role" == "admin" ]] || {
+            echo "FAIL: bootstrap did not create role=admin for $label ($email)" >&2
+            exit 1
+        }
+        ;;
+    "admin")
+        :
+        ;;
+    *)
+        echo "FAIL: $label account $email exists with role=$role, expected admin" >&2
+        exit 1
+        ;;
+    esac
+}
+
 DB_KIND="${1:-${DURPDEPLOY_DB_KIND:-}}"
 DB_CONTAINER="${DURPDEPLOY_DB_CONTAINER:-}"
 case "$DB_KIND" in
@@ -25,6 +88,11 @@ case "$DB_KIND" in
         exit 2
         ;;
 esac
+
+if ! curl -fsS "$BASE/healthz" >/dev/null; then
+    echo "FAIL: DurpDeploy server is unavailable at $BASE (set DURPDEPLOY_BASE_URL)" >&2
+    exit 1
+fi
 
 if [[ -n "$DB_CONTAINER" ]]; then
     command -v docker >/dev/null || { echo "FAIL: docker is required" >&2; exit 1; }
@@ -72,30 +140,10 @@ COOKIES=$(mktemp)
 trap "rm -rf $TMP; rm -f $COOKIES" EXIT
 
 echo "=== Preparing E2E checks against the running server ==="
-go build -o "$TMP/durpdeploy" ./cmd/server
-
-# `make dev-postgres` and `make dev-mssql` start the server in another
-# terminal. Create the test admin when using a fresh database, but keep
-# reruns safe when the user already exists.
 ADMIN_EMAIL="${E2E_ADMIN_EMAIL:-e2e-admin@test.local}"
 ADMIN_PASS="${E2E_ADMIN_PASSWORD:-e2e-admin-password-1234}"
-if [[ "$(db_query "SELECT COUNT(*) FROM users WHERE email='$ADMIN_EMAIL';")" == "0" ]]; then
-    DURPDEPLOY_DB="$DB_DSN" "$TMP/durpdeploy" admin create \
-        --email "$ADMIN_EMAIL" --password "$ADMIN_PASS" >/dev/null
-else
-    # A previous run may have left the reusable account with a read-only role.
-    # Keep the setup idempotent while ensuring the happy path uses an admin.
-    db_query "UPDATE users SET role='admin' WHERE email='$ADMIN_EMAIL';" >/dev/null
-fi
-
-if [[ "$(db_query "SELECT COUNT(*) FROM users WHERE email='admin@durp.info';")" == "0" ]]; then
-    DURPDEPLOY_DB="$DB_DSN" "$TMP/durpdeploy" admin create \
-        --email "admin@durp.info" --password "password" >/dev/null
-else
-    # A previous run may have left the reusable account with a read-only role.
-    # Keep the setup idempotent while ensuring the happy path uses an admin.
-    db_query "UPDATE users SET role='admin' WHERE email='$ADMIN_EMAIL';" >/dev/null
-fi
+ensure_test_admin "$ADMIN_EMAIL" "$ADMIN_PASS" "configured primary E2E admin"
+ensure_test_admin "$E2E_TASK3_ADMIN_EMAIL" "$E2E_TASK3_ADMIN_PASSWORD" "task-3 fixed admin"
 
 # Helpers. All helpers pass -b $COOKIES so the session cookie is
 # attached automatically. State-changing methods append csrf_token=$CSRF
@@ -197,9 +245,17 @@ CANCEL_DEP=$(echo "$CANCEL_URL" | grep -oP '/deployments/\K[0-9]+')
 echo "Cancel Deployment ID: $CANCEL_DEP"
 
 for i in {1..50}; do
-  if curl_body "$BASE/deployments/$CANCEL_DEP/status" | grep -q 'running'; then break; fi
+  CANCEL_STATUS=$(curl_body "$BASE/deployments/$CANCEL_DEP/status")
+  CANCEL_STATE=$(printf '%s' "$CANCEL_STATUS" | \
+      grep -oP 'badge [^"]+">\K[a-z_]+' | head -1 || true)
+  [[ "$CANCEL_STATE" == "running" ]] && break
   sleep 0.1
 done
+CANCEL_STATE=${CANCEL_STATE:-unknown}
+[[ "$CANCEL_STATE" == "running" ]] || {
+  echo "FAIL: cancel deployment did not become running (last state=$CANCEL_STATE)" >&2
+  exit 1
+}
 CODE=$(curl_silent -X POST -d "csrf_token=$CSRF" "$BASE/deployments/$CANCEL_DEP/cancel")
 [[ "$CODE" == "303" ]] || { echo "FAIL: cancel got $CODE"; exit 1; }
 
@@ -658,6 +714,7 @@ echo "=== API tests ==="
 api_get() { curl -s -H "Authorization: Bearer $API_TOKEN" "$@"; }
 api_get_code() { curl -s -H "Authorization: Bearer $API_TOKEN" -o /dev/null -w "%{http_code}" "$@"; }
 api_post() { curl -s -H "Authorization: Bearer $API_TOKEN" -H "Content-Type: application/json" -X POST -d "$1" "$2"; }
+api_put() { curl -s -H "Authorization: Bearer $API_TOKEN" -H "Content-Type: application/json" -X PUT -d "$1" "$2"; }
 api_post_code() { curl -s -H "Authorization: Bearer $API_TOKEN" -H "Content-Type: application/json" -X POST -d "$1" -o /dev/null -w "%{http_code}" "$2"; }
 api_post_noauth() { curl -s -H "Content-Type: application/json" -X POST -d "$1" -o /dev/null -w "%{http_code}" "$2"; }
 
@@ -771,17 +828,34 @@ echo "  404 missing project: OK"
 # 403 viewer write block.
 VIEWER_EMAIL="e2e-viewer@test.local"
 VIEWER_PASS="e2e-viewer-pass-1234"
-VIEWER_CREATE=$(api_post "{\"email\":\"$VIEWER_EMAIL\",\"name\":\"E2E Viewer\",\"role\":\"viewer\",\"password\":\"$VIEWER_PASS\"}" \
+VIEWER_CREATE=$(api_post "{\"email\":\"$VIEWER_EMAIL\",\"name\":\"E2E Viewer\",\"role\":\"deployer\",\"password\":\"$VIEWER_PASS\"}" \
     "$BASE/api/v1/admin/users")
 VIEWER_USER_ID=$(echo "$VIEWER_CREATE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))")
 [[ -n "$VIEWER_USER_ID" ]] || { echo "FAIL: viewer user create did not return id: $VIEWER_CREATE"; exit 1; }
-# Mint a token for the viewer via the CLI (web session for the viewer is not needed).
-VIEWER_TOKEN=$(DURPDEPLOY_DB="$DB_DSN" "$TMP/durpdeploy" tokens create --user "$VIEWER_EMAIL" --name e2e-viewer 2>/dev/null | grep '^ddp_pat_' | head -1)
+VIEWER_LOGIN=$(mktemp)
+CODE=$(curl -s -c "$VIEWER_LOGIN" -o /dev/null -w "%{http_code}" \
+    -X POST -d "email=$VIEWER_EMAIL&password=$VIEWER_PASS" "$BASE/login")
+[[ "$CODE" == "303" ]] || { echo "FAIL: viewer login got $CODE, want 303"; exit 1; }
+VIEWER_SESSION_ID=$(awk '$6 == "session" { print $7 }' "$VIEWER_LOGIN")
+VIEWER_CSRF=$(db_query "SELECT LTRIM(RTRIM(csrf_token)) FROM sessions WHERE id='$VIEWER_SESSION_ID';")
+[[ -n "$VIEWER_CSRF" ]] || { echo "FAIL: no CSRF token for viewer"; exit 1; }
+VIEWER_TOKEN_REDIRECT=$(curl -s -b "$VIEWER_LOGIN" -D - -o /dev/null \
+    -X POST -d "name=e2e-viewer&csrf_token=$VIEWER_CSRF" "$BASE/settings/tokens" | \
+    grep -i "^location:" | awk '{print $2}' | tr -d '\r')
+VIEWER_TOKEN=$(echo "$VIEWER_TOKEN_REDIRECT" | python3 -c "
+import sys, urllib.parse
+url = sys.stdin.read().strip()
+print(urllib.parse.unquote(urllib.parse.parse_qs(urllib.parse.urlparse(url).query).get('new_token', [''])[0]))
+")
 [[ -n "$VIEWER_TOKEN" ]] || { echo "FAIL: could not mint viewer token"; exit 1; }
+VIEWER_UPDATE=$(api_put '{"name":"E2E Viewer","role":"viewer"}' "$BASE/api/v1/admin/users/$VIEWER_USER_ID")
+VIEWER_ROLE=$(echo "$VIEWER_UPDATE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('role',''))")
+[[ "$VIEWER_ROLE" == "viewer" ]] || { echo "FAIL: viewer role = $VIEWER_ROLE, want viewer"; exit 1; }
 CODE=$(curl -s -H "Authorization: Bearer $VIEWER_TOKEN" -H "Content-Type: application/json" \
     -X POST -d '{"name":"viewer-proj"}' -o /dev/null -w "%{http_code}" "$BASE/api/v1/projects")
 [[ "$CODE" == "403" ]] || { echo "FAIL: viewer create project got $CODE, want 403"; exit 1; }
 echo "  403 viewer write block: OK"
+rm -f "$VIEWER_LOGIN"
 
 # A10: Swagger endpoints.
 CODE=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/api/swagger/")

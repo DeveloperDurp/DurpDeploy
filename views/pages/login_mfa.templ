@@ -1,0 +1,113 @@
+package pages
+
+import "durpdeploy/views/layouts"
+
+type LoginMFAAvailability struct {
+	TOTP     bool
+	Passkey  bool
+	Recovery bool
+}
+
+templ LoginMFAPage(currentPath, csrf string, availability LoginMFAAvailability, errorMsg string) {
+	@layouts.Base("Verify login", currentPath) {
+		<div class="w-full px-4 sm:px-6 lg:px-8 py-12">
+			<div class="max-w-md mx-auto space-y-4">
+				<div class="card bg-base-200 shadow-xl">
+					<div class="card-body space-y-4">
+						<h1 class="card-title text-2xl font-bold">Verify login</h1>
+						<p class="text-sm opacity-70">
+							Complete sign-in with an available verification method.
+						</p>
+						if errorMsg != "" {
+							<div class="alert alert-error" role="alert" aria-live="assertive">
+								<span>{ errorMsg }</span>
+							</div>
+						}
+						if availability.TOTP || availability.Recovery || availability.Passkey {
+							<section class="space-y-4" aria-labelledby="factor-options">
+								<h2 id="factor-options" class="text-lg font-semibold">
+									Choose a verification method
+								</h2>
+								if availability.TOTP {
+									<form method="post" action="/login/mfa/totp" class="space-y-4">
+										<input type="hidden" name="csrf_token" value={ csrf }/>
+										<div class="form-control">
+											<label class="label" for="totp-code">
+												<span class="label-text">Authenticator code</span>
+											</label>
+											<input
+												id="totp-code"
+												type="text"
+												name="code"
+												class="input input-bordered"
+												inputmode="numeric"
+												autocomplete="one-time-code"
+												pattern="[0-9]{6}"
+												maxlength="6"
+												aria-describedby="totp-code-help"
+												required
+											/>
+											<p id="totp-code-help" class="text-sm opacity-70">
+												Enter the six-digit code from your authenticator app.
+											</p>
+										</div>
+									<button type="submit" class="btn btn-primary w-full">Continue</button>
+									</form>
+								}
+								if availability.Recovery {
+									<form method="post" action="/login/mfa/recovery" class="space-y-4">
+										<input type="hidden" name="csrf_token" value={ csrf }/>
+										<div class="form-control">
+											<label class="label" for="recovery-code">
+												<span class="label-text">Recovery code</span>
+											</label>
+											<input
+												id="recovery-code"
+												type="text"
+												name="code"
+												class="input input-bordered"
+												autocomplete="one-time-code"
+												required
+											/>
+										</div>
+									<button type="submit" class="btn btn-outline w-full">
+										Use recovery code
+									</button>
+									</form>
+								}
+								if availability.Passkey {
+									<div class="space-y-2" data-webauthn-container>
+										<input type="hidden" name="csrf_token" value={ csrf }/>
+										<h3 class="font-medium">Passkey</h3>
+										<p id="passkey-help" class="text-sm opacity-70">
+											Passkey verification uses your browser.
+										</p>
+										<button
+											id="login-mfa-passkey"
+											type="button"
+											class="btn btn-outline w-full"
+											aria-describedby="passkey-help"
+											data-webauthn-authenticate
+											data-webauthn-begin="/login/mfa/webauthn/begin"
+											data-webauthn-finish="/login/mfa/webauthn/finish"
+										>
+											Use a passkey
+										</button>
+										<p data-webauthn-status role="status" aria-live="polite" class="text-sm"></p>
+									</div>
+								}
+							</section>
+						}
+						<p class="text-sm opacity-70">
+							This verification expires after five minutes.
+						</p>
+						<form method="post" action="/login/mfa/cancel">
+							<input type="hidden" name="csrf_token" value={ csrf }/>
+							<button type="submit" class="btn btn-ghost w-full">Cancel</button>
+						</form>
+					</div>
+				</div>
+			</div>
+		</div>
+	}
+}

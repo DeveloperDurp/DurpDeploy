@@ -503,7 +503,11 @@ func (h *ProjectHandler) UpdateProjectNotifications(
 	webhook := trimSpace(req.SlackWebhookURL)
 	gotifyURL := trimSpace(req.GotifyURL)
 	discordWebhook := trimSpace(req.DiscordWebhookURL)
-	if err := validateNotificationURLs(webhook, gotifyURL, discordWebhook); err != nil {
+	if err := validateNotificationURLs(
+		webhook,
+		gotifyURL,
+		discordWebhook,
+	); err != nil {
 		RespondError(w, http.StatusBadRequest, err.Error())
 		return
 	}

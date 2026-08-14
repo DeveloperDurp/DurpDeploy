@@ -1,4 +1,4 @@
-.PHONY: build dev dev-postgres dev-mssql e2e-postgres e2e-mssql check-openssl templ-generate tailwind-build js-build npm-install golines golines-check clean test e2e-test swagger-spec mobile-browser-container
+.PHONY: build dev dev-server dev-postgres dev-mssql e2e-test e2e-test-isolated e2e-postgres e2e-mssql check-openssl templ-generate tailwind-build js-build npm-install golines golines-check clean test mfa-e2e-test auth-mfa-e2e-go-prepare auth-mfa-e2e-browser-prepare auth-mfa-e2e-sqlite-http auth-mfa-e2e-sqlite-browser auth-mfa-e2e-sqlite auth-mfa-e2e-postgres auth-mfa-e2e-mssql auth-mfa-e2e swagger-spec mobile-browser-container
 
 BINARY_NAME=durpdeploy
 MAIN_PATH=cmd/server/main.go
@@ -6,6 +6,9 @@ DEV_POSTGRES_CONTAINER ?= durpdeploy-dev-postgres
 DEV_POSTGRES_IMAGE ?= postgres:16-alpine
 DEV_MSSQL_CONTAINER ?= durpdeploy-dev-mssql
 DEV_MSSQL_IMAGE ?= mcr.microsoft.com/mssql/server:2022-latest
+DEV_HTTPS_PROXY_CONTAINER ?= durpdeploy-dev-https
+DEV_HTTPS_PROXY_PORT ?= 8443
+DEV_HTTPS_PROXY_BACKEND ?= host.docker.internal:8080
 
 build: swagger-spec swagger-ui-copy templ-generate tailwind-build js-build
 	go build -o $(BINARY_NAME) $(MAIN_PATH)
@@ -21,6 +24,13 @@ MAKEFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 ENV_FILE ?= $(MAKEFILE_DIR).env
 
 dev: check-openssl
+	DURPDEPLOY_HTTPS_PROXY_CONTAINER='$(DEV_HTTPS_PROXY_CONTAINER)' \
+	DURPDEPLOY_HTTPS_PROXY_PORT='$(DEV_HTTPS_PROXY_PORT)' \
+	DURPDEPLOY_HTTPS_PROXY_BACKEND='$(DEV_HTTPS_PROXY_BACKEND)' \
+	DURPDEPLOY_URL="$${DURPDEPLOY_URL:-https://localhost:$(DEV_HTTPS_PROXY_PORT)}" \
+	./scripts/dev_https_proxy.sh "$${MAKE:-make}" --no-print-directory dev-server
+
+dev-server:
 	env_secret_key=$$(unset DURPDEPLOY_SECRET_KEY; \
 		if [ -f "$(ENV_FILE)" ]; then . "$(ENV_FILE)"; fi; \
 		printf '%s' "$${DURPDEPLOY_SECRET_KEY:-}"); \
@@ -145,16 +155,62 @@ clean:
 test: templ-generate
 	go test -v -count=1 ./...
 
-# Bash end-to-end test: builds, runs the server, curls happy/cancel/validation
-# paths. Reads the shell-compatible DURPDEPLOY_SECRET_KEY assignment from
-# ENV_FILE (default repository/.env) before inherited/generated-key fallback.
-e2e-test: build check-openssl
+# Running-server E2E checks. Start `make dev` (or the matching database dev
+# target) in another terminal first; this target never starts another server.
+e2e-test:
+	DURPDEPLOY_BASE_URL="$${DURPDEPLOY_BASE_URL:-http://localhost:8080}" \
+	DURPDEPLOY_DB="$${DURPDEPLOY_DB:-durpdeploy.db}" ./scripts/e2e_db_test.sh sqlite
+
+# Isolated E2E checks for CI or a clean-room local run. Unlike e2e-test, this
+# target builds and starts its own temporary SQLite-backed server.
+e2e-test-isolated: build check-openssl
 	env_secret_key=$$(unset DURPDEPLOY_SECRET_KEY; \
 		if [ -f "$(ENV_FILE)" ]; then . "$(ENV_FILE)"; fi; \
 		printf '%s' "$${DURPDEPLOY_SECRET_KEY:-}"); \
 	if [ -n "$$env_secret_key" ]; then DURPDEPLOY_SECRET_KEY="$$env_secret_key"; fi; \
 	DURPDEPLOY_SECRET_KEY=$${DURPDEPLOY_SECRET_KEY:-$$(openssl rand -base64 32)} \
 	DURPDEPLOY_ENV_FILE="$(ENV_FILE)" ./scripts/e2e_test.sh
+
+# Complete deterministic MFA proof. The browser script creates its own isolated
+# database/key and virtual authenticator after the shell contracts above.
+mfa-e2e-test: e2e-test-isolated
+	node scripts/mfa_browser_test.mjs
+
+auth-mfa-e2e-go-prepare: check-openssl
+	@command -v go >/dev/null 2>&1 || { echo "ERROR: go is required for auth/MFA E2E." >&2; exit 1; }
+	@test -f static/swagger-ui/swagger-ui.css -a -f static/swagger-ui/swagger-ui-bundle.js || { echo "ERROR: generated Swagger UI is required; run make swagger-ui-copy first." >&2; exit 1; }
+	templ generate
+
+auth-mfa-e2e-browser-prepare: auth-mfa-e2e-go-prepare
+	@command -v node >/dev/null 2>&1 || { echo "ERROR: node is required for auth/MFA browser E2E." >&2; exit 1; }
+	@node -e 'require.resolve("playwright")' >/dev/null 2>&1 || { echo "ERROR: Playwright is required for auth/MFA browser E2E." >&2; exit 1; }
+
+auth-mfa-e2e-sqlite-http: auth-mfa-e2e-go-prepare
+	@printf '%s\n' '{"engine":"sqlite","suite":"auth-mfa-http","result":"start"}'
+	DURPDEPLOY_AUTH_MFA_HTTP_MATRIX=1 ./scripts/e2e_test.sh
+	DURPDEPLOY_AUTH_MFA_HTTP_MATRIX=1 DURPDEPLOY_AUTH_MFA_HTTP_MATRIX_SCRIPT=./scripts/auth_mfa_sqlite_authz_matrix.sh ./scripts/e2e_test.sh
+	@printf '%s\n' '{"engine":"sqlite","suite":"auth-mfa-http","result":"pass"}'
+
+auth-mfa-e2e-sqlite-browser: auth-mfa-e2e-browser-prepare
+	@printf '%s\n' '{"engine":"sqlite","suite":"auth-mfa-browser","result":"start"}'
+	node scripts/mfa_browser_test.mjs
+	node scripts/auth_mfa_authz_browser_matrix.mjs
+	@printf '%s\n' '{"engine":"sqlite","suite":"auth-mfa-browser","result":"pass"}'
+
+auth-mfa-e2e-sqlite:
+	+$(MAKE) --no-print-directory auth-mfa-e2e-sqlite-http
+	+$(MAKE) --no-print-directory auth-mfa-e2e-sqlite-browser
+
+auth-mfa-e2e-postgres: auth-mfa-e2e-go-prepare
+	./scripts/auth_mfa_db_parity.sh postgres
+
+auth-mfa-e2e-mssql: auth-mfa-e2e-go-prepare
+	./scripts/auth_mfa_db_parity.sh mssql
+
+auth-mfa-e2e:
+	+$(MAKE) --no-print-directory auth-mfa-e2e-sqlite
+	+$(MAKE) --no-print-directory auth-mfa-e2e-postgres
+	+$(MAKE) --no-print-directory auth-mfa-e2e-mssql
 
 # Runs the strict Playwright browser contract in the shared CI image. The source checkout
 # and secret-free evidence directory stay on the host; Docker owns the browser.

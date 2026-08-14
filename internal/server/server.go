@@ -47,6 +47,9 @@ func NewRouter(
 		"/static/*",
 		http.StripPrefix("/static/", http.FileServer(http.FS(static.Assets))),
 	)
+	r.Get("/favicon.ico", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
 
 	errorHandler := handler.NewErrorHandler()
 	r.NotFound(errorHandler.NotFound)
@@ -60,7 +63,12 @@ func NewRouter(
 	// Auth endpoints (public).
 	r.Get("/login", authHandler.LoginGet)
 	r.Post("/login", authHandler.LoginPost)
-	r.Post("/logout", authHandler.LogoutPost)
+	r.Get("/login/mfa", authHandler.LoginMFAGet)
+	r.Post("/login/mfa/totp", authHandler.LoginMFATOTPPost)
+	r.Post("/login/mfa/recovery", authHandler.LoginMFARecoveryPost)
+	r.Post("/login/mfa/webauthn/begin", authHandler.LoginMFAWebAuthnBegin)
+	r.Post("/login/mfa/webauthn/finish", authHandler.LoginMFAWebAuthnFinish)
+	r.Post("/login/mfa/cancel", authHandler.LoginMFACancelPost)
 
 	// Protected routes: every request must carry a valid session cookie
 	// and state-changing requests must carry the CSRF token.
@@ -74,6 +82,7 @@ func NewRouter(
 		// Home page
 		indexHandler := handler.NewIndexHandler(repo)
 		pr.Get("/", indexHandler.Index)
+		pr.Post("/logout", authHandler.LogoutPost)
 
 		envHandler := handler.NewEnvironmentHandler(repo)
 		pr.Get("/environments", envHandler.ListEnvironments)
@@ -110,6 +119,75 @@ func NewRouter(
 		pr.Get("/settings/tokens", tokensH.MyTokens)
 		pr.Post("/settings/tokens", tokensH.MyTokensPost)
 		pr.Post("/settings/tokens/{id}/revoke", tokensH.MyTokensRevoke)
+
+		pr.Get("/settings/security", authHandler.SecurityGet)
+		pr.Get("/settings/security/reauth", authHandler.SecurityReauthGet)
+		pr.Post("/settings/security/reauth", authHandler.SecurityReauthPost)
+		pr.Post(
+			"/settings/security/reauth/totp",
+			authHandler.SecurityReauthTOTPPost,
+		)
+		pr.Post(
+			"/settings/security/reauth/recovery",
+			authHandler.SecurityReauthRecoveryPost,
+		)
+		pr.Post(
+			"/settings/security/recovery/continue",
+			authHandler.SecurityRecoveryContinuePost,
+		)
+		pr.Post(
+			"/settings/security/reauth/webauthn/begin",
+			authHandler.SecurityReauthWebAuthnBegin,
+		)
+		pr.Post(
+			"/settings/security/reauth/webauthn/finish",
+			authHandler.SecurityReauthWebAuthnFinish,
+		)
+		pr.Post(
+			"/settings/security/totp/begin",
+			authHandler.SecurityTOTPBeginPost,
+		)
+		pr.Post(
+			"/settings/security/totp/confirm",
+			authHandler.SecurityTOTPConfirmPost,
+		)
+		pr.Post(
+			"/settings/security/passkeys/begin",
+			authHandler.SecurityPasskeyBeginPost,
+		)
+		pr.Post(
+			"/settings/security/passkeys/finish",
+			authHandler.SecurityPasskeyFinishPost,
+		)
+		pr.Get(
+			"/settings/security/passkeys/test",
+			authHandler.SecurityPasskeyTestGet,
+		)
+		pr.Post(
+			"/settings/security/passkeys/test/begin",
+			authHandler.SecurityPasskeyTestBeginPost,
+		)
+		pr.Post(
+			"/settings/security/passkeys/test/finish",
+			authHandler.SecurityPasskeyTestFinishPost,
+		)
+		pr.Post(
+			"/settings/security/passkeys/test/cancel",
+			authHandler.SecurityPasskeyTestCancelPost,
+		)
+		pr.Post(
+			"/settings/security/passkeys/rename",
+			authHandler.SecurityPasskeyRenamePost,
+		)
+		pr.Post(
+			"/settings/security/passkeys/delete",
+			authHandler.SecurityPasskeyDeletePost,
+		)
+		pr.Post(
+			"/settings/security/recovery/regenerate",
+			authHandler.SecurityRecoveryRegeneratePost,
+		)
+		pr.Post("/settings/security/disable", authHandler.SecurityDisablePost)
 
 		sh := handler.NewStepHandler(repo)
 
@@ -243,6 +321,10 @@ func NewRouter(
 			ar.Get("/admin/users/{id}/edit", usersH.EditUserForm)
 			ar.Put("/admin/users/{id}", usersH.UpdateUser)
 			ar.Delete("/admin/users/{id}", usersH.DeleteUser)
+			ar.Post(
+				"/admin/users/{id}/mfa-reset",
+				authHandler.AdminMFAResetPost,
+			)
 
 			webTokensH := handler.NewTokensHandler(repo)
 			ar.Get("/admin/tokens", webTokensH.AdminTokens)

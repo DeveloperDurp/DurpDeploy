@@ -208,16 +208,20 @@ require_text "$ci" 'Docker daemon did not become ready after 30 seconds' \
 require_text "$ci" 'docker info 2>&1 || true' 'CI Docker readiness diagnostics are missing'
 require_text "$ci" 'if ! docker info >/tmp/mobile-browser-docker-info 2>&1; then' \
 	'CI Docker after-script diagnostic is missing'
-require_text "$ci" 'skipping artifact copy and container cleanup' \
+require_text "$ci" 'skipping failure diagnostics and container cleanup' \
 	'CI Docker after-script diagnostic is missing'
 require_text "$ci" 'docker container inspect "$MOBILE_BROWSER_CONTAINER"' \
 	'CI container existence check is missing'
-require_text "$ci" 'docker cp "$MOBILE_BROWSER_CONTAINER:/artifacts/." artifacts/mobile/' \
-	'CI artifact copy is missing'
+require_text "$ci" 'mobile:browser failure diagnostics (capped at 32 KiB):' \
+	'CI failure diagnostic heading is missing'
+require_text "$ci" 'mobile-readability-*.json' \
+	'CI failure diagnostic receipt allowlist is missing'
+require_text "$ci" 'head -c 32768' \
+	'CI failure diagnostic byte cap is missing'
 require_text "$ci" 'docker rm -f "$MOBILE_BROWSER_CONTAINER"' \
 	'CI container cleanup is missing'
 
-if sed -n '/^mobile:browser:/,/^build:/p' "$root/$ci" | \
+if sed -n '/^mobile:browser:/,/^auth:mfa-sqlite:/p' "$root/$ci" | \
 	grep -Eq 'docker start -a.*\|\| true|docker run.*\|\| true'; then
 	echo 'mobile browser contract: CI main test command must not be failure-masked' >&2
 	exit 1
@@ -248,7 +252,7 @@ for file in \
 		"legacy mobile browser mode remains in $file"
 done
 
-if sed -n '/^mobile:browser:/,/^build:/p' "$root/$ci" | \
+if sed -n '/^mobile:browser:/,/^auth:mfa-sqlite:/p' "$root/$ci" | \
 	grep -Eq 'apt-get|npm ci|playwright install|templ generate'; then
 	echo 'mobile browser contract: CI duplicates container provisioning' >&2
 	exit 1

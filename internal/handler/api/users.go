@@ -276,18 +276,10 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.Password != "" {
-		hash, err := auth.HashPassword(req.Password)
-		if err != nil {
-			RespondError(w, http.StatusInternalServerError, err.Error())
-			return
-		}
-		if err := h.repo.Queries.UpdateUserPassword(
-			r.Context(),
-			db.UpdateUserPasswordParams{
-				ID:           id,
-				PasswordHash: hash,
-			},
-		); err != nil {
+		if err := auth.UpdatePassword(r.Context(), h.repo, auth.PasswordChange{
+			UserID:   id,
+			Password: req.Password,
+		}); err != nil {
 			RespondError(w, http.StatusInternalServerError, err.Error())
 			return
 		}

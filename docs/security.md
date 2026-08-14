@@ -44,6 +44,38 @@ see "Runner cleanup" below); per-step OS-level sandboxing
   Comparison uses `subtle.ConstantTimeCompare` to prevent timing attacks.
 - No plaintext password is stored anywhere in the database.
 
+### Browser MFA
+
+Browser MFA is optional. An enrolled user completes a browser login with their
+password and one current TOTP code, passkey, or recovery code. TOTP is not
+phishing-resistant. Passkeys are bound to the single origin and RP ID derived
+from `DURPDEPLOY_URL`; changing its hostname or origin invalidates the stored
+credential relationship and requires passkey re-enrollment.
+
+Recovery codes are one-time values. They are displayed only when first
+generated or regenerated, and only their hashes are stored. Users should keep
+the displayed values in approved secure storage. MFA ceremony and secret
+responses use `Cache-Control: no-store`; do not put recovery codes, TOTP
+seeds, cookies, challenges, or assertions in URLs, logs, tickets, or docs.
+
+The final `session` cookie is `HttpOnly`, `SameSite=Lax`, and `Secure` when
+`DURPDEPLOY_URL` uses HTTPS. Pending MFA cookies are separate from the final
+session and do not authorize protected routes. Factor completion issues a new
+browser session and records `reauthenticated_at`; factor changes, disablement,
+password changes, and administrator resets invalidate the affected browser
+sessions and pending challenges.
+
+Browser MFA protects browser sessions only. API tokens are single bearer
+factors: `/api/v1/*` does not prompt for MFA, and MFA disablement or an
+administrator reset does not revoke API tokens. Revoke API tokens separately
+when their bearer value may have leaked.
+
+Users enroll or recover factors from **Security**. An administrator may reset
+another user's MFA only after fresh reauthentication; that reset removes the
+target's factors, recovery codes, browser sessions, and pending challenges.
+It intentionally preserves API tokens. This is an operational contract; the
+browser ceremony end-to-end proof is tracked separately from this document.
+
 ---
 
 ## CSRF protection
@@ -82,6 +114,10 @@ Two-layer defense for viewer read-only enforcement:
 
 Both layers are required. Skipping the templ guard leaves dead-end UI;
 skipping the middleware leaves a security hole.
+
+The narrow exception is self-security: a viewer may manage only their own
+Security settings after the normal session, CSRF, and fresh-reauthentication
+checks. A viewer cannot manage another user, deployments, projects, or tokens.
 
 ### Per-project authorization
 

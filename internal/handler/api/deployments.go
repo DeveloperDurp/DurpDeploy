@@ -756,15 +756,16 @@ func (h *DeploymentHandler) DeploymentEvents(
 		return
 	}
 
-	logs, err := h.repo.Queries.ListDeploymentLogsByDeployment(
+	if err := h.repo.ForEachDeploymentLogByDeploymentAsc(
 		r.Context(),
 		depID,
-	)
-	if err == nil {
-		for _, log := range logs {
+		func(log db.DeploymentLog) error {
 			fmt.Fprintf(w, "data: %s\n\n", log.Line)
 			flusher.Flush()
-		}
+			return nil
+		},
+	); err != nil {
+		return
 	}
 
 	ch := h.runner.Broker().Subscribe(depID)

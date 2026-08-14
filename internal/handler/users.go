@@ -244,36 +244,24 @@ func (h *UsersHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if password != "" {
-		hash, err := auth.HashPassword(password)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		if err := h.repo.Queries.UpdateUserPassword(
-			r.Context(),
-			db.UpdateUserPasswordParams{
-				PasswordHash: hash,
-				ID:           id,
-			},
-		); err != nil {
+		if err := auth.UpdatePassword(r.Context(), h.repo, auth.PasswordChange{
+			UserID:   id,
+			Password: password,
+		}); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 	}
 
-	// Role change OR password change forces re-login. The new role /
-	// new password is in the DB but the user's existing session still
-	// has the old role cached on the session row, and a compromised
-	// password remains valid on every other device the user is logged
-	// into until the row is wiped.
-	//
-	// ponytail: invalidating on password change is the standard
-	// "log out other sessions" behavior (GitHub, Google, ...). The
-	// plan only explicitly calls out role change, but the same
-	// security argument applies — keeping a single invalidation point
-	// is cheaper than splitting it.
-	if role != target.Role || password != "" {
-		_ = h.repo.Queries.DeleteSessionsByUser(r.Context(), id)
+	if role != target.Role && password == "" {
+		if err := auth.InvalidateBrowserAuth(
+			r.Context(),
+			h.repo,
+			id,
+		); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 
 	redirect := "/admin/users"

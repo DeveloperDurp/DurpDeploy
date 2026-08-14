@@ -15,6 +15,8 @@ default:
 
 lint:
   stage: lint
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
   before_script:
     - go install github.com/a-h/templ/cmd/templ@v0.3.1020
     - templ generate
@@ -36,13 +38,17 @@ lint:
 # Dockerfile lint. Runs on every pipeline so a bad Dockerfile fails fast.
 lint:dockerfile:
   stage: lint
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
   image: hadolint/hadolint:latest-alpine
   script:
     - hadolint --failure-threshold warning Dockerfile
   needs: []
 
-test:
+golang:test:
   stage: test
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
   before_script:
     # ponytail: tests spawn the deployment runner, which exec's `bash` to run step scripts. The `default.before_script` doesn't reliably run in this Kubernetes executor, so install explicitly.
     - apk add --no-cache bash make nodejs npm util-linux
@@ -64,6 +70,8 @@ test:
 # created container and copy only its secret-free artifacts back afterward.
 mobile:browser:
   stage: test
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
   image: docker:24
   services:
     - name: docker:24-dind
@@ -101,30 +109,134 @@ mobile:browser:
   after_script:
     - |
       set +e
-      mkdir -p artifacts/mobile
       if ! docker info >/tmp/mobile-browser-docker-info 2>&1; then
-        echo 'mobile:browser after_script: Docker daemon unavailable; skipping artifact copy and container cleanup.' >&2
+        echo 'mobile:browser after_script: Docker daemon unavailable; skipping failure diagnostics and container cleanup.' >&2
         cat /tmp/mobile-browser-docker-info >&2
         rm -f /tmp/mobile-browser-docker-info
         exit 0
       fi
       if docker container inspect "$MOBILE_BROWSER_CONTAINER" >/dev/null 2>&1; then
-        docker cp "$MOBILE_BROWSER_CONTAINER:/artifacts/." artifacts/mobile/ ||
-          echo 'mobile:browser after_script: artifact copy failed.' >&2
+        if [ "$CI_JOB_STATUS" = failed ]; then
+          echo 'mobile:browser failure diagnostics (capped at 32 KiB):' >&2
+          docker exec "$MOBILE_BROWSER_CONTAINER" sh -c '
+            find /artifacts -type f -name "mobile-readability-*.json" -size -33k \
+              -print -exec cat {} \;
+          ' 2>&1 | head -c 32768 || true
+        fi
         docker rm -f "$MOBILE_BROWSER_CONTAINER" ||
           echo 'mobile:browser after_script: container cleanup failed.' >&2
       else
         echo "mobile:browser after_script: container $MOBILE_BROWSER_CONTAINER was not found; nothing to copy or remove." >&2
       fi
       rm -f /tmp/mobile-browser-docker-info
-  artifacts:
-    when: always
-    paths:
-      - artifacts/mobile/
-    expire_in: 1 week
+auth:mfa-sqlite:
+  stage: test
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+  image: docker:24
+  services:
+    - name: docker:24-dind
+      alias: docker
+      command: ["--tls=false"]
+  resource_group: auth-mfa-e2e
+  variables:
+    DOCKER_TLS_CERTDIR: ""
+    DOCKER_HOST: tcp://docker:2375
+    AUTH_MFA_IMAGE: "$CI_REGISTRY_IMAGE/auth-mfa-e2e:$CI_COMMIT_SHA"
+    AUTH_MFA_CONTAINER: "auth-mfa-e2e-$CI_JOB_ID"
+  before_script:
+    - |
+      for attempt in $(seq 1 30); do
+        if docker info >/dev/null 2>&1; then
+          break
+        fi
+        if [ "$attempt" -eq 30 ]; then
+          echo 'auth:mfa-sqlite: Docker daemon did not become ready after 30 seconds' >&2
+          docker info 2>&1 || true
+          exit 1
+        fi
+        sleep 1
+      done
+    - docker build -f Dockerfile.mobile-browser -t "$AUTH_MFA_IMAGE" .
+    - docker create --name "$AUTH_MFA_CONTAINER" --entrypoint sleep "$AUTH_MFA_IMAGE" infinity
+    - docker cp "$CI_PROJECT_DIR/." "$AUTH_MFA_CONTAINER:/workspace"
+  script:
+    - docker start "$AUTH_MFA_CONTAINER"
+    - >-
+      docker exec
+      -e NODE_PATH=/opt/mobile-browser/node_modules
+      "$AUTH_MFA_CONTAINER"
+      sh -ec
+      'ln -s /opt/mobile-browser/node_modules node_modules &&
+      mkdir -p static/swagger-ui &&
+      cp /opt/mobile-browser/node_modules/swagger-ui-dist/swagger-ui-bundle.js static/swagger-ui/ &&
+      cp /opt/mobile-browser/node_modules/swagger-ui-dist/swagger-ui-standalone-preset.js static/swagger-ui/ &&
+      cp /opt/mobile-browser/node_modules/swagger-ui-dist/swagger-ui.css static/swagger-ui/ &&
+      cp /opt/mobile-browser/node_modules/swagger-ui-dist/favicon-32x32.png static/swagger-ui/ &&
+      cp /opt/mobile-browser/node_modules/swagger-ui-dist/favicon-16x16.png static/swagger-ui/ &&
+      make auth-mfa-e2e-sqlite'
+  after_script:
+    - |
+      set +e
+      if docker info >/dev/null 2>&1 && docker container inspect "$AUTH_MFA_CONTAINER" >/dev/null 2>&1; then
+        if [ "$CI_JOB_STATUS" = failed ] && docker exec "$AUTH_MFA_CONTAINER" test -d /workspace/artifacts; then
+          echo 'auth:mfa-sqlite failure diagnostics (capped at 32 KiB):' >&2
+          docker exec "$AUTH_MFA_CONTAINER" sh -c '
+            find /workspace/artifacts -type f \( -name summary.txt -o -name "*.redacted.log" -o -name trace.redacted.json \) -size -33k \
+              -print -exec cat {} \;
+          ' 2>&1 | head -c 32768 || true
+        fi
+        docker rm -f "$AUTH_MFA_CONTAINER" || true
+      fi
+
+auth:mfa-parity:
+  stage: test
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+  image: golang:1.26-bookworm
+  services:
+    - name: docker:24-dind
+      alias: docker
+      command: ["--tls=false"]
+  resource_group: auth-mfa-e2e
+  variables:
+    DOCKER_TLS_CERTDIR: ""
+    DOCKER_HOST: tcp://docker:2375
+  before_script:
+    - apt-get update && apt-get install -y --no-install-recommends bash docker.io make nodejs npm && rm -rf /var/lib/apt/lists/*
+    - go install github.com/a-h/templ/cmd/templ@v0.3.1020
+    - templ generate
+    - make swagger-ui-copy
+    - |
+      for attempt in $(seq 1 30); do
+        if docker info >/dev/null 2>&1; then
+          break
+        fi
+        if [ "$attempt" -eq 30 ]; then
+          echo 'auth:mfa-parity: Docker daemon did not become ready after 30 seconds' >&2
+          docker info 2>&1 || true
+          exit 1
+        fi
+        sleep 1
+      done
+  script:
+    - make auth-mfa-e2e-postgres auth-mfa-e2e-mssql
+  after_script:
+    - |
+      set +e
+      if [ "$CI_JOB_STATUS" = failed ] && [ -d artifacts/auth-mfa ]; then
+        echo 'auth:mfa-parity failure diagnostics (capped at 32 KiB):' >&2
+        find artifacts/auth-mfa -type f \( -name summary.txt -o -name '*.redacted.log' -o -name trace.redacted.json \) -size -33k \
+          -print -exec cat {} \; 2>&1 | head -c 32768 || true
+      fi
+      if docker info >/dev/null 2>&1; then
+        docker ps --filter 'label=org.testcontainers=true' -q | xargs -r docker rm -f || true
+      fi
 
 build:
   stage: build
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
   before_script:
     - go install github.com/a-h/templ/cmd/templ@v0.3.1020
     - templ generate
@@ -137,7 +249,7 @@ build:
  #   paths:
  #     - durpdeploy
  #   expire_in: 1 week
-  needs: ["lint", "test"]
+  needs: ["lint", "golang:test"]
 
 # Multi-arch (linux/amd64, linux/arm64) image build + push to the GitLab
 # container registry, with a Trivy vulnerability scan against the pushed

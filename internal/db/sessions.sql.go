@@ -11,7 +11,9 @@ import (
 )
 
 const createSession = `-- name: CreateSession :one
-INSERT INTO sessions (id, user_id, csrf_token, expires_at, ip_address, user_agent) VALUES (?, ?, ?, ?, ?, ?) RETURNING id, user_id, csrf_token, created_at, expires_at, ip_address, user_agent
+INSERT INTO sessions (
+    id, user_id, csrf_token, expires_at, ip_address, user_agent, reauthenticated_at
+) VALUES (?, ?, ?, ?, ?, ?, unixepoch()) RETURNING id, user_id, csrf_token, created_at, expires_at, ip_address, user_agent, reauthenticated_at
 `
 
 type CreateSessionParams struct {
@@ -41,6 +43,7 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (S
 		&i.ExpiresAt,
 		&i.IpAddress,
 		&i.UserAgent,
+		&i.ReauthenticatedAt,
 	)
 	return i, err
 }
@@ -64,7 +67,7 @@ func (q *Queries) DeleteSession(ctx context.Context, id string) error {
 }
 
 const getSession = `-- name: GetSession :one
-SELECT s.id, s.user_id, s.csrf_token, s.created_at, s.expires_at, s.ip_address, s.user_agent, u.email, u.name, u.role FROM sessions s JOIN users u ON s.user_id = u.id WHERE s.id = ? AND s.expires_at > ?
+SELECT s.id, s.user_id, s.csrf_token, s.created_at, s.expires_at, s.ip_address, s.user_agent, s.reauthenticated_at, u.email, u.name, u.role FROM sessions s JOIN users u ON s.user_id = u.id WHERE s.id = ? AND s.expires_at > ?
 `
 
 type GetSessionParams struct {
@@ -73,16 +76,17 @@ type GetSessionParams struct {
 }
 
 type GetSessionRow struct {
-	ID        string         `json:"id"`
-	UserID    int64          `json:"user_id"`
-	CsrfToken string         `json:"csrf_token"`
-	CreatedAt int64          `json:"created_at"`
-	ExpiresAt int64          `json:"expires_at"`
-	IpAddress sql.NullString `json:"ip_address"`
-	UserAgent sql.NullString `json:"user_agent"`
-	Email     string         `json:"email"`
-	Name      string         `json:"name"`
-	Role      string         `json:"role"`
+	ID                string         `json:"id"`
+	UserID            int64          `json:"user_id"`
+	CsrfToken         string         `json:"csrf_token"`
+	CreatedAt         int64          `json:"created_at"`
+	ExpiresAt         int64          `json:"expires_at"`
+	IpAddress         sql.NullString `json:"ip_address"`
+	UserAgent         sql.NullString `json:"user_agent"`
+	ReauthenticatedAt sql.NullInt64  `json:"reauthenticated_at"`
+	Email             string         `json:"email"`
+	Name              string         `json:"name"`
+	Role              string         `json:"role"`
 }
 
 func (q *Queries) GetSession(ctx context.Context, arg GetSessionParams) (GetSessionRow, error) {
@@ -96,11 +100,26 @@ func (q *Queries) GetSession(ctx context.Context, arg GetSessionParams) (GetSess
 		&i.ExpiresAt,
 		&i.IpAddress,
 		&i.UserAgent,
+		&i.ReauthenticatedAt,
 		&i.Email,
 		&i.Name,
 		&i.Role,
 	)
 	return i, err
+}
+
+const markSessionReauthenticated = `-- name: MarkSessionReauthenticated :exec
+UPDATE sessions SET reauthenticated_at = ? WHERE id = ?
+`
+
+type MarkSessionReauthenticatedParams struct {
+	ReauthenticatedAt sql.NullInt64 `json:"reauthenticated_at"`
+	ID                string        `json:"id"`
+}
+
+func (q *Queries) MarkSessionReauthenticated(ctx context.Context, arg MarkSessionReauthenticatedParams) error {
+	_, err := q.db.ExecContext(ctx, markSessionReauthenticated, arg.ReauthenticatedAt, arg.ID)
+	return err
 }
 
 const touchSession = `-- name: TouchSession :exec
