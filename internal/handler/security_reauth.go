@@ -28,6 +28,7 @@ func (h *AuthHandler) SecurityReauthGet(
 		r.URL.Path,
 		session.CsrfToken,
 		"",
+		h.oidcProvider != nil && h.oidcTransactions != nil,
 	).Render(r.Context(), w); err != nil {
 		http.Error(
 			w,
@@ -207,7 +208,12 @@ func (h *AuthHandler) renderReauthenticationError(
 	csrf string,
 ) {
 	w.WriteHeader(http.StatusUnprocessableEntity)
-	if err := pages.SecurityReauthPage(r.URL.Path, csrf, reauthenticationError).
+	if err := pages.SecurityReauthPage(
+		r.URL.Path,
+		csrf,
+		reauthenticationError,
+		h.oidcProvider != nil && h.oidcTransactions != nil,
+	).
 		Render(r.Context(), w); err != nil {
 		http.Error(
 			w,

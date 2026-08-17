@@ -31,13 +31,36 @@ mkdir -p secrets
 openssl rand -base64 32 > secrets/durpdeploy_key
 chmod 0600 secrets/durpdeploy_key
 
-# 3. Create your .env file
-cat > .env <<'EOF'
+# 3. Create compose env files
+cat > compose.caddy.env <<'EOF'
 DURPDEPLOY_URL=https://durpdeploy.example.com
+# Optional backend override (default: app:8080 in compose)
+# BACKEND=app:8080
+EOF
+
+cat > compose.app.env <<'EOF'
+# Optional OIDC block (omit all variables if you do not need SSO)
+# DURPDEPLOY_OIDC_ISSUER=https://idp.example.com/realms/example
+# DURPDEPLOY_OIDC_CLIENT_ID=durpdeploy-example
+# DURPDEPLOY_OIDC_CLIENT_SECRET=REPLACE_WITH_CLIENT_SECRET
+# DURPDEPLOY_OIDC_ADMIN_GROUP=durpdeploy-admin
+# DURPDEPLOY_OIDC_DEPLOYER_GROUP=durpdeploy-deployer
+# DURPDEPLOY_OIDC_VIEWER_GROUP=durpdeploy-viewer
+# DURPDEPLOY_OIDC_DISPLAY_NAME=SSO
+# DURPDEPLOY_OIDC_GROUP_CLAIM=groups
+# DURPDEPLOY_OIDC_REQUIRE_EMAIL_VERIFIED=false  # default true
+
+# Include any other app env your deployment needs, e.g. SMTP or secret key.
+EOF
+
+cat > compose.litestream.env <<'EOF'
 LITESTREAM_S3_BUCKET=my-durpdeploy-backups
 AWS_ACCESS_KEY_ID=AKIA...
 AWS_SECRET_ACCESS_KEY=...
 EOF
+
+# Keep root .env out of the runtime path for compose app container env to avoid
+# leaking AWS credentials into the application process.
 
 # 4. Build and start
 docker compose up -d --build
@@ -70,6 +93,53 @@ or source control. An administrator can reset another user's MFA from user
 management after fresh reauthentication. Resetting MFA removes that user's
 browser sessions, challenges, factors, and recovery codes; it preserves API
 tokens, which are separate single-bearer credentials.
+
+### Optional OIDC sign-in
+
+OIDC is disabled unless an OIDC-specific variable is set. When enabled, all
+required values must be present. Use placeholders for deployment-specific
+values, never a client secret in documentation:
+
+```ini
+DURPDEPLOY_URL=https://<public-host>
+DURPDEPLOY_OIDC_ISSUER=https://<issuer-host>
+DURPDEPLOY_OIDC_CLIENT_ID=<client-id>
+DURPDEPLOY_OIDC_CLIENT_SECRET=<secret>
+DURPDEPLOY_OIDC_ADMIN_GROUP=<admin-group>
+DURPDEPLOY_OIDC_DEPLOYER_GROUP=<deployer-group>
+DURPDEPLOY_OIDC_VIEWER_GROUP=<viewer-group>
+DURPDEPLOY_OIDC_DISPLAY_NAME=<display-name>
+DURPDEPLOY_OIDC_GROUP_CLAIM=<claim-name>
+DURPDEPLOY_OIDC_REQUIRE_EMAIL_VERIFIED=<true|false>
+```
+
+The issuer and `DURPDEPLOY_URL` must be HTTPS origins. Register exactly
+`DURPDEPLOY_URL + /login/oidc/callback` at the provider. The application asks
+for `openid`, `profile`, and `email`. The password login remains beside the SSO
+link, and password login uses the most recently stored local role.
+
+When unset, or set to `true`, the callback requires the ID token to contain the
+literal JSON boolean `email_verified: true`. Explicit lowercase
+`DURPDEPLOY_OIDC_REQUIRE_EMAIL_VERIFIED=false` accepts a present literal JSON
+boolean `email_verified: true` or `email_verified: false`, after normal ID token
+signature, issuer, audience, and nonce verification. Missing, null, string, and
+numeric claims remain rejected. This weakens identity assurance, so use it only
+where Authentik independently establishes address ownership. The first matching email links
+exactly one local account. An email with no match is JIT-created with an empty
+password. Groups map to admin, deployer, or
+viewer, in that precedence order, and each successful OIDC login synchronizes
+name, email, and role. A role change invalidates that user's browser sessions.
+Group removal takes effect on the next OIDC login. There is no SCIM or provider
+back-channel deprovisioning, and no instant deprovisioning between logins.
+
+OIDC reauthentication is completed by the provider and then bound to the local
+session and stored OIDC identity. Local logout clears only the DurpDeploy
+session, not the provider session. The application does not persist provider
+tokens, authorization codes, or raw claims, and OIDC does not issue or protect
+API tokens. If provider discovery or login is unavailable, password login,
+existing sessions, health checks, and bearer API authentication continue to work.
+An OIDC-created empty-password account is recovered by an administrator through
+the existing local user recovery process; there is no self-service password reset.
 
 The Debian 12 bare-metal runbook below is the alternative if you want full
 control of the host (cgroup v2 sandbox for step scripts, custom kernel

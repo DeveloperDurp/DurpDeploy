@@ -220,6 +220,39 @@ suspect.
 
 ---
 
+## 5. OIDC coexistence and recovery
+
+**Attack.** The provider is unavailable, removes a user's mapped group, or a
+user logs out locally after using SSO.
+
+**Expected.** Provider failure returns a generic OIDC error while password
+login, existing browser sessions, health checks, and bearer API authentication
+remain usable. A removed group changes the local role only at that user's next
+OIDC login. Local logout clears the DurpDeploy session but does not log out of
+the provider. Provider tokens, authorization codes, and raw claims are not
+persisted. OIDC does not authenticate API tokens, and an OIDC-created
+empty-password account has no self-service password reset.
+
+**What defends.** When unset, or set to `true`, OIDC requires the literal JSON
+boolean `email_verified: true`. Explicit lowercase
+`DURPDEPLOY_OIDC_REQUIRE_EMAIL_VERIFIED=false` accepts a present literal JSON
+boolean `email_verified: true` or `email_verified: false` after normal ID token
+signature, issuer, audience, and nonce verification. Missing, null, string, and
+numeric claims remain rejected. This weakens identity assurance and is
+appropriate only where Authentik independently
+establishes address ownership. OIDC links the first exact email match and
+otherwise JIT-creates an empty-password account. Group mapping
+uses admin, deployer, viewer precedence. A changed role invalidates the user's
+browser sessions. Reauthentication is handled by the provider and bound to the
+current local session and OIDC identity. There is no SCIM or provider
+back-channel deprovisioning, so deprovisioning is not instant.
+
+**Configuration contract.** OIDC requires the HTTPS `DURPDEPLOY_URL`, the
+redirect URI `DURPDEPLOY_URL + /login/oidc/callback`, and the OIDC variables documented in the deployment runbook. Never put a live issuer,
+client value, secret, token, or claim in this document.
+
+---
+
 ## What this drill does not cover
 
 These attacks are out of scope for P0:

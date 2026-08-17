@@ -5,8 +5,11 @@
 #   caddy      : reverse proxy + TLS termination
 #   litestream : continuous SQLite WAL replication to S3-compatible storage
 #
-# Copy compose.example.yml to compose.yml and edit the environment variables,
-# or source them from a .env file before running `docker compose up -d`.
+# Copy compose.example.yml to compose.yml and create scoped env files in the
+# same directory before running `docker compose up -d`:
+#   - compose.app.env
+#   - compose.caddy.env
+#   - compose.litestream.env
 
 services:
   app:
@@ -16,6 +19,8 @@ services:
     restart: unless-stopped
     # Port 8080 is internal only — Caddy talks to it over the compose network.
     # Don't publish it to the host.
+    env_file:
+      - ./compose.app.env
     environment:
       DURPDEPLOY_DB: /data/durpdeploy.db
       # Optional. The mounted secret file at /etc/durpdeploy/key is the
@@ -56,12 +61,8 @@ services:
     ports:
       - "80:80"
       - "443:443"
-    environment:
-      DURPDEPLOY_URL: ${DURPDEPLOY_URL:?}  # required, e.g. https://durpdeploy.example.com
-      # Backend address for the reverse_proxy directive in Caddyfile.
-      # Defaults to localhost:8080 (the systemd deploy); the compose
-      # stack overrides to `app:8080` to use the compose DNS.
-      BACKEND: ${BACKEND:-app:8080}
+    env_file:
+      - ./compose.caddy.env
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
@@ -89,14 +90,11 @@ services:
     image: litestream/litestream:0.3
     restart: unless-stopped
     command: replicate -config /etc/litestream.yml
+    env_file:
+      - ./compose.litestream.env
     volumes:
       - durpdeploy-data:/data
       - ./deploy/litestream.example.yml:/etc/litestream.yml:ro
-    environment:
-      LITESTREAM_S3_BUCKET: ${LITESTREAM_S3_BUCKET:?}  # required for S3 replication
-      LITESTREAM_S3_ENDPOINT: ${LITESTREAM_S3_ENDPOINT:-}
-      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
-      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
     depends_on:
       app:
         condition: service_healthy

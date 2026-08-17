@@ -53,6 +53,14 @@ case "secret-artifact-metadata":
 case "secret-artifact-field":
 	manifest.scenarios[0].artifacts.password = "redacted-placeholder";
 	break;
+case "protocol-artifact-metadata":
+	manifest.scenarios.find((scenario) => scenario.id === "oidc-valid-login")
+		.artifacts.metadata.push("state");
+	break;
+case "protocol-artifact-field":
+	manifest.scenarios.find((scenario) => scenario.id === "oidc-valid-login")
+		.artifacts.nonce = "redacted-placeholder";
+	break;
 case "unassigned-server-route":
 	manifest.route_inventory = manifest.route_inventory.slice(1);
 	break;
@@ -62,6 +70,21 @@ case "missing-runtime-owner":
 case "mismatched-runtime-owner":
 	manifest.execution_registry[0].owner = "scripts/not-a-runner.sh";
 	break;
+case "missing-oidc-scenario":
+	manifest.scenarios = manifest.scenarios.filter(
+		(scenario) => scenario.id !== "oidc-disabled-regression",
+	);
+	break;
+case "wrong-oidc-runtime-owner": {
+	const oidc = manifest.execution_registry.find(
+		(entry) => entry.owner === "scripts/oidc_http_matrix.sh",
+	);
+	oidc.owner = "scripts/not-an-oidc-runner.sh";
+	for (const id of oidc.scenario_ids) {
+		manifest.scenarios.find((scenario) => scenario.id === id).owner = oidc.owner;
+	}
+	break;
+}
 default:
 	throw new Error(`unknown fixture kind: ${kind}`);
 }
@@ -94,8 +117,12 @@ expect_invalid unsupported-layer 'unsupported layer'
 expect_invalid unsupported-engine 'unsupported engine'
 expect_invalid secret-artifact-metadata 'secret-bearing artifact metadata'
 expect_invalid secret-artifact-field 'secret-bearing artifact field'
+expect_invalid protocol-artifact-metadata 'protocol-bearing artifact metadata'
+expect_invalid protocol-artifact-field 'protocol-bearing artifact field'
 expect_invalid unassigned-server-route 'registered in server.go but absent from route_inventory'
 expect_invalid missing-runtime-owner 'missing execution ownership'
 expect_invalid mismatched-runtime-owner 'owner disagrees with execution ownership'
+expect_invalid missing-oidc-scenario 'missing required OIDC scenario oidc-disabled-regression'
+expect_invalid wrong-oidc-runtime-owner 'must be owned by scripts/oidc_http_matrix.sh'
 
 echo "auth/MFA attack manifest validator test: OK"

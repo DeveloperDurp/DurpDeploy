@@ -39,7 +39,8 @@ func newAuthHarness(t *testing.T) *authHarness {
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "test.db")
 	dsn := fmt.Sprintf(
-		"file:%s?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)",
+		"file:%s?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&"+
+			"_pragma=busy_timeout(5000)",
 		dbPath,
 	)
 	conn, err := migrate.Run(dsn)

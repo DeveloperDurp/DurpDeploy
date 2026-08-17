@@ -20,6 +20,24 @@ Group=durpdeploy
 WorkingDirectory=/var/lib/durpdeploy
 Environment=DURPDEPLOY_DB=/var/lib/durpdeploy/durpdeploy.db
 Environment=DURPDEPLOY_URL=https://durpdeploy.example.com
+# Optional OIDC SSO settings. Create /etc/durpdeploy/durpdeploy.env as root,
+# mode 0600, with all required values together. The exact callback URI is
+# https://durpdeploy.example.com/login/oidc/callback and scopes are fixed to
+# openid profile email.
+#
+# DURPDEPLOY_OIDC_ISSUER=https://idp.example.com/realms/example
+# DURPDEPLOY_OIDC_CLIENT_ID=durpdeploy-example
+# DURPDEPLOY_OIDC_CLIENT_SECRET=REPLACE_WITH_CLIENT_SECRET
+# DURPDEPLOY_OIDC_ADMIN_GROUP=durpdeploy-admin
+# DURPDEPLOY_OIDC_DEPLOYER_GROUP=durpdeploy-deployer
+# DURPDEPLOY_OIDC_VIEWER_GROUP=durpdeploy-viewer
+# DURPDEPLOY_OIDC_DISPLAY_NAME=SSO
+# DURPDEPLOY_OIDC_GROUP_CLAIM=groups
+#   Security exception: set false to accept a present literal boolean
+#   email_verified=true or false claim. Missing or malformed claims remain
+#   rejected; this weakens identity assurance.
+#   DURPDEPLOY_OIDC_REQUIRE_EMAIL_VERIFIED=false
+EnvironmentFile=-/etc/durpdeploy/durpdeploy.env
 ExecStart=/usr/local/bin/durpdeploy
 Restart=on-failure
 RestartSec=5s

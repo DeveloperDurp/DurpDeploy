@@ -57,6 +57,31 @@ non-admins `viewer`.
 operator who owns the box and the user list. `viewer` is for stakeholders
 who want to follow deploys without the ability to trigger one.
 
+## OIDC role authority
+
+When optional OIDC is enabled, a successful OIDC login is authoritative for the
+verified email identity and the configured group-to-role mapping. Group
+precedence is `admin`, then `deployer`, then `viewer`. The login synchronizes the
+local name, email, and role every time. A role change invalidates all browser
+sessions for that user. Removing a provider group is applied on the next OIDC
+login only. There is no SCIM or provider back-channel deprovisioning, so role
+removal is not immediate between logins.
+
+OIDC and password login coexist. Password login uses the most recently stored
+local role. When unset, or set to `true`, the ID token must contain the literal
+JSON boolean `email_verified: true`. Explicit lowercase
+`DURPDEPLOY_OIDC_REQUIRE_EMAIL_VERIFIED=false` accepts a present literal JSON
+boolean `email_verified: true` or `email_verified: false` after normal ID token
+signature, issuer, audience, and nonce verification. Missing, null, string, and
+numeric claims remain rejected. This weakens identity assurance and is
+appropriate only where Authentik independently
+establishes address ownership. An email match links to exactly one existing
+local account. Otherwise OIDC JIT-creates a user with an empty password. OIDC
+reauthentication is performed by the provider and bound back to the current
+local session. Local logout clears only the DurpDeploy session, and OIDC does
+not authenticate API tokens. Provider tokens, codes, and raw claims are never
+stored. If the provider is unavailable, local password login remains available.
+
 ## Programmatic role check
 
 The middleware writes the user into request context, so any handler can do:

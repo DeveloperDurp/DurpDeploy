@@ -37,7 +37,9 @@ func NewRouter(
 	rnr *runner.DeploymentRunner,
 	parser cron.Parser,
 	authHandler *handler.AuthHandler,
+	oidcEnabled ...bool,
 ) *chi.Mux {
+	registerOIDC := len(oidcEnabled) > 0 && oidcEnabled[0]
 	r := chi.NewRouter()
 	r.Use(requestLogger)
 	r.Use(handler.PanicRecoveryMiddleware)
@@ -69,6 +71,11 @@ func NewRouter(
 	r.Post("/login/mfa/webauthn/begin", authHandler.LoginMFAWebAuthnBegin)
 	r.Post("/login/mfa/webauthn/finish", authHandler.LoginMFAWebAuthnFinish)
 	r.Post("/login/mfa/cancel", authHandler.LoginMFACancelPost)
+	if registerOIDC {
+		r.Get("/login/oidc", authHandler.LoginOIDCGet)
+		r.Get("/login/oidc/callback", authHandler.LoginOIDCCallbackGet)
+		r.Get("/login/oidc/failure", authHandler.LoginOIDCFailureGet)
+	}
 
 	// Protected routes: every request must carry a valid session cookie
 	// and state-changing requests must carry the CSRF token.
@@ -123,6 +130,12 @@ func NewRouter(
 		pr.Get("/settings/security", authHandler.SecurityGet)
 		pr.Get("/settings/security/reauth", authHandler.SecurityReauthGet)
 		pr.Post("/settings/security/reauth", authHandler.SecurityReauthPost)
+		if registerOIDC {
+			pr.Get(
+				"/settings/security/reauth/oidc",
+				authHandler.SecurityReauthOIDCGet,
+			)
+		}
 		pr.Post(
 			"/settings/security/reauth/totp",
 			authHandler.SecurityReauthTOTPPost,

@@ -11,14 +11,18 @@ import (
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/mfa"
+	"durpdeploy/internal/oidc"
 	"durpdeploy/internal/repository"
 	"durpdeploy/views/pages"
 )
 
 type AuthHandler struct {
-	repo         *repository.Repository
-	mfaService   *mfa.Service
-	cookieSecure bool
+	repo             *repository.Repository
+	mfaService       *mfa.Service
+	cookieSecure     bool
+	oidcDisplayName  string
+	oidcProvider     *oidc.Provider
+	oidcTransactions *oidc.TransactionStore
 }
 
 func NewAuthHandler(repo *repository.Repository) *AuthHandler {
@@ -30,11 +34,58 @@ func (h *AuthHandler) SetMFAService(service *mfa.Service) {
 	h.cookieSecure = service.CookieSecure()
 }
 
+func (h *AuthHandler) SetOIDCDisplayName(displayName string) {
+	h.oidcDisplayName = displayName
+}
+
+func (h *AuthHandler) SetOIDCLogin(
+	provider *oidc.Provider,
+	transactions *oidc.TransactionStore,
+) {
+	h.oidcProvider = provider
+	h.oidcTransactions = transactions
+}
+
 func (h *AuthHandler) LoginGet(w http.ResponseWriter, r *http.Request) {
-	if err := pages.LoginPage(r.URL.Path, "").
+	if err := pages.LoginPage(r.URL.Path, "", h.oidcDisplayName).
 		Render(r.Context(), w); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
+}
+
+func (h *AuthHandler) LoginOIDCGet(w http.ResponseWriter, r *http.Request) {
+	setNoStore(w)
+	if h.oidcProvider == nil || h.oidcTransactions == nil {
+		http.NotFound(w, r)
+		return
+	}
+	transaction, cookie, err := h.oidcTransactions.Start(
+		r.Context(),
+		oidc.TransactionRequest{Mode: oidc.TransactionModeLogin},
+	)
+	if err != nil {
+		h.renderOIDCLoginUnavailable(w, r)
+		return
+	}
+	location, err := h.oidcProvider.AuthorizationURL(r.Context(), transaction)
+	if err != nil {
+		h.renderOIDCLoginUnavailable(w, r)
+		return
+	}
+	http.SetCookie(w, cookie)
+	http.Redirect(w, r, location, http.StatusSeeOther)
+}
+
+func (h *AuthHandler) renderOIDCLoginUnavailable(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	w.WriteHeader(http.StatusServiceUnavailable)
+	_ = pages.LoginPage(
+		r.URL.Path,
+		"Single sign-on is temporarily unavailable",
+		h.oidcDisplayName,
+	).Render(r.Context(), w)
 }
 
 func (h *AuthHandler) LoginPost(w http.ResponseWriter, r *http.Request) {
@@ -49,7 +100,11 @@ func (h *AuthHandler) LoginPost(w http.ResponseWriter, r *http.Request) {
 	user, err := h.repo.Queries.GetUserByEmail(r.Context(), email)
 	if err != nil || !auth.VerifyPassword(user.PasswordHash, password) {
 		w.WriteHeader(http.StatusUnprocessableEntity)
-		_ = pages.LoginPage(r.URL.Path, "Invalid email or password").
+		_ = pages.LoginPage(
+			r.URL.Path,
+			"Invalid email or password",
+			h.oidcDisplayName,
+		).
 			Render(r.Context(), w)
 		return
 	}

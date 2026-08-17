@@ -4,6 +4,7 @@ go 1.25.7
 
 require (
 	github.com/a-h/templ v0.3.1020
+	github.com/coreos/go-oidc/v3 v3.20.0
 	github.com/go-chi/chi/v5 v5.3.1
 	github.com/go-openapi/runtime v0.32.6
 	github.com/go-webauthn/webauthn v0.17.4
@@ -16,6 +17,7 @@ require (
 	github.com/testcontainers/testcontainers-go v0.43.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.43.0
 	golang.org/x/crypto v0.54.0
+	golang.org/x/oauth2 v0.36.0
 	modernc.org/sqlite v1.53.0
 )
 
@@ -41,6 +43,7 @@ require (
 	github.com/fxamacker/cbor/v2 v2.9.2 // indirect
 	github.com/go-logr/logr v1.4.4 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
+	github.com/go-jose/go-jose/v4 v4.1.4 // indirect
 	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/go-openapi/analysis v0.25.5 // indirect
 	github.com/go-openapi/errors v0.22.8 // indirect

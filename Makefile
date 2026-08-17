@@ -35,6 +35,17 @@ dev-server:
 		if [ -f "$(ENV_FILE)" ]; then . "$(ENV_FILE)"; fi; \
 		printf '%s' "$${DURPDEPLOY_SECRET_KEY:-}"); \
 	if [ -n "$$env_secret_key" ]; then DURPDEPLOY_SECRET_KEY="$$env_secret_key"; fi; \
+	if [ -f "$(ENV_FILE)" ]; then . "$(ENV_FILE)"; fi; \
+	if [ "$${DURPDEPLOY_URL+x}" != "" ]; then export DURPDEPLOY_URL; fi; \
+	if [ "$${DURPDEPLOY_OIDC_ISSUER+x}" != "" ]; then export DURPDEPLOY_OIDC_ISSUER; fi; \
+	if [ "$${DURPDEPLOY_OIDC_CLIENT_ID+x}" != "" ]; then export DURPDEPLOY_OIDC_CLIENT_ID; fi; \
+	if [ "$${DURPDEPLOY_OIDC_CLIENT_SECRET+x}" != "" ]; then export DURPDEPLOY_OIDC_CLIENT_SECRET; fi; \
+	if [ "$${DURPDEPLOY_OIDC_ADMIN_GROUP+x}" != "" ]; then export DURPDEPLOY_OIDC_ADMIN_GROUP; fi; \
+	if [ "$${DURPDEPLOY_OIDC_DEPLOYER_GROUP+x}" != "" ]; then export DURPDEPLOY_OIDC_DEPLOYER_GROUP; fi; \
+	if [ "$${DURPDEPLOY_OIDC_VIEWER_GROUP+x}" != "" ]; then export DURPDEPLOY_OIDC_VIEWER_GROUP; fi; \
+	if [ "$${DURPDEPLOY_OIDC_DISPLAY_NAME+x}" != "" ]; then export DURPDEPLOY_OIDC_DISPLAY_NAME; fi; \
+	if [ "$${DURPDEPLOY_OIDC_GROUP_CLAIM+x}" != "" ]; then export DURPDEPLOY_OIDC_GROUP_CLAIM; fi; \
+	if [ "$${DURPDEPLOY_OIDC_REQUIRE_EMAIL_VERIFIED+x}" != "" ]; then export DURPDEPLOY_OIDC_REQUIRE_EMAIL_VERIFIED; fi; \
 	DURPDEPLOY_SECRET_KEY=$${DURPDEPLOY_SECRET_KEY:-$$(openssl rand -base64 32)} \
 	DURPDEPLOY_ENV_FILE="$(ENV_FILE)" go run github.com/air-verse/air@latest
 

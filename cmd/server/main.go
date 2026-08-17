@@ -11,6 +11,7 @@ import (
 	"log"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"strings"
@@ -29,6 +30,7 @@ import (
 	"durpdeploy/internal/mfa"
 	"durpdeploy/internal/migrate"
 	"durpdeploy/internal/notify"
+	"durpdeploy/internal/oidc"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/runner"
 	"durpdeploy/internal/scheduler"
@@ -39,6 +41,60 @@ import (
 // defaultDSN mirrors the historical hardcoded DSN. Production overrides it
 // via DURPDEPLOY_DB (see loadDSN).
 const defaultDSN = "durpdeploy.db?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)"
+
+type oidcServicesConfig struct {
+	Config       oidc.Config
+	Repository   *repository.Repository
+	Box          *secret.Box
+	HTTPClient   *http.Client
+	CookieSecure bool
+	Now          func() time.Time
+}
+
+type oidcServices struct {
+	enabled      bool
+	provider     *oidc.Provider
+	transactions *oidc.TransactionStore
+}
+
+func newOIDCServices(config oidcServicesConfig) (oidcServices, error) {
+	if !config.Config.Enabled {
+		return oidcServices{}, nil
+	}
+
+	codec, err := oidc.NewTransactionCookieCodec(
+		config.Box,
+		oidc.TransactionCookieConfig{
+			Secure: config.CookieSecure,
+			Now:    config.Now,
+		},
+	)
+	if err != nil {
+		return oidcServices{}, fmt.Errorf(
+			"new OIDC transaction cookie: %w",
+			err,
+		)
+	}
+	transactions, err := oidc.NewTransactionStore(oidc.TransactionStoreOptions{
+		Repository: config.Repository, CookieCodec: codec,
+	})
+	if err != nil {
+		return oidcServices{}, fmt.Errorf("new OIDC transaction store: %w", err)
+	}
+	provider, err := oidc.NewProvider(oidc.ProviderOptions{
+		Config:     config.Config,
+		HTTPClient: config.HTTPClient,
+		Now:        config.Now,
+	})
+	if err != nil {
+		return oidcServices{}, fmt.Errorf("new OIDC provider: %w", err)
+	}
+	return oidcServices{
+		enabled:      true,
+		provider:     provider,
+		transactions: transactions,
+	}, nil
+}
 
 func main() {
 	// ponytail: subcommand dispatcher in main() instead of a CLI framework
@@ -110,6 +166,10 @@ func runServer() {
 	if err != nil {
 		log.Fatalf("mfa config: %v", err)
 	}
+	oidcConfig, err := oidc.LoadConfig()
+	if err != nil {
+		log.Fatalf("oidc config: %v", err)
+	}
 	slog.Info(
 		"MFA configuration loaded",
 		"webauthn_enabled", mfaConfig.WebAuthn.Enabled,
@@ -159,7 +219,35 @@ func runServer() {
 	defer cancel()
 	authHandler := handler.NewAuthHandler(repo)
 	authHandler.SetMFAService(mfaService)
-	r := server.NewRouter(repo, rnr, parser, authHandler)
+	authHandler.SetOIDCDisplayName(oidcConfig.DisplayName)
+	oidcServices, err := newOIDCServices(oidcServicesConfig{
+		Config:       oidcConfig,
+		Repository:   repo,
+		Box:          box,
+		HTTPClient:   &http.Client{Timeout: 10 * time.Second},
+		CookieSecure: mfaConfig.CookieSecure,
+		Now:          time.Now,
+	})
+	if err != nil {
+		log.Fatalf("OIDC service: %v", err)
+	}
+	if oidcServices.enabled {
+		authHandler.SetOIDCLogin(
+			oidcServices.provider,
+			oidcServices.transactions,
+		)
+		issuerURL, err := url.Parse(oidcConfig.Issuer)
+		if err != nil {
+			log.Fatalf("OIDC issuer: %v", err)
+		}
+		slog.Info(
+			"OIDC enabled",
+			"enabled", true,
+			"display_name", oidcConfig.DisplayName,
+			"issuer_host", issuerURL.Hostname(),
+		)
+	}
+	r := server.NewRouter(repo, rnr, parser, authHandler, oidcServices.enabled)
 
 	// Recover deployments that were created but never picked up by a
 	// runner goroutine (process restarted, container OOM, manual kill,

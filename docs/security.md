@@ -21,6 +21,47 @@ What we defend against:
 - Roster tampering by a non-admin project member (per-project admin gate on member add/remove)
 - A leaked `variables`/`release_variables` DB file, on its own, does not disclose secret values (AES-256-GCM at rest)
 
+### OIDC boundary and threat model
+
+OIDC is an optional login factor, not a replacement for local authentication.
+The approved variables are `DURPDEPLOY_OIDC_ISSUER`,
+`DURPDEPLOY_OIDC_CLIENT_ID`, `DURPDEPLOY_OIDC_CLIENT_SECRET`,
+`DURPDEPLOY_OIDC_ADMIN_GROUP`, `DURPDEPLOY_OIDC_DEPLOYER_GROUP`,
+`DURPDEPLOY_OIDC_VIEWER_GROUP`, `DURPDEPLOY_OIDC_DISPLAY_NAME`,
+`DURPDEPLOY_OIDC_GROUP_CLAIM`, and
+`DURPDEPLOY_OIDC_REQUIRE_EMAIL_VERIFIED` (default `true`). It also requires the HTTPS canonical
+`DURPDEPLOY_URL`. The provider redirect URI is exactly
+`DURPDEPLOY_URL + /login/oidc/callback`; scopes are `openid`, `profile`, and
+`email`.
+
+The provider is authoritative for a successful OIDC login's verified identity
+and mapped group role. When unset, or set to `true`, the ID token must contain
+the literal JSON boolean `email_verified: true`. With explicit lowercase
+`DURPDEPLOY_OIDC_REQUIRE_EMAIL_VERIFIED=false`, a present literal JSON boolean
+`email_verified: true` or `email_verified: false` is accepted after normal ID
+token signature, issuer, audience, and nonce verification. Missing, null,
+string, and numeric claims remain rejected. This weakens identity assurance and
+is appropriate only where
+Authentik independently establishes address ownership. The first email match
+links exactly one local account. Without a match, the application JIT-creates a user with an empty
+password. Group precedence is admin, then deployer, then viewer. Each successful
+OIDC login synchronizes the local name, email, and role. A role change deletes
+the user's browser sessions. Removing a group is observed on the next OIDC
+login only. There is no SCIM or provider back-channel deprovisioning, so this is
+not instant deprovisioning.
+
+Password login remains available and uses the most recently stored local role.
+OIDC reauthentication is handled by the provider, then bound to the current
+local session and stored OIDC identity. Logout is local only and clears the
+DurpDeploy session, not the provider session. Provider tokens, authorization
+codes, and raw claims are not persisted. OIDC does not authenticate API tokens,
+and local MFA is not asserted by an OIDC login.
+
+Provider outage is isolated from local authentication: password login, existing
+sessions, health checks, and bearer API authentication remain usable. An
+OIDC-created empty-password account has no self-service password reset; an
+administrator must use the existing local user recovery process.
+
 What we do **not** defend against yet (see Known Gaps):
 
 - Rate limiting on the login endpoint
