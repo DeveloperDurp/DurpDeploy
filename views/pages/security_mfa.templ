@@ -2,7 +2,7 @@ package pages
 
 import "durpdeploy/views/layouts"
 
-templ SecurityReauthPage(currentPath, csrf, errorMsg string) {
+templ SecurityReauthPage(currentPath, csrf, errorMsg string, oidcEnabled bool) {
 	@layouts.Base("Reauthenticate", currentPath) {
 		<div class="w-full px-4 sm:px-6 lg:px-8 py-12">
 			<div class="max-w-md mx-auto">
@@ -21,6 +21,11 @@ templ SecurityReauthPage(currentPath, csrf, errorMsg string) {
 							</div>
 							<button type="submit" class="btn btn-primary w-full">Continue</button>
 						</form>
+						if oidcEnabled {
+							<div class="mt-4">
+								<a href="/settings/security/reauth/oidc" class="btn btn-outline w-full">Use single sign-on</a>
+							</div>
+						}
 					</div>
 				</div>
 			</div>

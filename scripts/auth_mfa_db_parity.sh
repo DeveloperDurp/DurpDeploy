@@ -7,7 +7,12 @@ artifact_root=${AUTH_MFA_ARTIFACT_DIR:-artifacts/auth-mfa}
 tmp=
 
 cleanup() {
-    [[ -n $tmp ]] && rm -rf -- "$tmp"
+    local exit_code=$?
+
+    if [[ -n $tmp ]]; then
+        rm -rf -- "$tmp"
+    fi
+    return "$exit_code"
 }
 trap cleanup EXIT INT TERM
 
@@ -60,6 +65,12 @@ run() {
     if "$@" > "$tmp/test.log" 2>&1; then
         if grep -q '^--- SKIP:' "$tmp/test.log"; then
             result skip "$name"
+            if [[ $required == 1 ]]; then
+                failure_artifact
+                echo "FAIL: [$engine] parity is required but test skipped: $name" >&2
+                result fail "$name"
+                return 1
+            fi
         else
             result pass "$name"
         fi
@@ -73,11 +84,11 @@ run() {
 
 case "$engine" in
 postgres)
-    tests='^(TestPostgres_MigrationsRun|TestPostgres_WebAuthnCredentialCRUD|TestPostgres_ChallengeGuardedConsume|TestPostgres_RepositoryWithTx)$'
+    tests='^(TestPostgres_MigrationsRun|TestPostgres_WebAuthnCredentialCRUD|TestPostgres_ChallengeGuardedConsume|TestPostgres_OIDCSchemaParity|TestPostgres_RepositoryWithTx)$'
     packages=(./internal/migrate ./internal/mfa ./internal/repository)
     ;;
 mssql)
-    tests='^(TestMSSQL_MFASchemaParity|TestMSSQL_MFASchemaPreservesBinaryFieldsAndRollsBack|TestSQLServer_SchemaParityDefaultsAndIndexes|TestSQLServer_SourceQueryRewritesPersistResults|TestSQLServer_FinalWaveRuntimeParity|TestSQLServer_MigrationsAndQueries)$'
+    tests='^(TestMSSQL_MFASchemaParity|TestMSSQL_MFASchemaPreservesBinaryFieldsAndRollsBack|TestMSSQL_OIDCSchemaParity|TestSQLServer_SchemaParityDefaultsAndIndexes|TestSQLServer_SourceQueryRewritesPersistResults|TestSQLServer_FinalWaveRuntimeParity|TestSQLServer_MigrationsAndQueries)$'
     packages=(./internal/migrate)
     ;;
 *)
@@ -102,7 +113,9 @@ run container-parity go test -v -count=1 -run "$tests" "${packages[@]}"
 
 if [[ $engine == mssql ]]; then
     if [[ -z ${DURPDEPLOY_MSSQL_TEST_DSN:-} ]]; then
-        result skip mssql-dsn-not-configured
+        if [[ $required != 1 ]]; then
+            result skip mssql-dsn-not-configured
+        fi
     else
         run configured-dsn-parity env \
             DURPDEPLOY_MSSQL_TEST_DSN="$DURPDEPLOY_MSSQL_TEST_DSN" \

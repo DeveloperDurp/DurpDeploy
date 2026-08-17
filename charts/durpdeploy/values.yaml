@@ -134,6 +134,29 @@ externalPostgres:
   # you can override it directly if you need stricter checks).
   sslmode: require
 
+# --- OIDC SSO --------------------------------------------------------------
+# Disabled by default. When enabled, set every required value and create the
+# existing Secret before upgrading. The callback is derived exactly as:
+# https://durpdeploy.example.com/login/oidc/callback
+# Scopes are fixed by the application to: openid profile email.
+oidc:
+  enabled: false
+  # -- Public HTTPS origin used by OIDC as DURPDEPLOY_URL and callback origin.
+  # Required when OIDC is enabled.
+  publicURL: ""
+  issuer: https://idp.example.com/realms/example
+  clientID: durpdeploy-example
+  adminGroup: durpdeploy-admin
+  deployerGroup: durpdeploy-deployer
+  viewerGroup: durpdeploy-viewer
+  displayName: SSO
+  groupClaim: groups
+  requireEmailVerified: true
+  clientSecret:
+    # The client secret is never stored in values or a ConfigMap.
+    existingSecret: durpdeploy-oidc
+    key: client-secret
+
 # --- Encryption key ------------------------------------------------------
 # The chart renders a Secret durpdeploy-secret-key with a key the
 # operator fills in. Encryption uses AES-256-GCM (see internal/secret);

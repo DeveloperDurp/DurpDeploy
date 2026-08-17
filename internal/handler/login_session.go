@@ -19,6 +19,7 @@ const (
 	finalLoginTOTP     finalLoginFactor = "totp"
 	finalLoginRecovery finalLoginFactor = "recovery"
 	finalLoginPasskey  finalLoginFactor = "passkey"
+	finalLoginOIDC     finalLoginFactor = "oidc"
 )
 
 type finalSessionIssue struct {

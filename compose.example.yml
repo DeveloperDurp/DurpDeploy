@@ -8,7 +8,8 @@
 # How to bootstrap:
 #   1. Copy this file to compose.yml:
 #        cp compose.example.yml compose.yml
-#   2. Create a .env file in this directory with the variables below.
+#   2. Create three env files in this directory:
+#      compose.app.env, compose.litestream.env, and compose.caddy.env.
 #   3. Generate an encryption key and keep it secret:
 #        mkdir -p secrets
 #        openssl rand -base64 32 > secrets/durpdeploy_key
@@ -21,40 +22,44 @@
 #   6. Build and start the stack:
 #        docker compose up -d --build
 #
-# Required environment variables:
-#   DURPDEPLOY_URL            - public URL (scheme matters for Caddy TLS)
-#   LITESTREAM_S3_BUCKET      - S3 bucket for SQLite backups
-#   AWS_ACCESS_KEY_ID         - S3 access key
-#   AWS_SECRET_ACCESS_KEY     - S3 secret key
-#
-# Optional environment variables (one of these is required for the encryption key):
-#   DURPDEPLOY_SECRET_KEY     - base64 32-byte AES key
-#                              Default key source is the mounted secret file at
-#                              secrets/durpdeploy_key → /etc/durpdeploy/key;
-#                              secret/secret.go reads file first, env fallback.
-#                              Set DURPDEPLOY_SECRET_KEY only when you cannot
-#                              mount a secret file (k8s, swarm, etc.).
-#   DURPDEPLOY_LITESTREAM_CHECK_COMMAND  - shell command to poll backup health
-#   DURPDEPLOY_LITESTREAM_CHECK_INTERVAL - how often to run the check (default 1h)
-#   LITESTREAM_S3_ENDPOINT               - required for non-AWS S3 stores
-#
-# Database:
-#   This stack uses SQLite via the named volume `durpdeploy-data`. The
-#   DURPDEPLOY_DB env var supports `postgres://` if you prefer Postgres, but
-#   SQLite is the default and is what Litestream replicates.
-#
-# .env.example:
-#   # Required
+# Caddy env file (compose.caddy.env) required:
 #   DURPDEPLOY_URL=https://durpdeploy.example.com
+#   BACKEND=app:8080
+#
+# App env file optional:
+#   # only set if you are NOT using secrets/durpdeploy_key
+#   DURPDEPLOY_SECRET_KEY=REPLACE_WITH_BASE64_32_BYTE_KEY
+#   DURPDEPLOY_SMTP_HOST=<host>
+#   DURPDEPLOY_SMTP_PORT=<port>
+#   DURPDEPLOY_SMTP_FROM=<from-address>
+#   DURPDEPLOY_SMTP_USER=<user>
+#   DURPDEPLOY_SMTP_PASS=<pass>
+#   DURPDEPLOY_EXTRA_SCRUB_PATTERNS=<comma-separated-patterns>
+#   DURPDEPLOY_AUDIT_RETENTION_DAYS=<days>
+#   DURPDEPLOY_LITESTREAM_CHECK_COMMAND=<healthcheck-command>
+#   DURPDEPLOY_LITESTREAM_CHECK_INTERVAL=<1h>
+#
+# Optional OIDC SSO (set all in compose.app.env together, or omit all):
+#   DURPDEPLOY_URL=https://durpdeploy.example.com
+#   DURPDEPLOY_OIDC_ISSUER=https://idp.example.com/realms/example
+#   DURPDEPLOY_OIDC_CLIENT_ID=durpdeploy-example
+#   DURPDEPLOY_OIDC_CLIENT_SECRET=REPLACE_WITH_CLIENT_SECRET
+#   DURPDEPLOY_OIDC_ADMIN_GROUP=durpdeploy-admin
+#   DURPDEPLOY_OIDC_DEPLOYER_GROUP=durpdeploy-deployer
+#   DURPDEPLOY_OIDC_VIEWER_GROUP=durpdeploy-viewer
+#   DURPDEPLOY_OIDC_DISPLAY_NAME=SSO
+#   DURPDEPLOY_OIDC_GROUP_CLAIM=groups
+#   DURPDEPLOY_OIDC_REQUIRE_EMAIL_VERIFIED=false  # default true
+#   # Callback: https://durpdeploy.example.com/login/oidc/callback
+#   # Scopes: openid profile email
+#
+# Required in compose.litestream.env:
 #   LITESTREAM_S3_BUCKET=my-durpdeploy-backups
+#
+# Optional in compose.litestream.env:
+#   LITESTREAM_S3_ENDPOINT=https://s3.example.com
 #   AWS_ACCESS_KEY_ID=AKIA...
 #   AWS_SECRET_ACCESS_KEY=...
-#   # Optional — only set if you are NOT using secrets/durpdeploy_key
-#   DURPDEPLOY_SECRET_KEY=REPLACE_WITH_BASE64_32_BYTE_KEY
-#   # Optional
-#   LITESTREAM_S3_ENDPOINT=https://s3.example.com
-#   DURPDEPLOY_LITESTREAM_CHECK_COMMAND=
-#   DURPDEPLOY_LITESTREAM_CHECK_INTERVAL=1h
 
 services:
   app:
@@ -64,16 +69,10 @@ services:
     restart: unless-stopped
     # Port 8080 is internal only — Caddy talks to it over the compose network.
     # Don't publish it to the host.
+    env_file:
+      - ./compose.app.env
     environment:
-      DURPDEPLOY_DB: /data/durpdeploy.db
-      DURPDEPLOY_URL: ${DURPDEPLOY_URL:?}
-      # Encryption key: the mounted secret file at /etc/durpdeploy/key is the
-      # primary source (generated via: openssl rand -base64 32 > secrets/durpdeploy_key
-      # && chmod 0600 secrets/durpdeploy_key). Set DURPDEPLOY_SECRET_KEY only when
-      # you cannot mount a secret file (k8s, swarm, etc.).
-      DURPDEPLOY_SECRET_KEY: ${DURPDEPLOY_SECRET_KEY:-}
-      DURPDEPLOY_LITESTREAM_CHECK_COMMAND: ${DURPDEPLOY_LITESTREAM_CHECK_COMMAND:-}  # e.g. "litestream ltx /data/durpdeploy.db"
-      DURPDEPLOY_LITESTREAM_CHECK_INTERVAL: ${DURPDEPLOY_LITESTREAM_CHECK_INTERVAL:-1h}  # e.g. 1h, 30m
+      - DURPDEPLOY_DB=/data/durpdeploy.db
     volumes:
       - durpdeploy-data:/data
     secrets:
@@ -106,12 +105,8 @@ services:
     ports:
       - "80:80"
       - "443:443"
-    environment:
-      DURPDEPLOY_URL: ${DURPDEPLOY_URL:?}  # required, e.g. https://durpdeploy.example.com
-      # Backend address for the reverse_proxy directive in Caddyfile.
-      # Defaults to localhost:8080 (the systemd deploy); the compose
-      # stack overrides to `app:8080` to use the compose DNS.
-      BACKEND: ${BACKEND:-app:8080}
+    env_file:
+      - ./compose.caddy.env
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
@@ -139,14 +134,11 @@ services:
     image: litestream/litestream:0.3
     restart: unless-stopped
     command: replicate -config /etc/litestream.yml
+    env_file:
+      - ./compose.litestream.env
     volumes:
       - durpdeploy-data:/data
       - ./deploy/litestream.example.yml:/etc/litestream.yml:ro
-    environment:
-      LITESTREAM_S3_BUCKET: ${LITESTREAM_S3_BUCKET:?}  # required for S3 replication, e.g. my-durpdeploy-backups
-      LITESTREAM_S3_ENDPOINT: ${LITESTREAM_S3_ENDPOINT:-}  # e.g. https://s3.example.com (leave empty for AWS)
-      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}  # e.g. AKIA...
-      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}  # e.g. wJalrXU...
     depends_on:
       app:
         condition: service_healthy

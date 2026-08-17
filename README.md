@@ -68,6 +68,51 @@ durpdeploy tokens create --user admin@example.com --name ci
 Browser MFA protects browser sessions only. API tokens remain single bearer
 credentials and are not MFA-protected; an MFA reset does not revoke them.
 
+### Optional OIDC sign-in
+
+OIDC is optional. Enable it only with the complete configuration below:
+
+```text
+DURPDEPLOY_URL=https://<public-host>
+DURPDEPLOY_OIDC_ISSUER=https://<issuer-host>
+DURPDEPLOY_OIDC_CLIENT_ID=<client-id>
+DURPDEPLOY_OIDC_CLIENT_SECRET=<secret>
+DURPDEPLOY_OIDC_ADMIN_GROUP=<admin-group>
+DURPDEPLOY_OIDC_DEPLOYER_GROUP=<deployer-group>
+DURPDEPLOY_OIDC_VIEWER_GROUP=<viewer-group>
+DURPDEPLOY_OIDC_DISPLAY_NAME=<display-name>
+DURPDEPLOY_OIDC_GROUP_CLAIM=<claim-name>
+DURPDEPLOY_OIDC_REQUIRE_EMAIL_VERIFIED=<true|false>
+```
+
+The issuer and public URL must be HTTPS origins. Register the exact redirect URI
+`DURPDEPLOY_URL + /login/oidc/callback` with the provider. The requested scopes
+are `openid`, `profile`, and `email`. The local password form remains available
+alongside OIDC, and password login uses the most recently stored local role.
+
+When unset, or set to `true`, the callback requires the ID token to contain the
+literal JSON boolean `email_verified: true`. Explicit lowercase
+`DURPDEPLOY_OIDC_REQUIRE_EMAIL_VERIFIED=false` accepts a present literal JSON
+boolean `email_verified: true` or `email_verified: false`, after normal ID token
+signature, issuer, audience, and nonce verification. Missing, null, string, and
+numeric claims remain rejected. This weakens identity assurance, so use it only
+where Authentik independently establishes address ownership. The first email match links to
+the one local account with that email. If no account matches, OIDC creates a
+user with an empty password, so that user must continue using OIDC.
+Configured groups map to roles with admin, then deployer, then viewer precedence.
+Each successful OIDC login synchronizes the stored name, email, and role. A role
+change deletes that user's browser sessions. Removing a group is observed on the
+next OIDC login only. There is no SCIM or provider back-channel deprovisioning.
+
+OIDC reauthentication is handled by the identity provider, while the application
+binds the result to the existing local session and OIDC identity. Logout is local
+only: it clears the DurpDeploy browser session and does not log out of the
+provider. DurpDeploy does not persist provider tokens, authorization codes, or
+raw claims, and OIDC does not authenticate API tokens. If the provider is down,
+the password login, existing sessions, health endpoint, and bearer API remain
+available. An OIDC-created account can be recovered by an administrator through
+the normal local user recovery process; there is no self-service password reset.
+
 The full API reference is available at `/api/swagger/` in a running server (no auth required).
 
 ## Architecture

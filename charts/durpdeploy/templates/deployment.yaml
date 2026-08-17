@@ -65,6 +65,33 @@ spec:
                 secretKeyRef:
                   name: {{ include "durpdeploy.secretKeyName" . }}
                   key: secret-key
+            {{- if .Values.oidc.enabled }}
+            - name: DURPDEPLOY_URL
+              value: {{ required "oidc.publicURL is required when OIDC is enabled" .Values.oidc.publicURL | quote }}
+            # OIDC callback: https://durpdeploy.example.com/login/oidc/callback
+            # OIDC scopes are fixed by the application: openid profile email.
+            - name: DURPDEPLOY_OIDC_ISSUER
+              value: {{ .Values.oidc.issuer | quote }}
+            - name: DURPDEPLOY_OIDC_CLIENT_ID
+              value: {{ .Values.oidc.clientID | quote }}
+            - name: DURPDEPLOY_OIDC_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ required "oidc.clientSecret.existingSecret is required when OIDC is enabled" .Values.oidc.clientSecret.existingSecret | quote }}
+                  key: {{ required "oidc.clientSecret.key is required when OIDC is enabled" .Values.oidc.clientSecret.key | quote }}
+            - name: DURPDEPLOY_OIDC_ADMIN_GROUP
+              value: {{ .Values.oidc.adminGroup | quote }}
+            - name: DURPDEPLOY_OIDC_DEPLOYER_GROUP
+              value: {{ .Values.oidc.deployerGroup | quote }}
+            - name: DURPDEPLOY_OIDC_VIEWER_GROUP
+              value: {{ .Values.oidc.viewerGroup | quote }}
+            - name: DURPDEPLOY_OIDC_DISPLAY_NAME
+              value: {{ .Values.oidc.displayName | quote }}
+            - name: DURPDEPLOY_OIDC_GROUP_CLAIM
+              value: {{ .Values.oidc.groupClaim | quote }}
+            - name: DURPDEPLOY_OIDC_REQUIRE_EMAIL_VERIFIED
+              value: {{ ternary "true" "false" .Values.oidc.requireEmailVerified | quote }}
+            {{- end }}
             {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}

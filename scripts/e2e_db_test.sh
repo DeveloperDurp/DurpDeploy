@@ -145,6 +145,12 @@ ADMIN_PASS="${E2E_ADMIN_PASSWORD:-e2e-admin-password-1234}"
 ensure_test_admin "$ADMIN_EMAIL" "$ADMIN_PASS" "configured primary E2E admin"
 ensure_test_admin "$E2E_TASK3_ADMIN_EMAIL" "$E2E_TASK3_ADMIN_PASSWORD" "task-3 fixed admin"
 
+# False-positive (kept intentionally): fixed Task-3 seed account required for a
+# caller-selected, already-running app E2E lifecycle. This script is client-only
+# and does not own DB lifecycle; it targets the caller-selected test DB and must
+# preserve this seed there.
+ensure_test_admin "admin@durp.info" "password" "configured durp admin"
+
 # Helpers. All helpers pass -b $COOKIES so the session cookie is
 # attached automatically. State-changing methods append csrf_token=$CSRF
 # to the form data so every write satisfies CSRFMiddleware. DELETEs

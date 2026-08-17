@@ -11,7 +11,22 @@ const requiredFamilies = new Set([
 	"admin_reset",
 	"api_separation",
 	"cache_secret_safety",
+	"oidc_protocol_abuse",
 	"database_parity",
+]);
+
+const oidcRuntimeOwner = "scripts/oidc_http_matrix.sh";
+const requiredOIDCScenarioIDs = new Set([
+	"oidc-valid-login",
+	"oidc-state-nonce-pkce-replay",
+	"oidc-issuer-audience-signature-expiry-verifier",
+	"oidc-verified-email-linking",
+	"oidc-concurrent-first-login",
+	"oidc-group-role-downgrade-invalidation",
+	"oidc-reauth-session-subject-binding",
+	"oidc-provider-outage-password-fallback",
+	"oidc-secret-cache-log-safety",
+	"oidc-disabled-regression",
 ]);
 const requiredExclusions = new Set([
 	"excluded-endpoint-compromise",
@@ -26,6 +41,7 @@ const allowed = {
 	coverageSources: new Set([
 		"shell-e2e",
 		"browser-e2e",
+		"go-integration",
 		"handler-test",
 		"mfa-unit",
 		"database-parity",
@@ -35,8 +51,9 @@ const allowed = {
 		"planned-todo-7",
 	]),
 };
-const runtimeSources = new Set(["shell-e2e", "browser-e2e"]);
+const runtimeSources = new Set(["shell-e2e", "browser-e2e", "go-integration"]);
 const secretBearingName = /password|token|secret|seed|recovery|challenge|assertion|credential|session|cookie|webauthn|passkey|blob/i;
+const protocolBearingName = /^(?:(?:oidc_)?(?:state|nonce)|(?:authorization_)?code|(?:pkce_)?verifier|id_token|(?:raw_)?claims?)$/i;
 
 export class ManifestError extends Error {
 	constructor(message) {
@@ -86,7 +103,7 @@ function registeredRoutes(source) {
 	if (apiStart < 0) fail("internal/server/server.go has no API v1 route group");
 	const browser = routes(
 		source.slice(0, apiStart),
-		/^\/login(?:\/mfa(?:\/.*)?)?$|^\/logout$|^\/projects$|^\/settings\/(?:tokens|security)(?:\/.*)?$|^\/admin\/(?:tokens(?:\/.*)?|users\/\{id\}\/mfa-reset)$/,
+		/^\/login(?:\/(?:mfa(?:\/.*)?|oidc(?:\/callback)?))?$|^\/logout$|^\/projects$|^\/settings\/(?:tokens|security)(?:\/.*)?$|^\/admin\/(?:tokens(?:\/.*)?|users\/\{id\}\/mfa-reset)$/,
 	);
 	const api = routes(
 		source.slice(apiStart),
@@ -100,6 +117,7 @@ function artifacts(value, context) {
 	if (!record(value)) fail(`${context}: missing required field artifacts`);
 	for (const name of Object.keys(value)) {
 		if (secretBearingName.test(name)) fail(`${context}: secret-bearing artifact field ${name}`);
+		if (protocolBearingName.test(name)) fail(`${context}: protocol-bearing artifact field ${name}`);
 	}
 	for (const field of ["metadata", "on_failure"]) {
 		if (!Array.isArray(value[field])) fail(`${context}: artifact ${field} must be an array`);
@@ -109,6 +127,9 @@ function artifacts(value, context) {
 			}
 			if (secretBearingName.test(name)) {
 				fail(`${context}: secret-bearing artifact metadata ${name}`);
+			}
+			if (protocolBearingName.test(name)) {
+				fail(`${context}: protocol-bearing artifact metadata ${name}`);
 			}
 		}
 	}
@@ -207,6 +228,7 @@ function executionRegistry(manifest, scenarios) {
 			fail(`scenario ${scenario.id}: non-SQLite scenario requires parity execution ownership`);
 		}
 	}
+	return ownership;
 }
 
 export function validateManifest(manifest, source) {
@@ -241,9 +263,16 @@ export function validateManifest(manifest, source) {
 		families.add(result.family);
 		scenarios.push(result);
 	}
-	executionRegistry(manifest, scenarios);
+	const ownership = executionRegistry(manifest, scenarios);
 	for (const family of requiredFamilies) {
 		if (!families.has(family)) fail(`missing required scenario family ${family}`);
+	}
+	for (const id of requiredOIDCScenarioIDs) {
+		if (!ids.has(id)) fail(`missing required OIDC scenario ${id}`);
+		const execution = ownership.get(id);
+		if (execution?.kind !== "runtime" || execution.owner !== oidcRuntimeOwner) {
+			fail(`OIDC scenario ${id}: must be owned by ${oidcRuntimeOwner}`);
+		}
 	}
 	for (const key of inventory) {
 		if (!manifest.scenarios.some((value) => value.covered_routes.some(

@@ -139,6 +139,18 @@ type NotificationEvent struct {
 	CreatedAt     int64         `json:"created_at"`
 }
 
+type OidcIdentity struct {
+	Issuer    string `json:"issuer"`
+	Subject   string `json:"subject"`
+	UserID    int64  `json:"user_id"`
+	CreatedAt int64  `json:"created_at"`
+}
+
+type OidcTransaction struct {
+	StateHash string `json:"state_hash"`
+	ExpiresAt int64  `json:"expires_at"`
+}
+
 type Project struct {
 	ID                int64          `json:"id"`
 	Name              string         `json:"name"`
