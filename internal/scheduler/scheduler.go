@@ -9,24 +9,23 @@ import (
 	"time"
 
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/dispatch"
 	"durpdeploy/internal/gate"
 	"durpdeploy/internal/repository"
-	"durpdeploy/internal/runner"
 
 	"github.com/robfig/cron/v3"
 )
 
 // Scheduler fires due scheduled deployments on a fixed interval.
 type Scheduler struct {
-	repo     *repository.Repository
-	runner   *runner.DeploymentRunner
-	runFunc  func(ctx context.Context, deploymentID, releaseID, environmentID int64)
-	interval time.Duration
-	now      func() time.Time
-	parser   cron.Parser
-	log      *slog.Logger
-	wg       sync.WaitGroup
-	cancel   context.CancelFunc
+	repo         *repository.Repository
+	dispatchFunc func(ctx context.Context, deploymentID int64) error
+	interval     time.Duration
+	now          func() time.Time
+	parser       cron.Parser
+	log          *slog.Logger
+	wg           sync.WaitGroup
+	cancel       context.CancelFunc
 }
 
 // Option configures a Scheduler.
@@ -50,15 +49,14 @@ func WithLogger(l *slog.Logger) Option {
 // New creates a Scheduler with a 60s tick interval and the standard 5-field cron parser.
 func New(
 	repo *repository.Repository,
-	rnr *runner.DeploymentRunner,
+	dispatcher *dispatch.Dispatcher,
 	opts ...Option,
 ) *Scheduler {
 	s := &Scheduler{
-		repo:     repo,
-		runner:   rnr,
-		runFunc:  rnr.Run,
-		interval: 60 * time.Second,
-		now:      time.Now,
+		repo:         repo,
+		dispatchFunc: dispatcher.Dispatch,
+		interval:     60 * time.Second,
+		now:          time.Now,
 		parser: cron.NewParser(
 			cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow,
 		),
@@ -70,11 +68,18 @@ func New(
 	return s
 }
 
-// SetRunFunc replaces the runner function (tests use this to avoid real bash processes).
+// SetRunFunc replaces dispatch for tests that assert scheduled deployment inputs.
 func (s *Scheduler) SetRunFunc(
 	fn func(ctx context.Context, deploymentID, releaseID, environmentID int64),
 ) {
-	s.runFunc = fn
+	s.dispatchFunc = func(ctx context.Context, deploymentID int64) error {
+		deployment, err := s.repo.Queries.GetDeployment(ctx, deploymentID)
+		if err != nil {
+			return err
+		}
+		fn(ctx, deploymentID, deployment.ReleaseID, deployment.EnvironmentID)
+		return nil
+	}
 }
 
 // Start begins the background ticker goroutine. Call Stop to shut it down cleanly.
@@ -364,13 +369,17 @@ func (s *Scheduler) fireOne(ctx context.Context, row db.ScheduledDeployment) {
 	)
 
 	if initialStatus == "pending" {
-		// spawn runner without blocking the ticker
-		go s.runFunc(
-			context.Background(),
-			deployment.ID,
-			row.ReleaseID,
-			row.EnvironmentID,
-		)
+		if err := s.dispatchFunc(ctx, deployment.ID); err != nil {
+			s.log.Error(
+				"dispatch scheduled deployment failed",
+				"schedule_id",
+				row.ID,
+				"deployment_id",
+				deployment.ID,
+				"error",
+				err,
+			)
+		}
 	}
 
 	if err := s.advance(ctx, row, next); err != nil {

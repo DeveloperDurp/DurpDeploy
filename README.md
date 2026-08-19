@@ -15,6 +15,10 @@ A single-binary deployment tool for running bash scripts against environments. D
 - **Approvals** - Manual gate for production deployments requiring admin sign-off
 - **Notifications** - Event-driven Slack, Email, Gotify, and Discord alerts for deployment status
 - **Cancel** - Stop running deployments mid-execution
+- **Remote agents** - Dispatch deployments to outbound-only agents with mTLS and certificate pinning
+
+For the complete server listener, admin enrollment, agent installation, and
+recovery procedure, see [`docs/agents.md`](docs/agents.md).
 
 ## Quick Start
 
@@ -249,7 +253,7 @@ five-minute hands-on attack drill — is documented in
 
 ## What It Does Not Do
 
-- No remote deployment targets or SSH
+- No SSH-based deployment transport
 - No parallel step execution
 - No CI/build features
 - No Kubernetes or cloud integrations

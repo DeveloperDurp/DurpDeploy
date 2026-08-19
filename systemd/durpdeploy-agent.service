@@ -1,0 +1,48 @@
+# DurpDeploy remote execution agent.
+#
+# Install the dedicated user and state directory first, then install this unit:
+#   sudo useradd --system --home-dir /var/lib/durpdeploy-agent --shell /usr/sbin/nologin durpdeploy-agent
+#   sudo install -d -o durpdeploy-agent -g durpdeploy-agent -m 0700 /var/lib/durpdeploy-agent
+#   sudo install -m 0600 /tmp/durpdeploy-agent.env /etc/durpdeploy-agent.env
+#   sudo install -m 0644 systemd/durpdeploy-agent.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now durpdeploy-agent
+
+[Unit]
+Description=DurpDeploy remote execution agent
+Documentation=https://gitlab.example.com/durpdeploy/blob/main/docs/agent-protocol.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=durpdeploy-agent
+Group=durpdeploy-agent
+WorkingDirectory=/var/lib/durpdeploy-agent
+Environment=DURPDEPLOY_AGENT_STATE_DIR=/var/lib/durpdeploy-agent
+EnvironmentFile=/etc/durpdeploy-agent.env
+ExecStart=/usr/local/bin/durpdeploy-agent
+Restart=on-failure
+RestartSec=5s
+StateDirectory=durpdeploy-agent
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadWritePaths=/var/lib/durpdeploy-agent
+UMask=0077
+LimitNOFILE=1024
+MemoryMax=512M
+TasksMax=128
+
+[Install]
+WantedBy=multi-user.target

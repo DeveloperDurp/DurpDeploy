@@ -717,7 +717,7 @@ func (h *ScheduledDeploymentHandler) availableEnvsForDeployPage(
 	project db.Project,
 	release *db.Release,
 ) ([]pages.AvailableEnv, error) {
-	dh := NewDeploymentHandler(h.repo, nil)
+	dh := NewDeploymentHandler(h.repo, nil, nil)
 	return dh.availableEnvsForDeployPage(r, project, release)
 }
 

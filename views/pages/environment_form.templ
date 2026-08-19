@@ -6,7 +6,19 @@ import (
 	"strconv"
 )
 
-templ EnvironmentForm(env *db.Environment, isNew bool, errorMsg string, currentPath string) {
+type EnvironmentPolicyForm struct {
+	Remote   bool
+	PoolID   int64
+	Selector string
+}
+
+type EnvironmentFormData struct {
+	Environment *db.Environment
+	Pools       []db.AgentPool
+	Policy      EnvironmentPolicyForm
+}
+
+templ EnvironmentForm(data EnvironmentFormData, isNew bool, errorMsg string, currentPath string) {
 	if !CanWrite(ctx) {
 		@ViewerForbiddenMessage(
 			envFormTitle(isNew),
@@ -17,7 +29,7 @@ templ EnvironmentForm(env *db.Environment, isNew bool, errorMsg string, currentP
 		)
 	} else {
 		@layouts.Base("Environment", currentPath) {
-			@EnvironmentFormContent(env, isNew, errorMsg)
+			@EnvironmentFormContent(data, isNew, errorMsg)
 		}
 	}
 }
@@ -36,11 +48,11 @@ func envFormAction(isNew bool) string {
 	return "edit"
 }
 
-templ EnvironmentFormFragment(env *db.Environment, isNew bool, errorMsg string) {
-	@EnvironmentFormContent(env, isNew, errorMsg)
+templ EnvironmentFormFragment(data EnvironmentFormData, isNew bool, errorMsg string) {
+	@EnvironmentFormContent(data, isNew, errorMsg)
 }
 
-templ EnvironmentFormContent(env *db.Environment, isNew bool, errorMsg string) {
+templ EnvironmentFormContent(data EnvironmentFormData, isNew bool, errorMsg string) {
 	<div class="max-w-2xl mx-auto">
 		<h1 class="text-3xl font-bold mb-6">
 			if isNew {
@@ -54,7 +66,7 @@ templ EnvironmentFormContent(env *db.Environment, isNew bool, errorMsg string) {
 				method="post"
 				action="/environments"
 			} else {
-				hx-put={ "/environments/" + strconv.FormatInt(env.ID, 10) }
+				hx-put={ "/environments/" + strconv.FormatInt(data.Environment.ID, 10) }
 				hx-target="#form-container"
 				hx-swap="innerHTML"
 				data-toast-success="Environment updated"
@@ -63,25 +75,88 @@ templ EnvironmentFormContent(env *db.Environment, isNew bool, errorMsg string) {
 			class="space-y-4"
 		>
 			<div class="form-control">
-				<label class="label">
+				<label class="label" for="environment-name">
 					<span class="label-text">Name</span>
 				</label>
-				<input type="text" name="name" value={ env.Name } class="input input-bordered" required/>
+				<input id="environment-name" type="text" name="name" value={ data.Environment.Name } class="input input-bordered" required/>
 				if errorMsg != "" {
 					<span class="text-error text-sm mt-1">{ errorMsg }</span>
 				}
 			</div>
 			<div class="form-control">
-				<label class="label">
+				<label class="label" for="environment-description">
 					<span class="label-text">Description</span>
 				</label>
-				<textarea name="description" class="textarea textarea-bordered">{ env.Description.String }</textarea>
+				<textarea id="environment-description" name="description" class="textarea textarea-bordered">{ data.Environment.Description.String }</textarea>
+			</div>
+			<div class="form-control">
+				<label class="label" for="environment-tags">
+					<span class="label-text">Tags</span>
+				</label>
+				<input id="environment-tags" type="text" name="tags" value={ data.Environment.Tags.String } class="input input-bordered" placeholder="comma, separated, tags"/>
 			</div>
 			<div class="form-control">
 				<label class="label">
-					<span class="label-text">Tags</span>
+					<span class="label-text">Execution mode</span>
 				</label>
-				<input type="text" name="tags" value={ env.Tags.String } class="input input-bordered" placeholder="comma, separated, tags"/>
+				<div class="flex flex-wrap gap-4">
+					<label class="label cursor-pointer justify-start gap-2">
+						<input
+							type="radio"
+							name="execution_mode"
+							value="local"
+							if !data.Policy.Remote {
+								checked
+							}
+							class="radio radio-primary"
+						/>
+						<span class="label-text">Local runner</span>
+					</label>
+					<label class="label cursor-pointer justify-start gap-2">
+						<input
+							type="radio"
+							name="execution_mode"
+							value="remote"
+							if data.Policy.Remote {
+								checked
+							}
+							class="radio radio-primary"
+						/>
+						<span class="label-text">Remote agent pool</span>
+					</label>
+				</div>
+			</div>
+			<div class="space-y-4 rounded-box border border-base-300 p-4">
+				<div role="alert" class="alert alert-warning">
+					<span>Remote environments wait for a matching agent and never fall back to the local runner. Changing the mode only affects future deployments; existing dispatch snapshots remain unchanged.</span>
+				</div>
+				<div class="form-control">
+					<label class="label" for="environment-pool">
+						<span class="label-text">Agent pool</span>
+					</label>
+					<select id="environment-pool" name="pool_id" class="select select-bordered">
+						<option value="">Select an enabled pool</option>
+						for _, pool := range data.Pools {
+							if pool.Enabled == 1 {
+								<option
+									value={ strconv.FormatInt(pool.ID, 10) }
+									if data.Policy.PoolID == pool.ID {
+										selected
+									}
+								>
+									{ pool.Name }
+								</option>
+							}
+						}
+					</select>
+				</div>
+				<div class="form-control">
+					<label class="label" for="environment-agent-tags">
+						<span class="label-text">Required agent tags</span>
+						<span class="label-text-alt text-gray-500">Optional key=value pairs, comma-separated.</span>
+					</label>
+					<input id="environment-agent-tags" type="text" name="agent_tags" value={ data.Policy.Selector } class="input input-bordered" placeholder="region=us,role=web"/>
+				</div>
 			</div>
 			<div class="flex gap-2">
 				<button type="submit" class="btn btn-primary">

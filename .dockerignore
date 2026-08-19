@@ -34,6 +34,14 @@ screenshots/
 *.db
 *.db-*
 
+# Local secrets
+.env
+.env.*
+*.key
+*.pem
+key/
+secrets/
+
 # Node
 node_modules/
 

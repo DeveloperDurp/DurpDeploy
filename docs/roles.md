@@ -39,11 +39,10 @@ security state; administrator MFA reset remains admin-only.
 
 ## A note on per-project authorization
 
-Today, **any `deployer` can deploy to any project**. There is no project
-membership check yet. P1-1 in the team-hardening plan introduces a
-`project_members` table that restricts deployers to projects they're a
-member of. Until that ships, the practical "least privilege" is to make
-non-admins `viewer`.
+Per-project authorization is enforced through `project_members`. Global admins
+bypass the membership check. Other users must be members of a project to read
+or write its project-scoped resources, and project member management is limited
+to global admins and project admins.
 
 ## Picking a role for a new user
 

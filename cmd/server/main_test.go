@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/dispatch"
 	"durpdeploy/internal/migrate"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/runner"
@@ -44,8 +45,8 @@ func TestLoadDSN_respectsEnvOverride(t *testing.T) {
 	// When:
 	dsn := loadDSN()
 	// Then: the override wins.
-	if dsn != "/var/lib/durpdeploy/durpdeploy.db" {
-		t.Fatalf("loadDSN() = %q, want production path", dsn)
+	if !strings.HasPrefix(dsn, "/var/lib/durpdeploy/durpdeploy.db?") {
+		t.Fatalf("loadDSN() = %q, want SQLite production path", dsn)
 	}
 }
 
@@ -487,7 +488,11 @@ func TestRecoverPendingDeployments_launchesRunnerForOrphanedDeployment(
 	// When: the server starts and runs startup recovery.
 	broker := runner.NewLogBroker()
 	rnr := runner.New(repo, broker)
-	recoverPendingDeployments(ctx, rnr, repo)
+	box, err := secret.NewBox(make([]byte, 32))
+	if err != nil {
+		t.Fatalf("new secret box: %v", err)
+	}
+	recoverPendingDeployments(ctx, dispatch.New(repo, box, rnr), repo)
 
 	// Then: the deployment leaves "pending" within a few seconds.
 	// (Empty steps_json means the runner marks it succeeded immediately.)
@@ -514,6 +519,146 @@ func TestRecoverPendingDeployments_launchesRunnerForOrphanedDeployment(
 			"final status = %q, want succeeded (empty steps_json = no-op success)",
 			finalStatus,
 		)
+	}
+}
+
+func TestStartupRecovery_RoutesOnlyEligiblePreStartDeployments(t *testing.T) {
+	// Given: pending deployments with no dispatch, an expired pre-start claim,
+	// and routes that have either started or been lost.
+	dsn := tempDSN(t)
+	conn, err := migrate.Run(dsn)
+	if err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	defer conn.Close()
+	repo := repository.New(conn)
+	ctx := context.Background()
+	project, err := repo.Queries.CreateProject(
+		ctx,
+		db.CreateProjectParams{Name: "recovery"},
+	)
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	environment, err := repo.Queries.CreateEnvironment(
+		ctx,
+		db.CreateEnvironmentParams{Name: "environment"},
+	)
+	if err != nil {
+		t.Fatalf("create environment: %v", err)
+	}
+	release, err := repo.Queries.CreateRelease(ctx, db.CreateReleaseParams{
+		ProjectID: project.ID, Version: "v1", StepsJson: "[]",
+	})
+	if err != nil {
+		t.Fatalf("create release: %v", err)
+	}
+	createPending := func() db.Deployment {
+		deployment, createErr := repo.Queries.CreateDeployment(
+			ctx,
+			db.CreateDeploymentParams{
+				ReleaseID: release.ID, EnvironmentID: environment.ID, Status: "pending",
+			},
+		)
+		if createErr != nil {
+			t.Fatalf("create pending deployment: %v", createErr)
+		}
+		return deployment
+	}
+	noDispatch := createPending()
+	expiredClaim := createPending()
+	started := createPending()
+	lost := createPending()
+	if _, err := repo.DB.ExecContext(
+		ctx,
+		"INSERT INTO agent_pools (name) VALUES ('recovery-pool')",
+	); err != nil {
+		t.Fatalf("create agent pool: %v", err)
+	}
+	if _, err := repo.DB.ExecContext(ctx, `
+		INSERT INTO agents (id, name, status, certificate_pem, certificate_fingerprint)
+		VALUES ('agent-1', 'agent', 'active', 'certificate', ?)`, strings.Repeat("a", 64)); err != nil {
+		t.Fatalf("create agent: %v", err)
+	}
+	claimHash := bytes.Repeat([]byte{1}, 32)
+	for _, route := range []struct {
+		deploymentID int64
+		state        string
+	}{
+		{expiredClaim.ID, "claimed"},
+		{started.ID, "started"},
+		{lost.ID, "lost"},
+	} {
+		if _, err := repo.Queries.CreateDeploymentDispatch(
+			ctx,
+			db.CreateDeploymentDispatchParams{
+				DeploymentID: route.deploymentID,
+				Mode:         "remote",
+				PoolID:       sql.NullInt64{Int64: 1, Valid: true},
+				Selector:     "",
+				State:        route.state,
+				Reason:       sql.NullString{},
+			},
+		); err != nil {
+			t.Fatalf("create %s route: %v", route.state, err)
+		}
+	}
+	if _, err := repo.DB.ExecContext(ctx, `
+		UPDATE deployment_dispatches
+		SET agent_id = 'agent-1', claim_token_hash = ?, claim_expires_at = ?
+		WHERE deployment_id = ?`, claimHash, time.Now().Add(-time.Minute).Unix(), expiredClaim.ID); err != nil {
+		t.Fatalf("expire claim: %v", err)
+	}
+	if _, err := repo.DB.ExecContext(ctx, `
+		UPDATE deployment_dispatches SET started_at = ? WHERE deployment_id = ?`,
+		time.Now().Add(-time.Minute).Unix(), started.ID); err != nil {
+		t.Fatalf("mark started: %v", err)
+	}
+	box, err := secret.NewBox(make([]byte, 32))
+	if err != nil {
+		t.Fatalf("new secret box: %v", err)
+	}
+
+	// When: startup recovery runs through the dispatcher.
+	recoverPendingDeployments(ctx, dispatch.New(repo, box, nil), repo)
+
+	// Then: only un-routed and expired pre-start work becomes waiting.
+	localRoute, err := repo.Queries.GetDeploymentDispatch(ctx, noDispatch.ID)
+	if err != nil {
+		t.Fatalf("get recovered local route: %v", err)
+	}
+	if localRoute.Mode != "local" || localRoute.State != "waiting" {
+		t.Fatalf("recovered local route = %+v, want local waiting", localRoute)
+	}
+	expiredRoute, err := repo.Queries.GetDeploymentDispatch(
+		ctx,
+		expiredClaim.ID,
+	)
+	if err != nil {
+		t.Fatalf("get expired claim route: %v", err)
+	}
+	if expiredRoute.State != "waiting" {
+		t.Fatalf(
+			"expired pre-start route = %q, want waiting",
+			expiredRoute.State,
+		)
+	}
+	for deploymentID, wantState := range map[int64]string{
+		started.ID: "started",
+		lost.ID:    "lost",
+	} {
+		route, getErr := repo.Queries.GetDeploymentDispatch(ctx, deploymentID)
+		if getErr != nil {
+			t.Fatalf("get preserved route %d: %v", deploymentID, getErr)
+		}
+		if route.State != wantState {
+			t.Fatalf(
+				"preserved route %d state = %q, want %q",
+				deploymentID,
+				route.State,
+				wantState,
+			)
+		}
 	}
 }
 
@@ -801,7 +946,11 @@ func TestRecoverPendingDeployments_noopWhenNonePending(t *testing.T) {
 	// When: recovery runs.
 	broker := runner.NewLogBroker()
 	rnr := runner.New(repo, broker)
-	recoverPendingDeployments(ctx, rnr, repo)
+	box, err := secret.NewBox(make([]byte, 32))
+	if err != nil {
+		t.Fatalf("new secret box: %v", err)
+	}
+	recoverPendingDeployments(ctx, dispatch.New(repo, box, rnr), repo)
 
 	// Then: no panic, no error, no goroutine spawned. We can't directly
 	// assert "no goroutine" but the function returning cleanly with no

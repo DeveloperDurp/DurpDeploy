@@ -1,8 +1,11 @@
 # DurpDeploy — Backup & Restore Runbook (P1-6)
 
-DurpDeploy's SQLite database (`durpdeploy.db`, WAL mode) is the sole source of
-truth for projects, releases, deployments, variables, and the audit log.
-There is no other durable copy unless you set one up. This runbook covers two
+DurpDeploy's SQLite database (`durpdeploy.db`, WAL mode) is the source of truth
+for projects, releases, deployments, variables, and the audit log. Remote agent
+state is separate and includes the agent certificate, server fingerprints, and
+claim marker. Back up the agent state directory only when you need to preserve
+that enrolled identity. There is no durable database copy unless you set one up.
+This runbook covers two
 options:
 
 1. **Litestream** (recommended) — continuous WAL streaming to S3-compatible

@@ -34,6 +34,11 @@ func TestRewriteSQL(t *testing.T) {
 			want:  "SELECT COUNT(*) FROM deployments WHERE created_at >= extract(epoch from date_trunc('day', now()))::bigint",
 		},
 		{
+			name:  "instr predicate",
+			query: "SELECT instr(selector, ?) > 0",
+			want:  "SELECT strpos(selector, $1) > 0",
+		},
+		{
 			name:  "placeholders renumbered",
 			query: "INSERT INTO users (email, password_hash) VALUES (?, ?)",
 			want:  "INSERT INTO users (email, password_hash) VALUES ($1, $2)",

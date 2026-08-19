@@ -70,6 +70,56 @@ docker compose exec app admin create \
   --email admin@example.com --password '<strong-password>'
 ```
 
+### Remote agent control plane
+
+The complete agent runbook is [`docs/agents.md`](agents.md). Read it before
+opening the listener or issuing an enrollment token. The short deployment
+boundary is:
+
+* The server owns SQLite, WAL/SHM files, agent records, policies, and the
+  server encryption key. An agent has no database and receives none of those
+  files or secrets.
+* Caddy and Let's Encrypt serve browser and API HTTPS on ports 80 and 443.
+  The dedicated agent listener is direct TLS 1.3 mTLS on port 10943 and does
+  not route through Caddy. Publish 10943 separately and firewall it to agent
+  networks.
+* The server listener requires all three variables together:
+
+  ```dotenv
+  DURPDEPLOY_AGENT_LISTEN_ADDR=0.0.0.0:10943
+  DURPDEPLOY_AGENT_PUBLIC_URL=https://<agent-control-host>
+  DURPDEPLOY_AGENT_IDENTITY_DIR=/var/lib/durpdeploy/agent-identity
+  ```
+
+* Agent configuration uses the exact variables below. The token is one-time and
+  the current binary attempts enrollment at every startup, so a consumed token
+  is not a reusable restart credential.
+
+  ```dotenv
+  DURPDEPLOY_AGENT_SERVER_URL=https://<agent-control-host>:10943
+  DURPDEPLOY_AGENT_SERVER_FINGERPRINT=<64-lowercase-hex-sha256-fingerprint>
+  DURPDEPLOY_AGENT_STATE_DIR=/var/lib/durpdeploy-agent
+  DURPDEPLOY_AGENT_ENROLLMENT_TOKEN=<one-time-enrollment-token>
+  DURPDEPLOY_AGENT_ID=<stable-agent-id>
+  DURPDEPLOY_AGENT_NAME=<agent-name>
+  DURPDEPLOY_AGENT_VERSION=<agent-version>
+  ```
+
+The optional Compose `agent` profile is a co-located demonstration only. It
+has a private state volume and no server database, server key, Docker socket,
+or inbound port. Production agents should run remotely on the host where the
+deployment commands belong. Use either:
+
+```bash
+docker compose --profile agent up -d --build agent
+podman compose --profile agent up -d --build agent
+```
+
+Do not run both commands for the same agent. For systemd, install
+`systemd/durpdeploy-agent.service`, use a dedicated `durpdeploy-agent` user,
+keep `/etc/durpdeploy-agent.env` mode `0600`, and use the commands in
+[`docs/agents.md`](agents.md) for start, status, logs, restart, and stop.
+
 DNS must be pointed at the host (port 80/443 open inbound) before the first
 `docker compose up` — Caddy issues Let's Encrypt certs on first request.
 See [`docs/backup-restore.md`](backup-restore.md) for the Litestream

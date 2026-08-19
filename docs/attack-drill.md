@@ -192,11 +192,11 @@ require running those parameters on a hashcat-class rig for hours per
 guess; against a unique salt per user, a dictionary attack has to pay
 that cost per (user, guess) pair.
 
-**What does NOT defend.** This drill does NOT protect the session token,
-the secret variables stored in `release_variables.value`, or the audit log
-itself. A DB read of those is still useful to an attacker. P1-2
-(secret encryption at rest) and the audit log retention policy in P2-5
-are the upgrade paths.
+**What does NOT defend.** This drill does NOT protect session tokens, the
+server encryption key, or the audit log itself. A DB read alone does not reveal
+the encrypted values in `release_variables.value`, but an attacker who also
+gets the matching server key can decrypt them. Audit log retention remains an
+operational policy.
 
 **Detection.** If you suspect a backup or the live DB leaked, rotate
 every user's password immediately:
@@ -266,5 +266,7 @@ These attacks are out of scope for P0:
 - **Network-level DDoS** — handled upstream (Caddy, firewall).
 - **Supply chain** — `go mod verify` and pinned versions only.
 
-P1 closes several more gaps (per-project authorization, secret
-encryption at rest, runner sandbox) — see `.omo/plans/team-hardening.md`.
+Remote agent transport is outbound-only and uses mTLS with pinned fingerprints.
+If an agent host is compromised, stop its service, revoke the agent, rotate its
+enrollment and certificate material, and review deployments assigned to its
+pool. See `docs/agent-protocol.md` for the protocol boundaries.

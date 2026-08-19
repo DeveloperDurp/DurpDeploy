@@ -8,13 +8,17 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pressly/goose/v3"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
 func newSQLServerTestDB(t *testing.T) *sql.DB {
+	return newSQLServerTestDBAt(t, 0)
+}
+
+func newSQLServerTestDBAt(t *testing.T, version int64) *sql.DB {
 	t.Helper()
-	testcontainers.SkipIfProviderIsNotHealthy(t)
 
 	ctx := context.Background()
 	const password = "Durpdeploy12345!"
@@ -51,15 +55,34 @@ func newSQLServerTestDB(t *testing.T) *sql.DB {
 		Host:   fmt.Sprintf("%s:%s", host, port.Port()),
 	}).String() + "?database=master&encrypt=false&trustservercertificate=true"
 
+	config, err := migrationConfig(dsn)
+	requireNoError(t, err, "build SQL Server migration config")
+
 	var dbConn *sql.DB
 	for attempt := 0; attempt < 15; attempt++ {
-		dbConn, err = Run(dsn)
+		dbConn, err = sql.Open(config.driverName, config.dsn)
+		if err == nil {
+			err = dbConn.Ping()
+		}
+		if err == nil {
+			goose.SetBaseFS(config.migrationFS)
+			if err = goose.SetDialect(config.gooseDialect); err == nil {
+				if version == 0 {
+					err = goose.Up(dbConn, ".")
+				} else {
+					err = goose.UpTo(dbConn, ".", version)
+				}
+			}
+		}
 		if err == nil {
 			break
 		}
+		if dbConn != nil {
+			_ = dbConn.Close()
+		}
 		time.Sleep(2 * time.Second)
 	}
-	requireNoError(t, err, "run migrations")
+	requireNoError(t, err, "run SQL Server migrations")
 	t.Cleanup(func() {
 		if err := dbConn.Close(); err != nil {
 			t.Errorf("close database: %v", err)

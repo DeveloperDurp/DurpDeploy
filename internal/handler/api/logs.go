@@ -2,7 +2,6 @@ package api
 
 import (
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -25,111 +24,6 @@ func NewLogHandler(
 	repo *repository.Repository,
 ) *LogHandler {
 	return &LogHandler{repo: repo, broker: broker}
-}
-
-// StreamLogs streams deployment logs as SSE or NDJSON.
-// swagger:route GET /deployments/{id}/logs/stream logs streamLogs
-//
-// Stream deployment logs.
-//
-//	Produces:
-//	- text/event-stream
-//	- application/x-ndjson
-//
-//	Schemes: http, https
-//
-//	Security:
-//	  bearer:
-//
-//	Responses:
-//	  200: body:StreamResponse
-//	  400: body:BadRequestError
-//	  401: body:UnauthorizedError
-//	  404: body:NotFoundError
-func (h *LogHandler) StreamLogs(w http.ResponseWriter, r *http.Request) {
-	depID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
-	if err != nil {
-		RespondError(w, http.StatusBadRequest, "Invalid deployment ID")
-		return
-	}
-
-	format := r.URL.Query().Get("format")
-	ndjson := format == "ndjson"
-	if format != "" && format != "sse" && format != "ndjson" {
-		RespondError(w, http.StatusBadRequest, "format must be sse or ndjson")
-		return
-	}
-
-	if _, err := h.repo.Queries.GetDeployment(r.Context(), depID); err != nil {
-		if err == sql.ErrNoRows {
-			RespondError(w, http.StatusNotFound, "Deployment not found")
-			return
-		}
-		RespondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	if ndjson {
-		w.Header().Set("Content-Type", "application/x-ndjson")
-	} else {
-		w.Header().Set("Content-Type", "text/event-stream")
-		w.Header().Set("Cache-Control", "no-cache")
-		w.Header().Set("Connection", "keep-alive")
-		w.Header().Set("X-Accel-Buffering", "no")
-	}
-
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		RespondError(w, http.StatusInternalServerError, "Streaming unsupported")
-		return
-	}
-
-	if err := h.repo.ForEachDeploymentLogByDeploymentAsc(
-		r.Context(),
-		depID,
-		func(log db.DeploymentLog) error {
-			h.writeLogLine(w, flusher, log, ndjson)
-			return nil
-		},
-	); err != nil {
-		return
-	}
-
-	ch := h.broker.Subscribe(depID)
-	defer h.broker.Unsubscribe(depID, ch)
-
-	for {
-		select {
-		case <-r.Context().Done():
-			return
-		case line := <-ch:
-			if ndjson {
-				fmt.Fprintf(w, `{"line":%q,"step":""}`+"\n", line)
-			} else {
-				fmt.Fprintf(w, "data: %s\n\n", line)
-			}
-			flusher.Flush()
-		}
-	}
-}
-
-func (h *LogHandler) writeLogLine(
-	w http.ResponseWriter,
-	flusher http.Flusher,
-	log db.DeploymentLog,
-	ndjson bool,
-) {
-	if ndjson {
-		step := ""
-		if log.StepName.Valid {
-			step = log.StepName.String
-		}
-		enc := json.NewEncoder(w)
-		_ = enc.Encode(map[string]string{"line": log.Line, "step": step})
-	} else {
-		fmt.Fprintf(w, "data: %s\n\n", log.Line)
-	}
-	flusher.Flush()
 }
 
 // ExportLogs returns deployment logs as a plain text file.

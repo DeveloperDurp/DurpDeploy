@@ -11,6 +11,7 @@ import (
 
 	"durpdeploy/internal/audit"
 	"durpdeploy/internal/auth"
+	"durpdeploy/internal/dispatch"
 	"durpdeploy/internal/handler"
 	"durpdeploy/internal/handler/api"
 	"durpdeploy/internal/repository"
@@ -35,6 +36,7 @@ func requestLogger(next http.Handler) http.Handler {
 func NewRouter(
 	repo *repository.Repository,
 	rnr *runner.DeploymentRunner,
+	dispatcher *dispatch.Dispatcher,
 	parser cron.Parser,
 	authHandler *handler.AuthHandler,
 	oidcEnabled ...bool,
@@ -217,7 +219,7 @@ func NewRouter(
 
 		rh := handler.NewReleaseHandler(repo)
 
-		dh := handler.NewDeploymentHandler(repo, rnr)
+		dh := handler.NewDeploymentHandler(repo, rnr, dispatcher)
 		pr.Get("/deployments", dh.ListDeployments)
 
 		lhH := handler.NewLintHandler()
@@ -342,6 +344,43 @@ func NewRouter(
 			webTokensH := handler.NewTokensHandler(repo)
 			ar.Get("/admin/tokens", webTokensH.AdminTokens)
 			ar.Post("/admin/tokens/{id}/revoke", webTokensH.AdminTokensRevoke)
+
+			poolsH := handler.NewPoolAdminHandler(repo)
+			ar.Get("/admin/pools", poolsH.ListPools)
+			ar.Get("/admin/pools/new", poolsH.NewPoolForm)
+			ar.Get("/admin/pools/{id}", poolsH.PoolPage)
+			ar.Post("/admin/pools", poolsH.CreatePool)
+			ar.Put("/admin/pools/{id}", poolsH.UpdatePool)
+			ar.Post("/admin/pools/{id}/disable", poolsH.DisablePool)
+			ar.Get("/admin/pools/{id}/members", poolsH.ListMembers)
+			ar.Post("/admin/pools/{id}/members", poolsH.AddMember)
+			ar.Delete("/admin/pools/{id}/members", poolsH.RemoveMember)
+
+			agentsH := handler.NewAgentAdminHandler(repo)
+			ar.Get("/admin/agents", agentsH.ListAgents)
+			ar.Get("/admin/agents/new", agentsH.NewAgentForm)
+			ar.Post("/admin/agents", agentsH.CreateAgent)
+			ar.Get("/admin/agents/{agentID}", agentsH.GetAgent)
+			ar.Delete("/admin/agents/{agentID}", agentsH.DeleteAgent)
+			ar.Post("/admin/agents/{agentID}/disable", agentsH.DisableAgent)
+			ar.Post("/admin/agents/{agentID}/revoke", agentsH.RevokeAgent)
+			ar.Post("/admin/agents/{agentID}/reenroll", agentsH.ReenrollAgent)
+			ar.Post(
+				"/admin/agents/{agentID}/enrollment",
+				agentsH.CreateEnrollment,
+			)
+			ar.Get(
+				"/admin/agents/{agentID}/enrollment",
+				agentsH.EnrollmentPage,
+			)
+			ar.Get("/admin/agents/{agentID}/tags", agentsH.ListAgentTags)
+			ar.Post("/admin/agents/{agentID}/tags", agentsH.SetAgentTagForm)
+			ar.Put("/admin/agents/{agentID}/tags/{tagKey}", agentsH.SetAgentTag)
+			ar.Delete(
+				"/admin/agents/{agentID}/tags/{tagKey}",
+				agentsH.DeleteAgentTag,
+			)
+			ar.Get("/admin/agents/{agentID}/events", agentsH.ListAgentEvents)
 		})
 	})
 
@@ -426,7 +465,7 @@ func NewRouter(
 		ar.Get("/templates/{id}/history", apiTplH.ListTemplateHistory)
 
 		apiRelH := api.NewReleaseHandler(repo)
-		apiDepH := api.NewDeploymentHandler(repo, rnr)
+		apiDepH := api.NewDeploymentHandler(repo, rnr, dispatcher)
 		apiSchedH := api.NewScheduleHandler(repo)
 		apiLogH := api.NewLogHandler(rnr.Broker(), repo)
 

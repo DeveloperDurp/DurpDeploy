@@ -24,6 +24,7 @@ import (
 
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/dispatch"
 	"durpdeploy/internal/events"
 	"durpdeploy/internal/handler"
 	"durpdeploy/internal/maintenance"
@@ -40,7 +41,7 @@ import (
 
 // defaultDSN mirrors the historical hardcoded DSN. Production overrides it
 // via DURPDEPLOY_DB (see loadDSN).
-const defaultDSN = "durpdeploy.db?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)"
+const defaultDSN = "durpdeploy.db?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_txlock=immediate"
 
 type oidcServicesConfig struct {
 	Config       oidc.Config
@@ -129,8 +130,20 @@ func main() {
 // they always agree on which database is in use.
 func loadDSN() string {
 	if dsn := os.Getenv("DURPDEPLOY_DB"); dsn != "" {
-		return dsn
+		if strings.HasPrefix(dsn, "postgres://") ||
+			strings.HasPrefix(dsn, "postgresql://") ||
+			strings.HasPrefix(dsn, "sqlserver://") {
+			return dsn
+		}
+		separator := "?"
+		if strings.Contains(dsn, "?") {
+			separator = "&"
+		}
+		return dsn + separator +
+			"_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&" +
+			"_pragma=busy_timeout(5000)&_txlock=immediate"
 	}
+
 	return defaultDSN
 }
 
@@ -197,6 +210,7 @@ func runServer() {
 	repo.SetSecretBox(box)
 	broker := runner.NewLogBroker()
 	rnr := runner.New(repo, broker)
+	dispatcher := dispatch.New(repo, box, rnr)
 
 	// Event bus for Slack/email/Gotify notifications on deployment
 	// start/success/failure (Stage 3). Every event is recorded to
@@ -211,7 +225,7 @@ func runServer() {
 	parser := cron.NewParser(
 		cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow,
 	)
-	sched := scheduler.New(repo, rnr)
+	sched := scheduler.New(repo, dispatcher)
 	ctx, cancel := context.WithCancel(context.Background())
 	maintenance.StartLitestreamCheck(ctx, bus)
 	sched.Start(ctx)
@@ -247,14 +261,36 @@ func runServer() {
 			"issuer_host", issuerURL.Hostname(),
 		)
 	}
-	r := server.NewRouter(repo, rnr, parser, authHandler, oidcServices.enabled)
+	r := server.NewRouter(
+		repo,
+		rnr,
+		dispatcher,
+		parser,
+		authHandler,
+		oidcServices.enabled,
+	)
+	agentConfig, agentEnabled, err := loadAgentListenerConfig()
+	if err != nil {
+		log.Fatalf("agent listener config: %v", err)
+	}
+	var agents *agentListener
+	if agentEnabled {
+		agents, err = startAgentListener(agentConfig, agentListenerDependencies{
+			repo: repo, box: box, broker: broker, bus: bus,
+		})
+		if err != nil {
+			log.Fatalf("agent listener: %v", err)
+		}
+		agents.startMaintenance(ctx)
+		slog.Info("agent listener starting", "addr", agentConfig.addr)
+	}
 
 	// Recover deployments that were created but never picked up by a
 	// runner goroutine (process restarted, container OOM, manual kill,
 	// etc.). Without this, a deployment sitting in "pending" stays there
 	// forever — the HTTP handler launched the runner as a goroutine and
 	// that goroutine dies with the process.
-	recoverPendingDeployments(ctx, rnr, repo)
+	recoverPendingDeployments(ctx, dispatcher, repo)
 
 	addr := loadAddr()
 	srv := &http.Server{Addr: addr, Handler: r}
@@ -278,6 +314,12 @@ func runServer() {
 			10*time.Second,
 		)
 		defer shutdownCancel()
+		cancel()
+		if agents != nil {
+			if err := agents.shutdown(shutdownCtx); err != nil {
+				slog.Error("agent listener shutdown failed", "err", err)
+			}
+		}
 		_ = srv.Shutdown(shutdownCtx)
 		rnr.KillAll()
 	}()
@@ -290,22 +332,9 @@ func runServer() {
 	shutdownWG.Wait()
 }
 
-// recoverPendingDeployments scans for deployments left in "pending"
-// status and re-launches their runners. Called once at server startup
-// (see runServer).
-//
-// ponytail: the runner.Run call does NOT use a SELECT ... FOR UPDATE
-// or any atomic claim — the runner transitions status to "running"
-// on its first DB write (internal/runner/runner.go:188). If two
-// goroutines ever saw the same pending row (recovery at startup + a
-// concurrent HTTP create), both would transition it to "running" and
-// run the steps. In practice this can't happen — recovery runs once
-// at boot, before any HTTP handler is reachable — but the race
-// remains in the contract. Fix with a conditional UPDATE (WHERE
-// status='pending') if the startup window ever overlaps with traffic.
 func recoverPendingDeployments(
 	ctx context.Context,
-	rnr *runner.DeploymentRunner,
+	dispatcher *dispatch.Dispatcher,
 	repo *repository.Repository,
 ) {
 	pending, err := repo.Queries.ListPendingDeployments(ctx)
@@ -320,23 +349,69 @@ func recoverPendingDeployments(
 	if len(pending) == 0 {
 		return
 	}
-	slog.Info(
-		"startup recovery: re-launching runners for pending deployments",
-		"count",
-		len(pending),
-	)
+	now := time.Now().Unix()
 	for _, d := range pending {
-		d := d // capture
-		slog.Info(
-			"startup recovery: re-launching",
+		route, err := repo.Queries.GetDeploymentDispatch(ctx, d.ID)
+		if errors.Is(err, sql.ErrNoRows) {
+			recoverDeployment(ctx, dispatcher, d.ID)
+			continue
+		}
+		if err != nil {
+			slog.Error(
+				"startup recovery: get deployment dispatch failed",
+				"deployment_id",
+				d.ID,
+				"err",
+				err,
+			)
+			continue
+		}
+		if route.Mode != "remote" || route.State != "claimed" ||
+			route.StartedAt.Valid || !route.ClaimExpiresAt.Valid ||
+			route.ClaimExpiresAt.Int64 > now {
+			continue
+		}
+		if _, err := repo.Queries.TransitionDeploymentDispatch(
+			ctx,
+			db.TransitionDeploymentDispatchParams{
+				NextState: "waiting",
+				Reason: sql.NullString{
+					String: "claim expired before start",
+					Valid:  true,
+				},
+				FinishedAt:     sql.NullInt64{},
+				DeploymentID:   d.ID,
+				AgentID:        route.AgentID,
+				ClaimTokenHash: route.ClaimTokenHash,
+				CurrentState:   "claimed",
+			},
+		); err != nil {
+			slog.Error(
+				"startup recovery: release expired deployment claim failed",
+				"deployment_id",
+				d.ID,
+				"err",
+				err,
+			)
+			continue
+		}
+		recoverDeployment(ctx, dispatcher, d.ID)
+	}
+}
+
+func recoverDeployment(
+	ctx context.Context,
+	dispatcher *dispatch.Dispatcher,
+	deploymentID int64,
+) {
+	if err := dispatcher.Dispatch(ctx, deploymentID); err != nil {
+		slog.Error(
+			"startup recovery: dispatch deployment failed",
 			"deployment_id",
-			d.ID,
-			"project",
-			d.ProjectName,
-			"env",
-			d.EnvironmentName,
+			deploymentID,
+			"err",
+			err,
 		)
-		go rnr.Run(context.Background(), d.ID, d.ReleaseID, d.EnvironmentID)
 	}
 }
 

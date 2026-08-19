@@ -411,6 +411,7 @@ func TestListDeployments_ByProject_RouteRegistered(t *testing.T) {
 	rtr := server.NewRouter(
 		h.repo,
 		h.runner,
+		nil,
 		parser,
 		handler.NewAuthHandler(h.repo),
 	)
@@ -488,10 +489,14 @@ func TestGetDeploymentStatus(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
-	var resp map[string]string
+	var resp map[string]any
 	mustDecode(t, rec.Body, &resp)
 	if resp["status"] != "running" {
 		t.Fatalf("expected running, got %v", resp["status"])
+	}
+	dispatch, ok := resp["dispatch"].(map[string]any)
+	if !ok || dispatch["mode"] != "local" {
+		t.Fatalf("expected local dispatch, got %#v", resp["dispatch"])
 	}
 }
 
@@ -578,6 +583,12 @@ func TestApproveDeployment_AdminOnly(t *testing.T) {
 	if resp["status"] != "approved" {
 		t.Fatalf("expected approved, got %v", resp["status"])
 	}
+	if _, err := h.repo.Queries.GetDeploymentDispatch(
+		context.Background(),
+		d.ID,
+	); err != nil {
+		t.Fatalf("expected exactly one dispatch after approval: %v", err)
+	}
 }
 
 func TestApproveDeployment_ViewerForbidden(t *testing.T) {
@@ -635,6 +646,16 @@ func TestRedeployDeployment(t *testing.T) {
 			e.ID,
 			resp["environment_id"],
 		)
+	}
+	deploymentID, ok := resp["id"].(float64)
+	if !ok {
+		t.Fatalf("redeploy response has invalid id: %v", resp["id"])
+	}
+	if _, err := h.repo.Queries.GetDeploymentDispatch(
+		context.Background(),
+		int64(deploymentID),
+	); err != nil {
+		t.Fatalf("expected exactly one dispatch for redeployment: %v", err)
 	}
 }
 
@@ -869,6 +890,71 @@ func TestCreateDeploymentRequiresApproval(t *testing.T) {
 	mustDecode(t, rec.Body, &deployment)
 	if deployment.Status != "pending_approval" {
 		t.Fatalf("expected pending_approval, got %q", deployment.Status)
+	}
+	if _, err := h.repo.Queries.GetDeploymentDispatch(
+		context.Background(),
+		deployment.ID,
+	); err != sql.ErrNoRows {
+		t.Fatalf(
+			"approval-gated deployment dispatch = %v, want sql.ErrNoRows",
+			err,
+		)
+	}
+}
+
+func TestCreateDeployment_DispatchesEligibleDeployment(t *testing.T) {
+	h := newAPIHarness(t)
+	project := seedProject(t, h.repo)
+	env := seedEnv(t, h.repo)
+	release := seedRelease(t, h.repo, project.ID)
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/",
+		strings.NewReader(fmt.Sprintf(
+			`{"release_id":%d,"environment_id":%d}`,
+			release.ID,
+			env.ID,
+		)),
+	)
+	req = withAPIURLParam(req, "id", fmt.Sprint(project.ID))
+	rec := httptest.NewRecorder()
+
+	api.NewDeploymentHandler(h.repo, h.runner).CreateDeployment(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var deployment db.Deployment
+	mustDecode(t, rec.Body, &deployment)
+	if _, err := h.repo.Queries.GetDeploymentDispatch(
+		context.Background(),
+		deployment.ID,
+	); err != nil {
+		t.Fatalf(
+			"expected exactly one dispatch for deployment creation: %v",
+			err,
+		)
+	}
+}
+
+func TestRetryDeployment_DispatchesEligibleDeployment(t *testing.T) {
+	h := newAPIHarness(t)
+	project := seedProject(t, h.repo)
+	env := seedEnv(t, h.repo)
+	release := seedRelease(t, h.repo, project.ID)
+	deployment := seedDeployment(t, h.repo, release.ID, env.ID, "failed")
+	req := httptest.NewRequest(http.MethodPost, "/", nil)
+	req = withAPIURLParam(req, "id", fmt.Sprint(deployment.ID))
+	rec := httptest.NewRecorder()
+
+	api.NewDeploymentHandler(h.repo, h.runner).RetryDeployment(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if _, err := h.repo.Queries.GetDeploymentDispatch(
+		context.Background(),
+		deployment.ID,
+	); err != nil {
+		t.Fatalf("expected exactly one dispatch for retry: %v", err)
 	}
 }
 
@@ -1372,6 +1458,7 @@ func TestAPIWriteCreatesAuditLogWithoutTokenLeak(t *testing.T) {
 	r := server.NewRouter(
 		h.repo,
 		h.runner,
+		nil,
 		parser,
 		handler.NewAuthHandler(h.repo),
 	)
@@ -1433,6 +1520,7 @@ func TestR1_NonAdminCannotManageUsers(t *testing.T) {
 	r := server.NewRouter(
 		h.repo,
 		h.runner,
+		nil,
 		parser,
 		handler.NewAuthHandler(h.repo),
 	)
@@ -1512,6 +1600,7 @@ func TestR1_AdminCanStillManageUsers(t *testing.T) {
 	r := server.NewRouter(
 		h.repo,
 		h.runner,
+		nil,
 		parser,
 		handler.NewAuthHandler(h.repo),
 	)
@@ -1542,6 +1631,7 @@ func TestR1_AdminCannotDeleteSelf(t *testing.T) {
 	r := server.NewRouter(
 		h.repo,
 		h.runner,
+		nil,
 		parser,
 		handler.NewAuthHandler(h.repo),
 	)
@@ -1623,6 +1713,7 @@ func TestR2_VariableCrossProjectIDOR(t *testing.T) {
 	r := server.NewRouter(
 		h.repo,
 		h.runner,
+		nil,
 		parser,
 		handler.NewAuthHandler(h.repo),
 	)
@@ -1776,6 +1867,7 @@ func TestR2_StepCrossProjectIDOR(t *testing.T) {
 	r := server.NewRouter(
 		h.repo,
 		h.runner,
+		nil,
 		parser,
 		handler.NewAuthHandler(h.repo),
 	)

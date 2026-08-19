@@ -133,30 +133,38 @@ func TestStreamLogs_ReplaysHistoricalLogs(t *testing.T) {
 		if line != "" {
 			lines = append(lines, line)
 		}
-		if len(lines) >= 2 {
+		if len(lines) >= 4 {
 			break
 		}
 	}
 
-	if len(lines) < 2 {
+	if len(lines) < 4 {
 		t.Fatalf(
-			"expected at least 2 historical logs, got %d: %v",
+			"expected at least 4 historical log lines, got %d: %v",
 			len(lines),
 			lines,
 		)
 	}
 
-	if lines[0] != "data: historical log 1" {
-		t.Errorf("expected 'data: historical log 1', got %q", lines[0])
+	if lines[1] != "data: historical log 1" {
+		t.Errorf("expected 'data: historical log 1', got %q", lines[1])
 	}
-	if lines[1] != "data: historical log 2" {
-		t.Errorf("expected 'data: historical log 2', got %q", lines[1])
+	if lines[3] != "data: historical log 2" {
+		t.Errorf("expected 'data: historical log 2', got %q", lines[3])
 	}
 
-	go func() {
-		time.Sleep(50 * time.Millisecond)
-		broker.Broadcast(deployment.ID, "live log")
-	}()
+	live, err := repo.Queries.CreateDeploymentLog(
+		context.Background(),
+		db.CreateDeploymentLogParams{
+			DeploymentID: deployment.ID,
+			StepName:     sql.NullString{String: "Step1", Valid: true},
+			Line:         "live log",
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	broker.Broadcast(deployment.ID, live.ID)
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -215,10 +223,11 @@ func TestStreamLogs_RealServer(t *testing.T) {
 	srv := httptest.NewServer(r)
 	defer srv.Close()
 
-	go func() {
-		time.Sleep(50 * time.Millisecond)
-		broker.Broadcast(1, "real server log")
-	}()
+	deployment := durableLogDeployment(t, repo)
+	live := durableLog(t, repo, durableLogInput{
+		deploymentID: deployment.ID,
+		line:         "real server log",
+	})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -226,7 +235,7 @@ func TestStreamLogs_RealServer(t *testing.T) {
 	req, err := http.NewRequestWithContext(
 		ctx,
 		http.MethodGet,
-		fmt.Sprintf("%s/deployments/1/logs/stream", srv.URL),
+		fmt.Sprintf("%s/deployments/%d/logs/stream", srv.URL, deployment.ID),
 		nil,
 	)
 	if err != nil {
@@ -253,19 +262,22 @@ func TestStreamLogs_RealServer(t *testing.T) {
 	var lines []string
 	for scanner.Scan() {
 		lines = append(lines, scanner.Text())
-		if len(lines) >= 2 {
+		if len(lines) >= 3 {
 			break
 		}
 	}
 
-	if len(lines) < 2 {
-		t.Fatalf("expected at least 2 lines, got %d: %v", len(lines), lines)
+	if len(lines) < 3 {
+		t.Fatalf("expected at least 3 lines, got %d: %v", len(lines), lines)
 	}
-	if lines[0] != "data: real server log" {
-		t.Errorf("expected 'data: real server log', got %q", lines[0])
+	if lines[0] != fmt.Sprintf("id: %d", live.ID) {
+		t.Errorf("expected log ID, got %q", lines[0])
 	}
-	if lines[1] != "" {
-		t.Errorf("expected empty line after data, got %q", lines[1])
+	if lines[1] != "data: real server log" {
+		t.Errorf("expected 'data: real server log', got %q", lines[1])
+	}
+	if lines[2] != "" {
+		t.Errorf("expected empty line after data, got %q", lines[2])
 	}
 }
 
@@ -300,7 +312,7 @@ func TestStreamLogs_ClientDisconnect(t *testing.T) {
 		t.Fatal("handler did not return after context cancel")
 	}
 
-	broker.Broadcast(1, "after disconnect")
+	broker.Broadcast(1, 1)
 }
 
 func TestExportLogs(t *testing.T) {

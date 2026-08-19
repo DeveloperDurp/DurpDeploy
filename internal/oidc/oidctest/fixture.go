@@ -116,9 +116,11 @@ type Fixture struct {
 	tokenRequests     atomic.Int32
 	jwksRequests      atomic.Int32
 
-	blockDiscovery      atomic.Bool
-	discoveryCanceled   chan struct{}
-	discoveryCancelOnce sync.Once
+	blockDiscovery       atomic.Bool
+	discoveryStarted     chan struct{}
+	discoveryStartedOnce sync.Once
+	discoveryCanceled    chan struct{}
+	discoveryCancelOnce  sync.Once
 }
 
 type authorizationCode struct {
@@ -169,6 +171,7 @@ func New(options Options) (*Fixture, error) {
 		keyID:             "fixture-key-1",
 		keyVersion:        1,
 		codes:             make(map[string]authorizationCode),
+		discoveryStarted:  make(chan struct{}),
 		discoveryCanceled: make(chan struct{}),
 	}
 	fixture.initialCode = fixture.newCodeLocked(

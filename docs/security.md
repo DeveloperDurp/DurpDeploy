@@ -20,6 +20,8 @@ What we defend against:
 - Cross-project access by a non-member (per-project authorization middleware)
 - Roster tampering by a non-admin project member (per-project admin gate on member add/remove)
 - A leaked `variables`/`release_variables` DB file, on its own, does not disclose secret values (AES-256-GCM at rest)
+- Remote agents do not receive the server database, server encryption key, or Docker socket
+- Agent transport uses outbound-only mTLS with pinned peer fingerprints and one-time enrollment
 
 ### OIDC boundary and threat model
 
@@ -67,9 +69,9 @@ What we do **not** defend against yet (see Known Gaps):
 - Rate limiting on the login endpoint
 - Audit log retention / tamper-proofing
 
-Runner orphan cleanup on shutdown/timeout is handled (process-group SIGKILL,
-see "Runner cleanup" below); per-step OS-level sandboxing
-(chroot/namespaces/seccomp) is still future work.
+Runner orphan cleanup on shutdown/timeout and the local step sandbox are shipped.
+Remote agents are separately sandboxed as dedicated users with private state
+directories and no server storage access. The agent does not provide SSH access.
 
 ---
 
@@ -478,5 +480,6 @@ values:
   read the DB, or sniff process memory. OS-level problem.
 - **Network-level DDoS** — handled upstream (Caddy, firewall).
 - **Supply chain** — `go mod verify` and pinned versions only.
+- **Compromised remote agent host:** an agent can execute deployments assigned to its configured pool. Isolate it from the control-plane host and rotate its enrollment and certificate material if compromised.
 
 See `docs/attack-drill.md` for hands-on verification of the active defenses.

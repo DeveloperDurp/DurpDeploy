@@ -30,7 +30,13 @@ func TestWebAuthn_BaselineRepositoryAndRouterCompatibility(t *testing.T) {
 	parser := cron.NewParser(
 		cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow,
 	)
-	router := server.NewRouter(repo, rnr, parser, handler.NewAuthHandler(repo))
+	router := server.NewRouter(
+		repo,
+		rnr,
+		nil,
+		parser,
+		handler.NewAuthHandler(repo),
+	)
 
 	// When: the public health endpoint is served through the constructed router.
 	response := httptest.NewRecorder()

@@ -104,9 +104,11 @@ FROM deployments d
 JOIN releases r ON d.release_id = r.id
 JOIN projects p ON r.project_id = p.id
 JOIN environments e ON d.environment_id = e.id
+LEFT JOIN deployment_dispatches dispatch ON dispatch.deployment_id = d.id
 WHERE (CAST(sqlc.narg(f_project_id) AS INTEGER) IS NULL OR d.release_id IN (SELECT id FROM releases WHERE project_id = CAST(sqlc.narg(f_project_id) AS INTEGER)))
   AND (CAST(sqlc.narg(f_env_id)     AS INTEGER) IS NULL OR d.environment_id = CAST(sqlc.narg(f_env_id) AS INTEGER))
   AND (CAST(sqlc.narg(f_status)     AS TEXT)    IS NULL OR d.status = CAST(sqlc.narg(f_status) AS TEXT))
+  AND (CAST(sqlc.narg(f_dispatch_state) AS TEXT) IS NULL OR CAST(sqlc.narg(f_dispatch_state) AS TEXT) = CASE WHEN COALESCE(dispatch.mode, 'local') = 'local' THEN 'local' ELSE dispatch.state END)
   AND (CAST(sqlc.narg(f_from_unix)  AS INTEGER) IS NULL OR d.created_at >= CAST(sqlc.narg(f_from_unix) AS INTEGER))
   AND (CAST(sqlc.narg(f_to_unix)    AS INTEGER) IS NULL OR d.created_at <= CAST(sqlc.narg(f_to_unix) AS INTEGER))
 ORDER BY d.created_at DESC
@@ -118,8 +120,10 @@ FROM deployments d
 JOIN releases r ON d.release_id = r.id
 JOIN projects p ON r.project_id = p.id
 JOIN environments e ON d.environment_id = e.id
+LEFT JOIN deployment_dispatches dispatch ON dispatch.deployment_id = d.id
 WHERE (CAST(sqlc.narg(f_project_id) AS INTEGER) IS NULL OR d.release_id IN (SELECT id FROM releases WHERE project_id = CAST(sqlc.narg(f_project_id) AS INTEGER)))
   AND (CAST(sqlc.narg(f_env_id)     AS INTEGER) IS NULL OR d.environment_id = CAST(sqlc.narg(f_env_id) AS INTEGER))
   AND (CAST(sqlc.narg(f_status)     AS TEXT)    IS NULL OR d.status = CAST(sqlc.narg(f_status) AS TEXT))
+  AND (CAST(sqlc.narg(f_dispatch_state) AS TEXT) IS NULL OR CAST(sqlc.narg(f_dispatch_state) AS TEXT) = CASE WHEN COALESCE(dispatch.mode, 'local') = 'local' THEN 'local' ELSE dispatch.state END)
   AND (CAST(sqlc.narg(f_from_unix)  AS INTEGER) IS NULL OR d.created_at >= CAST(sqlc.narg(f_from_unix) AS INTEGER))
   AND (CAST(sqlc.narg(f_to_unix)    AS INTEGER) IS NULL OR d.created_at <= CAST(sqlc.narg(f_to_unix) AS INTEGER));

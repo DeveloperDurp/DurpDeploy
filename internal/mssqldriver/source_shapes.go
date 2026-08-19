@@ -24,6 +24,28 @@ func rewriteDeploymentFilterIntegerCasts(query string) string {
 	return replaceOutsideQuotes(query, " AS INTEGER", " AS BIGINT")
 }
 
+func rewriteAgentClaimSelectors(query string) string {
+	if !containsOutsideQuotes(query, "instr(") {
+		return query
+	}
+	query = replaceOutsideQuotes(query, " || ", " + ")
+	query = replaceOutsideQuotes(query, "length(", "LEN(")
+	query = replaceOutsideQuotes(query, `instr(
+                ',' + deployment_dispatches.selector + ',',
+                ',' + t.tag_key + '=' + t.tag_value + ','
+            )`, `CHARINDEX(
+                ',' + t.tag_key + '=' + t.tag_value + ',',
+                ',' + deployment_dispatches.selector + ','
+            )`)
+	return replaceOutsideQuotes(query, `instr(
+                    ',' + candidate.selector + ',',
+                    ',' + tag.tag_key + '=' + tag.tag_value + ','
+                )`, `CHARINDEX(
+                    ',' + tag.tag_key + '=' + tag.tag_value + ',',
+                    ',' + candidate.selector + ','
+                )`)
+}
+
 func replaceOutsideQuotes(query, old, replacement string) string {
 	var result strings.Builder
 	result.Grow(len(query))

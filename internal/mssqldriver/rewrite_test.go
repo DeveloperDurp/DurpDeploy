@@ -220,6 +220,17 @@ func TestRewriteSQL(t *testing.T) {
 				"VALUES (source.project_id, source.user_id, source.role);",
 		},
 		{
+			name: "rewrites environment policy conflict to locked merge",
+			query: "INSERT INTO environment_agent_policies (environment_id, pool_id, selector) VALUES (?, ?, ?)\n" +
+				"ON CONFLICT (environment_id) DO UPDATE SET pool_id = excluded.pool_id, selector = excluded.selector",
+			want: "MERGE environment_agent_policies WITH (HOLDLOCK) AS target\n" +
+				"USING (VALUES (@p1, @p2, @p3)) AS source (environment_id, pool_id, selector)\n" +
+				"ON target.environment_id = source.environment_id\n" +
+				"WHEN MATCHED THEN UPDATE SET pool_id = source.pool_id, selector = source.selector\n" +
+				"WHEN NOT MATCHED THEN INSERT (environment_id, pool_id, selector)\n" +
+				"VALUES (source.environment_id, source.pool_id, source.selector);",
+		},
+		{
 			name: "rewrites project membership exists to integer scalar",
 			query: "-- name: IsProjectMember :one\n" +
 				"SELECT EXISTS(SELECT 1 FROM project_members WHERE project_id = ? AND user_id = ?)\n",

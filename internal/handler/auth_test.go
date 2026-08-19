@@ -2,14 +2,11 @@ package handler_test
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/url"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -18,7 +15,6 @@ import (
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/handler"
 	"durpdeploy/internal/mfa"
-	"durpdeploy/internal/migrate"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/runner"
 	"durpdeploy/internal/secret"
@@ -36,21 +32,7 @@ type authHarness struct {
 
 func newAuthHarness(t *testing.T) *authHarness {
 	t.Helper()
-	dir := t.TempDir()
-	dbPath := filepath.Join(dir, "test.db")
-	dsn := fmt.Sprintf(
-		"file:%s?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&"+
-			"_pragma=busy_timeout(5000)",
-		dbPath,
-	)
-	conn, err := migrate.Run(dsn)
-	if err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
-	t.Cleanup(func() {
-		_ = conn.Close()
-		_ = os.RemoveAll(dir)
-	})
+	conn := newHandlerTestDatabase(t)
 
 	repo := repository.New(conn)
 	broker := runner.NewLogBroker()
@@ -59,7 +41,9 @@ func newAuthHarness(t *testing.T) *authHarness {
 		cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow,
 	)
 	authHandler := handler.NewAuthHandler(repo)
-	srv := httptest.NewServer(server.NewRouter(repo, rnr, parser, authHandler))
+	srv := httptest.NewServer(
+		server.NewRouter(repo, rnr, nil, parser, authHandler),
+	)
 	t.Cleanup(srv.Close)
 	return &authHarness{
 		t:           t,

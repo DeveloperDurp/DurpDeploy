@@ -27,19 +27,22 @@ FROM deployments d
 JOIN releases r ON d.release_id = r.id
 JOIN projects p ON r.project_id = p.id
 JOIN environments e ON d.environment_id = e.id
+LEFT JOIN deployment_dispatches dispatch ON dispatch.deployment_id = d.id
 WHERE (CAST(?1 AS INTEGER) IS NULL OR d.release_id IN (SELECT id FROM releases WHERE project_id = CAST(?1 AS INTEGER)))
   AND (CAST(?2     AS INTEGER) IS NULL OR d.environment_id = CAST(?2 AS INTEGER))
   AND (CAST(?3     AS TEXT)    IS NULL OR d.status = CAST(?3 AS TEXT))
-  AND (CAST(?4  AS INTEGER) IS NULL OR d.created_at >= CAST(?4 AS INTEGER))
-  AND (CAST(?5    AS INTEGER) IS NULL OR d.created_at <= CAST(?5 AS INTEGER))
+  AND (CAST(?4 AS TEXT) IS NULL OR CAST(?4 AS TEXT) = CASE WHEN COALESCE(dispatch.mode, 'local') = 'local' THEN 'local' ELSE dispatch.state END)
+  AND (CAST(?5  AS INTEGER) IS NULL OR d.created_at >= CAST(?5 AS INTEGER))
+  AND (CAST(?6    AS INTEGER) IS NULL OR d.created_at <= CAST(?6 AS INTEGER))
 `
 
 type CountDeploymentsWithRefsFilteredParams struct {
-	FProjectID sql.NullInt64  `json:"f_project_id"`
-	FEnvID     sql.NullInt64  `json:"f_env_id"`
-	FStatus    sql.NullString `json:"f_status"`
-	FFromUnix  sql.NullInt64  `json:"f_from_unix"`
-	FToUnix    sql.NullInt64  `json:"f_to_unix"`
+	FProjectID     sql.NullInt64  `json:"f_project_id"`
+	FEnvID         sql.NullInt64  `json:"f_env_id"`
+	FStatus        sql.NullString `json:"f_status"`
+	FDispatchState sql.NullString `json:"f_dispatch_state"`
+	FFromUnix      sql.NullInt64  `json:"f_from_unix"`
+	FToUnix        sql.NullInt64  `json:"f_to_unix"`
 }
 
 func (q *Queries) CountDeploymentsWithRefsFiltered(ctx context.Context, arg CountDeploymentsWithRefsFilteredParams) (int64, error) {
@@ -47,6 +50,7 @@ func (q *Queries) CountDeploymentsWithRefsFiltered(ctx context.Context, arg Coun
 		arg.FProjectID,
 		arg.FEnvID,
 		arg.FStatus,
+		arg.FDispatchState,
 		arg.FFromUnix,
 		arg.FToUnix,
 	)
@@ -347,23 +351,26 @@ FROM deployments d
 JOIN releases r ON d.release_id = r.id
 JOIN projects p ON r.project_id = p.id
 JOIN environments e ON d.environment_id = e.id
+LEFT JOIN deployment_dispatches dispatch ON dispatch.deployment_id = d.id
 WHERE (CAST(?1 AS INTEGER) IS NULL OR d.release_id IN (SELECT id FROM releases WHERE project_id = CAST(?1 AS INTEGER)))
   AND (CAST(?2     AS INTEGER) IS NULL OR d.environment_id = CAST(?2 AS INTEGER))
   AND (CAST(?3     AS TEXT)    IS NULL OR d.status = CAST(?3 AS TEXT))
-  AND (CAST(?4  AS INTEGER) IS NULL OR d.created_at >= CAST(?4 AS INTEGER))
-  AND (CAST(?5    AS INTEGER) IS NULL OR d.created_at <= CAST(?5 AS INTEGER))
+  AND (CAST(?4 AS TEXT) IS NULL OR CAST(?4 AS TEXT) = CASE WHEN COALESCE(dispatch.mode, 'local') = 'local' THEN 'local' ELSE dispatch.state END)
+  AND (CAST(?5  AS INTEGER) IS NULL OR d.created_at >= CAST(?5 AS INTEGER))
+  AND (CAST(?6    AS INTEGER) IS NULL OR d.created_at <= CAST(?6 AS INTEGER))
 ORDER BY d.created_at DESC
-LIMIT ?7 OFFSET ?6
+LIMIT ?8 OFFSET ?7
 `
 
 type ListDeploymentsWithRefsFilteredParams struct {
-	FProjectID sql.NullInt64  `json:"f_project_id"`
-	FEnvID     sql.NullInt64  `json:"f_env_id"`
-	FStatus    sql.NullString `json:"f_status"`
-	FFromUnix  sql.NullInt64  `json:"f_from_unix"`
-	FToUnix    sql.NullInt64  `json:"f_to_unix"`
-	PageOffset int64          `json:"page_offset"`
-	PageLimit  int64          `json:"page_limit"`
+	FProjectID     sql.NullInt64  `json:"f_project_id"`
+	FEnvID         sql.NullInt64  `json:"f_env_id"`
+	FStatus        sql.NullString `json:"f_status"`
+	FDispatchState sql.NullString `json:"f_dispatch_state"`
+	FFromUnix      sql.NullInt64  `json:"f_from_unix"`
+	FToUnix        sql.NullInt64  `json:"f_to_unix"`
+	PageOffset     int64          `json:"page_offset"`
+	PageLimit      int64          `json:"page_limit"`
 }
 
 type ListDeploymentsWithRefsFilteredRow struct {
@@ -386,6 +393,7 @@ func (q *Queries) ListDeploymentsWithRefsFiltered(ctx context.Context, arg ListD
 		arg.FProjectID,
 		arg.FEnvID,
 		arg.FStatus,
+		arg.FDispatchState,
 		arg.FFromUnix,
 		arg.FToUnix,
 		arg.PageOffset,

@@ -1,0 +1,197 @@
+// Package dispatch routes deployments to the local runner or a remote agent pool.
+package dispatch
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"errors"
+	"fmt"
+
+	"durpdeploy/internal/db"
+	"durpdeploy/internal/repository"
+	"durpdeploy/internal/runner"
+	"durpdeploy/internal/secret"
+)
+
+type Dispatcher struct {
+	repo   *repository.Repository
+	box    *secret.Box
+	runner *runner.DeploymentRunner
+}
+
+type payload struct {
+	DeploymentID int64               `json:"deployment_id"`
+	Release      releaseSnapshot     `json:"release"`
+	Environment  environmentSnapshot `json:"environment"`
+	Variables    []variableSnapshot  `json:"variables"`
+}
+
+type releaseSnapshot struct {
+	ID        int64           `json:"id"`
+	ProjectID int64           `json:"project_id"`
+	Version   string          `json:"version"`
+	Steps     json.RawMessage `json:"steps"`
+}
+
+type environmentSnapshot struct {
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
+}
+
+type variableSnapshot struct {
+	Name   string `json:"name"`
+	Value  string `json:"value"`
+	Secret bool   `json:"secret"`
+}
+
+func New(
+	repo *repository.Repository,
+	box *secret.Box,
+	deploymentRunner *runner.DeploymentRunner,
+) *Dispatcher {
+	return &Dispatcher{repo: repo, box: box, runner: deploymentRunner}
+}
+
+// Dispatch records an immutable routing decision. A policy always selects the
+// remote path; agent availability is intentionally resolved later by claiming.
+func (d *Dispatcher) Dispatch(ctx context.Context, deploymentID int64) error {
+	var localDeployment db.Deployment
+	err := d.repo.WithTx(ctx, func(q *db.Queries) error {
+		if _, err := q.GetDeploymentDispatch(ctx, deploymentID); err == nil {
+			return nil
+		} else if !errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("get deployment dispatch: %w", err)
+		}
+
+		deployment, err := q.GetDeployment(ctx, deploymentID)
+		if err != nil {
+			return fmt.Errorf("get deployment: %w", err)
+		}
+		if deployment.Status == "pending_approval" {
+			return nil
+		}
+
+		policy, err := q.GetEnvironmentAgentPolicy(
+			ctx,
+			deployment.EnvironmentID,
+		)
+		if errors.Is(err, sql.ErrNoRows) {
+			if _, err := q.CreateDeploymentDispatch(
+				ctx,
+				db.CreateDeploymentDispatchParams{
+					DeploymentID: deployment.ID,
+					Mode:         "local",
+					Selector:     "",
+					State:        "waiting",
+				},
+			); err != nil {
+				return fmt.Errorf("create local dispatch: %w", err)
+			}
+			localDeployment = deployment
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("get environment agent policy: %w", err)
+		}
+		if d.box == nil {
+			return errors.New("remote dispatch requires a secret box")
+		}
+
+		ciphertext, err := d.buildPayload(ctx, q, deployment)
+		if err != nil {
+			return err
+		}
+		if _, err := q.CreateDeploymentPayload(
+			ctx,
+			db.CreateDeploymentPayloadParams{
+				DeploymentID: deployment.ID,
+				Ciphertext:   ciphertext,
+			},
+		); err != nil {
+			return fmt.Errorf("create deployment payload: %w", err)
+		}
+		if _, err := q.CreateDeploymentDispatch(
+			ctx,
+			db.CreateDeploymentDispatchParams{
+				DeploymentID: deployment.ID,
+				Mode:         "remote",
+				PoolID:       sql.NullInt64{Int64: policy.PoolID, Valid: true},
+				Selector:     policy.Selector,
+				State:        "waiting",
+			},
+		); err != nil {
+			return fmt.Errorf("create remote dispatch: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("dispatch deployment %d: %w", deploymentID, err)
+	}
+	if localDeployment.ID != 0 && d.runner != nil {
+		go d.runner.Run(
+			context.Background(),
+			localDeployment.ID,
+			localDeployment.ReleaseID,
+			localDeployment.EnvironmentID,
+		)
+	}
+	return nil
+}
+
+func (d *Dispatcher) buildPayload(
+	ctx context.Context,
+	q *db.Queries,
+	deployment db.Deployment,
+) (string, error) {
+	release, err := q.GetRelease(ctx, deployment.ReleaseID)
+	if err != nil {
+		return "", fmt.Errorf("get release: %w", err)
+	}
+	environment, err := q.GetEnvironment(ctx, deployment.EnvironmentID)
+	if err != nil {
+		return "", fmt.Errorf("get environment: %w", err)
+	}
+	variables, err := q.ListReleaseVariablesByRelease(ctx, release.ID)
+	if err != nil {
+		return "", fmt.Errorf("list release variables: %w", err)
+	}
+	payloadVariables := make([]variableSnapshot, 0, len(variables))
+	for _, variable := range variables {
+		if variable.EnvironmentID.Valid &&
+			variable.EnvironmentID.Int64 != deployment.EnvironmentID {
+			continue
+		}
+		value, err := d.box.Decrypt(variable.Value.String)
+		if err != nil {
+			return "", fmt.Errorf(
+				"decrypt release variable %d: %w",
+				variable.ID,
+				err,
+			)
+		}
+		payloadVariables = append(payloadVariables, variableSnapshot{
+			Name: variable.Name, Value: value, Secret: variable.Secret != 0,
+		})
+	}
+	encoded, err := json.Marshal(payload{
+		DeploymentID: deployment.ID,
+		Release: releaseSnapshot{
+			ID: release.ID, ProjectID: release.ProjectID, Version: release.Version,
+			Steps: json.RawMessage(release.StepsJson),
+		},
+		Environment: environmentSnapshot{
+			ID:   environment.ID,
+			Name: environment.Name,
+		},
+		Variables: payloadVariables,
+	})
+	if err != nil {
+		return "", fmt.Errorf("marshal deployment payload: %w", err)
+	}
+	ciphertext, err := d.box.Encrypt(string(encoded))
+	if err != nil {
+		return "", fmt.Errorf("encrypt deployment payload: %w", err)
+	}
+	return ciphertext, nil
+}

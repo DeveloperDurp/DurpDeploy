@@ -10,6 +10,7 @@
 #   - compose.app.env
 #   - compose.caddy.env
 #   - compose.litestream.env
+#   - compose.agent.env when the optional agent profile is enabled
 
 services:
   app:
@@ -109,10 +110,41 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  agent:
+    # Optional remote execution agent. Enable with --profile agent.
+    # It talks outbound to the control plane and is not a server sidecar.
+    profiles: [agent]
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+    image: durpdeploy-agent:latest
+    restart: unless-stopped
+    env_file:
+      - ./compose.agent.env
+    environment:
+      DURPDEPLOY_AGENT_STATE_DIR: /var/lib/durpdeploy-agent
+    volumes:
+      - durpdeploy-agent-state:/var/lib/durpdeploy-agent
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 128
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
 volumes:
   durpdeploy-data:
   caddy-data:
   caddy-config:
+  durpdeploy-agent-state:
 
 secrets:
   durpdeploy_key:

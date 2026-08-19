@@ -25,6 +25,7 @@ WORKDIR /opt/mobile-browser
 COPY package.json package-lock.json ./
 RUN npm ci
 
+COPY scripts/agent_admin_browser_proof.mjs ./agent_admin_browser_proof.mjs
 COPY scripts/mobile-browser-container.sh /usr/local/bin/mobile-browser-container
 RUN chmod 0755 /usr/local/bin/mobile-browser-container
 
