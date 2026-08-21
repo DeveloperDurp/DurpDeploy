@@ -96,7 +96,6 @@ type swaggerDeploymentDispatch struct {
 	Mode   string                  `json:"mode"`
 	State  string                  `json:"state,omitempty"`
 	Reason string                  `json:"reason,omitempty"`
-	Pool   string                  `json:"pool,omitempty"`
 	Agent  *swaggerDeploymentAgent `json:"agent,omitempty"`
 }
 

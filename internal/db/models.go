@@ -22,16 +22,6 @@ type Agent struct {
 	UpdatedAt              int64          `json:"updated_at"`
 }
 
-type AgentEnrollmentToken struct {
-	TokenHash   []byte        `json:"token_hash"`
-	AgentID     string        `json:"agent_id"`
-	TokenPrefix string        `json:"token_prefix"`
-	ExpiresAt   int64         `json:"expires_at"`
-	UsedAt      sql.NullInt64 `json:"used_at"`
-	RevokedAt   sql.NullInt64 `json:"revoked_at"`
-	CreatedAt   int64         `json:"created_at"`
-}
-
 type AgentEvent struct {
 	ID            int64          `json:"id"`
 	AgentID       sql.NullString `json:"agent_id"`
@@ -42,26 +32,18 @@ type AgentEvent struct {
 	CreatedAt     int64          `json:"created_at"`
 }
 
-type AgentPool struct {
-	ID          int64          `json:"id"`
-	Name        string         `json:"name"`
-	Description sql.NullString `json:"description"`
-	Enabled     int64          `json:"enabled"`
-	CreatedAt   int64          `json:"created_at"`
-	UpdatedAt   int64          `json:"updated_at"`
-}
-
-type AgentPoolMembership struct {
-	PoolID    int64  `json:"pool_id"`
-	AgentID   string `json:"agent_id"`
-	CreatedAt int64  `json:"created_at"`
-}
-
-type AgentTag struct {
-	AgentID   string `json:"agent_id"`
-	TagKey    string `json:"tag_key"`
-	TagValue  string `json:"tag_value"`
-	CreatedAt int64  `json:"created_at"`
+type AgentPairing struct {
+	AgentID              string         `json:"agent_id"`
+	PairingCodeHash      []byte         `json:"pairing_code_hash"`
+	AgentPublicIdentity  string         `json:"agent_public_identity"`
+	AgentPin             string         `json:"agent_pin"`
+	ServerPublicIdentity sql.NullString `json:"server_public_identity"`
+	ServerPin            sql.NullString `json:"server_pin"`
+	State                string         `json:"state"`
+	ExpiresAt            int64          `json:"expires_at"`
+	PairedAt             sql.NullInt64  `json:"paired_at"`
+	CreatedAt            int64          `json:"created_at"`
+	UpdatedAt            int64          `json:"updated_at"`
 }
 
 type ApiToken struct {
@@ -111,11 +93,10 @@ type DeploymentApproval struct {
 type DeploymentDispatch struct {
 	DeploymentID      int64          `json:"deployment_id"`
 	Mode              string         `json:"mode"`
-	PoolID            sql.NullInt64  `json:"pool_id"`
-	Selector          string         `json:"selector"`
 	State             string         `json:"state"`
 	Reason            sql.NullString `json:"reason"`
 	AgentID           sql.NullString `json:"agent_id"`
+	AssignedAgentID   sql.NullString `json:"assigned_agent_id"`
 	ClaimTokenHash    []byte         `json:"claim_token_hash"`
 	ClaimExpiresAt    sql.NullInt64  `json:"claim_expires_at"`
 	StartedAt         sql.NullInt64  `json:"started_at"`
@@ -149,10 +130,9 @@ type Environment struct {
 	CreatedAt   int64          `json:"created_at"`
 }
 
-type EnvironmentAgentPolicy struct {
+type EnvironmentAgentAssignment struct {
 	EnvironmentID int64  `json:"environment_id"`
-	PoolID        int64  `json:"pool_id"`
-	Selector      string `json:"selector"`
+	AgentID       string `json:"agent_id"`
 	CreatedAt     int64  `json:"created_at"`
 	UpdatedAt     int64  `json:"updated_at"`
 }

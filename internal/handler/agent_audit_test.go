@@ -25,9 +25,9 @@ func TestAgentAudit_returns_redacted_history_and_preserves_historic_agent(
 		t.Fatalf("create pending agent: %v", err)
 	}
 	now := time.Now().Unix()
-	_, err = h.repo.Queries.ActivatePendingAgent(
+	_, err = h.repo.Queries.ActivatePairedAgent(
 		context.Background(),
-		db.ActivatePendingAgentParams{
+		db.ActivatePairedAgentParams{
 			ID: created.ID,
 			CertificatePem: sql.NullString{
 				String: "certificate",
@@ -84,15 +84,6 @@ func TestAgentAudit_returns_redacted_history_and_preserves_historic_agent(
 		"",
 		true,
 	)
-	reenrollResponse := adminRequest(
-		t,
-		h,
-		h.sess,
-		http.MethodPost,
-		"/admin/agents/agent-history/reenroll",
-		"",
-		true,
-	)
 	deleteResponse := adminRequest(
 		t,
 		h,
@@ -107,10 +98,6 @@ func TestAgentAudit_returns_redacted_history_and_preserves_historic_agent(
 	requireAdminStatus(t, disableResponse, http.StatusNoContent)
 	requireAdminStatus(t, historyResponse, http.StatusOK)
 	requireAdminStatus(t, revokeResponse, http.StatusNoContent)
-	requireAdminStatus(t, reenrollResponse, http.StatusCreated)
-	if reenrollResponse.Header.Get("Cache-Control") != "no-store" {
-		t.Fatal("re-enrollment response is cacheable")
-	}
 	body, err := io.ReadAll(historyResponse.Body)
 	if err != nil {
 		t.Fatalf("read history: %v", err)
@@ -120,12 +107,11 @@ func TestAgentAudit_returns_redacted_history_and_preserves_historic_agent(
 	}
 	requireAdminStatus(t, deleteResponse, http.StatusConflict)
 	agent, err := h.repo.Queries.GetAgent(context.Background(), "agent-history")
-	if err != nil || agent.Status != "pending" {
-		t.Fatalf("agent after re-enrollment = %#v, %v", agent, err)
+	if err != nil || agent.Status != "revoked" {
+		t.Fatalf("agent after revocation = %#v, %v", agent, err)
 	}
 	if !hasAuditAction(t, h, "disable_agent") ||
-		!hasAuditAction(t, h, "revoke_agent") ||
-		!hasAuditAction(t, h, "reenroll_agent") {
+		!hasAuditAction(t, h, "revoke_agent") {
 		t.Fatal("agent lifecycle audit actions are missing")
 	}
 }

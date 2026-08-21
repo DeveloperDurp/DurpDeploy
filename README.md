@@ -17,7 +17,7 @@ A single-binary deployment tool for running bash scripts against environments. D
 - **Cancel** - Stop running deployments mid-execution
 - **Remote agents** - Dispatch deployments to outbound-only agents with mTLS and certificate pinning
 
-For the complete server listener, admin enrollment, agent installation, and
+For the complete server listener, admin pairing, agent installation, and
 recovery procedure, see [`docs/agents.md`](docs/agents.md).
 
 ## Quick Start

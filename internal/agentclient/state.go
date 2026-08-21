@@ -10,8 +10,7 @@ import (
 )
 
 const (
-	pinsFileName       = "server-pins.json"
-	enrollmentFileName = "enrollment-complete"
+	pinsFileName = "server-pins.json"
 )
 
 type pinState struct {
@@ -101,27 +100,4 @@ func writePins(path string, pins []agenttls.Fingerprint) (err error) {
 		return fmt.Errorf("replace server pins: %w", err)
 	}
 	return nil
-}
-
-func isEnrolled(directory string) (bool, error) {
-	_, err := os.Stat(filepath.Join(directory, enrollmentFileName))
-	if os.IsNotExist(err) {
-		return false, nil
-	}
-	if err != nil {
-		return false, fmt.Errorf("stat enrollment state: %w", err)
-	}
-	return true, nil
-}
-
-func markEnrolled(directory string) error {
-	path := filepath.Join(directory, enrollmentFileName)
-	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
-	if os.IsExist(err) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("create enrollment state: %w", err)
-	}
-	return file.Close()
 }

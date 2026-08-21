@@ -43,3 +43,38 @@ func CanTransition(from, to DispatchState) bool {
 		return false
 	}
 }
+
+// Complete applies a terminal result exactly once after work has started.
+func Complete(
+	state DispatchState,
+	result ResultState,
+) (DispatchState, error) {
+	switch state {
+	case DispatchSucceeded, DispatchFailed:
+		return "", protocolError("result", ReasonDuplicate, ErrDuplicateResult)
+	case DispatchStarted:
+		switch result {
+		case ResultSucceeded:
+			return Transition(state, DispatchSucceeded)
+		case ResultFailed:
+			return Transition(state, DispatchFailed)
+		default:
+			return "", protocolError(
+				"result.state",
+				ReasonInvalid,
+				ErrInvalidResultState,
+			)
+		}
+	default:
+		return "", protocolError("result", ReasonInvalid, ErrInvalidTransition)
+	}
+}
+
+// Reclaim returns a pre-start claim to the waiting queue. Started work is
+// intentionally never replayed because deployment scripts need not be idempotent.
+func Reclaim(state DispatchState) (DispatchState, error) {
+	if state == DispatchStarted {
+		return "", protocolError("state", ReasonInvalid, ErrStartedWorkReplay)
+	}
+	return Transition(state, DispatchWaiting)
+}

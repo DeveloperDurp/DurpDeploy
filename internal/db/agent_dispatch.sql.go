@@ -19,7 +19,7 @@ WHERE deployment_id = ?2
   AND agent_id = ?3
   AND claim_token_hash = ?4
   AND state = 'cancel_requested'
-RETURNING deployment_id, mode, pool_id, selector, state, reason, agent_id, claim_token_hash, claim_expires_at, started_at, finished_at, last_heartbeat_at, cancel_requested_at, created_at, updated_at
+RETURNING deployment_id, mode, state, reason, agent_id, assigned_agent_id, claim_token_hash, claim_expires_at, started_at, finished_at, last_heartbeat_at, cancel_requested_at, created_at, updated_at
 `
 
 type AcknowledgeDeploymentDispatchCancellationParams struct {
@@ -40,11 +40,10 @@ func (q *Queries) AcknowledgeDeploymentDispatchCancellation(ctx context.Context,
 	err := row.Scan(
 		&i.DeploymentID,
 		&i.Mode,
-		&i.PoolID,
-		&i.Selector,
 		&i.State,
 		&i.Reason,
 		&i.AgentID,
+		&i.AssignedAgentID,
 		&i.ClaimTokenHash,
 		&i.ClaimExpiresAt,
 		&i.StartedAt,
@@ -67,34 +66,13 @@ SET state = 'claimed',
     updated_at = unixepoch()
 WHERE deployment_id = ?5
   AND state = 'waiting'
-  AND EXISTS (
-      SELECT 1
-      FROM agents AS a
-      JOIN agent_pool_memberships AS m ON m.agent_id = a.id
-      WHERE a.id = ?1
-        AND a.status = 'active'
-        AND m.pool_id = deployment_dispatches.pool_id
-  )
-  AND (
-      selector = ''
-      OR (
-          SELECT COUNT(*)
-          FROM agent_tags AS t
-          WHERE t.agent_id = ?1
-            AND instr(
-                ',' || deployment_dispatches.selector || ',',
-                ',' || t.tag_key || '=' || t.tag_value || ','
-            ) > 0
-      ) = length(deployment_dispatches.selector) -
-          length(replace(deployment_dispatches.selector, ',', '')) + 1
-  )
   AND NOT EXISTS (
       SELECT 1
       FROM deployment_dispatches AS active_dispatch
         WHERE active_dispatch.agent_id = ?1
         AND active_dispatch.state IN ('claimed', 'started', 'cancel_requested')
   )
-RETURNING deployment_id, mode, pool_id, selector, state, reason, agent_id, claim_token_hash, claim_expires_at, started_at, finished_at, last_heartbeat_at, cancel_requested_at, created_at, updated_at
+RETURNING deployment_id, mode, state, reason, agent_id, assigned_agent_id, claim_token_hash, claim_expires_at, started_at, finished_at, last_heartbeat_at, cancel_requested_at, created_at, updated_at
 `
 
 type ClaimDeploymentDispatchParams struct {
@@ -117,91 +95,10 @@ func (q *Queries) ClaimDeploymentDispatch(ctx context.Context, arg ClaimDeployme
 	err := row.Scan(
 		&i.DeploymentID,
 		&i.Mode,
-		&i.PoolID,
-		&i.Selector,
 		&i.State,
 		&i.Reason,
 		&i.AgentID,
-		&i.ClaimTokenHash,
-		&i.ClaimExpiresAt,
-		&i.StartedAt,
-		&i.FinishedAt,
-		&i.LastHeartbeatAt,
-		&i.CancelRequestedAt,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const claimOldestEligibleDeployment = `-- name: ClaimOldestEligibleDeployment :one
-UPDATE deployment_dispatches
-SET state = 'claimed',
-    agent_id = ?1,
-    claim_token_hash = ?2,
-    claim_expires_at = ?3,
-    last_heartbeat_at = ?4,
-    updated_at = unixepoch()
-WHERE deployment_id = (
-    SELECT candidate.deployment_id
-    FROM deployment_dispatches AS candidate
-    JOIN agent_pools AS pool ON pool.id = candidate.pool_id
-    JOIN agent_pool_memberships AS membership
-        ON membership.pool_id = candidate.pool_id
-    JOIN agents AS agent ON agent.id = membership.agent_id
-    WHERE candidate.mode = 'remote'
-      AND candidate.state = 'waiting'
-      AND pool.enabled = 1
-      AND agent.id = ?1
-      AND agent.status = 'active'
-      AND (
-          candidate.selector = ''
-          OR (
-              SELECT COUNT(*)
-              FROM agent_tags AS tag
-              WHERE tag.agent_id = agent.id
-                AND instr(
-                    ',' || candidate.selector || ',',
-                    ',' || tag.tag_key || '=' || tag.tag_value || ','
-                ) > 0
-          ) = length(candidate.selector) -
-              length(replace(candidate.selector, ',', '')) + 1
-      )
-      AND NOT EXISTS (
-          SELECT 1
-          FROM deployment_dispatches AS active_dispatch
-          WHERE active_dispatch.agent_id = agent.id
-            AND active_dispatch.state IN ('claimed', 'started', 'cancel_requested')
-      )
-    ORDER BY candidate.created_at ASC, candidate.deployment_id ASC
-    LIMIT 1
-)
-RETURNING deployment_id, mode, pool_id, selector, state, reason, agent_id, claim_token_hash, claim_expires_at, started_at, finished_at, last_heartbeat_at, cancel_requested_at, created_at, updated_at
-`
-
-type ClaimOldestEligibleDeploymentParams struct {
-	AgentID         sql.NullString `json:"agent_id"`
-	ClaimTokenHash  []byte         `json:"claim_token_hash"`
-	ClaimExpiresAt  sql.NullInt64  `json:"claim_expires_at"`
-	LastHeartbeatAt sql.NullInt64  `json:"last_heartbeat_at"`
-}
-
-func (q *Queries) ClaimOldestEligibleDeployment(ctx context.Context, arg ClaimOldestEligibleDeploymentParams) (DeploymentDispatch, error) {
-	row := q.db.QueryRowContext(ctx, claimOldestEligibleDeployment,
-		arg.AgentID,
-		arg.ClaimTokenHash,
-		arg.ClaimExpiresAt,
-		arg.LastHeartbeatAt,
-	)
-	var i DeploymentDispatch
-	err := row.Scan(
-		&i.DeploymentID,
-		&i.Mode,
-		&i.PoolID,
-		&i.Selector,
-		&i.State,
-		&i.Reason,
-		&i.AgentID,
+		&i.AssignedAgentID,
 		&i.ClaimTokenHash,
 		&i.ClaimExpiresAt,
 		&i.StartedAt,
@@ -303,25 +200,21 @@ func (q *Queries) CreateAgentEventForDispatch(ctx context.Context, arg CreateAge
 }
 
 const createDeploymentDispatch = `-- name: CreateDeploymentDispatch :one
-INSERT INTO deployment_dispatches (deployment_id, mode, pool_id, selector, state, reason)
+INSERT INTO deployment_dispatches (deployment_id, mode, state, reason)
 VALUES (
     ?1,
     ?2,
     ?3,
-    ?4,
-    ?5,
-    ?6
+    ?4
 )
 ON CONFLICT(deployment_id) DO UPDATE
 SET deployment_id = deployment_dispatches.deployment_id
-RETURNING deployment_id, mode, pool_id, selector, state, reason, agent_id, claim_token_hash, claim_expires_at, started_at, finished_at, last_heartbeat_at, cancel_requested_at, created_at, updated_at
+RETURNING deployment_id, mode, state, reason, agent_id, assigned_agent_id, claim_token_hash, claim_expires_at, started_at, finished_at, last_heartbeat_at, cancel_requested_at, created_at, updated_at
 `
 
 type CreateDeploymentDispatchParams struct {
 	DeploymentID int64          `json:"deployment_id"`
 	Mode         string         `json:"mode"`
-	PoolID       sql.NullInt64  `json:"pool_id"`
-	Selector     string         `json:"selector"`
 	State        string         `json:"state"`
 	Reason       sql.NullString `json:"reason"`
 }
@@ -330,8 +223,6 @@ func (q *Queries) CreateDeploymentDispatch(ctx context.Context, arg CreateDeploy
 	row := q.db.QueryRowContext(ctx, createDeploymentDispatch,
 		arg.DeploymentID,
 		arg.Mode,
-		arg.PoolID,
-		arg.Selector,
 		arg.State,
 		arg.Reason,
 	)
@@ -339,11 +230,10 @@ func (q *Queries) CreateDeploymentDispatch(ctx context.Context, arg CreateDeploy
 	err := row.Scan(
 		&i.DeploymentID,
 		&i.Mode,
-		&i.PoolID,
-		&i.Selector,
 		&i.State,
 		&i.Reason,
 		&i.AgentID,
+		&i.AssignedAgentID,
 		&i.ClaimTokenHash,
 		&i.ClaimExpiresAt,
 		&i.StartedAt,
@@ -422,7 +312,7 @@ func (q *Queries) ExpireDeploymentDispatchCancellation(ctx context.Context, canc
 }
 
 const getDeploymentDispatch = `-- name: GetDeploymentDispatch :one
-SELECT deployment_id, mode, pool_id, selector, state, reason, agent_id, claim_token_hash, claim_expires_at, started_at, finished_at, last_heartbeat_at, cancel_requested_at, created_at, updated_at FROM deployment_dispatches WHERE deployment_id = ?
+SELECT deployment_id, mode, state, reason, agent_id, assigned_agent_id, claim_token_hash, claim_expires_at, started_at, finished_at, last_heartbeat_at, cancel_requested_at, created_at, updated_at FROM deployment_dispatches WHERE deployment_id = ?
 `
 
 func (q *Queries) GetDeploymentDispatch(ctx context.Context, deploymentID int64) (DeploymentDispatch, error) {
@@ -431,11 +321,10 @@ func (q *Queries) GetDeploymentDispatch(ctx context.Context, deploymentID int64)
 	err := row.Scan(
 		&i.DeploymentID,
 		&i.Mode,
-		&i.PoolID,
-		&i.Selector,
 		&i.State,
 		&i.Reason,
 		&i.AgentID,
+		&i.AssignedAgentID,
 		&i.ClaimTokenHash,
 		&i.ClaimExpiresAt,
 		&i.StartedAt,
@@ -460,7 +349,7 @@ func (q *Queries) GetDeploymentPayload(ctx context.Context, deploymentID int64) 
 }
 
 const listExpiredCancellationDeploymentDispatches = `-- name: ListExpiredCancellationDeploymentDispatches :many
-SELECT deployment_id, mode, pool_id, selector, state, reason, agent_id, claim_token_hash, claim_expires_at, started_at, finished_at, last_heartbeat_at, cancel_requested_at, created_at, updated_at
+SELECT deployment_id, mode, state, reason, agent_id, assigned_agent_id, claim_token_hash, claim_expires_at, started_at, finished_at, last_heartbeat_at, cancel_requested_at, created_at, updated_at
 FROM deployment_dispatches
 WHERE state = 'cancel_requested'
   AND cancel_requested_at <= ?1
@@ -478,11 +367,10 @@ func (q *Queries) ListExpiredCancellationDeploymentDispatches(ctx context.Contex
 		if err := rows.Scan(
 			&i.DeploymentID,
 			&i.Mode,
-			&i.PoolID,
-			&i.Selector,
 			&i.State,
 			&i.Reason,
 			&i.AgentID,
+			&i.AssignedAgentID,
 			&i.ClaimTokenHash,
 			&i.ClaimExpiresAt,
 			&i.StartedAt,
@@ -506,7 +394,7 @@ func (q *Queries) ListExpiredCancellationDeploymentDispatches(ctx context.Contex
 }
 
 const listExpiredClaimedDeploymentDispatches = `-- name: ListExpiredClaimedDeploymentDispatches :many
-SELECT deployment_id, mode, pool_id, selector, state, reason, agent_id, claim_token_hash, claim_expires_at, started_at, finished_at, last_heartbeat_at, cancel_requested_at, created_at, updated_at
+SELECT deployment_id, mode, state, reason, agent_id, assigned_agent_id, claim_token_hash, claim_expires_at, started_at, finished_at, last_heartbeat_at, cancel_requested_at, created_at, updated_at
 FROM deployment_dispatches
 WHERE state = 'claimed'
   AND claim_expires_at <= ?1
@@ -524,11 +412,10 @@ func (q *Queries) ListExpiredClaimedDeploymentDispatches(ctx context.Context, cl
 		if err := rows.Scan(
 			&i.DeploymentID,
 			&i.Mode,
-			&i.PoolID,
-			&i.Selector,
 			&i.State,
 			&i.Reason,
 			&i.AgentID,
+			&i.AssignedAgentID,
 			&i.ClaimTokenHash,
 			&i.ClaimExpiresAt,
 			&i.StartedAt,
@@ -552,7 +439,7 @@ func (q *Queries) ListExpiredClaimedDeploymentDispatches(ctx context.Context, cl
 }
 
 const listLostStartedDeploymentDispatches = `-- name: ListLostStartedDeploymentDispatches :many
-SELECT deployment_id, mode, pool_id, selector, state, reason, agent_id, claim_token_hash, claim_expires_at, started_at, finished_at, last_heartbeat_at, cancel_requested_at, created_at, updated_at
+SELECT deployment_id, mode, state, reason, agent_id, assigned_agent_id, claim_token_hash, claim_expires_at, started_at, finished_at, last_heartbeat_at, cancel_requested_at, created_at, updated_at
 FROM deployment_dispatches
 WHERE state = 'started'
   AND last_heartbeat_at <= ?1
@@ -570,11 +457,10 @@ func (q *Queries) ListLostStartedDeploymentDispatches(ctx context.Context, lastH
 		if err := rows.Scan(
 			&i.DeploymentID,
 			&i.Mode,
-			&i.PoolID,
-			&i.Selector,
 			&i.State,
 			&i.Reason,
 			&i.AgentID,
+			&i.AssignedAgentID,
 			&i.ClaimTokenHash,
 			&i.ClaimExpiresAt,
 			&i.StartedAt,
@@ -640,7 +526,7 @@ WHERE deployment_id = ?2
   AND claim_token_hash = ?4
   AND state = 'claimed'
   AND claim_expires_at <= ?5
-RETURNING deployment_id, mode, pool_id, selector, state, reason, agent_id, claim_token_hash, claim_expires_at, started_at, finished_at, last_heartbeat_at, cancel_requested_at, created_at, updated_at
+RETURNING deployment_id, mode, state, reason, agent_id, assigned_agent_id, claim_token_hash, claim_expires_at, started_at, finished_at, last_heartbeat_at, cancel_requested_at, created_at, updated_at
 `
 
 type ReclaimExpiredClaimedDeploymentDispatchParams struct {
@@ -663,11 +549,10 @@ func (q *Queries) ReclaimExpiredClaimedDeploymentDispatch(ctx context.Context, a
 	err := row.Scan(
 		&i.DeploymentID,
 		&i.Mode,
-		&i.PoolID,
-		&i.Selector,
 		&i.State,
 		&i.Reason,
 		&i.AgentID,
+		&i.AssignedAgentID,
 		&i.ClaimTokenHash,
 		&i.ClaimExpiresAt,
 		&i.StartedAt,
@@ -689,7 +574,7 @@ WHERE deployment_id = ?3
   AND agent_id = ?4
   AND claim_token_hash = ?5
   AND state = ?6
-RETURNING deployment_id, mode, pool_id, selector, state, reason, agent_id, claim_token_hash, claim_expires_at, started_at, finished_at, last_heartbeat_at, cancel_requested_at, created_at, updated_at
+RETURNING deployment_id, mode, state, reason, agent_id, assigned_agent_id, claim_token_hash, claim_expires_at, started_at, finished_at, last_heartbeat_at, cancel_requested_at, created_at, updated_at
 `
 
 type RenewDeploymentDispatchClaimParams struct {
@@ -714,11 +599,10 @@ func (q *Queries) RenewDeploymentDispatchClaim(ctx context.Context, arg RenewDep
 	err := row.Scan(
 		&i.DeploymentID,
 		&i.Mode,
-		&i.PoolID,
-		&i.Selector,
 		&i.State,
 		&i.Reason,
 		&i.AgentID,
+		&i.AssignedAgentID,
 		&i.ClaimTokenHash,
 		&i.ClaimExpiresAt,
 		&i.StartedAt,
@@ -738,7 +622,7 @@ SET state = 'cancel_requested',
     updated_at = unixepoch()
 WHERE deployment_id = ?2
   AND state = ?3
-RETURNING deployment_id, mode, pool_id, selector, state, reason, agent_id, claim_token_hash, claim_expires_at, started_at, finished_at, last_heartbeat_at, cancel_requested_at, created_at, updated_at
+RETURNING deployment_id, mode, state, reason, agent_id, assigned_agent_id, claim_token_hash, claim_expires_at, started_at, finished_at, last_heartbeat_at, cancel_requested_at, created_at, updated_at
 `
 
 type RequestDeploymentDispatchCancellationParams struct {
@@ -753,11 +637,10 @@ func (q *Queries) RequestDeploymentDispatchCancellation(ctx context.Context, arg
 	err := row.Scan(
 		&i.DeploymentID,
 		&i.Mode,
-		&i.PoolID,
-		&i.Selector,
 		&i.State,
 		&i.Reason,
 		&i.AgentID,
+		&i.AssignedAgentID,
 		&i.ClaimTokenHash,
 		&i.ClaimExpiresAt,
 		&i.StartedAt,
@@ -781,7 +664,7 @@ WHERE deployment_id = ?3
   AND agent_id = ?4
   AND claim_token_hash = ?5
   AND state = 'claimed'
-RETURNING deployment_id, mode, pool_id, selector, state, reason, agent_id, claim_token_hash, claim_expires_at, started_at, finished_at, last_heartbeat_at, cancel_requested_at, created_at, updated_at
+RETURNING deployment_id, mode, state, reason, agent_id, assigned_agent_id, claim_token_hash, claim_expires_at, started_at, finished_at, last_heartbeat_at, cancel_requested_at, created_at, updated_at
 `
 
 type StartClaimedDeploymentDispatchParams struct {
@@ -804,11 +687,10 @@ func (q *Queries) StartClaimedDeploymentDispatch(ctx context.Context, arg StartC
 	err := row.Scan(
 		&i.DeploymentID,
 		&i.Mode,
-		&i.PoolID,
-		&i.Selector,
 		&i.State,
 		&i.Reason,
 		&i.AgentID,
+		&i.AssignedAgentID,
 		&i.ClaimTokenHash,
 		&i.ClaimExpiresAt,
 		&i.StartedAt,
@@ -831,7 +713,7 @@ WHERE deployment_id = ?4
   AND agent_id = ?5
   AND claim_token_hash = ?6
    AND state = ?7
-RETURNING deployment_id, mode, pool_id, selector, state, reason, agent_id, claim_token_hash, claim_expires_at, started_at, finished_at, last_heartbeat_at, cancel_requested_at, created_at, updated_at
+RETURNING deployment_id, mode, state, reason, agent_id, assigned_agent_id, claim_token_hash, claim_expires_at, started_at, finished_at, last_heartbeat_at, cancel_requested_at, created_at, updated_at
 `
 
 type TransitionDeploymentDispatchParams struct {
@@ -858,11 +740,10 @@ func (q *Queries) TransitionDeploymentDispatch(ctx context.Context, arg Transiti
 	err := row.Scan(
 		&i.DeploymentID,
 		&i.Mode,
-		&i.PoolID,
-		&i.Selector,
 		&i.State,
 		&i.Reason,
 		&i.AgentID,
+		&i.AssignedAgentID,
 		&i.ClaimTokenHash,
 		&i.ClaimExpiresAt,
 		&i.StartedAt,

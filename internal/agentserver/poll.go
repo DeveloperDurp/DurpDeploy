@@ -111,8 +111,8 @@ func (server *Server) claimWaiting(
 	var response *agentproto.PollResponse
 	err = server.repository.WithTx(ctx, func(queries *db.Queries) error {
 		hash := sha256.Sum256([]byte(claimToken))
-		dispatch, err := queries.ClaimOldestEligibleDeployment(ctx,
-			db.ClaimOldestEligibleDeploymentParams{
+		dispatch, err := queries.ClaimOldestDirectDeployment(ctx,
+			db.ClaimOldestDirectDeploymentParams{
 				AgentID:        sql.NullString{String: agent.ID, Valid: true},
 				ClaimTokenHash: hash[:],
 				ClaimExpiresAt: sql.NullInt64{
@@ -138,8 +138,8 @@ func (server *Server) claimWaiting(
 		if err != nil {
 			return err
 		}
-		certificate, err := enrolledCertificate(
-			agentproto.CertificatePEM(agent.CertificatePem.String),
+		certificate, err := parseAgentCertificate(
+			agent.CertificatePem.String,
 			server.now(),
 		)
 		if err != nil {

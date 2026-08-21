@@ -11,12 +11,11 @@ import (
 )
 
 // Dispatch is the safe, operator-facing routing state for a deployment.
-// It deliberately excludes selectors, claim tokens and hashes, and payload data.
+// It deliberately excludes claim tokens, hashes, and payload data.
 type Dispatch struct {
 	Mode   string `json:"mode"`
 	State  string `json:"state,omitempty"`
 	Reason string `json:"reason,omitempty"`
-	Pool   string `json:"pool,omitempty"`
 	Agent  *Agent `json:"agent,omitempty"`
 }
 
@@ -72,13 +71,6 @@ func fromDispatch(
 	}
 	if dispatch.State == "waiting" && dispatch.Reason.Valid {
 		result.Reason = dispatch.Reason.String
-	}
-	if dispatch.PoolID.Valid {
-		pool, err := repo.Queries.GetAgentPool(ctx, dispatch.PoolID.Int64)
-		if err != nil {
-			return Dispatch{}, fmt.Errorf("get dispatch pool: %w", err)
-		}
-		result.Pool = pool.Name
 	}
 	if !dispatch.AgentID.Valid {
 		return result, nil

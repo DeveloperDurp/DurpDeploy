@@ -1,4 +1,4 @@
-.PHONY: build build-agent build-all agent-container agent-container-contract agent-compose-contract agent-systemd-contract agent-documentation-contract agent-e2e-sqlite agent-e2e-postgres agent-e2e-mssql dev dev-agent dev-server agent-run agent-help dev-postgres dev-mssql e2e-test e2e-test-isolated e2e-postgres e2e-mssql check-openssl templ-generate tailwind-build js-build npm-install golines golines-check clean test mfa-e2e-test auth-mfa-e2e-go-prepare auth-mfa-e2e-browser-prepare auth-mfa-e2e-sqlite-http auth-mfa-e2e-sqlite-browser auth-mfa-e2e-sqlite auth-mfa-e2e-postgres auth-mfa-e2e-mssql auth-mfa-e2e swagger-spec mobile-browser-container
+.PHONY: build build-agent build-all agent-container agent-container-contract agent-compose-contract agent-systemd-contract agent-documentation-contract agent-e2e-sqlite agent-e2e-postgres agent-e2e-mssql dev dev-server dev-postgres dev-mssql e2e-test e2e-test-isolated e2e-postgres e2e-mssql check-openssl templ-generate tailwind-build js-build npm-install golines golines-check clean test mfa-e2e-test auth-mfa-e2e-go-prepare auth-mfa-e2e-browser-prepare auth-mfa-e2e-sqlite-http auth-mfa-e2e-sqlite-browser auth-mfa-e2e-sqlite auth-mfa-e2e-postgres auth-mfa-e2e-mssql auth-mfa-e2e swagger-spec mobile-browser-container
 
 BINARY_NAME=durpdeploy
 MAIN_PATH=./cmd/server
@@ -64,11 +64,6 @@ agent-documentation-contract:
 # and the air build to retrigger. Add a second air include_dir entry when that hurts.
 MAKEFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 ENV_FILE ?= $(MAKEFILE_DIR).env
-AGENT_PUBLIC_URL_ORIGIN := $(origin AGENT_PUBLIC_URL)
-AGENT_PUBLIC_URL ?= https://localhost
-AGENT_LISTEN_ADDR_ORIGIN := $(origin AGENT_LISTEN_ADDR)
-AGENT_IDENTITY_DIR_ORIGIN := $(origin AGENT_IDENTITY_DIR)
-AGENT_ENV_FILE ?= $(MAKEFILE_DIR)agent.env
 
 dev: check-openssl
 	DURPDEPLOY_HTTPS_PROXY_CONTAINER='$(DEV_HTTPS_PROXY_CONTAINER)' \
@@ -95,61 +90,6 @@ dev-server:
 	if [ "$${DURPDEPLOY_OIDC_REQUIRE_EMAIL_VERIFIED+x}" != "" ]; then export DURPDEPLOY_OIDC_REQUIRE_EMAIL_VERIFIED; fi; \
 	DURPDEPLOY_SECRET_KEY=$${DURPDEPLOY_SECRET_KEY:-$$(openssl rand -base64 32)} \
 	DURPDEPLOY_ENV_FILE="$(ENV_FILE)" go run github.com/air-verse/air@latest
-
-# Local server with the direct agent listener enabled. This is separate from
-# `make dev`: AGENT_PUBLIC_URL must be an explicit HTTPS origin because its
-# hostname becomes the self-signed certificate SAN.
-dev-agent: check-openssl
-	@if [ "$(AGENT_LISTEN_ADDR_ORIGIN)" = undefined ] || [ -z "$(AGENT_LISTEN_ADDR)" ]; then \
-		echo 'ERROR: AGENT_LISTEN_ADDR is required, for example :10943' >&2; \
-		exit 1; \
-	fi; \
-	if [ "$(AGENT_PUBLIC_URL_ORIGIN)" = undefined ] || [ -z "$(AGENT_PUBLIC_URL)" ]; then \
-		echo 'ERROR: AGENT_PUBLIC_URL is required, for example https://localhost' >&2; \
-		exit 1; \
-	fi; \
-	if [ "$(AGENT_IDENTITY_DIR_ORIGIN)" = undefined ] || [ -z "$(AGENT_IDENTITY_DIR)" ]; then \
-		echo 'ERROR: AGENT_IDENTITY_DIR is required, for example .agent-identity' >&2; \
-		exit 1; \
-	fi; \
-	case "$(AGENT_PUBLIC_URL)" in \
-		https://*) ;; \
-		*) echo 'ERROR: AGENT_PUBLIC_URL must be an HTTPS origin' >&2; exit 1 ;; \
-	esac; \
-	DURPDEPLOY_AGENT_LISTEN_ADDR='$(AGENT_LISTEN_ADDR)' \
-	DURPDEPLOY_AGENT_PUBLIC_URL='$(AGENT_PUBLIC_URL)' \
-	DURPDEPLOY_AGENT_IDENTITY_DIR='$(AGENT_IDENTITY_DIR)' \
-	$(MAKE) --no-print-directory dev-server
-
-# Build and run an outbound-only agent from one explicit, protected env file.
-# Server database, secret, URL, and proxy settings are removed before exec.
-agent-run:
-	@test -r "$(AGENT_ENV_FILE)" || { \
-		echo "ERROR: AGENT_ENV_FILE is missing or unreadable: $(AGENT_ENV_FILE)" >&2; \
-		exit 1; \
-	}
-	$(MAKE) --no-print-directory build-agent
-	@set -a; . "$(AGENT_ENV_FILE)"; set +a; \
-	env -u DURPDEPLOY_DB -u DURPDEPLOY_SECRET_KEY -u DURPDEPLOY_URL \
-		-u DURPDEPLOY_HTTPS_PROXY_CONTAINER -u DURPDEPLOY_HTTPS_PROXY_PORT \
-		-u DURPDEPLOY_HTTPS_PROXY_BACKEND -u DEV_HTTPS_PROXY_CONTAINER \
-		-u DEV_HTTPS_PROXY_PORT -u DEV_HTTPS_PROXY_BACKEND \
-		-u DURPDEPLOY_ENV_FILE ./$(AGENT_BINARY_NAME)
-
-agent-help:
-	@printf '%s\n' \
-		'Agent development commands:' \
-		'  make dev                         browser/API dev path via Caddy-style proxy (normal listener only)' \
-		'  AGENT_LISTEN_ADDR=:10943 AGENT_PUBLIC_URL=https://localhost AGENT_IDENTITY_DIR=.agent-identity make dev-agent' \
-		'                                  direct server mTLS listener on the explicit address' \
-		'  AGENT_ENV_FILE=./agent.env make agent-run' \
-		'                                  outbound-only agent client; no database' \
-		'' \
-		'dev-agent requires explicit AGENT_LISTEN_ADDR, HTTPS AGENT_PUBLIC_URL, and AGENT_IDENTITY_DIR.' \
-		'agent-run requires these values in AGENT_ENV_FILE:' \
-		'  DURPDEPLOY_AGENT_SERVER_URL, DURPDEPLOY_AGENT_SERVER_FINGERPRINT,' \
-		'  DURPDEPLOY_AGENT_STATE_DIR, DURPDEPLOY_AGENT_ENROLLMENT_TOKEN,' \
-		'  DURPDEPLOY_AGENT_ID, DURPDEPLOY_AGENT_NAME, DURPDEPLOY_AGENT_VERSION'
 
 # Disposable database containers for manual backend testing. Stop them with
 # `docker stop $(DEV_POSTGRES_CONTAINER)` or `docker stop $(DEV_MSSQL_CONTAINER)`.

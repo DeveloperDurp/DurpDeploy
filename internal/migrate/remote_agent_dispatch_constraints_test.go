@@ -13,16 +13,16 @@ func assertRemoteAgentDispatchAndLogConstraints(t *testing.T, conn *sql.DB) {
 	// Given a remote dispatch with a non-null agent claim token hash.
 	_, err := conn.Exec(`
 		INSERT INTO deployment_dispatches (
-			deployment_id, mode, pool_id, selector, state, agent_id, claim_token_hash
-		) VALUES (1, 'remote', 1, ?, 'waiting', ?, ?)`,
-		"region=us",
+			deployment_id, mode, assigned_agent_id, state, agent_id, claim_token_hash
+		) VALUES (1, 'remote', ?, 'waiting', ?, ?)`,
+		"active-agent",
 		"active-agent",
 		claimTokenHash,
 	)
 	requireNoError(t, err, "create deployment dispatch")
 	if _, err := conn.Exec(`
-		INSERT INTO deployment_dispatches (deployment_id, mode, pool_id, state)
-		VALUES (1, 'remote', 1, 'waiting')`); err == nil {
+		INSERT INTO deployment_dispatches (deployment_id, mode, assigned_agent_id, state)
+		VALUES (1, 'remote', 'active-agent', 'waiting')`); err == nil {
 		t.Fatal("duplicate deployment dispatch succeeded")
 	}
 	_, err = conn.Exec(`
@@ -33,8 +33,8 @@ func assertRemoteAgentDispatchAndLogConstraints(t *testing.T, conn *sql.DB) {
 	// When the same claim token hash is reused by another deployment.
 	if _, err := conn.Exec(`
 		INSERT INTO deployment_dispatches (
-			deployment_id, mode, pool_id, state, claim_token_hash
-		) VALUES (2, 'remote', 1, 'waiting', ?)`, claimTokenHash); err == nil {
+			deployment_id, mode, assigned_agent_id, state, claim_token_hash
+		) VALUES (2, 'remote', 'active-agent', 'waiting', ?)`, claimTokenHash); err == nil {
 		t.Fatal("duplicate non-null deployment claim token hash succeeded")
 	}
 	_, err = conn.Exec(`
@@ -42,8 +42,8 @@ func assertRemoteAgentDispatchAndLogConstraints(t *testing.T, conn *sql.DB) {
 		VALUES (1, 1, 'pending')`)
 	requireNoError(t, err, "create third deployment")
 	if _, err := conn.Exec(`
-		INSERT INTO deployment_dispatches (deployment_id, mode, pool_id, state)
-		VALUES (3, 'remote', 1, 'unknown')`); err == nil {
+		INSERT INTO deployment_dispatches (deployment_id, mode, assigned_agent_id, state)
+		VALUES (3, 'remote', 'active-agent', 'unknown')`); err == nil {
 		t.Fatal("dispatch with unknown protocol state succeeded")
 	}
 

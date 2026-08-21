@@ -21,7 +21,7 @@ What we defend against:
 - Roster tampering by a non-admin project member (per-project admin gate on member add/remove)
 - A leaked `variables`/`release_variables` DB file, on its own, does not disclose secret values (AES-256-GCM at rest)
 - Remote agents do not receive the server database, server encryption key, or Docker socket
-- Agent transport uses outbound-only mTLS with pinned peer fingerprints and one-time enrollment
+- Agent transport uses outbound-only mTLS with pinned peer fingerprints and one-time pairing
 
 ### OIDC boundary and threat model
 
@@ -480,6 +480,6 @@ values:
   read the DB, or sniff process memory. OS-level problem.
 - **Network-level DDoS** — handled upstream (Caddy, firewall).
 - **Supply chain** — `go mod verify` and pinned versions only.
-- **Compromised remote agent host:** an agent can execute deployments assigned to its configured pool. Isolate it from the control-plane host and rotate its enrollment and certificate material if compromised.
+- **Compromised remote agent host:** an agent can execute deployments for its assigned environments. Isolate it from the control-plane host and rotate its pairing and certificate material if compromised.
 
 See `docs/attack-drill.md` for hands-on verification of the active defenses.

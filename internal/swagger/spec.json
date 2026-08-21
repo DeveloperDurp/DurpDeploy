@@ -5929,10 +5929,6 @@
           "type": "string",
           "x-go-name": "Mode"
         },
-        "pool": {
-          "type": "string",
-          "x-go-name": "Pool"
-        },
         "reason": {
           "type": "string",
           "x-go-name": "Reason"

@@ -2,298 +2,257 @@ package agentserver
 
 import (
 	"context"
-	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
+	"fmt"
+	"net"
 	"net/http"
-	"sync"
+	"net/http/httptest"
+	"net/url"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"testing"
+	"time"
 
+	"github.com/testcontainers/testcontainers-go"
+	"github.com/testcontainers/testcontainers-go/modules/postgres"
+	"github.com/testcontainers/testcontainers-go/wait"
+
+	"durpdeploy/internal/agentpairing"
 	"durpdeploy/internal/agentproto"
+	"durpdeploy/internal/agenttls"
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/migrate"
+	"durpdeploy/internal/repository"
+	"durpdeploy/internal/secret"
 )
 
 func TestPostgres_RemoteAgentRuntimeParity(t *testing.T) {
-	testRemoteAgentRuntimeParity(t, postgresRuntimeParityDSN(t))
+	ctx := context.Background()
+	container, err := postgres.Run(ctx, "postgres:16-alpine", postgres.WithDatabase("durpdeploy"), postgres.WithUsername("durpdeploy"), postgres.WithPassword("postgres"), postgres.BasicWaitStrategies())
+	if err != nil {
+		t.Skipf("PostgreSQL runtime parity unavailable: %v", err)
+	}
+	t.Cleanup(func() { _ = container.Terminate(context.Background()) })
+	dsn, err := container.ConnectionString(ctx, "sslmode=disable")
+	if err != nil {
+		t.Fatal(err)
+	}
+	testRemoteAgentRuntimeParity(t, dsn)
 }
 
 func TestMSSQL_RemoteAgentRuntimeParity(t *testing.T) {
-	testRemoteAgentRuntimeParity(t, sqlServerRuntimeParityDSN(t))
+	conn := mssqlRuntimeDB(t)
+	testRemoteAgentRuntimeParity(t, conn)
+}
+
+func mssqlRuntimeDB(t *testing.T) string {
+	t.Helper()
+	ctx := context.Background()
+	const password = "Durpdeploy12345!"
+	container, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{ContainerRequest: testcontainers.ContainerRequest{Image: "mcr.microsoft.com/mssql/server:2022-latest", ExposedPorts: []string{"1433/tcp"}, Env: map[string]string{"ACCEPT_EULA": "Y", "MSSQL_SA_PASSWORD": password}, WaitingFor: wait.ForLog("SQL Server is now ready for client connections").WithStartupTimeout(3 * time.Minute)}, Started: true})
+	if err != nil {
+		t.Skipf("SQL Server runtime parity unavailable: %v", err)
+	}
+	t.Cleanup(func() { _ = container.Terminate(context.Background()) })
+	host, err := container.Host(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	port, err := container.MappedPort(ctx, "1433/tcp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return (&url.URL{Scheme: "sqlserver", User: url.UserPassword("sa", password), Host: fmt.Sprintf("%s:%s", host, port.Port())}).String() + "?database=master&encrypt=false&trustservercertificate=true"
 }
 
 func testRemoteAgentRuntimeParity(t *testing.T, dsn string) {
 	t.Helper()
 	fixture := newRuntimeParityFixture(t, dsn)
-	fixture.activate(t, "agent-a", fixture.agentIdentity)
-	runtimeAddEligibleAgent(t, fixture, "agent-a")
-
-	t.Run("sequenced-log", func(t *testing.T) {
-		deploymentID, token := claimRuntimeDeployment(t, fixture, "log")
-		if response := fixture.lifecycle(
-			t,
-			fixture.agentIdentity,
-			deploymentID,
-			"start",
-			claimBody(token),
-		); response.StatusCode != http.StatusNoContent {
-			t.Fatalf(
-				"start status = %d, want %d",
-				response.StatusCode,
-				http.StatusNoContent,
-			)
-		}
-		logs := fixture.lifecycle(
-			t,
-			fixture.agentIdentity,
-			deploymentID,
-			"logs",
-			`{"protocol":"agent/1","claim_token":"`+token+`","events":[{"sequence":2,"line":"two"},{"sequence":1,"line":"one"},{"sequence":2,"line":"two"}]}`,
-		)
-		if logs.StatusCode != http.StatusNoContent {
-			t.Fatalf(
-				"logs status = %d, want %d",
-				logs.StatusCode,
-				http.StatusNoContent,
-			)
-		}
-		assertLogSequences(t, fixture, deploymentID, []int64{1, 2})
-		if response := fixture.lifecycle(
-			t,
-			fixture.agentIdentity,
-			deploymentID,
-			"result",
-			`{"protocol":"agent/1","claim_token":"`+token+`","state":"succeeded"}`,
-		); response.StatusCode != http.StatusNoContent {
-			t.Fatalf(
-				"result status = %d, want %d",
-				response.StatusCode,
-				http.StatusNoContent,
-			)
-		}
-	})
-
-	t.Run("cancel", func(t *testing.T) {
-		deploymentID, token := claimRuntimeDeployment(t, fixture, "cancel")
-		if response := fixture.lifecycle(
-			t,
-			fixture.agentIdentity,
-			deploymentID,
-			"start",
-			claimBody(token),
-		); response.StatusCode != http.StatusNoContent {
-			t.Fatalf(
-				"start status = %d, want %d",
-				response.StatusCode,
-				http.StatusNoContent,
-			)
-		}
-		if _, err := fixture.repo.Queries.RequestDeploymentDispatchCancellation(
-			context.Background(),
-			db.RequestDeploymentDispatchCancellationParams{
-				CancelRequestedAt: sql.NullInt64{
-					Int64: fixture.now.Unix(),
-					Valid: true,
-				},
-				DeploymentID: deploymentID,
-				CurrentState: "started",
-			},
-		); err != nil {
-			t.Fatalf("request cancellation: %v", err)
-		}
-		heartbeat := fixture.lifecycle(
-			t,
-			fixture.agentIdentity,
-			deploymentID,
-			"heartbeat",
-			claimBody(token),
-		)
-		var body agentproto.HeartbeatResponse
-		if err := json.NewDecoder(heartbeat.Body).
-			Decode(&body); err != nil || heartbeat.StatusCode != http.StatusOK ||
-			!body.CancelRequested {
-			t.Fatalf(
-				"heartbeat cancellation = status %d body %#v error %v",
-				heartbeat.StatusCode,
-				body,
-				err,
-			)
-		}
-		if response := fixture.lifecycle(
-			t,
-			fixture.agentIdentity,
-			deploymentID,
-			"cancelled",
-			claimBody(token),
-		); response.StatusCode != http.StatusNoContent {
-			t.Fatalf(
-				"cancel acknowledgement status = %d, want %d",
-				response.StatusCode,
-				http.StatusNoContent,
-			)
-		}
-		assertDispatchState(t, fixture, deploymentID, "cancelled")
-	})
-
-	t.Run("lost", func(t *testing.T) {
-		deploymentID, token := claimRuntimeDeployment(t, fixture, "lost")
-		if response := fixture.lifecycle(
-			t,
-			fixture.agentIdentity,
-			deploymentID,
-			"start",
-			claimBody(token),
-		); response.StatusCode != http.StatusNoContent {
-			t.Fatalf(
-				"start status = %d, want %d",
-				response.StatusCode,
-				http.StatusNoContent,
-			)
-		}
-		fixture.now = fixture.now.Add(agentproto.LostThreshold)
-		if err := fixture.listener.Maintain(context.Background()); err != nil {
-			t.Fatalf("maintain: %v", err)
-		}
-		if err := fixture.listener.Maintain(context.Background()); err != nil {
-			t.Fatalf("repeat maintain: %v", err)
-		}
-		late := fixture.lifecycle(
-			t,
-			fixture.agentIdentity,
-			deploymentID,
-			"result",
-			`{"protocol":"agent/1","claim_token":"`+token+`","state":"failed"}`,
-		)
-		if late.StatusCode != http.StatusConflict {
-			t.Fatalf(
-				"late result status = %d, want %d",
-				late.StatusCode,
-				http.StatusConflict,
-			)
-		}
-		assertDispatchState(t, fixture, deploymentID, "lost")
-		assertDeploymentStatus(t, fixture, deploymentID, "failed")
-	})
-
-	t.Run("claim-race", func(t *testing.T) {
-		secondIdentity := loadTestIdentity(t)
-		fixture.activate(t, "agent-b", secondIdentity)
-		runtimeAddEligibleAgent(t, fixture, "agent-b")
-		deploymentID := runtimeCreateWaitingDeployment(t, fixture, "race")
-		start := make(chan struct{})
-		results := make(chan int, 2)
-		var group sync.WaitGroup
-		for index, agentID := range []string{"agent-a", "agent-b"} {
-			group.Add(1)
-			go func(index int, agentID string) {
-				defer group.Done()
-				<-start
-				results <- runtimeClaimStatus(fixture, deploymentID, agentID, "race-"+string(rune('a'+index)))
-			}(index, agentID)
-		}
-		close(start)
-		group.Wait()
-		close(results)
-		claims := 0
-		for status := range results {
-			if status == http.StatusOK {
-				claims++
-			}
-		}
-		if claims != 1 {
-			t.Fatalf("successful concurrent claims = %d, want 1", claims)
-		}
-	})
-}
-
-func claimRuntimeDeployment(
-	t *testing.T,
-	fixture *pollFixture,
-	payload string,
-) (int64, string) {
-	t.Helper()
-	deploymentID := runtimeCreateWaitingDeployment(t, fixture, payload)
-	token := "runtime-parity-token-" + payload
-	if status := runtimeClaimStatus(
-		fixture,
-		deploymentID,
-		"agent-a",
-		token,
-	); status != http.StatusOK {
-		t.Fatalf("claim status = %d, want %d", status, http.StatusOK)
+	fixture.createPendingAgent(t, "agent-a")
+	stateDir := t.TempDir()
+	address := freeRuntimeAddress(t)
+	bootstrap := exec.Command(runtimeAgentBinary(t), "")
+	bootstrap.Env = append(os.Environ(), "DURPDEPLOY_AGENT_STATE_DIR="+stateDir, "DURPDEPLOY_AGENT_LISTEN_ADDR="+address, "DURPDEPLOY_AGENT_VERSION=runtime")
+	if err := bootstrap.Start(); err != nil {
+		t.Fatal(err)
 	}
-	return deploymentID, token
-}
-
-func runtimeAddEligibleAgent(
-	t *testing.T,
-	fixture *pollFixture,
-	agentID string,
-) {
-	t.Helper()
-	if _, err := fixture.repo.DB.ExecContext(context.Background(),
-		"INSERT INTO agent_pool_memberships (pool_id, agent_id) VALUES (?, ?)",
-		fixture.poolID, agentID); err != nil {
-		t.Fatalf("add agent %q to pool: %v", agentID, err)
+	t.Cleanup(func() {
+		if bootstrap.ProcessState == nil {
+			_ = bootstrap.Process.Kill()
+			_ = bootstrap.Wait()
+		}
+	})
+	endpoint := "https://" + address
+	var identity agentpairing.Bootstrap
+	var err error
+	for attempt := 0; attempt < 20; attempt++ {
+		identity, err = agentpairing.FetchBootstrapIdentity(context.Background(), endpoint)
+		if err == nil {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
 	}
-}
-
-func runtimeCreateWaitingDeployment(
-	t *testing.T,
-	fixture *pollFixture,
-	payload string,
-) int64 {
-	t.Helper()
-	ctx := context.Background()
-	deployment, err := fixture.repo.Queries.CreateDeployment(
-		ctx,
-		db.CreateDeploymentParams{
-			ReleaseID:     fixture.releaseID,
-			EnvironmentID: fixture.envID,
-			Status:        "pending",
-		},
-	)
 	if err != nil {
-		t.Fatalf("create deployment: %v", err)
+		t.Fatalf("bootstrap: %v", err)
 	}
-	ciphertext, err := fixture.box.Encrypt(payload)
+	pull, err := agentproto.ParsePullEndpoint(fixture.server.URL)
 	if err != nil {
-		t.Fatalf("encrypt payload: %v", err)
+		t.Fatal(err)
 	}
-	if _, err := fixture.repo.DB.ExecContext(
-		ctx,
-		"INSERT INTO deployment_payloads (deployment_id, ciphertext) VALUES (?, ?)",
-		deployment.ID,
-		ciphertext,
-	); err != nil {
-		t.Fatalf("create payload: %v", err)
+	serverPin, err := agentproto.ParseSHA256Pin(fixture.serverIdentity.Fingerprint.String())
+	if err != nil {
+		t.Fatal(err)
 	}
-	if _, err := fixture.repo.DB.ExecContext(
-		ctx,
-		"INSERT INTO deployment_dispatches (deployment_id, mode, pool_id, selector, state) VALUES (?, 'remote', ?, '', 'waiting')",
-		deployment.ID,
-		fixture.poolID,
-	); err != nil {
-		t.Fatalf("create dispatch: %v", err)
+	input := agentpairing.PairInput{Endpoint: endpoint, AgentPin: identity.Offer.AgentPin, Identity: fixture.serverIdentity, Request: agentproto.PairRequest{ProtocolEnvelope: agentproto.ProtocolEnvelope{Protocol: agentproto.AgentV1}, PairingCode: identity.Offer.PairingCode, ServerPin: serverPin, PullEndpoint: pull, AgentID: "agent-a"}}
+	if _, err := agentpairing.Pair(context.Background(), input); err != nil {
+		t.Fatal(err)
 	}
-	return deployment.ID
+	codeHash := identity.Offer.PairingCode.Hash()
+	if _, err := fixture.repo.DB.ExecContext(context.Background(), "INSERT INTO agent_pairings (agent_id, pairing_code_hash, agent_public_identity, agent_pin, state, expires_at) VALUES (?, ?, ?, ?, 'pending', ?)", "agent-a", codeHash[:], identity.PublicIdentity, identity.Offer.AgentPin.String(), fixture.now.Add(time.Hour).Unix()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fixture.repo.DB.ExecContext(context.Background(), "UPDATE agents SET status = 'active', certificate_pem = ?, certificate_fingerprint = ?, enrolled_at = ?, last_heartbeat_at = ? WHERE id = ?", identity.PublicIdentity, identity.Offer.AgentPin.String(), fixture.now.Unix(), fixture.now.Unix(), "agent-a"); err != nil {
+		t.Fatal(err)
+	}
+	if err := agentpairing.Commit(context.Background(), input); err != nil {
+		t.Fatal(err)
+	}
+	if err := bootstrap.Wait(); err != nil {
+		t.Fatal(err)
+	}
+	pairedIdentity, err := agenttls.LoadOrCreate(stateDir, "https://"+address)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture.agentIdentity = pairedIdentity
+	if _, err := fixture.repo.DB.ExecContext(context.Background(), "UPDATE agent_pairings SET state = 'paired', server_public_identity = ?, server_pin = ?, paired_at = ? WHERE agent_id = ?", "server", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", fixture.now.Unix(), "agent-a"); err != nil {
+		t.Fatal(err)
+	}
+
+	deploymentID := fixture.createWaitingDeployment(t, "runtime-payload")
+	response := fixture.poll(t, fixture.agentIdentity, `{"protocol":"agent/1","agent_version":"runtime"}`)
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("poll status = %d", response.StatusCode)
+	}
+	var claim agentproto.PollResponse
+	if err := json.NewDecoder(response.Body).Decode(&claim); err != nil {
+		t.Fatal(err)
+	}
+	if response := fixture.lifecycle(t, fixture.agentIdentity, int64(claim.DeploymentID), "start", claimBody(string(claim.ClaimToken))); response.StatusCode != http.StatusNoContent {
+		t.Fatalf("start status = %d", response.StatusCode)
+	}
+	if response := fixture.lifecycle(t, fixture.agentIdentity, int64(claim.DeploymentID), "result", `{"protocol":"agent/1","claim_token":"`+string(claim.ClaimToken)+`","state":"succeeded"}`); response.StatusCode != http.StatusNoContent {
+		t.Fatalf("result status = %d", response.StatusCode)
+	}
+	assertDispatchState(t, fixture, deploymentID, "succeeded")
+	cancelID, cancelToken := runtimeClaim(t, fixture)
+	if response := fixture.lifecycle(t, fixture.agentIdentity, cancelID, "start", claimBody(cancelToken)); response.StatusCode != http.StatusNoContent {
+		t.Fatalf("cancel start = %d", response.StatusCode)
+	}
+	if _, err := fixture.repo.Queries.RequestDeploymentDispatchCancellation(context.Background(), db.RequestDeploymentDispatchCancellationParams{CancelRequestedAt: sql.NullInt64{Int64: fixture.now.Unix(), Valid: true}, DeploymentID: cancelID, CurrentState: "started"}); err != nil {
+		t.Fatal(err)
+	}
+	if response := fixture.lifecycle(t, fixture.agentIdentity, cancelID, "cancelled", claimBody(cancelToken)); response.StatusCode != http.StatusNoContent {
+		t.Fatalf("cancel ack = %d", response.StatusCode)
+	}
+	assertDispatchState(t, fixture, cancelID, "cancelled")
+	lostID, lostToken := runtimeClaim(t, fixture)
+	if response := fixture.lifecycle(t, fixture.agentIdentity, lostID, "start", claimBody(lostToken)); response.StatusCode != http.StatusNoContent {
+		t.Fatalf("lost start = %d", response.StatusCode)
+	}
+	fixture.now = fixture.now.Add(agentproto.LostThreshold)
+	if err := fixture.listener.Maintain(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	assertDispatchState(t, fixture, lostID, "lost")
+
+	fixture.revoke(t, "agent-a")
+	if response := fixture.poll(t, fixture.agentIdentity, `{"protocol":"agent/1","agent_version":"runtime"}`); response.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("revoked poll status = %d", response.StatusCode)
+	}
 }
 
-func runtimeClaimStatus(
-	fixture *pollFixture,
-	deploymentID int64,
-	agentID, token string,
-) int {
-	hash := sha256.Sum256([]byte(token))
-	result, err := fixture.repo.DB.ExecContext(context.Background(), `
-UPDATE deployment_dispatches
-SET state = 'claimed', agent_id = ?, claim_token_hash = ?, claim_expires_at = ?, last_heartbeat_at = ?
-WHERE deployment_id = ? AND state = 'waiting'`, agentID, hash[:], fixture.now.AddDate(0, 0, 1).Unix(), fixture.now.Unix(), deploymentID)
+func runtimeClaim(t *testing.T, fixture *pollFixture) (int64, string) {
+	t.Helper()
+	id := fixture.createWaitingDeployment(t, "runtime-payload")
+	response := fixture.poll(t, fixture.agentIdentity, `{"protocol":"agent/1","agent_version":"runtime"}`)
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("poll status = %d", response.StatusCode)
+	}
+	var claim agentproto.PollResponse
+	if err := json.NewDecoder(response.Body).Decode(&claim); err != nil {
+		t.Fatal(err)
+	}
+	return id, string(claim.ClaimToken)
+}
+
+func newRuntimeParityFixture(t *testing.T, dsn string) *pollFixture {
+	t.Helper()
+	conn, err := migrate.Run(dsn)
+	for attempt := 0; err != nil && attempt < 14; attempt++ {
+		time.Sleep(2 * time.Second)
+		conn, err = migrate.Run(dsn)
+	}
 	if err != nil {
-		return http.StatusInternalServerError
+		t.Fatalf("migrate: %v", err)
 	}
-	updated, err := result.RowsAffected()
-	if err != nil || updated != 1 {
-		return http.StatusNoContent
+	t.Cleanup(func() { _ = conn.Close() })
+	box, err := secret.NewBox(make([]byte, 32))
+	if err != nil {
+		t.Fatal(err)
 	}
-	return http.StatusOK
+	fixture := &agentServerFixture{now: time.Now().UTC().Truncate(time.Second), repo: repository.New(conn), serverIdentity: loadTestIdentity(t), agentIdentity: loadTestIdentity(t), box: box}
+	listener, err := New(Config{Repository: fixture.repo, Identity: fixture.serverIdentity, Now: func() time.Time { return fixture.now }, Box: box})
+	if err != nil {
+		t.Fatal(err)
+	}
+	listener.pollWait = func(context.Context) error { return nil }
+	server := httptest.NewUnstartedServer(listener.Handler())
+	server.TLS = listener.TLSConfig()
+	server.StartTLS()
+	t.Cleanup(server.Close)
+	fixture.listener, fixture.server = listener, server
+	project, err := fixture.repo.Queries.CreateProject(context.Background(), db.CreateProjectParams{Name: "runtime-project"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	environment, err := fixture.repo.Queries.CreateEnvironment(context.Background(), db.CreateEnvironmentParams{Name: "runtime-environment"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	release, err := fixture.repo.Queries.CreateRelease(context.Background(), db.CreateReleaseParams{ProjectID: project.ID, Version: "runtime-v1", StepsJson: "[]"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &pollFixture{agentServerFixture: fixture, releaseID: release.ID, envID: environment.ID}
+}
+
+func freeRuntimeAddress(t *testing.T) string {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	address := listener.Addr().String()
+	if err := listener.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return address
+}
+
+func runtimeAgentBinary(t *testing.T) string {
+	t.Helper()
+	root, err := filepath.Abs("../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	binary := filepath.Join(t.TempDir(), "durpdeploy-agent")
+	command := exec.Command("go", "build", "-o", binary, "./cmd/agent")
+	command.Dir = root
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("build agent: %v: %s", err, output)
+	}
+	return binary
 }

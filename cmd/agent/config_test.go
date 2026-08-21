@@ -1,67 +1,57 @@
 package main
 
 import (
-	"os"
 	"strings"
 	"testing"
-
-	"durpdeploy/internal/agentclient"
 )
 
-func TestLoadConfig_allowsMissingEnrollmentTokenForRestart(t *testing.T) {
+func TestAgentHelp_listsOnlyLocalBootstrapInputs(t *testing.T) {
 	// Given
-	t.Setenv("DURPDEPLOY_AGENT_ENROLLMENT_TOKEN", "")
+	const forbidden = "DURPDEPLOY_AGENT_SERVER_URL"
+
+	// When
+	help := agentHelp()
+
+	// Then
+	for _, required := range []string{
+		"DURPDEPLOY_AGENT_LISTEN_ADDR",
+		"DURPDEPLOY_AGENT_STATE_DIR",
+		"DURPDEPLOY_AGENT_VERSION",
+	} {
+		if !strings.Contains(help, required) {
+			t.Fatalf("help does not mention %s: %s", required, help)
+		}
+	}
+	if strings.Contains(help, forbidden) {
+		t.Fatalf("help exposes manual server configuration: %s", help)
+	}
+}
+
+func TestLoadConfig_usesDefaultStateDirectory(t *testing.T) {
+	// Given
+	t.Setenv("DURPDEPLOY_AGENT_STATE_DIR", "")
 
 	// When
 	configuration, err := loadConfig()
 
 	// Then
-	if err != nil || configuration.client.EnrollmentToken != "" {
-		t.Fatalf("restart config = %#v, %v", configuration, err)
+	if err != nil || configuration.stateDir == "" {
+		t.Fatalf("default config = %#v, %v", configuration, err)
 	}
 }
 
-func TestLoadConfig_rejectsMissingServerPin(t *testing.T) {
+func TestLoadConfig_ignoresManualServerConfiguration(t *testing.T) {
 	// Given
-	t.Setenv("DURPDEPLOY_AGENT_ENROLLMENT_TOKEN", "token")
-	t.Setenv("DURPDEPLOY_AGENT_SERVER_FINGERPRINT", "")
-	configuration, err := loadConfig()
-	if err != nil {
-		t.Fatalf("load config: %v", err)
-	}
-
-	// When
-	_, err = agentclient.New(configuration.client)
-
-	// Then
-	if err == nil {
-		t.Fatal("missing server pin accepted")
-	}
-}
-
-func TestLoadConfig_rejectsInsecureStateDirectory(t *testing.T) {
-	// Given
-	stateDir := t.TempDir()
-	if err := os.Chmod(stateDir, 0o755); err != nil {
-		t.Fatalf("make state directory insecure: %v", err)
-	}
-	t.Setenv("DURPDEPLOY_AGENT_ENROLLMENT_TOKEN", "token")
-	t.Setenv("DURPDEPLOY_AGENT_SERVER_URL", "https://127.0.0.1")
+	t.Setenv("DURPDEPLOY_AGENT_SERVER_URL", "https://server.example.test")
 	t.Setenv("DURPDEPLOY_AGENT_SERVER_FINGERPRINT", strings.Repeat("a", 64))
-	t.Setenv("DURPDEPLOY_AGENT_STATE_DIR", stateDir)
-	t.Setenv("DURPDEPLOY_AGENT_ID", "agent")
-	t.Setenv("DURPDEPLOY_AGENT_NAME", "agent")
-	t.Setenv("DURPDEPLOY_AGENT_VERSION", "test")
-	configuration, err := loadConfig()
-	if err != nil {
-		t.Fatalf("load config: %v", err)
-	}
+	t.Setenv("DURPDEPLOY_AGENT_ID", "manual-agent")
+	t.Setenv("DURPDEPLOY_AGENT_NAME", "manual-agent")
 
 	// When
-	_, err = agentclient.New(configuration.client)
+	configuration, err := loadConfig()
 
 	// Then
-	if err == nil {
-		t.Fatal("insecure state directory accepted")
+	if err != nil || configuration.stateDir == "" {
+		t.Fatalf("manual server configuration was retained: %#v, %v", configuration, err)
 	}
 }

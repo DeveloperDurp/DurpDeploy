@@ -96,15 +96,12 @@ func TestRemoteAgentSchemaCreatesControlPlaneTables(t *testing.T) {
 
 	// When each durable remote-agent structure is inspected.
 	for _, table := range []string{
-		"agent_pools",
 		"agents",
-		"agent_pool_memberships",
-		"agent_tags",
-		"environment_agent_policies",
-		"agent_enrollment_tokens",
 		"deployment_payloads",
 		"deployment_dispatches",
 		"agent_events",
+		"agent_pairings",
+		"environment_agent_assignments",
 	} {
 		var count int
 		err := conn.QueryRow(
@@ -144,16 +141,16 @@ func TestSQLite_RemoteAgentHistoricLogsBackfill(t *testing.T) {
 			t.Fatalf("reapply remote-agent migration: %v", err)
 		}
 
-		// Then the control-plane table returns after the round trip.
+		// Then the direct-assignment table returns after the round trip.
 		var count int
 		err := conn.QueryRow(`
 			SELECT COUNT(*) FROM sqlite_master
-			WHERE type = 'table' AND name = 'agent_pools'`).Scan(&count)
+			WHERE type = 'table' AND name = 'environment_agent_assignments'`).Scan(&count)
 		if err != nil {
-			t.Fatalf("find agent_pools after reapply: %v", err)
+			t.Fatalf("find environment_agent_assignments after reapply: %v", err)
 		}
 		if count != 1 {
-			t.Fatalf("agent_pools after reapply = %d, want 1", count)
+			t.Fatalf("environment_agent_assignments after reapply = %d, want 1", count)
 		}
 	})
 

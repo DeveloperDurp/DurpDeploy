@@ -248,10 +248,14 @@ func certificateSignedByOtherKey(
 }
 
 func localURL(t *testing.T, address string) string {
+	return urlForHost(t, address, "localhost")
+}
+
+func urlForHost(t *testing.T, address string, hostname string) string {
 	t.Helper()
 	_, port, err := net.SplitHostPort(address)
 	if err != nil {
 		t.Fatalf("split host: %v", err)
 	}
-	return "https://localhost:" + port
+	return "https://" + hostname + ":" + port
 }

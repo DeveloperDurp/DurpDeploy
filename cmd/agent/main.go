@@ -16,10 +16,24 @@ import (
 
 	"durpdeploy/internal/agentclient"
 	"durpdeploy/internal/agentproto"
+	"durpdeploy/internal/agentstate"
 	"durpdeploy/internal/runner"
 )
 
 const claimFileName = "current-claim.json"
+
+const agentHelpText = `Usage: durpdeploy-agent
+
+Starts a local pairing listener until paired, then polls the persisted server.
+
+Inputs:
+  DURPDEPLOY_AGENT_LISTEN_ADDR  local address used only while pairing
+  DURPDEPLOY_AGENT_STATE_DIR    private persistent state directory
+  DURPDEPLOY_AGENT_VERSION      agent version sent after pairing
+
+Pairing stores the server URL, pinned fingerprints, and agent ID in state.
+Do not provide server connection settings manually.
+`
 
 type claimMarker struct {
 	DeploymentID int64  `json:"deployment_id"`
@@ -27,6 +41,11 @@ type claimMarker struct {
 }
 
 func main() {
+	if len(os.Args) == 2 &&
+		(os.Args[1] == "help" || os.Args[1] == "--help" || os.Args[1] == "-h") {
+		fmt.Fprint(os.Stdout, agentHelp())
+		return
+	}
 	configuration, err := loadConfig()
 	if err != nil {
 		slog.Error("invalid agent configuration", "err", err)
@@ -48,15 +67,22 @@ func main() {
 	}
 }
 
+func agentHelp() string {
+	return agentHelpText
+}
+
 func run(ctx context.Context, configuration config) error {
-	client, err := agentclient.New(configuration.client)
+	client, err := agentclient.NewPaired(
+		configuration.stateDir,
+		configuration.agentVersion,
+	)
+	if errors.Is(err, agentstate.ErrRePairRequired) {
+		return runBootstrap(ctx, configuration.bootstrap)
+	}
 	if err != nil {
 		return err
 	}
 	defer client.Close()
-	if err := client.Enroll(ctx); err != nil {
-		return err
-	}
 	for ctx.Err() == nil {
 		claim, err := client.Poll(ctx)
 		if err != nil {
@@ -134,25 +160,22 @@ func executeClaim(
 	environment, secrets, err := payload.environment()
 	if err == nil {
 		executor := runner.NewExecutor()
-		for _, step := range payload.Release.Steps {
-			err = executor.Execute(executionCtx, runner.NewJob(runner.JobConfig{
-				DeploymentID: int64(claim.DeploymentID), Name: step.Name,
-				ScriptBody: step.ScriptBody, Timeout: step.timeout(),
-				MaxRetries: int(
-					step.MaxRetries,
-				), Environment: environment, Secrets: secrets,
-			}), runner.NewCallbacks(runner.CallbacksConfig{
-				WriteLog: logs.Write,
-				Cancelled: func() bool {
-					cancelMu.Lock()
-					defer cancelMu.Unlock()
-					return cancelled
-				},
-			}))
-			if err != nil {
-				break
-			}
-		}
+		err = executor.ExecuteSteps(executionCtx, runner.ExecutionConfig{
+			DeploymentID: int64(claim.DeploymentID),
+			Steps:        payload.Release.Steps,
+			Environment:  environment,
+			Secrets:      secrets,
+			CallbacksForStep: func(runner.Step) runner.Callbacks {
+				return runner.NewCallbacks(runner.CallbacksConfig{
+					WriteLog: logs.Write,
+					Cancelled: func() bool {
+						cancelMu.Lock()
+						defer cancelMu.Unlock()
+						return cancelled
+					},
+				})
+			},
+		})
 	}
 	cancel()
 	<-heartbeatDone
@@ -234,56 +257,4 @@ func writePrivateFile(path string, contents []byte) (err error) {
 		return err
 	}
 	return os.Rename(temporaryPath, path)
-}
-
-type logSender struct {
-	client *agentclient.Client
-	claim  agentproto.PollResponse
-	mu     sync.Mutex
-	next   agentproto.LogSequence
-	events []agentproto.LogEvent
-}
-
-func newLogSender(
-	client *agentclient.Client,
-	claim agentproto.PollResponse,
-) *logSender {
-	return &logSender{client: client, claim: claim, next: 1}
-}
-
-func (sender *logSender) Write(line string) error {
-	sender.mu.Lock()
-	defer sender.mu.Unlock()
-	sender.events = append(
-		sender.events,
-		agentproto.LogEvent{Sequence: sender.next, Line: line},
-	)
-	sender.next++
-	if len(sender.events) < agentproto.MaxLogEvents {
-		return nil
-	}
-	return sender.flushLocked(context.Background())
-}
-
-func (sender *logSender) Flush(ctx context.Context) error {
-	sender.mu.Lock()
-	defer sender.mu.Unlock()
-	return sender.flushLocked(ctx)
-}
-
-func (sender *logSender) flushLocked(ctx context.Context) error {
-	if len(sender.events) == 0 {
-		return nil
-	}
-	if err := sender.client.Logs(
-		ctx,
-		sender.claim.DeploymentID,
-		agentproto.LogBatchRequest{
-			ClaimToken: sender.claim.ClaimToken, Events: sender.events,
-		},
-	); err != nil {
-		return err
-	}
-	sender.events = nil
-	return nil
 }

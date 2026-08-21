@@ -1,15 +1,17 @@
 package handler_test
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"database/sql"
-	"encoding/json"
 	"io"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
 	"testing"
+
+	"durpdeploy/internal/db"
 )
 
 func adminRequest(
@@ -63,88 +65,6 @@ func hasAuditAction(t *testing.T, h *testHarness, want string) bool {
 		}
 	}
 	return false
-}
-
-func TestAgentAdmin_creates_single_no_store_enrollment_token(t *testing.T) {
-	// Given
-	h := newHarness(t)
-	response := adminRequest(
-		t,
-		h,
-		h.sess,
-		http.MethodPost,
-		"/admin/agents",
-		`{"id":"agent-one","name":"Agent One"}`,
-		true,
-	)
-	requireAdminStatus(t, response, http.StatusCreated)
-
-	// When
-	response = adminRequest(
-		t,
-		h,
-		h.sess,
-		http.MethodPost,
-		"/admin/agents/agent-one/enrollment",
-		"",
-		true,
-	)
-	requireAdminStatus(t, response, http.StatusCreated)
-	var enrollment struct {
-		Token string `json:"token"`
-	}
-	if err := json.NewDecoder(response.Body).Decode(&enrollment); err != nil {
-		t.Fatalf("decode enrollment: %v", err)
-	}
-
-	// Then
-	if response.Header.Get("Cache-Control") != "no-store" {
-		t.Fatalf(
-			"cache-control = %q, want no-store",
-			response.Header.Get("Cache-Control"),
-		)
-	}
-	if enrollment.Token == "" {
-		t.Fatal("enrollment token is empty")
-	}
-	if response.Request.URL.RawQuery != "" ||
-		response.Header.Get("Location") != "" {
-		t.Fatal("enrollment secret leaked through URL or redirect")
-	}
-	var stored []byte
-	err := h.repo.DB.QueryRowContext(
-		context.Background(),
-		"SELECT token_hash FROM agent_enrollment_tokens WHERE agent_id = ?",
-		"agent-one",
-	).Scan(&stored)
-	if err != nil {
-		t.Fatalf("load enrollment hash: %v", err)
-	}
-	hash := sha256.Sum256([]byte(enrollment.Token))
-	if !bytes.Equal(stored, hash[:]) ||
-		bytes.Equal(stored, []byte(enrollment.Token)) {
-		t.Fatal("database did not store only the enrollment hash")
-	}
-	response = adminRequest(
-		t,
-		h,
-		h.sess,
-		http.MethodGet,
-		"/admin/agents/agent-one",
-		"",
-		false,
-	)
-	requireAdminStatus(t, response, http.StatusOK)
-	body, err := io.ReadAll(response.Body)
-	if err != nil {
-		t.Fatalf("read agent: %v", err)
-	}
-	if strings.Contains(string(body), enrollment.Token) {
-		t.Fatal("agent response includes enrollment secret")
-	}
-	if !hasAuditAction(t, h, "create_agent_enrollment") {
-		t.Fatal("create enrollment audit action is missing")
-	}
 }
 
 func TestAgentAdmin_rejects_non_admin_and_missing_csrf_without_writes(
@@ -210,5 +130,108 @@ func TestAgentAdmin_rejects_non_admin_and_missing_csrf_without_writes(
 			after,
 			before,
 		)
+	}
+}
+
+func TestAgentAdmin_assignsAndRepairsAgents(t *testing.T) {
+	// Given
+	h := newHarness(t)
+	_, err := h.repo.DB.ExecContext(context.Background(), `
+INSERT INTO agents (id, name, status, certificate_pem, certificate_fingerprint)
+VALUES ('assigned-agent', 'Assigned agent', 'active', 'certificate', ?),
+       ('revoked-agent', 'Revoked agent', 'revoked', 'certificate', ?)`,
+		strings.Repeat("a", 64),
+		strings.Repeat("b", 64),
+	)
+	if err != nil {
+		t.Fatalf("create agents: %v", err)
+	}
+	environment, err := h.repo.Queries.CreateEnvironment(
+		context.Background(),
+		db.CreateEnvironmentParams{Name: "assigned environment"},
+	)
+	if err != nil {
+		t.Fatalf("create environment: %v", err)
+	}
+	codeHash := sha256.Sum256([]byte("assigned-agent-pairing"))
+	if _, err := h.repo.Queries.CreateAgentPairing(
+		context.Background(),
+		db.CreateAgentPairingParams{
+			AgentID:             "assigned-agent",
+			PairingCodeHash:     codeHash[:],
+			AgentPublicIdentity: "certificate",
+			AgentPin:            strings.Repeat("a", 64),
+			ExpiresAt:           2_000_000_000,
+		},
+	); err != nil {
+		t.Fatalf("create assignment pairing: %v", err)
+	}
+	if _, err := h.repo.Queries.CompleteAgentPairing(
+		context.Background(),
+		db.CompleteAgentPairingParams{
+			ServerPublicIdentity: sql.NullString{String: "server", Valid: true},
+			ServerPin: sql.NullString{
+				String: strings.Repeat("c", 64), Valid: true,
+			},
+			PairedAt:        sql.NullInt64{Int64: 1_000_000_000, Valid: true},
+			UpdatedAt:       1_000_000_000,
+			AgentID:         "assigned-agent",
+			PairingCodeHash: codeHash[:],
+			AgentPin:        strings.Repeat("a", 64),
+			Now:             1,
+		},
+	); err != nil {
+		t.Fatalf("complete assignment pairing: %v", err)
+	}
+
+	// When
+	assign := h.sess.formRequest(
+		t,
+		h.server.URL+"/admin/agents/assigned-agent/assignments",
+		url.Values{
+			"environment_id": {strconv.FormatInt(environment.ID, 10)},
+			"csrf_token":     {h.sess.csrfToken},
+		},
+	)
+	assigned, err := h.sess.client.Do(assign)
+	if err != nil {
+		t.Fatalf("assign environment: %v", err)
+	}
+	defer assigned.Body.Close()
+	repair := h.sess.formRequest(
+		t,
+		h.server.URL+"/admin/agents/revoked-agent/re-pair",
+		url.Values{"csrf_token": {h.sess.csrfToken}},
+	)
+	repaired, err := h.sess.client.Do(repair)
+	if err != nil {
+		t.Fatalf("repair agent: %v", err)
+	}
+	defer repaired.Body.Close()
+
+	// Then
+	if assigned.StatusCode != http.StatusSeeOther ||
+		repaired.StatusCode != http.StatusSeeOther {
+		t.Fatalf(
+			"assignment/repair status = %d/%d, want 303/303",
+			assigned.StatusCode,
+			repaired.StatusCode,
+		)
+	}
+	assignment, err := h.repo.Queries.GetEnvironmentAgentAssignment(
+		context.Background(), environment.ID,
+	)
+	if err != nil || assignment.AgentID != "assigned-agent" {
+		t.Fatalf("assignment = %#v, %v", assignment, err)
+	}
+	repairedAgent, err := h.repo.Queries.GetAgent(
+		context.Background(), "revoked-agent",
+	)
+	if err != nil || repairedAgent.Status != "pending" {
+		t.Fatalf("repaired agent = %#v, %v", repairedAgent, err)
+	}
+	if !hasAuditAction(t, h, "assign_environment_agent") ||
+		!hasAuditAction(t, h, "repair_agent") {
+		t.Fatal("assignment or repair audit action is missing")
 	}
 }

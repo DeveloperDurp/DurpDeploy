@@ -16,8 +16,8 @@ func TestLifecycle_runsGuardedStartHeartbeatLogsResult(t *testing.T) {
 	// Given
 	fixture := newPollFixture(t)
 	fixture.activate(t, "agent-a", fixture.agentIdentity)
-	fixture.addEligibleAgent(t, "agent-a", "")
-	deploymentID := fixture.createWaitingDeployment(t, "", "payload")
+	fixture.addEligibleAgent(t, "agent-a")
+	deploymentID := fixture.createWaitingDeployment(t, "payload")
 	claimToken := "claim-token"
 	claimDispatch(t, fixture, deploymentID, "agent-a", claimToken)
 
@@ -91,8 +91,8 @@ func TestLifecycle_rejectsWrongOwnerAndMakesDuplicatesIdempotent(t *testing.T) {
 	otherIdentity := loadTestIdentity(t)
 	fixture.activate(t, "agent-a", fixture.agentIdentity)
 	fixture.activate(t, "agent-b", otherIdentity)
-	fixture.addEligibleAgent(t, "agent-a", "")
-	deploymentID := fixture.createWaitingDeployment(t, "", "payload")
+	fixture.addEligibleAgent(t, "agent-a")
+	deploymentID := fixture.createWaitingDeployment(t, "payload")
 	claimToken := "claim-token"
 	claimDispatch(t, fixture, deploymentID, "agent-a", claimToken)
 
@@ -151,8 +151,8 @@ func TestLifecycle_acknowledgesCancellationAndRecordsLateResult(t *testing.T) {
 	// Given
 	fixture := newPollFixture(t)
 	fixture.activate(t, "agent-a", fixture.agentIdentity)
-	fixture.addEligibleAgent(t, "agent-a", "")
-	deploymentID := fixture.createWaitingDeployment(t, "", "payload")
+	fixture.addEligibleAgent(t, "agent-a")
+	deploymentID := fixture.createWaitingDeployment(t, "payload")
 	claimToken := "claim-token"
 	claimDispatch(t, fixture, deploymentID, "agent-a", claimToken)
 	if response := fixture.lifecycle(
@@ -249,8 +249,8 @@ func TestLog_rejectsOversizedBatchWithoutPersisting(t *testing.T) {
 	// Given
 	fixture := newPollFixture(t)
 	fixture.activate(t, "agent-a", fixture.agentIdentity)
-	fixture.addEligibleAgent(t, "agent-a", "")
-	deploymentID := fixture.createWaitingDeployment(t, "", "payload")
+	fixture.addEligibleAgent(t, "agent-a")
+	deploymentID := fixture.createWaitingDeployment(t, "payload")
 	claimToken := "claim-token"
 	claimDispatch(t, fixture, deploymentID, "agent-a", claimToken)
 	if response := fixture.lifecycle(
@@ -311,8 +311,8 @@ func TestLifecycle_publishesOneRedactedFailureNotification(t *testing.T) {
 	fixture := newPollFixture(t)
 	fixture.listener.events = events.NewBus(fixture.repo)
 	fixture.activate(t, "agent-a", fixture.agentIdentity)
-	fixture.addEligibleAgent(t, "agent-a", "")
-	deploymentID := fixture.createWaitingDeployment(t, "", "payload")
+	fixture.addEligibleAgent(t, "agent-a")
+	deploymentID := fixture.createWaitingDeployment(t, "payload")
 	claimToken := "claim-token"
 	claimDispatch(t, fixture, deploymentID, "agent-a", claimToken)
 	if response := fixture.lifecycle(

@@ -19,6 +19,7 @@ import (
 
 	"durpdeploy/internal/agentpayload"
 	"durpdeploy/internal/agentproto"
+	"durpdeploy/internal/agentstate"
 	"durpdeploy/internal/agenttls"
 )
 
@@ -148,8 +149,7 @@ func (fixture *agentSubprocessFixture) handle(
 	request *http.Request,
 ) {
 	switch request.URL.Path {
-	case agentproto.EnrollmentPath,
-		"/agent/v1/deployments/42/start",
+	case "/agent/v1/deployments/42/start",
 		"/agent/v1/deployments/42/cancelled":
 		writer.WriteHeader(http.StatusNoContent)
 	case agentproto.PollPath:
@@ -203,6 +203,17 @@ func (fixture *agentSubprocessFixture) addVariable(variable variablePayload) {
 
 func (fixture *agentSubprocessFixture) start(t *testing.T) *exec.Cmd {
 	t.Helper()
+	state, err := agentstate.New(
+		fixture.server.URL,
+		[]agenttls.Fingerprint{fixture.serverID.Fingerprint},
+		"agent-test",
+	)
+	if err != nil {
+		t.Fatalf("create paired state: %v", err)
+	}
+	if err := agentstate.NewStore(fixture.stateDir).Save(state); err != nil {
+		t.Fatalf("save paired state: %v", err)
+	}
 	binary := filepath.Join(t.TempDir(), "durpdeploy-agent")
 	build := exec.Command("go", "build", "-o", binary, ".")
 	if output, err := build.CombinedOutput(); err != nil {
@@ -211,12 +222,7 @@ func (fixture *agentSubprocessFixture) start(t *testing.T) *exec.Cmd {
 	command := exec.Command(binary)
 	command.Env = []string{
 		"PATH=" + os.Getenv("PATH"),
-		"DURPDEPLOY_AGENT_SERVER_URL=" + fixture.server.URL,
-		"DURPDEPLOY_AGENT_SERVER_FINGERPRINT=" + fixture.serverID.Fingerprint.String(),
 		"DURPDEPLOY_AGENT_STATE_DIR=" + fixture.stateDir,
-		"DURPDEPLOY_AGENT_ENROLLMENT_TOKEN=test-token",
-		"DURPDEPLOY_AGENT_ID=agent-test",
-		"DURPDEPLOY_AGENT_NAME=agent-test",
 		"DURPDEPLOY_AGENT_VERSION=test",
 	}
 	for _, value := range command.Env {

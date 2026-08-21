@@ -10,10 +10,11 @@ type ProtocolVersion string
 const (
 	AgentV1 ProtocolVersion = "agent/1"
 
-	MaxRequestBytes  = 1 << 20
-	MaxLogEvents     = 100
-	MaxLogBatchBytes = 256 << 10
-	MaxLogLineBytes  = 16 << 10
+	MaxRequestBytes        = 1 << 20
+	MaxLogEvents           = 100
+	MaxLogBatchBytes       = 256 << 10
+	MaxLogLineBytes        = 16 << 10
+	MaxPairingMessageBytes = 64 << 10
 
 	PollInterval                 = 25 * time.Second
 	HeartbeatInterval            = 10 * time.Second
@@ -23,7 +24,9 @@ const (
 )
 
 const (
-	EnrollmentPath = "/agent/v1/enroll"
+	BootstrapPath  = "/agent/v1/bootstrap"
+	PairPath       = "/agent/v1/pair"
+	PairCommitPath = "/agent/v1/pair/commit"
 	PollPath       = "/agent/v1/poll"
 	DeploymentPath = "/agent/v1/deployments/{id}"
 	StartPath      = DeploymentPath + "/start"

@@ -9,6 +9,23 @@ func TestRewriteSQL_RemoteAgentSourceShapes(t *testing.T) {
 		want  string
 	}{
 		{
+			name: "rewrites direct environment assignment upsert",
+			query: "INSERT INTO environment_agent_assignments (\n" +
+				"    environment_id, agent_id, updated_at\n" +
+				") VALUES (?, ?, ?)\n" +
+				"ON CONFLICT(environment_id) DO UPDATE\n" +
+				"SET agent_id = excluded.agent_id,\n" +
+				"    updated_at = excluded.updated_at\n" +
+				"RETURNING environment_id, agent_id, created_at, updated_at\n",
+			want: "MERGE environment_agent_assignments WITH (HOLDLOCK) AS target\n" +
+				"\tUSING (SELECT @p1 AS environment_id, @p2 AS agent_id, @p3 AS updated_at) AS source\n" +
+				"\tON target.environment_id = source.environment_id\n" +
+				"\tWHEN NOT MATCHED THEN INSERT (environment_id, agent_id, updated_at)\n" +
+				"\tVALUES (source.environment_id, source.agent_id, source.updated_at)\n" +
+				"\tWHEN MATCHED THEN UPDATE SET agent_id = source.agent_id, updated_at = source.updated_at\n" +
+				"\tOUTPUT INSERTED.environment_id, INSERTED.agent_id, INSERTED.created_at, INSERTED.updated_at;",
+		},
+		{
 			name: "moves agent enrollment returning to output",
 			query: "INSERT INTO agents (id, name, agent_version)\n" +
 				"VALUES (?, ?, ?)\n" +

@@ -12,7 +12,6 @@ malformed JSON, and every other protocol value.
 
 | Endpoint | Request contract | Notes |
 | --- | --- | --- |
-| `POST /agent/v1/enroll` | `EnrollmentRequest` | Protocol, agent identity/name/version, and self-signed public certificate. Enrollment is the only route without an agent client certificate. |
 | `POST /agent/v1/poll` | `PollRequest` | Protocol and agent version. A no-work response has no deployment payload. |
 | `POST /agent/v1/deployments/{id}/start` | `StartRequest` | Acknowledges that the claimed work started. |
 | `POST /agent/v1/deployments/{id}/heartbeat` | `HeartbeatRequest` | Response carries cancellation state and staged server fingerprints. |
@@ -40,18 +39,12 @@ material, certificate bodies, or secret values.
 These are protocol constants, not configuration knobs. Oversize requests and
 batches fail before later agent or persistence work consumes them.
 
-## Pool and tag scope
+## Direct assignment
 
-An environment selects one server-configured pool and zero or more required
-tags. Tags are exact `key=value` pairs: entries, keys, and values are trimmed;
-keys match `[a-z0-9_.-]{1,32}`; values are case-sensitive valid UTF-8 of 1-64
-bytes; and at most 32 unique keys are allowed. Canonical form sorts by key, so
-`role=web,region=us` becomes `region=us,role=web`.
-
-Agents never authorize themselves by supplying pools or tags. The server owns
-pool membership and agent tags, and one agent has capacity for one active
-deployment. A remotely configured environment without a matching agent stays
-waiting; it does not fall back to local execution.
+An administrator explicitly assigns each remote environment to one paired
+agent. Environments without an assignment execute locally. An assigned
+environment creates work only for its paired agent; agents do not select work
+or authorize themselves through labels.
 
 ## Dispatch state machine
 
@@ -65,7 +58,8 @@ waiting; it does not fall back to local execution.
 
 All other edges, including `started` to `waiting`, are invalid. A pre-start
 claim may be reclaimed, but started work is never automatically replayed or
-requeued; recovery is an explicit new deployment.
+requeued and does not fall back to local execution; recovery is an explicit new
+deployment.
 
 ## Transport trust
 

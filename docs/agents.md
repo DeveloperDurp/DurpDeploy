@@ -1,19 +1,19 @@
 # DurpDeploy agent operator runbook
 
 This runbook configures a DurpDeploy server and one outbound-only remote agent.
-It covers the server listener, admin enrollment, agent installation, routing,
+It covers the server listener, admin pairing, agent installation, routing,
 maintenance, and recovery.
 
 ## Two storage boundaries
 
 The **server owns the DurpDeploy database**. SQLite, its WAL and SHM files,
-projects, releases, deployments, variables, audit records, agent records,
-pool membership, tags, policies, and enrollment-token hashes stay on the
-server. The agent never receives the SQLite database, `DURPDEPLOY_SECRET_KEY`,
+projects, releases, deployments, variables, audit records, and agent records
+stay on the server. The agent never receives the SQLite database,
+`DURPDEPLOY_SECRET_KEY`,
 or the server's control-plane state directory.
 
 The **agent has no database**. Its private state directory contains only the
-agent identity certificate and key, pinned server fingerprint state, and a
+agent identity certificate and key, paired server identity state, and a
 temporary hash-only current-claim marker. Keep that directory private and
 back it up only if preserving the enrolled identity is intentional.
 
@@ -40,30 +40,22 @@ agent port.
 
 ## Configure the server listener
 
-For a local foreground run, use the Makefile targets below. `make dev` remains
-the ordinary browser/API development path and does not enable the agent
-listener. `dev-agent` requires an explicit direct listener address, public HTTPS
-origin, and identity directory because the hostname becomes the self-signed
-certificate SAN:
+Configure the direct listener through the server environment file. `make dev`
+remains the ordinary browser/API development path and does not enable the agent
+listener. For a local foreground run, set the server listener variables before
+starting `go run ./cmd/server`; the public origin hostname becomes the
+self-signed certificate SAN:
 
 ```bash
-AGENT_LISTEN_ADDR=:10943 AGENT_PUBLIC_URL=https://localhost \
-  AGENT_IDENTITY_DIR=.agent-identity make dev-agent
+DURPDEPLOY_AGENT_LISTEN_ADDR=:10943 \
+  DURPDEPLOY_AGENT_PUBLIC_URL=https://localhost \
+  DURPDEPLOY_AGENT_IDENTITY_DIR=.agent-identity \
+  go run ./cmd/server
 ```
 
 The public URL is the direct server mTLS endpoint, not the Caddy/Let's Encrypt
-browser or API endpoint. To run an agent from a separate environment file:
-
-```bash
-chmod 0600 /path/to/agent.env
-AGENT_ENV_FILE=/path/to/agent.env make agent-run
-```
-
-`agent-run` builds `durpdeploy-agent`, sources only `AGENT_ENV_FILE`, and does
-not set `DURPDEPLOY_DB`, `DURPDEPLOY_SECRET_KEY`, or Docker/Caddy variables. The
-file must define the seven `DURPDEPLOY_AGENT_*` values listed below. The agent
-is outbound-only and has no database; its state directory is not server
-storage. Run `make agent-help` for the compact prerequisite summary.
+browser or API endpoint. The agent is outbound-only and has no database; its
+state directory is not server storage.
 
 The listener is disabled unless all three variables are set together:
 
@@ -74,8 +66,9 @@ DURPDEPLOY_AGENT_IDENTITY_DIR=/var/lib/durpdeploy/agent-identity
 ```
 
 `DURPDEPLOY_AGENT_PUBLIC_URL` must be an HTTPS origin with no path, query, or
-fragment. Its hostname is placed in the self-signed certificate SAN. The agent
-uses the same host with port 10943 for `DURPDEPLOY_AGENT_SERVER_URL`.
+fragment. Its hostname is placed in the self-signed certificate SAN. Pairing
+persists the direct listener URL for the agent; operators do not enter it on
+the agent host.
 
 On a systemd server, put those variables in the root-owned server environment
 file referenced by the unit, for example:
@@ -91,7 +84,7 @@ sudo systemctl status durpdeploy --no-pager
 The server unit already permits writes below `/var/lib/durpdeploy`. Keep the
 identity directory owned by `durpdeploy`, mode `0700` or stricter, and do not
 copy its private key to an agent. Check the listener and server logs before
-enrolling:
+pairing:
 
 ```bash
 sudo journalctl -u durpdeploy -n 100 --no-pager
@@ -104,89 +97,53 @@ listener port to the required agent network. The stock Compose files publish
 only Caddy's 80 and 443, so port 10943 is intentionally not exposed by
 default. Do not put the server identity directory in the agent service.
 
-Retrieve the server fingerprint from the server identity certificate through a
-trusted administrative path. Do not retrieve it from the agent connection,
-disable verification, or accept it on first use:
-
-```bash
-sudo openssl x509 -in /var/lib/durpdeploy/agent-identity/identity.crt \
-  -outform DER | sha256sum
-```
-
-The result is 64 lowercase hexadecimal characters. Compare it out of band,
-then place that exact value in the agent configuration. The server UI displays
-agent fingerprints after enrollment, but the initial server fingerprint must
-be obtained from the server identity file or another trusted server-side
-administrative channel.
-
-## Admin UI enrollment workflow
+## Admin UI pairing workflow
 
 Use an administrator browser session at the Caddy URL. The agent pages are
 admin-only.
 
-1. Open **Admin, Agent pools**, choose **New pool**, enter a name, and leave the
-   pool enabled. A disabled pool cannot be selected by an environment policy.
-2. Open **Admin, Agents**, choose **New agent**, and enter the stable Agent ID,
+1. Open **Admin, Agents**, choose **New agent**, and enter the stable Agent ID,
    display name, and optional agent version. The ID must be unique.
-3. Open the new agent's details. Add its membership to the intended pool from
-   the pool details page. Add any tags from the agent details page, using exact
-   `key=value` pairs such as `region=<region>,role=<role>`. Keys are lowercase
-   letters, digits, underscore, dot, or hyphen. Values are case-sensitive.
-4. Open the agent's **Enroll** page and choose **Generate enrollment token** only
-   when the agent is ready. The token is displayed once, expires after 15
-   minutes, and cannot be retrieved later. Copy it directly into a protected
-   environment file. Never put it in source control, tickets, chat, shell
-   history, or logs.
-5. Edit the target environment. Set execution mode to **remote**, select the
-   enabled pool, and enter the required agent tags. An empty selector means any
-   member of that pool. The server canonicalizes tag order and rejects duplicate
-   keys or malformed pairs.
-6. Save the environment, then verify the agent is **active** and has a recent
-   heartbeat before creating a deployment.
+2. Start the local agent listener, then open the agent's pairing page only when
+the operator can complete the ceremony. Enter the short-lived, one-time pairing code,
+   compare the displayed fingerprint through a trusted channel, and confirm.
+   The code is single-use and cannot be retrieved later. Never put it in source
+   control, tickets, chat, shell history, or logs.
+3. Assign an environment to the paired active agent from its details page, then
+   verify its heartbeat before creating a deployment.
 
-The server owns pool membership and tags. An agent cannot select its own pool,
-change its tags, or bypass an environment policy. A remote environment with no
-matching agent remains waiting. It never falls back to local execution.
+Each remote deployment is assigned to exactly one paired agent. It never falls back to local execution.
 
-## Agent variables
+## Agent start and pairing
 
-The agent reads exactly these environment variables:
+Start an unpaired agent with only local inputs:
 
 ```dotenv
-DURPDEPLOY_AGENT_SERVER_URL=https://<agent-control-host>:10943
-DURPDEPLOY_AGENT_SERVER_FINGERPRINT=<64-lowercase-hex-sha256-fingerprint>
 DURPDEPLOY_AGENT_STATE_DIR=/var/lib/durpdeploy-agent
-DURPDEPLOY_AGENT_ENROLLMENT_TOKEN=<one-time-enrollment-token>
-DURPDEPLOY_AGENT_ID=<stable-agent-id>
-DURPDEPLOY_AGENT_NAME=<agent-name>
+DURPDEPLOY_AGENT_LISTEN_ADDR=0.0.0.0:10943
 DURPDEPLOY_AGENT_VERSION=<agent-version>
 ```
 
-The protocol is fixed by the binary as `agent/1`; there is no protocol variable.
-`DURPDEPLOY_AGENT_SERVER_URL` must be an HTTPS origin and may include port
-10943, but no path, query, or fragment. The fingerprint must be the exact
-lowercase SHA-256 value. The ID and name must match the admin record, and the
-version is sent in heartbeats and enrollment metadata.
+`DURPDEPLOY_AGENT_STATE_DIR` defaults to the platform configuration directory,
+but production services set it explicitly. `DURPDEPLOY_AGENT_LISTEN_ADDR` is
+needed only while the local pairing listener is open. `DURPDEPLOY_AGENT_VERSION`
+is sent in heartbeats after pairing. The protocol is fixed by the binary as
+`agent/1`; there is no protocol variable.
 
-### First enrollment versus restart
+The first run prints a short-lived pairing code and agent fingerprint. Enter
+those values in the authenticated admin pairing flow, compare the displayed
+fingerprint, and confirm before the code expires. Do not put the pairing code,
+fingerprint, endpoint, or private key in documentation, tickets, shell history,
+or logs. Pairing persists the agent identity, pull URL, server pins, and agent
+ID in the private state directory.
 
-On first enrollment, the agent creates `identity.crt` and `identity.key` in
-the state directory, writes `server-pins.json` mode `0600`, and posts the
-enrollment request with the one-time token. The server stores only the token
-hash and activates the pending agent after matching the presented certificate.
-
-The current agent binary requires `DURPDEPLOY_AGENT_ENROLLMENT_TOKEN` at every
-startup and calls the enrollment endpoint at every startup. The token is
-single-use, so a consumed token cannot be reused for an ordinary restart. Do
-not document or assume a reusable token or an enrollment skip flag. If a
-restart is needed after the token was consumed, use the recovery procedure
-below to revoke and re-enroll the agent, then start it with the new token.
-
-After successful enrollment, normal work is outbound polling, heartbeats, log
-uploads, and result or cancellation acknowledgements. The agent stores no
-server secret or deployment payload at rest. A current claim marker contains
-only the deployment ID and a SHA-256 hash of the claim token and is removed
-after the claim completes.
+After pairing, restart with `DURPDEPLOY_AGENT_STATE_DIR` and
+`DURPDEPLOY_AGENT_VERSION`; do not supply a server URL, certificate,
+fingerprint, token, or agent ID manually. Normal work is outbound polling,
+heartbeats, log uploads, and result or cancellation acknowledgements. The agent
+stores no server secret or deployment payload at rest. A current claim marker
+contains only the deployment ID and a SHA-256 hash of the claim token and is
+removed after the claim completes.
 
 ## Direct binary installation
 
@@ -208,8 +165,8 @@ sudo install -d -o durpdeploy-agent -g durpdeploy-agent -m 0700 \
 sudo install -m 0600 /tmp/durpdeploy-agent.env /etc/durpdeploy-agent.env
 ```
 
-For a first enrollment, a foreground run can use a protected environment file
-owned by the agent user. Keep the token out of the command line:
+For first pairing, a foreground run can use a protected environment file owned
+by the agent user:
 
 ```bash
 sudo install -o durpdeploy-agent -g durpdeploy-agent -m 0600 \
@@ -229,15 +186,11 @@ path. It is not a server sidecar and is not a production placement
 recommendation. Production agents should run remotely on the host where the
 deployment commands belong.
 
-Create `compose.agent.env` with the same variables, use mode `0600`, and do not
-include a credential-shaped literal:
+Create `compose.agent.env` with the same local variables, use mode `0600`, and
+do not include a credential-shaped literal:
 
 ```dotenv
-DURPDEPLOY_AGENT_SERVER_URL=https://<agent-control-host>:10943
-DURPDEPLOY_AGENT_SERVER_FINGERPRINT=<64-lowercase-hex-sha256-fingerprint>
-DURPDEPLOY_AGENT_ENROLLMENT_TOKEN=<one-time-enrollment-token>
-DURPDEPLOY_AGENT_ID=<stable-agent-id>
-DURPDEPLOY_AGENT_NAME=<agent-name>
+DURPDEPLOY_AGENT_LISTEN_ADDR=0.0.0.0:10943
 DURPDEPLOY_AGENT_VERSION=<agent-version>
 ```
 
@@ -298,9 +251,8 @@ sudo systemctl restart durpdeploy-agent
 sudo systemctl stop durpdeploy-agent
 ```
 
-Because the current binary enrolls at every startup, use a freshly issued
-enrollment token before a restart that follows a completed enrollment. See
-revocation and re-enrollment below.
+After a successful pairing, keep the state directory across an ordinary restart.
+The agent resumes its pinned outbound connection without manual server settings.
 
 ## Verify before deploying
 
@@ -309,10 +261,9 @@ sudo systemctl is-active durpdeploy-agent
 sudo journalctl -u durpdeploy-agent -n 50 --no-pager
 ```
 
-In the UI, confirm the agent is active, its fingerprint is the expected one,
-its pool membership and tags are correct, and its heartbeat is current. Start a
-small non-production deployment first. Watch the deployment routing state. A
-remote deployment should show its pool and agent, not local execution.
+In the UI, confirm the agent is active and its heartbeat is current. Start a
+small non-production deployment first. A remote deployment should show its
+assigned agent, not local execution.
 
 ## Troubleshooting
 
@@ -328,29 +279,28 @@ when its behavior does not match the checkout.
 
 ### Wrong fingerprint
 
-The agent rejects an unpinned or changed certificate. Recalculate the value
-from the server's `identity.crt`, compare it through a trusted channel, and
-correct `DURPDEPLOY_AGENT_SERVER_FINGERPRINT`. Do not use trust-all TLS or
-replace the value with a fingerprint copied from an untrusted connection.
+The agent rejects an unpinned or changed certificate. For an unexpected change,
+stop the agent and investigate the server identity through a trusted channel;
+then follow the controlled re-pair or planned rotation procedure below. Do not
+use trust-all TLS or accept a fingerprint copied from an untrusted connection.
 
-### Expired or reused enrollment token
+### Expired or reused pairing code
 
-Tokens expire after 15 minutes and are consumed once. Generate a new token from
-the agent's **Enroll** page and update the protected env file. For an already
-active agent, revoke and re-enroll it first.
+Pairing codes expire after 15 minutes and are consumed once. Restart the
+unpaired local listener to obtain a fresh code. For an already active agent,
+revoke and re-pair it first.
 
 ### No match
 
-Check that the pool is enabled, the agent is a member, tag keys and values match
-exactly, and the environment policy is remote. A missing tag is not a wildcard.
-The deployment remains waiting until a matching active agent polls.
+Check that the environment is assigned to this paired active agent. The
+deployment remains waiting until that agent polls.
 
 ### Revoked agent
 
 Revocation blocks the old identity. Stop the old process, confirm the agent is
-revoked in **Admin, Agents**, issue a new enrollment token with **Re-enroll**,
-and enroll the replacement using a controlled state directory. Do not restore
-the old private key onto an unrelated host.
+revoked in **Admin, Agents**, use **Re-pair**, and pair the replacement using
+a controlled state directory. Do not restore the old private key onto an
+unrelated host.
 
 ### Lost agent
 
@@ -366,16 +316,16 @@ If the 30-second acknowledgement deadline expires, routing becomes
 logs, and create a new deployment only after confirming what happened. Do not
 retry the original deployment or assume cancellation succeeded.
 
-## Revocation, re-enrollment, and fingerprint rotation
+## Revocation, re-pairing, and fingerprint rotation
 
 For a lost or compromised host:
 
 1. Stop the agent service and isolate the host.
-2. In **Admin, Agents**, revoke the agent and remove it from its pool.
+2. In **Admin, Agents**, revoke the agent.
 3. Review redacted agent events, deployment history, and the audit log.
 4. Prepare a replacement host with a new private state directory.
-5. Use **Re-enroll** on the revoked agent, generate a fresh one-time token, and
-   enroll the replacement. Update only the replacement environment file.
+5. Use **Re-pair** on the revoked agent and pair the replacement. Update only
+   the replacement local listener configuration.
 
 For planned server certificate rotation, keep the current server identity and
 fingerprint working first. The server can advertise the old and pending pins
@@ -390,7 +340,7 @@ the state file by guesswork.
 
 Upgrade the server and agents from the same repository revision when possible.
 For an agent, build a new `durpdeploy-agent`, install it over the binary, and
-restart through the normal controlled enrollment procedure. Preserve the state
+restart through the normal controlled pairing procedure. Preserve the state
 directory across a compatible upgrade. If rollback is required, stop the
 service, install the previous binary, and restore the matching known-good
 configuration. Do not delete pins or identity files during an ordinary binary
@@ -398,7 +348,7 @@ rollback.
 
 Back up the server SQLite database and the matching server encryption key as a
 pair. Litestream or SQLite backup procedures cover server database state. Back
-up an agent state directory only to preserve that exact enrolled identity. It
+up an agent state directory only to preserve that exact paired identity. It
 is not a database, and restoring it to another host transfers the identity.
 
 ## Safety rules

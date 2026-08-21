@@ -1,6 +1,9 @@
 package agentproto
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"time"
+)
 
 type AgentID string
 type AgentVersion string
@@ -18,15 +21,35 @@ func (e ProtocolEnvelope) protocolVersion() ProtocolVersion {
 	return e.Protocol
 }
 
-type EnrollmentRequest struct {
+// BootstrapResponse is the temporary listener's versioned pairing offer.
+// PairingCode is intentionally only available through JSON encoding for the
+// short-lived bootstrap transport.
+type BootstrapResponse struct {
 	ProtocolEnvelope
-	AgentID        AgentID        `json:"agent_id"`
-	Name           string         `json:"name"`
-	AgentVersion   AgentVersion   `json:"agent_version"`
-	CertificatePEM CertificatePEM `json:"certificate_pem"`
+	PairingCode PairingCode `json:"pairing_code"`
+	AgentPin    SHA256Pin   `json:"agent_pin"`
+	ExpiresAt   time.Time   `json:"expires_at"`
 }
 
-func (EnrollmentRequest) agentRequest() {}
+// PairRequest carries the server's mutually pinned pull endpoint to the agent.
+type PairRequest struct {
+	ProtocolEnvelope
+	PairingCode  PairingCode  `json:"pairing_code"`
+	ServerPin    SHA256Pin    `json:"server_pin"`
+	PullEndpoint PullEndpoint `json:"pull_endpoint"`
+	AgentID      string       `json:"agent_id"`
+}
+
+func (PairRequest) agentRequest() {}
+
+type PairCommitRequest = PairRequest
+
+// PairResponse confirms the agent identity that the server observed during
+// temporary bootstrap pairing.
+type PairResponse struct {
+	ProtocolEnvelope
+	AgentPin SHA256Pin `json:"agent_pin"`
+}
 
 type PollRequest struct {
 	ProtocolEnvelope

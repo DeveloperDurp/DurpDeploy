@@ -6,33 +6,28 @@ import (
 )
 
 var remoteAgentTableNames = []string{
-	"agent_pools",
 	"agents",
-	"agent_pool_memberships",
-	"agent_tags",
-	"environment_agent_policies",
-	"agent_enrollment_tokens",
 	"deployment_payloads",
 	"deployment_dispatches",
 	"agent_events",
+	"agent_pairings",
+	"environment_agent_assignments",
 }
 
 var remoteAgentIndexNames = []string{
 	"idx_deployment_logs_deployment_sequence",
-	"idx_agent_pools_name",
 	"idx_agents_certificate_fingerprint",
 	"idx_agents_status",
 	"idx_agents_last_heartbeat_at",
-	"idx_agent_pool_memberships_agent_id",
-	"idx_agent_tags_agent_id",
-	"idx_environment_agent_policies_pool_id",
-	"idx_agent_enrollment_tokens_agent_id",
-	"idx_agent_enrollment_tokens_expires_at",
 	"idx_deployment_dispatches_agent_state",
 	"idx_deployment_dispatches_claim_token_hash",
 	"idx_deployment_dispatches_state_claim_expires",
 	"idx_agent_events_agent_created_at",
 	"idx_agent_events_deployment_created_at",
+	"idx_agent_pairings_state_expires_at",
+	"idx_environment_agent_assignments_agent_id",
+	"idx_deployment_dispatches_assigned_agent_state",
+	"idx_deployment_dispatches_active_agent",
 }
 
 func seedRemoteAgentDeployment(t *testing.T, conn *sql.DB) {

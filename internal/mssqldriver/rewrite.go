@@ -21,14 +21,8 @@ var (
 		"mssqldriver: unsupported conflict target",
 	)
 
-	limitRe = regexp.MustCompile(
-		`(?is)\s+LIMIT\s+(@p\d+|\d+)(?:\s+OFFSET\s+(@p\d+|\d+))?(\s*(?:\)\s*)?;?\s*)$`,
-	)
 	conflictRe = regexp.MustCompile(
 		`(?is)^(.*?)(INSERT INTO project_members \(project_id, user_id, role\) VALUES \((@p\d+), (@p\d+), (@p\d+)\))\s+ON CONFLICT \(project_id, user_id\) DO UPDATE SET role = excluded\.role(\s*;?)$`,
-	)
-	environmentPolicyConflictRe = regexp.MustCompile(
-		`(?is)^(.*?)(INSERT INTO environment_agent_policies \(environment_id, pool_id, selector\)\s+VALUES \((@p\d+), (@p\d+), (@p\d+)\))\s+ON CONFLICT \(environment_id\) DO UPDATE SET\s+pool_id = excluded\.pool_id,\s+selector = excluded\.selector(\s*;?)$`,
 	)
 	projectMemberExistsRe = regexp.MustCompile(
 		`(?is)^(\s*(?:--[^\r\n]*(?:\r?\n|$))?\s*)SELECT\s+EXISTS\s*\(\s*(SELECT\s+1\s+FROM\s+project_members\s+WHERE\s+project_id\s*=\s*(@p\d+)\s+AND\s+user_id\s*=\s*(@p\d+))\s*\)(\s*;?\s*)$`,
@@ -68,7 +62,6 @@ func RewriteSQL(query string) (string, error) {
 	query = rewriteProjectMemberExists(query)
 	query = rewriteLatestDeploymentDerivedTable(query)
 	query = rewriteDeploymentFilterIntegerCasts(query)
-	query = rewriteAgentClaimSelectors(query)
 	return rewriteLimit(query), nil
 }
 
@@ -239,10 +232,6 @@ func rewriteConflict(query string) (string, error) {
 	if match != nil {
 		return mergeProjectMembers(match), nil
 	}
-	match = environmentPolicyConflictRe.FindStringSubmatch(query)
-	if match != nil {
-		return mergeEnvironmentPolicy(match), nil
-	}
 	return "", fmt.Errorf("%w: unsupported target", ErrUnsupportedConflict)
 }
 
@@ -257,44 +246,4 @@ func mergeProjectMembers(match []string) string {
 		mergeSQL += ";"
 	}
 	return mergeSQL
-}
-
-func mergeEnvironmentPolicy(match []string) string {
-	mergeSQL := match[1] + "MERGE environment_agent_policies WITH (HOLDLOCK) AS target\n" +
-		"USING (VALUES (" + match[3] + ", " + match[4] + ", " + match[5] + ")) AS source (environment_id, pool_id, selector)\n" +
-		"ON target.environment_id = source.environment_id\n" +
-		"WHEN MATCHED THEN UPDATE SET pool_id = source.pool_id, selector = source.selector\n" +
-		"WHEN NOT MATCHED THEN INSERT (environment_id, pool_id, selector)\n" +
-		"VALUES (source.environment_id, source.pool_id, source.selector);"
-	if !strings.HasSuffix(mergeSQL, ";") {
-		mergeSQL += ";"
-	}
-	return mergeSQL
-}
-
-func rewriteLimit(query string) string {
-	match := limitRe.FindStringSubmatchIndex(query)
-	if match == nil {
-		return query
-	}
-	limit := query[match[2]:match[3]]
-	offset := ""
-	if match[4] >= 0 {
-		offset = query[match[4]:match[5]]
-	}
-	suffix := query[match[6]:match[7]]
-	if offset != "" {
-		limitStart := strings.Index(
-			strings.ToUpper(query[match[0]:match[1]]),
-			"LIMIT",
-		)
-		separator := query[match[0] : match[0]+limitStart]
-		return query[:match[0]] + separator + "OFFSET " + offset + " ROWS FETCH NEXT " + limit + " ROWS ONLY" + suffix
-	}
-	selectIndex := keywordIndexOutsideQuotes(query[:match[0]], "SELECT")
-	if selectIndex < 0 {
-		return query
-	}
-	insertAt := selectIndex + len("SELECT")
-	return query[:insertAt] + " TOP (" + limit + ")" + query[insertAt:match[0]] + suffix
 }

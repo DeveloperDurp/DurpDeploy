@@ -119,15 +119,6 @@ func TestDecodeRequest_rejects_omitted_protocol_for_every_request(
 		decode func() error
 	}{
 		{
-			name: "enrollment",
-			decode: func() error {
-				_, err := DecodeRequest[EnrollmentRequest](
-					strings.NewReader(`{}`),
-				)
-				return err
-			},
-		},
-		{
 			name: "poll",
 			decode: func() error {
 				_, err := DecodeRequest[PollRequest](strings.NewReader(`{}`))

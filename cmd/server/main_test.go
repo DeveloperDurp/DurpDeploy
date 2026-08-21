@@ -569,12 +569,6 @@ func TestStartupRecovery_RoutesOnlyEligiblePreStartDeployments(t *testing.T) {
 	expiredClaim := createPending()
 	started := createPending()
 	lost := createPending()
-	if _, err := repo.DB.ExecContext(
-		ctx,
-		"INSERT INTO agent_pools (name) VALUES ('recovery-pool')",
-	); err != nil {
-		t.Fatalf("create agent pool: %v", err)
-	}
 	if _, err := repo.DB.ExecContext(ctx, `
 		INSERT INTO agents (id, name, status, certificate_pem, certificate_fingerprint)
 		VALUES ('agent-1', 'agent', 'active', 'certificate', ?)`, strings.Repeat("a", 64)); err != nil {
@@ -589,18 +583,22 @@ func TestStartupRecovery_RoutesOnlyEligiblePreStartDeployments(t *testing.T) {
 		{started.ID, "started"},
 		{lost.ID, "lost"},
 	} {
-		if _, err := repo.Queries.CreateDeploymentDispatch(
+		if _, err := repo.Queries.CreateDirectDeploymentDispatch(
 			ctx,
-			db.CreateDeploymentDispatchParams{
-				DeploymentID: route.deploymentID,
-				Mode:         "remote",
-				PoolID:       sql.NullInt64{Int64: 1, Valid: true},
-				Selector:     "",
-				State:        route.state,
-				Reason:       sql.NullString{},
+			db.CreateDirectDeploymentDispatchParams{
+				DeploymentID:    route.deploymentID,
+				AssignedAgentID: sql.NullString{String: "agent-1", Valid: true},
 			},
 		); err != nil {
 			t.Fatalf("create %s route: %v", route.state, err)
+		}
+		if _, err := repo.DB.ExecContext(
+			ctx,
+			"UPDATE deployment_dispatches SET state = ? WHERE deployment_id = ?",
+			route.state,
+			route.deploymentID,
+		); err != nil {
+			t.Fatalf("set %s route state: %v", route.state, err)
 		}
 	}
 	if _, err := repo.DB.ExecContext(ctx, `

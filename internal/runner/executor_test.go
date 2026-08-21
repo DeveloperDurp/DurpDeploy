@@ -3,6 +3,7 @@ package runner
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -188,5 +189,31 @@ func TestExecutor_Fails_when_log_persistence_fails(t *testing.T) {
 	// Then
 	if !errors.Is(err, persistenceErr) {
 		t.Fatalf("execute error = %v, want persistence error", err)
+	}
+}
+
+func TestExecutor_ExecuteSteps_stops_after_first_failed_step(t *testing.T) {
+	// Given
+	marker := filepath.Join(t.TempDir(), "second-step-ran")
+	executor := NewExecutor()
+
+	// When
+	err := executor.ExecuteSteps(context.Background(), ExecutionConfig{
+		DeploymentID: 1,
+		Steps: []Step{
+			{Name: "fail", ScriptBody: "exit 1"},
+			{
+				Name:       "must not run",
+				ScriptBody: "touch " + marker,
+			},
+		},
+	})
+
+	// Then
+	if err == nil {
+		t.Fatal("execute steps succeeded, want failure")
+	}
+	if _, statErr := os.Stat(marker); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("second step marker error = %v, want not exist", statErr)
 	}
 }

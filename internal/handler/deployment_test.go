@@ -15,9 +15,11 @@ import (
 	"time"
 
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/dispatch"
 	"durpdeploy/internal/handler"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/runner"
+	"durpdeploy/internal/secret"
 	"durpdeploy/internal/server"
 
 	"github.com/robfig/cron/v3"
@@ -44,12 +46,23 @@ func newHarness(t *testing.T) *testHarness {
 	repo := repository.New(conn)
 	broker := runner.NewLogBroker()
 	rnr := runner.New(repo, broker)
+	box, err := secret.NewBox(make([]byte, 32))
+	if err != nil {
+		t.Fatalf("new secret box: %v", err)
+	}
+	repo.SetSecretBox(box)
 	parser := cron.NewParser(
 		cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow,
 	)
 	authHandler := handler.NewAuthHandler(repo)
 	srv := httptest.NewServer(
-		server.NewRouter(repo, rnr, nil, parser, authHandler),
+		server.NewRouter(
+			repo,
+			rnr,
+			dispatch.New(repo, box, rnr),
+			parser,
+			authHandler,
+		),
 	)
 	t.Cleanup(srv.Close)
 

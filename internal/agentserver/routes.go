@@ -9,7 +9,6 @@ import (
 // Handler returns the dedicated agent router.
 func (server *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc(agentproto.EnrollmentPath, server.enroll)
 	mux.Handle(
 		agentproto.PollPath,
 		server.authenticated(http.HandlerFunc(server.poll)),

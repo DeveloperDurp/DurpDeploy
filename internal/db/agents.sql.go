@@ -10,7 +10,7 @@ import (
 	"database/sql"
 )
 
-const activatePendingAgent = `-- name: ActivatePendingAgent :one
+const activatePairedAgent = `-- name: ActivatePairedAgent :one
 UPDATE agents
 SET status = 'active',
     certificate_pem = ?,
@@ -24,7 +24,7 @@ WHERE id = ?
 RETURNING id, status, certificate_fingerprint, agent_version, enrolled_at
 `
 
-type ActivatePendingAgentParams struct {
+type ActivatePairedAgentParams struct {
 	CertificatePem         sql.NullString `json:"certificate_pem"`
 	CertificateFingerprint sql.NullString `json:"certificate_fingerprint"`
 	AgentVersion           sql.NullString `json:"agent_version"`
@@ -34,7 +34,7 @@ type ActivatePendingAgentParams struct {
 	ID                     string         `json:"id"`
 }
 
-type ActivatePendingAgentRow struct {
+type ActivatePairedAgentRow struct {
 	ID                     string         `json:"id"`
 	Status                 string         `json:"status"`
 	CertificateFingerprint sql.NullString `json:"certificate_fingerprint"`
@@ -42,8 +42,8 @@ type ActivatePendingAgentRow struct {
 	EnrolledAt             sql.NullInt64  `json:"enrolled_at"`
 }
 
-func (q *Queries) ActivatePendingAgent(ctx context.Context, arg ActivatePendingAgentParams) (ActivatePendingAgentRow, error) {
-	row := q.db.QueryRowContext(ctx, activatePendingAgent,
+func (q *Queries) ActivatePairedAgent(ctx context.Context, arg ActivatePairedAgentParams) (ActivatePairedAgentRow, error) {
+	row := q.db.QueryRowContext(ctx, activatePairedAgent,
 		arg.CertificatePem,
 		arg.CertificateFingerprint,
 		arg.AgentVersion,
@@ -52,7 +52,7 @@ func (q *Queries) ActivatePendingAgent(ctx context.Context, arg ActivatePendingA
 		arg.UpdatedAt,
 		arg.ID,
 	)
-	var i ActivatePendingAgentRow
+	var i ActivatePairedAgentRow
 	err := row.Scan(
 		&i.ID,
 		&i.Status,
@@ -61,65 +61,6 @@ func (q *Queries) ActivatePendingAgent(ctx context.Context, arg ActivatePendingA
 		&i.EnrolledAt,
 	)
 	return i, err
-}
-
-const consumeAgentEnrollmentToken = `-- name: ConsumeAgentEnrollmentToken :execrows
-UPDATE agent_enrollment_tokens
-SET used_at = ?
-WHERE token_hash = ?
-  AND agent_id = ?
-  AND expires_at > ?
-  AND used_at IS NULL
-  AND revoked_at IS NULL
-  AND EXISTS (
-      SELECT 1
-      FROM agents
-      WHERE agents.id = agent_enrollment_tokens.agent_id
-        AND agents.status = 'pending'
-  )
-`
-
-type ConsumeAgentEnrollmentTokenParams struct {
-	UsedAt    sql.NullInt64 `json:"used_at"`
-	TokenHash []byte        `json:"token_hash"`
-	AgentID   string        `json:"agent_id"`
-	ExpiresAt int64         `json:"expires_at"`
-}
-
-func (q *Queries) ConsumeAgentEnrollmentToken(ctx context.Context, arg ConsumeAgentEnrollmentTokenParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, consumeAgentEnrollmentToken,
-		arg.UsedAt,
-		arg.TokenHash,
-		arg.AgentID,
-		arg.ExpiresAt,
-	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
-}
-
-const createAgentEnrollmentToken = `-- name: CreateAgentEnrollmentToken :exec
-INSERT INTO agent_enrollment_tokens (
-    token_hash, token_prefix, agent_id, expires_at
-) VALUES (?, ?, ?, ?)
-`
-
-type CreateAgentEnrollmentTokenParams struct {
-	TokenHash   []byte `json:"token_hash"`
-	TokenPrefix string `json:"token_prefix"`
-	AgentID     string `json:"agent_id"`
-	ExpiresAt   int64  `json:"expires_at"`
-}
-
-func (q *Queries) CreateAgentEnrollmentToken(ctx context.Context, arg CreateAgentEnrollmentTokenParams) error {
-	_, err := q.db.ExecContext(ctx, createAgentEnrollmentToken,
-		arg.TokenHash,
-		arg.TokenPrefix,
-		arg.AgentID,
-		arg.ExpiresAt,
-	)
-	return err
 }
 
 const createPendingAgent = `-- name: CreatePendingAgent :one
@@ -159,13 +100,6 @@ const deletePendingUnreferencedAgent = `-- name: DeletePendingUnreferencedAgent 
 DELETE FROM agents
 WHERE id = ?
   AND status = 'pending'
-  AND NOT EXISTS (
-      SELECT 1 FROM agent_pool_memberships WHERE agent_id = agents.id
-  )
-  AND NOT EXISTS (SELECT 1 FROM agent_tags WHERE agent_id = agents.id)
-  AND NOT EXISTS (
-      SELECT 1 FROM agent_enrollment_tokens WHERE agent_id = agents.id
-  )
   AND NOT EXISTS (SELECT 1 FROM agent_events WHERE agent_id = agents.id)
   AND NOT EXISTS (
       SELECT 1 FROM deployment_dispatches WHERE agent_id = agents.id
@@ -342,7 +276,7 @@ func (q *Queries) ListRedactedAgentEventsByAgent(ctx context.Context, agentID sq
 	return items, nil
 }
 
-const reenrollAgent = `-- name: ReenrollAgent :execrows
+const rePairAgent = `-- name: RePairAgent :execrows
 UPDATE agents
 SET status = 'pending',
     certificate_pem = NULL,
@@ -355,13 +289,13 @@ WHERE id = ?
   AND status = 'revoked'
 `
 
-type ReenrollAgentParams struct {
+type RePairAgentParams struct {
 	UpdatedAt int64  `json:"updated_at"`
 	ID        string `json:"id"`
 }
 
-func (q *Queries) ReenrollAgent(ctx context.Context, arg ReenrollAgentParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, reenrollAgent, arg.UpdatedAt, arg.ID)
+func (q *Queries) RePairAgent(ctx context.Context, arg RePairAgentParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, rePairAgent, arg.UpdatedAt, arg.ID)
 	if err != nil {
 		return 0, err
 	}
@@ -389,24 +323,6 @@ func (q *Queries) RevokeAgent(ctx context.Context, arg RevokeAgentParams) (int64
 		return 0, err
 	}
 	return result.RowsAffected()
-}
-
-const revokeAgentEnrollmentTokens = `-- name: RevokeAgentEnrollmentTokens :exec
-UPDATE agent_enrollment_tokens
-SET revoked_at = ?
-WHERE agent_id = ?
-  AND used_at IS NULL
-  AND revoked_at IS NULL
-`
-
-type RevokeAgentEnrollmentTokensParams struct {
-	RevokedAt sql.NullInt64 `json:"revoked_at"`
-	AgentID   string        `json:"agent_id"`
-}
-
-func (q *Queries) RevokeAgentEnrollmentTokens(ctx context.Context, arg RevokeAgentEnrollmentTokensParams) error {
-	_, err := q.db.ExecContext(ctx, revokeAgentEnrollmentTokens, arg.RevokedAt, arg.AgentID)
-	return err
 }
 
 const touchAgentHeartbeat = `-- name: TouchAgentHeartbeat :execrows

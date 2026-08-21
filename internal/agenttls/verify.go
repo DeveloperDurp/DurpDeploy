@@ -72,6 +72,81 @@ func NewClientConfig(
 	}, nil
 }
 
+// NewBootstrapClientConfig validates a temporary self-signed peer by hostname
+// without accepting a trust anchor. The caller must compare and pin the
+// returned fingerprint before durable pairing.
+func NewBootstrapClientConfig(serverURL string) (*tls.Config, error) {
+	hostname, err := parseHTTPSURL(serverURL)
+	if err != nil {
+		return nil, err
+	}
+	return &tls.Config{
+		MinVersion:         tls.VersionTLS13,
+		ServerName:         hostname,
+		InsecureSkipVerify: true, // VerifyConnection validates the complete bootstrap peer contract.
+		VerifyConnection: func(connection tls.ConnectionState) error {
+			if len(connection.PeerCertificates) != 1 {
+				return fmt.Errorf("peer must provide exactly one certificate")
+			}
+			if err := verifySelfSignedCertificate(
+				connection.PeerCertificates[0],
+				hostname,
+				time.Now(),
+			); err != nil {
+				return fmt.Errorf("verify bootstrap peer certificate: %w", err)
+			}
+			return nil
+		},
+	}, nil
+}
+
+// NewServerConfig returns a TLS configuration that accepts only one pinned client.
+func NewServerConfig(
+	identity Identity,
+	peerHostname string,
+	peerPin Fingerprint,
+) (*tls.Config, error) {
+	if len(identity.Certificate.Certificate) != 1 {
+		return nil, fmt.Errorf(
+			"server identity must contain exactly one certificate",
+		)
+	}
+	certificate, err := x509.ParseCertificate(
+		identity.Certificate.Certificate[0],
+	)
+	if err != nil {
+		return nil, fmt.Errorf("parse server identity certificate: %w", err)
+	}
+	if err := verifySelfSignedIdentity(certificate, time.Now()); err != nil {
+		return nil, fmt.Errorf("validate server identity certificate: %w", err)
+	}
+	return &tls.Config{
+		MinVersion:   tls.VersionTLS13,
+		Certificates: []tls.Certificate{identity.Certificate},
+		ClientAuth:   tls.RequireAnyClientCert,
+		VerifyPeerCertificate: func(rawCertificates [][]byte, _ [][]*x509.Certificate) error {
+			if len(rawCertificates) != 1 {
+				return fmt.Errorf("peer must provide exactly one certificate")
+			}
+			peer, err := x509.ParseCertificate(rawCertificates[0])
+			if err != nil {
+				return fmt.Errorf("parse peer certificate: %w", err)
+			}
+			if !matchesPin(FingerprintOf(peer.Raw), []Fingerprint{peerPin}) {
+				return fmt.Errorf("peer certificate fingerprint is not pinned")
+			}
+			if err := verifySelfSignedCertificate(
+				peer,
+				peerHostname,
+				time.Now(),
+			); err != nil {
+				return fmt.Errorf("verify peer certificate: %w", err)
+			}
+			return nil
+		},
+	}, nil
+}
+
 // PromotePendingPin removes the old pin only after a verified pending-pin connection.
 func PromotePendingPin(
 	pins []Fingerprint,
@@ -104,6 +179,19 @@ func verifySelfSignedCertificate(
 	hostname string,
 	now time.Time,
 ) error {
+	if err := verifySelfSignedIdentity(certificate, now); err != nil {
+		return err
+	}
+	if err := certificate.VerifyHostname(hostname); err != nil {
+		return fmt.Errorf("certificate hostname: %w", err)
+	}
+	return nil
+}
+
+func verifySelfSignedIdentity(
+	certificate *x509.Certificate,
+	now time.Time,
+) error {
 	if now.Before(certificate.NotBefore) || !now.Before(certificate.NotAfter) {
 		return fmt.Errorf("certificate is outside its validity window")
 	}
@@ -119,9 +207,6 @@ func verifySelfSignedCertificate(
 		certificate.Signature,
 	); err != nil {
 		return fmt.Errorf("certificate is not self-signed: %w", err)
-	}
-	if err := certificate.VerifyHostname(hostname); err != nil {
-		return fmt.Errorf("certificate hostname: %w", err)
 	}
 	return nil
 }

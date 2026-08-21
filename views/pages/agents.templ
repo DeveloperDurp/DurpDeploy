@@ -13,16 +13,16 @@ type AgentsView struct {
 
 type AgentDetailView struct {
 	Agent       db.Agent
-	Pools       []db.AgentPool
-	Tags        []db.ListAgentTagsByAgentRow
 	Events      []db.ListRedactedAgentEventsByAgentRow
+	AssignedEnvironments []db.Environment
+	AvailableEnvironments []db.Environment
+	Paired bool
 	CurrentPath string
 }
 
-type AgentEnrollmentView struct {
+type AgentPairingConfirmationView struct {
 	Agent       db.Agent
-	Token       string
-	ExpiresAt   int64
+	AgentPin    string
 	CurrentPath string
 }
 
@@ -63,10 +63,7 @@ templ AgentsPage(view AgentsView) {
 									<td class="whitespace-nowrap">
 										<a href={ templ.SafeURL("/admin/agents/" + agent.ID) } class="btn btn-ghost btn-xs">Details</a>
 										if CanWrite(ctx) {
-											if agent.Status == "pending" || agent.Status == "revoked" {
-												<a href={ templ.SafeURL("/admin/agents/" + agent.ID + "/enrollment") } class="btn btn-primary btn-xs">Enroll</a>
-											}
-											if agent.Status == "active" {
+										if agent.Status == "active" {
 												<form method="post" action={ templ.SafeURL("/admin/agents/" + agent.ID + "/disable") } class="inline"><button type="submit" class="btn btn-error btn-xs">Disable</button></form>
 											}
 										}
@@ -131,36 +128,39 @@ templ AgentDetailsPage(view AgentDetailView) {
 						</dl>
 					</div>
 				</div>
-				<div class="card bg-base-200 shadow">
-					<div class="card-body">
-						<h2 class="card-title">Pool membership</h2>
-						if len(view.Pools) == 0 {
-							<p class="text-sm opacity-70">This agent is not in a pool.</p>
-						} else {
-							<ul class="list-disc pl-5 text-sm">
-								for _, pool := range view.Pools {
-									<li>{ pool.Name }</li>
-								}
-							</ul>
-						}
-					</div>
-				</div>
 			</div>
-			<div class="card bg-base-200 shadow"><div class="card-body"><h2 class="card-title">Tags</h2>
-				if len(view.Tags) == 0 {
-					<p class="text-sm opacity-70">No tags configured.</p>
+			<div class="card bg-base-200 shadow"><div class="card-body"><h2 class="card-title">Direct assignments</h2><p class="text-sm opacity-70">Future deployments for an assigned environment go only to this paired agent.</p>
+				if len(view.AssignedEnvironments) == 0 {
+					<p class="text-sm opacity-70">No environments are assigned directly.</p>
 				} else {
-					<div class="flex flex-wrap gap-2">
-						for _, tag := range view.Tags {
-							<span class="badge badge-outline font-mono">{ tag.TagKey }={ tag.TagValue }</span>
+					<ul class="list-disc pl-5 text-sm">
+						for _, environment := range view.AssignedEnvironments {
+							<li>{ environment.Name }</li>
 						}
-					</div>
+					</ul>
 				}
-				if CanWrite(ctx) {
-					<form method="post" action={ templ.SafeURL("/admin/agents/" + view.Agent.ID + "/tags") } class="mt-4 flex flex-wrap items-end gap-2"><div class="form-control"><label class="label" for="agent-tag-key"><span class="label-text">Tag key</span></label><input id="agent-tag-key" type="text" name="key" class="input input-bordered input-sm" required/></div><div class="form-control"><label class="label" for="agent-tag-value"><span class="label-text">Tag value</span></label><input id="agent-tag-value" type="text" name="value" class="input input-bordered input-sm" required/></div><button type="submit" class="btn btn-primary btn-sm">Add tag</button></form>
+				if CanWrite(ctx) && view.Agent.Status == "active" && view.Paired && len(view.AvailableEnvironments) > 0 {
+					<form method="post" action={ templ.SafeURL("/admin/agents/" + view.Agent.ID + "/assignments") } class="mt-4 flex flex-wrap items-end gap-2">
+						<div class="form-control">
+							<label class="label" for="assigned-environment"><span class="label-text">Environment</span></label>
+							<select id="assigned-environment" name="environment_id" class="select select-bordered select-sm" required>
+								<option value="">Select environment</option>
+								for _, environment := range view.AvailableEnvironments {
+									<option value={ strconv.FormatInt(environment.ID, 10) }>{ environment.Name }</option>
+								}
+							</select>
+						</div>
+						<button type="submit" class="btn btn-primary btn-sm">Assign environment</button>
+					</form>
 				}
 			</div></div>
-			<div class="card bg-base-200 shadow"><div class="card-body"><h2 class="card-title">Events</h2><p class="text-sm opacity-70">Event details are redacted to avoid exposing enrollment secrets.</p>
+			if CanWrite(ctx) && view.Agent.Status == "revoked" {
+				<div class="card bg-base-200 shadow"><div class="card-body"><h2 class="card-title">Re-pair agent</h2><p class="text-sm opacity-70">The agent must reconnect through its temporary pairing listener before it can receive work again.</p><form method="post" action={ templ.SafeURL("/admin/agents/" + view.Agent.ID + "/re-pair") } class="mt-4"><button type="submit" class="btn btn-primary">Re-pair agent</button></form></div></div>
+			}
+			if CanWrite(ctx) && view.Agent.Status == "pending" {
+				<div class="card bg-base-200 shadow"><div class="card-body"><h2 class="card-title">Pair agent</h2><p class="text-sm opacity-70">Enter the endpoint and one-time code shown by the agent. You will confirm its fingerprint before pairing.</p><form method="post" action={ templ.SafeURL("/admin/agents/" + view.Agent.ID + "/pairings") } class="mt-2 space-y-4"><div class="form-control"><label class="label" for="agent-endpoint"><span class="label-text">Agent endpoint</span></label><input id="agent-endpoint" type="url" name="agent_endpoint" class="input input-bordered" placeholder="https://agent.example.test:10943" autocomplete="off" required/></div><div class="form-control"><label class="label" for="pairing-code"><span class="label-text">Pairing code</span></label><input id="pairing-code" type="password" name="pairing_code" class="input input-bordered font-mono" autocomplete="one-time-code" required/></div><button type="submit" class="btn btn-primary">Continue to fingerprint check</button></form></div></div>
+			}
+			<div class="card bg-base-200 shadow"><div class="card-body"><h2 class="card-title">Events</h2><p class="text-sm opacity-70">Event details are redacted to avoid exposing pairing secrets.</p>
 				if len(view.Events) == 0 {
 					<p class="text-sm opacity-70">No events recorded.</p>
 				} else {
@@ -175,26 +175,12 @@ templ AgentDetailsPage(view AgentDetailView) {
 	}
 }
 
-templ AgentEnrollmentPage(view AgentEnrollmentView) {
+templ AgentPairingConfirmationPage(view AgentPairingConfirmationView) {
 	if !CanWrite(ctx) {
-		@ViewerForbiddenMessage("Agent enrollment", "create", "an enrollment token", "/admin/agents", view.CurrentPath)
+		@ViewerForbiddenMessage("Agent pairing", "confirm", "an agent fingerprint", "/admin/agents", view.CurrentPath)
 	} else {
-		@layouts.Base("Agent enrollment", view.CurrentPath) {
-			<div class="max-w-2xl space-y-4">
-				<h1 class="text-3xl font-bold">Enroll { view.Agent.Name }</h1>
-				if view.Token == "" {
-					<div class="alert alert-warning" role="alert"><span>Generate an enrollment token only when the agent is ready. It is shown once and cannot be retrieved later.</span></div>
-					<div class="card bg-base-200 shadow"><div class="card-body"><form method="post" action={ templ.SafeURL("/admin/agents/" + view.Agent.ID + "/enrollment") }><button type="submit" class="btn btn-primary">Generate enrollment token</button></form></div></div>
-				} else {
-					<div class="alert alert-warning" role="alert"><span>Copy this enrollment token now. It is shown only once and cannot be retrieved later.</span></div>
-					<div class="card bg-base-200 shadow"><div class="card-body"><label class="label" for="enrollment-token"><span class="label-text">Enrollment token</span></label><div class="flex gap-2"><code id="enrollment-token" class="block flex-1 break-all rounded bg-base-300 p-2 font-mono select-all">{ view.Token }</code><button type="button" class="btn btn-ghost btn-sm" aria-label="Copy enrollment token" data-copy-value={ view.Token } onclick="navigator.clipboard.writeText(this.dataset.copyValue)">Copy</button></div>
-						if view.ExpiresAt > 0 {
-							<p class="mt-2 text-sm opacity-70">Expires { formatUnixTime(view.ExpiresAt) }.</p>
-						}
-						<div class="mt-4"><a href="/admin/agents" class="btn btn-primary btn-sm">Got it — don't show this again</a></div>
-					</div></div>
-				}
-			</div>
+		@layouts.Base("Confirm agent pairing", view.CurrentPath) {
+			<div class="max-w-2xl space-y-4"><h1 class="text-3xl font-bold">Confirm { view.Agent.Name }</h1><div class="alert alert-warning" role="alert"><span>Compare this fingerprint with the agent console, then type it exactly to create the trusted connection.</span></div><div class="card bg-base-200 shadow"><div class="card-body"><dl class="space-y-2 text-sm"><div><dt class="opacity-70">Agent fingerprint</dt><dd><code class="block break-all rounded bg-base-300 p-2 font-mono select-all">{ view.AgentPin }</code></dd></div></dl><form method="post" action={ templ.SafeURL("/admin/agents/" + view.Agent.ID + "/pairings/confirm") } class="mt-4 space-y-4"><div class="form-control"><label class="label" for="confirmed-agent-pin"><span class="label-text">Type the agent fingerprint to confirm</span></label><input id="confirmed-agent-pin" type="text" name="agent_pin" class="input input-bordered font-mono" autocomplete="off" required/></div><div class="flex gap-2"><button type="submit" class="btn btn-primary">Confirm pairing</button><a href={ templ.SafeURL("/admin/agents/" + view.Agent.ID) } class="btn btn-ghost">Cancel</a></div></form></div></div></div>
 		}
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/robfig/cron/v3"
 
+	"durpdeploy/internal/agentpairing"
 	"durpdeploy/internal/audit"
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/dispatch"
@@ -39,6 +40,44 @@ func NewRouter(
 	dispatcher *dispatch.Dispatcher,
 	parser cron.Parser,
 	authHandler *handler.AuthHandler,
+	oidcEnabled ...bool,
+) *chi.Mux {
+	return newRouter(
+		repo,
+		rnr,
+		dispatcher,
+		parser,
+		authHandler,
+		nil,
+		oidcEnabled...)
+}
+
+func NewRouterWithAgentPairer(
+	repo *repository.Repository,
+	rnr *runner.DeploymentRunner,
+	dispatcher *dispatch.Dispatcher,
+	parser cron.Parser,
+	authHandler *handler.AuthHandler,
+	pairer *agentpairing.Server,
+	oidcEnabled ...bool,
+) *chi.Mux {
+	return newRouter(
+		repo,
+		rnr,
+		dispatcher,
+		parser,
+		authHandler,
+		pairer,
+		oidcEnabled...)
+}
+
+func newRouter(
+	repo *repository.Repository,
+	rnr *runner.DeploymentRunner,
+	dispatcher *dispatch.Dispatcher,
+	parser cron.Parser,
+	authHandler *handler.AuthHandler,
+	pairer *agentpairing.Server,
 	oidcEnabled ...bool,
 ) *chi.Mux {
 	registerOIDC := len(oidcEnabled) > 0 && oidcEnabled[0]
@@ -345,18 +384,7 @@ func NewRouter(
 			ar.Get("/admin/tokens", webTokensH.AdminTokens)
 			ar.Post("/admin/tokens/{id}/revoke", webTokensH.AdminTokensRevoke)
 
-			poolsH := handler.NewPoolAdminHandler(repo)
-			ar.Get("/admin/pools", poolsH.ListPools)
-			ar.Get("/admin/pools/new", poolsH.NewPoolForm)
-			ar.Get("/admin/pools/{id}", poolsH.PoolPage)
-			ar.Post("/admin/pools", poolsH.CreatePool)
-			ar.Put("/admin/pools/{id}", poolsH.UpdatePool)
-			ar.Post("/admin/pools/{id}/disable", poolsH.DisablePool)
-			ar.Get("/admin/pools/{id}/members", poolsH.ListMembers)
-			ar.Post("/admin/pools/{id}/members", poolsH.AddMember)
-			ar.Delete("/admin/pools/{id}/members", poolsH.RemoveMember)
-
-			agentsH := handler.NewAgentAdminHandler(repo)
+			agentsH := handler.NewAgentAdminHandler(repo, pairer)
 			ar.Get("/admin/agents", agentsH.ListAgents)
 			ar.Get("/admin/agents/new", agentsH.NewAgentForm)
 			ar.Post("/admin/agents", agentsH.CreateAgent)
@@ -364,21 +392,15 @@ func NewRouter(
 			ar.Delete("/admin/agents/{agentID}", agentsH.DeleteAgent)
 			ar.Post("/admin/agents/{agentID}/disable", agentsH.DisableAgent)
 			ar.Post("/admin/agents/{agentID}/revoke", agentsH.RevokeAgent)
-			ar.Post("/admin/agents/{agentID}/reenroll", agentsH.ReenrollAgent)
+			ar.Post("/admin/agents/{agentID}/re-pair", agentsH.RePairAgent)
+			ar.Post("/admin/agents/{agentID}/pairings", agentsH.StartPairing)
 			ar.Post(
-				"/admin/agents/{agentID}/enrollment",
-				agentsH.CreateEnrollment,
+				"/admin/agents/{agentID}/pairings/confirm",
+				agentsH.ConfirmPairing,
 			)
-			ar.Get(
-				"/admin/agents/{agentID}/enrollment",
-				agentsH.EnrollmentPage,
-			)
-			ar.Get("/admin/agents/{agentID}/tags", agentsH.ListAgentTags)
-			ar.Post("/admin/agents/{agentID}/tags", agentsH.SetAgentTagForm)
-			ar.Put("/admin/agents/{agentID}/tags/{tagKey}", agentsH.SetAgentTag)
-			ar.Delete(
-				"/admin/agents/{agentID}/tags/{tagKey}",
-				agentsH.DeleteAgentTag,
+			ar.Post(
+				"/admin/agents/{agentID}/assignments",
+				agentsH.AssignEnvironment,
 			)
 			ar.Get("/admin/agents/{agentID}/events", agentsH.ListAgentEvents)
 		})

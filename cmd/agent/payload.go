@@ -6,7 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"time"
+
+	"durpdeploy/internal/runner"
 )
 
 type deploymentPayload struct {
@@ -20,7 +21,7 @@ type releasePayload struct {
 	ID        int64         `json:"id"`
 	ProjectID int64         `json:"project_id"`
 	Version   string        `json:"version"`
-	Steps     []stepPayload `json:"steps"`
+	Steps     []runner.Step `json:"steps"`
 }
 
 type environmentPayload struct {
@@ -28,13 +29,7 @@ type environmentPayload struct {
 	Name string `json:"name"`
 }
 
-type stepPayload struct {
-	Name           string `json:"name"`
-	ScriptBody     string `json:"script_body"`
-	SortOrder      int64  `json:"sort_order"`
-	TimeoutSeconds int64  `json:"timeout_seconds"`
-	MaxRetries     int64  `json:"max_retries"`
-}
+type stepPayload = runner.Step
 
 type variablePayload struct {
 	Name   string `json:"name"`
@@ -85,8 +80,4 @@ func (payload deploymentPayload) environment() (map[string]string, []string, err
 		}
 	}
 	return environment, secrets, nil
-}
-
-func (step stepPayload) timeout() time.Duration {
-	return time.Duration(step.TimeoutSeconds) * time.Second
 }

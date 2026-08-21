@@ -6,20 +6,34 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 
+	"durpdeploy/internal/agentpairing"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/repository"
 )
 
 type AgentAdminHandler struct {
-	repo *repository.Repository
+	repo      *repository.Repository
+	pairer    *agentpairing.Server
+	pendingMu sync.Mutex
+	pending   map[string]pendingAgentPairing
 }
 
-func NewAgentAdminHandler(repo *repository.Repository) *AgentAdminHandler {
-	return &AgentAdminHandler{repo: repo}
+func NewAgentAdminHandler(
+	repo *repository.Repository,
+	pairer ...*agentpairing.Server,
+) *AgentAdminHandler {
+	result := &AgentAdminHandler{
+		repo: repo, pending: make(map[string]pendingAgentPairing),
+	}
+	if len(pairer) > 0 {
+		result.pairer = pairer[0]
+	}
+	return result
 }
 
 type agentAdminRequest struct {
@@ -39,12 +53,6 @@ type agentAdminResponse struct {
 	RevokedAt              *int64  `json:"revoked_at,omitempty"`
 	CreatedAt              int64   `json:"created_at"`
 	UpdatedAt              int64   `json:"updated_at"`
-}
-
-type enrollmentResponse struct {
-	AgentID   string `json:"agent_id"`
-	Token     string `json:"token"`
-	ExpiresAt int64  `json:"expires_at"`
 }
 
 func nullableString(value sql.NullString) *string {

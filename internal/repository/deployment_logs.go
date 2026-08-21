@@ -7,8 +7,8 @@ import (
 )
 
 type DeploymentLogCursor struct {
-	DeploymentID int64
-	AfterID      int64
+	DeploymentID  int64
+	AfterSequence int64
 }
 
 // ForEachDeploymentLogAfterID streams persisted deployment logs after a cursor.
@@ -20,8 +20,8 @@ func (r *Repository) ForEachDeploymentLogAfterID(
 	rows, err := r.DB.QueryContext(ctx, `
 	SELECT id, deployment_id, step_name, line, created_at, sequence
 	FROM deployment_logs
-	WHERE deployment_id = ? AND id > ?
-	ORDER BY sequence ASC, id ASC`, cursor.DeploymentID, cursor.AfterID)
+		WHERE deployment_id = ? AND sequence > ?
+		ORDER BY sequence ASC, id ASC`, cursor.DeploymentID, cursor.AfterSequence)
 	if err != nil {
 		return err
 	}

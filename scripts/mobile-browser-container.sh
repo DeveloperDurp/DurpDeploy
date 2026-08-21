@@ -32,7 +32,7 @@ cp /opt/mobile-browser/node_modules/swagger-ui-dist/favicon-16x16.png \
 	static/swagger-ui/
 
 if [ "${AGENT_ADMIN_BROWSER_PROOF:-}" = "1" ]; then
-	AGENT_BROWSER_EVIDENCE_DIR="$evidence_dir" \
+	AGENT_BROWSER_OUTPUT_DIR="$evidence_dir" \
 	node /opt/mobile-browser/agent_admin_browser_proof.mjs
 	exit 0
 fi

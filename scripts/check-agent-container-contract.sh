@@ -56,17 +56,16 @@ docker run --rm --read-only --entrypoint sh "$image" -ceu '
 	! test -S /var/run/docker.sock
 '
 
-set +e
-output=$(docker run --rm --read-only \
-	-e DURPDEPLOY_AGENT_ENROLLMENT_TOKEN=placeholder \
-	-e DURPDEPLOY_AGENT_ID=agent-contract \
-	-e DURPDEPLOY_AGENT_NAME=contract \
-	-e DURPDEPLOY_AGENT_VERSION=contract \
-	"$image" 2>&1)
-status=$?
-set -e
-if [ "$status" -eq 0 ] || ! grep -Fq 'agent client requires server' <<<"$output"; then
-	echo 'agent container contract: missing server URL/fingerprint does not fail clearly' >&2
+help=$(docker run --rm --read-only "$image" --help)
+for required in DURPDEPLOY_AGENT_LISTEN_ADDR DURPDEPLOY_AGENT_STATE_DIR \
+	DURPDEPLOY_AGENT_VERSION; do
+	grep -Fq "$required" <<<"$help" || {
+		echo "agent container contract: help omits $required" >&2
+		exit 1
+	}
+done
+if grep -Fq 'DURPDEPLOY_AGENT_SERVER_URL' <<<"$help"; then
+	echo 'agent container contract: help exposes manual server configuration' >&2
 	exit 1
 fi
 

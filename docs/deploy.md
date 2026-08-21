@@ -73,7 +73,7 @@ docker compose exec app admin create \
 ### Remote agent control plane
 
 The complete agent runbook is [`docs/agents.md`](agents.md). Read it before
-opening the listener or issuing an enrollment token. The short deployment
+opening the listener or starting an agent pairing. The short deployment
 boundary is:
 
 * The server owns SQLite, WAL/SHM files, agent records, policies, and the
@@ -91,17 +91,13 @@ boundary is:
   DURPDEPLOY_AGENT_IDENTITY_DIR=/var/lib/durpdeploy/agent-identity
   ```
 
-* Agent configuration uses the exact variables below. The token is one-time and
-  the current binary attempts enrollment at every startup, so a consumed token
-  is not a reusable restart credential.
+* An unpaired agent needs only a private state directory, temporary local
+  pairing listener, and version. The administrator pairing flow stores the
+  pinned server endpoint and agent identity; restarts use that paired state.
 
   ```dotenv
-  DURPDEPLOY_AGENT_SERVER_URL=https://<agent-control-host>:10943
-  DURPDEPLOY_AGENT_SERVER_FINGERPRINT=<64-lowercase-hex-sha256-fingerprint>
   DURPDEPLOY_AGENT_STATE_DIR=/var/lib/durpdeploy-agent
-  DURPDEPLOY_AGENT_ENROLLMENT_TOKEN=<one-time-enrollment-token>
-  DURPDEPLOY_AGENT_ID=<stable-agent-id>
-  DURPDEPLOY_AGENT_NAME=<agent-name>
+  DURPDEPLOY_AGENT_LISTEN_ADDR=0.0.0.0:10943
   DURPDEPLOY_AGENT_VERSION=<agent-version>
   ```
 

@@ -2,27 +2,44 @@ package main
 
 import (
 	"os"
+	"path/filepath"
 
-	"durpdeploy/internal/agentclient"
+	"durpdeploy/internal/agentbootstrap"
 	"durpdeploy/internal/agentproto"
 )
 
 type config struct {
-	client agentclient.Config
+	stateDir     string
+	agentVersion agentproto.AgentVersion
+	bootstrap    agentbootstrap.Config
 }
 
 func loadConfig() (config, error) {
-	values := agentclient.Config{
-		ServerURL:         os.Getenv("DURPDEPLOY_AGENT_SERVER_URL"),
-		ServerFingerprint: os.Getenv("DURPDEPLOY_AGENT_SERVER_FINGERPRINT"),
-		StateDir:          os.Getenv("DURPDEPLOY_AGENT_STATE_DIR"),
-		EnrollmentToken:   os.Getenv("DURPDEPLOY_AGENT_ENROLLMENT_TOKEN"),
-		AgentID:           agentproto.AgentID(os.Getenv("DURPDEPLOY_AGENT_ID")),
-		Name:              os.Getenv("DURPDEPLOY_AGENT_NAME"),
-		AgentVersion: agentproto.AgentVersion(
+	stateDir, err := stateDirectory()
+	if err != nil {
+		return config{}, err
+	}
+	return config{
+		stateDir: stateDir,
+		agentVersion: agentproto.AgentVersion(
 			os.Getenv("DURPDEPLOY_AGENT_VERSION"),
 		),
-		Protocol: string(agentproto.AgentV1),
+		bootstrap: agentbootstrap.Config{
+			StateDir: stateDir,
+			ListenAddr: os.Getenv(
+				"DURPDEPLOY_AGENT_LISTEN_ADDR",
+			),
+		},
+	}, nil
+}
+
+func stateDirectory() (string, error) {
+	if directory := os.Getenv("DURPDEPLOY_AGENT_STATE_DIR"); directory != "" {
+		return directory, nil
 	}
-	return config{client: values}, nil
+	directory, err := os.UserConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(directory, "durpdeploy-agent"), nil
 }

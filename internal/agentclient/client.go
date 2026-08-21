@@ -11,7 +11,6 @@ import (
 	"io"
 	"math/big"
 	"net/http"
-	"os"
 	"strconv"
 	"sync"
 	"time"
@@ -26,114 +25,21 @@ const (
 	maxBackoff     = 5 * time.Minute
 )
 
-var ErrEnrollmentUnavailable = errors.New(
-	"agent enrollment token is unavailable",
-)
-
-// Config contains all persistent and in-memory client inputs. EnrollmentToken is
-// used only for first-run enrollment and is never written to disk.
-type Config struct {
-	ServerURL         string
-	ServerFingerprint string
-	StateDir          string
-	EnrollmentToken   string
-	AgentID           agentproto.AgentID
-	Name              string
-	AgentVersion      agentproto.AgentVersion
-	Protocol          string
-}
-
 // Client makes only outbound HTTP requests to the configured agent server.
 type Client struct {
-	serverURL       string
-	stateDir        string
-	enrollmentToken string
-	agentID         agentproto.AgentID
-	name            string
-	agentVersion    agentproto.AgentVersion
-	protocol        agentproto.ProtocolVersion
-	identity        agenttls.Identity
-	http            *http.Client
+	serverURL    string
+	stateDir     string
+	agentID      agentproto.AgentID
+	agentVersion agentproto.AgentVersion
+	protocol     agentproto.ProtocolVersion
+	identity     agenttls.Identity
+	http         *http.Client
 
-	mu       sync.Mutex
-	pins     []agenttls.Fingerprint
-	enrolled bool
-	now      func() time.Time
-	sleep    func(context.Context, time.Duration) error
-	jitter   func(int64) (int64, error)
-}
-
-// New loads or creates the mTLS identity and pinned-server state.
-func New(config Config) (*Client, error) {
-	if config.StateDir == "" || config.ServerURL == "" ||
-		config.ServerFingerprint == "" ||
-		config.AgentID == "" ||
-		config.Name == "" ||
-		config.AgentVersion == "" {
-		return nil, fmt.Errorf(
-			"agent client requires server, state, and agent identity",
-		)
-	}
-	protocol, err := agentproto.ParseProtocolVersion(config.Protocol)
-	if err != nil {
-		return nil, fmt.Errorf("parse protocol version: %w", err)
-	}
-	initialPin, err := agenttls.ParseFingerprint(config.ServerFingerprint)
-	if err != nil {
-		return nil, fmt.Errorf("parse server fingerprint: %w", err)
-	}
-	identity, err := agenttls.LoadOrCreate(config.StateDir, config.ServerURL)
-	if err != nil {
-		return nil, fmt.Errorf("load agent identity: %w", err)
-	}
-	pins, err := loadPins(config.StateDir, initialPin)
-	if err != nil {
-		return nil, err
-	}
-	enrolled, err := isEnrolled(config.StateDir)
-	if err != nil {
-		return nil, err
-	}
-	info, err := os.Stat(config.StateDir)
-	if err != nil {
-		return nil, fmt.Errorf("stat agent state directory: %w", err)
-	}
-	if info.Mode().Perm()&0o077 != 0 {
-		return nil, fmt.Errorf(
-			"agent state directory must not be group or world accessible",
-		)
-	}
-	client := &Client{
-		serverURL:       config.ServerURL,
-		stateDir:        config.StateDir,
-		enrollmentToken: config.EnrollmentToken,
-		agentID:         config.AgentID,
-		name:            config.Name,
-		agentVersion:    config.AgentVersion,
-		protocol:        protocol,
-		identity:        identity,
-		pins:            pins,
-		enrolled:        enrolled,
-		now:             time.Now,
-		sleep:           sleep,
-		jitter:          randomInt,
-	}
-	tlsConfig, err := client.tlsConfig()
-	if err != nil {
-		return nil, err
-	}
-	client.http = &http.Client{
-		Timeout: requestTimeout,
-		Transport: &http.Transport{
-			TLSClientConfig:     tlsConfig,
-			ForceAttemptHTTP2:   true,
-			MaxIdleConns:        4,
-			MaxConnsPerHost:     2,
-			MaxIdleConnsPerHost: 2,
-			IdleConnTimeout:     30 * time.Second,
-		},
-	}
-	return client, nil
+	mu     sync.Mutex
+	pins   []agenttls.Fingerprint
+	now    func() time.Time
+	sleep  func(context.Context, time.Duration) error
+	jitter func(int64) (int64, error)
 }
 
 // Close releases idle outbound connections. It never starts a listener.

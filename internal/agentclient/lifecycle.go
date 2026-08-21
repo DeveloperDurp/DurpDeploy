@@ -2,8 +2,6 @@ package agentclient
 
 import (
 	"context"
-	"crypto/tls"
-	"encoding/pem"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -12,44 +10,6 @@ import (
 	"durpdeploy/internal/agentpayload"
 	"durpdeploy/internal/agentproto"
 )
-
-// Enroll proves possession of the persistent client certificate.
-func (client *Client) Enroll(ctx context.Context) error {
-	if client.enrolled {
-		return nil
-	}
-	if client.enrollmentToken == "" {
-		return ErrEnrollmentUnavailable
-	}
-	certificate, err := certificatePEM(client.identity.Certificate)
-	if err != nil {
-		return err
-	}
-	request := agentproto.EnrollmentRequest{
-		ProtocolEnvelope: agentproto.ProtocolEnvelope{
-			Protocol: client.protocol,
-		},
-		AgentID:        client.agentID,
-		Name:           client.name,
-		AgentVersion:   client.agentVersion,
-		CertificatePEM: agentproto.CertificatePEM(certificate),
-	}
-	if err := client.send(
-		ctx,
-		agentproto.EnrollmentPath,
-		request,
-		http.StatusNoContent,
-		"Enrollment "+client.enrollmentToken,
-		nil,
-	); err != nil {
-		return err
-	}
-	if err := markEnrolled(client.stateDir); err != nil {
-		return err
-	}
-	client.enrolled = true
-	return nil
-}
 
 // Poll waits for and returns one claimed deployment, or nil when no deployment is available.
 func (client *Client) Poll(
@@ -74,6 +34,9 @@ func (client *Client) Poll(
 	}
 	if status == http.StatusNoContent {
 		return nil, nil
+	}
+	if status != http.StatusOK {
+		return nil, &StatusError{Status: status}
 	}
 	if response.DeploymentID < 1 || response.Payload == "" ||
 		response.ClaimToken == "" {
@@ -193,19 +156,6 @@ func (client *Client) lifecycle(
 		"",
 		nil,
 	)
-}
-
-func certificatePEM(certificate tls.Certificate) (string, error) {
-	if len(certificate.Certificate) != 1 {
-		return "", fmt.Errorf(
-			"agent identity must contain exactly one certificate",
-		)
-	}
-	return string(
-		pem.EncodeToMemory(
-			&pem.Block{Type: "CERTIFICATE", Bytes: certificate.Certificate[0]},
-		),
-	), nil
 }
 
 func deploymentPath(pattern string, id agentproto.DeploymentID) string {

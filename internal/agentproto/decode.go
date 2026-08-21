@@ -13,12 +13,32 @@ type wireProtocolEnvelope struct {
 	Protocol json.RawMessage `json:"protocol"`
 }
 
+type versionedMessage interface {
+	protocolVersion() ProtocolVersion
+}
+
 func DecodeRequest[T Request](body io.Reader) (T, error) {
-	return decodeRequest[T](body, MaxRequestBytes, ErrRequestTooLarge)
+	return decodeMessage[T](body, MaxRequestBytes, ErrRequestTooLarge)
+}
+
+func DecodeBootstrapResponse(body io.Reader) (BootstrapResponse, error) {
+	return decodeMessage[BootstrapResponse](
+		body,
+		MaxPairingMessageBytes,
+		ErrRequestTooLarge,
+	)
+}
+
+func DecodePairResponse(body io.Reader) (PairResponse, error) {
+	return decodeMessage[PairResponse](
+		body,
+		MaxPairingMessageBytes,
+		ErrRequestTooLarge,
+	)
 }
 
 func DecodeLogBatch(body io.Reader) (LogBatchRequest, error) {
-	batch, err := decodeRequest[LogBatchRequest](
+	batch, err := decodeMessage[LogBatchRequest](
 		body,
 		MaxLogBatchBytes,
 		ErrLogBatchTooLarge,
@@ -45,7 +65,7 @@ func DecodeLogBatch(body io.Reader) (LogBatchRequest, error) {
 	return batch, nil
 }
 
-func decodeRequest[T Request](
+func decodeMessage[T versionedMessage](
 	body io.Reader,
 	maxBytes int,
 	limitError error,
@@ -60,6 +80,17 @@ func decodeRequest[T Request](
 	}
 	if !utf8.Valid(payload) {
 		return request, protocolError("request", ReasonInvalid, ErrInvalidJSON)
+	}
+	duplicate, err := hasDuplicateJSONMember(payload)
+	if err != nil {
+		return request, protocolError("request", ReasonInvalid, ErrInvalidJSON)
+	}
+	if duplicate {
+		return request, protocolError(
+			"request",
+			ReasonDuplicate,
+			ErrInvalidJSON,
+		)
 	}
 	wireProtocol, err := decodeWireProtocol(payload)
 	if err != nil {

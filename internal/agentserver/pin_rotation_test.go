@@ -14,8 +14,8 @@ func TestHeartbeat_advertisesConfiguredPendingServerPin(t *testing.T) {
 	pendingIdentity := loadTestIdentity(t)
 	fixture.listener.pendingServerPin = &pendingIdentity.Fingerprint
 	fixture.activate(t, "agent-a", fixture.agentIdentity)
-	fixture.addEligibleAgent(t, "agent-a", "")
-	deploymentID := fixture.createWaitingDeployment(t, "", "payload")
+	fixture.addEligibleAgent(t, "agent-a")
+	deploymentID := fixture.createWaitingDeployment(t, "payload")
 	claimDispatch(t, fixture, deploymentID, "agent-a", "claim-token")
 	started := fixture.lifecycle(
 		t,

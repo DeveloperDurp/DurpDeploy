@@ -60,26 +60,6 @@ func seedRemoteDeployment(
 	if err != nil {
 		t.Fatalf("create deployment: %v", err)
 	}
-	result, err := harness.repo.DB.ExecContext(
-		ctx,
-		"INSERT INTO agent_pools (name) VALUES ('remote-pool')",
-	)
-	if err != nil {
-		t.Fatalf("create pool: %v", err)
-	}
-	poolID, err := result.LastInsertId()
-	if err != nil {
-		t.Fatalf("pool ID: %v", err)
-	}
-	_, err = harness.repo.DB.ExecContext(ctx, `
-		INSERT INTO deployment_dispatches (
-			deployment_id, mode, pool_id, selector, state, reason, claim_token_hash
-		) VALUES (?, 'remote', ?, '', ?, ?, ?)
-	`, deployment.ID, poolID, dispatchState, protocolSecretSentinel,
-		[]byte(protocolSecretSentinel))
-	if err != nil {
-		t.Fatalf("create remote dispatch: %v", err)
-	}
 	agentID := "agent-" + dispatchState
 	_, err = harness.repo.DB.ExecContext(ctx, `
 		INSERT INTO agents (
@@ -91,12 +71,20 @@ func seedRemoteDeployment(
 	}
 	_, err = harness.repo.DB.ExecContext(
 		ctx,
-		"UPDATE deployment_dispatches SET agent_id = ? WHERE deployment_id = ?",
-		agentID,
-		deployment.ID,
+		"INSERT INTO environment_agent_assignments (environment_id, agent_id) VALUES (?, ?)",
+		environment.ID, agentID,
 	)
 	if err != nil {
-		t.Fatalf("assign dispatch agent: %v", err)
+		t.Fatalf("assign environment agent: %v", err)
+	}
+	_, err = harness.repo.DB.ExecContext(ctx, `
+		INSERT INTO deployment_dispatches (
+			deployment_id, mode, assigned_agent_id, state, reason, claim_token_hash
+		) VALUES (?, 'remote', ?, ?, ?, ?)
+	`, deployment.ID, agentID, dispatchState, protocolSecretSentinel,
+		[]byte(protocolSecretSentinel))
+	if err != nil {
+		t.Fatalf("create direct dispatch: %v", err)
 	}
 	return deployment
 }

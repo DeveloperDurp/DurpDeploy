@@ -17,8 +17,8 @@ func TestMaintain_reclaimsOnlyExpiredUnstartedClaims(t *testing.T) {
 	// Given
 	fixture := newPollFixture(t)
 	fixture.activate(t, "agent-a", fixture.agentIdentity)
-	fixture.addEligibleAgent(t, "agent-a", "")
-	deploymentID := fixture.createWaitingDeployment(t, "", "payload")
+	fixture.addEligibleAgent(t, "agent-a")
+	deploymentID := fixture.createWaitingDeployment(t, "payload")
 	hash := sha256.Sum256([]byte("claim-token"))
 	if _, err := fixture.repo.Queries.ClaimDeploymentDispatch(
 		context.Background(),
@@ -58,8 +58,8 @@ func TestMaintain_losesStartedWorkOnceAcrossRestartAndRecordsLateResult(
 	fixture := newPollFixture(t)
 	fixture.listener.events = events.NewBus(fixture.repo)
 	fixture.activate(t, "agent-a", fixture.agentIdentity)
-	fixture.addEligibleAgent(t, "agent-a", "")
-	deploymentID := fixture.createWaitingDeployment(t, "", "payload")
+	fixture.addEligibleAgent(t, "agent-a")
+	deploymentID := fixture.createWaitingDeployment(t, "payload")
 	const claimToken = "claim-token"
 	claimDispatch(t, fixture, deploymentID, "agent-a", claimToken)
 	if response := fixture.lifecycle(
@@ -125,8 +125,8 @@ func TestMaintain_marksOfflineAndExpiresCancellationWithoutFailingDeployment(
 	// Given
 	fixture := newPollFixture(t)
 	fixture.activate(t, "agent-a", fixture.agentIdentity)
-	fixture.addEligibleAgent(t, "agent-a", "")
-	deploymentID := fixture.createWaitingDeployment(t, "", "payload")
+	fixture.addEligibleAgent(t, "agent-a")
+	deploymentID := fixture.createWaitingDeployment(t, "payload")
 	const claimToken = "claim-token"
 	claimDispatch(t, fixture, deploymentID, "agent-a", claimToken)
 	if response := fixture.lifecycle(
@@ -181,8 +181,8 @@ func TestMaintain_keepsHeartbeatingAgentOnline(t *testing.T) {
 	// Given
 	fixture := newPollFixture(t)
 	fixture.activate(t, "agent-a", fixture.agentIdentity)
-	fixture.addEligibleAgent(t, "agent-a", "")
-	deploymentID := fixture.createWaitingDeployment(t, "", "payload")
+	fixture.addEligibleAgent(t, "agent-a")
+	deploymentID := fixture.createWaitingDeployment(t, "payload")
 	const claimToken = "claim-token"
 	claimDispatch(t, fixture, deploymentID, "agent-a", claimToken)
 	if response := fixture.lifecycle(

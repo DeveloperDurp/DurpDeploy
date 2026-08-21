@@ -22,6 +22,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/robfig/cron/v3"
 
+	"durpdeploy/internal/agentpairing"
+	"durpdeploy/internal/agentproto"
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/dispatch"
@@ -261,19 +263,12 @@ func runServer() {
 			"issuer_host", issuerURL.Hostname(),
 		)
 	}
-	r := server.NewRouter(
-		repo,
-		rnr,
-		dispatcher,
-		parser,
-		authHandler,
-		oidcServices.enabled,
-	)
 	agentConfig, agentEnabled, err := loadAgentListenerConfig()
 	if err != nil {
 		log.Fatalf("agent listener config: %v", err)
 	}
 	var agents *agentListener
+	var pairer *agentpairing.Server
 	if agentEnabled {
 		agents, err = startAgentListener(agentConfig, agentListenerDependencies{
 			repo: repo, box: box, broker: broker, bus: bus,
@@ -281,9 +276,28 @@ func runServer() {
 		if err != nil {
 			log.Fatalf("agent listener: %v", err)
 		}
+		pullEndpoint, parseErr := agentproto.ParsePullEndpoint(
+			agentConfig.publicURL,
+		)
+		if parseErr != nil {
+			log.Fatalf("agent pull endpoint: %v", parseErr)
+		}
+		pairer, err = agentpairing.NewServer(pullEndpoint, agents.identity)
+		if err != nil {
+			log.Fatalf("agent pairer: %v", err)
+		}
 		agents.startMaintenance(ctx)
 		slog.Info("agent listener starting", "addr", agentConfig.addr)
 	}
+	r := server.NewRouterWithAgentPairer(
+		repo,
+		rnr,
+		dispatcher,
+		parser,
+		authHandler,
+		pairer,
+		oidcServices.enabled,
+	)
 
 	// Recover deployments that were created but never picked up by a
 	// runner goroutine (process restarted, container OOM, manual kill,

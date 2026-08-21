@@ -360,14 +360,14 @@ func TestTick_DefaultDispatcherRoutesScheduledDeploymentOnce(t *testing.T) {
 	remote := f.createEnvironment("remote")
 	if _, err := f.repo.DB.ExecContext(
 		f.ctx(),
-		"INSERT INTO agent_pools (name) VALUES ('pool')",
+		"INSERT INTO agents (id, name) VALUES ('agent', 'agent')",
 	); err != nil {
-		t.Fatalf("create agent pool: %v", err)
+		t.Fatalf("create agent: %v", err)
 	}
 	if _, err := f.repo.DB.ExecContext(f.ctx(), `
-		INSERT INTO environment_agent_policies (environment_id, pool_id, selector)
-		VALUES (?, 1, 'region=us')`, remote.ID); err != nil {
-		t.Fatalf("create remote policy: %v", err)
+		INSERT INTO environment_agent_assignments (environment_id, agent_id)
+		VALUES (?, 'agent')`, remote.ID); err != nil {
+		t.Fatalf("create agent assignment: %v", err)
 	}
 	f.createSchedule(
 		project.ID,

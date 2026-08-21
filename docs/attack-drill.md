@@ -268,5 +268,5 @@ These attacks are out of scope for P0:
 
 Remote agent transport is outbound-only and uses mTLS with pinned fingerprints.
 If an agent host is compromised, stop its service, revoke the agent, rotate its
-enrollment and certificate material, and review deployments assigned to its
-pool. See `docs/agent-protocol.md` for the protocol boundaries.
+pairing and certificate material, and review deployments for its assigned
+environments. See `docs/agent-protocol.md` for the protocol boundaries.

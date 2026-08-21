@@ -12,14 +12,6 @@ import (
 	"durpdeploy/internal/events"
 )
 
-type releaseStep struct {
-	Name           string `json:"name"`
-	ScriptBody     string `json:"script_body"`
-	SortOrder      int64  `json:"sort_order"`
-	TimeoutSeconds int64  `json:"timeout_seconds"`
-	MaxRetries     int64  `json:"max_retries"`
-}
-
 func (r *DeploymentRunner) Run(
 	ctx context.Context,
 	deploymentID, releaseID, environmentID int64,
@@ -62,7 +54,7 @@ func (r *DeploymentRunner) Run(
 		),
 	)
 
-	var steps []releaseStep
+	var steps []Step
 	if err := json.Unmarshal([]byte(release.StepsJson), &steps); err != nil {
 		_ = r.failUnlessCancelled(ctx, deploymentID)
 		return
@@ -74,51 +66,44 @@ func (r *DeploymentRunner) Run(
 	}
 	environment, secrets := releaseEnvironment(variables, environmentID)
 
-	for _, step := range steps {
-		job := NewJob(JobConfig{
-			DeploymentID: deploymentID,
-			Name:         step.Name,
-			ScriptBody:   step.ScriptBody,
-			Timeout:      time.Duration(step.TimeoutSeconds) * time.Second,
-			MaxRetries:   int(step.MaxRetries),
-			Environment:  environment,
-			Secrets:      secrets,
-		})
-		err := r.executor.Execute(
-			runCtx,
-			job,
-			r.callbacks(ctx, deploymentID, step.Name),
-		)
-		if errors.Is(err, ErrCancelled) {
-			return
-		}
-		if err != nil {
-			_ = r.repo.Queries.UpdateDeploymentStatus(
-				ctx,
-				db.UpdateDeploymentStatusParams{
-					ID:     deploymentID,
-					Status: "failed",
-					FinishedAt: sql.NullInt64{
-						Int64: time.Now().Unix(),
-						Valid: true,
-					},
+	err = r.executor.ExecuteSteps(runCtx, ExecutionConfig{
+		DeploymentID: deploymentID,
+		Steps:        steps,
+		Environment:  environment,
+		Secrets:      secrets,
+		CallbacksForStep: func(step Step) Callbacks {
+			return r.callbacks(ctx, deploymentID, step.Name)
+		},
+	})
+	if errors.Is(err, ErrCancelled) {
+		return
+	}
+	if err != nil {
+		_ = r.repo.Queries.UpdateDeploymentStatus(
+			ctx,
+			db.UpdateDeploymentStatusParams{
+				ID:     deploymentID,
+				Status: "failed",
+				FinishedAt: sql.NullInt64{
+					Int64: time.Now().Unix(),
+					Valid: true,
 				},
-			)
-			r.publish(
-				ctx,
-				events.DeploymentFailed,
+			},
+		)
+		r.publish(
+			ctx,
+			events.DeploymentFailed,
+			deploymentID,
+			release.ProjectID,
+			environmentID,
+			fmt.Sprintf(
+				"Deployment #%d failed on %s: %v",
 				deploymentID,
-				release.ProjectID,
-				environmentID,
-				fmt.Sprintf(
-					"Deployment #%d failed on %s: %v",
-					deploymentID,
-					environmentName,
-					err,
-				),
-			)
-			return
-		}
+				environmentName,
+				err,
+			),
+		)
+		return
 	}
 
 	deployment, _ := r.repo.Queries.GetDeployment(ctx, deploymentID)

@@ -1,5 +1,8 @@
 # Binaries
 /durpdeploy
+/durpdeploy-agent
+/.agent-identity/
+/agent.env
 *.exe
 *.dll
 *.so

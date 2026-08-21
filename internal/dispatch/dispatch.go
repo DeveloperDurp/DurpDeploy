@@ -1,4 +1,4 @@
-// Package dispatch routes deployments to the local runner or a remote agent pool.
+// Package dispatch routes deployments to the local runner or an assigned remote agent.
 package dispatch
 
 import (
@@ -53,8 +53,8 @@ func New(
 	return &Dispatcher{repo: repo, box: box, runner: deploymentRunner}
 }
 
-// Dispatch records an immutable routing decision. A policy always selects the
-// remote path; agent availability is intentionally resolved later by claiming.
+// Dispatch records an immutable routing decision. Only an explicit environment
+// assignment selects the remote path; every other environment runs locally.
 func (d *Dispatcher) Dispatch(ctx context.Context, deploymentID int64) error {
 	var localDeployment db.Deployment
 	err := d.repo.WithTx(ctx, func(q *db.Queries) error {
@@ -71,58 +71,59 @@ func (d *Dispatcher) Dispatch(ctx context.Context, deploymentID int64) error {
 		if deployment.Status == "pending_approval" {
 			return nil
 		}
-
-		policy, err := q.GetEnvironmentAgentPolicy(
+		assignment, err := q.GetEnvironmentAgentAssignment(
 			ctx,
 			deployment.EnvironmentID,
 		)
-		if errors.Is(err, sql.ErrNoRows) {
-			if _, err := q.CreateDeploymentDispatch(
-				ctx,
-				db.CreateDeploymentDispatchParams{
-					DeploymentID: deployment.ID,
-					Mode:         "local",
-					Selector:     "",
-					State:        "waiting",
-				},
-			); err != nil {
-				return fmt.Errorf("create local dispatch: %w", err)
+		if err == nil {
+			if d.box == nil {
+				return errors.New("remote dispatch requires a secret box")
 			}
-			localDeployment = deployment
+			ciphertext, payloadErr := d.buildPayload(ctx, q, deployment)
+			if payloadErr != nil {
+				return payloadErr
+			}
+			if _, payloadErr = q.CreateDeploymentPayload(
+				ctx,
+				db.CreateDeploymentPayloadParams{
+					DeploymentID: deployment.ID,
+					Ciphertext:   ciphertext,
+				},
+			); payloadErr != nil {
+				return fmt.Errorf("create deployment payload: %w", payloadErr)
+			}
+			if _, payloadErr = q.CreateDirectDeploymentDispatch(
+				ctx,
+				db.CreateDirectDeploymentDispatchParams{
+					DeploymentID: deployment.ID,
+					AssignedAgentID: sql.NullString{
+						String: assignment.AgentID,
+						Valid:  true,
+					},
+				},
+			); payloadErr != nil {
+				return fmt.Errorf(
+					"create direct remote dispatch: %w",
+					payloadErr,
+				)
+			}
 			return nil
 		}
-		if err != nil {
-			return fmt.Errorf("get environment agent policy: %w", err)
-		}
-		if d.box == nil {
-			return errors.New("remote dispatch requires a secret box")
+		if !errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("get environment agent assignment: %w", err)
 		}
 
-		ciphertext, err := d.buildPayload(ctx, q, deployment)
-		if err != nil {
-			return err
-		}
-		if _, err := q.CreateDeploymentPayload(
-			ctx,
-			db.CreateDeploymentPayloadParams{
-				DeploymentID: deployment.ID,
-				Ciphertext:   ciphertext,
-			},
-		); err != nil {
-			return fmt.Errorf("create deployment payload: %w", err)
-		}
 		if _, err := q.CreateDeploymentDispatch(
 			ctx,
 			db.CreateDeploymentDispatchParams{
 				DeploymentID: deployment.ID,
-				Mode:         "remote",
-				PoolID:       sql.NullInt64{Int64: policy.PoolID, Valid: true},
-				Selector:     policy.Selector,
+				Mode:         "local",
 				State:        "waiting",
 			},
 		); err != nil {
-			return fmt.Errorf("create remote dispatch: %w", err)
+			return fmt.Errorf("create local dispatch: %w", err)
 		}
+		localDeployment = deployment
 		return nil
 	})
 	if err != nil {

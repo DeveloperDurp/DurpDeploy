@@ -12,27 +12,20 @@ import (
 
 	"durpdeploy/internal/agentpayload"
 	"durpdeploy/internal/agentproto"
+	"durpdeploy/internal/agentstate"
 	"durpdeploy/internal/agenttls"
 )
 
-func TestClient_enrolls_polls_and_acknowledges_cancellation(t *testing.T) {
+func TestClient_polls_and_acknowledges_cancellation(t *testing.T) {
 	// Given
 	serverIdentity := testIdentity(t)
-	requests := make(chan string, 3)
+	requests := make(chan string, 2)
 	server := newTLSServer(
 		t,
 		serverIdentity,
 		func(w http.ResponseWriter, r *http.Request) {
 			requests <- r.URL.Path
 			switch r.URL.Path {
-			case agentproto.EnrollmentPath:
-				if r.Header.Get(
-					"Authorization",
-				) != "Enrollment enrollment-secret" {
-					w.WriteHeader(http.StatusUnauthorized)
-					return
-				}
-				w.WriteHeader(http.StatusNoContent)
 			case agentproto.PollPath:
 				_ = json.NewEncoder(w).Encode(agentproto.PollResponse{
 					DeploymentID: 42, Payload: "ciphertext", ClaimToken: "claim-secret",
@@ -54,9 +47,6 @@ func TestClient_enrolls_polls_and_acknowledges_cancellation(t *testing.T) {
 	client := testClient(t, server.URL, serverIdentity.Fingerprint.String())
 
 	// When
-	if err := client.Enroll(context.Background()); err != nil {
-		t.Fatalf("enroll: %v", err)
-	}
 	poll, err := client.Poll(context.Background())
 	if err != nil {
 		t.Fatalf("poll: %v", err)
@@ -75,7 +65,7 @@ func TestClient_enrolls_polls_and_acknowledges_cancellation(t *testing.T) {
 		!heartbeat.CancelRequested {
 		t.Fatalf("unexpected poll or heartbeat response")
 	}
-	for _, want := range []string{agentproto.EnrollmentPath, agentproto.PollPath, "/agent/v1/deployments/42/heartbeat"} {
+	for _, want := range []string{agentproto.PollPath, "/agent/v1/deployments/42/heartbeat"} {
 		if got := <-requests; got != want {
 			t.Fatalf("request path = %q, want %q", got, want)
 		}
@@ -112,7 +102,7 @@ func TestClient_retries_retryable_statuses_with_retry_after(t *testing.T) {
 	client.jitter = func(limit int64) (int64, error) { return limit - 1, nil }
 
 	// When
-	err := client.Enroll(context.Background())
+	_, err := client.Poll(context.Background())
 
 	// Then
 	if err != nil || calls != 3 || len(delays) != 2 ||
@@ -174,56 +164,6 @@ func TestClient_persists_staged_server_pin_from_heartbeat(t *testing.T) {
 	pins, err := loadPins(client.stateDir, serverIdentity.Fingerprint)
 	if err != nil || len(pins) != 2 || pins[1] != pendingIdentity.Fingerprint {
 		t.Fatalf("persisted pins error=%v pins=%v", err, pins)
-	}
-}
-
-func TestClient_promotes_pending_pin_after_verified_connection(t *testing.T) {
-	// Given
-	oldIdentity := testIdentity(t)
-	pendingIdentity := testIdentity(t)
-	server := newTLSServer(
-		t,
-		pendingIdentity,
-		func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusNoContent)
-		},
-	)
-	stateDir := t.TempDir()
-	if err := os.Chmod(stateDir, 0o700); err != nil {
-		t.Fatalf("secure state directory: %v", err)
-	}
-	if err := writePins(
-		stateDir+"/"+pinsFileName,
-		[]agenttls.Fingerprint{
-			oldIdentity.Fingerprint,
-			pendingIdentity.Fingerprint,
-		},
-	); err != nil {
-		t.Fatalf("stage pins: %v", err)
-	}
-	client, err := New(
-		Config{
-			ServerURL:         server.URL,
-			ServerFingerprint: oldIdentity.Fingerprint.String(),
-			StateDir:          stateDir,
-			AgentID:           "agent-a",
-			Name:              "Agent A",
-			AgentVersion:      "v1",
-			Protocol:          string(agentproto.AgentV1),
-		},
-	)
-	if err != nil {
-		t.Fatalf("new client: %v", err)
-	}
-	t.Cleanup(client.Close)
-
-	// When
-	_, err = client.Poll(context.Background())
-
-	// Then
-	if err != nil || len(client.pins) != 1 ||
-		client.pins[0] != pendingIdentity.Fingerprint {
-		t.Fatalf("poll error=%v pins=%v", err, client.pins)
 	}
 }
 
@@ -302,9 +242,7 @@ func TestClient_decodesOnlyItsClaimedEnvelope(t *testing.T) {
 	}
 }
 
-func TestClient_rejects_unsupported_version_and_stops_on_shutdown(
-	t *testing.T,
-) {
+func TestClient_stops_on_shutdown(t *testing.T) {
 	// Given
 	serverIdentity := testIdentity(t)
 	server := newTLSServer(
@@ -312,17 +250,6 @@ func TestClient_rejects_unsupported_version_and_stops_on_shutdown(
 		serverIdentity,
 		func(w http.ResponseWriter, r *http.Request) {
 			<-r.Context().Done()
-		},
-	)
-	_, invalidVersionErr := New(
-		Config{
-			ServerURL:         server.URL,
-			ServerFingerprint: serverIdentity.Fingerprint.String(),
-			StateDir:          t.TempDir(),
-			AgentID:           "agent-a",
-			Name:              "Agent A",
-			AgentVersion:      "v1",
-			Protocol:          "agent/99",
 		},
 	)
 	client := testClient(t, server.URL, serverIdentity.Fingerprint.String())
@@ -339,12 +266,8 @@ func TestClient_rejects_unsupported_version_and_stops_on_shutdown(
 	err := <-finished
 
 	// Then
-	if invalidVersionErr == nil || err == nil {
-		t.Fatalf(
-			"invalid version error=%v shutdown error=%v",
-			invalidVersionErr,
-			err,
-		)
+	if err == nil {
+		t.Fatal("shutdown did not cancel poll")
 	}
 }
 
@@ -371,18 +294,25 @@ func testClient(t *testing.T, serverURL, pin string) *Client {
 	if err := os.Chmod(stateDir, 0o700); err != nil {
 		t.Fatalf("secure state directory: %v", err)
 	}
-	client, err := New(
-		Config{
-			ServerURL:         serverURL,
-			ServerFingerprint: pin,
-			StateDir:          stateDir,
-			AgentID:           "agent-a",
-			Name:              "Agent A",
-			AgentVersion:      "v1",
-			EnrollmentToken:   "enrollment-secret",
-			Protocol:          string(agentproto.AgentV1),
-		},
+	if _, err := agenttls.LoadOrCreate(stateDir, serverURL); err != nil {
+		t.Fatalf("create agent identity: %v", err)
+	}
+	serverPin, err := agenttls.ParseFingerprint(pin)
+	if err != nil {
+		t.Fatalf("parse server pin: %v", err)
+	}
+	state, err := agentstate.New(
+		serverURL,
+		[]agenttls.Fingerprint{serverPin},
+		"agent-a",
 	)
+	if err != nil {
+		t.Fatalf("create paired state: %v", err)
+	}
+	if err := agentstate.NewStore(stateDir).Save(state); err != nil {
+		t.Fatalf("save paired state: %v", err)
+	}
+	client, err := NewPaired(stateDir, "v1")
 	if err != nil {
 		t.Fatalf("new client: %v", err)
 	}

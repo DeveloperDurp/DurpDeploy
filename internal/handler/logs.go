@@ -55,14 +55,19 @@ func (h *LogHandler) StreamLogs(w http.ResponseWriter, r *http.Request) {
 		err := h.repo.ForEachDeploymentLogAfterID(
 			r.Context(),
 			repository.DeploymentLogCursor{
-				DeploymentID: deploymentID,
-				AfterID:      cursor,
+				DeploymentID:  deploymentID,
+				AfterSequence: cursor,
 			},
 			func(log db.DeploymentLog) error {
-				_, _ = fmt.Fprintf(w, "id: %d\ndata: %s\n\n", log.ID, log.Line)
+				_, _ = fmt.Fprintf(
+					w,
+					"id: %d\ndata: %s\n\n",
+					log.Sequence,
+					log.Line,
+				)
 				flusher.Flush()
-				if log.ID > cursor {
-					cursor = log.ID
+				if log.Sequence > cursor {
+					cursor = log.Sequence
 				}
 				return nil
 			},

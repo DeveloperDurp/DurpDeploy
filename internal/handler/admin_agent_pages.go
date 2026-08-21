@@ -51,30 +51,6 @@ func (h *AgentAdminHandler) AgentPage(
 	if !ok {
 		return
 	}
-	pools, err := h.repo.Queries.ListAgentPoolsByAgent(
-		request.Context(),
-		agent.ID,
-	)
-	if err != nil {
-		http.Error(
-			writer,
-			"could not load agent pools",
-			http.StatusInternalServerError,
-		)
-		return
-	}
-	tags, err := h.repo.Queries.ListAgentTagsByAgent(
-		request.Context(),
-		agent.ID,
-	)
-	if err != nil {
-		http.Error(
-			writer,
-			"could not load agent tags",
-			http.StatusInternalServerError,
-		)
-		return
-	}
 	events, err := h.repo.Queries.ListRedactedAgentEventsByAgent(
 		request.Context(), sql.NullString{String: agent.ID, Valid: true},
 	)
@@ -86,9 +62,51 @@ func (h *AgentAdminHandler) AgentPage(
 		)
 		return
 	}
+	environments, err := h.repo.Queries.ListEnvironments(request.Context())
+	if err != nil {
+		http.Error(
+			writer,
+			"could not load environments",
+			http.StatusInternalServerError,
+		)
+		return
+	}
+	assignments, err := h.repo.Queries.ListEnvironmentAgentAssignmentsByAgent(
+		request.Context(),
+		agent.ID,
+	)
+	if err != nil {
+		http.Error(
+			writer,
+			"could not load agent assignments",
+			http.StatusInternalServerError,
+		)
+		return
+	}
+	pairing, err := h.repo.Queries.GetAgentPairing(
+		request.Context(),
+		agent.ID,
+	)
+	paired := err == nil && pairing.State == "paired"
+	assigned := make(map[int64]struct{}, len(assignments))
+	for _, assignment := range assignments {
+		assigned[assignment.EnvironmentID] = struct{}{}
+	}
+	assignedEnvironments := make([]db.Environment, 0, len(assignments))
+	availableEnvironments := make([]db.Environment, 0, len(environments))
+	for _, environment := range environments {
+		if _, exists := assigned[environment.ID]; exists {
+			assignedEnvironments = append(assignedEnvironments, environment)
+			continue
+		}
+		availableEnvironments = append(availableEnvironments, environment)
+	}
 	if err := pages.AgentDetailsPage(pages.AgentDetailView{
-		Agent: agent, Pools: pools, Tags: tags, Events: events,
-		CurrentPath: request.URL.Path,
+		Agent: agent, Events: events,
+		AssignedEnvironments:  assignedEnvironments,
+		AvailableEnvironments: availableEnvironments,
+		Paired:                paired,
+		CurrentPath:           request.URL.Path,
 	}).Render(request.Context(), writer); err != nil {
 		http.Error(
 			writer,
@@ -118,85 +136,4 @@ func (h *AgentAdminHandler) agentPageAgent(
 		return db.Agent{}, false
 	}
 	return agent, true
-}
-
-func (h *PoolAdminHandler) ListPoolsPage(
-	writer http.ResponseWriter,
-	request *http.Request,
-) {
-	pools, err := h.repo.Queries.ListAgentPools(request.Context())
-	if err != nil {
-		http.Error(
-			writer,
-			"could not load agent pools",
-			http.StatusInternalServerError,
-		)
-		return
-	}
-	if err := pages.AgentPoolsPage(pages.AgentPoolsView{
-		Pools: pools, CurrentPath: request.URL.Path,
-	}).Render(request.Context(), writer); err != nil {
-		http.Error(
-			writer,
-			"could not render agent pools",
-			http.StatusInternalServerError,
-		)
-	}
-}
-
-func (h *PoolAdminHandler) PoolPage(
-	writer http.ResponseWriter,
-	request *http.Request,
-) {
-	id, ok := h.poolID(writer, request)
-	if !ok {
-		return
-	}
-	pool, err := h.repo.Queries.GetAgentPool(request.Context(), id)
-	if err != nil {
-		http.Error(
-			writer,
-			"could not load agent pool",
-			http.StatusInternalServerError,
-		)
-		return
-	}
-	members, err := h.repo.Queries.ListAgentPoolMembers(request.Context(), id)
-	if err != nil {
-		http.Error(
-			writer,
-			"could not load agent pool members",
-			http.StatusInternalServerError,
-		)
-		return
-	}
-	agents, err := h.repo.Queries.ListAgents(request.Context())
-	if err != nil {
-		http.Error(
-			writer,
-			"could not load agents",
-			http.StatusInternalServerError,
-		)
-		return
-	}
-	memberIDs := make(map[string]struct{}, len(members))
-	for _, member := range members {
-		memberIDs[member.ID] = struct{}{}
-	}
-	candidates := make([]db.Agent, 0, len(agents))
-	for _, agent := range agents {
-		if _, member := memberIDs[agent.ID]; !member {
-			candidates = append(candidates, agent)
-		}
-	}
-	if err := pages.AgentPoolDetailsPage(pages.AgentPoolDetailView{
-		Pool: pool, Members: members, Candidates: candidates,
-		CurrentPath: request.URL.Path,
-	}).Render(request.Context(), writer); err != nil {
-		http.Error(
-			writer,
-			"could not render agent pool",
-			http.StatusInternalServerError,
-		)
-	}
 }
