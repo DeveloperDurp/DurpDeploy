@@ -25,6 +25,8 @@ services:
       - ./compose.app.env
     environment:
       DURPDEPLOY_DB: /data/durpdeploy.db
+      # Caddy is the only public ingress on this private Compose network.
+      DURPDEPLOY_TRUSTED_PROXIES: 172.28.0.0/24
       # Optional. The mounted secret file at /etc/durpdeploy/key is the
       # primary path; secret/secret.go reads file first, env fallback. Set
       # this only when delivering the key via env (k8s, swarm, etc.).
@@ -115,6 +117,12 @@ volumes:
   durpdeploy-data:
   caddy-data:
   caddy-config:
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 172.28.0.0/24
 
 secrets:
   durpdeploy_key:

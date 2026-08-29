@@ -252,6 +252,24 @@ func TestLogin_Post_ValidCredentials(t *testing.T) {
 	}
 }
 
+func TestLogin_Post_PreservesStoredEmailCase(t *testing.T) {
+	h := newAuthHarness(t)
+	h.seedUser(t, "Admin@Example.com", "hunter2")
+
+	client := newJar(t)
+	resp, err := client.PostForm(h.server+"/login", url.Values{
+		"email":    {"Admin@Example.com"},
+		"password": {"hunter2"},
+	})
+	if err != nil {
+		t.Fatalf("post /login: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("status = %d, want 303", resp.StatusCode)
+	}
+}
+
 func TestLogin_Post_SetsSecureCookieWhenConfigured(t *testing.T) {
 	// Given: a handler configured for an HTTPS public origin.
 	h := newAuthHarness(t)

@@ -43,6 +43,20 @@ go test -run TestName ./internal/handler/...   # single test, single package
 
 CI stage order: `lint` (`go vet ./...` + `gofmt -l .` must be empty) → `test` → `build`. Go fails CI if any file isn't gofmt'd.
 
+## SonarCloud and Codex
+
+SonarCloud runs on pushes to `main`/`master` and on pull requests. It reports
+Go coverage and waits for the Quality Gate, so a failed gate fails the GitHub
+check. Before declaring pull-request work complete, inspect the SonarCloud
+check and address valid new-code findings. With a local `SONAR_TOKEN`, use:
+
+```bash
+make sonar-issues PR=<pull-request-number>
+```
+
+The command is read-only and must never print or persist `SONAR_TOKEN`.
+SonarCloud does not replace the required Go and end-to-end verification above.
+
 ## Conventions agents get wrong
 
 - **Pre-commit: run `make install-hooks` once per clone.** It copies `scripts/pre-commit` to `.git/hooks/pre-commit`, which runs `golines -m 80 --ignore-generated -l .` on staged Go files and blocks the commit if any line exceeds 80 cols. The Makefile target `golines-check` does the same dry-run for the whole tree. CI re-runs the same check in the `lint` stage, so `--no-verify` doesn't bypass the gate.

@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"log/slog"
 	"net"
 	"net/http"
@@ -138,6 +140,13 @@ func (l *loginLimiter) reset(key string) {
 	l.mu.Lock()
 	delete(l.entries, key)
 	l.mu.Unlock()
+}
+
+func loginPairKey(email, ip string) string {
+	sum := sha256.Sum256([]byte(
+		strings.ToLower(strings.TrimSpace(email)) + "\x00" + ip,
+	))
+	return "login-pair:" + hex.EncodeToString(sum[:])
 }
 
 func (h *AuthHandler) publicRateLimit(

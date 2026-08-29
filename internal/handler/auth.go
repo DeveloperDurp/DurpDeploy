@@ -100,10 +100,10 @@ func (h *AuthHandler) LoginPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	email := strings.ToLower(strings.TrimSpace(r.PostFormValue("email")))
+	email := r.PostFormValue("email")
 	password := r.PostFormValue("password")
 	ip := h.loginLimiter.clientIP(r)
-	pairKey := "login-pair:" + email + ":" + ip
+	pairKey := loginPairKey(email, ip)
 	if !h.loginLimiter.allow("login-ip:"+ip, loginIPLimit) ||
 		!h.loginLimiter.allow(pairKey, loginPairLimit) {
 		slog.Warn(

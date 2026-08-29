@@ -1,4 +1,5 @@
-name: Build
+name: SonarCloud
+
 on:
   push:
     branches:
@@ -6,15 +7,37 @@ on:
       - main
   pull_request:
     types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
 jobs:
   sonarqube:
-    name: SonarQube
+    name: SonarCloud Quality Gate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
-          fetch-depth: 0  # Shallow clones should be disabled for a better relevancy of analysis
+          fetch-depth: 0
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+      - name: Prepare generated assets
+        run: |
+          go install github.com/a-h/templ/cmd/templ@v0.3.1020
+          make swagger-ui-copy
+          templ generate
+      - name: Test with coverage
+        run: go test -count=1 -covermode=atomic -coverprofile=coverage.out ./...
       - name: SonarQube Scan
         uses: SonarSource/sonarqube-scan-action@7006c4492b2e0ee0f816d36501671557c97f5995 # v8.1.0
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          args: >-
+            -Dsonar.qualitygate.wait=true

@@ -1,10 +1,13 @@
 package handler
 
 import (
+	"crypto/sha256"
 	"net/http/httptest"
 	"net/netip"
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 func TestLoginLimiterRecoversAfterWindow(t *testing.T) {
@@ -24,6 +27,18 @@ func TestLoginLimiterRecoversAfterWindow(t *testing.T) {
 	now = now.Add(loginLimitWindow)
 	if !limiter.allow("pair", loginPairLimit) {
 		t.Fatal("request did not recover after window")
+	}
+}
+
+func TestLoginPairKeyIsNormalizedAndBounded(t *testing.T) {
+	first := loginPairKey(" Admin@Example.com ", "192.0.2.1")
+	second := loginPairKey("admin@example.com", "192.0.2.1")
+	if first != second {
+		t.Fatal("equivalent account identifiers produced different keys")
+	}
+	large := loginPairKey(strings.Repeat("x", 10<<20), "192.0.2.1")
+	if utf8.RuneCountInString(large) != len("login-pair:")+sha256.Size*2 {
+		t.Fatalf("large identifier key length = %d", len(large))
 	}
 }
 
