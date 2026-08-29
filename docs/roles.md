@@ -2,7 +2,7 @@
 
 DurpDeploy has three roles. Every user has exactly one. The role is set at
 user-creation time and stored in `users.role`. There is no UI to change a
-user's role today; use the `durpdeploy admin` CLI or a direct DB update.
+user's role today. Use the `durpdeploy admin` CLI or a direct DB update.
 
 ## The roles
 
@@ -10,7 +10,7 @@ user's role today; use the `durpdeploy admin` CLI or a direct DB update.
 |------------|-----------------------------------------------|---------------------------------------------------------|----------------|
 | `admin`    | Everything                                    | Everything (projects, steps, releases, deployments, …) | Yes (`/admin/audit`) |
 | `deployer` | Everything                                    | Everything — same writes as `admin`                     | No             |
-| `viewer`   | Everything (dashboard, projects, deployments) | Only their own Security settings; all other writes return 403 | No             |
+| `viewer`   | Everything (dashboard, projects, deployments) | Only their own Security settings. All other writes return 403 | No             |
 
 ## Where the gates live
 
@@ -18,7 +18,7 @@ The role enforcement is in three places:
 
 1. **Auth middleware** (`internal/auth/middleware.go`) — verifies the session
    cookie and injects the user into request context. Same for all three
-   roles; no role check here.
+   roles. No role check here.
 2. **CSRF middleware** (`internal/auth/csrf.go`) — the coarse write gate.
    It rejects every state-changing request from a `viewer` except the narrow
    self-security path. This is what stops a viewer from clicking Deploy or
@@ -35,15 +35,14 @@ A viewer may manage only their own Security settings after the normal session,
 CSRF, and fresh-reauthentication checks. This permits optional browser MFA
 enrollment, recovery-code regeneration, and MFA disablement without granting
 access to tokens or unrelated writes. A viewer may not manage another user's
-security state; administrator MFA reset remains admin-only.
+security state. Administrator MFA reset remains admin-only.
 
 ## A note on per-project authorization
 
-Today, **any `deployer` can deploy to any project**. There is no project
-membership check yet. P1-1 in the team-hardening plan introduces a
-`project_members` table that restricts deployers to projects they're a
-member of. Until that ships, the practical "least privilege" is to make
-non-admins `viewer`.
+Per-project authorization is enforced through `project_members`. Global admins
+bypass the membership check. Other users must be project members to read or
+write project resources. Only global administrators and project administrators
+can manage project members.
 
 ## Picking a role for a new user
 
@@ -77,7 +76,7 @@ numeric claims remain rejected. This weakens identity assurance and is
 appropriate only where Authentik independently
 establishes address ownership. An email match links to exactly one existing
 local account. Otherwise OIDC JIT-creates a user with an empty password. OIDC
-reauthentication is performed by the provider and bound back to the current
+reauthentication is done by the provider and bound back to the current
 local session. Local logout clears only the DurpDeploy session, and OIDC does
 not authenticate API tokens. Provider tokens, codes, and raw claims are never
 stored. If the provider is unavailable, local password login remains available.
