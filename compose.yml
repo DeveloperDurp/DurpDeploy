@@ -20,6 +20,8 @@ services:
     # Port 8080 is internal only — Caddy talks to it over the compose network.
     # Don't publish it to the host.
     env_file:
+      # Shared with Caddy so the app marks browser cookies Secure for HTTPS.
+      - ./compose.caddy.env
       - ./compose.app.env
     environment:
       DURPDEPLOY_DB: /data/durpdeploy.db
