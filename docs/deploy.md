@@ -3,7 +3,7 @@
 This walks through provisioning a fresh Debian 12 VM to run DurpDeploy behind
 Caddy with automatic HTTPS. At the end you will have:
 
-- A `durpdeploy` system user running the Go binary under systemd.
+- A `durpdeploy` system user that runs the Go binary with systemd.
 - Caddy in front, terminating TLS and reverse-proxying to `localhost:8080`.
 - A first admin user created via the CLI.
 - The dashboard reachable at `https://<your-host>/`.
@@ -16,7 +16,7 @@ Caddy with automatic HTTPS. At the end you will have:
 
 A Docker Compose stack ships the app, Caddy (reverse proxy + Let's Encrypt
 TLS), and Litestream (continuous SQLite backup to S3) in three services.
-The image is Alpine-based and runs as a non-root user; Caddy and Litestream
+The image is based on Alpine and operates as a non-root user. Caddy and Litestream
 are the official upstream images.
 
 ```bash
@@ -70,6 +70,52 @@ docker compose exec app admin create \
   --email admin@example.com --password '<strong-password>'
 ```
 
+### Remote agent control plane
+
+The complete agent runbook is [`docs/agents.md`](agents.md). Read it before
+opening the listener or starting an agent pairing. The short deployment
+boundary is:
+
+* The server owns SQLite, WAL/SHM files, agent records, policies, and the
+  server encryption key. An agent has no database and receives none of those
+  files or secrets.
+* Caddy and Let's Encrypt serve browser and API HTTPS on ports 80 and 443.
+  The dedicated agent listener is direct TLS 1.3 mTLS on port 10943 and does
+  not route through Caddy. Publish 10943 separately and firewall it to agent
+  networks.
+* The server listener requires all three variables together:
+
+  ```dotenv
+  DURPDEPLOY_AGENT_LISTEN_ADDR=0.0.0.0:10943
+  DURPDEPLOY_AGENT_PUBLIC_URL=https://<agent-control-host>
+  DURPDEPLOY_AGENT_IDENTITY_DIR=/var/lib/durpdeploy/agent-identity
+  ```
+
+* An unpaired agent needs only a private state directory, temporary local
+  pairing listener, and version. The administrator pairing flow stores the
+  pinned server endpoint and agent identity. Restarts use that paired state.
+
+  ```dotenv
+  DURPDEPLOY_AGENT_STATE_DIR=/var/lib/durpdeploy-agent
+  DURPDEPLOY_AGENT_LISTEN_ADDR=0.0.0.0:10943
+  DURPDEPLOY_AGENT_VERSION=<agent-version>
+  ```
+
+The optional Compose `agent` profile is a co-located demonstration only. It
+has a private state volume and no server database, server key, Docker socket,
+or inbound port. Production agents must run remotely on the host where the
+deployment commands belong. Use either:
+
+```bash
+docker compose --profile agent up -d --build agent
+podman compose --profile agent up -d --build agent
+```
+
+Do not run both commands for the same agent. For systemd, install
+`systemd/durpdeploy-agent.service`, use a dedicated `durpdeploy-agent` user,
+keep `/etc/durpdeploy-agent.env` mode `0600`, and use the commands in
+[`docs/agents.md`](agents.md) for start, status, logs, restart, and stop.
+
 DNS must be pointed at the host (port 80/443 open inbound) before the first
 `docker compose up` — Caddy issues Let's Encrypt certs on first request.
 See [`docs/backup-restore.md`](backup-restore.md) for the Litestream
@@ -78,7 +124,7 @@ restore drill and [`docs/security.md`](security.md) for the threat model.
 ### Browser MFA and public URL
 
 Set `DURPDEPLOY_URL` to one absolute public origin, for example
-`DURPDEPLOY_URL=https://durpdeploy.example.com`. Production must use HTTPS;
+`DURPDEPLOY_URL=https://durpdeploy.example.com`. Production must use HTTPS.
 HTTP is accepted only for `localhost` or loopback development. The app derives
 the WebAuthn RP ID from this hostname and does not trust request Host or
 forwarded-host headers. Changing the hostname or origin invalidates existing
@@ -87,17 +133,17 @@ users enroll new passkeys.
 
 Browser MFA is optional. After the first admin signs in, each user can enroll
 a TOTP authenticator or passkey from **Security**. Recovery codes are shown
-once when the first factor is activated or regenerated; store them in an
-approved password manager or offline secure storage, never in tickets, chat,
+once when the first factor is activated or regenerated. Store them in an
+approved password manager or offline protected storage, never in tickets, chat,
 or source control. An administrator can reset another user's MFA from user
 management after fresh reauthentication. Resetting MFA removes that user's
-browser sessions, challenges, factors, and recovery codes; it preserves API
+browser sessions, challenges, factors, and recovery codes. It preserves API
 tokens, which are separate single-bearer credentials.
 
 ### Optional OIDC sign-in
 
 OIDC is disabled unless an OIDC-specific variable is set. When enabled, all
-required values must be present. Use placeholders for deployment-specific
+necessary values must be present. Use placeholders for deployment-specific
 values, never a client secret in documentation:
 
 ```ini
@@ -139,11 +185,11 @@ tokens, authorization codes, or raw claims, and OIDC does not issue or protect
 API tokens. If provider discovery or login is unavailable, password login,
 existing sessions, health checks, and bearer API authentication continue to work.
 An OIDC-created empty-password account is recovered by an administrator through
-the existing local user recovery process; there is no self-service password reset.
+the existing local user recovery process. There is no self-service password reset.
 
-The Debian 12 bare-metal runbook below is the alternative if you want full
-control of the host (cgroup v2 sandbox for step scripts, custom kernel
-tuning, etc.). Most small teams will be fine with compose.
+Use the Debian 12 bare-metal procedure if you must control the host. This
+procedure includes a cgroup v2 sandbox and custom kernel settings. Compose is
+sufficient for most small teams.
 
 ### Plain Docker (binary distribution only)
 
@@ -173,16 +219,16 @@ Caddy, TLS, and Litestream are NOT included — bring your own.
 
 ## Database: SQLite (default), PostgreSQL, or SQL Server
 
-DurpDeploy runs on SQLite out of the box — no separate database server to
-provision, and the recommended choice for a single-instance install (see
-`docs/backup-restore.md` for the Litestream-based backup story).
+DurpDeploy uses SQLite by default. SQLite does not require a separate database
+server. Use SQLite for an installation with one application instance. Refer to
+`docs/backup-restore.md` for the Litestream backup procedure.
 
 PostgreSQL and SQL Server are also supported for teams that already operate
 those databases. The driver is selected from `DURPDEPLOY_DB`: `postgres://`
 and `postgresql://` URLs use PostgreSQL, while `sqlserver://` URLs use SQL
 Server. Any other value is treated as a SQLite file path (the default).
-PostgreSQL shares the SQLite migrations; SQL Server applies the embedded native
-MSSQL migrations while using the same generated query API.
+PostgreSQL uses the SQLite migrations. SQL Server applies the embedded native
+MSSQL migrations and uses the same generated query API.
 
 ```bash
 # SQLite (default)
@@ -191,7 +237,7 @@ export DURPDEPLOY_DB=/var/lib/durpdeploy/durpdeploy.db
 # PostgreSQL
 export DURPDEPLOY_DB="postgres://durpdeploy:<password>@localhost:5432/durpdeploy?sslmode=disable"
 
-# SQL Server (TLS is required by default; use a certificate trusted by the host)
+# SQL Server (TLS is necessary by default; use a certificate trusted by the host)
 export DURPDEPLOY_DB="sqlserver://durpdeploy:<password>@sqlserver.example.com:1433?database=durpdeploy"
 ```
 
@@ -201,7 +247,7 @@ engines — pick one per environment.
 
 Back up and restore the database together with the server secret key. MFA
 records, browser sessions, recovery-code hashes, and encrypted TOTP material
-are database state; restoring one without the matching key can make encrypted
+are database state. Restoring one without the matching key can make encrypted
 TOTP material unusable. A restore does not change the configured origin, so a
 hostname change still requires passkey re-enrollment.
 
@@ -211,7 +257,7 @@ hostname change still requires passkey re-enrollment.
 
 - A Debian 12 VM with a **public IP** and root/sudo access.
 - A **DNS A record** pointing your hostname (e.g. `durpdeploy.example.com`)
-  at that IP. Caddy cannot obtain a Let's Encrypt certificate without it.
+  at that IP. Caddy cannot get a certificate from Let's Encrypt without it.
 - Ports **80 and 443 open inbound**. The Go server listens on `localhost:8080`
   only — it is never exposed directly.
 
@@ -259,9 +305,9 @@ sudo install -d -o root  -g root  -m 0750 /var/log/caddy
 ```
 
 `/var/lib/durpdeploy` holds the SQLite database (and WAL/SHM). The `durpdeploy`
-user owns it; no other account can read it. `/var/log/caddy` is owned by root
-because Caddy runs as root initially (it drops privileges to the `caddy` user
-for the listener, but writes the log file as configured).
+user owns it. No other account can read it. `/var/log/caddy` is owned by root
+because Caddy initially operates as root. It changes to the `caddy` user for
+the listener. It writes the log file as configured.
 
 ---
 
@@ -296,10 +342,10 @@ openssl rand -base64 32 | sudo -u durpdeploy tee /etc/durpdeploy/key >/dev/null
 sudo chmod 0600 /etc/durpdeploy/key
 ```
 
-(Alternatively set `DURPDEPLOY_SECRET_KEY` — same base64, 32-byte value —
-in the systemd unit's `Environment=` instead of a file; the file is
-checked first if both are present.) Losing this key makes every stored
-secret unrecoverable — back it up alongside the DB.
+As an alternative, set `DURPDEPLOY_SECRET_KEY` to the same base64, 32-byte value
+in the systemd unit's `Environment=`. If the file and variable are present, the
+server uses the file. If you lose this key, you cannot decrypt the stored
+secrets. Back up the key with the database.
 
 ---
 
@@ -307,7 +353,7 @@ secret unrecoverable — back it up alongside the DB.
 
 Deployment steps no longer run as the `durpdeploy` user directly (P1-4). A
 low-privileged `durpdeploy-runner` account is used instead, so a buggy or
-malicious step script cannot read the SQLite DB, the secret key, or write
+malicious step script cannot read the SQLite DB or the secret key. The script cannot write
 outside its own scratch chroot.
 
 ```bash
@@ -328,10 +374,10 @@ sudo chown -R durpdeploy:durpdeploy /sys/fs/cgroup/durpdeploy
 echo '+cpu +memory +pids' | sudo tee /sys/fs/cgroup/durpdeploy/cgroup.subtree_control
 ```
 
-This directory does not survive a reboot (cgroupfs is virtual) — re-run the
-above after every reboot, or add a small `systemd-tmpfiles` rule / oneshot
-unit if you want it automated. `durpdeploy` degrades gracefully (logs a
-warning, skips resource limiting) if this directory is missing.
+The operating system removes this virtual directory during a reboot. Run the
+commands again after each reboot. As an alternative, add a `systemd-tmpfiles` rule
+or a one-shot unit. If this directory is missing, `durpdeploy` writes a warning
+and does not apply resource limits.
 
 ---
 
@@ -344,7 +390,7 @@ sudo systemctl enable --now durpdeploy
 sudo systemctl status durpdeploy --no-pager
 ```
 
-You should see `active (running)`. If it fails, check the logs:
+You must see `active (running)`. If it fails, check the logs:
 
 ```bash
 sudo journalctl -u durpdeploy -n 50 --no-pager
@@ -380,7 +426,7 @@ sudo journalctl -u caddy -n 50 --no-pager
 > Caddy does not have it, rebuild with
 > `xcaddy build --with github.com/mholt/caddy-ratelimit` or remove the
 > `@login` / `rate_limit` block — argon2id's cost is the primary brute-force
-> mitigation; rate limiting is defense in depth.
+> mitigation. Rate limiting is defense in depth.
 
 ---
 
@@ -430,7 +476,7 @@ curl -I https://durpdeploy.example.com
 
 Then in a browser:
 
-1. Open `https://durpdeploy.example.com` → should redirect to `/login`.
+1. Open `https://durpdeploy.example.com` → must redirect to `/login`.
 2. Log in with the admin email + password you just created.
 3. The dashboard renders.
 
@@ -465,7 +511,9 @@ You can automate this with a daily cron job:
 
 ### Backup Health Monitoring (Litestream)
 
-If you are using Litestream (Option B below), you can enable an automated health check that triggers a notification (Slack, Discord, Gotify, or Email) if replication stops or falls behind.
+If you use Litestream, you can enable an automatic health check. The check sends
+a notification if replication stops or has a delay. It supports Slack,
+Discord, Gotify, and email.
 
 1. Configure the check command and interval via environment variables in your systemd unit or environment file:
 
@@ -489,12 +537,11 @@ When the check command fails, a `backup_unhealthy` event is published to all pro
 
 ## Backup
 
-SQLite WAL mode makes a live `sqlite3 .backup` safe (it takes a consistent
-snapshot without stopping the server). **See
-[`docs/backup-restore.md`](backup-restore.md) for the full setup, verification,
-and restore runbook** — it covers both options below in detail, plus the
-systemd unit/config templates (`systemd/litestream.service`,
-`systemd/litestream.yml`) and the `scripts/test-backup-restore.sh` acceptance
+SQLite WAL mode permits a live `sqlite3 .backup` operation. The operation makes
+a consistent snapshot without a server stop. Refer to
+[`docs/backup-restore.md`](backup-restore.md) for setup, verification, and
+restore instructions. It also describes the systemd templates and the
+`scripts/test-backup-restore.sh` acceptance
 test. The short version:
 
 ### Option A — daily cron with `sqlite3 .backup` (simplest)
@@ -558,7 +605,7 @@ rate limited: too many certificates already issued for exact set of domains
 Let's Encrypt allows 5 duplicate certificates per week. If you have been
 reprovisioning the VM repeatedly, either:
 
-- Use the staging endpoint while testing (add `acme_ca https://acme-staging-v02.api.letsencrypt.org/directory` to the Caddyfile's global options block), or
+- Use the staging endpoint during tests. Add `acme_ca https://acme-staging-v02.api.letsencrypt.org/directory` to the global options in the Caddyfile.
 - Wait a week, or
 - Reuse the certificate from a previous VM (copy `/var/lib/caddy/.local/share/caddy/certificates/`).
 
@@ -582,5 +629,5 @@ Check the runner logs — the deploy runs `bash` steps via `os/exec`, inheriting
 the `durpdeploy` user's environment. If a step needs a tool not in the
 `durpdeploy` user's `PATH`, install it system-wide or set the variable in the
 project's variables. Steps run in their own process group and are fully
-reaped on timeout, cancel, or server shutdown (P1-3); OS-level sandboxing
+reaped on timeout, cancel, or server shutdown (P1-3). Operating-system sandboxing
 (chroot/namespaces/cgroups) is enabled by default if provisioned per Step 5.

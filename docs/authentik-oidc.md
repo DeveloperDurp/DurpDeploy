@@ -30,7 +30,7 @@ these groups as carefully as local administrator access.
 In the Authentik administrator interface:
 
 Before configuring the client details, select a provider `Signing Key`. DurpDeploy
-verifies ID tokens using the provider's published JWKS, so this integration needs
+verifies ID tokens with the provider's published JWKS. Thus, this integration needs
 asymmetric token signatures that can be checked through that JWKS. Selecting the
 default `authentik Self-signed Certificate` is sufficient for local or setup use.
 For production, an operator-managed certificate and key may be more appropriate.
@@ -51,7 +51,7 @@ Authentik OIDC client.
    this provider, including any provider path and trailing slash. For example,
    Authentik may show `https://authentik.example/application/o/durpdeploy/`.
    Do not omit the path, add or remove a trailing slash, or manually alter the
-   value; reject only a value with a query or fragment. Use the same value for
+   value. Reject only a value with a query or fragment. Use the same value for
    `DURPDEPLOY_OIDC_ISSUER`.
 5. Add one strict authorization redirect URI:
 
@@ -65,7 +65,7 @@ Authentik OIDC client.
 6. Allow these exact scopes, in any UI order: `openid profile email`.
 
 The issuer and the DurpDeploy public URL must both use HTTPS. The issuer may
-include Authentik's required provider path and trailing slash; copy it exactly.
+include the necessary Authentik provider path and trailing slash. Copy it exactly.
 The DurpDeploy canonical public URL, unlike the issuer, must have no path, query,
 or fragment. The callback is derived from that URL, so a proxy URL mismatch
 causes a redirect or state failure.
@@ -89,20 +89,20 @@ so the ID token contains:
 * `name`, when you want Authentik to supply the display name.
 * `groups`, an array of strings containing the exact configured group names.
 
-Attach that mapping to the provider's selected scopes, normally under the
-`profile` scope or a dedicated scope that is requested by the client. If you
-use a dedicated scope, keep the requested DurpDeploy scopes unchanged and add
-the mapping to the provider so it is included for the `profile` request.
+Attach that mapping to the scopes that the provider selects. Usually, attach
+it to the `profile` scope. You can also attach it to a dedicated scope. Do not
+change the DurpDeploy scopes. Add the mapping to the provider for the
+`profile` request.
 
 An Authentik property mapping expression can return a dictionary containing
-the required claim names. The group value should be built from the user's
+the necessary claim names. Build the group value from the user's
 actual group names, not from display labels or group objects. Set the verified
 flag only from an enrollment or directory rule that your organization trusts.
 Do not set `email_verified` to true merely because the user has an Authentik
 account.
 
 After saving the mapping, inspect the provider's token preview or a test
-login using Authentik's version-appropriate tools. Verify the claims without
+login with the applicable Authentik tools. Verify the claims without
 copying tokens or full claim payloads into logs or tickets. When unset, or set
 to `true`, DurpDeploy requires the callback ID token to contain the literal
 boolean `email_verified: true`. Explicit lowercase
@@ -115,9 +115,9 @@ establishes address ownership.
 
 ## 3. Create and assign the role groups
 
-Create the three groups if they do not exist, using the exact strings selected
+Create the three groups if they do not exist. Use the exact strings selected
 above. Add test users to one group at a time first. Then assign the groups to
-the Authentik application or provider using the access policy or group policy
+the Authentik application or provider with the access policy or group policy
 mechanism available in your release.
 
 For an operator who belongs to both admin and deployer, DurpDeploy still stores
@@ -129,7 +129,7 @@ OIDC login.
 ## 4. Deploy DurpDeploy with OIDC enabled
 
 OIDC is disabled unless at least one OIDC-specific variable is set. Once it is
-enabled, all required values below must be present. The group values must be
+enabled, all necessary values below must be present. The group values must be
 distinct. The display name and group claim have defaults, but setting them
 explicitly makes the deployment easier to audit.
 
@@ -146,12 +146,12 @@ DURPDEPLOY_OIDC_GROUP_CLAIM=groups
 DURPDEPLOY_OIDC_REQUIRE_EMAIL_VERIFIED=<true|false>
 ```
 
-The required values are `DURPDEPLOY_URL`, the issuer, client ID, client
+The necessary values are `DURPDEPLOY_URL`, the issuer, client ID, client
 secret, and all three role group variables. `DURPDEPLOY_OIDC_REQUIRE_EMAIL_VERIFIED`
-defaults to `true`; set it to explicit lowercase `false` only where Authentik
+defaults to `true`. Set it to explicit lowercase `false` only where Authentik
 independently establishes address ownership. This weakens identity assurance
 and accepts a present literal JSON boolean `email_verified: true` or
-`email_verified: false` claim; missing, null, string, and numeric claims remain
+`email_verified: false` claim. Missing, null, string, and numeric claims remain
 rejected. `DURPDEPLOY_OIDC_DISPLAY_NAME`
 defaults to `SSO`.
 `DURPDEPLOY_OIDC_GROUP_CLAIM` defaults to `groups`.
@@ -181,7 +181,7 @@ Use a test account before changing production group membership.
       `deployer`, and a viewer user becomes `viewer`.
 - [ ] A user in multiple configured groups receives the highest-precedence
       role, admin over deployer over viewer.
-- [ ] An email matching one local account links to that account. When unset or `true`, the ID token has literal JSON boolean `email_verified: true`; with explicit lowercase `false`, it has a present literal JSON boolean `email_verified: true` or `email_verified: false`. Missing, null, string, and numeric claims are rejected.
+- [ ] An email matching one local account links to that account. When unset or `true`, the ID token has literal JSON boolean `email_verified: true`. With explicit lowercase `false`, it has a present literal JSON boolean `email_verified: true` or `email_verified: false`. Missing, null, string, and numeric claims are rejected.
 - [ ] A verified email with no local match creates a JIT user with an empty
       password.
 - [ ] Password login still works when the provider is unavailable.
@@ -203,7 +203,7 @@ does not accept wildcard redirect URIs.
 
 ### OIDC is not shown on the login page
 
-Check that at least one OIDC-specific variable is set and that all required
+Make sure that at least one OIDC-specific variable is set and that all necessary
 variables are nonempty. `DURPDEPLOY_URL` alone does not enable OIDC. Check the
 service environment, not only the shell where the file was edited, then
 restart the service.
@@ -213,7 +213,7 @@ restart the service.
 The scope mapping may be attached to the wrong provider, selected scope, or
 token type. Confirm that the mapping is selected by this provider and that the
 claims are in the ID token. Use the exact claim name configured in
-`DURPDEPLOY_OIDC_GROUP_CLAIM`; the default is `groups`. Confirm that group
+`DURPDEPLOY_OIDC_GROUP_CLAIM`. The default is `groups`. Confirm that group
 values are strings and that the configured names match exactly.
 
 ### The user gets the wrong role
@@ -241,19 +241,19 @@ is deliberate provider isolation, not a signal to disable TLS verification.
 
 OIDC is an optional login factor, not a replacement for local authentication.
 The first email match links exactly one local account. A new email creates a JIT user with an empty password. Whether the email must be verified depends on `DURPDEPLOY_OIDC_REQUIRE_EMAIL_VERIFIED` (default `true`). That user has no self-service
-password reset; an administrator must use the existing local recovery process.
+password reset. An administrator must use the existing local recovery process.
 
 Each successful SSO login synchronizes the local name, email, and role. Password
 login remains available beside SSO and uses the most recently stored local role.
-OIDC reauthentication is performed by Authentik and then bound to the current
+OIDC reauthentication is done by Authentik and then bound to the current
 DurpDeploy session and stored OIDC identity. DurpDeploy does not persist
 provider tokens, authorization codes, or raw claims. OIDC does not use UserInfo,
 does not authenticate API tokens, and does not assert local MFA.
 
 Logout is local only. It clears the DurpDeploy session, not the Authentik
-session, and there is no upstream logout. Closing the browser or using the
+session, and there is no upstream logout. Close the browser or use the
 provider's own logout is separate from DurpDeploy logout.
 
 These limits are part of the current behavior. Review [`docs/security.md`](security.md),
 [`docs/roles.md`](roles.md), and [`docs/attack-drill.md`](attack-drill.md) before
-using group membership as an emergency access control.
+use group membership as an emergency access control.
