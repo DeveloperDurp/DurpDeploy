@@ -58,8 +58,8 @@ missing selectors, unreadable geometry, and interaction failures fail the test.
 
 `MOBILE_BASELINE=1` is an explicit harness diagnostic only. The harness treats
 it as a baseline when `MOBILE_STRICT` is anything other than `"1"`, including
-when it is absent or `"0"`; the normal tagged test sets it to `"1"`. Use it
-only while diagnosing the harness with its required environment inputs. Do not
+when it is absent or `"0"`. The normal tagged test sets it to `"1"`. Use it
+only while you diagnose the harness with its necessary environment inputs. Do not
 add it to the Make target, container entrypoint, or GitLab job.
 
 ## Evidence and receipts
@@ -67,12 +67,12 @@ add it to the Make target, container entrypoint, or GitLab job.
 The Go test creates `.omo/evidence` itself with mode `0700` and writes its
 receipt with mode `0600`. A direct successful run writes the default receipt
 to `.omo/evidence/task-3-mobile-readability-receipt.json`. That ignored path is
-an output, not a required checkout artifact.
+an output, not a necessary checkout artifact.
 
 The container supplies a run-specific receipt name, then copies it on exit to
 `/artifacts/<run-id>/mobile-readability-<run-id>.json`. The harness also writes
 its JSON reports and PNG screenshots below that run directory. Local Docker
-runs export it as `artifacts/mobile/<run-id>/`; GitLab copies `/artifacts` and
+runs export it as `artifacts/mobile/<run-id>/`. GitLab copies `/artifacts` and
 uploads `artifacts/mobile/` with `when: always` for one week. The container
 does not copy source or evidence into an image layer.
 
@@ -82,8 +82,8 @@ does not copy source or evidence into an image layer.
 alias, `--tls=false`, `DOCKER_TLS_CERTDIR=""`, and
 `DOCKER_HOST=tcp://docker:2375`. The job waits up to 30 seconds for
 `docker info` before building and creating the test container. If the daemon
-disappears during cleanup, `after_script` records the diagnostic and avoids a
-misleading secondary artifact-copy failure.
+stops during cleanup, `after_script` records the diagnostic. Thus, it prevents
+a misleading secondary artifact-copy failure.
 
 The runner needs a privileged Docker executor, or a Kubernetes runner that can
 run privileged pods and services. GitLab copies the checkout into a created

@@ -4,25 +4,25 @@ DurpDeploy supports event-driven notifications for deployment start, success, an
 
 Notifications are configured in two parts:
 1. **Server-wide settings**: Configured via environment variables (primarily for Email/SMTP).
-2. **Project-specific settings**: Configured in the UI under **Project** → **Notifications**.
+2. **Project-specific settings**: Configure these settings in **Project** → **Notifications**.
 
 ---
 
 ## Email (SMTP)
 
-Email notifications use a server-wide SMTP configuration. Individual projects then define which email addresses should receive notifications.
+Email notifications use a server-wide SMTP configuration. Individual projects then define which email addresses must receive notifications.
 
 ### 1. Server-wide Configuration
 
-Set the following environment variables for the DurpDeploy process (typically in your systemd unit or Docker environment):
+Set the environment variables that follow for the DurpDeploy process:
 
 | Variable | Description | Example |
 |---|---|---|
-| `DURPDEPLOY_SMTP_HOST` | **Required to enable email.** The SMTP server hostname. | `smtp.gmail.com` |
+| `DURPDEPLOY_SMTP_HOST` | **Necessary to enable email.** The SMTP server hostname. | `smtp.gmail.com` |
 | `DURPDEPLOY_SMTP_PORT` | The SMTP server port. Defaults to `25` if omitted. | `587` |
 | `DURPDEPLOY_SMTP_FROM` | The "From" address for notification emails. | `deploy@example.com` |
-| `DURPDEPLOY_SMTP_USER` | The SMTP username (if authentication is required). | `deploy@example.com` |
-| `DURPDEPLOY_SMTP_PASS` | The SMTP password (if authentication is required). | `app-specific-password` |
+| `DURPDEPLOY_SMTP_USER` | The SMTP username (if authentication is necessary). | `deploy@example.com` |
+| `DURPDEPLOY_SMTP_PASS` | The SMTP password (if authentication is necessary). | `app-specific-password` |
 
 **Note on Security:** `smtp.SendMail` (used by DurpDeploy) will attempt to use `STARTTLS` if the server advertises it.
 

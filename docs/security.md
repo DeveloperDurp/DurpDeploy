@@ -20,6 +20,8 @@ What we defend against:
 - Cross-project access by a non-member (per-project authorization middleware)
 - Roster tampering by a non-admin project member (per-project admin gate on member add/remove)
 - A leaked `variables`/`release_variables` DB file, on its own, does not disclose secret values (AES-256-GCM at rest)
+- Remote agents do not receive the server database, server encryption key, or Docker socket
+- Agent transport uses outbound-only mTLS with pinned peer fingerprints and one-time pairing
 
 ### OIDC boundary and threat model
 
@@ -31,7 +33,7 @@ The approved variables are `DURPDEPLOY_OIDC_ISSUER`,
 `DURPDEPLOY_OIDC_GROUP_CLAIM`, and
 `DURPDEPLOY_OIDC_REQUIRE_EMAIL_VERIFIED` (default `true`). It also requires the HTTPS canonical
 `DURPDEPLOY_URL`. The provider redirect URI is exactly
-`DURPDEPLOY_URL + /login/oidc/callback`; scopes are `openid`, `profile`, and
+`DURPDEPLOY_URL + /login/oidc/callback`. Scopes are `openid`, `profile`, and
 `email`.
 
 The provider is authoritative for a successful OIDC login's verified identity
@@ -59,16 +61,16 @@ and local MFA is not asserted by an OIDC login.
 
 Provider outage is isolated from local authentication: password login, existing
 sessions, health checks, and bearer API authentication remain usable. An
-OIDC-created empty-password account has no self-service password reset; an
+OIDC-created empty-password account has no self-service password reset. An
 administrator must use the existing local user recovery process.
 
 What we do **not** defend against yet (see Known Gaps):
 
 - Audit log retention / tamper-proofing
 
-Runner orphan cleanup on shutdown/timeout is handled (process-group SIGKILL,
-see "Runner cleanup" below); per-step OS-level sandboxing
-(chroot/namespaces/seccomp) is still future work.
+Runner orphan cleanup on shutdown/timeout and the local step sandbox are shipped.
+Remote agents are separately sandboxed as dedicated users with private state
+directories and no server storage access. The agent does not provide SSH access.
 
 ---
 
@@ -77,7 +79,7 @@ see "Runner cleanup" below); per-step OS-level sandboxing
 **Implementation:** `internal/auth/auth.go`
 
 - Session cookie (`session` key, `HttpOnly`, `SameSite=Lax`).
-- `AuthMiddleware` validates the cookie on every protected route; redirects to
+- `AuthMiddleware` validates the cookie on every protected route. Redirects to
   `/login` on miss.
 - Passwords hashed with **argon2id** (`time=2, memory=64 MB, threads=2`).
   Each wrong-password guess costs ~100 ms of server CPU and ~64 MB of RAM.
@@ -89,19 +91,19 @@ see "Runner cleanup" below); per-step OS-level sandboxing
 Browser MFA is optional. An enrolled user completes a browser login with their
 password and one current TOTP code, passkey, or recovery code. TOTP is not
 phishing-resistant. Passkeys are bound to the single origin and RP ID derived
-from `DURPDEPLOY_URL`; changing its hostname or origin invalidates the stored
+from `DURPDEPLOY_URL`. Changing its hostname or origin invalidates the stored
 credential relationship and requires passkey re-enrollment.
 
 Recovery codes are one-time values. They are displayed only when first
-generated or regenerated, and only their hashes are stored. Users should keep
-the displayed values in approved secure storage. MFA ceremony and secret
-responses use `Cache-Control: no-store`; do not put recovery codes, TOTP
+generated or regenerated, and only their hashes are stored. Users must keep
+the displayed values in approved protected storage. MFA ceremony and secret
+responses use `Cache-Control: no-store`. Do not put recovery codes, TOTP
 seeds, cookies, challenges, or assertions in URLs, logs, tickets, or docs.
 
 The final `session` cookie is `HttpOnly`, `SameSite=Lax`, and `Secure` when
 `DURPDEPLOY_URL` uses HTTPS. Pending MFA cookies are separate from the final
 session and do not authorize protected routes. Factor completion issues a new
-browser session and records `reauthenticated_at`; factor changes, disablement,
+browser session and records `reauthenticated_at`. Factor changes, disablement,
 password changes, and administrator resets invalidate the affected browser
 sessions and pending challenges.
 
@@ -111,9 +113,9 @@ administrator reset does not revoke API tokens. Revoke API tokens separately
 when their bearer value may have leaked.
 
 Users enroll or recover factors from **Security**. An administrator may reset
-another user's MFA only after fresh reauthentication; that reset removes the
+another user's MFA only after fresh reauthentication. That reset removes the
 target's factors, recovery codes, browser sessions, and pending challenges.
-It intentionally preserves API tokens. This is an operational contract; the
+It intentionally preserves API tokens. This is an operational contract. The
 browser ceremony end-to-end proof is tracked separately from this document.
 
 ---
@@ -129,7 +131,7 @@ browser ceremony end-to-end proof is tracked separately from this document.
   - HTMX requests → `200` + `HX-Trigger: makeToast` (red toast, page stays).
   - Non-HTMX form submits → `403` + styled error page.
 - CSRF rejections are **not** written to `audit_log` (intentional — failed
-  attempts should not be enumerable).
+  attempts must not be enumerable).
 
 ---
 
@@ -137,7 +139,7 @@ browser ceremony end-to-end proof is tracked separately from this document.
 
 ### Role-based access
 
-**Roles:** `admin`, `deployer`, `viewer` (global; enforced by the
+**Roles:** `admin`, `deployer`, `viewer` (global. Enforced by the
 `CHECK (role IN ('admin', 'deployer', 'viewer'))` constraint in
 `migrations/011_auth.sql` and by `validRoles` in `internal/handler/users.go`).
 Per-project member roles are `admin`, `deployer`
@@ -152,7 +154,7 @@ Two-layer defense for viewer read-only enforcement:
    never sees a useless form. `pages.CanWrite(ctx)` / `components.canWrite(ctx)`
    return `false` for viewers.
 
-Both layers are required. Skipping the templ guard leaves dead-end UI;
+Both layers are necessary. Without the templ guard, the user interface has dead-end controls.
 skipping the middleware leaves a security hole.
 
 The narrow exception is self-security: a viewer may manage only their own
@@ -163,8 +165,9 @@ checks. A viewer cannot manage another user, deployments, projects, or tokens.
 
 **Implementation:** `internal/auth/projectaccess.go`
 
-- `RequireProjectAccess` middleware: admin bypass; 404 on missing project
-  (hides existence); 403 on non-member; 200 on member.
+- `RequireProjectAccess` middleware: An administrator can bypass this check.
+  A missing project causes a 404 response. A non-member gets a 403 response.
+  A member gets a 200 response.
 - `CreateProject` auto-adds the creator as project admin.
 - `ListProjects` filters by membership for non-admins.
 
@@ -183,13 +186,13 @@ for member add/remove is enforced **at the handler level** via
 - `AddMember` / `RemoveMember` return `403` when it returns `false`.
 
 This keeps per-project deployers/viewers from editing the roster while still
-letting them reach the other project routes. `canManageProject` also gates the
+letting them access the other project routes. `canManageProject` also gates the
 Members section of the project edit page (UI layer), mirroring the
 CanWrite two-layer pattern.
 
 ### Admin-only routes
 
-Routes under `/admin/users/*` are gated by `RequireRole("admin")`. The
+Routes in `/admin/users/*` are gated by `RequireRole("admin")`. The
 `CanWrite` templ guard is applied there too as belt-and-suspenders.
 
 ---
@@ -239,16 +242,14 @@ redirect := fmt.Sprintf(
 ```
 
 **Risk:** The plaintext password appears in:
-- Server access logs of any reverse proxy that logs the full URL (Caddy,
-  nginx, etc.) — the current code-level comment assumes only `r.URL.Path` is
-  logged, but this is not guaranteed across deployments or future logging
-  changes.
+- Access logs can contain the full URL. This can occur in Caddy, nginx, and
+  other reverse proxies. The code comment only describes the application log.
 - Browser history.
 - The `Referer` header on any subsequent navigation away from the page.
 
-**Recommended fix:** Store the one-time password in a short-lived DB row (or
-session flash) keyed by `new_user_id`, delete it after the first read, and
-never embed it in the URL.
+**Recommended fix:** Store the one-time password in a temporary database row or
+session flash. Use `new_user_id` as the key. Delete it after the first read.
+Never put it in the URL.
 
 ---
 
@@ -256,12 +257,10 @@ never embed it in the URL.
 
 **File:** `internal/auth/projectaccess.go:55–60`
 
-When the user is a global admin, `RequireProjectAccess` calls
-`next.ServeHTTP` without injecting the project ID into context via
-`projectAccessKey{}`. Any handler that calls `auth.ProjectIDFromContext`
-downstream will receive `(0, false)` for admins, which may cause silent
-failures or incorrect behavior if the handler relies on the context value
-being set.
+For a global administrator, `RequireProjectAccess` calls `next.ServeHTTP`
+without a project ID in `projectAccessKey{}`. Thus,
+`auth.ProjectIDFromContext` returns `(0, false)`. A handler that uses this value
+can give an incorrect result.
 
 **Recommended fix:** Inject the project ID into context for admins the same
 way it is injected for members, before calling `next.ServeHTTP`.
@@ -337,13 +336,10 @@ The runner is dispatched with `context.Background()` rather than the request
 context. This is intentional (the deploy must outlive the HTTP request), but
 it means the only cancellation path is `runner.Cancel(id)`.
 
-**Fix (P1-4, shipped):** Each step now runs in its own process group
-(`cmd.SysProcAttr.Setpgid`, `internal/runner/runner.go`). Step timeout and
-`Cancel` SIGKILL the whole group (`-pid`), not just the bash PID, so
-grandchildren spawned by a script are reaped too. `cmd/server/main.go` now
-traps `SIGINT`/`SIGTERM`, drains the HTTP server, and calls
-`DeploymentRunner.KillAll` to SIGKILL every in-flight step's process group
-before exiting — a server restart no longer orphans a running bash tree.
+**Fix (P1-4, shipped):** Each step operates in its own process group. A step
+timeout or `Cancel` sends SIGKILL to the group. Thus, the signal also stops
+child processes. During shutdown, `DeploymentRunner.KillAll` stops all active
+step process groups. A server restart does not leave a Bash process active.
 
 ---
 
@@ -364,18 +360,15 @@ AES-256-GCM encrypted before it ever reaches SQLite:
   variable's value via `Repository.EncryptValue` before writing the
   `release_variables` row (values are never round-tripped through the DB
   in plaintext).
-- **Decrypt path:** `Repository.GetVariable` / `ListVariablesByProject` /
-  `GetReleaseVariable` / `ListReleaseVariablesByRelease` decrypt into a
-  transient Go string on read. The plaintext is never written back to the
-  DB, logged, or included in an error message — `secret.Box.Decrypt`
-  returns only static error strings (`"authentication failed"`, etc.), never
-  the ciphertext or plaintext.
-- **Runner:** `DeploymentRunner.Run` still receives plaintext via the
-  decrypting `ListReleaseVariablesByRelease` — the runner needs real values
-  to inject as env vars — and feeds them into the regex-based `Scrubber`
-  described below (P1-5).
+- **Decrypt path:** The repository decrypts a value into a temporary Go string.
+  It does not write plaintext to the database or a log. It does not put
+  plaintext in an error message. `secret.Box.Decrypt` returns only fixed error
+  text.
+- **Runner:** `DeploymentRunner.Run` receives plaintext from
+  `ListReleaseVariablesByRelease`. The runner puts these values in environment
+  variables. It also gives them to the `Scrubber` described below.
 - **Acceptance check:** `sqlite3 durpdeploy.db 'select * from variables'`
-  shows only base64 ciphertext in `value`; the app reads/writes normally
+  shows only base64 ciphertext in `value`. The app reads/writes normally
   through the UI because the repository layer decrypts/encrypts
   transparently.
 
@@ -412,11 +405,10 @@ sudo chmod 0600 /etc/durpdeploy/key
 sudo systemctl restart durpdeploy
 ```
 
-Until the server is restarted with the new key installed, **do not discard
-the old key** — the rotate command already re-encrypted every row with the
-new one, so the running server (still holding the old key in memory) will
-fail to decrypt on its next read. Restart promptly after a successful
-rotation.
+**Do not discard the old key before the server restart.** The rotate command
+encrypts all rows with the new key. The active server still has the old key in
+memory. Thus, it cannot decrypt a new value. Restart the server immediately
+after a successful rotation.
 
 ---
 
@@ -424,47 +416,42 @@ rotation.
 
 **Implementation:** `internal/runner/scrubber.go`, `internal/runner/runner.go`
 
-Deployment logs are scrubbed before they are broadcast over SSE
-(`LogBroker.Broadcast`) or persisted to `deployment_logs`. The old
-redactor did a per-line `strings.ReplaceAll` for each literal secret value —
-it missed common credential formats entirely and couldn't catch a secret
-that was split across two `Write` calls or contained an embedded newline
-(e.g. a multi-line SSH key).
+DurpDeploy scrubs deployment logs before an SSE broadcast or a database write.
+The old scrubber used `strings.ReplaceAll` for each line and secret. It did not
+find some credential formats. It also did not find a secret in two writes or
+a secret that contained a newline.
 
 `broadcastWriter` now delegates to a `Scrubber` (`internal/runner/scrubber.go`),
 built once per deployment run from that environment's secret variable
 values:
 
-- **Single compiled regex:** every literal secret (escaped with
-  `regexp.QuoteMeta`, sorted longest-first so a superstring secret is
-  redacted whole rather than leaving a suffix behind) plus a set of common
-  credential patterns — Bearer tokens, GitHub PATs (`ghp_...`), AWS access
-  keys (`AKIA...`), Slack tokens (`xox[bap]-...`), and `password=`/`token=`/
-  `key=` assignments — are joined into one `(?s)(...)` alternation, so RE2
-  matching stays linear time even on large logs.
+- **Single compiled regular expression:** The scrubber escapes each literal
+  secret with `regexp.QuoteMeta`. It sorts the secrets from longest to shortest.
+  It also includes patterns for common credentials. These include bearer
+  tokens, GitHub PATs, AWS keys, Slack tokens, and credential assignments. RE2
+  processes the combined expression in linear time.
 - **Configurable patterns:** Additional regex patterns can be added via the
   `DURPDEPLOY_EXTRA_SCRUB_PATTERNS` environment variable (comma-separated).
   These are appended to the common credential patterns at startup.
-- **Buffered, not line-by-line:** `broadcastWriter.Write` scrubs everything
-  up to the last newline in its buffer (instead of one line at a time),
-  so a secret split across two `Write` calls, or one containing a literal
-  newline, is still caught before it reaches the broker or the DB.
+- **Buffered operation:** `broadcastWriter.Write` scrubs all text through the
+  last newline in its buffer. Thus, it finds a secret in two writes. It also
+  finds a secret that contains a newline.
 - **Best-effort:** this catches known secret values and a handful of common
   token shapes, not every possible secret format. **Redaction is
-  best-effort. Do not paste secrets into your script body; use environment
+  best-effort. Do not paste secrets into your script body. Use environment
   variables marked Secret.**
 
 ## Known gaps (P1 / future work)
 
 | Gap | Risk | Planned |
 |-----|------|---------|
-| ~~**Secret encryption at rest**~~ | ~~`release_variables.value` is plaintext; a DB read leaks secrets~~ | **shipped (P1-3)** |
+| ~~**Secret encryption at rest**~~ | ~~`release_variables.value` is plaintext. A DB read leaks secrets~~ | **shipped (P1-3)** |
 | ~~**Runner orphan cleanup**~~ | ~~Killed/restarted server left orphaned bash children~~ | **shipped** |
 | ~~**Log redaction hardening**~~ | ~~Naive per-line `strings.ReplaceAll` missed common credential formats and multi-line/split secrets~~ | **shipped (P1-5)** |
 | ~~**Runner OS-level sandboxing**~~ | ~~Steps run as a low-privilege user in a chroot'd scratch directory with cgroup limits~~ | **shipped (P1-4)** |
 | ~~**Login rate limiting**~~ | ~~Password, MFA, and OIDC login surfaces lacked application limits~~ | **shipped** |
 | **Audit log retention** | No retention policy or tamper-proofing on `audit_log` | P2-5 |
-| **Password reset flow** | No self-service reset; admin must delete + recreate the user | P2 |
+| **Password reset flow** | No self-service reset. Admin must delete + recreate the user | P2 |
 | **Session invalidation on password change** | Changing a user's password does not invalidate existing sessions | P2 |
 
 ---
@@ -477,5 +464,6 @@ values:
   read the DB, or sniff process memory. OS-level problem.
 - **Network-level DDoS** — handled upstream (Caddy, firewall).
 - **Supply chain** — `go mod verify` and pinned versions only.
+- **Compromised remote agent host:** An agent can run deployments for its assigned environments. Isolate it from the control-plane host. Rotate its pairing and certificate material.
 
 See `docs/attack-drill.md` for hands-on verification of the active defenses.

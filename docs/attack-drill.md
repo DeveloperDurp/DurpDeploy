@@ -8,14 +8,14 @@ defenses are still in place.
 The drills assume you have a running instance reachable at
 `https://durpdeploy.example.com` and you have shell access to the server's
 SQLite database (via `sudo -u durpdeploy sqlite3 ...`). The server-side
-queries in drill 4 require shell access to the box; drills 1, 2 and 3 only
+queries in drill 4 require shell access to the box. Drills 1, 2 and 3 only
 need `curl`.
 
 ---
 
 ## 1. Password guessing (brute force)
 
-**Attack.** An attacker who can reach the login endpoint tries many
+**Attack.** An attacker who can access the login endpoint tries many
 passwords against a known email.
 
 ```bash
@@ -37,7 +37,7 @@ the guess. At 10 attempts/sec, 1 vCPU is fully saturated and the server
 stops responding to other requests.
 
 **Detection.** Failed logins are deliberately **not** written to the
-`audit_log` table — that's a privacy decision, so attackers can't enumerate
+`audit_log` table. This is a privacy decision, so attackers cannot enumerate
 which emails are real by counting rows. They DO appear in the
 `request`-level slog output on the server:
 
@@ -59,12 +59,12 @@ still indicates an attack and can justify an additional firewall or edge limit.
 
 **Attack.** A teammate is tricked into clicking a malicious link on
 another site. The link has hidden form fields that POST to your
-DurpDeploy, using the teammate's session cookie. The attacker does not
+DurpDeploy with the teammate's session cookie. The attacker does not
 have the cookie value — but the browser sends it automatically.
 
-In this drill we **simulate** the attack with `curl`: we have a valid
-session cookie (yours, from logging in via the UI), and we POST without
-the CSRF token that a real cross-site form couldn't know.
+In this drill, use `curl` to simulate the attack. Use a valid session cookie
+from the user interface. Send a POST request without the CSRF token. A real
+cross-site form cannot know this token.
 
 ```bash
 BASE=https://durpdeploy.example.com
@@ -92,11 +92,10 @@ curl -s -b $COOKIES -o /dev/null -w "Status: %{http_code}\n" -X POST \
 form, which has the session cookie but not the CSRF token, cannot
 trigger a state change.
 
-**What defends.** `internal/auth/csrf.go:CSRFMiddleware` requires a valid
-CSRF token on every POST/PUT/PATCH/DELETE. The token is per-session,
-random, and never leaves the server's DB except via the `X-CSRF-Token`
-header / `csrf_token` form field, which a cross-site attacker can't read
-(`SameSite=Lax` cookie + the CORS default-deny).
+**Defense.** `internal/auth/csrf.go:CSRFMiddleware` requires a valid CSRF token
+on each POST, PUT, PATCH, and DELETE request. Each session has one random
+token. The server sends it only in the `X-CSRF-Token` header or the
+`csrf_token` form field. A cross-site attacker cannot read these values.
 
 **Detection.** A 403 on a state-changing endpoint is a CSRF rejection.
 Like failed logins, these are NOT written to `audit_log` — only successful
@@ -151,20 +150,21 @@ if its bearer value is exposed.
 3. Audit the user's actions in `/admin/audit` between the token creation and
    revocation.
 
-**Design defense.** Bearer tokens are hashed (SHA-256) at rest; the plaintext
+**Design defense.** Bearer tokens are hashed (SHA-256) at rest. The plaintext
 is shown exactly once at creation. The request logger records `r.URL.Path`
 only — headers, including `Authorization`, are never written to logs.
 
-**Avoid putting tokens in version control.** Use environment variables or a
+**Prevent tokens from going into version control.** Use environment variables or a
 secrets manager for CI/CD pipelines.
 
 ---
 
 ## 4. Direct DB read (stolen backup / server compromise)
 
-**Attack.** An attacker gets a copy of the SQLite database — via a
-misconfigured backup, a stolen drive, a compromised admin account, an
-`rsync` to the wrong host, etc. They want to learn the user passwords.
+**Attack.** An attacker gets a copy of the SQLite database. Possible sources
+include an incorrect backup, a stolen drive, and a compromised administrator
+account. An `rsync` operation to the wrong host is another possible source.
+The attacker wants to get the user passwords.
 
 ```bash
 # Attacker has the DB file. Inspect users table.
@@ -187,14 +187,14 @@ The parameters (`m=65536, t=2, p=2`) are the modern PHC-recommended
 defaults for argon2id — they cost ~100 ms to compute and ~64 MB of memory
 on the attacker's machine. A real attack against one password would
 require running those parameters on a hashcat-class rig for hours per
-guess; against a unique salt per user, a dictionary attack has to pay
+guess. Against a unique salt per user, a dictionary attack has to pay
 that cost per (user, guess) pair.
 
-**What does NOT defend.** This drill does NOT protect the session token,
-the secret variables stored in `release_variables.value`, or the audit log
-itself. A DB read of those is still useful to an attacker. P1-2
-(secret encryption at rest) and the audit log retention policy in P2-5
-are the upgrade paths.
+**What does NOT defend.** This drill does NOT protect session tokens, the
+server encryption key, or the audit log itself. A DB read alone does not reveal
+the encrypted values in `release_variables.value`, but an attacker who also
+gets the matching server key can decrypt them. Audit log retention remains an
+operational policy.
 
 **Detection.** If you suspect a backup or the live DB leaked, rotate
 every user's password immediately:
@@ -212,16 +212,15 @@ sudo -u durpdeploy /usr/local/bin/durpdeploy admin create \
   --email user@example.com --password '<new-strong-password>'
 ```
 
-Then check the audit log for the new user_id and any actions by the
-old id in the window between compromise and rotation — those are
-suspect.
+Then check the audit log for the new user ID. Also check actions by the old ID
+between the compromise and the rotation. Investigate these actions.
 
 ---
 
 ## 5. OIDC coexistence and recovery
 
 **Attack.** The provider is unavailable, removes a user's mapped group, or a
-user logs out locally after using SSO.
+user logs out locally after an SSO operation.
 
 **Expected.** Provider failure returns a generic OIDC error while password
 login, existing browser sessions, health checks, and bearer API authentication
@@ -264,5 +263,7 @@ These attacks are out of scope for P0:
 - **Network-level DDoS** — handled upstream (Caddy, firewall).
 - **Supply chain** — `go mod verify` and pinned versions only.
 
-P1 closes several more gaps (per-project authorization, secret
-encryption at rest, runner sandbox) — see `.omo/plans/team-hardening.md`.
+Remote agent transport is outbound-only and uses mTLS with pinned fingerprints.
+If an agent host is compromised, stop its service, revoke the agent, rotate its
+pairing and certificate material, and review deployments for its assigned
+environments. See `docs/agent-protocol.md` for the protocol boundaries.
