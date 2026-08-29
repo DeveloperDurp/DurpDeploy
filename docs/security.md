@@ -64,7 +64,6 @@ administrator must use the existing local user recovery process.
 
 What we do **not** defend against yet (see Known Gaps):
 
-- Rate limiting on the login endpoint
 - Audit log retention / tamper-proofing
 
 Runner orphan cleanup on shutdown/timeout is handled (process-group SIGKILL,
@@ -463,7 +462,7 @@ values:
 | ~~**Runner orphan cleanup**~~ | ~~Killed/restarted server left orphaned bash children~~ | **shipped** |
 | ~~**Log redaction hardening**~~ | ~~Naive per-line `strings.ReplaceAll` missed common credential formats and multi-line/split secrets~~ | **shipped (P1-5)** |
 | ~~**Runner OS-level sandboxing**~~ | ~~Steps run as a low-privilege user in a chroot'd scratch directory with cgroup limits~~ | **shipped (P1-4)** |
-| **Login rate limiting** | No rate limit on `/login`; argon2id cost is the only brute-force defense | P2 (custom Caddy build) |
+| ~~**Login rate limiting**~~ | ~~Password, MFA, and OIDC login surfaces lacked application limits~~ | **shipped** |
 | **Audit log retention** | No retention policy or tamper-proofing on `audit_log` | P2-5 |
 | **Password reset flow** | No self-service reset; admin must delete + recreate the user | P2 |
 | **Session invalidation on password change** | Changing a user's password does not invalidate existing sessions | P2 |

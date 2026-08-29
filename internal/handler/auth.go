@@ -3,6 +3,7 @@ package handler
 import (
 	"database/sql"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -23,10 +24,15 @@ type AuthHandler struct {
 	oidcDisplayName  string
 	oidcProvider     *oidc.Provider
 	oidcTransactions *oidc.TransactionStore
+	loginLimiter     *loginLimiter
 }
 
+var unknownAccountPasswordHash, _ = auth.HashPassword(
+	"durpdeploy unknown account timing placeholder",
+)
+
 func NewAuthHandler(repo *repository.Repository) *AuthHandler {
-	return &AuthHandler{repo: repo}
+	return &AuthHandler{repo: repo, loginLimiter: newLoginLimiter()}
 }
 
 func (h *AuthHandler) SetMFAService(service *mfa.Service) {
@@ -94,20 +100,33 @@ func (h *AuthHandler) LoginPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	email := r.PostFormValue("email")
+	email := strings.ToLower(strings.TrimSpace(r.PostFormValue("email")))
 	password := r.PostFormValue("password")
-
-	user, err := h.repo.Queries.GetUserByEmail(r.Context(), email)
-	if err != nil || !auth.VerifyPassword(user.PasswordHash, password) {
-		w.WriteHeader(http.StatusUnprocessableEntity)
-		_ = pages.LoginPage(
-			r.URL.Path,
-			"Invalid email or password",
-			h.oidcDisplayName,
-		).
-			Render(r.Context(), w)
+	ip := h.loginLimiter.clientIP(r)
+	pairKey := "login-pair:" + email + ":" + ip
+	if !h.loginLimiter.allow("login-ip:"+ip, loginIPLimit) ||
+		!h.loginLimiter.allow(pairKey, loginPairLimit) {
+		slog.Warn(
+			"authentication request throttled",
+			"surface", "password",
+			"ip", ip,
+		)
+		w.Header().Set("Retry-After", "900")
+		h.renderInvalidLogin(w, r)
 		return
 	}
+
+	user, err := h.repo.Queries.GetUserByEmail(r.Context(), email)
+	passwordHash := user.PasswordHash
+	if err != nil {
+		passwordHash = unknownAccountPasswordHash
+	}
+	if !auth.VerifyPassword(passwordHash, password) || err != nil {
+		slog.Warn("password authentication failed", "ip", ip)
+		h.renderInvalidLogin(w, r)
+		return
+	}
+	h.loginLimiter.reset(pairKey)
 	factors, err := h.repo.Queries.CountMFAFactors(r.Context(), user.ID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -138,6 +157,18 @@ func (h *AuthHandler) LoginPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
+func (h *AuthHandler) renderInvalidLogin(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	w.WriteHeader(http.StatusUnprocessableEntity)
+	_ = pages.LoginPage(
+		r.URL.Path,
+		"Invalid email or password",
+		h.oidcDisplayName,
+	).Render(r.Context(), w)
 }
 
 func (h *AuthHandler) LogoutPost(w http.ResponseWriter, r *http.Request) {

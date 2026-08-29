@@ -66,13 +66,23 @@ func NewRouter(
 	r.Get("/login", authHandler.LoginGet)
 	r.Post("/login", authHandler.LoginPost)
 	r.Get("/login/mfa", authHandler.LoginMFAGet)
-	r.Post("/login/mfa/totp", authHandler.LoginMFATOTPPost)
-	r.Post("/login/mfa/recovery", authHandler.LoginMFARecoveryPost)
-	r.Post("/login/mfa/webauthn/begin", authHandler.LoginMFAWebAuthnBegin)
-	r.Post("/login/mfa/webauthn/finish", authHandler.LoginMFAWebAuthnFinish)
+	r.With(authHandler.MFARateLimit).Post(
+		"/login/mfa/totp", authHandler.LoginMFATOTPPost,
+	)
+	r.With(authHandler.MFARateLimit).Post(
+		"/login/mfa/recovery", authHandler.LoginMFARecoveryPost,
+	)
+	r.With(authHandler.MFARateLimit).Post(
+		"/login/mfa/webauthn/begin", authHandler.LoginMFAWebAuthnBegin,
+	)
+	r.With(authHandler.MFARateLimit).Post(
+		"/login/mfa/webauthn/finish", authHandler.LoginMFAWebAuthnFinish,
+	)
 	r.Post("/login/mfa/cancel", authHandler.LoginMFACancelPost)
 	if registerOIDC {
-		r.Get("/login/oidc", authHandler.LoginOIDCGet)
+		r.With(authHandler.OIDCRateLimit).Get(
+			"/login/oidc", authHandler.LoginOIDCGet,
+		)
 		r.Get("/login/oidc/callback", authHandler.LoginOIDCCallbackGet)
 		r.Get("/login/oidc/failure", authHandler.LoginOIDCFailureGet)
 	}

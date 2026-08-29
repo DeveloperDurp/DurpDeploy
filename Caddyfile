@@ -10,13 +10,9 @@
 #   dev:    DURPDEPLOY_URL=http://localhost
 #   prod:   DURPDEPLOY_URL=https://durpdeploy.example.com
 #
-# ponytail: no `rate_limit` block. The stock `caddy:2-alpine` image
-# does not include the rate_limit module (it requires a custom build
-# with `xcaddy build --with github.com/mholt/caddy-ratelimit`). The
-# primary brute-force mitigation is argon2id's computational cost
-# (P0-2) — each wrong-password guess is ~100ms of CPU on the server.
-# Add a custom Caddy build + a /login rate_limit block here if you
-# need edge-level throttling.
+# DurpDeploy applies authentication rate limits in the Go server, so the stock
+# Caddy image needs no custom rate-limit module. Add edge limits only as an
+# optional second layer for unusually exposed deployments.
 
 {$DURPDEPLOY_URL:http://localhost} {
 	# Proxy to the Go server. The Go process listens on port 8080

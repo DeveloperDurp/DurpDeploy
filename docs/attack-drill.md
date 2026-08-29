@@ -48,12 +48,10 @@ sudo journalctl -u durpdeploy --since "5 min ago" | grep '"path":"/login".*"stat
 A sudden spike in 422s on `/login` is the right alerting signal. Wire that
 to whatever you use (Promtail, Loki, Slack via the P2 notifier).
 
-**No edge rate limit (yet).** The Caddyfile deliberately omits a
-`rate_limit` block on `/login` because the stock `caddy:2-alpine` image
-lacks the `caddy-ratelimit` module. The CPU-cost mitigation is the only
-line of defense until a custom Caddy build is in place. If you start
-seeing 1000+ failed logins/minute, that's a real attack — block the
-source IP at the firewall.
+The application limits password attempts by client IP and by normalized
+email-plus-IP, and applies separate IP limits to MFA and OIDC initiation. The
+stock Caddy image needs no custom module. A large volume of throttle telemetry
+still indicates an attack and can justify an additional firewall or edge limit.
 
 ---
 
