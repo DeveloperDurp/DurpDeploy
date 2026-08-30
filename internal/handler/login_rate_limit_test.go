@@ -2,6 +2,7 @@ package handler
 
 import (
 	"crypto/sha256"
+	"net/http"
 	"net/http/httptest"
 	"net/netip"
 	"strings"
@@ -75,4 +76,87 @@ func TestLoginLimiterRejectsSpoofedLeftmostForwardedAddress(t *testing.T) {
 	if got := limiter.clientIP(request); got != "203.0.113.9" {
 		t.Fatalf("client IP = %q, want nearest untrusted hop", got)
 	}
+}
+
+func TestTrustedProxyPrefixes(t *testing.T) {
+	prefixes := trustedProxyPrefixes(
+		" 192.0.2.1, 2001:db8::1/64, invalid, ,",
+	)
+	if len(prefixes) != 2 {
+		t.Fatalf("prefix count = %d", len(prefixes))
+	}
+	if got := prefixes[0].String(); got != "192.0.2.1/32" {
+		t.Fatalf("address prefix = %q", got)
+	}
+	if got := prefixes[1].String(); got != "2001:db8::/64" {
+		t.Fatalf("masked prefix = %q", got)
+	}
+}
+
+func TestLoginLimiterClientIPEdgeCases(t *testing.T) {
+	limiter := newLoginLimiter()
+
+	request := httptest.NewRequest("POST", "/login", nil)
+	request.RemoteAddr = "not an address"
+	if got := limiter.clientIP(request); got != "unknown" {
+		t.Fatalf("invalid remote address = %q", got)
+	}
+
+	request.RemoteAddr = "127.0.0.1"
+	request.Header.Set("X-Forwarded-For", "invalid, 127.0.0.2")
+	if got := limiter.clientIP(request); got != "127.0.0.1" {
+		t.Fatalf("proxy-only forwarding chain = %q", got)
+	}
+}
+
+func TestLoginLimiterReset(t *testing.T) {
+	limiter := newLoginLimiter()
+	if !limiter.allow("key", 1) || limiter.allow("key", 1) {
+		t.Fatal("unexpected limit behavior")
+	}
+	limiter.reset("key")
+	if !limiter.allow("key", 1) {
+		t.Fatal("reset key remained limited")
+	}
+}
+
+func TestLoginRateLimitMiddleware(t *testing.T) {
+	request := httptest.NewRequest("GET", "/login", nil)
+	request.RemoteAddr = "192.0.2.10:1234"
+
+	for _, test := range []struct {
+		name       string
+		middleware func(http.Handler) http.Handler
+		limit      int
+	}{
+		{"mfa", newAuthHandlerForLimiter().MFARateLimit, mfaIPLimit},
+		{"oidc", newAuthHandlerForLimiter().OIDCRateLimit, oidcIPLimit},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			handler := test.middleware(
+				http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+					w.WriteHeader(http.StatusNoContent)
+				}),
+			)
+			for range test.limit {
+				response := httptest.NewRecorder()
+				handler.ServeHTTP(response, request)
+				if response.Code != http.StatusNoContent {
+					t.Fatalf("allowed status = %d", response.Code)
+				}
+			}
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, request)
+			if response.Code != http.StatusTooManyRequests {
+				t.Fatalf("limited status = %d", response.Code)
+			}
+			if got := response.Header().Get("Retry-After"); got != "900" {
+				t.Fatalf("Retry-After = %q", got)
+			}
+		})
+	}
+}
+
+func newAuthHandlerForLimiter() *AuthHandler {
+	return &AuthHandler{loginLimiter: newLoginLimiter()}
 }

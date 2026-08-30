@@ -29,9 +29,8 @@ jobs:
           cache: npm
       - name: Prepare generated assets
         run: |
-          go install github.com/a-h/templ/cmd/templ@v0.3.1020
           make swagger-ui-copy
-          templ generate
+          go run github.com/a-h/templ/cmd/templ generate
       - name: Test with coverage
         run: go test -count=1 -covermode=atomic -coverprofile=coverage.out ./...
       - name: SonarQube Scan

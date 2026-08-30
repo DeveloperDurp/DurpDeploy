@@ -80,33 +80,28 @@ func (l *loginLimiter) clientIP(r *http.Request) string {
 	if err != nil {
 		return "unknown"
 	}
-	trusted := false
-	for _, prefix := range l.trustedProxies {
-		if prefix.Contains(peer) {
-			trusted = true
-			break
-		}
-	}
-	if trusted {
+	if containsIP(l.trustedProxies, peer) {
 		forwarded := strings.Split(r.Header.Get("X-Forwarded-For"), ",")
 		for i := len(forwarded) - 1; i >= 0; i-- {
 			addr, parseErr := netip.ParseAddr(strings.TrimSpace(forwarded[i]))
 			if parseErr != nil {
 				continue
 			}
-			isProxy := false
-			for _, prefix := range l.trustedProxies {
-				if prefix.Contains(addr) {
-					isProxy = true
-					break
-				}
-			}
-			if !isProxy {
+			if !containsIP(l.trustedProxies, addr) {
 				return addr.String()
 			}
 		}
 	}
 	return peer.String()
+}
+
+func containsIP(prefixes []netip.Prefix, addr netip.Addr) bool {
+	for _, prefix := range prefixes {
+		if prefix.Contains(addr) {
+			return true
+		}
+	}
+	return false
 }
 
 func (l *loginLimiter) allow(key string, limit int) bool {
