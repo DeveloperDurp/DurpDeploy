@@ -30,7 +30,7 @@ jobs:
       - name: Prepare generated assets
         run: |
           make swagger-ui-copy
-          go run github.com/a-h/templ/cmd/templ generate
+          go tool templ generate
       - name: Test with coverage
         run: go test -count=1 -covermode=atomic -coverprofile=coverage.out ./...
       - name: SonarQube Scan
