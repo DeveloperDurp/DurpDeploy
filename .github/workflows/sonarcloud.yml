@@ -30,7 +30,12 @@ jobs:
       - name: Prepare generated assets
         run: |
           make swagger-ui-copy
-          go tool templ generate
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            --volume "$PWD:/workspace" \
+            --workdir /workspace \
+            ghcr.io/a-h/templ@sha256:2e266c40e32de7fa67e08018a06675975ccb7e86110dae7a7c0b0131adaab41d \
+            generate
       - name: Test with coverage
         run: go test -count=1 -covermode=atomic -coverprofile=coverage.out ./...
       - name: SonarQube Scan
