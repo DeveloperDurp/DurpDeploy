@@ -78,6 +78,20 @@ func (s PairingSession) State() PairingState {
 	return s.current.status
 }
 
+// Expire atomically consumes a pending offer whose expiry has passed.
+func (s PairingSession) Expire(now time.Time) bool {
+	if s.current == nil {
+		return false
+	}
+	s.current.mu.Lock()
+	defer s.current.mu.Unlock()
+	if s.current.status != PairingPending || now.Before(s.current.expiresAt) {
+		return false
+	}
+	s.current.status = PairingExpired
+	return true
+}
+
 func (s PairingSession) CodeHash() PairingCodeHash {
 	if s.current == nil {
 		return PairingCodeHash{}
@@ -163,6 +177,14 @@ func (s PairingSession) pair(
 	}
 	s.current.mu.Lock()
 	defer s.current.mu.Unlock()
+
+	if s.current.status == PairingPaired && commit != nil &&
+		s.current.codeHash.matches(confirmation.Code) &&
+		s.current.expectedAgent.matches(confirmation.ObservedAgent) &&
+		s.current.trust.Server == confirmation.ServerPin &&
+		s.current.pullEndpoint == confirmation.PullEndpoint {
+		return s, nil
+	}
 
 	switch s.current.status {
 	case PairingPaired:

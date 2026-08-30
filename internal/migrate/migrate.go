@@ -32,7 +32,7 @@ func Run(dsn string) (*sql.DB, error) {
 		)
 	}
 	if isPostgres(dsn) {
-		return runMigrations(dsn, "pgx-qmark", "postgres", migrations.FS)
+		return runMigrations(dsn, "pgx-qmark", "postgres", migrations.PostgresFS)
 	}
 	return runMigrations(dsn, "sqlite", "sqlite3", migrations.FS)
 }

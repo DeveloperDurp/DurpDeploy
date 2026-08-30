@@ -1,6 +1,7 @@
 package agentserver
 
 import (
+	"bufio"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -12,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -75,6 +77,10 @@ func testRemoteAgentRuntimeParity(t *testing.T, dsn string) {
 	address := freeRuntimeAddress(t)
 	bootstrap := exec.Command(runtimeAgentBinary(t), "")
 	bootstrap.Env = append(os.Environ(), "DURPDEPLOY_AGENT_STATE_DIR="+stateDir, "DURPDEPLOY_AGENT_LISTEN_ADDR="+address, "DURPDEPLOY_AGENT_VERSION=runtime")
+	stdout, err := bootstrap.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := bootstrap.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -85,17 +91,24 @@ func testRemoteAgentRuntimeParity(t *testing.T, dsn string) {
 		}
 	})
 	endpoint := "https://" + address
-	var identity agentpairing.Bootstrap
-	var err error
-	for attempt := 0; attempt < 20; attempt++ {
-		identity, err = agentpairing.FetchBootstrapIdentity(context.Background(), endpoint)
-		if err == nil {
-			break
-		}
-		time.Sleep(100 * time.Millisecond)
+	scanner := bufio.NewScanner(stdout)
+	if !scanner.Scan() {
+		t.Fatalf("read pairing code: %v", scanner.Err())
 	}
+	code, err := agentproto.ParsePairingCode(
+		strings.TrimPrefix(scanner.Text(), "Pairing code: "),
+	)
 	if err != nil {
-		t.Fatalf("bootstrap: %v", err)
+		t.Fatal(err)
+	}
+	if !scanner.Scan() {
+		t.Fatalf("read agent fingerprint: %v", scanner.Err())
+	}
+	agentPin, err := agentproto.ParseSHA256Pin(
+		strings.TrimPrefix(scanner.Text(), "Agent fingerprint: "),
+	)
+	if err != nil {
+		t.Fatal(err)
 	}
 	pull, err := agentproto.ParsePullEndpoint(fixture.server.URL)
 	if err != nil {
@@ -105,32 +118,32 @@ func testRemoteAgentRuntimeParity(t *testing.T, dsn string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	input := agentpairing.PairInput{Endpoint: endpoint, AgentPin: identity.Offer.AgentPin, Identity: fixture.serverIdentity, Request: agentproto.PairRequest{ProtocolEnvelope: agentproto.ProtocolEnvelope{Protocol: agentproto.AgentV1}, PairingCode: identity.Offer.PairingCode, ServerPin: serverPin, PullEndpoint: pull, AgentID: "agent-a"}}
-	if _, err := agentpairing.Pair(context.Background(), input); err != nil {
+	input := agentpairing.PairInput{Endpoint: endpoint, AgentPin: agentPin, Identity: fixture.serverIdentity, Request: agentproto.PairRequest{ProtocolEnvelope: agentproto.ProtocolEnvelope{Protocol: agentproto.AgentV1}, PairingCode: code, AgentPin: agentPin, ServerPin: serverPin, PullEndpoint: pull, AgentID: "agent-a"}}
+	identity, err := agentpairing.Pair(context.Background(), input)
+	if err != nil {
 		t.Fatal(err)
 	}
-	codeHash := identity.Offer.PairingCode.Hash()
-	if _, err := fixture.repo.DB.ExecContext(context.Background(), "INSERT INTO agent_pairings (agent_id, pairing_code_hash, agent_public_identity, agent_pin, state, expires_at) VALUES (?, ?, ?, ?, 'pending', ?)", "agent-a", codeHash[:], identity.PublicIdentity, identity.Offer.AgentPin.String(), fixture.now.Add(time.Hour).Unix()); err != nil {
+	codeHash := code.Hash()
+	if _, err := fixture.repo.DB.ExecContext(context.Background(), "INSERT INTO agent_pairings (agent_id, pairing_code_hash, agent_public_identity, agent_pin, state, expires_at) VALUES (?, ?, ?, ?, 'pending', ?)", "agent-a", codeHash[:], identity.PublicIdentity, identity.AgentPin.String(), fixture.now.Add(time.Hour).Unix()); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := fixture.repo.DB.ExecContext(context.Background(), "UPDATE agents SET status = 'active', certificate_pem = ?, certificate_fingerprint = ?, enrolled_at = ?, last_heartbeat_at = ? WHERE id = ?", identity.PublicIdentity, identity.Offer.AgentPin.String(), fixture.now.Unix(), fixture.now.Unix(), "agent-a"); err != nil {
-		t.Fatal(err)
-	}
-	if err := agentpairing.Commit(context.Background(), input); err != nil {
-		t.Fatal(err)
-	}
-	if err := bootstrap.Wait(); err != nil {
+	if _, err := fixture.repo.DB.ExecContext(context.Background(), "UPDATE agents SET status = 'active', certificate_pem = ?, certificate_fingerprint = ?, enrolled_at = ?, last_heartbeat_at = ? WHERE id = ?", identity.PublicIdentity, identity.AgentPin.String(), fixture.now.Unix(), fixture.now.Unix(), "agent-a"); err != nil {
 		t.Fatal(err)
 	}
 	pairedIdentity, err := agenttls.LoadOrCreate(stateDir, "https://"+address)
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err := bootstrap.Process.Kill(); err != nil {
+		t.Fatal(err)
+	}
+	if err := bootstrap.Wait(); err == nil {
+		t.Fatal("agent exited successfully after termination")
+	}
 	fixture.agentIdentity = pairedIdentity
 	if _, err := fixture.repo.DB.ExecContext(context.Background(), "UPDATE agent_pairings SET state = 'paired', server_public_identity = ?, server_pin = ?, paired_at = ? WHERE agent_id = ?", "server", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", fixture.now.Unix(), "agent-a"); err != nil {
 		t.Fatal(err)
 	}
-
 	deploymentID := fixture.createWaitingDeployment(t, "runtime-payload")
 	response := fixture.poll(t, fixture.agentIdentity, `{"protocol":"agent/1","agent_version":"runtime"}`)
 	if response.StatusCode != http.StatusOK {

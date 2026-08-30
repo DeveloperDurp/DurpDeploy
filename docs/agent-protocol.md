@@ -12,6 +12,7 @@ malformed JSON, and every other protocol value.
 
 | Endpoint | Request contract | Notes |
 | --- | --- | --- |
+| `POST /agent/v1/pairings/server-init` | `PairRequest` | Server-side pairing completion over mTLS. The first call uses `completion_ack: false`; after durable confirmation the same request is retried with `completion_ack: true` to perform listener cleanup.
 | `POST /agent/v1/poll` | `PollRequest` | Protocol and agent version. A no-work response has no deployment payload. |
 | `POST /agent/v1/deployments/{id}/start` | `StartRequest` | Acknowledges that the claimed work started. |
 | `POST /agent/v1/deployments/{id}/heartbeat` | `HeartbeatRequest` | Response carries cancellation state and staged server fingerprints. |
@@ -22,6 +23,29 @@ malformed JSON, and every other protocol value.
 The endpoint route, active mTLS identity, and later persistence checks bind a
 claim to one agent. This contract deliberately does not document credential
 material, certificate bodies, or secret values.
+
+## Bootstrap and pairing flow
+
+The pairing flow is two-channel:
+
+1. The unpaired local listener prints a short-lived pairing code.
+2. The operator copies that code and the displayed agent fingerprint into the
+   authenticated pairing form.
+3. On confirmation, the server submits an mTLS request to
+   `POST /agent/v1/pairings/server-init` with that code and fingerprint and
+   `completion_ack: false`.
+4. The listener verifies the request is over mTLS, validates the operator-
+   confirmed identity values, and only then persists the server pin and pull
+   endpoint.
+5. The operator confirmation path uses the exact same identity, pin, and endpoint
+   values for a second request with `completion_ack: true` when needed to recover a
+   lost `204 No Content` response.
+6. A listener may treat the second `completion_ack: true` request as idempotent and
+   use it as the durable completion boundary for shutting down the temporary
+   pairing callback.
+
+Pairing code disclosure happens only on the local listener output; the code and
+fingerprint are never surfaced through API responses.
 
 ## Bounds and timing
 

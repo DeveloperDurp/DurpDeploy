@@ -3,14 +3,19 @@
 package runner
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"os/user"
 	"path/filepath"
 	"strconv"
-	"sync/atomic"
 	"syscall"
+)
+
+var (
+	lookupRunnerUser = user.Lookup
+	lookupSetpriv    = exec.LookPath
 )
 
 // runnerUsername is the dedicated, low-privileged account (see docs/deploy.md
@@ -38,42 +43,56 @@ const (
 // available inside it. Anything not listed here (the DB, secret key,
 // other projects' scratch dirs, ...) simply doesn't exist inside the
 // chroot.
-var chrootBinds = []string{"/bin", "/usr", "/lib", "/lib64"}
+var chrootBinds = []string{"/bin", "/usr", "/lib"}
+
+// optionalChrootBinds are mounted when present. Alpine does not provide
+// /lib64, while glibc-based systems may need it for dynamic binaries.
+var optionalChrootBinds = []string{"/lib64"}
 
 // Sandbox resolves the runner UID/GID once at startup and applies
 // per-step isolation (credential drop, cgroup limits, chroot) to each
 // step's exec.Cmd.
 type Sandbox struct {
-	uid, gid     uint32
-	enabled      bool
-	warned       atomic.Bool
-	cgroupUsable bool
-	cgroupWarned atomic.Bool
-	chrootWarned atomic.Bool
+	uid                 uint32
+	gid                 uint32
+	enabled             bool
+	applyCredentialFn   func(*exec.Cmd)
+	clearCapabilitiesFn func(*exec.Cmd, bool) error
+	createCgroupFn      func(int64) (*cgroup, error)
+	configureCgroupFn   func(*exec.Cmd, *cgroup) error
+	removeCgroupFn      func(*cgroup) error
+	setupChrootFn       func(string) (bool, error)
+	cgroupUsable        bool
 }
 
-// newSandbox looks up the durpdeploy-runner account. If it does not exist
-// (e.g. local dev/CI where docs/deploy.md Step 5 was never run), the
-// sandbox is disabled and steps keep running as the server's own user —
-// applyCredential logs a one-time warning instead of failing deployments.
-func newSandbox() *Sandbox {
+type cgroup struct {
+	path string
+	dir  *os.File
+}
+
+// newSandbox looks up the dedicated durpdeploy-runner account. A missing or
+// malformed account is fatal: scripts must never execute as the service user.
+func newSandbox() (*Sandbox, error) {
 	s := &Sandbox{}
 	if info, err := os.Stat(cgroupRoot); err == nil && info.IsDir() {
 		s.cgroupUsable = true
 	}
 
-	u, err := user.Lookup(runnerUsername)
+	u, err := lookupRunnerUser(runnerUsername)
 	if err != nil {
-		return s
+		return nil, fmt.Errorf("lookup runner user %q: %w", runnerUsername, err)
 	}
 	uid, errUID := strconv.ParseUint(u.Uid, 10, 32)
 	gid, errGID := strconv.ParseUint(u.Gid, 10, 32)
-	if errUID != nil || errGID != nil {
-		return s
+	if errUID != nil {
+		return nil, fmt.Errorf("parse runner UID %q: %w", u.Uid, errUID)
+	}
+	if errGID != nil {
+		return nil, fmt.Errorf("parse runner GID %q: %w", u.Gid, errGID)
 	}
 	s.uid, s.gid = uint32(uid), uint32(gid)
 	s.enabled = true
-	return s
+	return s, nil
 }
 
 // applyCredential drops the step process to the durpdeploy-runner UID/GID.
@@ -82,14 +101,8 @@ func newSandbox() *Sandbox {
 // systemd/durpdeploy.service) since Go's syscall.SysProcAttr does not
 // expose a per-Cmd equivalent.
 func (s *Sandbox) applyCredential(cmd *exec.Cmd) {
-	if !s.enabled {
-		if s.warned.CompareAndSwap(false, true) {
-			fmt.Fprintf(
-				os.Stderr,
-				"runner: %q user not found, steps run as the server's own user (see docs/deploy.md Step 5 to enable the sandbox)\n",
-				runnerUsername,
-			)
-		}
+	if s.applyCredentialFn != nil {
+		s.applyCredentialFn(cmd)
 		return
 	}
 	if cmd.SysProcAttr == nil {
@@ -106,12 +119,15 @@ func (s *Sandbox) applyCredential(cmd *exec.Cmd) {
 // inherited capability before it execs the attacker-controlled step. Changing
 // UID alone is insufficient when the service has ambient capabilities.
 func (s *Sandbox) clearCapabilities(cmd *exec.Cmd, chrooted bool) error {
+	if s.clearCapabilitiesFn != nil {
+		return s.clearCapabilitiesFn(cmd, chrooted)
+	}
 	if !s.enabled {
-		return nil
+		return fmt.Errorf("runner sandbox has no %q identity", runnerUsername)
 	}
 	setpriv := "/usr/bin/setpriv"
 	if !chrooted {
-		path, err := exec.LookPath("setpriv")
+		path, err := lookupSetpriv("setpriv")
 		if err != nil {
 			return fmt.Errorf("runner sandbox requires setpriv: %w", err)
 		}
@@ -132,124 +148,133 @@ func (s *Sandbox) clearCapabilities(cmd *exec.Cmd, chrooted bool) error {
 	return nil
 }
 
-// createCgroup creates a fresh cgroup v2 directory for this deployment
-// under cgroupRoot and writes the default cpu/memory/pids limits. Returns
-// "" (no error) if cgroupRoot isn't set up (docs/deploy.md Step 5 wasn't
-// followed) — the step then simply runs without resource limits.
-func (s *Sandbox) createCgroup(deploymentID int64) string {
+func (s *Sandbox) createCgroup(deploymentID int64) (*cgroup, error) {
+	if s.createCgroupFn != nil {
+		return s.createCgroupFn(deploymentID)
+	}
 	if !s.cgroupUsable {
-		if s.cgroupWarned.CompareAndSwap(false, true) {
-			fmt.Fprintf(
-				os.Stderr,
-				"runner: %s not found, steps run without cgroup resource limits (see docs/deploy.md Step 5 to enable)\n",
-				cgroupRoot,
-			)
-		}
-		return ""
+		return nil, fmt.Errorf("runner sandbox requires writable cgroup root %s", cgroupRoot)
 	}
 
 	dir := filepath.Join(cgroupRoot, fmt.Sprintf("deploy-%d", deploymentID))
 	if err := os.Mkdir(dir, 0755); err != nil {
-		fmt.Fprintf(os.Stderr, "runner: creating cgroup %s: %v\n", dir, err)
-		return ""
+		return nil, fmt.Errorf("create cgroup %s: %w", dir, err)
 	}
-	limits := map[string]string{
-		"memory.max": cgroupMemoryMax,
-		"pids.max":   cgroupPidsMax,
-		"cpu.max":    cgroupCPUMax,
+	limits := []struct {
+		file  string
+		value string
+	}{
+		{"memory.max", cgroupMemoryMax},
+		{"pids.max", cgroupPidsMax},
+		{"cpu.max", cgroupCPUMax},
 	}
-	for file, value := range limits {
+	for _, limit := range limits {
 		if err := os.WriteFile(
-			filepath.Join(dir, file),
-			[]byte(value),
+			filepath.Join(dir, limit.file),
+			[]byte(limit.value),
 			0644,
 		); err != nil {
-			fmt.Fprintf(
-				os.Stderr,
-				"runner: setting %s on %s: %v\n",
-				file,
-				dir,
-				err,
+			cleanupErr := os.Remove(dir)
+			return nil, errors.Join(
+				fmt.Errorf("set %s on %s: %w", limit.file, dir, err),
+				cleanupErr,
 			)
 		}
 	}
-	return dir
-}
-
-// addProcess moves pid into the given cgroup. Must be called after
-// cmd.Start() (the PID doesn't exist before then). No-op if cgroup is "".
-func (s *Sandbox) addProcess(cgroup string, pid int) {
-	if cgroup == "" {
-		return
-	}
-	procs := filepath.Join(cgroup, "cgroup.procs")
-	if err := os.WriteFile(procs, []byte(strconv.Itoa(pid)), 0644); err != nil {
-		fmt.Fprintf(
-			os.Stderr,
-			"runner: adding pid %d to cgroup %s: %v\n",
-			pid,
-			cgroup,
-			err,
+	dirFile, err := os.Open(dir)
+	if err != nil {
+		cleanupErr := os.Remove(dir)
+		return nil, errors.Join(
+			fmt.Errorf("open cgroup %s: %w", dir, err),
+			cleanupErr,
 		)
 	}
+	return &cgroup{path: dir, dir: dirFile}, nil
+}
+
+func (s *Sandbox) configureCgroup(cmd *exec.Cmd, group *cgroup) error {
+	if s.configureCgroupFn != nil {
+		return s.configureCgroupFn(cmd, group)
+	}
+	if group == nil || group.dir == nil {
+		return fmt.Errorf("runner sandbox has no cgroup file descriptor")
+	}
+	if cmd.SysProcAttr == nil {
+		cmd.SysProcAttr = &syscall.SysProcAttr{}
+	}
+	cmd.SysProcAttr.UseCgroupFD = true
+	cmd.SysProcAttr.CgroupFD = int(group.dir.Fd())
+	return nil
 }
 
 // removeCgroup deletes the deployment's cgroup directory once the step has
 // exited (a cgroup can only be rmdir'd once it has no live processes).
-// No-op if cgroup is "".
-func (s *Sandbox) removeCgroup(cgroup string) {
-	if cgroup == "" {
-		return
+func (s *Sandbox) removeCgroup(group *cgroup) error {
+	if s.removeCgroupFn != nil {
+		return s.removeCgroupFn(group)
 	}
-	if err := os.Remove(cgroup); err != nil {
-		fmt.Fprintf(os.Stderr, "runner: removing cgroup %s: %v\n", cgroup, err)
+	if group == nil {
+		return nil
 	}
+	var cleanupErr error
+	if group.dir != nil {
+		cleanupErr = group.dir.Close()
+		group.dir = nil
+	}
+	if group.path == "" {
+		return cleanupErr
+	}
+	return errors.Join(cleanupErr, os.Remove(group.path))
 }
 
-// setupChroot bind-mounts chrootBinds (read-only, skipping any that don't
-// exist on this distro) into scratchRoot. Returns false if it could not
-// mount anything (e.g. missing CAP_SYS_ADMIN in local dev/CI), in which
-// case the caller should run the step un-chrooted rather than fail the
-// deployment.
-func (s *Sandbox) setupChroot(scratchRoot string) bool {
-	mounted := false
-	for _, src := range chrootBinds {
-		if _, err := os.Stat(src); err != nil {
-			continue
-		}
-		dst := filepath.Join(scratchRoot, src)
-		if err := os.MkdirAll(dst, 0755); err != nil {
-			continue
-		}
-		if err := syscall.Mount(
-			src,
-			dst,
-			"",
-			syscall.MS_BIND|syscall.MS_REC,
-			"",
-		); err != nil {
-			if s.chrootWarned.CompareAndSwap(false, true) {
-				fmt.Fprintf(
-					os.Stderr,
-					"runner: bind-mounting %s: %v (steps run without chroot isolation, see docs/deploy.md Step 5)\n",
-					src,
-					err,
-				)
-			}
-			continue
-		}
-		// Remount read-only; the step must not be able to modify the
-		// host's /bin, /usr, /lib, /lib64 through the bind mount.
-		_ = syscall.Mount(
-			"",
-			dst,
-			"",
-			syscall.MS_BIND|syscall.MS_REMOUNT|syscall.MS_RDONLY,
-			"",
-		)
-		mounted = true
+// setupChroot bind-mounts chrootBinds read-only into scratchRoot. Any source,
+// mount, or remount failure aborts the deployment rather than exposing the host.
+func (s *Sandbox) setupChroot(scratchRoot string) (bool, error) {
+	if s.setupChrootFn != nil {
+		return s.setupChrootFn(scratchRoot)
 	}
-	return mounted
+	mounted := make([]string, 0, len(chrootBinds)+len(optionalChrootBinds))
+	for _, src := range chrootBinds {
+		if err := s.mountChrootBind(scratchRoot, src); err != nil {
+			s.teardownChroot(scratchRoot)
+			return false, err
+		}
+		mounted = append(mounted, src)
+	}
+	for _, src := range optionalChrootBinds {
+		if _, err := os.Stat(src); errors.Is(err, os.ErrNotExist) {
+			continue
+		} else if err != nil {
+			s.teardownChroot(scratchRoot)
+			return false, fmt.Errorf("inspect optional bind source %s: %w", src, err)
+		}
+		if err := s.mountChrootBind(scratchRoot, src); err != nil {
+			s.teardownChroot(scratchRoot)
+			return false, err
+		}
+		mounted = append(mounted, src)
+	}
+	return len(mounted) > 0, nil
+}
+
+func (s *Sandbox) mountChrootBind(scratchRoot, src string) error {
+	dst := filepath.Join(scratchRoot, src)
+	if err := os.MkdirAll(dst, 0755); err != nil {
+		return fmt.Errorf("create bind target %s: %w", dst, err)
+	}
+	if err := syscall.Mount(src, dst, "", syscall.MS_BIND|syscall.MS_REC, ""); err != nil {
+		return fmt.Errorf("bind mount %s: %w", src, err)
+	}
+	if err := syscall.Mount(
+		"",
+		dst,
+		"",
+		syscall.MS_BIND|syscall.MS_REMOUNT|syscall.MS_RDONLY,
+		"",
+	); err != nil {
+		return fmt.Errorf("remount %s read-only: %w", src, err)
+	}
+	return nil
 }
 
 // applyChroot locks cmd into scratchRoot. Must only be called after
@@ -265,7 +290,7 @@ func (s *Sandbox) applyChroot(cmd *exec.Cmd, scratchRoot string) {
 // teardownChroot unmounts everything setupChroot bind-mounted. Safe to
 // call even if setupChroot mounted nothing (each Unmount is best-effort).
 func (s *Sandbox) teardownChroot(scratchRoot string) {
-	for _, src := range chrootBinds {
+	for _, src := range append(chrootBinds, optionalChrootBinds...) {
 		dst := filepath.Join(scratchRoot, src)
 		_ = syscall.Unmount(dst, syscall.MNT_DETACH)
 	}

@@ -32,9 +32,10 @@ func (err *RePairRequiredError) Is(target error) bool {
 // State contains the durable pairing values. Agent identity is persisted only
 // by agenttls as a certificate and private key, never duplicated here.
 type State struct {
-	ServerURL  string
-	ServerPins []agenttls.Fingerprint
-	AgentID    string
+	ServerURL    string
+	ServerPins   []agenttls.Fingerprint
+	AgentID      string
+	AgentVersion string
 }
 
 // New parses the durable pairing values before they enter application state.
@@ -75,10 +76,11 @@ func NewStore(directory string) Store { return Store{directory: directory} }
 
 // Save atomically replaces the pairing state with restrictive filesystem modes.
 func (store Store) Save(state State) error {
-	state, err := New(state.ServerURL, state.ServerPins, state.AgentID)
+	validated, err := New(state.ServerURL, state.ServerPins, state.AgentID)
 	if err != nil {
 		return err
 	}
+	validated.AgentVersion = state.AgentVersion
 	if err := os.MkdirAll(store.directory, 0o700); err != nil {
 		return fmt.Errorf("create agent state directory: %w", err)
 	}
@@ -86,9 +88,10 @@ func (store Store) Save(state State) error {
 		return fmt.Errorf("protect agent state directory: %w", err)
 	}
 	contents, err := json.Marshal(diskState{
-		ServerURL:  state.ServerURL,
-		ServerPins: fingerprints(state.ServerPins),
-		AgentID:    state.AgentID,
+		ServerURL:    validated.ServerURL,
+		ServerPins:   fingerprints(validated.ServerPins),
+		AgentID:      validated.AgentID,
+		AgentVersion: validated.AgentVersion,
 	})
 	if err != nil {
 		return fmt.Errorf("encode agent state: %w", err)
@@ -134,6 +137,7 @@ func (store Store) Load() (State, error) {
 	if err != nil {
 		return State{}, rePairError("validate pairing state", err)
 	}
+	state.AgentVersion = stored.AgentVersion
 	info, err := os.Stat(filepath.Join(store.directory, FileName))
 	if err != nil {
 		return State{}, rePairError("stat pairing state", err)
@@ -148,9 +152,10 @@ func (store Store) Load() (State, error) {
 }
 
 type diskState struct {
-	ServerURL  string   `json:"server_url"`
-	ServerPins []string `json:"server_pins"`
-	AgentID    string   `json:"agent_id"`
+	ServerURL    string   `json:"server_url"`
+	ServerPins   []string `json:"server_pins"`
+	AgentID      string   `json:"agent_id"`
+	AgentVersion string   `json:"agent_version,omitempty"`
 }
 
 func fingerprints(pins []agenttls.Fingerprint) []string {

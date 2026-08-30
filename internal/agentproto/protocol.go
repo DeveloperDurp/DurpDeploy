@@ -24,9 +24,7 @@ const (
 )
 
 const (
-	BootstrapPath  = "/agent/v1/bootstrap"
-	PairPath       = "/agent/v1/pair"
-	PairCommitPath = "/agent/v1/pair/commit"
+	ServerInitPath = "/agent/v1/pairings/server-init"
 	PollPath       = "/agent/v1/poll"
 	DeploymentPath = "/agent/v1/deployments/{id}"
 	StartPath      = DeploymentPath + "/start"

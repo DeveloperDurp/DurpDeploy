@@ -40,6 +40,91 @@ func TestNewClientConfig_acceptsOnlyPinnedValidSelfSignedHostname(
 
 }
 
+func TestNewBootstrapClientConfig_acceptsMismatchedSANForBootstrap(
+	t *testing.T,
+) {
+	// Given
+	identity := selfSignedCertificate(t, certificateTestOptions{
+		hostnames: []string{"bootstrap-peer.example.test"},
+		notBefore: time.Now().Add(-time.Minute),
+		notAfter:  time.Now().Add(time.Hour),
+	})
+	address, wait := serveTLS(t, identity)
+	defer wait()
+
+	// When
+	config, err := NewBootstrapClientConfig(localURL(t, address))
+	if err != nil {
+		t.Fatalf("new bootstrap client config: %v", err)
+	}
+	if config.MinVersion != tls.VersionTLS13 {
+		t.Fatalf(
+			"bootstrap client min version = %v, want TLS 1.3",
+			config.MinVersion,
+		)
+	}
+	connection, err := tls.Dial("tcp", address, config)
+	if err != nil {
+		t.Fatalf("dial bootstrap peer: %v", err)
+	}
+	_ = connection.Close()
+}
+
+func TestNewPairingBootstrapClientConfig_enforcesPinnedBootstrapPeer(
+	t *testing.T,
+) {
+	// Given
+	identity := selfSignedCertificate(t, certificateTestOptions{
+		hostnames: []string{"pairing-peer.example.test"},
+		notBefore: time.Now().Add(-time.Minute),
+		notAfter:  time.Now().Add(time.Hour),
+	})
+	wrongPin := selfSignedCertificate(t, certificateTestOptions{
+		hostnames: []string{"pairing-peer.example.test"},
+		notBefore: time.Now().Add(-time.Minute),
+		notAfter:  time.Now().Add(time.Hour),
+	})
+
+	t.Run("accepts matching fingerprint", func(t *testing.T) {
+		// When
+		address, wait := serveTLS(t, identity)
+		defer wait()
+		config, err := NewPairingBootstrapClientConfig(
+			localURL(t, address),
+			FingerprintOf(identity.Certificate[0]),
+		)
+		if err != nil {
+			t.Fatalf("new pairing bootstrap client config: %v", err)
+		}
+		if config.MinVersion != tls.VersionTLS13 {
+			t.Fatalf("client min version = %v, want TLS 1.3", config.MinVersion)
+		}
+		connection, err := tls.Dial("tcp", address, config)
+		if err != nil {
+			t.Fatalf("dial pinned bootstrap peer: %v", err)
+		}
+		_ = connection.Close()
+	})
+
+	t.Run("rejects wrong fingerprint", func(t *testing.T) {
+		// When
+		address, wait := serveTLS(t, identity)
+		defer wait()
+		config, err := NewPairingBootstrapClientConfig(
+			localURL(t, address),
+			FingerprintOf(wrongPin.Certificate[0]),
+		)
+		if err != nil {
+			t.Fatalf("new pairing bootstrap client config: %v", err)
+		}
+		connection, err := tls.Dial("tcp", address, config)
+		if err == nil {
+			_ = connection.Close()
+			t.Fatal("wrong pin completed TLS handshake")
+		}
+	})
+}
+
 func TestNewClientConfig_rejectsWrongPinHostnameAndExpiry(t *testing.T) {
 	// Given
 	valid, err := LoadOrCreate(t.TempDir(), "https://localhost")
@@ -174,7 +259,10 @@ func serveTLS(t *testing.T, certificate tls.Certificate) (string, func()) {
 		if err := listener.Close(); err != nil {
 			t.Errorf("close listener: %v", err)
 		}
-		<-done
+		select {
+		case <-done:
+		case <-time.After(time.Second):
+		}
 	}
 }
 

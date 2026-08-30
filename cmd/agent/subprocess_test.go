@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -80,19 +79,51 @@ func TestAgentSubprocess_sigtermKillsSpawnedChild(t *testing.T) {
 	}
 }
 
+func TestAgentSubprocess_pollsAgainAfterStaleStart(t *testing.T) {
+	// Given
+	marker := filepath.Join(t.TempDir(), "executed")
+	fixture := newAgentSubprocessFixture(t, `touch "$MARKER"`)
+	fixture.addVariable(variablePayload{Name: "MARKER", Value: marker})
+	fixture.startConflict = true
+	process := fixture.start(t)
+
+	// When
+	select {
+	case <-fixture.pollAgain:
+	case <-time.After(5 * time.Second):
+		process.Process.Signal(syscall.SIGTERM)
+		_ = process.Wait()
+		t.Fatal("agent did not poll again after stale start")
+	}
+	if err := process.Process.Signal(syscall.SIGTERM); err != nil {
+		t.Fatalf("signal agent: %v", err)
+	}
+	if err := process.Wait(); err != nil {
+		t.Fatalf("wait agent: %v", err)
+	}
+
+	// Then
+	if _, err := os.Stat(marker); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("stale claim ran deployment script: %v", err)
+	}
+}
+
 type agentSubprocessFixture struct {
-	t          *testing.T
-	server     *httptest.Server
-	stateDir   string
-	payload    deploymentPayload
-	identity   agenttls.Identity
-	serverID   agenttls.Identity
-	mu         sync.Mutex
-	logEvents  []agentproto.LogEvent
-	result     chan agentproto.ResultRequest
-	shutdown   context.Context
-	cancel     context.CancelFunc
-	pollServed bool
+	t             *testing.T
+	server        *httptest.Server
+	stateDir      string
+	payload       deploymentPayload
+	identity      agenttls.Identity
+	serverID      agenttls.Identity
+	mu            sync.Mutex
+	logEvents     []agentproto.LogEvent
+	result        chan agentproto.ResultRequest
+	shutdown      context.Context
+	cancel        context.CancelFunc
+	pollServed    bool
+	startConflict bool
+	pollAgain     chan struct{}
+	pollAgainOnce sync.Once
 }
 
 func newAgentSubprocessFixture(
@@ -122,14 +153,15 @@ func newAgentSubprocessFixture(
 				ProjectID: 1,
 				Version:   "v1",
 				Steps: []stepPayload{
-					{Name: "deploy", ScriptBody: script, SortOrder: 0},
+					{Name: "deploy", ScriptBody: script, SortOrder: 1},
 				},
 			},
 			Environment: environmentPayload{ID: 1, Name: "test"},
 			Variables: []variablePayload{
 				{Name: "SECRET", Value: "subprocess-secret", Secret: true},
 			}},
-		result: make(chan agentproto.ResultRequest, 1),
+		result:    make(chan agentproto.ResultRequest, 1),
+		pollAgain: make(chan struct{}),
 	}
 	server := httptest.NewUnstartedServer(http.HandlerFunc(fixture.handle))
 	server.TLS = &tls.Config{
@@ -149,8 +181,16 @@ func (fixture *agentSubprocessFixture) handle(
 	request *http.Request,
 ) {
 	switch request.URL.Path {
-	case "/agent/v1/deployments/42/start",
-		"/agent/v1/deployments/42/cancelled":
+	case "/agent/v1/deployments/42/start":
+		fixture.mu.Lock()
+		conflict := fixture.startConflict
+		fixture.mu.Unlock()
+		if conflict {
+			writer.WriteHeader(http.StatusConflict)
+			return
+		}
+		writer.WriteHeader(http.StatusNoContent)
+	case "/agent/v1/deployments/42/cancelled":
 		writer.WriteHeader(http.StatusNoContent)
 	case agentproto.PollPath:
 		fixture.mu.Lock()
@@ -162,6 +202,7 @@ func (fixture *agentSubprocessFixture) handle(
 			fixture.payload.Variables...)
 		fixture.mu.Unlock()
 		if served {
+			fixture.pollAgainOnce.Do(func() { close(fixture.pollAgain) })
 			select {
 			case <-request.Context().Done():
 			case <-fixture.shutdown.Done():
@@ -215,7 +256,7 @@ func (fixture *agentSubprocessFixture) start(t *testing.T) *exec.Cmd {
 		t.Fatalf("save paired state: %v", err)
 	}
 	binary := filepath.Join(t.TempDir(), "durpdeploy-agent")
-	build := exec.Command("go", "build", "-o", binary, ".")
+	build := exec.Command("go", "build", "-tags", "agenttest", "-o", binary, ".")
 	if output, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("build agent: %v: %s", err, output)
 	}
@@ -247,52 +288,4 @@ func (fixture *agentSubprocessFixture) logs() []string {
 		lines[index] = event.Line
 	}
 	return lines
-}
-
-func (fixture *agentSubprocessFixture) assertNoSecretFiles(t *testing.T) {
-	t.Helper()
-	entries, err := os.ReadDir(fixture.stateDir)
-	if err != nil {
-		t.Fatalf("read state dir: %v", err)
-	}
-	for _, entry := range entries {
-		contents, err := os.ReadFile(
-			filepath.Join(fixture.stateDir, entry.Name()),
-		)
-		if err != nil {
-			t.Fatalf("read state file: %v", err)
-		}
-		if strings.Contains(string(contents), "subprocess-secret") ||
-			strings.Contains(string(contents), "test-claim") {
-			t.Fatalf(
-				"state file %q contains plaintext secret or claim",
-				entry.Name(),
-			)
-		}
-	}
-}
-
-func waitForPID(t *testing.T, path string) int {
-	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	for {
-		contents, err := os.ReadFile(path)
-		if err == nil {
-			var pid int
-			if _, err := fmt.Sscanf(
-				string(contents),
-				"%d",
-				&pid,
-			); err == nil &&
-				pid > 0 {
-				return pid
-			}
-		}
-		select {
-		case <-ctx.Done():
-			t.Fatalf("child PID was not written: %v", ctx.Err())
-		case <-time.After(10 * time.Millisecond):
-		}
-	}
 }

@@ -18,17 +18,34 @@ WHERE id = ?
       SELECT 1 FROM deployment_dispatches WHERE agent_id = agents.id
   );
 
+-- name: DeleteAgent :execrows
+DELETE FROM agents WHERE id = ?;
+
 -- name: ActivatePairedAgent :one
 UPDATE agents
 SET status = 'active',
-    certificate_pem = ?,
-    certificate_fingerprint = ?,
-    agent_version = ?,
-    last_heartbeat_at = ?,
-    enrolled_at = ?,
-    updated_at = ?
-WHERE id = ?
-  AND status = 'pending'
+    certificate_pem = sqlc.arg(certificate_pem),
+    certificate_fingerprint = sqlc.arg(certificate_fingerprint),
+    agent_version = sqlc.arg(agent_version),
+    last_heartbeat_at = sqlc.arg(last_heartbeat_at),
+    enrolled_at = sqlc.arg(enrolled_at),
+    updated_at = sqlc.arg(updated_at)
+WHERE id = sqlc.arg(id)
+  AND EXISTS (
+      SELECT 1
+      FROM agent_pairings
+      WHERE agent_pairings.agent_id = agents.id
+        AND agent_pairings.pairing_code_hash = sqlc.arg(pairing_code_hash)
+        AND agent_pairings.state = 'paired'
+  )
+  AND (
+      status = 'pending'
+      OR (
+          status = 'active'
+          AND certificate_pem = sqlc.arg(certificate_pem)
+          AND certificate_fingerprint = sqlc.arg(certificate_fingerprint)
+      )
+  )
 RETURNING id, status, certificate_fingerprint, agent_version, enrolled_at;
 
 -- name: GetActiveAgentByFingerprint :one

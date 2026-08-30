@@ -6,7 +6,6 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -27,20 +26,30 @@ const (
 )
 
 type Config struct {
-	StateDir   string
-	ListenAddr string
+	StateDir        string
+	ListenAddr      string
+	AgentVersion    agentproto.AgentVersion
+	Now             func() time.Time
+	PairingTTL      time.Duration
+	AfterPairCommit func(http.ResponseWriter) bool
 }
 
 type Listener struct {
-	server   *http.Server
-	listener net.Listener
-	done     chan struct{}
-	once     sync.Once
+	server     *http.Server
+	listener   net.Listener
+	done       chan struct{}
+	paired     chan struct{}
+	expiryDone chan struct{}
+	once       sync.Once
+	pairedOnce sync.Once
 
-	identity agenttls.Identity
-	offer    agentproto.BootstrapResponse
-	session  agentproto.PairingSession
-	store    agentstate.Store
+	identity        agenttls.Identity
+	agentVersion    agentproto.AgentVersion
+	now             func() time.Time
+	offer           agentproto.PairingOffer
+	session         agentproto.PairingSession
+	store           agentstate.Store
+	afterPairCommit func(http.ResponseWriter) bool
 }
 
 func Start(config Config) (*Listener, error) {
@@ -49,6 +58,16 @@ func Start(config Config) (*Listener, error) {
 	}
 	if config.ListenAddr == "" {
 		config.ListenAddr = DefaultListenAddr
+	}
+	if config.Now == nil {
+		config.Now = time.Now
+	}
+	ttl := config.PairingTTL
+	if ttl == 0 {
+		ttl = pairingTTL
+	}
+	if ttl < 0 {
+		return nil, errors.New("bootstrap pairing TTL must not be negative")
 	}
 	identityURL, err := identityURL(config.ListenAddr)
 	if err != nil {
@@ -66,7 +85,7 @@ func Start(config Config) (*Listener, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse bootstrap agent pin: %w", err)
 	}
-	expiresAt := time.Now().Add(pairingTTL)
+	expiresAt := config.Now().Add(ttl)
 	session, err := agentproto.NewPairingSession(agentproto.PairingOffer{
 		Code: code, AgentPin: agentPin, ExpiresAt: expiresAt,
 	})
@@ -78,26 +97,36 @@ func Start(config Config) (*Listener, error) {
 		return nil, fmt.Errorf("listen for pairing: %w", err)
 	}
 	result := &Listener{
-		listener: networkListener,
-		done:     make(chan struct{}),
-		identity: identity,
-		offer: agentproto.BootstrapResponse{
-			ProtocolEnvelope: agentproto.ProtocolEnvelope{
-				Protocol: agentproto.AgentV1,
-			},
-			PairingCode: code,
-			AgentPin:    agentPin,
-			ExpiresAt:   expiresAt,
+		listener:     networkListener,
+		done:         make(chan struct{}),
+		paired:       make(chan struct{}),
+		expiryDone:   make(chan struct{}),
+		identity:     identity,
+		agentVersion: config.AgentVersion,
+		now:          config.Now,
+		offer: agentproto.PairingOffer{
+			Code: code, AgentPin: agentPin, ExpiresAt: expiresAt,
 		},
-		session: session,
-		store:   agentstate.NewStore(config.StateDir),
+		session:         session,
+		store:           agentstate.NewStore(config.StateDir),
+		afterPairCommit: config.AfterPairCommit,
 	}
 	result.server = &http.Server{Handler: result.handler()}
 	go result.serve()
 	go func() {
+		defer close(result.expiryDone)
 		timer := time.NewTimer(time.Until(expiresAt))
 		defer timer.Stop()
-		<-timer.C
+		select {
+		case <-result.done:
+			return
+		case <-result.paired:
+			return
+		case <-timer.C:
+		}
+		if !result.session.Expire(time.Now()) {
+			return
+		}
 		shutdownCtx, cancel := context.WithTimeout(
 			context.Background(),
 			time.Second,
@@ -112,11 +141,13 @@ func (listener *Listener) Endpoint() string {
 	return "https://" + listener.listener.Addr().String()
 }
 
-func (listener *Listener) Offer() agentproto.BootstrapResponse {
+func (listener *Listener) Offer() agentproto.PairingOffer {
 	return listener.offer
 }
 
 func (listener *Listener) Done() <-chan struct{} { return listener.done }
+
+func (listener *Listener) Paired() <-chan struct{} { return listener.paired }
 
 func (listener *Listener) Shutdown(ctx context.Context) error {
 	var shutdownErr error
@@ -143,124 +174,13 @@ func (listener *Listener) serve() {
 
 func (listener *Listener) handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc(agentproto.BootstrapPath, listener.bootstrap)
-	mux.HandleFunc(agentproto.PairPath, listener.pair)
-	mux.HandleFunc(agentproto.PairCommitPath, listener.commitPair)
+	mux.HandleFunc(agentproto.ServerInitPath, listener.serverInit)
 	return http.HandlerFunc(
 		func(writer http.ResponseWriter, request *http.Request) {
 			writer.Header().Set("Cache-Control", "no-store")
 			mux.ServeHTTP(writer, request)
 		},
 	)
-}
-
-func (listener *Listener) bootstrap(
-	writer http.ResponseWriter,
-	request *http.Request,
-) {
-	if request.Method != http.MethodGet {
-		writer.WriteHeader(http.StatusMethodNotAllowed)
-		return
-	}
-	writer.Header().Set("Content-Type", "application/json; charset=utf-8")
-	if err := json.NewEncoder(writer).Encode(listener.offer); err != nil {
-		return
-	}
-}
-
-func (listener *Listener) pair(
-	writer http.ResponseWriter,
-	request *http.Request,
-) {
-	if request.Method != http.MethodPost {
-		writer.WriteHeader(http.StatusMethodNotAllowed)
-		return
-	}
-	pairRequest, err := agentproto.DecodeRequest[agentproto.PairRequest](
-		request.Body,
-	)
-	if err != nil || pairRequest.AgentID == "" {
-		writer.WriteHeader(http.StatusBadRequest)
-		return
-	}
-	if request.TLS == nil || len(request.TLS.PeerCertificates) != 1 {
-		writer.WriteHeader(http.StatusUnauthorized)
-		return
-	}
-	serverFingerprint := agenttls.FingerprintOf(
-		request.TLS.PeerCertificates[0].Raw,
-	)
-	serverPin, err := agentproto.ParseSHA256Pin(serverFingerprint.String())
-	if err != nil || serverPin != pairRequest.ServerPin {
-		writer.WriteHeader(http.StatusUnauthorized)
-		return
-	}
-	err = listener.session.Prepare(
-		time.Now(),
-		agentproto.PairingConfirmation{
-			Code:          pairRequest.PairingCode,
-			ObservedAgent: listener.offer.AgentPin,
-			ServerPin:     serverPin,
-			PullEndpoint:  pairRequest.PullEndpoint,
-		},
-	)
-	if err != nil {
-		writer.WriteHeader(http.StatusUnauthorized)
-		return
-	}
-	writer.Header().Set("Content-Type", "application/json; charset=utf-8")
-	if err := json.NewEncoder(writer).Encode(agentproto.PairResponse{
-		ProtocolEnvelope: agentproto.ProtocolEnvelope{
-			Protocol: agentproto.AgentV1,
-		},
-		AgentPin: listener.offer.AgentPin,
-	}); err != nil {
-		return
-	}
-}
-
-func (listener *Listener) commitPair(
-	writer http.ResponseWriter,
-	request *http.Request,
-) {
-	if request.Method != http.MethodPost {
-		writer.WriteHeader(http.StatusMethodNotAllowed)
-		return
-	}
-	pairRequest, err := agentproto.DecodeRequest[agentproto.PairRequest](request.Body)
-	if err != nil || pairRequest.AgentID == "" || request.TLS == nil || len(request.TLS.PeerCertificates) != 1 {
-		writer.WriteHeader(http.StatusUnauthorized)
-		return
-	}
-	serverFingerprint := agenttls.FingerprintOf(request.TLS.PeerCertificates[0].Raw)
-	serverPin, err := agentproto.ParseSHA256Pin(serverFingerprint.String())
-	if err != nil || serverPin != pairRequest.ServerPin {
-		writer.WriteHeader(http.StatusUnauthorized)
-		return
-	}
-	_, err = listener.session.PairAndCommit(time.Now(), agentproto.PairingConfirmation{
-		Code: pairRequest.PairingCode, ObservedAgent: listener.offer.AgentPin,
-		ServerPin: serverPin, PullEndpoint: pairRequest.PullEndpoint,
-	}, func() error {
-		state, stateErr := agentstate.New(pairRequest.PullEndpoint.String(), []agenttls.Fingerprint{serverFingerprint}, pairRequest.AgentID)
-		if stateErr != nil {
-			return stateErr
-		}
-		return listener.store.Save(state)
-	})
-	if err != nil {
-		writer.WriteHeader(http.StatusUnauthorized)
-		return
-	}
-	writer.WriteHeader(http.StatusNoContent)
-	go func() {
-		shutdownCtx, cancel := context.WithTimeout(
-			context.Background(),
-			time.Second,
-		)
-		defer cancel()
-		_ = listener.Shutdown(shutdownCtx)
-	}()
 }
 
 func identityURL(address string) (string, error) {

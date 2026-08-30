@@ -63,45 +63,60 @@ func TestPullAgentPairingQueriesSmoke(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("create agent pairing: %v", err)
 	}
+	if _, err := queries.BeginAgentPairing(ctx, db.BeginAgentPairingParams{
+		UpdatedAt: 999, AgentID: agent.ID, PairingCodeHash: codeHash,
+		AgentPin: pairingSmokePin("a"), Now: 999,
+	}); err != nil {
+		t.Fatalf("begin agent pairing: %v", err)
+	}
+	completeInput := db.CompleteAgentPairingParams{
+		AgentPublicIdentity: "agent-public-identity",
+		ServerPublicIdentity: sql.NullString{
+			String: "server-public-identity",
+			Valid:  true,
+		},
+		ServerPin: sql.NullString{
+			String: pairingSmokePin("b"),
+			Valid:  true,
+		},
+		PairedAt:        sql.NullInt64{Int64: 1_000, Valid: true},
+		UpdatedAt:       1_000,
+		AgentID:         agent.ID,
+		PairingCodeHash: codeHash,
+		AgentPin:        pairingSmokePin("a"),
+	}
 	if _, err := queries.CompleteAgentPairing(
 		ctx,
-		db.CompleteAgentPairingParams{
-			ServerPublicIdentity: sql.NullString{
-				String: "server-public-identity",
-				Valid:  true,
-			},
-			ServerPin: sql.NullString{
-				String: pairingSmokePin("b"),
-				Valid:  true,
-			},
-			PairedAt:        sql.NullInt64{Int64: 1_000, Valid: true},
-			UpdatedAt:       1_000,
-			AgentID:         agent.ID,
-			PairingCodeHash: codeHash,
-			AgentPin:        pairingSmokePin("a"),
-			Now:             999,
-		},
+		completeInput,
 	); err != nil {
 		t.Fatalf("complete agent pairing: %v", err)
 	}
+	activateInput := db.ActivatePairedAgentParams{
+		CertificatePem: sql.NullString{
+			String: "agent-public-identity",
+			Valid:  true,
+		},
+		CertificateFingerprint: sql.NullString{
+			String: pairingSmokePin("a"),
+			Valid:  true,
+		},
+		LastHeartbeatAt: sql.NullInt64{Int64: 1_000, Valid: true},
+		EnrolledAt:      sql.NullInt64{Int64: 1_000, Valid: true},
+		UpdatedAt:       1_000,
+		ID:              agent.ID,
+		PairingCodeHash: codeHash,
+	}
 	if _, err := queries.ActivatePairedAgent(
 		ctx,
-		db.ActivatePairedAgentParams{
-			CertificatePem: sql.NullString{
-				String: "agent-public-identity",
-				Valid:  true,
-			},
-			CertificateFingerprint: sql.NullString{
-				String: pairingSmokePin("a"),
-				Valid:  true,
-			},
-			LastHeartbeatAt: sql.NullInt64{Int64: 1_000, Valid: true},
-			EnrolledAt:      sql.NullInt64{Int64: 1_000, Valid: true},
-			UpdatedAt:       1_000,
-			ID:              agent.ID,
-		},
+		activateInput,
 	); err != nil {
 		t.Fatalf("activate paired agent: %v", err)
+	}
+	if _, err := queries.CompleteAgentPairing(ctx, completeInput); err != nil {
+		t.Fatalf("repeat complete agent pairing: %v", err)
+	}
+	if _, err := queries.ActivatePairedAgent(ctx, activateInput); err != nil {
+		t.Fatalf("repeat activate paired agent: %v", err)
 	}
 	assignment, err := queries.AssignAgentToEnvironment(
 		ctx,

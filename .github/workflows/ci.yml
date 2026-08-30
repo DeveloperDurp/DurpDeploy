@@ -1,0 +1,203 @@
+name: CI
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  GO_VERSION: '1.26'
+  TEMPL_VERSION: v0.3.1020
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      - run: go install github.com/a-h/templ/cmd/templ@${TEMPL_VERSION}
+      - run: templ generate
+      - run: make swagger-ui-copy
+      - run: go vet ./...
+      - name: gofmt
+        run: test -z "$(gofmt -l .)"
+      - run: go install github.com/segmentio/golines@v0.13.0
+      - name: golines
+        run: test -z "$(golines -m 80 --ignore-generated -l .)"
+
+  lint-dockerfile:
+    name: Lint Dockerfiles
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Dockerfile
+        uses: hadolint/hadolint-action@2332a7b74a6de0dda2e2221d575162eba76ba5e5 # v3.3.0
+        with:
+          dockerfile: Dockerfile
+          failure-threshold: warning
+      - name: Dockerfile.agent
+        uses: hadolint/hadolint-action@2332a7b74a6de0dda2e2221d575162eba76ba5e5 # v3.3.0
+        with:
+          dockerfile: Dockerfile.agent
+          failure-threshold: warning
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    needs: [lint, lint-dockerfile]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      - run: go install github.com/a-h/templ/cmd/templ@${TEMPL_VERSION}
+      - run: templ generate
+      - run: make swagger-ui-copy
+      - run: go test -v -count=1 -cover -coverprofile=coverage.txt ./...
+
+  mobile-browser:
+    name: Mobile browser
+    runs-on: ubuntu-latest
+    needs: [lint, lint-dockerfile]
+    concurrency:
+      group: mobile-browser
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Build test image
+        run: docker build -f Dockerfile.mobile-browser -t mobile-browser:${GITHUB_SHA} .
+      - name: Create test container
+        run: |
+          docker create --name mobile-browser-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT} \
+            --entrypoint /usr/local/bin/mobile-browser-container \
+            -e MOBILE_RUN_ID=github-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT} \
+            -e MOBILE_ARTIFACT_DIR=/artifacts \
+            mobile-browser:${GITHUB_SHA}
+          docker cp ./. mobile-browser-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}:/workspace
+      - name: Run mobile browser tests
+        run: docker start -a mobile-browser-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}
+      - name: Failure diagnostics
+        if: failure()
+        run: |
+          docker exec mobile-browser-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT} sh -c '
+            find /artifacts -type f -name "mobile-readability-*.json" -size -33k \
+              -print -exec cat {} \;
+          ' 2>&1 | head -c 32768 || true
+      - name: Cleanup
+        if: always()
+        run: docker rm -f mobile-browser-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT} || true
+
+  auth-mfa-sqlite:
+    name: Auth MFA SQLite
+    runs-on: ubuntu-latest
+    needs: [lint, lint-dockerfile]
+    concurrency:
+      group: auth-mfa-e2e
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Build test image
+        run: docker build -f Dockerfile.mobile-browser -t auth-mfa-e2e:${GITHUB_SHA} .
+      - name: Create test container
+        run: |
+          docker create --name auth-mfa-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT} \
+            --entrypoint sleep auth-mfa-e2e:${GITHUB_SHA} infinity
+          docker cp ./. auth-mfa-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}:/workspace
+          docker start auth-mfa-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}
+      - name: Run SQLite MFA tests
+        run: |
+          docker exec \
+            -e NODE_PATH=/opt/mobile-browser/node_modules \
+            auth-mfa-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT} \
+            sh -ec 'ln -s /opt/mobile-browser/node_modules node_modules &&
+            mkdir -p static/swagger-ui &&
+            cp /opt/mobile-browser/node_modules/swagger-ui-dist/swagger-ui-bundle.js static/swagger-ui/ &&
+            cp /opt/mobile-browser/node_modules/swagger-ui-dist/swagger-ui-standalone-preset.js static/swagger-ui/ &&
+            cp /opt/mobile-browser/node_modules/swagger-ui-dist/swagger-ui.css static/swagger-ui/ &&
+            cp /opt/mobile-browser/node_modules/swagger-ui-dist/favicon-32x32.png static/swagger-ui/ &&
+            cp /opt/mobile-browser/node_modules/swagger-ui-dist/favicon-16x16.png static/swagger-ui/ &&
+            make auth-mfa-e2e-sqlite'
+      - name: Failure diagnostics
+        if: failure()
+        run: |
+          docker exec auth-mfa-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT} sh -c '
+            find /workspace/artifacts -type f \
+              \( -name summary.txt -o -name "*.redacted.log" -o -name trace.redacted.json \) \
+              -size -33k -print -exec cat {} \;
+          ' 2>&1 | head -c 32768 || true
+      - name: Cleanup
+        if: always()
+        run: docker rm -f auth-mfa-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT} || true
+
+  auth-mfa-parity:
+    name: Auth MFA database parity
+    runs-on: ubuntu-latest
+    needs: [lint, lint-dockerfile]
+    concurrency:
+      group: auth-mfa-e2e
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      - run: go install github.com/a-h/templ/cmd/templ@${TEMPL_VERSION}
+      - run: templ generate
+      - run: make swagger-ui-copy
+      - run: make auth-mfa-e2e-postgres auth-mfa-e2e-mssql
+      - name: Failure diagnostics
+        if: failure()
+        run: |
+          if [ -d artifacts/auth-mfa ]; then
+            find artifacts/auth-mfa -type f \
+              \( -name summary.txt -o -name '*.redacted.log' -o -name trace.redacted.json \) \
+              -size -33k -print -exec cat {} \; 2>&1 | head -c 32768 || true
+          fi
+      - name: Cleanup Testcontainers
+        if: always()
+        run: |
+          docker ps --filter 'label=org.testcontainers=true' -q |
+            xargs -r docker rm -f || true
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      - run: go install github.com/a-h/templ/cmd/templ@${TEMPL_VERSION}
+      - run: templ generate
+      - run: make swagger-ui-copy
+      - run: go build -o durpdeploy ./cmd/server
+      - run: go build -o durpdeploy-agent ./cmd/agent
+      - run: make agent-container-contract

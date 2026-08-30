@@ -168,11 +168,7 @@ func releaseEnvironment(
 ) (map[string]string, []string) {
 	environment := make(map[string]string)
 	var secrets []string
-	for _, variable := range variables {
-		if variable.EnvironmentID.Valid &&
-			variable.EnvironmentID.Int64 != environmentID {
-			continue
-		}
+	for _, variable := range ResolveReleaseVariables(variables, environmentID) {
 		environment[variable.Name] = variable.Value.String
 		if variable.Secret != 0 && variable.Value.String != "" {
 			secrets = append(secrets, variable.Value.String)

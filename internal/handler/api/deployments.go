@@ -506,26 +506,33 @@ func (h *DeploymentHandler) ApproveDeployment(
 		return
 	}
 
-	if _, err := h.repo.Queries.CreateApproval(
-		r.Context(),
-		db.CreateApprovalParams{
-			DeploymentID:         depID,
-			ApprovedBy:           user.Name,
+	err = h.repo.WithTx(r.Context(), func(q *db.Queries) error {
+		updated, updateErr := q.ApprovePendingDeployment(
+			r.Context(),
+			depID,
+		)
+		if updateErr != nil {
+			return updateErr
+		}
+		if updated != 1 {
+			return dispatch.ErrCancellationState
+		}
+		_, createErr := q.CreateApproval(r.Context(), db.CreateApprovalParams{
+			DeploymentID: depID, ApprovedBy: user.Name,
 			ApproverUserID:       sql.NullInt64{Int64: user.ID, Valid: true},
 			RequiredApproverRole: "admin",
-		},
-	); err != nil {
-		RespondError(w, http.StatusInternalServerError, err.Error())
+		})
+		return createErr
+	})
+	if errors.Is(err, dispatch.ErrCancellationState) {
+		RespondError(
+			w,
+			http.StatusConflict,
+			"Deployment is not pending approval",
+		)
 		return
 	}
-
-	if err := h.repo.Queries.UpdateDeploymentStatus(
-		r.Context(),
-		db.UpdateDeploymentStatusParams{
-			ID:     depID,
-			Status: "pending",
-		},
-	); err != nil {
+	if err != nil {
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -744,28 +751,7 @@ func (h *DeploymentHandler) RetryDeployment(
 		return
 	}
 
-	if err := h.repo.Queries.UpdateDeploymentStatus(
-		r.Context(),
-		db.UpdateDeploymentStatusParams{
-			ID:     depID,
-			Status: "pending",
-		},
-	); err != nil {
-		RespondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	if err := h.dispatcher.Dispatch(r.Context(), depID); err != nil {
-		RespondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	updated, err := h.repo.Queries.GetDeployment(r.Context(), depID)
-	if err != nil {
-		RespondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	RespondJSON(w, http.StatusOK, updated)
+	h.RedeployDeployment(w, r)
 }
 
 // swagger:route GET /deployments/{id}/logs deployments listDeploymentLogs

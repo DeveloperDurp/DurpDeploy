@@ -38,6 +38,56 @@ func (q *Queries) AssignAgentToEnvironment(ctx context.Context, arg AssignAgentT
 	return i, err
 }
 
+const beginAgentPairing = `-- name: BeginAgentPairing :one
+UPDATE agent_pairings
+SET state = CASE WHEN state = 'pending' THEN 'committing' ELSE state END,
+    updated_at = CASE
+        WHEN state = 'pending' THEN ?1
+        ELSE updated_at
+    END
+WHERE agent_id = ?2
+  AND pairing_code_hash = ?3
+  AND agent_pin = ?4
+  AND (
+      (state = 'pending' AND expires_at > ?5)
+      OR state IN ('committing', 'paired')
+  )
+RETURNING agent_id, pairing_code_hash, agent_public_identity, agent_pin, server_public_identity, server_pin, state, expires_at, paired_at, created_at, updated_at
+`
+
+type BeginAgentPairingParams struct {
+	UpdatedAt       int64  `json:"updated_at"`
+	AgentID         string `json:"agent_id"`
+	PairingCodeHash []byte `json:"pairing_code_hash"`
+	AgentPin        string `json:"agent_pin"`
+	Now             int64  `json:"now"`
+}
+
+func (q *Queries) BeginAgentPairing(ctx context.Context, arg BeginAgentPairingParams) (AgentPairing, error) {
+	row := q.db.QueryRowContext(ctx, beginAgentPairing,
+		arg.UpdatedAt,
+		arg.AgentID,
+		arg.PairingCodeHash,
+		arg.AgentPin,
+		arg.Now,
+	)
+	var i AgentPairing
+	err := row.Scan(
+		&i.AgentID,
+		&i.PairingCodeHash,
+		&i.AgentPublicIdentity,
+		&i.AgentPin,
+		&i.ServerPublicIdentity,
+		&i.ServerPin,
+		&i.State,
+		&i.ExpiresAt,
+		&i.PairedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const claimOldestDirectDeployment = `-- name: ClaimOldestDirectDeployment :one
 UPDATE deployment_dispatches
 SET state = 'claimed',
@@ -107,19 +157,38 @@ func (q *Queries) ClaimOldestDirectDeployment(ctx context.Context, arg ClaimOlde
 const completeAgentPairing = `-- name: CompleteAgentPairing :one
 UPDATE agent_pairings
 SET state = 'paired',
-    server_public_identity = ?1,
-    server_pin = ?2,
-    paired_at = ?3,
-    updated_at = ?4
-WHERE agent_id = ?5
-  AND pairing_code_hash = ?6
-  AND agent_pin = ?7
-  AND state = 'pending'
-  AND expires_at > ?8
+    agent_public_identity = CASE
+        WHEN state = 'committing' THEN ?1
+        ELSE agent_public_identity
+    END,
+    server_public_identity = CASE
+        WHEN state = 'committing' THEN ?2
+        ELSE server_public_identity
+    END,
+    server_pin = CASE
+        WHEN state = 'committing' THEN ?3
+        ELSE server_pin
+    END,
+    paired_at = CASE
+        WHEN state = 'committing' THEN ?4
+        ELSE paired_at
+    END,
+    updated_at = CASE
+        WHEN state = 'committing' THEN ?5
+        ELSE updated_at
+    END
+WHERE agent_id = ?6
+  AND pairing_code_hash = ?7
+  AND agent_pin = ?8
+  AND (
+      state = 'committing'
+      OR state = 'paired'
+  )
 RETURNING agent_id, pairing_code_hash, agent_public_identity, agent_pin, server_public_identity, server_pin, state, expires_at, paired_at, created_at, updated_at
 `
 
 type CompleteAgentPairingParams struct {
+	AgentPublicIdentity  string         `json:"agent_public_identity"`
 	ServerPublicIdentity sql.NullString `json:"server_public_identity"`
 	ServerPin            sql.NullString `json:"server_pin"`
 	PairedAt             sql.NullInt64  `json:"paired_at"`
@@ -127,11 +196,11 @@ type CompleteAgentPairingParams struct {
 	AgentID              string         `json:"agent_id"`
 	PairingCodeHash      []byte         `json:"pairing_code_hash"`
 	AgentPin             string         `json:"agent_pin"`
-	Now                  int64          `json:"now"`
 }
 
 func (q *Queries) CompleteAgentPairing(ctx context.Context, arg CompleteAgentPairingParams) (AgentPairing, error) {
 	row := q.db.QueryRowContext(ctx, completeAgentPairing,
+		arg.AgentPublicIdentity,
 		arg.ServerPublicIdentity,
 		arg.ServerPin,
 		arg.PairedAt,
@@ -139,7 +208,6 @@ func (q *Queries) CompleteAgentPairing(ctx context.Context, arg CompleteAgentPai
 		arg.AgentID,
 		arg.PairingCodeHash,
 		arg.AgentPin,
-		arg.Now,
 	)
 	var i AgentPairing
 	err := row.Scan(
@@ -177,6 +245,7 @@ SET pairing_code_hash = excluded.pairing_code_hash,
     expires_at = excluded.expires_at,
     paired_at = NULL,
     updated_at = unixepoch()
+WHERE agent_pairings.state IN ('pending', 'expired')
 RETURNING agent_id, pairing_code_hash, agent_public_identity, agent_pin, server_public_identity, server_pin, state, expires_at, paired_at, created_at, updated_at
 `
 
@@ -247,12 +316,50 @@ func (q *Queries) CreateDirectDeploymentDispatch(ctx context.Context, arg Create
 	return i, err
 }
 
+const deleteAgentPairing = `-- name: DeleteAgentPairing :execrows
+DELETE FROM agent_pairings WHERE agent_id = ?
+`
+
+func (q *Queries) DeleteAgentPairing(ctx context.Context, agentID string) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteAgentPairing, agentID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const deleteEnvironmentAgentAssignment = `-- name: DeleteEnvironmentAgentAssignment :execrows
 DELETE FROM environment_agent_assignments WHERE environment_id = ?
 `
 
 func (q *Queries) DeleteEnvironmentAgentAssignment(ctx context.Context, environmentID int64) (int64, error) {
 	result, err := q.db.ExecContext(ctx, deleteEnvironmentAgentAssignment, environmentID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const deleteEnvironmentAgentAssignmentsByAgent = `-- name: DeleteEnvironmentAgentAssignmentsByAgent :execrows
+DELETE FROM environment_agent_assignments WHERE agent_id = ?
+`
+
+func (q *Queries) DeleteEnvironmentAgentAssignmentsByAgent(ctx context.Context, agentID string) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteEnvironmentAgentAssignmentsByAgent, agentID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const deletePendingAgentPairing = `-- name: DeletePendingAgentPairing :execrows
+DELETE FROM agent_pairings
+WHERE agent_id = ?
+  AND state = 'pending'
+`
+
+func (q *Queries) DeletePendingAgentPairing(ctx context.Context, agentID string) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deletePendingAgentPairing, agentID)
 	if err != nil {
 		return 0, err
 	}

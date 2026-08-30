@@ -17,21 +17,41 @@ import (
 )
 
 type AgentAdminHandler struct {
-	repo      *repository.Repository
-	pairer    *agentpairing.Server
-	pendingMu sync.Mutex
-	pending   map[string]pendingAgentPairing
+	repo            *repository.Repository
+	pairer          *agentpairing.Server
+	confirmationTTL time.Duration
+	pendingMu       sync.Mutex
+	pending         map[string]pendingAgentPairing
 }
+
+const pairingConfirmationTTL = 10 * time.Minute
 
 func NewAgentAdminHandler(
 	repo *repository.Repository,
 	pairer ...*agentpairing.Server,
 ) *AgentAdminHandler {
-	result := &AgentAdminHandler{
-		repo: repo, pending: make(map[string]pendingAgentPairing),
-	}
+	var configuredPairer *agentpairing.Server
 	if len(pairer) > 0 {
-		result.pairer = pairer[0]
+		configuredPairer = pairer[0]
+	}
+	return NewAgentAdminHandlerWithConfirmationTTL(
+		repo,
+		configuredPairer,
+		pairingConfirmationTTL,
+	)
+}
+
+func NewAgentAdminHandlerWithConfirmationTTL(
+	repo *repository.Repository,
+	pairer *agentpairing.Server,
+	confirmationTTL time.Duration,
+) *AgentAdminHandler {
+	if confirmationTTL <= 0 {
+		confirmationTTL = pairingConfirmationTTL
+	}
+	result := &AgentAdminHandler{
+		repo: repo, pairer: pairer, confirmationTTL: confirmationTTL,
+		pending: make(map[string]pendingAgentPairing),
 	}
 	return result
 }
@@ -202,107 +222,6 @@ func (h *AgentAdminHandler) GetAgent(
 		return
 	}
 	writeAdminJSON(w, http.StatusOK, agentAdminFromRow(agent))
-}
-
-func (h *AgentAdminHandler) DeleteAgent(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
-	agent, ok := h.agent(w, r)
-	if !ok {
-		return
-	}
-	deleted, err := h.repo.Queries.DeletePendingUnreferencedAgent(
-		r.Context(),
-		agent.ID,
-	)
-	if err != nil {
-		writeAdminError(
-			w,
-			http.StatusInternalServerError,
-			"could not delete agent",
-		)
-		return
-	}
-	if deleted != 1 {
-		writeAdminError(
-			w,
-			http.StatusConflict,
-			"agent has history; disable it instead",
-		)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
-}
-
-func (h *AgentAdminHandler) DisableAgent(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
-	agent, ok := h.agent(w, r)
-	if !ok {
-		return
-	}
-	updated, err := h.repo.Queries.DisableAgent(
-		r.Context(),
-		db.DisableAgentParams{
-			ID:        agent.ID,
-			UpdatedAt: time.Now().Unix(),
-		},
-	)
-	if err != nil {
-		writeAdminError(
-			w,
-			http.StatusInternalServerError,
-			"could not disable agent",
-		)
-		return
-	}
-	if updated != 1 {
-		writeAdminError(
-			w,
-			http.StatusConflict,
-			"only active agents can be disabled",
-		)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
-}
-
-func (h *AgentAdminHandler) RevokeAgent(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
-	agent, ok := h.agent(w, r)
-	if !ok {
-		return
-	}
-	now := time.Now().Unix()
-	updated, err := h.repo.Queries.RevokeAgent(
-		r.Context(),
-		db.RevokeAgentParams{
-			ID:        agent.ID,
-			RevokedAt: sql.NullInt64{Int64: now, Valid: true},
-			UpdatedAt: now,
-		},
-	)
-	if err != nil {
-		writeAdminError(
-			w,
-			http.StatusInternalServerError,
-			"could not revoke agent",
-		)
-		return
-	}
-	if updated != 1 {
-		writeAdminError(
-			w,
-			http.StatusConflict,
-			"only active or disabled agents can be revoked",
-		)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *AgentAdminHandler) agent(

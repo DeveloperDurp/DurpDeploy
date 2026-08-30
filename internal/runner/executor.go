@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"slices"
-	"strings"
 	"time"
 )
 
@@ -96,11 +95,13 @@ func NewCallbacks(config CallbacksConfig) Callbacks {
 
 // Executor executes bash jobs with the local sandbox and process isolation.
 type Executor struct {
-	sandbox *Sandbox
+	sandbox    *Sandbox
+	sandboxErr error
 }
 
 func NewExecutor() *Executor {
-	return &Executor{sandbox: newSandbox()}
+	sandbox, err := newSandbox()
+	return &Executor{sandbox: sandbox, sandboxErr: err}
 }
 
 func (e *Executor) Execute(
@@ -108,6 +109,9 @@ func (e *Executor) Execute(
 	job Job,
 	callbacks Callbacks,
 ) error {
+	if e.sandboxErr != nil {
+		return fmt.Errorf("initialize runner sandbox: %w", e.sandboxErr)
+	}
 	writer := newRedactingWriter(NewScrubber(job.secrets), callbacks.writeLog)
 	maxAttempts := job.maxRetries + 1
 	var lastErr error
@@ -144,7 +148,7 @@ func (e *Executor) runAttempt(
 	writer *redactingWriter,
 	callbacks Callbacks,
 	attempt int,
-) error {
+) (err error) {
 	timeout := job.timeout
 	if timeout <= 0 {
 		timeout = defaultStepTimeout
@@ -170,7 +174,10 @@ func (e *Executor) runAttempt(
 		return err
 	}
 
-	chrooted := e.sandbox.setupChroot(tmpDir)
+	chrooted, err := e.sandbox.setupChroot(tmpDir)
+	if err != nil {
+		return fmt.Errorf("setup runner sandbox: %w", err)
+	}
 	defer e.sandbox.teardownChroot(tmpDir)
 	cmd := e.command(stepCtx, chrooted, tmpDir, scriptPath)
 	cmd.Env = baseStepEnv()
@@ -187,7 +194,18 @@ func (e *Executor) runAttempt(
 		return err
 	}
 
-	cgroup := e.sandbox.createCgroup(job.deploymentID)
+	group, err := e.sandbox.createCgroup(job.deploymentID)
+	if err != nil {
+		return fmt.Errorf("setup runner cgroup: %w", err)
+	}
+	defer func() {
+		if cleanupErr := e.sandbox.removeCgroup(group); cleanupErr != nil {
+			err = errors.Join(err, fmt.Errorf("cleanup runner cgroup: %w", cleanupErr))
+		}
+	}()
+	if err := e.sandbox.configureCgroup(cmd, group); err != nil {
+		return fmt.Errorf("configure runner cgroup: %w", err)
+	}
 	var output bytes.Buffer
 	cmd.Stdout = io.MultiWriter(&output, writer)
 	cmd.Stderr = io.MultiWriter(&output, writer)
@@ -195,7 +213,6 @@ func (e *Executor) runAttempt(
 		if err := writer.flush(); err != nil {
 			return err
 		}
-		e.sandbox.removeCgroup(cgroup)
 		return err
 	}
 	if callbacks.trackProcessGroup != nil {
@@ -204,9 +221,6 @@ func (e *Executor) runAttempt(
 			defer callbacks.untrackProcessGroup()
 		}
 	}
-	e.sandbox.addProcess(cgroup, cmd.Process.Pid)
-	defer e.sandbox.removeCgroup(cgroup)
-
 	go e.killAfterDeadline(stepCtx, cmd)
 	err = cmd.Wait()
 	if flushErr := writer.flush(); flushErr != nil {
@@ -265,53 +279,4 @@ func (e *Executor) killAfterDeadline(ctx context.Context, cmd *exec.Cmd) {
 	if cmd.Process != nil {
 		killProcessGroup(cmd.Process.Pid)
 	}
-}
-
-type redactingWriter struct {
-	scrubber *Scrubber
-	writeLog func(string) error
-	buffer   bytes.Buffer
-}
-
-func newRedactingWriter(
-	scrubber *Scrubber,
-	writeLog func(string) error,
-) *redactingWriter {
-	return &redactingWriter{scrubber: scrubber, writeLog: writeLog}
-}
-
-func (w *redactingWriter) Write(data []byte) (int, error) {
-	w.buffer.Write(data)
-	lastNewline := bytes.LastIndexByte(w.buffer.Bytes(), '\n')
-	if lastNewline == -1 {
-		return len(data), nil
-	}
-	if err := w.write(w.buffer.String()[:lastNewline+1]); err != nil {
-		return 0, err
-	}
-	w.buffer.Next(lastNewline + 1)
-	return len(data), nil
-}
-
-func (w *redactingWriter) flush() error {
-	if w.buffer.Len() == 0 {
-		return nil
-	}
-	if err := w.write(w.buffer.String()); err != nil {
-		return err
-	}
-	w.buffer.Reset()
-	return nil
-}
-
-func (w *redactingWriter) write(text string) error {
-	if w.writeLog == nil {
-		return nil
-	}
-	for _, line := range strings.Split(strings.TrimSuffix(w.scrubber.Scrub(text), "\n"), "\n") {
-		if err := w.writeLog(line); err != nil {
-			return err
-		}
-	}
-	return nil
 }

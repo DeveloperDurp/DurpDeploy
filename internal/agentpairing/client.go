@@ -31,8 +31,8 @@ type Server struct {
 }
 
 type Bootstrap struct {
-	Offer          agentproto.BootstrapResponse
 	PublicIdentity string
+	AgentPin       agentproto.SHA256Pin
 }
 
 func NewServer(
@@ -48,125 +48,36 @@ func NewServer(
 	return &Server{PullEndpoint: pullEndpoint, Identity: identity}, nil
 }
 
-func FetchBootstrap(
-	ctx context.Context,
-	endpoint string,
-) (agentproto.BootstrapResponse, error) {
-	bootstrap, err := FetchBootstrapIdentity(ctx, endpoint)
-	if err != nil {
-		return agentproto.BootstrapResponse{}, err
-	}
-	return bootstrap.Offer, nil
+func Pair(ctx context.Context, input PairInput) (Bootstrap, error) {
+	return pair(ctx, input)
 }
 
-func FetchBootstrapIdentity(
-	ctx context.Context,
-	endpoint string,
-) (Bootstrap, error) {
-	baseURL, err := parseEndpoint(endpoint)
-	if err != nil {
-		return Bootstrap{}, err
-	}
-	config, err := agenttls.NewBootstrapClientConfig(baseURL)
-	if err != nil {
-		return Bootstrap{}, fmt.Errorf("bootstrap TLS: %w", err)
-	}
-	request, err := http.NewRequestWithContext(
-		ctx,
-		http.MethodGet,
-		baseURL+agentproto.BootstrapPath,
-		nil,
-	)
-	if err != nil {
-		return Bootstrap{}, fmt.Errorf("create bootstrap request: %w", err)
-	}
-	response, err := (&http.Client{
-		Timeout:   requestTimeout,
-		Transport: &http.Transport{TLSClientConfig: config},
-	}).Do(request)
-	if err != nil {
-		return Bootstrap{}, fmt.Errorf("fetch bootstrap: %w", err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		return Bootstrap{}, fmt.Errorf(
-			"bootstrap agent returned HTTP %d",
-			response.StatusCode,
-		)
-	}
-	bootstrap, err := agentproto.DecodeBootstrapResponse(response.Body)
-	if err != nil {
-		return Bootstrap{}, fmt.Errorf("decode bootstrap: %w", err)
-	}
-	if err := matchesConnectionPin(
-		response.TLS,
-		bootstrap.AgentPin,
-	); err != nil {
-		return Bootstrap{}, err
-	}
-	return Bootstrap{
-		Offer: bootstrap,
-		PublicIdentity: string(pem.EncodeToMemory(&pem.Block{
-			Type: "CERTIFICATE", Bytes: response.TLS.PeerCertificates[0].Raw,
-		})),
-	}, nil
-}
-
-func Pair(
-	ctx context.Context,
-	input PairInput,
-) (agentproto.PairResponse, error) {
-	return pair(ctx, input, agentproto.PairPath, http.StatusOK)
-}
-
-func Commit(
-	ctx context.Context,
-	input PairInput,
-) error {
-	_, err := pair(ctx, input, agentproto.PairCommitPath, http.StatusNoContent)
-	return err
-}
-
-func pair(
-	ctx context.Context,
-	input PairInput,
-	path string,
-	expectedStatus int,
-) (agentproto.PairResponse, error) {
+func pair(ctx context.Context, input PairInput) (Bootstrap, error) {
 	baseURL, err := parseEndpoint(input.Endpoint)
 	if err != nil {
-		return agentproto.PairResponse{}, err
+		return Bootstrap{}, err
 	}
 	pin, err := agenttls.ParseFingerprint(input.AgentPin.String())
 	if err != nil {
-		return agentproto.PairResponse{}, fmt.Errorf("parse agent pin: %w", err)
+		return Bootstrap{}, fmt.Errorf("parse agent pin: %w", err)
 	}
-	config, err := agenttls.NewClientConfig(
-		baseURL,
-		[]agenttls.Fingerprint{pin},
-	)
+	config, err := agenttls.NewPairingBootstrapClientConfig(baseURL, pin)
 	if err != nil {
-		return agentproto.PairResponse{}, fmt.Errorf("pair TLS: %w", err)
+		return Bootstrap{}, fmt.Errorf("pair TLS: %w", err)
 	}
 	config.Certificates = []tls.Certificate{input.Identity.Certificate}
 	body, err := json.Marshal(input.Request)
 	if err != nil {
-		return agentproto.PairResponse{}, fmt.Errorf(
-			"encode pair request: %w",
-			err,
-		)
+		return Bootstrap{}, fmt.Errorf("encode pair request: %w", err)
 	}
 	request, err := http.NewRequestWithContext(
 		ctx,
 		http.MethodPost,
-		baseURL+path,
+		baseURL+agentproto.ServerInitPath,
 		bytes.NewReader(body),
 	)
 	if err != nil {
-		return agentproto.PairResponse{}, fmt.Errorf(
-			"create pair request: %w",
-			err,
-		)
+		return Bootstrap{}, fmt.Errorf("create pair request: %w", err)
 	}
 	request.Header.Set("Content-Type", "application/json")
 	response, err := (&http.Client{
@@ -174,31 +85,26 @@ func pair(
 		Transport: &http.Transport{TLSClientConfig: config},
 	}).Do(request)
 	if err != nil {
-		return agentproto.PairResponse{}, fmt.Errorf("pair agent: %w", err)
+		return Bootstrap{}, fmt.Errorf("pair agent: %w", err)
 	}
 	defer response.Body.Close()
-	if response.StatusCode != expectedStatus {
-		return agentproto.PairResponse{}, fmt.Errorf(
+	if response.StatusCode != http.StatusNoContent {
+		return Bootstrap{}, fmt.Errorf(
 			"pair agent returned HTTP %d",
 			response.StatusCode,
 		)
 	}
-	if expectedStatus == http.StatusNoContent {
-		return agentproto.PairResponse{}, nil
-	}
-	pair, err := agentproto.DecodePairResponse(response.Body)
-	if err != nil {
-		return agentproto.PairResponse{}, fmt.Errorf(
-			"decode pair response: %w",
-			err,
+	if response.TLS == nil || len(response.TLS.PeerCertificates) != 1 {
+		return Bootstrap{}, fmt.Errorf(
+			"server-init agent did not provide exactly one certificate",
 		)
 	}
-	if pair.AgentPin != input.AgentPin {
-		return agentproto.PairResponse{}, fmt.Errorf(
-			"agent pairing response pin mismatch",
-		)
-	}
-	return pair, nil
+	return Bootstrap{
+		PublicIdentity: string(pem.EncodeToMemory(&pem.Block{
+			Type: "CERTIFICATE", Bytes: response.TLS.PeerCertificates[0].Raw,
+		})),
+		AgentPin: input.AgentPin,
+	}, nil
 }
 
 func parseEndpoint(raw string) (string, error) {
@@ -210,21 +116,4 @@ func parseEndpoint(raw string) (string, error) {
 		return "", fmt.Errorf("agent endpoint must be an HTTPS origin")
 	}
 	return parsed.String(), nil
-}
-
-func matchesConnectionPin(
-	state *tls.ConnectionState,
-	pin agentproto.SHA256Pin,
-) error {
-	if state == nil || len(state.PeerCertificates) != 1 {
-		return fmt.Errorf(
-			"bootstrap agent did not provide exactly one certificate",
-		)
-	}
-	if agenttls.FingerprintOf(state.PeerCertificates[0].Raw).
-		String() !=
-		pin.String() {
-		return fmt.Errorf("bootstrap response pin does not match TLS peer")
-	}
-	return nil
 }

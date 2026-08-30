@@ -19,6 +19,14 @@ require_absent() {
 	fi
 }
 
+require_absent_token() {
+	local file=$1 token=$2 description=$3
+	if grep -Eq "(^|[^A-Za-z0-9_])${token}([^A-Za-z0-9_]|=|$)" "$root/$file"; then
+		echo "agent documentation contract: $description" >&2
+		exit 1
+	fi
+}
+
 for file in README.md docs/deploy.md docs/agent-protocol.md docs/agents.md \
 	docs/security.md docs/roles.md docs/attack-drill.md docs/backup-restore.md; do
 	if [ ! -f "$root/$file" ]; then
@@ -31,10 +39,14 @@ require_text README.md 'Remote agents' 'README must describe remote agents'
 require_text README.md 'No SSH-based deployment transport' 'README must distinguish agents from SSH'
 require_text docs/agents.md 'outbound-only' 'agent operator boundary is missing'
 require_text docs/agent-protocol.md 'does not fall back to local execution' 'remote dispatch fallback must be explicit'
+require_text docs/agent-protocol.md 'server-init' 'server-init pairing channel is missing'
+require_text docs/deploy.md 'durpdeploy-runner' 'runner identity requirement is missing'
+require_text docs/agents.md '10 minutes' 'pairing TTL update is missing'
 require_text docs/security.md 'Remote agents do not receive the server database' 'agent storage boundary is missing'
 require_text docs/deploy.md 'DURPDEPLOY_AGENT_STATE_DIR=/var/lib/durpdeploy-agent' 'agent state directory example is missing'
+require_text Makefile 'DEV_AGENT_LISTEN_ADDR' 'Makefile dev listener variable convention is missing'
 require_text docs/backup-restore.md 'state is separate' 'agent state backup boundary is missing'
-require_absent Makefile 'AGENT_LISTEN_ADDR' 'Makefile must not accept agent listener inputs'
+require_absent_token Makefile 'AGENT_LISTEN_ADDR' 'Makefile must not accept bare agent listener inputs'
 require_absent Makefile 'AGENT_ENV_FILE' 'Makefile must not source agent environment files'
 
 for variable in \

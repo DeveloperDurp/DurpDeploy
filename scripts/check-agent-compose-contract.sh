@@ -49,17 +49,30 @@ for path in list(root.glob("*/agent.json")) + list(root.glob("*/agent.yml")):
     agent = services["agent"]
     assert agent["image"] == "durpdeploy-agent:latest"
     assert agent["cap_drop"] == ["ALL"]
+    assert agent["cap_add"] == ["SETUID", "SETGID", "SETPCAP", "SYS_ADMIN", "SYS_CHROOT"]
     assert agent["read_only"] is True
     assert agent["security_opt"] == ["no-new-privileges:true"]
     assert "network_mode" not in agent
-    assert len(agent["volumes"]) == 1
-    volume = agent["volumes"][0]
-    if isinstance(volume, str):
-        source, target, *_ = volume.split(":")
-        volume = {"source": source, "target": target, "type": "volume"}
-    assert volume["target"] == "/var/lib/durpdeploy-agent"
-    assert volume["type"] == "volume"
-    assert volume["source"].endswith("durpdeploy-agent-state")
+    volumes = []
+    for volume in agent["volumes"]:
+        if isinstance(volume, str):
+            source, target, *options = volume.split(":")
+            volume = {
+                "source": source,
+                "target": target,
+                "type": "bind" if source.startswith("/") else "volume",
+                "read_only": "ro" in options,
+            }
+        volumes.append(volume)
+    assert len(volumes) == 2
+    state, cgroup = volumes
+    assert state["target"] == "/var/lib/durpdeploy-agent"
+    assert state["type"] == "volume"
+    assert state["source"].endswith("durpdeploy-agent-state")
+    assert cgroup["source"] == "/sys/fs/cgroup/durpdeploy"
+    assert cgroup["target"] == "/sys/fs/cgroup/durpdeploy"
+    assert cgroup["type"] == "bind"
+    assert cgroup.get("read_only") is False
     agent_text = json.dumps(agent)
     for forbidden in ("/data", "durpdeploy_key", "docker.sock", "privileged", "host"):
         assert forbidden not in agent_text, f"{path}: found forbidden {forbidden}"

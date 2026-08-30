@@ -2,7 +2,6 @@ package handler
 
 import (
 	"database/sql"
-	"encoding/pem"
 	"errors"
 	"net/http"
 	"time"
@@ -12,7 +11,6 @@ import (
 	"durpdeploy/internal/agentpairing"
 	"durpdeploy/internal/agentproto"
 	"durpdeploy/internal/db"
-	"durpdeploy/views/pages"
 )
 
 type pendingAgentPairing struct {
@@ -38,13 +36,12 @@ func (h *AgentAdminHandler) StartPairing(
 		http.Error(writer, "invalid pairing form", http.StatusBadRequest)
 		return
 	}
-	code, err := agentproto.ParsePairingCode(request.FormValue("pairing_code"))
+	endpoint, err := normalizeAgentEndpoint(
+		request.FormValue("agent_host"),
+		request.FormValue("agent_port"),
+	)
 	if err != nil {
-		http.Error(
-			writer,
-			"invalid pairing code",
-			http.StatusUnprocessableEntity,
-		)
+		http.Error(writer, err.Error(), http.StatusUnprocessableEntity)
 		return
 	}
 	agent, ok := h.agentPageAgent(writer, request)
@@ -55,64 +52,35 @@ func (h *AgentAdminHandler) StartPairing(
 		http.Error(writer, "agent must be pending", http.StatusConflict)
 		return
 	}
-	bootstrap, err := agentpairing.FetchBootstrapIdentity(
+	pairing, ok := preflightAgentPairing(
 		request.Context(),
-		request.FormValue("agent_endpoint"),
+		endpoint,
+		request.FormValue("pairing_code"),
+		request.FormValue("agent_fingerprint"),
 	)
-	if err != nil || bootstrap.Offer.PairingCode.Hash() != code.Hash() ||
-		!time.Now().Before(bootstrap.Offer.ExpiresAt) {
+	if !ok {
 		http.Error(
 			writer,
-			"agent pairing code is invalid",
+			"agent pairing offer is invalid",
 			http.StatusUnprocessableEntity,
 		)
 		return
 	}
-	hash := code.Hash()
-	if _, err := h.repo.Queries.CreateAgentPairing(
+	initiation := agentPairingInitiation{agent: agent, pairing: pairing}
+	confirmation, err := renderAgentPairingConfirmation(
 		request.Context(),
-		db.CreateAgentPairingParams{
-			AgentID:             agent.ID,
-			PairingCodeHash:     hash[:],
-			AgentPublicIdentity: bootstrap.PublicIdentity,
-			AgentPin:            bootstrap.Offer.AgentPin.String(),
-			ExpiresAt:           bootstrap.Offer.ExpiresAt.Unix(),
-		},
-	); err != nil {
-		if IsUniqueViolation(err) {
-			http.Error(
-				writer,
-				"agent pairing already exists",
-				http.StatusConflict,
-			)
-			return
-		}
-		http.Error(
-			writer,
-			"could not store pending pairing",
-			http.StatusInternalServerError,
-		)
-		return
-	}
-	h.pendingMu.Lock()
-	h.pending[agent.ID] = pendingAgentPairing{
-		code: code, endpoint: request.FormValue("agent_endpoint"),
-		agentPin: bootstrap.Offer.AgentPin, expires: bootstrap.Offer.ExpiresAt,
-	}
-	h.pendingMu.Unlock()
-	writer.Header().Set("Cache-Control", "no-store")
-	writer.WriteHeader(http.StatusCreated)
-	if err := pages.AgentPairingConfirmationPage(pages.AgentPairingConfirmationView{
-		Agent: agent, AgentPin: bootstrap.Offer.AgentPin.String(),
-		CurrentPath: request.URL.Path,
-	}).
-		Render(request.Context(), writer); err != nil {
+		request.URL.Path,
+		initiation,
+	)
+	if err != nil {
 		http.Error(
 			writer,
 			"could not render pairing confirmation",
 			http.StatusInternalServerError,
 		)
+		return
 	}
+	h.finishPairing(writer, initiation, confirmation)
 }
 
 func (h *AgentAdminHandler) ConfirmPairing(
@@ -139,7 +107,12 @@ func (h *AgentAdminHandler) ConfirmPairing(
 	h.pendingMu.Lock()
 	pending, ok := h.pending[agentID]
 	h.pendingMu.Unlock()
-	if !ok || !time.Now().Before(pending.expires) {
+	if !ok {
+		http.Error(writer, "pairing confirmation expired", http.StatusConflict)
+		return
+	}
+	if !time.Now().Before(pending.expires) &&
+		!h.canRecoverExpiredConfirmation(request.Context(), agentID, pending) {
 		http.Error(writer, "pairing confirmation expired", http.StatusConflict)
 		return
 	}
@@ -170,11 +143,31 @@ func (h *AgentAdminHandler) ConfirmPairing(
 			ProtocolEnvelope: agentproto.ProtocolEnvelope{
 				Protocol: agentproto.AgentV1,
 			},
-			PairingCode: pending.code, ServerPin: serverPin,
+			PairingCode: pending.code, AgentPin: pending.agentPin, ServerPin: serverPin,
 			PullEndpoint: h.pairer.PullEndpoint, AgentID: agentID,
 		},
 	}
-	_, err = agentpairing.Pair(request.Context(), pairInput)
+	hash := pending.code.Hash()
+	now := time.Now().Unix()
+	err = h.repo.WithTx(request.Context(), func(queries *db.Queries) error {
+		_, beginErr := beginAgentPairing(
+			request.Context(),
+			queries,
+			agentID,
+			pending,
+			"",
+		)
+		return beginErr
+	})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			http.Error(writer, "pairing is no longer pending", http.StatusConflict)
+			return
+		}
+		http.Error(writer, "could not begin pairing", http.StatusInternalServerError)
+		return
+	}
+	pairedIdentity, err := agentpairing.Pair(request.Context(), pairInput)
 	if err != nil {
 		http.Error(
 			writer,
@@ -183,8 +176,6 @@ func (h *AgentAdminHandler) ConfirmPairing(
 		)
 		return
 	}
-	hash := pending.code.Hash()
-	now := time.Now().Unix()
 	err = h.repo.WithTx(request.Context(), func(queries *db.Queries) error {
 		paired, completeErr := queries.CompleteAgentPairing(
 			request.Context(),
@@ -192,13 +183,14 @@ func (h *AgentAdminHandler) ConfirmPairing(
 				ServerPublicIdentity: sql.NullString{
 					String: certificatePEM(h.pairer), Valid: true,
 				},
+				AgentPublicIdentity: pairedIdentity.PublicIdentity,
 				ServerPin: sql.NullString{
 					String: serverPin.String(),
 					Valid:  true,
 				},
 				PairedAt:  sql.NullInt64{Int64: now, Valid: true},
 				UpdatedAt: now, AgentID: agentID, PairingCodeHash: hash[:],
-				AgentPin: pending.agentPin.String(), Now: now,
+				AgentPin: pending.agentPin.String(),
 			},
 		)
 		if completeErr != nil {
@@ -219,6 +211,7 @@ func (h *AgentAdminHandler) ConfirmPairing(
 				EnrolledAt:      sql.NullInt64{Int64: now, Valid: true},
 				UpdatedAt:       now,
 				ID:              agentID,
+				PairingCodeHash: hash[:],
 			},
 		)
 		return activateErr
@@ -239,8 +232,13 @@ func (h *AgentAdminHandler) ConfirmPairing(
 		)
 		return
 	}
-	if err := agentpairing.Commit(request.Context(), pairInput); err != nil {
-		http.Error(writer, "agent pairing commit was rejected", http.StatusInternalServerError)
+	pairInput.Request.CompletionAck = true
+	if _, err := agentpairing.Pair(request.Context(), pairInput); err != nil {
+		http.Error(
+			writer,
+			"agent pairing acknowledgement was rejected",
+			http.StatusUnprocessableEntity,
+		)
 		return
 	}
 	h.pendingMu.Lock()
@@ -253,10 +251,4 @@ func (h *AgentAdminHandler) ConfirmPairing(
 		"/admin/agents/"+agentID,
 		http.StatusSeeOther,
 	)
-}
-
-func certificatePEM(pairer *agentpairing.Server) string {
-	return string(pem.EncodeToMemory(&pem.Block{
-		Type: "CERTIFICATE", Bytes: pairer.Identity.Certificate.Certificate[0],
-	}))
 }

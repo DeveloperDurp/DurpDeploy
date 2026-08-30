@@ -12,6 +12,10 @@ DEV_MSSQL_IMAGE ?= mcr.microsoft.com/mssql/server:2022-latest
 DEV_HTTPS_PROXY_CONTAINER ?= durpdeploy-dev-https
 DEV_HTTPS_PROXY_PORT ?= 8443
 DEV_HTTPS_PROXY_BACKEND ?= host.docker.internal:8080
+# Browser HTTPS stays on 8443; agent TLS uses 8444 so the ports do not collide.
+DEV_AGENT_LISTEN_ADDR ?= :8444
+DEV_AGENT_PUBLIC_URL ?= https://localhost:8444
+DEV_AGENT_IDENTITY_DIR ?= $(MAKEFILE_DIR).agent-identity
 
 build: swagger-spec swagger-ui-copy templ-generate tailwind-build js-build
 	go build -o $(BINARY_NAME) $(MAIN_PATH)
@@ -66,9 +70,13 @@ MAKEFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 ENV_FILE ?= $(MAKEFILE_DIR).env
 
 dev: check-openssl
+	mkdir -p '$(DEV_AGENT_IDENTITY_DIR)'
 	DURPDEPLOY_HTTPS_PROXY_CONTAINER='$(DEV_HTTPS_PROXY_CONTAINER)' \
 	DURPDEPLOY_HTTPS_PROXY_PORT='$(DEV_HTTPS_PROXY_PORT)' \
 	DURPDEPLOY_HTTPS_PROXY_BACKEND='$(DEV_HTTPS_PROXY_BACKEND)' \
+	DURPDEPLOY_AGENT_LISTEN_ADDR='$(DEV_AGENT_LISTEN_ADDR)' \
+	DURPDEPLOY_AGENT_PUBLIC_URL='$(DEV_AGENT_PUBLIC_URL)' \
+	DURPDEPLOY_AGENT_IDENTITY_DIR='$(DEV_AGENT_IDENTITY_DIR)' \
 	DURPDEPLOY_URL="$${DURPDEPLOY_URL:-https://localhost:$(DEV_HTTPS_PROXY_PORT)}" \
 	./scripts/dev_https_proxy.sh "$${MAKE:-make}" --no-print-directory dev-server
 
@@ -94,16 +102,23 @@ dev-server:
 # Disposable database containers for manual backend testing. Stop them with
 # `docker stop $(DEV_POSTGRES_CONTAINER)` or `docker stop $(DEV_MSSQL_CONTAINER)`.
 dev-postgres:
-	docker pull $(DEV_POSTGRES_IMAGE)
-	-docker rm -f $(DEV_POSTGRES_CONTAINER)
 	@printf '%s\n' \
 		'Database container: $(DEV_POSTGRES_CONTAINER)' \
 		'DURPDEPLOY_DB=postgres://durpdeploy:durpdeploy@localhost:5432/durpdeploy?sslmode=disable'
-	docker run -d --name $(DEV_POSTGRES_CONTAINER) \
-		-e POSTGRES_USER=durpdeploy \
-		-e POSTGRES_PASSWORD=durpdeploy \
-		-e POSTGRES_DB=durpdeploy \
-		-p 5432:5432 $(DEV_POSTGRES_IMAGE)
+	@if docker container inspect $(DEV_POSTGRES_CONTAINER) >/dev/null 2>&1; then \
+		if [ "$$(docker inspect -f '{{.State.Running}}' $(DEV_POSTGRES_CONTAINER))" = true ]; then \
+			echo 'Reusing running PostgreSQL container.'; \
+		else \
+			echo 'Starting existing PostgreSQL container.'; \
+			docker start $(DEV_POSTGRES_CONTAINER) >/dev/null; \
+		fi; \
+	else \
+		docker run -d --name $(DEV_POSTGRES_CONTAINER) \
+			-e POSTGRES_USER=durpdeploy \
+			-e POSTGRES_PASSWORD=durpdeploy \
+			-e POSTGRES_DB=durpdeploy \
+			-p 5432:5432 $(DEV_POSTGRES_IMAGE); \
+	fi
 	@printf '%s\n' \
 		'Waiting for PostgreSQL...'
 	@for i in $$(seq 1 60); do \
@@ -120,16 +135,23 @@ dev-postgres:
 	DURPDEPLOY_DB='postgres://durpdeploy:durpdeploy@localhost:5432/durpdeploy?sslmode=disable' $(MAKE) dev
 
 dev-mssql:
-	docker pull $(DEV_MSSQL_IMAGE)
-	-docker rm -f $(DEV_MSSQL_CONTAINER)
 	@printf '%s\n' \
 		'Database container: $(DEV_MSSQL_CONTAINER)' \
 		'DURPDEPLOY_DB=sqlserver://sa:DurpDeploy%21Dev123@localhost:1433?database=master&encrypt=false&trustservercertificate=true'
-	docker run -d --name $(DEV_MSSQL_CONTAINER) \
-		-e ACCEPT_EULA=Y \
-		-e MSSQL_PID=Developer \
-		-e MSSQL_SA_PASSWORD='DurpDeploy!Dev123' \
-		-p 1433:1433 $(DEV_MSSQL_IMAGE)
+	@if docker container inspect $(DEV_MSSQL_CONTAINER) >/dev/null 2>&1; then \
+		if [ "$$(docker inspect -f '{{.State.Running}}' $(DEV_MSSQL_CONTAINER))" = true ]; then \
+			echo 'Reusing running SQL Server container.'; \
+		else \
+			echo 'Starting existing SQL Server container.'; \
+			docker start $(DEV_MSSQL_CONTAINER) >/dev/null; \
+		fi; \
+	else \
+		docker run -d --name $(DEV_MSSQL_CONTAINER) \
+			-e ACCEPT_EULA=Y \
+			-e MSSQL_PID=Developer \
+			-e MSSQL_SA_PASSWORD='DurpDeploy!Dev123' \
+			-p 1433:1433 $(DEV_MSSQL_IMAGE); \
+	fi
 	@printf '%s\n' \
 		'Waiting for SQL Server...'
 	@for i in $$(seq 1 120); do \

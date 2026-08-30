@@ -157,12 +157,9 @@ func (d *Dispatcher) buildPayload(
 	if err != nil {
 		return "", fmt.Errorf("list release variables: %w", err)
 	}
+	variables = runner.ResolveReleaseVariables(variables, deployment.EnvironmentID)
 	payloadVariables := make([]variableSnapshot, 0, len(variables))
 	for _, variable := range variables {
-		if variable.EnvironmentID.Valid &&
-			variable.EnvironmentID.Int64 != deployment.EnvironmentID {
-			continue
-		}
 		value, err := d.box.Decrypt(variable.Value.String)
 		if err != nil {
 			return "", fmt.Errorf(

@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"durpdeploy/internal/agentproto"
+	"durpdeploy/internal/agentstate"
 	"durpdeploy/internal/agenttls"
 )
 
@@ -43,7 +44,7 @@ func (client *Client) promotePin(state *tls.ConnectionState) error {
 	if err != nil {
 		return fmt.Errorf("promote server pin: %w", err)
 	}
-	if err := writePins(client.pinsPath(), pins); err != nil {
+	if err := client.persistPins(pins); err != nil {
 		return err
 	}
 	client.pins = pins
@@ -54,11 +55,7 @@ func (client *Client) stagePins(raw []agentproto.CertificateFingerprint) error {
 	if len(raw) == 0 || len(raw) > 2 {
 		return fmt.Errorf("server returned invalid pin count")
 	}
-	values := make([]string, 0, len(raw))
-	for _, pin := range raw {
-		values = append(values, string(pin))
-	}
-	pins, err := parsePins(values)
+	pins, err := parsePins(raw)
 	if err != nil {
 		return err
 	}
@@ -68,7 +65,7 @@ func (client *Client) stagePins(raw []agentproto.CertificateFingerprint) error {
 		return nil
 	}
 	if len(pins) == 2 && pins[0] == client.pins[0] {
-		if err := writePins(client.pinsPath(), pins); err != nil {
+		if err := client.persistPins(pins); err != nil {
 			return err
 		}
 		client.pins = pins
@@ -85,7 +82,7 @@ func (client *Client) stagePins(raw []agentproto.CertificateFingerprint) error {
 		return nil
 	}
 	staged := []agenttls.Fingerprint{client.pins[0], pins[0]}
-	if err := writePins(client.pinsPath(), staged); err != nil {
+	if err := client.persistPins(staged); err != nil {
 		return err
 	}
 	client.pins = staged
@@ -93,4 +90,29 @@ func (client *Client) stagePins(raw []agentproto.CertificateFingerprint) error {
 	return nil
 }
 
-func (client *Client) pinsPath() string { return client.stateDir + "/" + pinsFileName }
+func (client *Client) persistPins(pins []agenttls.Fingerprint) error {
+	client.state.ServerPins = append([]agenttls.Fingerprint(nil), pins...)
+	if err := agentstate.NewStore(client.stateDir).Save(client.state); err != nil {
+		return fmt.Errorf("save paired state: %w", err)
+	}
+	return nil
+}
+
+func parsePins(
+	raw []agentproto.CertificateFingerprint,
+) ([]agenttls.Fingerprint, error) {
+	pins := make([]agenttls.Fingerprint, 0, len(raw))
+	for _, value := range raw {
+		pin, err := agenttls.ParseFingerprint(string(value))
+		if err != nil {
+			return nil, fmt.Errorf("parse server fingerprint: %w", err)
+		}
+		for _, existing := range pins {
+			if pin == existing {
+				return nil, fmt.Errorf("server pins must be unique")
+			}
+		}
+		pins = append(pins, pin)
+	}
+	return pins, nil
+}

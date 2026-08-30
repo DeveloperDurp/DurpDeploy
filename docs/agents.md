@@ -17,8 +17,10 @@ agent identity certificate and key, paired server identity state, and a
 temporary hash-only current-claim marker. Keep that directory private and
 back it up only if preserving the enrolled identity is intentional.
 
-Agents initiate all connections. The server never connects inbound to an agent,
-and remote dispatch does not use SSH.
+Agents initiate most runtime connections, but pairing uses temporary server-to-agent
+reachability: the server calls the unpaired listener once the operator confirms
+the code and agent fingerprint. After completion acknowledgment, there is no
+persistent inbound agent listener.
 
 ## Transport and ports
 
@@ -32,11 +34,10 @@ There are two separate HTTPS paths:
   Ed25519 identities, and direct SHA-256 certificate fingerprint pinning. It is
   **not routed through Caddy** and must not be terminated by Caddy.
 
-Only the agent network should reach the dedicated listener. Allow inbound TCP
-10943 from the agent hosts or agent network, allow the server's normal 80 and
-443 as required by Caddy, and keep application port 8080 private. Agents need
-outbound TCP access to the server's 10943 address. They do not need an inbound
-agent port.
+Allow inbound TCP 10943 only for the temporary pairing callback from the server
+process; keep application port 8080 private. After pairing acknowledgment, the
+listener is shut down and not part of normal operation. Agents need outbound TCP
+access to the server's polling endpoint; no outbound agent listener is required.
 
 ## Configure the server listener
 
@@ -104,11 +105,15 @@ admin-only.
 
 1. Open **Admin, Agents**, choose **New agent**, and enter the stable Agent ID,
    display name, and optional agent version. The ID must be unique.
-2. Start the local agent listener, then open the agent's pairing page only when
-the operator can complete the ceremony. Enter the short-lived, one-time pairing code,
-   compare the displayed fingerprint through a trusted channel, and confirm.
-   The code is single-use and cannot be retrieved later. Never put it in source
-   control, tickets, chat, shell history, or logs.
+2. Start the unpaired local agent listener, then open the agent's pairing page
+   only when the operator can complete the ceremony. Enter the short-lived,
+   one-time pairing code and compare the displayed fingerprint through a trusted
+   channel, then confirm. The operator re-types only the displayed agent
+   fingerprint in a dedicated second confirmation step; server-init
+   (`/agent/v1/pairings/server-init`) uses that value plus the server-held code
+   and pinned endpoint to finalize pairing. The values are console-only and cannot
+   be retrieved later. Never put them in source control, tickets, chat, shell
+   history, or logs.
 3. Assign an environment to the paired active agent from its details page, then
    verify its heartbeat before creating a deployment.
 
@@ -132,10 +137,11 @@ is sent in heartbeats after pairing. The protocol is fixed by the binary as
 
 The first run prints a short-lived pairing code and agent fingerprint. Enter
 those values in the authenticated admin pairing flow, compare the displayed
-fingerprint, and confirm before the code expires. Do not put the pairing code,
-fingerprint, endpoint, or private key in documentation, tickets, shell history,
-or logs. Pairing persists the agent identity, pull URL, server pins, and agent
-ID in the private state directory.
+fingerprint, and confirm before the 10-minute code expiry.
+Do not put the pairing code, fingerprint, endpoint, or private key in
+documentation, tickets, shell history, or logs. Pairing persists the server
+endpoint, pinned server identity, agent identity, and agent ID in the private
+state directory.
 
 After pairing, restart with `DURPDEPLOY_AGENT_STATE_DIR` and
 `DURPDEPLOY_AGENT_VERSION`; do not supply a server URL, certificate,
@@ -286,7 +292,7 @@ use trust-all TLS or accept a fingerprint copied from an untrusted connection.
 
 ### Expired or reused pairing code
 
-Pairing codes expire after 15 minutes and are consumed once. Restart the
+Pairing codes expire after 10 minutes and are consumed once. Restart the
 unpaired local listener to obtain a fresh code. For an already active agent,
 revoke and re-pair it first.
 

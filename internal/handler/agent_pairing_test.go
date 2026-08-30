@@ -6,104 +6,44 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/robfig/cron/v3"
-
-	"durpdeploy/internal/agentbootstrap"
-	"durpdeploy/internal/agentpairing"
 	"durpdeploy/internal/agentproto"
-	"durpdeploy/internal/agenttls"
 	"durpdeploy/internal/db"
-	"durpdeploy/internal/handler"
-	"durpdeploy/internal/repository"
-	"durpdeploy/internal/runner"
-	"durpdeploy/internal/server"
 )
 
 func TestAgentPairing_HTMLConfirmation_persistsPairingWithoutRenderingCode(
 	t *testing.T,
 ) {
 	// Given
-	bootstrap, err := agentbootstrap.Start(agentbootstrap.Config{
-		StateDir: t.TempDir(), ListenAddr: "127.0.0.1:0",
-	})
+	env := newAgentPairingTestEnv(t)
+	endpoint, err := url.Parse(env.bootstrapURL)
 	if err != nil {
-		t.Fatalf("start bootstrap agent: %v", err)
+		t.Fatalf("parse bootstrap endpoint: %v", err)
 	}
-	t.Cleanup(func() {
-		shutdownCtx, cancel := context.WithTimeout(
-			context.Background(),
-			time.Second,
-		)
-		defer cancel()
-		if shutdownErr := bootstrap.Shutdown(shutdownCtx); shutdownErr != nil {
-			t.Errorf("shutdown bootstrap agent: %v", shutdownErr)
-		}
-	})
-	serverIdentity, err := agenttls.LoadOrCreate(
-		t.TempDir(),
-		"https://127.0.0.1",
-	)
-	if err != nil {
-		t.Fatalf("create server identity: %v", err)
-	}
-	pullEndpoint, err := agentproto.ParsePullEndpoint("https://127.0.0.1:10944")
-	if err != nil {
-		t.Fatalf("parse pull endpoint: %v", err)
-	}
-	pairer, err := agentpairing.NewServer(pullEndpoint, serverIdentity)
-	if err != nil {
-		t.Fatalf("create pairer: %v", err)
-	}
-	conn := newHandlerTestDatabase(t)
-	repo := repository.New(conn)
-	rnr := runner.New(repo, runner.NewLogBroker())
-	parser := cron.NewParser(
-		cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow,
-	)
-	h := httptest.NewServer(server.NewRouterWithAgentPairer(
-		repo,
-		rnr,
-		nil,
-		parser,
-		handler.NewAuthHandler(repo),
-		pairer,
-	))
-	t.Cleanup(h.Close)
-	session := seedSession(t, repo, h.URL, "admin")
-	if _, err := repo.Queries.CreatePendingAgent(
+	if _, err := env.repo.Queries.CreatePendingAgent(
 		context.Background(),
-		db.CreatePendingAgentParams{
-			ID: "paired-agent", Name: "Paired agent",
-		},
+		db.CreatePendingAgentParams{ID: "paired-agent", Name: "Paired agent"},
 	); err != nil {
 		t.Fatalf("create pending agent: %v", err)
 	}
-	offer, err := agentpairing.FetchBootstrap(
-		context.Background(),
-		bootstrap.Endpoint(),
-	)
-	if err != nil {
-		t.Fatalf("fetch bootstrap: %v", err)
-	}
-	code := pairingCodeText(t, offer.PairingCode)
 
 	// When
-	begin := session.formRequest(
+	begin := env.session.formRequest(
 		t,
-		h.URL+"/admin/agents/paired-agent/pairings",
+		env.server.URL+"/admin/agents/paired-agent/pairings",
 		url.Values{
-			"agent_endpoint": {bootstrap.Endpoint()},
-			"pairing_code":   {code},
-			"csrf_token":     {session.csrfToken},
+			"agent_host":        {endpoint.Hostname()},
+			"agent_port":        {endpoint.Port()},
+			"pairing_code":      {env.code},
+			"agent_fingerprint": {env.agentPin},
+			"csrf_token":        {env.session.csrfToken},
 		},
 	)
-	beginResponse, err := session.client.Do(begin)
+	beginResponse, err := env.session.client.Do(begin)
 	if err != nil {
 		t.Fatalf("begin pairing: %v", err)
 	}
@@ -112,15 +52,15 @@ func TestAgentPairing_HTMLConfirmation_persistsPairingWithoutRenderingCode(
 	if err != nil {
 		t.Fatalf("read confirmation: %v", err)
 	}
-	confirm := session.formRequest(
+	confirm := env.session.formRequest(
 		t,
-		h.URL+"/admin/agents/paired-agent/pairings/confirm",
+		env.server.URL+"/admin/agents/paired-agent/pairings/confirm",
 		url.Values{
-			"agent_pin":  {offer.AgentPin.String()},
-			"csrf_token": {session.csrfToken},
+			"agent_pin":  {env.agentPin},
+			"csrf_token": {env.session.csrfToken},
 		},
 	)
-	confirmResponse, err := session.client.Do(confirm)
+	confirmResponse, err := env.session.client.Do(confirm)
 	if err != nil {
 		t.Fatalf("confirm pairing: %v", err)
 	}
@@ -129,8 +69,10 @@ func TestAgentPairing_HTMLConfirmation_persistsPairingWithoutRenderingCode(
 	// Then
 	if beginResponse.StatusCode != http.StatusCreated ||
 		beginResponse.Header.Get("Cache-Control") != "no-store" ||
-		!strings.Contains(string(body), offer.AgentPin.String()) ||
-		strings.Contains(string(body), code) {
+		!strings.Contains(string(body), env.agentPin) ||
+		strings.Contains(string(body), env.code) ||
+		strings.Contains(string(body), `name="pairing_code"`) ||
+		!strings.Contains(string(body), `name="agent_pin"`) {
 		t.Fatal("pairing confirmation response rendered a pairing secret")
 	}
 	if confirmResponse.StatusCode != http.StatusSeeOther ||
@@ -141,35 +83,96 @@ func TestAgentPairing_HTMLConfirmation_persistsPairingWithoutRenderingCode(
 			confirmResponse.Header.Get("Location"),
 		)
 	}
-	paired, err := repo.Queries.GetAgentPairing(
+	paired, err := env.repo.Queries.GetAgentPairing(
 		context.Background(),
 		"paired-agent",
 	)
 	if err != nil || paired.State != "paired" || !paired.ServerPin.Valid {
 		t.Fatalf("stored pairing = %#v, %v", paired, err)
 	}
-	activated, err := repo.Queries.GetAgent(
+	activated, err := env.repo.Queries.GetAgent(
 		context.Background(),
 		"paired-agent",
 	)
 	if err != nil || activated.Status != "active" ||
-		activated.CertificateFingerprint.String != offer.AgentPin.String() {
+		activated.CertificateFingerprint.String != env.agentPin {
 		t.Fatalf("activated paired agent = %#v, %v", activated, err)
 	}
-	hash := offer.PairingCode.Hash()
-	if !bytes.Equal(paired.PairingCodeHash, hash[:]) {
+	if !bytes.Equal(paired.PairingCodeHash, env.codeHash[:]) {
 		t.Fatal("stored pairing did not retain only the pairing-code hash")
 	}
-	if !hasAuditAction(t, &testHarness{repo: repo}, "create_agent_pairing") ||
-		!hasAuditAction(t, &testHarness{repo: repo}, "confirm_agent_pairing") {
+	if !hasAuditAction(
+		t,
+		&testHarness{repo: env.repo},
+		"create_agent_pairing",
+	) ||
+		!hasAuditAction(
+			t,
+			&testHarness{repo: env.repo},
+			"confirm_agent_pairing",
+		) {
 		t.Fatal("pairing audit actions are missing")
 	}
 	select {
-	case <-bootstrap.Done():
+	case <-env.bootstrap.Paired():
 	case <-time.After(time.Second):
 		t.Fatal(
 			"agent bootstrap listener remained available after confirmation",
 		)
+	}
+}
+
+func TestAdminPairingFlow_RequiresOperatorTypedConfirmation(t *testing.T) {
+	// Given
+	env := newAgentPairingTestEnv(t)
+	if _, err := env.repo.Queries.CreatePendingAgent(
+		context.Background(),
+		db.CreatePendingAgentParams{ID: "typed-confirmation", Name: "Typed confirmation"},
+	); err != nil {
+		t.Fatalf("create pending agent: %v", err)
+	}
+	endpoint, err := url.Parse(env.bootstrapURL)
+	if err != nil {
+		t.Fatalf("parse bootstrap endpoint: %v", err)
+	}
+	begin := env.session.formRequest(
+		t,
+		env.server.URL+"/admin/agents/typed-confirmation/pairings",
+		url.Values{
+			"agent_host":        {endpoint.Hostname()},
+			"agent_port":        {endpoint.Port()},
+			"pairing_code":      {env.code},
+			"agent_fingerprint": {env.agentPin},
+			"csrf_token":        {env.session.csrfToken},
+		},
+	)
+	beginResponse, err := env.session.client.Do(begin)
+	if err != nil {
+		t.Fatalf("begin pairing: %v", err)
+	}
+	defer beginResponse.Body.Close()
+
+	// When
+	confirm := env.session.formRequest(
+		t,
+		env.server.URL+"/admin/agents/typed-confirmation/pairings/confirm",
+		url.Values{
+			"agent_pin":  {strings.Repeat("0", 64)},
+			"csrf_token": {env.session.csrfToken},
+		},
+	)
+	confirmResponse, err := env.session.client.Do(confirm)
+	if err != nil {
+		t.Fatalf("confirm pairing: %v", err)
+	}
+	defer confirmResponse.Body.Close()
+
+	// Then
+	if beginResponse.StatusCode != http.StatusCreated {
+		t.Fatalf("begin status = %d, want %d", beginResponse.StatusCode, http.StatusCreated)
+	}
+	if confirmResponse.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("confirm status = %d, want %d", confirmResponse.StatusCode, http.StatusUnprocessableEntity)
 	}
 }
 

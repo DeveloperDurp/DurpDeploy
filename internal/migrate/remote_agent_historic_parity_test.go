@@ -51,7 +51,7 @@ func newPostgresTestDBAt(t *testing.T, version int64) *sql.DB {
 	if err := conn.Ping(); err != nil {
 		t.Fatalf("ping PostgreSQL database: %v", err)
 	}
-	goose.SetBaseFS(migrations.FS)
+	goose.SetBaseFS(migrations.PostgresFS)
 	if err := goose.SetDialect("postgres"); err != nil {
 		t.Fatalf("set PostgreSQL Goose dialect: %v", err)
 	}

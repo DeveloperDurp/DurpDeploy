@@ -27,8 +27,8 @@ type Agent struct {
 }
 
 func (dispatch Dispatch) CanCancel() bool {
-	return dispatch.Mode == "local" || dispatch.State == "claimed" ||
-		dispatch.State == "started"
+	return dispatch.Mode == "local" || dispatch.State == "waiting" ||
+		dispatch.State == "claimed" || dispatch.State == "started"
 }
 
 func (dispatch Dispatch) IsUncertainTerminal() bool {

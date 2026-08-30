@@ -1,6 +1,96 @@
 -- +goose Up
 -- +goose StatementBegin
 
+DECLARE @ambiguous_environment_ids NVARCHAR(MAX);
+SELECT @ambiguous_environment_ids = STRING_AGG(
+    CONVERT(NVARCHAR(MAX), environment_id), ','
+) WITHIN GROUP (ORDER BY environment_id)
+FROM (
+    SELECT DISTINCT deployments.environment_id
+    FROM deployment_dispatches
+    JOIN deployments ON deployments.id = deployment_dispatches.deployment_id
+    LEFT JOIN environment_agent_policies
+        ON environment_agent_policies.environment_id = deployments.environment_id
+    WHERE deployment_dispatches.mode = 'remote'
+       AND deployment_dispatches.assigned_agent_id IS NULL
+       AND deployment_dispatches.agent_id IS NULL
+       AND (
+           deployment_dispatches.state <> 'waiting'
+           OR (NOT EXISTS (
+               SELECT 1 FROM environment_agent_assignments
+               JOIN agents ON agents.id = environment_agent_assignments.agent_id
+               WHERE environment_agent_assignments.environment_id = deployments.environment_id
+                 AND agents.status = 'active'
+           ) AND (
+               (SELECT COUNT(*) FROM agent_pool_memberships
+                WHERE agent_pool_memberships.pool_id = environment_agent_policies.pool_id) <> 1
+               OR (SELECT COUNT(*) FROM agent_pool_memberships
+                   JOIN agents ON agents.id = agent_pool_memberships.agent_id
+                   WHERE agent_pool_memberships.pool_id = environment_agent_policies.pool_id
+                     AND agents.status = 'active') <> 1
+           ))
+       )
+) AS ambiguous_environments;
+IF @ambiguous_environment_ids IS NOT NULL
+BEGIN
+    DECLARE @backfill_error NVARCHAR(2047) =
+        N'cannot migrate pooled deployment dispatches for environments: '
+            + @ambiguous_environment_ids;
+    THROW 50000, @backfill_error, 1;
+END;
+
+DECLARE @dispatch_assignments TABLE (
+    deployment_id BIGINT PRIMARY KEY,
+    assigned_agent_id NVARCHAR(255) NOT NULL
+);
+INSERT INTO @dispatch_assignments (deployment_id, assigned_agent_id)
+SELECT
+    deployment_dispatches.deployment_id,
+    COALESCE(
+        deployment_dispatches.assigned_agent_id,
+        deployment_dispatches.agent_id,
+        CASE WHEN deployment_dispatches.state = 'waiting'
+            THEN environment_assignment.agent_id END,
+        agent_pool_memberships.agent_id
+    )
+FROM deployment_dispatches
+JOIN deployments ON deployments.id = deployment_dispatches.deployment_id
+LEFT JOIN environment_agent_policies
+    ON environment_agent_policies.environment_id = deployments.environment_id
+OUTER APPLY (
+    SELECT TOP 1 environment_agent_assignments.agent_id
+    FROM environment_agent_assignments
+    JOIN agents ON agents.id = environment_agent_assignments.agent_id
+    WHERE environment_agent_assignments.environment_id = deployments.environment_id
+      AND agents.status = 'active'
+    ORDER BY environment_agent_assignments.updated_at DESC,
+        environment_agent_assignments.agent_id
+) AS environment_assignment
+LEFT JOIN agent_pool_memberships
+    ON agent_pool_memberships.pool_id = environment_agent_policies.pool_id
+    AND deployment_dispatches.assigned_agent_id IS NULL
+    AND deployment_dispatches.agent_id IS NULL
+    AND environment_assignment.agent_id IS NULL
+    AND EXISTS (
+        SELECT 1 FROM agents
+        WHERE agents.id = agent_pool_memberships.agent_id
+          AND agents.status = 'active'
+    )
+LEFT JOIN agents ON agents.id = agent_pool_memberships.agent_id
+    AND agents.status = 'active'
+WHERE deployment_dispatches.mode = 'remote';
+
+SELECT * INTO direct_dispatch_backup_deployment_dispatches
+FROM deployment_dispatches;
+SELECT * INTO direct_dispatch_backup_agent_pools FROM agent_pools;
+SELECT IDENT_CURRENT('agent_pools') AS current_value
+INTO direct_dispatch_backup_identities;
+SELECT * INTO direct_dispatch_backup_agent_pool_memberships
+FROM agent_pool_memberships;
+SELECT * INTO direct_dispatch_backup_agent_tags FROM agent_tags;
+SELECT * INTO direct_dispatch_backup_environment_agent_policies
+FROM environment_agent_policies;
+
 DECLARE @dispatch_check_name NVARCHAR(128), @dispatch_check_sql NVARCHAR(MAX);
 DECLARE @dispatch_fk_sql NVARCHAR(MAX) = N'', @dispatch_default_sql NVARCHAR(MAX) = N'';
 SELECT @dispatch_check_name = name FROM sys.check_constraints
@@ -25,6 +115,12 @@ WHERE default_constraint.parent_object_id = OBJECT_ID('deployment_dispatches')
 EXEC(@dispatch_default_sql);
 ALTER TABLE deployment_dispatches DROP COLUMN pool_id;
 ALTER TABLE deployment_dispatches DROP COLUMN selector;
+UPDATE deployment_dispatches
+SET assigned_agent_id = dispatch_assignments.assigned_agent_id
+FROM deployment_dispatches
+JOIN @dispatch_assignments AS dispatch_assignments
+    ON dispatch_assignments.deployment_id = deployment_dispatches.deployment_id
+WHERE deployment_dispatches.assigned_agent_id IS NULL;
 ALTER TABLE deployment_dispatches ADD CONSTRAINT ck_deployment_dispatches_mode_assignment
 CHECK (
     (mode = 'local' AND assigned_agent_id IS NULL)
@@ -119,5 +215,54 @@ FROM deployment_dispatches
 JOIN agent_pool_memberships
     ON agent_pool_memberships.agent_id = deployment_dispatches.assigned_agent_id
 WHERE deployment_dispatches.mode = 'remote';
+DELETE FROM deployment_dispatches;
+DELETE FROM environment_agent_policies;
+DELETE FROM agent_tags;
+DELETE FROM agent_pool_memberships;
+DELETE FROM agent_pools;
+SET IDENTITY_INSERT agent_pools ON;
+INSERT INTO agent_pools (
+    id, name, description, enabled, created_at, updated_at
+)
+SELECT id, name, description, enabled, created_at, updated_at
+FROM direct_dispatch_backup_agent_pools;
+SET IDENTITY_INSERT agent_pools OFF;
+DECLARE @direct_dispatch_identity BIGINT;
+DECLARE @direct_dispatch_identity_sql NVARCHAR(128);
+SELECT @direct_dispatch_identity = current_value
+FROM direct_dispatch_backup_identities;
+SET @direct_dispatch_identity_sql = N'DBCC CHECKIDENT (''agent_pools'', RESEED, '
+    + CONVERT(NVARCHAR(20), @direct_dispatch_identity) + N')';
+EXEC(@direct_dispatch_identity_sql);
+INSERT INTO agent_pool_memberships (pool_id, agent_id, created_at)
+SELECT pool_id, agent_id, created_at
+FROM direct_dispatch_backup_agent_pool_memberships;
+INSERT INTO agent_tags (agent_id, tag_key, tag_value, created_at)
+SELECT agent_id, tag_key, tag_value, created_at
+FROM direct_dispatch_backup_agent_tags;
+INSERT INTO environment_agent_policies (
+    environment_id, pool_id, selector, created_at, updated_at
+)
+SELECT environment_id, pool_id, selector, created_at, updated_at
+FROM direct_dispatch_backup_environment_agent_policies;
+EXEC(N'
+    INSERT INTO deployment_dispatches (
+        deployment_id, mode, pool_id, selector, state, reason, agent_id,
+        assigned_agent_id, claim_token_hash, claim_expires_at, started_at,
+        finished_at, last_heartbeat_at, cancel_requested_at, created_at,
+        updated_at
+    )
+    SELECT
+        deployment_id, mode, pool_id, selector, state, reason, agent_id,
+        assigned_agent_id, claim_token_hash, claim_expires_at, started_at,
+        finished_at, last_heartbeat_at, cancel_requested_at, created_at,
+        updated_at
+    FROM direct_dispatch_backup_deployment_dispatches;');
+DROP TABLE direct_dispatch_backup_deployment_dispatches;
+DROP TABLE direct_dispatch_backup_agent_pools;
+DROP TABLE direct_dispatch_backup_identities;
+DROP TABLE direct_dispatch_backup_agent_pool_memberships;
+DROP TABLE direct_dispatch_backup_agent_tags;
+DROP TABLE direct_dispatch_backup_environment_agent_policies;
 EXEC(N'ALTER TABLE deployment_dispatches ADD CONSTRAINT ck_deployment_dispatches_mode_assignment CHECK ((mode = ''local'' AND pool_id IS NULL AND assigned_agent_id IS NULL) OR (mode = ''remote'' AND ((pool_id IS NOT NULL AND assigned_agent_id IS NULL) OR (pool_id IS NULL AND assigned_agent_id IS NOT NULL))));');
 -- +goose StatementEnd

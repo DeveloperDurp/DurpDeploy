@@ -51,20 +51,13 @@ func NewClientConfig(
 	return &tls.Config{
 		MinVersion:         tls.VersionTLS13,
 		ServerName:         hostname,
-		InsecureSkipVerify: true, // Custom verification below checks the complete peer contract.
+		InsecureSkipVerify: true, // VerifyConnection owns peer validation.
 		VerifyConnection: func(connection tls.ConnectionState) error {
-			if len(connection.PeerCertificates) != 1 {
-				return fmt.Errorf("peer must provide exactly one certificate")
+			certificate, err := verifyPinnedConnection(connection, pins)
+			if err != nil {
+				return fmt.Errorf("verify peer certificate: %w", err)
 			}
-			certificate := connection.PeerCertificates[0]
-			if !matchesPin(FingerprintOf(certificate.Raw), pins) {
-				return fmt.Errorf("peer certificate fingerprint is not pinned")
-			}
-			if err := verifySelfSignedCertificate(
-				certificate,
-				hostname,
-				time.Now(),
-			); err != nil {
+			if err := certificate.VerifyHostname(hostname); err != nil {
 				return fmt.Errorf("verify peer certificate: %w", err)
 			}
 			return nil
@@ -72,9 +65,9 @@ func NewClientConfig(
 	}, nil
 }
 
-// NewBootstrapClientConfig validates a temporary self-signed peer by hostname
-// without accepting a trust anchor. The caller must compare and pin the
-// returned fingerprint before durable pairing.
+// NewBootstrapClientConfig validates a temporary self-signed peer without
+// accepting a trust anchor or requiring the endpoint hostname to match its SAN.
+// The caller must compare and pin the returned fingerprint before pairing.
 func NewBootstrapClientConfig(serverURL string) (*tls.Config, error) {
 	hostname, err := parseHTTPSURL(serverURL)
 	if err != nil {
@@ -83,17 +76,37 @@ func NewBootstrapClientConfig(serverURL string) (*tls.Config, error) {
 	return &tls.Config{
 		MinVersion:         tls.VersionTLS13,
 		ServerName:         hostname,
-		InsecureSkipVerify: true, // VerifyConnection validates the complete bootstrap peer contract.
+		InsecureSkipVerify: true, // VerifyConnection owns peer validation.
 		VerifyConnection: func(connection tls.ConnectionState) error {
-			if len(connection.PeerCertificates) != 1 {
-				return fmt.Errorf("peer must provide exactly one certificate")
-			}
-			if err := verifySelfSignedCertificate(
-				connection.PeerCertificates[0],
-				hostname,
-				time.Now(),
-			); err != nil {
+			if _, err := verifySelfSignedConnection(connection); err != nil {
 				return fmt.Errorf("verify bootstrap peer certificate: %w", err)
+			}
+			return nil
+		},
+	}, nil
+}
+
+// NewPairingBootstrapClientConfig validates the confirmed bootstrap peer pin
+// while pairing, without requiring the bootstrap endpoint hostname to match the
+// agent certificate SAN. Use NewClientConfig after durable enrollment.
+func NewPairingBootstrapClientConfig(
+	serverURL string,
+	pin Fingerprint,
+) (*tls.Config, error) {
+	hostname, err := parseHTTPSURL(serverURL)
+	if err != nil {
+		return nil, err
+	}
+	return &tls.Config{
+		MinVersion:         tls.VersionTLS13,
+		ServerName:         hostname,
+		InsecureSkipVerify: true, // VerifyConnection owns peer validation.
+		VerifyConnection: func(connection tls.ConnectionState) error {
+			if _, err := verifyPinnedConnection(
+				connection,
+				[]Fingerprint{pin},
+			); err != nil {
+				return fmt.Errorf("verify pairing peer certificate: %w", err)
 			}
 			return nil
 		},
@@ -172,6 +185,36 @@ func matchesPin(actual Fingerprint, pins []Fingerprint) bool {
 		}
 	}
 	return false
+}
+
+func verifyPinnedConnection(
+	connection tls.ConnectionState,
+	pins []Fingerprint,
+) (*x509.Certificate, error) {
+	certificate, err := verifySelfSignedConnection(connection)
+	if err != nil {
+		return nil, err
+	}
+	if !matchesPin(FingerprintOf(certificate.Raw), pins) {
+		return nil, fmt.Errorf("peer certificate fingerprint is not pinned")
+	}
+	return certificate, nil
+}
+
+func verifySelfSignedConnection(
+	connection tls.ConnectionState,
+) (*x509.Certificate, error) {
+	if connection.Version != tls.VersionTLS13 {
+		return nil, fmt.Errorf("peer must negotiate TLS 1.3")
+	}
+	if len(connection.PeerCertificates) != 1 {
+		return nil, fmt.Errorf("peer must provide exactly one certificate")
+	}
+	certificate := connection.PeerCertificates[0]
+	if err := verifySelfSignedIdentity(certificate, time.Now()); err != nil {
+		return nil, err
+	}
+	return certificate, nil
 }
 
 func verifySelfSignedCertificate(

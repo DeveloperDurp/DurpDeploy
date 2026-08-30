@@ -2,6 +2,7 @@ package agentserver
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
 	"database/sql"
 	"encoding/pem"
@@ -98,6 +99,45 @@ func activateFixtureAgent(
 	fixture.createPendingAgent(t, agentID)
 	now := fixture.now.Unix()
 	certificate := certificatePEM(t, identity.Certificate)
+	codeHash := sha256.Sum256([]byte(agentID + "-pairing"))
+	if _, err := fixture.repo.Queries.CreateAgentPairing(
+		context.Background(),
+		db.CreateAgentPairingParams{
+			AgentID:             agentID,
+			PairingCodeHash:     codeHash[:],
+			AgentPublicIdentity: certificate,
+			AgentPin:            identity.Fingerprint.String(),
+			ExpiresAt:           now + 60,
+		},
+	); err != nil {
+		t.Fatalf("create fixture pairing: %v", err)
+	}
+	if _, err := fixture.repo.Queries.BeginAgentPairing(
+		context.Background(),
+		db.BeginAgentPairingParams{
+			AgentID: agentID, PairingCodeHash: codeHash[:],
+			AgentPin: identity.Fingerprint.String(), UpdatedAt: now, Now: now,
+		},
+	); err != nil {
+		t.Fatalf("begin fixture pairing: %v", err)
+	}
+	if _, err := fixture.repo.Queries.CompleteAgentPairing(
+		context.Background(),
+		db.CompleteAgentPairingParams{
+			AgentPublicIdentity: certificate,
+			ServerPublicIdentity: sql.NullString{
+				String: certificatePEM(t, fixture.serverIdentity.Certificate), Valid: true,
+			},
+			ServerPin: sql.NullString{
+				String: fixture.serverIdentity.Fingerprint.String(), Valid: true,
+			},
+			PairedAt: sql.NullInt64{Int64: now, Valid: true}, UpdatedAt: now,
+			AgentID: agentID, PairingCodeHash: codeHash[:],
+			AgentPin: identity.Fingerprint.String(),
+		},
+	); err != nil {
+		t.Fatalf("complete fixture pairing: %v", err)
+	}
 	_, err := fixture.repo.Queries.ActivatePairedAgent(
 		context.Background(),
 		db.ActivatePairedAgentParams{
@@ -110,6 +150,7 @@ func activateFixtureAgent(
 			EnrolledAt:      sql.NullInt64{Int64: now, Valid: true},
 			UpdatedAt:       now,
 			ID:              agentID,
+			PairingCodeHash: codeHash[:],
 		},
 	)
 	if err != nil {

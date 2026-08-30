@@ -714,27 +714,28 @@ func (h *DeploymentHandler) ApproveDeployment(
 	approvedBy := u.Name
 	approverUserID := sql.NullInt64{Int64: u.ID, Valid: true}
 
-	if _, err := h.repo.Queries.CreateApproval(
-		r.Context(),
-		db.CreateApprovalParams{
-			DeploymentID:         id,
-			ApprovedBy:           approvedBy,
-			ApproverUserID:       approverUserID,
-			RequiredApproverRole: "admin",
-		},
-	); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	err = h.repo.WithTx(r.Context(), func(q *db.Queries) error {
+		updated, updateErr := q.ApprovePendingDeployment(
+			r.Context(),
+			id,
+		)
+		if updateErr != nil {
+			return updateErr
+		}
+		if updated != 1 {
+			return dispatch.ErrCancellationState
+		}
+		_, createErr := q.CreateApproval(r.Context(), db.CreateApprovalParams{
+			DeploymentID: id, ApprovedBy: approvedBy,
+			ApproverUserID: approverUserID, RequiredApproverRole: "admin",
+		})
+		return createErr
+	})
+	if errors.Is(err, dispatch.ErrCancellationState) {
+		http.Error(w, "Deployment is not pending approval", http.StatusConflict)
 		return
 	}
-
-	// Transition to "pending" so the runner picks it up via the normal path.
-	if err := h.repo.Queries.UpdateDeploymentStatus(
-		r.Context(),
-		db.UpdateDeploymentStatusParams{
-			ID:     id,
-			Status: "pending",
-		},
-	); err != nil {
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

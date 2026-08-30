@@ -17,6 +17,7 @@ import (
 	"unicode/utf8"
 
 	"durpdeploy/internal/agentproto"
+	"durpdeploy/internal/agentstate"
 	"durpdeploy/internal/agenttls"
 )
 
@@ -34,6 +35,7 @@ type Client struct {
 	protocol     agentproto.ProtocolVersion
 	identity     agenttls.Identity
 	http         *http.Client
+	state        agentstate.State
 
 	mu     sync.Mutex
 	pins   []agenttls.Fingerprint

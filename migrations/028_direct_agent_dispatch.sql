@@ -1,6 +1,90 @@
 -- +goose Up
 -- +goose StatementBegin
 
+CREATE TEMP TABLE direct_dispatch_backfill_guard (
+    environment_ids TEXT
+);
+CREATE TEMP TRIGGER direct_dispatch_backfill_abort
+BEFORE INSERT ON direct_dispatch_backfill_guard
+WHEN NEW.environment_ids IS NOT NULL
+BEGIN
+    SELECT RAISE(
+        ABORT,
+        'cannot migrate pooled deployment dispatches for environments: '
+            || NEW.environment_ids
+    );
+END;
+INSERT INTO direct_dispatch_backfill_guard (environment_ids)
+SELECT group_concat(environment_id, ',')
+FROM (
+    SELECT DISTINCT deployments.environment_id
+    FROM deployment_dispatches
+    JOIN deployments ON deployments.id = deployment_dispatches.deployment_id
+    LEFT JOIN environment_agent_policies
+        ON environment_agent_policies.environment_id = deployments.environment_id
+    WHERE deployment_dispatches.mode = 'remote'
+       AND deployment_dispatches.assigned_agent_id IS NULL
+       AND deployment_dispatches.agent_id IS NULL
+       AND (
+           deployment_dispatches.state <> 'waiting'
+           OR (NOT EXISTS (
+               SELECT 1
+               FROM environment_agent_assignments
+               JOIN agents ON agents.id = environment_agent_assignments.agent_id
+               WHERE environment_agent_assignments.environment_id = deployments.environment_id
+                 AND agents.status = 'active'
+           ) AND (
+               (SELECT COUNT(*) FROM agent_pool_memberships
+                WHERE agent_pool_memberships.pool_id = environment_agent_policies.pool_id) <> 1
+               OR (SELECT COUNT(*) FROM agent_pool_memberships
+                   JOIN agents ON agents.id = agent_pool_memberships.agent_id
+                   WHERE agent_pool_memberships.pool_id = environment_agent_policies.pool_id
+                     AND agents.status = 'active') <> 1
+           ))
+       )
+    ORDER BY deployments.environment_id
+);
+DROP TRIGGER direct_dispatch_backfill_abort;
+DROP TABLE direct_dispatch_backfill_guard;
+
+CREATE TEMP TABLE direct_dispatch_backfill_assignments AS
+SELECT
+    deployment_dispatches.deployment_id,
+    COALESCE(
+        deployment_dispatches.assigned_agent_id,
+        deployment_dispatches.agent_id,
+        CASE WHEN deployment_dispatches.state = 'waiting' THEN (
+    SELECT environment_agent_assignments.agent_id
+    FROM deployments
+    JOIN environment_agent_assignments
+        ON environment_agent_assignments.environment_id = deployments.environment_id
+    JOIN agents ON agents.id = environment_agent_assignments.agent_id
+    WHERE deployments.id = deployment_dispatches.deployment_id
+      AND agents.status = 'active'
+    ORDER BY environment_agent_assignments.updated_at DESC,
+        environment_agent_assignments.agent_id
+    LIMIT 1
+        ) END,
+        (
+    SELECT agent_pool_memberships.agent_id
+    FROM deployments
+    JOIN environment_agent_policies
+        ON environment_agent_policies.environment_id = deployments.environment_id
+    JOIN agent_pool_memberships
+        ON agent_pool_memberships.pool_id = environment_agent_policies.pool_id
+    JOIN agents ON agents.id = agent_pool_memberships.agent_id
+    WHERE deployments.id = deployment_dispatches.deployment_id
+      AND agents.status = 'active'
+    ORDER BY agent_pool_memberships.created_at DESC, agent_pool_memberships.agent_id
+    LIMIT 1
+        )
+    ) AS assigned_agent_id
+FROM deployment_dispatches
+WHERE mode = 'remote';
+
+CREATE TABLE direct_dispatch_backup_deployment_dispatches AS
+    SELECT * FROM deployment_dispatches;
+
 DROP INDEX idx_deployment_dispatches_active_agent;
 DROP INDEX idx_deployment_dispatches_assigned_agent_state;
 DROP INDEX idx_deployment_dispatches_agent_state;
@@ -28,7 +112,7 @@ CREATE TABLE deployment_dispatches (
     cancel_requested_at INTEGER,
     created_at INTEGER NOT NULL DEFAULT (unixepoch()),
     updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
-    CHECK (
+    CONSTRAINT ck_deployment_dispatches_mode_assignment CHECK (
         (mode = 'local' AND assigned_agent_id IS NULL)
         OR (mode = 'remote' AND assigned_agent_id IS NOT NULL)
     )
@@ -39,12 +123,28 @@ INSERT INTO deployment_dispatches (
     last_heartbeat_at, cancel_requested_at, created_at, updated_at
 )
 SELECT
-    deployment_id, mode, state, reason, agent_id,
-    COALESCE(assigned_agent_id, agent_id), claim_token_hash, claim_expires_at,
-    started_at, finished_at, last_heartbeat_at, cancel_requested_at,
-    created_at, updated_at
+    deployment_dispatches_legacy.deployment_id,
+    deployment_dispatches_legacy.mode,
+    deployment_dispatches_legacy.state,
+    deployment_dispatches_legacy.reason,
+    deployment_dispatches_legacy.agent_id,
+    COALESCE(
+        deployment_dispatches_legacy.assigned_agent_id,
+        deployment_dispatches_legacy.agent_id,
+        direct_dispatch_backfill_assignments.assigned_agent_id
+    ), deployment_dispatches_legacy.claim_token_hash,
+    deployment_dispatches_legacy.claim_expires_at,
+    deployment_dispatches_legacy.started_at,
+    deployment_dispatches_legacy.finished_at,
+    deployment_dispatches_legacy.last_heartbeat_at,
+    deployment_dispatches_legacy.cancel_requested_at,
+    deployment_dispatches_legacy.created_at,
+    deployment_dispatches_legacy.updated_at
 FROM deployment_dispatches_legacy
-WHERE mode = 'local' OR assigned_agent_id IS NOT NULL OR agent_id IS NOT NULL;
+LEFT JOIN direct_dispatch_backfill_assignments
+    ON direct_dispatch_backfill_assignments.deployment_id =
+        deployment_dispatches_legacy.deployment_id;
+DROP TABLE direct_dispatch_backfill_assignments;
 DROP TABLE deployment_dispatches_legacy;
 CREATE INDEX idx_deployment_dispatches_agent_state
     ON deployment_dispatches(agent_id, state);
@@ -60,6 +160,14 @@ CREATE UNIQUE INDEX idx_deployment_dispatches_active_agent
     WHERE agent_id IS NOT NULL
       AND state IN ('claimed', 'started', 'cancel_requested');
 
+CREATE TABLE direct_dispatch_backup_agent_pools AS SELECT * FROM agent_pools;
+CREATE TABLE direct_dispatch_backup_sequences AS
+    SELECT name, seq FROM sqlite_sequence WHERE name = 'agent_pools';
+CREATE TABLE direct_dispatch_backup_agent_pool_memberships AS
+    SELECT * FROM agent_pool_memberships;
+CREATE TABLE direct_dispatch_backup_agent_tags AS SELECT * FROM agent_tags;
+CREATE TABLE direct_dispatch_backup_environment_agent_policies AS
+    SELECT * FROM environment_agent_policies;
 DROP TABLE environment_agent_policies;
 DROP TABLE agent_tags;
 DROP TABLE agent_pool_memberships;
@@ -187,6 +295,27 @@ SELECT
     cancel_requested_at, created_at, updated_at
 FROM deployment_dispatches_legacy;
 DROP TABLE deployment_dispatches_legacy;
+DELETE FROM deployment_dispatches;
+DELETE FROM environment_agent_policies;
+DELETE FROM agent_tags;
+DELETE FROM agent_pool_memberships;
+DELETE FROM agent_pools;
+INSERT INTO agent_pools SELECT * FROM direct_dispatch_backup_agent_pools;
+DELETE FROM sqlite_sequence WHERE name = 'agent_pools';
+INSERT INTO sqlite_sequence SELECT * FROM direct_dispatch_backup_sequences;
+INSERT INTO agent_pool_memberships
+    SELECT * FROM direct_dispatch_backup_agent_pool_memberships;
+INSERT INTO agent_tags SELECT * FROM direct_dispatch_backup_agent_tags;
+INSERT INTO environment_agent_policies
+    SELECT * FROM direct_dispatch_backup_environment_agent_policies;
+INSERT INTO deployment_dispatches
+    SELECT * FROM direct_dispatch_backup_deployment_dispatches;
+DROP TABLE direct_dispatch_backup_deployment_dispatches;
+DROP TABLE direct_dispatch_backup_agent_pools;
+DROP TABLE direct_dispatch_backup_sequences;
+DROP TABLE direct_dispatch_backup_agent_pool_memberships;
+DROP TABLE direct_dispatch_backup_agent_tags;
+DROP TABLE direct_dispatch_backup_environment_agent_policies;
 CREATE INDEX idx_deployment_dispatches_agent_state
     ON deployment_dispatches(agent_id, state);
 CREATE UNIQUE INDEX idx_deployment_dispatches_claim_token_hash

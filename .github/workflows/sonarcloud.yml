@@ -6,6 +6,14 @@ on:
       - main
   pull_request:
     types: [opened, synchronize, reopened]
+
+concurrency:
+  group: sonarcloud-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 jobs:
   sonarqube:
     name: SonarQube

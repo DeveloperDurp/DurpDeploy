@@ -12,8 +12,10 @@ func TestDispatchState_Transition_allows_contract_edges(t *testing.T) {
 		to   DispatchState
 	}{
 		{"waiting to claimed", DispatchWaiting, DispatchClaimed},
+		{"waiting to cancelled", DispatchWaiting, DispatchCancelled},
 		{"claimed reclaim to waiting", DispatchClaimed, DispatchWaiting},
 		{"claimed to started", DispatchClaimed, DispatchStarted},
+		{"claimed to cancelled", DispatchClaimed, DispatchCancelled},
 		{
 			"claimed cancellation requested",
 			DispatchClaimed,

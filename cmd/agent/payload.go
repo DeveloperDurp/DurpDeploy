@@ -52,7 +52,7 @@ func decodePayload(raw []byte, deploymentID int64) (deploymentPayload, error) {
 	}
 	for index, step := range payload.Release.Steps {
 		if step.Name == "" || step.ScriptBody == "" ||
-			step.SortOrder != int64(index) ||
+			step.SortOrder != int64(index+1) ||
 			step.TimeoutSeconds < 0 ||
 			step.MaxRetries < 0 {
 			return deploymentPayload{}, errors.New("invalid deployment payload")

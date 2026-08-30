@@ -161,6 +161,18 @@ func assertPullAgentPairingPersistence(t *testing.T, conn *sql.DB) {
 	)
 	requireNoError(t, err, "create paired agent persistence")
 	_, err = conn.Exec(`
+		INSERT INTO agent_pairings (
+			agent_id, pairing_code_hash, agent_public_identity, agent_pin,
+			state, expires_at
+		) VALUES (?, ?, ?, ?, 'committing', ?)`,
+		"pending-agent-2",
+		bytes.Repeat([]byte{6}, 32),
+		"committing-agent-public-identity",
+		"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+		1_700_000_300,
+	)
+	requireNoError(t, err, "create committing agent persistence")
+	_, err = conn.Exec(`
 		INSERT INTO environment_agent_assignments (environment_id, agent_id)
 		VALUES (1, ?)`, "pending-agent-1")
 	requireNoError(t, err, "create direct environment assignment")

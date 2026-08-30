@@ -1,5 +1,5 @@
 -- name: ListReleaseVariablesByRelease :many
-SELECT * FROM release_variables WHERE release_id = ? ORDER BY created_at DESC;
+SELECT * FROM release_variables WHERE release_id = ? ORDER BY id ASC;
 
 -- name: GetReleaseVariable :one
 SELECT * FROM release_variables WHERE id = ?;

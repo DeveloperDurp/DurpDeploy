@@ -69,38 +69,12 @@ func (fixture *pollFixture) addEligibleAgent(
 	agentID string,
 ) {
 	t.Helper()
-	ctx := context.Background()
-	codeHash := sha256.Sum256([]byte(agentID + "-pairing-code"))
-	agentPin := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-	serverPin := "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-	if _, err := fixture.repo.Queries.CreateAgentPairing(
-		ctx,
-		db.CreateAgentPairingParams{
-			AgentID:             agentID,
-			PairingCodeHash:     codeHash[:],
-			AgentPublicIdentity: agentID + "-identity",
-			AgentPin:            agentPin,
-			ExpiresAt:           fixture.now.AddDate(0, 0, 1).Unix(),
-		},
-	); err != nil {
-		t.Fatalf("create pairing for agent %q: %v", agentID, err)
-	}
-	if _, err := fixture.repo.Queries.CompleteAgentPairing(
-		ctx,
-		db.CompleteAgentPairingParams{
-			ServerPublicIdentity: sql.NullString{
-				String: "server-identity", Valid: true,
-			},
-			ServerPin:       sql.NullString{String: serverPin, Valid: true},
-			PairedAt:        sql.NullInt64{Int64: fixture.now.Unix(), Valid: true},
-			UpdatedAt:       fixture.now.Unix(),
-			AgentID:         agentID,
-			PairingCodeHash: codeHash[:],
-			AgentPin:        agentPin,
-			Now:             fixture.now.Unix(),
-		},
-	); err != nil {
-		t.Fatalf("complete pairing for agent %q: %v", agentID, err)
+	pairing, err := fixture.repo.Queries.GetAgentPairing(
+		context.Background(),
+		agentID,
+	)
+	if err != nil || pairing.State != "paired" {
+		t.Fatalf("paired agent %q = %#v, %v", agentID, pairing, err)
 	}
 }
 

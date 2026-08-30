@@ -166,9 +166,21 @@ VALUES ('assigned-agent', 'Assigned agent', 'active', 'certificate', ?),
 	); err != nil {
 		t.Fatalf("create assignment pairing: %v", err)
 	}
+	if _, err := h.repo.Queries.BeginAgentPairing(
+		context.Background(),
+		db.BeginAgentPairingParams{
+			AgentID:         "assigned-agent",
+			PairingCodeHash: codeHash[:],
+			AgentPin:        strings.Repeat("a", 64),
+			UpdatedAt:       1_000_000_000,
+		},
+	); err != nil {
+		t.Fatalf("begin assignment pairing: %v", err)
+	}
 	if _, err := h.repo.Queries.CompleteAgentPairing(
 		context.Background(),
 		db.CompleteAgentPairingParams{
+			AgentPublicIdentity:  "certificate",
 			ServerPublicIdentity: sql.NullString{String: "server", Valid: true},
 			ServerPin: sql.NullString{
 				String: strings.Repeat("c", 64), Valid: true,
@@ -178,7 +190,6 @@ VALUES ('assigned-agent', 'Assigned agent', 'active', 'certificate', ?),
 			AgentID:         "assigned-agent",
 			PairingCodeHash: codeHash[:],
 			AgentPin:        strings.Repeat("a", 64),
-			Now:             1,
 		},
 	); err != nil {
 		t.Fatalf("complete assignment pairing: %v", err)

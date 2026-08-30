@@ -161,9 +161,10 @@ func TestClient_persists_staged_server_pin_from_heartbeat(t *testing.T) {
 		client.pins[1] != pendingIdentity.Fingerprint {
 		t.Fatalf("heartbeat error=%v pins=%v", err, client.pins)
 	}
-	pins, err := loadPins(client.stateDir, serverIdentity.Fingerprint)
-	if err != nil || len(pins) != 2 || pins[1] != pendingIdentity.Fingerprint {
-		t.Fatalf("persisted pins error=%v pins=%v", err, pins)
+	state, err := agentstate.NewStore(client.stateDir).Load()
+	if err != nil || len(state.ServerPins) != 2 ||
+		state.ServerPins[1] != pendingIdentity.Fingerprint {
+		t.Fatalf("persisted pins error=%v pins=%v", err, state.ServerPins)
 	}
 }
 

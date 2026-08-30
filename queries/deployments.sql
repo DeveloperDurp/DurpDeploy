@@ -13,6 +13,21 @@ UPDATE deployments SET release_id = ?, environment_id = ?, status = ?, started_a
 -- name: UpdateDeploymentStatus :exec
 UPDATE deployments SET status = ?, started_at = ?, finished_at = ? WHERE id = ?;
 
+-- name: CancelQueuedDeployment :execrows
+UPDATE deployments
+SET status = 'cancelled', finished_at = sqlc.arg(finished_at)
+WHERE id = sqlc.arg(id) AND status = 'pending';
+
+-- name: CancelPendingApprovalDeployment :execrows
+UPDATE deployments
+SET status = 'cancelled', finished_at = sqlc.arg(finished_at)
+WHERE id = sqlc.arg(id) AND status = 'pending_approval';
+
+-- name: ApprovePendingDeployment :execrows
+UPDATE deployments
+SET status = 'pending', started_at = NULL, finished_at = NULL
+WHERE id = sqlc.arg(id) AND status = 'pending_approval';
+
 -- name: ListDeployments :many
 SELECT * FROM deployments ORDER BY created_at DESC;
 

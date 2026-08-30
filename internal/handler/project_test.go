@@ -40,7 +40,7 @@ func newProjectHarness(t *testing.T) *projectHarness {
 
 	repo := repository.New(conn)
 	broker := runner.NewLogBroker()
-	rnr := runner.New(repo, broker)
+	rnr := runner.NewForTests(repo, broker)
 	parser := cron.NewParser(
 		cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow,
 	)

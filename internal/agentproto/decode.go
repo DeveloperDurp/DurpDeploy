@@ -21,22 +21,6 @@ func DecodeRequest[T Request](body io.Reader) (T, error) {
 	return decodeMessage[T](body, MaxRequestBytes, ErrRequestTooLarge)
 }
 
-func DecodeBootstrapResponse(body io.Reader) (BootstrapResponse, error) {
-	return decodeMessage[BootstrapResponse](
-		body,
-		MaxPairingMessageBytes,
-		ErrRequestTooLarge,
-	)
-}
-
-func DecodePairResponse(body io.Reader) (PairResponse, error) {
-	return decodeMessage[PairResponse](
-		body,
-		MaxPairingMessageBytes,
-		ErrRequestTooLarge,
-	)
-}
-
 func DecodeLogBatch(body io.Reader) (LogBatchRequest, error) {
 	batch, err := decodeMessage[LogBatchRequest](
 		body,

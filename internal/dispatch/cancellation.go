@@ -48,24 +48,81 @@ func (s *CancellationService) Cancel(
 		return "", fmt.Errorf("get deployment: %w", err)
 	}
 	if deployment.Status == "pending_approval" {
-		if err := s.repo.Queries.UpdateDeploymentStatus(
+		updated, err := s.repo.Queries.CancelPendingApprovalDeployment(
 			ctx,
-			db.UpdateDeploymentStatusParams{
-				ID:     deploymentID,
-				Status: "cancelled",
-				FinishedAt: sql.NullInt64{
-					Int64: s.now().Unix(), Valid: true,
-				},
+			db.CancelPendingApprovalDeploymentParams{
+				ID:         deploymentID,
+				FinishedAt: sql.NullInt64{Int64: s.now().Unix(), Valid: true},
 			},
-		); err != nil {
+		)
+		if err != nil {
 			return "", fmt.Errorf("cancel pending approval: %w", err)
 		}
+		if updated != 1 {
+			return "", ErrCancellationState
+		}
 		return "cancelled", nil
+	}
+	if deployment.Status == "pending" {
+		if err := s.cancelQueued(ctx, deploymentID); err == nil {
+			return "cancelled", nil
+		} else if !errors.Is(err, ErrCancellationState) {
+			return "", fmt.Errorf("cancel queued remote deployment: %w", err)
+		}
+		deployment, err = s.repo.Queries.GetDeployment(ctx, deploymentID)
+		if err != nil {
+			return "", fmt.Errorf(
+				"reload deployment after queued cancellation: %w",
+				err,
+			)
+		}
 	}
 	if deployment.Status != "running" {
 		return "", ErrCancellationState
 	}
 
+	return s.cancelRunning(ctx, deploymentID)
+}
+
+func (s *CancellationService) cancelQueued(
+	ctx context.Context,
+	deploymentID int64,
+) error {
+	return s.repo.WithTx(ctx, func(q *db.Queries) error {
+		finishedAt := sql.NullInt64{Int64: s.now().Unix(), Valid: true}
+		dispatchUpdated, err := q.CancelQueuedDeploymentDispatch(
+			ctx,
+			db.CancelQueuedDeploymentDispatchParams{
+				DeploymentID: deploymentID,
+				FinishedAt:   finishedAt,
+			},
+		)
+		if err != nil {
+			return fmt.Errorf("cancel queued dispatch: %w", err)
+		}
+		if dispatchUpdated != 1 {
+			return ErrCancellationState
+		}
+		deploymentUpdated, err := q.CancelQueuedDeployment(
+			ctx,
+			db.CancelQueuedDeploymentParams{
+				ID: deploymentID, FinishedAt: finishedAt,
+			},
+		)
+		if err != nil {
+			return fmt.Errorf("cancel queued deployment: %w", err)
+		}
+		if deploymentUpdated != 1 {
+			return ErrCancellationState
+		}
+		return nil
+	})
+}
+
+func (s *CancellationService) cancelRunning(
+	ctx context.Context,
+	deploymentID int64,
+) (string, error) {
 	dispatch, err := s.repo.Queries.GetDeploymentDispatch(ctx, deploymentID)
 	if errors.Is(err, sql.ErrNoRows) || dispatch.Mode == "local" {
 		return s.cancelLocal(deploymentID)
@@ -73,8 +130,7 @@ func (s *CancellationService) Cancel(
 	if err != nil {
 		return "", fmt.Errorf("get deployment dispatch: %w", err)
 	}
-	if dispatch.Mode != "remote" ||
-		(dispatch.State != "claimed" && dispatch.State != "started") {
+	if dispatch.Mode != "remote" || dispatch.State != "started" {
 		return "", ErrCancellationState
 	}
 
@@ -86,7 +142,7 @@ func (s *CancellationService) Cancel(
 					Int64: s.now().Unix(), Valid: true,
 				},
 				DeploymentID: deploymentID,
-				CurrentState: dispatch.State,
+				CurrentState: "started",
 			},
 		)
 		if errors.Is(err, sql.ErrNoRows) {

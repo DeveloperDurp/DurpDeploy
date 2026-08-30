@@ -8,6 +8,15 @@ RETURNING *;
 -- name: GetDeploymentPayload :one
 SELECT * FROM deployment_payloads WHERE deployment_id = ?;
 
+-- name: DeleteDeploymentPayloadsForAgent :execrows
+DELETE FROM deployment_payloads
+WHERE deployment_id IN (
+    SELECT deployment_id
+    FROM deployment_dispatches
+    WHERE assigned_agent_id = sqlc.arg(agent_id)
+       OR agent_id = sqlc.arg(agent_id)
+);
+
 -- name: CreateDeploymentDispatch :one
 INSERT INTO deployment_dispatches (deployment_id, mode, state, reason)
 VALUES (
@@ -22,6 +31,43 @@ RETURNING *;
 
 -- name: GetDeploymentDispatch :one
 SELECT * FROM deployment_dispatches WHERE deployment_id = ?;
+
+-- name: FailInFlightDeploymentsForAgent :execrows
+UPDATE deployments
+SET status = 'failed',
+    finished_at = sqlc.arg(finished_at)
+WHERE id IN (
+    SELECT deployment_id
+    FROM deployment_dispatches
+    WHERE mode = 'remote'
+      AND (assigned_agent_id = sqlc.arg(agent_id) OR agent_id = sqlc.arg(agent_id))
+      AND state IN ('claimed', 'started', 'cancel_requested')
+);
+
+-- name: DetachDeploymentDispatchesForAgent :execrows
+UPDATE deployment_dispatches
+SET mode = 'local',
+    state = CASE
+        WHEN state IN ('claimed', 'started', 'cancel_requested') THEN 'lost'
+        ELSE state
+    END,
+    reason = CASE
+        WHEN state IN ('claimed', 'started', 'cancel_requested') THEN sqlc.arg(reason)
+        ELSE reason
+    END,
+    agent_id = NULL,
+    assigned_agent_id = NULL,
+    claim_token_hash = NULL,
+    claim_expires_at = NULL,
+    last_heartbeat_at = NULL,
+    cancel_requested_at = NULL,
+    finished_at = CASE
+        WHEN state IN ('claimed', 'started', 'cancel_requested') THEN sqlc.arg(finished_at)
+        ELSE finished_at
+    END,
+    updated_at = sqlc.arg(updated_at)
+WHERE assigned_agent_id = sqlc.arg(agent_id)
+   OR agent_id = sqlc.arg(agent_id);
 
 -- name: ClaimDeploymentDispatch :one
 UPDATE deployment_dispatches
@@ -86,6 +132,15 @@ WHERE deployment_id = sqlc.arg(deployment_id)
   AND state = sqlc.arg(current_state)
 RETURNING *;
 
+-- name: CancelQueuedDeploymentDispatch :execrows
+UPDATE deployment_dispatches
+SET state = 'cancelled',
+    finished_at = sqlc.arg(finished_at),
+    updated_at = unixepoch()
+WHERE deployment_id = sqlc.arg(deployment_id)
+  AND mode = 'remote'
+  AND state IN ('waiting', 'claimed');
+
 -- name: AcknowledgeDeploymentDispatchCancellation :one
 UPDATE deployment_dispatches
 SET state = 'cancelled',
@@ -146,6 +201,9 @@ VALUES (
     sqlc.narg(dispatch_state)
 )
 RETURNING *;
+
+-- name: DeleteAgentEventsByAgent :execrows
+DELETE FROM agent_events WHERE agent_id = ?;
 
 -- name: CreateOfflineAgentEvent :execrows
 INSERT INTO agent_events (agent_id, event_type)

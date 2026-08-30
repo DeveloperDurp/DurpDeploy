@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"durpdeploy/internal/agentbootstrap"
+	"durpdeploy/internal/agentstate"
 )
 
 func runBootstrap(ctx context.Context, config agentbootstrap.Config) error {
@@ -23,7 +24,7 @@ func runBootstrap(ctx context.Context, config agentbootstrap.Config) error {
 		defer cancel()
 		_ = listener.Shutdown(shutdownCtx)
 	}()
-	encoded, err := json.Marshal(listener.Offer().PairingCode)
+	encoded, err := json.Marshal(listener.Offer().Code)
 	if err != nil {
 		return fmt.Errorf("encode pairing code: %w", err)
 	}
@@ -40,7 +41,9 @@ func runBootstrap(ctx context.Context, config agentbootstrap.Config) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case <-listener.Done():
+	case <-listener.Paired():
 		return nil
+	case <-listener.Done():
+		return agentstate.ErrRePairRequired
 	}
 }

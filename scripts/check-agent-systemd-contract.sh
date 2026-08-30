@@ -5,19 +5,24 @@ unit=${AGENT_SYSTEMD_UNIT:-systemd/durpdeploy-agent.service}
 required=(
 	'User=durpdeploy-agent'
 	'Group=durpdeploy-agent'
+	'#   sudo useradd --system --home-dir /nonexistent --shell /usr/sbin/nologin durpdeploy-runner'
 	'EnvironmentFile=/etc/durpdeploy-agent.env'
 	'ExecStart=/usr/local/bin/durpdeploy-agent'
 	'StateDirectory=durpdeploy-agent'
+	'StateDirectoryMode=0700'
 	'NoNewPrivileges=true'
 	'ProtectSystem=strict'
 	'ProtectHome=true'
 	'PrivateTmp=true'
 	'PrivateDevices=true'
-	'ProtectControlGroups=true'
+	'ProtectControlGroups=false'
+	'Delegate=true'
 	'RestrictNamespaces=true'
 	'RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6'
 	'MemoryMax=512M'
 	'TasksMax=128'
+	'CapabilityBoundingSet=CAP_SETUID CAP_SETGID CAP_SETPCAP CAP_SYS_ADMIN CAP_SYS_CHROOT'
+	'AmbientCapabilities=CAP_SETUID CAP_SETGID CAP_SETPCAP CAP_SYS_ADMIN CAP_SYS_CHROOT'
 )
 for value in "${required[@]}"; do
 	grep -Fqx "$value" "$unit" || {
@@ -27,8 +32,6 @@ for value in "${required[@]}"; do
 done
 
 forbidden=(
-	'CapabilityBoundingSet='
-	'AmbientCapabilities='
 	'PrivateNetwork=true'
 	'BindReadOnlyPaths=/var/lib/durpdeploy'
 	'BindReadOnlyPaths=/data'
@@ -51,7 +54,7 @@ if command -v systemd-analyze >/dev/null 2>&1; then
 		exit "$status"
 	fi
 	if [ "$status" -ne 0 ]; then
-		echo 'agent systemd contract: static PASS (agent binary is not installed)' 
+		echo 'agent systemd contract: static PASS (agent binary is not installed)'
 	else
 		echo 'agent systemd contract: systemd-analyze PASS'
 	fi

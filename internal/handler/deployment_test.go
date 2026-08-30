@@ -45,7 +45,7 @@ func newHarness(t *testing.T) *testHarness {
 
 	repo := repository.New(conn)
 	broker := runner.NewLogBroker()
-	rnr := runner.New(repo, broker)
+	rnr := runner.NewForTests(repo, broker)
 	box, err := secret.NewBox(make([]byte, 32))
 	if err != nil {
 		t.Fatalf("new secret box: %v", err)

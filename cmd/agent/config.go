@@ -26,6 +26,9 @@ func loadConfig() (config, error) {
 		),
 		bootstrap: agentbootstrap.Config{
 			StateDir: stateDir,
+			AgentVersion: agentproto.AgentVersion(
+				os.Getenv("DURPDEPLOY_AGENT_VERSION"),
+			),
 			ListenAddr: os.Getenv(
 				"DURPDEPLOY_AGENT_LISTEN_ADDR",
 			),

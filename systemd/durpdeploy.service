@@ -56,8 +56,8 @@ Delegate=yes
 # step processes to the low-privileged durpdeploy-runner user and to
 # bind-mount/chroot the step's scratch filesystem. NoNewPrivileges below
 # still blocks privilege gain via execve, it does not block these syscalls.
-AmbientCapabilities=CAP_SETUID CAP_SETGID CAP_SETPCAP CAP_SYS_ADMIN
-CapabilityBoundingSet=CAP_SETUID CAP_SETGID CAP_SETPCAP CAP_SYS_ADMIN
+AmbientCapabilities=CAP_SETUID CAP_SETGID CAP_SETPCAP CAP_SYS_ADMIN CAP_SYS_CHROOT
+CapabilityBoundingSet=CAP_SETUID CAP_SETGID CAP_SETPCAP CAP_SYS_ADMIN CAP_SYS_CHROOT
 
 # --- Hardening ---
 # Make most of the filesystem read-only to the process. Writes are still

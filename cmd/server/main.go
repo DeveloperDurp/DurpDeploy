@@ -45,6 +45,8 @@ import (
 // via DURPDEPLOY_DB (see loadDSN).
 const defaultDSN = "durpdeploy.db?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_txlock=immediate"
 
+var newDeploymentRunner = runner.New
+
 type oidcServicesConfig struct {
 	Config       oidc.Config
 	Repository   *repository.Repository
@@ -211,7 +213,7 @@ func runServer() {
 	repo := repository.New(dbConn)
 	repo.SetSecretBox(box)
 	broker := runner.NewLogBroker()
-	rnr := runner.New(repo, broker)
+	rnr := newDeploymentRunner(repo, broker)
 	dispatcher := dispatch.New(repo, box, rnr)
 
 	// Event bus for Slack/email/Gotify notifications on deployment

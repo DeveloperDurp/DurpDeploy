@@ -69,7 +69,7 @@ func TestRunner_PublishesStartedAndSucceededEvents(t *testing.T) {
 	release, err := repo.Queries.CreateRelease(ctx, db.CreateReleaseParams{
 		ProjectID: proj.ID,
 		Version:   "v1",
-		StepsJson: `[{"name":"step1","script_body":"echo hi","sort_order":1,"timeout_seconds":5,"max_retries":0}]`,
+		StepsJson: `[]`,
 	})
 	if err != nil {
 		t.Fatalf("create release: %v", err)

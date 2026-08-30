@@ -49,6 +49,7 @@ func NewRouter(
 		parser,
 		authHandler,
 		nil,
+		0,
 		oidcEnabled...)
 }
 
@@ -68,6 +69,28 @@ func NewRouterWithAgentPairer(
 		parser,
 		authHandler,
 		pairer,
+		0,
+		oidcEnabled...)
+}
+
+func NewRouterWithAgentPairerAndConfirmationTTL(
+	repo *repository.Repository,
+	rnr *runner.DeploymentRunner,
+	dispatcher *dispatch.Dispatcher,
+	parser cron.Parser,
+	authHandler *handler.AuthHandler,
+	pairer *agentpairing.Server,
+	confirmationTTL time.Duration,
+	oidcEnabled ...bool,
+) *chi.Mux {
+	return newRouter(
+		repo,
+		rnr,
+		dispatcher,
+		parser,
+		authHandler,
+		pairer,
+		confirmationTTL,
 		oidcEnabled...)
 }
 
@@ -78,6 +101,7 @@ func newRouter(
 	parser cron.Parser,
 	authHandler *handler.AuthHandler,
 	pairer *agentpairing.Server,
+	confirmationTTL time.Duration,
 	oidcEnabled ...bool,
 ) *chi.Mux {
 	registerOIDC := len(oidcEnabled) > 0 && oidcEnabled[0]
@@ -384,7 +408,11 @@ func newRouter(
 			ar.Get("/admin/tokens", webTokensH.AdminTokens)
 			ar.Post("/admin/tokens/{id}/revoke", webTokensH.AdminTokensRevoke)
 
-			agentsH := handler.NewAgentAdminHandler(repo, pairer)
+			agentsH := handler.NewAgentAdminHandlerWithConfirmationTTL(
+				repo,
+				pairer,
+				confirmationTTL,
+			)
 			ar.Get("/admin/agents", agentsH.ListAgents)
 			ar.Get("/admin/agents/new", agentsH.NewAgentForm)
 			ar.Post("/admin/agents", agentsH.CreateAgent)

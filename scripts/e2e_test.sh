@@ -31,7 +31,8 @@ if [[ "$CLIENT_ONLY" == "1" ]]; then
         exit 1
     fi
 else
-    BASE="http://localhost:8080"
+    PORT=$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()')
+    BASE="http://127.0.0.1:$PORT"
     cd "$ROOT_DIR"
 
     DB_DSN="$TMP/durpdeploy.db?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)"
@@ -44,7 +45,7 @@ else
     export DURPDEPLOY_SECRET_KEY
 
     echo "=== Building and starting server ==="
-    go build -o "$TMP/durpdeploy" ./cmd/server
+    go build -tags e2e -o "$TMP/durpdeploy" ./cmd/server
 
     # Seed the first admin user via the CLI. The CLI runs migrations on its
     # own, so the server's startup migration is a no-op. This mirrors the
@@ -54,7 +55,7 @@ else
 
     # Start the server. The migrations it would normally run are a no-op
     # because the admin CLI just created the schema.
-    DURPDEPLOY_ADDR=127.0.0.1:8080 \
+    DURPDEPLOY_ADDR="127.0.0.1:$PORT" \
         DURPDEPLOY_DB="$DB_DSN" \
         DURPDEPLOY_URL="$BASE" \
         "$TMP/durpdeploy" >"$TMP/server.log" 2>&1 &

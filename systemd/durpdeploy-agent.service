@@ -2,6 +2,7 @@
 #
 # Install the dedicated user and state directory first, then install this unit:
 #   sudo useradd --system --home-dir /var/lib/durpdeploy-agent --shell /usr/sbin/nologin durpdeploy-agent
+#   sudo useradd --system --home-dir /nonexistent --shell /usr/sbin/nologin durpdeploy-runner
 #   sudo install -d -o durpdeploy-agent -g durpdeploy-agent -m 0700 /var/lib/durpdeploy-agent
 #   sudo install -m 0600 /tmp/durpdeploy-agent.env /etc/durpdeploy-agent.env
 #   sudo install -m 0644 systemd/durpdeploy-agent.service /etc/systemd/system/
@@ -24,14 +25,20 @@ ExecStart=/usr/local/bin/durpdeploy-agent
 Restart=on-failure
 RestartSec=5s
 StateDirectory=durpdeploy-agent
+StateDirectoryMode=0700
 PrivateTmp=true
 NoNewPrivileges=true
+# Mount/chroot happens before Go drops the child to durpdeploy-runner; setpriv
+# clears inherited and ambient capabilities before that child executes Bash.
+CapabilityBoundingSet=CAP_SETUID CAP_SETGID CAP_SETPCAP CAP_SYS_ADMIN CAP_SYS_CHROOT
+AmbientCapabilities=CAP_SETUID CAP_SETGID CAP_SETPCAP CAP_SYS_ADMIN CAP_SYS_CHROOT
 ProtectSystem=strict
 ProtectHome=true
 PrivateDevices=true
 ProtectKernelTunables=true
 ProtectKernelModules=true
-ProtectControlGroups=true
+ProtectControlGroups=false
+Delegate=true
 RestrictNamespaces=true
 RestrictSUIDSGID=true
 RestrictRealtime=true

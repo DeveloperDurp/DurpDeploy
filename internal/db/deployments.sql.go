@@ -10,6 +10,58 @@ import (
 	"database/sql"
 )
 
+const approvePendingDeployment = `-- name: ApprovePendingDeployment :execrows
+UPDATE deployments
+SET status = 'pending', started_at = NULL, finished_at = NULL
+WHERE id = ?1 AND status = 'pending_approval'
+`
+
+func (q *Queries) ApprovePendingDeployment(ctx context.Context, id int64) (int64, error) {
+	result, err := q.db.ExecContext(ctx, approvePendingDeployment, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const cancelPendingApprovalDeployment = `-- name: CancelPendingApprovalDeployment :execrows
+UPDATE deployments
+SET status = 'cancelled', finished_at = ?1
+WHERE id = ?2 AND status = 'pending_approval'
+`
+
+type CancelPendingApprovalDeploymentParams struct {
+	FinishedAt sql.NullInt64 `json:"finished_at"`
+	ID         int64         `json:"id"`
+}
+
+func (q *Queries) CancelPendingApprovalDeployment(ctx context.Context, arg CancelPendingApprovalDeploymentParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, cancelPendingApprovalDeployment, arg.FinishedAt, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const cancelQueuedDeployment = `-- name: CancelQueuedDeployment :execrows
+UPDATE deployments
+SET status = 'cancelled', finished_at = ?1
+WHERE id = ?2 AND status = 'pending'
+`
+
+type CancelQueuedDeploymentParams struct {
+	FinishedAt sql.NullInt64 `json:"finished_at"`
+	ID         int64         `json:"id"`
+}
+
+func (q *Queries) CancelQueuedDeployment(ctx context.Context, arg CancelQueuedDeploymentParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, cancelQueuedDeployment, arg.FinishedAt, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const countDeploymentsToday = `-- name: CountDeploymentsToday :one
 SELECT COUNT(*) FROM deployments WHERE created_at >= strftime('%s','now','start of day')
 `

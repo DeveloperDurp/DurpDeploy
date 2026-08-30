@@ -9,8 +9,45 @@ import (
 
 	"durpdeploy/internal/agentproto"
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/dispatch"
 	"durpdeploy/internal/events"
 )
+
+func TestLifecycle_rejectsStaleStartAfterQueuedCancellation(t *testing.T) {
+	// Given
+	fixture := newPollFixture(t)
+	fixture.activate(t, "agent-a", fixture.agentIdentity)
+	fixture.addEligibleAgent(t, "agent-a")
+	deploymentID := fixture.createWaitingDeployment(t, "payload")
+	claimToken := "claim-token"
+	claimDispatch(t, fixture, deploymentID, "agent-a", claimToken)
+	if _, err := dispatch.NewCancellationService(fixture.repo, nil).Cancel(
+		context.Background(),
+		deploymentID,
+	); err != nil {
+		t.Fatalf("cancel queued deployment: %v", err)
+	}
+
+	// When
+	response := fixture.lifecycle(
+		t,
+		fixture.agentIdentity,
+		deploymentID,
+		"start",
+		claimBody(claimToken),
+	)
+
+	// Then
+	if response.StatusCode != http.StatusConflict {
+		t.Fatalf(
+			"stale start status = %d, want %d",
+			response.StatusCode,
+			http.StatusConflict,
+		)
+	}
+	assertDispatchState(t, fixture, deploymentID, "cancelled")
+	assertDeploymentStatus(t, fixture, deploymentID, "cancelled")
+}
 
 func TestLifecycle_runsGuardedStartHeartbeatLogsResult(t *testing.T) {
 	// Given

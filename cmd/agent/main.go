@@ -22,6 +22,8 @@ import (
 
 const claimFileName = "current-claim.json"
 
+var newExecutor = runner.NewExecutor
+
 const agentHelpText = `Usage: durpdeploy-agent
 
 Starts a local pairing listener until paired, then polls the persisted server.
@@ -72,28 +74,39 @@ func agentHelp() string {
 }
 
 func run(ctx context.Context, configuration config) error {
-	client, err := agentclient.NewPaired(
-		configuration.stateDir,
-		configuration.agentVersion,
-	)
-	if errors.Is(err, agentstate.ErrRePairRequired) {
-		return runBootstrap(ctx, configuration.bootstrap)
-	}
-	if err != nil {
-		return err
-	}
-	defer client.Close()
 	for ctx.Err() == nil {
-		claim, err := client.Poll(ctx)
+		client, err := agentclient.NewPaired(
+			configuration.stateDir,
+			configuration.agentVersion,
+		)
+		if errors.Is(err, agentstate.ErrRePairRequired) {
+			if err := runBootstrap(ctx, configuration.bootstrap); err != nil {
+				return err
+			}
+			continue
+		}
 		if err != nil {
 			return err
 		}
-		if claim == nil {
-			continue
+		for ctx.Err() == nil {
+			claim, err := client.Poll(ctx)
+			if err != nil {
+				client.Close()
+				return err
+			}
+			if claim == nil {
+				continue
+			}
+			if err := executeClaim(ctx, client, *claim); err != nil {
+				var statusErr *agentclient.StatusError
+				if errors.As(err, &statusErr) && statusErr.Status == 409 {
+					continue
+				}
+				client.Close()
+				return err
+			}
 		}
-		if err := executeClaim(ctx, client, *claim); err != nil {
-			return err
-		}
+		client.Close()
 	}
 	return ctx.Err()
 }
@@ -159,7 +172,7 @@ func executeClaim(
 
 	environment, secrets, err := payload.environment()
 	if err == nil {
-		executor := runner.NewExecutor()
+		executor := newExecutor()
 		err = executor.ExecuteSteps(executionCtx, runner.ExecutionConfig{
 			DeploymentID: int64(claim.DeploymentID),
 			Steps:        payload.Release.Steps,

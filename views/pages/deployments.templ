@@ -276,6 +276,26 @@ func isTerminalStatus(status string) bool {
 	}
 }
 
+func canCancelDeployment(
+	deployment db.Deployment,
+	routing deploymentstate.Dispatch,
+) bool {
+	if !routing.CanCancel() {
+		return false
+	}
+	switch deployment.Status {
+	case "pending_approval":
+		return true
+	case "running":
+		return routing.Mode == "local" || routing.State == "started"
+	case "pending":
+		return routing.Mode == "remote" &&
+			(routing.State == "waiting" || routing.State == "claimed")
+	default:
+		return false
+	}
+}
+
 templ StatusBadge(deployment db.Deployment) {
 	<span class={ fmt.Sprintf("badge %s", statusBadgeClass(deployment.Status)) }>
 		{ deployment.Status }
@@ -389,7 +409,7 @@ templ DeploymentDetail(project db.Project, release db.Release, environment db.En
 						Approve
 					</button>
 				}
-				if routing.CanCancel() && (deployment.Status == "running" || deployment.Status == "pending_approval") {
+				if canCancelDeployment(deployment, routing) {
 						<button
 							class="btn btn-sm btn-error"
 							hx-post={ fmt.Sprintf("/deployments/%d/cancel", deployment.ID) }

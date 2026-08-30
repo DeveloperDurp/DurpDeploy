@@ -56,6 +56,29 @@ func (q *Queries) AcknowledgeDeploymentDispatchCancellation(ctx context.Context,
 	return i, err
 }
 
+const cancelQueuedDeploymentDispatch = `-- name: CancelQueuedDeploymentDispatch :execrows
+UPDATE deployment_dispatches
+SET state = 'cancelled',
+    finished_at = ?1,
+    updated_at = unixepoch()
+WHERE deployment_id = ?2
+  AND mode = 'remote'
+  AND state IN ('waiting', 'claimed')
+`
+
+type CancelQueuedDeploymentDispatchParams struct {
+	FinishedAt   sql.NullInt64 `json:"finished_at"`
+	DeploymentID int64         `json:"deployment_id"`
+}
+
+func (q *Queries) CancelQueuedDeploymentDispatch(ctx context.Context, arg CancelQueuedDeploymentDispatchParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, cancelQueuedDeploymentDispatch, arg.FinishedAt, arg.DeploymentID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const claimDeploymentDispatch = `-- name: ClaimDeploymentDispatch :one
 UPDATE deployment_dispatches
 SET state = 'claimed',
@@ -295,6 +318,82 @@ func (q *Queries) CreateOfflineAgentEvent(ctx context.Context, arg CreateOffline
 	return result.RowsAffected()
 }
 
+const deleteAgentEventsByAgent = `-- name: DeleteAgentEventsByAgent :execrows
+DELETE FROM agent_events WHERE agent_id = ?
+`
+
+func (q *Queries) DeleteAgentEventsByAgent(ctx context.Context, agentID sql.NullString) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteAgentEventsByAgent, agentID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const deleteDeploymentPayloadsForAgent = `-- name: DeleteDeploymentPayloadsForAgent :execrows
+DELETE FROM deployment_payloads
+WHERE deployment_id IN (
+    SELECT deployment_id
+    FROM deployment_dispatches
+    WHERE assigned_agent_id = ?1
+       OR agent_id = ?1
+)
+`
+
+func (q *Queries) DeleteDeploymentPayloadsForAgent(ctx context.Context, agentID sql.NullString) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteDeploymentPayloadsForAgent, agentID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const detachDeploymentDispatchesForAgent = `-- name: DetachDeploymentDispatchesForAgent :execrows
+UPDATE deployment_dispatches
+SET mode = 'local',
+    state = CASE
+        WHEN state IN ('claimed', 'started', 'cancel_requested') THEN 'lost'
+        ELSE state
+    END,
+    reason = CASE
+        WHEN state IN ('claimed', 'started', 'cancel_requested') THEN ?1
+        ELSE reason
+    END,
+    agent_id = NULL,
+    assigned_agent_id = NULL,
+    claim_token_hash = NULL,
+    claim_expires_at = NULL,
+    last_heartbeat_at = NULL,
+    cancel_requested_at = NULL,
+    finished_at = CASE
+        WHEN state IN ('claimed', 'started', 'cancel_requested') THEN ?2
+        ELSE finished_at
+    END,
+    updated_at = ?3
+WHERE assigned_agent_id = ?4
+   OR agent_id = ?4
+`
+
+type DetachDeploymentDispatchesForAgentParams struct {
+	Reason     sql.NullString `json:"reason"`
+	FinishedAt sql.NullInt64  `json:"finished_at"`
+	UpdatedAt  int64          `json:"updated_at"`
+	AgentID    sql.NullString `json:"agent_id"`
+}
+
+func (q *Queries) DetachDeploymentDispatchesForAgent(ctx context.Context, arg DetachDeploymentDispatchesForAgentParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, detachDeploymentDispatchesForAgent,
+		arg.Reason,
+		arg.FinishedAt,
+		arg.UpdatedAt,
+		arg.AgentID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const expireDeploymentDispatchCancellation = `-- name: ExpireDeploymentDispatchCancellation :execrows
 UPDATE deployment_dispatches
 SET state = 'cancel_unconfirmed',
@@ -305,6 +404,32 @@ WHERE state = 'cancel_requested'
 
 func (q *Queries) ExpireDeploymentDispatchCancellation(ctx context.Context, cancelRequestedBefore sql.NullInt64) (int64, error) {
 	result, err := q.db.ExecContext(ctx, expireDeploymentDispatchCancellation, cancelRequestedBefore)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const failInFlightDeploymentsForAgent = `-- name: FailInFlightDeploymentsForAgent :execrows
+UPDATE deployments
+SET status = 'failed',
+    finished_at = ?1
+WHERE id IN (
+    SELECT deployment_id
+    FROM deployment_dispatches
+    WHERE mode = 'remote'
+      AND (assigned_agent_id = ?2 OR agent_id = ?2)
+      AND state IN ('claimed', 'started', 'cancel_requested')
+)
+`
+
+type FailInFlightDeploymentsForAgentParams struct {
+	FinishedAt sql.NullInt64  `json:"finished_at"`
+	AgentID    sql.NullString `json:"agent_id"`
+}
+
+func (q *Queries) FailInFlightDeploymentsForAgent(ctx context.Context, arg FailInFlightDeploymentsForAgentParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, failInFlightDeploymentsForAgent, arg.FinishedAt, arg.AgentID)
 	if err != nil {
 		return 0, err
 	}

@@ -13,14 +13,28 @@ import (
 const activatePairedAgent = `-- name: ActivatePairedAgent :one
 UPDATE agents
 SET status = 'active',
-    certificate_pem = ?,
-    certificate_fingerprint = ?,
-    agent_version = ?,
-    last_heartbeat_at = ?,
-    enrolled_at = ?,
-    updated_at = ?
-WHERE id = ?
-  AND status = 'pending'
+    certificate_pem = ?1,
+    certificate_fingerprint = ?2,
+    agent_version = ?3,
+    last_heartbeat_at = ?4,
+    enrolled_at = ?5,
+    updated_at = ?6
+WHERE id = ?7
+  AND EXISTS (
+      SELECT 1
+      FROM agent_pairings
+      WHERE agent_pairings.agent_id = agents.id
+        AND agent_pairings.pairing_code_hash = ?8
+        AND agent_pairings.state = 'paired'
+  )
+  AND (
+      status = 'pending'
+      OR (
+          status = 'active'
+          AND certificate_pem = ?1
+          AND certificate_fingerprint = ?2
+      )
+  )
 RETURNING id, status, certificate_fingerprint, agent_version, enrolled_at
 `
 
@@ -32,6 +46,7 @@ type ActivatePairedAgentParams struct {
 	EnrolledAt             sql.NullInt64  `json:"enrolled_at"`
 	UpdatedAt              int64          `json:"updated_at"`
 	ID                     string         `json:"id"`
+	PairingCodeHash        []byte         `json:"pairing_code_hash"`
 }
 
 type ActivatePairedAgentRow struct {
@@ -51,6 +66,7 @@ func (q *Queries) ActivatePairedAgent(ctx context.Context, arg ActivatePairedAge
 		arg.EnrolledAt,
 		arg.UpdatedAt,
 		arg.ID,
+		arg.PairingCodeHash,
 	)
 	var i ActivatePairedAgentRow
 	err := row.Scan(
@@ -94,6 +110,18 @@ func (q *Queries) CreatePendingAgent(ctx context.Context, arg CreatePendingAgent
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const deleteAgent = `-- name: DeleteAgent :execrows
+DELETE FROM agents WHERE id = ?
+`
+
+func (q *Queries) DeleteAgent(ctx context.Context, id string) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteAgent, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const deletePendingUnreferencedAgent = `-- name: DeletePendingUnreferencedAgent :execrows

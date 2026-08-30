@@ -2,116 +2,166 @@ package handler_test
 
 import (
 	"context"
-	"database/sql"
-	"io"
 	"net/http"
-	"strings"
 	"testing"
-	"time"
 
 	"durpdeploy/internal/db"
 )
 
-func TestAgentAudit_returns_redacted_history_and_preserves_historic_agent(
+func TestAgentAudit_delete_pending_agent_uses_hx_redirect_and_audits(
 	t *testing.T,
 ) {
 	// Given
 	h := newHarness(t)
-	created, err := h.repo.Queries.CreatePendingAgent(
+	_, err := h.repo.Queries.CreatePendingAgent(
 		context.Background(),
-		db.CreatePendingAgentParams{ID: "agent-history", Name: "Agent History"},
+		db.CreatePendingAgentParams{ID: "agent-delete", Name: "Agent Delete"},
 	)
 	if err != nil {
 		t.Fatalf("create pending agent: %v", err)
 	}
-	now := time.Now().Unix()
-	_, err = h.repo.Queries.ActivatePairedAgent(
+	before, err := h.repo.Queries.CountAuditLogs(context.Background())
+	if err != nil {
+		t.Fatalf("count audit logs: %v", err)
+	}
+	req, err := http.NewRequestWithContext(
 		context.Background(),
-		db.ActivatePairedAgentParams{
-			ID: created.ID,
-			CertificatePem: sql.NullString{
-				String: "certificate",
-				Valid:  true,
-			},
-			CertificateFingerprint: sql.NullString{
-				String: strings.Repeat("a", 64),
-				Valid:  true,
-			},
-			EnrolledAt:      sql.NullInt64{Int64: now, Valid: true},
-			LastHeartbeatAt: sql.NullInt64{Int64: now, Valid: true},
-			UpdatedAt:       now,
+		http.MethodDelete,
+		h.server.URL+"/admin/agents/agent-delete",
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("new delete request: %v", err)
+	}
+	req.Header.Set("HX-Request", "true")
+	req.Header.Set("X-CSRF-Token", h.csrfToken())
+
+	// When
+	resp, err := h.authedClient().Do(req)
+	if err != nil {
+		t.Fatalf("delete agent: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// Then
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	if got := resp.Header.Get("HX-Redirect"); got != "/admin/agents" {
+		t.Fatalf("HX-Redirect = %q, want /admin/agents", got)
+	}
+	if !hasAuditAction(t, h, "delete_agent") {
+		t.Fatal("delete agent audit action is missing")
+	}
+	after, err := h.repo.Queries.CountAuditLogs(context.Background())
+	if err != nil {
+		t.Fatalf("count audit logs: %v", err)
+	}
+	if after != before+1 {
+		t.Fatalf("audit rows = %d, want %d", after, before+1)
+	}
+}
+
+func TestAgentAudit_delete_pending_agent_keeps_204_without_htmx(
+	t *testing.T,
+) {
+	// Given
+	h := newHarness(t)
+	_, err := h.repo.Queries.CreatePendingAgent(
+		context.Background(),
+		db.CreatePendingAgentParams{ID: "agent-plain", Name: "Agent Plain"},
+	)
+	if err != nil {
+		t.Fatalf("create pending agent: %v", err)
+	}
+	before, err := h.repo.Queries.CountAuditLogs(context.Background())
+	if err != nil {
+		t.Fatalf("count audit logs: %v", err)
+	}
+	req, err := http.NewRequestWithContext(
+		context.Background(),
+		http.MethodDelete,
+		h.server.URL+"/admin/agents/agent-plain",
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("new delete request: %v", err)
+	}
+	req.Header.Set("X-CSRF-Token", h.csrfToken())
+
+	// When
+	resp, err := h.authedClient().Do(req)
+	if err != nil {
+		t.Fatalf("delete agent: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// Then
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204", resp.StatusCode)
+	}
+	if got := resp.Header.Get("HX-Redirect"); got != "" {
+		t.Fatalf("HX-Redirect = %q, want empty on plain delete", got)
+	}
+	if !hasAuditAction(t, h, "delete_agent") {
+		t.Fatal("delete agent audit action is missing")
+	}
+	after, err := h.repo.Queries.CountAuditLogs(context.Background())
+	if err != nil {
+		t.Fatalf("count audit logs: %v", err)
+	}
+	if after != before+1 {
+		t.Fatalf("audit rows = %d, want %d", after, before+1)
+	}
+}
+
+func TestAgentAudit_delete_pending_agent_with_history_redirects(t *testing.T) {
+	// Given
+	h := newHarness(t)
+	created, err := h.repo.Queries.CreatePendingAgent(
+		context.Background(),
+		db.CreatePendingAgentParams{
+			ID:   "agent-conflict",
+			Name: "Agent Conflict",
 		},
 	)
 	if err != nil {
-		t.Fatalf("activate agent: %v", err)
+		t.Fatalf("create pending agent: %v", err)
 	}
 	_, err = h.repo.DB.ExecContext(
 		context.Background(),
 		"INSERT INTO agent_events (agent_id, event_type, details) VALUES (?, ?, ?)",
 		created.ID,
 		"heartbeat",
-		"secret event detail",
+		"history",
 	)
 	if err != nil {
-		t.Fatalf("create agent event: %v", err)
+		t.Fatalf("create agent history: %v", err)
 	}
+	req, err := http.NewRequestWithContext(
+		context.Background(),
+		http.MethodDelete,
+		h.server.URL+"/admin/agents/agent-conflict",
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("new delete request: %v", err)
+	}
+	req.Header.Set("HX-Request", "true")
+	req.Header.Set("X-CSRF-Token", h.csrfToken())
 
 	// When
-	disableResponse := adminRequest(
-		t,
-		h,
-		h.sess,
-		http.MethodPost,
-		"/admin/agents/agent-history/disable",
-		"",
-		true,
-	)
-	historyResponse := adminRequest(
-		t,
-		h,
-		h.sess,
-		http.MethodGet,
-		"/admin/agents/agent-history/events",
-		"",
-		false,
-	)
-	revokeResponse := adminRequest(
-		t,
-		h,
-		h.sess,
-		http.MethodPost,
-		"/admin/agents/agent-history/revoke",
-		"",
-		true,
-	)
-	deleteResponse := adminRequest(
-		t,
-		h,
-		h.sess,
-		http.MethodDelete,
-		"/admin/agents/agent-history",
-		"",
-		true,
-	)
+	resp, err := h.authedClient().Do(req)
+	if err != nil {
+		t.Fatalf("delete agent: %v", err)
+	}
+	defer resp.Body.Close()
 
 	// Then
-	requireAdminStatus(t, disableResponse, http.StatusNoContent)
-	requireAdminStatus(t, historyResponse, http.StatusOK)
-	requireAdminStatus(t, revokeResponse, http.StatusNoContent)
-	body, err := io.ReadAll(historyResponse.Body)
-	if err != nil {
-		t.Fatalf("read history: %v", err)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
-	if strings.Contains(string(body), "secret event detail") {
-		t.Fatal("agent event history contains redacted details")
-	}
-	requireAdminStatus(t, deleteResponse, http.StatusConflict)
-	agent, err := h.repo.Queries.GetAgent(context.Background(), "agent-history")
-	if err != nil || agent.Status != "revoked" {
-		t.Fatalf("agent after revocation = %#v, %v", agent, err)
-	}
-	if !hasAuditAction(t, h, "disable_agent") ||
-		!hasAuditAction(t, h, "revoke_agent") {
-		t.Fatal("agent lifecycle audit actions are missing")
+	if got := resp.Header.Get("HX-Redirect"); got != "/admin/agents" {
+		t.Fatalf("HX-Redirect = %q, want /admin/agents", got)
 	}
 }

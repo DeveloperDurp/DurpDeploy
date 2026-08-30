@@ -28,10 +28,10 @@ func Transition(from, to DispatchState) (DispatchState, error) {
 func CanTransition(from, to DispatchState) bool {
 	switch from {
 	case DispatchWaiting:
-		return to == DispatchClaimed
+		return to == DispatchClaimed || to == DispatchCancelled
 	case DispatchClaimed:
 		return to == DispatchWaiting || to == DispatchStarted ||
-			to == DispatchCancelRequested
+			to == DispatchCancelRequested || to == DispatchCancelled
 	case DispatchStarted:
 		return to == DispatchSucceeded || to == DispatchFailed ||
 			to == DispatchCancelled || to == DispatchLost ||

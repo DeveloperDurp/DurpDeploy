@@ -17,7 +17,16 @@ SET pairing_code_hash = excluded.pairing_code_hash,
     expires_at = excluded.expires_at,
     paired_at = NULL,
     updated_at = unixepoch()
+WHERE agent_pairings.state IN ('pending', 'expired')
 RETURNING *;
+
+-- name: DeletePendingAgentPairing :execrows
+DELETE FROM agent_pairings
+WHERE agent_id = ?
+  AND state = 'pending';
+
+-- name: DeleteAgentPairing :execrows
+DELETE FROM agent_pairings WHERE agent_id = ?;
 
 -- name: GetAgentPairing :one
 SELECT * FROM agent_pairings WHERE agent_id = ?;
@@ -25,15 +34,49 @@ SELECT * FROM agent_pairings WHERE agent_id = ?;
 -- name: CompleteAgentPairing :one
 UPDATE agent_pairings
 SET state = 'paired',
-    server_public_identity = sqlc.arg(server_public_identity),
-    server_pin = sqlc.arg(server_pin),
-    paired_at = sqlc.arg(paired_at),
-    updated_at = sqlc.arg(updated_at)
+    agent_public_identity = CASE
+        WHEN state = 'committing' THEN sqlc.arg(agent_public_identity)
+        ELSE agent_public_identity
+    END,
+    server_public_identity = CASE
+        WHEN state = 'committing' THEN sqlc.arg(server_public_identity)
+        ELSE server_public_identity
+    END,
+    server_pin = CASE
+        WHEN state = 'committing' THEN sqlc.arg(server_pin)
+        ELSE server_pin
+    END,
+    paired_at = CASE
+        WHEN state = 'committing' THEN sqlc.arg(paired_at)
+        ELSE paired_at
+    END,
+    updated_at = CASE
+        WHEN state = 'committing' THEN sqlc.arg(updated_at)
+        ELSE updated_at
+    END
 WHERE agent_id = sqlc.arg(agent_id)
   AND pairing_code_hash = sqlc.arg(pairing_code_hash)
   AND agent_pin = sqlc.arg(agent_pin)
-  AND state = 'pending'
-  AND expires_at > sqlc.arg(now)
+  AND (
+      state = 'committing'
+      OR state = 'paired'
+  )
+RETURNING *;
+
+-- name: BeginAgentPairing :one
+UPDATE agent_pairings
+SET state = CASE WHEN state = 'pending' THEN 'committing' ELSE state END,
+    updated_at = CASE
+        WHEN state = 'pending' THEN sqlc.arg(updated_at)
+        ELSE updated_at
+    END
+WHERE agent_id = sqlc.arg(agent_id)
+  AND pairing_code_hash = sqlc.arg(pairing_code_hash)
+  AND agent_pin = sqlc.arg(agent_pin)
+  AND (
+      (state = 'pending' AND expires_at > sqlc.arg(now))
+      OR state IN ('committing', 'paired')
+  )
 RETURNING *;
 
 -- name: ExpirePendingAgentPairings :execrows
@@ -56,6 +99,9 @@ RETURNING *;
 
 -- name: DeleteEnvironmentAgentAssignment :execrows
 DELETE FROM environment_agent_assignments WHERE environment_id = ?;
+
+-- name: DeleteEnvironmentAgentAssignmentsByAgent :execrows
+DELETE FROM environment_agent_assignments WHERE agent_id = ?;
 
 -- name: ListEnvironmentAgentAssignmentsByAgent :many
 SELECT * FROM environment_agent_assignments

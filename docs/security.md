@@ -144,7 +144,7 @@ browser ceremony end-to-end proof is tracked separately from this document.
 `CHECK (role IN ('admin', 'deployer', 'viewer'))` constraint in
 `migrations/011_auth.sql` and by `validRoles` in `internal/handler/users.go`).
 Per-project member roles are `admin`, `deployer`
-(`migrations/013_project_members.sql`).  
+(`migrations/013_project_members.sql`).
 **Reference:** `docs/roles.md`
 
 Two-layer defense for viewer read-only enforcement:

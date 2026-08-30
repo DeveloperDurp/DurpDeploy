@@ -10,6 +10,8 @@ import (
 	"durpdeploy/internal/agenttls"
 )
 
+const legacyAgentVersion = agentproto.AgentVersion("legacy-unknown")
+
 // NewPaired restores the identity and exact server pins established by pairing.
 func NewPaired(
 	stateDir string,
@@ -20,7 +22,10 @@ func NewPaired(
 		return nil, err
 	}
 	if agentVersion == "" {
-		return nil, fmt.Errorf("paired agent version is required")
+		agentVersion = agentproto.AgentVersion(state.AgentVersion)
+	}
+	if agentVersion == "" {
+		agentVersion = legacyAgentVersion
 	}
 	identity, err := agenttls.LoadExisting(stateDir)
 	if err != nil {
@@ -34,6 +39,7 @@ func NewPaired(
 		protocol:     agentproto.AgentV1,
 		identity:     identity,
 		pins:         append([]agenttls.Fingerprint(nil), state.ServerPins...),
+		state:        state,
 		now:          time.Now,
 		sleep:        sleep,
 		jitter:       randomInt,

@@ -51,7 +51,7 @@ func newAPIHarness(t *testing.T) *harness {
 
 	repo := repository.New(conn)
 	broker := runner.NewLogBroker()
-	rnr := runner.New(repo, broker)
+	rnr := runner.NewForTests(repo, broker)
 	return &harness{repo: repo, runner: rnr, broker: broker}
 }
 
@@ -557,6 +557,56 @@ func TestCancelDeployment_NotRunning(t *testing.T) {
 	}
 }
 
+func TestCancelDeployment_QueuedRemoteWaiting(t *testing.T) {
+	// Given
+	h := newAPIHarness(t)
+	u := seedAPIUser(t, h.repo, "admin@example.com", "admin")
+	p := seedProject(t, h.repo)
+	e := seedEnv(t, h.repo)
+	r := seedRelease(t, h.repo, p.ID)
+	d := seedDeployment(t, h.repo, r.ID, e.ID, "pending")
+	if _, err := h.repo.Queries.CreatePendingAgent(
+		context.Background(),
+		db.CreatePendingAgentParams{ID: "agent", Name: "agent"},
+	); err != nil {
+		t.Fatalf("create agent: %v", err)
+	}
+	if _, err := h.repo.Queries.CreateDirectDeploymentDispatch(
+		context.Background(),
+		db.CreateDirectDeploymentDispatchParams{
+			DeploymentID:    d.ID,
+			AssignedAgentID: sql.NullString{String: "agent", Valid: true},
+		},
+	); err != nil {
+		t.Fatalf("create dispatch: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost,
+		fmt.Sprintf("/api/v1/deployments/%d/cancel", d.ID), nil,
+	)
+	req = withAPIUser(req, u)
+	req = withAPIURLParam(req, "id", fmt.Sprint(d.ID))
+	rec := httptest.NewRecorder()
+
+	// When
+	api.NewDeploymentHandler(h.repo, h.runner).CancelDeployment(rec, req)
+
+	// Then
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	dispatch, err := h.repo.Queries.GetDeploymentDispatch(
+		context.Background(),
+		d.ID,
+	)
+	if err != nil || dispatch.State != "cancelled" {
+		t.Fatalf("dispatch = %#v, %v; want cancelled", dispatch, err)
+	}
+	deployment, err := h.repo.Queries.GetDeployment(context.Background(), d.ID)
+	if err != nil || deployment.Status != "cancelled" {
+		t.Fatalf("deployment = %#v, %v; want cancelled", deployment, err)
+	}
+}
+
 func TestApproveDeployment_AdminOnly(t *testing.T) {
 	h := newAPIHarness(t)
 	admin := seedAPIUser(t, h.repo, "admin@example.com", "admin")
@@ -936,25 +986,214 @@ func TestCreateDeployment_DispatchesEligibleDeployment(t *testing.T) {
 	}
 }
 
-func TestRetryDeployment_DispatchesEligibleDeployment(t *testing.T) {
+func TestLegacyRedeployDeployment_ReusesImmutableReleaseSnapshot(t *testing.T) {
+	// Given
 	h := newAPIHarness(t)
 	project := seedProject(t, h.repo)
 	env := seedEnv(t, h.repo)
-	release := seedRelease(t, h.repo, project.ID)
-	deployment := seedDeployment(t, h.repo, release.ID, env.ID, "failed")
+	release, err := h.repo.Queries.CreateRelease(
+		context.Background(),
+		db.CreateReleaseParams{
+			ProjectID: project.ID,
+			Version:   "immutable-release",
+			StepsJson: `[{"name":"deploy","script_body":"echo snapshot"}]`,
+		},
+	)
+	if err != nil {
+		t.Fatalf("create release: %v", err)
+	}
+	if _, err := h.repo.Queries.CreateReleaseVariable(
+		context.Background(),
+		db.CreateReleaseVariableParams{
+			ReleaseID: release.ID,
+			Name:      "SNAPSHOT_VARIABLE",
+			Value:     sql.NullString{String: "snapshot-value", Valid: true},
+		},
+	); err != nil {
+		t.Fatalf("create release variable: %v", err)
+	}
+	source := seedDeployment(t, h.repo, release.ID, env.ID, "succeeded")
 	req := httptest.NewRequest(http.MethodPost, "/", nil)
-	req = withAPIURLParam(req, "id", fmt.Sprint(deployment.ID))
+	req = withAPIURLParam(req, "id", fmt.Sprint(source.ID))
 	rec := httptest.NewRecorder()
 
-	api.NewDeploymentHandler(h.repo, h.runner).RetryDeployment(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	// When
+	api.NewDeploymentHandler(h.repo, nil).RedeployDeployment(rec, req)
+
+	// Then
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
 	}
-	if _, err := h.repo.Queries.GetDeploymentDispatch(
+	var got db.Deployment
+	mustDecode(t, rec.Body, &got)
+	if got.ID == source.ID || got.ReleaseID != release.ID ||
+		got.EnvironmentID != env.ID {
+		t.Fatalf("redeployment = %#v, want a new row for the release snapshot", got)
+	}
+	storedRelease, err := h.repo.Queries.GetRelease(context.Background(), release.ID)
+	if err != nil {
+		t.Fatalf("get release snapshot: %v", err)
+	}
+	if storedRelease.StepsJson != release.StepsJson {
+		t.Fatalf("steps_json = %q, want %q", storedRelease.StepsJson, release.StepsJson)
+	}
+	variables, err := h.repo.Queries.ListReleaseVariablesByRelease(
 		context.Background(),
-		deployment.ID,
+		release.ID,
+	)
+	if err != nil || len(variables) != 1 || variables[0].Name != "SNAPSHOT_VARIABLE" {
+		t.Fatalf("release variables = %#v, %v; want immutable snapshot", variables, err)
+	}
+}
+
+func TestLegacyDeploymentRetry_CreatesFreshDeployment(t *testing.T) {
+	// Given
+	h := newAPIHarness(t)
+	user := seedAPIUser(t, h.repo, "retry@example.com", "admin")
+	_, token := seedAPIToken(t, h.repo, user.ID)
+	project := seedProject(t, h.repo)
+	env := seedEnv(t, h.repo)
+	release, err := h.repo.Queries.CreateRelease(
+		context.Background(),
+		db.CreateReleaseParams{
+			ProjectID: project.ID,
+			Version:   "retry-snapshot",
+			StepsJson: `[{"name":"deploy","script_body":"echo snapshot"}]`,
+		},
+	)
+	if err != nil {
+		t.Fatalf("create release: %v", err)
+	}
+	if _, err := h.repo.Queries.CreateReleaseVariable(
+		context.Background(),
+		db.CreateReleaseVariableParams{
+			ReleaseID: release.ID,
+			Name:      "SNAPSHOT_VARIABLE",
+			Value:     sql.NullString{String: "snapshot-value", Valid: true},
+		},
 	); err != nil {
-		t.Fatalf("expected exactly one dispatch for retry: %v", err)
+		t.Fatalf("create release variable: %v", err)
+	}
+	source, err := h.repo.Queries.CreateDeployment(
+		context.Background(),
+		db.CreateDeploymentParams{
+			ReleaseID:     release.ID,
+			EnvironmentID: env.ID,
+			Status:        "failed",
+			StartedAt:     sql.NullInt64{Int64: 1, Valid: true},
+			FinishedAt:    sql.NullInt64{Int64: 2, Valid: true},
+		},
+	)
+	if err != nil {
+		t.Fatalf("create failed deployment: %v", err)
+	}
+	parser := cron.NewParser(
+		cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow,
+	)
+	server := httptest.NewServer(server.NewRouter(
+		h.repo,
+		h.runner,
+		nil,
+		parser,
+		handler.NewAuthHandler(h.repo),
+	))
+	defer server.Close()
+	req, err := http.NewRequest(
+		http.MethodPost,
+		fmt.Sprintf("%s/api/v1/deployments/%d/retry", server.URL, source.ID),
+		strings.NewReader(`{}`),
+	)
+	if err != nil {
+		t.Fatalf("new retry request: %v", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+
+	// When
+	resp, err := server.Client().Do(req)
+	if err != nil {
+		t.Fatalf("retry deployment: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// Then
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want 201: %s", resp.StatusCode, resp.Status)
+	}
+	var got db.Deployment
+	mustDecode(t, resp.Body, &got)
+	if got.ID == source.ID || got.ReleaseID != source.ReleaseID ||
+		got.EnvironmentID != source.EnvironmentID || got.Status != "pending" {
+		t.Fatalf("retry response = %#v, want fresh pending deployment", got)
+	}
+	preserved, err := h.repo.Queries.GetDeployment(context.Background(), source.ID)
+	if err != nil {
+		t.Fatalf("get original deployment: %v", err)
+	}
+	if preserved.Status != "failed" || preserved.StartedAt != source.StartedAt ||
+		preserved.FinishedAt != source.FinishedAt {
+		t.Fatalf("original deployment was mutated: %#v", preserved)
+	}
+	if _, err := h.repo.Queries.GetDeploymentDispatch(context.Background(), got.ID); err != nil {
+		t.Fatalf("get fresh deployment dispatch: %v", err)
+	}
+	auditLogs, err := h.repo.Queries.ListAuditLogsFiltered(
+		context.Background(),
+		db.ListAuditLogsFilteredParams{
+			FAction:   sql.NullString{String: "retry_deployment", Valid: true},
+			PageLimit: 1,
+		},
+	)
+	if err != nil || len(auditLogs) != 1 || !auditLogs[0].EntityID.Valid ||
+		auditLogs[0].EntityID.Int64 != source.ID {
+		t.Fatalf("retry audit log = %#v, %v; want source deployment action", auditLogs, err)
+	}
+}
+
+func TestLegacyDeploymentRetry_RejectsUnknownId(t *testing.T) {
+	// Given
+	h := newAPIHarness(t)
+	user := seedAPIUser(t, h.repo, "retry-unknown@example.com", "admin")
+	_, token := seedAPIToken(t, h.repo, user.ID)
+	parser := cron.NewParser(
+		cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow,
+	)
+	server := httptest.NewServer(server.NewRouter(
+		h.repo,
+		h.runner,
+		nil,
+		parser,
+		handler.NewAuthHandler(h.repo),
+	))
+	defer server.Close()
+	req, err := http.NewRequest(
+		http.MethodPost,
+		server.URL+"/api/v1/deployments/999999/retry",
+		strings.NewReader(`{}`),
+	)
+	if err != nil {
+		t.Fatalf("new retry request: %v", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+
+	// When
+	resp, err := server.Client().Do(req)
+	if err != nil {
+		t.Fatalf("retry unknown deployment: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// Then
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", resp.StatusCode)
+	}
+	var body struct {
+		Error string `json:"error"`
+	}
+	mustDecode(t, resp.Body, &body)
+	if body.Error != "Deployment not found" {
+		t.Fatalf("error = %q, want deployment not found", body.Error)
 	}
 }
 

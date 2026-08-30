@@ -122,6 +122,24 @@ type DeploymentPayload struct {
 	CreatedAt    int64  `json:"created_at"`
 }
 
+type DirectDispatchBackupAgentPool struct {
+}
+
+type DirectDispatchBackupAgentPoolMembership struct {
+}
+
+type DirectDispatchBackupAgentTag struct {
+}
+
+type DirectDispatchBackupDeploymentDispatch struct {
+}
+
+type DirectDispatchBackupEnvironmentAgentPolicy struct {
+}
+
+type DirectDispatchBackupSequence struct {
+}
+
 type Environment struct {
 	ID          int64          `json:"id"`
 	Name        string         `json:"name"`
