@@ -10,7 +10,7 @@ options:
 
 1. **Litestream** (recommended) — continuous WAL streaming to S3-compatible
    storage. Point-in-time recovery, seconds of data loss at most.
-2. **Cron fallback** — a daily `sqlite3 .backup` + `rsync` if you don't want
+2. **Cron fallback** — a daily `sqlite3 .backup` + `rsync` if you do not want
    to manage an S3 bucket.
 
 Pick one. Litestream is strictly better if you already have (or can create)
@@ -20,8 +20,8 @@ an S3-compatible bucket (AWS S3, MinIO, Backblaze B2, Cloudflare R2, etc).
 
 ## Option 1 — Litestream (continuous replication)
 
-Litestream tails the SQLite WAL and streams changed pages to object storage
-as they're written. It runs as its own systemd service, alongside — not
+Litestream reads the SQLite WAL and streams changed pages to object storage
+when SQLite writes them. It runs as its own systemd service, alongside — not
 inside — the `durpdeploy` service.
 
 ### Install
@@ -35,7 +35,7 @@ litestream version
 Pin an exact version rather than trusting the "latest" redirect in a real
 provisioning script — the download URL above will need bumping when you
 upgrade. Debian/Ubuntu also has a `.deb` release asset if you prefer
-`dpkg -i`; check the
+`dpkg -i`. Check the
 [releases page](https://github.com/benbjohnson/litestream/releases) for
 the current version and the right asset for your architecture (`x86_64` vs
 `arm64`).
@@ -83,7 +83,7 @@ healthy setup shows entries with a `max_txid` that keeps advancing every
 time you re-run the command. An empty list, or a `max_txid` that stops
 advancing, means replication is stuck — check `journalctl -u litestream`
 first. (Older Litestream releases, pre-v0.4, called this command
-`snapshots`; this runbook targets the current `ltx`/LTX-based CLI.)
+`snapshots`. This runbook targets the current `ltx`/LTX-based CLI.)
 
 ```bash
 journalctl -u litestream -n 50 --no-pager
@@ -114,26 +114,24 @@ sudo -u durpdeploy litestream restore -config /etc/litestream.yml \
   /var/lib/durpdeploy/durpdeploy.db
 ```
 
-`litestream restore` writes to a temp file and renames it into place, so a
-restore that's interrupted partway through does not leave a corrupt
-`durpdeploy.db` — the original file (or nothing, on a fresh VM) is left
-untouched until the restore completes successfully.
+`litestream restore` writes to a temporary file and renames it into place. Thus,
+an interrupted restore does not leave a corrupt
+`durpdeploy.db`. The restore does not change the original file until the
+operation is successful.
 
-**Test this monthly.** A backup you have never restored is a backup you
-don't have. Spin up a scratch VM, run the restore steps above against a
-copy of your production `litestream.yml` (read-only credentials are enough),
-and confirm the resulting `durpdeploy.db` opens and the row counts look
-sane (`sqlite3 durpdeploy.db 'select count(*) from deployments;'`).
+**Do this test each month.** Start a temporary VM. Do the restore steps with a
+copy of the production `litestream.yml`. Read-only credentials are sufficient.
+Open the restored `durpdeploy.db`. Make sure that the row counts are correct.
 
-`scripts/test-backup-restore.sh` in this repo automates an end-to-end
-version of this drill against a local replica directory (no S3 bucket
-required) — see that script for the exact sequence.
+The `scripts/test-backup-restore.sh` script does this test with a local replica
+directory. The test does not require an S3 bucket. Refer to the script for the
+command sequence.
 
 ---
 
-## Option 2 — Cron fallback (no S3 required)
+## Option 2 — Cron alternative (no S3 necessary)
 
-If you don't want to run Litestream or manage a bucket, a daily
+If you do not want to run Litestream or manage a bucket, a daily
 `sqlite3 .backup` plus offsite copy is a reasonable minimum. This gives you
 daily-granularity recovery (worst case: lose up to 24h of data) rather than
 Litestream's near-continuous replication.
@@ -161,7 +159,7 @@ sudo chmod +x /usr/local/bin/durpdeploy-backup.sh
 ```
 
 `sqlite3 .backup` uses SQLite's online backup API — it is safe to run while
-`durpdeploy` is live and writing to the WAL; it does not require stopping
+`durpdeploy` is live and writing to the WAL. It does not require stopping
 the service.
 
 ### Cron entry
@@ -182,14 +180,12 @@ sudo rm -f /var/lib/durpdeploy/durpdeploy.db-shm /var/lib/durpdeploy/durpdeploy.
 sudo systemctl start durpdeploy
 ```
 
-Removing the stale `-shm`/`-wal` sidecar files is required — they belong to
-the old database and starting the server against a fresh `.db` file with
-leftover WAL sidecars from a different point in time can confuse SQLite's
-WAL recovery.
+Remove the stale `-shm` and `-wal` sidecar files. They belong to the old
+database. Old sidecar files can cause an incorrect SQLite WAL recovery.
 
 ---
 
-## Which one should I use?
+## Which one must I use?
 
 | | Litestream | Cron fallback |
 |---|---|---|
@@ -198,9 +194,9 @@ WAL recovery.
 | Point-in-time restore | Yes (`-timestamp`) | Daily granularity only |
 | Setup effort | Moderate (bucket + credentials) | Low |
 
-Litestream is the recommended default for anything you'd call "production."
-The cron fallback exists for the case where standing up an S3-compatible
-bucket is a bigger lift than accepting daily-granularity backups.
+Use Litestream for a production installation. Use the cron alternative when
+you cannot supply an S3-compatible bucket. This alternative gives one backup
+each day.
 
 ## Edge cases
 
@@ -210,7 +206,8 @@ bucket is a bigger lift than accepting daily-granularity backups.
 - **WAL checkpoints**: durpdeploy opens SQLite with `journal_mode=WAL`
   (see `cmd/server/main.go`'s DSN). Litestream is designed around WAL mode
   and handles checkpoints (including ones triggered by the Go server's own
-  connection pool) by shipping WAL frames before they're checkpointed away;
+  connection pool). Litestream sends WAL frames before SQLite removes them
+  during a checkpoint.
   no configuration is needed on the durpdeploy side.
 - **Interrupted restore**: `litestream restore` restores to a temp path and
   renames atomically, so a killed/interrupted restore never leaves a
@@ -256,6 +253,6 @@ The service unit loads this file via `EnvironmentFile=-/etc/durpdeploy/durpdeplo
 systemctl list-timers durpdeploy-audit-prune.timer
 ```
 
-You should see the next trigger (03:17 the following day) and the last run.
+You must see the next trigger (03:17 on the next day) and the last run.
 `journalctl -u durpdeploy-audit-prune.service` shows the prune output
 (rows pruned + cutoff timestamp).
