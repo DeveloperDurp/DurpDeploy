@@ -705,7 +705,7 @@ func (h *DeploymentHandler) CancelDeployment(
 //	  bearer:
 //
 //	Responses:
-//	  200: body:Deployment
+//	  201: body:Deployment
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
 //	  404: body:NotFoundError

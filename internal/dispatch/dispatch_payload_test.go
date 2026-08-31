@@ -61,13 +61,19 @@ func TestDispatchPayload_DeterministicLastWriteWins(t *testing.T) {
 	repo, box := newPayloadRepository(t)
 	deployment := createPayloadDeployment(t, repo)
 	for _, value := range []string{"first", "last"} {
-		createPayloadVariable(t, repo, box, deployment.ReleaseID, payloadVariable{
-			name: "REGION", value: value,
-			environmentID: sql.NullInt64{
-				Int64: deployment.EnvironmentID,
-				Valid: true,
+		createPayloadVariable(
+			t,
+			repo,
+			box,
+			deployment.ReleaseID,
+			payloadVariable{
+				name: "REGION", value: value,
+				environmentID: sql.NullInt64{
+					Int64: deployment.EnvironmentID,
+					Valid: true,
+				},
 			},
-		})
+		)
 	}
 
 	// When
@@ -97,10 +103,16 @@ func newPayloadRepository(t *testing.T) (*repository.Repository, *secret.Box) {
 	return repository.New(connection), box
 }
 
-func createPayloadDeployment(t *testing.T, repo *repository.Repository) db.Deployment {
+func createPayloadDeployment(
+	t *testing.T,
+	repo *repository.Repository,
+) db.Deployment {
 	t.Helper()
 	ctx := context.Background()
-	project, err := repo.Queries.CreateProject(ctx, db.CreateProjectParams{Name: "project"})
+	project, err := repo.Queries.CreateProject(
+		ctx,
+		db.CreateProjectParams{Name: "project"},
+	)
 	if err != nil {
 		t.Fatalf("create project: %v", err)
 	}
@@ -117,9 +129,12 @@ func createPayloadDeployment(t *testing.T, repo *repository.Repository) db.Deplo
 	if err != nil {
 		t.Fatalf("create release: %v", err)
 	}
-	deployment, err := repo.Queries.CreateDeployment(ctx, db.CreateDeploymentParams{
-		ReleaseID: release.ID, EnvironmentID: environment.ID, Status: "pending",
-	})
+	deployment, err := repo.Queries.CreateDeployment(
+		ctx,
+		db.CreateDeploymentParams{
+			ReleaseID: release.ID, EnvironmentID: environment.ID, Status: "pending",
+		},
+	)
 	if err != nil {
 		t.Fatalf("create deployment: %v", err)
 	}

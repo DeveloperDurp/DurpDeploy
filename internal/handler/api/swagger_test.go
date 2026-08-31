@@ -66,6 +66,30 @@ func TestSwagger_SpecEmbedded(t *testing.T) {
 	}
 }
 
+func TestSwagger_RetryDeclaresCreatedResponse(t *testing.T) {
+	// Given
+	spec, err := swagger.ReadSpec()
+	if err != nil {
+		t.Fatalf("read embedded spec: %v", err)
+	}
+	var doc struct {
+		Paths map[string]map[string]struct {
+			Responses map[string]json.RawMessage `json:"responses"`
+		} `json:"paths"`
+	}
+	if err := json.Unmarshal(spec, &doc); err != nil {
+		t.Fatalf("parse spec: %v", err)
+	}
+
+	// When
+	responses := doc.Paths["/deployments/{id}/retry"]["post"].Responses
+
+	// Then
+	if _, ok := responses["201"]; !ok {
+		t.Fatalf("retry responses = %v, want 201", responses)
+	}
+}
+
 // TestSwagger_AllPathParamsDeclared is a regression guard: every {name}
 // placeholder in every path must be declared as an "in": "path" parameter on
 // every operation under that path, and no path parameter may be declared for

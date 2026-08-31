@@ -14,7 +14,10 @@ func TestListener_StopsExpiryTimerOnShutdown(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Start(): %v", err)
 	}
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+	shutdownCtx, cancel := context.WithTimeout(
+		context.Background(),
+		time.Second,
+	)
 	defer cancel()
 	if err := listener.Shutdown(shutdownCtx); err != nil {
 		t.Fatalf("Shutdown(): %v", err)

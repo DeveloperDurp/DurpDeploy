@@ -189,7 +189,11 @@ func TestNewPaired_LoadsPromotedPinAfterRestart(t *testing.T) {
 	if len(restarted.pins) != 1 || restarted.pins[0] != pending.Fingerprint {
 		t.Fatalf("restarted pins = %v, want promoted pin", restarted.pins)
 	}
-	if _, err := os.Stat(filepath.Join(client.stateDir, "server-pins.json")); !os.IsNotExist(err) {
+	if _, err := os.Stat(
+		filepath.Join(client.stateDir, "server-pins.json"),
+	); !os.IsNotExist(
+		err,
+	) {
 		t.Fatalf("orphan pin state stat error = %v, want not exist", err)
 	}
 }
@@ -220,7 +224,10 @@ func TestNewPaired_LoadsStagedPinsAfterRestart(t *testing.T) {
 	// Then
 	if len(restarted.pins) != 2 || restarted.pins[0] != current.Fingerprint ||
 		restarted.pins[1] != pending.Fingerprint {
-		t.Fatalf("restarted pins = %v, want current and pending pins", restarted.pins)
+		t.Fatalf(
+			"restarted pins = %v, want current and pending pins",
+			restarted.pins,
+		)
 	}
 }
 
@@ -230,7 +237,9 @@ func TestNewPaired_RejectsStateWithDuplicatedPins(t *testing.T) {
 	if err := os.Chmod(stateDir, 0o700); err != nil {
 		t.Fatalf("secure state directory: %v", err)
 	}
-	contents := []byte(`{"server_url":"https://agent.example.test","server_pins":["0000000000000000000000000000000000000000000000000000000000000000","0000000000000000000000000000000000000000000000000000000000000000"],"agent_id":"agent-duplicate"}`)
+	contents := []byte(
+		`{"server_url":"https://agent.example.test","server_pins":["0000000000000000000000000000000000000000000000000000000000000000","0000000000000000000000000000000000000000000000000000000000000000"],"agent_id":"agent-duplicate"}`,
+	)
 	if err := os.WriteFile(
 		filepath.Join(stateDir, agentstate.FileName),
 		contents,

@@ -75,13 +75,19 @@ func newAgentPairingTestEnvWithConfig(
 		t.Fatalf("start bootstrap agent: %v", err)
 	}
 	t.Cleanup(func() {
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+		shutdownCtx, cancel := context.WithTimeout(
+			context.Background(),
+			time.Second,
+		)
 		defer cancel()
 		if shutdownErr := bootstrap.Shutdown(shutdownCtx); shutdownErr != nil {
 			t.Errorf("shutdown bootstrap agent: %v", shutdownErr)
 		}
 	})
-	serverIdentity, err := agenttls.LoadOrCreate(t.TempDir(), "https://127.0.0.1")
+	serverIdentity, err := agenttls.LoadOrCreate(
+		t.TempDir(),
+		"https://127.0.0.1",
+	)
 	if err != nil {
 		t.Fatalf("create server identity: %v", err)
 	}

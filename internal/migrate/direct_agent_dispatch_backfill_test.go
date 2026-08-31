@@ -109,7 +109,10 @@ func TestMigration_AbortsOnAmbiguousPool(t *testing.T) {
 				t.Fatalf("read queued legacy dispatch after refusal: %v", err)
 			}
 			if count != 1 {
-				t.Fatalf("queued legacy dispatches after refusal = %d, want 1", count)
+				t.Fatalf(
+					"queued legacy dispatches after refusal = %d, want 1",
+					count,
+				)
 			}
 		})
 	}
@@ -175,11 +178,18 @@ func TestMSSQL_DirectAgentDispatchBackfillParity(t *testing.T) {
 		if err != nil {
 			t.Fatalf("read pool after rollback: %v", err)
 		}
-		if poolName != "original-pool" || description != "original description" ||
-			enabled != 0 || createdAt != 11 || updatedAt != 12 {
+		if poolName != "original-pool" ||
+			description != "original description" ||
+			enabled != 0 ||
+			createdAt != 11 ||
+			updatedAt != 12 {
 			t.Fatalf(
 				"pool after rollback = (%q, %q, %d, %d, %d), want original values",
-				poolName, description, enabled, createdAt, updatedAt,
+				poolName,
+				description,
+				enabled,
+				createdAt,
+				updatedAt,
 			)
 		}
 		var nextPoolID int64
@@ -217,30 +227,33 @@ func TestMSSQL_DirectAgentDispatchBackfillParity(t *testing.T) {
 		}
 	})
 
-	t.Run("environment-assignment-precedes-multiple-pool-members", func(t *testing.T) {
-		// Given: a waiting row has a current environment assignment and an
-		// otherwise ambiguous legacy pool.
-		conn := newSQLServerTestDBAt(t, 12)
-		seedDirectDispatchBackfillFixture(t, conn, true)
-		seedLatestEnvironmentAssignment(t, conn)
+	t.Run(
+		"environment-assignment-precedes-multiple-pool-members",
+		func(t *testing.T) {
+			// Given: a waiting row has a current environment assignment and an
+			// otherwise ambiguous legacy pool.
+			conn := newSQLServerTestDBAt(t, 12)
+			seedDirectDispatchBackfillFixture(t, conn, true)
+			seedLatestEnvironmentAssignment(t, conn)
 
-		// When: direct assignment migration runs.
-		migrateDirectDispatchMSSQLTo(t, conn, 13)
+			// When: direct assignment migration runs.
+			migrateDirectDispatchMSSQLTo(t, conn, 13)
 
-		// Then: the environment assignment is the single deterministic result.
-		var assignedAgentID string
-		if err := conn.QueryRow(`
+			// Then: the environment assignment is the single deterministic result.
+			var assignedAgentID string
+			if err := conn.QueryRow(`
 			SELECT assigned_agent_id FROM deployment_dispatches
 			WHERE deployment_id = 1`).Scan(&assignedAgentID); err != nil {
-			t.Fatalf("read migrated environment assignment: %v", err)
-		}
-		if assignedAgentID != "environment-agent" {
-			t.Fatalf(
-			"migrated environment assignment = %q, want environment-agent",
-			assignedAgentID,
-		)
-		}
-	})
+				t.Fatalf("read migrated environment assignment: %v", err)
+			}
+			if assignedAgentID != "environment-agent" {
+				t.Fatalf(
+					"migrated environment assignment = %q, want environment-agent",
+					assignedAgentID,
+				)
+			}
+		},
+	)
 
 	t.Run("active-and-inactive", func(t *testing.T) {
 		conn := newSQLServerTestDBAt(t, 12)
@@ -291,7 +304,8 @@ func TestPostgres_DirectAgentDispatchBackfillParity(t *testing.T) {
 		t.Fatalf("apply direct-assignment migration: %v", err)
 	}
 	var got string
-	if err := conn.QueryRow(`SELECT assigned_agent_id FROM deployment_dispatches WHERE deployment_id = 1`).Scan(&got); err != nil {
+	if err := conn.QueryRow(`SELECT assigned_agent_id FROM deployment_dispatches WHERE deployment_id = 1`).
+		Scan(&got); err != nil {
 		t.Fatalf("read queued assignment: %v", err)
 	}
 	if got != "environment-agent" {

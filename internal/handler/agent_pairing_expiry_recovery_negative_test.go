@@ -90,7 +90,11 @@ func TestConfirmPairing_RejectsExpiredNonMatchingDurablePairings(t *testing.T) {
 			}
 			defer beginResponse.Body.Close()
 			if beginResponse.StatusCode != http.StatusCreated {
-				t.Fatalf("begin status = %d, want %d", beginResponse.StatusCode, http.StatusCreated)
+				t.Fatalf(
+					"begin status = %d, want %d",
+					beginResponse.StatusCode,
+					http.StatusCreated,
+				)
 			}
 			fixture.agentID = agentID
 			test.seed(t, fixture)
@@ -113,18 +117,31 @@ func TestConfirmPairing_RejectsExpiredNonMatchingDurablePairings(t *testing.T) {
 
 			// Then
 			if response.StatusCode != http.StatusConflict {
-				t.Fatalf("confirm status = %d, want %d", response.StatusCode, http.StatusConflict)
+				t.Fatalf(
+					"confirm status = %d, want %d",
+					response.StatusCode,
+					http.StatusConflict,
+				)
 			}
-			pairing, err := env.repo.Queries.GetAgentPairing(context.Background(), agentID)
+			pairing, err := env.repo.Queries.GetAgentPairing(
+				context.Background(),
+				agentID,
+			)
 			if err != nil || pairing.State != test.state {
 				t.Fatalf("pairing = %#v, %v", pairing, err)
 			}
-			agent, err := env.repo.Queries.GetAgent(context.Background(), agentID)
+			agent, err := env.repo.Queries.GetAgent(
+				context.Background(),
+				agentID,
+			)
 			if err != nil || agent.Status != "pending" {
 				t.Fatalf("agent = %#v, %v", agent, err)
 			}
 			if fixture.callbackCalls.Load() != 0 {
-				t.Fatalf("callback calls = %d, want 0", fixture.callbackCalls.Load())
+				t.Fatalf(
+					"callback calls = %d, want 0",
+					fixture.callbackCalls.Load(),
+				)
 			}
 		})
 	}
@@ -151,7 +168,11 @@ func newExpiredReconciliationFixture(
 	t *testing.T,
 ) expiredReconciliationFixture {
 	t.Helper()
-	env := newAgentPairingTestEnvWithTTLs(t, 3*time.Second, 100*time.Millisecond)
+	env := newAgentPairingTestEnvWithTTLs(
+		t,
+		3*time.Second,
+		100*time.Millisecond,
+	)
 	callbackIdentity, err := agenttls.LoadOrCreate(
 		t.TempDir(),
 		"https://127.0.0.1",
@@ -228,7 +249,9 @@ func seedExpiredPairing(
 	if _, err := fixture.env.repo.Queries.ExpirePendingAgentPairings(
 		context.Background(),
 		db.ExpirePendingAgentPairingsParams{
-			UpdatedAt: time.Now().Unix(), ExpiresBefore: time.Now().Add(time.Minute).Unix(),
+			UpdatedAt: time.Now().
+				Unix(),
+			ExpiresBefore: time.Now().Add(time.Minute).Unix(),
 		},
 	); err != nil {
 		t.Fatalf("expire pairing: %v", err)

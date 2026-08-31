@@ -7,7 +7,9 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
+	"github.com/testcontainers/testcontainers-go/wait"
 
 	generated "durpdeploy/internal/db"
 )
@@ -22,7 +24,7 @@ func TestPostgres_MigrationsRun(t *testing.T) {
 		postgres.WithDatabase("durpdeploy"),
 		postgres.WithUsername("durpdeploy"),
 		postgres.WithPassword("postgres"),
-		postgres.BasicWaitStrategies(),
+		testcontainers.WithWaitStrategy(wait.ForListeningPort("5432/tcp")),
 	)
 	if err != nil {
 		t.Skipf("could not start postgres container: %v", err)

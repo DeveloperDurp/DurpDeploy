@@ -256,7 +256,15 @@ func (fixture *agentSubprocessFixture) start(t *testing.T) *exec.Cmd {
 		t.Fatalf("save paired state: %v", err)
 	}
 	binary := filepath.Join(t.TempDir(), "durpdeploy-agent")
-	build := exec.Command("go", "build", "-tags", "agenttest", "-o", binary, ".")
+	build := exec.Command(
+		"go",
+		"build",
+		"-tags",
+		"agenttest",
+		"-o",
+		binary,
+		".",
+	)
 	if output, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("build agent: %v: %s", err, output)
 	}

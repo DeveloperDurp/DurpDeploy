@@ -99,7 +99,9 @@ func TestAgentPairing_NewAgentForm_startsPairingWithoutSecretFields(
 	}
 }
 
-func TestAgentPairing_NewAgentForm_requiresTypedCodeAndFingerprint(t *testing.T) {
+func TestAgentPairing_NewAgentForm_requiresTypedCodeAndFingerprint(
+	t *testing.T,
+) {
 	// Given
 	env := newAgentPairingTestEnv(t)
 	endpoint, err := url.Parse(env.bootstrapURL)
@@ -126,6 +128,10 @@ func TestAgentPairing_NewAgentForm_requiresTypedCodeAndFingerprint(t *testing.T)
 
 	// Then
 	if response.StatusCode != http.StatusUnprocessableEntity {
-		t.Fatalf("status = %d, want %d", response.StatusCode, http.StatusUnprocessableEntity)
+		t.Fatalf(
+			"status = %d, want %d",
+			response.StatusCode,
+			http.StatusUnprocessableEntity,
+		)
 	}
 }

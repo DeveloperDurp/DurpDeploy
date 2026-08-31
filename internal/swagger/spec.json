@@ -1508,7 +1508,7 @@
           }
         ],
         "responses": {
-          "200": {
+          "201": {
             "description": "Deployment represents a release executing against an environment.",
             "schema": {
               "$ref": "#/definitions/Deployment"

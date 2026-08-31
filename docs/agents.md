@@ -17,10 +17,11 @@ agent identity certificate and key, paired server identity state, and a
 temporary hash-only current-claim marker. Keep that directory private and
 back it up only if preserving the enrolled identity is intentional.
 
-Agents initiate most runtime connections, but pairing uses temporary server-to-agent
-reachability: the server calls the unpaired listener once the operator confirms
-the code and agent fingerprint. After completion acknowledgment, there is no
-persistent inbound agent listener.
+Agents initiate most runtime connections, but pairing still needs a temporary
+unpaired agent callback listener: after code and fingerprint confirmation, the
+server performs a one-shot `server-init` callback to that temporary listener.
+After completion acknowledgment, the temporary listener is closed and the agent has
+no persistent inbound listener.
 
 ## Transport and ports
 
@@ -34,10 +35,11 @@ There are two separate HTTPS paths:
   Ed25519 identities, and direct SHA-256 certificate fingerprint pinning. It is
   **not routed through Caddy** and must not be terminated by Caddy.
 
-Allow inbound TCP 10943 only for the temporary pairing callback from the server
-process; keep application port 8080 private. After pairing acknowledgment, the
-listener is shut down and not part of normal operation. Agents need outbound TCP
-access to the server's polling endpoint; no outbound agent listener is required.
+Allow inbound TCP 10943 for the server’s durable direct listener; keep application
+port 8080 private. During pairing, each unpaired agent briefly opens a temporary
+local callback listener for one-shot `server-init`; once paired, that listener is
+closed. Agents need outbound TCP access to the server’s control listener for
+polling and heartbeats; no persistent inbound agent listener is required.
 
 ## Configure the server listener
 

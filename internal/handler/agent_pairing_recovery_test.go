@@ -16,10 +16,15 @@ import (
 	"durpdeploy/internal/db"
 )
 
-func TestAgentPairing_ConfirmationRetriesAfterAgentCallbackFailure(t *testing.T) {
+func TestAgentPairing_ConfirmationRetriesAfterAgentCallbackFailure(
+	t *testing.T,
+) {
 	// Given
 	env := newAgentPairingTestEnv(t)
-	agentIdentity, err := agenttls.LoadOrCreate(t.TempDir(), "https://127.0.0.1")
+	agentIdentity, err := agenttls.LoadOrCreate(
+		t.TempDir(),
+		"https://127.0.0.1",
+	)
 	if err != nil {
 		t.Fatalf("create callback agent identity: %v", err)
 	}
@@ -34,7 +39,9 @@ func TestAgentPairing_ConfirmationRetriesAfterAgentCallbackFailure(t *testing.T)
 			writer.WriteHeader(http.StatusNoContent)
 		},
 	))
-	callback.TLS = &tls.Config{Certificates: []tls.Certificate{agentIdentity.Certificate}}
+	callback.TLS = &tls.Config{
+		Certificates: []tls.Certificate{agentIdentity.Certificate},
+	}
 	callback.StartTLS()
 	t.Cleanup(callback.Close)
 	callbackURL, err := url.Parse(callback.URL)
@@ -65,7 +72,11 @@ func TestAgentPairing_ConfirmationRetriesAfterAgentCallbackFailure(t *testing.T)
 	}
 	defer beginResponse.Body.Close()
 	if beginResponse.StatusCode != http.StatusCreated {
-		t.Fatalf("begin status = %d, want %d", beginResponse.StatusCode, http.StatusCreated)
+		t.Fatalf(
+			"begin status = %d, want %d",
+			beginResponse.StatusCode,
+			http.StatusCreated,
+		)
 	}
 	confirmValues := url.Values{
 		"agent_pin":  {agentIdentity.Fingerprint.String()},
@@ -84,11 +95,20 @@ func TestAgentPairing_ConfirmationRetriesAfterAgentCallbackFailure(t *testing.T)
 			t.Fatalf("confirm pairing: %v", requestErr)
 		}
 		defer response.Body.Close()
-		if callbackCalls == 1 && response.StatusCode != http.StatusUnprocessableEntity {
-			t.Fatalf("failed callback status = %d, want %d", response.StatusCode, http.StatusUnprocessableEntity)
+		if callbackCalls == 1 &&
+			response.StatusCode != http.StatusUnprocessableEntity {
+			t.Fatalf(
+				"failed callback status = %d, want %d",
+				response.StatusCode,
+				http.StatusUnprocessableEntity,
+			)
 		}
 		if callbackCalls == 3 && response.StatusCode != http.StatusSeeOther {
-			t.Fatalf("retry status = %d, want %d", response.StatusCode, http.StatusSeeOther)
+			t.Fatalf(
+				"retry status = %d, want %d",
+				response.StatusCode,
+				http.StatusSeeOther,
+			)
 		}
 		if callbackCalls == 1 {
 			committing, getErr := env.repo.Queries.GetAgentPairing(
@@ -96,19 +116,33 @@ func TestAgentPairing_ConfirmationRetriesAfterAgentCallbackFailure(t *testing.T)
 				"retry-agent",
 			)
 			if getErr != nil || committing.State != "committing" {
-				t.Fatalf("pairing after callback failure = %#v, %v", committing, getErr)
+				t.Fatalf(
+					"pairing after callback failure = %#v, %v",
+					committing,
+					getErr,
+				)
 			}
 		}
 	}
 
 	// Then
-	paired, err := env.repo.Queries.GetAgentPairing(context.Background(), "retry-agent")
+	paired, err := env.repo.Queries.GetAgentPairing(
+		context.Background(),
+		"retry-agent",
+	)
 	if err != nil || paired.State != "paired" || callbackCalls != 3 {
-		t.Fatalf("retried pairing = %#v, callbacks = %d, err = %v", paired, callbackCalls, err)
+		t.Fatalf(
+			"retried pairing = %#v, callbacks = %d, err = %v",
+			paired,
+			callbackCalls,
+			err,
+		)
 	}
 }
 
-func TestAgentPairing_ConfirmationReconcilesAfterAgentCommitResponseLoss(t *testing.T) {
+func TestAgentPairing_ConfirmationReconcilesAfterAgentCommitResponseLoss(
+	t *testing.T,
+) {
 	// Given
 	var dropFirstResponse sync.Once
 	env := newAgentPairingTestEnvWithConfig(t, agentPairingTestConfig{
@@ -132,7 +166,10 @@ func TestAgentPairing_ConfirmationReconcilesAfterAgentCommitResponseLoss(t *test
 	})
 	if _, err := env.repo.Queries.CreatePendingAgent(
 		context.Background(),
-		db.CreatePendingAgentParams{ID: "response-loss-agent", Name: "Response loss agent"},
+		db.CreatePendingAgentParams{
+			ID:   "response-loss-agent",
+			Name: "Response loss agent",
+		},
 	); err != nil {
 		t.Fatalf("create pending agent: %v", err)
 	}
@@ -157,7 +194,11 @@ func TestAgentPairing_ConfirmationReconcilesAfterAgentCommitResponseLoss(t *test
 	}
 	defer beginResponse.Body.Close()
 	if beginResponse.StatusCode != http.StatusCreated {
-		t.Fatalf("begin status = %d, want %d", beginResponse.StatusCode, http.StatusCreated)
+		t.Fatalf(
+			"begin status = %d, want %d",
+			beginResponse.StatusCode,
+			http.StatusCreated,
+		)
 	}
 
 	// When
@@ -177,7 +218,11 @@ func TestAgentPairing_ConfirmationReconcilesAfterAgentCommitResponseLoss(t *test
 
 	// Then
 	if firstResponse.StatusCode != http.StatusUnprocessableEntity {
-		t.Fatalf("first confirmation status = %d, want %d", firstResponse.StatusCode, http.StatusUnprocessableEntity)
+		t.Fatalf(
+			"first confirmation status = %d, want %d",
+			firstResponse.StatusCode,
+			http.StatusUnprocessableEntity,
+		)
 	}
 	committing, err := env.repo.Queries.GetAgentPairing(
 		context.Background(),
@@ -224,9 +269,16 @@ func TestAgentPairing_ConfirmationReconcilesAfterAgentCommitResponseLoss(t *test
 
 	// Then
 	if response.StatusCode != http.StatusSeeOther {
-		t.Fatalf("reconcile status = %d, want %d", response.StatusCode, http.StatusSeeOther)
+		t.Fatalf(
+			"reconcile status = %d, want %d",
+			response.StatusCode,
+			http.StatusSeeOther,
+		)
 	}
-	paired, err := env.repo.Queries.GetAgentPairing(context.Background(), "response-loss-agent")
+	paired, err := env.repo.Queries.GetAgentPairing(
+		context.Background(),
+		"response-loss-agent",
+	)
 	if err != nil || paired.State != "paired" ||
 		!bytes.Equal(paired.PairingCodeHash, env.codeHash[:]) ||
 		paired.AgentPin != env.agentPin ||
@@ -234,7 +286,10 @@ func TestAgentPairing_ConfirmationReconcilesAfterAgentCommitResponseLoss(t *test
 		paired.ServerPin.String != env.pairer.Identity.Fingerprint.String() {
 		t.Fatalf("reconciled pairing = %#v, %v", paired, err)
 	}
-	activated, err := env.repo.Queries.GetAgent(context.Background(), "response-loss-agent")
+	activated, err := env.repo.Queries.GetAgent(
+		context.Background(),
+		"response-loss-agent",
+	)
 	if err != nil || activated.Status != "active" ||
 		!activated.CertificateFingerprint.Valid ||
 		activated.CertificateFingerprint.String != env.agentPin {
@@ -243,6 +298,8 @@ func TestAgentPairing_ConfirmationReconcilesAfterAgentCommitResponseLoss(t *test
 	select {
 	case <-env.bootstrap.Paired():
 	default:
-		t.Fatal("agent bootstrap did not receive server completion acknowledgement")
+		t.Fatal(
+			"agent bootstrap did not receive server completion acknowledgement",
+		)
 	}
 }

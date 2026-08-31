@@ -32,7 +32,14 @@ import (
 
 func TestPostgres_RemoteAgentRuntimeParity(t *testing.T) {
 	ctx := context.Background()
-	container, err := postgres.Run(ctx, "postgres:16-alpine", postgres.WithDatabase("durpdeploy"), postgres.WithUsername("durpdeploy"), postgres.WithPassword("postgres"), postgres.BasicWaitStrategies())
+	container, err := postgres.Run(
+		ctx,
+		"postgres:16-alpine",
+		postgres.WithDatabase("durpdeploy"),
+		postgres.WithUsername("durpdeploy"),
+		postgres.WithPassword("postgres"),
+		postgres.BasicWaitStrategies(),
+	)
 	if err != nil {
 		t.Skipf("PostgreSQL runtime parity unavailable: %v", err)
 	}
@@ -53,7 +60,22 @@ func mssqlRuntimeDB(t *testing.T) string {
 	t.Helper()
 	ctx := context.Background()
 	const password = "Durpdeploy12345!"
-	container, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{ContainerRequest: testcontainers.ContainerRequest{Image: "mcr.microsoft.com/mssql/server:2022-latest", ExposedPorts: []string{"1433/tcp"}, Env: map[string]string{"ACCEPT_EULA": "Y", "MSSQL_SA_PASSWORD": password}, WaitingFor: wait.ForLog("SQL Server is now ready for client connections").WithStartupTimeout(3 * time.Minute)}, Started: true})
+	container, err := testcontainers.GenericContainer(
+		ctx,
+		testcontainers.GenericContainerRequest{
+			ContainerRequest: testcontainers.ContainerRequest{
+				Image:        "mcr.microsoft.com/mssql/server:2022-latest",
+				ExposedPorts: []string{"1433/tcp"},
+				Env: map[string]string{
+					"ACCEPT_EULA":       "Y",
+					"MSSQL_SA_PASSWORD": password,
+				},
+				WaitingFor: wait.ForLog("SQL Server is now ready for client connections").
+					WithStartupTimeout(3 * time.Minute),
+			},
+			Started: true,
+		},
+	)
 	if err != nil {
 		t.Skipf("SQL Server runtime parity unavailable: %v", err)
 	}
@@ -76,7 +98,12 @@ func testRemoteAgentRuntimeParity(t *testing.T, dsn string) {
 	stateDir := t.TempDir()
 	address := freeRuntimeAddress(t)
 	bootstrap := exec.Command(runtimeAgentBinary(t), "")
-	bootstrap.Env = append(os.Environ(), "DURPDEPLOY_AGENT_STATE_DIR="+stateDir, "DURPDEPLOY_AGENT_LISTEN_ADDR="+address, "DURPDEPLOY_AGENT_VERSION=runtime")
+	bootstrap.Env = append(
+		os.Environ(),
+		"DURPDEPLOY_AGENT_STATE_DIR="+stateDir,
+		"DURPDEPLOY_AGENT_LISTEN_ADDR="+address,
+		"DURPDEPLOY_AGENT_VERSION=runtime",
+	)
 	stdout, err := bootstrap.StdoutPipe()
 	if err != nil {
 		t.Fatal(err)
@@ -114,20 +141,52 @@ func testRemoteAgentRuntimeParity(t *testing.T, dsn string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	serverPin, err := agentproto.ParseSHA256Pin(fixture.serverIdentity.Fingerprint.String())
+	serverPin, err := agentproto.ParseSHA256Pin(
+		fixture.serverIdentity.Fingerprint.String(),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	input := agentpairing.PairInput{Endpoint: endpoint, AgentPin: agentPin, Identity: fixture.serverIdentity, Request: agentproto.PairRequest{ProtocolEnvelope: agentproto.ProtocolEnvelope{Protocol: agentproto.AgentV1}, PairingCode: code, AgentPin: agentPin, ServerPin: serverPin, PullEndpoint: pull, AgentID: "agent-a"}}
+	input := agentpairing.PairInput{
+		Endpoint: endpoint,
+		AgentPin: agentPin,
+		Identity: fixture.serverIdentity,
+		Request: agentproto.PairRequest{
+			ProtocolEnvelope: agentproto.ProtocolEnvelope{
+				Protocol: agentproto.AgentV1,
+			},
+			PairingCode:  code,
+			AgentPin:     agentPin,
+			ServerPin:    serverPin,
+			PullEndpoint: pull,
+			AgentID:      "agent-a",
+		},
+	}
 	identity, err := agentpairing.Pair(context.Background(), input)
 	if err != nil {
 		t.Fatal(err)
 	}
 	codeHash := code.Hash()
-	if _, err := fixture.repo.DB.ExecContext(context.Background(), "INSERT INTO agent_pairings (agent_id, pairing_code_hash, agent_public_identity, agent_pin, state, expires_at) VALUES (?, ?, ?, ?, 'pending', ?)", "agent-a", codeHash[:], identity.PublicIdentity, identity.AgentPin.String(), fixture.now.Add(time.Hour).Unix()); err != nil {
+	if _, err := fixture.repo.DB.ExecContext(
+		context.Background(),
+		"INSERT INTO agent_pairings (agent_id, pairing_code_hash, agent_public_identity, agent_pin, state, expires_at) VALUES (?, ?, ?, ?, 'pending', ?)",
+		"agent-a",
+		codeHash[:],
+		identity.PublicIdentity,
+		identity.AgentPin.String(),
+		fixture.now.Add(time.Hour).Unix(),
+	); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := fixture.repo.DB.ExecContext(context.Background(), "UPDATE agents SET status = 'active', certificate_pem = ?, certificate_fingerprint = ?, enrolled_at = ?, last_heartbeat_at = ? WHERE id = ?", identity.PublicIdentity, identity.AgentPin.String(), fixture.now.Unix(), fixture.now.Unix(), "agent-a"); err != nil {
+	if _, err := fixture.repo.DB.ExecContext(
+		context.Background(),
+		"UPDATE agents SET status = 'active', certificate_pem = ?, certificate_fingerprint = ?, enrolled_at = ?, last_heartbeat_at = ? WHERE id = ?",
+		identity.PublicIdentity,
+		identity.AgentPin.String(),
+		fixture.now.Unix(),
+		fixture.now.Unix(),
+		"agent-a",
+	); err != nil {
 		t.Fatal(err)
 	}
 	pairedIdentity, err := agenttls.LoadOrCreate(stateDir, "https://"+address)
@@ -141,11 +200,22 @@ func testRemoteAgentRuntimeParity(t *testing.T, dsn string) {
 		t.Fatal("agent exited successfully after termination")
 	}
 	fixture.agentIdentity = pairedIdentity
-	if _, err := fixture.repo.DB.ExecContext(context.Background(), "UPDATE agent_pairings SET state = 'paired', server_public_identity = ?, server_pin = ?, paired_at = ? WHERE agent_id = ?", "server", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", fixture.now.Unix(), "agent-a"); err != nil {
+	if _, err := fixture.repo.DB.ExecContext(
+		context.Background(),
+		"UPDATE agent_pairings SET state = 'paired', server_public_identity = ?, server_pin = ?, paired_at = ? WHERE agent_id = ?",
+		"server",
+		"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		fixture.now.Unix(),
+		"agent-a",
+	); err != nil {
 		t.Fatal(err)
 	}
 	deploymentID := fixture.createWaitingDeployment(t, "runtime-payload")
-	response := fixture.poll(t, fixture.agentIdentity, `{"protocol":"agent/1","agent_version":"runtime"}`)
+	response := fixture.poll(
+		t,
+		fixture.agentIdentity,
+		`{"protocol":"agent/1","agent_version":"runtime"}`,
+	)
 	if response.StatusCode != http.StatusOK {
 		t.Fatalf("poll status = %d", response.StatusCode)
 	}
@@ -153,26 +223,68 @@ func testRemoteAgentRuntimeParity(t *testing.T, dsn string) {
 	if err := json.NewDecoder(response.Body).Decode(&claim); err != nil {
 		t.Fatal(err)
 	}
-	if response := fixture.lifecycle(t, fixture.agentIdentity, int64(claim.DeploymentID), "start", claimBody(string(claim.ClaimToken))); response.StatusCode != http.StatusNoContent {
+	if response := fixture.lifecycle(
+		t,
+		fixture.agentIdentity,
+		int64(claim.DeploymentID),
+		"start",
+		claimBody(string(claim.ClaimToken)),
+	); response.StatusCode != http.StatusNoContent {
 		t.Fatalf("start status = %d", response.StatusCode)
 	}
-	if response := fixture.lifecycle(t, fixture.agentIdentity, int64(claim.DeploymentID), "result", `{"protocol":"agent/1","claim_token":"`+string(claim.ClaimToken)+`","state":"succeeded"}`); response.StatusCode != http.StatusNoContent {
+	if response := fixture.lifecycle(
+		t,
+		fixture.agentIdentity,
+		int64(claim.DeploymentID),
+		"result",
+		`{"protocol":"agent/1","claim_token":"`+string(
+			claim.ClaimToken,
+		)+`","state":"succeeded"}`,
+	); response.StatusCode != http.StatusNoContent {
 		t.Fatalf("result status = %d", response.StatusCode)
 	}
 	assertDispatchState(t, fixture, deploymentID, "succeeded")
 	cancelID, cancelToken := runtimeClaim(t, fixture)
-	if response := fixture.lifecycle(t, fixture.agentIdentity, cancelID, "start", claimBody(cancelToken)); response.StatusCode != http.StatusNoContent {
+	if response := fixture.lifecycle(
+		t,
+		fixture.agentIdentity,
+		cancelID,
+		"start",
+		claimBody(cancelToken),
+	); response.StatusCode != http.StatusNoContent {
 		t.Fatalf("cancel start = %d", response.StatusCode)
 	}
-	if _, err := fixture.repo.Queries.RequestDeploymentDispatchCancellation(context.Background(), db.RequestDeploymentDispatchCancellationParams{CancelRequestedAt: sql.NullInt64{Int64: fixture.now.Unix(), Valid: true}, DeploymentID: cancelID, CurrentState: "started"}); err != nil {
+	if _, err := fixture.repo.Queries.RequestDeploymentDispatchCancellation(
+		context.Background(),
+		db.RequestDeploymentDispatchCancellationParams{
+			CancelRequestedAt: sql.NullInt64{
+				Int64: fixture.now.Unix(),
+				Valid: true,
+			},
+			DeploymentID: cancelID,
+			CurrentState: "started",
+		},
+	); err != nil {
 		t.Fatal(err)
 	}
-	if response := fixture.lifecycle(t, fixture.agentIdentity, cancelID, "cancelled", claimBody(cancelToken)); response.StatusCode != http.StatusNoContent {
+	if response := fixture.lifecycle(
+		t,
+		fixture.agentIdentity,
+		cancelID,
+		"cancelled",
+		claimBody(cancelToken),
+	); response.StatusCode != http.StatusNoContent {
 		t.Fatalf("cancel ack = %d", response.StatusCode)
 	}
 	assertDispatchState(t, fixture, cancelID, "cancelled")
 	lostID, lostToken := runtimeClaim(t, fixture)
-	if response := fixture.lifecycle(t, fixture.agentIdentity, lostID, "start", claimBody(lostToken)); response.StatusCode != http.StatusNoContent {
+	if response := fixture.lifecycle(
+		t,
+		fixture.agentIdentity,
+		lostID,
+		"start",
+		claimBody(lostToken),
+	); response.StatusCode != http.StatusNoContent {
 		t.Fatalf("lost start = %d", response.StatusCode)
 	}
 	fixture.now = fixture.now.Add(agentproto.LostThreshold)
@@ -182,7 +294,11 @@ func testRemoteAgentRuntimeParity(t *testing.T, dsn string) {
 	assertDispatchState(t, fixture, lostID, "lost")
 
 	fixture.revoke(t, "agent-a")
-	if response := fixture.poll(t, fixture.agentIdentity, `{"protocol":"agent/1","agent_version":"runtime"}`); response.StatusCode != http.StatusUnauthorized {
+	if response := fixture.poll(
+		t,
+		fixture.agentIdentity,
+		`{"protocol":"agent/1","agent_version":"runtime"}`,
+	); response.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("revoked poll status = %d", response.StatusCode)
 	}
 }
@@ -190,7 +306,11 @@ func testRemoteAgentRuntimeParity(t *testing.T, dsn string) {
 func runtimeClaim(t *testing.T, fixture *pollFixture) (int64, string) {
 	t.Helper()
 	id := fixture.createWaitingDeployment(t, "runtime-payload")
-	response := fixture.poll(t, fixture.agentIdentity, `{"protocol":"agent/1","agent_version":"runtime"}`)
+	response := fixture.poll(
+		t,
+		fixture.agentIdentity,
+		`{"protocol":"agent/1","agent_version":"runtime"}`,
+	)
 	if response.StatusCode != http.StatusOK {
 		t.Fatalf("poll status = %d", response.StatusCode)
 	}
@@ -216,8 +336,21 @@ func newRuntimeParityFixture(t *testing.T, dsn string) *pollFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fixture := &agentServerFixture{now: time.Now().UTC().Truncate(time.Second), repo: repository.New(conn), serverIdentity: loadTestIdentity(t), agentIdentity: loadTestIdentity(t), box: box}
-	listener, err := New(Config{Repository: fixture.repo, Identity: fixture.serverIdentity, Now: func() time.Time { return fixture.now }, Box: box})
+	fixture := &agentServerFixture{
+		now:            time.Now().UTC().Truncate(time.Second),
+		repo:           repository.New(conn),
+		serverIdentity: loadTestIdentity(t),
+		agentIdentity:  loadTestIdentity(t),
+		box:            box,
+	}
+	listener, err := New(
+		Config{
+			Repository: fixture.repo,
+			Identity:   fixture.serverIdentity,
+			Now:        func() time.Time { return fixture.now },
+			Box:        box,
+		},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -227,19 +360,36 @@ func newRuntimeParityFixture(t *testing.T, dsn string) *pollFixture {
 	server.StartTLS()
 	t.Cleanup(server.Close)
 	fixture.listener, fixture.server = listener, server
-	project, err := fixture.repo.Queries.CreateProject(context.Background(), db.CreateProjectParams{Name: "runtime-project"})
+	project, err := fixture.repo.Queries.CreateProject(
+		context.Background(),
+		db.CreateProjectParams{Name: "runtime-project"},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	environment, err := fixture.repo.Queries.CreateEnvironment(context.Background(), db.CreateEnvironmentParams{Name: "runtime-environment"})
+	environment, err := fixture.repo.Queries.CreateEnvironment(
+		context.Background(),
+		db.CreateEnvironmentParams{Name: "runtime-environment"},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	release, err := fixture.repo.Queries.CreateRelease(context.Background(), db.CreateReleaseParams{ProjectID: project.ID, Version: "runtime-v1", StepsJson: "[]"})
+	release, err := fixture.repo.Queries.CreateRelease(
+		context.Background(),
+		db.CreateReleaseParams{
+			ProjectID: project.ID,
+			Version:   "runtime-v1",
+			StepsJson: "[]",
+		},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &pollFixture{agentServerFixture: fixture, releaseID: release.ID, envID: environment.ID}
+	return &pollFixture{
+		agentServerFixture: fixture,
+		releaseID:          release.ID,
+		envID:              environment.ID,
+	}
 }
 
 func freeRuntimeAddress(t *testing.T) string {

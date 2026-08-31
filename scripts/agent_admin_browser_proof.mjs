@@ -82,11 +82,6 @@ function waitForPairingOffer(child) {
 	});
 }
 
-async function waitForExit(child) {
-	if (child.exitCode !== null) return;
-	await new Promise((resolve) => child.once("exit", resolve));
-}
-
 async function waitForHealth() {
 	for (let attempt = 0; attempt < 100; attempt += 1) {
 		try {
@@ -105,6 +100,12 @@ function assert(condition, message) {
 
 async function saveJSON(name, value) {
 	await fs.writeFile(join(outputDir, name), `${JSON.stringify(value, null, 2)}\n`);
+}
+
+function redactDiagnostic(value) {
+	return value
+		.replace(/ddp_pat_[\w-]+/g, "<redacted>")
+		.replace(/(password|secret|token|claim)[=:]\S+/gi, "$1=<redacted>");
 }
 
 async function screenshot(page, name, options = {}) {
@@ -214,10 +215,21 @@ try {
 	await page.goto(`${baseURL}/admin/agents/new`, { waitUntil: "networkidle" });
 	const newAgentFocus = await tabOrder(page);
 	await screenshot(page, "agent-new-desktop.png");
-	await page.getByLabel("Agent ID").fill("browser-agent");
 	await page.getByLabel("Name").fill("Browser Agent");
-	await page.getByLabel(/Agent version/).fill("browser-v1");
-	await Promise.all([page.waitForURL(`${baseURL}/admin/agents/browser-agent`), page.getByRole("button", { name: "Create agent" }).click()]);
+	await page.getByLabel("Agent host or IP address").fill("127.0.0.1");
+	await page.getByLabel(/Port/).fill("18083");
+	await page.getByLabel("Pairing code").fill(pairing.code);
+	await page.getByLabel("Agent fingerprint").fill(pairing.fingerprint);
+	await page.getByRole("button", { name: "Create agent" }).click();
+	await page.getByLabel("Type the agent fingerprint to confirm").waitFor();
+	await page.getByLabel("Type the agent fingerprint to confirm").fill(pairing.fingerprint);
+	await Promise.all([
+		page.waitForURL(new RegExp(`${baseURL}/admin/agents/[^/]+$`)),
+		page.getByRole("button", { name: "Confirm pairing" }).click(),
+	]);
+	const agentURLPath = new URL(page.url()).pathname;
+	assert(agentURLPath.startsWith("/admin/agents/"), `pairing redirected to ${page.url()}`);
+	const agentID = agentURLPath.slice("/admin/agents/".length);
 	await checkPage(page, "agent-detail-desktop");
 	await screenshot(page, "agent-detail-desktop.png");
 
@@ -227,22 +239,6 @@ try {
 	await page.waitForURL(`${baseURL}/environments`);
 	assert((await page.locator("body").innerText()).includes("Browser remote environment"), "environment form did not persist");
 
-	await page.goto(`${baseURL}/admin/agents/browser-agent`, { waitUntil: "networkidle" });
-	await page.getByLabel("Agent endpoint").fill(bootstrapURL);
-	await page.getByLabel("Pairing code").fill(pairing.code);
-	await page.getByRole("button", { name: "Continue to fingerprint check" }).click();
-	await page.getByLabel("Type the agent fingerprint to confirm").waitFor();
-	await page.getByLabel("Type the agent fingerprint to confirm").fill(pairing.fingerprint);
-	await Promise.all([
-		page.waitForURL(`${baseURL}/admin/agents/browser-agent`),
-		page.getByRole("button", { name: "Confirm pairing" }).click(),
-	]);
-	await waitForExit(agent);
-	agent = start(agentBinary, [], { env: {
-		...environment,
-		DURPDEPLOY_AGENT_STATE_DIR: join(serverDir, "agent-state"),
-		DURPDEPLOY_AGENT_VERSION: "browser-v1",
-	} });
 	for (let attempt = 0; attempt < 100; attempt += 1) {
 		await page.goto(`${baseURL}/admin/agents`, { waitUntil: "networkidle" });
 		if ((await page.locator("body").innerText()).includes("active")) break;
@@ -250,21 +246,21 @@ try {
 	}
 	assert((await page.locator("body").innerText()).includes("active"), "agent did not poll after pairing");
 	await screenshot(page, "agents-active-desktop.png");
-	await page.goto(`${baseURL}/admin/agents/browser-agent`, { waitUntil: "networkidle" });
+	await page.goto(`${baseURL}/admin/agents/${agentID}`, { waitUntil: "networkidle" });
 	await page.getByLabel("Environment", { exact: true }).selectOption({ label: "Browser remote environment" });
 	await page.getByRole("button", { name: "Assign environment" }).click();
 	await page.waitForLoadState("networkidle");
 	assert((await page.locator("body").innerText()).includes("Browser remote environment"), "direct environment assignment did not persist");
 	const assignmentDesktop = await checkPage(page, "agent-assignment-desktop");
 	await screenshot(page, "agent-assignment-desktop.png");
-	const databaseSummary = await runOutput("sqlite3", [database, "SELECT a.status, p.state, eaa.agent_id FROM agents a JOIN agent_pairings p ON p.agent_id = a.id JOIN environment_agent_assignments eaa ON eaa.agent_id = a.id WHERE a.id = 'browser-agent';"]);
-	assert(databaseSummary.trim() === "active|paired|browser-agent", "database lacks the paired direct assignment");
+	const databaseSummary = await runOutput("sqlite3", [database, `SELECT a.status, p.state, eaa.agent_id FROM agents a JOIN agent_pairings p ON p.agent_id = a.id JOIN environment_agent_assignments eaa ON eaa.agent_id = a.id WHERE a.id = '${agentID}';`]);
+	assert(databaseSummary.trim() === `active|paired|${agentID}`, "database lacks the paired direct assignment");
 
 	await page.setViewportSize({ width: 375, height: 812 });
 	await page.goto(`${baseURL}/admin/agents`, { waitUntil: "networkidle" });
 	const mobileAgents = await checkPage(page, "agents-mobile");
 	await screenshot(page, "agents-mobile.png");
-	await page.goto(`${baseURL}/admin/agents/browser-agent`, { waitUntil: "networkidle" });
+	await page.goto(`${baseURL}/admin/agents/${agentID}`, { waitUntil: "networkidle" });
 	const assignmentMobile = await checkPage(page, "agent-assignment-mobile");
 	await screenshot(page, "agent-assignment-mobile.png");
 	assert(consoleErrors.length === 0, `browser console errors: ${consoleErrors.join("; ")}`);
@@ -276,6 +272,15 @@ try {
 	await saveJSON("listener-runtime.json", { agentPaired: true, pollObserved: true, publicURL: "configured" });
 	await saveJSON("database-summary.json", { pairedDirectAssignment: databaseSummary.trim() });
 	await saveJSON("browser-console.json", { errors: consoleErrors });
+	} catch (error) {
+		const diagnostics = {
+			error: redactDiagnostic(error instanceof Error ? error.message : String(error)),
+			consoleErrors: consoleErrors.map(redactDiagnostic),
+		};
+		await fs.mkdir(outputDir, { recursive: true });
+		await saveJSON("browser-failure.json", diagnostics);
+		console.error("browser proof diagnostics:", JSON.stringify(diagnostics));
+		throw error;
 } finally {
 	if (browser) await browser.close();
 	if (agent?.exitCode === null) {

@@ -4,7 +4,10 @@
 DECLARE @state_check NVARCHAR(128), @state_sql NVARCHAR(MAX);
 SELECT @state_check = name FROM sys.check_constraints
 WHERE parent_object_id = OBJECT_ID('agent_pairings')
-  AND definition LIKE '%state IN (''pending'', ''paired'', ''expired'')%';
+  AND definition LIKE '%''pending''%'
+  AND definition LIKE '%''paired''%'
+  AND definition LIKE '%''expired''%'
+  AND definition NOT LIKE '%server_public_identity%';
 SET @state_sql = N'ALTER TABLE agent_pairings DROP CONSTRAINT ' + QUOTENAME(@state_check);
 EXEC(@state_sql);
 ALTER TABLE agent_pairings ADD CONSTRAINT ck_agent_pairings_state

@@ -21,10 +21,34 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 redact() {
-    sed -E \
+	sed -E \
 		-e 's/(ddp_pat_[[:alnum:]_-]+)/<redacted>/g' \
-        -e 's/([Tt]oken|[Ss]ecret|[Pp]assword|[Cc]laim)[=:][^[:space:],]*/\1=<redacted>/g' \
-        -e 's/-----BEGIN [^-]+-----[^-]*-----END [^-]+-----/<redacted-certificate>/g'
+		-e 's/([Tt]oken|[Ss]ecret|[Pp]assword|[Cc]laim)[=:][^[:space:],]*/\1=<redacted>/g' \
+		-e 's/-----BEGIN [^-]+-----[^-]*-----END [^-]+-----/<redacted-certificate>/g'
+}
+
+print_browser_artifacts() {
+	local container_log=$1
+	local evidence_dir="$ARTIFACT_DIR/$RUN_ID/browser"
+
+	printf '%s\n' '===== browser proof container log =====' >&2
+	redact <"$container_log" >&2
+
+	if [ -d "$evidence_dir" ]; then
+		printf '%s\n' '===== browser proof evidence (redacted) =====' >&2
+		local artifact
+		shopt -s nullglob
+		for artifact in "$evidence_dir"/*; do
+			case "$artifact" in
+				*.png | *.jpg | *.jpeg | *.webp) continue ;;
+				esac
+			if [ -f "$artifact" ]; then
+				printf '\n--- %s ---\n' "$(basename -- "$artifact")" >&2
+				redact <"$artifact" >&2
+			fi
+			done
+		shopt -u nullglob
+	fi
 }
 
 result() {
@@ -77,6 +101,7 @@ browser_proof() {
 		result "browser-admin-pages" pass "container-playwright"
 		return
 	fi
+	print_browser_artifacts "$log"
 	result "browser-admin-pages" fail "container-playwright"
 	return 1
 }

@@ -131,24 +131,49 @@ func (s PairingSession) Prepare(
 	confirmation PairingConfirmation,
 ) error {
 	if s.current == nil {
-		return protocolError("pairing_session", ReasonInvalid, ErrInvalidPairingOffer)
+		return protocolError(
+			"pairing_session",
+			ReasonInvalid,
+			ErrInvalidPairingOffer,
+		)
 	}
 	s.current.mu.Lock()
 	defer s.current.mu.Unlock()
 	if s.current.status != PairingPending {
-		return protocolError("pairing_code", ReasonDuplicate, ErrPairingCodeUsed)
+		return protocolError(
+			"pairing_code",
+			ReasonDuplicate,
+			ErrPairingCodeUsed,
+		)
 	}
 	if !now.Before(s.current.expiresAt) {
-		return protocolError("pairing_code", ReasonInvalid, ErrPairingCodeExpired)
+		return protocolError(
+			"pairing_code",
+			ReasonInvalid,
+			ErrPairingCodeExpired,
+		)
 	}
-	if !confirmation.Code.valid || !s.current.codeHash.matches(confirmation.Code) {
-		return protocolError("pairing_code", ReasonInvalid, ErrPairingCodeMismatch)
+	if !confirmation.Code.valid ||
+		!s.current.codeHash.matches(confirmation.Code) {
+		return protocolError(
+			"pairing_code",
+			ReasonInvalid,
+			ErrPairingCodeMismatch,
+		)
 	}
 	if !s.current.expectedAgent.matches(confirmation.ObservedAgent) {
-		return protocolError("agent_pin", ReasonInvalid, ErrAgentFingerprintMismatch)
+		return protocolError(
+			"agent_pin",
+			ReasonInvalid,
+			ErrAgentFingerprintMismatch,
+		)
 	}
 	if !confirmation.ServerPin.valid || !confirmation.PullEndpoint.valid() {
-		return protocolError("pairing_confirmation", ReasonInvalid, ErrInvalidPairingConfirmation)
+		return protocolError(
+			"pairing_confirmation",
+			ReasonInvalid,
+			ErrInvalidPairingConfirmation,
+		)
 	}
 	return nil
 }

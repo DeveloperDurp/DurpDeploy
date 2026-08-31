@@ -92,7 +92,8 @@ func (client *Client) stagePins(raw []agentproto.CertificateFingerprint) error {
 
 func (client *Client) persistPins(pins []agenttls.Fingerprint) error {
 	client.state.ServerPins = append([]agenttls.Fingerprint(nil), pins...)
-	if err := agentstate.NewStore(client.stateDir).Save(client.state); err != nil {
+	if err := agentstate.NewStore(client.stateDir).
+		Save(client.state); err != nil {
 		return fmt.Errorf("save paired state: %w", err)
 	}
 	return nil

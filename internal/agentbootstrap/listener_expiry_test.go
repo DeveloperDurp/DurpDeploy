@@ -53,7 +53,11 @@ func TestBootstrap_ExpiresPendingOfferButKeepsCommittedPairingAvailable(
 
 	// Then
 	if status != http.StatusNoContent {
-		t.Fatalf("acknowledgement status = %d, want %d", status, http.StatusNoContent)
+		t.Fatalf(
+			"acknowledgement status = %d, want %d",
+			status,
+			http.StatusNoContent,
+		)
 	}
 	select {
 	case <-committed.Paired():
@@ -74,7 +78,10 @@ func newServerInitListenerWithTTL(
 		t.Fatalf("start listener: %v", err)
 	}
 	t.Cleanup(func() {
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+		shutdownCtx, cancel := context.WithTimeout(
+			context.Background(),
+			time.Second,
+		)
 		defer cancel()
 		_ = listener.Shutdown(shutdownCtx)
 	})

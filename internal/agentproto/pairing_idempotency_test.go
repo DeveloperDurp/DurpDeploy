@@ -40,7 +40,12 @@ func TestPairingSession_PairAndCommit_isIdempotent_whenConfirmationRepeats(
 
 	// Then
 	if err != nil || commits != 1 || session.State() != PairingPaired {
-		t.Fatalf("repeat PairAndCommit() = %v, commits = %d, state = %q", err, commits, session.State())
+		t.Fatalf(
+			"repeat PairAndCommit() = %v, commits = %d, state = %q",
+			err,
+			commits,
+			session.State(),
+		)
 	}
 }
 

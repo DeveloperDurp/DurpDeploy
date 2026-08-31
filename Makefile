@@ -219,7 +219,14 @@ golines:
 
 # Dry-run: print a diff of what golines would change.
 golines-check:
-	golines --max-len=80 --ignore-generated --dry-run .
+	@tmp=$$(mktemp); \
+	if golines --max-len=80 --ignore-generated --dry-run . >"$$tmp" 2>&1; then \
+		rm -f "$$tmp"; \
+	else \
+		cat "$$tmp"; \
+		rm -f "$$tmp"; \
+		exit 1; \
+	fi
 
 clean:
 	rm -f $(BINARY_NAME)

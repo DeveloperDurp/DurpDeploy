@@ -27,7 +27,11 @@ func (h *AgentAdminHandler) ListAgentEvents(
 		sql.NullString{String: agent.ID, Valid: true},
 	)
 	if err != nil {
-		writeAdminError(w, http.StatusInternalServerError, "could not list agent events")
+		writeAdminError(
+			w,
+			http.StatusInternalServerError,
+			"could not list agent events",
+		)
 		return
 	}
 	response := make([]agentEventResponse, len(events))

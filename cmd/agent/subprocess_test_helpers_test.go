@@ -17,13 +17,18 @@ func (fixture *agentSubprocessFixture) assertNoSecretFiles(t *testing.T) {
 		t.Fatalf("read state dir: %v", err)
 	}
 	for _, entry := range entries {
-		contents, err := os.ReadFile(filepath.Join(fixture.stateDir, entry.Name()))
+		contents, err := os.ReadFile(
+			filepath.Join(fixture.stateDir, entry.Name()),
+		)
 		if err != nil {
 			t.Fatalf("read state file: %v", err)
 		}
 		if strings.Contains(string(contents), "subprocess-secret") ||
 			strings.Contains(string(contents), "test-claim") {
-			t.Fatalf("state file %q contains plaintext secret or claim", entry.Name())
+			t.Fatalf(
+				"state file %q contains plaintext secret or claim",
+				entry.Name(),
+			)
 		}
 	}
 }

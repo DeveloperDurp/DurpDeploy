@@ -53,8 +53,14 @@ func TestAgentAudit_returns_redacted_history_and_deletes_historic_agent(
 		db.CompleteAgentPairingParams{
 			AgentPublicIdentity:  "certificate",
 			ServerPublicIdentity: sql.NullString{String: "server", Valid: true},
-			ServerPin:            sql.NullString{String: strings.Repeat("b", 64), Valid: true},
-			PairedAt:             sql.NullInt64{Int64: now, Valid: true}, UpdatedAt: now,
+			ServerPin: sql.NullString{
+				String: strings.Repeat("b", 64),
+				Valid:  true,
+			},
+			PairedAt: sql.NullInt64{
+				Int64: now,
+				Valid: true,
+			}, UpdatedAt: now,
 			AgentID: created.ID, PairingCodeHash: codeHash[:],
 			AgentPin: strings.Repeat("a", 64),
 		},

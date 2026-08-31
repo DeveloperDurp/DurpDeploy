@@ -95,8 +95,10 @@ func NewCallbacks(config CallbacksConfig) Callbacks {
 
 // Executor executes bash jobs with the local sandbox and process isolation.
 type Executor struct {
-	sandbox    *Sandbox
-	sandboxErr error
+	sandbox       *Sandbox
+	sandboxErr    error
+	deadlineGrace func()
+	killGroup     func(int)
 }
 
 func NewExecutor() *Executor {
@@ -200,7 +202,10 @@ func (e *Executor) runAttempt(
 	}
 	defer func() {
 		if cleanupErr := e.sandbox.removeCgroup(group); cleanupErr != nil {
-			err = errors.Join(err, fmt.Errorf("cleanup runner cgroup: %w", cleanupErr))
+			err = errors.Join(
+				err,
+				fmt.Errorf("cleanup runner cgroup: %w", cleanupErr),
+			)
 		}
 	}()
 	if err := e.sandbox.configureCgroup(cmd, group); err != nil {
@@ -215,14 +220,22 @@ func (e *Executor) runAttempt(
 		}
 		return err
 	}
+	pgid := cmd.Process.Pid
 	if callbacks.trackProcessGroup != nil {
-		callbacks.trackProcessGroup(cmd.Process.Pid)
+		callbacks.trackProcessGroup(pgid)
 		if callbacks.untrackProcessGroup != nil {
 			defer callbacks.untrackProcessGroup()
 		}
 	}
-	go e.killAfterDeadline(stepCtx, cmd)
 	err = cmd.Wait()
+	if err != nil && stepCtx.Err() != nil {
+		cleanupDone := make(chan struct{})
+		go func(pgid int) {
+			defer close(cleanupDone)
+			e.killAfterDeadline(pgid)
+		}(pgid)
+		<-cleanupDone
+	}
 	if flushErr := writer.flush(); flushErr != nil {
 		return flushErr
 	}
@@ -273,10 +286,15 @@ func (e *Executor) command(
 	return cmd
 }
 
-func (e *Executor) killAfterDeadline(ctx context.Context, cmd *exec.Cmd) {
-	<-ctx.Done()
-	time.Sleep(10 * time.Second)
-	if cmd.Process != nil {
-		killProcessGroup(cmd.Process.Pid)
+func (e *Executor) killAfterDeadline(pgid int) {
+	if e.deadlineGrace != nil {
+		e.deadlineGrace()
+	} else {
+		time.Sleep(10 * time.Second)
 	}
+	if e.killGroup != nil {
+		e.killGroup(pgid)
+		return
+	}
+	killProcessGroup(pgid)
 }

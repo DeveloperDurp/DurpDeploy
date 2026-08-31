@@ -32,7 +32,7 @@ func newSQLServerTestDBAt(t *testing.T, version int64) *sql.DB {
 					"ACCEPT_EULA":       "Y",
 					"MSSQL_SA_PASSWORD": password,
 				},
-				WaitingFor: wait.ForLog("SQL Server is now ready for client connections").
+				WaitingFor: wait.ForListeningPort("1433/tcp").
 					WithStartupTimeout(3 * time.Minute),
 			},
 			Started: true,

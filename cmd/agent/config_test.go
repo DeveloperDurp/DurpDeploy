@@ -52,6 +52,10 @@ func TestLoadConfig_ignoresManualServerConfiguration(t *testing.T) {
 
 	// Then
 	if err != nil || configuration.stateDir == "" {
-		t.Fatalf("manual server configuration was retained: %#v, %v", configuration, err)
+		t.Fatalf(
+			"manual server configuration was retained: %#v, %v",
+			configuration,
+			err,
+		)
 	}
 }

@@ -78,7 +78,10 @@ func loadTestIdentity(t *testing.T) agenttls.Identity {
 	return identity
 }
 
-func (fixture *agentServerFixture) createPendingAgent(t *testing.T, agentID string) {
+func (fixture *agentServerFixture) createPendingAgent(
+	t *testing.T,
+	agentID string,
+) {
 	t.Helper()
 	_, err := fixture.repo.Queries.CreatePendingAgent(
 		context.Background(),
@@ -126,7 +129,10 @@ func activateFixtureAgent(
 		db.CompleteAgentPairingParams{
 			AgentPublicIdentity: certificate,
 			ServerPublicIdentity: sql.NullString{
-				String: certificatePEM(t, fixture.serverIdentity.Certificate), Valid: true,
+				String: certificatePEM(
+					t,
+					fixture.serverIdentity.Certificate,
+				), Valid: true,
 			},
 			ServerPin: sql.NullString{
 				String: fixture.serverIdentity.Fingerprint.String(), Valid: true,

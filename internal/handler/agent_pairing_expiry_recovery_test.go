@@ -23,7 +23,10 @@ func TestConfirmPairing_ReconcilesExpiredCommittedIdentityAfterOfferExpiry(
 	)
 	if _, err := env.repo.Queries.CreatePendingAgent(
 		context.Background(),
-		db.CreatePendingAgentParams{ID: "expired-commit-agent", Name: "Expired commit agent"},
+		db.CreatePendingAgentParams{
+			ID:   "expired-commit-agent",
+			Name: "Expired commit agent",
+		},
 	); err != nil {
 		t.Fatalf("create pending agent: %v", err)
 	}
@@ -48,7 +51,11 @@ func TestConfirmPairing_ReconcilesExpiredCommittedIdentityAfterOfferExpiry(
 	}
 	defer beginResponse.Body.Close()
 	if beginResponse.StatusCode != http.StatusCreated {
-		t.Fatalf("begin status = %d, want %d", beginResponse.StatusCode, http.StatusCreated)
+		t.Fatalf(
+			"begin status = %d, want %d",
+			beginResponse.StatusCode,
+			http.StatusCreated,
+		)
 	}
 	if _, err := env.repo.Queries.CreateAgentPairing(
 		context.Background(),
@@ -68,7 +75,9 @@ func TestConfirmPairing_ReconcilesExpiredCommittedIdentityAfterOfferExpiry(
 	); err != nil {
 		t.Fatalf("begin pairing: %v", err)
 	}
-	serverPin, err := agentproto.ParseSHA256Pin(env.pairer.Identity.Fingerprint.String())
+	serverPin, err := agentproto.ParseSHA256Pin(
+		env.pairer.Identity.Fingerprint.String(),
+	)
 	if err != nil {
 		t.Fatalf("parse server pin: %v", err)
 	}
@@ -76,9 +85,11 @@ func TestConfirmPairing_ReconcilesExpiredCommittedIdentityAfterOfferExpiry(
 		Endpoint: env.bootstrapURL, AgentPin: env.bootstrap.Offer().AgentPin,
 		Identity: env.pairer.Identity,
 		Request: agentproto.PairRequest{
-			ProtocolEnvelope: agentproto.ProtocolEnvelope{Protocol: agentproto.AgentV1},
-			PairingCode:      env.bootstrap.Offer().Code,
-			AgentPin:         env.bootstrap.Offer().AgentPin, ServerPin: serverPin,
+			ProtocolEnvelope: agentproto.ProtocolEnvelope{
+				Protocol: agentproto.AgentV1,
+			},
+			PairingCode: env.bootstrap.Offer().Code,
+			AgentPin:    env.bootstrap.Offer().AgentPin, ServerPin: serverPin,
 			PullEndpoint: env.pairer.PullEndpoint, AgentID: "expired-commit-agent",
 		},
 	}); err != nil {
@@ -103,9 +114,16 @@ func TestConfirmPairing_ReconcilesExpiredCommittedIdentityAfterOfferExpiry(
 
 	// Then
 	if response.StatusCode != http.StatusSeeOther {
-		t.Fatalf("confirmation status = %d, want %d", response.StatusCode, http.StatusSeeOther)
+		t.Fatalf(
+			"confirmation status = %d, want %d",
+			response.StatusCode,
+			http.StatusSeeOther,
+		)
 	}
-	paired, err := env.repo.Queries.GetAgentPairing(context.Background(), "expired-commit-agent")
+	paired, err := env.repo.Queries.GetAgentPairing(
+		context.Background(),
+		"expired-commit-agent",
+	)
 	if err != nil || paired.State != "paired" {
 		t.Fatalf("paired row = %#v, %v", paired, err)
 	}

@@ -72,7 +72,8 @@ func seedRemoteDeployment(
 	_, err = harness.repo.DB.ExecContext(
 		ctx,
 		"INSERT INTO environment_agent_assignments (environment_id, agent_id) VALUES (?, ?)",
-		environment.ID, agentID,
+		environment.ID,
+		agentID,
 	)
 	if err != nil {
 		t.Fatalf("assign environment agent: %v", err)

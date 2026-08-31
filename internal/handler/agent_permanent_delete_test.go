@@ -70,8 +70,11 @@ func TestAgentPairing_DeleteActiveAssignedAgent_detachesDispatchesAndDeletesData
 	if _, err := h.repo.Queries.CreateDirectDeploymentDispatch(
 		ctx,
 		db.CreateDirectDeploymentDispatchParams{
-			DeploymentID:    deployment.ID,
-			AssignedAgentID: sql.NullString{String: "delete-active", Valid: true},
+			DeploymentID: deployment.ID,
+			AssignedAgentID: sql.NullString{
+				String: "delete-active",
+				Valid:  true,
+			},
 		},
 	); err != nil {
 		t.Fatalf("create dispatch: %v", err)
@@ -130,10 +133,16 @@ func TestAgentPairing_DeleteActiveAssignedAgent_detachesDispatchesAndDeletesData
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("delete status = %d, want 200", resp.StatusCode)
 	}
-	if _, err := h.repo.Queries.GetAgent(ctx, "delete-active"); err != sql.ErrNoRows {
+	if _, err := h.repo.Queries.GetAgent(
+		ctx,
+		"delete-active",
+	); err != sql.ErrNoRows {
 		t.Fatalf("agent after delete = %v", err)
 	}
-	if _, err := h.repo.Queries.GetAgentPairing(ctx, "delete-active"); err != sql.ErrNoRows {
+	if _, err := h.repo.Queries.GetAgentPairing(
+		ctx,
+		"delete-active",
+	); err != sql.ErrNoRows {
 		t.Fatalf("pairing after delete = %v", err)
 	}
 	if _, err := h.repo.Queries.GetEnvironmentAgentAssignment(
@@ -142,7 +151,10 @@ func TestAgentPairing_DeleteActiveAssignedAgent_detachesDispatchesAndDeletesData
 	); err != sql.ErrNoRows {
 		t.Fatalf("assignment after delete = %v", err)
 	}
-	if _, err := h.repo.Queries.GetDeploymentPayload(ctx, deployment.ID); err != sql.ErrNoRows {
+	if _, err := h.repo.Queries.GetDeploymentPayload(
+		ctx,
+		deployment.ID,
+	); err != sql.ErrNoRows {
 		t.Fatalf("payload after delete = %v", err)
 	}
 	var deploymentStatus string

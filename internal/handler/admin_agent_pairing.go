@@ -161,10 +161,18 @@ func (h *AgentAdminHandler) ConfirmPairing(
 	})
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			http.Error(writer, "pairing is no longer pending", http.StatusConflict)
+			http.Error(
+				writer,
+				"pairing is no longer pending",
+				http.StatusConflict,
+			)
 			return
 		}
-		http.Error(writer, "could not begin pairing", http.StatusInternalServerError)
+		http.Error(
+			writer,
+			"could not begin pairing",
+			http.StatusInternalServerError,
+		)
 		return
 	}
 	pairedIdentity, err := agentpairing.Pair(request.Context(), pairInput)

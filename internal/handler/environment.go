@@ -69,15 +69,20 @@ func (h *EnvironmentHandler) CreateEnvironment(
 	}
 	data := pages.EnvironmentFormData{Environment: environment}
 	if environment.Name == "" {
-		pages.EnvironmentForm(data, true, "Name is required", r.URL.Path).Render(r.Context(), w)
+		pages.EnvironmentForm(data, true, "Name is required", r.URL.Path).
+			Render(r.Context(), w)
 		return
 	}
-	_, err := h.Repo.Queries.CreateEnvironment(r.Context(), db.CreateEnvironmentParams{
-		Name: environment.Name, Description: environment.Description, Tags: environment.Tags,
-	})
+	_, err := h.Repo.Queries.CreateEnvironment(
+		r.Context(),
+		db.CreateEnvironmentParams{
+			Name: environment.Name, Description: environment.Description, Tags: environment.Tags,
+		},
+	)
 	if err != nil {
 		if IsUniqueViolation(err) {
-			pages.EnvironmentForm(data, true, "An environment with this name already exists", r.URL.Path).Render(r.Context(), w)
+			pages.EnvironmentForm(data, true, "An environment with this name already exists", r.URL.Path).
+				Render(r.Context(), w)
 			return
 		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -151,16 +156,21 @@ func (h *EnvironmentHandler) UpdateEnvironment(
 	}
 	data := pages.EnvironmentFormData{Environment: environment}
 	if environment.Name == "" {
-		pages.EnvironmentForm(data, false, "Name is required", r.URL.Path).Render(r.Context(), w)
+		pages.EnvironmentForm(data, false, "Name is required", r.URL.Path).
+			Render(r.Context(), w)
 		return
 	}
-	_, err = h.Repo.Queries.UpdateEnvironment(r.Context(), db.UpdateEnvironmentParams{
-		ID: environment.ID, Name: environment.Name,
-		Description: environment.Description, Tags: environment.Tags,
-	})
+	_, err = h.Repo.Queries.UpdateEnvironment(
+		r.Context(),
+		db.UpdateEnvironmentParams{
+			ID: environment.ID, Name: environment.Name,
+			Description: environment.Description, Tags: environment.Tags,
+		},
+	)
 	if err != nil {
 		if IsUniqueViolation(err) {
-			pages.EnvironmentForm(data, false, "An environment with this name already exists", r.URL.Path).Render(r.Context(), w)
+			pages.EnvironmentForm(data, false, "An environment with this name already exists", r.URL.Path).
+				Render(r.Context(), w)
 			return
 		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)

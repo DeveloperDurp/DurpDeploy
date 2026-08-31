@@ -121,7 +121,9 @@ func TestAgentDetailsPage_shows_permanent_delete_for_writer(t *testing.T) {
 	}
 }
 
-func TestAgentDetailsPage_shows_permanent_delete_for_agent_with_history(t *testing.T) {
+func TestAgentDetailsPage_shows_permanent_delete_for_agent_with_history(
+	t *testing.T,
+) {
 	// Given
 	request := auth.SetUser(
 		httptest.NewRequest("GET", "/admin/agents/agent-one", nil),
@@ -144,7 +146,9 @@ func TestAgentDetailsPage_shows_permanent_delete_for_agent_with_history(t *testi
 	}
 }
 
-func TestAgentDetailsPage_shows_permanent_delete_for_non_pending_agents(t *testing.T) {
+func TestAgentDetailsPage_shows_permanent_delete_for_non_pending_agents(
+	t *testing.T,
+) {
 	for _, status := range []string{"active", "revoked"} {
 		t.Run(status, func(t *testing.T) {
 			// Given
@@ -169,7 +173,10 @@ func TestAgentDetailsPage_shows_permanent_delete_for_non_pending_agents(t *testi
 			)
 
 			// Then
-			if !strings.Contains(markup, `hx-delete="/admin/agents/agent-one"`) {
+			if !strings.Contains(
+				markup,
+				`hx-delete="/admin/agents/agent-one"`,
+			) {
 				t.Errorf("%s agent must show permanent delete button", status)
 			}
 		})

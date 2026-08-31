@@ -127,7 +127,10 @@ func TestAdminPairingFlow_RequiresOperatorTypedConfirmation(t *testing.T) {
 	env := newAgentPairingTestEnv(t)
 	if _, err := env.repo.Queries.CreatePendingAgent(
 		context.Background(),
-		db.CreatePendingAgentParams{ID: "typed-confirmation", Name: "Typed confirmation"},
+		db.CreatePendingAgentParams{
+			ID:   "typed-confirmation",
+			Name: "Typed confirmation",
+		},
 	); err != nil {
 		t.Fatalf("create pending agent: %v", err)
 	}
@@ -169,10 +172,18 @@ func TestAdminPairingFlow_RequiresOperatorTypedConfirmation(t *testing.T) {
 
 	// Then
 	if beginResponse.StatusCode != http.StatusCreated {
-		t.Fatalf("begin status = %d, want %d", beginResponse.StatusCode, http.StatusCreated)
+		t.Fatalf(
+			"begin status = %d, want %d",
+			beginResponse.StatusCode,
+			http.StatusCreated,
+		)
 	}
 	if confirmResponse.StatusCode != http.StatusUnprocessableEntity {
-		t.Fatalf("confirm status = %d, want %d", confirmResponse.StatusCode, http.StatusUnprocessableEntity)
+		t.Fatalf(
+			"confirm status = %d, want %d",
+			confirmResponse.StatusCode,
+			http.StatusUnprocessableEntity,
+		)
 	}
 }
 

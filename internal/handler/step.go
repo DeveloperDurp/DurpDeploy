@@ -192,10 +192,18 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 
 	sortOrder := int64(1)
 	if v := strings.TrimSpace(r.FormValue("sort_order")); v != "" {
-		if parsed, err := strconv.ParseInt(v, 10, 64); err == nil && parsed > 0 {
+		if parsed, err := strconv.ParseInt(
+			v,
+			10,
+			64,
+		); err == nil &&
+			parsed > 0 {
 			sortOrder = parsed
 		} else {
-			steps, _ := h.repo.Queries.ListStepsByProject(r.Context(), projectID)
+			steps, _ := h.repo.Queries.ListStepsByProject(
+				r.Context(),
+				projectID,
+			)
 			for _, s := range steps {
 				if s.SortOrder >= sortOrder {
 					sortOrder = s.SortOrder + 1

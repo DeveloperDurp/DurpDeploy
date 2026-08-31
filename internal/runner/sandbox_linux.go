@@ -153,7 +153,10 @@ func (s *Sandbox) createCgroup(deploymentID int64) (*cgroup, error) {
 		return s.createCgroupFn(deploymentID)
 	}
 	if !s.cgroupUsable {
-		return nil, fmt.Errorf("runner sandbox requires writable cgroup root %s", cgroupRoot)
+		return nil, fmt.Errorf(
+			"runner sandbox requires writable cgroup root %s",
+			cgroupRoot,
+		)
 	}
 
 	dir := filepath.Join(cgroupRoot, fmt.Sprintf("deploy-%d", deploymentID))
@@ -246,7 +249,11 @@ func (s *Sandbox) setupChroot(scratchRoot string) (bool, error) {
 			continue
 		} else if err != nil {
 			s.teardownChroot(scratchRoot)
-			return false, fmt.Errorf("inspect optional bind source %s: %w", src, err)
+			return false, fmt.Errorf(
+				"inspect optional bind source %s: %w",
+				src,
+				err,
+			)
 		}
 		if err := s.mountChrootBind(scratchRoot, src); err != nil {
 			s.teardownChroot(scratchRoot)
@@ -262,7 +269,13 @@ func (s *Sandbox) mountChrootBind(scratchRoot, src string) error {
 	if err := os.MkdirAll(dst, 0755); err != nil {
 		return fmt.Errorf("create bind target %s: %w", dst, err)
 	}
-	if err := syscall.Mount(src, dst, "", syscall.MS_BIND|syscall.MS_REC, ""); err != nil {
+	if err := syscall.Mount(
+		src,
+		dst,
+		"",
+		syscall.MS_BIND|syscall.MS_REC,
+		"",
+	); err != nil {
 		return fmt.Errorf("bind mount %s: %w", src, err)
 	}
 	if err := syscall.Mount(

@@ -147,10 +147,16 @@ func TestSQLite_RemoteAgentHistoricLogsBackfill(t *testing.T) {
 			SELECT COUNT(*) FROM sqlite_master
 			WHERE type = 'table' AND name = 'environment_agent_assignments'`).Scan(&count)
 		if err != nil {
-			t.Fatalf("find environment_agent_assignments after reapply: %v", err)
+			t.Fatalf(
+				"find environment_agent_assignments after reapply: %v",
+				err,
+			)
 		}
 		if count != 1 {
-			t.Fatalf("environment_agent_assignments after reapply = %d, want 1", count)
+			t.Fatalf(
+				"environment_agent_assignments after reapply = %d, want 1",
+				count,
+			)
 		}
 	})
 

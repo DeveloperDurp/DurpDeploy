@@ -1028,21 +1028,36 @@ func TestLegacyRedeployDeployment_ReusesImmutableReleaseSnapshot(t *testing.T) {
 	mustDecode(t, rec.Body, &got)
 	if got.ID == source.ID || got.ReleaseID != release.ID ||
 		got.EnvironmentID != env.ID {
-		t.Fatalf("redeployment = %#v, want a new row for the release snapshot", got)
+		t.Fatalf(
+			"redeployment = %#v, want a new row for the release snapshot",
+			got,
+		)
 	}
-	storedRelease, err := h.repo.Queries.GetRelease(context.Background(), release.ID)
+	storedRelease, err := h.repo.Queries.GetRelease(
+		context.Background(),
+		release.ID,
+	)
 	if err != nil {
 		t.Fatalf("get release snapshot: %v", err)
 	}
 	if storedRelease.StepsJson != release.StepsJson {
-		t.Fatalf("steps_json = %q, want %q", storedRelease.StepsJson, release.StepsJson)
+		t.Fatalf(
+			"steps_json = %q, want %q",
+			storedRelease.StepsJson,
+			release.StepsJson,
+		)
 	}
 	variables, err := h.repo.Queries.ListReleaseVariablesByRelease(
 		context.Background(),
 		release.ID,
 	)
-	if err != nil || len(variables) != 1 || variables[0].Name != "SNAPSHOT_VARIABLE" {
-		t.Fatalf("release variables = %#v, %v; want immutable snapshot", variables, err)
+	if err != nil || len(variables) != 1 ||
+		variables[0].Name != "SNAPSHOT_VARIABLE" {
+		t.Fatalf(
+			"release variables = %#v, %v; want immutable snapshot",
+			variables,
+			err,
+		)
 	}
 }
 
@@ -1126,15 +1141,22 @@ func TestLegacyDeploymentRetry_CreatesFreshDeployment(t *testing.T) {
 		got.EnvironmentID != source.EnvironmentID || got.Status != "pending" {
 		t.Fatalf("retry response = %#v, want fresh pending deployment", got)
 	}
-	preserved, err := h.repo.Queries.GetDeployment(context.Background(), source.ID)
+	preserved, err := h.repo.Queries.GetDeployment(
+		context.Background(),
+		source.ID,
+	)
 	if err != nil {
 		t.Fatalf("get original deployment: %v", err)
 	}
-	if preserved.Status != "failed" || preserved.StartedAt != source.StartedAt ||
+	if preserved.Status != "failed" ||
+		preserved.StartedAt != source.StartedAt ||
 		preserved.FinishedAt != source.FinishedAt {
 		t.Fatalf("original deployment was mutated: %#v", preserved)
 	}
-	if _, err := h.repo.Queries.GetDeploymentDispatch(context.Background(), got.ID); err != nil {
+	if _, err := h.repo.Queries.GetDeploymentDispatch(
+		context.Background(),
+		got.ID,
+	); err != nil {
 		t.Fatalf("get fresh deployment dispatch: %v", err)
 	}
 	auditLogs, err := h.repo.Queries.ListAuditLogsFiltered(
@@ -1146,7 +1168,11 @@ func TestLegacyDeploymentRetry_CreatesFreshDeployment(t *testing.T) {
 	)
 	if err != nil || len(auditLogs) != 1 || !auditLogs[0].EntityID.Valid ||
 		auditLogs[0].EntityID.Int64 != source.ID {
-		t.Fatalf("retry audit log = %#v, %v; want source deployment action", auditLogs, err)
+		t.Fatalf(
+			"retry audit log = %#v, %v; want source deployment action",
+			auditLogs,
+			err,
+		)
 	}
 }
 

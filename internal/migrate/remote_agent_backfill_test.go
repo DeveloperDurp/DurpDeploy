@@ -27,7 +27,9 @@ func TestRemoteAgentBackfill_RefusesNonWaitingNullAgent(t *testing.T) {
 	}
 }
 
-func TestRemoteAgentBackfill_PartialBackupPreservesEnrollmentTokens(t *testing.T) {
+func TestRemoteAgentBackfill_PartialBackupPreservesEnrollmentTokens(
+	t *testing.T,
+) {
 	conn := newRemoteAgentSQLiteDB(t)
 	migrateRemoteAgentSQLiteTo(t, conn, 28)
 	_, err := conn.Exec(`DROP TABLE direct_dispatch_backup_agent_tags`)

@@ -7,7 +7,9 @@ import (
 	"durpdeploy/internal/db"
 )
 
-func TestResolveReleaseVariables_EnvironmentOverridesGlobalLastWrite(t *testing.T) {
+func TestResolveReleaseVariables_EnvironmentOverridesGlobalLastWrite(
+	t *testing.T,
+) {
 	// Given
 	variables := releaseVariablePrecedenceFixture()
 
@@ -29,7 +31,10 @@ func TestReleaseEnvironment_MatchesRemotePrecedence(t *testing.T) {
 
 	// Then
 	if len(environment) != 1 || environment["REGION"] != "last" {
-		t.Fatalf("environment = %#v, want one last environment REGION", environment)
+		t.Fatalf(
+			"environment = %#v, want one last environment REGION",
+			environment,
+		)
 	}
 }
 

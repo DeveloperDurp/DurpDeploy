@@ -16,7 +16,8 @@ func ResolveReleaseVariables(
 			if variable.EnvironmentID.Valid != environmentScoped {
 				continue
 			}
-			if environmentScoped && variable.EnvironmentID.Int64 != environmentID {
+			if environmentScoped &&
+				variable.EnvironmentID.Int64 != environmentID {
 				continue
 			}
 			if index, found := indexes[variable.Name]; found {
