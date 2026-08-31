@@ -33,7 +33,9 @@ func TestExecutor_SkipsDeadlineCleanup_when_attempt_succeeds(t *testing.T) {
 	}
 }
 
-func TestExecutor_KillsCapturedProcessGroup_when_attempt_cancelled(t *testing.T) {
+func TestExecutor_KillsCapturedProcessGroup_when_attempt_cancelled(
+	t *testing.T,
+) {
 	// Given
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
@@ -69,7 +71,10 @@ func TestExecutor_KillsCapturedProcessGroup_when_attempt_cancelled(t *testing.T)
 	select {
 	case pgid := <-killCalled:
 		if pgid <= 0 {
-			t.Fatalf("killed process group = %d, want captured positive ID", pgid)
+			t.Fatalf(
+				"killed process group = %d, want captured positive ID",
+				pgid,
+			)
 		}
 	default:
 		t.Fatal("deadline cleanup did not kill the captured process group")
