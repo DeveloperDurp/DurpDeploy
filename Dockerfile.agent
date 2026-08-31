@@ -31,6 +31,8 @@ COPY --from=builder /out/durpdeploy-agent /usr/local/bin/durpdeploy-agent
 COPY docker-agent-entrypoint.sh /usr/local/bin/durpdeploy-agent-entrypoint
 RUN chmod 0755 /usr/local/bin/durpdeploy-agent /usr/local/bin/durpdeploy-agent-entrypoint
 
+# Root is required only until the entrypoint drops to durpdeploy-agent.
+# hadolint ignore=DL3002
 USER root
 ENTRYPOINT ["/usr/local/bin/durpdeploy-agent-entrypoint"]
 CMD ["/usr/local/bin/durpdeploy-agent"]
