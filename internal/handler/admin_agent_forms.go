@@ -13,11 +13,11 @@ import (
 
 	"github.com/google/uuid"
 
-	"durpdeploy/internal/agentbootstrap"
 	"durpdeploy/internal/agentpairing"
-	"durpdeploy/internal/agentproto"
 	"durpdeploy/internal/db"
 	"durpdeploy/views/pages"
+	agentbootstrap "github.com/DeveloperDurp/durpdeploy-agent/bootstrap"
+	agentproto "github.com/DeveloperDurp/durpdeploy-agent/protocol"
 )
 
 type agentPairingBootstrap struct {

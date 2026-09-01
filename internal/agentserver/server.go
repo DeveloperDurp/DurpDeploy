@@ -12,11 +12,11 @@ import (
 	"strings"
 	"time"
 
-	"durpdeploy/internal/agenttls"
 	"durpdeploy/internal/events"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/runner"
 	"durpdeploy/internal/secret"
+	agenttls "github.com/DeveloperDurp/durpdeploy-agent/transport"
 )
 
 // Config supplies the dependencies for the dedicated agent TLS server.

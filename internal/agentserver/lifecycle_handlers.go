@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"durpdeploy/internal/agentproto"
+	agentproto "github.com/DeveloperDurp/durpdeploy-agent/protocol"
 )
 
 func (server *Server) start(writer http.ResponseWriter, request *http.Request) {

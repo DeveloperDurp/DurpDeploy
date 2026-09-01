@@ -8,9 +8,9 @@ import (
 	"errors"
 	"net/http"
 
-	"durpdeploy/internal/agentproto"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/events"
+	agentproto "github.com/DeveloperDurp/durpdeploy-agent/protocol"
 )
 
 const remoteFailureReason = "remote agent reported failure"

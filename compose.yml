@@ -116,10 +116,7 @@ services:
     # Optional remote execution agent. Enable with --profile agent.
     # It talks outbound to the control plane and is not a server sidecar.
     profiles: [agent]
-    build:
-      context: .
-      dockerfile: Dockerfile.agent
-    image: durpdeploy-agent:latest
+    image: ghcr.io/developerdurp/durpdeploy-agent:${DURPDEPLOY_AGENT_VERSION:-v0.1.0}
     restart: unless-stopped
     env_file:
       - ./compose.agent.env
@@ -130,6 +127,7 @@ services:
       - /sys/fs/cgroup/durpdeploy:/sys/fs/cgroup/durpdeploy:rw
     security_opt:
       - no-new-privileges:true
+      - apparmor:unconfined
     cap_drop: [ALL]
     cap_add: [SETUID, SETGID, SETPCAP, SYS_ADMIN, SYS_CHROOT]
     read_only: true

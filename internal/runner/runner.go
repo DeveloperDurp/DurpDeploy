@@ -10,6 +10,8 @@ import (
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/events"
 	"durpdeploy/internal/repository"
+
+	agentexecutor "github.com/DeveloperDurp/durpdeploy-agent/executor"
 )
 
 type DeploymentRunner struct {
@@ -46,7 +48,7 @@ func (r *DeploymentRunner) KillAll() {
 	}
 	r.mu.Unlock()
 	for _, pgid := range pgids {
-		killProcessGroup(pgid)
+		agentexecutor.KillProcessGroup(pgid)
 	}
 }
 

@@ -109,18 +109,22 @@ the deployment commands belong and must execute commands under the distinct
 Use either:
 
 ```bash
-docker compose --profile agent up -d --build agent
-podman compose --profile agent up -d --build agent
+docker compose --profile agent pull agent
+docker compose --profile agent up -d agent
+podman compose --profile agent pull agent
+podman compose --profile agent up -d agent
 ```
 
-Do not run both commands for the same agent. For systemd, install
-`systemd/durpdeploy-agent.service`; it requires the separate
+Do not run both runtimes for the same agent. For systemd, install the unit from
+the [standalone agent repository](https://github.com/DeveloperDurp/durpdeploy-agent);
+it requires the separate
 `durpdeploy-runner` execution identity. The agent needs `CAP_SETUID`,
 `CAP_SETGID`, `CAP_SETPCAP`, `CAP_SYS_ADMIN`, and `CAP_SYS_CHROOT` only while
 it creates the read-only chroot, configures the cgroup, and drops to that
 identity; `setpriv` clears every child capability set before Bash starts. Keep
 `/etc/durpdeploy-agent.env` mode `0600`, and use the commands in
-[`docs/agents.md`](agents.md) for start, status, logs, restart, and stop.
+standalone [agent runbook](https://github.com/DeveloperDurp/durpdeploy-agent/blob/main/docs/agents.md)
+for start, status, logs, restart, and stop.
 
 `CAP_SETPCAP` lets `setpriv` drop the child's entire capability bounding set.
 The Docker Compose root entrypoint passes this limited setup set to the

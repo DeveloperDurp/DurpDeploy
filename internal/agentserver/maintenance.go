@@ -6,9 +6,9 @@ import (
 	"errors"
 	"fmt"
 
-	"durpdeploy/internal/agentproto"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/events"
+	agentproto "github.com/DeveloperDurp/durpdeploy-agent/protocol"
 )
 
 const remoteLostReason = "remote agent heartbeat expired"

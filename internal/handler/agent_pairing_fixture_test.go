@@ -9,14 +9,14 @@ import (
 
 	"github.com/robfig/cron/v3"
 
-	"durpdeploy/internal/agentbootstrap"
 	"durpdeploy/internal/agentpairing"
-	"durpdeploy/internal/agentproto"
-	"durpdeploy/internal/agenttls"
 	"durpdeploy/internal/handler"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/runner"
 	"durpdeploy/internal/server"
+	agentbootstrap "github.com/DeveloperDurp/durpdeploy-agent/bootstrap"
+	agentproto "github.com/DeveloperDurp/durpdeploy-agent/protocol"
+	agenttls "github.com/DeveloperDurp/durpdeploy-agent/transport"
 )
 
 type agentPairingTestEnv struct {

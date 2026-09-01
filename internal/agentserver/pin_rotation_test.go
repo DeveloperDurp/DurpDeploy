@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"testing"
 
-	"durpdeploy/internal/agentproto"
+	agentproto "github.com/DeveloperDurp/durpdeploy-agent/protocol"
 )
 
 func TestHeartbeat_advertisesConfiguredPendingServerPin(t *testing.T) {

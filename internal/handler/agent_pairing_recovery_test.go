@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"durpdeploy/internal/agentstate"
-	"durpdeploy/internal/agenttls"
 	"durpdeploy/internal/db"
+	agentstate "github.com/DeveloperDurp/durpdeploy-agent/state"
+	agenttls "github.com/DeveloperDurp/durpdeploy-agent/transport"
 )
 
 func TestAgentPairing_ConfirmationRetriesAfterAgentCallbackFailure(

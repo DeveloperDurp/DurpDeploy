@@ -43,7 +43,6 @@ lint:dockerfile:
   image: hadolint/hadolint:latest-alpine
   script:
     - hadolint --failure-threshold warning Dockerfile
-    - hadolint --failure-threshold warning Dockerfile.agent
   needs: []
 
 golang:test:
@@ -267,8 +266,6 @@ build:
       done
   script:
     - go build -o durpdeploy ./cmd/server
-    - go build -o durpdeploy-agent ./cmd/agent
-    - make agent-container-contract
   # artifacts:
   #   paths:
   #     - durpdeploy

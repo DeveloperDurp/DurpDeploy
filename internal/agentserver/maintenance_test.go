@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"durpdeploy/internal/agentproto"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/events"
+	agentproto "github.com/DeveloperDurp/durpdeploy-agent/protocol"
 )
 
 func TestMaintain_reclaimsOnlyExpiredUnstartedClaims(t *testing.T) {

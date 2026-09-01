@@ -6,8 +6,8 @@ import (
 	"database/sql"
 	"testing"
 
-	"durpdeploy/internal/agenttls"
 	"durpdeploy/internal/db"
+	agenttls "github.com/DeveloperDurp/durpdeploy-agent/transport"
 )
 
 type pollFixture struct {

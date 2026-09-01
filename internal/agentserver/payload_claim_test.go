@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	"durpdeploy/internal/agentpayload"
-	"durpdeploy/internal/agentproto"
+	agentpayload "github.com/DeveloperDurp/durpdeploy-agent/payload"
+	agentproto "github.com/DeveloperDurp/durpdeploy-agent/protocol"
 )
 
 func TestPoll_claimedPayloadOpensOnlyForClaimedIdentity(t *testing.T) {

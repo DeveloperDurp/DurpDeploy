@@ -22,12 +22,12 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"durpdeploy/internal/agentpairing"
-	"durpdeploy/internal/agentproto"
-	"durpdeploy/internal/agenttls"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/migrate"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/secret"
+	agentproto "github.com/DeveloperDurp/durpdeploy-agent/protocol"
+	agenttls "github.com/DeveloperDurp/durpdeploy-agent/transport"
 )
 
 func TestPostgres_RemoteAgentRuntimeParity(t *testing.T) {
@@ -412,7 +412,13 @@ func runtimeAgentBinary(t *testing.T) string {
 		t.Fatal(err)
 	}
 	binary := filepath.Join(t.TempDir(), "durpdeploy-agent")
-	command := exec.Command("go", "build", "-o", binary, "./cmd/agent")
+	command := exec.Command(
+		"go",
+		"build",
+		"-o",
+		binary,
+		"github.com/DeveloperDurp/durpdeploy-agent/cmd/agent",
+	)
 	command.Dir = root
 	if output, err := command.CombinedOutput(); err != nil {
 		t.Fatalf("build agent: %v: %s", err, output)

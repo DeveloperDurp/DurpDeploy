@@ -3,7 +3,7 @@ package agentserver
 import (
 	"net/http"
 
-	"durpdeploy/internal/agentproto"
+	agentproto "github.com/DeveloperDurp/durpdeploy-agent/protocol"
 )
 
 // Handler returns the dedicated agent router.

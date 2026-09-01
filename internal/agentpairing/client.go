@@ -12,8 +12,8 @@ import (
 	"net/url"
 	"time"
 
-	"durpdeploy/internal/agentproto"
-	"durpdeploy/internal/agenttls"
+	agentproto "github.com/DeveloperDurp/durpdeploy-agent/protocol"
+	agenttls "github.com/DeveloperDurp/durpdeploy-agent/transport"
 )
 
 const requestTimeout = 15 * time.Second

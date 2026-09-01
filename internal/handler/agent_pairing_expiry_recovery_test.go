@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"durpdeploy/internal/agentpairing"
-	"durpdeploy/internal/agentproto"
 	"durpdeploy/internal/db"
+	agentproto "github.com/DeveloperDurp/durpdeploy-agent/protocol"
 )
 
 func TestConfirmPairing_ReconcilesExpiredCommittedIdentityAfterOfferExpiry(

@@ -12,11 +12,11 @@ import (
 	"time"
 
 	"durpdeploy/internal/agentserver"
-	"durpdeploy/internal/agenttls"
 	"durpdeploy/internal/events"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/runner"
 	"durpdeploy/internal/secret"
+	agenttls "github.com/DeveloperDurp/durpdeploy-agent/transport"
 )
 
 type agentListenerConfig struct {

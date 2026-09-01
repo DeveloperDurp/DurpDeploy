@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"durpdeploy/internal/agentproto"
 	"durpdeploy/internal/db"
+	agentproto "github.com/DeveloperDurp/durpdeploy-agent/protocol"
 )
 
 func TestAgentPairing_HTMLConfirmation_persistsPairingWithoutRenderingCode(

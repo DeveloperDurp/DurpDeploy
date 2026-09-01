@@ -49,11 +49,6 @@ jobs:
         with:
           dockerfile: Dockerfile
           failure-threshold: warning
-      - name: Dockerfile.agent
-        uses: hadolint/hadolint-action@2332a7b74a6de0dda2e2221d575162eba76ba5e5 # v3.3.0
-        with:
-          dockerfile: Dockerfile.agent
-          failure-threshold: warning
 
   test:
     name: Test
@@ -199,5 +194,3 @@ jobs:
       - run: templ generate
       - run: make swagger-ui-copy
       - run: go build -o durpdeploy ./cmd/server
-      - run: go build -o durpdeploy-agent ./cmd/agent
-      - run: make agent-container-contract

@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"durpdeploy/internal/agenttls"
 	"durpdeploy/internal/db"
+	agenttls "github.com/DeveloperDurp/durpdeploy-agent/transport"
 )
 
 func TestConfirmPairing_RejectsExpiredNonMatchingDurablePairings(t *testing.T) {

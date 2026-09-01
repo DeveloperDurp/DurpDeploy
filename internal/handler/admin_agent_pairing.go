@@ -9,8 +9,8 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"durpdeploy/internal/agentpairing"
-	"durpdeploy/internal/agentproto"
 	"durpdeploy/internal/db"
+	agentproto "github.com/DeveloperDurp/durpdeploy-agent/protocol"
 )
 
 type pendingAgentPairing struct {

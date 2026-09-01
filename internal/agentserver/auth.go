@@ -5,8 +5,8 @@ import (
 	"database/sql"
 	"net/http"
 
-	"durpdeploy/internal/agenttls"
 	"durpdeploy/internal/db"
+	agenttls "github.com/DeveloperDurp/durpdeploy-agent/transport"
 )
 
 type authenticatedAgentKey struct{}

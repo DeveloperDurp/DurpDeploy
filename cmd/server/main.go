@@ -23,7 +23,6 @@ import (
 	"github.com/robfig/cron/v3"
 
 	"durpdeploy/internal/agentpairing"
-	"durpdeploy/internal/agentproto"
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/dispatch"
@@ -39,6 +38,7 @@ import (
 	"durpdeploy/internal/scheduler"
 	"durpdeploy/internal/secret"
 	"durpdeploy/internal/server"
+	agentproto "github.com/DeveloperDurp/durpdeploy-agent/protocol"
 )
 
 // defaultDSN mirrors the historical hardcoded DSN. Production overrides it

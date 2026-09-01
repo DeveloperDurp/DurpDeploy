@@ -147,7 +147,9 @@ YAML
 	run_scenario matching ./internal/agentserver '^TestPoll_claimedPayloadOpensOnlyForClaimedIdentity$'
     run_scenario logs ./internal/agentserver '^TestLifecycle_runsGuardedStartHeartbeatLogsResult$'
     run_scenario cancel ./internal/agentserver '^TestLifecycle_acknowledgesCancellationAndRecordsLateResult$'
-    run_scenario cancellation-tree ./cmd/agent '^TestAgentSubprocess_sigtermKillsSpawnedChild$'
+    run_scenario cancellation-tree \
+      github.com/DeveloperDurp/durpdeploy-agent/cmd/agent \
+      '^TestAgentSubprocess_sigtermKillsSpawnedChild$'
     run_scenario wrong-pin ./internal/agenttls '^TestNewClientConfig_rejectsWrongPinHostnameAndExpiry$'
 	run_scenario rotate ./internal/agentclient '^TestClient_persists_staged_server_pin_from_heartbeat$'
     run_scenario restart-before-start ./internal/agentserver '^TestMaintain_reclaimsOnlyExpiredUnstartedClaims$'

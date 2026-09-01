@@ -11,11 +11,11 @@ import (
 	"testing"
 	"time"
 
-	"durpdeploy/internal/agenttls"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/migrate"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/secret"
+	agenttls "github.com/DeveloperDurp/durpdeploy-agent/transport"
 )
 
 type agentServerFixture struct {

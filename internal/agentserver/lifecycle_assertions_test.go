@@ -11,8 +11,8 @@ import (
 	"strconv"
 	"testing"
 
-	"durpdeploy/internal/agenttls"
 	"durpdeploy/internal/db"
+	agenttls "github.com/DeveloperDurp/durpdeploy-agent/transport"
 )
 
 func (fixture *pollFixture) lifecycle(

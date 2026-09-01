@@ -171,7 +171,7 @@ try {
 		DURPDEPLOY_SECRET_KEY: randomBytes(32).toString("base64"),
 	};
 	await run("go", ["build", "-o", binary, "./cmd/server"], { env: environment });
-	await run("go", ["build", "-o", agentBinary, "./cmd/agent"], { env: environment });
+	await run("go", ["build", "-o", agentBinary, "github.com/DeveloperDurp/durpdeploy-agent/cmd/agent"], { env: environment });
 	await run(binary, ["admin", "create", "--email", admin.email, "--password", admin.password], { env: environment });
 	server = start(binary, [], { env: environment });
 	await waitForHealth();

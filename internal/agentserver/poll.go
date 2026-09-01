@@ -11,9 +11,9 @@ import (
 	"net/http"
 	"time"
 
-	"durpdeploy/internal/agentpayload"
-	"durpdeploy/internal/agentproto"
 	"durpdeploy/internal/db"
+	agentpayload "github.com/DeveloperDurp/durpdeploy-agent/payload"
+	agentproto "github.com/DeveloperDurp/durpdeploy-agent/protocol"
 )
 
 var errInactiveAgent = errors.New("agent is no longer active")

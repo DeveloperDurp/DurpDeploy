@@ -7,10 +7,10 @@ import (
 	"net/http"
 	"testing"
 
-	"durpdeploy/internal/agentproto"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/dispatch"
 	"durpdeploy/internal/events"
+	agentproto "github.com/DeveloperDurp/durpdeploy-agent/protocol"
 )
 
 func TestLifecycle_rejectsStaleStartAfterQueuedCancellation(t *testing.T) {
