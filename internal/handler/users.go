@@ -3,9 +3,7 @@ package handler
 import (
 	"database/sql"
 	"errors"
-	"fmt"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 
@@ -43,12 +41,7 @@ var validRoles = map[string]bool{
 	"viewer":   true,
 }
 
-// ListUsers renders /admin/users with every user in the system. The
-// `newPassword`/`newUserID` query params render a one-time banner
-// showing the plaintext password set during the most recent create —
-// the admin must copy it and click "Got it" (which navigates to
-// /admin/users without the query params) so the password is gone
-// from the URL.
+// ListUsers renders /admin/users with every user in the system.
 func (h *UsersHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 	users, err := h.repo.Queries.ListUsers(r.Context())
 	if err != nil {
@@ -56,25 +49,9 @@ func (h *UsersHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var newUserID int64
-	var newUserEmail string
-	var newPassword string
-	if v := r.URL.Query().Get("new_user_id"); v != "" {
-		if id, err := strconv.ParseInt(v, 10, 64); err == nil {
-			newUserID = id
-		}
-	}
-	newUserEmail = r.URL.Query().Get("new_user_email")
-	newPassword = r.URL.Query().Get("new_password")
-	updated := r.URL.Query().Get("updated") == "1"
-
 	currentUser := auth.UserFromContext(r.Context())
 	if err := pages.UsersListPage(
 		users,
-		newUserID,
-		newUserEmail,
-		newPassword,
-		updated,
 		currentUser,
 		r.URL.Path,
 	).Render(r.Context(), w); err != nil {
@@ -91,8 +68,8 @@ func (h *UsersHandler) NewUserForm(w http.ResponseWriter, r *http.Request) {
 }
 
 // CreateUser handles POST /admin/users. Hashes the password with
-// argon2id (same path as the CLI `admin create`), then 303s to
-// /admin/users with the one-time password flash in the query string.
+// argon2id (same path as the CLI `admin create`), then redirects to
+// /admin/users without redisplaying the plaintext password.
 // The audit middleware records the row as "create_user" via the
 // actionMap entry.
 func (h *UsersHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
@@ -105,8 +82,11 @@ func (h *UsersHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimSpace(r.FormValue("name"))
 	role := r.FormValue("role")
 	password := r.FormValue("password")
+	passwordConfirmation := r.FormValue("password_confirmation")
 
-	errMsg := validateUserFields(email, name, role, password, true)
+	errMsg := validateUserFields(
+		email, name, role, password, passwordConfirmation, true,
+	)
 	if errMsg != "" {
 		h.renderFormError(
 			w,
@@ -139,7 +119,7 @@ func (h *UsersHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	created, err := h.repo.Queries.CreateUser(r.Context(), db.CreateUserParams{
+	_, err = h.repo.Queries.CreateUser(r.Context(), db.CreateUserParams{
 		Email:        email,
 		PasswordHash: hash,
 		Name:         name,
@@ -155,15 +135,7 @@ func (h *UsersHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// One-time password flash via query string. The form's "Done" button
-	// on the banner navigates to /admin/users (no query), so the
-	// plaintext lives in the URL for one page load only. Caddy
-	// terminates TLS, so the URL is encrypted in transit; the server's
-	// request logger only logs r.URL.Path (not the query).
-	redirect := fmt.Sprintf(
-		"/admin/users?new_user_id=%d&new_user_email=%s&new_password=%s",
-		created.ID, url.QueryEscape(created.Email), url.QueryEscape(password),
-	)
+	redirect := "/admin/users"
 
 	if r.Header.Get("HX-Request") == "true" {
 		w.Header().Set("HX-Redirect", redirect)
@@ -227,12 +199,14 @@ func (h *UsersHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimSpace(r.FormValue("name"))
 	role := r.FormValue("role")
 	password := r.FormValue("password")
+	passwordConfirmation := r.FormValue("password_confirmation")
 
 	errMsg := validateUserFields(
 		emailKeepCurrent(target.Email),
 		name,
 		role,
 		password,
+		passwordConfirmation,
 		false,
 	)
 	if errMsg != "" {
@@ -273,14 +247,6 @@ func (h *UsersHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	redirect := "/admin/users"
-	if password != "" {
-		redirect = fmt.Sprintf(
-			"/admin/users?new_user_id=%d&new_user_email=%s&new_password=%s&updated=1",
-			id,
-			url.QueryEscape(target.Email),
-			url.QueryEscape(password),
-		)
-	}
 
 	if r.Header.Get("HX-Request") == "true" {
 		w.Header().Set("HX-Redirect", redirect)
@@ -401,7 +367,10 @@ func emailKeepCurrent(original string) string {
 // validateUserFields returns "" when valid, otherwise a human-readable
 // error message. isNew=true requires a non-empty password; the edit
 // path treats a blank password as "keep current".
-func validateUserFields(email, name, role, password string, isNew bool) string {
+func validateUserFields(
+	email, name, role, password, passwordConfirmation string,
+	isNew bool,
+) string {
 	if email == "" || !strings.Contains(email, "@") {
 		return "Email is required and must look like an email"
 	}
@@ -415,11 +384,25 @@ func validateUserFields(email, name, role, password string, isNew bool) string {
 		if password == "" {
 			return "Password is required"
 		}
+		if passwordConfirmation == "" {
+			return "Password confirmation is required"
+		}
 		if len(password) < 8 {
 			return "Password must be at least 8 characters"
 		}
-	} else if password != "" && len(password) < 8 {
-		return "New password must be at least 8 characters (blank = keep current)"
+	} else {
+		if password == "" && passwordConfirmation != "" {
+			return "New password is required when confirming a password"
+		}
+		if password != "" && passwordConfirmation == "" {
+			return "Password confirmation is required"
+		}
+		if password != "" && len(password) < 8 {
+			return "New password must be at least 8 characters (blank = keep current)"
+		}
+	}
+	if password != passwordConfirmation {
+		return "Passwords do not match"
 	}
 	return ""
 }

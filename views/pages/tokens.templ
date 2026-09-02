@@ -218,7 +218,7 @@ templ adminTokensRow(t db.ListAllApiTokensRow) {
 // NewTokenBanner shows the freshly-created token's plaintext. The
 // user must copy it and click "Got it" (which navigates to
 // /settings/tokens with no query), so the plaintext lives in the URL
-// for one page load only. Pattern matches NewUserPasswordBanner.
+// for one page load only.
 //
 // ponytail: warning color + monospace makes the token unmissable.
 templ NewTokenBanner(token string, name string) {

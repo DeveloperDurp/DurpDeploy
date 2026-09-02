@@ -37,6 +37,31 @@ func TestUsers_NonAdminCannotList(t *testing.T) {
 	}
 }
 
+func TestUsers_PasswordFormsRenderConfirmation(t *testing.T) {
+	h := newProjectHarness(t)
+	target := seedSessionAs(
+		t, h.repo, h.server.URL, "form-target@example.com", "deployer",
+	)
+	for _, path := range []string{
+		"/admin/users/new",
+		fmt.Sprintf("/admin/users/%d/edit", target.user.ID),
+	} {
+		resp, err := h.authedClient().Get(h.server.URL + path)
+		if err != nil {
+			t.Fatalf("GET %s: %v", path, err)
+		}
+		body := readBody(t, resp)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("GET %s: status = %d, want 200", path, resp.StatusCode)
+		}
+		if !strings.Contains(body, `name="password"`) ||
+			!strings.Contains(body, `name="password_confirmation"`) {
+			t.Fatalf("GET %s did not render both password fields", path)
+		}
+	}
+}
+
 // TestUsers_NavDropdownHiddenForNonAdmin: the navbar Admin dropdown
 // must NOT render for non-admin users. Verifies the templ's `if
 // user.Role == "admin"` guard on the base layout.
@@ -112,10 +137,11 @@ func TestUsers_CreateLogin(t *testing.T) {
 	h := newProjectHarness(t)
 
 	form := url.Values{
-		"email":    {"newuser@example.com"},
-		"name":     {"New User"},
-		"role":     {"deployer"},
-		"password": {"initial-pass-1"},
+		"email":                 {"newuser@example.com"},
+		"name":                  {"New User"},
+		"role":                  {"deployer"},
+		"password":              {"initial-pass-1"},
+		"password_confirmation": {"initial-pass-1"},
 	}
 	form.Set("csrf_token", h.csrfToken())
 	resp, err := h.authedClient().PostForm(h.server.URL+"/admin/users", form)
@@ -127,13 +153,8 @@ func TestUsers_CreateLogin(t *testing.T) {
 	if resp.StatusCode != http.StatusSeeOther {
 		t.Fatalf("create user: status = %d, want 303", resp.StatusCode)
 	}
-	if loc := resp.Header.Get(
-		"Location",
-	); !strings.HasPrefix(
-		loc,
-		"/admin/users?new_user_id=",
-	) {
-		t.Fatalf("redirect = %q, want /admin/users?new_user_id=...", loc)
+	if loc := resp.Header.Get("Location"); loc != "/admin/users" {
+		t.Fatalf("redirect = %q, want /admin/users", loc)
 	}
 
 	// The new user can log in.
@@ -175,10 +196,11 @@ func TestUsers_CreateDuplicateEmail(t *testing.T) {
 	h := newProjectHarness(t)
 
 	form := url.Values{
-		"email":    {"dup@example.com"},
-		"name":     {"Dup"},
-		"role":     {"deployer"},
-		"password": {"password1"},
+		"email":                 {"dup@example.com"},
+		"name":                  {"Dup"},
+		"role":                  {"deployer"},
+		"password":              {"password1"},
+		"password_confirmation": {"password1"},
 	}
 	form.Set("csrf_token", h.csrfToken())
 	resp, err := h.authedClient().PostForm(h.server.URL+"/admin/users", form)
@@ -229,6 +251,168 @@ func TestUsers_CreateMissingPassword(t *testing.T) {
 	body := readBody(t, resp)
 	if !strings.Contains(body, "Password") {
 		t.Fatalf("body missing 'Password' message: %s", body)
+	}
+}
+
+func TestUsers_CreateRejectsPasswordConfirmationMismatch(t *testing.T) {
+	h := newProjectHarness(t)
+	form := url.Values{
+		"email":                 {"mismatch@example.com"},
+		"name":                  {"Mismatch"},
+		"role":                  {"viewer"},
+		"password":              {"password1"},
+		"password_confirmation": {"password2"},
+		"csrf_token":            {h.csrfToken()},
+	}
+	resp, err := h.authedClient().PostForm(h.server.URL+"/admin/users", form)
+	if err != nil {
+		t.Fatalf("POST /admin/users: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want 422", resp.StatusCode)
+	}
+	if body := readBody(t, resp); !strings.Contains(
+		body,
+		"Passwords do not match",
+	) {
+		t.Fatalf("body missing mismatch error: %s", body)
+	}
+	if _, err := h.repo.Queries.GetUserByEmail(
+		context.Background(),
+		"mismatch@example.com",
+	); err == nil {
+		t.Fatal("mismatched confirmation created a user")
+	}
+}
+
+func TestUsers_CreateRequiresPasswordConfirmation(t *testing.T) {
+	h := newProjectHarness(t)
+	form := url.Values{
+		"email":      {"no-confirmation@example.com"},
+		"name":       {"No Confirmation"},
+		"role":       {"viewer"},
+		"password":   {"password1"},
+		"csrf_token": {h.csrfToken()},
+	}
+	resp, err := h.authedClient().PostForm(h.server.URL+"/admin/users", form)
+	if err != nil {
+		t.Fatalf("POST /admin/users: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want 422", resp.StatusCode)
+	}
+	if body := readBody(t, resp); !strings.Contains(
+		body, "Password confirmation is required",
+	) {
+		t.Fatalf("body missing confirmation error: %s", body)
+	}
+}
+
+func TestUsers_UpdateRejectsIncompleteOrMismatchedPassword(t *testing.T) {
+	tests := []struct {
+		name         string
+		password     string
+		confirmation string
+	}{
+		{name: "missing confirmation", password: "new-password-1"},
+		{name: "missing password", confirmation: "new-password-1"},
+		{
+			name:         "mismatch",
+			password:     "new-password-1",
+			confirmation: "new-password-2",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newProjectHarness(t)
+			target := seedSessionAs(
+				t, h.repo, h.server.URL, "confirm@example.com", "deployer",
+			)
+			form := url.Values{
+				"name":                  {"Changed Name"},
+				"role":                  {"admin"},
+				"password":              {tt.password},
+				"password_confirmation": {tt.confirmation},
+				"csrf_token":            {h.csrfToken()},
+			}
+			req, _ := http.NewRequestWithContext(
+				context.Background(),
+				http.MethodPut,
+				fmt.Sprintf("%s/admin/users/%d", h.server.URL, target.user.ID),
+				bytes.NewBufferString(form.Encode()),
+			)
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			req.Header.Set("X-CSRF-Token", h.csrfToken())
+			resp, err := h.authedClient().Do(req)
+			if err != nil {
+				t.Fatalf("PUT /admin/users/{id}: %v", err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusUnprocessableEntity {
+				t.Fatalf("status = %d, want 422", resp.StatusCode)
+			}
+			updated, err := h.repo.Queries.GetUserByID(
+				context.Background(), target.user.ID,
+			)
+			if err != nil {
+				t.Fatalf("get user: %v", err)
+			}
+			if updated.Name != target.user.Name ||
+				updated.Role != target.user.Role ||
+				!auth.VerifyPassword(updated.PasswordHash, "testpass") {
+				t.Fatal("rejected password reset mutated the user")
+			}
+			if _, err := h.repo.Queries.GetSession(
+				context.Background(),
+				db.GetSessionParams{ID: target.sessionToken, ExpiresAt: 0},
+			); err != nil {
+				t.Fatal(
+					"rejected password reset invalidated the target session",
+				)
+			}
+		})
+	}
+}
+
+func TestUsers_UpdateBlankPasswordKeepsCurrent(t *testing.T) {
+	h := newProjectHarness(t)
+	target := seedSessionAs(
+		t, h.repo, h.server.URL, "keep-password@example.com", "deployer",
+	)
+	form := url.Values{
+		"name":                  {"Renamed"},
+		"role":                  {"deployer"},
+		"password":              {""},
+		"password_confirmation": {""},
+		"csrf_token":            {h.csrfToken()},
+	}
+	req, _ := http.NewRequestWithContext(
+		context.Background(),
+		http.MethodPut,
+		fmt.Sprintf("%s/admin/users/%d", h.server.URL, target.user.ID),
+		bytes.NewBufferString(form.Encode()),
+	)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("X-CSRF-Token", h.csrfToken())
+	resp, err := h.authedClient().Do(req)
+	if err != nil {
+		t.Fatalf("PUT /admin/users/{id}: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("status = %d, want 303", resp.StatusCode)
+	}
+	updated, err := h.repo.Queries.GetUserByID(
+		context.Background(), target.user.ID,
+	)
+	if err != nil {
+		t.Fatalf("get user: %v", err)
+	}
+	if updated.Name != "Renamed" ||
+		!auth.VerifyPassword(updated.PasswordHash, "testpass") {
+		t.Fatal("blank password fields changed the current password")
 	}
 }
 
@@ -332,9 +516,10 @@ func TestUsers_PasswordChangeInvalidatesSession(t *testing.T) {
 	)
 
 	form := url.Values{
-		"name":     {"PW Change"},
-		"role":     {"deployer"},
-		"password": {"new-password-1"},
+		"name":                  {"PW Change"},
+		"role":                  {"deployer"},
+		"password":              {"new-password-1"},
+		"password_confirmation": {"new-password-1"},
 	}
 	form.Set("csrf_token", h.csrfToken())
 	req, _ := http.NewRequestWithContext(
@@ -354,6 +539,9 @@ func TestUsers_PasswordChangeInvalidatesSession(t *testing.T) {
 	if resp.StatusCode != http.StatusSeeOther &&
 		resp.StatusCode != http.StatusOK {
 		t.Fatalf("update: status = %d, want 303/200", resp.StatusCode)
+	}
+	if loc := resp.Header.Get("Location"); loc != "/admin/users" {
+		t.Fatalf("redirect = %q, want /admin/users", loc)
 	}
 
 	_, err = h.repo.Queries.GetSession(
@@ -525,17 +713,18 @@ func TestUsers_DeleteInvalidatesSessions(t *testing.T) {
 	}
 }
 
-// TestUsers_PasswordBannerDisplayedAfterCreate: the redirect after
-// POST /admin/users carries the new password in the query string;
-// the list page renders the one-time banner with the password.
-func TestUsers_PasswordBannerDisplayedAfterCreate(t *testing.T) {
+// TestUsers_PasswordNeverReturned verifies the create redirect and users page
+// never expose plaintext passwords, including attacker-controlled legacy query
+// parameters.
+func TestUsers_PasswordNeverReturned(t *testing.T) {
 	h := newProjectHarness(t)
 
 	form := url.Values{
-		"email":    {"banner@example.com"},
-		"name":     {"Banner"},
-		"role":     {"deployer"},
-		"password": {"banner-pass-1"},
+		"email":                 {"banner@example.com"},
+		"name":                  {"Banner"},
+		"role":                  {"deployer"},
+		"password":              {"banner-pass-1"},
+		"password_confirmation": {"banner-pass-1"},
 	}
 	form.Set("csrf_token", h.csrfToken())
 	resp, err := h.authedClient().PostForm(h.server.URL+"/admin/users", form)
@@ -545,14 +734,19 @@ func TestUsers_PasswordBannerDisplayedAfterCreate(t *testing.T) {
 	_, _ = io.Copy(io.Discard, resp.Body)
 	resp.Body.Close()
 	loc := resp.Header.Get("Location")
-	if !strings.HasPrefix(loc, "/admin/users?new_user_id=") {
-		t.Fatalf("redirect = %q, want /admin/users?new_user_id=...", loc)
+	if loc != "/admin/users" {
+		t.Fatalf("redirect = %q, want /admin/users", loc)
+	}
+	if strings.Contains(loc, "banner-pass-1") {
+		t.Fatalf("redirect exposed password: %q", loc)
 	}
 
-	// Follow the redirect (manually — harness client doesn't follow).
-	// The Location header is a server-relative path, so prepend the
-	// server's URL.
-	followReq, _ := http.NewRequest(http.MethodGet, h.server.URL+loc, nil)
+	followReq, _ := http.NewRequest(
+		http.MethodGet,
+		h.server.URL+loc+"?new_user_id=1&new_user_email=x&"+
+			"new_password=attacker-controlled&updated=1",
+		nil,
+	)
 	followResp, err := h.authedClient().Do(followReq)
 	if err != nil {
 		t.Fatalf("GET redirect: %v", err)
@@ -562,11 +756,9 @@ func TestUsers_PasswordBannerDisplayedAfterCreate(t *testing.T) {
 		t.Fatalf("status = %d, want 200", followResp.StatusCode)
 	}
 	body := readBody(t, followResp)
-	if !strings.Contains(body, "banner-pass-1") {
-		t.Fatalf("body missing the new password: %s", body)
-	}
-	if !strings.Contains(body, "User created") {
-		t.Fatalf("body missing 'User created' banner header: %s", body)
+	if strings.Contains(body, "banner-pass-1") ||
+		strings.Contains(body, "attacker-controlled") {
+		t.Fatalf("users page rendered password query content: %s", body)
 	}
 }
 

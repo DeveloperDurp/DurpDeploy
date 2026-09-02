@@ -135,6 +135,26 @@ templ UserFormContent(user *db.User, errorMsg string) {
 				autocomplete="new-password"
 			/>
 		</div>
+		<div class="form-control">
+			<label class="label">
+				<span class="label-text">
+					if user == nil {
+						Confirm password
+					} else {
+						Confirm new password
+					}
+				</span>
+			</label>
+			<input
+				type="password"
+				name="password_confirmation"
+				class="input input-bordered"
+				if user == nil {
+					required
+				}
+				autocomplete="new-password"
+			/>
+		</div>
 	</form>
 	if user != nil {
 		<div class="mt-6 pt-4 border-t border-base-300 flex items-center justify-between">

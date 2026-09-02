@@ -23,8 +23,8 @@ import (
 // ponytail: the create path reuses auth.MintApiToken + the sqlc
 // CreateApiToken query — same path the JSON API handler uses. No new
 // token-minting helper; the handler is a thin web adapter over the
-// existing primitives. The one-time plaintext flash mirrors the
-// user-create password flash (query string + banner + "Got it").
+// existing primitives. The one-time plaintext token is displayed via
+// a query string banner; replacing that legacy flow is tracked separately.
 type TokensHandler struct {
 	repo *repository.Repository
 }
