@@ -102,3 +102,52 @@ func TestInternalErrorMiddlewarePreservesExpectedErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestInternalErrorMiddlewarePassesSuccessfulWritesThrough(t *testing.T) {
+	rec := httptest.NewRecorder()
+	h := InternalErrorMiddleware(http.HandlerFunc(
+		func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("first"))
+			if rec.Body.String() != "first" {
+				t.Fatal("successful response was buffered")
+			}
+			_, _ = w.Write([]byte(" second"))
+		},
+	))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/logs.txt", nil))
+
+	if rec.Body.String() != "first second" {
+		t.Fatalf(
+			"body = %q, want streamed successful writes",
+			rec.Body.String(),
+		)
+	}
+}
+
+func TestInternalErrorMiddlewarePreservesMarkedSafeServerError(
+	t *testing.T,
+) {
+	h := InternalErrorMiddleware(http.HandlerFunc(
+		func(w http.ResponseWriter, _ *http.Request) {
+			markSafeErrorResponse(w)
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = w.Write([]byte("safe password fallback"))
+		},
+	))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(
+		rec,
+		httptest.NewRequest(http.MethodGet, "/login/oidc", nil),
+	)
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503", rec.Code)
+	}
+	if rec.Body.String() != "safe password fallback" {
+		t.Fatalf("body = %q, want safe response", rec.Body.String())
+	}
+	if rec.Header().Get(safeErrorHeader) != "" {
+		t.Fatal("internal safe-error marker leaked to client")
+	}
+}

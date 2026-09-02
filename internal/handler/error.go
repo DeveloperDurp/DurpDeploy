@@ -15,6 +15,12 @@ import (
 
 const internalErrorMessage = "Internal server error"
 
+const safeErrorHeader = "X-DurpDeploy-Safe-Error"
+
+func markSafeErrorResponse(w http.ResponseWriter) {
+	w.Header().Set(safeErrorHeader, "true")
+}
+
 type internalErrorResponseWriter struct {
 	http.ResponseWriter
 	status      int
@@ -33,7 +39,10 @@ func (w *internalErrorResponseWriter) WriteHeader(status int) {
 	}
 	w.status = status
 	w.internalErr = status >= http.StatusInternalServerError
-	if w.passthrough {
+	if !w.internalErr || w.Header().Get(safeErrorHeader) == "true" {
+		w.Header().Del(safeErrorHeader)
+		w.passthrough = true
+		w.internalErr = false
 		w.ResponseWriter.WriteHeader(status)
 	}
 }
