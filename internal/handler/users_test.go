@@ -272,11 +272,24 @@ func TestUsers_CreateRejectsPasswordConfirmationMismatch(t *testing.T) {
 	if resp.StatusCode != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want 422", resp.StatusCode)
 	}
-	if body := readBody(t, resp); !strings.Contains(
-		body,
-		"Passwords do not match",
-	) {
+	body := readBody(t, resp)
+	if !strings.Contains(body, "Passwords do not match") {
 		t.Fatalf("body missing mismatch error: %s", body)
+	}
+	for _, want := range []string{
+		`action="/admin/users"`,
+		`name="email"`,
+		`value="mismatch@example.com"`,
+		`name="password"`,
+		`name="password_confirmation"`,
+		"Create user",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("failed create form missing %q: %s", want, body)
+		}
+	}
+	if strings.Contains(body, `hx-put="/admin/users/0"`) {
+		t.Fatalf("failed create rendered in edit mode: %s", body)
 	}
 	if _, err := h.repo.Queries.GetUserByEmail(
 		context.Background(),

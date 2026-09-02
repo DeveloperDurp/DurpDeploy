@@ -7,28 +7,28 @@ import (
 	"strconv"
 )
 
-// UserFormPage renders the create or edit user form, depending on
-// whether user is nil. errorMsg renders in an alert at the top of the
-// form. The same templ component is used by the HTMX fragment path
+// UserFormPage renders the create or edit user form. isNew selects the form
+// mode independently of user, which may contain submitted values after a
+// create validation error. The same component is used by the HTMX fragment path
 // (the form-container swap) and the full-page path.
 //
 // ponytail: the edit form uses hx-put and the destructive action uses
 // hx-delete, both below the form via the form= attribute. The base
 // form is the same shell; only the per-action attrs differ. Same
 // shape as ProjectForm / TemplateForm.
-templ UserFormPage(user *db.User, errorMsg string, currentPath string) {
+templ UserFormPage(user *db.User, errorMsg string, currentPath string, isNew bool) {
 	if !CanWrite(ctx) {
 		@ViewerForbiddenMessage(
-			formTitle(user),
-			userFormAction(user),
+			formTitle(isNew),
+			userFormAction(isNew),
 			"a user",
 			"/admin/users",
 			currentPath,
 		)
 	} else {
-		@layouts.Base(formTitle(user), currentPath) {
+		@layouts.Base(formTitle(isNew), currentPath) {
 			<div class="max-w-xl">
-				<h1 class="text-3xl font-bold mb-4">{ formTitle(user) }</h1>
+				<h1 class="text-3xl font-bold mb-4">{ formTitle(isNew) }</h1>
 				if errorMsg != "" {
 					<div class="alert alert-error mb-4" id="form-error">
 						<span>{ errorMsg }</span>
@@ -36,7 +36,7 @@ templ UserFormPage(user *db.User, errorMsg string, currentPath string) {
 				}
 				<div class="card bg-base-200 shadow">
 					<div class="card-body">
-						@UserFormContent(user, errorMsg)
+						@UserFormContent(user, isNew)
 					</div>
 				</div>
 			</div>
@@ -47,8 +47,8 @@ templ UserFormPage(user *db.User, errorMsg string, currentPath string) {
 // userFormAction returns the verb ("create" or "edit") for the
 // ViewerForbiddenMessage on the user form. Keeps the inline literal
 // out of the call site.
-func userFormAction(user *db.User) string {
-	if user == nil {
+func userFormAction(isNew bool) string {
+	if isNew {
 		return "create"
 	}
 	return "edit"
@@ -57,18 +57,18 @@ func userFormAction(user *db.User) string {
 // UserFormFragment is the form-only view, used by HTMX 422 retargets
 // via WriteFormError. isNew picks the action URL and the submit label.
 templ UserFormFragment(user *db.User, errorMsg string, isNew bool) {
-	@UserFormContent(user, errorMsg)
+	@UserFormContent(user, isNew)
 }
 
-templ UserFormContent(user *db.User, errorMsg string) {
-	if user != nil {
+templ UserFormContent(user *db.User, isNew bool) {
+	if !isNew && user != nil {
 		<div class="text-sm opacity-70 mb-2">
 			Editing <span class="font-mono">{ user.Email }</span>
 		</div>
 	}
 	<form
-		id={ userFormID(user) }
-		if user == nil {
+		id={ userFormID(user, isNew) }
+		if isNew {
 			method="post"
 			action="/admin/users"
 		} else {
@@ -80,7 +80,7 @@ templ UserFormContent(user *db.User, errorMsg string) {
 		}
 		class="space-y-4"
 	>
-		if user == nil {
+		if isNew {
 			<div class="form-control">
 				<label class="label">
 					<span class="label-text">Email</span>
@@ -88,6 +88,7 @@ templ UserFormContent(user *db.User, errorMsg string) {
 				<input
 					type="email"
 					name="email"
+					value={ fieldValue(user, "email") }
 					class="input input-bordered"
 					required
 				/>
@@ -118,7 +119,7 @@ templ UserFormContent(user *db.User, errorMsg string) {
 		<div class="form-control">
 			<label class="label">
 				<span class="label-text">
-					if user == nil {
+					if isNew {
 						Password
 					} else {
 						New password <span class="text-xs opacity-60">(blank = keep current)</span>
@@ -129,7 +130,7 @@ templ UserFormContent(user *db.User, errorMsg string) {
 				type="password"
 				name="password"
 				class="input input-bordered"
-				if user == nil {
+				if isNew {
 					required
 				}
 				autocomplete="new-password"
@@ -138,7 +139,7 @@ templ UserFormContent(user *db.User, errorMsg string) {
 		<div class="form-control">
 			<label class="label">
 				<span class="label-text">
-					if user == nil {
+					if isNew {
 						Confirm password
 					} else {
 						Confirm new password
@@ -149,14 +150,14 @@ templ UserFormContent(user *db.User, errorMsg string) {
 				type="password"
 				name="password_confirmation"
 				class="input input-bordered"
-				if user == nil {
+				if isNew {
 					required
 				}
 				autocomplete="new-password"
 			/>
 		</div>
 	</form>
-	if user != nil {
+	if !isNew && user != nil {
 		<div class="mt-6 pt-4 border-t border-base-300 flex items-center justify-between">
 			<div>
 				<div class="font-medium">Delete this user</div>
@@ -174,8 +175,8 @@ templ UserFormContent(user *db.User, errorMsg string) {
 		</div>
 	}
 	<div class="mt-6 pt-4 border-t border-base-300 flex gap-2 justify-end">
-		<button type="submit" form={ userFormID(user) } class="btn btn-primary">
-			if user == nil {
+		<button type="submit" form={ userFormID(user, isNew) } class="btn btn-primary">
+			if isNew {
 				Create user
 			} else {
 				Save changes
@@ -185,8 +186,8 @@ templ UserFormContent(user *db.User, errorMsg string) {
 	</div>
 }
 
-func formTitle(user *db.User) string {
-	if user == nil {
+func formTitle(isNew bool) string {
+	if isNew {
 		return "New user"
 	}
 	return "Edit user"
@@ -195,8 +196,8 @@ func formTitle(user *db.User) string {
 // userFormID is the form's id attribute. The submit button rendered
 // below the form uses the same id via form= so clicking Save changes
 // actually submits the form. Pattern matches projectFormID.
-func userFormID(user *db.User) string {
-	if user == nil {
+func userFormID(user *db.User, isNew bool) string {
+	if isNew {
 		return "user-form-new"
 	}
 	return "user-form-" + strconv.FormatInt(user.ID, 10)
