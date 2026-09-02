@@ -22,9 +22,6 @@ require (
 	modernc.org/sqlite v1.53.0
 )
 
-// Remove this local replacement after v0.1.0 is published.
-replace github.com/DeveloperDurp/durpdeploy-agent => ../durpdeploy-agent
-
 require (
 	dario.cat/mergo v1.0.2 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
