@@ -20,10 +20,11 @@ func (h *HealthHandler) Healthz(w http.ResponseWriter, r *http.Request) {
 
 	err := h.repo.DB.PingContext(r.Context())
 	if err != nil {
+		markSafeErrorResponse(w)
 		w.WriteHeader(http.StatusServiceUnavailable)
 		json.NewEncoder(w).Encode(map[string]string{
 			"status": "down",
-			"db":     err.Error(),
+			"db":     "unavailable",
 		})
 		return
 	}

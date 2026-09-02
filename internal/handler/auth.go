@@ -80,6 +80,7 @@ func (h *AuthHandler) renderOIDCLoginUnavailable(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
+	markSafeErrorResponse(w)
 	w.WriteHeader(http.StatusServiceUnavailable)
 	_ = pages.LoginPage(
 		r.URL.Path,
