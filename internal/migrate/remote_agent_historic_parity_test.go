@@ -6,9 +6,7 @@ import (
 	"testing"
 
 	"github.com/pressly/goose/v3"
-	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
 
 	"durpdeploy/migrations"
 )
@@ -35,7 +33,7 @@ func newPostgresTestDBAt(t *testing.T, version int64) *sql.DB {
 		postgres.WithDatabase("durpdeploy"),
 		postgres.WithUsername("durpdeploy"),
 		postgres.WithPassword("postgres"),
-		testcontainers.WithWaitStrategy(wait.ForListeningPort("5432/tcp")),
+		postgres.BasicWaitStrategies(),
 	)
 	if err != nil {
 		t.Fatalf("start PostgreSQL container: %v", err)

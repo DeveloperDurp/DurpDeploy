@@ -6,9 +6,7 @@ import (
 	"database/sql"
 	"testing"
 
-	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
 )
 
 func TestPostgres_RemoteAgentSchemaParity(t *testing.T) {
@@ -18,7 +16,7 @@ func TestPostgres_RemoteAgentSchemaParity(t *testing.T) {
 		postgres.WithDatabase("durpdeploy"),
 		postgres.WithUsername("durpdeploy"),
 		postgres.WithPassword("postgres"),
-		testcontainers.WithWaitStrategy(wait.ForListeningPort("5432/tcp")),
+		postgres.BasicWaitStrategies(),
 	)
 	if err != nil {
 		t.Skipf("could not start PostgreSQL container: %v", err)
