@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"bytes"
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -10,6 +12,104 @@ import (
 
 	"durpdeploy/views/pages"
 )
+
+const internalErrorMessage = "Internal server error"
+
+type internalErrorResponseWriter struct {
+	http.ResponseWriter
+	status      int
+	internalErr bool
+	passthrough bool
+	body        bytes.Buffer
+}
+
+func (w *internalErrorResponseWriter) WriteHeader(status int) {
+	if w.status != 0 {
+		if status >= http.StatusInternalServerError && !w.passthrough {
+			w.status = status
+			w.internalErr = true
+		}
+		return
+	}
+	w.status = status
+	w.internalErr = status >= http.StatusInternalServerError
+	if w.passthrough {
+		w.ResponseWriter.WriteHeader(status)
+	}
+}
+
+func (w *internalErrorResponseWriter) Write(p []byte) (int, error) {
+	if w.status == 0 {
+		w.WriteHeader(http.StatusOK)
+	}
+	if w.passthrough {
+		return w.ResponseWriter.Write(p)
+	}
+	return w.body.Write(p)
+}
+
+func (w *internalErrorResponseWriter) Unwrap() http.ResponseWriter {
+	return w.ResponseWriter
+}
+
+func (w *internalErrorResponseWriter) Flush() {
+	if !w.passthrough {
+		w.passthrough = true
+		if w.status == 0 {
+			w.status = http.StatusOK
+		}
+		w.ResponseWriter.WriteHeader(w.status)
+		_, _ = w.body.WriteTo(w.ResponseWriter)
+	}
+	if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
+}
+
+// InternalErrorMiddleware prevents unexpected server diagnostics from being
+// returned to clients. Handlers may keep their specific 4xx contracts; only
+// 5xx responses are replaced at the HTTP boundary.
+func InternalErrorMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ww := &internalErrorResponseWriter{ResponseWriter: w}
+		next.ServeHTTP(ww, r)
+		if ww.passthrough {
+			return
+		}
+		if ww.status == 0 {
+			ww.status = http.StatusOK
+		}
+		if !ww.internalErr {
+			w.WriteHeader(ww.status)
+			_, _ = ww.body.WriteTo(w)
+			return
+		}
+
+		slog.Error(
+			"internal request error",
+			"error", strings.TrimSpace(ww.body.String()),
+			"request_id", middleware.GetReqID(r.Context()),
+			"method", r.Method,
+			"path", r.URL.Path,
+			"status", ww.status,
+		)
+
+		w.Header().Del("Content-Length")
+		w.Header().Del("Content-Encoding")
+		if strings.HasPrefix(r.URL.Path, "/api/") {
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			w.WriteHeader(ww.status)
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"error": strings.ToLower(internalErrorMessage),
+			})
+			return
+		}
+
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(ww.status)
+		_, _ = w.Write([]byte(internalErrorMessage + "\n"))
+	})
+}
 
 func IsUniqueViolation(err error) bool {
 	return err != nil &&
