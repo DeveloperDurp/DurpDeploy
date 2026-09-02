@@ -124,6 +124,7 @@ jobs:
         run: |
           docker exec \
             -e NODE_PATH=/opt/mobile-browser/node_modules \
+            -e GOFLAGS=-buildvcs=false \
             auth-mfa-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT} \
             sh -ec 'ln -s /opt/mobile-browser/node_modules node_modules &&
             mkdir -p static/swagger-ui &&
