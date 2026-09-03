@@ -639,15 +639,10 @@ echo "  Admin lists /admin/users with seed admin: OK"
 NEW_EMAIL="e2e-newdeployer@test.local"
 NEW_PASS="newdeployer-pass-1234"
 REDIR=$(curl -s -b "$COOKIES" -D - -o /dev/null \
-    -X POST -d "email=$NEW_EMAIL&name=NewDeployer&role=deployer&password=$NEW_PASS&csrf_token=$CSRF" \
+    -X POST -d "email=$NEW_EMAIL&name=NewDeployer&role=deployer&password=$NEW_PASS&password_confirmation=$NEW_PASS&csrf_token=$CSRF" \
     "$BASE/admin/users" | grep -i "^location:" | awk '{print $2}' | tr -d '\r')
-[[ "$REDIR" == /admin/users?new_user_id=* ]] || { echo "FAIL: create user redirect = $REDIR, want /admin/users?new_user_id=..."; exit 1; }
-echo "  POST /admin/users created user + flashed password: OK"
-
-# Follow the redirect and confirm the password banner shows the plaintext.
-BANNER=$(curl -s -b "$COOKIES" "$BASE$REDIR")
-echo "$BANNER" | grep -qF "$NEW_PASS" || { echo "FAIL: banner missing the new password"; exit 1; }
-echo "  Banner shows the new password: OK"
+[[ "$REDIR" == /admin/users ]] || { echo "FAIL: create user redirect = $REDIR, want /admin/users"; exit 1; }
+echo "  POST /admin/users created user without exposing password: OK"
 
 # The new user can log in with the chosen password.
 NEW_LOGIN=$(mktemp)

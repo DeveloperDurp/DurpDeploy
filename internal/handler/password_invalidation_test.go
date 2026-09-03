@@ -38,9 +38,10 @@ func TestWebPasswordUpdate_invalidates_browser_sessions_and_mfa_challenges(
 		t.Fatalf("issue MFA challenge: %v", err)
 	}
 	form := url.Values{
-		"name":     {"Password Target"},
-		"role":     {"deployer"},
-		"password": {"new-password-1"},
+		"name":                  {"Password Target"},
+		"role":                  {"deployer"},
+		"password":              {"new-password-1"},
+		"password_confirmation": {"new-password-1"},
 	}
 	form.Set("csrf_token", h.csrfToken())
 	req, err := http.NewRequestWithContext(

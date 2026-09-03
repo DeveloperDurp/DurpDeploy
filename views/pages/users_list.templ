@@ -7,18 +7,8 @@ import (
 	"fmt"
 )
 
-// UsersListPage renders the /admin/users table plus an optional
-// "newly created user" banner that displays the one-time plaintext
-// password. The banner only renders when newUserID > 0 — the URL
-// query that triggers it is set by the CreateUser handler and
-// cleared by clicking the "Got it" button (which navigates back to
-// /admin/users with no query string).
 templ UsersListPage(
 	users []db.ListUsersRow,
-	newUserID int64,
-	newUserEmail string,
-	newPassword string,
-	updated bool,
 	currentUser *db.User,
 	currentPath string,
 ) {
@@ -29,15 +19,6 @@ templ UsersListPage(
 				<a href="/admin/users/new" class="btn btn-primary btn-sm">New user</a>
 			}
 		</div>
-		if newUserID > 0 {
-			if newPassword != "" && newUserEmail != "" {
-				if updated {
-					@NewUserPasswordBanner("Password updated.", newUserEmail, newPassword)
-				} else {
-					@NewUserPasswordBanner("User created.", newUserEmail, newPassword)
-				}
-			}
-		}
 		if len(users) == 0 {
 			<div class="card bg-base-200 p-8 text-center">
 				<p class="text-gray-400">No users yet.</p>
@@ -174,31 +155,4 @@ templ MFAResetConfirmationDialog(u db.ListUsersRow) {
 			<button type="submit" aria-label="Cancel MFA reset"></button>
 		</form>
 	</dialog>
-}
-
-// NewUserPasswordBanner shows the freshly-created user's initial
-// password. The admin must copy it and click "Got it" (which
-// navigates to /admin/users with no query), so the password lives
-// in the URL for one page load only.
-//
-// ponytail: warning color + monospace makes the password unmissable.
-// The whole card is bordered so it stands out from the user table
-// below.
-templ NewUserPasswordBanner(title string, email string, password string) {
-	<div class="alert alert-warning mb-4 flex-col items-start gap-2">
-		<div class="flex items-center gap-2 w-full">
-			<span class="font-bold">{ title }</span>
-			<span>
-				Share this initial password with <span class="font-mono">{ email }</span>. They will need it to log in.
-			</span>
-		</div>
-		<div class="w-full">
-			<code class="block bg-base-300 text-base-content p-2 rounded font-mono select-all">
-				{ password }
-			</code>
-		</div>
-		<div class="flex justify-end w-full">
-			<a href="/admin/users" class="btn btn-sm">Got it — don't show this again</a>
-		</div>
-	</div>
 }
