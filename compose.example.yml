@@ -75,6 +75,7 @@ services:
       - ./compose.app.env
     environment:
       - DURPDEPLOY_DB=/data/durpdeploy.db
+      - DURPDEPLOY_TRUSTED_PROXIES=172.28.0.0/24
     volumes:
       - durpdeploy-data:/data
     secrets:
@@ -164,6 +165,12 @@ volumes:
   durpdeploy-data:
   caddy-data:
   caddy-config:
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 172.28.0.0/24
 
 secrets:
   durpdeploy_key:
