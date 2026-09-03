@@ -38,8 +38,8 @@ func SessionFromContext(ctx context.Context) *db.Session {
 // request context. Any unauthenticated request is redirected to /login.
 //
 // Applied only to the protected route group in server.NewRouter; public
-// routes (/login, /static/*, /healthz, /logout) are mounted on the root
-// mux and never reach this middleware.
+// routes (/login, /static/*, /healthz) are mounted on the root mux and
+// never reach this middleware. Logout is authenticated and CSRF-protected.
 func AuthMiddleware(
 	repo *repository.Repository,
 ) func(http.Handler) http.Handler {
