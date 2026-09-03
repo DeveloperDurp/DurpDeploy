@@ -3,6 +3,7 @@ package pages
 import (
 	"database/sql"
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/deploymentstate"
 	"durpdeploy/views/components"
 	"durpdeploy/views/layouts"
 	"fmt"
@@ -13,6 +14,7 @@ import (
 
 type DeploymentListItem struct {
 	Deployment      db.Deployment
+	Routing         deploymentstate.Dispatch
 	ProjectName     string
 	ReleaseVersion  string
 	EnvironmentName string
@@ -28,6 +30,7 @@ type DeploymentsView struct {
 	FilterProject sql.NullInt64
 	FilterEnv     sql.NullInt64
 	FilterStatus  sql.NullString
+	FilterDispatch sql.NullString
 	FilterFrom    sql.NullInt64
 	FilterTo      sql.NullInt64
 	Projects      []db.Project
@@ -63,6 +66,19 @@ templ DeploymentsFilterBar(view DeploymentsView) {
 				for _, p := range view.Projects {
 					<option value={ strconv.FormatInt(p.ID, 10) } if view.FilterProject.Valid && view.FilterProject.Int64 == p.ID { selected }>{ p.Name }</option>
 				}
+			</select>
+		</label>
+		<label class="form-control">
+			<span class="label-text">Routing</span>
+			<select name="remote_state" class="select select-bordered select-sm">
+				<option value="">All</option>
+				<option value="local" if view.FilterDispatch.String == "local" { selected }>Local</option>
+				<option value="waiting" if view.FilterDispatch.String == "waiting" { selected }>Waiting</option>
+				<option value="claimed" if view.FilterDispatch.String == "claimed" { selected }>Claimed</option>
+				<option value="started" if view.FilterDispatch.String == "started" { selected }>Running</option>
+				<option value="cancel_requested" if view.FilterDispatch.String == "cancel_requested" { selected }>Cancel requested</option>
+				<option value="cancel_unconfirmed" if view.FilterDispatch.String == "cancel_unconfirmed" { selected }>Cancel unconfirmed</option>
+				<option value="lost" if view.FilterDispatch.String == "lost" { selected }>Lost</option>
 			</select>
 		</label>
 		<label class="form-control">
@@ -125,8 +141,9 @@ templ DeploymentListTable(view DeploymentsView) {
 				<th class="w-1/6 hidden md:table-cell">Version</th>
 				<th class="w-1/6">Environment</th>
 				<th class="w-1/6">Status</th>
+				<th class="w-1/4">Routing</th>
 				<th class="w-1/6">Date</th>
-				<th class="w-1/4 md:w-1/6">Actions</th>
+				<th class="w-48">Actions</th>
 			</tr>
 		</thead>
 		<tbody id="deployments-tbody">
@@ -149,6 +166,9 @@ templ DeploymentListRow(item DeploymentListItem) {
 		<td class="truncate">{ item.EnvironmentName }</td>
 		<td>
 			@StatusBadge(item.Deployment)
+		</td>
+		<td class="truncate">
+			@DeploymentRoutingSummary(item.Routing)
 		</td>
 		<td class="truncate md:whitespace-nowrap">{ formatUnixTime(item.Deployment.CreatedAt) }</td>
 		<td class="flex flex-wrap gap-1">
@@ -194,6 +214,9 @@ func loadMoreURL(view DeploymentsView) string {
 	}
 	if view.FilterStatus.Valid {
 		v.Set("status", view.FilterStatus.String)
+	}
+	if view.FilterDispatch.Valid {
+		v.Set("remote_state", view.FilterDispatch.String)
 	}
 	if view.FilterFrom.Valid {
 		v.Set("from", unixToDate(view.FilterFrom.Int64))
@@ -253,13 +276,72 @@ func isTerminalStatus(status string) bool {
 	}
 }
 
+func canCancelDeployment(
+	deployment db.Deployment,
+	routing deploymentstate.Dispatch,
+) bool {
+	if !routing.CanCancel() {
+		return false
+	}
+	switch deployment.Status {
+	case "pending_approval":
+		return true
+	case "running":
+		return routing.Mode == "local" || routing.State == "started"
+	case "pending":
+		return routing.Mode == "remote" &&
+			(routing.State == "waiting" || routing.State == "claimed")
+	default:
+		return false
+	}
+}
+
 templ StatusBadge(deployment db.Deployment) {
 	<span class={ fmt.Sprintf("badge %s", statusBadgeClass(deployment.Status)) }>
 		{ deployment.Status }
 	</span>
 }
 
-templ StatusBadgeContainer(deployment db.Deployment) {
+func dispatchBadgeClass(state string) string {
+	switch state {
+	case "waiting", "claimed", "started", "cancel_requested":
+		return "badge-warning"
+	case "cancelled":
+		return "badge-ghost"
+	case "succeeded":
+		return "badge-success"
+	case "failed", "cancel_unconfirmed", "lost":
+		return "badge-error"
+	default:
+		return "badge-ghost"
+	}
+}
+
+func dispatchLabel(state string) string {
+	switch state {
+	case "started":
+		return "running"
+	case "cancel_requested":
+		return "cancel requested"
+	case "cancel_unconfirmed":
+		return "cancel unconfirmed"
+	default:
+		return state
+	}
+}
+
+templ DeploymentRoutingSummary(routing deploymentstate.Dispatch) {
+	if routing.Mode == "remote" {
+		<span class={ fmt.Sprintf("badge badge-sm %s", dispatchBadgeClass(routing.State)) }>{ dispatchLabel(routing.State) }</span>
+		if routing.Agent != nil {
+			<span class="text-xs text-gray-500 ml-1">{ routing.Agent.Name } ({ routing.Agent.Status })</span>
+		}
+	} else {
+		<span class="badge badge-sm badge-outline">local</span>
+	}
+}
+
+templ StatusBadgeContainer(deployment db.Deployment, routing deploymentstate.Dispatch) {
 	<div
 		id="status-badge"
 		hx-get={ fmt.Sprintf("/deployments/%d/status", deployment.ID) }
@@ -271,21 +353,22 @@ templ StatusBadgeContainer(deployment db.Deployment) {
 		hx-swap="outerHTML"
 	>
 		@StatusBadge(deployment)
+		@DeploymentRoutingSummary(routing)
 	</div>
 }
 
-templ DeploymentDetailPage(project db.Project, release db.Release, environment db.Environment, deployment db.Deployment, logs []db.DeploymentLog, currentPath string) {
+templ DeploymentDetailPage(project db.Project, release db.Release, environment db.Environment, deployment db.Deployment, routing deploymentstate.Dispatch, logs []db.DeploymentLog, currentPath string) {
 	@layouts.Base(fmt.Sprintf("Deployment %d", deployment.ID), currentPath) {
 		@components.Breadcrumbs([]components.Crumb{
 			{Label: "Home", Href: "/"},
 			{Label: "Deployments", Href: "/deployments"},
 			{Label: fmt.Sprintf("#%d", deployment.ID)},
 		})
-		@DeploymentDetail(project, release, environment, deployment, logs)
+		@DeploymentDetail(project, release, environment, deployment, routing, logs)
 	}
 }
 
-templ DeploymentDetail(project db.Project, release db.Release, environment db.Environment, deployment db.Deployment, logs []db.DeploymentLog) {
+templ DeploymentDetail(project db.Project, release db.Release, environment db.Environment, deployment db.Deployment, routing deploymentstate.Dispatch, logs []db.DeploymentLog) {
 	<div class="space-y-6">
 		<div class="flex flex-wrap justify-between items-center gap-2">
 			<div>
@@ -302,16 +385,16 @@ templ DeploymentDetail(project db.Project, release db.Release, environment db.En
 			<div class="flex flex-wrap items-center gap-2 ml-auto">
 				<a href={ fmt.Sprintf("/deployments/%d/logs.txt", deployment.ID) } class="btn btn-sm btn-ghost">Export</a>
 				if CanWrite(ctx) {
-					if isTerminalStatus(deployment.Status) {
+					if isTerminalStatus(deployment.Status) || routing.IsUncertainTerminal() {
 						<button
 							class="btn btn-sm btn-primary"
 							hx-post={ fmt.Sprintf("/deployments/%d/redeploy", deployment.ID) }
 							hx-confirm={ fmt.Sprintf("Re-run this deployment with the same release (%s) and environment (%s)?", release.Version, environment.Name) }
 							hx-disable-elt
-							data-toast-success="Re-run started"
-							data-toast-error="Failed to re-run"
-						>
-				Re-run
+						data-toast-success="Redeploy started"
+						data-toast-error="Failed to redeploy"
+					>
+						Redeploy
 					</button>
 				}
 				if deployment.Status == "pending_approval" {
@@ -326,7 +409,7 @@ templ DeploymentDetail(project db.Project, release db.Release, environment db.En
 						Approve
 					</button>
 				}
-				if deployment.Status == "running" || deployment.Status == "pending_approval" {
+				if canCancelDeployment(deployment, routing) {
 						<button
 							class="btn btn-sm btn-error"
 							hx-post={ fmt.Sprintf("/deployments/%d/cancel", deployment.ID) }
@@ -339,10 +422,11 @@ templ DeploymentDetail(project db.Project, release db.Release, environment db.En
 						</button>
 					}
 				}
-				@StatusBadgeContainer(deployment)
+				@StatusBadgeContainer(deployment, routing)
 				<a href={ fmt.Sprintf("/projects/%d/releases/%d", project.ID, release.ID) } class="btn btn-ghost btn-sm">Back</a>
 			</div>
 		</div>
+		@DeploymentRoutingDetail(routing)
 		<div class="card bg-base-200 p-4">
 			<h2 class="text-xl font-bold mb-4">Steps</h2>
 			<table class="table table-zebra table-fixed w-full">
@@ -408,5 +492,37 @@ templ DeploymentDetail(project db.Project, release db.Release, environment db.En
 				};
 			</script>
 		</div>
+	</div>
+}
+
+templ DeploymentRoutingDetail(routing deploymentstate.Dispatch) {
+	<div class="card bg-base-200 p-4">
+		<h2 class="text-xl font-bold mb-4">Routing</h2>
+		if routing.Mode == "remote" {
+			<div class="space-y-2 text-sm">
+				<p><span class="font-medium">State:</span> <span class={ fmt.Sprintf("badge badge-sm %s", dispatchBadgeClass(routing.State)) }>{ dispatchLabel(routing.State) }</span></p>
+				if routing.Agent != nil {
+					<p><span class="font-medium">Agent:</span> { routing.Agent.Name } ({ routing.Agent.Status })</p>
+					if routing.Agent.LastHeartbeatAt != nil {
+						<p class="text-gray-500">Last heartbeat: { formatUnixTime(*routing.Agent.LastHeartbeatAt) }</p>
+					} else {
+						<p class="text-gray-500">Agent has not sent a heartbeat.</p>
+					}
+				} else {
+					<p class="text-gray-500">Waiting for a matching agent.</p>
+				}
+				if routing.Reason != "" {
+					<p class="text-gray-500">{ routing.Reason }</p>
+				}
+			</div>
+			if routing.State == "lost" {
+				<div role="alert" class="alert alert-error mt-4"><span>Remote deployment lost contact with its agent. It was marked failed and will not be retried. Redeploy creates a new deployment.</span></div>
+			}
+			if routing.State == "cancel_unconfirmed" {
+				<div role="alert" class="alert alert-warning mt-4"><span>Cancellation was not confirmed by the remote agent. The deployment is terminally failed; redeploy creates a new deployment.</span></div>
+			}
+		} else {
+			<p class="text-sm text-gray-500">Local runner</p>
+		}
 	</div>
 }

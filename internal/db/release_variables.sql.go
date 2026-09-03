@@ -116,7 +116,7 @@ func (q *Queries) ListAllReleaseVariables(ctx context.Context) ([]ReleaseVariabl
 }
 
 const listReleaseVariablesByRelease = `-- name: ListReleaseVariablesByRelease :many
-SELECT id, release_id, name, value, environment_id, created_at, secret FROM release_variables WHERE release_id = ? ORDER BY created_at DESC
+SELECT id, release_id, name, value, environment_id, created_at, secret FROM release_variables WHERE release_id = ? ORDER BY id ASC
 `
 
 func (q *Queries) ListReleaseVariablesByRelease(ctx context.Context, releaseID int64) ([]ReleaseVariable, error) {

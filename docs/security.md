@@ -144,7 +144,7 @@ browser ceremony end-to-end proof is tracked separately from this document.
 `CHECK (role IN ('admin', 'deployer', 'viewer'))` constraint in
 `migrations/011_auth.sql` and by `validRoles` in `internal/handler/users.go`).
 Per-project member roles are `admin`, `deployer`
-(`migrations/013_project_members.sql`).  
+(`migrations/013_project_members.sql`).
 **Reference:** `docs/roles.md`
 
 Two-layer defense for viewer read-only enforcement:
@@ -465,6 +465,6 @@ values:
   read the DB, or sniff process memory. OS-level problem.
 - **Network-level DDoS** — handled upstream (Caddy, firewall).
 - **Supply chain** — `go mod verify` and pinned versions only.
-- **Compromised remote agent host:** An agent can run deployments for its assigned environments. Isolate it from the control-plane host. Rotate its pairing and certificate material.
+- **Compromised remote agent host:** an agent can execute deployments for its assigned environments. Isolate it from the control-plane host and rotate its pairing and certificate material if compromised.
 
 See `docs/attack-drill.md` for hands-on verification of the active defenses.

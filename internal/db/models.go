@@ -8,6 +8,44 @@ import (
 	"database/sql"
 )
 
+type Agent struct {
+	ID                     string         `json:"id"`
+	Name                   string         `json:"name"`
+	Status                 string         `json:"status"`
+	AgentVersion           sql.NullString `json:"agent_version"`
+	CertificatePem         sql.NullString `json:"certificate_pem"`
+	CertificateFingerprint sql.NullString `json:"certificate_fingerprint"`
+	LastHeartbeatAt        sql.NullInt64  `json:"last_heartbeat_at"`
+	EnrolledAt             sql.NullInt64  `json:"enrolled_at"`
+	RevokedAt              sql.NullInt64  `json:"revoked_at"`
+	CreatedAt              int64          `json:"created_at"`
+	UpdatedAt              int64          `json:"updated_at"`
+}
+
+type AgentEvent struct {
+	ID            int64          `json:"id"`
+	AgentID       sql.NullString `json:"agent_id"`
+	DeploymentID  sql.NullInt64  `json:"deployment_id"`
+	EventType     string         `json:"event_type"`
+	DispatchState sql.NullString `json:"dispatch_state"`
+	Details       sql.NullString `json:"details"`
+	CreatedAt     int64          `json:"created_at"`
+}
+
+type AgentPairing struct {
+	AgentID              string         `json:"agent_id"`
+	PairingCodeHash      []byte         `json:"pairing_code_hash"`
+	AgentPublicIdentity  string         `json:"agent_public_identity"`
+	AgentPin             string         `json:"agent_pin"`
+	ServerPublicIdentity sql.NullString `json:"server_public_identity"`
+	ServerPin            sql.NullString `json:"server_pin"`
+	State                string         `json:"state"`
+	ExpiresAt            int64          `json:"expires_at"`
+	PairedAt             sql.NullInt64  `json:"paired_at"`
+	CreatedAt            int64          `json:"created_at"`
+	UpdatedAt            int64          `json:"updated_at"`
+}
+
 type ApiToken struct {
 	ID          string        `json:"id"`
 	UserID      int64         `json:"user_id"`
@@ -52,12 +90,54 @@ type DeploymentApproval struct {
 	RequiredApproverRole string        `json:"required_approver_role"`
 }
 
+type DeploymentDispatch struct {
+	DeploymentID      int64          `json:"deployment_id"`
+	Mode              string         `json:"mode"`
+	State             string         `json:"state"`
+	Reason            sql.NullString `json:"reason"`
+	AgentID           sql.NullString `json:"agent_id"`
+	AssignedAgentID   sql.NullString `json:"assigned_agent_id"`
+	ClaimTokenHash    []byte         `json:"claim_token_hash"`
+	ClaimExpiresAt    sql.NullInt64  `json:"claim_expires_at"`
+	StartedAt         sql.NullInt64  `json:"started_at"`
+	FinishedAt        sql.NullInt64  `json:"finished_at"`
+	LastHeartbeatAt   sql.NullInt64  `json:"last_heartbeat_at"`
+	CancelRequestedAt sql.NullInt64  `json:"cancel_requested_at"`
+	CreatedAt         int64          `json:"created_at"`
+	UpdatedAt         int64          `json:"updated_at"`
+}
+
 type DeploymentLog struct {
 	ID           int64          `json:"id"`
 	DeploymentID int64          `json:"deployment_id"`
 	StepName     sql.NullString `json:"step_name"`
 	Line         string         `json:"line"`
 	CreatedAt    int64          `json:"created_at"`
+	Sequence     int64          `json:"sequence"`
+}
+
+type DeploymentPayload struct {
+	DeploymentID int64  `json:"deployment_id"`
+	Ciphertext   string `json:"ciphertext"`
+	CreatedAt    int64  `json:"created_at"`
+}
+
+type DirectDispatchBackupAgentPool struct {
+}
+
+type DirectDispatchBackupAgentPoolMembership struct {
+}
+
+type DirectDispatchBackupAgentTag struct {
+}
+
+type DirectDispatchBackupDeploymentDispatch struct {
+}
+
+type DirectDispatchBackupEnvironmentAgentPolicy struct {
+}
+
+type DirectDispatchBackupSequence struct {
 }
 
 type Environment struct {
@@ -66,6 +146,13 @@ type Environment struct {
 	Description sql.NullString `json:"description"`
 	Tags        sql.NullString `json:"tags"`
 	CreatedAt   int64          `json:"created_at"`
+}
+
+type EnvironmentAgentAssignment struct {
+	EnvironmentID int64  `json:"environment_id"`
+	AgentID       string `json:"agent_id"`
+	CreatedAt     int64  `json:"created_at"`
+	UpdatedAt     int64  `json:"updated_at"`
 }
 
 type GlobalNotification struct {

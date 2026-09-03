@@ -22,41 +22,6 @@ func New(dbConn *sql.DB) *Repository {
 	}
 }
 
-// ForEachDeploymentLogByDeploymentAsc streams deployment log rows oldest-first
-// without materializing the full result set in memory.
-func (r *Repository) ForEachDeploymentLogByDeploymentAsc(
-	ctx context.Context,
-	deploymentID int64,
-	fn func(db.DeploymentLog) error,
-) error {
-	rows, err := r.DB.QueryContext(ctx, `
-SELECT id, deployment_id, step_name, line, created_at
-FROM deployment_logs
-WHERE deployment_id = ?
-ORDER BY created_at ASC, id ASC`, deploymentID)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var log db.DeploymentLog
-		if err := rows.Scan(
-			&log.ID,
-			&log.DeploymentID,
-			&log.StepName,
-			&log.Line,
-			&log.CreatedAt,
-		); err != nil {
-			return err
-		}
-		if err := fn(log); err != nil {
-			return err
-		}
-	}
-	return rows.Err()
-}
-
 // SetSecretBox configures the AES-GCM box used to encrypt/decrypt the
 // `value` column of variables/release_variables (P1-3). Until this is
 // called, values are stored/read as plaintext — production startup

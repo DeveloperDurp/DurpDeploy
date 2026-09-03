@@ -65,6 +65,7 @@ func (h *oidcRouterHarness) server(
 	server := httptest.NewServer(NewRouter(
 		h.repo,
 		h.runner,
+		nil,
 		h.parser,
 		h.authHandler,
 		oidcEnabled,

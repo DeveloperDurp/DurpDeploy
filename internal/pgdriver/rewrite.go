@@ -34,6 +34,7 @@ var (
 	strftimeTodayRe = regexp.MustCompile(
 		`(?i)strftime\('%s',\s*'now',\s*'start of day'\)`,
 	)
+	instrRe = regexp.MustCompile(`(?i)\binstr\s*\(`)
 )
 
 // RewriteSQL translates a single SQLite-flavored SQL statement into
@@ -56,6 +57,17 @@ func RewriteSQL(query string) string {
 		query = strftimeTodayRe.ReplaceAllString(
 			query,
 			"extract(epoch from date_trunc('day', now()))::bigint",
+		)
+	}
+	if strings.Contains(strings.ToLower(query), "instr") {
+		query = instrRe.ReplaceAllString(query, "strpos(")
+	}
+	if strings.Contains(query, "sqlite_sequence") {
+		query = strings.Replace(
+			query,
+			"UPDATE sqlite_sequence\n    SET seq = (SELECT MAX(id) FROM deployment_logs)\n    WHERE name = 'deployment_logs';",
+			"SELECT setval(pg_get_serial_sequence('deployment_logs', 'id'), (SELECT MAX(id) FROM deployment_logs), true);",
+			1,
 		)
 	}
 	if strings.ContainsRune(query, '?') {

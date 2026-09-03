@@ -58,6 +58,7 @@ func newMobileBrowserFixtures(t *testing.T) mobileBrowserFixtures {
 		server.NewRouter(
 			repo,
 			runner.New(repo, broker),
+			nil,
 			parser,
 			handler.NewAuthHandler(repo),
 		),

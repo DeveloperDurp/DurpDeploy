@@ -15,10 +15,12 @@ import (
 	"time"
 
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/dispatch"
 	"durpdeploy/internal/migrate"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/runner"
 	"durpdeploy/internal/scheduler"
+	"durpdeploy/internal/secret"
 )
 
 // testFixture holds a real SQLite-backed repo, a real runner, and a scheduler
@@ -67,7 +69,7 @@ func newFixture(t *testing.T) *testFixture {
 
 	now := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
 
-	sched := scheduler.New(repo, rnr,
+	sched := scheduler.New(repo, dispatch.New(repo, nil, rnr),
 		scheduler.WithNow(func() time.Time { return now }),
 		scheduler.WithLogger(logger),
 		scheduler.WithInterval(10*time.Millisecond),
@@ -332,6 +334,87 @@ func TestTick_DueRow_FiresAndAdvances(t *testing.T) {
 	}
 	if !strings.Contains(logs, fmt.Sprintf("%d", sched.ID)) {
 		t.Fatalf("log missing schedule id: %s", logs)
+	}
+}
+
+func TestTick_DefaultDispatcherRoutesScheduledDeploymentOnce(t *testing.T) {
+	// Given: a due schedule in both a local and configured-remote environment.
+	f := newFixture(t)
+	box, err := secret.NewBox(make([]byte, 32))
+	if err != nil {
+		t.Fatalf("new secret box: %v", err)
+	}
+	f.repo.SetSecretBox(box)
+	dispatcher := dispatch.New(f.repo, box, nil)
+	f.sched = scheduler.New(
+		f.repo,
+		dispatcher,
+		scheduler.WithNow(func() time.Time { return f.now }),
+		scheduler.WithLogger(
+			slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil)),
+		),
+	)
+	project := f.createProject()
+	release := f.createRelease(project.ID)
+	local := f.createEnvironment("local")
+	remote := f.createEnvironment("remote")
+	if _, err := f.repo.DB.ExecContext(
+		f.ctx(),
+		"INSERT INTO agents (id, name) VALUES ('agent', 'agent')",
+	); err != nil {
+		t.Fatalf("create agent: %v", err)
+	}
+	if _, err := f.repo.DB.ExecContext(f.ctx(), `
+		INSERT INTO environment_agent_assignments (environment_id, agent_id)
+		VALUES (?, 'agent')`, remote.ID); err != nil {
+		t.Fatalf("create agent assignment: %v", err)
+	}
+	f.createSchedule(
+		project.ID,
+		release.ID,
+		local.ID,
+		"* * * * *",
+		f.now.Add(-time.Minute),
+		1,
+		"local",
+	)
+	f.createSchedule(
+		project.ID,
+		release.ID,
+		remote.ID,
+		"* * * * *",
+		f.now.Add(-time.Minute),
+		1,
+		"remote",
+	)
+
+	// When: the scheduler evaluates due schedules.
+	f.sched.Tick(f.ctx())
+
+	// Then: each deployment has one dispatcher-owned routing record.
+	deployments, err := f.repo.Queries.ListDeploymentsByRelease(
+		f.ctx(),
+		release.ID,
+	)
+	if err != nil {
+		t.Fatalf("list deployments: %v", err)
+	}
+	if len(deployments) != 2 {
+		t.Fatalf("deployment count = %d, want 2", len(deployments))
+	}
+	modes := make(map[string]int)
+	for _, deployment := range deployments {
+		route, err := f.repo.Queries.GetDeploymentDispatch(
+			f.ctx(),
+			deployment.ID,
+		)
+		if err != nil {
+			t.Fatalf("get deployment dispatch %d: %v", deployment.ID, err)
+		}
+		modes[route.Mode]++
+	}
+	if modes["local"] != 1 || modes["remote"] != 1 {
+		t.Fatalf("dispatch modes = %v, want one local and one remote", modes)
 	}
 }
 

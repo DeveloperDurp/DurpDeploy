@@ -11,7 +11,11 @@ import (
 )
 
 const createDeploymentLog = `-- name: CreateDeploymentLog :one
-INSERT INTO deployment_logs (deployment_id, step_name, line) VALUES (?, ?, ?) RETURNING id, deployment_id, step_name, line, created_at
+INSERT INTO deployment_logs (deployment_id, step_name, line, sequence)
+SELECT ?1, ?2, ?3, COALESCE(MAX(sequence), 0) + 1
+FROM deployment_logs
+WHERE deployment_id = ?1
+RETURNING id, deployment_id, step_name, line, created_at, sequence
 `
 
 type CreateDeploymentLogParams struct {
@@ -29,6 +33,59 @@ func (q *Queries) CreateDeploymentLog(ctx context.Context, arg CreateDeploymentL
 		&i.StepName,
 		&i.Line,
 		&i.CreatedAt,
+		&i.Sequence,
+	)
+	return i, err
+}
+
+const createSequencedDeploymentLogForDispatch = `-- name: CreateSequencedDeploymentLogForDispatch :one
+INSERT INTO deployment_logs (deployment_id, step_name, line, sequence)
+SELECT
+    ?1,
+    ?2,
+    ?3,
+    ?4
+WHERE EXISTS (
+    SELECT 1
+    FROM deployment_dispatches
+    WHERE deployment_id = ?1
+      AND agent_id = ?5
+      AND claim_token_hash = ?6
+      AND state = ?7
+)
+ON CONFLICT(deployment_id, sequence) DO UPDATE
+SET deployment_id = deployment_logs.deployment_id
+RETURNING id, deployment_id, step_name, line, created_at, sequence
+`
+
+type CreateSequencedDeploymentLogForDispatchParams struct {
+	DeploymentID   int64          `json:"deployment_id"`
+	StepName       sql.NullString `json:"step_name"`
+	Line           string         `json:"line"`
+	Sequence       int64          `json:"sequence"`
+	AgentID        sql.NullString `json:"agent_id"`
+	ClaimTokenHash []byte         `json:"claim_token_hash"`
+	CurrentState   string         `json:"current_state"`
+}
+
+func (q *Queries) CreateSequencedDeploymentLogForDispatch(ctx context.Context, arg CreateSequencedDeploymentLogForDispatchParams) (DeploymentLog, error) {
+	row := q.db.QueryRowContext(ctx, createSequencedDeploymentLogForDispatch,
+		arg.DeploymentID,
+		arg.StepName,
+		arg.Line,
+		arg.Sequence,
+		arg.AgentID,
+		arg.ClaimTokenHash,
+		arg.CurrentState,
+	)
+	var i DeploymentLog
+	err := row.Scan(
+		&i.ID,
+		&i.DeploymentID,
+		&i.StepName,
+		&i.Line,
+		&i.CreatedAt,
+		&i.Sequence,
 	)
 	return i, err
 }
@@ -43,7 +100,7 @@ func (q *Queries) DeleteDeploymentLog(ctx context.Context, id int64) error {
 }
 
 const getDeploymentLog = `-- name: GetDeploymentLog :one
-SELECT id, deployment_id, step_name, line, created_at FROM deployment_logs WHERE id = ?
+SELECT id, deployment_id, step_name, line, created_at, sequence FROM deployment_logs WHERE id = ?
 `
 
 func (q *Queries) GetDeploymentLog(ctx context.Context, id int64) (DeploymentLog, error) {
@@ -55,12 +112,13 @@ func (q *Queries) GetDeploymentLog(ctx context.Context, id int64) (DeploymentLog
 		&i.StepName,
 		&i.Line,
 		&i.CreatedAt,
+		&i.Sequence,
 	)
 	return i, err
 }
 
 const listDeploymentLogsByDeployment = `-- name: ListDeploymentLogsByDeployment :many
-SELECT id, deployment_id, step_name, line, created_at FROM deployment_logs WHERE deployment_id = ? ORDER BY created_at DESC
+SELECT id, deployment_id, step_name, line, created_at, sequence FROM deployment_logs WHERE deployment_id = ? ORDER BY created_at DESC
 `
 
 func (q *Queries) ListDeploymentLogsByDeployment(ctx context.Context, deploymentID int64) ([]DeploymentLog, error) {
@@ -78,6 +136,7 @@ func (q *Queries) ListDeploymentLogsByDeployment(ctx context.Context, deployment
 			&i.StepName,
 			&i.Line,
 			&i.CreatedAt,
+			&i.Sequence,
 		); err != nil {
 			return nil, err
 		}
@@ -93,7 +152,7 @@ func (q *Queries) ListDeploymentLogsByDeployment(ctx context.Context, deployment
 }
 
 const updateDeploymentLog = `-- name: UpdateDeploymentLog :one
-UPDATE deployment_logs SET deployment_id = ?, step_name = ?, line = ? WHERE id = ? RETURNING id, deployment_id, step_name, line, created_at
+UPDATE deployment_logs SET deployment_id = ?, step_name = ?, line = ? WHERE id = ? RETURNING id, deployment_id, step_name, line, created_at, sequence
 `
 
 type UpdateDeploymentLogParams struct {
@@ -117,6 +176,7 @@ func (q *Queries) UpdateDeploymentLog(ctx context.Context, arg UpdateDeploymentL
 		&i.StepName,
 		&i.Line,
 		&i.CreatedAt,
+		&i.Sequence,
 	)
 	return i, err
 }

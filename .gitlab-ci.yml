@@ -237,18 +237,39 @@ build:
   stage: build
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+  image: golang:1.26-alpine@sha256:0178a641fbb4858c5f1b48e34bdaabe0350a330a1b1149aabd498d0699ff5fb2
+  services:
+    - name: docker:24-dind
+      alias: docker
+      command: ["--tls=false"]
+  variables:
+    DOCKER_TLS_CERTDIR: ""
+    DOCKER_HOST: tcp://docker:2375
   before_script:
+    - apk add --no-cache docker-cli
     - go install github.com/a-h/templ/cmd/templ@v0.3.1020
     - templ generate
     # ponytail: static/swagger-ui/ is gitignored; materialize it before the build.
     - apk add --no-cache make nodejs npm
     - make swagger-ui-copy
+    - |
+      for attempt in $(seq 1 30); do
+        if docker info >/dev/null 2>&1; then
+          break
+        fi
+        if [ "$attempt" -eq 30 ]; then
+          echo 'build: docker daemon did not become ready after 30 seconds' >&2
+          docker info 2>&1 || true
+          exit 1
+        fi
+        sleep 1
+      done
   script:
     - go build -o durpdeploy ./cmd/server
- # artifacts:
- #   paths:
- #     - durpdeploy
- #   expire_in: 1 week
+  # artifacts:
+  #   paths:
+  #     - durpdeploy
+  #   expire_in: 1 week
   needs: ["lint", "golang:test"]
 
 # Multi-arch (linux/amd64, linux/arm64) image build + push to the GitLab

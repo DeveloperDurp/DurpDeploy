@@ -144,8 +144,10 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sortOrder := req.SortOrder
-	if sortOrder <= 0 {
+	sortOrder := int64(1)
+	if req.SortOrder > 0 {
+		sortOrder = req.SortOrder
+	} else {
 		steps, _ := h.repo.Queries.ListStepsByProject(r.Context(), projectID)
 		for _, s := range steps {
 			if s.SortOrder >= sortOrder {

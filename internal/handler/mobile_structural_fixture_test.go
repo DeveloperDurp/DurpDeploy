@@ -58,6 +58,7 @@ func newMobileStructuralFixture(t *testing.T) mobileStructuralFixture {
 		server.NewRouter(
 			repo,
 			runner.New(repo, runner.NewLogBroker()),
+			nil,
 			parser,
 			handler.NewAuthHandler(repo),
 		),

@@ -138,7 +138,8 @@ func TestRepository_WithTx_rollsBackAllWritesWhenCallbackFails(t *testing.T) {
 func newTestRepo(t *testing.T) *repository.Repository {
 	t.Helper()
 	conn, err := migrate.Run(
-		"file:" + t.TempDir() + "/repository.db?_pragma=foreign_keys(1)",
+		"file:" + t.TempDir() + "/repository.db?_pragma=foreign_keys(1)" +
+			"&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)",
 	)
 	if err != nil {
 		t.Fatalf("migrate: %v", err)

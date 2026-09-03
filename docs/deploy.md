@@ -93,7 +93,7 @@ boundary is:
 
 * An unpaired agent needs only a private state directory, temporary local
   pairing listener, and version. The administrator pairing flow stores the
-  pinned server endpoint and agent identity. Restarts use that paired state.
+  pinned server endpoint and agent identity; restarts use that paired state.
 
   ```dotenv
   DURPDEPLOY_AGENT_STATE_DIR=/var/lib/durpdeploy-agent
@@ -103,18 +103,32 @@ boundary is:
 
 The optional Compose `agent` profile is a co-located demonstration only. It
 has a private state volume and no server database, server key, Docker socket,
-or inbound port. Production agents must run remotely on the host where the
-deployment commands belong. Use either:
+or inbound listener port. Production agents should run remotely on the host where
+the deployment commands belong and must execute commands under the distinct
+`durpdeploy-runner` identity.
+Use either:
 
 ```bash
-docker compose --profile agent up -d --build agent
-podman compose --profile agent up -d --build agent
+docker compose --profile agent pull agent
+docker compose --profile agent up -d agent
+podman compose --profile agent pull agent
+podman compose --profile agent up -d agent
 ```
 
-Do not run both commands for the same agent. For systemd, install
-`systemd/durpdeploy-agent.service`, use a dedicated `durpdeploy-agent` user,
-keep `/etc/durpdeploy-agent.env` mode `0600`, and use the commands in
-[`docs/agents.md`](agents.md) for start, status, logs, restart, and stop.
+Do not run both runtimes for the same agent. For systemd, install the unit from
+the [standalone agent repository](https://github.com/DeveloperDurp/durpdeploy-agent);
+it requires the separate
+`durpdeploy-runner` execution identity. The agent needs `CAP_SETUID`,
+`CAP_SETGID`, `CAP_SETPCAP`, `CAP_SYS_ADMIN`, and `CAP_SYS_CHROOT` only while
+it creates the read-only chroot, configures the cgroup, and drops to that
+identity; `setpriv` clears every child capability set before Bash starts. Keep
+`/etc/durpdeploy-agent.env` mode `0600`, and use the commands in
+standalone [agent runbook](https://github.com/DeveloperDurp/durpdeploy-agent/blob/main/docs/agents.md)
+for start, status, logs, restart, and stop.
+
+`CAP_SETPCAP` lets `setpriv` drop the child's entire capability bounding set.
+The Docker Compose root entrypoint passes this limited setup set to the
+non-root agent as ambient capabilities; no step inherits any of them.
 
 DNS must be pointed at the host (port 80/443 open inbound) before the first
 `docker compose up` — Caddy issues Let's Encrypt certs on first request.
@@ -363,9 +377,14 @@ sudo useradd --system --no-create-home --shell /usr/sbin/nologin durpdeploy-runn
 command -v setpriv >/dev/null # provided by Debian/Ubuntu's util-linux package
 ```
 
+The runner fails the deployment rather than falling back to `durpdeploy` if
+this user, `setpriv`, a required chroot bind mount, or cgroup delegation is
+unavailable.
+
 Cgroup v2 is used to cap CPU/memory/PIDs per deployment. Create the parent
-cgroup and hand ownership to `durpdeploy` so it can create/remove the
-per-deployment sub-cgroups without root:
+cgroup and hand ownership to the account running this host's deployment
+service (`durpdeploy` for the server or `durpdeploy-agent` for a remote agent)
+so it can create/remove per-deployment sub-cgroups without root:
 
 ```bash
 sudo mkdir -p /sys/fs/cgroup/durpdeploy
@@ -374,10 +393,12 @@ sudo chown -R durpdeploy:durpdeploy /sys/fs/cgroup/durpdeploy
 echo '+cpu +memory +pids' | sudo tee /sys/fs/cgroup/durpdeploy/cgroup.subtree_control
 ```
 
-The operating system removes this virtual directory during a reboot. Run the
-commands again after each reboot. As an alternative, add a `systemd-tmpfiles` rule
-or a one-shot unit. If this directory is missing, `durpdeploy` writes a warning
-and does not apply resource limits.
+This directory does not survive a reboot (cgroupfs is virtual) — re-run the
+above after every reboot, or add a small `systemd-tmpfiles` rule / oneshot
+unit if you want it automated. For a remote agent, use the same commands with
+`durpdeploy-agent:durpdeploy-agent`; Compose bind-mounts only this delegated
+subtree. Missing, read-only, or incorrectly delegated cgroups fail the
+deployment rather than disabling its resource limits.
 
 ---
 

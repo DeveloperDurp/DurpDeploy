@@ -97,17 +97,17 @@ jobs:
     runs-on: ubuntu-latest
     needs: [version]
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
 
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version: '1.25'
           cache: true
 
       - name: Install templ
-        run: go install github.com/a-h/templ/cmd/templ@v0.3.1020
+        run: go install github.com/a-h/templ/cmd/templ@09d6b02946f54492f3d3dcb9729f5b792f220b40
 
       # ponytail: static/swagger-ui/ is gitignored (build artifacts from
       # node_modules/swagger-ui-dist), so the //go:embed pattern in
@@ -129,8 +129,16 @@ jobs:
             exit 1
           fi
 
+      - name: golines
+        run: |
+          output=$(make golines-check)
+          if [ -n "$output" ]; then
+            printf '%s\n' "$output"
+            exit 1
+          fi
+
       - name: hadolint
-        uses: hadolint/hadolint-action@v3.3.0
+        uses: hadolint/hadolint-action@2332a7b74a6de0dda2e2221d575162eba76ba5e5 # v3.3.0
         with:
           dockerfile: Dockerfile
           failure-threshold: warning
@@ -141,17 +149,17 @@ jobs:
     runs-on: ubuntu-latest
     needs: [lint]
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
 
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version: '1.25'
           cache: true
 
       - name: Install templ
-        run: go install github.com/a-h/templ/cmd/templ@v0.3.1020
+        run: go install github.com/a-h/templ/cmd/templ@09d6b02946f54492f3d3dcb9729f5b792f220b40
 
       # ponytail: must run before any go command. Without it, internal/handler
       # packages that import `durpdeploy/views/components` fail to resolve
@@ -182,13 +190,13 @@ jobs:
       packages: write
       attestations: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
 
       - name: Log in to ghcr.io
-        uses: docker/login-action@v4
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -196,7 +204,7 @@ jobs:
 
       - name: Extract metadata
         id: meta
-        uses: docker/metadata-action@v6
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
         with:
           images: ghcr.io/${{ env.REGISTRY_OWNER }}/${{ env.IMAGE_NAME }}
           # Only the primary version is interesting here; ghcr retains
@@ -206,7 +214,7 @@ jobs:
             type=raw,value=latest,enable=${{ needs.version.outputs.is_release == 'true' }}
 
       - name: Build and push
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: .
           file: ./Dockerfile
@@ -229,15 +237,16 @@ jobs:
         # of the 76 tags compromised in the March 2026 supply-chain
         # attack — only 0.35.0+ are post-incident, and 0.36.0 is current.
         # GitHub Actions requires the `v` prefix on bare SemVer tags —
-        # `aquasecurity/trivy-action@0.36.0` 404s, `@v0.36.0` resolves.
-        uses: aquasecurity/trivy-action@v0.36.0
+        # The prefixed release ref is required for this action.
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: ghcr.io/${{ env.REGISTRY_OWNER }}/${{ env.IMAGE_NAME }}:${{ needs.version.outputs.version }}
           format: 'table'
-          exit-code: '0'
+          exit-code: '1'
           ignore-unfixed: true
           vuln-type: 'os,library'
           severity: 'HIGH,CRITICAL'
+
 
   # ----- Helm chart (OCI) -----------------------------------------------
   # Bump appVersion in Chart.yaml to the built image's tag, package, and
@@ -251,10 +260,10 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Helm
-        uses: azure/setup-helm@v5
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5
         with:
           version: v3.16.2
 

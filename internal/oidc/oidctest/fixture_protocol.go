@@ -36,6 +36,7 @@ func (f *Fixture) serveDiscovery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if f.blockDiscovery.Load() {
+		f.discoveryStartedOnce.Do(func() { close(f.discoveryStarted) })
 		<-r.Context().Done()
 		f.discoveryCancelOnce.Do(func() { close(f.discoveryCanceled) })
 		return

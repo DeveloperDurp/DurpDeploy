@@ -268,4 +268,6 @@ These attacks are out of scope for P0:
 Remote agent transport is outbound-only and uses mTLS with pinned fingerprints.
 If an agent host is compromised, stop its service, revoke the agent, rotate its
 pairing and certificate material, and review deployments for its assigned
-environments. See `docs/agent-protocol.md` for the protocol boundaries.
+environments. See the standalone
+[agent protocol](https://github.com/DeveloperDurp/durpdeploy-agent/blob/main/docs/agent-protocol.md)
+for the protocol boundaries.

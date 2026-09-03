@@ -21,9 +21,6 @@ var (
 		"mssqldriver: unsupported conflict target",
 	)
 
-	limitRe = regexp.MustCompile(
-		`(?is)\s+LIMIT\s+(@p\d+|\d+)(?:\s+OFFSET\s+(@p\d+|\d+))?(\s*;?)$`,
-	)
 	conflictRe = regexp.MustCompile(
 		`(?is)^(.*?)(INSERT INTO project_members \(project_id, user_id, role\) VALUES \((@p\d+), (@p\d+), (@p\d+)\))\s+ON CONFLICT \(project_id, user_id\) DO UPDATE SET role = excluded\.role(\s*;?)$`,
 	)
@@ -43,10 +40,14 @@ func RewriteSQL(query string) (string, error) {
 	query = replaceOutsideQuotes(query, " AS TEXT", " AS NVARCHAR(MAX)")
 
 	if containsOutsideQuotes(query, "ON CONFLICT") {
-		var err error
-		query, err = rewriteProjectMembersConflict(query)
-		if err != nil {
-			return "", err
+		if rewritten, ok := rewriteRemoteAgentConflict(query); ok {
+			query = rewritten
+		} else {
+			var err error
+			query, err = rewriteConflict(query)
+			if err != nil {
+				return "", err
+			}
 		}
 	}
 
@@ -226,14 +227,15 @@ func rewriteProjectMemberExists(query string) string {
 		") THEN CAST(1 AS BIGINT) ELSE CAST(0 AS BIGINT) END" + match[5]
 }
 
-func rewriteProjectMembersConflict(query string) (string, error) {
+func rewriteConflict(query string) (string, error) {
 	match := conflictRe.FindStringSubmatch(query)
-	if match == nil {
-		return "", fmt.Errorf(
-			"%w: project_members requires (project_id, user_id)",
-			ErrUnsupportedConflict,
-		)
+	if match != nil {
+		return mergeProjectMembers(match), nil
 	}
+	return "", fmt.Errorf("%w: unsupported target", ErrUnsupportedConflict)
+}
+
+func mergeProjectMembers(match []string) string {
 	mergeSQL := match[1] + "MERGE project_members WITH (HOLDLOCK) AS target\n" +
 		"USING (VALUES (" + match[3] + ", " + match[4] + ", " + match[5] + ")) AS source (project_id, user_id, role)\n" +
 		"ON target.project_id = source.project_id AND target.user_id = source.user_id\n" +
@@ -243,32 +245,5 @@ func rewriteProjectMembersConflict(query string) (string, error) {
 	if !strings.HasSuffix(mergeSQL, ";") {
 		mergeSQL += ";"
 	}
-	return mergeSQL, nil
-}
-
-func rewriteLimit(query string) string {
-	match := limitRe.FindStringSubmatchIndex(query)
-	if match == nil {
-		return query
-	}
-	limit := query[match[2]:match[3]]
-	offset := ""
-	if match[4] >= 0 {
-		offset = query[match[4]:match[5]]
-	}
-	suffix := query[match[6]:match[7]]
-	if offset != "" {
-		limitStart := strings.Index(
-			strings.ToUpper(query[match[0]:match[1]]),
-			"LIMIT",
-		)
-		separator := query[match[0] : match[0]+limitStart]
-		return query[:match[0]] + separator + "OFFSET " + offset + " ROWS FETCH NEXT " + limit + " ROWS ONLY" + suffix
-	}
-	selectIndex := keywordIndexOutsideQuotes(query[:match[0]], "SELECT")
-	if selectIndex < 0 {
-		return query
-	}
-	insertAt := selectIndex + len("SELECT")
-	return query[:insertAt] + " TOP (" + limit + ")" + query[insertAt:match[0]] + suffix
+	return mergeSQL
 }

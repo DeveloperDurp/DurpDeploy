@@ -14,6 +14,7 @@ import (
 
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/dispatch"
 	"durpdeploy/internal/handler"
 	"durpdeploy/internal/migrate"
 	"durpdeploy/internal/oidc"
@@ -140,6 +141,7 @@ func runHarness(ctx context.Context, config commandConfig) (err error) {
 		Handler: server.NewRouter(
 			repo,
 			deploymentRunner,
+			dispatch.New(repo, box, deploymentRunner),
 			parser,
 			authHandler,
 			true,

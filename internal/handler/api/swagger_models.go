@@ -78,32 +78,52 @@ type swaggerRelease struct {
 // Deployment represents a release executing against an environment.
 // swagger:model Deployment
 type swaggerDeployment struct {
-	ID            int64   `json:"id"`
-	ReleaseID     int64   `json:"release_id"`
-	EnvironmentID int64   `json:"environment_id"`
-	Status        string  `json:"status"`
-	StartedAt     *int64  `json:"started_at"`
-	FinishedAt    *int64  `json:"finished_at"`
-	CreatedAt     int64   `json:"created_at"`
-	Forced        int64   `json:"forced"`
-	Note          *string `json:"note"`
+	ID            int64                     `json:"id"`
+	ReleaseID     int64                     `json:"release_id"`
+	EnvironmentID int64                     `json:"environment_id"`
+	Status        string                    `json:"status"`
+	StartedAt     *int64                    `json:"started_at"`
+	FinishedAt    *int64                    `json:"finished_at"`
+	CreatedAt     int64                     `json:"created_at"`
+	Forced        int64                     `json:"forced"`
+	Note          *string                   `json:"note"`
+	Dispatch      swaggerDeploymentDispatch `json:"dispatch"`
+}
+
+// DeploymentDispatch is the safe operator-facing routing state.
+// swagger:model DeploymentDispatch
+type swaggerDeploymentDispatch struct {
+	Mode   string                  `json:"mode"`
+	State  string                  `json:"state,omitempty"`
+	Reason string                  `json:"reason,omitempty"`
+	Agent  *swaggerDeploymentAgent `json:"agent,omitempty"`
+}
+
+// DeploymentAgent is the assigned agent's safe health metadata.
+// swagger:model DeploymentAgent
+type swaggerDeploymentAgent struct {
+	ID              string `json:"id"`
+	Name            string `json:"name"`
+	Status          string `json:"status"`
+	LastHeartbeatAt *int64 `json:"last_heartbeat_at,omitempty"`
 }
 
 // DeploymentListItem is the enriched row returned by ListDeployments.
 // swagger:model DeploymentListItem
 type swaggerDeploymentListItem struct {
-	ID              int64   `json:"id"`
-	ReleaseID       int64   `json:"release_id"`
-	EnvironmentID   int64   `json:"environment_id"`
-	Status          string  `json:"status"`
-	StartedAt       *int64  `json:"started_at"`
-	FinishedAt      *int64  `json:"finished_at"`
-	CreatedAt       int64   `json:"created_at"`
-	Forced          int64   `json:"forced"`
-	Note            *string `json:"note"`
-	ProjectName     string  `json:"project_name"`
-	ReleaseVersion  string  `json:"release_version"`
-	EnvironmentName string  `json:"environment_name"`
+	ID              int64                     `json:"id"`
+	ReleaseID       int64                     `json:"release_id"`
+	EnvironmentID   int64                     `json:"environment_id"`
+	Status          string                    `json:"status"`
+	StartedAt       *int64                    `json:"started_at"`
+	FinishedAt      *int64                    `json:"finished_at"`
+	CreatedAt       int64                     `json:"created_at"`
+	Forced          int64                     `json:"forced"`
+	Note            *string                   `json:"note"`
+	ProjectName     string                    `json:"project_name"`
+	ReleaseVersion  string                    `json:"release_version"`
+	EnvironmentName string                    `json:"environment_name"`
+	Dispatch        swaggerDeploymentDispatch `json:"dispatch"`
 }
 
 // DeploymentListResponse is the paginated envelope for ListDeployments.
@@ -118,8 +138,8 @@ type swaggerDeploymentListResponse struct {
 // DeploymentStatusResponse is the status payload for GetDeploymentStatus.
 // swagger:model DeploymentStatusResponse
 type swaggerDeploymentStatusResponse struct {
-	ID     string `json:"id"`
-	Status string `json:"status"`
+	Status   string                    `json:"status"`
+	Dispatch swaggerDeploymentDispatch `json:"dispatch"`
 }
 
 // ScheduledDeployment is a cron-driven deployment configuration.

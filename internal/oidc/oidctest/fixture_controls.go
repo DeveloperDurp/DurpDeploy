@@ -38,10 +38,10 @@ func (f *Fixture) SetTokenFailures(count int32) {
 	f.tokenFailures.Store(count)
 }
 
-// BlockDiscovery waits for client cancellation and returns its notification.
-func (f *Fixture) BlockDiscovery() <-chan struct{} {
+// BlockDiscovery returns notifications for request arrival and cancellation.
+func (f *Fixture) BlockDiscovery() (started, canceled <-chan struct{}) {
 	f.blockDiscovery.Store(true)
-	return f.discoveryCanceled
+	return f.discoveryStarted, f.discoveryCanceled
 }
 
 // RotateSigningKey generates and serves a new key with a new key ID.

@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -20,7 +19,6 @@ import (
 
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/handler"
-	"durpdeploy/internal/migrate"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/runner"
 )
@@ -36,16 +34,7 @@ func newScheduledHarness(t *testing.T) *scheduledHarness {
 	t.Helper()
 	// ponytail: file-backed SQLite, not :memory:, because the runner spawns
 	// goroutines that need their own DB connection.
-	dir := t.TempDir()
-	dsn := fmt.Sprintf(
-		"file:%s?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)",
-		filepath.Join(dir, "test.db"),
-	)
-	conn, err := migrate.Run(dsn)
-	if err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
-	t.Cleanup(func() { _ = conn.Close() })
+	conn := newHandlerTestDatabase(t)
 
 	repo := repository.New(conn)
 	broker := runner.NewLogBroker()

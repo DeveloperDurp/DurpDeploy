@@ -10,17 +10,16 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/dispatch"
 	"durpdeploy/internal/handler"
-	"durpdeploy/internal/migrate"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/runner"
+	"durpdeploy/internal/secret"
 	"durpdeploy/internal/server"
 
 	"github.com/robfig/cron/v3"
@@ -37,38 +36,37 @@ type testHarness struct {
 	repo   *repository.Repository
 	rnr    *runner.DeploymentRunner
 	server *httptest.Server
-	dbPath string
 	sess   *authedSession
 }
 
 func newHarness(t *testing.T) *testHarness {
 	t.Helper()
-	dir := t.TempDir()
-	dbPath := filepath.Join(dir, "test.db")
-	dsn := fmt.Sprintf(
-		"file:%s?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)",
-		dbPath,
-	)
-	conn, err := migrate.Run(dsn)
-	if err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
-	t.Cleanup(func() {
-		_ = conn.Close()
-		_ = os.RemoveAll(dir)
-	})
+	conn := newHandlerTestDatabase(t)
 
 	repo := repository.New(conn)
 	broker := runner.NewLogBroker()
-	rnr := runner.New(repo, broker)
+	rnr := runner.NewForTests(repo, broker)
+	box, err := secret.NewBox(make([]byte, 32))
+	if err != nil {
+		t.Fatalf("new secret box: %v", err)
+	}
+	repo.SetSecretBox(box)
 	parser := cron.NewParser(
 		cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow,
 	)
 	authHandler := handler.NewAuthHandler(repo)
-	srv := httptest.NewServer(server.NewRouter(repo, rnr, parser, authHandler))
+	srv := httptest.NewServer(
+		server.NewRouter(
+			repo,
+			rnr,
+			dispatch.New(repo, box, rnr),
+			parser,
+			authHandler,
+		),
+	)
 	t.Cleanup(srv.Close)
 
-	h := &testHarness{repo: repo, rnr: rnr, server: srv, dbPath: dbPath}
+	h := &testHarness{repo: repo, rnr: rnr, server: srv}
 	h.sess = seedSession(t, repo, srv.URL, "admin")
 	return h
 }
@@ -919,6 +917,15 @@ func TestScheduleDeployment_Success(t *testing.T) {
 	if deps[0].ReleaseID != rel.ID {
 		t.Errorf("deployment release_id mismatch")
 	}
+	if _, err := h.repo.Queries.GetDeploymentDispatch(
+		context.Background(),
+		deps[0].ID,
+	); err != nil {
+		t.Fatalf(
+			"expected exactly one dispatch for eligible deployment: %v",
+			err,
+		)
+	}
 }
 
 func TestScheduleDeployment_CrossProjectReleaseIsRejected(t *testing.T) {
@@ -963,6 +970,14 @@ func TestScheduleDeployment_GateViolation422(t *testing.T) {
 	)
 	if code != 422 {
 		t.Errorf("expected 422, got %d", code)
+	}
+	if _, err := h.repo.Queries.GetLatestDeploymentForReleaseEnv(
+		context.Background(),
+		db.GetLatestDeploymentForReleaseEnvParams{
+			ReleaseID: rel.ID, EnvironmentID: out.ID,
+		},
+	); err != sql.ErrNoRows {
+		t.Fatalf("gate-blocked deployment = %v, want sql.ErrNoRows", err)
 	}
 }
 
@@ -1634,6 +1649,9 @@ func TestApproval_DeployerCannotApprove(t *testing.T) {
 	defer adminResp.Body.Close()
 	if adminResp.StatusCode != http.StatusSeeOther {
 		t.Fatalf("admin approve: got %d, want 303", adminResp.StatusCode)
+	}
+	if _, err := h.repo.Queries.GetDeploymentDispatch(ctx, dep.ID); err != nil {
+		t.Fatalf("expected exactly one dispatch after admin approval: %v", err)
 	}
 }
 

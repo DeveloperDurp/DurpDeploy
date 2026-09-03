@@ -3,7 +3,7 @@ package api
 import (
 	"context"
 	"database/sql"
-	"fmt"
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -11,26 +11,56 @@ import (
 
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/deploymentstate"
+	"durpdeploy/internal/dispatch"
 	"durpdeploy/internal/gate"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/runner"
 )
 
 type DeploymentHandler struct {
-	repo   *repository.Repository
-	runner *runner.DeploymentRunner
+	repo       *repository.Repository
+	runner     *runner.DeploymentRunner
+	dispatcher *dispatch.Dispatcher
 }
 
 func NewDeploymentHandler(
 	repo *repository.Repository,
 	r *runner.DeploymentRunner,
+	dispatchers ...*dispatch.Dispatcher,
 ) *DeploymentHandler {
-	return &DeploymentHandler{repo: repo, runner: r}
+	dispatcher := dispatch.New(repo, nil, r)
+	if len(dispatchers) > 0 && dispatchers[0] != nil {
+		dispatcher = dispatchers[0]
+	}
+	return &DeploymentHandler{repo: repo, runner: r, dispatcher: dispatcher}
 }
 
 type deploymentCreateRequest struct {
 	ReleaseID     int64 `json:"release_id"`
 	EnvironmentID int64 `json:"environment_id"`
+}
+
+type deploymentResponse struct {
+	db.Deployment
+	Dispatch deploymentstate.Dispatch `json:"dispatch"`
+}
+
+type deploymentStatusResponse struct {
+	Status   string                   `json:"status"`
+	Dispatch deploymentstate.Dispatch `json:"dispatch"`
+}
+
+func deploymentWithRouting(
+	ctx context.Context,
+	repo *repository.Repository,
+	deployment db.Deployment,
+) (deploymentResponse, error) {
+	routing, err := deploymentstate.Load(ctx, repo, deployment.ID)
+	if err != nil {
+		return deploymentResponse{}, err
+	}
+	return deploymentResponse{Deployment: deployment, Dispatch: routing}, nil
 }
 
 func deploymentIDFromRequest(r *http.Request) (int64, error) {
@@ -146,12 +176,13 @@ func (h *DeploymentHandler) CreateDeployment(
 	}
 
 	if status == "pending" {
-		go h.runner.Run(
-			context.Background(),
+		if err := h.dispatcher.Dispatch(
+			r.Context(),
 			deployment.ID,
-			release.ID,
-			req.EnvironmentID,
-		)
+		); err != nil {
+			RespondError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
 	}
 
 	RespondJSON(w, http.StatusCreated, deployment)
@@ -239,6 +270,14 @@ func (h *DeploymentHandler) ListDeployments(
 	if v := r.URL.Query().Get("status"); v != "" {
 		fStatus = sql.NullString{String: v, Valid: true}
 	}
+	var fDispatchState sql.NullString
+	if value := r.URL.Query().Get("remote_state"); value != "" {
+		if !deploymentstate.ValidFilterState(value) {
+			RespondError(w, http.StatusBadRequest, "invalid remote_state")
+			return
+		}
+		fDispatchState = sql.NullString{String: value, Valid: true}
+	}
 
 	var fFromUnix, fToUnix sql.NullInt64
 	if v := r.URL.Query().Get("from"); v != "" {
@@ -269,13 +308,14 @@ func (h *DeploymentHandler) ListDeployments(
 	deployments, err := h.repo.Queries.ListDeploymentsWithRefsFiltered(
 		r.Context(),
 		db.ListDeploymentsWithRefsFilteredParams{
-			FProjectID: fProjectID,
-			FEnvID:     fEnvID,
-			FStatus:    fStatus,
-			FFromUnix:  fFromUnix,
-			FToUnix:    fToUnix,
-			PageOffset: offset,
-			PageLimit:  limit,
+			FProjectID:     fProjectID,
+			FEnvID:         fEnvID,
+			FStatus:        fStatus,
+			FDispatchState: fDispatchState,
+			FFromUnix:      fFromUnix,
+			FToUnix:        fToUnix,
+			PageOffset:     offset,
+			PageLimit:      limit,
 		},
 	)
 	if err != nil {
@@ -286,11 +326,12 @@ func (h *DeploymentHandler) ListDeployments(
 	total, err := h.repo.Queries.CountDeploymentsWithRefsFiltered(
 		r.Context(),
 		db.CountDeploymentsWithRefsFilteredParams{
-			FProjectID: fProjectID,
-			FEnvID:     fEnvID,
-			FStatus:    fStatus,
-			FFromUnix:  fFromUnix,
-			FToUnix:    fToUnix,
+			FProjectID:     fProjectID,
+			FEnvID:         fEnvID,
+			FStatus:        fStatus,
+			FDispatchState: fDispatchState,
+			FFromUnix:      fFromUnix,
+			FToUnix:        fToUnix,
 		},
 	)
 	if err != nil {
@@ -300,7 +341,23 @@ func (h *DeploymentHandler) ListDeployments(
 
 	items := make([]any, len(deployments))
 	for i, d := range deployments {
-		items[i] = d
+		deployment := db.Deployment{
+			ID:            d.ID,
+			ReleaseID:     d.ReleaseID,
+			EnvironmentID: d.EnvironmentID,
+			Status:        d.Status,
+			StartedAt:     d.StartedAt,
+			FinishedAt:    d.FinishedAt,
+			CreatedAt:     d.CreatedAt,
+			Forced:        d.Forced,
+			Note:          d.Note,
+		}
+		response, err := deploymentWithRouting(r.Context(), h.repo, deployment)
+		if err != nil {
+			RespondError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		items[i] = response
 	}
 	RespondJSON(w, http.StatusOK, PaginatedResponse{
 		Items:  items,
@@ -347,7 +404,12 @@ func (h *DeploymentHandler) GetDeployment(
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	RespondJSON(w, http.StatusOK, deployment)
+	response, err := deploymentWithRouting(r.Context(), h.repo, deployment)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	RespondJSON(w, http.StatusOK, response)
 }
 
 // GetDeploymentStatus returns the current deployment status.
@@ -386,11 +448,14 @@ func (h *DeploymentHandler) GetDeploymentStatus(
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	RespondJSON(
-		w,
-		http.StatusOK,
-		map[string]string{"status": deployment.Status},
-	)
+	routing, err := deploymentstate.Load(r.Context(), h.repo, depID)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	RespondJSON(w, http.StatusOK, deploymentStatusResponse{
+		Status: deployment.Status, Dispatch: routing,
+	})
 }
 
 // ApproveDeployment approves a deployment pending approval.
@@ -441,13 +506,37 @@ func (h *DeploymentHandler) ApproveDeployment(
 		return
 	}
 
-	if err := h.repo.Queries.UpdateDeploymentStatus(
-		r.Context(),
-		db.UpdateDeploymentStatusParams{
-			ID:     depID,
-			Status: "approved",
-		},
-	); err != nil {
+	err = h.repo.WithTx(r.Context(), func(q *db.Queries) error {
+		updated, updateErr := q.ApprovePendingDeployment(
+			r.Context(),
+			depID,
+		)
+		if updateErr != nil {
+			return updateErr
+		}
+		if updated != 1 {
+			return dispatch.ErrCancellationState
+		}
+		_, createErr := q.CreateApproval(r.Context(), db.CreateApprovalParams{
+			DeploymentID: depID, ApprovedBy: user.Name,
+			ApproverUserID:       sql.NullInt64{Int64: user.ID, Valid: true},
+			RequiredApproverRole: "admin",
+		})
+		return createErr
+	})
+	if errors.Is(err, dispatch.ErrCancellationState) {
+		RespondError(
+			w,
+			http.StatusConflict,
+			"Deployment is not pending approval",
+		)
+		return
+	}
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if err := h.dispatcher.Dispatch(r.Context(), depID); err != nil {
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -489,8 +578,13 @@ func (h *DeploymentHandler) RedeployDeployment(
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	routing, err := deploymentstate.Load(r.Context(), h.repo, depID)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 	if deployment.Status != "succeeded" && deployment.Status != "failed" &&
-		deployment.Status != "cancelled" {
+		deployment.Status != "cancelled" && !routing.IsUncertainTerminal() {
 		RespondError(
 			w,
 			http.StatusConflict,
@@ -541,12 +635,13 @@ func (h *DeploymentHandler) RedeployDeployment(
 		return
 	}
 	if initialStatus == "pending" {
-		go h.runner.Run(
-			context.Background(),
+		if err := h.dispatcher.Dispatch(
+			r.Context(),
 			newDeployment.ID,
-			newDeployment.ReleaseID,
-			newDeployment.EnvironmentID,
-		)
+		); err != nil {
+			RespondError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
 	}
 	RespondJSON(w, http.StatusCreated, newDeployment)
 }
@@ -576,30 +671,28 @@ func (h *DeploymentHandler) CancelDeployment(
 		return
 	}
 
-	deployment, err := h.repo.Queries.GetDeployment(r.Context(), depID)
+	state, err := dispatch.NewCancellationService(h.repo, h.runner).Cancel(
+		r.Context(),
+		depID,
+	)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			RespondError(w, http.StatusNotFound, "Deployment not found")
+			return
+		}
+		if errors.Is(err, dispatch.ErrCancellationState) {
+			RespondError(
+				w,
+				http.StatusUnprocessableEntity,
+				"Cannot cancel a deployment that is not running",
+			)
 			return
 		}
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	if deployment.Status != "running" {
-		RespondError(
-			w,
-			http.StatusUnprocessableEntity,
-			"Cannot cancel a deployment that is not running",
-		)
-		return
-	}
 
-	if err := h.runner.Cancel(depID); err != nil {
-		RespondError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	RespondJSON(w, http.StatusOK, map[string]string{"status": "cancelled"})
+	RespondJSON(w, http.StatusOK, map[string]string{"status": state})
 }
 
 // swagger:route POST /deployments/{id}/retry deployments retryDeployment
@@ -612,7 +705,7 @@ func (h *DeploymentHandler) CancelDeployment(
 //	  bearer:
 //
 //	Responses:
-//	  200: body:Deployment
+//	  201: body:Deployment
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
 //	  404: body:NotFoundError
@@ -644,31 +737,21 @@ func (h *DeploymentHandler) RetryDeployment(
 		)
 		return
 	}
-
-	if err := h.repo.Queries.UpdateDeploymentStatus(
-		r.Context(),
-		db.UpdateDeploymentStatusParams{
-			ID:     depID,
-			Status: "pending",
-		},
-	); err != nil {
-		RespondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	go h.runner.Run(
-		r.Context(),
-		depID,
-		deployment.ReleaseID,
-		deployment.EnvironmentID,
-	)
-
-	updated, err := h.repo.Queries.GetDeployment(r.Context(), depID)
+	routing, err := deploymentstate.Load(r.Context(), h.repo, depID)
 	if err != nil {
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	RespondJSON(w, http.StatusOK, updated)
+	if routing.IsUncertainTerminal() {
+		RespondError(
+			w,
+			http.StatusConflict,
+			"Use redeploy to create a new deployment after remote work is uncertain",
+		)
+		return
+	}
+
+	h.RedeployDeployment(w, r)
 }
 
 // swagger:route GET /deployments/{id}/logs deployments listDeploymentLogs
@@ -707,77 +790,4 @@ func (h *DeploymentHandler) ListDeploymentLogs(
 		return
 	}
 	RespondJSON(w, http.StatusOK, logs)
-}
-
-// swagger:route GET /deployments/{id}/events deployments deploymentEvents
-//
-// Stream deployment events as Server-Sent Events.
-//
-//	Produces:
-//	- text/event-stream
-//
-//	Schemes: http, https
-//
-//	Security:
-//	  bearer:
-//
-//	Responses:
-//	  200: body:StreamResponse
-//	  400: body:BadRequestError
-//	  401: body:UnauthorizedError
-//	  404: body:NotFoundError
-func (h *DeploymentHandler) DeploymentEvents(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
-	depID, err := deploymentIDFromRequest(r)
-	if err != nil {
-		RespondError(w, http.StatusBadRequest, "Invalid deployment ID")
-		return
-	}
-
-	if _, err := h.repo.Queries.GetDeployment(r.Context(), depID); err != nil {
-		if err == sql.ErrNoRows {
-			RespondError(w, http.StatusNotFound, "Deployment not found")
-			return
-		}
-		RespondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("X-Accel-Buffering", "no")
-
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		RespondError(w, http.StatusInternalServerError, "Streaming unsupported")
-		return
-	}
-
-	if err := h.repo.ForEachDeploymentLogByDeploymentAsc(
-		r.Context(),
-		depID,
-		func(log db.DeploymentLog) error {
-			fmt.Fprintf(w, "data: %s\n\n", log.Line)
-			flusher.Flush()
-			return nil
-		},
-	); err != nil {
-		return
-	}
-
-	ch := h.runner.Broker().Subscribe(depID)
-	defer h.runner.Broker().Unsubscribe(depID, ch)
-
-	for {
-		select {
-		case <-r.Context().Done():
-			return
-		case line := <-ch:
-			fmt.Fprintf(w, "data: %s\n\n", line)
-			flusher.Flush()
-		}
-	}
 }

@@ -1,8 +1,8 @@
 package handler
 
 import (
-	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -13,6 +13,8 @@ import (
 
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/deploymentstate"
+	"durpdeploy/internal/dispatch"
 	"durpdeploy/internal/gate"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/runner"
@@ -20,15 +22,23 @@ import (
 )
 
 type DeploymentHandler struct {
-	repo   *repository.Repository
-	runner *runner.DeploymentRunner
+	repo       *repository.Repository
+	runner     *runner.DeploymentRunner
+	dispatcher *dispatch.Dispatcher
 }
 
 func NewDeploymentHandler(
 	repo *repository.Repository,
 	runner *runner.DeploymentRunner,
+	dispatchers ...*dispatch.Dispatcher,
 ) *DeploymentHandler {
-	return &DeploymentHandler{repo: repo, runner: runner}
+	dispatcher := dispatch.New(repo, nil, runner)
+	if len(dispatchers) > 0 && dispatchers[0] != nil {
+		dispatcher = dispatchers[0]
+	}
+	return &DeploymentHandler{
+		repo: repo, runner: runner, dispatcher: dispatcher,
+	}
 }
 
 // gateViolation describes a single reason a deployment is blocked by a project's
@@ -385,12 +395,13 @@ func (h *DeploymentHandler) ScheduleDeployment(
 	}
 
 	if initialStatus == "pending" {
-		go h.runner.Run(
-			context.Background(),
+		if err := h.dispatcher.Dispatch(
+			r.Context(),
 			deployment.ID,
-			releaseID,
-			environmentID,
-		)
+		); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 
 	http.Redirect(
@@ -555,14 +566,19 @@ func (h *DeploymentHandler) GetDeployment(
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	routing, err := deploymentstate.Load(r.Context(), h.repo, id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
 	if r.Header.Get("HX-Request") == "true" {
-		if err := pages.DeploymentDetail(project, release, environment, deployment, logs).
+		if err := pages.DeploymentDetail(project, release, environment, deployment, routing, logs).
 			Render(r.Context(), w); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	} else {
-		if err := pages.DeploymentDetailPage(project, release, environment, deployment, logs, r.URL.Path).
+		if err := pages.DeploymentDetailPage(project, release, environment, deployment, routing, logs, r.URL.Path).
 			Render(r.Context(), w); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
@@ -590,7 +606,12 @@ func (h *DeploymentHandler) GetDeploymentStatus(
 		return
 	}
 
-	if err := pages.StatusBadgeContainer(deployment).
+	routing, err := deploymentstate.Load(r.Context(), h.repo, id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err := pages.StatusBadgeContainer(deployment, routing).
 		Render(r.Context(), w); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -607,39 +628,36 @@ func (h *DeploymentHandler) CancelDeployment(
 		return
 	}
 
-	deployment, err := h.repo.Queries.GetDeployment(r.Context(), id)
+	_, err = dispatch.NewCancellationService(h.repo, h.runner).Cancel(
+		r.Context(),
+		id,
+	)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			http.Error(w, "Deployment not found", http.StatusNotFound)
+			return
+		}
+		if errors.Is(err, dispatch.ErrCancellationState) {
+			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	if deployment.Status != "running" &&
-		deployment.Status != "pending_approval" {
-		http.Error(
-			w,
-			"Deployment cannot be cancelled in its current state",
-			http.StatusBadRequest,
-		)
-		return
-	}
-
-	if err := h.runner.Cancel(id); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	deployment, err = h.repo.Queries.GetDeployment(r.Context(), id)
+	deployment, err := h.repo.Queries.GetDeployment(r.Context(), id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
+	routing, err := deploymentstate.Load(r.Context(), h.repo, id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	if r.Header.Get("HX-Request") == "true" {
-		if err := pages.StatusBadgeContainer(deployment).
+		if err := pages.StatusBadgeContainer(deployment, routing).
 			Render(r.Context(), w); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
@@ -696,37 +714,36 @@ func (h *DeploymentHandler) ApproveDeployment(
 	approvedBy := u.Name
 	approverUserID := sql.NullInt64{Int64: u.ID, Valid: true}
 
-	if _, err := h.repo.Queries.CreateApproval(
-		r.Context(),
-		db.CreateApprovalParams{
-			DeploymentID:         id,
-			ApprovedBy:           approvedBy,
-			ApproverUserID:       approverUserID,
-			RequiredApproverRole: "admin",
-		},
-	); err != nil {
+	err = h.repo.WithTx(r.Context(), func(q *db.Queries) error {
+		updated, updateErr := q.ApprovePendingDeployment(
+			r.Context(),
+			id,
+		)
+		if updateErr != nil {
+			return updateErr
+		}
+		if updated != 1 {
+			return dispatch.ErrCancellationState
+		}
+		_, createErr := q.CreateApproval(r.Context(), db.CreateApprovalParams{
+			DeploymentID: id, ApprovedBy: approvedBy,
+			ApproverUserID: approverUserID, RequiredApproverRole: "admin",
+		})
+		return createErr
+	})
+	if errors.Is(err, dispatch.ErrCancellationState) {
+		http.Error(w, "Deployment is not pending approval", http.StatusConflict)
+		return
+	}
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	// Transition to "pending" so the runner picks it up via the normal path.
-	if err := h.repo.Queries.UpdateDeploymentStatus(
-		r.Context(),
-		db.UpdateDeploymentStatusParams{
-			ID:     id,
-			Status: "pending",
-		},
-	); err != nil {
+	if err := h.dispatcher.Dispatch(r.Context(), id); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
-	go h.runner.Run(
-		context.Background(),
-		id,
-		deployment.ReleaseID,
-		deployment.EnvironmentID,
-	)
 
 	if r.Header.Get("HX-Request") == "true" {
 		w.Header().Set(
@@ -762,9 +779,14 @@ func (h *DeploymentHandler) RedeployDeployment(
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	routing, err := deploymentstate.Load(r.Context(), h.repo, id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
 	if source.Status != "succeeded" && source.Status != "failed" &&
-		source.Status != "cancelled" {
+		source.Status != "cancelled" && !routing.IsUncertainTerminal() {
 		http.Error(
 			w,
 			"Source deployment is not in a terminal state",
@@ -829,12 +851,13 @@ func (h *DeploymentHandler) RedeployDeployment(
 	}
 
 	if initialStatus == "pending" {
-		go h.runner.Run(
-			context.Background(),
+		if err := h.dispatcher.Dispatch(
+			r.Context(),
 			deployment.ID,
-			source.ReleaseID,
-			source.EnvironmentID,
-		)
+		); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 
 	if r.Header.Get("HX-Request") == "true" {
@@ -862,13 +885,14 @@ func (h *DeploymentHandler) ListDeployments(
 	rows, err := h.repo.Queries.ListDeploymentsWithRefsFiltered(
 		r.Context(),
 		db.ListDeploymentsWithRefsFilteredParams{
-			FProjectID: f.ProjectID,
-			FEnvID:     f.EnvID,
-			FStatus:    f.Status,
-			FFromUnix:  f.FromUnix,
-			FToUnix:    f.ToUnix,
-			PageOffset: f.Offset,
-			PageLimit:  f.Limit,
+			FProjectID:     f.ProjectID,
+			FEnvID:         f.EnvID,
+			FStatus:        f.Status,
+			FDispatchState: f.DispatchState,
+			FFromUnix:      f.FromUnix,
+			FToUnix:        f.ToUnix,
+			PageOffset:     f.Offset,
+			PageLimit:      f.Limit,
 		},
 	)
 	if err != nil {
@@ -894,16 +918,23 @@ func (h *DeploymentHandler) ListDeployments(
 			ReleaseVersion:  row.ReleaseVersion,
 			EnvironmentName: row.EnvironmentName,
 		}
+		routing, err := deploymentstate.Load(r.Context(), h.repo, row.ID)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		items[i].Routing = routing
 	}
 
 	total, err := h.repo.Queries.CountDeploymentsWithRefsFiltered(
 		r.Context(),
 		db.CountDeploymentsWithRefsFilteredParams{
-			FProjectID: f.ProjectID,
-			FEnvID:     f.EnvID,
-			FStatus:    f.Status,
-			FFromUnix:  f.FromUnix,
-			FToUnix:    f.ToUnix,
+			FProjectID:     f.ProjectID,
+			FEnvID:         f.EnvID,
+			FStatus:        f.Status,
+			FDispatchState: f.DispatchState,
+			FFromUnix:      f.FromUnix,
+			FToUnix:        f.ToUnix,
 		},
 	)
 	if err != nil {
@@ -913,15 +944,16 @@ func (h *DeploymentHandler) ListDeployments(
 
 	if r.Header.Get("HX-Request") == "true" {
 		view := pages.DeploymentsView{
-			Items:         items,
-			Total:         total,
-			Limit:         f.Limit,
-			Offset:        f.Offset,
-			FilterProject: f.ProjectID,
-			FilterEnv:     f.EnvID,
-			FilterStatus:  f.Status,
-			FilterFrom:    f.FromUnix,
-			FilterTo:      f.ToUnix,
+			Items:          items,
+			Total:          total,
+			Limit:          f.Limit,
+			Offset:         f.Offset,
+			FilterProject:  f.ProjectID,
+			FilterEnv:      f.EnvID,
+			FilterStatus:   f.Status,
+			FilterDispatch: f.DispatchState,
+			FilterFrom:     f.FromUnix,
+			FilterTo:       f.ToUnix,
 		}
 		if err := pages.DeploymentsList(view, true).
 			Render(r.Context(), w); err != nil {
@@ -942,17 +974,18 @@ func (h *DeploymentHandler) ListDeployments(
 	}
 
 	view := pages.DeploymentsView{
-		Items:         items,
-		Total:         total,
-		Limit:         f.Limit,
-		Offset:        f.Offset,
-		FilterProject: f.ProjectID,
-		FilterEnv:     f.EnvID,
-		FilterStatus:  f.Status,
-		FilterFrom:    f.FromUnix,
-		FilterTo:      f.ToUnix,
-		Projects:      projects,
-		Envs:          envs,
+		Items:          items,
+		Total:          total,
+		Limit:          f.Limit,
+		Offset:         f.Offset,
+		FilterProject:  f.ProjectID,
+		FilterEnv:      f.EnvID,
+		FilterStatus:   f.Status,
+		FilterDispatch: f.DispatchState,
+		FilterFrom:     f.FromUnix,
+		FilterTo:       f.ToUnix,
+		Projects:       projects,
+		Envs:           envs,
 	}
 	if err := pages.DeploymentsListPage(view, r.URL.Path).
 		Render(r.Context(), w); err != nil {
@@ -979,13 +1012,14 @@ const (
 // DeploymentsFilter is the parsed query-parameter filter for the deployments
 // list endpoint. Exported so the JSON API handler can reuse the same parsing.
 type DeploymentsFilter struct {
-	ProjectID sql.NullInt64
-	EnvID     sql.NullInt64
-	Status    sql.NullString
-	FromUnix  sql.NullInt64
-	ToUnix    sql.NullInt64
-	Limit     int64
-	Offset    int64
+	ProjectID     sql.NullInt64
+	EnvID         sql.NullInt64
+	Status        sql.NullString
+	DispatchState sql.NullString
+	FromUnix      sql.NullInt64
+	ToUnix        sql.NullInt64
+	Limit         int64
+	Offset        int64
 }
 
 // ParseDeploymentsFilter parses deployments list query parameters into a
@@ -1008,6 +1042,12 @@ func ParseDeploymentsFilter(r *http.Request) DeploymentsFilter {
 		if _, ok := allowedStatuses[s]; ok {
 			f.Status = sql.NullString{String: s, Valid: true}
 		}
+	}
+	if s := strings.TrimSpace(
+		q.Get("remote_state"),
+	); s != "" &&
+		deploymentstate.ValidFilterState(s) {
+		f.DispatchState = sql.NullString{String: s, Valid: true}
 	}
 	if s := strings.TrimSpace(q.Get("from")); s != "" {
 		if t, ok := parseDateStart(s); ok {

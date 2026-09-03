@@ -22,6 +22,12 @@
 #   6. Build and start the stack:
 #        docker compose up -d --build
 #
+# Optional remote agent profile:
+#   7. Create compose.agent.env from the agent section in docs/deploy.md, then
+#        docker compose --profile agent up -d --build agent
+#      This profile has its own state volume and no server storage, secrets, or
+#      Docker socket. Production agents should run on a separate network.
+#
 # Caddy env file (compose.caddy.env) required:
 #   DURPDEPLOY_URL=https://durpdeploy.example.com
 #   BACKEND=app:8080
@@ -58,8 +64,8 @@
 #
 # Optional in compose.litestream.env:
 #   LITESTREAM_S3_ENDPOINT=https://s3.example.com
-#   AWS_ACCESS_KEY_ID=AKIA...
-#   AWS_SECRET_ACCESS_KEY=...
+#   AWS_ACCESS_KEY_ID=<access-key-id>
+#   AWS_SECRET_ACCESS_KEY=<secret-access-key>
 
 services:
   app:
@@ -160,10 +166,40 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  agent:
+    # Optional remote execution agent. Enable with --profile agent.
+    profiles: [agent]
+    image: ghcr.io/developerdurp/durpdeploy-agent:${DURPDEPLOY_AGENT_VERSION:-v0.1.0}
+    restart: unless-stopped
+    env_file:
+      - ./compose.agent.env
+    environment:
+      DURPDEPLOY_AGENT_STATE_DIR: /var/lib/durpdeploy-agent
+    volumes:
+      - durpdeploy-agent-state:/var/lib/durpdeploy-agent
+      - /sys/fs/cgroup/durpdeploy:/sys/fs/cgroup/durpdeploy:rw
+    security_opt:
+      - no-new-privileges:true
+      - apparmor:unconfined
+    cap_drop: [ALL]
+    cap_add: [SETUID, SETGID, SETPCAP, SYS_ADMIN, SYS_CHROOT]
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 128
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
 volumes:
   durpdeploy-data:
   caddy-data:
   caddy-config:
+  durpdeploy-agent-state:
 
 secrets:
   durpdeploy_key:

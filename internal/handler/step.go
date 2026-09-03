@@ -190,9 +190,26 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var sortOrder int64
-	if v := r.FormValue("sort_order"); v != "" {
-		sortOrder, _ = strconv.ParseInt(v, 10, 64)
+	sortOrder := int64(1)
+	if v := strings.TrimSpace(r.FormValue("sort_order")); v != "" {
+		if parsed, err := strconv.ParseInt(
+			v,
+			10,
+			64,
+		); err == nil &&
+			parsed > 0 {
+			sortOrder = parsed
+		} else {
+			steps, _ := h.repo.Queries.ListStepsByProject(
+				r.Context(),
+				projectID,
+			)
+			for _, s := range steps {
+				if s.SortOrder >= sortOrder {
+					sortOrder = s.SortOrder + 1
+				}
+			}
+		}
 	} else {
 		steps, _ := h.repo.Queries.ListStepsByProject(r.Context(), projectID)
 		for _, s := range steps {

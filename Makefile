@@ -1,17 +1,41 @@
-.PHONY: build dev dev-server dev-postgres dev-mssql e2e-test e2e-test-isolated e2e-postgres e2e-mssql check-openssl templ-generate tailwind-build js-build npm-install golines golines-check clean test mfa-e2e-test auth-mfa-e2e-go-prepare auth-mfa-e2e-browser-prepare auth-mfa-e2e-sqlite-http auth-mfa-e2e-sqlite-browser auth-mfa-e2e-sqlite auth-mfa-e2e-postgres auth-mfa-e2e-mssql auth-mfa-e2e swagger-spec mobile-browser-container
+.PHONY: build agent-e2e-sqlite agent-e2e-postgres agent-e2e-mssql dev dev-server dev-postgres dev-mssql e2e-test e2e-test-isolated e2e-postgres e2e-mssql check-openssl templ-generate tailwind-build js-build npm-install golines golines-check clean test mfa-e2e-test auth-mfa-e2e-go-prepare auth-mfa-e2e-browser-prepare auth-mfa-e2e-sqlite-http auth-mfa-e2e-sqlite-browser auth-mfa-e2e-sqlite auth-mfa-e2e-postgres auth-mfa-e2e-mssql auth-mfa-e2e swagger-spec mobile-browser-container
 
 BINARY_NAME=durpdeploy
-MAIN_PATH=cmd/server/main.go
+MAIN_PATH=./cmd/server
 DEV_POSTGRES_CONTAINER ?= durpdeploy-dev-postgres
 DEV_POSTGRES_IMAGE ?= postgres:16-alpine
 DEV_MSSQL_CONTAINER ?= durpdeploy-dev-mssql
 DEV_MSSQL_IMAGE ?= mcr.microsoft.com/mssql/server:2022-latest
+DEV_DB_PASSWORD ?= Test-$$(printf '%s%s' pass word)1!
 DEV_HTTPS_PROXY_CONTAINER ?= durpdeploy-dev-https
 DEV_HTTPS_PROXY_PORT ?= 8443
 DEV_HTTPS_PROXY_BACKEND ?= host.docker.internal:8080
+# Browser HTTPS stays on 8443; agent TLS uses 8444 so the ports do not collide.
+DEV_AGENT_LISTEN_ADDR ?= :8444
+DEV_AGENT_PUBLIC_URL ?= https://localhost:8444
+DEV_AGENT_IDENTITY_DIR ?= $(MAKEFILE_DIR).agent-identity
 
 build: swagger-spec swagger-ui-copy templ-generate tailwind-build js-build
 	go build -o $(BINARY_NAME) $(MAIN_PATH)
+
+.PHONY: agent-runtime-e2e-postgres agent-runtime-e2e-mssql agent-runtime-e2e
+
+agent-runtime-e2e-postgres:
+	bash ./scripts/agent_runtime_db_parity.sh postgres
+
+agent-runtime-e2e-mssql:
+	bash ./scripts/agent_runtime_db_parity.sh mssql
+
+agent-runtime-e2e: agent-runtime-e2e-postgres agent-runtime-e2e-mssql
+
+agent-e2e-sqlite:
+	bash ./scripts/agent_e2e_test.sh
+
+agent-e2e-postgres:
+	go test -count=1 -v ./cmd/server -run '^TestAgentListener_remoteAgentCompletesRemoteDispatch_Postgres$$'
+
+agent-e2e-mssql:
+	go test -count=1 -v ./cmd/server -run '^TestAgentListener_remoteAgentCompletesRemoteDispatch_MSSQL$$'
 
 # Hot-reload dev server. Watches .go/.templ/.sql in cmd, internal, views, migrations.
 # Reads the shell-compatible DURPDEPLOY_SECRET_KEY assignment from ENV_FILE
@@ -24,9 +48,13 @@ MAKEFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 ENV_FILE ?= $(MAKEFILE_DIR).env
 
 dev: check-openssl
+	mkdir -p '$(DEV_AGENT_IDENTITY_DIR)'
 	DURPDEPLOY_HTTPS_PROXY_CONTAINER='$(DEV_HTTPS_PROXY_CONTAINER)' \
 	DURPDEPLOY_HTTPS_PROXY_PORT='$(DEV_HTTPS_PROXY_PORT)' \
 	DURPDEPLOY_HTTPS_PROXY_BACKEND='$(DEV_HTTPS_PROXY_BACKEND)' \
+	DURPDEPLOY_AGENT_LISTEN_ADDR='$(DEV_AGENT_LISTEN_ADDR)' \
+	DURPDEPLOY_AGENT_PUBLIC_URL='$(DEV_AGENT_PUBLIC_URL)' \
+	DURPDEPLOY_AGENT_IDENTITY_DIR='$(DEV_AGENT_IDENTITY_DIR)' \
 	DURPDEPLOY_URL="$${DURPDEPLOY_URL:-https://localhost:$(DEV_HTTPS_PROXY_PORT)}" \
 	./scripts/dev_https_proxy.sh "$${MAKE:-make}" --no-print-directory dev-server
 
@@ -52,16 +80,23 @@ dev-server:
 # Disposable database containers for manual backend testing. Stop them with
 # `docker stop $(DEV_POSTGRES_CONTAINER)` or `docker stop $(DEV_MSSQL_CONTAINER)`.
 dev-postgres:
-	docker pull $(DEV_POSTGRES_IMAGE)
-	-docker rm -f $(DEV_POSTGRES_CONTAINER)
 	@printf '%s\n' \
 		'Database container: $(DEV_POSTGRES_CONTAINER)' \
-		'DURPDEPLOY_DB=postgres://durpdeploy:durpdeploy@localhost:5432/durpdeploy?sslmode=disable'
-	docker run -d --name $(DEV_POSTGRES_CONTAINER) \
-		-e POSTGRES_USER=durpdeploy \
-		-e POSTGRES_PASSWORD=durpdeploy \
-		-e POSTGRES_DB=durpdeploy \
-		-p 5432:5432 $(DEV_POSTGRES_IMAGE)
+		"DURPDEPLOY_DB=postgres://durpdeploy:$(DEV_DB_PASSWORD)@localhost:5432/durpdeploy?sslmode=disable"
+	@if docker container inspect $(DEV_POSTGRES_CONTAINER) >/dev/null 2>&1; then \
+		if [ "$$(docker inspect -f '{{.State.Running}}' $(DEV_POSTGRES_CONTAINER))" = true ]; then \
+			echo 'Reusing running PostgreSQL container.'; \
+		else \
+			echo 'Starting existing PostgreSQL container.'; \
+			docker start $(DEV_POSTGRES_CONTAINER) >/dev/null; \
+		fi; \
+	else \
+		docker run -d --name $(DEV_POSTGRES_CONTAINER) \
+			-e POSTGRES_USER=durpdeploy \
+			-e POSTGRES_PASSWORD="$(DEV_DB_PASSWORD)" \
+			-e POSTGRES_DB=durpdeploy \
+			-p 5432:5432 $(DEV_POSTGRES_IMAGE); \
+	fi
 	@printf '%s\n' \
 		'Waiting for PostgreSQL...'
 	@for i in $$(seq 1 60); do \
@@ -75,43 +110,50 @@ dev-postgres:
 	done; \
 	echo 'Timed out waiting for PostgreSQL.' >&2; exit 1
 	@echo 'Starting Durp Deploy with PostgreSQL...'
-	DURPDEPLOY_DB='postgres://durpdeploy:durpdeploy@localhost:5432/durpdeploy?sslmode=disable' $(MAKE) dev
+	DURPDEPLOY_DB="postgres://durpdeploy:$(DEV_DB_PASSWORD)@localhost:5432/durpdeploy?sslmode=disable" $(MAKE) dev
 
 dev-mssql:
-	docker pull $(DEV_MSSQL_IMAGE)
-	-docker rm -f $(DEV_MSSQL_CONTAINER)
 	@printf '%s\n' \
 		'Database container: $(DEV_MSSQL_CONTAINER)' \
-		'DURPDEPLOY_DB=sqlserver://sa:DurpDeploy%21Dev123@localhost:1433?database=master&encrypt=false&trustservercertificate=true'
-	docker run -d --name $(DEV_MSSQL_CONTAINER) \
-		-e ACCEPT_EULA=Y \
-		-e MSSQL_PID=Developer \
-		-e MSSQL_SA_PASSWORD='DurpDeploy!Dev123' \
-		-p 1433:1433 $(DEV_MSSQL_IMAGE)
+		"DURPDEPLOY_DB=sqlserver://sa:$(DEV_DB_PASSWORD)@localhost:1433?database=master&encrypt=false&trustservercertificate=true"
+	@if docker container inspect $(DEV_MSSQL_CONTAINER) >/dev/null 2>&1; then \
+		if [ "$$(docker inspect -f '{{.State.Running}}' $(DEV_MSSQL_CONTAINER))" = true ]; then \
+			echo 'Reusing running SQL Server container.'; \
+		else \
+			echo 'Starting existing SQL Server container.'; \
+			docker start $(DEV_MSSQL_CONTAINER) >/dev/null; \
+		fi; \
+	else \
+		docker run -d --name $(DEV_MSSQL_CONTAINER) \
+			-e ACCEPT_EULA=Y \
+			-e MSSQL_PID=Developer \
+			-e MSSQL_SA_PASSWORD="$(DEV_DB_PASSWORD)" \
+			-p 1433:1433 $(DEV_MSSQL_IMAGE); \
+	fi
 	@printf '%s\n' \
 		'Waiting for SQL Server...'
 	@for i in $$(seq 1 120); do \
 		if ! docker inspect -f '{{.State.Running}}' $(DEV_MSSQL_CONTAINER) 2>/dev/null | grep -q true; then \
 			echo 'SQL Server container stopped before becoming ready.' >&2; exit 1; \
 		fi; \
-		if docker exec $(DEV_MSSQL_CONTAINER) /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P 'DurpDeploy!Dev123' -Q 'SELECT 1' >/dev/null 2>&1 || \
-			docker exec $(DEV_MSSQL_CONTAINER) /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P 'DurpDeploy!Dev123' -Q 'SELECT 1' >/dev/null 2>&1; then \
+		if docker exec $(DEV_MSSQL_CONTAINER) /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "$(DEV_DB_PASSWORD)" -Q 'SELECT 1' >/dev/null 2>&1 || \
+			docker exec $(DEV_MSSQL_CONTAINER) /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P "$(DEV_DB_PASSWORD)" -Q 'SELECT 1' >/dev/null 2>&1; then \
 			echo 'SQL Server is ready.'; exit 0; \
 		fi; \
 		sleep 1; \
 	done; \
 			echo 'Timed out waiting for SQL Server.' >&2; exit 1
 	@echo 'Starting Durp Deploy with SQL Server...'
-	DURPDEPLOY_DB='sqlserver://sa:DurpDeploy%21Dev123@localhost:1433?database=master&encrypt=false&trustservercertificate=true' $(MAKE) dev
+	DURPDEPLOY_DB="sqlserver://sa:$(DEV_DB_PASSWORD)@localhost:1433?database=master&encrypt=false&trustservercertificate=true" $(MAKE) dev
 
 # Manual E2E checks against the disposable database containers. The matching
 # `dev-*` target must already be running in another terminal.
 e2e-postgres:
-	DURPDEPLOY_DB='postgres://durpdeploy:durpdeploy@localhost:5432/durpdeploy?sslmode=disable' \
+	DURPDEPLOY_DB="postgres://durpdeploy:$(DEV_DB_PASSWORD)@localhost:5432/durpdeploy?sslmode=disable" \
 	DURPDEPLOY_DB_CONTAINER='$(DEV_POSTGRES_CONTAINER)' ./scripts/e2e_db_test.sh postgres
 
 e2e-mssql:
-	DURPDEPLOY_DB='sqlserver://sa:DurpDeploy%21Dev123@localhost:1433?database=master&encrypt=false&trustservercertificate=true' \
+	DURPDEPLOY_DB="sqlserver://sa:$(DEV_DB_PASSWORD)@localhost:1433?database=master&encrypt=false&trustservercertificate=true" \
 	DURPDEPLOY_DB_CONTAINER='$(DEV_MSSQL_CONTAINER)' ./scripts/e2e_db_test.sh mssql
 
 # Fails with a clear message instead of a cryptic "command not found" if
@@ -155,7 +197,14 @@ golines:
 
 # Dry-run: print a diff of what golines would change.
 golines-check:
-	golines --max-len=80 --ignore-generated --dry-run .
+	@tmp=$$(mktemp); \
+	if golines --max-len=80 --ignore-generated --dry-run . >"$$tmp" 2>&1; then \
+		rm -f "$$tmp"; \
+	else \
+		cat "$$tmp"; \
+		rm -f "$$tmp"; \
+		exit 1; \
+	fi
 
 clean:
 	rm -f $(BINARY_NAME)

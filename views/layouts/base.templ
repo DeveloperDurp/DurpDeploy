@@ -83,6 +83,7 @@ templ Base(title string, currentPath string) {
 												<li><a href="/admin/notifications">Notifications</a></li>
 												<li><a href="/admin/tokens">API tokens</a></li>
 												<li><a href="/admin/users">Users</a></li>
+												<li><a href="/admin/agents" class={ activeClass(currentPath, "/admin/agents") }>Agents</a></li>
 											</ul>
 										</details>
 									</li>
@@ -136,6 +137,7 @@ templ Base(title string, currentPath string) {
 									<li><a href="/admin/notifications">Notifications</a></li>
 									<li><a href="/admin/tokens">API tokens</a></li>
 									<li><a href="/admin/users">Users</a></li>
+									<li><a href="/admin/agents" class={ activeClass(currentPath, "/admin/agents") }>Agents</a></li>
 								</ul>
 							</details>
 						}

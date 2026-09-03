@@ -32,6 +32,11 @@ func (h *LogHandler) StreamLogs(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid deployment ID", http.StatusBadRequest)
 		return
 	}
+	cursor, err := streamLastEventID(r)
+	if err != nil {
+		http.Error(w, "Invalid Last-Event-ID", http.StatusBadRequest)
+		return
+	}
 
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -44,31 +49,46 @@ func (h *LogHandler) StreamLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Replay historical logs first.
-	if err := h.repo.ForEachDeploymentLogByDeploymentAsc(
-		r.Context(),
-		deploymentID,
-		func(log db.DeploymentLog) error {
-			fmt.Fprintf(w, "data: %s\n\n", log.Line)
-			flusher.Flush()
-			return nil
-		},
-	); err != nil {
-		return
-	}
-
 	ch := h.broker.Subscribe(deploymentID)
 	defer h.broker.Unsubscribe(deploymentID, ch)
-
 	for {
+		err := h.repo.ForEachDeploymentLogAfterID(
+			r.Context(),
+			repository.DeploymentLogCursor{
+				DeploymentID:  deploymentID,
+				AfterSequence: cursor,
+			},
+			func(log db.DeploymentLog) error {
+				_, _ = fmt.Fprintf(
+					w,
+					"id: %d\ndata: %s\n\n",
+					log.Sequence,
+					log.Line,
+				)
+				flusher.Flush()
+				if log.Sequence > cursor {
+					cursor = log.Sequence
+				}
+				return nil
+			},
+		)
+		if err != nil {
+			return
+		}
 		select {
 		case <-r.Context().Done():
 			return
-		case line := <-ch:
-			fmt.Fprintf(w, "data: %s\n\n", line)
-			flusher.Flush()
+		case <-ch:
 		}
 	}
+}
+
+func streamLastEventID(r *http.Request) (int64, error) {
+	value := r.Header.Get("Last-Event-ID")
+	if value == "" {
+		return 0, nil
+	}
+	return strconv.ParseInt(value, 10, 64)
 }
 
 func (h *LogHandler) ExportLogs(w http.ResponseWriter, r *http.Request) {

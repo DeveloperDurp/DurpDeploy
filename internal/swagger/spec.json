@@ -1508,7 +1508,7 @@
           }
         ],
         "responses": {
-          "200": {
+          "201": {
             "description": "Deployment represents a release executing against an environment.",
             "schema": {
               "$ref": "#/definitions/Deployment"
@@ -5848,6 +5848,9 @@
           "format": "int64",
           "x-go-name": "CreatedAt"
         },
+        "dispatch": {
+          "$ref": "#/definitions/DeploymentDispatch"
+        },
         "environment_id": {
           "type": "integer",
           "format": "int64",
@@ -5890,6 +5893,54 @@
       "x-go-name": "swaggerDeployment",
       "x-go-package": "durpdeploy/internal/handler/api"
     },
+    "DeploymentAgent": {
+      "type": "object",
+      "title": "DeploymentAgent is the assigned agent's safe health metadata.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "x-go-name": "ID"
+        },
+        "last_heartbeat_at": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "LastHeartbeatAt"
+        },
+        "name": {
+          "type": "string",
+          "x-go-name": "Name"
+        },
+        "status": {
+          "type": "string",
+          "x-go-name": "Status"
+        }
+      },
+      "x-go-name": "swaggerDeploymentAgent",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "DeploymentDispatch": {
+      "type": "object",
+      "title": "DeploymentDispatch is the safe operator-facing routing state.",
+      "properties": {
+        "agent": {
+          "$ref": "#/definitions/DeploymentAgent"
+        },
+        "mode": {
+          "type": "string",
+          "x-go-name": "Mode"
+        },
+        "reason": {
+          "type": "string",
+          "x-go-name": "Reason"
+        },
+        "state": {
+          "type": "string",
+          "x-go-name": "State"
+        }
+      },
+      "x-go-name": "swaggerDeploymentDispatch",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
     "DeploymentListItem": {
       "type": "object",
       "title": "DeploymentListItem is the enriched row returned by ListDeployments.",
@@ -5898,6 +5949,9 @@
           "type": "integer",
           "format": "int64",
           "x-go-name": "CreatedAt"
+        },
+        "dispatch": {
+          "$ref": "#/definitions/DeploymentDispatch"
         },
         "environment_id": {
           "type": "integer",
@@ -6053,9 +6107,8 @@
       "type": "object",
       "title": "DeploymentStatusResponse is the status payload for GetDeploymentStatus.",
       "properties": {
-        "id": {
-          "type": "string",
-          "x-go-name": "ID"
+        "dispatch": {
+          "$ref": "#/definitions/DeploymentDispatch"
         },
         "status": {
           "type": "string",

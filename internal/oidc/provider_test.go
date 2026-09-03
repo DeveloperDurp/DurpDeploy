@@ -7,7 +7,6 @@ import (
 	"net/url"
 	"strings"
 	"testing"
-	"time"
 
 	"durpdeploy/internal/oidc/oidctest"
 
@@ -184,28 +183,6 @@ func TestProviderExchangeRejectsUnverifiedTokens(t *testing.T) {
 			// Then
 			assertProviderError(t, err, tt.want)
 		})
-	}
-}
-
-func TestProviderAuthorizationURLStopsAtHTTPClientTimeout(t *testing.T) {
-	// Given
-	fixture := newProviderFixture(t)
-	fixture.client.Timeout = 25 * time.Millisecond
-	discoveryCanceled := fixture.BlockDiscovery()
-	provider := fixture.newProvider(t)
-
-	// When
-	_, err := provider.AuthorizationURL(
-		context.Background(),
-		fixture.transaction,
-	)
-
-	// Then
-	assertProviderError(t, err, ProviderErrorDiscovery)
-	select {
-	case <-discoveryCanceled:
-	case <-time.After(time.Second):
-		t.Fatal("slow TLS discovery request was not canceled")
 	}
 }
 

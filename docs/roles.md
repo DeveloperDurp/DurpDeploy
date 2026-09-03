@@ -40,9 +40,9 @@ security state. Administrator MFA reset remains admin-only.
 ## A note on per-project authorization
 
 Per-project authorization is enforced through `project_members`. Global admins
-bypass the membership check. Other users must be project members to read or
-write project resources. Only global administrators and project administrators
-can manage project members.
+bypass the membership check. Other users must be members of a project to read
+or write its project-scoped resources, and project member management is limited
+to global admins and project admins.
 
 ## Picking a role for a new user
 

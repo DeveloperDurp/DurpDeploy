@@ -9,8 +9,10 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/robfig/cron/v3"
 
+	"durpdeploy/internal/agentpairing"
 	"durpdeploy/internal/audit"
 	"durpdeploy/internal/auth"
+	"durpdeploy/internal/dispatch"
 	"durpdeploy/internal/handler"
 	"durpdeploy/internal/handler/api"
 	"durpdeploy/internal/repository"
@@ -35,8 +37,71 @@ func requestLogger(next http.Handler) http.Handler {
 func NewRouter(
 	repo *repository.Repository,
 	rnr *runner.DeploymentRunner,
+	dispatcher *dispatch.Dispatcher,
 	parser cron.Parser,
 	authHandler *handler.AuthHandler,
+	oidcEnabled ...bool,
+) *chi.Mux {
+	return newRouter(
+		repo,
+		rnr,
+		dispatcher,
+		parser,
+		authHandler,
+		nil,
+		0,
+		oidcEnabled...)
+}
+
+func NewRouterWithAgentPairer(
+	repo *repository.Repository,
+	rnr *runner.DeploymentRunner,
+	dispatcher *dispatch.Dispatcher,
+	parser cron.Parser,
+	authHandler *handler.AuthHandler,
+	pairer *agentpairing.Server,
+	oidcEnabled ...bool,
+) *chi.Mux {
+	return newRouter(
+		repo,
+		rnr,
+		dispatcher,
+		parser,
+		authHandler,
+		pairer,
+		0,
+		oidcEnabled...)
+}
+
+func NewRouterWithAgentPairerAndConfirmationTTL(
+	repo *repository.Repository,
+	rnr *runner.DeploymentRunner,
+	dispatcher *dispatch.Dispatcher,
+	parser cron.Parser,
+	authHandler *handler.AuthHandler,
+	pairer *agentpairing.Server,
+	confirmationTTL time.Duration,
+	oidcEnabled ...bool,
+) *chi.Mux {
+	return newRouter(
+		repo,
+		rnr,
+		dispatcher,
+		parser,
+		authHandler,
+		pairer,
+		confirmationTTL,
+		oidcEnabled...)
+}
+
+func newRouter(
+	repo *repository.Repository,
+	rnr *runner.DeploymentRunner,
+	dispatcher *dispatch.Dispatcher,
+	parser cron.Parser,
+	authHandler *handler.AuthHandler,
+	pairer *agentpairing.Server,
+	confirmationTTL time.Duration,
 	oidcEnabled ...bool,
 ) *chi.Mux {
 	registerOIDC := len(oidcEnabled) > 0 && oidcEnabled[0]
@@ -219,7 +284,7 @@ func NewRouter(
 
 		rh := handler.NewReleaseHandler(repo)
 
-		dh := handler.NewDeploymentHandler(repo, rnr)
+		dh := handler.NewDeploymentHandler(repo, rnr, dispatcher)
 		pr.Get("/deployments", dh.ListDeployments)
 
 		lhH := handler.NewLintHandler()
@@ -344,6 +409,30 @@ func NewRouter(
 			webTokensH := handler.NewTokensHandler(repo)
 			ar.Get("/admin/tokens", webTokensH.AdminTokens)
 			ar.Post("/admin/tokens/{id}/revoke", webTokensH.AdminTokensRevoke)
+
+			agentsH := handler.NewAgentAdminHandlerWithConfirmationTTL(
+				repo,
+				pairer,
+				confirmationTTL,
+			)
+			ar.Get("/admin/agents", agentsH.ListAgents)
+			ar.Get("/admin/agents/new", agentsH.NewAgentForm)
+			ar.Post("/admin/agents", agentsH.CreateAgent)
+			ar.Get("/admin/agents/{agentID}", agentsH.GetAgent)
+			ar.Delete("/admin/agents/{agentID}", agentsH.DeleteAgent)
+			ar.Post("/admin/agents/{agentID}/disable", agentsH.DisableAgent)
+			ar.Post("/admin/agents/{agentID}/revoke", agentsH.RevokeAgent)
+			ar.Post("/admin/agents/{agentID}/re-pair", agentsH.RePairAgent)
+			ar.Post("/admin/agents/{agentID}/pairings", agentsH.StartPairing)
+			ar.Post(
+				"/admin/agents/{agentID}/pairings/confirm",
+				agentsH.ConfirmPairing,
+			)
+			ar.Post(
+				"/admin/agents/{agentID}/assignments",
+				agentsH.AssignEnvironment,
+			)
+			ar.Get("/admin/agents/{agentID}/events", agentsH.ListAgentEvents)
 		})
 	})
 
@@ -428,7 +517,7 @@ func NewRouter(
 		ar.Get("/templates/{id}/history", apiTplH.ListTemplateHistory)
 
 		apiRelH := api.NewReleaseHandler(repo)
-		apiDepH := api.NewDeploymentHandler(repo, rnr)
+		apiDepH := api.NewDeploymentHandler(repo, rnr, dispatcher)
 		apiSchedH := api.NewScheduleHandler(repo)
 		apiLogH := api.NewLogHandler(rnr.Broker(), repo)
 

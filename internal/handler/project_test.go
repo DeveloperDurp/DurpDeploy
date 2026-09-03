@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -18,7 +17,6 @@ import (
 
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/handler"
-	"durpdeploy/internal/migrate"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/runner"
 	"durpdeploy/internal/server"
@@ -38,25 +36,18 @@ type projectHarness struct {
 
 func newProjectHarness(t *testing.T) *projectHarness {
 	t.Helper()
-	dir := t.TempDir()
-	dsn := fmt.Sprintf(
-		"file:%s?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)",
-		filepath.Join(dir, "test.db"),
-	)
-	conn, err := migrate.Run(dsn)
-	if err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
-	t.Cleanup(func() { _ = conn.Close() })
+	conn := newHandlerTestDatabase(t)
 
 	repo := repository.New(conn)
 	broker := runner.NewLogBroker()
-	rnr := runner.New(repo, broker)
+	rnr := runner.NewForTests(repo, broker)
 	parser := cron.NewParser(
 		cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow,
 	)
 	authHandler := handler.NewAuthHandler(repo)
-	srv := httptest.NewServer(server.NewRouter(repo, rnr, parser, authHandler))
+	srv := httptest.NewServer(
+		server.NewRouter(repo, rnr, nil, parser, authHandler),
+	)
 	t.Cleanup(srv.Close)
 	h := &projectHarness{t: t, repo: repo, server: srv}
 	h.sess = seedSession(t, repo, srv.URL, "admin")
