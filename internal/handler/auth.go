@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"log/slog"
@@ -18,21 +19,68 @@ import (
 )
 
 type AuthHandler struct {
-	repo             *repository.Repository
-	mfaService       *mfa.Service
-	cookieSecure     bool
-	oidcDisplayName  string
-	oidcProvider     *oidc.Provider
-	oidcTransactions *oidc.TransactionStore
-	loginLimiter     *loginLimiter
+	repo                  *repository.Repository
+	mfaService            *mfa.Service
+	cookieSecure          bool
+	oidcDisplayName       string
+	oidcProvider          *oidc.Provider
+	oidcTransactions      *oidc.TransactionStore
+	loginLimiter          *loginLimiter
+	passwordVerifications chan struct{}
 }
+
+// Two concurrent 64 MiB Argon2 hashes leave headroom in the 512 MiB image.
+const maxConcurrentPasswordVerifications = 2
 
 var unknownAccountPasswordHash, _ = auth.HashPassword(
 	"durpdeploy unknown account timing placeholder",
 )
 
 func NewAuthHandler(repo *repository.Repository) *AuthHandler {
-	return &AuthHandler{repo: repo, loginLimiter: newLoginLimiter()}
+	return &AuthHandler{
+		repo:         repo,
+		loginLimiter: newLoginLimiter(),
+		passwordVerifications: make(
+			chan struct{},
+			maxConcurrentPasswordVerifications,
+		),
+	}
+}
+
+func (h *AuthHandler) verifyPassword(
+	ctx context.Context,
+	passwordHash string,
+	password string,
+) (bool, error) {
+	return h.withPasswordVerification(ctx, func() bool {
+		return auth.VerifyPassword(passwordHash, password)
+	})
+}
+
+func (h *AuthHandler) withPasswordVerification(
+	ctx context.Context,
+	verify func() bool,
+) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	select {
+	case h.passwordVerifications <- struct{}{}:
+		defer func() { <-h.passwordVerifications }()
+		if err := ctx.Err(); err != nil {
+			return false, err
+		}
+		return verify(), nil
+	case <-ctx.Done():
+		return false, ctx.Err()
+	}
+}
+
+func loginPasswordHash(user db.User, err error) (string, bool) {
+	if err != nil || user.PasswordHash == "" {
+		return unknownAccountPasswordHash, false
+	}
+	return user.PasswordHash, true
 }
 
 func (h *AuthHandler) SetMFAService(service *mfa.Service) {
@@ -117,11 +165,16 @@ func (h *AuthHandler) LoginPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user, err := h.repo.Queries.GetUserByEmail(r.Context(), email)
-	passwordHash := user.PasswordHash
-	if err != nil {
-		passwordHash = unknownAccountPasswordHash
+	passwordHash, hasPassword := loginPasswordHash(user, err)
+	passwordMatches, verifyErr := h.verifyPassword(
+		r.Context(),
+		passwordHash,
+		password,
+	)
+	if verifyErr != nil {
+		return
 	}
-	if !auth.VerifyPassword(passwordHash, password) || err != nil {
+	if !passwordMatches || !hasPassword {
 		slog.Warn("password authentication failed", "ip", ip)
 		h.renderInvalidLogin(w, r)
 		return

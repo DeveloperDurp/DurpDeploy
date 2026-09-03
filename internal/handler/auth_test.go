@@ -347,6 +347,33 @@ func TestLogin_Post_UnknownEmail(t *testing.T) {
 	}
 }
 
+func TestLogin_Post_PasswordlessAccountRejectsDummyPassword(t *testing.T) {
+	h := newAuthHarness(t)
+	_, err := h.repo.Queries.CreateUser(context.Background(), db.CreateUserParams{
+		Email:        "oidc@example.com",
+		PasswordHash: "",
+		Name:         "OIDC User",
+		Role:         "deployer",
+	})
+	if err != nil {
+		t.Fatalf("create passwordless user: %v", err)
+	}
+
+	client := newJar(t)
+	resp, err := client.PostForm(h.server+"/login", url.Values{
+		"email":    {"oidc@example.com"},
+		"password": {"durpdeploy unknown account timing placeholder"},
+	})
+	if err != nil {
+		t.Fatalf("post /login: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want 422", resp.StatusCode)
+	}
+}
+
 func TestAuthMiddleware_NoCookie_RedirectsFromHome(t *testing.T) {
 	h := newAuthHarness(t)
 	client := newJar(t)
