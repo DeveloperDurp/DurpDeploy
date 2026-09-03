@@ -487,9 +487,12 @@ func TestLogout_AllRolesWithValidCSRF(t *testing.T) {
 			}
 
 			// When
-			response, err := session.client.PostForm(h.server+"/logout", url.Values{
-				"csrf_token": {session.csrfToken},
-			})
+			response, err := session.client.PostForm(
+				h.server+"/logout",
+				url.Values{
+					"csrf_token": {session.csrfToken},
+				},
+			)
 			if err != nil {
 				t.Fatalf("post /logout: %v", err)
 			}
@@ -513,16 +516,27 @@ func TestLogout_AllRolesWithValidCSRF(t *testing.T) {
 				t.Fatal("session deletion cookie missing")
 			}
 			if deletionCookie.Value != "" {
-				t.Fatalf("session cookie value = %q, want empty", deletionCookie.Value)
+				t.Fatalf(
+					"session cookie value = %q, want empty",
+					deletionCookie.Value,
+				)
 			}
 			if deletionCookie.MaxAge >= 0 {
-				t.Fatalf("session cookie MaxAge = %d, want negative", deletionCookie.MaxAge)
+				t.Fatalf(
+					"session cookie MaxAge = %d, want negative",
+					deletionCookie.MaxAge,
+				)
 			}
 			if deletionCookie.Path != "/" {
-				t.Fatalf("session cookie Path = %q, want /", deletionCookie.Path)
+				t.Fatalf(
+					"session cookie Path = %q, want /",
+					deletionCookie.Path,
+				)
 			}
-			if deletionCookie.Expires.IsZero() || !deletionCookie.Expires.Before(time.Now()) {
-				t.Fatalf("session cookie Expires = %v, want expired timestamp", deletionCookie.Expires)
+			if deletionCookie.Expires.IsZero() ||
+				!deletionCookie.Expires.Before(time.Now()) {
+				t.Fatalf("session cookie Expires = %v, want expired timestamp",
+					deletionCookie.Expires)
 			}
 			if _, err := h.repo.Queries.GetSession(
 				context.Background(),
@@ -532,14 +546,20 @@ func TestLogout_AllRolesWithValidCSRF(t *testing.T) {
 			}
 
 			replayClient := newJar(t)
-			replayClient.Jar.SetCookies(serverURL, []*http.Cookie{originalCookie})
+			replayClient.Jar.SetCookies(
+				serverURL,
+				[]*http.Cookie{originalCookie},
+			)
 			replayResponse, err := replayClient.Get(h.server + "/")
 			if err != nil {
 				t.Fatalf("replay old cookie on /: %v", err)
 			}
 			defer replayResponse.Body.Close()
 			if replayResponse.StatusCode != http.StatusSeeOther {
-				t.Fatalf("replay status = %d, want 303", replayResponse.StatusCode)
+				t.Fatalf(
+					"replay status = %d, want 303",
+					replayResponse.StatusCode,
+				)
 			}
 			if location := replayResponse.Header.Get("Location"); location != "/login" {
 				t.Fatalf("replay location = %q, want /login", location)
