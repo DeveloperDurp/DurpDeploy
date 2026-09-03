@@ -52,19 +52,16 @@ func (h *AuthHandler) SecurityReauthPost(
 		return
 	}
 	storedUser, err := h.repo.Queries.GetUserByID(r.Context(), user.ID)
-	if err != nil {
-		h.renderReauthenticationError(w, r, session.CsrfToken)
-		return
-	}
+	passwordHash, hasPassword := passwordHashForUser(storedUser, err)
 	passwordMatches, verifyErr := h.verifyPassword(
 		r.Context(),
-		storedUser.PasswordHash,
+		passwordHash,
 		r.PostFormValue("password"),
 	)
 	if verifyErr != nil {
 		return
 	}
-	if !passwordMatches {
+	if !passwordMatches || !hasPassword {
 		h.renderReauthenticationError(w, r, session.CsrfToken)
 		return
 	}

@@ -11,8 +11,8 @@ import (
 	"durpdeploy/internal/db"
 )
 
-func TestLoginPasswordHashUsesDummyForPasswordlessAccount(t *testing.T) {
-	passwordHash, hasPassword := loginPasswordHash(db.User{}, nil)
+func TestPasswordHashForUserUsesDummyForPasswordlessAccount(t *testing.T) {
+	passwordHash, hasPassword := passwordHashForUser(db.User{}, nil)
 	if hasPassword {
 		t.Fatal("passwordless account reported a password")
 	}

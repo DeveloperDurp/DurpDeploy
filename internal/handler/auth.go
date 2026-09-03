@@ -76,7 +76,7 @@ func (h *AuthHandler) withPasswordVerification(
 	}
 }
 
-func loginPasswordHash(user db.User, err error) (string, bool) {
+func passwordHashForUser(user db.User, err error) (string, bool) {
 	if err != nil || user.PasswordHash == "" {
 		return unknownAccountPasswordHash, false
 	}
@@ -165,7 +165,7 @@ func (h *AuthHandler) LoginPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user, err := h.repo.Queries.GetUserByEmail(r.Context(), email)
-	passwordHash, hasPassword := loginPasswordHash(user, err)
+	passwordHash, hasPassword := passwordHashForUser(user, err)
 	passwordMatches, verifyErr := h.verifyPassword(
 		r.Context(),
 		passwordHash,
