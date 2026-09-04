@@ -544,6 +544,26 @@ func TestLogout_AllRolesWithValidCSRF(t *testing.T) {
 			); err != sql.ErrNoRows {
 				t.Fatalf("session lookup error = %v, want sql.ErrNoRows", err)
 			}
+			entries, err := h.repo.Queries.ListAuditLogsFiltered(
+				context.Background(),
+				db.ListAuditLogsFilteredParams{
+					FUserID: sql.NullInt64{
+						Int64: session.user.ID,
+						Valid: true,
+					},
+					FAction: sql.NullString{
+						String: "logout",
+						Valid:  true,
+					},
+					PageLimit: 10,
+				},
+			)
+			if err != nil {
+				t.Fatalf("list logout audit entries: %v", err)
+			}
+			if len(entries) != 1 {
+				t.Fatalf("logout audit entries = %d, want 1", len(entries))
+			}
 
 			replayClient := newJar(t)
 			replayClient.Jar.SetCookies(
