@@ -161,6 +161,7 @@ func (h *AuthHandler) LogoutPost(w http.ResponseWriter, r *http.Request) {
 				EntityID:   sql.NullInt64{Int64: sess.UserID, Valid: true},
 				Details:    loginDetails(r, ""),
 			})
+			audit.Suppress(r)
 		}
 		_ = h.repo.Queries.DeleteSession(r.Context(), cookie.Value)
 	}
