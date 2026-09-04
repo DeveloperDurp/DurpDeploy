@@ -12,7 +12,33 @@ import (
 	"github.com/google/uuid"
 )
 
-func TestAgentPairing_NewAgentForm_startsPairingWithoutSecretFields(
+func TestAgentPairing_NewAgentForm_omitsFingerprintInput(t *testing.T) {
+	// Given
+	env := newAgentPairingTestEnv(t)
+
+	// When
+	response, err := env.session.client.Get(
+		env.server.URL + "/admin/agents/new",
+	)
+	if err != nil {
+		t.Fatalf("get new agent form: %v", err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatalf("read new agent form: %v", err)
+	}
+
+	// Then
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.StatusCode, http.StatusOK)
+	}
+	if strings.Contains(string(body), `name="agent_fingerprint"`) {
+		t.Fatalf("new agent form rendered a fingerprint input: %s", body)
+	}
+}
+
+func TestAgentPairing_NewAgentForm_discoversFingerprintAfterCreate(
 	t *testing.T,
 ) {
 	// Given
@@ -27,12 +53,11 @@ func TestAgentPairing_NewAgentForm_startsPairingWithoutSecretFields(
 		t,
 		env.server.URL+"/admin/agents",
 		url.Values{
-			"name":              {"New Agent"},
-			"agent_host":        {endpoint.Hostname()},
-			"agent_port":        {endpoint.Port()},
-			"pairing_code":      {env.code},
-			"agent_fingerprint": {env.agentPin},
-			"csrf_token":        {env.session.csrfToken},
+			"name":         {"New Agent"},
+			"agent_host":   {endpoint.Hostname()},
+			"agent_port":   {endpoint.Port()},
+			"pairing_code": {env.code},
+			"csrf_token":   {env.session.csrfToken},
 		},
 	)
 	response, err := env.session.client.Do(request)
@@ -99,7 +124,7 @@ func TestAgentPairing_NewAgentForm_startsPairingWithoutSecretFields(
 	}
 }
 
-func TestAgentPairing_NewAgentForm_requiresTypedCodeAndFingerprint(
+func TestAgentPairing_NewAgentForm_requiresTypedCode(
 	t *testing.T,
 ) {
 	// Given

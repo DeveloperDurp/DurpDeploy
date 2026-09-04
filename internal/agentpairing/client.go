@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"time"
@@ -50,6 +51,52 @@ func NewServer(
 
 func Pair(ctx context.Context, input PairInput) (Bootstrap, error) {
 	return pair(ctx, input)
+}
+
+// Discover reads the untrusted agent identity for operator confirmation.
+func Discover(ctx context.Context, endpoint string) (Bootstrap, error) {
+	baseURL, err := parseEndpoint(endpoint)
+	if err != nil {
+		return Bootstrap{}, err
+	}
+	parsed, err := url.Parse(baseURL)
+	if err != nil {
+		return Bootstrap{}, fmt.Errorf("parse agent endpoint: %w", err)
+	}
+	connection, err := (&tls.Dialer{
+		NetDialer: &net.Dialer{Timeout: requestTimeout},
+		Config: &tls.Config{
+			// The operator authenticates this certificate on the confirmation page.
+			InsecureSkipVerify: true, // #nosec G402 -- intentional TOFU discovery
+			ServerName:         parsed.Hostname(),
+		}}).DialContext(ctx, "tcp", parsed.Host)
+	if err != nil {
+		return Bootstrap{}, fmt.Errorf("discover agent identity: %w", err)
+	}
+	defer connection.Close()
+	tlsConnection, ok := connection.(*tls.Conn)
+	if !ok {
+		return Bootstrap{}, fmt.Errorf("agent did not negotiate TLS")
+	}
+	state := tlsConnection.ConnectionState()
+	if len(state.PeerCertificates) != 1 {
+		return Bootstrap{}, fmt.Errorf(
+			"agent did not provide exactly one certificate",
+		)
+	}
+	certificate := state.PeerCertificates[0]
+	agentPin, err := agentproto.ParseSHA256Pin(
+		agenttls.FingerprintOf(certificate.Raw).String(),
+	)
+	if err != nil {
+		return Bootstrap{}, fmt.Errorf("parse discovered agent pin: %w", err)
+	}
+	return Bootstrap{
+		PublicIdentity: string(pem.EncodeToMemory(&pem.Block{
+			Type: "CERTIFICATE", Bytes: certificate.Raw,
+		})),
+		AgentPin: agentPin,
+	}, nil
 }
 
 func pair(ctx context.Context, input PairInput) (Bootstrap, error) {

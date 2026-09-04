@@ -104,19 +104,28 @@ func (h *AgentAdminHandler) CreateAgentForm(
 		http.Error(w, err.Error(), http.StatusUnprocessableEntity)
 		return
 	}
-	pairing, ok := preflightAgentPairing(
-		r.Context(),
-		endpoint,
-		r.FormValue("pairing_code"),
-		r.FormValue("agent_fingerprint"),
+	code, err := agentproto.ParsePairingCode(
+		strings.TrimSpace(r.FormValue("pairing_code")),
 	)
-	if !ok {
+	if err != nil {
 		form := pages.AgentFormPage(
 			"agent pairing offer is invalid",
 			r.URL.Path,
 		)
 		WriteFormError(w, r, form, form)
 		return
+	}
+	bootstrap, err := agentpairing.Discover(r.Context(), endpoint)
+	if err != nil {
+		form := pages.AgentFormPage(
+			"could not reach the agent pairing listener",
+			r.URL.Path,
+		)
+		WriteFormError(w, r, form, form)
+		return
+	}
+	pairing := agentPairingBootstrap{
+		code: code, endpoint: endpoint, bootstrap: bootstrap,
 	}
 	initiation := agentPairingInitiation{
 		agent: db.Agent{
