@@ -43,6 +43,7 @@ func NewRouter(
 	r := chi.NewRouter()
 	r.Use(requestLogger)
 	r.Use(handler.PanicRecoveryMiddleware)
+	r.Use(passwordFormBodyLimit)
 
 	// Serve static files from embedded assets (public).
 	r.Handle(
