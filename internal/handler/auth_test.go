@@ -2,6 +2,7 @@ package handler_test
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"io"
 	"net/http"
@@ -461,6 +462,176 @@ func TestLogout_RequiresCSRFToken(t *testing.T) {
 		db.GetSessionParams{ID: session.sessionToken, ExpiresAt: 0},
 	); err != nil {
 		t.Fatal("logout without CSRF token deleted the session")
+	}
+}
+
+func TestLogout_AllRolesWithValidCSRF(t *testing.T) {
+	for _, role := range []string{"admin", "deployer", "viewer"} {
+		t.Run(role, func(t *testing.T) {
+			// Given
+			h := newAuthHarness(t)
+			session := seedSession(t, h.repo, h.server, role)
+			serverURL, err := url.Parse(h.server)
+			if err != nil {
+				t.Fatalf("parse server URL: %v", err)
+			}
+			var originalCookie *http.Cookie
+			for _, cookie := range session.client.Jar.Cookies(serverURL) {
+				if cookie.Name == "session" {
+					originalCookie = cookie
+					break
+				}
+			}
+			if originalCookie == nil {
+				t.Fatal("session cookie missing before logout")
+			}
+
+			// When
+			response, err := session.client.PostForm(
+				h.server+"/logout",
+				url.Values{
+					"csrf_token": {session.csrfToken},
+				},
+			)
+			if err != nil {
+				t.Fatalf("post /logout: %v", err)
+			}
+			defer response.Body.Close()
+
+			// Then
+			if response.StatusCode != http.StatusSeeOther {
+				t.Fatalf("status = %d, want 303", response.StatusCode)
+			}
+			if location := response.Header.Get("Location"); location != "/login" {
+				t.Fatalf("location = %q, want /login", location)
+			}
+			var deletionCookie *http.Cookie
+			for _, cookie := range response.Cookies() {
+				if cookie.Name == "session" {
+					deletionCookie = cookie
+					break
+				}
+			}
+			if deletionCookie == nil {
+				t.Fatal("session deletion cookie missing")
+			}
+			if deletionCookie.Value != "" {
+				t.Fatalf(
+					"session cookie value = %q, want empty",
+					deletionCookie.Value,
+				)
+			}
+			if deletionCookie.MaxAge >= 0 {
+				t.Fatalf(
+					"session cookie MaxAge = %d, want negative",
+					deletionCookie.MaxAge,
+				)
+			}
+			if deletionCookie.Path != "/" {
+				t.Fatalf(
+					"session cookie Path = %q, want /",
+					deletionCookie.Path,
+				)
+			}
+			if deletionCookie.Expires.IsZero() ||
+				!deletionCookie.Expires.Before(time.Now()) {
+				t.Fatalf("session cookie Expires = %v, want expired timestamp",
+					deletionCookie.Expires)
+			}
+			if _, err := h.repo.Queries.GetSession(
+				context.Background(),
+				db.GetSessionParams{ID: session.sessionToken, ExpiresAt: 0},
+			); err != sql.ErrNoRows {
+				t.Fatalf("session lookup error = %v, want sql.ErrNoRows", err)
+			}
+			entries, err := h.repo.Queries.ListAuditLogsFiltered(
+				context.Background(),
+				db.ListAuditLogsFilteredParams{
+					FUserID: sql.NullInt64{
+						Int64: session.user.ID,
+						Valid: true,
+					},
+					FAction: sql.NullString{
+						String: "logout",
+						Valid:  true,
+					},
+					PageLimit: 10,
+				},
+			)
+			if err != nil {
+				t.Fatalf("list logout audit entries: %v", err)
+			}
+			if len(entries) != 1 {
+				t.Fatalf("logout audit entries = %d, want 1", len(entries))
+			}
+
+			replayClient := newJar(t)
+			replayClient.Jar.SetCookies(
+				serverURL,
+				[]*http.Cookie{originalCookie},
+			)
+			replayResponse, err := replayClient.Get(h.server + "/")
+			if err != nil {
+				t.Fatalf("replay old cookie on /: %v", err)
+			}
+			defer replayResponse.Body.Close()
+			if replayResponse.StatusCode != http.StatusSeeOther {
+				t.Fatalf(
+					"replay status = %d, want 303",
+					replayResponse.StatusCode,
+				)
+			}
+			if location := replayResponse.Header.Get("Location"); location != "/login" {
+				t.Fatalf("replay location = %q, want /login", location)
+			}
+		})
+	}
+}
+
+func TestLogout_ViewerRejectsInvalidCSRF(t *testing.T) {
+	tests := []struct {
+		name  string
+		token string
+	}{
+		{name: "missing"},
+		{name: "invalid", token: "invalid-csrf-token"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			// Given
+			h := newAuthHarness(t)
+			session := seedSession(t, h.repo, h.server, "viewer")
+			form := url.Values{}
+			if test.token != "" {
+				form.Set("csrf_token", test.token)
+			}
+
+			// When
+			response, err := session.client.PostForm(h.server+"/logout", form)
+			if err != nil {
+				t.Fatalf("post /logout: %v", err)
+			}
+			defer response.Body.Close()
+
+			// Then
+			if response.StatusCode != http.StatusForbidden {
+				t.Fatalf("status = %d, want 403", response.StatusCode)
+			}
+			if _, err := h.repo.Queries.GetSession(
+				context.Background(),
+				db.GetSessionParams{ID: session.sessionToken, ExpiresAt: 0},
+			); err != nil {
+				t.Fatalf("session missing after rejected logout: %v", err)
+			}
+			homeResponse, err := session.client.Get(h.server + "/")
+			if err != nil {
+				t.Fatalf("get / after rejected logout: %v", err)
+			}
+			defer homeResponse.Body.Close()
+			if homeResponse.StatusCode != http.StatusOK {
+				t.Fatalf("home status = %d, want 200", homeResponse.StatusCode)
+			}
+		})
 	}
 }
 

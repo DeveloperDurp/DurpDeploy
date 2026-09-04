@@ -490,20 +490,37 @@ async function run() {
 		await viewerPage.goto(`${app.url}/`);
 		const viewerSummary = await visibleAccountSummary(viewerPage, "viewer");
 		await viewerSummary.click();
-			const viewerLogout = viewerPage.waitForResponse(
-				(response) => new URL(response.url()).pathname === "/logout",
-			);
-			await viewerSummary.locator("xpath=following-sibling::ul").getByRole("button", { name: "Logout" }).click();
-			check((await viewerLogout).status() === 403, "viewer logout was not blocked");
-			check(new URL(viewerPage.url()).pathname === "/logout", "viewer logout left the read-only error page");
-			await viewerPage.evaluate(() => new Promise(requestAnimationFrame));
-			const viewerLogoutError = browserErrors.findIndex((error) =>
-				error.includes("403 (Forbidden)"),
-			);
-			check(viewerLogoutError !== -1, "viewer logout did not report its expected 403");
-			browserErrors.splice(viewerLogoutError, 1);
+		const [viewerLogout] = await Promise.all([
+			viewerPage.waitForResponse(
+				(response) =>
+					response.request().method() === "POST" &&
+					new URL(response.url()).pathname === "/logout",
+			),
+			viewerPage.waitForURL(
+				(url) => url.origin === app.url && url.pathname === "/login",
+			),
+			viewerSummary
+				.locator("xpath=following-sibling::ul")
+				.getByRole("button", { name: "Logout" })
+				.click(),
+		]);
+		check(viewerLogout.status() === 303, "viewer logout did not redirect");
+		await Promise.all([
+			viewerPage.waitForURL(
+				(url) => url.origin === app.url && url.pathname === "/login",
+			),
+			viewerPage.goto(`${app.url}/`),
+		]);
+		check(
+			new URL(viewerPage.url()).origin === app.url &&
+				new URL(viewerPage.url()).pathname === "/login",
+			"viewer logout left an authenticated browser session",
+		);
+		check(browserErrors.length === 0, `browser console errors: ${browserErrors.join(" | ")}`);
+		emitScenario("viewer-logout");
+		await passwordLogin(viewerPage, app.url, "viewer@mfa.test", passwords.viewer);
 
-			await adminPage.goto(`${app.url}/settings/security/reauth`);
+		await adminPage.goto(`${app.url}/settings/security/reauth`);
 		await adminPage.locator('input[name="password"]').fill(passwords.admin);
 		await adminPage.getByRole("button", { name: "Continue" }).click();
 		await adminPage.goto(`${app.url}/admin/users`);

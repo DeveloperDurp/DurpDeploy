@@ -13,11 +13,10 @@ const viewerWriteBlockMessage = "Viewers cannot perform write operations"
 
 // CSRFMiddleware validates POST/PUT/DELETE/PATCH requests carry the
 // correct CSRF token for the active session. It also rejects "viewer"
-// role users from any state-changing request — viewers are read-only
-// in P0.
+// role users from application writes; authenticated logout and security
+// settings remain CSRF-protected viewer actions.
 //
-// Exempt paths: /login (no session yet), /logout (CSRF-exempt by
-// decision — the user has a cookie, the handler just clears it).
+// Exempt path: /login (no session yet).
 //
 // ponytail: viewer role gate lives here so it fires on every write
 // regardless of route. P1 replaces this with per-project authorization.
@@ -81,7 +80,8 @@ func CSRFMiddleware() func(http.Handler) http.Handler {
 }
 
 func viewerSecurityWrite(path string) bool {
-	return strings.HasPrefix(path, "/settings/security/")
+	return path == "/logout" ||
+		strings.HasPrefix(path, "/settings/security/")
 }
 
 // blockViewerWrite responds to a viewer's write attempt. Two paths:
