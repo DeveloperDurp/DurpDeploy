@@ -26,7 +26,7 @@ services:
     environment:
       DURPDEPLOY_DB: /data/durpdeploy.db
       # Only the fixed Caddy peer may supply forwarding headers.
-      DURPDEPLOY_TRUSTED_PROXIES: 172.28.0.2/32
+      DURPDEPLOY_TRUSTED_PROXIES: 172.28.0.10/32
       # Optional. The mounted secret file at /etc/durpdeploy/key is the
       # primary path; secret/secret.go reads file first, env fallback. Set
       # this only when delivering the key via env (k8s, swarm, etc.).
@@ -67,7 +67,7 @@ services:
       - "443:443"
     networks:
       default:
-        ipv4_address: 172.28.0.2
+        ipv4_address: 172.28.0.10
     env_file:
       - ./compose.caddy.env
     volumes:
