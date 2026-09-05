@@ -12,7 +12,8 @@ import (
 )
 
 func wantsHTML(request *http.Request) bool {
-	return strings.Contains(request.Header.Get("Accept"), "text/html") ||
+	return request.Header.Get("HX-Request") == "true" ||
+		strings.Contains(request.Header.Get("Accept"), "text/html") ||
 		strings.HasPrefix(
 			request.Header.Get("Content-Type"),
 			"application/x-www-form-urlencoded",
@@ -34,7 +35,11 @@ func (h *AgentAdminHandler) ListAgentsPage(
 	}
 	labelsByAgent, err := h.labelsByAgent(request)
 	if err != nil {
-		http.Error(writer, "could not load agent labels", http.StatusInternalServerError)
+		http.Error(
+			writer,
+			"could not load agent labels",
+			http.StatusInternalServerError,
+		)
 		return
 	}
 	if err := pages.AgentsPage(pages.AgentsView{
@@ -95,7 +100,11 @@ func (h *AgentAdminHandler) AgentPage(
 	paired := err == nil && pairing.State == "paired"
 	labelsByAgent, err := h.labelsByAgent(request)
 	if err != nil {
-		http.Error(writer, "could not load agent labels", http.StatusInternalServerError)
+		http.Error(
+			writer,
+			"could not load agent labels",
+			http.StatusInternalServerError,
+		)
 		return
 	}
 	assigned := make(map[int64]struct{}, len(assignments))

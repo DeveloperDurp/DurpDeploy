@@ -227,3 +227,68 @@ func TestAgentLabelAdmin_HTMLValidationAndRoleBoundary(t *testing.T) {
 		t.Fatalf("deployer status = %d", denied.Code)
 	}
 }
+
+func TestAgentLabelAdmin_HTMXRenameRedirectsWithoutJSON(t *testing.T) {
+	// Given
+	h := newAgentLabelHarness(t, "admin")
+	created := agentLabelRequest(t, h, http.MethodPost,
+		"/admin/agent-labels", `{"name":"Cat Fact"}`)
+	var label struct {
+		ID int64 `json:"id"`
+	}
+	if err := json.NewDecoder(created.Body).Decode(&label); err != nil {
+		t.Fatalf("decode created label: %v", err)
+	}
+	path := "/admin/agent-labels/" + strconv.FormatInt(label.ID, 10)
+	request := httptest.NewRequest(http.MethodPut, path,
+		strings.NewReader("name=Cat+Facts"))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	request.Header.Set("HX-Request", "true")
+	response := httptest.NewRecorder()
+
+	// When
+	h.router.ServeHTTP(response, request)
+
+	// Then
+	if response.Code != http.StatusOK {
+		t.Fatalf(
+			"HTMX rename status = %d, want %d",
+			response.Code,
+			http.StatusOK,
+		)
+	}
+	if redirect := response.Header().Get("HX-Redirect"); redirect != path {
+		t.Fatalf("HX-Redirect = %q, want %q", redirect, path)
+	}
+	if response.Body.Len() != 0 {
+		t.Fatalf("HTMX rename body = %q, want empty", response.Body.String())
+	}
+}
+
+func TestAgentLabelAdmin_HTMXGetRendersHTML(t *testing.T) {
+	// Given
+	h := newAgentLabelHarness(t, "admin")
+	created := agentLabelRequest(t, h, http.MethodPost,
+		"/admin/agent-labels", `{"name":"Cat Facts"}`)
+	var label struct {
+		ID int64 `json:"id"`
+	}
+	if err := json.NewDecoder(created.Body).Decode(&label); err != nil {
+		t.Fatalf("decode created label: %v", err)
+	}
+	path := "/admin/agent-labels/" + strconv.FormatInt(label.ID, 10)
+	request := httptest.NewRequest(http.MethodGet, path, nil)
+	request.Header.Set("HX-Request", "true")
+	response := httptest.NewRecorder()
+
+	// When
+	h.router.ServeHTTP(response, request)
+
+	// Then
+	if !strings.Contains(response.Body.String(), `<form`) {
+		t.Fatalf("HTMX detail did not render HTML: %s", response.Body.String())
+	}
+	if strings.HasPrefix(strings.TrimSpace(response.Body.String()), `{"id":`) {
+		t.Fatalf("HTMX detail rendered JSON: %s", response.Body.String())
+	}
+}

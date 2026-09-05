@@ -252,8 +252,25 @@ INSERT INTO agent_pairings (
 			await page.waitForLoadState("networkidle");
 		}
 		await page.getByLabel("Name", { exact: true }).fill("Cat Facts");
+		const renameNavigation = page.waitForURL(`${baseURL}${labelPath}`);
+		const renameResponsePromise = page.waitForResponse((response) =>
+			response.request().method() === "PUT" && new URL(response.url()).pathname === labelPath,
+		);
 		await page.getByRole("button", { name: "Rename" }).click();
+		const renameResponse = await renameResponsePromise;
+		const renameHeaders = renameResponse.headers();
+		const renameBody = await renameResponse.text();
+		assert(renameResponse.status() === 200,
+			`rename returned ${renameResponse.status()}`);
+		assert(renameHeaders["hx-redirect"] === labelPath,
+			`rename HX-Redirect was ${renameHeaders["hx-redirect"]}`);
+		assert(renameBody === "", `rename returned an unexpected body: ${renameBody}`);
+		await renameNavigation;
 		await page.waitForLoadState("networkidle");
+		assert(await page.getByRole("heading", { name: "Cat Facts", exact: true }).isVisible(),
+			"renamed label heading did not settle");
+		assert(await page.getByLabel("Name", { exact: true }).inputValue() === "Cat Facts",
+			"rename form did not settle with the updated name");
 		const desktopLabel = await checkPage(page, "label-detail-desktop");
 		await screenshot(page, "label-detail-desktop.png");
 		await page.goto(`${baseURL}/admin/agents`, { waitUntil: "networkidle" });
@@ -334,6 +351,7 @@ VALUES (last_insert_rowid(), 'label', ${labelID}, 'all');`]);
 		await saveJSON("label-scenario.json", {
 			labelID, memberCount: 3, duplicate, unpaired, referencedDelete,
 			roleResults, deletionMembershipCount: deletionSummary.trim(),
+			rename: { status: renameResponse.status(), hxRedirect: renameHeaders["hx-redirect"] },
 		});
 		await saveJSON("viewport-metadata.json", {
 			desktop: { width: 1280, height: 768, label: desktopLabel },

@@ -145,9 +145,14 @@ func (h *AgentAdminHandler) redirectAgentLabel(
 	r *http.Request,
 	id int64,
 ) {
+	target := "/admin/agent-labels/" + strconv.FormatInt(id, 10)
+	if r.Header.Get("HX-Request") == "true" {
+		w.Header().Set("HX-Redirect", target)
+		w.WriteHeader(http.StatusOK)
+		return
+	}
 	http.Redirect(
-		w, r, "/admin/agent-labels/"+strconv.FormatInt(id, 10),
-		http.StatusSeeOther,
+		w, r, target, http.StatusSeeOther,
 	)
 }
 
