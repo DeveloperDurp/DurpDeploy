@@ -3,9 +3,23 @@ package mssqldriver
 import "strings"
 
 func rewriteAgentLabelRouting(query string) (string, bool) {
+	const ensureCursor = "INSERT INTO agent_label_cursors (agent_label_id, last_agent_id)"
+	if strings.Contains(query, ensureCursor) &&
+		strings.Contains(query, "ON CONFLICT(agent_label_id) DO NOTHING") {
+		start := strings.Index(query, ensureCursor)
+		return query[:start] + `MERGE agent_label_cursors WITH (HOLDLOCK) AS target
+USING (VALUES (@p1)) AS source (agent_label_id)
+ON target.agent_label_id = source.agent_label_id
+WHEN NOT MATCHED THEN
+    INSERT (agent_label_id, last_agent_id)
+    VALUES (source.agent_label_id, NULL);`, true
+	}
 	const membership = "INSERT INTO agent_label_memberships (agent_label_id, agent_id)"
 	if !strings.Contains(query, membership) ||
-		!strings.Contains(query, "RETURNING agent_label_id, agent_id, created_at") {
+		!strings.Contains(
+			query,
+			"RETURNING agent_label_id, agent_id, created_at",
+		) {
 		return "", false
 	}
 	start := strings.Index(query, membership)

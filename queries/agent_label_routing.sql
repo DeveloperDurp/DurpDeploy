@@ -149,8 +149,19 @@ INSERT INTO agent_label_cursors (agent_label_id, last_agent_id)
 VALUES (?, ?)
 RETURNING *;
 
+-- name: EnsureAgentLabelCursor :exec
+INSERT INTO agent_label_cursors (agent_label_id, last_agent_id)
+VALUES (?, NULL)
+ON CONFLICT(agent_label_id) DO NOTHING;
+
 -- name: GetAgentLabelCursor :one
 SELECT * FROM agent_label_cursors WHERE agent_label_id = ?;
+
+-- name: LockAgentLabelCursor :one
+UPDATE agent_label_cursors
+SET last_agent_id = last_agent_id
+WHERE agent_label_id = ?
+RETURNING *;
 
 -- name: AdvanceAgentLabelCursor :one
 UPDATE agent_label_cursors

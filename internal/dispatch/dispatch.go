@@ -4,14 +4,13 @@ package dispatch
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
-	"errors"
-	"fmt"
-
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/runner"
 	"durpdeploy/internal/secret"
+	"encoding/json"
+	"errors"
+	"fmt"
 )
 
 type Dispatcher struct {
@@ -53,11 +52,26 @@ func New(
 	return &Dispatcher{repo: repo, box: box, runner: deploymentRunner}
 }
 
-// Dispatch records an immutable routing decision. Only an explicit environment
-// assignment selects the remote path; every other environment runs locally.
+// Dispatch selects a frozen label target before enqueuing local or remote work.
 func (d *Dispatcher) Dispatch(ctx context.Context, deploymentID int64) error {
+	routingAgents, hasRoutingSnapshot, err := NewResolver(
+		d.repo,
+	).SelectForDispatch(
+		ctx,
+		deploymentID,
+	)
+	if err != nil {
+		return fmt.Errorf(
+			"resolve deployment %d routing: %w",
+			deploymentID,
+			err,
+		)
+	}
+	if len(routingAgents) > 1 {
+		return nil
+	}
 	var localDeployment db.Deployment
-	err := d.repo.WithTx(ctx, func(q *db.Queries) error {
+	err = d.repo.WithTx(ctx, func(q *db.Queries) error {
 		if _, err := q.GetDeploymentDispatch(ctx, deploymentID); err == nil {
 			return nil
 		} else if !errors.Is(err, sql.ErrNoRows) {
@@ -71,11 +85,24 @@ func (d *Dispatcher) Dispatch(ctx context.Context, deploymentID int64) error {
 		if deployment.Status == "pending_approval" {
 			return nil
 		}
-		assignment, err := q.GetEnvironmentAgentAssignment(
-			ctx,
-			deployment.EnvironmentID,
-		)
-		if err == nil {
+		assignedAgentID := ""
+		if len(routingAgents) == 1 {
+			assignedAgentID = routingAgents[0].ID
+		} else if !hasRoutingSnapshot {
+			assignment, assignmentErr := q.GetEnvironmentAgentAssignment(
+				ctx,
+				deployment.EnvironmentID,
+			)
+			if assignmentErr == nil {
+				assignedAgentID = assignment.AgentID
+			} else if !errors.Is(assignmentErr, sql.ErrNoRows) {
+				return fmt.Errorf(
+					"get environment agent assignment: %w",
+					assignmentErr,
+				)
+			}
+		}
+		if assignedAgentID != "" {
 			if d.box == nil {
 				return errors.New("remote dispatch requires a secret box")
 			}
@@ -97,7 +124,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, deploymentID int64) error {
 				db.CreateDirectDeploymentDispatchParams{
 					DeploymentID: deployment.ID,
 					AssignedAgentID: sql.NullString{
-						String: assignment.AgentID,
+						String: assignedAgentID,
 						Valid:  true,
 					},
 				},
@@ -108,9 +135,6 @@ func (d *Dispatcher) Dispatch(ctx context.Context, deploymentID int64) error {
 				)
 			}
 			return nil
-		}
-		if !errors.Is(err, sql.ErrNoRows) {
-			return fmt.Errorf("get environment agent assignment: %w", err)
 		}
 
 		if _, err := q.CreateDeploymentDispatch(

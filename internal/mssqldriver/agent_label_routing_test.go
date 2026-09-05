@@ -1,12 +1,11 @@
 package mssqldriver_test
 
 import (
+	"durpdeploy/internal/mssqldriver"
+	"durpdeploy/migrations"
 	"io/fs"
 	"strings"
 	"testing"
-
-	"durpdeploy/internal/mssqldriver"
-	"durpdeploy/migrations"
 )
 
 func TestAgentLabelRoutingQueriesRewriteMembership(t *testing.T) {
@@ -37,6 +36,26 @@ RETURNING agent_label_id, agent_id, created_at`
 	}
 	if strings.Contains(got, "RETURNING") {
 		t.Fatalf("rewritten membership retained RETURNING: %s", got)
+	}
+}
+
+func TestAgentLabelRoutingCursorEnsureRewriteUsesDatabaseLock(t *testing.T) {
+	query := `-- name: EnsureAgentLabelCursor :exec
+INSERT INTO agent_label_cursors (agent_label_id, last_agent_id)
+VALUES (?, NULL)
+ON CONFLICT(agent_label_id) DO NOTHING;`
+	got, err := mssqldriver.RewriteSQL(query)
+	if err != nil {
+		t.Fatalf("rewrite cursor ensure: %v", err)
+	}
+	for _, required := range []string{
+		"MERGE agent_label_cursors WITH (HOLDLOCK)",
+		"USING (VALUES (@p1))",
+		"WHEN NOT MATCHED THEN",
+	} {
+		if !strings.Contains(got, required) {
+			t.Fatalf("rewritten query missing %q:\n%s", required, got)
+		}
 	}
 }
 

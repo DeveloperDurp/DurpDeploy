@@ -372,6 +372,17 @@ func (q *Queries) DeleteScheduledDeploymentRoutingPolicy(ctx context.Context, sc
 	return result.RowsAffected()
 }
 
+const ensureAgentLabelCursor = `-- name: EnsureAgentLabelCursor :exec
+INSERT INTO agent_label_cursors (agent_label_id, last_agent_id)
+VALUES (?, NULL)
+ON CONFLICT(agent_label_id) DO NOTHING
+`
+
+func (q *Queries) EnsureAgentLabelCursor(ctx context.Context, agentLabelID int64) error {
+	_, err := q.db.ExecContext(ctx, ensureAgentLabelCursor, agentLabelID)
+	return err
+}
+
 const getAgentLabel = `-- name: GetAgentLabel :one
 SELECT id, name, normalized_name, created_at, updated_at FROM agent_labels WHERE id = ?
 `
@@ -674,6 +685,20 @@ func (q *Queries) ListEligibleAgentLabelMembers(ctx context.Context, agentLabelI
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockAgentLabelCursor = `-- name: LockAgentLabelCursor :one
+UPDATE agent_label_cursors
+SET last_agent_id = last_agent_id
+WHERE agent_label_id = ?
+RETURNING agent_label_id, last_agent_id, updated_at
+`
+
+func (q *Queries) LockAgentLabelCursor(ctx context.Context, agentLabelID int64) (AgentLabelCursor, error) {
+	row := q.db.QueryRowContext(ctx, lockAgentLabelCursor, agentLabelID)
+	var i AgentLabelCursor
+	err := row.Scan(&i.AgentLabelID, &i.LastAgentID, &i.UpdatedAt)
+	return i, err
 }
 
 const updateAgentLabel = `-- name: UpdateAgentLabel :one
