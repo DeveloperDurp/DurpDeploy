@@ -15,6 +15,14 @@ type ScheduledDeploymentListItem struct {
 	Schedule        db.ScheduledDeployment
 	ReleaseVersion  string
 	EnvironmentName string
+	TargetOptions ScheduleTargetOptions
+}
+
+type ScheduleTargetOptions struct {
+	Labels []db.AgentLabel
+	Mode string
+	LabelID int64
+	Strategy string
 }
 
 templ ScheduledDeploymentsListPage(project db.Project, items []ScheduledDeploymentListItem, currentPath string) {
@@ -153,6 +161,7 @@ templ ScheduledDeploymentQuickEditForm(projectID int64, item ScheduledDeployment
 		<input type="hidden" name="release_id" value={ strconv.FormatInt(item.Schedule.ReleaseID, 10) }/>
 		<input type="hidden" name="environment_id" value={ strconv.FormatInt(item.Schedule.EnvironmentID, 10) }/>
 		<input type="hidden" name="note" value={ item.Schedule.Note.String }/>
+		@ScheduleExecutionTargetFields(item.TargetOptions, true)
 		<div class="form-control">
 			<label class="label"><span class="label-text">Cron</span></label>
 			<input type="text" name="cron" class="input input-bordered input-sm w-full" required value={ item.Schedule.Cron }/>
@@ -246,7 +255,7 @@ templ ScheduledDeploymentMobileRecord(projectID int64, item ScheduledDeploymentL
 	</li>
 }
 
-templ ScheduledDeploymentFormPage(project db.Project, releases []db.Release, envs []AvailableEnv, schedule *db.ScheduledDeployment, errorMsg string, currentPath string) {
+templ ScheduledDeploymentFormPage(project db.Project, releases []db.Release, envs []AvailableEnv, schedule *db.ScheduledDeployment, targets ScheduleTargetOptions, errorMsg string, currentPath string) {
 	if !CanWrite(ctx) {
 		@ViewerForbiddenMessage(
 			scheduleFormPageTitle(schedule),
@@ -264,7 +273,7 @@ templ ScheduledDeploymentFormPage(project db.Project, releases []db.Release, env
 				{Label: "Schedules", Href: fmt.Sprintf("/projects/%d/schedules", project.ID)},
 				{Label: scheduleLabel(schedule)},
 			})
-			@ScheduledDeploymentForm(project, releases, envs, schedule, errorMsg)
+			@ScheduledDeploymentForm(project, releases, envs, schedule, targets, errorMsg)
 		}
 	}
 }
@@ -283,7 +292,7 @@ func scheduleFormPageVerb(schedule *db.ScheduledDeployment) string {
 	return "edit"
 }
 
-templ ScheduledDeploymentForm(project db.Project, releases []db.Release, envs []AvailableEnv, schedule *db.ScheduledDeployment, errorMsg string) {
+templ ScheduledDeploymentForm(project db.Project, releases []db.Release, envs []AvailableEnv, schedule *db.ScheduledDeployment, targets ScheduleTargetOptions, errorMsg string) {
 	<div id="form-container" class="card bg-base-200 p-4">
 		<h3 class="text-lg font-bold mb-4">{ scheduleHeading(schedule) }</h3>
 		if errorMsg != "" {
@@ -306,6 +315,7 @@ templ ScheduledDeploymentForm(project db.Project, releases []db.Release, envs []
 					}
 				</select>
 			</div>
+			@ScheduleExecutionTargetFields(targets, false)
 			<div class="form-control">
 				<label class="label"><span class="label-text">Environment</span></label>
 				<select name="environment_id" class="select select-bordered" required>
@@ -351,6 +361,29 @@ templ ScheduledDeploymentForm(project db.Project, releases []db.Release, envs []
 			</div>
 		</form>
 	</div>
+}
+
+templ ScheduleExecutionTargetFields(options ScheduleTargetOptions, compact bool) {
+	<fieldset class="space-y-2 min-w-0" x-data={ fmt.Sprintf("{ targetMode: '%s' }", options.Mode) }>
+		<legend class="label-text font-medium">Execution target</legend>
+		<select name="target_mode" aria-label="Execution target" x-model="targetMode" class={ templ.KV("select select-bordered max-w-full", true), templ.KV("select-sm w-full", compact), templ.KV("w-full", !compact) }>
+			<option value="inherit" if options.Mode == "inherit" { selected }>Inherit project policy</option>
+			<option value="local" if options.Mode == "local" { selected }>Local</option>
+			<option value="label" if options.Mode == "label" { selected }>Agent label</option>
+		</select>
+		<div x-show="targetMode === 'label'" x-cloak class="grid gap-2 sm:grid-cols-2">
+			<select name="agent_label_id" aria-label="Agent label" x-bind:required="targetMode === 'label'" class="select select-bordered max-w-full w-full">
+				<option value="">Select label</option>
+				for _, label := range options.Labels {
+					<option value={ strconv.FormatInt(label.ID, 10) } if label.ID == options.LabelID { selected }>{ label.Name }</option>
+				}
+			</select>
+			<select name="agent_strategy" aria-label="Agent strategy" x-bind:required="targetMode === 'label'" class="select select-bordered max-w-full w-full">
+				<option value="round_robin" if options.Strategy == "round_robin" { selected }>Round robin</option>
+				<option value="all" if options.Strategy == "all" { selected }>All agents</option>
+			</select>
+		</div>
+	</fieldset>
 }
 
 // ScheduledDeploymentEditRow is the inline edit form rendered in place of

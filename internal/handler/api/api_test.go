@@ -1320,8 +1320,10 @@ func TestUpdateSchedule(t *testing.T) {
 			Cron:          "0 9 * * *",
 			NextRunAt:     next.Unix(),
 			Enabled:       1,
-			LastFiredAt:   sql.NullInt64{},
-			Note:          sql.NullString{},
+			LastFiredAt: sql.NullInt64{
+				Int64: 1_700_000_000, Valid: true,
+			},
+			Note: sql.NullString{},
 		},
 	)
 	if err != nil {
@@ -1357,6 +1359,13 @@ func TestUpdateSchedule(t *testing.T) {
 	}
 	if resp["enabled"] != float64(0) {
 		t.Fatalf("expected disabled, got %v", resp["enabled"])
+	}
+	updated, err := h.repo.Queries.GetScheduledDeployment(
+		context.Background(), s.ID,
+	)
+	if err != nil || !updated.LastFiredAt.Valid ||
+		updated.LastFiredAt.Int64 != 1_700_000_000 {
+		t.Fatalf("last fired = %#v, error = %v", updated.LastFiredAt, err)
 	}
 }
 

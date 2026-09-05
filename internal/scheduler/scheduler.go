@@ -3,6 +3,7 @@ package scheduler
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -20,6 +21,8 @@ import (
 type Scheduler struct {
 	repo         *repository.Repository
 	dispatchFunc func(ctx context.Context, deploymentID int64) error
+	creator      *dispatch.CreationService
+	testRunFunc  bool
 	interval     time.Duration
 	now          func() time.Time
 	parser       cron.Parser
@@ -55,6 +58,7 @@ func New(
 	s := &Scheduler{
 		repo:         repo,
 		dispatchFunc: dispatcher.Dispatch,
+		creator:      dispatch.NewCreationService(repo, dispatcher),
 		interval:     60 * time.Second,
 		now:          time.Now,
 		parser: cron.NewParser(
@@ -72,6 +76,7 @@ func New(
 func (s *Scheduler) SetRunFunc(
 	fn func(ctx context.Context, deploymentID, releaseID, environmentID int64),
 ) {
+	s.testRunFunc = true
 	s.dispatchFunc = func(ctx context.Context, deploymentID int64) error {
 		deployment, err := s.repo.Queries.GetDeployment(ctx, deploymentID)
 		if err != nil {
@@ -118,6 +123,7 @@ func (s *Scheduler) Tick(ctx context.Context) {
 }
 
 func (s *Scheduler) tick(ctx context.Context) {
+	s.recoverPending(ctx)
 	due, err := s.repo.Queries.ListDueScheduledDeployments(ctx, s.now().Unix())
 	if err != nil {
 		s.log.Error("list due scheduled deployments", "error", err)
@@ -318,21 +324,20 @@ func (s *Scheduler) fireOne(ctx context.Context, row db.ScheduledDeployment) {
 		initialStatus = "pending_approval"
 	}
 
-	// create deployment
 	note := fmt.Sprintf("Scheduled: %d - %s", row.ID, row.Note.String)
-	deployment, err := s.repo.Queries.CreateDeployment(
-		ctx,
-		db.CreateDeploymentParams{
-			ReleaseID:     row.ReleaseID,
-			EnvironmentID: row.EnvironmentID,
-			Status:        initialStatus,
-			StartedAt:     sql.NullInt64{},
-			FinishedAt:    sql.NullInt64{},
-			Forced:        0,
-			Note:          sql.NullString{String: note, Valid: true},
+	deployment, err := s.creator.CreateScheduled(
+		ctx, dispatch.ScheduledRequest{
+			CreateRequest: dispatch.CreateRequest{
+				ProjectID: row.ProjectID, ReleaseID: row.ReleaseID,
+				EnvironmentID: row.EnvironmentID, Note: note,
+			},
+			ScheduleID: row.ID, DueAt: row.NextRunAt, NextRunAt: next.Unix(),
 		},
 	)
 	if err != nil {
+		if errors.Is(err, dispatch.ErrScheduledOccurrenceClaimed) {
+			return
+		}
 		s.log.Error(
 			"create deployment failed",
 			"schedule_id",
@@ -342,17 +347,6 @@ func (s *Scheduler) fireOne(ctx context.Context, row db.ScheduledDeployment) {
 			"error",
 			err,
 		)
-		if err := s.advance(ctx, row, next); err != nil {
-			s.log.Error(
-				"advance failed",
-				"schedule_id",
-				row.ID,
-				"project_id",
-				row.ProjectID,
-				"error",
-				err,
-			)
-		}
 		return
 	}
 
@@ -369,7 +363,18 @@ func (s *Scheduler) fireOne(ctx context.Context, row db.ScheduledDeployment) {
 	)
 
 	if initialStatus == "pending" {
-		if err := s.dispatchFunc(ctx, deployment.ID); err != nil {
+		dispatchScheduled := s.creator.DispatchFrozen
+		if s.testRunFunc {
+			dispatchScheduled = s.dispatchFunc
+		}
+		if err := dispatchScheduled(ctx, deployment.ID); err != nil {
+			if errors.Is(err, dispatch.ErrNoEligibleAgents) {
+				_ = s.repo.Queries.FinishDeployment(
+					ctx, db.FinishDeploymentParams{
+						Status: "failed", ID: deployment.ID,
+					},
+				)
+			}
 			s.log.Error(
 				"dispatch scheduled deployment failed",
 				"schedule_id",
@@ -382,16 +387,21 @@ func (s *Scheduler) fireOne(ctx context.Context, row db.ScheduledDeployment) {
 		}
 	}
 
-	if err := s.advance(ctx, row, next); err != nil {
-		s.log.Error(
-			"advance failed",
-			"schedule_id",
-			row.ID,
-			"project_id",
-			row.ProjectID,
-			"error",
-			err,
-		)
+}
+
+func (s *Scheduler) recoverPending(ctx context.Context) {
+	deployments, err := s.repo.Queries.ListRecoverableScheduledDeployments(ctx)
+	if err != nil {
+		s.log.Error("list recoverable scheduled deployments", "error", err)
+		return
+	}
+	for _, deployment := range deployments {
+		if err := s.creator.DispatchFrozen(ctx, deployment.ID); err != nil {
+			s.log.Error(
+				"recover scheduled deployment", "deployment_id", deployment.ID,
+				"error", err,
+			)
+		}
 	}
 }
 

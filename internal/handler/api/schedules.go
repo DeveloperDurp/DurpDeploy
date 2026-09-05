@@ -2,6 +2,7 @@ package api
 
 import (
 	"database/sql"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"github.com/robfig/cron/v3"
 
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/dispatch"
 	"durpdeploy/internal/repository"
 )
 
@@ -41,6 +43,69 @@ type scheduledDeploymentRequest struct {
 	Enabled       bool   `json:"enabled"`
 	Active        bool   `json:"active"`
 	Note          string `json:"note"`
+	TargetMode    string `json:"target_mode"`
+	AgentLabelID  int64  `json:"agent_label_id"`
+	AgentStrategy string `json:"agent_strategy"`
+}
+
+type scheduledDeploymentResponse struct {
+	db.ScheduledDeployment
+	TargetMode    string `json:"target_mode"`
+	AgentLabelID  *int64 `json:"agent_label_id"`
+	AgentStrategy string `json:"agent_strategy,omitempty"`
+}
+
+func (h *ScheduleHandler) response(
+	r *http.Request,
+	schedule db.ScheduledDeployment,
+) (scheduledDeploymentResponse, error) {
+	response := scheduledDeploymentResponse{
+		ScheduledDeployment: schedule, TargetMode: "inherit",
+	}
+	policy, err := h.repo.Queries.GetScheduledDeploymentRoutingPolicy(
+		r.Context(), schedule.ID,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return response, nil
+	}
+	if err != nil {
+		return scheduledDeploymentResponse{}, err
+	}
+	response.TargetMode = policy.TargetMode
+	if policy.AgentLabelID.Valid {
+		response.AgentLabelID = &policy.AgentLabelID.Int64
+	}
+	response.AgentStrategy = policy.AgentStrategy.String
+	return response, nil
+}
+
+func (request scheduledDeploymentRequest) routingInput() (dispatch.Input, error) {
+	mode := request.TargetMode
+	if mode == "" {
+		mode = "inherit"
+	}
+	input := dispatch.Input{
+		Source: dispatch.SourceSchedule, Mode: mode,
+		LabelID: request.AgentLabelID, Strategy: request.AgentStrategy,
+	}
+	if _, err := dispatch.ParseInput(input); err != nil {
+		return dispatch.Input{}, err
+	}
+	return input, nil
+}
+
+func apiSchedulePolicyParams(
+	scheduleID int64,
+	input dispatch.Input,
+) db.CreateScheduledDeploymentRoutingPolicyParams {
+	params := db.CreateScheduledDeploymentRoutingPolicyParams{
+		ScheduledDeploymentID: scheduleID, TargetMode: input.Mode,
+	}
+	if input.Mode == "label" {
+		params.AgentLabelID = sql.NullInt64{Int64: input.LabelID, Valid: true}
+		params.AgentStrategy = sql.NullString{String: input.Strategy, Valid: true}
+	}
+	return params
 }
 
 func parseAndValidateCron(expr string) (cron.Schedule, error) {
@@ -122,7 +187,12 @@ func (h *ScheduleHandler) ListSchedules(
 
 	items := make([]any, len(schedules))
 	for i, s := range schedules {
-		items[i] = s
+		response, err := h.response(r, s)
+		if err != nil {
+			RespondError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		items[i] = response
 	}
 	RespondJSON(w, http.StatusOK, PaginatedResponse{
 		Items:  items,
@@ -166,6 +236,11 @@ func (h *ScheduleHandler) CreateSchedule(
 
 	var req scheduledDeploymentRequest
 	if !readJSONBool(w, r, &req) {
+		return
+	}
+	routingInput, err := req.routingInput()
+	if err != nil {
+		RespondError(w, http.StatusUnprocessableEntity, "Invalid execution target")
 		return
 	}
 	cronExpr := req.CronExpr
@@ -225,25 +300,40 @@ func (h *ScheduleHandler) CreateSchedule(
 		note = sql.NullString{String: req.Note, Valid: true}
 	}
 
-	schedule, err := h.repo.Queries.CreateScheduledDeployment(
-		r.Context(),
-		db.CreateScheduledDeploymentParams{
-			ProjectID:     projectID,
-			ReleaseID:     req.ReleaseID,
-			EnvironmentID: req.EnvironmentID,
-			Cron:          cronExpr,
-			NextRunAt:     sched.Next(time.Now()).Unix(),
-			Enabled:       enabled,
-			LastFiredAt:   sql.NullInt64{},
-			Note:          note,
-		},
-	)
+	var schedule db.ScheduledDeployment
+	err = h.repo.WithRoutingTx(r.Context(), func(q *db.Queries) error {
+		var err error
+		schedule, err = q.CreateScheduledDeployment(
+			r.Context(), db.CreateScheduledDeploymentParams{
+				ProjectID:     projectID,
+				ReleaseID:     req.ReleaseID,
+				EnvironmentID: req.EnvironmentID,
+				Cron:          cronExpr,
+				NextRunAt:     sched.Next(time.Now()).Unix(),
+				Enabled:       enabled,
+				LastFiredAt:   sql.NullInt64{},
+				Note:          note,
+			},
+		)
+		if err != nil {
+			return err
+		}
+		_, err = q.CreateScheduledDeploymentRoutingPolicy(
+			r.Context(), apiSchedulePolicyParams(schedule.ID, routingInput),
+		)
+		return err
+	})
 	if err != nil {
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	RespondJSON(w, http.StatusCreated, schedule)
+	response, err := h.response(r, schedule)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	RespondJSON(w, http.StatusCreated, response)
 }
 
 // swagger:route GET /projects/{id}/schedules/{schedId} schedules getSchedule
@@ -293,7 +383,12 @@ func (h *ScheduleHandler) GetSchedule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	RespondJSON(w, http.StatusOK, schedule)
+	response, err := h.response(r, schedule)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	RespondJSON(w, http.StatusOK, response)
 }
 
 // swagger:route PUT /projects/{id}/schedules/{schedId} schedules updateSchedule
@@ -354,6 +449,11 @@ func (h *ScheduleHandler) UpdateSchedule(
 	if !readJSONBool(w, r, &req) {
 		return
 	}
+	routingInput, err := req.routingInput()
+	if err != nil {
+		RespondError(w, http.StatusUnprocessableEntity, "Invalid execution target")
+		return
+	}
 	cronExpr := req.CronExpr
 	if cronExpr == "" {
 		cronExpr = req.Cron
@@ -399,20 +499,38 @@ func (h *ScheduleHandler) UpdateSchedule(
 		note = sql.NullString{String: req.Note, Valid: true}
 	}
 
-	schedule, err := h.repo.Queries.UpdateScheduledDeployment(
-		r.Context(),
-		db.UpdateScheduledDeploymentParams{
-			ID:            schedID,
-			ProjectID:     projectID,
-			ReleaseID:     req.ReleaseID,
-			EnvironmentID: req.EnvironmentID,
-			Cron:          cronExpr,
-			NextRunAt:     sched.Next(time.Now()).Unix(),
-			Enabled:       enabled,
-			LastFiredAt:   sql.NullInt64{},
-			Note:          note,
-		},
-	)
+	var schedule db.ScheduledDeployment
+	err = h.repo.WithRoutingTx(r.Context(), func(q *db.Queries) error {
+		var err error
+		schedule, err = q.UpdateScheduledDeployment(
+			r.Context(), db.UpdateScheduledDeploymentParams{
+				ID:            schedID,
+				ProjectID:     projectID,
+				ReleaseID:     req.ReleaseID,
+				EnvironmentID: req.EnvironmentID,
+				Cron:          cronExpr,
+				NextRunAt:     sched.Next(time.Now()).Unix(),
+				Enabled:       enabled,
+				LastFiredAt:   existing.LastFiredAt,
+				Note:          note,
+			},
+		)
+		if err != nil {
+			return err
+		}
+		params := apiSchedulePolicyParams(schedID, routingInput)
+		_, err = q.UpdateScheduledDeploymentRoutingPolicy(
+			r.Context(), db.UpdateScheduledDeploymentRoutingPolicyParams{
+				TargetMode: params.TargetMode, AgentLabelID: params.AgentLabelID,
+				AgentStrategy:         params.AgentStrategy,
+				ScheduledDeploymentID: schedID,
+			},
+		)
+		if errors.Is(err, sql.ErrNoRows) {
+			_, err = q.CreateScheduledDeploymentRoutingPolicy(r.Context(), params)
+		}
+		return err
+	})
 	if err != nil {
 		if err == sql.ErrNoRows {
 			RespondError(w, http.StatusNotFound, "Schedule not found")
@@ -421,7 +539,12 @@ func (h *ScheduleHandler) UpdateSchedule(
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	RespondJSON(w, http.StatusOK, schedule)
+	response, err := h.response(r, schedule)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	RespondJSON(w, http.StatusOK, response)
 }
 
 // swagger:route DELETE /projects/{id}/schedules/{schedId} schedules deleteSchedule

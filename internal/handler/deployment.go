@@ -15,7 +15,6 @@ import (
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/deploymentstate"
 	"durpdeploy/internal/dispatch"
-	"durpdeploy/internal/gate"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/runner"
 	"durpdeploy/views/pages"
@@ -739,6 +738,10 @@ func (h *DeploymentHandler) RedeployDeployment(
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	if source.ParentDeploymentID.Valid {
+		http.Error(w, "Child deployments cannot be redeployed", http.StatusConflict)
+		return
+	}
 	routing, err := deploymentstate.Load(r.Context(), h.repo, id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -764,60 +767,24 @@ func (h *DeploymentHandler) RedeployDeployment(
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	project, err := h.repo.Queries.GetProject(r.Context(), release.ProjectID)
-	if err != nil {
-		http.Error(w, "Project not found", http.StatusNotFound)
-		return
-	}
-	blocked, reason, requiresApproval, err := gate.CheckAndApproval(
-		r.Context(),
-		h.repo,
-		project,
-		release,
-		source.EnvironmentID,
-	)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	if blocked {
-		http.Error(w, reason, http.StatusUnprocessableEntity)
-		return
-	}
-
-	note := sql.NullString{
-		String: fmt.Sprintf("Re-run of #%d", source.ID),
-		Valid:  true,
-	}
-	initialStatus := "pending"
-	if requiresApproval {
-		initialStatus = "pending_approval"
-	}
-	deployment, err := h.repo.Queries.CreateDeployment(
-		r.Context(),
-		db.CreateDeploymentParams{
-			ReleaseID:     source.ReleaseID,
-			EnvironmentID: source.EnvironmentID,
-			Status:        initialStatus,
-			StartedAt:     sql.NullInt64{},
-			FinishedAt:    sql.NullInt64{},
-			Forced:        0,
-			Note:          note,
+	deployment, err := dispatch.NewCreationService(
+		h.repo, h.dispatcher,
+	).Create(r.Context(), dispatch.CreateRequest{
+		ProjectID: release.ProjectID, ReleaseID: source.ReleaseID,
+		EnvironmentID: source.EnvironmentID,
+		Note:          fmt.Sprintf("Re-run of #%d", source.ID),
+		Routing: dispatch.Input{
+			Source: dispatch.SourceRedeploy, Mode: "default",
 		},
-	)
+	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	if initialStatus == "pending" {
-		if err := h.dispatcher.Dispatch(
-			r.Context(),
-			deployment.ID,
-		); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+		if errors.Is(err, dispatch.ErrPromotionBlocked) ||
+			errors.Is(err, dispatch.ErrNoEligibleAgents) {
+			http.Error(w, err.Error(), http.StatusUnprocessableEntity)
 			return
 		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	if r.Header.Get("HX-Request") == "true" {

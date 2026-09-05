@@ -418,6 +418,213 @@ func TestTick_DefaultDispatcherRoutesScheduledDeploymentOnce(t *testing.T) {
 	}
 }
 
+func TestScheduledExecutionTarget_InheritUsesProjectPolicyAtFire(t *testing.T) {
+	// Given
+	f := newFixture(t)
+	project := f.createProject()
+	release := f.createRelease(project.ID)
+	environment := f.createEnvironment("inherit")
+	schedule := f.createSchedule(
+		project.ID, release.ID, environment.ID, "* * * * *",
+		f.now.Add(-time.Minute), 1, "inherit",
+	)
+	if _, err := f.repo.Queries.CreateScheduledDeploymentRoutingPolicy(
+		f.ctx(), db.CreateScheduledDeploymentRoutingPolicyParams{
+			ScheduledDeploymentID: schedule.ID, TargetMode: "inherit",
+		},
+	); err != nil {
+		t.Fatalf("create schedule routing policy: %v", err)
+	}
+	if _, err := f.repo.Queries.CreateProjectExecutionPolicy(
+		f.ctx(), db.CreateProjectExecutionPolicyParams{
+			ProjectID: project.ID, TargetMode: "local",
+		},
+	); err != nil {
+		t.Fatalf("create project routing policy: %v", err)
+	}
+
+	// When
+	f.sched.Tick(f.ctx())
+
+	// Then
+	deployments, err := f.repo.Queries.ListDeploymentsByRelease(f.ctx(), release.ID)
+	if err != nil || len(deployments) != 1 {
+		t.Fatalf("deployments = %d, error = %v", len(deployments), err)
+	}
+	snapshot, err := f.repo.Queries.GetDeploymentRoutingSnapshot(
+		f.ctx(), deployments[0].ID,
+	)
+	if err != nil || snapshot.TargetMode != "local" || snapshot.Source != "project" {
+		t.Fatalf("snapshot = %#v, error = %v", snapshot, err)
+	}
+}
+
+func TestScheduledExecutionTarget_ExplicitIgnoresLaterProjectPolicy(t *testing.T) {
+	// Given
+	f := newFixture(t)
+	project := f.createProject()
+	release := f.createRelease(project.ID)
+	environment := f.createEnvironment("explicit")
+	schedule := f.createSchedule(
+		project.ID, release.ID, environment.ID, "* * * * *",
+		f.now.Add(-time.Minute), 1, "explicit",
+	)
+	if _, err := f.repo.Queries.CreateScheduledDeploymentRoutingPolicy(
+		f.ctx(), db.CreateScheduledDeploymentRoutingPolicyParams{
+			ScheduledDeploymentID: schedule.ID, TargetMode: "local",
+		},
+	); err != nil {
+		t.Fatalf("create schedule routing policy: %v", err)
+	}
+	label, err := f.repo.Queries.CreateAgentLabel(
+		f.ctx(), db.CreateAgentLabelParams{
+			Name: "Later", NormalizedName: "later",
+		},
+	)
+	if err != nil {
+		t.Fatalf("create label: %v", err)
+	}
+	if _, err := f.repo.Queries.CreateProjectExecutionPolicy(
+		f.ctx(), db.CreateProjectExecutionPolicyParams{
+			ProjectID: project.ID, TargetMode: "label",
+			AgentLabelID: sql.NullInt64{Int64: label.ID, Valid: true},
+			AgentStrategy: sql.NullString{
+				String: "round_robin", Valid: true,
+			},
+		},
+	); err != nil {
+		t.Fatalf("create later project policy: %v", err)
+	}
+
+	// When
+	f.sched.Tick(f.ctx())
+
+	// Then
+	deployments, err := f.repo.Queries.ListDeploymentsByRelease(f.ctx(), release.ID)
+	if err != nil || len(deployments) != 1 {
+		t.Fatalf("deployments = %d, error = %v", len(deployments), err)
+	}
+	snapshot, err := f.repo.Queries.GetDeploymentRoutingSnapshot(
+		f.ctx(), deployments[0].ID,
+	)
+	if err != nil || snapshot.TargetMode != "local" || snapshot.Source != "schedule" {
+		t.Fatalf("snapshot = %#v, error = %v", snapshot, err)
+	}
+}
+
+func TestScheduledApprovalRouting_FreezesIntentBeforeApproval(t *testing.T) {
+	// Given
+	f := newFixture(t)
+	project := f.createProject()
+	release := f.createRelease(project.ID)
+	environment := f.createEnvironment("approval")
+	lifecycle := f.createLifecycle("approval")
+	f.attachLifecycle(project.ID, lifecycle.ID)
+	f.addLifecycleStageWithApproval(lifecycle.ID, environment.ID, 0)
+	schedule := f.createSchedule(
+		project.ID, release.ID, environment.ID, "* * * * *",
+		f.now.Add(-time.Minute), 1, "approval",
+	)
+	if _, err := f.repo.Queries.CreateScheduledDeploymentRoutingPolicy(
+		f.ctx(), db.CreateScheduledDeploymentRoutingPolicyParams{
+			ScheduledDeploymentID: schedule.ID, TargetMode: "local",
+		},
+	); err != nil {
+		t.Fatalf("create schedule routing policy: %v", err)
+	}
+
+	// When
+	f.sched.Tick(f.ctx())
+
+	// Then
+	deployments, err := f.repo.Queries.ListDeploymentsByRelease(f.ctx(), release.ID)
+	if err != nil || len(deployments) != 1 {
+		t.Fatalf("deployments = %d, error = %v", len(deployments), err)
+	}
+	if deployments[0].Status != "pending_approval" {
+		t.Fatalf("status = %q", deployments[0].Status)
+	}
+	if _, err := f.repo.Queries.GetDeploymentRoutingSnapshot(
+		f.ctx(), deployments[0].ID,
+	); err != nil {
+		t.Fatalf("get frozen routing snapshot: %v", err)
+	}
+}
+
+func TestScheduledOccurrenceCAS_ConcurrentTicksCreateOneRoot(t *testing.T) {
+	// Given
+	f := newFixture(t)
+	project := f.createProject()
+	release := f.createRelease(project.ID)
+	environment := f.createEnvironment("cas")
+	f.createSchedule(
+		project.ID, release.ID, environment.ID, "* * * * *",
+		f.now.Add(-time.Minute), 1, "cas",
+	)
+
+	// When
+	var wg sync.WaitGroup
+	wg.Add(2)
+	for range 2 {
+		go func() {
+			defer wg.Done()
+			f.sched.Tick(f.ctx())
+		}()
+	}
+	wg.Wait()
+
+	// Then
+	deployments, err := f.repo.Queries.ListDeploymentsByRelease(f.ctx(), release.ID)
+	if err != nil || len(deployments) != 1 {
+		t.Fatalf("deployments = %d, error = %v; want one", len(deployments), err)
+	}
+}
+
+func TestScheduledOccurrenceCAS_RecoveryDispatchesOnce(t *testing.T) {
+	// Given: creation committed, but dispatch did not run before the process stopped.
+	f := newFixture(t)
+	project := f.createProject()
+	release := f.createRelease(project.ID)
+	environment := f.createEnvironment("recovery")
+	schedule := f.createSchedule(
+		project.ID, release.ID, environment.ID, "* * * * *",
+		f.now.Add(-time.Minute), 1, "recovery",
+	)
+	creator := dispatch.NewCreationService(
+		f.repo, dispatch.New(f.repo, nil, nil),
+	)
+	deployment, err := creator.CreateScheduled(
+		f.ctx(), dispatch.ScheduledRequest{
+			CreateRequest: dispatch.CreateRequest{
+				ProjectID: project.ID, ReleaseID: release.ID,
+				EnvironmentID: environment.ID,
+			},
+			ScheduleID: schedule.ID, DueAt: schedule.NextRunAt,
+			NextRunAt: f.now.Add(time.Minute).Unix(),
+		},
+	)
+	if err != nil {
+		t.Fatalf("create interrupted occurrence: %v", err)
+	}
+
+	// When
+	f.sched.Tick(f.ctx())
+	f.sched.Tick(f.ctx())
+
+	// Then
+	var count int
+	if err := f.repo.DB.QueryRowContext(
+		f.ctx(),
+		"SELECT COUNT(*) FROM deployment_dispatches WHERE deployment_id = ?",
+		deployment.ID,
+	).Scan(&count); err != nil {
+		t.Fatalf("count recovered dispatches: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("dispatch count = %d, want one", count)
+	}
+}
+
 func TestTick_BadCron_ParksAndLogs(t *testing.T) {
 	f := newFixture(t)
 	proj := f.createProject()

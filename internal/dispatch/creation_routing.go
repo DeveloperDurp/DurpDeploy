@@ -41,6 +41,16 @@ func freezeIntentTx(
 	if err := createSnapshot(ctx, queries, deploymentID, policy); err != nil {
 		return err
 	}
+	for position, agent := range policy.ExactAgents {
+		if _, err := queries.AddDeploymentRoutingAgent(
+			ctx, db.AddDeploymentRoutingAgentParams{
+				DeploymentID: deploymentID, Position: int64(position),
+				AgentID: agent.ID, AgentName: agent.Name,
+			},
+		); err != nil {
+			return fmt.Errorf("freeze exact routing agent: %w", err)
+		}
+	}
 	return nil
 }
 
@@ -51,14 +61,28 @@ func policyForApproval(
 ) (Policy, error) {
 	snapshot, err := queries.GetDeploymentRoutingSnapshot(ctx, deployment.ID)
 	if err == nil {
-		return Policy{
+		policy := Policy{
 			Source: Source(
 				snapshot.Source,
 			), Mode: TargetMode(snapshot.TargetMode),
 			LabelID:   snapshot.AgentLabelID.Int64,
 			LabelName: snapshot.AgentLabelName.String,
 			Strategy:  Strategy(snapshot.AgentStrategy.String),
-		}, nil
+		}
+		if policy.Source == SourceRetry {
+			rows, listErr := queries.ListDeploymentRoutingAgents(
+				ctx, deployment.ID,
+			)
+			if listErr != nil {
+				return Policy{}, fmt.Errorf("list exact routing agents: %w", listErr)
+			}
+			for _, row := range rows {
+				policy.ExactAgents = append(policy.ExactAgents, Agent{
+					ID: row.AgentID, Name: row.AgentName,
+				})
+			}
+		}
+		return policy, nil
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
 		return Policy{}, fmt.Errorf("get routing snapshot: %w", err)
@@ -106,12 +130,22 @@ func (d *Dispatcher) prepareTx(
 		}
 	}
 	if policy.Mode == TargetLabel {
-		if err := selectAgents(ctx, queries, deployment.ID, policy); err != nil {
-			return false, err
-		}
 		rows, err := queries.ListDeploymentRoutingAgents(ctx, deployment.ID)
 		if err != nil {
 			return false, fmt.Errorf("list routing agents: %w", err)
+		}
+		if len(rows) == 0 {
+			if err := selectAgents(ctx, queries, deployment.ID, policy); err != nil {
+				return false, err
+			}
+			rows, err = queries.ListDeploymentRoutingAgents(ctx, deployment.ID)
+			if err != nil {
+				return false, fmt.Errorf("list routing agents: %w", err)
+			}
+		} else if policy.Source == SourceRetry {
+			if err := validateExactAgents(ctx, queries, rows); err != nil {
+				return false, err
+			}
 		}
 		agents = make([]Agent, len(rows))
 		for i, row := range rows {
@@ -144,6 +178,24 @@ func (d *Dispatcher) prepareTx(
 		return false, fmt.Errorf("create local dispatch: %w", err)
 	}
 	return true, nil
+}
+
+func validateExactAgents(
+	ctx context.Context,
+	queries *db.Queries,
+	agents []db.DeploymentRoutingAgent,
+) error {
+	for _, selected := range agents {
+		agent, err := queries.GetAgent(ctx, selected.AgentID)
+		if err != nil || agent.Status != "active" {
+			return ErrNoEligibleAgents
+		}
+		pairing, err := queries.GetAgentPairing(ctx, selected.AgentID)
+		if err != nil || pairing.State != "paired" {
+			return ErrNoEligibleAgents
+		}
+	}
+	return nil
 }
 
 func (d *Dispatcher) prepareRemoteTx(

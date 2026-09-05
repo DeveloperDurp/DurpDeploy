@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -13,7 +14,6 @@ import (
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/deploymentstate"
 	"durpdeploy/internal/dispatch"
-	"durpdeploy/internal/gate"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/runner"
 )
@@ -527,6 +527,10 @@ func (h *DeploymentHandler) RedeployDeployment(
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	if deployment.ParentDeploymentID.Valid {
+		RespondError(w, http.StatusConflict, "Child deployments cannot be redeployed")
+		return
+	}
 	routing, err := deploymentstate.Load(r.Context(), h.repo, depID)
 	if err != nil {
 		RespondError(w, http.StatusInternalServerError, err.Error())
@@ -546,51 +550,19 @@ func (h *DeploymentHandler) RedeployDeployment(
 		RespondError(w, http.StatusNotFound, "Release not found")
 		return
 	}
-	project, err := h.repo.Queries.GetProject(r.Context(), release.ProjectID)
-	if err != nil {
-		RespondError(w, http.StatusNotFound, "Project not found")
-		return
-	}
-	blocked, reason, requiresApproval, err := gate.CheckAndApproval(
-		r.Context(),
-		h.repo,
-		project,
-		release,
-		deployment.EnvironmentID,
-	)
-	if err != nil {
-		RespondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	if blocked {
-		RespondError(w, http.StatusUnprocessableEntity, reason)
-		return
-	}
-
-	initialStatus := "pending"
-	if requiresApproval {
-		initialStatus = "pending_approval"
-	}
-	newDeployment, err := h.repo.Queries.CreateDeployment(
-		r.Context(),
-		db.CreateDeploymentParams{
-			ReleaseID:     deployment.ReleaseID,
-			EnvironmentID: deployment.EnvironmentID,
-			Status:        initialStatus,
+	newDeployment, err := dispatch.NewCreationService(
+		h.repo, h.dispatcher,
+	).Create(r.Context(), dispatch.CreateRequest{
+		ProjectID: release.ProjectID, ReleaseID: deployment.ReleaseID,
+		EnvironmentID: deployment.EnvironmentID,
+		Note:          fmt.Sprintf("Redeploy of #%d", deployment.ID),
+		Routing: dispatch.Input{
+			Source: dispatch.SourceRedeploy, Mode: "default",
 		},
-	)
+	})
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, err.Error())
+		writeDeploymentCreationError(w, err)
 		return
-	}
-	if initialStatus == "pending" {
-		if err := h.dispatcher.Dispatch(
-			r.Context(),
-			newDeployment.ID,
-		); err != nil {
-			RespondError(w, http.StatusInternalServerError, err.Error())
-			return
-		}
 	}
 	RespondJSON(w, http.StatusCreated, newDeployment)
 }
@@ -686,6 +658,10 @@ func (h *DeploymentHandler) RetryDeployment(
 		)
 		return
 	}
+	if deployment.ParentDeploymentID.Valid {
+		RespondError(w, http.StatusConflict, "Child deployments cannot be retried")
+		return
+	}
 	routing, err := deploymentstate.Load(r.Context(), h.repo, depID)
 	if err != nil {
 		RespondError(w, http.StatusInternalServerError, err.Error())
@@ -700,7 +676,22 @@ func (h *DeploymentHandler) RetryDeployment(
 		return
 	}
 
-	h.RedeployDeployment(w, r)
+	newDeployment, err := dispatch.NewCreationService(
+		h.repo, h.dispatcher,
+	).Retry(r.Context(), deployment)
+	if errors.Is(err, dispatch.ErrNoEligibleAgents) {
+		RespondError(w, http.StatusConflict, err.Error())
+		return
+	}
+	if errors.Is(err, dispatch.ErrPromotionBlocked) {
+		RespondError(w, http.StatusUnprocessableEntity, err.Error())
+		return
+	}
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	RespondJSON(w, http.StatusCreated, newDeployment)
 }
 
 // swagger:route GET /deployments/{id}/logs deployments listDeploymentLogs

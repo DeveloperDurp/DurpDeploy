@@ -62,6 +62,7 @@ type Policy struct {
 	LabelName     string
 	Strategy      Strategy
 	LegacyAgentID string
+	ExactAgents   []Agent
 }
 
 type Agent struct {

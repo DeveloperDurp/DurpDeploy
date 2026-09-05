@@ -179,3 +179,13 @@ RETURNING *;
 SELECT * FROM scheduled_deployment_occurrences
 WHERE scheduled_deployment_id = sqlc.arg(scheduled_deployment_id)
   AND due_at = sqlc.arg(due_at);
+
+-- name: ListRecoverableScheduledDeployments :many
+SELECT deployment.*
+FROM scheduled_deployment_occurrences AS occurrence
+JOIN deployments AS deployment ON deployment.id = occurrence.deployment_id
+LEFT JOIN deployment_dispatches AS dispatch
+    ON dispatch.deployment_id = deployment.id
+WHERE deployment.status = 'pending'
+  AND dispatch.deployment_id IS NULL
+ORDER BY occurrence.created_at ASC, deployment.id ASC;

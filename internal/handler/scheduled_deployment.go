@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -130,17 +131,22 @@ func (h *ScheduledDeploymentHandler) NewForm(
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	targets, err := h.scheduleTargetOptions(r.Context(), 0)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
 	if r.Header.Get("HX-Request") == "true" {
 		if err := pages.ScheduledDeploymentForm(
-			project, releases, envs, nil, "",
+			project, releases, envs, nil, targets, "",
 		).Render(r.Context(), w); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 		return
 	}
 	if err := pages.ScheduledDeploymentFormPage(
-		project, releases, envs, nil, "", r.URL.Path,
+		project, releases, envs, nil, targets, "", r.URL.Path,
 	).Render(r.Context(), w); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -159,6 +165,11 @@ func (h *ScheduledDeploymentHandler) Create(
 
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	routingInput, err := parseScheduleRouting(r)
+	if err != nil {
+		h.renderFormError(w, r, projectID, nil, "Invalid execution target.")
 		return
 	}
 
@@ -249,19 +260,27 @@ func (h *ScheduledDeploymentHandler) Create(
 		Valid:  submitted.Note.String != "",
 	}
 
-	_, err = h.repo.Queries.CreateScheduledDeployment(
-		r.Context(),
-		db.CreateScheduledDeploymentParams{
-			ProjectID:     projectID,
-			ReleaseID:     submitted.ReleaseID,
-			EnvironmentID: submitted.EnvironmentID,
-			Cron:          submitted.Cron,
-			NextRunAt:     nextRun.Unix(),
-			Enabled:       submitted.Enabled,
-			LastFiredAt:   sql.NullInt64{},
-			Note:          note,
-		},
-	)
+	err = h.repo.WithRoutingTx(r.Context(), func(q *db.Queries) error {
+		schedule, err := q.CreateScheduledDeployment(
+			r.Context(), db.CreateScheduledDeploymentParams{
+				ProjectID:     projectID,
+				ReleaseID:     submitted.ReleaseID,
+				EnvironmentID: submitted.EnvironmentID,
+				Cron:          submitted.Cron,
+				NextRunAt:     nextRun.Unix(),
+				Enabled:       submitted.Enabled,
+				LastFiredAt:   sql.NullInt64{},
+				Note:          note,
+			},
+		)
+		if err != nil {
+			return err
+		}
+		_, err = q.CreateScheduledDeploymentRoutingPolicy(
+			r.Context(), schedulePolicyParams(schedule.ID, routingInput),
+		)
+		return err
+	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -334,17 +353,22 @@ func (h *ScheduledDeploymentHandler) EditForm(
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	targets, err := h.scheduleTargetOptions(r.Context(), schedule.ID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
 	if r.Header.Get("HX-Request") == "true" {
 		if err := pages.ScheduledDeploymentForm(
-			project, releases, envs, &schedule, "",
+			project, releases, envs, &schedule, targets, "",
 		).Render(r.Context(), w); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 		return
 	}
 	if err := pages.ScheduledDeploymentFormPage(
-		project, releases, envs, &schedule, "", r.URL.Path,
+		project, releases, envs, &schedule, targets, "", r.URL.Path,
 	).Render(r.Context(), w); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -369,6 +393,11 @@ func (h *ScheduledDeploymentHandler) Update(
 
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	routingInput, err := parseScheduleRouting(r)
+	if err != nil {
+		h.renderFormError(w, r, projectID, nil, "Invalid execution target.")
 		return
 	}
 
@@ -478,20 +507,38 @@ func (h *ScheduledDeploymentHandler) Update(
 		Valid:  submitted.Note.String != "",
 	}
 
-	_, err = h.repo.Queries.UpdateScheduledDeployment(
-		r.Context(),
-		db.UpdateScheduledDeploymentParams{
-			ProjectID:     projectID,
-			ReleaseID:     submitted.ReleaseID,
-			EnvironmentID: submitted.EnvironmentID,
-			Cron:          submitted.Cron,
-			NextRunAt:     nextRun.Unix(),
-			Enabled:       submitted.Enabled,
-			LastFiredAt:   existing.LastFiredAt,
-			Note:          note,
-			ID:            schedID,
-		},
-	)
+	err = h.repo.WithRoutingTx(r.Context(), func(q *db.Queries) error {
+		_, err := q.UpdateScheduledDeployment(
+			r.Context(), db.UpdateScheduledDeploymentParams{
+				ProjectID:     projectID,
+				ReleaseID:     submitted.ReleaseID,
+				EnvironmentID: submitted.EnvironmentID,
+				Cron:          submitted.Cron,
+				NextRunAt:     nextRun.Unix(),
+				Enabled:       submitted.Enabled,
+				LastFiredAt:   existing.LastFiredAt,
+				Note:          note,
+				ID:            schedID,
+			},
+		)
+		if err != nil {
+			return err
+		}
+		_, err = q.UpdateScheduledDeploymentRoutingPolicy(
+			r.Context(), db.UpdateScheduledDeploymentRoutingPolicyParams{
+				TargetMode:            routingInput.Mode,
+				AgentLabelID:          schedulePolicyParams(schedID, routingInput).AgentLabelID,
+				AgentStrategy:         schedulePolicyParams(schedID, routingInput).AgentStrategy,
+				ScheduledDeploymentID: schedID,
+			},
+		)
+		if errors.Is(err, sql.ErrNoRows) {
+			_, err = q.CreateScheduledDeploymentRoutingPolicy(
+				r.Context(), schedulePolicyParams(schedID, routingInput),
+			)
+		}
+		return err
+	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -695,6 +742,15 @@ func (h *ScheduledDeploymentHandler) renderFormError(
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	scheduleID := int64(0)
+	if schedule != nil {
+		scheduleID = schedule.ID
+	}
+	targets, err := h.scheduleTargetOptions(r.Context(), scheduleID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	WriteFormError(
 		w,
 		r,
@@ -703,10 +759,11 @@ func (h *ScheduledDeploymentHandler) renderFormError(
 			releases,
 			envs,
 			schedule,
+			targets,
 			errorMsg,
 		),
 		pages.ScheduledDeploymentFormPage(
-			project, releases, envs, schedule, errorMsg, r.URL.Path,
+			project, releases, envs, schedule, targets, errorMsg, r.URL.Path,
 		),
 	)
 }
@@ -741,10 +798,15 @@ func (h *ScheduledDeploymentHandler) buildScheduleListItems(
 	}
 	items := make([]pages.ScheduledDeploymentListItem, 0, len(schedules))
 	for _, s := range schedules {
+		targets, err := h.scheduleTargetOptions(ctx, s.ID)
+		if err != nil {
+			return nil, err
+		}
 		items = append(items, pages.ScheduledDeploymentListItem{
 			Schedule:        s,
 			ReleaseVersion:  relVer[s.ReleaseID],
 			EnvironmentName: envName[s.EnvironmentID],
+			TargetOptions:   targets,
 		})
 	}
 	return items, nil

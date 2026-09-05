@@ -187,7 +187,75 @@ func TestDeploymentRetry_AllowsRepeatedRetries(t *testing.T) {
 	}
 }
 
-func TestDeploymentRetry_LeavesFreshPendingRowWhenDispatchFails(t *testing.T) {
+func TestRedeployRoutingPolicy_UsesCurrentProjectDefault(t *testing.T) {
+	// Given
+	h, box, source := retryFixture(t, "failed")
+	release, err := h.repo.Queries.GetRelease(context.Background(), source.ReleaseID)
+	if err != nil {
+		t.Fatalf("get release: %v", err)
+	}
+	if _, err := h.repo.Queries.CreateProjectExecutionPolicy(
+		context.Background(), db.CreateProjectExecutionPolicyParams{
+			ProjectID: release.ProjectID, TargetMode: "local",
+		},
+	); err != nil {
+		t.Fatalf("create project policy: %v", err)
+	}
+	handler := api.NewDeploymentHandler(
+		h.repo, nil, dispatch.New(h.repo, box, nil),
+	)
+
+	// When
+	created := invokeDeploymentAction(t, handler.RedeployDeployment, source.ID)
+
+	// Then
+	snapshot, err := h.repo.Queries.GetDeploymentRoutingSnapshot(
+		context.Background(), created.ID,
+	)
+	if err != nil || snapshot.Source != "project" || snapshot.TargetMode != "local" {
+		t.Fatalf("snapshot = %#v, error = %v", snapshot, err)
+	}
+}
+
+func TestChildDeploymentActions_ReturnConflict(t *testing.T) {
+	// Given
+	h, box, source := retryFixture(t, "failed")
+	child, err := h.repo.Queries.CreateRoutingChildDeployment(
+		context.Background(), db.CreateRoutingChildDeploymentParams{
+			ReleaseID: source.ReleaseID, EnvironmentID: source.EnvironmentID,
+			Status:             "failed",
+			ParentDeploymentID: sql.NullInt64{Int64: source.ID, Valid: true},
+			TargetAgentID:      sql.NullString{String: "retry-agent", Valid: true},
+			TargetAgentName:    sql.NullString{String: "retry-agent", Valid: true},
+		},
+	)
+	if err != nil {
+		t.Fatalf("create child deployment: %v", err)
+	}
+	handler := api.NewDeploymentHandler(
+		h.repo, nil, dispatch.New(h.repo, box, nil),
+	)
+
+	for name, action := range map[string]http.HandlerFunc{
+		"retry": handler.RetryDeployment, "redeploy": handler.RedeployDeployment,
+	} {
+		t.Run(name, func(t *testing.T) {
+			// When
+			recorder := httptest.NewRecorder()
+			action(recorder, withAPIURLParam(
+				httptest.NewRequest(http.MethodPost, "/", nil),
+				"id", fmt.Sprint(child.ID),
+			))
+
+			// Then
+			if recorder.Code != http.StatusConflict {
+				t.Fatalf("status = %d, want 409", recorder.Code)
+			}
+		})
+	}
+}
+
+func TestRetryRoutingSnapshot_DispatchFailureRollsBackRoot(t *testing.T) {
 	// Given
 	h, _, source := retryFixture(t, "failed")
 	rec := httptest.NewRecorder()
@@ -208,19 +276,13 @@ func TestDeploymentRetry_LeavesFreshPendingRowWhenDispatchFails(t *testing.T) {
 		context.Background(),
 		source.ReleaseID,
 	)
-	if err != nil || len(deployments) != 2 {
+	if err != nil || len(deployments) != 1 {
 		t.Fatalf(
-			"deployments = %#v, %v; want source and pending retry",
+			"deployments = %#v, %v; want source only",
 			deployments,
 			err,
 		)
 	}
-	for _, deployment := range deployments {
-		if deployment.ID != source.ID && deployment.Status == "pending" {
-			return
-		}
-	}
-	t.Fatalf("deployments = %#v, want fresh pending row", deployments)
 }
 
 func retryFixture(

@@ -22,6 +22,7 @@ var (
 	ErrForceForbidden       = errors.New("only admins can force deployments")
 	ErrDeploymentNotFound   = errors.New("deployment not found")
 	ErrDeploymentNotPending = errors.New("deployment not pending approval")
+	ErrChildDeployment      = errors.New("child deployment action is not allowed")
 )
 
 type CreateRequest struct {

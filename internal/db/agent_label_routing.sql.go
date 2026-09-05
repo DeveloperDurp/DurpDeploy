@@ -687,6 +687,53 @@ func (q *Queries) ListEligibleAgentLabelMembers(ctx context.Context, agentLabelI
 	return items, nil
 }
 
+const listRecoverableScheduledDeployments = `-- name: ListRecoverableScheduledDeployments :many
+SELECT deployment.id, deployment.release_id, deployment.environment_id, deployment.status, deployment.started_at, deployment.finished_at, deployment.created_at, deployment.forced, deployment.note, deployment.parent_deployment_id, deployment.target_agent_id, deployment.target_agent_name
+FROM scheduled_deployment_occurrences AS occurrence
+JOIN deployments AS deployment ON deployment.id = occurrence.deployment_id
+LEFT JOIN deployment_dispatches AS dispatch
+    ON dispatch.deployment_id = deployment.id
+WHERE deployment.status = 'pending'
+  AND dispatch.deployment_id IS NULL
+ORDER BY occurrence.created_at ASC, deployment.id ASC
+`
+
+func (q *Queries) ListRecoverableScheduledDeployments(ctx context.Context) ([]Deployment, error) {
+	rows, err := q.db.QueryContext(ctx, listRecoverableScheduledDeployments)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Deployment
+	for rows.Next() {
+		var i Deployment
+		if err := rows.Scan(
+			&i.ID,
+			&i.ReleaseID,
+			&i.EnvironmentID,
+			&i.Status,
+			&i.StartedAt,
+			&i.FinishedAt,
+			&i.CreatedAt,
+			&i.Forced,
+			&i.Note,
+			&i.ParentDeploymentID,
+			&i.TargetAgentID,
+			&i.TargetAgentName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockAgentLabelCursor = `-- name: LockAgentLabelCursor :one
 UPDATE agent_label_cursors
 SET last_agent_id = last_agent_id

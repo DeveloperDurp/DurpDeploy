@@ -10,6 +10,30 @@ import (
 	"database/sql"
 )
 
+const advanceScheduledDeploymentOccurrence = `-- name: AdvanceScheduledDeploymentOccurrence :execrows
+UPDATE scheduled_deployments
+SET next_run_at = ?1,
+    last_fired_at = ?2,
+    updated_at = unixepoch()
+WHERE id = ?3
+  AND enabled = 1
+  AND next_run_at = ?2
+`
+
+type AdvanceScheduledDeploymentOccurrenceParams struct {
+	NextRunAt         int64         `json:"next_run_at"`
+	ExpectedNextRunAt sql.NullInt64 `json:"expected_next_run_at"`
+	ID                int64         `json:"id"`
+}
+
+func (q *Queries) AdvanceScheduledDeploymentOccurrence(ctx context.Context, arg AdvanceScheduledDeploymentOccurrenceParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, advanceScheduledDeploymentOccurrence, arg.NextRunAt, arg.ExpectedNextRunAt, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const countScheduledDeploymentsByProject = `-- name: CountScheduledDeploymentsByProject :one
 SELECT COUNT(*) FROM scheduled_deployments WHERE project_id = ?
 `
