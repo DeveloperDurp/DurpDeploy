@@ -36,3 +36,8 @@ export function findUnexpectedConsoleErrors(errors, expectedFailures, baseURL) {
 export function consoleErrorTexts(errors) {
 	return errors.map((error) => error.text);
 }
+
+export function isExplicitlyEmptyResponse(headers) {
+	return headers["content-length"] === "0" &&
+		headers["transfer-encoding"] === undefined;
+}

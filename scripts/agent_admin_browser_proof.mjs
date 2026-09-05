@@ -8,6 +8,7 @@ import {
 	attachPageDiagnostics,
 	consoleErrorTexts,
 	findUnexpectedConsoleErrors,
+	isExplicitlyEmptyResponse,
 } from "./agent_admin_browser_proof_support.mjs";
 
 // allow: SIZE_OK — one sequential pairing proof; extract only for a second scenario.
@@ -259,12 +260,12 @@ INSERT INTO agent_pairings (
 		await page.getByRole("button", { name: "Rename" }).click();
 		const renameResponse = await renameResponsePromise;
 		const renameHeaders = renameResponse.headers();
-		const renameBody = await renameResponse.text();
 		assert(renameResponse.status() === 200,
 			`rename returned ${renameResponse.status()}`);
 		assert(renameHeaders["hx-redirect"] === labelPath,
 			`rename HX-Redirect was ${renameHeaders["hx-redirect"]}`);
-		assert(renameBody === "", `rename returned an unexpected body: ${renameBody}`);
+		assert(isExplicitlyEmptyResponse(renameHeaders),
+			`rename response was not explicitly empty: ${JSON.stringify(renameHeaders)}`);
 		await renameNavigation;
 		await page.waitForLoadState("networkidle");
 		assert(await page.getByRole("heading", { name: "Cat Facts", exact: true }).isVisible(),
@@ -351,7 +352,10 @@ VALUES (last_insert_rowid(), 'label', ${labelID}, 'all');`]);
 		await saveJSON("label-scenario.json", {
 			labelID, memberCount: 3, duplicate, unpaired, referencedDelete,
 			roleResults, deletionMembershipCount: deletionSummary.trim(),
-			rename: { status: renameResponse.status(), hxRedirect: renameHeaders["hx-redirect"] },
+			rename: {
+				status: renameResponse.status(), hxRedirect: renameHeaders["hx-redirect"],
+				contentLength: renameHeaders["content-length"],
+			},
 		});
 		await saveJSON("viewport-metadata.json", {
 			desktop: { width: 1280, height: 768, label: desktopLabel },

@@ -4,6 +4,7 @@ import test from "node:test";
 import {
 	attachPageDiagnostics,
 	findUnexpectedConsoleErrors,
+	isExplicitlyEmptyResponse,
 } from "./agent_admin_browser_proof_support.mjs";
 
 const baseURL = "http://127.0.0.1:18081";
@@ -60,4 +61,14 @@ test("attaches diagnostics once when page discovery and setup both register it",
 		text: "unexpected",
 		url: `${baseURL}/admin/agent-labels`,
 	}]);
+});
+
+test("requires an explicit zero-length non-streaming response", () => {
+	assert.equal(isExplicitlyEmptyResponse({ "content-length": "0" }), true);
+	assert.equal(isExplicitlyEmptyResponse({ "content-length": "2" }), false);
+	assert.equal(isExplicitlyEmptyResponse({}), false);
+	assert.equal(isExplicitlyEmptyResponse({
+		"content-length": "0",
+		"transfer-encoding": "chunked",
+	}), false);
 });
