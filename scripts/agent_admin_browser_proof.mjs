@@ -9,6 +9,8 @@ import {
 	consoleErrorTexts,
 	findUnexpectedConsoleErrors,
 	isExplicitlyEmptyResponse,
+	reserveHarnessAddresses,
+	waitForSettledRename,
 } from "./agent_admin_browser_proof_support.mjs";
 
 // allow: SIZE_OK — one sequential pairing proof; extract only for a second scenario.
@@ -23,12 +25,12 @@ const serverDir = await fs.mkdtemp(join(tmpdir(), "durpdeploy-agent-browser-"));
 const binary = join(serverDir, "durpdeploy");
 const agentBinary = join(serverDir, "durpdeploy-agent");
 const database = join(serverDir, "durpdeploy.db");
-const address = process.env.AGENT_BROWSER_SERVER_ADDR || "127.0.0.1:18081";
-const baseURL = `http://${address}`;
-const agentAddress = process.env.AGENT_BROWSER_RUNTIME_ADDR || "127.0.0.1:18082";
-const agentURL = `https://${agentAddress}`;
-const bootstrapAddress = process.env.AGENT_BROWSER_BOOTSTRAP_ADDR || "127.0.0.1:18083";
-const bootstrapURL = `https://${bootstrapAddress}`;
+let address;
+let baseURL;
+let agentAddress;
+let agentURL;
+let bootstrapAddress;
+let bootstrapURL;
 const admin = { email: "admin@browser.test", password: "browser-admin-password" };
 const deployer = { email: "deployer@browser.test", password: "browser-deployer-password" };
 const viewer = { email: "viewer@browser.test", password: "browser-viewer-password" };
@@ -176,8 +178,18 @@ async function tabOrder(page) {
 let server;
 let agent;
 let browser;
+let addressReservations;
 try {
 	await fs.mkdir(outputDir, { recursive: true });
+	addressReservations = await reserveHarnessAddresses([
+		process.env.AGENT_BROWSER_SERVER_ADDR,
+		process.env.AGENT_BROWSER_RUNTIME_ADDR,
+		process.env.AGENT_BROWSER_BOOTSTRAP_ADDR,
+	]);
+	[address, agentAddress, bootstrapAddress] = addressReservations.addresses;
+	baseURL = `http://${address}`;
+	agentURL = `https://${agentAddress}`;
+	bootstrapURL = `https://${bootstrapAddress}`;
 	const environment = {
 		...process.env,
 		DURPDEPLOY_ADDR: address,
@@ -208,7 +220,9 @@ INSERT INTO agent_pairings (
  ('label-agent-1', X'0101010101010101010101010101010101010101010101010101010101010101', 'public-1', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1', 'server-1', 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb1', 'paired', 2000000000, 1000000000),
  ('label-agent-2', X'0202020202020202020202020202020202020202020202020202020202020202', 'public-2', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa2', 'server-2', 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb2', 'paired', 2000000000, 1000000000),
  ('label-agent-3', X'0303030303030303030303030303030303030303030303030303030303030303', 'public-3', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa3', 'server-3', 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb3', 'paired', 2000000000, 1000000000);`]);
-	}
+		}
+	await addressReservations.release();
+	addressReservations = undefined;
 	server = spawn(binary, [], {
 		cwd: root, stdio: ["ignore", "pipe", "pipe"], env: environment,
 	});
@@ -253,7 +267,6 @@ INSERT INTO agent_pairings (
 			await page.waitForLoadState("networkidle");
 		}
 		await page.getByLabel("Name", { exact: true }).fill("Cat Facts");
-		const renameNavigation = page.waitForURL(`${baseURL}${labelPath}`);
 		const renameResponsePromise = page.waitForResponse((response) =>
 			response.request().method() === "PUT" && new URL(response.url()).pathname === labelPath,
 		);
@@ -266,11 +279,10 @@ INSERT INTO agent_pairings (
 			`rename HX-Redirect was ${renameHeaders["hx-redirect"]}`);
 		assert(isExplicitlyEmptyResponse(renameHeaders),
 			`rename response was not explicitly empty: ${JSON.stringify(renameHeaders)}`);
-		await renameNavigation;
-		await page.waitForLoadState("networkidle");
-		assert(await page.getByRole("heading", { name: "Cat Facts", exact: true }).isVisible(),
+		const settledRename = await waitForSettledRename(page, "Cat Facts");
+		assert(settledRename.headingVisible,
 			"renamed label heading did not settle");
-		assert(await page.getByLabel("Name", { exact: true }).inputValue() === "Cat Facts",
+		assert(settledRename.inputValue === "Cat Facts",
 			"rename form did not settle with the updated name");
 		const desktopLabel = await checkPage(page, "label-detail-desktop");
 		await screenshot(page, "label-detail-desktop.png");
@@ -450,8 +462,9 @@ VALUES (last_insert_rowid(), 'label', ${labelID}, 'all');`]);
 		await saveJSON("browser-failure.json", diagnostics);
 		console.error("browser proof diagnostics:", JSON.stringify(diagnostics));
 		throw error;
-} finally {
-	if (browser) await browser.close();
+	} finally {
+		if (addressReservations) await addressReservations.release();
+		if (browser) await browser.close();
 	if (agent?.exitCode === null) {
 		const exited = new Promise((resolve) => agent.once("exit", resolve));
 		agent.kill("SIGTERM");

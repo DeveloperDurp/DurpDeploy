@@ -5,6 +5,8 @@ import {
 	attachPageDiagnostics,
 	findUnexpectedConsoleErrors,
 	isExplicitlyEmptyResponse,
+	reserveHarnessAddresses,
+	waitForSettledRename,
 } from "./agent_admin_browser_proof_support.mjs";
 
 const baseURL = "http://127.0.0.1:18081";
@@ -71,4 +73,60 @@ test("requires an explicit zero-length non-streaming response", () => {
 		"content-length": "0",
 		"transfer-encoding": "chunked",
 	}), false);
+});
+
+test("waits for renamed DOM state when the URL is already current", async () => {
+	const calls = [];
+	const page = {
+		getByLabel: () => ({
+			inputValue: async () => "Cat Facts",
+			waitFor: async () => { calls.push("input"); },
+		}),
+		getByRole: () => ({
+			isVisible: async () => true,
+			waitFor: async () => { calls.push("heading"); },
+		}),
+		waitForURL: () => { throw new Error("same URL is not a completion signal"); },
+	};
+
+	assert.deepEqual(await waitForSettledRename(page, "Cat Facts"), {
+		headingVisible: true,
+		inputValue: "Cat Facts",
+	});
+	assert.deepEqual(calls, ["heading", "input"]);
+});
+
+test("reserves unique harness addresses and releases every reservation", async () => {
+	const released = [];
+	let port = 24000;
+	const reservations = await reserveHarnessAddresses(
+		[undefined, undefined, "127.0.0.1:25000"],
+		async (requested) => {
+			const address = requested ?? `127.0.0.1:${port++}`;
+			return { address, release: async () => { released.push(address); } };
+		},
+	);
+
+	assert.deepEqual(reservations.addresses, [
+		"127.0.0.1:24000", "127.0.0.1:24001", "127.0.0.1:25000",
+	]);
+	await reservations.release();
+	assert.deepEqual(released, reservations.addresses);
+});
+
+test("releases prior reservations and names a configured port collision", async () => {
+	const released = [];
+	const reserve = async (requested) => {
+		if (requested === "127.0.0.1:25000") throw new Error("EADDRINUSE");
+		return {
+			address: "127.0.0.1:24000",
+			release: async () => { released.push("127.0.0.1:24000"); },
+		};
+	};
+
+	await assert.rejects(
+		reserveHarnessAddresses([undefined, "127.0.0.1:25000"], reserve),
+		/address 127\.0\.0\.1:25000 is unavailable: EADDRINUSE/,
+	);
+	assert.deepEqual(released, ["127.0.0.1:24000"]);
 });
