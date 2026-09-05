@@ -8,8 +8,18 @@ import (
 	"testing"
 	"time"
 
+	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
 )
+
+func TestUnknownAccountPasswordHashIsValid(t *testing.T) {
+	if !auth.VerifyPassword(
+		unknownAccountPasswordHash,
+		"durpdeploy unknown account timing placeholder",
+	) {
+		t.Fatal("unknown-account password hash is invalid")
+	}
+}
 
 func TestPasswordHashForUserUsesDummyForPasswordlessAccount(t *testing.T) {
 	passwordHash, hasPassword := passwordHashForUser(db.User{}, nil)
