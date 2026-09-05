@@ -73,7 +73,36 @@ func TestHealthz_503(t *testing.T) {
 	if body["status"] != "down" {
 		t.Fatalf("expected status down, got %q", body["status"])
 	}
-	if body["db"] == "" {
-		t.Fatal("expected non-empty db error message")
+	if body["db"] != "unavailable" {
+		t.Fatalf("expected stable db status, got %q", body["db"])
+	}
+}
+
+func TestHealthz_503RemainsSafeJSONThroughMiddleware(t *testing.T) {
+	dbConn, err := migrate.Run(":memory:?_pragma=foreign_keys(1)")
+	if err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	dbConn.Close()
+
+	repo := repository.New(dbConn)
+	health := handler.NewHealthHandler(repo)
+	h := handler.InternalErrorMiddleware(http.HandlerFunc(health.Healthz))
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d", rec.Code)
+	}
+	if ct := rec.Header().Get("Content-Type"); ct != "application/json" {
+		t.Fatalf("expected application/json, got %q", ct)
+	}
+	var body map[string]string
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if body["status"] != "down" || body["db"] != "unavailable" {
+		t.Fatalf("unexpected health response: %#v", body)
 	}
 }

@@ -227,29 +227,13 @@ Do not reorder or skip any of these.
 
 ## Findings from code review (2026-07-15)
 
-### [CRITICAL] Plaintext password in redirect URL
+### [RESOLVED] Plaintext password in redirect URL
 
-**File:** `internal/handler/users.go:156–158`
+**File:** `internal/handler/users.go`
 
-After creating a user, the one-time password is embedded in the redirect URL
-as a query parameter (`new_password=...`):
-
-```go
-redirect := fmt.Sprintf(
-    "/admin/users?new_user_id=%d&new_user_email=%s&new_password=%s",
-    created.ID, url.QueryEscape(created.Email), url.QueryEscape(password),
-)
-```
-
-**Risk:** The plaintext password appears in:
-- Access logs can contain the full URL. This can occur in Caddy, nginx, and
-  other reverse proxies. The code comment only describes the application log.
-- Browser history.
-- The `Referer` header on any subsequent navigation away from the page.
-
-**Recommended fix:** Store the one-time password in a temporary database row or
-session flash. Use `new_user_id` as the key. Delete it after the first read.
-Never put it in the URL.
+Resolved on 2026-09-02. Admin-created and reset passwords are no longer
+redisplayed. Both forms require matching password and confirmation fields, and
+successful requests redirect to `/admin/users` without a query string.
 
 ---
 
@@ -267,26 +251,12 @@ way it is injected for members, before calling `next.ServeHTTP`.
 
 ---
 
-### [MEDIUM] Unvalidated query parameters rendered in password banner
+### [RESOLVED] Unvalidated query parameters rendered in password banner
 
-**File:** `internal/handler/users.go:67–68`
+**File:** `internal/handler/users.go`
 
-`new_user_email` and `new_password` are read from the query string without
-validation or length cap and passed directly to the template:
-
-```go
-newUserEmail = r.URL.Query().Get("new_user_email")
-newPassword  = r.URL.Query().Get("new_password")
-```
-
-A crafted URL like `/admin/users?new_password=<very-long-string>` can render
-arbitrary content in the password banner (visible to any admin who follows
-such a link).
-
-**Recommended fix:** Only display the banner when `new_user_id` resolves to a
-real user in the `users` slice already loaded from the DB. Ignore
-`new_password` entirely if `new_user_id` is absent or does not match a known
-user.
+Resolved on 2026-09-02 by removing the password banner and all credential query
+parameter handling from the users page.
 
 ---
 

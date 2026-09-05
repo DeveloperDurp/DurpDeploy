@@ -43,8 +43,10 @@ func NewRouter(
 ) *chi.Mux {
 	registerOIDC := len(oidcEnabled) > 0 && oidcEnabled[0]
 	r := chi.NewRouter()
+	r.Use(middleware.RequestID)
 	r.Use(requestmeta.Middleware(os.Getenv("DURPDEPLOY_TRUSTED_PROXIES")))
 	r.Use(requestLogger)
+	r.Use(handler.InternalErrorMiddleware)
 	r.Use(handler.PanicRecoveryMiddleware)
 	r.Use(passwordFormBodyLimit)
 

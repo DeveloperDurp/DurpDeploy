@@ -20,8 +20,8 @@ import (
 )
 
 // Entry is the audit record a caller wants to persist. Callers that
-// cannot be reached by the middleware (public routes like /login and
-// /logout) build one of these and call Record directly.
+// cannot be reached by the middleware, or that need to record before
+// mutating state, build one of these and call Record directly.
 type Entry struct {
 	UserID     sql.NullInt64
 	Action     string
@@ -104,11 +104,11 @@ var methodVerb = map[string]string{
 // (so the user is in context) and AFTER auth.CSRFMiddleware (so CSRF
 // rejections don't generate audit entries).
 //
-// ponytail: central middleware over per-handler inserts. The only
-// exceptions are /login and /logout which are public and call Record
-// directly. Ceiling: action inference is lossy for routes outside
-// actionMap — the fallback heuristic names them verb_<singularized
-// first segment>. Add a map entry when you need the exact name.
+// ponytail: central middleware over per-handler inserts. Handlers that
+// record directly suppress the middleware entry. Ceiling: action
+// inference is lossy for routes outside actionMap — the fallback
+// heuristic names them verb_<singularized first segment>. Add a map
+// entry when you need the exact name.
 func Middleware(repo *repository.Repository) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
