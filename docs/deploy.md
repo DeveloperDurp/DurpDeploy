@@ -425,7 +425,8 @@ DurpDeploy applies login rate limits itself. It trusts forwarding headers from
 loopback proxies by default. If Caddy or another trusted proxy is on a different
 host, set `DURPDEPLOY_TRUSTED_PROXIES` to its IP address or CIDR. Multiple
 entries are comma-separated. Only those peers may supply `X-Forwarded-For`.
-The bundled Compose files set this to their private Caddy network.
+The bundled Compose file assigns Caddy a fixed private address and trusts only
+that address, not the rest of the container network.
 
 If a CDN or load balancer sits in front of Caddy, also set
 `DURPDEPLOY_CADDY_TRUSTED_PROXIES` in Caddy's environment to that provider's
