@@ -52,8 +52,9 @@ func (r *Resolver) SelectedAgents(
 func (r *Resolver) SelectForDispatch(
 	ctx context.Context,
 	deploymentID int64,
-) ([]Agent, bool, error) {
+) ([]Agent, Strategy, bool, error) {
 	var selected []Agent
+	var strategy Strategy
 	hasSnapshot := false
 	err := r.repo.WithRoutingTx(ctx, func(queries *db.Queries) error {
 		snapshot, err := queries.GetDeploymentRoutingSnapshot(ctx, deploymentID)
@@ -64,6 +65,7 @@ func (r *Resolver) SelectForDispatch(
 			return fmt.Errorf("get routing snapshot: %w", err)
 		}
 		hasSnapshot = true
+		strategy = Strategy(snapshot.AgentStrategy.String)
 		deployment, err := queries.GetDeployment(ctx, deploymentID)
 		if err != nil {
 			return fmt.Errorf("get deployment: %w", err)
@@ -100,9 +102,9 @@ func (r *Resolver) SelectForDispatch(
 		return nil
 	})
 	if err != nil {
-		return nil, false, err
+		return nil, "", false, err
 	}
-	return selected, hasSnapshot, nil
+	return selected, strategy, hasSnapshot, nil
 }
 
 func validatePolicy(policy Policy) error {

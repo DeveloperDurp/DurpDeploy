@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/base64"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -955,4 +956,89 @@ func TestRecoverPendingDeployments_noopWhenNonePending(t *testing.T) {
 	// rows to iterate is the observable signal. Wait briefly to be sure
 	// nothing async was kicked off.
 	time.Sleep(100 * time.Millisecond)
+}
+
+func TestRecoverPendingDeployments_FanoutExpansionIsIdempotent(t *testing.T) {
+	dsn := tempDSN(t)
+	conn, err := migrate.Run(dsn)
+	if err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	defer conn.Close()
+	repo := repository.New(conn)
+	ctx := context.Background()
+	project, err := repo.Queries.CreateProject(
+		ctx, db.CreateProjectParams{Name: "fanout recovery"},
+	)
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	environment, err := repo.Queries.CreateEnvironment(
+		ctx, db.CreateEnvironmentParams{Name: "production"},
+	)
+	if err != nil {
+		t.Fatalf("create environment: %v", err)
+	}
+	release, err := repo.Queries.CreateRelease(ctx, db.CreateReleaseParams{
+		ProjectID: project.ID, Version: "v1", StepsJson: "[]",
+	})
+	if err != nil {
+		t.Fatalf("create release: %v", err)
+	}
+	parent, err := repo.Queries.CreateDeployment(ctx, db.CreateDeploymentParams{
+		ReleaseID: release.ID, EnvironmentID: environment.ID, Status: "pending",
+	})
+	if err != nil {
+		t.Fatalf("create parent: %v", err)
+	}
+	label, err := repo.Queries.CreateAgentLabel(
+		ctx,
+		db.CreateAgentLabelParams{Name: "Builders", NormalizedName: "builders"},
+	)
+	if err != nil {
+		t.Fatalf("create label: %v", err)
+	}
+	if _, err := repo.Queries.CreateDeploymentRoutingSnapshot(
+		ctx,
+		db.CreateDeploymentRoutingSnapshotParams{
+			DeploymentID: parent.ID, Source: "request", TargetMode: "label",
+			AgentLabelID:   sql.NullInt64{Int64: label.ID, Valid: true},
+			AgentLabelName: sql.NullString{String: "Builders", Valid: true},
+			AgentStrategy:  sql.NullString{String: "all", Valid: true},
+		},
+	); err != nil {
+		t.Fatalf("create routing snapshot: %v", err)
+	}
+	for index := range 3 {
+		agentID := fmt.Sprintf("agent-%d", index)
+		if _, err := repo.Queries.CreatePendingAgent(
+			ctx, db.CreatePendingAgentParams{ID: agentID, Name: agentID},
+		); err != nil {
+			t.Fatalf("create agent: %v", err)
+		}
+		if _, err := repo.Queries.AddDeploymentRoutingAgent(
+			ctx,
+			db.AddDeploymentRoutingAgentParams{
+				DeploymentID: parent.ID, Position: int64(index),
+				AgentID: agentID, AgentName: agentID,
+			},
+		); err != nil {
+			t.Fatalf("add routing agent: %v", err)
+		}
+	}
+	box, err := secret.NewBox(make([]byte, 32))
+	if err != nil {
+		t.Fatalf("new secret box: %v", err)
+	}
+	dispatcher := dispatch.New(repo, box, nil)
+
+	recoverPendingDeployments(ctx, dispatcher, repo)
+	recoverPendingDeployments(ctx, dispatcher, repo)
+
+	children, err := repo.Queries.ListDeploymentChildren(
+		ctx, sql.NullInt64{Int64: parent.ID, Valid: true},
+	)
+	if err != nil || len(children) != 3 {
+		t.Fatalf("children = %d, %v; want three", len(children), err)
+	}
 }

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/deploymentstate"
 )
 
 func (h *AgentAdminHandler) DeleteAgent(
@@ -20,6 +21,11 @@ func (h *AgentAdminHandler) DeleteAgent(
 	agentID := sql.NullString{String: agent.ID, Valid: true}
 	now := time.Now().Unix()
 	err := h.repo.WithTx(r.Context(), func(q *db.Queries) error {
+		if err := deploymentstate.FailUnclaimedAgentDeployments(
+			r.Context(), q, agent.ID, now, "target agent deleted",
+		); err != nil {
+			return fmt.Errorf("settle unclaimed deployments: %w", err)
+		}
 		if _, err := q.DeleteDeploymentPayloadsForAgent(
 			r.Context(),
 			agentID,
@@ -34,6 +40,11 @@ func (h *AgentAdminHandler) DeleteAgent(
 			},
 		); err != nil {
 			return fmt.Errorf("fail in-flight deployments: %w", err)
+		}
+		if err := deploymentstate.RecomputeAgentParents(
+			r.Context(), q, agent.ID,
+		); err != nil {
+			return fmt.Errorf("recompute fan-out parents: %w", err)
 		}
 		if _, err := q.DetachDeploymentDispatchesForAgent(
 			r.Context(),

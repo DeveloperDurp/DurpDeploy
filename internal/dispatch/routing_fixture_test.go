@@ -4,6 +4,7 @@ import (
 	"context"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/repository"
+	"durpdeploy/internal/secret"
 	"fmt"
 	"sort"
 	"testing"
@@ -15,11 +16,12 @@ type routingFixture struct {
 	environment db.Environment
 	release     db.Release
 	label       db.AgentLabel
+	box         *secret.Box
 }
 
 func newRoutingFixture(t *testing.T, agentCount int) routingFixture {
 	t.Helper()
-	repo, _ := newPayloadRepository(t)
+	repo, box := newPayloadRepository(t)
 	ctx := context.Background()
 	project, err := repo.Queries.CreateProject(
 		ctx,
@@ -64,7 +66,7 @@ func newRoutingFixture(t *testing.T, agentCount int) routingFixture {
 	}
 	return routingFixture{
 		repo: repo, project: project, environment: environment,
-		release: release, label: label,
+		release: release, label: label, box: box,
 	}
 }
 

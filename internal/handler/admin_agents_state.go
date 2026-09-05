@@ -2,10 +2,12 @@ package handler
 
 import (
 	"database/sql"
+	"fmt"
 	"net/http"
 	"time"
 
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/deploymentstate"
 )
 
 func (h *AgentAdminHandler) DisableAgent(
@@ -16,13 +18,21 @@ func (h *AgentAdminHandler) DisableAgent(
 	if !ok {
 		return
 	}
-	updated, err := h.repo.Queries.DisableAgent(
-		r.Context(),
-		db.DisableAgentParams{
-			ID:        agent.ID,
-			UpdatedAt: time.Now().Unix(),
-		},
-	)
+	now := time.Now().Unix()
+	var updated int64
+	err := h.repo.WithTx(r.Context(), func(queries *db.Queries) error {
+		var err error
+		updated, err = queries.DisableAgent(
+			r.Context(),
+			db.DisableAgentParams{ID: agent.ID, UpdatedAt: now},
+		)
+		if err != nil || updated != 1 {
+			return err
+		}
+		return deploymentstate.FailUnclaimedAgentDeployments(
+			r.Context(), queries, agent.ID, now, "target agent disabled",
+		)
+	})
 	if err != nil {
 		writeAdminError(
 			w,
@@ -51,14 +61,27 @@ func (h *AgentAdminHandler) RevokeAgent(
 		return
 	}
 	now := time.Now().Unix()
-	updated, err := h.repo.Queries.RevokeAgent(
-		r.Context(),
-		db.RevokeAgentParams{
-			ID:        agent.ID,
-			RevokedAt: sql.NullInt64{Int64: now, Valid: true},
-			UpdatedAt: now,
-		},
-	)
+	var updated int64
+	err := h.repo.WithTx(r.Context(), func(queries *db.Queries) error {
+		var err error
+		updated, err = queries.RevokeAgent(
+			r.Context(),
+			db.RevokeAgentParams{
+				ID:        agent.ID,
+				RevokedAt: sql.NullInt64{Int64: now, Valid: true},
+				UpdatedAt: now,
+			},
+		)
+		if err != nil || updated != 1 {
+			return err
+		}
+		if err := deploymentstate.FailUnclaimedAgentDeployments(
+			r.Context(), queries, agent.ID, now, "target agent revoked",
+		); err != nil {
+			return fmt.Errorf("settle unclaimed deployments: %w", err)
+		}
+		return nil
+	})
 	if err != nil {
 		writeAdminError(
 			w,

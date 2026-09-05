@@ -165,6 +165,21 @@ func (q *Queries) DeleteDeployment(ctx context.Context, id int64) error {
 	return err
 }
 
+const finishDeployment = `-- name: FinishDeployment :exec
+UPDATE deployments SET status = ?, finished_at = ? WHERE id = ?
+`
+
+type FinishDeploymentParams struct {
+	Status     string        `json:"status"`
+	FinishedAt sql.NullInt64 `json:"finished_at"`
+	ID         int64         `json:"id"`
+}
+
+func (q *Queries) FinishDeployment(ctx context.Context, arg FinishDeploymentParams) error {
+	_, err := q.db.ExecContext(ctx, finishDeployment, arg.Status, arg.FinishedAt, arg.ID)
+	return err
+}
+
 const getDeployment = `-- name: GetDeployment :one
 SELECT id, release_id, environment_id, status, started_at, finished_at, created_at, forced, note, parent_deployment_id, target_agent_id, target_agent_name FROM deployments WHERE id = ?
 `

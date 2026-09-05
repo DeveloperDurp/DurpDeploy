@@ -182,3 +182,44 @@ func TestRunner_PublishesFailedEvent(t *testing.T) {
 		)
 	}
 }
+
+func TestFanout_LocalRunnerPreservesSingleDeploymentExecution(t *testing.T) {
+	ctx := context.Background()
+	repo, rnr, _ := setupRunnerHarness(t)
+	project, err := repo.Queries.CreateProject(
+		ctx, db.CreateProjectParams{Name: "local"},
+	)
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	environment, err := repo.Queries.CreateEnvironment(
+		ctx, db.CreateEnvironmentParams{Name: "production"},
+	)
+	if err != nil {
+		t.Fatalf("create environment: %v", err)
+	}
+	release, err := repo.Queries.CreateRelease(ctx, db.CreateReleaseParams{
+		ProjectID: project.ID, Version: "v1", StepsJson: "[]",
+	})
+	if err != nil {
+		t.Fatalf("create release: %v", err)
+	}
+	deployment, err := repo.Queries.CreateDeployment(
+		ctx,
+		db.CreateDeploymentParams{
+			ReleaseID: release.ID, EnvironmentID: environment.ID,
+			Status: "pending",
+		},
+	)
+	if err != nil {
+		t.Fatalf("create deployment: %v", err)
+	}
+
+	rnr.Run(ctx, deployment.ID, release.ID, environment.ID)
+
+	got, err := repo.Queries.GetDeployment(ctx, deployment.ID)
+	if err != nil || got.Status != "succeeded" ||
+		got.ParentDeploymentID.Valid {
+		t.Fatalf("local deployment = %#v, %v", got, err)
+	}
+}

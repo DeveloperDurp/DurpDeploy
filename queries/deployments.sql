@@ -15,6 +15,9 @@ UPDATE deployments SET release_id = ?, environment_id = ?, status = ?, started_a
 -- name: UpdateDeploymentStatus :exec
 UPDATE deployments SET status = ?, started_at = ?, finished_at = ? WHERE id = ?;
 
+-- name: FinishDeployment :exec
+UPDATE deployments SET status = ?, finished_at = ? WHERE id = ?;
+
 -- name: CancelQueuedDeployment :execrows
 UPDATE deployments
 SET status = 'cancelled', finished_at = sqlc.arg(finished_at)

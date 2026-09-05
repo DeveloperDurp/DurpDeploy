@@ -7,7 +7,9 @@ import (
 	"fmt"
 
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/deploymentstate"
 	"durpdeploy/internal/events"
+
 	agentproto "github.com/DeveloperDurp/durpdeploy-agent/protocol"
 )
 
@@ -122,6 +124,24 @@ func reclaimExpiredClaims(
 		); err != nil {
 			return fmt.Errorf("record reclaimed claim: %w", err)
 		}
+		agent, err := queries.GetAgent(ctx, dispatch.AgentID.String)
+		if err != nil {
+			return fmt.Errorf("get reclaimed claim agent: %w", err)
+		}
+		pairing, err := queries.GetAgentPairing(ctx, dispatch.AgentID.String)
+		eligible := err == nil && agent.Status == "active" &&
+			pairing.State == "paired"
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("get reclaimed claim pairing: %w", err)
+		}
+		if !eligible {
+			if err := deploymentstate.FailUnclaimedAgentDeployments(
+				ctx, queries, dispatch.AgentID.String, now,
+				"target agent unavailable",
+			); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }
@@ -150,7 +170,7 @@ func expireCancellations(
 			ctx,
 			db.TransitionDeploymentDispatchParams{
 				NextState:      string(agentproto.DispatchCancelUnconfirmed),
-				FinishedAt:     sql.NullInt64{},
+				FinishedAt:     sql.NullInt64{Int64: now, Valid: true},
 				DeploymentID:   dispatch.DeploymentID,
 				AgentID:        dispatch.AgentID,
 				ClaimTokenHash: dispatch.ClaimTokenHash,
@@ -162,6 +182,20 @@ func expireCancellations(
 		}
 		if err != nil {
 			return fmt.Errorf("expire cancellation: %w", err)
+		}
+		if err := queries.FinishDeployment(
+			ctx,
+			db.FinishDeploymentParams{
+				ID: dispatch.DeploymentID, Status: "failed",
+				FinishedAt: sql.NullInt64{Int64: now, Valid: true},
+			},
+		); err != nil {
+			return fmt.Errorf("fail unconfirmed cancellation: %w", err)
+		}
+		if err := deploymentstate.RecomputeParent(
+			ctx, queries, dispatch.DeploymentID,
+		); err != nil {
+			return err
 		}
 		if _, err := queries.CreateAgentEvent(
 			ctx,
@@ -223,15 +257,20 @@ func loseStartedDeployments(
 		if err != nil {
 			return nil, fmt.Errorf("mark deployment lost: %w", err)
 		}
-		if err := queries.UpdateDeploymentStatus(
+		if err := queries.FinishDeployment(
 			ctx,
-			db.UpdateDeploymentStatusParams{
+			db.FinishDeploymentParams{
 				ID:         dispatch.DeploymentID,
 				Status:     "failed",
 				FinishedAt: sql.NullInt64{Int64: now, Valid: true},
 			},
 		); err != nil {
 			return nil, fmt.Errorf("mark lost deployment failed: %w", err)
+		}
+		if err := deploymentstate.RecomputeParent(
+			ctx, queries, dispatch.DeploymentID,
+		); err != nil {
+			return nil, err
 		}
 		if _, err := queries.CreateAgentEvent(
 			ctx,

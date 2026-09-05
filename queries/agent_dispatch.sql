@@ -32,6 +32,30 @@ RETURNING *;
 -- name: GetDeploymentDispatch :one
 SELECT * FROM deployment_dispatches WHERE deployment_id = ?;
 
+-- name: ListWaitingDeploymentDispatchesForAgent :many
+SELECT dispatch.* FROM deployment_dispatches AS dispatch
+JOIN deployments AS deployment ON deployment.id = dispatch.deployment_id
+WHERE dispatch.assigned_agent_id = sqlc.arg(agent_id)
+  AND deployment.parent_deployment_id IS NOT NULL
+  AND dispatch.state = 'waiting'
+ORDER BY dispatch.deployment_id ASC;
+
+-- name: ListDeploymentDispatchesForAgent :many
+SELECT * FROM deployment_dispatches
+WHERE assigned_agent_id = sqlc.arg(agent_id)
+   OR agent_id = sqlc.arg(agent_id)
+ORDER BY deployment_id ASC;
+
+-- name: FailWaitingDeploymentDispatch :execrows
+UPDATE deployment_dispatches
+SET state = 'failed',
+    reason = sqlc.arg(reason),
+    finished_at = sqlc.arg(finished_at),
+    updated_at = sqlc.arg(updated_at)
+WHERE deployment_id = sqlc.arg(deployment_id)
+  AND assigned_agent_id = sqlc.arg(agent_id)
+  AND state = 'waiting';
+
 -- name: FailInFlightDeploymentsForAgent :execrows
 UPDATE deployments
 SET status = 'failed',

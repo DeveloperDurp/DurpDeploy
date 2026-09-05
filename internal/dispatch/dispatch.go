@@ -54,7 +54,7 @@ func New(
 
 // Dispatch selects a frozen label target before enqueuing local or remote work.
 func (d *Dispatcher) Dispatch(ctx context.Context, deploymentID int64) error {
-	routingAgents, hasRoutingSnapshot, err := NewResolver(
+	routingAgents, routingStrategy, hasRoutingSnapshot, err := NewResolver(
 		d.repo,
 	).SelectForDispatch(
 		ctx,
@@ -67,7 +67,14 @@ func (d *Dispatcher) Dispatch(ctx context.Context, deploymentID int64) error {
 			err,
 		)
 	}
-	if len(routingAgents) > 1 {
+	if routingStrategy == StrategyAll {
+		if err := d.expandFanout(ctx, deploymentID, routingAgents); err != nil {
+			return fmt.Errorf(
+				"expand deployment %d fan-out: %w",
+				deploymentID,
+				err,
+			)
+		}
 		return nil
 	}
 	var localDeployment db.Deployment

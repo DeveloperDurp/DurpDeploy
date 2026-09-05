@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/deploymentstate"
 	"durpdeploy/internal/events"
 	"durpdeploy/internal/repository"
 
@@ -91,14 +92,18 @@ func (r *DeploymentRunner) Cancel(deploymentID int64) error {
 		return fmt.Errorf("deployment %d is not running", deploymentID)
 	}
 	cancel()
-	return r.repo.Queries.UpdateDeploymentStatus(
+	if err := r.repo.Queries.FinishDeployment(
 		context.Background(),
-		db.UpdateDeploymentStatusParams{
+		db.FinishDeploymentParams{
 			ID:         deploymentID,
 			Status:     "cancelled",
-			StartedAt:  sql.NullInt64{},
 			FinishedAt: sql.NullInt64{Int64: time.Now().Unix(), Valid: true},
 		},
+	); err != nil {
+		return err
+	}
+	return deploymentstate.RecomputeParent(
+		context.Background(), r.repo.Queries, deploymentID,
 	)
 }
 

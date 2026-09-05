@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/deploymentstate"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/runner"
 )
@@ -21,6 +22,9 @@ var (
 	)
 	ErrCancellationState = errors.New(
 		"deployment cannot be cancelled in its current state",
+	)
+	ErrCancellationChild = errors.New(
+		"fan-out child cannot be cancelled directly",
 	)
 )
 
@@ -37,51 +41,6 @@ func NewCancellationService(
 	return &CancellationService{
 		repo: repo, runner: deploymentRunner, now: time.Now,
 	}
-}
-
-func (s *CancellationService) Cancel(
-	ctx context.Context,
-	deploymentID int64,
-) (string, error) {
-	deployment, err := s.repo.Queries.GetDeployment(ctx, deploymentID)
-	if err != nil {
-		return "", fmt.Errorf("get deployment: %w", err)
-	}
-	if deployment.Status == "pending_approval" {
-		updated, err := s.repo.Queries.CancelPendingApprovalDeployment(
-			ctx,
-			db.CancelPendingApprovalDeploymentParams{
-				ID:         deploymentID,
-				FinishedAt: sql.NullInt64{Int64: s.now().Unix(), Valid: true},
-			},
-		)
-		if err != nil {
-			return "", fmt.Errorf("cancel pending approval: %w", err)
-		}
-		if updated != 1 {
-			return "", ErrCancellationState
-		}
-		return "cancelled", nil
-	}
-	if deployment.Status == "pending" {
-		if err := s.cancelQueued(ctx, deploymentID); err == nil {
-			return "cancelled", nil
-		} else if !errors.Is(err, ErrCancellationState) {
-			return "", fmt.Errorf("cancel queued remote deployment: %w", err)
-		}
-		deployment, err = s.repo.Queries.GetDeployment(ctx, deploymentID)
-		if err != nil {
-			return "", fmt.Errorf(
-				"reload deployment after queued cancellation: %w",
-				err,
-			)
-		}
-	}
-	if deployment.Status != "running" {
-		return "", ErrCancellationState
-	}
-
-	return s.cancelRunning(ctx, deploymentID)
 }
 
 func (s *CancellationService) cancelQueued(
@@ -115,7 +74,7 @@ func (s *CancellationService) cancelQueued(
 		if deploymentUpdated != 1 {
 			return ErrCancellationState
 		}
-		return nil
+		return deploymentstate.RecomputeParent(ctx, q, deploymentID)
 	})
 }
 
@@ -199,7 +158,7 @@ func (s *CancellationService) Acknowledge(
 		}); err != nil {
 			return fmt.Errorf("mark deployment cancelled: %w", err)
 		}
-		return nil
+		return deploymentstate.RecomputeParent(ctx, q, deploymentID)
 	})
 }
 

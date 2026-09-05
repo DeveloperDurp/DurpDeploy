@@ -9,7 +9,9 @@ import (
 	"net/http"
 
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/deploymentstate"
 	"durpdeploy/internal/events"
+
 	agentproto "github.com/DeveloperDurp/durpdeploy-agent/protocol"
 )
 
@@ -53,14 +55,17 @@ func (server *Server) startDeployment(
 		); err != nil {
 			return errLifecycleConflict
 		}
-		return queries.UpdateDeploymentStatus(
+		if err := queries.UpdateDeploymentStatus(
 			ctx,
 			db.UpdateDeploymentStatusParams{
 				ID:        deploymentID,
 				Status:    "running",
 				StartedAt: sql.NullInt64{Int64: now, Valid: true},
 			},
-		)
+		); err != nil {
+			return err
+		}
+		return deploymentstate.RecomputeParent(ctx, queries, deploymentID)
 	})
 }
 
@@ -211,13 +216,18 @@ func (server *Server) completeDeployment(
 		); err != nil {
 			return errLifecycleConflict
 		}
-		if err := queries.UpdateDeploymentStatus(
+		if err := queries.FinishDeployment(
 			ctx,
-			db.UpdateDeploymentStatusParams{
+			db.FinishDeploymentParams{
 				ID:         deploymentID,
 				Status:     status,
 				FinishedAt: sql.NullInt64{Int64: now, Valid: true},
 			},
+		); err != nil {
+			return err
+		}
+		if err := deploymentstate.RecomputeParent(
+			ctx, queries, deploymentID,
 		); err != nil {
 			return err
 		}
@@ -279,14 +289,17 @@ func (server *Server) cancelDeployment(
 		); err != nil {
 			return errLifecycleConflict
 		}
-		return queries.UpdateDeploymentStatus(
+		if err := queries.FinishDeployment(
 			ctx,
-			db.UpdateDeploymentStatusParams{
+			db.FinishDeploymentParams{
 				ID:         deploymentID,
 				Status:     "cancelled",
 				FinishedAt: sql.NullInt64{Int64: now, Valid: true},
 			},
-		)
+		); err != nil {
+			return err
+		}
+		return deploymentstate.RecomputeParent(ctx, queries, deploymentID)
 	})
 }
 

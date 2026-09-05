@@ -437,6 +437,39 @@ func (q *Queries) FailInFlightDeploymentsForAgent(ctx context.Context, arg FailI
 	return result.RowsAffected()
 }
 
+const failWaitingDeploymentDispatch = `-- name: FailWaitingDeploymentDispatch :execrows
+UPDATE deployment_dispatches
+SET state = 'failed',
+    reason = ?1,
+    finished_at = ?2,
+    updated_at = ?3
+WHERE deployment_id = ?4
+  AND assigned_agent_id = ?5
+  AND state = 'waiting'
+`
+
+type FailWaitingDeploymentDispatchParams struct {
+	Reason       sql.NullString `json:"reason"`
+	FinishedAt   sql.NullInt64  `json:"finished_at"`
+	UpdatedAt    int64          `json:"updated_at"`
+	DeploymentID int64          `json:"deployment_id"`
+	AgentID      sql.NullString `json:"agent_id"`
+}
+
+func (q *Queries) FailWaitingDeploymentDispatch(ctx context.Context, arg FailWaitingDeploymentDispatchParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, failWaitingDeploymentDispatch,
+		arg.Reason,
+		arg.FinishedAt,
+		arg.UpdatedAt,
+		arg.DeploymentID,
+		arg.AgentID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const getDeploymentDispatch = `-- name: GetDeploymentDispatch :one
 SELECT deployment_id, mode, state, reason, agent_id, assigned_agent_id, claim_token_hash, claim_expires_at, started_at, finished_at, last_heartbeat_at, cancel_requested_at, created_at, updated_at FROM deployment_dispatches WHERE deployment_id = ?
 `
@@ -472,6 +505,51 @@ func (q *Queries) GetDeploymentPayload(ctx context.Context, deploymentID int64) 
 	var i DeploymentPayload
 	err := row.Scan(&i.DeploymentID, &i.Ciphertext, &i.CreatedAt)
 	return i, err
+}
+
+const listDeploymentDispatchesForAgent = `-- name: ListDeploymentDispatchesForAgent :many
+SELECT deployment_id, mode, state, reason, agent_id, assigned_agent_id, claim_token_hash, claim_expires_at, started_at, finished_at, last_heartbeat_at, cancel_requested_at, created_at, updated_at FROM deployment_dispatches
+WHERE assigned_agent_id = ?1
+   OR agent_id = ?1
+ORDER BY deployment_id ASC
+`
+
+func (q *Queries) ListDeploymentDispatchesForAgent(ctx context.Context, agentID sql.NullString) ([]DeploymentDispatch, error) {
+	rows, err := q.db.QueryContext(ctx, listDeploymentDispatchesForAgent, agentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DeploymentDispatch
+	for rows.Next() {
+		var i DeploymentDispatch
+		if err := rows.Scan(
+			&i.DeploymentID,
+			&i.Mode,
+			&i.State,
+			&i.Reason,
+			&i.AgentID,
+			&i.AssignedAgentID,
+			&i.ClaimTokenHash,
+			&i.ClaimExpiresAt,
+			&i.StartedAt,
+			&i.FinishedAt,
+			&i.LastHeartbeatAt,
+			&i.CancelRequestedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listExpiredCancellationDeploymentDispatches = `-- name: ListExpiredCancellationDeploymentDispatches :many
@@ -629,6 +707,53 @@ func (q *Queries) ListOfflineAgentIDs(ctx context.Context, lastHeartbeatBefore s
 			return nil, err
 		}
 		items = append(items, id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listWaitingDeploymentDispatchesForAgent = `-- name: ListWaitingDeploymentDispatchesForAgent :many
+SELECT dispatch.deployment_id, dispatch.mode, dispatch.state, dispatch.reason, dispatch.agent_id, dispatch.assigned_agent_id, dispatch.claim_token_hash, dispatch.claim_expires_at, dispatch.started_at, dispatch.finished_at, dispatch.last_heartbeat_at, dispatch.cancel_requested_at, dispatch.created_at, dispatch.updated_at FROM deployment_dispatches AS dispatch
+JOIN deployments AS deployment ON deployment.id = dispatch.deployment_id
+WHERE dispatch.assigned_agent_id = ?1
+  AND deployment.parent_deployment_id IS NOT NULL
+  AND dispatch.state = 'waiting'
+ORDER BY dispatch.deployment_id ASC
+`
+
+func (q *Queries) ListWaitingDeploymentDispatchesForAgent(ctx context.Context, agentID sql.NullString) ([]DeploymentDispatch, error) {
+	rows, err := q.db.QueryContext(ctx, listWaitingDeploymentDispatchesForAgent, agentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DeploymentDispatch
+	for rows.Next() {
+		var i DeploymentDispatch
+		if err := rows.Scan(
+			&i.DeploymentID,
+			&i.Mode,
+			&i.State,
+			&i.Reason,
+			&i.AgentID,
+			&i.AssignedAgentID,
+			&i.ClaimTokenHash,
+			&i.ClaimExpiresAt,
+			&i.StartedAt,
+			&i.FinishedAt,
+			&i.LastHeartbeatAt,
+			&i.CancelRequestedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/deploymentstate"
 	"durpdeploy/internal/events"
 )
 
@@ -28,6 +29,7 @@ func (r *DeploymentRunner) Run(
 			StartedAt: sql.NullInt64{Int64: time.Now().Unix(), Valid: true},
 		},
 	)
+	_ = deploymentstate.RecomputeParent(ctx, r.repo.Queries, deploymentID)
 	release, err := r.repo.Queries.GetRelease(ctx, releaseID)
 	if err != nil {
 		_ = r.failUnlessCancelled(ctx, deploymentID)
@@ -79,9 +81,9 @@ func (r *DeploymentRunner) Run(
 		return
 	}
 	if err != nil {
-		_ = r.repo.Queries.UpdateDeploymentStatus(
+		_ = r.repo.Queries.FinishDeployment(
 			ctx,
-			db.UpdateDeploymentStatusParams{
+			db.FinishDeploymentParams{
 				ID:     deploymentID,
 				Status: "failed",
 				FinishedAt: sql.NullInt64{
@@ -90,6 +92,7 @@ func (r *DeploymentRunner) Run(
 				},
 			},
 		)
+		_ = deploymentstate.RecomputeParent(ctx, r.repo.Queries, deploymentID)
 		r.publish(
 			ctx,
 			events.DeploymentFailed,
@@ -110,14 +113,15 @@ func (r *DeploymentRunner) Run(
 	if deployment.Status == "cancelled" {
 		return
 	}
-	_ = r.repo.Queries.UpdateDeploymentStatus(
+	_ = r.repo.Queries.FinishDeployment(
 		ctx,
-		db.UpdateDeploymentStatusParams{
+		db.FinishDeploymentParams{
 			ID:         deploymentID,
 			Status:     "succeeded",
 			FinishedAt: sql.NullInt64{Int64: time.Now().Unix(), Valid: true},
 		},
 	)
+	_ = deploymentstate.RecomputeParent(ctx, r.repo.Queries, deploymentID)
 	r.publish(
 		ctx,
 		events.DeploymentSucceeded,
@@ -185,12 +189,15 @@ func (r *DeploymentRunner) failUnlessCancelled(
 	if deployment.Status == "cancelled" {
 		return nil
 	}
-	return r.repo.Queries.UpdateDeploymentStatus(
+	if err := r.repo.Queries.FinishDeployment(
 		ctx,
-		db.UpdateDeploymentStatusParams{
+		db.FinishDeploymentParams{
 			ID:         deploymentID,
 			Status:     "failed",
 			FinishedAt: sql.NullInt64{Int64: time.Now().Unix(), Valid: true},
 		},
-	)
+	); err != nil {
+		return err
+	}
+	return deploymentstate.RecomputeParent(ctx, r.repo.Queries, deploymentID)
 }
