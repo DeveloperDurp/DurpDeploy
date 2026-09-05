@@ -16,6 +16,7 @@ import (
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/repository"
+	"durpdeploy/internal/requestmeta"
 )
 
 // Entry is the audit record a caller wants to persist. Callers that
@@ -260,10 +261,7 @@ func buildDetails(
 	action string,
 	canonicalReason string,
 ) string {
-	ip := r.RemoteAddr
-	if idx := strings.LastIndex(ip, ":"); idx != -1 {
-		ip = ip[:idx]
-	}
+	ip := requestmeta.ClientIP(r)
 	details := map[string]any{
 		"ip":         ip,
 		"user_agent": r.UserAgent(),

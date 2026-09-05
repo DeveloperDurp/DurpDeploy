@@ -424,9 +424,14 @@ sudo journalctl -u caddy -n 50 --no-pager
 DurpDeploy applies login rate limits itself. It trusts forwarding headers from
 loopback proxies by default. If Caddy or another trusted proxy is on a different
 host, set `DURPDEPLOY_TRUSTED_PROXIES` to its IP address or CIDR. Multiple
-entries are comma-separated. Only those peers may supply `X-Forwarded-For`;
-DurpDeploy walks the chain from the nearest hop and ignores spoofed addresses
-before the first untrusted hop.
+entries are comma-separated. Only those peers may supply `X-Forwarded-For`.
+The bundled Compose files set this to their private Caddy network.
+
+If a CDN or load balancer sits in front of Caddy, also set
+`DURPDEPLOY_CADDY_TRUSTED_PROXIES` in Caddy's environment to that provider's
+documented egress CIDRs. Caddy parses the incoming chain from right to left,
+then sends DurpDeploy one canonical client address. Do not use broad public or
+private ranges: every configured address is authorized to speak for clients.
 
 ---
 

@@ -4,13 +4,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"log/slog"
-	"net"
 	"net/http"
-	"net/netip"
-	"os"
 	"strings"
 	"sync"
 	"time"
+
+	"durpdeploy/internal/requestmeta"
 )
 
 const (
@@ -28,80 +27,16 @@ type loginLimitEntry struct {
 }
 
 type loginLimiter struct {
-	mu             sync.Mutex
-	entries        map[string]loginLimitEntry
-	trustedProxies []netip.Prefix
-	now            func() time.Time
+	mu      sync.Mutex
+	entries map[string]loginLimitEntry
+	now     func() time.Time
 }
 
 func newLoginLimiter() *loginLimiter {
-	trustedProxies := trustedProxyPrefixes(
-		os.Getenv("DURPDEPLOY_TRUSTED_PROXIES"),
-	)
-	if len(trustedProxies) == 0 {
-		trustedProxies = []netip.Prefix{
-			netip.MustParsePrefix("127.0.0.0/8"),
-			netip.MustParsePrefix("::1/128"),
-		}
-	}
 	return &loginLimiter{
-		entries:        make(map[string]loginLimitEntry),
-		trustedProxies: trustedProxies,
-		now:            time.Now,
+		entries: make(map[string]loginLimitEntry),
+		now:     time.Now,
 	}
-}
-
-func trustedProxyPrefixes(value string) []netip.Prefix {
-	var prefixes []netip.Prefix
-	for _, raw := range strings.Split(value, ",") {
-		raw = strings.TrimSpace(raw)
-		if raw == "" {
-			continue
-		}
-		if addr, err := netip.ParseAddr(raw); err == nil {
-			prefixes = append(prefixes, netip.PrefixFrom(addr, addr.BitLen()))
-			continue
-		}
-		if prefix, err := netip.ParsePrefix(raw); err == nil {
-			prefixes = append(prefixes, prefix.Masked())
-		} else {
-			slog.Warn("ignoring invalid trusted proxy", "value", raw)
-		}
-	}
-	return prefixes
-}
-
-func (l *loginLimiter) clientIP(r *http.Request) string {
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		host = r.RemoteAddr
-	}
-	peer, err := netip.ParseAddr(strings.Trim(host, "[]"))
-	if err != nil {
-		return "unknown"
-	}
-	if containsIP(l.trustedProxies, peer) {
-		forwarded := strings.Split(r.Header.Get("X-Forwarded-For"), ",")
-		for i := len(forwarded) - 1; i >= 0; i-- {
-			addr, parseErr := netip.ParseAddr(strings.TrimSpace(forwarded[i]))
-			if parseErr != nil {
-				continue
-			}
-			if !containsIP(l.trustedProxies, addr) {
-				return addr.String()
-			}
-		}
-	}
-	return peer.String()
-}
-
-func containsIP(prefixes []netip.Prefix, addr netip.Addr) bool {
-	for _, prefix := range prefixes {
-		if prefix.Contains(addr) {
-			return true
-		}
-	}
-	return false
 }
 
 func (l *loginLimiter) allow(key string, limit int) bool {
@@ -150,7 +85,7 @@ func (h *AuthHandler) publicRateLimit(
 ) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ip := h.loginLimiter.clientIP(r)
+			ip := requestmeta.ClientIP(r)
 			if !h.loginLimiter.allow(scope+":"+ip, limit) {
 				slog.Warn(
 					"authentication request throttled",

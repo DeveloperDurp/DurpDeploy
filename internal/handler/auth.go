@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
-	"strings"
 	"time"
 
 	"durpdeploy/internal/audit"
@@ -15,6 +14,7 @@ import (
 	"durpdeploy/internal/mfa"
 	"durpdeploy/internal/oidc"
 	"durpdeploy/internal/repository"
+	"durpdeploy/internal/requestmeta"
 	"durpdeploy/views/pages"
 )
 
@@ -150,7 +150,7 @@ func (h *AuthHandler) LoginPost(w http.ResponseWriter, r *http.Request) {
 
 	email := r.PostFormValue("email")
 	password := r.PostFormValue("password")
-	ip := h.loginLimiter.clientIP(r)
+	ip := requestmeta.ClientIP(r)
 	pairKey := loginPairKey(email, ip)
 	if !h.loginLimiter.allow("login-ip:"+ip, loginIPLimit) ||
 		!h.loginLimiter.allow(pairKey, loginPairLimit) {
@@ -265,10 +265,7 @@ func (h *AuthHandler) LogoutPost(w http.ResponseWriter, r *http.Request) {
 // loginDetails returns a JSON string with IP + user agent for audit
 // entries. It never includes form values (passwords, emails).
 func loginDetails(r *http.Request, factor finalLoginFactor) string {
-	ip := r.RemoteAddr
-	if idx := strings.LastIndex(ip, ":"); idx != -1 {
-		ip = ip[:idx]
-	}
+	ip := requestmeta.ClientIP(r)
 	details := map[string]string{"ip": ip, "user_agent": r.UserAgent()}
 	if factor != "" {
 		details["factor"] = string(factor)

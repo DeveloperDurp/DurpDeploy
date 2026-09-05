@@ -3,6 +3,7 @@ package server
 import (
 	"log/slog"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -14,6 +15,7 @@ import (
 	"durpdeploy/internal/handler"
 	"durpdeploy/internal/handler/api"
 	"durpdeploy/internal/repository"
+	"durpdeploy/internal/requestmeta"
 	"durpdeploy/internal/runner"
 	"durpdeploy/static"
 )
@@ -41,6 +43,7 @@ func NewRouter(
 ) *chi.Mux {
 	registerOIDC := len(oidcEnabled) > 0 && oidcEnabled[0]
 	r := chi.NewRouter()
+	r.Use(requestmeta.Middleware(os.Getenv("DURPDEPLOY_TRUSTED_PROXIES")))
 	r.Use(requestLogger)
 	r.Use(handler.PanicRecoveryMiddleware)
 	r.Use(passwordFormBodyLimit)

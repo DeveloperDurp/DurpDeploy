@@ -25,6 +25,8 @@
 # Caddy env file (compose.caddy.env) required:
 #   DURPDEPLOY_URL=https://durpdeploy.example.com
 #   BACKEND=app:8080
+# Optional only when a CDN/load balancer is directly in front of Caddy:
+#   DURPDEPLOY_CADDY_TRUSTED_PROXIES=192.0.2.0/24 2001:db8::/32
 #
 # App env file optional:
 #   # only set if you are NOT using secrets/durpdeploy_key

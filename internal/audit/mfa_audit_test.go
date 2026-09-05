@@ -7,6 +7,8 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+
+	"durpdeploy/internal/requestmeta"
 )
 
 func TestMFAAuditActionMapUsesStableActions(t *testing.T) {
@@ -108,5 +110,32 @@ func TestMFAAuditDetailsRedactsProtocolFields(t *testing.T) {
 	if strings.Contains(got, "challenge-secret") ||
 		strings.Contains(got, "recovery-secret") {
 		t.Fatal("audit details contain MFA protocol data")
+	}
+}
+
+func TestAuditDetailsUsesTrustedForwardedClientIP(t *testing.T) {
+	// Given
+	req := httptest.NewRequest(http.MethodPost, "/projects/42", nil)
+	req.RemoteAddr = "192.0.2.10:1234"
+	req.Header.Set("X-Forwarded-For", "203.0.113.9")
+	var got string
+	handler := requestmeta.Middleware("192.0.2.0/24")(
+		http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+			got = buildDetails(r, http.StatusSeeOther, "update_project", "")
+		}),
+	)
+
+	// When
+	handler.ServeHTTP(httptest.NewRecorder(), req)
+
+	// Then
+	var details struct {
+		IP string `json:"ip"`
+	}
+	if err := json.Unmarshal([]byte(got), &details); err != nil {
+		t.Fatalf("unmarshal audit details: %v", err)
+	}
+	if details.IP != "203.0.113.9" {
+		t.Fatalf("audit IP = %q, want forwarded client", details.IP)
 	}
 }
