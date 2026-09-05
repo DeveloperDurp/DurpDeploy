@@ -27,7 +27,7 @@ type LifecyclePanelStage struct {
 // when a project has dozens of variables; full list is on /variables.
 const variablesPreviewCap = 6
 
-templ ProjectDetail(project db.Project, panel LifecyclePanel, vars []db.Variable, envs []db.Environment) {
+templ ProjectDetail(project db.Project, panel LifecyclePanel, vars []db.Variable, envs []db.Environment, policy ProjectExecutionPolicyView) {
 	<div id="project-detail">
 		<div class="flex flex-wrap justify-between items-center gap-2 mb-4">
 			<h1 class="text-3xl font-bold">{ project.Name }</h1>
@@ -45,6 +45,7 @@ templ ProjectDetail(project db.Project, panel LifecyclePanel, vars []db.Variable
 				<span>No description</span>
 			}
 		</p>
+		@ProjectExecutionPolicySummary(policy)
 		<div class="flex gap-4 flex-wrap">
 			<a href={ fmt.Sprintf("/projects/%d/steps-page", project.ID) } class="btn btn-primary">Steps</a>
 			<a href={ fmt.Sprintf("/projects/%d/variables", project.ID) } class="btn btn-secondary">Variables</a>
@@ -57,6 +58,21 @@ templ ProjectDetail(project db.Project, panel LifecyclePanel, vars []db.Variable
 		</div>
 		@LifecyclePanelSection(project, panel)
 		@VariablesPreviewSection(project, vars, envs)
+	</div>
+}
+
+templ ProjectExecutionPolicySummary(policy ProjectExecutionPolicyView) {
+	<div class="card bg-base-200 shadow mb-6">
+		<div class="card-body py-4">
+			<h2 class="card-title text-lg">Execution default</h2>
+			if policy.Legacy {
+				<p class="text-sm"><span class="badge badge-warning mr-2">Legacy</span>Uses environment assignments when present, otherwise local execution. Save an explicit local or agent-label default to stop consulting assignments.</p>
+			} else if policy.TargetMode == "label" {
+				<p class="text-sm"><span class="badge badge-primary mr-2">Agent label</span>{ policy.LabelName } · { policy.Strategy }</p>
+			} else {
+				<p class="text-sm"><span class="badge badge-neutral mr-2">Local</span>Runs on this DurpDeploy server by default.</p>
+			}
+		</div>
 	</div>
 }
 
@@ -391,14 +407,14 @@ templ VariablePreviewRow(v db.Variable, envs []db.Environment) {
 	</tr>
 }
 
-templ ProjectDetailPage(project db.Project, panel LifecyclePanel, vars []db.Variable, envs []db.Environment, currentPath string) {
+templ ProjectDetailPage(project db.Project, panel LifecyclePanel, vars []db.Variable, envs []db.Environment, policy ProjectExecutionPolicyView, currentPath string) {
 	@layouts.Base(project.Name, currentPath) {
 		@components.Breadcrumbs([]components.Crumb{
 			{Label: "Home", Href: "/"},
 			{Label: "Projects", Href: "/projects"},
 			{Label: project.Name},
 		})
-		@ProjectDetail(project, panel, vars, envs)
+		@ProjectDetail(project, panel, vars, envs, policy)
 	}
 }
 

@@ -495,7 +495,7 @@ func TestProject_GetUpdateDelete(t *testing.T) {
 		http.MethodPut,
 		"/api/v1/projects/"+itoa(p.ID),
 		token,
-		`{"name":"renamed"}`,
+		`{"name":"renamed","target_mode":"local"}`,
 	)
 	h.assertStatus(t, rec, http.StatusOK)
 	h.assertJSONField(t, rec, "name", "renamed")

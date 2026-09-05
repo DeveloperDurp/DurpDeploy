@@ -296,16 +296,26 @@ type swaggerProjectListResponse []swaggerProjectResponse
 // ProjectResponse is the JSON shape for a project.
 // swagger:model ProjectResponse
 type swaggerProjectResponse struct {
-	ID                int64  `json:"id"`
-	Name              string `json:"name"`
-	Description       string `json:"description"`
-	CreatedAt         int64  `json:"created_at"`
-	LifecycleID       *int64 `json:"lifecycle_id"`
-	SlackWebhookURL   string `json:"slack_webhook_url"`
-	NotifyEmails      string `json:"notify_emails"`
-	GotifyURL         string `json:"gotify_url"`
-	GotifyToken       string `json:"gotify_token"`
-	DiscordWebhookURL string `json:"discord_webhook_url"`
+	ID                int64                         `json:"id"`
+	Name              string                        `json:"name"`
+	Description       string                        `json:"description"`
+	CreatedAt         int64                         `json:"created_at"`
+	LifecycleID       *int64                        `json:"lifecycle_id"`
+	SlackWebhookURL   string                        `json:"slack_webhook_url"`
+	NotifyEmails      string                        `json:"notify_emails"`
+	GotifyURL         string                        `json:"gotify_url"`
+	GotifyToken       string                        `json:"gotify_token"`
+	DiscordWebhookURL string                        `json:"discord_webhook_url"`
+	ExecutionPolicy   swaggerProjectExecutionPolicy `json:"execution_policy"`
+}
+
+// ProjectExecutionPolicy is the persisted project execution default.
+// swagger:model ProjectExecutionPolicy
+type swaggerProjectExecutionPolicy struct {
+	Source        string `json:"source"`
+	TargetMode    string `json:"target_mode,omitempty"`
+	LabelName     string `json:"label_name,omitempty"`
+	AgentStrategy string `json:"agent_strategy,omitempty"`
 }
 
 // ProjectNotificationResponse is the notification settings for a project.
@@ -335,9 +345,12 @@ type swaggerProjectNotificationRequest struct {
 // ProjectRequest is the body for create/update project.
 // swagger:model ProjectRequest
 type swaggerProjectRequest struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	LifecycleID int64  `json:"lifecycle_id"`
+	Name          string `json:"name"`
+	Description   string `json:"description"`
+	LifecycleID   int64  `json:"lifecycle_id"`
+	TargetMode    string `json:"target_mode"`
+	AgentLabelID  int64  `json:"agent_label_id"`
+	AgentStrategy string `json:"agent_strategy"`
 }
 
 // EnvironmentRequest is the body for create/update environment.

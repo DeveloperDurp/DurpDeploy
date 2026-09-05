@@ -7,6 +7,7 @@ import (
 
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/dispatch"
 	"durpdeploy/internal/handler"
 	"durpdeploy/internal/notify"
 	"durpdeploy/internal/repository"
@@ -21,9 +22,12 @@ func NewProjectHandler(repo *repository.Repository) *ProjectHandler {
 }
 
 type projectRequest struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	LifecycleID int64  `json:"lifecycle_id"`
+	Name          string `json:"name"`
+	Description   string `json:"description"`
+	LifecycleID   int64  `json:"lifecycle_id"`
+	TargetMode    string `json:"target_mode"`
+	AgentLabelID  int64  `json:"agent_label_id"`
+	AgentStrategy string `json:"agent_strategy"`
 }
 
 type projectNotificationsRequest struct {
@@ -35,19 +39,30 @@ type projectNotificationsRequest struct {
 }
 
 type projectResponse struct {
-	ID                int64  `json:"id"`
-	Name              string `json:"name"`
-	Description       string `json:"description"`
-	CreatedAt         int64  `json:"created_at"`
-	LifecycleID       *int64 `json:"lifecycle_id"`
-	SlackWebhookURL   string `json:"slack_webhook_url"`
-	NotifyEmails      string `json:"notify_emails"`
-	GotifyURL         string `json:"gotify_url"`
-	GotifyToken       string `json:"gotify_token"`
-	DiscordWebhookURL string `json:"discord_webhook_url"`
+	ID                int64                          `json:"id"`
+	Name              string                         `json:"name"`
+	Description       string                         `json:"description"`
+	CreatedAt         int64                          `json:"created_at"`
+	LifecycleID       *int64                         `json:"lifecycle_id"`
+	SlackWebhookURL   string                         `json:"slack_webhook_url"`
+	NotifyEmails      string                         `json:"notify_emails"`
+	GotifyURL         string                         `json:"gotify_url"`
+	GotifyToken       string                         `json:"gotify_token"`
+	DiscordWebhookURL string                         `json:"discord_webhook_url"`
+	ExecutionPolicy   projectExecutionPolicyResponse `json:"execution_policy"`
 }
 
-func toProjectResponse(p db.Project) projectResponse {
+type projectExecutionPolicyResponse struct {
+	Source        string `json:"source"`
+	TargetMode    string `json:"target_mode,omitempty"`
+	LabelName     string `json:"label_name,omitempty"`
+	AgentStrategy string `json:"agent_strategy,omitempty"`
+}
+
+func toProjectResponse(
+	p db.Project,
+	policy handler.ProjectExecutionPolicyState,
+) projectResponse {
 	var lcID *int64
 	if p.LifecycleID.Valid {
 		lcID = &p.LifecycleID.Int64
@@ -63,7 +78,36 @@ func toProjectResponse(p db.Project) projectResponse {
 		GotifyURL:         p.GotifyUrl.String,
 		GotifyToken:       p.GotifyToken.String,
 		DiscordWebhookURL: p.DiscordWebhookUrl.String,
+		ExecutionPolicy: projectExecutionPolicyResponse{
+			Source:        projectPolicySource(policy),
+			TargetMode:    policy.TargetMode,
+			LabelName:     policy.LabelName,
+			AgentStrategy: policy.Strategy,
+		},
 	}
+}
+
+func projectPolicySource(policy handler.ProjectExecutionPolicyState) string {
+	if policy.Legacy {
+		return string(dispatch.SourceLegacy)
+	}
+	return string(dispatch.SourceProject)
+}
+
+func projectPolicyResponseFor(
+	r *http.Request,
+	repo *repository.Repository,
+	p db.Project,
+) (projectResponse, error) {
+	policy, err := handler.LoadProjectExecutionPolicy(
+		r.Context(),
+		repo.Queries,
+		p.ID,
+	)
+	if err != nil {
+		return projectResponse{}, err
+	}
+	return toProjectResponse(p, policy), nil
 }
 
 type projectNotificationResponse struct {
@@ -144,7 +188,12 @@ func (h *ProjectHandler) ListProjects(w http.ResponseWriter, r *http.Request) {
 		}
 		items = make([]any, len(rows))
 		for i, p := range rows {
-			items[i] = toProjectResponse(p)
+			response, err := projectPolicyResponseFor(r, h.repo, p)
+			if err != nil {
+				RespondError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			items[i] = response
 		}
 	} else {
 		rows, err := h.repo.Queries.ListProjectsForUserPaginated(
@@ -166,7 +215,12 @@ func (h *ProjectHandler) ListProjects(w http.ResponseWriter, r *http.Request) {
 		}
 		items = make([]any, len(rows))
 		for i, p := range rows {
-			items[i] = toProjectResponse(p)
+			response, err := projectPolicyResponseFor(r, h.repo, p)
+			if err != nil {
+				RespondError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			items[i] = response
 		}
 	}
 
@@ -219,12 +273,32 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 			Valid:  req.Description != "",
 		},
 	}
+	policyInput := handler.ProjectExecutionPolicyInput{
+		TargetMode: req.TargetMode,
+		LabelID:    req.AgentLabelID,
+		Strategy:   req.AgentStrategy,
+	}
+	if policyInput.TargetMode == "" {
+		policyInput.TargetMode = string(dispatch.TargetLocal)
+	}
+	policy, err := handler.ResolveProjectExecutionPolicy(
+		r.Context(), h.repo, policyInput,
+	)
+	if err != nil {
+		writeProjectPolicyError(w, err)
+		return
+	}
 
 	var created db.Project
-	err := h.repo.WithTx(r.Context(), func(q *db.Queries) error {
+	err = h.repo.WithTx(r.Context(), func(q *db.Queries) error {
 		var txErr error
 		created, txErr = q.CreateProject(r.Context(), params)
 		if txErr != nil {
+			return txErr
+		}
+		if txErr = handler.SaveProjectExecutionPolicy(
+			r.Context(), q, created.ID, policy,
+		); txErr != nil {
 			return txErr
 		}
 		if user := auth.UserFromContext(r.Context()); user != nil {
@@ -268,7 +342,7 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	RespondJSON(w, http.StatusCreated, toProjectResponse(created))
+	RespondJSON(w, http.StatusCreated, toProjectResponse(created, policy))
 }
 
 // swagger:route GET /projects/{id} projects getProject
@@ -306,7 +380,12 @@ func (h *ProjectHandler) GetProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	RespondJSON(w, http.StatusOK, toProjectResponse(project))
+	response, err := projectPolicyResponseFor(r, h.repo, project)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	RespondJSON(w, http.StatusOK, response)
 }
 
 // swagger:route PUT /projects/{id} projects updateProject
@@ -349,18 +428,48 @@ func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 		RespondError(w, http.StatusBadRequest, "Name is required")
 		return
 	}
+	existingPolicy, err := handler.LoadProjectExecutionPolicy(
+		r.Context(), h.repo.Queries, id,
+	)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	policy := existingPolicy
+	if req.TargetMode == "" {
+		if existingPolicy.Legacy {
+			writeProjectPolicyError(w, dispatch.ErrInvalidPolicy)
+			return
+		}
+	} else {
+		policy, err = handler.ResolveProjectExecutionPolicy(
+			r.Context(), h.repo, handler.ProjectExecutionPolicyInput{
+				TargetMode: req.TargetMode,
+				LabelID:    req.AgentLabelID,
+				Strategy:   req.AgentStrategy,
+			},
+		)
+		if err != nil {
+			writeProjectPolicyError(w, err)
+			return
+		}
+	}
 
-	updated, err := h.repo.Queries.UpdateProject(
-		r.Context(),
-		db.UpdateProjectParams{
-			ID:   id,
-			Name: name,
+	var updated db.Project
+	err = h.repo.WithTx(r.Context(), func(q *db.Queries) error {
+		var txErr error
+		updated, txErr = q.UpdateProject(r.Context(), db.UpdateProjectParams{
+			ID: id, Name: name,
 			Description: sql.NullString{
 				String: req.Description,
 				Valid:  req.Description != "",
 			},
-		},
-	)
+		})
+		if txErr != nil {
+			return txErr
+		}
+		return handler.SaveProjectExecutionPolicy(r.Context(), q, id, policy)
+	})
 	if err != nil {
 		if handler.IsUniqueViolation(err) {
 			RespondError(
@@ -390,7 +499,19 @@ func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	RespondJSON(w, http.StatusOK, toProjectResponse(updated))
+	RespondJSON(w, http.StatusOK, toProjectResponse(updated, policy))
+}
+
+func writeProjectPolicyError(w http.ResponseWriter, err error) {
+	if errors.Is(err, dispatch.ErrLabelNotFound) {
+		RespondError(w, http.StatusNotFound, "agent label not found")
+		return
+	}
+	RespondError(
+		w,
+		http.StatusUnprocessableEntity,
+		"invalid project execution policy",
+	)
 }
 
 // swagger:route DELETE /projects/{id} projects deleteProject

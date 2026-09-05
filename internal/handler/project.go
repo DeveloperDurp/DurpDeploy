@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -12,6 +13,7 @@ import (
 
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/dispatch"
 	"durpdeploy/internal/notify"
 	"durpdeploy/internal/repository"
 	"durpdeploy/views/pages"
@@ -79,7 +81,12 @@ func (h *ProjectHandler) NewProject(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if err := pages.ProjectFormPage(db.Project{}, false, "", lifecycles, nil, nil, false, r.URL.Path).
+	labels, err := h.repo.Queries.ListAgentLabels(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err := pages.ProjectFormPage(db.Project{}, false, "", lifecycles, projectPolicyView(ProjectExecutionPolicyState{TargetMode: string(dispatch.TargetLocal)}), labels, nil, nil, false, r.URL.Path).
 		Render(r.Context(), w); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -89,24 +96,30 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimSpace(r.FormValue("name"))
 	desc := r.FormValue("description")
 
-	if name == "" {
+	policy, policyErr := h.projectPolicyFromForm(r, false)
+	if name == "" || policyErr != nil {
 		lifecycles, _ := h.repo.Queries.ListLifecycles(r.Context())
+		labels, _ := h.repo.Queries.ListAgentLabels(r.Context())
+		errorMsg := "Name is required"
+		if policyErr != nil {
+			errorMsg = projectPolicyErrorMessage(policyErr)
+		}
 		WriteFormError(
 			w,
 			r,
 			pages.ProjectForm(
 				db.Project{},
 				false,
-				"Name is required",
+				errorMsg,
 				lifecycles,
-				nil, nil, false,
+				projectPolicyView(policy), labels, nil, nil, false,
 			),
 			pages.ProjectFormPage(
 				db.Project{},
 				false,
-				"Name is required",
+				errorMsg,
 				lifecycles,
-				nil, nil, false,
+				projectPolicyView(policy), labels, nil, nil, false,
 				r.URL.Path,
 			),
 		)
@@ -132,6 +145,9 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 		if txErr != nil {
 			return txErr
 		}
+		if txErr = SaveProjectExecutionPolicy(r.Context(), q, created.ID, policy); txErr != nil {
+			return txErr
+		}
 		if user := auth.UserFromContext(r.Context()); user != nil {
 			txErr = q.AddProjectMember(
 				r.Context(),
@@ -147,6 +163,7 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if IsUniqueViolation(err) {
 			lifecycles, _ := h.repo.Queries.ListLifecycles(r.Context())
+			labels, _ := h.repo.Queries.ListAgentLabels(r.Context())
 			WriteFormError(
 				w,
 				r,
@@ -154,14 +171,14 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 					db.Project{Name: name},
 					false,
 					"A project with this name already exists",
-					lifecycles,
+					lifecycles, projectPolicyView(policy), labels,
 					nil, nil, false,
 				),
 				pages.ProjectFormPage(
 					db.Project{Name: name},
 					false,
 					"A project with this name already exists",
-					lifecycles,
+					lifecycles, projectPolicyView(policy), labels,
 					nil, nil, false,
 					r.URL.Path,
 				),
@@ -309,14 +326,19 @@ func (h *ProjectHandler) GetProject(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	policy, err := LoadProjectExecutionPolicy(r.Context(), h.repo.Queries, id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
 	if r.Header.Get("HX-Request") == "true" {
-		if err := pages.ProjectDetail(project, panel, variables, environments).
+		if err := pages.ProjectDetail(project, panel, variables, environments, projectPolicyView(policy)).
 			Render(r.Context(), w); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	} else {
-		if err := pages.ProjectDetailPage(project, panel, variables, environments, r.URL.Path).
+		if err := pages.ProjectDetailPage(project, panel, variables, environments, projectPolicyView(policy), r.URL.Path).
 			Render(r.Context(), w); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
@@ -519,8 +541,18 @@ func (h *ProjectHandler) EditProject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	members, available, canManage := h.loadMembersContext(r, id)
+	policy, err := LoadProjectExecutionPolicy(r.Context(), h.repo.Queries, id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	labels, err := h.repo.Queries.ListAgentLabels(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
-	if err := pages.ProjectFormPage(project, true, "", lifecycles, members, available, canManage, r.URL.Path).
+	if err := pages.ProjectFormPage(project, true, "", lifecycles, projectPolicyView(policy), labels, members, available, canManage, r.URL.Path).
 		Render(r.Context(), w); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -540,19 +572,34 @@ func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 
 	name := strings.TrimSpace(r.FormValue("name"))
 	desc := r.FormValue("description")
+	existingPolicy, err := LoadProjectExecutionPolicy(
+		r.Context(),
+		h.repo.Queries,
+		id,
+	)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	policy, policyErr := h.projectPolicyFromForm(r, existingPolicy.Legacy)
 
-	if name == "" {
+	if name == "" || policyErr != nil {
 		project := db.Project{ID: id, Name: name}
 		lifecycles, _ := h.repo.Queries.ListLifecycles(r.Context())
+		labels, _ := h.repo.Queries.ListAgentLabels(r.Context())
 		members, available, canManage := h.loadMembersContext(r, id)
+		errorMsg := "Name is required"
+		if policyErr != nil {
+			errorMsg = projectPolicyErrorMessage(policyErr)
+		}
 		WriteFormError(
 			w,
 			r,
 			pages.ProjectForm(
 				project,
 				true,
-				"Name is required",
-				lifecycles,
+				errorMsg,
+				lifecycles, projectPolicyView(policy), labels,
 				members,
 				available,
 				canManage,
@@ -560,8 +607,8 @@ func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 			pages.ProjectFormPage(
 				project,
 				true,
-				"Name is required",
-				lifecycles,
+				errorMsg,
+				lifecycles, projectPolicyView(policy), labels,
 				members, available, canManage,
 				r.URL.Path,
 			),
@@ -578,10 +625,17 @@ func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	if _, err = h.repo.Queries.UpdateProject(r.Context(), params); err != nil {
+	err = h.repo.WithTx(r.Context(), func(q *db.Queries) error {
+		if _, txErr := q.UpdateProject(r.Context(), params); txErr != nil {
+			return txErr
+		}
+		return SaveProjectExecutionPolicy(r.Context(), q, id, policy)
+	})
+	if err != nil {
 		if IsUniqueViolation(err) {
 			project := db.Project{ID: id, Name: name}
 			lifecycles, _ := h.repo.Queries.ListLifecycles(r.Context())
+			labels, _ := h.repo.Queries.ListAgentLabels(r.Context())
 			members, available, canManage := h.loadMembersContext(r, id)
 			WriteFormError(
 				w,
@@ -590,14 +644,14 @@ func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 					project,
 					true,
 					"A project with this name already exists",
-					lifecycles,
+					lifecycles, projectPolicyView(policy), labels,
 					members, available, canManage,
 				),
 				pages.ProjectFormPage(
 					project,
 					true,
 					"A project with this name already exists",
-					lifecycles,
+					lifecycles, projectPolicyView(policy), labels,
 					members, available, canManage,
 					r.URL.Path,
 				),
@@ -607,7 +661,6 @@ func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
 	if err := h.applyLifecycleSelection(r, id); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -699,4 +752,55 @@ func validateNotificationURLs(urls ...string) error {
 		}
 	}
 	return nil
+}
+
+func (h *ProjectHandler) projectPolicyFromForm(
+	r *http.Request,
+	requiresExplicitSelection bool,
+) (ProjectExecutionPolicyState, error) {
+	targetMode := strings.TrimSpace(r.FormValue("target_mode"))
+	if targetMode == "" {
+		if requiresExplicitSelection {
+			return ProjectExecutionPolicyState{
+				Legacy: true,
+			}, dispatch.ErrInvalidPolicy
+		}
+		targetMode = string(dispatch.TargetLocal)
+	}
+	labelID := int64(0)
+	labelIDValue := strings.TrimSpace(r.FormValue("agent_label_id"))
+	if labelIDValue != "" {
+		var err error
+		labelID, err = strconv.ParseInt(labelIDValue, 10, 64)
+		if err != nil {
+			return ProjectExecutionPolicyState{
+				TargetMode: targetMode, Strategy: r.FormValue("agent_strategy"),
+			}, dispatch.ErrInvalidPolicy
+		}
+	}
+	return ResolveProjectExecutionPolicy(
+		r.Context(),
+		h.repo,
+		ProjectExecutionPolicyInput{
+			TargetMode: targetMode,
+			LabelID:    labelID,
+			Strategy:   strings.TrimSpace(r.FormValue("agent_strategy")),
+		},
+	)
+}
+
+func projectPolicyView(
+	state ProjectExecutionPolicyState,
+) pages.ProjectExecutionPolicyView {
+	return pages.ProjectExecutionPolicyView{
+		Legacy: state.Legacy, TargetMode: state.TargetMode, LabelID: state.LabelID,
+		LabelName: state.LabelName, Strategy: state.Strategy,
+	}
+}
+
+func projectPolicyErrorMessage(err error) string {
+	if errors.Is(err, dispatch.ErrLabelNotFound) {
+		return "The selected agent label no longer exists"
+	}
+	return "Choose local execution or a label with a strategy"
 }

@@ -7,6 +7,14 @@ import (
 	"strconv"
 )
 
+type ProjectExecutionPolicyView struct {
+	Legacy     bool
+	TargetMode string
+	LabelID    int64
+	LabelName  string
+	Strategy   string
+}
+
 // projectFormID returns the form's id attribute. The submit button
 // rendered below the form uses the same id so its `form=` attribute
 // actually binds to the form — without this, clicking Create on the
@@ -19,7 +27,7 @@ func projectFormID(project db.Project, isEdit bool) string {
 	return "project-form-new"
 }
 
-templ ProjectForm(project db.Project, isEdit bool, errorMsg string, lifecycles []db.Lifecycle, members []db.ListProjectMembersRow, availableUsers []db.ListUsersRow, canManage bool) {
+templ ProjectForm(project db.Project, isEdit bool, errorMsg string, lifecycles []db.Lifecycle, policy ProjectExecutionPolicyView, labels []db.AgentLabel, members []db.ListProjectMembersRow, availableUsers []db.ListUsersRow, canManage bool) {
 	<div class="max-w-2xl mx-auto">
 		<h1 class="text-3xl font-bold mb-6">
 			if isEdit {
@@ -77,6 +85,7 @@ templ ProjectForm(project db.Project, isEdit bool, errorMsg string, lifecycles [
 					}
 				</select>
 			</div>
+			@ProjectExecutionPolicyFields(policy, labels)
 		</form>
 		// Both action rows live below the form tag: the destructive Delete
 		// section first, then the primary Update + Cancel. This puts the
@@ -117,7 +126,7 @@ templ ProjectForm(project db.Project, isEdit bool, errorMsg string, lifecycles [
 	</div>
 }
 
-templ ProjectFormPage(project db.Project, isEdit bool, errorMsg string, lifecycles []db.Lifecycle, members []db.ListProjectMembersRow, availableUsers []db.ListUsersRow, canManage bool, currentPath string) {
+templ ProjectFormPage(project db.Project, isEdit bool, errorMsg string, lifecycles []db.Lifecycle, policy ProjectExecutionPolicyView, labels []db.AgentLabel, members []db.ListProjectMembersRow, availableUsers []db.ListUsersRow, canManage bool, currentPath string) {
 	if !CanWrite(ctx) {
 		@ViewerForbiddenMessage(
 			projectFormTitle(isEdit),
@@ -128,9 +137,51 @@ templ ProjectFormPage(project db.Project, isEdit bool, errorMsg string, lifecycl
 		)
 	} else {
 		@layouts.Base("Project Form", currentPath) {
-			@ProjectForm(project, isEdit, errorMsg, lifecycles, members, availableUsers, canManage)
+			@ProjectForm(project, isEdit, errorMsg, lifecycles, policy, labels, members, availableUsers, canManage)
 		}
 	}
+}
+
+templ ProjectExecutionPolicyFields(policy ProjectExecutionPolicyView, labels []db.AgentLabel) {
+	<fieldset class="form-control" aria-describedby="execution-policy-help">
+		<legend class="label"><span class="label-text">Execution default</span></legend>
+		if policy.Legacy {
+			<div class="alert alert-warning text-sm mb-3" role="status">
+				<span><strong>Legacy execution behavior.</strong> This project uses environment assignments when present, otherwise local execution. Choose a default to save this project.</span>
+			</div>
+		}
+		<p id="execution-policy-help" class="label-text-alt text-gray-500 mb-2">Choose where new deployments run unless they explicitly override this project default.</p>
+		<label class="label cursor-pointer justify-start gap-3">
+			<input type="radio" name="target_mode" value="local" class="radio radio-primary" required if policy.TargetMode == "local" { checked }/>
+			<span class="label-text">Local execution</span>
+		</label>
+		<label class="label cursor-pointer justify-start gap-3">
+			<input type="radio" name="target_mode" value="label" class="radio radio-primary" if policy.TargetMode == "label" { checked }/>
+			<span class="label-text">Agent label</span>
+		</label>
+		<div class="grid gap-4 sm:grid-cols-2 mt-2">
+			<div class="form-control">
+				<label class="label" for="agent-label-id"><span class="label-text">Agent label</span></label>
+				<select id="agent-label-id" name="agent_label_id" class="select select-bordered">
+					<option value="">— Select a label —</option>
+					for _, label := range labels {
+						<option value={ strconv.FormatInt(label.ID, 10) } if policy.LabelID == label.ID { selected }>{ label.Name }</option>
+					}
+				</select>
+			</div>
+			<div class="form-control">
+				<span class="label"><span class="label-text">Label strategy</span></span>
+				<label class="label cursor-pointer justify-start gap-3 py-1">
+					<input type="radio" name="agent_strategy" value="round_robin" class="radio radio-sm" if policy.Strategy == "round_robin" { checked }/>
+					<span class="label-text">Round robin</span>
+				</label>
+				<label class="label cursor-pointer justify-start gap-3 py-1">
+					<input type="radio" name="agent_strategy" value="all" class="radio radio-sm" if policy.Strategy == "all" { checked }/>
+					<span class="label-text">All eligible agents</span>
+				</label>
+			</div>
+		</div>
+	</fieldset>
 }
 
 func projectFormTitle(isEdit bool) string {

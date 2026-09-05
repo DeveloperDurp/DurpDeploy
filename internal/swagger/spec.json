@@ -6915,6 +6915,30 @@
       "x-go-name": "swaggerPaginatedResponse",
       "x-go-package": "durpdeploy/internal/handler/api"
     },
+    "ProjectExecutionPolicy": {
+      "type": "object",
+      "title": "ProjectExecutionPolicy is the persisted project execution default.",
+      "properties": {
+        "agent_strategy": {
+          "type": "string",
+          "x-go-name": "AgentStrategy"
+        },
+        "label_name": {
+          "type": "string",
+          "x-go-name": "LabelName"
+        },
+        "source": {
+          "type": "string",
+          "x-go-name": "Source"
+        },
+        "target_mode": {
+          "type": "string",
+          "x-go-name": "TargetMode"
+        }
+      },
+      "x-go-name": "swaggerProjectExecutionPolicy",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
     "ProjectListResponse": {
       "type": "array",
       "title": "ProjectListResponse is a list of projects.",
@@ -7102,6 +7126,15 @@
       "type": "object",
       "title": "ProjectRequest is the body for create/update project.",
       "properties": {
+        "agent_label_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "AgentLabelID"
+        },
+        "agent_strategy": {
+          "type": "string",
+          "x-go-name": "AgentStrategy"
+        },
         "description": {
           "type": "string",
           "x-go-name": "Description"
@@ -7114,6 +7147,10 @@
         "name": {
           "type": "string",
           "x-go-name": "Name"
+        },
+        "target_mode": {
+          "type": "string",
+          "x-go-name": "TargetMode"
         }
       },
       "x-go-name": "swaggerProjectRequest",
@@ -7135,6 +7172,9 @@
         "discord_webhook_url": {
           "type": "string",
           "x-go-name": "DiscordWebhookURL"
+        },
+        "execution_policy": {
+          "$ref": "#/definitions/ProjectExecutionPolicy"
         },
         "gotify_token": {
           "type": "string",
