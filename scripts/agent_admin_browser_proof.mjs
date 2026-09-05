@@ -4,6 +4,11 @@ import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { chromium } from "playwright";
+import {
+	attachPageDiagnostics,
+	consoleErrorTexts,
+	findUnexpectedConsoleErrors,
+} from "./agent_admin_browser_proof_support.mjs";
 
 // allow: SIZE_OK — one sequential pairing proof; extract only for a second scenario.
 const outputDir = process.env.AGENT_BROWSER_OUTPUT_DIR;
@@ -27,6 +32,7 @@ const admin = { email: "admin@browser.test", password: "browser-admin-password" 
 const deployer = { email: "deployer@browser.test", password: "browser-deployer-password" };
 const viewer = { email: "viewer@browser.test", password: "browser-viewer-password" };
 const consoleErrors = [];
+const expectedHTTPFailures = [];
 let serverErrors = "";
 const receipt = { agentStopped: false, serverDirectoryRemoved: false, serverStopped: false };
 
@@ -222,17 +228,9 @@ INSERT INTO agent_pairings (
 
 	browser = await chromium.launch({ headless: true });
 	const context = await browser.newContext();
-	context.on("page", (page) => {
-		page.on("console", (message) => {
-			if (message.type() === "error") consoleErrors.push(message.text());
-		});
-		page.on("pageerror", (error) => consoleErrors.push(error.message));
-	});
+	context.on("page", (newPage) => attachPageDiagnostics(newPage, consoleErrors));
 	const page = await context.newPage();
-	page.on("console", (message) => {
-		if (message.type() === "error") consoleErrors.push(message.text());
-	});
-	page.on("pageerror", (error) => consoleErrors.push(error.message));
+	attachPageDiagnostics(page, consoleErrors);
 
 	await page.goto(`${baseURL}/login`);
 	await page.getByLabel("Email").fill(admin.email);
@@ -281,21 +279,35 @@ INSERT INTO agent_pairings (
 			});
 			return { status: response.status, body: await response.text() };
 		}, { method, path, body, csrf });
-		const duplicate = await api("POST", "/admin/agent-labels", { name: "CAT FACTS" });
-		const unpaired = await api("POST", `${labelPath}/members`, { agent_id: "label-unpaired" });
-		assert(duplicate.status === 409, `duplicate label returned ${duplicate.status}`);
-		assert(unpaired.status === 409, `unpaired member returned ${unpaired.status}`);
+		const expectAPIError = async (method, path, status, body) => {
+			const response = await api(method, path, body);
+			assert(response.status === status, `${method} ${path} returned ${response.status}`);
+			expectedHTTPFailures.push({ method, path, status });
+			return response;
+		};
+		const duplicate = await expectAPIError(
+			"POST", "/admin/agent-labels", 409, { name: "CAT FACTS" },
+		);
+		const unpaired = await expectAPIError(
+			"POST", `${labelPath}/members`, 409, { agent_id: "label-unpaired" },
+		);
 
 		await run("sqlite3", [database, `
 INSERT INTO projects (name) VALUES ('Label reference project');
 INSERT INTO project_execution_policies (project_id, target_mode, agent_label_id, agent_strategy)
 VALUES (last_insert_rowid(), 'label', ${labelID}, 'all');`]);
-		const referencedDelete = await api("DELETE", labelPath);
-		assert(referencedDelete.status === 409, `referenced delete returned ${referencedDelete.status}`);
+		const referencedDelete = await expectAPIError("DELETE", labelPath, 409);
 
 		await page.goto(`${baseURL}/admin/agents/label-agent-1`, { waitUntil: "networkidle" });
-		await page.getByRole("button", { name: "Permanently delete agent" }).click();
-		await page.waitForURL(`${baseURL}/admin/agents`);
+		const deletionNavigation = page.waitForURL(`${baseURL}/admin/agents`);
+		const deletionDialog = page.waitForEvent("dialog");
+		const deletionClick = page.getByRole(
+			"button", { name: "Permanently delete agent" },
+		).click();
+		const dialog = await deletionDialog;
+		assert(dialog.type() === "confirm", `agent deletion opened ${dialog.type()} dialog`);
+		await dialog.accept();
+		await Promise.all([deletionClick, deletionNavigation]);
 		const deletionSummary = await runOutput("sqlite3", [database,
 			`SELECT COUNT(*) FROM agent_label_memberships WHERE agent_id = 'label-agent-1';`]);
 		assert(deletionSummary.trim() === "0", "agent deletion retained label membership");
@@ -314,7 +326,11 @@ VALUES (last_insert_rowid(), 'label', ${labelID}, 'all');`]);
 		}
 		assert(roleResults.deployer === 403 && roleResults.viewer === 403,
 			`role denial statuses: ${JSON.stringify(roleResults)}`);
-		assert(consoleErrors.length === 0, `browser console errors: ${consoleErrors.join("; ")}`);
+		const unexpectedConsoleErrors = findUnexpectedConsoleErrors(
+			consoleErrors, expectedHTTPFailures, baseURL,
+		);
+		assert(unexpectedConsoleErrors.length === 0,
+			`browser console errors: ${consoleErrorTexts(unexpectedConsoleErrors).join("; ")}`);
 		await saveJSON("label-scenario.json", {
 			labelID, memberCount: 3, duplicate, unpaired, referencedDelete,
 			roleResults, deletionMembershipCount: deletionSummary.trim(),
@@ -323,7 +339,7 @@ VALUES (last_insert_rowid(), 'label', ${labelID}, 'all');`]);
 			desktop: { width: 1280, height: 768, label: desktopLabel },
 			mobile: { width: 375, height: 812, label: mobileLabel },
 		});
-		await saveJSON("browser-console.json", { errors: consoleErrors });
+		await saveJSON("browser-console.json", { errors: consoleErrorTexts(unexpectedConsoleErrors) });
 	} else {
 
 	await page.setViewportSize({ width: 1280, height: 768 });
@@ -392,7 +408,8 @@ VALUES (last_insert_rowid(), 'label', ${labelID}, 'all');`]);
 	await page.goto(`${baseURL}/admin/agents/${agentID}`, { waitUntil: "networkidle" });
 	const assignmentMobile = await checkPage(page, "agent-assignment-mobile");
 	await screenshot(page, "agent-assignment-mobile.png");
-	assert(consoleErrors.length === 0, `browser console errors: ${consoleErrors.join("; ")}`);
+	assert(consoleErrors.length === 0,
+		`browser console errors: ${consoleErrorTexts(consoleErrors).join("; ")}`);
 	await saveJSON("viewport-metadata.json", {
 		desktop: { width: 1280, height: 768, agents: desktopAgents, assignment: assignmentDesktop },
 		mobile: { width: 375, height: 812, agents: mobileAgents, assignment: assignmentMobile },
@@ -400,12 +417,12 @@ VALUES (last_insert_rowid(), 'label', ${labelID}, 'all');`]);
 	await saveJSON("keyboard-navigation.json", { newAgentFocus });
 	await saveJSON("listener-runtime.json", { agentPaired: true, pollObserved: true, publicURL: "configured" });
 	await saveJSON("database-summary.json", { pairedDirectAssignment: databaseSummary.trim() });
-	await saveJSON("browser-console.json", { errors: consoleErrors });
+	await saveJSON("browser-console.json", { errors: consoleErrorTexts(consoleErrors) });
 	}
 	} catch (error) {
 		const diagnostics = {
 			error: redactDiagnostic(error instanceof Error ? error.message : String(error)),
-			consoleErrors: consoleErrors.map(redactDiagnostic),
+			consoleErrors: consoleErrorTexts(consoleErrors).map(redactDiagnostic),
 		};
 		await fs.mkdir(outputDir, { recursive: true });
 		await saveJSON("browser-failure.json", diagnostics);
