@@ -4,6 +4,7 @@ import test from "node:test";
 import {
 	attachPageDiagnostics,
 	findUnexpectedConsoleErrors,
+	inspectResponsiveBounds,
 	isExplicitlyEmptyResponse,
 	reserveHarnessAddresses,
 	waitForSettledRename,
@@ -129,4 +130,17 @@ test("releases prior reservations and names a configured port collision", async 
 		/address 127\.0\.0\.1:25000 is unavailable: EADDRINUSE/,
 	);
 	assert.deepEqual(released, ["127.0.0.1:24000"]);
+});
+
+test("detects nested clipping and undersized touch targets", () => {
+	const report = inspectResponsiveBounds([
+		{ label: "good", rect: { left: 16, top: 20, right: 80, bottom: 68, width: 64, height: 48 } },
+		{ label: "below-fold", rect: { left: 16, top: 900, right: 80, bottom: 948, width: 64, height: 48 } },
+		{ label: "clipped", rect: { left: 320, top: 20, right: 390, bottom: 68, width: 70, height: 48 } },
+		{ label: "nested", rect: { left: 20, top: 20, right: 100, bottom: 68, width: 80, height: 48 }, clipRect: { left: 30, top: 0, right: 200, bottom: 100 } },
+		{ label: "small", touch: true, rect: { left: 16, top: 80, right: 56, bottom: 112, width: 40, height: 32 } },
+	], { left: 0, top: 0, right: 375, bottom: 812 });
+
+	assert.deepEqual(report.clipped.map(({ label }) => label), ["clipped", "nested"]);
+	assert.deepEqual(report.undersizedTouchTargets.map(({ label }) => label), ["small"]);
 });

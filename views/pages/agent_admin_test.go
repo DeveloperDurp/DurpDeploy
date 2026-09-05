@@ -56,10 +56,38 @@ func TestAgentsPage_renders_admin_navigation_and_fixed_table(t *testing.T) {
 		`class="table table-zebra table-fixed w-full"`,
 		`<caption class="sr-only">Remote agents</caption>`,
 		`class="btn btn-primary btn-sm">New agent</a>`,
+		`data-mobile-agent-list`,
+		`data-mobile-agent="agent-one"`,
+		`data-desktop-agent-table`,
 	} {
 		if !strings.Contains(markup, required) {
 			t.Errorf("agents markup is missing %q", required)
 		}
+	}
+}
+
+func TestAgentsPage_MobileRecordHidesDisableForViewer(t *testing.T) {
+	// Given
+	request := auth.SetUser(
+		httptest.NewRequest("GET", "/admin/agents", nil),
+		&db.User{Role: "viewer"},
+	)
+	view := AgentsView{
+		Agents: []db.Agent{
+			{ID: "agent-one", Name: "Agent One", Status: "active"},
+		},
+		CurrentPath: "/admin/agents",
+	}
+
+	// When
+	markup := renderAgentAdminPage(t, request.Context(), AgentsPage(view))
+
+	// Then
+	if !strings.Contains(markup, `data-mobile-agent="agent-one"`) {
+		t.Error("viewer is missing the mobile agent record")
+	}
+	if strings.Contains(markup, ">Disable</button>") {
+		t.Error("viewer mobile record contains the Disable action")
 	}
 }
 

@@ -69,7 +69,7 @@ templ AgentLabelDetailPage(view AgentLabelDetailView) {
 				if len(view.Members) == 0 {
 					<p class="text-sm opacity-70">No agents are assigned.</p>
 				} else {
-					<div class="overflow-x-auto"><table class="table table-zebra table-fixed w-full"><caption class="sr-only">Label members</caption><thead><tr><th class="w-2/5">Agent</th><th class="w-1/5">Status</th><th class="w-1/5">Eligibility</th><th class="w-1/5">Actions</th></tr></thead><tbody>
+					<div class="hidden overflow-x-auto md:block" data-desktop-label-members><table class="table table-zebra table-fixed w-full"><caption class="sr-only">Label members</caption><thead><tr><th class="w-2/5">Agent</th><th class="w-1/5">Status</th><th class="w-1/5">Eligibility</th><th class="w-1/5">Actions</th></tr></thead><tbody>
 						for _, member := range view.Members {
 							<tr><td class="truncate"><a class="link" href={ templ.SafeURL("/admin/agents/" + member.AgentID) }>{ member.AgentName }</a></td><td><span class="badge badge-outline">{ member.AgentStatus }</span></td><td>@agentMemberEligibility(member)</td><td class="whitespace-nowrap">
 								if CanWrite(ctx) {
@@ -78,6 +78,11 @@ templ AgentLabelDetailPage(view AgentLabelDetailView) {
 							</td></tr>
 						}
 					</tbody></table></div>
+					<ul class="space-y-3 md:hidden" aria-label="Label members" data-mobile-label-members>
+						for _, member := range view.Members {
+							@agentLabelMemberMobile(view.Label.ID, member)
+						}
+					</ul>
 				}
 				if CanWrite(ctx) {
 					<form method="post" action={ templ.SafeURL("/admin/agent-labels/" + strconv.FormatInt(view.Label.ID, 10) + "/members") } class="mt-4 flex flex-wrap items-end gap-2"><div class="form-control grow"><label class="label" for="label-agent"><span class="label-text">Active paired agent</span></label><select id="label-agent" name="agent_id" class="select select-bordered" required><option value="">Select agent</option>
@@ -92,6 +97,22 @@ templ AgentLabelDetailPage(view AgentLabelDetailView) {
 			}
 		</div>
 	}
+}
+
+templ agentLabelMemberMobile(labelID int64, member db.ListAgentLabelMembershipsRow) {
+	<li class="rounded-box border border-base-300 p-4 space-y-3" data-mobile-label-member={ member.AgentID }>
+		<div class="min-w-0" data-proof-bounds>
+			<p class="text-sm opacity-70">Agent</p>
+			<a class="link break-all" href={ templ.SafeURL("/admin/agents/" + member.AgentID) }>{ member.AgentName }</a>
+		</div>
+		<dl class="flex flex-wrap gap-4 text-sm" data-proof-bounds>
+			<div><dt class="opacity-70">Status</dt><dd><span class="badge badge-outline">{ member.AgentStatus }</span></dd></div>
+			<div><dt class="opacity-70">Eligibility</dt><dd>@agentMemberEligibility(member)</dd></div>
+		</dl>
+		if CanWrite(ctx) {
+			<div data-proof-bounds><button class="btn btn-error" data-proof-touch hx-delete={ "/admin/agent-labels/" + strconv.FormatInt(labelID, 10) + "/members/" + member.AgentID } hx-confirm="Remove this agent from the label?">Remove</button></div>
+		}
+	</li>
 }
 
 templ agentMemberEligibility(member db.ListAgentLabelMembershipsRow) {

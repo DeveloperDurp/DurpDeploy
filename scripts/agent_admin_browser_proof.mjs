@@ -8,6 +8,7 @@ import {
 	attachPageDiagnostics,
 	consoleErrorTexts,
 	findUnexpectedConsoleErrors,
+	inspectResponsiveBounds,
 	isExplicitlyEmptyResponse,
 	reserveHarnessAddresses,
 	waitForSettledRename,
@@ -147,14 +148,45 @@ async function checkPage(page, name) {
 		const missingLabels = controls.filter((control) =>
 			["input", "select", "textarea", "button", "summary"].includes(control.tag) && !control.label,
 		);
+		const responsiveElements = [...document.querySelectorAll(
+			"[data-proof-bounds], [data-proof-touch]",
+		)].filter((element) => element.checkVisibility()).map((element) => {
+			const rect = element.getBoundingClientRect().toJSON();
+			let clipRect;
+			for (let ancestor = element.parentElement; ancestor; ancestor = ancestor.parentElement) {
+				const style = getComputedStyle(ancestor);
+				if (![style.overflowX, style.overflowY].some((value) =>
+					["auto", "clip", "hidden", "scroll"].includes(value))) continue;
+				const bounds = ancestor.getBoundingClientRect();
+				clipRect = clipRect ? {
+					left: Math.max(clipRect.left, bounds.left),
+					top: Math.max(clipRect.top, bounds.top),
+					right: Math.min(clipRect.right, bounds.right),
+					bottom: Math.min(clipRect.bottom, bounds.bottom),
+				} : bounds.toJSON();
+			}
+			return {
+				label: element.textContent?.trim() || element.getAttribute("aria-label") || element.tagName,
+				touch: element.hasAttribute("data-proof-touch"), rect, clipRect,
+			};
+		});
 		return {
 			controls, missingLabels, statusText: [...document.querySelectorAll("[role=status], [role=alert], .badge")]
 				.map((element) => element.textContent?.trim()).filter(Boolean),
 			horizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+			responsiveElements,
+			viewport: { left: 0, top: 0, right: innerWidth, bottom: innerHeight },
 		};
 	});
+	const bounds = inspectResponsiveBounds(report.responsiveElements, report.viewport);
+	report.clippedElements = bounds.clipped;
+	report.undersizedTouchTargets = bounds.undersizedTouchTargets;
 	assert(report.missingLabels.length === 0, `${name} has unlabeled controls`);
 	assert(!report.horizontalOverflow, `${name} has horizontal overflow`);
+	assert(report.clippedElements.length === 0,
+		`${name} has clipped responsive elements: ${JSON.stringify(report.clippedElements)}`);
+	assert(report.undersizedTouchTargets.length === 0,
+		`${name} has undersized touch targets: ${JSON.stringify(report.undersizedTouchTargets)}`);
 	return report;
 }
 
@@ -288,6 +320,7 @@ INSERT INTO agent_pairings (
 		await screenshot(page, "label-detail-desktop.png");
 		await page.goto(`${baseURL}/admin/agents`, { waitUntil: "networkidle" });
 		assert((await page.locator("body").innerText()).includes("Cat Facts"), "agent list lacks label badges");
+		const desktopAgentBadges = await checkPage(page, "agent-label-badges-desktop");
 		await screenshot(page, "agent-label-badges-desktop.png");
 
 		await page.setViewportSize({ width: 375, height: 812 });
@@ -295,7 +328,7 @@ INSERT INTO agent_pairings (
 		const mobileLabel = await checkPage(page, "label-detail-mobile");
 		await screenshot(page, "label-detail-mobile.png");
 		await page.goto(`${baseURL}/admin/agents`, { waitUntil: "networkidle" });
-		await checkPage(page, "agent-label-badges-mobile");
+		const mobileAgentBadges = await checkPage(page, "agent-label-badges-mobile");
 		assert((await page.locator("body").innerText()).includes("Cat Facts"),
 			"mobile agent list lacks label badges");
 		await screenshot(page, "agent-label-badges-mobile.png");
@@ -370,8 +403,14 @@ VALUES (last_insert_rowid(), 'label', ${labelID}, 'all');`]);
 			},
 		});
 		await saveJSON("viewport-metadata.json", {
-			desktop: { width: 1280, height: 768, label: desktopLabel },
-			mobile: { width: 375, height: 812, label: mobileLabel },
+			desktop: {
+				width: 1280, height: 768, label: desktopLabel,
+				agentBadges: desktopAgentBadges,
+			},
+			mobile: {
+				width: 375, height: 812, label: mobileLabel,
+				agentBadges: mobileAgentBadges,
+			},
 		});
 		await saveJSON("browser-console.json", { errors: consoleErrorTexts(unexpectedConsoleErrors) });
 	} else {

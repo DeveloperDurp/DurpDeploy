@@ -44,6 +44,23 @@ export function isExplicitlyEmptyResponse(headers) {
 		headers["transfer-encoding"] === undefined;
 }
 
+export function inspectResponsiveBounds(elements, viewport, minimumTouchSize = 44) {
+	const tolerance = 0.5;
+	const isInside = (rect, container) => rect.left >= container.left - tolerance &&
+		rect.top >= container.top - tolerance && rect.right <= container.right + tolerance &&
+		rect.bottom <= container.bottom + tolerance;
+	const isInsideViewport = (rect) => rect.left >= viewport.left - tolerance &&
+		rect.right <= viewport.right + tolerance;
+	return {
+		clipped: elements.filter(({ rect, clipRect }) =>
+			!isInsideViewport(rect) || (clipRect && !isInside(rect, clipRect)),
+		),
+		undersizedTouchTargets: elements.filter(({ rect, touch }) =>
+			touch && (rect.width < minimumTouchSize || rect.height < minimumTouchSize),
+		),
+	};
+}
+
 export async function waitForSettledRename(page, name) {
 	const heading = page.getByRole("heading", { name, exact: true });
 	await heading.waitFor({ state: "visible" });
