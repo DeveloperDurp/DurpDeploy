@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 	"unicode/utf8"
+
+	"durpdeploy/internal/requestmeta"
 )
 
 func TestLoginLimiterRecoversAfterWindow(t *testing.T) {
@@ -66,11 +68,14 @@ func TestLoginRateLimitMiddleware(t *testing.T) {
 		{"oidc", newAuthHandlerForLimiter().OIDCRateLimit, oidcIPLimit},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			handler := test.middleware(
-				http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-					w.WriteHeader(http.StatusNoContent)
-				}),
+			handler := requestmeta.Middleware("192.0.2.0/24")(
+				test.middleware(
+					http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+						w.WriteHeader(http.StatusNoContent)
+					}),
+				),
 			)
+			request.Header.Set("X-Forwarded-For", "203.0.113.9")
 			for range test.limit {
 				response := httptest.NewRecorder()
 				handler.ServeHTTP(response, request)
@@ -85,6 +90,13 @@ func TestLoginRateLimitMiddleware(t *testing.T) {
 			}
 			if got := response.Header().Get("Retry-After"); got != "900" {
 				t.Fatalf("Retry-After = %q", got)
+			}
+
+			request.Header.Set("X-Forwarded-For", "203.0.113.10")
+			response = httptest.NewRecorder()
+			handler.ServeHTTP(response, request)
+			if response.Code != http.StatusNoContent {
+				t.Fatalf("independent client status = %d", response.Code)
 			}
 		})
 	}
