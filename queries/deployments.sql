@@ -33,6 +33,12 @@ UPDATE deployments
 SET status = 'pending', started_at = NULL, finished_at = NULL
 WHERE id = sqlc.arg(id) AND status = 'pending_approval';
 
+-- name: SetDeploymentTargetAgent :exec
+UPDATE deployments
+SET target_agent_id = sqlc.arg(target_agent_id),
+    target_agent_name = sqlc.arg(target_agent_name)
+WHERE id = sqlc.arg(id) AND parent_deployment_id IS NULL;
+
 -- name: ListDeployments :many
 SELECT * FROM deployments
 WHERE parent_deployment_id IS NULL

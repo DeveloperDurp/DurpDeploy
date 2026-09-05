@@ -822,6 +822,24 @@ func (q *Queries) ListRunningDeploymentsWithRefs(ctx context.Context) ([]ListRun
 	return items, nil
 }
 
+const setDeploymentTargetAgent = `-- name: SetDeploymentTargetAgent :exec
+UPDATE deployments
+SET target_agent_id = ?1,
+    target_agent_name = ?2
+WHERE id = ?3 AND parent_deployment_id IS NULL
+`
+
+type SetDeploymentTargetAgentParams struct {
+	TargetAgentID   sql.NullString `json:"target_agent_id"`
+	TargetAgentName sql.NullString `json:"target_agent_name"`
+	ID              int64          `json:"id"`
+}
+
+func (q *Queries) SetDeploymentTargetAgent(ctx context.Context, arg SetDeploymentTargetAgentParams) error {
+	_, err := q.db.ExecContext(ctx, setDeploymentTargetAgent, arg.TargetAgentID, arg.TargetAgentName, arg.ID)
+	return err
+}
+
 const updateDeployment = `-- name: UpdateDeployment :one
 UPDATE deployments SET release_id = ?, environment_id = ?, status = ?, started_at = ?, finished_at = ?, note = ? WHERE id = ? RETURNING id, release_id, environment_id, status, started_at, finished_at, created_at, forced, note, parent_deployment_id, target_agent_id, target_agent_name
 `

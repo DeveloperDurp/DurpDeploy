@@ -104,8 +104,17 @@ func (h *DeploymentHandler) NewDeploymentPage(
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	targetOptions, err := loadExecutionTargetOptions(
+		r.Context(), h.repo, project.ID,
+	)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
-	if err := pages.DeployFormPage(project, releases, selectedRelease, envs, r.URL.Path).
+	if err := pages.DeployFormPage(
+		project, releases, selectedRelease, envs, targetOptions, r.URL.Path,
+	).
 		Render(r.Context(), w); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -303,105 +312,27 @@ func (h *DeploymentHandler) ScheduleDeployment(
 
 	force := isTruthy(r.FormValue("force"))
 	note := r.FormValue("note")
-	noteParam := sql.NullString{String: note, Valid: note != ""}
-
-	release, err := h.repo.Queries.GetRelease(r.Context(), releaseID)
-	if err != nil {
-		http.Error(w, "Release not found", http.StatusBadRequest)
-		return
+	mode := r.FormValue("target_mode")
+	if mode == "" {
+		mode = "default"
 	}
-
-	if release.ProjectID != projectID {
-		http.Error(
-			w,
-			"Release does not belong to this project",
-			http.StatusBadRequest,
-		)
-		return
-	}
-
-	project, err := h.repo.Queries.GetProject(r.Context(), projectID)
-	if err != nil {
-		http.Error(w, "Project not found", http.StatusBadRequest)
-		return
-	}
-
-	violation, blocked := h.checkPromotionGate(
-		r,
-		project,
-		release,
-		environmentID,
-	)
-	if blocked {
-		// Hard restriction: force cannot bypass.
-		if !violation.bypassable {
-			h.renderDeployGateError(w, r, project, release, violation.reason)
-			return
-		}
-		// Bypassable: force is required to proceed, but only admins
-		// may override lifecycle promotion gates.
-		if !force {
-			h.renderDeployGateError(w, r, project, release, violation.reason)
-			return
-		}
-		if u := auth.UserFromContext(
-			r.Context(),
-		); u == nil ||
-			u.Role != "admin" {
-			http.Error(
-				w,
-				"only admins can force deployments past lifecycle gates",
-				http.StatusForbidden,
-			)
-			return
-		}
-	}
-
-	requiresApproval, err := gate.RequiresApproval(
+	labelID, _ := strconv.ParseInt(r.FormValue("agent_label_id"), 10, 64)
+	user := auth.UserFromContext(r.Context())
+	deployment, err := dispatch.NewCreationService(h.repo, h.dispatcher).Create(
 		r.Context(),
-		h.repo,
-		project,
-		environmentID,
-	)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	initialStatus := "pending"
-	if requiresApproval {
-		initialStatus = "pending_approval"
-	}
-
-	forcedFlag := int64(0)
-	if force && violation != nil && violation.bypassable {
-		forcedFlag = 1
-	}
-
-	deployment, err := h.repo.Queries.CreateDeployment(
-		r.Context(),
-		db.CreateDeploymentParams{
-			ReleaseID:     releaseID,
-			EnvironmentID: environmentID,
-			Status:        initialStatus,
-			StartedAt:     sql.NullInt64{},
-			FinishedAt:    sql.NullInt64{},
-			Forced:        forcedFlag,
-			Note:          noteParam,
+		dispatch.CreateRequest{
+			ProjectID: projectID, ReleaseID: releaseID,
+			EnvironmentID: environmentID, Force: force,
+			Admin: user != nil && user.Role == "admin", Note: note,
+			Routing: dispatch.Input{
+				Source: dispatch.SourceRequest, Mode: mode,
+				LabelID: labelID, Strategy: r.FormValue("agent_strategy"),
+			},
 		},
 	)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		h.writeCreationError(w, r, err)
 		return
-	}
-
-	if initialStatus == "pending" {
-		if err := h.dispatcher.Dispatch(
-			r.Context(),
-			deployment.ID,
-		); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
 	}
 
 	http.Redirect(
@@ -410,6 +341,49 @@ func (h *DeploymentHandler) ScheduleDeployment(
 		fmt.Sprintf("/deployments/%d", deployment.ID),
 		http.StatusSeeOther,
 	)
+}
+
+func (h *DeploymentHandler) writeCreationError(
+	w http.ResponseWriter,
+	r *http.Request,
+	err error,
+) {
+	switch {
+	case errors.Is(err, dispatch.ErrReleaseNotFound),
+		errors.Is(err, dispatch.ErrReleaseProjectMismatch):
+		http.Error(
+			w,
+			"Release does not belong to this project",
+			http.StatusBadRequest,
+		)
+	case errors.Is(err, dispatch.ErrProjectNotFound):
+		http.Error(w, "Project not found", http.StatusBadRequest)
+	case errors.Is(err, dispatch.ErrEnvironmentNotFound),
+		errors.Is(err, dispatch.ErrInvalidPolicy),
+		errors.Is(err, dispatch.ErrLabelNotFound),
+		errors.Is(err, dispatch.ErrNoEligibleAgents):
+		http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+	case errors.Is(err, dispatch.ErrForceForbidden):
+		http.Error(w, err.Error(), http.StatusForbidden)
+	case errors.Is(err, dispatch.ErrPromotionBlocked):
+		projectID, projectIDErr := parseProjectID(r)
+		releaseID, releaseIDErr := strconv.ParseInt(
+			r.FormValue("release_id"), 10, 64,
+		)
+		if projectIDErr != nil || releaseIDErr != nil {
+			http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+			return
+		}
+		project, projectErr := h.repo.Queries.GetProject(r.Context(), projectID)
+		release, releaseErr := h.repo.Queries.GetRelease(r.Context(), releaseID)
+		if projectErr != nil || releaseErr != nil {
+			http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+			return
+		}
+		h.renderDeployGateError(w, r, project, release, err.Error())
+	default:
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }
 
 // renderDeployGateError renders a 422 with the deploy page re-shown and
@@ -435,8 +409,17 @@ func (h *DeploymentHandler) renderDeployGateError(
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	targetOptions, err := loadExecutionTargetOptions(
+		r.Context(), h.repo, project.ID,
+	)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	w.WriteHeader(http.StatusUnprocessableEntity)
-	if err := pages.DeployFormPage(project, releases, &release, envs, r.URL.Path).
+	if err := pages.DeployFormPage(
+		project, releases, &release, envs, targetOptions, r.URL.Path,
+	).
 		Render(r.Context(), w); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -685,21 +668,6 @@ func (h *DeploymentHandler) ApproveDeployment(
 		return
 	}
 
-	deployment, err := h.repo.Queries.GetDeployment(r.Context(), id)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			http.Error(w, "Deployment not found", http.StatusNotFound)
-			return
-		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	if deployment.Status != "pending_approval" {
-		http.Error(w, "Deployment is not pending approval", http.StatusConflict)
-		return
-	}
-
 	// Gate: only admins can approve. The stored `required_approver_role` in
 	// `deployment_approvals` is descriptive only — the real gate is here.
 	u := auth.UserFromContext(r.Context())
@@ -711,36 +679,23 @@ func (h *DeploymentHandler) ApproveDeployment(
 		)
 		return
 	}
-	approvedBy := u.Name
-	approverUserID := sql.NullInt64{Int64: u.ID, Valid: true}
-
-	err = h.repo.WithTx(r.Context(), func(q *db.Queries) error {
-		updated, updateErr := q.ApprovePendingDeployment(
-			r.Context(),
-			id,
-		)
-		if updateErr != nil {
-			return updateErr
-		}
-		if updated != 1 {
-			return dispatch.ErrCancellationState
-		}
-		_, createErr := q.CreateApproval(r.Context(), db.CreateApprovalParams{
-			DeploymentID: id, ApprovedBy: approvedBy,
-			ApproverUserID: approverUserID, RequiredApproverRole: "admin",
-		})
-		return createErr
-	})
-	if errors.Is(err, dispatch.ErrCancellationState) {
+	err = dispatch.NewCreationService(h.repo, h.dispatcher).Approve(
+		r.Context(), id,
+		dispatch.Approval{ApprovedBy: u.Name, ApproverUserID: u.ID},
+	)
+	if errors.Is(err, dispatch.ErrDeploymentNotPending) {
 		http.Error(w, "Deployment is not pending approval", http.StatusConflict)
 		return
 	}
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	if errors.Is(err, dispatch.ErrDeploymentNotFound) {
+		http.Error(w, "Deployment not found", http.StatusNotFound)
 		return
 	}
-
-	if err := h.dispatcher.Dispatch(r.Context(), id); err != nil {
+	if errors.Is(err, dispatch.ErrNoEligibleAgents) {
+		http.Error(w, err.Error(), http.StatusConflict)
+		return
+	}
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

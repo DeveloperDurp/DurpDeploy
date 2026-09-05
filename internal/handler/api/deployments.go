@@ -37,8 +37,13 @@ func NewDeploymentHandler(
 }
 
 type deploymentCreateRequest struct {
-	ReleaseID     int64 `json:"release_id"`
-	EnvironmentID int64 `json:"environment_id"`
+	ReleaseID     int64  `json:"release_id"`
+	EnvironmentID int64  `json:"environment_id"`
+	TargetMode    string `json:"target_mode"`
+	AgentLabelID  int64  `json:"agent_label_id"`
+	AgentStrategy string `json:"agent_strategy"`
+	Force         bool   `json:"force"`
+	Note          string `json:"note"`
 }
 
 type deploymentResponse struct {
@@ -115,77 +120,50 @@ func (h *DeploymentHandler) CreateDeployment(
 		return
 	}
 
-	release, err := h.repo.Queries.GetRelease(r.Context(), req.ReleaseID)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			RespondError(w, http.StatusNotFound, "Release not found")
-			return
-		}
-		RespondError(w, http.StatusInternalServerError, err.Error())
-		return
+	mode := req.TargetMode
+	if mode == "" {
+		mode = "default"
 	}
-	if release.ProjectID != projectID {
-		RespondError(w, http.StatusNotFound, "Release not found")
-		return
-	}
-	project, err := h.repo.Queries.GetProject(r.Context(), projectID)
-	if err != nil {
-		RespondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	if _, err := h.repo.Queries.GetEnvironment(
+	user := auth.UserFromContext(r.Context())
+	deployment, err := dispatch.NewCreationService(h.repo, h.dispatcher).Create(
 		r.Context(),
-		req.EnvironmentID,
-	); err != nil {
-		if err == sql.ErrNoRows {
-			RespondError(w, http.StatusNotFound, "Environment not found")
-			return
-		}
-		RespondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	blocked, reason, requiresApproval, err := gate.CheckAndApproval(
-		r.Context(), h.repo, project, release, req.EnvironmentID,
-	)
-	if err != nil {
-		RespondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	if blocked {
-		RespondError(w, http.StatusUnprocessableEntity, reason)
-		return
-	}
-	status := "pending"
-	if requiresApproval {
-		status = "pending_approval"
-	}
-
-	deployment, err := h.repo.Queries.CreateDeployment(
-		r.Context(),
-		db.CreateDeploymentParams{
-			ReleaseID:     req.ReleaseID,
-			EnvironmentID: req.EnvironmentID,
-			Status:        status,
+		dispatch.CreateRequest{
+			ProjectID: projectID, ReleaseID: req.ReleaseID,
+			EnvironmentID: req.EnvironmentID, Force: req.Force,
+			Admin: user != nil && user.Role == "admin", Note: req.Note,
+			Routing: dispatch.Input{
+				Source: dispatch.SourceRequest, Mode: mode,
+				LabelID: req.AgentLabelID, Strategy: req.AgentStrategy,
+			},
 		},
 	)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, err.Error())
+		writeDeploymentCreationError(w, err)
 		return
 	}
 
-	if status == "pending" {
-		if err := h.dispatcher.Dispatch(
-			r.Context(),
-			deployment.ID,
-		); err != nil {
-			RespondError(w, http.StatusInternalServerError, err.Error())
-			return
-		}
-	}
-
 	RespondJSON(w, http.StatusCreated, deployment)
+}
+
+func writeDeploymentCreationError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, dispatch.ErrReleaseNotFound),
+		errors.Is(err, dispatch.ErrReleaseProjectMismatch):
+		RespondError(w, http.StatusNotFound, "Release not found")
+	case errors.Is(err, dispatch.ErrProjectNotFound):
+		RespondError(w, http.StatusNotFound, "Project not found")
+	case errors.Is(err, dispatch.ErrEnvironmentNotFound):
+		RespondError(w, http.StatusNotFound, "Environment not found")
+	case errors.Is(err, dispatch.ErrInvalidPolicy),
+		errors.Is(err, dispatch.ErrLabelNotFound),
+		errors.Is(err, dispatch.ErrNoEligibleAgents),
+		errors.Is(err, dispatch.ErrPromotionBlocked):
+		RespondError(w, http.StatusUnprocessableEntity, err.Error())
+	case errors.Is(err, dispatch.ErrForceForbidden):
+		RespondError(w, http.StatusForbidden, err.Error())
+	default:
+		RespondError(w, http.StatusInternalServerError, err.Error())
+	}
 }
 
 // swagger:route GET /deployments deployments listAllDeployments
@@ -488,55 +466,26 @@ func (h *DeploymentHandler) ApproveDeployment(
 		return
 	}
 
-	deployment, err := h.repo.Queries.GetDeployment(r.Context(), depID)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			RespondError(w, http.StatusNotFound, "Deployment not found")
-			return
-		}
-		RespondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	if deployment.Status != "pending_approval" {
-		RespondError(
-			w,
-			http.StatusBadRequest,
-			"Deployment is not pending approval",
+	err = dispatch.NewCreationService(h.repo, h.dispatcher).Approve(
+		r.Context(), depID,
+		dispatch.Approval{ApprovedBy: user.Name, ApproverUserID: user.ID},
+	)
+	if errors.Is(err, dispatch.ErrDeploymentNotPending) {
+		RespondJSON(
+			w, http.StatusConflict,
+			map[string]string{"error": "deployment_not_pending"},
 		)
 		return
 	}
-
-	err = h.repo.WithTx(r.Context(), func(q *db.Queries) error {
-		updated, updateErr := q.ApprovePendingDeployment(
-			r.Context(),
-			depID,
-		)
-		if updateErr != nil {
-			return updateErr
-		}
-		if updated != 1 {
-			return dispatch.ErrCancellationState
-		}
-		_, createErr := q.CreateApproval(r.Context(), db.CreateApprovalParams{
-			DeploymentID: depID, ApprovedBy: user.Name,
-			ApproverUserID:       sql.NullInt64{Int64: user.ID, Valid: true},
-			RequiredApproverRole: "admin",
-		})
-		return createErr
-	})
-	if errors.Is(err, dispatch.ErrCancellationState) {
-		RespondError(
-			w,
-			http.StatusConflict,
-			"Deployment is not pending approval",
-		)
+	if errors.Is(err, dispatch.ErrDeploymentNotFound) {
+		RespondError(w, http.StatusNotFound, "Deployment not found")
+		return
+	}
+	if errors.Is(err, dispatch.ErrNoEligibleAgents) {
+		RespondError(w, http.StatusConflict, err.Error())
 		return
 	}
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	if err := h.dispatcher.Dispatch(r.Context(), depID); err != nil {
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}

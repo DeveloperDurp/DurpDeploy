@@ -540,6 +540,9 @@ type swaggerDeploymentScheduleRequest struct {
 	EnvironmentID int64  `json:"environment_id"`
 	Force         bool   `json:"force"`
 	Note          string `json:"note"`
+	TargetMode    string `json:"target_mode"`
+	AgentLabelID  int64  `json:"agent_label_id"`
+	AgentStrategy string `json:"agent_strategy"`
 }
 
 // Array response models.

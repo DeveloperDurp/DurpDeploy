@@ -8,11 +8,16 @@ import (
 	"strconv"
 )
 
+type ExecutionTargetOptions struct {
+	Default string
+	Labels []db.AgentLabel
+}
+
 // DeployFormPage is the dedicated full page for selecting a release and
 // environment to deploy. Reached from the "Deploy" button on the
 // projects list. The inline deploy form on the releases page is still
 // available as a quick alternative.
-templ DeployFormPage(project db.Project, releases []db.Release, selectedRelease *db.Release, envs []AvailableEnv, currentPath string) {
+templ DeployFormPage(project db.Project, releases []db.Release, selectedRelease *db.Release, envs []AvailableEnv, targets ExecutionTargetOptions, currentPath string) {
 	if !CanWrite(ctx) {
 		@ViewerForbiddenMessage(
 			"Deploy "+project.Name,
@@ -29,14 +34,14 @@ templ DeployFormPage(project db.Project, releases []db.Release, selectedRelease 
 				{Label: project.Name, Href: fmt.Sprintf("/projects/%d", project.ID)},
 				{Label: "Deploy"},
 			})
-			@DeployFormContent(project, releases, selectedRelease, envs)
+			@DeployFormContent(project, releases, selectedRelease, envs, targets)
 			@DeployPageFormScript()
 		}
 	}
 }
 
-	templ DeployFormContent(project db.Project, releases []db.Release, selectedRelease *db.Release, envs []AvailableEnv) {
-	<div class="space-y-6">
+	templ DeployFormContent(project db.Project, releases []db.Release, selectedRelease *db.Release, envs []AvailableEnv, targets ExecutionTargetOptions) {
+	<div class="space-y-6" style="padding-bottom: 1rem">
 		<div class="flex justify-between items-center">
 			<h1 class="text-3xl font-bold">Deploy { project.Name }</h1>
 			<div class="flex gap-2">
@@ -61,6 +66,7 @@ templ DeployFormPage(project db.Project, releases []db.Release, selectedRelease 
 					</label>
 					<select
 						name="release_id"
+						aria-label="Release"
 						class="select select-bordered"
 						required
 						onchange="window.location.href = '?release_id=' + this.value"
@@ -99,7 +105,7 @@ templ DeployFormPage(project db.Project, releases []db.Release, selectedRelease 
 								<span>This version is already deployed to some environments. Re-deploying will run the steps again.</span>
 							</div>
 						}
- 					<select name="environment_id" class="select select-bordered" required onchange="toggleDeploySubmitLabel(this)">
+					<select name="environment_id" aria-label="Environment" class="select select-bordered" required onchange="toggleDeploySubmitLabel(this)">
 							<option value="">Select env</option>
 							for _, e := range envs {
 								if e.State.Deployable {
@@ -140,6 +146,7 @@ templ DeployFormPage(project db.Project, releases []db.Release, selectedRelease 
 						</select>
 					}
 				</div>
+				@ExecutionTargetFields(targets, false)
 				if hasForceableEnvs(envs) {
 					<label class="label cursor-pointer gap-2 justify-start">
 						<input
@@ -157,7 +164,7 @@ templ DeployFormPage(project db.Project, releases []db.Release, selectedRelease 
 					<label class="label">
 						<span class="label-text">Note (optional — why this deploy, ticket #, etc.)</span>
 					</label>
-					<textarea name="note" class="textarea textarea-bordered" rows="2" placeholder=""></textarea>
+					<textarea name="note" aria-label="Deployment note" class="textarea textarea-bordered" rows="2" placeholder=""></textarea>
 				</div>
 			<div class="flex gap-2 justify-end">
 				<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost">Cancel</a>
@@ -167,6 +174,35 @@ templ DeployFormPage(project db.Project, releases []db.Release, selectedRelease 
 			</div>
 		}
 	</div>
+}
+
+templ ExecutionTargetFields(options ExecutionTargetOptions, compact bool) {
+	<fieldset class="space-y-2" style="min-width: 17rem; flex-shrink: 0" x-data="{ targetMode: 'default' }">
+		<legend class="label-text font-medium">Execution target</legend>
+		<select name="target_mode" aria-label="Execution target" x-model="targetMode" class={ templ.KV("select select-bordered", true), templ.KV("select-xs", compact) }>
+			<option value="default">Default — { options.Default }</option>
+			<option value="local">Local</option>
+			<option value="label">Agent label</option>
+		</select>
+		<div x-show="targetMode === 'label'" x-cloak class={ templ.KV("flex gap-2", compact), templ.KV("grid gap-2 sm:grid-cols-2", !compact) }>
+			<label class="form-control">
+				<span class="label-text">Agent label</span>
+				<select name="agent_label_id" x-bind:required="targetMode === 'label'" class={ templ.KV("select select-bordered", true), templ.KV("select-xs", compact) }>
+					<option value="">Select label</option>
+					for _, label := range options.Labels {
+						<option value={ strconv.FormatInt(label.ID, 10) }>{ label.Name }</option>
+					}
+				</select>
+			</label>
+			<label class="form-control">
+				<span class="label-text">Strategy</span>
+				<select name="agent_strategy" x-bind:required="targetMode === 'label'" class={ templ.KV("select select-bordered", true), templ.KV("select-xs", compact) }>
+					<option value="round_robin">Round robin</option>
+					<option value="all">All eligible agents</option>
+				</select>
+			</label>
+		</div>
+	</fieldset>
 }
 
 // hasForceableEnvs reports whether the env list contains any env whose

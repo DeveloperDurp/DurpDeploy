@@ -56,7 +56,6 @@ func (h *ReleaseHandler) ListReleases(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
 	if r.Header.Get("HX-Request") == "true" {
 		if err := pages.ReleasesFragment(project, views, "").
 			Render(r.Context(), w); err != nil {
@@ -77,6 +76,10 @@ func buildReleaseViews(
 	project db.Project,
 	releases []db.Release,
 ) ([]pages.ReleaseView, error) {
+	targetOptions, err := loadExecutionTargetOptions(ctx, repo, project.ID)
+	if err != nil {
+		return nil, err
+	}
 	views := make([]pages.ReleaseView, len(releases))
 	for i, rel := range releases {
 		envs, err := availableEnvsForRelease(ctx, repo, project, rel)
@@ -95,7 +98,9 @@ func buildReleaseViews(
 				},
 			}
 		}
-		views[i] = pages.ReleaseView{Release: rel, Envs: mapped}
+		views[i] = pages.ReleaseView{
+			Release: rel, Envs: mapped, TargetOptions: targetOptions,
+		}
 	}
 	return views, nil
 }

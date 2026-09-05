@@ -6446,6 +6446,15 @@
       "type": "object",
       "title": "DeploymentScheduleRequest is the body for scheduling a deployment.",
       "properties": {
+        "agent_label_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "AgentLabelID"
+        },
+        "agent_strategy": {
+          "type": "string",
+          "x-go-name": "AgentStrategy"
+        },
         "environment_id": {
           "type": "integer",
           "format": "int64",
@@ -6463,6 +6472,10 @@
           "type": "integer",
           "format": "int64",
           "x-go-name": "ReleaseID"
+        },
+        "target_mode": {
+          "type": "string",
+          "x-go-name": "TargetMode"
         }
       },
       "x-go-name": "swaggerDeploymentScheduleRequest",
