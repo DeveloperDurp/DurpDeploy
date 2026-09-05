@@ -32,9 +32,8 @@ type AuthHandler struct {
 // Two concurrent 64 MiB Argon2 hashes leave headroom in the 512 MiB image.
 const maxConcurrentPasswordVerifications = 2
 
-var unknownAccountPasswordHash, _ = auth.HashPassword(
-	"durpdeploy unknown account timing placeholder",
-)
+const unknownAccountPasswordHash = "$argon2id$v=19$m=65536,t=2,p=2$" +
+	"fD0A8+3lNiCjOMQf3smp/w$PuSeBJSJVdCOzqXVm6hn0zTsFFp7AynshoUevDwYBIE"
 
 func NewAuthHandler(repo *repository.Repository) *AuthHandler {
 	return &AuthHandler{
