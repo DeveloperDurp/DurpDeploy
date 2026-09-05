@@ -8,6 +8,7 @@ import (
 
 type AgentsView struct {
 	Agents      []db.Agent
+	LabelsByAgent map[string][]db.AgentLabel
 	CurrentPath string
 }
 
@@ -17,6 +18,7 @@ type AgentDetailView struct {
 	AssignedEnvironments []db.Environment
 	AvailableEnvironments []db.Environment
 	Paired bool
+	Labels []db.AgentLabel
 	CurrentPath string
 }
 
@@ -46,14 +48,26 @@ templ AgentsPage(view AgentsView) {
 				<div class="overflow-x-auto">
 					<table class="table table-zebra table-fixed w-full">
 						<caption class="sr-only">Remote agents</caption>
-						<thead><tr><th class="w-1/3 sm:w-1/5">Agent</th><th class="hidden sm:table-cell sm:w-1/5">Name</th><th class="w-1/4 sm:w-1/6">Status</th><th class="hidden w-1/6 md:table-cell">Last heartbeat</th><th class="w-32 sm:w-48">Actions</th></tr></thead>
+						<thead><tr><th class="w-1/3 sm:w-1/5">Agent</th><th class="hidden sm:table-cell sm:w-1/5">Name</th><th class="w-1/4 sm:w-1/6">Status</th><th class="hidden w-1/6 md:table-cell">Labels</th><th class="hidden w-1/6 lg:table-cell">Last heartbeat</th><th class="w-32 sm:w-48">Actions</th></tr></thead>
 						<tbody>
 							for _, agent := range view.Agents {
 								<tr>
-									<td class="truncate font-mono text-sm">{ agent.ID }</td>
+									<td class="truncate font-mono text-sm">
+										{ agent.ID }
+										<div class="mt-1 flex flex-wrap gap-1 font-sans md:hidden">
+											for _, label := range view.LabelsByAgent[agent.ID] {
+												<span class="badge badge-secondary badge-sm">{ label.Name }</span>
+											}
+										</div>
+									</td>
 									<td class="hidden truncate sm:table-cell">{ agent.Name }</td>
 									<td><span class="badge badge-outline">{ agent.Status }</span></td>
-									<td class="hidden whitespace-nowrap text-sm md:table-cell">
+									<td class="hidden truncate md:table-cell">
+										for _, label := range view.LabelsByAgent[agent.ID] {
+											<span class="badge badge-secondary badge-sm mr-1">{ label.Name }</span>
+										}
+									</td>
+									<td class="hidden whitespace-nowrap text-sm lg:table-cell">
 										if agent.LastHeartbeatAt.Valid {
 											{ formatUnixTime(agent.LastHeartbeatAt.Int64) }
 										} else {
@@ -138,6 +152,15 @@ templ AgentDetailsPage(view AgentDetailView) {
 				</div>
 			</div>
 			<div class="card bg-base-200 shadow"><div class="card-body"><h2 class="card-title">Direct assignments</h2><p class="text-sm opacity-70">Future deployments for an assigned environment go only to this paired agent.</p>
+				<div><span class="text-sm opacity-70">Labels</span><div class="mt-1 flex flex-wrap gap-1">
+					if len(view.Labels) == 0 {
+						<span class="text-sm opacity-70">None</span>
+					} else {
+						for _, label := range view.Labels {
+							<a class="badge badge-secondary" href={ templ.SafeURL("/admin/agent-labels/" + strconv.FormatInt(label.ID, 10)) }>{ label.Name }</a>
+						}
+					}
+				</div></div>
 				if len(view.AssignedEnvironments) == 0 {
 					<p class="text-sm opacity-70">No environments are assigned directly.</p>
 				} else {

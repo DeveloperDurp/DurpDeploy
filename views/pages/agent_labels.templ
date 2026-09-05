@@ -1,0 +1,103 @@
+package pages
+
+import (
+	"strconv"
+
+	"durpdeploy/internal/db"
+	"durpdeploy/views/layouts"
+)
+
+type AgentLabelsView struct {
+	Labels      []db.AgentLabel
+	Error       string
+	CurrentPath string
+}
+
+type AgentLabelDetailView struct {
+	Label       db.AgentLabel
+	Members     []db.ListAgentLabelMembershipsRow
+	Agents      []db.Agent
+	CurrentPath string
+}
+
+templ AgentLabelsPage(view AgentLabelsView) {
+	@layouts.Base("Agent labels", view.CurrentPath) {
+		<div class="space-y-6">
+			<div>
+				<h1 class="text-3xl font-bold">Agent labels</h1>
+				<p class="text-sm opacity-70">Group paired agents into reusable execution targets.</p>
+			</div>
+			if CanWrite(ctx) {
+				<div class="card bg-base-200 shadow"><div class="card-body">
+					<h2 class="card-title">New label</h2>
+					if view.Error != "" {
+						<div class="alert alert-error" role="alert"><span>{ view.Error }</span></div>
+					}
+					<form method="post" action="/admin/agent-labels" class="flex flex-wrap items-end gap-2">
+						<div class="form-control grow"><label class="label" for="label-name"><span class="label-text">Name</span></label><input id="label-name" name="name" maxlength="64" class="input input-bordered" required/></div>
+						<button type="submit" class="btn btn-primary">Create label</button>
+					</form>
+				</div></div>
+			}
+			<div class="overflow-x-auto">
+				<table class="table table-zebra table-fixed w-full">
+					<caption class="sr-only">Agent labels</caption>
+					<thead><tr><th class="w-auto">Name</th><th class="w-32 sm:w-48">Actions</th></tr></thead>
+					<tbody>
+						for _, label := range view.Labels {
+							<tr><td class="truncate">{ label.Name }</td><td class="whitespace-nowrap"><a href={ templ.SafeURL("/admin/agent-labels/" + strconv.FormatInt(label.ID, 10)) } class="btn btn-ghost btn-xs">Details</a></td></tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		</div>
+	}
+}
+
+templ AgentLabelDetailPage(view AgentLabelDetailView) {
+	@layouts.Base(view.Label.Name+" label", view.CurrentPath) {
+		<div class="space-y-6">
+			<div class="flex flex-wrap items-center justify-between gap-2"><div><h1 class="text-3xl font-bold">{ view.Label.Name }</h1><p class="text-sm opacity-70">Agent label membership and eligibility.</p></div><a href="/admin/agent-labels" class="btn btn-ghost btn-sm">Back to labels</a></div>
+			if CanWrite(ctx) {
+				<div class="card bg-base-200 shadow"><div class="card-body">
+					<h2 class="card-title">Rename label</h2>
+					<form method="post" action={ templ.SafeURL("/admin/agent-labels/" + strconv.FormatInt(view.Label.ID, 10)) } hx-put={ "/admin/agent-labels/" + strconv.FormatInt(view.Label.ID, 10) } class="flex flex-wrap items-end gap-2"><div class="form-control grow"><label class="label" for="label-name"><span class="label-text">Name</span></label><input id="label-name" name="name" value={ view.Label.Name } maxlength="64" class="input input-bordered" required/></div><button type="submit" class="btn btn-primary">Rename</button></form>
+				</div></div>
+			}
+			<div class="card bg-base-200 shadow"><div class="card-body">
+				<h2 class="card-title">Members</h2>
+				if len(view.Members) == 0 {
+					<p class="text-sm opacity-70">No agents are assigned.</p>
+				} else {
+					<div class="overflow-x-auto"><table class="table table-zebra table-fixed w-full"><caption class="sr-only">Label members</caption><thead><tr><th class="w-2/5">Agent</th><th class="w-1/5">Status</th><th class="w-1/5">Eligibility</th><th class="w-1/5">Actions</th></tr></thead><tbody>
+						for _, member := range view.Members {
+							<tr><td class="truncate"><a class="link" href={ templ.SafeURL("/admin/agents/" + member.AgentID) }>{ member.AgentName }</a></td><td><span class="badge badge-outline">{ member.AgentStatus }</span></td><td>@agentMemberEligibility(member)</td><td class="whitespace-nowrap">
+								if CanWrite(ctx) {
+									<button class="btn btn-error btn-xs" hx-delete={ "/admin/agent-labels/" + strconv.FormatInt(view.Label.ID, 10) + "/members/" + member.AgentID } hx-confirm="Remove this agent from the label?">Remove</button>
+								}
+							</td></tr>
+						}
+					</tbody></table></div>
+				}
+				if CanWrite(ctx) {
+					<form method="post" action={ templ.SafeURL("/admin/agent-labels/" + strconv.FormatInt(view.Label.ID, 10) + "/members") } class="mt-4 flex flex-wrap items-end gap-2"><div class="form-control grow"><label class="label" for="label-agent"><span class="label-text">Active paired agent</span></label><select id="label-agent" name="agent_id" class="select select-bordered" required><option value="">Select agent</option>
+						for _, agent := range view.Agents {
+							<option value={ agent.ID }>{ agent.Name } ({ agent.Status })</option>
+						}
+					</select></div><button type="submit" class="btn btn-primary">Add member</button></form>
+				}
+			</div></div>
+			if CanWrite(ctx) {
+				<div class="card bg-base-200 shadow"><div class="card-body"><h2 class="card-title text-error">Delete label</h2><p class="text-sm opacity-70">Labels referenced by execution policies cannot be deleted.</p><div><button class="btn btn-error" hx-delete={ "/admin/agent-labels/" + strconv.FormatInt(view.Label.ID, 10) } hx-confirm="Delete this label?">Delete label</button></div></div></div>
+			}
+		</div>
+	}
+}
+
+templ agentMemberEligibility(member db.ListAgentLabelMembershipsRow) {
+	if member.AgentStatus == "active" && member.PairingState.Valid && member.PairingState.String == "paired" {
+		<span class="badge badge-success">eligible</span>
+	} else {
+		<span class="badge badge-warning">ineligible</span>
+	}
+}

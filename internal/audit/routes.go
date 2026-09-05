@@ -129,4 +129,15 @@ var actionMap = map[string]string{
 	"POST /admin/agents/{agentID}/tags":                    "set_agent_tag",
 	"PUT /admin/agents/{agentID}/tags/{tagKey}":            "set_agent_tag",
 	"DELETE /admin/agents/{agentID}/tags/{tagKey}":         "delete_agent_tag",
+
+	"POST /admin/agent-labels":                                      "create_agent_label",
+	"PUT /admin/agent-labels/{labelID}":                             "update_agent_label",
+	"DELETE /admin/agent-labels/{labelID}":                          "delete_agent_label",
+	"POST /admin/agent-labels/{labelID}/members":                    "add_agent_label_member",
+	"DELETE /admin/agent-labels/{labelID}/members/{agentID}":        "remove_agent_label_member",
+	"POST /api/v1/admin/agent-labels":                               "create_agent_label",
+	"PUT /api/v1/admin/agent-labels/{labelID}":                      "update_agent_label",
+	"DELETE /api/v1/admin/agent-labels/{labelID}":                   "delete_agent_label",
+	"POST /api/v1/admin/agent-labels/{labelID}/members":             "add_agent_label_member",
+	"DELETE /api/v1/admin/agent-labels/{labelID}/members/{agentID}": "remove_agent_label_member",
 }

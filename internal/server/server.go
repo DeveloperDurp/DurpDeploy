@@ -431,6 +431,19 @@ func newRouter(
 				agentsH.AssignEnvironment,
 			)
 			ar.Get("/admin/agents/{agentID}/events", agentsH.ListAgentEvents)
+			ar.Get("/admin/agent-labels", agentsH.ListAgentLabels)
+			ar.Post("/admin/agent-labels", agentsH.CreateAgentLabel)
+			ar.Get("/admin/agent-labels/{labelID}", agentsH.GetAgentLabel)
+			ar.Put("/admin/agent-labels/{labelID}", agentsH.UpdateAgentLabel)
+			ar.Delete("/admin/agent-labels/{labelID}", agentsH.DeleteAgentLabel)
+			ar.Post(
+				"/admin/agent-labels/{labelID}/members",
+				agentsH.AddAgentLabelMember,
+			)
+			ar.Delete(
+				"/admin/agent-labels/{labelID}/members/{agentID}",
+				agentsH.DeleteAgentLabelMember,
+			)
 		})
 	})
 
@@ -479,6 +492,21 @@ func newRouter(
 			aar.Get("/admin/users/{id}", usersH.GetUser)
 			aar.Put("/admin/users/{id}", usersH.UpdateUser)
 			aar.Delete("/admin/users/{id}", usersH.DeleteUser)
+
+			agentLabelsH := handler.NewAgentAdminHandler(repo)
+			aar.Get("/admin/agent-labels", agentLabelsH.ListAgentLabels)
+			aar.Post("/admin/agent-labels", agentLabelsH.CreateAgentLabel)
+			aar.Get("/admin/agent-labels/{labelID}", agentLabelsH.GetAgentLabel)
+			aar.Put("/admin/agent-labels/{labelID}", agentLabelsH.UpdateAgentLabel)
+			aar.Delete("/admin/agent-labels/{labelID}", agentLabelsH.DeleteAgentLabel)
+			aar.Post(
+				"/admin/agent-labels/{labelID}/members",
+				agentLabelsH.AddAgentLabelMember,
+			)
+			aar.Delete(
+				"/admin/agent-labels/{labelID}/members/{agentID}",
+				agentLabelsH.DeleteAgentLabelMember,
+			)
 		})
 
 		ar.Post("/tokens", tokensH.CreateToken)

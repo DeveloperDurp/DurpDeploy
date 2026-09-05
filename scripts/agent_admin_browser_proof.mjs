@@ -8,6 +8,9 @@ import { chromium } from "playwright";
 // allow: SIZE_OK — one sequential pairing proof; extract only for a second scenario.
 const outputDir = process.env.AGENT_BROWSER_OUTPUT_DIR;
 if (!outputDir) throw new Error("AGENT_BROWSER_OUTPUT_DIR is required");
+const scenario = process.argv.includes("--scenario")
+	? process.argv[process.argv.indexOf("--scenario") + 1]
+	: "pairing";
 
 const root = process.cwd();
 const serverDir = await fs.mkdtemp(join(tmpdir(), "durpdeploy-agent-browser-"));
@@ -21,7 +24,10 @@ const agentURL = `https://${agentAddress}`;
 const bootstrapAddress = process.env.AGENT_BROWSER_BOOTSTRAP_ADDR || "127.0.0.1:18083";
 const bootstrapURL = `https://${bootstrapAddress}`;
 const admin = { email: "admin@browser.test", password: "browser-admin-password" };
+const deployer = { email: "deployer@browser.test", password: "browser-deployer-password" };
+const viewer = { email: "viewer@browser.test", password: "browser-viewer-password" };
 const consoleErrors = [];
+let serverErrors = "";
 const receipt = { agentStopped: false, serverDirectoryRemoved: false, serverStopped: false };
 
 function run(command, args, options = {}) {
@@ -84,6 +90,10 @@ function waitForPairingOffer(child) {
 
 async function waitForHealth() {
 	for (let attempt = 0; attempt < 100; attempt += 1) {
+		if (server?.exitCode !== null) {
+			await new Promise((resolve) => setTimeout(resolve, 20));
+			throw new Error(`browser proof server exited ${server.exitCode}: ${serverErrors}`);
+		}
 		try {
 			if ((await fetch(`${baseURL}/healthz`)).ok) return;
 		} catch {
@@ -170,12 +180,35 @@ try {
 		DURPDEPLOY_DB: `${database}?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)`,
 		DURPDEPLOY_SECRET_KEY: randomBytes(32).toString("base64"),
 	};
-	await run("go", ["build", "-o", binary, "./cmd/server"], { env: environment });
-	await run("go", ["build", "-o", agentBinary, "github.com/DeveloperDurp/durpdeploy-agent/cmd/agent"], { env: environment });
+	await run("go", ["build", "-buildvcs=false", "-o", binary, "./cmd/server"], { env: environment });
+	await run("go", ["build", "-buildvcs=false", "-o", agentBinary, "github.com/DeveloperDurp/durpdeploy-agent/cmd/agent"], { env: environment });
 	await run(binary, ["admin", "create", "--email", admin.email, "--password", admin.password], { env: environment });
-	server = start(binary, [], { env: environment });
+	if (scenario === "labels") {
+		await run(binary, ["admin", "create", "--email", deployer.email, "--password", deployer.password], { env: environment });
+		await run(binary, ["admin", "create", "--email", viewer.email, "--password", viewer.password], { env: environment });
+		await run("sqlite3", [database, `
+UPDATE users SET role = 'deployer' WHERE email = '${deployer.email}';
+UPDATE users SET role = 'viewer' WHERE email = '${viewer.email}';
+INSERT INTO agents (id, name, status, certificate_pem, certificate_fingerprint) VALUES
+ ('label-agent-1', 'Label Agent One', 'active', 'cert-1', '1111111111111111111111111111111111111111111111111111111111111111'),
+ ('label-agent-2', 'Label Agent Two', 'active', 'cert-2', '2222222222222222222222222222222222222222222222222222222222222222'),
+ ('label-agent-3', 'Label Agent Three', 'active', 'cert-3', '3333333333333333333333333333333333333333333333333333333333333333'),
+ ('label-unpaired', 'Label Unpaired', 'active', 'cert-4', '4444444444444444444444444444444444444444444444444444444444444444');
+INSERT INTO agent_pairings (
+ agent_id, pairing_code_hash, agent_public_identity, agent_pin,
+ server_public_identity, server_pin, state, expires_at, paired_at
+) VALUES
+ ('label-agent-1', X'0101010101010101010101010101010101010101010101010101010101010101', 'public-1', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1', 'server-1', 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb1', 'paired', 2000000000, 1000000000),
+ ('label-agent-2', X'0202020202020202020202020202020202020202020202020202020202020202', 'public-2', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa2', 'server-2', 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb2', 'paired', 2000000000, 1000000000),
+ ('label-agent-3', X'0303030303030303030303030303030303030303030303030303030303030303', 'public-3', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa3', 'server-3', 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb3', 'paired', 2000000000, 1000000000);`]);
+	}
+	server = spawn(binary, [], {
+		cwd: root, stdio: ["ignore", "pipe", "pipe"], env: environment,
+	});
+	server.stdout.on("data", (chunk) => { serverErrors += chunk; });
+	server.stderr.on("data", (chunk) => { serverErrors += chunk; });
 	await waitForHealth();
-	agent = spawn(agentBinary, [], {
+	if (scenario !== "labels") agent = spawn(agentBinary, [], {
 		cwd: root,
 		stdio: ["ignore", "pipe", "pipe"],
 		env: {
@@ -185,7 +218,7 @@ try {
 			DURPDEPLOY_AGENT_VERSION: "browser-v1",
 		},
 	});
-	const pairing = await waitForPairingOffer(agent);
+	const pairing = scenario === "labels" ? null : await waitForPairingOffer(agent);
 
 	browser = await chromium.launch({ headless: true });
 	const context = await browser.newContext();
@@ -207,6 +240,91 @@ try {
 	await page.getByRole("button", { name: "Login" }).click();
 	await page.waitForLoadState("networkidle");
 	assert(new URL(page.url()).pathname === "/", `login redirected to ${page.url()}`);
+	if (scenario === "labels") {
+		await page.setViewportSize({ width: 1280, height: 768 });
+		await page.goto(`${baseURL}/admin/agent-labels`, { waitUntil: "networkidle" });
+		await page.getByLabel("Name", { exact: true }).fill("  Cat Fact  ");
+		await page.getByRole("button", { name: "Create label" }).click();
+		await page.waitForURL(/\/admin\/agent-labels\/\d+$/);
+		const labelPath = new URL(page.url()).pathname;
+		const labelID = labelPath.split("/").at(-1);
+		for (const agentName of ["Label Agent One", "Label Agent Two", "Label Agent Three"]) {
+			await page.getByLabel("Active paired agent").selectOption({ label: `${agentName} (active)` });
+			await page.getByRole("button", { name: "Add member" }).click();
+			await page.waitForLoadState("networkidle");
+		}
+		await page.getByLabel("Name", { exact: true }).fill("Cat Facts");
+		await page.getByRole("button", { name: "Rename" }).click();
+		await page.waitForLoadState("networkidle");
+		const desktopLabel = await checkPage(page, "label-detail-desktop");
+		await screenshot(page, "label-detail-desktop.png");
+		await page.goto(`${baseURL}/admin/agents`, { waitUntil: "networkidle" });
+		assert((await page.locator("body").innerText()).includes("Cat Facts"), "agent list lacks label badges");
+		await screenshot(page, "agent-label-badges-desktop.png");
+
+		await page.setViewportSize({ width: 375, height: 812 });
+		await page.goto(`${baseURL}${labelPath}`, { waitUntil: "networkidle" });
+		const mobileLabel = await checkPage(page, "label-detail-mobile");
+		await screenshot(page, "label-detail-mobile.png");
+		await page.goto(`${baseURL}/admin/agents`, { waitUntil: "networkidle" });
+		await checkPage(page, "agent-label-badges-mobile");
+		assert((await page.locator("body").innerText()).includes("Cat Facts"),
+			"mobile agent list lacks label badges");
+		await screenshot(page, "agent-label-badges-mobile.png");
+
+		const csrf = await page.locator('meta[name="csrf-token"]').getAttribute("content");
+		const api = async (method, path, body) => page.evaluate(async ({ method, path, body, csrf }) => {
+			const response = await fetch(path, {
+				method,
+				headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
+				body: body ? JSON.stringify(body) : undefined,
+			});
+			return { status: response.status, body: await response.text() };
+		}, { method, path, body, csrf });
+		const duplicate = await api("POST", "/admin/agent-labels", { name: "CAT FACTS" });
+		const unpaired = await api("POST", `${labelPath}/members`, { agent_id: "label-unpaired" });
+		assert(duplicate.status === 409, `duplicate label returned ${duplicate.status}`);
+		assert(unpaired.status === 409, `unpaired member returned ${unpaired.status}`);
+
+		await run("sqlite3", [database, `
+INSERT INTO projects (name) VALUES ('Label reference project');
+INSERT INTO project_execution_policies (project_id, target_mode, agent_label_id, agent_strategy)
+VALUES (last_insert_rowid(), 'label', ${labelID}, 'all');`]);
+		const referencedDelete = await api("DELETE", labelPath);
+		assert(referencedDelete.status === 409, `referenced delete returned ${referencedDelete.status}`);
+
+		await page.goto(`${baseURL}/admin/agents/label-agent-1`, { waitUntil: "networkidle" });
+		await page.getByRole("button", { name: "Permanently delete agent" }).click();
+		await page.waitForURL(`${baseURL}/admin/agents`);
+		const deletionSummary = await runOutput("sqlite3", [database,
+			`SELECT COUNT(*) FROM agent_label_memberships WHERE agent_id = 'label-agent-1';`]);
+		assert(deletionSummary.trim() === "0", "agent deletion retained label membership");
+
+		const roleResults = {};
+		for (const [role, credentials] of Object.entries({ deployer, viewer })) {
+			const roleContext = await browser.newContext();
+			const rolePage = await roleContext.newPage();
+			await rolePage.goto(`${baseURL}/login`);
+			await rolePage.getByLabel("Email").fill(credentials.email);
+			await rolePage.getByLabel("Password").fill(credentials.password);
+			await rolePage.getByRole("button", { name: "Login" }).click();
+			const response = await rolePage.goto(`${baseURL}/admin/agent-labels`);
+			roleResults[role] = response.status();
+			await roleContext.close();
+		}
+		assert(roleResults.deployer === 403 && roleResults.viewer === 403,
+			`role denial statuses: ${JSON.stringify(roleResults)}`);
+		assert(consoleErrors.length === 0, `browser console errors: ${consoleErrors.join("; ")}`);
+		await saveJSON("label-scenario.json", {
+			labelID, memberCount: 3, duplicate, unpaired, referencedDelete,
+			roleResults, deletionMembershipCount: deletionSummary.trim(),
+		});
+		await saveJSON("viewport-metadata.json", {
+			desktop: { width: 1280, height: 768, label: desktopLabel },
+			mobile: { width: 375, height: 812, label: mobileLabel },
+		});
+		await saveJSON("browser-console.json", { errors: consoleErrors });
+	} else {
 
 	await page.setViewportSize({ width: 1280, height: 768 });
 	await page.goto(`${baseURL}/admin/agents`, { waitUntil: "networkidle" });
@@ -283,6 +401,7 @@ try {
 	await saveJSON("listener-runtime.json", { agentPaired: true, pollObserved: true, publicURL: "configured" });
 	await saveJSON("database-summary.json", { pairedDirectAssignment: databaseSummary.trim() });
 	await saveJSON("browser-console.json", { errors: consoleErrors });
+	}
 	} catch (error) {
 		const diagnostics = {
 			error: redactDiagnostic(error instanceof Error ? error.message : String(error)),
@@ -300,12 +419,14 @@ try {
 		await exited;
 		receipt.agentStopped = true;
 	}
+	if (!agent || agent.exitCode !== null) receipt.agentStopped = true;
 	if (server?.exitCode === null) {
 		const exited = new Promise((resolve) => server.once("exit", resolve));
 		server.kill("SIGTERM");
 		await exited;
 		receipt.serverStopped = true;
 	}
+	if (!server || server.exitCode !== null) receipt.serverStopped = true;
 	await fs.rm(serverDir, { recursive: true, force: true });
 	receipt.serverDirectoryRemoved = true;
 	await fs.mkdir(outputDir, { recursive: true });

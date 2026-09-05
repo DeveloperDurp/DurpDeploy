@@ -32,8 +32,13 @@ func (h *AgentAdminHandler) ListAgentsPage(
 		)
 		return
 	}
+	labelsByAgent, err := h.labelsByAgent(request)
+	if err != nil {
+		http.Error(writer, "could not load agent labels", http.StatusInternalServerError)
+		return
+	}
 	if err := pages.AgentsPage(pages.AgentsView{
-		Agents: agents, CurrentPath: request.URL.Path,
+		Agents: agents, LabelsByAgent: labelsByAgent, CurrentPath: request.URL.Path,
 	}).Render(request.Context(), writer); err != nil {
 		http.Error(
 			writer,
@@ -88,6 +93,11 @@ func (h *AgentAdminHandler) AgentPage(
 		agent.ID,
 	)
 	paired := err == nil && pairing.State == "paired"
+	labelsByAgent, err := h.labelsByAgent(request)
+	if err != nil {
+		http.Error(writer, "could not load agent labels", http.StatusInternalServerError)
+		return
+	}
 	assigned := make(map[int64]struct{}, len(assignments))
 	for _, assignment := range assignments {
 		assigned[assignment.EnvironmentID] = struct{}{}
@@ -106,6 +116,7 @@ func (h *AgentAdminHandler) AgentPage(
 		AssignedEnvironments:  assignedEnvironments,
 		AvailableEnvironments: availableEnvironments,
 		Paired:                paired,
+		Labels:                labelsByAgent[agent.ID],
 		CurrentPath:           request.URL.Path,
 	}).Render(request.Context(), writer); err != nil {
 		http.Error(
@@ -114,6 +125,28 @@ func (h *AgentAdminHandler) AgentPage(
 			http.StatusInternalServerError,
 		)
 	}
+}
+
+func (h *AgentAdminHandler) labelsByAgent(
+	request *http.Request,
+) (map[string][]db.AgentLabel, error) {
+	labels, err := h.repo.Queries.ListAgentLabels(request.Context())
+	if err != nil {
+		return nil, err
+	}
+	result := make(map[string][]db.AgentLabel)
+	for _, label := range labels {
+		members, err := h.repo.Queries.ListAgentLabelMemberships(
+			request.Context(), label.ID,
+		)
+		if err != nil {
+			return nil, err
+		}
+		for _, member := range members {
+			result[member.AgentID] = append(result[member.AgentID], label)
+		}
+	}
+	return result, nil
 }
 
 func (h *AgentAdminHandler) agentPageAgent(

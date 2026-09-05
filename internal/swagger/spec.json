@@ -17,8 +17,280 @@
   "host": "localhost:8080",
   "basePath": "/api/v1",
   "paths": {
+    "/admin/agent-labels": {
+      "get": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "agent-labels"
+        ],
+        "summary": "List agent labels.",
+        "operationId": "listAgentLabels",
+        "responses": {
+          "200": {
+            "$ref": "#/responses/AgentLabelListResponse"
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "ForbiddenError",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          }
+        }
+      },
+      "post": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "agent-labels"
+        ],
+        "summary": "Create an agent label.",
+        "operationId": "createAgentLabel",
+        "parameters": [
+          {
+            "x-go-name": "Body",
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/AgentLabelRequest"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "$ref": "#/responses/AgentLabelResponse"
+          },
+          "409": {
+            "description": "ConflictError",
+            "schema": {
+              "$ref": "#/definitions/ConflictError"
+            }
+          },
+          "422": {
+            "description": "ValidationError",
+            "schema": {
+              "$ref": "#/definitions/ValidationError"
+            }
+          }
+        }
+      }
+    },
+    "/admin/agent-labels/{labelID}": {
+      "get": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "agent-labels"
+        ],
+        "summary": "Get an agent label and its members.",
+        "operationId": "getAgentLabel",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "LabelID",
+            "name": "labelID",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/responses/AgentLabelResponse"
+          },
+          "404": {
+            "description": "NotFoundError",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
+            }
+          }
+        }
+      },
+      "put": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "agent-labels"
+        ],
+        "summary": "Rename an agent label.",
+        "operationId": "updateAgentLabel",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "LabelID",
+            "name": "labelID",
+            "in": "path",
+            "required": true
+          },
+          {
+            "x-go-name": "Body",
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/AgentLabelRequest"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/responses/AgentLabelResponse"
+          },
+          "409": {
+            "description": "ConflictError",
+            "schema": {
+              "$ref": "#/definitions/ConflictError"
+            }
+          }
+        }
+      },
+      "delete": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "agent-labels"
+        ],
+        "summary": "Delete an unreferenced agent label.",
+        "operationId": "deleteAgentLabel",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "LabelID",
+            "name": "labelID",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "NoContent"
+          },
+          "409": {
+            "description": "ConflictError",
+            "schema": {
+              "$ref": "#/definitions/ConflictError"
+            }
+          }
+        }
+      }
+    },
+    "/admin/agent-labels/{labelID}/members": {
+      "post": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "agent-labels"
+        ],
+        "summary": "Add an active paired agent.",
+        "operationId": "addAgentLabelMember",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "LabelID",
+            "name": "labelID",
+            "in": "path",
+            "required": true
+          },
+          {
+            "x-go-name": "Body",
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/AgentLabelMemberRequest"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "$ref": "#/responses/AgentLabelResponse"
+          },
+          "409": {
+            "description": "ConflictError",
+            "schema": {
+              "$ref": "#/definitions/ConflictError"
+            }
+          }
+        }
+      }
+    },
+    "/admin/agent-labels/{labelID}/members/{agentID}": {
+      "delete": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "agent-labels"
+        ],
+        "summary": "Remove an agent from a label.",
+        "operationId": "removeAgentLabelMember",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "LabelID",
+            "name": "labelID",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "x-go-name": "AgentID",
+            "name": "agentID",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "NoContent"
+          },
+          "404": {
+            "description": "NotFoundError",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
+            }
+          }
+        }
+      }
+    },
     "/admin/audit": {
       "get": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "produces": [
           "application/json"
         ],
@@ -61,39 +333,39 @@
         ],
         "responses": {
           "200": {
-            "description": "AuditLogListResponse is a list of audit log entries.",
+            "description": "AuditLogListResponse",
             "schema": {
               "$ref": "#/definitions/AuditLogListResponse"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "403": {
-            "description": "Forbidden error response.",
+            "description": "ForbiddenError",
             "schema": {
               "$ref": "#/definitions/ForbiddenError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
+        }
       }
     },
     "/admin/db-tables": {
       "get": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "produces": [
           "application/json"
         ],
@@ -108,39 +380,39 @@
         "operationId": "dbTables",
         "responses": {
           "200": {
-            "description": "DbTableListResponse is a list of SQLite table names.",
+            "description": "DbTableListResponse",
             "schema": {
               "$ref": "#/definitions/DbTableListResponse"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "403": {
-            "description": "Forbidden error response.",
+            "description": "ForbiddenError",
             "schema": {
               "$ref": "#/definitions/ForbiddenError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
+        }
       }
     },
     "/admin/maintenance": {
       "post": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "schemes": [
           "http",
           "https"
@@ -152,39 +424,39 @@
         "operationId": "maintenance",
         "responses": {
           "200": {
-            "description": "EmptyResponse is returned for no-content endpoints.",
+            "description": "EmptyResponse",
             "schema": {
               "$ref": "#/definitions/EmptyResponse"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "403": {
-            "description": "Forbidden error response.",
+            "description": "ForbiddenError",
             "schema": {
               "$ref": "#/definitions/ForbiddenError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
+        }
       }
     },
     "/admin/notifications": {
       "get": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "produces": [
           "application/json"
         ],
@@ -198,39 +470,39 @@
         "operationId": "listNotifications",
         "responses": {
           "200": {
-            "description": "NotificationEventListResponse is a list of notification events.",
+            "description": "NotificationEventListResponse",
             "schema": {
               "$ref": "#/definitions/NotificationEventListResponse"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "403": {
-            "description": "Forbidden error response.",
+            "description": "ForbiddenError",
             "schema": {
               "$ref": "#/definitions/ForbiddenError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
+        }
       }
     },
     "/admin/notifications/settings": {
       "get": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "produces": [
           "application/json"
         ],
@@ -244,37 +516,37 @@
         "operationId": "getNotificationSettings",
         "responses": {
           "200": {
-            "description": "GlobalNotification holds the global notification settings.",
+            "description": "GlobalNotification",
             "schema": {
               "$ref": "#/definitions/GlobalNotification"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "403": {
-            "description": "Forbidden error response.",
+            "description": "ForbiddenError",
             "schema": {
               "$ref": "#/definitions/ForbiddenError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
+        }
+      },
+      "put": {
         "security": [
           {
             "bearer": []
           }
-        ]
-      },
-      "put": {
+        ],
         "consumes": [
           "application/json"
         ],
@@ -291,45 +563,45 @@
         "operationId": "updateNotificationSettings",
         "responses": {
           "200": {
-            "description": "GlobalNotification holds the global notification settings.",
+            "description": "GlobalNotification",
             "schema": {
               "$ref": "#/definitions/GlobalNotification"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "403": {
-            "description": "Forbidden error response.",
+            "description": "ForbiddenError",
             "schema": {
               "$ref": "#/definitions/ForbiddenError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
+        }
       }
     },
     "/admin/stats": {
       "get": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "produces": [
           "application/json"
         ],
@@ -344,39 +616,39 @@
         "operationId": "stats",
         "responses": {
           "200": {
-            "description": "ServerStatsResponse contains aggregate counts.",
+            "description": "ServerStatsResponse",
             "schema": {
               "$ref": "#/definitions/ServerStatsResponse"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "403": {
-            "description": "Forbidden error response.",
+            "description": "ForbiddenError",
             "schema": {
               "$ref": "#/definitions/ForbiddenError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
+        }
       }
     },
     "/admin/tokens": {
       "get": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "produces": [
           "application/json"
         ],
@@ -414,39 +686,39 @@
         ],
         "responses": {
           "200": {
-            "description": "TokenListResponse is a list of API tokens.",
+            "description": "TokenListResponse",
             "schema": {
               "$ref": "#/definitions/TokenListResponse"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "403": {
-            "description": "Forbidden error response.",
+            "description": "ForbiddenError",
             "schema": {
               "$ref": "#/definitions/ForbiddenError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
+        }
       }
     },
     "/admin/tokens/{id}": {
       "delete": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "schemes": [
           "http",
           "https"
@@ -468,45 +740,45 @@
         ],
         "responses": {
           "204": {
-            "description": "EmptyResponse is returned for no-content endpoints.",
+            "description": "EmptyResponse",
             "schema": {
               "$ref": "#/definitions/EmptyResponse"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "403": {
-            "description": "Forbidden error response.",
+            "description": "ForbiddenError",
             "schema": {
               "$ref": "#/definitions/ForbiddenError"
             }
           },
           "404": {
-            "description": "Not found error response.",
+            "description": "NotFoundError",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
+        }
       }
     },
     "/admin/users": {
       "get": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "produces": [
           "application/json"
         ],
@@ -537,37 +809,37 @@
         ],
         "responses": {
           "200": {
-            "description": "UserListResponse is a list of users.",
+            "description": "UserListResponse",
             "schema": {
               "$ref": "#/definitions/UserListResponse"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "403": {
-            "description": "Forbidden error response.",
+            "description": "ForbiddenError",
             "schema": {
               "$ref": "#/definitions/ForbiddenError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
+        }
+      },
+      "post": {
         "security": [
           {
             "bearer": []
           }
-        ]
-      },
-      "post": {
+        ],
         "consumes": [
           "application/json"
         ],
@@ -596,57 +868,57 @@
         ],
         "responses": {
           "201": {
-            "description": "User is a user account.",
+            "description": "User",
             "schema": {
               "$ref": "#/definitions/User"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "403": {
-            "description": "Forbidden error response.",
+            "description": "ForbiddenError",
             "schema": {
               "$ref": "#/definitions/ForbiddenError"
             }
           },
           "409": {
-            "description": "Conflict error response.",
+            "description": "ConflictError",
             "schema": {
               "$ref": "#/definitions/ConflictError"
             }
           },
           "422": {
-            "description": "Validation error response.",
+            "description": "ValidationError",
             "schema": {
               "$ref": "#/definitions/ValidationError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
+        }
       }
     },
     "/admin/users/{id}": {
       "get": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "produces": [
           "application/json"
         ],
@@ -672,49 +944,49 @@
         ],
         "responses": {
           "200": {
-            "description": "User is a user account.",
+            "description": "User",
             "schema": {
               "$ref": "#/definitions/User"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "403": {
-            "description": "Forbidden error response.",
+            "description": "ForbiddenError",
             "schema": {
               "$ref": "#/definitions/ForbiddenError"
             }
           },
           "404": {
-            "description": "Not found error response.",
+            "description": "NotFoundError",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
+        }
+      },
+      "put": {
         "security": [
           {
             "bearer": []
           }
-        ]
-      },
-      "put": {
+        ],
         "consumes": [
           "application/json"
         ],
@@ -752,61 +1024,61 @@
         ],
         "responses": {
           "200": {
-            "description": "User is a user account.",
+            "description": "User",
             "schema": {
               "$ref": "#/definitions/User"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "403": {
-            "description": "Forbidden error response.",
+            "description": "ForbiddenError",
             "schema": {
               "$ref": "#/definitions/ForbiddenError"
             }
           },
           "404": {
-            "description": "Not found error response.",
+            "description": "NotFoundError",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
             }
           },
           "409": {
-            "description": "Conflict error response.",
+            "description": "ConflictError",
             "schema": {
               "$ref": "#/definitions/ConflictError"
             }
           },
           "422": {
-            "description": "Validation error response.",
+            "description": "ValidationError",
             "schema": {
               "$ref": "#/definitions/ValidationError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
+        }
+      },
+      "delete": {
         "security": [
           {
             "bearer": []
           }
-        ]
-      },
-      "delete": {
+        ],
         "schemes": [
           "http",
           "https"
@@ -829,45 +1101,45 @@
         ],
         "responses": {
           "204": {
-            "description": "EmptyResponse is returned for no-content endpoints.",
+            "description": "EmptyResponse",
             "schema": {
               "$ref": "#/definitions/EmptyResponse"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "403": {
-            "description": "Forbidden error response.",
+            "description": "ForbiddenError",
             "schema": {
               "$ref": "#/definitions/ForbiddenError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
+        }
       }
     },
     "/deployments": {
       "get": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "produces": [
           "application/json"
         ],
@@ -882,33 +1154,33 @@
         "operationId": "listAllDeployments",
         "responses": {
           "200": {
-            "description": "DeploymentListResponse is the paginated envelope for ListDeployments.",
+            "description": "DeploymentListResponse",
             "schema": {
               "$ref": "#/definitions/DeploymentListResponse"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
+        }
       }
     },
     "/deployments/{id}": {
       "get": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "produces": [
           "application/json"
         ],
@@ -934,45 +1206,45 @@
         ],
         "responses": {
           "200": {
-            "description": "Deployment represents a release executing against an environment.",
+            "description": "Deployment",
             "schema": {
               "$ref": "#/definitions/Deployment"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "404": {
-            "description": "Not found error response.",
+            "description": "NotFoundError",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
+        }
       }
     },
     "/deployments/{id}/approve": {
       "post": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "schemes": [
           "http",
           "https"
@@ -994,45 +1266,45 @@
         ],
         "responses": {
           "200": {
-            "description": "Deployment represents a release executing against an environment.",
+            "description": "Deployment",
             "schema": {
               "$ref": "#/definitions/Deployment"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "404": {
-            "description": "Not found error response.",
+            "description": "NotFoundError",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
+        }
       }
     },
     "/deployments/{id}/cancel": {
       "post": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "schemes": [
           "http",
           "https"
@@ -1055,45 +1327,45 @@
         ],
         "responses": {
           "200": {
-            "description": "Deployment represents a release executing against an environment.",
+            "description": "Deployment",
             "schema": {
               "$ref": "#/definitions/Deployment"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "404": {
-            "description": "Not found error response.",
+            "description": "NotFoundError",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
+        }
       }
     },
     "/deployments/{id}/events": {
       "get": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "produces": [
           "text/event-stream"
         ],
@@ -1119,39 +1391,39 @@
         ],
         "responses": {
           "200": {
-            "description": "StreamResponse is a server-sent event stream.",
+            "description": "StreamResponse",
             "schema": {
               "$ref": "#/definitions/StreamResponse"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "404": {
-            "description": "Not found error response.",
+            "description": "NotFoundError",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
             }
           }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
+        }
       }
     },
     "/deployments/{id}/logs": {
       "get": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "produces": [
           "application/json"
         ],
@@ -1191,39 +1463,39 @@
         ],
         "responses": {
           "200": {
-            "description": "DeploymentLogListResponse is a list of deployment log entries.",
+            "description": "DeploymentLogListResponse",
             "schema": {
               "$ref": "#/definitions/DeploymentLogListResponse"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
+        }
       }
     },
     "/deployments/{id}/logs.txt": {
       "get": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "produces": [
           "text/plain"
         ],
@@ -1249,39 +1521,39 @@
         ],
         "responses": {
           "200": {
-            "description": "TextResponse is a plain text response.",
+            "description": "TextResponse",
             "schema": {
               "$ref": "#/definitions/TextResponse"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "404": {
-            "description": "Not found error response.",
+            "description": "NotFoundError",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
+        }
       }
     },
     "/deployments/{id}/logs/stream": {
       "get": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "produces": [
           "text/event-stream",
           "application/x-ndjson"
@@ -1315,39 +1587,39 @@
         ],
         "responses": {
           "200": {
-            "description": "StreamResponse is a server-sent event stream.",
+            "description": "StreamResponse",
             "schema": {
               "$ref": "#/definitions/StreamResponse"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "404": {
-            "description": "Not found error response.",
+            "description": "NotFoundError",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
             }
           }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
+        }
       }
     },
     "/deployments/{id}/logs/{logId}": {
       "get": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "produces": [
           "application/json"
         ],
@@ -1382,45 +1654,45 @@
         ],
         "responses": {
           "200": {
-            "description": "DeploymentLog is a single step log entry.",
+            "description": "DeploymentLog",
             "schema": {
               "$ref": "#/definitions/DeploymentLog"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "404": {
-            "description": "Not found error response.",
+            "description": "NotFoundError",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
+        }
       }
     },
     "/deployments/{id}/redeploy": {
       "post": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "schemes": [
           "http",
           "https"
@@ -1442,51 +1714,51 @@
         ],
         "responses": {
           "201": {
-            "description": "Deployment represents a release executing against an environment.",
+            "description": "Deployment",
             "schema": {
               "$ref": "#/definitions/Deployment"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "404": {
-            "description": "Not found error response.",
+            "description": "NotFoundError",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
             }
           },
           "409": {
-            "description": "Conflict error response.",
+            "description": "ConflictError",
             "schema": {
               "$ref": "#/definitions/ConflictError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
+        }
       }
     },
     "/deployments/{id}/retry": {
       "post": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "schemes": [
           "http",
           "https"
@@ -1509,45 +1781,45 @@
         ],
         "responses": {
           "201": {
-            "description": "Deployment represents a release executing against an environment.",
+            "description": "Deployment",
             "schema": {
               "$ref": "#/definitions/Deployment"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "404": {
-            "description": "Not found error response.",
+            "description": "NotFoundError",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
+        }
       }
     },
     "/deployments/{id}/status": {
       "get": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "produces": [
           "application/json"
         ],
@@ -1572,45 +1844,45 @@
         ],
         "responses": {
           "200": {
-            "description": "DeploymentStatusResponse is the status payload for GetDeploymentStatus.",
+            "description": "DeploymentStatusResponse",
             "schema": {
               "$ref": "#/definitions/DeploymentStatusResponse"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "404": {
-            "description": "Not found error response.",
+            "description": "NotFoundError",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
+        }
       }
     },
     "/environments": {
       "get": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "produces": [
           "application/json"
         ],
@@ -1641,31 +1913,31 @@
         ],
         "responses": {
           "200": {
-            "description": "EnvironmentListResponse is a list of environments.",
+            "description": "EnvironmentListResponse",
             "schema": {
               "$ref": "#/definitions/EnvironmentListResponse"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
+        }
+      },
+      "post": {
         "security": [
           {
             "bearer": []
           }
-        ]
-      },
-      "post": {
+        ],
         "consumes": [
           "application/json"
         ],
@@ -1694,45 +1966,45 @@
         ],
         "responses": {
           "201": {
-            "description": "Environment represents a deployment target.",
+            "description": "Environment",
             "schema": {
               "$ref": "#/definitions/Environment"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "409": {
-            "description": "Conflict error response.",
+            "description": "ConflictError",
             "schema": {
               "$ref": "#/definitions/ConflictError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
+        }
       }
     },
     "/environments/{id}": {
       "get": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "produces": [
           "application/json"
         ],
@@ -1758,43 +2030,43 @@
         ],
         "responses": {
           "200": {
-            "description": "Environment represents a deployment target.",
+            "description": "Environment",
             "schema": {
               "$ref": "#/definitions/Environment"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "404": {
-            "description": "Not found error response.",
+            "description": "NotFoundError",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
+        }
+      },
+      "put": {
         "security": [
           {
             "bearer": []
           }
-        ]
-      },
-      "put": {
+        ],
         "consumes": [
           "application/json"
         ],
@@ -1832,49 +2104,49 @@
         ],
         "responses": {
           "200": {
-            "description": "Environment represents a deployment target.",
+            "description": "Environment",
             "schema": {
               "$ref": "#/definitions/Environment"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "404": {
-            "description": "Not found error response.",
+            "description": "NotFoundError",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
             }
           },
           "409": {
-            "description": "Conflict error response.",
+            "description": "ConflictError",
             "schema": {
               "$ref": "#/definitions/ConflictError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
+        }
+      },
+      "delete": {
         "security": [
           {
             "bearer": []
           }
-        ]
-      },
-      "delete": {
+        ],
         "schemes": [
           "http",
           "https"
@@ -1897,39 +2169,39 @@
         ],
         "responses": {
           "204": {
-            "description": "EmptyResponse is returned for no-content endpoints.",
+            "description": "EmptyResponse",
             "schema": {
               "$ref": "#/definitions/EmptyResponse"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
+        }
       }
     },
     "/lifecycles": {
       "get": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "produces": [
           "application/json"
         ],
@@ -1960,31 +2232,31 @@
         ],
         "responses": {
           "200": {
-            "description": "LifecycleListResponse is a list of lifecycles.",
+            "description": "LifecycleListResponse",
             "schema": {
               "$ref": "#/definitions/LifecycleListResponse"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
+        }
+      },
+      "post": {
         "security": [
           {
             "bearer": []
           }
-        ]
-      },
-      "post": {
+        ],
         "consumes": [
           "application/json"
         ],
@@ -2013,45 +2285,45 @@
         ],
         "responses": {
           "201": {
-            "description": "Lifecycle represents a deployment promotion pipeline.",
+            "description": "Lifecycle",
             "schema": {
               "$ref": "#/definitions/Lifecycle"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "409": {
-            "description": "Conflict error response.",
+            "description": "ConflictError",
             "schema": {
               "$ref": "#/definitions/ConflictError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
+        }
       }
     },
     "/lifecycles/{id}": {
       "get": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "produces": [
           "application/json"
         ],
@@ -2077,45 +2349,45 @@
         ],
         "responses": {
           "200": {
-            "description": "LifecycleResponse is the detailed lifecycle payload.",
+            "description": "LifecycleResponse",
             "schema": {
               "$ref": "#/definitions/LifecycleResponse"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "404": {
-            "description": "Not found error response.",
+            "description": "NotFoundError",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
+        }
       }
     },
     "/lifecycles/{id}/save": {
       "post": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "consumes": [
           "application/json"
         ],
@@ -2153,51 +2425,51 @@
         ],
         "responses": {
           "200": {
-            "description": "LifecycleResponse is the detailed lifecycle payload.",
+            "description": "LifecycleResponse",
             "schema": {
               "$ref": "#/definitions/LifecycleResponse"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "404": {
-            "description": "Not found error response.",
+            "description": "NotFoundError",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
             }
           },
           "409": {
-            "description": "Conflict error response.",
+            "description": "ConflictError",
             "schema": {
               "$ref": "#/definitions/ConflictError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
+        }
       }
     },
     "/lifecycles/{id}/stages": {
       "post": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "consumes": [
           "application/json"
         ],
@@ -2235,45 +2507,45 @@
         ],
         "responses": {
           "201": {
-            "description": "LifecycleStage is a single stage in a lifecycle.",
+            "description": "LifecycleStage",
             "schema": {
               "$ref": "#/definitions/LifecycleStage"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "409": {
-            "description": "Conflict error response.",
+            "description": "ConflictError",
             "schema": {
               "$ref": "#/definitions/ConflictError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
+        }
       }
     },
     "/lifecycles/{id}/stages/reorder": {
       "post": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "consumes": [
           "application/json"
         ],
@@ -2311,39 +2583,39 @@
         ],
         "responses": {
           "200": {
-            "description": "LifecycleStageListResponse is a list of lifecycle stages.",
+            "description": "LifecycleStageListResponse",
             "schema": {
               "$ref": "#/definitions/LifecycleStageListResponse"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
+        }
       }
     },
     "/lifecycles/{id}/stages/{stageId}": {
       "patch": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "consumes": [
           "application/json"
         ],
@@ -2390,45 +2662,45 @@
         ],
         "responses": {
           "200": {
-            "description": "LifecycleStage is a single stage in a lifecycle.",
+            "description": "LifecycleStage",
             "schema": {
               "$ref": "#/definitions/LifecycleStage"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "404": {
-            "description": "Not found error response.",
+            "description": "NotFoundError",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
+        }
       }
     },
     "/lifecycles/{id}/stages/{stageId}/delete": {
       "post": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "schemes": [
           "http",
           "https"
@@ -2460,39 +2732,39 @@
         ],
         "responses": {
           "204": {
-            "description": "EmptyResponse is returned for no-content endpoints.",
+            "description": "EmptyResponse",
             "schema": {
               "$ref": "#/definitions/EmptyResponse"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
+        }
       }
     },
     "/projects": {
       "get": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "produces": [
           "application/json"
         ],
@@ -2523,31 +2795,31 @@
         ],
         "responses": {
           "200": {
-            "description": "ProjectListResponse is a list of projects.",
+            "description": "ProjectListResponse",
             "schema": {
               "$ref": "#/definitions/ProjectListResponse"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
+        }
+      },
+      "post": {
         "security": [
           {
             "bearer": []
           }
-        ]
-      },
-      "post": {
+        ],
         "consumes": [
           "application/json"
         ],
@@ -2576,45 +2848,45 @@
         ],
         "responses": {
           "201": {
-            "description": "ProjectResponse is the JSON shape for a project.",
+            "description": "ProjectResponse",
             "schema": {
               "$ref": "#/definitions/ProjectResponse"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "409": {
-            "description": "Conflict error response.",
+            "description": "ConflictError",
             "schema": {
               "$ref": "#/definitions/ConflictError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
+        }
       }
     },
     "/projects/{id}": {
       "get": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "produces": [
           "application/json"
         ],
@@ -2640,43 +2912,43 @@
         ],
         "responses": {
           "200": {
-            "description": "ProjectResponse is the JSON shape for a project.",
+            "description": "ProjectResponse",
             "schema": {
               "$ref": "#/definitions/ProjectResponse"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "404": {
-            "description": "Not found error response.",
+            "description": "NotFoundError",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
+        }
+      },
+      "put": {
         "security": [
           {
             "bearer": []
           }
-        ]
-      },
-      "put": {
+        ],
         "consumes": [
           "application/json"
         ],
@@ -2714,49 +2986,49 @@
         ],
         "responses": {
           "200": {
-            "description": "ProjectResponse is the JSON shape for a project.",
+            "description": "ProjectResponse",
             "schema": {
               "$ref": "#/definitions/ProjectResponse"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "404": {
-            "description": "Not found error response.",
+            "description": "NotFoundError",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
             }
           },
           "409": {
-            "description": "Conflict error response.",
+            "description": "ConflictError",
             "schema": {
               "$ref": "#/definitions/ConflictError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
+        }
+      },
+      "delete": {
         "security": [
           {
             "bearer": []
           }
-        ]
-      },
-      "delete": {
+        ],
         "schemes": [
           "http",
           "https"
@@ -2779,39 +3051,39 @@
         ],
         "responses": {
           "204": {
-            "description": "EmptyResponse is returned for no-content endpoints.",
+            "description": "EmptyResponse",
             "schema": {
               "$ref": "#/definitions/EmptyResponse"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
+        }
       }
     },
     "/projects/{id}/deployments": {
       "get": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "produces": [
           "application/json"
         ],
@@ -2885,43 +3157,43 @@
         ],
         "responses": {
           "200": {
-            "description": "DeploymentListResponse is the paginated envelope for ListDeployments.",
+            "description": "DeploymentListResponse",
             "schema": {
               "$ref": "#/definitions/DeploymentListResponse"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "404": {
-            "description": "Not found error response.",
+            "description": "NotFoundError",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
+        }
+      },
+      "post": {
         "security": [
           {
             "bearer": []
           }
-        ]
-      },
-      "post": {
+        ],
         "consumes": [
           "application/json"
         ],
@@ -2959,51 +3231,51 @@
         ],
         "responses": {
           "201": {
-            "description": "Deployment represents a release executing against an environment.",
+            "description": "Deployment",
             "schema": {
               "$ref": "#/definitions/Deployment"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "404": {
-            "description": "Not found error response.",
+            "description": "NotFoundError",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
             }
           },
           "422": {
-            "description": "Validation error response.",
+            "description": "ValidationError",
             "schema": {
               "$ref": "#/definitions/ValidationError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
+        }
       }
     },
     "/projects/{id}/members": {
       "get": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "produces": [
           "application/json"
         ],
@@ -3043,43 +3315,43 @@
         ],
         "responses": {
           "200": {
-            "description": "ProjectMemberListResponse is a list of project members.",
+            "description": "ProjectMemberListResponse",
             "schema": {
               "$ref": "#/definitions/ProjectMemberListResponse"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "404": {
-            "description": "Not found error response.",
+            "description": "NotFoundError",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
+        }
+      },
+      "post": {
         "security": [
           {
             "bearer": []
           }
-        ]
-      },
-      "post": {
+        ],
         "consumes": [
           "application/json"
         ],
@@ -3117,57 +3389,57 @@
         ],
         "responses": {
           "201": {
-            "description": "ProjectMember is a single user membership on a project.",
+            "description": "ProjectMember",
             "schema": {
               "$ref": "#/definitions/ProjectMember"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "404": {
-            "description": "Not found error response.",
+            "description": "NotFoundError",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
             }
           },
           "409": {
-            "description": "Conflict error response.",
+            "description": "ConflictError",
             "schema": {
               "$ref": "#/definitions/ConflictError"
             }
           },
           "422": {
-            "description": "Validation error response.",
+            "description": "ValidationError",
             "schema": {
               "$ref": "#/definitions/ValidationError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
+        }
       }
     },
     "/projects/{id}/members/{userId}": {
       "put": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "consumes": [
           "application/json"
         ],
@@ -3214,49 +3486,49 @@
         ],
         "responses": {
           "200": {
-            "description": "ProjectMember is a single user membership on a project.",
+            "description": "ProjectMember",
             "schema": {
               "$ref": "#/definitions/ProjectMember"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "404": {
-            "description": "Not found error response.",
+            "description": "NotFoundError",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
             }
           },
           "422": {
-            "description": "Validation error response.",
+            "description": "ValidationError",
             "schema": {
               "$ref": "#/definitions/ValidationError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
+        }
+      },
+      "delete": {
         "security": [
           {
             "bearer": []
           }
-        ]
-      },
-      "delete": {
+        ],
         "schemes": [
           "http",
           "https"
@@ -3288,45 +3560,45 @@
         ],
         "responses": {
           "204": {
-            "description": "EmptyResponse is returned for no-content endpoints.",
+            "description": "EmptyResponse",
             "schema": {
               "$ref": "#/definitions/EmptyResponse"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "404": {
-            "description": "Not found error response.",
+            "description": "NotFoundError",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
+        }
       }
     },
     "/projects/{id}/notifications": {
       "get": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "produces": [
           "application/json"
         ],
@@ -3352,43 +3624,43 @@
         ],
         "responses": {
           "200": {
-            "description": "ProjectNotificationResponse is the notification settings for a project.",
+            "description": "ProjectNotificationResponse",
             "schema": {
               "$ref": "#/definitions/ProjectNotificationResponse"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "404": {
-            "description": "Not found error response.",
+            "description": "NotFoundError",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
+        }
+      },
+      "put": {
         "security": [
           {
             "bearer": []
           }
-        ]
-      },
-      "put": {
+        ],
         "consumes": [
           "application/json"
         ],
@@ -3426,45 +3698,45 @@
         ],
         "responses": {
           "200": {
-            "description": "ProjectNotificationResponse is the notification settings for a project.",
+            "description": "ProjectNotificationResponse",
             "schema": {
               "$ref": "#/definitions/ProjectNotificationResponse"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "404": {
-            "description": "Not found error response.",
+            "description": "NotFoundError",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
+        }
       }
     },
     "/projects/{id}/releases": {
       "get": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "produces": [
           "application/json"
         ],
@@ -3504,43 +3776,43 @@
         ],
         "responses": {
           "200": {
-            "description": "ReleaseListResponse is a list of releases.",
+            "description": "ReleaseListResponse",
             "schema": {
               "$ref": "#/definitions/ReleaseListResponse"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "404": {
-            "description": "Not found error response.",
+            "description": "NotFoundError",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
+        }
+      },
+      "post": {
         "security": [
           {
             "bearer": []
           }
-        ]
-      },
-      "post": {
+        ],
         "consumes": [
           "application/json"
         ],
@@ -3578,57 +3850,57 @@
         ],
         "responses": {
           "201": {
-            "description": "Release is an immutable snapshot of project steps and variables.",
+            "description": "Release",
             "schema": {
               "$ref": "#/definitions/Release"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "404": {
-            "description": "Not found error response.",
+            "description": "NotFoundError",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
             }
           },
           "409": {
-            "description": "Conflict error response.",
+            "description": "ConflictError",
             "schema": {
               "$ref": "#/definitions/ConflictError"
             }
           },
           "422": {
-            "description": "Validation error response.",
+            "description": "ValidationError",
             "schema": {
               "$ref": "#/definitions/ValidationError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
+        }
       }
     },
     "/projects/{id}/releases/{relId}": {
       "get": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "produces": [
           "application/json"
         ],
@@ -3663,45 +3935,45 @@
         ],
         "responses": {
           "200": {
-            "description": "ReleaseWithVariablesResponse is the detailed release payload.",
+            "description": "ReleaseWithVariablesResponse",
             "schema": {
               "$ref": "#/definitions/ReleaseWithVariablesResponse"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "404": {
-            "description": "Not found error response.",
+            "description": "NotFoundError",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
+        }
       }
     },
     "/projects/{id}/releases/{relId}/refresh": {
       "post": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "produces": [
           "application/json"
         ],
@@ -3736,45 +4008,45 @@
         ],
         "responses": {
           "200": {
-            "description": "Release is an immutable snapshot of project steps and variables.",
+            "description": "Release",
             "schema": {
               "$ref": "#/definitions/Release"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "404": {
-            "description": "Not found error response.",
+            "description": "NotFoundError",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
+        }
       }
     },
     "/projects/{id}/schedules": {
       "get": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "produces": [
           "application/json"
         ],
@@ -3814,43 +4086,43 @@
         ],
         "responses": {
           "200": {
-            "description": "ScheduledDeploymentListResponse is a list of scheduled deployments.",
+            "description": "ScheduledDeploymentListResponse",
             "schema": {
               "$ref": "#/definitions/ScheduledDeploymentListResponse"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "404": {
-            "description": "Not found error response.",
+            "description": "NotFoundError",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
+        }
+      },
+      "post": {
         "security": [
           {
             "bearer": []
           }
-        ]
-      },
-      "post": {
+        ],
         "consumes": [
           "application/json"
         ],
@@ -3888,51 +4160,51 @@
         ],
         "responses": {
           "201": {
-            "description": "ScheduledDeployment is a cron-driven deployment configuration.",
+            "description": "ScheduledDeployment",
             "schema": {
               "$ref": "#/definitions/ScheduledDeployment"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "404": {
-            "description": "Not found error response.",
+            "description": "NotFoundError",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
             }
           },
           "422": {
-            "description": "Validation error response.",
+            "description": "ValidationError",
             "schema": {
               "$ref": "#/definitions/ValidationError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
+        }
       }
     },
     "/projects/{id}/schedules/{schedId}": {
       "get": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "produces": [
           "application/json"
         ],
@@ -3967,43 +4239,43 @@
         ],
         "responses": {
           "200": {
-            "description": "ScheduledDeployment is a cron-driven deployment configuration.",
+            "description": "ScheduledDeployment",
             "schema": {
               "$ref": "#/definitions/ScheduledDeployment"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "404": {
-            "description": "Not found error response.",
+            "description": "NotFoundError",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
+        }
+      },
+      "put": {
         "security": [
           {
             "bearer": []
           }
-        ]
-      },
-      "put": {
+        ],
         "consumes": [
           "application/json"
         ],
@@ -4050,49 +4322,49 @@
         ],
         "responses": {
           "200": {
-            "description": "ScheduledDeployment is a cron-driven deployment configuration.",
+            "description": "ScheduledDeployment",
             "schema": {
               "$ref": "#/definitions/ScheduledDeployment"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "404": {
-            "description": "Not found error response.",
+            "description": "NotFoundError",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
             }
           },
           "422": {
-            "description": "Validation error response.",
+            "description": "ValidationError",
             "schema": {
               "$ref": "#/definitions/ValidationError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
+        }
+      },
+      "delete": {
         "security": [
           {
             "bearer": []
           }
-        ]
-      },
-      "delete": {
+        ],
         "schemes": [
           "http",
           "https"
@@ -4124,39 +4396,39 @@
         ],
         "responses": {
           "204": {
-            "description": "EmptyResponse is returned for no-content endpoints.",
+            "description": "EmptyResponse",
             "schema": {
               "$ref": "#/definitions/EmptyResponse"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
+        }
       }
     },
     "/projects/{id}/schedules/{schedId}/toggle": {
       "post": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "produces": [
           "application/json"
         ],
@@ -4191,45 +4463,45 @@
         ],
         "responses": {
           "200": {
-            "description": "ScheduledDeployment is a cron-driven deployment configuration.",
+            "description": "ScheduledDeployment",
             "schema": {
               "$ref": "#/definitions/ScheduledDeployment"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "404": {
-            "description": "Not found error response.",
+            "description": "NotFoundError",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
+        }
       }
     },
     "/projects/{id}/steps": {
       "get": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "produces": [
           "application/json"
         ],
@@ -4269,37 +4541,37 @@
         ],
         "responses": {
           "200": {
-            "description": "StepListResponse is a list of project steps.",
+            "description": "StepListResponse",
             "schema": {
               "$ref": "#/definitions/StepListResponse"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
+        }
+      },
+      "post": {
         "security": [
           {
             "bearer": []
           }
-        ]
-      },
-      "post": {
+        ],
         "consumes": [
           "application/json"
         ],
@@ -4337,39 +4609,39 @@
         ],
         "responses": {
           "201": {
-            "description": "Step is a bash script step within a project.",
+            "description": "Step",
             "schema": {
               "$ref": "#/definitions/Step"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
+        }
       }
     },
     "/projects/{id}/steps/reorder": {
       "patch": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "consumes": [
           "application/json"
         ],
@@ -4407,39 +4679,39 @@
         ],
         "responses": {
           "200": {
-            "description": "StepListResponse is a list of project steps.",
+            "description": "StepListResponse",
             "schema": {
               "$ref": "#/definitions/StepListResponse"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
+        }
       }
     },
     "/projects/{id}/steps/{stepId}": {
       "get": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "produces": [
           "application/json"
         ],
@@ -4474,43 +4746,43 @@
         ],
         "responses": {
           "200": {
-            "description": "Step is a bash script step within a project.",
+            "description": "Step",
             "schema": {
               "$ref": "#/definitions/Step"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "404": {
-            "description": "Not found error response.",
+            "description": "NotFoundError",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
+        }
+      },
+      "put": {
         "security": [
           {
             "bearer": []
           }
-        ]
-      },
-      "put": {
+        ],
         "consumes": [
           "application/json"
         ],
@@ -4557,43 +4829,43 @@
         ],
         "responses": {
           "200": {
-            "description": "Step is a bash script step within a project.",
+            "description": "Step",
             "schema": {
               "$ref": "#/definitions/Step"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "404": {
-            "description": "Not found error response.",
+            "description": "NotFoundError",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
+        }
+      },
+      "delete": {
         "security": [
           {
             "bearer": []
           }
-        ]
-      },
-      "delete": {
+        ],
         "schemes": [
           "http",
           "https"
@@ -4625,39 +4897,39 @@
         ],
         "responses": {
           "204": {
-            "description": "EmptyResponse is returned for no-content endpoints.",
+            "description": "EmptyResponse",
             "schema": {
               "$ref": "#/definitions/EmptyResponse"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
+        }
       }
     },
     "/projects/{id}/templates-picker": {
       "get": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "produces": [
           "application/json"
         ],
@@ -4683,39 +4955,39 @@
         ],
         "responses": {
           "200": {
-            "description": "StepTemplateListResponse is a list of step templates.",
+            "description": "StepTemplateListResponse",
             "schema": {
               "$ref": "#/definitions/StepTemplateListResponse"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
+        }
       }
     },
     "/projects/{id}/variables": {
       "get": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "produces": [
           "application/json"
         ],
@@ -4768,37 +5040,37 @@
         ],
         "responses": {
           "200": {
-            "description": "VariableListResponse is a list of variables.",
+            "description": "VariableListResponse",
             "schema": {
               "$ref": "#/definitions/VariableListResponse"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
+        }
+      },
+      "post": {
         "security": [
           {
             "bearer": []
           }
-        ]
-      },
-      "post": {
+        ],
         "consumes": [
           "application/json"
         ],
@@ -4836,39 +5108,39 @@
         ],
         "responses": {
           "201": {
-            "description": "VariableResponse is the JSON shape for a variable.",
+            "description": "VariableResponse",
             "schema": {
               "$ref": "#/definitions/VariableResponse"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
+        }
       }
     },
     "/projects/{id}/variables/{varId}": {
       "get": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "produces": [
           "application/json"
         ],
@@ -4903,43 +5175,43 @@
         ],
         "responses": {
           "200": {
-            "description": "VariableResponse is the JSON shape for a variable.",
+            "description": "VariableResponse",
             "schema": {
               "$ref": "#/definitions/VariableResponse"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "404": {
-            "description": "Not found error response.",
+            "description": "NotFoundError",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
+        }
+      },
+      "put": {
         "security": [
           {
             "bearer": []
           }
-        ]
-      },
-      "put": {
+        ],
         "consumes": [
           "application/json"
         ],
@@ -4986,43 +5258,43 @@
         ],
         "responses": {
           "200": {
-            "description": "VariableResponse is the JSON shape for a variable.",
+            "description": "VariableResponse",
             "schema": {
               "$ref": "#/definitions/VariableResponse"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "404": {
-            "description": "Not found error response.",
+            "description": "NotFoundError",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
+        }
+      },
+      "delete": {
         "security": [
           {
             "bearer": []
           }
-        ]
-      },
-      "delete": {
+        ],
         "schemes": [
           "http",
           "https"
@@ -5054,39 +5326,39 @@
         ],
         "responses": {
           "204": {
-            "description": "EmptyResponse is returned for no-content endpoints.",
+            "description": "EmptyResponse",
             "schema": {
               "$ref": "#/definitions/EmptyResponse"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
+        }
       }
     },
     "/templates": {
       "get": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "produces": [
           "application/json"
         ],
@@ -5117,31 +5389,31 @@
         ],
         "responses": {
           "200": {
-            "description": "StepTemplateListResponse is a list of step templates.",
+            "description": "StepTemplateListResponse",
             "schema": {
               "$ref": "#/definitions/StepTemplateListResponse"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
+        }
+      },
+      "post": {
         "security": [
           {
             "bearer": []
           }
-        ]
-      },
-      "post": {
+        ],
         "consumes": [
           "application/json"
         ],
@@ -5170,45 +5442,45 @@
         ],
         "responses": {
           "201": {
-            "description": "StepTemplate is a reusable step template.",
+            "description": "StepTemplate",
             "schema": {
               "$ref": "#/definitions/StepTemplate"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "409": {
-            "description": "Conflict error response.",
+            "description": "ConflictError",
             "schema": {
               "$ref": "#/definitions/ConflictError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
+        }
       }
     },
     "/templates/{id}": {
       "get": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "produces": [
           "application/json"
         ],
@@ -5234,43 +5506,43 @@
         ],
         "responses": {
           "200": {
-            "description": "StepTemplate is a reusable step template.",
+            "description": "StepTemplate",
             "schema": {
               "$ref": "#/definitions/StepTemplate"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "404": {
-            "description": "Not found error response.",
+            "description": "NotFoundError",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
+        }
+      },
+      "put": {
         "security": [
           {
             "bearer": []
           }
-        ]
-      },
-      "put": {
+        ],
         "consumes": [
           "application/json"
         ],
@@ -5308,49 +5580,49 @@
         ],
         "responses": {
           "200": {
-            "description": "StepTemplate is a reusable step template.",
+            "description": "StepTemplate",
             "schema": {
               "$ref": "#/definitions/StepTemplate"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "404": {
-            "description": "Not found error response.",
+            "description": "NotFoundError",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
             }
           },
           "409": {
-            "description": "Conflict error response.",
+            "description": "ConflictError",
             "schema": {
               "$ref": "#/definitions/ConflictError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
+        }
+      },
+      "delete": {
         "security": [
           {
             "bearer": []
           }
-        ]
-      },
-      "delete": {
+        ],
         "schemes": [
           "http",
           "https"
@@ -5373,39 +5645,39 @@
         ],
         "responses": {
           "204": {
-            "description": "EmptyResponse is returned for no-content endpoints.",
+            "description": "EmptyResponse",
             "schema": {
               "$ref": "#/definitions/EmptyResponse"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
+        }
       }
     },
     "/templates/{id}/history": {
       "get": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "produces": [
           "application/json"
         ],
@@ -5431,45 +5703,45 @@
         ],
         "responses": {
           "200": {
-            "description": "StepTemplateVersionListResponse is a list of step template versions.",
+            "description": "StepTemplateVersionListResponse",
             "schema": {
               "$ref": "#/definitions/StepTemplateVersionListResponse"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "404": {
-            "description": "Not found error response.",
+            "description": "NotFoundError",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
+        }
       }
     },
     "/tokens": {
       "get": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "produces": [
           "application/json"
         ],
@@ -5507,31 +5779,31 @@
         ],
         "responses": {
           "200": {
-            "description": "TokenListResponse is a list of API tokens.",
+            "description": "TokenListResponse",
             "schema": {
               "$ref": "#/definitions/TokenListResponse"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
+        }
+      },
+      "post": {
         "security": [
           {
             "bearer": []
           }
-        ]
-      },
-      "post": {
+        ],
         "consumes": [
           "application/json"
         ],
@@ -5560,45 +5832,45 @@
         ],
         "responses": {
           "201": {
-            "description": "CreateTokenResponse returns the plaintext token once.",
+            "description": "CreateTokenResponse",
             "schema": {
               "$ref": "#/definitions/CreateTokenResponse"
             }
           },
           "400": {
-            "description": "Bad request error response.",
+            "description": "BadRequestError",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "422": {
-            "description": "Validation error response.",
+            "description": "ValidationError",
             "schema": {
               "$ref": "#/definitions/ValidationError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
+        }
       }
     },
     "/tokens/{id}": {
       "delete": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "schemes": [
           "http",
           "https"
@@ -5620,39 +5892,39 @@
         ],
         "responses": {
           "204": {
-            "description": "EmptyResponse is returned for no-content endpoints.",
+            "description": "EmptyResponse",
             "schema": {
               "$ref": "#/definitions/EmptyResponse"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "404": {
-            "description": "Not found error response.",
+            "description": "NotFoundError",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
+        }
       }
     },
     "/users/me": {
       "get": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "produces": [
           "application/json"
         ],
@@ -5667,33 +5939,120 @@
         "operationId": "getCurrentUser",
         "responses": {
           "200": {
-            "description": "User is a user account.",
+            "description": "User",
             "schema": {
               "$ref": "#/definitions/User"
             }
           },
           "401": {
-            "description": "Unauthorized error response.",
+            "description": "UnauthorizedError",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "500": {
-            "description": "Server error response.",
+            "description": "ServerError",
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
           }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
+        }
       }
     }
   },
   "definitions": {
+    "AgentLabel": {
+      "type": "object",
+      "title": "AgentLabel is a safe administrative label representation.",
+      "properties": {
+        "created_at": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "CreatedAt"
+        },
+        "id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "ID"
+        },
+        "members": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/AgentLabelMember"
+          },
+          "x-go-name": "Members"
+        },
+        "name": {
+          "type": "string",
+          "x-go-name": "Name"
+        },
+        "updated_at": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "UpdatedAt"
+        }
+      },
+      "x-go-name": "swaggerAgentLabel",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "AgentLabelMember": {
+      "type": "object",
+      "title": "AgentLabelMember contains only operator-safe identity and health fields.",
+      "properties": {
+        "agent_id": {
+          "type": "string",
+          "x-go-name": "AgentID"
+        },
+        "agent_name": {
+          "type": "string",
+          "x-go-name": "AgentName"
+        },
+        "agent_status": {
+          "type": "string",
+          "x-go-name": "AgentStatus"
+        },
+        "eligible": {
+          "type": "boolean",
+          "x-go-name": "Eligible"
+        },
+        "paired": {
+          "type": "boolean",
+          "x-go-name": "Paired"
+        }
+      },
+      "x-go-name": "swaggerAgentLabelMember",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "AgentLabelMemberRequest": {
+      "type": "object",
+      "required": [
+        "agent_id"
+      ],
+      "properties": {
+        "agent_id": {
+          "type": "string",
+          "x-go-name": "AgentID"
+        }
+      },
+      "x-go-name": "swaggerAgentLabelMemberRequest",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "AgentLabelRequest": {
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "maxLength": 64,
+          "minLength": 1,
+          "x-go-name": "Name"
+        }
+      },
+      "x-go-name": "swaggerAgentLabelRequest",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
     "AuditLog": {
       "type": "object",
       "title": "AuditLog is a recorded state-changing action.",
@@ -5748,19 +6107,23 @@
       "title": "AuditLogParams filters the audit log list.",
       "properties": {
         "action": {
+          "description": "in: query",
           "type": "string",
           "x-go-name": "Action"
         },
         "entity_type": {
+          "description": "in: query",
           "type": "string",
           "x-go-name": "EntityType"
         },
         "limit": {
+          "description": "in: query",
           "type": "integer",
           "format": "int64",
           "x-go-name": "Limit"
         },
         "user_id": {
+          "description": "in: query",
           "type": "integer",
           "format": "int64",
           "x-go-name": "UserID"
@@ -5774,6 +6137,7 @@
       "title": "Bad request error response.",
       "properties": {
         "error": {
+          "description": "in: body",
           "type": "string",
           "x-go-name": "Error"
         }
@@ -5786,6 +6150,7 @@
       "title": "Conflict error response.",
       "properties": {
         "error": {
+          "description": "in: body",
           "type": "string",
           "x-go-name": "Error"
         }
@@ -6188,6 +6553,7 @@
       "title": "Generic error response.",
       "properties": {
         "error": {
+          "description": "in: body",
           "type": "string",
           "x-go-name": "Error"
         }
@@ -6200,6 +6566,7 @@
       "title": "Forbidden error response.",
       "properties": {
         "error": {
+          "description": "in: body",
           "type": "string",
           "x-go-name": "Error"
         }
@@ -6441,7 +6808,7 @@
       "title": "LogStreamParams controls the format of StreamLogs.",
       "properties": {
         "format": {
-          "description": "Format is either sse or ndjson.",
+          "description": "Format is either sse or ndjson.\n\nin: query",
           "type": "string",
           "x-go-name": "Format"
         }
@@ -6454,6 +6821,7 @@
       "title": "Not found error response.",
       "properties": {
         "error": {
+          "description": "in: body",
           "type": "string",
           "x-go-name": "Error"
         }
@@ -6520,6 +6888,7 @@
       "title": "Paginated list envelope.",
       "properties": {
         "items": {
+          "description": "in: body",
           "type": "array",
           "items": {
             "type": "object",
@@ -6975,7 +7344,6 @@
         "cron_expr": {
           "description": "Deprecated: alias for cron. Prefer cron in new callers.",
           "type": "string",
-          "x-deprecated": true,
           "x-go-name": "CronExpr"
         },
         "enabled": {
@@ -7075,6 +7443,7 @@
       "title": "Server error response.",
       "properties": {
         "error": {
+          "description": "in: body",
           "type": "string",
           "x-go-name": "Error"
         }
@@ -7116,6 +7485,7 @@
       "title": "Status message response.",
       "properties": {
         "status": {
+          "description": "in: body",
           "type": "string",
           "x-go-name": "Status"
         }
@@ -7405,6 +7775,7 @@
       "title": "Unauthorized error response.",
       "properties": {
         "error": {
+          "description": "in: body",
           "type": "string",
           "x-go-name": "Error"
         }
@@ -7534,6 +7905,7 @@
       "title": "Validation error response.",
       "properties": {
         "error": {
+          "description": "in: body",
           "type": "string",
           "x-go-name": "Error"
         }
@@ -7658,16 +8030,28 @@
       "x-go-package": "durpdeploy/internal/handler/api"
     }
   },
+  "responses": {
+    "AgentLabelListResponse": {
+      "description": "",
+      "schema": {
+        "type": "array",
+        "items": {
+          "$ref": "#/definitions/AgentLabel"
+        }
+      }
+    },
+    "AgentLabelResponse": {
+      "description": "",
+      "schema": {
+        "$ref": "#/definitions/AgentLabel"
+      }
+    }
+  },
   "securityDefinitions": {
     "bearer": {
       "type": "apiKey",
       "name": "Authorization",
       "in": "header"
     }
-  },
-  "security": [
-    {
-      "bearer": []
-    }
-  ]
+  }
 }
