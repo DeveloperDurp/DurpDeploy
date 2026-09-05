@@ -55,8 +55,13 @@ func NewRouter(
 		"/static/*",
 		http.StripPrefix("/static/", http.FileServer(http.FS(static.Assets))),
 	)
-	r.Get("/favicon.ico", func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusNoContent)
+	r.Get("/favicon.ico", func(w http.ResponseWriter, req *http.Request) {
+		http.Redirect(
+			w,
+			req,
+			"/static/icons/favicon-64.png",
+			http.StatusPermanentRedirect,
+		)
 	})
 
 	errorHandler := handler.NewErrorHandler()
