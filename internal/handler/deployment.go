@@ -317,6 +317,11 @@ func (h *DeploymentHandler) ScheduleDeployment(
 		mode = "default"
 	}
 	labelID, _ := strconv.ParseInt(r.FormValue("agent_label_id"), 10, 64)
+	strategy := r.FormValue("agent_strategy")
+	if mode != string(dispatch.TargetLabel) {
+		labelID = 0
+		strategy = ""
+	}
 	user := auth.UserFromContext(r.Context())
 	deployment, err := dispatch.NewCreationService(h.repo, h.dispatcher).Create(
 		r.Context(),
@@ -326,7 +331,7 @@ func (h *DeploymentHandler) ScheduleDeployment(
 			Admin: user != nil && user.Role == "admin", Note: note,
 			Routing: dispatch.Input{
 				Source: dispatch.SourceRequest, Mode: mode,
-				LabelID: labelID, Strategy: r.FormValue("agent_strategy"),
+				LabelID: labelID, Strategy: strategy,
 			},
 		},
 	)

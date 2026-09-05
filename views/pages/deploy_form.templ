@@ -177,17 +177,20 @@ templ DeployFormPage(project db.Project, releases []db.Release, selectedRelease 
 }
 
 templ ExecutionTargetFields(options ExecutionTargetOptions, compact bool) {
-	<fieldset class="space-y-2" style="min-width: 17rem; flex-shrink: 0" x-data="{ targetMode: 'default' }">
+	<fieldset class={ templ.KV("space-y-2 min-w-0", true), templ.KV("sm:min-w-[17rem] sm:shrink-0", compact) } x-data="{ targetMode: 'default' }">
 		<legend class="label-text font-medium">Execution target</legend>
-		<select name="target_mode" aria-label="Execution target" x-model="targetMode" class={ templ.KV("select select-bordered", true), templ.KV("select-xs", compact) }>
-			<option value="default">Default — { options.Default }</option>
+		<select name="target_mode" aria-label="Execution target" x-model="targetMode" class={ templ.KV("select select-bordered max-w-full", true), templ.KV("select-xs w-full sm:w-auto", compact), templ.KV("w-full", !compact) }>
+			<option value="default">Default</option>
 			<option value="local">Local</option>
 			<option value="label">Agent label</option>
 		</select>
-		<div x-show="targetMode === 'label'" x-cloak class={ templ.KV("flex gap-2", compact), templ.KV("grid gap-2 sm:grid-cols-2", !compact) }>
+		<p x-show="targetMode === 'default'" class="text-xs text-gray-500">
+			Uses { options.Default }.
+		</p>
+		<div x-show="targetMode === 'label'" x-cloak class={ templ.KV("flex flex-col gap-2 sm:flex-row", compact), templ.KV("grid gap-2 sm:grid-cols-2", !compact) }>
 			<label class="form-control">
 				<span class="label-text">Agent label</span>
-				<select name="agent_label_id" x-bind:required="targetMode === 'label'" class={ templ.KV("select select-bordered", true), templ.KV("select-xs", compact) }>
+				<select name="agent_label_id" x-bind:required="targetMode === 'label'" class={ templ.KV("select select-bordered max-w-full", true), templ.KV("select-xs w-full sm:w-auto", compact), templ.KV("w-full", !compact) }>
 					<option value="">Select label</option>
 					for _, label := range options.Labels {
 						<option value={ strconv.FormatInt(label.ID, 10) }>{ label.Name }</option>
@@ -196,7 +199,7 @@ templ ExecutionTargetFields(options ExecutionTargetOptions, compact bool) {
 			</label>
 			<label class="form-control">
 				<span class="label-text">Strategy</span>
-				<select name="agent_strategy" x-bind:required="targetMode === 'label'" class={ templ.KV("select select-bordered", true), templ.KV("select-xs", compact) }>
+				<select name="agent_strategy" x-bind:required="targetMode === 'label'" class={ templ.KV("select select-bordered max-w-full", true), templ.KV("select-xs w-full sm:w-auto", compact), templ.KV("w-full", !compact) }>
 					<option value="round_robin">Round robin</option>
 					<option value="all">All eligible agents</option>
 				</select>
