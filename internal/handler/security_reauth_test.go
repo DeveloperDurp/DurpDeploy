@@ -158,6 +158,35 @@ func TestSecurity_ReauthRejectsWrongPasswordWithoutRefreshingSession(
 	}
 }
 
+func TestSecurity_ReauthRejectsDummyPasswordForPasswordlessAccount(
+	t *testing.T,
+) {
+	h := newAuthHarness(t)
+	configureMFA(t, h, mfa.Config{})
+	current := seedSession(t, h.repo, h.server, "admin")
+	if err := h.repo.Queries.UpdateUserPassword(
+		context.Background(),
+		db.UpdateUserPasswordParams{ID: current.user.ID, PasswordHash: ""},
+	); err != nil {
+		t.Fatalf("clear password: %v", err)
+	}
+
+	response := postSecurityForm(
+		t,
+		h,
+		current,
+		"/settings/security/reauth",
+		url.Values{
+			"password": {"durpdeploy unknown account timing placeholder"},
+		},
+		h.authHandler.SecurityReauthPost,
+	)
+
+	if response.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want 422", response.Code)
+	}
+}
+
 func TestSecurity_ReauthConsumesRecoveryCode(t *testing.T) {
 	// Given
 	h := newAuthHarness(t)

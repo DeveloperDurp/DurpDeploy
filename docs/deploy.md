@@ -421,12 +421,18 @@ logs if TLS setup fails (DNS not propagated, port 443 blocked, etc.):
 sudo journalctl -u caddy -n 50 --no-pager
 ```
 
-> **Rate limiting note:** the `rate_limit` directive requires a Caddy build
-> with the `caddy-ratelimit` module (built-in from Caddy v2.8+). If your
-> Caddy does not have it, rebuild with
-> `xcaddy build --with github.com/mholt/caddy-ratelimit` or remove the
-> `@login` / `rate_limit` block — argon2id's cost is the primary brute-force
-> mitigation. Rate limiting is defense in depth.
+DurpDeploy applies login rate limits itself. It trusts forwarding headers from
+loopback proxies by default. If Caddy or another trusted proxy is on a different
+host, set `DURPDEPLOY_TRUSTED_PROXIES` to its IP address or CIDR. Multiple
+entries are comma-separated. Only those peers may supply `X-Forwarded-For`.
+The bundled Compose file assigns Caddy a fixed private address and trusts only
+that address, not the rest of the container network.
+
+If a CDN or load balancer sits in front of Caddy, also set
+`DURPDEPLOY_CADDY_TRUSTED_PROXIES` in Caddy's environment to that provider's
+documented egress CIDRs. Caddy parses the incoming chain from right to left,
+then sends DurpDeploy one canonical client address. Do not use broad public or
+private ranges: every configured address is authorized to speak for clients.
 
 ---
 
