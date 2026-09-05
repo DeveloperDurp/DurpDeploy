@@ -11,8 +11,8 @@ SELECT * FROM agents ORDER BY name ASC, id ASC;
 
 -- name: DeletePendingUnreferencedAgent :execrows
 DELETE FROM agents
-WHERE id = ?
-  AND status = 'pending'
+WHERE agents.id = ?
+  AND agents.status = 'pending'
   AND NOT EXISTS (SELECT 1 FROM agent_events WHERE agent_id = agents.id)
   AND NOT EXISTS (
       SELECT 1 FROM deployment_dispatches WHERE agent_id = agents.id

@@ -1,5 +1,7 @@
 -- name: ListDeploymentsByRelease :many
-SELECT * FROM deployments WHERE release_id = ? ORDER BY created_at DESC;
+SELECT * FROM deployments
+WHERE release_id = ? AND parent_deployment_id IS NULL
+ORDER BY created_at DESC;
 
 -- name: GetDeployment :one
 SELECT * FROM deployments WHERE id = ?;
@@ -29,7 +31,9 @@ SET status = 'pending', started_at = NULL, finished_at = NULL
 WHERE id = sqlc.arg(id) AND status = 'pending_approval';
 
 -- name: ListDeployments :many
-SELECT * FROM deployments ORDER BY created_at DESC;
+SELECT * FROM deployments
+WHERE parent_deployment_id IS NULL
+ORDER BY created_at DESC;
 
 -- name: ListDeploymentsWithRefs :many
 SELECT
@@ -42,28 +46,38 @@ FROM deployments d
 JOIN releases r ON d.release_id = r.id
 JOIN projects p ON r.project_id = p.id
 JOIN environments e ON d.environment_id = e.id
+WHERE d.parent_deployment_id IS NULL
 ORDER BY d.created_at DESC;
 
 -- name: ListRecentDeployments :many
-SELECT * FROM deployments ORDER BY created_at DESC LIMIT ?;
+SELECT * FROM deployments
+WHERE parent_deployment_id IS NULL
+ORDER BY created_at DESC LIMIT ?;
 
 -- name: DeleteDeployment :exec
 DELETE FROM deployments WHERE id = ?;
 
 -- name: GetLatestDeploymentForReleaseEnv :one
-SELECT * FROM deployments WHERE release_id = ? AND environment_id = ? ORDER BY created_at DESC LIMIT 1;
+SELECT * FROM deployments WHERE release_id = ? AND environment_id = ?
+AND parent_deployment_id IS NULL ORDER BY created_at DESC LIMIT 1;
 
 -- name: GetLatestSuccessfulDeploymentForReleaseEnv :one
-SELECT * FROM deployments WHERE release_id = ? AND environment_id = ? AND status = 'succeeded' ORDER BY created_at DESC LIMIT 1;
+SELECT * FROM deployments WHERE release_id = ? AND environment_id = ?
+AND status = 'succeeded' AND parent_deployment_id IS NULL
+ORDER BY created_at DESC LIMIT 1;
 
 -- name: GetLatestSuccessfulDeploymentForEnv :one
-SELECT * FROM deployments WHERE environment_id = ? AND status = 'succeeded' ORDER BY created_at DESC LIMIT 1;
+SELECT * FROM deployments WHERE environment_id = ? AND status = 'succeeded'
+AND parent_deployment_id IS NULL ORDER BY created_at DESC LIMIT 1;
 
 -- name: ListRecentDeploymentsForEnv :many
-SELECT * FROM deployments WHERE environment_id = ? ORDER BY created_at DESC LIMIT ?;
+SELECT * FROM deployments WHERE environment_id = ?
+AND parent_deployment_id IS NULL ORDER BY created_at DESC LIMIT ?;
 
 -- name: CountDeploymentsToday :one
-SELECT COUNT(*) FROM deployments WHERE created_at >= strftime('%s','now','start of day');
+SELECT COUNT(*) FROM deployments
+WHERE created_at >= strftime('%s','now','start of day')
+  AND parent_deployment_id IS NULL;
 
 -- name: ListRunningDeploymentsWithRefs :many
 SELECT
@@ -76,7 +90,7 @@ FROM deployments d
 JOIN releases r ON d.release_id = r.id
 JOIN projects p ON r.project_id = p.id
 JOIN environments e ON d.environment_id = e.id
-WHERE d.status IN ('pending','running')
+WHERE d.status IN ('pending','running') AND d.parent_deployment_id IS NULL
 ORDER BY d.created_at DESC;
 
 -- name: ListPendingDeployments :many
@@ -93,7 +107,7 @@ FROM deployments d
 JOIN releases r ON d.release_id = r.id
 JOIN projects p ON r.project_id = p.id
 JOIN environments e ON d.environment_id = e.id
-WHERE d.status = 'pending'
+WHERE d.status = 'pending' AND d.parent_deployment_id IS NULL
 ORDER BY d.created_at ASC;
 
 -- name: ListLatestDeploymentPerReleaseEnv :many
@@ -106,6 +120,7 @@ FROM (
     JOIN releases r ON d.release_id = r.id
     JOIN projects p ON r.project_id = p.id
     JOIN environments e ON d.environment_id = e.id
+    WHERE d.parent_deployment_id IS NULL
 ) WHERE rn = 1 ORDER BY created_at DESC;
 
 -- name: ListDeploymentsWithRefsFiltered :many
@@ -120,7 +135,8 @@ JOIN releases r ON d.release_id = r.id
 JOIN projects p ON r.project_id = p.id
 JOIN environments e ON d.environment_id = e.id
 LEFT JOIN deployment_dispatches dispatch ON dispatch.deployment_id = d.id
-WHERE (CAST(sqlc.narg(f_project_id) AS INTEGER) IS NULL OR d.release_id IN (SELECT id FROM releases WHERE project_id = CAST(sqlc.narg(f_project_id) AS INTEGER)))
+WHERE d.parent_deployment_id IS NULL
+  AND (CAST(sqlc.narg(f_project_id) AS INTEGER) IS NULL OR d.release_id IN (SELECT id FROM releases WHERE project_id = CAST(sqlc.narg(f_project_id) AS INTEGER)))
   AND (CAST(sqlc.narg(f_env_id)     AS INTEGER) IS NULL OR d.environment_id = CAST(sqlc.narg(f_env_id) AS INTEGER))
   AND (CAST(sqlc.narg(f_status)     AS TEXT)    IS NULL OR d.status = CAST(sqlc.narg(f_status) AS TEXT))
   AND (CAST(sqlc.narg(f_dispatch_state) AS TEXT) IS NULL OR CAST(sqlc.narg(f_dispatch_state) AS TEXT) = CASE WHEN COALESCE(dispatch.mode, 'local') = 'local' THEN 'local' ELSE dispatch.state END)
@@ -136,7 +152,8 @@ JOIN releases r ON d.release_id = r.id
 JOIN projects p ON r.project_id = p.id
 JOIN environments e ON d.environment_id = e.id
 LEFT JOIN deployment_dispatches dispatch ON dispatch.deployment_id = d.id
-WHERE (CAST(sqlc.narg(f_project_id) AS INTEGER) IS NULL OR d.release_id IN (SELECT id FROM releases WHERE project_id = CAST(sqlc.narg(f_project_id) AS INTEGER)))
+WHERE d.parent_deployment_id IS NULL
+  AND (CAST(sqlc.narg(f_project_id) AS INTEGER) IS NULL OR d.release_id IN (SELECT id FROM releases WHERE project_id = CAST(sqlc.narg(f_project_id) AS INTEGER)))
   AND (CAST(sqlc.narg(f_env_id)     AS INTEGER) IS NULL OR d.environment_id = CAST(sqlc.narg(f_env_id) AS INTEGER))
   AND (CAST(sqlc.narg(f_status)     AS TEXT)    IS NULL OR d.status = CAST(sqlc.narg(f_status) AS TEXT))
   AND (CAST(sqlc.narg(f_dispatch_state) AS TEXT) IS NULL OR CAST(sqlc.narg(f_dispatch_state) AS TEXT) = CASE WHEN COALESCE(dispatch.mode, 'local') = 'local' THEN 'local' ELSE dispatch.state END)

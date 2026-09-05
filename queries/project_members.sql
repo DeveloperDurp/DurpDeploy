@@ -13,7 +13,9 @@ WHERE pm.project_id = ?
 ORDER BY pm.created_at ASC;
 
 -- name: IsProjectMember :one
-SELECT EXISTS(SELECT 1 FROM project_members WHERE project_id = ? AND user_id = ?);
+SELECT CAST(EXISTS(
+    SELECT 1 FROM project_members WHERE project_id = ? AND user_id = ?
+) AS INTEGER);
 
 -- name: GetProjectMember :one
 SELECT * FROM project_members WHERE project_id = ? AND user_id = ?;

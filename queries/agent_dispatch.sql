@@ -77,7 +77,7 @@ SET state = 'claimed',
     claim_expires_at = sqlc.arg(claim_expires_at),
     last_heartbeat_at = sqlc.arg(last_heartbeat_at),
     updated_at = unixepoch()
-WHERE deployment_id = sqlc.arg(deployment_id)
+WHERE deployment_dispatches.deployment_id = sqlc.arg(deployment_id)
   AND state = 'waiting'
   AND NOT EXISTS (
       SELECT 1

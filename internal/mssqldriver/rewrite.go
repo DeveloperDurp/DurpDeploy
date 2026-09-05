@@ -27,6 +27,9 @@ var (
 	projectMemberExistsRe = regexp.MustCompile(
 		`(?is)^(\s*(?:--[^\r\n]*(?:\r?\n|$))?\s*)SELECT\s+EXISTS\s*\(\s*(SELECT\s+1\s+FROM\s+project_members\s+WHERE\s+project_id\s*=\s*(@p\d+)\s+AND\s+user_id\s*=\s*(@p\d+))\s*\)(\s*;?\s*)$`,
 	)
+	projectMemberCastExistsRe = regexp.MustCompile(
+		`(?is)^(\s*(?:--[^\r\n]*(?:\r?\n|$))?\s*)SELECT\s+CAST\s*\(\s*EXISTS\s*\(\s*(SELECT\s+1\s+FROM\s+project_members\s+WHERE\s+project_id\s*=\s*(@p\d+)\s+AND\s+user_id\s*=\s*(@p\d+))\s*\)\s+AS\s+INTEGER\s*\)(\s*;?\s*)$`,
+	)
 )
 
 const unixEpoch = "DATEDIFF_BIG(SECOND, '1970-01-01T00:00:00Z', SYSUTCDATETIME())"
@@ -38,6 +41,9 @@ func RewriteSQL(query string) (string, error) {
 	query = rewriteTimes(query)
 	query = rewritePlaceholders(query)
 	query = replaceOutsideQuotes(query, " AS TEXT", " AS NVARCHAR(MAX)")
+	if rewritten, ok := rewriteAgentLabelRouting(query); ok {
+		query = rewritten
+	}
 
 	if containsOutsideQuotes(query, "ON CONFLICT") {
 		if rewritten, ok := rewriteRemoteAgentConflict(query); ok {
@@ -220,6 +226,9 @@ func outputColumns(returning string) (string, error) {
 
 func rewriteProjectMemberExists(query string) string {
 	match := projectMemberExistsRe.FindStringSubmatch(query)
+	if match == nil {
+		match = projectMemberCastExistsRe.FindStringSubmatch(query)
+	}
 	if match == nil {
 		return query
 	}
