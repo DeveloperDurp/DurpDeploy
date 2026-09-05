@@ -108,14 +108,14 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 			w,
 			r,
 			pages.ProjectForm(
-				db.Project{},
+				projectFromForm(r, 0, name, desc),
 				false,
 				errorMsg,
 				lifecycles,
 				projectPolicyView(policy), labels, nil, nil, false,
 			),
 			pages.ProjectFormPage(
-				db.Project{},
+				projectFromForm(r, 0, name, desc),
 				false,
 				errorMsg,
 				lifecycles,
@@ -168,14 +168,14 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 				w,
 				r,
 				pages.ProjectForm(
-					db.Project{Name: name},
+					projectFromForm(r, 0, name, desc),
 					false,
 					"A project with this name already exists",
 					lifecycles, projectPolicyView(policy), labels,
 					nil, nil, false,
 				),
 				pages.ProjectFormPage(
-					db.Project{Name: name},
+					projectFromForm(r, 0, name, desc),
 					false,
 					"A project with this name already exists",
 					lifecycles, projectPolicyView(policy), labels,
@@ -584,7 +584,7 @@ func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 	policy, policyErr := h.projectPolicyFromForm(r, existingPolicy.Legacy)
 
 	if name == "" || policyErr != nil {
-		project := db.Project{ID: id, Name: name}
+		project := projectFromForm(r, id, name, desc)
 		lifecycles, _ := h.repo.Queries.ListLifecycles(r.Context())
 		labels, _ := h.repo.Queries.ListAgentLabels(r.Context())
 		members, available, canManage := h.loadMembersContext(r, id)
@@ -633,7 +633,7 @@ func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		if IsUniqueViolation(err) {
-			project := db.Project{ID: id, Name: name}
+			project := projectFromForm(r, id, name, desc)
 			lifecycles, _ := h.repo.Queries.ListLifecycles(r.Context())
 			labels, _ := h.repo.Queries.ListAgentLabels(r.Context())
 			members, available, canManage := h.loadMembersContext(r, id)
@@ -778,15 +778,49 @@ func (h *ProjectHandler) projectPolicyFromForm(
 			}, dispatch.ErrInvalidPolicy
 		}
 	}
-	return ResolveProjectExecutionPolicy(
+	state := ProjectExecutionPolicyState{
+		TargetMode: targetMode,
+		LabelID:    labelID,
+		Strategy:   strings.TrimSpace(r.FormValue("agent_strategy")),
+	}
+	resolved, err := ResolveProjectExecutionPolicy(
 		r.Context(),
 		h.repo,
 		ProjectExecutionPolicyInput{
 			TargetMode: targetMode,
 			LabelID:    labelID,
-			Strategy:   strings.TrimSpace(r.FormValue("agent_strategy")),
+			Strategy:   state.Strategy,
 		},
 	)
+	if err != nil {
+		return state, err
+	}
+	return resolved, nil
+}
+
+func projectFromForm(
+	r *http.Request,
+	id int64,
+	name string,
+	description string,
+) db.Project {
+	project := db.Project{
+		ID:   id,
+		Name: name,
+		Description: sql.NullString{
+			String: description,
+			Valid:  description != "",
+		},
+	}
+	lifecycleID, err := strconv.ParseInt(
+		strings.TrimSpace(r.FormValue("lifecycle_id")),
+		10,
+		64,
+	)
+	if err == nil && lifecycleID > 0 {
+		project.LifecycleID = sql.NullInt64{Int64: lifecycleID, Valid: true}
+	}
+	return project
 }
 
 func projectPolicyView(
