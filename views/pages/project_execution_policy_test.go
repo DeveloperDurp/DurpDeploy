@@ -3,11 +3,13 @@ package pages
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/a-h/templ"
+	"golang.org/x/net/html"
 
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
@@ -87,6 +89,124 @@ func TestProjectExecutionPolicySummary_ExplainsLegacyAndLocalStates(
 		)
 	}
 	t.Log("rendered detail state: legacy warning and local summary present")
+}
+
+func TestProjectForm_LifecycleHelperUsesResponsiveFlow(t *testing.T) {
+	markup := renderProjectExecutionPolicy(
+		t,
+		context.Background(),
+		ProjectForm(
+			db.Project{
+				Name: "mobile-safe",
+				Description: sql.NullString{
+					String: "preserved description",
+					Valid:  true,
+				},
+				LifecycleID: sql.NullInt64{Int64: 1, Valid: true},
+			},
+			false,
+			"Choose a default",
+			[]db.Lifecycle{{ID: 1, Name: "Approval"}},
+			ProjectExecutionPolicyView{
+				TargetMode: "label",
+				LabelID:    1,
+			},
+			[]db.AgentLabel{{ID: 1, Name: "Cat Facts"}},
+			nil,
+			nil,
+			false,
+		),
+	)
+	document, err := html.Parse(strings.NewReader(markup))
+	if err != nil {
+		t.Fatalf("parse rendered project form: %v", err)
+	}
+	lifecycleLabel := lifecycleHelpLabel(document)
+	if lifecycleLabel == nil {
+		t.Fatal("rendered project form has no lifecycle help label")
+	}
+	children := elementChildren(lifecycleLabel)
+	if len(children) != 2 || nodeText(children[0]) != "Lifecycle" ||
+		nodeText(
+			children[1],
+		) != "Optional. Gates deployments to environments in order." {
+		t.Fatalf("lifecycle label/help flow = %q", nodeText(lifecycleLabel))
+	}
+	classes := attribute(lifecycleLabel, "class")
+	for _, layout := range []string{
+		"flex", "flex-col", "gap-1", "sm:flex-row", "sm:items-center",
+	} {
+		if !classToken(classes, layout) {
+			t.Errorf(
+				"lifecycle label misses responsive flow %q: %q",
+				layout,
+				classes,
+			)
+		}
+	}
+	if !strings.Contains(markup, `>preserved description</textarea>`) ||
+		!strings.Contains(markup, `value="1" selected`) ||
+		!strings.Contains(markup, `value="1" selected>Cat Facts`) {
+		t.Fatal(
+			"responsive lifecycle layout lost submitted lifecycle or policy form state",
+		)
+	}
+}
+
+func lifecycleHelpLabel(node *html.Node) *html.Node {
+	if node.Type == html.ElementNode && node.Data == "label" &&
+		strings.Contains(nodeText(node), "Optional. Gates deployments") {
+		return node
+	}
+	for child := node.FirstChild; child != nil; child = child.NextSibling {
+		if label := lifecycleHelpLabel(child); label != nil {
+			return label
+		}
+	}
+	return nil
+}
+
+func elementChildren(node *html.Node) []*html.Node {
+	var children []*html.Node
+	for child := node.FirstChild; child != nil; child = child.NextSibling {
+		if child.Type == html.ElementNode {
+			children = append(children, child)
+		}
+	}
+	return children
+}
+
+func nodeText(node *html.Node) string {
+	var text strings.Builder
+	var walk func(*html.Node)
+	walk = func(current *html.Node) {
+		if current.Type == html.TextNode {
+			text.WriteString(current.Data)
+		}
+		for child := current.FirstChild; child != nil; child = child.NextSibling {
+			walk(child)
+		}
+	}
+	walk(node)
+	return strings.Join(strings.Fields(text.String()), " ")
+}
+
+func attribute(node *html.Node, name string) string {
+	for _, attribute := range node.Attr {
+		if attribute.Key == name {
+			return attribute.Val
+		}
+	}
+	return ""
+}
+
+func classToken(classes, token string) bool {
+	for _, class := range strings.Fields(classes) {
+		if class == token {
+			return true
+		}
+	}
+	return false
 }
 
 func renderProjectExecutionPolicy(

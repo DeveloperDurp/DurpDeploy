@@ -67,7 +67,7 @@ templ ProjectForm(project db.Project, isEdit bool, errorMsg string, lifecycles [
 				<textarea name="description" class="textarea textarea-bordered" rows="4">{ project.Description.String }</textarea>
 			</div>
 			<div class="form-control">
-				<label class="label">
+				<label class="label flex flex-col items-start gap-1 sm:flex-row sm:items-center sm:justify-between">
 					<span class="label-text">Lifecycle</span>
 					<span class="label-text-alt text-gray-500">Optional. Gates deployments to environments in order.</span>
 				</label>
