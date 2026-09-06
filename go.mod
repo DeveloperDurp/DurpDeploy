@@ -1,6 +1,6 @@
 module durpdeploy
 
-go 1.25.7
+go 1.26.0
 
 require (
 	github.com/a-h/templ v0.3.1020
@@ -16,7 +16,7 @@ require (
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/testcontainers/testcontainers-go v0.44.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.44.0
-	golang.org/x/crypto v0.55.0
+	golang.org/x/crypto v0.56.0
 	golang.org/x/oauth2 v0.36.0
 	modernc.org/sqlite v1.58.0
 )
