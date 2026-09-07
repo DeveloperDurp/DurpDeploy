@@ -121,6 +121,9 @@ func (s *CreationService) exactRetryPolicy(
 			ctx, source.ID,
 		)
 		if dispatchErr == nil {
+			if dispatchRow.Mode == "local" {
+				return Policy{Source: SourceRetry, Mode: TargetLocal}, nil
+			}
 			agentID = dispatchRow.AssignedAgentID.String
 		} else if !errors.Is(dispatchErr, sql.ErrNoRows) {
 			return Policy{}, fmt.Errorf("get prior dispatch: %w", dispatchErr)
@@ -128,7 +131,8 @@ func (s *CreationService) exactRetryPolicy(
 	}
 	if agentID == "" {
 		assignment, assignmentErr := s.repo.Queries.GetEnvironmentAgentAssignment(
-			ctx, source.EnvironmentID,
+			ctx,
+			source.EnvironmentID,
 		)
 		if assignmentErr == nil {
 			agentID = assignment.AgentID
