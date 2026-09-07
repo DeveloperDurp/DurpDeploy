@@ -4,12 +4,12 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	"durpdeploy/internal/audit"
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/requestmeta"
 )
 
 type finalLoginFactor string
@@ -45,10 +45,7 @@ func (h *AuthHandler) finalBrowserSessionIssue(
 	r *http.Request,
 	issue finalSessionIssue,
 ) auth.BrowserSessionIssue {
-	ip := r.RemoteAddr
-	if idx := strings.LastIndex(ip, ":"); idx != -1 {
-		ip = ip[:idx]
-	}
+	ip := requestmeta.ClientIP(r)
 	return auth.BrowserSessionIssue{
 		UserID: issue.UserID, IPAddress: ip, UserAgent: r.UserAgent(),
 		Audit: func(session db.Session) {

@@ -1,4 +1,4 @@
-.PHONY: build dev dev-server dev-postgres dev-mssql e2e-test e2e-test-isolated e2e-postgres e2e-mssql check-openssl templ-generate tailwind-build js-build npm-install golines golines-check clean test mfa-e2e-test auth-mfa-e2e-go-prepare auth-mfa-e2e-browser-prepare auth-mfa-e2e-sqlite-http auth-mfa-e2e-sqlite-browser auth-mfa-e2e-sqlite auth-mfa-e2e-postgres auth-mfa-e2e-mssql auth-mfa-e2e swagger-spec mobile-browser-container
+.PHONY: build dev dev-server dev-postgres dev-mssql e2e-test e2e-test-isolated e2e-postgres e2e-mssql check-openssl templ-generate tailwind-build js-build npm-install golines golines-check clean test sonar-issues mfa-e2e-test auth-mfa-e2e-go-prepare auth-mfa-e2e-browser-prepare auth-mfa-e2e-sqlite-http auth-mfa-e2e-sqlite-browser auth-mfa-e2e-sqlite auth-mfa-e2e-postgres auth-mfa-e2e-mssql auth-mfa-e2e swagger-spec mobile-browser-container
 
 BINARY_NAME=durpdeploy
 MAIN_PATH=cmd/server/main.go
@@ -165,6 +165,10 @@ clean:
 # Go unit/integration tests (mirrors CI's exact command).
 test: templ-generate
 	go test -v -count=1 ./...
+
+# Read unresolved SonarCloud findings for a pull request. Requires SONAR_TOKEN.
+sonar-issues:
+	./scripts/sonar_issues.sh $(PR)
 
 # Running-server E2E checks. Start `make dev` (or the matching database dev
 # target) in another terminal first; this target never starts another server.
