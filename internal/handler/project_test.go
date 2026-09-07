@@ -769,7 +769,7 @@ func TestUpdateProject_AfterSubmitLandsOnProject(t *testing.T) {
 		"PUT",
 		fmt.Sprintf("%s/projects/%d", h.server.URL, proj.ID),
 		strings.NewReader(
-			"name=renamed&description=&lifecycle_id=&csrf_token="+h.csrfToken(),
+			"name=renamed&description=&lifecycle_id=&target_mode=local&csrf_token="+h.csrfToken(),
 		),
 	)
 	hxReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -787,7 +787,7 @@ func TestUpdateProject_AfterSubmitLandsOnProject(t *testing.T) {
 		"PUT",
 		fmt.Sprintf("%s/projects/%d", h.server.URL, proj.ID),
 		strings.NewReader(
-			"name=renamed-2&description=&lifecycle_id=&csrf_token="+h.csrfToken(),
+			"name=renamed-2&description=&lifecycle_id=&target_mode=local&csrf_token="+h.csrfToken(),
 		),
 	)
 	nonHxReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")

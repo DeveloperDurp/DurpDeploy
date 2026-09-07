@@ -384,6 +384,129 @@ func TestScheduledDeploymentFullEditForm_saves_on_native_POST(
 	}
 }
 
+func TestScheduledDeploymentFullEditForm_ignores_hiddenLabelFieldsOutsideLabelMode(
+	t *testing.T,
+) {
+	// Given
+	h := newProjectHarness(t)
+	project := h.makeProject("full-schedule-edit-hidden-label")
+	environment := h.makeEnv("full-schedule-edit-hidden-label-env")
+	release := h.makeRelease(project.ID, "1.0.0", "true")
+	label, err := h.repo.Queries.CreateAgentLabel(
+		context.Background(),
+		db.CreateAgentLabelParams{
+			Name: "Hidden label", NormalizedName: "hidden label",
+		},
+	)
+	if err != nil {
+		t.Fatalf("create label: %v", err)
+	}
+
+	for _, targetMode := range []string{"local", "inherit"} {
+		t.Run("label_to_"+targetMode, func(t *testing.T) {
+			schedule, err := h.repo.Queries.CreateScheduledDeployment(
+				context.Background(),
+				db.CreateScheduledDeploymentParams{
+					ProjectID:     project.ID,
+					ReleaseID:     release.ID,
+					EnvironmentID: environment.ID,
+					Cron:          "0 0 * * *",
+					NextRunAt:     time.Now().Add(time.Hour).Unix(),
+					Enabled:       1,
+				},
+			)
+			if err != nil {
+				t.Fatalf("create schedule: %v", err)
+			}
+			_, err = h.repo.Queries.CreateScheduledDeploymentRoutingPolicy(
+				context.Background(),
+				db.CreateScheduledDeploymentRoutingPolicyParams{
+					ScheduledDeploymentID: schedule.ID,
+					TargetMode:            "label",
+					AgentLabelID: sql.NullInt64{
+						Int64: label.ID,
+						Valid: true,
+					},
+					AgentStrategy: sql.NullString{
+						String: "round_robin",
+						Valid:  true,
+					},
+				},
+			)
+			if err != nil {
+				t.Fatalf("create label policy: %v", err)
+			}
+
+			editResponse, err := h.authedClient().Get(fmt.Sprintf(
+				"%s/projects/%d/schedules/%d/edit",
+				h.server.URL,
+				project.ID,
+				schedule.ID,
+			))
+			if err != nil {
+				t.Fatalf("get edit form: %v", err)
+			}
+			formHTML, readErr := io.ReadAll(editResponse.Body)
+			editResponse.Body.Close()
+			if readErr != nil {
+				t.Fatalf("read edit form: %v", readErr)
+			}
+			formActionMatch := regexp.MustCompile(
+				`<form method="post" action="([^"]+)" class="space-y-4">`,
+			).FindStringSubmatch(string(formHTML))
+			if len(formActionMatch) != 2 {
+				t.Fatal("full schedule edit form action was not rendered")
+			}
+			form := url.Values{
+				"release_id":     {fmt.Sprintf("%d", release.ID)},
+				"environment_id": {fmt.Sprintf("%d", environment.ID)},
+				"cron":           {"0 12 * * *"},
+				"enabled":        {"true"},
+				"target_mode":    {targetMode},
+				"agent_label_id": {fmt.Sprintf("%d", label.ID)},
+				"agent_strategy": {"round_robin"},
+				"csrf_token":     {h.csrfToken()},
+			}
+			request, err := http.NewRequest(
+				http.MethodPost,
+				h.server.URL+formActionMatch[1],
+				strings.NewReader(form.Encode()),
+			)
+			if err != nil {
+				t.Fatalf("new full edit form request: %v", err)
+			}
+			request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			response, err := h.authedClient().Do(request)
+			if err != nil {
+				t.Fatalf("submit full edit form: %v", err)
+			}
+			response.Body.Close()
+			if response.StatusCode != http.StatusSeeOther {
+				t.Fatalf(
+					"submit full edit form: got %d, want %d",
+					response.StatusCode,
+					http.StatusSeeOther,
+				)
+			}
+			policy, err := h.repo.Queries.GetScheduledDeploymentRoutingPolicy(
+				context.Background(),
+				schedule.ID,
+			)
+			if err != nil {
+				t.Fatalf("get updated schedule policy: %v", err)
+			}
+			if policy.TargetMode != targetMode || policy.AgentLabelID.Valid ||
+				policy.AgentStrategy.Valid {
+				t.Fatalf(
+					"updated schedule policy = %#v, want %s without label fields",
+					policy,
+					targetMode,
+				)
+			}
+		})
+	}
+}
+
 func TestScheduledQuickEdit_retains_note_when_form_round_trips(
 	t *testing.T,
 ) {

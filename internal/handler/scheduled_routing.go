@@ -21,14 +21,14 @@ func parseScheduleRouting(r *http.Request) (dispatch.Input, error) {
 	if input.Mode == "" {
 		input.Mode = "inherit"
 	}
-	if value := r.FormValue("agent_label_id"); value != "" {
-		labelID, err := strconv.ParseInt(value, 10, 64)
-		if err != nil {
-			return dispatch.Input{}, dispatch.ErrInvalidPolicy
-		}
-		input.LabelID = labelID
-	}
 	if input.Mode == "label" {
+		if value := r.FormValue("agent_label_id"); value != "" {
+			labelID, err := strconv.ParseInt(value, 10, 64)
+			if err != nil {
+				return dispatch.Input{}, dispatch.ErrInvalidPolicy
+			}
+			input.LabelID = labelID
+		}
 		input.Strategy = r.FormValue("agent_strategy")
 	}
 	if _, err := dispatch.ParseInput(input); err != nil {
