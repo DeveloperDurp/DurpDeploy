@@ -99,13 +99,29 @@ func splitEmails(v sql.NullString) []string {
 func (b *Bus) Publish(ctx context.Context, evt Event) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	b.publish(ctx, evt)
+}
 
+func (b *Bus) publish(ctx context.Context, evt Event) {
 	var notify bool
 	evt, notify = b.rootDeploymentEvent(ctx, evt)
 	if !notify || b.notificationExists(ctx, evt) {
 		return
 	}
+	if isTerminalDeploymentEvent(evt.Type) &&
+		b.deploymentStarted(ctx, evt.DeploymentID) {
+		b.publish(ctx, Event{
+			Type:          DeploymentStarted,
+			DeploymentID:  evt.DeploymentID,
+			ProjectID:     evt.ProjectID,
+			EnvironmentID: evt.EnvironmentID,
+			Message:       "Deployment started",
+		})
+	}
+	b.deliver(ctx, evt)
+}
 
+func (b *Bus) deliver(ctx context.Context, evt Event) {
 	if evt.ProjectID == 0 {
 		// Project-less/system-wide event (e.g. backup health): load
 		// channels from the global_notifications singleton instead of a
@@ -191,7 +207,7 @@ func (b *Bus) rootDeploymentEvent(
 	}
 	switch evt.Type {
 	case DeploymentStarted:
-		if root.Status != "running" {
+		if !root.StartedAt.Valid {
 			return evt, false
 		}
 	case DeploymentSucceeded, DeploymentFailed, DeploymentCancelled:
@@ -214,6 +230,19 @@ func isDeploymentEvent(typ Type) bool {
 	default:
 		return false
 	}
+}
+
+func isTerminalDeploymentEvent(typ Type) bool {
+	return typ == DeploymentSucceeded || typ == DeploymentFailed ||
+		typ == DeploymentCancelled
+}
+
+func (b *Bus) deploymentStarted(ctx context.Context, deploymentID int64) bool {
+	if deploymentID == 0 {
+		return false
+	}
+	deployment, err := b.repo.Queries.GetDeployment(ctx, deploymentID)
+	return err == nil && deployment.StartedAt.Valid
 }
 
 func terminalDeploymentEvent(status string) (Type, bool) {

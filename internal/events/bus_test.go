@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 
 	"durpdeploy/internal/db"
@@ -241,4 +242,122 @@ func TestBus_PublishDeliversLocalDeploymentToWebhook(t *testing.T) {
 	if notifications != 1 {
 		t.Fatalf("notification events = %d, want 1", notifications)
 	}
+}
+
+func TestBus_DelayedChildStartNotifiesStartedRootBeforeTerminal(t *testing.T) {
+	repo := newTestRepo(t)
+	ctx := context.Background()
+	var mu sync.Mutex
+	var receipts int
+	receiver := httptest.NewServer(http.HandlerFunc(func(
+		w http.ResponseWriter,
+		r *http.Request,
+	) {
+		mu.Lock()
+		receipts++
+		mu.Unlock()
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(receiver.Close)
+	if _, err := repo.DB.ExecContext(ctx, `
+		INSERT INTO projects(id, name, slack_webhook_url) VALUES(1, 'gate', ?);
+		INSERT INTO environments(id, name) VALUES(1, 'gate');
+		INSERT INTO releases(id, project_id, version, steps_json) VALUES(1, 1, 'v1', '[]');
+		INSERT INTO agents(id, name, status) VALUES('a', 'Agent', 'pending');
+		INSERT INTO deployments(id, release_id, environment_id, status, started_at) VALUES(1, 1, 1, 'running', 10);
+		INSERT INTO deployments(id, release_id, environment_id, status, started_at, parent_deployment_id, target_agent_id, target_agent_name) VALUES(2, 1, 1, 'running', 10, 1, 'a', 'Agent');
+		INSERT INTO deployments(id, release_id, environment_id, status) VALUES(3, 1, 1, 'pending');
+		INSERT INTO deployments(id, release_id, environment_id, status, parent_deployment_id, target_agent_id, target_agent_name) VALUES(4, 1, 1, 'pending', 3, 'a', 'Agent');
+	`, receiver.URL); err != nil {
+		t.Fatalf("seed delayed start: %v", err)
+	}
+	bus := events.NewBus(repo)
+	bus.Register(notify.NewSlackNotifierWithClient(receiver.Client()))
+	if _, err := repo.DB.ExecContext(ctx, `
+		UPDATE deployments SET status = 'cancelled', finished_at = 20 WHERE id IN (1, 2, 3, 4)
+	`); err != nil {
+		t.Fatalf("settle deployments before delayed callbacks: %v", err)
+	}
+
+	var calls sync.WaitGroup
+	calls.Add(2)
+	go func() {
+		defer calls.Done()
+		bus.Publish(ctx, events.Event{
+			Type: events.DeploymentStarted, DeploymentID: 2,
+			ProjectID: 1, EnvironmentID: 1, Message: "delayed start",
+		})
+	}()
+	go func() {
+		defer calls.Done()
+		bus.Publish(ctx, events.Event{
+			Type: events.DeploymentCancelled, DeploymentID: 2,
+			ProjectID: 1, EnvironmentID: 1, Message: "terminal",
+		})
+	}()
+	calls.Wait()
+	bus.Publish(ctx, events.Event{
+		Type: events.DeploymentCancelled, DeploymentID: 4,
+		ProjectID: 1, EnvironmentID: 1, Message: "queued terminal",
+	})
+
+	var rootStarts, rootTerminals, childNotifications, queuedStarts int
+	if err := repo.DB.QueryRowContext(ctx, `
+		SELECT
+			COUNT(*) FILTER (WHERE deployment_id = 1 AND event_type = 'deployment_started'),
+			COUNT(*) FILTER (WHERE deployment_id = 1 AND event_type = 'deployment_cancelled'),
+			COUNT(*) FILTER (WHERE deployment_id IN (2, 4)),
+			COUNT(*) FILTER (WHERE deployment_id = 3 AND event_type = 'deployment_started')
+		FROM notification_events
+	`).Scan(&rootStarts, &rootTerminals, &childNotifications, &queuedStarts); err != nil {
+		t.Fatalf("count delayed notification events: %v", err)
+	}
+	mu.Lock()
+	gotReceipts := receipts
+	mu.Unlock()
+	if rootStarts != 1 || rootTerminals != 1 || childNotifications != 0 ||
+		queuedStarts != 0 || gotReceipts != 3 {
+		t.Fatalf(
+			"delayed root start/terminal/child/queued/receipts = %d/%d/%d/%d/%d, want 1/1/0/0/3",
+			rootStarts,
+			rootTerminals,
+			childNotifications,
+			queuedStarts,
+			gotReceipts,
+		)
+	}
+	rows, err := repo.DB.QueryContext(ctx, `
+		SELECT event_type FROM notification_events
+		WHERE deployment_id = 1 ORDER BY id
+	`)
+	if err != nil {
+		t.Fatalf("list delayed root event order: %v", err)
+	}
+	defer rows.Close()
+	var rootTypes []string
+	for rows.Next() {
+		var eventType string
+		if err := rows.Scan(&eventType); err != nil {
+			t.Fatalf("scan delayed root event: %v", err)
+		}
+		rootTypes = append(rootTypes, eventType)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate delayed root events: %v", err)
+	}
+	if len(rootTypes) != 2 || rootTypes[0] != "deployment_started" ||
+		rootTypes[1] != "deployment_cancelled" {
+		t.Fatalf(
+			"delayed root event order = %v, want start then cancelled",
+			rootTypes,
+		)
+	}
+	t.Logf(
+		"receiver receipts=%d delayed_root_start=%d terminal=%d child=%d queued_start=%d",
+		gotReceipts,
+		rootStarts,
+		rootTerminals,
+		childNotifications,
+		queuedStarts,
+	)
 }
