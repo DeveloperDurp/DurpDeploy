@@ -366,6 +366,7 @@ func newRouter(
 			ppr.Get("/projects/{id}/schedules/new", sdh.NewForm)
 			ppr.Post("/projects/{id}/schedules", sdh.Create)
 			ppr.Get("/projects/{id}/schedules/{schedId}/edit", sdh.EditForm)
+			ppr.Post("/projects/{id}/schedules/{schedId}", sdh.Update)
 			ppr.Put("/projects/{id}/schedules/{schedId}", sdh.Update)
 			ppr.Delete("/projects/{id}/schedules/{schedId}", sdh.Delete)
 			ppr.Post("/projects/{id}/schedules/{schedId}/toggle", sdh.Toggle)

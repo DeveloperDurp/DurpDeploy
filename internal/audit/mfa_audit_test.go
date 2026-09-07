@@ -56,6 +56,7 @@ func TestAuditActionMapCoversReviewedRouteRegistrations(t *testing.T) {
 		"POST /api/v1/deployments/{id}/retry":                  "retry_deployment",
 		"PUT /api/v1/projects/{id}/members/{userId}":           "update_project_member",
 		"POST /api/v1/projects/{id}/deployments":               "create_deployment",
+		"POST /projects/{id}/schedules/{schedId}":              "update_schedule",
 	}
 
 	// When / Then

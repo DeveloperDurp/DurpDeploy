@@ -28,7 +28,9 @@ func parseScheduleRouting(r *http.Request) (dispatch.Input, error) {
 		}
 		input.LabelID = labelID
 	}
-	input.Strategy = r.FormValue("agent_strategy")
+	if input.Mode == "label" {
+		input.Strategy = r.FormValue("agent_strategy")
+	}
 	if _, err := dispatch.ParseInput(input); err != nil {
 		return dispatch.Input{}, err
 	}

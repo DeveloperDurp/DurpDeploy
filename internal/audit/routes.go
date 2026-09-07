@@ -40,6 +40,7 @@ var actionMap = map[string]string{
 	"PATCH /lifecycles/{id}/stages/{stageId}":              "update_lifecycle_stage",
 	"POST /lifecycles/{id}/stages/{stageId}/delete":        "delete_lifecycle_stage",
 	"POST /projects/{id}/schedules":                        "create_schedule",
+	"POST /projects/{id}/schedules/{schedId}":              "update_schedule",
 	"PUT /projects/{id}/schedules/{schedId}":               "update_schedule",
 	"DELETE /projects/{id}/schedules/{schedId}":            "delete_schedule",
 	"POST /projects/{id}/schedules/{schedId}/toggle":       "toggle_schedule",

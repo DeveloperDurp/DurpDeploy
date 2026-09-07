@@ -275,6 +275,115 @@ func (h *scheduledHarness) scheduleRequest(
 	return resp.StatusCode, string(body)
 }
 
+func TestScheduledDeploymentFullEditForm_saves_on_native_POST(
+	t *testing.T,
+) {
+	// Given
+	h := newProjectHarness(t)
+	project := h.makeProject("full-schedule-edit")
+	environment := h.makeEnv("full-schedule-edit-env")
+	release := h.makeRelease(project.ID, "1.0.0", "true")
+	schedule, err := h.repo.Queries.CreateScheduledDeployment(
+		context.Background(),
+		db.CreateScheduledDeploymentParams{
+			ProjectID:     project.ID,
+			ReleaseID:     release.ID,
+			EnvironmentID: environment.ID,
+			Cron:          "0 0 * * *",
+			NextRunAt:     time.Now().Add(time.Hour).Unix(),
+			Enabled:       1,
+			Note:          sql.NullString{String: "before", Valid: true},
+		},
+	)
+	if err != nil {
+		t.Fatalf("create schedule: %v", err)
+	}
+
+	editResponse, err := h.authedClient().Get(fmt.Sprintf(
+		"%s/projects/%d/schedules/%d/edit",
+		h.server.URL,
+		project.ID,
+		schedule.ID,
+	))
+	if err != nil {
+		t.Fatalf("get edit form: %v", err)
+	}
+	defer editResponse.Body.Close()
+	if editResponse.StatusCode != http.StatusOK {
+		t.Fatalf(
+			"get edit form: got %d, want %d",
+			editResponse.StatusCode,
+			http.StatusOK,
+		)
+	}
+	formHTML, err := io.ReadAll(editResponse.Body)
+	if err != nil {
+		t.Fatalf("read edit form: %v", err)
+	}
+	formActionMatch := regexp.MustCompile(
+		`<form method="post" action="([^"]+)" class="space-y-4">`,
+	).FindStringSubmatch(string(formHTML))
+	if len(formActionMatch) != 2 {
+		t.Fatal("full schedule edit form action was not rendered")
+	}
+	form := url.Values{
+		"release_id":     {fmt.Sprintf("%d", release.ID)},
+		"environment_id": {fmt.Sprintf("%d", environment.ID)},
+		"cron":           {"0 12 * * *"},
+		"note":           {"after"},
+		"enabled":        {"true"},
+		"target_mode":    {"inherit"},
+		"agent_strategy": {"round_robin"},
+		"csrf_token":     {h.csrfToken()},
+	}
+
+	// When
+	request, err := http.NewRequest(
+		http.MethodPost,
+		h.server.URL+formActionMatch[1],
+		strings.NewReader(form.Encode()),
+	)
+	if err != nil {
+		t.Fatalf("new full edit form request: %v", err)
+	}
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	response, err := h.authedClient().Do(request)
+	if err != nil {
+		t.Fatalf("submit full edit form: %v", err)
+	}
+	defer response.Body.Close()
+
+	// Then
+	if response.StatusCode != http.StatusSeeOther {
+		t.Fatalf(
+			"submit full edit form: got %d, want %d",
+			response.StatusCode,
+			http.StatusSeeOther,
+		)
+	}
+	updated, err := h.repo.Queries.GetScheduledDeployment(
+		context.Background(),
+		schedule.ID,
+	)
+	if err != nil {
+		t.Fatalf("get updated schedule: %v", err)
+	}
+	if updated.Cron != "0 12 * * *" || updated.Note.String != "after" {
+		t.Fatalf("updated schedule = %#v, want submitted values", updated)
+	}
+	policy, err := h.repo.Queries.GetScheduledDeploymentRoutingPolicy(
+		context.Background(),
+		schedule.ID,
+	)
+	if err != nil {
+		t.Fatalf("get updated schedule policy: %v", err)
+	}
+	if policy.TargetMode != "inherit" || policy.AgentLabelID.Valid ||
+		policy.AgentStrategy.Valid {
+		t.Fatalf("updated schedule policy = %#v, want inherit", policy)
+	}
+}
+
 func TestScheduledQuickEdit_retains_note_when_form_round_trips(
 	t *testing.T,
 ) {
