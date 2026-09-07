@@ -62,24 +62,48 @@ func (q *Queries) AdvanceAgentLabelCursor(ctx context.Context, arg AdvanceAgentL
 
 const claimScheduledDeploymentOccurrence = `-- name: ClaimScheduledDeploymentOccurrence :one
 INSERT INTO scheduled_deployment_occurrences (
-    scheduled_deployment_id, due_at, deployment_id
-) VALUES (?, ?, ?)
-RETURNING scheduled_deployment_id, due_at, deployment_id, created_at
+    scheduled_deployment_id, due_at, deployment_id, routing_source,
+    target_mode, agent_label_id, agent_label_name, agent_strategy,
+    legacy_agent_id
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+RETURNING scheduled_deployment_id, due_at, deployment_id, routing_source, target_mode, agent_label_id, agent_label_name, agent_strategy, legacy_agent_id, created_at
 `
 
 type ClaimScheduledDeploymentOccurrenceParams struct {
-	ScheduledDeploymentID int64 `json:"scheduled_deployment_id"`
-	DueAt                 int64 `json:"due_at"`
-	DeploymentID          int64 `json:"deployment_id"`
+	ScheduledDeploymentID int64          `json:"scheduled_deployment_id"`
+	DueAt                 int64          `json:"due_at"`
+	DeploymentID          int64          `json:"deployment_id"`
+	RoutingSource         string         `json:"routing_source"`
+	TargetMode            string         `json:"target_mode"`
+	AgentLabelID          sql.NullInt64  `json:"agent_label_id"`
+	AgentLabelName        sql.NullString `json:"agent_label_name"`
+	AgentStrategy         sql.NullString `json:"agent_strategy"`
+	LegacyAgentID         sql.NullString `json:"legacy_agent_id"`
 }
 
 func (q *Queries) ClaimScheduledDeploymentOccurrence(ctx context.Context, arg ClaimScheduledDeploymentOccurrenceParams) (ScheduledDeploymentOccurrence, error) {
-	row := q.db.QueryRowContext(ctx, claimScheduledDeploymentOccurrence, arg.ScheduledDeploymentID, arg.DueAt, arg.DeploymentID)
+	row := q.db.QueryRowContext(ctx, claimScheduledDeploymentOccurrence,
+		arg.ScheduledDeploymentID,
+		arg.DueAt,
+		arg.DeploymentID,
+		arg.RoutingSource,
+		arg.TargetMode,
+		arg.AgentLabelID,
+		arg.AgentLabelName,
+		arg.AgentStrategy,
+		arg.LegacyAgentID,
+	)
 	var i ScheduledDeploymentOccurrence
 	err := row.Scan(
 		&i.ScheduledDeploymentID,
 		&i.DueAt,
 		&i.DeploymentID,
+		&i.RoutingSource,
+		&i.TargetMode,
+		&i.AgentLabelID,
+		&i.AgentLabelName,
+		&i.AgentStrategy,
+		&i.LegacyAgentID,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -449,7 +473,7 @@ func (q *Queries) GetProjectExecutionPolicy(ctx context.Context, projectID int64
 }
 
 const getScheduledDeploymentOccurrence = `-- name: GetScheduledDeploymentOccurrence :one
-SELECT scheduled_deployment_id, due_at, deployment_id, created_at FROM scheduled_deployment_occurrences
+SELECT scheduled_deployment_id, due_at, deployment_id, routing_source, target_mode, agent_label_id, agent_label_name, agent_strategy, legacy_agent_id, created_at FROM scheduled_deployment_occurrences
 WHERE scheduled_deployment_id = ?1
   AND due_at = ?2
 `
@@ -466,6 +490,35 @@ func (q *Queries) GetScheduledDeploymentOccurrence(ctx context.Context, arg GetS
 		&i.ScheduledDeploymentID,
 		&i.DueAt,
 		&i.DeploymentID,
+		&i.RoutingSource,
+		&i.TargetMode,
+		&i.AgentLabelID,
+		&i.AgentLabelName,
+		&i.AgentStrategy,
+		&i.LegacyAgentID,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getScheduledDeploymentOccurrenceByDeployment = `-- name: GetScheduledDeploymentOccurrenceByDeployment :one
+SELECT scheduled_deployment_id, due_at, deployment_id, routing_source, target_mode, agent_label_id, agent_label_name, agent_strategy, legacy_agent_id, created_at FROM scheduled_deployment_occurrences
+WHERE deployment_id = ?
+`
+
+func (q *Queries) GetScheduledDeploymentOccurrenceByDeployment(ctx context.Context, deploymentID int64) (ScheduledDeploymentOccurrence, error) {
+	row := q.db.QueryRowContext(ctx, getScheduledDeploymentOccurrenceByDeployment, deploymentID)
+	var i ScheduledDeploymentOccurrence
+	err := row.Scan(
+		&i.ScheduledDeploymentID,
+		&i.DueAt,
+		&i.DeploymentID,
+		&i.RoutingSource,
+		&i.TargetMode,
+		&i.AgentLabelID,
+		&i.AgentLabelName,
+		&i.AgentStrategy,
+		&i.LegacyAgentID,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -693,8 +746,11 @@ FROM scheduled_deployment_occurrences AS occurrence
 JOIN deployments AS deployment ON deployment.id = occurrence.deployment_id
 LEFT JOIN deployment_dispatches AS dispatch
     ON dispatch.deployment_id = deployment.id
+LEFT JOIN deployment_routing_snapshots AS snapshot
+    ON snapshot.deployment_id = deployment.id
 WHERE deployment.status = 'pending'
   AND dispatch.deployment_id IS NULL
+  AND snapshot.deployment_id IS NULL
 ORDER BY occurrence.created_at ASC, deployment.id ASC
 `
 

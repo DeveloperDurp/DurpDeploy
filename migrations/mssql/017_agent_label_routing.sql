@@ -112,8 +112,31 @@ CREATE TABLE scheduled_deployment_occurrences (
     due_at BIGINT NOT NULL,
     deployment_id BIGINT NOT NULL UNIQUE
         REFERENCES deployments(id) ON DELETE NO ACTION,
+    routing_source NVARCHAR(32) NOT NULL CHECK (
+        routing_source IN ('legacy', 'project', 'schedule')
+    ),
+    target_mode NVARCHAR(32) NOT NULL CHECK (
+        target_mode IN ('local', 'label', 'remote')
+    ),
+    agent_label_id BIGINT NULL REFERENCES agent_labels(id) ON DELETE NO ACTION,
+    agent_label_name NVARCHAR(255) NULL,
+    agent_strategy NVARCHAR(32) NULL CHECK (
+        agent_strategy IN ('round_robin', 'all')
+    ),
+    legacy_agent_id NVARCHAR(255) NULL,
     created_at BIGINT NOT NULL DEFAULT DATEDIFF_BIG(SECOND, '1970-01-01', SYSUTCDATETIME()),
-    PRIMARY KEY (scheduled_deployment_id, due_at)
+    PRIMARY KEY (scheduled_deployment_id, due_at),
+    CHECK (
+        (target_mode = 'local' AND agent_label_id IS NULL
+            AND agent_label_name IS NULL AND agent_strategy IS NULL
+            AND legacy_agent_id IS NULL)
+        OR (target_mode = 'label' AND agent_label_id IS NOT NULL
+            AND agent_label_name IS NOT NULL AND agent_strategy IS NOT NULL
+            AND legacy_agent_id IS NULL)
+        OR (target_mode = 'remote' AND agent_label_id IS NULL
+            AND agent_label_name IS NULL AND agent_strategy IS NULL
+            AND legacy_agent_id IS NOT NULL)
+    )
 );
 
 -- +goose StatementEnd

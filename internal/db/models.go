@@ -340,10 +340,16 @@ type ScheduledDeployment struct {
 }
 
 type ScheduledDeploymentOccurrence struct {
-	ScheduledDeploymentID int64 `json:"scheduled_deployment_id"`
-	DueAt                 int64 `json:"due_at"`
-	DeploymentID          int64 `json:"deployment_id"`
-	CreatedAt             int64 `json:"created_at"`
+	ScheduledDeploymentID int64          `json:"scheduled_deployment_id"`
+	DueAt                 int64          `json:"due_at"`
+	DeploymentID          int64          `json:"deployment_id"`
+	RoutingSource         string         `json:"routing_source"`
+	TargetMode            string         `json:"target_mode"`
+	AgentLabelID          sql.NullInt64  `json:"agent_label_id"`
+	AgentLabelName        sql.NullString `json:"agent_label_name"`
+	AgentStrategy         sql.NullString `json:"agent_strategy"`
+	LegacyAgentID         sql.NullString `json:"legacy_agent_id"`
+	CreatedAt             int64          `json:"created_at"`
 }
 
 type ScheduledDeploymentRoutingPolicy struct {

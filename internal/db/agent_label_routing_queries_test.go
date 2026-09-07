@@ -194,6 +194,8 @@ func TestAgentLabelRoutingQueries(t *testing.T) {
 		ScheduledDeploymentID: schedule.ID,
 		DueAt:                 100,
 		DeploymentID:          root.ID,
+		RoutingSource:         "schedule",
+		TargetMode:            "local",
 	}
 	if _, err := queries.ClaimScheduledDeploymentOccurrence(ctx, occurrence); err != nil {
 		t.Fatalf("claim occurrence: %v", err)

@@ -171,8 +171,10 @@ RETURNING *;
 
 -- name: ClaimScheduledDeploymentOccurrence :one
 INSERT INTO scheduled_deployment_occurrences (
-    scheduled_deployment_id, due_at, deployment_id
-) VALUES (?, ?, ?)
+    scheduled_deployment_id, due_at, deployment_id, routing_source,
+    target_mode, agent_label_id, agent_label_name, agent_strategy,
+    legacy_agent_id
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 RETURNING *;
 
 -- name: GetScheduledDeploymentOccurrence :one
@@ -180,12 +182,19 @@ SELECT * FROM scheduled_deployment_occurrences
 WHERE scheduled_deployment_id = sqlc.arg(scheduled_deployment_id)
   AND due_at = sqlc.arg(due_at);
 
+-- name: GetScheduledDeploymentOccurrenceByDeployment :one
+SELECT * FROM scheduled_deployment_occurrences
+WHERE deployment_id = ?;
+
 -- name: ListRecoverableScheduledDeployments :many
 SELECT deployment.*
 FROM scheduled_deployment_occurrences AS occurrence
 JOIN deployments AS deployment ON deployment.id = occurrence.deployment_id
 LEFT JOIN deployment_dispatches AS dispatch
     ON dispatch.deployment_id = deployment.id
+LEFT JOIN deployment_routing_snapshots AS snapshot
+    ON snapshot.deployment_id = deployment.id
 WHERE deployment.status = 'pending'
   AND dispatch.deployment_id IS NULL
+  AND snapshot.deployment_id IS NULL
 ORDER BY occurrence.created_at ASC, deployment.id ASC;

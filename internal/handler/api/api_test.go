@@ -31,6 +31,7 @@ type harness struct {
 	repo   *repository.Repository
 	runner *runner.DeploymentRunner
 	broker *runner.LogBroker
+	dsn    string
 }
 
 func newAPIHarness(t *testing.T) *harness {
@@ -52,7 +53,7 @@ func newAPIHarness(t *testing.T) *harness {
 	repo := repository.New(conn)
 	broker := runner.NewLogBroker()
 	rnr := runner.NewForTests(repo, broker)
-	return &harness{repo: repo, runner: rnr, broker: broker}
+	return &harness{repo: repo, runner: rnr, broker: broker, dsn: dsn}
 }
 
 func seedAPIUser(

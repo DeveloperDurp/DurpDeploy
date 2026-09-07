@@ -146,8 +146,29 @@ CREATE TABLE scheduled_deployment_occurrences (
     due_at INTEGER NOT NULL,
     deployment_id INTEGER NOT NULL UNIQUE
         REFERENCES deployments(id) ON DELETE RESTRICT,
+    routing_source TEXT NOT NULL CHECK (
+        routing_source IN ('legacy', 'project', 'schedule')
+    ),
+    target_mode TEXT NOT NULL CHECK (
+        target_mode IN ('local', 'label', 'remote')
+    ),
+    agent_label_id INTEGER REFERENCES agent_labels(id) ON DELETE RESTRICT,
+    agent_label_name TEXT,
+    agent_strategy TEXT CHECK (agent_strategy IN ('round_robin', 'all')),
+    legacy_agent_id TEXT,
     created_at INTEGER NOT NULL DEFAULT (unixepoch()),
-    PRIMARY KEY (scheduled_deployment_id, due_at)
+    PRIMARY KEY (scheduled_deployment_id, due_at),
+    CHECK (
+        (target_mode = 'local' AND agent_label_id IS NULL
+            AND agent_label_name IS NULL AND agent_strategy IS NULL
+            AND legacy_agent_id IS NULL)
+        OR (target_mode = 'label' AND agent_label_id IS NOT NULL
+            AND agent_label_name IS NOT NULL AND agent_strategy IS NOT NULL
+            AND legacy_agent_id IS NULL)
+        OR (target_mode = 'remote' AND agent_label_id IS NULL
+            AND agent_label_name IS NULL AND agent_strategy IS NULL
+            AND legacy_agent_id IS NOT NULL)
+    )
 );
 
 -- +goose StatementEnd

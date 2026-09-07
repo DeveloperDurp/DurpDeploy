@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -33,6 +34,7 @@ type testFixture struct {
 	sched  *scheduler.Scheduler
 	now    time.Time
 	logBuf *bytes.Buffer
+	dsn    string
 }
 
 func newFixture(t *testing.T) *testFixture {
@@ -82,6 +84,7 @@ func newFixture(t *testing.T) *testFixture {
 		sched:  sched,
 		now:    now,
 		logBuf: logBuf,
+		dsn:    dsn,
 	}
 }
 
@@ -546,8 +549,15 @@ func TestScheduledApprovalRouting_FreezesIntentBeforeApproval(t *testing.T) {
 	}
 	if _, err := f.repo.Queries.GetDeploymentRoutingSnapshot(
 		f.ctx(), deployments[0].ID,
-	); err != nil {
-		t.Fatalf("get frozen routing snapshot: %v", err)
+	); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("snapshot error = %v, want post-commit dispatch only", err)
+	}
+	occurrence, err := f.repo.Queries.GetScheduledDeploymentOccurrenceByDeployment(
+		f.ctx(), deployments[0].ID,
+	)
+	if err != nil || occurrence.TargetMode != "local" ||
+		occurrence.RoutingSource != "schedule" {
+		t.Fatalf("occurrence intent = %#v, error = %v", occurrence, err)
 	}
 }
 

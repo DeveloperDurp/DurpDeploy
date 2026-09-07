@@ -159,6 +159,11 @@ func (s *CreationService) Approve(
 		if err != nil {
 			return err
 		}
+		if err := freezeScheduledIntentTx(
+			ctx, q, deployment, policy,
+		); err != nil {
+			return err
+		}
 		runLocal, err := s.dispatcher.prepareTx(ctx, q, deployment, policy)
 		if err != nil {
 			return err

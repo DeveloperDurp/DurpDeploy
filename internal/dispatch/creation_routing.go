@@ -87,6 +87,15 @@ func policyForApproval(
 	if !errors.Is(err, sql.ErrNoRows) {
 		return Policy{}, fmt.Errorf("get routing snapshot: %w", err)
 	}
+	occurrence, err := queries.GetScheduledDeploymentOccurrenceByDeployment(
+		ctx, deployment.ID,
+	)
+	if err == nil {
+		return scheduledOccurrencePolicy(occurrence), nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return Policy{}, fmt.Errorf("get scheduled occurrence: %w", err)
+	}
 	if deployment.TargetAgentID.Valid {
 		return Policy{
 			Source:        SourceLegacy,

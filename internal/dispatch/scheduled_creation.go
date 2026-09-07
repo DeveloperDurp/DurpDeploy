@@ -79,13 +79,23 @@ func (s *CreationService) CreateScheduled(
 		if err != nil {
 			return fmt.Errorf("create scheduled deployment: %w", err)
 		}
-		if err := freezeIntentTx(ctx, q, deployment.ID, policy); err != nil {
-			return err
-		}
 		_, err = q.ClaimScheduledDeploymentOccurrence(
 			ctx, db.ClaimScheduledDeploymentOccurrenceParams{
 				ScheduledDeploymentID: request.ScheduleID,
 				DueAt:                 request.DueAt, DeploymentID: deployment.ID,
+				RoutingSource: string(policy.Source), TargetMode: string(policy.Mode),
+				AgentLabelID: sql.NullInt64{
+					Int64: policy.LabelID, Valid: policy.LabelID != 0,
+				},
+				AgentLabelName: sql.NullString{
+					String: policy.LabelName, Valid: policy.LabelName != "",
+				},
+				AgentStrategy: sql.NullString{
+					String: string(policy.Strategy), Valid: policy.Strategy != "",
+				},
+				LegacyAgentID: sql.NullString{
+					String: policy.LegacyAgentID, Valid: policy.LegacyAgentID != "",
+				},
 			},
 		)
 		return err
@@ -127,6 +137,11 @@ func (s *CreationService) DispatchFrozen(
 		if err != nil {
 			return err
 		}
+		if err := freezeScheduledIntentTx(
+			ctx, q, deployment, policy,
+		); err != nil {
+			return err
+		}
 		runLocal, err := s.dispatcher.prepareTx(ctx, q, deployment, policy)
 		if runLocal {
 			local = deployment
@@ -137,4 +152,47 @@ func (s *CreationService) DispatchFrozen(
 		s.dispatcher.runLocal(local)
 	}
 	return err
+}
+
+func scheduledOccurrencePolicy(
+	occurrence db.ScheduledDeploymentOccurrence,
+) Policy {
+	return Policy{
+		Source:        Source(occurrence.RoutingSource),
+		Mode:          TargetMode(occurrence.TargetMode),
+		LabelID:       occurrence.AgentLabelID.Int64,
+		LabelName:     occurrence.AgentLabelName.String,
+		Strategy:      Strategy(occurrence.AgentStrategy.String),
+		LegacyAgentID: occurrence.LegacyAgentID.String,
+	}
+}
+
+func freezeScheduledIntentTx(
+	ctx context.Context,
+	queries *db.Queries,
+	deployment db.Deployment,
+	policy Policy,
+) error {
+	_, err := queries.GetScheduledDeploymentOccurrenceByDeployment(
+		ctx, deployment.ID,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("get scheduled occurrence: %w", err)
+	}
+	if policy.Mode == TargetRemote && deployment.TargetAgentID.Valid {
+		return nil
+	}
+	if policy.Mode != TargetRemote {
+		if _, err := queries.GetDeploymentRoutingSnapshot(
+			ctx, deployment.ID,
+		); err == nil {
+			return nil
+		} else if !errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("get routing snapshot: %w", err)
+		}
+	}
+	return freezeIntentTx(ctx, queries, deployment.ID, policy)
 }
