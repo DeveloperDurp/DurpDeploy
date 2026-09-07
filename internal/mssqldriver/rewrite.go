@@ -176,6 +176,14 @@ func rewriteReturning(query string) (string, error) {
 	}
 	statement := strings.TrimRight(query[:start], " \t\r\n")
 	trailing := rest[len(returningColumns):columnsEnd] + rest[columnsEnd:]
+	prefix := ""
+	if containsOutsideQuotes(statement, "INSERT INTO deployments") ||
+		containsOutsideQuotes(statement, "UPDATE deployments") {
+		prefix = "DECLARE @deployment_ids TABLE (id BIGINT);\n"
+		output = "INSERTED.id INTO @deployment_ids"
+		trailing = ";\nSELECT " + returningColumns + " FROM deployments WITH (FORCESEEK) " +
+			"WHERE id IN (SELECT id FROM @deployment_ids)" + trailing
+	}
 	switch {
 	case containsOutsideQuotes(statement, "INSERT INTO"):
 		values := keywordIndexOutsideQuotes(statement, "VALUES")
@@ -186,7 +194,7 @@ func rewriteReturning(query string) (string, error) {
 		for insertAt > 0 && strings.ContainsRune(" \t\r\n", rune(statement[insertAt-1])) {
 			insertAt--
 		}
-		return statement[:insertAt] + " OUTPUT " + output + statement[insertAt:] + trailing, nil
+		return prefix + statement[:insertAt] + " OUTPUT " + output + statement[insertAt:] + trailing, nil
 	case containsOutsideQuotes(statement, "UPDATE"):
 		whereIndex := keywordIndexOutsideQuotes(statement, "WHERE")
 		if whereIndex < 0 {
@@ -199,7 +207,7 @@ func rewriteReturning(query string) (string, error) {
 			start--
 		}
 		separator := statement[start:whereIndex]
-		return statement[:start] + " OUTPUT " + output + separator + statement[whereIndex:] + trailing, nil
+		return prefix + statement[:start] + " OUTPUT " + output + separator + statement[whereIndex:] + trailing, nil
 	default:
 		return "", ErrMalformedReturning
 	}

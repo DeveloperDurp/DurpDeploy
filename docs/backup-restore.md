@@ -5,6 +5,9 @@ for projects, releases, deployments, variables, and the audit log. Remote agent
 state is separate and includes the agent certificate, server fingerprints, and
 claim marker. Back up the agent state directory only when you need to preserve
 that enrolled identity. There is no durable database copy unless you set one up.
+The database also stores agent labels, project execution policies, schedule
+targets, routing snapshots, fan-out roots, and child deployments. Restore these
+records together. Do not restore one routing table from a different backup.
 This runbook covers two
 options:
 
@@ -199,6 +202,15 @@ you cannot supply an S3-compatible bucket. This alternative gives one backup
 each day.
 
 ## Edge cases
+
+- **Routing after restore**: A restored retry still uses its saved agent IDs and
+  order. A restored redeploy resolves the restored current project policy. A
+  restored scheduled occurrence remains one occurrence for its saved due time.
+  Start the server after the database and agent state restore complete.
+- **Agent identity after restore**: Restore an agent state directory only with
+  the matching agent identity. If the identity is unavailable, revoke the old
+  agent record and pair a new agent. Do not copy one agent state directory to
+  another host.
 
 - **Empty database**: both options work fine on a freshly-migrated,
   empty `durpdeploy.db` — Litestream just replicates an (almost) empty WAL,

@@ -54,6 +54,8 @@ ALTER TABLE deployments ADD parent_deployment_id BIGINT NULL
     REFERENCES deployments(id) ON DELETE NO ACTION;
 ALTER TABLE deployments ADD target_agent_id NVARCHAR(255) NULL;
 ALTER TABLE deployments ADD target_agent_name NVARCHAR(255) NULL;
+-- +goose StatementEnd
+-- +goose StatementBegin
 ALTER TABLE deployments ADD CONSTRAINT ck_deployments_not_self_parent
     CHECK (parent_deployment_id IS NULL OR parent_deployment_id <> id);
 ALTER TABLE deployments ADD CONSTRAINT ck_deployments_target_agent_identity

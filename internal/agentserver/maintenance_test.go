@@ -10,6 +10,7 @@ import (
 
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/events"
+
 	agentproto "github.com/DeveloperDurp/durpdeploy-agent/protocol"
 )
 
@@ -119,7 +120,7 @@ func TestMaintain_losesStartedWorkOnceAcrossRestartAndRecordsLateResult(
 	assertNotificationCount(t, fixture, deploymentID, "deployment_failed", 1)
 }
 
-func TestMaintain_marksOfflineAndExpiresCancellationWithoutFailingDeployment(
+func TestMaintain_marksOfflineAndExpiresCancellationAsTerminalFailure(
 	t *testing.T,
 ) {
 	// Given
@@ -162,11 +163,41 @@ func TestMaintain_marksOfflineAndExpiresCancellationWithoutFailingDeployment(
 	if err := fixture.listener.Maintain(context.Background()); err != nil {
 		t.Fatalf("repeat maintain: %v", err)
 	}
+	late := fixture.lifecycle(
+		t,
+		fixture.agentIdentity,
+		deploymentID,
+		"result",
+		`{"protocol":"agent/1","claim_token":"claim-token","state":"failed"}`,
+	)
 
 	// Then
+	if late.StatusCode != http.StatusConflict {
+		t.Fatalf(
+			"late result status = %d, want %d",
+			late.StatusCode,
+			http.StatusConflict,
+		)
+	}
 	assertDispatchState(t, fixture, deploymentID, "cancel_unconfirmed")
-	assertDeploymentStatus(t, fixture, deploymentID, "running")
+	assertDeploymentStatus(t, fixture, deploymentID, "failed")
+	deployment, err := fixture.repo.Queries.GetDeployment(
+		context.Background(),
+		deploymentID,
+	)
+	if err != nil {
+		t.Fatalf("get expired cancellation deployment: %v", err)
+	}
+	if !deployment.FinishedAt.Valid ||
+		deployment.FinishedAt.Int64 != fixture.now.Unix() {
+		t.Fatalf(
+			"expired cancellation finished_at = %#v, want %d",
+			deployment.FinishedAt,
+			fixture.now.Unix(),
+		)
+	}
 	assertAgentEventCount(t, fixture, deploymentID, "cancel_unconfirmed", 1)
+	assertAgentEventCount(t, fixture, deploymentID, "late_result", 1)
 	var offline int
 	if err := fixture.repo.DB.QueryRowContext(context.Background(), "SELECT COUNT(*) FROM agent_events WHERE agent_id = ? AND event_type = 'agent_offline'", "agent-a").
 		Scan(&offline); err != nil {
@@ -175,6 +206,12 @@ func TestMaintain_marksOfflineAndExpiresCancellationWithoutFailingDeployment(
 	if offline != 1 {
 		t.Fatalf("offline events = %d, want 1", offline)
 	}
+	t.Logf(
+		"terminal cancellation: deployment=%d state=cancel_unconfirmed status=failed finished_at=%d late_result=%d",
+		deploymentID,
+		deployment.FinishedAt.Int64,
+		late.StatusCode,
+	)
 }
 
 func TestMaintain_keepsHeartbeatingAgentOnline(t *testing.T) {

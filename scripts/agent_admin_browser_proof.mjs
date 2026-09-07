@@ -21,6 +21,12 @@ const scenario = process.argv.includes("--scenario")
 	? process.argv[process.argv.indexOf("--scenario") + 1]
 	: "pairing";
 
+if (scenario === "full-routing") {
+	const { runFullRoutingOrchestration } = await import("./agent_full_routing_orchestration.mjs");
+	await runFullRoutingOrchestration(outputDir);
+	process.exit(0);
+}
+
 if (scenario === "fanout") {
 	const { runFanoutProof } = await import("./agent_fanout_browser_proof.mjs");
 	await runFanoutProof(outputDir);

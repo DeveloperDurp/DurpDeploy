@@ -13,6 +13,8 @@ Do not change these items to make their spelling agree with normal text.
 | Term | Approved meaning |
 | --- | --- |
 | agent | A DurpDeploy process that does deployment work on a remote host. |
+| agent label | A named fixed list of agents for deployment routing. |
+| agent strategy | The rule that selects `round_robin` or `all` label members. |
 | API | The DurpDeploy HTTP interface that uses JSON. |
 | API token | A bearer credential for the API. |
 | Argon2id | The algorithm that makes a password hash. |
@@ -29,10 +31,13 @@ Do not change these items to make their spelling agree with normal text.
 | CSRF | Cross-site request forgery. |
 | database | The DurpDeploy SQLite, PostgreSQL, or SQL Server data store. |
 | deployment | One operation that runs the steps in a release. |
+| deployment child | One agent-specific deployment below an `all` deployment root. |
+| deployment root | The deployment that records the result of local or fan-out work. |
 | deployment gate | A rule that controls movement through lifecycle stages. |
 | deployment log | Text output from a deployment step. |
 | DurpDeploy | The application that this repository contains. |
 | environment | A DurpDeploy deployment target. |
+| execution policy | The project rule that selects `local` or label routing. |
 | environment file | A file that contains process environment variables. |
 | heartbeat | A periodic message that shows that an agent operates. |
 | HTMX | The browser library that sends partial-page HTTP requests. |
@@ -49,6 +54,9 @@ Do not change these items to make their spelling agree with normal text.
 | passkey | A WebAuthn credential. |
 | payload | The encrypted deployment data that the server sends to an agent. |
 | project | A DurpDeploy object that contains steps, variables, and releases. |
+| routing snapshot | The saved routing policy and selected agents for one deployment. |
+| round robin | A strategy that selects one eligible label member in cursor order. |
+| schedule target | The routing rule that a scheduled deployment uses. |
 | recovery code | A one-time MFA credential. |
 | release | An immutable snapshot of project steps and variables. |
 | reverse proxy | The HTTP service between a client and DurpDeploy. |
@@ -86,6 +94,7 @@ nouns.
 | poll | To ask the server for work. |
 | re-pair | To pair an agent identity again. |
 | redeploy | To make a new deployment from a completed deployment. |
+| retry | To run a failed or cancelled deployment with its saved agent set. |
 | replicate | To copy database changes to backup storage. |
 | restore | To replace data with data from a backup. |
 | revoke | To make a credential or identity invalid. |

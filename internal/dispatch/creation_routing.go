@@ -74,7 +74,10 @@ func policyForApproval(
 				ctx, deployment.ID,
 			)
 			if listErr != nil {
-				return Policy{}, fmt.Errorf("list exact routing agents: %w", listErr)
+				return Policy{}, fmt.Errorf(
+					"list exact routing agents: %w",
+					listErr,
+				)
 			}
 			for _, row := range rows {
 				policy.ExactAgents = append(policy.ExactAgents, Agent{
@@ -124,6 +127,11 @@ func (d *Dispatcher) prepareTx(
 	deployment db.Deployment,
 	policy Policy,
 ) (bool, error) {
+	if _, err := queries.GetDeploymentDispatch(ctx, deployment.ID); err == nil {
+		return false, nil
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return false, fmt.Errorf("get deployment dispatch: %w", err)
+	}
 	var agents []Agent
 	if policy.Mode != TargetRemote {
 		if _, err := queries.GetDeploymentRoutingSnapshot(

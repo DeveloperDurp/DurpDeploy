@@ -69,6 +69,36 @@ API tokens are created per-user from the `/settings/tokens` page or via the CLI:
 durpdeploy tokens create --user admin@example.com --name ci
 ```
 
+### Agent-label routing examples
+
+Create a project that uses one eligible label member per deployment:
+
+```bash
+curl -X POST -H "Authorization: Bearer ddp_pat_<token>" \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Cat facts","target_mode":"label","agent_label_id":1,"agent_strategy":"round_robin"}' \
+  http://localhost:8080/api/v1/projects
+```
+
+Use the current project policy by omitting `target_mode`. Use this local
+override for one deployment:
+
+```bash
+curl -X POST -H "Authorization: Bearer ddp_pat_<token>" \
+  -H 'Content-Type: application/json' \
+  -d '{"release_id":1,"environment_id":1,"target_mode":"local"}' \
+  http://localhost:8080/api/v1/projects/1/deployments
+```
+
+Use `agent_strategy:"all"` with a label override to create one root and one
+child per eligible label member. A label request needs both `agent_label_id`
+and `agent_strategy`. A normal request with no eligible members fails. It does
+not fall back to the local runner. A retry preserves its saved agents. A
+redeploy resolves the current project policy.
+
+Schedules use `target_mode:"inherit"` by default. Use `local` or a label with
+both label fields to save an explicit schedule target.
+
 Browser MFA protects browser sessions only. API tokens remain single bearer
 credentials and are not MFA-protected; an MFA reset does not revoke them.
 

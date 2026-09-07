@@ -1,11 +1,16 @@
 package auth_test
 
 import (
+	"bytes"
+	"encoding/base64"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
 	"durpdeploy/internal/auth"
+
+	"golang.org/x/crypto/argon2"
 )
 
 func TestHashPassword_BasicRoundTrip(t *testing.T) {
@@ -43,12 +48,78 @@ func TestHashPassword_DifferentSalts(t *testing.T) {
 	}
 }
 
-func TestHashPassword_SameSaltSameOutput(t *testing.T) {
-	// Skipped: HashPassword does not expose salt injection, and the public
-	// API is intentionally stateless. Determinism is guaranteed by the
-	// argon2.IDKey contract (same salt + same params = same output), which
-	// is verified indirectly by the round-trip tests above.
-	t.Skip("salt injection not exposed by public API")
+func TestHashPassword_PHCOutputRecomputesWithPublishedParameters(t *testing.T) {
+	// Given
+	const password = "correct horse battery staple"
+	hash, err := auth.HashPassword(password)
+	if err != nil {
+		t.Fatalf("hash password: %v", err)
+	}
+	parts := strings.Split(hash, "$")
+	if len(parts) != 6 || parts[1] != "argon2id" || parts[2] != "v=19" {
+		t.Fatalf("invalid PHC envelope")
+	}
+	params := make(map[string]string, 3)
+	for _, parameter := range strings.Split(parts[3], ",") {
+		name, value, ok := strings.Cut(parameter, "=")
+		if !ok || value == "" {
+			t.Fatalf("invalid PHC parameter")
+		}
+		params[name] = value
+	}
+	memory, err := strconv.ParseUint(params["m"], 10, 32)
+	if err != nil {
+		t.Fatalf("parse memory: %v", err)
+	}
+	time, err := strconv.ParseUint(params["t"], 10, 32)
+	if err != nil {
+		t.Fatalf("parse time: %v", err)
+	}
+	threads, err := strconv.ParseUint(params["p"], 10, 8)
+	if err != nil {
+		t.Fatalf("parse threads: %v", err)
+	}
+	if memory != 65536 || time != 2 || threads != 2 || len(params) != 3 {
+		t.Fatalf("unexpected published Argon2id parameters")
+	}
+	salt, err := base64.RawStdEncoding.DecodeString(parts[4])
+	if err != nil {
+		t.Fatalf("decode salt: %v", err)
+	}
+	digest, err := base64.RawStdEncoding.DecodeString(parts[5])
+	if err != nil {
+		t.Fatalf("decode digest: %v", err)
+	}
+	if len(salt) != 16 || len(digest) != 32 {
+		t.Fatalf("unexpected salt or digest length")
+	}
+
+	// When
+	recomputed := argon2.IDKey(
+		[]byte(password),
+		salt,
+		uint32(time),
+		uint32(memory),
+		uint8(threads),
+		uint32(len(digest)),
+	)
+
+	// Then
+	if !bytes.Equal(recomputed, digest) {
+		t.Fatal("recomputed digest does not match PHC digest")
+	}
+	if !auth.VerifyPassword(hash, password) ||
+		auth.VerifyPassword(hash, "wrong password") {
+		t.Fatal("public password verification mismatch")
+	}
+	t.Logf(
+		"PHC parsed and independently recomputed: algorithm=argon2id version=19 memory=%d time=%d threads=%d salt_bytes=%d digest_bytes=%d",
+		memory,
+		time,
+		threads,
+		len(salt),
+		len(digest),
+	)
 }
 
 func TestHashPassword_PHCFormat(t *testing.T) {

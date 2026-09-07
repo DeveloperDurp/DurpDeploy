@@ -172,7 +172,7 @@ templ-generate:
 	templ generate
 
 swagger-spec:
-	swagger generate spec -m -o internal/swagger/spec.json ./internal/handler/api
+	go run github.com/go-swagger/go-swagger/cmd/swagger@v0.32.3 generate spec -m -o internal/swagger/spec.json -c durpdeploy/internal/handler/api
 
 swagger-ui-copy: npm-install
 	@mkdir -p static/swagger-ui

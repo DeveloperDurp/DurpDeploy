@@ -17,8 +17,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/moby/moby/api/types/network"
 	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"durpdeploy/internal/agentpairing"
@@ -26,29 +26,13 @@ import (
 	"durpdeploy/internal/migrate"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/secret"
+
 	agentproto "github.com/DeveloperDurp/durpdeploy-agent/protocol"
 	agenttls "github.com/DeveloperDurp/durpdeploy-agent/transport"
 )
 
 func TestPostgres_RemoteAgentRuntimeParity(t *testing.T) {
-	ctx := context.Background()
-	container, err := postgres.Run(
-		ctx,
-		"postgres:16-alpine",
-		postgres.WithDatabase("durpdeploy"),
-		postgres.WithUsername("durpdeploy"),
-		postgres.WithPassword("postgres"),
-		postgres.BasicWaitStrategies(),
-	)
-	if err != nil {
-		t.Skipf("PostgreSQL runtime parity unavailable: %v", err)
-	}
-	t.Cleanup(func() { _ = container.Terminate(context.Background()) })
-	dsn, err := container.ConnectionString(ctx, "sslmode=disable")
-	if err != nil {
-		t.Fatal(err)
-	}
-	testRemoteAgentRuntimeParity(t, dsn)
+	testRemoteAgentRuntimeParity(t, labelRuntimeDSN(t, "postgres"))
 }
 
 func TestMSSQL_RemoteAgentRuntimeParity(t *testing.T) {
@@ -70,16 +54,34 @@ func mssqlRuntimeDB(t *testing.T) string {
 					"ACCEPT_EULA":       "Y",
 					"MSSQL_SA_PASSWORD": password,
 				},
-				WaitingFor: wait.ForLog("SQL Server is now ready for client connections").
-					WithStartupTimeout(3 * time.Minute),
+				WaitingFor: wait.ForSQL("1433/tcp", "sqlserver",
+					func(host string, port network.Port) string {
+						return (&url.URL{
+							Scheme: "sqlserver", User: url.UserPassword("sa", password),
+							Host:     net.JoinHostPort(host, port.Port()),
+							RawQuery: "database=master&encrypt=false&trustservercertificate=true",
+						}).String()
+					}).WithStartupTimeout(3 * time.Minute),
 			},
 			Started: true,
 		},
 	)
 	if err != nil {
+		if os.Getenv("DURPDEPLOY_AGENT_RUNTIME_PARITY_REQUIRED") == "1" {
+			t.Fatalf("required SQL Server runtime parity unavailable: %v", err)
+		}
 		t.Skipf("SQL Server runtime parity unavailable: %v", err)
 	}
-	t.Cleanup(func() { _ = container.Terminate(context.Background()) })
+	t.Logf("owned_container=%s engine=mssql", container.GetContainerID())
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
+		if err := container.Terminate(ctx); err != nil {
+			t.Errorf("container cleanup: %v", err)
+		} else {
+			t.Log("owned_container_cleanup=complete")
+		}
+	})
 	host, err := container.Host(ctx)
 	if err != nil {
 		t.Fatal(err)
