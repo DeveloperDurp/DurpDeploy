@@ -840,6 +840,29 @@ func (q *Queries) SetDeploymentTargetAgent(ctx context.Context, arg SetDeploymen
 	return err
 }
 
+const updateActiveParentDeploymentStatus = `-- name: UpdateActiveParentDeploymentStatus :exec
+UPDATE deployments SET status = ?, started_at = ?, finished_at = ?
+WHERE id = ? AND parent_deployment_id IS NULL
+  AND status IN ('pending', 'running')
+`
+
+type UpdateActiveParentDeploymentStatusParams struct {
+	Status     string        `json:"status"`
+	StartedAt  sql.NullInt64 `json:"started_at"`
+	FinishedAt sql.NullInt64 `json:"finished_at"`
+	ID         int64         `json:"id"`
+}
+
+func (q *Queries) UpdateActiveParentDeploymentStatus(ctx context.Context, arg UpdateActiveParentDeploymentStatusParams) error {
+	_, err := q.db.ExecContext(ctx, updateActiveParentDeploymentStatus,
+		arg.Status,
+		arg.StartedAt,
+		arg.FinishedAt,
+		arg.ID,
+	)
+	return err
+}
+
 const updateDeployment = `-- name: UpdateDeployment :one
 UPDATE deployments SET release_id = ?, environment_id = ?, status = ?, started_at = ?, finished_at = ?, note = ? WHERE id = ? RETURNING id, release_id, environment_id, status, started_at, finished_at, created_at, forced, note, parent_deployment_id, target_agent_id, target_agent_name
 `

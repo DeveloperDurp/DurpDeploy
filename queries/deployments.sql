@@ -15,6 +15,11 @@ UPDATE deployments SET release_id = ?, environment_id = ?, status = ?, started_a
 -- name: UpdateDeploymentStatus :exec
 UPDATE deployments SET status = ?, started_at = ?, finished_at = ? WHERE id = ?;
 
+-- name: UpdateActiveParentDeploymentStatus :exec
+UPDATE deployments SET status = ?, started_at = ?, finished_at = ?
+WHERE id = ? AND parent_deployment_id IS NULL
+  AND status IN ('pending', 'running');
+
 -- name: FinishDeployment :exec
 UPDATE deployments SET status = ?, finished_at = ? WHERE id = ?;
 

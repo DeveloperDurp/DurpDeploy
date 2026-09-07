@@ -32,9 +32,9 @@ func RecomputeParent(
 		return nil
 	}
 	status, startedAt, finishedAt := aggregate(children)
-	if err := queries.UpdateDeploymentStatus(
+	if err := queries.UpdateActiveParentDeploymentStatus(
 		ctx,
-		db.UpdateDeploymentStatusParams{
+		db.UpdateActiveParentDeploymentStatusParams{
 			ID: child.ParentDeploymentID.Int64, Status: status,
 			StartedAt: startedAt, FinishedAt: finishedAt,
 		},
