@@ -4,11 +4,14 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/events"
 	"durpdeploy/internal/migrate"
+	"durpdeploy/internal/notify"
 	"durpdeploy/internal/repository"
 )
 
@@ -157,5 +160,85 @@ func TestBus_PublishRecordsFailure(t *testing.T) {
 			"slack result = %q, want a failed: ... status",
 			results["slack"],
 		)
+	}
+}
+
+func TestBus_PublishDeliversLocalDeploymentToWebhook(t *testing.T) {
+	// Given
+	repo := newTestRepo(t)
+	ctx := context.Background()
+	var receipts int
+	receiver := httptest.NewServer(http.HandlerFunc(func(
+		w http.ResponseWriter,
+		r *http.Request,
+	) {
+		receipts++
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(receiver.Close)
+	project, err := repo.Queries.CreateProject(
+		ctx,
+		db.CreateProjectParams{Name: "local-project"},
+	)
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	if err := repo.Queries.UpdateProjectNotifications(
+		ctx,
+		db.UpdateProjectNotificationsParams{
+			SlackWebhookUrl: sql.NullString{String: receiver.URL, Valid: true},
+			ID:              project.ID,
+		},
+	); err != nil {
+		t.Fatalf("configure webhook: %v", err)
+	}
+	environment, err := repo.Queries.CreateEnvironment(
+		ctx,
+		db.CreateEnvironmentParams{Name: "local-environment"},
+	)
+	if err != nil {
+		t.Fatalf("create environment: %v", err)
+	}
+	release, err := repo.Queries.CreateRelease(ctx, db.CreateReleaseParams{
+		ProjectID: project.ID, Version: "v1", StepsJson: "[]",
+	})
+	if err != nil {
+		t.Fatalf("create release: %v", err)
+	}
+	deployment, err := repo.Queries.CreateDeployment(
+		ctx,
+		db.CreateDeploymentParams{
+			ReleaseID: release.ID, EnvironmentID: environment.ID, Status: "pending",
+		},
+	)
+	if err != nil {
+		t.Fatalf("create deployment: %v", err)
+	}
+	bus := events.NewBus(repo)
+	bus.Register(notify.NewSlackNotifierWithClient(receiver.Client()))
+
+	// When
+	bus.Publish(ctx, events.Event{
+		Type:          events.DeploymentStarted,
+		DeploymentID:  deployment.ID,
+		ProjectID:     project.ID,
+		EnvironmentID: environment.ID,
+		Message:       "local deployment started",
+	})
+
+	// Then
+	if receipts != 1 {
+		t.Fatalf("webhook receipts = %d, want 1", receipts)
+	}
+	var notifications int
+	if err := repo.DB.QueryRowContext(
+		ctx,
+		"SELECT COUNT(*) FROM notification_events WHERE deployment_id = ?",
+		deployment.ID,
+	).Scan(&notifications); err != nil {
+		t.Fatalf("count notification events: %v", err)
+	}
+	if notifications != 1 {
+		t.Fatalf("notification events = %d, want 1", notifications)
 	}
 }

@@ -1480,6 +1480,12 @@
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
+          "409": {
+            "description": "FanoutParentLogConflict",
+            "schema": {
+              "$ref": "#/definitions/FanoutParentLogConflict"
+            }
+          },
           "500": {
             "description": "ServerError",
             "schema": {
@@ -1536,6 +1542,12 @@
             "description": "NotFoundError",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "409": {
+            "description": "FanoutParentLogConflict",
+            "schema": {
+              "$ref": "#/definitions/FanoutParentLogConflict"
             }
           },
           "500": {
@@ -1609,6 +1621,12 @@
             "schema": {
               "$ref": "#/definitions/NotFoundError"
             }
+          },
+          "409": {
+            "description": "FanoutParentLogConflict",
+            "schema": {
+              "$ref": "#/definitions/FanoutParentLogConflict"
+            }
           }
         }
       }
@@ -1675,6 +1693,12 @@
             "description": "NotFoundError",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "409": {
+            "description": "FanoutParentLogConflict",
+            "schema": {
+              "$ref": "#/definitions/FanoutParentLogConflict"
             }
           },
           "500": {
@@ -5961,6 +5985,29 @@
     }
   },
   "definitions": {
+    "Agent": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "x-go-name": "ID"
+        },
+        "last_heartbeat_at": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "LastHeartbeatAt"
+        },
+        "name": {
+          "type": "string",
+          "x-go-name": "Name"
+        },
+        "status": {
+          "type": "string",
+          "x-go-name": "Status"
+        }
+      },
+      "x-go-package": "durpdeploy/internal/deploymentstate"
+    },
     "AgentLabel": {
       "type": "object",
       "title": "AgentLabel is a safe administrative label representation.",
@@ -6145,6 +6192,44 @@
       "x-go-name": "swaggerBadRequestError",
       "x-go-package": "durpdeploy/internal/handler/api"
     },
+    "Child": {
+      "type": "object",
+      "properties": {
+        "detail_url": {
+          "type": "string",
+          "x-go-name": "DetailURL"
+        },
+        "dispatch": {
+          "$ref": "#/definitions/Dispatch"
+        },
+        "id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "ID"
+        },
+        "logs_url": {
+          "type": "string",
+          "x-go-name": "LogsURL"
+        },
+        "ndjson_url": {
+          "type": "string",
+          "x-go-name": "NDJSONURL"
+        },
+        "sse_url": {
+          "type": "string",
+          "x-go-name": "SSEURL"
+        },
+        "status": {
+          "type": "string",
+          "x-go-name": "Status"
+        },
+        "text_url": {
+          "type": "string",
+          "x-go-name": "TextURL"
+        }
+      },
+      "x-go-package": "durpdeploy/internal/deploymentstate"
+    },
     "ConflictError": {
       "type": "object",
       "title": "Conflict error response.",
@@ -6283,12 +6368,75 @@
       "x-go-name": "swaggerDeploymentAgent",
       "x-go-package": "durpdeploy/internal/handler/api"
     },
+    "DeploymentChild": {
+      "type": "object",
+      "properties": {
+        "detail_url": {
+          "type": "string",
+          "x-go-name": "DetailURL"
+        },
+        "dispatch": {
+          "$ref": "#/definitions/DeploymentDispatch"
+        },
+        "id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "ID"
+        },
+        "logs_url": {
+          "type": "string",
+          "x-go-name": "LogsURL"
+        },
+        "ndjson_url": {
+          "type": "string",
+          "x-go-name": "NDJSONURL"
+        },
+        "sse_url": {
+          "type": "string",
+          "x-go-name": "SSEURL"
+        },
+        "status": {
+          "type": "string",
+          "x-go-name": "Status"
+        },
+        "text_url": {
+          "type": "string",
+          "x-go-name": "TextURL"
+        }
+      },
+      "x-go-name": "swaggerDeploymentChild",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
     "DeploymentDispatch": {
       "type": "object",
       "title": "DeploymentDispatch is the safe operator-facing routing state.",
       "properties": {
         "agent": {
           "$ref": "#/definitions/DeploymentAgent"
+        },
+        "agent_label_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "AgentLabelID"
+        },
+        "agent_label_name": {
+          "type": "string",
+          "x-go-name": "AgentLabelName"
+        },
+        "agent_strategy": {
+          "type": "string",
+          "x-go-name": "AgentStrategy"
+        },
+        "aggregate_status": {
+          "type": "string",
+          "x-go-name": "AggregateStatus"
+        },
+        "children": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/DeploymentChild"
+          },
+          "x-go-name": "Children"
         },
         "mode": {
           "type": "string",
@@ -6298,9 +6446,17 @@
           "type": "string",
           "x-go-name": "Reason"
         },
+        "source": {
+          "type": "string",
+          "x-go-name": "Source"
+        },
         "state": {
           "type": "string",
           "x-go-name": "State"
+        },
+        "target_mode": {
+          "type": "string",
+          "x-go-name": "TargetMode"
         }
       },
       "x-go-name": "swaggerDeploymentDispatch",
@@ -6496,6 +6652,61 @@
       "x-go-name": "swaggerDeploymentStatusResponse",
       "x-go-package": "durpdeploy/internal/handler/api"
     },
+    "Dispatch": {
+      "description": "It deliberately excludes claim tokens, hashes, and payload data.",
+      "type": "object",
+      "title": "Dispatch is the safe, operator-facing routing state for a deployment.",
+      "properties": {
+        "agent": {
+          "$ref": "#/definitions/Agent"
+        },
+        "agent_label_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "AgentLabelID"
+        },
+        "agent_label_name": {
+          "type": "string",
+          "x-go-name": "AgentLabelName"
+        },
+        "agent_strategy": {
+          "type": "string",
+          "x-go-name": "AgentStrategy"
+        },
+        "aggregate_status": {
+          "type": "string",
+          "x-go-name": "AggregateStatus"
+        },
+        "children": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Child"
+          },
+          "x-go-name": "Children"
+        },
+        "mode": {
+          "type": "string",
+          "x-go-name": "Mode"
+        },
+        "reason": {
+          "type": "string",
+          "x-go-name": "Reason"
+        },
+        "source": {
+          "type": "string",
+          "x-go-name": "Source"
+        },
+        "state": {
+          "type": "string",
+          "x-go-name": "State"
+        },
+        "target_mode": {
+          "type": "string",
+          "x-go-name": "TargetMode"
+        }
+      },
+      "x-go-package": "durpdeploy/internal/deploymentstate"
+    },
     "EmptyResponse": {
       "type": "object",
       "title": "EmptyResponse is returned for no-content endpoints.",
@@ -6572,6 +6783,28 @@
         }
       },
       "x-go-name": "swaggerErrorResponse",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "FanoutParentLogConflict": {
+      "type": "object",
+      "title": "FanoutParentLogConflict directs callers to the immutable child log targets.",
+      "properties": {
+        "children": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Child"
+          },
+          "x-go-name": "Children"
+        },
+        "code": {
+          "type": "string",
+          "x-go-name": "Code"
+        },
+        "message": {
+          "type": "string",
+          "x-go-name": "Message"
+        }
+      },
       "x-go-package": "durpdeploy/internal/handler/api"
     },
     "ForbiddenError": {

@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"durpdeploy/internal/audit"
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/deploymentstate"
@@ -314,6 +315,9 @@ func (h *DeploymentHandler) ScheduleDeployment(
 	mode := r.FormValue("target_mode")
 	if mode == "" {
 		mode = "default"
+	}
+	if mode != "default" {
+		audit.SetAction(r, "create_deployment_override", "deployment")
 	}
 	labelID, _ := strconv.ParseInt(r.FormValue("agent_label_id"), 10, 64)
 	strategy := r.FormValue("agent_strategy")
@@ -620,6 +624,10 @@ func (h *DeploymentHandler) CancelDeployment(
 		id,
 	)
 	if err != nil {
+		if errors.Is(err, dispatch.ErrCancellationChild) {
+			http.Error(w, err.Error(), http.StatusConflict)
+			return
+		}
 		if errors.Is(err, sql.ErrNoRows) {
 			http.Error(w, "Deployment not found", http.StatusNotFound)
 			return
@@ -739,7 +747,11 @@ func (h *DeploymentHandler) RedeployDeployment(
 		return
 	}
 	if source.ParentDeploymentID.Valid {
-		http.Error(w, "Child deployments cannot be redeployed", http.StatusConflict)
+		http.Error(
+			w,
+			"Child deployments cannot be redeployed",
+			http.StatusConflict,
+		)
 		return
 	}
 	routing, err := deploymentstate.Load(r.Context(), h.repo, id)

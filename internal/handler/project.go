@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"durpdeploy/internal/audit"
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/dispatch"
@@ -665,6 +666,7 @@ func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	audit.SetAction(r, "update_project_execution_policy", "project")
 
 	if r.Header.Get("HX-Request") == "true" {
 		// After an HTMX edit, navigate the browser back to the project's

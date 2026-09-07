@@ -93,10 +93,29 @@ type swaggerDeployment struct {
 // DeploymentDispatch is the safe operator-facing routing state.
 // swagger:model DeploymentDispatch
 type swaggerDeploymentDispatch struct {
-	Mode   string                  `json:"mode"`
-	State  string                  `json:"state,omitempty"`
-	Reason string                  `json:"reason,omitempty"`
-	Agent  *swaggerDeploymentAgent `json:"agent,omitempty"`
+	Mode            string                   `json:"mode"`
+	State           string                   `json:"state,omitempty"`
+	Reason          string                   `json:"reason,omitempty"`
+	Agent           *swaggerDeploymentAgent  `json:"agent,omitempty"`
+	Source          string                   `json:"source,omitempty"`
+	TargetMode      string                   `json:"target_mode,omitempty"`
+	AgentLabelID    *int64                   `json:"agent_label_id,omitempty"`
+	AgentLabelName  string                   `json:"agent_label_name,omitempty"`
+	AgentStrategy   string                   `json:"agent_strategy,omitempty"`
+	AggregateStatus string                   `json:"aggregate_status,omitempty"`
+	Children        []swaggerDeploymentChild `json:"children,omitempty"`
+}
+
+// swagger:model DeploymentChild
+type swaggerDeploymentChild struct {
+	ID        int64                     `json:"id"`
+	Status    string                    `json:"status"`
+	Dispatch  swaggerDeploymentDispatch `json:"dispatch"`
+	DetailURL string                    `json:"detail_url"`
+	LogsURL   string                    `json:"logs_url"`
+	SSEURL    string                    `json:"sse_url"`
+	NDJSONURL string                    `json:"ndjson_url"`
+	TextURL   string                    `json:"text_url"`
 }
 
 // DeploymentAgent is the assigned agent's safe health metadata.

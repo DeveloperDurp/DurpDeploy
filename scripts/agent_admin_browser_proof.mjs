@@ -21,6 +21,12 @@ const scenario = process.argv.includes("--scenario")
 	? process.argv[process.argv.indexOf("--scenario") + 1]
 	: "pairing";
 
+if (scenario === "fanout") {
+	const { runFanoutProof } = await import("./agent_fanout_browser_proof.mjs");
+	await runFanoutProof(outputDir);
+	process.exit(0);
+}
+
 const root = process.cwd();
 const serverDir = await fs.mkdtemp(join(tmpdir(), "durpdeploy-agent-browser-"));
 const binary = join(serverDir, "durpdeploy");

@@ -8,8 +8,10 @@ import (
 	"time"
 
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/deploymentstate"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/runner"
+
 	"github.com/go-chi/chi/v5"
 )
 
@@ -30,6 +32,9 @@ func (h *LogHandler) StreamLogs(w http.ResponseWriter, r *http.Request) {
 	deploymentID, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
 		http.Error(w, "Invalid deployment ID", http.StatusBadRequest)
+		return
+	}
+	if h.rejectParentLogs(w, r, deploymentID) {
 		return
 	}
 	cursor, err := streamLastEventID(r)
@@ -96,6 +101,9 @@ func (h *LogHandler) ExportLogs(w http.ResponseWriter, r *http.Request) {
 	deploymentID, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
 		http.Error(w, "Invalid deployment ID", http.StatusBadRequest)
+		return
+	}
+	if h.rejectParentLogs(w, r, deploymentID) {
 		return
 	}
 
@@ -169,5 +177,24 @@ func (h *LogHandler) ExportLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, _ = fmt.Fprintln(w)
+}
 
+func (h *LogHandler) rejectParentLogs(
+	w http.ResponseWriter,
+	r *http.Request,
+	id int64,
+) bool {
+	parent, err := deploymentstate.IsParent(r.Context(), h.repo, id)
+	if err != nil {
+		http.Error(
+			w,
+			"Could not load deployment routing",
+			http.StatusInternalServerError,
+		)
+		return true
+	}
+	if parent {
+		http.Error(w, deploymentstate.ParentLogMessage, http.StatusConflict)
+	}
+	return parent
 }

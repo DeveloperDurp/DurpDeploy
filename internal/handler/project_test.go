@@ -802,6 +802,18 @@ func TestUpdateProject_AfterSubmitLandsOnProject(t *testing.T) {
 	if loc := nonHxResp.Header.Get("Location"); loc != wantRedirect {
 		t.Errorf("non-HX Location: got %q, want %q", loc, wantRedirect)
 	}
+
+	entries, err := h.repo.Queries.ListAuditLogs(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("list project policy audit: %v", err)
+	}
+	if len(entries) != 1 ||
+		entries[0].Action != "update_project_execution_policy" {
+		t.Fatalf(
+			"project form audit = %#v, want update_project_execution_policy",
+			entries,
+		)
+	}
 }
 
 // TestProject_UpdateNotifications verifies the Slack webhook URL,

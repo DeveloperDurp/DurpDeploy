@@ -9,6 +9,7 @@ import (
 
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/repository"
+
 	"github.com/go-chi/chi/v5"
 )
 
@@ -31,10 +32,14 @@ import (
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
 //	  404: body:NotFoundError
+//	  409: body:FanoutParentLogConflict
 func (h *LogHandler) StreamLogs(w http.ResponseWriter, r *http.Request) {
 	deploymentID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
 		RespondError(w, http.StatusBadRequest, "Invalid deployment ID")
+		return
+	}
+	if rejectParentLogs(w, r, h.repo, deploymentID) {
 		return
 	}
 	format := r.URL.Query().Get("format")

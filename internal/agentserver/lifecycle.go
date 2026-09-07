@@ -25,7 +25,8 @@ func (server *Server) startDeployment(
 	agentID string,
 	token agentproto.ClaimToken,
 ) error {
-	return server.repository.WithTx(ctx, func(queries *db.Queries) error {
+	var notification events.Event
+	err := server.repository.WithTx(ctx, func(queries *db.Queries) error {
 		dispatch, hash, err := lifecycleDispatch(
 			ctx,
 			queries,
@@ -65,8 +66,32 @@ func (server *Server) startDeployment(
 		); err != nil {
 			return err
 		}
-		return deploymentstate.RecomputeParent(ctx, queries, deploymentID)
+		if err := deploymentstate.RecomputeParent(
+			ctx, queries, deploymentID,
+		); err != nil {
+			return err
+		}
+		deployment, err := queries.GetDeployment(ctx, deploymentID)
+		if err != nil {
+			return err
+		}
+		release, err := queries.GetRelease(ctx, deployment.ReleaseID)
+		if err != nil {
+			return err
+		}
+		notification = events.Event{
+			Type:          events.DeploymentStarted,
+			DeploymentID:  deploymentID,
+			ProjectID:     release.ProjectID,
+			EnvironmentID: deployment.EnvironmentID,
+			Message:       "Remote deployment started",
+		}
+		return nil
 	})
+	if err == nil && server.events != nil && notification.DeploymentID != 0 {
+		server.events.Publish(ctx, notification)
+	}
+	return err
 }
 
 func (server *Server) heartbeatDeployment(
@@ -260,7 +285,8 @@ func (server *Server) cancelDeployment(
 	agentID string,
 	token agentproto.ClaimToken,
 ) error {
-	return server.repository.WithTx(ctx, func(queries *db.Queries) error {
+	var notification events.Event
+	err := server.repository.WithTx(ctx, func(queries *db.Queries) error {
 		dispatch, hash, err := lifecycleDispatch(
 			ctx,
 			queries,
@@ -299,8 +325,32 @@ func (server *Server) cancelDeployment(
 		); err != nil {
 			return err
 		}
-		return deploymentstate.RecomputeParent(ctx, queries, deploymentID)
+		if err := deploymentstate.RecomputeParent(
+			ctx, queries, deploymentID,
+		); err != nil {
+			return err
+		}
+		deployment, err := queries.GetDeployment(ctx, deploymentID)
+		if err != nil {
+			return err
+		}
+		release, err := queries.GetRelease(ctx, deployment.ReleaseID)
+		if err != nil {
+			return err
+		}
+		notification = events.Event{
+			Type:          events.DeploymentCancelled,
+			DeploymentID:  deploymentID,
+			ProjectID:     release.ProjectID,
+			EnvironmentID: deployment.EnvironmentID,
+			Message:       "Remote deployment cancelled",
+		}
+		return nil
 	})
+	if err == nil && server.events != nil && notification.DeploymentID != 0 {
+		server.events.Publish(ctx, notification)
+	}
+	return err
 }
 
 func lifecycleDispatch(

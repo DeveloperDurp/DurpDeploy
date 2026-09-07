@@ -53,10 +53,12 @@ func (s *CancellationService) cancelOne(
 		if updated != 1 {
 			return "", ErrCancellationState
 		}
+		s.publishCancelled(ctx, deploymentID)
 		return "cancelled", nil
 	}
 	if deployment.Status == "pending" {
 		if err := s.cancelQueued(ctx, deploymentID); err == nil {
+			s.publishCancelled(ctx, deploymentID)
 			return "cancelled", nil
 		} else if !errors.Is(err, ErrCancellationState) {
 			return "", fmt.Errorf("cancel queued remote deployment: %w", err)
@@ -74,6 +76,15 @@ func (s *CancellationService) cancelOne(
 		return "", ErrCancellationState
 	}
 	return s.cancelRunning(ctx, deploymentID)
+}
+
+func (s *CancellationService) publishCancelled(
+	ctx context.Context,
+	deploymentID int64,
+) {
+	if s.runner != nil {
+		s.runner.PublishCancelled(ctx, deploymentID)
+	}
 }
 
 func (s *CancellationService) cancelParent(

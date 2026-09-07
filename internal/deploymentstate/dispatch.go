@@ -13,10 +13,17 @@ import (
 // Dispatch is the safe, operator-facing routing state for a deployment.
 // It deliberately excludes claim tokens, hashes, and payload data.
 type Dispatch struct {
-	Mode   string `json:"mode"`
-	State  string `json:"state,omitempty"`
-	Reason string `json:"reason,omitempty"`
-	Agent  *Agent `json:"agent,omitempty"`
+	Mode            string  `json:"mode"`
+	State           string  `json:"state,omitempty"`
+	Reason          string  `json:"reason,omitempty"`
+	Agent           *Agent  `json:"agent,omitempty"`
+	Source          string  `json:"source,omitempty"`
+	TargetMode      string  `json:"target_mode,omitempty"`
+	AgentLabelID    *int64  `json:"agent_label_id,omitempty"`
+	AgentLabelName  string  `json:"agent_label_name,omitempty"`
+	AgentStrategy   string  `json:"agent_strategy,omitempty"`
+	AggregateStatus string  `json:"aggregate_status,omitempty"`
+	Children        []Child `json:"children,omitempty"`
 }
 
 type Agent struct {
@@ -50,6 +57,22 @@ func Load(
 	repo *repository.Repository,
 	deploymentID int64,
 ) (Dispatch, error) {
+	deployment, err := repo.Queries.GetDeployment(ctx, deploymentID)
+	if err != nil {
+		return Dispatch{}, fmt.Errorf("get deployment: %w", err)
+	}
+	result, err := loadDispatch(ctx, repo, deploymentID)
+	if err != nil {
+		return Dispatch{}, err
+	}
+	return withRouting(ctx, repo, deployment, result)
+}
+
+func loadDispatch(
+	ctx context.Context,
+	repo *repository.Repository,
+	deploymentID int64,
+) (Dispatch, error) {
 	dispatch, err := repo.Queries.GetDeploymentDispatch(ctx, deploymentID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Dispatch{Mode: "local"}, nil
@@ -66,16 +89,19 @@ func fromDispatch(
 	dispatch db.DeploymentDispatch,
 ) (Dispatch, error) {
 	result := Dispatch{Mode: dispatch.Mode, State: dispatch.State}
+	if dispatch.Reason.Valid {
+		result.Reason = dispatch.Reason.String
+	}
 	if dispatch.Mode != "remote" {
 		return result, nil
-	}
-	if dispatch.State == "waiting" && dispatch.Reason.Valid {
-		result.Reason = dispatch.Reason.String
 	}
 	if !dispatch.AgentID.Valid {
 		return result, nil
 	}
 	agent, err := repo.Queries.GetAgent(ctx, dispatch.AgentID.String)
+	if errors.Is(err, sql.ErrNoRows) {
+		return result, nil
+	}
 	if err != nil {
 		return Dispatch{}, fmt.Errorf("get dispatch agent: %w", err)
 	}

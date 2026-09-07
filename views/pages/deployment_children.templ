@@ -1,0 +1,70 @@
+package pages
+
+import "fmt"
+import "durpdeploy/internal/db"
+import "durpdeploy/internal/deploymentstate"
+
+templ DeploymentChildren(deployment db.Deployment, children []deploymentstate.Child) {
+	<section data-fanout-children class="card bg-base-200 p-4" hx-get={ fmt.Sprintf("/deployments/%d", deployment.ID) } hx-select="[data-fanout-children]" hx-swap="outerHTML" if !isTerminalStatus(deployment.Status) { hx-trigger="every 3s" }>
+		<h2 class="text-xl font-bold mb-4">Child executions</h2>
+		if len(children) == 0 {
+			if deployment.Status == "pending_approval" {
+				<p class="text-sm text-gray-500">Agents will be resolved when this deployment is approved.</p>
+			} else {
+				<p class="text-sm text-gray-500">No child executions were dispatched.</p>
+			}
+		} else {
+			<div class="hidden xl:block">
+				<table class="table table-zebra table-fixed w-full">
+					<thead><tr><th class="w-1/6">Deployment</th><th class="w-1/6">Agent at dispatch</th><th class="w-1/6">Status</th><th class="w-1/6">Dispatch</th><th class="w-1/6">Heartbeat</th><th class="w-1/6">Logs</th></tr></thead>
+					<tbody>
+						for _, child := range children {
+							<tr data-child-id={ fmt.Sprint(child.ID) }>
+								<td><a class="link" href={ child.DetailURL }>#{ fmt.Sprint(child.ID) }</a></td>
+								<td class="break-words">@ChildAgentIdentity(child.Dispatch)</td>
+								<td>@StatusBadge(db.Deployment{Status: child.Status})</td>
+								<td class="break-words">{ dispatchLabel(child.Dispatch.State) }<p class="text-xs text-gray-500">{ child.Dispatch.Reason }</p></td>
+								<td>@ChildHeartbeat(child.Dispatch)</td>
+								<td>@ChildLogLinks(child)</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+			<div class="xl:hidden space-y-4">
+				for _, child := range children {
+					<article data-child-id={ fmt.Sprint(child.ID) } data-proof-bounds class="border border-base-300 rounded p-4 space-y-3">
+						<div class="flex flex-wrap items-center justify-between gap-2"><a class="link" href={ child.DetailURL }>Deployment #{ fmt.Sprint(child.ID) }</a>@StatusBadge(db.Deployment{Status: child.Status})</div>
+						<div class="break-words">@ChildAgentIdentity(child.Dispatch)</div>
+						<p class="text-sm break-words">Dispatch: { dispatchLabel(child.Dispatch.State) } { child.Dispatch.Reason }</p>
+						@ChildHeartbeat(child.Dispatch)
+						@ChildLogLinks(child)
+					</article>
+				}
+			</div>
+		}
+	</section>
+}
+
+templ ChildAgentIdentity(routing deploymentstate.Dispatch) {
+	if routing.Agent != nil {
+		<p>{ routing.Agent.Name }</p><p class="text-xs text-gray-500">{ routing.Agent.ID } · { routing.Agent.Status }</p>
+	}
+}
+
+templ ChildHeartbeat(routing deploymentstate.Dispatch) {
+	if routing.Agent != nil && routing.Agent.LastHeartbeatAt != nil {
+		<p class="text-xs">{ formatUnixTime(*routing.Agent.LastHeartbeatAt) }</p>
+	} else {
+		<p class="text-xs text-gray-500">No heartbeat</p>
+	}
+}
+
+templ ChildLogLinks(child deploymentstate.Child) {
+	<div class="flex flex-wrap gap-2">
+		<a href={ fmt.Sprintf("/deployments/%d#logs", child.ID) } class="btn btn-sm" data-child-log={ fmt.Sprint(child.ID) }>View logs</a>
+		<a href={ fmt.Sprintf("/deployments/%d/logs.txt", child.ID) } class="link text-sm">Text</a>
+		<a href={ child.SSEURL } class="link text-sm">SSE</a>
+		<a href={ child.NDJSONURL } class="link text-sm">NDJSON</a>
+	</div>
+}

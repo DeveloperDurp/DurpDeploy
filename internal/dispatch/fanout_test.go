@@ -5,10 +5,15 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/deploymentstate"
+	"durpdeploy/internal/events"
+	"durpdeploy/internal/notify"
+	"durpdeploy/internal/runner"
 )
 
 func TestFanout_CreatesAtomicOrdinaryChildren(t *testing.T) {
@@ -201,13 +206,38 @@ func TestParentAggregation_UsesTerminalPrecedenceAndTimestamps(t *testing.T) {
 func TestCancellationService_ParentFansOutIdempotently(t *testing.T) {
 	fixture := newRoutingFixture(t, 3)
 	parent := fixture.createDeployment(t)
+	var receipts int
+	receiver := httptest.NewServer(http.HandlerFunc(func(
+		w http.ResponseWriter,
+		r *http.Request,
+	) {
+		receipts++
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(receiver.Close)
+	if err := fixture.repo.Queries.UpdateProjectNotifications(
+		context.Background(),
+		db.UpdateProjectNotificationsParams{
+			ID: fixture.project.ID,
+			SlackWebhookUrl: sql.NullString{
+				String: receiver.URL,
+				Valid:  true,
+			},
+		},
+	); err != nil {
+		t.Fatalf("configure webhook: %v", err)
+	}
+	bus := events.NewBus(fixture.repo)
+	bus.Register(notify.NewSlackNotifierWithClient(receiver.Client()))
+	rnr := runner.NewForTests(fixture.repo, runner.NewLogBroker())
+	rnr.SetEventBus(bus)
 	freezeAll(t, fixture, parent.ID)
 	if err := New(fixture.repo, fixture.box, nil).Dispatch(
 		context.Background(), parent.ID,
 	); err != nil {
 		t.Fatalf("dispatch: %v", err)
 	}
-	service := NewCancellationService(fixture.repo, nil)
+	service := NewCancellationService(fixture.repo, rnr)
 
 	state, err := service.Cancel(context.Background(), parent.ID)
 	if err != nil || state != "cancelled" {
@@ -225,6 +255,44 @@ func TestCancellationService_ParentFansOutIdempotently(t *testing.T) {
 			t.Fatalf("child = %#v, want cancelled", child)
 		}
 	}
+	var rootNotifications int
+	if err := fixture.repo.DB.QueryRowContext(
+		context.Background(),
+		"SELECT COUNT(*) FROM notification_events WHERE deployment_id = ? AND event_type = ?",
+		parent.ID,
+		string(events.DeploymentCancelled),
+	).Scan(&rootNotifications); err != nil {
+		t.Fatalf("count root cancellation notifications: %v", err)
+	}
+	if rootNotifications != 1 || receipts != 1 {
+		t.Fatalf(
+			"root cancellation notifications/receipts = %d/%d, want 1/1",
+			rootNotifications,
+			receipts,
+		)
+	}
+	var childNotifications int
+	if err := fixture.repo.DB.QueryRowContext(
+		context.Background(),
+		"SELECT COUNT(*) FROM notification_events WHERE deployment_id IN (?, ?, ?)",
+		children[0].ID,
+		children[1].ID,
+		children[2].ID,
+	).Scan(&childNotifications); err != nil {
+		t.Fatalf("count child cancellation notifications: %v", err)
+	}
+	if childNotifications != 0 {
+		t.Fatalf(
+			"child cancellation notifications = %d, want 0",
+			childNotifications,
+		)
+	}
+	t.Logf(
+		"queued all cancellation webhook: root_id=%d receipts=%d child_notifications=%d",
+		parent.ID,
+		receipts,
+		childNotifications,
+	)
 }
 
 func TestTargetUnavailable_FailsOnlyUnclaimedChild(t *testing.T) {

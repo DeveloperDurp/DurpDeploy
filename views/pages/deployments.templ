@@ -280,6 +280,8 @@ func canCancelDeployment(
 	deployment db.Deployment,
 	routing deploymentstate.Dispatch,
 ) bool {
+	if deployment.ParentDeploymentID.Valid { return false }
+	if routing.Mode == "fanout" { return !isTerminalStatus(deployment.Status) }
 	if !routing.CanCancel() {
 		return false
 	}
@@ -331,7 +333,9 @@ func dispatchLabel(state string) string {
 }
 
 templ DeploymentRoutingSummary(routing deploymentstate.Dispatch) {
-	if routing.Mode == "remote" {
+	if routing.Mode == "fanout" {
+		<span class="badge badge-sm badge-outline">all agents</span>
+	} else if routing.Mode == "remote" {
 		<span class={ fmt.Sprintf("badge badge-sm %s", dispatchBadgeClass(routing.State)) }>{ dispatchLabel(routing.State) }</span>
 		if routing.Agent != nil {
 			<span class="text-xs text-gray-500 ml-1">{ routing.Agent.Name } ({ routing.Agent.Status })</span>
@@ -383,8 +387,13 @@ templ DeploymentDetail(project db.Project, release db.Release, environment db.En
 				}
 			</div>
 			<div class="flex flex-wrap items-center gap-2 ml-auto">
-				<a href={ fmt.Sprintf("/deployments/%d/logs.txt", deployment.ID) } class="btn btn-sm btn-ghost">Export</a>
-				if CanWrite(ctx) {
+				if routing.Mode != "fanout" {
+					<a href={ fmt.Sprintf("/deployments/%d/logs.txt", deployment.ID) } class="btn btn-sm btn-ghost">Export</a>
+				}
+				if deployment.ParentDeploymentID.Valid {
+					<a href={ fmt.Sprintf("/deployments/%d", deployment.ParentDeploymentID.Int64) } class="btn btn-sm btn-ghost">Parent</a>
+				}
+				if CanWrite(ctx) && !deployment.ParentDeploymentID.Valid {
 					if isTerminalStatus(deployment.Status) || routing.IsUncertainTerminal() {
 						<button
 							class="btn btn-sm btn-primary"
@@ -427,6 +436,9 @@ templ DeploymentDetail(project db.Project, release db.Release, environment db.En
 			</div>
 		</div>
 		@DeploymentRoutingDetail(routing)
+		if routing.Mode == "fanout" {
+			@DeploymentChildren(deployment, routing.Children)
+		}
 		<div class="card bg-base-200 p-4">
 			<h2 class="text-xl font-bold mb-4">Steps</h2>
 			<table class="table table-zebra table-fixed w-full">
@@ -462,7 +474,8 @@ templ DeploymentDetail(project db.Project, release db.Release, environment db.En
 				</tbody>
 			</table>
 		</div>
-		<div class="card bg-base-200 p-4">
+		if routing.Mode != "fanout" {
+		<div id="logs" class="card bg-base-200 p-4">
 			<h2 class="text-xl font-bold mb-4">Logs</h2>
 			if len(logs) == 0 {
 				<p id="no-logs-message" class="text-gray-500 italic">No logs yet.</p>
@@ -492,12 +505,23 @@ templ DeploymentDetail(project db.Project, release db.Release, environment db.En
 				};
 			</script>
 		</div>
+		}
 	</div>
 }
 
 templ DeploymentRoutingDetail(routing deploymentstate.Dispatch) {
 	<div class="card bg-base-200 p-4">
 		<h2 class="text-xl font-bold mb-4">Routing</h2>
+		if routing.Source != "" {
+			<dl class="flex flex-wrap gap-4 text-sm mb-4">
+				<div><dt class="text-gray-500">Source</dt><dd>{ routing.Source }</dd></div>
+				<div><dt class="text-gray-500">Target</dt><dd>{ routing.TargetMode }</dd></div>
+				if routing.AgentLabelName != "" {
+					<div><dt class="text-gray-500">Label at creation</dt><dd class="break-words">{ routing.AgentLabelName }</dd></div>
+					<div><dt class="text-gray-500">Strategy</dt><dd>{ routing.AgentStrategy }</dd></div>
+				}
+			</dl>
+		}
 		if routing.Mode == "remote" {
 			<div class="space-y-2 text-sm">
 				<p><span class="font-medium">State:</span> <span class={ fmt.Sprintf("badge badge-sm %s", dispatchBadgeClass(routing.State)) }>{ dispatchLabel(routing.State) }</span></p>
@@ -521,6 +545,9 @@ templ DeploymentRoutingDetail(routing deploymentstate.Dispatch) {
 			if routing.State == "cancel_unconfirmed" {
 				<div role="alert" class="alert alert-warning mt-4"><span>Cancellation was not confirmed by the remote agent. The deployment is terminally failed; redeploy creates a new deployment.</span></div>
 			}
+		} else if routing.Mode == "fanout" {
+			<p class="text-sm">Aggregate status: { routing.AggregateStatus }</p>
+			<p class="text-sm text-gray-500">{ deploymentstate.ParentLogMessage }</p>
 		} else {
 			<p class="text-sm text-gray-500">Local runner</p>
 		}

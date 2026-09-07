@@ -7,11 +7,11 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/runner"
+
+	"github.com/go-chi/chi/v5"
 )
 
 type LogHandler struct {
@@ -41,6 +41,7 @@ func NewLogHandler(
 //
 //	Responses:
 //	  200: body:TextResponse
+//	  409: body:FanoutParentLogConflict
 //	  401: body:UnauthorizedError
 //	  404: body:NotFoundError
 //	  500: body:ServerError
@@ -48,6 +49,9 @@ func (h *LogHandler) ExportLogs(w http.ResponseWriter, r *http.Request) {
 	depID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
 		RespondError(w, http.StatusBadRequest, "Invalid deployment ID")
+		return
+	}
+	if rejectParentLogs(w, r, h.repo, depID) {
 		return
 	}
 
@@ -121,7 +125,6 @@ func (h *LogHandler) ExportLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, _ = fmt.Fprintln(w)
-
 }
 
 // GetLog returns a single deployment log entry.
@@ -139,6 +142,7 @@ func (h *LogHandler) ExportLogs(w http.ResponseWriter, r *http.Request) {
 //
 //	Responses:
 //	  200: body:DeploymentLog
+//	  409: body:FanoutParentLogConflict
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
 //	  404: body:NotFoundError
@@ -147,6 +151,9 @@ func (h *LogHandler) GetLog(w http.ResponseWriter, r *http.Request) {
 	depID, err := parseParamInt(r, "id")
 	if err != nil {
 		RespondError(w, http.StatusBadRequest, "Invalid deployment ID")
+		return
+	}
+	if rejectParentLogs(w, r, h.repo, depID) {
 		return
 	}
 	logID, err := parseParamInt(r, "logId")

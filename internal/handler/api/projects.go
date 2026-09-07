@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 
+	"durpdeploy/internal/audit"
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/dispatch"
@@ -491,6 +492,9 @@ func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 	); err != nil {
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
+	}
+	if req.TargetMode != "" {
+		audit.SetAction(r, "update_project_execution_policy", "project")
 	}
 
 	updated, err = h.repo.Queries.GetProject(r.Context(), id)

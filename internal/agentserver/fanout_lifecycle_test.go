@@ -5,18 +5,23 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/dispatch"
+	"durpdeploy/internal/events"
 	"durpdeploy/internal/migrate"
+	"durpdeploy/internal/notify"
 	"durpdeploy/internal/repository"
 
 	agentproto "github.com/DeveloperDurp/durpdeploy-agent/protocol"
 )
 
-func TestLifecycle_FanoutAggregatesIndependentChildrenWithoutSockets(
+func TestLifecycle_FanoutCancellationNotifiesRootOnceWithoutChildNotices(
 	t *testing.T,
 ) {
 	connection, err := migrate.Run(
@@ -34,6 +39,24 @@ func TestLifecycle_FanoutAggregatesIndependentChildrenWithoutSockets(
 	)
 	if err != nil {
 		t.Fatalf("create project: %v", err)
+	}
+	var receipts int
+	receiver := httptest.NewServer(http.HandlerFunc(func(
+		w http.ResponseWriter,
+		r *http.Request,
+	) {
+		receipts++
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(receiver.Close)
+	if err := repo.Queries.UpdateProjectNotifications(
+		ctx,
+		db.UpdateProjectNotificationsParams{
+			SlackWebhookUrl: sql.NullString{String: receiver.URL, Valid: true},
+			ID:              project.ID,
+		},
+	); err != nil {
+		t.Fatalf("configure webhook: %v", err)
 	}
 	environment, err := repo.Queries.CreateEnvironment(
 		ctx, db.CreateEnvironmentParams{Name: "production"},
@@ -108,7 +131,13 @@ func TestLifecycle_FanoutAggregatesIndependentChildrenWithoutSockets(
 	}
 
 	now := time.Unix(10, 0)
-	server := &Server{repository: repo, now: func() time.Time { return now }}
+	bus := events.NewBus(repo)
+	bus.Register(notify.NewSlackNotifierWithClient(receiver.Client()))
+	server := &Server{
+		repository: repo,
+		events:     bus,
+		now:        func() time.Time { return now },
+	}
 	for index, child := range children {
 		agentID := "agent-" + string(rune('a'+index))
 		if err := server.startDeployment(
@@ -132,34 +161,65 @@ func TestLifecycle_FanoutAggregatesIndependentChildrenWithoutSockets(
 		t.Fatalf("wrong-agent start error = %v", err)
 	}
 
-	states := []agentproto.ResultState{
-		agentproto.ResultSucceeded,
-		agentproto.ResultFailed,
-		agentproto.ResultSucceeded,
+	state, err := dispatch.NewCancellationService(repo, nil).Cancel(
+		ctx, parent.ID,
+	)
+	if err != nil || state != "running" {
+		t.Fatalf("request parent cancellation = %q, %v", state, err)
 	}
 	for index, child := range children {
 		now = time.Unix(int64(20+index*10), 0)
 		agentID := "agent-" + string(rune('a'+index))
-		if err := server.completeDeployment(
-			ctx, child.ID, agentID,
-			agentproto.ResultRequest{
-				ClaimToken: tokens[index], State: states[index],
-			},
+		if err := server.cancelDeployment(
+			ctx, child.ID, agentID, tokens[index],
 		); err != nil {
-			t.Fatalf("complete child: %v", err)
+			t.Fatalf("cancel child: %v", err)
 		}
 	}
 	got, err := repo.Queries.GetDeployment(ctx, parent.ID)
-	if err != nil || got.Status != "failed" || got.StartedAt.Int64 != 10 ||
+	if err != nil || got.Status != "cancelled" || got.StartedAt.Int64 != 10 ||
 		got.FinishedAt.Int64 != 40 {
-		t.Fatalf("parent = %#v, %v; want failed [10,40]", got, err)
+		t.Fatalf("parent = %#v, %v; want cancelled [10,40]", got, err)
 	}
-	if err := server.completeDeployment(
-		ctx, children[0].ID, "agent-a",
-		agentproto.ResultRequest{
-			ClaimToken: tokens[0], State: agentproto.ResultFailed,
-		},
-	); !errors.Is(err, errLifecycleConflict) {
-		t.Fatalf("late result error = %v", err)
+	if err := server.cancelDeployment(
+		ctx, children[0].ID, "agent-a", tokens[0],
+	); err != nil {
+		t.Fatalf("duplicate cancellation error = %v", err)
 	}
+	var rootNotifications int
+	if err := repo.DB.QueryRowContext(
+		ctx,
+		"SELECT COUNT(*) FROM notification_events WHERE deployment_id = ?",
+		parent.ID,
+	).Scan(&rootNotifications); err != nil {
+		t.Fatalf("count root notifications: %v", err)
+	}
+	if rootNotifications != 2 {
+		t.Fatalf("root notifications = %d, want 2", rootNotifications)
+	}
+	var childNotifications int
+	if err := repo.DB.QueryRowContext(
+		ctx,
+		"SELECT COUNT(*) FROM notification_events WHERE deployment_id IN (?, ?, ?)",
+		children[0].ID,
+		children[1].ID,
+		children[2].ID,
+	).Scan(&childNotifications); err != nil {
+		t.Fatalf("count child notifications: %v", err)
+	}
+	if childNotifications != 0 {
+		t.Fatalf("child notifications = %d, want 0", childNotifications)
+	}
+	if receipts != 2 {
+		t.Fatalf("webhook receipts = %d, want 2", receipts)
+	}
+	t.Logf(
+		"webhook receipts: root_id=%d types=deployment_started,deployment_cancelled count=%d child_ids=%d,%d,%d child_notifications=%d",
+		parent.ID,
+		receipts,
+		children[0].ID,
+		children[1].ID,
+		children[2].ID,
+		childNotifications,
+	)
 }

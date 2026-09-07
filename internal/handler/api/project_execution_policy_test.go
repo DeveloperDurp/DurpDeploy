@@ -128,9 +128,10 @@ func TestProjectExecutionPolicy_CreateDefaultsLocalAndUpdateLabel(
 	if err != nil {
 		t.Fatalf("list project policy audit: %v", err)
 	}
-	if len(entries) == 0 || entries[0].Action != "update_project" {
+	if len(entries) == 0 ||
+		entries[0].Action != "update_project_execution_policy" {
 		t.Fatalf(
-			"latest project policy audit = %#v, want update_project",
+			"latest project policy audit = %#v, want update_project_execution_policy",
 			entries,
 		)
 	}

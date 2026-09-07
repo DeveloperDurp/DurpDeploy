@@ -11,6 +11,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"strings"
+	"sync"
 
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/repository"
@@ -23,6 +24,7 @@ const (
 	DeploymentStarted   Type = "deployment_started"
 	DeploymentSucceeded Type = "deployment_succeeded"
 	DeploymentFailed    Type = "deployment_failed"
+	DeploymentCancelled Type = "deployment_cancelled"
 	BackupUnhealthy     Type = "backup_unhealthy"
 	BackupHealthy       Type = "backup_healthy"
 )
@@ -61,6 +63,7 @@ type Notifier interface {
 type Bus struct {
 	repo      *repository.Repository
 	notifiers []Notifier
+	mu        sync.Mutex
 }
 
 func NewBus(repo *repository.Repository) *Bus {
@@ -94,6 +97,15 @@ func splitEmails(v sql.NullString) []string {
 // Errors loading the project or writing the history row are swallowed
 // (best-effort observability; must never fail the deployment itself).
 func (b *Bus) Publish(ctx context.Context, evt Event) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	var notify bool
+	evt, notify = b.rootDeploymentEvent(ctx, evt)
+	if !notify || b.notificationExists(ctx, evt) {
+		return
+	}
+
 	if evt.ProjectID == 0 {
 		// Project-less/system-wide event (e.g. backup health): load
 		// channels from the global_notifications singleton instead of a
@@ -156,4 +168,79 @@ func (b *Bus) Publish(ctx context.Context, evt Event) {
 			Results: string(resultsJSON),
 		},
 	)
+}
+
+// rootDeploymentEvent maps child lifecycle events after parent aggregation.
+func (b *Bus) rootDeploymentEvent(
+	ctx context.Context,
+	evt Event,
+) (Event, bool) {
+	if !isDeploymentEvent(evt.Type) || evt.DeploymentID == 0 {
+		return evt, true
+	}
+	deployment, err := b.repo.Queries.GetDeployment(ctx, evt.DeploymentID)
+	if err != nil || !deployment.ParentDeploymentID.Valid {
+		return evt, true
+	}
+	root, err := b.repo.Queries.GetDeployment(
+		ctx,
+		deployment.ParentDeploymentID.Int64,
+	)
+	if err != nil {
+		return evt, false
+	}
+	switch evt.Type {
+	case DeploymentStarted:
+		if root.Status != "running" {
+			return evt, false
+		}
+	case DeploymentSucceeded, DeploymentFailed, DeploymentCancelled:
+		terminalType, ok := terminalDeploymentEvent(root.Status)
+		if !ok {
+			return evt, false
+		}
+		evt.Type = terminalType
+	}
+	evt.DeploymentID = root.ID
+	evt.EnvironmentID = root.EnvironmentID
+	return evt, true
+}
+
+func isDeploymentEvent(typ Type) bool {
+	switch typ {
+	case DeploymentStarted, DeploymentSucceeded, DeploymentFailed,
+		DeploymentCancelled:
+		return true
+	default:
+		return false
+	}
+}
+
+func terminalDeploymentEvent(status string) (Type, bool) {
+	switch status {
+	case "succeeded":
+		return DeploymentSucceeded, true
+	case "failed":
+		return DeploymentFailed, true
+	case "cancelled":
+		return DeploymentCancelled, true
+	default:
+		return "", false
+	}
+}
+
+func (b *Bus) notificationExists(ctx context.Context, evt Event) bool {
+	if !isDeploymentEvent(evt.Type) || evt.DeploymentID == 0 {
+		return false
+	}
+	var count int
+	if err := b.repo.DB.QueryRowContext(
+		ctx,
+		"SELECT COUNT(*) FROM notification_events WHERE event_type = ? AND deployment_id = ?",
+		string(evt.Type),
+		evt.DeploymentID,
+	).Scan(&count); err != nil {
+		return false
+	}
+	return count != 0
 }

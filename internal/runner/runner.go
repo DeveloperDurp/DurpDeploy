@@ -102,8 +102,38 @@ func (r *DeploymentRunner) Cancel(deploymentID int64) error {
 	); err != nil {
 		return err
 	}
-	return deploymentstate.RecomputeParent(
+	if err := deploymentstate.RecomputeParent(
 		context.Background(), r.repo.Queries, deploymentID,
+	); err != nil {
+		return err
+	}
+	r.PublishCancelled(context.Background(), deploymentID)
+	return nil
+}
+
+// PublishCancelled notifies configured channels after a cancellation commit.
+func (r *DeploymentRunner) PublishCancelled(
+	ctx context.Context,
+	deploymentID int64,
+) {
+	if r.bus == nil {
+		return
+	}
+	deployment, err := r.repo.Queries.GetDeployment(ctx, deploymentID)
+	if err != nil {
+		return
+	}
+	release, err := r.repo.Queries.GetRelease(ctx, deployment.ReleaseID)
+	if err != nil {
+		return
+	}
+	r.publish(
+		ctx,
+		events.DeploymentCancelled,
+		deployment.ID,
+		release.ProjectID,
+		deployment.EnvironmentID,
+		fmt.Sprintf("Deployment #%d cancelled", deployment.ID),
 	)
 }
 

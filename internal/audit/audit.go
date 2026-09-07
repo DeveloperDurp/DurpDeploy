@@ -84,6 +84,16 @@ func SetMFAAdminReset(r *http.Request, targetID int64, reason string) {
 	}
 }
 
+// SetAction records a parsed-input action in the request audit state.
+func SetAction(r *http.Request, action, entityType string) {
+	if state, ok := r.Context().Value(requestStateKey{}).(*requestState); ok {
+		state.overridden = &actionOverride{
+			action:     action,
+			entityType: entityType,
+		}
+	}
+}
+
 // entityIDRe captures the first numeric path segment, e.g. /projects/42
 // → 42. Used to populate entity_id when the route references one.
 var entityIDRe = regexp.MustCompile(`^/\w+/(\d+)`)
@@ -152,7 +162,9 @@ func Middleware(repo *repository.Repository) func(http.Handler) http.Handler {
 			if state.overridden != nil {
 				action = state.overridden.action
 				entityType = state.overridden.entityType
-				entityID = state.overridden.entityID
+				if state.overridden.entityID.Valid {
+					entityID = state.overridden.entityID
+				}
 				reason = state.overridden.reason
 			}
 

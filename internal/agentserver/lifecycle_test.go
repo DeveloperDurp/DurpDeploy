@@ -410,8 +410,9 @@ func TestLifecycle_publishesOneRedactedFailureNotification(t *testing.T) {
 	var message string
 	if err := fixture.repo.DB.QueryRowContext(
 		context.Background(),
-		"SELECT message FROM notification_events WHERE deployment_id = ?",
+		"SELECT message FROM notification_events WHERE deployment_id = ? AND event_type = ?",
 		deploymentID,
+		"deployment_failed",
 	).Scan(&message); err != nil {
 		t.Fatalf("get notification message: %v", err)
 	}

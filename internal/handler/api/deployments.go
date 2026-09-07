@@ -8,14 +8,15 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/go-chi/chi/v5"
-
+	"durpdeploy/internal/audit"
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/deploymentstate"
 	"durpdeploy/internal/dispatch"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/runner"
+
+	"github.com/go-chi/chi/v5"
 )
 
 type DeploymentHandler struct {
@@ -123,6 +124,9 @@ func (h *DeploymentHandler) CreateDeployment(
 	mode := req.TargetMode
 	if mode == "" {
 		mode = "default"
+	}
+	if mode != "default" {
+		audit.SetAction(r, "create_deployment_override", "deployment")
 	}
 	user := auth.UserFromContext(r.Context())
 	deployment, err := dispatch.NewCreationService(h.repo, h.dispatcher).Create(
@@ -528,7 +532,11 @@ func (h *DeploymentHandler) RedeployDeployment(
 		return
 	}
 	if deployment.ParentDeploymentID.Valid {
-		RespondError(w, http.StatusConflict, "Child deployments cannot be redeployed")
+		RespondError(
+			w,
+			http.StatusConflict,
+			"Child deployments cannot be redeployed",
+		)
 		return
 	}
 	routing, err := deploymentstate.Load(r.Context(), h.repo, depID)
@@ -597,6 +605,10 @@ func (h *DeploymentHandler) CancelDeployment(
 		depID,
 	)
 	if err != nil {
+		if errors.Is(err, dispatch.ErrCancellationChild) {
+			RespondError(w, http.StatusConflict, err.Error())
+			return
+		}
 		if errors.Is(err, sql.ErrNoRows) {
 			RespondError(w, http.StatusNotFound, "Deployment not found")
 			return
@@ -650,16 +662,20 @@ func (h *DeploymentHandler) RetryDeployment(
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	if deployment.ParentDeploymentID.Valid {
+		RespondError(
+			w,
+			http.StatusConflict,
+			"Child deployments cannot be retried",
+		)
+		return
+	}
 	if deployment.Status != "failed" && deployment.Status != "cancelled" {
 		RespondError(
 			w,
 			http.StatusBadRequest,
 			"Can only retry failed or cancelled deployments",
 		)
-		return
-	}
-	if deployment.ParentDeploymentID.Valid {
-		RespondError(w, http.StatusConflict, "Child deployments cannot be retried")
 		return
 	}
 	routing, err := deploymentstate.Load(r.Context(), h.repo, depID)
@@ -708,6 +724,7 @@ func (h *DeploymentHandler) RetryDeployment(
 //
 //	Responses:
 //	  200: body:DeploymentLogListResponse
+//	  409: body:FanoutParentLogConflict
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
 //	  500: body:ServerError
@@ -718,6 +735,9 @@ func (h *DeploymentHandler) ListDeploymentLogs(
 	depID, err := deploymentIDFromRequest(r)
 	if err != nil {
 		RespondError(w, http.StatusBadRequest, "Invalid deployment ID")
+		return
+	}
+	if rejectParentLogs(w, r, h.repo, depID) {
 		return
 	}
 
