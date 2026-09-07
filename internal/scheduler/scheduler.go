@@ -266,7 +266,7 @@ func (s *Scheduler) fireOne(ctx context.Context, row db.ScheduledDeployment) {
 	// Combines the deployability gate and the requires-approval check
 	// (same lifecycle-stage gate the manual deploy handler enforces) into
 	// a single call so the lifecycle stages are only loaded once.
-	blocked, reason, requiresApproval, err := gate.CheckAndApproval(
+	blocked, reason, _, err := gate.CheckAndApproval(
 		ctx,
 		s.repo,
 		project,
@@ -319,11 +319,6 @@ func (s *Scheduler) fireOne(ctx context.Context, row db.ScheduledDeployment) {
 		}
 		return
 	}
-	initialStatus := "pending"
-	if requiresApproval {
-		initialStatus = "pending_approval"
-	}
-
 	note := fmt.Sprintf("Scheduled: %d - %s", row.ID, row.Note.String)
 	deployment, err := s.creator.CreateScheduled(
 		ctx, dispatch.ScheduledRequest{
@@ -359,10 +354,10 @@ func (s *Scheduler) fireOne(ctx context.Context, row db.ScheduledDeployment) {
 		"deployment_id",
 		deployment.ID,
 		"status",
-		initialStatus,
+		deployment.Status,
 	)
 
-	if initialStatus == "pending" {
+	if deployment.Status == "pending" {
 		dispatchScheduled := s.creator.DispatchFrozen
 		if s.testRunFunc {
 			dispatchScheduled = s.dispatchFunc

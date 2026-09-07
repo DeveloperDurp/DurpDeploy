@@ -10,7 +10,9 @@ import (
 	"durpdeploy/internal/gate"
 )
 
-var ErrScheduledOccurrenceClaimed = errors.New("scheduled occurrence already claimed")
+var ErrScheduledOccurrenceClaimed = errors.New(
+	"scheduled occurrence already claimed",
+)
 
 type ScheduledRequest struct {
 	CreateRequest
@@ -83,7 +85,8 @@ func (s *CreationService) CreateScheduled(
 			ctx, db.ClaimScheduledDeploymentOccurrenceParams{
 				ScheduledDeploymentID: request.ScheduleID,
 				DueAt:                 request.DueAt, DeploymentID: deployment.ID,
-				RoutingSource: string(policy.Source), TargetMode: string(policy.Mode),
+				RoutingSource: string(policy.Source),
+				TargetMode:    string(policy.Mode),
 				AgentLabelID: sql.NullInt64{
 					Int64: policy.LabelID, Valid: policy.LabelID != 0,
 				},
@@ -91,7 +94,8 @@ func (s *CreationService) CreateScheduled(
 					String: policy.LabelName, Valid: policy.LabelName != "",
 				},
 				AgentStrategy: sql.NullString{
-					String: string(policy.Strategy), Valid: policy.Strategy != "",
+					String: string(policy.Strategy),
+					Valid:  policy.Strategy != "",
 				},
 				LegacyAgentID: sql.NullString{
 					String: policy.LegacyAgentID, Valid: policy.LegacyAgentID != "",
@@ -132,6 +136,9 @@ func (s *CreationService) DispatchFrozen(
 		deployment, err := q.GetDeployment(ctx, deploymentID)
 		if err != nil {
 			return fmt.Errorf("get deployment: %w", err)
+		}
+		if deployment.Status != "pending" {
+			return nil
 		}
 		policy, err := policyForApproval(ctx, q, deployment)
 		if err != nil {
