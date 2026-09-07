@@ -34,6 +34,13 @@ type swaggerAgentLabelMemberRequest struct {
 	AgentID string `json:"agent_id"`
 }
 
+// swagger:model AgentLabelMembership
+type swaggerAgentLabelMembership struct {
+	AgentLabelID int64  `json:"agent_label_id"`
+	AgentID      string `json:"agent_id"`
+	CreatedAt    int64  `json:"created_at"`
+}
+
 // swagger:parameters getAgentLabel updateAgentLabel deleteAgentLabel addAgentLabelMember removeAgentLabelMember
 type agentLabelIDPathParam struct {
 	// in: path
@@ -72,6 +79,12 @@ type agentLabelResponseDoc struct {
 type agentLabelListResponseDoc struct {
 	// in: body
 	Body []swaggerAgentLabel `json:"body"`
+}
+
+// swagger:response AgentLabelMembershipResponse
+type agentLabelMembershipResponseDoc struct {
+	// in: body
+	Body swaggerAgentLabelMembership `json:"body"`
 }
 
 // swagger:route GET /admin/agent-labels agent-labels listAgentLabels
@@ -156,7 +169,7 @@ type deleteAgentLabelSwagger struct{}
 //
 // Responses:
 //
-//	201: AgentLabelResponse
+//	201: AgentLabelMembershipResponse
 //	409: ConflictError
 type addAgentLabelMemberSwagger struct{}
 

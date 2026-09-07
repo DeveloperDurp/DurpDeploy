@@ -231,7 +231,7 @@
         ],
         "responses": {
           "201": {
-            "$ref": "#/responses/AgentLabelResponse"
+            "$ref": "#/responses/AgentLabelMembershipResponse"
           },
           "409": {
             "description": "ConflictError",
@@ -6084,6 +6084,27 @@
       "x-go-name": "swaggerAgentLabelMemberRequest",
       "x-go-package": "durpdeploy/internal/handler/api"
     },
+    "AgentLabelMembership": {
+      "type": "object",
+      "properties": {
+        "agent_id": {
+          "type": "string",
+          "x-go-name": "AgentID"
+        },
+        "agent_label_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "AgentLabelID"
+        },
+        "created_at": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "CreatedAt"
+        }
+      },
+      "x-go-name": "swaggerAgentLabelMembership",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
     "AgentLabelRequest": {
       "type": "object",
       "required": [
@@ -8324,6 +8345,12 @@
         "items": {
           "$ref": "#/definitions/AgentLabel"
         }
+      }
+    },
+    "AgentLabelMembershipResponse": {
+      "description": "",
+      "schema": {
+        "$ref": "#/definitions/AgentLabelMembership"
       }
     },
     "AgentLabelResponse": {
