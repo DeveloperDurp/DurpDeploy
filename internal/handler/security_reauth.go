@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"durpdeploy/internal/audit"
-	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/mfa"
 	"durpdeploy/views/pages"
@@ -53,10 +52,16 @@ func (h *AuthHandler) SecurityReauthPost(
 		return
 	}
 	storedUser, err := h.repo.Queries.GetUserByID(r.Context(), user.ID)
-	if err != nil || !auth.VerifyPassword(
-		storedUser.PasswordHash,
+	passwordHash, hasPassword := passwordHashForUser(storedUser, err)
+	passwordMatches, verifyErr := h.verifyPassword(
+		r.Context(),
+		passwordHash,
 		r.PostFormValue("password"),
-	) {
+	)
+	if verifyErr != nil {
+		return
+	}
+	if !passwordMatches || !hasPassword {
 		h.renderReauthenticationError(w, r, session.CsrfToken)
 		return
 	}

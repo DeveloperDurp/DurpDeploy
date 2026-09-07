@@ -1,10 +1,11 @@
 package handler
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
+	"log/slog"
 	"net/http"
-	"strings"
 	"time"
 
 	"durpdeploy/internal/audit"
@@ -13,20 +14,72 @@ import (
 	"durpdeploy/internal/mfa"
 	"durpdeploy/internal/oidc"
 	"durpdeploy/internal/repository"
+	"durpdeploy/internal/requestmeta"
 	"durpdeploy/views/pages"
 )
 
 type AuthHandler struct {
-	repo             *repository.Repository
-	mfaService       *mfa.Service
-	cookieSecure     bool
-	oidcDisplayName  string
-	oidcProvider     *oidc.Provider
-	oidcTransactions *oidc.TransactionStore
+	repo                  *repository.Repository
+	mfaService            *mfa.Service
+	cookieSecure          bool
+	oidcDisplayName       string
+	oidcProvider          *oidc.Provider
+	oidcTransactions      *oidc.TransactionStore
+	loginLimiter          *loginLimiter
+	passwordVerifications chan struct{}
 }
 
+// Two concurrent 64 MiB Argon2 hashes leave headroom in the 512 MiB image.
+const maxConcurrentPasswordVerifications = 2
+
+const unknownAccountPasswordHash = "$argon2id$v=19$m=65536,t=2,p=2$" +
+	"fD0A8+3lNiCjOMQf3smp/w$PuSeBJSJVdCOzqXVm6hn0zTsFFp7AynshoUevDwYBIE"
+
 func NewAuthHandler(repo *repository.Repository) *AuthHandler {
-	return &AuthHandler{repo: repo}
+	return &AuthHandler{
+		repo:         repo,
+		loginLimiter: newLoginLimiter(),
+		passwordVerifications: make(
+			chan struct{},
+			maxConcurrentPasswordVerifications,
+		),
+	}
+}
+
+func (h *AuthHandler) verifyPassword(
+	ctx context.Context,
+	passwordHash string,
+	password string,
+) (bool, error) {
+	return h.withPasswordVerification(ctx, func() bool {
+		return auth.VerifyPassword(passwordHash, password)
+	})
+}
+
+func (h *AuthHandler) withPasswordVerification(
+	ctx context.Context,
+	verify func() bool,
+) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	select {
+	case h.passwordVerifications <- struct{}{}:
+		defer func() { <-h.passwordVerifications }()
+		if err := ctx.Err(); err != nil {
+			return false, err
+		}
+		return verify(), nil
+	case <-ctx.Done():
+		return false, ctx.Err()
+	}
+}
+
+func passwordHashForUser(user db.User, err error) (string, bool) {
+	if err != nil || user.PasswordHash == "" {
+		return unknownAccountPasswordHash, false
+	}
+	return user.PasswordHash, true
 }
 
 func (h *AuthHandler) SetMFAService(service *mfa.Service) {
@@ -97,18 +150,36 @@ func (h *AuthHandler) LoginPost(w http.ResponseWriter, r *http.Request) {
 
 	email := r.PostFormValue("email")
 	password := r.PostFormValue("password")
-
-	user, err := h.repo.Queries.GetUserByEmail(r.Context(), email)
-	if err != nil || !auth.VerifyPassword(user.PasswordHash, password) {
-		w.WriteHeader(http.StatusUnprocessableEntity)
-		_ = pages.LoginPage(
-			r.URL.Path,
-			"Invalid email or password",
-			h.oidcDisplayName,
-		).
-			Render(r.Context(), w)
+	ip := requestmeta.ClientIP(r)
+	pairKey := loginPairKey(email, ip)
+	if !h.loginLimiter.allow("login-ip:"+ip, loginIPLimit) ||
+		!h.loginLimiter.allow(pairKey, loginPairLimit) {
+		slog.Warn(
+			"authentication request throttled",
+			"surface", "password",
+			"ip", ip,
+		)
+		w.Header().Set("Retry-After", "900")
+		h.renderInvalidLogin(w, r)
 		return
 	}
+
+	user, err := h.repo.Queries.GetUserByEmail(r.Context(), email)
+	passwordHash, hasPassword := passwordHashForUser(user, err)
+	passwordMatches, verifyErr := h.verifyPassword(
+		r.Context(),
+		passwordHash,
+		password,
+	)
+	if verifyErr != nil {
+		return
+	}
+	if !passwordMatches || !hasPassword {
+		slog.Warn("password authentication failed", "ip", ip)
+		h.renderInvalidLogin(w, r)
+		return
+	}
+	h.loginLimiter.reset(pairKey)
 	factors, err := h.repo.Queries.CountMFAFactors(r.Context(), user.ID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -139,6 +210,18 @@ func (h *AuthHandler) LoginPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
+func (h *AuthHandler) renderInvalidLogin(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	w.WriteHeader(http.StatusUnprocessableEntity)
+	_ = pages.LoginPage(
+		r.URL.Path,
+		"Invalid email or password",
+		h.oidcDisplayName,
+	).Render(r.Context(), w)
 }
 
 func (h *AuthHandler) LogoutPost(w http.ResponseWriter, r *http.Request) {
@@ -183,10 +266,7 @@ func (h *AuthHandler) LogoutPost(w http.ResponseWriter, r *http.Request) {
 // loginDetails returns a JSON string with IP + user agent for audit
 // entries. It never includes form values (passwords, emails).
 func loginDetails(r *http.Request, factor finalLoginFactor) string {
-	ip := r.RemoteAddr
-	if idx := strings.LastIndex(ip, ":"); idx != -1 {
-		ip = ip[:idx]
-	}
+	ip := requestmeta.ClientIP(r)
 	details := map[string]string{"ip": ip, "user_agent": r.UserAgent()}
 	if factor != "" {
 		details["factor"] = string(factor)

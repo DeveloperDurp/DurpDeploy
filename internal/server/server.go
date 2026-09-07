@@ -3,6 +3,7 @@ package server
 import (
 	"log/slog"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -14,6 +15,7 @@ import (
 	"durpdeploy/internal/handler"
 	"durpdeploy/internal/handler/api"
 	"durpdeploy/internal/repository"
+	"durpdeploy/internal/requestmeta"
 	"durpdeploy/internal/runner"
 	"durpdeploy/static"
 )
@@ -42,9 +44,11 @@ func NewRouter(
 	registerOIDC := len(oidcEnabled) > 0 && oidcEnabled[0]
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
+	r.Use(requestmeta.Middleware(os.Getenv("DURPDEPLOY_TRUSTED_PROXIES")))
 	r.Use(requestLogger)
 	r.Use(handler.InternalErrorMiddleware)
 	r.Use(handler.PanicRecoveryMiddleware)
+	r.Use(passwordFormBodyLimit)
 
 	// Serve static files from embedded assets (public).
 	r.Handle(
@@ -73,13 +77,23 @@ func NewRouter(
 	r.Get("/login", authHandler.LoginGet)
 	r.Post("/login", authHandler.LoginPost)
 	r.Get("/login/mfa", authHandler.LoginMFAGet)
-	r.Post("/login/mfa/totp", authHandler.LoginMFATOTPPost)
-	r.Post("/login/mfa/recovery", authHandler.LoginMFARecoveryPost)
-	r.Post("/login/mfa/webauthn/begin", authHandler.LoginMFAWebAuthnBegin)
-	r.Post("/login/mfa/webauthn/finish", authHandler.LoginMFAWebAuthnFinish)
+	r.With(authHandler.MFARateLimit).Post(
+		"/login/mfa/totp", authHandler.LoginMFATOTPPost,
+	)
+	r.With(authHandler.MFARateLimit).Post(
+		"/login/mfa/recovery", authHandler.LoginMFARecoveryPost,
+	)
+	r.With(authHandler.MFARateLimit).Post(
+		"/login/mfa/webauthn/begin", authHandler.LoginMFAWebAuthnBegin,
+	)
+	r.With(authHandler.MFARateLimit).Post(
+		"/login/mfa/webauthn/finish", authHandler.LoginMFAWebAuthnFinish,
+	)
 	r.Post("/login/mfa/cancel", authHandler.LoginMFACancelPost)
 	if registerOIDC {
-		r.Get("/login/oidc", authHandler.LoginOIDCGet)
+		r.With(authHandler.OIDCRateLimit).Get(
+			"/login/oidc", authHandler.LoginOIDCGet,
+		)
 		r.Get("/login/oidc/callback", authHandler.LoginOIDCCallbackGet)
 		r.Get("/login/oidc/failure", authHandler.LoginOIDCFailureGet)
 	}

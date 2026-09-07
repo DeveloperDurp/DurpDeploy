@@ -10,13 +10,18 @@
 #   dev:    DURPDEPLOY_URL=http://localhost
 #   prod:   DURPDEPLOY_URL=https://durpdeploy.example.com
 #
-# ponytail: no `rate_limit` block. The stock `caddy:2-alpine` image
-# does not include the rate_limit module (it requires a custom build
-# with `xcaddy build --with github.com/mholt/caddy-ratelimit`). The
-# primary brute-force mitigation is argon2id's computational cost
-# (P0-2) — each wrong-password guess is ~100ms of CPU on the server.
-# Add a custom Caddy build + a /login rate_limit block here if you
-# need edge-level throttling.
+# DurpDeploy applies authentication rate limits in the Go server, so the stock
+# Caddy image needs no custom rate-limit module. Add edge limits only as an
+# optional second layer for unusually exposed deployments.
+{
+	# Direct clients are untrusted by default. If a CDN or load balancer is in
+	# front of Caddy, set this to its documented egress CIDRs. Strict parsing
+	# selects the nearest untrusted address and ignores spoofed leftmost values.
+	servers {
+		trusted_proxies static {$DURPDEPLOY_CADDY_TRUSTED_PROXIES:192.0.2.0/32}
+		trusted_proxies_strict
+	}
+}
 
 {$DURPDEPLOY_URL:http://localhost} {
 	# Proxy to the Go server. The Go process listens on port 8080
@@ -26,11 +31,9 @@
 	# service sets `BACKEND=app:8080` so the reverse proxy reaches the
 	# app over the compose network rather than its own loopback.
 	reverse_proxy {$BACKEND:localhost:8080} {
-		# Pass the original client IP through so the audit log records the
-		# real requester, not Caddy's loopback address.
-		header_up X-Real-IP {remote_host}
-		header_up X-Forwarded-For {remote_host}
-		header_up X-Forwarded-Proto {scheme}
+		# Collapse Caddy's validated chain to one canonical address. The app
+		# trusts only its direct Caddy peer, never arbitrary forwarding input.
+		header_up X-Forwarded-For {client_ip}
 	}
 
 	# Access log to stdout so `docker logs` captures it (no in-container

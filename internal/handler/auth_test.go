@@ -253,6 +253,24 @@ func TestLogin_Post_ValidCredentials(t *testing.T) {
 	}
 }
 
+func TestLogin_Post_PreservesStoredEmailCase(t *testing.T) {
+	h := newAuthHarness(t)
+	h.seedUser(t, "Admin@Example.com", "hunter2")
+
+	client := newJar(t)
+	resp, err := client.PostForm(h.server+"/login", url.Values{
+		"email":    {"Admin@Example.com"},
+		"password": {"hunter2"},
+	})
+	if err != nil {
+		t.Fatalf("post /login: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("status = %d, want 303", resp.StatusCode)
+	}
+}
+
 func TestLogin_Post_SetsSecureCookieWhenConfigured(t *testing.T) {
 	// Given: a handler configured for an HTTPS public origin.
 	h := newAuthHarness(t)
@@ -327,6 +345,33 @@ func TestLogin_Post_UnknownEmail(t *testing.T) {
 	body, _ := io.ReadAll(resp.Body)
 	if !strings.Contains(string(body), "Invalid") {
 		t.Fatalf("body missing 'Invalid': %s", body)
+	}
+}
+
+func TestLogin_Post_PasswordlessAccountRejectsDummyPassword(t *testing.T) {
+	h := newAuthHarness(t)
+	_, err := h.repo.Queries.CreateUser(context.Background(), db.CreateUserParams{
+		Email:        "oidc@example.com",
+		PasswordHash: "",
+		Name:         "OIDC User",
+		Role:         "deployer",
+	})
+	if err != nil {
+		t.Fatalf("create passwordless user: %v", err)
+	}
+
+	client := newJar(t)
+	resp, err := client.PostForm(h.server+"/login", url.Values{
+		"email":    {"oidc@example.com"},
+		"password": {"durpdeploy unknown account timing placeholder"},
+	})
+	if err != nil {
+		t.Fatalf("post /login: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want 422", resp.StatusCode)
 	}
 }
 
