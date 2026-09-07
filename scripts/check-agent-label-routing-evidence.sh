@@ -56,6 +56,16 @@ require_text() {
     fi
 }
 
+require_runtime_pass() {
+    local label=$1 file=$2 test=$3 pattern
+    require_file "$label" "$file"
+    [[ -s $file ]] || return 0
+    pattern="^[[:space:]]*--- PASS: TestAgentLabelRoutingRuntimeParity/$test([[:space:]]+\\([0-9]+(\\.[0-9]+)?s\\))?[[:space:]]*$"
+    if ! grep -Eq -- "$pattern" "$file"; then
+        fail "$label has no required runtime PASS: $test ($file)"
+    fi
+}
+
 clean_receipt() {
     local label=$1 file=$2
     require_file "$label" "$file"
@@ -106,6 +116,23 @@ require_pngs() {
     fi
 }
 
+require_empty_console_errors() {
+    local label=$1 file=$2
+    require_file "$label" "$file"
+    [[ -s $file ]] || return 0
+    if ! python3 -c '
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as receipt:
+    value = json.load(receipt)
+if not isinstance(value, dict) or value.get("errors") != []:
+    raise SystemExit(1)
+' "$file" >/dev/null 2>&1; then
+        fail "$label must be valid JSON with an empty errors array ($file)"
+    fi
+}
+
 check_runtime() {
     local file=$1 engine=$2 test
     clean_receipt "$engine runtime parity" "$file"
@@ -113,8 +140,7 @@ check_runtime() {
         RoundRobinConcurrentThreeAgents FanoutUniqueChildren ParentConstraints \
         ScheduleOccurrenceCAS ApprovalCAS ApprovalRollback ExactSetRetryApprovalCAS \
         ExactSetRetryApprovalRollback ImmediateAtomicRollback ScheduledDispatchRecovery; do
-        require_text "$engine runtime parity" "$file" \
-            "--- PASS: TestAgentLabelRoutingRuntimeParity/$test"
+        require_runtime_pass "$engine runtime parity" "$file" "$test"
     done
 }
 
@@ -149,6 +175,8 @@ check_task9() {
     require_file 'browser console receipt' "$browser/browser-console.json"
     require_file 'browser cleanup receipt' "$browser/cleanup.json"
     clean_receipt 'browser console receipt' "$browser/browser-console.json"
+    require_empty_console_errors 'browser console receipt' \
+        "$browser/browser-console.json"
     require_json_true 'browser cleanup receipt' "$browser/cleanup.json" 'browserClosed'
     require_approve 'task 9 reviewer record' "$task/task-9-agent-label-routing-review.md"
 }
@@ -171,6 +199,8 @@ else
     require_file 'final browser cleanup receipt' "$root/final-F3-manual-qa/cleanup.json"
     require_file 'final secret scan receipt' "$root/final-F3-manual-qa/secret-scan.txt"
     clean_receipt 'final browser console receipt' "$root/final-F3-manual-qa/browser-console.json"
+    require_empty_console_errors 'final browser console receipt' \
+        "$root/final-F3-manual-qa/browser-console.json"
     clean_receipt 'final secret scan receipt' "$root/final-F3-manual-qa/secret-scan.txt"
     require_json_true 'final browser cleanup receipt' \
         "$root/final-F3-manual-qa/cleanup.json" 'browserClosed'

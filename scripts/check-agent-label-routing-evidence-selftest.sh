@@ -29,7 +29,7 @@ make_task_fixture() {
             RoundRobinConcurrentThreeAgents FanoutUniqueChildren ParentConstraints \
             ScheduleOccurrenceCAS ApprovalCAS ApprovalRollback ExactSetRetryApprovalCAS \
             ExactSetRetryApprovalRollback ImmediateAtomicRollback ScheduledDispatchRecovery; do
-            printf '%s\n' "--- PASS: TestAgentLabelRoutingRuntimeParity/$test" >>"$task/$engine.txt"
+            printf '%s\n' "    --- PASS: TestAgentLabelRoutingRuntimeParity/$test (0.29s)" >>"$task/$engine.txt"
         done
     done
     printf 'secret scan: clean\n' >"$task/secret-scan.txt"
@@ -50,15 +50,19 @@ make_task_fixture "$fixture"
 "$checker" "$fixture"
 echo "fixture-only populated manifest: PASS"
 
-for mutation in runtime skip sha cleanup reviewer dirty interrupted; do
+for mutation in runtime named_suffix skip sha cleanup malformed_cleanup reviewer console malformed_console dirty interrupted; do
     copy="$tmp/$mutation"
     cp -a "$fixture" "$copy"
     case "$mutation" in
         runtime) rm "$copy/postgres.txt" ;;
+        named_suffix) sed -i 's#TestAgentLabelRoutingRuntimeParity/ApprovalCAS (0.29s)$#TestAgentLabelRoutingRuntimeParity/ApprovalCASNotRun (0.29s)#' "$copy/postgres.txt" ;;
         skip) printf '%s\n' '--- SKIP: TestAgentLabelRoutingRuntimeParity/ApprovalCAS' >>"$copy/mssql.txt" ;;
         sha) printf '0000000000000000000000000000000000000000\n' >"$copy/revision.txt" ;;
         cleanup) rm "$copy/browser/cleanup.json" ;;
+        malformed_cleanup) printf '%s\n' '{"complete":"true"}' >"$copy/cleanup.json" ;;
         reviewer) rm "$copy/task-9-agent-label-routing-review.md" ;;
+        console) printf '%s\n' '{"errors":["uncaught browser exception"]}' >"$copy/browser/browser-console.json" ;;
+        malformed_console) printf '%s\n' '{' >"$copy/browser/browser-console.json" ;;
         dirty) printf 'dirty\n' >"$copy/worktree.txt" ;;
         interrupted) printf 'interrupted\n' >>"$copy/full-tests.txt" ;;
     esac

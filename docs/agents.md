@@ -66,7 +66,7 @@ the existing sandbox tests and host security checks in the release procedure.
 
 If a remote agent does not acknowledge cancellation before the server deadline,
 DurpDeploy records `cancel_unconfirmed`. The fan-out root then settles failed.
-Use the child logs to investigate the remote process before you retry.
+Use the child logs to investigate the remote process before you redeploy.
 
 ## Legacy environments
 
