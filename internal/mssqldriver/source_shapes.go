@@ -18,7 +18,8 @@ func rewriteLatestDeploymentDerivedTable(query string) string {
 
 func rewriteDeploymentFilterIntegerCasts(query string) string {
 	if !containsOutsideQuotes(query, "FROM deployments d") &&
-		!containsOutsideQuotes(query, "FROM audit_log") {
+		!containsOutsideQuotes(query, "FROM audit_log") &&
+		!containsOutsideQuotes(query, "JOIN deployments d") {
 		return query
 	}
 	return replaceOutsideQuotes(query, " AS INTEGER", " AS BIGINT")
