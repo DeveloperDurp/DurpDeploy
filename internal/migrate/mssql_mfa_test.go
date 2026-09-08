@@ -4,17 +4,29 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"io/fs"
+	"path"
 	"testing"
+	"testing/fstest"
 
 	"github.com/pressly/goose/v3"
 
 	"durpdeploy/internal/db"
+	"durpdeploy/migrations"
 )
 
 func TestMSSQL_MFASchemaParity(t *testing.T) {
 	// Given a native SQL Server database migrated from the embedded migrations.
 	ctx := context.Background()
-	conn := newSQLServerTestDB(t)
+	fixtureFS := fstest.MapFS{}
+	names, err := fs.Glob(migrations.MSSQLFS, "mssql/00*.sql")
+	requireNoError(t, err, "find migrations through OIDC version 9")
+	for _, name := range names {
+		data, err := migrations.MSSQLFS.ReadFile(name)
+		requireNoError(t, err, "read migration fixture")
+		fixtureFS[path.Base(name)] = &fstest.MapFile{Data: data}
+	}
+	conn := newSQLServerTestDB(t, fixtureFS)
 	queries := db.New(conn)
 	user, err := queries.CreateUser(ctx, db.CreateUserParams{
 		Email: "mssql-mfa@example.com", PasswordHash: "hash", Name: "MFA", Role: "admin",

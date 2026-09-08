@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/robfig/cron/v3"
 
+	"durpdeploy/internal/agentserver"
 	"durpdeploy/internal/audit"
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/handler"
@@ -18,7 +19,25 @@ import (
 	"durpdeploy/internal/requestmeta"
 	"durpdeploy/internal/runner"
 	"durpdeploy/static"
+
+	agentproto "github.com/DeveloperDurp/durpdeploy-agent/protocol"
 )
+
+func NewAgentRouter(agents *agentserver.Server) http.Handler {
+	r := chi.NewRouter()
+	r.Use(agents.Authenticated)
+	for _, path := range []string{
+		agentproto.PollPath, agentproto.StartPath, agentproto.HeartbeatPath,
+		agentproto.LogsPath, agentproto.ResultPath, agentproto.CancelledPath,
+	} {
+		r.Post(path, agentUnavailable)
+	}
+	return r
+}
+
+func agentUnavailable(w http.ResponseWriter, r *http.Request) {
+	http.Error(w, "Agent lifecycle is not available", http.StatusNotImplemented)
+}
 
 func requestLogger(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -336,6 +355,8 @@ func NewRouter(
 		// non-admin roles get 403 without touching the handlers.
 		pr.Group(func(ar chi.Router) {
 			ar.Use(auth.RequireRole("admin"))
+			ar.Handle("/admin/agents", http.HandlerFunc(agentUnavailable))
+			ar.Handle("/admin/agents/*", http.HandlerFunc(agentUnavailable))
 			adminH := handler.NewAdminHandler(repo)
 			ar.Get("/admin/audit", adminH.ListAudit)
 			ar.Get("/admin/notifications", adminH.ListNotifications)
@@ -384,6 +405,8 @@ func NewRouter(
 		// Admin-only sub-group.
 		ar.Group(func(aar chi.Router) {
 			aar.Use(auth.RequireRole("admin"))
+			aar.Handle("/admin/agents", http.HandlerFunc(agentUnavailable))
+			aar.Handle("/admin/agents/*", http.HandlerFunc(agentUnavailable))
 			aar.Get("/admin/tokens", tokensH.ListAllTokens)
 			aar.Delete("/admin/tokens/{id}", tokensH.RevokeAnyToken)
 

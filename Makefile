@@ -1,7 +1,7 @@
 .PHONY: build dev dev-server dev-postgres dev-mssql e2e-test e2e-test-isolated e2e-postgres e2e-mssql check-openssl templ-generate tailwind-build js-build npm-install golines golines-check clean test sonar-issues mfa-e2e-test auth-mfa-e2e-go-prepare auth-mfa-e2e-browser-prepare auth-mfa-e2e-sqlite-http auth-mfa-e2e-sqlite-browser auth-mfa-e2e-sqlite auth-mfa-e2e-postgres auth-mfa-e2e-mssql auth-mfa-e2e swagger-spec mobile-browser-container
 
 BINARY_NAME=durpdeploy
-MAIN_PATH=cmd/server/main.go
+MAIN_PATH=./cmd/server
 DEV_POSTGRES_CONTAINER ?= durpdeploy-dev-postgres
 DEV_POSTGRES_IMAGE ?= postgres:16-alpine
 DEV_MSSQL_CONTAINER ?= durpdeploy-dev-mssql
@@ -10,7 +10,7 @@ DEV_HTTPS_PROXY_CONTAINER ?= durpdeploy-dev-https
 DEV_HTTPS_PROXY_PORT ?= 8443
 DEV_HTTPS_PROXY_BACKEND ?= host.docker.internal:8080
 
-build: swagger-spec swagger-ui-copy templ-generate tailwind-build js-build
+build: swagger-ui-copy templ-generate tailwind-build js-build
 	go build -o $(BINARY_NAME) $(MAIN_PATH)
 
 # Hot-reload dev server. Watches .go/.templ/.sql in cmd, internal, views, migrations.

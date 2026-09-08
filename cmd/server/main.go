@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -24,6 +25,7 @@ import (
 
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/dispatch"
 	"durpdeploy/internal/events"
 	"durpdeploy/internal/handler"
 	"durpdeploy/internal/maintenance"
@@ -152,6 +154,11 @@ func runServer() {
 	// which would skip the KillAll cleanup below.
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(stop)
+	agentConfig, agentsEnabled, err := loadAgentListenerConfig()
+	if err != nil {
+		log.Fatalf("agent listener configuration: %v", err)
+	}
 
 	slog.SetDefault(
 		slog.New(
@@ -213,9 +220,6 @@ func runServer() {
 	)
 	sched := scheduler.New(repo, rnr)
 	ctx, cancel := context.WithCancel(context.Background())
-	maintenance.StartLitestreamCheck(ctx, bus)
-	sched.Start(ctx)
-	defer sched.Stop()
 	defer cancel()
 	authHandler := handler.NewAuthHandler(repo)
 	authHandler.SetMFAService(mfaService)
@@ -247,6 +251,30 @@ func runServer() {
 			"issuer_host", issuerURL.Hostname(),
 		)
 	}
+	browserListener, err := net.Listen("tcp", loadAddr())
+	if err != nil {
+		log.Fatalf("browser listener: %v", err)
+	}
+	defer browserListener.Close()
+	var agentRuntime *agentListener
+	if agentsEnabled {
+		dispatcher := dispatch.New(repo)
+		agentRuntime, err = startAgentListener(ctx, agentConfig,
+			agentListenerDependencies{repo: repo, dispatcher: dispatcher})
+		if err != nil {
+			browserListener.Close()
+			cancel()
+			log.Fatalf("agent listener: %v", err)
+		}
+		slog.Info(
+			"agent listener started",
+			"addr",
+			agentRuntime.listener.Addr().String(),
+		)
+	}
+	maintenance.StartLitestreamCheck(ctx, bus)
+	sched.Start(ctx)
+	defer sched.Stop()
 	r := server.NewRouter(repo, rnr, parser, authHandler, oidcServices.enabled)
 
 	// Recover deployments that were created but never picked up by a
@@ -256,7 +284,7 @@ func runServer() {
 	// that goroutine dies with the process.
 	recoverPendingDeployments(ctx, rnr, repo)
 
-	addr := loadAddr()
+	addr := browserListener.Addr().String()
 	srv := &http.Server{Addr: addr, Handler: r}
 
 	// Graceful shutdown: on SIGINT/SIGTERM, stop accepting new connections
@@ -278,12 +306,18 @@ func runServer() {
 			10*time.Second,
 		)
 		defer shutdownCancel()
+		cancel()
+		if agentRuntime != nil {
+			if err := agentRuntime.shutdown(shutdownCtx); err != nil {
+				slog.Error("agent shutdown failed", "err", err)
+			}
+		}
 		_ = srv.Shutdown(shutdownCtx)
 		rnr.KillAll()
 	}()
 
 	slog.Info("server starting", "addr", addr)
-	if err := srv.ListenAndServe(); err != nil &&
+	if err := srv.Serve(browserListener); err != nil &&
 		!errors.Is(err, http.ErrServerClosed) {
 		log.Fatalf("server failed: %v", err)
 	}
