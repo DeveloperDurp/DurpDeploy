@@ -10,28 +10,26 @@ import (
 	"database/sql"
 )
 
-const acknowledgeRemoteCancellation = `-- name: AcknowledgeRemoteCancellation :execrows
-UPDATE deployment_step_attempts SET state = 'cancelled', finished_at = ?1, updated_at = ?1
-WHERE deployment_step_attempts.deployment_id = ?2 AND deployment_step_attempts.step_index = ?3
-  AND deployment_step_attempts.attempt = ?4 AND deployment_step_attempts.agent_id = ?5
-  AND claim_token_hash = ?6 AND state = 'cancel_requested'
+const acknowledgeRemoteDeploymentCancellation = `-- name: AcknowledgeRemoteDeploymentCancellation :execrows
+UPDATE remote_deployment_claims SET state = 'cancelled',
+    finished_at = ?1, updated_at = ?1
+WHERE deployment_id = ?2
+  AND agent_id = ?3
+  AND claim_token_hash = ?4
+  AND state = 'cancel_requested'
 `
 
-type AcknowledgeRemoteCancellationParams struct {
-	Now            sql.NullInt64  `json:"now"`
-	DeploymentID   int64          `json:"deployment_id"`
-	StepIndex      int64          `json:"step_index"`
-	Attempt        int64          `json:"attempt"`
-	AgentID        sql.NullString `json:"agent_id"`
-	ClaimTokenHash []byte         `json:"claim_token_hash"`
+type AcknowledgeRemoteDeploymentCancellationParams struct {
+	Now            sql.NullInt64 `json:"now"`
+	DeploymentID   int64         `json:"deployment_id"`
+	AgentID        string        `json:"agent_id"`
+	ClaimTokenHash []byte        `json:"claim_token_hash"`
 }
 
-func (q *Queries) AcknowledgeRemoteCancellation(ctx context.Context, arg AcknowledgeRemoteCancellationParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, acknowledgeRemoteCancellation,
+func (q *Queries) AcknowledgeRemoteDeploymentCancellation(ctx context.Context, arg AcknowledgeRemoteDeploymentCancellationParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, acknowledgeRemoteDeploymentCancellation,
 		arg.Now,
 		arg.DeploymentID,
-		arg.StepIndex,
-		arg.Attempt,
 		arg.AgentID,
 		arg.ClaimTokenHash,
 	)
@@ -41,48 +39,51 @@ func (q *Queries) AcknowledgeRemoteCancellation(ctx context.Context, arg Acknowl
 	return result.RowsAffected()
 }
 
-const claimRemoteDeploymentStep = `-- name: ClaimRemoteDeploymentStep :execrows
-UPDATE deployment_step_attempts SET state = 'claimed', agent_id = ?1,
-    claim_token_hash = ?2, claim_expires_at = ?3,
-    last_heartbeat_at = ?4, updated_at = ?4
-WHERE deployment_step_attempts.deployment_id = ?5 AND deployment_step_attempts.step_index = ?6 AND deployment_step_attempts.attempt = ?7
-  AND state = 'waiting' AND started_at IS NULL AND agent_id IS NULL
-  AND wait_deadline > ?4 AND ?3 > ?4
-  AND EXISTS (SELECT 1 FROM deployments d WHERE d.id = deployment_step_attempts.deployment_id AND d.status IN ('pending', 'running'))
-  AND EXISTS (SELECT 1 FROM deployment_steps s WHERE s.deployment_id = deployment_step_attempts.deployment_id
-      AND s.step_index = deployment_step_attempts.step_index AND s.execution_target = 'agent')
-  AND EXISTS (SELECT 1 FROM agents a WHERE a.id = ?1 AND a.status = 'active' AND a.last_heartbeat_at >= ?8
-      AND EXISTS (SELECT 1 FROM agent_pairings p WHERE p.agent_id = a.id AND p.state = 'paired')
-      AND EXISTS (SELECT 1 FROM environment_agent_assignments e
-          JOIN deployments d ON d.environment_id = e.environment_id
-          WHERE d.id = ?5 AND e.agent_id = a.id)
-      AND EXISTS (SELECT 1 FROM deployment_step_selectors s JOIN agent_labels l ON l.label = s.label
-              WHERE s.deployment_id = ?5 AND s.step_index = ?6 AND l.agent_id = a.id)
-      AND NOT EXISTS (SELECT 1 FROM deployment_step_attempts busy WHERE busy.agent_id = a.id
-          AND busy.state IN ('claimed', 'started', 'cancel_requested', 'cancel_uncertain', 'lost')))
+const claimRemoteDeployment = `-- name: ClaimRemoteDeployment :execrows
+UPDATE remote_deployment_claims SET state = 'claimed',
+    claim_token_hash = ?1,
+    ciphertext = ?2,
+    claim_expires_at = CAST(?3 AS BIGINT),
+    last_heartbeat_at = CAST(?4 AS BIGINT),
+    updated_at = CAST(?4 AS BIGINT)
+WHERE remote_deployment_claims.deployment_id = ?5
+  AND remote_deployment_claims.agent_id = ?6
+  AND remote_deployment_claims.state = 'waiting'
+  AND remote_deployment_claims.claim_token_hash IS NULL
+  AND remote_deployment_claims.started_at IS NULL
+  AND CAST(?3 AS BIGINT) >
+      CAST(?4 AS BIGINT)
+  AND EXISTS (SELECT 1 FROM deployments d
+      WHERE d.id = remote_deployment_claims.deployment_id
+        AND d.assigned_agent_id = remote_deployment_claims.agent_id
+        AND d.status = 'pending')
+  AND EXISTS (SELECT 1 FROM agents a
+      WHERE a.id = remote_deployment_claims.agent_id AND a.status = 'active'
+        AND EXISTS (SELECT 1 FROM agent_pairings p
+            WHERE p.agent_id = a.id AND p.state = 'paired'))
+  AND NOT EXISTS (SELECT 1 FROM remote_deployment_claims busy
+      WHERE busy.agent_id = remote_deployment_claims.agent_id
+        AND busy.deployment_id <> remote_deployment_claims.deployment_id
+        AND busy.state IN ('claimed', 'started', 'cancel_requested'))
 `
 
-type ClaimRemoteDeploymentStepParams struct {
-	AgentID        sql.NullString `json:"agent_id"`
+type ClaimRemoteDeploymentParams struct {
 	ClaimTokenHash []byte         `json:"claim_token_hash"`
-	ClaimExpiresAt sql.NullInt64  `json:"claim_expires_at"`
-	Now            sql.NullInt64  `json:"now"`
+	Ciphertext     sql.NullString `json:"ciphertext"`
+	ClaimExpiresAt int64          `json:"claim_expires_at"`
+	Now            int64          `json:"now"`
 	DeploymentID   int64          `json:"deployment_id"`
-	StepIndex      int64          `json:"step_index"`
-	Attempt        int64          `json:"attempt"`
-	FreshAfter     sql.NullInt64  `json:"fresh_after"`
+	AgentID        string         `json:"agent_id"`
 }
 
-func (q *Queries) ClaimRemoteDeploymentStep(ctx context.Context, arg ClaimRemoteDeploymentStepParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, claimRemoteDeploymentStep,
-		arg.AgentID,
+func (q *Queries) ClaimRemoteDeployment(ctx context.Context, arg ClaimRemoteDeploymentParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, claimRemoteDeployment,
 		arg.ClaimTokenHash,
+		arg.Ciphertext,
 		arg.ClaimExpiresAt,
 		arg.Now,
 		arg.DeploymentID,
-		arg.StepIndex,
-		arg.Attempt,
-		arg.FreshAfter,
+		arg.AgentID,
 	)
 	if err != nil {
 		return 0, err
@@ -90,34 +91,17 @@ func (q *Queries) ClaimRemoteDeploymentStep(ctx context.Context, arg ClaimRemote
 	return result.RowsAffected()
 }
 
-const createDeploymentDispatch = `-- name: CreateDeploymentDispatch :execrows
-INSERT INTO deployment_dispatches (deployment_id, step_index, attempt, ciphertext)
-SELECT ?1, ?2, ?3, ?4
-WHERE EXISTS (SELECT 1 FROM deployment_step_attempts WHERE deployment_step_attempts.deployment_id = ?1 AND deployment_step_attempts.step_index = ?2
-  AND deployment_step_attempts.attempt = ?3 AND deployment_step_attempts.agent_id = ?5
-  AND claim_token_hash = ?6 AND state = 'claimed')
-  AND NOT EXISTS (SELECT 1 FROM deployment_dispatches WHERE deployment_id = ?1
-      AND step_index = ?2 AND attempt = ?3)
+const createRemoteDeploymentClaim = `-- name: CreateRemoteDeploymentClaim :execrows
+INSERT INTO remote_deployment_claims (deployment_id, agent_id)
+SELECT d.id, d.assigned_agent_id FROM deployments d
+WHERE d.id = ?1 AND d.assigned_agent_id IS NOT NULL
+  AND d.status IN ('pending', 'pending_approval')
+  AND NOT EXISTS (SELECT 1 FROM remote_deployment_claims c
+      WHERE c.deployment_id = d.id)
 `
 
-type CreateDeploymentDispatchParams struct {
-	DeploymentID   int64          `json:"deployment_id"`
-	StepIndex      int64          `json:"step_index"`
-	Attempt        int64          `json:"attempt"`
-	Ciphertext     sql.NullString `json:"ciphertext"`
-	AgentID        sql.NullString `json:"agent_id"`
-	ClaimTokenHash []byte         `json:"claim_token_hash"`
-}
-
-func (q *Queries) CreateDeploymentDispatch(ctx context.Context, arg CreateDeploymentDispatchParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, createDeploymentDispatch,
-		arg.DeploymentID,
-		arg.StepIndex,
-		arg.Attempt,
-		arg.Ciphertext,
-		arg.AgentID,
-		arg.ClaimTokenHash,
-	)
+func (q *Queries) CreateRemoteDeploymentClaim(ctx context.Context, deploymentID int64) (int64, error) {
+	result, err := q.db.ExecContext(ctx, createRemoteDeploymentClaim, deploymentID)
 	if err != nil {
 		return 0, err
 	}
@@ -125,8 +109,11 @@ func (q *Queries) CreateDeploymentDispatch(ctx context.Context, arg CreateDeploy
 }
 
 const expireRemoteCancellation = `-- name: ExpireRemoteCancellation :execrows
-UPDATE deployment_step_attempts SET state = 'cancel_uncertain', finished_at = ?1, updated_at = ?1
-WHERE state = 'cancel_requested' AND agent_id IS NOT NULL AND cancel_requested_at <= ?2
+UPDATE remote_deployment_claims SET state = 'cancel_unconfirmed',
+    reason = 'cancel_ack_timeout', finished_at = ?1,
+    updated_at = ?1
+WHERE state = 'cancel_requested'
+  AND cancel_requested_at <= ?2
 `
 
 type ExpireRemoteCancellationParams struct {
@@ -143,9 +130,11 @@ func (q *Queries) ExpireRemoteCancellation(ctx context.Context, arg ExpireRemote
 }
 
 const expireRemoteClaims = `-- name: ExpireRemoteClaims :execrows
-UPDATE deployment_step_attempts SET state = 'waiting', agent_id = NULL, claim_token_hash = NULL,
-    claim_expires_at = NULL, last_heartbeat_at = NULL, updated_at = ?1
-WHERE state = 'claimed' AND started_at IS NULL AND claim_expires_at <= ?1
+UPDATE remote_deployment_claims SET state = 'waiting', reason = NULL,
+    claim_token_hash = NULL, ciphertext = NULL, claim_expires_at = NULL,
+    last_heartbeat_at = NULL, updated_at = ?1
+WHERE state = 'claimed' AND started_at IS NULL
+  AND claim_expires_at <= ?1
 `
 
 func (q *Queries) ExpireRemoteClaims(ctx context.Context, now int64) (int64, error) {
@@ -156,48 +145,41 @@ func (q *Queries) ExpireRemoteClaims(ctx context.Context, now int64) (int64, err
 	return result.RowsAffected()
 }
 
-const expireWaitingDeploymentSteps = `-- name: ExpireWaitingDeploymentSteps :execrows
-UPDATE deployment_step_attempts SET state = 'failed', reason = 'wait_expired', finished_at = ?1, updated_at = ?1
-WHERE state = 'waiting' AND wait_deadline <= ?1
+const finishRemoteDeployment = `-- name: FinishRemoteDeployment :execrows
+UPDATE remote_deployment_claims SET state = ?1,
+    reason = ?2, finished_at = ?3,
+    updated_at = ?3
+WHERE remote_deployment_claims.deployment_id = ?4
+  AND remote_deployment_claims.agent_id = ?5
+  AND remote_deployment_claims.claim_token_hash = ?6
+  AND remote_deployment_claims.state = 'started'
+  AND remote_deployment_claims.started_at IS NOT NULL
+  AND (?1 = 'succeeded' OR ?1 = 'failed')
+  AND EXISTS (SELECT 1 FROM deployments d
+      WHERE d.id = remote_deployment_claims.deployment_id
+        AND d.assigned_agent_id = remote_deployment_claims.agent_id
+        AND d.status IN ('pending', 'running'))
+  AND EXISTS (SELECT 1 FROM agents a
+      WHERE a.id = remote_deployment_claims.agent_id AND a.status = 'active'
+        AND EXISTS (SELECT 1 FROM agent_pairings p
+            WHERE p.agent_id = a.id AND p.state = 'paired'))
 `
 
-func (q *Queries) ExpireWaitingDeploymentSteps(ctx context.Context, now sql.NullInt64) (int64, error) {
-	result, err := q.db.ExecContext(ctx, expireWaitingDeploymentSteps, now)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
-}
-
-const finishRemoteDeploymentStep = `-- name: FinishRemoteDeploymentStep :execrows
-UPDATE deployment_step_attempts SET state = ?1, reason = ?2,
-    finished_at = ?3, updated_at = ?3
-WHERE deployment_step_attempts.deployment_id = ?4 AND deployment_step_attempts.step_index = ?5
-  AND deployment_step_attempts.attempt = ?6 AND deployment_step_attempts.agent_id = ?7
-  AND claim_token_hash = ?8 AND state = 'started' AND started_at IS NOT NULL
-  AND (?1 = 'succeeded' OR ?1 = 'failed') AND EXISTS (SELECT 1 FROM deployments d WHERE d.id = deployment_step_attempts.deployment_id AND d.status IN ('pending', 'running')) AND EXISTS (SELECT 1 FROM agents a WHERE a.id = deployment_step_attempts.agent_id AND a.status = 'active'
-      AND EXISTS (SELECT 1 FROM agent_pairings p WHERE p.agent_id = a.id AND p.state = 'paired'))
-`
-
-type FinishRemoteDeploymentStepParams struct {
+type FinishRemoteDeploymentParams struct {
 	State          string         `json:"state"`
 	Reason         sql.NullString `json:"reason"`
 	Now            sql.NullInt64  `json:"now"`
 	DeploymentID   int64          `json:"deployment_id"`
-	StepIndex      int64          `json:"step_index"`
-	Attempt        int64          `json:"attempt"`
-	AgentID        sql.NullString `json:"agent_id"`
+	AgentID        string         `json:"agent_id"`
 	ClaimTokenHash []byte         `json:"claim_token_hash"`
 }
 
-func (q *Queries) FinishRemoteDeploymentStep(ctx context.Context, arg FinishRemoteDeploymentStepParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, finishRemoteDeploymentStep,
+func (q *Queries) FinishRemoteDeployment(ctx context.Context, arg FinishRemoteDeploymentParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, finishRemoteDeployment,
 		arg.State,
 		arg.Reason,
 		arg.Now,
 		arg.DeploymentID,
-		arg.StepIndex,
-		arg.Attempt,
 		arg.AgentID,
 		arg.ClaimTokenHash,
 	)
@@ -207,64 +189,56 @@ func (q *Queries) FinishRemoteDeploymentStep(ctx context.Context, arg FinishRemo
 	return result.RowsAffected()
 }
 
-const getDeploymentDispatch = `-- name: GetDeploymentDispatch :one
-SELECT d.deployment_id, d.step_index, d.attempt, d.ciphertext, d.created_at, d.updated_at FROM deployment_dispatches d JOIN deployment_step_attempts a
-ON a.deployment_id = d.deployment_id AND a.step_index = d.step_index AND a.attempt = d.attempt
-WHERE a.deployment_id = ? AND a.step_index = ? AND a.attempt = ? AND a.agent_id = ? AND a.claim_token_hash = ?
+const getRemoteDeploymentClaim = `-- name: GetRemoteDeploymentClaim :one
+SELECT deployment_id, agent_id, state, reason, claim_token_hash, ciphertext, claim_expires_at, last_heartbeat_at, started_at, finished_at, cancel_requested_at, created_at, updated_at FROM remote_deployment_claims WHERE deployment_id = ?
 `
 
-type GetDeploymentDispatchParams struct {
-	DeploymentID   int64          `json:"deployment_id"`
-	StepIndex      int64          `json:"step_index"`
-	Attempt        int64          `json:"attempt"`
-	AgentID        sql.NullString `json:"agent_id"`
-	ClaimTokenHash []byte         `json:"claim_token_hash"`
-}
-
-func (q *Queries) GetDeploymentDispatch(ctx context.Context, arg GetDeploymentDispatchParams) (DeploymentDispatch, error) {
-	row := q.db.QueryRowContext(ctx, getDeploymentDispatch,
-		arg.DeploymentID,
-		arg.StepIndex,
-		arg.Attempt,
-		arg.AgentID,
-		arg.ClaimTokenHash,
-	)
-	var i DeploymentDispatch
+func (q *Queries) GetRemoteDeploymentClaim(ctx context.Context, deploymentID int64) (RemoteDeploymentClaim, error) {
+	row := q.db.QueryRowContext(ctx, getRemoteDeploymentClaim, deploymentID)
+	var i RemoteDeploymentClaim
 	err := row.Scan(
 		&i.DeploymentID,
-		&i.StepIndex,
-		&i.Attempt,
+		&i.AgentID,
+		&i.State,
+		&i.Reason,
+		&i.ClaimTokenHash,
 		&i.Ciphertext,
+		&i.ClaimExpiresAt,
+		&i.LastHeartbeatAt,
+		&i.StartedAt,
+		&i.FinishedAt,
+		&i.CancelRequestedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
 	return i, err
 }
 
-const heartbeatRemoteDeploymentStep = `-- name: HeartbeatRemoteDeploymentStep :execrows
-UPDATE deployment_step_attempts SET last_heartbeat_at = ?1, updated_at = ?1
-WHERE deployment_step_attempts.deployment_id = ?2 AND deployment_step_attempts.step_index = ?3
-  AND deployment_step_attempts.attempt = ?4 AND deployment_step_attempts.agent_id = ?5
-  AND claim_token_hash = ?6 AND state IN ('started', 'cancel_requested')
-  AND last_heartbeat_at <= ?1 AND EXISTS (SELECT 1 FROM agents a WHERE a.id = deployment_step_attempts.agent_id AND a.status = 'active'
-      AND EXISTS (SELECT 1 FROM agent_pairings p WHERE p.agent_id = a.id AND p.state = 'paired'))
+const heartbeatRemoteDeployment = `-- name: HeartbeatRemoteDeployment :execrows
+UPDATE remote_deployment_claims SET last_heartbeat_at = ?1,
+    updated_at = ?1
+WHERE remote_deployment_claims.deployment_id = ?2
+  AND remote_deployment_claims.agent_id = ?3
+  AND remote_deployment_claims.claim_token_hash = ?4
+  AND remote_deployment_claims.state IN ('started', 'cancel_requested')
+  AND remote_deployment_claims.last_heartbeat_at <= ?1
+  AND EXISTS (SELECT 1 FROM agents a
+      WHERE a.id = remote_deployment_claims.agent_id AND a.status = 'active'
+        AND EXISTS (SELECT 1 FROM agent_pairings p
+            WHERE p.agent_id = a.id AND p.state = 'paired'))
 `
 
-type HeartbeatRemoteDeploymentStepParams struct {
-	Now            sql.NullInt64  `json:"now"`
-	DeploymentID   int64          `json:"deployment_id"`
-	StepIndex      int64          `json:"step_index"`
-	Attempt        int64          `json:"attempt"`
-	AgentID        sql.NullString `json:"agent_id"`
-	ClaimTokenHash []byte         `json:"claim_token_hash"`
+type HeartbeatRemoteDeploymentParams struct {
+	Now            sql.NullInt64 `json:"now"`
+	DeploymentID   int64         `json:"deployment_id"`
+	AgentID        string        `json:"agent_id"`
+	ClaimTokenHash []byte        `json:"claim_token_hash"`
 }
 
-func (q *Queries) HeartbeatRemoteDeploymentStep(ctx context.Context, arg HeartbeatRemoteDeploymentStepParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, heartbeatRemoteDeploymentStep,
+func (q *Queries) HeartbeatRemoteDeployment(ctx context.Context, arg HeartbeatRemoteDeploymentParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, heartbeatRemoteDeployment,
 		arg.Now,
 		arg.DeploymentID,
-		arg.StepIndex,
-		arg.Attempt,
 		arg.AgentID,
 		arg.ClaimTokenHash,
 	)
@@ -274,44 +248,35 @@ func (q *Queries) HeartbeatRemoteDeploymentStep(ctx context.Context, arg Heartbe
 	return result.RowsAffected()
 }
 
-const listEligibleStepAgents = `-- name: ListEligibleStepAgents :many
-SELECT a.id, a.name, a.endpoint, a.status, a.agent_version, a.certificate_pem, a.certificate_fingerprint, a.encrypted_identity, a.last_heartbeat_at, a.revoked_at, a.created_at, a.updated_at FROM agents a WHERE a.status = 'active' AND a.last_heartbeat_at >= ?1
-      AND EXISTS (SELECT 1 FROM agent_pairings p WHERE p.agent_id = a.id AND p.state = 'paired')
-      AND EXISTS (SELECT 1 FROM environment_agent_assignments e
-          JOIN deployments d ON d.environment_id = e.environment_id
-          WHERE d.id = ?2 AND e.agent_id = a.id)
-      AND EXISTS (SELECT 1 FROM deployment_step_selectors s JOIN agent_labels l ON l.label = s.label
-              WHERE s.deployment_id = ?2 AND s.step_index = ?3 AND l.agent_id = a.id)
-      AND NOT EXISTS (SELECT 1 FROM deployment_step_attempts busy WHERE busy.agent_id = a.id
-          AND busy.state IN ('claimed', 'started', 'cancel_requested', 'cancel_uncertain', 'lost')) ORDER BY a.id
+const listWaitingRemoteDeploymentClaims = `-- name: ListWaitingRemoteDeploymentClaims :many
+SELECT c.deployment_id, c.agent_id, c.state, c.reason, c.claim_token_hash, c.ciphertext, c.claim_expires_at, c.last_heartbeat_at, c.started_at, c.finished_at, c.cancel_requested_at, c.created_at, c.updated_at FROM remote_deployment_claims c
+JOIN deployments d ON d.id = c.deployment_id
+WHERE c.agent_id = ?1 AND c.state = 'waiting'
+  AND d.assigned_agent_id = c.agent_id AND d.status = 'pending'
+ORDER BY c.created_at, c.deployment_id
 `
 
-type ListEligibleStepAgentsParams struct {
-	FreshAfter   sql.NullInt64 `json:"fresh_after"`
-	DeploymentID int64         `json:"deployment_id"`
-	StepIndex    int64         `json:"step_index"`
-}
-
-func (q *Queries) ListEligibleStepAgents(ctx context.Context, arg ListEligibleStepAgentsParams) ([]Agent, error) {
-	rows, err := q.db.QueryContext(ctx, listEligibleStepAgents, arg.FreshAfter, arg.DeploymentID, arg.StepIndex)
+func (q *Queries) ListWaitingRemoteDeploymentClaims(ctx context.Context, agentID string) ([]RemoteDeploymentClaim, error) {
+	rows, err := q.db.QueryContext(ctx, listWaitingRemoteDeploymentClaims, agentID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Agent
+	var items []RemoteDeploymentClaim
 	for rows.Next() {
-		var i Agent
+		var i RemoteDeploymentClaim
 		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.Endpoint,
-			&i.Status,
-			&i.AgentVersion,
-			&i.CertificatePem,
-			&i.CertificateFingerprint,
-			&i.EncryptedIdentity,
+			&i.DeploymentID,
+			&i.AgentID,
+			&i.State,
+			&i.Reason,
+			&i.ClaimTokenHash,
+			&i.Ciphertext,
+			&i.ClaimExpiresAt,
 			&i.LastHeartbeatAt,
-			&i.RevokedAt,
+			&i.StartedAt,
+			&i.FinishedAt,
+			&i.CancelRequestedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -340,99 +305,106 @@ func (q *Queries) LockClaimAgent(ctx context.Context, id string) (int64, error) 
 	return result.RowsAffected()
 }
 
-const lockRemoteLogAttempt = `-- name: LockRemoteLogAttempt :execrows
-UPDATE deployment_step_attempts SET updated_at = updated_at
-WHERE deployment_step_attempts.deployment_id = ?1 AND deployment_step_attempts.step_index = ?2
-  AND deployment_step_attempts.attempt = ?3 AND deployment_step_attempts.agent_id = ?4
-  AND claim_token_hash = ?5 AND state IN ('started', 'cancel_requested') AND EXISTS (SELECT 1 FROM agents a WHERE a.id = deployment_step_attempts.agent_id AND a.status = 'active'
-      AND EXISTS (SELECT 1 FROM agent_pairings p WHERE p.agent_id = a.id AND p.state = 'paired'))
+const lockRemoteDeploymentClaim = `-- name: LockRemoteDeploymentClaim :execrows
+UPDATE remote_deployment_claims SET updated_at = updated_at
+WHERE remote_deployment_claims.deployment_id = ?1
+  AND remote_deployment_claims.agent_id = ?2
+  AND remote_deployment_claims.claim_token_hash = ?3
+  AND remote_deployment_claims.state IN ('started', 'cancel_requested')
+  AND EXISTS (SELECT 1 FROM agents a
+      WHERE a.id = remote_deployment_claims.agent_id AND a.status = 'active'
+        AND EXISTS (SELECT 1 FROM agent_pairings p
+            WHERE p.agent_id = a.id AND p.state = 'paired'))
 `
 
-type LockRemoteLogAttemptParams struct {
-	DeploymentID   int64          `json:"deployment_id"`
-	StepIndex      int64          `json:"step_index"`
-	Attempt        int64          `json:"attempt"`
-	AgentID        sql.NullString `json:"agent_id"`
-	ClaimTokenHash []byte         `json:"claim_token_hash"`
+type LockRemoteDeploymentClaimParams struct {
+	DeploymentID   int64  `json:"deployment_id"`
+	AgentID        string `json:"agent_id"`
+	ClaimTokenHash []byte `json:"claim_token_hash"`
 }
 
-func (q *Queries) LockRemoteLogAttempt(ctx context.Context, arg LockRemoteLogAttemptParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, lockRemoteLogAttempt,
-		arg.DeploymentID,
-		arg.StepIndex,
-		arg.Attempt,
-		arg.AgentID,
-		arg.ClaimTokenHash,
-	)
+func (q *Queries) LockRemoteDeploymentClaim(ctx context.Context, arg LockRemoteDeploymentClaimParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, lockRemoteDeploymentClaim, arg.DeploymentID, arg.AgentID, arg.ClaimTokenHash)
 	if err != nil {
 		return 0, err
 	}
 	return result.RowsAffected()
 }
 
-const loseStaleRemoteAttempts = `-- name: LoseStaleRemoteAttempts :execrows
-UPDATE deployment_step_attempts SET state = 'lost', reason = 'heartbeat_lost', finished_at = ?1, updated_at = ?1
-WHERE state = 'started' AND agent_id IS NOT NULL AND last_heartbeat_at <= ?2
+const loseStaleRemoteClaims = `-- name: LoseStaleRemoteClaims :execrows
+UPDATE remote_deployment_claims SET state = 'lost',
+    reason = 'heartbeat_lost', finished_at = ?1,
+    updated_at = ?1
+WHERE state = 'started'
+  AND last_heartbeat_at <= ?2
 `
 
-type LoseStaleRemoteAttemptsParams struct {
+type LoseStaleRemoteClaimsParams struct {
 	Now         sql.NullInt64 `json:"now"`
 	StaleBefore sql.NullInt64 `json:"stale_before"`
 }
 
-func (q *Queries) LoseStaleRemoteAttempts(ctx context.Context, arg LoseStaleRemoteAttemptsParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, loseStaleRemoteAttempts, arg.Now, arg.StaleBefore)
+func (q *Queries) LoseStaleRemoteClaims(ctx context.Context, arg LoseStaleRemoteClaimsParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, loseStaleRemoteClaims, arg.Now, arg.StaleBefore)
 	if err != nil {
 		return 0, err
 	}
 	return result.RowsAffected()
 }
 
-const requestDeploymentStepCancellation = `-- name: RequestDeploymentStepCancellation :execrows
-UPDATE deployment_step_attempts SET
-    state = CASE WHEN started_at IS NULL THEN 'cancelled' ELSE 'cancel_requested' END,
+const requestRemoteDeploymentCancellation = `-- name: RequestRemoteDeploymentCancellation :execrows
+UPDATE remote_deployment_claims SET
+    state = CASE WHEN started_at IS NULL THEN 'cancelled'
+        ELSE 'cancel_requested' END,
     finished_at = CASE WHEN started_at IS NULL THEN ?1 ELSE NULL END,
     cancel_requested_at = ?1, updated_at = ?1
-WHERE deployment_id = ?2 AND state IN ('waiting', 'claimed', 'started')
+WHERE deployment_id = ?2
+  AND state IN ('waiting', 'claimed', 'started')
 `
 
-type RequestDeploymentStepCancellationParams struct {
+type RequestRemoteDeploymentCancellationParams struct {
 	Now          sql.NullInt64 `json:"now"`
 	DeploymentID int64         `json:"deployment_id"`
 }
 
-func (q *Queries) RequestDeploymentStepCancellation(ctx context.Context, arg RequestDeploymentStepCancellationParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, requestDeploymentStepCancellation, arg.Now, arg.DeploymentID)
+func (q *Queries) RequestRemoteDeploymentCancellation(ctx context.Context, arg RequestRemoteDeploymentCancellationParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, requestRemoteDeploymentCancellation, arg.Now, arg.DeploymentID)
 	if err != nil {
 		return 0, err
 	}
 	return result.RowsAffected()
 }
 
-const startRemoteDeploymentStep = `-- name: StartRemoteDeploymentStep :execrows
-UPDATE deployment_step_attempts SET state = 'started', started_at = ?1, updated_at = ?1
-WHERE deployment_step_attempts.deployment_id = ?2 AND deployment_step_attempts.step_index = ?3
-  AND deployment_step_attempts.attempt = ?4 AND deployment_step_attempts.agent_id = ?5
-  AND claim_token_hash = ?6 AND state = 'claimed' AND started_at IS NULL
-  AND claim_expires_at > ?1 AND EXISTS (SELECT 1 FROM deployments d WHERE d.id = deployment_step_attempts.deployment_id AND d.status IN ('pending', 'running')) AND EXISTS (SELECT 1 FROM agents a WHERE a.id = deployment_step_attempts.agent_id AND a.status = 'active'
-      AND EXISTS (SELECT 1 FROM agent_pairings p WHERE p.agent_id = a.id AND p.state = 'paired'))
+const startRemoteDeployment = `-- name: StartRemoteDeployment :execrows
+UPDATE remote_deployment_claims SET state = 'started',
+    started_at = ?1, updated_at = ?1
+WHERE remote_deployment_claims.deployment_id = ?2
+  AND remote_deployment_claims.agent_id = ?3
+  AND remote_deployment_claims.claim_token_hash = ?4
+  AND remote_deployment_claims.state = 'claimed'
+  AND remote_deployment_claims.started_at IS NULL
+  AND remote_deployment_claims.claim_expires_at > ?1
+  AND EXISTS (SELECT 1 FROM deployments d
+      WHERE d.id = remote_deployment_claims.deployment_id
+        AND d.assigned_agent_id = remote_deployment_claims.agent_id
+        AND d.status = 'pending')
+  AND EXISTS (SELECT 1 FROM agents a
+      WHERE a.id = remote_deployment_claims.agent_id AND a.status = 'active'
+        AND EXISTS (SELECT 1 FROM agent_pairings p
+            WHERE p.agent_id = a.id AND p.state = 'paired'))
 `
 
-type StartRemoteDeploymentStepParams struct {
-	Now            sql.NullInt64  `json:"now"`
-	DeploymentID   int64          `json:"deployment_id"`
-	StepIndex      int64          `json:"step_index"`
-	Attempt        int64          `json:"attempt"`
-	AgentID        sql.NullString `json:"agent_id"`
-	ClaimTokenHash []byte         `json:"claim_token_hash"`
+type StartRemoteDeploymentParams struct {
+	Now            sql.NullInt64 `json:"now"`
+	DeploymentID   int64         `json:"deployment_id"`
+	AgentID        string        `json:"agent_id"`
+	ClaimTokenHash []byte        `json:"claim_token_hash"`
 }
 
-func (q *Queries) StartRemoteDeploymentStep(ctx context.Context, arg StartRemoteDeploymentStepParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, startRemoteDeploymentStep,
+func (q *Queries) StartRemoteDeployment(ctx context.Context, arg StartRemoteDeploymentParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, startRemoteDeployment,
 		arg.Now,
 		arg.DeploymentID,
-		arg.StepIndex,
-		arg.Attempt,
 		arg.AgentID,
 		arg.ClaimTokenHash,
 	)

@@ -14,6 +14,7 @@ func TestRemoteAgentSQLParityFixtures(t *testing.T) {
 		{"025_remote_agents.sql", "mssql/010_remote_agents.sql"},
 		{"026_deployment_step_execution.sql", "mssql/011_deployment_step_execution.sql"},
 		{"027_deployment_log_scopes.sql", "mssql/012_deployment_log_scopes.sql"},
+		{"028_remote_deployment_claims.sql", "mssql/013_remote_deployment_claims.sql"},
 	} {
 		t.Run(pair[0], func(t *testing.T) {
 			shared, err := migrations.FS.ReadFile(pair[0])

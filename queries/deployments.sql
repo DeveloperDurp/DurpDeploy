@@ -5,7 +5,8 @@ SELECT * FROM deployments WHERE release_id = ? ORDER BY created_at DESC;
 SELECT * FROM deployments WHERE id = ?;
 
 -- name: CreateDeployment :one
-INSERT INTO deployments (release_id, environment_id, status, started_at, finished_at, forced, note) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING *;
+INSERT INTO deployments (release_id, environment_id, status, started_at, finished_at, forced, note, assigned_agent_id)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING *;
 
 -- name: UpdateDeployment :one
 UPDATE deployments SET release_id = ?, environment_id = ?, status = ?, started_at = ?, finished_at = ?, note = ? WHERE id = ? RETURNING *;
@@ -20,6 +21,7 @@ SELECT * FROM deployments ORDER BY created_at DESC;
 SELECT
     d.id, d.release_id, d.environment_id, d.status,
     d.started_at, d.finished_at, d.created_at, d.forced, d.note,
+    d.assigned_agent_id,
     p.name AS project_name,
     r.version AS release_version,
     e.name AS environment_name
@@ -54,6 +56,7 @@ SELECT COUNT(*) FROM deployments WHERE created_at >= strftime('%s','now','start 
 SELECT
     d.id, d.release_id, d.environment_id, d.status,
     d.started_at, d.finished_at, d.created_at, d.forced, d.note,
+    d.assigned_agent_id,
     p.name AS project_name,
     r.version AS release_version,
     e.name AS environment_name
@@ -71,6 +74,7 @@ ORDER BY d.created_at DESC;
 SELECT
     d.id, d.release_id, d.environment_id, d.status,
     d.started_at, d.finished_at, d.created_at, d.forced, d.note,
+    d.assigned_agent_id,
     p.name AS project_name,
     r.version AS release_version,
     e.name AS environment_name
@@ -82,9 +86,13 @@ WHERE d.status = 'pending'
 ORDER BY d.created_at ASC;
 
 -- name: ListLatestDeploymentPerReleaseEnv :many
-SELECT id, release_id, environment_id, status, started_at, finished_at, created_at, forced, note, project_name, release_version, environment_name
+SELECT id, release_id, environment_id, status, started_at, finished_at,
+       created_at, forced, note, assigned_agent_id, project_name,
+       release_version, environment_name
 FROM (
-    SELECT d.id, d.release_id, d.environment_id, d.status, d.started_at, d.finished_at, d.created_at, d.forced, d.note,
+    SELECT d.id, d.release_id, d.environment_id, d.status, d.started_at,
+           d.finished_at, d.created_at, d.forced, d.note,
+           d.assigned_agent_id,
            p.name AS project_name, r.version AS release_version, e.name AS environment_name,
            ROW_NUMBER() OVER (PARTITION BY d.release_id, d.environment_id ORDER BY d.created_at DESC) AS rn
     FROM deployments d
@@ -97,6 +105,7 @@ FROM (
 SELECT
     d.id, d.release_id, d.environment_id, d.status,
     d.started_at, d.finished_at, d.created_at, d.forced, d.note,
+    d.assigned_agent_id,
     p.name AS project_name,
     r.version AS release_version,
     e.name AS environment_name

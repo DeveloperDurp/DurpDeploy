@@ -41,6 +41,7 @@ type AgentPairing struct {
 	PairedAt             sql.NullInt64  `json:"paired_at"`
 	CreatedAt            int64          `json:"created_at"`
 	UpdatedAt            int64          `json:"updated_at"`
+	ServerPullEndpoint   sql.NullString `json:"server_pull_endpoint"`
 }
 
 type ApiToken struct {
@@ -67,15 +68,16 @@ type AuditLog struct {
 }
 
 type Deployment struct {
-	ID            int64          `json:"id"`
-	ReleaseID     int64          `json:"release_id"`
-	EnvironmentID int64          `json:"environment_id"`
-	Status        string         `json:"status"`
-	StartedAt     sql.NullInt64  `json:"started_at"`
-	FinishedAt    sql.NullInt64  `json:"finished_at"`
-	CreatedAt     int64          `json:"created_at"`
-	Forced        int64          `json:"forced"`
-	Note          sql.NullString `json:"note"`
+	ID              int64          `json:"id"`
+	ReleaseID       int64          `json:"release_id"`
+	EnvironmentID   int64          `json:"environment_id"`
+	Status          string         `json:"status"`
+	StartedAt       sql.NullInt64  `json:"started_at"`
+	FinishedAt      sql.NullInt64  `json:"finished_at"`
+	CreatedAt       int64          `json:"created_at"`
+	Forced          int64          `json:"forced"`
+	Note            sql.NullString `json:"note"`
+	AssignedAgentID sql.NullString `json:"assigned_agent_id"`
 }
 
 type DeploymentApproval struct {
@@ -288,6 +290,22 @@ type ReleaseVariable struct {
 	EnvironmentID sql.NullInt64  `json:"environment_id"`
 	CreatedAt     int64          `json:"created_at"`
 	Secret        int64          `json:"secret"`
+}
+
+type RemoteDeploymentClaim struct {
+	DeploymentID      int64          `json:"deployment_id"`
+	AgentID           string         `json:"agent_id"`
+	State             string         `json:"state"`
+	Reason            sql.NullString `json:"reason"`
+	ClaimTokenHash    []byte         `json:"claim_token_hash"`
+	Ciphertext        sql.NullString `json:"ciphertext"`
+	ClaimExpiresAt    sql.NullInt64  `json:"claim_expires_at"`
+	LastHeartbeatAt   sql.NullInt64  `json:"last_heartbeat_at"`
+	StartedAt         sql.NullInt64  `json:"started_at"`
+	FinishedAt        sql.NullInt64  `json:"finished_at"`
+	CancelRequestedAt sql.NullInt64  `json:"cancel_requested_at"`
+	CreatedAt         int64          `json:"created_at"`
+	UpdatedAt         int64          `json:"updated_at"`
 }
 
 type ScheduledDeployment struct {

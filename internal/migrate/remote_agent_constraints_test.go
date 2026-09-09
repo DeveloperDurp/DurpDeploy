@@ -12,7 +12,7 @@ func assertRemoteConstraints(t *testing.T, conn *sql.DB) {
 		`INSERT INTO agents(id,name,endpoint) VALUES('b','b','https://b')`,
 		`INSERT INTO environments(id,name) VALUES(2,'second')`,
 		`INSERT INTO environment_agent_assignments(environment_id,agent_id)
-		 VALUES(1,'a'),(2,'a'),(1,'b')`,
+		 VALUES(1,'a'),(2,'a')`,
 		`INSERT INTO agent_labels(agent_id,label)
 		 VALUES('a','web'),('a','linux'),('b','web')`,
 		`INSERT INTO step_agent_selectors(step_id,label)
@@ -81,6 +81,6 @@ func assertRemoteConstraints(t *testing.T, conn *sql.DB) {
 		}
 	}
 	t.Log(
-		"PASS: many-to-many, multi-valued selectors, attempt and log scope constraints",
+		"PASS: one-agent assignments, multi-valued selectors, attempt and log scope constraints",
 	)
 }

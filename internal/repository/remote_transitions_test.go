@@ -11,28 +11,26 @@ import (
 func TestDeploymentStepRejectsInvalidClaims(t *testing.T) {
 	r := remoteFixture(t)
 	ctx := context.Background()
-	for _, mutate := range []func(*db.ClaimRemoteDeploymentStepParams){
-		func(a *db.ClaimRemoteDeploymentStepParams) { a.DeploymentID = 0 },
-		func(a *db.ClaimRemoteDeploymentStepParams) { a.StepIndex = -1 },
-		func(a *db.ClaimRemoteDeploymentStepParams) { a.Attempt = 0 },
-		func(a *db.ClaimRemoteDeploymentStepParams) { a.AgentID = ns("") },
-		func(a *db.ClaimRemoteDeploymentStepParams) { a.AgentID = ns("' OR 1=1 --") },
-		func(a *db.ClaimRemoteDeploymentStepParams) { a.ClaimExpiresAt = a.Now },
+	for _, mutate := range []func(*db.ClaimRemoteDeploymentParams){
+		func(a *db.ClaimRemoteDeploymentParams) { a.DeploymentID = 0 },
+		func(a *db.ClaimRemoteDeploymentParams) { a.AgentID = "" },
+		func(a *db.ClaimRemoteDeploymentParams) { a.AgentID = "b" },
+		func(a *db.ClaimRemoteDeploymentParams) { a.ClaimExpiresAt = a.Now },
 	} {
 		a := claimArg("a")
 		mutate(&a)
-		n, err := r.ClaimRemoteStep(ctx, a)
+		n, err := r.ClaimRemoteDeployment(ctx, a)
 		assertZero(t, n, err)
 	}
 	cancelled, cancel := context.WithCancel(ctx)
 	cancel()
-	n, err := r.ClaimRemoteStep(cancelled, claimArg("a"))
+	n, err := r.ClaimRemoteDeployment(cancelled, claimArg("a"))
 	if n != 0 || !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancelled claim rows=%d error=%v", n, err)
 	}
-	n, err = r.ClaimRemoteStep(ctx, claimArg("a"))
+	n, err = r.ClaimRemoteDeployment(ctx, claimArg("a"))
 	assertOne(t, n, err)
-	n, err = r.Queries.FinishRemoteDeploymentStep(ctx, finishArg(claimArg("a")))
+	n, err = r.Queries.FinishRemoteDeployment(ctx, finishArg(claimArg("a")))
 	assertZero(t, n, err)
 	t.Log(
 		"zero/negative/malformed IDs, expired claim, finish-before-start: rows=0; cancelled context preserved; fresh claim=1",
@@ -43,44 +41,38 @@ func TestDeploymentStepCancellationAndHeartbeat(t *testing.T) {
 	r := remoteFixture(t)
 	ctx := context.Background()
 	a := claimArg("a")
-	n, err := r.ClaimRemoteStep(ctx, a)
+	n, err := r.ClaimRemoteDeployment(ctx, a)
 	assertOne(t, n, err)
-	n, err = r.Queries.StartRemoteDeploymentStep(ctx, startArg(a))
+	n, err = r.Queries.StartRemoteDeployment(ctx, startArg(a))
 	assertOne(t, n, err)
-	hb := db.HeartbeatRemoteDeploymentStepParams{
-		DeploymentID: 1, StepIndex: 0, Attempt: 1,
-		AgentID: a.AgentID, ClaimTokenHash: a.ClaimTokenHash, Now: ni(105),
+	hb := db.HeartbeatRemoteDeploymentParams{
+		DeploymentID: 1,
+		AgentID:      a.AgentID, ClaimTokenHash: a.ClaimTokenHash, Now: ni(105),
 	}
-	n, err = r.Queries.HeartbeatRemoteDeploymentStep(ctx, hb)
+	n, err = r.Queries.HeartbeatRemoteDeployment(ctx, hb)
 	assertOne(t, n, err)
 	hb.Now = ni(104)
-	n, err = r.Queries.HeartbeatRemoteDeploymentStep(ctx, hb)
+	n, err = r.Queries.HeartbeatRemoteDeployment(ctx, hb)
 	assertZero(t, n, err)
-	n, err = r.CancelStepDeployment(
+	n, err = r.CancelRemoteDeployment(
 		ctx,
-		db.RequestDeploymentStepCancellationParams{
+		db.RequestRemoteDeploymentCancellationParams{
 			DeploymentID: 1,
 			Now:          ni(106),
 		},
 	)
 	assertOne(t, n, err)
-	n, err = r.Queries.FinishRemoteDeploymentStep(ctx, finishArg(a))
+	n, err = r.Queries.FinishRemoteDeployment(ctx, finishArg(a))
 	assertZero(t, n, err)
 	n, err = r.Queries.ExpireRemoteCancellation(ctx,
 		db.ExpireRemoteCancellationParams{Now: ni(120), StaleBefore: ni(110)})
 	assertOne(t, n, err)
 	a.DeploymentID = 2
-	n, err = r.ClaimRemoteStep(ctx, a)
-	assertZero(t, n, err)
-	row, err := r.Queries.GetDeploymentStepAttempt(
-		ctx,
-		db.GetDeploymentStepAttemptParams{
-			DeploymentID: 1,
-			StepIndex:    0,
-			Attempt:      1,
-		},
-	)
-	if err != nil || row.State != "cancel_uncertain" ||
+	a.ClaimTokenHash[0] = 2
+	n, err = r.ClaimRemoteDeployment(ctx, a)
+	assertOne(t, n, err)
+	row, err := r.Queries.GetRemoteDeploymentClaim(ctx, 1)
+	if err != nil || row.State != "cancel_unconfirmed" ||
 		row.LastHeartbeatAt.Int64 != 105 {
 		t.Fatalf(
 			"state=%s heartbeat=%d error=%v",
@@ -90,7 +82,7 @@ func TestDeploymentStepCancellationAndHeartbeat(t *testing.T) {
 		)
 	}
 	t.Log(
-		"heartbeat=105; backwards heartbeat=0; cancellation=1; late finish=0; cancel_uncertain retains capacity",
+		"heartbeat=105; backwards heartbeat=0; cancellation=1; late finish=0; cancel_unconfirmed frees capacity",
 	)
 }
 

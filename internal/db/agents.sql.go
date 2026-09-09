@@ -33,7 +33,7 @@ const assignEnvironmentAgent = `-- name: AssignEnvironmentAgent :execrows
 INSERT INTO environment_agent_assignments (environment_id, agent_id)
 SELECT ?1, ?2
 WHERE NOT EXISTS (SELECT 1 FROM environment_agent_assignments
- WHERE environment_id = ?1 AND agent_id = ?2)
+ WHERE environment_id = ?1)
 `
 
 type AssignEnvironmentAgentParams struct {
@@ -130,6 +130,17 @@ func (q *Queries) GetAgent(ctx context.Context, id string) (Agent, error) {
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
+	return i, err
+}
+
+const getEnvironmentAgentAssignment = `-- name: GetEnvironmentAgentAssignment :one
+SELECT environment_id, agent_id, created_at FROM environment_agent_assignments WHERE environment_id = ?
+`
+
+func (q *Queries) GetEnvironmentAgentAssignment(ctx context.Context, environmentID int64) (EnvironmentAgentAssignment, error) {
+	row := q.db.QueryRowContext(ctx, getEnvironmentAgentAssignment, environmentID)
+	var i EnvironmentAgentAssignment
+	err := row.Scan(&i.EnvironmentID, &i.AgentID, &i.CreatedAt)
 	return i, err
 }
 

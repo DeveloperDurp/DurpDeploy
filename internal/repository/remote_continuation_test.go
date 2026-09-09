@@ -24,7 +24,8 @@ func TestAgentConcurrentCapacity(t *testing.T) {
 			<-start
 			a := claimArg("a")
 			a.DeploymentID = int64(i + 1)
-			counts[i], errs[i] = r.ClaimRemoteStep(ctx, a)
+			a.ClaimTokenHash[0] = byte(i + 1)
+			counts[i], errs[i] = r.ClaimRemoteDeployment(ctx, a)
 		}()
 	}
 	close(start)
@@ -33,7 +34,7 @@ func TestAgentConcurrentCapacity(t *testing.T) {
 		t.Fatalf("claims=%v errors=%v", counts, errs)
 	}
 	var occupied int
-	err := r.DB.QueryRow(`SELECT COUNT(*) FROM deployment_step_attempts
+	err := r.DB.QueryRow(`SELECT COUNT(*) FROM remote_deployment_claims
 WHERE agent_id = 'a' AND state = 'claimed'`).Scan(&occupied)
 	if err != nil || occupied != 1 {
 		t.Fatalf("occupied=%d error=%v", occupied, err)
@@ -102,7 +103,10 @@ func runProjectMembershipIntegerContract(
 				ProjectID: 1, UserID: u.ID, Role: "deployer",
 			})
 		} else {
-			err = r.Queries.RemoveProjectMember(ctx, db.RemoveProjectMemberParams(arg))
+			err = r.Queries.RemoveProjectMember(
+				ctx,
+				db.RemoveProjectMemberParams(arg),
+			)
 		}
 		if err != nil {
 			t.Fatal(err)

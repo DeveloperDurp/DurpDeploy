@@ -92,7 +92,7 @@ func (q *Queries) CompleteAgentPairing(ctx context.Context, arg CompleteAgentPai
 
 const createAgentPairing = `-- name: CreateAgentPairing :one
 INSERT INTO agent_pairings (agent_id, pairing_code_hash, agent_public_identity, agent_pin, expires_at)
-VALUES (?, ?, ?, ?, ?) RETURNING agent_id, pairing_code_hash, agent_public_identity, agent_pin, server_public_identity, server_pin, encrypted_identity, state, expires_at, paired_at, created_at, updated_at
+VALUES (?, ?, ?, ?, ?) RETURNING agent_id, pairing_code_hash, agent_public_identity, agent_pin, server_public_identity, server_pin, encrypted_identity, state, expires_at, paired_at, created_at, updated_at, server_pull_endpoint
 `
 
 type CreateAgentPairingParams struct {
@@ -125,6 +125,7 @@ func (q *Queries) CreateAgentPairing(ctx context.Context, arg CreateAgentPairing
 		&i.PairedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ServerPullEndpoint,
 	)
 	return i, err
 }
@@ -143,7 +144,7 @@ func (q *Queries) ExpireAgentPairings(ctx context.Context, now int64) (int64, er
 }
 
 const getAgentPairing = `-- name: GetAgentPairing :one
-SELECT agent_id, pairing_code_hash, agent_public_identity, agent_pin, server_public_identity, server_pin, encrypted_identity, state, expires_at, paired_at, created_at, updated_at FROM agent_pairings WHERE agent_id = ?
+SELECT agent_id, pairing_code_hash, agent_public_identity, agent_pin, server_public_identity, server_pin, encrypted_identity, state, expires_at, paired_at, created_at, updated_at, server_pull_endpoint FROM agent_pairings WHERE agent_id = ?
 `
 
 func (q *Queries) GetAgentPairing(ctx context.Context, agentID string) (AgentPairing, error) {
@@ -162,6 +163,7 @@ func (q *Queries) GetAgentPairing(ctx context.Context, agentID string) (AgentPai
 		&i.PairedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ServerPullEndpoint,
 	)
 	return i, err
 }

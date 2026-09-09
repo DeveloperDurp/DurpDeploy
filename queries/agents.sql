@@ -45,7 +45,7 @@ SELECT label FROM agent_labels WHERE agent_id = ? ORDER BY label;
 INSERT INTO environment_agent_assignments (environment_id, agent_id)
 SELECT sqlc.arg(environment_id), sqlc.arg(agent_id)
 WHERE NOT EXISTS (SELECT 1 FROM environment_agent_assignments
- WHERE environment_id = sqlc.arg(environment_id) AND agent_id = sqlc.arg(agent_id));
+ WHERE environment_id = sqlc.arg(environment_id));
 
 -- name: UnassignEnvironmentAgent :execrows
 DELETE FROM environment_agent_assignments WHERE environment_id = ? AND agent_id = ?;
@@ -53,6 +53,9 @@ DELETE FROM environment_agent_assignments WHERE environment_id = ? AND agent_id 
 -- name: ListEnvironmentAgents :many
 SELECT a.* FROM agents a JOIN environment_agent_assignments e ON e.agent_id = a.id
 WHERE e.environment_id = ? ORDER BY a.name, a.id;
+
+-- name: GetEnvironmentAgentAssignment :one
+SELECT * FROM environment_agent_assignments WHERE environment_id = ?;
 
 -- name: ListAgentEnvironments :many
 SELECT e.* FROM environments e JOIN environment_agent_assignments a ON a.environment_id = e.id

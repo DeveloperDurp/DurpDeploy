@@ -64,13 +64,6 @@ func seedRemoteFixture(t *testing.T, r *repository.Repository) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, env := range []int64{1, 1, 2} {
-		if _, err := r.Queries.CreateDeployment(ctx, db.CreateDeploymentParams{
-			ReleaseID: 1, EnvironmentID: env, Status: "pending",
-		}); err != nil {
-			t.Fatal(err)
-		}
-	}
 	for i, id := range []string{"a", "b"} {
 		_, err := r.Queries.CreateAgent(ctx, db.CreateAgentParams{
 			ID: id, Name: id, Endpoint: "https://fixture.invalid",
@@ -104,11 +97,29 @@ func seedRemoteFixture(t *testing.T, r *repository.Repository) {
 			ID: id, Now: ni(100), CertificateFingerprint: ns(pin),
 		})
 		assertOne(t, n, err)
-		n, err = r.Queries.AssignEnvironmentAgent(ctx,
-			db.AssignEnvironmentAgentParams{EnvironmentID: 1, AgentID: id})
-		assertOne(t, n, err)
+		if id == "a" {
+			n, err = r.Queries.AssignEnvironmentAgent(ctx,
+				db.AssignEnvironmentAgentParams{EnvironmentID: 1, AgentID: id})
+			assertOne(t, n, err)
+		}
 		n, err = r.Queries.AddAgentLabel(ctx,
 			db.AddAgentLabelParams{AgentID: id, Label: "linux"})
+		assertOne(t, n, err)
+	}
+	for _, env := range []int64{1, 1, 2} {
+		assignedAgentID := ns("a")
+		if env == 2 {
+			assignedAgentID = sql.NullString{}
+		}
+		if _, err := r.Queries.CreateDeployment(ctx, db.CreateDeploymentParams{
+			ReleaseID: 1, EnvironmentID: env, Status: "pending",
+			AssignedAgentID: assignedAgentID,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, deploymentID := range []int64{1, 2} {
+		n, err := r.Queries.CreateRemoteDeploymentClaim(ctx, deploymentID)
 		assertOne(t, n, err)
 	}
 	for _, id := range []int64{1, 2, 3} {
@@ -136,25 +147,24 @@ func seedRemoteFixture(t *testing.T, r *repository.Repository) {
 		}
 	}
 	t.Log(
-		"baseline rows: agents=2 paired=2 assignments=2 steps=6 attempts=3; cursor=0",
+		"baseline rows: agents=2 paired=2 assignments=1 claims=2 steps=6 attempts=3; cursor=0",
 	)
 }
 
-func claimArg(agent string) db.ClaimRemoteDeploymentStepParams {
-	return db.ClaimRemoteDeploymentStepParams{
-		DeploymentID: 1, StepIndex: 0, Attempt: 1, AgentID: ns(agent),
+func claimArg(agent string) db.ClaimRemoteDeploymentParams {
+	return db.ClaimRemoteDeploymentParams{
+		DeploymentID: 1, AgentID: agent,
 		ClaimTokenHash: bytes.Repeat([]byte(agent), 32),
-		Now:            ni(100), FreshAfter: ni(90), ClaimExpiresAt: ni(110),
+		Ciphertext:     ns("ciphertext"), Now: 100, ClaimExpiresAt: 110,
 	}
 }
 
 func startArg(
-	arg db.ClaimRemoteDeploymentStepParams,
-) db.StartRemoteDeploymentStepParams {
-	return db.StartRemoteDeploymentStepParams{
-		DeploymentID: arg.DeploymentID, StepIndex: arg.StepIndex,
-		Attempt: arg.Attempt, AgentID: arg.AgentID,
-		ClaimTokenHash: arg.ClaimTokenHash, Now: arg.Now,
+	arg db.ClaimRemoteDeploymentParams,
+) db.StartRemoteDeploymentParams {
+	return db.StartRemoteDeploymentParams{
+		DeploymentID: arg.DeploymentID, AgentID: arg.AgentID,
+		ClaimTokenHash: arg.ClaimTokenHash, Now: ni(arg.Now),
 	}
 }
 

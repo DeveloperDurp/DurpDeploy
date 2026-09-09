@@ -2,9 +2,11 @@ package migrate
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"io/fs"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/pressly/goose/v3"
@@ -13,6 +15,10 @@ import (
 	"durpdeploy/internal/mssqldriver"
 	_ "durpdeploy/internal/pgdriver"
 	"durpdeploy/migrations"
+)
+
+var ErrAmbiguousAgentAssignments = errors.New(
+	"multiple agents are assigned to one environment",
 )
 
 // Run opens the database and applies all pending migrations. A sqlserver://
@@ -119,10 +125,62 @@ func runMigrations(
 		db.Close()
 		return nil, fmt.Errorf("set Goose dialect: %w", err)
 	}
+	version, err := goose.GetDBVersion(db)
+	if err != nil {
+		db.Close()
+		return nil, fmt.Errorf("get migration version: %w", err)
+	}
+	if assignmentSchemaExists(gooseDialect, version) {
+		if err := refuseAmbiguousAgentAssignments(db); err != nil {
+			db.Close()
+			return nil, err
+		}
+	}
 	if err := goose.Up(db, "."); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("run migrations: %w", err)
 	}
 
 	return db, nil
+}
+
+func assignmentSchemaExists(dialect string, version int64) bool {
+	if dialect == "mssql" {
+		return version >= 10 && version < 13
+	}
+	return version >= 25 && version < 28
+}
+
+func refuseAmbiguousAgentAssignments(db *sql.DB) error {
+	rows, err := db.Query(`SELECT environment_id
+		FROM environment_agent_assignments
+		GROUP BY environment_id HAVING COUNT(*) > 1
+		ORDER BY environment_id`)
+	if err != nil {
+		return fmt.Errorf("inspect environment agent assignments: %w", err)
+	}
+	defer rows.Close()
+
+	var environmentIDs []string
+	for rows.Next() {
+		var environmentID int64
+		if err := rows.Scan(&environmentID); err != nil {
+			return fmt.Errorf("read ambiguous environment assignment: %w", err)
+		}
+		environmentIDs = append(
+			environmentIDs,
+			strconv.FormatInt(environmentID, 10),
+		)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("list ambiguous environment assignments: %w", err)
+	}
+	if len(environmentIDs) > 0 {
+		return fmt.Errorf(
+			"%w: environment IDs %s",
+			ErrAmbiguousAgentAssignments,
+			strings.Join(environmentIDs, ","),
+		)
+	}
+	return nil
 }
