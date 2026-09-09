@@ -7,17 +7,22 @@ import (
 	"strconv"
 )
 
-templ EnvironmentsList(envs []db.Environment, currentPath string) {
+type EnvironmentAgentRow struct {
+	Environment db.Environment
+	Agent *db.Agent
+}
+
+templ EnvironmentsList(rows []EnvironmentAgentRow, agents []db.Agent, currentPath string) {
 	@layouts.Base("Environments", currentPath) {
 		@components.Breadcrumbs([]components.Crumb{
 			{Label: "Home", Href: "/"},
 			{Label: "Environments"},
 		})
-		@EnvironmentsListContent(envs)
+		@EnvironmentsListContent(rows, agents)
 	}
 }
 
-templ EnvironmentsListContent(envs []db.Environment) {
+templ EnvironmentsListContent(rows []EnvironmentAgentRow, agents []db.Agent) {
 	<div id="environments-content" class="space-y-4">
 		<div class="flex flex-wrap justify-between items-center gap-2">
 			<h1 class="text-3xl font-bold">Environments</h1>
@@ -25,32 +30,35 @@ templ EnvironmentsListContent(envs []db.Environment) {
 				<a href="/environments/new" class="btn btn-primary">New Environment</a>
 			}
 		</div>
-		@EnvironmentsListFragment(envs)
+		@EnvironmentsListFragment(rows, agents)
 	</div>
 }
 
-templ EnvironmentsListFragment(envs []db.Environment) {
+templ EnvironmentsListFragment(rows []EnvironmentAgentRow, agents []db.Agent) {
 	<div id="environments-list">
-		if len(envs) == 0 {
+		if len(rows) == 0 {
 			<div class="card bg-base-200 p-8 text-center">
-				<p class="text-gray-400 mb-4">No environments yet. Create your first environment to define deployment targets.</p>
 				if CanWrite(ctx) {
+					<p class="text-gray-400 mb-4">No environments yet. Create your first environment to define deployment targets.</p>
 					<a href="/environments/new" class="btn btn-primary">New Environment</a>
+				} else {
+					<p class="text-gray-400">No environments are available.</p>
 				}
 			</div>
 		} else {
 			<table class="table table-zebra table-fixed w-full">
 				<thead>
 					<tr>
-						<th class="w-1/3 md:w-1/5">Name</th>
-						<th class="hidden md:table-cell w-2/5">Description</th>
-						<th class="w-1/3 md:w-1/5">Tags</th>
-						<th class="w-1/3 md:w-1/5">Actions</th>
+						<th class="w-1/5">Name</th>
+						<th class="hidden lg:table-cell w-1/5">Description</th>
+						<th class="hidden md:table-cell w-1/5">Tags</th>
+						<th class="w-1/5">Agent</th>
+						<th class="w-1/5">Actions</th>
 					</tr>
 				</thead>
 				<tbody>
-					for _, env := range envs {
-						@EnvironmentRow(env)
+					for _, row := range rows {
+						@EnvironmentRow(row, agents)
 					}
 				</tbody>
 			</table>
@@ -58,16 +66,23 @@ templ EnvironmentsListFragment(envs []db.Environment) {
 	</div>
 }
 
-templ EnvironmentRow(env db.Environment) {
+templ EnvironmentRow(row EnvironmentAgentRow, agents []db.Agent) {
 	<tr>
-		<td class="truncate">{ env.Name }</td>
-		<td class="hidden md:table-cell truncate">{ env.Description.String }</td>
-		<td class="truncate">{ env.Tags.String }</td>
+		<td class="truncate">{ row.Environment.Name }</td>
+		<td class="hidden lg:table-cell truncate">{ row.Environment.Description.String }</td>
+		<td class="hidden md:table-cell truncate">{ row.Environment.Tags.String }</td>
+		<td class="truncate">
+			if row.Agent != nil {
+				<a class="link" href={ templ.SafeURL("/admin/agents/" + row.Agent.ID) }>{ row.Agent.Name }</a>
+			} else {
+				<span class="opacity-60">Local</span>
+			}
+		</td>
 		<td class="flex flex-wrap gap-2">
 			if CanWrite(ctx) {
-				<a href={ templ.SafeURL("/environments/" + strconv.FormatInt(env.ID, 10) + "/edit") } class="btn btn-sm btn-ghost">Edit</a>
+				<a href={ templ.SafeURL("/environments/" + strconv.FormatInt(row.Environment.ID, 10) + "/edit") } class="btn btn-sm btn-ghost">Edit</a>
 				<button
-					hx-delete={ "/environments/" + strconv.FormatInt(env.ID, 10) }
+					hx-delete={ "/environments/" + strconv.FormatInt(row.Environment.ID, 10) }
 					hx-target="#form-container"
 					hx-swap="innerHTML"
 					hx-confirm="Delete this environment?"
@@ -77,6 +92,23 @@ templ EnvironmentRow(env db.Environment) {
 				>
 					Delete
 				</button>
+				if CanManageAgents(ctx) {
+					if row.Agent != nil {
+						<button class="btn btn-error btn-sm" hx-delete={ "/admin/environments/" + strconv.FormatInt(row.Environment.ID, 10) + "/agent" } hx-vals={ `{"agent_id":"` + row.Agent.ID + `"}` } hx-confirm={ "Unassign " + row.Agent.Name + " from " + row.Environment.Name + "?" }>Unassign</button>
+					} else {
+						<form method="post" class="flex gap-1" hx-put={ "/admin/environments/" + strconv.FormatInt(row.Environment.ID, 10) + "/agent" }>
+							<select class="select select-bordered select-sm" name="agent_id" aria-label={ "Agent for " + row.Environment.Name } required>
+								<option value="">Agent</option>
+								for _, agent := range agents {
+									if agent.Status == "active" {
+										<option value={ agent.ID }>{ agent.Name }</option>
+									}
+								}
+							</select>
+							<button class="btn btn-primary btn-sm" type="submit">Assign</button>
+						</form>
+					}
+				}
 			}
 		</td>
 	</tr>

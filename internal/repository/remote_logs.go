@@ -20,38 +20,48 @@ func (r *Repository) AppendRemoteDeploymentLogs(
 ) ([]db.DeploymentLog, error) {
 	inserted := make([]db.DeploymentLog, 0, len(events))
 	err := r.WithTx(ctx, func(q *db.Queries) error {
-		now, err := q.CurrentUnixTime(ctx)
-		if err != nil {
-			return err
-		}
-		claim, deployment, err := lockRemoteLifecycle(
-			ctx, q, identity, true,
-		)
-		if err != nil {
-			return err
-		}
-		if deployment.Status != "running" ||
-			(claim.State != "started" && claim.State != "cancel_requested") {
-			return ErrRemoteLifecycleConflict
-		}
-		for _, event := range events {
-			if event.Sequence < 0 {
-				return ErrInvalidRemoteLog
-			}
-			log, created, err := appendRemoteDeploymentLog(
-				ctx, q, identity.DeploymentID, now, event,
-			)
-			if err != nil {
-				return err
-			}
-			if created {
-				inserted = append(inserted, log)
-			}
-		}
-		return nil
+		var err error
+		inserted, err = appendRemoteDeploymentLogs(ctx, q, identity, events)
+		return err
 	})
 	if err != nil {
 		return nil, err
+	}
+	return inserted, nil
+}
+
+func appendRemoteDeploymentLogs(
+	ctx context.Context,
+	q *db.Queries,
+	identity RemoteLifecycleClaim,
+	events []RemoteLogEvent,
+) ([]db.DeploymentLog, error) {
+	claim, deployment, err := lockRemoteLifecycle(ctx, q, identity, true)
+	if err != nil {
+		return nil, err
+	}
+	now, err := q.CurrentUnixTime(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if deployment.Status != "running" ||
+		(claim.State != "started" && claim.State != "cancel_requested") {
+		return nil, ErrRemoteLifecycleConflict
+	}
+	inserted := make([]db.DeploymentLog, 0, len(events))
+	for _, event := range events {
+		if event.Sequence < 0 {
+			return nil, ErrInvalidRemoteLog
+		}
+		log, created, err := appendRemoteDeploymentLog(
+			ctx, q, identity.DeploymentID, now, event,
+		)
+		if err != nil {
+			return nil, err
+		}
+		if created {
+			inserted = append(inserted, log)
+		}
 	}
 	return inserted, nil
 }

@@ -1,0 +1,230 @@
+package pages
+
+import (
+	"durpdeploy/internal/db"
+	"durpdeploy/views/layouts"
+	"fmt"
+	"time"
+)
+
+func agentHealth(agent db.Agent) (string, string) {
+	if agent.Status == "revoked" {
+		return "revoked", "badge-error"
+	}
+	if !agent.LastHeartbeatAt.Valid {
+		return "not reported", "badge-ghost"
+	}
+	age := time.Since(time.Unix(agent.LastHeartbeatAt.Int64, 0))
+	if age < 2*time.Minute {
+		return "healthy", "badge-success"
+	}
+	if age < 10*time.Minute {
+		return "stale", "badge-warning"
+	}
+	return "offline", "badge-error"
+}
+
+func environmentAssigned(env db.Environment, assigned []db.Environment) bool {
+	for _, item := range assigned {
+		if item.ID == env.ID {
+			return true
+		}
+	}
+	return false
+}
+
+templ AgentsPage(agents []db.Agent, formError string, currentPath string) {
+	if !CanWrite(ctx) {
+		@ViewerForbiddenMessage(
+			"Agents",
+			"manage",
+			"remote agents",
+			"/",
+			currentPath,
+		)
+	} else {
+		@layouts.Base("Agents", currentPath) {
+		<div class="space-y-6">
+			<div>
+				<h1 class="text-3xl font-bold">Agents</h1>
+				<p class="mt-1 opacity-70">Pair and monitor remote deployment agents.</p>
+			</div>
+			<div class="card bg-base-200 shadow">
+				<div class="card-body">
+					<h2 class="card-title">Pair agent</h2>
+					if formError != "" {
+						<div role="alert" class="alert alert-error">
+							<span>{ formError }. Enter the pairing values again.</span>
+						</div>
+					}
+					<form method="post" action="/admin/agents/pair" class="grid gap-4 lg:grid-cols-3">
+						<label class="form-control">
+							<span class="label"><span class="label-text">HTTPS address</span></span>
+							<input class="input input-bordered" type="url" name="address" placeholder="https://agent.example:9443" required/>
+						</label>
+						<label class="form-control">
+							<span class="label"><span class="label-text">Pairing code</span></span>
+							<input class="input input-bordered font-mono" type="password" name="code" autocomplete="off" required/>
+						</label>
+						<label class="form-control">
+							<span class="label"><span class="label-text">Certificate fingerprint</span></span>
+							<input class="input input-bordered font-mono" name="fingerprint" autocomplete="off" required/>
+						</label>
+						<div class="lg:col-span-3">
+							<button type="submit" class="btn btn-primary">Pair agent</button>
+						</div>
+					</form>
+				</div>
+			</div>
+			if len(agents) == 0 {
+				<div class="card bg-base-200 p-8 text-center">
+					<p class="opacity-70">No agents paired yet.</p>
+				</div>
+			} else {
+				<div class="overflow-x-auto">
+					<table class="table table-zebra table-fixed w-full">
+						<thead>
+							<tr>
+								<th class="w-1/4">Agent</th>
+								<th class="w-1/5">Status</th>
+								<th class="hidden lg:table-cell w-2/5">Transport</th>
+								<th class="w-1/5">Actions</th>
+							</tr>
+						</thead>
+						<tbody>
+							for _, agent := range agents {
+								<tr>
+									<td class="truncate">
+										<a class="link font-medium" href={ templ.SafeURL("/admin/agents/" + agent.ID) }>{ agent.Name }</a>
+										<div class="truncate font-mono text-xs opacity-60">{ agent.ID }</div>
+									</td>
+									<td>
+										{{ label, class := agentHealth(agent) }}
+										<span class={ "badge " + class }>{ label }</span>
+										<div class="mt-1 text-xs opacity-60">{ agent.Status }</div>
+									</td>
+									<td class="hidden lg:table-cell truncate font-mono text-sm">{ agent.Endpoint }</td>
+									<td>
+										<div class="flex flex-col items-start gap-1 sm:flex-row">
+											<a class="btn btn-ghost btn-xs" href={ templ.SafeURL("/admin/agents/" + agent.ID) }>Details</a>
+											if agent.Status != "revoked" {
+												<button
+													class="btn btn-error btn-xs"
+													hx-post={ "/admin/agents/" + agent.ID + "/revoke" }
+													hx-confirm={ "Revoke agent " + agent.Name + " (" + agent.ID + ")? Active remote work will be terminated." }
+												>
+													Revoke
+												</button>
+											}
+										</div>
+									</td>
+								</tr>
+							}
+						</tbody>
+					</table>
+				</div>
+			}
+		</div>
+		}
+	}
+}
+
+templ AgentDetailPage(agent db.Agent, assigned []db.Environment, environments []db.Environment, currentPath string) {
+	if !CanWrite(ctx) {
+		@ViewerForbiddenMessage(
+			"Agent "+agent.Name,
+			"manage",
+			"remote agents",
+			"/",
+			currentPath,
+		)
+	} else {
+		@layouts.Base("Agent "+agent.Name, currentPath) {
+		<div class="space-y-6">
+			<div class="flex flex-wrap items-start justify-between gap-3">
+				<div>
+					<a class="link text-sm" href="/admin/agents">Back to agents</a>
+					<h1 class="mt-2 text-3xl font-bold">{ agent.Name }</h1>
+					<p class="font-mono text-sm opacity-60">{ agent.ID }</p>
+				</div>
+				if agent.Status != "revoked" {
+					<button
+						class="btn btn-error btn-sm"
+						hx-post={ "/admin/agents/" + agent.ID + "/revoke" }
+						hx-confirm={ "Revoke agent " + agent.Name + " (" + agent.ID + ")? Active remote work will be terminated." }
+					>
+						Revoke agent
+					</button>
+				}
+			</div>
+			<div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+				<div class="stat rounded-box bg-base-200">
+					<div class="stat-title">Status</div>
+					<div class="stat-value text-lg">{ agent.Status }</div>
+				</div>
+				<div class="stat rounded-box bg-base-200">
+					<div class="stat-title">Health</div>
+					<div class="stat-value text-lg">{{ label, _ := agentHealth(agent) }}{ label }</div>
+				</div>
+				<div class="stat rounded-box bg-base-200">
+					<div class="stat-title">Version</div>
+					<div class="stat-value text-lg">{ agent.AgentVersion.String }</div>
+				</div>
+				<div class="stat rounded-box bg-base-200">
+					<div class="stat-title">Last heartbeat</div>
+					<div class="stat-value text-base">
+						if agent.LastHeartbeatAt.Valid {
+							{ formatUnixTime(agent.LastHeartbeatAt.Int64) }
+						} else {
+							never
+						}
+					</div>
+				</div>
+			</div>
+			<div class="card bg-base-200 shadow">
+				<div class="card-body">
+					<h2 class="card-title">Transport</h2>
+					<dl class="grid gap-3 md:grid-cols-[12rem_1fr]">
+						<dt class="font-medium">Endpoint</dt><dd class="break-all font-mono">{ agent.Endpoint }</dd>
+						<dt class="font-medium">Certificate fingerprint</dt><dd class="break-all font-mono">{ agent.CertificateFingerprint.String }</dd>
+					</dl>
+				</div>
+			</div>
+			if agent.Status == "pending" {
+				<div class="card bg-base-200 shadow">
+					<div class="card-body">
+						<h2 class="card-title">Retry pairing</h2>
+						<form method="post" action={ templ.SafeURL("/admin/agents/" + agent.ID + "/retry-pair") } class="grid gap-4 lg:grid-cols-3">
+							<input class="input input-bordered" type="url" name="address" aria-label="HTTPS address" placeholder="https://agent.example:9443" required/>
+							<input class="input input-bordered font-mono" type="password" name="code" aria-label="Pairing code" autocomplete="off" required/>
+							<input class="input input-bordered font-mono" name="fingerprint" aria-label="Certificate fingerprint" autocomplete="off" required/>
+							<button class="btn btn-primary lg:col-span-3 lg:w-fit" type="submit">Retry pairing</button>
+						</form>
+					</div>
+				</div>
+			}
+			<div class="card bg-base-200 shadow">
+				<div class="card-body">
+					<h2 class="card-title">Environment assignments</h2>
+					if agent.Status == "active" {
+						<div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+							for _, env := range environments {
+								<div class="flex items-center justify-between gap-2 rounded-box bg-base-100 p-3">
+									<span class="truncate">{ env.Name }</span>
+									if environmentAssigned(env, assigned) {
+										<button class="btn btn-error btn-xs" hx-delete={ fmt.Sprintf("/admin/environments/%d/agent", env.ID) } hx-vals={ fmt.Sprintf(`{"agent_id":%q}`, agent.ID) } hx-confirm={ "Unassign " + env.Name + " from " + agent.Name + "?" }>Unassign</button>
+									} else {
+										<button class="btn btn-primary btn-xs" hx-put={ fmt.Sprintf("/admin/environments/%d/agent", env.ID) } hx-vals={ fmt.Sprintf(`{"agent_id":%q}`, agent.ID) }>Assign</button>
+									}
+								</div>
+							}
+						</div>
+					} else {
+						<p class="opacity-70">Only active paired agents can receive environment assignments.</p>
+					}
+				</div>
+			</div>
+		</div>
+		}
+	}
+}

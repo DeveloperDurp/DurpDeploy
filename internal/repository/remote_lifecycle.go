@@ -26,71 +26,30 @@ func (r *Repository) StartRemoteDeployment(
 	identity RemoteLifecycleClaim,
 ) error {
 	return r.WithTx(ctx, func(q *db.Queries) error {
-		now, err := q.CurrentUnixTime(ctx)
-		if err != nil {
-			return err
-		}
-		claim, deployment, err := lockRemoteLifecycle(ctx, q, identity, true)
-		if err != nil {
-			return err
-		}
-		switch claim.State {
-		case "claimed":
-			if deployment.Status != "pending" {
-				return ErrRemoteLifecycleConflict
-			}
-			changed, err := q.StartRemoteDeployment(ctx,
-				db.StartRemoteDeploymentParams{
-					Now:            sql.NullInt64{Int64: now, Valid: true},
-					DeploymentID:   identity.DeploymentID,
-					AgentID:        identity.AgentID,
-					ClaimTokenHash: identity.ClaimTokenHash,
-				})
-			if err != nil || changed != 1 {
-				return transitionError(err)
-			}
-			changed, err = q.StartRemoteDeploymentStatus(ctx,
-				db.StartRemoteDeploymentStatusParams{
-					Now:          sql.NullInt64{Int64: now, Valid: true},
-					DeploymentID: identity.DeploymentID,
-					AgentID: sql.NullString{
-						String: identity.AgentID,
-						Valid:  true,
-					},
-				})
-			if err != nil || changed != 1 {
-				return transitionError(err)
-			}
-			return nil
-		case "started", "cancel_requested":
-			if deployment.Status == "running" && claim.StartedAt.Valid {
-				return nil
-			}
-		}
-		return ErrRemoteLifecycleConflict
+		return startRemoteDeployment(ctx, q, identity)
 	})
 }
 
-func (r *Repository) HeartbeatRemoteDeployment(
+func startRemoteDeployment(
 	ctx context.Context,
+	q *db.Queries,
 	identity RemoteLifecycleClaim,
-) (RemoteHeartbeatResult, error) {
-	result := RemoteHeartbeatResult{}
-	err := r.WithTx(ctx, func(q *db.Queries) error {
-		now, err := q.CurrentUnixTime(ctx)
-		if err != nil {
-			return err
-		}
-		claim, deployment, err := lockRemoteLifecycle(ctx, q, identity, true)
-		if err != nil {
-			return err
-		}
-		if deployment.Status != "running" ||
-			(claim.State != "started" && claim.State != "cancel_requested") {
+) error {
+	claim, deployment, err := lockRemoteLifecycle(ctx, q, identity, true)
+	if err != nil {
+		return err
+	}
+	now, err := q.CurrentUnixTime(ctx)
+	if err != nil {
+		return err
+	}
+	switch claim.State {
+	case "claimed":
+		if deployment.Status != "pending" {
 			return ErrRemoteLifecycleConflict
 		}
-		changed, err := q.HeartbeatRemoteDeployment(ctx,
-			db.HeartbeatRemoteDeploymentParams{
+		changed, err := q.StartRemoteDeployment(ctx,
+			db.StartRemoteDeploymentParams{
 				Now:            sql.NullInt64{Int64: now, Valid: true},
 				DeploymentID:   identity.DeploymentID,
 				AgentID:        identity.AgentID,
@@ -99,10 +58,70 @@ func (r *Repository) HeartbeatRemoteDeployment(
 		if err != nil || changed != 1 {
 			return transitionError(err)
 		}
-		result.CancelRequested = claim.State == "cancel_requested"
+		changed, err = q.StartRemoteDeploymentStatus(ctx,
+			db.StartRemoteDeploymentStatusParams{
+				Now:          sql.NullInt64{Int64: now, Valid: true},
+				DeploymentID: identity.DeploymentID,
+				AgentID: sql.NullString{
+					String: identity.AgentID,
+					Valid:  true,
+				},
+			})
+		if err != nil || changed != 1 {
+			return transitionError(err)
+		}
 		return nil
+	case "started", "cancel_requested":
+		if deployment.Status == "running" && claim.StartedAt.Valid {
+			return nil
+		}
+	}
+	return ErrRemoteLifecycleConflict
+}
+
+func (r *Repository) HeartbeatRemoteDeployment(
+	ctx context.Context,
+	identity RemoteLifecycleClaim,
+) (RemoteHeartbeatResult, error) {
+	result := RemoteHeartbeatResult{}
+	err := r.WithTx(ctx, func(q *db.Queries) error {
+		var err error
+		result, err = heartbeatRemoteDeployment(ctx, q, identity)
+		return err
 	})
 	return result, err
+}
+
+func heartbeatRemoteDeployment(
+	ctx context.Context,
+	q *db.Queries,
+	identity RemoteLifecycleClaim,
+) (RemoteHeartbeatResult, error) {
+	claim, deployment, err := lockRemoteLifecycle(ctx, q, identity, true)
+	if err != nil {
+		return RemoteHeartbeatResult{}, err
+	}
+	now, err := q.CurrentUnixTime(ctx)
+	if err != nil {
+		return RemoteHeartbeatResult{}, err
+	}
+	if deployment.Status != "running" ||
+		(claim.State != "started" && claim.State != "cancel_requested") {
+		return RemoteHeartbeatResult{}, ErrRemoteLifecycleConflict
+	}
+	changed, err := q.HeartbeatRemoteDeployment(ctx,
+		db.HeartbeatRemoteDeploymentParams{
+			Now:            sql.NullInt64{Int64: now, Valid: true},
+			DeploymentID:   identity.DeploymentID,
+			AgentID:        identity.AgentID,
+			ClaimTokenHash: identity.ClaimTokenHash,
+		})
+	if err != nil || changed != 1 {
+		return RemoteHeartbeatResult{}, transitionError(err)
+	}
+	return RemoteHeartbeatResult{
+		CancelRequested: claim.State == "cancel_requested",
+	}, nil
 }
 
 func transitionError(err error) error {

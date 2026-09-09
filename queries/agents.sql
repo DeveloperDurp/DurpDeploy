@@ -71,3 +71,36 @@ WHERE environment_agent_assignments.environment_id = sqlc.arg(environment_id)
 -- name: ListAgentEnvironments :many
 SELECT e.* FROM environments e JOIN environment_agent_assignments a ON a.environment_id = e.id
 WHERE a.agent_id = ? ORDER BY e.name, e.id;
+
+-- name: ListAgentAssignments :many
+SELECT * FROM environment_agent_assignments
+WHERE agent_id = ? ORDER BY environment_id;
+
+-- name: ListRevocableAgentClaims :many
+SELECT * FROM remote_deployment_claims
+WHERE agent_id = ? AND state IN ('waiting', 'claimed', 'started', 'cancel_requested')
+ORDER BY deployment_id;
+
+-- name: RevokeUnstartedRemoteClaim :execrows
+UPDATE remote_deployment_claims SET state = 'failed',
+    reason = 'remote_agent_revoked_before_start',
+    finished_at = sqlc.arg(now), updated_at = sqlc.arg(now)
+WHERE deployment_id = sqlc.arg(deployment_id)
+  AND agent_id = sqlc.arg(agent_id)
+  AND state IN ('waiting', 'claimed') AND started_at IS NULL;
+
+-- name: RevokeStartedRemoteClaim :execrows
+UPDATE remote_deployment_claims SET state = 'lost',
+    reason = 'remote_agent_revoked_after_start', cancel_requested_at = NULL,
+    finished_at = sqlc.arg(now), updated_at = sqlc.arg(now)
+WHERE deployment_id = sqlc.arg(deployment_id)
+  AND agent_id = sqlc.arg(agent_id)
+  AND state IN ('started', 'cancel_requested') AND started_at IS NOT NULL;
+
+-- name: TerminateRevokedRemoteDeployment :execrows
+UPDATE deployments SET
+    status = 'failed',
+    finished_at = sqlc.arg(now)
+WHERE id = sqlc.arg(deployment_id)
+  AND assigned_agent_id = sqlc.arg(agent_id)
+  AND status IN ('pending', 'pending_approval', 'running');

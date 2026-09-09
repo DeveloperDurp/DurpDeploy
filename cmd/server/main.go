@@ -23,6 +23,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/robfig/cron/v3"
 
+	"durpdeploy/internal/agentserver"
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/dispatch"
@@ -257,7 +258,18 @@ func runServer() {
 	}
 	defer browserListener.Close()
 	var agentRuntime *agentListener
+	var pairingService agentserver.Pairer
 	if agentsEnabled {
+		pairingService, err = agentserver.NewPairingService(
+			agentserver.PairingConfig{
+				Repository: repo, Identity: agentConfig.identity,
+				PullEndpoint: agentConfig.pullEndpoint,
+				Secrets:      box, Now: time.Now,
+			},
+		)
+		if err != nil {
+			log.Fatalf("agent pairing service: %v", err)
+		}
 		dispatcher := dispatch.New(repo)
 		agentRuntime, err = startAgentListener(ctx, agentConfig,
 			agentListenerDependencies{
@@ -278,7 +290,14 @@ func runServer() {
 	maintenance.StartLitestreamCheck(ctx, bus)
 	sched.Start(ctx)
 	defer sched.Stop()
-	r := server.NewRouter(repo, rnr, parser, authHandler, oidcServices.enabled)
+	r := server.NewRouterWithAgentManagement(
+		repo,
+		rnr,
+		parser,
+		authHandler,
+		pairingService,
+		oidcServices.enabled,
+	)
 
 	// Recover deployments that were created but never picked up by a
 	// runner goroutine (process restarted, container OOM, manual kill,

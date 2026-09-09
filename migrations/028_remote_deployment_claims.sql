@@ -42,6 +42,9 @@ CREATE TABLE remote_deployment_claims (
         OR (state IN ('succeeded', 'failed', 'lost')
             AND claim_token_hash IS NOT NULL AND started_at IS NOT NULL
             AND finished_at IS NOT NULL AND cancel_requested_at IS NULL)
+        OR (state = 'failed' AND started_at IS NULL
+            AND finished_at IS NOT NULL AND cancel_requested_at IS NULL
+            AND reason = 'remote_agent_revoked_before_start')
         OR (state = 'cancelled' AND finished_at IS NOT NULL
             AND cancel_requested_at IS NOT NULL)
         OR (state = 'cancel_unconfirmed' AND claim_token_hash IS NOT NULL

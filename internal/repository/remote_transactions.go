@@ -14,17 +14,26 @@ func (r *Repository) ClaimRemoteDeployment(
 ) (int64, error) {
 	var changed int64
 	err := r.WithTx(ctx, func(q *db.Queries) error {
-		locked, err := q.LockClaimAgent(ctx, arg.AgentID)
-		if err != nil || locked == 0 {
-			return err
-		}
-		changed, err = q.ClaimRemoteDeployment(ctx, arg)
+		var err error
+		changed, err = claimRemoteDeployment(ctx, q, arg)
 		return err
 	})
 	if err != nil {
 		return 0, err
 	}
 	return changed, nil
+}
+
+func claimRemoteDeployment(
+	ctx context.Context,
+	q *db.Queries,
+	arg db.ClaimRemoteDeploymentParams,
+) (int64, error) {
+	locked, err := q.LockClaimAgent(ctx, arg.AgentID)
+	if err != nil || locked == 0 {
+		return 0, err
+	}
+	return q.ClaimRemoteDeployment(ctx, arg)
 }
 
 func (r *Repository) CommitAgentPairing(

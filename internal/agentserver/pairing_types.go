@@ -1,6 +1,7 @@
 package agentserver
 
 import (
+	"context"
 	"errors"
 	"net/url"
 
@@ -61,4 +62,8 @@ func (input PairingInput) Address() string { return input.address }
 type PairingResult struct {
 	AgentID string `json:"agent_id"`
 	State   string `json:"state"`
+}
+
+type Pairer interface {
+	Pair(context.Context, PairingInput) (PairingResult, error)
 }

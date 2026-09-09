@@ -117,43 +117,11 @@ func revokeRaceAgent(
 	repo *Repository,
 	begun chan<- struct{},
 ) error {
-	tx, err := repo.DB.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
 	if begun != nil {
 		close(begun)
 	}
-	q := repo.Queries.WithTx(tx)
-	locked, err := q.LockClaimAgent(ctx, "race-agent")
-	if err != nil {
-		return err
-	}
-	if locked != 1 {
-		return sql.ErrNoRows
-	}
-	if _, err := q.SetAgentStatus(ctx, db.SetAgentStatusParams{
-		ID: "race-agent", Status: "revoked",
-	}); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM
-environment_agent_assignments WHERE agent_id = ?`, "race-agent"); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `UPDATE remote_deployment_claims
-SET state='cancelled', reason='agent_revoked', finished_at=unixepoch(),
-cancel_requested_at=unixepoch(), updated_at=unixepoch()
-WHERE agent_id=? AND state='waiting'`, "race-agent"); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `UPDATE deployments SET status='failed',
-finished_at=unixepoch() WHERE assigned_agent_id=?
-AND status IN ('pending','running')`, "race-agent"); err != nil {
-		return err
-	}
-	return tx.Commit()
+	_, err := repo.RevokeAgent(ctx, "race-agent")
+	return err
 }
 
 func assertDeploymentCreationRaceRows(

@@ -173,6 +173,34 @@ func (q *Queries) HeartbeatAgent(ctx context.Context, arg HeartbeatAgentParams) 
 	return result.RowsAffected()
 }
 
+const listAgentAssignments = `-- name: ListAgentAssignments :many
+SELECT environment_id, agent_id, created_at FROM environment_agent_assignments
+WHERE agent_id = ? ORDER BY environment_id
+`
+
+func (q *Queries) ListAgentAssignments(ctx context.Context, agentID string) ([]EnvironmentAgentAssignment, error) {
+	rows, err := q.db.QueryContext(ctx, listAgentAssignments, agentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []EnvironmentAgentAssignment
+	for rows.Next() {
+		var i EnvironmentAgentAssignment
+		if err := rows.Scan(&i.EnvironmentID, &i.AgentID, &i.CreatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAgentEnvironments = `-- name: ListAgentEnvironments :many
 SELECT e.id, e.name, e.description, e.tags, e.created_at FROM environments e JOIN environment_agent_assignments a ON a.environment_id = e.id
 WHERE a.agent_id = ? ORDER BY e.name, e.id
@@ -315,6 +343,49 @@ func (q *Queries) ListEnvironmentAgents(ctx context.Context, environmentID int64
 	return items, nil
 }
 
+const listRevocableAgentClaims = `-- name: ListRevocableAgentClaims :many
+SELECT deployment_id, agent_id, state, reason, claim_token_hash, ciphertext, claim_expires_at, last_heartbeat_at, started_at, finished_at, cancel_requested_at, created_at, updated_at FROM remote_deployment_claims
+WHERE agent_id = ? AND state IN ('waiting', 'claimed', 'started', 'cancel_requested')
+ORDER BY deployment_id
+`
+
+func (q *Queries) ListRevocableAgentClaims(ctx context.Context, agentID string) ([]RemoteDeploymentClaim, error) {
+	rows, err := q.db.QueryContext(ctx, listRevocableAgentClaims, agentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RemoteDeploymentClaim
+	for rows.Next() {
+		var i RemoteDeploymentClaim
+		if err := rows.Scan(
+			&i.DeploymentID,
+			&i.AgentID,
+			&i.State,
+			&i.Reason,
+			&i.ClaimTokenHash,
+			&i.Ciphertext,
+			&i.ClaimExpiresAt,
+			&i.LastHeartbeatAt,
+			&i.StartedAt,
+			&i.FinishedAt,
+			&i.CancelRequestedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockEnvironmentAgentAssignment = `-- name: LockEnvironmentAgentAssignment :execrows
 UPDATE environment_agent_assignments SET created_at = created_at
 WHERE environment_agent_assignments.environment_id = ?1
@@ -334,6 +405,52 @@ type LockEnvironmentAgentAssignmentParams struct {
 
 func (q *Queries) LockEnvironmentAgentAssignment(ctx context.Context, arg LockEnvironmentAgentAssignmentParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, lockEnvironmentAgentAssignment, arg.EnvironmentID, arg.AgentID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const revokeStartedRemoteClaim = `-- name: RevokeStartedRemoteClaim :execrows
+UPDATE remote_deployment_claims SET state = 'lost',
+    reason = 'remote_agent_revoked_after_start', cancel_requested_at = NULL,
+    finished_at = ?1, updated_at = ?1
+WHERE deployment_id = ?2
+  AND agent_id = ?3
+  AND state IN ('started', 'cancel_requested') AND started_at IS NOT NULL
+`
+
+type RevokeStartedRemoteClaimParams struct {
+	Now          sql.NullInt64 `json:"now"`
+	DeploymentID int64         `json:"deployment_id"`
+	AgentID      string        `json:"agent_id"`
+}
+
+func (q *Queries) RevokeStartedRemoteClaim(ctx context.Context, arg RevokeStartedRemoteClaimParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, revokeStartedRemoteClaim, arg.Now, arg.DeploymentID, arg.AgentID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const revokeUnstartedRemoteClaim = `-- name: RevokeUnstartedRemoteClaim :execrows
+UPDATE remote_deployment_claims SET state = 'failed',
+    reason = 'remote_agent_revoked_before_start',
+    finished_at = ?1, updated_at = ?1
+WHERE deployment_id = ?2
+  AND agent_id = ?3
+  AND state IN ('waiting', 'claimed') AND started_at IS NULL
+`
+
+type RevokeUnstartedRemoteClaimParams struct {
+	Now          sql.NullInt64 `json:"now"`
+	DeploymentID int64         `json:"deployment_id"`
+	AgentID      string        `json:"agent_id"`
+}
+
+func (q *Queries) RevokeUnstartedRemoteClaim(ctx context.Context, arg RevokeUnstartedRemoteClaimParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, revokeUnstartedRemoteClaim, arg.Now, arg.DeploymentID, arg.AgentID)
 	if err != nil {
 		return 0, err
 	}
@@ -371,6 +488,29 @@ func (q *Queries) SetAgentStatus(ctx context.Context, arg SetAgentStatusParams) 
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const terminateRevokedRemoteDeployment = `-- name: TerminateRevokedRemoteDeployment :execrows
+UPDATE deployments SET
+    status = 'failed',
+    finished_at = ?1
+WHERE id = ?2
+  AND assigned_agent_id = ?3
+  AND status IN ('pending', 'pending_approval', 'running')
+`
+
+type TerminateRevokedRemoteDeploymentParams struct {
+	Now          sql.NullInt64  `json:"now"`
+	DeploymentID int64          `json:"deployment_id"`
+	AgentID      sql.NullString `json:"agent_id"`
+}
+
+func (q *Queries) TerminateRevokedRemoteDeployment(ctx context.Context, arg TerminateRevokedRemoteDeploymentParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, terminateRevokedRemoteDeployment, arg.Now, arg.DeploymentID, arg.AgentID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const unassignEnvironmentAgent = `-- name: UnassignEnvironmentAgent :execrows
