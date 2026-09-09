@@ -5,11 +5,13 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
 
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/events"
 	"durpdeploy/internal/repository"
 
 	"github.com/go-chi/chi/v5"
@@ -117,30 +119,33 @@ func (s *Server) Logs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	agentID, _ := AgentIDFromContext(r.Context())
-	claim := db.LockRemoteDeploymentClaimParams{
+	claim := repository.RemoteLifecycleClaim{
 		DeploymentID:   deploymentID,
 		AgentID:        string(agentID),
 		ClaimTokenHash: claimTokenHash(request.ClaimToken),
 	}
-	changed, err := s.repository.Queries.LockRemoteDeploymentClaim(
-		r.Context(),
-		claim,
+	events := make([]repository.RemoteLogEvent, len(request.Events))
+	for _, event := range request.Events {
+		if event.Sequence < 0 {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+	}
+	for index, event := range request.Events {
+		events[index] = repository.RemoteLogEvent{
+			Sequence: int64(event.Sequence),
+			Line:     event.Line,
+		}
+	}
+	inserted, err := s.repository.AppendRemoteDeploymentLogs(
+		r.Context(), claim, events,
 	)
-	if !writeTransitionStatus(w, changed, err) {
+	if !writeLifecycleStatus(w, err) {
 		return
 	}
-	for _, event := range request.Events {
-		_, err := s.repository.AppendRemoteDeploymentLog(
-			r.Context(),
-			repository.RemoteDeploymentLog{
-				LockRemoteDeploymentClaimParams: claim,
-				Sequence:                        int64(event.Sequence),
-				Line:                            event.Line,
-			},
-		)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
+	if s.broker != nil {
+		for _, log := range inserted {
+			s.broker.Broadcast(deploymentID, log.Line)
 		}
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -156,7 +161,7 @@ func (s *Server) Result(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	agentID, _ := AgentIDFromContext(r.Context())
-	err := s.repository.FinishRemoteDeploymentLifecycle(
+	result, err := s.repository.FinishRemoteDeploymentLifecycle(
 		r.Context(),
 		repository.RemoteLifecycleClaim{
 			DeploymentID:   deploymentID,
@@ -164,11 +169,14 @@ func (s *Server) Result(w http.ResponseWriter, r *http.Request) {
 			ClaimTokenHash: claimTokenHash(request.ClaimToken),
 		},
 		string(request.State),
-		nullableString(request.Error),
 	)
-	if writeLifecycleStatus(w, err) {
-		w.WriteHeader(http.StatusNoContent)
+	if !writeLifecycleStatus(w, err) {
+		return
 	}
+	if result.Changed {
+		s.publishRemoteResult(r, result)
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) Cancelled(w http.ResponseWriter, r *http.Request) {
@@ -181,7 +189,7 @@ func (s *Server) Cancelled(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	agentID, _ := AgentIDFromContext(r.Context())
-	err := s.repository.AcknowledgeRemoteCancellation(
+	_, err := s.repository.AcknowledgeRemoteCancellation(
 		r.Context(),
 		repository.RemoteLifecycleClaim{
 			DeploymentID:   deploymentID,
@@ -192,6 +200,36 @@ func (s *Server) Cancelled(w http.ResponseWriter, r *http.Request) {
 	if writeLifecycleStatus(w, err) {
 		w.WriteHeader(http.StatusNoContent)
 	}
+}
+
+func (s *Server) publishRemoteResult(
+	r *http.Request,
+	result repository.RemoteTerminalResult,
+) {
+	if s.eventBus == nil {
+		return
+	}
+	typ := events.DeploymentSucceeded
+	message := fmt.Sprintf(
+		"Deployment #%d succeeded on %s",
+		result.DeploymentID,
+		result.EnvironmentName,
+	)
+	if result.State == "failed" {
+		typ = events.DeploymentFailed
+		message = fmt.Sprintf(
+			"Deployment #%d failed on %s",
+			result.DeploymentID,
+			result.EnvironmentName,
+		)
+	}
+	s.eventBus.Publish(r.Context(), events.Event{
+		Type:          typ,
+		DeploymentID:  result.DeploymentID,
+		ProjectID:     result.ProjectID,
+		EnvironmentID: result.EnvironmentID,
+		Message:       message,
+	})
 }
 
 func deploymentID(w http.ResponseWriter, r *http.Request) (int64, bool) {

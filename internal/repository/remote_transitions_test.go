@@ -58,7 +58,7 @@ func TestDeploymentStepCancellationAndHeartbeat(t *testing.T) {
 		ctx,
 		db.RequestRemoteDeploymentCancellationParams{
 			DeploymentID: 1,
-			Now:          ni(106),
+			Now:          106,
 		},
 	)
 	assertOne(t, n, err)

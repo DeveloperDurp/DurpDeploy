@@ -10,7 +10,9 @@ import (
 
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/dispatch"
+	"durpdeploy/internal/events"
 	"durpdeploy/internal/repository"
+	"durpdeploy/internal/runner"
 
 	agentproto "github.com/DeveloperDurp/durpdeploy-agent/protocol"
 	agenttls "github.com/DeveloperDurp/durpdeploy-agent/transport"
@@ -20,12 +22,16 @@ type Config struct {
 	Repository *repository.Repository
 	Dispatcher *dispatch.Dispatcher
 	Identity   agenttls.Identity
+	Broker     *runner.LogBroker
+	EventBus   *events.Bus
 }
 
 type Server struct {
 	repository *repository.Repository
 	dispatcher *dispatch.Dispatcher
 	identity   agenttls.Identity
+	broker     *runner.LogBroker
+	eventBus   *events.Bus
 }
 
 func New(config Config) (*Server, error) {
@@ -41,7 +47,13 @@ func New(config Config) (*Server, error) {
 	); err != nil {
 		return nil, err
 	}
-	return &Server{config.Repository, config.Dispatcher, config.Identity}, nil
+	return &Server{
+		repository: config.Repository,
+		dispatcher: config.Dispatcher,
+		identity:   config.Identity,
+		broker:     config.Broker,
+		eventBus:   config.EventBus,
+	}, nil
 }
 
 func (s *Server) TLSConfig(ctx context.Context) *tls.Config {

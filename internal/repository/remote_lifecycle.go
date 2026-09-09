@@ -9,6 +9,7 @@ import (
 )
 
 var ErrRemoteLifecycleConflict = errors.New("remote lifecycle conflict")
+var ErrInvalidRemoteLog = errors.New("invalid remote log")
 
 type RemoteLifecycleClaim struct {
 	DeploymentID   int64
@@ -104,88 +105,6 @@ func (r *Repository) HeartbeatRemoteDeployment(
 	return result, err
 }
 
-func (r *Repository) FinishRemoteDeploymentLifecycle(
-	ctx context.Context,
-	identity RemoteLifecycleClaim,
-	state string,
-	reason sql.NullString,
-) error {
-	return r.WithTx(ctx, func(q *db.Queries) error {
-		now, err := q.CurrentUnixTime(ctx)
-		if err != nil {
-			return err
-		}
-		claim, deployment, err := lockRemoteLifecycle(ctx, q, identity, true)
-		if err != nil {
-			return err
-		}
-		if claim.State == state && deployment.Status == state {
-			return nil
-		}
-		if claim.State != "started" || deployment.Status != "running" {
-			return ErrRemoteLifecycleConflict
-		}
-		changed, err := q.FinishRemoteDeployment(ctx,
-			db.FinishRemoteDeploymentParams{
-				State: state, Reason: reason,
-				Now:            sql.NullInt64{Int64: now, Valid: true},
-				DeploymentID:   identity.DeploymentID,
-				AgentID:        identity.AgentID,
-				ClaimTokenHash: identity.ClaimTokenHash,
-			})
-		if err != nil || changed != 1 {
-			return transitionError(err)
-		}
-		changed, err = q.FinishRemoteDeploymentStatus(ctx,
-			db.FinishRemoteDeploymentStatusParams{
-				State:        state,
-				Now:          sql.NullInt64{Int64: now, Valid: true},
-				DeploymentID: identity.DeploymentID,
-				AgentID: sql.NullString{
-					String: identity.AgentID,
-					Valid:  true,
-				},
-			})
-		if err != nil || changed != 1 {
-			return transitionError(err)
-		}
-		return nil
-	})
-}
-
-func (r *Repository) AcknowledgeRemoteCancellation(
-	ctx context.Context,
-	identity RemoteLifecycleClaim,
-) error {
-	return r.WithTx(ctx, func(q *db.Queries) error {
-		now, err := q.CurrentUnixTime(ctx)
-		if err != nil {
-			return err
-		}
-		claim, deployment, err := lockRemoteLifecycle(ctx, q, identity, true)
-		if err != nil {
-			return err
-		}
-		if claim.State == "cancelled" && deployment.Status == "cancelled" {
-			return nil
-		}
-		if claim.State != "cancel_requested" || deployment.Status != "running" {
-			return ErrRemoteLifecycleConflict
-		}
-		changed, err := q.AcknowledgeRemoteDeploymentCancellation(ctx,
-			db.AcknowledgeRemoteDeploymentCancellationParams{
-				Now:            sql.NullInt64{Int64: now, Valid: true},
-				DeploymentID:   identity.DeploymentID,
-				AgentID:        identity.AgentID,
-				ClaimTokenHash: identity.ClaimTokenHash,
-			})
-		if err != nil || changed != 1 {
-			return transitionError(err)
-		}
-		return cancelRemoteDeploymentStatus(ctx, q, now, identity)
-	})
-}
-
 func transitionError(err error) error {
 	if err != nil {
 		return err
@@ -234,22 +153,4 @@ func lockRemoteLifecycle(
 	}
 	deployment, err := q.GetDeployment(ctx, identity.DeploymentID)
 	return claim, deployment, err
-}
-
-func cancelRemoteDeploymentStatus(
-	ctx context.Context,
-	q *db.Queries,
-	now int64,
-	identity RemoteLifecycleClaim,
-) error {
-	changed, err := q.CancelRemoteDeploymentStatus(ctx,
-		db.CancelRemoteDeploymentStatusParams{
-			Now:          sql.NullInt64{Int64: now, Valid: true},
-			DeploymentID: identity.DeploymentID,
-			AgentID:      sql.NullString{String: identity.AgentID, Valid: true},
-		})
-	if err != nil || changed != 1 {
-		return transitionError(err)
-	}
-	return nil
 }

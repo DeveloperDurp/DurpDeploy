@@ -45,7 +45,7 @@ func (r *Repository) CancelAssignedRemoteDeployment(
 			}
 			changed, err := q.RequestRemoteDeploymentCancellation(ctx,
 				db.RequestRemoteDeploymentCancellationParams{
-					Now:          sql.NullInt64{Int64: now, Valid: true},
+					Now:          now,
 					DeploymentID: assigned.DeploymentID,
 				})
 			if err != nil || changed != 1 {
@@ -58,7 +58,7 @@ func (r *Repository) CancelAssignedRemoteDeployment(
 			}
 			changed, err := q.RequestRemoteDeploymentCancellation(ctx,
 				db.RequestRemoteDeploymentCancellationParams{
-					Now:          sql.NullInt64{Int64: now, Valid: true},
+					Now:          now,
 					DeploymentID: assigned.DeploymentID,
 				})
 			if err != nil || changed != 1 {

@@ -174,8 +174,10 @@ WHERE remote_deployment_claims.deployment_id = sqlc.arg(deployment_id)
 UPDATE remote_deployment_claims SET
     state = CASE WHEN started_at IS NULL THEN 'cancelled'
         ELSE 'cancel_requested' END,
-    finished_at = CASE WHEN started_at IS NULL THEN sqlc.arg(now) ELSE NULL END,
-    cancel_requested_at = sqlc.arg(now), updated_at = sqlc.arg(now)
+    finished_at = CASE WHEN started_at IS NULL
+        THEN CAST(sqlc.arg(now) AS BIGINT) ELSE NULL END,
+    cancel_requested_at = CAST(sqlc.arg(now) AS BIGINT),
+    updated_at = CAST(sqlc.arg(now) AS BIGINT)
 WHERE deployment_id = sqlc.arg(deployment_id)
   AND state IN ('waiting', 'claimed', 'started');
 

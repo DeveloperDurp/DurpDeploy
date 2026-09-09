@@ -16,13 +16,18 @@ func TestDurableLogScopeFailureRollsBack(t *testing.T) {
 	assertOne(t, n, err)
 	n, err = r.Queries.StartRemoteDeployment(ctx, startArg(a))
 	assertOne(t, n, err)
-	arg := repository.RemoteDeploymentLog{
-		LockRemoteDeploymentClaimParams: db.LockRemoteDeploymentClaimParams{
-			DeploymentID: 1,
-			AgentID:      a.AgentID, ClaimTokenHash: a.ClaimTokenHash,
-		}, Sequence: -1, StepIndex: ni(0), Attempt: ni(1), Line: "fixture line",
+	n, err = r.Queries.StartRemoteDeploymentStatus(
+		ctx,
+		db.StartRemoteDeploymentStatusParams{
+			Now: ni(100), DeploymentID: 1, AgentID: ns(a.AgentID),
+		},
+	)
+	assertOne(t, n, err)
+	identity := repository.RemoteLifecycleClaim{
+		DeploymentID: 1, AgentID: a.AgentID, ClaimTokenHash: a.ClaimTokenHash,
 	}
-	_, err = r.AppendRemoteDeploymentLog(ctx, arg)
+	events := []repository.RemoteLogEvent{{Sequence: -1, Line: "fixture line"}}
+	_, err = r.AppendRemoteDeploymentLogs(ctx, identity, events)
 	if err == nil {
 		t.Fatal("negative sequence accepted")
 	}
@@ -31,14 +36,14 @@ func TestDurableLogScopeFailureRollsBack(t *testing.T) {
 	if err != nil || count != 0 {
 		t.Fatalf("rollback logs=%d error=%v", count, err)
 	}
-	arg.Sequence = 0
-	first, err := r.AppendRemoteDeploymentLog(ctx, arg)
-	if err != nil {
+	events[0].Sequence = 0
+	first, err := r.AppendRemoteDeploymentLogs(ctx, identity, events)
+	if err != nil || len(first) != 1 {
 		t.Fatal(err)
 	}
-	second, err := r.AppendRemoteDeploymentLog(ctx, arg)
-	if err != nil || first.ID == 0 || second.ID != first.ID {
-		t.Fatalf("dedup IDs=%d,%d error=%v", first.ID, second.ID, err)
+	second, err := r.AppendRemoteDeploymentLogs(ctx, identity, events)
+	if err != nil || len(second) != 0 {
+		t.Fatalf("dedup inserts=%d,%d error=%v", len(first), len(second), err)
 	}
 	t.Log(
 		"negative sequence rejected; rollback logs=0; fresh duplicate returns same nonzero ID",
@@ -55,7 +60,7 @@ func TestRemoteDeploymentPreStartCancellationFreesCapacity(t *testing.T) {
 		ctx,
 		db.RequestRemoteDeploymentCancellationParams{
 			DeploymentID: 1,
-			Now:          ni(105),
+			Now:          105,
 		},
 	)
 	assertOne(t, n, err)

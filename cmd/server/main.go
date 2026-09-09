@@ -260,7 +260,10 @@ func runServer() {
 	if agentsEnabled {
 		dispatcher := dispatch.New(repo)
 		agentRuntime, err = startAgentListener(ctx, agentConfig,
-			agentListenerDependencies{repo: repo, dispatcher: dispatcher})
+			agentListenerDependencies{
+				repo: repo, dispatcher: dispatcher,
+				broker: broker, eventBus: bus,
+			})
 		if err != nil {
 			browserListener.Close()
 			cancel()

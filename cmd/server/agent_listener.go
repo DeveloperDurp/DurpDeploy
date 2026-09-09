@@ -16,7 +16,9 @@ import (
 
 	"durpdeploy/internal/agentserver"
 	"durpdeploy/internal/dispatch"
+	"durpdeploy/internal/events"
 	"durpdeploy/internal/repository"
+	"durpdeploy/internal/runner"
 	"durpdeploy/internal/server"
 
 	agentproto "github.com/DeveloperDurp/durpdeploy-agent/protocol"
@@ -105,6 +107,8 @@ func loadAgentListenerConfig() (agentListenerConfig, bool, error) {
 type agentListenerDependencies struct {
 	repo       *repository.Repository
 	dispatcher *dispatch.Dispatcher
+	broker     *runner.LogBroker
+	eventBus   *events.Bus
 }
 
 type agentListener struct {
@@ -122,6 +126,7 @@ func startAgentListener(
 ) (*agentListener, error) {
 	agents, err := agentserver.New(agentserver.Config{
 		Repository: deps.repo, Dispatcher: deps.dispatcher, Identity: config.identity,
+		Broker: deps.broker, EventBus: deps.eventBus,
 	})
 	if err != nil {
 		return nil, err

@@ -647,15 +647,17 @@ const requestRemoteDeploymentCancellation = `-- name: RequestRemoteDeploymentCan
 UPDATE remote_deployment_claims SET
     state = CASE WHEN started_at IS NULL THEN 'cancelled'
         ELSE 'cancel_requested' END,
-    finished_at = CASE WHEN started_at IS NULL THEN ?1 ELSE NULL END,
-    cancel_requested_at = ?1, updated_at = ?1
+    finished_at = CASE WHEN started_at IS NULL
+        THEN CAST(?1 AS BIGINT) ELSE NULL END,
+    cancel_requested_at = CAST(?1 AS BIGINT),
+    updated_at = CAST(?1 AS BIGINT)
 WHERE deployment_id = ?2
   AND state IN ('waiting', 'claimed', 'started')
 `
 
 type RequestRemoteDeploymentCancellationParams struct {
-	Now          sql.NullInt64 `json:"now"`
-	DeploymentID int64         `json:"deployment_id"`
+	Now          int64 `json:"now"`
+	DeploymentID int64 `json:"deployment_id"`
 }
 
 func (q *Queries) RequestRemoteDeploymentCancellation(ctx context.Context, arg RequestRemoteDeploymentCancellationParams) (int64, error) {

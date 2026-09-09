@@ -2,7 +2,6 @@ package repository_test
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"sync"
 	"testing"
@@ -60,29 +59,42 @@ func runRemoteAtomicity(t *testing.T, repo *repository.Repository) {
 	assertOne(t, n, err)
 	n, err = repo.Queries.StartRemoteDeployment(ctx, startArg(next))
 	assertOne(t, n, err)
-
-	logArg := repository.RemoteDeploymentLog{
-		LockRemoteDeploymentClaimParams: db.LockRemoteDeploymentClaimParams{
+	n, err = repo.Queries.StartRemoteDeploymentStatus(
+		ctx,
+		db.StartRemoteDeploymentStatusParams{
+			Now:          ni(110),
 			DeploymentID: next.DeploymentID,
-			AgentID:      next.AgentID, ClaimTokenHash: next.ClaimTokenHash,
+			AgentID:      ns(next.AgentID),
 		},
-		Sequence: 0, StepIndex: ni(0), Attempt: ni(1), Line: "one durable line",
+	)
+	assertOne(t, n, err)
+
+	identity := repository.RemoteLifecycleClaim{
+		DeploymentID:   next.DeploymentID,
+		AgentID:        next.AgentID,
+		ClaimTokenHash: next.ClaimTokenHash,
 	}
-	logs := make([]db.DeploymentLog, 2)
+	events := []repository.RemoteLogEvent{
+		{Sequence: 0, Line: "one durable line"},
+	}
+	logs := make([][]db.DeploymentLog, 2)
 	for index := range logs {
 		wait.Add(1)
 		go func() {
 			defer wait.Done()
-			logs[index], errs[index] = repo.AppendRemoteDeploymentLog(
-				ctx,
-				logArg,
+			logs[index], errs[index] = repo.AppendRemoteDeploymentLogs(
+				ctx, identity, events,
 			)
 		}()
 	}
 	wait.Wait()
-	if errs[0] != nil || errs[1] != nil || logs[0].ID == 0 ||
-		logs[0].ID != logs[1].ID {
-		t.Fatalf("dedup IDs=%d,%d errors=%v", logs[0].ID, logs[1].ID, errs)
+	if errs[0] != nil || errs[1] != nil || len(logs[0])+len(logs[1]) != 1 {
+		t.Fatalf(
+			"dedup inserts=%d,%d errors=%v",
+			len(logs[0]),
+			len(logs[1]),
+			errs,
+		)
 	}
 
 	for _, mutate := range []func(*db.FinishRemoteDeploymentParams){
@@ -99,8 +111,8 @@ func runRemoteAtomicity(t *testing.T, repo *repository.Repository) {
 	assertOne(t, n, err)
 	n, err = repo.Queries.FinishRemoteDeployment(ctx, finishArg(next))
 	assertZero(t, n, err)
-	_, err = repo.AppendRemoteDeploymentLog(ctx, logArg)
-	if !errors.Is(err, sql.ErrNoRows) {
+	_, err = repo.AppendRemoteDeploymentLogs(ctx, identity, events)
+	if !errors.Is(err, repository.ErrRemoteLifecycleConflict) {
 		t.Fatalf("terminal log callback: %v", err)
 	}
 }

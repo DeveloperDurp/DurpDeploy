@@ -43,10 +43,17 @@ func (r *Repository) ForEachDeploymentLogByDeploymentAsc(
 	fn func(db.DeploymentLog) error,
 ) error {
 	rows, err := r.DB.QueryContext(ctx, `
-SELECT id, deployment_id, step_name, line, created_at
-FROM deployment_logs
-WHERE deployment_id = ?
-ORDER BY created_at ASC, id ASC`, deploymentID)
+SELECT l.id, l.deployment_id, l.step_name, l.line, l.created_at
+FROM deployment_logs l
+LEFT JOIN deployment_log_scopes s ON s.log_id = l.id
+WHERE l.deployment_id = ?
+ORDER BY CASE
+    WHEN s.step_index IS NULL AND s.attempt IS NULL THEN 0 ELSE 1
+END,
+CASE
+    WHEN s.step_index IS NULL AND s.attempt IS NULL THEN s.sequence
+END,
+l.created_at ASC, l.id ASC`, deploymentID)
 	if err != nil {
 		return err
 	}

@@ -61,66 +61,6 @@ func (r *Repository) CommitAgentPairing(
 	return 1, nil
 }
 
-type RemoteDeploymentLog struct {
-	db.LockRemoteDeploymentClaimParams
-	Sequence  int64
-	StepIndex sql.NullInt64
-	Attempt   sql.NullInt64
-	StepName  sql.NullString
-	Line      string
-}
-
-func (r *Repository) AppendRemoteDeploymentLog(
-	ctx context.Context,
-	arg RemoteDeploymentLog,
-) (db.DeploymentLog, error) {
-	var log db.DeploymentLog
-	err := r.WithTx(ctx, func(q *db.Queries) error {
-		locked, err := q.LockRemoteDeploymentClaim(
-			ctx,
-			arg.LockRemoteDeploymentClaimParams,
-		)
-		if err != nil {
-			return err
-		}
-		if locked == 0 {
-			return sql.ErrNoRows
-		}
-		scope := db.GetScopedDeploymentLogParams{
-			DeploymentID: arg.DeploymentID,
-			StepIndex:    arg.StepIndex,
-			Attempt:      arg.Attempt,
-			Sequence:     arg.Sequence,
-		}
-		log, err = q.GetScopedDeploymentLog(ctx, scope)
-		if !errors.Is(err, sql.ErrNoRows) {
-			return err
-		}
-		log, err = q.CreateDeploymentLog(ctx, db.CreateDeploymentLogParams{
-			DeploymentID: arg.DeploymentID,
-			StepName:     arg.StepName,
-			Line:         arg.Line,
-		})
-		if err != nil {
-			return err
-		}
-		return q.CreateDeploymentLogScope(
-			ctx,
-			db.CreateDeploymentLogScopeParams{
-				LogID:        log.ID,
-				DeploymentID: scope.DeploymentID,
-				StepIndex:    scope.StepIndex,
-				Attempt:      scope.Attempt,
-				Sequence:     scope.Sequence,
-			},
-		)
-	})
-	if err != nil {
-		return db.DeploymentLog{}, err
-	}
-	return log, nil
-}
-
 func (r *Repository) CancelRemoteDeployment(
 	ctx context.Context,
 	arg db.RequestRemoteDeploymentCancellationParams,

@@ -14,8 +14,10 @@ import (
 
 	"durpdeploy/internal/agentserver"
 	"durpdeploy/internal/dispatch"
+	"durpdeploy/internal/events"
 	"durpdeploy/internal/migrate"
 	"durpdeploy/internal/repository"
+	"durpdeploy/internal/runner"
 	"durpdeploy/internal/server"
 
 	agentproto "github.com/DeveloperDurp/durpdeploy-agent/protocol"
@@ -28,6 +30,7 @@ type agentFixture struct {
 	server   *httptest.Server
 	client   *http.Client
 	identity agenttls.Identity
+	broker   *runner.LogBroker
 }
 
 func newAgentFixture(t *testing.T) agentFixture {
@@ -38,6 +41,8 @@ func newAgentFixture(t *testing.T) agentFixture {
 	}
 	t.Cleanup(func() { conn.Close() })
 	repo := repository.New(conn)
+	broker := runner.NewLogBroker()
+	bus := events.NewBus(repo)
 	identity, err := agenttls.LoadOrCreate(t.TempDir(), "https://127.0.0.1")
 	if err != nil {
 		t.Fatal(err)
@@ -73,6 +78,8 @@ func newAgentFixture(t *testing.T) agentFixture {
 			Repository: repo,
 			Dispatcher: dispatch.New(repo),
 			Identity:   identity,
+			Broker:     broker,
+			EventBus:   bus,
 		},
 	)
 	if err != nil {
@@ -98,6 +105,7 @@ func newAgentFixture(t *testing.T) agentFixture {
 		srv,
 		&http.Client{Transport: transport, Timeout: 3 * time.Second},
 		peer,
+		broker,
 	}
 }
 
