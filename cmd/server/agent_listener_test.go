@@ -24,7 +24,10 @@ func TestServerAgentIdentityConfig(t *testing.T) {
 			}
 			if name == "invalid address" {
 				dir := t.TempDir()
-				if _, err := agenttls.LoadOrCreate(dir, "https://localhost"); err != nil {
+				if _, err := agenttls.LoadOrCreate(
+					dir,
+					"https://localhost",
+				); err != nil {
 					t.Fatal(err)
 				}
 				t.Setenv("DURPDEPLOY_AGENT_IDENTITY_DIR", dir)
@@ -54,6 +57,9 @@ func TestRuntimeAgentShutdownRestart(t *testing.T) {
 	if err != nil || !enabled {
 		t.Fatalf("config: enabled=%v err=%v", enabled, err)
 	}
+	if got := config.pullEndpoint.String(); got != "https://localhost" {
+		t.Fatalf("pull endpoint=%q", got)
+	}
 	conn, err := migrate.Run(":memory:?_pragma=foreign_keys(1)")
 	if err != nil {
 		t.Fatal(err)
@@ -70,8 +76,14 @@ func TestRuntimeAgentShutdownRestart(t *testing.T) {
 		addr := listener.listener.Addr().String()
 		occupied := config
 		occupied.addr = addr
-		if extra, err := startAgentListener(context.Background(), occupied,
-			agentListenerDependencies{repo: repo, dispatcher: dispatcher}); err == nil {
+		if extra, err := startAgentListener(
+			context.Background(),
+			occupied,
+			agentListenerDependencies{
+				repo:       repo,
+				dispatcher: dispatcher,
+			},
+		); err == nil {
 			extra.shutdown(context.Background())
 			t.Fatal("occupied port accepted")
 		}

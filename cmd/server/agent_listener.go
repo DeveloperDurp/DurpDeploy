@@ -19,12 +19,14 @@ import (
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/server"
 
+	agentproto "github.com/DeveloperDurp/durpdeploy-agent/protocol"
 	agenttls "github.com/DeveloperDurp/durpdeploy-agent/transport"
 )
 
 type agentListenerConfig struct {
-	addr     string
-	identity agenttls.Identity
+	addr         string
+	identity     agenttls.Identity
+	pullEndpoint agentproto.PullEndpoint
 }
 
 func loadAgentListenerConfig() (agentListenerConfig, bool, error) {
@@ -88,7 +90,16 @@ func loadAgentListenerConfig() (agentListenerConfig, bool, error) {
 			err,
 		)
 	}
-	return agentListenerConfig{addr: addr, identity: identity}, true, nil
+	pullEndpoint, err := agentproto.ParsePullEndpoint(publicURL)
+	if err != nil {
+		return agentListenerConfig{}, false, fmt.Errorf(
+			"DURPDEPLOY_AGENT_PUBLIC_URL: %w",
+			err,
+		)
+	}
+	return agentListenerConfig{
+		addr: addr, identity: identity, pullEndpoint: pullEndpoint,
+	}, true, nil
 }
 
 type agentListenerDependencies struct {
