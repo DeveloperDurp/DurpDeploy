@@ -40,6 +40,9 @@
 #   DURPDEPLOY_AUDIT_RETENTION_DAYS=<days>
 #   DURPDEPLOY_LITESTREAM_CHECK_COMMAND=<healthcheck-command>
 #   DURPDEPLOY_LITESTREAM_CHECK_INTERVAL=<1h>
+#   DURPDEPLOY_AGENT_LISTEN_ADDR=0.0.0.0:10943
+#   DURPDEPLOY_AGENT_PUBLIC_URL=https://<agent-control-host>
+#   DURPDEPLOY_AGENT_IDENTITY_DIR=/var/lib/durpdeploy/agent-identity
 #
 # Optional OIDC SSO (set all in compose.app.env together, or omit all):
 #   DURPDEPLOY_URL=https://durpdeploy.example.com
@@ -110,6 +113,8 @@ services:
     ports:
       - "80:80"
       - "443:443"
+      # Publish 10943 separately to the agent network when remote agents are enabled.
+      # - "10943:10943"
     networks:
       default:
         ipv4_address: 172.28.0.10

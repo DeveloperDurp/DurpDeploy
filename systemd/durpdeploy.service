@@ -38,6 +38,11 @@ Environment=DURPDEPLOY_URL=https://durpdeploy.example.com
 #   rejected; this weakens identity assurance.
 #   DURPDEPLOY_OIDC_REQUIRE_EMAIL_VERIFIED=false
 EnvironmentFile=-/etc/durpdeploy/durpdeploy.env
+# Remote agents use a direct TLS listener, not Caddy. Set all three variables
+# together in the environment file to enable it.
+# DURPDEPLOY_AGENT_LISTEN_ADDR=0.0.0.0:10943
+# DURPDEPLOY_AGENT_PUBLIC_URL=https://<agent-control-host>
+# DURPDEPLOY_AGENT_IDENTITY_DIR=/var/lib/durpdeploy/agent-identity
 ExecStart=/usr/local/bin/durpdeploy
 Restart=on-failure
 RestartSec=5s
@@ -47,7 +52,7 @@ RestartSec=5s
 # makes the entire filesystem read-only, so /var/lib/durpdeploy must be
 # explicitly carved out as writable. Same pattern as the audit-prune
 # service; see systemd/durpdeploy-audit-prune.service.
-ReadWritePaths=/var/lib/durpdeploy
+ReadWritePaths=/var/lib/durpdeploy /var/lib/durpdeploy/agent-identity
 # Let the process manage its own cgroup sub-tree under
 # /sys/fs/cgroup/durpdeploy — required so the runner sandbox (P1-4) can
 # create a per-deployment cgroup and apply cpu/memory/pids limits.
