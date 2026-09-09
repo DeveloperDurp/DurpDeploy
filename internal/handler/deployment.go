@@ -615,19 +615,40 @@ func (h *DeploymentHandler) CancelDeployment(
 		return
 	}
 
-	if deployment.Status != "running" &&
-		deployment.Status != "pending_approval" {
-		http.Error(
-			w,
-			"Deployment cannot be cancelled in its current state",
-			http.StatusBadRequest,
+	if deployment.AssignedAgentID.Valid {
+		err := h.repo.CancelAssignedRemoteDeployment(
+			r.Context(),
+			repository.RemoteAssignedDeployment{
+				DeploymentID: deployment.ID,
+				AgentID:      deployment.AssignedAgentID.String,
+			},
 		)
-		return
-	}
-
-	if err := h.runner.Cancel(id); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		if errors.Is(err, repository.ErrRemoteLifecycleConflict) {
+			http.Error(
+				w,
+				"Deployment cannot be cancelled in its current state",
+				http.StatusBadRequest,
+			)
+			return
+		}
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	} else {
+		if deployment.Status != "running" &&
+			deployment.Status != "pending_approval" {
+			http.Error(
+				w,
+				"Deployment cannot be cancelled in its current state",
+				http.StatusBadRequest,
+			)
+			return
+		}
+		if err := h.runner.Cancel(id); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 
 	deployment, err = h.repo.Queries.GetDeployment(r.Context(), id)

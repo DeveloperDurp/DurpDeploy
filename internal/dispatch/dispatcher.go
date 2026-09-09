@@ -132,16 +132,22 @@ func prepareRemoteClaim(
 	}, nil
 }
 
-func (d *Dispatcher) Maintain(ctx context.Context, now int64) error {
+func (d *Dispatcher) Maintain(ctx context.Context) error {
 	err := d.repository.WithTx(ctx, func(q *db.Queries) error {
+		now, err := q.CurrentUnixTime(ctx)
+		if err != nil {
+			return err
+		}
 		if _, err := q.ExpireAgentPairings(ctx, now); err != nil {
 			return err
 		}
-		_, err := q.ExpireRemoteClaims(ctx, now)
-		return err
+		return nil
 	})
 	if err != nil {
-		return fmt.Errorf("expire agent pairings and unstarted claims: %w", err)
+		return fmt.Errorf("expire agent pairings: %w", err)
+	}
+	if err := d.repository.MaintainRemoteLifecycle(ctx); err != nil {
+		return fmt.Errorf("maintain remote deployment lifecycle: %w", err)
 	}
 	return nil
 }

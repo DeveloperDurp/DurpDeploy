@@ -137,6 +137,41 @@ func TestRetryDeploymentCreatesNewSnapshot(t *testing.T) {
 	}
 }
 
+func TestAssignedCancelNeverCallsLocalRunner(t *testing.T) {
+	harness := newAPIHarness(t)
+	user := seedAPIUser(t, harness.repo, "cancel@example.com", "admin")
+	project := seedProject(t, harness.repo)
+	environment := seedEnv(t, harness.repo)
+	release := seedRelease(t, harness.repo, project.ID)
+	seedActiveAssignedAgent(t, harness, environment.ID)
+	result, err := harness.repo.CreateDeployment(t.Context(),
+		db.CreateDeploymentParams{
+			ReleaseID:     release.ID,
+			EnvironmentID: environment.ID,
+			Status:        "pending",
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodPost,
+		fmt.Sprintf("/api/v1/deployments/%d/cancel", result.Deployment.ID), nil)
+	request = withAPIUser(request, user)
+	request = withAPIURLParam(request, "id", fmt.Sprint(result.Deployment.ID))
+	recorder := httptest.NewRecorder()
+
+	api.NewDeploymentHandler(harness.repo, harness.runner).
+		CancelDeployment(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("remote cancel status=%d body=%s",
+			recorder.Code, recorder.Body.String())
+	}
+	claim, err := harness.repo.Queries.GetRemoteDeploymentClaim(
+		t.Context(), result.Deployment.ID)
+	if err != nil || claim.State != "cancelled" {
+		t.Fatalf("remote claim=%+v error=%v", claim, err)
+	}
+}
+
 func TestAssignedDeploymentNeverFallsBackLocal(t *testing.T) {
 	harness := newAPIHarness(t)
 	project := seedProject(t, harness.repo)

@@ -36,6 +36,25 @@ func (q *Queries) CancelStepDeployment(ctx context.Context, id int64) (int64, er
 	return result.RowsAffected()
 }
 
+const lockAssignedRemoteDeployment = `-- name: LockAssignedRemoteDeployment :execrows
+UPDATE deployments SET status = status
+WHERE id = ?1
+  AND assigned_agent_id = ?2
+`
+
+type LockAssignedRemoteDeploymentParams struct {
+	DeploymentID int64          `json:"deployment_id"`
+	AgentID      sql.NullString `json:"agent_id"`
+}
+
+func (q *Queries) LockAssignedRemoteDeployment(ctx context.Context, arg LockAssignedRemoteDeploymentParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, lockAssignedRemoteDeployment, arg.DeploymentID, arg.AgentID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const lockDeploymentApproval = `-- name: LockDeploymentApproval :execrows
 UPDATE deployments SET status = status
 WHERE id = ?1 AND status = 'pending_approval'

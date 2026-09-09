@@ -45,7 +45,7 @@ func TestRuntimeMaintenanceExpiresPairings(t *testing.T) {
 		strings.Repeat("c", 64)); err != nil {
 		t.Fatal(err)
 	}
-	if err := New(repo).Maintain(ctx, 100); err != nil {
+	if err := New(repo).Maintain(ctx); err != nil {
 		t.Fatal(err)
 	}
 	pairing, err := repo.Queries.GetAgentPairing(ctx, "expired")

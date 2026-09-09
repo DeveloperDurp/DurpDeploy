@@ -120,5 +120,5 @@ func (s *Server) Authenticated(next http.Handler) http.Handler {
 }
 
 func (s *Server) Maintain(ctx context.Context) error {
-	return s.dispatcher.Maintain(ctx, time.Now().Unix())
+	return s.dispatcher.Maintain(ctx)
 }

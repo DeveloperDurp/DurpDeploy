@@ -7,6 +7,11 @@ AND NOT EXISTS (SELECT 1 FROM deployment_steps WHERE deployment_id = sqlc.arg(de
 UPDATE deployments SET status = status
 WHERE id = sqlc.arg(deployment_id) AND status = 'pending_approval';
 
+-- name: LockAssignedRemoteDeployment :execrows
+UPDATE deployments SET status = status
+WHERE id = sqlc.arg(deployment_id)
+  AND assigned_agent_id = sqlc.arg(agent_id);
+
 -- name: ApproveDeploymentStatus :execrows
 UPDATE deployments SET status = 'pending'
 WHERE id = sqlc.arg(deployment_id) AND status = 'pending_approval';

@@ -1,5 +1,7 @@
 -- name: LockClaimAgent :execrows
-UPDATE agents SET updated_at = updated_at WHERE id = ? AND status = 'active';
+UPDATE agents SET updated_at = updated_at WHERE id = ? AND status = 'active'
+AND EXISTS (SELECT 1 FROM agent_pairings p
+    WHERE p.agent_id = agents.id AND p.state = 'paired');
 
 -- name: CurrentUnixTime :one
 SELECT CAST(unixepoch() AS BIGINT) AS now;
@@ -14,6 +16,22 @@ WHERE d.id = sqlc.arg(deployment_id) AND d.assigned_agent_id IS NOT NULL
 
 -- name: GetRemoteDeploymentClaim :one
 SELECT * FROM remote_deployment_claims WHERE deployment_id = ?;
+
+-- name: LockRemoteLifecycleClaim :execrows
+UPDATE remote_deployment_claims SET updated_at = updated_at
+WHERE deployment_id = sqlc.arg(deployment_id)
+  AND agent_id = sqlc.arg(agent_id)
+  AND claim_token_hash = sqlc.arg(claim_token_hash);
+
+-- name: LockRemoteMaintenanceClaim :execrows
+UPDATE remote_deployment_claims SET updated_at = updated_at
+WHERE deployment_id = sqlc.arg(deployment_id)
+  AND agent_id = sqlc.arg(agent_id);
+
+-- name: ListRemoteLifecycleClaims :many
+SELECT * FROM remote_deployment_claims
+WHERE state IN ('claimed', 'started', 'cancel_requested')
+ORDER BY agent_id, deployment_id;
 
 -- name: ListWaitingRemoteDeploymentClaims :many
 SELECT c.* FROM remote_deployment_claims c
@@ -70,6 +88,15 @@ UPDATE remote_deployment_claims SET state = 'waiting', reason = NULL,
 WHERE state = 'claimed' AND started_at IS NULL
   AND claim_expires_at <= sqlc.arg(now);
 
+-- name: ExpireRemoteClaim :execrows
+UPDATE remote_deployment_claims SET state = 'waiting', reason = NULL,
+    claim_token_hash = NULL, ciphertext = NULL, claim_expires_at = NULL,
+    last_heartbeat_at = NULL, updated_at = sqlc.arg(now)
+WHERE deployment_id = sqlc.arg(deployment_id)
+  AND agent_id = sqlc.arg(agent_id)
+  AND state = 'claimed' AND started_at IS NULL
+  AND claim_expires_at <= sqlc.arg(now);
+
 -- name: StartRemoteDeployment :execrows
 UPDATE remote_deployment_claims SET state = 'started',
     started_at = sqlc.arg(now), updated_at = sqlc.arg(now)
@@ -87,6 +114,12 @@ WHERE remote_deployment_claims.deployment_id = sqlc.arg(deployment_id)
       WHERE a.id = remote_deployment_claims.agent_id AND a.status = 'active'
         AND EXISTS (SELECT 1 FROM agent_pairings p
             WHERE p.agent_id = a.id AND p.state = 'paired'));
+
+-- name: StartRemoteDeploymentStatus :execrows
+UPDATE deployments SET status = 'running', started_at = sqlc.arg(now)
+WHERE id = sqlc.arg(deployment_id)
+  AND assigned_agent_id = sqlc.arg(agent_id)
+  AND status = 'pending' AND started_at IS NULL;
 
 -- name: HeartbeatRemoteDeployment :execrows
 UPDATE remote_deployment_claims SET last_heartbeat_at = sqlc.arg(now),
@@ -120,6 +153,12 @@ WHERE remote_deployment_claims.deployment_id = sqlc.arg(deployment_id)
         AND EXISTS (SELECT 1 FROM agent_pairings p
             WHERE p.agent_id = a.id AND p.state = 'paired'));
 
+-- name: FinishRemoteDeploymentStatus :execrows
+UPDATE deployments SET status = sqlc.arg(state), finished_at = sqlc.arg(now)
+WHERE id = sqlc.arg(deployment_id)
+  AND assigned_agent_id = sqlc.arg(agent_id)
+  AND status = 'running';
+
 -- name: LockRemoteDeploymentClaim :execrows
 UPDATE remote_deployment_claims SET updated_at = updated_at
 WHERE remote_deployment_claims.deployment_id = sqlc.arg(deployment_id)
@@ -140,6 +179,12 @@ UPDATE remote_deployment_claims SET
 WHERE deployment_id = sqlc.arg(deployment_id)
   AND state IN ('waiting', 'claimed', 'started');
 
+-- name: CancelRemoteDeploymentStatus :execrows
+UPDATE deployments SET status = 'cancelled', finished_at = sqlc.arg(now)
+WHERE id = sqlc.arg(deployment_id)
+  AND assigned_agent_id = sqlc.arg(agent_id)
+  AND status IN ('pending', 'pending_approval', 'running');
+
 -- name: AcknowledgeRemoteDeploymentCancellation :execrows
 UPDATE remote_deployment_claims SET state = 'cancelled',
     finished_at = sqlc.arg(now), updated_at = sqlc.arg(now)
@@ -150,14 +195,38 @@ WHERE deployment_id = sqlc.arg(deployment_id)
 
 -- name: ExpireRemoteCancellation :execrows
 UPDATE remote_deployment_claims SET state = 'cancel_unconfirmed',
-    reason = 'cancel_ack_timeout', finished_at = sqlc.arg(now),
+    reason = 'remote_cancel_unconfirmed', finished_at = sqlc.arg(now),
     updated_at = sqlc.arg(now)
 WHERE state = 'cancel_requested'
   AND cancel_requested_at <= sqlc.arg(stale_before);
 
+-- name: ExpireRemoteCancellationClaim :execrows
+UPDATE remote_deployment_claims SET state = 'cancel_unconfirmed',
+    reason = 'remote_cancel_unconfirmed', finished_at = sqlc.arg(now),
+    updated_at = sqlc.arg(now)
+WHERE deployment_id = sqlc.arg(deployment_id)
+  AND agent_id = sqlc.arg(agent_id)
+  AND state = 'cancel_requested'
+  AND cancel_requested_at <= sqlc.arg(stale_before);
+
 -- name: LoseStaleRemoteClaims :execrows
 UPDATE remote_deployment_claims SET state = 'lost',
-    reason = 'heartbeat_lost', finished_at = sqlc.arg(now),
+    reason = 'remote_agent_lost', finished_at = sqlc.arg(now),
     updated_at = sqlc.arg(now)
 WHERE state = 'started'
   AND last_heartbeat_at <= sqlc.arg(stale_before);
+
+-- name: LoseStaleRemoteClaim :execrows
+UPDATE remote_deployment_claims SET state = 'lost',
+    reason = 'remote_agent_lost', finished_at = sqlc.arg(now),
+    updated_at = sqlc.arg(now)
+WHERE deployment_id = sqlc.arg(deployment_id)
+  AND agent_id = sqlc.arg(agent_id)
+  AND state = 'started'
+  AND last_heartbeat_at <= sqlc.arg(stale_before);
+
+-- name: FailRemoteDeploymentStatus :execrows
+UPDATE deployments SET status = 'failed', finished_at = sqlc.arg(now)
+WHERE id = sqlc.arg(deployment_id)
+  AND assigned_agent_id = sqlc.arg(agent_id)
+  AND status = 'running';

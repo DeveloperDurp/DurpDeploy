@@ -591,6 +591,35 @@ func (h *DeploymentHandler) CancelDeployment(
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	if deployment.AssignedAgentID.Valid {
+		err := h.repo.CancelAssignedRemoteDeployment(
+			r.Context(),
+			repository.RemoteAssignedDeployment{
+				DeploymentID: deployment.ID,
+				AgentID:      deployment.AssignedAgentID.String,
+			},
+		)
+		if errors.Is(err, repository.ErrRemoteLifecycleConflict) {
+			RespondError(
+				w,
+				http.StatusUnprocessableEntity,
+				"Cannot cancel a deployment in its current state",
+			)
+			return
+		}
+		if err != nil {
+			RespondError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		updated, err := h.repo.Queries.GetDeployment(r.Context(), depID)
+		if err != nil {
+			RespondError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		RespondJSON(w, http.StatusOK,
+			map[string]string{"status": updated.Status})
+		return
+	}
 	if deployment.Status != "running" {
 		RespondError(
 			w,
