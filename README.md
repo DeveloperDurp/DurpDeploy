@@ -15,6 +15,7 @@ A single-binary deployment tool for running bash scripts against environments. D
 - **Approvals** - Manual gate for production deployments requiring admin sign-off
 - **Notifications** - Event-driven Slack, Email, Gotify, and Discord alerts for deployment status
 - **Cancel** - Stop running deployments mid-execution
+- **Remote agents** - Assign deployments to one outbound-only agent over pinned mTLS
 
 ## Quick Start
 
@@ -114,6 +115,10 @@ available. An OIDC-created account can be recovered by an administrator through
 the normal local user recovery process; there is no self-service password reset.
 
 The full API reference is available at `/api/swagger/` in a running server (no auth required).
+
+Remote agents use the backward-compatible `agent/1` protocol. The `v0.1.0`
+agent release is compatible with this control plane; keep the paired state
+directory when upgrading.
 
 ## Architecture
 
@@ -249,7 +254,8 @@ five-minute hands-on attack drill — is documented in
 
 ## What It Does Not Do
 
-- No remote deployment targets or SSH
+- No SSH-based deployment targets
+- No agent failover: an assigned deployment never falls back to local execution
 - No parallel step execution
 - No CI/build features
 - No Kubernetes or cloud integrations

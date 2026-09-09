@@ -17,8 +17,11 @@ agent identity certificate and key, paired server identity state, and a
 temporary hash-only current-claim marker. Keep that directory private and
 back it up only if preserving the enrolled identity is intentional.
 
-Agents initiate all connections. The server never connects inbound to an agent,
-and remote dispatch does not use SSH.
+Agents initiate runtime connections, but pairing needs a temporary unpaired agent
+callback listener. After code and fingerprint confirmation, the server sends one
+`server-init` callback. After the completion acknowledgement, that callback
+listener closes. The paired agent has no persistent inbound listener, and remote
+dispatch does not use SSH.
 
 ## Transport and ports
 
@@ -106,7 +109,11 @@ admin-only.
    display name, and optional agent version. The ID must be unique.
 2. Start the local agent listener, then open the agent's pairing page only when
 the operator can complete the ceremony. Enter the short-lived, one-time pairing code,
-   compare the displayed fingerprint through a trusted channel, and confirm.
+    compare the displayed fingerprint through a trusted channel, and confirm.
+    The operator re-types only the displayed agent fingerprint in a dedicated
+    second confirmation step. Server-init (`/agent/v1/pairings/server-init`)
+    uses that value plus the server-held code and pinned endpoint to finalize
+    pairing. The values are console-only and cannot be retrieved later.
    You can use the code one time. You cannot retrieve it later. Never put it in source
    control, tickets, chat, shell history, or logs.
 3. Assign an environment to the paired active agent from its details page, then
@@ -286,7 +293,7 @@ use trust-all TLS or accept a fingerprint copied from an untrusted connection.
 
 ### Expired or reused pairing code
 
-Pairing codes expire after 15 minutes and are consumed once. Restart the
+Pairing codes expire after 10 minutes and are consumed once. Restart the
 unpaired local listener to obtain a fresh code. For an already active agent,
 revoke and re-pair it first.
 
