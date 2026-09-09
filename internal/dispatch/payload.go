@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"durpdeploy/internal/runner"
 	"github.com/DeveloperDurp/durpdeploy-agent/executor"
 	agentpayload "github.com/DeveloperDurp/durpdeploy-agent/payload"
 	agentproto "github.com/DeveloperDurp/durpdeploy-agent/protocol"
@@ -32,6 +33,14 @@ type VariableSnapshot struct {
 	Name   string `json:"name"`
 	Value  string `json:"value"`
 	Secret bool   `json:"secret"`
+}
+
+func VariableSnapshots(variables []runner.ResolvedVariable) []VariableSnapshot {
+	result := make([]VariableSnapshot, len(variables))
+	for i, variable := range variables {
+		result[i] = VariableSnapshot{Name: variable.Name, Value: variable.Value, Secret: variable.Secret}
+	}
+	return result
 }
 
 func (snapshot Payload) Seal(certificateDER []byte) ([]byte, error) {

@@ -363,19 +363,17 @@ func (r *DeploymentRunner) Run(
 		return
 	}
 
-	envMap := make(map[string]string)
+	resolved, err := ResolveReleaseVariables(vars, environmentID)
+	if err != nil {
+		_ = r.failUnlessCancelled(ctx, deploymentID)
+		return
+	}
+	envMap := make(map[string]string, len(resolved))
 	var secretValues []string
-	for _, v := range vars {
-		if v.EnvironmentID.Valid && v.EnvironmentID.Int64 == environmentID {
-			envMap[v.Name] = v.Value.String
-			if v.Secret != 0 && v.Value.String != "" {
-				secretValues = append(secretValues, v.Value.String)
-			}
-		} else if !v.EnvironmentID.Valid {
-			envMap[v.Name] = v.Value.String
-			if v.Secret != 0 && v.Value.String != "" {
-				secretValues = append(secretValues, v.Value.String)
-			}
+	for _, variable := range resolved {
+		envMap[variable.Name] = variable.Value
+		if variable.Secret && variable.Value != "" {
+			secretValues = append(secretValues, variable.Value)
 		}
 	}
 
