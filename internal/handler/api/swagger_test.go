@@ -53,7 +53,7 @@ func TestSwagger_UIRenders(t *testing.T) {
 	}
 }
 
-func TestSwagger_SpecEmbedded(t *testing.T) {
+func TestSwagger(t *testing.T) {
 	spec, err := swagger.ReadSpec()
 	if err != nil {
 		t.Fatalf("failed to read embedded spec: %v", err)

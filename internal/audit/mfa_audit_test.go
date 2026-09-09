@@ -43,7 +43,7 @@ func TestMFAAuditActionMapUsesStableActions(t *testing.T) {
 	}
 }
 
-func TestAuditActionMapCoversReviewedRouteRegistrations(t *testing.T) {
+func TestAuditActionMap(t *testing.T) {
 	// Given
 	cases := map[string]string{
 		"POST /api/lint":                                       "",
