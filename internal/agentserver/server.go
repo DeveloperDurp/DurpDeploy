@@ -8,9 +8,11 @@ import (
 	"net/http"
 	"time"
 
+	"durpdeploy/internal/db"
 	"durpdeploy/internal/dispatch"
 	"durpdeploy/internal/repository"
 
+	agentproto "github.com/DeveloperDurp/durpdeploy-agent/protocol"
 	agenttls "github.com/DeveloperDurp/durpdeploy-agent/transport"
 )
 
@@ -32,7 +34,11 @@ func New(config Config) (*Server, error) {
 			"agent server requires repository and dispatcher",
 		)
 	}
-	if _, err := agenttls.NewServerConfig(config.Identity, "", agenttls.Fingerprint{}); err != nil {
+	if _, err := agenttls.NewServerConfig(
+		config.Identity,
+		"",
+		agenttls.Fingerprint{},
+	); err != nil {
 		return nil, err
 	}
 	return &Server{config.Repository, config.Dispatcher, config.Identity}, nil
@@ -46,7 +52,8 @@ func (s *Server) TLSConfig(ctx context.Context) *tls.Config {
 		VerifyConnection: func(state tls.ConnectionState) error {
 			lookupCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 			defer cancel()
-			return s.authenticate(lookupCtx, state)
+			_, err := s.authenticate(lookupCtx, state)
+			return err
 		},
 	}
 }
@@ -54,15 +61,17 @@ func (s *Server) TLSConfig(ctx context.Context) *tls.Config {
 func (s *Server) authenticate(
 	ctx context.Context,
 	state tls.ConnectionState,
-) error {
+) (db.Agent, error) {
 	if state.Version != tls.VersionTLS13 || len(state.PeerCertificates) != 1 {
-		return errors.New("agent requires TLS 1.3 and one pinned certificate")
+		return db.Agent{}, errors.New(
+			"agent requires TLS 1.3 and one pinned certificate",
+		)
 	}
 	peer := state.PeerCertificates[0]
 	pin := agenttls.FingerprintOf(peer.Raw)
 	agents, err := s.repository.Queries.ListAgents(ctx)
 	if err != nil {
-		return err
+		return db.Agent{}, err
 	}
 	for _, agent := range agents {
 		if agent.Status != "active" || !agent.CertificateFingerprint.Valid ||
@@ -73,29 +82,40 @@ func (s *Server) authenticate(
 		if err != nil || pairing.State != "paired" ||
 			pairing.AgentPin != pin.String() || !pairing.ServerPin.Valid ||
 			pairing.ServerPin.String != s.identity.Fingerprint.String() {
-			return errors.New("agent pairing is not committed")
+			return db.Agent{}, errors.New("agent pairing is not committed")
 		}
 		verify, err := agenttls.NewPairingBootstrapClientConfig(
 			"https://agent",
 			pin,
 		)
 		if err != nil {
-			return err
+			return db.Agent{}, err
 		}
-		return verify.VerifyConnection(state)
+		if err := verify.VerifyConnection(state); err != nil {
+			return db.Agent{}, err
+		}
+		return agent, nil
 	}
-	return errors.New("agent certificate is not active and pinned")
+	return db.Agent{}, errors.New("agent certificate is not active and pinned")
 }
 
 // Authenticated rechecks durable status on every request, including keep-alive.
 func (s *Server) Authenticated(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
-		if r.TLS == nil || s.authenticate(r.Context(), *r.TLS) != nil {
+		if r.TLS == nil {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
-		next.ServeHTTP(w, r)
+		agent, err := s.authenticate(r.Context(), *r.TLS)
+		if err != nil {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		next.ServeHTTP(
+			w,
+			withAgentID(r, agentproto.AgentID(agent.ID)),
+		)
 	})
 }
 

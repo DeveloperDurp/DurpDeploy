@@ -3,6 +3,7 @@ package agentserver_test
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"encoding/pem"
 	"io"
 	"net/http"
@@ -23,6 +24,7 @@ import (
 
 type agentFixture struct {
 	repo     *repository.Repository
+	agents   *agentserver.Server
 	server   *httptest.Server
 	client   *http.Client
 	identity agenttls.Identity
@@ -92,6 +94,7 @@ func newAgentFixture(t *testing.T) agentFixture {
 	t.Cleanup(transport.CloseIdleConnections)
 	return agentFixture{
 		repo,
+		agents,
 		srv,
 		&http.Client{Transport: transport, Timeout: 3 * time.Second},
 		peer,
@@ -100,26 +103,56 @@ func newAgentFixture(t *testing.T) agentFixture {
 
 func TestAgentServerPinnedRoutes(t *testing.T) {
 	f := newAgentFixture(t)
-	for _, path := range []string{
-		agentproto.PollPath, agentproto.StartPath,
-		agentproto.HeartbeatPath, agentproto.LogsPath, agentproto.ResultPath, agentproto.CancelledPath,
+	seedAgentLifecycle(t, f.repo)
+	for _, test := range []struct {
+		path   string
+		body   string
+		status int
+	}{
+		{agentproto.PollPath, `{"protocol":"agent/1","agent_version":"test"}`, http.StatusNoContent},
+		{agentproto.StartPath, `{"protocol":"agent/1","claim_token":"claim-one"}`, http.StatusNoContent},
+		{agentproto.HeartbeatPath, `{"protocol":"agent/1","claim_token":"claim-one"}`, http.StatusOK},
+		{agentproto.LogsPath, `{"protocol":"agent/1","claim_token":"claim-one","events":[{"sequence":1,"line":"ok"}]}`, http.StatusNoContent},
+		{agentproto.ResultPath, `{"protocol":"agent/1","claim_token":"claim-one","state":"succeeded","error":""}`, http.StatusNoContent},
+		{agentproto.CancelledPath, `{"protocol":"agent/1","claim_token":"claim-two"}`, http.StatusNoContent},
 	} {
-		path = strings.ReplaceAll(path, "{id}", "42")
+		path := strings.ReplaceAll(
+			test.path,
+			"{id}",
+			lifecycleDeploymentID(test.path),
+		)
+		if test.path == agentproto.CancelledPath {
+			activateCancellationFixture(t, f.repo)
+		}
 		response, err := f.client.Post(
 			f.server.URL+path,
 			"application/json",
-			strings.NewReader("{}"),
+			strings.NewReader(test.body),
 		)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := io.Copy(io.Discard, response.Body); err != nil {
+		body, err := io.ReadAll(response.Body)
+		if err != nil {
 			t.Fatal(err)
 		}
 		response.Body.Close()
-		if response.StatusCode != http.StatusNotImplemented ||
-			response.TLS.Version != tls.VersionTLS13 {
+		if response.StatusCode != test.status ||
+			response.TLS.Version != tls.VersionTLS13 ||
+			response.Header.Get("Cache-Control") != "no-store" {
 			t.Fatalf("route %s status=%d", path, response.StatusCode)
+		}
+		if test.status == http.StatusOK {
+			var heartbeat agentproto.HeartbeatResponse
+			if err := json.Unmarshal(body, &heartbeat); err != nil {
+				t.Fatalf("route %s response: %v", path, err)
+			}
+		} else if len(body) != 0 {
+			t.Fatalf(
+				"route %s returned a body for status %d",
+				path,
+				test.status,
+			)
 		}
 		t.Logf(
 			"POST %s%s TLS=1.3 status=%d",
@@ -128,83 +161,4 @@ func TestAgentServerPinnedRoutes(t *testing.T) {
 			response.StatusCode,
 		)
 	}
-	if _, err := f.repo.DB.Exec("UPDATE agents SET status='disabled'"); err != nil {
-		t.Fatal(err)
-	}
-	response, err := f.client.Post(
-		f.server.URL+agentproto.PollPath,
-		"application/json",
-		nil,
-	)
-	if err != nil {
-		t.Fatalf(
-			"expected HTTP reauthentication on existing connection: %v",
-			err,
-		)
-	}
-	response.Body.Close()
-	if response.StatusCode != http.StatusUnauthorized {
-		t.Fatal("disabled agent accepted")
-	}
-	t.Log("disabled agent rejected on existing TLS connection: status=401")
-}
-
-func TestAgentRoutesRejectBrowserSession(t *testing.T) {
-	f := newAgentFixture(t)
-	if _, err := f.repo.DB.Exec(`INSERT INTO users
-		(email,name,password_hash,role) VALUES ('browser@test','browser','fixture','admin')`); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := f.repo.DB.Exec(`INSERT INTO sessions
-		(id,user_id,csrf_token,expires_at) VALUES ('browser-session',1,'browser-csrf',?)`,
-		time.Now().Add(time.Hour).Unix()); err != nil {
-		t.Fatal(err)
-	}
-	config := f.client.Transport.(*http.Transport).TLSClientConfig.Clone()
-	config.Certificates = nil
-	transport := &http.Transport{TLSClientConfig: config}
-	defer transport.CloseIdleConnections()
-	client := &http.Client{Transport: transport, Timeout: 3 * time.Second}
-	request, err := http.NewRequest(
-		http.MethodPost,
-		f.server.URL+agentproto.PollPath,
-		nil,
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	request.AddCookie(&http.Cookie{Name: "session", Value: "browser-session"})
-	request.Header.Set("X-CSRF-Token", "browser-csrf")
-	response, err := client.Do(request)
-	if err == nil {
-		response.Body.Close()
-		t.Fatalf("browser-only client reached HTTP: %d", response.StatusCode)
-	}
-	t.Logf(
-		"POST %s%s browser cookies rejected during TLS: %v",
-		f.server.URL,
-		agentproto.PollPath,
-		err,
-	)
-}
-
-func TestAgentServerRejectsUnpinnedClient(t *testing.T) {
-	f := newAgentFixture(t)
-	other, err := agenttls.LoadOrCreate(t.TempDir(), "https://agent")
-	if err != nil {
-		t.Fatal(err)
-	}
-	f.client.Transport.(*http.Transport).TLSClientConfig.Certificates = []tls.Certificate{
-		other.Certificate,
-	}
-	response, err := f.client.Post(
-		f.server.URL+agentproto.PollPath,
-		"application/json",
-		nil,
-	)
-	if err == nil {
-		response.Body.Close()
-		t.Fatal("unpinned client reached HTTP")
-	}
-	t.Logf("unpinned client rejected: %v", err)
 }

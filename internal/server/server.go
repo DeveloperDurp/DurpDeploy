@@ -26,17 +26,21 @@ import (
 func NewAgentRouter(agents *agentserver.Server) http.Handler {
 	r := chi.NewRouter()
 	r.Use(agents.Authenticated)
-	for _, path := range []string{
-		agentproto.PollPath, agentproto.StartPath, agentproto.HeartbeatPath,
-		agentproto.LogsPath, agentproto.ResultPath, agentproto.CancelledPath,
-	} {
-		r.Post(path, agentUnavailable)
-	}
+	r.Post(agentproto.PollPath, agents.Poll)
+	r.Post(agentproto.StartPath, agents.Start)
+	r.Post(agentproto.HeartbeatPath, agents.Heartbeat)
+	r.Post(agentproto.LogsPath, agents.Logs)
+	r.Post(agentproto.ResultPath, agents.Result)
+	r.Post(agentproto.CancelledPath, agents.Cancelled)
 	return r
 }
 
-func agentUnavailable(w http.ResponseWriter, r *http.Request) {
-	http.Error(w, "Agent lifecycle is not available", http.StatusNotImplemented)
+func agentManagementUnavailable(w http.ResponseWriter, r *http.Request) {
+	http.Error(
+		w,
+		"Agent management is not available",
+		http.StatusNotImplemented,
+	)
 }
 
 func requestLogger(next http.Handler) http.Handler {
@@ -355,8 +359,14 @@ func NewRouter(
 		// non-admin roles get 403 without touching the handlers.
 		pr.Group(func(ar chi.Router) {
 			ar.Use(auth.RequireRole("admin"))
-			ar.Handle("/admin/agents", http.HandlerFunc(agentUnavailable))
-			ar.Handle("/admin/agents/*", http.HandlerFunc(agentUnavailable))
+			ar.Handle(
+				"/admin/agents",
+				http.HandlerFunc(agentManagementUnavailable),
+			)
+			ar.Handle(
+				"/admin/agents/*",
+				http.HandlerFunc(agentManagementUnavailable),
+			)
 			adminH := handler.NewAdminHandler(repo)
 			ar.Get("/admin/audit", adminH.ListAudit)
 			ar.Get("/admin/notifications", adminH.ListNotifications)
@@ -405,8 +415,14 @@ func NewRouter(
 		// Admin-only sub-group.
 		ar.Group(func(aar chi.Router) {
 			aar.Use(auth.RequireRole("admin"))
-			aar.Handle("/admin/agents", http.HandlerFunc(agentUnavailable))
-			aar.Handle("/admin/agents/*", http.HandlerFunc(agentUnavailable))
+			aar.Handle(
+				"/admin/agents",
+				http.HandlerFunc(agentManagementUnavailable),
+			)
+			aar.Handle(
+				"/admin/agents/*",
+				http.HandlerFunc(agentManagementUnavailable),
+			)
 			aar.Get("/admin/tokens", tokensH.ListAllTokens)
 			aar.Delete("/admin/tokens/{id}", tokensH.RevokeAnyToken)
 
