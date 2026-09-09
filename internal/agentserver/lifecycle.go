@@ -40,7 +40,18 @@ func (s *Server) Poll(w http.ResponseWriter, r *http.Request) {
 	if !writeTransitionStatus(w, changed, err) {
 		return
 	}
-	w.WriteHeader(http.StatusNoContent)
+	response, claimed, err := s.dispatcher.Poll(r.Context(), agentID)
+	if err != nil {
+		if r.Context().Err() == nil {
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+		return
+	}
+	if !claimed {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	writeJSON(w, response)
 }
 
 func (s *Server) Start(w http.ResponseWriter, r *http.Request) {
@@ -230,7 +241,10 @@ func writeTransitionStatus(
 	return true
 }
 
-func writeJSON(w http.ResponseWriter, response agentproto.HeartbeatResponse) {
+func writeJSON[T agentproto.HeartbeatResponse | agentproto.PollResponse](
+	w http.ResponseWriter,
+	response T,
+) {
 	payload, err := json.Marshal(response)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)

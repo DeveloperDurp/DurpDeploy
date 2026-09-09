@@ -35,16 +35,18 @@ func seedAgentLifecycle(t *testing.T, repo *repository.Repository) {
 		{`INSERT INTO deployments
 			(id,release_id,environment_id,status,assigned_agent_id)
 			VALUES (1,1,1,'pending','test-agent'),
-			       (2,1,1,'running','test-agent')`, nil},
+			       (2,1,1,'running','test-agent'),
+			       (3,1,1,'pending','test-agent')`, nil},
 		{`INSERT INTO remote_deployment_claims
 			(deployment_id,agent_id,state,claim_token_hash,ciphertext,
 			 claim_expires_at,last_heartbeat_at,started_at,
 			 cancel_requested_at,updated_at)
 			VALUES (1,'test-agent','claimed',?,'ciphertext',?,?,NULL,NULL,?),
-			       (2,'test-agent','waiting',NULL,NULL,NULL,NULL,NULL,NULL,?)`,
+			       (2,'test-agent','waiting',NULL,NULL,NULL,NULL,NULL,NULL,?),
+			       (3,'test-agent','waiting',NULL,NULL,NULL,NULL,NULL,NULL,?)`,
 			[]any{
 				firstHash[:], expiresAt, lastHeartbeat, lastHeartbeat,
-				lastHeartbeat,
+				lastHeartbeat, lastHeartbeat,
 			}},
 	}
 	for _, statement := range statements {

@@ -10,15 +10,28 @@ import (
 )
 
 type Repository struct {
-	DB      *sql.DB
-	Queries *db.Queries
-	secrets *secret.Box
+	DB              *sql.DB
+	Queries         *db.Queries
+	secrets         *secret.Box
+	remoteWorkReady chan struct{}
 }
 
 func New(dbConn *sql.DB) *Repository {
 	return &Repository{
-		DB:      dbConn,
-		Queries: db.New(dbConn),
+		DB:              dbConn,
+		Queries:         db.New(dbConn),
+		remoteWorkReady: make(chan struct{}, 1),
+	}
+}
+
+func (r *Repository) RemoteWorkReady() <-chan struct{} {
+	return r.remoteWorkReady
+}
+
+func (r *Repository) notifyRemoteWork() {
+	select {
+	case r.remoteWorkReady <- struct{}{}:
+	default:
 	}
 }
 

@@ -109,12 +109,12 @@ func TestAgentServerPinnedRoutes(t *testing.T) {
 		body   string
 		status int
 	}{
-		{agentproto.PollPath, `{"protocol":"agent/1","agent_version":"test"}`, http.StatusNoContent},
 		{agentproto.StartPath, `{"protocol":"agent/1","claim_token":"claim-one"}`, http.StatusNoContent},
 		{agentproto.HeartbeatPath, `{"protocol":"agent/1","claim_token":"claim-one"}`, http.StatusOK},
 		{agentproto.LogsPath, `{"protocol":"agent/1","claim_token":"claim-one","events":[{"sequence":1,"line":"ok"}]}`, http.StatusNoContent},
 		{agentproto.ResultPath, `{"protocol":"agent/1","claim_token":"claim-one","state":"succeeded","error":""}`, http.StatusNoContent},
 		{agentproto.CancelledPath, `{"protocol":"agent/1","claim_token":"claim-two"}`, http.StatusNoContent},
+		{agentproto.PollPath, `{"protocol":"agent/1","agent_version":"test"}`, http.StatusOK},
 	} {
 		path := strings.ReplaceAll(
 			test.path,

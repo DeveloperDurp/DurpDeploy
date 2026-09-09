@@ -58,6 +58,9 @@ func (r *Repository) CreateDeployment(
 	if err != nil {
 		return DeploymentResult{}, fmt.Errorf("create deployment: %w", err)
 	}
+	if result.Mode == ExecutionRemote && result.Deployment.Status == "pending" {
+		r.notifyRemoteWork()
+	}
 	return result, nil
 }
 
@@ -180,6 +183,9 @@ func (r *Repository) ApproveDeployment(
 	})
 	if err != nil {
 		return DeploymentResult{}, fmt.Errorf("approve deployment: %w", err)
+	}
+	if result.Mode == ExecutionRemote {
+		r.notifyRemoteWork()
 	}
 	return result, nil
 }

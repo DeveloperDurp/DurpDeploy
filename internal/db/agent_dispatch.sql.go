@@ -108,6 +108,17 @@ func (q *Queries) CreateRemoteDeploymentClaim(ctx context.Context, deploymentID 
 	return result.RowsAffected()
 }
 
+const currentUnixTime = `-- name: CurrentUnixTime :one
+SELECT CAST(unixepoch() AS BIGINT) AS now
+`
+
+func (q *Queries) CurrentUnixTime(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, currentUnixTime)
+	var now int64
+	err := row.Scan(&now)
+	return now, err
+}
+
 const expireRemoteCancellation = `-- name: ExpireRemoteCancellation :execrows
 UPDATE remote_deployment_claims SET state = 'cancel_unconfirmed',
     reason = 'cancel_ack_timeout', finished_at = ?1,
@@ -305,6 +316,26 @@ func (q *Queries) LockClaimAgent(ctx context.Context, id string) (int64, error) 
 	return result.RowsAffected()
 }
 
+const lockPendingRemoteDeployment = `-- name: LockPendingRemoteDeployment :execrows
+UPDATE deployments SET status = status
+WHERE id = ?1
+  AND assigned_agent_id = ?2
+  AND status = 'pending'
+`
+
+type LockPendingRemoteDeploymentParams struct {
+	DeploymentID int64          `json:"deployment_id"`
+	AgentID      sql.NullString `json:"agent_id"`
+}
+
+func (q *Queries) LockPendingRemoteDeployment(ctx context.Context, arg LockPendingRemoteDeploymentParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, lockPendingRemoteDeployment, arg.DeploymentID, arg.AgentID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const lockRemoteDeploymentClaim = `-- name: LockRemoteDeploymentClaim :execrows
 UPDATE remote_deployment_claims SET updated_at = updated_at
 WHERE remote_deployment_claims.deployment_id = ?1
@@ -325,6 +356,28 @@ type LockRemoteDeploymentClaimParams struct {
 
 func (q *Queries) LockRemoteDeploymentClaim(ctx context.Context, arg LockRemoteDeploymentClaimParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, lockRemoteDeploymentClaim, arg.DeploymentID, arg.AgentID, arg.ClaimTokenHash)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const lockWaitingRemoteDeploymentClaim = `-- name: LockWaitingRemoteDeploymentClaim :execrows
+UPDATE remote_deployment_claims SET updated_at = updated_at
+WHERE deployment_id = ?1
+  AND agent_id = ?2
+  AND state = 'waiting'
+  AND claim_token_hash IS NULL
+  AND ciphertext IS NULL
+`
+
+type LockWaitingRemoteDeploymentClaimParams struct {
+	DeploymentID int64  `json:"deployment_id"`
+	AgentID      string `json:"agent_id"`
+}
+
+func (q *Queries) LockWaitingRemoteDeploymentClaim(ctx context.Context, arg LockWaitingRemoteDeploymentClaimParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, lockWaitingRemoteDeploymentClaim, arg.DeploymentID, arg.AgentID)
 	if err != nil {
 		return 0, err
 	}

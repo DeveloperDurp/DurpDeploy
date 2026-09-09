@@ -1,6 +1,9 @@
 -- name: LockClaimAgent :execrows
 UPDATE agents SET updated_at = updated_at WHERE id = ? AND status = 'active';
 
+-- name: CurrentUnixTime :one
+SELECT CAST(unixepoch() AS BIGINT) AS now;
+
 -- name: CreateRemoteDeploymentClaim :execrows
 INSERT INTO remote_deployment_claims (deployment_id, agent_id)
 SELECT d.id, d.assigned_agent_id FROM deployments d
@@ -18,6 +21,20 @@ JOIN deployments d ON d.id = c.deployment_id
 WHERE c.agent_id = sqlc.arg(agent_id) AND c.state = 'waiting'
   AND d.assigned_agent_id = c.agent_id AND d.status = 'pending'
 ORDER BY c.created_at, c.deployment_id;
+
+-- name: LockWaitingRemoteDeploymentClaim :execrows
+UPDATE remote_deployment_claims SET updated_at = updated_at
+WHERE deployment_id = sqlc.arg(deployment_id)
+  AND agent_id = sqlc.arg(agent_id)
+  AND state = 'waiting'
+  AND claim_token_hash IS NULL
+  AND ciphertext IS NULL;
+
+-- name: LockPendingRemoteDeployment :execrows
+UPDATE deployments SET status = status
+WHERE id = sqlc.arg(deployment_id)
+  AND assigned_agent_id = sqlc.arg(agent_id)
+  AND status = 'pending';
 
 -- name: ClaimRemoteDeployment :execrows
 UPDATE remote_deployment_claims SET state = 'claimed',

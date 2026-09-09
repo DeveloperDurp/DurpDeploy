@@ -2,6 +2,7 @@ package agentserver_test
 
 import (
 	"crypto/tls"
+	"io"
 	"net/http"
 	"net/http/httptrace"
 	"strings"
@@ -14,12 +15,16 @@ import (
 
 func TestAgentServerReauthenticatesReusedConnection(t *testing.T) {
 	fixture := newAgentFixture(t)
+	seedPollPayload(t, fixture, "pending", "test-agent")
 	response := postAgent(
 		t,
 		fixture,
 		agentproto.PollPath,
 		`{"protocol":"agent/1","agent_version":"v1"}`,
 	)
+	if _, err := io.Copy(io.Discard, response.Body); err != nil {
+		t.Fatal(err)
+	}
 	response.Body.Close()
 	beforeHeartbeat, beforeVersion := agentState(t, fixture.repo)
 	if _, err := fixture.repo.DB.Exec(
