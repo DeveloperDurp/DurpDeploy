@@ -7,7 +7,7 @@ import (
 	"durpdeploy/internal/db"
 )
 
-func TestResolveReleaseVariables_EnvironmentOverridesGlobalAndDeduplicates(t *testing.T) {
+func TestResolveReleaseVariables_EnvironmentOverridesGlobal(t *testing.T) {
 	variables := []db.ReleaseVariable{
 		{ID: 4, Name: "TARGET", Value: sql.NullString{String: "old", Valid: true}, Secret: 0},
 		{ID: 1, Name: "TARGET", Value: sql.NullString{String: "global", Valid: true}},
