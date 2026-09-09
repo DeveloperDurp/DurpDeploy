@@ -72,7 +72,7 @@ func (q *Queries) BeginPairingCommit(ctx context.Context, arg BeginPairingCommit
 
 const completeAgentPairing = `-- name: CompleteAgentPairing :execrows
 UPDATE agent_pairings SET state = 'paired', paired_at = ?1, updated_at = ?1
-WHERE agent_id = ?2 AND state = 'committing' AND expires_at > ?1
+WHERE agent_id = ?2 AND state = 'committing'
   AND server_pin = ?3 AND encrypted_identity IS NOT NULL
 `
 
@@ -130,13 +130,105 @@ func (q *Queries) CreateAgentPairing(ctx context.Context, arg CreateAgentPairing
 	return i, err
 }
 
+const createCommittingAgentPairing = `-- name: CreateCommittingAgentPairing :one
+INSERT INTO agent_pairings (
+    agent_id, pairing_code_hash, agent_public_identity, agent_pin,
+    server_public_identity, server_pin, encrypted_identity, state,
+    expires_at, updated_at, server_pull_endpoint
+)
+VALUES (
+    ?1, ?2,
+    ?3, ?4,
+    ?5, ?6,
+    ?7, 'committing', ?8,
+    ?9, ?10
+)
+RETURNING agent_id, pairing_code_hash, agent_public_identity, agent_pin, server_public_identity, server_pin, encrypted_identity, state, expires_at, paired_at, created_at, updated_at, server_pull_endpoint
+`
+
+type CreateCommittingAgentPairingParams struct {
+	AgentID              string         `json:"agent_id"`
+	PairingCodeHash      []byte         `json:"pairing_code_hash"`
+	AgentPublicIdentity  string         `json:"agent_public_identity"`
+	AgentPin             string         `json:"agent_pin"`
+	ServerPublicIdentity sql.NullString `json:"server_public_identity"`
+	ServerPin            sql.NullString `json:"server_pin"`
+	EncryptedIdentity    sql.NullString `json:"encrypted_identity"`
+	ExpiresAt            int64          `json:"expires_at"`
+	Now                  int64          `json:"now"`
+	ServerPullEndpoint   sql.NullString `json:"server_pull_endpoint"`
+}
+
+func (q *Queries) CreateCommittingAgentPairing(ctx context.Context, arg CreateCommittingAgentPairingParams) (AgentPairing, error) {
+	row := q.db.QueryRowContext(ctx, createCommittingAgentPairing,
+		arg.AgentID,
+		arg.PairingCodeHash,
+		arg.AgentPublicIdentity,
+		arg.AgentPin,
+		arg.ServerPublicIdentity,
+		arg.ServerPin,
+		arg.EncryptedIdentity,
+		arg.ExpiresAt,
+		arg.Now,
+		arg.ServerPullEndpoint,
+	)
+	var i AgentPairing
+	err := row.Scan(
+		&i.AgentID,
+		&i.PairingCodeHash,
+		&i.AgentPublicIdentity,
+		&i.AgentPin,
+		&i.ServerPublicIdentity,
+		&i.ServerPin,
+		&i.EncryptedIdentity,
+		&i.State,
+		&i.ExpiresAt,
+		&i.PairedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ServerPullEndpoint,
+	)
+	return i, err
+}
+
+const deleteExpiredAgentPairing = `-- name: DeleteExpiredAgentPairing :execrows
+DELETE FROM agent_pairings
+WHERE agent_id = ?1 AND state = 'expired'
+`
+
+func (q *Queries) DeleteExpiredAgentPairing(ctx context.Context, agentID string) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteExpiredAgentPairing, agentID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const expireAgentPairings = `-- name: ExpireAgentPairings :execrows
 UPDATE agent_pairings SET state = 'expired', updated_at = ?1
-WHERE state IN ('pending', 'committing') AND expires_at <= ?1
+WHERE state = 'pending' AND expires_at <= ?1
 `
 
 func (q *Queries) ExpireAgentPairings(ctx context.Context, now int64) (int64, error) {
 	result, err := q.db.ExecContext(ctx, expireAgentPairings, now)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const expireCommittingAgentPairing = `-- name: ExpireCommittingAgentPairing :execrows
+UPDATE agent_pairings SET state = 'expired', updated_at = ?1
+WHERE agent_id = ?2 AND state = 'committing'
+`
+
+type ExpireCommittingAgentPairingParams struct {
+	Now     int64  `json:"now"`
+	AgentID string `json:"agent_id"`
+}
+
+func (q *Queries) ExpireCommittingAgentPairing(ctx context.Context, arg ExpireCommittingAgentPairingParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, expireCommittingAgentPairing, arg.Now, arg.AgentID)
 	if err != nil {
 		return 0, err
 	}
@@ -166,4 +258,75 @@ func (q *Queries) GetAgentPairing(ctx context.Context, agentID string) (AgentPai
 		&i.ServerPullEndpoint,
 	)
 	return i, err
+}
+
+const listAgentPairingRecoveryCandidates = `-- name: ListAgentPairingRecoveryCandidates :many
+SELECT p.agent_id, p.pairing_code_hash, p.agent_public_identity, p.agent_pin, p.server_public_identity, p.server_pin, p.encrypted_identity, p.state, p.expires_at, p.paired_at, p.created_at, p.updated_at, p.server_pull_endpoint, a.endpoint
+FROM agent_pairings p
+JOIN agents a ON a.id = p.agent_id
+WHERE p.pairing_code_hash = ?1
+   OR p.agent_pin = ?2
+   OR a.endpoint = ?3
+ORDER BY p.agent_id
+`
+
+type ListAgentPairingRecoveryCandidatesParams struct {
+	PairingCodeHash []byte `json:"pairing_code_hash"`
+	AgentPin        string `json:"agent_pin"`
+	Endpoint        string `json:"endpoint"`
+}
+
+type ListAgentPairingRecoveryCandidatesRow struct {
+	AgentID              string         `json:"agent_id"`
+	PairingCodeHash      []byte         `json:"pairing_code_hash"`
+	AgentPublicIdentity  string         `json:"agent_public_identity"`
+	AgentPin             string         `json:"agent_pin"`
+	ServerPublicIdentity sql.NullString `json:"server_public_identity"`
+	ServerPin            sql.NullString `json:"server_pin"`
+	EncryptedIdentity    sql.NullString `json:"encrypted_identity"`
+	State                string         `json:"state"`
+	ExpiresAt            int64          `json:"expires_at"`
+	PairedAt             sql.NullInt64  `json:"paired_at"`
+	CreatedAt            int64          `json:"created_at"`
+	UpdatedAt            int64          `json:"updated_at"`
+	ServerPullEndpoint   sql.NullString `json:"server_pull_endpoint"`
+	Endpoint             string         `json:"endpoint"`
+}
+
+func (q *Queries) ListAgentPairingRecoveryCandidates(ctx context.Context, arg ListAgentPairingRecoveryCandidatesParams) ([]ListAgentPairingRecoveryCandidatesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listAgentPairingRecoveryCandidates, arg.PairingCodeHash, arg.AgentPin, arg.Endpoint)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAgentPairingRecoveryCandidatesRow
+	for rows.Next() {
+		var i ListAgentPairingRecoveryCandidatesRow
+		if err := rows.Scan(
+			&i.AgentID,
+			&i.PairingCodeHash,
+			&i.AgentPublicIdentity,
+			&i.AgentPin,
+			&i.ServerPublicIdentity,
+			&i.ServerPin,
+			&i.EncryptedIdentity,
+			&i.State,
+			&i.ExpiresAt,
+			&i.PairedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.ServerPullEndpoint,
+			&i.Endpoint,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
