@@ -361,6 +361,9 @@ func recoverPendingDeployments(
 	)
 	for _, d := range pending {
 		d := d // capture
+		if d.AssignedAgentID.Valid {
+			continue
+		}
 		slog.Info(
 			"startup recovery: re-launching",
 			"deployment_id",

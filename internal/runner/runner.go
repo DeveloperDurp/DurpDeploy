@@ -347,7 +347,12 @@ func (r *DeploymentRunner) Run(
 		TimeoutSeconds int64  `json:"timeout_seconds"`
 		MaxRetries     int64  `json:"max_retries"`
 	}
-	if err := json.Unmarshal([]byte(release.StepsJson), &steps); err != nil {
+	stepSource, err := r.repo.Queries.GetDeploymentStepSource(ctx, deploymentID)
+	if err != nil {
+		_ = r.failUnlessCancelled(ctx, deploymentID)
+		return
+	}
+	if err := json.Unmarshal([]byte(stepSource.StepsJson), &steps); err != nil {
 		_ = r.failUnlessCancelled(ctx, deploymentID)
 		return
 	}

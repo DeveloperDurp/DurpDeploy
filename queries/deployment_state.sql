@@ -3,6 +3,14 @@ UPDATE deployments SET status = status WHERE id = sqlc.arg(deployment_id) AND st
 AND NOT EXISTS (SELECT 1 FROM deployment_step_sources WHERE deployment_id = sqlc.arg(deployment_id))
 AND NOT EXISTS (SELECT 1 FROM deployment_steps WHERE deployment_id = sqlc.arg(deployment_id));
 
+-- name: LockDeploymentApproval :execrows
+UPDATE deployments SET status = status
+WHERE id = sqlc.arg(deployment_id) AND status = 'pending_approval';
+
+-- name: ApproveDeploymentStatus :execrows
+UPDATE deployments SET status = 'pending'
+WHERE id = sqlc.arg(deployment_id) AND status = 'pending_approval';
+
 -- name: CancelStepDeployment :execrows
 UPDATE deployments SET status = 'cancelled', finished_at = unixepoch()
 WHERE id = ? AND status IN ('pending', 'running');

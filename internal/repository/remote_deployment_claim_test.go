@@ -3,77 +3,99 @@ package repository_test
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"testing"
 
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/repository"
 )
 
 func TestCreateDeploymentSnapshotsAssignedAgent(t *testing.T) {
-	repo := newTestRepo(t)
+	repo := remoteFixture(t)
 	ctx := context.Background()
-	project, err := repo.Queries.CreateProject(
-		ctx,
-		db.CreateProjectParams{Name: "claim-snapshot"},
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	environment, err := repo.Queries.CreateEnvironment(
-		ctx,
-		db.CreateEnvironmentParams{Name: "claim-snapshot"},
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	release, err := repo.Queries.CreateRelease(ctx, db.CreateReleaseParams{
-		ProjectID: project.ID, Version: "v1", StepsJson: "[]",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = repo.Queries.CreateAgent(ctx, db.CreateAgentParams{
-		ID: "agent-a", Name: "agent-a", Endpoint: "https://agent.invalid",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	assigned, err := repo.Queries.AssignEnvironmentAgent(
-		ctx,
-		db.AssignEnvironmentAgentParams{
-			EnvironmentID: environment.ID,
-			AgentID:       "agent-a",
-		},
-	)
-	assertOne(t, assigned, err)
 
-	local, err := repo.Queries.CreateDeployment(ctx, db.CreateDeploymentParams{
-		ReleaseID: release.ID, EnvironmentID: environment.ID, Status: "pending",
+	local, err := repo.CreateDeployment(ctx, db.CreateDeploymentParams{
+		ReleaseID: 1, EnvironmentID: 2, Status: "pending",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	remote, err := repo.Queries.CreateDeployment(ctx, db.CreateDeploymentParams{
-		ReleaseID: release.ID, EnvironmentID: environment.ID, Status: "pending",
-		AssignedAgentID: sql.NullString{String: "agent-a", Valid: true},
+	if local.Mode != repository.ExecutionLocal ||
+		local.Deployment.AssignedAgentID.Valid {
+		t.Fatalf("local result=%+v", local)
+	}
+	if _, err := repo.Queries.GetDeploymentStepSource(
+		ctx,
+		local.Deployment.ID,
+	); err != nil {
+		t.Fatalf("local source snapshot: %v", err)
+	}
+	if _, err := repo.Queries.GetRemoteDeploymentClaim(
+		ctx,
+		local.Deployment.ID,
+	); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("local claim error=%v", err)
+	}
+
+	remote, err := repo.CreateDeployment(ctx, db.CreateDeploymentParams{
+		ReleaseID: 1, EnvironmentID: 1, Status: "pending_approval",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if local.AssignedAgentID.Valid {
+	if remote.Mode != repository.ExecutionRemote ||
+		remote.Deployment.AssignedAgentID.String != "a" {
+		t.Fatalf("remote result=%+v", remote)
+	}
+	claim, err := repo.Queries.GetRemoteDeploymentClaim(
+		ctx,
+		remote.Deployment.ID,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if claim.AgentID != "a" || claim.State != "waiting" {
+		t.Fatalf("remote claim=%+v", claim)
+	}
+	waiting, err := repo.Queries.ListWaitingRemoteDeploymentClaims(ctx, "a")
+	if err != nil || len(waiting) != 2 {
 		t.Fatalf(
-			"local deployment assigned agent %q",
-			local.AssignedAgentID.String,
+			"approval-gated claim became poll eligible: %v %v",
+			waiting,
+			err,
 		)
 	}
-	if !remote.AssignedAgentID.Valid ||
-		remote.AssignedAgentID.String != "agent-a" {
-		t.Fatalf("remote deployment assignment=%#v", remote.AssignedAgentID)
+	approved, err := repo.ApproveDeployment(ctx, db.CreateApprovalParams{
+		DeploymentID: remote.Deployment.ID, ApprovedBy: "operator",
+		RequiredApproverRole: "admin",
+	})
+	if err != nil || approved.Mode != repository.ExecutionRemote {
+		t.Fatalf("approve remote deployment: %+v %v", approved, err)
 	}
-	persisted, err := repo.Queries.GetDeployment(ctx, remote.ID)
+	waiting, err = repo.Queries.ListWaitingRemoteDeploymentClaims(ctx, "a")
+	if err != nil || len(waiting) != 3 {
+		t.Fatalf("approved claim not poll eligible: %v %v", waiting, err)
+	}
+
+	before, err := repo.Queries.ListDeployments(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if persisted.AssignedAgentID != remote.AssignedAgentID {
-		t.Fatalf("persisted assignment=%#v", persisted.AssignedAgentID)
+	_, err = repo.Queries.SetAgentStatus(ctx, db.SetAgentStatusParams{
+		ID: "a", Status: "disabled",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = repo.CreateDeployment(ctx, db.CreateDeploymentParams{
+		ReleaseID: 1, EnvironmentID: 1, Status: "pending",
+	})
+	if !errors.Is(err, repository.ErrDeploymentRoutingConflict) {
+		t.Fatalf("inactive assignment error=%v", err)
+	}
+	after, err := repo.Queries.ListDeployments(ctx)
+	if err != nil || len(after) != len(before) {
+		t.Fatalf("inactive assignment created row: before=%d after=%d err=%v",
+			len(before), len(after), err)
 	}
 }

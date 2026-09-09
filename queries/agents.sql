@@ -57,6 +57,17 @@ WHERE e.environment_id = ? ORDER BY a.name, a.id;
 -- name: GetEnvironmentAgentAssignment :one
 SELECT * FROM environment_agent_assignments WHERE environment_id = ?;
 
+-- name: LockEnvironmentAgentAssignment :execrows
+UPDATE environment_agent_assignments SET created_at = created_at
+WHERE environment_agent_assignments.environment_id = sqlc.arg(environment_id)
+  AND environment_agent_assignments.agent_id = sqlc.arg(agent_id)
+  AND EXISTS (SELECT 1 FROM agents a
+      WHERE a.id = environment_agent_assignments.agent_id
+        AND a.status = 'active')
+  AND EXISTS (SELECT 1 FROM agent_pairings p
+      WHERE p.agent_id = environment_agent_assignments.agent_id
+        AND p.state = 'paired');
+
 -- name: ListAgentEnvironments :many
 SELECT e.* FROM environments e JOIN environment_agent_assignments a ON a.environment_id = e.id
 WHERE a.agent_id = ? ORDER BY e.name, e.id;

@@ -315,6 +315,31 @@ func (q *Queries) ListEnvironmentAgents(ctx context.Context, environmentID int64
 	return items, nil
 }
 
+const lockEnvironmentAgentAssignment = `-- name: LockEnvironmentAgentAssignment :execrows
+UPDATE environment_agent_assignments SET created_at = created_at
+WHERE environment_agent_assignments.environment_id = ?1
+  AND environment_agent_assignments.agent_id = ?2
+  AND EXISTS (SELECT 1 FROM agents a
+      WHERE a.id = environment_agent_assignments.agent_id
+        AND a.status = 'active')
+  AND EXISTS (SELECT 1 FROM agent_pairings p
+      WHERE p.agent_id = environment_agent_assignments.agent_id
+        AND p.state = 'paired')
+`
+
+type LockEnvironmentAgentAssignmentParams struct {
+	EnvironmentID int64  `json:"environment_id"`
+	AgentID       string `json:"agent_id"`
+}
+
+func (q *Queries) LockEnvironmentAgentAssignment(ctx context.Context, arg LockEnvironmentAgentAssignmentParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, lockEnvironmentAgentAssignment, arg.EnvironmentID, arg.AgentID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const setAgentStatus = `-- name: SetAgentStatus :one
 UPDATE agents SET status = ?1, updated_at = unixepoch(),
     revoked_at = CASE WHEN ?1 = 'revoked' THEN unixepoch() ELSE revoked_at END

@@ -10,6 +10,19 @@ import (
 	"database/sql"
 )
 
+const approveDeploymentStatus = `-- name: ApproveDeploymentStatus :execrows
+UPDATE deployments SET status = 'pending'
+WHERE id = ?1 AND status = 'pending_approval'
+`
+
+func (q *Queries) ApproveDeploymentStatus(ctx context.Context, deploymentID int64) (int64, error) {
+	result, err := q.db.ExecContext(ctx, approveDeploymentStatus, deploymentID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const cancelStepDeployment = `-- name: CancelStepDeployment :execrows
 UPDATE deployments SET status = 'cancelled', finished_at = unixepoch()
 WHERE id = ? AND status IN ('pending', 'running')
@@ -17,6 +30,19 @@ WHERE id = ? AND status IN ('pending', 'running')
 
 func (q *Queries) CancelStepDeployment(ctx context.Context, id int64) (int64, error) {
 	result, err := q.db.ExecContext(ctx, cancelStepDeployment, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const lockDeploymentApproval = `-- name: LockDeploymentApproval :execrows
+UPDATE deployments SET status = status
+WHERE id = ?1 AND status = 'pending_approval'
+`
+
+func (q *Queries) LockDeploymentApproval(ctx context.Context, deploymentID int64) (int64, error) {
+	result, err := q.db.ExecContext(ctx, lockDeploymentApproval, deploymentID)
 	if err != nil {
 		return 0, err
 	}

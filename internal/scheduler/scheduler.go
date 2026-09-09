@@ -315,7 +315,7 @@ func (s *Scheduler) fireOne(ctx context.Context, row db.ScheduledDeployment) {
 
 	// create deployment
 	note := fmt.Sprintf("Scheduled: %d - %s", row.ID, row.Note.String)
-	deployment, err := s.repo.Queries.CreateDeployment(
+	result, err := s.repo.CreateDeployment(
 		ctx,
 		db.CreateDeploymentParams{
 			ReleaseID:     row.ReleaseID,
@@ -358,16 +358,17 @@ func (s *Scheduler) fireOne(ctx context.Context, row db.ScheduledDeployment) {
 		"project_id",
 		row.ProjectID,
 		"deployment_id",
-		deployment.ID,
+		result.Deployment.ID,
 		"status",
 		initialStatus,
 	)
 
-	if initialStatus == "pending" {
+	if result.Mode == repository.ExecutionLocal &&
+		initialStatus == "pending" {
 		// spawn runner without blocking the ticker
 		go s.runFunc(
 			context.Background(),
-			deployment.ID,
+			result.Deployment.ID,
 			row.ReleaseID,
 			row.EnvironmentID,
 		)
