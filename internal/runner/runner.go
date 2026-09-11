@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"strings"
 	"sync"
 	"time"
@@ -194,8 +193,10 @@ func (r *DeploymentRunner) runStepAttempt(
 		return err
 	}
 
-	cmd := exec.CommandContext(stepCtx, "bash", scriptPath)
-	cmd.Dir = tmpDir
+	cmd, err := r.command(stepCtx, tmpDir, scriptPath)
+	if err != nil {
+		return err
+	}
 	// Minimal, whitelisted environment (P1-4) instead of inheriting the
 	// server's own os.Environ() — a step must not see DURPDEPLOY_DB,
 	// DURPDEPLOY_SECRET_KEY, or anything else the server process holds.
@@ -204,18 +205,6 @@ func (r *DeploymentRunner) runStepAttempt(
 		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
 	}
 	cmd.WaitDelay = 15 * time.Second
-	// Run the step in its own process group so a timeout/cancel/shutdown
-	// can kill the whole tree (bash + anything it spawned) instead of just
-	// the bash PID, which otherwise leaves grandchildren orphaned (P1-3).
-	// setPgid/killProcessGroup are platform-specific (see procgroup_unix.go
-	// / procgroup_other.go) so this package builds on non-Unix targets too.
-	setPgid(cmd)
-	// Drop to the durpdeploy-runner UID/GID (P1-4); no-op if that account
-	// isn't provisioned or the platform doesn't support it.
-	r.sandbox.applyCredential(cmd)
-	if err := r.sandbox.clearCapabilities(cmd); err != nil {
-		return err
-	}
 
 	// Allow the durpdeploy-runner user to enter the scratch directory (P1-4).
 	// MkdirTemp creates it as 0700; we need 0711 (+x) at minimum.
