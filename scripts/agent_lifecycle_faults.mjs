@@ -30,8 +30,8 @@ export function isLifecycleScenario(scenario) {
 
 export async function runLifecycleFault(context) {
 	const {
-		agentStateDir, api, command, environmentID, lifecycleProxy, readOnly,
-		restartAgent, scenario, serverIdentity, stopAgent,
+		agentStateDir, api, command, environmentID, lifecycleAddress,
+		lifecycleProxy, readOnly, restartAgent, scenario, serverIdentity, stopAgent,
 	} = context;
 	check(isLifecycleScenario(scenario), `unknown lifecycle fault scenario: ${scenario}`);
 	const createDeployment = async (scriptBody) => {
@@ -79,7 +79,7 @@ export async function runLifecycleFault(context) {
 		"--key", join(agentStateDir, "identity.key"),
 		"--header", "Content-Type: application/json",
 		"--output", "/dev/null", "--write-out", "%{http_code}",
-		"--data", body, `https://${lifecycleProxy.address}${path}`,
+		"--data", body, `https://${lifecycleAddress}${path}`,
 	]);
 	const armResponse = (skip = 0) => {
 		lifecycleProxy.arm({
@@ -226,7 +226,7 @@ export async function runLifecycleFault(context) {
 	} else if (scenario === "lost-cancelled-response") {
 		await stopAgent();
 		const client = await createFaultClient({
-			address: lifecycleProxy.address,
+			address: lifecycleAddress,
 			serverIdentity,
 			stateDir: agentStateDir,
 		});

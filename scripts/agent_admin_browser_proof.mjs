@@ -23,6 +23,7 @@ const evidenceDir = resolve(
 const agentRoot = resolve(process.env.DURPDEPLOY_AGENT_WORKTREE || defaultAgentRoot);
 const runDir = await mkdtemp(join(tmpdir(), "durpdeploy-agent-browser-"));
 const agentContainer = `durpdeploy-agent-e2e-${process.pid}`;
+const agentStateVolume = `${agentContainer}-state`;
 const serverBinary = join(runDir, "durpdeploy");
 const agentBinary = join(runDir, "durpdeploy-agent");
 const database = join(runDir, "durpdeploy.db");
@@ -192,10 +193,15 @@ async function main() {
 	const browserReservation = await reserveAddress();
 	const listenerReservation = await reserveAddress();
 	const bootstrapReservation = await reserveAddress();
-	lifecycleProxy = await FaultProxy.start({ upstreamAddress: listenerReservation.address });
+	lifecycleProxy = await FaultProxy.start({
+		listenHost: "0.0.0.0",
+		upstreamAddress: listenerReservation.address,
+	});
 	pairingProxy = await FaultProxy.start({ upstreamAddress: bootstrapReservation.address });
 	const baseURL = `http://${browserReservation.address}`;
-	const listenerURL = `https://${lifecycleProxy.address}`;
+	const listenerPort = lifecycleProxy.address.slice(lifecycleProxy.address.lastIndexOf(":") + 1);
+	const lifecycleAddress = `127.0.0.1:${listenerPort}`;
+	const listenerURL = `https://host.containers.internal:${listenerPort}`;
 	const bootstrapURL = `https://${pairingProxy.address}`;
 	const nonce = randomBytes(12).toString("hex");
 	const sentinelDir = join(runDir, "server-path");
@@ -233,8 +239,8 @@ async function main() {
 		...process.env,
 		DURPDEPLOY_AGENT_E2E_BINARY: agentBinary,
 		DURPDEPLOY_EXTRA_SCRUB_PATTERNS: "todo12-secret",
-		DURPDEPLOY_AGENT_LISTEN_ADDR: bootstrapReservation.address,
-		DURPDEPLOY_AGENT_STATE_DIR: join(runDir, "agent-state"),
+		DURPDEPLOY_AGENT_LISTEN_ADDR: `0.0.0.0:${bootstrapReservation.address.slice(bootstrapReservation.address.lastIndexOf(":") + 1)}`,
+		DURPDEPLOY_AGENT_STATE_DIR: "/var/lib/durpdeploy-agent",
 		DURPDEPLOY_AGENT_VERSION: "todo12-browser-proof",
 		LANG: `ddp-agent-${nonce}`,
 	};
@@ -246,6 +252,7 @@ async function main() {
 			env: {
 				...agentEnvironment,
 				DURPDEPLOY_AGENT_E2E_CONTAINER: currentAgentContainer,
+				DURPDEPLOY_AGENT_E2E_STATE_VOLUME: agentStateVolume,
 			},
 			stdio: ["ignore", "pipe", "pipe"],
 		});
@@ -256,8 +263,6 @@ async function main() {
 	const stopAgent = async () => {
 		await command("podman", ["rm", "-f", "--ignore", currentAgentContainer]);
 		await stop(agent, "agentStopped");
-		await command("podman", ["unshare", "chown", "-R", "0:0",
-			agentEnvironment.DURPDEPLOY_AGENT_STATE_DIR]);
 	};
 	const restartAgent = async () => {
 		await stopAgent();
@@ -268,7 +273,8 @@ async function main() {
 	await command("openssl", [
 		"req", "-new", "-x509", "-key", join(serverIdentity, "identity.key"),
 		"-out", join(serverIdentity, "identity.crt"), "-days", "1",
-		"-subj", "/CN=127.0.0.1", "-addext", "subjectAltName=IP:127.0.0.1",
+		"-subj", "/CN=host.containers.internal", "-addext",
+		"subjectAltName=DNS:host.containers.internal,IP:127.0.0.1",
 	]);
 	await command("go", ["build", "-buildvcs=false", "-o", serverBinary, "./cmd/server"], { cwd: root, env: serverEnvironment });
 	await command("go", ["build", "-buildvcs=false", "-o", agentBinary, "./cmd/agent"], {
@@ -410,6 +416,13 @@ async function main() {
 	const environmentID = state.trim().split("|").at(-1);
 	let lifecycleCheckpoint = null;
 	if (lifecycle) {
+		const agentIdentity = join(runDir, "agent-identity");
+		await mkdir(agentIdentity, { mode: 0o700 });
+		for (const file of ["identity.crt", "identity.key"]) {
+			await command("podman", ["cp",
+				`${currentAgentContainer}:/var/lib/durpdeploy-agent/${file}`,
+				join(agentIdentity, file)]);
+		}
 		const token = (await command(serverBinary, ["tokens", "create", "--user", admin.email, "--name", "todo12-e2e"], { cwd: runDir, env: serverEnvironment })).trim();
 		const api = async (method, path, body) => {
 			const response = await fetch(`${baseURL}/api/v1${path}`, {
@@ -424,10 +437,11 @@ async function main() {
 		};
 		if (isLifecycleScenario(faultScenario)) {
 			lifecycleCheckpoint = await runLifecycleFault({
-				agentStateDir: agentEnvironment.DURPDEPLOY_AGENT_STATE_DIR,
+				agentStateDir: agentIdentity,
 				api,
 				command,
 				environmentID,
+				lifecycleAddress,
 				lifecycleProxy,
 				readOnly,
 				restartAgent,
@@ -604,6 +618,7 @@ try {
 		cleanup.browserStopped = true;
 	}
 	if (agent) await command("podman", ["rm", "-f", "--ignore", currentAgentContainer]);
+	await command("podman", ["volume", "rm", "-f", agentStateVolume]);
 	await stop(agent, "agentStopped");
 	await stop(server, "serverStopped");
 	if (lifecycleProxy) await lifecycleProxy.close();

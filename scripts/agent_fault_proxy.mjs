@@ -13,14 +13,15 @@ function endpoint(address) {
 }
 
 export class FaultProxy {
-	static async start({ upstreamAddress }) {
-		const proxy = new FaultProxy(upstreamAddress);
+	static async start({ upstreamAddress, listenHost = "127.0.0.1" }) {
+		const proxy = new FaultProxy(upstreamAddress, listenHost);
 		await proxy.start();
 		return proxy;
 	}
 
-	constructor(upstreamAddress) {
+	constructor(upstreamAddress, listenHost) {
 		this.upstream = endpoint(upstreamAddress);
+		this.listenHost = listenHost;
 		this.server = net.createServer((client) => this.accept(client));
 		this.events = new EventEmitter();
 		this.rules = [];
@@ -30,13 +31,13 @@ export class FaultProxy {
 	}
 
 	async start() {
-		this.server.listen(0, "127.0.0.1");
+		this.server.listen(0, this.listenHost);
 		await once(this.server, "listening");
 		const address = this.server.address();
 		if (!address || typeof address === "string") {
 			throw new Error("fault proxy did not bind a TCP address");
 		}
-		this.address = `127.0.0.1:${address.port}`;
+		this.address = `${this.listenHost}:${address.port}`;
 	}
 
 	arm(rule) {
