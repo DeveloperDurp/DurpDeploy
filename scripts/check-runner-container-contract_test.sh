@@ -82,7 +82,13 @@ assert_compose_rejected 'network_mode=host' 'compose.yml shares the host network
 assert_compose_rejected 'network_mode="host"' 'compose.yml shares the host network'
 assert_compose_rejected 'read_only=false' 'compose.yml permits a writable image root'
 assert_compose_rejected 'read_only="false"' 'compose.yml permits a writable image root'
+for capability in SYS_ADMIN sys_admin CAP_SYS_ADMIN cap_sys_admin; do
+	assert_compose_rejected "cap_add=[\"$capability\"]" \
+		'compose.yml contains a forbidden privilege'
+done
 assert_compose_rejected 'volumes=["/var/run/docker.sock:/var/run/docker.sock"]' \
+	'compose.yml mounts a container socket'
+assert_compose_rejected 'volumes=["/run/podman/podman.sock:/run/podman/podman.sock"]' \
 	'compose.yml mounts a container socket'
 
 comment_fixture=$(mktemp -d)
@@ -94,7 +100,9 @@ cp "$repo_root/Dockerfile" "$repo_root/Makefile" \
 cp "$repo_root/internal/runner/runner.go" \
 	"$repo_root/internal/runner/sandbox_linux.go" \
 	"$comment_fixture/internal/runner/"
-printf '%s\n' '# privileged: true is forbidden' >> "$comment_fixture/compose.yml"
+printf '%s\n' \
+	'# privileged: true; cap_add: [sys_admin]; /run/podman/podman.sock' \
+	>> "$comment_fixture/compose.yml"
 RUNNER_CONTAINER_CONTRACT_ROOT="$comment_fixture" \
 	RUNNER_CONTAINER_CONTRACT_STATIC_ONLY=1 bash "$checker" >/dev/null
 

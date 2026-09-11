@@ -22,7 +22,6 @@ if grep -Eqi 'chroot|syscall\.Mount|\.Chroot' \
 fi
 for file in compose.yml compose.example.yml; do
 	python3 - "$root/$file" "$file" <<'PY'
-import json
 import pathlib
 import sys
 
@@ -43,10 +42,14 @@ if str(app.get("network_mode", "")).lower() == "host":
     fail("shares the host network")
 if app.get("read_only") is not True:
     fail("permits a writable image root")
-text = json.dumps(app)
-if "SYS_ADMIN" in text or "SYS_CHROOT" in text or "unconfined" in text:
+capabilities = {str(value).casefold() for value in app.get("cap_add", [])}
+if capabilities & {"sys_admin", "cap_sys_admin", "sys_chroot", "cap_sys_chroot"}:
     fail("contains a forbidden privilege")
-if "docker.sock" in text:
+security_options = [str(value).casefold() for value in app.get("security_opt", [])]
+if any("unconfined" in value for value in security_options):
+    fail("contains a forbidden privilege")
+volumes = str(app.get("volumes", [])).casefold()
+if "docker.sock" in volumes or "podman.sock" in volumes:
     fail("mounts a container socket")
 PY
 done
