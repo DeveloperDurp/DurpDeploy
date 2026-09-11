@@ -3,59 +3,27 @@ set -euo pipefail
 
 : "${DURPDEPLOY_AGENT_E2E_BINARY:?agent binary is required}"
 : "${DURPDEPLOY_AGENT_E2E_CONTAINER:?container name is required}"
+: "${DURPDEPLOY_AGENT_E2E_STATE_VOLUME:?state volume is required}"
 : "${DURPDEPLOY_AGENT_LISTEN_ADDR:?agent listen address is required}"
-: "${DURPDEPLOY_AGENT_STATE_DIR:?agent state directory is required}"
-
-unit="${DURPDEPLOY_AGENT_E2E_CONTAINER}.service"
+listen_port=${DURPDEPLOY_AGENT_LISTEN_ADDR##*:}
 
 cleanup() {
 	local status=$?
 	podman rm -f "$DURPDEPLOY_AGENT_E2E_CONTAINER" >/dev/null 2>&1 || true
-	systemctl --user stop "$unit" >/dev/null 2>&1 || true
-	systemctl --user reset-failed "$unit" >/dev/null 2>&1 || true
-	podman unshare chown -R 0:0 "$DURPDEPLOY_AGENT_STATE_DIR" \
-		>/dev/null 2>&1 || true
 	return "$status"
 }
 trap cleanup EXIT
 trap 'exit 143' INT TERM
 
-mkdir -p "$DURPDEPLOY_AGENT_STATE_DIR"
-chmod 0711 "$(dirname "$DURPDEPLOY_AGENT_STATE_DIR")"
-podman unshare chown -R 10001:10001 "$DURPDEPLOY_AGENT_STATE_DIR"
-
-systemd-run --user --unit="$unit" --property=Delegate=yes \
-	/bin/sleep infinity >/dev/null
-control_group=$(systemctl --user show -p ControlGroup --value "$unit")
-cgroup_root="/sys/fs/cgroup$control_group"
-mkdir "$cgroup_root/manager"
-manager_pid=0
-for _ in $(seq 1 100); do
-	manager_pid=$(systemctl --user show -p MainPID --value "$unit")
-	[[ $manager_pid != 0 ]] && break
-	sleep 0.01
-done
-[[ $manager_pid != 0 ]] || {
-	printf 'delegated systemd unit did not start: %s\n' "$unit" >&2
-	exit 1
-}
-printf '%s' "$manager_pid" >"$cgroup_root/manager/cgroup.procs"
-printf '+cpu +memory +pids' >"$cgroup_root/cgroup.subtree_control"
-mkdir "$cgroup_root/durpdeploy"
-printf '+cpu +memory +pids' >"$cgroup_root/durpdeploy/cgroup.subtree_control"
-podman unshare chown -R 10001:10001 "$cgroup_root/durpdeploy"
-mkdir "$cgroup_root/agent"
-
 podman run --detach --name "$DURPDEPLOY_AGENT_E2E_CONTAINER" \
-	--network host --cgroupns host --read-only \
+	--network slirp4netns:allow_host_loopback=true --read-only \
+	--publish "127.0.0.1:$listen_port:$listen_port" \
 	--security-opt no-new-privileges:true \
-	--security-opt apparmor=unconfined \
 	--cap-drop ALL \
 	--cap-add SETUID --cap-add SETGID --cap-add SETPCAP \
-	--cap-add SYS_ADMIN --cap-add SYS_CHROOT \
+	--memory 512m --cpus 1.0 --pids-limit 128 \
 	--tmpfs /tmp:size=64m,mode=1777 \
-	-v "$cgroup_root:/sys/fs/cgroup:rw" \
-	-v "$DURPDEPLOY_AGENT_STATE_DIR:/var/lib/durpdeploy-agent:rw" \
+	-v "$DURPDEPLOY_AGENT_E2E_STATE_VOLUME:/var/lib/durpdeploy-agent" \
 	-v "$DURPDEPLOY_AGENT_E2E_BINARY:/usr/local/bin/durpdeploy-agent:ro" \
 	-e DURPDEPLOY_AGENT_LISTEN_ADDR \
 	-e DURPDEPLOY_AGENT_STATE_DIR=/var/lib/durpdeploy-agent \
@@ -79,14 +47,6 @@ if [[ $container_pid == 0 ]]; then
 		"${container_status:-unknown}" >&2
 	exit 1
 fi
-for _ in $(seq 1 100); do
-	grep -q '/libpod-' "/proc/$container_pid/cgroup" && break
-	sleep 0.01
-done
-printf '%s' "$container_pid" >"$cgroup_root/agent/cgroup.procs"
-grep -Fq "$control_group/agent" "/proc/$container_pid/cgroup"
-podman unshare chown 10001:10001 \
-	"$cgroup_root/cgroup.procs" "$cgroup_root/agent/cgroup.procs"
 podman logs --follow "$DURPDEPLOY_AGENT_E2E_CONTAINER" &
 logs_pid=$!
 container_status=$(podman wait "$DURPDEPLOY_AGENT_E2E_CONTAINER")
