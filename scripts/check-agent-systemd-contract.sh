@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-unit=systemd/durpdeploy.service
+root=${AGENT_SYSTEMD_CONTRACT_ROOT:-.}
+unit="$root/systemd/durpdeploy.service"
 grep -Fq 'DURPDEPLOY_AGENT_LISTEN_ADDR=0.0.0.0:10943' "$unit"
 grep -Fq 'DURPDEPLOY_AGENT_PUBLIC_URL=https://<agent-control-host>' "$unit"
 grep -Fq 'DURPDEPLOY_AGENT_IDENTITY_DIR=/var/lib/durpdeploy/agent-identity' "$unit"
@@ -17,8 +18,11 @@ grep -Fq 'ProtectControlGroups=true' "$unit"
 grep -Fq 'MemoryMax=512M' "$unit"
 grep -Fq 'TasksMax=256' "$unit"
 grep -Fq 'CPUQuota=100%' "$unit"
-if grep -Eq 'CAP_SYS_(ADMIN|CHROOT)|chroot|bind-mount' "$unit"; then
-	printf '%s\n' 'agent systemd contract: obsolete privileged sandbox found' >&2
-	exit 1
-fi
+for forbidden in CAP_SYS_ADMIN CAP_SYS_CHROOT Delegate=true \
+	BindReadOnlyPaths=/data docker.sock chroot bind-mount; do
+	if grep -Fq "$forbidden" "$unit"; then
+		printf 'agent systemd contract: forbidden %s\n' "$forbidden" >&2
+		exit 1
+	fi
+done
 printf '%s\n' 'agent systemd contract: PASS'
