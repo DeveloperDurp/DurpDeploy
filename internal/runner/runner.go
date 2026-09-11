@@ -17,7 +17,10 @@ import (
 	"durpdeploy/internal/repository"
 )
 
-const defaultStepTimeout = 5 * time.Minute
+const (
+	defaultStepTimeout = 5 * time.Minute
+	serviceUsername    = "durpdeploy"
+)
 
 // baseStepEnv returns the minimal environment passed to every step (P1-4)
 // instead of inheriting the server's os.Environ(), which would otherwise
@@ -27,8 +30,8 @@ func baseStepEnv() []string {
 	env := []string{
 		"PATH=/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin",
 		"HOME=/nonexistent",
-		"USER=" + runnerUsername,
-		"LOGNAME=" + runnerUsername,
+		"USER=" + serviceUsername,
+		"LOGNAME=" + serviceUsername,
 		"TERM=xterm",
 	}
 	if lang := os.Getenv("LANG"); lang != "" {
@@ -47,11 +50,7 @@ type DeploymentRunner struct {
 	// the step exits. Used by KillAll to reap orphans on server shutdown.
 	// ponytail: one entry per deployment (steps run sequentially, no
 	// parallel step execution), so a plain map is enough.
-	pgids map[int64]int
-	// sandbox drops each step's process to the low-privileged
-	// durpdeploy-runner user (P1-4). Resolved once at startup; a no-op if
-	// that account/platform isn't available (see sandbox_linux.go).
-	sandbox    *Sandbox
+	pgids      map[int64]int
 	sandboxErr error
 	// bus publishes deployment_started/succeeded/failed events for the
 	// Slack/email notifiers (Stage 3). Nil until SetEventBus is called —
@@ -61,13 +60,12 @@ type DeploymentRunner struct {
 }
 
 func New(repo *repository.Repository, broker *LogBroker) *DeploymentRunner {
-	sandbox, sandboxErr := newSandbox()
+	sandboxErr := validateExecutionBoundary()
 	return &DeploymentRunner{
 		repo:       repo,
 		broker:     broker,
 		cancels:    make(map[int64]context.CancelFunc),
 		pgids:      make(map[int64]int),
-		sandbox:    sandbox,
 		sandboxErr: sandboxErr,
 	}
 }
@@ -205,12 +203,6 @@ func (r *DeploymentRunner) runStepAttempt(
 		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
 	}
 	cmd.WaitDelay = 15 * time.Second
-
-	// Allow the durpdeploy-runner user to enter the scratch directory (P1-4).
-	// MkdirTemp creates it as 0700; we need 0711 (+x) at minimum.
-	if err := os.Chmod(tmpDir, 0711); err != nil {
-		return err
-	}
 
 	var buf bytes.Buffer
 	cmd.Stdout = io.MultiWriter(&buf, logWriter)
