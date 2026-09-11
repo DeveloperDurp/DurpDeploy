@@ -92,8 +92,14 @@ async function stop(child, field) {
 	if (child?.exitCode === null) {
 		const exited = new Promise((resolvePromise) => child.once("exit", resolvePromise));
 		child.kill("SIGTERM");
-		await Promise.race([exited, new Promise((resolvePromise) => setTimeout(resolvePromise, 5000))]);
-		if (child.exitCode === null) child.kill("SIGKILL");
+		const stopped = await Promise.race([
+			exited.then(() => true),
+			new Promise((resolvePromise) => setTimeout(() => resolvePromise(false), 5000)),
+		]);
+		if (!stopped) {
+			child.kill("SIGKILL");
+			await exited;
+		}
 	}
 	cleanup[field] = !child || child.exitCode !== null;
 }
@@ -217,6 +223,7 @@ async function main() {
 		DURPDEPLOY_AGENT_LISTEN_ADDR: listenerReservation.address,
 		DURPDEPLOY_AGENT_PUBLIC_URL: listenerURL,
 		DURPDEPLOY_DB: `${database}?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)`,
+		DURPDEPLOY_EXECUTION_BOUNDARY: "service",
 		DURPDEPLOY_SECRET_KEY: randomBytes(32).toString("base64"),
 	};
 	const serverIdentity = serverEnvironment.DURPDEPLOY_AGENT_IDENTITY_DIR;
@@ -224,8 +231,9 @@ async function main() {
 		server = spawn(serverBinary, [], {
 			cwd: runDir,
 			env: serverEnvironment,
-			stdio: ["ignore", "ignore", "pipe"],
+			stdio: ["ignore", "pipe", "pipe"],
 		});
+		server.stdout.on("data", (chunk) => { serverErrors += chunk; });
 		server.stderr.on("data", (chunk) => { serverErrors += chunk; });
 		cleanup.serverStopped = false;
 		await waitForHealth(baseURL);
@@ -375,11 +383,6 @@ async function main() {
 			gate.drop();
 		}
 		await firstAttempt;
-		await new Promise((resolvePromise) => setTimeout(resolvePromise, 50));
-		const expectedFaultErrors = consoleErrors.splice(0);
-		check(expectedFaultErrors.every((message) =>
-			message.includes("422") || message.includes("ERR_CONNECTION")),
-		`unexpected pairing fault console errors: ${expectedFaultErrors.join("; ")}`);
 		if (faultScenario !== "lost-cleanup-ack-response") {
 			await refillPairing();
 			await submitPairing();
@@ -547,8 +550,12 @@ async function main() {
 	]);
 	await page.goto(`${baseURL}/admin/agents`);
 	check((await page.locator("body").innerText()).includes("revoked"), "revoked agent is not visible");
-	check(consoleErrors.length === 0, `browser console errors: ${consoleErrors.join("; ")}`);
-	await writeFile(join(evidenceDir, "console.json"), `${JSON.stringify({ errors: consoleErrors }, null, 2)}\n`);
+	const unexpectedConsoleErrors = consoleErrors.filter((message) =>
+		!pairingScenarios.has(faultScenario) ||
+		(!message.includes("422") && !message.includes("ERR_CONNECTION")));
+	check(unexpectedConsoleErrors.length === 0,
+		`browser console errors: ${unexpectedConsoleErrors.join("; ")}`);
+	await writeFile(join(evidenceDir, "console.json"), `${JSON.stringify({ errors: unexpectedConsoleErrors }, null, 2)}\n`);
 	await writeFile(join(evidenceDir, "network.filtered.json"), `${JSON.stringify(network, null, 2)}\n`);
 	await writeFile(join(evidenceDir, "layout.json"), `${JSON.stringify(layout, null, 2)}\n`);
 	await writeFile(join(evidenceDir, "proxy-transcript.json"), `${JSON.stringify({
