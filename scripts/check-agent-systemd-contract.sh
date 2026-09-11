@@ -8,8 +8,8 @@ grep -Fq 'DURPDEPLOY_AGENT_PUBLIC_URL=https://<agent-control-host>' "$unit"
 grep -Fq 'DURPDEPLOY_AGENT_IDENTITY_DIR=/var/lib/durpdeploy/agent-identity' "$unit"
 grep -Fq 'ReadWritePaths=/var/lib/durpdeploy /var/lib/durpdeploy/agent-identity' "$unit"
 grep -Fq 'Environment=DURPDEPLOY_EXECUTION_BOUNDARY=service' "$unit"
-grep -Fq 'AmbientCapabilities=CAP_SETUID CAP_SETGID CAP_SETPCAP' "$unit"
-grep -Fq 'CapabilityBoundingSet=CAP_SETUID CAP_SETGID CAP_SETPCAP' "$unit"
+grep -Fxq 'AmbientCapabilities=' "$unit"
+grep -Fxq 'CapabilityBoundingSet=' "$unit"
 grep -Fq 'NoNewPrivileges=true' "$unit"
 grep -Fq 'ProtectSystem=strict' "$unit"
 grep -Fq 'PrivateTmp=true' "$unit"
@@ -35,13 +35,18 @@ for raw_line in pathlib.Path(sys.argv[1]).read_text().splitlines():
         continue
     key = key.strip().casefold()
     value = value.strip().casefold()
-    if key in {"ambientcapabilities", "capabilityboundingset"}:
-        if "cap_sys_admin" in value:
-            raise SystemExit("agent systemd contract: forbidden CAP_SYS_ADMIN")
-        if "cap_sys_chroot" in value:
-            raise SystemExit("agent systemd contract: forbidden CAP_SYS_CHROOT")
+    if key in {"ambientcapabilities", "capabilityboundingset"} and value:
+        raise SystemExit("agent systemd contract: forbidden capability grant")
     if key == "delegate" and value == "true":
         raise SystemExit("agent systemd contract: forbidden Delegate=true")
+    if key == "protectcontrolgroups" and value != "true":
+        raise SystemExit(
+            "agent systemd contract: forbidden ProtectControlGroups=false"
+        )
+    if key == "restrictnamespaces" and value != "true":
+        raise SystemExit(
+            "agent systemd contract: forbidden RestrictNamespaces=false"
+        )
     if key == "bindreadonlypaths" and "/data" in value:
         raise SystemExit(
             "agent systemd contract: forbidden BindReadOnlyPaths=/data"

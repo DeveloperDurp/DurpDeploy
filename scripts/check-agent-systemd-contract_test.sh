@@ -32,11 +32,17 @@ PY
 	rm -rf "$fixture"
 }
 
-assert_rejected 'CapabilityBoundingSet=CAP_SYS_ADMIN' 'forbidden CAP_SYS_ADMIN'
-assert_rejected 'CapabilityBoundingSet=cap_sys_admin' 'forbidden CAP_SYS_ADMIN'
-assert_rejected 'AmbientCapabilities=CAP_SYS_CHROOT' 'forbidden CAP_SYS_CHROOT'
-assert_rejected 'AmbientCapabilities=cap_sys_chroot' 'forbidden CAP_SYS_CHROOT'
+assert_rejected 'CapabilityBoundingSet=CAP_SYS_ADMIN' 'forbidden capability grant'
+assert_rejected 'CapabilityBoundingSet=cap_sys_admin' 'forbidden capability grant'
+assert_rejected 'AmbientCapabilities=CAP_SYS_CHROOT' 'forbidden capability grant'
+assert_rejected 'AmbientCapabilities=cap_sys_chroot' 'forbidden capability grant'
+assert_rejected 'CapabilityBoundingSet=CAP_SETUID' 'forbidden capability grant'
+assert_rejected 'CapabilityBoundingSet=cap_setgid' 'forbidden capability grant'
+assert_rejected 'AmbientCapabilities=CAP_SETPCAP' 'forbidden capability grant'
+assert_rejected 'AmbientCapabilities=cap_net_admin' 'forbidden capability grant'
 assert_rejected 'Delegate=true' 'forbidden Delegate=true'
+assert_rejected 'ProtectControlGroups=false' 'forbidden ProtectControlGroups=false'
+assert_rejected 'RestrictNamespaces=false' 'forbidden RestrictNamespaces=false'
 assert_rejected 'BindReadOnlyPaths=/data' 'forbidden BindReadOnlyPaths=/data'
 assert_rejected 'BindPaths=/var/run/docker.sock' 'forbidden docker.sock'
 assert_rejected 'BindPaths=/run/podman/podman.sock' 'forbidden podman.sock'

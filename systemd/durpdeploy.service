@@ -54,10 +54,9 @@ RestartSec=5s
 # explicitly carved out as writable. Same pattern as the audit-prune
 # service; see systemd/durpdeploy-audit-prune.service.
 ReadWritePaths=/var/lib/durpdeploy /var/lib/durpdeploy/agent-identity
-# The server switches only Bash children to durpdeploy-runner. setpriv clears
-# every capability before the child executes.
-AmbientCapabilities=CAP_SETUID CAP_SETGID CAP_SETPCAP
-CapabilityBoundingSet=CAP_SETUID CAP_SETGID CAP_SETPCAP
+# The server and Bash children share this preselected unprivileged identity.
+AmbientCapabilities=
+CapabilityBoundingSet=
 
 # --- Hardening ---
 # Make most of the filesystem read-only to the process. Writes are still
