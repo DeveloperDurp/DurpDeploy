@@ -18,11 +18,41 @@ grep -Fq 'ProtectControlGroups=true' "$unit"
 grep -Fq 'MemoryMax=512M' "$unit"
 grep -Fq 'TasksMax=256' "$unit"
 grep -Fq 'CPUQuota=100%' "$unit"
-for forbidden in CAP_SYS_ADMIN CAP_SYS_CHROOT Delegate=true \
-	BindReadOnlyPaths=/data docker.sock chroot bind-mount; do
-	if grep -Fq "$forbidden" "$unit"; then
-		printf 'agent systemd contract: forbidden %s\n' "$forbidden" >&2
-		exit 1
-	fi
-done
+python3 - "$unit" <<'PY'
+import pathlib
+import sys
+
+section = ""
+for raw_line in pathlib.Path(sys.argv[1]).read_text().splitlines():
+    line = raw_line.strip()
+    if line.startswith("[") and line.endswith("]"):
+        section = line[1:-1].casefold()
+        continue
+    if section != "service" or not line or line.startswith(("#", ";")):
+        continue
+    key, separator, value = line.partition("=")
+    if not separator:
+        continue
+    key = key.strip().casefold()
+    value = value.strip().casefold()
+    if key in {"ambientcapabilities", "capabilityboundingset"}:
+        if "cap_sys_admin" in value:
+            raise SystemExit("agent systemd contract: forbidden CAP_SYS_ADMIN")
+        if "cap_sys_chroot" in value:
+            raise SystemExit("agent systemd contract: forbidden CAP_SYS_CHROOT")
+    if key == "delegate" and value == "true":
+        raise SystemExit("agent systemd contract: forbidden Delegate=true")
+    if key == "bindreadonlypaths" and "/data" in value:
+        raise SystemExit(
+            "agent systemd contract: forbidden BindReadOnlyPaths=/data"
+        )
+    if key in {"bindpaths", "bindreadonlypaths"}:
+        for socket in ("docker.sock", "podman.sock"):
+            if socket in value:
+                raise SystemExit(f"agent systemd contract: forbidden {socket}")
+    if "chroot" in line.casefold():
+        raise SystemExit("agent systemd contract: forbidden chroot")
+    if "bind-mount" in line.casefold():
+        raise SystemExit("agent systemd contract: forbidden bind-mount")
+PY
 printf '%s\n' 'agent systemd contract: PASS'

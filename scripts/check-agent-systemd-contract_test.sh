@@ -33,9 +33,30 @@ PY
 }
 
 assert_rejected 'CapabilityBoundingSet=CAP_SYS_ADMIN' 'forbidden CAP_SYS_ADMIN'
+assert_rejected 'CapabilityBoundingSet=cap_sys_admin' 'forbidden CAP_SYS_ADMIN'
 assert_rejected 'AmbientCapabilities=CAP_SYS_CHROOT' 'forbidden CAP_SYS_CHROOT'
+assert_rejected 'AmbientCapabilities=cap_sys_chroot' 'forbidden CAP_SYS_CHROOT'
 assert_rejected 'Delegate=true' 'forbidden Delegate=true'
 assert_rejected 'BindReadOnlyPaths=/data' 'forbidden BindReadOnlyPaths=/data'
 assert_rejected 'BindPaths=/var/run/docker.sock' 'forbidden docker.sock'
+assert_rejected 'BindPaths=/run/podman/podman.sock' 'forbidden podman.sock'
+
+comment_fixture=$(mktemp -d)
+trap 'rm -rf "$comment_fixture"' EXIT
+mkdir -p "$comment_fixture/systemd"
+cp "$repo_root/systemd/durpdeploy.service" "$comment_fixture/systemd/"
+python3 - "$comment_fixture/systemd/durpdeploy.service" <<'PY'
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+text = path.read_text().replace(
+    "[Service]\n",
+    "[Service]\n# CAP_SYS_ADMIN and /run/podman/podman.sock are forbidden\n",
+    1,
+)
+path.write_text(text)
+PY
+AGENT_SYSTEMD_CONTRACT_ROOT="$comment_fixture" bash "$checker" >/dev/null
 
 printf '%s\n' 'agent systemd contract negative test: PASS'
