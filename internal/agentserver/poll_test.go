@@ -49,7 +49,9 @@ func TestPollPayloadRoundTrip(t *testing.T) {
 	if payload.Release.Version != "poll-v1" ||
 		len(payload.Release.Steps) != 2 ||
 		payload.Release.Steps[0].Name != "first" ||
+		payload.Release.Steps[0].SortOrder != 1 ||
 		payload.Release.Steps[1].Name != "second" ||
+		payload.Release.Steps[1].SortOrder != 2 ||
 		len(payload.Variables) != 2 ||
 		payload.Variables[0].Value != "override" ||
 		payload.Variables[1].Value != "top-secret" ||
