@@ -642,5 +642,7 @@ it system-wide or set the variable in the project. Steps run in their own
 process group and are fully reaped on timeout, cancel, or server shutdown
 (P1-3). The supported systemd and container configurations provide the
 read-only/private filesystem and service-level cgroup boundaries described in
-Step 5; direct foreground execution is a development mode without those
-service protections.
+Step 5. Direct foreground execution requires the explicit
+`DURPDEPLOY_EXECUTION_BOUNDARY=development` opt-in and has none of those service
+protections. An unset boundary fails deployment execution instead of silently
+selecting development mode.

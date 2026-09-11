@@ -184,9 +184,10 @@ private, but a remote host is still the preferred placement for production
 deployments.
 
 The supplied systemd unit provides the equivalent service-level read-only and
-private mount boundary. A direct foreground binary does not and is reserved for
-initial pairing. The direct control-plane runner uses the same no-chroot model;
-see `docs/deploy.md`.
+private mount boundary. A direct foreground agent does not and is reserved for
+initial pairing. The control-plane server permits an unisolated foreground
+runner only with the explicit `DURPDEPLOY_EXECUTION_BOUNDARY=development`
+opt-in; an unset marker fails deployment execution. See `docs/deploy.md`.
 
 ## Direct binary installation
 
