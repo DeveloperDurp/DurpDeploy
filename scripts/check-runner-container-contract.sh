@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+root=${RUNNER_CONTAINER_CONTRACT_ROOT:-.}
 image=${RUNNER_CONTAINER_IMAGE:-durpdeploy:runner-contract}
 state_volume="durpdeploy-runner-contract-state-$$"
 cleanup() {
@@ -9,15 +10,34 @@ cleanup() {
 trap cleanup EXIT
 
 for file in Dockerfile server-entrypoint.sh compose.yml compose.example.yml; do
-	if grep -Eq 'SYS_ADMIN|SYS_CHROOT|apparmor.?unconfined|privileged:' "$file"; then
-		printf 'runner container contract: forbidden privilege in %s\n' "$file" >&2
+	if grep -Eq "SYS_ADMIN|SYS_CHROOT|apparmor.?unconfined|privileged:|pid:[[:space:]]*['\"]?host['\"]?|network_mode:[[:space:]]*['\"]?host['\"]?" "$root/$file"; then
+		printf 'runner container contract: %s contains a forbidden privilege\n' "$file" >&2
 		exit 1
 	fi
 done
-grep -Fq 'durpdeploy-runner' Dockerfile
-grep -Fq 'chmod 0700 /data' Dockerfile
+if grep -Eqi 'chroot|syscall\.Mount|\.Chroot' \
+	"$root/internal/runner/runner.go" "$root/internal/runner/sandbox_linux.go"; then
+	printf '%s\n' 'runner container contract: runner source invokes chroot' >&2
+	exit 1
+fi
+for file in compose.yml compose.example.yml; do
+	grep -Fq 'read_only: true' "$root/$file"
+	if grep -Eq "read_only:[[:space:]]*['\"]?false['\"]?" \
+		"$root/$file"; then
+		printf 'runner container contract: %s permits a writable image root\n' \
+			"$file" >&2
+		exit 1
+	fi
+	if grep -Fq '/var/run/docker.sock' "$root/$file"; then
+		printf 'runner container contract: %s mounts a container socket\n' \
+			"$file" >&2
+		exit 1
+	fi
+done
+grep -Fq 'durpdeploy-runner' "$root/Dockerfile"
+grep -Fq 'chmod 0700 /data' "$root/Dockerfile"
 
-podman build -t "$image" .
+podman build -t "$image" "$root"
 podman run --rm --read-only --security-opt no-new-privileges:true \
 	--cap-drop ALL \
 	--cap-add SETUID --cap-add SETGID --cap-add SETPCAP \
