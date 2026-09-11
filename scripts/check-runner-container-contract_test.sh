@@ -34,23 +34,68 @@ assert_rejected() {
 	rm -rf "$fixture"
 }
 
+assert_compose_rejected() {
+	local value=$1 diagnostic=$2 fixture
+	fixture=$(mktemp -d)
+	mkdir -p "$fixture/internal/runner"
+	cp "$repo_root/Dockerfile" "$repo_root/Makefile" \
+		"$repo_root/server-entrypoint.sh" "$repo_root/compose.yml" \
+		"$repo_root/compose.example.yml" "$fixture/"
+	cp "$repo_root/internal/runner/runner.go" \
+		"$repo_root/internal/runner/sandbox_linux.go" "$fixture/internal/runner/"
+	python3 - "$fixture/compose.yml" "$value" <<'PY'
+import pathlib
+import sys
+
+import yaml
+
+path = pathlib.Path(sys.argv[1])
+document = yaml.safe_load(path.read_text())
+key, value = sys.argv[2].split("=", 1)
+document["services"]["app"][key] = yaml.safe_load(value)
+path.write_text(yaml.safe_dump(document, sort_keys=False))
+PY
+	if output=$(RUNNER_CONTAINER_CONTRACT_ROOT="$fixture" \
+		RUNNER_CONTAINER_CONTRACT_STATIC_ONLY=1 bash "$checker" 2>&1); then
+		echo "runner container contract negative test: accepted $diagnostic" >&2
+		rm -rf "$fixture"
+		exit 1
+	fi
+	if ! grep -Fq "$diagnostic" <<<"$output"; then
+		printf 'runner container contract negative test: missing diagnostic %s\n%s\n' \
+			"$diagnostic" "$output" >&2
+		rm -rf "$fixture"
+		exit 1
+	fi
+	rm -rf "$fixture"
+}
+
 assert_rejected internal/runner/runner.go '// chroot' \
 	'runner source invokes chroot'
 assert_rejected Dockerfile 'SYS_CHROOT' 'Dockerfile contains a forbidden privilege'
 assert_rejected Dockerfile 'SYS_ADMIN' 'Dockerfile contains a forbidden privilege'
-assert_rejected compose.yml 'privileged: true' \
-	'compose.yml contains a forbidden privilege'
-assert_rejected compose.yml 'pid: host' \
-	'compose.yml contains a forbidden privilege'
-assert_rejected compose.yml 'network_mode: host' \
-	'compose.yml contains a forbidden privilege'
-assert_rejected compose.yml 'network_mode: "host"' \
-	'compose.yml contains a forbidden privilege'
-assert_rejected compose.yml 'read_only: false' \
-	'compose.yml permits a writable image root'
-assert_rejected compose.yml 'read_only: "false"' \
-	'compose.yml permits a writable image root'
-assert_rejected compose.yml '/var/run/docker.sock:/var/run/docker.sock' \
+assert_compose_rejected 'privileged=true' 'compose.yml enables privileged mode'
+assert_compose_rejected 'privileged="true"' 'compose.yml enables privileged mode'
+assert_compose_rejected 'pid=host' 'compose.yml shares the host PID namespace'
+assert_compose_rejected 'pid="host"' 'compose.yml shares the host PID namespace'
+assert_compose_rejected 'network_mode=host' 'compose.yml shares the host network'
+assert_compose_rejected 'network_mode="host"' 'compose.yml shares the host network'
+assert_compose_rejected 'read_only=false' 'compose.yml permits a writable image root'
+assert_compose_rejected 'read_only="false"' 'compose.yml permits a writable image root'
+assert_compose_rejected 'volumes=["/var/run/docker.sock:/var/run/docker.sock"]' \
 	'compose.yml mounts a container socket'
+
+comment_fixture=$(mktemp -d)
+trap 'rm -rf "$comment_fixture"' EXIT
+mkdir -p "$comment_fixture/internal/runner"
+cp "$repo_root/Dockerfile" "$repo_root/Makefile" \
+	"$repo_root/server-entrypoint.sh" "$repo_root/compose.yml" \
+	"$repo_root/compose.example.yml" "$comment_fixture/"
+cp "$repo_root/internal/runner/runner.go" \
+	"$repo_root/internal/runner/sandbox_linux.go" \
+	"$comment_fixture/internal/runner/"
+printf '%s\n' '# privileged: true is forbidden' >> "$comment_fixture/compose.yml"
+RUNNER_CONTAINER_CONTRACT_ROOT="$comment_fixture" \
+	RUNNER_CONTAINER_CONTRACT_STATIC_ONLY=1 bash "$checker" >/dev/null
 
 printf '%s\n' 'runner container contract negative test: PASS'

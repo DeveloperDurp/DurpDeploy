@@ -9,8 +9,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
-for file in Dockerfile server-entrypoint.sh compose.yml compose.example.yml; do
-	if grep -Eq "SYS_ADMIN|SYS_CHROOT|apparmor.?unconfined|privileged:|pid:[[:space:]]*['\"]?host['\"]?|network_mode:[[:space:]]*['\"]?host['\"]?" "$root/$file"; then
+for file in Dockerfile server-entrypoint.sh; do
+	if grep -Eq "SYS_ADMIN|SYS_CHROOT|apparmor.?unconfined|privileged:" "$root/$file"; then
 		printf 'runner container contract: %s contains a forbidden privilege\n' "$file" >&2
 		exit 1
 	fi
@@ -21,21 +21,42 @@ if grep -Eqi 'chroot|syscall\.Mount|\.Chroot' \
 	exit 1
 fi
 for file in compose.yml compose.example.yml; do
-	grep -Fq 'read_only: true' "$root/$file"
-	if grep -Eq "read_only:[[:space:]]*['\"]?false['\"]?" \
-		"$root/$file"; then
-		printf 'runner container contract: %s permits a writable image root\n' \
-			"$file" >&2
-		exit 1
-	fi
-	if grep -Fq '/var/run/docker.sock' "$root/$file"; then
-		printf 'runner container contract: %s mounts a container socket\n' \
-			"$file" >&2
-		exit 1
-	fi
+	python3 - "$root/$file" "$file" <<'PY'
+import json
+import pathlib
+import sys
+
+import yaml
+
+path = pathlib.Path(sys.argv[1])
+name = sys.argv[2]
+app = yaml.safe_load(path.read_text())["services"]["app"]
+
+def fail(message):
+    raise SystemExit(f"runner container contract: {name} {message}")
+
+if str(app.get("privileged", False)).lower() == "true":
+    fail("enables privileged mode")
+if str(app.get("pid", "")).lower() == "host":
+    fail("shares the host PID namespace")
+if str(app.get("network_mode", "")).lower() == "host":
+    fail("shares the host network")
+if app.get("read_only") is not True:
+    fail("permits a writable image root")
+text = json.dumps(app)
+if "SYS_ADMIN" in text or "SYS_CHROOT" in text or "unconfined" in text:
+    fail("contains a forbidden privilege")
+if "docker.sock" in text:
+    fail("mounts a container socket")
+PY
 done
 grep -Fq 'durpdeploy-runner' "$root/Dockerfile"
 grep -Fq 'chmod 0700 /data' "$root/Dockerfile"
+
+if [ "${RUNNER_CONTAINER_CONTRACT_STATIC_ONLY:-0}" = 1 ]; then
+	printf '%s\n' 'runner container contract: static PASS'
+	exit 0
+fi
 
 podman build -t "$image" "$root"
 podman run --rm --read-only --security-opt no-new-privileges:true \
