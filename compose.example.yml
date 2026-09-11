@@ -80,15 +80,20 @@ services:
       - ./compose.app.env
     environment:
       - DURPDEPLOY_DB=/data/durpdeploy.db
+      - DURPDEPLOY_EXECUTION_BOUNDARY=service
       - DURPDEPLOY_TRUSTED_PROXIES=172.28.0.10/32
     volumes:
       - durpdeploy-data:/data
     secrets:
       - source: durpdeploy_key
         target: /etc/durpdeploy/key
+        uid: "10001"
+        gid: "10001"
+        mode: 0400
     security_opt:
       - no-new-privileges:true
     cap_drop: [ALL]
+    cap_add: [SETUID, SETGID, SETPCAP]
     read_only: true
     tmpfs:
       - /tmp:size=64m,mode=1777

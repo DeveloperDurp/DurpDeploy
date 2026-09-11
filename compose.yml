@@ -25,6 +25,7 @@ services:
       - ./compose.app.env
     environment:
       DURPDEPLOY_DB: /data/durpdeploy.db
+      DURPDEPLOY_EXECUTION_BOUNDARY: service
       # Only the fixed Caddy peer may supply forwarding headers.
       DURPDEPLOY_TRUSTED_PROXIES: 172.28.0.10/32
       # Optional. The mounted secret file at /etc/durpdeploy/key is the
@@ -38,9 +39,13 @@ services:
     secrets:
       - source: durpdeploy_key
         target: /etc/durpdeploy/key
+        uid: "10001"
+        gid: "10001"
+        mode: 0400
     security_opt:
       - no-new-privileges:true
     cap_drop: [ALL]
+    cap_add: [SETUID, SETGID, SETPCAP]
     read_only: true
     tmpfs:
       - /tmp:size=64m,mode=1777
