@@ -152,6 +152,42 @@ stores no server secret or deployment payload at rest. A current claim marker
 contains only the deployment ID and a SHA-256 hash of the claim token and is
 removed after the claim completes.
 
+## Agent execution boundary
+
+Agent execution does **not** use a per-step `chroot`. The container or systemd
+service is the filesystem and cgroup boundary, and the operator or user is responsible for every
+deployment script they run there, including its contents, the secrets supplied
+to it, its network access, and all effects available inside the agent
+container. A read-only root filesystem does not stop a script from reading
+files that are visible in the container or exfiltrating secrets supplied to it.
+
+The container contract is deliberately limited and explicit:
+
+* The agent process runs as service UID `10001`; Bash runs as runner UID
+  `10002` and cannot traverse the private agent state directory.
+* The root filesystem is read-only. Writable locations are private to the
+  container, primarily the agent state directory and a private `/tmp` tmpfs.
+* The container has no host or control-plane database, server secret,
+  control-plane state directory, Docker socket, or arbitrary host filesystem
+  mount. Its private state volume is the only operator-provided data path.
+* Linux capabilities are dropped by default, and `NoNewPrivs` is enabled.
+* CPU, memory, and process-count limits are enforced on the service cgroup.
+* No host cgroup tree, host filesystem, or server data is mounted into the
+  agent container.
+
+These controls reduce the agent container's access to its host. They do not
+turn deployment scripts into trusted code, restrict the network destinations
+available to the container, or prevent scripts from using secrets and files
+that the operator makes available. Co-locating the agent with the control
+plane is compatible with this contract when the container mounts remain
+private, but a remote host is still the preferred placement for production
+deployments.
+
+The supplied systemd unit provides the equivalent service-level read-only and
+private mount boundary. A direct foreground binary does not and is reserved for
+initial pairing. The direct control-plane runner uses the same no-chroot model;
+see `docs/deploy.md`.
+
 ## Direct binary installation
 
 Build the agent binary from the repository. This builds only `cmd/agent` and
@@ -162,11 +198,13 @@ make build-agent
 sudo install -o root -g root -m 0755 ./durpdeploy-agent /usr/local/bin/durpdeploy-agent
 ```
 
-Create the dedicated account and private state directory:
+Create the separate service and runner accounts and private state directory:
 
 ```bash
 sudo useradd --system --home-dir /var/lib/durpdeploy-agent \
   --shell /usr/sbin/nologin durpdeploy-agent
+sudo useradd --system --home-dir /nonexistent \
+  --shell /usr/sbin/nologin durpdeploy-runner
 sudo install -d -o durpdeploy-agent -g durpdeploy-agent -m 0700 \
   /var/lib/durpdeploy-agent
 sudo install -m 0600 /tmp/durpdeploy-agent.env /etc/durpdeploy-agent.env
@@ -188,9 +226,9 @@ service process receives the values without putting them in shell history.
 
 ## Docker or Podman Compose
 
-The optional `agent` profile is a co-located demonstration and validation
-path. It is not a server sidecar and is not a production placement
-recommendation. Production agents must run remotely on the host where the
+The standalone agent repository's Compose service is a co-located compatibility
+and validation path. It is not a server sidecar or a production placement
+recommendation. Production agents should run remotely on the host where the
 deployment commands belong.
 
 Create `compose.agent.env` with the same local variables, use mode `0600`, and
@@ -205,23 +243,25 @@ Docker Compose:
 
 ```bash
 chmod 0600 compose.agent.env
-docker compose --profile agent up -d --build agent
-docker compose --profile agent ps agent
-docker compose --profile agent logs -f agent
+docker compose -f /path/to/durpdeploy-agent/compose.yml up -d --build agent
+docker compose -f /path/to/durpdeploy-agent/compose.yml ps agent
+docker compose -f /path/to/durpdeploy-agent/compose.yml logs -f agent
 ```
 
 Podman Compose:
 
 ```bash
 chmod 0600 compose.agent.env
-podman compose --profile agent up -d --build agent
-podman compose --profile agent ps agent
-podman compose --profile agent logs -f agent
+podman compose -f /path/to/durpdeploy-agent/compose.yml up -d --build agent
+podman compose -f /path/to/durpdeploy-agent/compose.yml ps agent
+podman compose -f /path/to/durpdeploy-agent/compose.yml logs -f agent
 ```
 
-The profile mounts one volume at `/var/lib/durpdeploy-agent`, has no `/data`
-mount, server secret, Docker socket, host network, or inbound listener. That
-volume is agent identity state, not SQLite and not a server backup.
+The service mounts one private volume at `/var/lib/durpdeploy-agent` and a
+private `/tmp`. It has no `/data` mount, server secret, Docker socket, host
+network, host cgroup mount, or persistent inbound listener. Its root is
+read-only and its CPU, memory, and process count are limited. The state volume
+contains agent identity, not SQLite or a server backup.
 
 ## systemd installation and operations
 
@@ -236,9 +276,11 @@ sudo systemctl enable --now durpdeploy-agent
 sudo systemctl status durpdeploy-agent --no-pager
 ```
 
-The unit runs as `durpdeploy-agent`, sets the state directory, uses
+The unit runs as `durpdeploy-agent`, executes Bash as `durpdeploy-runner`, sets the state directory, uses
 `/etc/durpdeploy-agent.env`, applies a private `UMask=0077`, and permits writes
-only to the agent state directory. Keep both `/etc/durpdeploy-agent.env` and
+only to the agent state directory. It also applies `NoNewPrivileges`, private
+mounts and `/tmp`, and service cgroup limits. Keep both
+`/etc/durpdeploy-agent.env` and
 the state directory inaccessible to other users:
 
 ```bash
