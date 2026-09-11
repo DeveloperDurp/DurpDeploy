@@ -74,9 +74,10 @@ What we do **not** defend against yet (see Known Gaps):
 
 - Audit log retention / tamper-proofing
 
-Runner orphan cleanup on shutdown/timeout and the local step sandbox are shipped.
-Remote agents are separately sandboxed as dedicated users with private state
-directories and no server storage access. The agent does not provide SSH access.
+Runner orphan cleanup on shutdown/timeout and the service-level step boundary
+are shipped. Direct and remote runners use dedicated users, private state,
+read-only service or container filesystems, zero-capability Bash children, and
+service cgroup limits. The agent does not provide SSH access.
 
 ---
 
@@ -424,7 +425,7 @@ values:
 | ~~**Secret encryption at rest**~~ | ~~`release_variables.value` is plaintext. A DB read leaks secrets~~ | **shipped (P1-3)** |
 | ~~**Runner orphan cleanup**~~ | ~~Killed/restarted server left orphaned bash children~~ | **shipped** |
 | ~~**Log redaction hardening**~~ | ~~Naive per-line `strings.ReplaceAll` missed common credential formats and multi-line/split secrets~~ | **shipped (P1-5)** |
-| ~~**Runner OS-level sandboxing**~~ | ~~Steps run as a low-privilege user in a chroot'd scratch directory with cgroup limits~~ | **shipped (P1-4)** |
+| ~~**Direct runner OS-level sandboxing**~~ | ~~Direct control-plane steps run as a low-privilege user inside read-only/private service mounts with cgroup limits~~ | **shipped (P1-4)** |
 | ~~**Login rate limiting**~~ | ~~Password, MFA, and OIDC login surfaces lacked application limits~~ | **shipped** |
 | **Audit log retention** | No retention policy or tamper-proofing on `audit_log` | P2-5 |
 | **Password reset flow** | No self-service reset. Admin must delete + recreate the user | P2 |

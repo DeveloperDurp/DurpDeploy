@@ -237,8 +237,11 @@ five-minute hands-on attack drill — is documented in
   password DB leak (argon2id, per-user salt, ~100ms per guess), cross-project
   write access (per-project `project_members` — P1-1), secret-at-rest
   exposure (AES-256-GCM for `variables` and `release_variables.value` —
-  P1-3), rogue step scripts (dedicated user + cgroup sandbox + minimal env
-  — P1-4), naive log redaction (regex-based scrubber for literal secrets,
+  P1-3), direct-runner rogue step scripts (dedicated user + service cgroup +
+  minimal env — P1-4), containerized agent boundaries (read-only root,
+  private writable paths, runner UID, dropped capabilities, NoNewPrivs,
+  cgroups, and no host or control-plane mounts), naive log redaction
+  (regex-based scrubber for literal secrets,
   common credential patterns, and split writes — P1-5), unrecoverable
   data loss (Litestream continuous WAL replication + monthly restore drill
   — P1-6), and unauthorized approval of `pending_approval` deployments
