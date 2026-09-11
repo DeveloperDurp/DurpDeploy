@@ -52,12 +52,22 @@ func TestBaseLayoutUsesSingleAlpineEntryPoint(t *testing.T) {
 	) {
 		t.Fatal("active Alpine entry is not deferred")
 	}
-	if strings.Index(rendered, `localStorage.getItem('theme')`) >
-		strings.Index(rendered, `<script src="/static/js/app.bundle.js"`) {
+	themeBootstrap := strings.Index(rendered, `localStorage.getItem('theme')`)
+	if themeBootstrap < 0 {
+		t.Fatal("theme bootstrap marker is missing")
+	}
+	activeEntry := strings.Index(rendered, `<script src="/static/js/app.bundle.js"`)
+	if activeEntry < 0 {
+		t.Fatal("active Alpine entry marker is missing")
+	}
+	if themeBootstrap > activeEntry {
 		t.Fatal("theme bootstrap must precede deferred Alpine entry")
 	}
-	if strings.Index(rendered, `htmx:configRequest`) >
-		strings.Index(rendered, `<script src="/static/js/app.bundle.js"`) {
+	csrfBootstrap := strings.Index(rendered, `htmx:configRequest`)
+	if csrfBootstrap < 0 {
+		t.Fatal("CSRF bootstrap marker is missing")
+	}
+	if csrfBootstrap > activeEntry {
 		t.Fatal("CSRF bootstrap must precede deferred Alpine entry")
 	}
 }
