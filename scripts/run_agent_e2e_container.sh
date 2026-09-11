@@ -20,7 +20,6 @@ podman run --detach --name "$DURPDEPLOY_AGENT_E2E_CONTAINER" \
 	--publish "127.0.0.1:$listen_port:$listen_port" \
 	--security-opt no-new-privileges:true \
 	--cap-drop ALL \
-	--cap-add SETUID --cap-add SETGID --cap-add SETPCAP \
 	--memory 512m --cpus 1.0 --pids-limit 128 \
 	--tmpfs /tmp:size=64m,mode=1777 \
 	-v "$DURPDEPLOY_AGENT_E2E_STATE_VOLUME:/var/lib/durpdeploy-agent" \

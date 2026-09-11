@@ -9,7 +9,18 @@ for file in compose.yml compose.example.yml; do
 	grep -Fq 'DURPDEPLOY_EXECUTION_BOUNDARY: service' "$file" ||
 		grep -Fq 'DURPDEPLOY_EXECUTION_BOUNDARY=service' "$file"
 	grep -Fq 'cap_drop: [ALL]' "$file"
-	grep -Fq 'cap_add: [SETUID, SETGID, SETPCAP]' "$file"
+	python3 - "$file" <<'PY'
+import pathlib
+import sys
+
+import yaml
+
+app = yaml.safe_load(pathlib.Path(sys.argv[1]).read_text())["services"]["app"]
+if app.get("cap_add"):
+    raise SystemExit("agent compose contract: app grants a Linux capability")
+if str(app.get("user", "")) != "10001:10001":
+    raise SystemExit("agent compose contract: app service identity is not fixed")
+PY
 	grep -Fq 'read_only: true' "$file"
 	grep -Fq 'no-new-privileges:true' "$file"
 	grep -Fq 'mode: 0400' "$file"
