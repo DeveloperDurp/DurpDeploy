@@ -237,9 +237,9 @@ five-minute hands-on attack drill — is documented in
   password DB leak (argon2id, per-user salt, ~100ms per guess), cross-project
   write access (per-project `project_members` — P1-1), secret-at-rest
   exposure (AES-256-GCM for `variables` and `release_variables.value` —
-  P1-3), direct-runner rogue step scripts (dedicated user + service cgroup +
-  minimal env — P1-4), containerized agent boundaries (read-only root,
-  private writable paths, runner UID, dropped capabilities, NoNewPrivs,
+  P1-3), deployment scripts (minimal environment, zero capabilities,
+  read-only service paths, and service cgroup limits — P1-4), containerized
+  agent boundaries (read-only root, private writable paths, zero capabilities, NoNewPrivs,
   cgroups, and no host or control-plane mounts), naive log redaction
   (regex-based scrubber for literal secrets,
   common credential patterns, and split writes — P1-5), unrecoverable
@@ -254,6 +254,14 @@ five-minute hands-on attack drill — is documented in
   retention (P2-5 — `audit prune --days N` ships and preserves rows tied
   to live deployments/releases, but the default 180-day window and the
   daily systemd timer are operator-deployed, not auto-installed).
+
+The server and local Bash steps share the preselected unprivileged `durpdeploy`
+identity. Linux capabilities are absent from both processes. Because an
+unprivileged process cannot switch to another UID without a capability, local
+steps can read and change server state writable by that identity, including the
+database and visible key files. Run only operator-trusted local scripts, or use
+a separately hosted remote agent as the stronger filesystem boundary. Operators
+also own script secrets, network access, and all effects inside that boundary.
 
 ## What It Does Not Do
 
