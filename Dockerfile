@@ -45,12 +45,11 @@ FROM alpine:3.20
 
 # Install runtime essentials (CA certificates for HTTPS notifications, bash
 # because the deployment runner executes step scripts via os/exec and Alpine
-# base only provides busybox /bin/sh, and util-linux for setpriv), then create
-# a non-root user with a stable UID. No shell, no home, no password.
+# base only provides busybox /bin/sh), then create a non-root user with a
+# stable UID. No shell, no home, no password.
 # hadolint ignore=DL3018
-RUN apk add --no-cache ca-certificates bash util-linux && \
-	adduser -D -u 10001 durpdeploy && \
-	adduser -D -H -s /sbin/nologin -u 10002 durpdeploy-runner
+RUN apk add --no-cache ca-certificates bash && \
+	adduser -D -u 10001 durpdeploy
 
 # Data directory for the SQLite database and WAL files. Chown to the runtime
 # user and declare it a volume so it can be mounted from the host.
@@ -61,12 +60,10 @@ VOLUME ["/data"]
 # Copy the binary from the builder. Keep it owned by root so it cannot be
 # tampered with at runtime, and make it world-executable.
 COPY --from=builder /out/durpdeploy /usr/local/bin/durpdeploy
-COPY server-entrypoint.sh /usr/local/bin/durpdeploy-entrypoint
-RUN chmod 0755 /usr/local/bin/durpdeploy /usr/local/bin/durpdeploy-entrypoint
+RUN chmod 0755 /usr/local/bin/durpdeploy
 
-# The entrypoint transfers only runner identity-switching capabilities to the
-# non-root service process. Bash children receive no capabilities.
-USER root
+ENV DURPDEPLOY_EXECUTION_BOUNDARY=service
+USER 10001
 
 # The application listens on port 8080 (hardcoded in cmd/server/main.go).
 EXPOSE 8080
@@ -74,8 +71,7 @@ EXPOSE 8080
 # Use ENTRYPOINT so the binary is the fixed executable for subcommands such as
 # `admin create`, `audit prune`, and `secret-key rotate`, as well as the default
 # HTTP server.
-ENTRYPOINT ["/usr/local/bin/durpdeploy-entrypoint"]
-CMD ["/usr/local/bin/durpdeploy"]
+ENTRYPOINT ["/usr/local/bin/durpdeploy"]
 
 # Probe the /login endpoint. It returns a 303 redirect when the server is alive,
 # which is enough for an orchestrator to consider the container healthy.

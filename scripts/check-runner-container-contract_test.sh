@@ -14,7 +14,7 @@ assert_rejected() {
 	fixture=$(mktemp -d)
 	mkdir -p "$fixture/internal/runner"
 	cp "$repo_root/Dockerfile" "$repo_root/Makefile" \
-		"$repo_root/server-entrypoint.sh" "$repo_root/compose.yml" \
+		"$repo_root/compose.yml" \
 		"$repo_root/compose.example.yml" "$fixture/"
 	cp "$repo_root/internal/runner/runner.go" \
 		"$repo_root/internal/runner/sandbox_linux.go" "$fixture/internal/runner/"
@@ -39,7 +39,7 @@ assert_compose_rejected() {
 	fixture=$(mktemp -d)
 	mkdir -p "$fixture/internal/runner"
 	cp "$repo_root/Dockerfile" "$repo_root/Makefile" \
-		"$repo_root/server-entrypoint.sh" "$repo_root/compose.yml" \
+		"$repo_root/compose.yml" \
 		"$repo_root/compose.example.yml" "$fixture/"
 	cp "$repo_root/internal/runner/runner.go" \
 		"$repo_root/internal/runner/sandbox_linux.go" "$fixture/internal/runner/"
@@ -71,7 +71,11 @@ PY
 }
 
 assert_rejected internal/runner/runner.go '// chroot' \
-	'runner source invokes chroot'
+	'runner source changes privileges'
+assert_rejected internal/runner/runner.go '// SysProcAttr.Credential' \
+	'runner source changes privileges'
+assert_rejected server-entrypoint.sh 'setpriv' \
+	'capability entrypoint remains'
 assert_rejected Dockerfile 'SYS_CHROOT' 'Dockerfile contains a forbidden privilege'
 assert_rejected Dockerfile 'SYS_ADMIN' 'Dockerfile contains a forbidden privilege'
 assert_compose_rejected 'privileged=true' 'compose.yml enables privileged mode'
@@ -82,10 +86,16 @@ assert_compose_rejected 'network_mode=host' 'compose.yml shares the host network
 assert_compose_rejected 'network_mode="host"' 'compose.yml shares the host network'
 assert_compose_rejected 'read_only=false' 'compose.yml permits a writable image root'
 assert_compose_rejected 'read_only="false"' 'compose.yml permits a writable image root'
-for capability in SYS_ADMIN sys_admin CAP_SYS_ADMIN cap_sys_admin; do
+for capability in SETUID setuid CAP_SETUID cap_setuid \
+	SETGID setgid CAP_SETGID cap_setgid \
+	SETPCAP setpcap CAP_SETPCAP cap_setpcap \
+	SYS_ADMIN sys_admin CAP_SYS_ADMIN cap_sys_admin \
+	NET_ADMIN net_admin CAP_NET_ADMIN cap_net_admin; do
 	assert_compose_rejected "cap_add=[\"$capability\"]" \
 		'compose.yml contains a forbidden privilege'
 done
+assert_compose_rejected 'cgroupns=host' \
+	'compose.yml shares the host cgroup namespace'
 assert_compose_rejected 'volumes=["/var/run/docker.sock:/var/run/docker.sock"]' \
 	'compose.yml mounts a container socket'
 assert_compose_rejected 'volumes=["/run/podman/podman.sock:/run/podman/podman.sock"]' \
@@ -94,8 +104,8 @@ assert_compose_rejected 'volumes=["/run/podman/podman.sock:/run/podman/podman.so
 comment_fixture=$(mktemp -d)
 trap 'rm -rf "$comment_fixture"' EXIT
 mkdir -p "$comment_fixture/internal/runner"
-cp "$repo_root/Dockerfile" "$repo_root/Makefile" \
-	"$repo_root/server-entrypoint.sh" "$repo_root/compose.yml" \
+	cp "$repo_root/Dockerfile" "$repo_root/Makefile" \
+	"$repo_root/compose.yml" \
 	"$repo_root/compose.example.yml" "$comment_fixture/"
 cp "$repo_root/internal/runner/runner.go" \
 	"$repo_root/internal/runner/sandbox_linux.go" \
@@ -105,5 +115,11 @@ printf '%s\n' \
 	>> "$comment_fixture/compose.yml"
 RUNNER_CONTAINER_CONTRACT_ROOT="$comment_fixture" \
 	RUNNER_CONTAINER_CONTRACT_STATIC_ONLY=1 bash "$checker" >/dev/null
+
+if grep -RqiE 'setpriv|--cap-add|ambient-caps|inh-caps' \
+	"$repo_root/Dockerfile"; then
+	echo 'runner container contract negative test: capability bootstrap remains' >&2
+	exit 1
+fi
 
 printf '%s\n' 'runner container contract negative test: PASS'
