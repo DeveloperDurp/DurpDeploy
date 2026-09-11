@@ -145,7 +145,7 @@ templ AgentDetailPage(agent db.Agent, assigned []db.Environment, environments []
 				<div>
 					<a class="link text-sm" href="/admin/agents">Back to agents</a>
 					<h1 class="mt-2 text-3xl font-bold">{ agent.Name }</h1>
-					<p class="font-mono text-sm opacity-60">{ agent.ID }</p>
+					<p class="break-all font-mono text-sm opacity-60">{ agent.ID }</p>
 				</div>
 				if agent.Status != "revoked" {
 					<button
@@ -172,7 +172,7 @@ templ AgentDetailPage(agent db.Agent, assigned []db.Environment, environments []
 				</div>
 				<div class="stat rounded-box bg-base-200">
 					<div class="stat-title">Last heartbeat</div>
-					<div class="stat-value text-base">
+					<div class="stat-value text-base text-base-content">
 						if agent.LastHeartbeatAt.Valid {
 							{ formatUnixTime(agent.LastHeartbeatAt.Int64) }
 						} else {
@@ -203,28 +203,32 @@ templ AgentDetailPage(agent db.Agent, assigned []db.Environment, environments []
 					</div>
 				</div>
 			}
-			<div class="card bg-base-200 shadow">
-				<div class="card-body">
-					<h2 class="card-title">Environment assignments</h2>
-					if agent.Status == "active" {
-						<div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-							for _, env := range environments {
-								<div class="flex items-center justify-between gap-2 rounded-box bg-base-100 p-3">
-									<span class="truncate">{ env.Name }</span>
-									if environmentAssigned(env, assigned) {
-										<button class="btn btn-error btn-xs" hx-delete={ fmt.Sprintf("/admin/environments/%d/agent", env.ID) } hx-vals={ fmt.Sprintf(`{"agent_id":%q}`, agent.ID) } hx-confirm={ "Unassign " + env.Name + " from " + agent.Name + "?" }>Unassign</button>
-									} else {
-										<button class="btn btn-primary btn-xs" hx-put={ fmt.Sprintf("/admin/environments/%d/agent", env.ID) } hx-vals={ fmt.Sprintf(`{"agent_id":%q}`, agent.ID) }>Assign</button>
-									}
-								</div>
-							}
-						</div>
-					} else {
-						<p class="opacity-70">Only active paired agents can receive environment assignments.</p>
-					}
-				</div>
-			</div>
+			@AgentAssignments(agent, assigned, environments)
 		</div>
 		}
 	}
+}
+
+templ AgentAssignments(agent db.Agent, assigned []db.Environment, environments []db.Environment) {
+	<div id="agent-assignments" class="card bg-base-200 shadow">
+		<div class="card-body">
+			<h2 class="card-title">Environment assignments</h2>
+			if agent.Status == "active" {
+				<div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+					for _, env := range environments {
+						<div class="flex min-w-0 items-center justify-between gap-2 rounded-box bg-base-100 p-3">
+							<span class="min-w-0 flex-1 break-words">{ env.Name }</span>
+							if environmentAssigned(env, assigned) {
+								<button class="btn btn-error btn-xs" hx-delete={ fmt.Sprintf("/admin/environments/%d/agent", env.ID) } hx-vals={ fmt.Sprintf(`{"agent_id":%q}`, agent.ID) } hx-target="#agent-assignments" hx-swap="outerHTML" hx-confirm={ "Unassign " + env.Name + " from " + agent.Name + "?" }>Unassign</button>
+							} else {
+								<button class="btn btn-primary btn-xs" hx-put={ fmt.Sprintf("/admin/environments/%d/agent", env.ID) } hx-vals={ fmt.Sprintf(`{"agent_id":%q}`, agent.ID) } hx-target="#agent-assignments" hx-swap="outerHTML">Assign</button>
+							}
+						</div>
+					}
+				</div>
+			} else {
+				<p class="opacity-70">Only active paired agents can receive environment assignments.</p>
+			}
+		</div>
+	</div>
 }

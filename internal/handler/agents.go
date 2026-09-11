@@ -162,6 +162,10 @@ func (h *AgentsHandler) Assign(w http.ResponseWriter, r *http.Request) {
 		writeBrowserAgentMutationError(w, err)
 		return
 	}
+	if r.Header.Get("HX-Request") == "true" {
+		h.renderAssignments(w, r, agentID)
+		return
+	}
 	http.Redirect(w, r, "/admin/agents/"+agentID, http.StatusSeeOther)
 }
 
@@ -185,7 +189,37 @@ func (h *AgentsHandler) Unassign(w http.ResponseWriter, r *http.Request) {
 		writeBrowserAgentMutationError(w, err)
 		return
 	}
+	if r.Header.Get("HX-Request") == "true" {
+		h.renderAssignments(w, r, agentID)
+		return
+	}
 	http.Redirect(w, r, "/admin/agents/"+agentID, http.StatusSeeOther)
+}
+
+func (h *AgentsHandler) renderAssignments(
+	w http.ResponseWriter,
+	r *http.Request,
+	agentID string,
+) {
+	agent, err := h.repo.Queries.GetAgent(r.Context(), agentID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	assigned, err := h.repo.Queries.ListAgentEnvironments(r.Context(), agentID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	environments, err := h.repo.Queries.ListEnvironments(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err := pages.AgentAssignments(agent, assigned, environments).
+		Render(r.Context(), w); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }
 
 func (h *AgentsHandler) renderListError(
