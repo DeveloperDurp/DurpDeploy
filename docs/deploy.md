@@ -104,7 +104,8 @@ boundary is:
 The optional Compose `agent` profile is a co-located demonstration and
 validation path. Containerized agent execution does not use a per-step
 `chroot`. The container has a read-only root, private writable state and `/tmp`,
-service UID `10001`, runner UID `10002`, dropped capabilities, `NoNewPrivs`, cgroup limits, and no
+one preselected service and script UID `10001`, zero capabilities, `NoNewPrivs`,
+service-owned cgroup limits, and no
 host or control-plane mounts. The operator or user remains responsible for the
 contents of every script run in the container, the secrets supplied to it, its
 network access, and its effects inside that container. Read-only does not stop
@@ -358,27 +359,26 @@ secrets. Back up the key with the database.
 
 ---
 
-## Step 5 — Set up the direct runner service boundary
+## Step 5 — Set up the direct execution service boundary
 
-Deployment steps no longer run as the `durpdeploy` user directly (P1-4). A
-low-privileged `durpdeploy-runner` account is used instead, so a buggy or
-malicious step script cannot read the private SQLite DB or secret key. Supported
-execution does not use a per-step filesystem root. The systemd unit supplies a
-read-only service filesystem, private mounts and `/tmp`, a single private state
-write path, `NoNewPrivileges`, and service-level cgroup limits. The runner child
-receives a minimal environment and no Linux capabilities.
+The server and deployment steps run as the preselected unprivileged
+`durpdeploy` account. Supported execution does not use an identity switch or a
+per-step filesystem root. The systemd unit supplies a read-only service
+filesystem, private mounts and `/tmp`, a single private state write path,
+`NoNewPrivileges`, empty capability sets, and service-level cgroup limits. Bash
+receives a minimal environment.
 
 The operator is responsible for every deployment script, the secrets and files
 intentionally made available to it, its network access, and every effect it can
 cause inside the service boundary. Read-only paths do not prevent a script from
 reading visible files or exfiltrating supplied secrets.
 
-```bash
-# Dedicated, unprivileged, no-login user for running step scripts.
-sudo useradd --system --no-create-home --shell /usr/sbin/nologin durpdeploy-runner
-# setpriv clears the service's identity-switching capabilities before Bash.
-command -v setpriv >/dev/null # provided by Debian/Ubuntu's util-linux package
-```
+An unprivileged server cannot change to a separate runner UID without
+`SETUID`/`SETGID`. Those capabilities are intentionally absent. The tradeoff is
+that a local step can read or change `/var/lib/durpdeploy` and any key file
+available to the `durpdeploy` account. Run only operator-trusted local steps.
+Use a remote agent on a separate host or container when scripts must not share
+the control-plane filesystem boundary.
 
 The supplied unit applies CPU, memory, and process limits to the complete
 service cgroup. No writable host cgroup mount, delegated subtree, mount

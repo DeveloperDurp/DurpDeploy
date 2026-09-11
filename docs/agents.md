@@ -163,8 +163,8 @@ files that are visible in the container or exfiltrating secrets supplied to it.
 
 The container contract is deliberately limited and explicit:
 
-* The agent process runs as service UID `10001`; Bash runs as runner UID
-  `10002` and cannot traverse the private agent state directory.
+* The agent process and Bash run as the preselected unprivileged service UID
+  `10001`; neither process has Linux capabilities.
 * The root filesystem is read-only. Writable locations are private to the
   container, primarily the agent state directory and a private `/tmp` tmpfs.
 * The container has no host or control-plane database, server secret,
@@ -174,6 +174,13 @@ The container contract is deliberately limited and explicit:
 * CPU, memory, and process-count limits are enforced on the service cgroup.
 * No host cgroup tree, host filesystem, or server data is mounted into the
   agent container.
+
+An unprivileged agent cannot change to a separate runner UID without
+`SETUID`/`SETGID`. Those capabilities are intentionally absent. Bash therefore
+shares the agent UID and can read or change its private state volume, including
+the paired identity. Use one agent boundary per trusted script domain, and
+re-pair the agent if a script may have altered that state. The separate host or
+container still prevents access to control-plane state and arbitrary host data.
 
 These controls reduce the agent container's access to its host. They do not
 turn deployment scripts into trusted code, restrict the network destinations
@@ -199,13 +206,11 @@ make build-agent
 sudo install -o root -g root -m 0755 ./durpdeploy-agent /usr/local/bin/durpdeploy-agent
 ```
 
-Create the separate service and runner accounts and private state directory:
+Create the service account and private state directory:
 
 ```bash
 sudo useradd --system --home-dir /var/lib/durpdeploy-agent \
   --shell /usr/sbin/nologin durpdeploy-agent
-sudo useradd --system --home-dir /nonexistent \
-  --shell /usr/sbin/nologin durpdeploy-runner
 sudo install -d -o durpdeploy-agent -g durpdeploy-agent -m 0700 \
   /var/lib/durpdeploy-agent
 sudo install -m 0600 /tmp/durpdeploy-agent.env /etc/durpdeploy-agent.env
@@ -277,7 +282,7 @@ sudo systemctl enable --now durpdeploy-agent
 sudo systemctl status durpdeploy-agent --no-pager
 ```
 
-The unit runs as `durpdeploy-agent`, executes Bash as `durpdeploy-runner`, sets the state directory, uses
+The unit runs the agent and Bash as `durpdeploy-agent`, sets the state directory, uses
 `/etc/durpdeploy-agent.env`, applies a private `UMask=0077`, and permits writes
 only to the agent state directory. It also applies `NoNewPrivileges`, private
 mounts and `/tmp`, and service cgroup limits. Keep both
