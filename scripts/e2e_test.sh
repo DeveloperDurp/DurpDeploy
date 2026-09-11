@@ -61,6 +61,7 @@ else
     # because the admin CLI just created the schema.
     DURPDEPLOY_ADDR="127.0.0.1:$PORT" \
         DURPDEPLOY_DB="$DB_DSN" \
+        DURPDEPLOY_EXECUTION_BOUNDARY=development \
         DURPDEPLOY_URL="$BASE" \
         "$TMP/durpdeploy" >"$TMP/server.log" 2>&1 &
     SERVER_PID=$!

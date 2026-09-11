@@ -30,13 +30,16 @@ type Sandbox struct {
 	enabled  bool
 }
 
-// newSandbox keeps local development compatible, while configured service
-// execution fails closed if the dedicated runner identity is unavailable.
+// newSandbox requires an explicit execution mode so production cannot
+// accidentally use the development no-op boundary.
 func newSandbox() (*Sandbox, error) {
 	s := &Sandbox{}
 	boundary := os.Getenv("DURPDEPLOY_EXECUTION_BOUNDARY")
-	if boundary == "" {
+	if boundary == "development" {
 		return s, nil
+	}
+	if boundary == "" {
+		return nil, fmt.Errorf("runner execution boundary is required")
 	}
 	if boundary != "service" {
 		return nil, fmt.Errorf("invalid runner execution boundary %q", boundary)

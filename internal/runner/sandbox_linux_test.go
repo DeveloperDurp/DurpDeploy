@@ -40,6 +40,35 @@ func TestSandbox_RejectsMalformedServiceBoundary(t *testing.T) {
 	}
 }
 
+func TestSandbox_FailsClosedWhenExecutionBoundaryMissing(t *testing.T) {
+	// Given
+	t.Setenv("DURPDEPLOY_EXECUTION_BOUNDARY", "")
+
+	// When
+	_, err := newSandbox()
+
+	// Then
+	if err == nil {
+		t.Fatal("new sandbox succeeded without an execution boundary")
+	}
+}
+
+func TestSandbox_AllowsExplicitDevelopmentBoundary(t *testing.T) {
+	// Given
+	t.Setenv("DURPDEPLOY_EXECUTION_BOUNDARY", "development")
+
+	// When
+	sandbox, err := newSandbox()
+
+	// Then
+	if err != nil {
+		t.Fatalf("new development sandbox: %v", err)
+	}
+	if sandbox.enabled {
+		t.Fatal("development sandbox unexpectedly enables service credentials")
+	}
+}
+
 func TestClearCapabilitiesWrapsStepWithSetpriv(t *testing.T) {
 	cmd := exec.Command("bash", "/script.sh")
 	sandbox := &Sandbox{enabled: true}

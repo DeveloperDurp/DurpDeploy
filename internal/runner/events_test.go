@@ -29,6 +29,7 @@ func setupRunnerHarness(
 	t *testing.T,
 ) (*repository.Repository, *runner.DeploymentRunner, *recordingNotifier) {
 	t.Helper()
+	t.Setenv("DURPDEPLOY_EXECUTION_BOUNDARY", "development")
 	dbConn, err := migrate.Run(":memory:?_pragma=foreign_keys(1)")
 	if err != nil {
 		t.Fatalf("migrate: %v", err)
