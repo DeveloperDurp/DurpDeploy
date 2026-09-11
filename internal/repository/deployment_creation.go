@@ -50,13 +50,19 @@ func (r *Repository) CreateDeployment(
 	}
 
 	var result DeploymentResult
-	err = r.WithTx(ctx, func(q *db.Queries) error {
-		var err error
-		result, err = r.createDeployment(ctx, q, arg, candidate)
-		return err
-	})
-	if err != nil {
-		return DeploymentResult{}, fmt.Errorf("create deployment: %w", err)
+	for attempt := 0; ; attempt++ {
+		result = DeploymentResult{}
+		err = r.WithTx(ctx, func(q *db.Queries) error {
+			var createErr error
+			result, createErr = r.createDeployment(ctx, q, arg, candidate)
+			return createErr
+		})
+		if err == nil {
+			break
+		}
+		if !retryDeploymentCreation(ctx, err, attempt) {
+			return DeploymentResult{}, fmt.Errorf("create deployment: %w", err)
+		}
 	}
 	if result.Mode == ExecutionRemote && result.Deployment.Status == "pending" {
 		r.notifyRemoteWork()
