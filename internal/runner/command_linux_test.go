@@ -4,6 +4,7 @@ package runner
 
 import (
 	"path/filepath"
+	"slices"
 	"syscall"
 	"testing"
 )
@@ -13,7 +14,7 @@ func TestDeploymentRunner_CommandUsesScratchDirectoryWithoutMountIsolation(
 ) {
 	// Given
 	runner := &DeploymentRunner{
-		sandbox: &Sandbox{uid: 10002, gid: 10002, enabled: true},
+		sandboxErr: nil,
 	}
 	tmpDir := t.TempDir()
 	scriptPath := filepath.Join(tmpDir, "script.sh")
@@ -34,16 +35,12 @@ func TestDeploymentRunner_CommandUsesScratchDirectoryWithoutMountIsolation(
 	if !cmd.SysProcAttr.Setpgid {
 		t.Fatal("command lacks its own process group")
 	}
-	credential := cmd.SysProcAttr.Credential
-	if credential == nil || credential.Uid != 10002 || credential.Gid != 10002 {
-		t.Fatalf("command credential = %+v, want UID/GID 10002", credential)
+	if cmd.SysProcAttr.Credential != nil {
+		t.Fatalf("command switches credentials: %+v", cmd.SysProcAttr.Credential)
 	}
-	if len(cmd.Args) < 6 || cmd.Args[0] != "setpriv" ||
-		cmd.Args[1] != "--bounding-set=-all" ||
-		cmd.Args[2] != "--inh-caps=-all" ||
-		cmd.Args[3] != "--ambient-caps=-all" ||
-		cmd.Args[4] != "--no-new-privs" || cmd.Args[5] != "--" {
-		t.Fatalf("command capability wrapper = %q", cmd.Args)
+	wantArgs := []string{"bash", scriptPath}
+	if !slices.Equal(cmd.Args, wantArgs) {
+		t.Fatalf("command args = %q, want %q", cmd.Args, wantArgs)
 	}
 	if cmd.SysProcAttr.Chroot != "" {
 		t.Fatalf("command chroot = %q, want empty", cmd.SysProcAttr.Chroot)
