@@ -19,6 +19,7 @@ User=durpdeploy
 Group=durpdeploy
 WorkingDirectory=/var/lib/durpdeploy
 Environment=DURPDEPLOY_DB=/var/lib/durpdeploy/durpdeploy.db
+Environment=DURPDEPLOY_EXECUTION_BOUNDARY=service
 Environment=DURPDEPLOY_URL=https://durpdeploy.example.com
 # Optional OIDC SSO settings. Create /etc/durpdeploy/durpdeploy.env as root,
 # mode 0600, with all required values together. The exact callback URI is
@@ -53,16 +54,10 @@ RestartSec=5s
 # explicitly carved out as writable. Same pattern as the audit-prune
 # service; see systemd/durpdeploy-audit-prune.service.
 ReadWritePaths=/var/lib/durpdeploy /var/lib/durpdeploy/agent-identity
-# Let the process manage its own cgroup sub-tree under
-# /sys/fs/cgroup/durpdeploy — required so the runner sandbox (P1-4) can
-# create a per-deployment cgroup and apply cpu/memory/pids limits.
-Delegate=yes
-# Grant just enough capabilities for the runner sandbox (P1-4) to switch
-# step processes to the low-privileged durpdeploy-runner user and to
-# bind-mount/chroot the step's scratch filesystem. NoNewPrivileges below
-# still blocks privilege gain via execve, it does not block these syscalls.
-AmbientCapabilities=CAP_SETUID CAP_SETGID CAP_SETPCAP CAP_SYS_ADMIN
-CapabilityBoundingSet=CAP_SETUID CAP_SETGID CAP_SETPCAP CAP_SYS_ADMIN
+# The server switches only Bash children to durpdeploy-runner. setpriv clears
+# every capability before the child executes.
+AmbientCapabilities=CAP_SETUID CAP_SETGID CAP_SETPCAP
+CapabilityBoundingSet=CAP_SETUID CAP_SETGID CAP_SETPCAP
 
 # --- Hardening ---
 # Make most of the filesystem read-only to the process. Writes are still
@@ -75,19 +70,16 @@ ProtectHome=true
 NoNewPrivileges=true
 # Private /tmp — the process sees its own fresh tmpfs, isolated from host /tmp.
 PrivateTmp=true
+PrivateMounts=true
 # Block writes to kernel tunables (sysctl) and kernel module loading.
 ProtectKernelTunables=true
 ProtectKernelModules=true
-# NOTE: ProtectControlGroups is intentionally omitted (P1-4) — the runner
-# sandbox needs write access under /sys/fs/cgroup/durpdeploy to create and
-# manage per-deployment cgroups (see docs/deploy.md for directory setup).
+ProtectControlGroups=true
 # Restrict to the socket families the binary actually needs: unix sockets
 # (SQLite in some configs), IPv4/IPv6 for the HTTP listener. No AF_PACKET,
 # no AF_NETLINK — the process cannot do raw sockets or netlink trickery.
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
-# NOTE: RestrictNamespaces is intentionally omitted (P1-4) — the runner
-# sandbox bind-mounts and chroots each step's scratch directory, which
-# requires mount namespace operations.
+RestrictNamespaces=true
 # Block realtime scheduling — not needed, blocks a class of priority attacks.
 RestrictRealtime=true
 # Lock the process personality (prevents 32-bit-on-64-bit ABI tricks).
@@ -95,6 +87,9 @@ LockPersonality=true
 # Block writable+executable memory. Go does not use JIT, so this is safe and
 # blocks a large class of code-injection attacks.
 MemoryDenyWriteExecute=true
+MemoryMax=512M
+TasksMax=256
+CPUQuota=100%
 
 [Install]
 WantedBy=multi-user.target
