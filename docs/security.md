@@ -75,9 +75,12 @@ What we do **not** defend against yet (see Known Gaps):
 - Audit log retention / tamper-proofing
 
 Runner orphan cleanup on shutdown/timeout and the service-level step boundary
-are shipped. Direct and remote runners use dedicated users, private state,
-read-only service or container filesystems, zero-capability Bash children, and
-service cgroup limits. The agent does not provide SSH access.
+are shipped. Each service and its Bash children share one preselected
+unprivileged identity with zero capability sets. Private mounts, read-only
+service or container filesystems, minimal child environments, and service cgroup
+limits remain. Bash can access state writable by its service identity; use a
+separate remote agent boundary for scripts that must not access control-plane
+state. The agent does not provide SSH access.
 
 ---
 
@@ -425,7 +428,7 @@ values:
 | ~~**Secret encryption at rest**~~ | ~~`release_variables.value` is plaintext. A DB read leaks secrets~~ | **shipped (P1-3)** |
 | ~~**Runner orphan cleanup**~~ | ~~Killed/restarted server left orphaned bash children~~ | **shipped** |
 | ~~**Log redaction hardening**~~ | ~~Naive per-line `strings.ReplaceAll` missed common credential formats and multi-line/split secrets~~ | **shipped (P1-5)** |
-| ~~**Direct runner OS-level sandboxing**~~ | ~~Direct control-plane steps run as a low-privilege user inside read-only/private service mounts with cgroup limits~~ | **shipped (P1-4)** |
+| **Local script/state UID separation** | Local Bash shares the unprivileged server UID because no identity-switch capability is granted; it can change server-writable state | Use a separate remote agent trust boundary for untrusted scripts |
 | ~~**Login rate limiting**~~ | ~~Password, MFA, and OIDC login surfaces lacked application limits~~ | **shipped** |
 | **Audit log retention** | No retention policy or tamper-proofing on `audit_log` | P2-5 |
 | **Password reset flow** | No self-service reset. Admin must delete + recreate the user | P2 |
