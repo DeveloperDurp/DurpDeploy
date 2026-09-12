@@ -69,6 +69,7 @@ templ LifecycleDetail(lc db.Lifecycle, stages []LifecycleStageView, availableEnv
 templ LifecycleStageList(lc db.Lifecycle, stages []LifecycleStageView, availableEnvs []db.Environment) {
 	<div
 		id="lifecycle-stages"
+		x-data
 		hx-get={ templ.SafeURL("/lifecycles/" + strconv.FormatInt(lc.ID, 10)) }
 		hx-trigger="mobile-stage-updated from:body"
 		hx-target="this"
@@ -158,7 +159,7 @@ templ LifecycleStageRow(lc db.Lifecycle, index int, total int, s LifecycleStageV
 						<button type="submit" class="btn btn-xs" data-lifecycle-stage-action="move-down" aria-label={ lifecycleStageReorderLabel(s, "down") }>↓</button>
 					</form>
 				}
-				<form method="post" action={ templ.SafeURL("/lifecycles/" + strconv.FormatInt(lc.ID, 10) + "/stages/" + strconv.FormatInt(s.Stage.ID, 10) + "/delete") } onsubmit="return confirm('Remove this stage from the lifecycle?')">
+				<form method="post" action={ templ.SafeURL("/lifecycles/" + strconv.FormatInt(lc.ID, 10) + "/stages/" + strconv.FormatInt(s.Stage.ID, 10) + "/delete") } hx-boost="true" hx-confirm="Remove this stage from the lifecycle?">
 					<button type="submit" class="btn btn-xs btn-error" data-lifecycle-stage-action="delete">Delete</button>
 				</form>
 			}
@@ -187,7 +188,7 @@ templ LifecycleStageMobileRecord(lc db.Lifecycle, index int, total int, s Lifecy
 							hx-vals={ fmt.Sprintf(`{"requires_approval":%q}`, ternaryNext(s.Stage.RequiresApproval)) }
 							hx-target="#lifecycle-stages"
 							hx-swap="none"
-							hx-on::after-request="if(event.detail.successful) htmx.trigger(document.body, 'mobile-stage-updated')"
+							x-on:htmx:after-request="if ($event.detail.successful) $dispatch('mobile-stage-updated')"
 							checked?={ s.Stage.RequiresApproval != 0 }
 						/>
 						<span class="text-sm">Approval</span>
@@ -215,7 +216,7 @@ templ LifecycleStageMobileRecord(lc db.Lifecycle, index int, total int, s Lifecy
 						<button type="submit" class="btn btn-xs" data-lifecycle-stage-action="move-down" aria-label={ lifecycleStageReorderLabel(s, "down") }>↓</button>
 					</form>
 				}
-				<form method="post" action={ templ.SafeURL("/lifecycles/" + strconv.FormatInt(lc.ID, 10) + "/stages/" + strconv.FormatInt(s.Stage.ID, 10) + "/delete") } onsubmit="return confirm('Remove this stage from the lifecycle?')">
+				<form method="post" action={ templ.SafeURL("/lifecycles/" + strconv.FormatInt(lc.ID, 10) + "/stages/" + strconv.FormatInt(s.Stage.ID, 10) + "/delete") } hx-boost="true" hx-confirm="Remove this stage from the lifecycle?">
 					<button type="submit" class="btn btn-xs btn-error" data-lifecycle-stage-action="delete">Delete</button>
 				</form>
 			</div>

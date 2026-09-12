@@ -1,0 +1,51 @@
+- generic [active] [ref=f7e1]:
+  - generic [ref=f7e3]:
+    - link "DurpDeploy" [ref=f7e5] [cursor=pointer]:
+      - /url: /
+    - generic [ref=f7e6]:
+      - list [ref=f7e8]:
+        - listitem [ref=f7e9]:
+          - link "Projects" [ref=f7e10] [cursor=pointer]:
+            - /url: /projects
+        - listitem [ref=f7e11]:
+          - link "Environments" [ref=f7e12] [cursor=pointer]:
+            - /url: /environments
+        - listitem [ref=f7e13]:
+          - link "Lifecycles" [ref=f7e14] [cursor=pointer]:
+            - /url: /lifecycles
+        - listitem [ref=f7e15]:
+          - link "Deployments" [ref=f7e16] [cursor=pointer]:
+            - /url: /deployments
+        - listitem [ref=f7e17]:
+          - link "Templates" [ref=f7e18] [cursor=pointer]:
+            - /url: /templates
+      - group [ref=f7e19]:
+        - generic "Admin" [ref=f7e20] [cursor=pointer]
+      - generic [ref=f7e21]:
+        - button "☀️" [ref=f7e22] [cursor=pointer]
+        - group [ref=f7e24]:
+          - generic "qa-admin@example.com (admin)" [ref=f7e25] [cursor=pointer]
+  - generic [ref=f7e27]:
+    - generic [ref=f7e28]:
+      - heading "Users" [level=1] [ref=f7e29]
+      - link "New user" [ref=f7e30] [cursor=pointer]:
+        - /url: /admin/users/new
+    - table [ref=f7e32]:
+      - rowgroup [ref=f7e33]:
+        - row [ref=f7e34]:
+          - columnheader "Email" [ref=f7e35]
+          - columnheader "Name" [ref=f7e36]
+          - columnheader "Role" [ref=f7e37]
+          - columnheader "Created" [ref=f7e38]
+          - columnheader "Last login" [ref=f7e39]
+          - columnheader "Actions" [ref=f7e40]
+      - rowgroup [ref=f7e41]:
+        - row [ref=f7e42]:
+          - cell "qa-admin@example.com" [ref=f7e43]
+          - cell "qa-admin@example.com" [ref=f7e44]
+          - cell "admin" [ref=f7e45]
+          - cell "2026-09-11 18:51:12" [ref=f7e47]
+          - cell "2026-09-11 18:51:49" [ref=f7e48]
+          - cell [ref=f7e49]:
+            - link "Edit" [ref=f7e50] [cursor=pointer]:
+              - /url: /admin/users/1/edit

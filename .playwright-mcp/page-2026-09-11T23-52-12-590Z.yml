@@ -1,0 +1,46 @@
+- generic [active] [ref=f4e1]:
+  - generic [ref=f4e3]:
+    - link "DurpDeploy" [ref=f4e5] [cursor=pointer]:
+      - /url: /
+    - generic [ref=f4e6]:
+      - list [ref=f4e8]:
+        - listitem [ref=f4e9]:
+          - link "Projects" [ref=f4e10] [cursor=pointer]:
+            - /url: /projects
+        - listitem [ref=f4e11]:
+          - link "Environments" [ref=f4e12] [cursor=pointer]:
+            - /url: /environments
+        - listitem [ref=f4e13]:
+          - link "Lifecycles" [ref=f4e14] [cursor=pointer]:
+            - /url: /lifecycles
+        - listitem [ref=f4e15]:
+          - link "Deployments" [ref=f4e16] [cursor=pointer]:
+            - /url: /deployments
+        - listitem [ref=f4e17]:
+          - link "Templates" [ref=f4e18] [cursor=pointer]:
+            - /url: /templates
+      - group [ref=f4e19]:
+        - generic "Admin" [ref=f4e20] [cursor=pointer]
+      - generic [ref=f4e21]:
+        - button "☀️" [ref=f4e22] [cursor=pointer]
+        - group [ref=f4e24]:
+          - generic "qa-admin@example.com (admin)" [ref=f4e25] [cursor=pointer]
+  - generic [ref=f4e28]:
+    - heading "New Project" [level=1] [ref=f4e29]
+    - generic [ref=f4e30]:
+      - generic [ref=f4e31]:
+        - generic [ref=f4e32]: Name
+        - textbox [ref=f4e34]
+      - generic [ref=f4e35]:
+        - generic [ref=f4e36]: Description
+        - textbox [ref=f4e38]
+      - generic [ref=f4e39]:
+        - generic [ref=f4e40]:
+          - generic [ref=f4e41]: Lifecycle
+          - generic [ref=f4e42]: Optional. Gates deployments to environments in order.
+        - combobox [ref=f4e43] [cursor=pointer]:
+          - option "— No lifecycle —" [selected]
+    - generic [ref=f4e44]:
+      - button "Create" [ref=f4e45] [cursor=pointer]
+      - link "Cancel" [ref=f4e46] [cursor=pointer]:
+        - /url: /projects

@@ -1,0 +1,36 @@
+- generic [active] [ref=f1e1]:
+  - generic [ref=f1e3]:
+    - link "DurpDeploy" [ref=f1e5] [cursor=pointer]:
+      - /url: /
+    - generic [ref=f1e6]:
+      - list [ref=f1e8]:
+        - listitem [ref=f1e9]:
+          - link "Projects" [ref=f1e10] [cursor=pointer]:
+            - /url: /projects
+        - listitem [ref=f1e11]:
+          - link "Environments" [ref=f1e12] [cursor=pointer]:
+            - /url: /environments
+        - listitem [ref=f1e13]:
+          - link "Lifecycles" [ref=f1e14] [cursor=pointer]:
+            - /url: /lifecycles
+        - listitem [ref=f1e15]:
+          - link "Deployments" [ref=f1e16] [cursor=pointer]:
+            - /url: /deployments
+        - listitem [ref=f1e17]:
+          - link "Templates" [ref=f1e18] [cursor=pointer]:
+            - /url: /templates
+      - group [ref=f1e19]:
+        - generic "Admin" [ref=f1e20] [cursor=pointer]
+      - generic [ref=f1e21]:
+        - button "☀️" [ref=f1e22] [cursor=pointer]
+        - group [ref=f1e24]:
+          - generic "qa-admin@example.com (admin)" [ref=f1e25] [cursor=pointer]
+  - generic [ref=f1e30]:
+    - heading "Welcome to DurpDeploy" [level=1] [ref=f1e31]
+    - paragraph [ref=f1e32]: Simple deployment tool for bash scripts
+    - paragraph [ref=f1e33]: Get started by creating your first project or environment
+    - generic [ref=f1e34]:
+      - link "Create Project" [ref=f1e35] [cursor=pointer]:
+        - /url: /projects/new
+      - link "Create Environment" [ref=f1e36] [cursor=pointer]:
+        - /url: /environments/new

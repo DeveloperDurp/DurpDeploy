@@ -1,0 +1,53 @@
+- generic [active] [ref=f8e1]:
+  - generic [ref=f8e3]:
+    - link "DurpDeploy" [ref=f8e5] [cursor=pointer]:
+      - /url: /
+    - generic [ref=f8e6]:
+      - list [ref=f8e8]:
+        - listitem [ref=f8e9]:
+          - link "Projects" [ref=f8e10] [cursor=pointer]:
+            - /url: /projects
+        - listitem [ref=f8e11]:
+          - link "Environments" [ref=f8e12] [cursor=pointer]:
+            - /url: /environments
+        - listitem [ref=f8e13]:
+          - link "Lifecycles" [ref=f8e14] [cursor=pointer]:
+            - /url: /lifecycles
+        - listitem [ref=f8e15]:
+          - link "Deployments" [ref=f8e16] [cursor=pointer]:
+            - /url: /deployments
+        - listitem [ref=f8e17]:
+          - link "Templates" [ref=f8e18] [cursor=pointer]:
+            - /url: /templates
+      - group [ref=f8e19]:
+        - generic "Admin" [ref=f8e20] [cursor=pointer]
+      - generic [ref=f8e21]:
+        - button "☀️" [ref=f8e22] [cursor=pointer]
+        - group [ref=f8e24]:
+          - generic "qa-admin@example.com (admin)" [ref=f8e25] [cursor=pointer]
+  - generic [ref=f8e28]:
+    - heading "New user" [level=1] [ref=f8e29]
+    - generic [ref=f8e31]:
+      - generic [ref=f8e32]:
+        - generic [ref=f8e33]:
+          - generic [ref=f8e34]: Email
+          - textbox [ref=f8e36]
+        - generic [ref=f8e37]:
+          - generic [ref=f8e38]: Name
+          - textbox [ref=f8e40]
+        - generic [ref=f8e41]:
+          - generic [ref=f8e42]: Role
+          - combobox [ref=f8e44] [cursor=pointer]:
+            - option "admin" [selected]
+            - option "deployer"
+            - option "viewer"
+        - generic [ref=f8e45]:
+          - generic [ref=f8e46]: Password
+          - textbox [ref=f8e48]
+        - generic [ref=f8e49]:
+          - generic [ref=f8e50]: Confirm password
+          - textbox [ref=f8e52]
+      - generic [ref=f8e53]:
+        - button "Create user" [ref=f8e54] [cursor=pointer]
+        - link "Cancel" [ref=f8e55] [cursor=pointer]:
+          - /url: /admin/users

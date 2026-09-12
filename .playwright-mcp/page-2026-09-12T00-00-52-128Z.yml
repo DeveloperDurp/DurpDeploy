@@ -1,0 +1,73 @@
+- generic [active] [ref=f11e1]:
+  - generic [ref=f11e3]:
+    - link "DurpDeploy" [ref=f11e5] [cursor=pointer]:
+      - /url: /
+    - generic [ref=f11e6]:
+      - list [ref=f11e8]:
+        - listitem [ref=f11e9]:
+          - link "Projects" [ref=f11e10] [cursor=pointer]:
+            - /url: /projects
+        - listitem [ref=f11e11]:
+          - link "Environments" [ref=f11e12] [cursor=pointer]:
+            - /url: /environments
+        - listitem [ref=f11e13]:
+          - link "Lifecycles" [ref=f11e14] [cursor=pointer]:
+            - /url: /lifecycles
+        - listitem [ref=f11e15]:
+          - link "Deployments" [ref=f11e16] [cursor=pointer]:
+            - /url: /deployments
+        - listitem [ref=f11e17]:
+          - link "Templates" [ref=f11e18] [cursor=pointer]:
+            - /url: /templates
+      - group [ref=f11e19]:
+        - generic "Admin" [ref=f11e20] [cursor=pointer]
+      - generic [ref=f11e21]:
+        - button "☀️" [ref=f11e22] [cursor=pointer]
+        - group [ref=f11e24]:
+          - generic "qa-admin@example.com (admin)" [ref=f11e25] [cursor=pointer]
+  - generic [ref=f11e28]:
+    - heading "Edit Project" [level=1] [ref=f11e29]
+    - generic [ref=f11e30]:
+      - generic [ref=f11e31]:
+        - generic [ref=f11e32]: Name
+        - textbox [ref=f11e34]: Task 7 Alpine QA
+      - generic [ref=f11e35]:
+        - generic [ref=f11e36]: Description
+        - textbox [ref=f11e38]: Disposable variable editor QA
+      - generic [ref=f11e39]:
+        - generic [ref=f11e40]:
+          - generic [ref=f11e41]: Lifecycle
+          - generic [ref=f11e42]: Optional. Gates deployments to environments in order.
+        - combobox [ref=f11e43] [cursor=pointer]:
+          - option "— No lifecycle —" [selected]
+    - generic [ref=f11e44]:
+      - generic [ref=f11e45]:
+        - generic [ref=f11e46]: Delete this project
+        - generic [ref=f11e47]: Steps, variables, and releases will be deleted too.
+      - button "Delete project" [ref=f11e48] [cursor=pointer]
+    - generic [ref=f11e49]:
+      - heading "Members" [level=2] [ref=f11e50]
+      - table [ref=f11e52]:
+        - rowgroup [ref=f11e53]:
+          - row [ref=f11e54]:
+            - columnheader "Name" [ref=f11e55]
+            - columnheader "Email" [ref=f11e56]
+            - columnheader "Role" [ref=f11e57]
+            - columnheader "Actions" [ref=f11e58]
+        - rowgroup [ref=f11e59]:
+          - row [ref=f11e60]:
+            - cell "qa-admin@example.com" [ref=f11e61]
+            - cell "qa-admin@example.com" [ref=f11e62]
+            - cell "admin" [ref=f11e63]
+            - cell [ref=f11e64]:
+              - button "Remove" [ref=f11e65] [cursor=pointer]
+          - row [ref=f11e66]:
+            - cell "Task 7 Viewer" [ref=f11e67]
+            - cell "qa-viewer@example.com" [ref=f11e68]
+            - cell "deployer" [ref=f11e69]
+            - cell [ref=f11e70]:
+              - button "Remove" [ref=f11e71] [cursor=pointer]
+    - generic [ref=f11e72]:
+      - button "Update" [ref=f11e73] [cursor=pointer]
+      - link "Cancel" [ref=f11e74] [cursor=pointer]:
+        - /url: /projects/1

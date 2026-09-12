@@ -297,3 +297,116 @@ func TestMobile_RenderedHTML_preserves_disclosures_and_containment_when_authenti
 		})
 	}
 }
+
+func TestSteps_RenderedHTML_uses_named_Alpine_state_when_authenticated(
+	t *testing.T,
+) {
+	// Given
+	fixture := newMobileStructuralFixture(t)
+	projectID := fixture.project.ID
+	stepID := fixture.step.ID
+
+	// When
+	pageBody := fixture.getHTML(
+		t,
+		fixture.admin,
+		fmt.Sprintf("/projects/%d/steps-page", projectID),
+	)
+	newBody := fixture.getHTML(
+		t,
+		fixture.admin,
+		fmt.Sprintf("/projects/%d/steps/new", projectID),
+	)
+	editBody := fixture.getHTML(
+		t,
+		fixture.admin,
+		fmt.Sprintf("/projects/%d/steps/%d/edit", projectID, stepID),
+	)
+	pickerBody := fixture.getHTML(
+		t,
+		fixture.admin,
+		fmt.Sprintf("/projects/%d/templates-picker", projectID),
+	)
+
+	// Then
+	for _, pattern := range []string{
+		`x-data="stepFormHost"`,
+		`x-on:step-form-add="handleEvent"`,
+		`x-on:step-form-cancel="handleEvent"`,
+		`x-on:step-form-edit="handleEvent"`,
+		`x-ref="addStepForm"`,
+		fmt.Sprintf(`hx-get="/projects/%d/steps/new"`, projectID),
+		`hx-target="#add-step-form"`,
+		`hx-swap="innerHTML"`,
+		fmt.Sprintf(
+			`hx-target="#step-row-%d" hx-swap="outerHTML"`,
+			stepID,
+		),
+		`x-on:click="[^"]*step-form-add`,
+		`\$dispatch\('step-form-edit'\)`,
+	} {
+		requireHTMLPattern(t, pageBody, pattern)
+	}
+
+	for _, body := range []string{newBody, editBody} {
+		for _, pattern := range []string{
+			`x-data="stepEditor"`,
+			`x-ref="textarea"`,
+			`x-on:input="input"`,
+			`x-on:scroll="scroll"`,
+			`x-on:click="fullscreen"`,
+			`x-ref="modal"`,
+			`x-ref="modalTextarea"`,
+			`x-text="lineNumbers"`,
+			`x-model="script"`,
+			`\$dispatch\('step-form-cancel'\)`,
+		} {
+			requireHTMLPattern(t, body, pattern)
+		}
+		for _, forbidden := range []string{
+			"hx-on:",
+			"onclick=",
+			".innerHTML",
+			"fetch('/api/lint'",
+			`x-data="{`,
+		} {
+			if strings.Contains(body, forbidden) {
+				t.Errorf("step editor contains forbidden inline behavior %q", forbidden)
+			}
+		}
+	}
+
+	for _, pattern := range []string{
+		fmt.Sprintf(`hx-post="/projects/%d/steps"`, projectID),
+		`hx-target="#step-list"`,
+		`hx-swap="innerHTML"`,
+	} {
+		requireHTMLPattern(t, newBody, pattern)
+	}
+	for _, pattern := range []string{
+		fmt.Sprintf(`hx-put="/projects/%d/steps/%d"`, projectID, stepID),
+		`hx-target="#step-list"`,
+		`hx-swap="innerHTML"`,
+		fixture.step.ScriptBody,
+	} {
+		requireHTMLPattern(t, editBody, pattern)
+	}
+	for _, pattern := range []string{
+		fmt.Sprintf(
+			`hx-post="/projects/%d/steps/from-template/%d"`,
+			projectID,
+			fixture.template.ID,
+		),
+		`hx-target="#step-list"`,
+		`hx-swap="innerHTML"`,
+	} {
+		requireHTMLPattern(t, pickerBody, pattern)
+	}
+	for _, body := range []string{pageBody, pickerBody} {
+		for _, forbidden := range []string{"hx-on:", "onclick=", "innerHTML ="} {
+			if strings.Contains(body, forbidden) {
+				t.Errorf("step host contains forbidden inline behavior %q", forbidden)
+			}
+		}
+	}
+}
