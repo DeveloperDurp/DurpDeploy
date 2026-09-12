@@ -50,19 +50,16 @@ func (r *Repository) CreateDeployment(
 	}
 
 	var result DeploymentResult
-	for attempt := 0; ; attempt++ {
+	err = withSQLiteBusyRetry(ctx, func() error {
 		result = DeploymentResult{}
-		err = r.WithTx(ctx, func(q *db.Queries) error {
+		return r.WithTx(ctx, func(q *db.Queries) error {
 			var createErr error
 			result, createErr = r.createDeployment(ctx, q, arg, candidate)
 			return createErr
 		})
-		if err == nil {
-			break
-		}
-		if !retryDeploymentCreation(ctx, err, attempt) {
-			return DeploymentResult{}, fmt.Errorf("create deployment: %w", err)
-		}
+	})
+	if err != nil {
+		return DeploymentResult{}, fmt.Errorf("create deployment: %w", err)
 	}
 	if result.Mode == ExecutionRemote && result.Deployment.Status == "pending" {
 		r.notifyRemoteWork()

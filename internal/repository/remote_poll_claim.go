@@ -39,94 +39,101 @@ func (r *Repository) ClaimRemoteDeploymentPayload(
 ) (RemoteClaim, bool, error) {
 	var result RemoteClaim
 	claimed := false
-	err := r.WithTx(ctx, func(q *db.Queries) error {
-		locked, err := q.LockClaimAgent(ctx, agentID)
-		if err != nil {
-			return fmt.Errorf("lock active agent: %w", err)
-		}
-		if locked == 0 {
-			return nil
-		}
-		now, err := q.CurrentUnixTime(ctx)
-		if err != nil {
-			return fmt.Errorf("read database time: %w", err)
-		}
-		waiting, err := q.ListWaitingRemoteDeploymentClaims(ctx, agentID)
-		if err != nil {
-			return fmt.Errorf("list waiting remote claims: %w", err)
-		}
-		if len(waiting) == 0 {
-			return nil
-		}
-		candidate := waiting[0]
-		locked, err = q.LockWaitingRemoteDeploymentClaim(
-			ctx,
-			db.LockWaitingRemoteDeploymentClaimParams{
-				DeploymentID: candidate.DeploymentID,
-				AgentID:      agentID,
-			},
-		)
-		if err != nil {
-			return fmt.Errorf("lock waiting remote claim: %w", err)
-		}
-		if locked == 0 {
-			return nil
-		}
-		locked, err = q.LockPendingRemoteDeployment(
-			ctx,
-			db.LockPendingRemoteDeploymentParams{
-				DeploymentID: candidate.DeploymentID,
-				AgentID:      sql.NullString{String: agentID, Valid: true},
-			},
-		)
-		if err != nil {
-			return fmt.Errorf("lock pending deployment: %w", err)
-		}
-		if locked == 0 {
-			return nil
-		}
-		snapshot, err := r.remotePayloadSnapshot(
-			ctx,
-			q,
-			agentID,
-			candidate.DeploymentID,
-		)
-		if err != nil {
-			return err
-		}
-		prepared, err := prepare(snapshot)
-		if err != nil {
-			return err
-		}
-		changed, err := q.ClaimRemoteDeployment(
-			ctx,
-			db.ClaimRemoteDeploymentParams{
-				ClaimTokenHash: prepared.TokenHash,
-				Ciphertext: sql.NullString{
-					String: string(prepared.Ciphertext),
-					Valid:  true,
+	err := withSQLiteBusyRetry(ctx, func() error {
+		result = RemoteClaim{}
+		claimed = false
+		return r.WithTx(ctx, func(q *db.Queries) error {
+			locked, err := q.LockClaimAgent(ctx, agentID)
+			if err != nil {
+				return fmt.Errorf("lock active agent: %w", err)
+			}
+			if locked == 0 {
+				return nil
+			}
+			now, err := q.CurrentUnixTime(ctx)
+			if err != nil {
+				return fmt.Errorf("read database time: %w", err)
+			}
+			waiting, err := q.ListWaitingRemoteDeploymentClaims(ctx, agentID)
+			if err != nil {
+				return fmt.Errorf("list waiting remote claims: %w", err)
+			}
+			if len(waiting) == 0 {
+				return nil
+			}
+			candidate := waiting[0]
+			locked, err = q.LockWaitingRemoteDeploymentClaim(
+				ctx,
+				db.LockWaitingRemoteDeploymentClaimParams{
+					DeploymentID: candidate.DeploymentID,
+					AgentID:      agentID,
 				},
-				ClaimExpiresAt: now + int64(
-					agentproto.PreStartClaimTimeout/time.Second,
-				),
-				Now:          now,
+			)
+			if err != nil {
+				return fmt.Errorf("lock waiting remote claim: %w", err)
+			}
+			if locked == 0 {
+				return nil
+			}
+			locked, err = q.LockPendingRemoteDeployment(
+				ctx,
+				db.LockPendingRemoteDeploymentParams{
+					DeploymentID: candidate.DeploymentID,
+					AgentID: sql.NullString{
+						String: agentID,
+						Valid:  true,
+					},
+				},
+			)
+			if err != nil {
+				return fmt.Errorf("lock pending deployment: %w", err)
+			}
+			if locked == 0 {
+				return nil
+			}
+			snapshot, err := r.remotePayloadSnapshot(
+				ctx,
+				q,
+				agentID,
+				candidate.DeploymentID,
+			)
+			if err != nil {
+				return err
+			}
+			prepared, err := prepare(snapshot)
+			if err != nil {
+				return err
+			}
+			changed, err := q.ClaimRemoteDeployment(
+				ctx,
+				db.ClaimRemoteDeploymentParams{
+					ClaimTokenHash: prepared.TokenHash,
+					Ciphertext: sql.NullString{
+						String: string(prepared.Ciphertext),
+						Valid:  true,
+					},
+					ClaimExpiresAt: now + int64(
+						agentproto.PreStartClaimTimeout/time.Second,
+					),
+					Now:          now,
+					DeploymentID: candidate.DeploymentID,
+					AgentID:      agentID,
+				},
+			)
+			if err != nil {
+				return fmt.Errorf("claim remote deployment: %w", err)
+			}
+			if changed == 0 {
+				return nil
+			}
+			claimed = true
+			result = RemoteClaim{
 				DeploymentID: candidate.DeploymentID,
-				AgentID:      agentID,
-			},
-		)
-		if err != nil {
-			return fmt.Errorf("claim remote deployment: %w", err)
-		}
-		if changed == 0 {
+				Token:        prepared.Token,
+				Ciphertext:   prepared.Ciphertext,
+			}
 			return nil
-		}
-		claimed = true
-		result = RemoteClaim{
-			DeploymentID: candidate.DeploymentID,
-			Token:        prepared.Token,
-			Ciphertext:   prepared.Ciphertext,
-		}
-		return nil
+		})
 	})
 	if err != nil {
 		return RemoteClaim{}, false, err
