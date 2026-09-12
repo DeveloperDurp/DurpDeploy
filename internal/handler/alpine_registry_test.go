@@ -183,7 +183,7 @@ func TestAlpineRegistryDefinesComplianceComponents(t *testing.T) {
 		`(?ms)Alpine\.data\('stepFormHost'.*?^\}\)\);`,
 	)
 	host := hostPattern.FindString(source)
-	destroyEditor := strings.Index(host, "Alpine.destroyTree(form)")
+	destroyEditor := strings.Index(host, "Alpine.destroyTree(editor)")
 	removeForm := strings.Index(host, "replaceChildren()")
 	if destroyEditor < 0 || removeForm < 0 || destroyEditor > removeForm {
 		t.Error(

@@ -156,7 +156,7 @@ Alpine.data('stepFormHost', () => ({
 		if (!(source instanceof Element) || !event.detail.successful) return;
 		const form = source.closest('form[data-step-add-form]');
 		if (!(form instanceof HTMLFormElement)) return;
-		this.cancel();
+		this.cancel(form);
 	},
 	add(event) {
 		if (event.detail?.listURL) {
@@ -166,12 +166,13 @@ Alpine.data('stepFormHost', () => ({
 			});
 		}
 	},
-	cancel() {
+	cancel(form) {
 		const host = this.$refs.addStepForm;
-		const form = host?.firstElementChild;
-		if (!host || !form) return;
-		Alpine.destroyTree(form);
-		host.replaceChildren();
+		const target = form || host?.querySelector('form');
+		if (!(target instanceof HTMLFormElement)) return;
+		const editor = target.querySelector('[x-data="stepEditor"]');
+		if (editor) Alpine.destroyTree(editor);
+		if (host?.contains(target)) host.replaceChildren();
 	},
 	// step-form-add, step-form-cancel, and step-form-edit are the host contract.
 	handleEvent(event) {
@@ -181,7 +182,7 @@ Alpine.data('stepFormHost', () => ({
 				break;
 			case 'step-form-cancel':
 			case 'step-form-edit':
-				this.cancel();
+				this.cancel(event.target.closest('form'));
 				break;
 		}
 	},
