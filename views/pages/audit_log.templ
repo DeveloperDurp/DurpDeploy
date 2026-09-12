@@ -80,10 +80,10 @@ templ AuditLogRow(entry db.AuditLog) {
 				<span class="text-gray-500">-</span>
 			}
 		</td>
-		<td>
-			<details class="text-sm" data-disclosure="audit-details">
+		<td class="align-top break-words">
+			<details class="space-y-3 text-sm leading-relaxed" data-disclosure="audit-details">
 				<summary class="cursor-pointer text-primary">View details</summary>
-				<pre class="mt-2 whitespace-pre-wrap break-words rounded bg-base-100 p-3 text-xs"><code>{ entry.Details.String }</code></pre>
+				<pre class="whitespace-pre-wrap break-words rounded bg-base-100 p-4 text-xs leading-relaxed"><code>{ entry.Details.String }</code></pre>
 			</details>
 		</td>
 	</tr>
