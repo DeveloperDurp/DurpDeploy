@@ -113,6 +113,8 @@ func main() {
 			os.Exit(runSecretKey(os.Args[2:]))
 		case "tokens":
 			os.Exit(runTokens(os.Args[2:]))
+		case "dev-agent-identity":
+			os.Exit(runDevAgentIdentity())
 		case "version", "--version", "-v":
 			fmt.Println("durpdeploy dev")
 			os.Exit(0)
