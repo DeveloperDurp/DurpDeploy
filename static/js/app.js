@@ -302,7 +302,9 @@ Alpine.data('deploymentStream', ({ url }) => ({
 	},
 	// 'htmx:afterSwap' supplies the replacement #status-badge to status().
 	status(event) {
-		const target = event.detail?.elt || event.detail?.target;
+		const target = event.target instanceof Element
+			? event.target
+			: event.detail?.target;
 		if (!(target instanceof Element) || target.id !== 'status-badge') return;
 		const status = target.textContent.trim();
 		if (!['succeeded', 'failed', 'cancelled'].includes(status)) return;
