@@ -14,10 +14,11 @@ import (
 
 func TestLifecycleListRow_renders_plain_name_and_writer_edit_action(t *testing.T) {
 	// Given
-	request := auth.SetUser(
-		http.NewRequest(http.MethodGet, "/lifecycles", nil),
-		&db.User{Role: "writer"},
-	)
+	request, err := http.NewRequest(http.MethodGet, "/lifecycles", nil)
+	if err != nil {
+		t.Fatalf("create request: %v", err)
+	}
+	request = auth.SetUser(request, &db.User{Role: "writer"})
 	row := pages.LifecycleRow{
 		Lifecycle:  db.Lifecycle{ID: 42, Name: "release flow", Description: sql.NullString{}},
 		StageCount: 3,
@@ -25,7 +26,7 @@ func TestLifecycleListRow_renders_plain_name_and_writer_edit_action(t *testing.T
 	var rendered bytes.Buffer
 
 	// When
-	err := pages.LifecycleListRow(row).Render(request.Context(), &rendered)
+	err = pages.LifecycleListRow(row).Render(request.Context(), &rendered)
 	if err != nil {
 		t.Fatalf("render lifecycle row: %v", err)
 	}
