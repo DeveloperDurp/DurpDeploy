@@ -34,8 +34,20 @@ type agentFixture struct {
 }
 
 func newAgentFixture(t *testing.T) agentFixture {
+	return newAgentFixtureWithDSN(
+		t,
+		":memory:?_pragma=foreign_keys(1)",
+		nil,
+	)
+}
+
+func newAgentFixtureWithDSN(
+	t *testing.T,
+	dsn string,
+	requestStarted func(*http.Request),
+) agentFixture {
 	t.Helper()
-	conn, err := migrate.Run(":memory:?_pragma=foreign_keys(1)")
+	conn, err := migrate.Run(dsn)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +97,16 @@ func newAgentFixture(t *testing.T) agentFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := httptest.NewUnstartedServer(server.NewAgentRouter(agents))
+	var handler http.Handler = server.NewAgentRouter(agents)
+	if requestStarted != nil {
+		handler = agents.Authenticated(
+			http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				requestStarted(r)
+				agents.Poll(w, r)
+			}),
+		)
+	}
+	srv := httptest.NewUnstartedServer(handler)
 	srv.TLS = agents.TLSConfig(context.Background())
 	srv.StartTLS()
 	t.Cleanup(srv.Close)
