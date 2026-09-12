@@ -203,8 +203,11 @@ const allTargets = [
     path: "/templates",
     surface: "#templates-content",
     row: "#templates-list tbody > tr",
-    controls: "#templates-list tbody > tr button",
-    writerControlCount: 1,
+    controls: "#templates-list tbody > tr [data-template-action]",
+    writerControls: "#templates-list tbody > tr [data-template-action]:not([data-template-action=history])",
+    actionAttribute: "data-template-action",
+    writerActions: ["edit", "delete"],
+    writerControlCount: 2,
     disclosure: `[data-disclosure="template-script-${config.templateID}"]`,
   },
   {

@@ -237,6 +237,8 @@ func TestMobile_RenderedHTML_preserves_disclosures_and_containment_when_authenti
 					fmt.Sprintf("template-script-%d", fixture.template.ID),
 				),
 				`(?s)<div[^>]*id="templates-list"[^>]*>.*?<div[^>]*class="[^"]*overflow-x-auto[^"]*"[^>]*>\s*<table[^>]*class="[^"]*table[^"]*"`,
+				`(?s)data-template-action="edit"[^>]*href="/templates/[0-9]+/edit".*?data-template-action="delete".*?data-template-action="history"[^>]*href="/templates/[0-9]+/history"`,
+				`(?s)<th class="w-1/2 sm:w-48">Actions</th>`,
 			},
 			contents: []string{fixture.template.ScriptBody},
 		},

@@ -97,7 +97,7 @@ templ Base(title string, currentPath string) {
 								if user := auth.UserFromContext(ctx); user != nil {
 									<li>
 									<details data-account-menu data-focus-menu class="dropdown dropdown-end w-full min-w-0">
-										<summary class={ "btn btn-ghost btn-sm w-full min-w-0 justify-start whitespace-normal break-words text-left " + activeClass(currentPath, "/settings") } title={ user.Name + " (" + user.Role + ")" } aria-label={ user.Name + " (" + user.Role + ")" }>{ user.Name } ({ user.Role })</summary>
+										<summary class={ "btn btn-ghost btn-sm h-auto w-full min-w-0 justify-start whitespace-normal break-words text-left " + activeClass(currentPath, "/settings") } title={ user.Name + " (" + user.Role + ")" } aria-label={ user.Name + " (" + user.Role + ")" }>{ user.Name } ({ user.Role })</summary>
 											<ul class="menu bg-base-200 rounded-box p-2">
 												<li><a href="/settings/security" class={ activeClass(currentPath, "/settings/security") }>Security</a></li>
 												if user.Role != "viewer" {
@@ -140,14 +140,14 @@ templ Base(title string, currentPath string) {
 								</ul>
 							</details>
 						}
-						<div class="hidden shrink-0 items-center gap-2 md:flex">
+						<div class="hidden min-w-0 flex-1 items-center justify-end gap-2 md:flex">
 							<button class="btn btn-ghost btn-sm" @click="theme = theme === 'mocha' ? 'light' : 'mocha'">
 								<span class="theme-dark">☀️</span>
 								<span class="theme-light">🌙</span>
 							</button>
 							if user := auth.UserFromContext(ctx); user != nil {
 								<details data-account-menu data-focus-menu class="dropdown dropdown-end min-w-0 max-w-full">
-									<summary class={ "btn btn-ghost btn-sm min-w-0 max-w-full whitespace-normal break-words text-left " + activeClass(currentPath, "/settings") } title={ user.Name + " (" + user.Role + ")" } aria-label={ user.Name + " (" + user.Role + ")" }>{ user.Name } ({ user.Role })</summary>
+									<summary class={ "btn btn-ghost btn-sm h-auto min-w-0 max-w-full whitespace-normal break-words text-left " + activeClass(currentPath, "/settings") } title={ user.Name + " (" + user.Role + ")" } aria-label={ user.Name + " (" + user.Role + ")" }>{ user.Name } ({ user.Role })</summary>
 									<ul class="dropdown-content menu bg-base-200 rounded-box z-[1] w-52 p-2 shadow">
 										<li><a href="/settings/security" class={ activeClass(currentPath, "/settings/security") }>Security</a></li>
 										if user.Role != "viewer" {
