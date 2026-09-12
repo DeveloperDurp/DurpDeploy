@@ -89,6 +89,7 @@ assert_compose_rejected 'read_only="false"' 'compose.yml permits a writable imag
 for capability in SETUID setuid CAP_SETUID cap_setuid \
 	SETGID setgid CAP_SETGID cap_setgid \
 	SETPCAP setpcap CAP_SETPCAP cap_setpcap \
+	SYS_CHROOT sys_chroot CAP_SYS_CHROOT cap_sys_chroot \
 	SYS_ADMIN sys_admin CAP_SYS_ADMIN cap_sys_admin \
 	NET_ADMIN net_admin CAP_NET_ADMIN cap_net_admin; do
 	assert_compose_rejected "cap_add=[\"$capability\"]" \
