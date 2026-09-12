@@ -44,7 +44,7 @@ templ TemplatesListFragment(templates []db.StepTemplate) {
 				<thead>
 					<tr>
 						<th class="w-auto">Name</th>
-						<th class="w-1/2 sm:w-48">Actions</th>
+						<th class="w-1/2 text-left sm:w-48">Actions</th>
 					</tr>
 				</thead>
 				<tbody>
@@ -67,8 +67,8 @@ templ TemplateRow(tpl db.StepTemplate) {
 				<pre class="mt-2 whitespace-pre-wrap break-words rounded bg-base-100 p-3 text-xs"><code>{ tpl.ScriptBody }</code></pre>
 			</details>
 		</td>
-		<td>
-			<div class="flex flex-wrap gap-2">
+		<td class="align-top text-left">
+			<div class="flex flex-wrap justify-start gap-2">
 			if CanWrite(ctx) {
 				<a data-template-action="edit" href={ templ.SafeURL("/templates/" + strconv.FormatInt(tpl.ID, 10) + "/edit") } class="btn btn-sm btn-ghost whitespace-nowrap">Edit</a>
 				<button
