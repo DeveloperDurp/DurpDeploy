@@ -73,14 +73,13 @@ async function accountContract(page, url, role, tokensVisible, artifactDir) {
 		await summary.focus();
 		await page.keyboard.press("Enter");
 		const menu = summary.locator("xpath=following-sibling::ul");
-		if (width === 375 && role === "deployer") {
-			check(
-				await summary.evaluate((element) =>
-					element.scrollWidth <= element.clientWidth,
-				),
-				`${role} account summary fits at ${width}px`,
-			);
-		}
+		check(
+			await summary.evaluate((element) =>
+				element.scrollWidth <= element.clientWidth &&
+				element.scrollHeight <= element.clientHeight,
+			),
+			`${role} account summary fits horizontally and vertically at ${width}px`,
+		);
 		await check(await menu.locator('a[href="/settings/security"]').isVisible(), `${role} lacks Security`);
 		await check((await menu.locator('a[href="/settings/tokens"]').count()) === (tokensVisible ? 1 : 0), `${role} token visibility is wrong`);
 		await check(await menu.locator('button[type="submit"]', { hasText: "Logout" }).isVisible(), `${role} lacks Logout`);

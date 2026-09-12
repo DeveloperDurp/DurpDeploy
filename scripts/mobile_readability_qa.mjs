@@ -394,7 +394,7 @@ async function inspectBrowser(context) {
       await rowLocator.waitFor({ state: "visible" });
       const disclosure = await assertDisclosure(page, target);
       const scrollContainer = await assertScrollContainer(page, target);
-      const geometry = await page.evaluate(({ surface, row, rowText, controls, writerControls, desktopTable, mobileRecord, actionAttribute }) => {
+      const geometry = await page.evaluate(({ surface, row, rowText, controls, writerControls, desktopTable, mobileRecord, actionAttribute, targetName }) => {
         const clientWidth = document.documentElement.clientWidth;
         const documentWidth = document.documentElement.scrollWidth;
         const bodyWidth = document.body.scrollWidth;
@@ -416,7 +416,7 @@ async function inspectBrowser(context) {
 			 const rect = element.getBoundingClientRect();
 			 return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
 		 });
-         const accountSummaryHeights = target.name === "navbar"
+         const accountSummaryHeights = targetName === "navbar"
            ? Array.from(document.querySelectorAll("[data-account-menu]:visible > summary")).map((element) => element.getBoundingClientRect().height)
            : [];
          const rowRect = rowElement?.getBoundingClientRect();
@@ -459,7 +459,17 @@ async function inspectBrowser(context) {
 								overflowingElements,
             controlRects,
          };
-      }, { ...target, row, controls, writerControls });
+      }, {
+        surface: target.surface,
+        row,
+        rowText: target.rowText,
+        controls,
+        writerControls,
+        desktopTable: target.desktopTable,
+        mobileRecord: target.mobileRecord,
+        actionAttribute: target.actionAttribute,
+        targetName: target.name,
+      });
       const violations = assertGeometry(target, viewport, geometry);
       const interactionFailure = await mobileInteractionFailure(page, target, viewport);
       if (interactionFailure) {
