@@ -412,10 +412,13 @@ async function inspectBrowser(context) {
          const rect = element.getBoundingClientRect();
          return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
        });
-		 const writerControlRects = writerControlElements.map((element) => {
+         const writerControlRects = writerControlElements.map((element) => {
 			 const rect = element.getBoundingClientRect();
 			 return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
 		 });
+         const accountSummaryHeights = target.name === "navbar"
+           ? Array.from(document.querySelectorAll("[data-account-menu]:visible > summary")).map((element) => element.getBoundingClientRect().height)
+           : [];
          const rowRect = rowElement?.getBoundingClientRect();
 		 const overflowingElements = Array.from(document.querySelectorAll("*")).flatMap((element) => {
 			const rect = element.getBoundingClientRect();
@@ -449,10 +452,11 @@ async function inspectBrowser(context) {
 			 visibleWriterControlCount: writerControlRects.filter(
 				 (rect) => rect.right > rect.left && rect.bottom > rect.top,
 			 ).length,
-			 writerControlActions: writerControlElements.map((element) =>
-				 element.getAttribute(actionAttribute),
-			 ).filter(Boolean),
-				overflowingElements,
+							 writerControlActions: writerControlElements.map((element) =>
+							 element.getAttribute(actionAttribute),
+							 ).filter(Boolean),
+							 accountSummaryHeights,
+								overflowingElements,
             controlRects,
          };
       }, { ...target, row, controls, writerControls });
@@ -613,6 +617,9 @@ function assertGeometry(target, viewport, geometry) {
     if (rect.left < 0 || rect.right > geometry.clientWidth) {
       violations.push(`${target.name} control is unreachable at ${viewport.width}px`);
     }
+  }
+  if (target.name === "navbar" && geometry.accountSummaryHeights.some((height) => height > 60)) {
+    violations.push(`${target.name} account summary is too tall at ${viewport.width}px`);
   }
   if (
     process.env.MOBILE_ROLE === "viewer" &&
