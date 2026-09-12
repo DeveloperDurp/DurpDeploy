@@ -69,7 +69,7 @@ templ Base(title string, currentPath string) {
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
 								</svg>
 							</summary>
-							<ul class="dropdown-content menu bg-base-200 rounded-box z-[1] w-52 p-2 shadow">
+							<ul class="dropdown-content menu bg-base-200 rounded-box z-[1] max-h-[calc(100vh-2rem)] w-52 overflow-y-auto p-2 shadow">
 								<li><a href="/projects" class={ activeClass(currentPath, "/projects") }>Projects</a></li>
 								<li><a href="/environments" class={ activeClass(currentPath, "/environments") }>Environments</a></li>
 								<li><a href="/lifecycles" class={ activeClass(currentPath, "/lifecycles") }>Lifecycles</a></li>
@@ -97,7 +97,7 @@ templ Base(title string, currentPath string) {
 								if user := auth.UserFromContext(ctx); user != nil {
 									<li>
 									<details data-account-menu data-focus-menu class="dropdown dropdown-end w-full min-w-0">
-										<summary class={ "btn btn-ghost btn-sm h-auto min-h-14 max-h-14 w-full min-w-0 items-start justify-start overflow-hidden text-left " + activeClass(currentPath, "/settings") } title={ user.Name + " (" + user.Role + ")" } aria-label={ user.Name + " (" + user.Role + ")" }><span class="min-w-0 whitespace-normal break-words leading-tight line-clamp-2">{ user.Name } ({ user.Role })</span></summary>
+										<summary class={ "btn btn-ghost btn-sm h-auto min-h-14 w-full min-w-0 items-start justify-start text-left " + activeClass(currentPath, "/settings") } title={ user.Name + " (" + user.Role + ")" } aria-label={ user.Name + " (" + user.Role + ")" }><span class="min-w-0 whitespace-normal break-all leading-tight">{ user.Name } ({ user.Role })</span></summary>
 											<ul class="menu bg-base-200 rounded-box p-2">
 												<li><a href="/settings/security" class={ activeClass(currentPath, "/settings/security") }>Security</a></li>
 												if user.Role != "viewer" {
