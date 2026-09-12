@@ -150,7 +150,7 @@ make tailwind-build
 # Full build
 make build
 
-# Run with hot-reload behind an ephemeral Caddy HTTPS proxy (requires Docker)
+# Run with hot-reload behind an ephemeral Caddy HTTPS proxy (requires Docker or Podman)
 make dev
 ```
 
@@ -167,8 +167,9 @@ DEV_HTTPS_PROXY_PORT=9443 \
 DEV_HTTPS_PROXY_BACKEND=host.docker.internal:8080 make dev
 ```
 
-The Linux Docker daemon must support `host-gateway`; startup fails clearly if
-the host backend cannot be reached through that mapping.
+The container engine must support `host-gateway`; startup fails clearly if the
+host backend cannot be reached through that mapping. Docker is preferred when
+available, with a healthy Podman engine used otherwise.
 
 `make e2e-test` exercises the SQLite database of an already-running server; it
 does not build or start one. Override the target with
