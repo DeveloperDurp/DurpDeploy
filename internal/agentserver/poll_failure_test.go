@@ -20,6 +20,9 @@ func TestPollSealFailureLeavesWaiting(t *testing.T) {
 	if response.StatusCode != http.StatusInternalServerError {
 		t.Fatalf("status=%d want=500", response.StatusCode)
 	}
+	if retryAfter := response.Header.Get("Retry-After"); retryAfter != "" {
+		t.Fatalf("Retry-After=%q want empty", retryAfter)
+	}
 	assertWaitingWithoutPayload(t, fixture, deploymentID)
 }
 
