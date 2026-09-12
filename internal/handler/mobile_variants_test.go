@@ -334,6 +334,7 @@ func TestSteps_RenderedHTML_uses_named_Alpine_state_when_authenticated(
 		`x-on:step-form-add="handleEvent"`,
 		`x-on:step-form-cancel="handleEvent"`,
 		`x-on:step-form-edit="handleEvent"`,
+		`x-on:htmx:after-request.camel="afterRequest"`,
 		`x-ref="addStepForm"`,
 		fmt.Sprintf(`hx-get="/projects/%d/steps/new"`, projectID),
 		`hx-target="#add-step-form"`,
@@ -342,7 +343,10 @@ func TestSteps_RenderedHTML_uses_named_Alpine_state_when_authenticated(
 			`hx-target="#step-row-%d" hx-swap="outerHTML"`,
 			stepID,
 		),
-		`x-on:click="[^"]*step-form-add`,
+		fmt.Sprintf(
+			`data-mobile-step-editor="%d"[^>]*x-bind:hidden="!editing"`,
+			stepID,
+		),
 		`\$dispatch\('step-form-edit'\)`,
 	} {
 		requireHTMLPattern(t, pageBody, pattern)
@@ -380,6 +384,7 @@ func TestSteps_RenderedHTML_uses_named_Alpine_state_when_authenticated(
 		fmt.Sprintf(`hx-post="/projects/%d/steps"`, projectID),
 		`hx-target="#step-list"`,
 		`hx-swap="innerHTML"`,
+		`data-step-add-form`,
 	} {
 		requireHTMLPattern(t, newBody, pattern)
 	}

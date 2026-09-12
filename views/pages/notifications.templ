@@ -24,7 +24,7 @@ templ NotificationsPage(entries []db.ListNotificationEventsRow, currentPath stri
 				<p class="text-gray-400">No notification events yet.</p>
 			</div>
 		} else {
-			<div x-data>
+			<div x-data="{}">
 				<div class="overflow-x-auto">
 					<table class="table table-zebra table-fixed w-full">
 						<thead>

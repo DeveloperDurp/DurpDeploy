@@ -51,8 +51,8 @@ func TestAlpineRegistryDefinesComplianceComponents(t *testing.T) {
 		{
 			name:        "stepFormHost",
 			constructor: `\(\)`,
-			members:     []string{"add", "cancel", "handleEvent"},
-			methods:     []string{"add", "cancel", "handleEvent"},
+			members:     []string{"afterRequest", "add", "cancel", "handleEvent"},
+			methods:     []string{"afterRequest", "add", "cancel", "handleEvent"},
 			events: []string{
 				"step-form-add", "step-form-cancel", "step-form-edit",
 			},
@@ -177,5 +177,17 @@ func TestAlpineRegistryDefinesComplianceComponents(t *testing.T) {
 	}
 	if strings.LastIndex(source, "Alpine.start()") <= previous {
 		t.Error("Alpine.start() must follow all registry definitions")
+	}
+
+	hostPattern := regexp.MustCompile(
+		`(?ms)Alpine\.data\('stepFormHost'.*?^\}\)\);`,
+	)
+	host := hostPattern.FindString(source)
+	destroyEditor := strings.Index(host, "Alpine.destroyTree(form)")
+	removeForm := strings.Index(host, "replaceChildren()")
+	if destroyEditor < 0 || removeForm < 0 || destroyEditor > removeForm {
+		t.Error(
+			"stepFormHost must synchronously destroy editors before removing the form",
+		)
 	}
 }

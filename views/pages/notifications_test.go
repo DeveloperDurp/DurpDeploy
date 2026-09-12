@@ -28,9 +28,12 @@ func TestNotificationsPageUsesAlpineDialogTrigger(t *testing.T) {
 	}
 	if !strings.Contains(
 		rendered,
-		`x-on:click="$refs[$el.dataset.modalTarget].showModal()"`,
+		`x-data="{}"`,
 	) {
-		t.Fatal("notification row does not open its dialog through an Alpine ref")
+		t.Fatal("notifications page does not own a local Alpine scope")
+	}
+	if !strings.Contains(rendered, `x-on:click="$refs[$el.dataset.modalTarget].showModal()"`) {
+		t.Fatal("notification row does not open its local Alpine dialog ref")
 	}
 	if !strings.Contains(
 		rendered,

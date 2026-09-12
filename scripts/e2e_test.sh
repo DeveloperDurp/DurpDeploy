@@ -6,6 +6,7 @@ umask 077
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 ROOT_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
 CLIENT_ONLY=${DURPDEPLOY_E2E_CLIENT_ONLY:-0}
+PORT=${DURPDEPLOY_E2E_PORT:-8080}
 TMP=$(mktemp -d)
 COOKIES="$TMP/admin-cookies"
 SERVER_PID=""
@@ -31,7 +32,11 @@ if [[ "$CLIENT_ONLY" == "1" ]]; then
         exit 1
     fi
 else
-    BASE="http://localhost:8080"
+    if [[ ! "$PORT" =~ ^[0-9]+$ ]] || ((PORT < 1 || PORT > 65535)); then
+        echo "FAIL: DURPDEPLOY_E2E_PORT must be an integer from 1 to 65535" >&2
+        exit 2
+    fi
+    BASE="http://localhost:$PORT"
     cd "$ROOT_DIR"
 
     DB_DSN="$TMP/durpdeploy.db?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)"
@@ -54,7 +59,7 @@ else
 
     # Start the server. The migrations it would normally run are a no-op
     # because the admin CLI just created the schema.
-    DURPDEPLOY_ADDR=127.0.0.1:8080 \
+    DURPDEPLOY_ADDR="127.0.0.1:$PORT" \
         DURPDEPLOY_DB="$DB_DSN" \
         DURPDEPLOY_URL="$BASE" \
         "$TMP/durpdeploy" >"$TMP/server.log" 2>&1 &

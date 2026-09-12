@@ -203,6 +203,8 @@ templ StepMobileRecord(step db.Step, projectID int64, isFirst bool, isLast bool)
 			<div
 				id={ fmt.Sprintf("mobile-step-edit-%d", step.ID) }
 				data-mobile-step-editor={ strconv.FormatInt(step.ID, 10) }
+				hidden
+				x-bind:hidden="!editing"
 				x-cloak
 				x-show="editing"
 			>

@@ -47,7 +47,7 @@ templ StepForm(step db.Step, projectID int64, isNew bool, errorMsg string) {
 			hx-target="#step-list"
 			hx-swap="innerHTML"
 			if isNew {
-				x-on:htmx:after-request="$event.detail.successful && $dispatch('step-form-cancel')"
+				data-step-add-form
 				data-toast-success="Step added"
 			} else {
 				data-toast-success="Step updated"

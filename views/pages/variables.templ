@@ -72,6 +72,7 @@ templ VariablesFragment(project db.Project, variables []db.Variable, environment
 	<div
 		id="variables-content"
 		x-data="variablesPage"
+		x-init="focusAfterSwap({ detail: { target: $root } })"
 		x-on:click="override($event)"
 	>
 		if CanWrite(ctx) {

@@ -11,7 +11,9 @@ Alpine.data('toast', () => ({
 	timeout: null,
 	showToastListener: null,
 	makeToastListener: null,
+	beforeRequestListener: null,
 	afterRequestListener: null,
+	requestToasts: new WeakMap(),
 	show(msg, type = 'success') {
 		if (this.timeout) clearTimeout(this.timeout);
 		this.message = String(msg);
@@ -41,20 +43,30 @@ Alpine.data('toast', () => ({
 			const type = level === 'danger' ? 'error' : level;
 			this.show(message, type);
 		};
-		this.afterRequestListener = (e) => {
+		this.beforeRequestListener = (e) => {
 			const trigger = e.detail.elt;
-			const successMsg = trigger.getAttribute('data-toast-success');
-			const errorMsg = trigger.getAttribute('data-toast-error');
+			this.requestToasts.set(e.detail.xhr, {
+				success: trigger.getAttribute('data-toast-success'),
+				error: trigger.getAttribute('data-toast-error'),
+			});
+		};
+		this.afterRequestListener = (e) => {
+			const messages = this.requestToasts.get(e.detail.xhr) || {};
+			this.requestToasts.delete(e.detail.xhr);
 			const status = e.detail.xhr.status;
 			
-			if (status >= 200 && status < 400 && successMsg) {
-				this.show(successMsg, 'success');
-			} else if (status >= 400 && errorMsg) {
-				this.show(errorMsg, 'error');
+			if (status >= 200 && status < 400 && messages.success) {
+				this.show(messages.success, 'success');
+			} else if (status >= 400 && messages.error) {
+				this.show(messages.error, 'error');
 			}
 		};
 		window.addEventListener('show-toast', this.showToastListener);
 		document.body.addEventListener('makeToast', this.makeToastListener);
+		document.body.addEventListener(
+			'htmx:beforeRequest',
+			this.beforeRequestListener,
+		);
 		document.body.addEventListener(
 			'htmx:afterRequest',
 			this.afterRequestListener,
@@ -64,6 +76,10 @@ Alpine.data('toast', () => ({
 		if (this.timeout) clearTimeout(this.timeout);
 		window.removeEventListener('show-toast', this.showToastListener);
 		document.body.removeEventListener('makeToast', this.makeToastListener);
+		document.body.removeEventListener(
+			'htmx:beforeRequest',
+			this.beforeRequestListener,
+		);
 		document.body.removeEventListener(
 			'htmx:afterRequest',
 			this.afterRequestListener,
@@ -135,6 +151,13 @@ Alpine.data('releaseDeployRow', () => ({
 }));
 
 Alpine.data('stepFormHost', () => ({
+	afterRequest(event) {
+		const source = event.detail?.elt;
+		if (!(source instanceof Element) || !event.detail.successful) return;
+		const form = source.closest('form[data-step-add-form]');
+		if (!(form instanceof HTMLFormElement)) return;
+		this.cancel();
+	},
 	add(event) {
 		if (event.detail?.listURL) {
 			htmx.ajax('GET', event.detail.listURL, {
@@ -144,7 +167,11 @@ Alpine.data('stepFormHost', () => ({
 		}
 	},
 	cancel() {
-		this.$refs.addStepForm?.replaceChildren();
+		const host = this.$refs.addStepForm;
+		const form = host?.firstElementChild;
+		if (!host || !form) return;
+		Alpine.destroyTree(form);
+		host.replaceChildren();
 	},
 	// step-form-add, step-form-cancel, and step-form-edit are the host contract.
 	handleEvent(event) {
@@ -274,7 +301,7 @@ Alpine.data('deploymentStream', ({ url }) => ({
 	},
 	// 'htmx:afterSwap' supplies the replacement #status-badge to status().
 	status(event) {
-		const target = event.detail?.target;
+		const target = event.detail?.elt || event.detail?.target;
 		if (!(target instanceof Element) || target.id !== 'status-badge') return;
 		const status = target.textContent.trim();
 		if (!['succeeded', 'failed', 'cancelled'].includes(status)) return;
@@ -418,9 +445,8 @@ async function followWebAuthnResponse(response, element) {
 	webauthnStatus(element, 'Passkey added.', false);
 }
 
-async function registerPasskey(event) {
+async function registerPasskey(event, form) {
 	event.preventDefault();
-	const form = event.currentTarget;
 	if (!window.PublicKeyCredential || !navigator.credentials) {
 		webauthnStatus(form, webauthnError(), true);
 		return;
@@ -452,9 +478,8 @@ async function registerPasskey(event) {
 	}
 }
 
-async function authenticatePasskey(event) {
+async function authenticatePasskey(event, button) {
 	event.preventDefault();
-	const button = event.currentTarget;
 	if (!window.PublicKeyCredential || !navigator.credentials) {
 		webauthnStatus(button, webauthnError(), true);
 		return;
@@ -488,11 +513,19 @@ async function authenticatePasskey(event) {
 	}
 }
 
-document.querySelectorAll('[data-webauthn-register]').forEach((form) => {
-	form.addEventListener('submit', registerPasskey);
+document.addEventListener('submit', (event) => {
+	const target = event.target;
+	if (!(target instanceof Element)) return;
+	const form = target.closest('[data-webauthn-register]');
+	if (!(form instanceof HTMLFormElement)) return;
+	registerPasskey(event, form);
 });
-document.querySelectorAll('[data-webauthn-authenticate]').forEach((button) => {
-	button.addEventListener('click', authenticatePasskey);
+document.addEventListener('click', (event) => {
+	const target = event.target;
+	if (!(target instanceof Element)) return;
+	const button = target.closest('[data-webauthn-authenticate]');
+	if (!(button instanceof HTMLButtonElement)) return;
+	authenticatePasskey(event, button);
 });
 
 const mfaResetOpeners = new WeakMap();
@@ -616,26 +649,14 @@ document.addEventListener('close', (event) => {
 	if (opener?.isConnected) opener.focus();
 }, true);
 
-document.querySelectorAll('[data-mfa-reset-confirmation-dialog]').forEach((dialog) => {
-	dialog.addEventListener('cancel', (event) => {
-		event.preventDefault();
-		if (dialog.open) dialog.close();
-	});
-});
-
-document.querySelectorAll('[data-passkey-delete-confirmation-dialog]').forEach((dialog) => {
-	dialog.addEventListener('cancel', (event) => {
-		event.preventDefault();
-		if (dialog.open) dialog.close();
-	});
-});
-
-document.querySelectorAll('[data-security-disable-confirmation-dialog]').forEach((dialog) => {
-	dialog.addEventListener('cancel', (event) => {
-		event.preventDefault();
-		if (dialog.open) dialog.close();
-	});
-});
+document.addEventListener('cancel', (event) => {
+	const target = event.target;
+	if (!(target instanceof Element)) return;
+	const dialog = target.closest('[data-mfa-reset-confirmation-dialog], [data-passkey-delete-confirmation-dialog], [data-security-disable-confirmation-dialog]');
+	if (!(dialog instanceof HTMLDialogElement)) return;
+	event.preventDefault();
+	if (dialog.open) dialog.close();
+}, true);
 
 document.addEventListener('click', (event) => {
 	const dialog = event.target;
