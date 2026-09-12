@@ -45,9 +45,11 @@ agent port.
 
 Configure the direct listener through the server environment file. `make dev`
 remains the ordinary browser/API development path and does not enable the agent
-listener. For a local foreground run, set the server listener variables before
-starting `go run ./cmd/server`. The public origin hostname becomes the
-self-signed certificate SAN:
+listener unless all three listener variables are configured. When configured,
+`make dev` creates a missing local identity with the public origin hostname as
+the self-signed certificate SAN and preserves an existing identity. For a local
+foreground run, set the server listener variables and provision the identity
+before starting `go run ./cmd/server`:
 
 ```bash
 DURPDEPLOY_AGENT_LISTEN_ADDR=:10943 \
