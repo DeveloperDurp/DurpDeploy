@@ -71,7 +71,7 @@ templ LifecyclesListFragment(rows []LifecycleRow) {
 templ LifecycleListRow(row LifecycleRow) {
 	<tr>
 		<td class="truncate font-medium">
-			<a href={ templ.SafeURL("/lifecycles/" + strconv.FormatInt(row.Lifecycle.ID, 10)) } class="link link-primary">{ row.Lifecycle.Name }</a>
+			{ row.Lifecycle.Name }
 		</td>
 		<td class="truncate hidden md:table-cell">
 			if row.Lifecycle.Description.Valid {
