@@ -37,7 +37,7 @@ func TestAlpineRegistryDefinesComplianceComponents(t *testing.T) {
 			constructor: `\(\{ releaseID, environmentID \}\)`,
 			members: []string{
 				"releaseChanged", "environmentChanged", "forceChanged",
-				"submitLabel", "forceVisible",
+				"submitLabel", "environmentAlreadyDeployed", "forceVisible",
 			},
 			methods: []string{
 				"releaseChanged", "environmentChanged", "forceChanged",

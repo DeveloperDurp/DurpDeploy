@@ -81,9 +81,9 @@ templ LifecycleListRow(row LifecycleRow) {
 			}
 		</td>
 		<td class="whitespace-nowrap">{ strconv.FormatInt(row.StageCount, 10) }</td>
-		<td class="flex flex-wrap gap-2">
+		<td class="flex flex-nowrap gap-2 whitespace-nowrap">
 			if CanWrite(ctx) {
-				<a href={ templ.SafeURL("/lifecycles/" + strconv.FormatInt(row.Lifecycle.ID, 10) + "/edit") } class="btn btn-sm btn-ghost">Edit</a>
+				<a href={ templ.SafeURL("/lifecycles/" + strconv.FormatInt(row.Lifecycle.ID, 10)) } class="btn btn-sm btn-ghost">Edit</a>
 				<form method="post" action={ templ.SafeURL("/lifecycles/" + strconv.FormatInt(row.Lifecycle.ID, 10)) }>
 					<input type="hidden" name="_method" value="delete"/>
 					<button type="submit" class="btn btn-sm btn-error" hx-confirm="Delete this lifecycle? Projects using it will be unset.">Delete</button>

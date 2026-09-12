@@ -130,6 +130,7 @@ Alpine.data('deploymentForm', ({ releaseID, environmentID }) => ({
 	releaseID,
 	environmentID,
 	submitLabel: 'Deploy',
+	environmentAlreadyDeployed: false,
 	forceVisible: false,
 	releaseChanged() {
 		window.location.href = `?release_id=${this.releaseID}`;
@@ -137,6 +138,7 @@ Alpine.data('deploymentForm', ({ releaseID, environmentID }) => ({
 	environmentChanged(event) {
 		this.environmentID = event.currentTarget.value;
 		const option = event.currentTarget.selectedOptions[0];
+		this.environmentAlreadyDeployed = option?.dataset.gate === 'already-deployed';
 		this.submitLabel = option?.dataset.requiresApproval === 'true'
 			? 'Request Approval'
 			: 'Deploy';

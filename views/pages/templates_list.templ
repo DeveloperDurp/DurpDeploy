@@ -39,12 +39,11 @@ templ TemplatesListFragment(templates []db.StepTemplate) {
 				}
 			</div>
 		} else {
-			<div class="overflow-x-auto">
-				<table class="table table-zebra table-fixed w-full">
+			<table class="hidden lg:table table-zebra table-fixed w-full">
 				<thead>
 					<tr>
 						<th class="w-auto">Name</th>
-						<th class="w-48 text-left">Actions</th>
+						<th class="w-64 text-left">Actions</th>
 					</tr>
 				</thead>
 				<tbody>
@@ -52,8 +51,19 @@ templ TemplatesListFragment(templates []db.StepTemplate) {
 						@TemplateRow(tpl)
 					}
 				</tbody>
-				</table>
-			</div>
+			</table>
+			<ol class="space-y-3 lg:hidden" data-mobile-template-list>
+				for _, tpl := range templates {
+					<li class="card bg-base-200 p-4 space-y-3">
+						<p class="break-words font-medium">{ tpl.Name }</p>
+						<details class="text-sm" data-disclosure={ "template-script-mobile-" + strconv.FormatInt(tpl.ID, 10) }>
+							<summary class="cursor-pointer text-primary">View full script</summary>
+							<pre class="mt-2 max-w-full overflow-x-auto whitespace-pre-wrap break-words rounded bg-base-100 p-3 text-xs"><code>{ tpl.ScriptBody }</code></pre>
+						</details>
+						@TemplateActions(tpl)
+					</li>
+				}
+			</ol>
 		}
 	</div>
 }
@@ -68,7 +78,13 @@ templ TemplateRow(tpl db.StepTemplate) {
 			</details>
 		</td>
 		<td class="align-top text-left">
-			<div class="flex flex-wrap justify-start gap-2">
+			@TemplateActions(tpl)
+		</td>
+	</tr>
+}
+
+templ TemplateActions(tpl db.StepTemplate) {
+	<div class="flex flex-nowrap justify-start gap-2 whitespace-nowrap">
 			if CanWrite(ctx) {
 				<a data-template-action="edit" href={ templ.SafeURL("/templates/" + strconv.FormatInt(tpl.ID, 10) + "/edit") } class="btn btn-sm btn-ghost whitespace-nowrap">Edit</a>
 				<button
@@ -85,7 +101,5 @@ templ TemplateRow(tpl db.StepTemplate) {
 				</button>
 			}
 			<a data-template-action="history" href={ templ.SafeURL("/templates/" + strconv.FormatInt(tpl.ID, 10) + "/history") } class="btn btn-xs whitespace-nowrap">History</a>
-			</div>
-		</td>
-	</tr>
+	</div>
 }

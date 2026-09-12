@@ -34,8 +34,8 @@ func TestMobile_RenderedHTML_renders_breakpoint_gated_variants_when_authenticate
 			name: "lifecycle stages",
 			path: fmt.Sprintf("/lifecycles/%d", fixture.lifecycle.ID),
 			patterns: []string{
-				desktopVariantPattern("table"),
-				mobileVariantPattern("ol"),
+				`(?s)<table[^>]*class="[^"]*hidden lg:table[^"]*"`,
+				`(?s)<ol[^>]*class="[^"]*lg:hidden[^"]*"`,
 				`data-mobile-lifecycle-stage-list`,
 				fmt.Sprintf(
 					`data-mobile-lifecycle-stage="%d"`,
@@ -105,7 +105,7 @@ func TestMobile_RenderedHTML_rendersLifecycleBackAndKeepsPermissionGoBack(
 ) {
 	// Given
 	fixture := newMobileStructuralFixture(t)
-	const lifecycleBack = `<a href="/lifecycles" class="btn btn-ghost btn-sm">Back</a>`
+	const lifecycleBack = `<a href="/lifecycles" class="btn btn-ghost btn-sm shrink-0">Back</a>`
 
 	// When
 	detailBody := fixture.getHTML(
@@ -127,7 +127,7 @@ func TestMobile_RenderedHTML_rendersLifecycleBackAndKeepsPermissionGoBack(
 	requireHTMLPattern(
 		t,
 		detailBody,
-		`(?s)<div class="flex justify-between items-start">\s*<div>.*?</div>\s*<div class="flex gap-2">.*?`+lifecycleBack,
+		`(?s)<div class="flex items-start justify-between gap-4">\s*<div>.*?</div>\s*`+lifecycleBack,
 	)
 	const lifecycleFormHeader = `(?s)<div class="flex justify-between items-center">\s*<h1 class="text-3xl font-bold">New Lifecycle</h1>\s*<div class="flex gap-2">\s*<a href="/lifecycles" class="btn btn-ghost btn-sm">Back</a>\s*</div>\s*</div>`
 	requireHTMLPattern(t, formBody, lifecycleFormHeader)
@@ -236,9 +236,10 @@ func TestMobile_RenderedHTML_preserves_disclosures_and_containment_when_authenti
 				disclosurePattern(
 					fmt.Sprintf("template-script-%d", fixture.template.ID),
 				),
-				`(?s)<div[^>]*id="templates-list"[^>]*>.*?<div[^>]*class="[^"]*overflow-x-auto[^"]*"[^>]*>\s*<table[^>]*class="[^"]*table[^"]*"`,
+				`(?s)<div[^>]*id="templates-list"[^>]*>.*?<table[^>]*class="[^"]*hidden lg:table[^"]*"`,
+				`(?s)<ol[^>]*class="[^"]*lg:hidden[^"]*"[^>]*data-mobile-template-list`,
 				`(?s)data-template-action="edit"[^>]*href="/templates/[0-9]+/edit".*?data-template-action="delete".*?data-template-action="history"[^>]*href="/templates/[0-9]+/history"`,
-				`(?s)<th class="w-1/2 text-left sm:w-48">Actions</th>`,
+				`(?s)<div class="flex flex-nowrap justify-start gap-2 whitespace-nowrap">`,
 			},
 			contents: []string{fixture.template.ScriptBody},
 		},
@@ -255,14 +256,15 @@ func TestMobile_RenderedHTML_preserves_disclosures_and_containment_when_authenti
 			path: "/admin/audit",
 			patterns: []string{
 				disclosurePattern("audit-details"),
+				`data-mobile-audit-list`,
 			},
 			contents: []string{fixture.auditDetails},
 		},
 		{
-			name: "project environment mini-table",
+			name: "project environment grid",
 			path: "/projects",
 			patterns: []string{
-				`(?s)<div[^>]*data-project-environment-scroll[^>]*>\s*<table[^>]*class="[^"]*table[^"]*"`,
+				`(?s)<div[^>]*data-project-environment-grid[^>]*>\s*<table[^>]*class="[^"]*table-fixed[^"]*w-full[^"]*"`,
 			},
 		},
 		{

@@ -729,8 +729,22 @@ func TestNewDeploymentPage_RendersForm(t *testing.T) {
 func TestDeploymentPageUsesAlpineOwnedState(t *testing.T) {
 	// Given
 	h := newHarness(t)
-	hc := h.setupProjectWithLifecycle(t, []string{"Alpine-Dev", "Alpine-Prod"})
+	hc := h.setupProjectWithLifecycle(
+		t,
+		[]string{"Alpine-Dev", "Alpine-Staging", "Alpine-Prod"},
+	)
 	release := hc.makeRelease(t, "alpine-1.0.0", "exit 0")
+	_, err := h.repo.Queries.CreateDeployment(
+		context.Background(),
+		db.CreateDeploymentParams{
+			ReleaseID:     release.ID,
+			EnvironmentID: hc.envs["Alpine-Dev"].ID,
+			Status:        "succeeded",
+		},
+	)
+	if err != nil {
+		t.Fatalf("create successful deployment: %v", err)
+	}
 
 	// When
 	resp, err := h.authedClient().Get(
@@ -761,6 +775,7 @@ func TestDeploymentPageUsesAlpineOwnedState(t *testing.T) {
 		`x-on:change="releaseChanged"`,
 		`x-model="environmentID"`,
 		`x-on:change="environmentChanged"`,
+		`x-show="environmentAlreadyDeployed"`,
 		`x-on:change="forceChanged"`,
 		`x-bind:hidden="!forceVisible"`,
 		`x-bind:disabled="!forceVisible"`,

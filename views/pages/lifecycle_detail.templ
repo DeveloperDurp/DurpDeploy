@@ -40,29 +40,39 @@ templ LifecycleDetailPage(lc db.Lifecycle, stages []LifecycleStageView, availabl
 
 templ LifecycleDetail(lc db.Lifecycle, stages []LifecycleStageView, availableEnvs []db.Environment, errorMsg string) {
 	<div class="space-y-6">
-		<div class="flex justify-between items-start">
+		<div class="flex items-start justify-between gap-4">
 			<div>
 				<h1 class="text-3xl font-bold">{ lc.Name }</h1>
-				if lc.Description.Valid {
-					<p class="text-gray-400 mt-1">{ lc.Description.String }</p>
-				}
 			</div>
-			<div class="flex gap-2">
-				if CanWrite(ctx) {
-					<a href={ templ.SafeURL("/lifecycles/" + strconv.FormatInt(lc.ID, 10) + "/edit") } class="btn btn-ghost btn-sm">Edit</a>
-				}
-				<a href="/lifecycles" class="btn btn-ghost btn-sm">Back</a>
-			</div>
+			<a href="/lifecycles" class="btn btn-ghost btn-sm shrink-0">Back</a>
 		</div>
-
 		<div class="card bg-base-200 p-4">
-			<h2 class="text-xl font-bold mb-4">Promotion Order</h2>
-			if errorMsg != "" {
-				<p class="text-error mb-2">{ errorMsg }</p>
-			}
+			<h2 class="text-xl font-bold mb-4">Promotion order</h2>
 			<p class="text-sm text-gray-400 mb-4">Releases must deploy successfully to each stage before they can be promoted to the next.</p>
 			@LifecycleStageList(lc, stages, availableEnvs)
 		</div>
+		if CanWrite(ctx) {
+			<div class="card bg-base-200 p-4">
+				<h2 class="text-xl font-bold mb-4">Lifecycle settings</h2>
+				<form method="post" action={ templ.SafeURL("/lifecycles/" + strconv.FormatInt(lc.ID, 10)) } class="space-y-4" data-lifecycle-settings>
+					<input type="hidden" name="_method" value="put"/>
+					<div class="form-control">
+						<label class="label" for="lifecycle-name"><span class="label-text">Name</span></label>
+						<input id="lifecycle-name" type="text" name="name" class="input input-bordered w-full" value={ lc.Name } required/>
+						if errorMsg != "" {
+							<span class="text-error text-sm mt-1">{ errorMsg }</span>
+						}
+					</div>
+					<div class="form-control">
+						<label class="label" for="lifecycle-description"><span class="label-text">Description</span></label>
+						<textarea id="lifecycle-description" name="description" class="textarea textarea-bordered w-full" rows="3">{ lc.Description.String }</textarea>
+					</div>
+					<button type="submit" class="btn btn-primary">Update lifecycle</button>
+				</form>
+			</div>
+		} else if lc.Description.Valid {
+			<p class="text-gray-400">{ lc.Description.String }</p>
+		}
 	</div>
 }
 
@@ -79,13 +89,13 @@ templ LifecycleStageList(lc db.Lifecycle, stages []LifecycleStageView, available
 		if len(stages) == 0 {
 			<p class="text-gray-500 italic">No stages yet. Add an environment below to begin.</p>
 		} else {
-			<table class="hidden md:table table-zebra table-fixed w-full">
+			<table class="hidden lg:table table-zebra table-fixed w-full">
 				<thead>
 					<tr>
 						<th class="w-16">Order</th>
-					<th class="w-auto whitespace-normal">Environment</th>
-					<th class="w-1/4 md:w-1/3 whitespace-normal">Requires approval</th>
-					<th class="w-1/3 md:w-96 whitespace-normal">Actions</th>
+						<th class="w-auto whitespace-normal">Environment</th>
+						<th class="w-1/4 md:w-1/3 whitespace-normal">Requires approval</th>
+						<th class="w-1/3 md:w-96 whitespace-normal">Actions</th>
 					</tr>
 				</thead>
 				<tbody>
@@ -94,7 +104,7 @@ templ LifecycleStageList(lc db.Lifecycle, stages []LifecycleStageView, available
 					}
 				</tbody>
 			</table>
-			<ol class="space-y-3 md:hidden" aria-label="Promotion stages" data-mobile-lifecycle-stage-list>
+			<ol class="space-y-3 lg:hidden" aria-label="Promotion stages" data-mobile-lifecycle-stage-list>
 				for i, s := range stages {
 					@LifecycleStageMobileRecord(lc, i, len(stages), s)
 				}
@@ -139,7 +149,7 @@ templ LifecycleStageRow(lc db.Lifecycle, index int, total int, s LifecycleStageV
 				</span>
 			}
 		</td>
-		<td class="flex flex-wrap gap-2 whitespace-nowrap">
+		<td class="flex flex-nowrap gap-2 whitespace-nowrap">
 			if CanWrite(ctx) {
 				if index == 0 {
 					<span class="btn btn-xs invisible" aria-hidden="true">↑</span>
@@ -194,14 +204,14 @@ templ LifecycleStageMobileRecord(lc db.Lifecycle, index int, total int, s Lifecy
 						<span class="text-sm">Approval</span>
 					</label>
 				} else if s.Stage.RequiresApproval != 0 {
-					<span class="badge badge-warning badge-sm">Approval required</span>
+					<span class="badge badge-warning badge-sm shrink-0 whitespace-nowrap">Approval required</span>
 				} else {
-					<span class="badge badge-ghost badge-sm">No approval</span>
+					<span class="badge badge-ghost badge-sm shrink-0 whitespace-nowrap">No approval</span>
 				}
 			</div>
 		</div>
 		if CanWrite(ctx) {
-			<div class="flex flex-wrap gap-2">
+			<div class="flex flex-nowrap justify-start gap-2 whitespace-nowrap">
 				if index > 0 {
 					<form method="post" action={ templ.SafeURL("/lifecycles/" + strconv.FormatInt(lc.ID, 10) + "/stages/reorder") }>
 						<input type="hidden" name="stage_id" value={ strconv.FormatInt(s.Stage.ID, 10) }/>
@@ -229,6 +239,7 @@ templ LifecycleAddStageForm(lc db.Lifecycle, availableEnvs []db.Environment) {
 		method="post"
 		action={ templ.SafeURL("/lifecycles/" + strconv.FormatInt(lc.ID, 10) + "/stages") }
 		class="flex flex-wrap gap-4 items-end mt-4"
+		data-lifecycle-environment-assignment
 	>
 		<div class="form-control flex-1 min-w-[200px]">
 			<label class="label">

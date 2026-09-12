@@ -22,7 +22,7 @@ func TestMobile_Navbar_keeps_account_controls_in_right_aligned_menu(
 		t,
 		adminBody,
 		`(?s)<details[^>]*data-mobile-nav[^>]*data-focus-menu`+
-			`[^>]*class="[^"]*dropdown-end[^"]*md:hidden[^"]*"`,
+			`[^>]*class="[^"]*dropdown-end[^"]*xl:hidden[^"]*"`,
 	)
 	requireHTMLPattern(
 		t,
@@ -41,7 +41,7 @@ func TestMobile_Navbar_keeps_account_controls_in_right_aligned_menu(
 		t,
 		adminBody,
 		`(?s)<details[^>]*data-account-menu[^>]*>.*?<summary[^>]*>`+
-			`\s*Test admin \(admin\)\s*</summary>.*?href="/settings/security"`+
+			`.*?Test admin \(admin\).*?</summary>.*?href="/settings/security"`+
 			`.*?href="/settings/tokens".*?<li[^>]*class="menu-title"[^>]*>`+
 			`\s*<hr>\s*</li>.*?action="/logout"`,
 	)
@@ -49,7 +49,7 @@ func TestMobile_Navbar_keeps_account_controls_in_right_aligned_menu(
 		t,
 		viewerBody,
 		`(?s)<details[^>]*data-account-menu[^>]*>.*?<summary[^>]*>`+
-			`\s*Test viewer \(viewer\)\s*</summary>.*?href="/settings/security"`+
+			`.*?Test viewer \(viewer\).*?</summary>.*?href="/settings/security"`+
 			`.*?action="/logout"`,
 	)
 	logoutForms := regexp.MustCompile(
@@ -75,13 +75,15 @@ func TestMobile_Navbar_keeps_account_controls_in_right_aligned_menu(
 		t,
 		securityBody,
 		`(?s)<details[^>]*data-account-menu[^>]*>.*?<summary[^>]*`+
-			`class="[^"]*active[^"]*"[^>]*>\s*Test admin \(admin\)\s*</summary>`,
+			`class="[^"]*active[^"]*"[^>]*>.*?Test admin \(admin\).*?</summary>`,
 	)
 	requireHTMLPattern(
 		t,
 		adminBody,
-		`(?s)<details[^>]*class="[^"]*dropdown-end[^"]*hidden`+
-			`[^"]*md:block[^"]*"[^>]*>.*?>Admin</summary>`,
+		`(?s)<div class="ml-auto hidden min-w-0 flex-none items-center `+
+			`justify-end gap-2 xl:flex">.*?`+
+			`<summary class="btn btn-ghost btn-sm">Admin</summary>.*?`+
+			`data-account-menu`,
 	)
 	requireHTMLPattern(
 		t,
@@ -115,8 +117,13 @@ func TestMobileNavbar_uses_single_line_shrink_safe_layout(t *testing.T) {
 	requireHTMLPattern(
 		t,
 		body,
-		`(?s)<div class="hidden min-w-0 flex-1 overflow-x-auto md:flex">`+
+		`(?s)<div class="hidden shrink-0 items-center xl:flex">`+
 			`.*?<ul class="menu menu-horizontal flex-nowrap whitespace-nowrap px-1">`,
+	)
+	requireHTMLPattern(
+		t,
+		body,
+		`(?s)data-account-menu[^>]*>.*?<summary[^>]*class="[^"]*whitespace-nowrap[^"]*"[^>]*>.*?<span class="[^"]*truncate[^"]*">`,
 	)
 }
 
@@ -133,7 +140,7 @@ func TestAccountDropdown_marks_each_open_menu_for_scoped_dismissal(
 	requireHTMLPattern(
 		t,
 		body,
-		`(?s)<details data-focus-menu class="dropdown dropdown-end hidden shrink-0 md:block">`+
+		`(?s)<details data-focus-menu class="dropdown dropdown-end shrink-0 self-center">`+
 			`.*?<summary class="btn btn-ghost btn-sm">Admin</summary>`,
 	)
 	requireHTMLPattern(

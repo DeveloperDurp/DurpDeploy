@@ -141,6 +141,7 @@ const allTargets = [
     mobileControls: "[data-mobile-nav] > summary",
     desktopControls: "[data-mobile-nav] + div > ul > li > a",
     readOnlyControls: true,
+		mobileUntilWidth: 1280,
   },
   {
     name: "steps",
@@ -169,6 +170,7 @@ const allTargets = [
     writerControlCount: 3,
     desktopTable: "#lifecycle-stages > table",
     mobileRecord: "[data-mobile-lifecycle-stage-list]",
+		mobileUntilWidth: 1024,
   },
   {
     name: "schedules",
@@ -203,20 +205,33 @@ const allTargets = [
     path: "/templates",
     surface: "#templates-content",
     row: "#templates-list tbody > tr",
+		mobileRow: "[data-mobile-template-list] > li",
     controls: "#templates-list tbody > tr [data-template-action]",
+		mobileControls: "[data-mobile-template-list] [data-template-action]",
     writerControls: "#templates-list tbody > tr [data-template-action]:not([data-template-action=history])",
+		mobileWriterControls: "[data-mobile-template-list] [data-template-action]:not([data-template-action=history])",
     actionAttribute: "data-template-action",
     writerActions: ["edit", "delete"],
     writerControlCount: 2,
     disclosure: `[data-disclosure="template-script-${config.templateID}"]`,
+		mobileDisclosure: `[data-disclosure="template-script-mobile-${config.templateID}"]`,
+		desktopTable: "#templates-list > table",
+		mobileRecord: "[data-mobile-template-list]",
+		mobileUntilWidth: 1024,
+		singleLineControls: true,
   },
   {
     name: "template-history",
     path: `/templates/${config.templateID}/history`,
     surface: "#template-history",
     row: "#template-history tbody > tr",
+		mobileRow: "[data-mobile-template-history-list] > li",
     controls: "#template-history button",
     disclosure: "[data-disclosure=\"template-history-script\"]",
+		mobileDisclosure: '[data-disclosure="template-history-script-mobile"]',
+		desktopTable: "#template-history > table",
+		mobileRecord: "[data-mobile-template-history-list]",
+		mobileUntilWidth: 1024,
   },
   {
     name: "projects",
@@ -224,19 +239,23 @@ const allTargets = [
     surface: "#projects-list",
     row: "#projects-list > div > table > tbody > tr",
     controls: "#projects-list button",
-    scrollContainer: "[data-project-environment-scroll]",
   },
   {
     name: "audit",
     path: "/admin/audit",
     surface: "#form-container",
     row: "#form-container tbody > tr",
+		mobileRow: "[data-mobile-audit-list] > li",
     rowText: "hostile.audit",
     controls: "#form-container button",
     disclosure: "[data-disclosure=\"audit-details\"]",
+		mobileDisclosure: "[data-mobile-audit-list] [data-disclosure=\"audit-details\"]",
     disclosureRowName: /hostile\.audit/,
     disclosureContent: "audit-token",
     roles: ["admin"],
+		desktopTable: "#form-container > table",
+		mobileRecord: "[data-mobile-audit-list]",
+		mobileUntilWidth: 1024,
   },
 ];
 
@@ -368,16 +387,18 @@ async function inspectBrowser(context) {
       if (!response || response.status() !== 200) {
         throw new Error(`${target.path} returned ${response?.status() ?? "no response"}`);
       }
-      const mobileLayout = viewport.layout === "mobile";
+		const mobileLayout = usesMobileLayout(target, viewport);
       const row = mobileLayout
         ? target.mobileRow ?? target.row
         : target.desktopRow ?? target.row;
       const controls = mobileLayout
         ? target.mobileControls ?? target.controls
         : target.desktopControls ?? target.controls;
-      const writerControls = target.readOnlyControls
+		const writerControls = target.readOnlyControls
         ? null
-        : target.writerControls ?? controls;
+				: mobileLayout
+					? target.mobileWriterControls ?? target.writerControls ?? controls
+					: target.writerControls ?? controls;
       const surface = page.locator(target.surface);
       if ((await surface.count()) !== 1) {
         throw new Error(`${target.name} surface is missing or ambiguous`);
@@ -392,7 +413,12 @@ async function inspectBrowser(context) {
         );
       }
       await rowLocator.waitFor({ state: "visible" });
-      const disclosure = await assertDisclosure(page, target);
+		const disclosure = await assertDisclosure(
+			page,
+			mobileLayout && target.mobileDisclosure
+				? { ...target, disclosure: target.mobileDisclosure, disclosureRowName: null }
+				: target,
+		);
       const scrollContainer = await assertScrollContainer(page, target);
       const geometry = await page.evaluate(({ surface, row, rowText, controls, writerControls, desktopTable, mobileRecord, actionAttribute, targetName }) => {
         const clientWidth = document.documentElement.clientWidth;
@@ -417,7 +443,9 @@ async function inspectBrowser(context) {
 			 return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
 		 });
          const accountSummaryHeights = targetName === "navbar"
-           ? Array.from(document.querySelectorAll("[data-account-menu]:visible > summary")).map((element) => element.getBoundingClientRect().height)
+			? Array.from(document.querySelectorAll("[data-account-menu] > summary"))
+				.filter((element) => element.checkVisibility())
+				.map((element) => element.getBoundingClientRect().height)
            : [];
          const rowRect = rowElement?.getBoundingClientRect();
 		 const overflowingElements = Array.from(document.querySelectorAll("*")).flatMap((element) => {
@@ -600,7 +628,7 @@ async function cleanupPhase(name, action, errors) {
 
 function assertGeometry(target, viewport, geometry) {
   const violations = [];
-	const mobileLayout = viewport.layout === "mobile";
+	const mobileLayout = usesMobileLayout(target, viewport);
   if (!geometry.surfaceFound || !geometry.rowFound) {
     throw new Error(`${target.name} marker is missing at ${viewport.width}px`);
   }
@@ -628,6 +656,14 @@ function assertGeometry(target, viewport, geometry) {
       violations.push(`${target.name} control is unreachable at ${viewport.width}px`);
     }
   }
+	if (target.singleLineControls) {
+		const visibleTops = geometry.controlRects
+			.filter((rect) => rect.right > rect.left && rect.bottom > rect.top)
+			.map((rect) => Math.round(rect.top));
+		if (new Set(visibleTops).size > 1) {
+			violations.push(`${target.name} controls wrap at ${viewport.width}px`);
+		}
+	}
   if (target.name === "navbar" && geometry.accountSummaryHeights.some((height) => height > 60)) {
     violations.push(`${target.name} account summary is too tall at ${viewport.width}px`);
   }
@@ -664,11 +700,19 @@ function assertGeometry(target, viewport, geometry) {
   return violations;
 }
 
+function usesMobileLayout(target, viewport) {
+	return (
+		viewport.layout === "mobile" ||
+		(target.mobileUntilWidth !== undefined &&
+			viewport.width < target.mobileUntilWidth)
+	);
+}
+
 async function mobileInteractionFailure(page, target, viewport) {
 	if (target.name === "navbar") {
 		try {
 			const menu = page.locator("[data-mobile-nav]");
-			if (viewport.layout === "mobile") {
+			if (usesMobileLayout(target, viewport)) {
 				const summary = page.locator("[data-mobile-nav] > summary");
 				const panel = page.locator("[data-mobile-nav] > ul");
 				const themeToggle = page.locator(
@@ -756,6 +800,22 @@ async function mobileInteractionFailure(page, target, viewport) {
 			return null;
 		} catch (error) {
 			return `navbar interaction did not complete: ${error instanceof Error ? error.message : String(error)}`;
+		}
+	}
+	if (target.name === "lifecycle-stages") {
+		const settings = page.locator("[data-lifecycle-settings]");
+		const assignment = page.locator("[data-lifecycle-environment-assignment]");
+		if (config.role === "viewer") {
+			if ((await settings.count()) !== 0 || (await assignment.count()) !== 0) {
+				return "viewer received lifecycle write controls";
+			}
+		} else if (
+			(await settings.count()) !== 1 ||
+			!(await settings.isVisible()) ||
+			(await assignment.count()) !== 1 ||
+			!(await assignment.locator('select[name="environment_id"]').isVisible())
+		) {
+			return "merged lifecycle settings or environment assignment is missing";
 		}
 	}
 		if (

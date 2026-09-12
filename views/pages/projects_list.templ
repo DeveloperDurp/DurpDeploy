@@ -71,19 +71,19 @@ templ ProjectsListDeployments(panel LifecyclePanel) {
 	if len(panel.Stages) == 0 {
 		<span class="text-gray-500 italic text-sm">No environments</span>
 	} else {
-		<div class="overflow-x-auto" data-project-environment-scroll>
-			<table class="table table-xs min-w-max">
+		<div class="min-w-0 overflow-hidden" data-project-environment-grid>
+			<table class="table table-xs table-fixed w-full">
 				<thead>
-					<tr>
+					<tr class="!border-b-0">
 						for _, s := range panel.Stages {
-							<th class="whitespace-nowrap text-xs font-medium text-gray-500 normal-case">{ s.Environment.Name }</th>
+							<th class="truncate text-xs font-medium text-gray-500 normal-case" title={ s.Environment.Name }>{ s.Environment.Name }</th>
 						}
 					</tr>
 				</thead>
 				<tbody>
-					<tr>
+					<tr class="!border-b-0">
 						for _, s := range panel.Stages {
-							<td>
+							<td class="overflow-hidden">
 								if s.LatestAttempt == nil {
 									<span class="badge badge-sm bg-base-300 text-base-content border-0 font-mono">—</span>
 								} else {
@@ -103,7 +103,7 @@ templ ProjectsListDeployments(panel LifecyclePanel) {
 templ VersionPill(d db.Deployment, version string) {
 	<span
 		class={
-			templ.KV("badge badge-sm font-mono", true),
+			templ.KV("badge badge-sm max-w-full truncate font-mono", true),
 			templ.KV("bg-success text-success-content border-0", d.Status == "succeeded"),
 			templ.KV("bg-error text-error-content border-0", d.Status == "failed"),
 			templ.KV("bg-warning text-warning-content border-0", d.Status == "cancelled"),

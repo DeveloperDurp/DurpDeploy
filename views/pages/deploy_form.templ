@@ -100,7 +100,11 @@ templ DeployFormPage(project db.Project, releases []db.Release, selectedRelease 
 						<p class="text-gray-500 italic text-sm">No environments available.</p>
 					} else {
 						if hasAlreadyDeployedEnvs(envs) {
-							<div class="alert alert-warning text-sm mb-2">
+							<div
+								class="alert alert-warning text-sm mb-2"
+								x-cloak
+								x-show="environmentAlreadyDeployed"
+							>
 								<span>This version is already deployed to some environments. Re-deploying will run the steps again.</span>
 							</div>
 						}

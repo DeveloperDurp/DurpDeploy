@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"net/http"
@@ -137,40 +138,10 @@ func (h *LifecycleHandler) GetLifecycle(
 		return
 	}
 
-	stages, err := h.repo.Queries.ListLifecycleStages(r.Context(), id)
+	stageViews, availableEnvs, err := h.lifecycleWorkspace(r.Context(), id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
-	}
-
-	environments, err := h.repo.Queries.ListEnvironments(r.Context())
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	envsByID := make(map[int64]db.Environment, len(environments))
-	for _, env := range environments {
-		envsByID[env.ID] = env
-	}
-
-	used := make(map[int64]bool, len(stages))
-	for _, s := range stages {
-		used[s.EnvironmentID] = true
-	}
-	availableEnvs := make([]db.Environment, 0, len(environments))
-	for _, env := range environments {
-		if !used[env.ID] {
-			availableEnvs = append(availableEnvs, env)
-		}
-	}
-
-	stageViews := make([]pages.LifecycleStageView, len(stages))
-	for i, s := range stages {
-		stageViews[i] = pages.LifecycleStageView{
-			Stage:       s,
-			Environment: envsByID[s.EnvironmentID],
-		}
 	}
 
 	if err := pages.LifecycleDetailPage(lc, stageViews, availableEnvs, "", r.URL.Path).
@@ -189,20 +160,12 @@ func (h *LifecycleHandler) EditLifecycle(
 		return
 	}
 
-	lc, err := h.repo.Queries.GetLifecycle(r.Context(), id)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			http.Error(w, "Lifecycle not found", http.StatusNotFound)
-			return
-		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	if err := pages.LifecycleFormPage(lc, true, "", r.URL.Path).
-		Render(r.Context(), w); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
+	http.Redirect(
+		w,
+		r,
+		"/lifecycles/"+strconv.FormatInt(id, 10),
+		http.StatusSeeOther,
+	)
 }
 
 // SaveLifecycle handles POST /lifecycles/{id} and dispatches to update or delete
@@ -233,22 +196,20 @@ func (h *LifecycleHandler) SaveLifecycle(
 		http.Redirect(w, r, "/lifecycles", http.StatusSeeOther)
 	case "put":
 		name := strings.TrimSpace(r.FormValue("name"))
+		desc := r.FormValue("description")
 		if name == "" {
-			lc := db.Lifecycle{ID: id, Name: name}
-			WriteFormError(
-				w,
-				r,
-				pages.LifecycleForm(lc, true, "Name is required"),
-				pages.LifecycleFormPage(
-					lc,
-					true,
-					"Name is required",
-					r.URL.Path,
-				),
-			)
+			lc := db.Lifecycle{
+				ID:          id,
+				Name:        name,
+				Description: sql.NullString{String: desc, Valid: desc != ""},
+			}
+			if err := h.writeLifecycleDetailError(
+				w, r, lc, "Name is required",
+			); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
 			return
 		}
-		desc := r.FormValue("description")
 		_, err := h.repo.Queries.UpdateLifecycle(
 			r.Context(),
 			db.UpdateLifecycleParams{
@@ -259,22 +220,19 @@ func (h *LifecycleHandler) SaveLifecycle(
 		)
 		if err != nil {
 			if IsUniqueViolation(err) {
-				lc := db.Lifecycle{ID: id, Name: name}
-				WriteFormError(
+				lc := db.Lifecycle{
+					ID:          id,
+					Name:        name,
+					Description: sql.NullString{String: desc, Valid: desc != ""},
+				}
+				if err := h.writeLifecycleDetailError(
 					w,
 					r,
-					pages.LifecycleForm(
-						lc,
-						true,
-						"A lifecycle with this name already exists",
-					),
-					pages.LifecycleFormPage(
-						lc,
-						true,
-						"A lifecycle with this name already exists",
-						r.URL.Path,
-					),
-				)
+					lc,
+					"A lifecycle with this name already exists",
+				); err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+				}
 				return
 			}
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -289,6 +247,69 @@ func (h *LifecycleHandler) SaveLifecycle(
 	default:
 		http.Error(w, "Unknown method", http.StatusBadRequest)
 	}
+}
+
+func (h *LifecycleHandler) lifecycleWorkspace(
+	ctx context.Context,
+	lifecycleID int64,
+) ([]pages.LifecycleStageView, []db.Environment, error) {
+	stages, err := h.repo.Queries.ListLifecycleStages(ctx, lifecycleID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("list lifecycle stages: %w", err)
+	}
+	environments, err := h.repo.Queries.ListEnvironments(ctx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("list environments: %w", err)
+	}
+
+	envsByID := make(map[int64]db.Environment, len(environments))
+	for _, env := range environments {
+		envsByID[env.ID] = env
+	}
+	used := make(map[int64]bool, len(stages))
+	stageViews := make([]pages.LifecycleStageView, len(stages))
+	for i, stage := range stages {
+		used[stage.EnvironmentID] = true
+		stageViews[i] = pages.LifecycleStageView{
+			Stage:       stage,
+			Environment: envsByID[stage.EnvironmentID],
+		}
+	}
+
+	availableEnvs := make([]db.Environment, 0, len(environments)-len(used))
+	for _, env := range environments {
+		if !used[env.ID] {
+			availableEnvs = append(availableEnvs, env)
+		}
+	}
+	return stageViews, availableEnvs, nil
+}
+
+func (h *LifecycleHandler) writeLifecycleDetailError(
+	w http.ResponseWriter,
+	r *http.Request,
+	lifecycle db.Lifecycle,
+	message string,
+) error {
+	stages, availableEnvs, err := h.lifecycleWorkspace(
+		r.Context(), lifecycle.ID,
+	)
+	if err != nil {
+		return err
+	}
+	WriteFormError(
+		w,
+		r,
+		pages.LifecycleDetail(lifecycle, stages, availableEnvs, message),
+		pages.LifecycleDetailPage(
+			lifecycle,
+			stages,
+			availableEnvs,
+			message,
+			r.URL.Path,
+		),
+	)
+	return nil
 }
 
 func (h *LifecycleHandler) AddStage(w http.ResponseWriter, r *http.Request) {
