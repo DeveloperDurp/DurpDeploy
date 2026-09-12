@@ -61,10 +61,14 @@ async function accountContract(page, url, role, tokensVisible, artifactDir) {
 			const label = `${longDeployerName} (${role})`;
 			check(
 				await summary.evaluate((element, expected) =>
-					element.title === expected && element.getAttribute("aria-label") === expected,
-					label,
-				),
-				`long account name is not discoverable at ${width}px`,
+					element.title === expected &&
+					element.getAttribute("aria-label") === expected &&
+					element.textContent?.trim() === expected &&
+					element.scrollWidth <= element.clientWidth &&
+					element.scrollHeight <= element.clientHeight,
+				label,
+			),
+				`long account name is not fully visible at ${width}px`,
 			);
 		}
 		await summary.focus();
