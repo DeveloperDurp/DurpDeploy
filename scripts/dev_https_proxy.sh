@@ -6,6 +6,7 @@ port=${DURPDEPLOY_HTTPS_PROXY_PORT:-8443}
 backend=${DURPDEPLOY_HTTPS_PROXY_BACKEND:-host.docker.internal:8080}
 image=${DURPDEPLOY_HTTPS_PROXY_IMAGE:-caddy:2-alpine}
 health_url="https://localhost:${port}/healthz"
+container_engine=""
 config=""
 app_pid=""
 app_pgid=""
@@ -27,7 +28,8 @@ cleanup() {
 	local status=$?
 	trap - EXIT INT TERM HUP
 	stop_app
-	docker rm -f "$container" >/dev/null 2>&1 || true
+	[[ -z "$container_engine" ]] || \
+		"$container_engine" rm -f "$container" >/dev/null 2>&1 || true
 	[[ -z "$config" ]] || rm -f "$config"
 	exit "$status"
 }
@@ -37,15 +39,26 @@ fail() {
 	exit 1
 }
 
+select_container_engine() {
+	local candidate
+	for candidate in docker podman; do
+		if command -v "$candidate" >/dev/null 2>&1 && \
+			"$candidate" info >/dev/null 2>&1; then
+			container_engine=$candidate
+			return
+		fi
+	done
+	fail "Docker or Podman is unavailable; install one and start its engine."
+}
+
 if (($# == 0)); then
 	fail "usage: $0 <dev-server command...>"
 fi
 
-command -v docker >/dev/null 2>&1 || fail "Docker is required for the HTTPS development proxy."
-docker info >/dev/null 2>&1 || fail "Docker is unavailable; start the Docker daemon and try again."
+select_container_engine
 command -v setsid >/dev/null 2>&1 || fail "setsid is required to stop the development server process group."
 
-if docker container inspect "$container" >/dev/null 2>&1; then
+if "$container_engine" container inspect "$container" >/dev/null 2>&1; then
 	fail "HTTPS proxy container '$container' already exists; choose DURPDEPLOY_HTTPS_PROXY_CONTAINER or remove it."
 fi
 
@@ -63,12 +76,12 @@ EOF
 
 echo "WARNING: development HTTPS uses Caddy's self-signed internal CA; browser trust warnings are expected."
 echo "Starting HTTPS proxy at https://localhost:${port} -> ${backend}"
-if ! docker run -d --rm --name "$container" \
+if ! "$container_engine" run -d --rm --name "$container" \
 	--add-host host.docker.internal:host-gateway \
 	-p "${port}:443" \
 	-v "$config:/etc/caddy/Caddyfile:ro" \
 	"$image" >/dev/null; then
-	fail "Could not start Caddy. Docker must support the Linux host-gateway mapping required to reach the host backend."
+	fail "Could not start Caddy. The container engine must support the Linux host-gateway mapping required to reach the host backend."
 fi
 
 setsid "$@" &
@@ -87,5 +100,5 @@ for _ in $(seq 1 60); do
 	sleep 0.5
 done
 
-docker logs "$container" >&2 || true
+"$container_engine" logs "$container" >&2 || true
 fail "HTTPS proxy backend is unhealthy at ${backend}; expected ${health_url}. Set DURPDEPLOY_HTTPS_PROXY_BACKEND to override it."

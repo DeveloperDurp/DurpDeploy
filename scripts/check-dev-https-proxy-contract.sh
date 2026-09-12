@@ -72,12 +72,63 @@ EOF
 	}
 }
 
+test_podman_fallback() {
+	local tmp status
+	tmp=$(mktemp -d "${TMPDIR:-/tmp}/durpdeploy-proxy-podman.XXXXXX")
+	cleanup_podman_test() {
+		rm -rf "$tmp"
+	}
+	trap cleanup_podman_test RETURN
+
+	mkdir "$tmp/bin"
+	cat >"$tmp/bin/docker" <<'EOF'
+#!/usr/bin/env bash
+[[ "$1" == info ]] && exit 1
+exit 1
+EOF
+	cat >"$tmp/bin/podman" <<'EOF'
+#!/usr/bin/env bash
+case "$1" in
+	info|run) exit 0 ;;
+	rm) : >"$DURPDEPLOY_PROXY_TEST_CLEANUP_FILE"; exit 0 ;;
+	container) exit 1 ;;
+esac
+exit 1
+EOF
+	cat >"$tmp/bin/curl" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+	cat >"$tmp/server" <<'EOF'
+#!/usr/bin/env bash
+sleep 30
+EOF
+	chmod +x "$tmp/bin/docker" "$tmp/bin/podman" "$tmp/bin/curl" "$tmp/server"
+
+	set +e
+	DURPDEPLOY_PROXY_TEST_CLEANUP_FILE="$tmp/podman-cleaned" \
+		PATH="$tmp/bin:$PATH" timeout --preserve-status -s INT 1 \
+		"$root/scripts/dev_https_proxy.sh" "$tmp/server"
+	status=$?
+	set -e
+	[[ "$status" -eq 130 ]] || {
+		echo "dev HTTPS proxy Podman fallback: expected SIGINT status 130, got $status" >&2
+		return 1
+	}
+	[[ -f "$tmp/podman-cleaned" ]] || {
+		echo "dev HTTPS proxy Podman fallback: Podman cleanup did not run" >&2
+		return 1
+	}
+}
+
 bash -n "$root/scripts/dev_https_proxy.sh" "$root/scripts/e2e_db_test.sh"
 make -C "$root" -n dev dev-postgres dev-mssql >/dev/null
 
 grep -Fq 'caddy:2-alpine' "$root/scripts/dev_https_proxy.sh"
 grep -Fq -- '--add-host host.docker.internal:host-gateway' "$root/scripts/dev_https_proxy.sh"
 grep -Fq 'trap cleanup EXIT' "$root/scripts/dev_https_proxy.sh"
+grep -Fq 'dev-agent-identity' "$root/Makefile"
+grep -Fq 'DURPDEPLOY_AGENT_IDENTITY_DIR' "$root/Makefile"
 grep -Fq './scripts/e2e_db_test.sh sqlite' "$root/Makefile"
 grep -Fq 'e2e-test-isolated:' "$root/Makefile"
 if grep -Eq 'go (build|run)|\$TMP/durpdeploy' "$root/scripts/e2e_db_test.sh"; then
@@ -88,5 +139,6 @@ grep -Fq '/settings/security/totp/verify' "$root/scripts/e2e_test.sh"
 grep -Fq '/settings/security/totp/cancel' "$root/scripts/e2e_test.sh"
 grep -Fq '/settings/security/recovery/continue' "$root/scripts/e2e_test.sh"
 test_shutdown_tree
+test_podman_fallback
 
 echo 'dev HTTPS proxy contract: OK'
