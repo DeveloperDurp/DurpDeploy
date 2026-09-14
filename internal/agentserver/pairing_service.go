@@ -177,6 +177,7 @@ func (service *PairingService) prepare(
 			EncryptedIdentity:    encryptedIdentity,
 			ExpiresAt:            now.Add(pairingTTL).Unix(), Now: now.Unix(),
 			ServerPullEndpoint: service.pullEndpoint.String(),
+			ExpectedAgentID:    input.expectedAgentID,
 		},
 	)
 }

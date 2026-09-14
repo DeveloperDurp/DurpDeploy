@@ -411,6 +411,27 @@ func (q *Queries) LockEnvironmentAgentAssignment(ctx context.Context, arg LockEn
 	return result.RowsAffected()
 }
 
+const resetRevokedAgentForPairing = `-- name: ResetRevokedAgentForPairing :execrows
+UPDATE agents SET endpoint = ?1, status = 'pending',
+    agent_version = NULL, certificate_pem = NULL,
+    certificate_fingerprint = NULL, encrypted_identity = NULL,
+    last_heartbeat_at = NULL, revoked_at = NULL, updated_at = unixepoch()
+WHERE id = ?2 AND status = 'revoked'
+`
+
+type ResetRevokedAgentForPairingParams struct {
+	Endpoint string `json:"endpoint"`
+	ID       string `json:"id"`
+}
+
+func (q *Queries) ResetRevokedAgentForPairing(ctx context.Context, arg ResetRevokedAgentForPairingParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, resetRevokedAgentForPairing, arg.Endpoint, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const revokeStartedRemoteClaim = `-- name: RevokeStartedRemoteClaim :execrows
 UPDATE remote_deployment_claims SET state = 'lost',
     reason = 'remote_agent_revoked_after_start', cancel_requested_at = NULL,

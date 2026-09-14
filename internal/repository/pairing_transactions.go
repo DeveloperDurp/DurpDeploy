@@ -26,6 +26,7 @@ type AgentPairingTuple struct {
 	ExpiresAt            int64
 	Now                  int64
 	ServerPullEndpoint   string
+	ExpectedAgentID      string
 }
 
 func (r *Repository) PrepareAgentPairing(
@@ -44,6 +45,47 @@ func (r *Repository) PrepareAgentPairing(
 		)
 		if err != nil {
 			return err
+		}
+		if tuple.ExpectedAgentID != "" {
+			if len(candidates) != 1 ||
+				candidates[0].AgentID != tuple.ExpectedAgentID {
+				return ErrPairingTupleConflict
+			}
+			agent, err := q.GetAgent(ctx, tuple.ExpectedAgentID)
+			if err != nil {
+				return err
+			}
+			if agent.Status == "revoked" {
+				pairing, err = q.ResetRevokedAgentPairing(
+					ctx,
+					db.ResetRevokedAgentPairingParams{
+						PairingCodeHash:      tuple.PairingCodeHash,
+						AgentPublicIdentity:  tuple.AgentPublicIdentity,
+						AgentPin:             tuple.AgentPin,
+						ServerPublicIdentity: nullable(tuple.ServerPublicIdentity),
+						ServerPin:            nullable(tuple.ServerPin),
+						EncryptedIdentity:    nullable(tuple.EncryptedIdentity),
+						ExpiresAt:            tuple.ExpiresAt,
+						Now:                  tuple.Now,
+						ServerPullEndpoint:   nullable(tuple.ServerPullEndpoint),
+						AgentID:              tuple.ExpectedAgentID,
+					},
+				)
+				if err != nil {
+					return err
+				}
+				changed, err := q.ResetRevokedAgentForPairing(
+					ctx,
+					db.ResetRevokedAgentForPairingParams{
+						Endpoint: tuple.Endpoint,
+						ID:       tuple.ExpectedAgentID,
+					},
+				)
+				if err != nil || changed != 1 {
+					return ErrPairingTupleConflict
+				}
+				return nil
+			}
 		}
 		if len(candidates) > 0 {
 			if len(candidates) != 1 {

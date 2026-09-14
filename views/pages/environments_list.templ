@@ -94,9 +94,9 @@ templ EnvironmentRow(row EnvironmentAgentRow, agents []db.Agent) {
 				</button>
 				if CanManageAgents(ctx) {
 					if row.Agent != nil {
-						<button class="btn btn-error btn-sm" hx-delete={ "/admin/environments/" + strconv.FormatInt(row.Environment.ID, 10) + "/agent" } hx-vals={ `{"agent_id":"` + row.Agent.ID + `"}` } hx-confirm={ "Unassign " + row.Agent.Name + " from " + row.Environment.Name + "?" }>Unassign</button>
+						<button class="btn btn-error btn-sm" hx-delete={ "/admin/environments/" + strconv.FormatInt(row.Environment.ID, 10) + "/agent" } hx-vals={ `{"agent_id":"` + row.Agent.ID + `"}` } hx-target="#environments-list" hx-swap="outerHTML" hx-confirm={ "Unassign " + row.Agent.Name + " from " + row.Environment.Name + "?" }>Unassign</button>
 					} else {
-						<form method="post" class="flex gap-1" hx-put={ "/admin/environments/" + strconv.FormatInt(row.Environment.ID, 10) + "/agent" }>
+						<form method="post" class="flex gap-1" hx-put={ "/admin/environments/" + strconv.FormatInt(row.Environment.ID, 10) + "/agent" } hx-target="#environments-list" hx-swap="outerHTML">
 							<select class="select select-bordered select-sm" name="agent_id" aria-label={ "Agent for " + row.Environment.Name } required>
 								<option value="">Agent</option>
 								for _, agent := range agents {

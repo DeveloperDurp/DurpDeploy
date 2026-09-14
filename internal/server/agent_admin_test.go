@@ -15,15 +15,17 @@ import (
 )
 
 type fakePairer struct {
-	result agentserver.PairingResult
-	calls  int
+	result          agentserver.PairingResult
+	calls           int
+	expectedAgentID string
 }
 
 func (pairer *fakePairer) Pair(
-	context.Context,
-	agentserver.PairingInput,
+	_ context.Context,
+	input agentserver.PairingInput,
 ) (agentserver.PairingResult, error) {
 	pairer.calls++
+	pairer.expectedAgentID = input.ExpectedAgentID()
 	return pairer.result, nil
 }
 
@@ -57,6 +59,47 @@ func TestAdminAgentPairing(t *testing.T) {
 		t.Fatalf("status=%d calls=%d body=%s", res.Code, pairer.calls, res.Body)
 	}
 	assertAuditActionCount(t, h, "pair_agent", 1)
+}
+
+func TestAdminAgentRetryBindsPairingToRouteAgent(t *testing.T) {
+	// Given
+	h := newOIDCRouterHarness(t)
+	seedAgentRouteUser(t, h, "admin", "retry-pair-admin")
+	pairer := &fakePairer{result: agentserver.PairingResult{
+		AgentID: "agent-a", State: agentserver.PairingStatePaired,
+	}}
+	router := NewRouterWithAgentManagement(
+		h.repo, h.runner, h.parser, h.authHandler, pairer, false,
+	)
+	form := url.Values{
+		"address": {"https://agent.test"},
+		"code": {
+			base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{3}, 32)),
+		},
+		"fingerprint": {strings.Repeat("a", 64)},
+		"csrf_token":  {"csrf"},
+	}
+	req := browserFormRequest(
+		http.MethodPost,
+		"/admin/agents/agent-a/retry-pair",
+		"retry-pair-admin",
+		form,
+	)
+	res := httptest.NewRecorder()
+
+	// When
+	router.ServeHTTP(res, req)
+
+	// Then
+	if res.Code != http.StatusSeeOther ||
+		pairer.expectedAgentID != "agent-a" {
+		t.Fatalf(
+			"status=%d expected agent ID=%q body=%s",
+			res.Code,
+			pairer.expectedAgentID,
+			res.Body,
+		)
+	}
 }
 
 func TestAdminAssignEnvironmentAgent(t *testing.T) {
@@ -98,17 +141,56 @@ func TestAdminAssignEnvironmentAgentReturnsFragmentForHTMX(t *testing.T) {
 		form,
 	)
 	req.Header.Set("HX-Request", "true")
+	req.Header.Set("HX-Target", "environments-list")
 	res := httptest.NewRecorder()
 
 	router.ServeHTTP(res, req)
 
 	body := res.Body.String()
 	if res.Code != http.StatusOK ||
-		!strings.Contains(body, `id="agent-assignments"`) ||
+		!strings.Contains(body, `id="environments-list"`) ||
 		!strings.Contains(body, ">Unassign</button>") ||
+		strings.Contains(body, `id="agent-assignments"`) ||
 		strings.Contains(body, "<!doctype html>") ||
 		strings.Contains(body, "<html") ||
 		res.Header().Get("Location") != "" {
+		t.Fatalf("status=%d body=%s", res.Code, body)
+	}
+}
+
+func TestAdminUnassignEnvironmentAgentReturnsEnvironmentFragmentForHTMX(
+	t *testing.T,
+) {
+	// Given
+	h := newOIDCRouterHarness(t)
+	seedAgentRouteUser(t, h, "admin", "unassign-htmx-admin")
+	environmentID := seedAssignableAgent(t, h)
+	if err := h.repo.AssignEnvironmentAgent(
+		t.Context(), environmentID, "agent-a",
+	); err != nil {
+		t.Fatal(err)
+	}
+	router := NewRouter(h.repo, h.runner, h.parser, h.authHandler)
+	form := url.Values{"agent_id": {"agent-a"}, "csrf_token": {"csrf"}}
+	req := browserFormRequest(
+		http.MethodDelete,
+		fmt.Sprintf("/admin/environments/%d/agent", environmentID),
+		"unassign-htmx-admin",
+		form,
+	)
+	req.Header.Set("HX-Request", "true")
+	req.Header.Set("HX-Target", "environments-list")
+	res := httptest.NewRecorder()
+
+	// When
+	router.ServeHTTP(res, req)
+
+	// Then
+	body := res.Body.String()
+	if res.Code != http.StatusOK ||
+		!strings.Contains(body, `id="environments-list"`) ||
+		!strings.Contains(body, ">Local</span>") ||
+		strings.Contains(body, `id="agent-assignments"`) {
 		t.Fatalf("status=%d body=%s", res.Code, body)
 	}
 }

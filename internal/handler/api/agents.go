@@ -126,6 +126,9 @@ func (h *AgentHandler) pair(
 		RespondError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	if wantAgentID != "" {
+		input = input.ForAgent(wantAgentID)
+	}
 	result, err := h.pairing.Pair(r.Context(), input)
 	if err != nil {
 		switch {

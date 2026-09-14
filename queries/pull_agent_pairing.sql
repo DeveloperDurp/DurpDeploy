@@ -29,6 +29,22 @@ VALUES (
 )
 RETURNING *;
 
+-- name: ResetRevokedAgentPairing :one
+UPDATE agent_pairings SET
+    pairing_code_hash = sqlc.arg(pairing_code_hash),
+    agent_public_identity = sqlc.arg(agent_public_identity),
+    agent_pin = sqlc.arg(agent_pin),
+    server_public_identity = sqlc.arg(server_public_identity),
+    server_pin = sqlc.arg(server_pin),
+    encrypted_identity = sqlc.arg(encrypted_identity),
+    state = 'committing', expires_at = sqlc.arg(expires_at),
+    paired_at = NULL, updated_at = sqlc.arg(now),
+    server_pull_endpoint = sqlc.arg(server_pull_endpoint)
+WHERE agent_id = sqlc.arg(agent_id)
+  AND EXISTS (SELECT 1 FROM agents
+      WHERE id = agent_pairings.agent_id AND status = 'revoked')
+RETURNING *;
+
 -- name: BeginPairingCommit :execrows
 UPDATE agent_pairings SET state = 'committing', server_public_identity = sqlc.arg(server_public_identity),
     server_pin = sqlc.arg(server_pin), encrypted_identity = sqlc.arg(encrypted_identity), updated_at = sqlc.arg(now)

@@ -330,3 +330,65 @@ func (q *Queries) ListAgentPairingRecoveryCandidates(ctx context.Context, arg Li
 	}
 	return items, nil
 }
+
+const resetRevokedAgentPairing = `-- name: ResetRevokedAgentPairing :one
+UPDATE agent_pairings SET
+    pairing_code_hash = ?1,
+    agent_public_identity = ?2,
+    agent_pin = ?3,
+    server_public_identity = ?4,
+    server_pin = ?5,
+    encrypted_identity = ?6,
+    state = 'committing', expires_at = ?7,
+    paired_at = NULL, updated_at = ?8,
+    server_pull_endpoint = ?9
+WHERE agent_id = ?10
+  AND EXISTS (SELECT 1 FROM agents
+      WHERE id = agent_pairings.agent_id AND status = 'revoked')
+RETURNING agent_id, pairing_code_hash, agent_public_identity, agent_pin, server_public_identity, server_pin, encrypted_identity, state, expires_at, paired_at, created_at, updated_at, server_pull_endpoint
+`
+
+type ResetRevokedAgentPairingParams struct {
+	PairingCodeHash      []byte         `json:"pairing_code_hash"`
+	AgentPublicIdentity  string         `json:"agent_public_identity"`
+	AgentPin             string         `json:"agent_pin"`
+	ServerPublicIdentity sql.NullString `json:"server_public_identity"`
+	ServerPin            sql.NullString `json:"server_pin"`
+	EncryptedIdentity    sql.NullString `json:"encrypted_identity"`
+	ExpiresAt            int64          `json:"expires_at"`
+	Now                  int64          `json:"now"`
+	ServerPullEndpoint   sql.NullString `json:"server_pull_endpoint"`
+	AgentID              string         `json:"agent_id"`
+}
+
+func (q *Queries) ResetRevokedAgentPairing(ctx context.Context, arg ResetRevokedAgentPairingParams) (AgentPairing, error) {
+	row := q.db.QueryRowContext(ctx, resetRevokedAgentPairing,
+		arg.PairingCodeHash,
+		arg.AgentPublicIdentity,
+		arg.AgentPin,
+		arg.ServerPublicIdentity,
+		arg.ServerPin,
+		arg.EncryptedIdentity,
+		arg.ExpiresAt,
+		arg.Now,
+		arg.ServerPullEndpoint,
+		arg.AgentID,
+	)
+	var i AgentPairing
+	err := row.Scan(
+		&i.AgentID,
+		&i.PairingCodeHash,
+		&i.AgentPublicIdentity,
+		&i.AgentPin,
+		&i.ServerPublicIdentity,
+		&i.ServerPin,
+		&i.EncryptedIdentity,
+		&i.State,
+		&i.ExpiresAt,
+		&i.PairedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ServerPullEndpoint,
+	)
+	return i, err
+}

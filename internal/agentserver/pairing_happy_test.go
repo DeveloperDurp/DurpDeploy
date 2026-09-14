@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"testing"
 	"time"
 
@@ -144,6 +145,58 @@ func TestPairingPersistsTupleBeforeFirstRequest(t *testing.T) {
 
 	if _, err := fixture.pair(t); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestPairingRejectsRetryForAnotherAgentBeforePersistence(t *testing.T) {
+	// Given
+	fixture := newPairingFixture(t)
+	fixture.input = fixture.input.ForAgent("another-agent")
+
+	// When
+	_, err := fixture.pair(t)
+
+	// Then
+	if !errors.Is(err, ErrPairingConflict) {
+		t.Fatalf("pairing error = %v, want %v", err, ErrPairingConflict)
+	}
+	var agents int
+	if err := fixture.repo.DB.QueryRow("SELECT COUNT(*) FROM agents").Scan(
+		&agents,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if agents != 0 {
+		t.Fatalf("persisted agents = %d, want 0", agents)
+	}
+}
+
+func TestPairingReactivatesExpectedRevokedAgent(t *testing.T) {
+	// Given
+	fixture := newPairingFixture(t)
+	paired, err := fixture.pair(t)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fixture.repo.RevokeAgent(t.Context(), paired.AgentID); err != nil {
+		t.Fatal(err)
+	}
+	fixture.requests = nil
+	fixture.input = fixture.input.ForAgent(paired.AgentID)
+
+	// When
+	result, err := fixture.pair(t)
+
+	// Then
+	if err != nil {
+		t.Fatal(err)
+	}
+	agent, err := fixture.repo.Queries.GetAgent(t.Context(), paired.AgentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.AgentID != paired.AgentID || agent.Status != "active" {
+		t.Fatalf("result=%+v agent status=%q", result, agent.Status)
 	}
 }
 

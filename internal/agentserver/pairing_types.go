@@ -20,9 +20,10 @@ var (
 const PairingStatePaired = "paired"
 
 type PairingInput struct {
-	address     string
-	code        agentproto.PairingCode
-	fingerprint agenttls.Fingerprint
+	address         string
+	code            agentproto.PairingCode
+	fingerprint     agenttls.Fingerprint
+	expectedAgentID string
 }
 
 func ParsePairingInput(
@@ -58,6 +59,15 @@ func ParsePairingInput(
 }
 
 func (input PairingInput) Address() string { return input.address }
+
+func (input PairingInput) ForAgent(agentID string) PairingInput {
+	input.expectedAgentID = agentID
+	return input
+}
+
+func (input PairingInput) ExpectedAgentID() string {
+	return input.expectedAgentID
+}
 
 type PairingResult struct {
 	AgentID string `json:"agent_id"`

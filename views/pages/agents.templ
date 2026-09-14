@@ -190,7 +190,7 @@ templ AgentDetailPage(agent db.Agent, assigned []db.Environment, environments []
 					</dl>
 				</div>
 			</div>
-			if agent.Status == "pending" {
+			if agent.Status == "pending" || agent.Status == "revoked" {
 				<div class="card bg-base-200 shadow">
 					<div class="card-body">
 						<h2 class="card-title">Retry pairing</h2>
