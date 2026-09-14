@@ -61,21 +61,25 @@ async function accountContract(page, url, role, tokensVisible, artifactDir) {
 			const label = `${longDeployerName} (${role})`;
 			check(
 				await summary.evaluate((element, expected) =>
-					element.title === expected && element.getAttribute("aria-label") === expected,
-					label,
-				),
-				`long account name is not discoverable at ${width}px`,
+					element.title === expected &&
+					element.getAttribute("aria-label") === expected &&
+					element.textContent?.trim() === expected &&
+					element.scrollWidth <= element.clientWidth,
+				label,
+			),
+				`long account name is not fully visible at ${width}px`,
 			);
 		}
 		await summary.focus();
 		await page.keyboard.press("Enter");
 		const menu = summary.locator("xpath=following-sibling::ul");
-		if (width === 375) {
+		if (width === 375 && role === "deployer") {
 			check(
 				await summary.evaluate((element) =>
+					element.scrollWidth <= element.clientWidth &&
 					element.scrollHeight <= element.clientHeight,
 				),
-				`${role} account summary wraps at ${width}px`,
+				`${role} account summary fits horizontally and vertically at ${width}px`,
 			);
 		}
 		await check(await menu.locator('a[href="/settings/security"]').isVisible(), `${role} lacks Security`);
@@ -199,6 +203,9 @@ async function passkeyDeleteConfirmationContract(page, url, token, artifactDir) 
 			[1280, async () => dialog.click({ position: { x: 1, y: 1 } })],
 		]) {
 			await page.setViewportSize({ height: 900, width });
+			await dialog.evaluate((element) => {
+				element.replaceWith(element.cloneNode(true));
+			});
 			await opener.click();
 			await dialog.waitFor({ state: "visible" });
 			await page.screenshot({ path: join(artifactDir, `passkey-delete-dialog-${width}.png`) });
@@ -306,9 +313,30 @@ async function enrollPasskey(page, url, name, authenticator, artifactDir) {
 			credentialId: credentials[0].credentialId,
 		});
 	}
-	await page.locator("#passkey-name").fill(name);
-	await page.getByRole("button", { name: "Add passkey" }).click();
-	await page.getByRole("heading", { name: "Test your passkey" }).waitFor();
+	let registrationBegins = 0;
+	const countRegistrationBegin = (request) => {
+		if (
+			request.method() === "POST" &&
+			new URL(request.url()).pathname === "/settings/security/passkeys/begin"
+		) {
+			registrationBegins += 1;
+		}
+	};
+	page.on("request", countRegistrationBegin);
+	try {
+		await page.locator("[data-webauthn-register]").evaluate((form) => {
+			for (let replacement = 0; replacement < 3; replacement += 1) {
+				form.replaceWith(form.cloneNode(true));
+				form = document.querySelector("[data-webauthn-register]");
+			}
+		});
+		await page.locator("#passkey-name").fill(name);
+		await page.getByRole("button", { name: "Add passkey" }).click();
+		await page.getByRole("heading", { name: "Test your passkey" }).waitFor();
+		check(registrationBegins === 1, "replacement passkey form did not begin exactly once");
+	} finally {
+		page.off("request", countRegistrationBegin);
+	}
 	for (const width of [375, 768, 1280]) {
 		await page.setViewportSize({ height: 900, width });
 		await page.screenshot({ path: join(artifactDir, `passkey-test-${width}.png`) });
@@ -397,15 +425,45 @@ async function fallbackContract(browser, url, kind, errors) {
 	const page = await context.newPage();
 	monitorBrowserErrors(page, errors);
 	await passwordLogin(page, url, "deployer@mfa.test", passwords.deployer);
-	await page.getByRole("button", { name: "Use a passkey" }).click();
+	let assertionBegins = 0;
+	const countAssertionBegin = (request) => {
+		if (
+			request.method() === "POST" &&
+			new URL(request.url()).pathname === "/login/mfa/webauthn/begin"
+		) {
+			assertionBegins += 1;
+		}
+	};
+	page.on("request", countAssertionBegin);
+	if (kind === "cancel") {
+		await page.locator("[data-webauthn-authenticate]").evaluate((button) => {
+			for (let replacement = 0; replacement < 3; replacement += 1) {
+				button.replaceWith(button.cloneNode(true));
+				button = document.querySelector("[data-webauthn-authenticate]");
+			}
+			const target = document.createElement("span");
+			target.dataset.webauthnReplacementTarget = "";
+			target.textContent = button.textContent;
+			button.replaceChildren(target);
+		});
+		await page.locator("[data-webauthn-replacement-target]").click();
+	} else {
+		await page.getByRole("button", { name: "Use a passkey" }).click();
+	}
 	await page.locator("[data-webauthn-status]").waitFor();
 	check(new URL(page.url()).pathname === "/login/mfa", `${kind} fallback issued a session`);
+	check(
+		assertionBegins === (kind === "cancel" ? 1 : 0),
+		`${kind} fallback started the wrong number of ceremonies`,
+	);
+	page.off("request", countAssertionBegin);
 	await context.close();
 }
 
 async function run() {
 	const app = await startApp(root);
-	const artifactDir = join(root, ".omo", "evidence", "task-14-browser");
+	const artifactDir = process.env.DURPDEPLOY_MFA_ARTIFACT_DIR ||
+		join(root, ".omo", "evidence", "task-14-browser");
 	let browser;
 	try {
 		await mkdir(artifactDir, { recursive: true });
@@ -663,7 +721,15 @@ async function run() {
 		check(browserErrors.length === 0, `browser console errors: ${browserErrors.join(" | ")}`);
 		await writeFile(join(artifactDir, "trace.redacted.json"), JSON.stringify({
 			artifacts: "screenshots contain settings/navigation only; no trace network payload is retained",
-			checks: ["CDP virtual authenticator with UV", "passkey lifecycle", "role navigation", "admin reset bearer survival"],
+			checks: [
+				"CDP virtual authenticator with UV",
+				"three dynamic registration replacements with one ceremony",
+				"three dynamic assertion replacements with a nested click target and one ceremony",
+				"dynamic confirmation dialog replacement and cancellation",
+				"passkey lifecycle",
+				"role navigation",
+				"admin reset bearer survival",
+			],
 			redacted: true,
 		}, null, 2));
 		await viewerContext.close();

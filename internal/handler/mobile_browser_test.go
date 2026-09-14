@@ -67,6 +67,12 @@ func newMobileBrowserFixtures(t *testing.T) mobileBrowserFixtures {
 	project := mustCreateProject(t, ctx, repo)
 	environment := mustCreateEnvironment(t, ctx, repo)
 	lifecycle := mustCreateLifecycle(t, ctx, repo, environment)
+	if _, err := repo.Queries.CreateEnvironment(
+		ctx,
+		db.CreateEnvironmentParams{Name: "available lifecycle environment"},
+	); err != nil {
+		t.Fatalf("create available lifecycle environment: %v", err)
+	}
 	steps := mustCreateMobileSteps(t, ctx, repo, project)
 	release := mustCreateRelease(t, ctx, repo, project)
 	template, err := repo.Queries.CreateStepTemplate(

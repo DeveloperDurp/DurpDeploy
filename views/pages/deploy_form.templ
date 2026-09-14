@@ -30,7 +30,6 @@ templ DeployFormPage(project db.Project, releases []db.Release, selectedRelease 
 				{Label: "Deploy"},
 			})
 			@DeployFormContent(project, releases, selectedRelease, envs)
-			@DeployPageFormScript()
 		}
 	}
 }
@@ -54,6 +53,11 @@ templ DeployFormPage(project db.Project, releases []db.Release, selectedRelease 
 					method="post"
 					action={ fmt.Sprintf("/projects/%d/deploy", project.ID) }
 					class="space-y-4"
+					if selectedRelease != nil {
+						x-data={ fmt.Sprintf("deploymentForm({releaseID: '%d', environmentID: ''})", selectedRelease.ID) }
+					} else {
+						x-data="deploymentForm({releaseID: '', environmentID: ''})"
+					}
 				>
 				<div class="form-control">
 					<label class="label">
@@ -63,7 +67,8 @@ templ DeployFormPage(project db.Project, releases []db.Release, selectedRelease 
 						name="release_id"
 						class="select select-bordered"
 						required
-						onchange="window.location.href = '?release_id=' + this.value"
+						x-model="releaseID"
+						x-on:change="releaseChanged"
 					>
 						<option value="">Select release</option>
 						for _, rel := range releases {
@@ -95,11 +100,21 @@ templ DeployFormPage(project db.Project, releases []db.Release, selectedRelease 
 						<p class="text-gray-500 italic text-sm">No environments available.</p>
 					} else {
 						if hasAlreadyDeployedEnvs(envs) {
-							<div class="alert alert-warning text-sm mb-2">
+							<div
+								class="alert alert-warning text-sm mb-2"
+								x-cloak
+								x-show="environmentAlreadyDeployed"
+							>
 								<span>This version is already deployed to some environments. Re-deploying will run the steps again.</span>
 							</div>
 						}
- 					<select name="environment_id" class="select select-bordered" required onchange="toggleDeploySubmitLabel(this)">
+					<select
+						name="environment_id"
+						class="select select-bordered"
+						required
+						x-model="environmentID"
+						x-on:change="environmentChanged"
+					>
 							<option value="">Select env</option>
 							for _, e := range envs {
 								if e.State.Deployable {
@@ -111,14 +126,19 @@ templ DeployFormPage(project db.Project, releases []db.Release, selectedRelease 
 								}
 							}
 							if hasForceableEnvs(envs) {
-								<optgroup label="Needs force" data-gate-group="forceable">
+							<optgroup
+								label="Needs force"
+								data-gate-group="forceable"
+								x-bind:hidden="!forceVisible"
+							>
 									for _, e := range envs {
 										if !e.State.Deployable && e.State.Bypassable {
 											<option
 												value={ strconv.FormatInt(e.Environment.ID, 10) }
-												data-gate="forceable"
-												data-requires-approval={ strconv.FormatBool(e.State.RequiresApproval) }
-												title={ e.State.Reason }
+										data-gate="forceable"
+										data-requires-approval={ strconv.FormatBool(e.State.RequiresApproval) }
+										title={ e.State.Reason }
+										x-bind:disabled="!forceVisible"
 											>{ e.Environment.Name }</option>
 										}
 									}
@@ -148,10 +168,11 @@ templ DeployFormPage(project db.Project, releases []db.Release, selectedRelease 
 							value="true"
 							class="checkbox checkbox-sm"
 							data-force-toggle="deploy-form"
-							onchange="toggleDeployForce(this)"
+							x-on:change="forceChanged"
 						/>
 						<span class="label-text">Force deploy (bypass the promotion gate)</span>
 					</label>
+					<input type="hidden" name="force" value="true" :disabled="!forceVisible"/>
 				}
 				<div class="form-control">
 					<label class="label">
@@ -161,7 +182,7 @@ templ DeployFormPage(project db.Project, releases []db.Release, selectedRelease 
 				</div>
 			<div class="flex gap-2 justify-end">
 				<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost">Cancel</a>
-				<button type="submit" class="btn btn-primary" data-submit-label="deploy-form">Deploy</button>
+				<button type="submit" class="btn btn-primary" data-submit-label="deploy-form" x-text="submitLabel">Deploy</button>
 			</div>
 				</form>
 			</div>
@@ -191,56 +212,4 @@ func hasAlreadyDeployedEnvs(envs []AvailableEnv) bool {
 		}
 	}
 	return false
-}
-
-// DeployPageFormScript is the small JS that wires up the Force
-// checkbox on the deploy page. The releases page has its own copy of
-// the same logic; they could be merged into a shared util later.
-templ DeployPageFormScript() {
-	<script>
-		function toggleDeploySubmitLabel(select) {
-			var form = select.closest('form');
-			if (!form) return;
-			var btn = form.querySelector('button[data-submit-label="deploy-form"]');
-			if (!btn) return;
-			var opt = select.options[select.selectedIndex];
-			var requiresApproval = opt && opt.dataset.requiresApproval === 'true';
-			btn.textContent = requiresApproval ? 'Request Approval' : 'Deploy';
-		}
-		function toggleDeployForce(cb) {
-			var form = cb.closest('form');
-			if (!form) return;
-			var checked = cb.checked;
-			form.querySelectorAll('optgroup[data-gate-group="forceable"]').forEach(function(g) {
-				g.hidden = !checked;
-			});
-			form.querySelectorAll('option[data-gate="forceable"]').forEach(function(o) {
-				o.disabled = !checked;
-			});
-			var hidden = form.querySelector('input[name="force"][type="hidden"]');
-			if (checked && !hidden) {
-				hidden = document.createElement('input');
-				hidden.type = 'hidden';
-				hidden.name = 'force';
-				hidden.value = 'true';
-				form.appendChild(hidden);
-			} else if (!cb.checked && hidden) {
-				hidden.remove();
-			}
-		}
-		document.addEventListener('DOMContentLoaded', function() {
-			document.querySelectorAll('form[action$="/deploy"]').forEach(function(form) {
-				form.querySelectorAll('optgroup[data-gate-group="forceable"]').forEach(function(g) {
-					g.hidden = true;
-				});
-				form.querySelectorAll('option[data-gate="forceable"]').forEach(function(o) {
-					o.disabled = true;
-				});
-				var select = form.querySelector('select[name="environment_id"]');
-				if (select) {
-					toggleDeploySubmitLabel(select);
-				}
-			});
-		});
-	</script>
 }

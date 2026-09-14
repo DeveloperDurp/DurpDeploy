@@ -34,8 +34,8 @@ func TestMobile_RenderedHTML_renders_breakpoint_gated_variants_when_authenticate
 			name: "lifecycle stages",
 			path: fmt.Sprintf("/lifecycles/%d", fixture.lifecycle.ID),
 			patterns: []string{
-				desktopVariantPattern("table"),
-				mobileVariantPattern("ol"),
+				`(?s)<table[^>]*class="[^"]*hidden lg:table[^"]*"`,
+				`(?s)<ol[^>]*class="[^"]*lg:hidden[^"]*"`,
 				`data-mobile-lifecycle-stage-list`,
 				fmt.Sprintf(
 					`data-mobile-lifecycle-stage="%d"`,
@@ -105,7 +105,7 @@ func TestMobile_RenderedHTML_rendersLifecycleBackAndKeepsPermissionGoBack(
 ) {
 	// Given
 	fixture := newMobileStructuralFixture(t)
-	const lifecycleBack = `<a href="/lifecycles" class="btn btn-ghost btn-sm">Back</a>`
+	const lifecycleBack = `<a href="/lifecycles" class="btn btn-ghost btn-sm shrink-0">Back</a>`
 
 	// When
 	detailBody := fixture.getHTML(
@@ -127,7 +127,7 @@ func TestMobile_RenderedHTML_rendersLifecycleBackAndKeepsPermissionGoBack(
 	requireHTMLPattern(
 		t,
 		detailBody,
-		`(?s)<div class="flex justify-between items-start">\s*<div>.*?</div>\s*<div class="flex gap-2">.*?`+lifecycleBack,
+		`(?s)<div class="flex items-start justify-between gap-4">\s*<div>.*?</div>\s*`+lifecycleBack,
 	)
 	const lifecycleFormHeader = `(?s)<div class="flex justify-between items-center">\s*<h1 class="text-3xl font-bold">New Lifecycle</h1>\s*<div class="flex gap-2">\s*<a href="/lifecycles" class="btn btn-ghost btn-sm">Back</a>\s*</div>\s*</div>`
 	requireHTMLPattern(t, formBody, lifecycleFormHeader)
@@ -236,7 +236,10 @@ func TestMobile_RenderedHTML_preserves_disclosures_and_containment_when_authenti
 				disclosurePattern(
 					fmt.Sprintf("template-script-%d", fixture.template.ID),
 				),
-				`(?s)<div[^>]*id="templates-list"[^>]*>.*?<div[^>]*class="[^"]*overflow-x-auto[^"]*"[^>]*>\s*<table[^>]*class="[^"]*table[^"]*"`,
+				`(?s)<div[^>]*id="templates-list"[^>]*>.*?<table[^>]*class="[^"]*hidden lg:table[^"]*"`,
+				`(?s)<ol[^>]*class="[^"]*lg:hidden[^"]*"[^>]*data-mobile-template-list`,
+				`(?s)data-template-action="edit"[^>]*href="/templates/[0-9]+/edit".*?data-template-action="delete".*?data-template-action="history"[^>]*href="/templates/[0-9]+/history"`,
+				`(?s)<div class="flex flex-nowrap justify-start gap-2 whitespace-nowrap">`,
 			},
 			contents: []string{fixture.template.ScriptBody},
 		},
@@ -253,14 +256,15 @@ func TestMobile_RenderedHTML_preserves_disclosures_and_containment_when_authenti
 			path: "/admin/audit",
 			patterns: []string{
 				disclosurePattern("audit-details"),
+				`data-mobile-audit-list`,
 			},
 			contents: []string{fixture.auditDetails},
 		},
 		{
-			name: "project environment mini-table",
+			name: "project environment grid",
 			path: "/projects",
 			patterns: []string{
-				`(?s)<div[^>]*data-project-environment-scroll[^>]*>\s*<table[^>]*class="[^"]*table[^"]*"`,
+				`(?s)<div[^>]*data-project-environment-grid[^>]*>\s*<table[^>]*class="[^"]*table-fixed[^"]*w-full[^"]*"`,
 			},
 		},
 		{
@@ -295,5 +299,123 @@ func TestMobile_RenderedHTML_preserves_disclosures_and_containment_when_authenti
 				}
 			}
 		})
+	}
+}
+
+func TestSteps_RenderedHTML_uses_named_Alpine_state_when_authenticated(
+	t *testing.T,
+) {
+	// Given
+	fixture := newMobileStructuralFixture(t)
+	projectID := fixture.project.ID
+	stepID := fixture.step.ID
+
+	// When
+	pageBody := fixture.getHTML(
+		t,
+		fixture.admin,
+		fmt.Sprintf("/projects/%d/steps-page", projectID),
+	)
+	newBody := fixture.getHTML(
+		t,
+		fixture.admin,
+		fmt.Sprintf("/projects/%d/steps/new", projectID),
+	)
+	editBody := fixture.getHTML(
+		t,
+		fixture.admin,
+		fmt.Sprintf("/projects/%d/steps/%d/edit", projectID, stepID),
+	)
+	pickerBody := fixture.getHTML(
+		t,
+		fixture.admin,
+		fmt.Sprintf("/projects/%d/templates-picker", projectID),
+	)
+
+	// Then
+	for _, pattern := range []string{
+		`x-data="stepFormHost"`,
+		`x-on:step-form-add="handleEvent"`,
+		`x-on:step-form-cancel="handleEvent"`,
+		`x-on:step-form-edit="handleEvent"`,
+		`x-on:htmx:after-request.camel="afterRequest"`,
+		`x-ref="addStepForm"`,
+		fmt.Sprintf(`hx-get="/projects/%d/steps/new"`, projectID),
+		`hx-target="#add-step-form"`,
+		`hx-swap="innerHTML"`,
+		fmt.Sprintf(
+			`hx-target="#step-row-%d" hx-swap="outerHTML"`,
+			stepID,
+		),
+		fmt.Sprintf(
+			`data-mobile-step-editor="%d"[^>]*x-bind:hidden="!editing"`,
+			stepID,
+		),
+		`\$dispatch\('step-form-edit'\)`,
+	} {
+		requireHTMLPattern(t, pageBody, pattern)
+	}
+
+	for _, body := range []string{newBody, editBody} {
+		for _, pattern := range []string{
+			`x-data="stepEditor"`,
+			`x-ref="textarea"`,
+			`x-on:input="input"`,
+			`x-on:scroll="scroll"`,
+			`x-on:click="fullscreen"`,
+			`x-ref="modal"`,
+			`x-ref="modalTextarea"`,
+			`x-text="lineNumbers"`,
+			`x-model="script"`,
+			`\$dispatch\('step-form-cancel'\)`,
+		} {
+			requireHTMLPattern(t, body, pattern)
+		}
+		for _, forbidden := range []string{
+			"hx-on:",
+			"onclick=",
+			".innerHTML",
+			"fetch('/api/lint'",
+			`x-data="{`,
+		} {
+			if strings.Contains(body, forbidden) {
+				t.Errorf("step editor contains forbidden inline behavior %q", forbidden)
+			}
+		}
+	}
+
+	for _, pattern := range []string{
+		fmt.Sprintf(`hx-post="/projects/%d/steps"`, projectID),
+		`hx-target="#step-list"`,
+		`hx-swap="innerHTML"`,
+		`data-step-add-form`,
+	} {
+		requireHTMLPattern(t, newBody, pattern)
+	}
+	for _, pattern := range []string{
+		fmt.Sprintf(`hx-put="/projects/%d/steps/%d"`, projectID, stepID),
+		`hx-target="#step-list"`,
+		`hx-swap="innerHTML"`,
+		fixture.step.ScriptBody,
+	} {
+		requireHTMLPattern(t, editBody, pattern)
+	}
+	for _, pattern := range []string{
+		fmt.Sprintf(
+			`hx-post="/projects/%d/steps/from-template/%d"`,
+			projectID,
+			fixture.template.ID,
+		),
+		`hx-target="#step-list"`,
+		`hx-swap="innerHTML"`,
+	} {
+		requireHTMLPattern(t, pickerBody, pattern)
+	}
+	for _, body := range []string{pageBody, pickerBody} {
+		for _, forbidden := range []string{"hx-on:", "onclick=", "innerHTML ="} {
+			if strings.Contains(body, forbidden) {
+				t.Errorf("step host contains forbidden inline behavior %q", forbidden)
+			}
+		}
 	}
 }

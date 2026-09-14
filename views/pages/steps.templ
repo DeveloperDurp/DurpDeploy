@@ -24,7 +24,14 @@ templ StepsPage(project db.Project, steps []db.Step, currentPath string) {
 }
 
 templ StepsContent(project db.Project, steps []db.Step) {
-	<div class="space-y-6">
+	<div
+		class="space-y-6"
+		x-data="stepFormHost"
+		x-on:step-form-add="handleEvent"
+		x-on:step-form-cancel="handleEvent"
+		x-on:step-form-edit="handleEvent"
+		x-on:htmx:after-request.camel="afterRequest"
+	>
 		<div class="flex justify-between items-center">
 			<h1 class="text-3xl font-bold">Steps for { project.Name }</h1>
 			<div class="flex gap-2">
@@ -50,7 +57,6 @@ templ StepsContent(project db.Project, steps []db.Step) {
 						hx-get={ fmt.Sprintf("/projects/%d/steps/new", project.ID) }
 						hx-target="#add-step-form"
 						hx-swap="innerHTML"
-						hx-on::before-request="htmx.ajax('GET', this.getAttribute('hx-get').replace('/new', ''), {target: '#step-list', swap: 'innerHTML'})"
 					>
 						Add Step
 					</button>
@@ -64,7 +70,7 @@ templ StepsContent(project db.Project, steps []db.Step) {
 					</button>
 				</div>
 			}
-			<div id="add-step-form" class="mt-4"></div>
+			<div id="add-step-form" x-ref="addStepForm" class="mt-4"></div>
 			<div id="template-picker" class="mt-4"></div>
 		</div>
 	</div>

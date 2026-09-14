@@ -12,7 +12,7 @@ templ NotificationsPage(entries []db.ListNotificationEventsRow, currentPath stri
 	@layouts.Base("Notifications", currentPath) {
 		<div class="flex justify-between items-center mb-4">
 			<h1 class="text-3xl font-bold">Notifications</h1>
-			<a href="/admin/notifications/settings" class="btn btn-ghost btn-sm">Settings</a>
+			<a href="/admin/notifications/settings" class="btn btn-outline btn-sm">Settings</a>
 		</div>
 		<p class="text-sm text-gray-500 mb-4">
 			Recent deployment events published to the internal event bus, and
@@ -24,28 +24,33 @@ templ NotificationsPage(entries []db.ListNotificationEventsRow, currentPath stri
 				<p class="text-gray-400">No notification events yet.</p>
 			</div>
 		} else {
-			<div class="overflow-x-auto">
-				<table class="table table-zebra table-fixed w-full">
-					<thead>
-						<tr>
-							<th class="w-32 sm:w-44">Time</th>
-							<th class="hidden sm:table-cell w-32">Event</th>
-							<th class="hidden md:table-cell w-32">Project</th>
-							<th class="hidden md:table-cell w-32">Environment</th>
-							<th class="w-auto">Message</th>
-							<th class="w-24 sm:w-56">Delivery</th>
-						</tr>
-					</thead>
-					<tbody>
-						for _, entry := range entries {
-							@NotificationEventRow(entry)
-						}
-					</tbody>
+			<div x-data="{}">
+				<table class="hidden xl:table table-zebra table-fixed w-full">
+						<thead>
+							<tr>
+								<th class="w-32 sm:w-44">Time</th>
+								<th class="hidden sm:table-cell w-32">Event</th>
+								<th class="hidden md:table-cell w-32">Project</th>
+								<th class="hidden md:table-cell w-32">Environment</th>
+								<th class="w-auto">Message</th>
+								<th class="w-24 sm:w-56">Delivery</th>
+							</tr>
+						</thead>
+						<tbody>
+							for _, entry := range entries {
+								@NotificationEventRow(entry)
+							}
+						</tbody>
 				</table>
+				<ol class="space-y-3 xl:hidden" data-mobile-notification-list>
+					for _, entry := range entries {
+						@NotificationEventMobileRecord(entry)
+					}
+				</ol>
+				for _, entry := range entries {
+					@NotificationEventModal(entry)
+				}
 			</div>
-			for _, entry := range entries {
-				@NotificationEventModal(entry)
-			}
 		}
 	}
 }
@@ -54,7 +59,7 @@ templ NotificationEventRow(entry db.ListNotificationEventsRow) {
 	<tr
 		class="cursor-pointer hover"
 		data-modal-target={ fmt.Sprintf("notification_modal_%d", entry.ID) }
-		onclick="document.getElementById(this.dataset.modalTarget).showModal()"
+		x-on:click="$refs[$el.dataset.modalTarget].showModal()"
 	>
 		<td class="truncate text-xs sm:text-sm" title={ formatUnixTime(entry.CreatedAt) }>{ formatUnixTime(entry.CreatedAt) }</td>
 		<td class="hidden sm:table-cell truncate">{ entry.EventType }</td>
@@ -73,8 +78,8 @@ templ NotificationEventRow(entry db.ListNotificationEventsRow) {
 			}
 		</td>
 		<td class="truncate">{ entry.Message }</td>
-		<td class="truncate">
-			<div class="flex gap-1 overflow-hidden whitespace-nowrap">
+		<td class="align-top">
+			<div class="flex flex-wrap gap-1">
 				for _, r := range deliveryResults(entry.Results) {
 					<span class={ "badge badge-sm shrink-0 " + deliveryBadgeClass(r.status) }>
 						{ r.notifier }: { r.status }
@@ -85,8 +90,59 @@ templ NotificationEventRow(entry db.ListNotificationEventsRow) {
 	</tr>
 }
 
+templ NotificationEventMobileRecord(entry db.ListNotificationEventsRow) {
+	<li>
+		<button
+			type="button"
+			class="card bg-base-200 w-full p-4 text-left space-y-3"
+			data-modal-target={ fmt.Sprintf("notification_modal_%d", entry.ID) }
+			x-on:click="$refs[$el.dataset.modalTarget].showModal()"
+		>
+			<div class="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+				<div class="min-w-0">
+					<p class="font-medium break-words">{ entry.EventType }</p>
+					<p class="text-sm break-words">{ entry.Message }</p>
+				</div>
+				<time class="shrink-0 text-xs whitespace-nowrap">{ formatUnixTime(entry.CreatedAt) }</time>
+			</div>
+			<dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+				<dt class="text-gray-500">Project</dt>
+				<dd class="min-w-0 break-words">
+					if entry.ProjectName.Valid {
+						{ entry.ProjectName.String }
+					} else {
+						<span class="text-gray-500">-</span>
+					}
+				</dd>
+				<dt class="text-gray-500">Environment</dt>
+				<dd class="min-w-0 break-words">
+					if entry.EnvironmentName.Valid {
+						{ entry.EnvironmentName.String }
+					} else {
+						<span class="text-gray-500">-</span>
+					}
+				</dd>
+			</dl>
+			<div>
+				<p class="mb-1 text-sm text-gray-500">Delivery</p>
+				<div class="flex flex-wrap gap-1">
+					for _, result := range deliveryResults(entry.Results) {
+						<span class={ "badge badge-sm " + deliveryBadgeClass(result.status) }>
+							{ result.notifier }: { result.status }
+						</span>
+					}
+				</div>
+			</div>
+		</button>
+	</li>
+}
+
 templ NotificationEventModal(entry db.ListNotificationEventsRow) {
-	<dialog id={ fmt.Sprintf("notification_modal_%d", entry.ID) } class="modal">
+	<dialog
+		id={ fmt.Sprintf("notification_modal_%d", entry.ID) }
+		x-ref={ fmt.Sprintf("notification_modal_%d", entry.ID) }
+		class="modal"
+	>
 		<div class="modal-box w-11/12 max-w-2xl rounded-2xl shadow-2xl border border-base-300 bg-base-200">
 			<h3 class="text-lg font-bold mb-4">Notification Event</h3>
 			<dl class="grid grid-cols-1 sm:grid-cols-[8rem_1fr] gap-y-2 text-sm">

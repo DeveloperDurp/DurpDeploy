@@ -9,6 +9,11 @@ Alpine.data('toast', () => ({
 	message: '',
 	type: 'success',
 	timeout: null,
+	showToastListener: null,
+	makeToastListener: null,
+	beforeRequestListener: null,
+	afterRequestListener: null,
+	requestToasts: new WeakMap(),
 	show(msg, type = 'success') {
 		if (this.timeout) clearTimeout(this.timeout);
 		this.message = String(msg);
@@ -26,35 +31,60 @@ Alpine.data('toast', () => ({
 			'info': 'alert-info'
 		};
 		const alertTypeClass = classMap[this.type] || 'alert-success';
-		console.log('fullAlertClass called, type:', this.type, 'returning:', `alert shadow-lg ${alertTypeClass}`);
 		return `alert shadow-lg ${alertTypeClass}`;
 	},
 	init() {
-		const self = this;
-		
-		window.addEventListener('show-toast', (e) => {
+		this.showToastListener = (e) => {
 			const { message, type } = e.detail;
-			self.show(message, type);
-		});
-		
-		document.body.addEventListener('makeToast', (e) => {
+			this.show(message, type);
+		};
+		this.makeToastListener = (e) => {
 			const { level, message } = e.detail;
 			const type = level === 'danger' ? 'error' : level;
-			self.show(message, type);
-		});
-		
-		document.body.addEventListener('htmx:afterRequest', (e) => {
+			this.show(message, type);
+		};
+		this.beforeRequestListener = (e) => {
 			const trigger = e.detail.elt;
-			const successMsg = trigger.getAttribute('data-toast-success');
-			const errorMsg = trigger.getAttribute('data-toast-error');
+			this.requestToasts.set(e.detail.xhr, {
+				success: trigger.getAttribute('data-toast-success'),
+				error: trigger.getAttribute('data-toast-error'),
+			});
+		};
+		this.afterRequestListener = (e) => {
+			const messages = this.requestToasts.get(e.detail.xhr) || {};
+			this.requestToasts.delete(e.detail.xhr);
 			const status = e.detail.xhr.status;
 			
-			if (status >= 200 && status < 400 && successMsg) {
-				self.show(successMsg, 'success');
-			} else if (status >= 400 && errorMsg) {
-				self.show(errorMsg, 'error');
+			if (status >= 200 && status < 400 && messages.success) {
+				this.show(messages.success, 'success');
+			} else if (status >= 400 && messages.error) {
+				this.show(messages.error, 'error');
 			}
-		});
+		};
+		window.addEventListener('show-toast', this.showToastListener);
+		document.body.addEventListener('makeToast', this.makeToastListener);
+		document.body.addEventListener(
+			'htmx:beforeRequest',
+			this.beforeRequestListener,
+		);
+		document.body.addEventListener(
+			'htmx:afterRequest',
+			this.afterRequestListener,
+		);
+	},
+	destroy() {
+		if (this.timeout) clearTimeout(this.timeout);
+		window.removeEventListener('show-toast', this.showToastListener);
+		document.body.removeEventListener('makeToast', this.makeToastListener);
+		document.body.removeEventListener(
+			'htmx:beforeRequest',
+			this.beforeRequestListener,
+		);
+		document.body.removeEventListener(
+			'htmx:afterRequest',
+			this.afterRequestListener,
+		);
+		this.timeout = null;
 	}
 }));
 
@@ -93,6 +123,200 @@ Alpine.data('navbar', () => ({
 			!menus.some((other) => other !== candidate && candidate.contains(other)),
 		);
 		if (menu) this.closeMenu(menu);
+	},
+}));
+
+Alpine.data('deploymentForm', ({ releaseID, environmentID }) => ({
+	releaseID,
+	environmentID,
+	submitLabel: 'Deploy',
+	environmentAlreadyDeployed: false,
+	forceVisible: false,
+	releaseChanged() {
+		window.location.href = `?release_id=${this.releaseID}`;
+	},
+	environmentChanged(event) {
+		this.environmentID = event.currentTarget.value;
+		const option = event.currentTarget.selectedOptions[0];
+		this.environmentAlreadyDeployed = option?.dataset.gate === 'already-deployed';
+		this.submitLabel = option?.dataset.requiresApproval === 'true'
+			? 'Request Approval'
+			: 'Deploy';
+	},
+	forceChanged(event) {
+		this.forceVisible = event.currentTarget.checked;
+	},
+}));
+
+Alpine.data('releaseDeployRow', () => ({
+	forceChecked: false,
+}));
+
+Alpine.data('stepFormHost', () => ({
+	afterRequest(event) {
+		const source = event.detail?.elt;
+		if (!(source instanceof Element) || !event.detail.successful) return;
+		const form = source.closest('form[data-step-add-form]');
+		if (!(form instanceof HTMLFormElement)) return;
+		this.cancel(form);
+	},
+	add(event) {
+		if (event.detail?.listURL) {
+			htmx.ajax('GET', event.detail.listURL, {
+				target: '#step-list',
+				swap: 'innerHTML',
+			});
+		}
+	},
+	cancel(form) {
+		const host = this.$refs.addStepForm;
+		const target = form || host?.querySelector('form');
+		if (!(target instanceof HTMLFormElement)) return;
+		const editor = target.querySelector('[x-data="stepEditor"]');
+		if (editor) Alpine.destroyTree(editor);
+		if (host?.contains(target)) host.replaceChildren();
+	},
+	// step-form-add, step-form-cancel, and step-form-edit are the host contract.
+	handleEvent(event) {
+		switch (event.type) {
+			case 'step-form-add':
+				this.add(event);
+				break;
+			case 'step-form-cancel':
+			case 'step-form-edit':
+				this.cancel(event.target.closest('form'));
+				break;
+		}
+	},
+}));
+
+Alpine.data('stepEditor', () => ({
+	script: '',
+	diagnostics: [],
+	lineNumbers: '1',
+	modalOpen: false,
+	timer: null,
+	request: null,
+	destroyed: false,
+	init() {
+		this.input({ currentTarget: this.$refs.textarea });
+	},
+	input(event) {
+		if (this.destroyed) return;
+		this.script = event.currentTarget.value;
+		const count = this.script.split('\n').length;
+		this.lineNumbers = Array.from(
+			{ length: count },
+			(_, index) => index + 1,
+		).join('\n');
+		if (this.timer) clearTimeout(this.timer);
+		if (this.request) this.request.abort();
+		this.timer = setTimeout(async () => {
+			this.timer = null;
+			const request = new AbortController();
+			this.request = request;
+			try {
+				const response = await fetch('/api/lint', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ script: this.script }),
+					signal: request.signal,
+				});
+				const data = await response.json();
+				if (!this.destroyed && this.request === request) {
+					this.diagnostics = data.diagnostics || [];
+				}
+			} catch (error) {
+				if (!this.destroyed && error.name !== 'AbortError') {
+					this.diagnostics = [];
+				}
+			} finally {
+				if (this.request === request) this.request = null;
+			}
+		}, 300);
+	},
+	scroll(event) {
+		const gutter = event.currentTarget === this.$refs.modalTextarea
+			? this.$refs.modalGutter
+			: this.$refs.gutter;
+		gutter.scrollTop = event.currentTarget.scrollTop;
+	},
+	fullscreen() {
+		this.modalOpen = true;
+		this.$nextTick(() => {
+			this.$refs.modal.showModal();
+			this.$refs.modalTextarea.focus();
+		});
+	},
+	destroy() {
+		this.destroyed = true;
+		if (this.timer) clearTimeout(this.timer);
+		if (this.request) this.request.abort();
+		this.timer = null;
+		this.request = null;
+	},
+}));
+
+Alpine.data('variablesPage', () => ({
+	afterSwap: null,
+	override(event) {
+		const button = event.target.closest('[data-override-for]');
+		if (!button) return;
+		const form = this.$el.querySelector('form');
+		if (!form) return;
+		const nameInput = form.querySelector('input[name="name"]');
+		const environment = form.querySelector('select[name="environment_id"]');
+		if (nameInput) nameInput.value = button.dataset.overrideFor;
+		if (environment) environment.focus();
+		form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+	},
+	focusAfterSwap(event) {
+		const target = event.detail?.target;
+		if (!(target instanceof Element) || !this.$el.contains(target)) return;
+		const input = target.querySelector('input[name="name"]');
+		if (input) input.focus();
+	},
+	init() {
+		this.afterSwap = this.focusAfterSwap.bind(this);
+		document.body.addEventListener('htmx:afterSwap', this.afterSwap);
+	},
+	destroy() {
+		document.body.removeEventListener('htmx:afterSwap', this.afterSwap);
+		this.afterSwap = null;
+	},
+}));
+
+Alpine.data('deploymentStream', ({ url }) => ({
+	url,
+	source: null,
+	started: false,
+	destroyed: false,
+	init() {
+		if (this.started) return;
+		this.started = true;
+		this.source = new EventSource(this.url);
+		this.source.onmessage = (event) => this.message(event);
+	},
+	message(event) {
+		if (this.destroyed) return;
+		this.$refs.noLogs?.remove();
+		this.$refs.logs.textContent += `${event.data}\n`;
+	},
+	// 'htmx:afterSwap' supplies the replacement #status-badge to status().
+	status(event) {
+		const target = event.target instanceof Element
+			? event.target
+			: event.detail?.target;
+		if (!(target instanceof Element) || target.id !== 'status-badge') return;
+		const status = target.textContent.trim();
+		if (!['succeeded', 'failed', 'cancelled'].includes(status)) return;
+		if (this.source) this.source.close();
+		this.source = null;
+	},
+	destroy() {
+		this.destroyed = true;
+		if (this.source) this.source.close();
+		this.source = null;
 	},
 }));
 
@@ -226,9 +450,8 @@ async function followWebAuthnResponse(response, element) {
 	webauthnStatus(element, 'Passkey added.', false);
 }
 
-async function registerPasskey(event) {
+async function registerPasskey(event, form) {
 	event.preventDefault();
-	const form = event.currentTarget;
 	if (!window.PublicKeyCredential || !navigator.credentials) {
 		webauthnStatus(form, webauthnError(), true);
 		return;
@@ -260,9 +483,8 @@ async function registerPasskey(event) {
 	}
 }
 
-async function authenticatePasskey(event) {
+async function authenticatePasskey(event, button) {
 	event.preventDefault();
-	const button = event.currentTarget;
 	if (!window.PublicKeyCredential || !navigator.credentials) {
 		webauthnStatus(button, webauthnError(), true);
 		return;
@@ -296,11 +518,19 @@ async function authenticatePasskey(event) {
 	}
 }
 
-document.querySelectorAll('[data-webauthn-register]').forEach((form) => {
-	form.addEventListener('submit', registerPasskey);
+document.addEventListener('submit', (event) => {
+	const target = event.target;
+	if (!(target instanceof Element)) return;
+	const form = target.closest('[data-webauthn-register]');
+	if (!(form instanceof HTMLFormElement)) return;
+	registerPasskey(event, form);
 });
-document.querySelectorAll('[data-webauthn-authenticate]').forEach((button) => {
-	button.addEventListener('click', authenticatePasskey);
+document.addEventListener('click', (event) => {
+	const target = event.target;
+	if (!(target instanceof Element)) return;
+	const button = target.closest('[data-webauthn-authenticate]');
+	if (!(button instanceof HTMLButtonElement)) return;
+	authenticatePasskey(event, button);
 });
 
 const mfaResetOpeners = new WeakMap();
@@ -424,26 +654,14 @@ document.addEventListener('close', (event) => {
 	if (opener?.isConnected) opener.focus();
 }, true);
 
-document.querySelectorAll('[data-mfa-reset-confirmation-dialog]').forEach((dialog) => {
-	dialog.addEventListener('cancel', (event) => {
-		event.preventDefault();
-		if (dialog.open) dialog.close();
-	});
-});
-
-document.querySelectorAll('[data-passkey-delete-confirmation-dialog]').forEach((dialog) => {
-	dialog.addEventListener('cancel', (event) => {
-		event.preventDefault();
-		if (dialog.open) dialog.close();
-	});
-});
-
-document.querySelectorAll('[data-security-disable-confirmation-dialog]').forEach((dialog) => {
-	dialog.addEventListener('cancel', (event) => {
-		event.preventDefault();
-		if (dialog.open) dialog.close();
-	});
-});
+document.addEventListener('cancel', (event) => {
+	const target = event.target;
+	if (!(target instanceof Element)) return;
+	const dialog = target.closest('[data-mfa-reset-confirmation-dialog], [data-passkey-delete-confirmation-dialog], [data-security-disable-confirmation-dialog]');
+	if (!(dialog instanceof HTMLDialogElement)) return;
+	event.preventDefault();
+	if (dialog.open) dialog.close();
+}, true);
 
 document.addEventListener('click', (event) => {
 	const dialog = event.target;

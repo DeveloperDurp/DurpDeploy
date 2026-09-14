@@ -47,7 +47,7 @@ templ TemplateHistoryFragment(
 		if len(versions) == 0 {
 			<p class="italic text-gray-500">No history yet.</p>
 		} else {
-			<table class="table table-zebra table-fixed w-full">
+			<table class="hidden lg:table table-zebra table-fixed w-full">
 				<thead>
 					<tr>
 						<th class="w-20">Version</th>
@@ -62,8 +62,34 @@ templ TemplateHistoryFragment(
 					}
 				</tbody>
 			</table>
+			<ol class="space-y-3 lg:hidden" data-mobile-template-history-list>
+				for i, v := range versions {
+					@TemplateHistoryMobileRecord(v, i == 0)
+				}
+			</ol>
 		}
 	</div>
+}
+
+templ TemplateHistoryMobileRecord(v db.StepTemplateVersion, isCurrent bool) {
+	<li class="card bg-base-200 p-4 space-y-3">
+		<div class="flex items-start justify-between gap-3">
+			<div class="min-w-0">
+				<p class="font-medium">v{ strconv.FormatInt(v.VersionNumber, 10) }</p>
+				<time class="text-sm text-gray-400 whitespace-nowrap">
+					{ time.Unix(v.CreatedAt, 0).UTC().Format("2006-01-02 15:04") }
+				</time>
+			</div>
+			if isCurrent {
+				<span class="badge badge-primary shrink-0">current</span>
+			}
+		</div>
+		<p class="break-words">{ v.Name }</p>
+		<details class="text-sm" data-disclosure="template-history-script-mobile">
+			<summary class="cursor-pointer text-primary">View full script</summary>
+			<pre class="mt-2 max-w-full overflow-x-auto whitespace-pre-wrap break-words rounded bg-base-100 p-3 text-xs"><code>{ v.ScriptBody }</code></pre>
+		</details>
+	</li>
 }
 
 templ TemplateHistoryRow(

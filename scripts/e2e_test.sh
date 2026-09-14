@@ -6,6 +6,7 @@ umask 077
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 ROOT_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
 CLIENT_ONLY=${DURPDEPLOY_E2E_CLIENT_ONLY:-0}
+PORT=${DURPDEPLOY_E2E_PORT:-8080}
 TMP=$(mktemp -d)
 COOKIES="$TMP/admin-cookies"
 SERVER_PID=""
@@ -31,7 +32,11 @@ if [[ "$CLIENT_ONLY" == "1" ]]; then
         exit 1
     fi
 else
-    BASE="http://localhost:8080"
+    if [[ ! "$PORT" =~ ^[0-9]+$ ]] || ((PORT < 1 || PORT > 65535)); then
+        echo "FAIL: DURPDEPLOY_E2E_PORT must be an integer from 1 to 65535" >&2
+        exit 2
+    fi
+    BASE="http://localhost:$PORT"
     cd "$ROOT_DIR"
 
     DB_DSN="$TMP/durpdeploy.db?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)"
@@ -54,7 +59,7 @@ else
 
     # Start the server. The migrations it would normally run are a no-op
     # because the admin CLI just created the schema.
-    DURPDEPLOY_ADDR=127.0.0.1:8080 \
+    DURPDEPLOY_ADDR="127.0.0.1:$PORT" \
         DURPDEPLOY_DB="$DB_DSN" \
         DURPDEPLOY_URL="$BASE" \
         "$TMP/durpdeploy" >"$TMP/server.log" 2>&1 &
@@ -381,7 +386,7 @@ echo "Env IDs: dev=$LC_DEV_ID test=$LC_TEST_ID prod=$LC_PROD_ID out=$LC_OUT_ID"
 LC_LIFECYCLE_NAME="LC-$LC_TS"
 CODE=$(curl_silent -X POST -d "name=$LC_LIFECYCLE_NAME&csrf_token=$CSRF" "$BASE/lifecycles")
 [[ "$CODE" == "303" ]] || { echo "FAIL: create lifecycle got $CODE"; exit 1; }
-LC_LIFECYCLE_ID=$(curl_body "$BASE/lifecycles" | python3 -c "import sys,re; html=sys.stdin.read(); m=re.search(r'<a href=\"/lifecycles/(\d+)\"[^>]*>$LC_LIFECYCLE_NAME</a>', html); print(m.group(1) if m else '')")
+LC_LIFECYCLE_ID=$(curl_body "$BASE/lifecycles" | grep -oP 'href="/lifecycles/\K[0-9]+(?=" class="btn btn-sm btn-ghost">Edit)' | sort -n | tail -1)
 echo "Lifecycle ID: $LC_LIFECYCLE_ID"
 
 for EID in "$LC_DEV_ID" "$LC_TEST_ID" "$LC_PROD_ID"; do

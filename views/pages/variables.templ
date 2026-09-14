@@ -53,7 +53,6 @@ templ VariablesPage(project db.Project, variables []db.Variable, environments []
 			{Label: "Variables"},
 		})
 		@VariablesContent(project, variables, environments, errorMsg)
-		@VariablesPageScript()
 	}
 }
 
@@ -70,7 +69,12 @@ templ VariablesContent(project db.Project, variables []db.Variable, environments
 }
 
 templ VariablesFragment(project db.Project, variables []db.Variable, environments []db.Environment, errorMsg string) {
-	<div id="variables-content">
+	<div
+		id="variables-content"
+		x-data="variablesPage"
+		x-init="focusAfterSwap({ detail: { target: $root } })"
+		x-on:click="override($event)"
+	>
 		if CanWrite(ctx) {
 			@VariableForm(project.ID, environments, errorMsg)
 		}
@@ -424,26 +428,4 @@ templ VariableEditRow(projectID int64, variable db.Variable, environments []db.E
 			<button type="submit" form={ fmt.Sprintf("variable-edit-form-%d", variable.ID) } class="btn btn-primary btn-sm whitespace-nowrap">Save</button>
 		</td>
 	</tr>
-}
-
-templ VariablesPageScript() {
-	<script>
-		document.addEventListener('click', function(e) {
-			var btn = e.target.closest('[data-override-for]');
-			if (!btn) return;
-			var name = btn.getAttribute('data-override-for');
-			var form = document.querySelector('#variables-content form');
-			if (!form) return;
-			var nameInput = form.querySelector('input[name="name"]');
-			var envSelect = form.querySelector('select[name="environment_id"]');
-			if (nameInput) {
-				nameInput.value = name;
-				nameInput.focus();
-			}
-			if (envSelect) {
-				envSelect.focus();
-			}
-			form.scrollIntoView({behavior: 'smooth', block: 'start'});
-		});
-	</script>
 }

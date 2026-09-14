@@ -726,6 +726,155 @@ func TestNewDeploymentPage_RendersForm(t *testing.T) {
 	)
 }
 
+func TestDeploymentPageUsesAlpineOwnedState(t *testing.T) {
+	// Given
+	h := newHarness(t)
+	hc := h.setupProjectWithLifecycle(
+		t,
+		[]string{"Alpine-Dev", "Alpine-Staging", "Alpine-Prod"},
+	)
+	release := hc.makeRelease(t, "alpine-1.0.0", "exit 0")
+	_, err := h.repo.Queries.CreateDeployment(
+		context.Background(),
+		db.CreateDeploymentParams{
+			ReleaseID:     release.ID,
+			EnvironmentID: hc.envs["Alpine-Dev"].ID,
+			Status:        "succeeded",
+		},
+	)
+	if err != nil {
+		t.Fatalf("create successful deployment: %v", err)
+	}
+
+	// When
+	resp, err := h.authedClient().Get(
+		fmt.Sprintf(
+			"%s/projects/%d/deploy?release_id=%d",
+			h.server.URL,
+			hc.project.ID,
+			release.ID,
+		),
+	)
+	if err != nil {
+		t.Fatalf("GET deploy page: %v", err)
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read deploy page: %v", err)
+	}
+
+	// Then
+	markup := string(body)
+	for _, marker := range []string{
+		fmt.Sprintf(
+			`x-data="deploymentForm({releaseID: &#39;%d&#39;, environmentID: &#39;&#39;})"`,
+			release.ID,
+		),
+		`x-model="releaseID"`,
+		`x-on:change="releaseChanged"`,
+		`x-model="environmentID"`,
+		`x-on:change="environmentChanged"`,
+		`x-show="environmentAlreadyDeployed"`,
+		`x-on:change="forceChanged"`,
+		`x-bind:hidden="!forceVisible"`,
+		`x-bind:disabled="!forceVisible"`,
+		`<input type="hidden" name="force" value="true" :disabled="!forceVisible">`,
+		`x-text="submitLabel"`,
+	} {
+		if !strings.Contains(markup, marker) {
+			t.Errorf("deploy page missing Alpine marker %q", marker)
+		}
+	}
+	for _, legacy := range []string{
+		"toggleDeployForce",
+		"toggleDeploySubmitLabel",
+		"DeployPageFormScript",
+		` onchange=`,
+	} {
+		if strings.Contains(markup, legacy) {
+			t.Errorf("deploy page retained legacy marker %q", legacy)
+		}
+	}
+}
+
+func TestReleaseRowsUseAlpineOwnedState(t *testing.T) {
+	// Given
+	h := newHarness(t)
+	hc := h.setupProjectWithLifecycle(t, []string{"Row-Dev", "Row-Prod"})
+	_ = hc.makeRelease(t, "row-1.0.0", "exit 0")
+
+	// When
+	resp, err := h.authedClient().Get(
+		fmt.Sprintf("%s/projects/%d/releases", h.server.URL, hc.project.ID),
+	)
+	if err != nil {
+		t.Fatalf("GET releases page: %v", err)
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read releases page: %v", err)
+	}
+
+	// Then
+	markup := string(body)
+	for _, marker := range []string{
+		`x-data="releaseDeployRow()"`,
+		`x-model="forceChecked"`,
+		`x-bind:hidden="!forceChecked"`,
+		`x-bind:disabled="!forceChecked"`,
+		`<input type="hidden" name="force" value="true" :disabled="!forceChecked">`,
+	} {
+		if !strings.Contains(markup, marker) {
+			t.Errorf("release row missing Alpine marker %q", marker)
+		}
+	}
+	if strings.Contains(markup, "toggleDeployForce") {
+		t.Error("release row still calls undefined toggleDeployForce")
+	}
+	if strings.Contains(markup, ` onchange=`) {
+		t.Error("release row retained an ordinary onchange handler")
+	}
+}
+
+func TestReleaseRefreshUsesAlpineCompatibleHTMXConfirm(t *testing.T) {
+	// Given
+	h := newHarness(t)
+	hc := h.setupProjectWithLifecycle(t, []string{"Refresh"})
+	release := hc.makeRelease(t, "refresh-1.0.0", "exit 0")
+
+	// When
+	resp, err := h.authedClient().Get(
+		fmt.Sprintf(
+			"%s/projects/%d/releases/%d",
+			h.server.URL,
+			hc.project.ID,
+			release.ID,
+		),
+	)
+	if err != nil {
+		t.Fatalf("GET release detail: %v", err)
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read release detail: %v", err)
+	}
+
+	// Then
+	markup := string(body)
+	if !strings.Contains(
+		markup,
+		`hx-confirm="Refresh this release with the latest steps and variables?"`,
+	) {
+		t.Error("release refresh is missing native HTMX confirmation")
+	}
+	if strings.Contains(markup, `onclick="return confirm(`) {
+		t.Error("release refresh retained an ordinary onclick confirmation")
+	}
+}
+
 func TestReleaseAndDeploymentPages_RenderBackControls(t *testing.T) {
 	// Given
 	h := newHarness(t)

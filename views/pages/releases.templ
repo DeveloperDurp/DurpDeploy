@@ -140,7 +140,7 @@ templ ReleaseRow(projectID int64, rv ReleaseView) {
 			if len(rv.Envs) == 0 {
 				<span class="text-gray-500 italic text-sm">No envs available</span>
 			} else if CanWrite(ctx) {
-				<form method="post" action={ fmt.Sprintf("/projects/%d/deploy", projectID) } class="flex flex-wrap gap-2 items-center">
+				<form method="post" action={ fmt.Sprintf("/projects/%d/deploy", projectID) } class="flex flex-wrap gap-2 items-center" x-data="releaseDeployRow()">
 					<input type="hidden" name="release_id" value={ strconv.FormatInt(rv.Release.ID, 10) }/>
 					<input type="hidden" name="note" value=""/>
 					<select name="environment_id" class="select select-bordered select-xs" required>
@@ -151,20 +151,21 @@ templ ReleaseRow(projectID int64, rv ReleaseView) {
 							}
 						}
 						if hasForceableEnvs(rv.Envs) {
-							<optgroup label="Needs force" data-gate-group="forceable">
-								for _, e := range rv.Envs {
-									if !e.State.Deployable && e.State.Bypassable {
-										<option value={ strconv.FormatInt(e.Environment.ID, 10) } data-gate="forceable" title={ e.State.Reason }>{ e.Environment.Name }</option>
-									}
+						<optgroup label="Needs force" data-gate-group="forceable" x-bind:hidden="!forceChecked">
+							for _, e := range rv.Envs {
+								if !e.State.Deployable && e.State.Bypassable {
+									<option value={ strconv.FormatInt(e.Environment.ID, 10) } data-gate="forceable" title={ e.State.Reason } x-bind:disabled="!forceChecked">{ e.Environment.Name }</option>
+								}
 								}
 							</optgroup>
 						}
 					</select>
 					if hasForceableEnvs(rv.Envs) {
 						<label class="label cursor-pointer gap-1">
-							<input type="checkbox" name="force_check" value="true" class="checkbox checkbox-xs" onchange="toggleDeployForce(this)"/>
+							<input type="checkbox" name="force_check" value="true" class="checkbox checkbox-xs" x-model="forceChecked"/>
 							<span class="label-text text-xs">Force</span>
 						</label>
+						<input type="hidden" name="force" value="true" :disabled="!forceChecked"/>
 					}
 					<button type="submit" class="btn btn-primary btn-xs">Deploy</button>
 				</form>
@@ -196,8 +197,13 @@ templ ReleaseDetail(project db.Project, release db.Release, variables []db.Relea
 			</div>
 			<div class="flex gap-2">
 				if CanWrite(ctx) {
-					<form method="post" action={ fmt.Sprintf("/projects/%d/releases/%d/refresh", project.ID, release.ID) }>
-						<button type="submit" class="btn btn-outline btn-warning btn-sm" onclick="return confirm('Refresh this release with the latest steps and variables?')">Refresh</button>
+					<form
+						method="post"
+						action={ fmt.Sprintf("/projects/%d/releases/%d/refresh", project.ID, release.ID) }
+						hx-boost="true"
+						hx-confirm="Refresh this release with the latest steps and variables?"
+					>
+						<button type="submit" class="btn btn-outline btn-warning btn-sm">Refresh</button>
 					</form>
 				}
 				<a href={ fmt.Sprintf("/projects/%d/releases", project.ID) } class="btn btn-ghost btn-sm">Back</a>
