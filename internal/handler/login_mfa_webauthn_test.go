@@ -124,6 +124,41 @@ func TestLogin_WebAuthnCompletesPendingChallenge(t *testing.T) {
 	}
 }
 
+func TestLogin_WebAuthnAndDialogBindingsAreDelegated(t *testing.T) {
+	source, err := os.ReadFile(
+		filepath.Join("..", "..", "static", "js", "app.js"),
+	)
+	if err != nil {
+		t.Fatalf("read frontend source: %v", err)
+	}
+	content := string(source)
+	for _, initialBinding := range []string{
+		`document.querySelectorAll('[data-webauthn-register]')`,
+		`document.querySelectorAll('[data-webauthn-authenticate]')`,
+		`document.querySelectorAll('[data-mfa-reset-confirmation-dialog]')`,
+		`document.querySelectorAll('[data-passkey-delete-confirmation-dialog]')`,
+		`document.querySelectorAll('[data-security-disable-confirmation-dialog]')`,
+	} {
+		if strings.Contains(content, initialBinding) {
+			t.Errorf("frontend retains initial-load binding %q", initialBinding)
+		}
+	}
+	for _, delegatedBinding := range []string{
+		`target.closest('[data-webauthn-register]')`,
+		`target.closest('[data-webauthn-authenticate]')`,
+		`target.closest('[data-mfa-reset-confirmation-dialog], ` +
+			`[data-passkey-delete-confirmation-dialog], ` +
+			`[data-security-disable-confirmation-dialog]')`,
+	} {
+		if !strings.Contains(content, delegatedBinding) {
+			t.Errorf(
+				"frontend is missing delegated binding %q",
+				delegatedBinding,
+			)
+		}
+	}
+}
+
 func officialUVAssertion(t *testing.T) ([]byte, []byte, []byte) {
 	t.Helper()
 	credentialID := officialUVCredentialID(t)

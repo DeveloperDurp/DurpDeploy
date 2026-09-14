@@ -83,7 +83,7 @@ func TestMobile_RenderedHTML_includes_responsive_classes_when_authenticated(
 			name: "home navbar",
 			path: "/",
 			patterns: []string{
-				`(?s)<details[^>]*class="[^"]*md:hidden[^"]*"`,
+				`(?s)<details[^>]*class="[^"]*xl:hidden[^"]*"`,
 				responsiveHeaderPattern(mdTableCell),
 				responsiveCellPattern(mdTableCell),
 			},

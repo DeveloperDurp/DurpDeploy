@@ -40,7 +40,8 @@ body text uses the default size; supporting text uses `text-sm`; metadata uses
 Tailwind's default 4px scale is the spacing system: `gap-2`/`p-2` for compact
 menu groups, `gap-4`/`p-4` for controls, `mb-4` for title separation, and
 `mb-6`/`space-y-6` for page sections. The main shell is
-`w-full px-4 sm:px-6 lg:px-8`; navigation changes at `md`; responsive tables
+`w-full px-4 sm:px-6 lg:px-8`; navigation changes at `xl` so long account names
+do not collide with primary links; responsive tables
 keep `overflow-x-auto` and `table table-zebra table-fixed w-full`.
 
 ## 5. Components

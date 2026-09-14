@@ -378,10 +378,16 @@ templ DeploymentDetail(project db.Project, release db.Release, environment db.En
 				</tbody>
 			</table>
 		</div>
-		<div class="card bg-base-200 p-4">
+		<div
+			class="card bg-base-200 p-4"
+			if !isTerminalStatus(deployment.Status) {
+				x-data={ fmt.Sprintf("deploymentStream({ url: '/deployments/%d/logs/stream' })", deployment.ID) }
+				x-on:htmx:after-swap.camel.window="status($event)"
+			}
+		>
 			<h2 class="text-xl font-bold mb-4">Logs</h2>
 			if len(logs) == 0 {
-				<p id="no-logs-message" class="text-gray-500 italic">No logs yet.</p>
+				<p id="no-logs-message" x-ref="noLogs" class="text-gray-500 italic">No logs yet.</p>
 			} else {
 				<div class="space-y-1">
 					for _, log := range logs {
@@ -395,18 +401,7 @@ templ DeploymentDetail(project db.Project, release db.Release, environment db.En
 					}
 				</div>
 			}
-			<pre id="log-container" data-deployment-id={ strconv.FormatInt(deployment.ID, 10) } class="font-mono text-sm mt-4 whitespace-pre-wrap"></pre>
-			<script>
-				const deploymentID = document.getElementById('log-container').dataset.deploymentId;
-				const es = new EventSource('/deployments/' + deploymentID + '/logs/stream');
-				es.onmessage = function(e) {
-					const noLogsMsg = document.getElementById('no-logs-message');
-					if (noLogsMsg) {
-						noLogsMsg.remove();
-					}
-					document.getElementById('log-container').textContent += e.data + '\n';
-				};
-			</script>
+			<pre id="log-container" x-ref="logs" class="font-mono text-sm mt-4 whitespace-pre-wrap"></pre>
 		</div>
 	</div>
 }
