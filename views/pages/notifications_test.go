@@ -48,3 +48,34 @@ func TestNotificationsPageUsesAlpineDialogTrigger(t *testing.T) {
 		t.Fatal("notifications page still performs a global ID lookup")
 	}
 }
+
+func TestNotificationsPageKeepsDeliveryStatusesReadable(t *testing.T) {
+	// Given
+	var output bytes.Buffer
+	entries := []db.ListNotificationEventsRow{{
+		ID:      42,
+		Message: "Deployment completed",
+		Results: `{"email":"ok","slack":"ok"}`,
+	}}
+
+	// When
+	err := NotificationsPage(entries, "/admin/notifications", nil).
+		Render(context.Background(), &output)
+	if err != nil {
+		t.Fatalf("render notifications page: %v", err)
+	}
+	rendered := output.String()
+
+	// Then
+	for _, marker := range []string{
+		`class="btn btn-outline btn-sm">Settings</a>`,
+		`class="hidden xl:table table-zebra table-fixed w-full"`,
+		`data-mobile-notification-list`,
+		`class="space-y-3 xl:hidden"`,
+		`class="flex flex-wrap gap-1"`,
+	} {
+		if !strings.Contains(rendered, marker) {
+			t.Errorf("responsive notification layout missing %q", marker)
+		}
+	}
+}
