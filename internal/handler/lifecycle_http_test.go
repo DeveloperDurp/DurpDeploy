@@ -92,8 +92,8 @@ func TestLifecycle_Save_updates_lifecycle(t *testing.T) {
 	if response.StatusCode != http.StatusSeeOther {
 		t.Fatalf("status = %d, want 303", response.StatusCode)
 	}
-	if location := response.Header.Get("Location"); location != path {
-		t.Errorf("Location = %q, want %q", location, path)
+	if location := response.Header.Get("Location"); location != "/lifecycles" {
+		t.Errorf("Location = %q, want %q", location, "/lifecycles")
 	}
 	updated, err := h.repo.Queries.GetLifecycle(context.Background(), lifecycle.ID)
 	if err != nil {

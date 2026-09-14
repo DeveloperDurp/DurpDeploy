@@ -241,7 +241,7 @@ func (h *LifecycleHandler) SaveLifecycle(
 		http.Redirect(
 			w,
 			r,
-			"/lifecycles/"+strconv.FormatInt(id, 10),
+			"/lifecycles",
 			http.StatusSeeOther,
 		)
 	default:

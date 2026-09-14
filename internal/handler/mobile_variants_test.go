@@ -105,7 +105,8 @@ func TestMobile_RenderedHTML_rendersLifecycleBackAndKeepsPermissionGoBack(
 ) {
 	// Given
 	fixture := newMobileStructuralFixture(t)
-	const lifecycleBack = `<a href="/lifecycles" class="btn btn-ghost btn-sm shrink-0">Back</a>`
+	const lifecycleSave = `<button type="submit" form="lifecycle-settings-form" class="btn btn-primary btn-sm">Save</button>`
+	const lifecycleBack = `<a href="/lifecycles" class="btn btn-ghost btn-sm">Back</a>`
 
 	// When
 	detailBody := fixture.getHTML(
@@ -124,10 +125,22 @@ func TestMobile_RenderedHTML_rendersLifecycleBackAndKeepsPermissionGoBack(
 			lifecycleBack,
 		)
 	}
+	if strings.Count(detailBody, lifecycleSave) != 1 {
+		t.Errorf(
+			"lifecycle detail save control = %q, want exactly one %q",
+			detailBody,
+			lifecycleSave,
+		)
+	}
 	requireHTMLPattern(
 		t,
 		detailBody,
-		`(?s)<div class="flex items-start justify-between gap-4">\s*<div>.*?</div>\s*`+lifecycleBack,
+		`(?s)<div class="flex items-start justify-between gap-4">\s*<div>.*?</div>\s*<div class="flex gap-2 shrink-0">\s*`+lifecycleSave+`\s*`+lifecycleBack,
+	)
+	requireHTMLPattern(
+		t,
+		detailBody,
+		`<form id="lifecycle-settings-form" method="post" action="/lifecycles/\d+"`,
 	)
 	const lifecycleFormHeader = `(?s)<div class="flex justify-between items-center">\s*<h1 class="text-3xl font-bold">New Lifecycle</h1>\s*<div class="flex gap-2">\s*<a href="/lifecycles" class="btn btn-ghost btn-sm">Back</a>\s*</div>\s*</div>`
 	requireHTMLPattern(t, formBody, lifecycleFormHeader)
