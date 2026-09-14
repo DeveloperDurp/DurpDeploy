@@ -38,7 +38,7 @@ func TestDeploymentRunner_CommandUsesScratchDirectoryWithoutMountIsolation(
 	if cmd.SysProcAttr.Credential != nil {
 		t.Fatalf("command switches credentials: %+v", cmd.SysProcAttr.Credential)
 	}
-	wantArgs := []string{"bash", scriptPath}
+	wantArgs := []string{"/bin/bash", scriptPath}
 	if !slices.Equal(cmd.Args, wantArgs) {
 		t.Fatalf("command args = %q, want %q", cmd.Args, wantArgs)
 	}

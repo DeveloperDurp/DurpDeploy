@@ -63,7 +63,7 @@ function command(commandName, args, options = {}) {
 }
 
 function sqliteWriteLock(database) {
-	const child = spawn("sqlite3", [database], { stdio: ["pipe", "pipe", "pipe"] });
+	const child = spawn("/usr/bin/sqlite3", [database], { stdio: ["pipe", "pipe", "pipe"] });
 	let output = "";
 	let errors = "";
 	child.stdout.on("data", (chunk) => { output += chunk; });
@@ -255,7 +255,7 @@ async function main() {
 	const startAgent = () => {
 		agentRun += 1;
 		currentAgentContainer = `${agentContainer}-${agentRun}`;
-		agent = spawn("bash", [join(root, "scripts/run_agent_e2e_container.sh")], {
+		agent = spawn("/bin/bash", [join(root, "scripts/run_agent_e2e_container.sh")], {
 			cwd: runDir,
 			env: {
 				...agentEnvironment,
