@@ -52,10 +52,11 @@ foreground run, set the server listener variables and provision the identity
 before starting `go run ./cmd/server`:
 
 ```bash
-DURPDEPLOY_AGENT_LISTEN_ADDR=:10943 \
-  DURPDEPLOY_AGENT_PUBLIC_URL=https://localhost \
-  DURPDEPLOY_AGENT_IDENTITY_DIR=.agent-identity \
-  go run ./cmd/server
+export DURPDEPLOY_AGENT_LISTEN_ADDR=:10943
+export DURPDEPLOY_AGENT_PUBLIC_URL=https://localhost
+export DURPDEPLOY_AGENT_IDENTITY_DIR=.agent-identity
+go run ./cmd/server dev-agent-identity
+go run ./cmd/server
 ```
 
 The public URL is the direct server mTLS endpoint, not the Caddy/Let's Encrypt

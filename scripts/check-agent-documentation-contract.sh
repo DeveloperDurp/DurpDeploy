@@ -8,6 +8,7 @@ require_text() {
 require_text README.md 'No SSH-based deployment targets' 'README still describes remote deployment as unsupported'
 require_text README.md 'v0.1.0' 'agent compatibility is missing'
 require_text docs/agents.md 'DURPDEPLOY_AGENT_LISTEN_ADDR=0.0.0.0:10943' 'listener port is missing'
+require_text docs/agents.md 'go run ./cmd/server dev-agent-identity' 'listener identity provisioning command is missing'
 require_text docs/agents.md '/agent/v1/pairings/server-init' 'pairing callback is missing'
 require_text docs/agents.md 'expire after 10 minutes' 'pairing expiry is incorrect'
 require_text docs/agent-protocol.md 'completion_ack: false' 'pairing acknowledgement contract is missing'
