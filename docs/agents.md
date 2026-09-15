@@ -17,8 +17,11 @@ agent identity certificate and key, paired server identity state, and a
 temporary hash-only current-claim marker. Keep that directory private and
 back it up only if preserving the enrolled identity is intentional.
 
-Agents initiate all connections. The server never connects inbound to an agent,
-and remote dispatch does not use SSH.
+Agents initiate runtime connections, but pairing needs a temporary unpaired agent
+callback listener. After code and fingerprint confirmation, the server sends one
+`server-init` callback. After the completion acknowledgement, that callback
+listener closes. The paired agent has no persistent inbound listener, and remote
+dispatch does not use SSH.
 
 ## Transport and ports
 
@@ -42,15 +45,18 @@ agent port.
 
 Configure the direct listener through the server environment file. `make dev`
 remains the ordinary browser/API development path and does not enable the agent
-listener. For a local foreground run, set the server listener variables before
-starting `go run ./cmd/server`. The public origin hostname becomes the
-self-signed certificate SAN:
+listener unless all three listener variables are configured. When configured,
+`make dev` creates a missing local identity with the public origin hostname as
+the self-signed certificate SAN and preserves an existing identity. For a local
+foreground run, set the server listener variables and provision the identity
+before starting `go run ./cmd/server`:
 
 ```bash
-DURPDEPLOY_AGENT_LISTEN_ADDR=:10943 \
-  DURPDEPLOY_AGENT_PUBLIC_URL=https://localhost \
-  DURPDEPLOY_AGENT_IDENTITY_DIR=.agent-identity \
-  go run ./cmd/server
+export DURPDEPLOY_AGENT_LISTEN_ADDR=:10943
+export DURPDEPLOY_AGENT_PUBLIC_URL=https://localhost
+export DURPDEPLOY_AGENT_IDENTITY_DIR=.agent-identity
+go run ./cmd/server dev-agent-identity
+go run ./cmd/server
 ```
 
 The public URL is the direct server mTLS endpoint, not the Caddy/Let's Encrypt
@@ -106,7 +112,11 @@ admin-only.
    display name, and optional agent version. The ID must be unique.
 2. Start the local agent listener, then open the agent's pairing page only when
 the operator can complete the ceremony. Enter the short-lived, one-time pairing code,
-   compare the displayed fingerprint through a trusted channel, and confirm.
+    compare the displayed fingerprint through a trusted channel, and confirm.
+    The operator re-types only the displayed agent fingerprint in a dedicated
+    second confirmation step. Server-init (`/agent/v1/pairings/server-init`)
+    uses that value plus the server-held code and pinned endpoint to finalize
+    pairing. The values are console-only and cannot be retrieved later.
    You can use the code one time. You cannot retrieve it later. Never put it in source
    control, tickets, chat, shell history, or logs.
 3. Assign an environment to the paired active agent from its details page, then
@@ -145,6 +155,50 @@ stores no server secret or deployment payload at rest. A current claim marker
 contains only the deployment ID and a SHA-256 hash of the claim token and is
 removed after the claim completes.
 
+## Agent execution boundary
+
+Agent execution does **not** use a per-step `chroot`. The container or systemd
+service is the filesystem and cgroup boundary, and the operator or user is responsible for every
+deployment script they run there, including its contents, the secrets supplied
+to it, its network access, and all effects available inside the agent
+container. A read-only root filesystem does not stop a script from reading
+files that are visible in the container or exfiltrating secrets supplied to it.
+
+The container contract is deliberately limited and explicit:
+
+* The agent process and Bash run as the preselected unprivileged service UID
+  `10001`; neither process has Linux capabilities.
+* The root filesystem is read-only. Writable locations are private to the
+  container, primarily the agent state directory and a private `/tmp` tmpfs.
+* The container has no host or control-plane database, server secret,
+  control-plane state directory, Docker socket, or arbitrary host filesystem
+  mount. Its private state volume is the only operator-provided data path.
+* Linux capabilities are dropped by default, and `NoNewPrivs` is enabled.
+* CPU, memory, and process-count limits are enforced on the service cgroup.
+* No host cgroup tree, host filesystem, or server data is mounted into the
+  agent container.
+
+An unprivileged agent cannot change to a separate runner UID without
+`SETUID`/`SETGID`. Those capabilities are intentionally absent. Bash therefore
+shares the agent UID and can read or change its private state volume, including
+the paired identity. Use one agent boundary per trusted script domain, and
+re-pair the agent if a script may have altered that state. The separate host or
+container still prevents access to control-plane state and arbitrary host data.
+
+These controls reduce the agent container's access to its host. They do not
+turn deployment scripts into trusted code, restrict the network destinations
+available to the container, or prevent scripts from using secrets and files
+that the operator makes available. Co-locating the agent with the control
+plane is compatible with this contract when the container mounts remain
+private, but a remote host is still the preferred placement for production
+deployments.
+
+The supplied systemd unit provides the equivalent service-level read-only and
+private mount boundary. A direct foreground agent does not and is reserved for
+initial pairing. The control-plane server permits an unisolated foreground
+runner only with the explicit `DURPDEPLOY_EXECUTION_BOUNDARY=development`
+opt-in; an unset marker fails deployment execution. See `docs/deploy.md`.
+
 ## Direct binary installation
 
 Build the agent binary from the repository. This builds only `cmd/agent` and
@@ -155,7 +209,7 @@ make build-agent
 sudo install -o root -g root -m 0755 ./durpdeploy-agent /usr/local/bin/durpdeploy-agent
 ```
 
-Create the dedicated account and private state directory:
+Create the service account and private state directory:
 
 ```bash
 sudo useradd --system --home-dir /var/lib/durpdeploy-agent \
@@ -181,9 +235,9 @@ service process receives the values without putting them in shell history.
 
 ## Docker or Podman Compose
 
-The optional `agent` profile is a co-located demonstration and validation
-path. It is not a server sidecar and is not a production placement
-recommendation. Production agents must run remotely on the host where the
+The standalone agent repository's Compose service is a co-located compatibility
+and validation path. It is not a server sidecar or a production placement
+recommendation. Production agents should run remotely on the host where the
 deployment commands belong.
 
 Create `compose.agent.env` with the same local variables, use mode `0600`, and
@@ -198,23 +252,25 @@ Docker Compose:
 
 ```bash
 chmod 0600 compose.agent.env
-docker compose --profile agent up -d --build agent
-docker compose --profile agent ps agent
-docker compose --profile agent logs -f agent
+docker compose -f /path/to/durpdeploy-agent/compose.yml up -d --build agent
+docker compose -f /path/to/durpdeploy-agent/compose.yml ps agent
+docker compose -f /path/to/durpdeploy-agent/compose.yml logs -f agent
 ```
 
 Podman Compose:
 
 ```bash
 chmod 0600 compose.agent.env
-podman compose --profile agent up -d --build agent
-podman compose --profile agent ps agent
-podman compose --profile agent logs -f agent
+podman compose -f /path/to/durpdeploy-agent/compose.yml up -d --build agent
+podman compose -f /path/to/durpdeploy-agent/compose.yml ps agent
+podman compose -f /path/to/durpdeploy-agent/compose.yml logs -f agent
 ```
 
-The profile mounts one volume at `/var/lib/durpdeploy-agent`, has no `/data`
-mount, server secret, Docker socket, host network, or inbound listener. That
-volume is agent identity state, not SQLite and not a server backup.
+The service mounts one private volume at `/var/lib/durpdeploy-agent` and a
+private `/tmp`. It has no `/data` mount, server secret, Docker socket, host
+network, host cgroup mount, or persistent inbound listener. Its root is
+read-only and its CPU, memory, and process count are limited. The state volume
+contains agent identity, not SQLite or a server backup.
 
 ## systemd installation and operations
 
@@ -229,9 +285,11 @@ sudo systemctl enable --now durpdeploy-agent
 sudo systemctl status durpdeploy-agent --no-pager
 ```
 
-The unit runs as `durpdeploy-agent`, sets the state directory, uses
+The unit runs the agent and Bash as `durpdeploy-agent`, sets the state directory, uses
 `/etc/durpdeploy-agent.env`, applies a private `UMask=0077`, and permits writes
-only to the agent state directory. Keep both `/etc/durpdeploy-agent.env` and
+only to the agent state directory. It also applies `NoNewPrivileges`, private
+mounts and `/tmp`, and service cgroup limits. Keep both
+`/etc/durpdeploy-agent.env` and
 the state directory inaccessible to other users:
 
 ```bash
@@ -286,7 +344,7 @@ use trust-all TLS or accept a fingerprint copied from an untrusted connection.
 
 ### Expired or reused pairing code
 
-Pairing codes expire after 15 minutes and are consumed once. Restart the
+Pairing codes expire after 10 minutes and are consumed once. Restart the
 unpaired local listener to obtain a fresh code. For an already active agent,
 revoke and re-pair it first.
 

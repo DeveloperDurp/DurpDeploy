@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"io/fs"
 	"net/url"
 	"testing"
 	"time"
@@ -12,7 +13,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
-func newSQLServerTestDB(t *testing.T) *sql.DB {
+func newSQLServerTestDB(t *testing.T, fixtureFS ...fs.FS) *sql.DB {
 	t.Helper()
 	testcontainers.SkipIfProviderIsNotHealthy(t)
 
@@ -53,7 +54,15 @@ func newSQLServerTestDB(t *testing.T) *sql.DB {
 
 	var dbConn *sql.DB
 	for attempt := 0; attempt < 15; attempt++ {
-		dbConn, err = Run(dsn)
+		if len(fixtureFS) == 0 {
+			dbConn, err = Run(dsn)
+		} else {
+			config, configErr := migrationConfig(dsn)
+			requireNoError(t, configErr, "migration configuration")
+			dbConn, err = runMigrations(
+				config.dsn, config.driverName, config.gooseDialect, fixtureFS[0],
+			)
+		}
 		if err == nil {
 			break
 		}

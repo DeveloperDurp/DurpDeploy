@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/robfig/cron/v3"
 
+	"durpdeploy/internal/agentserver"
 	"durpdeploy/internal/audit"
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/handler"
@@ -18,7 +19,21 @@ import (
 	"durpdeploy/internal/requestmeta"
 	"durpdeploy/internal/runner"
 	"durpdeploy/static"
+
+	agentproto "github.com/DeveloperDurp/durpdeploy-agent/protocol"
 )
+
+func NewAgentRouter(agents *agentserver.Server) http.Handler {
+	r := chi.NewRouter()
+	r.Use(agents.Authenticated)
+	r.Post(agentproto.PollPath, agents.Poll)
+	r.Post(agentproto.StartPath, agents.Start)
+	r.Post(agentproto.HeartbeatPath, agents.Heartbeat)
+	r.Post(agentproto.LogsPath, agents.Logs)
+	r.Post(agentproto.ResultPath, agents.Result)
+	r.Post(agentproto.CancelledPath, agents.Cancelled)
+	return r
+}
 
 func requestLogger(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -42,6 +57,28 @@ func NewRouter(
 	oidcEnabled ...bool,
 ) *chi.Mux {
 	registerOIDC := len(oidcEnabled) > 0 && oidcEnabled[0]
+	return newRouter(repo, rnr, parser, authHandler, nil, registerOIDC)
+}
+
+func NewRouterWithAgentManagement(
+	repo *repository.Repository,
+	rnr *runner.DeploymentRunner,
+	parser cron.Parser,
+	authHandler *handler.AuthHandler,
+	pairing agentserver.Pairer,
+	oidcEnabled bool,
+) *chi.Mux {
+	return newRouter(repo, rnr, parser, authHandler, pairing, oidcEnabled)
+}
+
+func newRouter(
+	repo *repository.Repository,
+	rnr *runner.DeploymentRunner,
+	parser cron.Parser,
+	authHandler *handler.AuthHandler,
+	pairing agentserver.Pairer,
+	registerOIDC bool,
+) *chi.Mux {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(requestmeta.Middleware(os.Getenv("DURPDEPLOY_TRUSTED_PROXIES")))
@@ -336,6 +373,14 @@ func NewRouter(
 		// non-admin roles get 403 without touching the handlers.
 		pr.Group(func(ar chi.Router) {
 			ar.Use(auth.RequireRole("admin"))
+			agentsH := handler.NewAgentsHandler(repo, pairing)
+			ar.Get("/admin/agents", agentsH.List)
+			ar.Post("/admin/agents/pair", agentsH.Pair)
+			ar.Get("/admin/agents/{id}", agentsH.Detail)
+			ar.Post("/admin/agents/{id}/retry-pair", agentsH.RetryPair)
+			ar.Post("/admin/agents/{id}/revoke", agentsH.Revoke)
+			ar.Put("/admin/environments/{id}/agent", agentsH.Assign)
+			ar.Delete("/admin/environments/{id}/agent", agentsH.Unassign)
 			adminH := handler.NewAdminHandler(repo)
 			ar.Get("/admin/audit", adminH.ListAudit)
 			ar.Get("/admin/notifications", adminH.ListNotifications)
@@ -384,6 +429,23 @@ func NewRouter(
 		// Admin-only sub-group.
 		ar.Group(func(aar chi.Router) {
 			aar.Use(auth.RequireRole("admin"))
+			agentsH := api.NewAgentHandler(repo, pairing)
+			aar.Get("/admin/agents", agentsH.ListAgents)
+			aar.Post("/admin/agents/pair", agentsH.PairAgent)
+			aar.Get("/admin/agents/{id}", agentsH.GetAgent)
+			aar.Post(
+				"/admin/agents/{id}/retry-pair",
+				agentsH.RetryPairAgent,
+			)
+			aar.Post("/admin/agents/{id}/revoke", agentsH.RevokeAgent)
+			aar.Put(
+				"/admin/environments/{id}/agent",
+				agentsH.AssignEnvironment,
+			)
+			aar.Delete(
+				"/admin/environments/{id}/agent",
+				agentsH.UnassignEnvironment,
+			)
 			aar.Get("/admin/tokens", tokensH.ListAllTokens)
 			aar.Delete("/admin/tokens/{id}", tokensH.RevokeAnyToken)
 

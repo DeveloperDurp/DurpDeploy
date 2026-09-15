@@ -15,6 +15,7 @@ A single-binary deployment tool for running bash scripts against environments. D
 - **Approvals** - Manual gate for production deployments requiring admin sign-off
 - **Notifications** - Event-driven Slack, Email, Gotify, and Discord alerts for deployment status
 - **Cancel** - Stop running deployments mid-execution
+- **Remote agents** - Assign deployments to one outbound-only agent over pinned mTLS
 
 ## Quick Start
 
@@ -115,6 +116,10 @@ the normal local user recovery process; there is no self-service password reset.
 
 The full API reference is available at `/api/swagger/` in a running server (no auth required).
 
+Remote agents use the backward-compatible `agent/1` protocol. The `v0.1.0`
+agent release is compatible with this control plane; keep the paired state
+directory when upgrading.
+
 ## Architecture
 
 ```
@@ -145,14 +150,17 @@ make tailwind-build
 # Full build
 make build
 
-# Run with hot-reload behind an ephemeral Caddy HTTPS proxy (requires Docker)
+# Run with hot-reload behind an ephemeral Caddy HTTPS proxy (requires Docker or Podman)
 make dev
 ```
 
 `make dev`, `make dev-postgres`, and `make dev-mssql` keep the app on
 `http://localhost:8080` and expose it through `https://localhost:8443`. The
-proxy uses Caddy's self-signed internal CA, so accept the local browser warning
-or use `curl -k`. It is removed automatically when the dev command exits.
+proxy creates a temporary local CA and one certificate for `localhost`, the
+loopback addresses, and every host IP reported at startup. Accept the local
+browser warning, import the printed CA certificate into your browser, or use
+`curl -k`. The proxy and certificate files are removed when the dev command
+exits.
 
 Configure the ephemeral proxy without installing Caddy on the host:
 
@@ -162,8 +170,9 @@ DEV_HTTPS_PROXY_PORT=9443 \
 DEV_HTTPS_PROXY_BACKEND=host.docker.internal:8080 make dev
 ```
 
-The Linux Docker daemon must support `host-gateway`; startup fails clearly if
-the host backend cannot be reached through that mapping.
+The container engine must support `host-gateway`; startup fails clearly if the
+host backend cannot be reached through that mapping. Docker is preferred when
+available, with a healthy Podman engine used otherwise.
 
 `make e2e-test` exercises the SQLite database of an already-running server; it
 does not build or start one. Override the target with
@@ -232,8 +241,11 @@ five-minute hands-on attack drill — is documented in
   password DB leak (argon2id, per-user salt, ~100ms per guess), cross-project
   write access (per-project `project_members` — P1-1), secret-at-rest
   exposure (AES-256-GCM for `variables` and `release_variables.value` —
-  P1-3), rogue step scripts (dedicated user + cgroup sandbox + minimal env
-  — P1-4), naive log redaction (regex-based scrubber for literal secrets,
+  P1-3), deployment scripts (minimal environment, zero capabilities,
+  read-only service paths, and service cgroup limits — P1-4), containerized
+  agent boundaries (read-only root, private writable paths, zero capabilities, NoNewPrivs,
+  cgroups, and no host or control-plane mounts), naive log redaction
+  (regex-based scrubber for literal secrets,
   common credential patterns, and split writes — P1-5), unrecoverable
   data loss (Litestream continuous WAL replication + monthly restore drill
   — P1-6), and unauthorized approval of `pending_approval` deployments
@@ -247,9 +259,18 @@ five-minute hands-on attack drill — is documented in
   to live deployments/releases, but the default 180-day window and the
   daily systemd timer are operator-deployed, not auto-installed).
 
+The server and local Bash steps share the preselected unprivileged `durpdeploy`
+identity. Linux capabilities are absent from both processes. Because an
+unprivileged process cannot switch to another UID without a capability, local
+steps can read and change server state writable by that identity, including the
+database and visible key files. Run only operator-trusted local scripts, or use
+a separately hosted remote agent as the stronger filesystem boundary. Operators
+also own script secrets, network access, and all effects inside that boundary.
+
 ## What It Does Not Do
 
-- No remote deployment targets or SSH
+- No SSH-based deployment targets
+- No agent failover: an assigned deployment never falls back to local execution
 - No parallel step execution
 - No CI/build features
 - No Kubernetes or cloud integrations

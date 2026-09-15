@@ -101,10 +101,20 @@ boundary is:
   DURPDEPLOY_AGENT_VERSION=<agent-version>
   ```
 
-The optional Compose `agent` profile is a co-located demonstration only. It
-has a private state volume and no server database, server key, Docker socket,
-or inbound port. Production agents must run remotely on the host where the
-deployment commands belong. Use either:
+The optional Compose `agent` profile is a co-located demonstration and
+validation path. Containerized agent execution does not use a per-step
+`chroot`. The container has a read-only root, private writable state and `/tmp`,
+one preselected service and script UID `10001`, zero capabilities, `NoNewPrivs`,
+service-owned cgroup limits, and no
+host or control-plane mounts. The operator or user remains responsible for the
+contents of every script run in the container, the secrets supplied to it, its
+network access, and its effects inside that container. Read-only does not stop
+scripts from reading visible files or exfiltrating supplied secrets.
+
+Co-location is compatible with these boundaries, but production agents should
+run remotely on the host where the deployment commands belong. The profile has
+a private state volume and no server database, server key, Docker socket, or
+inbound port. Use either:
 
 ```bash
 docker compose --profile agent up -d --build agent
@@ -187,9 +197,9 @@ existing sessions, health checks, and bearer API authentication continue to work
 An OIDC-created empty-password account is recovered by an administrator through
 the existing local user recovery process. There is no self-service password reset.
 
-Use the Debian 12 bare-metal procedure if you must control the host. This
-procedure includes a cgroup v2 sandbox and custom kernel settings. Compose is
-sufficient for most small teams.
+Use the Debian 12 bare-metal procedure if you must control the host. The
+provided systemd unit applies service-level cgroup and filesystem boundaries.
+Compose is sufficient for most small teams.
 
 ### Plain Docker (binary distribution only)
 
@@ -349,35 +359,30 @@ secrets. Back up the key with the database.
 
 ---
 
-## Step 5 — Set up the runner sandbox (durpdeploy-runner user + cgroups)
+## Step 5 — Set up the direct execution service boundary
 
-Deployment steps no longer run as the `durpdeploy` user directly (P1-4). A
-low-privileged `durpdeploy-runner` account is used instead, so a buggy or
-malicious step script cannot read the SQLite DB or the secret key. The script cannot write
-outside its own scratch chroot.
+The server and deployment steps run as the preselected unprivileged
+`durpdeploy` account. Supported execution does not use an identity switch or a
+per-step filesystem root. The systemd unit supplies a read-only service
+filesystem, private mounts and `/tmp`, a single private state write path,
+`NoNewPrivileges`, empty capability sets, and service-level cgroup limits. Bash
+receives a minimal environment.
 
-```bash
-# Dedicated, unprivileged, no-login user for running step scripts.
-sudo useradd --system --no-create-home --shell /usr/sbin/nologin durpdeploy-runner
-# setpriv clears the service's sandbox-management capabilities before Bash.
-command -v setpriv >/dev/null # provided by Debian/Ubuntu's util-linux package
-```
+The operator is responsible for every deployment script, the secrets and files
+intentionally made available to it, its network access, and every effect it can
+cause inside the service boundary. Read-only paths do not prevent a script from
+reading visible files or exfiltrating supplied secrets.
 
-Cgroup v2 is used to cap CPU/memory/PIDs per deployment. Create the parent
-cgroup and hand ownership to `durpdeploy` so it can create/remove the
-per-deployment sub-cgroups without root:
+An unprivileged server cannot change to a separate runner UID without
+`SETUID`/`SETGID`. Those capabilities are intentionally absent. The tradeoff is
+that a local step can read or change `/var/lib/durpdeploy` and any key file
+available to the `durpdeploy` account. Run only operator-trusted local steps.
+Use a remote agent on a separate host or container when scripts must not share
+the control-plane filesystem boundary.
 
-```bash
-sudo mkdir -p /sys/fs/cgroup/durpdeploy
-sudo chown -R durpdeploy:durpdeploy /sys/fs/cgroup/durpdeploy
-# Let durpdeploy write the controllers it needs in sub-cgroups it creates.
-echo '+cpu +memory +pids' | sudo tee /sys/fs/cgroup/durpdeploy/cgroup.subtree_control
-```
-
-The operating system removes this virtual directory during a reboot. Run the
-commands again after each reboot. As an alternative, add a `systemd-tmpfiles` rule
-or a one-shot unit. If this directory is missing, `durpdeploy` writes a warning
-and does not apply resource limits.
+The supplied unit applies CPU, memory, and process limits to the complete
+service cgroup. No writable host cgroup mount, delegated subtree, mount
+capability, or chroot capability is required.
 
 ---
 
@@ -631,9 +636,13 @@ key `ON DELETE CASCADE`.)
 
 ### The dashboard loads but deploys fail
 
-Check the runner logs — the deploy runs `bash` steps via `os/exec`, inheriting
-the `durpdeploy` user's environment. If a step needs a tool not in the
-`durpdeploy` user's `PATH`, install it system-wide or set the variable in the
-project's variables. Steps run in their own process group and are fully
-reaped on timeout, cancel, or server shutdown (P1-3). Operating-system sandboxing
-(chroot/namespaces/cgroups) is enabled by default if provisioned per Step 5.
+Check the runner logs. Deployments run `bash` with a minimal environment plus
+project variables. If a step needs a tool outside the documented `PATH`, install
+it system-wide or set the variable in the project. Steps run in their own
+process group and are fully reaped on timeout, cancel, or server shutdown
+(P1-3). The supported systemd and container configurations provide the
+read-only/private filesystem and service-level cgroup boundaries described in
+Step 5. Direct foreground execution requires the explicit
+`DURPDEPLOY_EXECUTION_BOUNDARY=development` opt-in and has none of those service
+protections. An unset boundary fails deployment execution instead of silently
+selecting development mode.

@@ -40,6 +40,9 @@
 #   DURPDEPLOY_AUDIT_RETENTION_DAYS=<days>
 #   DURPDEPLOY_LITESTREAM_CHECK_COMMAND=<healthcheck-command>
 #   DURPDEPLOY_LITESTREAM_CHECK_INTERVAL=<1h>
+#   DURPDEPLOY_AGENT_LISTEN_ADDR=0.0.0.0:10943
+#   DURPDEPLOY_AGENT_PUBLIC_URL=https://<agent-control-host>
+#   DURPDEPLOY_AGENT_IDENTITY_DIR=/var/lib/durpdeploy/agent-identity
 #
 # Optional OIDC SSO (set all in compose.app.env together, or omit all):
 #   DURPDEPLOY_URL=https://durpdeploy.example.com
@@ -69,6 +72,7 @@ services:
     build: .
     image: durpdeploy:latest
     restart: unless-stopped
+    user: "10001:10001"
     # Port 8080 is internal only — Caddy talks to it over the compose network.
     # Don't publish it to the host.
     env_file:
@@ -77,12 +81,16 @@ services:
       - ./compose.app.env
     environment:
       - DURPDEPLOY_DB=/data/durpdeploy.db
+      - DURPDEPLOY_EXECUTION_BOUNDARY=service
       - DURPDEPLOY_TRUSTED_PROXIES=172.28.0.10/32
     volumes:
       - durpdeploy-data:/data
     secrets:
       - source: durpdeploy_key
         target: /etc/durpdeploy/key
+        uid: "10001"
+        gid: "10001"
+        mode: 0400
     security_opt:
       - no-new-privileges:true
     cap_drop: [ALL]
@@ -110,6 +118,8 @@ services:
     ports:
       - "80:80"
       - "443:443"
+      # Publish 10943 separately to the agent network when remote agents are enabled.
+      # - "10943:10943"
     networks:
       default:
         ipv4_address: 172.28.0.10

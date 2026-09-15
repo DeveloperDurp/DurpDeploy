@@ -23,6 +23,12 @@ What we defend against:
 - Remote agents do not receive the server database, server encryption key, or Docker socket
 - Agent transport uses outbound-only mTLS with pinned peer fingerprints and one-time pairing
 
+Remote dispatch is assigned directly to one paired agent. A pre-start claim can
+expire after 60 seconds, but started work is not requeued, replayed, or moved to
+the local runner. Missed heartbeats mark work lost after 45 seconds. A cancel
+needs an agent acknowledgement within 30 seconds, otherwise the result is
+`cancel_unconfirmed` and requires host inspection before a new deployment.
+
 ### OIDC boundary and threat model
 
 OIDC is an optional login factor, not a replacement for local authentication.
@@ -68,9 +74,13 @@ What we do **not** defend against yet (see Known Gaps):
 
 - Audit log retention / tamper-proofing
 
-Runner orphan cleanup on shutdown/timeout and the local step sandbox are shipped.
-Remote agents are separately sandboxed as dedicated users with private state
-directories and no server storage access. The agent does not provide SSH access.
+Runner orphan cleanup on shutdown/timeout and the service-level step boundary
+are shipped. Each service and its Bash children share one preselected
+unprivileged identity with zero capability sets. Private mounts, read-only
+service or container filesystems, minimal child environments, and service cgroup
+limits remain. Bash can access state writable by its service identity; use a
+separate remote agent boundary for scripts that must not access control-plane
+state. The agent does not provide SSH access.
 
 ---
 
@@ -418,7 +428,7 @@ values:
 | ~~**Secret encryption at rest**~~ | ~~`release_variables.value` is plaintext. A DB read leaks secrets~~ | **shipped (P1-3)** |
 | ~~**Runner orphan cleanup**~~ | ~~Killed/restarted server left orphaned bash children~~ | **shipped** |
 | ~~**Log redaction hardening**~~ | ~~Naive per-line `strings.ReplaceAll` missed common credential formats and multi-line/split secrets~~ | **shipped (P1-5)** |
-| ~~**Runner OS-level sandboxing**~~ | ~~Steps run as a low-privilege user in a chroot'd scratch directory with cgroup limits~~ | **shipped (P1-4)** |
+| **Local script/state UID separation** | Local Bash shares the unprivileged server UID because no identity-switch capability is granted; it can change server-writable state | Use a separate remote agent trust boundary for untrusted scripts |
 | ~~**Login rate limiting**~~ | ~~Password, MFA, and OIDC login surfaces lacked application limits~~ | **shipped** |
 | **Audit log retention** | No retention policy or tamper-proofing on `audit_log` | P2-5 |
 | **Password reset flow** | No self-service reset. Admin must delete + recreate the user | P2 |

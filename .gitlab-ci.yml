@@ -253,9 +253,7 @@ build:
 
 # Multi-arch (linux/amd64, linux/arm64) image build + push to the GitLab
 # container registry, with a Trivy vulnerability scan against the pushed
-# image. Trivy results are reported but do not fail the build — leave the
-# gatekeeping to your security tooling, or tighten --exit-code 1 below if
-# you want CI to fail on HIGH/CRITICAL findings.
+# image. HIGH and CRITICAL findings fail the build.
 #
 # Requires a GitLab runner with the docker executor and buildx available
 # (the project README's CI section assumes this). The docker:dind service
@@ -289,8 +287,9 @@ build:
 #    # For a multi-arch scan, repeat the pull with --platform for each arch.
 #    - docker pull $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
 #    - >-
-#      docker run --rm aquasec/trivy:latest image
+#      docker run --rm aquasec/trivy@sha256:152250a00485c128eacf57a3ecb4b0402440bf8d19dceeb2302dc5e95a26adab image
 #      --severity HIGH,CRITICAL
+#      --exit-code 1
 #      --no-progress
 #      $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
 #  rules:

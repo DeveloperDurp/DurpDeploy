@@ -465,7 +465,7 @@ func TestRecoverPendingDeployments_launchesRunnerForOrphanedDeployment(
 	if err != nil {
 		t.Fatalf("create release: %v", err)
 	}
-	deployment, err := repo.Queries.CreateDeployment(
+	created, err := repo.CreateDeployment(
 		ctx,
 		db.CreateDeploymentParams{
 			ReleaseID: release.ID, EnvironmentID: env.ID, Status: "pending",
@@ -475,6 +475,7 @@ func TestRecoverPendingDeployments_launchesRunnerForOrphanedDeployment(
 	if err != nil {
 		t.Fatalf("create deployment: %v", err)
 	}
+	deployment := created.Deployment
 
 	// Sanity: it really is pending.
 	if got, _ := repo.Queries.GetDeployment(
@@ -702,15 +703,26 @@ func TestPruneAuditLogs_preservesLiveDeploymentAndReleaseRows(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create release: %v", err)
 	}
-	deployment, err := repo.Queries.CreateDeployment(
+	created, err := repo.CreateDeployment(
 		ctx,
 		db.CreateDeploymentParams{
-			ReleaseID: release.ID, EnvironmentID: env.ID, Status: "succeeded",
+			ReleaseID: release.ID, EnvironmentID: env.ID, Status: "pending",
 			StartedAt: sql.NullInt64{}, FinishedAt: sql.NullInt64{}, Forced: 0, Note: sql.NullString{},
 		},
 	)
 	if err != nil {
 		t.Fatalf("create deployment: %v", err)
+	}
+	deployment := created.Deployment
+	if err := repo.Queries.UpdateDeploymentStatus(
+		ctx,
+		db.UpdateDeploymentStatusParams{
+			Status:     "succeeded",
+			FinishedAt: sql.NullInt64{Int64: time.Now().Unix(), Valid: true},
+			ID:         deployment.ID,
+		},
+	); err != nil {
+		t.Fatalf("complete deployment: %v", err)
 	}
 
 	// Insert three audit rows, then backdate created_at to well before now.

@@ -1,7 +1,7 @@
-.PHONY: build dev dev-server dev-postgres dev-mssql e2e-test e2e-test-isolated e2e-postgres e2e-mssql check-openssl templ-generate tailwind-build js-build npm-install golines golines-check clean test sonar-issues mfa-e2e-test auth-mfa-e2e-go-prepare auth-mfa-e2e-browser-prepare auth-mfa-e2e-sqlite-http auth-mfa-e2e-sqlite-browser auth-mfa-e2e-sqlite auth-mfa-e2e-postgres auth-mfa-e2e-mssql auth-mfa-e2e swagger-spec mobile-browser-container
+.PHONY: build dev dev-server dev-postgres dev-mssql e2e-test e2e-test-isolated e2e-postgres e2e-mssql check-openssl templ-generate tailwind-build js-build npm-install golines golines-check clean test sonar-issues mfa-e2e-test auth-mfa-e2e-go-prepare auth-mfa-e2e-browser-prepare auth-mfa-e2e-sqlite-http auth-mfa-e2e-sqlite-browser auth-mfa-e2e-postgres auth-mfa-e2e-mssql auth-mfa-e2e swagger-spec mobile-browser-container agent-documentation-contract agent-compose-contract agent-systemd-contract agent-systemd-contract-test runner-container-contract runner-container-contract-test agent-ci-contract agent-e2e-sqlite
 
 BINARY_NAME=durpdeploy
-MAIN_PATH=cmd/server/main.go
+MAIN_PATH=./cmd/server
 DEV_POSTGRES_CONTAINER ?= durpdeploy-dev-postgres
 DEV_POSTGRES_IMAGE ?= postgres:16-alpine
 DEV_MSSQL_CONTAINER ?= durpdeploy-dev-mssql
@@ -10,7 +10,7 @@ DEV_HTTPS_PROXY_CONTAINER ?= durpdeploy-dev-https
 DEV_HTTPS_PROXY_PORT ?= 8443
 DEV_HTTPS_PROXY_BACKEND ?= host.docker.internal:8080
 
-build: swagger-spec swagger-ui-copy templ-generate tailwind-build js-build
+build: swagger-ui-copy templ-generate tailwind-build js-build
 	go build -o $(BINARY_NAME) $(MAIN_PATH)
 
 # Hot-reload dev server. Watches .go/.templ/.sql in cmd, internal, views, migrations.
@@ -36,6 +36,17 @@ dev-server:
 		printf '%s' "$${DURPDEPLOY_SECRET_KEY:-}"); \
 	if [ -n "$$env_secret_key" ]; then DURPDEPLOY_SECRET_KEY="$$env_secret_key"; fi; \
 	if [ -f "$(ENV_FILE)" ]; then . "$(ENV_FILE)"; fi; \
+	if [ -n "$${DURPDEPLOY_AGENT_LISTEN_ADDR:-}" ] || \
+		[ -n "$${DURPDEPLOY_AGENT_PUBLIC_URL:-}" ] || \
+		[ -n "$${DURPDEPLOY_AGENT_IDENTITY_DIR:-}" ]; then \
+		if [ -z "$${DURPDEPLOY_AGENT_LISTEN_ADDR:-}" ] || \
+			[ -z "$${DURPDEPLOY_AGENT_PUBLIC_URL:-}" ] || \
+			[ -z "$${DURPDEPLOY_AGENT_IDENTITY_DIR:-}" ]; then \
+			echo 'ERROR: make dev agent listener requires all three DURPDEPLOY_AGENT_* variables.' >&2; exit 1; \
+		fi; \
+		export DURPDEPLOY_AGENT_LISTEN_ADDR DURPDEPLOY_AGENT_PUBLIC_URL DURPDEPLOY_AGENT_IDENTITY_DIR; \
+		go run ./cmd/server dev-agent-identity; \
+	fi; \
 	if [ "$${DURPDEPLOY_URL+x}" != "" ]; then export DURPDEPLOY_URL; fi; \
 	if [ "$${DURPDEPLOY_OIDC_ISSUER+x}" != "" ]; then export DURPDEPLOY_OIDC_ISSUER; fi; \
 	if [ "$${DURPDEPLOY_OIDC_CLIENT_ID+x}" != "" ]; then export DURPDEPLOY_OIDC_CLIENT_ID; fi; \
@@ -47,6 +58,7 @@ dev-server:
 	if [ "$${DURPDEPLOY_OIDC_GROUP_CLAIM+x}" != "" ]; then export DURPDEPLOY_OIDC_GROUP_CLAIM; fi; \
 	if [ "$${DURPDEPLOY_OIDC_REQUIRE_EMAIL_VERIFIED+x}" != "" ]; then export DURPDEPLOY_OIDC_REQUIRE_EMAIL_VERIFIED; fi; \
 	DURPDEPLOY_SECRET_KEY=$${DURPDEPLOY_SECRET_KEY:-$$(openssl rand -base64 32)} \
+	DURPDEPLOY_EXECUTION_BOUNDARY=development \
 	DURPDEPLOY_ENV_FILE="$(ENV_FILE)" go run github.com/air-verse/air@latest
 
 # Disposable database containers for manual backend testing. Stop them with
@@ -131,6 +143,30 @@ templ-generate:
 
 swagger-spec:
 	swagger generate spec -m -o internal/swagger/spec.json ./internal/handler/api
+
+agent-documentation-contract:
+	bash scripts/check-agent-documentation-contract.sh
+
+agent-compose-contract:
+	bash scripts/check-agent-compose-contract.sh
+
+agent-systemd-contract:
+	bash scripts/check-agent-systemd-contract.sh
+
+agent-systemd-contract-test:
+	bash scripts/check-agent-systemd-contract_test.sh
+
+runner-container-contract:
+	bash scripts/check-runner-container-contract.sh
+
+runner-container-contract-test:
+	bash scripts/check-runner-container-contract_test.sh
+
+agent-ci-contract:
+	bash scripts/check-agent-ci-contract.sh
+
+agent-e2e-sqlite:
+	bash scripts/agent_e2e_test.sh
 
 swagger-ui-copy: npm-install
 	@mkdir -p static/swagger-ui
