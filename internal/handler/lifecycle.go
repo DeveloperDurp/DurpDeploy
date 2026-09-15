@@ -15,6 +15,8 @@ import (
 	"durpdeploy/views/pages"
 )
 
+const lifecyclesPath = "/lifecycles"
+
 type LifecycleHandler struct {
 	repo *repository.Repository
 }
@@ -115,7 +117,7 @@ func (h *LifecycleHandler) CreateLifecycle(
 		return
 	}
 
-	http.Redirect(w, r, "/lifecycles", http.StatusSeeOther)
+	http.Redirect(w, r, lifecyclesPath, http.StatusSeeOther)
 }
 
 func (h *LifecycleHandler) GetLifecycle(
@@ -193,7 +195,7 @@ func (h *LifecycleHandler) SaveLifecycle(
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		http.Redirect(w, r, "/lifecycles", http.StatusSeeOther)
+		http.Redirect(w, r, lifecyclesPath, http.StatusSeeOther)
 	case "put":
 		name := strings.TrimSpace(r.FormValue("name"))
 		desc := r.FormValue("description")
@@ -241,7 +243,7 @@ func (h *LifecycleHandler) SaveLifecycle(
 		http.Redirect(
 			w,
 			r,
-			"/lifecycles",
+			lifecyclesPath,
 			http.StatusSeeOther,
 		)
 	default:
