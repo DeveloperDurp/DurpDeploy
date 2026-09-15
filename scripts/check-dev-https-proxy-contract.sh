@@ -121,6 +121,93 @@ EOF
 	}
 }
 
+test_tls_host_addresses() {
+	local tmp
+	tmp=$(mktemp -d "${TMPDIR:-/tmp}/durpdeploy-proxy-hosts.XXXXXX")
+	cleanup_tls_host_test() {
+		rm -rf "$tmp"
+	}
+	trap cleanup_tls_host_test RETURN
+
+	mkdir "$tmp/bin"
+	cat >"$tmp/bin/docker" <<'EOF'
+#!/usr/bin/env bash
+case "$1" in
+	info) exit 0 ;;
+	container) exit 1 ;;
+	run)
+		shift
+		while (($#)); do
+			if [[ "$1" == -v ]]; then
+				source=${2%%:*}
+				case "$2" in
+				*:/etc/caddy/Caddyfile:ro)
+					cp "$source" "$DURPDEPLOY_PROXY_TEST_CONFIG"
+					;;
+				*:/etc/caddy/dev-cert.pem:ro)
+					cp "$source" "$DURPDEPLOY_PROXY_TEST_CERT"
+					;;
+				esac
+				shift 2
+				continue
+			fi
+			shift
+		done
+		exit 0
+		;;
+	rm) exit 0 ;;
+esac
+exit 1
+EOF
+	cat >"$tmp/bin/curl" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+	cat >"$tmp/bin/hostname" <<'EOF'
+#!/usr/bin/env bash
+[[ "${1:-}" == -I ]] || exit 1
+printf '%s\n' '127.0.0.1 192.0.2.10 ::1 2001:db8::10'
+EOF
+	cat >"$tmp/server" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+	chmod +x "$tmp/bin/docker" "$tmp/bin/curl" \
+		"$tmp/bin/hostname" "$tmp/server"
+
+	DURPDEPLOY_PROXY_TEST_CONFIG="$tmp/Caddyfile" \
+		DURPDEPLOY_PROXY_TEST_CERT="$tmp/dev-cert.pem" \
+		PATH="$tmp/bin:$PATH" \
+		"$root/scripts/dev_https_proxy.sh" "$tmp/server"
+	grep -Fqx ':443 {' "$tmp/Caddyfile" || {
+		echo 'dev HTTPS proxy host test: missing catch-all listener' >&2
+		return 1
+	}
+	grep -Fq \
+		'tls /etc/caddy/dev-cert.pem /etc/caddy/dev-key.pem' \
+		"$tmp/Caddyfile" || {
+		echo 'dev HTTPS proxy host test: missing static certificate' >&2
+		return 1
+	}
+	local sans
+	sans=$(openssl x509 -in "$tmp/dev-cert.pem" -noout \
+		-ext subjectAltName) || {
+		echo 'dev HTTPS proxy host test: invalid certificate' >&2
+		return 1
+	}
+	for expected in \
+		'DNS:localhost' \
+		'IP Address:127.0.0.1' \
+		'IP Address:192.0.2.10' \
+		'IP Address:0:0:0:0:0:0:0:1' \
+		'IP Address:2001:DB8:0:0:0:0:0:10'; do
+		grep -Fq "$expected" <<<"$sans" || {
+			echo "dev HTTPS proxy host test: missing SAN $expected" >&2
+			return 1
+		}
+	done
+}
+
 bash -n "$root/scripts/dev_https_proxy.sh" "$root/scripts/e2e_db_test.sh"
 make -C "$root" -n dev dev-postgres dev-mssql >/dev/null
 
@@ -140,5 +227,6 @@ grep -Fq '/settings/security/totp/cancel' "$root/scripts/e2e_test.sh"
 grep -Fq '/settings/security/recovery/continue' "$root/scripts/e2e_test.sh"
 test_shutdown_tree
 test_podman_fallback
+test_tls_host_addresses
 
 echo 'dev HTTPS proxy contract: OK'

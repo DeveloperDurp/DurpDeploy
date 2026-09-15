@@ -156,8 +156,11 @@ make dev
 
 `make dev`, `make dev-postgres`, and `make dev-mssql` keep the app on
 `http://localhost:8080` and expose it through `https://localhost:8443`. The
-proxy uses Caddy's self-signed internal CA, so accept the local browser warning
-or use `curl -k`. It is removed automatically when the dev command exits.
+proxy creates a temporary local CA and one certificate for `localhost`, the
+loopback addresses, and every host IP reported at startup. Accept the local
+browser warning, import the printed CA certificate into your browser, or use
+`curl -k`. The proxy and certificate files are removed when the dev command
+exits.
 
 Configure the ephemeral proxy without installing Caddy on the host:
 
