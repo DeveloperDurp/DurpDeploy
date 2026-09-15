@@ -44,7 +44,12 @@ templ LifecycleDetail(lc db.Lifecycle, stages []LifecycleStageView, availableEnv
 			<div>
 				<h1 class="text-3xl font-bold">{ lc.Name }</h1>
 			</div>
-			<a href="/lifecycles" class="btn btn-ghost btn-sm shrink-0">Back</a>
+			<div class="flex gap-2 shrink-0">
+				if CanWrite(ctx) {
+					<button type="submit" form="lifecycle-settings-form" class="btn btn-primary btn-sm">Save</button>
+				}
+				<a href="/lifecycles" class="btn btn-ghost btn-sm">Back</a>
+			</div>
 		</div>
 		<div class="card bg-base-200 p-4">
 			<h2 class="text-xl font-bold mb-4">Promotion order</h2>
@@ -54,7 +59,7 @@ templ LifecycleDetail(lc db.Lifecycle, stages []LifecycleStageView, availableEnv
 		if CanWrite(ctx) {
 			<div class="card bg-base-200 p-4">
 				<h2 class="text-xl font-bold mb-4">Lifecycle settings</h2>
-				<form method="post" action={ templ.SafeURL("/lifecycles/" + strconv.FormatInt(lc.ID, 10)) } class="space-y-4" data-lifecycle-settings>
+				<form id="lifecycle-settings-form" method="post" action={ templ.SafeURL("/lifecycles/" + strconv.FormatInt(lc.ID, 10)) } class="space-y-4" data-lifecycle-settings>
 					<input type="hidden" name="_method" value="put"/>
 					<div class="form-control">
 						<label class="label" for="lifecycle-name"><span class="label-text">Name</span></label>
@@ -67,7 +72,6 @@ templ LifecycleDetail(lc db.Lifecycle, stages []LifecycleStageView, availableEnv
 						<label class="label" for="lifecycle-description"><span class="label-text">Description</span></label>
 						<textarea id="lifecycle-description" name="description" class="textarea textarea-bordered w-full" rows="3">{ lc.Description.String }</textarea>
 					</div>
-					<button type="submit" class="btn btn-primary">Update lifecycle</button>
 				</form>
 			</div>
 		} else if lc.Description.Valid {
