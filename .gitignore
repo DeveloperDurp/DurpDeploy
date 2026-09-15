@@ -53,3 +53,6 @@ static/swagger-ui/
 *.db-wal
 .junie/
 artifacts/
+
+# Playwright
+.playwright-mcp/
