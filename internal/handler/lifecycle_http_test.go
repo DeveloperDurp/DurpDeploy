@@ -2,6 +2,8 @@ package handler_test
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"io"
 	"net/http"
 	"net/url"
@@ -66,6 +68,71 @@ func TestLifecycle_Edit_redirects_to_merged_workspace(t *testing.T) {
 	}
 	if location := response.Header.Get("Location"); location != path {
 		t.Errorf("Location = %q, want %q", location, path)
+	}
+}
+
+func TestLifecycle_Create_redirects_to_lifecycle_list(t *testing.T) {
+	// Given
+	h := newProjectHarness(t)
+	form := url.Values{
+		"name":        {"release flow"},
+		"description": {"promote through environments"},
+		"csrf_token":  {h.csrfToken()},
+	}
+
+	// When
+	response, err := h.authedClient().PostForm(
+		h.server.URL+"/lifecycles",
+		form,
+	)
+	if err != nil {
+		t.Fatalf("create lifecycle: %v", err)
+	}
+	defer response.Body.Close()
+
+	// Then
+	if response.StatusCode != http.StatusSeeOther {
+		t.Fatalf("status = %d, want 303", response.StatusCode)
+	}
+	if location := response.Header.Get("Location"); location != "/lifecycles" {
+		t.Errorf("Location = %q, want %q", location, "/lifecycles")
+	}
+	lifecycles, err := h.repo.Queries.ListLifecycles(context.Background())
+	if err != nil {
+		t.Fatalf("list lifecycles: %v", err)
+	}
+	if len(lifecycles) != 1 || lifecycles[0].Name != "release flow" {
+		t.Errorf("lifecycles = %#v, want created lifecycle", lifecycles)
+	}
+}
+
+func TestLifecycle_Delete_redirects_to_lifecycle_list(t *testing.T) {
+	// Given
+	h := newProjectHarness(t)
+	lifecycle := h.makeLifecycle("release flow")
+	path := "/lifecycles/" + strconv.FormatInt(lifecycle.ID, 10)
+	form := url.Values{
+		"_method":    {"delete"},
+		"csrf_token": {h.csrfToken()},
+	}
+
+	// When
+	response, err := h.authedClient().PostForm(h.server.URL+path, form)
+	if err != nil {
+		t.Fatalf("delete lifecycle: %v", err)
+	}
+	defer response.Body.Close()
+
+	// Then
+	if response.StatusCode != http.StatusSeeOther {
+		t.Fatalf("status = %d, want 303", response.StatusCode)
+	}
+	if location := response.Header.Get("Location"); location != "/lifecycles" {
+		t.Errorf("Location = %q, want %q", location, "/lifecycles")
+	}
+	_, err = h.repo.Queries.GetLifecycle(context.Background(), lifecycle.ID)
+	if !errors.Is(err, sql.ErrNoRows) {
+		t.Errorf("get deleted lifecycle error = %v, want sql.ErrNoRows", err)
 	}
 }
 
