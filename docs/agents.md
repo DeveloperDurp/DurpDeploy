@@ -112,19 +112,20 @@ default. Do not put the server identity directory in the agent service.
 Use an administrator browser session at the Caddy URL. The agent pages are
 admin-only.
 
-1. Open **Admin, Agents**, choose **New agent**, and enter the stable Agent ID,
-   display name, and optional agent version. The ID must be unique.
-2. Start the local agent listener, then open the agent's pairing page only when
-the operator can complete the ceremony. Enter the short-lived, one-time pairing code,
-    compare the displayed fingerprint through a trusted channel, and confirm.
-    The operator re-types only the displayed agent fingerprint in a dedicated
-    second confirmation step. Server-init (`/agent/v1/pairings/server-init`)
-    uses that value plus the server-held code and pinned endpoint to finalize
-    pairing. The values are console-only and cannot be retrieved later.
+1. Start the local agent listener. Open **Admin, Agents**, then enter a display
+   name, agent address, and the short-lived pairing code. The address can omit
+   `https://`; the server adds it automatically. The server creates the stable
+   Agent ID.
+2. Compare the fingerprint on the confirmation page with the fingerprint shown
+   by the agent through a trusted channel. Approve only when they match. Deny
+   returns to the agent list without creating the agent. Server-init
+   (`/agent/v1/pairings/server-init`) uses the approved value plus the
+   server-held code and pinned endpoint to finalize pairing. The values are
+   console-only and cannot be retrieved later.
    You can use the code one time. You cannot retrieve it later. Never put it in source
    control, tickets, chat, shell history, or logs.
-3. Add capability and environment labels to the paired agent from its details
-   page, then verify its heartbeat.
+3. Change the display name or add capability and environment labels on the
+   agent details page, then verify its heartbeat. The Agent ID does not change.
 
 Labels are inventory metadata for now. An environment label records a possible
 future deployment target; it does not route the environment's deployments to
@@ -147,8 +148,8 @@ is sent in heartbeats after pairing. The protocol is fixed by the binary as
 `agent/1`. There is no protocol variable.
 
 The first run prints a short-lived pairing code and agent fingerprint. Enter
-those values in the authenticated admin pairing flow, compare the displayed
-fingerprint, and confirm before the code expires. Do not put the pairing code,
+the code in the authenticated admin pairing flow, compare the displayed
+fingerprint, and approve before the code expires. Do not put the pairing code,
 fingerprint, endpoint, or private key in documentation, tickets, shell history,
 or logs. Pairing persists the agent identity, pull URL, server pins, and agent
 ID in the private state directory.

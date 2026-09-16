@@ -57,6 +57,84 @@ func TestPairingServerInitCompletes(t *testing.T) {
 	assertRealPairingCompletes(t)
 }
 
+func TestPairingRequiresFingerprintApprovalBeforePersistence(t *testing.T) {
+	fixture := newPairingFixture(t)
+	input, err := ParsePairingStartInput(
+		"Chicago runner", "agent.test:10943", fixture.code,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	challenge, err := fixture.service.Begin(t.Context(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if challenge.Address != "https://agent.test:10943" ||
+		challenge.Fingerprint != fixture.agent.Fingerprint.String() {
+		t.Fatalf("challenge=%+v", challenge)
+	}
+	var agents int
+	if err := fixture.repo.DB.QueryRow("SELECT COUNT(*) FROM agents").Scan(
+		&agents,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if agents != 0 {
+		t.Fatalf("agents before approval=%d", agents)
+	}
+
+	result, err := fixture.service.Approve(t.Context(), challenge.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	agent, err := fixture.repo.Queries.GetAgent(t.Context(), result.AgentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if agent.Name != "Chicago runner" || agent.ID != result.AgentID {
+		t.Fatalf("agent=%+v result=%+v", agent, result)
+	}
+	if _, err := fixture.service.Approve(t.Context(), challenge.ID); !errors.Is(
+		err,
+		ErrPairingChallenge,
+	) {
+		t.Fatalf("second approval error=%v", err)
+	}
+}
+
+func TestPairingDenialDoesNotPersistAgent(t *testing.T) {
+	fixture := newPairingFixture(t)
+	input, err := ParsePairingStartInput(
+		"Denied runner", "agent.test:10943", fixture.code,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	challenge, err := fixture.service.Begin(t.Context(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := fixture.service.Deny(challenge.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fixture.service.Challenge(challenge.ID); !errors.Is(
+		err,
+		ErrPairingChallenge,
+	) {
+		t.Fatalf("denied challenge error=%v", err)
+	}
+	var agents int
+	if err := fixture.repo.DB.QueryRow("SELECT COUNT(*) FROM agents").Scan(
+		&agents,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if agents != 0 {
+		t.Fatalf("agents after denial=%d", agents)
+	}
+}
+
 func assertRealPairingCompletes(t *testing.T) {
 	t.Helper()
 	listener, err := agentbootstrap.Start(agentbootstrap.Config{

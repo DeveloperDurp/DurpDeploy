@@ -313,9 +313,21 @@ async function main() {
 	await login(page, baseURL, admin);
 	await page.goto(`${baseURL}/admin/agents`);
 	for (const width of [375, 768, 1280]) await capture(page, "agents-before-pair", width);
-	await page.getByLabel("HTTPS address").fill(bootstrapURL);
-	await page.getByLabel("Pairing code").fill(offer.code);
-	await page.getByLabel("Certificate fingerprint").fill(offer.fingerprint);
+	const fillPairingRequest = async () => {
+		await page.getByLabel("Agent name").fill("Browser runner");
+		await page.getByLabel("Agent address").fill(bootstrapURL.replace(/^https:\/\//, ""));
+		await page.getByLabel("Pairing code").fill(offer.code);
+		await Promise.all([
+			page.waitForURL(/\/admin\/agents\/pair\/[^/]+$/),
+			page.getByRole("button", { name: "Continue" }).click(),
+		]);
+		check(
+			(await page.getByTestId("agent-fingerprint").innerText()).trim() === offer.fingerprint,
+			"pairing confirmation fingerprint did not match the agent offer",
+		);
+	};
+	await fillPairingRequest();
+	for (const width of [375, 768, 1280]) await capture(page, "agent-pair-confirmation", width);
 	const pairingScenarios = new Set([
 		"crash-before-first-pair-request",
 		"lost-first-phase-response",
@@ -325,13 +337,11 @@ async function main() {
 	]);
 	const submitPairing = () => Promise.all([
 		page.waitForURL(/\/admin\/agents\/[^/]+$/),
-		page.getByRole("button", { name: "Pair agent" }).click(),
+		page.getByRole("button", { name: "Approve agent" }).click(),
 	]);
 	const refillPairing = async () => {
 		await page.goto(`${baseURL}/admin/agents`);
-		await page.getByLabel("HTTPS address").fill(bootstrapURL);
-		await page.getByLabel("Pairing code").fill(offer.code);
-		await page.getByLabel("Certificate fingerprint").fill(offer.fingerprint);
+		await fillPairingRequest();
 	};
 	let pairingCheckpoint = null;
 	if (pairingScenarios.has(faultScenario)) {

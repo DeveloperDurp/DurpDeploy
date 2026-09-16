@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
 
 	"durpdeploy/internal/db"
@@ -39,6 +40,8 @@ type PairingService struct {
 	afterPersist    func() error
 	afterFirstPhase func() error
 	afterActivation func() error
+	challengeMu     sync.Mutex
+	challenges      map[string]pairingChallenge
 }
 
 func NewPairingService(config PairingConfig) (*PairingService, error) {
@@ -57,6 +60,7 @@ func NewPairingService(config PairingConfig) (*PairingService, error) {
 		repository: config.Repository, identity: config.Identity,
 		pullEndpoint: config.PullEndpoint, secrets: config.Secrets,
 		now: config.Now, connect: connectPairing,
+		challenges: make(map[string]pairingChallenge),
 	}, nil
 }
 
@@ -166,10 +170,14 @@ func (service *PairingService) prepare(
 	}
 	codeHash := input.code.Hash()
 	agentID := uuid.NewString()
+	agentName := input.name
+	if agentName == "" {
+		agentName = "agent-" + agentID[:8]
+	}
 	return service.repository.PrepareAgentPairing(
 		ctx,
 		repository.AgentPairingTuple{
-			AgentID: agentID, AgentName: "agent-" + agentID[:8],
+			AgentID: agentID, AgentName: agentName,
 			Endpoint: input.address, PairingCodeHash: codeHash[:],
 			AgentPublicIdentity: agentPEM, AgentPin: agentPin.String(),
 			ServerPublicIdentity: serverPEM,

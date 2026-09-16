@@ -1,6 +1,7 @@
 package pages
 
 import (
+	"durpdeploy/internal/agentserver"
 	"durpdeploy/internal/db"
 	"durpdeploy/views/layouts"
 	"fmt"
@@ -42,7 +43,8 @@ templ AgentsPage(agents []db.Agent, formError string, currentPath string) {
 			</div>
 			<div class="card bg-base-200 shadow">
 				<div class="card-body">
-					<h2 class="card-title">Pair agent</h2>
+					<h2 class="card-title">Pair a new agent</h2>
+					<p class="opacity-70">Enter the agent address and one-time pairing code. You will confirm its certificate fingerprint next.</p>
 					if formError != "" {
 						<div role="alert" class="alert alert-error">
 							<span>{ formError }. Enter the pairing values again.</span>
@@ -50,19 +52,20 @@ templ AgentsPage(agents []db.Agent, formError string, currentPath string) {
 					}
 					<form method="post" action="/admin/agents/pair" class="grid gap-4 lg:grid-cols-3">
 						<label class="form-control">
-							<span class="label"><span class="label-text">HTTPS address</span></span>
-							<input class="input input-bordered" type="url" name="address" placeholder="https://agent.example:9443" required/>
+							<span class="label"><span class="label-text">Agent name</span></span>
+							<input class="input input-bordered" name="name" maxlength="255" placeholder="e.g. Production runner" required/>
+						</label>
+						<label class="form-control">
+							<span class="label"><span class="label-text">Agent address</span></span>
+							<input class="input input-bordered" type="text" inputmode="url" name="address" placeholder="agent.example:9443" aria-describedby="agent-address-help" required/>
+							<span id="agent-address-help" class="label-text-alt opacity-70">HTTPS is added automatically.</span>
 						</label>
 						<label class="form-control">
 							<span class="label"><span class="label-text">Pairing code</span></span>
 							<input class="input input-bordered font-mono" type="password" name="code" autocomplete="off" required/>
 						</label>
-						<label class="form-control">
-							<span class="label"><span class="label-text">Certificate fingerprint</span></span>
-							<input class="input input-bordered font-mono" name="fingerprint" autocomplete="off" required/>
-						</label>
 						<div class="lg:col-span-3">
-							<button type="submit" class="btn btn-primary">Pair agent</button>
+							<button type="submit" class="btn btn-primary">Continue</button>
 						</div>
 					</form>
 				</div>
@@ -86,7 +89,7 @@ templ AgentsPage(agents []db.Agent, formError string, currentPath string) {
 							for _, agent := range agents {
 								<tr>
 									<td class="truncate">
-										<a class="link font-medium" href={ templ.SafeURL("/admin/agents/" + agent.ID) }>{ agent.Name }</a>
+										<span class="font-medium">{ agent.Name }</span>
 										<div class="truncate font-mono text-xs opacity-60">{ agent.ID }</div>
 									</td>
 									<td>
@@ -97,7 +100,7 @@ templ AgentsPage(agents []db.Agent, formError string, currentPath string) {
 									<td class="hidden lg:table-cell truncate font-mono text-sm">{ agent.Endpoint }</td>
 									<td>
 										<div class="flex flex-col items-start gap-1 sm:flex-row">
-											<a class="btn btn-ghost btn-xs" href={ templ.SafeURL("/admin/agents/" + agent.ID) }>Details</a>
+											<a class="btn btn-ghost btn-xs" href={ templ.SafeURL("/admin/agents/" + agent.ID) }>Edit</a>
 											if agent.Status != "revoked" {
 												<button
 													class="btn btn-error btn-xs"
@@ -117,6 +120,41 @@ templ AgentsPage(agents []db.Agent, formError string, currentPath string) {
 			}
 		</div>
 		}
+	}
+}
+
+templ AgentPairingConfirmationPage(challenge agentserver.PairingChallenge, currentPath string) {
+	@layouts.Base("Confirm agent fingerprint", currentPath) {
+		<div class="mx-auto max-w-3xl space-y-6">
+			<div>
+				<a class="link text-sm" href="/admin/agents">Back to agents</a>
+				<h1 class="mt-2 text-3xl font-bold">Confirm agent fingerprint</h1>
+				<p class="mt-1 opacity-70">Compare this fingerprint with the one shown by the agent before you approve it.</p>
+			</div>
+			<div role="alert" class="alert alert-warning">
+				<span>Approve only when every fingerprint character matches. A mismatch can indicate the wrong agent or an intercepted connection.</span>
+			</div>
+			<div class="card bg-base-200 shadow">
+				<div class="card-body gap-5">
+					<dl class="grid gap-3 sm:grid-cols-[9rem_1fr]">
+						<dt class="font-medium">Agent name</dt>
+						<dd>{ challenge.Name }</dd>
+						<dt class="font-medium">Address</dt>
+						<dd class="break-all font-mono text-sm">{ challenge.Address }</dd>
+						<dt class="font-medium">Fingerprint</dt>
+						<dd class="break-all rounded-box bg-base-300 p-4 font-mono text-sm" data-testid="agent-fingerprint">{ challenge.Fingerprint }</dd>
+					</dl>
+					<div class="flex flex-wrap gap-3">
+						<form method="post" action={ templ.SafeURL("/admin/agents/pair/" + challenge.ID + "/approve") }>
+							<button type="submit" class="btn btn-primary">Approve agent</button>
+						</form>
+						<form method="post" action={ templ.SafeURL("/admin/agents/pair/" + challenge.ID + "/deny") }>
+							<button type="submit" class="btn btn-ghost">Deny</button>
+						</form>
+					</div>
+				</div>
+			</div>
+		</div>
 	}
 }
 
@@ -148,6 +186,21 @@ templ AgentDetailPage(agent db.Agent, labels []string, environmentLabels []db.En
 					</button>
 				}
 			</div>
+			if agent.Status != "revoked" {
+				<div class="card bg-base-200 shadow">
+					<div class="card-body">
+						<h2 class="card-title">Agent name</h2>
+						<p class="opacity-70">Use a recognizable name. The agent GUID remains unchanged.</p>
+						<form method="post" action={ templ.SafeURL("/admin/agents/" + agent.ID + "/name") } class="flex flex-wrap items-end gap-2">
+							<label class="form-control min-w-48 flex-1">
+								<span class="label"><span class="label-text">Name</span></span>
+								<input class="input input-bordered" name="name" value={ agent.Name } maxlength="255" required/>
+							</label>
+							<button type="submit" class="btn btn-primary">Save name</button>
+						</form>
+					</div>
+				</div>
+			}
 			<div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
 				<div class="stat rounded-box bg-base-200">
 					<div class="stat-title">Status</div>

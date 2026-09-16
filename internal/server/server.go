@@ -65,7 +65,7 @@ func NewRouterWithAgentManagement(
 	rnr *runner.DeploymentRunner,
 	parser cron.Parser,
 	authHandler *handler.AuthHandler,
-	pairing agentserver.Pairer,
+	pairing agentserver.PairingManager,
 	oidcEnabled bool,
 ) *chi.Mux {
 	return newRouter(repo, rnr, parser, authHandler, pairing, oidcEnabled)
@@ -76,7 +76,7 @@ func newRouter(
 	rnr *runner.DeploymentRunner,
 	parser cron.Parser,
 	authHandler *handler.AuthHandler,
-	pairing agentserver.Pairer,
+	pairing agentserver.PairingManager,
 	registerOIDC bool,
 ) *chi.Mux {
 	r := chi.NewRouter()
@@ -376,7 +376,20 @@ func newRouter(
 			agentsH := handler.NewAgentsHandler(repo, pairing)
 			ar.Get("/admin/agents", agentsH.List)
 			ar.Post("/admin/agents/pair", agentsH.Pair)
+			ar.Get(
+				"/admin/agents/pair/{challengeID}",
+				agentsH.ConfirmPair,
+			)
+			ar.Post(
+				"/admin/agents/pair/{challengeID}/approve",
+				agentsH.ApprovePair,
+			)
+			ar.Post(
+				"/admin/agents/pair/{challengeID}/deny",
+				agentsH.DenyPair,
+			)
 			ar.Get("/admin/agents/{id}", agentsH.Detail)
+			ar.Post("/admin/agents/{id}/name", agentsH.UpdateName)
 			ar.Post("/admin/agents/{id}/retry-pair", agentsH.RetryPair)
 			ar.Post("/admin/agents/{id}/revoke", agentsH.Revoke)
 			ar.Post("/admin/agents/{id}/labels", agentsH.AddLabel)

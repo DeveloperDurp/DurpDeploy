@@ -44,9 +44,12 @@ batches fail before later agent or persistence work consumes them.
 
 Pairing uses two channels:
 
-1. The unpaired local listener prints a short-lived pairing code.
-2. The operator enters that code and the displayed agent fingerprint in the
-   authenticated pairing form, then confirms the fingerprint again.
+1. The unpaired local listener prints a short-lived pairing code and its
+   certificate fingerprint.
+2. The operator enters the agent address, display name, and pairing code in
+   the authenticated form. The server discovers the certificate fingerprint,
+   and the operator approves it on a separate confirmation page after comparing
+   it with the fingerprint printed by the agent.
 3. The server submits `POST /agent/v1/pairings/server-init` over mTLS with
    `completion_ack: false`.
 4. The callback validates the confirmed identity and persists the server pin
