@@ -44,26 +44,29 @@ agent port.
 ## Configure the server listener
 
 Configure the direct listener through the server environment file. `make dev`
-remains the ordinary browser/API development path and does not enable the agent
-listener unless all three listener variables are configured. When configured,
-`make dev` creates a missing local identity with the public origin hostname as
-the self-signed certificate SAN and preserves an existing identity. For a local
-foreground run, set the server listener variables and provision the identity
-before starting `go run ./cmd/server`:
+enables it automatically for local container development with port 10943,
+public URL `https://host.containers.internal:10943`, and an identity below the
+ignored `tmp/` directory. Set any of the variables explicitly to override that
+default. `make dev` creates a missing local identity with the public origin
+hostname as the self-signed certificate SAN and preserves an existing identity.
+For a local foreground run without `make dev`, no listener setup is required:
 
 ```bash
-export DURPDEPLOY_AGENT_LISTEN_ADDR=:10943
-export DURPDEPLOY_AGENT_PUBLIC_URL=https://localhost
-export DURPDEPLOY_AGENT_IDENTITY_DIR=.agent-identity
-go run ./cmd/server dev-agent-identity
 go run ./cmd/server
 ```
+
+Startup creates the identity automatically. To provision it before starting the
+server, run `go run ./cmd/server dev-agent-identity` with any desired listener
+overrides set.
 
 The public URL is the direct server mTLS endpoint, not the Caddy/Let's Encrypt
 browser or API endpoint. The agent is outbound-only and has no database. Its
 state directory is not server storage.
 
-The listener is disabled unless all three variables are set together:
+The server listener is always active. A bare binary defaults to
+`0.0.0.0:10943`, `https://localhost:10943`, and `.agent-identity`, creating the
+identity on first start. Production installations must override the public URL
+and identity directory with externally reachable, persistent values:
 
 ```dotenv
 DURPDEPLOY_AGENT_LISTEN_ADDR=0.0.0.0:10943
@@ -74,7 +77,8 @@ DURPDEPLOY_AGENT_IDENTITY_DIR=/var/lib/durpdeploy/agent-identity
 `DURPDEPLOY_AGENT_PUBLIC_URL` must be an HTTPS origin with no path, query, or
 fragment. Its hostname is placed in the self-signed certificate SAN. Pairing
 persists the direct listener URL for the agent. Operators do not enter it on
-the agent host.
+the agent host. Each variable can be overridden independently; an omitted
+variable keeps its default.
 
 On a systemd server, put those variables in the root-owned server environment
 file referenced by the unit, for example:
@@ -119,10 +123,12 @@ the operator can complete the ceremony. Enter the short-lived, one-time pairing 
     pairing. The values are console-only and cannot be retrieved later.
    You can use the code one time. You cannot retrieve it later. Never put it in source
    control, tickets, chat, shell history, or logs.
-3. Assign an environment to the paired active agent from its details page, then
-   verify its heartbeat before creating a deployment.
+3. Add capability and environment labels to the paired agent from its details
+   page, then verify its heartbeat.
 
-Each remote deployment is assigned to exactly one paired agent. It never falls back to local execution.
+Labels are inventory metadata for now. An environment label records a possible
+future deployment target; it does not route the environment's deployments to
+that agent or authorize remote work.
 
 ## Agent start and pairing
 
@@ -350,8 +356,9 @@ revoke and re-pair it first.
 
 ### No match
 
-Check that the environment is assigned to this paired active agent. The
-deployment remains waiting until that agent polls.
+Check that the paired agent has the expected capability and environment labels
+and is reporting a healthy heartbeat. Labels do not route deployments until
+label-based dispatch is enabled.
 
 ### Revoked agent
 

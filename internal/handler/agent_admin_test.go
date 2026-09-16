@@ -28,14 +28,14 @@ func TestViewerAgentControlsHidden(t *testing.T) {
 	}
 }
 
-func TestViewerAgentWriteReturnsToast(t *testing.T) {
+func TestViewerAgentLabelWriteReturnsToast(t *testing.T) {
 	h := newProjectHarness(t)
 	h.setRole("viewer")
 	req, err := http.NewRequestWithContext(
 		t.Context(),
-		http.MethodPut,
-		h.server.URL+"/admin/environments/1/agent",
-		strings.NewReader("agent_id=agent-a"),
+		http.MethodPost,
+		h.server.URL+"/admin/agents/agent-a/labels",
+		strings.NewReader("label=linux"),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -44,7 +44,7 @@ func TestViewerAgentWriteReturnsToast(t *testing.T) {
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	response, err := h.authedClient().Do(req)
 	if err != nil {
-		t.Fatalf("PUT environment agent: %v", err)
+		t.Fatalf("POST agent label: %v", err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK ||

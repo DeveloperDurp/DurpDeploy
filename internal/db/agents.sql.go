@@ -10,6 +10,27 @@ import (
 	"database/sql"
 )
 
+const addAgentEnvironmentLabel = `-- name: AddAgentEnvironmentLabel :execrows
+INSERT INTO agent_environment_labels (agent_id, environment_id)
+SELECT ?1, ?2
+WHERE NOT EXISTS (SELECT 1 FROM agent_environment_labels
+ WHERE agent_id = ?1
+   AND environment_id = ?2)
+`
+
+type AddAgentEnvironmentLabelParams struct {
+	AgentID       string `json:"agent_id"`
+	EnvironmentID int64  `json:"environment_id"`
+}
+
+func (q *Queries) AddAgentEnvironmentLabel(ctx context.Context, arg AddAgentEnvironmentLabelParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, addAgentEnvironmentLabel, arg.AgentID, arg.EnvironmentID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const addAgentLabel = `-- name: AddAgentLabel :execrows
 INSERT INTO agent_labels (agent_id, label)
 SELECT ?1, ?2
@@ -77,6 +98,24 @@ func (q *Queries) CreateAgent(ctx context.Context, arg CreateAgentParams) (Agent
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const deleteAgentEnvironmentLabel = `-- name: DeleteAgentEnvironmentLabel :execrows
+DELETE FROM agent_environment_labels
+WHERE agent_id = ? AND environment_id = ?
+`
+
+type DeleteAgentEnvironmentLabelParams struct {
+	AgentID       string `json:"agent_id"`
+	EnvironmentID int64  `json:"environment_id"`
+}
+
+func (q *Queries) DeleteAgentEnvironmentLabel(ctx context.Context, arg DeleteAgentEnvironmentLabelParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteAgentEnvironmentLabel, arg.AgentID, arg.EnvironmentID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const deleteAgentLabel = `-- name: DeleteAgentLabel :execrows
@@ -201,6 +240,41 @@ func (q *Queries) ListAgentAssignments(ctx context.Context, agentID string) ([]E
 	return items, nil
 }
 
+const listAgentEnvironmentLabels = `-- name: ListAgentEnvironmentLabels :many
+SELECT e.id, e.name, e.description, e.tags, e.created_at FROM environments e
+JOIN agent_environment_labels l ON l.environment_id = e.id
+WHERE l.agent_id = ? ORDER BY e.name, e.id
+`
+
+func (q *Queries) ListAgentEnvironmentLabels(ctx context.Context, agentID string) ([]Environment, error) {
+	rows, err := q.db.QueryContext(ctx, listAgentEnvironmentLabels, agentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Environment
+	for rows.Next() {
+		var i Environment
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Description,
+			&i.Tags,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAgentEnvironments = `-- name: ListAgentEnvironments :many
 SELECT e.id, e.name, e.description, e.tags, e.created_at FROM environments e JOIN environment_agent_assignments a ON a.environment_id = e.id
 WHERE a.agent_id = ? ORDER BY e.name, e.id
@@ -288,6 +362,42 @@ func (q *Queries) ListAgents(ctx context.Context) ([]Agent, error) {
 			&i.RevokedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAvailableAgentEnvironmentLabels = `-- name: ListAvailableAgentEnvironmentLabels :many
+SELECT e.id, e.name, e.description, e.tags, e.created_at FROM environments e
+WHERE NOT EXISTS (SELECT 1 FROM agent_environment_labels l
+ WHERE l.agent_id = ?1 AND l.environment_id = e.id)
+ORDER BY e.name, e.id
+`
+
+func (q *Queries) ListAvailableAgentEnvironmentLabels(ctx context.Context, agentID string) ([]Environment, error) {
+	rows, err := q.db.QueryContext(ctx, listAvailableAgentEnvironmentLabels, agentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Environment
+	for rows.Next() {
+		var i Environment
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Description,
+			&i.Tags,
+			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}

@@ -83,7 +83,8 @@ boundary is:
   The dedicated agent listener is direct TLS 1.3 mTLS on port 10943 and does
   not route through Caddy. Publish 10943 separately and firewall it to agent
   networks.
-* The server listener requires all three variables together:
+* The server listener is always active and creates a local identity when
+  needed. Production must override its localhost-oriented defaults:
 
   ```dotenv
   DURPDEPLOY_AGENT_LISTEN_ADDR=0.0.0.0:10943

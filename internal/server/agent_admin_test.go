@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -102,124 +101,6 @@ func TestAdminAgentRetryBindsPairingToRouteAgent(t *testing.T) {
 	}
 }
 
-func TestAdminAssignEnvironmentAgent(t *testing.T) {
-	h := newOIDCRouterHarness(t)
-	seedAgentRouteUser(t, h, "admin", "assign-admin")
-	environmentID := seedAssignableAgent(t, h)
-	router := NewRouter(h.repo, h.runner, h.parser, h.authHandler)
-	form := url.Values{"agent_id": {"agent-a"}, "csrf_token": {"csrf"}}
-	req := browserFormRequest(
-		http.MethodPut,
-		fmt.Sprintf("/admin/environments/%d/agent", environmentID),
-		"assign-admin",
-		form,
-	)
-	res := httptest.NewRecorder()
-	router.ServeHTTP(res, req)
-	if res.Code != http.StatusSeeOther {
-		t.Fatalf("status=%d body=%s", res.Code, res.Body)
-	}
-	assignment, err := h.repo.Queries.GetEnvironmentAgentAssignment(
-		t.Context(), environmentID,
-	)
-	if err != nil || assignment.AgentID != "agent-a" {
-		t.Fatalf("assignment=%+v err=%v", assignment, err)
-	}
-	assertAuditActionCount(t, h, "assign_environment_agent", 1)
-}
-
-func TestAdminAssignEnvironmentAgentReturnsFragmentForHTMX(t *testing.T) {
-	h := newOIDCRouterHarness(t)
-	seedAgentRouteUser(t, h, "admin", "assign-htmx-admin")
-	environmentID := seedAssignableAgent(t, h)
-	router := NewRouter(h.repo, h.runner, h.parser, h.authHandler)
-	form := url.Values{"agent_id": {"agent-a"}, "csrf_token": {"csrf"}}
-	req := browserFormRequest(
-		http.MethodPut,
-		fmt.Sprintf("/admin/environments/%d/agent", environmentID),
-		"assign-htmx-admin",
-		form,
-	)
-	req.Header.Set("HX-Request", "true")
-	req.Header.Set("HX-Target", "environments-list")
-	res := httptest.NewRecorder()
-
-	router.ServeHTTP(res, req)
-
-	body := res.Body.String()
-	if res.Code != http.StatusOK ||
-		!strings.Contains(body, `id="environments-list"`) ||
-		!strings.Contains(body, ">Unassign</button>") ||
-		strings.Contains(body, `id="agent-assignments"`) ||
-		strings.Contains(body, "<!doctype html>") ||
-		strings.Contains(body, "<html") ||
-		res.Header().Get("Location") != "" {
-		t.Fatalf("status=%d body=%s", res.Code, body)
-	}
-}
-
-func TestAdminUnassignEnvironmentAgentReturnsEnvironmentFragmentForHTMX(
-	t *testing.T,
-) {
-	// Given
-	h := newOIDCRouterHarness(t)
-	seedAgentRouteUser(t, h, "admin", "unassign-htmx-admin")
-	environmentID := seedAssignableAgent(t, h)
-	if err := h.repo.AssignEnvironmentAgent(
-		t.Context(), environmentID, "agent-a",
-	); err != nil {
-		t.Fatal(err)
-	}
-	router := NewRouter(h.repo, h.runner, h.parser, h.authHandler)
-	form := url.Values{"agent_id": {"agent-a"}, "csrf_token": {"csrf"}}
-	req := browserFormRequest(
-		http.MethodDelete,
-		fmt.Sprintf("/admin/environments/%d/agent", environmentID),
-		"unassign-htmx-admin",
-		form,
-	)
-	req.Header.Set("HX-Request", "true")
-	req.Header.Set("HX-Target", "environments-list")
-	res := httptest.NewRecorder()
-
-	// When
-	router.ServeHTTP(res, req)
-
-	// Then
-	body := res.Body.String()
-	if res.Code != http.StatusOK ||
-		!strings.Contains(body, `id="environments-list"`) ||
-		!strings.Contains(body, ">Local</span>") ||
-		strings.Contains(body, `id="agent-assignments"`) {
-		t.Fatalf("status=%d body=%s", res.Code, body)
-	}
-}
-
-func TestAdminUnassignEnvironmentAgent(t *testing.T) {
-	h := newOIDCRouterHarness(t)
-	seedAgentRouteUser(t, h, "admin", "unassign-admin")
-	environmentID := seedAssignableAgent(t, h)
-	if err := h.repo.AssignEnvironmentAgent(
-		t.Context(), environmentID, "agent-a",
-	); err != nil {
-		t.Fatal(err)
-	}
-	router := NewRouter(h.repo, h.runner, h.parser, h.authHandler)
-	form := url.Values{"agent_id": {"agent-a"}, "csrf_token": {"csrf"}}
-	req := browserFormRequest(
-		http.MethodDelete,
-		fmt.Sprintf("/admin/environments/%d/agent", environmentID),
-		"unassign-admin",
-		form,
-	)
-	res := httptest.NewRecorder()
-	router.ServeHTTP(res, req)
-	if res.Code != http.StatusSeeOther {
-		t.Fatalf("status=%d body=%s", res.Code, res.Body)
-	}
-	assertAuditActionCount(t, h, "unassign_environment_agent", 1)
-}
-
 func TestAdminRevokeAgent(t *testing.T) {
 	h := newOIDCRouterHarness(t)
 	seedAgentRouteUser(t, h, "admin", "revoke-admin")
@@ -242,10 +123,4 @@ func TestAdminRevokeAgent(t *testing.T) {
 		t.Fatalf("agent=%+v err=%v", agent, err)
 	}
 	assertAuditActionCount(t, h, "revoke_agent", 1)
-}
-
-func TestAgentAudit(t *testing.T) {
-	TestAdminAssignEnvironmentAgent(t)
-	TestAdminUnassignEnvironmentAgent(t)
-	TestAdminRevokeAgent(t)
 }

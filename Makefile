@@ -36,17 +36,11 @@ dev-server:
 		printf '%s' "$${DURPDEPLOY_SECRET_KEY:-}"); \
 	if [ -n "$$env_secret_key" ]; then DURPDEPLOY_SECRET_KEY="$$env_secret_key"; fi; \
 	if [ -f "$(ENV_FILE)" ]; then . "$(ENV_FILE)"; fi; \
-	if [ -n "$${DURPDEPLOY_AGENT_LISTEN_ADDR:-}" ] || \
-		[ -n "$${DURPDEPLOY_AGENT_PUBLIC_URL:-}" ] || \
-		[ -n "$${DURPDEPLOY_AGENT_IDENTITY_DIR:-}" ]; then \
-		if [ -z "$${DURPDEPLOY_AGENT_LISTEN_ADDR:-}" ] || \
-			[ -z "$${DURPDEPLOY_AGENT_PUBLIC_URL:-}" ] || \
-			[ -z "$${DURPDEPLOY_AGENT_IDENTITY_DIR:-}" ]; then \
-			echo 'ERROR: make dev agent listener requires all three DURPDEPLOY_AGENT_* variables.' >&2; exit 1; \
-		fi; \
-		export DURPDEPLOY_AGENT_LISTEN_ADDR DURPDEPLOY_AGENT_PUBLIC_URL DURPDEPLOY_AGENT_IDENTITY_DIR; \
-		go run ./cmd/server dev-agent-identity; \
-	fi; \
+	DURPDEPLOY_AGENT_LISTEN_ADDR=$${DURPDEPLOY_AGENT_LISTEN_ADDR:-0.0.0.0:10943}; \
+	DURPDEPLOY_AGENT_PUBLIC_URL=$${DURPDEPLOY_AGENT_PUBLIC_URL:-https://host.containers.internal:10943}; \
+	DURPDEPLOY_AGENT_IDENTITY_DIR=$${DURPDEPLOY_AGENT_IDENTITY_DIR:-$(MAKEFILE_DIR)tmp/dev-agent-identity}; \
+	export DURPDEPLOY_AGENT_LISTEN_ADDR DURPDEPLOY_AGENT_PUBLIC_URL DURPDEPLOY_AGENT_IDENTITY_DIR; \
+	go run ./cmd/server dev-agent-identity; \
 	if [ "$${DURPDEPLOY_URL+x}" != "" ]; then export DURPDEPLOY_URL; fi; \
 	if [ "$${DURPDEPLOY_OIDC_ISSUER+x}" != "" ]; then export DURPDEPLOY_OIDC_ISSUER; fi; \
 	if [ "$${DURPDEPLOY_OIDC_CLIENT_ID+x}" != "" ]; then export DURPDEPLOY_OIDC_CLIENT_ID; fi; \

@@ -4,7 +4,7 @@ set -euo pipefail
 container=${DURPDEPLOY_HTTPS_PROXY_CONTAINER:-durpdeploy-dev-https}
 port=${DURPDEPLOY_HTTPS_PROXY_PORT:-8443}
 backend=${DURPDEPLOY_HTTPS_PROXY_BACKEND:-host.docker.internal:8080}
-image=${DURPDEPLOY_HTTPS_PROXY_IMAGE:-caddy:2-alpine}
+image=${DURPDEPLOY_HTTPS_PROXY_IMAGE:-docker.io/library/caddy:2-alpine}
 health_url="https://localhost:${port}/healthz"
 container_engine=""
 config=""
@@ -82,7 +82,13 @@ select_container_engine
 command -v setsid >/dev/null 2>&1 || fail "setsid is required to stop the development server process group."
 
 if "$container_engine" container inspect "$container" >/dev/null 2>&1; then
-	fail "HTTPS proxy container '$container' already exists; choose DURPDEPLOY_HTTPS_PROXY_CONTAINER or remove it."
+	if curl -kfsS "$health_url" >/dev/null 2>&1; then
+		echo "Development server is already running at $health_url"
+		exit 0
+	fi
+	echo "Replacing unhealthy HTTPS proxy container '$container'."
+	"$container_engine" rm -f "$container" >/dev/null || \
+		fail "Could not remove unhealthy HTTPS proxy container '$container'."
 fi
 
 host_ip_output=$(hostname -I 2>/dev/null) || host_ip_output=""
@@ -139,9 +145,9 @@ echo "Development CA certificate: $tls_dir/ca.pem"
 if ! "$container_engine" run -d --rm --name "$container" \
 	--add-host host.docker.internal:host-gateway \
 	-p "${port}:443" \
-	-v "$config:/etc/caddy/Caddyfile:ro" \
-	-v "$tls_dir/dev-cert.pem:/etc/caddy/dev-cert.pem:ro" \
-	-v "$tls_dir/dev-key.pem:/etc/caddy/dev-key.pem:ro" \
+	-v "$config:/etc/caddy/Caddyfile:ro,Z" \
+	-v "$tls_dir/dev-cert.pem:/etc/caddy/dev-cert.pem:ro,Z" \
+	-v "$tls_dir/dev-key.pem:/etc/caddy/dev-key.pem:ro,Z" \
 	"$image" >/dev/null; then
 	fail "Could not start Caddy. The container engine must support the Linux host-gateway mapping required to reach the host backend."
 fi

@@ -18,22 +18,16 @@ func TestServerAgentChild(t *testing.T) {
 	}
 }
 
-func TestServerMissingAgentIdentityFailsClosed(t *testing.T) {
-	testAgentChildFailure(t, "missing")
-}
-
 func TestServerInvalidAgentIdentityFailsClosed(t *testing.T) {
-	testAgentChildFailure(t, "invalid")
+	testAgentChildFailure(t)
 }
 
-func testAgentChildFailure(t *testing.T, material string) {
+func testAgentChildFailure(t *testing.T) {
 	t.Helper()
 	dir := t.TempDir()
-	if material == "invalid" {
-		for _, name := range []string{"identity.crt", "identity.key"} {
-			if err := os.WriteFile(filepath.Join(dir, name), []byte("invalid"), 0o600); err != nil {
-				t.Fatal(err)
-			}
+	for _, name := range []string{"identity.crt", "identity.key"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("invalid"), 0o600); err != nil {
+			t.Fatal(err)
 		}
 	}
 	port, err := net.Listen("tcp", "127.0.0.1:0")
@@ -73,8 +67,7 @@ func testAgentChildFailure(t *testing.T, material string) {
 		t.Fatal("startup touched child working directory before validation")
 	}
 	t.Logf(
-		"%s identity: child exit=1; port %s rebound; no database created; diagnostic=%s",
-		material,
+		"invalid identity: child exit=1; port %s rebound; no database created; diagnostic=%s",
 		addr,
 		output,
 	)

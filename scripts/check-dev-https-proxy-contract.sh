@@ -121,6 +121,57 @@ EOF
 	}
 }
 
+test_existing_unhealthy_proxy_is_replaced() {
+	local tmp
+	tmp=$(mktemp -d "${TMPDIR:-/tmp}/durpdeploy-proxy-existing.XXXXXX")
+	cleanup_existing_proxy_test() {
+		rm -rf "$tmp"
+	}
+	trap cleanup_existing_proxy_test RETURN
+
+	mkdir "$tmp/bin"
+	cat >"$tmp/bin/docker" <<'EOF'
+#!/usr/bin/env bash
+case "$1" in
+info|container) exit 0 ;;
+rm) printf 'rm\n' >>"$DURPDEPLOY_PROXY_TEST_OPERATIONS"; exit 0 ;;
+run)
+	printf 'run\n' >>"$DURPDEPLOY_PROXY_TEST_OPERATIONS"
+	: >"$DURPDEPLOY_PROXY_TEST_STARTED"
+	exit 0
+	;;
+esac
+exit 1
+EOF
+	cat >"$tmp/bin/curl" <<'EOF'
+#!/usr/bin/env bash
+[[ -f "$DURPDEPLOY_PROXY_TEST_STARTED" ]]
+EOF
+	cat >"$tmp/server" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+	chmod +x "$tmp/bin/docker" "$tmp/bin/curl" "$tmp/server"
+
+	DURPDEPLOY_PROXY_TEST_OPERATIONS="$tmp/operations" \
+		DURPDEPLOY_PROXY_TEST_STARTED="$tmp/started" \
+		PATH="$tmp/bin:$PATH" \
+		"$root/scripts/dev_https_proxy.sh" "$tmp/server"
+	grep -Fqx 'rm' "$tmp/operations"
+	grep -Fqx 'run' "$tmp/operations"
+}
+
+test_selinux_labeled_proxy_mounts() {
+	local target
+	for target in Caddyfile dev-cert.pem dev-key.pem; do
+		grep -Fq "/etc/caddy/$target:ro,Z" \
+			"$root/scripts/dev_https_proxy.sh" || {
+			echo "dev HTTPS proxy: $target mount lacks private SELinux label" >&2
+			return 1
+		}
+	done
+}
+
 test_tls_host_addresses() {
 	local tmp
 	tmp=$(mktemp -d "${TMPDIR:-/tmp}/durpdeploy-proxy-hosts.XXXXXX")
@@ -141,10 +192,10 @@ case "$1" in
 			if [[ "$1" == -v ]]; then
 				source=${2%%:*}
 				case "$2" in
-				*:/etc/caddy/Caddyfile:ro)
+				*:/etc/caddy/Caddyfile:ro,Z)
 					cp "$source" "$DURPDEPLOY_PROXY_TEST_CONFIG"
 					;;
-				*:/etc/caddy/dev-cert.pem:ro)
+				*:/etc/caddy/dev-cert.pem:ro,Z)
 					cp "$source" "$DURPDEPLOY_PROXY_TEST_CERT"
 					;;
 				esac
@@ -211,11 +262,22 @@ EOF
 bash -n "$root/scripts/dev_https_proxy.sh" "$root/scripts/e2e_db_test.sh"
 make -C "$root" -n dev dev-postgres dev-mssql >/dev/null
 
-grep -Fq 'caddy:2-alpine' "$root/scripts/dev_https_proxy.sh"
+grep -Fq \
+	'image=${DURPDEPLOY_HTTPS_PROXY_IMAGE:-docker.io/library/caddy:2-alpine}' \
+	"$root/scripts/dev_https_proxy.sh"
 grep -Fq -- '--add-host host.docker.internal:host-gateway' "$root/scripts/dev_https_proxy.sh"
 grep -Fq 'trap cleanup EXIT' "$root/scripts/dev_https_proxy.sh"
 grep -Fq 'dev-agent-identity' "$root/Makefile"
 grep -Fq 'DURPDEPLOY_AGENT_IDENTITY_DIR' "$root/Makefile"
+grep -Fq \
+	'DURPDEPLOY_AGENT_LISTEN_ADDR=$${DURPDEPLOY_AGENT_LISTEN_ADDR:-0.0.0.0:10943}' \
+	"$root/Makefile"
+grep -Fq \
+	'DURPDEPLOY_AGENT_PUBLIC_URL=$${DURPDEPLOY_AGENT_PUBLIC_URL:-https://host.containers.internal:10943}' \
+	"$root/Makefile"
+grep -Fq \
+	'DURPDEPLOY_AGENT_IDENTITY_DIR=$${DURPDEPLOY_AGENT_IDENTITY_DIR:-$(MAKEFILE_DIR)tmp/dev-agent-identity}' \
+	"$root/Makefile"
 grep -Fq './scripts/e2e_db_test.sh sqlite' "$root/Makefile"
 grep -Fq 'e2e-test-isolated:' "$root/Makefile"
 if grep -Eq 'go (build|run)|\$TMP/durpdeploy' "$root/scripts/e2e_db_test.sh"; then
@@ -227,6 +289,8 @@ grep -Fq '/settings/security/totp/cancel' "$root/scripts/e2e_test.sh"
 grep -Fq '/settings/security/recovery/continue' "$root/scripts/e2e_test.sh"
 test_shutdown_tree
 test_podman_fallback
+test_existing_unhealthy_proxy_is_replaced
+test_selinux_labeled_proxy_mounts
 test_tls_host_addresses
 
 echo 'dev HTTPS proxy contract: OK'

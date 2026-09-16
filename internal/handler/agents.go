@@ -4,11 +4,12 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
-	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 
 	"durpdeploy/internal/agentserver"
+	"durpdeploy/internal/db"
 	"durpdeploy/internal/repository"
 	"durpdeploy/views/pages"
 )
@@ -70,20 +71,32 @@ func (h *AgentsHandler) Detail(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	assigned, err := h.repo.Queries.ListAgentEnvironments(r.Context(), agent.ID)
+	labels, err := h.repo.Queries.ListAgentLabels(r.Context(), agent.ID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	environments, err := h.repo.Queries.ListEnvironments(r.Context())
+	environmentLabels, err := h.repo.Queries.ListAgentEnvironmentLabels(
+		r.Context(),
+		agent.ID,
+	)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	availableEnvironments, err := h.repo.Queries.ListAvailableAgentEnvironmentLabels(
+		r.Context(),
+		agent.ID,
+	)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	if err := pages.AgentDetailPage(
 		agent,
-		assigned,
-		environments,
+		labels,
+		environmentLabels,
+		availableEnvironments,
 		r.URL.Path,
 	).Render(r.Context(), w); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -142,56 +155,64 @@ func (h *AgentsHandler) Revoke(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/admin/agents", http.StatusSeeOther)
 }
 
-func (h *AgentsHandler) Assign(w http.ResponseWriter, r *http.Request) {
-	environmentID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
-	if err != nil {
-		http.Error(w, "Invalid environment ID", http.StatusBadRequest)
-		return
-	}
+func (h *AgentsHandler) AddLabel(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "Invalid form", http.StatusBadRequest)
 		return
 	}
-	agentID := r.FormValue("agent_id")
-	if agentID == "" {
-		http.Error(w, "Agent is required", http.StatusUnprocessableEntity)
+	agentID := chi.URLParam(r, "id")
+	label := strings.TrimSpace(r.FormValue("label"))
+	if label == "" || len(label) > 64 {
+		http.Error(
+			w,
+			"Label must be between 1 and 64 characters",
+			http.StatusUnprocessableEntity,
+		)
 		return
 	}
-	if err := h.repo.AssignEnvironmentAgent(
-		r.Context(), environmentID, agentID,
+	if _, err := h.repo.Queries.GetAgent(r.Context(), agentID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			http.NotFound(w, r)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if _, err := h.repo.Queries.AddAgentLabel(
+		r.Context(),
+		db.AddAgentLabelParams{AgentID: agentID, Label: label},
 	); err != nil {
-		writeBrowserAgentMutationError(w, err)
-		return
-	}
-	if r.Header.Get("HX-Request") == "true" {
-		h.renderAssignments(w, r, agentID)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	http.Redirect(w, r, "/admin/agents/"+agentID, http.StatusSeeOther)
 }
 
-func (h *AgentsHandler) Unassign(w http.ResponseWriter, r *http.Request) {
-	environmentID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
-	if err != nil {
-		http.Error(w, "Invalid environment ID", http.StatusBadRequest)
+func (h *AgentsHandler) DeleteLabel(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "Invalid form", http.StatusBadRequest)
 		return
 	}
-	assignment, err := h.repo.Queries.GetEnvironmentAgentAssignment(
-		r.Context(), environmentID,
+	agentID := chi.URLParam(r, "id")
+	label := strings.TrimSpace(r.FormValue("label"))
+	if label == "" || len(label) > 64 {
+		http.Error(
+			w,
+			"Label must be between 1 and 64 characters",
+			http.StatusUnprocessableEntity,
+		)
+		return
+	}
+	changed, err := h.repo.Queries.DeleteAgentLabel(
+		r.Context(),
+		db.DeleteAgentLabelParams{AgentID: agentID, Label: label},
 	)
 	if err != nil {
-		writeBrowserAgentMutationError(w, err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	agentID := assignment.AgentID
-	if err := h.repo.UnassignEnvironmentAgent(
-		r.Context(), environmentID, agentID,
-	); err != nil {
-		writeBrowserAgentMutationError(w, err)
-		return
-	}
-	if r.Header.Get("HX-Request") == "true" {
-		h.renderAssignments(w, r, agentID)
+	if changed == 0 {
+		http.NotFound(w, r)
 		return
 	}
 	http.Redirect(w, r, "/admin/agents/"+agentID, http.StatusSeeOther)
@@ -230,18 +251,5 @@ func pairingErrorMessage(err error) string {
 		return "The observed certificate fingerprint did not match"
 	default:
 		return "Agent pairing failed"
-	}
-}
-
-func writeBrowserAgentMutationError(w http.ResponseWriter, err error) {
-	switch {
-	case errors.Is(err, sql.ErrNoRows),
-		errors.Is(err, repository.ErrAgentAssignmentNotFound):
-		http.Error(w, "Agent or environment not found", http.StatusNotFound)
-	case errors.Is(err, repository.ErrAgentAssignmentConflict),
-		errors.Is(err, repository.ErrAgentUnavailable):
-		http.Error(w, err.Error(), http.StatusConflict)
-	default:
-		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }

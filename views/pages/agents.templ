@@ -24,15 +24,6 @@ func agentHealth(agent db.Agent) (string, string) {
 	return "offline", "badge-error"
 }
 
-func environmentAssigned(env db.Environment, assigned []db.Environment) bool {
-	for _, item := range assigned {
-		if item.ID == env.ID {
-			return true
-		}
-	}
-	return false
-}
-
 templ AgentsPage(agents []db.Agent, formError string, currentPath string) {
 	if !CanWrite(ctx) {
 		@ViewerForbiddenMessage(
@@ -129,7 +120,7 @@ templ AgentsPage(agents []db.Agent, formError string, currentPath string) {
 	}
 }
 
-templ AgentDetailPage(agent db.Agent, assigned []db.Environment, environments []db.Environment, currentPath string) {
+templ AgentDetailPage(agent db.Agent, labels []string, environmentLabels []db.Environment, availableEnvironments []db.Environment, currentPath string) {
 	if !CanWrite(ctx) {
 		@ViewerForbiddenMessage(
 			"Agent "+agent.Name,
@@ -203,32 +194,78 @@ templ AgentDetailPage(agent db.Agent, assigned []db.Environment, environments []
 					</div>
 				</div>
 			}
-			@AgentAssignments(agent, assigned, environments)
+			@AgentLabels(agent, labels)
+			@AgentEnvironmentLabels(agent, environmentLabels, availableEnvironments)
 		</div>
 		}
 	}
 }
 
-templ AgentAssignments(agent db.Agent, assigned []db.Environment, environments []db.Environment) {
-	<div id="agent-assignments" class="card bg-base-200 shadow">
+templ AgentEnvironmentLabels(agent db.Agent, labels []db.Environment, availableEnvironments []db.Environment) {
+	<div class="card bg-base-200 shadow">
 		<div class="card-body">
-			<h2 class="card-title">Environment assignments</h2>
-			if agent.Status == "active" {
-				<div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-					for _, env := range environments {
-						<div class="flex min-w-0 items-center justify-between gap-2 rounded-box bg-base-100 p-3">
-							<span class="min-w-0 flex-1 break-words">{ env.Name }</span>
-							if environmentAssigned(env, assigned) {
-								<button class="btn btn-error btn-xs" hx-delete={ fmt.Sprintf("/admin/environments/%d/agent", env.ID) } hx-vals={ fmt.Sprintf(`{"agent_id":%q}`, agent.ID) } hx-target="#agent-assignments" hx-swap="outerHTML" hx-confirm={ "Unassign " + env.Name + " from " + agent.Name + "?" }>Unassign</button>
-							} else {
-								<button class="btn btn-primary btn-xs" hx-put={ fmt.Sprintf("/admin/environments/%d/agent", env.ID) } hx-vals={ fmt.Sprintf(`{"agent_id":%q}`, agent.ID) } hx-target="#agent-assignments" hx-swap="outerHTML">Assign</button>
-							}
-						</div>
+			<h2 class="card-title">Environment labels</h2>
+			<p class="opacity-70">Environment labels are metadata for future deployment selection. They do not route deployments.</p>
+			if len(labels) == 0 {
+				<p class="text-sm opacity-60">No environment labels assigned.</p>
+			} else {
+				<div class="flex flex-wrap gap-2">
+					for _, environment := range labels {
+						<form method="post" action={ templ.SafeURL("/admin/agents/" + agent.ID + "/environments/delete") } class="flex items-center gap-1 rounded-box bg-base-100 p-2">
+							<input type="hidden" name="environment_id" value={ fmt.Sprint(environment.ID) }/>
+							<span class="badge badge-outline">{ environment.Name }</span>
+							<button type="submit" class="btn btn-error btn-xs" aria-label={ "Remove environment label " + environment.Name }>Remove</button>
+						</form>
 					}
 				</div>
-			} else {
-				<p class="opacity-70">Only active paired agents can receive environment assignments.</p>
 			}
+			if len(availableEnvironments) == 0 && len(labels) == 0 {
+				<p class="text-sm opacity-60">Create an environment before adding an environment label.</p>
+			} else if len(availableEnvironments) == 0 {
+				<p class="text-sm opacity-60">All environments are already selected.</p>
+			} else {
+				<form method="post" action={ templ.SafeURL("/admin/agents/" + agent.ID + "/environments") } class="flex flex-wrap items-end gap-2">
+					<label class="form-control flex-1 min-w-48">
+						<span class="label"><span class="label-text">Environment</span></span>
+						<select class="select select-bordered" name="environment_id" required>
+							<option value="" disabled selected>Select environment</option>
+							for _, environment := range availableEnvironments {
+								<option value={ fmt.Sprint(environment.ID) }>{ environment.Name }</option>
+							}
+						</select>
+					</label>
+					<button type="submit" class="btn btn-primary">Add environment</button>
+				</form>
+			}
+		</div>
+	</div>
+}
+
+templ AgentLabels(agent db.Agent, labels []string) {
+	<div class="card bg-base-200 shadow">
+		<div class="card-body">
+			<h2 class="card-title">Labels</h2>
+			<p class="opacity-70">Labels identify which work this agent can receive.</p>
+			if len(labels) == 0 {
+				<p class="text-sm opacity-60">No labels assigned.</p>
+			} else {
+				<div class="flex flex-wrap gap-2">
+					for _, label := range labels {
+						<form method="post" action={ templ.SafeURL("/admin/agents/" + agent.ID + "/labels/delete") } class="flex items-center gap-1 rounded-box bg-base-100 p-2">
+							<input type="hidden" name="label" value={ label }/>
+							<span class="badge badge-outline">{ label }</span>
+							<button type="submit" class="btn btn-error btn-xs" aria-label={ "Remove label " + label }>Remove</button>
+						</form>
+					}
+				</div>
+			}
+			<form method="post" action={ templ.SafeURL("/admin/agents/" + agent.ID + "/labels") } class="flex flex-wrap items-end gap-2">
+				<label class="form-control flex-1 min-w-48">
+					<span class="label"><span class="label-text">New label</span></span>
+					<input class="input input-bordered" name="label" maxlength="64" placeholder="e.g. linux" required/>
+				</label>
+				<button type="submit" class="btn btn-primary">Add label</button>
+			</form>
 		</div>
 	</div>
 }

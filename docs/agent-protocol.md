@@ -58,12 +58,13 @@ Pairing uses two channels:
 Pairing code disclosure is local-only. Codes and fingerprints are never API
 responses.
 
-## Direct assignment
+## Agent labels
 
-An administrator explicitly assigns each remote environment to one paired
-agent. Environments without an assignment run locally. An assigned
-environment creates work only for its paired agent. Agents do not select work
-or authorize themselves through labels.
+Administrators can attach capability labels through the browser or API and
+environment labels through the agent details page. Both are metadata only;
+they do not authorize an agent or route an environment's deployments. The
+environment routing assignment is not exposed through the supported browser or
+API surfaces.
 
 ## Dispatch state machine
 

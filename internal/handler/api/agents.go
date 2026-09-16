@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 
@@ -36,8 +37,8 @@ type pairAgentRequest struct {
 	Fingerprint string `json:"fingerprint"`
 }
 
-type assignAgentRequest struct {
-	AgentID string `json:"agent_id"`
+type agentLabelRequest struct {
+	Label string `json:"label"`
 }
 
 func NewAgentHandler(
@@ -73,7 +74,7 @@ func (h *AgentHandler) GetAgent(w http.ResponseWriter, r *http.Request) {
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	environments, err := h.repo.Queries.ListAgentEnvironments(
+	labels, err := h.repo.Queries.ListAgentLabels(
 		r.Context(),
 		agent.ID,
 	)
@@ -82,9 +83,9 @@ func (h *AgentHandler) GetAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	RespondJSON(w, http.StatusOK, struct {
-		Agent        agentResponse    `json:"agent"`
-		Environments []db.Environment `json:"environments"`
-	}{publicAgent(agent), environments})
+		Agent  agentResponse `json:"agent"`
+		Labels []string      `json:"labels"`
+	}{publicAgent(agent), labels})
 }
 
 func (h *AgentHandler) PairAgent(w http.ResponseWriter, r *http.Request) {
@@ -165,66 +166,73 @@ func (h *AgentHandler) RevokeAgent(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (h *AgentHandler) AssignEnvironment(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
-	environmentID, ok := parseIDParam(w, r, "id")
-	if !ok {
-		return
-	}
-	var request assignAgentRequest
+func (h *AgentHandler) AddLabel(w http.ResponseWriter, r *http.Request) {
+	var request agentLabelRequest
 	if !readJSONBool(w, r, &request) {
 		return
 	}
-	if request.AgentID == "" {
-		RespondError(w, http.StatusBadRequest, "agent_id is required")
+	request.Label = strings.TrimSpace(request.Label)
+	if request.Label == "" || len(request.Label) > 64 {
+		RespondError(
+			w,
+			http.StatusBadRequest,
+			"label must be between 1 and 64 characters",
+		)
 		return
 	}
-	if err := h.repo.AssignEnvironmentAgent(
-		r.Context(), environmentID, request.AgentID,
+	agentID := chi.URLParam(r, "id")
+	if _, err := h.repo.Queries.GetAgent(r.Context(), agentID); err != nil {
+		writeAgentNotFound(w, err)
+		return
+	}
+	if _, err := h.repo.Queries.AddAgentLabel(
+		r.Context(),
+		db.AddAgentLabelParams{AgentID: agentID, Label: request.Label},
 	); err != nil {
-		writeAgentMutationError(w, err)
+		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (h *AgentHandler) UnassignEnvironment(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
-	environmentID, ok := parseIDParam(w, r, "id")
-	if !ok {
+func (h *AgentHandler) DeleteLabel(w http.ResponseWriter, r *http.Request) {
+	var request agentLabelRequest
+	if !readJSONBool(w, r, &request) {
 		return
 	}
-	assignment, err := h.repo.Queries.GetEnvironmentAgentAssignment(
-		r.Context(), environmentID,
+	request.Label = strings.TrimSpace(request.Label)
+	if request.Label == "" || len(request.Label) > 64 {
+		RespondError(
+			w,
+			http.StatusBadRequest,
+			"label must be between 1 and 64 characters",
+		)
+		return
+	}
+	changed, err := h.repo.Queries.DeleteAgentLabel(
+		r.Context(),
+		db.DeleteAgentLabelParams{
+			AgentID: chi.URLParam(r, "id"),
+			Label:   request.Label,
+		},
 	)
 	if err != nil {
-		writeAgentMutationError(w, err)
+		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	if err := h.repo.UnassignEnvironmentAgent(
-		r.Context(), environmentID, assignment.AgentID,
-	); err != nil {
-		writeAgentMutationError(w, err)
+	if changed == 0 {
+		RespondError(w, http.StatusNotFound, "Agent label not found")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func writeAgentMutationError(w http.ResponseWriter, err error) {
-	switch {
-	case errors.Is(err, sql.ErrNoRows),
-		errors.Is(err, repository.ErrAgentAssignmentNotFound):
-		RespondError(w, http.StatusNotFound, "Agent or environment not found")
-	case errors.Is(err, repository.ErrAgentAssignmentConflict),
-		errors.Is(err, repository.ErrAgentUnavailable):
-		RespondError(w, http.StatusConflict, err.Error())
-	default:
-		RespondError(w, http.StatusInternalServerError, err.Error())
+func writeAgentNotFound(w http.ResponseWriter, err error) {
+	if errors.Is(err, sql.ErrNoRows) {
+		RespondError(w, http.StatusNotFound, "Agent not found")
+		return
 	}
+	RespondError(w, http.StatusInternalServerError, err.Error())
 }
 
 func publicAgent(agent db.Agent) agentResponse {

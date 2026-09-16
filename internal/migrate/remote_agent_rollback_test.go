@@ -11,7 +11,7 @@ import (
 )
 
 func TestRemoteAgentRollbackRefusal(t *testing.T) {
-	for _, version := range []int64{25, 26, 27, 28} {
+	for _, version := range []int64{25, 26, 27, 28, 29} {
 		t.Run(fmt.Sprint(version), func(t *testing.T) {
 			conn, err := sql.Open("sqlite", ":memory:?_pragma=foreign_keys(1)")
 			requireNoError(t, err, "open isolated database")

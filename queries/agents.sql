@@ -48,6 +48,28 @@ DELETE FROM agent_labels WHERE agent_id = ? AND label = ?;
 -- name: ListAgentLabels :many
 SELECT label FROM agent_labels WHERE agent_id = ? ORDER BY label;
 
+-- name: AddAgentEnvironmentLabel :execrows
+INSERT INTO agent_environment_labels (agent_id, environment_id)
+SELECT sqlc.arg(agent_id), sqlc.arg(environment_id)
+WHERE NOT EXISTS (SELECT 1 FROM agent_environment_labels
+ WHERE agent_id = sqlc.arg(agent_id)
+   AND environment_id = sqlc.arg(environment_id));
+
+-- name: DeleteAgentEnvironmentLabel :execrows
+DELETE FROM agent_environment_labels
+WHERE agent_id = ? AND environment_id = ?;
+
+-- name: ListAgentEnvironmentLabels :many
+SELECT e.* FROM environments e
+JOIN agent_environment_labels l ON l.environment_id = e.id
+WHERE l.agent_id = ? ORDER BY e.name, e.id;
+
+-- name: ListAvailableAgentEnvironmentLabels :many
+SELECT e.* FROM environments e
+WHERE NOT EXISTS (SELECT 1 FROM agent_environment_labels l
+ WHERE l.agent_id = sqlc.arg(agent_id) AND l.environment_id = e.id)
+ORDER BY e.name, e.id;
+
 -- name: AssignEnvironmentAgent :execrows
 INSERT INTO environment_agent_assignments (environment_id, agent_id)
 SELECT sqlc.arg(environment_id), sqlc.arg(agent_id)

@@ -158,7 +158,7 @@ func runServer() {
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 	defer signal.Stop(stop)
-	agentConfig, agentsEnabled, err := loadAgentListenerConfig()
+	agentConfig, err := loadAgentListenerConfig()
 	if err != nil {
 		log.Fatalf("agent listener configuration: %v", err)
 	}
@@ -259,36 +259,32 @@ func runServer() {
 		log.Fatalf("browser listener: %v", err)
 	}
 	defer browserListener.Close()
-	var agentRuntime *agentListener
-	var pairingService agentserver.Pairer
-	if agentsEnabled {
-		pairingService, err = agentserver.NewPairingService(
-			agentserver.PairingConfig{
-				Repository: repo, Identity: agentConfig.identity,
-				PullEndpoint: agentConfig.pullEndpoint,
-				Secrets:      box, Now: time.Now,
-			},
-		)
-		if err != nil {
-			log.Fatalf("agent pairing service: %v", err)
-		}
-		dispatcher := dispatch.New(repo)
-		agentRuntime, err = startAgentListener(ctx, agentConfig,
-			agentListenerDependencies{
-				repo: repo, dispatcher: dispatcher,
-				broker: broker, eventBus: bus,
-			})
-		if err != nil {
-			browserListener.Close()
-			cancel()
-			log.Fatalf("agent listener: %v", err)
-		}
-		slog.Info(
-			"agent listener started",
-			"addr",
-			agentRuntime.listener.Addr().String(),
-		)
+	pairingService, err := agentserver.NewPairingService(
+		agentserver.PairingConfig{
+			Repository: repo, Identity: agentConfig.identity,
+			PullEndpoint: agentConfig.pullEndpoint,
+			Secrets:      box, Now: time.Now,
+		},
+	)
+	if err != nil {
+		log.Fatalf("agent pairing service: %v", err)
 	}
+	dispatcher := dispatch.New(repo)
+	agentRuntime, err := startAgentListener(ctx, agentConfig,
+		agentListenerDependencies{
+			repo: repo, dispatcher: dispatcher,
+			broker: broker, eventBus: bus,
+		})
+	if err != nil {
+		browserListener.Close()
+		cancel()
+		log.Fatalf("agent listener: %v", err)
+	}
+	slog.Info(
+		"agent listener started",
+		"addr",
+		agentRuntime.listener.Addr().String(),
+	)
 	maintenance.StartLitestreamCheck(ctx, bus)
 	sched.Start(ctx)
 	defer sched.Stop()
@@ -331,10 +327,8 @@ func runServer() {
 		)
 		defer shutdownCancel()
 		cancel()
-		if agentRuntime != nil {
-			if err := agentRuntime.shutdown(shutdownCtx); err != nil {
-				slog.Error("agent shutdown failed", "err", err)
-			}
+		if err := agentRuntime.shutdown(shutdownCtx); err != nil {
+			slog.Error("agent shutdown failed", "err", err)
 		}
 		_ = srv.Shutdown(shutdownCtx)
 		rnr.KillAll()

@@ -31,28 +31,29 @@ type agentListenerConfig struct {
 	pullEndpoint agentproto.PullEndpoint
 }
 
-func loadAgentListenerConfig() (agentListenerConfig, bool, error) {
+func loadAgentListenerConfig() (agentListenerConfig, error) {
 	addr := os.Getenv("DURPDEPLOY_AGENT_LISTEN_ADDR")
 	publicURL := os.Getenv("DURPDEPLOY_AGENT_PUBLIC_URL")
 	dir := os.Getenv("DURPDEPLOY_AGENT_IDENTITY_DIR")
-	if addr == "" && publicURL == "" && dir == "" {
-		return agentListenerConfig{}, false, nil
+	if addr == "" {
+		addr = "0.0.0.0:10943"
 	}
-	if addr == "" || publicURL == "" || dir == "" {
-		return agentListenerConfig{}, false, errors.New(
-			"agent listener requires DURPDEPLOY_AGENT_LISTEN_ADDR, DURPDEPLOY_AGENT_PUBLIC_URL and DURPDEPLOY_AGENT_IDENTITY_DIR containing identity.crt and identity.key",
-		)
+	if publicURL == "" {
+		publicURL = "https://localhost:10943"
+	}
+	if dir == "" {
+		dir = ".agent-identity"
 	}
 	_, port, err := net.SplitHostPort(addr)
 	if err != nil {
-		return agentListenerConfig{}, false, fmt.Errorf(
+		return agentListenerConfig{}, fmt.Errorf(
 			"DURPDEPLOY_AGENT_LISTEN_ADDR: %w",
 			err,
 		)
 	}
 	portNumber, err := strconv.Atoi(port)
 	if err != nil || portNumber < 0 || portNumber > 65535 {
-		return agentListenerConfig{}, false, errors.New(
+		return agentListenerConfig{}, errors.New(
 			"DURPDEPLOY_AGENT_LISTEN_ADDR requires a numeric port from 0 to 65535",
 		)
 	}
@@ -63,45 +64,45 @@ func loadAgentListenerConfig() (agentListenerConfig, bool, error) {
 		u.ForceQuery ||
 		u.Fragment != "" ||
 		(u.Path != "" && u.Path != "/") {
-		return agentListenerConfig{}, false, errors.New(
+		return agentListenerConfig{}, errors.New(
 			"DURPDEPLOY_AGENT_PUBLIC_URL must be an HTTPS origin",
 		)
 	}
 	if u.Port() != "" {
 		publicPort, err := strconv.Atoi(u.Port())
 		if err != nil || publicPort < 1 || publicPort > 65535 {
-			return agentListenerConfig{}, false, errors.New(
+			return agentListenerConfig{}, errors.New(
 				"DURPDEPLOY_AGENT_PUBLIC_URL requires a port from 1 to 65535",
 			)
 		}
 	}
-	identity, err := agenttls.LoadExisting(dir)
+	identity, err := agenttls.LoadOrCreate(dir, publicURL)
 	if err != nil {
-		return agentListenerConfig{}, false, fmt.Errorf(
-			"DURPDEPLOY_AGENT_IDENTITY_DIR: provision valid identity.crt and identity.key: %w",
+		return agentListenerConfig{}, fmt.Errorf(
+			"DURPDEPLOY_AGENT_IDENTITY_DIR: load or create identity.crt and identity.key: %w",
 			err,
 		)
 	}
 	cert, err := x509.ParseCertificate(identity.Certificate.Certificate[0])
 	if err != nil {
-		return agentListenerConfig{}, false, err
+		return agentListenerConfig{}, err
 	}
 	if err := cert.VerifyHostname(u.Hostname()); err != nil {
-		return agentListenerConfig{}, false, fmt.Errorf(
+		return agentListenerConfig{}, fmt.Errorf(
 			"agent public URL identity mismatch: %w",
 			err,
 		)
 	}
 	pullEndpoint, err := agentproto.ParsePullEndpoint(publicURL)
 	if err != nil {
-		return agentListenerConfig{}, false, fmt.Errorf(
+		return agentListenerConfig{}, fmt.Errorf(
 			"DURPDEPLOY_AGENT_PUBLIC_URL: %w",
 			err,
 		)
 	}
 	return agentListenerConfig{
 		addr: addr, identity: identity, pullEndpoint: pullEndpoint,
-	}, true, nil
+	}, nil
 }
 
 type agentListenerDependencies struct {

@@ -2,7 +2,6 @@ package handler
 
 import (
 	"database/sql"
-	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -31,41 +30,7 @@ func (h *EnvironmentHandler) ListEnvironments(
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	rows, agents, err := h.environmentAgentRows(r, envs)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	pages.EnvironmentsList(rows, agents, r.URL.Path).Render(r.Context(), w)
-}
-
-func (h *EnvironmentHandler) environmentAgentRows(
-	r *http.Request,
-	envs []db.Environment,
-) ([]pages.EnvironmentAgentRow, []db.Agent, error) {
-	rows := make([]pages.EnvironmentAgentRow, len(envs))
-	for index, environment := range envs {
-		rows[index].Environment = environment
-		assignment, err := h.Repo.Queries.GetEnvironmentAgentAssignment(
-			r.Context(), environment.ID,
-		)
-		if errors.Is(err, sql.ErrNoRows) {
-			continue
-		}
-		if err != nil {
-			return nil, nil, err
-		}
-		agent, err := h.Repo.Queries.GetAgent(r.Context(), assignment.AgentID)
-		if err != nil {
-			return nil, nil, err
-		}
-		rows[index].Agent = &agent
-	}
-	agents, err := h.Repo.Queries.ListAgents(r.Context())
-	if err != nil {
-		return nil, nil, err
-	}
-	return rows, agents, nil
+	pages.EnvironmentsList(envs, r.URL.Path).Render(r.Context(), w)
 }
 
 func (h *EnvironmentHandler) NewEnvironment(
@@ -153,12 +118,7 @@ func (h *EnvironmentHandler) CreateEnvironment(
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		rows, agents, err := h.environmentAgentRows(r, envs)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		pages.EnvironmentsListContent(rows, agents).Render(r.Context(), w)
+		pages.EnvironmentsListContent(envs).Render(r.Context(), w)
 	} else {
 		http.Redirect(w, r, "/environments", http.StatusSeeOther)
 	}
@@ -261,12 +221,7 @@ func (h *EnvironmentHandler) UpdateEnvironment(
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		rows, agents, err := h.environmentAgentRows(r, envs)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		pages.EnvironmentsListContent(rows, agents).Render(r.Context(), w)
+		pages.EnvironmentsListContent(envs).Render(r.Context(), w)
 	} else {
 		http.Redirect(w, r, "/environments", http.StatusSeeOther)
 	}
@@ -293,10 +248,5 @@ func (h *EnvironmentHandler) DeleteEnvironment(
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	rows, agents, err := h.environmentAgentRows(r, envs)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	pages.EnvironmentsListContent(rows, agents).Render(r.Context(), w)
+	pages.EnvironmentsListContent(envs).Render(r.Context(), w)
 }

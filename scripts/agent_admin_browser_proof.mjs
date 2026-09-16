@@ -409,14 +409,19 @@ async function main() {
 		if ((await page.locator("body").innerText()).includes("active")) break;
 		await new Promise((resolvePromise) => setTimeout(resolvePromise, 100));
 	}
-	const assignmentCard = page.getByRole("heading", { name: "Environment assignments" }).locator("..");
-	await assignmentCard.getByText("Todo 12 browser environment").locator("..").getByRole("button", { name: "Assign" }).click();
-	await page.waitForLoadState("networkidle");
-	for (const width of [375, 768, 1280]) await capture(page, "agent-assigned", width);
+	await page.locator('input[name="label"]').fill("linux");
+	await Promise.all([
+		page.waitForURL(`${baseURL}/admin/agents/${pairedAgentID}`),
+		page.getByRole("button", { name: "Add label" }).click(),
+	]);
+	for (const width of [375, 768, 1280]) await capture(page, "agent-labeled", width);
 	const state = await command("sqlite3", ["-readonly", database,
-		`SELECT a.status||'|'||p.state||'|'||eaa.agent_id||'|'||eaa.environment_id FROM agents a JOIN agent_pairings p ON p.agent_id=a.id JOIN environment_agent_assignments eaa ON eaa.agent_id=a.id WHERE a.id='${pairedAgentID}';`]);
-	check(state.trim().startsWith(`active|paired|${pairedAgentID}|`), `unexpected read-only assignment state: ${state.trim()}`);
-	const environmentID = state.trim().split("|").at(-1);
+		`SELECT a.status||'|'||p.state||'|'||l.label FROM agents a JOIN agent_pairings p ON p.agent_id=a.id JOIN agent_labels l ON l.agent_id=a.id WHERE a.id='${pairedAgentID}';`]);
+	check(state.trim() === "active|paired|linux", `unexpected read-only label state: ${state.trim()}`);
+	const environmentID = (await readOnly("SELECT id FROM environments WHERE name='Todo 12 browser environment';")).trim();
+	check(environmentID, "browser environment ID was not durable");
+	await command("sqlite3", [database,
+		`INSERT INTO environment_agent_assignments(environment_id,agent_id) VALUES(${environmentID},'${pairedAgentID}');`]);
 	let lifecycleCheckpoint = null;
 	if (lifecycle) {
 		const agentIdentity = join(runDir, "agent-identity");
@@ -527,18 +532,18 @@ async function main() {
 	await logout(page, baseURL);
 	await login(page, baseURL, viewer);
 	await page.goto(`${baseURL}/environments`);
-	check(await page.getByRole("button", { name: /Assign|Unassign/ }).count() === 0, "viewer can see assignment controls");
+	check(await page.getByRole("button", { name: /Assign|Unassign/ }).count() === 0, "environment assignment controls are visible");
 	for (const width of [375, 768, 1280]) await capture(page, "viewer-environments", width);
 	const csrf = await page.locator('meta[name="csrf-token"]').getAttribute("content");
 	check(csrf, "viewer page lacks CSRF token");
-	const denied = await page.evaluate(async ({ environmentID, agentID, csrf }) => {
-		const response = await fetch(`/admin/environments/${environmentID}/agent`, {
-			method: "PUT",
+	const denied = await page.evaluate(async ({ agentID, csrf }) => {
+		const response = await fetch(`/admin/agents/${agentID}/labels`, {
+			method: "POST",
 			headers: { "HX-Request": "true", "X-CSRF-Token": csrf, "Content-Type": "application/x-www-form-urlencoded" },
-			body: new URLSearchParams({ agent_id: agentID }),
+			body: new URLSearchParams({ label: "viewer-denied" }),
 		});
 		return { status: response.status, trigger: response.headers.get("HX-Trigger") };
-	}, { environmentID, agentID: pairedAgentID, csrf });
+	}, { agentID: pairedAgentID, csrf });
 	check(denied.status === 200 && denied.trigger?.includes("makeToast"), `viewer HTMX denial was ${JSON.stringify(denied)}`);
 	await logout(page, baseURL);
 	await login(page, baseURL, admin);

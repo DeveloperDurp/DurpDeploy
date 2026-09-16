@@ -444,6 +444,6 @@ values:
   read the DB, or sniff process memory. OS-level problem.
 - **Network-level DDoS** — handled upstream (Caddy, firewall).
 - **Supply chain** — `go mod verify` and pinned versions only.
-- **Compromised remote agent host:** An agent can run deployments for its assigned environments. Isolate it from the control-plane host. Rotate its pairing and certificate material.
+- **Compromised remote agent host:** An agent can run work explicitly routed to it. Isolate it from the control-plane host. Rotate its pairing and certificate material.
 
 See `docs/attack-drill.md` for hands-on verification of the active defenses.

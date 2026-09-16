@@ -379,8 +379,16 @@ func newRouter(
 			ar.Get("/admin/agents/{id}", agentsH.Detail)
 			ar.Post("/admin/agents/{id}/retry-pair", agentsH.RetryPair)
 			ar.Post("/admin/agents/{id}/revoke", agentsH.Revoke)
-			ar.Put("/admin/environments/{id}/agent", agentsH.Assign)
-			ar.Delete("/admin/environments/{id}/agent", agentsH.Unassign)
+			ar.Post("/admin/agents/{id}/labels", agentsH.AddLabel)
+			ar.Post("/admin/agents/{id}/labels/delete", agentsH.DeleteLabel)
+			ar.Post(
+				"/admin/agents/{id}/environments",
+				agentsH.AddEnvironmentLabel,
+			)
+			ar.Post(
+				"/admin/agents/{id}/environments/delete",
+				agentsH.DeleteEnvironmentLabel,
+			)
 			adminH := handler.NewAdminHandler(repo)
 			ar.Get("/admin/audit", adminH.ListAudit)
 			ar.Get("/admin/notifications", adminH.ListNotifications)
@@ -438,14 +446,8 @@ func newRouter(
 				agentsH.RetryPairAgent,
 			)
 			aar.Post("/admin/agents/{id}/revoke", agentsH.RevokeAgent)
-			aar.Put(
-				"/admin/environments/{id}/agent",
-				agentsH.AssignEnvironment,
-			)
-			aar.Delete(
-				"/admin/environments/{id}/agent",
-				agentsH.UnassignEnvironment,
-			)
+			aar.Post("/admin/agents/{id}/labels", agentsH.AddLabel)
+			aar.Delete("/admin/agents/{id}/labels", agentsH.DeleteLabel)
 			aar.Get("/admin/tokens", tokensH.ListAllTokens)
 			aar.Delete("/admin/tokens/{id}", tokensH.RevokeAnyToken)
 
