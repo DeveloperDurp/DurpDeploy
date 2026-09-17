@@ -60,14 +60,15 @@ func (s *Server) Start(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	agentID, _ := AgentIDFromContext(r.Context())
-	err := s.repository.StartRemoteDeployment(
-		r.Context(),
-		repository.RemoteLifecycleClaim{
-			DeploymentID:   deploymentID,
-			AgentID:        string(agentID),
-			ClaimTokenHash: claimTokenHash(request.ClaimToken),
-		},
-	)
+	claim := repository.RemoteLifecycleClaim{
+		DeploymentID:   deploymentID,
+		AgentID:        string(agentID),
+		ClaimTokenHash: claimTokenHash(request.ClaimToken),
+	}
+	handled, err := s.repository.StartRemoteStep(r.Context(), claim)
+	if err == nil && !handled {
+		err = s.repository.StartRemoteDeployment(r.Context(), claim)
+	}
 	if writeLifecycleStatus(w, err) {
 		w.WriteHeader(http.StatusNoContent)
 	}
@@ -83,14 +84,15 @@ func (s *Server) Heartbeat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	agentID, _ := AgentIDFromContext(r.Context())
-	result, err := s.repository.HeartbeatRemoteDeployment(
-		r.Context(),
-		repository.RemoteLifecycleClaim{
-			DeploymentID:   deploymentID,
-			AgentID:        string(agentID),
-			ClaimTokenHash: claimTokenHash(request.ClaimToken),
-		},
-	)
+	claim := repository.RemoteLifecycleClaim{
+		DeploymentID:   deploymentID,
+		AgentID:        string(agentID),
+		ClaimTokenHash: claimTokenHash(request.ClaimToken),
+	}
+	result, handled, err := s.repository.HeartbeatRemoteStep(r.Context(), claim)
+	if err == nil && !handled {
+		result, err = s.repository.HeartbeatRemoteDeployment(r.Context(), claim)
+	}
 	if !writeLifecycleStatus(w, err) {
 		return
 	}
@@ -130,9 +132,14 @@ func (s *Server) Logs(w http.ResponseWriter, r *http.Request) {
 			Line:     event.Line,
 		}
 	}
-	inserted, err := s.repository.AppendRemoteDeploymentLogs(
+	inserted, handled, err := s.repository.AppendRemoteStepLogs(
 		r.Context(), claim, events,
 	)
+	if err == nil && !handled {
+		inserted, err = s.repository.AppendRemoteDeploymentLogs(
+			r.Context(), claim, events,
+		)
+	}
 	if !writeLifecycleStatus(w, err) {
 		return
 	}
@@ -154,15 +161,20 @@ func (s *Server) Result(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	agentID, _ := AgentIDFromContext(r.Context())
-	result, err := s.repository.FinishRemoteDeploymentLifecycle(
-		r.Context(),
-		repository.RemoteLifecycleClaim{
-			DeploymentID:   deploymentID,
-			AgentID:        string(agentID),
-			ClaimTokenHash: claimTokenHash(request.ClaimToken),
-		},
-		string(request.State),
+	claim := repository.RemoteLifecycleClaim{
+		DeploymentID:   deploymentID,
+		AgentID:        string(agentID),
+		ClaimTokenHash: claimTokenHash(request.ClaimToken),
+	}
+	handled, err := s.repository.FinishRemoteStep(
+		r.Context(), claim, string(request.State),
 	)
+	result := repository.RemoteTerminalResult{}
+	if err == nil && !handled {
+		result, err = s.repository.FinishRemoteDeploymentLifecycle(
+			r.Context(), claim, string(request.State),
+		)
+	}
 	if !writeLifecycleStatus(w, err) {
 		return
 	}
@@ -182,14 +194,19 @@ func (s *Server) Cancelled(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	agentID, _ := AgentIDFromContext(r.Context())
-	_, err := s.repository.AcknowledgeRemoteCancellation(
-		r.Context(),
-		repository.RemoteLifecycleClaim{
-			DeploymentID:   deploymentID,
-			AgentID:        string(agentID),
-			ClaimTokenHash: claimTokenHash(request.ClaimToken),
-		},
+	claim := repository.RemoteLifecycleClaim{
+		DeploymentID:   deploymentID,
+		AgentID:        string(agentID),
+		ClaimTokenHash: claimTokenHash(request.ClaimToken),
+	}
+	_, handled, err := s.repository.AcknowledgeRemoteStepCancellation(
+		r.Context(), claim,
 	)
+	if err == nil && !handled {
+		_, err = s.repository.AcknowledgeRemoteCancellation(
+			r.Context(), claim,
+		)
+	}
 	if writeLifecycleStatus(w, err) {
 		w.WriteHeader(http.StatusNoContent)
 	}

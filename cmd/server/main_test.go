@@ -518,6 +518,41 @@ func TestRecoverPendingDeployments_launchesRunnerForOrphanedDeployment(
 	}
 }
 
+func TestRecoverPendingDeploymentsFailsOrphanedRunningDeployment(t *testing.T) {
+	conn, err := migrate.Run(tempDSN(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	repo := repository.New(conn)
+	ctx := t.Context()
+	for _, statement := range []string{
+		`INSERT INTO projects(id,name) VALUES(1,'p')`,
+		`INSERT INTO environments(id,name) VALUES(1,'e')`,
+		`INSERT INTO releases(id,project_id,version,steps_json)
+		 VALUES(1,1,'v1','[]')`,
+		`INSERT INTO deployments(id,release_id,environment_id,status,started_at)
+		 VALUES(1,1,1,'running',100)`,
+	} {
+		if _, err := conn.ExecContext(ctx, statement); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	recoverPendingDeployments(
+		ctx,
+		runner.New(repo, runner.NewLogBroker()),
+		repo,
+	)
+	deployment, err := repo.Queries.GetDeployment(ctx, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if deployment.Status != "failed" || !deployment.FinishedAt.Valid {
+		t.Fatalf("orphaned deployment=%+v", deployment)
+	}
+}
+
 func TestRunSecretKeyRotate_reencryptsAllRowsWithoutDataLoss(t *testing.T) {
 	// Given: a DB with a variable and a release variable, both encrypted
 	// with an "old" key.

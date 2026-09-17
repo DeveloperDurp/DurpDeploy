@@ -360,6 +360,24 @@ func recoverPendingDeployments(
 	rnr *runner.DeploymentRunner,
 	repo *repository.Repository,
 ) {
+	var failed int64
+	err := repo.WithTx(ctx, func(q *db.Queries) error {
+		now, err := q.CurrentUnixTime(ctx)
+		if err != nil {
+			return err
+		}
+		timestamp := sql.NullInt64{Int64: now, Valid: true}
+		if _, err := q.FailOrphanedRemoteStepRuns(ctx, timestamp); err != nil {
+			return err
+		}
+		failed, err = q.FailOrphanedDeployments(ctx, timestamp)
+		return err
+	})
+	if err != nil {
+		slog.Error("startup recovery: fail orphaned deployments", "err", err)
+	} else if failed > 0 {
+		slog.Warn("startup recovery: failed orphaned deployments", "count", failed)
+	}
 	pending, err := repo.Queries.ListPendingDeployments(ctx)
 	if err != nil {
 		slog.Error(

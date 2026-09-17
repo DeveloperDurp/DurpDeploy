@@ -3,6 +3,7 @@ package dispatch
 import (
 	"crypto/sha256"
 	"database/sql"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -19,6 +20,43 @@ func TestMaintainRequeuesExpiredUnstartedClaim(t *testing.T) {
 	if err != nil || claim.State != "waiting" || claim.ClaimTokenHash != nil ||
 		claim.Ciphertext.Valid || claim.ClaimExpiresAt.Valid {
 		t.Fatalf("requeued claim=%+v error=%v", claim, err)
+	}
+}
+
+func TestMaintainRequeuesExpiredUnstartedStepClaim(t *testing.T) {
+	repo := lifecycleFixture(t, "claimed", 4102444800, sql.NullInt64{})
+	hash := sha256.Sum256([]byte("step-claim"))
+	for _, statement := range []string{
+		`INSERT INTO deployment_steps
+		 (deployment_id,step_index,name,script_body,execution_target)
+		 VALUES(1,0,'remote','echo remote','agent')`,
+		`INSERT INTO remote_step_runs
+		 (deployment_id,step_index,agent_id,state,claim_token_hash,
+		  ciphertext,claim_expires_at,last_heartbeat_at,updated_at)
+		 VALUES(1,0,'a','claimed',x'` + fmt.Sprintf("%x", hash) +
+			`','ciphertext',100,100,100)`,
+	} {
+		if _, err := repo.DB.Exec(statement); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := New(repo).Maintain(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	var state string
+	var token, ciphertext, expiresAt sql.NullString
+	if err := repo.DB.QueryRow(`SELECT state,claim_token_hash,ciphertext,
+		claim_expires_at FROM remote_step_runs
+		WHERE deployment_id=1 AND step_index=0 AND agent_id='a'`).Scan(
+		&state, &token, &ciphertext, &expiresAt,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if state != "waiting" || token.Valid || ciphertext.Valid || expiresAt.Valid {
+		t.Fatalf(
+			"expired remote step claim not requeued: state=%q token=%v ciphertext=%v expires=%v",
+			state, token.Valid, ciphertext.Valid, expiresAt.Valid,
+		)
 	}
 }
 
@@ -43,6 +81,40 @@ func TestRemoteCancellationTimeout(t *testing.T) {
 	}
 	assertFailedLifecycle(t, repo, "cancel_unconfirmed",
 		"remote_cancel_unconfirmed")
+}
+
+func TestMaintainFailsStaleRemoteStepCancellation(t *testing.T) {
+	repo := lifecycleFixture(t, "claimed", 4102444800, sql.NullInt64{})
+	hash := sha256.Sum256([]byte("step-claim"))
+	for _, statement := range []string{
+		`INSERT INTO deployment_steps
+		 (deployment_id,step_index,name,script_body,execution_target)
+		 VALUES(1,0,'remote','echo remote','agent')`,
+		`INSERT INTO remote_step_runs
+		 (deployment_id,step_index,agent_id,state,claim_token_hash,
+		  ciphertext,claim_expires_at,last_heartbeat_at,started_at,
+		  cancel_requested_at,updated_at)
+		 VALUES(1,0,'a','cancel_requested',x'` + fmt.Sprintf("%x", hash) +
+			`','ciphertext',200,100,100,100,100)`,
+	} {
+		if _, err := repo.DB.Exec(statement); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := New(repo).Maintain(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	var state string
+	var finishedAt sql.NullInt64
+	if err := repo.DB.QueryRow(`SELECT state,finished_at
+		FROM remote_step_runs WHERE deployment_id=1 AND step_index=0`,
+	).Scan(&state, &finishedAt); err != nil {
+		t.Fatal(err)
+	}
+	if state != "failed" || !finishedAt.Valid {
+		t.Fatalf("stale remote step state=%q finished=%v", state, finishedAt)
+	}
 }
 
 func lifecycleFixture(

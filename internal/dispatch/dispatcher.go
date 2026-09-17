@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/base64"
 	"encoding/pem"
 	"fmt"
@@ -59,7 +60,15 @@ func (d *Dispatcher) claim(
 	ctx context.Context,
 	agentID agentproto.AgentID,
 ) (agentproto.PollResponse, bool, error) {
-	claim, claimed, err := d.repository.ClaimRemoteDeploymentPayload(
+	claim, claimed, err := d.repository.ClaimRemoteStepPayload(
+		ctx,
+		string(agentID),
+		prepareRemoteClaim,
+	)
+	if err != nil || claimed {
+		return pollResponse(claim), claimed, err
+	}
+	claim, claimed, err = d.repository.ClaimRemoteDeploymentPayload(
 		ctx,
 		string(agentID),
 		prepareRemoteClaim,
@@ -67,11 +76,15 @@ func (d *Dispatcher) claim(
 	if err != nil || !claimed {
 		return agentproto.PollResponse{}, false, err
 	}
+	return pollResponse(claim), true, nil
+}
+
+func pollResponse(claim repository.RemoteClaim) agentproto.PollResponse {
 	return agentproto.PollResponse{
 		DeploymentID: agentproto.DeploymentID(claim.DeploymentID),
 		Payload:      string(claim.Ciphertext),
 		ClaimToken:   agentproto.ClaimToken(claim.Token),
-	}, true, nil
+	}
 }
 
 func prepareRemoteClaim(
@@ -89,7 +102,7 @@ func prepareRemoteClaim(
 		steps[index] = executor.Step{
 			Name:           step.Name,
 			ScriptBody:     step.ScriptBody,
-			SortOrder:      step.StepIndex + 1,
+			SortOrder:      int64(index + 1),
 			TimeoutSeconds: step.TimeoutSeconds,
 			MaxRetries:     step.MaxRetries,
 		}
@@ -141,10 +154,28 @@ func (d *Dispatcher) Maintain(ctx context.Context) error {
 		if _, err := q.ExpireAgentPairings(ctx, now); err != nil {
 			return err
 		}
+		if _, err := q.ExpireRemoteStepClaims(ctx, now); err != nil {
+			return err
+		}
+		staleBefore := now - int64(
+			agentproto.CancelAcknowledgementTimeout/time.Second,
+		)
+		if _, err := q.FailStaleRemoteStepCancellations(
+			ctx,
+			db.FailStaleRemoteStepCancellationsParams{
+				Now: sql.NullInt64{Int64: now, Valid: true},
+				StaleBefore: sql.NullInt64{
+					Int64: staleBefore,
+					Valid: true,
+				},
+			},
+		); err != nil {
+			return err
+		}
 		return nil
 	})
 	if err != nil {
-		return fmt.Errorf("expire agent pairings: %w", err)
+		return fmt.Errorf("maintain agent dispatch: %w", err)
 	}
 	if err := d.repository.MaintainRemoteLifecycle(ctx); err != nil {
 		return fmt.Errorf("maintain remote deployment lifecycle: %w", err)

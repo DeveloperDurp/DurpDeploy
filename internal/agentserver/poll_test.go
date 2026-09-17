@@ -75,6 +75,50 @@ func TestPollPayloadRoundTrip(t *testing.T) {
 	}
 }
 
+func TestRemoteStepPayloadStartsSortOrderAtOne(t *testing.T) {
+	fixture := newAgentFixture(t)
+	deploymentID := seedPollPayload(t, fixture, "pending", "test-agent")
+	deployment, err := fixture.repo.Queries.GetDeployment(t.Context(), deploymentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fixture.repo.DB.ExecContext(t.Context(), `
+DELETE FROM remote_deployment_claims WHERE deployment_id = ?;
+UPDATE deployments SET status = 'running', assigned_agent_id = NULL WHERE id = ?;
+INSERT INTO agent_labels(agent_id,label) VALUES('test-agent','test');
+INSERT INTO agent_environment_labels(agent_id,environment_id) VALUES('test-agent',?);
+INSERT INTO deployment_step_selectors(deployment_id,step_index,label)
+VALUES(?,1,'test')`, deploymentID, deploymentID, deployment.EnvironmentID,
+		deploymentID); err != nil {
+		t.Fatal(err)
+	}
+	created, err := fixture.repo.QueueRemoteStepRuns(
+		t.Context(), deploymentID, 1,
+	)
+	if err != nil || created != 1 {
+		t.Fatalf("queue remote step rows=%d error=%v", created, err)
+	}
+
+	response := postAgent(t, fixture, agentproto.PollPath, pollBody)
+	poll := decodePollResponse(t, response)
+	plaintext, err := agentpayload.Open(
+		fixture.identity,
+		deploymentID,
+		[]byte(poll.Payload),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var payload dispatch.Payload
+	if err := json.Unmarshal(plaintext, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if len(payload.Release.Steps) != 1 ||
+		payload.Release.Steps[0].SortOrder != 1 {
+		t.Fatalf("remote step payload=%+v", payload.Release.Steps)
+	}
+}
+
 func TestLostPollResponseBlocksUntilExpiry(t *testing.T) {
 	fixture := newAgentFixture(t)
 	firstID := seedPollPayload(t, fixture, "pending", "test-agent")

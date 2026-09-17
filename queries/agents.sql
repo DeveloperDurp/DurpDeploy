@@ -48,6 +48,9 @@ DELETE FROM agent_labels WHERE agent_id = ? AND label = ?;
 -- name: ListAgentLabels :many
 SELECT label FROM agent_labels WHERE agent_id = ? ORDER BY label;
 
+-- name: ListAvailableAgentLabels :many
+SELECT DISTINCT label FROM agent_labels ORDER BY label;
+
 -- name: AddAgentEnvironmentLabel :execrows
 INSERT INTO agent_environment_labels (agent_id, environment_id)
 SELECT sqlc.arg(agent_id), sqlc.arg(environment_id)

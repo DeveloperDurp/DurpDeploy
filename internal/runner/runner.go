@@ -59,6 +59,16 @@ type DeploymentRunner struct {
 	bus *events.Bus
 }
 
+type deploymentStep struct {
+	Name            string   `json:"name"`
+	ScriptBody      string   `json:"script_body"`
+	SortOrder       int64    `json:"sort_order"`
+	TimeoutSeconds  int64    `json:"timeout_seconds"`
+	MaxRetries      int64    `json:"max_retries"`
+	ExecutionTarget string   `json:"execution_target"`
+	AgentSelectors  []string `json:"agent_selectors"`
+}
+
 func New(repo *repository.Repository, broker *LogBroker) *DeploymentRunner {
 	sandboxErr := validateExecutionBoundary()
 	return &DeploymentRunner{
@@ -151,13 +161,7 @@ func (r *DeploymentRunner) runStepAttempt(
 	ctx context.Context,
 	runCtx context.Context,
 	deploymentID int64,
-	step struct {
-		Name           string `json:"name"`
-		ScriptBody     string `json:"script_body"`
-		SortOrder      int64  `json:"sort_order"`
-		TimeoutSeconds int64  `json:"timeout_seconds"`
-		MaxRetries     int64  `json:"max_retries"`
-	},
+	step deploymentStep,
 	logWriter *broadcastWriter,
 	envMap map[string]string,
 	secretValues []string,
@@ -299,13 +303,7 @@ func (r *DeploymentRunner) Run(
 		fmt.Sprintf("Deployment #%d started on %s", deploymentID, envName),
 	)
 
-	var steps []struct {
-		Name           string `json:"name"`
-		ScriptBody     string `json:"script_body"`
-		SortOrder      int64  `json:"sort_order"`
-		TimeoutSeconds int64  `json:"timeout_seconds"`
-		MaxRetries     int64  `json:"max_retries"`
-	}
+	var steps []deploymentStep
 	stepSource, err := r.repo.Queries.GetDeploymentStepSource(ctx, deploymentID)
 	if err != nil {
 		_ = r.failUnlessCancelled(ctx, deploymentID)
@@ -338,7 +336,7 @@ func (r *DeploymentRunner) Run(
 
 	scrubber := NewScrubber(secretValues)
 
-	for _, step := range steps {
+	for stepIndex, step := range steps {
 		logWriter := &broadcastWriter{
 			broker:       r.broker,
 			repo:         r.repo,
@@ -346,6 +344,23 @@ func (r *DeploymentRunner) Run(
 			stepName:     step.Name,
 			ctx:          ctx,
 			scrubber:     scrubber,
+		}
+		if step.ExecutionTarget == "agent" {
+			err := r.runRemoteStep(
+				runCtx,
+				deploymentID,
+				int64(stepIndex),
+				step,
+				logWriter,
+			)
+			if err != nil {
+				if runCtx.Err() != nil {
+					return
+				}
+				r.failStep(ctx, deploymentID, release.ProjectID, environmentID, envName, err)
+				return
+			}
+			continue
 		}
 
 		var lastErr error
@@ -380,30 +395,7 @@ func (r *DeploymentRunner) Run(
 		}
 
 		if lastErr != nil {
-			_ = r.repo.Queries.UpdateDeploymentStatus(
-				ctx,
-				db.UpdateDeploymentStatusParams{
-					ID:     deploymentID,
-					Status: "failed",
-					FinishedAt: sql.NullInt64{
-						Int64: time.Now().Unix(),
-						Valid: true,
-					},
-				},
-			)
-			r.publish(
-				ctx,
-				events.DeploymentFailed,
-				deploymentID,
-				release.ProjectID,
-				environmentID,
-				fmt.Sprintf(
-					"Deployment #%d failed on %s: %v",
-					deploymentID,
-					envName,
-					lastErr,
-				),
-			)
+			r.failStep(ctx, deploymentID, release.ProjectID, environmentID, envName, lastErr)
 			return
 		}
 	}
@@ -427,6 +419,118 @@ func (r *DeploymentRunner) Run(
 		release.ProjectID,
 		environmentID,
 		fmt.Sprintf("Deployment #%d succeeded on %s", deploymentID, envName),
+	)
+}
+
+func (r *DeploymentRunner) runRemoteStep(
+	ctx context.Context,
+	deploymentID int64,
+	stepIndex int64,
+	step deploymentStep,
+	logWriter *broadcastWriter,
+) error {
+	created, err := r.repo.QueueRemoteStepRuns(ctx, deploymentID, stepIndex)
+	if err != nil {
+		return err
+	}
+	if created == 0 {
+		return fmt.Errorf(
+			"step %q: no active paired agents match the environment and label",
+			step.Name,
+		)
+	}
+	_, _ = logWriter.Write([]byte(fmt.Sprintf(
+		"step %q: queued for %d matching agent(s)\n",
+		step.Name,
+		created,
+	)))
+	logWriter.Flush()
+
+	timeout := defaultStepTimeout
+	if step.TimeoutSeconds > 0 {
+		timeout = time.Duration(step.TimeoutSeconds) * time.Second
+	}
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	ticker := time.NewTicker(250 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		runs, err := r.repo.Queries.ListRemoteStepRuns(
+			ctx,
+			db.ListRemoteStepRunsParams{
+				DeploymentID: deploymentID,
+				StepIndex:    stepIndex,
+			},
+		)
+		if err != nil {
+			return err
+		}
+		allSucceeded := len(runs) > 0
+		for _, run := range runs {
+			if run.State == "failed" || run.State == "cancelled" {
+				return fmt.Errorf(
+					"step %q failed on agent %s",
+					step.Name,
+					run.AgentID,
+				)
+			}
+			allSucceeded = allSucceeded && run.State == "succeeded"
+		}
+		if allSucceeded {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			_, _ = r.repo.Queries.RequestRemoteStepCancellation(
+				context.Background(),
+				db.RequestRemoteStepCancellationParams{
+					Now:          sql.NullInt64{Int64: time.Now().Unix(), Valid: true},
+					DeploymentID: deploymentID,
+				},
+			)
+			return ctx.Err()
+		case <-timer.C:
+			_, _ = r.repo.Queries.FailUnfinishedRemoteStepRuns(
+				context.Background(),
+				db.FailUnfinishedRemoteStepRunsParams{
+					Now:          sql.NullInt64{Int64: time.Now().Unix(), Valid: true},
+					DeploymentID: deploymentID,
+					StepIndex:    stepIndex,
+				},
+			)
+			return fmt.Errorf("step %q timed out after %s", step.Name, timeout)
+		case <-ticker.C:
+		}
+	}
+}
+
+func (r *DeploymentRunner) failStep(
+	ctx context.Context,
+	deploymentID int64,
+	projectID int64,
+	environmentID int64,
+	environmentName string,
+	err error,
+) {
+	_ = r.repo.Queries.UpdateDeploymentStatus(
+		ctx,
+		db.UpdateDeploymentStatusParams{
+			ID: deploymentID, Status: "failed",
+			FinishedAt: sql.NullInt64{Int64: time.Now().Unix(), Valid: true},
+		},
+	)
+	r.publish(
+		ctx,
+		events.DeploymentFailed,
+		deploymentID,
+		projectID,
+		environmentID,
+		fmt.Sprintf(
+			"Deployment #%d failed on %s: %v",
+			deploymentID,
+			environmentName,
+			err,
+		),
 	)
 }
 

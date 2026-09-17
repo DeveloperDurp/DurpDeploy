@@ -107,6 +107,37 @@ func (q *Queries) DeleteDeployment(ctx context.Context, id int64) error {
 	return err
 }
 
+const failOrphanedDeployments = `-- name: FailOrphanedDeployments :execrows
+UPDATE deployments SET status = 'failed', finished_at = ?1
+WHERE status = 'running' AND assigned_agent_id IS NULL
+`
+
+func (q *Queries) FailOrphanedDeployments(ctx context.Context, now sql.NullInt64) (int64, error) {
+	result, err := q.db.ExecContext(ctx, failOrphanedDeployments, now)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const failOrphanedRemoteStepRuns = `-- name: FailOrphanedRemoteStepRuns :execrows
+UPDATE remote_step_runs SET state = 'failed', finished_at = ?1,
+    updated_at = ?1
+WHERE state IN ('waiting', 'claimed', 'started', 'cancel_requested')
+  AND deployment_id IN (
+      SELECT id FROM deployments
+      WHERE status = 'running' AND assigned_agent_id IS NULL
+  )
+`
+
+func (q *Queries) FailOrphanedRemoteStepRuns(ctx context.Context, now sql.NullInt64) (int64, error) {
+	result, err := q.db.ExecContext(ctx, failOrphanedRemoteStepRuns, now)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const getDeployment = `-- name: GetDeployment :one
 SELECT id, release_id, environment_id, status, started_at, finished_at, created_at, forced, note, assigned_agent_id FROM deployments WHERE id = ?
 `

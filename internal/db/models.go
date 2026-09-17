@@ -314,6 +314,30 @@ type RemoteDeploymentClaim struct {
 	UpdatedAt         int64          `json:"updated_at"`
 }
 
+type RemoteStepLogSequence struct {
+	DeploymentID int64  `json:"deployment_id"`
+	StepIndex    int64  `json:"step_index"`
+	AgentID      string `json:"agent_id"`
+	Sequence     int64  `json:"sequence"`
+	LogID        int64  `json:"log_id"`
+}
+
+type RemoteStepRun struct {
+	DeploymentID      int64          `json:"deployment_id"`
+	StepIndex         int64          `json:"step_index"`
+	AgentID           string         `json:"agent_id"`
+	State             string         `json:"state"`
+	ClaimTokenHash    []byte         `json:"claim_token_hash"`
+	Ciphertext        sql.NullString `json:"ciphertext"`
+	ClaimExpiresAt    sql.NullInt64  `json:"claim_expires_at"`
+	LastHeartbeatAt   sql.NullInt64  `json:"last_heartbeat_at"`
+	StartedAt         sql.NullInt64  `json:"started_at"`
+	FinishedAt        sql.NullInt64  `json:"finished_at"`
+	CancelRequestedAt sql.NullInt64  `json:"cancel_requested_at"`
+	CreatedAt         int64          `json:"created_at"`
+	UpdatedAt         int64          `json:"updated_at"`
+}
+
 type ScheduledDeployment struct {
 	ID            int64          `json:"id"`
 	ProjectID     int64          `json:"project_id"`

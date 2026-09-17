@@ -152,6 +152,11 @@ Alpine.data('releaseDeployRow', () => ({
 	forceChecked: false,
 }));
 
+Alpine.data('stepPlacement', (executionTarget = 'local', agentLabel = '') => ({
+	executionTarget,
+	agentLabel,
+}));
+
 Alpine.data('stepFormHost', () => ({
 	afterRequest(event) {
 		const source = event.detail?.elt;

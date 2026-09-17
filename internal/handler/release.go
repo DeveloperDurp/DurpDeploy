@@ -306,22 +306,10 @@ func (h *ReleaseHandler) RefreshRelease(
 		return
 	}
 
-	type stepSnapshot struct {
-		Name           string `json:"name"`
-		ScriptBody     string `json:"script_body"`
-		SortOrder      int64  `json:"sort_order"`
-		TimeoutSeconds int64  `json:"timeout_seconds"`
-		MaxRetries     int64  `json:"max_retries"`
-	}
-	snapshots := make([]stepSnapshot, len(steps))
-	for i, step := range steps {
-		snapshots[i] = stepSnapshot{
-			Name:           step.Name,
-			ScriptBody:     step.ScriptBody,
-			SortOrder:      step.SortOrder,
-			TimeoutSeconds: step.TimeoutSeconds,
-			MaxRetries:     step.MaxRetries,
-		}
+	snapshots, err := releaseStepSnapshots(r.Context(), h.repo.Queries, steps)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 	stepsJSON, err := json.Marshal(snapshots)
 	if err != nil {
@@ -419,23 +407,9 @@ func CreateReleaseSnapshot(
 		return db.Release{}, err
 	}
 
-	type stepSnapshot struct {
-		Name           string `json:"name"`
-		ScriptBody     string `json:"script_body"`
-		SortOrder      int64  `json:"sort_order"`
-		TimeoutSeconds int64  `json:"timeout_seconds"`
-		MaxRetries     int64  `json:"max_retries"`
-	}
-
-	snapshots := make([]stepSnapshot, len(steps))
-	for i, step := range steps {
-		snapshots[i] = stepSnapshot{
-			Name:           step.Name,
-			ScriptBody:     step.ScriptBody,
-			SortOrder:      step.SortOrder,
-			TimeoutSeconds: step.TimeoutSeconds,
-			MaxRetries:     step.MaxRetries,
-		}
+	snapshots, err := releaseStepSnapshots(ctx, repo.Queries, steps)
+	if err != nil {
+		return db.Release{}, err
 	}
 
 	stepsJSON, err := json.Marshal(snapshots)
@@ -488,4 +462,38 @@ func CreateReleaseSnapshot(
 		return db.Release{}, err
 	}
 	return release, nil
+}
+
+type releaseStepSnapshot struct {
+	Name            string   `json:"name"`
+	ScriptBody      string   `json:"script_body"`
+	SortOrder       int64    `json:"sort_order"`
+	TimeoutSeconds  int64    `json:"timeout_seconds"`
+	MaxRetries      int64    `json:"max_retries"`
+	ExecutionTarget string   `json:"execution_target"`
+	AgentSelectors  []string `json:"agent_selectors,omitempty"`
+}
+
+func releaseStepSnapshots(
+	ctx context.Context,
+	queries *db.Queries,
+	steps []db.Step,
+) ([]releaseStepSnapshot, error) {
+	snapshots := make([]releaseStepSnapshot, len(steps))
+	for i, step := range steps {
+		selectors, err := queries.ListStepAgentSelectors(ctx, step.ID)
+		if err != nil {
+			return nil, err
+		}
+		snapshots[i] = releaseStepSnapshot{
+			Name:            step.Name,
+			ScriptBody:      step.ScriptBody,
+			SortOrder:       step.SortOrder,
+			TimeoutSeconds:  step.TimeoutSeconds,
+			MaxRetries:      step.MaxRetries,
+			ExecutionTarget: step.ExecutionTarget,
+			AgentSelectors:  selectors,
+		}
+	}
+	return snapshots, nil
 }

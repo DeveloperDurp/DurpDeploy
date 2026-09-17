@@ -412,6 +412,33 @@ func (q *Queries) ListAvailableAgentEnvironmentLabels(ctx context.Context, agent
 	return items, nil
 }
 
+const listAvailableAgentLabels = `-- name: ListAvailableAgentLabels :many
+SELECT DISTINCT label FROM agent_labels ORDER BY label
+`
+
+func (q *Queries) ListAvailableAgentLabels(ctx context.Context) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listAvailableAgentLabels)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var label string
+		if err := rows.Scan(&label); err != nil {
+			return nil, err
+		}
+		items = append(items, label)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listEnvironmentAgents = `-- name: ListEnvironmentAgents :many
 SELECT a.id, a.name, a.endpoint, a.status, a.agent_version, a.certificate_pem, a.certificate_fingerprint, a.encrypted_identity, a.last_heartbeat_at, a.revoked_at, a.created_at, a.updated_at FROM agents a JOIN environment_agent_assignments e ON e.agent_id = a.id
 WHERE e.environment_id = ? ORDER BY a.name, a.id

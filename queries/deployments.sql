@@ -85,6 +85,19 @@ JOIN environments e ON d.environment_id = e.id
 WHERE d.status = 'pending'
 ORDER BY d.created_at ASC;
 
+-- name: FailOrphanedRemoteStepRuns :execrows
+UPDATE remote_step_runs SET state = 'failed', finished_at = sqlc.arg(now),
+    updated_at = sqlc.arg(now)
+WHERE state IN ('waiting', 'claimed', 'started', 'cancel_requested')
+  AND deployment_id IN (
+      SELECT id FROM deployments
+      WHERE status = 'running' AND assigned_agent_id IS NULL
+  );
+
+-- name: FailOrphanedDeployments :execrows
+UPDATE deployments SET status = 'failed', finished_at = sqlc.arg(now)
+WHERE status = 'running' AND assigned_agent_id IS NULL;
+
 -- name: ListLatestDeploymentPerReleaseEnv :many
 SELECT id, release_id, environment_id, status, started_at, finished_at,
        created_at, forced, note, assigned_agent_id, project_name,

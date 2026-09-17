@@ -81,6 +81,9 @@ func (r *Repository) createDeployment(
 	if err != nil {
 		return DeploymentResult{}, err
 	}
+	if releaseHasStepPlacement(release.StepsJson) {
+		candidate = sql.NullString{}
+	}
 
 	arg.AssignedAgentID = sql.NullString{}
 	if candidate.Valid {
@@ -145,6 +148,19 @@ func (r *Repository) createDeployment(
 		}, nil
 	}
 	return DeploymentResult{Deployment: deployment, Mode: ExecutionLocal}, nil
+}
+
+func releaseHasStepPlacement(raw string) bool {
+	var steps []map[string]json.RawMessage
+	if json.Unmarshal([]byte(raw), &steps) != nil {
+		return false
+	}
+	for _, step := range steps {
+		if _, ok := step["execution_target"]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *Repository) ApproveDeployment(
