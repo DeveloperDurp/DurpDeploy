@@ -1,8 +1,6 @@
 package repository
 
 import (
-	"database/sql"
-	"errors"
 	"testing"
 )
 
@@ -17,15 +15,6 @@ func assertRevocationRaceOutcome(
 	agent, err := repo.Queries.GetAgent(t.Context(), fixture.agentID)
 	if err != nil || agent.Status != "revoked" {
 		t.Fatalf("agent=%+v err=%v", agent, err)
-	}
-	if _, err := repo.Queries.GetEnvironmentAgentAssignment(
-		t.Context(),
-		fixture.environmentID,
-	); !errors.Is(err, sql.ErrNoRows) {
-		t.Fatalf("assignment remains: %v", err)
-	}
-	if operation == "Assignment" {
-		return
 	}
 	claim, err := repo.Queries.GetRemoteDeploymentClaim(
 		t.Context(),

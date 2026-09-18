@@ -8,10 +8,9 @@ import (
 )
 
 type revocationRaceFixture struct {
-	agentID       string
-	environmentID int64
-	deploymentID  int64
-	identity      RemoteLifecycleClaim
+	agentID      string
+	deploymentID int64
+	identity     RemoteLifecycleClaim
 }
 
 type revocationOperation struct {
@@ -91,21 +90,6 @@ func revocationOperations() []revocationOperation {
 		}
 	}
 	return []revocationOperation{
-		{name: "Assignment", setup: noRaceSetup,
-			run: func(ctx context.Context, repo *Repository, fixture revocationRaceFixture) (bool, error) {
-				err := repo.AssignEnvironmentAgent(
-					ctx,
-					fixture.environmentID,
-					fixture.agentID,
-				)
-				return err == nil, err
-			},
-			runTx: func(ctx context.Context, q *db.Queries, fixture revocationRaceFixture) (bool, error) {
-				err := assignEnvironmentAgent(
-					ctx, q, fixture.environmentID, fixture.agentID,
-				)
-				return err == nil, err
-			}},
 		{name: "Poll", setup: noRaceSetup,
 			run: func(ctx context.Context, repo *Repository, fixture revocationRaceFixture) (bool, error) {
 				rows, err := repo.ClaimRemoteDeployment(

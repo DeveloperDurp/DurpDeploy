@@ -81,8 +81,6 @@ func TestRemoteAgentSchemaFreshUpgradeRollback(t *testing.T) {
 	t.Log(
 		"release refresh preserved deployment source; missing target defaults local",
 	)
-	requireNoError(t, goose.Down(conn, "."), "rollback remote step lifecycle")
-	requireNoError(t, goose.Down(conn, "."), "rollback remote step runs")
 	if err := goose.Down(conn, "."); err == nil {
 		t.Fatal("unsafe rollback succeeded")
 	} else {
@@ -91,17 +89,17 @@ func TestRemoteAgentSchemaFreshUpgradeRollback(t *testing.T) {
 	assertRemoteLegacy(t, conn)
 	version, err = goose.GetDBVersion(conn)
 	requireNoError(t, err, "version after refused rollback")
-	if version != 29 {
+	if version != 32 {
 		t.Fatalf("version after rollback=%d", version)
 	}
-	t.Log("PASS: rollback preserved history and version=29")
+	t.Log("PASS: rollback preserved history and version=32")
 }
 
 func assertRemoteTables(t *testing.T, conn *sql.DB) {
 	t.Helper()
 	for _, table := range []string{
 		"agents", "agent_pairings", "agent_labels",
-		"environment_agent_assignments", "step_agent_selectors",
+		"step_agent_selectors",
 		"step_template_agent_selectors", "step_template_version_agent_selectors",
 		"deployment_step_sources", "deployment_steps",
 		"deployment_step_selectors", "deployment_step_attempts",

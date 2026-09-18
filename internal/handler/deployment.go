@@ -381,10 +381,6 @@ func (h *DeploymentHandler) ScheduleDeployment(
 		},
 	)
 	if err != nil {
-		if errors.Is(err, repository.ErrDeploymentRoutingConflict) {
-			http.Error(w, err.Error(), http.StatusConflict)
-			return
-		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -830,10 +826,6 @@ func (h *DeploymentHandler) RedeployDeployment(
 		},
 	)
 	if err != nil {
-		if errors.Is(err, repository.ErrDeploymentRoutingConflict) {
-			http.Error(w, err.Error(), http.StatusConflict)
-			return
-		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

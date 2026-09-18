@@ -431,7 +431,8 @@ async function main() {
 	const environmentID = (await readOnly("SELECT id FROM environments WHERE name='Todo 12 browser environment';")).trim();
 	check(environmentID, "browser environment ID was not durable");
 	await command("sqlite3", [database,
-		`INSERT INTO environment_agent_assignments(environment_id,agent_id) VALUES(${environmentID},'${pairedAgentID}');`]);
+		`INSERT INTO agent_environment_labels(agent_id,environment_id) ` +
+		`VALUES('${pairedAgentID}',${environmentID});`]);
 	let lifecycleCheckpoint = null;
 	if (lifecycle) {
 		const agentIdentity = join(runDir, "agent-identity");

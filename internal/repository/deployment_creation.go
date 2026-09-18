@@ -11,9 +11,6 @@ import (
 )
 
 var (
-	ErrDeploymentRoutingConflict = errors.New(
-		"assigned remote agent is not active and paired",
-	)
 	ErrDeploymentApprovalConflict = errors.New(
 		"deployment is not pending approval",
 	)
@@ -35,34 +32,17 @@ func (r *Repository) CreateDeployment(
 	ctx context.Context,
 	arg db.CreateDeploymentParams,
 ) (DeploymentResult, error) {
-	candidate := sql.NullString{}
-	assignment, err := r.Queries.GetEnvironmentAgentAssignment(
-		ctx,
-		arg.EnvironmentID,
-	)
-	if err == nil {
-		candidate = sql.NullString{String: assignment.AgentID, Valid: true}
-	} else if !errors.Is(err, sql.ErrNoRows) {
-		return DeploymentResult{}, fmt.Errorf(
-			"get environment assignment: %w",
-			err,
-		)
-	}
-
 	var result DeploymentResult
-	err = withSQLiteBusyRetry(ctx, func() error {
+	err := withSQLiteBusyRetry(ctx, func() error {
 		result = DeploymentResult{}
 		return r.WithTx(ctx, func(q *db.Queries) error {
 			var createErr error
-			result, createErr = r.createDeployment(ctx, q, arg, candidate)
+			result, createErr = r.createDeployment(ctx, q, arg)
 			return createErr
 		})
 	})
 	if err != nil {
 		return DeploymentResult{}, fmt.Errorf("create deployment: %w", err)
-	}
-	if result.Mode == ExecutionRemote && result.Deployment.Status == "pending" {
-		r.notifyRemoteWork()
 	}
 	return result, nil
 }
@@ -71,7 +51,6 @@ func (r *Repository) createDeployment(
 	ctx context.Context,
 	q *db.Queries,
 	arg db.CreateDeploymentParams,
-	candidate sql.NullString,
 ) (DeploymentResult, error) {
 	release, err := q.GetRelease(ctx, arg.ReleaseID)
 	if err != nil {
@@ -81,44 +60,7 @@ func (r *Repository) createDeployment(
 	if err != nil {
 		return DeploymentResult{}, err
 	}
-	if releaseHasStepPlacement(release.StepsJson) {
-		candidate = sql.NullString{}
-	}
-
 	arg.AssignedAgentID = sql.NullString{}
-	if candidate.Valid {
-		locked, lockErr := q.LockClaimAgent(ctx, candidate.String)
-		if lockErr != nil {
-			return DeploymentResult{}, fmt.Errorf(
-				"lock assigned agent: %w",
-				lockErr,
-			)
-		}
-		if locked == 0 {
-			return DeploymentResult{}, ErrDeploymentRoutingConflict
-		}
-		locked, lockErr = q.LockEnvironmentAgentAssignment(
-			ctx,
-			db.LockEnvironmentAgentAssignmentParams{
-				EnvironmentID: arg.EnvironmentID,
-				AgentID:       candidate.String,
-			},
-		)
-		if lockErr != nil {
-			return DeploymentResult{}, fmt.Errorf(
-				"lock environment assignment: %w",
-				lockErr,
-			)
-		}
-		if locked == 0 {
-			return DeploymentResult{}, ErrDeploymentRoutingConflict
-		}
-		arg.AssignedAgentID = sql.NullString{
-			String: candidate.String,
-			Valid:  true,
-		}
-	}
-
 	deployment, err := q.CreateDeployment(ctx, arg)
 	if err != nil {
 		return DeploymentResult{}, fmt.Errorf("insert deployment: %w", err)
@@ -131,36 +73,7 @@ func (r *Repository) createDeployment(
 	); err != nil {
 		return DeploymentResult{}, fmt.Errorf("snapshot release steps: %w", err)
 	}
-	if deployment.AssignedAgentID.Valid {
-		created, err := q.CreateRemoteDeploymentClaim(ctx, deployment.ID)
-		if err != nil {
-			return DeploymentResult{}, fmt.Errorf(
-				"create remote claim: %w",
-				err,
-			)
-		}
-		if created != 1 {
-			return DeploymentResult{}, ErrDeploymentRoutingConflict
-		}
-		return DeploymentResult{
-			Deployment: deployment,
-			Mode:       ExecutionRemote,
-		}, nil
-	}
 	return DeploymentResult{Deployment: deployment, Mode: ExecutionLocal}, nil
-}
-
-func releaseHasStepPlacement(raw string) bool {
-	var steps []map[string]json.RawMessage
-	if json.Unmarshal([]byte(raw), &steps) != nil {
-		return false
-	}
-	for _, step := range steps {
-		if _, ok := step["execution_target"]; ok {
-			return true
-		}
-	}
-	return false
 }
 
 func (r *Repository) ApproveDeployment(

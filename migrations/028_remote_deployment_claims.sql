@@ -1,7 +1,4 @@
 -- +goose Up
-CREATE UNIQUE INDEX idx_environment_agent_assignments_environment
-    ON environment_agent_assignments(environment_id);
-
 ALTER TABLE deployments ADD COLUMN assigned_agent_id TEXT
     REFERENCES agents(id) ON DELETE NO ACTION;
 ALTER TABLE agent_pairings ADD COLUMN server_pull_endpoint TEXT;

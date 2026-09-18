@@ -8,8 +8,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"durpdeploy/internal/db"
 )
 
 type sqliteCodeError int
@@ -46,15 +44,7 @@ func TestClaimRemoteDeploymentRetriesSQLiteBusyAtomically(t *testing.T) {
 		1,
 	)
 	claimer, locker := openDeploymentCreationEngine(t, engine)
-	created, err := claimer.CreateDeployment(
-		t.Context(),
-		db.CreateDeploymentParams{
-			ReleaseID: 1, EnvironmentID: 1, Status: "pending",
-		},
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
+	created := createLegacyRemoteDeployment(t, claimer)
 	lock := holdClaimWriter(t, locker.DB)
 	started := make(chan struct{})
 	type claimResult struct {
@@ -92,7 +82,7 @@ func TestClaimRemoteDeploymentRetriesSQLiteBusyAtomically(t *testing.T) {
 	if got.err != nil || !got.claimed {
 		t.Fatalf("claimed=%v error=%v", got.claimed, got.err)
 	}
-	if got.claim.DeploymentID != created.Deployment.ID || prepareCalls != 1 {
+	if got.claim.DeploymentID != created.ID || prepareCalls != 1 {
 		t.Fatalf(
 			"deployment=%d prepare calls=%d",
 			got.claim.DeploymentID,

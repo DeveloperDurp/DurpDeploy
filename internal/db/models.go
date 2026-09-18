@@ -171,12 +171,6 @@ type Environment struct {
 	CreatedAt   int64          `json:"created_at"`
 }
 
-type EnvironmentAgentAssignment struct {
-	EnvironmentID int64  `json:"environment_id"`
-	AgentID       string `json:"agent_id"`
-	CreatedAt     int64  `json:"created_at"`
-}
-
 type GlobalNotification struct {
 	ID                int64          `json:"id"`
 	SlackWebhookUrl   sql.NullString `json:"slack_webhook_url"`

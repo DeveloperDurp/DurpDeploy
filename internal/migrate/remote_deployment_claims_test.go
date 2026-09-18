@@ -5,8 +5,6 @@ import (
 	"database/sql"
 	"strings"
 	"testing"
-
-	"github.com/pressly/goose/v3"
 )
 
 func TestRemoteDeploymentClaimMigrationBaseline(t *testing.T) {
@@ -62,10 +60,6 @@ func TestRemoteDeploymentClaimMigration(t *testing.T) {
 			if claims != 0 {
 				t.Fatalf("historical claims=%d want=0", claims)
 			}
-			if _, err := conn.Exec(`INSERT INTO environment_agent_assignments
-			(environment_id,agent_id) VALUES(2,'b')`); err == nil {
-				t.Fatal("second assignment for one environment accepted")
-			}
 			_, err = conn.Exec(`UPDATE agent_pairings SET server_pull_endpoint=?
 			WHERE agent_id='a'`, "https://server.example/agent/v1/poll")
 			requireNoError(t, err, "persist server pull endpoint")
@@ -92,7 +86,7 @@ func TestRemoteDeploymentClaimMigration(t *testing.T) {
 	)
 }
 
-func TestRemoteDeploymentClaimMigrationRejectsMultipleAssignments(
+func TestRemoteDeploymentClaimMigrationConvertsMultipleAssignments(
 	t *testing.T,
 ) {
 	forEachRemoteClaimDatabase(
@@ -102,39 +96,24 @@ func TestRemoteDeploymentClaimMigrationRejectsMultipleAssignments(
 			fixture.seedRemoteClaimPrerequisites(t, conn, true)
 			requireNoError(t, conn.Close(), "close ambiguous baseline")
 
-			migrated, err := Run(fixture.dsn)
-			if migrated != nil {
-				migrated.Close()
-				t.Fatal("ambiguous assignment migration returned a connection")
+			conn, err := Run(fixture.dsn)
+			requireNoError(t, err, "migrate multiple assignments")
+			defer func() {
+				requireNoError(t, conn.Close(), "close migrated database")
+			}()
+			var labels int
+			err = conn.QueryRow(`SELECT COUNT(*) FROM agent_environment_labels
+				WHERE environment_id=2 AND agent_id IN ('a','b')`).Scan(&labels)
+			requireNoError(t, err, "count converted environment labels")
+			if labels != 2 {
+				t.Fatalf("converted labels=%d want=2", labels)
 			}
-			if err == nil ||
-				!strings.Contains(err.Error(), "environment IDs 2") {
-				t.Fatalf(
-					"migration error=%v, want ambiguous environment IDs 2",
-					err,
-				)
+			if rows, err := conn.Query(
+				"SELECT * FROM environment_agent_assignments",
+			); err == nil {
+				requireNoError(t, rows.Close(), "close legacy table query")
+				t.Fatal("legacy environment assignment table still exists")
 			}
-
-			conn = fixture.openRaw(t)
-			defer conn.Close()
-			if fixture.gooseDialect == "mssql" {
-				config, configErr := migrationConfig(fixture.dsn)
-				requireNoError(t, configErr, "SQL Server migration config")
-				goose.SetBaseFS(config.migrationFS)
-			} else {
-				goose.SetBaseFS(nil)
-			}
-			requireNoError(
-				t,
-				goose.SetDialect(fixture.gooseDialect),
-				"set dialect",
-			)
-			version, versionErr := goose.GetDBVersion(conn)
-			requireNoError(t, versionErr, "read version after refusal")
-			if version != fixture.baselineVersion {
-				t.Fatalf("version=%d want=%d", version, fixture.baselineVersion)
-			}
-			assertRemoteClaimSchemaAbsent(t, conn)
 		},
 	)
 }

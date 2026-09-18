@@ -66,17 +66,6 @@ func TestRevocationAfterStartMarksLost(t *testing.T) {
 	}
 }
 
-func TestRevokedAgentRejected(t *testing.T) {
-	repo := remoteFixture(t)
-	if _, err := repo.RevokeAgent(t.Context(), "a"); err != nil {
-		t.Fatal(err)
-	}
-	err := repo.AssignEnvironmentAgent(t.Context(), 2, "a")
-	if !errors.Is(err, repository.ErrAgentUnavailable) {
-		t.Fatalf("assign revoked agent err=%v", err)
-	}
-}
-
 func remoteIdentity(
 	claim db.ClaimRemoteDeploymentParams,
 ) repository.RemoteLifecycleClaim {
@@ -115,11 +104,5 @@ func assertRevokedUnstarted(
 	deployment, err := repo.Queries.GetDeployment(t.Context(), 1)
 	if err != nil || deployment.Status != "failed" {
 		t.Fatalf("deployment=%+v err=%v", deployment, err)
-	}
-	if _, err := repo.Queries.GetEnvironmentAgentAssignment(
-		t.Context(),
-		1,
-	); err == nil {
-		t.Fatal("revoked agent assignment remains")
 	}
 }

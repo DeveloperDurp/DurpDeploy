@@ -65,15 +65,6 @@ func seedRevocationRaceFixture(
 	}); err != nil || rows != 1 {
 		t.Fatalf("pairing activation rows=%d err=%v", rows, err)
 	}
-	if !strings.HasPrefix(suffix, "Assignment") {
-		if err := repo.AssignEnvironmentAgent(
-			ctx,
-			environment.ID,
-			agentID,
-		); err != nil {
-			t.Fatal(err)
-		}
-	}
 	deployment, err := repo.Queries.CreateDeployment(
 		ctx,
 		db.CreateDeploymentParams{
@@ -93,8 +84,7 @@ func seedRevocationRaceFixture(
 	}
 	tokenHash := sha256.Sum256([]byte("claim-" + agentID))
 	return revocationRaceFixture{
-		agentID: agentID, environmentID: environment.ID,
-		deploymentID: deployment.ID,
+		agentID: agentID, deploymentID: deployment.ID,
 		identity: RemoteLifecycleClaim{DeploymentID: deployment.ID,
 			AgentID: agentID, ClaimTokenHash: tokenHash[:]},
 	}

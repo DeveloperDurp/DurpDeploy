@@ -189,7 +189,7 @@ func seedDeploymentCreationRace(t *testing.T, repo *Repository) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	environment, err := repo.Queries.CreateEnvironment(
+	_, err = repo.Queries.CreateEnvironment(
 		ctx,
 		db.CreateEnvironmentParams{Name: "creation-race"},
 	)
@@ -224,13 +224,32 @@ VALUES (?,?,?,?,?,?,?,?,?,?)`, "race-agent", make([]byte, 32), "public",
 		"paired", int64(500), int64(100)); err != nil {
 		t.Fatal(err)
 	}
-	rows, err := repo.Queries.AssignEnvironmentAgent(
-		ctx,
-		db.AssignEnvironmentAgentParams{
-			EnvironmentID: environment.ID, AgentID: "race-agent",
+}
+
+func createLegacyRemoteDeployment(
+	t *testing.T,
+	repo *Repository,
+) db.Deployment {
+	t.Helper()
+	deployment, err := repo.Queries.CreateDeployment(
+		t.Context(),
+		db.CreateDeploymentParams{
+			ReleaseID: 1, EnvironmentID: 1, Status: "pending",
+			AssignedAgentID: sql.NullString{
+				String: "race-agent",
+				Valid:  true,
+			},
 		},
 	)
-	if err != nil || rows != 1 {
-		t.Fatalf("assign race agent rows=%d error=%v", rows, err)
+	if err != nil {
+		t.Fatal(err)
 	}
+	created, err := repo.Queries.CreateRemoteDeploymentClaim(
+		t.Context(),
+		deployment.ID,
+	)
+	if err != nil || created != 1 {
+		t.Fatalf("create legacy claim rows=%d error=%v", created, err)
+	}
+	return deployment
 }

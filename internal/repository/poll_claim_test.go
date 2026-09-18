@@ -5,8 +5,6 @@ import (
 	"context"
 	"sync"
 	"testing"
-
-	"durpdeploy/internal/db"
 )
 
 func TestConcurrentPollCapacityAcrossDatabases(t *testing.T) {
@@ -15,11 +13,7 @@ func TestConcurrentPollCapacityAcrossDatabases(t *testing.T) {
 		first, second := openDeploymentCreationEngine(t, engine)
 		ctx := context.Background()
 		for range 2 {
-			if _, err := first.CreateDeployment(ctx, db.CreateDeploymentParams{
-				ReleaseID: 1, EnvironmentID: 1, Status: "pending",
-			}); err != nil {
-				t.Fatal(err)
-			}
+			createLegacyRemoteDeployment(t, first)
 		}
 
 		start := make(chan struct{})

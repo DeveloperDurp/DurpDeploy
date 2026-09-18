@@ -142,10 +142,6 @@ func (h *DeploymentHandler) CreateDeployment(
 		},
 	)
 	if err != nil {
-		if errors.Is(err, repository.ErrDeploymentRoutingConflict) {
-			RespondError(w, http.StatusConflict, err.Error())
-			return
-		}
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -546,10 +542,6 @@ func (h *DeploymentHandler) RedeployDeployment(
 		},
 	)
 	if err != nil {
-		if errors.Is(err, repository.ErrDeploymentRoutingConflict) {
-			RespondError(w, http.StatusConflict, err.Error())
-			return
-		}
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -693,10 +685,6 @@ func (h *DeploymentHandler) RetryDeployment(
 		},
 	)
 	if err != nil {
-		if errors.Is(err, repository.ErrDeploymentRoutingConflict) {
-			RespondError(w, http.StatusConflict, err.Error())
-			return
-		}
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}

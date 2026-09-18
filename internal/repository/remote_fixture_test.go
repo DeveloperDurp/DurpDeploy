@@ -97,11 +97,6 @@ func seedRemoteFixture(t *testing.T, r *repository.Repository) {
 			ID: id, Now: ni(100), CertificateFingerprint: ns(pin),
 		})
 		assertOne(t, n, err)
-		if id == "a" {
-			n, err = r.Queries.AssignEnvironmentAgent(ctx,
-				db.AssignEnvironmentAgentParams{EnvironmentID: 1, AgentID: id})
-			assertOne(t, n, err)
-		}
 		n, err = r.Queries.AddAgentLabel(ctx,
 			db.AddAgentLabelParams{AgentID: id, Label: "linux"})
 		assertOne(t, n, err)
@@ -147,7 +142,7 @@ func seedRemoteFixture(t *testing.T, r *repository.Repository) {
 		}
 	}
 	t.Log(
-		"baseline rows: agents=2 paired=2 assignments=1 claims=2 steps=6 attempts=3; cursor=0",
+		"baseline rows: agents=2 paired=2 claims=2 steps=6 attempts=3; cursor=0",
 	)
 }
 

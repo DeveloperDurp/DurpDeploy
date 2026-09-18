@@ -50,26 +50,6 @@ func (q *Queries) AddAgentLabel(ctx context.Context, arg AddAgentLabelParams) (i
 	return result.RowsAffected()
 }
 
-const assignEnvironmentAgent = `-- name: AssignEnvironmentAgent :execrows
-INSERT INTO environment_agent_assignments (environment_id, agent_id)
-SELECT ?1, ?2
-WHERE NOT EXISTS (SELECT 1 FROM environment_agent_assignments
- WHERE environment_id = ?1)
-`
-
-type AssignEnvironmentAgentParams struct {
-	EnvironmentID int64  `json:"environment_id"`
-	AgentID       string `json:"agent_id"`
-}
-
-func (q *Queries) AssignEnvironmentAgent(ctx context.Context, arg AssignEnvironmentAgentParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, assignEnvironmentAgent, arg.EnvironmentID, arg.AgentID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
-}
-
 const createAgent = `-- name: CreateAgent :one
 INSERT INTO agents (id, name, endpoint) VALUES (?, ?, ?) RETURNING id, name, endpoint, status, agent_version, certificate_pem, certificate_fingerprint, encrypted_identity, last_heartbeat_at, revoked_at, created_at, updated_at
 `
@@ -172,17 +152,6 @@ func (q *Queries) GetAgent(ctx context.Context, id string) (Agent, error) {
 	return i, err
 }
 
-const getEnvironmentAgentAssignment = `-- name: GetEnvironmentAgentAssignment :one
-SELECT environment_id, agent_id, created_at FROM environment_agent_assignments WHERE environment_id = ?
-`
-
-func (q *Queries) GetEnvironmentAgentAssignment(ctx context.Context, environmentID int64) (EnvironmentAgentAssignment, error) {
-	row := q.db.QueryRowContext(ctx, getEnvironmentAgentAssignment, environmentID)
-	var i EnvironmentAgentAssignment
-	err := row.Scan(&i.EnvironmentID, &i.AgentID, &i.CreatedAt)
-	return i, err
-}
-
 const heartbeatAgent = `-- name: HeartbeatAgent :execrows
 UPDATE agents SET last_heartbeat_at = ?1, agent_version = ?2,
     updated_at = ?1
@@ -212,34 +181,6 @@ func (q *Queries) HeartbeatAgent(ctx context.Context, arg HeartbeatAgentParams) 
 	return result.RowsAffected()
 }
 
-const listAgentAssignments = `-- name: ListAgentAssignments :many
-SELECT environment_id, agent_id, created_at FROM environment_agent_assignments
-WHERE agent_id = ? ORDER BY environment_id
-`
-
-func (q *Queries) ListAgentAssignments(ctx context.Context, agentID string) ([]EnvironmentAgentAssignment, error) {
-	rows, err := q.db.QueryContext(ctx, listAgentAssignments, agentID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []EnvironmentAgentAssignment
-	for rows.Next() {
-		var i EnvironmentAgentAssignment
-		if err := rows.Scan(&i.EnvironmentID, &i.AgentID, &i.CreatedAt); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listAgentEnvironmentLabels = `-- name: ListAgentEnvironmentLabels :many
 SELECT e.id, e.name, e.description, e.tags, e.created_at FROM environments e
 JOIN agent_environment_labels l ON l.environment_id = e.id
@@ -248,40 +189,6 @@ WHERE l.agent_id = ? ORDER BY e.name, e.id
 
 func (q *Queries) ListAgentEnvironmentLabels(ctx context.Context, agentID string) ([]Environment, error) {
 	rows, err := q.db.QueryContext(ctx, listAgentEnvironmentLabels, agentID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []Environment
-	for rows.Next() {
-		var i Environment
-		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.Description,
-			&i.Tags,
-			&i.CreatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listAgentEnvironments = `-- name: ListAgentEnvironments :many
-SELECT e.id, e.name, e.description, e.tags, e.created_at FROM environments e JOIN environment_agent_assignments a ON a.environment_id = e.id
-WHERE a.agent_id = ? ORDER BY e.name, e.id
-`
-
-func (q *Queries) ListAgentEnvironments(ctx context.Context, agentID string) ([]Environment, error) {
-	rows, err := q.db.QueryContext(ctx, listAgentEnvironments, agentID)
 	if err != nil {
 		return nil, err
 	}
@@ -439,47 +346,6 @@ func (q *Queries) ListAvailableAgentLabels(ctx context.Context) ([]string, error
 	return items, nil
 }
 
-const listEnvironmentAgents = `-- name: ListEnvironmentAgents :many
-SELECT a.id, a.name, a.endpoint, a.status, a.agent_version, a.certificate_pem, a.certificate_fingerprint, a.encrypted_identity, a.last_heartbeat_at, a.revoked_at, a.created_at, a.updated_at FROM agents a JOIN environment_agent_assignments e ON e.agent_id = a.id
-WHERE e.environment_id = ? ORDER BY a.name, a.id
-`
-
-func (q *Queries) ListEnvironmentAgents(ctx context.Context, environmentID int64) ([]Agent, error) {
-	rows, err := q.db.QueryContext(ctx, listEnvironmentAgents, environmentID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []Agent
-	for rows.Next() {
-		var i Agent
-		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.Endpoint,
-			&i.Status,
-			&i.AgentVersion,
-			&i.CertificatePem,
-			&i.CertificateFingerprint,
-			&i.EncryptedIdentity,
-			&i.LastHeartbeatAt,
-			&i.RevokedAt,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listRevocableAgentClaims = `-- name: ListRevocableAgentClaims :many
 SELECT deployment_id, agent_id, state, reason, claim_token_hash, ciphertext, claim_expires_at, last_heartbeat_at, started_at, finished_at, cancel_requested_at, created_at, updated_at FROM remote_deployment_claims
 WHERE agent_id = ? AND state IN ('waiting', 'claimed', 'started', 'cancel_requested')
@@ -521,31 +387,6 @@ func (q *Queries) ListRevocableAgentClaims(ctx context.Context, agentID string) 
 		return nil, err
 	}
 	return items, nil
-}
-
-const lockEnvironmentAgentAssignment = `-- name: LockEnvironmentAgentAssignment :execrows
-UPDATE environment_agent_assignments SET created_at = created_at
-WHERE environment_agent_assignments.environment_id = ?1
-  AND environment_agent_assignments.agent_id = ?2
-  AND EXISTS (SELECT 1 FROM agents a
-      WHERE a.id = environment_agent_assignments.agent_id
-        AND a.status = 'active')
-  AND EXISTS (SELECT 1 FROM agent_pairings p
-      WHERE p.agent_id = environment_agent_assignments.agent_id
-        AND p.state = 'paired')
-`
-
-type LockEnvironmentAgentAssignmentParams struct {
-	EnvironmentID int64  `json:"environment_id"`
-	AgentID       string `json:"agent_id"`
-}
-
-func (q *Queries) LockEnvironmentAgentAssignment(ctx context.Context, arg LockEnvironmentAgentAssignmentParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, lockEnvironmentAgentAssignment, arg.EnvironmentID, arg.AgentID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
 }
 
 const resetRevokedAgentForPairing = `-- name: ResetRevokedAgentForPairing :execrows
@@ -665,23 +506,6 @@ type TerminateRevokedRemoteDeploymentParams struct {
 
 func (q *Queries) TerminateRevokedRemoteDeployment(ctx context.Context, arg TerminateRevokedRemoteDeploymentParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, terminateRevokedRemoteDeployment, arg.Now, arg.DeploymentID, arg.AgentID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
-}
-
-const unassignEnvironmentAgent = `-- name: UnassignEnvironmentAgent :execrows
-DELETE FROM environment_agent_assignments WHERE environment_id = ? AND agent_id = ?
-`
-
-type UnassignEnvironmentAgentParams struct {
-	EnvironmentID int64  `json:"environment_id"`
-	AgentID       string `json:"agent_id"`
-}
-
-func (q *Queries) UnassignEnvironmentAgent(ctx context.Context, arg UnassignEnvironmentAgentParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, unassignEnvironmentAgent, arg.EnvironmentID, arg.AgentID)
 	if err != nil {
 		return 0, err
 	}

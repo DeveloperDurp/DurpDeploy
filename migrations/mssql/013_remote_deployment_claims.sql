@@ -1,7 +1,4 @@
 -- +goose Up
-CREATE UNIQUE INDEX idx_environment_agent_assignments_environment
-    ON environment_agent_assignments(environment_id);
-
 ALTER TABLE deployments ADD assigned_agent_id NVARCHAR(255) NULL;
 ALTER TABLE deployments ADD CONSTRAINT fk_deployments_assigned_agent
     FOREIGN KEY (assigned_agent_id) REFERENCES agents(id) ON DELETE NO ACTION;
