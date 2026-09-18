@@ -225,24 +225,45 @@ opt-in; an unset marker fails deployment execution. See `docs/deploy.md`.
 
 The agent lives in the standalone
 [`DeveloperDurp/durpdeploy-agent`](https://github.com/DeveloperDurp/durpdeploy-agent)
-repository. Install Git, GNU Make, and Go 1.25.7 or newer, then build the agent
-from the version required by the DurpDeploy server release. A server checkout
-records that version in `go.mod`:
+repository. Install Git, GNU Make, `jq`, and Go 1.25.7 or newer, then build the
+agent from the version required by the DurpDeploy server release. In a trusted
+server checkout, record the pinned version, authenticated module checksum, and
+source commit:
 
 ```bash
-go list -m -f '{{.Version}}' github.com/DeveloperDurp/durpdeploy-agent
+AGENT_MODULE=github.com/DeveloperDurp/durpdeploy-agent
+AGENT_VERSION=$(go list -m -f '{{.Version}}' "$AGENT_MODULE")
+AGENT_SUM=$(awk -v module="$AGENT_MODULE" -v version="$AGENT_VERSION" \
+  '$1 == module && $2 == version { print $3 }' go.sum)
+AGENT_COMMIT=$(go mod download -json "$AGENT_MODULE@$AGENT_VERSION" \
+  | jq -r '.Origin.Hash')
+printf 'AGENT_VERSION=%s\nAGENT_SUM=%s\nAGENT_COMMIT=%s\n' \
+  "$AGENT_VERSION" "$AGENT_SUM" "$AGENT_COMMIT"
 ```
 
-On the agent host, clone and check out that version. Building `cmd/agent` in
-the standalone repository does not create or open a database:
+Transfer those three values to the agent host through the same trusted channel
+as the server release. Verify the module downloaded there against the server's
+checksum and commit before checking out the exact commit. These comparisons
+fail closed if a tag was rewritten:
 
 ```bash
-AGENT_VERSION=v0.1.0 # replace with the version reported by the server checkout
+AGENT_MODULE=github.com/DeveloperDurp/durpdeploy-agent
+AGENT_VERSION=v0.1.0 # use the value recorded from the server checkout
+AGENT_SUM='h1:...' # use the value recorded from the server checkout
+AGENT_COMMIT=... # use the value recorded from the server checkout
+AGENT_DOWNLOAD=$(go mod download -json "$AGENT_MODULE@$AGENT_VERSION")
+test "$(printf '%s' "$AGENT_DOWNLOAD" | jq -r '.Sum')" = "$AGENT_SUM"
+test "$(printf '%s' "$AGENT_DOWNLOAD" | jq -r '.Origin.Hash')" = \
+  "$AGENT_COMMIT"
 git clone https://github.com/DeveloperDurp/durpdeploy-agent.git
 cd durpdeploy-agent
-git checkout --detach "$AGENT_VERSION"
+git checkout --detach "$AGENT_COMMIT"
+test "$(git rev-parse HEAD)" = "$AGENT_COMMIT"
 make build
 ```
+
+Building `cmd/agent` in the standalone repository does not create or open a
+database.
 
 Verify the source revision embedded in the artifact and record its SHA-256
 digest before installation. `vcs.modified` must be `false` for an unmodified
@@ -375,8 +396,8 @@ sudo journalctl -u durpdeploy-agent -n 50 --no-pager
 ```
 
 In the UI, confirm the agent is active and its heartbeat is current. Start a
-small non-production deployment first. A remote deployment must show its
-assigned agent, not local execution.
+small non-production deployment first. A remote step must show every matching
+agent run, not local execution.
 
 ## Troubleshooting
 

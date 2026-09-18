@@ -23,11 +23,13 @@ What we defend against:
 - Remote agents do not receive the server database, server encryption key, or Docker socket
 - Agent transport uses outbound-only mTLS with pinned peer fingerprints and one-time pairing
 
-Remote dispatch is assigned directly to one paired agent. A pre-start claim can
-expire after 60 seconds, but started work is not requeued, replayed, or moved to
-the local runner. Missed heartbeats mark work lost after 45 seconds. A cancel
-needs an agent acknowledgement within 30 seconds, otherwise the result is
-`cancel_unconfirmed` and requires host inspection before a new deployment.
+Each remote step creates one run for every active, paired agent that matches the
+deployment environment and all required capability labels. Each pre-start claim
+belongs to one agent and can expire after 60 seconds, but started work is not
+requeued, replayed, or moved to the local runner. Missed heartbeats mark work
+lost after 45 seconds. A cancel needs an agent acknowledgement within 30
+seconds, otherwise the result is `cancel_unconfirmed` and requires host
+inspection before a new deployment.
 
 ### OIDC boundary and threat model
 
