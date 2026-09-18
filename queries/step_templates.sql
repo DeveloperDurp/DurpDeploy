@@ -27,7 +27,8 @@ INSERT INTO step_template_versions (template_id, version_number, name, script_bo
 SELECT * FROM step_template_versions WHERE template_id = ? ORDER BY version_number DESC;
 
 -- name: GetLatestStepTemplateVersionNumber :one
-SELECT COALESCE(MAX(version_number), 0) FROM step_template_versions WHERE template_id = ?;
+SELECT CAST(COALESCE(MAX(version_number), 0) AS BIGINT)
+FROM step_template_versions WHERE template_id = ?;
 
 -- name: GetStepTemplateVersion :one
 SELECT * FROM step_template_versions WHERE id = ?;

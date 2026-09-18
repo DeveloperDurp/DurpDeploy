@@ -83,14 +83,15 @@ func (q *Queries) DeleteStepTemplate(ctx context.Context, id int64) error {
 }
 
 const getLatestStepTemplateVersionNumber = `-- name: GetLatestStepTemplateVersionNumber :one
-SELECT COALESCE(MAX(version_number), 0) FROM step_template_versions WHERE template_id = ?
+SELECT CAST(COALESCE(MAX(version_number), 0) AS BIGINT)
+FROM step_template_versions WHERE template_id = ?
 `
 
-func (q *Queries) GetLatestStepTemplateVersionNumber(ctx context.Context, templateID int64) (interface{}, error) {
+func (q *Queries) GetLatestStepTemplateVersionNumber(ctx context.Context, templateID int64) (int64, error) {
 	row := q.db.QueryRowContext(ctx, getLatestStepTemplateVersionNumber, templateID)
-	var coalesce interface{}
-	err := row.Scan(&coalesce)
-	return coalesce, err
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const getStepTemplate = `-- name: GetStepTemplate :one

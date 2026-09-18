@@ -3,7 +3,6 @@ package repository
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"strings"
 
 	"durpdeploy/internal/db"
@@ -84,15 +83,11 @@ func (r *Repository) UpdateStepTemplateWithPlacement(
 		if err != nil {
 			return err
 		}
-		next, err := nextTemplateVersion(latest)
-		if err != nil {
-			return err
-		}
 		version, err := q.CreateStepTemplateVersion(
 			ctx,
 			db.CreateStepTemplateVersionParams{
 				TemplateID:    template.ID,
-				VersionNumber: next,
+				VersionNumber: latest + 1,
 				Name:          template.Name,
 				ScriptBody:    template.ScriptBody,
 			},
@@ -206,20 +201,4 @@ func setTemplateVersionPlacement(
 		}
 	}
 	return nil
-}
-
-func nextTemplateVersion(latest any) (int64, error) {
-	switch value := latest.(type) {
-	case int64:
-		return value + 1, nil
-	case int:
-		return int64(value) + 1, nil
-	case nil:
-		return 1, nil
-	default:
-		return 0, fmt.Errorf(
-			"unexpected version_number type %T from DB",
-			latest,
-		)
-	}
 }
