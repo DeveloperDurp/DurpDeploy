@@ -31,7 +31,7 @@ func TestCreateReleaseSnapshotPreservesStepPlacement(t *testing.T) {
 			ProjectID: project.ID, Name: "remote", ScriptBody: "echo remote",
 		},
 		"agent",
-		"linux",
+		[]string{"linux"},
 	)
 	if err != nil {
 		t.Fatal(err)

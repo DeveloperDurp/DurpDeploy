@@ -57,23 +57,58 @@ func (h *StepHandler) placementOptions(
 }
 
 func parseStepPlacement(r *http.Request, labels []string) (string, string, error) {
-	target := strings.TrimSpace(r.FormValue("execution_target"))
+	target, selectors, err := ValidateStepPlacement(
+		r.FormValue("execution_target"),
+		[]string{r.FormValue("agent_label")},
+		labels,
+	)
+	if err != nil {
+		return "", "", err
+	}
+	if len(selectors) == 0 {
+		return target, "", nil
+	}
+	return target, selectors[0], nil
+}
+
+func ValidateStepPlacement(
+	target string,
+	selectors []string,
+	available []string,
+) (string, []string, error) {
+	target = strings.TrimSpace(target)
 	if target == "" {
 		target = "local"
 	}
 	if target != "local" && target != "agent" {
-		return "", "", errors.New("Run step on must be Local or Agent")
+		return "", nil, errors.New("Run step on must be Local or Agent")
 	}
 	if target == "local" {
-		return target, "", nil
+		return target, nil, nil
 	}
-	label := strings.ToLower(strings.TrimSpace(r.FormValue("agent_label")))
-	for _, available := range labels {
-		if strings.ToLower(available) == label {
-			return target, available, nil
+	canonical := make(map[string]string, len(available))
+	for _, label := range available {
+		canonical[strings.ToLower(label)] = label
+	}
+	validated := make([]string, 0, len(selectors))
+	seen := make(map[string]struct{}, len(selectors))
+	for _, selector := range selectors {
+		selector = strings.ToLower(strings.TrimSpace(selector))
+		label, ok := canonical[selector]
+		if !ok {
+			return "", nil, errors.New("Select an available agent label")
 		}
+		key := strings.ToLower(label)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		validated = append(validated, label)
 	}
-	return "", "", errors.New("Select an available agent label")
+	if len(validated) == 0 {
+		return "", nil, errors.New("Select an available agent label")
+	}
+	return target, validated, nil
 }
 
 func (h *StepHandler) ListSteps(w http.ResponseWriter, r *http.Request) {
@@ -278,7 +313,7 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_, err = h.repo.CreateStepWithPlacement(
-		r.Context(), params, target, agentLabel,
+		r.Context(), params, target, []string{agentLabel},
 	)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -478,7 +513,7 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_, err = h.repo.UpdateStepWithPlacement(
-		r.Context(), params, target, agentLabel,
+		r.Context(), params, target, []string{agentLabel},
 	)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

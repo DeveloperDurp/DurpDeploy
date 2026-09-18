@@ -292,6 +292,24 @@ func (h *testHarness) seedStep(t *testing.T, projectID int64) db.Step {
 	return s
 }
 
+func (h *testHarness) seedAgentLabel(t *testing.T, label string) {
+	t.Helper()
+	ctx := context.Background()
+	if _, err := h.repo.Queries.CreateAgent(ctx, db.CreateAgentParams{
+		ID:       "placement-agent",
+		Name:     "Placement Agent",
+		Endpoint: "https://agent.invalid",
+	}); err != nil {
+		t.Fatalf("create agent: %v", err)
+	}
+	if _, err := h.repo.Queries.AddAgentLabel(ctx, db.AddAgentLabelParams{
+		AgentID: "placement-agent",
+		Label:   label,
+	}); err != nil {
+		t.Fatalf("add agent label: %v", err)
+	}
+}
+
 func (h *testHarness) seedTemplate(t *testing.T, name string) db.StepTemplate {
 	tpl, err := h.repo.Queries.CreateStepTemplate(
 		context.Background(),
@@ -869,6 +887,99 @@ func TestStep_CreateAndList(t *testing.T) {
 	}
 }
 
+func TestStep_AgentPlacementRoundTripsThroughAPI(t *testing.T) {
+	h := newHarness(t)
+	admin := h.seedUser(t, "placement@example.com", "admin")
+	token := h.seedToken(t, admin)
+	project := h.seedProject(t, admin)
+	h.seedAgentLabel(t, "linux")
+
+	rec := h.request(
+		t,
+		http.MethodPost,
+		"/api/v1/projects/"+itoa(project.ID)+"/steps",
+		token,
+		`{"name":"remote","script_body":"uname -a",`+
+			`"execution_target":"agent","agent_selectors":["LINUX"]}`,
+	)
+	h.assertStatus(t, rec, http.StatusCreated)
+	h.assertJSONField(t, rec, "execution_target", "agent")
+	var created struct {
+		ID             int64    `json:"id"`
+		AgentSelectors []string `json:"agent_selectors"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode created step: %v", err)
+	}
+	if len(created.AgentSelectors) != 1 || created.AgentSelectors[0] != "linux" {
+		t.Fatalf("created selectors = %v, want [linux]", created.AgentSelectors)
+	}
+
+	rec = h.request(
+		t,
+		http.MethodGet,
+		"/api/v1/projects/"+itoa(project.ID)+"/steps/"+itoa(created.ID),
+		token,
+		"",
+	)
+	h.assertStatus(t, rec, http.StatusOK)
+	h.assertJSONField(t, rec, "execution_target", "agent")
+	var fetched struct {
+		AgentSelectors []string `json:"agent_selectors"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &fetched); err != nil {
+		t.Fatalf("decode fetched step: %v", err)
+	}
+	if len(fetched.AgentSelectors) != 1 || fetched.AgentSelectors[0] != "linux" {
+		t.Fatalf("fetched selectors = %v, want [linux]", fetched.AgentSelectors)
+	}
+
+	rec = h.request(
+		t,
+		http.MethodPut,
+		"/api/v1/projects/"+itoa(project.ID)+"/steps/"+itoa(created.ID),
+		token,
+		`{"name":"local","script_body":"hostname",`+
+			`"execution_target":"local"}`,
+	)
+	h.assertStatus(t, rec, http.StatusOK)
+	h.assertJSONField(t, rec, "execution_target", "local")
+	var updated struct {
+		AgentSelectors []string `json:"agent_selectors"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &updated); err != nil {
+		t.Fatalf("decode updated step: %v", err)
+	}
+	if len(updated.AgentSelectors) != 0 {
+		t.Fatalf("updated selectors = %v, want none", updated.AgentSelectors)
+	}
+}
+
+func TestStep_AgentPlacementRejectsInvalidAPISelectors(t *testing.T) {
+	h := newHarness(t)
+	admin := h.seedUser(t, "invalid-placement@example.com", "admin")
+	token := h.seedToken(t, admin)
+	project := h.seedProject(t, admin)
+	h.seedAgentLabel(t, "linux")
+
+	for _, body := range []string{
+		`{"name":"bad-target","execution_target":"remote",` +
+			`"agent_selectors":["linux"]}`,
+		`{"name":"missing-selector","execution_target":"agent"}`,
+		`{"name":"unknown-selector","execution_target":"agent",` +
+			`"agent_selectors":["windows"]}`,
+	} {
+		rec := h.request(
+			t,
+			http.MethodPost,
+			"/api/v1/projects/"+itoa(project.ID)+"/steps",
+			token,
+			body,
+		)
+		h.assertStatus(t, rec, http.StatusBadRequest)
+	}
+}
+
 func TestStep_GetUpdateDelete(t *testing.T) {
 	h := newHarness(t)
 	admin := h.seedUser(t, "admin@example.com", "admin")
@@ -969,6 +1080,78 @@ func TestTemplate_CreateAndList(t *testing.T) {
 	list := decodeList(t, rec)
 	if len(list) != 1 {
 		t.Fatalf("expected 1 template, got %d", len(list))
+	}
+}
+
+func TestTemplate_AgentPlacementAndHistoryRoundTripThroughAPI(t *testing.T) {
+	h := newHarness(t)
+	token := h.adminToken(t)
+	h.seedAgentLabel(t, "linux")
+
+	rec := h.request(
+		t,
+		http.MethodPost,
+		"/api/v1/templates",
+		token,
+		`{"name":"agent-template","script_body":"uname -a",`+
+			`"execution_target":"agent","agent_selectors":["linux"]}`,
+	)
+	h.assertStatus(t, rec, http.StatusCreated)
+	var created struct {
+		ID              int64    `json:"id"`
+		ExecutionTarget string   `json:"execution_target"`
+		AgentSelectors  []string `json:"agent_selectors"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode created template: %v", err)
+	}
+	if created.ExecutionTarget != "agent" ||
+		len(created.AgentSelectors) != 1 || created.AgentSelectors[0] != "linux" {
+		t.Fatalf("created placement = %q %v", created.ExecutionTarget, created.AgentSelectors)
+	}
+
+	rec = h.request(
+		t,
+		http.MethodPut,
+		"/api/v1/templates/"+itoa(created.ID),
+		token,
+		`{"name":"agent-template-v2","script_body":"hostname",`+
+			`"execution_target":"local"}`,
+	)
+	h.assertStatus(t, rec, http.StatusOK)
+
+	rec = h.request(
+		t,
+		http.MethodGet,
+		"/api/v1/templates/"+itoa(created.ID)+"/history",
+		token,
+		"",
+	)
+	h.assertStatus(t, rec, http.StatusOK)
+	var history []struct {
+		ExecutionTarget string   `json:"execution_target"`
+		AgentSelectors  []string `json:"agent_selectors"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &history); err != nil {
+		t.Fatalf("decode template history: %v", err)
+	}
+	if len(history) != 2 {
+		t.Fatalf("history length = %d, want 2", len(history))
+	}
+	if history[0].ExecutionTarget != "local" || len(history[0].AgentSelectors) != 0 {
+		t.Fatalf(
+			"latest history placement = %q %v",
+			history[0].ExecutionTarget,
+			history[0].AgentSelectors,
+		)
+	}
+	if history[1].ExecutionTarget != "agent" ||
+		len(history[1].AgentSelectors) != 1 || history[1].AgentSelectors[0] != "linux" {
+		t.Fatalf(
+			"original history placement = %q %v",
+			history[1].ExecutionTarget,
+			history[1].AgentSelectors,
+		)
 	}
 }
 

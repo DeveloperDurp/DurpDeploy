@@ -25,5 +25,8 @@ SELECT label FROM step_template_agent_selectors WHERE template_id = ? ORDER BY l
 -- name: AddTemplateVersionAgentSelector :exec
 INSERT INTO step_template_version_agent_selectors (template_version_id, label) VALUES (?, ?);
 
+-- name: SetTemplateVersionExecutionTarget :execrows
+UPDATE step_template_versions SET execution_target = ? WHERE id = ?;
+
 -- name: ListTemplateVersionAgentSelectors :many
 SELECT label FROM step_template_version_agent_selectors WHERE template_version_id = ? ORDER BY label;

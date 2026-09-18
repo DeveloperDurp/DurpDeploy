@@ -183,3 +183,20 @@ func (q *Queries) SetTemplateExecutionTarget(ctx context.Context, arg SetTemplat
 	}
 	return result.RowsAffected()
 }
+
+const setTemplateVersionExecutionTarget = `-- name: SetTemplateVersionExecutionTarget :execrows
+UPDATE step_template_versions SET execution_target = ? WHERE id = ?
+`
+
+type SetTemplateVersionExecutionTargetParams struct {
+	ExecutionTarget string `json:"execution_target"`
+	ID              int64  `json:"id"`
+}
+
+func (q *Queries) SetTemplateVersionExecutionTarget(ctx context.Context, arg SetTemplateVersionExecutionTargetParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, setTemplateVersionExecutionTarget, arg.ExecutionTarget, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}

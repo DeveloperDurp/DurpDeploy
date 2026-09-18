@@ -12,36 +12,10 @@ func (r *Repository) SetStepPlacement(
 	ctx context.Context,
 	stepID int64,
 	target string,
-	label string,
+	selectors []string,
 ) error {
 	return r.WithTx(ctx, func(q *db.Queries) error {
-		changed, err := q.SetStepExecutionTarget(
-			ctx,
-			db.SetStepExecutionTargetParams{
-				ExecutionTarget: target,
-				ID:              stepID,
-			},
-		)
-		if err != nil {
-			return err
-		}
-		if changed != 1 {
-			return sql.ErrNoRows
-		}
-		if err := q.DeleteStepAgentSelectors(ctx, stepID); err != nil {
-			return err
-		}
-		if target != "agent" {
-			return nil
-		}
-		err = q.AddStepAgentSelector(
-			ctx,
-			db.AddStepAgentSelectorParams{
-				StepID: stepID,
-				Label:  strings.ToLower(strings.TrimSpace(label)),
-			},
-		)
-		return err
+		return setStepPlacement(ctx, q, stepID, target, selectors)
 	})
 }
 
@@ -49,7 +23,7 @@ func (r *Repository) CreateStepWithPlacement(
 	ctx context.Context,
 	params db.CreateStepParams,
 	target string,
-	label string,
+	selectors []string,
 ) (db.Step, error) {
 	var step db.Step
 	err := r.WithTx(ctx, func(q *db.Queries) error {
@@ -58,8 +32,9 @@ func (r *Repository) CreateStepWithPlacement(
 		if err != nil {
 			return err
 		}
-		return setStepPlacement(ctx, q, step.ID, target, label)
+		return setStepPlacement(ctx, q, step.ID, target, selectors)
 	})
+	step.ExecutionTarget = target
 	return step, err
 }
 
@@ -67,7 +42,7 @@ func (r *Repository) UpdateStepWithPlacement(
 	ctx context.Context,
 	params db.UpdateStepParams,
 	target string,
-	label string,
+	selectors []string,
 ) (db.Step, error) {
 	var step db.Step
 	err := r.WithTx(ctx, func(q *db.Queries) error {
@@ -76,8 +51,9 @@ func (r *Repository) UpdateStepWithPlacement(
 		if err != nil {
 			return err
 		}
-		return setStepPlacement(ctx, q, step.ID, target, label)
+		return setStepPlacement(ctx, q, step.ID, target, selectors)
 	})
+	step.ExecutionTarget = target
 	return step, err
 }
 
@@ -86,7 +62,7 @@ func setStepPlacement(
 	q *db.Queries,
 	stepID int64,
 	target string,
-	label string,
+	selectors []string,
 ) error {
 	changed, err := q.SetStepExecutionTarget(
 		ctx,
@@ -107,12 +83,16 @@ func setStepPlacement(
 	if target != "agent" {
 		return nil
 	}
-	err = q.AddStepAgentSelector(
-		ctx,
-		db.AddStepAgentSelectorParams{
-			StepID: stepID,
-			Label:  strings.ToLower(strings.TrimSpace(label)),
-		},
-	)
-	return err
+	for _, selector := range selectors {
+		if err := q.AddStepAgentSelector(
+			ctx,
+			db.AddStepAgentSelectorParams{
+				StepID: stepID,
+				Label:  strings.ToLower(strings.TrimSpace(selector)),
+			},
+		); err != nil {
+			return err
+		}
+	}
+	return nil
 }
