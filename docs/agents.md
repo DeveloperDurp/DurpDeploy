@@ -231,12 +231,15 @@ server checkout, record the pinned version, authenticated module checksum, and
 source commit:
 
 ```bash
+set -euo pipefail
 AGENT_MODULE=github.com/DeveloperDurp/durpdeploy-agent
 AGENT_VERSION=$(go list -m -f '{{.Version}}' "$AGENT_MODULE")
 AGENT_SUM=$(awk -v module="$AGENT_MODULE" -v version="$AGENT_VERSION" \
   '$1 == module && $2 == version { print $3 }' go.sum)
 AGENT_COMMIT=$(go mod download -json "$AGENT_MODULE@$AGENT_VERSION" \
   | jq -r '.Origin.Hash')
+test -n "$AGENT_SUM"
+test -n "$AGENT_COMMIT"
 printf 'AGENT_VERSION=%s\nAGENT_SUM=%s\nAGENT_COMMIT=%s\n' \
   "$AGENT_VERSION" "$AGENT_SUM" "$AGENT_COMMIT"
 ```
@@ -247,6 +250,7 @@ checksum and commit before checking out the exact commit. These comparisons
 fail closed if a tag was rewritten:
 
 ```bash
+set -euo pipefail
 AGENT_MODULE=github.com/DeveloperDurp/durpdeploy-agent
 AGENT_VERSION=v0.1.0 # use the value recorded from the server checkout
 AGENT_SUM='h1:...' # use the value recorded from the server checkout
@@ -260,25 +264,22 @@ cd durpdeploy-agent
 git checkout --detach "$AGENT_COMMIT"
 test "$(git rev-parse HEAD)" = "$AGENT_COMMIT"
 make build
-```
 
-Building `cmd/agent` in the standalone repository does not create or open a
-database.
-
-Verify the source revision embedded in the artifact and record its SHA-256
-digest before installation. `vcs.modified` must be `false` for an unmodified
-release build:
-
-```bash
-git rev-parse HEAD
-go version -m ./durpdeploy-agent
-sha256sum ./durpdeploy-agent
+BUILD_INFO=$(go version -m ./durpdeploy-agent)
+printf '%s\n' "$BUILD_INFO"
+printf '%s\n' "$BUILD_INFO" | grep -Fq "vcs.revision=$AGENT_COMMIT"
+printf '%s\n' "$BUILD_INFO" | grep -Fq 'vcs.modified=false'
+SOURCE_SHA=$(sha256sum ./durpdeploy-agent | awk '{ print $1 }')
 sudo install -o root -g root -m 0755 ./durpdeploy-agent /usr/local/bin/durpdeploy-agent
-sha256sum /usr/local/bin/durpdeploy-agent
+INSTALLED_SHA=$(sha256sum /usr/local/bin/durpdeploy-agent | awk '{ print $1 }')
+test "$SOURCE_SHA" = "$INSTALLED_SHA"
+printf 'installed sha256: %s\n' "$INSTALLED_SHA"
 ```
 
-The two SHA-256 values must match. Keep the digest with the deployment record
-so the installed artifact can be checked later.
+The block stops at the first failed check. Building `cmd/agent` in the
+standalone repository does not create or open a database. Keep the printed
+digest with the deployment record so the installed artifact can be checked
+later.
 
 The server and agent must both use protocol `agent/1`. Builds using that
 protocol are wire-compatible; a breaking wire change requires a new protocol
