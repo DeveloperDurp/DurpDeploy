@@ -1153,6 +1153,15 @@ func TestTemplate_AgentPlacementAndHistoryRoundTripThroughAPI(t *testing.T) {
 			history[1].AgentSelectors,
 		)
 	}
+
+	rec = h.request(
+		t,
+		http.MethodDelete,
+		"/api/v1/templates/"+itoa(created.ID),
+		token,
+		"",
+	)
+	h.assertStatus(t, rec, http.StatusNoContent)
 }
 
 func TestTemplate_GetUpdateDelete(t *testing.T) {

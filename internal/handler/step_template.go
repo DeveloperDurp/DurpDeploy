@@ -235,7 +235,7 @@ func (h *StepTemplateHandler) DeleteTemplate(
 		return
 	}
 
-	if err := h.repo.Queries.DeleteStepTemplate(r.Context(), id); err != nil {
+	if err := h.repo.DeleteStepTemplate(r.Context(), id); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

@@ -70,6 +70,18 @@ func (q *Queries) DeleteTemplateAgentSelectors(ctx context.Context, templateID i
 	return err
 }
 
+const deleteTemplateVersionAgentSelectors = `-- name: DeleteTemplateVersionAgentSelectors :exec
+DELETE FROM step_template_version_agent_selectors
+WHERE template_version_id IN (
+    SELECT id FROM step_template_versions WHERE template_id = ?
+)
+`
+
+func (q *Queries) DeleteTemplateVersionAgentSelectors(ctx context.Context, templateID int64) error {
+	_, err := q.db.ExecContext(ctx, deleteTemplateVersionAgentSelectors, templateID)
+	return err
+}
+
 const listStepAgentSelectors = `-- name: ListStepAgentSelectors :many
 SELECT label FROM step_agent_selectors WHERE step_id = ? ORDER BY label
 `

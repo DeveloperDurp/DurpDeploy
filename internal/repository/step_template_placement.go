@@ -112,6 +112,21 @@ func (r *Repository) UpdateStepTemplateWithPlacement(
 	return template, err
 }
 
+func (r *Repository) DeleteStepTemplate(
+	ctx context.Context,
+	templateID int64,
+) error {
+	return r.WithTx(ctx, func(q *db.Queries) error {
+		if err := q.DeleteTemplateVersionAgentSelectors(
+			ctx,
+			templateID,
+		); err != nil {
+			return err
+		}
+		return q.DeleteStepTemplate(ctx, templateID)
+	})
+}
+
 func setTemplatePlacement(
 	ctx context.Context,
 	q *db.Queries,

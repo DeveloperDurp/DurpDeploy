@@ -43,3 +43,9 @@ SELECT label FROM step_template_version_agent_selectors WHERE template_version_i
 SELECT template_version_id, label FROM step_template_version_agent_selectors
 WHERE template_version_id IN (sqlc.slice('version_ids'))
 ORDER BY template_version_id, label;
+
+-- name: DeleteTemplateVersionAgentSelectors :exec
+DELETE FROM step_template_version_agent_selectors
+WHERE template_version_id IN (
+    SELECT id FROM step_template_versions WHERE template_id = ?
+);
