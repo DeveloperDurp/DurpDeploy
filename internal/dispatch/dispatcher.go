@@ -157,19 +157,41 @@ func (d *Dispatcher) Maintain(ctx context.Context) error {
 		if _, err := q.ExpireRemoteStepClaims(ctx, now); err != nil {
 			return err
 		}
-		staleBefore := now - int64(
+		cancelStaleBefore := now - int64(
 			agentproto.CancelAcknowledgementTimeout/time.Second,
 		)
-		if _, err := q.FailStaleRemoteStepCancellations(
+		if _, err := q.ExpireRemoteStepCancellations(
 			ctx,
-			db.FailStaleRemoteStepCancellationsParams{
+			db.ExpireRemoteStepCancellationsParams{
 				Now: sql.NullInt64{Int64: now, Valid: true},
 				StaleBefore: sql.NullInt64{
-					Int64: staleBefore,
+					Int64: cancelStaleBefore,
 					Valid: true,
 				},
 			},
 		); err != nil {
+			return err
+		}
+		heartbeatStaleBefore := now - int64(
+			agentproto.LostThreshold/time.Second,
+		)
+		if _, err := q.LoseStaleRemoteStepRuns(
+			ctx,
+			db.LoseStaleRemoteStepRunsParams{
+				Now: sql.NullInt64{Int64: now, Valid: true},
+				StaleBefore: sql.NullInt64{
+					Int64: heartbeatStaleBefore,
+					Valid: true,
+				},
+			},
+		); err != nil {
+			return err
+		}
+		_, err = q.FailDeploymentsWithTerminalRemoteStepRuns(
+			ctx,
+			sql.NullInt64{Int64: now, Valid: true},
+		)
+		if err != nil {
 			return err
 		}
 		return nil

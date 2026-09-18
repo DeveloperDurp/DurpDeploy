@@ -147,6 +147,26 @@ func (q *Queries) CreateRemoteStepRuns(ctx context.Context, arg CreateRemoteStep
 	return result.RowsAffected()
 }
 
+const expireRemoteStepCancellations = `-- name: ExpireRemoteStepCancellations :execrows
+UPDATE remote_step_runs SET state = 'cancel_unconfirmed', finished_at = ?1,
+    updated_at = ?1
+WHERE state = 'cancel_requested'
+  AND cancel_requested_at <= ?2
+`
+
+type ExpireRemoteStepCancellationsParams struct {
+	Now         sql.NullInt64 `json:"now"`
+	StaleBefore sql.NullInt64 `json:"stale_before"`
+}
+
+func (q *Queries) ExpireRemoteStepCancellations(ctx context.Context, arg ExpireRemoteStepCancellationsParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, expireRemoteStepCancellations, arg.Now, arg.StaleBefore)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const expireRemoteStepClaims = `-- name: ExpireRemoteStepClaims :execrows
 UPDATE remote_step_runs SET state = 'waiting', claim_token_hash = NULL,
     ciphertext = NULL, claim_expires_at = NULL, last_heartbeat_at = NULL,
@@ -157,48 +177,6 @@ WHERE state = 'claimed' AND started_at IS NULL
 
 func (q *Queries) ExpireRemoteStepClaims(ctx context.Context, now int64) (int64, error) {
 	result, err := q.db.ExecContext(ctx, expireRemoteStepClaims, now)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
-}
-
-const failStaleRemoteStepCancellations = `-- name: FailStaleRemoteStepCancellations :execrows
-UPDATE remote_step_runs SET state = 'failed', finished_at = ?1,
-    updated_at = ?1
-WHERE state = 'cancel_requested'
-  AND cancel_requested_at <= ?2
-`
-
-type FailStaleRemoteStepCancellationsParams struct {
-	Now         sql.NullInt64 `json:"now"`
-	StaleBefore sql.NullInt64 `json:"stale_before"`
-}
-
-func (q *Queries) FailStaleRemoteStepCancellations(ctx context.Context, arg FailStaleRemoteStepCancellationsParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, failStaleRemoteStepCancellations, arg.Now, arg.StaleBefore)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
-}
-
-const failUnfinishedRemoteStepRuns = `-- name: FailUnfinishedRemoteStepRuns :execrows
-UPDATE remote_step_runs SET state = 'failed', finished_at = ?1,
-    updated_at = ?1
-WHERE deployment_id = ?2
-  AND step_index = ?3
-  AND state IN ('waiting', 'claimed', 'started', 'cancel_requested')
-`
-
-type FailUnfinishedRemoteStepRunsParams struct {
-	Now          sql.NullInt64 `json:"now"`
-	DeploymentID int64         `json:"deployment_id"`
-	StepIndex    int64         `json:"step_index"`
-}
-
-func (q *Queries) FailUnfinishedRemoteStepRuns(ctx context.Context, arg FailUnfinishedRemoteStepRunsParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, failUnfinishedRemoteStepRuns, arg.Now, arg.DeploymentID, arg.StepIndex)
 	if err != nil {
 		return 0, err
 	}
@@ -430,6 +408,26 @@ func (q *Queries) ListWaitingRemoteStepRuns(ctx context.Context, agentID string)
 	return items, nil
 }
 
+const loseStaleRemoteStepRuns = `-- name: LoseStaleRemoteStepRuns :execrows
+UPDATE remote_step_runs SET state = 'lost', finished_at = ?1,
+    updated_at = ?1
+WHERE state = 'started'
+  AND last_heartbeat_at <= ?2
+`
+
+type LoseStaleRemoteStepRunsParams struct {
+	Now         sql.NullInt64 `json:"now"`
+	StaleBefore sql.NullInt64 `json:"stale_before"`
+}
+
+func (q *Queries) LoseStaleRemoteStepRuns(ctx context.Context, arg LoseStaleRemoteStepRunsParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, loseStaleRemoteStepRuns, arg.Now, arg.StaleBefore)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const requestRemoteStepCancellation = `-- name: RequestRemoteStepCancellation :execrows
 UPDATE remote_step_runs SET
     state = CASE WHEN state = 'waiting' THEN 'cancelled'
@@ -458,9 +456,16 @@ func (q *Queries) RequestRemoteStepCancellation(ctx context.Context, arg Request
 const startRemoteStepRun = `-- name: StartRemoteStepRun :execrows
 UPDATE remote_step_runs SET state = 'started', started_at = ?1,
     last_heartbeat_at = ?1, updated_at = ?1
-WHERE deployment_id = ?2
-  AND step_index = ?3 AND agent_id = ?4
-  AND claim_token_hash = ?5 AND state = 'claimed'
+WHERE remote_step_runs.deployment_id = ?2
+  AND remote_step_runs.step_index = ?3
+  AND remote_step_runs.agent_id = ?4
+  AND remote_step_runs.claim_token_hash = ?5
+  AND remote_step_runs.state = 'claimed'
+  AND remote_step_runs.claim_expires_at > ?1
+  AND EXISTS (SELECT 1 FROM agents a
+      WHERE a.id = remote_step_runs.agent_id AND a.status = 'active'
+        AND EXISTS (SELECT 1 FROM agent_pairings p
+            WHERE p.agent_id = a.id AND p.state = 'paired'))
 `
 
 type StartRemoteStepRunParams struct {

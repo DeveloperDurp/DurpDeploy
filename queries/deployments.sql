@@ -85,8 +85,14 @@ JOIN environments e ON d.environment_id = e.id
 WHERE d.status = 'pending'
 ORDER BY d.created_at ASC;
 
--- name: FailOrphanedRemoteStepRuns :execrows
-UPDATE remote_step_runs SET state = 'failed', finished_at = sqlc.arg(now),
+-- name: CancelOrphanedRemoteStepRuns :execrows
+UPDATE remote_step_runs SET
+    state = CASE WHEN state = 'waiting' THEN 'cancelled'
+        ELSE 'cancel_requested' END,
+    cancel_requested_at = CASE WHEN state = 'cancel_requested'
+        THEN cancel_requested_at ELSE sqlc.arg(now) END,
+    finished_at = CASE WHEN state = 'waiting' THEN sqlc.arg(now)
+        ELSE finished_at END,
     updated_at = sqlc.arg(now)
 WHERE state IN ('waiting', 'claimed', 'started', 'cancel_requested')
   AND deployment_id IN (
@@ -96,7 +102,26 @@ WHERE state IN ('waiting', 'claimed', 'started', 'cancel_requested')
 
 -- name: FailOrphanedDeployments :execrows
 UPDATE deployments SET status = 'failed', finished_at = sqlc.arg(now)
-WHERE status = 'running' AND assigned_agent_id IS NULL;
+WHERE status = 'running' AND assigned_agent_id IS NULL
+  AND NOT EXISTS (
+      SELECT 1 FROM remote_step_runs r
+      WHERE r.deployment_id = deployments.id
+        AND r.state = 'cancel_requested'
+  );
+
+-- name: FailDeploymentsWithTerminalRemoteStepRuns :execrows
+UPDATE deployments SET status = 'failed', finished_at = sqlc.arg(now)
+WHERE status = 'running' AND assigned_agent_id IS NULL
+  AND EXISTS (
+      SELECT 1 FROM remote_step_runs r
+      WHERE r.deployment_id = deployments.id
+        AND r.state IN ('failed', 'cancelled', 'lost', 'cancel_unconfirmed')
+  )
+  AND NOT EXISTS (
+      SELECT 1 FROM remote_step_runs r
+      WHERE r.deployment_id = deployments.id
+        AND r.state IN ('waiting', 'claimed', 'started', 'cancel_requested')
+  );
 
 -- name: ListLatestDeploymentPerReleaseEnv :many
 SELECT id, release_id, environment_id, status, started_at, finished_at,

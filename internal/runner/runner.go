@@ -454,7 +454,32 @@ func (r *DeploymentRunner) runRemoteStep(
 	defer timer.Stop()
 	ticker := time.NewTicker(250 * time.Millisecond)
 	defer ticker.Stop()
+	timedOut := false
+	cancellationNeeded := false
+	cancellationRequested := false
+	failureAgent := ""
 	for {
+		if cancellationNeeded && !cancellationRequested {
+			_, err := r.repo.Queries.RequestRemoteStepCancellation(
+				context.Background(),
+				db.RequestRemoteStepCancellationParams{
+					Now: sql.NullInt64{
+						Int64: time.Now().Unix(),
+						Valid: true,
+					},
+					DeploymentID: deploymentID,
+				},
+			)
+			if err != nil {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-ticker.C:
+				}
+				continue
+			}
+			cancellationRequested = true
+		}
 		runs, err := r.repo.Queries.ListRemoteStepRuns(
 			ctx,
 			db.ListRemoteStepRunsParams{
@@ -466,15 +491,37 @@ func (r *DeploymentRunner) runRemoteStep(
 			return err
 		}
 		allSucceeded := len(runs) > 0
+		hasActive := false
+		hasFailure := false
 		for _, run := range runs {
-			if run.State == "failed" || run.State == "cancelled" {
+			switch run.State {
+			case "succeeded":
+			case "failed", "cancelled", "lost", "cancel_unconfirmed":
+				allSucceeded = false
+				hasFailure = true
+				if failureAgent == "" {
+					failureAgent = run.AgentID
+				}
+			default:
+				allSucceeded = false
+				hasActive = true
+			}
+		}
+		if hasFailure && hasActive {
+			cancellationNeeded = true
+		} else if hasFailure {
+			if timedOut {
 				return fmt.Errorf(
-					"step %q failed on agent %s",
+					"step %q timed out after %s",
 					step.Name,
-					run.AgentID,
+					timeout,
 				)
 			}
-			allSucceeded = allSucceeded && run.State == "succeeded"
+			return fmt.Errorf(
+				"step %q failed on agent %s",
+				step.Name,
+				failureAgent,
+			)
 		}
 		if allSucceeded {
 			return nil
@@ -490,15 +537,10 @@ func (r *DeploymentRunner) runRemoteStep(
 			)
 			return ctx.Err()
 		case <-timer.C:
-			_, _ = r.repo.Queries.FailUnfinishedRemoteStepRuns(
-				context.Background(),
-				db.FailUnfinishedRemoteStepRunsParams{
-					Now:          sql.NullInt64{Int64: time.Now().Unix(), Valid: true},
-					DeploymentID: deploymentID,
-					StepIndex:    stepIndex,
-				},
-			)
-			return fmt.Errorf("step %q timed out after %s", step.Name, timeout)
+			if failureAgent == "" {
+				timedOut = true
+			}
+			cancellationNeeded = true
 		case <-ticker.C:
 		}
 	}

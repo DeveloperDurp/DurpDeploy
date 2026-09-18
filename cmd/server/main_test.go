@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/dispatch"
 	"durpdeploy/internal/migrate"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/runner"
@@ -550,6 +551,121 @@ func TestRecoverPendingDeploymentsFailsOrphanedRunningDeployment(t *testing.T) {
 	}
 	if deployment.Status != "failed" || !deployment.FinishedAt.Valid {
 		t.Fatalf("orphaned deployment=%+v", deployment)
+	}
+}
+
+func TestRecoverPendingDeploymentsCancelsActiveRemoteStepBeforeFailure(
+	t *testing.T,
+) {
+	conn, err := migrate.Run(tempDSN(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	repo := repository.New(conn)
+	ctx := t.Context()
+	fingerprint := strings.Repeat("a", 64)
+	secondFingerprint := strings.Repeat("b", 64)
+	for _, statement := range []string{
+		`INSERT INTO projects(id,name) VALUES(1,'p')`,
+		`INSERT INTO environments(id,name) VALUES(1,'e')`,
+		`INSERT INTO releases(id,project_id,version,steps_json)
+		 VALUES(1,1,'v1','[]')`,
+		`INSERT INTO deployments(id,release_id,environment_id,status,started_at)
+		 VALUES(1,1,1,'running',100)`,
+		`INSERT INTO agents(id,name,endpoint,status,certificate_pem,
+		 certificate_fingerprint,encrypted_identity)
+		 VALUES('a','a','https://agent.invalid','active','certificate','` +
+			fingerprint + `','identity')`,
+		`INSERT INTO agents(id,name,endpoint,status,certificate_pem,
+		 certificate_fingerprint,encrypted_identity)
+		 VALUES('b','b','https://agent.invalid','active','certificate','` +
+			secondFingerprint + `','identity')`,
+		`INSERT INTO deployment_steps
+		 (deployment_id,step_index,name,script_body,execution_target)
+		 VALUES(1,0,'remote','echo remote','agent')`,
+	} {
+		if _, err := conn.ExecContext(ctx, statement); err != nil {
+			t.Fatal(err)
+		}
+	}
+	claimHash := make([]byte, 32)
+	if _, err := conn.ExecContext(ctx, `INSERT INTO remote_step_runs
+		(deployment_id,step_index,agent_id,state,claim_token_hash,ciphertext,
+		 claim_expires_at,last_heartbeat_at,started_at,updated_at)
+		VALUES(1,0,'a','started',?,'payload',200,100,100,100)`, claimHash,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conn.ExecContext(ctx, `INSERT INTO remote_step_runs
+		(deployment_id,step_index,agent_id,state,updated_at)
+		VALUES(1,0,'b','waiting',100)`); err != nil {
+		t.Fatal(err)
+	}
+
+	recoverPendingDeployments(
+		ctx,
+		runner.New(repo, runner.NewLogBroker()),
+		repo,
+	)
+	runs, err := repo.Queries.ListRemoteStepRuns(ctx,
+		db.ListRemoteStepRunsParams{DeploymentID: 1, StepIndex: 0})
+	if err != nil || len(runs) != 2 || runs[0].State != "cancel_requested" ||
+		runs[1].State != "cancelled" ||
+		len(runs[0].ClaimTokenHash) != 32 {
+		t.Fatalf("recovered remote runs=%+v error=%v", runs, err)
+	}
+	deployment, err := repo.Queries.GetDeployment(ctx, 1)
+	if err != nil || deployment.Status != "running" ||
+		deployment.FinishedAt.Valid {
+		t.Fatalf("deployment before cancellation grace=%+v error=%v", deployment, err)
+	}
+	if _, err := conn.ExecContext(ctx, `UPDATE remote_step_runs
+		SET cancel_requested_at=unixepoch()-5
+		WHERE deployment_id=1 AND agent_id='a'`); err != nil {
+		t.Fatal(err)
+	}
+	var originalRequestedAt int64
+	if err := conn.QueryRowContext(ctx, `SELECT cancel_requested_at
+		FROM remote_step_runs WHERE deployment_id=1 AND agent_id='a'`).
+		Scan(&originalRequestedAt); err != nil {
+		t.Fatal(err)
+	}
+	recoverPendingDeployments(
+		ctx,
+		runner.New(repo, runner.NewLogBroker()),
+		repo,
+	)
+	runs, err = repo.Queries.ListRemoteStepRuns(ctx,
+		db.ListRemoteStepRunsParams{DeploymentID: 1, StepIndex: 0})
+	if err != nil || runs[0].CancelRequestedAt.Int64 != originalRequestedAt {
+		t.Fatalf("recovered cancellation deadline runs=%+v error=%v", runs, err)
+	}
+	if err := dispatch.New(repo).Maintain(ctx); err != nil {
+		t.Fatal(err)
+	}
+	deployment, err = repo.Queries.GetDeployment(ctx, 1)
+	if err != nil || deployment.Status != "running" {
+		t.Fatalf("deployment with active sibling=%+v error=%v", deployment, err)
+	}
+	if _, err := conn.ExecContext(ctx, `UPDATE remote_step_runs
+		SET cancel_requested_at=unixepoch()-31
+		WHERE deployment_id=1 AND agent_id='a'`); err != nil {
+		t.Fatal(err)
+	}
+	if err := dispatch.New(repo).Maintain(ctx); err != nil {
+		t.Fatal(err)
+	}
+	runs, err = repo.Queries.ListRemoteStepRuns(ctx,
+		db.ListRemoteStepRunsParams{DeploymentID: 1, StepIndex: 0})
+	if err != nil || len(runs) != 2 || runs[0].State != "cancel_unconfirmed" ||
+		runs[1].State != "cancelled" {
+		t.Fatalf("expired remote runs=%+v error=%v", runs, err)
+	}
+	deployment, err = repo.Queries.GetDeployment(ctx, 1)
+	if err != nil || deployment.Status != "failed" ||
+		!deployment.FinishedAt.Valid {
+		t.Fatalf("deployment after cancellation grace=%+v error=%v", deployment, err)
 	}
 }
 

@@ -10,6 +10,30 @@ import (
 	"database/sql"
 )
 
+const cancelOrphanedRemoteStepRuns = `-- name: CancelOrphanedRemoteStepRuns :execrows
+UPDATE remote_step_runs SET
+    state = CASE WHEN state = 'waiting' THEN 'cancelled'
+        ELSE 'cancel_requested' END,
+    cancel_requested_at = CASE WHEN state = 'cancel_requested'
+        THEN cancel_requested_at ELSE ?1 END,
+    finished_at = CASE WHEN state = 'waiting' THEN ?1
+        ELSE finished_at END,
+    updated_at = ?1
+WHERE state IN ('waiting', 'claimed', 'started', 'cancel_requested')
+  AND deployment_id IN (
+      SELECT id FROM deployments
+      WHERE status = 'running' AND assigned_agent_id IS NULL
+  )
+`
+
+func (q *Queries) CancelOrphanedRemoteStepRuns(ctx context.Context, now int64) (int64, error) {
+	result, err := q.db.ExecContext(ctx, cancelOrphanedRemoteStepRuns, now)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const countDeploymentsToday = `-- name: CountDeploymentsToday :one
 SELECT COUNT(*) FROM deployments WHERE created_at >= strftime('%s','now','start of day')
 `
@@ -107,31 +131,41 @@ func (q *Queries) DeleteDeployment(ctx context.Context, id int64) error {
 	return err
 }
 
-const failOrphanedDeployments = `-- name: FailOrphanedDeployments :execrows
+const failDeploymentsWithTerminalRemoteStepRuns = `-- name: FailDeploymentsWithTerminalRemoteStepRuns :execrows
 UPDATE deployments SET status = 'failed', finished_at = ?1
 WHERE status = 'running' AND assigned_agent_id IS NULL
+  AND EXISTS (
+      SELECT 1 FROM remote_step_runs r
+      WHERE r.deployment_id = deployments.id
+        AND r.state IN ('failed', 'cancelled', 'lost', 'cancel_unconfirmed')
+  )
+  AND NOT EXISTS (
+      SELECT 1 FROM remote_step_runs r
+      WHERE r.deployment_id = deployments.id
+        AND r.state IN ('waiting', 'claimed', 'started', 'cancel_requested')
+  )
 `
 
-func (q *Queries) FailOrphanedDeployments(ctx context.Context, now sql.NullInt64) (int64, error) {
-	result, err := q.db.ExecContext(ctx, failOrphanedDeployments, now)
+func (q *Queries) FailDeploymentsWithTerminalRemoteStepRuns(ctx context.Context, now sql.NullInt64) (int64, error) {
+	result, err := q.db.ExecContext(ctx, failDeploymentsWithTerminalRemoteStepRuns, now)
 	if err != nil {
 		return 0, err
 	}
 	return result.RowsAffected()
 }
 
-const failOrphanedRemoteStepRuns = `-- name: FailOrphanedRemoteStepRuns :execrows
-UPDATE remote_step_runs SET state = 'failed', finished_at = ?1,
-    updated_at = ?1
-WHERE state IN ('waiting', 'claimed', 'started', 'cancel_requested')
-  AND deployment_id IN (
-      SELECT id FROM deployments
-      WHERE status = 'running' AND assigned_agent_id IS NULL
+const failOrphanedDeployments = `-- name: FailOrphanedDeployments :execrows
+UPDATE deployments SET status = 'failed', finished_at = ?1
+WHERE status = 'running' AND assigned_agent_id IS NULL
+  AND NOT EXISTS (
+      SELECT 1 FROM remote_step_runs r
+      WHERE r.deployment_id = deployments.id
+        AND r.state = 'cancel_requested'
   )
 `
 
-func (q *Queries) FailOrphanedRemoteStepRuns(ctx context.Context, now sql.NullInt64) (int64, error) {
-	result, err := q.db.ExecContext(ctx, failOrphanedRemoteStepRuns, now)
+func (q *Queries) FailOrphanedDeployments(ctx context.Context, now sql.NullInt64) (int64, error) {
+	result, err := q.db.ExecContext(ctx, failOrphanedDeployments, now)
 	if err != nil {
 		return 0, err
 	}

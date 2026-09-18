@@ -81,6 +81,7 @@ func TestRemoteAgentSchemaFreshUpgradeRollback(t *testing.T) {
 	t.Log(
 		"release refresh preserved deployment source; missing target defaults local",
 	)
+	requireNoError(t, goose.Down(conn, "."), "rollback remote step lifecycle")
 	requireNoError(t, goose.Down(conn, "."), "rollback remote step runs")
 	if err := goose.Down(conn, "."); err == nil {
 		t.Fatal("unsafe rollback succeeded")

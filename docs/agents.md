@@ -371,8 +371,9 @@ unrelated host.
 ### Lost agent
 
 Stop the service and inspect the agent and server journals. Started work that
-misses heartbeats becomes lost and is not automatically replayed. Review the
-original deployment, fix the host, and create an explicit new deployment.
+misses heartbeats for 45 seconds becomes lost and is not automatically
+replayed. Review the original deployment, fix the host, and create an explicit
+new deployment.
 
 ### Cancel unconfirmed
 

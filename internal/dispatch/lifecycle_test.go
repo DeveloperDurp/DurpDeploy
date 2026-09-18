@@ -27,6 +27,8 @@ func TestMaintainRequeuesExpiredUnstartedStepClaim(t *testing.T) {
 	repo := lifecycleFixture(t, "claimed", 4102444800, sql.NullInt64{})
 	hash := sha256.Sum256([]byte("step-claim"))
 	for _, statement := range []string{
+		`DELETE FROM remote_deployment_claims WHERE deployment_id=1`,
+		`UPDATE deployments SET assigned_agent_id=NULL WHERE id=1`,
 		`INSERT INTO deployment_steps
 		 (deployment_id,step_index,name,script_body,execution_target)
 		 VALUES(1,0,'remote','echo remote','agent')`,
@@ -83,10 +85,12 @@ func TestRemoteCancellationTimeout(t *testing.T) {
 		"remote_cancel_unconfirmed")
 }
 
-func TestMaintainFailsStaleRemoteStepCancellation(t *testing.T) {
+func TestMaintainMarksStaleRemoteStepCancellationUnconfirmed(t *testing.T) {
 	repo := lifecycleFixture(t, "claimed", 4102444800, sql.NullInt64{})
 	hash := sha256.Sum256([]byte("step-claim"))
 	for _, statement := range []string{
+		`DELETE FROM remote_deployment_claims WHERE deployment_id=1`,
+		`UPDATE deployments SET assigned_agent_id=NULL WHERE id=1`,
 		`INSERT INTO deployment_steps
 		 (deployment_id,step_index,name,script_body,execution_target)
 		 VALUES(1,0,'remote','echo remote','agent')`,
@@ -112,8 +116,87 @@ func TestMaintainFailsStaleRemoteStepCancellation(t *testing.T) {
 	).Scan(&state, &finishedAt); err != nil {
 		t.Fatal(err)
 	}
-	if state != "failed" || !finishedAt.Valid {
+	if state != "cancel_unconfirmed" || !finishedAt.Valid {
 		t.Fatalf("stale remote step state=%q finished=%v", state, finishedAt)
+	}
+	deployment, err := repo.Queries.GetDeployment(t.Context(), 1)
+	if err != nil || deployment.Status != "failed" ||
+		!deployment.FinishedAt.Valid {
+		t.Fatalf("failed deployment=%+v error=%v", deployment, err)
+	}
+}
+
+func TestMaintainMarksRemoteStepLostWhenHeartbeatStale(t *testing.T) {
+	repo := lifecycleFixture(t, "claimed", 4102444800, sql.NullInt64{})
+	hash := sha256.Sum256([]byte("step-claim"))
+	for _, statement := range []string{
+		`DELETE FROM remote_deployment_claims WHERE deployment_id=1`,
+		`UPDATE deployments SET assigned_agent_id=NULL WHERE id=1`,
+		`INSERT INTO deployment_steps
+		 (deployment_id,step_index,name,script_body,execution_target)
+		 VALUES(1,0,'remote','echo remote','agent')`,
+		`INSERT INTO remote_step_runs
+		 (deployment_id,step_index,agent_id,state,claim_token_hash,
+		  ciphertext,claim_expires_at,last_heartbeat_at,started_at,updated_at)
+		 VALUES(1,0,'a','started',x'` + fmt.Sprintf("%x", hash) +
+			`','ciphertext',200,100,100,100)`,
+	} {
+		if _, err := repo.DB.Exec(statement); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := New(repo).Maintain(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	var state string
+	var finishedAt sql.NullInt64
+	if err := repo.DB.QueryRow(`SELECT state,finished_at
+		FROM remote_step_runs WHERE deployment_id=1 AND step_index=0`,
+	).Scan(&state, &finishedAt); err != nil {
+		t.Fatal(err)
+	}
+	if state != "lost" || !finishedAt.Valid {
+		t.Fatalf("stale remote step state=%q finished=%v", state, finishedAt)
+	}
+	deployment, err := repo.Queries.GetDeployment(t.Context(), 1)
+	if err != nil || deployment.Status != "failed" ||
+		!deployment.FinishedAt.Valid {
+		t.Fatalf("failed deployment=%+v error=%v", deployment, err)
+	}
+}
+
+func TestMaintainWaitsForEveryRemoteStepRunToFinish(t *testing.T) {
+	repo := lifecycleFixture(t, "claimed", 4102444800, sql.NullInt64{})
+	hash := sha256.Sum256([]byte("step-claim"))
+	for _, statement := range []string{
+		`DELETE FROM remote_deployment_claims WHERE deployment_id=1`,
+		`UPDATE deployments SET assigned_agent_id=NULL WHERE id=1`,
+		`INSERT INTO agents(id,name,endpoint,status)
+		 VALUES('b','b','https://agent-b','pending')`,
+		`INSERT INTO deployment_steps
+		 (deployment_id,step_index,name,script_body,execution_target)
+		 VALUES(1,0,'remote','echo remote','agent')`,
+		`INSERT INTO remote_step_runs
+		 (deployment_id,step_index,agent_id,state,claim_token_hash,
+		  ciphertext,claim_expires_at,last_heartbeat_at,started_at,updated_at)
+		 VALUES(1,0,'a','started',x'` + fmt.Sprintf("%x", hash) +
+			`','ciphertext',200,100,100,100)`,
+		`INSERT INTO remote_step_runs
+		 (deployment_id,step_index,agent_id,state,updated_at)
+		 VALUES(1,0,'b','waiting',100)`,
+	} {
+		if _, err := repo.DB.Exec(statement); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := New(repo).Maintain(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	deployment, err := repo.Queries.GetDeployment(t.Context(), 1)
+	if err != nil || deployment.Status != "running" {
+		t.Fatalf("deployment=%+v error=%v", deployment, err)
 	}
 }
 

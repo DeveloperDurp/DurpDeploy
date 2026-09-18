@@ -102,6 +102,7 @@ func TestDispatchDatabaseParity(t *testing.T) {
 			r := repository.New(conn)
 			seedRemoteFixture(t, r)
 			runRemoteAtomicity(t, r)
+			runRemoteStepStartEligibility(t, r)
 			runProjectMembershipIntegerContract(t, r)
 		})
 	}

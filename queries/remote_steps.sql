@@ -61,11 +61,17 @@ UPDATE remote_step_runs SET state = 'waiting', claim_token_hash = NULL,
 WHERE state = 'claimed' AND started_at IS NULL
   AND claim_expires_at <= sqlc.arg(now);
 
--- name: FailStaleRemoteStepCancellations :execrows
-UPDATE remote_step_runs SET state = 'failed', finished_at = sqlc.arg(now),
+-- name: ExpireRemoteStepCancellations :execrows
+UPDATE remote_step_runs SET state = 'cancel_unconfirmed', finished_at = sqlc.arg(now),
     updated_at = sqlc.arg(now)
 WHERE state = 'cancel_requested'
   AND cancel_requested_at <= sqlc.arg(stale_before);
+
+-- name: LoseStaleRemoteStepRuns :execrows
+UPDATE remote_step_runs SET state = 'lost', finished_at = sqlc.arg(now),
+    updated_at = sqlc.arg(now)
+WHERE state = 'started'
+  AND last_heartbeat_at <= sqlc.arg(stale_before);
 
 -- name: GetRemoteStepRunByClaim :one
 SELECT * FROM remote_step_runs
@@ -76,9 +82,16 @@ WHERE deployment_id = sqlc.arg(deployment_id)
 -- name: StartRemoteStepRun :execrows
 UPDATE remote_step_runs SET state = 'started', started_at = sqlc.arg(now),
     last_heartbeat_at = sqlc.arg(now), updated_at = sqlc.arg(now)
-WHERE deployment_id = sqlc.arg(deployment_id)
-  AND step_index = sqlc.arg(step_index) AND agent_id = sqlc.arg(agent_id)
-  AND claim_token_hash = sqlc.arg(claim_token_hash) AND state = 'claimed';
+WHERE remote_step_runs.deployment_id = sqlc.arg(deployment_id)
+  AND remote_step_runs.step_index = sqlc.arg(step_index)
+  AND remote_step_runs.agent_id = sqlc.arg(agent_id)
+  AND remote_step_runs.claim_token_hash = sqlc.arg(claim_token_hash)
+  AND remote_step_runs.state = 'claimed'
+  AND remote_step_runs.claim_expires_at > sqlc.arg(now)
+  AND EXISTS (SELECT 1 FROM agents a
+      WHERE a.id = remote_step_runs.agent_id AND a.status = 'active'
+        AND EXISTS (SELECT 1 FROM agent_pairings p
+            WHERE p.agent_id = a.id AND p.state = 'paired'));
 
 -- name: HeartbeatRemoteStepRun :execrows
 UPDATE remote_step_runs SET last_heartbeat_at = sqlc.arg(now), updated_at = sqlc.arg(now)
@@ -112,13 +125,6 @@ WHERE deployment_id = sqlc.arg(deployment_id)
   AND step_index = sqlc.arg(step_index) AND agent_id = sqlc.arg(agent_id)
   AND claim_token_hash = sqlc.arg(claim_token_hash)
   AND state = 'cancel_requested';
-
--- name: FailUnfinishedRemoteStepRuns :execrows
-UPDATE remote_step_runs SET state = 'failed', finished_at = sqlc.arg(now),
-    updated_at = sqlc.arg(now)
-WHERE deployment_id = sqlc.arg(deployment_id)
-  AND step_index = sqlc.arg(step_index)
-  AND state IN ('waiting', 'claimed', 'started', 'cancel_requested');
 
 -- name: GetRemoteStepLogBySequence :one
 SELECT l.* FROM deployment_logs l

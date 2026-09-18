@@ -367,7 +367,7 @@ func recoverPendingDeployments(
 			return err
 		}
 		timestamp := sql.NullInt64{Int64: now, Valid: true}
-		if _, err := q.FailOrphanedRemoteStepRuns(ctx, timestamp); err != nil {
+		if _, err := q.CancelOrphanedRemoteStepRuns(ctx, now); err != nil {
 			return err
 		}
 		failed, err = q.FailOrphanedDeployments(ctx, timestamp)
