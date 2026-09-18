@@ -258,7 +258,7 @@ templ AgentEnvironmentLabels(agent db.Agent, labels []db.Environment, availableE
 	<div class="card bg-base-200 shadow">
 		<div class="card-body">
 			<h2 class="card-title">Environment labels</h2>
-			<p class="opacity-70">Environment labels are metadata for future deployment selection. They do not route deployments.</p>
+			<p class="opacity-70">An active, paired agent receives remote steps when this environment and all required capability labels match. Every matching agent receives the step.</p>
 			if len(labels) == 0 {
 				<p class="text-sm opacity-60">No environment labels assigned.</p>
 			} else {

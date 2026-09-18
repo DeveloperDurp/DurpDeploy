@@ -64,10 +64,16 @@ responses.
 ## Agent labels
 
 Administrators can attach capability labels through the browser or API and
-environment labels through the agent details page. Both are metadata only;
-they do not authorize an agent or route an environment's deployments. The
-environment routing assignment is not exposed through the supported browser or
-API surfaces.
+environment labels through the agent details page. For each remote step, the
+server selects active, paired agents that have the deployment's environment
+label and every capability label required by the step. Capability matching is
+case-insensitive. A step with no capability labels matches every active, paired
+agent carrying the environment label.
+
+The server creates one run per matching agent, so every match receives the
+step. The deployment continues only after all runs succeed. If nothing matches,
+the step fails without falling back to local execution. Labels select work;
+they do not grant authorization or create a security boundary.
 
 ## Dispatch state machine
 

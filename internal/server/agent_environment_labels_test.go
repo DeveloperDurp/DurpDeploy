@@ -11,8 +11,8 @@ import (
 	"durpdeploy/internal/repository"
 )
 
-func TestAdminAgentEnvironmentLabelsDoNotRouteDeployments(t *testing.T) {
-	// Given: an active agent and an environment with no routing assignment.
+func TestAdminAgentEnvironmentLabelsExplainRemoteStepRouting(t *testing.T) {
+	// Given: an active agent and an environment.
 	h := newOIDCRouterHarness(t)
 	seedAgentRouteUser(t, h, "admin", "environment-label-admin")
 	environmentID := seedAssignableAgent(t, h)
@@ -28,10 +28,10 @@ func TestAdminAgentEnvironmentLabelsDoNotRouteDeployments(t *testing.T) {
 	)
 	response := httptest.NewRecorder()
 
-	// When: the environment is added as agent metadata.
+	// When: the environment is added as an agent routing label.
 	router.ServeHTTP(response, request)
 
-	// Then: the label is visible but deployment routing remains local.
+	// Then: the label is visible with the remote-step routing contract.
 	if response.Code != http.StatusSeeOther {
 		t.Fatalf("add status=%d body=%s", response.Code, response.Body)
 	}
@@ -82,7 +82,8 @@ func TestAdminAgentEnvironmentLabelsDoNotRouteDeployments(t *testing.T) {
 	if detailResponse.Code != http.StatusOK ||
 		!strings.Contains(detailBody, "Environment labels") ||
 		!strings.Contains(detailBody, "agent environment") ||
-		!strings.Contains(detailBody, "do not route deployments") ||
+		!strings.Contains(detailBody, "remote steps") ||
+		!strings.Contains(detailBody, "Every matching agent") ||
 		strings.Contains(detailBody, ">agent environment</option>") ||
 		!strings.Contains(detailBody, "All environments are already selected") {
 		t.Fatalf(

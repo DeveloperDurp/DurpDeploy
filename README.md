@@ -15,7 +15,7 @@ A single-binary deployment tool for running bash scripts against environments. D
 - **Approvals** - Manual gate for production deployments requiring admin sign-off
 - **Notifications** - Event-driven Slack, Email, Gotify, and Discord alerts for deployment status
 - **Cancel** - Stop running deployments mid-execution
-- **Remote agents** - Assign deployments to one outbound-only agent over pinned mTLS
+- **Remote agents** - Fan out remote steps to every environment- and capability-matched agent over pinned mTLS
 
 ## Quick Start
 
@@ -117,7 +117,7 @@ the normal local user recovery process; there is no self-service password reset.
 The full API reference is available at `/api/swagger/` in a running server (no auth required).
 
 Remote agents use the backward-compatible `agent/1` protocol. The `v0.1.0`
-agent release is compatible with this control plane; keep the paired state
+agent source tag is compatible with this control plane; keep the paired state
 directory when upgrading.
 
 ## Architecture
@@ -270,7 +270,7 @@ also own script secrets, network access, and all effects inside that boundary.
 ## What It Does Not Do
 
 - No SSH-based deployment targets
-- No agent failover: an assigned deployment never falls back to local execution
+- No local fallback: a remote step with no matching agent fails the deployment
 - No parallel step execution
 - No CI/build features
 - No Kubernetes or cloud integrations

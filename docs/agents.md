@@ -127,9 +127,24 @@ admin-only.
 3. Change the display name or add capability and environment labels on the
    agent details page, then verify its heartbeat. The Agent ID does not change.
 
-Labels are inventory metadata for now. An environment label records a possible
-future deployment target; it does not route the environment's deployments to
-that agent or authorize remote work.
+Environment and capability labels route remote steps. An active, paired agent
+matches when it has the deployment's environment label and every capability
+label required by the step. Capability matching is case-insensitive. An
+environment label is a routing input, not an authorization boundary.
+
+Each matching agent receives its own copy of the remote step. The deployment
+waits for every copy to succeed before it continues. If no agent matches, the
+step fails immediately; DurpDeploy does not run it locally.
+
+Examples:
+
+* **One agent:** a `production` deployment contains a remote step requiring
+  `linux`. One active, paired agent has the `production` environment label and
+  the `linux` capability label, so that agent receives the step.
+* **Fan-out:** two active, paired agents have both labels. Both receive the
+  step, and the deployment continues only after both copies succeed.
+* **No match:** the agents have the wrong environment, lack `linux`, are not
+  active, or are not paired. The step fails without a local fallback.
 
 ## Agent start and pairing
 
@@ -208,13 +223,46 @@ opt-in; an unset marker fails deployment execution. See `docs/deploy.md`.
 
 ## Direct binary installation
 
-Build the agent binary from the repository. This builds only `cmd/agent` and
-does not create or open a database:
+The agent lives in the standalone
+[`DeveloperDurp/durpdeploy-agent`](https://github.com/DeveloperDurp/durpdeploy-agent)
+repository. Install Git, GNU Make, and Go 1.25.7 or newer, then build the agent
+from the version required by the DurpDeploy server release. A server checkout
+records that version in `go.mod`:
 
 ```bash
-make build-agent
-sudo install -o root -g root -m 0755 ./durpdeploy-agent /usr/local/bin/durpdeploy-agent
+go list -m -f '{{.Version}}' github.com/DeveloperDurp/durpdeploy-agent
 ```
+
+On the agent host, clone and check out that version. Building `cmd/agent` in
+the standalone repository does not create or open a database:
+
+```bash
+AGENT_VERSION=v0.1.0 # replace with the version reported by the server checkout
+git clone https://github.com/DeveloperDurp/durpdeploy-agent.git
+cd durpdeploy-agent
+git checkout --detach "$AGENT_VERSION"
+make build
+```
+
+Verify the source revision embedded in the artifact and record its SHA-256
+digest before installation. `vcs.modified` must be `false` for an unmodified
+release build:
+
+```bash
+git rev-parse HEAD
+go version -m ./durpdeploy-agent
+sha256sum ./durpdeploy-agent
+sudo install -o root -g root -m 0755 ./durpdeploy-agent /usr/local/bin/durpdeploy-agent
+sha256sum /usr/local/bin/durpdeploy-agent
+```
+
+The two SHA-256 values must match. Keep the digest with the deployment record
+so the installed artifact can be checked later.
+
+The server and agent must both use protocol `agent/1`. Builds using that
+protocol are wire-compatible; a breaking wire change requires a new protocol
+identifier. Prefer the exact agent version pinned by the server, and upgrade
+the server and agent together when a release changes that pin.
 
 Create the service account and private state directory:
 
@@ -339,8 +387,9 @@ API routes are not valid substitutes. A 404 often means the agent URL points
 at Caddy or port 443 instead of the direct listener. A stale server binary can
 also cause a 404. Confirm that the server has all three listener variables.
 Use `ss -ltn` to check port 10943. Verify the installed binary. Restart the
-server. Rebuild the agent with `make build-agent` and install it again
-when its behavior does not match the checkout.
+server. In a checkout of the standalone agent repository, rebuild with
+`make build`, verify the binary as described above, and install it again when
+its behavior does not match the checkout.
 
 ### Wrong fingerprint
 
@@ -358,8 +407,10 @@ revoke and re-pair it first.
 ### No match
 
 Check that the paired agent has the expected capability and environment labels
-and is reporting a healthy heartbeat. Labels do not route deployments until
-label-based dispatch is enabled.
+and is reporting a healthy heartbeat. The agent must be active and paired, its
+environment label must match the deployment environment, and it must have every
+capability label required by the remote step. A no-match step fails without
+running locally.
 
 ### Revoked agent
 
@@ -405,11 +456,12 @@ the state file by guesswork.
 
 ## Upgrades, rollback, and backup scope
 
-Upgrade the server and agents from the same repository revision when possible.
-For an agent, build a new `durpdeploy-agent`, install it over the binary, and
-restart through the normal controlled pairing procedure. Preserve the state
-directory across a compatible upgrade. If rollback is necessary, stop the
-service, install the previous binary, and restore the matching known-good
+Upgrade the server and agent to compatible releases together. For an agent,
+check out the standalone version pinned by the server, build and verify a new
+`durpdeploy-agent`, install it over the binary, and restart through the normal
+controlled pairing procedure. Preserve the state directory across an
+`agent/1`-compatible upgrade. If rollback is necessary, stop the service,
+install the previous verified binary, and restore the matching known-good
 configuration. Do not delete pins or identity files during an ordinary binary
 rollback.
 
