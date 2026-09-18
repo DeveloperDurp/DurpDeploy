@@ -237,7 +237,8 @@ AGENT_VERSION=$(go list -m -f '{{.Version}}' "$AGENT_MODULE")
 AGENT_SUM=$(awk -v module="$AGENT_MODULE" -v version="$AGENT_VERSION" \
   '$1 == module && $2 == version { print $3 }' go.sum)
 AGENT_COMMIT=$(go mod download -json "$AGENT_MODULE@$AGENT_VERSION" \
-  | jq -r '.Origin.Hash')
+  | jq -e -r '.Origin.Hash // empty')
+test -n "$AGENT_VERSION"
 test -n "$AGENT_SUM"
 test -n "$AGENT_COMMIT"
 printf 'AGENT_VERSION=%s\nAGENT_SUM=%s\nAGENT_COMMIT=%s\n' \
@@ -256,9 +257,14 @@ AGENT_VERSION=v0.1.0 # use the value recorded from the server checkout
 AGENT_SUM='h1:...' # use the value recorded from the server checkout
 AGENT_COMMIT=... # use the value recorded from the server checkout
 AGENT_DOWNLOAD=$(go mod download -json "$AGENT_MODULE@$AGENT_VERSION")
-test "$(printf '%s' "$AGENT_DOWNLOAD" | jq -r '.Sum')" = "$AGENT_SUM"
-test "$(printf '%s' "$AGENT_DOWNLOAD" | jq -r '.Origin.Hash')" = \
-  "$AGENT_COMMIT"
+DOWNLOADED_SUM=$(printf '%s' "$AGENT_DOWNLOAD" | jq -e -r '.Sum // empty')
+DOWNLOADED_COMMIT=$(printf '%s' "$AGENT_DOWNLOAD" \
+  | jq -e -r '.Origin.Hash // empty')
+test -n "$AGENT_VERSION"
+test -n "$AGENT_SUM"
+test -n "$AGENT_COMMIT"
+test "$DOWNLOADED_SUM" = "$AGENT_SUM"
+test "$DOWNLOADED_COMMIT" = "$AGENT_COMMIT"
 git clone https://github.com/DeveloperDurp/durpdeploy-agent.git
 cd durpdeploy-agent
 git checkout --detach "$AGENT_COMMIT"
