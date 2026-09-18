@@ -10,6 +10,10 @@ DELETE FROM step_agent_selectors WHERE step_id = ?;
 -- name: ListStepAgentSelectors :many
 SELECT label FROM step_agent_selectors WHERE step_id = ? ORDER BY label;
 
+-- name: ListStepAgentSelectorsByStepIDs :many
+SELECT step_id, label FROM step_agent_selectors
+WHERE step_id IN (sqlc.slice('step_ids')) ORDER BY step_id, label;
+
 -- name: SetTemplateExecutionTarget :execrows
 UPDATE step_templates SET execution_target = ? WHERE id = ?;
 
@@ -22,6 +26,10 @@ DELETE FROM step_template_agent_selectors WHERE template_id = ?;
 -- name: ListTemplateAgentSelectors :many
 SELECT label FROM step_template_agent_selectors WHERE template_id = ? ORDER BY label;
 
+-- name: ListTemplateAgentSelectorsByTemplateIDs :many
+SELECT template_id, label FROM step_template_agent_selectors
+WHERE template_id IN (sqlc.slice('template_ids')) ORDER BY template_id, label;
+
 -- name: AddTemplateVersionAgentSelector :exec
 INSERT INTO step_template_version_agent_selectors (template_version_id, label) VALUES (?, ?);
 
@@ -30,3 +38,8 @@ UPDATE step_template_versions SET execution_target = ? WHERE id = ?;
 
 -- name: ListTemplateVersionAgentSelectors :many
 SELECT label FROM step_template_version_agent_selectors WHERE template_version_id = ? ORDER BY label;
+
+-- name: ListTemplateVersionAgentSelectorsByVersionIDs :many
+SELECT template_version_id, label FROM step_template_version_agent_selectors
+WHERE template_version_id IN (sqlc.slice('version_ids'))
+ORDER BY template_version_id, label;

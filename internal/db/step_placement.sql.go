@@ -7,6 +7,7 @@ package db
 
 import (
 	"context"
+	"strings"
 )
 
 const addStepAgentSelector = `-- name: AddStepAgentSelector :exec
@@ -96,6 +97,44 @@ func (q *Queries) ListStepAgentSelectors(ctx context.Context, stepID int64) ([]s
 	return items, nil
 }
 
+const listStepAgentSelectorsByStepIDs = `-- name: ListStepAgentSelectorsByStepIDs :many
+SELECT step_id, label FROM step_agent_selectors
+WHERE step_id IN (/*SLICE:step_ids*/?) ORDER BY step_id, label
+`
+
+func (q *Queries) ListStepAgentSelectorsByStepIDs(ctx context.Context, stepIds []int64) ([]StepAgentSelector, error) {
+	query := listStepAgentSelectorsByStepIDs
+	var queryParams []interface{}
+	if len(stepIds) > 0 {
+		for _, v := range stepIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:step_ids*/?", strings.Repeat(",?", len(stepIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:step_ids*/?", "NULL", 1)
+	}
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []StepAgentSelector
+	for rows.Next() {
+		var i StepAgentSelector
+		if err := rows.Scan(&i.StepID, &i.Label); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listTemplateAgentSelectors = `-- name: ListTemplateAgentSelectors :many
 SELECT label FROM step_template_agent_selectors WHERE template_id = ? ORDER BY label
 `
@@ -123,6 +162,44 @@ func (q *Queries) ListTemplateAgentSelectors(ctx context.Context, templateID int
 	return items, nil
 }
 
+const listTemplateAgentSelectorsByTemplateIDs = `-- name: ListTemplateAgentSelectorsByTemplateIDs :many
+SELECT template_id, label FROM step_template_agent_selectors
+WHERE template_id IN (/*SLICE:template_ids*/?) ORDER BY template_id, label
+`
+
+func (q *Queries) ListTemplateAgentSelectorsByTemplateIDs(ctx context.Context, templateIds []int64) ([]StepTemplateAgentSelector, error) {
+	query := listTemplateAgentSelectorsByTemplateIDs
+	var queryParams []interface{}
+	if len(templateIds) > 0 {
+		for _, v := range templateIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:template_ids*/?", strings.Repeat(",?", len(templateIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:template_ids*/?", "NULL", 1)
+	}
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []StepTemplateAgentSelector
+	for rows.Next() {
+		var i StepTemplateAgentSelector
+		if err := rows.Scan(&i.TemplateID, &i.Label); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listTemplateVersionAgentSelectors = `-- name: ListTemplateVersionAgentSelectors :many
 SELECT label FROM step_template_version_agent_selectors WHERE template_version_id = ? ORDER BY label
 `
@@ -140,6 +217,45 @@ func (q *Queries) ListTemplateVersionAgentSelectors(ctx context.Context, templat
 			return nil, err
 		}
 		items = append(items, label)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTemplateVersionAgentSelectorsByVersionIDs = `-- name: ListTemplateVersionAgentSelectorsByVersionIDs :many
+SELECT template_version_id, label FROM step_template_version_agent_selectors
+WHERE template_version_id IN (/*SLICE:version_ids*/?)
+ORDER BY template_version_id, label
+`
+
+func (q *Queries) ListTemplateVersionAgentSelectorsByVersionIDs(ctx context.Context, versionIds []int64) ([]StepTemplateVersionAgentSelector, error) {
+	query := listTemplateVersionAgentSelectorsByVersionIDs
+	var queryParams []interface{}
+	if len(versionIds) > 0 {
+		for _, v := range versionIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:version_ids*/?", strings.Repeat(",?", len(versionIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:version_ids*/?", "NULL", 1)
+	}
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []StepTemplateVersionAgentSelector
+	for rows.Next() {
+		var i StepTemplateVersionAgentSelector
+		if err := rows.Scan(&i.TemplateVersionID, &i.Label); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err

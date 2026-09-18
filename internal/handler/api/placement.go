@@ -75,13 +75,24 @@ func newStepResponses(
 	repo *repository.Repository,
 	steps []db.Step,
 ) ([]stepResponse, error) {
+	ids := make([]int64, len(steps))
+	for index, step := range steps {
+		ids[index] = step.ID
+	}
+	rows, err := repo.Queries.ListStepAgentSelectorsByStepIDs(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	selectors := make(map[int64][]string, len(steps))
+	for _, row := range rows {
+		selectors[row.StepID] = append(selectors[row.StepID], row.Label)
+	}
 	responses := make([]stepResponse, len(steps))
 	for index, step := range steps {
-		response, err := newStepResponse(ctx, repo, step)
-		if err != nil {
-			return nil, err
+		responses[index] = stepResponse{
+			Step:           step,
+			AgentSelectors: selectorList(selectors[step.ID]),
 		}
-		responses[index] = response
 	}
 	return responses, nil
 }
@@ -106,13 +117,30 @@ func newStepTemplateResponses(
 	repo *repository.Repository,
 	templates []db.StepTemplate,
 ) ([]stepTemplateResponse, error) {
+	ids := make([]int64, len(templates))
+	for index, template := range templates {
+		ids[index] = template.ID
+	}
+	rows, err := repo.Queries.ListTemplateAgentSelectorsByTemplateIDs(
+		ctx,
+		ids,
+	)
+	if err != nil {
+		return nil, err
+	}
+	selectors := make(map[int64][]string, len(templates))
+	for _, row := range rows {
+		selectors[row.TemplateID] = append(
+			selectors[row.TemplateID],
+			row.Label,
+		)
+	}
 	responses := make([]stepTemplateResponse, len(templates))
 	for index, template := range templates {
-		response, err := newStepTemplateResponse(ctx, repo, template)
-		if err != nil {
-			return nil, err
+		responses[index] = stepTemplateResponse{
+			StepTemplate:   template,
+			AgentSelectors: selectorList(selectors[template.ID]),
 		}
-		responses[index] = response
 	}
 	return responses, nil
 }
@@ -122,18 +150,31 @@ func newStepTemplateVersionResponses(
 	repo *repository.Repository,
 	versions []db.StepTemplateVersion,
 ) ([]stepTemplateVersionResponse, error) {
+	ids := make([]int64, len(versions))
+	for index, version := range versions {
+		ids[index] = version.ID
+	}
+	rows, err := repo.Queries.ListTemplateVersionAgentSelectorsByVersionIDs(
+		ctx,
+		ids,
+	)
+	if err != nil {
+		return nil, err
+	}
+	selectors := make(map[int64][]string, len(versions))
+	for _, row := range rows {
+		selectors[row.TemplateVersionID] = append(
+			selectors[row.TemplateVersionID],
+			row.Label,
+		)
+	}
 	responses := make([]stepTemplateVersionResponse, len(versions))
 	for index, version := range versions {
-		selectors, err := repo.Queries.ListTemplateVersionAgentSelectors(
-			ctx,
-			version.ID,
-		)
-		if err != nil {
-			return nil, err
-		}
 		responses[index] = stepTemplateVersionResponse{
 			StepTemplateVersion: version,
-			AgentSelectors:      selectorList(selectors),
+			AgentSelectors: selectorList(
+				selectors[version.ID],
+			),
 		}
 	}
 	return responses, nil
