@@ -111,7 +111,7 @@ func (q *Queries) ListStepAgentSelectors(ctx context.Context, stepID int64) ([]s
 
 const listStepAgentSelectorsByStepIDs = `-- name: ListStepAgentSelectorsByStepIDs :many
 SELECT step_id, label FROM step_agent_selectors
-WHERE step_id IN (/*SLICE:step_ids*/?) ORDER BY step_id, label
+WHERE step_id IN (/*SLICE:step_ids*/?) ORDER BY step_id ASC, label ASC
 `
 
 func (q *Queries) ListStepAgentSelectorsByStepIDs(ctx context.Context, stepIds []int64) ([]StepAgentSelector, error) {
@@ -176,7 +176,8 @@ func (q *Queries) ListTemplateAgentSelectors(ctx context.Context, templateID int
 
 const listTemplateAgentSelectorsByTemplateIDs = `-- name: ListTemplateAgentSelectorsByTemplateIDs :many
 SELECT template_id, label FROM step_template_agent_selectors
-WHERE template_id IN (/*SLICE:template_ids*/?) ORDER BY template_id, label
+WHERE template_id IN (/*SLICE:template_ids*/?)
+ORDER BY template_id ASC, label ASC
 `
 
 func (q *Queries) ListTemplateAgentSelectorsByTemplateIDs(ctx context.Context, templateIds []int64) ([]StepTemplateAgentSelector, error) {
@@ -242,7 +243,7 @@ func (q *Queries) ListTemplateVersionAgentSelectors(ctx context.Context, templat
 const listTemplateVersionAgentSelectorsByVersionIDs = `-- name: ListTemplateVersionAgentSelectorsByVersionIDs :many
 SELECT template_version_id, label FROM step_template_version_agent_selectors
 WHERE template_version_id IN (/*SLICE:version_ids*/?)
-ORDER BY template_version_id, label
+ORDER BY template_version_id ASC, label ASC
 `
 
 func (q *Queries) ListTemplateVersionAgentSelectorsByVersionIDs(ctx context.Context, versionIds []int64) ([]StepTemplateVersionAgentSelector, error) {
