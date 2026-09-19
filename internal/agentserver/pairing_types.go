@@ -109,7 +109,10 @@ func parsePairingAddress(address string) (string, error) {
 			"agent address must be an HTTPS origin",
 		)
 	}
-	return parsedAddress.String(), nil
+	return (&url.URL{
+		Scheme: parsedAddress.Scheme,
+		Host:   parsedAddress.Host,
+	}).String(), nil
 }
 
 func (input PairingInput) Address() string { return input.address }

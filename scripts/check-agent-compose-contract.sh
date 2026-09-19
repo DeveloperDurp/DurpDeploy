@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+grep -Fq 'mkdir -p /var/lib/durpdeploy/agent-identity' Dockerfile
+grep -Fq '/data /var/lib/durpdeploy/agent-identity' Dockerfile
+grep -Fq 'chmod 0700 /data /var/lib/durpdeploy/agent-identity' Dockerfile
+
 for file in compose.yml compose.example.yml; do
 	app=$(awk '
 		/^  app:$/ { in_app=1; next }

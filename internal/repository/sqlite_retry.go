@@ -21,16 +21,27 @@ func IsSQLiteBusy(err error) bool {
 }
 
 func withSQLiteBusyRetry(ctx context.Context, operation func() error) error {
+	_, err := withSQLiteBusyRetryValue(ctx, func() (struct{}, error) {
+		return struct{}{}, operation()
+	})
+	return err
+}
+
+func withSQLiteBusyRetryValue[T any](
+	ctx context.Context,
+	operation func() (T, error),
+) (T, error) {
+	var zero T
 	for attempt := 0; ; attempt++ {
-		err := operation()
+		result, err := operation()
 		if err == nil {
-			return nil
+			return result, nil
 		}
 		if attempt+1 >= sqliteBusyTries || !IsSQLiteBusy(err) {
-			return err
+			return zero, err
 		}
 		if !waitForSQLiteBusyRetry(ctx, attempt) {
-			return err
+			return zero, err
 		}
 	}
 }

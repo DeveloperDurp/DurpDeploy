@@ -35,6 +35,37 @@ func TestSQLiteBusyClassificationRetriesOnlyPrimaryCode(t *testing.T) {
 	}
 }
 
+func TestSQLiteBusyRetryValueReturnsOnlySuccessfulAttempt(t *testing.T) {
+	// Given
+	attempts := 0
+
+	// When
+	result, err := withSQLiteBusyRetryValue(
+		t.Context(),
+		func() (string, error) {
+			attempts++
+			if attempts == 1 {
+				return "stale rolled-back claim", sqliteCodeError(
+					sqliteBusyCode,
+				)
+			}
+			return "", nil
+		},
+	)
+
+	// Then
+	if err != nil {
+		t.Fatal(err)
+	}
+	if attempts != 2 || result != "" {
+		t.Fatalf(
+			"attempts=%d result=%q, want successful empty result",
+			attempts,
+			result,
+		)
+	}
+}
+
 func TestClaimRemoteDeploymentRetriesSQLiteBusyAtomically(t *testing.T) {
 	engine := newDeploymentCreationEngine(t, "SQLite")
 	engine.dsn = strings.Replace(

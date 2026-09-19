@@ -57,6 +57,30 @@ func TestParsePairingInputRejectsMalformed(t *testing.T) {
 	}
 }
 
+func TestParsePairingInputNormalizesOriginTrailingSlash(t *testing.T) {
+	// Given
+	code := base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{3}, 32))
+	fingerprint := strings.Repeat("a", 64)
+
+	// When
+	input, err := ParsePairingInput(
+		"https://agent.test/",
+		code,
+		fingerprint,
+	)
+
+	// Then
+	if err != nil {
+		t.Fatal(err)
+	}
+	if input.Address() != "https://agent.test" {
+		t.Fatalf(
+			"pairing address = %q, want origin without trailing slash",
+			input.Address(),
+		)
+	}
+}
+
 func TestPairingRejectsWrongFingerprint(t *testing.T) {
 	fixture := newPairingFixture(t)
 	input, err := ParsePairingInput(

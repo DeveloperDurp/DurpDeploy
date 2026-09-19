@@ -36,63 +36,79 @@ func (r *Repository) ClaimRemoteStepPayload(
 	agentID string,
 	prepare func(RemotePayloadSnapshot) (RemotePreparedClaim, error),
 ) (RemoteClaim, bool, error) {
-	var result RemoteClaim
-	claimed := false
-	err := withSQLiteBusyRetry(ctx, func() error {
-		return r.WithTx(ctx, func(q *db.Queries) error {
-			waiting, err := q.ListWaitingRemoteStepRuns(ctx, agentID)
-			if err != nil || len(waiting) == 0 {
-				return err
-			}
-			candidate := waiting[0]
-			snapshot, err := r.remotePayloadSnapshot(
-				ctx, q, agentID, candidate.DeploymentID,
-			)
-			if err != nil {
-				return err
-			}
-			if candidate.StepIndex < 0 ||
-				candidate.StepIndex >= int64(len(snapshot.Steps)) {
-				return fmt.Errorf("remote step index %d is out of range", candidate.StepIndex)
-			}
-			snapshot.Steps = snapshot.Steps[candidate.StepIndex : candidate.StepIndex+1]
-			prepared, err := prepare(snapshot)
-			if err != nil {
-				return err
-			}
-			now, err := q.CurrentUnixTime(ctx)
-			if err != nil {
-				return err
-			}
-			changed, err := q.ClaimRemoteStepRun(
-				ctx,
-				db.ClaimRemoteStepRunParams{
-					ClaimTokenHash: prepared.TokenHash,
-					Ciphertext: sql.NullString{
-						String: string(prepared.Ciphertext), Valid: true,
+	type claimResult struct {
+		claim   RemoteClaim
+		claimed bool
+	}
+	result, err := withSQLiteBusyRetryValue(
+		ctx,
+		func() (claimResult, error) {
+			attempt := claimResult{}
+			err := r.WithTx(ctx, func(q *db.Queries) error {
+				waiting, err := q.ListWaitingRemoteStepRuns(ctx, agentID)
+				if err != nil || len(waiting) == 0 {
+					return err
+				}
+				candidate := waiting[0]
+				snapshot, err := r.remotePayloadSnapshot(
+					ctx, q, agentID, candidate.DeploymentID,
+				)
+				if err != nil {
+					return err
+				}
+				if candidate.StepIndex < 0 ||
+					candidate.StepIndex >= int64(len(snapshot.Steps)) {
+					return fmt.Errorf(
+						"remote step index %d is out of range",
+						candidate.StepIndex,
+					)
+				}
+				snapshot.Steps = snapshot.Steps[candidate.StepIndex : candidate.StepIndex+1]
+				prepared, err := prepare(snapshot)
+				if err != nil {
+					return err
+				}
+				now, err := q.CurrentUnixTime(ctx)
+				if err != nil {
+					return err
+				}
+				changed, err := q.ClaimRemoteStepRun(
+					ctx,
+					db.ClaimRemoteStepRunParams{
+						ClaimTokenHash: prepared.TokenHash,
+						Ciphertext: sql.NullString{
+							String: string(prepared.Ciphertext), Valid: true,
+						},
+						ClaimExpiresAt: sql.NullInt64{
+							Int64: now + int64(
+								agentproto.PreStartClaimTimeout/time.Second,
+							),
+							Valid: true,
+						},
+						Now:          sql.NullInt64{Int64: now, Valid: true},
+						DeploymentID: candidate.DeploymentID,
+						StepIndex:    candidate.StepIndex,
+						AgentID:      agentID,
 					},
-					ClaimExpiresAt: sql.NullInt64{
-						Int64: now + int64(agentproto.PreStartClaimTimeout/time.Second),
-						Valid: true,
-					},
-					Now:          sql.NullInt64{Int64: now, Valid: true},
+				)
+				if err != nil || changed == 0 {
+					return err
+				}
+				attempt.claimed = true
+				attempt.claim = RemoteClaim{
 					DeploymentID: candidate.DeploymentID,
-					StepIndex:    candidate.StepIndex,
-					AgentID:      agentID,
-				},
-			)
-			if err != nil || changed == 0 {
-				return err
+					Token:        prepared.Token,
+					Ciphertext:   prepared.Ciphertext,
+				}
+				return nil
+			})
+			if err != nil {
+				return claimResult{}, err
 			}
-			claimed = true
-			result = RemoteClaim{
-				DeploymentID: candidate.DeploymentID,
-				Token:        prepared.Token, Ciphertext: prepared.Ciphertext,
-			}
-			return nil
-		})
-	})
-	return result, claimed, err
+			return attempt, nil
+		},
+	)
+	return result.claim, result.claimed, err
 }
 
 func (r *Repository) StartRemoteStep(

@@ -54,7 +54,10 @@ RUN apk add --no-cache ca-certificates bash && \
 # Data directory for the SQLite database and WAL files. Chown to the runtime
 # user and declare it a volume so it can be mounted from the host.
 WORKDIR /data
-RUN chown durpdeploy:durpdeploy /data && chmod 0700 /data
+RUN mkdir -p /var/lib/durpdeploy/agent-identity && \
+	chown durpdeploy:durpdeploy \
+		/data /var/lib/durpdeploy/agent-identity && \
+	chmod 0700 /data /var/lib/durpdeploy/agent-identity
 VOLUME ["/data"]
 
 # Copy the binary from the builder. Keep it owned by root so it cannot be

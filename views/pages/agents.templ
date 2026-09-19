@@ -124,37 +124,47 @@ templ AgentsPage(agents []db.Agent, formError string, currentPath string) {
 }
 
 templ AgentPairingConfirmationPage(challenge agentserver.PairingChallenge, currentPath string) {
-	@layouts.Base("Confirm agent fingerprint", currentPath) {
-		<div class="mx-auto max-w-3xl space-y-6">
-			<div>
-				<a class="link text-sm" href="/admin/agents">Back to agents</a>
-				<h1 class="mt-2 text-3xl font-bold">Confirm agent fingerprint</h1>
-				<p class="mt-1 opacity-70">Compare this fingerprint with the one shown by the agent before you approve it.</p>
-			</div>
-			<div role="alert" class="alert alert-warning">
-				<span>Approve only when every fingerprint character matches. A mismatch can indicate the wrong agent or an intercepted connection.</span>
-			</div>
-			<div class="card bg-base-200 shadow">
-				<div class="card-body gap-5">
-					<dl class="grid gap-3 sm:grid-cols-[9rem_1fr]">
-						<dt class="font-medium">Agent name</dt>
-						<dd>{ challenge.Name }</dd>
-						<dt class="font-medium">Address</dt>
-						<dd class="break-all font-mono text-sm">{ challenge.Address }</dd>
-						<dt class="font-medium">Fingerprint</dt>
-						<dd class="break-all rounded-box bg-base-300 p-4 font-mono text-sm" data-testid="agent-fingerprint">{ challenge.Fingerprint }</dd>
-					</dl>
-					<div class="flex flex-wrap gap-3">
-						<form method="post" action={ templ.SafeURL("/admin/agents/pair/" + challenge.ID + "/approve") }>
-							<button type="submit" class="btn btn-primary">Approve agent</button>
-						</form>
-						<form method="post" action={ templ.SafeURL("/admin/agents/pair/" + challenge.ID + "/deny") }>
-							<button type="submit" class="btn btn-ghost">Deny</button>
-						</form>
+	if !CanWrite(ctx) {
+		@ViewerForbiddenMessage(
+			"Confirm agent fingerprint",
+			"confirm",
+			"agent pairing",
+			"/admin/agents",
+			currentPath,
+		)
+	} else {
+		@layouts.Base("Confirm agent fingerprint", currentPath) {
+			<div class="mx-auto max-w-3xl space-y-6">
+				<div>
+					<a class="link text-sm" href="/admin/agents">Back to agents</a>
+					<h1 class="mt-2 text-3xl font-bold">Confirm agent fingerprint</h1>
+					<p class="mt-1 opacity-70">Compare this fingerprint with the one shown by the agent before you approve it.</p>
+				</div>
+				<div role="alert" class="alert alert-warning">
+					<span>Approve only when every fingerprint character matches. A mismatch can indicate the wrong agent or an intercepted connection.</span>
+				</div>
+				<div class="card bg-base-200 shadow">
+					<div class="card-body gap-5">
+						<dl class="grid gap-3 sm:grid-cols-[9rem_1fr]">
+							<dt class="font-medium">Agent name</dt>
+							<dd>{ challenge.Name }</dd>
+							<dt class="font-medium">Address</dt>
+							<dd class="break-all font-mono text-sm">{ challenge.Address }</dd>
+							<dt class="font-medium">Fingerprint</dt>
+							<dd class="break-all rounded-box bg-base-300 p-4 font-mono text-sm" data-testid="agent-fingerprint">{ challenge.Fingerprint }</dd>
+						</dl>
+						<div class="flex flex-wrap gap-3">
+							<form method="post" action={ templ.SafeURL("/admin/agents/pair/" + challenge.ID + "/approve") }>
+								<button type="submit" class="btn btn-primary">Approve agent</button>
+							</form>
+							<form method="post" action={ templ.SafeURL("/admin/agents/pair/" + challenge.ID + "/deny") }>
+								<button type="submit" class="btn btn-ghost">Deny</button>
+							</form>
+						</div>
 					</div>
 				</div>
 			</div>
-		</div>
+		}
 	}
 }
 
