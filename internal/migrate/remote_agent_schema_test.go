@@ -89,10 +89,10 @@ func TestRemoteAgentSchemaFreshUpgradeRollback(t *testing.T) {
 	assertRemoteLegacy(t, conn)
 	version, err = goose.GetDBVersion(conn)
 	requireNoError(t, err, "version after refused rollback")
-	if version != 32 {
+	if version != 33 {
 		t.Fatalf("version after rollback=%d", version)
 	}
-	t.Log("PASS: rollback preserved history and version=32")
+	t.Log("PASS: rollback preserved history and version=33")
 }
 
 func assertRemoteTables(t *testing.T, conn *sql.DB) {

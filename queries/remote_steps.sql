@@ -63,18 +63,24 @@ WHERE state = 'claimed' AND started_at IS NULL
 
 -- name: ExpireRemoteStepCancellations :execrows
 UPDATE remote_step_runs SET state = 'cancel_unconfirmed', finished_at = sqlc.arg(now),
-    updated_at = sqlc.arg(now)
+    updated_at = sqlc.arg(now), log_buffer_ciphertext = NULL
 WHERE state = 'cancel_requested'
   AND cancel_requested_at <= sqlc.arg(stale_before);
 
 -- name: LoseStaleRemoteStepRuns :execrows
 UPDATE remote_step_runs SET state = 'lost', finished_at = sqlc.arg(now),
-    updated_at = sqlc.arg(now)
+    updated_at = sqlc.arg(now), log_buffer_ciphertext = NULL
 WHERE state = 'started'
   AND last_heartbeat_at <= sqlc.arg(stale_before);
 
 -- name: GetRemoteStepRunByClaim :one
 SELECT * FROM remote_step_runs
+WHERE deployment_id = sqlc.arg(deployment_id)
+  AND agent_id = sqlc.arg(agent_id)
+  AND claim_token_hash = sqlc.arg(claim_token_hash);
+
+-- name: LockRemoteStepRun :execrows
+UPDATE remote_step_runs SET updated_at = updated_at
 WHERE deployment_id = sqlc.arg(deployment_id)
   AND agent_id = sqlc.arg(agent_id)
   AND claim_token_hash = sqlc.arg(claim_token_hash);
@@ -131,6 +137,20 @@ SELECT l.* FROM deployment_logs l
 JOIN remote_step_log_sequences s ON s.log_id = l.id
 WHERE s.deployment_id = ? AND s.step_index = ? AND s.agent_id = ?
   AND s.sequence = ?;
+
+-- name: GetLastRemoteStepLogSequence :one
+SELECT CAST(COALESCE(MAX(sequence), -1) AS INTEGER) FROM remote_step_log_sequences
+WHERE deployment_id = sqlc.arg(deployment_id)
+  AND step_index = sqlc.arg(step_index)
+  AND agent_id = sqlc.arg(agent_id);
+
+-- name: UpdateRemoteStepLogBuffer :execrows
+UPDATE remote_step_runs
+SET log_buffer_ciphertext = sqlc.narg(log_buffer_ciphertext)
+WHERE deployment_id = sqlc.arg(deployment_id)
+  AND step_index = sqlc.arg(step_index)
+  AND agent_id = sqlc.arg(agent_id)
+  AND claim_token_hash = sqlc.arg(claim_token_hash);
 
 -- name: CreateRemoteStepLogSequence :exec
 INSERT INTO remote_step_log_sequences

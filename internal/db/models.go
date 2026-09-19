@@ -293,19 +293,20 @@ type ReleaseVariable struct {
 }
 
 type RemoteDeploymentClaim struct {
-	DeploymentID      int64          `json:"deployment_id"`
-	AgentID           string         `json:"agent_id"`
-	State             string         `json:"state"`
-	Reason            sql.NullString `json:"reason"`
-	ClaimTokenHash    []byte         `json:"claim_token_hash"`
-	Ciphertext        sql.NullString `json:"ciphertext"`
-	ClaimExpiresAt    sql.NullInt64  `json:"claim_expires_at"`
-	LastHeartbeatAt   sql.NullInt64  `json:"last_heartbeat_at"`
-	StartedAt         sql.NullInt64  `json:"started_at"`
-	FinishedAt        sql.NullInt64  `json:"finished_at"`
-	CancelRequestedAt sql.NullInt64  `json:"cancel_requested_at"`
-	CreatedAt         int64          `json:"created_at"`
-	UpdatedAt         int64          `json:"updated_at"`
+	DeploymentID        int64          `json:"deployment_id"`
+	AgentID             string         `json:"agent_id"`
+	State               string         `json:"state"`
+	Reason              sql.NullString `json:"reason"`
+	ClaimTokenHash      []byte         `json:"claim_token_hash"`
+	Ciphertext          sql.NullString `json:"ciphertext"`
+	ClaimExpiresAt      sql.NullInt64  `json:"claim_expires_at"`
+	LastHeartbeatAt     sql.NullInt64  `json:"last_heartbeat_at"`
+	StartedAt           sql.NullInt64  `json:"started_at"`
+	FinishedAt          sql.NullInt64  `json:"finished_at"`
+	CancelRequestedAt   sql.NullInt64  `json:"cancel_requested_at"`
+	CreatedAt           int64          `json:"created_at"`
+	UpdatedAt           int64          `json:"updated_at"`
+	LogBufferCiphertext sql.NullString `json:"log_buffer_ciphertext"`
 }
 
 type RemoteStepLogSequence struct {
@@ -317,19 +318,20 @@ type RemoteStepLogSequence struct {
 }
 
 type RemoteStepRun struct {
-	DeploymentID      int64          `json:"deployment_id"`
-	StepIndex         int64          `json:"step_index"`
-	AgentID           string         `json:"agent_id"`
-	State             string         `json:"state"`
-	ClaimTokenHash    []byte         `json:"claim_token_hash"`
-	Ciphertext        sql.NullString `json:"ciphertext"`
-	ClaimExpiresAt    sql.NullInt64  `json:"claim_expires_at"`
-	LastHeartbeatAt   sql.NullInt64  `json:"last_heartbeat_at"`
-	StartedAt         sql.NullInt64  `json:"started_at"`
-	FinishedAt        sql.NullInt64  `json:"finished_at"`
-	CancelRequestedAt sql.NullInt64  `json:"cancel_requested_at"`
-	CreatedAt         int64          `json:"created_at"`
-	UpdatedAt         int64          `json:"updated_at"`
+	DeploymentID        int64          `json:"deployment_id"`
+	StepIndex           int64          `json:"step_index"`
+	AgentID             string         `json:"agent_id"`
+	State               string         `json:"state"`
+	ClaimTokenHash      []byte         `json:"claim_token_hash"`
+	Ciphertext          sql.NullString `json:"ciphertext"`
+	ClaimExpiresAt      sql.NullInt64  `json:"claim_expires_at"`
+	LastHeartbeatAt     sql.NullInt64  `json:"last_heartbeat_at"`
+	StartedAt           sql.NullInt64  `json:"started_at"`
+	FinishedAt          sql.NullInt64  `json:"finished_at"`
+	CancelRequestedAt   sql.NullInt64  `json:"cancel_requested_at"`
+	CreatedAt           int64          `json:"created_at"`
+	UpdatedAt           int64          `json:"updated_at"`
+	LogBufferCiphertext sql.NullString `json:"log_buffer_ciphertext"`
 }
 
 type ScheduledDeployment struct {

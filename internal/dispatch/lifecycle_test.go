@@ -65,17 +65,20 @@ func TestMaintainRequeuesExpiredUnstartedStepClaim(t *testing.T) {
 func TestMaintainFailsExpiredStartedClaim(t *testing.T) {
 	repo := lifecycleFixture(t, "started", 200,
 		sql.NullInt64{Int64: 100, Valid: true})
+	setLegacyLogBuffer(t, repo)
 	if err := New(repo).Maintain(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	assertFailedLifecycle(t, repo, "lost", "remote_agent_lost")
+	assertLegacyLogBufferCleared(t, repo)
 }
 
 func TestRemoteCancellationTimeout(t *testing.T) {
 	repo := lifecycleFixture(t, "cancel_requested", 200,
 		sql.NullInt64{Int64: 100, Valid: true})
 	if _, err := repo.DB.Exec(`UPDATE remote_deployment_claims
-		SET cancel_requested_at=100 WHERE deployment_id=1`); err != nil {
+		SET cancel_requested_at=100, log_buffer_ciphertext=zeroblob(16)
+		WHERE deployment_id=1`); err != nil {
 		t.Fatal(err)
 	}
 	if err := New(repo).Maintain(t.Context()); err != nil {
@@ -83,6 +86,7 @@ func TestRemoteCancellationTimeout(t *testing.T) {
 	}
 	assertFailedLifecycle(t, repo, "cancel_unconfirmed",
 		"remote_cancel_unconfirmed")
+	assertLegacyLogBufferCleared(t, repo)
 }
 
 func TestMaintainMarksStaleRemoteStepCancellationUnconfirmed(t *testing.T) {
@@ -97,9 +101,9 @@ func TestMaintainMarksStaleRemoteStepCancellationUnconfirmed(t *testing.T) {
 		`INSERT INTO remote_step_runs
 		 (deployment_id,step_index,agent_id,state,claim_token_hash,
 		  ciphertext,claim_expires_at,last_heartbeat_at,started_at,
-		  cancel_requested_at,updated_at)
+		  cancel_requested_at,updated_at,log_buffer_ciphertext)
 		 VALUES(1,0,'a','cancel_requested',x'` + fmt.Sprintf("%x", hash) +
-			`','ciphertext',200,100,100,100,100)`,
+			`','ciphertext',200,100,100,100,100,zeroblob(16))`,
 	} {
 		if _, err := repo.DB.Exec(statement); err != nil {
 			t.Fatal(err)
@@ -111,13 +115,17 @@ func TestMaintainMarksStaleRemoteStepCancellationUnconfirmed(t *testing.T) {
 	}
 	var state string
 	var finishedAt sql.NullInt64
-	if err := repo.DB.QueryRow(`SELECT state,finished_at
+	var logBuffer []byte
+	if err := repo.DB.QueryRow(`SELECT state,finished_at,log_buffer_ciphertext
 		FROM remote_step_runs WHERE deployment_id=1 AND step_index=0`,
-	).Scan(&state, &finishedAt); err != nil {
+	).Scan(&state, &finishedAt, &logBuffer); err != nil {
 		t.Fatal(err)
 	}
-	if state != "cancel_unconfirmed" || !finishedAt.Valid {
-		t.Fatalf("stale remote step state=%q finished=%v", state, finishedAt)
+	if state != "cancel_unconfirmed" || !finishedAt.Valid || logBuffer != nil {
+		t.Fatalf(
+			"stale remote step state=%q finished=%v log_buffer=%x",
+			state, finishedAt, logBuffer,
+		)
 	}
 	deployment, err := repo.Queries.GetDeployment(t.Context(), 1)
 	if err != nil || deployment.Status != "failed" ||
@@ -137,9 +145,10 @@ func TestMaintainMarksRemoteStepLostWhenHeartbeatStale(t *testing.T) {
 		 VALUES(1,0,'remote','echo remote','agent')`,
 		`INSERT INTO remote_step_runs
 		 (deployment_id,step_index,agent_id,state,claim_token_hash,
-		  ciphertext,claim_expires_at,last_heartbeat_at,started_at,updated_at)
+		  ciphertext,claim_expires_at,last_heartbeat_at,started_at,updated_at,
+		  log_buffer_ciphertext)
 		 VALUES(1,0,'a','started',x'` + fmt.Sprintf("%x", hash) +
-			`','ciphertext',200,100,100,100)`,
+			`','ciphertext',200,100,100,100,zeroblob(16))`,
 	} {
 		if _, err := repo.DB.Exec(statement); err != nil {
 			t.Fatal(err)
@@ -151,18 +160,44 @@ func TestMaintainMarksRemoteStepLostWhenHeartbeatStale(t *testing.T) {
 	}
 	var state string
 	var finishedAt sql.NullInt64
-	if err := repo.DB.QueryRow(`SELECT state,finished_at
+	var logBuffer []byte
+	if err := repo.DB.QueryRow(`SELECT state,finished_at,log_buffer_ciphertext
 		FROM remote_step_runs WHERE deployment_id=1 AND step_index=0`,
-	).Scan(&state, &finishedAt); err != nil {
+	).Scan(&state, &finishedAt, &logBuffer); err != nil {
 		t.Fatal(err)
 	}
-	if state != "lost" || !finishedAt.Valid {
-		t.Fatalf("stale remote step state=%q finished=%v", state, finishedAt)
+	if state != "lost" || !finishedAt.Valid || logBuffer != nil {
+		t.Fatalf(
+			"stale remote step state=%q finished=%v log_buffer=%x",
+			state, finishedAt, logBuffer,
+		)
 	}
 	deployment, err := repo.Queries.GetDeployment(t.Context(), 1)
 	if err != nil || deployment.Status != "failed" ||
 		!deployment.FinishedAt.Valid {
 		t.Fatalf("failed deployment=%+v error=%v", deployment, err)
+	}
+}
+
+func setLegacyLogBuffer(t *testing.T, repo *repository.Repository) {
+	t.Helper()
+	if _, err := repo.DB.Exec(`UPDATE remote_deployment_claims
+		SET log_buffer_ciphertext=zeroblob(16) WHERE deployment_id=1`); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func assertLegacyLogBufferCleared(t *testing.T, repo *repository.Repository) {
+	t.Helper()
+	var logBuffer []byte
+	if err := repo.DB.QueryRow(`SELECT log_buffer_ciphertext
+		FROM remote_deployment_claims WHERE deployment_id=1`).Scan(
+		&logBuffer,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if logBuffer != nil {
+		t.Fatalf("terminal maintenance retained log buffer %x", logBuffer)
 	}
 }
 

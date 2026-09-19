@@ -107,6 +107,18 @@ func (q *Queries) GetDeploymentLog(ctx context.Context, id int64) (DeploymentLog
 	return i, err
 }
 
+const getLastRemoteDeploymentLogSequence = `-- name: GetLastRemoteDeploymentLogSequence :one
+SELECT CAST(COALESCE(MAX(sequence), -1) AS INTEGER) FROM deployment_log_scopes
+WHERE deployment_id = ? AND step_index IS NULL
+`
+
+func (q *Queries) GetLastRemoteDeploymentLogSequence(ctx context.Context, deploymentID int64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, getLastRemoteDeploymentLogSequence, deploymentID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const getRemoteDeploymentLogBySequence = `-- name: GetRemoteDeploymentLogBySequence :one
 SELECT l.id, l.deployment_id, l.step_name, l.line, l.created_at FROM deployment_logs l
 JOIN deployment_log_scopes s ON s.log_id = l.id AND s.deployment_id = l.deployment_id
@@ -231,4 +243,32 @@ func (q *Queries) UpdateDeploymentLog(ctx context.Context, arg UpdateDeploymentL
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const updateRemoteDeploymentLogBuffer = `-- name: UpdateRemoteDeploymentLogBuffer :execrows
+UPDATE remote_deployment_claims
+SET log_buffer_ciphertext = ?1
+WHERE deployment_id = ?2
+  AND agent_id = ?3
+  AND claim_token_hash = ?4
+`
+
+type UpdateRemoteDeploymentLogBufferParams struct {
+	LogBufferCiphertext sql.NullString `json:"log_buffer_ciphertext"`
+	DeploymentID        int64          `json:"deployment_id"`
+	AgentID             string         `json:"agent_id"`
+	ClaimTokenHash      []byte         `json:"claim_token_hash"`
+}
+
+func (q *Queries) UpdateRemoteDeploymentLogBuffer(ctx context.Context, arg UpdateRemoteDeploymentLogBufferParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, updateRemoteDeploymentLogBuffer,
+		arg.LogBufferCiphertext,
+		arg.DeploymentID,
+		arg.AgentID,
+		arg.ClaimTokenHash,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }

@@ -347,7 +347,7 @@ func (q *Queries) ListAvailableAgentLabels(ctx context.Context) ([]string, error
 }
 
 const listRevocableAgentClaims = `-- name: ListRevocableAgentClaims :many
-SELECT deployment_id, agent_id, state, reason, claim_token_hash, ciphertext, claim_expires_at, last_heartbeat_at, started_at, finished_at, cancel_requested_at, created_at, updated_at FROM remote_deployment_claims
+SELECT deployment_id, agent_id, state, reason, claim_token_hash, ciphertext, claim_expires_at, last_heartbeat_at, started_at, finished_at, cancel_requested_at, created_at, updated_at, log_buffer_ciphertext FROM remote_deployment_claims
 WHERE agent_id = ? AND state IN ('waiting', 'claimed', 'started', 'cancel_requested')
 ORDER BY deployment_id
 `
@@ -375,6 +375,7 @@ func (q *Queries) ListRevocableAgentClaims(ctx context.Context, agentID string) 
 			&i.CancelRequestedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.LogBufferCiphertext,
 		); err != nil {
 			return nil, err
 		}
@@ -410,10 +411,31 @@ func (q *Queries) ResetRevokedAgentForPairing(ctx context.Context, arg ResetRevo
 	return result.RowsAffected()
 }
 
+const revokeAgentRemoteStepRuns = `-- name: RevokeAgentRemoteStepRuns :execrows
+UPDATE remote_step_runs SET state = 'lost', finished_at = ?1,
+    updated_at = ?1, log_buffer_ciphertext = NULL
+WHERE agent_id = ?2
+  AND state IN ('waiting', 'claimed', 'started', 'cancel_requested')
+`
+
+type RevokeAgentRemoteStepRunsParams struct {
+	Now     sql.NullInt64 `json:"now"`
+	AgentID string        `json:"agent_id"`
+}
+
+func (q *Queries) RevokeAgentRemoteStepRuns(ctx context.Context, arg RevokeAgentRemoteStepRunsParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, revokeAgentRemoteStepRuns, arg.Now, arg.AgentID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const revokeStartedRemoteClaim = `-- name: RevokeStartedRemoteClaim :execrows
 UPDATE remote_deployment_claims SET state = 'lost',
     reason = 'remote_agent_revoked_after_start', cancel_requested_at = NULL,
-    finished_at = ?1, updated_at = ?1
+    finished_at = ?1, updated_at = ?1,
+    log_buffer_ciphertext = NULL
 WHERE deployment_id = ?2
   AND agent_id = ?3
   AND state IN ('started', 'cancel_requested') AND started_at IS NOT NULL
@@ -436,7 +458,8 @@ func (q *Queries) RevokeStartedRemoteClaim(ctx context.Context, arg RevokeStarte
 const revokeUnstartedRemoteClaim = `-- name: RevokeUnstartedRemoteClaim :execrows
 UPDATE remote_deployment_claims SET state = 'failed',
     reason = 'remote_agent_revoked_before_start',
-    finished_at = ?1, updated_at = ?1
+    finished_at = ?1, updated_at = ?1,
+    log_buffer_ciphertext = NULL
 WHERE deployment_id = ?2
   AND agent_id = ?3
   AND state IN ('waiting', 'claimed') AND started_at IS NULL

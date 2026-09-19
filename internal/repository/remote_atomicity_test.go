@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/logscrub"
 	"durpdeploy/internal/repository"
 )
 
@@ -83,7 +84,7 @@ func runRemoteAtomicity(t *testing.T, repo *repository.Repository) {
 		go func() {
 			defer wait.Done()
 			logs[index], errs[index] = repo.AppendRemoteDeploymentLogs(
-				ctx, identity, events,
+				ctx, identity, events, logscrub.New(nil),
 			)
 		}()
 	}
@@ -111,7 +112,9 @@ func runRemoteAtomicity(t *testing.T, repo *repository.Repository) {
 	assertOne(t, n, err)
 	n, err = repo.Queries.FinishRemoteDeployment(ctx, finishArg(next))
 	assertZero(t, n, err)
-	_, err = repo.AppendRemoteDeploymentLogs(ctx, identity, events)
+	_, err = repo.AppendRemoteDeploymentLogs(
+		ctx, identity, events, logscrub.New(nil),
+	)
 	if !errors.Is(err, repository.ErrRemoteLifecycleConflict) {
 		t.Fatalf("terminal log callback: %v", err)
 	}

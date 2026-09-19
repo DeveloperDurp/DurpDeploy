@@ -176,7 +176,7 @@ func runOperationFirst(
 	}
 	defer tx.Rollback()
 	wrote, err := operation.runTx(
-		ctx, operationRepo.Queries.WithTx(tx), fixture,
+		ctx, operationRepo, operationRepo.Queries.WithTx(tx), fixture,
 	)
 	if err != nil || !wrote {
 		return wrote, err

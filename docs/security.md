@@ -396,7 +396,8 @@ after a successful rotation.
 
 ## Log redaction (P1-5)
 
-**Implementation:** `internal/runner/scrubber.go`, `internal/runner/runner.go`
+**Implementation:** `internal/logscrub/scrubber.go`,
+`internal/runner/runner.go`, `internal/agentserver/lifecycle.go`
 
 DurpDeploy scrubs deployment logs before an SSE broadcast or a database write.
 The old scrubber used `strings.ReplaceAll` for each line and secret. It did not
@@ -414,14 +415,26 @@ values:
   processes the combined expression in linear time.
 - **Configurable patterns:** Additional regex patterns can be added via the
   `DURPDEPLOY_EXTRA_SCRUB_PATTERNS` environment variable (comma-separated).
-  These are appended to the common credential patterns at startup.
+  These are appended to the common credential patterns at startup. They apply
+  to each complete remote log event; cross-event buffering covers resolved
+  secret literals and the built-in credential patterns.
 - **Buffered operation:** `broadcastWriter.Write` scrubs all text through the
   last newline in its buffer. Thus, it finds a secret in two writes. It also
   finds a secret that contains a newline.
+- **Remote ingress:** The server applies the same scrubber before database and
+  SSE delivery. It keeps a bounded encrypted tail in the lifecycle row so a
+  plaintext secret split across events, requests, or a server restart is
+  redacted before release. An initial sequence gap remains encrypted until the
+  missing events arrive or a terminal agent message flushes the tail.
+  If an agent is lost, revoked, or times out before completing a buffered
+  fragment, DurpDeploy discards that incomplete fragment instead of publishing
+  ambiguous plaintext.
 - **Best-effort:** this catches known secret values and a handful of common
-  token shapes, not every possible secret format. **Redaction is
-  best-effort. Do not paste secrets into your script body. Use environment
-  variables marked Secret.**
+  token shapes. The security contract is protection against accidental
+  plaintext exposure, not intentional exfiltration by an agent that encodes,
+  transforms, or decorates secret data. **Redaction is best-effort. Do not
+  paste secrets into your script body. Use environment variables marked
+  Secret.**
 
 ## Known gaps (P1 / future work)
 

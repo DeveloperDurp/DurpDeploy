@@ -141,6 +141,17 @@ func lockRemoteLifecycle(
 	if err != nil || locked != 1 {
 		return db.RemoteDeploymentClaim{}, db.Deployment{}, transitionError(err)
 	}
+	return lockRemoteLifecycleRows(ctx, q, identity, requireToken)
+}
+
+func lockRemoteLifecycleRows(
+	ctx context.Context,
+	q *db.Queries,
+	identity RemoteLifecycleClaim,
+	requireToken bool,
+) (db.RemoteDeploymentClaim, db.Deployment, error) {
+	var locked int64
+	var err error
 	if requireToken {
 		locked, err = q.LockRemoteLifecycleClaim(ctx,
 			db.LockRemoteLifecycleClaimParams{

@@ -149,7 +149,7 @@ func (q *Queries) CreateRemoteStepRuns(ctx context.Context, arg CreateRemoteStep
 
 const expireRemoteStepCancellations = `-- name: ExpireRemoteStepCancellations :execrows
 UPDATE remote_step_runs SET state = 'cancel_unconfirmed', finished_at = ?1,
-    updated_at = ?1
+    updated_at = ?1, log_buffer_ciphertext = NULL
 WHERE state = 'cancel_requested'
   AND cancel_requested_at <= ?2
 `
@@ -215,6 +215,26 @@ func (q *Queries) FinishRemoteStepRun(ctx context.Context, arg FinishRemoteStepR
 	return result.RowsAffected()
 }
 
+const getLastRemoteStepLogSequence = `-- name: GetLastRemoteStepLogSequence :one
+SELECT CAST(COALESCE(MAX(sequence), -1) AS INTEGER) FROM remote_step_log_sequences
+WHERE deployment_id = ?1
+  AND step_index = ?2
+  AND agent_id = ?3
+`
+
+type GetLastRemoteStepLogSequenceParams struct {
+	DeploymentID int64  `json:"deployment_id"`
+	StepIndex    int64  `json:"step_index"`
+	AgentID      string `json:"agent_id"`
+}
+
+func (q *Queries) GetLastRemoteStepLogSequence(ctx context.Context, arg GetLastRemoteStepLogSequenceParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, getLastRemoteStepLogSequence, arg.DeploymentID, arg.StepIndex, arg.AgentID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const getRemoteStepLogBySequence = `-- name: GetRemoteStepLogBySequence :one
 SELECT l.id, l.deployment_id, l.step_name, l.line, l.created_at FROM deployment_logs l
 JOIN remote_step_log_sequences s ON s.log_id = l.id
@@ -248,7 +268,7 @@ func (q *Queries) GetRemoteStepLogBySequence(ctx context.Context, arg GetRemoteS
 }
 
 const getRemoteStepRunByClaim = `-- name: GetRemoteStepRunByClaim :one
-SELECT deployment_id, step_index, agent_id, state, claim_token_hash, ciphertext, claim_expires_at, last_heartbeat_at, started_at, finished_at, cancel_requested_at, created_at, updated_at FROM remote_step_runs
+SELECT deployment_id, step_index, agent_id, state, claim_token_hash, ciphertext, claim_expires_at, last_heartbeat_at, started_at, finished_at, cancel_requested_at, created_at, updated_at, log_buffer_ciphertext FROM remote_step_runs
 WHERE deployment_id = ?1
   AND agent_id = ?2
   AND claim_token_hash = ?3
@@ -277,6 +297,7 @@ func (q *Queries) GetRemoteStepRunByClaim(ctx context.Context, arg GetRemoteStep
 		&i.CancelRequestedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.LogBufferCiphertext,
 	)
 	return i, err
 }
@@ -312,7 +333,7 @@ func (q *Queries) HeartbeatRemoteStepRun(ctx context.Context, arg HeartbeatRemot
 }
 
 const listRemoteStepRuns = `-- name: ListRemoteStepRuns :many
-SELECT deployment_id, step_index, agent_id, state, claim_token_hash, ciphertext, claim_expires_at, last_heartbeat_at, started_at, finished_at, cancel_requested_at, created_at, updated_at FROM remote_step_runs
+SELECT deployment_id, step_index, agent_id, state, claim_token_hash, ciphertext, claim_expires_at, last_heartbeat_at, started_at, finished_at, cancel_requested_at, created_at, updated_at, log_buffer_ciphertext FROM remote_step_runs
 WHERE deployment_id = ? AND step_index = ? ORDER BY agent_id
 `
 
@@ -344,6 +365,7 @@ func (q *Queries) ListRemoteStepRuns(ctx context.Context, arg ListRemoteStepRuns
 			&i.CancelRequestedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.LogBufferCiphertext,
 		); err != nil {
 			return nil, err
 		}
@@ -359,7 +381,7 @@ func (q *Queries) ListRemoteStepRuns(ctx context.Context, arg ListRemoteStepRuns
 }
 
 const listWaitingRemoteStepRuns = `-- name: ListWaitingRemoteStepRuns :many
-SELECT r.deployment_id, r.step_index, r.agent_id, r.state, r.claim_token_hash, r.ciphertext, r.claim_expires_at, r.last_heartbeat_at, r.started_at, r.finished_at, r.cancel_requested_at, r.created_at, r.updated_at FROM remote_step_runs r
+SELECT r.deployment_id, r.step_index, r.agent_id, r.state, r.claim_token_hash, r.ciphertext, r.claim_expires_at, r.last_heartbeat_at, r.started_at, r.finished_at, r.cancel_requested_at, r.created_at, r.updated_at, r.log_buffer_ciphertext FROM remote_step_runs r
 JOIN deployments d ON d.id = r.deployment_id
 WHERE r.agent_id = ?1 AND r.state = 'waiting'
   AND d.status = 'running'
@@ -394,6 +416,7 @@ func (q *Queries) ListWaitingRemoteStepRuns(ctx context.Context, agentID string)
 			&i.CancelRequestedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.LogBufferCiphertext,
 		); err != nil {
 			return nil, err
 		}
@@ -408,9 +431,30 @@ func (q *Queries) ListWaitingRemoteStepRuns(ctx context.Context, agentID string)
 	return items, nil
 }
 
+const lockRemoteStepRun = `-- name: LockRemoteStepRun :execrows
+UPDATE remote_step_runs SET updated_at = updated_at
+WHERE deployment_id = ?1
+  AND agent_id = ?2
+  AND claim_token_hash = ?3
+`
+
+type LockRemoteStepRunParams struct {
+	DeploymentID   int64  `json:"deployment_id"`
+	AgentID        string `json:"agent_id"`
+	ClaimTokenHash []byte `json:"claim_token_hash"`
+}
+
+func (q *Queries) LockRemoteStepRun(ctx context.Context, arg LockRemoteStepRunParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, lockRemoteStepRun, arg.DeploymentID, arg.AgentID, arg.ClaimTokenHash)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const loseStaleRemoteStepRuns = `-- name: LoseStaleRemoteStepRuns :execrows
 UPDATE remote_step_runs SET state = 'lost', finished_at = ?1,
-    updated_at = ?1
+    updated_at = ?1, log_buffer_ciphertext = NULL
 WHERE state = 'started'
   AND last_heartbeat_at <= ?2
 `
@@ -479,6 +523,37 @@ type StartRemoteStepRunParams struct {
 func (q *Queries) StartRemoteStepRun(ctx context.Context, arg StartRemoteStepRunParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, startRemoteStepRun,
 		arg.Now,
+		arg.DeploymentID,
+		arg.StepIndex,
+		arg.AgentID,
+		arg.ClaimTokenHash,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const updateRemoteStepLogBuffer = `-- name: UpdateRemoteStepLogBuffer :execrows
+UPDATE remote_step_runs
+SET log_buffer_ciphertext = ?1
+WHERE deployment_id = ?2
+  AND step_index = ?3
+  AND agent_id = ?4
+  AND claim_token_hash = ?5
+`
+
+type UpdateRemoteStepLogBufferParams struct {
+	LogBufferCiphertext sql.NullString `json:"log_buffer_ciphertext"`
+	DeploymentID        int64          `json:"deployment_id"`
+	StepIndex           int64          `json:"step_index"`
+	AgentID             string         `json:"agent_id"`
+	ClaimTokenHash      []byte         `json:"claim_token_hash"`
+}
+
+func (q *Queries) UpdateRemoteStepLogBuffer(ctx context.Context, arg UpdateRemoteStepLogBufferParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, updateRemoteStepLogBuffer,
+		arg.LogBufferCiphertext,
 		arg.DeploymentID,
 		arg.StepIndex,
 		arg.AgentID,

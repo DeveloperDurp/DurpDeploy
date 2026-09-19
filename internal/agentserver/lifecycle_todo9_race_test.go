@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"durpdeploy/internal/logscrub"
 	"durpdeploy/internal/repository"
 )
 
@@ -15,6 +16,7 @@ func TestRevocationLogRaceHasOneWinner(t *testing.T) {
 		_, err := fixture.repo.AppendRemoteDeploymentLogs(
 			t.Context(), lifecycleIdentity(),
 			[]repository.RemoteLogEvent{{Sequence: 1, Line: "reject"}},
+			logscrub.New(nil),
 		)
 		if !errors.Is(err, repository.ErrRemoteLifecycleConflict) {
 			t.Fatalf("revocation-first log error=%v", err)
@@ -26,6 +28,7 @@ func TestRevocationLogRaceHasOneWinner(t *testing.T) {
 		logs, err := fixture.repo.AppendRemoteDeploymentLogs(
 			t.Context(), lifecycleIdentity(),
 			[]repository.RemoteLogEvent{{Sequence: 1, Line: "kept"}},
+			logscrub.New(nil),
 		)
 		if err != nil || len(logs) != 1 {
 			t.Fatalf("log-first rows=%d error=%v", len(logs), err)

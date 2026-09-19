@@ -42,6 +42,74 @@ func TestRemoteStepResultCompletesRun(t *testing.T) {
 	}
 }
 
+func TestRemoteStepLogsRedactSplitSecret(t *testing.T) {
+	fixture := newAgentFixture(t)
+	deploymentID, claim := claimedRemoteStep(t, fixture)
+	deployment, err := fixture.repo.Queries.GetDeployment(t.Context(), deploymentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fixture.repo.DB.Exec(`INSERT INTO release_variables
+		(release_id,name,value,secret) VALUES (?,'TOKEN','step-secret',1)`,
+		deployment.ReleaseID); err != nil {
+		t.Fatal(err)
+	}
+	path := func(pattern string) string {
+		return strings.ReplaceAll(pattern, "{id}", fmt.Sprint(deploymentID))
+	}
+	response := postAgent(t, fixture, path(agentproto.StartPath), claim)
+	if response.StatusCode != http.StatusNoContent {
+		t.Fatalf("start status=%d", response.StatusCode)
+	}
+	stream := fixture.broker.Subscribe(deploymentID)
+	t.Cleanup(func() { fixture.broker.Unsubscribe(deploymentID, stream) })
+	for sequence, line := range []string{"step-", "secret"} {
+		body := strings.Replace(
+			claim,
+			"}",
+			fmt.Sprintf(
+				`,"events":[{"sequence":%d,"line":%q}]}`,
+				sequence+1,
+				line,
+			),
+			1,
+		)
+		response = postAgent(t, fixture, path(agentproto.LogsPath), body)
+		if response.StatusCode != http.StatusNoContent {
+			t.Fatalf("log status=%d", response.StatusCode)
+		}
+	}
+	result := strings.Replace(
+		claim,
+		"}",
+		`,"state":"succeeded","error":""}`,
+		1,
+	)
+	response = postAgent(t, fixture, path(agentproto.ResultPath), result)
+	if response.StatusCode != http.StatusNoContent {
+		t.Fatalf("result status=%d", response.StatusCode)
+	}
+	logs, err := fixture.repo.Queries.ListDeploymentLogsByDeployment(
+		t.Context(), deploymentID,
+	)
+	if err != nil || len(logs) != 2 || logs[0].Line+logs[1].Line != "[REDACTED]" ||
+		!logs[0].StepName.Valid {
+		t.Fatalf("stored step logs=%+v error=%v", logs, err)
+	}
+	var streamed strings.Builder
+	for range 2 {
+		select {
+		case line := <-stream:
+			streamed.WriteString(line)
+		default:
+			t.Fatal("stored step log was not broadcast")
+		}
+	}
+	if got := streamed.String(); got != "[REDACTED]" {
+		t.Fatalf("streamed step logs=%q", got)
+	}
+}
+
 func TestRemoteStepStartRejectsExpiredClaim(t *testing.T) {
 	fixture := newAgentFixture(t)
 	deploymentID, claim := claimedRemoteStep(t, fixture)

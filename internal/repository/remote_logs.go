@@ -6,22 +6,26 @@ import (
 	"errors"
 
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/logscrub"
 )
 
 type RemoteLogEvent struct {
-	Sequence int64
-	Line     string
+	Sequence int64  `json:"sequence"`
+	Line     string `json:"line"`
 }
 
 func (r *Repository) AppendRemoteDeploymentLogs(
 	ctx context.Context,
 	identity RemoteLifecycleClaim,
 	events []RemoteLogEvent,
+	scrubber *logscrub.Scrubber,
 ) ([]db.DeploymentLog, error) {
 	inserted := make([]db.DeploymentLog, 0, len(events))
 	err := r.WithTx(ctx, func(q *db.Queries) error {
 		var err error
-		inserted, err = appendRemoteDeploymentLogs(ctx, q, identity, events)
+		inserted, err = r.appendRemoteDeploymentLogs(
+			ctx, q, identity, events, scrubber, false,
+		)
 		return err
 	})
 	if err != nil {
@@ -30,13 +34,24 @@ func (r *Repository) AppendRemoteDeploymentLogs(
 	return inserted, nil
 }
 
-func appendRemoteDeploymentLogs(
+func (r *Repository) appendRemoteDeploymentLogs(
 	ctx context.Context,
 	q *db.Queries,
 	identity RemoteLifecycleClaim,
 	events []RemoteLogEvent,
+	scrubber *logscrub.Scrubber,
+	flush bool,
 ) ([]db.DeploymentLog, error) {
-	claim, deployment, err := lockRemoteLifecycle(ctx, q, identity, true)
+	var claim db.RemoteDeploymentClaim
+	var deployment db.Deployment
+	var err error
+	if flush {
+		claim, deployment, err = lockRemoteLifecycleRows(
+			ctx, q, identity, true,
+		)
+	} else {
+		claim, deployment, err = lockRemoteLifecycle(ctx, q, identity, true)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -44,12 +59,28 @@ func appendRemoteDeploymentLogs(
 	if err != nil {
 		return nil, err
 	}
-	if deployment.Status != "running" ||
-		(claim.State != "started" && claim.State != "cancel_requested") {
+	if !flush && (deployment.Status != "running" ||
+		(claim.State != "started" && claim.State != "cancel_requested")) {
 		return nil, ErrRemoteLifecycleConflict
 	}
-	inserted := make([]db.DeploymentLog, 0, len(events))
-	for _, event := range events {
+	pending, err := r.decodeRemoteLogBuffer(claim.LogBufferCiphertext)
+	if err != nil {
+		return nil, err
+	}
+	lastSequence, err := q.GetLastRemoteDeploymentLogSequence(
+		ctx, identity.DeploymentID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	ready, remaining, err := prepareRemoteLogEvents(
+		pending, events, lastSequence, scrubber, flush,
+	)
+	if err != nil {
+		return nil, err
+	}
+	inserted := make([]db.DeploymentLog, 0, len(ready))
+	for _, event := range ready {
 		if event.Sequence < 0 {
 			return nil, ErrInvalidRemoteLog
 		}
@@ -63,7 +94,39 @@ func appendRemoteDeploymentLogs(
 			inserted = append(inserted, log)
 		}
 	}
+	buffer, err := r.encodeRemoteLogBuffer(remaining)
+	if err != nil {
+		return nil, err
+	}
+	changed, err := q.UpdateRemoteDeploymentLogBuffer(
+		ctx,
+		db.UpdateRemoteDeploymentLogBufferParams{
+			LogBufferCiphertext: buffer,
+			DeploymentID:        identity.DeploymentID,
+			AgentID:             identity.AgentID,
+			ClaimTokenHash:      identity.ClaimTokenHash,
+		},
+	)
+	if err != nil || changed != 1 {
+		return nil, transitionError(err)
+	}
 	return inserted, nil
+}
+
+func (r *Repository) FlushRemoteDeploymentLogs(
+	ctx context.Context,
+	identity RemoteLifecycleClaim,
+	scrubber *logscrub.Scrubber,
+) ([]db.DeploymentLog, error) {
+	var inserted []db.DeploymentLog
+	err := r.WithTx(ctx, func(q *db.Queries) error {
+		var err error
+		inserted, err = r.appendRemoteDeploymentLogs(
+			ctx, q, identity, nil, scrubber, true,
+		)
+		return err
+	})
+	return inserted, err
 }
 
 func appendRemoteDeploymentLog(

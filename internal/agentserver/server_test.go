@@ -25,12 +25,13 @@ import (
 )
 
 type agentFixture struct {
-	repo     *repository.Repository
-	agents   *agentserver.Server
-	server   *httptest.Server
-	client   *http.Client
-	identity agenttls.Identity
-	broker   *runner.LogBroker
+	repo           *repository.Repository
+	agents         *agentserver.Server
+	server         *httptest.Server
+	client         *http.Client
+	identity       agenttls.Identity
+	serverIdentity agenttls.Identity
+	broker         *runner.LogBroker
 }
 
 func newAgentFixture(t *testing.T) agentFixture {
@@ -121,12 +122,9 @@ func newAgentFixtureWithDSN(
 	transport := &http.Transport{TLSClientConfig: config}
 	t.Cleanup(transport.CloseIdleConnections)
 	return agentFixture{
-		repo,
-		agents,
-		srv,
-		&http.Client{Transport: transport, Timeout: 3 * time.Second},
-		peer,
-		broker,
+		repo: repo, agents: agents, server: srv,
+		client:   &http.Client{Transport: transport, Timeout: 3 * time.Second},
+		identity: peer, serverIdentity: identity, broker: broker,
 	}
 }
 

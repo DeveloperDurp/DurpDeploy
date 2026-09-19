@@ -16,7 +16,7 @@ func TestDuplicateLogBatchIsIdempotent(t *testing.T) {
 	t.Cleanup(func() { fixture.broker.Unsubscribe(1, logs) })
 	path := strings.ReplaceAll(agentproto.LogsPath, "{id}", "1")
 	body := `{"protocol":"agent/1","claim_token":"claim-one",` +
-		`"events":[{"sequence":7,"line":"one durable line"}]}`
+		`"events":[{"sequence":1,"line":"one durable line"}]}`
 
 	for range 2 {
 		response := postAgent(t, fixture, path, body)

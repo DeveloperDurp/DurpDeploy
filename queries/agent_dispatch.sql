@@ -198,14 +198,14 @@ WHERE deployment_id = sqlc.arg(deployment_id)
 -- name: ExpireRemoteCancellation :execrows
 UPDATE remote_deployment_claims SET state = 'cancel_unconfirmed',
     reason = 'remote_cancel_unconfirmed', finished_at = sqlc.arg(now),
-    updated_at = sqlc.arg(now)
+    updated_at = sqlc.arg(now), log_buffer_ciphertext = NULL
 WHERE state = 'cancel_requested'
   AND cancel_requested_at <= sqlc.arg(stale_before);
 
 -- name: ExpireRemoteCancellationClaim :execrows
 UPDATE remote_deployment_claims SET state = 'cancel_unconfirmed',
     reason = 'remote_cancel_unconfirmed', finished_at = sqlc.arg(now),
-    updated_at = sqlc.arg(now)
+    updated_at = sqlc.arg(now), log_buffer_ciphertext = NULL
 WHERE deployment_id = sqlc.arg(deployment_id)
   AND agent_id = sqlc.arg(agent_id)
   AND state = 'cancel_requested'
@@ -214,14 +214,14 @@ WHERE deployment_id = sqlc.arg(deployment_id)
 -- name: LoseStaleRemoteClaims :execrows
 UPDATE remote_deployment_claims SET state = 'lost',
     reason = 'remote_agent_lost', finished_at = sqlc.arg(now),
-    updated_at = sqlc.arg(now)
+    updated_at = sqlc.arg(now), log_buffer_ciphertext = NULL
 WHERE state = 'started'
   AND last_heartbeat_at <= sqlc.arg(stale_before);
 
 -- name: LoseStaleRemoteClaim :execrows
 UPDATE remote_deployment_claims SET state = 'lost',
     reason = 'remote_agent_lost', finished_at = sqlc.arg(now),
-    updated_at = sqlc.arg(now)
+    updated_at = sqlc.arg(now), log_buffer_ciphertext = NULL
 WHERE deployment_id = sqlc.arg(deployment_id)
   AND agent_id = sqlc.arg(agent_id)
   AND state = 'started'

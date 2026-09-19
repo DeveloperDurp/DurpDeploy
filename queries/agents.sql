@@ -78,10 +78,17 @@ SELECT * FROM remote_deployment_claims
 WHERE agent_id = ? AND state IN ('waiting', 'claimed', 'started', 'cancel_requested')
 ORDER BY deployment_id;
 
+-- name: RevokeAgentRemoteStepRuns :execrows
+UPDATE remote_step_runs SET state = 'lost', finished_at = sqlc.arg(now),
+    updated_at = sqlc.arg(now), log_buffer_ciphertext = NULL
+WHERE agent_id = sqlc.arg(agent_id)
+  AND state IN ('waiting', 'claimed', 'started', 'cancel_requested');
+
 -- name: RevokeUnstartedRemoteClaim :execrows
 UPDATE remote_deployment_claims SET state = 'failed',
     reason = 'remote_agent_revoked_before_start',
-    finished_at = sqlc.arg(now), updated_at = sqlc.arg(now)
+    finished_at = sqlc.arg(now), updated_at = sqlc.arg(now),
+    log_buffer_ciphertext = NULL
 WHERE deployment_id = sqlc.arg(deployment_id)
   AND agent_id = sqlc.arg(agent_id)
   AND state IN ('waiting', 'claimed') AND started_at IS NULL;
@@ -89,7 +96,8 @@ WHERE deployment_id = sqlc.arg(deployment_id)
 -- name: RevokeStartedRemoteClaim :execrows
 UPDATE remote_deployment_claims SET state = 'lost',
     reason = 'remote_agent_revoked_after_start', cancel_requested_at = NULL,
-    finished_at = sqlc.arg(now), updated_at = sqlc.arg(now)
+    finished_at = sqlc.arg(now), updated_at = sqlc.arg(now),
+    log_buffer_ciphertext = NULL
 WHERE deployment_id = sqlc.arg(deployment_id)
   AND agent_id = sqlc.arg(agent_id)
   AND state IN ('started', 'cancel_requested') AND started_at IS NOT NULL;

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/logscrub"
 	"durpdeploy/internal/repository"
 )
 
@@ -27,7 +28,9 @@ func TestDurableLogScopeFailureRollsBack(t *testing.T) {
 		DeploymentID: 1, AgentID: a.AgentID, ClaimTokenHash: a.ClaimTokenHash,
 	}
 	events := []repository.RemoteLogEvent{{Sequence: -1, Line: "fixture line"}}
-	_, err = r.AppendRemoteDeploymentLogs(ctx, identity, events)
+	_, err = r.AppendRemoteDeploymentLogs(
+		ctx, identity, events, logscrub.New(nil),
+	)
 	if err == nil {
 		t.Fatal("negative sequence accepted")
 	}
@@ -37,11 +40,15 @@ func TestDurableLogScopeFailureRollsBack(t *testing.T) {
 		t.Fatalf("rollback logs=%d error=%v", count, err)
 	}
 	events[0].Sequence = 0
-	first, err := r.AppendRemoteDeploymentLogs(ctx, identity, events)
+	first, err := r.AppendRemoteDeploymentLogs(
+		ctx, identity, events, logscrub.New(nil),
+	)
 	if err != nil || len(first) != 1 {
 		t.Fatal(err)
 	}
-	second, err := r.AppendRemoteDeploymentLogs(ctx, identity, events)
+	second, err := r.AppendRemoteDeploymentLogs(
+		ctx, identity, events, logscrub.New(nil),
+	)
 	if err != nil || len(second) != 0 {
 		t.Fatalf("dedup inserts=%d,%d error=%v", len(first), len(second), err)
 	}

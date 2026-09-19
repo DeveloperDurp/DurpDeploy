@@ -1,6 +1,9 @@
 package agentserver
 
 import (
+	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -8,6 +11,7 @@ import (
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/events"
 	"durpdeploy/internal/repository"
+	"durpdeploy/internal/runner"
 
 	agentproto "github.com/DeveloperDurp/durpdeploy-agent/protocol"
 	agenttls "github.com/DeveloperDurp/durpdeploy-agent/transport"
@@ -119,6 +123,10 @@ func (s *Server) Logs(w http.ResponseWriter, r *http.Request) {
 		AgentID:        string(agentID),
 		ClaimTokenHash: claimTokenHash(request.ClaimToken),
 	}
+	scrubber, err := s.remoteLogScrubber(r.Context(), deploymentID)
+	if !writeLifecycleStatus(w, err) {
+		return
+	}
 	events := make([]repository.RemoteLogEvent, len(request.Events))
 	for _, event := range request.Events {
 		if event.Sequence < 0 {
@@ -133,11 +141,11 @@ func (s *Server) Logs(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	inserted, handled, err := s.repository.AppendRemoteStepLogs(
-		r.Context(), claim, events,
+		r.Context(), claim, events, scrubber,
 	)
 	if err == nil && !handled {
 		inserted, err = s.repository.AppendRemoteDeploymentLogs(
-			r.Context(), claim, events,
+			r.Context(), claim, events, scrubber,
 		)
 	}
 	if !writeLifecycleStatus(w, err) {
@@ -166,6 +174,10 @@ func (s *Server) Result(w http.ResponseWriter, r *http.Request) {
 		AgentID:        string(agentID),
 		ClaimTokenHash: claimTokenHash(request.ClaimToken),
 	}
+	scrubber, err := s.remoteLogScrubber(r.Context(), deploymentID)
+	if !writeLifecycleStatus(w, err) {
+		return
+	}
 	handled, err := s.repository.FinishRemoteStep(
 		r.Context(), claim, string(request.State),
 	)
@@ -175,9 +187,20 @@ func (s *Server) Result(w http.ResponseWriter, r *http.Request) {
 			r.Context(), claim, string(request.State),
 		)
 	}
+	var inserted []db.DeploymentLog
+	if err == nil && handled {
+		inserted, _, err = s.repository.FlushRemoteStepLogs(
+			r.Context(), claim, scrubber,
+		)
+	} else if err == nil {
+		inserted, err = s.repository.FlushRemoteDeploymentLogs(
+			r.Context(), claim, scrubber,
+		)
+	}
 	if !writeLifecycleStatus(w, err) {
 		return
 	}
+	s.broadcastLogs(deploymentID, inserted)
 	if result.Changed {
 		s.publishRemoteResult(r, result)
 	}
@@ -199,6 +222,10 @@ func (s *Server) Cancelled(w http.ResponseWriter, r *http.Request) {
 		AgentID:        string(agentID),
 		ClaimTokenHash: claimTokenHash(request.ClaimToken),
 	}
+	scrubber, err := s.remoteLogScrubber(r.Context(), deploymentID)
+	if !writeLifecycleStatus(w, err) {
+		return
+	}
 	_, handled, err := s.repository.AcknowledgeRemoteStepCancellation(
 		r.Context(), claim,
 	)
@@ -207,8 +234,64 @@ func (s *Server) Cancelled(w http.ResponseWriter, r *http.Request) {
 			r.Context(), claim,
 		)
 	}
-	if writeLifecycleStatus(w, err) {
-		w.WriteHeader(http.StatusNoContent)
+	var inserted []db.DeploymentLog
+	if err == nil && handled {
+		inserted, _, err = s.repository.FlushRemoteStepLogs(
+			r.Context(), claim, scrubber,
+		)
+	} else if err == nil {
+		inserted, err = s.repository.FlushRemoteDeploymentLogs(
+			r.Context(), claim, scrubber,
+		)
+	}
+	if !writeLifecycleStatus(w, err) {
+		return
+	}
+	s.broadcastLogs(deploymentID, inserted)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) remoteLogScrubber(
+	ctx context.Context,
+	deploymentID int64,
+) (*runner.Scrubber, error) {
+	deployment, err := s.repository.Queries.GetDeployment(ctx, deploymentID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, repository.ErrRemoteLifecycleConflict
+		}
+		return nil, err
+	}
+	variables, err := s.repository.ListReleaseVariablesByRelease(
+		ctx, deployment.ReleaseID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	resolved, err := runner.ResolveReleaseVariables(
+		variables, deployment.EnvironmentID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	secrets := make([]string, 0, len(resolved))
+	for _, variable := range resolved {
+		if variable.Secret && variable.Value != "" {
+			secrets = append(secrets, variable.Value)
+		}
+	}
+	return runner.NewScrubber(secrets), nil
+}
+
+func (s *Server) broadcastLogs(
+	deploymentID int64,
+	logs []db.DeploymentLog,
+) {
+	if s.broker == nil {
+		return
+	}
+	for _, log := range logs {
+		s.broker.Broadcast(deploymentID, log.Line)
 	}
 }
 

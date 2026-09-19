@@ -4,6 +4,7 @@ import (
 	"errors"
 	"testing"
 
+	"durpdeploy/internal/logscrub"
 	"durpdeploy/internal/repository"
 )
 
@@ -23,6 +24,7 @@ func TestRemoteLogAndTerminalRevocationAcrossDatabases(t *testing.T) {
 				_, err := repo.AppendRemoteDeploymentLogs(
 					t.Context(), identity,
 					[]repository.RemoteLogEvent{{Sequence: 0, Line: "line"}},
+					logscrub.New(nil),
 				)
 				return err
 			},

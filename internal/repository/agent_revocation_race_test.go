@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/logscrub"
 )
 
 type revocationRaceFixture struct {
@@ -17,7 +18,7 @@ type revocationOperation struct {
 	name  string
 	setup func(*testing.T, *Repository, revocationRaceFixture)
 	run   func(context.Context, *Repository, revocationRaceFixture) (bool, error)
-	runTx func(context.Context, *db.Queries, revocationRaceFixture) (bool, error)
+	runTx func(context.Context, *Repository, *db.Queries, revocationRaceFixture) (bool, error)
 }
 
 func TestRevocationRaceMatrixAcrossDatabases(t *testing.T) {
@@ -98,7 +99,7 @@ func revocationOperations() []revocationOperation {
 				)
 				return rows == 1, err
 			},
-			runTx: func(ctx context.Context, q *db.Queries, fixture revocationRaceFixture) (bool, error) {
+			runTx: func(ctx context.Context, _ *Repository, q *db.Queries, fixture revocationRaceFixture) (bool, error) {
 				rows, err := claimRemoteDeployment(
 					ctx, q, raceClaimParamsQueries(ctx, q, fixture),
 				)
@@ -109,7 +110,7 @@ func revocationOperations() []revocationOperation {
 				err := repo.StartRemoteDeployment(ctx, fixture.identity)
 				return err == nil, err
 			},
-			runTx: func(ctx context.Context, q *db.Queries, fixture revocationRaceFixture) (bool, error) {
+			runTx: func(ctx context.Context, _ *Repository, q *db.Queries, fixture revocationRaceFixture) (bool, error) {
 				err := startRemoteDeployment(ctx, q, fixture.identity)
 				return err == nil, err
 			}},
@@ -118,7 +119,7 @@ func revocationOperations() []revocationOperation {
 				_, err := repo.HeartbeatRemoteDeployment(ctx, fixture.identity)
 				return err == nil, err
 			},
-			runTx: func(ctx context.Context, q *db.Queries, fixture revocationRaceFixture) (bool, error) {
+			runTx: func(ctx context.Context, _ *Repository, q *db.Queries, fixture revocationRaceFixture) (bool, error) {
 				_, err := heartbeatRemoteDeployment(ctx, q, fixture.identity)
 				return err == nil, err
 			}},
@@ -128,13 +129,15 @@ func revocationOperations() []revocationOperation {
 					ctx,
 					fixture.identity,
 					[]RemoteLogEvent{{Sequence: 1, Line: "committed"}},
+					logscrub.New(nil),
 				)
 				return len(logs) == 1, err
 			},
-			runTx: func(ctx context.Context, q *db.Queries, fixture revocationRaceFixture) (bool, error) {
-				logs, err := appendRemoteDeploymentLogs(
+			runTx: func(ctx context.Context, repo *Repository, q *db.Queries, fixture revocationRaceFixture) (bool, error) {
+				logs, err := repo.appendRemoteDeploymentLogs(
 					ctx, q, fixture.identity,
 					[]RemoteLogEvent{{Sequence: 1, Line: "committed"}},
+					logscrub.New(nil), false,
 				)
 				return len(logs) == 1, err
 			}},
@@ -147,7 +150,7 @@ func revocationOperations() []revocationOperation {
 				)
 				return result.Changed, err
 			},
-			runTx: func(ctx context.Context, q *db.Queries, fixture revocationRaceFixture) (bool, error) {
+			runTx: func(ctx context.Context, _ *Repository, q *db.Queries, fixture revocationRaceFixture) (bool, error) {
 				result, err := finishRemoteDeploymentLifecycle(
 					ctx, q, fixture.identity, "succeeded",
 				)
@@ -173,7 +176,7 @@ func revocationOperations() []revocationOperation {
 				)
 				return changed, err
 			},
-			runTx: func(ctx context.Context, q *db.Queries, fixture revocationRaceFixture) (bool, error) {
+			runTx: func(ctx context.Context, _ *Repository, q *db.Queries, fixture revocationRaceFixture) (bool, error) {
 				return acknowledgeRemoteCancellation(ctx, q, fixture.identity)
 			},
 		},

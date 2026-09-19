@@ -4,10 +4,70 @@ import (
 	"bytes"
 	"context"
 	"testing"
+	"time"
 
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/repository"
 )
+
+func TestRemoteStepLockSerializesTerminalTransition(t *testing.T) {
+	repo := remoteFixture(t)
+	tokenHash := bytes.Repeat([]byte{1}, 32)
+	if _, err := repo.DB.Exec(`INSERT INTO remote_step_runs
+		(deployment_id,step_index,agent_id,state,claim_token_hash,ciphertext,
+		 claim_expires_at,last_heartbeat_at,started_at,updated_at)
+		VALUES (1,0,'a','started',?,'ciphertext',200,100,100,100)`,
+		tokenHash,
+	); err != nil {
+		t.Fatal(err)
+	}
+	tx, err := repo.DB.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	locked, err := repo.Queries.WithTx(tx).LockRemoteStepRun(
+		t.Context(),
+		db.LockRemoteStepRunParams{
+			DeploymentID: 1, AgentID: "a", ClaimTokenHash: tokenHash,
+		},
+	)
+	if err != nil || locked != 1 {
+		t.Fatalf("lock rows=%d error=%v", locked, err)
+	}
+
+	type result struct {
+		handled bool
+		err     error
+	}
+	done := make(chan result, 1)
+	go func() {
+		handled, err := repo.FinishRemoteStep(
+			t.Context(),
+			repository.RemoteLifecycleClaim{
+				DeploymentID: 1, AgentID: "a", ClaimTokenHash: tokenHash,
+			},
+			"succeeded",
+		)
+		done <- result{handled: handled, err: err}
+	}()
+	select {
+	case got := <-done:
+		t.Fatalf("terminal transition bypassed row lock: %+v", got)
+	case <-time.After(50 * time.Millisecond):
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case got := <-done:
+		if got.err != nil || !got.handled {
+			t.Fatalf("terminal transition after unlock: %+v", got)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("terminal transition remained blocked after commit")
+	}
+}
 
 func TestRemoteStepStartRequiresLiveEligibleClaim(t *testing.T) {
 	runRemoteStepStartEligibility(t, remoteFixture(t))

@@ -52,6 +52,14 @@ func revokeAgent(
 	if err != nil {
 		return false, err
 	}
+	if _, err := q.RevokeAgentRemoteStepRuns(
+		ctx,
+		db.RevokeAgentRemoteStepRunsParams{
+			Now: sql.NullInt64{Int64: now, Valid: true}, AgentID: agentID,
+		},
+	); err != nil {
+		return false, err
+	}
 	claims, err := q.ListRevocableAgentClaims(ctx, agentID)
 	if err != nil {
 		return false, err
@@ -60,6 +68,12 @@ func revokeAgent(
 		if err := revokeAgentClaim(ctx, q, now, claim); err != nil {
 			return false, err
 		}
+	}
+	if _, err := q.FailDeploymentsWithTerminalRemoteStepRuns(
+		ctx,
+		sql.NullInt64{Int64: now, Valid: true},
+	); err != nil {
+		return false, err
 	}
 	return true, nil
 }

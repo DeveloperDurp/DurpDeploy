@@ -143,7 +143,7 @@ func (q *Queries) CurrentUnixTime(ctx context.Context) (int64, error) {
 const expireRemoteCancellation = `-- name: ExpireRemoteCancellation :execrows
 UPDATE remote_deployment_claims SET state = 'cancel_unconfirmed',
     reason = 'remote_cancel_unconfirmed', finished_at = ?1,
-    updated_at = ?1
+    updated_at = ?1, log_buffer_ciphertext = NULL
 WHERE state = 'cancel_requested'
   AND cancel_requested_at <= ?2
 `
@@ -164,7 +164,7 @@ func (q *Queries) ExpireRemoteCancellation(ctx context.Context, arg ExpireRemote
 const expireRemoteCancellationClaim = `-- name: ExpireRemoteCancellationClaim :execrows
 UPDATE remote_deployment_claims SET state = 'cancel_unconfirmed',
     reason = 'remote_cancel_unconfirmed', finished_at = ?1,
-    updated_at = ?1
+    updated_at = ?1, log_buffer_ciphertext = NULL
 WHERE deployment_id = ?2
   AND agent_id = ?3
   AND state = 'cancel_requested'
@@ -324,7 +324,7 @@ func (q *Queries) FinishRemoteDeploymentStatus(ctx context.Context, arg FinishRe
 }
 
 const getRemoteDeploymentClaim = `-- name: GetRemoteDeploymentClaim :one
-SELECT deployment_id, agent_id, state, reason, claim_token_hash, ciphertext, claim_expires_at, last_heartbeat_at, started_at, finished_at, cancel_requested_at, created_at, updated_at FROM remote_deployment_claims WHERE deployment_id = ?
+SELECT deployment_id, agent_id, state, reason, claim_token_hash, ciphertext, claim_expires_at, last_heartbeat_at, started_at, finished_at, cancel_requested_at, created_at, updated_at, log_buffer_ciphertext FROM remote_deployment_claims WHERE deployment_id = ?
 `
 
 func (q *Queries) GetRemoteDeploymentClaim(ctx context.Context, deploymentID int64) (RemoteDeploymentClaim, error) {
@@ -344,6 +344,7 @@ func (q *Queries) GetRemoteDeploymentClaim(ctx context.Context, deploymentID int
 		&i.CancelRequestedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.LogBufferCiphertext,
 	)
 	return i, err
 }
@@ -383,7 +384,7 @@ func (q *Queries) HeartbeatRemoteDeployment(ctx context.Context, arg HeartbeatRe
 }
 
 const listRemoteLifecycleClaims = `-- name: ListRemoteLifecycleClaims :many
-SELECT deployment_id, agent_id, state, reason, claim_token_hash, ciphertext, claim_expires_at, last_heartbeat_at, started_at, finished_at, cancel_requested_at, created_at, updated_at FROM remote_deployment_claims
+SELECT deployment_id, agent_id, state, reason, claim_token_hash, ciphertext, claim_expires_at, last_heartbeat_at, started_at, finished_at, cancel_requested_at, created_at, updated_at, log_buffer_ciphertext FROM remote_deployment_claims
 WHERE state IN ('claimed', 'started', 'cancel_requested')
 ORDER BY agent_id, deployment_id
 `
@@ -411,6 +412,7 @@ func (q *Queries) ListRemoteLifecycleClaims(ctx context.Context) ([]RemoteDeploy
 			&i.CancelRequestedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.LogBufferCiphertext,
 		); err != nil {
 			return nil, err
 		}
@@ -426,7 +428,7 @@ func (q *Queries) ListRemoteLifecycleClaims(ctx context.Context) ([]RemoteDeploy
 }
 
 const listWaitingRemoteDeploymentClaims = `-- name: ListWaitingRemoteDeploymentClaims :many
-SELECT c.deployment_id, c.agent_id, c.state, c.reason, c.claim_token_hash, c.ciphertext, c.claim_expires_at, c.last_heartbeat_at, c.started_at, c.finished_at, c.cancel_requested_at, c.created_at, c.updated_at FROM remote_deployment_claims c
+SELECT c.deployment_id, c.agent_id, c.state, c.reason, c.claim_token_hash, c.ciphertext, c.claim_expires_at, c.last_heartbeat_at, c.started_at, c.finished_at, c.cancel_requested_at, c.created_at, c.updated_at, c.log_buffer_ciphertext FROM remote_deployment_claims c
 JOIN deployments d ON d.id = c.deployment_id
 WHERE c.agent_id = ?1 AND c.state = 'waiting'
   AND d.assigned_agent_id = c.agent_id AND d.status = 'pending'
@@ -456,6 +458,7 @@ func (q *Queries) ListWaitingRemoteDeploymentClaims(ctx context.Context, agentID
 			&i.CancelRequestedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.LogBufferCiphertext,
 		); err != nil {
 			return nil, err
 		}
@@ -595,7 +598,7 @@ func (q *Queries) LockWaitingRemoteDeploymentClaim(ctx context.Context, arg Lock
 const loseStaleRemoteClaim = `-- name: LoseStaleRemoteClaim :execrows
 UPDATE remote_deployment_claims SET state = 'lost',
     reason = 'remote_agent_lost', finished_at = ?1,
-    updated_at = ?1
+    updated_at = ?1, log_buffer_ciphertext = NULL
 WHERE deployment_id = ?2
   AND agent_id = ?3
   AND state = 'started'
@@ -625,7 +628,7 @@ func (q *Queries) LoseStaleRemoteClaim(ctx context.Context, arg LoseStaleRemoteC
 const loseStaleRemoteClaims = `-- name: LoseStaleRemoteClaims :execrows
 UPDATE remote_deployment_claims SET state = 'lost',
     reason = 'remote_agent_lost', finished_at = ?1,
-    updated_at = ?1
+    updated_at = ?1, log_buffer_ciphertext = NULL
 WHERE state = 'started'
   AND last_heartbeat_at <= ?2
 `

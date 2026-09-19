@@ -36,6 +36,17 @@ JOIN deployment_log_scopes s ON s.log_id = l.id AND s.deployment_id = l.deployme
 WHERE s.deployment_id = ? AND s.step_index IS NULL AND s.attempt IS NULL
     AND s.sequence = ?;
 
+-- name: GetLastRemoteDeploymentLogSequence :one
+SELECT CAST(COALESCE(MAX(sequence), -1) AS INTEGER) FROM deployment_log_scopes
+WHERE deployment_id = ? AND step_index IS NULL;
+
+-- name: UpdateRemoteDeploymentLogBuffer :execrows
+UPDATE remote_deployment_claims
+SET log_buffer_ciphertext = sqlc.narg(log_buffer_ciphertext)
+WHERE deployment_id = sqlc.arg(deployment_id)
+  AND agent_id = sqlc.arg(agent_id)
+  AND claim_token_hash = sqlc.arg(claim_token_hash);
+
 -- name: CreateDeploymentLogScope :exec
 INSERT INTO deployment_log_scopes (log_id, deployment_id, step_index, attempt, sequence)
 VALUES (?, ?, ?, ?, ?);
