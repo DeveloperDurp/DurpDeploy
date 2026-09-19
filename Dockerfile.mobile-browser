@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # Go 1.25.7 is copied into Playwright's pinned runtime image so its bundled
 # Chromium and Linux dependencies match package-lock.json's Playwright 1.61.1.
-FROM golang:1.25.7-bookworm@sha256:564e366a28ad1d70f460a2b97d1d299a562f08707eb0ecb24b659e5bd6c108e1 AS go
+FROM golang@sha256:564e366a28ad1d70f460a2b97d1d299a562f08707eb0ecb24b659e5bd6c108e1 AS go
 
 FROM mcr.microsoft.com/playwright:v1.61.1-noble
 
