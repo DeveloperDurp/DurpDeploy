@@ -54,15 +54,17 @@ export async function runLifecycleFault(context) {
 		});
 	};
 	const claim = (id) => readOnly(
-		`SELECT state||'|'||COALESCE(reason,'')||'|'||` +
+		`SELECT state||'||'||` +
 		`COALESCE(hex(claim_token_hash),'')||'|'||COALESCE(started_at,0)||'|'||` +
-		`COALESCE(last_heartbeat_at,0) FROM remote_deployment_claims ` +
-		`WHERE deployment_id=${Number(id)};`,
+		`COALESCE(last_heartbeat_at,0) FROM remote_step_runs ` +
+		`WHERE deployment_id=${Number(id)} ` +
+		`ORDER BY step_index, agent_id LIMIT 1;`,
 	);
 	const deploymentStatus = (id) => readOnly(
-		`SELECT d.status||'|'||c.state||'|'||COALESCE(c.reason,'') ` +
-		`FROM deployments d JOIN remote_deployment_claims c ` +
-		`ON c.deployment_id=d.id WHERE d.id=${Number(id)};`,
+		`SELECT d.status||'|'||r.state||'|' ` +
+		`FROM deployments d JOIN remote_step_runs r ` +
+		`ON r.deployment_id=d.id WHERE d.id=${Number(id)} ` +
+		`ORDER BY r.step_index, r.agent_id LIMIT 1;`,
 	);
 	const waitClaim = (id, state) => waitFor(
 		() => claim(id),
@@ -169,7 +171,7 @@ export async function runLifecycleFault(context) {
 		await waitClaim(deployment.id, "lost");
 		await restartAgent();
 		await new Promise((resolve) => setTimeout(resolve, 1500));
-		check((await claim(deployment.id)).trim().startsWith("lost|remote_agent_lost|"),
+		check((await claim(deployment.id)).trim().startsWith("lost||"),
 			"lost deployment replayed after agent restart");
 	} else if (scenario === "cancel-unconfirmed") {
 		const deployment = await createDeployment("exec sleep 90");

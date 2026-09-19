@@ -1,6 +1,6 @@
 -- +goose Up
 ALTER TABLE deployments ADD COLUMN assigned_agent_id TEXT
-    REFERENCES agents(id) ON DELETE NO ACTION;
+    REFERENCES agents(id) ON DELETE NO ACTION; -- NOSONAR: preserves deployment history
 ALTER TABLE agent_pairings ADD COLUMN server_pull_endpoint TEXT;
 
 CREATE TABLE remote_deployment_claims (

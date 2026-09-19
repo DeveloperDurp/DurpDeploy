@@ -18,13 +18,13 @@ WHERE d.id = sqlc.arg(deployment_id) AND d.assigned_agent_id IS NOT NULL
 SELECT * FROM remote_deployment_claims WHERE deployment_id = ?;
 
 -- name: LockRemoteLifecycleClaim :execrows
-UPDATE remote_deployment_claims SET updated_at = updated_at
+UPDATE remote_deployment_claims SET updated_at = updated_at -- NOSONAR: intentional write lock
 WHERE deployment_id = sqlc.arg(deployment_id)
   AND agent_id = sqlc.arg(agent_id)
   AND claim_token_hash = sqlc.arg(claim_token_hash);
 
 -- name: LockRemoteMaintenanceClaim :execrows
-UPDATE remote_deployment_claims SET updated_at = updated_at
+UPDATE remote_deployment_claims SET updated_at = updated_at -- NOSONAR: intentional write lock
 WHERE deployment_id = sqlc.arg(deployment_id)
   AND agent_id = sqlc.arg(agent_id);
 
@@ -41,7 +41,7 @@ WHERE c.agent_id = sqlc.arg(agent_id) AND c.state = 'waiting'
 ORDER BY c.created_at, c.deployment_id;
 
 -- name: LockWaitingRemoteDeploymentClaim :execrows
-UPDATE remote_deployment_claims SET updated_at = updated_at
+UPDATE remote_deployment_claims SET updated_at = updated_at -- NOSONAR: intentional write lock
 WHERE deployment_id = sqlc.arg(deployment_id)
   AND agent_id = sqlc.arg(agent_id)
   AND state = 'waiting'
@@ -49,7 +49,7 @@ WHERE deployment_id = sqlc.arg(deployment_id)
   AND ciphertext IS NULL;
 
 -- name: LockPendingRemoteDeployment :execrows
-UPDATE deployments SET status = status
+UPDATE deployments SET status = status -- NOSONAR: intentional write lock
 WHERE id = sqlc.arg(deployment_id)
   AND assigned_agent_id = sqlc.arg(agent_id)
   AND status = 'pending';
@@ -160,7 +160,7 @@ WHERE id = sqlc.arg(deployment_id)
   AND status = 'running';
 
 -- name: LockRemoteDeploymentClaim :execrows
-UPDATE remote_deployment_claims SET updated_at = updated_at
+UPDATE remote_deployment_claims SET updated_at = updated_at -- NOSONAR: intentional write lock
 WHERE remote_deployment_claims.deployment_id = sqlc.arg(deployment_id)
   AND remote_deployment_claims.agent_id = sqlc.arg(agent_id)
   AND remote_deployment_claims.claim_token_hash = sqlc.arg(claim_token_hash)

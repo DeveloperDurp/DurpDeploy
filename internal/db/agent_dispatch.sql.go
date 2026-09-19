@@ -488,7 +488,7 @@ func (q *Queries) LockClaimAgent(ctx context.Context, id string) (int64, error) 
 }
 
 const lockPendingRemoteDeployment = `-- name: LockPendingRemoteDeployment :execrows
-UPDATE deployments SET status = status
+UPDATE deployments SET status = status -- NOSONAR: intentional write lock
 WHERE id = ?1
   AND assigned_agent_id = ?2
   AND status = 'pending'
@@ -508,7 +508,7 @@ func (q *Queries) LockPendingRemoteDeployment(ctx context.Context, arg LockPendi
 }
 
 const lockRemoteDeploymentClaim = `-- name: LockRemoteDeploymentClaim :execrows
-UPDATE remote_deployment_claims SET updated_at = updated_at
+UPDATE remote_deployment_claims SET updated_at = updated_at -- NOSONAR: intentional write lock
 WHERE remote_deployment_claims.deployment_id = ?1
   AND remote_deployment_claims.agent_id = ?2
   AND remote_deployment_claims.claim_token_hash = ?3
@@ -534,7 +534,7 @@ func (q *Queries) LockRemoteDeploymentClaim(ctx context.Context, arg LockRemoteD
 }
 
 const lockRemoteLifecycleClaim = `-- name: LockRemoteLifecycleClaim :execrows
-UPDATE remote_deployment_claims SET updated_at = updated_at
+UPDATE remote_deployment_claims SET updated_at = updated_at -- NOSONAR: intentional write lock
 WHERE deployment_id = ?1
   AND agent_id = ?2
   AND claim_token_hash = ?3
@@ -555,7 +555,7 @@ func (q *Queries) LockRemoteLifecycleClaim(ctx context.Context, arg LockRemoteLi
 }
 
 const lockRemoteMaintenanceClaim = `-- name: LockRemoteMaintenanceClaim :execrows
-UPDATE remote_deployment_claims SET updated_at = updated_at
+UPDATE remote_deployment_claims SET updated_at = updated_at -- NOSONAR: intentional write lock
 WHERE deployment_id = ?1
   AND agent_id = ?2
 `
@@ -574,7 +574,7 @@ func (q *Queries) LockRemoteMaintenanceClaim(ctx context.Context, arg LockRemote
 }
 
 const lockWaitingRemoteDeploymentClaim = `-- name: LockWaitingRemoteDeploymentClaim :execrows
-UPDATE remote_deployment_claims SET updated_at = updated_at
+UPDATE remote_deployment_claims SET updated_at = updated_at -- NOSONAR: intentional write lock
 WHERE deployment_id = ?1
   AND agent_id = ?2
   AND state = 'waiting'

@@ -47,7 +47,9 @@ templ EnvironmentsListFragment(environments []db.Environment) {
 						<th class="w-1/4">Name</th>
 						<th class="hidden lg:table-cell w-2/5">Description</th>
 						<th class="hidden md:table-cell w-1/5">Tags</th>
-						<th class="w-1/5">Actions</th>
+						if CanWrite(ctx) {
+							<th class="w-1/5">Actions</th>
+						}
 					</tr>
 				</thead>
 				<tbody>
@@ -65,8 +67,8 @@ templ EnvironmentRow(environment db.Environment) {
 		<td class="truncate">{ environment.Name }</td>
 		<td class="hidden lg:table-cell truncate">{ environment.Description.String }</td>
 		<td class="hidden md:table-cell truncate">{ environment.Tags.String }</td>
-		<td class="flex flex-wrap gap-2">
-			if CanWrite(ctx) {
+		if CanWrite(ctx) {
+			<td class="flex flex-wrap gap-2">
 				<a href={ templ.SafeURL("/environments/" + strconv.FormatInt(environment.ID, 10) + "/edit") } class="btn btn-sm btn-ghost">Edit</a>
 				<button
 					hx-delete={ "/environments/" + strconv.FormatInt(environment.ID, 10) }
@@ -79,7 +81,7 @@ templ EnvironmentRow(environment db.Environment) {
 				>
 					Delete
 				</button>
-			}
-		</td>
+			</td>
+		}
 	</tr>
 }

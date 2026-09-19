@@ -90,6 +90,13 @@ func newHarness(t *testing.T) *testHarness {
 
 		ar.Group(func(aar chi.Router) {
 			aar.Use(auth.RequireRole("admin"))
+			agentsH := api.NewAgentHandler(repo, nil)
+			aar.Get("/api/v1/admin/agents", agentsH.ListAgents)
+			aar.Post("/api/v1/admin/agents/pair", agentsH.PairAgent)
+			aar.Get("/api/v1/admin/agents/{id}", agentsH.GetAgent)
+			aar.Post("/api/v1/admin/agents/{id}/revoke", agentsH.RevokeAgent)
+			aar.Post("/api/v1/admin/agents/{id}/labels", agentsH.AddLabel)
+			aar.Delete("/api/v1/admin/agents/{id}/labels", agentsH.DeleteLabel)
 
 			adminH := api.NewAdminHandler(repo)
 			aar.Get("/api/v1/admin/notifications", adminH.ListNotifications)
@@ -173,6 +180,84 @@ func newHarness(t *testing.T) *testHarness {
 	})
 
 	return &testHarness{repo: repo, router: r}
+}
+
+func TestAgents_AdminManagementFlow(t *testing.T) {
+	h := newHarness(t)
+	token := h.adminToken(t)
+	if _, err := h.repo.Queries.CreateAgent(
+		context.Background(),
+		db.CreateAgentParams{
+			ID: "api-agent", Name: "API Agent", Endpoint: "https://agent.test",
+		},
+	); err != nil {
+		t.Fatalf("create agent: %v", err)
+	}
+
+	recorder := h.request(
+		t, http.MethodGet, "/api/v1/admin/agents", token, "",
+	)
+	h.assertStatus(t, recorder, http.StatusOK)
+	if !strings.Contains(recorder.Body.String(), "API Agent") {
+		t.Fatalf("agent list missing seeded agent: %s", recorder.Body.String())
+	}
+
+	recorder = h.request(
+		t, http.MethodGet, "/api/v1/admin/agents/api-agent", token, "",
+	)
+	h.assertStatus(t, recorder, http.StatusOK)
+	if !strings.Contains(recorder.Body.String(), `"labels":null`) {
+		t.Fatalf("agent detail missing labels: %s", recorder.Body.String())
+	}
+
+	recorder = h.request(
+		t,
+		http.MethodPost,
+		"/api/v1/admin/agents/api-agent/labels",
+		token,
+		`{"label":" linux "}`,
+	)
+	h.assertStatus(t, recorder, http.StatusNoContent)
+	recorder = h.request(
+		t, http.MethodGet, "/api/v1/admin/agents/api-agent", token, "",
+	)
+	h.assertStatus(t, recorder, http.StatusOK)
+	if !strings.Contains(recorder.Body.String(), `"labels":["linux"]`) {
+		t.Fatalf("agent detail missing label: %s", recorder.Body.String())
+	}
+
+	recorder = h.request(
+		t,
+		http.MethodDelete,
+		"/api/v1/admin/agents/api-agent/labels",
+		token,
+		`{"label":"linux"}`,
+	)
+	h.assertStatus(t, recorder, http.StatusNoContent)
+	recorder = h.request(
+		t,
+		http.MethodPost,
+		"/api/v1/admin/agents/pair",
+		token,
+		`{"address":"agent.test","code":"pair-code","fingerprint":"aa"}`,
+	)
+	h.assertStatus(t, recorder, http.StatusServiceUnavailable)
+
+	recorder = h.request(
+		t,
+		http.MethodPost,
+		"/api/v1/admin/agents/api-agent/revoke",
+		token,
+		"",
+	)
+	h.assertStatus(t, recorder, http.StatusConflict)
+	agent, err := h.repo.Queries.GetAgent(context.Background(), "api-agent")
+	if err != nil {
+		t.Fatalf("get agent: %v", err)
+	}
+	if agent.Status != "pending" {
+		t.Fatalf("agent status=%q", agent.Status)
+	}
 }
 
 func (h *testHarness) seedUser(t *testing.T, email, role string) *db.User {

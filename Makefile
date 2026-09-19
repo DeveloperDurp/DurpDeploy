@@ -1,4 +1,4 @@
-.PHONY: build dev dev-server dev-postgres dev-mssql e2e-test e2e-test-isolated e2e-postgres e2e-mssql check-openssl templ-generate tailwind-build js-build npm-install golines golines-check clean test sonar-issues mfa-e2e-test auth-mfa-e2e-go-prepare auth-mfa-e2e-browser-prepare auth-mfa-e2e-sqlite-http auth-mfa-e2e-sqlite-browser auth-mfa-e2e-postgres auth-mfa-e2e-mssql auth-mfa-e2e swagger-spec mobile-browser-container agent-documentation-contract agent-compose-contract agent-systemd-contract agent-systemd-contract-test runner-container-contract runner-container-contract-test agent-ci-contract agent-e2e-sqlite agent-rollout-gate agent-smoke-test
+.PHONY: build dev dev-server dev-postgres dev-mssql e2e-test e2e-test-isolated e2e-postgres e2e-mssql check-openssl templ-generate tailwind-build js-build npm-install golines golines-check clean test sonar-issues mfa-e2e-test auth-mfa-e2e-go-prepare auth-mfa-e2e-browser-prepare auth-mfa-e2e-sqlite-http auth-mfa-e2e-sqlite-browser auth-mfa-e2e-postgres auth-mfa-e2e-mssql auth-mfa-e2e swagger-spec mobile-browser-container agent-documentation-contract agent-compose-contract agent-helm-contract agent-systemd-contract agent-systemd-contract-test runner-container-contract runner-container-contract-test agent-ci-contract agent-e2e-sqlite agent-rollout-gate agent-smoke-test
 
 BINARY_NAME=durpdeploy
 MAIN_PATH=./cmd/server
@@ -143,6 +143,9 @@ agent-documentation-contract:
 
 agent-compose-contract:
 	bash scripts/check-agent-compose-contract.sh
+
+agent-helm-contract:
+	bash scripts/check-agent-helm-contract.sh
 
 agent-systemd-contract:
 	bash scripts/check-agent-systemd-contract.sh

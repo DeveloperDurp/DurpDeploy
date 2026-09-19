@@ -432,7 +432,7 @@ func (q *Queries) ListWaitingRemoteStepRuns(ctx context.Context, agentID string)
 }
 
 const lockRemoteStepRun = `-- name: LockRemoteStepRun :execrows
-UPDATE remote_step_runs SET updated_at = updated_at
+UPDATE remote_step_runs SET updated_at = updated_at -- NOSONAR: intentional write lock
 WHERE deployment_id = ?1
   AND agent_id = ?2
   AND claim_token_hash = ?3

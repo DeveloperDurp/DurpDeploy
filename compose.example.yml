@@ -83,8 +83,15 @@ services:
       - DURPDEPLOY_DB=/data/durpdeploy.db
       - DURPDEPLOY_EXECUTION_BOUNDARY=service
       - DURPDEPLOY_TRUSTED_PROXIES=172.28.0.10/32
+      - DURPDEPLOY_AGENT_LISTEN_ADDR=0.0.0.0:10943
+      - DURPDEPLOY_AGENT_PUBLIC_URL=${DURPDEPLOY_AGENT_PUBLIC_URL:-https://localhost:10943}
+      - DURPDEPLOY_AGENT_IDENTITY_DIR=/var/lib/durpdeploy/agent-identity
     volumes:
       - durpdeploy-data:/data
+      - durpdeploy-agent-identity:/var/lib/durpdeploy/agent-identity
+    # Agents connect directly with mTLS. Restrict this host port to agent networks.
+    ports:
+      - "10943:10943"
     secrets:
       - source: durpdeploy_key
         target: /etc/durpdeploy/key
@@ -118,8 +125,6 @@ services:
     ports:
       - "80:80"
       - "443:443"
-      # Publish 10943 separately to the agent network when remote agents are enabled.
-      # - "10943:10943"
     networks:
       default:
         ipv4_address: 172.28.0.10
@@ -178,6 +183,7 @@ services:
 
 volumes:
   durpdeploy-data:
+  durpdeploy-agent-identity:
   caddy-data:
   caddy-config:
 

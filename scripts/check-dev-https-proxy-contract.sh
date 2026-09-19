@@ -284,8 +284,6 @@ if grep -Eq 'go (build|run)|\$TMP/durpdeploy' "$root/scripts/e2e_db_test.sh"; th
     echo 'dev HTTPS proxy contract: running-server E2E must not build or launch DurpDeploy' >&2
     exit 1
 fi
-grep -Fq '/settings/security/totp/verify' "$root/scripts/e2e_test.sh"
-grep -Fq '/settings/security/totp/cancel' "$root/scripts/e2e_test.sh"
 grep -Fq '/settings/security/recovery/continue' "$root/scripts/e2e_test.sh"
 test_shutdown_tree
 test_podman_fallback

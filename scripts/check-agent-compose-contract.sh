@@ -1,26 +1,38 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-grep -Fq 'DURPDEPLOY_AGENT_LISTEN_ADDR=0.0.0.0:10943' compose.example.yml
-grep -Fq 'DURPDEPLOY_AGENT_PUBLIC_URL=https://<agent-control-host>' compose.example.yml
-grep -Fq 'DURPDEPLOY_AGENT_IDENTITY_DIR=/var/lib/durpdeploy/agent-identity' compose.example.yml
-grep -Fq '"10943:10943"' compose.example.yml
 for file in compose.yml compose.example.yml; do
+	app=$(awk '
+		/^  app:$/ { in_app=1; next }
+		/^  [[:alnum:]_-]+:$/ && in_app { exit }
+		in_app { print }
+	' "$file")
+	caddy=$(awk '
+		/^  caddy:$/ { in_caddy=1; next }
+		/^  [[:alnum:]_-]+:$/ && in_caddy { exit }
+		in_caddy { print }
+	' "$file")
+	grep -Fq 'DURPDEPLOY_AGENT_LISTEN_ADDR' <<<"$app"
+	grep -Fq '0.0.0.0:10943' <<<"$app"
+	grep -Fq 'DURPDEPLOY_AGENT_PUBLIC_URL' <<<"$app"
+	grep -Fq 'https://localhost:10943' <<<"$app"
+	grep -Fq 'DURPDEPLOY_AGENT_IDENTITY_DIR' <<<"$app"
+	grep -Fq '/var/lib/durpdeploy/agent-identity' <<<"$app"
+	grep -Fq '"10943:10943"' <<<"$app"
+	grep -Fq 'durpdeploy-agent-identity:/var/lib/durpdeploy/agent-identity' <<<"$app"
+	if grep -Fq '10943' <<<"$caddy"; then
+		printf 'agent compose contract: Caddy owns agent port in %s\n' "$file" >&2
+		exit 1
+	fi
+	grep -Fq 'durpdeploy-agent-identity:' "$file"
 	grep -Fq 'DURPDEPLOY_EXECUTION_BOUNDARY: service' "$file" ||
 		grep -Fq 'DURPDEPLOY_EXECUTION_BOUNDARY=service' "$file"
 	grep -Fq 'cap_drop: [ALL]' "$file"
-	python3 - "$file" <<'PY'
-import pathlib
-import sys
-
-import yaml
-
-app = yaml.safe_load(pathlib.Path(sys.argv[1]).read_text())["services"]["app"]
-if app.get("cap_add"):
-    raise SystemExit("agent compose contract: app grants a Linux capability")
-if str(app.get("user", "")) != "10001:10001":
-    raise SystemExit("agent compose contract: app service identity is not fixed")
-PY
+	grep -Fq 'user: "10001:10001"' <<<"$app"
+	if grep -Eq '^[[:space:]]+cap_add:' <<<"$app"; then
+		printf 'agent compose contract: app grants a Linux capability in %s\n' "$file" >&2
+		exit 1
+	fi
 	grep -Fq 'read_only: true' "$file"
 	grep -Fq 'no-new-privileges:true' "$file"
 	grep -Fq 'mode: 0400' "$file"

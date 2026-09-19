@@ -80,7 +80,7 @@ WHERE deployment_id = sqlc.arg(deployment_id)
   AND claim_token_hash = sqlc.arg(claim_token_hash);
 
 -- name: LockRemoteStepRun :execrows
-UPDATE remote_step_runs SET updated_at = updated_at
+UPDATE remote_step_runs SET updated_at = updated_at -- NOSONAR: intentional write lock
 WHERE deployment_id = sqlc.arg(deployment_id)
   AND agent_id = sqlc.arg(agent_id)
   AND claim_token_hash = sqlc.arg(claim_token_hash);

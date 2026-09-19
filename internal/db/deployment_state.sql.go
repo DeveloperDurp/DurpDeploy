@@ -37,7 +37,7 @@ func (q *Queries) CancelStepDeployment(ctx context.Context, id int64) (int64, er
 }
 
 const lockAssignedRemoteDeployment = `-- name: LockAssignedRemoteDeployment :execrows
-UPDATE deployments SET status = status
+UPDATE deployments SET status = status -- NOSONAR: intentional write lock
 WHERE id = ?1
   AND assigned_agent_id = ?2
 `
@@ -56,7 +56,7 @@ func (q *Queries) LockAssignedRemoteDeployment(ctx context.Context, arg LockAssi
 }
 
 const lockDeploymentApproval = `-- name: LockDeploymentApproval :execrows
-UPDATE deployments SET status = status
+UPDATE deployments SET status = status -- NOSONAR: intentional write lock
 WHERE id = ?1 AND status = 'pending_approval'
 `
 
@@ -69,7 +69,8 @@ func (q *Queries) LockDeploymentApproval(ctx context.Context, deploymentID int64
 }
 
 const lockDeploymentSnapshot = `-- name: LockDeploymentSnapshot :execrows
-UPDATE deployments SET status = status WHERE id = ?1 AND status IN ('pending', 'pending_approval')
+UPDATE deployments SET status = status -- NOSONAR: intentional write lock
+WHERE id = ?1 AND status IN ('pending', 'pending_approval')
 AND NOT EXISTS (SELECT 1 FROM deployment_step_sources WHERE deployment_id = ?1)
 AND NOT EXISTS (SELECT 1 FROM deployment_steps WHERE deployment_id = ?1)
 `

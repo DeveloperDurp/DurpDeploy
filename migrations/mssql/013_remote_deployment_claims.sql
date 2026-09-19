@@ -1,7 +1,7 @@
 -- +goose Up
 ALTER TABLE deployments ADD assigned_agent_id NVARCHAR(255) NULL;
 ALTER TABLE deployments ADD CONSTRAINT fk_deployments_assigned_agent
-    FOREIGN KEY (assigned_agent_id) REFERENCES agents(id) ON DELETE NO ACTION;
+    FOREIGN KEY (assigned_agent_id) REFERENCES agents(id) ON DELETE NO ACTION; -- NOSONAR: preserves deployment history
 ALTER TABLE agent_pairings ADD server_pull_endpoint NVARCHAR(MAX) NULL;
 
 CREATE TABLE remote_deployment_claims (

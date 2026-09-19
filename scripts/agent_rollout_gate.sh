@@ -3,6 +3,14 @@ set -euo pipefail
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 
+bash "$ROOT/scripts/check-agent-compose-contract.sh"
+bash "$ROOT/scripts/check-agent-helm-contract.sh"
+if grep -Fq 'remote_deployment_claims' "$ROOT/scripts/agent_lifecycle_faults.mjs"; then
+	printf '%s\n' 'agent rollout: lifecycle faults use retired deployment claims' >&2
+	exit 1
+fi
+grep -Fq 'FROM remote_step_runs' "$ROOT/scripts/agent_lifecycle_faults.mjs"
+
 tests=(
 	TestRemoteStepResultCompletesRun
 	TestRemoteLogsOrderBySequence
