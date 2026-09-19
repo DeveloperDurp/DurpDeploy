@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 workflow_dir=.github/workflows
 if [ "${1:-}" = "--workflow-dir" ]; then
 	workflow_dir=${2:?missing workflow directory}
@@ -32,4 +33,11 @@ PY
 	fi
 done
 [ "$failed" -eq 0 ] || exit 1
+
+grep -Fqx \
+	'sonar.test.inclusions=**/*_test.go,scripts/*.mjs,scripts/run_named_go_tests_verify.go' \
+	"$repo_root/sonar-project.properties" || {
+	echo 'sonar: script test harnesses must be classified as tests' >&2
+	exit 1
+}
 printf '%s\n' 'CI contract: PASS'
