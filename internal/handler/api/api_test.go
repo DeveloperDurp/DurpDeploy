@@ -524,8 +524,11 @@ func TestCancelDeployment_Success(t *testing.T) {
 	}
 	var resp map[string]string
 	mustDecode(t, rec.Body, &resp)
-	if resp["status"] != "cancelled" {
-		t.Fatalf("expected cancelled, got %v", resp["status"])
+	if resp["status"] != "running" {
+		t.Fatalf(
+			"expected running until the runner stops, got %v",
+			resp["status"],
+		)
 	}
 }
 

@@ -625,8 +625,11 @@ func (h *DeploymentHandler) CancelDeployment(
 		RespondError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-
-	RespondJSON(w, http.StatusOK, map[string]string{"status": "cancelled"})
+	RespondJSON(
+		w,
+		http.StatusOK,
+		map[string]string{"status": deployment.Status},
+	)
 }
 
 // swagger:route POST /deployments/{id}/retry deployments retryDeployment

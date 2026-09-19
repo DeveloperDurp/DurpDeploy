@@ -145,45 +145,6 @@ func (r *Repository) StartRemoteStep(
 	return handled, err
 }
 
-func (r *Repository) HeartbeatRemoteStep(
-	ctx context.Context,
-	identity RemoteLifecycleClaim,
-) (RemoteHeartbeatResult, bool, error) {
-	result := RemoteHeartbeatResult{}
-	handled := false
-	err := r.WithTx(ctx, func(q *db.Queries) error {
-		run, err := remoteStepRun(ctx, q, identity)
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		handled = true
-		if run.State != "started" && run.State != "cancel_requested" {
-			return ErrRemoteLifecycleConflict
-		}
-		now, err := q.CurrentUnixTime(ctx)
-		if err != nil {
-			return err
-		}
-		changed, err := q.HeartbeatRemoteStepRun(
-			ctx,
-			db.HeartbeatRemoteStepRunParams{
-				Now:          sql.NullInt64{Int64: now, Valid: true},
-				DeploymentID: run.DeploymentID, StepIndex: run.StepIndex,
-				AgentID: run.AgentID, ClaimTokenHash: identity.ClaimTokenHash,
-			},
-		)
-		if err != nil || changed != 1 {
-			return transitionError(err)
-		}
-		result.CancelRequested = run.State == "cancel_requested"
-		return nil
-	})
-	return result, handled, err
-}
-
 func (r *Repository) FinishRemoteStep(
 	ctx context.Context,
 	identity RemoteLifecycleClaim,

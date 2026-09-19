@@ -119,6 +119,15 @@ func heartbeatRemoteDeployment(
 	if err != nil || changed != 1 {
 		return RemoteHeartbeatResult{}, transitionError(err)
 	}
+	changed, err = q.TouchAgentHeartbeat(
+		ctx,
+		db.TouchAgentHeartbeatParams{
+			Now: sql.NullInt64{Int64: now, Valid: true}, ID: identity.AgentID,
+		},
+	)
+	if err != nil || changed != 1 {
+		return RemoteHeartbeatResult{}, transitionError(err)
+	}
 	return RemoteHeartbeatResult{
 		CancelRequested: claim.State == "cancel_requested",
 	}, nil

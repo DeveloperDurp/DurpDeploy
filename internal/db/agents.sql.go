@@ -535,6 +535,26 @@ func (q *Queries) TerminateRevokedRemoteDeployment(ctx context.Context, arg Term
 	return result.RowsAffected()
 }
 
+const touchAgentHeartbeat = `-- name: TouchAgentHeartbeat :execrows
+UPDATE agents SET last_heartbeat_at = ?1, updated_at = ?1
+WHERE id = ?2 AND status = 'active'
+  AND (last_heartbeat_at IS NULL OR last_heartbeat_at <= ?1)
+  AND EXISTS (SELECT 1 FROM agent_pairings WHERE agent_id = agents.id AND state = 'paired')
+`
+
+type TouchAgentHeartbeatParams struct {
+	Now sql.NullInt64 `json:"now"`
+	ID  string        `json:"id"`
+}
+
+func (q *Queries) TouchAgentHeartbeat(ctx context.Context, arg TouchAgentHeartbeatParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, touchAgentHeartbeat, arg.Now, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const updateAgent = `-- name: UpdateAgent :one
 UPDATE agents SET name = ?, endpoint = ?, updated_at = unixepoch()
 WHERE id = ? AND status IN ('pending', 'active', 'disabled') RETURNING id, name, endpoint, status, agent_version, certificate_pem, certificate_fingerprint, encrypted_identity, last_heartbeat_at, revoked_at, created_at, updated_at

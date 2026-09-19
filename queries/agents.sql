@@ -37,6 +37,12 @@ WHERE id = sqlc.arg(id) AND certificate_fingerprint = sqlc.arg(certificate_finge
   AND (last_heartbeat_at IS NULL OR last_heartbeat_at <= sqlc.arg(now))
   AND EXISTS (SELECT 1 FROM agent_pairings WHERE agent_id = agents.id AND state = 'paired');
 
+-- name: TouchAgentHeartbeat :execrows
+UPDATE agents SET last_heartbeat_at = sqlc.arg(now), updated_at = sqlc.arg(now)
+WHERE id = sqlc.arg(id) AND status = 'active'
+  AND (last_heartbeat_at IS NULL OR last_heartbeat_at <= sqlc.arg(now))
+  AND EXISTS (SELECT 1 FROM agent_pairings WHERE agent_id = agents.id AND state = 'paired');
+
 -- name: AddAgentLabel :execrows
 INSERT INTO agent_labels (agent_id, label)
 SELECT sqlc.arg(agent_id), sqlc.arg(label)

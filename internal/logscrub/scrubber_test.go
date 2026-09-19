@@ -25,3 +25,21 @@ func TestPendingBytesHoldsCaseInsensitiveAssignmentPrefix(t *testing.T) {
 		t.Fatalf("PendingBytes(prefix PASS)=%d want=4", got)
 	}
 }
+
+func TestMalformedPatternDoesNotDisableValidRedaction(t *testing.T) {
+	scrubber := NewWithPatterns(
+		[]string{"release-secret"},
+		[]string{`Bearer\s+[A-Za-z0-9]+`, `[`},
+	)
+	got := scrubber.Scrub("release-secret Bearer token")
+	if got != "[REDACTED] [REDACTED]" {
+		t.Fatalf("Scrub()=%q; malformed pattern disabled valid redaction", got)
+	}
+}
+
+func TestAllInvalidPatternsAreInert(t *testing.T) {
+	scrubber := NewWithPatterns(nil, []string{`[`, `(?P<`})
+	if got := scrubber.Scrub("plain text"); got != "plain text" {
+		t.Fatalf("Scrub()=%q want unchanged text", got)
+	}
+}

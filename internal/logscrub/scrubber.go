@@ -70,12 +70,17 @@ func newScrubber(
 }
 
 func compile(parts []string) *regexp.Regexp {
-	if len(parts) == 0 {
-		return nil
-	}
-	compiled, err := regexp.Compile("(?s)(" + strings.Join(parts, "|") + ")")
-	if err != nil {
-		return nil
+	valid := make([]string, 0, len(parts))
+	var compiled *regexp.Regexp
+	for _, part := range parts {
+		candidate := append(valid, part)
+		combined, err := regexp.Compile(
+			"(?s)(" + strings.Join(candidate, "|") + ")",
+		)
+		if err == nil {
+			valid = candidate
+			compiled = combined
+		}
 	}
 	return compiled
 }

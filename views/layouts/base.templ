@@ -183,8 +183,14 @@ templ Base(title string, currentPath string) {
 				x-show="visible"
 				x-transition.opacity.duration.300ms
 				class="toast toast-end toast-top z-[9999]"
+				role="status"
+				aria-live="polite"
+				aria-atomic="true"
 			>
-<div :class="fullAlertClass">
+				<div
+					class="max-w-[calc(100vw-2rem)] whitespace-normal break-words"
+					:class="fullAlertClass"
+				>
 				<span x-text="message"></span>
 			</div>
 			</div>
