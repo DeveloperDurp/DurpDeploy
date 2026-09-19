@@ -22,3 +22,8 @@ func CanWrite(ctx context.Context) bool {
 	u := auth.UserFromContext(ctx)
 	return u == nil || u.Role != "viewer"
 }
+
+func CanManageAgents(ctx context.Context) bool {
+	u := auth.UserFromContext(ctx)
+	return u != nil && u.Role == "admin"
+}

@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -367,7 +368,7 @@ func (h *DeploymentHandler) ScheduleDeployment(
 		forcedFlag = 1
 	}
 
-	deployment, err := h.repo.Queries.CreateDeployment(
+	result, err := h.repo.CreateDeployment(
 		r.Context(),
 		db.CreateDeploymentParams{
 			ReleaseID:     releaseID,
@@ -384,19 +385,12 @@ func (h *DeploymentHandler) ScheduleDeployment(
 		return
 	}
 
-	if initialStatus == "pending" {
-		go h.runner.Run(
-			context.Background(),
-			deployment.ID,
-			releaseID,
-			environmentID,
-		)
-	}
+	h.startLocalDeployment(result)
 
 	http.Redirect(
 		w,
 		r,
-		fmt.Sprintf("/deployments/%d", deployment.ID),
+		fmt.Sprintf("/deployments/%d", result.Deployment.ID),
 		http.StatusSeeOther,
 	)
 }
@@ -617,19 +611,40 @@ func (h *DeploymentHandler) CancelDeployment(
 		return
 	}
 
-	if deployment.Status != "running" &&
-		deployment.Status != "pending_approval" {
-		http.Error(
-			w,
-			"Deployment cannot be cancelled in its current state",
-			http.StatusBadRequest,
+	if deployment.AssignedAgentID.Valid {
+		err := h.repo.CancelAssignedRemoteDeployment(
+			r.Context(),
+			repository.RemoteAssignedDeployment{
+				DeploymentID: deployment.ID,
+				AgentID:      deployment.AssignedAgentID.String,
+			},
 		)
-		return
-	}
-
-	if err := h.runner.Cancel(id); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		if errors.Is(err, repository.ErrRemoteLifecycleConflict) {
+			http.Error(
+				w,
+				"Deployment cannot be cancelled in its current state",
+				http.StatusBadRequest,
+			)
+			return
+		}
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	} else {
+		if deployment.Status != "running" &&
+			deployment.Status != "pending_approval" {
+			http.Error(
+				w,
+				"Deployment cannot be cancelled in its current state",
+				http.StatusBadRequest,
+			)
+			return
+		}
+		if err := h.runner.Cancel(id); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 
 	deployment, err = h.repo.Queries.GetDeployment(r.Context(), id)
@@ -696,7 +711,7 @@ func (h *DeploymentHandler) ApproveDeployment(
 	approvedBy := u.Name
 	approverUserID := sql.NullInt64{Int64: u.ID, Valid: true}
 
-	if _, err := h.repo.Queries.CreateApproval(
+	result, err := h.repo.ApproveDeployment(
 		r.Context(),
 		db.CreateApprovalParams{
 			DeploymentID:         id,
@@ -704,29 +719,16 @@ func (h *DeploymentHandler) ApproveDeployment(
 			ApproverUserID:       approverUserID,
 			RequiredApproverRole: "admin",
 		},
-	); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	// Transition to "pending" so the runner picks it up via the normal path.
-	if err := h.repo.Queries.UpdateDeploymentStatus(
-		r.Context(),
-		db.UpdateDeploymentStatusParams{
-			ID:     id,
-			Status: "pending",
-		},
-	); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	go h.runner.Run(
-		context.Background(),
-		id,
-		deployment.ReleaseID,
-		deployment.EnvironmentID,
 	)
+	if err != nil {
+		if errors.Is(err, repository.ErrDeploymentApprovalConflict) {
+			http.Error(w, err.Error(), http.StatusConflict)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	h.startLocalDeployment(result)
 
 	if r.Header.Get("HX-Request") == "true" {
 		w.Header().Set(
@@ -811,7 +813,7 @@ func (h *DeploymentHandler) RedeployDeployment(
 	if requiresApproval {
 		initialStatus = "pending_approval"
 	}
-	deployment, err := h.repo.Queries.CreateDeployment(
+	result, err := h.repo.CreateDeployment(
 		r.Context(),
 		db.CreateDeploymentParams{
 			ReleaseID:     source.ReleaseID,
@@ -828,28 +830,37 @@ func (h *DeploymentHandler) RedeployDeployment(
 		return
 	}
 
-	if initialStatus == "pending" {
-		go h.runner.Run(
-			context.Background(),
-			deployment.ID,
-			source.ReleaseID,
-			source.EnvironmentID,
-		)
-	}
+	h.startLocalDeployment(result)
 
 	if r.Header.Get("HX-Request") == "true" {
 		// HX-Redirect (not 303) so the client does a full-page nav; a
 		// body swap would clobber the nav bar's Alpine.js state.
 		w.Header().
-			Set("HX-Redirect", fmt.Sprintf("/deployments/%d", deployment.ID))
+			Set("HX-Redirect", fmt.Sprintf("/deployments/%d", result.Deployment.ID))
 		w.WriteHeader(http.StatusOK)
 		return
 	}
 	http.Redirect(
 		w,
 		r,
-		fmt.Sprintf("/deployments/%d", deployment.ID),
+		fmt.Sprintf("/deployments/%d", result.Deployment.ID),
 		http.StatusSeeOther,
+	)
+}
+
+func (h *DeploymentHandler) startLocalDeployment(
+	result repository.DeploymentResult,
+) {
+	if result.Mode != repository.ExecutionLocal ||
+		result.Deployment.Status != "pending" {
+		return
+	}
+	deployment := result.Deployment
+	go h.runner.Run(
+		context.Background(),
+		deployment.ID,
+		deployment.ReleaseID,
+		deployment.EnvironmentID,
 	)
 }
 

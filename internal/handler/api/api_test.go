@@ -575,8 +575,8 @@ func TestApproveDeployment_AdminOnly(t *testing.T) {
 	}
 	var resp map[string]string
 	mustDecode(t, rec.Body, &resp)
-	if resp["status"] != "approved" {
-		t.Fatalf("expected approved, got %v", resp["status"])
+	if resp["status"] != "pending" {
+		t.Fatalf("expected pending, got %v", resp["status"])
 	}
 }
 

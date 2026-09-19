@@ -222,7 +222,7 @@ func TestMobile_RenderedHTML_preserves_disclosures_and_containment_when_authenti
 		contents []string
 	}{
 		{
-			name: "step script and editor",
+			name: "step script and lazy editor",
 			path: fmt.Sprintf("/projects/%d/steps-page", fixture.project.ID),
 			patterns: []string{
 				fmt.Sprintf(
@@ -230,15 +230,16 @@ func TestMobile_RenderedHTML_preserves_disclosures_and_containment_when_authenti
 					fixture.step.ID,
 				),
 				fmt.Sprintf(
-					`(?s)data-mobile-step-editor="%d"[^>]*x-show="editing"[^>]*>.*?<form[^>]*hx-put="/projects/%d/steps/%d"`,
-					fixture.step.ID,
+					`(?s)data-step-action="edit"[^>]*hx-get="/projects/%d/steps/%d/edit\?mobile=1"[^>]*hx-target="#mobile-step-edit-%d"`,
 					fixture.project.ID,
+					fixture.step.ID,
 					fixture.step.ID,
 				),
 				fmt.Sprintf(
-					`(?s)<div[^>]*%s`,
-					breakpointClassPattern("font-mono", "overflow-hidden"),
+					`data-mobile-step-editor="%d"[^>]*x-show="editing"`,
+					fixture.step.ID,
 				),
+				`(?s)<details[^>]*>.*?<pre[^>]*class="[^"]*whitespace-pre-wrap[^"]*"`,
 			},
 			contents: []string{fixture.step.ScriptBody},
 		},

@@ -49,6 +49,10 @@ func newStepTemplateHarness(t *testing.T) *stepTemplateHarness {
 		"/projects/{id}/steps/{stepId}/save-as-template",
 		sth.SaveStepAsTemplate,
 	)
+	r.Post(
+		"/projects/{id}/steps/from-template/{templateId}",
+		sth.InsertTemplate,
+	)
 
 	srv := httptest.NewServer(r)
 	t.Cleanup(srv.Close)
@@ -117,6 +121,111 @@ func TestStepTemplate_SaveRejectsStepFromAnotherProject(t *testing.T) {
 	}
 	if len(templates) != 0 {
 		t.Fatalf("expected no copied templates, got %d", len(templates))
+	}
+}
+
+func TestStepTemplate_SaveAndApplyPreservesAgentPlacement(t *testing.T) {
+	h := newStepTemplateHarness(t)
+	ctx := context.Background()
+	project, err := h.repo.Queries.CreateProject(
+		ctx,
+		db.CreateProjectParams{Name: "placement-project"},
+	)
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	step, err := h.repo.CreateStepWithPlacement(
+		ctx,
+		db.CreateStepParams{
+			ProjectID:  project.ID,
+			Name:       "agent-step",
+			ScriptBody: "uname -a",
+		},
+		"agent",
+		[]string{"linux"},
+	)
+	if err != nil {
+		t.Fatalf("create agent step: %v", err)
+	}
+
+	resp, err := h.client.Post(
+		fmt.Sprintf(
+			"%s/projects/%d/steps/%d/save-as-template",
+			h.server.URL,
+			project.ID,
+			step.ID,
+		),
+		"application/x-www-form-urlencoded",
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("save step as template: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("save template status = %d, want 303", resp.StatusCode)
+	}
+
+	templateID := h.templateID("agent-step")
+	tpl, err := h.repo.Queries.GetStepTemplate(ctx, templateID)
+	if err != nil {
+		t.Fatalf("get template: %v", err)
+	}
+	selectors, err := h.repo.Queries.ListTemplateAgentSelectors(ctx, templateID)
+	if err != nil {
+		t.Fatalf("list template selectors: %v", err)
+	}
+	if tpl.ExecutionTarget != "agent" || len(selectors) != 1 || selectors[0] != "linux" {
+		t.Fatalf("template placement = %q %v", tpl.ExecutionTarget, selectors)
+	}
+	versions, err := h.repo.Queries.ListStepTemplateVersions(ctx, templateID)
+	if err != nil {
+		t.Fatalf("list template versions: %v", err)
+	}
+	if len(versions) != 1 || versions[0].ExecutionTarget != "agent" {
+		t.Fatalf("version placement = %v", versions)
+	}
+	versionSelectors, err := h.repo.Queries.ListTemplateVersionAgentSelectors(
+		ctx,
+		versions[0].ID,
+	)
+	if err != nil {
+		t.Fatalf("list version selectors: %v", err)
+	}
+	if len(versionSelectors) != 1 || versionSelectors[0] != "linux" {
+		t.Fatalf("version selectors = %v", versionSelectors)
+	}
+
+	resp, err = h.client.Post(
+		fmt.Sprintf(
+			"%s/projects/%d/steps/from-template/%d",
+			h.server.URL,
+			project.ID,
+			templateID,
+		),
+		"application/x-www-form-urlencoded",
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("apply template: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("apply template status = %d, want 200", resp.StatusCode)
+	}
+	steps, err := h.repo.Queries.ListStepsByProject(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("list project steps: %v", err)
+	}
+	if len(steps) != 2 || steps[1].ExecutionTarget != "agent" {
+		t.Fatalf("applied steps = %v", steps)
+	}
+	appliedSelectors, err := h.repo.Queries.ListStepAgentSelectors(ctx, steps[1].ID)
+	if err != nil {
+		t.Fatalf("list applied selectors: %v", err)
+	}
+	if len(appliedSelectors) != 1 || appliedSelectors[0] != "linux" {
+		t.Fatalf("applied selectors = %v", appliedSelectors)
 	}
 }
 

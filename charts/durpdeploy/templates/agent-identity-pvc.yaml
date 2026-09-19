@@ -1,0 +1,17 @@
+{{- if not .Values.agent.persistence.existingClaim }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "durpdeploy.agentIdentityClaimName" . }}
+  labels:
+    {{- include "durpdeploy.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    {{- toYaml .Values.agent.persistence.accessModes | nindent 4 }}
+  {{- with .Values.agent.persistence.storageClass }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.agent.persistence.size }}
+{{- end }}

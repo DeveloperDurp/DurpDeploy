@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -31,6 +30,12 @@ type testFixture struct {
 	sched  *scheduler.Scheduler
 	now    time.Time
 	logBuf *bytes.Buffer
+}
+
+type runCall struct {
+	DeploymentID  int64
+	ReleaseID     int64
+	EnvironmentID int64
 }
 
 func newFixture(t *testing.T) *testFixture {
@@ -245,25 +250,18 @@ func (f *testFixture) advanceNow(d time.Duration) {
 	f.now = f.now.Add(d)
 }
 
-func (f *testFixture) captureRunCalls() *[]struct{ DeploymentID, ReleaseID, EnvironmentID int64 } {
+func (f *testFixture) captureRunCalls() chan runCall {
 	f.t.Helper()
-	var mu sync.Mutex
-	calls := []struct{ DeploymentID, ReleaseID, EnvironmentID int64 }{}
+	calls := make(chan runCall, 1)
 	f.sched.SetRunFunc(
 		func(ctx context.Context, deploymentID, releaseID, environmentID int64) {
-			mu.Lock()
-			defer mu.Unlock()
-			calls = append(
-				calls,
-				struct{ DeploymentID, ReleaseID, EnvironmentID int64 }{
-					deploymentID,
-					releaseID,
-					environmentID,
-				},
-			)
+			calls <- runCall{
+				DeploymentID: deploymentID, ReleaseID: releaseID,
+				EnvironmentID: environmentID,
+			}
 		},
 	)
-	return &calls
+	return calls
 }
 
 // --- tests ---
@@ -288,12 +286,14 @@ func TestTick_DueRow_FiresAndAdvances(t *testing.T) {
 	f.sched.Tick(f.ctx())
 
 	// assert runner was called
-	if len(*calls) != 1 {
-		t.Fatalf("expected 1 run call, got %d", len(*calls))
+	var call runCall
+	select {
+	case call = <-calls:
+	case <-time.After(time.Second):
+		t.Fatal("runner was not called")
 	}
-	c := (*calls)[0]
-	if c.ReleaseID != rel.ID || c.EnvironmentID != env.ID {
-		t.Fatalf("runner called with wrong args: %+v", c)
+	if call.ReleaseID != rel.ID || call.EnvironmentID != env.ID {
+		t.Fatalf("runner called with wrong args: %+v", call)
 	}
 
 	// assert deployment created with scheduled note
@@ -440,8 +440,8 @@ func TestTick_Overlap_SkipsAndAdvances(t *testing.T) {
 	calls := f.captureRunCalls()
 	f.sched.Tick(f.ctx())
 
-	if len(*calls) != 0 {
-		t.Fatalf("expected 0 run calls, got %d", len(*calls))
+	if len(calls) != 0 {
+		t.Fatalf("expected 0 run calls, got %d", len(calls))
 	}
 
 	// assert no new deployment
@@ -492,8 +492,8 @@ func TestTick_GateBlock_SkipsAndAdvances(t *testing.T) {
 	calls := f.captureRunCalls()
 	f.sched.Tick(f.ctx())
 
-	if len(*calls) != 0 {
-		t.Fatalf("expected 0 run calls, got %d", len(*calls))
+	if len(calls) != 0 {
+		t.Fatalf("expected 0 run calls, got %d", len(calls))
 	}
 
 	deps, _ := f.repo.Queries.ListDeploymentsByRelease(f.ctx(), rel.ID)
@@ -534,8 +534,8 @@ func TestTick_Disabled_NotInDueList(t *testing.T) {
 	calls := f.captureRunCalls()
 	f.sched.Tick(f.ctx())
 
-	if len(*calls) != 0 {
-		t.Fatalf("expected 0 run calls, got %d", len(*calls))
+	if len(calls) != 0 {
+		t.Fatalf("expected 0 run calls, got %d", len(calls))
 	}
 
 	updated, _ := f.repo.Queries.GetScheduledDeployment(f.ctx(), sched.ID)
@@ -567,8 +567,8 @@ func TestTick_NoDueRows_Noop(t *testing.T) {
 	calls := f.captureRunCalls()
 	f.sched.Tick(f.ctx())
 
-	if len(*calls) != 0 {
-		t.Fatalf("expected 0 run calls, got %d", len(*calls))
+	if len(calls) != 0 {
+		t.Fatalf("expected 0 run calls, got %d", len(calls))
 	}
 }
 
@@ -622,8 +622,10 @@ func TestTick_GatePass_Fires(t *testing.T) {
 	calls := f.captureRunCalls()
 	f.sched.Tick(f.ctx())
 
-	if len(*calls) != 1 {
-		t.Fatalf("expected 1 run call, got %d", len(*calls))
+	select {
+	case <-calls:
+	case <-time.After(time.Second):
+		t.Fatal("runner was not called")
 	}
 
 	deps, _ := f.repo.Queries.ListDeploymentsByRelease(f.ctx(), rel.ID)
@@ -661,8 +663,8 @@ func TestTick_RequiresApproval_CreatesPendingApprovalWithoutFiring(
 	calls := f.captureRunCalls()
 	f.sched.Tick(f.ctx())
 
-	if len(*calls) != 0 {
-		t.Fatalf("expected 0 run calls, got %d", len(*calls))
+	if len(calls) != 0 {
+		t.Fatalf("expected 0 run calls, got %d", len(calls))
 	}
 
 	deps, _ := f.repo.Queries.ListDeploymentsByRelease(f.ctx(), rel.ID)

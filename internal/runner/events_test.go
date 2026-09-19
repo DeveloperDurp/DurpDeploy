@@ -29,6 +29,7 @@ func setupRunnerHarness(
 	t *testing.T,
 ) (*repository.Repository, *runner.DeploymentRunner, *recordingNotifier) {
 	t.Helper()
+	t.Setenv("DURPDEPLOY_EXECUTION_BOUNDARY", "development")
 	dbConn, err := migrate.Run(":memory:?_pragma=foreign_keys(1)")
 	if err != nil {
 		t.Fatalf("migrate: %v", err)
@@ -74,7 +75,7 @@ func TestRunner_PublishesStartedAndSucceededEvents(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create release: %v", err)
 	}
-	dep, err := repo.Queries.CreateDeployment(ctx, db.CreateDeploymentParams{
+	created, err := repo.CreateDeployment(ctx, db.CreateDeploymentParams{
 		ReleaseID:     release.ID,
 		EnvironmentID: env.ID,
 		Status:        "pending",
@@ -82,6 +83,7 @@ func TestRunner_PublishesStartedAndSucceededEvents(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create deployment: %v", err)
 	}
+	dep := created.Deployment
 
 	rnr.Run(ctx, dep.ID, release.ID, env.ID)
 
@@ -156,7 +158,7 @@ func TestRunner_PublishesFailedEvent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create release: %v", err)
 	}
-	dep, err := repo.Queries.CreateDeployment(ctx, db.CreateDeploymentParams{
+	created, err := repo.CreateDeployment(ctx, db.CreateDeploymentParams{
 		ReleaseID:     release.ID,
 		EnvironmentID: env.ID,
 		Status:        "pending",
@@ -164,6 +166,7 @@ func TestRunner_PublishesFailedEvent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create deployment: %v", err)
 	}
+	dep := created.Deployment
 
 	rnr.Run(ctx, dep.ID, release.ID, env.ID)
 

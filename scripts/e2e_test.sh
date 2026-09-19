@@ -60,7 +60,11 @@ else
     # Start the server. The migrations it would normally run are a no-op
     # because the admin CLI just created the schema.
     DURPDEPLOY_ADDR="127.0.0.1:$PORT" \
+        DURPDEPLOY_AGENT_LISTEN_ADDR="127.0.0.1:0" \
+        DURPDEPLOY_AGENT_PUBLIC_URL="https://localhost" \
+        DURPDEPLOY_AGENT_IDENTITY_DIR="$TMP/agent-identity" \
         DURPDEPLOY_DB="$DB_DSN" \
+        DURPDEPLOY_EXECUTION_BOUNDARY=development \
         DURPDEPLOY_URL="$BASE" \
         "$TMP/durpdeploy" >"$TMP/server.log" 2>&1 &
     SERVER_PID=$!

@@ -69,6 +69,22 @@ service:
   port: 80
   targetPort: 8080
 
+agent:
+  port: 10943
+  listenAddress: 0.0.0.0:10943
+  # -- Public mTLS endpoint advertised during pairing. The in-cluster Service
+  # DNS name is used when this is empty; override it for agents outside Kubernetes.
+  publicURL: ""
+  identityDir: /var/lib/durpdeploy/agent-identity
+  persistence:
+    # -- Existing PVC for the agent server identity. A dedicated PVC is created
+    # when empty so the identity survives pod replacement.
+    existingClaim: ""
+    storageClass: ""
+    accessModes:
+      - ReadWriteOnce
+    size: 1Gi
+
 # -- Resource requests/limits for the durpdeploy container.
 resources:
   requests:

@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"strings"
 	"sync"
 	"time"
@@ -18,7 +17,10 @@ import (
 	"durpdeploy/internal/repository"
 )
 
-const defaultStepTimeout = 5 * time.Minute
+const (
+	defaultStepTimeout = 5 * time.Minute
+	serviceUsername    = "durpdeploy"
+)
 
 // baseStepEnv returns the minimal environment passed to every step (P1-4)
 // instead of inheriting the server's os.Environ(), which would otherwise
@@ -28,8 +30,8 @@ func baseStepEnv() []string {
 	env := []string{
 		"PATH=/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin",
 		"HOME=/nonexistent",
-		"USER=" + runnerUsername,
-		"LOGNAME=" + runnerUsername,
+		"USER=" + serviceUsername,
+		"LOGNAME=" + serviceUsername,
 		"TERM=xterm",
 	}
 	if lang := os.Getenv("LANG"); lang != "" {
@@ -48,11 +50,8 @@ type DeploymentRunner struct {
 	// the step exits. Used by KillAll to reap orphans on server shutdown.
 	// ponytail: one entry per deployment (steps run sequentially, no
 	// parallel step execution), so a plain map is enough.
-	pgids map[int64]int
-	// sandbox drops each step's process to the low-privileged
-	// durpdeploy-runner user (P1-4). Resolved once at startup; a no-op if
-	// that account/platform isn't available (see sandbox_linux.go).
-	sandbox *Sandbox
+	pgids      map[int64]int
+	sandboxErr error
 	// bus publishes deployment_started/succeeded/failed events for the
 	// Slack/email notifiers (Stage 3). Nil until SetEventBus is called —
 	// existing callers (tests, recovery path) that never call it simply
@@ -60,13 +59,24 @@ type DeploymentRunner struct {
 	bus *events.Bus
 }
 
+type deploymentStep struct {
+	Name            string   `json:"name"`
+	ScriptBody      string   `json:"script_body"`
+	SortOrder       int64    `json:"sort_order"`
+	TimeoutSeconds  int64    `json:"timeout_seconds"`
+	MaxRetries      int64    `json:"max_retries"`
+	ExecutionTarget string   `json:"execution_target"`
+	AgentSelectors  []string `json:"agent_selectors"`
+}
+
 func New(repo *repository.Repository, broker *LogBroker) *DeploymentRunner {
+	sandboxErr := validateExecutionBoundary()
 	return &DeploymentRunner{
-		repo:    repo,
-		broker:  broker,
-		cancels: make(map[int64]context.CancelFunc),
-		pgids:   make(map[int64]int),
-		sandbox: newSandbox(),
+		repo:       repo,
+		broker:     broker,
+		cancels:    make(map[int64]context.CancelFunc),
+		pgids:      make(map[int64]int),
+		sandboxErr: sandboxErr,
 	}
 }
 
@@ -151,18 +161,15 @@ func (r *DeploymentRunner) runStepAttempt(
 	ctx context.Context,
 	runCtx context.Context,
 	deploymentID int64,
-	step struct {
-		Name           string `json:"name"`
-		ScriptBody     string `json:"script_body"`
-		SortOrder      int64  `json:"sort_order"`
-		TimeoutSeconds int64  `json:"timeout_seconds"`
-		MaxRetries     int64  `json:"max_retries"`
-	},
+	step deploymentStep,
 	logWriter *broadcastWriter,
 	envMap map[string]string,
 	secretValues []string,
 	attempt int,
 ) error {
+	if r.sandboxErr != nil {
+		return fmt.Errorf("initialize runner sandbox: %w", r.sandboxErr)
+	}
 	d := defaultStepTimeout
 	if step.TimeoutSeconds > 0 {
 		d = time.Duration(step.TimeoutSeconds) * time.Second
@@ -188,24 +195,9 @@ func (r *DeploymentRunner) runStepAttempt(
 		return err
 	}
 
-	// Bind-mount /bin, /usr, /lib, /lib64 (read-only) into tmpDir and chroot
-	// the step into it (P1-4), so a step cannot see the rest of the host
-	// filesystem (the DB, secret key, other projects' scratch dirs, ...).
-	// Falls back to running un-chrooted (same as before P1-4) if bind
-	// mounts aren't permitted, e.g. local dev without CAP_SYS_ADMIN.
-	chrooted := r.sandbox.setupChroot(tmpDir)
-	defer r.sandbox.teardownChroot(tmpDir)
-
-	var cmd *exec.Cmd
-	if chrooted {
-		// Paths are relative to the chroot: the script lands at /script.sh,
-		// bash at /bin/bash (bind-mounted above).
-		cmd = exec.CommandContext(stepCtx, "/bin/bash", "/script.sh")
-		cmd.Dir = "/"
-		r.sandbox.applyChroot(cmd, tmpDir)
-	} else {
-		cmd = exec.CommandContext(stepCtx, "bash", scriptPath)
-		cmd.Dir = tmpDir
+	cmd, err := r.command(stepCtx, tmpDir, scriptPath)
+	if err != nil {
+		return err
 	}
 	// Minimal, whitelisted environment (P1-4) instead of inheriting the
 	// server's own os.Environ() — a step must not see DURPDEPLOY_DB,
@@ -215,28 +207,6 @@ func (r *DeploymentRunner) runStepAttempt(
 		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
 	}
 	cmd.WaitDelay = 15 * time.Second
-	// Run the step in its own process group so a timeout/cancel/shutdown
-	// can kill the whole tree (bash + anything it spawned) instead of just
-	// the bash PID, which otherwise leaves grandchildren orphaned (P1-3).
-	// setPgid/killProcessGroup are platform-specific (see procgroup_unix.go
-	// / procgroup_other.go) so this package builds on non-Unix targets too.
-	setPgid(cmd)
-	// Drop to the durpdeploy-runner UID/GID (P1-4); no-op if that account
-	// isn't provisioned or the platform doesn't support it.
-	r.sandbox.applyCredential(cmd)
-	if err := r.sandbox.clearCapabilities(cmd, chrooted); err != nil {
-		return err
-	}
-
-	// Allow the durpdeploy-runner user to enter the scratch directory (P1-4).
-	// MkdirTemp creates it as 0700; we need 0711 (+x) at minimum.
-	if err := os.Chmod(tmpDir, 0711); err != nil {
-		return err
-	}
-
-	// Create the deployment's cgroup up front so the process can be moved
-	// into it right after Start(); "" if cgroups aren't set up (P1-4).
-	cgroup := r.sandbox.createCgroup(deploymentID)
 
 	var buf bytes.Buffer
 	cmd.Stdout = io.MultiWriter(&buf, logWriter)
@@ -244,18 +214,11 @@ func (r *DeploymentRunner) runStepAttempt(
 
 	if err := cmd.Start(); err != nil {
 		logWriter.Flush()
-		r.sandbox.removeCgroup(cgroup)
 		return err
 	}
 
 	r.trackProcessGroup(deploymentID, cmd.Process.Pid)
 	defer r.untrackProcessGroup(deploymentID)
-
-	// Move the process into its cgroup right after Start() (the PID must
-	// exist first), and drop the cgroup once the step exits so cgroups
-	// don't accumulate across deployments (P1-4).
-	r.sandbox.addProcess(cgroup, cmd.Process.Pid)
-	defer r.sandbox.removeCgroup(cgroup)
 
 	go func() {
 		<-stepCtx.Done()
@@ -340,14 +303,13 @@ func (r *DeploymentRunner) Run(
 		fmt.Sprintf("Deployment #%d started on %s", deploymentID, envName),
 	)
 
-	var steps []struct {
-		Name           string `json:"name"`
-		ScriptBody     string `json:"script_body"`
-		SortOrder      int64  `json:"sort_order"`
-		TimeoutSeconds int64  `json:"timeout_seconds"`
-		MaxRetries     int64  `json:"max_retries"`
+	var steps []deploymentStep
+	stepSource, err := r.repo.Queries.GetDeploymentStepSource(ctx, deploymentID)
+	if err != nil {
+		_ = r.failUnlessCancelled(ctx, deploymentID)
+		return
 	}
-	if err := json.Unmarshal([]byte(release.StepsJson), &steps); err != nil {
+	if err := json.Unmarshal([]byte(stepSource.StepsJson), &steps); err != nil {
 		_ = r.failUnlessCancelled(ctx, deploymentID)
 		return
 	}
@@ -358,25 +320,23 @@ func (r *DeploymentRunner) Run(
 		return
 	}
 
-	envMap := make(map[string]string)
+	resolved, err := ResolveReleaseVariables(vars, environmentID)
+	if err != nil {
+		_ = r.failUnlessCancelled(ctx, deploymentID)
+		return
+	}
+	envMap := make(map[string]string, len(resolved))
 	var secretValues []string
-	for _, v := range vars {
-		if v.EnvironmentID.Valid && v.EnvironmentID.Int64 == environmentID {
-			envMap[v.Name] = v.Value.String
-			if v.Secret != 0 && v.Value.String != "" {
-				secretValues = append(secretValues, v.Value.String)
-			}
-		} else if !v.EnvironmentID.Valid {
-			envMap[v.Name] = v.Value.String
-			if v.Secret != 0 && v.Value.String != "" {
-				secretValues = append(secretValues, v.Value.String)
-			}
+	for _, variable := range resolved {
+		envMap[variable.Name] = variable.Value
+		if variable.Secret && variable.Value != "" {
+			secretValues = append(secretValues, variable.Value)
 		}
 	}
 
 	scrubber := NewScrubber(secretValues)
 
-	for _, step := range steps {
+	for stepIndex, step := range steps {
 		logWriter := &broadcastWriter{
 			broker:       r.broker,
 			repo:         r.repo,
@@ -384,6 +344,23 @@ func (r *DeploymentRunner) Run(
 			stepName:     step.Name,
 			ctx:          ctx,
 			scrubber:     scrubber,
+		}
+		if step.ExecutionTarget == "agent" {
+			err := r.runRemoteStep(
+				runCtx,
+				deploymentID,
+				int64(stepIndex),
+				step,
+				logWriter,
+			)
+			if err != nil {
+				if runCtx.Err() != nil {
+					return
+				}
+				r.failStep(ctx, deploymentID, release.ProjectID, environmentID, envName, err)
+				return
+			}
+			continue
 		}
 
 		var lastErr error
@@ -418,30 +395,7 @@ func (r *DeploymentRunner) Run(
 		}
 
 		if lastErr != nil {
-			_ = r.repo.Queries.UpdateDeploymentStatus(
-				ctx,
-				db.UpdateDeploymentStatusParams{
-					ID:     deploymentID,
-					Status: "failed",
-					FinishedAt: sql.NullInt64{
-						Int64: time.Now().Unix(),
-						Valid: true,
-					},
-				},
-			)
-			r.publish(
-				ctx,
-				events.DeploymentFailed,
-				deploymentID,
-				release.ProjectID,
-				environmentID,
-				fmt.Sprintf(
-					"Deployment #%d failed on %s: %v",
-					deploymentID,
-					envName,
-					lastErr,
-				),
-			)
+			r.failStep(ctx, deploymentID, release.ProjectID, environmentID, envName, lastErr)
 			return
 		}
 	}
@@ -465,6 +419,160 @@ func (r *DeploymentRunner) Run(
 		release.ProjectID,
 		environmentID,
 		fmt.Sprintf("Deployment #%d succeeded on %s", deploymentID, envName),
+	)
+}
+
+func (r *DeploymentRunner) runRemoteStep(
+	ctx context.Context,
+	deploymentID int64,
+	stepIndex int64,
+	step deploymentStep,
+	logWriter *broadcastWriter,
+) error {
+	created, err := r.repo.QueueRemoteStepRuns(ctx, deploymentID, stepIndex)
+	if err != nil {
+		return err
+	}
+	if created == 0 {
+		return fmt.Errorf(
+			"step %q: no active paired agents match the environment and label",
+			step.Name,
+		)
+	}
+	_, _ = logWriter.Write([]byte(fmt.Sprintf(
+		"step %q: queued for %d matching agent(s)\n",
+		step.Name,
+		created,
+	)))
+	logWriter.Flush()
+
+	timeout := defaultStepTimeout
+	if step.TimeoutSeconds > 0 {
+		timeout = time.Duration(step.TimeoutSeconds) * time.Second
+	}
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	ticker := time.NewTicker(250 * time.Millisecond)
+	defer ticker.Stop()
+	timedOut := false
+	cancellationNeeded := false
+	cancellationRequested := false
+	failureAgent := ""
+	for {
+		if cancellationNeeded && !cancellationRequested {
+			_, err := r.repo.Queries.RequestRemoteStepCancellation(
+				context.Background(),
+				db.RequestRemoteStepCancellationParams{
+					Now: sql.NullInt64{
+						Int64: time.Now().Unix(),
+						Valid: true,
+					},
+					DeploymentID: deploymentID,
+				},
+			)
+			if err != nil {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-ticker.C:
+				}
+				continue
+			}
+			cancellationRequested = true
+		}
+		runs, err := r.repo.Queries.ListRemoteStepRuns(
+			ctx,
+			db.ListRemoteStepRunsParams{
+				DeploymentID: deploymentID,
+				StepIndex:    stepIndex,
+			},
+		)
+		if err != nil {
+			return err
+		}
+		allSucceeded := len(runs) > 0
+		hasActive := false
+		hasFailure := false
+		for _, run := range runs {
+			switch run.State {
+			case "succeeded":
+			case "failed", "cancelled", "lost", "cancel_unconfirmed":
+				allSucceeded = false
+				hasFailure = true
+				if failureAgent == "" {
+					failureAgent = run.AgentID
+				}
+			default:
+				allSucceeded = false
+				hasActive = true
+			}
+		}
+		if hasFailure && hasActive {
+			cancellationNeeded = true
+		} else if hasFailure {
+			if timedOut {
+				return fmt.Errorf(
+					"step %q timed out after %s",
+					step.Name,
+					timeout,
+				)
+			}
+			return fmt.Errorf(
+				"step %q failed on agent %s",
+				step.Name,
+				failureAgent,
+			)
+		}
+		if allSucceeded {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			_, _ = r.repo.Queries.RequestRemoteStepCancellation(
+				context.Background(),
+				db.RequestRemoteStepCancellationParams{
+					Now:          sql.NullInt64{Int64: time.Now().Unix(), Valid: true},
+					DeploymentID: deploymentID,
+				},
+			)
+			return ctx.Err()
+		case <-timer.C:
+			if failureAgent == "" {
+				timedOut = true
+			}
+			cancellationNeeded = true
+		case <-ticker.C:
+		}
+	}
+}
+
+func (r *DeploymentRunner) failStep(
+	ctx context.Context,
+	deploymentID int64,
+	projectID int64,
+	environmentID int64,
+	environmentName string,
+	err error,
+) {
+	_ = r.repo.Queries.UpdateDeploymentStatus(
+		ctx,
+		db.UpdateDeploymentStatusParams{
+			ID: deploymentID, Status: "failed",
+			FinishedAt: sql.NullInt64{Int64: time.Now().Unix(), Valid: true},
+		},
+	)
+	r.publish(
+		ctx,
+		events.DeploymentFailed,
+		deploymentID,
+		projectID,
+		environmentID,
+		fmt.Sprintf(
+			"Deployment #%d failed on %s: %v",
+			deploymentID,
+			environmentName,
+			err,
+		),
 	)
 }
 
