@@ -92,3 +92,26 @@ func TestRemoteStepFanoutRequiresEnvironmentAndCapabilityLabels(t *testing.T) {
 		t.Fatalf("runs = %+v, want only agent a", runs)
 	}
 }
+
+func TestRemoteStepFanoutReturnsNoWorkWithoutMatchingAgent(t *testing.T) {
+	r := remoteFixture(t)
+	ctx := context.Background()
+	if err := r.Queries.UpdateDeploymentStatus(
+		ctx,
+		db.UpdateDeploymentStatusParams{ID: 3, Status: "running"},
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	created, err := r.QueueRemoteStepRuns(ctx, 3, 0)
+	if err != nil || created != 0 {
+		t.Fatalf("created runs = %d, want 0; error = %v", created, err)
+	}
+	runs, err := r.Queries.ListRemoteStepRuns(
+		ctx,
+		db.ListRemoteStepRunsParams{DeploymentID: 3, StepIndex: 0},
+	)
+	if err != nil || len(runs) != 0 {
+		t.Fatalf("runs = %+v, want none; error = %v", runs, err)
+	}
+}

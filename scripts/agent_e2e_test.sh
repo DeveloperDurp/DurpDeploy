@@ -6,6 +6,7 @@ umask 077
 ROOT=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 RUN_DIR=$(mktemp -d "${TMPDIR:-/tmp}/durpdeploy-agent-e2e.XXXXXX")
 EVIDENCE_DIR=${AGENT_E2E_EVIDENCE_DIR:-"$ROOT/.omo/evidence/continue-remote-agent-rollout"}
+AGENT_SOURCE_REV=ad28fd52cb63087eb6525dd8743436803000ede4
 EVENTS="$RUN_DIR/events.txt"
 : >"$EVENTS"
 MODE=happy
@@ -120,9 +121,17 @@ JS
 }
 
 run_happy() {
-	local agent_root=${DURPDEPLOY_AGENT_WORKTREE:-"$(dirname "$ROOT")/durpdeploy-agent-continue-remote-agent-rollout"}
+	local agent_root=${DURPDEPLOY_AGENT_WORKTREE:-}
+	if [[ -z $agent_root ]]; then
+		agent_root="$RUN_DIR/agent-source"
+		git init -q "$agent_root"
+		git -C "$agent_root" remote add origin \
+			https://github.com/DeveloperDurp/durpdeploy-agent.git
+		git -C "$agent_root" fetch -q --depth=1 origin "$AGENT_SOURCE_REV"
+		git -C "$agent_root" checkout -q --detach FETCH_HEAD
+	fi
 	[[ -f "$agent_root/go.mod" ]] || {
-		printf 'ERROR: standalone agent worktree not found: %s\n' "$agent_root" >&2
+		printf 'ERROR: standalone agent source not found: %s\n' "$agent_root" >&2
 		return 1
 	}
 	mkdir -p "$EVIDENCE_DIR/browser"

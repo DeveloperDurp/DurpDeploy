@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { spawn } from "node:child_process";
-import { chmod, mkdir, mkdtemp, readlink, rm, writeFile } from "node:fs/promises";
+import { chmod, copyFile, mkdir, mkdtemp, readlink, rm, writeFile } from "node:fs/promises";
 import net from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -24,8 +24,10 @@ const agentRoot = resolve(process.env.DURPDEPLOY_AGENT_WORKTREE || defaultAgentR
 const runDir = await mkdtemp(join(tmpdir(), "durpdeploy-agent-browser-"));
 const agentContainer = `durpdeploy-agent-e2e-${process.pid}`;
 const agentStateVolume = `${agentContainer}-state`;
+const hostAgent = process.env.DURPDEPLOY_AGENT_E2E_HOST_PROCESS === "1";
 const serverBinary = join(runDir, "durpdeploy");
 const agentBinary = join(runDir, "durpdeploy-agent");
+const agentStateDir = join(runDir, "agent-state");
 const database = join(runDir, "durpdeploy.db");
 const admin = { email: "admin@agent-proof.test", password: randomBytes(24).toString("hex") };
 const viewer = { email: "viewer@agent-proof.test", password: randomBytes(24).toString("hex") };
@@ -207,7 +209,8 @@ async function main() {
 	const baseURL = `http://${browserReservation.address}`;
 	const listenerPort = lifecycleProxy.address.slice(lifecycleProxy.address.lastIndexOf(":") + 1);
 	const lifecycleAddress = `127.0.0.1:${listenerPort}`;
-	const listenerURL = `https://host.containers.internal:${listenerPort}`;
+	const listenerURL = hostAgent ? `https://127.0.0.1:${listenerPort}` :
+		`https://host.containers.internal:${listenerPort}`;
 	const bootstrapURL = `https://${pairingProxy.address}`;
 	const nonce = randomBytes(12).toString("hex");
 	const sentinelDir = join(runDir, "server-path");
@@ -245,17 +248,21 @@ async function main() {
 	const readOnly = (query) => command("sqlite3", ["-readonly", database, query]);
 	const agentEnvironment = {
 		...process.env,
+		DURPDEPLOY_AGENT_EXECUTION_BOUNDARY: "service",
 		DURPDEPLOY_AGENT_E2E_BINARY: agentBinary,
 		DURPDEPLOY_EXTRA_SCRUB_PATTERNS: "todo12-secret",
 		DURPDEPLOY_AGENT_LISTEN_ADDR: `0.0.0.0:${bootstrapReservation.address.slice(bootstrapReservation.address.lastIndexOf(":") + 1)}`,
-		DURPDEPLOY_AGENT_STATE_DIR: "/var/lib/durpdeploy-agent",
+		DURPDEPLOY_AGENT_STATE_DIR: hostAgent ? agentStateDir :
+			"/var/lib/durpdeploy-agent",
 		DURPDEPLOY_AGENT_VERSION: "todo12-browser-proof",
 		LANG: `ddp-agent-${nonce}`,
 	};
 	const startAgent = () => {
 		agentRun += 1;
 		currentAgentContainer = `${agentContainer}-${agentRun}`;
-		agent = spawn("/bin/bash", [join(root, "scripts/run_agent_e2e_container.sh")], {
+		const executable = hostAgent ? agentBinary : "/bin/bash";
+		const args = hostAgent ? [] : [join(root, "scripts/run_agent_e2e_container.sh")];
+		agent = spawn(executable, args, {
 			cwd: runDir,
 			env: {
 				...agentEnvironment,
@@ -269,7 +276,9 @@ async function main() {
 		return agent;
 	};
 	const stopAgent = async () => {
-		await command("podman", ["rm", "-f", "--ignore", currentAgentContainer]);
+		if (!hostAgent) {
+			await command("podman", ["rm", "-f", "--ignore", currentAgentContainer]);
+		}
 		await stop(agent, "agentStopped");
 	};
 	const restartAgent = async () => {
@@ -438,9 +447,13 @@ async function main() {
 		const agentIdentity = join(runDir, "agent-identity");
 		await mkdir(agentIdentity, { mode: 0o700 });
 		for (const file of ["identity.crt", "identity.key"]) {
-			await command("podman", ["cp",
-				`${currentAgentContainer}:/var/lib/durpdeploy-agent/${file}`,
-				join(agentIdentity, file)]);
+			if (hostAgent) {
+				await copyFile(join(agentStateDir, file), join(agentIdentity, file));
+			} else {
+				await command("podman", ["cp",
+					`${currentAgentContainer}:/var/lib/durpdeploy-agent/${file}`,
+					join(agentIdentity, file)]);
+			}
 		}
 		const token = (await command(serverBinary, ["tokens", "create", "--user", admin.email, "--name", "todo12-e2e"], { cwd: runDir, env: serverEnvironment })).trim();
 		const api = async (method, path, body) => {
@@ -453,6 +466,39 @@ async function main() {
 			const text = await response.text();
 			check(response.ok, `${method} ${path} returned ${response.status}: ${redact(text)}`);
 			return text ? JSON.parse(text) : null;
+		};
+		const streamLogs = async (deploymentID) => {
+			const controller = new AbortController();
+			const timer = setTimeout(() => controller.abort(), 30000);
+			const streamed = [];
+			try {
+				const response = await fetch(
+					`${baseURL}/api/v1/deployments/${deploymentID}/logs/stream?format=ndjson`,
+					{ headers: { Authorization: `Bearer ${token}` }, signal: controller.signal },
+				);
+				check(response.ok && response.body, `log stream returned ${response.status}`);
+				const reader = response.body.getReader();
+				const decoder = new TextDecoder();
+				let pending = "";
+				while (streamed.length < 100) {
+					const chunk = await reader.read();
+					if (chunk.done) break;
+					pending += decoder.decode(chunk.value, { stream: true });
+					let newline;
+					while ((newline = pending.indexOf("\n")) >= 0) {
+						const line = pending.slice(0, newline);
+						pending = pending.slice(newline + 1);
+						if (line) streamed.push(JSON.parse(line).line);
+					}
+					if (streamed.includes("remote-agent-ok")) {
+						await reader.cancel();
+						return streamed;
+					}
+				}
+				throw new Error(`log stream ended before marker: ${JSON.stringify(streamed)}`);
+			} finally {
+				clearTimeout(timer);
+			}
 		};
 		if (isLifecycleScenario(faultScenario)) {
 			lifecycleCheckpoint = await runLifecycleFault({
@@ -471,6 +517,8 @@ async function main() {
 		} else {
 		const project = await api("POST", "/projects", { name: "Todo 12 remote project" });
 		await api("POST", `/projects/${project.id}/steps`, {
+			agent_selectors: ["linux"],
+			execution_target: "agent",
 			name: "agent-only", sort_order: 1, timeout_seconds: 30, max_retries: 0,
 			script_body: `if [ "$LANG" != "ddp-agent-${nonce}" ]; then echo SERVER_EXECUTION_MARKER; exit 91; fi\nprintf '%s\\n' 'AGENT_EXECUTION_MARKER:${nonce}' 'todo12-secret' 'remote-agent-ok'`,
 		});
@@ -493,13 +541,25 @@ async function main() {
 			}
 			throw new Error(`deployment ${deploymentID} did not finish`);
 		};
-		await waitForStatus(deployment.id, "succeeded");
+		const [streamed] = await Promise.all([
+			streamLogs(deployment.id),
+			waitForStatus(deployment.id, "succeeded"),
+		]);
 		const logs = await api("GET", `/deployments/${deployment.id}/logs`);
 		const lines = logs.map((entry) => entry.line);
-		check(lines.join("\n").includes(`AGENT_EXECUTION_MARKER:${nonce}\n[REDACTED]\nremote-agent-ok`), `ordered redacted logs were ${JSON.stringify(lines)}`);
-		check(!lines.some((line) => line.includes("SERVER_EXECUTION_MARKER") || line.includes("todo12-secret")), "execution or secret marker leaked");
+		const markerIndex = streamed.indexOf(`AGENT_EXECUTION_MARKER:${nonce}`);
+		const redactedIndex = streamed.indexOf("[REDACTED]");
+		const successIndex = streamed.indexOf("remote-agent-ok");
+		check(markerIndex >= 0 && markerIndex < redactedIndex &&
+			redactedIndex < successIndex,
+		`ordered redacted stream was ${JSON.stringify(streamed)}`);
+		check(![...streamed, ...lines].some((line) =>
+			line.includes("SERVER_EXECUTION_MARKER") || line.includes("todo12-secret")),
+		"execution or secret marker leaked");
 		const failedProject = await api("POST", "/projects", { name: "Todo 12 retry project" });
 		await api("POST", `/projects/${failedProject.id}/steps`, {
+			agent_selectors: ["linux"],
+			execution_target: "agent",
 			name: "expected-failure", sort_order: 1, timeout_seconds: 30, max_retries: 0,
 			script_body: "exit 23",
 		});
@@ -513,7 +573,7 @@ async function main() {
 		check(retry.id !== failedDeployment.id, "retry reused the source deployment ID");
 		await waitForStatus(retry.id, "failed");
 		const remoteState = await command("sqlite3", ["-readonly", database,
-			`SELECT COUNT(*)||'|'||COUNT(DISTINCT agent_id) FROM remote_deployment_claims WHERE deployment_id IN (${failedDeployment.id},${retry.id}) AND state='failed';`]);
+			`SELECT COUNT(*)||'|'||COUNT(DISTINCT agent_id) FROM remote_step_runs WHERE deployment_id IN (${failedDeployment.id},${retry.id}) AND state='failed';`]);
 		check(remoteState.trim() === "2|1", `retry claims were ${remoteState.trim()}`);
 		try {
 			await command("test", ["!", "-e", sentinelMarker]);
@@ -523,7 +583,7 @@ async function main() {
 		await writeFile(join(evidenceDir, "lifecycle.json"), `${JSON.stringify({
 			agentMarker: `AGENT_EXECUTION_MARKER:${nonce}`,
 			deploymentID: deployment.id,
-			logs: lines,
+			logs: streamed,
 			remoteClaims: remoteState.trim(),
 			retryDeploymentID: retry.id,
 			serverBashInvoked: false,
@@ -586,7 +646,10 @@ async function main() {
 				if (agent.exitCode !== null || agent.signalCode !== null) {
 					return { stopped: true };
 				}
-				const pid = Number((await command("podman", ["inspect", "--format", "{{.State.Pid}}", currentAgentContainer])).trim());
+				const pid = hostAgent ? agent.pid : Number((await command(
+					"podman",
+					["inspect", "--format", "{{.State.Pid}}", currentAgentContainer],
+				)).trim());
 				return { exe: await readlink(`/proc/${pid}/exe`), pid };
 			})(),
 			server: { exe: await readlink(`/proc/${server.pid}/exe`), pid: server.pid },
@@ -620,6 +683,7 @@ try {
 	try {
 		durableState = await command("sqlite3", ["-readonly", database,
 			"SELECT 'claim|'||state||'|'||COALESCE(reason,'') FROM remote_deployment_claims " +
+			"UNION ALL SELECT 'run|'||state FROM remote_step_runs " +
 			"UNION ALL SELECT 'log|'||COALESCE(step_name,'')||'|'||line FROM deployment_logs;"]);
 	} catch (stateError) {
 		durableState = `unavailable: ${stateError instanceof Error ? stateError.message : String(stateError)}`;
@@ -640,8 +704,12 @@ try {
 		await browser.close();
 		cleanup.browserStopped = true;
 	}
-	if (agent) await command("podman", ["rm", "-f", "--ignore", currentAgentContainer]);
-	await command("podman", ["volume", "rm", "-f", agentStateVolume]);
+	if (!hostAgent && agent) {
+		await command("podman", ["rm", "-f", "--ignore", currentAgentContainer]);
+	}
+	if (!hostAgent) {
+		await command("podman", ["volume", "rm", "-f", agentStateVolume]);
+	}
 	await stop(agent, "agentStopped");
 	await stop(server, "serverStopped");
 	if (lifecycleProxy) await lifecycleProxy.close();

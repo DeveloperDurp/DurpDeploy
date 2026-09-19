@@ -37,6 +37,8 @@ export async function runLifecycleFault(context) {
 	const createDeployment = async (scriptBody) => {
 		const project = await api("POST", "/projects", { name: `Fault ${scenario}` });
 		await api("POST", `/projects/${project.id}/steps`, {
+			agent_selectors: ["linux"],
+			execution_target: "agent",
 			max_retries: 0,
 			name: "fault-step",
 			script_body: scriptBody,

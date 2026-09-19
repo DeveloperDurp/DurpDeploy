@@ -1,6 +1,7 @@
 package agentserver_test
 
 import (
+	"database/sql"
 	"fmt"
 	"net/http"
 	"strings"
@@ -63,13 +64,47 @@ func TestRemoteStepStartRejectsExpiredClaim(t *testing.T) {
 	}
 }
 
+func TestRemoteStepCancellationAcknowledgement(t *testing.T) {
+	fixture := newAgentFixture(t)
+	deploymentID, claim := claimedRemoteStep(t, fixture)
+	if _, err := fixture.repo.Queries.RequestRemoteStepCancellation(
+		t.Context(),
+		db.RequestRemoteStepCancellationParams{
+			Now:          sql.NullInt64{Int64: 1, Valid: true},
+			DeploymentID: deploymentID,
+		},
+	); err != nil {
+		t.Fatal(err)
+	}
+	path := strings.ReplaceAll(
+		agentproto.CancelledPath,
+		"{id}",
+		fmt.Sprint(deploymentID),
+	)
+	response := postAgent(t, fixture, path, claim)
+	if response.StatusCode != http.StatusNoContent {
+		t.Fatalf("cancel acknowledgement status=%d", response.StatusCode)
+	}
+	runs, err := fixture.repo.Queries.ListRemoteStepRuns(
+		t.Context(),
+		db.ListRemoteStepRunsParams{DeploymentID: deploymentID, StepIndex: 0},
+	)
+	if err != nil || len(runs) != 1 || runs[0].State != "cancelled" ||
+		!runs[0].FinishedAt.Valid {
+		t.Fatalf("remote runs=%+v error=%v", runs, err)
+	}
+}
+
 func claimedRemoteStep(
 	t *testing.T,
 	fixture agentFixture,
 ) (int64, string) {
 	t.Helper()
 	deploymentID := seedPollPayload(t, fixture, "pending", "test-agent")
-	deployment, err := fixture.repo.Queries.GetDeployment(t.Context(), deploymentID)
+	deployment, err := fixture.repo.Queries.GetDeployment(
+		t.Context(),
+		deploymentID,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,12 +121,19 @@ func claimedRemoteStep(
 	); err != nil {
 		t.Fatal(err)
 	}
-	created, err := fixture.repo.QueueRemoteStepRuns(t.Context(), deploymentID, 0)
+	created, err := fixture.repo.QueueRemoteStepRuns(
+		t.Context(),
+		deploymentID,
+		0,
+	)
 	if err != nil || created != 1 {
 		t.Fatalf("queue remote step rows=%d error=%v", created, err)
 	}
 
-	poll := decodePollResponse(t, postAgent(t, fixture, agentproto.PollPath, pollBody))
+	poll := decodePollResponse(
+		t,
+		postAgent(t, fixture, agentproto.PollPath, pollBody),
+	)
 	claim := fmt.Sprintf(
 		`{"protocol":"agent/1","claim_token":%q}`,
 		poll.ClaimToken,
