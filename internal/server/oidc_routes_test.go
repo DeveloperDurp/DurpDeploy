@@ -2,12 +2,10 @@ package server
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -32,14 +30,11 @@ type oidcRouterHarness struct {
 
 func newOIDCRouterHarness(t *testing.T) *oidcRouterHarness {
 	t.Helper()
-	dsn := fmt.Sprintf(
-		"file:%s?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)",
-		filepath.Join(t.TempDir(), "router.db"),
-	)
-	conn, err := migrate.Run(dsn)
+	conn, err := migrate.Run(":memory:?_pragma=foreign_keys(1)")
 	if err != nil {
 		t.Fatalf("migrate router database: %v", err)
 	}
+	conn.SetMaxOpenConns(1)
 	t.Cleanup(func() {
 		if err := conn.Close(); err != nil {
 			t.Errorf("close router database: %v", err)
