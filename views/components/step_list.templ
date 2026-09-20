@@ -175,6 +175,9 @@ templ StepMobileRecord(step db.Step, projectID int64, isFirst bool, isLast bool)
 					type="button"
 					class="btn btn-xs btn-secondary"
 					data-step-action="edit"
+					hx-get={ fmt.Sprintf("/projects/%d/steps/%d/edit?mobile=1", projectID, step.ID) }
+					hx-target={ fmt.Sprintf("#mobile-step-edit-%d", step.ID) }
+					hx-swap="innerHTML"
 					x-on:click="editing = true; $dispatch('step-form-edit')"
 				>
 					Edit
@@ -207,9 +210,7 @@ templ StepMobileRecord(step db.Step, projectID int64, isFirst bool, isLast bool)
 				x-bind:hidden="!editing"
 				x-cloak
 				x-show="editing"
-			>
-				@StepForm(step, projectID, false, "")
-			</div>
+			></div>
 		}
 	</li>
 }

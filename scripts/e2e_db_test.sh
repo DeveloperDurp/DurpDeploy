@@ -405,7 +405,8 @@ echo "Env IDs: dev=$LC_DEV_ID test=$LC_TEST_ID prod=$LC_PROD_ID out=$LC_OUT_ID"
 LC_LIFECYCLE_NAME="LC-$LC_TS"
 CODE=$(curl_silent -X POST -d "name=$LC_LIFECYCLE_NAME&csrf_token=$CSRF" "$BASE/lifecycles")
 [[ "$CODE" == "303" ]] || { echo "FAIL: create lifecycle got $CODE"; exit 1; }
-LC_LIFECYCLE_ID=$(curl_body "$BASE/lifecycles" | python3 -c "import sys,re; html=sys.stdin.read(); m=re.search(r'<a href=\"/lifecycles/(\d+)\"[^>]*>$LC_LIFECYCLE_NAME</a>', html); print(m.group(1) if m else '')")
+LC_LIFECYCLE_ID=$(db_query "SELECT id FROM lifecycles WHERE name='$LC_LIFECYCLE_NAME';")
+[[ -n "$LC_LIFECYCLE_ID" ]] || { echo "FAIL: could not find lifecycle $LC_LIFECYCLE_NAME"; exit 1; }
 echo "Lifecycle ID: $LC_LIFECYCLE_ID"
 
 for EID in "$LC_DEV_ID" "$LC_TEST_ID" "$LC_PROD_ID"; do

@@ -1,4 +1,4 @@
-image: golang:1.26-alpine@sha256:0178a641fbb4858c5f1b48e34bdaabe0350a330a1b1149aabd498d0699ff5fb2
+image: golang:1.25.7-alpine@sha256:f6751d823c26342f9506c03797d2527668d095b0a15f1862cddb4d927a7a4ced
 
 # Tests spin up real bash via os/exec to run deployment scripts. The alpine
 # base image doesn't ship bash by default, so install it before any stage
@@ -193,7 +193,7 @@ auth:mfa-parity:
   stage: test
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-  image: golang:1.26-bookworm
+  image: golang:1.25.7-bookworm@sha256:564e366a28ad1d70f460a2b97d1d299a562f08707eb0ecb24b659e5bd6c108e1
   services:
     - name: docker:24-dind
       alias: docker
@@ -233,6 +233,93 @@ auth:mfa-parity:
         docker ps --filter 'label=org.testcontainers=true' -q | xargs -r docker rm -f || true
       fi
 
+agent:rollout:
+  stage: test
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+  image: golang:1.25.7-bookworm@sha256:564e366a28ad1d70f460a2b97d1d299a562f08707eb0ecb24b659e5bd6c108e1
+  services:
+    - name: docker:24-dind@sha256:9b17a9f25adf17b88d0a013b4f00160754adf4b07ccbe9986664a49886c2c98e
+      alias: docker
+  variables:
+    DOCKER_TLS_CERTDIR: "/builds/.docker-certs-$CI_JOB_ID"
+    DOCKER_CERT_PATH: "/builds/.docker-certs-$CI_JOB_ID/client"
+    DOCKER_HOST: tcp://docker:2376
+    DOCKER_TLS_VERIFY: "1"
+  before_script:
+    - apt-get update && apt-get install -y --no-install-recommends bash docker.io make nodejs npm && rm -rf /var/lib/apt/lists/*
+    - go install github.com/a-h/templ/cmd/templ@v0.3.1020
+    - templ generate
+    - make swagger-ui-copy
+    - |
+      for attempt in $(seq 1 30); do
+        if docker info >/dev/null 2>&1; then
+          break
+        fi
+        if [ "$attempt" -eq 30 ]; then
+          echo 'agent:rollout: Docker daemon did not become ready after 30 seconds' >&2
+          docker info 2>&1 || true
+          exit 1
+        fi
+        sleep 1
+      done
+  script:
+    - make agent-rollout-gate
+  after_script:
+    - |
+      if docker info >/dev/null 2>&1; then
+        docker ps --filter 'label=org.testcontainers=true' -q | xargs -r docker rm -f || true
+      fi
+
+agent:smoke:
+  stage: test
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+  image: docker:24-cli@sha256:2b62f89aaab9e4df0ff843f0d9a7bbd17340a9ba7c660ba6f40b1f00b38c2a4d
+  services:
+    - name: docker:24-dind@sha256:9b17a9f25adf17b88d0a013b4f00160754adf4b07ccbe9986664a49886c2c98e
+      alias: docker
+  variables:
+    DOCKER_TLS_CERTDIR: "/builds/.docker-certs-$CI_JOB_ID"
+    DOCKER_CERT_PATH: "/builds/.docker-certs-$CI_JOB_ID/client"
+    DOCKER_HOST: tcp://docker:2376
+    DOCKER_TLS_VERIFY: "1"
+    AGENT_SMOKE_IMAGE: "$CI_REGISTRY_IMAGE/agent-smoke:$CI_COMMIT_SHA"
+    AGENT_SMOKE_CONTAINER: "agent-smoke-$CI_JOB_ID"
+  before_script:
+    - |
+      for attempt in $(seq 1 30); do
+        if docker info >/dev/null 2>&1; then
+          break
+        fi
+        if [ "$attempt" -eq 30 ]; then
+          echo 'agent:smoke: Docker daemon did not become ready after 30 seconds' >&2
+          docker info 2>&1 || true
+          exit 1
+        fi
+        sleep 1
+      done
+    - docker build -f Dockerfile.mobile-browser -t "$AGENT_SMOKE_IMAGE" .
+    - >-
+      docker create --name "$AGENT_SMOKE_CONTAINER"
+      --entrypoint /usr/local/bin/agent-smoke-container
+      -e AGENT_E2E_EVIDENCE_DIR=/artifacts/agent-smoke
+      "$AGENT_SMOKE_IMAGE"
+    - docker cp "$CI_PROJECT_DIR/." "$AGENT_SMOKE_CONTAINER:/workspace"
+  script:
+    - docker start -a "$AGENT_SMOKE_CONTAINER"
+  after_script:
+    - |
+      set +e
+      mkdir -p artifacts
+      docker cp "$AGENT_SMOKE_CONTAINER:/artifacts/." artifacts/
+      docker rm -f "$AGENT_SMOKE_CONTAINER"
+  artifacts:
+    when: always
+    paths:
+      - artifacts/agent-smoke/
+    expire_in: 1 week
+
 build:
   stage: build
   rules:
@@ -253,9 +340,7 @@ build:
 
 # Multi-arch (linux/amd64, linux/arm64) image build + push to the GitLab
 # container registry, with a Trivy vulnerability scan against the pushed
-# image. Trivy results are reported but do not fail the build — leave the
-# gatekeeping to your security tooling, or tighten --exit-code 1 below if
-# you want CI to fail on HIGH/CRITICAL findings.
+# image. HIGH and CRITICAL findings fail the build.
 #
 # Requires a GitLab runner with the docker executor and buildx available
 # (the project README's CI section assumes this). The docker:dind service
@@ -289,8 +374,9 @@ build:
 #    # For a multi-arch scan, repeat the pull with --platform for each arch.
 #    - docker pull $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
 #    - >-
-#      docker run --rm aquasec/trivy:latest image
+#      docker run --rm aquasec/trivy@sha256:152250a00485c128eacf57a3ecb4b0402440bf8d19dceeb2302dc5e95a26adab image
 #      --severity HIGH,CRITICAL
+#      --exit-code 1
 #      --no-progress
 #      $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
 #  rules:

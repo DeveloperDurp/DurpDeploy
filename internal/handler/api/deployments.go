@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -132,7 +133,7 @@ func (h *DeploymentHandler) CreateDeployment(
 		status = "pending_approval"
 	}
 
-	deployment, err := h.repo.Queries.CreateDeployment(
+	result, err := h.repo.CreateDeployment(
 		r.Context(),
 		db.CreateDeploymentParams{
 			ReleaseID:     req.ReleaseID,
@@ -145,16 +146,9 @@ func (h *DeploymentHandler) CreateDeployment(
 		return
 	}
 
-	if status == "pending" {
-		go h.runner.Run(
-			context.Background(),
-			deployment.ID,
-			release.ID,
-			req.EnvironmentID,
-		)
-	}
+	h.startLocalDeployment(result)
 
-	RespondJSON(w, http.StatusCreated, deployment)
+	RespondJSON(w, http.StatusCreated, result.Deployment)
 }
 
 // swagger:route GET /deployments deployments listAllDeployments
@@ -441,18 +435,29 @@ func (h *DeploymentHandler) ApproveDeployment(
 		return
 	}
 
-	if err := h.repo.Queries.UpdateDeploymentStatus(
+	result, err := h.repo.ApproveDeployment(
 		r.Context(),
-		db.UpdateDeploymentStatusParams{
-			ID:     depID,
-			Status: "approved",
+		db.CreateApprovalParams{
+			DeploymentID: depID,
+			ApprovedBy:   user.Name,
+			ApproverUserID: sql.NullInt64{
+				Int64: user.ID,
+				Valid: true,
+			},
+			RequiredApproverRole: "admin",
 		},
-	); err != nil {
+	)
+	if err != nil {
+		if errors.Is(err, repository.ErrDeploymentApprovalConflict) {
+			RespondError(w, http.StatusConflict, err.Error())
+			return
+		}
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	h.startLocalDeployment(result)
 
-	RespondJSON(w, http.StatusOK, map[string]string{"status": "approved"})
+	RespondJSON(w, http.StatusOK, map[string]string{"status": "pending"})
 }
 
 // RedeployDeployment creates a new deployment from a terminal one.
@@ -528,7 +533,7 @@ func (h *DeploymentHandler) RedeployDeployment(
 	if requiresApproval {
 		initialStatus = "pending_approval"
 	}
-	newDeployment, err := h.repo.Queries.CreateDeployment(
+	result, err := h.repo.CreateDeployment(
 		r.Context(),
 		db.CreateDeploymentParams{
 			ReleaseID:     deployment.ReleaseID,
@@ -540,15 +545,8 @@ func (h *DeploymentHandler) RedeployDeployment(
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	if initialStatus == "pending" {
-		go h.runner.Run(
-			context.Background(),
-			newDeployment.ID,
-			newDeployment.ReleaseID,
-			newDeployment.EnvironmentID,
-		)
-	}
-	RespondJSON(w, http.StatusCreated, newDeployment)
+	h.startLocalDeployment(result)
+	RespondJSON(w, http.StatusCreated, result.Deployment)
 }
 
 // swagger:route POST /deployments/{id}/cancel deployments cancelDeployment
@@ -585,6 +583,35 @@ func (h *DeploymentHandler) CancelDeployment(
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	if deployment.AssignedAgentID.Valid {
+		err := h.repo.CancelAssignedRemoteDeployment(
+			r.Context(),
+			repository.RemoteAssignedDeployment{
+				DeploymentID: deployment.ID,
+				AgentID:      deployment.AssignedAgentID.String,
+			},
+		)
+		if errors.Is(err, repository.ErrRemoteLifecycleConflict) {
+			RespondError(
+				w,
+				http.StatusUnprocessableEntity,
+				"Cannot cancel a deployment in its current state",
+			)
+			return
+		}
+		if err != nil {
+			RespondError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		updated, err := h.repo.Queries.GetDeployment(r.Context(), depID)
+		if err != nil {
+			RespondError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		RespondJSON(w, http.StatusOK,
+			map[string]string{"status": updated.Status})
+		return
+	}
 	if deployment.Status != "running" {
 		RespondError(
 			w,
@@ -598,8 +625,11 @@ func (h *DeploymentHandler) CancelDeployment(
 		RespondError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-
-	RespondJSON(w, http.StatusOK, map[string]string{"status": "cancelled"})
+	RespondJSON(
+		w,
+		http.StatusOK,
+		map[string]string{"status": deployment.Status},
+	)
 }
 
 // swagger:route POST /deployments/{id}/retry deployments retryDeployment
@@ -612,7 +642,7 @@ func (h *DeploymentHandler) CancelDeployment(
 //	  bearer:
 //
 //	Responses:
-//	  200: body:Deployment
+//	  201: body:Deployment
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
 //	  404: body:NotFoundError
@@ -645,30 +675,40 @@ func (h *DeploymentHandler) RetryDeployment(
 		return
 	}
 
-	if err := h.repo.Queries.UpdateDeploymentStatus(
+	result, err := h.repo.CreateDeployment(
 		r.Context(),
-		db.UpdateDeploymentStatusParams{
-			ID:     depID,
-			Status: "pending",
+		db.CreateDeploymentParams{
+			ReleaseID:     deployment.ReleaseID,
+			EnvironmentID: deployment.EnvironmentID,
+			Status:        "pending",
+			Note: sql.NullString{
+				String: fmt.Sprintf("Retry of #%d", deployment.ID),
+				Valid:  true,
+			},
 		},
-	); err != nil {
-		RespondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	go h.runner.Run(
-		r.Context(),
-		depID,
-		deployment.ReleaseID,
-		deployment.EnvironmentID,
 	)
-
-	updated, err := h.repo.Queries.GetDeployment(r.Context(), depID)
 	if err != nil {
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	RespondJSON(w, http.StatusOK, updated)
+	h.startLocalDeployment(result)
+	RespondJSON(w, http.StatusCreated, result.Deployment)
+}
+
+func (h *DeploymentHandler) startLocalDeployment(
+	result repository.DeploymentResult,
+) {
+	if result.Mode != repository.ExecutionLocal ||
+		result.Deployment.Status != "pending" {
+		return
+	}
+	deployment := result.Deployment
+	go h.runner.Run(
+		context.Background(),
+		deployment.ID,
+		deployment.ReleaseID,
+		deployment.EnvironmentID,
+	)
 }
 
 // swagger:route GET /deployments/{id}/logs deployments listDeploymentLogs

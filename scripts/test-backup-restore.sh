@@ -70,6 +70,7 @@ DURPDEPLOY_DB="$DB_PATH" "$WORKDIR/durpdeploy" admin create \
 
 echo "=== Starting server on $SERVER_ADDR ==="
 DURPDEPLOY_DB="$DB_PATH" DURPDEPLOY_ADDR="$SERVER_ADDR" \
+    DURPDEPLOY_EXECUTION_BOUNDARY=development \
     "$WORKDIR/durpdeploy" >"$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
 for _ in $(seq 1 30); do
@@ -167,6 +168,7 @@ litestream restore -config "$LITESTREAM_CONF" -o "$DB_PATH" "$DB_PATH"
 
 echo "=== Restarting server and verifying data ==="
 DURPDEPLOY_DB="$DB_PATH" DURPDEPLOY_ADDR="$SERVER_ADDR" \
+    DURPDEPLOY_EXECUTION_BOUNDARY=development \
     "$WORKDIR/durpdeploy" >>"$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
 for _ in $(seq 1 30); do

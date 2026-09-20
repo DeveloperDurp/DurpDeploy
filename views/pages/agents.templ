@@ -1,0 +1,334 @@
+package pages
+
+import (
+	"durpdeploy/internal/agentserver"
+	"durpdeploy/internal/db"
+	"durpdeploy/views/layouts"
+	"fmt"
+	"time"
+)
+
+func agentHealth(agent db.Agent) (string, string) {
+	if agent.Status == "revoked" {
+		return "revoked", "badge-error"
+	}
+	if !agent.LastHeartbeatAt.Valid {
+		return "not reported", "badge-ghost"
+	}
+	age := time.Since(time.Unix(agent.LastHeartbeatAt.Int64, 0))
+	if age < 2*time.Minute {
+		return "healthy", "badge-success"
+	}
+	if age < 10*time.Minute {
+		return "stale", "badge-warning"
+	}
+	return "offline", "badge-error"
+}
+
+templ AgentsPage(agents []db.Agent, formError string, currentPath string) {
+	if !CanWrite(ctx) {
+		@ViewerForbiddenMessage(
+			"Agents",
+			"manage",
+			"remote agents",
+			"/",
+			currentPath,
+		)
+	} else {
+		@layouts.Base("Agents", currentPath) {
+		<div class="space-y-6">
+			<div>
+				<h1 class="text-3xl font-bold">Agents</h1>
+				<p class="mt-1 opacity-70">Pair and monitor remote deployment agents.</p>
+			</div>
+			<div class="card bg-base-200 shadow">
+				<div class="card-body">
+					<h2 class="card-title">Pair a new agent</h2>
+					<p class="opacity-70">Enter the agent address and one-time pairing code. You will confirm its certificate fingerprint next.</p>
+					if formError != "" {
+						<div role="alert" class="alert alert-error">
+							<span>{ formError }. Enter the pairing values again.</span>
+						</div>
+					}
+					<form method="post" action="/admin/agents/pair" class="grid gap-4 lg:grid-cols-3">
+						<label class="form-control">
+							<span class="label"><span class="label-text">Agent name</span></span>
+							<input class="input input-bordered" name="name" maxlength="255" placeholder="e.g. Production runner" required/>
+						</label>
+						<label class="form-control">
+							<span class="label"><span class="label-text">Agent address</span></span>
+							<input class="input input-bordered" type="text" inputmode="url" name="address" placeholder="agent.example:9443" aria-describedby="agent-address-help" required/>
+							<span id="agent-address-help" class="label-text-alt opacity-70">HTTPS is added automatically.</span>
+						</label>
+						<label class="form-control">
+							<span class="label"><span class="label-text">Pairing code</span></span>
+							<input class="input input-bordered font-mono" type="password" name="code" autocomplete="off" required/>
+						</label>
+						<div class="lg:col-span-3">
+							<button type="submit" class="btn btn-primary">Continue</button>
+						</div>
+					</form>
+				</div>
+			</div>
+			if len(agents) == 0 {
+				<div class="card bg-base-200 p-8 text-center">
+					<p class="opacity-70">No agents paired yet.</p>
+				</div>
+			} else {
+				<div class="overflow-x-auto">
+					<table class="table table-zebra table-fixed w-full">
+						<thead>
+							<tr>
+								<th class="w-1/4">Agent</th>
+								<th class="w-1/5">Status</th>
+								<th class="hidden lg:table-cell w-2/5">Transport</th>
+								<th class="w-1/5">Actions</th>
+							</tr>
+						</thead>
+						<tbody>
+							for _, agent := range agents {
+								<tr>
+									<td class="truncate">
+										<span class="font-medium">{ agent.Name }</span>
+										<div class="truncate font-mono text-xs opacity-60">{ agent.ID }</div>
+									</td>
+									<td>
+										{{ label, class := agentHealth(agent) }}
+										<span class={ "badge " + class }>{ label }</span>
+										<div class="mt-1 text-xs opacity-60">{ agent.Status }</div>
+									</td>
+									<td class="hidden lg:table-cell truncate font-mono text-sm">{ agent.Endpoint }</td>
+									<td>
+										<div class="flex flex-col items-start gap-1 sm:flex-row">
+											<a class="btn btn-ghost btn-xs" href={ templ.SafeURL("/admin/agents/" + agent.ID) }>Edit</a>
+											if agent.Status != "revoked" {
+												<button
+													class="btn btn-error btn-xs"
+													hx-post={ "/admin/agents/" + agent.ID + "/revoke" }
+													hx-confirm={ "Revoke agent " + agent.Name + " (" + agent.ID + ")? Active remote work will be terminated." }
+												>
+													Revoke
+												</button>
+											}
+										</div>
+									</td>
+								</tr>
+							}
+						</tbody>
+					</table>
+				</div>
+			}
+		</div>
+		}
+	}
+}
+
+templ AgentPairingConfirmationPage(challenge agentserver.PairingChallenge, currentPath string) {
+	if !CanWrite(ctx) {
+		@ViewerForbiddenMessage(
+			"Confirm agent fingerprint",
+			"confirm",
+			"agent pairing",
+			"/admin/agents",
+			currentPath,
+		)
+	} else {
+		@layouts.Base("Confirm agent fingerprint", currentPath) {
+			<div class="mx-auto max-w-3xl space-y-6">
+				<div>
+					<a class="link text-sm" href="/admin/agents">Back to agents</a>
+					<h1 class="mt-2 text-3xl font-bold">Confirm agent fingerprint</h1>
+					<p class="mt-1 opacity-70">Compare this fingerprint with the one shown by the agent before you approve it.</p>
+				</div>
+				<div role="alert" class="alert alert-warning">
+					<span>Approve only when every fingerprint character matches. A mismatch can indicate the wrong agent or an intercepted connection.</span>
+				</div>
+				<div class="card bg-base-200 shadow">
+					<div class="card-body gap-5">
+						<dl class="grid gap-3 sm:grid-cols-[9rem_1fr]">
+							<dt class="font-medium">Agent name</dt>
+							<dd>{ challenge.Name }</dd>
+							<dt class="font-medium">Address</dt>
+							<dd class="break-all font-mono text-sm">{ challenge.Address }</dd>
+							<dt class="font-medium">Fingerprint</dt>
+							<dd class="break-all rounded-box bg-base-300 p-4 font-mono text-sm" data-testid="agent-fingerprint">{ challenge.Fingerprint }</dd>
+						</dl>
+						<div class="flex flex-wrap gap-3">
+							<form method="post" action={ templ.SafeURL("/admin/agents/pair/" + challenge.ID + "/approve") }>
+								<button type="submit" class="btn btn-primary">Approve agent</button>
+							</form>
+							<form method="post" action={ templ.SafeURL("/admin/agents/pair/" + challenge.ID + "/deny") }>
+								<button type="submit" class="btn btn-ghost">Deny</button>
+							</form>
+						</div>
+					</div>
+				</div>
+			</div>
+		}
+	}
+}
+
+templ AgentDetailPage(agent db.Agent, labels []string, environmentLabels []db.Environment, availableEnvironments []db.Environment, currentPath string) {
+	if !CanWrite(ctx) {
+		@ViewerForbiddenMessage(
+			"Agent "+agent.Name,
+			"manage",
+			"remote agents",
+			"/",
+			currentPath,
+		)
+	} else {
+		@layouts.Base("Agent "+agent.Name, currentPath) {
+		<div class="space-y-6">
+			<div class="flex flex-wrap items-start justify-between gap-3">
+				<div>
+					<a class="link text-sm" href="/admin/agents">Back to agents</a>
+					<h1 class="mt-2 text-3xl font-bold">{ agent.Name }</h1>
+					<p class="break-all font-mono text-sm opacity-60">{ agent.ID }</p>
+				</div>
+				if agent.Status != "revoked" {
+					<button
+						class="btn btn-error btn-sm"
+						hx-post={ "/admin/agents/" + agent.ID + "/revoke" }
+						hx-confirm={ "Revoke agent " + agent.Name + " (" + agent.ID + ")? Active remote work will be terminated." }
+					>
+						Revoke agent
+					</button>
+				}
+			</div>
+			if agent.Status != "revoked" {
+				<div class="card bg-base-200 shadow">
+					<div class="card-body">
+						<h2 class="card-title">Agent name</h2>
+						<p class="opacity-70">Use a recognizable name. The agent GUID remains unchanged.</p>
+						<form method="post" action={ templ.SafeURL("/admin/agents/" + agent.ID + "/name") } class="flex flex-wrap items-end gap-2">
+							<label class="form-control min-w-48 flex-1">
+								<span class="label"><span class="label-text">Name</span></span>
+								<input class="input input-bordered" name="name" value={ agent.Name } maxlength="255" required/>
+							</label>
+							<button type="submit" class="btn btn-primary">Save name</button>
+						</form>
+					</div>
+				</div>
+			}
+			<div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+				<div class="stat rounded-box bg-base-200">
+					<div class="stat-title">Status</div>
+					<div class="stat-value text-lg">{ agent.Status }</div>
+				</div>
+				<div class="stat rounded-box bg-base-200">
+					<div class="stat-title">Health</div>
+					<div class="stat-value text-lg">{{ label, _ := agentHealth(agent) }}{ label }</div>
+				</div>
+				<div class="stat rounded-box bg-base-200">
+					<div class="stat-title">Version</div>
+					<div class="stat-value text-lg">{ agent.AgentVersion.String }</div>
+				</div>
+				<div class="stat rounded-box bg-base-200">
+					<div class="stat-title">Last heartbeat</div>
+					<div class="stat-value text-base text-base-content">
+						if agent.LastHeartbeatAt.Valid {
+							{ formatUnixTime(agent.LastHeartbeatAt.Int64) }
+						} else {
+							never
+						}
+					</div>
+				</div>
+			</div>
+			<div class="card bg-base-200 shadow">
+				<div class="card-body">
+					<h2 class="card-title">Transport</h2>
+					<dl class="grid gap-3 md:grid-cols-[12rem_1fr]">
+						<dt class="font-medium">Endpoint</dt><dd class="break-all font-mono">{ agent.Endpoint }</dd>
+						<dt class="font-medium">Certificate fingerprint</dt><dd class="break-all font-mono">{ agent.CertificateFingerprint.String }</dd>
+					</dl>
+				</div>
+			</div>
+			if agent.Status == "pending" || agent.Status == "revoked" {
+				<div class="card bg-base-200 shadow">
+					<div class="card-body">
+						<h2 class="card-title">Retry pairing</h2>
+						<form method="post" action={ templ.SafeURL("/admin/agents/" + agent.ID + "/retry-pair") } class="grid gap-4 lg:grid-cols-3">
+							<input class="input input-bordered" type="url" name="address" aria-label="HTTPS address" placeholder="https://agent.example:9443" required/>
+							<input class="input input-bordered font-mono" type="password" name="code" aria-label="Pairing code" autocomplete="off" required/>
+							<input class="input input-bordered font-mono" name="fingerprint" aria-label="Certificate fingerprint" autocomplete="off" required/>
+							<button class="btn btn-primary lg:col-span-3 lg:w-fit" type="submit">Retry pairing</button>
+						</form>
+					</div>
+				</div>
+			}
+			@AgentLabels(agent, labels)
+			@AgentEnvironmentLabels(agent, environmentLabels, availableEnvironments)
+		</div>
+		}
+	}
+}
+
+templ AgentEnvironmentLabels(agent db.Agent, labels []db.Environment, availableEnvironments []db.Environment) {
+	<div class="card bg-base-200 shadow">
+		<div class="card-body">
+			<h2 class="card-title">Environment labels</h2>
+			<p class="opacity-70">An active, paired agent receives remote steps when this environment and all required capability labels match. Every matching agent receives the step.</p>
+			if len(labels) == 0 {
+				<p class="text-sm opacity-60">No environment labels assigned.</p>
+			} else {
+				<div class="flex flex-wrap gap-2">
+					for _, environment := range labels {
+						<form method="post" action={ templ.SafeURL("/admin/agents/" + agent.ID + "/environments/delete") } class="flex items-center gap-1 rounded-box bg-base-100 p-2">
+							<input type="hidden" name="environment_id" value={ fmt.Sprint(environment.ID) }/>
+							<span class="badge badge-outline">{ environment.Name }</span>
+							<button type="submit" class="btn btn-error btn-xs" aria-label={ "Remove environment label " + environment.Name }>Remove</button>
+						</form>
+					}
+				</div>
+			}
+			if len(availableEnvironments) == 0 && len(labels) == 0 {
+				<p class="text-sm opacity-60">Create an environment before adding an environment label.</p>
+			} else if len(availableEnvironments) == 0 {
+				<p class="text-sm opacity-60">All environments are already selected.</p>
+			} else {
+				<form method="post" action={ templ.SafeURL("/admin/agents/" + agent.ID + "/environments") } class="flex flex-wrap items-end gap-2">
+					<label class="form-control flex-1 min-w-48">
+						<span class="label"><span class="label-text">Environment</span></span>
+						<select class="select select-bordered" name="environment_id" required>
+							<option value="" disabled selected>Select environment</option>
+							for _, environment := range availableEnvironments {
+								<option value={ fmt.Sprint(environment.ID) }>{ environment.Name }</option>
+							}
+						</select>
+					</label>
+					<button type="submit" class="btn btn-primary">Add environment</button>
+				</form>
+			}
+		</div>
+	</div>
+}
+
+templ AgentLabels(agent db.Agent, labels []string) {
+	<div class="card bg-base-200 shadow">
+		<div class="card-body">
+			<h2 class="card-title">Labels</h2>
+			<p class="opacity-70">Labels identify which work this agent can receive.</p>
+			if len(labels) == 0 {
+				<p class="text-sm opacity-60">No labels assigned.</p>
+			} else {
+				<div class="flex flex-wrap gap-2">
+					for _, label := range labels {
+						<form method="post" action={ templ.SafeURL("/admin/agents/" + agent.ID + "/labels/delete") } class="flex items-center gap-1 rounded-box bg-base-100 p-2">
+							<input type="hidden" name="label" value={ label }/>
+							<span class="badge badge-outline">{ label }</span>
+							<button type="submit" class="btn btn-error btn-xs" aria-label={ "Remove label " + label }>Remove</button>
+						</form>
+					}
+				</div>
+			}
+			<form method="post" action={ templ.SafeURL("/admin/agents/" + agent.ID + "/labels") } class="flex flex-wrap items-end gap-2">
+				<label class="form-control flex-1 min-w-48">
+					<span class="label"><span class="label-text">New label</span></span>
+					<input class="input input-bordered" name="label" maxlength="64" placeholder="e.g. linux" required/>
+				</label>
+				<button type="submit" class="btn btn-primary">Add label</button>
+			</form>
+		</div>
+	</div>
+}

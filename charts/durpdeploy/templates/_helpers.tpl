@@ -5,6 +5,11 @@ Expand the name of the chart.
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
+{{/* Persistent claim containing the server identity used for agent mTLS. */}}
+{{- define "durpdeploy.agentIdentityClaimName" -}}
+{{- default (printf "%s-agent-identity" (include "durpdeploy.fullname" .)) .Values.agent.persistence.existingClaim -}}
+{{- end }}
+
 {{/*
 Create a default fully qualified app name.
 */}}

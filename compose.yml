@@ -17,6 +17,7 @@ services:
     build: .
     image: durpdeploy:latest
     restart: unless-stopped
+    user: "10001:10001"
     # Port 8080 is internal only — Caddy talks to it over the compose network.
     # Don't publish it to the host.
     env_file:
@@ -25,6 +26,10 @@ services:
       - ./compose.app.env
     environment:
       DURPDEPLOY_DB: /data/durpdeploy.db
+      DURPDEPLOY_EXECUTION_BOUNDARY: service
+      DURPDEPLOY_AGENT_LISTEN_ADDR: 0.0.0.0:10943
+      DURPDEPLOY_AGENT_PUBLIC_URL: ${DURPDEPLOY_AGENT_PUBLIC_URL:-https://localhost:10943}
+      DURPDEPLOY_AGENT_IDENTITY_DIR: /var/lib/durpdeploy/agent-identity
       # Only the fixed Caddy peer may supply forwarding headers.
       DURPDEPLOY_TRUSTED_PROXIES: 172.28.0.10/32
       # Optional. The mounted secret file at /etc/durpdeploy/key is the
@@ -35,9 +40,15 @@ services:
       DURPDEPLOY_LITESTREAM_CHECK_INTERVAL: ${DURPDEPLOY_LITESTREAM_CHECK_INTERVAL:-1h}
     volumes:
       - durpdeploy-data:/data
+      - durpdeploy-agent-identity:/var/lib/durpdeploy/agent-identity
+    ports:
+      - "10943:10943"
     secrets:
       - source: durpdeploy_key
         target: /etc/durpdeploy/key
+        uid: "10001"
+        gid: "10001"
+        mode: 0400
     security_opt:
       - no-new-privileges:true
     cap_drop: [ALL]
@@ -118,6 +129,7 @@ services:
 
 volumes:
   durpdeploy-data:
+  durpdeploy-agent-identity:
   caddy-data:
   caddy-config:
 

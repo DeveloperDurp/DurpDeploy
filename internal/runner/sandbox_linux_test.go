@@ -3,24 +3,57 @@
 package runner
 
 import (
-	"os/exec"
-	"slices"
 	"testing"
 )
 
-func TestClearCapabilitiesWrapsStepWithSetpriv(t *testing.T) {
-	cmd := exec.Command("bash", "/script.sh")
-	sandbox := &Sandbox{enabled: true}
-	if err := sandbox.clearCapabilities(cmd, false); err != nil {
-		t.Fatal(err)
-	}
+func TestExecutionBoundary_AllowsServiceMode(t *testing.T) {
+	// Given
+	t.Setenv("DURPDEPLOY_EXECUTION_BOUNDARY", "service")
 
-	want := []string{
-		"setpriv", "--bounding-set=-all", "--inh-caps=-all",
-		"--ambient-caps=-all", "--no-new-privs", "--",
-		"bash", "/script.sh",
+	// When
+	err := validateExecutionBoundary()
+
+	// Then
+	if err != nil {
+		t.Fatalf("validate service execution boundary: %v", err)
 	}
-	if !slices.Equal(cmd.Args, want) {
-		t.Fatalf("args = %q, want %q", cmd.Args, want)
+}
+
+func TestSandbox_RejectsMalformedServiceBoundary(t *testing.T) {
+	// Given
+	t.Setenv("DURPDEPLOY_EXECUTION_BOUNDARY", "enabled")
+
+	// When
+	err := validateExecutionBoundary()
+
+	// Then
+	if err == nil {
+		t.Fatal("new sandbox accepted malformed service boundary")
+	}
+}
+
+func TestSandbox_FailsClosedWhenExecutionBoundaryMissing(t *testing.T) {
+	// Given
+	t.Setenv("DURPDEPLOY_EXECUTION_BOUNDARY", "")
+
+	// When
+	err := validateExecutionBoundary()
+
+	// Then
+	if err == nil {
+		t.Fatal("new sandbox succeeded without an execution boundary")
+	}
+}
+
+func TestSandbox_AllowsExplicitDevelopmentBoundary(t *testing.T) {
+	// Given
+	t.Setenv("DURPDEPLOY_EXECUTION_BOUNDARY", "development")
+
+	// When
+	err := validateExecutionBoundary()
+
+	// Then
+	if err != nil {
+		t.Fatalf("new development sandbox: %v", err)
 	}
 }

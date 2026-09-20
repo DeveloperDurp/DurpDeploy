@@ -19,11 +19,13 @@ func NewStepHandler(repo *repository.Repository) *StepHandler {
 }
 
 type stepRequest struct {
-	Name           string `json:"name"`
-	ScriptBody     string `json:"script_body"`
-	SortOrder      int64  `json:"sort_order"`
-	TimeoutSeconds int64  `json:"timeout_seconds"`
-	MaxRetries     int64  `json:"max_retries"`
+	Name            string   `json:"name"`
+	ScriptBody      string   `json:"script_body"`
+	SortOrder       int64    `json:"sort_order"`
+	TimeoutSeconds  int64    `json:"timeout_seconds"`
+	MaxRetries      int64    `json:"max_retries"`
+	ExecutionTarget string   `json:"execution_target"`
+	AgentSelectors  []string `json:"agent_selectors"`
 }
 
 type reorderStepsRequest struct {
@@ -77,9 +79,14 @@ func (h *StepHandler) ListSteps(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	items := make([]any, len(steps))
-	for i, s := range steps {
-		items[i] = s
+	responses, err := newStepResponses(r.Context(), h.repo, steps)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	items := make([]any, len(responses))
+	for index, response := range responses {
+		items[index] = response
 	}
 	RespondJSON(w, http.StatusOK, PaginatedResponse{
 		Items:  items,
@@ -143,6 +150,16 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 		)
 		return
 	}
+	target, selectors, ok := validatePlacement(
+		w,
+		r,
+		h.repo,
+		req.ExecutionTarget,
+		req.AgentSelectors,
+	)
+	if !ok {
+		return
+	}
 
 	sortOrder := req.SortOrder
 	if sortOrder <= 0 {
@@ -154,20 +171,30 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	step, err := h.repo.Queries.CreateStep(r.Context(), db.CreateStepParams{
-		ProjectID:      projectID,
-		Name:           name,
-		ScriptBody:     req.ScriptBody,
-		SortOrder:      sortOrder,
-		TimeoutSeconds: req.TimeoutSeconds,
-		MaxRetries:     req.MaxRetries,
-	})
+	step, err := h.repo.CreateStepWithPlacement(
+		r.Context(),
+		db.CreateStepParams{
+			ProjectID:      projectID,
+			Name:           name,
+			ScriptBody:     req.ScriptBody,
+			SortOrder:      sortOrder,
+			TimeoutSeconds: req.TimeoutSeconds,
+			MaxRetries:     req.MaxRetries,
+		},
+		target,
+		selectors,
+	)
 	if err != nil {
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	RespondJSON(w, http.StatusCreated, step)
+	response, err := newStepResponse(r.Context(), h.repo, step)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	RespondJSON(w, http.StatusCreated, response)
 }
 
 // swagger:route GET /projects/{id}/steps/{stepId} steps getStep
@@ -216,7 +243,12 @@ func (h *StepHandler) GetStep(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	RespondJSON(w, http.StatusOK, step)
+	response, err := newStepResponse(r.Context(), h.repo, step)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	RespondJSON(w, http.StatusOK, response)
 }
 
 // swagger:route PUT /projects/{id}/steps/{stepId} steps updateStep
@@ -295,15 +327,30 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 		)
 		return
 	}
+	target, selectors, ok := validatePlacement(
+		w,
+		r,
+		h.repo,
+		req.ExecutionTarget,
+		req.AgentSelectors,
+	)
+	if !ok {
+		return
+	}
 
-	step, err := h.repo.Queries.UpdateStep(r.Context(), db.UpdateStepParams{
-		ID:             stepID,
-		Name:           name,
-		ScriptBody:     req.ScriptBody,
-		SortOrder:      req.SortOrder,
-		TimeoutSeconds: req.TimeoutSeconds,
-		MaxRetries:     req.MaxRetries,
-	})
+	step, err := h.repo.UpdateStepWithPlacement(
+		r.Context(),
+		db.UpdateStepParams{
+			ID:             stepID,
+			Name:           name,
+			ScriptBody:     req.ScriptBody,
+			SortOrder:      req.SortOrder,
+			TimeoutSeconds: req.TimeoutSeconds,
+			MaxRetries:     req.MaxRetries,
+		},
+		target,
+		selectors,
+	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			RespondError(w, http.StatusNotFound, "Step not found")
@@ -313,7 +360,12 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	RespondJSON(w, http.StatusOK, step)
+	response, err := newStepResponse(r.Context(), h.repo, step)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	RespondJSON(w, http.StatusOK, response)
 }
 
 // swagger:route DELETE /projects/{id}/steps/{stepId} steps deleteStep
@@ -470,5 +522,10 @@ func (h *StepHandler) ReorderSteps(w http.ResponseWriter, r *http.Request) {
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	RespondJSON(w, http.StatusOK, steps)
+	responses, err := newStepResponses(r.Context(), h.repo, steps)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	RespondJSON(w, http.StatusOK, responses)
 }

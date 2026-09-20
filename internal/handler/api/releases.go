@@ -2,7 +2,6 @@ package api
 
 import (
 	"database/sql"
-	"encoding/json"
 	"net/http"
 	"strconv"
 
@@ -303,100 +302,10 @@ func (h *ReleaseHandler) RefreshRelease(
 		return
 	}
 
-	steps, err := h.repo.Queries.ListStepsByProject(r.Context(), projectID)
+	updated, err := handler.RefreshReleaseSnapshot(r.Context(), h.repo, release)
 	if err != nil {
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-
-	type stepSnapshot struct {
-		Name           string `json:"name"`
-		ScriptBody     string `json:"script_body"`
-		SortOrder      int64  `json:"sort_order"`
-		TimeoutSeconds int64  `json:"timeout_seconds"`
-		MaxRetries     int64  `json:"max_retries"`
-	}
-	snapshots := make([]stepSnapshot, len(steps))
-	for i, step := range steps {
-		snapshots[i] = stepSnapshot{
-			Name:           step.Name,
-			ScriptBody:     step.ScriptBody,
-			SortOrder:      step.SortOrder,
-			TimeoutSeconds: step.TimeoutSeconds,
-			MaxRetries:     step.MaxRetries,
-		}
-	}
-
-	stepsJSON, err := json.Marshal(snapshots)
-	if err != nil {
-		RespondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	tx, err := h.repo.DB.BeginTx(r.Context(), nil)
-	if err != nil {
-		RespondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	defer tx.Rollback()
-
-	qtx := h.repo.Queries.WithTx(tx)
-
-	if _, err := qtx.UpdateRelease(r.Context(), db.UpdateReleaseParams{
-		ID:        releaseID,
-		ProjectID: projectID,
-		Version:   release.Version,
-		StepsJson: string(stepsJSON),
-	}); err != nil {
-		RespondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	if err := qtx.DeleteReleaseVariablesByRelease(
-		r.Context(),
-		releaseID,
-	); err != nil {
-		RespondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	variables, err := h.repo.ListVariablesByProject(r.Context(), projectID)
-	if err != nil {
-		RespondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	for _, v := range variables {
-		encValue, err := h.repo.EncryptValue(v.Value)
-		if err != nil {
-			RespondError(w, http.StatusInternalServerError, err.Error())
-			return
-		}
-		if _, err := qtx.CreateReleaseVariable(
-			r.Context(),
-			db.CreateReleaseVariableParams{
-				ReleaseID:     releaseID,
-				Name:          v.Name,
-				Value:         encValue,
-				EnvironmentID: v.EnvironmentID,
-				Secret:        v.Secret,
-			},
-		); err != nil {
-			RespondError(w, http.StatusInternalServerError, err.Error())
-			return
-		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		RespondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	updated, err := h.repo.Queries.GetRelease(r.Context(), releaseID)
-	if err != nil {
-		RespondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
 	RespondJSON(w, http.StatusOK, updated)
 }

@@ -85,9 +85,11 @@ func (h *StepTemplateHandler) CreateTemplate(
 		ScriptBody: script,
 	}
 
-	tpl, err := h.repo.Queries.CreateStepTemplate(
+	_, err := h.repo.CreateStepTemplateWithPlacement(
 		r.Context(),
 		params,
+		"local",
+		nil,
 	)
 	if err != nil {
 		if IsUniqueViolation(err) {
@@ -109,22 +111,6 @@ func (h *StepTemplateHandler) CreateTemplate(
 			)
 			return
 		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	// ponytail: best-effort v1 snapshot. The template row already exists;
-	// a failed version insert here leaves the template history-less but
-	// usable. Acceptable for shadow history.
-	if _, err := h.repo.Queries.CreateStepTemplateVersion(
-		r.Context(),
-		db.CreateStepTemplateVersionParams{
-			TemplateID:    tpl.ID,
-			VersionNumber: 1,
-			Name:          tpl.Name,
-			ScriptBody:    tpl.ScriptBody,
-		},
-	); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -191,15 +177,26 @@ func (h *StepTemplateHandler) UpdateTemplate(
 		ScriptBody: script,
 	}
 
-	tx, err := h.repo.DB.BeginTx(r.Context(), nil)
+	existing, err := h.repo.Queries.GetStepTemplate(r.Context(), id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	defer tx.Rollback()
-	qtx := h.repo.Queries.WithTx(tx)
+	selectors, err := h.repo.Queries.ListTemplateAgentSelectors(
+		r.Context(),
+		id,
+	)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
-	updated, err := qtx.UpdateStepTemplate(r.Context(), params)
+	_, err = h.repo.UpdateStepTemplateWithPlacement(
+		r.Context(),
+		params,
+		existing.ExecutionTarget,
+		selectors,
+	)
 	if err != nil {
 		if IsUniqueViolation(err) {
 			tpl := &db.StepTemplate{ID: id, Name: name, ScriptBody: script}
@@ -224,49 +221,6 @@ func (h *StepTemplateHandler) UpdateTemplate(
 		return
 	}
 
-	latest, err := qtx.GetLatestStepTemplateVersionNumber(r.Context(), id)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	// sqlc scans MAX(...)+COALESCE into interface{}; the value is always
-	// int64 (SQLite stores INTEGER as int64). Defensive type-switch would
-	// hide real bugs from the test suite — fail loud.
-	var nextVersion int64
-	switch v := latest.(type) {
-	case int64:
-		nextVersion = v + 1
-	case int:
-		nextVersion = int64(v) + 1
-	case nil:
-		nextVersion = 1
-	default:
-		http.Error(
-			w,
-			"unexpected version_number type from DB",
-			http.StatusInternalServerError,
-		)
-		return
-	}
-
-	if _, err := qtx.CreateStepTemplateVersion(
-		r.Context(),
-		db.CreateStepTemplateVersionParams{
-			TemplateID:    updated.ID,
-			VersionNumber: nextVersion,
-			Name:          updated.Name,
-			ScriptBody:    updated.ScriptBody,
-		},
-	); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	if err := tx.Commit(); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
 	http.Redirect(w, r, "/templates", http.StatusSeeOther)
 }
 
@@ -281,7 +235,7 @@ func (h *StepTemplateHandler) DeleteTemplate(
 		return
 	}
 
-	if err := h.repo.Queries.DeleteStepTemplate(r.Context(), id); err != nil {
+	if err := h.repo.DeleteStepTemplate(r.Context(), id); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -379,7 +333,20 @@ func (h *StepTemplateHandler) InsertTemplate(
 		// new step inherits defaults (0/0).
 	}
 
-	if _, err := h.repo.Queries.CreateStep(r.Context(), params); err != nil {
+	selectors, err := h.repo.Queries.ListTemplateAgentSelectors(
+		r.Context(),
+		templateID,
+	)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if _, err := h.repo.CreateStepWithPlacement(
+		r.Context(),
+		params,
+		tpl.ExecutionTarget,
+		selectors,
+	); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -432,10 +399,20 @@ func (h *StepTemplateHandler) SaveStepAsTemplate(
 		Name:       step.Name,
 		ScriptBody: step.ScriptBody,
 	}
+	selectors, err := h.repo.Queries.ListStepAgentSelectors(
+		r.Context(),
+		step.ID,
+	)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
-	if _, err := h.repo.Queries.CreateStepTemplate(
+	if _, err := h.repo.CreateStepTemplateWithPlacement(
 		r.Context(),
 		params,
+		step.ExecutionTarget,
+		selectors,
 	); err != nil {
 		if IsUniqueViolation(err) {
 			if r.Header.Get("HX-Request") == "true" {
