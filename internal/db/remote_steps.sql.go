@@ -268,7 +268,7 @@ func (q *Queries) GetRemoteStepLogBySequence(ctx context.Context, arg GetRemoteS
 }
 
 const getRemoteStepRunByClaim = `-- name: GetRemoteStepRunByClaim :one
-SELECT deployment_id, step_index, agent_id, state, claim_token_hash, ciphertext, claim_expires_at, last_heartbeat_at, started_at, finished_at, cancel_requested_at, created_at, updated_at, log_buffer_ciphertext FROM remote_step_runs
+SELECT deployment_id, step_index, agent_id, state, claim_token_hash, ciphertext, claim_expires_at, last_heartbeat_at, started_at, finished_at, cancel_requested_at, created_at, updated_at, log_buffer_ciphertext, recovery_cancelled FROM remote_step_runs
 WHERE deployment_id = ?1
   AND agent_id = ?2
   AND claim_token_hash = ?3
@@ -298,6 +298,7 @@ func (q *Queries) GetRemoteStepRunByClaim(ctx context.Context, arg GetRemoteStep
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.LogBufferCiphertext,
+		&i.RecoveryCancelled,
 	)
 	return i, err
 }
@@ -333,7 +334,7 @@ func (q *Queries) HeartbeatRemoteStepRun(ctx context.Context, arg HeartbeatRemot
 }
 
 const listRemoteStepRuns = `-- name: ListRemoteStepRuns :many
-SELECT deployment_id, step_index, agent_id, state, claim_token_hash, ciphertext, claim_expires_at, last_heartbeat_at, started_at, finished_at, cancel_requested_at, created_at, updated_at, log_buffer_ciphertext FROM remote_step_runs
+SELECT deployment_id, step_index, agent_id, state, claim_token_hash, ciphertext, claim_expires_at, last_heartbeat_at, started_at, finished_at, cancel_requested_at, created_at, updated_at, log_buffer_ciphertext, recovery_cancelled FROM remote_step_runs
 WHERE deployment_id = ? AND step_index = ? ORDER BY agent_id
 `
 
@@ -366,6 +367,7 @@ func (q *Queries) ListRemoteStepRuns(ctx context.Context, arg ListRemoteStepRuns
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.LogBufferCiphertext,
+			&i.RecoveryCancelled,
 		); err != nil {
 			return nil, err
 		}
@@ -381,7 +383,7 @@ func (q *Queries) ListRemoteStepRuns(ctx context.Context, arg ListRemoteStepRuns
 }
 
 const listWaitingRemoteStepRuns = `-- name: ListWaitingRemoteStepRuns :many
-SELECT r.deployment_id, r.step_index, r.agent_id, r.state, r.claim_token_hash, r.ciphertext, r.claim_expires_at, r.last_heartbeat_at, r.started_at, r.finished_at, r.cancel_requested_at, r.created_at, r.updated_at, r.log_buffer_ciphertext FROM remote_step_runs r
+SELECT r.deployment_id, r.step_index, r.agent_id, r.state, r.claim_token_hash, r.ciphertext, r.claim_expires_at, r.last_heartbeat_at, r.started_at, r.finished_at, r.cancel_requested_at, r.created_at, r.updated_at, r.log_buffer_ciphertext, r.recovery_cancelled FROM remote_step_runs r
 JOIN deployments d ON d.id = r.deployment_id
 WHERE r.agent_id = ?1 AND r.state = 'waiting'
   AND d.status = 'running'
@@ -417,6 +419,7 @@ func (q *Queries) ListWaitingRemoteStepRuns(ctx context.Context, agentID string)
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.LogBufferCiphertext,
+			&i.RecoveryCancelled,
 		); err != nil {
 			return nil, err
 		}

@@ -166,6 +166,34 @@ func TestMaintainLeavesAcknowledgedCancellationForRunner(t *testing.T) {
 	}
 }
 
+func TestMaintainFailsAcknowledgedRecoveryCancellation(t *testing.T) {
+	repo := lifecycleFixture(t, "claimed", 4102444800, sql.NullInt64{})
+	for _, statement := range []string{
+		`DELETE FROM remote_deployment_claims WHERE deployment_id=1`,
+		`UPDATE deployments SET assigned_agent_id=NULL WHERE id=1`,
+		`INSERT INTO deployment_steps
+		 (deployment_id,step_index,name,script_body,execution_target)
+		 VALUES(1,0,'remote','echo remote','agent')`,
+		`INSERT INTO remote_step_runs
+		 (deployment_id,step_index,agent_id,state,started_at,finished_at,
+		  cancel_requested_at,updated_at,recovery_cancelled)
+		 VALUES(1,0,'a','cancelled',100,110,105,110,1)`,
+	} {
+		if _, err := repo.DB.Exec(statement); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := New(repo).Maintain(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	deployment, err := repo.Queries.GetDeployment(t.Context(), 1)
+	if err != nil || deployment.Status != "failed" ||
+		!deployment.FinishedAt.Valid {
+		t.Fatalf("deployment=%+v error=%v", deployment, err)
+	}
+}
+
 func TestMaintainMarksRemoteStepLostWhenHeartbeatStale(t *testing.T) {
 	repo := lifecycleFixture(t, "claimed", 4102444800, sql.NullInt64{})
 	hash := sha256.Sum256([]byte("step-claim"))

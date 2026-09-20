@@ -56,7 +56,10 @@ func (h *StepHandler) placementOptions(
 	return labels, selected[0], nil
 }
 
-func parseStepPlacement(r *http.Request, labels []string) (string, string, error) {
+func parseStepPlacement(
+	r *http.Request,
+	labels []string,
+) (string, string, error) {
 	target, selectors, err := ValidateStepPlacement(
 		r.FormValue("execution_target"),
 		[]string{r.FormValue("agent_label")},
@@ -94,6 +97,9 @@ func ValidateStepPlacement(
 	seen := make(map[string]struct{}, len(selectors))
 	for _, selector := range selectors {
 		selector = strings.ToLower(strings.TrimSpace(selector))
+		if selector == "" {
+			continue
+		}
 		label, ok := canonical[selector]
 		if !ok {
 			return "", nil, errors.New("Select an available agent label")
@@ -104,9 +110,6 @@ func ValidateStepPlacement(
 		}
 		seen[key] = struct{}{}
 		validated = append(validated, label)
-	}
-	if len(validated) == 0 {
-		return "", nil, errors.New("Select an available agent label")
 	}
 	return target, validated, nil
 }
@@ -173,7 +176,8 @@ func (h *StepHandler) NewStepForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	step := db.Step{ProjectID: projectID, ExecutionTarget: "local"}
-	components.StepForm(step, projectID, true, labels, "", "").Render(r.Context(), w)
+	components.StepForm(step, projectID, true, labels, "", "").
+		Render(r.Context(), w)
 }
 
 func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
@@ -276,8 +280,22 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 		WriteFormError(
 			w,
 			r,
-			components.StepForm(step, projectID, true, labels, agentLabel, "Name is required"),
-			components.StepForm(step, projectID, true, labels, agentLabel, "Name is required"),
+			components.StepForm(
+				step,
+				projectID,
+				true,
+				labels,
+				agentLabel,
+				"Name is required",
+			),
+			components.StepForm(
+				step,
+				projectID,
+				true,
+				labels,
+				agentLabel,
+				"Name is required",
+			),
 		)
 		return
 	}
@@ -285,9 +303,26 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 		step := db.Step{ProjectID: projectID, Name: name, ScriptBody: script,
 			TimeoutSeconds: timeoutSeconds, MaxRetries: maxRetries,
 			ExecutionTarget: r.FormValue("execution_target")}
-		WriteFormError(w, r,
-			components.StepForm(step, projectID, true, labels, agentLabel, placementErr.Error()),
-			components.StepForm(step, projectID, true, labels, agentLabel, placementErr.Error()))
+		WriteFormError(
+			w,
+			r,
+			components.StepForm(
+				step,
+				projectID,
+				true,
+				labels,
+				agentLabel,
+				placementErr.Error(),
+			),
+			components.StepForm(
+				step,
+				projectID,
+				true,
+				labels,
+				agentLabel,
+				placementErr.Error(),
+			),
+		)
 		return
 	}
 
@@ -364,7 +399,8 @@ func (h *StepHandler) EditStepForm(w http.ResponseWriter, r *http.Request) {
 		).Render(r.Context(), w)
 		return
 	}
-	components.StepEditRow(step, projectID, labels, selectedLabel, "").Render(r.Context(), w)
+	components.StepEditRow(step, projectID, labels, selectedLabel, "").
+		Render(r.Context(), w)
 }
 
 func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
@@ -488,8 +524,20 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 		WriteFormError(
 			w,
 			r,
-			components.StepEditRow(step, projectID, labels, agentLabel, "Name is required"),
-			components.StepEditRow(step, projectID, labels, agentLabel, "Name is required"),
+			components.StepEditRow(
+				step,
+				projectID,
+				labels,
+				agentLabel,
+				"Name is required",
+			),
+			components.StepEditRow(
+				step,
+				projectID,
+				labels,
+				agentLabel,
+				"Name is required",
+			),
 		)
 		return
 	}
@@ -497,9 +545,24 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 		step := db.Step{ID: stepID, ProjectID: projectID, Name: name,
 			ScriptBody: script, SortOrder: sortOrder, TimeoutSeconds: timeoutSeconds,
 			MaxRetries: maxRetries, ExecutionTarget: r.FormValue("execution_target")}
-		WriteFormError(w, r,
-			components.StepEditRow(step, projectID, labels, agentLabel, placementErr.Error()),
-			components.StepEditRow(step, projectID, labels, agentLabel, placementErr.Error()))
+		WriteFormError(
+			w,
+			r,
+			components.StepEditRow(
+				step,
+				projectID,
+				labels,
+				agentLabel,
+				placementErr.Error(),
+			),
+			components.StepEditRow(
+				step,
+				projectID,
+				labels,
+				agentLabel,
+				placementErr.Error(),
+			),
+		)
 		return
 	}
 

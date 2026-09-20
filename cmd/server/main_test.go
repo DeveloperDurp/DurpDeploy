@@ -615,10 +615,26 @@ func TestRecoverPendingDeploymentsCancelsActiveRemoteStepBeforeFailure(
 		len(runs[0].ClaimTokenHash) != 32 {
 		t.Fatalf("recovered remote runs=%+v error=%v", runs, err)
 	}
+	for _, run := range runs {
+		var recoveryCancelled int64
+		if err := conn.QueryRowContext(ctx, `SELECT recovery_cancelled
+			FROM remote_step_runs WHERE deployment_id=? AND step_index=?
+			AND agent_id=?`, run.DeploymentID, run.StepIndex, run.AgentID).
+			Scan(&recoveryCancelled); err != nil {
+			t.Fatal(err)
+		}
+		if recoveryCancelled != 1 {
+			t.Fatalf("recovery cancellation marker=%d", recoveryCancelled)
+		}
+	}
 	deployment, err := repo.Queries.GetDeployment(ctx, 1)
 	if err != nil || deployment.Status != "running" ||
 		deployment.FinishedAt.Valid {
-		t.Fatalf("deployment before cancellation grace=%+v error=%v", deployment, err)
+		t.Fatalf(
+			"deployment before cancellation grace=%+v error=%v",
+			deployment,
+			err,
+		)
 	}
 	if _, err := conn.ExecContext(ctx, `UPDATE remote_step_runs
 		SET cancel_requested_at=unixepoch()-5
@@ -665,7 +681,11 @@ func TestRecoverPendingDeploymentsCancelsActiveRemoteStepBeforeFailure(
 	deployment, err = repo.Queries.GetDeployment(ctx, 1)
 	if err != nil || deployment.Status != "failed" ||
 		!deployment.FinishedAt.Valid {
-		t.Fatalf("deployment after cancellation grace=%+v error=%v", deployment, err)
+		t.Fatalf(
+			"deployment after cancellation grace=%+v error=%v",
+			deployment,
+			err,
+		)
 	}
 }
 

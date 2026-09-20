@@ -24,6 +24,10 @@ func TestRemoteAgentSQLParityFixtures(t *testing.T) {
 			"mssql/017_remove_environment_agent_assignments.sql",
 		},
 		{"033_remote_log_buffers.sql", "mssql/018_remote_log_buffers.sql"},
+		{
+			"034_remote_step_recovery_cancellation.sql",
+			"mssql/019_remote_step_recovery_cancellation.sql",
+		},
 	} {
 		t.Run(pair[0], func(t *testing.T) {
 			shared, err := migrations.FS.ReadFile(pair[0])

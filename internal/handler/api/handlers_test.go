@@ -984,6 +984,28 @@ func TestStep_AgentPlacementRoundTripsThroughAPI(t *testing.T) {
 		http.MethodPost,
 		"/api/v1/projects/"+itoa(project.ID)+"/steps",
 		token,
+		`{"name":"all-agents","script_body":"hostname",`+
+			`"execution_target":"agent"}`,
+	)
+	h.assertStatus(t, rec, http.StatusCreated)
+	var selectorFree struct {
+		AgentSelectors []string `json:"agent_selectors"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &selectorFree); err != nil {
+		t.Fatalf("decode selector-free step: %v", err)
+	}
+	if len(selectorFree.AgentSelectors) != 0 {
+		t.Fatalf(
+			"selector-free step selectors = %v",
+			selectorFree.AgentSelectors,
+		)
+	}
+
+	rec = h.request(
+		t,
+		http.MethodPost,
+		"/api/v1/projects/"+itoa(project.ID)+"/steps",
+		token,
 		`{"name":"remote","script_body":"uname -a",`+
 			`"execution_target":"agent","agent_selectors":["LINUX"]}`,
 	)
@@ -1052,7 +1074,6 @@ func TestStep_AgentPlacementRejectsInvalidAPISelectors(t *testing.T) {
 	for _, body := range []string{
 		`{"name":"bad-target","execution_target":"remote",` +
 			`"agent_selectors":["linux"]}`,
-		`{"name":"missing-selector","execution_target":"agent"}`,
 		`{"name":"unknown-selector","execution_target":"agent",` +
 			`"agent_selectors":["windows"]}`,
 	} {

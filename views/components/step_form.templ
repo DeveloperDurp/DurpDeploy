@@ -101,8 +101,8 @@ templ StepForm(step db.Step, projectID int64, isNew bool, labels []string, selec
 					<label class="label" for={ stepInputID(step, isNew, "agent-label") }>
 						<span class="label-text">Agent label</span>
 					</label>
-					<select id={ stepInputID(step, isNew, "agent-label") } name="agent_label" x-on:change="agentLabel = $event.target.value" x-bind:required="executionTarget === 'agent'" x-bind:disabled="executionTarget !== 'agent'" class="select select-bordered min-w-0 w-full">
-						<option value="">Select a label</option>
+					<select id={ stepInputID(step, isNew, "agent-label") } name="agent_label" x-on:change="agentLabel = $event.target.value" x-bind:disabled="executionTarget !== 'agent'" class="select select-bordered min-w-0 w-full">
+						<option value="">All environment agents</option>
 						for _, label := range labels {
 							<option value={ label } selected?={ label == selectedLabel }>{ label }</option>
 						}
@@ -224,8 +224,8 @@ templ StepEditRow(step db.Step, projectID int64, labels []string, selectedLabel 
 						<option value="agent">Agent</option>
 					</select>
 					<label class="label" for={ fmt.Sprintf("step-%d-agent-label", step.ID) }><span class="label-text">Agent label</span></label>
-					<select id={ fmt.Sprintf("step-%d-agent-label", step.ID) } name="agent_label" x-on:change="agentLabel = $event.target.value" x-cloak x-show="executionTarget === 'agent'" x-bind:required="executionTarget === 'agent'" x-bind:disabled="executionTarget !== 'agent'" class="select select-bordered select-sm min-w-0 w-full">
-						<option value="">Select label</option>
+					<select id={ fmt.Sprintf("step-%d-agent-label", step.ID) } name="agent_label" x-on:change="agentLabel = $event.target.value" x-cloak x-show="executionTarget === 'agent'" x-bind:disabled="executionTarget !== 'agent'" class="select select-bordered select-sm min-w-0 w-full">
+						<option value="">All environment agents</option>
 						for _, label := range labels {
 							<option value={ label } selected?={ label == selectedLabel }>{ label }</option>
 						}

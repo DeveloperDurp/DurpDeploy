@@ -89,6 +89,7 @@ ORDER BY d.created_at ASC;
 UPDATE remote_step_runs SET
     state = CASE WHEN state = 'waiting' THEN 'cancelled'
         ELSE 'cancel_requested' END,
+    recovery_cancelled = 1,
     cancel_requested_at = CASE WHEN state = 'cancel_requested'
         THEN cancel_requested_at ELSE sqlc.arg(now) END,
     finished_at = CASE WHEN state = 'waiting' THEN sqlc.arg(now)
@@ -115,7 +116,8 @@ WHERE status = 'running' AND assigned_agent_id IS NULL
   AND EXISTS (
       SELECT 1 FROM remote_step_runs r
       WHERE r.deployment_id = deployments.id
-        AND r.state IN ('failed', 'lost', 'cancel_unconfirmed')
+        AND (r.state IN ('failed', 'lost', 'cancel_unconfirmed')
+          OR (r.state = 'cancelled' AND r.recovery_cancelled = 1))
   )
   AND NOT EXISTS (
       SELECT 1 FROM remote_step_runs r

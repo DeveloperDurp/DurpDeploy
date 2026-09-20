@@ -332,6 +332,7 @@ type RemoteStepRun struct {
 	CreatedAt           int64          `json:"created_at"`
 	UpdatedAt           int64          `json:"updated_at"`
 	LogBufferCiphertext sql.NullString `json:"log_buffer_ciphertext"`
+	RecoveryCancelled   int64          `json:"recovery_cancelled"`
 }
 
 type ScheduledDeployment struct {
