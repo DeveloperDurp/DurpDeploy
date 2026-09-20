@@ -28,7 +28,7 @@ func revokeAgent(
 	q *db.Queries,
 	agentID string,
 ) (bool, error) {
-	locked, err := q.LockClaimAgent(ctx, agentID)
+	locked, err := q.LockRevocableAgent(ctx, agentID)
 	if err != nil {
 		return false, err
 	}

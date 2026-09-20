@@ -9,6 +9,28 @@ import (
 	"durpdeploy/internal/repository"
 )
 
+func TestRevokePendingAgentWithCommittingPairing(t *testing.T) {
+	repo := remoteFixture(t)
+	if _, err := repo.DB.Exec(
+		`UPDATE agents SET status = 'pending' WHERE id = 'a'`,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.DB.Exec(`UPDATE agent_pairings
+		SET state = 'committing', paired_at = NULL WHERE agent_id = 'a'`); err != nil {
+		t.Fatal(err)
+	}
+
+	changed, err := repo.RevokeAgent(t.Context(), "a")
+	if err != nil || !changed {
+		t.Fatalf("revoke changed=%v error=%v", changed, err)
+	}
+	agent, err := repo.Queries.GetAgent(t.Context(), "a")
+	if err != nil || agent.Status != "revoked" {
+		t.Fatalf("agent status=%q error=%v", agent.Status, err)
+	}
+}
+
 func TestRemoteTerminalFlushSurvivesAgentRevocation(t *testing.T) {
 	repo := remoteFixture(t)
 	claim := currentClaimArg(t, repo)
@@ -33,7 +55,11 @@ func TestRemoteTerminalFlushSurvivesAgentRevocation(t *testing.T) {
 	if err != nil || !result.Changed {
 		t.Fatalf("finish result=%+v error=%v", result, err)
 	}
-	if changed, err := repo.RevokeAgent(t.Context(), "a"); err != nil || !changed {
+	if changed, err := repo.RevokeAgent(
+		t.Context(),
+		"a",
+	); err != nil ||
+		!changed {
 		t.Fatalf("revoke changed=%v error=%v", changed, err)
 	}
 	logs, err = repo.FlushRemoteDeploymentLogs(
@@ -62,7 +88,11 @@ func TestRevocationClearsRemoteStepBuffers(t *testing.T) {
 		 zeroblob(16))`); err != nil {
 		t.Fatal(err)
 	}
-	if changed, err := repo.RevokeAgent(t.Context(), "a"); err != nil || !changed {
+	if changed, err := repo.RevokeAgent(
+		t.Context(),
+		"a",
+	); err != nil ||
+		!changed {
 		t.Fatalf("revoke changed=%v error=%v", changed, err)
 	}
 	var state string

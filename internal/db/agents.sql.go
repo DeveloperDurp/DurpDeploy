@@ -390,6 +390,19 @@ func (q *Queries) ListRevocableAgentClaims(ctx context.Context, agentID string) 
 	return items, nil
 }
 
+const lockRevocableAgent = `-- name: LockRevocableAgent :execrows
+UPDATE agents SET updated_at = updated_at -- NOSONAR: intentional write lock
+WHERE id = ? AND status IN ('pending', 'active', 'disabled')
+`
+
+func (q *Queries) LockRevocableAgent(ctx context.Context, id string) (int64, error) {
+	result, err := q.db.ExecContext(ctx, lockRevocableAgent, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const resetRevokedAgentForPairing = `-- name: ResetRevokedAgentForPairing :execrows
 UPDATE agents SET endpoint = ?1, status = 'pending',
     agent_version = NULL, certificate_pem = NULL,

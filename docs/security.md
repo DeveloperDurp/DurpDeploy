@@ -415,9 +415,15 @@ values:
   processes the combined expression in linear time.
 - **Configurable patterns:** Additional regex patterns can be added via the
   `DURPDEPLOY_EXTRA_SCRUB_PATTERNS` environment variable (comma-separated).
-  These are appended to the common credential patterns at startup. They apply
-  to each complete remote log event; cross-event buffering covers resolved
-  secret literals and the built-in credential patterns.
+  These are appended to the common credential patterns at startup. A possible
+  custom-pattern match remains buffered while it can still grow across an
+  event or line boundary. Local tails stay in memory; persisted remote tails
+  are encrypted. Once later input terminates the possible match, redacted
+  output resumes. A pattern such as `.*` that can consume all future input
+  necessarily remains buffered until terminal flush.
+  Custom anchors and word-boundary assertions are treated as empty matches.
+  This can over-redact, but prevents chunk boundaries from exposing a match
+  whose assertion depends on text that was already released.
 - **Buffered operation:** `broadcastWriter.Write` scrubs all text through the
   last newline in its buffer. Thus, it finds a secret in two writes. It also
   finds a secret that contains a newline.

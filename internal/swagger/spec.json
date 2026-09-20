@@ -17,6 +17,439 @@
   "host": "localhost:8080",
   "basePath": "/api/v1",
   "paths": {
+    "/admin/agents": {
+      "get": {
+        "tags": [
+          "admin-agents"
+        ],
+        "summary": "List agents.",
+        "operationId": "listAgents",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/AgentListResponse"
+            }
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "500": {
+            "description": "Server error response.",
+            "schema": {
+              "$ref": "#/definitions/ServerError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/admin/agents/pair": {
+      "post": {
+        "tags": [
+          "admin-agents"
+        ],
+        "summary": "Pair an agent.",
+        "operationId": "pairAgent",
+        "parameters": [
+          {
+            "x-go-name": "Body",
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/PairAgentRequest"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Created",
+            "schema": {
+              "$ref": "#/definitions/PairAgentResponse"
+            }
+          },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "409": {
+            "description": "Conflict error response.",
+            "schema": {
+              "$ref": "#/definitions/ConflictError"
+            }
+          },
+          "422": {
+            "description": "Validation error response.",
+            "schema": {
+              "$ref": "#/definitions/ValidationError"
+            }
+          },
+          "503": {
+            "description": "Server error response.",
+            "schema": {
+              "$ref": "#/definitions/ServerError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/admin/agents/{id}": {
+      "get": {
+        "tags": [
+          "admin-agents"
+        ],
+        "summary": "Get an agent and its labels.",
+        "operationId": "getAgent",
+        "parameters": [
+          {
+            "type": "string",
+            "x-go-name": "ID",
+            "name": "id",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/AgentDetailResponse"
+            }
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "500": {
+            "description": "Server error response.",
+            "schema": {
+              "$ref": "#/definitions/ServerError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/admin/agents/{id}/labels": {
+      "post": {
+        "tags": [
+          "admin-agents"
+        ],
+        "summary": "Add an agent label.",
+        "operationId": "addAgentLabel",
+        "parameters": [
+          {
+            "type": "string",
+            "x-go-name": "ID",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "x-go-name": "Body",
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/AgentLabelRequest"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "EmptyResponse is returned for no-content endpoints.",
+            "schema": {
+              "$ref": "#/definitions/EmptyResponse"
+            }
+          },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "500": {
+            "description": "Server error response.",
+            "schema": {
+              "$ref": "#/definitions/ServerError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "admin-agents"
+        ],
+        "summary": "Delete an agent label.",
+        "operationId": "deleteAgentLabel",
+        "parameters": [
+          {
+            "type": "string",
+            "x-go-name": "ID",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "x-go-name": "Body",
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/AgentLabelRequest"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "EmptyResponse is returned for no-content endpoints.",
+            "schema": {
+              "$ref": "#/definitions/EmptyResponse"
+            }
+          },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "500": {
+            "description": "Server error response.",
+            "schema": {
+              "$ref": "#/definitions/ServerError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/admin/agents/{id}/retry-pair": {
+      "post": {
+        "tags": [
+          "admin-agents"
+        ],
+        "summary": "Retry pairing an agent.",
+        "operationId": "retryPairAgent",
+        "parameters": [
+          {
+            "type": "string",
+            "x-go-name": "ID",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "x-go-name": "Body",
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/PairAgentRequest"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Created",
+            "schema": {
+              "$ref": "#/definitions/PairAgentResponse"
+            }
+          },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "409": {
+            "description": "Conflict error response.",
+            "schema": {
+              "$ref": "#/definitions/ConflictError"
+            }
+          },
+          "422": {
+            "description": "Validation error response.",
+            "schema": {
+              "$ref": "#/definitions/ValidationError"
+            }
+          },
+          "503": {
+            "description": "Server error response.",
+            "schema": {
+              "$ref": "#/definitions/ServerError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/admin/agents/{id}/revoke": {
+      "post": {
+        "tags": [
+          "admin-agents"
+        ],
+        "summary": "Revoke an agent.",
+        "operationId": "revokeAgent",
+        "parameters": [
+          {
+            "type": "string",
+            "x-go-name": "ID",
+            "name": "id",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "EmptyResponse is returned for no-content endpoints.",
+            "schema": {
+              "$ref": "#/definitions/EmptyResponse"
+            }
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "409": {
+            "description": "Conflict error response.",
+            "schema": {
+              "$ref": "#/definitions/ConflictError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/admin/audit": {
       "get": {
         "produces": [
@@ -5694,6 +6127,87 @@
     }
   },
   "definitions": {
+    "Agent": {
+      "type": "object",
+      "properties": {
+        "agent_version": {
+          "$ref": "#/definitions/swaggerSQLNullString"
+        },
+        "certificate_fingerprint": {
+          "$ref": "#/definitions/swaggerSQLNullString"
+        },
+        "created_at": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "CreatedAt"
+        },
+        "endpoint": {
+          "type": "string",
+          "x-go-name": "Endpoint"
+        },
+        "id": {
+          "type": "string",
+          "x-go-name": "ID"
+        },
+        "last_heartbeat_at": {
+          "$ref": "#/definitions/swaggerSQLNullInteger"
+        },
+        "name": {
+          "type": "string",
+          "x-go-name": "Name"
+        },
+        "revoked_at": {
+          "$ref": "#/definitions/swaggerSQLNullInteger"
+        },
+        "status": {
+          "type": "string",
+          "x-go-name": "Status"
+        },
+        "updated_at": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "UpdatedAt"
+        }
+      },
+      "x-go-name": "swaggerAgent",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "AgentDetailResponse": {
+      "type": "object",
+      "properties": {
+        "agent": {
+          "$ref": "#/definitions/Agent"
+        },
+        "labels": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "x-go-name": "Labels"
+        }
+      },
+      "x-go-name": "swaggerAgentDetailResponse",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "AgentLabelRequest": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string",
+          "x-go-name": "Label"
+        }
+      },
+      "x-go-name": "swaggerAgentLabelRequest",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "AgentListResponse": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Agent"
+      },
+      "x-go-name": "swaggerAgentListResponse",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
     "AuditLog": {
       "type": "object",
       "title": "AuditLog is a recorded state-changing action.",
@@ -6491,6 +7005,40 @@
         }
       },
       "x-go-name": "swaggerPaginatedResponse",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "PairAgentRequest": {
+      "type": "object",
+      "properties": {
+        "address": {
+          "type": "string",
+          "x-go-name": "Address"
+        },
+        "code": {
+          "type": "string",
+          "x-go-name": "Code"
+        },
+        "fingerprint": {
+          "type": "string",
+          "x-go-name": "Fingerprint"
+        }
+      },
+      "x-go-name": "swaggerPairAgentRequest",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "PairAgentResponse": {
+      "type": "object",
+      "properties": {
+        "agent_id": {
+          "type": "string",
+          "x-go-name": "AgentID"
+        },
+        "state": {
+          "type": "string",
+          "x-go-name": "State"
+        }
+      },
+      "x-go-name": "swaggerPairAgentResponse",
       "x-go-package": "durpdeploy/internal/handler/api"
     },
     "ProjectListResponse": {
@@ -7657,6 +8205,31 @@
         }
       },
       "x-go-name": "swaggerVariableResponse",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "swaggerSQLNullInteger": {
+      "type": "object",
+      "properties": {
+        "Int64": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "Valid": {
+          "type": "boolean"
+        }
+      },
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "swaggerSQLNullString": {
+      "type": "object",
+      "properties": {
+        "String": {
+          "type": "string"
+        },
+        "Valid": {
+          "type": "boolean"
+        }
+      },
       "x-go-package": "durpdeploy/internal/handler/api"
     }
   },

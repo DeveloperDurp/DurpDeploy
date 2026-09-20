@@ -614,3 +614,54 @@ type swaggerDbTableListResponse []string
 type swaggerStreamResponse struct {
 	Data string `json:"data"`
 }
+
+// swagger:model Agent
+type swaggerAgent struct {
+	ID                     string                `json:"id"`
+	Name                   string                `json:"name"`
+	Endpoint               string                `json:"endpoint"`
+	Status                 string                `json:"status"`
+	AgentVersion           swaggerSQLNullString  `json:"agent_version"`
+	CertificateFingerprint swaggerSQLNullString  `json:"certificate_fingerprint"`
+	LastHeartbeatAt        swaggerSQLNullInteger `json:"last_heartbeat_at"`
+	RevokedAt              swaggerSQLNullInteger `json:"revoked_at"`
+	CreatedAt              int64                 `json:"created_at"`
+	UpdatedAt              int64                 `json:"updated_at"`
+}
+
+type swaggerSQLNullString struct {
+	String string `json:"String"`
+	Valid  bool   `json:"Valid"`
+}
+
+type swaggerSQLNullInteger struct {
+	Int64 int64 `json:"Int64"`
+	Valid bool  `json:"Valid"`
+}
+
+// swagger:model AgentListResponse
+type swaggerAgentListResponse []swaggerAgent
+
+// swagger:model AgentDetailResponse
+type swaggerAgentDetailResponse struct {
+	Agent  swaggerAgent `json:"agent"`
+	Labels []string     `json:"labels"`
+}
+
+// swagger:model PairAgentRequest
+type swaggerPairAgentRequest struct {
+	Address     string `json:"address"`
+	Code        string `json:"code"`
+	Fingerprint string `json:"fingerprint"`
+}
+
+// swagger:model PairAgentResponse
+type swaggerPairAgentResponse struct {
+	AgentID string `json:"agent_id"`
+	State   string `json:"state"`
+}
+
+// swagger:model AgentLabelRequest
+type swaggerAgentLabelRequest struct {
+	Label string `json:"label"`
+}

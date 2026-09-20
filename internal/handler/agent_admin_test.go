@@ -110,7 +110,7 @@ func TestAdminAgentManagementFlow(t *testing.T) {
 	}
 	response = post("/admin/agents/agent-a/revoke", url.Values{})
 	response.Body.Close()
-	if response.StatusCode != http.StatusConflict {
+	if response.StatusCode != http.StatusSeeOther {
 		t.Fatalf("revoke status=%d", response.StatusCode)
 	}
 
@@ -118,7 +118,7 @@ func TestAdminAgentManagementFlow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get agent: %v", err)
 	}
-	if agent.Name != "Renamed Agent" || agent.Status != "pending" {
+	if agent.Name != "Renamed Agent" || agent.Status != "revoked" {
 		t.Fatalf("agent name=%q status=%q", agent.Name, agent.Status)
 	}
 }

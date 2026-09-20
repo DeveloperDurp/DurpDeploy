@@ -5,8 +5,10 @@ package logscrub
 import (
 	"os"
 	"regexp"
+	"regexp/syntax"
 	"sort"
 	"strings"
+	"unicode/utf8"
 )
 
 const replacement = "[REDACTED]"
@@ -19,11 +21,13 @@ var commonSecretPatterns = []string{
 	`(?i:\b(password|token|key)\s*=\s*[^\s"']+)`,
 }
 
+var extraSecretPatterns []string
+
 func init() {
 	if extra := os.Getenv("DURPDEPLOY_EXTRA_SCRUB_PATTERNS"); extra != "" {
 		for _, pattern := range strings.Split(extra, ",") {
 			if pattern = strings.TrimSpace(pattern); pattern != "" {
-				commonSecretPatterns = append(commonSecretPatterns, pattern)
+				extraSecretPatterns = append(extraSecretPatterns, pattern)
 			}
 		}
 	}
@@ -33,21 +37,27 @@ func init() {
 // literal secret values and common credential formats, but not transformed or
 // intentionally disguised data such as Base64 or decorated fragments.
 type Scrubber struct {
-	all      *regexp.Regexp
-	literals []string
+	all             *regexp.Regexp
+	literals        []string
+	pendingPatterns []pendingPattern
+}
+
+type pendingPattern struct {
+	program *syntax.Prog
 }
 
 func New(secrets []string) *Scrubber {
-	return newScrubber(secrets, commonSecretPatterns)
+	return newScrubber(secrets, commonSecretPatterns, extraSecretPatterns)
 }
 
 func NewWithPatterns(secrets []string, patterns []string) *Scrubber {
-	return newScrubber(secrets, patterns)
+	return newScrubber(secrets, nil, patterns)
 }
 
 func newScrubber(
 	secrets []string,
 	patterns []string,
+	streamPatterns []string,
 ) *Scrubber {
 	literals := make([]string, 0, len(secrets))
 	for _, secret := range secrets {
@@ -55,6 +65,33 @@ func newScrubber(
 			continue
 		}
 		literals = append(literals, secret)
+	}
+	effectivePatterns := append([]string(nil), patterns...)
+	pendingPatterns := make([]pendingPattern, 0, len(streamPatterns))
+	for _, pattern := range streamPatterns {
+		expression, err := syntax.Parse("(?s)("+pattern+")", syntax.Perl)
+		if err != nil {
+			continue
+		}
+		dropEmptyWidthAssertions(expression)
+		pattern = expression.String()
+		effectivePatterns = append(effectivePatterns, pattern)
+		compiled, err := regexp.Compile(pattern)
+		if err != nil {
+			continue
+		}
+		prefix, complete := compiled.LiteralPrefix()
+		if complete {
+			literals = append(literals, prefix)
+			continue
+		}
+		program, err := syntax.Compile(expression.Simplify())
+		if err != nil {
+			continue
+		}
+		pendingPatterns = append(pendingPatterns, pendingPattern{
+			program: program,
+		})
 	}
 	sort.Slice(literals, func(i, j int) bool {
 		return len(literals[i]) > len(literals[j])
@@ -64,8 +101,23 @@ func newScrubber(
 		knownParts[index] = regexp.QuoteMeta(literal)
 	}
 	return &Scrubber{
-		all:      compile(append(knownParts, patterns...)),
-		literals: literals,
+		all:             compile(append(knownParts, effectivePatterns...)),
+		literals:        literals,
+		pendingPatterns: pendingPatterns,
+	}
+}
+
+func dropEmptyWidthAssertions(expression *syntax.Regexp) {
+	switch expression.Op {
+	case syntax.OpBeginLine, syntax.OpEndLine,
+		syntax.OpBeginText, syntax.OpEndText,
+		syntax.OpWordBoundary, syntax.OpNoWordBoundary:
+		expression.Op = syntax.OpEmptyMatch
+		expression.Sub = nil
+		expression.Rune = nil
+	}
+	for _, subexpression := range expression.Sub {
+		dropEmptyWidthAssertions(subexpression)
 	}
 }
 
@@ -136,7 +188,8 @@ func (s *Scrubber) PendingBytes(text string) int {
 	if s == nil || text == "" {
 		return 0
 	}
-	pending := 0
+	incompleteRune := incompleteUTF8SuffixBytes(text)
+	pending := incompleteRune
 	for _, literal := range s.literals {
 		limit := min(len(text), len(literal)-1)
 		for size := limit; size > pending; size-- {
@@ -171,7 +224,124 @@ func (s *Scrubber) PendingBytes(text string) int {
 			pending = max(pending, match[1]-match[0])
 		}
 	}
+	for _, pattern := range s.pendingPatterns {
+		patternPending := pattern.pendingBytes(
+			text[:len(text)-incompleteRune],
+		)
+		if patternPending > 0 {
+			patternPending += incompleteRune
+		}
+		pending = max(pending, patternPending)
+	}
+	if pending > 0 && s.all != nil {
+		boundary := len(text) - pending
+		for _, match := range s.all.FindAllStringIndex(text, -1) {
+			if match[0] < boundary && match[1] > boundary {
+				pending = len(text) - match[0]
+				break
+			}
+		}
+	}
 	return pending
+}
+
+func incompleteUTF8SuffixBytes(text string) int {
+	limit := max(0, len(text)-utf8.UTFMax+1)
+	for start := len(text) - 1; start >= limit; start-- {
+		if !utf8.RuneStart(text[start]) {
+			continue
+		}
+		if !utf8.FullRuneInString(text[start:]) {
+			return len(text) - start
+		}
+		return 0
+	}
+	return 0
+}
+
+func (p pendingPattern) pendingBytes(text string) int {
+	raw := make(map[uint32]int)
+	expanded := make(map[uint32]int)
+	nextRaw := make(map[uint32]int)
+	previousRune := rune(-1)
+	for offset := 0; offset < len(text); {
+		recordPatternState(raw, uint32(p.program.Start), offset)
+		r, size := utf8.DecodeRuneInString(text[offset:])
+		clear(expanded)
+		for pc, start := range raw {
+			p.addClosure(expanded, pc, start, previousRune, r, true)
+		}
+		clear(nextRaw)
+		for pc, start := range expanded {
+			instruction := &p.program.Inst[pc]
+			if instruction.MatchRune(r) {
+				recordPatternState(nextRaw, instruction.Out, start)
+			}
+		}
+		offset += size
+		previousRune = r
+		raw, nextRaw = nextRaw, raw
+	}
+	clear(expanded)
+	for pc, start := range raw {
+		p.addClosure(expanded, pc, start, previousRune, -1, false)
+	}
+	pending := 0
+	for pc, start := range expanded {
+		switch p.program.Inst[pc].Op {
+		case syntax.InstRune, syntax.InstRune1,
+			syntax.InstRuneAny, syntax.InstRuneAnyNotNL,
+			syntax.InstEmptyWidth:
+			pending = max(pending, len(text)-start)
+		}
+	}
+	return pending
+}
+
+func (p pendingPattern) addClosure(
+	states map[uint32]int,
+	pc uint32,
+	start int,
+	previousRune rune,
+	nextRune rune,
+	resolveEmpty bool,
+) {
+	if previous, ok := states[pc]; ok && previous <= start {
+		return
+	}
+	states[pc] = start
+	instruction := &p.program.Inst[pc]
+	switch instruction.Op {
+	case syntax.InstAlt, syntax.InstAltMatch:
+		p.addClosure(
+			states, instruction.Out, start,
+			previousRune, nextRune, resolveEmpty,
+		)
+		p.addClosure(
+			states, instruction.Arg, start,
+			previousRune, nextRune, resolveEmpty,
+		)
+	case syntax.InstCapture, syntax.InstNop:
+		p.addClosure(
+			states, instruction.Out, start,
+			previousRune, nextRune, resolveEmpty,
+		)
+	case syntax.InstEmptyWidth:
+		context := syntax.EmptyOpContext(previousRune, nextRune)
+		required := syntax.EmptyOp(instruction.Arg)
+		if !resolveEmpty || context&required == required {
+			p.addClosure(
+				states, instruction.Out, start,
+				previousRune, nextRune, resolveEmpty,
+			)
+		}
+	}
+}
+
+func recordPatternState(states map[uint32]int, pc uint32, start int) {
+	if previous, ok := states[pc]; !ok || start < previous {
+		states[pc] = start
+	}
 }
 
 func hasWordSuffixFold(text string, suffix string) bool {

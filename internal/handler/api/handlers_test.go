@@ -250,12 +250,12 @@ func TestAgents_AdminManagementFlow(t *testing.T) {
 		token,
 		"",
 	)
-	h.assertStatus(t, recorder, http.StatusConflict)
+	h.assertStatus(t, recorder, http.StatusNoContent)
 	agent, err := h.repo.Queries.GetAgent(context.Background(), "api-agent")
 	if err != nil {
 		t.Fatalf("get agent: %v", err)
 	}
-	if agent.Status != "pending" {
+	if agent.Status != "revoked" {
 		t.Fatalf("agent status=%q", agent.Status)
 	}
 }
@@ -996,7 +996,8 @@ func TestStep_AgentPlacementRoundTripsThroughAPI(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
 		t.Fatalf("decode created step: %v", err)
 	}
-	if len(created.AgentSelectors) != 1 || created.AgentSelectors[0] != "linux" {
+	if len(created.AgentSelectors) != 1 ||
+		created.AgentSelectors[0] != "linux" {
 		t.Fatalf("created selectors = %v, want [linux]", created.AgentSelectors)
 	}
 
@@ -1015,7 +1016,8 @@ func TestStep_AgentPlacementRoundTripsThroughAPI(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &fetched); err != nil {
 		t.Fatalf("decode fetched step: %v", err)
 	}
-	if len(fetched.AgentSelectors) != 1 || fetched.AgentSelectors[0] != "linux" {
+	if len(fetched.AgentSelectors) != 1 ||
+		fetched.AgentSelectors[0] != "linux" {
 		t.Fatalf("fetched selectors = %v, want [linux]", fetched.AgentSelectors)
 	}
 
@@ -1191,8 +1193,14 @@ func TestTemplate_AgentPlacementAndHistoryRoundTripThroughAPI(t *testing.T) {
 		t.Fatalf("decode created template: %v", err)
 	}
 	if created.ExecutionTarget != "agent" ||
-		len(created.AgentSelectors) != 1 || created.AgentSelectors[0] != "linux" {
-		t.Fatalf("created placement = %q %v", created.ExecutionTarget, created.AgentSelectors)
+		len(
+			created.AgentSelectors,
+		) != 1 || created.AgentSelectors[0] != "linux" {
+		t.Fatalf(
+			"created placement = %q %v",
+			created.ExecutionTarget,
+			created.AgentSelectors,
+		)
 	}
 
 	rec = h.request(
@@ -1223,7 +1231,8 @@ func TestTemplate_AgentPlacementAndHistoryRoundTripThroughAPI(t *testing.T) {
 	if len(history) != 2 {
 		t.Fatalf("history length = %d, want 2", len(history))
 	}
-	if history[0].ExecutionTarget != "local" || len(history[0].AgentSelectors) != 0 {
+	if history[0].ExecutionTarget != "local" ||
+		len(history[0].AgentSelectors) != 0 {
 		t.Fatalf(
 			"latest history placement = %q %v",
 			history[0].ExecutionTarget,
@@ -1231,7 +1240,9 @@ func TestTemplate_AgentPlacementAndHistoryRoundTripThroughAPI(t *testing.T) {
 		)
 	}
 	if history[1].ExecutionTarget != "agent" ||
-		len(history[1].AgentSelectors) != 1 || history[1].AgentSelectors[0] != "linux" {
+		len(
+			history[1].AgentSelectors,
+		) != 1 || history[1].AgentSelectors[0] != "linux" {
 		t.Fatalf(
 			"original history placement = %q %v",
 			history[1].ExecutionTarget,

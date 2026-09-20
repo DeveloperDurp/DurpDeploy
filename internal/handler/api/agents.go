@@ -48,6 +48,19 @@ func NewAgentHandler(
 	return &AgentHandler{repo: repo, pairing: pairing}
 }
 
+// swagger:route GET /admin/agents admin-agents listAgents
+//
+// List agents.
+//
+// Security:
+//   bearer:
+//
+// Responses:
+//   200: body:AgentListResponse
+//   401: body:UnauthorizedError
+//   403: body:ForbiddenError
+//   500: body:ServerError
+
 func (h *AgentHandler) ListAgents(w http.ResponseWriter, r *http.Request) {
 	agents, err := h.repo.Queries.ListAgents(r.Context())
 	if err != nil {
@@ -60,6 +73,20 @@ func (h *AgentHandler) ListAgents(w http.ResponseWriter, r *http.Request) {
 	}
 	RespondJSON(w, http.StatusOK, items)
 }
+
+// swagger:route GET /admin/agents/{id} admin-agents getAgent
+//
+// Get an agent and its labels.
+//
+// Security:
+//   bearer:
+//
+// Responses:
+//   200: body:AgentDetailResponse
+//   401: body:UnauthorizedError
+//   403: body:ForbiddenError
+//   404: body:NotFoundError
+//   500: body:ServerError
 
 func (h *AgentHandler) GetAgent(w http.ResponseWriter, r *http.Request) {
 	agent, err := h.repo.Queries.GetAgent(
@@ -88,6 +115,22 @@ func (h *AgentHandler) GetAgent(w http.ResponseWriter, r *http.Request) {
 	}{publicAgent(agent), labels})
 }
 
+// swagger:route POST /admin/agents/pair admin-agents pairAgent
+//
+// Pair an agent.
+//
+// Security:
+//   bearer:
+//
+// Responses:
+//   201: body:PairAgentResponse
+//   400: body:BadRequestError
+//   401: body:UnauthorizedError
+//   403: body:ForbiddenError
+//   409: body:ConflictError
+//   422: body:ValidationError
+//   503: body:ServerError
+
 func (h *AgentHandler) PairAgent(w http.ResponseWriter, r *http.Request) {
 	var request pairAgentRequest
 	if !readJSONBool(w, r, &request) {
@@ -95,6 +138,22 @@ func (h *AgentHandler) PairAgent(w http.ResponseWriter, r *http.Request) {
 	}
 	h.pair(w, r, request, "")
 }
+
+// swagger:route POST /admin/agents/{id}/retry-pair admin-agents retryPairAgent
+//
+// Retry pairing an agent.
+//
+// Security:
+//   bearer:
+//
+// Responses:
+//   201: body:PairAgentResponse
+//   400: body:BadRequestError
+//   401: body:UnauthorizedError
+//   403: body:ForbiddenError
+//   409: body:ConflictError
+//   422: body:ValidationError
+//   503: body:ServerError
 
 func (h *AgentHandler) RetryPairAgent(w http.ResponseWriter, r *http.Request) {
 	var request pairAgentRequest
@@ -153,6 +212,20 @@ func (h *AgentHandler) pair(
 	RespondJSON(w, http.StatusCreated, result)
 }
 
+// swagger:route POST /admin/agents/{id}/revoke admin-agents revokeAgent
+//
+// Revoke an agent.
+//
+// Security:
+//   bearer:
+//
+// Responses:
+//   204: body:EmptyResponse
+//   401: body:UnauthorizedError
+//   403: body:ForbiddenError
+//   404: body:NotFoundError
+//   409: body:ConflictError
+
 func (h *AgentHandler) RevokeAgent(w http.ResponseWriter, r *http.Request) {
 	_, err := h.repo.RevokeAgent(r.Context(), chi.URLParam(r, "id"))
 	if err != nil {
@@ -165,6 +238,21 @@ func (h *AgentHandler) RevokeAgent(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// swagger:route POST /admin/agents/{id}/labels admin-agents addAgentLabel
+//
+// Add an agent label.
+//
+// Security:
+//   bearer:
+//
+// Responses:
+//   204: body:EmptyResponse
+//   400: body:BadRequestError
+//   401: body:UnauthorizedError
+//   403: body:ForbiddenError
+//   404: body:NotFoundError
+//   500: body:ServerError
 
 func (h *AgentHandler) AddLabel(w http.ResponseWriter, r *http.Request) {
 	var request agentLabelRequest
@@ -194,6 +282,21 @@ func (h *AgentHandler) AddLabel(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// swagger:route DELETE /admin/agents/{id}/labels admin-agents deleteAgentLabel
+//
+// Delete an agent label.
+//
+// Security:
+//   bearer:
+//
+// Responses:
+//   204: body:EmptyResponse
+//   400: body:BadRequestError
+//   401: body:UnauthorizedError
+//   403: body:ForbiddenError
+//   404: body:NotFoundError
+//   500: body:ServerError
 
 func (h *AgentHandler) DeleteLabel(w http.ResponseWriter, r *http.Request) {
 	var request agentLabelRequest
@@ -237,10 +340,15 @@ func writeAgentNotFound(w http.ResponseWriter, err error) {
 
 func publicAgent(agent db.Agent) agentResponse {
 	return agentResponse{
-		ID: agent.ID, Name: agent.Name, Endpoint: agent.Endpoint,
-		Status: agent.Status, AgentVersion: agent.AgentVersion,
+		ID:                     agent.ID,
+		Name:                   agent.Name,
+		Endpoint:               agent.Endpoint,
+		Status:                 agent.Status,
+		AgentVersion:           agent.AgentVersion,
 		CertificateFingerprint: agent.CertificateFingerprint,
-		LastHeartbeatAt:        agent.LastHeartbeatAt, RevokedAt: agent.RevokedAt,
-		CreatedAt: agent.CreatedAt, UpdatedAt: agent.UpdatedAt,
+		LastHeartbeatAt:        agent.LastHeartbeatAt,
+		RevokedAt:              agent.RevokedAt,
+		CreatedAt:              agent.CreatedAt,
+		UpdatedAt:              agent.UpdatedAt,
 	}
 }
