@@ -7,6 +7,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"sync"
 	"time"
@@ -244,10 +245,19 @@ func (service *PairingService) cleanup(
 ) (PairingResult, error) {
 	status, err := connection.Post(ctx, request)
 	if err != nil {
-		return result, err
+		slog.Warn(
+			"paired agent cleanup acknowledgement failed",
+			"agent_id", result.AgentID,
+			"err", err,
+		)
+		return result, nil
 	}
 	if status != http.StatusNoContent {
-		return result, ErrPairingUnavailable
+		slog.Warn(
+			"paired agent cleanup acknowledgement rejected",
+			"agent_id", result.AgentID,
+			"status", status,
+		)
 	}
 	return result, nil
 }

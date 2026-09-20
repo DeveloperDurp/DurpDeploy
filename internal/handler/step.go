@@ -38,22 +38,19 @@ func NewStepHandler(repo *repository.Repository) *StepHandler {
 func (h *StepHandler) placementOptions(
 	ctx context.Context,
 	stepID int64,
-) ([]string, string, error) {
+) ([]string, []string, error) {
 	labels, err := h.repo.Queries.ListAvailableAgentLabels(ctx)
 	if err != nil {
-		return nil, "", err
+		return nil, nil, err
 	}
 	if stepID == 0 {
-		return labels, "", nil
+		return labels, nil, nil
 	}
 	selected, err := h.repo.Queries.ListStepAgentSelectors(ctx, stepID)
 	if err != nil {
-		return nil, "", err
+		return nil, nil, err
 	}
-	if len(selected) == 0 {
-		return labels, "", nil
-	}
-	return labels, selected[0], nil
+	return labels, selected, nil
 }
 
 func parseStepPlacement(
@@ -347,8 +344,15 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 		MaxRetries:     maxRetries,
 	}
 
+	var selectors []string
+	if agentLabel != "" {
+		selectors = []string{agentLabel}
+	}
 	_, err = h.repo.CreateStepWithPlacement(
-		r.Context(), params, target, []string{agentLabel},
+		r.Context(),
+		params,
+		target,
+		selectors,
 	)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -388,10 +392,14 @@ func (h *StepHandler) EditStepForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	labels, selectedLabel, err := h.placementOptions(r.Context(), step.ID)
+	labels, selected, err := h.placementOptions(r.Context(), step.ID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+	selectedLabel := ""
+	if len(selected) > 0 {
+		selectedLabel = selected[0]
 	}
 	if r.URL.Query().Get("mobile") == "1" {
 		components.StepForm(
@@ -429,15 +437,16 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	labels, selectedLabel, err := h.placementOptions(r.Context(), stepID)
+	labels, selected, err := h.placementOptions(r.Context(), stepID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	target, agentLabel, placementErr := parseStepPlacement(r, labels)
-	if agentLabel == "" {
-		agentLabel = selectedLabel
+	selectedLabel := ""
+	if len(selected) > 0 {
+		selectedLabel = selected[0]
 	}
+	target, agentLabel, placementErr := parseStepPlacement(r, labels)
 
 	name := strings.TrimSpace(r.FormValue("name"))
 	script := r.FormValue("script_body")
@@ -542,9 +551,16 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if placementErr != nil {
-		step := db.Step{ID: stepID, ProjectID: projectID, Name: name,
-			ScriptBody: script, SortOrder: sortOrder, TimeoutSeconds: timeoutSeconds,
-			MaxRetries: maxRetries, ExecutionTarget: r.FormValue("execution_target")}
+		step := db.Step{
+			ID:              stepID,
+			ProjectID:       projectID,
+			Name:            name,
+			ScriptBody:      script,
+			SortOrder:       sortOrder,
+			TimeoutSeconds:  timeoutSeconds,
+			MaxRetries:      maxRetries,
+			ExecutionTarget: r.FormValue("execution_target"),
+		}
 		WriteFormError(
 			w,
 			r,
@@ -575,8 +591,15 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 		MaxRetries:     maxRetries,
 	}
 
+	var selectors []string
+	if agentLabel != "" {
+		selectors = []string{agentLabel}
+	}
+	if target == "agent" && agentLabel == selectedLabel {
+		selectors = selected
+	}
 	_, err = h.repo.UpdateStepWithPlacement(
-		r.Context(), params, target, []string{agentLabel},
+		r.Context(), params, target, selectors,
 	)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

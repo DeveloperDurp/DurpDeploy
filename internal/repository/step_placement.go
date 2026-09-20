@@ -84,11 +84,15 @@ func setStepPlacement(
 		return nil
 	}
 	for _, selector := range selectors {
+		selector = strings.ToLower(strings.TrimSpace(selector))
+		if selector == "" {
+			continue
+		}
 		if err := q.AddStepAgentSelector(
 			ctx,
 			db.AddStepAgentSelectorParams{
 				StepID: stepID,
-				Label:  strings.ToLower(strings.TrimSpace(selector)),
+				Label:  selector,
 			},
 		); err != nil {
 			return err

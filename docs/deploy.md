@@ -102,8 +102,8 @@ boundary is:
   DURPDEPLOY_AGENT_VERSION=<agent-version>
   ```
 
-The optional Compose `agent` profile is a co-located demonstration and
-validation path. Containerized agent execution does not use a per-step
+The standalone agent repository provides a co-located Compose demonstration
+and validation path. Containerized agent execution does not use a per-step
 `chroot`. The container has a read-only root, private writable state and `/tmp`,
 one preselected service and script UID `10001`, zero capabilities, `NoNewPrivs`,
 service-owned cgroup limits, and no
@@ -113,13 +113,13 @@ network access, and its effects inside that container. Read-only does not stop
 scripts from reading visible files or exfiltrating supplied secrets.
 
 Co-location is compatible with these boundaries, but production agents should
-run remotely on the host where the deployment commands belong. The profile has
-a private state volume and no server database, server key, Docker socket, or
-inbound port. Use either:
+run remotely on the host where the deployment commands belong. The standalone
+service has a private state volume and no server database, server key, Docker
+socket, or inbound port. From the standalone agent checkout, use either:
 
 ```bash
-docker compose --profile agent up -d --build agent
-podman compose --profile agent up -d --build agent
+docker compose -f /path/to/durpdeploy-agent/compose.yml up -d --build agent
+podman compose -f /path/to/durpdeploy-agent/compose.yml up -d --build agent
 ```
 
 Do not run both commands for the same agent. For systemd, install
