@@ -21,7 +21,7 @@ Do not change these items to make their spelling agree with normal text.
 | Caddy | The reverse proxy in the supported installation. |
 | callback | The OIDC HTTP request that returns to DurpDeploy. |
 | certificate fingerprint | The SHA-256 identification of a certificate. |
-| claim | A temporary assignment of one deployment to one agent. |
+| claim | A temporary assignment of one remote deployment or remote-step run to one agent. |
 | claim token | A temporary credential for a claim. |
 | CLI | A command-line interface. |
 | container | An isolated operating-system process environment. |

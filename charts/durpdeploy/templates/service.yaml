@@ -11,5 +11,9 @@ spec:
       targetPort: http
       protocol: TCP
       name: http
+    - port: {{ .Values.agent.port }}
+      targetPort: agent
+      protocol: TCP
+      name: agent
   selector:
     {{- include "durpdeploy.selectorLabels" . | nindent 4 }}

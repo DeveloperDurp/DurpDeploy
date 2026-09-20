@@ -17,8 +17,11 @@ agent identity certificate and key, paired server identity state, and a
 temporary hash-only current-claim marker. Keep that directory private and
 back it up only if preserving the enrolled identity is intentional.
 
-Agents initiate all connections. The server never connects inbound to an agent,
-and remote dispatch does not use SSH.
+Agents initiate runtime connections, but pairing needs a temporary unpaired agent
+callback listener. After code and fingerprint confirmation, the server sends one
+`server-init` callback. After the completion acknowledgement, that callback
+listener closes. The paired agent has no persistent inbound listener, and remote
+dispatch does not use SSH.
 
 ## Transport and ports
 
@@ -41,23 +44,29 @@ agent port.
 ## Configure the server listener
 
 Configure the direct listener through the server environment file. `make dev`
-remains the ordinary browser/API development path and does not enable the agent
-listener. For a local foreground run, set the server listener variables before
-starting `go run ./cmd/server`. The public origin hostname becomes the
-self-signed certificate SAN:
+enables it automatically for local container development with port 10943,
+public URL `https://host.containers.internal:10943`, and an identity below the
+ignored `tmp/` directory. Set any of the variables explicitly to override that
+default. `make dev` creates a missing local identity with the public origin
+hostname as the self-signed certificate SAN and preserves an existing identity.
+For a local foreground run without `make dev`, no listener setup is required:
 
 ```bash
-DURPDEPLOY_AGENT_LISTEN_ADDR=:10943 \
-  DURPDEPLOY_AGENT_PUBLIC_URL=https://localhost \
-  DURPDEPLOY_AGENT_IDENTITY_DIR=.agent-identity \
-  go run ./cmd/server
+go run ./cmd/server
 ```
+
+Startup creates the identity automatically. To provision it before starting the
+server, run `go run ./cmd/server dev-agent-identity` with any desired listener
+overrides set.
 
 The public URL is the direct server mTLS endpoint, not the Caddy/Let's Encrypt
 browser or API endpoint. The agent is outbound-only and has no database. Its
 state directory is not server storage.
 
-The listener is disabled unless all three variables are set together:
+The server listener is always active. A bare binary defaults to
+`0.0.0.0:10943`, `https://localhost:10943`, and `.agent-identity`, creating the
+identity on first start. Production installations must override the public URL
+and identity directory with externally reachable, persistent values:
 
 ```dotenv
 DURPDEPLOY_AGENT_LISTEN_ADDR=0.0.0.0:10943
@@ -68,7 +77,8 @@ DURPDEPLOY_AGENT_IDENTITY_DIR=/var/lib/durpdeploy/agent-identity
 `DURPDEPLOY_AGENT_PUBLIC_URL` must be an HTTPS origin with no path, query, or
 fragment. Its hostname is placed in the self-signed certificate SAN. Pairing
 persists the direct listener URL for the agent. Operators do not enter it on
-the agent host.
+the agent host. Each variable can be overridden independently; an omitted
+variable keeps its default.
 
 On a systemd server, put those variables in the root-owned server environment
 file referenced by the unit, for example:
@@ -102,17 +112,39 @@ default. Do not put the server identity directory in the agent service.
 Use an administrator browser session at the Caddy URL. The agent pages are
 admin-only.
 
-1. Open **Admin, Agents**, choose **New agent**, and enter the stable Agent ID,
-   display name, and optional agent version. The ID must be unique.
-2. Start the local agent listener, then open the agent's pairing page only when
-the operator can complete the ceremony. Enter the short-lived, one-time pairing code,
-   compare the displayed fingerprint through a trusted channel, and confirm.
+1. Start the local agent listener. Open **Admin, Agents**, then enter a display
+   name, agent address, and the short-lived pairing code. The address can omit
+   `https://`; the server adds it automatically. The server creates the stable
+   Agent ID.
+2. Compare the fingerprint on the confirmation page with the fingerprint shown
+   by the agent through a trusted channel. Approve only when they match. Deny
+   returns to the agent list without creating the agent. Server-init
+   (`/agent/v1/pairings/server-init`) uses the approved value plus the
+   server-held code and pinned endpoint to finalize pairing. The values are
+   console-only and cannot be retrieved later.
    You can use the code one time. You cannot retrieve it later. Never put it in source
    control, tickets, chat, shell history, or logs.
-3. Assign an environment to the paired active agent from its details page, then
-   verify its heartbeat before creating a deployment.
+3. Change the display name or add capability and environment labels on the
+   agent details page, then verify its heartbeat. The Agent ID does not change.
 
-Each remote deployment is assigned to exactly one paired agent. It never falls back to local execution.
+Environment and capability labels route remote steps. An active, paired agent
+matches when it has the deployment's environment label and every capability
+label required by the step. Capability matching is case-insensitive. An
+environment label is a routing input, not an authorization boundary.
+
+Each matching agent receives its own copy of the remote step. The deployment
+waits for every copy to succeed before it continues. If no agent matches, the
+step fails immediately; DurpDeploy does not run it locally.
+
+Examples:
+
+* **One agent:** a `production` deployment contains a remote step requiring
+  `linux`. One active, paired agent has the `production` environment label and
+  the `linux` capability label, so that agent receives the step.
+* **Fan-out:** two active, paired agents have both labels. Both receive the
+  step, and the deployment continues only after both copies succeed.
+* **No match:** the agents have the wrong environment, lack `linux`, are not
+  active, or are not paired. The step fails without a local fallback.
 
 ## Agent start and pairing
 
@@ -131,8 +163,8 @@ is sent in heartbeats after pairing. The protocol is fixed by the binary as
 `agent/1`. There is no protocol variable.
 
 The first run prints a short-lived pairing code and agent fingerprint. Enter
-those values in the authenticated admin pairing flow, compare the displayed
-fingerprint, and confirm before the code expires. Do not put the pairing code,
+the code in the authenticated admin pairing flow, compare the displayed
+fingerprint, and approve before the code expires. Do not put the pairing code,
 fingerprint, endpoint, or private key in documentation, tickets, shell history,
 or logs. Pairing persists the agent identity, pull URL, server pins, and agent
 ID in the private state directory.
@@ -145,17 +177,122 @@ stores no server secret or deployment payload at rest. A current claim marker
 contains only the deployment ID and a SHA-256 hash of the claim token and is
 removed after the claim completes.
 
+## Agent execution boundary
+
+Agent execution does **not** use a per-step `chroot`. The container or systemd
+service is the filesystem and cgroup boundary, and the operator or user is responsible for every
+deployment script they run there, including its contents, the secrets supplied
+to it, its network access, and all effects available inside the agent
+container. A read-only root filesystem does not stop a script from reading
+files that are visible in the container or exfiltrating secrets supplied to it.
+
+The container contract is deliberately limited and explicit:
+
+* The agent process and Bash run as the preselected unprivileged service UID
+  `10001`; neither process has Linux capabilities.
+* The root filesystem is read-only. Writable locations are private to the
+  container, primarily the agent state directory and a private `/tmp` tmpfs.
+* The container has no host or control-plane database, server secret,
+  control-plane state directory, Docker socket, or arbitrary host filesystem
+  mount. Its private state volume is the only operator-provided data path.
+* Linux capabilities are dropped by default, and `NoNewPrivs` is enabled.
+* CPU, memory, and process-count limits are enforced on the service cgroup.
+* No host cgroup tree, host filesystem, or server data is mounted into the
+  agent container.
+
+An unprivileged agent cannot change to a separate runner UID without
+`SETUID`/`SETGID`. Those capabilities are intentionally absent. Bash therefore
+shares the agent UID and can read or change its private state volume, including
+the paired identity. Use one agent boundary per trusted script domain, and
+re-pair the agent if a script may have altered that state. The separate host or
+container still prevents access to control-plane state and arbitrary host data.
+
+These controls reduce the agent container's access to its host. They do not
+turn deployment scripts into trusted code, restrict the network destinations
+available to the container, or prevent scripts from using secrets and files
+that the operator makes available. Co-locating the agent with the control
+plane is compatible with this contract when the container mounts remain
+private, but a remote host is still the preferred placement for production
+deployments.
+
+The supplied systemd unit provides the equivalent service-level read-only and
+private mount boundary. A direct foreground agent does not and is reserved for
+initial pairing. The control-plane server permits an unisolated foreground
+runner only with the explicit `DURPDEPLOY_EXECUTION_BOUNDARY=development`
+opt-in; an unset marker fails deployment execution. See `docs/deploy.md`.
+
 ## Direct binary installation
 
-Build the agent binary from the repository. This builds only `cmd/agent` and
-does not create or open a database:
+The agent lives in the standalone
+[`DeveloperDurp/durpdeploy-agent`](https://github.com/DeveloperDurp/durpdeploy-agent)
+repository. Install Git, GNU Make, `jq`, and Go 1.25.7 or newer, then build the
+agent from the version required by the DurpDeploy server release. In a trusted
+server checkout, record the pinned version, authenticated module checksum, and
+source commit:
 
 ```bash
-make build-agent
-sudo install -o root -g root -m 0755 ./durpdeploy-agent /usr/local/bin/durpdeploy-agent
+set -euo pipefail
+AGENT_MODULE=github.com/DeveloperDurp/durpdeploy-agent
+AGENT_VERSION=$(go list -m -f '{{.Version}}' "$AGENT_MODULE")
+AGENT_SUM=$(awk -v module="$AGENT_MODULE" -v version="$AGENT_VERSION" \
+  '$1 == module && $2 == version { print $3 }' go.sum)
+AGENT_COMMIT=$(go mod download -json "$AGENT_MODULE@$AGENT_VERSION" \
+  | jq -e -r '.Origin.Hash // empty')
+test -n "$AGENT_VERSION"
+test -n "$AGENT_SUM"
+test -n "$AGENT_COMMIT"
+printf 'AGENT_VERSION=%s\nAGENT_SUM=%s\nAGENT_COMMIT=%s\n' \
+  "$AGENT_VERSION" "$AGENT_SUM" "$AGENT_COMMIT"
 ```
 
-Create the dedicated account and private state directory:
+Transfer those three values to the agent host through the same trusted channel
+as the server release. Verify the module downloaded there against the server's
+checksum and commit before checking out the exact commit. These comparisons
+fail closed if a tag was rewritten:
+
+```bash
+set -euo pipefail
+AGENT_MODULE=github.com/DeveloperDurp/durpdeploy-agent
+AGENT_VERSION=v0.1.0 # use the value recorded from the server checkout
+AGENT_SUM='h1:...' # use the value recorded from the server checkout
+AGENT_COMMIT=... # use the value recorded from the server checkout
+AGENT_DOWNLOAD=$(go mod download -json "$AGENT_MODULE@$AGENT_VERSION")
+DOWNLOADED_SUM=$(printf '%s' "$AGENT_DOWNLOAD" | jq -e -r '.Sum // empty')
+DOWNLOADED_COMMIT=$(printf '%s' "$AGENT_DOWNLOAD" \
+  | jq -e -r '.Origin.Hash // empty')
+test -n "$AGENT_VERSION"
+test -n "$AGENT_SUM"
+test -n "$AGENT_COMMIT"
+test "$DOWNLOADED_SUM" = "$AGENT_SUM"
+test "$DOWNLOADED_COMMIT" = "$AGENT_COMMIT"
+git clone https://github.com/DeveloperDurp/durpdeploy-agent.git
+cd durpdeploy-agent
+git checkout --detach "$AGENT_COMMIT"
+test "$(git rev-parse HEAD)" = "$AGENT_COMMIT"
+make build
+
+BUILD_INFO=$(go version -m ./durpdeploy-agent)
+printf '%s\n' "$BUILD_INFO"
+printf '%s\n' "$BUILD_INFO" | grep -Fq "vcs.revision=$AGENT_COMMIT"
+printf '%s\n' "$BUILD_INFO" | grep -Fq 'vcs.modified=false'
+SOURCE_SHA=$(sha256sum ./durpdeploy-agent | awk '{ print $1 }')
+sudo install -o root -g root -m 0755 ./durpdeploy-agent /usr/local/bin/durpdeploy-agent
+INSTALLED_SHA=$(sha256sum /usr/local/bin/durpdeploy-agent | awk '{ print $1 }')
+test "$SOURCE_SHA" = "$INSTALLED_SHA"
+printf 'installed sha256: %s\n' "$INSTALLED_SHA"
+```
+
+The block stops at the first failed check. Building `cmd/agent` in the
+standalone repository does not create or open a database. Keep the printed
+digest with the deployment record so the installed artifact can be checked
+later.
+
+The server and agent must both use protocol `agent/1`. Builds using that
+protocol are wire-compatible; a breaking wire change requires a new protocol
+identifier. Prefer the exact agent version pinned by the server, and upgrade
+the server and agent together when a release changes that pin.
+
+Create the service account and private state directory:
 
 ```bash
 sudo useradd --system --home-dir /var/lib/durpdeploy-agent \
@@ -181,9 +318,9 @@ service process receives the values without putting them in shell history.
 
 ## Docker or Podman Compose
 
-The optional `agent` profile is a co-located demonstration and validation
-path. It is not a server sidecar and is not a production placement
-recommendation. Production agents must run remotely on the host where the
+The standalone agent repository's Compose service is a co-located compatibility
+and validation path. It is not a server sidecar or a production placement
+recommendation. Production agents should run remotely on the host where the
 deployment commands belong.
 
 Create `compose.agent.env` with the same local variables, use mode `0600`, and
@@ -198,23 +335,25 @@ Docker Compose:
 
 ```bash
 chmod 0600 compose.agent.env
-docker compose --profile agent up -d --build agent
-docker compose --profile agent ps agent
-docker compose --profile agent logs -f agent
+docker compose -f /path/to/durpdeploy-agent/compose.yml up -d --build agent
+docker compose -f /path/to/durpdeploy-agent/compose.yml ps agent
+docker compose -f /path/to/durpdeploy-agent/compose.yml logs -f agent
 ```
 
 Podman Compose:
 
 ```bash
 chmod 0600 compose.agent.env
-podman compose --profile agent up -d --build agent
-podman compose --profile agent ps agent
-podman compose --profile agent logs -f agent
+podman compose -f /path/to/durpdeploy-agent/compose.yml up -d --build agent
+podman compose -f /path/to/durpdeploy-agent/compose.yml ps agent
+podman compose -f /path/to/durpdeploy-agent/compose.yml logs -f agent
 ```
 
-The profile mounts one volume at `/var/lib/durpdeploy-agent`, has no `/data`
-mount, server secret, Docker socket, host network, or inbound listener. That
-volume is agent identity state, not SQLite and not a server backup.
+The service mounts one private volume at `/var/lib/durpdeploy-agent` and a
+private `/tmp`. It has no `/data` mount, server secret, Docker socket, host
+network, host cgroup mount, or persistent inbound listener. Its root is
+read-only and its CPU, memory, and process count are limited. The state volume
+contains agent identity, not SQLite or a server backup.
 
 ## systemd installation and operations
 
@@ -229,9 +368,11 @@ sudo systemctl enable --now durpdeploy-agent
 sudo systemctl status durpdeploy-agent --no-pager
 ```
 
-The unit runs as `durpdeploy-agent`, sets the state directory, uses
+The unit runs the agent and Bash as `durpdeploy-agent`, sets the state directory, uses
 `/etc/durpdeploy-agent.env`, applies a private `UMask=0077`, and permits writes
-only to the agent state directory. Keep both `/etc/durpdeploy-agent.env` and
+only to the agent state directory. It also applies `NoNewPrivileges`, private
+mounts and `/tmp`, and service cgroup limits. Keep both
+`/etc/durpdeploy-agent.env` and
 the state directory inaccessible to other users:
 
 ```bash
@@ -262,8 +403,8 @@ sudo journalctl -u durpdeploy-agent -n 50 --no-pager
 ```
 
 In the UI, confirm the agent is active and its heartbeat is current. Start a
-small non-production deployment first. A remote deployment must show its
-assigned agent, not local execution.
+small non-production deployment first. A remote step must show every matching
+agent run, not local execution.
 
 ## Troubleshooting
 
@@ -274,8 +415,9 @@ API routes are not valid substitutes. A 404 often means the agent URL points
 at Caddy or port 443 instead of the direct listener. A stale server binary can
 also cause a 404. Confirm that the server has all three listener variables.
 Use `ss -ltn` to check port 10943. Verify the installed binary. Restart the
-server. Rebuild the agent with `make build-agent` and install it again
-when its behavior does not match the checkout.
+server. In a checkout of the standalone agent repository, rebuild with
+`make build`, verify the binary as described above, and install it again when
+its behavior does not match the checkout.
 
 ### Wrong fingerprint
 
@@ -286,14 +428,17 @@ use trust-all TLS or accept a fingerprint copied from an untrusted connection.
 
 ### Expired or reused pairing code
 
-Pairing codes expire after 15 minutes and are consumed once. Restart the
+Pairing codes expire after 10 minutes and are consumed once. Restart the
 unpaired local listener to obtain a fresh code. For an already active agent,
 revoke and re-pair it first.
 
 ### No match
 
-Check that the environment is assigned to this paired active agent. The
-deployment remains waiting until that agent polls.
+Check that the paired agent has the expected capability and environment labels
+and is reporting a healthy heartbeat. The agent must be active and paired, its
+environment label must match the deployment environment, and it must have every
+capability label required by the remote step. A no-match step fails without
+running locally.
 
 ### Revoked agent
 
@@ -305,8 +450,9 @@ unrelated host.
 ### Lost agent
 
 Stop the service and inspect the agent and server journals. Started work that
-misses heartbeats becomes lost and is not automatically replayed. Review the
-original deployment, fix the host, and create an explicit new deployment.
+misses heartbeats for 45 seconds becomes lost and is not automatically
+replayed. Review the original deployment, fix the host, and create an explicit
+new deployment.
 
 ### Cancel unconfirmed
 
@@ -338,11 +484,12 @@ the state file by guesswork.
 
 ## Upgrades, rollback, and backup scope
 
-Upgrade the server and agents from the same repository revision when possible.
-For an agent, build a new `durpdeploy-agent`, install it over the binary, and
-restart through the normal controlled pairing procedure. Preserve the state
-directory across a compatible upgrade. If rollback is necessary, stop the
-service, install the previous binary, and restore the matching known-good
+Upgrade the server and agent to compatible releases together. For an agent,
+check out the standalone version pinned by the server, build and verify a new
+`durpdeploy-agent`, install it over the binary, and restart through the normal
+controlled pairing procedure. Preserve the state directory across an
+`agent/1`-compatible upgrade. If rollback is necessary, stop the service,
+install the previous verified binary, and restore the matching known-good
 configuration. Do not delete pins or identity files during an ordinary binary
 rollback.
 

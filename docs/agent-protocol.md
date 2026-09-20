@@ -12,6 +12,7 @@ malformed JSON, and every other protocol value.
 
 | Endpoint | Request contract | Notes |
 | --- | --- | --- |
+| `POST /agent/v1/pairings/server-init` | `PairRequest` | Server-side pairing completion over mTLS. The first call uses `completion_ack: false`; after durable confirmation the same request is retried with `completion_ack: true` to perform listener cleanup. |
 | `POST /agent/v1/poll` | `PollRequest` | Protocol and agent version. A no-work response has no deployment payload. |
 | `POST /agent/v1/deployments/{id}/start` | `StartRequest` | Acknowledges that the claimed work started. |
 | `POST /agent/v1/deployments/{id}/heartbeat` | `HeartbeatRequest` | Response carries cancellation state and staged server fingerprints. |
@@ -39,12 +40,40 @@ material, certificate bodies, or secret values.
 These are protocol constants, not configuration knobs. Oversize requests and
 batches fail before later agent or persistence work consumes them.
 
-## Direct assignment
+## Bootstrap and pairing flow
 
-An administrator explicitly assigns each remote environment to one paired
-agent. Environments without an assignment run locally. An assigned
-environment creates work only for its paired agent. Agents do not select work
-or authorize themselves through labels.
+Pairing uses two channels:
+
+1. The unpaired local listener prints a short-lived pairing code and its
+   certificate fingerprint.
+2. The operator enters the agent address, display name, and pairing code in
+   the authenticated form. The server discovers the certificate fingerprint,
+   and the operator approves it on a separate confirmation page after comparing
+   it with the fingerprint printed by the agent.
+3. The server submits `POST /agent/v1/pairings/server-init` over mTLS with
+   `completion_ack: false`.
+4. The callback validates the confirmed identity and persists the server pin
+   and endpoint only after validation.
+5. The same request is retried with `completion_ack: true` when needed to
+   recover a lost `204 No Content` response. This acknowledgement closes the
+   temporary callback listener. It is idempotent.
+
+Pairing code disclosure is local-only. Codes and fingerprints are never API
+responses.
+
+## Agent labels
+
+Administrators can attach capability labels through the browser or API and
+environment labels through the agent details page. For each remote step, the
+server selects active, paired agents that have the deployment's environment
+label and every capability label required by the step. Capability matching is
+case-insensitive. A step with no capability labels matches every active, paired
+agent carrying the environment label.
+
+The server creates one run per matching agent, so every match receives the
+step. The deployment continues only after all runs succeed. If nothing matches,
+the step fails without falling back to local execution. Labels select work;
+they do not grant authorization or create a security boundary.
 
 ## Dispatch state machine
 

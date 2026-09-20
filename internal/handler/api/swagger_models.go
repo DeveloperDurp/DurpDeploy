@@ -35,34 +35,40 @@ type swaggerLifecycleStage struct {
 // Step is a bash script step within a project.
 // swagger:model Step
 type swaggerStep struct {
-	ID             int64  `json:"id"`
-	ProjectID      int64  `json:"project_id"`
-	Name           string `json:"name"`
-	ScriptBody     string `json:"script_body"`
-	SortOrder      int64  `json:"sort_order"`
-	CreatedAt      int64  `json:"created_at"`
-	TimeoutSeconds int64  `json:"timeout_seconds"`
-	MaxRetries     int64  `json:"max_retries"`
+	ID              int64    `json:"id"`
+	ProjectID       int64    `json:"project_id"`
+	Name            string   `json:"name"`
+	ScriptBody      string   `json:"script_body"`
+	SortOrder       int64    `json:"sort_order"`
+	CreatedAt       int64    `json:"created_at"`
+	TimeoutSeconds  int64    `json:"timeout_seconds"`
+	MaxRetries      int64    `json:"max_retries"`
+	ExecutionTarget string   `json:"execution_target"`
+	AgentSelectors  []string `json:"agent_selectors"`
 }
 
 // StepTemplate is a reusable step template.
 // swagger:model StepTemplate
 type swaggerStepTemplate struct {
-	ID         int64  `json:"id"`
-	Name       string `json:"name"`
-	ScriptBody string `json:"script_body"`
-	CreatedAt  int64  `json:"created_at"`
+	ID              int64    `json:"id"`
+	Name            string   `json:"name"`
+	ScriptBody      string   `json:"script_body"`
+	CreatedAt       int64    `json:"created_at"`
+	ExecutionTarget string   `json:"execution_target"`
+	AgentSelectors  []string `json:"agent_selectors"`
 }
 
 // StepTemplateVersion is a historical version of a step template.
 // swagger:model StepTemplateVersion
 type swaggerStepTemplateVersion struct {
-	ID            int64  `json:"id"`
-	TemplateID    int64  `json:"template_id"`
-	VersionNumber int64  `json:"version_number"`
-	Name          string `json:"name"`
-	ScriptBody    string `json:"script_body"`
-	CreatedAt     int64  `json:"created_at"`
+	ID              int64    `json:"id"`
+	TemplateID      int64    `json:"template_id"`
+	VersionNumber   int64    `json:"version_number"`
+	Name            string   `json:"name"`
+	ScriptBody      string   `json:"script_body"`
+	CreatedAt       int64    `json:"created_at"`
+	ExecutionTarget string   `json:"execution_target"`
+	AgentSelectors  []string `json:"agent_selectors"`
 }
 
 // Release is an immutable snapshot of project steps and variables.
@@ -359,11 +365,13 @@ type swaggerReorderStagesRequest struct {
 // StepRequest is the body for create/update step.
 // swagger:model StepRequest
 type swaggerStepRequest struct {
-	Name           string `json:"name"`
-	ScriptBody     string `json:"script_body"`
-	SortOrder      int64  `json:"sort_order"`
-	TimeoutSeconds int64  `json:"timeout_seconds"`
-	MaxRetries     int64  `json:"max_retries"`
+	Name            string   `json:"name"`
+	ScriptBody      string   `json:"script_body"`
+	SortOrder       int64    `json:"sort_order"`
+	TimeoutSeconds  int64    `json:"timeout_seconds"`
+	MaxRetries      int64    `json:"max_retries"`
+	ExecutionTarget string   `json:"execution_target"`
+	AgentSelectors  []string `json:"agent_selectors"`
 }
 
 // ReorderStepsRequest reorders project steps.
@@ -375,8 +383,10 @@ type swaggerReorderStepsRequest struct {
 // StepTemplateRequest is the body for create/update step template.
 // swagger:model StepTemplateRequest
 type swaggerStepTemplateRequest struct {
-	Name       string `json:"name"`
-	ScriptBody string `json:"script_body"`
+	Name            string   `json:"name"`
+	ScriptBody      string   `json:"script_body"`
+	ExecutionTarget string   `json:"execution_target"`
+	AgentSelectors  []string `json:"agent_selectors"`
 }
 
 // VariableRequest is the body for create/update variable.
@@ -603,4 +613,55 @@ type swaggerDbTableListResponse []string
 // swagger:model StreamResponse
 type swaggerStreamResponse struct {
 	Data string `json:"data"`
+}
+
+// swagger:model Agent
+type swaggerAgent struct {
+	ID                     string                `json:"id"`
+	Name                   string                `json:"name"`
+	Endpoint               string                `json:"endpoint"`
+	Status                 string                `json:"status"`
+	AgentVersion           swaggerSQLNullString  `json:"agent_version"`
+	CertificateFingerprint swaggerSQLNullString  `json:"certificate_fingerprint"`
+	LastHeartbeatAt        swaggerSQLNullInteger `json:"last_heartbeat_at"`
+	RevokedAt              swaggerSQLNullInteger `json:"revoked_at"`
+	CreatedAt              int64                 `json:"created_at"`
+	UpdatedAt              int64                 `json:"updated_at"`
+}
+
+type swaggerSQLNullString struct {
+	String string `json:"String"`
+	Valid  bool   `json:"Valid"`
+}
+
+type swaggerSQLNullInteger struct {
+	Int64 int64 `json:"Int64"`
+	Valid bool  `json:"Valid"`
+}
+
+// swagger:model AgentListResponse
+type swaggerAgentListResponse []swaggerAgent
+
+// swagger:model AgentDetailResponse
+type swaggerAgentDetailResponse struct {
+	Agent  swaggerAgent `json:"agent"`
+	Labels []string     `json:"labels"`
+}
+
+// swagger:model PairAgentRequest
+type swaggerPairAgentRequest struct {
+	Address     string `json:"address"`
+	Code        string `json:"code"`
+	Fingerprint string `json:"fingerprint"`
+}
+
+// swagger:model PairAgentResponse
+type swaggerPairAgentResponse struct {
+	AgentID string `json:"agent_id"`
+	State   string `json:"state"`
+}
+
+// swagger:model AgentLabelRequest
+type swaggerAgentLabelRequest struct {
+	Label string `json:"label"`
 }

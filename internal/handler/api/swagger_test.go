@@ -53,7 +53,7 @@ func TestSwagger_UIRenders(t *testing.T) {
 	}
 }
 
-func TestSwagger_SpecEmbedded(t *testing.T) {
+func TestSwagger(t *testing.T) {
 	spec, err := swagger.ReadSpec()
 	if err != nil {
 		t.Fatalf("failed to read embedded spec: %v", err)
@@ -63,6 +63,59 @@ func TestSwagger_SpecEmbedded(t *testing.T) {
 	}
 	if spec[0] != '{' {
 		t.Fatal("expected embedded spec to start with {")
+	}
+}
+
+func TestSwagger_DeploymentRetryDocumentsCreatedResponse(t *testing.T) {
+	// Given
+	spec, err := swagger.ReadSpec()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc struct {
+		Paths map[string]map[string]struct {
+			Responses map[string]json.RawMessage `json:"responses"`
+		} `json:"paths"`
+	}
+	if err := json.Unmarshal(spec, &doc); err != nil {
+		t.Fatal(err)
+	}
+
+	// When
+	responses := doc.Paths["/deployments/{id}/retry"]["post"].Responses
+
+	// Then
+	if _, ok := responses["201"]; !ok {
+		t.Fatalf("retry responses = %v, want 201", responses)
+	}
+}
+
+func TestSwagger_DocumentsAgentEndpoints(t *testing.T) {
+	spec, err := swagger.ReadSpec()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc struct {
+		Paths map[string]map[string]json.RawMessage `json:"paths"`
+	}
+	if err := json.Unmarshal(spec, &doc); err != nil {
+		t.Fatal(err)
+	}
+	for _, route := range []struct {
+		path   string
+		method string
+	}{
+		{"/admin/agents", "get"},
+		{"/admin/agents/pair", "post"},
+		{"/admin/agents/{id}", "get"},
+		{"/admin/agents/{id}/retry-pair", "post"},
+		{"/admin/agents/{id}/revoke", "post"},
+		{"/admin/agents/{id}/labels", "post"},
+		{"/admin/agents/{id}/labels", "delete"},
+	} {
+		if _, ok := doc.Paths[route.path][route.method]; !ok {
+			t.Errorf("missing %s %s", route.method, route.path)
+		}
 	}
 }
 

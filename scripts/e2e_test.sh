@@ -60,7 +60,11 @@ else
     # Start the server. The migrations it would normally run are a no-op
     # because the admin CLI just created the schema.
     DURPDEPLOY_ADDR="127.0.0.1:$PORT" \
+        DURPDEPLOY_AGENT_LISTEN_ADDR="127.0.0.1:0" \
+        DURPDEPLOY_AGENT_PUBLIC_URL="https://localhost" \
+        DURPDEPLOY_AGENT_IDENTITY_DIR="$TMP/agent-identity" \
         DURPDEPLOY_DB="$DB_DSN" \
+        DURPDEPLOY_EXECUTION_BOUNDARY=development \
         DURPDEPLOY_URL="$BASE" \
         "$TMP/durpdeploy" >"$TMP/server.log" 2>&1 &
     SERVER_PID=$!
@@ -760,10 +764,17 @@ done
 [[ "$API_DEP_STATUS" == "running" ]] || { echo "FAIL: deployment did not reach running, status=$API_DEP_STATUS"; exit 1; }
 echo "  Deployment reached running: OK ($API_DEP_ID)"
 
-CODE=$(curl -s -H "Authorization: Bearer $API_TOKEN" -X POST -o /dev/null -w "%{http_code}" \
+API_CANCEL_BODY="$TMP/api-cancel.json"
+CODE=$(curl -s -H "Authorization: Bearer $API_TOKEN" -X POST \
+    -o "$API_CANCEL_BODY" -w "%{http_code}" \
     "$BASE/api/v1/deployments/$API_DEP_ID/cancel")
 [[ "$CODE" == "200" ]] || { echo "FAIL: cancel deployment got $CODE, want 200"; exit 1; }
-for i in {1..50}; do
+API_CANCEL_STATUS=$(python3 -c \
+    "import sys,json; print(json.load(sys.stdin)['status'])" <"$API_CANCEL_BODY")
+[[ "$API_CANCEL_STATUS" == "running" ]] || {
+    echo "FAIL: cancel acknowledgement status=$API_CANCEL_STATUS, want running"; exit 1;
+}
+for i in {1..200}; do
     API_DEP_STATUS=$(api_get "$BASE/api/v1/deployments/$API_DEP_ID/status" | python3 -c "import sys,json; print(json.load(sys.stdin)['status'])")
     [[ "$API_DEP_STATUS" == "cancelled" ]] && break
     sleep 0.1

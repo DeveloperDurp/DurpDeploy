@@ -1,7 +1,9 @@
 package handler
 
 import (
+	"context"
 	"database/sql"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -31,6 +33,82 @@ func (h *StepHandler) getProjectStep(
 
 func NewStepHandler(repo *repository.Repository) *StepHandler {
 	return &StepHandler{repo: repo}
+}
+
+func (h *StepHandler) placementOptions(
+	ctx context.Context,
+	stepID int64,
+) ([]string, []string, error) {
+	labels, err := h.repo.Queries.ListAvailableAgentLabels(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	if stepID == 0 {
+		return labels, nil, nil
+	}
+	selected, err := h.repo.Queries.ListStepAgentSelectors(ctx, stepID)
+	if err != nil {
+		return nil, nil, err
+	}
+	return labels, selected, nil
+}
+
+func parseStepPlacement(
+	r *http.Request,
+	labels []string,
+) (string, string, error) {
+	target, selectors, err := ValidateStepPlacement(
+		r.FormValue("execution_target"),
+		[]string{r.FormValue("agent_label")},
+		labels,
+	)
+	if err != nil {
+		return "", "", err
+	}
+	if len(selectors) == 0 {
+		return target, "", nil
+	}
+	return target, selectors[0], nil
+}
+
+func ValidateStepPlacement(
+	target string,
+	selectors []string,
+	available []string,
+) (string, []string, error) {
+	target = strings.TrimSpace(target)
+	if target == "" {
+		target = "local"
+	}
+	if target != "local" && target != "agent" {
+		return "", nil, errors.New("Run step on must be Local or Agent")
+	}
+	if target == "local" {
+		return target, nil, nil
+	}
+	canonical := make(map[string]string, len(available))
+	for _, label := range available {
+		canonical[strings.ToLower(label)] = label
+	}
+	validated := make([]string, 0, len(selectors))
+	seen := make(map[string]struct{}, len(selectors))
+	for _, selector := range selectors {
+		selector = strings.ToLower(strings.TrimSpace(selector))
+		if selector == "" {
+			continue
+		}
+		label, ok := canonical[selector]
+		if !ok {
+			return "", nil, errors.New("Select an available agent label")
+		}
+		key := strings.ToLower(label)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		validated = append(validated, label)
+	}
+	return target, validated, nil
 }
 
 func (h *StepHandler) ListSteps(w http.ResponseWriter, r *http.Request) {
@@ -89,8 +167,14 @@ func (h *StepHandler) NewStepForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	step := db.Step{ProjectID: projectID}
-	components.StepForm(step, projectID, true, "").Render(r.Context(), w)
+	labels, _, err := h.placementOptions(r.Context(), 0)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	step := db.Step{ProjectID: projectID, ExecutionTarget: "local"}
+	components.StepForm(step, projectID, true, labels, "", "").
+		Render(r.Context(), w)
 }
 
 func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
@@ -104,6 +188,12 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid project ID", http.StatusBadRequest)
 		return
 	}
+	labels, _, err := h.placementOptions(r.Context(), 0)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	target, agentLabel, placementErr := parseStepPlacement(r, labels)
 
 	name := strings.TrimSpace(r.FormValue("name"))
 	script := r.FormValue("script_body")
@@ -114,10 +204,11 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 		t, err := strconv.ParseInt(timeoutStr, 10, 64)
 		if err != nil || t < 0 {
 			step := db.Step{
-				ProjectID:      projectID,
-				Name:           name,
-				ScriptBody:     script,
-				TimeoutSeconds: timeoutSeconds,
+				ProjectID:       projectID,
+				Name:            name,
+				ScriptBody:      script,
+				TimeoutSeconds:  timeoutSeconds,
+				ExecutionTarget: r.FormValue("execution_target"),
 			}
 			WriteFormError(
 				w,
@@ -125,13 +216,13 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 				components.StepForm(
 					step,
 					projectID,
-					true,
+					true, labels, agentLabel,
 					"Timeout must be a non-negative integer",
 				),
 				components.StepForm(
 					step,
 					projectID,
-					true,
+					true, labels, agentLabel,
 					"Timeout must be a non-negative integer",
 				),
 			)
@@ -146,11 +237,12 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 		m, err := strconv.ParseInt(maxRetriesStr, 10, 64)
 		if err != nil || m < 0 {
 			step := db.Step{
-				ProjectID:      projectID,
-				Name:           name,
-				ScriptBody:     script,
-				TimeoutSeconds: timeoutSeconds,
-				MaxRetries:     maxRetries,
+				ProjectID:       projectID,
+				Name:            name,
+				ScriptBody:      script,
+				TimeoutSeconds:  timeoutSeconds,
+				MaxRetries:      maxRetries,
+				ExecutionTarget: r.FormValue("execution_target"),
 			}
 			WriteFormError(
 				w,
@@ -158,13 +250,13 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 				components.StepForm(
 					step,
 					projectID,
-					true,
+					true, labels, agentLabel,
 					"Max retries must be a non-negative integer",
 				),
 				components.StepForm(
 					step,
 					projectID,
-					true,
+					true, labels, agentLabel,
 					"Max retries must be a non-negative integer",
 				),
 			)
@@ -175,17 +267,58 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 
 	if name == "" {
 		step := db.Step{
-			ProjectID:      projectID,
-			Name:           name,
-			ScriptBody:     script,
-			TimeoutSeconds: timeoutSeconds,
-			MaxRetries:     maxRetries,
+			ProjectID:       projectID,
+			Name:            name,
+			ScriptBody:      script,
+			TimeoutSeconds:  timeoutSeconds,
+			MaxRetries:      maxRetries,
+			ExecutionTarget: r.FormValue("execution_target"),
 		}
 		WriteFormError(
 			w,
 			r,
-			components.StepForm(step, projectID, true, "Name is required"),
-			components.StepForm(step, projectID, true, "Name is required"),
+			components.StepForm(
+				step,
+				projectID,
+				true,
+				labels,
+				agentLabel,
+				"Name is required",
+			),
+			components.StepForm(
+				step,
+				projectID,
+				true,
+				labels,
+				agentLabel,
+				"Name is required",
+			),
+		)
+		return
+	}
+	if placementErr != nil {
+		step := db.Step{ProjectID: projectID, Name: name, ScriptBody: script,
+			TimeoutSeconds: timeoutSeconds, MaxRetries: maxRetries,
+			ExecutionTarget: r.FormValue("execution_target")}
+		WriteFormError(
+			w,
+			r,
+			components.StepForm(
+				step,
+				projectID,
+				true,
+				labels,
+				agentLabel,
+				placementErr.Error(),
+			),
+			components.StepForm(
+				step,
+				projectID,
+				true,
+				labels,
+				agentLabel,
+				placementErr.Error(),
+			),
 		)
 		return
 	}
@@ -211,7 +344,16 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 		MaxRetries:     maxRetries,
 	}
 
-	_, err = h.repo.Queries.CreateStep(r.Context(), params)
+	var selectors []string
+	if agentLabel != "" {
+		selectors = []string{agentLabel}
+	}
+	_, err = h.repo.CreateStepWithPlacement(
+		r.Context(),
+		params,
+		target,
+		selectors,
+	)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -250,7 +392,23 @@ func (h *StepHandler) EditStepForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	components.StepEditRow(step, projectID, "").Render(r.Context(), w)
+	labels, selected, err := h.placementOptions(r.Context(), step.ID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	selectedLabel := ""
+	if len(selected) > 0 {
+		selectedLabel = selected[0]
+	}
+	if r.URL.Query().Get("mobile") == "1" {
+		components.StepForm(
+			step, projectID, false, labels, selectedLabel, "",
+		).Render(r.Context(), w)
+		return
+	}
+	components.StepEditRow(step, projectID, labels, selectedLabel, "").
+		Render(r.Context(), w)
 }
 
 func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
@@ -279,6 +437,16 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	labels, selected, err := h.placementOptions(r.Context(), stepID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	selectedLabel := ""
+	if len(selected) > 0 {
+		selectedLabel = selected[0]
+	}
+	target, agentLabel, placementErr := parseStepPlacement(r, labels)
 
 	name := strings.TrimSpace(r.FormValue("name"))
 	script := r.FormValue("script_body")
@@ -290,24 +458,25 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 		t, err := strconv.ParseInt(timeoutStr, 10, 64)
 		if err != nil || t < 0 {
 			step := db.Step{
-				ID:             stepID,
-				ProjectID:      projectID,
-				Name:           name,
-				ScriptBody:     script,
-				SortOrder:      sortOrder,
-				TimeoutSeconds: timeoutSeconds,
+				ID:              stepID,
+				ProjectID:       projectID,
+				Name:            name,
+				ScriptBody:      script,
+				SortOrder:       sortOrder,
+				TimeoutSeconds:  timeoutSeconds,
+				ExecutionTarget: r.FormValue("execution_target"),
 			}
 			WriteFormError(
 				w,
 				r,
 				components.StepEditRow(
 					step,
-					projectID,
+					projectID, labels, agentLabel,
 					"Timeout must be a non-negative integer",
 				),
 				components.StepEditRow(
 					step,
-					projectID,
+					projectID, labels, agentLabel,
 					"Timeout must be a non-negative integer",
 				),
 			)
@@ -322,25 +491,26 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 		m, err := strconv.ParseInt(maxRetriesStr, 10, 64)
 		if err != nil || m < 0 {
 			step := db.Step{
-				ID:             stepID,
-				ProjectID:      projectID,
-				Name:           name,
-				ScriptBody:     script,
-				SortOrder:      sortOrder,
-				TimeoutSeconds: timeoutSeconds,
-				MaxRetries:     maxRetries,
+				ID:              stepID,
+				ProjectID:       projectID,
+				Name:            name,
+				ScriptBody:      script,
+				SortOrder:       sortOrder,
+				TimeoutSeconds:  timeoutSeconds,
+				MaxRetries:      maxRetries,
+				ExecutionTarget: r.FormValue("execution_target"),
 			}
 			WriteFormError(
 				w,
 				r,
 				components.StepEditRow(
 					step,
-					projectID,
+					projectID, labels, agentLabel,
 					"Max retries must be a non-negative integer",
 				),
 				components.StepEditRow(
 					step,
-					projectID,
+					projectID, labels, agentLabel,
 					"Max retries must be a non-negative integer",
 				),
 			)
@@ -351,19 +521,63 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 
 	if name == "" {
 		step := db.Step{
-			ID:             stepID,
-			ProjectID:      projectID,
-			Name:           name,
-			ScriptBody:     script,
-			SortOrder:      sortOrder,
-			TimeoutSeconds: timeoutSeconds,
-			MaxRetries:     maxRetries,
+			ID:              stepID,
+			ProjectID:       projectID,
+			Name:            name,
+			ScriptBody:      script,
+			SortOrder:       sortOrder,
+			TimeoutSeconds:  timeoutSeconds,
+			MaxRetries:      maxRetries,
+			ExecutionTarget: r.FormValue("execution_target"),
 		}
 		WriteFormError(
 			w,
 			r,
-			components.StepEditRow(step, projectID, "Name is required"),
-			components.StepEditRow(step, projectID, "Name is required"),
+			components.StepEditRow(
+				step,
+				projectID,
+				labels,
+				agentLabel,
+				"Name is required",
+			),
+			components.StepEditRow(
+				step,
+				projectID,
+				labels,
+				agentLabel,
+				"Name is required",
+			),
+		)
+		return
+	}
+	if placementErr != nil {
+		step := db.Step{
+			ID:              stepID,
+			ProjectID:       projectID,
+			Name:            name,
+			ScriptBody:      script,
+			SortOrder:       sortOrder,
+			TimeoutSeconds:  timeoutSeconds,
+			MaxRetries:      maxRetries,
+			ExecutionTarget: r.FormValue("execution_target"),
+		}
+		WriteFormError(
+			w,
+			r,
+			components.StepEditRow(
+				step,
+				projectID,
+				labels,
+				agentLabel,
+				placementErr.Error(),
+			),
+			components.StepEditRow(
+				step,
+				projectID,
+				labels,
+				agentLabel,
+				placementErr.Error(),
+			),
 		)
 		return
 	}
@@ -377,7 +591,16 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 		MaxRetries:     maxRetries,
 	}
 
-	_, err = h.repo.Queries.UpdateStep(r.Context(), params)
+	var selectors []string
+	if agentLabel != "" {
+		selectors = []string{agentLabel}
+	}
+	if target == "agent" && agentLabel == selectedLabel {
+		selectors = selected
+	}
+	_, err = h.repo.UpdateStepWithPlacement(
+		r.Context(), params, target, selectors,
+	)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

@@ -13,7 +13,7 @@ WHERE pm.project_id = ?
 ORDER BY pm.created_at ASC;
 
 -- name: IsProjectMember :one
-SELECT EXISTS(SELECT 1 FROM project_members WHERE project_id = ? AND user_id = ?);
+SELECT CASE WHEN EXISTS(SELECT 1 FROM project_members WHERE project_id = ? AND user_id = ?) THEN 1 ELSE 0 END;
 
 -- name: GetProjectMember :one
 SELECT * FROM project_members WHERE project_id = ? AND user_id = ?;

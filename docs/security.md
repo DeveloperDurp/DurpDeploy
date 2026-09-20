@@ -23,6 +23,14 @@ What we defend against:
 - Remote agents do not receive the server database, server encryption key, or Docker socket
 - Agent transport uses outbound-only mTLS with pinned peer fingerprints and one-time pairing
 
+Each remote step creates one run for every active, paired agent that matches the
+deployment environment and all required capability labels. Each pre-start claim
+belongs to one agent and can expire after 60 seconds, but started work is not
+requeued, replayed, or moved to the local runner. Missed heartbeats mark work
+lost after 45 seconds. A cancel needs an agent acknowledgement within 30
+seconds, otherwise the result is `cancel_unconfirmed` and requires host
+inspection before a new deployment.
+
 ### OIDC boundary and threat model
 
 OIDC is an optional login factor, not a replacement for local authentication.
@@ -68,9 +76,13 @@ What we do **not** defend against yet (see Known Gaps):
 
 - Audit log retention / tamper-proofing
 
-Runner orphan cleanup on shutdown/timeout and the local step sandbox are shipped.
-Remote agents are separately sandboxed as dedicated users with private state
-directories and no server storage access. The agent does not provide SSH access.
+Runner orphan cleanup on shutdown/timeout and the service-level step boundary
+are shipped. Each service and its Bash children share one preselected
+unprivileged identity with zero capability sets. Private mounts, read-only
+service or container filesystems, minimal child environments, and service cgroup
+limits remain. Bash can access state writable by its service identity; use a
+separate remote agent boundary for scripts that must not access control-plane
+state. The agent does not provide SSH access.
 
 ---
 
@@ -384,7 +396,8 @@ after a successful rotation.
 
 ## Log redaction (P1-5)
 
-**Implementation:** `internal/runner/scrubber.go`, `internal/runner/runner.go`
+**Implementation:** `internal/logscrub/scrubber.go`,
+`internal/runner/runner.go`, `internal/agentserver/lifecycle.go`
 
 DurpDeploy scrubs deployment logs before an SSE broadcast or a database write.
 The old scrubber used `strings.ReplaceAll` for each line and secret. It did not
@@ -402,14 +415,32 @@ values:
   processes the combined expression in linear time.
 - **Configurable patterns:** Additional regex patterns can be added via the
   `DURPDEPLOY_EXTRA_SCRUB_PATTERNS` environment variable (comma-separated).
-  These are appended to the common credential patterns at startup.
+  These are appended to the common credential patterns at startup. A possible
+  custom-pattern match remains buffered while it can still grow across an
+  event or line boundary. Local tails stay in memory; persisted remote tails
+  are encrypted. Once later input terminates the possible match, redacted
+  output resumes. A pattern such as `.*` that can consume all future input
+  necessarily remains buffered until terminal flush.
+  Custom anchors and word-boundary assertions are treated as empty matches.
+  This can over-redact, but prevents chunk boundaries from exposing a match
+  whose assertion depends on text that was already released.
 - **Buffered operation:** `broadcastWriter.Write` scrubs all text through the
   last newline in its buffer. Thus, it finds a secret in two writes. It also
   finds a secret that contains a newline.
+- **Remote ingress:** The server applies the same scrubber before database and
+  SSE delivery. It keeps a bounded encrypted tail in the lifecycle row so a
+  plaintext secret split across events, requests, or a server restart is
+  redacted before release. An initial sequence gap remains encrypted until the
+  missing events arrive or a terminal agent message flushes the tail.
+  If an agent is lost, revoked, or times out before completing a buffered
+  fragment, DurpDeploy discards that incomplete fragment instead of publishing
+  ambiguous plaintext.
 - **Best-effort:** this catches known secret values and a handful of common
-  token shapes, not every possible secret format. **Redaction is
-  best-effort. Do not paste secrets into your script body. Use environment
-  variables marked Secret.**
+  token shapes. The security contract is protection against accidental
+  plaintext exposure, not intentional exfiltration by an agent that encodes,
+  transforms, or decorates secret data. **Redaction is best-effort. Do not
+  paste secrets into your script body. Use environment variables marked
+  Secret.**
 
 ## Known gaps (P1 / future work)
 
@@ -418,7 +449,7 @@ values:
 | ~~**Secret encryption at rest**~~ | ~~`release_variables.value` is plaintext. A DB read leaks secrets~~ | **shipped (P1-3)** |
 | ~~**Runner orphan cleanup**~~ | ~~Killed/restarted server left orphaned bash children~~ | **shipped** |
 | ~~**Log redaction hardening**~~ | ~~Naive per-line `strings.ReplaceAll` missed common credential formats and multi-line/split secrets~~ | **shipped (P1-5)** |
-| ~~**Runner OS-level sandboxing**~~ | ~~Steps run as a low-privilege user in a chroot'd scratch directory with cgroup limits~~ | **shipped (P1-4)** |
+| **Local script/state UID separation** | Local Bash shares the unprivileged server UID because no identity-switch capability is granted; it can change server-writable state | Use a separate remote agent trust boundary for untrusted scripts |
 | ~~**Login rate limiting**~~ | ~~Password, MFA, and OIDC login surfaces lacked application limits~~ | **shipped** |
 | **Audit log retention** | No retention policy or tamper-proofing on `audit_log` | P2-5 |
 | **Password reset flow** | No self-service reset. Admin must delete + recreate the user | P2 |
@@ -434,6 +465,6 @@ values:
   read the DB, or sniff process memory. OS-level problem.
 - **Network-level DDoS** — handled upstream (Caddy, firewall).
 - **Supply chain** — `go mod verify` and pinned versions only.
-- **Compromised remote agent host:** An agent can run deployments for its assigned environments. Isolate it from the control-plane host. Rotate its pairing and certificate material.
+- **Compromised remote agent host:** An agent can run work explicitly routed to it. Isolate it from the control-plane host. Rotate its pairing and certificate material.
 
 See `docs/attack-drill.md` for hands-on verification of the active defenses.

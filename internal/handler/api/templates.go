@@ -19,8 +19,10 @@ func NewStepTemplateHandler(repo *repository.Repository) *StepTemplateHandler {
 }
 
 type stepTemplateRequest struct {
-	Name       string `json:"name"`
-	ScriptBody string `json:"script_body"`
+	Name            string   `json:"name"`
+	ScriptBody      string   `json:"script_body"`
+	ExecutionTarget string   `json:"execution_target"`
+	AgentSelectors  []string `json:"agent_selectors"`
 }
 
 // swagger:route GET /templates templates listTemplates
@@ -66,9 +68,14 @@ func (h *StepTemplateHandler) ListTemplates(
 		return
 	}
 
-	items := make([]any, len(templates))
-	for i, t := range templates {
-		items[i] = t
+	responses, err := newStepTemplateResponses(r.Context(), h.repo, templates)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	items := make([]any, len(responses))
+	for index, response := range responses {
+		items[index] = response
 	}
 	RespondJSON(w, http.StatusOK, PaginatedResponse{
 		Items:  items,
@@ -104,7 +111,12 @@ func (h *StepTemplateHandler) TemplatesPicker(
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	RespondJSON(w, http.StatusOK, templates)
+	responses, err := newStepTemplateResponses(r.Context(), h.repo, templates)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	RespondJSON(w, http.StatusOK, responses)
 }
 
 // swagger:route POST /templates templates createTemplate
@@ -143,13 +155,25 @@ func (h *StepTemplateHandler) CreateTemplate(
 		RespondError(w, http.StatusBadRequest, "Name is required")
 		return
 	}
+	target, selectors, ok := validatePlacement(
+		w,
+		r,
+		h.repo,
+		req.ExecutionTarget,
+		req.AgentSelectors,
+	)
+	if !ok {
+		return
+	}
 
-	tpl, err := h.repo.Queries.CreateStepTemplate(
+	tpl, err := h.repo.CreateStepTemplateWithPlacement(
 		r.Context(),
 		db.CreateStepTemplateParams{
 			Name:       name,
 			ScriptBody: req.ScriptBody,
 		},
+		target,
+		selectors,
 	)
 	if err != nil {
 		if handler.IsUniqueViolation(err) {
@@ -164,20 +188,12 @@ func (h *StepTemplateHandler) CreateTemplate(
 		return
 	}
 
-	if _, err := h.repo.Queries.CreateStepTemplateVersion(
-		r.Context(),
-		db.CreateStepTemplateVersionParams{
-			TemplateID:    tpl.ID,
-			VersionNumber: 1,
-			Name:          tpl.Name,
-			ScriptBody:    tpl.ScriptBody,
-		},
-	); err != nil {
+	response, err := newStepTemplateResponse(r.Context(), h.repo, tpl)
+	if err != nil {
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-
-	RespondJSON(w, http.StatusCreated, tpl)
+	RespondJSON(w, http.StatusCreated, response)
 }
 
 // swagger:route GET /templates/{id} templates getTemplate
@@ -218,7 +234,12 @@ func (h *StepTemplateHandler) GetTemplate(
 		return
 	}
 
-	RespondJSON(w, http.StatusOK, tpl)
+	response, err := newStepTemplateResponse(r.Context(), h.repo, tpl)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	RespondJSON(w, http.StatusOK, response)
 }
 
 // swagger:route PUT /templates/{id} templates updateTemplate
@@ -264,22 +285,26 @@ func (h *StepTemplateHandler) UpdateTemplate(
 		RespondError(w, http.StatusBadRequest, "Name is required")
 		return
 	}
-
-	tx, err := h.repo.DB.BeginTx(r.Context(), nil)
-	if err != nil {
-		RespondError(w, http.StatusInternalServerError, err.Error())
+	target, selectors, ok := validatePlacement(
+		w,
+		r,
+		h.repo,
+		req.ExecutionTarget,
+		req.AgentSelectors,
+	)
+	if !ok {
 		return
 	}
-	defer tx.Rollback()
-	qtx := h.repo.Queries.WithTx(tx)
 
-	updated, err := qtx.UpdateStepTemplate(
+	updated, err := h.repo.UpdateStepTemplateWithPlacement(
 		r.Context(),
 		db.UpdateStepTemplateParams{
 			ID:         id,
 			Name:       name,
 			ScriptBody: req.ScriptBody,
 		},
+		target,
+		selectors,
 	)
 	if err != nil {
 		if handler.IsUniqueViolation(err) {
@@ -294,47 +319,12 @@ func (h *StepTemplateHandler) UpdateTemplate(
 		return
 	}
 
-	latest, err := qtx.GetLatestStepTemplateVersionNumber(r.Context(), id)
+	response, err := newStepTemplateResponse(r.Context(), h.repo, updated)
 	if err != nil {
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	nextVersion := int64(1)
-	switch v := latest.(type) {
-	case int64:
-		nextVersion = v + 1
-	case int:
-		nextVersion = int64(v) + 1
-	case nil:
-		nextVersion = 1
-	default:
-		RespondError(
-			w,
-			http.StatusInternalServerError,
-			"unexpected version_number type from DB",
-		)
-		return
-	}
-
-	if _, err := qtx.CreateStepTemplateVersion(
-		r.Context(),
-		db.CreateStepTemplateVersionParams{
-			TemplateID:    updated.ID,
-			VersionNumber: nextVersion,
-			Name:          updated.Name,
-			ScriptBody:    updated.ScriptBody,
-		},
-	); err != nil {
-		RespondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	if err := tx.Commit(); err != nil {
-		RespondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	RespondJSON(w, http.StatusOK, updated)
+	RespondJSON(w, http.StatusOK, response)
 }
 
 // swagger:route DELETE /templates/{id} templates deleteTemplate
@@ -361,7 +351,7 @@ func (h *StepTemplateHandler) DeleteTemplate(
 		return
 	}
 
-	if err := h.repo.Queries.DeleteStepTemplate(r.Context(), id); err != nil {
+	if err := h.repo.DeleteStepTemplate(r.Context(), id); err != nil {
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -412,5 +402,14 @@ func (h *StepTemplateHandler) ListTemplateHistory(
 		return
 	}
 
-	RespondJSON(w, http.StatusOK, versions)
+	responses, err := newStepTemplateVersionResponses(
+		r.Context(),
+		h.repo,
+		versions,
+	)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	RespondJSON(w, http.StatusOK, responses)
 }

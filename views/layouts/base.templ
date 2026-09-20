@@ -81,6 +81,7 @@ templ Base(title string, currentPath string) {
 											<summary>Admin</summary>
 											<ul>
 												<li><a href="/admin/audit">Audit log</a></li>
+												<li><a href="/admin/agents">Agents</a></li>
 												<li><a href="/admin/notifications">Notifications</a></li>
 												<li><a href="/admin/tokens">API tokens</a></li>
 												<li><a href="/admin/users">Users</a></li>
@@ -139,6 +140,7 @@ templ Base(title string, currentPath string) {
 									<summary class="btn btn-ghost btn-sm">Admin</summary>
 									<ul class="dropdown-content menu bg-base-200 rounded-box z-[1] w-44 p-2 shadow">
 										<li><a href="/admin/audit">Audit log</a></li>
+										<li><a href="/admin/agents">Agents</a></li>
 										<li><a href="/admin/notifications">Notifications</a></li>
 										<li><a href="/admin/tokens">API tokens</a></li>
 										<li><a href="/admin/users">Users</a></li>
@@ -181,8 +183,14 @@ templ Base(title string, currentPath string) {
 				x-show="visible"
 				x-transition.opacity.duration.300ms
 				class="toast toast-end toast-top z-[9999]"
+				role="status"
+				aria-live="polite"
+				aria-atomic="true"
 			>
-<div :class="fullAlertClass">
+				<div
+					class="max-w-[calc(100vw-2rem)] whitespace-normal break-words"
+					:class="fullAlertClass"
+				>
 				<span x-text="message"></span>
 			</div>
 			</div>

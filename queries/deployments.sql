@@ -5,7 +5,8 @@ SELECT * FROM deployments WHERE release_id = ? ORDER BY created_at DESC;
 SELECT * FROM deployments WHERE id = ?;
 
 -- name: CreateDeployment :one
-INSERT INTO deployments (release_id, environment_id, status, started_at, finished_at, forced, note) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING *;
+INSERT INTO deployments (release_id, environment_id, status, started_at, finished_at, forced, note, assigned_agent_id)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING *;
 
 -- name: UpdateDeployment :one
 UPDATE deployments SET release_id = ?, environment_id = ?, status = ?, started_at = ?, finished_at = ?, note = ? WHERE id = ? RETURNING *;
@@ -20,6 +21,7 @@ SELECT * FROM deployments ORDER BY created_at DESC;
 SELECT
     d.id, d.release_id, d.environment_id, d.status,
     d.started_at, d.finished_at, d.created_at, d.forced, d.note,
+    d.assigned_agent_id,
     p.name AS project_name,
     r.version AS release_version,
     e.name AS environment_name
@@ -54,6 +56,7 @@ SELECT COUNT(*) FROM deployments WHERE created_at >= strftime('%s','now','start 
 SELECT
     d.id, d.release_id, d.environment_id, d.status,
     d.started_at, d.finished_at, d.created_at, d.forced, d.note,
+    d.assigned_agent_id,
     p.name AS project_name,
     r.version AS release_version,
     e.name AS environment_name
@@ -71,6 +74,7 @@ ORDER BY d.created_at DESC;
 SELECT
     d.id, d.release_id, d.environment_id, d.status,
     d.started_at, d.finished_at, d.created_at, d.forced, d.note,
+    d.assigned_agent_id,
     p.name AS project_name,
     r.version AS release_version,
     e.name AS environment_name
@@ -81,10 +85,54 @@ JOIN environments e ON d.environment_id = e.id
 WHERE d.status = 'pending'
 ORDER BY d.created_at ASC;
 
+-- name: CancelOrphanedRemoteStepRuns :execrows
+UPDATE remote_step_runs SET
+    state = CASE WHEN state = 'waiting' THEN 'cancelled'
+        ELSE 'cancel_requested' END,
+    recovery_cancelled = 1,
+    cancel_requested_at = CASE WHEN state = 'cancel_requested'
+        THEN cancel_requested_at ELSE sqlc.arg(now) END,
+    finished_at = CASE WHEN state = 'waiting' THEN sqlc.arg(now)
+        ELSE finished_at END,
+    updated_at = sqlc.arg(now)
+WHERE state IN ('waiting', 'claimed', 'started', 'cancel_requested')
+  AND deployment_id IN (
+      SELECT id FROM deployments
+      WHERE status = 'running' AND assigned_agent_id IS NULL
+  );
+
+-- name: FailOrphanedDeployments :execrows
+UPDATE deployments SET status = 'failed', finished_at = sqlc.arg(now)
+WHERE status = 'running' AND assigned_agent_id IS NULL
+  AND NOT EXISTS (
+      SELECT 1 FROM remote_step_runs r
+      WHERE r.deployment_id = deployments.id
+        AND r.state = 'cancel_requested'
+  );
+
+-- name: FailDeploymentsWithTerminalRemoteStepRuns :execrows
+UPDATE deployments SET status = 'failed', finished_at = sqlc.arg(now)
+WHERE status = 'running' AND assigned_agent_id IS NULL
+  AND EXISTS (
+      SELECT 1 FROM remote_step_runs r
+      WHERE r.deployment_id = deployments.id
+        AND (r.state IN ('failed', 'lost', 'cancel_unconfirmed')
+          OR (r.state = 'cancelled' AND r.recovery_cancelled = 1))
+  )
+  AND NOT EXISTS (
+      SELECT 1 FROM remote_step_runs r
+      WHERE r.deployment_id = deployments.id
+        AND r.state IN ('waiting', 'claimed', 'started', 'cancel_requested')
+  );
+
 -- name: ListLatestDeploymentPerReleaseEnv :many
-SELECT id, release_id, environment_id, status, started_at, finished_at, created_at, forced, note, project_name, release_version, environment_name
+SELECT id, release_id, environment_id, status, started_at, finished_at,
+       created_at, forced, note, assigned_agent_id, project_name,
+       release_version, environment_name
 FROM (
-    SELECT d.id, d.release_id, d.environment_id, d.status, d.started_at, d.finished_at, d.created_at, d.forced, d.note,
+    SELECT d.id, d.release_id, d.environment_id, d.status, d.started_at,
+           d.finished_at, d.created_at, d.forced, d.note,
+           d.assigned_agent_id,
            p.name AS project_name, r.version AS release_version, e.name AS environment_name,
            ROW_NUMBER() OVER (PARTITION BY d.release_id, d.environment_id ORDER BY d.created_at DESC) AS rn
     FROM deployments d
@@ -97,6 +145,7 @@ FROM (
 SELECT
     d.id, d.release_id, d.environment_id, d.status,
     d.started_at, d.finished_at, d.created_at, d.forced, d.note,
+    d.assigned_agent_id,
     p.name AS project_name,
     r.version AS release_version,
     e.name AS environment_name
