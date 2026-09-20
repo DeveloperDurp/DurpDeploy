@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
@@ -256,7 +257,10 @@ func TestPairingReactivatesExpectedRevokedAgent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := fixture.repo.RevokeAgent(t.Context(), paired.AgentID); err != nil {
+	if _, err := fixture.repo.RevokeAgent(
+		t.Context(),
+		paired.AgentID,
+	); err != nil {
 		t.Fatal(err)
 	}
 	fixture.requests = nil
@@ -275,6 +279,113 @@ func TestPairingReactivatesExpectedRevokedAgent(t *testing.T) {
 	}
 	if result.AgentID != paired.AgentID || agent.Status != "active" {
 		t.Fatalf("result=%+v agent status=%q", result, agent.Status)
+	}
+}
+
+func TestPairingReplacesExpectedRevokedAgentTuple(t *testing.T) {
+	fixture := newPairingFixture(t)
+	paired, err := fixture.pair(t)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fixture.repo.RevokeAgent(
+		t.Context(),
+		paired.AgentID,
+	); err != nil {
+		t.Fatal(err)
+	}
+	replacement, err := agenttls.LoadOrCreate(
+		t.TempDir(),
+		"https://replacement.test",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replacementCode := base64.RawURLEncoding.EncodeToString(
+		bytes.Repeat([]byte{9}, 32),
+	)
+	fixture.input, err = ParsePairingInput(
+		"https://replacement.test:10943",
+		replacementCode,
+		replacement.Fingerprint.String(),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture.input = fixture.input.ForAgent(paired.AgentID)
+	fixture.agent = replacement
+
+	result, err := fixture.pair(t)
+	if err != nil {
+		t.Fatal(err)
+	}
+	agent, err := fixture.repo.Queries.GetAgent(t.Context(), paired.AgentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.AgentID != paired.AgentID || agent.Status != "active" ||
+		agent.Endpoint != "https://replacement.test:10943" {
+		t.Fatalf("result=%+v agent=%+v", result, agent)
+	}
+}
+
+func TestPairingRejectsRevokedRetryTupleOwnedByAnotherAgent(t *testing.T) {
+	fixture := newPairingFixture(t)
+	original, err := fixture.pair(t)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fixture.repo.RevokeAgent(
+		t.Context(),
+		original.AgentID,
+	); err != nil {
+		t.Fatal(err)
+	}
+	otherIdentity, err := agenttls.LoadOrCreate(
+		t.TempDir(),
+		"https://other.test",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherCode := base64.RawURLEncoding.EncodeToString(
+		bytes.Repeat([]byte{8}, 32),
+	)
+	fixture.input, err = ParsePairingInput(
+		"https://other.test:10943",
+		otherCode,
+		otherIdentity.Fingerprint.String(),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture.agent = otherIdentity
+	other, err := fixture.pair(t)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	fixture.input = fixture.input.ForAgent(original.AgentID)
+	if _, err := fixture.pair(t); !errors.Is(err, ErrPairingConflict) {
+		t.Fatalf("retry error=%v want=%v", err, ErrPairingConflict)
+	}
+	originalAgent, err := fixture.repo.Queries.GetAgent(
+		t.Context(),
+		original.AgentID,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherAgent, err := fixture.repo.Queries.GetAgent(t.Context(), other.AgentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if originalAgent.Status != "revoked" || otherAgent.Status != "active" {
+		t.Fatalf(
+			"original status=%q other status=%q",
+			originalAgent.Status,
+			otherAgent.Status,
+		)
 	}
 }
 

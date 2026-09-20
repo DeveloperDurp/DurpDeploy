@@ -137,7 +137,7 @@ WHERE status = 'running' AND assigned_agent_id IS NULL
   AND EXISTS (
       SELECT 1 FROM remote_step_runs r
       WHERE r.deployment_id = deployments.id
-        AND r.state IN ('failed', 'cancelled', 'lost', 'cancel_unconfirmed')
+        AND r.state IN ('failed', 'lost', 'cancel_unconfirmed')
   )
   AND NOT EXISTS (
       SELECT 1 FROM remote_step_runs r

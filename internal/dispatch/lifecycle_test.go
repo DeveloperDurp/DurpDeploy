@@ -54,10 +54,14 @@ func TestMaintainRequeuesExpiredUnstartedStepClaim(t *testing.T) {
 	); err != nil {
 		t.Fatal(err)
 	}
-	if state != "waiting" || token.Valid || ciphertext.Valid || expiresAt.Valid {
+	if state != "waiting" || token.Valid || ciphertext.Valid ||
+		expiresAt.Valid {
 		t.Fatalf(
 			"expired remote step claim not requeued: state=%q token=%v ciphertext=%v expires=%v",
-			state, token.Valid, ciphertext.Valid, expiresAt.Valid,
+			state,
+			token.Valid,
+			ciphertext.Valid,
+			expiresAt.Valid,
 		)
 	}
 }
@@ -131,6 +135,34 @@ func TestMaintainMarksStaleRemoteStepCancellationUnconfirmed(t *testing.T) {
 	if err != nil || deployment.Status != "failed" ||
 		!deployment.FinishedAt.Valid {
 		t.Fatalf("failed deployment=%+v error=%v", deployment, err)
+	}
+}
+
+func TestMaintainLeavesAcknowledgedCancellationForRunner(t *testing.T) {
+	repo := lifecycleFixture(t, "claimed", 4102444800, sql.NullInt64{})
+	for _, statement := range []string{
+		`DELETE FROM remote_deployment_claims WHERE deployment_id=1`,
+		`UPDATE deployments SET assigned_agent_id=NULL WHERE id=1`,
+		`INSERT INTO deployment_steps
+		 (deployment_id,step_index,name,script_body,execution_target)
+		 VALUES(1,0,'remote','echo remote','agent')`,
+		`INSERT INTO remote_step_runs
+		 (deployment_id,step_index,agent_id,state,started_at,finished_at,
+		  cancel_requested_at,updated_at)
+		 VALUES(1,0,'a','cancelled',100,110,105,110)`,
+	} {
+		if _, err := repo.DB.Exec(statement); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := New(repo).Maintain(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	deployment, err := repo.Queries.GetDeployment(t.Context(), 1)
+	if err != nil || deployment.Status != "running" ||
+		deployment.FinishedAt.Valid {
+		t.Fatalf("deployment=%+v error=%v", deployment, err)
 	}
 }
 
