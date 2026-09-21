@@ -1071,7 +1071,10 @@ body = sys.stdin.read()
 data = json.loads(body)
 secret = [v for v in data["variables"] if v["name"] == "E2E_SECRET"]
 assert len(secret) == 1, data["variables"]
-assert secret[0]["value"] == {"String": "", "Valid": True}, secret
+# The served contract declares value as a nullable string, so a
+# masked snapshot must emit "" (not {"String":..,"Valid":..}).
+assert isinstance(secret[0]["value"], str), type(secret[0]["value"]).__name__
+assert secret[0]["value"] == "", secret
 assert "e2e-super-secret" not in body, body
 '
 echo "  Release snapshot secret masked: OK"
