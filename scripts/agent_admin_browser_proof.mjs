@@ -425,9 +425,12 @@ async function main() {
 	]);
 	for (let attempt = 0; attempt < 100; attempt += 1) {
 		await page.goto(`${baseURL}/admin/agents/${pairedAgentID}`);
-		if ((await page.locator("body").innerText()).includes("active")) break;
+		const pageText = await page.locator("body").innerText();
+		if (pageText.includes("active") && pageText.includes("bash")) break;
 		await new Promise((resolvePromise) => setTimeout(resolvePromise, 100));
 	}
+	check((await page.locator("body").innerText()).includes("bash"),
+		"agent page did not show reported Bash capability");
 	await page.locator('input[name="label"]').fill("linux");
 	await Promise.all([
 		page.waitForURL(`${baseURL}/admin/agents/${pairedAgentID}`),
@@ -467,6 +470,9 @@ async function main() {
 			check(response.ok, `${method} ${path} returned ${response.status}: ${redact(text)}`);
 			return text ? JSON.parse(text) : null;
 		};
+		const agentDetail = await api("GET", `/admin/agents/${pairedAgentID}`);
+		check(agentDetail.agent.interpreters.includes("bash"),
+			`agent API omitted capabilities: ${JSON.stringify(agentDetail)}`);
 		const streamLogs = async (deploymentID) => {
 			const controller = new AbortController();
 			const timer = setTimeout(() => controller.abort(), 30000);
@@ -522,6 +528,16 @@ async function main() {
 			name: "agent-only", sort_order: 1, timeout_seconds: 30, max_retries: 0,
 			script_body: `if [ "$LANG" != "ddp-agent-${nonce}" ]; then echo SERVER_EXECUTION_MARKER; exit 91; fi\nprintf '%s\\n' 'AGENT_EXECUTION_MARKER:${nonce}' 'todo12-secret' 'remote-agent-ok'`,
 		});
+		if (hostAgent) {
+			await api("POST", `/projects/${project.id}/steps`, {
+				agent_selectors: ["linux"],
+				execution_target: "agent",
+				interpreter: "python3",
+				name: "python-agent", sort_order: 2,
+				timeout_seconds: 30, max_retries: 0,
+				script_body: "print('PYTHON_AGENT_MARKER')",
+			});
+		}
 		const release = await api("POST", `/projects/${project.id}/releases`, { version: "todo12-v1" });
 		const deployment = await api("POST", `/projects/${project.id}/deployments`, {
 			release_id: release.id,
@@ -556,6 +572,12 @@ async function main() {
 		check(![...streamed, ...lines].some((line) =>
 			line.includes("SERVER_EXECUTION_MARKER") || line.includes("todo12-secret")),
 		"execution or secret marker leaked");
+		const pythonInterpreterExecuted = lines.some((line) =>
+			line.includes("PYTHON_AGENT_MARKER"));
+		if (hostAgent) {
+			check(pythonInterpreterExecuted,
+				`Python agent marker missing from ${JSON.stringify(lines)}`);
+		}
 		const failedProject = await api("POST", "/projects", { name: "Todo 12 retry project" });
 		await api("POST", `/projects/${failedProject.id}/steps`, {
 			agent_selectors: ["linux"],
@@ -587,6 +609,8 @@ async function main() {
 			remoteClaims: remoteState.trim(),
 			retryDeploymentID: retry.id,
 			serverBashInvoked: false,
+			mixedInterpreter: hostAgent,
+			pythonInterpreterExecuted,
 		}, null, 2)}\n`);
 		}
 	}

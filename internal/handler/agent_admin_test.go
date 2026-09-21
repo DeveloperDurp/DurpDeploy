@@ -23,6 +23,13 @@ func TestAdminAgentManagementFlow(t *testing.T) {
 	); err != nil {
 		t.Fatalf("create agent: %v", err)
 	}
+	if _, err := h.repo.DB.ExecContext(
+		t.Context(),
+		"INSERT INTO agent_interpreters(agent_id, interpreter) "+
+			"VALUES('agent-a', 'python3')",
+	); err != nil {
+		t.Fatalf("create agent interpreter: %v", err)
+	}
 
 	post := func(path string, values url.Values) *http.Response {
 		t.Helper()
@@ -86,7 +93,12 @@ func TestAdminAgentManagementFlow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, text := range []string{"Renamed Agent", "linux", "agent environment"} {
+	for _, text := range []string{
+		"Renamed Agent",
+		"linux",
+		"agent environment",
+		"python3",
+	} {
 		if !strings.Contains(string(body), text) {
 			t.Fatalf("agent detail missing %q: %s", text, body)
 		}

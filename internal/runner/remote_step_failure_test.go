@@ -62,6 +62,7 @@ func TestRunnerPreservesOriginalFailureWhileCancellingSiblings(t *testing.T) {
 		); err != nil {
 			t.Fatal(err)
 		}
+		addAgentInterpreter(t, repo, agentID, "bash")
 	}
 	release, err := repo.Queries.CreateRelease(ctx, db.CreateReleaseParams{
 		ProjectID: project.ID,

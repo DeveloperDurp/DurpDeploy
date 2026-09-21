@@ -86,6 +86,10 @@ func newAgentFixtureWithDSN(
 	if err != nil {
 		t.Fatal(err)
 	}
+	if _, err := conn.Exec(`INSERT INTO agent_interpreters
+		(agent_id,interpreter) VALUES('test-agent','bash')`); err != nil {
+		t.Fatal(err)
+	}
 	agents, err := agentserver.New(
 		agentserver.Config{
 			Repository: repo,

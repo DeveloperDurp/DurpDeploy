@@ -116,8 +116,10 @@ the normal local user recovery process; there is no self-service password reset.
 
 The full API reference is available at `/api/swagger/` in a running server (no auth required).
 
-Remote agents use the backward-compatible `agent/1` protocol. The `v0.1.0`
-agent source tag is compatible with this control plane; keep the paired state
+Remote agents use the backward-compatible `agent/1` and `agent/2` protocols.
+The `v0.1.0` agent source tag remains compatible for Bash-only work. Protocol
+v2 agents report Bash, PowerShell, and Python capabilities so the control plane
+can dispatch each remote step only to compatible agents. Keep the paired state
 directory when upgrading.
 
 ## Architecture

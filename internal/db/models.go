@@ -29,6 +29,11 @@ type AgentEnvironmentLabel struct {
 	CreatedAt     int64  `json:"created_at"`
 }
 
+type AgentInterpreter struct {
+	AgentID     string `json:"agent_id"`
+	Interpreter string `json:"interpreter"`
+}
+
 type AgentLabel struct {
 	AgentID string `json:"agent_id"`
 	Label   string `json:"label"`

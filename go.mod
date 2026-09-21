@@ -1,9 +1,9 @@
 module durpdeploy
 
-go 1.25.7
+go 1.25.14
 
 require (
-	github.com/DeveloperDurp/durpdeploy-agent v0.1.0
+	github.com/DeveloperDurp/durpdeploy-agent v0.1.1-0.20260921105742-a63b344bf6eb
 	github.com/a-h/templ v0.3.1020
 	github.com/coreos/go-oidc/v3 v3.20.0
 	github.com/go-chi/chi/v5 v5.3.1

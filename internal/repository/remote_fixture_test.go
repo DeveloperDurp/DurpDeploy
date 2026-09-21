@@ -100,6 +100,13 @@ func seedRemoteFixture(t *testing.T, r *repository.Repository) {
 		n, err = r.Queries.AddAgentLabel(ctx,
 			db.AddAgentLabelParams{AgentID: id, Label: "linux"})
 		assertOne(t, n, err)
+		n, err = r.Queries.AddAgentInterpreter(
+			ctx,
+			db.AddAgentInterpreterParams{
+				AgentID: id, Interpreter: "bash",
+			},
+		)
+		assertOne(t, n, err)
 	}
 	for _, env := range []int64{1, 1, 2} {
 		assignedAgentID := ns("a")
@@ -123,10 +130,15 @@ func seedRemoteFixture(t *testing.T, r *repository.Repository) {
 			id,
 			[]repository.DeploymentStepSnapshot{
 				{CreateDeploymentStepParams: db.CreateDeploymentStepParams{
-					Name: "remote", ScriptBody: "echo remote", ExecutionTarget: "agent", MaxRetries: 1,
+					Name:            "remote",
+					ScriptBody:      "echo remote",
+					ExecutionTarget: "agent",
+					MaxRetries:      1,
 				}, Selectors: []string{" LINUX ", "linux", "other"}},
 				{CreateDeploymentStepParams: db.CreateDeploymentStepParams{
-					Name: "next", ScriptBody: "echo next", ExecutionTarget: "local",
+					Name:            "next",
+					ScriptBody:      "echo next",
+					ExecutionTarget: "local",
 				}},
 			},
 		)
@@ -135,7 +147,11 @@ func seedRemoteFixture(t *testing.T, r *repository.Repository) {
 		}
 		n, err := r.Queries.CreateDeploymentStepAttempt(ctx,
 			db.CreateDeploymentStepAttemptParams{
-				DeploymentID: id, StepIndex: 0, Attempt: 1, WaitDeadline: 400, Now: 100,
+				DeploymentID: id,
+				StepIndex:    0,
+				Attempt:      1,
+				WaitDeadline: 400,
+				Now:          100,
 			})
 		if err != nil || n != 1 {
 			t.Fatalf("CreateDeploymentStepAttempt rows=%d error=%v", n, err)

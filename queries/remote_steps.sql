@@ -7,6 +7,8 @@ JOIN agents a ON a.status = 'active' AND a.revoked_at IS NULL
 JOIN agent_pairings p ON p.agent_id = a.id AND p.state = 'paired'
 JOIN agent_environment_labels e ON e.agent_id = a.id
     AND e.environment_id = d.environment_id
+JOIN agent_interpreters i ON i.agent_id = a.id
+    AND i.interpreter = s.interpreter
 WHERE s.deployment_id = sqlc.arg(deployment_id)
   AND s.step_index = sqlc.arg(step_index)
   AND s.execution_target = 'agent'
@@ -35,6 +37,10 @@ WHERE deployment_id = ? AND step_index = ? ORDER BY agent_id;
 -- name: ListWaitingRemoteStepRuns :many
 SELECT r.* FROM remote_step_runs r
 JOIN deployments d ON d.id = r.deployment_id
+JOIN deployment_steps s ON s.deployment_id = r.deployment_id
+    AND s.step_index = r.step_index
+JOIN agent_interpreters i ON i.agent_id = r.agent_id
+    AND i.interpreter = s.interpreter
 WHERE r.agent_id = sqlc.arg(agent_id) AND r.state = 'waiting'
   AND d.status = 'running'
   AND NOT EXISTS (
@@ -50,9 +56,17 @@ UPDATE remote_step_runs SET state = 'claimed',
     ciphertext = sqlc.arg(ciphertext),
     claim_expires_at = sqlc.arg(claim_expires_at),
     last_heartbeat_at = sqlc.arg(now), updated_at = sqlc.arg(now)
-WHERE deployment_id = sqlc.arg(deployment_id)
-  AND step_index = sqlc.arg(step_index)
-  AND agent_id = sqlc.arg(agent_id) AND state = 'waiting';
+WHERE remote_step_runs.deployment_id = sqlc.arg(deployment_id)
+  AND remote_step_runs.step_index = sqlc.arg(step_index)
+  AND remote_step_runs.agent_id = sqlc.arg(agent_id)
+  AND remote_step_runs.state = 'waiting'
+  AND EXISTS (
+      SELECT 1 FROM deployment_steps s
+      JOIN agent_interpreters i ON i.agent_id = remote_step_runs.agent_id
+          AND i.interpreter = s.interpreter
+      WHERE s.deployment_id = remote_step_runs.deployment_id
+        AND s.step_index = remote_step_runs.step_index
+  );
 
 -- name: ExpireRemoteStepClaims :execrows
 UPDATE remote_step_runs SET state = 'waiting', claim_token_hash = NULL,

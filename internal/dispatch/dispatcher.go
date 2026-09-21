@@ -102,6 +102,7 @@ func prepareRemoteClaim(
 		steps[index] = executor.Step{
 			Name:           step.Name,
 			ScriptBody:     step.ScriptBody,
+			Interpreter:    executor.Interpreter(step.Interpreter),
 			SortOrder:      int64(index + 1),
 			TimeoutSeconds: step.TimeoutSeconds,
 			MaxRetries:     step.MaxRetries,

@@ -34,10 +34,18 @@ func (r *DeploymentRunner) runRemoteStep(
 		return err
 	}
 	if created == 0 {
-		return fmt.Errorf(
-			"step %q: no active paired agents match the environment and label",
+		selectedInterpreter := request.step.Interpreter
+		if selectedInterpreter == "" {
+			selectedInterpreter = "bash"
+		}
+		message := fmt.Sprintf(
+			"step %q: no compatible agents support interpreter %q and match the environment and labels",
 			request.step.Name,
+			selectedInterpreter,
 		)
+		_, _ = request.logWriter.Write([]byte(message + "\n"))
+		request.logWriter.Flush()
+		return errors.New(message)
 	}
 	_, _ = request.logWriter.Write([]byte(fmt.Sprintf(
 		"step %q: queued for %d matching agent(s)\n",

@@ -61,6 +61,17 @@ SELECT label FROM agent_labels WHERE agent_id = ? ORDER BY label;
 -- name: ListAvailableAgentLabels :many
 SELECT DISTINCT label FROM agent_labels ORDER BY label;
 
+-- name: AddAgentInterpreter :execrows
+INSERT INTO agent_interpreters (agent_id, interpreter)
+VALUES (?, ?);
+
+-- name: DeleteAgentInterpreters :execrows
+DELETE FROM agent_interpreters WHERE agent_id = ?;
+
+-- name: ListAgentInterpreters :many
+SELECT interpreter FROM agent_interpreters
+WHERE agent_id = ? ORDER BY interpreter;
+
 -- name: AddAgentEnvironmentLabel :execrows
 INSERT INTO agent_environment_labels (agent_id, environment_id)
 SELECT sqlc.arg(agent_id), sqlc.arg(environment_id)
