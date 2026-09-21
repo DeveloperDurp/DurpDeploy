@@ -404,6 +404,10 @@ type swaggerVariableRequest struct {
 }
 
 // VariableResponse is the JSON shape for a variable.
+//
+// Value is always an empty string when Secret is 1: ordinary reads
+// never return secret plaintext (issue #29).
+//
 // swagger:model VariableResponse
 type swaggerVariableResponse struct {
 	ID            int64  `json:"id"`
@@ -433,6 +437,10 @@ type swaggerReleaseWithVariablesResponse struct {
 }
 
 // ReleaseVariableResponse is a variable snapshot in a release.
+//
+// Value is always an empty string when Secret is 1: ordinary reads
+// never return secret plaintext (issue #29).
+//
 // swagger:model ReleaseVariableResponse
 type swaggerReleaseVariableResponse struct {
 	ID            int64   `json:"id"`

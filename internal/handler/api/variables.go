@@ -36,16 +36,27 @@ type variableResponse struct {
 	Secret        int64  `json:"secret"`
 }
 
+// maskedSecretValue replaces plaintext for secret-marked variables in
+// every ordinary API read (issue #29).
+const maskedSecretValue = ""
+
+// toVariableResponse is the single masking policy point: secret
+// variables never carry plaintext in list, get, create, or update
+// responses.
 func toVariableResponse(v db.Variable) variableResponse {
 	var envID *int64
 	if v.EnvironmentID.Valid {
 		envID = &v.EnvironmentID.Int64
 	}
+	value := v.Value.String
+	if v.Secret != 0 {
+		value = maskedSecretValue
+	}
 	return variableResponse{
 		ID:            v.ID,
 		ProjectID:     v.ProjectID,
 		Name:          v.Name,
-		Value:         v.Value.String,
+		Value:         value,
 		EnvironmentID: envID,
 		CreatedAt:     v.CreatedAt,
 		Secret:        v.Secret,
