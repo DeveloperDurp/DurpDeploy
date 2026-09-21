@@ -13,6 +13,7 @@ import (
 type ReleaseStep struct {
 	Name       string `json:"name"`
 	ScriptBody string `json:"script_body"`
+	Interpreter string `json:"interpreter"`
 	SortOrder  int64  `json:"sort_order"`
 }
 
@@ -22,6 +23,13 @@ func parseReleaseSteps(stepsJSON string) []ReleaseStep {
 		return nil
 	}
 	return steps
+}
+
+func releaseStepInterpreter(step ReleaseStep) string {
+	if step.Interpreter == "" {
+		return "bash"
+	}
+	return step.Interpreter
 }
 
 func formatUnixTime(ts int64) string {
@@ -216,19 +224,21 @@ templ ReleaseDetail(project db.Project, release db.Release, variables []db.Relea
 					<tr>
 						<th class="w-16">Order</th>
 						<th class="w-1/4">Name</th>
+						<th class="w-24">Interpreter</th>
 						<th class="w-auto">Script</th>
 					</tr>
 				</thead>
 				<tbody>
 					if len(parseReleaseSteps(release.StepsJson)) == 0 {
 						<tr>
-							<td colspan="3" class="text-gray-500 italic text-center py-4">No steps in this release.</td>
+							<td colspan="4" class="text-gray-500 italic text-center py-4">No steps in this release.</td>
 						</tr>
 					} else {
 						for _, step := range parseReleaseSteps(release.StepsJson) {
 							<tr>
 								<td>{ strconv.FormatInt(step.SortOrder, 10) }</td>
 								<td class="font-medium truncate">{ step.Name }</td>
+								<td class="whitespace-nowrap">{ releaseStepInterpreter(step) }</td>
 								<td class="truncate">
 									<code class="text-sm bg-base-300 px-2 py-1 rounded">
 										if len(step.ScriptBody) > 60 {

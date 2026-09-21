@@ -18,6 +18,22 @@ func TestSQLServer_SchemaParityDefaultsAndIndexes(t *testing.T) {
 		db.CreateProjectParams{Name: "parity-project"},
 	)
 	requireNoError(t, err, "create project")
+	step, err := queries.CreateStep(ctx, db.CreateStepParams{
+		ProjectID: project.ID, Name: "parity-step", ScriptBody: "echo parity",
+	})
+	requireNoError(t, err, "create step with default interpreter")
+	if step.Interpreter != "bash" {
+		t.Fatalf("step interpreter = %q, want bash", step.Interpreter)
+	}
+	_, err = dbConn.ExecContext(
+		ctx,
+		"UPDATE steps SET interpreter = @p1 WHERE id = @p2",
+		"ruby",
+		step.ID,
+	)
+	if err == nil {
+		t.Fatal("update step with invalid interpreter succeeded")
+	}
 	environment, err := queries.CreateEnvironment(
 		ctx,
 		db.CreateEnvironmentParams{Name: "parity-environment"},

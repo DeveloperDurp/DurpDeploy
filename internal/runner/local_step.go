@@ -6,7 +6,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"time"
+
+	"durpdeploy/internal/interpreter"
 )
 
 // baseStepEnv returns the minimal environment passed to every step (P1-4)
@@ -58,7 +61,14 @@ func (r *DeploymentRunner) runStepAttempt(
 	}
 	defer os.RemoveAll(tmpDir)
 
-	scriptPath := tmpDir + "/script.sh"
+	selected, err := interpreter.Validate(request.step.Interpreter)
+	if err != nil {
+		return err
+	}
+	scriptPath := filepath.Join(
+		tmpDir,
+		"script"+interpreter.Extension(selected),
+	)
 	if err := os.WriteFile(
 		scriptPath,
 		[]byte(request.step.ScriptBody),
@@ -67,8 +77,15 @@ func (r *DeploymentRunner) runStepAttempt(
 		return err
 	}
 
-	cmd, err := r.command(stepCtx, tmpDir, scriptPath)
+	cmd, err := r.command(stepCtx, tmpDir, scriptPath, selected)
 	if err != nil {
+		_, _ = request.logWriter.Write([]byte(fmt.Sprintf(
+			"step %q: attempt %d failed before execution: %v\n",
+			request.step.Name,
+			request.attempt,
+			err,
+		)))
+		request.logWriter.Flush()
 		return err
 	}
 	// Minimal, whitelisted environment (P1-4) instead of inheriting the

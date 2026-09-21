@@ -34,6 +34,12 @@ All applicable Go and end-to-end tests must pass before work is complete. Run
 the full relevant suites only at final verification; use focused tests while
 working. Do not treat focused tests as a substitute for final verification.
 
+Every new or changed functionality must be available through a corresponding
+public API endpoint and have end-to-end coverage through that API. Validation
+is not complete until the API contract and its E2E test both pass. New or
+changed web functionality must also have a web E2E test and pass it before
+validation is complete.
+
 ```bash
 ./durpdeploy                       # listens on :8080 (hardcoded), creates durpdeploy.db in CWD
 go test -v -count=1 ./...          # CI's exact command

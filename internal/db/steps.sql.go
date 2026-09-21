@@ -21,7 +21,9 @@ func (q *Queries) CountStepsByProject(ctx context.Context, projectID int64) (int
 }
 
 const createStep = `-- name: CreateStep :one
-INSERT INTO steps (project_id, name, script_body, sort_order, timeout_seconds, max_retries) VALUES (?, ?, ?, ?, ?, ?) RETURNING id, project_id, name, script_body, sort_order, created_at, timeout_seconds, max_retries, execution_target
+INSERT INTO steps (project_id, name, script_body, sort_order, timeout_seconds, max_retries, interpreter)
+VALUES (?, ?, ?, ?, ?, ?, COALESCE(NULLIF(CAST(?7 AS TEXT), ''), 'bash'))
+RETURNING id, project_id, name, script_body, sort_order, created_at, timeout_seconds, max_retries, execution_target, interpreter
 `
 
 type CreateStepParams struct {
@@ -31,6 +33,7 @@ type CreateStepParams struct {
 	SortOrder      int64  `json:"sort_order"`
 	TimeoutSeconds int64  `json:"timeout_seconds"`
 	MaxRetries     int64  `json:"max_retries"`
+	Interpreter    string `json:"interpreter"`
 }
 
 func (q *Queries) CreateStep(ctx context.Context, arg CreateStepParams) (Step, error) {
@@ -41,6 +44,7 @@ func (q *Queries) CreateStep(ctx context.Context, arg CreateStepParams) (Step, e
 		arg.SortOrder,
 		arg.TimeoutSeconds,
 		arg.MaxRetries,
+		arg.Interpreter,
 	)
 	var i Step
 	err := row.Scan(
@@ -53,6 +57,7 @@ func (q *Queries) CreateStep(ctx context.Context, arg CreateStepParams) (Step, e
 		&i.TimeoutSeconds,
 		&i.MaxRetries,
 		&i.ExecutionTarget,
+		&i.Interpreter,
 	)
 	return i, err
 }
@@ -67,7 +72,7 @@ func (q *Queries) DeleteStep(ctx context.Context, id int64) error {
 }
 
 const getStep = `-- name: GetStep :one
-SELECT id, project_id, name, script_body, sort_order, created_at, timeout_seconds, max_retries, execution_target FROM steps WHERE id = ?
+SELECT id, project_id, name, script_body, sort_order, created_at, timeout_seconds, max_retries, execution_target, interpreter FROM steps WHERE id = ?
 `
 
 func (q *Queries) GetStep(ctx context.Context, id int64) (Step, error) {
@@ -83,12 +88,13 @@ func (q *Queries) GetStep(ctx context.Context, id int64) (Step, error) {
 		&i.TimeoutSeconds,
 		&i.MaxRetries,
 		&i.ExecutionTarget,
+		&i.Interpreter,
 	)
 	return i, err
 }
 
 const listStepsByProject = `-- name: ListStepsByProject :many
-SELECT id, project_id, name, script_body, sort_order, created_at, timeout_seconds, max_retries, execution_target FROM steps WHERE project_id = ? ORDER BY sort_order ASC, created_at ASC
+SELECT id, project_id, name, script_body, sort_order, created_at, timeout_seconds, max_retries, execution_target, interpreter FROM steps WHERE project_id = ? ORDER BY sort_order ASC, created_at ASC
 `
 
 func (q *Queries) ListStepsByProject(ctx context.Context, projectID int64) ([]Step, error) {
@@ -110,6 +116,7 @@ func (q *Queries) ListStepsByProject(ctx context.Context, projectID int64) ([]St
 			&i.TimeoutSeconds,
 			&i.MaxRetries,
 			&i.ExecutionTarget,
+			&i.Interpreter,
 		); err != nil {
 			return nil, err
 		}
@@ -125,7 +132,7 @@ func (q *Queries) ListStepsByProject(ctx context.Context, projectID int64) ([]St
 }
 
 const listStepsByProjectPaginated = `-- name: ListStepsByProjectPaginated :many
-SELECT id, project_id, name, script_body, sort_order, created_at, timeout_seconds, max_retries, execution_target FROM steps WHERE project_id = ? ORDER BY sort_order ASC, created_at ASC
+SELECT id, project_id, name, script_body, sort_order, created_at, timeout_seconds, max_retries, execution_target, interpreter FROM steps WHERE project_id = ? ORDER BY sort_order ASC, created_at ASC
 LIMIT ? OFFSET ?
 `
 
@@ -154,6 +161,7 @@ func (q *Queries) ListStepsByProjectPaginated(ctx context.Context, arg ListSteps
 			&i.TimeoutSeconds,
 			&i.MaxRetries,
 			&i.ExecutionTarget,
+			&i.Interpreter,
 		); err != nil {
 			return nil, err
 		}
@@ -169,7 +177,9 @@ func (q *Queries) ListStepsByProjectPaginated(ctx context.Context, arg ListSteps
 }
 
 const updateStep = `-- name: UpdateStep :one
-UPDATE steps SET name = ?, script_body = ?, sort_order = ?, timeout_seconds = ?, max_retries = ? WHERE id = ? RETURNING id, project_id, name, script_body, sort_order, created_at, timeout_seconds, max_retries, execution_target
+UPDATE steps SET name = ?, script_body = ?, sort_order = ?, timeout_seconds = ?, max_retries = ?,
+interpreter = COALESCE(NULLIF(CAST(?6 AS TEXT), ''), 'bash')
+WHERE id = ?7 RETURNING id, project_id, name, script_body, sort_order, created_at, timeout_seconds, max_retries, execution_target, interpreter
 `
 
 type UpdateStepParams struct {
@@ -178,6 +188,7 @@ type UpdateStepParams struct {
 	SortOrder      int64  `json:"sort_order"`
 	TimeoutSeconds int64  `json:"timeout_seconds"`
 	MaxRetries     int64  `json:"max_retries"`
+	Interpreter    string `json:"interpreter"`
 	ID             int64  `json:"id"`
 }
 
@@ -188,6 +199,7 @@ func (q *Queries) UpdateStep(ctx context.Context, arg UpdateStepParams) (Step, e
 		arg.SortOrder,
 		arg.TimeoutSeconds,
 		arg.MaxRetries,
+		arg.Interpreter,
 		arg.ID,
 	)
 	var i Step
@@ -201,6 +213,7 @@ func (q *Queries) UpdateStep(ctx context.Context, arg UpdateStepParams) (Step, e
 		&i.TimeoutSeconds,
 		&i.MaxRetries,
 		&i.ExecutionTarget,
+		&i.Interpreter,
 	)
 	return i, err
 }

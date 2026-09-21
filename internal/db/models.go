@@ -130,6 +130,7 @@ type DeploymentStep struct {
 	MaxRetries      int64         `json:"max_retries"`
 	ExecutionTarget string        `json:"execution_target"`
 	CreatedAt       int64         `json:"created_at"`
+	Interpreter     string        `json:"interpreter"`
 }
 
 type DeploymentStepAttempt struct {
@@ -370,6 +371,7 @@ type Step struct {
 	TimeoutSeconds  int64  `json:"timeout_seconds"`
 	MaxRetries      int64  `json:"max_retries"`
 	ExecutionTarget string `json:"execution_target"`
+	Interpreter     string `json:"interpreter"`
 }
 
 type StepAgentSelector struct {
@@ -383,6 +385,7 @@ type StepTemplate struct {
 	ScriptBody      string `json:"script_body"`
 	CreatedAt       int64  `json:"created_at"`
 	ExecutionTarget string `json:"execution_target"`
+	Interpreter     string `json:"interpreter"`
 }
 
 type StepTemplateAgentSelector struct {
@@ -398,6 +401,7 @@ type StepTemplateVersion struct {
 	ScriptBody      string `json:"script_body"`
 	CreatedAt       int64  `json:"created_at"`
 	ExecutionTarget string `json:"execution_target"`
+	Interpreter     string `json:"interpreter"`
 }
 
 type StepTemplateVersionAgentSelector struct {

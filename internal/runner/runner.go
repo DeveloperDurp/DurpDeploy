@@ -11,6 +11,7 @@ import (
 
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/events"
+	"durpdeploy/internal/interpreter"
 	"durpdeploy/internal/repository"
 )
 
@@ -41,6 +42,7 @@ type DeploymentRunner struct {
 type deploymentStep struct {
 	Name            string   `json:"name"`
 	ScriptBody      string   `json:"script_body"`
+	Interpreter     string   `json:"interpreter"`
 	SortOrder       int64    `json:"sort_order"`
 	TimeoutSeconds  int64    `json:"timeout_seconds"`
 	MaxRetries      int64    `json:"max_retries"`
@@ -149,6 +151,25 @@ func (r *DeploymentRunner) Run(
 			scrubber:     scrubber,
 		}
 		if step.ExecutionTarget == "agent" {
+			if step.Interpreter != "" && step.Interpreter != interpreter.Bash {
+				_, _ = logWriter.Write([]byte(fmt.Sprintf(
+					"step %q: agent execution does not support interpreter %q\n",
+					step.Name,
+					step.Interpreter,
+				)))
+				logWriter.Flush()
+				r.failStep(ctx, runCtx, events.Event{
+					Type: events.DeploymentFailed, DeploymentID: deploymentID,
+					ProjectID: release.ProjectID, EnvironmentID: environmentID,
+					Message: fmt.Sprintf(
+						"Deployment #%d failed on %s: agent execution does not support interpreter %q",
+						deploymentID,
+						envName,
+						step.Interpreter,
+					),
+				}, false)
+				return
+			}
 			err := r.runRemoteStep(ctx, runCtx, remoteStepRequest{
 				deploymentID: deploymentID,
 				stepIndex:    int64(stepIndex),
