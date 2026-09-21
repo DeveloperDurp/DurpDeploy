@@ -253,3 +253,65 @@ func createLegacyRemoteDeployment(
 	}
 	return deployment
 }
+
+func TestCreateDeploymentFromDeploymentPreservesSourceAcrossDatabases(
+	t *testing.T,
+) {
+	forEachDeploymentCreationEngine(t, func(t *testing.T, name string) {
+		repo, _ := openDeploymentCreationEngine(
+			t,
+			newDeploymentCreationEngine(t, name),
+		)
+		const original = `[{"name":"python","script_body":"print('original')",` +
+			`"interpreter":"python3","execution_target":"local"}]`
+		if _, err := repo.Queries.UpdateRelease(
+			t.Context(),
+			db.UpdateReleaseParams{
+				ID: 1, ProjectID: 1, Version: "v1", StepsJson: original,
+			},
+		); err != nil {
+			t.Fatal(err)
+		}
+		source, err := repo.CreateDeployment(
+			t.Context(),
+			db.CreateDeploymentParams{
+				ReleaseID: 1, EnvironmentID: 1, Status: "pending",
+			},
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := repo.Queries.UpdateRelease(
+			t.Context(),
+			db.UpdateReleaseParams{
+				ID:        1,
+				ProjectID: 1,
+				Version:   "v1",
+				StepsJson: `[{"name":"powershell","script_body":"Write-Output refreshed",` +
+					`"interpreter":"pwsh","execution_target":"local"}]`,
+			},
+		); err != nil {
+			t.Fatal(err)
+		}
+		rerun, err := repo.CreateDeploymentFromDeployment(
+			t.Context(),
+			db.CreateDeploymentParams{
+				ReleaseID: 1, EnvironmentID: 1, Status: "pending",
+			},
+			source.Deployment.ID,
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		stepSource, err := repo.Queries.GetDeploymentStepSource(
+			t.Context(),
+			rerun.Deployment.ID,
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if stepSource.StepsJson != original {
+			t.Fatalf("rerun source = %s", stepSource.StepsJson)
+		}
+	})
+}

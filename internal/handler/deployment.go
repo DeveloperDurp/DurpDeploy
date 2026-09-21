@@ -528,6 +528,14 @@ func (h *DeploymentHandler) GetDeployment(
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	stepSource, err := h.repo.Queries.GetDeploymentStepSource(r.Context(), id)
+	if err != nil && err != sql.ErrNoRows {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err == nil {
+		release.StepsJson = stepSource.StepsJson
+	}
 
 	project, err := h.repo.Queries.GetProject(r.Context(), release.ProjectID)
 	if err != nil {
@@ -813,7 +821,7 @@ func (h *DeploymentHandler) RedeployDeployment(
 	if requiresApproval {
 		initialStatus = "pending_approval"
 	}
-	result, err := h.repo.CreateDeployment(
+	result, err := h.repo.CreateDeploymentFromDeployment(
 		r.Context(),
 		db.CreateDeploymentParams{
 			ReleaseID:     source.ReleaseID,
@@ -824,6 +832,7 @@ func (h *DeploymentHandler) RedeployDeployment(
 			Forced:        0,
 			Note:          note,
 		},
+		source.ID,
 	)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

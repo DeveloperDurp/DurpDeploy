@@ -28,6 +28,16 @@ func snapshotDeploymentSteps(
 	deploymentID int64,
 	steps []DeploymentStepSnapshot,
 ) error {
+	return snapshotDeploymentStepsFromSource(ctx, q, deploymentID, steps, "")
+}
+
+func snapshotDeploymentStepsFromSource(
+	ctx context.Context,
+	q *db.Queries,
+	deploymentID int64,
+	steps []DeploymentStepSnapshot,
+	stepsJSON string,
+) error {
 	n, err := q.LockDeploymentSnapshot(ctx, deploymentID)
 	if err != nil {
 		return err
@@ -62,7 +72,16 @@ func snapshotDeploymentSteps(
 			}
 		}
 	}
-	n, err = q.FreezeDeploymentStepSource(ctx, deploymentID)
+	if stepsJSON == "" {
+		n, err = q.FreezeDeploymentStepSource(ctx, deploymentID)
+	} else {
+		n, err = q.FreezeDeploymentStepSourceJSON(
+			ctx,
+			db.FreezeDeploymentStepSourceJSONParams{
+				StepsJson: stepsJSON, DeploymentID: deploymentID,
+			},
+		)
+	}
 	if err == nil && n == 0 {
 		return sql.ErrNoRows
 	}

@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/interpreter"
 	"durpdeploy/internal/repository"
 	"durpdeploy/views/components"
 	"durpdeploy/views/pages"
@@ -197,6 +198,11 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 
 	name := strings.TrimSpace(r.FormValue("name"))
 	script := r.FormValue("script_body")
+	selectedInterpreter, err := interpreter.Validate(r.FormValue("interpreter"))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+		return
+	}
 
 	timeoutStr := strings.TrimSpace(r.FormValue("timeout_seconds"))
 	var timeoutSeconds int64
@@ -342,6 +348,7 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 		SortOrder:      sortOrder,
 		TimeoutSeconds: timeoutSeconds,
 		MaxRetries:     maxRetries,
+		Interpreter:    selectedInterpreter,
 	}
 
 	var selectors []string
@@ -450,6 +457,11 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 
 	name := strings.TrimSpace(r.FormValue("name"))
 	script := r.FormValue("script_body")
+	selectedInterpreter, err := interpreter.Validate(r.FormValue("interpreter"))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+		return
+	}
 	sortOrder, _ := strconv.ParseInt(r.FormValue("sort_order"), 10, 64)
 
 	timeoutStr := strings.TrimSpace(r.FormValue("timeout_seconds"))
@@ -589,6 +601,7 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 		SortOrder:      sortOrder,
 		TimeoutSeconds: timeoutSeconds,
 		MaxRetries:     maxRetries,
+		Interpreter:    selectedInterpreter,
 	}
 
 	var selectors []string
@@ -727,6 +740,7 @@ func (h *StepHandler) ReorderStep(w http.ResponseWriter, r *http.Request) {
 					SortOrder:      s.SortOrder + 1,
 					TimeoutSeconds: s.TimeoutSeconds,
 					MaxRetries:     s.MaxRetries,
+					Interpreter:    s.Interpreter,
 				}
 				if _, err := qtx.UpdateStep(r.Context(), p); err != nil {
 					http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -747,6 +761,7 @@ func (h *StepHandler) ReorderStep(w http.ResponseWriter, r *http.Request) {
 					SortOrder:      s.SortOrder - 1,
 					TimeoutSeconds: s.TimeoutSeconds,
 					MaxRetries:     s.MaxRetries,
+					Interpreter:    s.Interpreter,
 				}
 				if _, err := qtx.UpdateStep(r.Context(), p); err != nil {
 					http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -763,6 +778,7 @@ func (h *StepHandler) ReorderStep(w http.ResponseWriter, r *http.Request) {
 		SortOrder:      newOrder,
 		TimeoutSeconds: target.TimeoutSeconds,
 		MaxRetries:     target.MaxRetries,
+		Interpreter:    target.Interpreter,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/interpreter"
 	"durpdeploy/internal/repository"
 	"durpdeploy/views/components"
 	"durpdeploy/views/pages"
@@ -68,9 +69,16 @@ func (h *StepTemplateHandler) CreateTemplate(
 
 	name := strings.TrimSpace(r.FormValue("name"))
 	script := r.FormValue("script_body")
+	selectedInterpreter, err := interpreter.Validate(r.FormValue("interpreter"))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+		return
+	}
 
 	if name == "" {
-		tpl := &db.StepTemplate{Name: name, ScriptBody: script}
+		tpl := &db.StepTemplate{
+			Name: name, ScriptBody: script, Interpreter: selectedInterpreter,
+		}
 		WriteFormError(
 			w,
 			r,
@@ -81,11 +89,12 @@ func (h *StepTemplateHandler) CreateTemplate(
 	}
 
 	params := db.CreateStepTemplateParams{
-		Name:       name,
-		ScriptBody: script,
+		Name:        name,
+		ScriptBody:  script,
+		Interpreter: selectedInterpreter,
 	}
 
-	_, err := h.repo.CreateStepTemplateWithPlacement(
+	_, err = h.repo.CreateStepTemplateWithPlacement(
 		r.Context(),
 		params,
 		"local",
@@ -93,7 +102,11 @@ func (h *StepTemplateHandler) CreateTemplate(
 	)
 	if err != nil {
 		if IsUniqueViolation(err) {
-			tplErr := &db.StepTemplate{Name: name, ScriptBody: script}
+			tplErr := &db.StepTemplate{
+				Name:        name,
+				ScriptBody:  script,
+				Interpreter: selectedInterpreter,
+			}
 			WriteFormError(
 				w,
 				r,
@@ -159,9 +172,17 @@ func (h *StepTemplateHandler) UpdateTemplate(
 
 	name := strings.TrimSpace(r.FormValue("name"))
 	script := r.FormValue("script_body")
+	selectedInterpreter, err := interpreter.Validate(r.FormValue("interpreter"))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+		return
+	}
 
 	if name == "" {
-		tpl := &db.StepTemplate{ID: id, Name: name, ScriptBody: script}
+		tpl := &db.StepTemplate{
+			ID: id, Name: name, ScriptBody: script,
+			Interpreter: selectedInterpreter,
+		}
 		WriteFormError(
 			w,
 			r,
@@ -172,9 +193,10 @@ func (h *StepTemplateHandler) UpdateTemplate(
 	}
 
 	params := db.UpdateStepTemplateParams{
-		ID:         id,
-		Name:       name,
-		ScriptBody: script,
+		ID:          id,
+		Name:        name,
+		ScriptBody:  script,
+		Interpreter: selectedInterpreter,
 	}
 
 	existing, err := h.repo.Queries.GetStepTemplate(r.Context(), id)
@@ -199,7 +221,10 @@ func (h *StepTemplateHandler) UpdateTemplate(
 	)
 	if err != nil {
 		if IsUniqueViolation(err) {
-			tpl := &db.StepTemplate{ID: id, Name: name, ScriptBody: script}
+			tpl := &db.StepTemplate{
+				ID: id, Name: name, ScriptBody: script,
+				Interpreter: selectedInterpreter,
+			}
 			WriteFormError(
 				w,
 				r,
@@ -325,10 +350,11 @@ func (h *StepTemplateHandler) InsertTemplate(
 	}
 
 	params := db.CreateStepParams{
-		ProjectID:  projectID,
-		Name:       tpl.Name,
-		ScriptBody: tpl.ScriptBody,
-		SortOrder:  sortOrder,
+		ProjectID:   projectID,
+		Name:        tpl.Name,
+		ScriptBody:  tpl.ScriptBody,
+		Interpreter: tpl.Interpreter,
+		SortOrder:   sortOrder,
 		// ponytail: StepTemplate has no timeout or max_retries field yet;
 		// new step inherits defaults (0/0).
 	}
@@ -396,8 +422,9 @@ func (h *StepTemplateHandler) SaveStepAsTemplate(
 	}
 
 	params := db.CreateStepTemplateParams{
-		Name:       step.Name,
-		ScriptBody: step.ScriptBody,
+		Name:        step.Name,
+		ScriptBody:  step.ScriptBody,
+		Interpreter: step.Interpreter,
 	}
 	selectors, err := h.repo.Queries.ListStepAgentSelectors(
 		r.Context(),

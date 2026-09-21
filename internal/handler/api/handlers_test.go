@@ -953,10 +953,12 @@ func TestStep_CreateAndList(t *testing.T) {
 		http.MethodPost,
 		"/api/v1/projects/"+itoa(p.ID)+"/steps",
 		token,
-		`{"name":"deploy","script_body":"echo deploy"}`,
+		`{"name":"deploy","script_body":"print('deploy')",`+
+			`"interpreter":"python3"}`,
 	)
 	h.assertStatus(t, rec, http.StatusCreated)
 	h.assertJSONField(t, rec, "name", "deploy")
+	h.assertJSONField(t, rec, "interpreter", "python3")
 
 	rec = h.request(
 		t,
@@ -1104,6 +1106,7 @@ func TestStep_GetUpdateDelete(t *testing.T) {
 	)
 	h.assertStatus(t, rec, http.StatusOK)
 	h.assertJSONField(t, rec, "name", "step-one")
+	h.assertJSONField(t, rec, "interpreter", "bash")
 
 	rec = h.request(
 		t,
@@ -1167,6 +1170,15 @@ func TestStep_CreateValidation(t *testing.T) {
 		`{"name":"","script_body":"x"}`,
 	)
 	h.assertStatus(t, rec, http.StatusBadRequest)
+
+	rec = h.request(
+		t,
+		http.MethodPost,
+		"/api/v1/projects/"+itoa(p.ID)+"/steps",
+		token,
+		`{"name":"invalid","interpreter":"/bin/sh"}`,
+	)
+	h.assertStatus(t, rec, http.StatusBadRequest)
 }
 
 func TestTemplate_CreateAndList(t *testing.T) {
@@ -1178,10 +1190,12 @@ func TestTemplate_CreateAndList(t *testing.T) {
 		http.MethodPost,
 		"/api/v1/templates",
 		token,
-		`{"name":"tpl","script_body":"echo tpl"}`,
+		`{"name":"tpl","script_body":"Write-Output 'tpl'",`+
+			`"interpreter":"pwsh"}`,
 	)
 	h.assertStatus(t, rec, http.StatusCreated)
 	h.assertJSONField(t, rec, "name", "tpl")
+	h.assertJSONField(t, rec, "interpreter", "pwsh")
 
 	rec = h.request(t, http.MethodGet, "/api/v1/templates", token, "")
 	h.assertStatus(t, rec, http.StatusOK)
@@ -1189,6 +1203,12 @@ func TestTemplate_CreateAndList(t *testing.T) {
 	if len(list) != 1 {
 		t.Fatalf("expected 1 template, got %d", len(list))
 	}
+
+	rec = h.request(
+		t, http.MethodPost, "/api/v1/templates", token,
+		`{"name":"invalid","interpreter":"ruby"}`,
+	)
+	h.assertStatus(t, rec, http.StatusBadRequest)
 }
 
 func TestTemplate_AgentPlacementAndHistoryRoundTripThroughAPI(t *testing.T) {
@@ -1202,7 +1222,8 @@ func TestTemplate_AgentPlacementAndHistoryRoundTripThroughAPI(t *testing.T) {
 		"/api/v1/templates",
 		token,
 		`{"name":"agent-template","script_body":"uname -a",`+
-			`"execution_target":"agent","agent_selectors":["linux"]}`,
+			`"interpreter":"pwsh","execution_target":"agent",`+
+			`"agent_selectors":["linux"]}`,
 	)
 	h.assertStatus(t, rec, http.StatusCreated)
 	var created struct {
@@ -1230,7 +1251,7 @@ func TestTemplate_AgentPlacementAndHistoryRoundTripThroughAPI(t *testing.T) {
 		"/api/v1/templates/"+itoa(created.ID),
 		token,
 		`{"name":"agent-template-v2","script_body":"hostname",`+
-			`"execution_target":"local"}`,
+			`"interpreter":"python3","execution_target":"local"}`,
 	)
 	h.assertStatus(t, rec, http.StatusOK)
 
@@ -1244,6 +1265,7 @@ func TestTemplate_AgentPlacementAndHistoryRoundTripThroughAPI(t *testing.T) {
 	h.assertStatus(t, rec, http.StatusOK)
 	var history []struct {
 		ExecutionTarget string   `json:"execution_target"`
+		Interpreter     string   `json:"interpreter"`
 		AgentSelectors  []string `json:"agent_selectors"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &history); err != nil {
@@ -1253,6 +1275,7 @@ func TestTemplate_AgentPlacementAndHistoryRoundTripThroughAPI(t *testing.T) {
 		t.Fatalf("history length = %d, want 2", len(history))
 	}
 	if history[0].ExecutionTarget != "local" ||
+		history[0].Interpreter != "python3" ||
 		len(history[0].AgentSelectors) != 0 {
 		t.Fatalf(
 			"latest history placement = %q %v",
@@ -1261,6 +1284,7 @@ func TestTemplate_AgentPlacementAndHistoryRoundTripThroughAPI(t *testing.T) {
 		)
 	}
 	if history[1].ExecutionTarget != "agent" ||
+		history[1].Interpreter != "pwsh" ||
 		len(
 			history[1].AgentSelectors,
 		) != 1 || history[1].AgentSelectors[0] != "linux" {
@@ -1295,6 +1319,7 @@ func TestTemplate_GetUpdateDelete(t *testing.T) {
 	)
 	h.assertStatus(t, rec, http.StatusOK)
 	h.assertJSONField(t, rec, "name", "base")
+	h.assertJSONField(t, rec, "interpreter", "bash")
 
 	rec = h.request(
 		t,

@@ -5,6 +5,7 @@ import (
 
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/interpreter"
 	"fmt"
 	"strconv"
 )
@@ -30,6 +31,13 @@ func stepInputID(step db.Step, isNew bool, field string) string {
 		return "new-step-" + field
 	}
 	return fmt.Sprintf("step-%d-%s", step.ID, field)
+}
+
+func stepInterpreter(step db.Step) string {
+	if step.Interpreter == "" {
+		return interpreter.Bash
+	}
+	return step.Interpreter
 }
 
 func stepPlacementData(step db.Step, selectedLabel string) string {
@@ -89,6 +97,16 @@ templ StepForm(step db.Step, projectID int64, isNew bool, labels []string, selec
 			</div>
 			<div class="grid min-w-0 gap-4 sm:grid-cols-2">
 				<div class="form-control min-w-0">
+					<label class="label" for={ stepInputID(step, isNew, "interpreter") }>
+						<span class="label-text">Interpreter</span>
+					</label>
+					<select id={ stepInputID(step, isNew, "interpreter") } name="interpreter" class="select select-bordered min-w-0 w-full">
+						<option value="bash" selected?={ stepInterpreter(step) == "bash" }>Bash</option>
+						<option value="pwsh" selected?={ stepInterpreter(step) == "pwsh" }>PowerShell</option>
+						<option value="python3" selected?={ stepInterpreter(step) == "python3" }>Python</option>
+					</select>
+				</div>
+				<div class="form-control min-w-0">
 					<label class="label" for={ stepInputID(step, isNew, "execution-target") }>
 						<span class="label-text">Run step on</span>
 					</label>
@@ -113,7 +131,7 @@ templ StepForm(step db.Step, projectID int64, isNew bool, labels []string, selec
 			</div>
 			<div x-data="stepEditor" class="form-control">
 				<label class="label" for={ stepInputID(step, isNew, "script") }>
-					<span class="label-text">Script Body (Bash)</span>
+					<span class="label-text">Script Body</span>
 					<button type="button" class="btn btn-ghost btn-xs" x-on:click="fullscreen">Fullscreen</button>
 				</label>
 				<div class="flex font-mono text-sm border border-base-300 rounded bg-base-100 overflow-hidden">
@@ -122,7 +140,7 @@ templ StepForm(step db.Step, projectID int64, isNew bool, labels []string, selec
 				</div>
 				<dialog x-cloak x-show="modalOpen" x-ref="modal" x-on:close="modalOpen = false" class="fixed inset-0 z-50 bg-base-100 text-base-content p-4 flex flex-col gap-4 w-screen h-screen max-w-none max-h-none">
 					<div class="flex items-center justify-between gap-4">
-						<h3 class="text-lg font-semibold">Script Body (Bash)</h3>
+						<h3 class="text-lg font-semibold">Script Body</h3>
 						<button type="button" class="btn btn-sm" x-on:click="$refs.modal.close()">Close</button>
 					</div>
 					<div class="flex min-h-0 flex-1 font-mono text-sm border border-base-300 rounded bg-base-100 overflow-hidden">
@@ -198,7 +216,7 @@ templ StepEditRow(step db.Step, projectID int64, labels []string, selectedLabel 
 		@ViewerStepFormMessage()
 	} else {
 	<tr id={ fmt.Sprintf("step-row-%d", step.ID) }>
-		<td colspan="6" class="w-full p-4">
+		<td colspan="7" class="w-full p-4">
 			<form
 				x-data={ stepPlacementData(step, selectedLabel) }
 				hx-put={ fmt.Sprintf("/projects/%d/steps/%d", projectID, step.ID) }
@@ -206,7 +224,7 @@ templ StepEditRow(step db.Step, projectID int64, labels []string, selectedLabel 
 				hx-swap="innerHTML"
 				data-toast-success="Step updated"
 				data-toast-error="Failed to update step"
-				class="grid w-full grid-cols-1 gap-4 items-start xl:grid-cols-6"
+				class="grid w-full grid-cols-1 gap-4 items-start xl:grid-cols-7"
 			>
 				<div class="form-control flex-1">
 					<label class="label" for={ fmt.Sprintf("step-%d-name", step.ID) }>
@@ -216,6 +234,14 @@ templ StepEditRow(step db.Step, projectID int64, labels []string, selectedLabel 
 					if errorMsg != "" {
 						<span class="text-error text-sm mt-1">{ errorMsg }</span>
 					}
+				</div>
+				<div class="form-control min-w-0">
+					<label class="label" for={ fmt.Sprintf("step-%d-interpreter", step.ID) }><span class="label-text">Interpreter</span></label>
+					<select id={ fmt.Sprintf("step-%d-interpreter", step.ID) } name="interpreter" class="select select-bordered select-sm min-w-0 w-full">
+						<option value="bash" selected?={ stepInterpreter(step) == "bash" }>Bash</option>
+						<option value="pwsh" selected?={ stepInterpreter(step) == "pwsh" }>PowerShell</option>
+						<option value="python3" selected?={ stepInterpreter(step) == "python3" }>Python</option>
+					</select>
 				</div>
 				<div class="form-control min-w-0">
 					<label class="label" for={ fmt.Sprintf("step-%d-target", step.ID) }><span class="label-text">Run on</span></label>
@@ -234,7 +260,7 @@ templ StepEditRow(step db.Step, projectID int64, labels []string, selectedLabel 
 				</div>
 				<div x-data="stepEditor" class="form-control flex-1 xl:col-span-2">
 					<label class="label" for={ fmt.Sprintf("step-%d-script", step.ID) }>
-						<span class="label-text">Script Body (Bash)</span>
+						<span class="label-text">Script Body</span>
 						<button type="button" class="btn btn-ghost btn-xs" x-on:click="fullscreen">Fullscreen</button>
 					</label>
 					<div class="flex font-mono text-xs border border-base-300 rounded bg-base-100 overflow-hidden">
@@ -243,7 +269,7 @@ templ StepEditRow(step db.Step, projectID int64, labels []string, selectedLabel 
 					</div>
 					<dialog x-cloak x-show="modalOpen" x-ref="modal" x-on:close="modalOpen = false" class="fixed inset-0 z-50 bg-base-100 text-base-content p-4 flex flex-col gap-4 w-screen h-screen max-w-none max-h-none">
 						<div class="flex items-center justify-between gap-4">
-							<h3 class="text-lg font-semibold">Script Body (Bash)</h3>
+							<h3 class="text-lg font-semibold">Script Body</h3>
 							<button type="button" class="btn btn-sm" x-on:click="$refs.modal.close()">Close</button>
 						</div>
 						<div class="flex min-h-0 flex-1 font-mono text-sm border border-base-300 rounded bg-base-100 overflow-hidden">

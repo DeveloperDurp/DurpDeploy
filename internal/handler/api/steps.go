@@ -7,6 +7,7 @@ import (
 
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/interpreter"
 	"durpdeploy/internal/repository"
 )
 
@@ -21,6 +22,7 @@ func NewStepHandler(repo *repository.Repository) *StepHandler {
 type stepRequest struct {
 	Name            string   `json:"name"`
 	ScriptBody      string   `json:"script_body"`
+	Interpreter     string   `json:"interpreter"`
 	SortOrder       int64    `json:"sort_order"`
 	TimeoutSeconds  int64    `json:"timeout_seconds"`
 	MaxRetries      int64    `json:"max_retries"`
@@ -150,6 +152,11 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 		)
 		return
 	}
+	selectedInterpreter, err := interpreter.Validate(req.Interpreter)
+	if err != nil {
+		RespondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	target, selectors, ok := validatePlacement(
 		w,
 		r,
@@ -180,6 +187,7 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 			SortOrder:      sortOrder,
 			TimeoutSeconds: req.TimeoutSeconds,
 			MaxRetries:     req.MaxRetries,
+			Interpreter:    selectedInterpreter,
 		},
 		target,
 		selectors,
@@ -327,6 +335,11 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 		)
 		return
 	}
+	selectedInterpreter, err := interpreter.Validate(req.Interpreter)
+	if err != nil {
+		RespondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	target, selectors, ok := validatePlacement(
 		w,
 		r,
@@ -347,6 +360,7 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 			SortOrder:      req.SortOrder,
 			TimeoutSeconds: req.TimeoutSeconds,
 			MaxRetries:     req.MaxRetries,
+			Interpreter:    selectedInterpreter,
 		},
 		target,
 		selectors,
@@ -506,6 +520,7 @@ func (h *StepHandler) ReorderSteps(w http.ResponseWriter, r *http.Request) {
 			SortOrder:      int64(i + 1),
 			TimeoutSeconds: s.TimeoutSeconds,
 			MaxRetries:     s.MaxRetries,
+			Interpreter:    s.Interpreter,
 		}); err != nil {
 			RespondError(w, http.StatusInternalServerError, err.Error())
 			return

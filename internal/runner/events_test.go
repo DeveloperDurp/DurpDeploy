@@ -2,6 +2,9 @@ package runner_test
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"durpdeploy/internal/db"
@@ -52,6 +55,15 @@ func setupRunnerHarness(
 func TestRunner_PublishesStartedAndSucceededEvents(t *testing.T) {
 	ctx := context.Background()
 	repo, rnr, rec := setupRunnerHarness(t)
+	binDir := t.TempDir()
+	if err := os.WriteFile(
+		filepath.Join(binDir, "python3"),
+		[]byte("#!/bin/sh\nprintf 'python invoked\\n'\n"),
+		0o755,
+	); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	proj, err := repo.Queries.CreateProject(
 		ctx,
@@ -70,7 +82,11 @@ func TestRunner_PublishesStartedAndSucceededEvents(t *testing.T) {
 	release, err := repo.Queries.CreateRelease(ctx, db.CreateReleaseParams{
 		ProjectID: proj.ID,
 		Version:   "v1",
-		StepsJson: `[{"name":"step1","script_body":"echo hi","sort_order":1,"timeout_seconds":5,"max_retries":0}]`,
+		StepsJson: `[{"name":"bash","script_body":"echo bash",` +
+			`"interpreter":"bash","sort_order":1,"timeout_seconds":5,` +
+			`"max_retries":0},{"name":"python",` +
+			`"script_body":"print('python')","interpreter":"python3",` +
+			`"sort_order":2,"timeout_seconds":5,"max_retries":0}]`,
 	})
 	if err != nil {
 		t.Fatalf("create release: %v", err)
@@ -183,5 +199,132 @@ func TestRunner_PublishesFailedEvent(t *testing.T) {
 			rec.events[1].Type,
 			events.DeploymentFailed,
 		)
+	}
+}
+
+func TestRunner_MissingInterpreterFailsClearlyBeforeExecution(t *testing.T) {
+	ctx := context.Background()
+	repo, rnr, _ := setupRunnerHarness(t)
+	t.Setenv("PATH", t.TempDir())
+
+	project, err := repo.Queries.CreateProject(
+		ctx,
+		db.CreateProjectParams{Name: "missing-interpreter"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	environment, err := repo.Queries.CreateEnvironment(
+		ctx,
+		db.CreateEnvironmentParams{Name: "test"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	release, err := repo.Queries.CreateRelease(ctx, db.CreateReleaseParams{
+		ProjectID: project.ID, Version: "v1",
+		StepsJson: `[{"name":"powershell","script_body":"Write-Output ok",` +
+			`"interpreter":"pwsh","execution_target":"local"}]`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	created, err := repo.CreateDeployment(ctx, db.CreateDeploymentParams{
+		ReleaseID: release.ID, EnvironmentID: environment.ID, Status: "pending",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rnr.Run(ctx, created.Deployment.ID, release.ID, environment.ID)
+
+	deployment, err := repo.Queries.GetDeployment(ctx, created.Deployment.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if deployment.Status != "failed" {
+		t.Fatalf("deployment status = %q, want failed", deployment.Status)
+	}
+	logs, err := repo.Queries.ListDeploymentLogsByDeployment(
+		ctx,
+		created.Deployment.ID,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(logs) != 1 || !strings.Contains(
+		logs[0].Line,
+		`interpreter "pwsh" is not installed`,
+	) {
+		t.Fatalf("deployment logs = %+v", logs)
+	}
+}
+
+func TestRunner_RejectsNonBashAgentStepBeforeDispatch(t *testing.T) {
+	ctx := context.Background()
+	repo, rnr, _ := setupRunnerHarness(t)
+
+	project, err := repo.Queries.CreateProject(
+		ctx,
+		db.CreateProjectParams{Name: "remote-interpreter"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	environment, err := repo.Queries.CreateEnvironment(
+		ctx,
+		db.CreateEnvironmentParams{Name: "test"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	release, err := repo.Queries.CreateRelease(ctx, db.CreateReleaseParams{
+		ProjectID: project.ID, Version: "v1",
+		StepsJson: `[{"name":"python","script_body":"print('ok')",` +
+			`"interpreter":"python3","execution_target":"agent"}]`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	created, err := repo.CreateDeployment(ctx, db.CreateDeploymentParams{
+		ReleaseID: release.ID, EnvironmentID: environment.ID, Status: "pending",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rnr.Run(ctx, created.Deployment.ID, release.ID, environment.ID)
+
+	deployment, err := repo.Queries.GetDeployment(ctx, created.Deployment.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if deployment.Status != "failed" {
+		t.Fatalf("deployment status = %q, want failed", deployment.Status)
+	}
+	logs, err := repo.Queries.ListDeploymentLogsByDeployment(
+		ctx,
+		created.Deployment.ID,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(logs) != 1 || !strings.Contains(
+		logs[0].Line,
+		`agent execution does not support interpreter "python3"`,
+	) {
+		t.Fatalf("deployment logs = %+v", logs)
+	}
+	runs, err := repo.Queries.ListRemoteStepRuns(
+		ctx,
+		db.ListRemoteStepRunsParams{
+			DeploymentID: created.Deployment.ID, StepIndex: 0,
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(runs) != 0 {
+		t.Fatalf("remote runs = %+v, want none", runs)
 	}
 }

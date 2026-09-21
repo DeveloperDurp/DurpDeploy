@@ -32,13 +32,14 @@ type swaggerLifecycleStage struct {
 	RequiresApproval int64 `json:"requires_approval"`
 }
 
-// Step is a bash script step within a project.
+// Step is an executable script step within a project.
 // swagger:model Step
 type swaggerStep struct {
 	ID              int64    `json:"id"`
 	ProjectID       int64    `json:"project_id"`
 	Name            string   `json:"name"`
 	ScriptBody      string   `json:"script_body"`
+	Interpreter     string   `json:"interpreter"`
 	SortOrder       int64    `json:"sort_order"`
 	CreatedAt       int64    `json:"created_at"`
 	TimeoutSeconds  int64    `json:"timeout_seconds"`
@@ -53,6 +54,7 @@ type swaggerStepTemplate struct {
 	ID              int64    `json:"id"`
 	Name            string   `json:"name"`
 	ScriptBody      string   `json:"script_body"`
+	Interpreter     string   `json:"interpreter"`
 	CreatedAt       int64    `json:"created_at"`
 	ExecutionTarget string   `json:"execution_target"`
 	AgentSelectors  []string `json:"agent_selectors"`
@@ -66,6 +68,7 @@ type swaggerStepTemplateVersion struct {
 	VersionNumber   int64    `json:"version_number"`
 	Name            string   `json:"name"`
 	ScriptBody      string   `json:"script_body"`
+	Interpreter     string   `json:"interpreter"`
 	CreatedAt       int64    `json:"created_at"`
 	ExecutionTarget string   `json:"execution_target"`
 	AgentSelectors  []string `json:"agent_selectors"`
@@ -367,6 +370,7 @@ type swaggerReorderStagesRequest struct {
 type swaggerStepRequest struct {
 	Name            string   `json:"name"`
 	ScriptBody      string   `json:"script_body"`
+	Interpreter     string   `json:"interpreter"`
 	SortOrder       int64    `json:"sort_order"`
 	TimeoutSeconds  int64    `json:"timeout_seconds"`
 	MaxRetries      int64    `json:"max_retries"`
@@ -385,6 +389,7 @@ type swaggerReorderStepsRequest struct {
 type swaggerStepTemplateRequest struct {
 	Name            string   `json:"name"`
 	ScriptBody      string   `json:"script_body"`
+	Interpreter     string   `json:"interpreter"`
 	ExecutionTarget string   `json:"execution_target"`
 	AgentSelectors  []string `json:"agent_selectors"`
 }

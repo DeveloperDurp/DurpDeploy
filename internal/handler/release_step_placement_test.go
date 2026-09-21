@@ -29,6 +29,7 @@ func TestCreateReleaseSnapshotPreservesStepPlacement(t *testing.T) {
 		t.Context(),
 		db.CreateStepParams{
 			ProjectID: project.ID, Name: "remote", ScriptBody: "echo remote",
+			Interpreter: "python3",
 		},
 		"agent",
 		[]string{"linux"},
@@ -44,12 +45,36 @@ func TestCreateReleaseSnapshotPreservesStepPlacement(t *testing.T) {
 		t.Fatal(err)
 	}
 	var snapshots []releaseStepSnapshot
-	if err := json.Unmarshal([]byte(release.StepsJson), &snapshots); err != nil {
+	if err := json.Unmarshal(
+		[]byte(release.StepsJson),
+		&snapshots,
+	); err != nil {
 		t.Fatal(err)
 	}
 	if len(snapshots) != 1 || snapshots[0].ExecutionTarget != "agent" ||
+		snapshots[0].Interpreter != "python3" ||
 		len(snapshots[0].AgentSelectors) != 1 ||
 		snapshots[0].AgentSelectors[0] != "linux" || step.ID == 0 {
 		t.Fatalf("snapshot = %+v", snapshots)
+	}
+	if _, err := repo.Queries.UpdateStep(t.Context(), db.UpdateStepParams{
+		ID: step.ID, Name: step.Name, ScriptBody: step.ScriptBody,
+		SortOrder: step.SortOrder, TimeoutSeconds: step.TimeoutSeconds,
+		MaxRetries: step.MaxRetries, Interpreter: "pwsh",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	frozen, err := repo.Queries.GetRelease(t.Context(), release.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal([]byte(frozen.StepsJson), &snapshots); err != nil {
+		t.Fatal(err)
+	}
+	if snapshots[0].Interpreter != "python3" {
+		t.Fatalf(
+			"release interpreter = %q, want python3",
+			snapshots[0].Interpreter,
+		)
 	}
 }

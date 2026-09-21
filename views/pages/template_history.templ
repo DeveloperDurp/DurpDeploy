@@ -85,6 +85,7 @@ templ TemplateHistoryMobileRecord(v db.StepTemplateVersion, isCurrent bool) {
 			}
 		</div>
 		<p class="break-words">{ v.Name }</p>
+		<p class="text-xs text-gray-400">{ "Interpreter: " + v.Interpreter }</p>
 		<details class="text-sm" data-disclosure="template-history-script-mobile">
 			<summary class="cursor-pointer text-primary">View full script</summary>
 			<pre class="mt-2 max-w-full overflow-x-auto whitespace-pre-wrap break-words rounded bg-base-100 p-3 text-xs"><code>{ v.ScriptBody }</code></pre>
@@ -101,6 +102,7 @@ templ TemplateHistoryRow(
 		<td class="whitespace-nowrap">v{ strconv.FormatInt(v.VersionNumber, 10) }</td>
 		<td class="min-w-0">
 			<p class="break-words">{ v.Name }</p>
+			<p class="text-xs text-gray-400">{ "Interpreter: " + v.Interpreter }</p>
 			<details class="mt-1 text-sm" data-disclosure="template-history-script">
 				<summary class="cursor-pointer text-primary">View full script</summary>
 				<pre class="mt-2 whitespace-pre-wrap break-words rounded bg-base-100 p-3 text-xs"><code>{ v.ScriptBody }</code></pre>

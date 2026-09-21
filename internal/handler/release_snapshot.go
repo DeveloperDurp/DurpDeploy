@@ -139,6 +139,7 @@ func (snapshot releaseSnapshotData) insertVariables(
 type releaseStepSnapshot struct {
 	Name            string   `json:"name"`
 	ScriptBody      string   `json:"script_body"`
+	Interpreter     string   `json:"interpreter"`
 	SortOrder       int64    `json:"sort_order"`
 	TimeoutSeconds  int64    `json:"timeout_seconds"`
 	MaxRetries      int64    `json:"max_retries"`
@@ -160,6 +161,7 @@ func releaseStepSnapshots(
 		snapshots[index] = releaseStepSnapshot{
 			Name:            step.Name,
 			ScriptBody:      step.ScriptBody,
+			Interpreter:     step.Interpreter,
 			SortOrder:       step.SortOrder,
 			TimeoutSeconds:  step.TimeoutSeconds,
 			MaxRetries:      step.MaxRetries,

@@ -37,6 +37,7 @@ func (r *Repository) CreateStepTemplateWithPlacement(
 				VersionNumber: 1,
 				Name:          template.Name,
 				ScriptBody:    template.ScriptBody,
+				Interpreter:   template.Interpreter,
 			},
 		)
 		if err != nil {
@@ -90,6 +91,7 @@ func (r *Repository) UpdateStepTemplateWithPlacement(
 				VersionNumber: latest + 1,
 				Name:          template.Name,
 				ScriptBody:    template.ScriptBody,
+				Interpreter:   template.Interpreter,
 			},
 		)
 		if err != nil {

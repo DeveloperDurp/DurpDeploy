@@ -4,13 +4,20 @@ SELECT d.id, r.steps_json FROM deployments d JOIN releases r ON r.id = d.release
 WHERE d.id = sqlc.arg(deployment_id) AND d.status IN ('pending', 'pending_approval')
   AND NOT EXISTS (SELECT 1 FROM deployment_step_sources s WHERE s.deployment_id = d.id);
 
+-- name: FreezeDeploymentStepSourceJSON :execrows
+INSERT INTO deployment_step_sources (deployment_id, steps_json)
+SELECT d.id, sqlc.arg(steps_json) FROM deployments d
+WHERE d.id = sqlc.arg(deployment_id) AND d.status IN ('pending', 'pending_approval')
+  AND NOT EXISTS (SELECT 1 FROM deployment_step_sources s WHERE s.deployment_id = d.id);
+
 -- name: GetDeploymentStepSource :one
 SELECT * FROM deployment_step_sources WHERE deployment_id = ?;
 
 -- name: CreateDeploymentStep :execrows
-INSERT INTO deployment_steps (deployment_id, step_index, source_step_id, name, script_body, timeout_seconds, max_retries, execution_target)
+INSERT INTO deployment_steps (deployment_id, step_index, source_step_id, name, script_body, timeout_seconds, max_retries, execution_target, interpreter)
 SELECT sqlc.arg(deployment_id), sqlc.arg(step_index), sqlc.narg(source_step_id), sqlc.arg(name),
-    sqlc.arg(script_body), sqlc.arg(timeout_seconds), sqlc.arg(max_retries), sqlc.arg(execution_target)
+    sqlc.arg(script_body), sqlc.arg(timeout_seconds), sqlc.arg(max_retries), sqlc.arg(execution_target),
+    COALESCE(NULLIF(CAST(sqlc.arg(interpreter) AS TEXT), ''), 'bash')
 WHERE EXISTS (SELECT 1 FROM deployments WHERE id = sqlc.arg(deployment_id) AND status IN ('pending', 'pending_approval'))
   AND NOT EXISTS (SELECT 1 FROM deployment_step_sources WHERE deployment_id = sqlc.arg(deployment_id))
   AND NOT EXISTS (SELECT 1 FROM deployment_step_attempts WHERE deployment_id = sqlc.arg(deployment_id));

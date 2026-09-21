@@ -21,6 +21,7 @@ templ StepList(steps []db.Step, projectID int64) {
 				<tr>
 					<th class="w-16">Order</th>
 					<th class="w-1/5">Name</th>
+					<th class="hidden md:table-cell w-24">Interpreter</th>
 					<th class="hidden md:table-cell w-auto">Script</th>
 					<th class="hidden md:table-cell w-20">Timeout</th>
 					<th class="hidden md:table-cell w-20">Retries</th>
@@ -45,6 +46,7 @@ templ StepRow(step db.Step, projectID int64, isFirst bool, isLast bool) {
 	<tr id={ fmt.Sprintf("step-row-%d", step.ID) }>
 		<td>{ strconv.FormatInt(step.SortOrder, 10) }</td>
 		<td class="font-medium truncate">{ step.Name }</td>
+		<td class="hidden md:table-cell whitespace-nowrap">{ step.Interpreter }</td>
 		<td class="hidden md:table-cell truncate">
 			<code class="text-sm bg-base-200 px-2 py-1 rounded">
 				if len(step.ScriptBody) > 60 {
@@ -133,6 +135,7 @@ templ StepMobileRecord(step db.Step, projectID int64, isFirst bool, isLast bool)
 			<div class="min-w-0">
 				<p class="text-sm text-gray-400">Step { strconv.FormatInt(step.SortOrder, 10) }</p>
 				<h3 class="font-medium break-words">{ step.Name }</h3>
+				<p class="text-xs text-gray-400">{ "Interpreter: " + step.Interpreter }</p>
 			</div>
 			<dl class="shrink-0 text-right text-xs text-gray-400">
 				<div><dt class="sr-only">Timeout</dt><dd>@timeoutCell(step.TimeoutSeconds)</dd></div>

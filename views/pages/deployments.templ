@@ -350,19 +350,21 @@ templ DeploymentDetail(project db.Project, release db.Release, environment db.En
 					<tr>
 						<th class="w-16">Order</th>
 						<th class="w-1/4">Name</th>
+						<th class="w-24">Interpreter</th>
 						<th class="w-auto hidden sm:table-cell">Script</th>
 					</tr>
 				</thead>
 				<tbody>
 					if len(parseReleaseSteps(release.StepsJson)) == 0 {
 						<tr>
-							<td colspan="3" class="text-gray-500 italic text-center py-4">No steps in this release.</td>
+							<td colspan="4" class="text-gray-500 italic text-center py-4">No steps in this release.</td>
 						</tr>
 					} else {
 						for _, step := range parseReleaseSteps(release.StepsJson) {
 							<tr>
 								<td>{ strconv.FormatInt(step.SortOrder, 10) }</td>
 								<td class="font-medium truncate">{ step.Name }</td>
+								<td class="whitespace-nowrap">{ releaseStepInterpreter(step) }</td>
 								<td class="truncate hidden sm:table-cell">
 									<code class="text-sm bg-base-300 px-2 py-1 rounded">
 										if len(step.ScriptBody) > 60 {
