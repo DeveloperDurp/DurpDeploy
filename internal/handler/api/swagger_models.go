@@ -443,17 +443,18 @@ type swaggerReleaseWithVariablesResponse struct {
 
 // ReleaseVariableResponse is a variable snapshot in a release.
 //
-// Value is always an empty string when Secret is 1: ordinary reads
-// never return secret plaintext (issue #29).
+// Value mirrors the sql.NullString wire shape: {"String": s,
+// "Valid": b}. When Secret is 1 it is an empty string with Valid=true;
+// ordinary reads never return secret plaintext (issue #29).
 //
 // swagger:model ReleaseVariableResponse
 type swaggerReleaseVariableResponse struct {
-	ID            int64   `json:"id"`
-	ReleaseID     int64   `json:"release_id"`
-	Name          string  `json:"name"`
-	Value         *string `json:"value"`
-	EnvironmentID *int64  `json:"environment_id"`
-	Secret        int64   `json:"secret"`
+	ID            int64                 `json:"id"`
+	ReleaseID     int64                 `json:"release_id"`
+	Name          string                `json:"name"`
+	Value         swaggerSQLNullString  `json:"value"`
+	EnvironmentID swaggerSQLNullInteger `json:"environment_id"`
+	Secret        int64                 `json:"secret"`
 }
 
 // ScheduleRequest is the body for create/update scheduled deployment.

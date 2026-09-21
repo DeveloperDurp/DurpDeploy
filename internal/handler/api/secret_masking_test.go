@@ -13,6 +13,7 @@ import (
 
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/handler"
+	"durpdeploy/internal/secret"
 	"durpdeploy/internal/server"
 )
 
@@ -28,6 +29,18 @@ func newMaskingRouter(h *harness) http.Handler {
 		parser,
 		handler.NewAuthHandler(h.repo),
 	)
+}
+
+// enableMaskingSecretBox turns on AES-GCM at-rest encryption so
+// double-encryption regressions (ciphertext stored and re-encrypted)
+// surface as failed round-trips.
+func enableMaskingSecretBox(t *testing.T, h *harness) {
+	t.Helper()
+	box, err := secret.NewBox(make([]byte, 32))
+	if err != nil {
+		t.Fatalf("NewBox: %v", err)
+	}
+	h.repo.SetSecretBox(box)
 }
 
 func maskingRequest(
@@ -70,6 +83,7 @@ func seedMaskingMember(
 
 func TestVariable_SecretValuesNeverReturned(t *testing.T) {
 	h := newAPIHarness(t)
+	enableMaskingSecretBox(t, h)
 	r := newMaskingRouter(h)
 	admin := seedAPIUser(t, h.repo, "admin@example.com", "admin")
 	_, token := seedAPIToken(t, h.repo, admin.ID)
