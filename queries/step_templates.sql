@@ -12,16 +12,22 @@ SELECT COUNT(*) FROM step_templates;
 SELECT * FROM step_templates WHERE id = ?;
 
 -- name: CreateStepTemplate :one
-INSERT INTO step_templates (name, script_body) VALUES (?, ?) RETURNING *;
+INSERT INTO step_templates (name, script_body, interpreter)
+VALUES (?, ?, COALESCE(NULLIF(CAST(sqlc.arg(interpreter) AS TEXT), ''), 'bash'))
+RETURNING *;
 
 -- name: UpdateStepTemplate :one
-UPDATE step_templates SET name = ?, script_body = ? WHERE id = ? RETURNING *;
+UPDATE step_templates SET name = ?, script_body = ?,
+interpreter = COALESCE(NULLIF(CAST(sqlc.arg(interpreter) AS TEXT), ''), 'bash')
+WHERE id = sqlc.arg(id) RETURNING *;
 
 -- name: DeleteStepTemplate :exec
 DELETE FROM step_templates WHERE id = ?;
 
 -- name: CreateStepTemplateVersion :one
-INSERT INTO step_template_versions (template_id, version_number, name, script_body) VALUES (?, ?, ?, ?) RETURNING *;
+INSERT INTO step_template_versions (template_id, version_number, name, script_body, interpreter)
+VALUES (?, ?, ?, ?, COALESCE(NULLIF(CAST(sqlc.arg(interpreter) AS TEXT), ''), 'bash'))
+RETURNING *;
 
 -- name: ListStepTemplateVersions :many
 SELECT * FROM step_template_versions WHERE template_id = ? ORDER BY version_number DESC;

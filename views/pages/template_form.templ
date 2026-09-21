@@ -2,6 +2,7 @@ package pages
 
 import (
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/interpreter"
 	"durpdeploy/views/layouts"
 	"strconv"
 )
@@ -62,6 +63,16 @@ templ TemplateFormContent(tpl *db.StepTemplate, isNew bool, errorMsg string) {
 			}
 			class="space-y-4"
 		>
+			<div class="form-control">
+				<label class="label" for="template-interpreter">
+					<span class="label-text">Interpreter</span>
+				</label>
+				<select id="template-interpreter" name="interpreter" class="select select-bordered">
+					<option value="bash" selected?={ tpl.Interpreter == "" || tpl.Interpreter == interpreter.Bash }>Bash</option>
+					<option value="pwsh" selected?={ tpl.Interpreter == interpreter.PowerShell }>PowerShell</option>
+					<option value="python3" selected?={ tpl.Interpreter == interpreter.Python }>Python</option>
+				</select>
+			</div>
 			<div class="form-control">
 				<label class="label">
 					<span class="label-text">Name</span>

@@ -47,6 +47,61 @@ func (r *Repository) CreateDeployment(
 	return result, nil
 }
 
+func (r *Repository) CreateDeploymentFromDeployment(
+	ctx context.Context,
+	arg db.CreateDeploymentParams,
+	sourceDeploymentID int64,
+) (DeploymentResult, error) {
+	var result DeploymentResult
+	err := withSQLiteBusyRetry(ctx, func() error {
+		result = DeploymentResult{}
+		return r.WithTx(ctx, func(q *db.Queries) error {
+			source, err := q.GetDeployment(ctx, sourceDeploymentID)
+			if err != nil {
+				return fmt.Errorf("get source deployment: %w", err)
+			}
+			if source.ReleaseID != arg.ReleaseID {
+				return errors.New("source deployment release mismatch")
+			}
+			stepSource, err := q.GetDeploymentStepSource(
+				ctx,
+				sourceDeploymentID,
+			)
+			if errors.Is(err, sql.ErrNoRows) {
+				release, releaseErr := q.GetRelease(ctx, arg.ReleaseID)
+				if releaseErr != nil {
+					return fmt.Errorf(
+						"get source release steps: %w",
+						releaseErr,
+					)
+				}
+				stepSource.StepsJson = release.StepsJson
+			} else if err != nil {
+				return fmt.Errorf("get source deployment steps: %w", err)
+			}
+			steps, err := deploymentStepsFromRelease(stepSource.StepsJson)
+			if err != nil {
+				return err
+			}
+			result, err = createDeploymentWithSteps(
+				ctx,
+				q,
+				arg,
+				steps,
+				stepSource.StepsJson,
+			)
+			return err
+		})
+	})
+	if err != nil {
+		return DeploymentResult{}, fmt.Errorf(
+			"create deployment from deployment: %w",
+			err,
+		)
+	}
+	return result, nil
+}
+
 func (r *Repository) createDeployment(
 	ctx context.Context,
 	q *db.Queries,
@@ -60,16 +115,27 @@ func (r *Repository) createDeployment(
 	if err != nil {
 		return DeploymentResult{}, err
 	}
+	return createDeploymentWithSteps(ctx, q, arg, steps, "")
+}
+
+func createDeploymentWithSteps(
+	ctx context.Context,
+	q *db.Queries,
+	arg db.CreateDeploymentParams,
+	steps []DeploymentStepSnapshot,
+	stepsJSON string,
+) (DeploymentResult, error) {
 	arg.AssignedAgentID = sql.NullString{}
 	deployment, err := q.CreateDeployment(ctx, arg)
 	if err != nil {
 		return DeploymentResult{}, fmt.Errorf("insert deployment: %w", err)
 	}
-	if err := snapshotDeploymentSteps(
+	if err := snapshotDeploymentStepsFromSource(
 		ctx,
 		q,
 		deployment.ID,
 		steps,
+		stepsJSON,
 	); err != nil {
 		return DeploymentResult{}, fmt.Errorf("snapshot release steps: %w", err)
 	}
@@ -134,6 +200,7 @@ func deploymentStepsFromRelease(raw string) ([]DeploymentStepSnapshot, error) {
 	var source []struct {
 		Name            string   `json:"name"`
 		ScriptBody      string   `json:"script_body"`
+		Interpreter     string   `json:"interpreter"`
 		TimeoutSeconds  int64    `json:"timeout_seconds"`
 		MaxRetries      int64    `json:"max_retries"`
 		ExecutionTarget string   `json:"execution_target"`
@@ -155,6 +222,7 @@ func deploymentStepsFromRelease(raw string) ([]DeploymentStepSnapshot, error) {
 				TimeoutSeconds:  step.TimeoutSeconds,
 				MaxRetries:      step.MaxRetries,
 				ExecutionTarget: target,
+				Interpreter:     step.Interpreter,
 			},
 			Selectors: step.AgentSelectors,
 		}

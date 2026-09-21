@@ -756,6 +756,249 @@ API_ENV_ID=$(echo "$API_ENV" | python3 -c "import sys,json; print(json.load(sys.
 [[ -n "$API_ENV_ID" ]] || { echo "FAIL: create env did not return id: $API_ENV"; exit 1; }
 echo "  Environment CRUD: OK ($API_ENV_ID)"
 
+# A4b: Interpreter validation, mixed local execution, immutable snapshots,
+# release refresh, and redeployment all use the public API.
+echo "=== API interpreter tests ==="
+INTERPRETER_PROJECT=$(api_post '{"name":"e2e-interpreters"}' "$BASE/api/v1/projects")
+INTERPRETER_PROJECT_ID=$(echo "$INTERPRETER_PROJECT" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+INTERPRETER_ENV=$(api_post '{"name":"interpreter-env"}' "$BASE/api/v1/environments")
+INTERPRETER_ENV_ID=$(echo "$INTERPRETER_ENV" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+[[ -n "$INTERPRETER_PROJECT_ID" && -n "$INTERPRETER_ENV_ID" ]] || {
+    echo "FAIL: could not create interpreter project/environment"; exit 1;
+}
+
+CODE=$(api_post_code '{"name":"invalid","interpreter":"/bin/sh"}' \
+    "$BASE/api/v1/projects/$INTERPRETER_PROJECT_ID/steps")
+[[ "$CODE" == "400" ]] || { echo "FAIL: invalid interpreter got $CODE, want 400"; exit 1; }
+
+INTERPRETER_BASH_STEP=$(api_post \
+    '{"name":"bash-step","script_body":"echo bash-e2e","interpreter":"bash"}' \
+    "$BASE/api/v1/projects/$INTERPRETER_PROJECT_ID/steps")
+INTERPRETER_PYTHON_STEP=$(api_post \
+    '{"name":"python-step","script_body":"print(\"python-e2e\")","interpreter":"python3"}' \
+    "$BASE/api/v1/projects/$INTERPRETER_PROJECT_ID/steps")
+INTERPRETER_PYTHON_STEP_ID=$(echo "$INTERPRETER_PYTHON_STEP" | python3 -c \
+    "import sys,json; d=json.load(sys.stdin); assert d['interpreter']=='python3'; print(d['id'])")
+echo "$INTERPRETER_BASH_STEP" | python3 -c \
+    "import sys,json; assert json.load(sys.stdin)['interpreter']=='bash'"
+
+INTERPRETER_NEW_STEP_PAGE=$(curl_body \
+    "$BASE/projects/$INTERPRETER_PROJECT_ID/steps/new")
+echo "$INTERPRETER_NEW_STEP_PAGE" | python3 -c '
+import sys
+
+page = sys.stdin.read()
+assert "name=\"interpreter\"" in page
+assert all(f"value=\"{value}\"" in page for value in ("bash", "pwsh", "python3"))
+'
+INTERPRETER_EDIT_STEP_PAGE=$(curl_body \
+    "$BASE/projects/$INTERPRETER_PROJECT_ID/steps/$INTERPRETER_PYTHON_STEP_ID/edit")
+echo "$INTERPRETER_EDIT_STEP_PAGE" | python3 -c '
+import re
+import sys
+
+page = sys.stdin.read()
+assert re.search(r"<option[^>]*value=\"python3\"[^>]*selected", page), page
+'
+CODE=$(curl_silent -X PUT \
+    --data-urlencode 'name=python-step' \
+    --data-urlencode 'script_body=print("python-e2e")' \
+    -d "interpreter=python3&sort_order=2&execution_target=local&csrf_token=$CSRF" \
+    "$BASE/projects/$INTERPRETER_PROJECT_ID/steps/$INTERPRETER_PYTHON_STEP_ID")
+[[ "$CODE" == "200" ]] || { echo "FAIL: web interpreter step update got $CODE"; exit 1; }
+INTERPRETER_STEPS_PAGE=$(curl_body \
+    "$BASE/projects/$INTERPRETER_PROJECT_ID/steps-page")
+grep -q 'Interpreter: python3' <<<"$INTERPRETER_STEPS_PAGE" || {
+    echo "FAIL: steps page did not display python3"; exit 1;
+}
+
+INTERPRETER_TEMPLATE=$(api_post \
+    '{"name":"python-template","script_body":"print(\"template\")","interpreter":"python3"}' \
+    "$BASE/api/v1/templates")
+INTERPRETER_TEMPLATE_ID=$(echo "$INTERPRETER_TEMPLATE" | python3 -c \
+    "import sys,json; d=json.load(sys.stdin); assert d['interpreter']=='python3'; print(d['id'])")
+INTERPRETER_NEW_TEMPLATE_PAGE=$(curl_body "$BASE/templates/new")
+echo "$INTERPRETER_NEW_TEMPLATE_PAGE" | python3 -c '
+import sys
+
+page = sys.stdin.read()
+assert "name=\"interpreter\"" in page
+assert all(f"value=\"{value}\"" in page for value in ("bash", "pwsh", "python3"))
+'
+INTERPRETER_EDIT_TEMPLATE_PAGE=$(curl_body \
+    "$BASE/templates/$INTERPRETER_TEMPLATE_ID/edit")
+echo "$INTERPRETER_EDIT_TEMPLATE_PAGE" | python3 -c '
+import re
+import sys
+
+page = sys.stdin.read()
+assert re.search(r"<option[^>]*value=\"python3\"[^>]*selected", page), page
+'
+CODE=$(curl_silent -X PUT \
+    --data-urlencode 'name=python-template' \
+    --data-urlencode 'script_body=Write-Output template' \
+    -d "interpreter=pwsh&csrf_token=$CSRF" \
+    "$BASE/templates/$INTERPRETER_TEMPLATE_ID")
+[[ "$CODE" == "303" ]] || { echo "FAIL: web template interpreter update got $CODE"; exit 1; }
+INTERPRETER_TEMPLATES_PAGE=$(curl_body "$BASE/templates")
+grep -q 'Interpreter: pwsh' <<<"$INTERPRETER_TEMPLATES_PAGE" || {
+    echo "FAIL: templates page did not display pwsh"; exit 1;
+}
+INTERPRETER_TEMPLATE_HISTORY_PAGE=$(curl_body \
+    "$BASE/templates/$INTERPRETER_TEMPLATE_ID/history")
+grep -q 'Interpreter: python3' <<<"$INTERPRETER_TEMPLATE_HISTORY_PAGE" || {
+    echo "FAIL: template history did not preserve python3"; exit 1;
+}
+grep -q 'Interpreter: pwsh' <<<"$INTERPRETER_TEMPLATE_HISTORY_PAGE" || {
+    echo "FAIL: template history did not display pwsh"; exit 1;
+}
+INTERPRETER_TEMPLATE_API_UPDATE=$(api_put \
+    '{"name":"python-template","script_body":"Write-Output template","interpreter":"pwsh"}' \
+    "$BASE/api/v1/templates/$INTERPRETER_TEMPLATE_ID")
+echo "$INTERPRETER_TEMPLATE_API_UPDATE" | python3 -c \
+    "import sys,json; assert json.load(sys.stdin)['interpreter']=='pwsh'"
+INTERPRETER_TEMPLATE_API_HISTORY=$(api_get \
+    "$BASE/api/v1/templates/$INTERPRETER_TEMPLATE_ID/history")
+echo "$INTERPRETER_TEMPLATE_API_HISTORY" | python3 -c '
+import json
+import sys
+
+interpreters = {version["interpreter"] for version in json.load(sys.stdin)}
+assert {"python3", "pwsh"} <= interpreters, interpreters
+'
+echo "  Web interpreter forms and template history: OK"
+
+INTERPRETER_RELEASE=$(api_post '{"version":"mixed-v1"}' \
+    "$BASE/api/v1/projects/$INTERPRETER_PROJECT_ID/releases")
+INTERPRETER_RELEASE_ID=$(echo "$INTERPRETER_RELEASE" | python3 -c '
+import json
+import sys
+
+release = json.load(sys.stdin)
+steps = {step["name"]: step["interpreter"] for step in json.loads(release["steps_json"])}
+assert steps == {"bash-step": "bash", "python-step": "python3"}, steps
+print(release["id"])
+')
+INTERPRETER_RELEASE_PAGE=$(curl_body \
+    "$BASE/projects/$INTERPRETER_PROJECT_ID/releases/$INTERPRETER_RELEASE_ID")
+grep -q '>python3<' <<<"$INTERPRETER_RELEASE_PAGE" || {
+    echo "FAIL: release page did not display python3"; exit 1;
+}
+
+INTERPRETER_DEPLOYMENT=$(api_post \
+    "{\"release_id\":$INTERPRETER_RELEASE_ID,\"environment_id\":$INTERPRETER_ENV_ID}" \
+    "$BASE/api/v1/projects/$INTERPRETER_PROJECT_ID/deployments")
+INTERPRETER_DEPLOYMENT_ID=$(echo "$INTERPRETER_DEPLOYMENT" | python3 -c \
+    "import sys,json; print(json.load(sys.stdin)['id'])")
+for i in {1..100}; do
+    INTERPRETER_STATUS=$(api_get \
+        "$BASE/api/v1/deployments/$INTERPRETER_DEPLOYMENT_ID/status" \
+        | python3 -c "import sys,json; print(json.load(sys.stdin)['status'])")
+    [[ "$INTERPRETER_STATUS" =~ ^(failed|succeeded|cancelled)$ ]] && break
+    sleep 0.1
+done
+[[ "$INTERPRETER_STATUS" == "succeeded" ]] || {
+    echo "FAIL: mixed interpreter deployment status=$INTERPRETER_STATUS"; exit 1;
+}
+INTERPRETER_LOGS=$(api_get \
+    "$BASE/api/v1/deployments/$INTERPRETER_DEPLOYMENT_ID/logs")
+echo "$INTERPRETER_LOGS" | python3 -c '
+import json
+import sys
+
+lines = "\n".join(item["line"] for item in json.load(sys.stdin))
+assert "bash-e2e" in lines and "python-e2e" in lines, lines
+'
+INTERPRETER_DEPLOYMENT_PAGE=$(curl_body \
+    "$BASE/deployments/$INTERPRETER_DEPLOYMENT_ID")
+grep -q '>python3<' <<<"$INTERPRETER_DEPLOYMENT_PAGE" || {
+    echo "FAIL: deployment page did not display python3"; exit 1;
+}
+echo "  Mixed Bash/Python deployment: OK"
+
+INTERPRETER_UPDATED_STEP=$(api_put \
+    '{"name":"python-step","script_body":"Write-Output refreshed","interpreter":"pwsh","sort_order":2}' \
+    "$BASE/api/v1/projects/$INTERPRETER_PROJECT_ID/steps/$INTERPRETER_PYTHON_STEP_ID")
+echo "$INTERPRETER_UPDATED_STEP" | python3 -c \
+    "import sys,json; assert json.load(sys.stdin)['interpreter']=='pwsh'"
+INTERPRETER_REFRESHED=$(api_post '{}' \
+    "$BASE/api/v1/projects/$INTERPRETER_PROJECT_ID/releases/$INTERPRETER_RELEASE_ID/refresh")
+echo "$INTERPRETER_REFRESHED" | python3 -c '
+import json
+import sys
+
+steps = {step["name"]: step["interpreter"] for step in json.loads(json.load(sys.stdin)["steps_json"])}
+assert steps["python-step"] == "pwsh", steps
+'
+INTERPRETER_REFRESHED_RELEASE_PAGE=$(curl_body \
+    "$BASE/projects/$INTERPRETER_PROJECT_ID/releases/$INTERPRETER_RELEASE_ID")
+grep -q '>pwsh<' <<<"$INTERPRETER_REFRESHED_RELEASE_PAGE" || {
+    echo "FAIL: refreshed release page did not display pwsh"; exit 1;
+}
+
+INTERPRETER_REDEPLOY=$(api_post '{}' \
+    "$BASE/api/v1/deployments/$INTERPRETER_DEPLOYMENT_ID/redeploy")
+INTERPRETER_REDEPLOY_ID=$(echo "$INTERPRETER_REDEPLOY" | python3 -c \
+    "import sys,json; print(json.load(sys.stdin)['id'])")
+for i in {1..100}; do
+    INTERPRETER_REDEPLOY_STATUS=$(api_get \
+        "$BASE/api/v1/deployments/$INTERPRETER_REDEPLOY_ID/status" \
+        | python3 -c "import sys,json; print(json.load(sys.stdin)['status'])")
+    [[ "$INTERPRETER_REDEPLOY_STATUS" =~ ^(failed|succeeded|cancelled)$ ]] && break
+    sleep 0.1
+done
+[[ "$INTERPRETER_REDEPLOY_STATUS" == "succeeded" ]] || {
+    echo "FAIL: frozen interpreter redeploy status=$INTERPRETER_REDEPLOY_STATUS"; exit 1;
+}
+INTERPRETER_REDEPLOY_LOGS=$(api_get \
+    "$BASE/api/v1/deployments/$INTERPRETER_REDEPLOY_ID/logs")
+echo "$INTERPRETER_REDEPLOY_LOGS" | python3 -c '
+import json
+import sys
+
+lines = "\n".join(item["line"] for item in json.load(sys.stdin))
+assert "python-e2e" in lines and "refreshed" not in lines, lines
+'
+INTERPRETER_REDEPLOY_PAGE=$(curl_body \
+    "$BASE/deployments/$INTERPRETER_REDEPLOY_ID")
+grep -q '>python3<' <<<"$INTERPRETER_REDEPLOY_PAGE" || {
+    echo "FAIL: redeployment page did not display frozen python3"; exit 1;
+}
+if grep -q '>pwsh<' <<<"$INTERPRETER_REDEPLOY_PAGE"; then
+    echo "FAIL: redeployment page displayed refreshed pwsh"; exit 1
+fi
+echo "  Interpreter validation and immutable redeploy snapshot: OK"
+
+CODE=$(curl_silent -X POST \
+    -d "csrf_token=$CSRF" \
+    "$BASE/projects/$INTERPRETER_PROJECT_ID/steps/$INTERPRETER_PYTHON_STEP_ID/save-as-template")
+[[ "$CODE" == "303" ]] || { echo "FAIL: save step as template got $CODE"; exit 1; }
+INTERPRETER_SAVED_TEMPLATE=$(api_get "$BASE/api/v1/templates?limit=1000" | python3 -c '
+import json
+import sys
+
+for item in json.load(sys.stdin)["items"]:
+    if item["name"] == "python-step":
+        assert item["interpreter"] == "pwsh", item
+        print(item["id"])
+        break
+')
+[[ -n "$INTERPRETER_SAVED_TEMPLATE" ]] || {
+    echo "FAIL: saved template was not exposed through the API"; exit 1;
+}
+CODE=$(curl_silent -X POST \
+    -d "csrf_token=$CSRF" \
+    "$BASE/projects/$INTERPRETER_PROJECT_ID/steps/from-template/$INTERPRETER_TEMPLATE_ID")
+[[ "$CODE" == "200" ]] || { echo "FAIL: insert template got $CODE"; exit 1; }
+api_get "$BASE/api/v1/projects/$INTERPRETER_PROJECT_ID/steps?limit=1000" | python3 -c '
+import json
+import sys
+
+matches = [item for item in json.load(sys.stdin)["items"] if item["name"] == "python-template"]
+assert len(matches) == 1 and matches[0]["interpreter"] == "pwsh", matches
+'
+echo "  Web template save/insert preserves interpreter: OK"
+
 # A5: Step CRUD.
 API_STEP=$(api_post '{"name":"long-step","script_body":"sleep 10"}' "$BASE/api/v1/projects/$API_PROJECT_ID/steps")
 API_STEP_ID=$(echo "$API_STEP" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")

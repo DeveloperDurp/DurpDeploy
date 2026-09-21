@@ -533,13 +533,14 @@ func (h *DeploymentHandler) RedeployDeployment(
 	if requiresApproval {
 		initialStatus = "pending_approval"
 	}
-	result, err := h.repo.CreateDeployment(
+	result, err := h.repo.CreateDeploymentFromDeployment(
 		r.Context(),
 		db.CreateDeploymentParams{
 			ReleaseID:     deployment.ReleaseID,
 			EnvironmentID: deployment.EnvironmentID,
 			Status:        initialStatus,
 		},
+		deployment.ID,
 	)
 	if err != nil {
 		RespondError(w, http.StatusInternalServerError, err.Error())
@@ -675,7 +676,7 @@ func (h *DeploymentHandler) RetryDeployment(
 		return
 	}
 
-	result, err := h.repo.CreateDeployment(
+	result, err := h.repo.CreateDeploymentFromDeployment(
 		r.Context(),
 		db.CreateDeploymentParams{
 			ReleaseID:     deployment.ReleaseID,
@@ -686,6 +687,7 @@ func (h *DeploymentHandler) RetryDeployment(
 				Valid:  true,
 			},
 		},
+		deployment.ID,
 	)
 	if err != nil {
 		RespondError(w, http.StatusInternalServerError, err.Error())

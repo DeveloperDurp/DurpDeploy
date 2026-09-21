@@ -56,6 +56,7 @@ templ TemplatesListFragment(templates []db.StepTemplate) {
 				for _, tpl := range templates {
 					<li class="card bg-base-200 p-4 space-y-3">
 						<p class="break-words font-medium">{ tpl.Name }</p>
+						<p class="text-xs text-gray-400">{ "Interpreter: " + tpl.Interpreter }</p>
 						<details class="text-sm" data-disclosure={ "template-script-mobile-" + strconv.FormatInt(tpl.ID, 10) }>
 							<summary class="cursor-pointer text-primary">View full script</summary>
 							<pre class="mt-2 max-w-full overflow-x-auto whitespace-pre-wrap break-words rounded bg-base-100 p-3 text-xs"><code>{ tpl.ScriptBody }</code></pre>
@@ -72,6 +73,7 @@ templ TemplateRow(tpl db.StepTemplate) {
 	<tr>
 		<td class="min-w-0">
 			<p class="break-words">{ tpl.Name }</p>
+			<p class="text-xs text-gray-400">{ "Interpreter: " + tpl.Interpreter }</p>
 			<details class="mt-1 text-sm" data-disclosure={ "template-script-" + strconv.FormatInt(tpl.ID, 10) }>
 				<summary class="cursor-pointer text-primary">View full script</summary>
 				<pre class="mt-2 whitespace-pre-wrap break-words rounded bg-base-100 p-3 text-xs"><code>{ tpl.ScriptBody }</code></pre>

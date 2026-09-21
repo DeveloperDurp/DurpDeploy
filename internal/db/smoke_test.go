@@ -79,6 +79,17 @@ func TestSmoke(t *testing.T) {
 	if step2.Name != step.Name {
 		t.Fatalf("step name mismatch")
 	}
+	if step2.Interpreter != "bash" {
+		t.Fatalf("step interpreter = %q, want bash", step2.Interpreter)
+	}
+	_, err = dbConn.ExecContext(
+		ctx,
+		"UPDATE steps SET interpreter = 'ruby' WHERE id = ?",
+		step.ID,
+	)
+	if err == nil {
+		t.Fatal("update step with invalid interpreter succeeded")
+	}
 
 	// variables
 	variable, err := queries.CreateVariable(ctx, db.CreateVariableParams{

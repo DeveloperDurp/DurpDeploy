@@ -21,16 +21,19 @@ func (q *Queries) CountStepTemplates(ctx context.Context) (int64, error) {
 }
 
 const createStepTemplate = `-- name: CreateStepTemplate :one
-INSERT INTO step_templates (name, script_body) VALUES (?, ?) RETURNING id, name, script_body, created_at, execution_target
+INSERT INTO step_templates (name, script_body, interpreter)
+VALUES (?, ?, COALESCE(NULLIF(CAST(?3 AS TEXT), ''), 'bash'))
+RETURNING id, name, script_body, created_at, execution_target, interpreter
 `
 
 type CreateStepTemplateParams struct {
-	Name       string `json:"name"`
-	ScriptBody string `json:"script_body"`
+	Name        string `json:"name"`
+	ScriptBody  string `json:"script_body"`
+	Interpreter string `json:"interpreter"`
 }
 
 func (q *Queries) CreateStepTemplate(ctx context.Context, arg CreateStepTemplateParams) (StepTemplate, error) {
-	row := q.db.QueryRowContext(ctx, createStepTemplate, arg.Name, arg.ScriptBody)
+	row := q.db.QueryRowContext(ctx, createStepTemplate, arg.Name, arg.ScriptBody, arg.Interpreter)
 	var i StepTemplate
 	err := row.Scan(
 		&i.ID,
@@ -38,12 +41,15 @@ func (q *Queries) CreateStepTemplate(ctx context.Context, arg CreateStepTemplate
 		&i.ScriptBody,
 		&i.CreatedAt,
 		&i.ExecutionTarget,
+		&i.Interpreter,
 	)
 	return i, err
 }
 
 const createStepTemplateVersion = `-- name: CreateStepTemplateVersion :one
-INSERT INTO step_template_versions (template_id, version_number, name, script_body) VALUES (?, ?, ?, ?) RETURNING id, template_id, version_number, name, script_body, created_at, execution_target
+INSERT INTO step_template_versions (template_id, version_number, name, script_body, interpreter)
+VALUES (?, ?, ?, ?, COALESCE(NULLIF(CAST(?5 AS TEXT), ''), 'bash'))
+RETURNING id, template_id, version_number, name, script_body, created_at, execution_target, interpreter
 `
 
 type CreateStepTemplateVersionParams struct {
@@ -51,6 +57,7 @@ type CreateStepTemplateVersionParams struct {
 	VersionNumber int64  `json:"version_number"`
 	Name          string `json:"name"`
 	ScriptBody    string `json:"script_body"`
+	Interpreter   string `json:"interpreter"`
 }
 
 func (q *Queries) CreateStepTemplateVersion(ctx context.Context, arg CreateStepTemplateVersionParams) (StepTemplateVersion, error) {
@@ -59,6 +66,7 @@ func (q *Queries) CreateStepTemplateVersion(ctx context.Context, arg CreateStepT
 		arg.VersionNumber,
 		arg.Name,
 		arg.ScriptBody,
+		arg.Interpreter,
 	)
 	var i StepTemplateVersion
 	err := row.Scan(
@@ -69,6 +77,7 @@ func (q *Queries) CreateStepTemplateVersion(ctx context.Context, arg CreateStepT
 		&i.ScriptBody,
 		&i.CreatedAt,
 		&i.ExecutionTarget,
+		&i.Interpreter,
 	)
 	return i, err
 }
@@ -95,7 +104,7 @@ func (q *Queries) GetLatestStepTemplateVersionNumber(ctx context.Context, templa
 }
 
 const getStepTemplate = `-- name: GetStepTemplate :one
-SELECT id, name, script_body, created_at, execution_target FROM step_templates WHERE id = ?
+SELECT id, name, script_body, created_at, execution_target, interpreter FROM step_templates WHERE id = ?
 `
 
 func (q *Queries) GetStepTemplate(ctx context.Context, id int64) (StepTemplate, error) {
@@ -107,12 +116,13 @@ func (q *Queries) GetStepTemplate(ctx context.Context, id int64) (StepTemplate, 
 		&i.ScriptBody,
 		&i.CreatedAt,
 		&i.ExecutionTarget,
+		&i.Interpreter,
 	)
 	return i, err
 }
 
 const getStepTemplateVersion = `-- name: GetStepTemplateVersion :one
-SELECT id, template_id, version_number, name, script_body, created_at, execution_target FROM step_template_versions WHERE id = ?
+SELECT id, template_id, version_number, name, script_body, created_at, execution_target, interpreter FROM step_template_versions WHERE id = ?
 `
 
 func (q *Queries) GetStepTemplateVersion(ctx context.Context, id int64) (StepTemplateVersion, error) {
@@ -126,12 +136,13 @@ func (q *Queries) GetStepTemplateVersion(ctx context.Context, id int64) (StepTem
 		&i.ScriptBody,
 		&i.CreatedAt,
 		&i.ExecutionTarget,
+		&i.Interpreter,
 	)
 	return i, err
 }
 
 const listStepTemplateVersions = `-- name: ListStepTemplateVersions :many
-SELECT id, template_id, version_number, name, script_body, created_at, execution_target FROM step_template_versions WHERE template_id = ? ORDER BY version_number DESC
+SELECT id, template_id, version_number, name, script_body, created_at, execution_target, interpreter FROM step_template_versions WHERE template_id = ? ORDER BY version_number DESC
 `
 
 func (q *Queries) ListStepTemplateVersions(ctx context.Context, templateID int64) ([]StepTemplateVersion, error) {
@@ -151,6 +162,7 @@ func (q *Queries) ListStepTemplateVersions(ctx context.Context, templateID int64
 			&i.ScriptBody,
 			&i.CreatedAt,
 			&i.ExecutionTarget,
+			&i.Interpreter,
 		); err != nil {
 			return nil, err
 		}
@@ -166,7 +178,7 @@ func (q *Queries) ListStepTemplateVersions(ctx context.Context, templateID int64
 }
 
 const listStepTemplates = `-- name: ListStepTemplates :many
-SELECT id, name, script_body, created_at, execution_target FROM step_templates ORDER BY name ASC
+SELECT id, name, script_body, created_at, execution_target, interpreter FROM step_templates ORDER BY name ASC
 `
 
 func (q *Queries) ListStepTemplates(ctx context.Context) ([]StepTemplate, error) {
@@ -184,6 +196,7 @@ func (q *Queries) ListStepTemplates(ctx context.Context) ([]StepTemplate, error)
 			&i.ScriptBody,
 			&i.CreatedAt,
 			&i.ExecutionTarget,
+			&i.Interpreter,
 		); err != nil {
 			return nil, err
 		}
@@ -199,7 +212,7 @@ func (q *Queries) ListStepTemplates(ctx context.Context) ([]StepTemplate, error)
 }
 
 const listStepTemplatesPaginated = `-- name: ListStepTemplatesPaginated :many
-SELECT id, name, script_body, created_at, execution_target FROM step_templates ORDER BY name ASC
+SELECT id, name, script_body, created_at, execution_target, interpreter FROM step_templates ORDER BY name ASC
 LIMIT ? OFFSET ?
 `
 
@@ -223,6 +236,7 @@ func (q *Queries) ListStepTemplatesPaginated(ctx context.Context, arg ListStepTe
 			&i.ScriptBody,
 			&i.CreatedAt,
 			&i.ExecutionTarget,
+			&i.Interpreter,
 		); err != nil {
 			return nil, err
 		}
@@ -238,17 +252,25 @@ func (q *Queries) ListStepTemplatesPaginated(ctx context.Context, arg ListStepTe
 }
 
 const updateStepTemplate = `-- name: UpdateStepTemplate :one
-UPDATE step_templates SET name = ?, script_body = ? WHERE id = ? RETURNING id, name, script_body, created_at, execution_target
+UPDATE step_templates SET name = ?, script_body = ?,
+interpreter = COALESCE(NULLIF(CAST(?3 AS TEXT), ''), 'bash')
+WHERE id = ?4 RETURNING id, name, script_body, created_at, execution_target, interpreter
 `
 
 type UpdateStepTemplateParams struct {
-	Name       string `json:"name"`
-	ScriptBody string `json:"script_body"`
-	ID         int64  `json:"id"`
+	Name        string `json:"name"`
+	ScriptBody  string `json:"script_body"`
+	Interpreter string `json:"interpreter"`
+	ID          int64  `json:"id"`
 }
 
 func (q *Queries) UpdateStepTemplate(ctx context.Context, arg UpdateStepTemplateParams) (StepTemplate, error) {
-	row := q.db.QueryRowContext(ctx, updateStepTemplate, arg.Name, arg.ScriptBody, arg.ID)
+	row := q.db.QueryRowContext(ctx, updateStepTemplate,
+		arg.Name,
+		arg.ScriptBody,
+		arg.Interpreter,
+		arg.ID,
+	)
 	var i StepTemplate
 	err := row.Scan(
 		&i.ID,
@@ -256,6 +278,7 @@ func (q *Queries) UpdateStepTemplate(ctx context.Context, arg UpdateStepTemplate
 		&i.ScriptBody,
 		&i.CreatedAt,
 		&i.ExecutionTarget,
+		&i.Interpreter,
 	)
 	return i, err
 }

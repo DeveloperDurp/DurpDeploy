@@ -7,6 +7,7 @@ import (
 
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/handler"
+	"durpdeploy/internal/interpreter"
 	"durpdeploy/internal/repository"
 )
 
@@ -21,6 +22,7 @@ func NewStepTemplateHandler(repo *repository.Repository) *StepTemplateHandler {
 type stepTemplateRequest struct {
 	Name            string   `json:"name"`
 	ScriptBody      string   `json:"script_body"`
+	Interpreter     string   `json:"interpreter"`
 	ExecutionTarget string   `json:"execution_target"`
 	AgentSelectors  []string `json:"agent_selectors"`
 }
@@ -155,6 +157,11 @@ func (h *StepTemplateHandler) CreateTemplate(
 		RespondError(w, http.StatusBadRequest, "Name is required")
 		return
 	}
+	selectedInterpreter, err := interpreter.Validate(req.Interpreter)
+	if err != nil {
+		RespondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	target, selectors, ok := validatePlacement(
 		w,
 		r,
@@ -169,8 +176,9 @@ func (h *StepTemplateHandler) CreateTemplate(
 	tpl, err := h.repo.CreateStepTemplateWithPlacement(
 		r.Context(),
 		db.CreateStepTemplateParams{
-			Name:       name,
-			ScriptBody: req.ScriptBody,
+			Name:        name,
+			ScriptBody:  req.ScriptBody,
+			Interpreter: selectedInterpreter,
 		},
 		target,
 		selectors,
@@ -285,6 +293,11 @@ func (h *StepTemplateHandler) UpdateTemplate(
 		RespondError(w, http.StatusBadRequest, "Name is required")
 		return
 	}
+	selectedInterpreter, err := interpreter.Validate(req.Interpreter)
+	if err != nil {
+		RespondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	target, selectors, ok := validatePlacement(
 		w,
 		r,
@@ -299,9 +312,10 @@ func (h *StepTemplateHandler) UpdateTemplate(
 	updated, err := h.repo.UpdateStepTemplateWithPlacement(
 		r.Context(),
 		db.UpdateStepTemplateParams{
-			ID:         id,
-			Name:       name,
-			ScriptBody: req.ScriptBody,
+			ID:          id,
+			Name:        name,
+			ScriptBody:  req.ScriptBody,
+			Interpreter: selectedInterpreter,
 		},
 		target,
 		selectors,
