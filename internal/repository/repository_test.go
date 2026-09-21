@@ -195,6 +195,26 @@ func TestVariables_ListPaginatedDecryptsAndFilters(t *testing.T) {
 	if len(list) != 1 || list[0].Name != "PAG_PLAIN" {
 		t.Fatalf("env-filtered list wrong: %+v", list)
 	}
+
+	// Unreadable ciphertext surfaces as an error, not silent garbage.
+	if _, err := repo.Queries.CreateVariable(ctx, db.CreateVariableParams{
+		ProjectID: proj.ID,
+		Name:      "PAG_CORRUPT",
+		Value:     sql.NullString{String: "not-a-ciphertext", Valid: true},
+		Secret:    1,
+	}); err != nil {
+		t.Fatalf("CreateVariable PAG_CORRUPT: %v", err)
+	}
+	if _, err := repo.ListVariablesByProjectPaginated(ctx, base); err == nil {
+		t.Fatal("expected decryption error for corrupt ciphertext")
+	}
+
+	repo.DB.Close()
+	if _, err := repo.ListVariablesByProjectPaginated(
+		ctx, base,
+	); err == nil {
+		t.Fatal("expected query error on closed connection")
+	}
 }
 
 func TestRepository_WithTx_rollsBackAllWritesWhenCallbackFails(t *testing.T) {
