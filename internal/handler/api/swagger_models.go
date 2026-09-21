@@ -395,6 +395,11 @@ type swaggerStepTemplateRequest struct {
 }
 
 // VariableRequest is the body for create/update variable.
+//
+// On update, an empty value with secret=true keeps the stored secret
+// (the API never returns secret plaintext, so clients send the masked
+// read-back unchanged); set secret=false to clear it.
+//
 // swagger:model VariableRequest
 type swaggerVariableRequest struct {
 	Name          string `json:"name"`

@@ -4770,7 +4770,7 @@
         ],
         "responses": {
           "201": {
-            "description": "Step is a bash script step within a project.",
+            "description": "Step is an executable script step within a project.",
             "schema": {
               "$ref": "#/definitions/Step"
             }
@@ -4907,7 +4907,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Step is a bash script step within a project.",
+            "description": "Step is an executable script step within a project.",
             "schema": {
               "$ref": "#/definitions/Step"
             }
@@ -4990,7 +4990,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Step is a bash script step within a project.",
+            "description": "Step is an executable script step within a project.",
             "schema": {
               "$ref": "#/definitions/Step"
             }
@@ -7349,6 +7349,7 @@
       "x-go-package": "durpdeploy/internal/handler/api"
     },
     "ReleaseVariableResponse": {
+      "description": "Value is always an empty string when Secret is 1: ordinary reads\nnever return secret plaintext (issue #29).",
       "type": "object",
       "title": "ReleaseVariableResponse is a variable snapshot in a release.",
       "properties": {
@@ -7620,7 +7621,7 @@
     },
     "Step": {
       "type": "object",
-      "title": "Step is a bash script step within a project.",
+      "title": "Step is an executable script step within a project.",
       "properties": {
         "agent_selectors": {
           "type": "array",
@@ -8162,6 +8163,7 @@
       "x-go-package": "durpdeploy/internal/handler/api"
     },
     "VariableRequest": {
+      "description": "On update, an empty value with secret=true keeps the stored secret\n(the API never returns secret plaintext, so clients send the masked\nread-back unchanged); set secret=false to clear it.",
       "type": "object",
       "title": "VariableRequest is the body for create/update variable.",
       "properties": {
@@ -8187,6 +8189,7 @@
       "x-go-package": "durpdeploy/internal/handler/api"
     },
     "VariableResponse": {
+      "description": "Value is always an empty string when Secret is 1: ordinary reads\nnever return secret plaintext (issue #29).",
       "type": "object",
       "title": "VariableResponse is the JSON shape for a variable.",
       "properties": {

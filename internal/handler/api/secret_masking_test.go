@@ -156,11 +156,29 @@ func TestVariable_SecretValuesNeverReturned(t *testing.T) {
 		t.Fatalf("update echoed secret: %s", rec.Body.String())
 	}
 
-	// The stored value must survive for the runner despite masking.
+	// Metadata-only update (masked read-back sent unchanged) keeps
+	// the stored credential instead of clearing it.
+	rec = maskingRequest(t, r, http.MethodPut,
+		fmt.Sprintf("%s/%d", base, secretID), token,
+		`{"name":"S2","value":"","secret":true}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("metadata update: %d %s", rec.Code, rec.Body.String())
+	}
 	v, err := h.repo.GetVariable(context.Background(), secretID)
 	if err != nil {
 		t.Fatal(err)
 	}
+	if v.Name != "S2" {
+		t.Fatalf("metadata update did not rename: %q", v.Name)
+	}
+	if v.Value.String != "rotated-secret" {
+		t.Fatalf(
+			"metadata update clobbered secret: %q",
+			v.Value.String,
+		)
+	}
+
+	// The stored value must survive for the runner despite masking.
 	if v.Value.String != "rotated-secret" {
 		t.Fatalf("stored value = %q, want rotated-secret", v.Value.String)
 	}

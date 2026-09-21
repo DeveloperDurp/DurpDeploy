@@ -373,13 +373,22 @@ func (h *VariableHandler) UpdateVariable(
 		secret = 1
 	}
 
+	// Blank-means-keep (mirrors the web handler): a masked secret
+	// read-back is an empty value, so an update that keeps secret=1
+	// with an empty value preserves the stored credential instead of
+	// overwriting it.
+	variableValue := sql.NullString{
+		String: req.Value,
+		Valid:  req.Value != "",
+	}
+	if secret != 0 && req.Value == "" && existing.Secret != 0 {
+		variableValue = existing.Value
+	}
+
 	variable, err := h.repo.UpdateVariable(r.Context(), db.UpdateVariableParams{
-		ID:   varID,
-		Name: name,
-		Value: sql.NullString{
-			String: req.Value,
-			Valid:  req.Value != "",
-		},
+		ID:            varID,
+		Name:          name,
+		Value:         variableValue,
 		EnvironmentID: envID,
 		Secret:        secret,
 	})
