@@ -286,6 +286,14 @@ func TestReleaseVariables_SecretValuesMasked(t *testing.T) {
 			EnvironmentID: sql.NullInt64{Int64: env.ID, Valid: true},
 			Secret:        0,
 		},
+		{
+			// Valueless secret: Valid=false must not emit null.
+			ReleaseID:     rel.ID,
+			Name:          "REL_SECRET_EMPTY",
+			Value:         sql.NullString{},
+			EnvironmentID: sql.NullInt64{Int64: env.ID, Valid: true},
+			Secret:        1,
+		},
 	} {
 		if _, err := h.repo.Queries.CreateReleaseVariable(
 			context.Background(), rv,
@@ -305,5 +313,31 @@ func TestReleaseVariables_SecretValuesMasked(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), "release-plain") {
 		t.Fatalf("release plain value missing: %s", rec.Body.String())
+	}
+	var body struct {
+		Variables []struct {
+			Name  string  `json:"name"`
+			Value *string `json:"value"`
+		} `json:"variables"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode release: %v", err)
+	}
+	for _, rv := range body.Variables {
+		if rv.Name == "REL_SECRET" {
+			if rv.Value == nil || *rv.Value != "" {
+				t.Fatalf("REL_SECRET snapshot value = %v, want \"\"", rv.Value)
+			}
+		}
+		if rv.Name == "REL_SECRET_EMPTY" {
+			if rv.Value == nil || *rv.Value != "" {
+				t.Fatalf("REL_SECRET_EMPTY snapshot value = %v, want \"\"", rv.Value)
+			}
+		}
+		if rv.Name == "REL_PLAIN" {
+			if rv.Value == nil || *rv.Value != "release-plain" {
+				t.Fatalf("REL_PLAIN snapshot value = %v, want release-plain", rv.Value)
+			}
+		}
 	}
 }
