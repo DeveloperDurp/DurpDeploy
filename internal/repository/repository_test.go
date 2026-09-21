@@ -271,6 +271,17 @@ func TestVariables_ListPaginated_ErrorPaths(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected query error on closed DB")
 	}
+	_, err = repo.UpdateVariableKeepValue(
+		context.Background(),
+		db.UpdateVariableKeepValueParams{
+			ID:     1,
+			Name:   "n",
+			Secret: 1,
+		},
+	)
+	if err == nil {
+		t.Fatal("expected query error on closed DB")
+	}
 
 	// Decrypt error: rotate the secret box so ciphertext
 	// can no longer be decrypted.
@@ -288,7 +299,7 @@ func TestVariables_ListPaginated_ErrorPaths(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create project: %v", err)
 	}
-	if _, err := repo2.CreateVariable(
+	createdVar, err := repo2.CreateVariable(
 		ctx, db.CreateVariableParams{
 			ProjectID: proj.ID,
 			Name:      "K",
@@ -297,7 +308,8 @@ func TestVariables_ListPaginated_ErrorPaths(t *testing.T) {
 			},
 			Secret: 1,
 		},
-	); err != nil {
+	)
+	if err != nil {
 		t.Fatalf("CreateVariable: %v", err)
 	}
 	keyB := make([]byte, 32)
@@ -313,6 +325,18 @@ func TestVariables_ListPaginated_ErrorPaths(t *testing.T) {
 			ProjectID:  proj.ID,
 			PageOffset: 0,
 			PageLimit:  10,
+		},
+	)
+	if err == nil {
+		t.Fatal("expected decrypt error after key rotation")
+	}
+	_, err = repo2.UpdateVariableKeepValue(
+		ctx,
+		db.UpdateVariableKeepValueParams{
+			ID:            createdVar.ID,
+			Name:          "K2",
+			EnvironmentID: sql.NullInt64{},
+			Secret:        1,
 		},
 	)
 	if err == nil {

@@ -329,14 +329,11 @@ func (h *VariableHandler) UpdateVariable(
 		return
 	}
 
-	// R2: load first, then verify ownership. Load through the wrapper
-	// (not the raw query) so the blank-means-keep path below sees the
-	// decrypted value and does not double-encrypt it. UpdateVariable
-	// returns the row only on success, so the existence check has to
-	// happen up front — and the secret-value row in the result set is
-	// what we're protecting, so the project check goes before any
-	// write.
-	existing, err := h.repo.GetVariable(r.Context(), varID)
+	// R2: load first, then verify ownership. UpdateVariable returns
+	// the row only on success, so the existence check has to happen
+	// up front — and the secret-value row in the result set is what
+	// we're protecting, so the project check goes before any write.
+	existing, err := h.repo.Queries.GetVariable(r.Context(), varID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			RespondError(w, http.StatusNotFound, "Variable not found")
@@ -376,25 +373,31 @@ func (h *VariableHandler) UpdateVariable(
 		secret = 1
 	}
 
-	// Blank-means-keep (mirrors the web handler): a masked secret
-	// read-back is an empty value, so an update that keeps secret=1
-	// with an empty value preserves the stored credential instead of
-	// overwriting it.
-	variableValue := sql.NullString{
-		String: req.Value,
-		Valid:  req.Value != "",
-	}
+	// Blank value on a still-secret variable preserves the
+	// stored secret atomically (no read-modify-write race).
+	var variable db.Variable
 	if secret != 0 && req.Value == "" && existing.Secret != 0 {
-		variableValue = existing.Value
+		variable, err = h.repo.UpdateVariableKeepValue(
+			r.Context(),
+			db.UpdateVariableKeepValueParams{
+				ID:            varID,
+				Name:          name,
+				EnvironmentID: envID,
+				Secret:        secret,
+			},
+		)
+	} else {
+		variable, err = h.repo.UpdateVariable(r.Context(), db.UpdateVariableParams{
+			ID:   varID,
+			Name: name,
+			Value: sql.NullString{
+				String: req.Value,
+				Valid:  req.Value != "",
+			},
+			EnvironmentID: envID,
+			Secret:        secret,
+		})
 	}
-
-	variable, err := h.repo.UpdateVariable(r.Context(), db.UpdateVariableParams{
-		ID:            varID,
-		Name:          name,
-		Value:         variableValue,
-		EnvironmentID: envID,
-		Secret:        secret,
-	})
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			RespondError(w, http.StatusNotFound, "Variable not found")

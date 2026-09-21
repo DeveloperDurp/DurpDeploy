@@ -1054,11 +1054,12 @@ echo "  Secret update response masked: OK"
 # must still emit "" and not null. Blank value keeps stored secrets.
 SECRET_EMPTY_CREATE=$(api_post '{"name":"E2E_SECRET_EMPTY","secret":true}' \
     "$BASE/api/v1/projects/$API_PROJECT_ID/variables")
-[[ -n "$SECRET_EMPTY_CREATE" ]] || {
+SECRET_EMPTY_ID=$(echo "$SECRET_EMPTY_CREATE" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+[[ -n "$SECRET_EMPTY_ID" ]] || {
     echo "FAIL: empty secret create got $SECRET_EMPTY_CREATE"; exit 1;
 }
 SECRET_EMPTY_GET=$(api_get \
-    "$BASE/api/v1/projects/$API_PROJECT_ID/variables/$SECRET_EMPTY_CREATE")
+    "$BASE/api/v1/projects/$API_PROJECT_ID/variables/$SECRET_EMPTY_ID")
 echo "$SECRET_EMPTY_GET" | python3 -c '
 import json
 import sys

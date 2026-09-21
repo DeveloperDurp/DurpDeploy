@@ -24,6 +24,9 @@ INSERT INTO variables (project_id, name, value, environment_id, secret) VALUES (
 -- name: UpdateVariable :one
 UPDATE variables SET name = ?, value = ?, environment_id = ?, secret = ? WHERE id = ? RETURNING *;
 
+-- name: UpdateVariableKeepValue :one
+UPDATE variables SET name = ?, environment_id = ?, secret = ? WHERE id = ? RETURNING *;
+
 -- name: DeleteVariable :exec
 DELETE FROM variables WHERE id = ?;
 

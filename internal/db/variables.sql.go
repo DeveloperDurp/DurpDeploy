@@ -248,6 +248,37 @@ func (q *Queries) UpdateVariable(ctx context.Context, arg UpdateVariableParams) 
 	return i, err
 }
 
+const updateVariableKeepValue = `-- name: UpdateVariableKeepValue :one
+UPDATE variables SET name = ?, environment_id = ?, secret = ? WHERE id = ? RETURNING id, project_id, name, value, environment_id, created_at, secret
+`
+
+type UpdateVariableKeepValueParams struct {
+	Name          string        `json:"name"`
+	EnvironmentID sql.NullInt64 `json:"environment_id"`
+	Secret        int64         `json:"secret"`
+	ID            int64         `json:"id"`
+}
+
+func (q *Queries) UpdateVariableKeepValue(ctx context.Context, arg UpdateVariableKeepValueParams) (Variable, error) {
+	row := q.db.QueryRowContext(ctx, updateVariableKeepValue,
+		arg.Name,
+		arg.EnvironmentID,
+		arg.Secret,
+		arg.ID,
+	)
+	var i Variable
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Value,
+		&i.EnvironmentID,
+		&i.CreatedAt,
+		&i.Secret,
+	)
+	return i, err
+}
+
 const updateVariableValue = `-- name: UpdateVariableValue :exec
 UPDATE variables SET value = ? WHERE id = ?
 `

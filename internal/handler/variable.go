@@ -312,22 +312,29 @@ func (h *VariableHandler) UpdateVariable(
 		envID = sql.NullInt64{Int64: id, Valid: true}
 	}
 
-	variableValue := sql.NullString{String: value, Valid: value != ""}
+	// Blank value on a still-secret variable preserves the
+	// stored secret atomically (no read-modify-write race).
+	var err2 error
 	if secret != 0 && value == "" && variable.Secret != 0 {
-		variableValue = variable.Value
+		_, err2 = h.repo.UpdateVariableKeepValue(
+			r.Context(),
+			db.UpdateVariableKeepValueParams{
+				ID:            varID,
+				Name:          name,
+				EnvironmentID: envID,
+				Secret:        secret,
+			})
+	} else {
+		_, err2 = h.repo.UpdateVariable(r.Context(), db.UpdateVariableParams{
+			ID:            varID,
+			Name:          name,
+			Value:         sql.NullString{String: value, Valid: value != ""},
+			EnvironmentID: envID,
+			Secret:        secret,
+		})
 	}
-
-	params := db.UpdateVariableParams{
-		ID:            varID,
-		Name:          name,
-		Value:         variableValue,
-		EnvironmentID: envID,
-		Secret:        secret,
-	}
-
-	_, err = h.repo.UpdateVariable(r.Context(), params)
-	if err != nil {
-		if IsUniqueViolation(err) {
+	if err2 != nil {
+		if IsUniqueViolation(err2) {
 			variable := db.Variable{
 				ID:        varID,
 				ProjectID: projectID,
@@ -364,7 +371,7 @@ func (h *VariableHandler) UpdateVariable(
 			)
 			return
 		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, err2.Error(), http.StatusInternalServerError)
 		return
 	}
 
