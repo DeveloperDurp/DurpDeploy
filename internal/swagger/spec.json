@@ -7349,7 +7349,7 @@
       "x-go-package": "durpdeploy/internal/handler/api"
     },
     "ReleaseVariableResponse": {
-      "description": "Value mirrors the sql.NullString wire shape: {\"String\": s,\n\"Valid\": b}. When Secret is 1 it is an empty string with Valid=true;\nordinary reads never return secret plaintext (issue #29).",
+      "description": "Value is a string or null. It is an empty string whenever Secret\nis 1 (Valid secrets included); ordinary reads never return secret\nplaintext (issue #29).",
       "type": "object",
       "title": "ReleaseVariableResponse is a variable snapshot in a release.",
       "properties": {
@@ -7376,7 +7376,8 @@
           "x-go-name": "Secret"
         },
         "value": {
-          "$ref": "#/definitions/swaggerSQLNullString"
+          "type": "string",
+          "x-go-name": "Value"
         }
       },
       "x-go-name": "swaggerReleaseVariableResponse",

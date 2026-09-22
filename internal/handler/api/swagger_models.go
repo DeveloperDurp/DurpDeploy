@@ -443,16 +443,16 @@ type swaggerReleaseWithVariablesResponse struct {
 
 // ReleaseVariableResponse is a variable snapshot in a release.
 //
-// Value mirrors the sql.NullString wire shape: {"String": s,
-// "Valid": b}. When Secret is 1 it is an empty string with Valid=true;
-// ordinary reads never return secret plaintext (issue #29).
+// Value is a string or null. It is an empty string whenever Secret
+// is 1 (Valid secrets included); ordinary reads never return secret
+// plaintext (issue #29).
 //
 // swagger:model ReleaseVariableResponse
 type swaggerReleaseVariableResponse struct {
 	ID            int64                 `json:"id"`
 	ReleaseID     int64                 `json:"release_id"`
 	Name          string                `json:"name"`
-	Value         swaggerSQLNullString  `json:"value"`
+	Value         *string               `json:"value"`
 	EnvironmentID swaggerSQLNullInteger `json:"environment_id"`
 	Secret        int64                 `json:"secret"`
 }
