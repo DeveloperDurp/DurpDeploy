@@ -1050,6 +1050,46 @@ assert "e2e-super-secret" not in body, body
 '
 echo "  Secret update response masked: OK"
 
+# A variable may be secret with no stored value at all; its snapshot
+# must still emit "" and not null. Blank value keeps stored secrets.
+SECRET_EMPTY_CREATE=$(api_post '{"name":"E2E_SECRET_EMPTY","secret":true}' \
+    "$BASE/api/v1/projects/$API_PROJECT_ID/variables")
+SECRET_EMPTY_ID=$(echo "$SECRET_EMPTY_CREATE" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+[[ -n "$SECRET_EMPTY_ID" ]] || {
+    echo "FAIL: empty secret create got $SECRET_EMPTY_CREATE"; exit 1;
+}
+SECRET_EMPTY_GET=$(api_get \
+    "$BASE/api/v1/projects/$API_PROJECT_ID/variables/$SECRET_EMPTY_ID")
+echo "$SECRET_EMPTY_GET" | python3 -c '
+import json
+import sys
+
+data = json.load(sys.stdin)
+assert isinstance(data["value"], str), type(data["value"]).__name__
+assert data["value"] == "", data
+'
+echo "  Valueless secret read masked: OK"
+
+# A non-secret variable with no value must also emit "" (not null) in
+# a release snapshot — matching the variables list/get behavior.
+PLAIN_EMPTY_CREATE=$(api_post '{"name":"E2E_PLAIN_EMPTY"}' \
+    "$BASE/api/v1/projects/$API_PROJECT_ID/variables")
+PLAIN_EMPTY_ID=$(echo "$PLAIN_EMPTY_CREATE" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+[[ -n "$PLAIN_EMPTY_ID" ]] || {
+    echo "FAIL: plain empty create got $PLAIN_EMPTY_CREATE"; exit 1;
+}
+PLAIN_EMPTY_GET=$(api_get \
+    "$BASE/api/v1/projects/$API_PROJECT_ID/variables/$PLAIN_EMPTY_ID")
+echo "$PLAIN_EMPTY_GET" | python3 -c '
+import json
+import sys
+
+data = json.load(sys.stdin)
+assert isinstance(data["value"], str), type(data["value"]).__name__
+assert data["value"] == "", data
+'
+echo "  Valueless plain read OK"
+
 # The stored secret survives metadata-only updates and appears in a
 # release snapshot response masked.
 api_post '{"version":"v-secret"}' "$BASE/api/v1/projects/$API_PROJECT_ID/releases" >/dev/null
@@ -1071,7 +1111,18 @@ body = sys.stdin.read()
 data = json.loads(body)
 secret = [v for v in data["variables"] if v["name"] == "E2E_SECRET"]
 assert len(secret) == 1, data["variables"]
-assert secret[0]["value"] == {"String": "", "Valid": True}, secret
+# The served contract declares value as a nullable string, so a
+# masked snapshot must emit "" (not {"String":..,"Valid":..}).
+assert isinstance(secret[0]["value"], str), type(secret[0]["value"]).__name__
+assert secret[0]["value"] == "", secret
+empty = [v for v in data["variables"] if v["name"] == "E2E_SECRET_EMPTY"]
+assert len(empty) == 1, data["variables"]
+assert isinstance(empty[0]["value"], str), type(empty[0]["value"]).__name__
+assert empty[0]["value"] == "", empty
+plain_empty = [v for v in data["variables"] if v["name"] == "E2E_PLAIN_EMPTY"]
+assert len(plain_empty) == 1, data["variables"]
+assert isinstance(plain_empty[0]["value"], str), type(plain_empty[0]["value"]).__name__
+assert plain_empty[0]["value"] == "", plain_empty
 assert "e2e-super-secret" not in body, body
 '
 echo "  Release snapshot secret masked: OK"

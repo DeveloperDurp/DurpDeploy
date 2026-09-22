@@ -31,12 +31,12 @@ type releaseWithVariables struct {
 }
 
 type releaseVariableJSON struct {
-	ID            int64          `json:"id"`
-	ReleaseID     int64          `json:"release_id"`
-	Name          string         `json:"name"`
-	Value         sql.NullString `json:"value"`
-	EnvironmentID sql.NullInt64  `json:"environment_id"`
-	Secret        int64          `json:"secret"`
+	ID            int64         `json:"id"`
+	ReleaseID     int64         `json:"release_id"`
+	Name          string        `json:"name"`
+	Value         string        `json:"value"`
+	EnvironmentID sql.NullInt64 `json:"environment_id"`
+	Secret        int64         `json:"secret"`
 }
 
 // swagger:route GET /projects/{id}/releases releases listReleases
@@ -235,9 +235,9 @@ func (h *ReleaseHandler) GetRelease(w http.ResponseWriter, r *http.Request) {
 
 	varsJSON := make([]releaseVariableJSON, len(variables))
 	for i, v := range variables {
-		value := v.Value
+		value := v.Value.String
 		if v.Secret != 0 {
-			value = sql.NullString{String: maskedSecretValue, Valid: true}
+			value = maskedSecretValue
 		}
 		varsJSON[i] = releaseVariableJSON{
 			ID:            v.ID,

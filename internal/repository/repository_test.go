@@ -170,7 +170,11 @@ func TestVariables_ListPaginatedDecryptsAndFilters(t *testing.T) {
 		if v.Secret == 0 && v.Value.String == "pag-plain-value" {
 			continue
 		}
-		t.Fatalf("list returned non-plaintext for %q: %q", v.Name, v.Value.String)
+		t.Fatalf(
+			"list returned non-plaintext for %q: %q",
+			v.Name,
+			v.Value.String,
+		)
 	}
 
 	// Secret-only filter keeps masked values out of the response while
@@ -226,7 +230,10 @@ func TestRepository_WithTx_rollsBackAllWritesWhenCallbackFails(t *testing.T) {
 	// When: the callback writes a user and then fails.
 	err := repo.WithTx(ctx, func(queries *db.Queries) error {
 		_, err := queries.CreateUser(ctx, db.CreateUserParams{
-			Email: "rollback@example.com", PasswordHash: "hash", Name: "Rollback", Role: "admin",
+			Email:        "rollback@example.com",
+			PasswordHash: "hash",
+			Name:         "Rollback",
+			Role:         "admin",
 		})
 		if err != nil {
 			return err
@@ -254,4 +261,106 @@ func newTestRepo(t *testing.T) *repository.Repository {
 	}
 	t.Cleanup(func() { _ = conn.Close() })
 	return repository.New(conn)
+}
+
+func TestVariables_ListPaginated_ErrorPaths(t *testing.T) {
+	repo := newTestRepo(t)
+
+	// Query error: close the DB so the query fails.
+	repo.DB.Close()
+	_, err := repo.ListVariablesByProjectPaginated(
+		context.Background(),
+		db.ListVariablesByProjectPaginatedParams{},
+	)
+	if err == nil {
+		t.Fatal("expected query error on closed DB")
+	}
+	_, err = repo.UpdateVariableKeepValue(
+		context.Background(),
+		db.UpdateVariableKeepValueParams{
+			ID:     1,
+			Name:   "n",
+			Secret: 1,
+		},
+	)
+	if err == nil {
+		t.Fatal("expected query error on closed DB")
+	}
+
+	// Decrypt error: rotate the secret box so ciphertext
+	// can no longer be decrypted.
+	repo2 := newTestRepo(t)
+	keyA := make([]byte, 32)
+	boxA, err := secret.NewBox(keyA)
+	if err != nil {
+		t.Fatalf("NewBox: %v", err)
+	}
+	repo2.SetSecretBox(boxA)
+	ctx := context.Background()
+	proj, err := repo2.Queries.CreateProject(
+		ctx, db.CreateProjectParams{Name: "rot-proj"},
+	)
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	createdVar, err := repo2.CreateVariable(
+		ctx, db.CreateVariableParams{
+			ProjectID: proj.ID,
+			Name:      "K",
+			Value: sql.NullString{
+				String: "v", Valid: true,
+			},
+			Secret: 1,
+		},
+	)
+	if err != nil {
+		t.Fatalf("CreateVariable: %v", err)
+	}
+	keyB := make([]byte, 32)
+	keyB[0] = 1
+	boxB, err := secret.NewBox(keyB)
+	if err != nil {
+		t.Fatalf("NewBox: %v", err)
+	}
+	repo2.SetSecretBox(boxB)
+	_, err = repo2.ListVariablesByProjectPaginated(
+		ctx,
+		db.ListVariablesByProjectPaginatedParams{
+			ProjectID:  proj.ID,
+			PageOffset: 0,
+			PageLimit:  10,
+		},
+	)
+	if err == nil {
+		t.Fatal("expected decrypt error after key rotation")
+	}
+	_, err = repo2.UpdateVariableKeepValue(
+		ctx,
+		db.UpdateVariableKeepValueParams{
+			ID:            createdVar.ID,
+			Name:          "K2",
+			EnvironmentID: sql.NullInt64{},
+			Secret:        1,
+		},
+	)
+	if err == nil {
+		t.Fatal("expected decrypt error after key rotation")
+	}
+
+	// Update error: non-existent variable ID causes the
+	// UPDATE to return sql.ErrNoRows, exercising the inner
+	// error return inside the WithTx closure.
+	repo3 := newTestRepo(t)
+	_, err = repo3.UpdateVariableKeepValue(
+		context.Background(),
+		db.UpdateVariableKeepValueParams{
+			ID:            999999,
+			Name:          "ghost",
+			EnvironmentID: sql.NullInt64{},
+			Secret:        0,
+		},
+	)
+	if err == nil {
+		t.Fatal("expected error for non-existent variable")
+	}
 }

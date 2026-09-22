@@ -165,6 +165,30 @@ func (r *Repository) UpdateVariable(
 	return r.decryptVariable(v)
 }
 
+// UpdateVariableKeepValue updates a variable's metadata without
+// touching the stored value column, so a blank-secret preserve
+// update can never revert a concurrent secret rotation.
+// The update and decrypt are wrapped in a transaction so a
+// decrypt failure rolls back the committed metadata change.
+func (r *Repository) UpdateVariableKeepValue(
+	ctx context.Context,
+	arg db.UpdateVariableKeepValueParams,
+) (db.Variable, error) {
+	var v db.Variable
+	if err := r.WithTx(ctx, func(q *db.Queries) error {
+		var err error
+		v, err = q.UpdateVariableKeepValue(ctx, arg)
+		if err != nil {
+			return err
+		}
+		v, err = r.decryptVariable(v)
+		return err
+	}); err != nil {
+		return db.Variable{}, err
+	}
+	return v, nil
+}
+
 // GetVariable returns the variable with its value decrypted.
 func (r *Repository) GetVariable(
 	ctx context.Context,
