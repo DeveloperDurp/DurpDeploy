@@ -177,7 +177,13 @@ func TestRelease_SecretMaskAcrossRoles(t *testing.T) {
 						vv["value"],
 					)
 				}
-				flag, _ := vv["secret"].(float64)
+				flag, flagOK := vv["secret"].(float64)
+				if !flagOK {
+					t.Fatalf(
+						"secret flag missing or mistyped: %v",
+						vv["secret"],
+					)
+				}
 				switch vname {
 				case "rel-secret":
 					if val != "" {
@@ -268,13 +274,19 @@ func TestRelease_SecretOnlySnapshotHasNoValue(t *testing.T) {
 		switch name {
 		case "only-secret":
 			onlySecreted = true
-			flag, _ := vv["secret"].(float64)
+			flag, flagOK := vv["secret"].(float64)
+			if !flagOK {
+				t.Fatal("secret flag missing or mistyped")
+			}
 			if flag != 1 {
 				t.Fatal("secret flag lost")
 			}
 		case "only-open":
 			onlyOpened = true
-			flag, _ := vv["secret"].(float64)
+			flag, flagOK := vv["secret"].(float64)
+			if !flagOK {
+				t.Fatal("open secret flag missing or mistyped")
+			}
 			if flag != 0 {
 				t.Fatal("open flag changed")
 			}
