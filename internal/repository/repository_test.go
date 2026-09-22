@@ -108,6 +108,115 @@ func TestVariables_NoSecretBoxIsPlaintextPassthrough(t *testing.T) {
 	}
 }
 
+func TestVariables_ListPaginatedDecryptsAndFilters(t *testing.T) {
+	repo := newTestRepo(t)
+
+	key := make([]byte, 32)
+	box, err := secret.NewBox(key)
+	if err != nil {
+		t.Fatalf("NewBox: %v", err)
+	}
+	repo.SetSecretBox(box)
+
+	ctx := context.Background()
+	proj, err := repo.Queries.CreateProject(ctx, db.CreateProjectParams{
+		Name: "paginated-secret-proj",
+	})
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	env, err := repo.Queries.CreateEnvironment(ctx, db.CreateEnvironmentParams{
+		Name: "paginated-env",
+	})
+	if err != nil {
+		t.Fatalf("create env: %v", err)
+	}
+
+	for _, v := range []db.CreateVariableParams{
+		{
+			ProjectID: proj.ID,
+			Name:      "PAG_SECRET",
+			Value:     sql.NullString{String: "pag-secret-value", Valid: true},
+			Secret:    1,
+		},
+		{
+			ProjectID:     proj.ID,
+			Name:          "PAG_PLAIN",
+			Value:         sql.NullString{String: "pag-plain-value", Valid: true},
+			EnvironmentID: sql.NullInt64{Int64: env.ID, Valid: true},
+		},
+	} {
+		if _, err := repo.CreateVariable(ctx, v); err != nil {
+			t.Fatalf("CreateVariable %s: %v", v.Name, err)
+		}
+	}
+
+	base := db.ListVariablesByProjectPaginatedParams{
+		ProjectID:  proj.ID,
+		PageOffset: 0,
+		PageLimit:  10,
+	}
+	list, err := repo.ListVariablesByProjectPaginated(ctx, base)
+	if err != nil {
+		t.Fatalf("ListVariablesByProjectPaginated: %v", err)
+	}
+	if len(list) != 2 {
+		t.Fatalf("expected 2 variables, got %d", len(list))
+	}
+	for _, v := range list {
+		if v.Secret != 0 && v.Value.String == "pag-secret-value" {
+			continue
+		}
+		if v.Secret == 0 && v.Value.String == "pag-plain-value" {
+			continue
+		}
+		t.Fatalf("list returned non-plaintext for %q: %q", v.Name, v.Value.String)
+	}
+
+	// Secret-only filter keeps masked values out of the response while
+	// the stored values still decrypt for the runner.
+	secretOnly := base
+	secretOnly.FSecretOnly = 1
+	list, err = repo.ListVariablesByProjectPaginated(ctx, secretOnly)
+	if err != nil {
+		t.Fatalf("secret-only list: %v", err)
+	}
+	if len(list) != 1 || list[0].Name != "PAG_SECRET" ||
+		list[0].Value.String != "pag-secret-value" {
+		t.Fatalf("secret-only list wrong: %+v", list)
+	}
+
+	envFiltered := base
+	envFiltered.FEnvironmentID = env.ID
+	list, err = repo.ListVariablesByProjectPaginated(ctx, envFiltered)
+	if err != nil {
+		t.Fatalf("env-filtered list: %v", err)
+	}
+	if len(list) != 1 || list[0].Name != "PAG_PLAIN" {
+		t.Fatalf("env-filtered list wrong: %+v", list)
+	}
+
+	// Unreadable ciphertext surfaces as an error, not silent garbage.
+	if _, err := repo.Queries.CreateVariable(ctx, db.CreateVariableParams{
+		ProjectID: proj.ID,
+		Name:      "PAG_CORRUPT",
+		Value:     sql.NullString{String: "not-a-ciphertext", Valid: true},
+		Secret:    1,
+	}); err != nil {
+		t.Fatalf("CreateVariable PAG_CORRUPT: %v", err)
+	}
+	if _, err := repo.ListVariablesByProjectPaginated(ctx, base); err == nil {
+		t.Fatal("expected decryption error for corrupt ciphertext")
+	}
+
+	repo.DB.Close()
+	if _, err := repo.ListVariablesByProjectPaginated(
+		ctx, base,
+	); err == nil {
+		t.Fatal("expected query error on closed connection")
+	}
+}
+
 func TestRepository_WithTx_rollsBackAllWritesWhenCallbackFails(t *testing.T) {
 	// Given: a migrated repository and a transaction callback that returns an error.
 	repo := newTestRepo(t)

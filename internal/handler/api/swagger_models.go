@@ -395,6 +395,11 @@ type swaggerStepTemplateRequest struct {
 }
 
 // VariableRequest is the body for create/update variable.
+//
+// On update, an empty value with secret=true keeps the stored secret
+// (the API never returns secret plaintext, so clients send the masked
+// read-back unchanged); set secret=false to clear it.
+//
 // swagger:model VariableRequest
 type swaggerVariableRequest struct {
 	Name          string `json:"name"`
@@ -404,6 +409,10 @@ type swaggerVariableRequest struct {
 }
 
 // VariableResponse is the JSON shape for a variable.
+//
+// Value is always an empty string when Secret is 1: ordinary reads
+// never return secret plaintext (issue #29).
+//
 // swagger:model VariableResponse
 type swaggerVariableResponse struct {
 	ID            int64  `json:"id"`
@@ -433,14 +442,19 @@ type swaggerReleaseWithVariablesResponse struct {
 }
 
 // ReleaseVariableResponse is a variable snapshot in a release.
+//
+// Value mirrors the sql.NullString wire shape: {"String": s,
+// "Valid": b}. When Secret is 1 it is an empty string with Valid=true;
+// ordinary reads never return secret plaintext (issue #29).
+//
 // swagger:model ReleaseVariableResponse
 type swaggerReleaseVariableResponse struct {
-	ID            int64   `json:"id"`
-	ReleaseID     int64   `json:"release_id"`
-	Name          string  `json:"name"`
-	Value         *string `json:"value"`
-	EnvironmentID *int64  `json:"environment_id"`
-	Secret        int64   `json:"secret"`
+	ID            int64                 `json:"id"`
+	ReleaseID     int64                 `json:"release_id"`
+	Name          string                `json:"name"`
+	Value         swaggerSQLNullString  `json:"value"`
+	EnvironmentID swaggerSQLNullInteger `json:"environment_id"`
+	Secret        int64                 `json:"secret"`
 }
 
 // ScheduleRequest is the body for create/update scheduled deployment.
