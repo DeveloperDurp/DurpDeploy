@@ -196,6 +196,26 @@ func (r *Repository) ListVariablesByProject(
 	return vars, nil
 }
 
+// ListVariablesByProjectPaginated returns filtered, paginated
+// variables with their values decrypted.
+func (r *Repository) ListVariablesByProjectPaginated(
+	ctx context.Context,
+	arg db.ListVariablesByProjectPaginatedParams,
+) ([]db.Variable, error) {
+	vars, err := r.Queries.ListVariablesByProjectPaginated(ctx, arg)
+	if err != nil {
+		return nil, err
+	}
+	for i := range vars {
+		dv, err := r.decryptVariable(vars[i])
+		if err != nil {
+			return nil, err
+		}
+		vars[i] = dv
+	}
+	return vars, nil
+}
+
 // GetReleaseVariable returns a release variable with its value decrypted.
 func (r *Repository) GetReleaseVariable(
 	ctx context.Context,

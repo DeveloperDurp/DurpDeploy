@@ -235,11 +235,15 @@ func (h *ReleaseHandler) GetRelease(w http.ResponseWriter, r *http.Request) {
 
 	varsJSON := make([]releaseVariableJSON, len(variables))
 	for i, v := range variables {
+		value := v.Value
+		if v.Secret != 0 {
+			value = sql.NullString{String: maskedSecretValue, Valid: true}
+		}
 		varsJSON[i] = releaseVariableJSON{
 			ID:            v.ID,
 			ReleaseID:     v.ReleaseID,
 			Name:          v.Name,
-			Value:         v.Value,
+			Value:         value,
 			EnvironmentID: v.EnvironmentID,
 			Secret:        v.Secret,
 		}

@@ -995,6 +995,138 @@ API_RELEASE_ID=$(echo "$API_RELEASE" | python3 -c "import sys,json; print(json.l
 [[ -n "$API_RELEASE_ID" ]] || { echo "FAIL: create release did not return id: $API_RELEASE"; exit 1; }
 echo "  Release CRUD: OK ($API_RELEASE_ID)"
 
+# A6b: Secret variables are never returned in plaintext by ordinary
+# API reads (issue #29).
+SECRET_E2E_VALUE="e2e-super-secret-$RANDOM"
+SECRET_CREATE=$(api_post "{\"name\":\"E2E_SECRET\",\"value\":\"$SECRET_E2E_VALUE\",\"secret\":true}" \
+    "$BASE/api/v1/projects/$API_PROJECT_ID/variables")
+SECRET_VAR_ID=$(echo "$SECRET_CREATE" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+[[ -n "$SECRET_VAR_ID" ]] || { echo "FAIL: create secret variable did not return id: $SECRET_CREATE"; exit 1; }
+echo "$SECRET_CREATE" | python3 -c '
+import json
+import sys
+
+body = sys.stdin.read()
+data = json.loads(body)
+assert data["secret"] == 1, data
+assert data["value"] == "", data
+assert "e2e-super-secret" not in body, body
+'
+echo "  Secret create response masked: OK"
+
+api_get "$BASE/api/v1/projects/$API_PROJECT_ID/variables" | python3 -c '
+import json
+import sys
+
+body = sys.stdin.read()
+items = [v for v in json.loads(body)["items"] if v["name"] == "E2E_SECRET"]
+assert len(items) == 1, items
+assert items[0]["value"] == "", items
+assert "e2e-super-secret" not in body, body
+'
+echo "  Secret list response masked: OK"
+
+api_get "$BASE/api/v1/projects/$API_PROJECT_ID/variables/$SECRET_VAR_ID" | python3 -c '
+import json
+import sys
+
+body = sys.stdin.read()
+data = json.loads(body)
+assert data["secret"] == 1 and data["value"] == "", data
+assert "e2e-super-secret" not in body, body
+'
+echo "  Secret get response masked: OK"
+
+SECRET_UPDATE=$(api_put '{"name":"E2E_SECRET","value":"","secret":true}' \
+    "$BASE/api/v1/projects/$API_PROJECT_ID/variables/$SECRET_VAR_ID")
+echo "$SECRET_UPDATE" | python3 -c '
+import json
+import sys
+
+body = sys.stdin.read()
+data = json.loads(body)
+assert data["value"] == "", data
+assert "e2e-super-secret" not in body, body
+'
+echo "  Secret update response masked: OK"
+
+# The stored secret survives metadata-only updates and appears in a
+# release snapshot response masked.
+api_post '{"version":"v-secret"}' "$BASE/api/v1/projects/$API_PROJECT_ID/releases" >/dev/null
+api_get "$BASE/api/v1/projects/$API_PROJECT_ID/releases?limit=1000" | python3 -c '
+import json
+import sys
+
+body = sys.stdin.read()
+releases = [r for r in json.loads(body)["items"] if r["version"] == "v-secret"]
+assert len(releases) == 1, releases
+print(releases[0]["id"])
+' >"$TMP/secret-release-id"
+SECRET_RELEASE_ID=$(cat "$TMP/secret-release-id")
+api_get "$BASE/api/v1/projects/$API_PROJECT_ID/releases/$SECRET_RELEASE_ID" | python3 -c '
+import json
+import sys
+
+body = sys.stdin.read()
+data = json.loads(body)
+secret = [v for v in data["variables"] if v["name"] == "E2E_SECRET"]
+assert len(secret) == 1, data["variables"]
+assert secret[0]["value"] == {"String": "", "Valid": True}, secret
+assert "e2e-super-secret" not in body, body
+'
+echo "  Release snapshot secret masked: OK"
+
+# A deployment using the masked round-trip still resolves the real
+# value: metadata-only update keeps it, the deploy substitutes it into
+# the step environment, and the log scrubber redacts it.
+SECRET_MASKED_STEP=$(api_post \
+    '{"name":"echo-secret","script_body":"echo secret=$E2E_SECRET"}' \
+    "$BASE/api/v1/projects/$API_PROJECT_ID/steps")
+SECRET_MASKED_STEP_ID=$(echo "$SECRET_MASKED_STEP" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+[[ -n "$SECRET_MASKED_STEP_ID" ]] || { echo "FAIL: masked round-trip step create failed: $SECRET_MASKED_STEP"; exit 1; }
+api_post "{\"version\":\"v-secret-deploy\"}" \
+    "$BASE/api/v1/projects/$API_PROJECT_ID/releases" >/dev/null
+SECRET_DEPLOY_RELEASE_ID=$(api_get "$BASE/api/v1/projects/$API_PROJECT_ID/releases?limit=1000" | python3 -c '
+import json
+import sys
+
+body = sys.stdin.read()
+releases = [r for r in json.loads(body)["items"] if r["version"] == "v-secret-deploy"]
+assert len(releases) == 1, releases
+print(releases[0]["id"])
+')
+api_post "{\"release_id\":$SECRET_DEPLOY_RELEASE_ID,\"environment_id\":$API_ENV_ID}" \
+    "$BASE/api/v1/projects/$API_PROJECT_ID/deployments" >/dev/null
+SECRET_DEPLOY_ID=$(api_get "$BASE/api/v1/projects/$API_PROJECT_ID/deployments?limit=1000" | python3 -c '
+import json
+import sys
+
+body = sys.stdin.read()
+deps = [d for d in json.loads(body)["items"] if d["release_id"] == '"$SECRET_DEPLOY_RELEASE_ID"']
+assert len(deps) == 1, deps
+print(deps[0]["id"])
+')
+for i in {1..100}; do
+    SECRET_DEPLOY_STATUS=$(api_get "$BASE/api/v1/deployments/$SECRET_DEPLOY_ID/status" \
+        | python3 -c "import sys,json; print(json.load(sys.stdin)['status'])")
+    [[ "$SECRET_DEPLOY_STATUS" =~ ^(failed|succeeded|cancelled)$ ]] && break
+    sleep 0.1
+done
+[[ "$SECRET_DEPLOY_STATUS" == "succeeded" ]] || {
+    echo "FAIL: secret round-trip deployment status=$SECRET_DEPLOY_STATUS"; exit 1;
+}
+SECRET_DEPLOY_LOGS=$(api_get "$BASE/api/v1/deployments/$SECRET_DEPLOY_ID/logs")
+echo "$SECRET_DEPLOY_LOGS" | python3 -c '
+import json
+import sys
+
+body = sys.stdin.read()
+lines = "\n".join(item["line"] for item in json.loads(body))
+assert "secret=[REDACTED]" in lines, lines
+assert "e2e-super-secret" not in body, body
+'
+echo "  Deploy resolves stored secret despite masked reads: OK"
+
 # A7: Deployment create + status + cancel.
 API_DEP=$(api_post "{\"release_id\":$API_RELEASE_ID,\"environment_id\":$API_ENV_ID}" \
     "$BASE/api/v1/projects/$API_PROJECT_ID/deployments")

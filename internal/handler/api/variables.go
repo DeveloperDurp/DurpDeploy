@@ -36,16 +36,27 @@ type variableResponse struct {
 	Secret        int64  `json:"secret"`
 }
 
+// maskedSecretValue replaces plaintext for secret-marked variables in
+// every ordinary API read (issue #29).
+const maskedSecretValue = ""
+
+// toVariableResponse is the single masking policy point: secret
+// variables never carry plaintext in list, get, create, or update
+// responses.
 func toVariableResponse(v db.Variable) variableResponse {
 	var envID *int64
 	if v.EnvironmentID.Valid {
 		envID = &v.EnvironmentID.Int64
 	}
+	value := v.Value.String
+	if v.Secret != 0 {
+		value = maskedSecretValue
+	}
 	return variableResponse{
 		ID:            v.ID,
 		ProjectID:     v.ProjectID,
 		Name:          v.Name,
-		Value:         v.Value.String,
+		Value:         value,
 		EnvironmentID: envID,
 		CreatedAt:     v.CreatedAt,
 		Secret:        v.Secret,
@@ -123,7 +134,7 @@ func (h *VariableHandler) ListVariables(
 		fSecretArg = fSecretOnly.Int64
 	}
 
-	variables, err := h.repo.Queries.ListVariablesByProjectPaginated(
+	variables, err := h.repo.ListVariablesByProjectPaginated(
 		r.Context(),
 		db.ListVariablesByProjectPaginatedParams{
 			ProjectID:      projectID,
@@ -318,11 +329,14 @@ func (h *VariableHandler) UpdateVariable(
 		return
 	}
 
-	// R2: load first, then verify ownership. UpdateVariable returns
-	// the row only on success, so the existence check has to happen
-	// up front — and the secret-value row in the result set is what
-	// we're protecting, so the project check goes before any write.
-	existing, err := h.repo.Queries.GetVariable(r.Context(), varID)
+	// R2: load first, then verify ownership. Load through the wrapper
+	// (not the raw query) so the blank-means-keep path below sees the
+	// decrypted value and does not double-encrypt it. UpdateVariable
+	// returns the row only on success, so the existence check has to
+	// happen up front — and the secret-value row in the result set is
+	// what we're protecting, so the project check goes before any
+	// write.
+	existing, err := h.repo.GetVariable(r.Context(), varID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			RespondError(w, http.StatusNotFound, "Variable not found")
@@ -362,13 +376,22 @@ func (h *VariableHandler) UpdateVariable(
 		secret = 1
 	}
 
+	// Blank-means-keep (mirrors the web handler): a masked secret
+	// read-back is an empty value, so an update that keeps secret=1
+	// with an empty value preserves the stored credential instead of
+	// overwriting it.
+	variableValue := sql.NullString{
+		String: req.Value,
+		Valid:  req.Value != "",
+	}
+	if secret != 0 && req.Value == "" && existing.Secret != 0 {
+		variableValue = existing.Value
+	}
+
 	variable, err := h.repo.UpdateVariable(r.Context(), db.UpdateVariableParams{
-		ID:   varID,
-		Name: name,
-		Value: sql.NullString{
-			String: req.Value,
-			Valid:  req.Value != "",
-		},
+		ID:            varID,
+		Name:          name,
+		Value:         variableValue,
 		EnvironmentID: envID,
 		Secret:        secret,
 	})
