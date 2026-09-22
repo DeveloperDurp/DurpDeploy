@@ -7349,7 +7349,7 @@
       "x-go-package": "durpdeploy/internal/handler/api"
     },
     "ReleaseVariableResponse": {
-      "description": "Value is a string or null. It is an empty string whenever Secret\nis 1 (Valid secrets included); ordinary reads never return secret\nplaintext (issue #29).",
+      "description": "Value is always a string. It is an empty string whenever Secret\nis 1 or the variable has no stored value; ordinary reads never\nreturn secret plaintext (issue #29).",
       "type": "object",
       "title": "ReleaseVariableResponse is a variable snapshot in a release.",
       "properties": {

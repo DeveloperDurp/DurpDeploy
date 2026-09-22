@@ -34,7 +34,7 @@ type releaseVariableJSON struct {
 	ID            int64         `json:"id"`
 	ReleaseID     int64         `json:"release_id"`
 	Name          string        `json:"name"`
-	Value         *string       `json:"value"`
+	Value         string        `json:"value"`
 	EnvironmentID sql.NullInt64 `json:"environment_id"`
 	Secret        int64         `json:"secret"`
 }
@@ -235,18 +235,15 @@ func (h *ReleaseHandler) GetRelease(w http.ResponseWriter, r *http.Request) {
 
 	varsJSON := make([]releaseVariableJSON, len(variables))
 	for i, v := range variables {
-		var val *string
+		value := v.Value.String
 		if v.Secret != 0 {
-			masked := maskedSecretValue
-			val = &masked
-		} else if v.Value.Valid {
-			val = &v.Value.String
+			value = maskedSecretValue
 		}
 		varsJSON[i] = releaseVariableJSON{
 			ID:            v.ID,
 			ReleaseID:     v.ReleaseID,
 			Name:          v.Name,
-			Value:         val,
+			Value:         value,
 			EnvironmentID: v.EnvironmentID,
 			Secret:        v.Secret,
 		}

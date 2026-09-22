@@ -170,7 +170,11 @@ func TestVariables_ListPaginatedDecryptsAndFilters(t *testing.T) {
 		if v.Secret == 0 && v.Value.String == "pag-plain-value" {
 			continue
 		}
-		t.Fatalf("list returned non-plaintext for %q: %q", v.Name, v.Value.String)
+		t.Fatalf(
+			"list returned non-plaintext for %q: %q",
+			v.Name,
+			v.Value.String,
+		)
 	}
 
 	// Secret-only filter keeps masked values out of the response while
@@ -341,5 +345,22 @@ func TestVariables_ListPaginated_ErrorPaths(t *testing.T) {
 	)
 	if err == nil {
 		t.Fatal("expected decrypt error after key rotation")
+	}
+
+	// Update error: non-existent variable ID causes the
+	// UPDATE to return sql.ErrNoRows, exercising the inner
+	// error return inside the WithTx closure.
+	repo3 := newTestRepo(t)
+	_, err = repo3.UpdateVariableKeepValue(
+		context.Background(),
+		db.UpdateVariableKeepValueParams{
+			ID:            999999,
+			Name:          "ghost",
+			EnvironmentID: sql.NullInt64{},
+			Secret:        0,
+		},
+	)
+	if err == nil {
+		t.Fatal("expected error for non-existent variable")
 	}
 }
