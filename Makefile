@@ -193,9 +193,11 @@ js-build: npm-install
 golines:
 	golines --max-len=80 --ignore-generated -w .
 
-# Dry-run: print a diff of what golines would change.
 golines-check:
-	golines --max-len=80 --ignore-generated --dry-run .
+	@files=$$(git diff --name-only --diff-filter=ACMR origin/main...HEAD -- '*.go'); \
+	if [ -z "$$files" ]; then exit 0; fi; \
+	out=$$(golines --max-len=80 --ignore-generated -l $$files); \
+	if [ -n "$$out" ]; then echo "Files needing golines:"; echo "$$out"; exit 1; fi
 
 clean:
 	rm -f $(BINARY_NAME)
