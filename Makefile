@@ -1,4 +1,4 @@
-.PHONY: build dev dev-server dev-postgres dev-mssql e2e-test e2e-test-isolated e2e-postgres e2e-mssql check-openssl templ-generate tailwind-build js-build npm-install golines golines-check clean test sonar-issues mfa-e2e-test auth-mfa-e2e-go-prepare auth-mfa-e2e-browser-prepare auth-mfa-e2e-sqlite-http auth-mfa-e2e-sqlite-browser auth-mfa-e2e-postgres auth-mfa-e2e-mssql auth-mfa-e2e swagger-spec mobile-browser-container agent-documentation-contract agent-compose-contract agent-helm-contract agent-systemd-contract agent-systemd-contract-test runner-container-contract runner-container-contract-test agent-ci-contract agent-e2e-sqlite agent-rollout-gate agent-smoke-test
+.PHONY: build dev dev-server dev-postgres dev-mssql e2e-test e2e-test-isolated e2e-postgres e2e-mssql check-openssl templ-generate tailwind-build js-build npm-install golines golines-check clean test sonar-issues mfa-e2e-test auth-mfa-e2e-go-prepare auth-mfa-e2e-browser-prepare auth-mfa-e2e-sqlite-http auth-mfa-e2e-sqlite-browser auth-mfa-e2e-postgres auth-mfa-e2e-mssql auth-mfa-e2e swagger-spec mobile-browser-container agent-documentation-contract agent-compose-contract agent-helm-contract agent-systemd-contract agent-systemd-contract-test runner-container-contract runner-container-contract-test agent-ci-contract agent-e2e-sqlite agent-rollout-gate agent-smoke-test verify
 
 BINARY_NAME=durpdeploy
 MAIN_PATH=./cmd/server
@@ -193,9 +193,29 @@ js-build: npm-install
 golines:
 	golines --max-len=80 --ignore-generated -w .
 
-# Dry-run: print a diff of what golines would change.
+# Fail if any Go file the branch or working tree touches needs the
+# 80-col reformat (same tool the pre-commit hook uses). Scoped to the
+# branch diff plus staged/unstaged/untracked Go files. The recipe is
+# one shell so set -e and the file list survive to the golines call.
 golines-check:
-	golines --max-len=80 --ignore-generated --dry-run .
+	@set -eu; \
+	files="$$(git diff --name-only --diff-filter=ACMR HEAD -- '*.go' || true)"; \
+	files="$$files $$(git diff --cached --name-only --diff-filter=ACMR -- '*.go' || true)"; \
+	files="$$files $$(git ls-files --others --exclude-standard -- '*.go' | tr '\n' ' ')"; \
+	if git rev-parse --verify origin/main >/dev/null 2>&1; then \
+		files="$$files $$(git diff --name-only --diff-filter=ACMR origin/main...HEAD -- '*.go' || true)"; \
+	fi; \
+	if [ -z "$$files" ]; then exit 0; fi; \
+	files=$$(echo $$files | tr ' ' '\n' | grep -v '^$$' | sort -u | tr '\n' ' '); \
+	files=$$(echo $$files); \
+	if [ -z "$$files" ]; then exit 0; fi; \
+	out=$$(golines --max-len=80 --ignore-generated -l $$files); \
+	if [ -n "$$out" ]; then \
+		echo "Files needing golines:"; \
+		echo "$$out"; \
+		exit 1; \
+	fi
+
 
 clean:
 	rm -f $(BINARY_NAME)
@@ -205,6 +225,15 @@ clean:
 # Go unit/integration tests (mirrors CI's exact command).
 test: templ-generate
 	go test -v -count=1 ./...
+
+# One-command pre-push gate: repo-wide 80-col check, go vet, the full
+# test suite, and the clean-room E2E contracts. Engine tests only need
+# a working container provider; on rootless Podman set
+# XDG_RUNTIME_DIR to a directory whose docker.sock symlinks the podman
+# socket and export TESTCONTAINERS_RYUK_DISABLED=true.
+verify: golines-check templ-generate swagger-ui-copy e2e-test-isolated
+	go vet ./...
+	go test -count=1 ./...
 
 # Read unresolved SonarCloud findings for a pull request. Requires SONAR_TOKEN.
 sonar-issues:
