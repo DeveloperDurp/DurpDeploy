@@ -1172,16 +1172,30 @@ for i in {1..100}; do
     sleep 0.1
 done
 SECRET_TMP=$(mktemp)
-timeout 10 curl -s -N -H "Authorization: Bearer $API_TOKEN" \
-    "$BASE/api/v1/deployments/$SECRET_DEPLOY_ID/logs/stream?format=ndjson" \
-    >"$SECRET_TMP" 2>/dev/null || true
+# Up to three passes: the first one subscribes while the deployment is
+# running and requires a scrubbed log to be actually DELIVERED, not
+# merely persisted; a later pass on terminal state replays the
+# rows instead, so a live broadcast regression cannot silently pass.
+LIVE_I=0
+for i in 1 2 3; do
+    timeout 8 curl -s -N -H "Authorization: Bearer $API_TOKEN" \
+        "$BASE/api/v1/deployments/$SECRET_DEPLOY_ID/logs/stream?format=ndjson" \
+        >"$SECRET_TMP" 2>/dev/null || true
+    LIVE_I=$(grep -c "secret=\[REDACTED\]" "$SECRET_TMP" 2>/dev/null) || true
+    [[ "$LIVE_I" -ge 1 ]] && break
+done
+[[ "$LIVE_I" -ge 1 ]] || {
+    echo "FAIL: live stream never carried the scrubbed line:" >&2
+    rm -f "$SECRET_TMP"
+    exit 1
+}
 if grep -q "$SECRET_E2E_VALUE" "$SECRET_TMP"; then
     echo "FAIL: live ndjson stream leaked the secret value:" >&2
     grep "$SECRET_E2E_VALUE" "$SECRET_TMP" | head -2 >&2
     rm -f "$SECRET_TMP"
     exit 1
 fi
-echo "  Live log stream carries no secret plaintext: OK"
+echo "  Live log stream scrubs secret split-writes: OK"
 rm -f "$SECRET_TMP"
 for i in {1..100}; do
     SECRET_DEPLOY_STATUS=$(api_get "$BASE/api/v1/deployments/$SECRET_DEPLOY_ID/status" \
