@@ -32,11 +32,13 @@ tests=(
 	TestPollReplacesInterpreterCapabilitiesByProtocol
 	TestRemoteStepPayloadIncludesNonBashInterpreter
 	TestAgentPollCapabilityReplacementIsTransactional
+	TestAgentPollCapabilityRemovalFailsWaitingRuns
+	TestAgentInterpretersMigrationBackfillsBashForPairedAgents
 	TestRunner_FailsWhenNoAgentSupportsInterpreter
 )
 required=$(IFS='|'; printf '%s' "${tests[*]}")
 
 exec bash "$ROOT/scripts/run_named_go_tests.sh" --race \
 	--packages \
-	"./cmd/server ./internal/agentserver ./internal/dispatch ./internal/repository ./internal/runner" \
+	"./cmd/server ./internal/agentserver ./internal/dispatch ./internal/migrate ./internal/repository ./internal/runner" \
 	--tests "$required" --require "$required"

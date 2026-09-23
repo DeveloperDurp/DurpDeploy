@@ -68,6 +68,19 @@ WHERE remote_step_runs.deployment_id = sqlc.arg(deployment_id)
         AND s.step_index = remote_step_runs.step_index
   );
 
+-- name: FailUnsupportedWaitingRemoteStepRuns :execrows
+UPDATE remote_step_runs SET state = 'failed',
+    finished_at = sqlc.arg(now), updated_at = sqlc.arg(now)
+WHERE remote_step_runs.agent_id = sqlc.arg(agent_id)
+  AND remote_step_runs.state = 'waiting'
+  AND NOT EXISTS (
+      SELECT 1 FROM deployment_steps s
+      JOIN agent_interpreters i ON i.agent_id = remote_step_runs.agent_id
+          AND i.interpreter = s.interpreter
+      WHERE s.deployment_id = remote_step_runs.deployment_id
+        AND s.step_index = remote_step_runs.step_index
+  );
+
 -- name: ExpireRemoteStepClaims :execrows
 UPDATE remote_step_runs SET state = 'waiting', claim_token_hash = NULL,
     ciphertext = NULL, claim_expires_at = NULL, last_heartbeat_at = NULL,

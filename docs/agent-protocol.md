@@ -74,7 +74,8 @@ the environment label and reporting the required interpreter.
 
 Each poll transactionally replaces the agent's interpreter capabilities. The
 claim transaction rechecks the capability, so a capability removed after queue
-creation cannot claim incompatible work. The server creates one run per
+creation cannot claim incompatible work; the pending run fails immediately
+instead of waiting for the step timeout. The server creates one run per
 matching agent, so every match receives the step. The deployment continues only
 after all runs succeed. If nothing matches, the step fails without falling back
 to local execution. Labels select work; they do not grant authorization or

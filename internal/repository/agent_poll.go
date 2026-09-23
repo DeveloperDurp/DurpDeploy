@@ -41,6 +41,15 @@ func (r *Repository) RecordAgentPoll(
 					return fmt.Errorf("record agent interpreter: %w", err)
 				}
 			}
+			if _, err := q.FailUnsupportedWaitingRemoteStepRuns(
+				ctx,
+				db.FailUnsupportedWaitingRemoteStepRunsParams{
+					Now:     heartbeat.Now,
+					AgentID: heartbeat.ID,
+				},
+			); err != nil {
+				return fmt.Errorf("fail unsupported remote steps: %w", err)
+			}
 			return nil
 		})
 	})

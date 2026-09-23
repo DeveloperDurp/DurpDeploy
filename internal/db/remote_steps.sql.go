@@ -193,6 +193,33 @@ func (q *Queries) ExpireRemoteStepClaims(ctx context.Context, now int64) (int64,
 	return result.RowsAffected()
 }
 
+const failUnsupportedWaitingRemoteStepRuns = `-- name: FailUnsupportedWaitingRemoteStepRuns :execrows
+UPDATE remote_step_runs SET state = 'failed',
+    finished_at = ?1, updated_at = ?1
+WHERE remote_step_runs.agent_id = ?2
+  AND remote_step_runs.state = 'waiting'
+  AND NOT EXISTS (
+      SELECT 1 FROM deployment_steps s
+      JOIN agent_interpreters i ON i.agent_id = remote_step_runs.agent_id
+          AND i.interpreter = s.interpreter
+      WHERE s.deployment_id = remote_step_runs.deployment_id
+        AND s.step_index = remote_step_runs.step_index
+  )
+`
+
+type FailUnsupportedWaitingRemoteStepRunsParams struct {
+	Now     sql.NullInt64 `json:"now"`
+	AgentID string        `json:"agent_id"`
+}
+
+func (q *Queries) FailUnsupportedWaitingRemoteStepRuns(ctx context.Context, arg FailUnsupportedWaitingRemoteStepRunsParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, failUnsupportedWaitingRemoteStepRuns, arg.Now, arg.AgentID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const finishRemoteStepRun = `-- name: FinishRemoteStepRun :execrows
 UPDATE remote_step_runs SET state = ?1, finished_at = ?2,
     updated_at = ?2
