@@ -4,7 +4,7 @@
 # Runtime is a minimal Alpine image with a non-root user and bash for step scripts.
 
 # Stage 1: builder
-FROM golang@sha256:f6751d823c26342f9506c03797d2527668d095b0a15f1862cddb4d927a7a4ced AS builder
+FROM golang:1.26.8-alpine@sha256:8ac98ca534ac3f51e1f420a1dd2c15e74c75cfa0f23f3ad27eb5d7236c349a0c AS builder
 
 # Install build tooling (npm for Tailwind/esbuild, make for the Makefile, git
 # and ca-certificates for Go module proxy / npm registry HTTPS fetches), then
