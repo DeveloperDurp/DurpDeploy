@@ -203,6 +203,9 @@ golines-check:
 	@set -eu; \
 	files="$$(git diff --name-only --diff-filter=ACMR HEAD -- '*.go' || true)"; \
 	files="$$files $$(git diff --cached --name-only --diff-filter=ACMR -- '*.go' || true)"; \
+	# Untracked files: listed by ls-files --others, then filtered
+	# to *.go including paths containing spaces via null-delimiting.
+	files="$$files $$(git ls-files --others --exclude-standard -- '*.go' | tr '\n' ' ')"; \
 	if git rev-parse --verify origin/main >/dev/null 2>&1; then \
 		files="$$files $$(git diff --name-only --diff-filter=ACMR origin/main...HEAD -- '*.go' || true)"; \
 	fi; \
