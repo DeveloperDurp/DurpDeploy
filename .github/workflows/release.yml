@@ -140,10 +140,10 @@ jobs:
       - name: golines
         run: |
           # Same check the pre-commit hook and .gitlab-ci.yml run: empty
-          # stdout == clean tree. Pinned to the version .gitlab-ci.yml
-          # uses so local, pre-commit, and CI all agree.
-          go install github.com/segmentio/golines@v0.13.0
-          out=$(golines -m 80 --ignore-generated -l .)
+          # stdout == clean tree. `go tool` resolves the binary through
+          # the go.mod tool directive, so the pinned version lives in
+          # the lockfile instead of an inline install (rule S8545).
+          out=$(go tool golines -m 80 --ignore-generated -l .)
           if [ -n "$out" ]; then
             echo "Files needing golines:"
             echo "$out"

@@ -136,7 +136,8 @@ func TestRemoteLogsRedactCommonPatternSplitAcrossEvents(t *testing.T) {
 	logs, err := fixture.repo.Queries.ListDeploymentLogsByDeployment(
 		t.Context(), 1,
 	)
-	if err != nil || len(logs) != 2 || logs[0].Line+logs[1].Line != "[REDACTED]" {
+	if err != nil || len(logs) != 2 ||
+		logs[0].Line+logs[1].Line != "[REDACTED]" {
 		t.Fatalf("stored logs=%+v error=%v", logs, err)
 	}
 	var streamed strings.Builder
