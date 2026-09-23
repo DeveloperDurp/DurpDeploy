@@ -188,22 +188,26 @@ jobs:
           go-version: '1.25'
           cache: true
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 22
-          cache: npm
+      # Same pinned-container pattern the sonarcloud job uses for templ.
+      # No npm needed: the script does a plain `go build`, and the CSS/JS
+      # bundles are committed; static/swagger-ui/ materializes via make.
+      - name: Materialize static/swagger-ui/
+        run: make swagger-ui-copy
 
-      - name: Install templ
-        run: go install github.com/a-h/templ/cmd/templ@v0.3.1020
+      - name: Generate templ files
+        run: |
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            --volume "$PWD:/workspace" \
+            --workdir /workspace \
+            ghcr.io/a-h/templ@sha256:2e266c40e32de7fa67e08018a06675975ccb7e86110dae7a7c0b0131adaab41d \
+            generate
 
-      - name: templ generate
-        run: templ generate
-
-      - name: npm install + swagger-ui + css/js bundles
-        run: make build
-
+      # The script handles its own build, admin seeding, secret key,
+      # server lifecycle, and teardown; calling it directly skips the
+      # npm-dependent `make build` this job does not need.
       - name: E2E contract checks
-        run: make e2e-test-isolated
+        run: ./scripts/e2e_test.sh
 
   # ----- Container image (multi-arch) ------------------------------------
   # Buildx with the docker-container driver, registry cache, push to ghcr.
