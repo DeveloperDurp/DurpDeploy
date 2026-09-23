@@ -57,9 +57,9 @@ jobs:
   # ----- Compute version once, share with downstream jobs ----------------
   version:
     name: Compute version
-    if: >-
-      github.event_name == 'push' ||
-      github.event_name == 'workflow_dispatch'
+    # Cheap and harmless on PRs: computing a version string has no
+    # side effects; the publishing jobs that consume it are separately
+    # event-gated.
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.v.outputs.version }}
