@@ -193,18 +193,14 @@ js-build: npm-install
 golines:
 	golines --max-len=80 --ignore-generated -w .
 
-# Fail if any Go file the branch or the working tree touches needs the
+# Fail if any Go file the branch or working tree touches needs the
 # 80-col reformat (same tool the pre-commit hook uses). Scoped to the
-# branch diff so main's historical formatting does not poison it; on
-# a push run the base falls back to main's previous commit. Uses the
-# go.mod tool directive's lockfile-pinned golines. Exits nonzero on
-# tool/format failures per codex P2 (propagate errors).
+# branch diff plus staged/unstaged/untracked Go files. The recipe is
+# one shell so set -e and the file list survive to the golines call.
 golines-check:
 	@set -eu; \
 	files="$$(git diff --name-only --diff-filter=ACMR HEAD -- '*.go' || true)"; \
 	files="$$files $$(git diff --cached --name-only --diff-filter=ACMR -- '*.go' || true)"; \
-	# Untracked files: listed by ls-files --others, then filtered
-	# to *.go including paths containing spaces via null-delimiting.
 	files="$$files $$(git ls-files --others --exclude-standard -- '*.go' | tr '\n' ' ')"; \
 	if git rev-parse --verify origin/main >/dev/null 2>&1; then \
 		files="$$files $$(git diff --name-only --diff-filter=ACMR origin/main...HEAD -- '*.go' || true)"; \
