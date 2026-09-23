@@ -152,7 +152,10 @@ jobs:
           if [ -z "$files" ]; then
             exit 0
           fi
-          out=$(go run github.com/segmentio/golines@v0.13.0 -m 80 --ignore-generated -l $files)
+          set -e
+          out=(
+            $(go run github.com/segmentio/golines@v0.13.0               -m 80 --ignore-generated -l $files)
+          )
           if [ -n "$out" ]; then
             echo "Files needing golines:"
             echo "$out"
