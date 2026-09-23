@@ -21,25 +21,15 @@ func (service *PairingService) Begin(
 ) (PairingChallenge, error) {
 	requestCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	connection, err := service.connect(
-		requestCtx,
-		input.address,
-		service.identity,
-	)
+	connection, err := service.connect(requestCtx, input.address, service.identity)
 	if err != nil {
-		return PairingChallenge{}, fmt.Errorf(
-			"observe agent certificate: %w",
-			err,
-		)
+		return PairingChallenge{}, fmt.Errorf("observe agent certificate: %w", err)
 	}
 	defer connection.Close()
 	fingerprint := agenttls.FingerprintOf(connection.CertificateDER())
 	token := make([]byte, 32)
 	if _, err := rand.Read(token); err != nil {
-		return PairingChallenge{}, fmt.Errorf(
-			"create pairing confirmation: %w",
-			err,
-		)
+		return PairingChallenge{}, fmt.Errorf("create pairing confirmation: %w", err)
 	}
 	challenge := PairingChallenge{
 		ID: base64.RawURLEncoding.EncodeToString(token), Name: input.name,
