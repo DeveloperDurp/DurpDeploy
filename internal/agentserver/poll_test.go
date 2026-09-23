@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -75,10 +76,80 @@ func TestPollPayloadRoundTrip(t *testing.T) {
 	}
 }
 
+func TestPollReplacesInterpreterCapabilitiesByProtocol(t *testing.T) {
+	// Given
+	fixture := newAgentFixture(t)
+	seedPollPayload(t, fixture, "pending", "test-agent")
+
+	// When
+	response := postAgent(
+		t,
+		fixture,
+		agentproto.PollPath,
+		`{"protocol":"agent/2","agent_version":"test-v2",`+
+			`"supported_interpreters":["bash","python3"]}`,
+	)
+	response.Body.Close()
+
+	// Then
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("v2 poll status=%d", response.StatusCode)
+	}
+	assertAgentInterpreters(t, fixture, []string{"bash", "python3"})
+
+	if _, err := fixture.repo.Queries.ExpireRemoteClaims(
+		t.Context(),
+		1<<62,
+	); err != nil {
+		t.Fatal(err)
+	}
+	response = postAgent(t, fixture, agentproto.PollPath, pollBody)
+	response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("v1 poll status=%d", response.StatusCode)
+	}
+	assertAgentInterpreters(t, fixture, []string{"bash"})
+}
+
+func assertAgentInterpreters(
+	t *testing.T,
+	fixture agentFixture,
+	want []string,
+) {
+	t.Helper()
+	rows, err := fixture.repo.DB.QueryContext(
+		t.Context(),
+		"SELECT interpreter FROM agent_interpreters "+
+			"WHERE agent_id = ? ORDER BY interpreter",
+		"test-agent",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	got := make([]string, 0, len(want))
+	for rows.Next() {
+		var interpreter string
+		if err := rows.Scan(&interpreter); err != nil {
+			t.Fatal(err)
+		}
+		got = append(got, interpreter)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("agent interpreters=%v want=%v", got, want)
+	}
+}
+
 func TestRemoteStepPayloadStartsSortOrderAtOne(t *testing.T) {
 	fixture := newAgentFixture(t)
 	deploymentID := seedPollPayload(t, fixture, "pending", "test-agent")
-	deployment, err := fixture.repo.Queries.GetDeployment(t.Context(), deploymentID)
+	deployment, err := fixture.repo.Queries.GetDeployment(
+		t.Context(),
+		deploymentID,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,6 +187,60 @@ VALUES(?,1,'test')`, deploymentID, deploymentID, deployment.EnvironmentID,
 	if len(payload.Release.Steps) != 1 ||
 		payload.Release.Steps[0].SortOrder != 1 {
 		t.Fatalf("remote step payload=%+v", payload.Release.Steps)
+	}
+}
+
+func TestRemoteStepPayloadIncludesNonBashInterpreter(t *testing.T) {
+	// Given
+	fixture := newAgentFixture(t)
+	deploymentID := seedPollPayload(t, fixture, "pending", "test-agent")
+	deployment, err := fixture.repo.Queries.GetDeployment(
+		t.Context(),
+		deploymentID,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fixture.repo.DB.ExecContext(t.Context(), `
+DELETE FROM remote_deployment_claims WHERE deployment_id = ?;
+UPDATE deployments SET status = 'running', assigned_agent_id = NULL WHERE id = ?;
+UPDATE deployment_steps SET interpreter = 'python3'
+WHERE deployment_id = ? AND step_index = 1;
+INSERT INTO agent_environment_labels(agent_id,environment_id)
+VALUES('test-agent',?);
+INSERT INTO agent_interpreters(agent_id,interpreter)
+VALUES('test-agent','python3');`, deploymentID, deploymentID, deploymentID,
+		deployment.EnvironmentID); err != nil {
+		t.Fatal(err)
+	}
+	created, err := fixture.repo.QueueRemoteStepRuns(
+		t.Context(), deploymentID, 1,
+	)
+	if err != nil || created != 1 {
+		t.Fatalf("queue remote step rows=%d error=%v", created, err)
+	}
+
+	// When
+	response := postAgent(
+		t,
+		fixture,
+		agentproto.PollPath,
+		`{"protocol":"agent/2","agent_version":"test-v2",`+
+			`"supported_interpreters":["python3"]}`,
+	)
+	poll := decodePollResponse(t, response)
+	plaintext, err := agentpayload.Open(
+		fixture.identity,
+		deploymentID,
+		[]byte(poll.Payload),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Then
+	if !strings.Contains(string(plaintext), `"interpreter":"python3"`) {
+		t.Fatalf("non-Bash payload omitted interpreter: %s", plaintext)
 	}
 }
 

@@ -18,6 +18,8 @@ github.com/AzureAD/microsoft-authentication-library-for-go v1.6.0 h1:XRzhVemXdgv
 github.com/AzureAD/microsoft-authentication-library-for-go v1.6.0/go.mod h1:HKpQxkWaGLJ+D/5H8QRpyQXA1eKjxkFlOMwck5+33Jk=
 github.com/DeveloperDurp/durpdeploy-agent v0.1.0 h1:eWTET93/KE2bCEHyimZPjSRrg9QSp4FgoH1K2MUvhtA=
 github.com/DeveloperDurp/durpdeploy-agent v0.1.0/go.mod h1:YRIf+naF+TYvT6U5zpvG5rZntmoCj+1eQACnkC3kDCE=
+github.com/DeveloperDurp/durpdeploy-agent v0.1.1-0.20260921105742-a63b344bf6eb h1:L9SJwX64Eoa1RM9POkzbsVyBZfeRoAJqkodKC5oqkEs=
+github.com/DeveloperDurp/durpdeploy-agent v0.1.1-0.20260921105742-a63b344bf6eb/go.mod h1:GjvYh0EVVCngIKUh1v2MLb3WyZCHlrqE9ID2meUAJTQ=
 github.com/Microsoft/go-winio v0.6.2 h1:F2VQgta7ecxGYO8k3ZZz3RS8fVIXVxONVUPlNERoyfY=
 github.com/Microsoft/go-winio v0.6.2/go.mod h1:yd8OoFMLzJbo9gZq8j5qaps8bJ9aShtEA8Ipt1oGCvU=
 github.com/a-h/templ v0.3.1020 h1:ypAT/L5ySWEnZ6Zft/5yfoWXYYkhFNvEFOeeqecg4tw=

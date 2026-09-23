@@ -68,6 +68,7 @@ INSERT INTO agent_environment_labels(agent_id,environment_id) VALUES(?,?)`,
 		); err != nil {
 			t.Fatal(err)
 		}
+		addAgentInterpreter(t, repo, agentID, "bash")
 	}
 	marker := filepath.Join(t.TempDir(), "order.txt")
 	steps, err := json.Marshal([]map[string]any{
@@ -204,6 +205,7 @@ func TestRunnerRequestsCancellationBeforeTimeoutFailure(t *testing.T) {
 		); err != nil {
 			t.Fatal(err)
 		}
+		addAgentInterpreter(t, repo, agentID, "bash")
 	}
 	steps, err := json.Marshal([]map[string]any{{
 		"name": "remote", "script_body": "echo remote",

@@ -193,12 +193,23 @@ func TestAgents_AdminManagementFlow(t *testing.T) {
 	); err != nil {
 		t.Fatalf("create agent: %v", err)
 	}
+	if _, err := h.repo.DB.ExecContext(
+		t.Context(),
+		"INSERT INTO agent_interpreters(agent_id, interpreter) "+
+			"VALUES('api-agent', 'python3')",
+	); err != nil {
+		t.Fatalf("create agent interpreter: %v", err)
+	}
 
 	recorder := h.request(
 		t, http.MethodGet, "/api/v1/admin/agents", token, "",
 	)
 	h.assertStatus(t, recorder, http.StatusOK)
-	if !strings.Contains(recorder.Body.String(), "API Agent") {
+	if !strings.Contains(recorder.Body.String(), "API Agent") ||
+		!strings.Contains(
+			recorder.Body.String(),
+			`"interpreters":["python3"]`,
+		) {
 		t.Fatalf("agent list missing seeded agent: %s", recorder.Body.String())
 	}
 
@@ -206,7 +217,11 @@ func TestAgents_AdminManagementFlow(t *testing.T) {
 		t, http.MethodGet, "/api/v1/admin/agents/api-agent", token, "",
 	)
 	h.assertStatus(t, recorder, http.StatusOK)
-	if !strings.Contains(recorder.Body.String(), `"labels":null`) {
+	if !strings.Contains(recorder.Body.String(), `"labels":null`) ||
+		!strings.Contains(
+			recorder.Body.String(),
+			`"interpreters":["python3"]`,
+		) {
 		t.Fatalf("agent detail missing labels: %s", recorder.Body.String())
 	}
 

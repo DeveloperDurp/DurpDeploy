@@ -49,6 +49,23 @@ func setupRunnerHarness(
 	return repo, rnr, rec
 }
 
+func addAgentInterpreter(
+	t *testing.T,
+	repo *repository.Repository,
+	agentID string,
+	interpreter string,
+) {
+	t.Helper()
+	if _, err := repo.Queries.AddAgentInterpreter(
+		t.Context(),
+		db.AddAgentInterpreterParams{
+			AgentID: agentID, Interpreter: interpreter,
+		},
+	); err != nil {
+		t.Fatalf("add agent interpreter: %v", err)
+	}
+}
+
 // TestRunner_PublishesStartedAndSucceededEvents: a deployment whose steps
 // all succeed publishes deployment_started then deployment_succeeded, in
 // that order.
@@ -260,7 +277,7 @@ func TestRunner_MissingInterpreterFailsClearlyBeforeExecution(t *testing.T) {
 	}
 }
 
-func TestRunner_RejectsNonBashAgentStepBeforeDispatch(t *testing.T) {
+func TestRunner_FailsWhenNoAgentSupportsInterpreter(t *testing.T) {
 	ctx := context.Background()
 	repo, rnr, _ := setupRunnerHarness(t)
 
@@ -311,7 +328,7 @@ func TestRunner_RejectsNonBashAgentStepBeforeDispatch(t *testing.T) {
 	}
 	if len(logs) != 1 || !strings.Contains(
 		logs[0].Line,
-		`agent execution does not support interpreter "python3"`,
+		`no compatible agents support interpreter "python3"`,
 	) {
 		t.Fatalf("deployment logs = %+v", logs)
 	}

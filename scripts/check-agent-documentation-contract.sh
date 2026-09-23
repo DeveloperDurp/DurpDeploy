@@ -14,6 +14,8 @@ require_text docs/agents.md 'expire after 10 minutes' 'pairing expiry is incorre
 require_text docs/agent-protocol.md 'completion_ack: false' 'pairing acknowledgement contract is missing'
 require_text docs/agent-protocol.md 'does not fall back to local execution' 'fallback behavior is missing'
 require_text docs/agent-protocol.md 'agent/1' 'protocol version is missing'
+require_text docs/agent-protocol.md 'agent/2' 'capability protocol version is missing'
+require_text docs/agent-protocol.md 'supported_interpreters' 'interpreter capability contract is missing'
 require_text docs/agents.md 'does **not** use a per-step `chroot`' 'container mode still promises per-step chroot'
 require_text docs/agents.md 'operator or user is responsible' 'script responsibility warning is missing'
 require_text docs/agents.md 'shares the agent UID' 'shared agent identity tradeoff is missing'

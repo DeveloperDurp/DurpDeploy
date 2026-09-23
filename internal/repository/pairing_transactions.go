@@ -92,6 +92,12 @@ func (r *Repository) PrepareAgentPairing(
 				if err != nil || changed != 1 {
 					return ErrPairingTupleConflict
 				}
+				if _, err := q.DeleteAgentInterpreters(
+					ctx,
+					tuple.ExpectedAgentID,
+				); err != nil {
+					return err
+				}
 				return nil
 			}
 			if len(candidates) != 1 {

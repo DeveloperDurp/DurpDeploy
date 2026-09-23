@@ -1,19 +1,20 @@
 # Agent protocol
 
-`agent/1` is the outbound-only JSON contract between DurpDeploy and a remote
-agent. This document freezes the wire vocabulary only. It adds no listener,
-database state, runner behavior, or fallback path.
+`agent/1` and `agent/2` are the outbound-only JSON contracts between DurpDeploy
+and a remote agent. Version 2 adds fixed interpreter capability reporting while
+the server continues to accept version 1 as Bash-only.
 
 ## Endpoints and payloads
 
 All JSON requests are exactly one object and require a present, non-null
-`"protocol":"agent/1"`. They reject unknown fields, trailing JSON values,
-malformed JSON, and every other protocol value.
+`protocol` of `agent/1` or `agent/2`. They reject unknown fields, trailing JSON
+values, malformed JSON, and every other protocol value. Pairing remains
+`agent/1` so existing identities can upgrade without re-pairing.
 
 | Endpoint | Request contract | Notes |
 | --- | --- | --- |
 | `POST /agent/v1/pairings/server-init` | `PairRequest` | Server-side pairing completion over mTLS. The first call uses `completion_ack: false`; after durable confirmation the same request is retried with `completion_ack: true` to perform listener cleanup. |
-| `POST /agent/v1/poll` | `PollRequest` | Protocol and agent version. A no-work response has no deployment payload. |
+| `POST /agent/v1/poll` | `PollRequest` | Version 1 sends protocol and agent version and is recorded as Bash-only. Version 2 also requires `supported_interpreters`, containing only `bash`, `pwsh`, or `python3`. A no-work response has no deployment payload. |
 | `POST /agent/v1/deployments/{id}/start` | `StartRequest` | Acknowledges that the claimed work started. |
 | `POST /agent/v1/deployments/{id}/heartbeat` | `HeartbeatRequest` | Response carries cancellation state and staged server fingerprints. |
 | `POST /agent/v1/deployments/{id}/logs` | `LogBatchRequest` | Ordered line events. |
@@ -66,14 +67,23 @@ responses.
 Administrators can attach capability labels through the browser or API and
 environment labels through the agent details page. For each remote step, the
 server selects active, paired agents that have the deployment's environment
-label and every capability label required by the step. Capability matching is
-case-insensitive. A step with no capability labels matches every active, paired
-agent carrying the environment label.
+label, every capability label required by the step, and the interpreter stored
+in the immutable deployment-step snapshot. Label matching is case-insensitive.
+A step with no capability labels matches every active, paired agent carrying
+the environment label and reporting the required interpreter.
 
-The server creates one run per matching agent, so every match receives the
-step. The deployment continues only after all runs succeed. If nothing matches,
-the step fails without falling back to local execution. Labels select work;
-they do not grant authorization or create a security boundary.
+Each poll transactionally replaces the agent's interpreter capabilities. The
+claim transaction rechecks the capability, so a capability removed after queue
+creation cannot claim incompatible work; the pending run fails immediately
+instead of waiting for the step timeout. The server creates one run per
+matching agent, so every match receives the step. The deployment continues only
+after all runs succeed. If nothing matches, the step fails without falling back
+to local execution. Labels select work; they do not grant authorization or
+create a security boundary.
+
+Encrypted step payloads omit the interpreter for Bash, preserving strict
+`agent/1` decoding. PowerShell and Python payloads include `pwsh` or `python3`
+and are sent only to compatible `agent/2` agents.
 
 ## Dispatch state machine
 

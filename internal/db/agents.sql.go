@@ -31,6 +31,24 @@ func (q *Queries) AddAgentEnvironmentLabel(ctx context.Context, arg AddAgentEnvi
 	return result.RowsAffected()
 }
 
+const addAgentInterpreter = `-- name: AddAgentInterpreter :execrows
+INSERT INTO agent_interpreters (agent_id, interpreter)
+VALUES (?, ?)
+`
+
+type AddAgentInterpreterParams struct {
+	AgentID     string `json:"agent_id"`
+	Interpreter string `json:"interpreter"`
+}
+
+func (q *Queries) AddAgentInterpreter(ctx context.Context, arg AddAgentInterpreterParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, addAgentInterpreter, arg.AgentID, arg.Interpreter)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const addAgentLabel = `-- name: AddAgentLabel :execrows
 INSERT INTO agent_labels (agent_id, label)
 SELECT ?1, ?2
@@ -92,6 +110,18 @@ type DeleteAgentEnvironmentLabelParams struct {
 
 func (q *Queries) DeleteAgentEnvironmentLabel(ctx context.Context, arg DeleteAgentEnvironmentLabelParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, deleteAgentEnvironmentLabel, arg.AgentID, arg.EnvironmentID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const deleteAgentInterpreters = `-- name: DeleteAgentInterpreters :execrows
+DELETE FROM agent_interpreters WHERE agent_id = ?
+`
+
+func (q *Queries) DeleteAgentInterpreters(ctx context.Context, agentID string) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteAgentInterpreters, agentID)
 	if err != nil {
 		return 0, err
 	}
@@ -206,6 +236,34 @@ func (q *Queries) ListAgentEnvironmentLabels(ctx context.Context, agentID string
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAgentInterpreters = `-- name: ListAgentInterpreters :many
+SELECT interpreter FROM agent_interpreters
+WHERE agent_id = ? ORDER BY interpreter
+`
+
+func (q *Queries) ListAgentInterpreters(ctx context.Context, agentID string) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listAgentInterpreters, agentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var interpreter string
+		if err := rows.Scan(&interpreter); err != nil {
+			return nil, err
+		}
+		items = append(items, interpreter)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err

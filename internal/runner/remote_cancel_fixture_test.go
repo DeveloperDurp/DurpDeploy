@@ -68,6 +68,7 @@ func startRemoteCancellationRun(t *testing.T) remoteCancellationHarness {
 	); err != nil {
 		t.Fatal(err)
 	}
+	addAgentInterpreter(t, repo, "agent", "bash")
 	release, err := repo.Queries.CreateRelease(
 		t.Context(),
 		db.CreateReleaseParams{
