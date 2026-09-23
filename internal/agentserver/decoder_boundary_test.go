@@ -80,7 +80,8 @@ func TestAgentRejectsMalformedPayloads(t *testing.T) {
 		body string
 	}{
 		{"malformed", `{"protocol":"agent/1",`},
-		{"unsupported protocol", `{"protocol":"agent/2","agent_version":"v1"}`},
+		{"unsupported protocol", `{"protocol":"agent/3","agent_version":"v1"}`},
+		{"missing v2 capabilities", `{"protocol":"agent/2","agent_version":"v2"}`},
 		{"duplicate member", `{"protocol":"agent/1","protocol":"agent/1","agent_version":"v1"}`},
 		{"trailing value", `{"protocol":"agent/1","agent_version":"v1"} {}`},
 	} {

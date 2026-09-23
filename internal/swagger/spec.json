@@ -6149,6 +6149,13 @@
           "type": "string",
           "x-go-name": "ID"
         },
+        "interpreters": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "x-go-name": "Interpreters"
+        },
         "last_heartbeat_at": {
           "$ref": "#/definitions/swaggerSQLNullInteger"
         },

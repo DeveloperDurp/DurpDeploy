@@ -25,7 +25,7 @@ func agentHealth(agent db.Agent) (string, string) {
 	return "offline", "badge-error"
 }
 
-templ AgentsPage(agents []db.Agent, formError string, currentPath string) {
+templ AgentsPage(agents []db.Agent, interpreters map[string][]string, formError string, currentPath string) {
 	if !CanWrite(ctx) {
 		@ViewerForbiddenMessage(
 			"Agents",
@@ -91,6 +91,15 @@ templ AgentsPage(agents []db.Agent, formError string, currentPath string) {
 									<td class="truncate">
 										<span class="font-medium">{ agent.Name }</span>
 										<div class="truncate font-mono text-xs opacity-60">{ agent.ID }</div>
+										<div class="mt-1 flex flex-wrap gap-1">
+											if len(interpreters[agent.ID]) == 0 {
+												<span class="text-xs opacity-60">Interpreters not reported</span>
+											} else {
+												for _, interpreter := range interpreters[agent.ID] {
+													<span class="badge badge-outline badge-sm">{ interpreter }</span>
+												}
+											}
+										</div>
 									</td>
 									<td>
 										{{ label, class := agentHealth(agent) }}
@@ -168,7 +177,7 @@ templ AgentPairingConfirmationPage(challenge agentserver.PairingChallenge, curre
 	}
 }
 
-templ AgentDetailPage(agent db.Agent, labels []string, environmentLabels []db.Environment, availableEnvironments []db.Environment, currentPath string) {
+templ AgentDetailPage(agent db.Agent, labels []string, interpreters []string, environmentLabels []db.Environment, availableEnvironments []db.Environment, currentPath string) {
 	if !CanWrite(ctx) {
 		@ViewerForbiddenMessage(
 			"Agent "+agent.Name,
@@ -233,6 +242,21 @@ templ AgentDetailPage(agent db.Agent, labels []string, environmentLabels []db.En
 							never
 						}
 					</div>
+				</div>
+			</div>
+			<div class="card bg-base-200 shadow">
+				<div class="card-body">
+					<h2 class="card-title">Interpreters</h2>
+					<p class="opacity-70">Capabilities reported by the agent during its latest poll.</p>
+					if len(interpreters) == 0 {
+						<p class="text-sm opacity-60">No interpreter capabilities reported.</p>
+					} else {
+						<div class="flex flex-wrap gap-2">
+							for _, interpreter := range interpreters {
+								<span class="badge badge-outline">{ interpreter }</span>
+							}
+						</div>
+					}
 				</div>
 			</div>
 			<div class="card bg-base-200 shadow">

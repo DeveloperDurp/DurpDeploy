@@ -45,6 +45,14 @@ func (h *AgentsHandler) Detail(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	interpreters, err := h.repo.Queries.ListAgentInterpreters(
+		r.Context(),
+		agent.ID,
+	)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	environmentLabels, err := h.repo.Queries.ListAgentEnvironmentLabels(
 		r.Context(),
 		agent.ID,
@@ -64,6 +72,7 @@ func (h *AgentsHandler) Detail(w http.ResponseWriter, r *http.Request) {
 	if err := pages.AgentDetailPage(
 		agent,
 		labels,
+		interpreters,
 		environmentLabels,
 		availableEnvironments,
 		r.URL.Path,
@@ -206,7 +215,18 @@ func (h *AgentsHandler) renderList(
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if err := pages.AgentsPage(agents, message, r.URL.Path).
+	interpreters := make(map[string][]string, len(agents))
+	for _, agent := range agents {
+		interpreters[agent.ID], err = h.repo.Queries.ListAgentInterpreters(
+			r.Context(),
+			agent.ID,
+		)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	if err := pages.AgentsPage(agents, interpreters, message, r.URL.Path).
 		Render(r.Context(), w); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}

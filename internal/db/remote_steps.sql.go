@@ -47,9 +47,17 @@ UPDATE remote_step_runs SET state = 'claimed',
     ciphertext = ?2,
     claim_expires_at = ?3,
     last_heartbeat_at = ?4, updated_at = ?4
-WHERE deployment_id = ?5
-  AND step_index = ?6
-  AND agent_id = ?7 AND state = 'waiting'
+WHERE remote_step_runs.deployment_id = ?5
+  AND remote_step_runs.step_index = ?6
+  AND remote_step_runs.agent_id = ?7
+  AND remote_step_runs.state = 'waiting'
+  AND EXISTS (
+      SELECT 1 FROM deployment_steps s
+      JOIN agent_interpreters i ON i.agent_id = remote_step_runs.agent_id
+          AND i.interpreter = s.interpreter
+      WHERE s.deployment_id = remote_step_runs.deployment_id
+        AND s.step_index = remote_step_runs.step_index
+  )
 `
 
 type ClaimRemoteStepRunParams struct {
@@ -112,6 +120,8 @@ JOIN agents a ON a.status = 'active' AND a.revoked_at IS NULL
 JOIN agent_pairings p ON p.agent_id = a.id AND p.state = 'paired'
 JOIN agent_environment_labels e ON e.agent_id = a.id
     AND e.environment_id = d.environment_id
+JOIN agent_interpreters i ON i.agent_id = a.id
+    AND i.interpreter = s.interpreter
 WHERE s.deployment_id = ?1
   AND s.step_index = ?2
   AND s.execution_target = 'agent'
@@ -177,6 +187,33 @@ WHERE state = 'claimed' AND started_at IS NULL
 
 func (q *Queries) ExpireRemoteStepClaims(ctx context.Context, now int64) (int64, error) {
 	result, err := q.db.ExecContext(ctx, expireRemoteStepClaims, now)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const failUnsupportedWaitingRemoteStepRuns = `-- name: FailUnsupportedWaitingRemoteStepRuns :execrows
+UPDATE remote_step_runs SET state = 'failed',
+    finished_at = ?1, updated_at = ?1
+WHERE remote_step_runs.agent_id = ?2
+  AND remote_step_runs.state = 'waiting'
+  AND NOT EXISTS (
+      SELECT 1 FROM deployment_steps s
+      JOIN agent_interpreters i ON i.agent_id = remote_step_runs.agent_id
+          AND i.interpreter = s.interpreter
+      WHERE s.deployment_id = remote_step_runs.deployment_id
+        AND s.step_index = remote_step_runs.step_index
+  )
+`
+
+type FailUnsupportedWaitingRemoteStepRunsParams struct {
+	Now     sql.NullInt64 `json:"now"`
+	AgentID string        `json:"agent_id"`
+}
+
+func (q *Queries) FailUnsupportedWaitingRemoteStepRuns(ctx context.Context, arg FailUnsupportedWaitingRemoteStepRunsParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, failUnsupportedWaitingRemoteStepRuns, arg.Now, arg.AgentID)
 	if err != nil {
 		return 0, err
 	}
@@ -385,6 +422,10 @@ func (q *Queries) ListRemoteStepRuns(ctx context.Context, arg ListRemoteStepRuns
 const listWaitingRemoteStepRuns = `-- name: ListWaitingRemoteStepRuns :many
 SELECT r.deployment_id, r.step_index, r.agent_id, r.state, r.claim_token_hash, r.ciphertext, r.claim_expires_at, r.last_heartbeat_at, r.started_at, r.finished_at, r.cancel_requested_at, r.created_at, r.updated_at, r.log_buffer_ciphertext, r.recovery_cancelled FROM remote_step_runs r
 JOIN deployments d ON d.id = r.deployment_id
+JOIN deployment_steps s ON s.deployment_id = r.deployment_id
+    AND s.step_index = r.step_index
+JOIN agent_interpreters i ON i.agent_id = r.agent_id
+    AND i.interpreter = s.interpreter
 WHERE r.agent_id = ?1 AND r.state = 'waiting'
   AND d.status = 'running'
   AND NOT EXISTS (

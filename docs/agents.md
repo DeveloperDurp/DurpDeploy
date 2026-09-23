@@ -160,7 +160,8 @@ DURPDEPLOY_AGENT_VERSION=<agent-version>
 but production services set it explicitly. `DURPDEPLOY_AGENT_LISTEN_ADDR` is
 needed only while the local pairing listener is open. `DURPDEPLOY_AGENT_VERSION`
 is sent in heartbeats after pairing. The protocol is fixed by the binary as
-`agent/1`. There is no protocol variable.
+`agent/2` for current agents. The server also accepts legacy `agent/1` polls as
+Bash-only. There is no protocol variable.
 
 The first run prints a short-lived pairing code and agent fingerprint. Enter
 the code in the authenticated admin pairing flow, compare the displayed
@@ -188,7 +189,7 @@ files that are visible in the container or exfiltrating secrets supplied to it.
 
 The container contract is deliberately limited and explicit:
 
-* The agent process and Bash run as the preselected unprivileged service UID
+* The agent process and selected interpreter run as the preselected unprivileged service UID
   `10001`; neither process has Linux capabilities.
 * The root filesystem is read-only. Writable locations are private to the
   container, primarily the agent state directory and a private `/tmp` tmpfs.
@@ -201,7 +202,7 @@ The container contract is deliberately limited and explicit:
   agent container.
 
 An unprivileged agent cannot change to a separate runner UID without
-`SETUID`/`SETGID`. Those capabilities are intentionally absent. Bash therefore
+`SETUID`/`SETGID`. Those capabilities are intentionally absent. Scripts therefore
 shares the agent UID and can read or change its private state volume, including
 the paired identity. Use one agent boundary per trusted script domain, and
 re-pair the agent if a script may have altered that state. The separate host or
@@ -253,7 +254,7 @@ fail closed if a tag was rewritten:
 ```bash
 set -euo pipefail
 AGENT_MODULE=github.com/DeveloperDurp/durpdeploy-agent
-AGENT_VERSION=v0.1.0 # use the value recorded from the server checkout
+AGENT_VERSION=v0.1.1-0.20260921105742-a63b344bf6eb # use the value recorded from the server checkout
 AGENT_SUM='h1:...' # use the value recorded from the server checkout
 AGENT_COMMIT=... # use the value recorded from the server checkout
 AGENT_DOWNLOAD=$(go mod download -json "$AGENT_MODULE@$AGENT_VERSION")
@@ -287,10 +288,10 @@ standalone repository does not create or open a database. Keep the printed
 digest with the deployment record so the installed artifact can be checked
 later.
 
-The server and agent must both use protocol `agent/1`. Builds using that
-protocol are wire-compatible; a breaking wire change requires a new protocol
-identifier. Prefer the exact agent version pinned by the server, and upgrade
-the server and agent together when a release changes that pin.
+The server accepts protocol `agent/1` for legacy Bash-only agents and `agent/2`
+for capability-aware agents. Prefer the exact agent version pinned by the
+server, and upgrade the server and agent together when a release changes that
+pin.
 
 Create the service account and private state directory:
 
@@ -368,7 +369,7 @@ sudo systemctl enable --now durpdeploy-agent
 sudo systemctl status durpdeploy-agent --no-pager
 ```
 
-The unit runs the agent and Bash as `durpdeploy-agent`, sets the state directory, uses
+The unit runs the agent and selected interpreter as `durpdeploy-agent`, sets the state directory, uses
 `/etc/durpdeploy-agent.env`, applies a private `UMask=0077`, and permits writes
 only to the agent state directory. It also applies `NoNewPrivileges`, private
 mounts and `/tmp`, and service cgroup limits. Keep both
@@ -488,7 +489,7 @@ Upgrade the server and agent to compatible releases together. For an agent,
 check out the standalone version pinned by the server, build and verify a new
 `durpdeploy-agent`, install it over the binary, and restart through the normal
 controlled pairing procedure. Preserve the state directory across an
-`agent/1`-compatible upgrade. If rollback is necessary, stop the service,
+protocol-compatible upgrade. If rollback is necessary, stop the service,
 install the previous verified binary, and restore the matching known-good
 configuration. Do not delete pins or identity files during an ordinary binary
 rollback.

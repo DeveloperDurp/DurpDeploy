@@ -29,6 +29,7 @@ type agentResponse struct {
 	RevokedAt              sql.NullInt64  `json:"revoked_at"`
 	CreatedAt              int64          `json:"created_at"`
 	UpdatedAt              int64          `json:"updated_at"`
+	Interpreters           []string       `json:"interpreters"`
 }
 
 type pairAgentRequest struct {
@@ -69,7 +70,15 @@ func (h *AgentHandler) ListAgents(w http.ResponseWriter, r *http.Request) {
 	}
 	items := make([]agentResponse, len(agents))
 	for index := range agents {
-		items[index] = publicAgent(agents[index])
+		interpreters, err := h.repo.Queries.ListAgentInterpreters(
+			r.Context(),
+			agents[index].ID,
+		)
+		if err != nil {
+			RespondError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		items[index] = publicAgent(agents[index], interpreters)
 	}
 	RespondJSON(w, http.StatusOK, items)
 }
@@ -109,10 +118,18 @@ func (h *AgentHandler) GetAgent(w http.ResponseWriter, r *http.Request) {
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	interpreters, err := h.repo.Queries.ListAgentInterpreters(
+		r.Context(),
+		agent.ID,
+	)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 	RespondJSON(w, http.StatusOK, struct {
 		Agent  agentResponse `json:"agent"`
 		Labels []string      `json:"labels"`
-	}{publicAgent(agent), labels})
+	}{publicAgent(agent, interpreters), labels})
 }
 
 // swagger:route POST /admin/agents/pair admin-agents pairAgent
@@ -338,7 +355,7 @@ func writeAgentNotFound(w http.ResponseWriter, err error) {
 	RespondError(w, http.StatusInternalServerError, err.Error())
 }
 
-func publicAgent(agent db.Agent) agentResponse {
+func publicAgent(agent db.Agent, interpreters []string) agentResponse {
 	return agentResponse{
 		ID:                     agent.ID,
 		Name:                   agent.Name,
@@ -350,5 +367,6 @@ func publicAgent(agent db.Agent) agentResponse {
 		RevokedAt:              agent.RevokedAt,
 		CreatedAt:              agent.CreatedAt,
 		UpdatedAt:              agent.UpdatedAt,
+		Interpreters:           interpreters,
 	}
 }
