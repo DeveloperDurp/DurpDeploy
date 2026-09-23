@@ -119,6 +119,8 @@ prepare_agent_source() {
 run_failure_matrix() {
 	verify_require "${EXPECTED[@]}"
 	node --test scripts/agent_fault_proxy_test.mjs
+	local agent_root
+	agent_root=$(prepare_agent_source) || return 1
 	local matrix_status=0
 	local scenario output lifecycle_flag
 	for scenario in "${EXPECTED[@]}"; do
@@ -129,7 +131,8 @@ run_failure_matrix() {
 			lifecycle_flag=
 			;;
 		esac
-		if ! node scripts/agent_admin_browser_proof.mjs ${lifecycle_flag:+"$lifecycle_flag"} \
+		if ! DURPDEPLOY_AGENT_WORKTREE="$agent_root" node \
+			scripts/agent_admin_browser_proof.mjs ${lifecycle_flag:+"$lifecycle_flag"} \
 			--fault-scenario "$scenario" \
 			--evidence-dir "$EVIDENCE_DIR/failure-matrix/$scenario" \
 			>"$output" 2>&1; then
