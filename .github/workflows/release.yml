@@ -142,10 +142,9 @@ jobs:
           # Same check the pre-commit hook runs on staged files, scoped
           # to the Go files this PR changes (golines' output is
           # toolchain-sensitive, so a repo-wide gate would fail on
-          # main's historical formatting, not on this diff). `go tool`
-          # resolves the binary through the go.mod tool directive, so
-          # the pinned version lives in the lockfile instead of an
-          # inline install (rule S8545).
+          # main's historical formatting, not on this diff). Pinned
+          # `go run` keeps the lint job's dependency at a fixed version
+          # without touching go.mod/go.sum (no manifest churn).
           # checkout is shallow; unshallow so the merge base with main
           # is resolvable for the changed-file diff.
           git fetch --unshallow origin main
@@ -153,7 +152,7 @@ jobs:
           if [ -z "$files" ]; then
             exit 0
           fi
-          out=$(go tool golines -m 80 --ignore-generated -l $files)
+          out=$(go run github.com/segmentio/golines@v0.13.0 -m 80 --ignore-generated -l $files)
           if [ -n "$out" ]; then
             echo "Files needing golines:"
             echo "$out"
