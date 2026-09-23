@@ -227,7 +227,12 @@ l.created_at ASC, l.id ASC`, deployment.ID)
 	}
 	for i := range want {
 		if got[i] != want[i] {
-			t.Fatalf("row %d: got id %d, want id %d (batch boundary skip or reorder)", i, got[i], want[i])
+			t.Fatalf(
+				"row %d: got id %d, want id %d (batch boundary skip or reorder)",
+				i,
+				got[i],
+				want[i],
+			)
 		}
 	}
 }
