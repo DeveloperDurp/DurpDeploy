@@ -1317,6 +1317,65 @@ func TestExportLogs(t *testing.T) {
 	}
 }
 
+// TestExportLogs_CompletesAcrossBatchBoundary drives the public API
+// route end-to-end (auth -> router -> handler -> repository) with enough
+// logs to cross the repository's 256-row batch boundary, asserting
+// completeness and ordering of the streaming export.
+func TestExportLogs_CompletesAcrossBatchBoundary(t *testing.T) {
+	h := newAPIHarness(t)
+	u := seedAPIUser(t, h.repo, "admin@example.com", "admin")
+	p := seedProject(t, h.repo)
+	e := seedEnv(t, h.repo)
+	r := seedRelease(t, h.repo, p.ID)
+	d := seedDeployment(t, h.repo, r.ID, e.ID, "succeeded")
+
+	const total = 300
+	for i := 0; i < total; i++ {
+		if _, err := h.repo.Queries.CreateDeploymentLog(
+			context.Background(),
+			db.CreateDeploymentLogParams{
+				DeploymentID: d.ID,
+				StepName:     sql.NullString{String: "build", Valid: true},
+				Line:         fmt.Sprintf("line-%03d", i),
+			},
+		); err != nil {
+			t.Fatalf("create deployment log: %v", err)
+		}
+	}
+
+	_, tokenPlain := seedAPIToken(t, h.repo, u.ID)
+	parser := cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
+	router := server.NewRouter(
+		h.repo,
+		h.runner,
+		parser,
+		handler.NewAuthHandler(h.repo),
+	)
+	req := httptest.NewRequest(
+		http.MethodGet,
+		fmt.Sprintf("/api/v1/deployments/%d/logs.txt", d.ID),
+		nil,
+	)
+	req.Header.Set("Authorization", "Bearer "+tokenPlain)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if got := strings.Count(body, "] line-"); got != total {
+		t.Fatalf("expected %d log lines in body, got %d", total, got)
+	}
+	lastPos := -1
+	for i := 0; i < total; i++ {
+		pos := strings.Index(body, fmt.Sprintf("line-%03d", i))
+		if pos < 0 || pos < lastPos {
+			t.Fatalf("log %d out of order or missing (pos %d, last %d)", i, pos, lastPos)
+		}
+		lastPos = pos
+	}
+}
+
 func TestExportLogs_NotFound(t *testing.T) {
 	h := newAPIHarness(t)
 	u := seedAPIUser(t, h.repo, "admin@example.com", "admin")

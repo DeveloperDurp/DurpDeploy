@@ -36,43 +36,72 @@ func (r *Repository) notifyRemoteWork() {
 	}
 }
 
-// ForEachDeploymentLogByDeploymentAsc streams deployment log rows oldest-first
-// in bounded batches. The rows are closed before fn is called so a slow export
-// client cannot pin a database connection.
+// ForEachDeploymentLogByDeploymentAsc streams deployment log rows
+// oldest-first in bounded batches of 256, and only rows that existed when
+// iteration started. Rows are closed before fn is called for a batch so a
+// slow export client cannot pin a database connection.
+//
+// The scope sort-key expressions below are repeated in the SELECT list
+// (aliased, so ORDER BY can use the aliases) and expanded inline in the
+// WHERE keyset predicate, which cannot use aliases. The query must not
+// wrap these in a subquery/CTE: the SQL Server LIMIT rewriter attaches
+// TOP to the first SELECT in the statement, so pagination must live on
+// the outermost select.
+const deploymentLogScopeGroupExpr = `
+    CASE
+        WHEN s.step_index IS NULL AND s.attempt IS NULL THEN 0 ELSE 1
+    END`
+
+const deploymentLogScopeSequenceExpr = `
+    CASE
+        WHEN s.step_index IS NULL AND s.attempt IS NULL
+            THEN COALESCE(s.sequence, -1)
+        ELSE -1
+    END`
+
 func (r *Repository) ForEachDeploymentLogByDeploymentAsc(
 	ctx context.Context,
 	deploymentID int64,
 	fn func(db.DeploymentLog) error,
 ) error {
+	// ponytail: each page rescans this deployment's logs because the sort
+	// keys are computed, not indexed — fine at realistic log volumes; if
+	// exports ever get huge, stream from one materialized ordered-id pass.
 	const batchSize = 256
+	var watermark int64
+	if err := r.DB.QueryRowContext(ctx, `
+SELECT COALESCE(MAX(id), 0)
+FROM deployment_logs
+WHERE deployment_id = ?`, deploymentID).Scan(&watermark); err != nil {
+		return err
+	}
+	query := fmt.Sprintf(`
+SELECT l.id, l.deployment_id, l.step_name, l.line, l.created_at,
+    %s AS scope_group, %s AS scope_sequence
+FROM deployment_logs l
+LEFT JOIN deployment_log_scopes s ON s.log_id = l.id
+WHERE l.deployment_id = ?
+    AND l.id <= ?
+    AND (
+        %s > ?
+        OR (%s = ? AND %s > ?)
+        OR (%s = ? AND %s = ? AND l.created_at > ?)
+        OR (%s = ? AND %s = ? AND l.created_at = ? AND l.id > ?)
+    )
+ORDER BY scope_group ASC, scope_sequence ASC, l.created_at ASC, l.id ASC
+LIMIT ?`,
+		deploymentLogScopeGroupExpr, deploymentLogScopeSequenceExpr,
+		deploymentLogScopeGroupExpr,
+		deploymentLogScopeGroupExpr, deploymentLogScopeSequenceExpr,
+		deploymentLogScopeGroupExpr, deploymentLogScopeSequenceExpr,
+		deploymentLogScopeGroupExpr, deploymentLogScopeSequenceExpr,
+	)
 	var lastScopeSequence, lastCreatedAt, lastID int64
 	lastScopeGroup := int64(-1)
 	for {
-		rows, err := r.DB.QueryContext(ctx, `
-WITH ordered_logs AS (
-    SELECT l.id, l.deployment_id, l.step_name, l.line, l.created_at,
-        CASE
-            WHEN s.step_index IS NULL AND s.attempt IS NULL THEN 0 ELSE 1
-        END AS scope_group,
-        CASE
-            WHEN s.step_index IS NULL AND s.attempt IS NULL
-                THEN COALESCE(s.sequence, -1)
-            ELSE -1
-        END AS scope_sequence
-    FROM deployment_logs l
-    LEFT JOIN deployment_log_scopes s ON s.log_id = l.id
-    WHERE l.deployment_id = ?
-)
-SELECT id, deployment_id, step_name, line, created_at,
-    scope_group, scope_sequence
-FROM ordered_logs
-WHERE scope_group > ?
-    OR (scope_group = ? AND scope_sequence > ?)
-    OR (scope_group = ? AND scope_sequence = ? AND created_at > ?)
-    OR (scope_group = ? AND scope_sequence = ? AND created_at = ? AND id > ?)
-ORDER BY scope_group ASC, scope_sequence ASC, created_at ASC, id ASC
-LIMIT ?`,
+		rows, err := r.DB.QueryContext(ctx, query,
 			deploymentID,
+			watermark,
 			lastScopeGroup,
 			lastScopeGroup, lastScopeSequence,
 			lastScopeGroup, lastScopeSequence, lastCreatedAt,
