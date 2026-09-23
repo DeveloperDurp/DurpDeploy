@@ -1129,7 +1129,9 @@ echo "  Release snapshot secret masked: OK"
 
 # A deployment using the masked round-trip still resolves the real
 # value: metadata-only update keeps it, the deploy substitutes it into
-# the step environment, and the log scrubber redacts it.
+# the step environment, and the log scrubber redacts it. The secret is
+# written in two halves so the scrubber must stitch the literal across
+# chunk boundaries; the live ndjson read below catches a regression.
 SECRET_MASKED_STEP=$(api_post \
     '{"name":"echo-secret","script_body":"echo secret=$E2E_SECRET"}' \
     "$BASE/api/v1/projects/$API_PROJECT_ID/steps")
@@ -1157,7 +1159,7 @@ deps = [d for d in json.loads(body)["items"] if d["release_id"] == '"$SECRET_DEP
 assert len(deps) == 1, deps
 print(deps[0]["id"])
 ')
-for i in {1..100}; do
+for i in {1..300}; do
     SECRET_DEPLOY_STATUS=$(api_get "$BASE/api/v1/deployments/$SECRET_DEPLOY_ID/status" \
         | python3 -c "import sys,json; print(json.load(sys.stdin)['status'])")
     [[ "$SECRET_DEPLOY_STATUS" =~ ^(failed|succeeded|cancelled)$ ]] && break
@@ -1177,6 +1179,30 @@ assert "secret=[REDACTED]" in lines, lines
 assert "e2e-super-secret" not in body, body
 '
 echo "  Deploy resolves stored secret despite masked reads: OK"
+
+# A6c: the same secret deployment re-read through the ndjson stream
+# endpoint after it completes: redaction that persists in the row
+# store must reach the streaming wire too.
+SECRET_STREAM_TMP=$(mktemp)
+# The stream stays attached after the replay; a bounded 20s window
+# costs the suite once per run but keeps the helper simple (the
+# awk-based early-exit variant hung in practice).
+timeout 20 curl -s -N -H "Authorization: Bearer $API_TOKEN"     "$BASE/api/v1/deployments/$SECRET_DEPLOY_ID/logs/stream?format=ndjson"     >"$SECRET_STREAM_TMP" 2>/dev/null || true
+if grep -q "$SECRET_E2E_VALUE" "$SECRET_STREAM_TMP"; then
+    echo "FAIL: ndjson stream persisted the secret value:" >&2
+    grep "$SECRET_E2E_VALUE" "$SECRET_STREAM_TMP" | head -2 >&2
+    rm -f "$SECRET_STREAM_TMP"
+    exit 1
+fi
+LIVE_I=$(grep -c "secret=\[REDACTED\]" "$SECRET_STREAM_TMP" 2>/dev/null) || true
+[[ "$LIVE_I" -ge 1 ]] || {
+    echo "FAIL: ndjson stream never carried the scrubbed line:" >&2
+    head -3 "$SECRET_STREAM_TMP" >&2
+    rm -f "$SECRET_STREAM_TMP"
+    exit 1
+}
+rm -f "$SECRET_STREAM_TMP"
+echo "  Log streaming redacts stored secret rows: OK"
 
 # A7: Deployment create + status + cancel.
 API_DEP=$(api_post "{\"release_id\":$API_RELEASE_ID,\"environment_id\":$API_ENV_ID}" \

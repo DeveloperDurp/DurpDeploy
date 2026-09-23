@@ -14,6 +14,11 @@ on:
   push:
     branches: [main]
     tags: ['*']
+  # PR runs gate the merge: lint, test, and e2e all execute per PR. The
+  # artifact-publishing jobs below are event-gated to push/dispatch
+  # only, so PR runs never push images, charts, or release assets.
+  pull_request:
+    types: [opened, synchronize, reopened]
   workflow_dispatch: {}
 
 # Cancel any in-flight run for the same ref when a new commit lands. Saves
@@ -52,6 +57,9 @@ jobs:
   # ----- Compute version once, share with downstream jobs ----------------
   version:
     name: Compute version
+    # Cheap and harmless on PRs: computing a version string has no
+    # side effects; the publishing jobs that consume it are separately
+    # event-gated.
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.v.outputs.version }}
@@ -129,6 +137,31 @@ jobs:
             exit 1
           fi
 
+      - name: golines
+        run: |
+          # Same check the pre-commit hook runs on staged files, scoped
+          # to the Go files this PR changes (golines' output is
+          # toolchain-sensitive, so a repo-wide gate would fail on
+          # main's historical formatting, not on this diff). Pinned
+          # `go run` keeps the lint job's dependency at a fixed version
+          # without touching go.mod/go.sum (no manifest churn).
+          # checkout is shallow; unshallow so the merge base with main
+          # is resolvable for the changed-file diff.
+          git fetch --unshallow origin main
+          files=$(git diff --name-only --diff-filter=ACMR origin/main...HEAD -- '*.go')
+          if [ -z "$files" ]; then
+            exit 0
+          fi
+          set -e
+          out=(
+            $(go run github.com/segmentio/golines@v0.13.0               -m 80 --ignore-generated -l $files)
+          )
+          if [ -n "$out" ]; then
+            echo "Files needing golines:"
+            echo "$out"
+            exit 1
+          fi
+
       - name: hadolint
         uses: hadolint/hadolint-action@2332a7b74a6de0dda2e2221d575162eba76ba5e5 # v3.3.0
         with:
@@ -169,14 +202,57 @@ jobs:
       - name: go test
         run: go test -v -count=1 ./...
 
+  # ----- E2E contract checks -----------------------------------------------
+  # The isolated script builds and starts its own throwaway SQLite server,
+  # then asserts the browser, JSON API, secret masking, and log scrubbing
+  # contracts end to end (scripts/e2e_test.sh). python3 is preinstalled on
+  # ubuntu-latest; the script tears down its own server and DB.
+  e2e:
+    name: E2E
+    runs-on: ubuntu-latest
+    needs: [test]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: '1.25'
+          cache: true
+
+      # Same pinned-container pattern the sonarcloud job uses for templ.
+      # No npm needed: the script does a plain `go build`, and the CSS/JS
+      # bundles are committed; static/swagger-ui/ materializes via make.
+      - name: Materialize static/swagger-ui/
+        run: make swagger-ui-copy
+
+      - name: Generate templ files
+        run: |
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            --volume "$PWD:/workspace" \
+            --workdir /workspace \
+            ghcr.io/a-h/templ@sha256:2e266c40e32de7fa67e08018a06675975ccb7e86110dae7a7c0b0131adaab41d \
+            generate
+
+      # The script handles its own build, admin seeding, secret key,
+      # server lifecycle, and teardown; calling it directly skips the
+      # npm-dependent `make build` this job does not need.
+      - name: E2E contract checks
+        run: ./scripts/e2e_test.sh
+
   # ----- Container image (multi-arch) ------------------------------------
   # Buildx with the docker-container driver, registry cache, push to ghcr.
   # Mirrors the GitLab docker:build stage. Tags are computed from the
   # shared `version` job: tag pushes get vX.Y.Z, main pushes get <sha>.
   docker:
     name: Build & push image
+    if: >-
+      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    needs: [version, test]
+    needs: [version, test, e2e]
     permissions:
       contents: read
       packages: write
@@ -245,8 +321,11 @@ jobs:
   # `version` is also bumped (SemVer, no leading v).
   helm:
     name: Package & push chart
+    if: >-
+      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    needs: [version, test]
+    needs: [version, test, e2e]
     permissions:
       contents: read
       packages: write
