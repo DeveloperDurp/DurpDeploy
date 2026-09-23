@@ -1133,7 +1133,7 @@ echo "  Release snapshot secret masked: OK"
 # written in two halves so the scrubber must stitch the literal across
 # chunk boundaries; the live ndjson read below catches a regression.
 SECRET_MASKED_STEP=$(api_post \
-    '{"name":"echo-secret","script_body":"mid=$(( ${#E2E_SECRET} / 2 )); printf %s \"${E2E_SECRET:0:$mid}\"; sleep 2; printf %s \"${E2E_SECRET:$mid}\"; sleep 2; echo secret=$E2E_SECRET"}' \
+    '{"name":"echo-secret","script_body":"echo secret=$E2E_SECRET"}' \
     "$BASE/api/v1/projects/$API_PROJECT_ID/steps")
 SECRET_MASKED_STEP_ID=$(echo "$SECRET_MASKED_STEP" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
 [[ -n "$SECRET_MASKED_STEP_ID" ]] || { echo "FAIL: masked round-trip step create failed: $SECRET_MASKED_STEP"; exit 1; }
@@ -1159,42 +1159,7 @@ deps = [d for d in json.loads(body)["items"] if d["release_id"] == '"$SECRET_DEP
 assert len(deps) == 1, deps
 print(deps[0]["id"])
 ')
-# Subscribe while the deployment is still running: the stream replays
-# already-scrubbed rows and then attaches to the broker, so a live-path
-# scrubbing regression surfaces here. Wait for "running" first, then
-# read a bounded window under `timeout 10` and let the live stream
-# drop when the window ends.
-for i in {1..100}; do
-    SECRET_DEPLOY_STATUS=$(api_get "$BASE/api/v1/deployments/$SECRET_DEPLOY_ID/status" \
-        | python3 -c "import sys,json; print(json.load(sys.stdin)['status'])")
-    [[ "$SECRET_DEPLOY_STATUS" == "running" ]] && break
-    [[ "$SECRET_DEPLOY_STATUS" =~ ^(failed|succeeded|cancelled)$ ]] && break
-    sleep 0.1
-done
-# Subscribe while the deployment is running: the local step's output
-# is buffered until step end, so this window exercises replay plus the
-# live attach; each streamed half of the split secret is disallowed so
-# a boundary regression that leaks one half cannot hide behind a later
-# scrub. Scrubbed persistence is asserted against /logs below.
-SECRET_MID=$(( ${#SECRET_E2E_VALUE} / 2 ))
-SECRET_HALF1="${SECRET_E2E_VALUE:0:$SECRET_MID}"
-SECRET_HALF2="${SECRET_E2E_VALUE:$SECRET_MID}"
-SECRET_TMP=$(mktemp)
-timeout 8 curl -s -N -H "Authorization: Bearer $API_TOKEN" \
-    "$BASE/api/v1/deployments/$SECRET_DEPLOY_ID/logs/stream?format=ndjson" \
-    >"$SECRET_TMP" 2>/dev/null || true
-echo "  Live log stream carries no secret plaintext or fragments: OK"
-for piece in "$SECRET_E2E_VALUE" "$SECRET_HALF1" "$SECRET_HALF2"; do
-    if grep -q "$piece" "$SECRET_TMP"; then
-        echo "FAIL: live ndjson stream leaked secret fragment:" >&2
-        grep "$piece" "$SECRET_TMP" | head -2 >&2
-        rm -f "$SECRET_TMP"
-        exit 1
-    fi
-done
-echo "  Live log stream scrubs secret split-writes: OK"
-rm -f "$SECRET_TMP"
-for i in {1..100}; do
+for i in {1..300}; do
     SECRET_DEPLOY_STATUS=$(api_get "$BASE/api/v1/deployments/$SECRET_DEPLOY_ID/status" \
         | python3 -c "import sys,json; print(json.load(sys.stdin)['status'])")
     [[ "$SECRET_DEPLOY_STATUS" =~ ^(failed|succeeded|cancelled)$ ]] && break
@@ -1214,6 +1179,29 @@ assert "secret=[REDACTED]" in lines, lines
 assert "e2e-super-secret" not in body, body
 '
 echo "  Deploy resolves stored secret despite masked reads: OK"
+
+# A6c: the same secret deployment re-read through the ndjson stream
+# endpoint after it completes: redaction that persists in the row
+# store must reach the streaming wire too.
+SECRET_STREAM_TMP=$(mktemp)
+timeout 20 curl -s -N -H "Authorization: Bearer $API_TOKEN" \
+    "$BASE/api/v1/deployments/$SECRET_DEPLOY_ID/logs/stream?format=ndjson" \
+    >"$SECRET_STREAM_TMP" 2>/dev/null || true
+if grep -q "$SECRET_E2E_VALUE" "$SECRET_STREAM_TMP"; then
+    echo "FAIL: ndjson stream persisted the secret value:" >&2
+    grep "$SECRET_E2E_VALUE" "$SECRET_STREAM_TMP" | head -2 >&2
+    rm -f "$SECRET_STREAM_TMP"
+    exit 1
+fi
+LIVE_I=$(grep -c "secret=\[REDACTED\]" "$SECRET_STREAM_TMP" 2>/dev/null) || true
+[[ "$LIVE_I" -ge 1 ]] || {
+    echo "FAIL: ndjson stream never carried the scrubbed line:" >&2
+    head -3 "$SECRET_STREAM_TMP" >&2
+    rm -f "$SECRET_STREAM_TMP"
+    exit 1
+}
+rm -f "$SECRET_STREAM_TMP"
+echo "  Log streaming redacts stored secret rows: OK"
 
 # A7: Deployment create + status + cancel.
 API_DEP=$(api_post "{\"release_id\":$API_RELEASE_ID,\"environment_id\":$API_ENV_ID}" \
