@@ -1,7 +1,7 @@
 # AGENTS.md
 
 Single-binary Go app: deploy bash scripts against environments with live SSE logs.
-Stack: Go 1.25 + chi + SQLite (modernc.org/sqlite, pure Go, no CGO) + sqlc + goose + templ + HTMX + Alpine + Tailwind/DaisyUI.
+Stack: Go 1.26 + chi + SQLite (modernc.org/sqlite, pure Go, no CGO) + sqlc + goose + templ + HTMX + Alpine + Tailwind/DaisyUI.
 
 ## Critical build gotcha
 

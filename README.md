@@ -21,7 +21,7 @@ A single-binary deployment tool for running bash scripts against environments. D
 
 ### Prerequisites
 
-- Go 1.25+
+- Go 1.26+
 - Node.js (for Tailwind CSS build)
 - [templ CLI](https://templ.guide/quick-start/installation)
 - [sqlc](https://docs.sqlc.dev/en/latest/overview/install.html) (only if modifying queries)
