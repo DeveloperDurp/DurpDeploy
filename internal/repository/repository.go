@@ -41,56 +41,23 @@ func (r *Repository) notifyRemoteWork() {
 // iteration started. Rows are closed before fn is called for a batch so a
 // slow export client cannot pin a database connection.
 //
-// The scope sort-key expressions below are repeated in the SELECT list
-// (aliased, so ORDER BY can use the aliases) and expanded inline in the
-// WHERE keyset predicate, which cannot use aliases. The query must not
-// wrap these in a subquery/CTE: the SQL Server LIMIT rewriter attaches
-// TOP to the first SELECT in the statement, so pagination must live on
-// the outermost select.
-const deploymentLogScopeGroupExpr = `
-    CASE
-        WHEN s.step_index IS NULL AND s.attempt IS NULL THEN 0 ELSE 1
-    END`
-
-const deploymentLogScopeSequenceExpr = `
-    CASE
-        WHEN s.step_index IS NULL AND s.attempt IS NULL
-            THEN COALESCE(s.sequence, -1)
-        ELSE -1
-    END`
-
-// The folded query is a compile-time string constant: nothing is
-// interpolated at runtime, every value flows through ? placeholders.
-const deploymentLogPageQuery = `
-SELECT l.id, l.deployment_id, l.step_name, l.line, l.created_at,
-    ` + deploymentLogScopeGroupExpr + ` AS scope_group,
-    ` + deploymentLogScopeSequenceExpr + ` AS scope_sequence
-FROM deployment_logs l
-LEFT JOIN deployment_log_scopes s ON s.log_id = l.id
-WHERE l.deployment_id = ?
-    AND l.id <= ?
-    AND (
-        ` + deploymentLogScopeGroupExpr + ` > ?
-        OR (` + deploymentLogScopeGroupExpr + ` = ?
-            AND ` + deploymentLogScopeSequenceExpr + ` > ?)
-        OR (` + deploymentLogScopeGroupExpr + ` = ?
-            AND ` + deploymentLogScopeSequenceExpr + ` = ?
-            AND l.created_at > ?)
-        OR (` + deploymentLogScopeGroupExpr + ` = ?
-            AND ` + deploymentLogScopeSequenceExpr + ` = ?
-            AND l.created_at = ? AND l.id > ?)
-    )
-ORDER BY scope_group ASC, scope_sequence ASC, l.created_at ASC, l.id ASC
-LIMIT ?`
-
+// The WHERE clause bounds iteration to a max(id) watermark taken up
+// front: without it, logs appended by an active deployment would keep
+// extending the export (and SSE historical replay) indefinitely. Pages
+// are plain OFFSET reads — the watermark freezes the row set and the
+// trailing l.id tiebreak makes the order total, so pages stay stable.
+//
+// The select must stay outermost (no subquery/CTE wrap): the SQL Server
+// LIMIT rewriter attaches TOP to the first SELECT in the statement.
+//
+// ponytail: each page rescans this deployment's logs because the sort
+// keys are computed, not indexed — fine at realistic log volumes; if
+// exports ever get huge, stream from one materialized ordered-id pass.
 func (r *Repository) ForEachDeploymentLogByDeploymentAsc(
 	ctx context.Context,
 	deploymentID int64,
 	fn func(db.DeploymentLog) error,
 ) error {
-	// ponytail: each page rescans this deployment's logs because the sort
-	// keys are computed, not indexed — fine at realistic log volumes; if
-	// exports ever get huge, stream from one materialized ordered-id pass.
 	const batchSize = 256
 	var watermark int64
 	if err := r.DB.QueryRowContext(ctx, `
@@ -99,18 +66,23 @@ FROM deployment_logs
 WHERE deployment_id = ?`, deploymentID).Scan(&watermark); err != nil {
 		return err
 	}
-	var lastScopeSequence, lastCreatedAt, lastID int64
-	lastScopeGroup := int64(-1)
+	var offset int64
 	for {
-		rows, err := r.DB.QueryContext(ctx, deploymentLogPageQuery,
-			deploymentID,
-			watermark,
-			lastScopeGroup,
-			lastScopeGroup, lastScopeSequence,
-			lastScopeGroup, lastScopeSequence, lastCreatedAt,
-			lastScopeGroup, lastScopeSequence, lastCreatedAt, lastID,
-			batchSize,
-		)
+		rows, err := r.DB.QueryContext(ctx, `
+SELECT l.id, l.deployment_id, l.step_name, l.line, l.created_at
+FROM deployment_logs l
+LEFT JOIN deployment_log_scopes s ON s.log_id = l.id
+WHERE l.deployment_id = ?
+    AND l.id <= ?
+ORDER BY CASE
+    WHEN s.step_index IS NULL AND s.attempt IS NULL THEN 0 ELSE 1
+END,
+CASE
+    WHEN s.step_index IS NULL AND s.attempt IS NULL
+        THEN COALESCE(s.sequence, -1) ELSE -1
+END,
+l.created_at ASC, l.id ASC
+LIMIT ? OFFSET ?`, deploymentID, watermark, batchSize, offset)
 		if err != nil {
 			return err
 		}
@@ -124,8 +96,6 @@ WHERE deployment_id = ?`, deploymentID).Scan(&watermark); err != nil {
 				&log.StepName,
 				&log.Line,
 				&log.CreatedAt,
-				&lastScopeGroup,
-				&lastScopeSequence,
 			); err != nil {
 				return errors.Join(err, rows.Close())
 			}
@@ -143,11 +113,10 @@ WHERE deployment_id = ?`, deploymentID).Scan(&watermark); err != nil {
 				return err
 			}
 		}
+		offset += int64(len(logs))
 		if len(logs) < batchSize {
 			return nil
 		}
-		last := logs[len(logs)-1]
-		lastCreatedAt, lastID = last.CreatedAt, last.ID
 	}
 }
 
