@@ -31,9 +31,11 @@ tests=(
 	TestRemoteLogAndTerminalRevocationAcrossDatabases
 	TestPollReplacesInterpreterCapabilitiesByProtocol
 	TestRemoteStepPayloadIncludesNonBashInterpreter
+	TestPayloadMarshalOmitsBashInterpreterForLegacyAgents
 	TestAgentPollCapabilityReplacementIsTransactional
 	TestAgentPollCapabilityRemovalFailsWaitingRuns
 	TestAgentInterpretersMigrationBackfillsBashForPairedAgents
+	TestPairingReactivationClearsStaleInterpreterCapabilities
 	TestRunner_FailsWhenNoAgentSupportsInterpreter
 )
 required=$(IFS='|'; printf '%s' "${tests[*]}")
