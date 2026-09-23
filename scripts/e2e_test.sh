@@ -1178,6 +1178,23 @@ assert "e2e-super-secret" not in body, body
 '
 echo "  Deploy resolves stored secret despite masked reads: OK"
 
+# The live ndjson stream must scrub the same literal; split-write
+# regressions only show through chunk boundaries, so re-read the
+# secret deployment via the streaming endpoint before it is pruned.
+SECRET_STREAM=$(curl -s -m 5 -H "Authorization: Bearer $API_TOKEN" \
+    "$BASE/api/v1/deployments/$SECRET_DEPLOY_ID/logs/stream?format=ndjson") || true
+if echo "$SECRET_STREAM" | grep -q "$SECRET_E2E_VALUE"; then
+    echo "FAIL: ndjson log stream leaked the secret value:" >&2
+    echo "$SECRET_STREAM" | grep "$SECRET_E2E_VALUE" | head -2 >&2
+    exit 1
+fi
+CURSED_LINE=$(echo "$SECRET_STREAM" | grep -c "secret=\[REDACTED\]") || true
+[[ "$CURSED_LINE" -ge 1 ]] || {
+    echo "FAIL: ndjson stream did not carry the scrubbed secret line" >&2
+    exit 1
+}
+echo "  Log stream scrubs secret value: OK"
+
 # A7: Deployment create + status + cancel.
 API_DEP=$(api_post "{\"release_id\":$API_RELEASE_ID,\"environment_id\":$API_ENV_ID}" \
     "$BASE/api/v1/projects/$API_PROJECT_ID/deployments")
