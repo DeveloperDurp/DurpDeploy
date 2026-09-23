@@ -206,7 +206,9 @@ golines-check:
 		files="$$files $$(git diff --name-only --diff-filter=ACMR origin/main...HEAD -- '*.go' || true)"; \
 	fi; \
 	if [ -z "$$files" ]; then exit 0; fi; \
-	files=$$(echo $$files | tr ' ' '\n' | sort -u | tr '\n' ' '); \
+	files=$$(echo $$files | tr ' ' '\n' | grep -v '^$$' | sort -u | tr '\n' ' '); \
+	files=$$(echo $$files); \
+	if [ -z "$$files" ]; then exit 0; fi; \
 	out=$$(golines --max-len=80 --ignore-generated -l $$files); \
 	if [ -n "$$out" ]; then \
 		echo "Files needing golines:"; \
