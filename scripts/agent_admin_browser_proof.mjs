@@ -15,6 +15,7 @@ const defaultAgentRoot = resolve(root, "../durpdeploy-agent-continue-remote-agen
 const evidenceFlag = process.argv.indexOf("--evidence-dir");
 const faultFlag = process.argv.indexOf("--fault-scenario");
 const lifecycle = process.argv.includes("--lifecycle");
+const mixedInterpreter = process.argv.includes("--mixed-interpreter");
 const faultScenario = faultFlag >= 0 ? process.argv[faultFlag + 1] : "";
 const evidenceDir = resolve(
 	evidenceFlag >= 0 ? process.argv[evidenceFlag + 1] :
@@ -41,6 +42,7 @@ let agentRun = 0;
 let browser;
 let currentAgentContainer = agentContainer;
 let lifecycleProxy;
+let mixedScenario = null;
 let pairingProxy;
 let server;
 let serverErrors = "";
@@ -528,16 +530,6 @@ async function main() {
 			name: "agent-only", sort_order: 1, timeout_seconds: 30, max_retries: 0,
 			script_body: `if [ "$LANG" != "ddp-agent-${nonce}" ]; then echo SERVER_EXECUTION_MARKER; exit 91; fi\nprintf '%s\\n' 'AGENT_EXECUTION_MARKER:${nonce}' 'todo12-secret' 'remote-agent-ok'`,
 		});
-		if (hostAgent) {
-			await api("POST", `/projects/${project.id}/steps`, {
-				agent_selectors: ["linux"],
-				execution_target: "agent",
-				interpreter: "python3",
-				name: "python-agent", sort_order: 2,
-				timeout_seconds: 30, max_retries: 0,
-				script_body: "print('PYTHON_AGENT_MARKER')",
-			});
-		}
 		const release = await api("POST", `/projects/${project.id}/releases`, { version: "todo12-v1" });
 		const deployment = await api("POST", `/projects/${project.id}/deployments`, {
 			release_id: release.id,
@@ -572,12 +564,6 @@ async function main() {
 		check(![...streamed, ...lines].some((line) =>
 			line.includes("SERVER_EXECUTION_MARKER") || line.includes("todo12-secret")),
 		"execution or secret marker leaked");
-		const pythonInterpreterExecuted = lines.some((line) =>
-			line.includes("PYTHON_AGENT_MARKER"));
-		if (hostAgent) {
-			check(pythonInterpreterExecuted,
-				`Python agent marker missing from ${JSON.stringify(lines)}`);
-		}
 		const failedProject = await api("POST", "/projects", { name: "Todo 12 retry project" });
 		await api("POST", `/projects/${failedProject.id}/steps`, {
 			agent_selectors: ["linux"],
@@ -597,6 +583,65 @@ async function main() {
 		const remoteState = await command("sqlite3", ["-readonly", database,
 			`SELECT COUNT(*)||'|'||COUNT(DISTINCT agent_id) FROM remote_step_runs WHERE deployment_id IN (${failedDeployment.id},${retry.id}) AND state='failed';`]);
 		check(remoteState.trim() === "2|1", `retry claims were ${remoteState.trim()}`);
+		if (mixedInterpreter) {
+			const interpreters = (await readOnly(
+				`SELECT interpreter FROM agent_interpreters WHERE agent_id='${pairedAgentID}' ORDER BY interpreter;`,
+			)).trim().split("\n").filter(Boolean);
+			check(interpreters.includes("bash"),
+				`agent did not report bash capability: ${JSON.stringify(interpreters)}`);
+			const pythonCapable = interpreters.includes("python3");
+			const mixedProject = await api("POST", "/projects", { name: "Todo 12 mixed interpreter project" });
+			await api("POST", `/projects/${mixedProject.id}/steps`, {
+				agent_selectors: ["linux"],
+				execution_target: "agent",
+				name: "mixed-bash", sort_order: 1, timeout_seconds: 30, max_retries: 0,
+				script_body: `printf '%s\\n' 'MIXED_BASH_MARKER:${nonce}' 'remote-agent-ok'`,
+			});
+			await api("POST", `/projects/${mixedProject.id}/steps`, {
+				agent_selectors: ["linux"],
+				execution_target: "agent",
+				interpreter: "python3",
+				name: "mixed-python", sort_order: 2,
+				timeout_seconds: 30, max_retries: 0,
+				script_body: "print('MIXED_PYTHON_MARKER')",
+			});
+			const mixedRelease = await api("POST", `/projects/${mixedProject.id}/releases`, { version: "todo12-mixed-v1" });
+			const mixedDeployment = await api("POST", `/projects/${mixedProject.id}/deployments`, {
+				release_id: mixedRelease.id,
+				environment_id: Number(environmentID),
+			});
+			if (pythonCapable) {
+				const [mixedStreamed] = await Promise.all([
+					streamLogs(mixedDeployment.id),
+					waitForStatus(mixedDeployment.id, "succeeded"),
+				]);
+				const mixedLogs = await api("GET", `/deployments/${mixedDeployment.id}/logs`);
+				const mixedLines = mixedLogs.map((entry) => entry.line);
+				check(mixedStreamed.some((line) => line.includes(`MIXED_BASH_MARKER:${nonce}`)) &&
+					mixedLines.some((line) => line.includes("MIXED_PYTHON_MARKER")),
+				`mixed-interpreter logs were ${JSON.stringify(mixedLines)}`);
+			} else {
+				await waitForStatus(mixedDeployment.id, "failed");
+				const mixedLogs = await api("GET", `/deployments/${mixedDeployment.id}/logs`);
+				const mixedLines = mixedLogs.map((entry) => entry.line);
+				check(mixedLines.some((line) => line.includes(`MIXED_BASH_MARKER:${nonce}`)),
+					`bash step did not run before the unsupported step: ${JSON.stringify(mixedLines)}`);
+				check(mixedLines.some((line) =>
+					line.includes('no compatible agents support interpreter "python3"')),
+				`unsupported interpreter message missing: ${JSON.stringify(mixedLines)}`);
+			}
+			const dispatched = await readOnly(
+				`SELECT COUNT(*)||'|'||COUNT(DISTINCT agent_id) FROM remote_step_runs ` +
+				`WHERE deployment_id=${mixedDeployment.id} AND state='succeeded';`);
+			check(dispatched.trim() === (pythonCapable ? "2|1" : "1|1"),
+				`mixed dispatch claims were ${dispatched.trim()}`);
+			mixedScenario = {
+				deploymentID: mixedDeployment.id,
+				interpreters,
+				outcome: pythonCapable ? "succeeded" : "failed-no-compatible-agents",
+				remoteStepRuns: dispatched.trim(),
+			};
+		}
 		try {
 			await command("test", ["!", "-e", sentinelMarker]);
 		} catch (error) {
@@ -609,8 +654,7 @@ async function main() {
 			remoteClaims: remoteState.trim(),
 			retryDeploymentID: retry.id,
 			serverBashInvoked: false,
-			mixedInterpreter: hostAgent,
-			pythonInterpreterExecuted,
+			mixedInterpreter: mixedScenario,
 		}, null, 2)}\n`);
 		}
 	}
@@ -696,6 +740,8 @@ async function main() {
 			scenario: faultScenario,
 		}, null, 2)}\n`);
 		console.log(`PASS ${faultScenario}`);
+	} else if (mixedInterpreter) {
+		console.log("PASS mixed-interpreter");
 	}
 }
 

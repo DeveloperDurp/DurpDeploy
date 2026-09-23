@@ -755,6 +755,13 @@ CODE=$(api_post_code '{"name":"invalid","interpreter":"/bin/sh"}' \
     "$BASE/api/v1/projects/$INTERPRETER_PROJECT_ID/steps")
 [[ "$CODE" == "400" ]] || { echo "FAIL: invalid interpreter got $CODE, want 400"; exit 1; }
 
+CODE=$(curl_silent -X POST \
+    --data-urlencode 'name=invalid-web' \
+    --data-urlencode 'script_body=echo nope' \
+    -d "interpreter=/bin/sh&sort_order=1&execution_target=local&csrf_token=$CSRF" \
+    "$BASE/projects/$INTERPRETER_PROJECT_ID/steps")
+[[ "$CODE" == "422" ]] || { echo "FAIL: web invalid interpreter got $CODE, want 422"; exit 1; }
+
 INTERPRETER_BASH_STEP=$(api_post \
     '{"name":"bash-step","script_body":"echo bash-e2e","interpreter":"bash"}' \
     "$BASE/api/v1/projects/$INTERPRETER_PROJECT_ID/steps")

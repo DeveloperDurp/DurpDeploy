@@ -17,6 +17,20 @@ func TestRetryDeploymentCreatesLocalSnapshot(t *testing.T) {
 	project := seedProject(t, harness.repo)
 	environment := seedEnv(t, harness.repo)
 	release := seedRelease(t, harness.repo, project.ID)
+	const mixedSteps = `[` +
+		`{"name":"bash-step","script_body":"echo hi",` +
+		`"interpreter":"bash","execution_target":"local"},` +
+		`{"name":"python-step","script_body":"print('ok')",` +
+		`"interpreter":"python3","execution_target":"local"}]`
+	if _, err := harness.repo.Queries.UpdateRelease(
+		context.Background(),
+		db.UpdateReleaseParams{
+			ID: release.ID, ProjectID: project.ID,
+			Version: release.Version, StepsJson: mixedSteps,
+		},
+	); err != nil {
+		t.Fatal(err)
+	}
 	sourceResult, err := harness.repo.CreateDeployment(
 		context.Background(),
 		db.CreateDeploymentParams{
@@ -98,5 +112,26 @@ func TestRetryDeploymentCreatesLocalSnapshot(t *testing.T) {
 		retried.ID,
 	); err != nil {
 		t.Fatalf("retry source snapshot: %v", err)
+	}
+	retriedSteps, err := harness.repo.Queries.ListDeploymentSteps(
+		context.Background(),
+		retried.ID,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantInterpreters := map[string]string{
+		"bash-step": "bash", "python-step": "python3",
+	}
+	if len(retriedSteps) != len(wantInterpreters) {
+		t.Fatalf("retry steps = %+v", retriedSteps)
+	}
+	for _, step := range retriedSteps {
+		if want := wantInterpreters[step.Name]; step.Interpreter != want {
+			t.Fatalf(
+				"step %q interpreter=%q want %q",
+				step.Name, step.Interpreter, want,
+			)
+		}
 	}
 }
