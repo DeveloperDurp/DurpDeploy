@@ -83,6 +83,23 @@ func TestDeploymentRunner_CommandReportsMissingInterpreter(t *testing.T) {
 	}
 }
 
+func TestDeploymentRunner_CommandUsesPwshInterpreter(t *testing.T) {
+	pwsh, err := exec.LookPath("pwsh")
+	if err != nil {
+		t.Skip("pwsh is not installed")
+	}
+	scriptPath := filepath.Join(t.TempDir(), "script.ps1")
+	cmd, err := (&DeploymentRunner{}).command(
+		t.Context(), filepath.Dir(scriptPath), scriptPath, "pwsh",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{pwsh, scriptPath}; !slices.Equal(cmd.Args, want) {
+		t.Fatalf("command args = %q, want %q", cmd.Args, want)
+	}
+}
+
 func TestDeploymentRunner_CommandUsesSelectedInterpreter(t *testing.T) {
 	python, err := exec.LookPath("python3")
 	if err != nil {
