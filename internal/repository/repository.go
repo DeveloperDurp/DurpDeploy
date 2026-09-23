@@ -59,6 +59,30 @@ const deploymentLogScopeSequenceExpr = `
         ELSE -1
     END`
 
+// The folded query is a compile-time string constant: nothing is
+// interpolated at runtime, every value flows through ? placeholders.
+const deploymentLogPageQuery = `
+SELECT l.id, l.deployment_id, l.step_name, l.line, l.created_at,
+    ` + deploymentLogScopeGroupExpr + ` AS scope_group,
+    ` + deploymentLogScopeSequenceExpr + ` AS scope_sequence
+FROM deployment_logs l
+LEFT JOIN deployment_log_scopes s ON s.log_id = l.id
+WHERE l.deployment_id = ?
+    AND l.id <= ?
+    AND (
+        ` + deploymentLogScopeGroupExpr + ` > ?
+        OR (` + deploymentLogScopeGroupExpr + ` = ?
+            AND ` + deploymentLogScopeSequenceExpr + ` > ?)
+        OR (` + deploymentLogScopeGroupExpr + ` = ?
+            AND ` + deploymentLogScopeSequenceExpr + ` = ?
+            AND l.created_at > ?)
+        OR (` + deploymentLogScopeGroupExpr + ` = ?
+            AND ` + deploymentLogScopeSequenceExpr + ` = ?
+            AND l.created_at = ? AND l.id > ?)
+    )
+ORDER BY scope_group ASC, scope_sequence ASC, l.created_at ASC, l.id ASC
+LIMIT ?`
+
 func (r *Repository) ForEachDeploymentLogByDeploymentAsc(
 	ctx context.Context,
 	deploymentID int64,
@@ -75,31 +99,10 @@ FROM deployment_logs
 WHERE deployment_id = ?`, deploymentID).Scan(&watermark); err != nil {
 		return err
 	}
-	query := fmt.Sprintf(`
-SELECT l.id, l.deployment_id, l.step_name, l.line, l.created_at,
-    %s AS scope_group, %s AS scope_sequence
-FROM deployment_logs l
-LEFT JOIN deployment_log_scopes s ON s.log_id = l.id
-WHERE l.deployment_id = ?
-    AND l.id <= ?
-    AND (
-        %s > ?
-        OR (%s = ? AND %s > ?)
-        OR (%s = ? AND %s = ? AND l.created_at > ?)
-        OR (%s = ? AND %s = ? AND l.created_at = ? AND l.id > ?)
-    )
-ORDER BY scope_group ASC, scope_sequence ASC, l.created_at ASC, l.id ASC
-LIMIT ?`,
-		deploymentLogScopeGroupExpr, deploymentLogScopeSequenceExpr,
-		deploymentLogScopeGroupExpr,
-		deploymentLogScopeGroupExpr, deploymentLogScopeSequenceExpr,
-		deploymentLogScopeGroupExpr, deploymentLogScopeSequenceExpr,
-		deploymentLogScopeGroupExpr, deploymentLogScopeSequenceExpr,
-	)
 	var lastScopeSequence, lastCreatedAt, lastID int64
 	lastScopeGroup := int64(-1)
 	for {
-		rows, err := r.DB.QueryContext(ctx, query,
+		rows, err := r.DB.QueryContext(ctx, deploymentLogPageQuery,
 			deploymentID,
 			watermark,
 			lastScopeGroup,

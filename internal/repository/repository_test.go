@@ -93,6 +93,100 @@ func TestDeploymentLogIterationReleasesConnectionBeforeCallback(t *testing.T) {
 	}
 }
 
+// legacyLogOrder returns the deployment's log ids in the ordering the
+// pre-batching single query produced, as the equivalence oracle for the
+// batched iteration.
+func legacyLogOrder(
+	t *testing.T,
+	repo *repository.Repository,
+	deploymentID int64,
+) []int64 {
+	t.Helper()
+	rows, err := repo.DB.Query(`
+SELECT l.id
+FROM deployment_logs l
+LEFT JOIN deployment_log_scopes s ON s.log_id = l.id
+WHERE l.deployment_id = ?
+ORDER BY CASE
+    WHEN s.step_index IS NULL AND s.attempt IS NULL THEN 0 ELSE 1
+END,
+CASE
+    WHEN s.step_index IS NULL AND s.attempt IS NULL THEN s.sequence
+END,
+l.created_at ASC, l.id ASC`, deploymentID)
+	if err != nil {
+		t.Fatalf("reference query: %v", err)
+	}
+	defer rows.Close()
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			t.Fatalf("scan reference: %v", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("reference rows: %v", err)
+	}
+	return ids
+}
+
+// seedBatchOrderLogs creates 600 mixed logs (every third one carrying a
+// step scope) for the batch-boundary ordering test.
+func seedBatchOrderLogs(
+	t *testing.T,
+	repo *repository.Repository,
+	ctx context.Context,
+	deploymentID int64,
+) {
+	t.Helper()
+	if _, err := repo.DB.Exec(
+		`INSERT INTO deployment_steps
+			(deployment_id, step_index, name, script_body)
+			VALUES (?, 0, 'step', 'echo')`,
+		deploymentID,
+	); err != nil {
+		t.Fatalf("create step: %v", err)
+	}
+	if _, err := repo.DB.Exec(
+		`INSERT INTO deployment_step_attempts
+			(deployment_id, step_index, attempt, wait_deadline)
+			VALUES (?, 0, 1, 0)`,
+		deploymentID,
+	); err != nil {
+		t.Fatalf("create step attempt: %v", err)
+	}
+	const total = 600
+	for i := 0; i < total; i++ {
+		log, err := repo.Queries.CreateDeploymentLog(
+			ctx,
+			db.CreateDeploymentLogParams{
+				DeploymentID: deploymentID,
+				Line:         fmt.Sprintf("line-%d", i),
+			},
+		)
+		if err != nil {
+			t.Fatalf("create deployment log: %v", err)
+		}
+		if i%3 != 0 {
+			continue
+		}
+		if err := repo.Queries.CreateDeploymentLogScope(
+			ctx,
+			db.CreateDeploymentLogScopeParams{
+				LogID:        log.ID,
+				DeploymentID: deploymentID,
+				StepIndex:    sql.NullInt64{Int64: 0, Valid: true},
+				Attempt:      sql.NullInt64{Int64: 1, Valid: true},
+				Sequence:     int64(i / 3),
+			},
+		); err != nil {
+			t.Fatalf("create scope: %v", err)
+		}
+	}
+}
+
 func TestDeploymentLogIterationOrderAcrossBatches(t *testing.T) {
 	repo := newTestRepo(t)
 	ctx := context.Background()
@@ -130,53 +224,9 @@ func TestDeploymentLogIterationOrderAcrossBatches(t *testing.T) {
 		t.Fatalf("create deployment: %v", err)
 	}
 
-	const total = 600
-	for i := 0; i < total; i++ {
-		log, err := repo.Queries.CreateDeploymentLog(
-			ctx,
-			db.CreateDeploymentLogParams{
-				DeploymentID: deployment.ID,
-				Line:         fmt.Sprintf("line-%d", i),
-			},
-		)
-		if err != nil {
-			t.Fatalf("create deployment log: %v", err)
-		}
-		if i%3 != 0 {
-			continue
-		}
-		if i == 0 {
-			if _, err := repo.DB.Exec(
-				`INSERT INTO deployment_steps
-					(deployment_id, step_index, name, script_body)
-					VALUES (?, 0, 'step', 'echo')`,
-				deployment.ID,
-			); err != nil {
-				t.Fatalf("create step: %v", err)
-			}
-			if _, err := repo.DB.Exec(
-				`INSERT INTO deployment_step_attempts
-					(deployment_id, step_index, attempt, wait_deadline)
-					VALUES (?, 0, 1, 0)`,
-				deployment.ID,
-			); err != nil {
-				t.Fatalf("create step attempt: %v", err)
-			}
-		}
-		if err := repo.Queries.CreateDeploymentLogScope(
-			ctx,
-			db.CreateDeploymentLogScopeParams{
-				LogID:        log.ID,
-				DeploymentID: deployment.ID,
-				StepIndex:    sql.NullInt64{Int64: 0, Valid: true},
-				Attempt:      sql.NullInt64{Int64: 1, Valid: true},
-				Sequence:     int64(i / 3),
-			},
-		); err != nil {
-			t.Fatalf("create scope: %v", err)
-		}
-	}
+	seedBatchOrderLogs(t, repo, ctx, deployment.ID)
 
+	const total = 600
 	var got []int64
 	err = repo.ForEachDeploymentLogByDeploymentAsc(
 		ctx,
@@ -195,33 +245,7 @@ func TestDeploymentLogIterationOrderAcrossBatches(t *testing.T) {
 
 	// Legacy ordering from the pre-batching single query; the batched
 	// implementation must produce the exact same sequence.
-	rows, err := repo.DB.Query(`
-SELECT l.id
-FROM deployment_logs l
-LEFT JOIN deployment_log_scopes s ON s.log_id = l.id
-WHERE l.deployment_id = ?
-ORDER BY CASE
-    WHEN s.step_index IS NULL AND s.attempt IS NULL THEN 0 ELSE 1
-END,
-CASE
-    WHEN s.step_index IS NULL AND s.attempt IS NULL THEN s.sequence
-END,
-l.created_at ASC, l.id ASC`, deployment.ID)
-	if err != nil {
-		t.Fatalf("reference query: %v", err)
-	}
-	defer rows.Close()
-	var want []int64
-	for rows.Next() {
-		var id int64
-		if err := rows.Scan(&id); err != nil {
-			t.Fatalf("scan reference: %v", err)
-		}
-		want = append(want, id)
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatalf("reference rows: %v", err)
-	}
+	want := legacyLogOrder(t, repo, deployment.ID)
 	if len(want) != total {
 		t.Fatalf("reference returned %d rows, want %d", len(want), total)
 	}

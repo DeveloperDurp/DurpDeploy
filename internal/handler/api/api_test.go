@@ -1344,7 +1344,9 @@ func TestExportLogs_CompletesAcrossBatchBoundary(t *testing.T) {
 	}
 
 	_, tokenPlain := seedAPIToken(t, h.repo, u.ID)
-	parser := cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
+	parser := cron.NewParser(
+		cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow,
+	)
 	router := server.NewRouter(
 		h.repo,
 		h.runner,
@@ -1370,7 +1372,12 @@ func TestExportLogs_CompletesAcrossBatchBoundary(t *testing.T) {
 	for i := 0; i < total; i++ {
 		pos := strings.Index(body, fmt.Sprintf("line-%03d", i))
 		if pos < 0 || pos < lastPos {
-			t.Fatalf("log %d out of order or missing (pos %d, last %d)", i, pos, lastPos)
+			t.Fatalf(
+				"log %d out of order or missing (pos %d, last %d)",
+				i,
+				pos,
+				lastPos,
+			)
 		}
 		lastPos = pos
 	}
