@@ -221,3 +221,78 @@ func TestRunbookSchedule_ActiveExecutionSkipsNextOccurrence(t *testing.T) {
 		t.Fatalf("executions=%d want 1", len(executions))
 	}
 }
+
+func TestRunbookSchedule_BlockedAndInaccessibleStages(t *testing.T) {
+	f := newFixture(t)
+	project := f.createProject()
+	first := f.createEnvironment("first-stage")
+	later := f.createEnvironment("later-stage")
+	outside := f.createEnvironment("outside-stage")
+	book, _, err := f.repo.SaveRunbook(f.ctx(), repository.RunbookSave{
+		ProjectID: project.ID, Name: "gated-book",
+		StepsJSON: `[{"name":"check","script_body":"true"}]`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	lifecycle, err := f.repo.Queries.CreateLifecycle(f.ctx(),
+		db.CreateLifecycleParams{Name: "runbook-stages"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.repo.Queries.SetProjectLifecycle(f.ctx(),
+		db.SetProjectLifecycleParams{
+			ID: project.ID,
+			LifecycleID: sql.NullInt64{
+				Int64: lifecycle.ID,
+				Valid: true,
+			},
+		}); err != nil {
+		t.Fatal(err)
+	}
+	for order, env := range []db.Environment{first, later} {
+		if _, err := f.repo.Queries.CreateLifecycleStage(f.ctx(),
+			db.CreateLifecycleStageParams{
+				LifecycleID: lifecycle.ID, EnvironmentID: env.ID,
+				SortOrder: int64(order),
+			}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var schedules []db.RunbookSchedule
+	for _, env := range []db.Environment{later, outside} {
+		schedule, err := f.repo.Queries.CreateRunbookSchedule(f.ctx(),
+			db.CreateRunbookScheduleParams{
+				RunbookID: book.ID, EnvironmentID: env.ID,
+				Cron: "* * * * *", NextRunAt: f.now.Unix(),
+			})
+		if err != nil {
+			t.Fatal(err)
+		}
+		schedules = append(schedules, schedule)
+	}
+	f.sched.Tick(f.ctx())
+	blocked, err := f.repo.Queries.GetRunbookSchedule(f.ctx(),
+		db.GetRunbookScheduleParams{ID: schedules[0].ID, RunbookID: book.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	inaccessible, err := f.repo.Queries.GetRunbookSchedule(f.ctx(),
+		db.GetRunbookScheduleParams{ID: schedules[1].ID, RunbookID: book.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if blocked.NextRunAt <= f.now.Unix() || blocked.Enabled == 0 {
+		t.Fatalf("blocked schedule did not advance: %+v", blocked)
+	}
+	if inaccessible.Enabled != 0 {
+		t.Fatalf("inaccessible schedule remains enabled: %+v", inaccessible)
+	}
+	executions, err := f.repo.Queries.ListRunbookExecutions(f.ctx(), project.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(executions) != 0 {
+		t.Fatalf("gated schedules created %d executions", len(executions))
+	}
+}
