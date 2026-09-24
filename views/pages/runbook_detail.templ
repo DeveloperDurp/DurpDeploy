@@ -80,8 +80,25 @@ templ RunbookDetailPage(project db.Project, book db.Runbook, versions []db.Runbo
 				if len(schedules) == 0 {
 					<p class="text-base-content/70">No schedules yet.</p>
 				} else {
-					<div class="overflow-x-auto">
-						<table class="table table-zebra table-fixed w-full min-w-[36rem]">
+					<div class="space-y-3 md:hidden">
+						for _, schedule := range schedules {
+							<div class="rounded bg-base-300 p-3 space-y-2">
+								<p><span class="font-semibold">Cron:</span> { schedule.Cron }</p>
+								<p>
+									<span class="font-semibold">Version:</span>
+									if schedule.VersionID.Valid {
+										Pinned
+									} else {
+										Latest
+									}
+								</p>
+								<p><span class="font-semibold">Next run:</span> { formatUnixTime(schedule.NextRunAt) }</p>
+								@RunbookScheduleAction(project.ID, book.ID, schedule)
+							</div>
+						}
+					</div>
+					<div class="hidden md:block">
+						<table class="table table-zebra table-fixed w-full">
 							<thead><tr><th class="w-1/4">Cron</th><th class="w-1/4">Version</th><th class="w-1/4">Next run</th><th class="w-1/4">Action</th></tr></thead>
 							<tbody>
 								for _, schedule := range schedules {
@@ -95,13 +112,8 @@ templ RunbookDetailPage(project db.Project, book db.Runbook, versions []db.Runbo
 											}
 										</td>
 										<td class="whitespace-nowrap">{ formatUnixTime(schedule.NextRunAt) }</td>
-										<td>
-											if schedule.Enabled != 0 && CanWrite(ctx) {
-												<form method="post" action={ fmt.Sprintf("/projects/%d/runbooks/%d/schedules/%d/disable", project.ID, book.ID, schedule.ID) }><button class="btn btn-error btn-xs" type="submit">Disable</button></form>
-											} else {
-												Disabled
-											}
-										</td>
+										<td>@RunbookScheduleAction(project.ID, book.ID, schedule)
+</td>
 									</tr>
 								}
 							</tbody>
@@ -110,6 +122,16 @@ templ RunbookDetailPage(project db.Project, book db.Runbook, versions []db.Runbo
 				}
 			</div>
 		</div>
+	}
+}
+
+templ RunbookScheduleAction(projectID int64, bookID int64, schedule db.RunbookSchedule) {
+	if schedule.Enabled == 0 {
+		Disabled
+	} else if CanWrite(ctx) {
+		<form method="post" action={ fmt.Sprintf("/projects/%d/runbooks/%d/schedules/%d/disable", projectID, bookID, schedule.ID) }><button class="btn btn-error btn-xs" type="submit">Disable</button></form>
+	} else {
+		Enabled
 	}
 }
 
