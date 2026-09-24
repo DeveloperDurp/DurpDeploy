@@ -26,9 +26,9 @@ CREATE TABLE runbook_versions (
 );
 CREATE TABLE runbook_schedules (
     id BIGINT IDENTITY(1,1) PRIMARY KEY,
-    runbook_id BIGINT NOT NULL REFERENCES runbooks(id) ON DELETE CASCADE,
+    runbook_id BIGINT NOT NULL REFERENCES runbooks(id),
     version_id BIGINT NULL REFERENCES runbook_versions(id),
-    environment_id BIGINT NOT NULL REFERENCES environments(id),
+    environment_id BIGINT NOT NULL REFERENCES environments(id) ON DELETE CASCADE,
     cron NVARCHAR(255) NOT NULL,
     next_run_at BIGINT NOT NULL,
     enabled BIGINT NOT NULL DEFAULT 1,
@@ -40,9 +40,9 @@ CREATE INDEX idx_runbook_schedules_due ON runbook_schedules(next_run_at)
 CREATE TABLE runbook_executions (
     id BIGINT IDENTITY(1,1) PRIMARY KEY,
     runbook_version_id BIGINT NOT NULL REFERENCES runbook_versions(id),
-    deployment_id BIGINT NOT NULL UNIQUE REFERENCES deployments(id),
-    actor_user_id BIGINT NULL REFERENCES users(id),
-    schedule_id BIGINT NULL REFERENCES runbook_schedules(id),
+    deployment_id BIGINT NOT NULL UNIQUE REFERENCES deployments(id) ON DELETE CASCADE,
+    actor_user_id BIGINT NULL REFERENCES users(id) ON DELETE SET NULL,
+    schedule_id BIGINT NULL REFERENCES runbook_schedules(id) ON DELETE SET NULL,
     created_at BIGINT NOT NULL DEFAULT DATEDIFF_BIG(SECOND,'1970-01-01',SYSUTCDATETIME())
 );
 CREATE INDEX idx_runbook_executions_version ON runbook_executions(runbook_version_id);

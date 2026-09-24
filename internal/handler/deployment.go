@@ -350,7 +350,7 @@ func (h *DeploymentHandler) ScheduleDeployment(
 
 	requiresApproval, err := gate.RequiresApproval(
 		r.Context(),
-		h.repo,
+		h.repo.Queries,
 		project,
 		environmentID,
 	)
@@ -805,7 +805,7 @@ func (h *DeploymentHandler) RedeployDeployment(
 	}
 	blocked, reason, requiresApproval, err := gate.CheckAndApproval(
 		r.Context(),
-		h.repo,
+		h.repo.Queries,
 		project,
 		release,
 		source.EnvironmentID,

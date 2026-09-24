@@ -27,7 +27,7 @@ CREATE TABLE runbook_schedules (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     runbook_id INTEGER NOT NULL REFERENCES runbooks(id) ON DELETE CASCADE,
     version_id INTEGER REFERENCES runbook_versions(id),
-    environment_id INTEGER NOT NULL REFERENCES environments(id),
+    environment_id INTEGER NOT NULL REFERENCES environments(id) ON DELETE CASCADE,
     cron TEXT NOT NULL,
     next_run_at INTEGER NOT NULL,
     enabled INTEGER NOT NULL DEFAULT 1,
@@ -40,9 +40,9 @@ CREATE INDEX idx_runbook_schedules_due ON runbook_schedules(next_run_at)
 CREATE TABLE runbook_executions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     runbook_version_id INTEGER NOT NULL REFERENCES runbook_versions(id),
-    deployment_id INTEGER NOT NULL UNIQUE REFERENCES deployments(id),
-    actor_user_id INTEGER REFERENCES users(id),
-    schedule_id INTEGER REFERENCES runbook_schedules(id),
+    deployment_id INTEGER NOT NULL UNIQUE REFERENCES deployments(id) ON DELETE CASCADE,
+    actor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    schedule_id INTEGER REFERENCES runbook_schedules(id) ON DELETE SET NULL,
     created_at INTEGER NOT NULL DEFAULT (unixepoch())
 );
 CREATE INDEX idx_runbook_executions_version ON runbook_executions(runbook_version_id);

@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -11,7 +12,6 @@ import (
 
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
-	"durpdeploy/internal/gate"
 	"durpdeploy/internal/repository"
 	"durpdeploy/views/pages"
 )
@@ -156,21 +156,6 @@ func (h *RunbookHandler) Retry(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Execution is not complete", http.StatusConflict)
 		return
 	}
-	project, err := h.repo.Queries.GetProject(r.Context(), execution.ProjectID)
-	if err != nil {
-		http.Error(w, "Cannot read project", http.StatusInternalServerError)
-		return
-	}
-	requiresApproval, err := gate.RequiresApproval(r.Context(), h.repo, project,
-		execution.EnvironmentID)
-	if err != nil {
-		http.Error(w, "Cannot check approval", http.StatusInternalServerError)
-		return
-	}
-	status := "pending"
-	if requiresApproval {
-		status = "pending_approval"
-	}
 	user := auth.UserFromContext(r.Context())
 	actor := sql.NullInt64{}
 	if user != nil {
@@ -181,13 +166,17 @@ func (h *RunbookHandler) Retry(w http.ResponseWriter, r *http.Request) {
 			ProjectID: execution.ProjectID, RunbookID: execution.RunbookID,
 			VersionID:     execution.RunbookVersionID,
 			EnvironmentID: execution.EnvironmentID,
-			ActorUserID:   actor, Status: status,
+			ActorUserID:   actor,
 		})
+	if errors.Is(err, repository.ErrRunbookGate) {
+		http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+		return
+	}
 	if err != nil {
 		http.Error(w, "Cannot retry execution", http.StatusInternalServerError)
 		return
 	}
-	if status == "pending" {
+	if result.Deployment.Status == "pending" {
 		go h.runner.Run(context.Background(), result.Deployment.ID,
 			result.Deployment.ReleaseID, result.Deployment.EnvironmentID)
 	}

@@ -163,6 +163,15 @@ func (q *Queries) DeleteProjectRunbookExecutions(ctx context.Context, projectID 
 	return err
 }
 
+const deleteProjectRunbookReleases = `-- name: DeleteProjectRunbookReleases :exec
+DELETE FROM releases WHERE project_id = ? AND kind = 'runbook'
+`
+
+func (q *Queries) DeleteProjectRunbookReleases(ctx context.Context, projectID int64) error {
+	_, err := q.db.ExecContext(ctx, deleteProjectRunbookReleases, projectID)
+	return err
+}
+
 const deleteProjectRunbookSchedules = `-- name: DeleteProjectRunbookSchedules :exec
 DELETE FROM runbook_schedules WHERE runbook_id IN (
     SELECT id FROM runbooks WHERE project_id = ?
@@ -387,6 +396,21 @@ func (q *Queries) GetRunbookVersion(ctx context.Context, arg GetRunbookVersionPa
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const hasActiveRunbookScheduleExecution = `-- name: HasActiveRunbookScheduleExecution :one
+SELECT EXISTS (
+    SELECT 1 FROM runbook_executions x
+    JOIN deployments d ON d.id = x.deployment_id
+    WHERE x.schedule_id = ? AND d.status IN ('pending', 'running', 'pending_approval')
+)
+`
+
+func (q *Queries) HasActiveRunbookScheduleExecution(ctx context.Context, scheduleID sql.NullInt64) (bool, error) {
+	row := q.db.QueryRowContext(ctx, hasActiveRunbookScheduleExecution, scheduleID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const listDueRunbookSchedules = `-- name: ListDueRunbookSchedules :many
@@ -615,4 +639,23 @@ UPDATE releases SET kind = 'runbook' WHERE id = ?
 func (q *Queries) SetRunbookReleaseKind(ctx context.Context, id int64) error {
 	_, err := q.db.ExecContext(ctx, setRunbookReleaseKind, id)
 	return err
+}
+
+const skipRunbookSchedule = `-- name: SkipRunbookSchedule :execrows
+UPDATE runbook_schedules SET next_run_at = ?
+WHERE id = ? AND enabled = 1 AND next_run_at <= ?
+`
+
+type SkipRunbookScheduleParams struct {
+	NextRunAt   int64 `json:"next_run_at"`
+	ID          int64 `json:"id"`
+	NextRunAt_2 int64 `json:"next_run_at_2"`
+}
+
+func (q *Queries) SkipRunbookSchedule(ctx context.Context, arg SkipRunbookScheduleParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, skipRunbookSchedule, arg.NextRunAt, arg.ID, arg.NextRunAt_2)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }

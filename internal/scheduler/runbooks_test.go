@@ -3,6 +3,7 @@ package scheduler_test
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"testing"
 
 	"durpdeploy/internal/db"
@@ -69,5 +70,154 @@ func TestRunbookSchedule_LatestAndPinnedResolveConcreteVersions(t *testing.T) {
 		versionsBySchedule[pinnedSchedule.ID] != first.ID {
 		t.Fatalf("resolved versions=%v want latest=%d pinned=%d",
 			versionsBySchedule, second.ID, first.ID)
+	}
+}
+
+func TestRunbookSchedule_ApprovalHoldsExecution(t *testing.T) {
+	f := newFixture(t)
+	project := f.createProject()
+	environment := f.createEnvironment("approval-env")
+	book, _, err := f.repo.SaveRunbook(f.ctx(), repository.RunbookSave{
+		ProjectID: project.ID, Name: "approval-book",
+		StepsJSON: `[{"name":"check","script_body":"true"}]`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	lifecycle, err := f.repo.Queries.CreateLifecycle(f.ctx(),
+		db.CreateLifecycleParams{Name: "approval-lifecycle"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.repo.Queries.SetProjectLifecycle(f.ctx(),
+		db.SetProjectLifecycleParams{
+			ID: project.ID,
+			LifecycleID: sql.NullInt64{
+				Int64: lifecycle.ID, Valid: true,
+			},
+		}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.repo.Queries.CreateLifecycleStage(f.ctx(),
+		db.CreateLifecycleStageParams{
+			LifecycleID: lifecycle.ID, EnvironmentID: environment.ID,
+			RequiresApproval: 1,
+		}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.repo.Queries.CreateRunbookSchedule(f.ctx(),
+		db.CreateRunbookScheduleParams{
+			RunbookID: book.ID, EnvironmentID: environment.ID,
+			Cron: "* * * * *", NextRunAt: f.now.Unix(),
+		}); err != nil {
+		t.Fatal(err)
+	}
+	run := make(chan struct{}, 1)
+	f.sched.SetRunFunc(func(context.Context, int64, int64, int64) {
+		run <- struct{}{}
+	})
+	f.sched.Tick(f.ctx())
+	executions, err := f.repo.Queries.ListRunbookExecutions(f.ctx(),
+		project.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(executions) != 1 || executions[0].Status != "pending_approval" {
+		t.Fatalf("executions=%+v", executions)
+	}
+	select {
+	case <-run:
+		t.Fatal("approval-required runbook started")
+	default:
+	}
+}
+
+func TestRunbookSchedule_InvalidCronDisablesSchedule(t *testing.T) {
+	f := newFixture(t)
+	project := f.createProject()
+	environment := f.createEnvironment("invalid-cron-env")
+	book, _, err := f.repo.SaveRunbook(f.ctx(), repository.RunbookSave{
+		ProjectID: project.ID, Name: "invalid-cron-book",
+		StepsJSON: `[{"name":"check","script_body":"true"}]`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	schedule, err := f.repo.Queries.CreateRunbookSchedule(f.ctx(),
+		db.CreateRunbookScheduleParams{
+			RunbookID: book.ID, EnvironmentID: environment.ID,
+			Cron: "invalid", NextRunAt: f.now.Unix(),
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.sched.Tick(f.ctx())
+	stored, err := f.repo.Queries.GetRunbookSchedule(f.ctx(),
+		db.GetRunbookScheduleParams{ID: schedule.ID, RunbookID: book.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.Enabled != 0 {
+		t.Fatalf("invalid schedule still enabled: %+v", stored)
+	}
+}
+
+func TestRunbookSchedule_ActiveExecutionSkipsNextOccurrence(t *testing.T) {
+	f := newFixture(t)
+	project := f.createProject()
+	environment := f.createEnvironment("overlap-env")
+	book, _, err := f.repo.SaveRunbook(f.ctx(), repository.RunbookSave{
+		ProjectID: project.ID, Name: "overlap-book",
+		StepsJSON: `[{"name":"check","script_body":"true"}]`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	schedule, err := f.repo.Queries.CreateRunbookSchedule(f.ctx(),
+		db.CreateRunbookScheduleParams{
+			RunbookID: book.ID, EnvironmentID: environment.ID,
+			Cron: "* * * * *", NextRunAt: f.now.Unix(),
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.sched.SetRunFunc(func(context.Context, int64, int64, int64) {})
+	f.sched.Tick(f.ctx())
+	stored, err := f.repo.Queries.GetRunbookSchedule(f.ctx(),
+		db.GetRunbookScheduleParams{ID: schedule.ID, RunbookID: book.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = f.repo.CreateRunbookExecution(f.ctx(),
+		repository.RunbookExecutionRequest{
+			ProjectID:     project.ID,
+			RunbookID:     book.ID,
+			EnvironmentID: environment.ID,
+			ScheduleID: sql.NullInt64{
+				Int64: schedule.ID,
+				Valid: true,
+			},
+			ScheduleExpectedRunAt: stored.NextRunAt,
+			ScheduleNextRunAt:     stored.NextRunAt + 60,
+			FiredAt:               stored.NextRunAt,
+		})
+	if !errors.Is(err, repository.ErrRunbookScheduleOverlap) {
+		t.Fatalf("overlap error=%v", err)
+	}
+	stored, err = f.repo.Queries.GetRunbookSchedule(f.ctx(),
+		db.GetRunbookScheduleParams{ID: schedule.ID, RunbookID: book.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.NextRunAt != schedule.NextRunAt+120 ||
+		stored.LastFiredAt.Int64 != schedule.NextRunAt {
+		t.Fatalf("schedule advanced incorrectly: %+v", stored)
+	}
+	executions, err := f.repo.Queries.ListRunbookExecutions(f.ctx(), project.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(executions) != 1 {
+		t.Fatalf("executions=%d want 1", len(executions))
 	}
 }

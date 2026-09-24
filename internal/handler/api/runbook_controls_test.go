@@ -25,6 +25,7 @@ func TestRunbookAPI_ApprovalAndSchedule(t *testing.T) {
 	_, token := seedAPIToken(t, h.repo, user.ID)
 	project := seedProject(t, h.repo)
 	environment := seedEnv(t, h.repo)
+	laterEnvironment := seedEnv(t, h.repo)
 	ctx := context.Background()
 	lifecycle, err := h.repo.Queries.CreateLifecycle(ctx,
 		db.CreateLifecycleParams{Name: "protected"})
@@ -44,6 +45,13 @@ func TestRunbookAPI_ApprovalAndSchedule(t *testing.T) {
 		db.CreateLifecycleStageParams{
 			LifecycleID: lifecycle.ID, EnvironmentID: environment.ID,
 			RequiresApproval: 1,
+		}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.repo.Queries.CreateLifecycleStage(ctx,
+		db.CreateLifecycleStageParams{
+			LifecycleID: lifecycle.ID, EnvironmentID: laterEnvironment.ID,
+			SortOrder: 1,
 		}); err != nil {
 		t.Fatal(err)
 	}
@@ -84,6 +92,12 @@ func TestRunbookAPI_ApprovalAndSchedule(t *testing.T) {
 		t.Fatal(err)
 	}
 	bookURL := fmt.Sprintf("%s/runbooks/%d", base, saved.Runbook.ID)
+	blocked := request(http.MethodPost, bookURL+"/executions",
+		fmt.Sprintf(`{"environment_id":%d}`, laterEnvironment.ID))
+	if blocked.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("ungated later stage status=%d body=%s", blocked.Code,
+			blocked.Body.String())
+	}
 	executed := request(http.MethodPost, bookURL+"/executions",
 		fmt.Sprintf(`{"environment_id":%d}`, environment.ID))
 	if executed.Code != http.StatusCreated {
@@ -122,6 +136,13 @@ func TestRunbookAPI_ApprovalAndSchedule(t *testing.T) {
 	if !succeeded {
 		t.Fatalf("approved execution did not succeed")
 	}
+	late := request(http.MethodPost, bookURL+"/executions",
+		fmt.Sprintf(`{"environment_id":%d}`, laterEnvironment.ID))
+	if late.Code != http.StatusCreated {
+		t.Fatalf("promoted stage status=%d body=%s", late.Code,
+			late.Body.String())
+	}
+
 	logs := request(http.MethodGet, executionURL+"/logs", "")
 	if !strings.Contains(logs.Body.String(), "approved") {
 		t.Fatalf("approved execution logs=%s", logs.Body.String())

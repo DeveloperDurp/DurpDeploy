@@ -121,7 +121,7 @@ func (h *DeploymentHandler) CreateDeployment(
 	}
 
 	blocked, reason, requiresApproval, err := gate.CheckAndApproval(
-		r.Context(), h.repo, project, release, req.EnvironmentID,
+		r.Context(), h.repo.Queries, project, release, req.EnvironmentID,
 	)
 	if err != nil {
 		RespondError(w, http.StatusInternalServerError, err.Error())
@@ -521,7 +521,7 @@ func (h *DeploymentHandler) RedeployDeployment(
 	}
 	blocked, reason, requiresApproval, err := gate.CheckAndApproval(
 		r.Context(),
-		h.repo,
+		h.repo.Queries,
 		project,
 		release,
 		deployment.EnvironmentID,

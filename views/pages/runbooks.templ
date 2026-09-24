@@ -84,7 +84,7 @@ templ RunbookFormPage(project db.Project, book db.Runbook, stepsJSON string, err
 				if errorMessage != "" {
 					<div class="alert alert-error">{ errorMessage }</div>
 				}
-				<form method="post" action={ runbookSaveURL(project.ID, book.ID) } class="space-y-4" x-data={ fmt.Sprintf("{ steps: %s }", stepsJSON) }>
+				<form method="post" action={ runbookSaveURL(project.ID, book.ID) } class="space-y-4" x-data={ fmt.Sprintf("{ steps: %s }", stepsJSON) } x-init="steps.forEach(step => step.agent_selectors_text = (step.agent_selectors || []).join(', '))">
 					if book.ID == 0 {
 						<label class="form-control"><span class="label-text">Name</span><input name="name" class="input input-bordered" required/></label>
 						<label class="form-control"><span class="label-text">Description</span><input name="description" class="input input-bordered"/></label>
@@ -100,11 +100,11 @@ templ RunbookFormPage(project db.Project, book db.Runbook, stepsJSON string, err
 								<label class="form-control"><span class="label-text">Retries</span><input name="step_retries" type="number" min="0" class="input input-bordered" x-model="step.max_retries"/></label>
 								<label class="form-control"><span class="label-text">Execution target</span><select name="step_target" class="select select-bordered" x-model="step.execution_target"><option value="local">Local</option><option value="agent">Agent</option></select></label>
 							</div>
-								<label class="form-control" x-show="step.execution_target === 'agent'"><span class="label-text">Agent labels (comma separated)</span><input name="step_selectors" class="input input-bordered" x-bind:value="(step.agent_selectors || []).join(', ')" x-bind:disabled="step.execution_target !== 'agent'"/></label>
+								<label class="form-control" x-show="step.execution_target === 'agent'"><span class="label-text">Agent labels (comma separated)</span><input name="step_selectors" class="input input-bordered" x-model="step.agent_selectors_text" x-bind:disabled="step.execution_target !== 'agent'"/></label>
 							<input name="step_selectors" type="hidden" value="" x-bind:disabled="step.execution_target === 'agent'"/>
 						</div>
 					</template>
-					<button type="button" class="btn btn-secondary" x-on:click="steps.push({name:'',script_body:'',interpreter:'bash',timeout_seconds:0,max_retries:0,execution_target:'local',agent_selectors:[]})">Add step</button>
+					<button type="button" class="btn btn-secondary" x-on:click="steps.push({name:'',script_body:'',interpreter:'bash',timeout_seconds:0,max_retries:0,execution_target:'local',agent_selectors_text:''})">Add step</button>
 					<div><button type="submit" class="btn btn-primary">Save immutable version</button><a class="btn btn-ghost" href={ fmt.Sprintf("/projects/%d/runbooks", project.ID) }>Cancel</a></div>
 				</form>
 			</div>

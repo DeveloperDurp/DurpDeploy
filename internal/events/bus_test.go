@@ -82,7 +82,7 @@ func TestBus_RunbookNotificationUsesExecutionID(t *testing.T) {
 	execution, deployment, err := repo.CreateRunbookExecution(ctx,
 		repository.RunbookExecutionRequest{
 			ProjectID: project.ID, RunbookID: book.ID,
-			EnvironmentID: environment.ID, Status: "pending",
+			EnvironmentID: environment.ID,
 		})
 	if err != nil {
 		t.Fatal(err)
@@ -101,6 +101,26 @@ func TestBus_RunbookNotificationUsesExecutionID(t *testing.T) {
 		notifier.calls[0].Message != fmt.Sprintf(
 			"Runbook execution #%d started", execution.ID) {
 		t.Fatalf("notification=%+v", notifier.calls)
+	}
+	for _, outcome := range []struct {
+		eventType events.Type
+		wantType  events.Type
+		verb      string
+	}{
+		{events.DeploymentSucceeded, events.RunbookSucceeded, "succeeded"},
+		{events.DeploymentFailed, events.RunbookFailed, "failed"},
+	} {
+		bus.Publish(ctx, events.Event{
+			Type: outcome.eventType, ProjectID: project.ID,
+			DeploymentID: deployment.Deployment.ID,
+			Message: fmt.Sprintf("Deployment #%d %s",
+				deployment.Deployment.ID, outcome.verb),
+		})
+		got := notifier.calls[len(notifier.calls)-1]
+		if got.Type != outcome.wantType || got.Message != fmt.Sprintf(
+			"Runbook execution #%d %s", execution.ID, outcome.verb) {
+			t.Fatalf("notification=%+v", got)
+		}
 	}
 }
 

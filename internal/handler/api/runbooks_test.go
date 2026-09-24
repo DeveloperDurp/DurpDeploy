@@ -1,6 +1,7 @@
 package api_test
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/robfig/cron/v3"
 
+	"durpdeploy/internal/db"
 	"durpdeploy/internal/handler"
 	"durpdeploy/internal/server"
 )
@@ -141,6 +143,22 @@ func TestRunbookAPI_VersionedExecutionStaysSeparate(t *testing.T) {
 			)
 		}
 	}
+	unusedEnvironment := seedEnv(t, h.repo)
+	if _, err := h.repo.Queries.CreateRunbookSchedule(context.Background(),
+		db.CreateRunbookScheduleParams{
+			RunbookID:     saved.Runbook.ID,
+			EnvironmentID: unusedEnvironment.ID,
+			Cron:          "0 3 * * *", NextRunAt: time.Now().Unix() + 86400,
+		}); err != nil {
+		t.Fatal(err)
+	}
+	deletedEnvironment := request(http.MethodDelete,
+		fmt.Sprintf("/api/v1/environments/%d", unusedEnvironment.ID), "")
+	if deletedEnvironment.Code != http.StatusNoContent {
+		t.Fatalf("delete scheduled environment status=%d body=%s",
+			deletedEnvironment.Code, deletedEnvironment.Body.String())
+	}
+
 }
 
 func TestRunbookAPI_ProjectDeleteAfterVersion(t *testing.T) {

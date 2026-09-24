@@ -7,7 +7,6 @@ import (
 	"net/http"
 
 	"durpdeploy/internal/auth"
-	"durpdeploy/internal/gate"
 	"durpdeploy/internal/repository"
 )
 
@@ -39,23 +38,9 @@ func (h *RunbookHandler) Execute(w http.ResponseWriter, r *http.Request) {
 		)
 		return
 	}
-	project, ok := h.projectEnvironment(w, r, projectID, req.EnvironmentID)
+	_, ok = h.projectEnvironment(w, r, projectID, req.EnvironmentID)
 	if !ok {
 		return
-	}
-	requiresApproval, err := gate.RequiresApproval(
-		r.Context(),
-		h.repo,
-		project,
-		req.EnvironmentID,
-	)
-	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "Cannot check approval")
-		return
-	}
-	status := "pending"
-	if requiresApproval {
-		status = "pending_approval"
 	}
 	user := auth.UserFromContext(r.Context())
 	actor := sql.NullInt64{}
@@ -66,10 +51,14 @@ func (h *RunbookHandler) Execute(w http.ResponseWriter, r *http.Request) {
 		r.Context(), repository.RunbookExecutionRequest{
 			ProjectID: projectID, RunbookID: id,
 			VersionID: req.VersionID, EnvironmentID: req.EnvironmentID,
-			ActorUserID: actor, Status: status,
+			ActorUserID: actor,
 		})
 	if errors.Is(err, sql.ErrNoRows) {
 		RespondError(w, http.StatusNotFound, "Runbook or version not found")
+		return
+	}
+	if errors.Is(err, repository.ErrRunbookGate) {
+		RespondError(w, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
 	if err != nil {
@@ -80,7 +69,7 @@ func (h *RunbookHandler) Execute(w http.ResponseWriter, r *http.Request) {
 		)
 		return
 	}
-	if status == "pending" {
+	if result.Deployment.Status == "pending" {
 		go h.runner.Run(context.Background(), result.Deployment.ID,
 			result.Deployment.ReleaseID, result.Deployment.EnvironmentID)
 	}

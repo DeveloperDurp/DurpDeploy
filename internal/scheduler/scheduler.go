@@ -258,7 +258,7 @@ func (s *Scheduler) fireOne(ctx context.Context, row db.ScheduledDeployment) {
 	// a single call so the lifecycle stages are only loaded once.
 	blocked, reason, requiresApproval, err := gate.CheckAndApproval(
 		ctx,
-		s.repo,
+		s.repo.Queries,
 		project,
 		release,
 		row.EnvironmentID,

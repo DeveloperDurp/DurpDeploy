@@ -2,8 +2,7 @@ package repository
 
 import (
 	"context"
-	"database/sql"
-	"errors"
+	"crypto/rand"
 	"fmt"
 
 	"durpdeploy/internal/db"
@@ -26,6 +25,9 @@ func (r *Repository) DeleteProject(ctx context.Context, projectID int64) error {
 			return err
 		}
 		if err := q.DeleteProjectRunbookVersions(ctx, projectID); err != nil {
+			return err
+		}
+		if err := q.DeleteProjectRunbookReleases(ctx, projectID); err != nil {
 			return err
 		}
 		return q.DeleteProject(ctx, projectID)
@@ -78,9 +80,18 @@ func (r *Repository) SaveRunbook(
 				}
 				number = latest.Version + 1
 			}
+			var releaseToken [16]byte
+			if _, err := rand.Read(releaseToken[:]); err != nil {
+				return err
+			}
 			release, releaseErr := q.CreateRelease(ctx, db.CreateReleaseParams{
 				ProjectID: arg.ProjectID,
-				Version:   fmt.Sprintf("runbook:%d:%d", runbook.ID, number),
+				Version: fmt.Sprintf(
+					"runbook:%d:%d:%x",
+					runbook.ID,
+					number,
+					releaseToken,
+				),
 				StepsJson: arg.StepsJSON,
 			})
 			if releaseErr != nil {
@@ -120,109 +131,4 @@ func (r *Repository) SaveRunbook(
 		)
 	}
 	return runbook, version, nil
-}
-
-type RunbookExecutionRequest struct {
-	ProjectID             int64
-	RunbookID             int64
-	VersionID             int64
-	EnvironmentID         int64
-	ActorUserID           sql.NullInt64
-	ScheduleID            sql.NullInt64
-	ScheduleNextRunAt     int64
-	ScheduleExpectedRunAt int64
-	FiredAt               int64
-	Status                string
-}
-
-var ErrRunbookScheduleConflict = errors.New("runbook schedule already fired")
-
-func (r *Repository) CreateRunbookExecution(
-	ctx context.Context,
-	arg RunbookExecutionRequest,
-) (db.RunbookExecution, DeploymentResult, error) {
-	var execution db.RunbookExecution
-	var result DeploymentResult
-	err := withSQLiteBusyRetry(ctx, func() error {
-		return r.WithTx(ctx, func(q *db.Queries) error {
-			if _, err := q.GetRunbook(ctx, db.GetRunbookParams{
-				ID: arg.RunbookID, ProjectID: arg.ProjectID,
-			}); err != nil {
-				return err
-			}
-			if arg.ScheduleID.Valid {
-				changed, err := q.AdvanceRunbookSchedule(ctx,
-					db.AdvanceRunbookScheduleParams{
-						NextRunAt: arg.ScheduleNextRunAt,
-						LastFiredAt: sql.NullInt64{
-							Int64: arg.FiredAt,
-							Valid: true,
-						},
-						ID:          arg.ScheduleID.Int64,
-						NextRunAt_2: arg.ScheduleExpectedRunAt,
-					})
-				if err != nil {
-					return err
-				}
-				if changed != 1 {
-					return ErrRunbookScheduleConflict
-				}
-			}
-			var version db.RunbookVersion
-			var err error
-			if arg.VersionID == 0 {
-				version, err = q.GetLatestRunbookVersion(ctx, arg.RunbookID)
-			} else {
-				version, err = q.GetRunbookVersion(
-					ctx,
-					db.GetRunbookVersionParams{
-						ID: arg.VersionID, RunbookID: arg.RunbookID,
-					},
-				)
-			}
-			if err != nil {
-				return err
-			}
-			result, err = r.createDeployment(ctx, q, db.CreateDeploymentParams{
-				ReleaseID: version.ReleaseID, EnvironmentID: arg.EnvironmentID,
-				Status: arg.Status,
-			})
-			if err != nil {
-				return err
-			}
-			if err := q.SetRunbookDeploymentKind(
-				ctx,
-				result.Deployment.ID,
-			); err != nil {
-				return err
-			}
-			result.Deployment.Kind = "runbook"
-			execution, err = q.CreateRunbookExecution(ctx,
-				db.CreateRunbookExecutionParams{
-					RunbookVersionID: version.ID,
-					DeploymentID:     result.Deployment.ID,
-					ActorUserID:      arg.ActorUserID,
-					ScheduleID:       arg.ScheduleID,
-				})
-			return err
-		})
-	})
-	if err != nil {
-		return db.RunbookExecution{}, DeploymentResult{},
-			fmt.Errorf("create runbook execution: %w", err)
-	}
-	return execution, result, nil
-}
-
-func (r *Repository) ListRunbookLogs(
-	ctx context.Context,
-	deploymentID int64,
-) ([]db.DeploymentLog, error) {
-	logs := make([]db.DeploymentLog, 0)
-	err := r.ForEachDeploymentLogByDeploymentAsc(ctx, deploymentID,
-		func(log db.DeploymentLog) error {
-			logs = append(logs, log)
-			return nil
-		})
-	return logs, err
 }

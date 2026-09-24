@@ -189,7 +189,7 @@ templ RunbookExecutionPage(project db.Project, book db.Runbook, execution db.Get
 			</div>
 			<div
 				class="card bg-base-200 p-4"
-				if execution.Status == "running" || execution.Status == "pending" {
+				if execution.Status == "running" || execution.Status == "pending" || execution.Status == "pending_approval" {
 					x-data={ fmt.Sprintf("deploymentStream({ url: '/projects/%d/runbooks/executions/%d/logs/stream' })", project.ID, execution.ID) }
 					x-on:htmx:after-swap.camel.window="status($event)"
 				}

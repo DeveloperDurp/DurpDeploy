@@ -82,6 +82,17 @@ ORDER BY next_run_at, id;
 UPDATE runbook_schedules SET next_run_at = ?, last_fired_at = ?
 WHERE id = ? AND enabled = 1 AND next_run_at <= ?;
 
+-- name: SkipRunbookSchedule :execrows
+UPDATE runbook_schedules SET next_run_at = ?
+WHERE id = ? AND enabled = 1 AND next_run_at <= ?;
+
+-- name: HasActiveRunbookScheduleExecution :one
+SELECT EXISTS (
+    SELECT 1 FROM runbook_executions x
+    JOIN deployments d ON d.id = x.deployment_id
+    WHERE x.schedule_id = ? AND d.status IN ('pending', 'running', 'pending_approval')
+);
+
 -- name: DisableRunbookSchedule :exec
 UPDATE runbook_schedules SET enabled = 0 WHERE id = ?;
 
@@ -100,3 +111,6 @@ DELETE FROM runbook_schedules WHERE runbook_id IN (
 DELETE FROM runbook_versions WHERE runbook_id IN (
     SELECT id FROM runbooks WHERE project_id = ?
 );
+
+-- name: DeleteProjectRunbookReleases :exec
+DELETE FROM releases WHERE project_id = ? AND kind = 'runbook';

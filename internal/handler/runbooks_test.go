@@ -54,6 +54,23 @@ func TestRunbookWeb_CreateAndExecuteMultiStep(t *testing.T) {
 		t.Fatalf("create status=%d location=%s body=%s", response.StatusCode,
 			response.Header.Get("Location"), body)
 	}
+	version, err := h.repo.Queries.GetLatestRunbookVersion(
+		context.Background(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	refresh, err := h.authedClient().PostForm(
+		fmt.Sprintf("%s/projects/%d/releases/%d/refresh",
+			h.server.URL, project.ID, version.ReleaseID),
+		url.Values{"csrf_token": {h.csrfToken()}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer refresh.Body.Close()
+	if refresh.StatusCode != http.StatusNotFound {
+		t.Fatalf("runbook release refresh status=%d", refresh.StatusCode)
+	}
 	response, err = h.authedClient().PostForm(h.server.URL+base+"/1/execute",
 		url.Values{
 			"csrf_token":     {h.csrfToken()},

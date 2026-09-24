@@ -7,7 +7,6 @@ import (
 	"log/slog"
 
 	"durpdeploy/internal/db"
-	"durpdeploy/internal/gate"
 	"durpdeploy/internal/repository"
 )
 
@@ -84,33 +83,17 @@ func (s *Scheduler) fireRunbook(ctx context.Context, row db.RunbookSchedule) {
 			accessible = accessible || stage.EnvironmentID == row.EnvironmentID
 		}
 		if !accessible {
-			s.log.Warn(
-				"skip inaccessible runbook environment",
-				"schedule_id",
+			s.log.Warn("disable inaccessible runbook environment",
+				"schedule_id", row.ID)
+			if err := s.repo.Queries.DisableRunbookSchedule(
+				ctx,
 				row.ID,
-			)
+			); err != nil {
+				s.log.Error("disable runbook schedule", "schedule_id", row.ID,
+					"error", err)
+			}
 			return
 		}
-	}
-	requiresApproval, err := gate.RequiresApproval(
-		ctx,
-		s.repo,
-		project,
-		row.EnvironmentID,
-	)
-	if err != nil {
-		s.log.Error(
-			"check runbook approval",
-			"schedule_id",
-			row.ID,
-			"error",
-			err,
-		)
-		return
-	}
-	status := "pending"
-	if requiresApproval {
-		status = "pending_approval"
 	}
 	versionID := int64(0)
 	if row.VersionID.Valid {
@@ -124,10 +107,21 @@ func (s *Scheduler) fireRunbook(ctx context.Context, row db.RunbookSchedule) {
 			ScheduleNextRunAt:     next.Unix(),
 			ScheduleExpectedRunAt: row.NextRunAt,
 			FiredAt:               s.now().Unix(),
-			Status:                status,
 		})
 	if err != nil {
-		if errors.Is(err, repository.ErrRunbookScheduleConflict) {
+		if errors.Is(err, repository.ErrRunbookScheduleConflict) ||
+			errors.Is(err, repository.ErrRunbookScheduleOverlap) {
+			return
+		}
+		if errors.Is(err, repository.ErrRunbookGate) {
+			if _, skipErr := s.repo.Queries.SkipRunbookSchedule(ctx,
+				db.SkipRunbookScheduleParams{
+					NextRunAt: next.Unix(), ID: row.ID,
+					NextRunAt_2: row.NextRunAt,
+				}); skipErr != nil {
+				s.log.Error("skip gated runbook schedule", "schedule_id",
+					row.ID, "error", skipErr)
+			}
 			return
 		}
 		s.log.Error(
@@ -141,8 +135,8 @@ func (s *Scheduler) fireRunbook(ctx context.Context, row db.RunbookSchedule) {
 	}
 	s.log.Info("runbook fired", slog.Int64("schedule_id", row.ID),
 		slog.Int64("execution_id", execution.ID))
-	if status == "pending" {
-		go s.runFunc(context.Background(), result.Deployment.ID,
+	if result.Deployment.Status == "pending" {
+		go s.runFunc(context.WithoutCancel(ctx), result.Deployment.ID,
 			result.Deployment.ReleaseID, result.Deployment.EnvironmentID)
 	}
 }

@@ -34,8 +34,17 @@ try {
   const table = page.locator(".md\\:block table").filter({ hasText: "Next run" });
   assert.equal(await table.isVisible(), true);
   assert.equal(await table.locator(`form[action$="/schedules/${scheduleID}/disable"]`).count(), 1);
+  await page.goto(`${base}/projects/${projectID}/runbooks/${runbookID}/edit`);
+  await page.getByRole("button", { name: "Add step" }).click();
+  const targets = page.locator('select[name="step_target"]');
+  await targets.first().selectOption("agent");
+  const selectors = page.locator('input[name="step_selectors"]:not([type="hidden"])');
+  await selectors.first().fill("canary, production");
+  await page.getByRole("button", { name: "Move step down" }).first().click();
+  assert.equal(await selectors.nth(1).inputValue(), "canary, production");
+  assert.equal(await targets.nth(1).inputValue(), "agent");
   assert.deepEqual(errors, []);
-  console.log("Runbook mobile and desktop schedule browser E2E: OK");
+  console.log("Runbook mobile, desktop, and selector reorder browser E2E: OK");
 } finally {
   await browser.close();
 }
