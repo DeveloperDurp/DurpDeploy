@@ -67,8 +67,9 @@ jobs:
         run: docker info >/dev/null
 
       - name: Build image
-        run: docker build -f Dockerfile.mobile-browser \
-          -t "$MOBILE_BROWSER_IMAGE" .
+        run: |
+          docker build -f Dockerfile.mobile-browser \
+            -t "$MOBILE_BROWSER_IMAGE" .
 
       - name: Create container and copy checkout
         run: |
@@ -134,8 +135,9 @@ jobs:
         run: docker info >/dev/null
 
       - name: Build image
-        run: docker build -f Dockerfile.mobile-browser \
-          -t "$AUTH_MFA_IMAGE" .
+        run: |
+          docker build -f Dockerfile.mobile-browser \
+            -t "$AUTH_MFA_IMAGE" .
 
       - name: Create container and copy checkout
         run: |
@@ -286,8 +288,9 @@ jobs:
         run: docker info >/dev/null
 
       - name: Build image
-        run: docker build -f Dockerfile.mobile-browser \
-          -t "$AGENT_SMOKE_IMAGE" .
+        run: |
+          docker build -f Dockerfile.mobile-browser \
+            -t "$AGENT_SMOKE_IMAGE" .
 
       - name: Create container and copy checkout
         run: |
