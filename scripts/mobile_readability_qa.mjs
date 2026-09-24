@@ -249,7 +249,7 @@ const allTargets = [
     rowText: "hostile.audit",
     controls: "#form-container button",
     disclosure: "[data-disclosure=\"audit-details\"]",
-		mobileDisclosure: "[data-mobile-audit-list] [data-disclosure=\"audit-details\"]",
+		mobileDisclosure: '[data-mobile-audit-list] > li:has-text("hostile.audit") [data-disclosure="audit-details"]',
     disclosureRowName: /hostile\.audit/,
     disclosureContent: "audit-token",
     roles: ["admin"],

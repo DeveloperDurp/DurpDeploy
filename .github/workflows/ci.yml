@@ -145,6 +145,9 @@ jobs:
             --entrypoint sleep "$AUTH_MFA_IMAGE" infinity
           docker cp "$GITHUB_WORKSPACE/." \
             "$AUTH_MFA_CONTAINER:/workspace"
+          # GitHub's checkout .git makes go buildvcs stamping fail (git exit
+          # 128) inside the container; test builds don't need stamping.
+          docker exec "$AUTH_MFA_CONTAINER" rm -rf /workspace/.git
 
       - name: Run auth MFA SQLite E2E
         run: |
