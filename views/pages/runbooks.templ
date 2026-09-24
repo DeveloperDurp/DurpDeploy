@@ -1,0 +1,113 @@
+package pages
+
+import (
+	"durpdeploy/internal/db"
+	"durpdeploy/views/components"
+	"durpdeploy/views/layouts"
+	"fmt"
+	"strconv"
+)
+
+func runbookSaveURL(projectID, runbookID int64) string {
+	if runbookID == 0 {
+		return fmt.Sprintf("/projects/%d/runbooks", projectID)
+	}
+	return fmt.Sprintf("/projects/%d/runbooks/%d/save", projectID, runbookID)
+}
+
+templ RunbooksPage(project db.Project, books []db.Runbook, executions []db.ListRunbookExecutionsRow, currentPath string) {
+	@layouts.Base("Runbooks", currentPath) {
+		@components.Breadcrumbs([]components.Crumb{
+			{Label: "Home", Href: "/"},
+			{Label: "Projects", Href: "/projects"},
+			{Label: project.Name, Href: fmt.Sprintf("/projects/%d", project.ID)},
+			{Label: "Runbooks"},
+		})
+		<div class="space-y-6">
+			<div class="flex flex-wrap justify-between items-center gap-2">
+				<h1 class="text-3xl font-bold">Runbooks — { project.Name }</h1>
+				if CanWrite(ctx) {
+					<a class="btn btn-primary btn-sm" href={ fmt.Sprintf("/projects/%d/runbooks/new", project.ID) }>New runbook</a>
+				}
+			</div>
+			<div class="card bg-base-200 p-4">
+				<h2 class="text-xl font-bold mb-3">Saved procedures</h2>
+				<table class="table table-zebra table-fixed w-full">
+					<thead><tr><th class="w-full sm:w-2/5">Name</th><th class="hidden sm:table-cell w-2/5">Description</th><th class="hidden sm:table-cell w-1/5">Created</th></tr></thead>
+					<tbody>
+						for _, book := range books {
+							<tr><td class="truncate"><a class="link link-primary" href={ fmt.Sprintf("/projects/%d/runbooks/%d", project.ID, book.ID) }>{ book.Name }</a></td><td class="hidden sm:table-cell truncate">{ book.Description }</td><td class="hidden sm:table-cell whitespace-nowrap">{ formatUnixTime(book.CreatedAt) }</td></tr>
+						}
+					</tbody>
+				</table>
+				if len(books) == 0 {
+					<p class="text-sm opacity-70 mt-3">No runbooks saved yet.</p>
+				}
+			</div>
+			<div class="card bg-base-200 p-4">
+				<h2 class="text-xl font-bold mb-3">Execution history</h2>
+				<table class="table table-zebra table-fixed w-full">
+					<thead><tr><th class="w-1/2 sm:w-1/5">Runbook</th><th class="hidden sm:table-cell w-1/5">Version</th><th class="hidden sm:table-cell w-1/5">Environment</th><th class="w-1/2 sm:w-1/5">Status</th><th class="hidden sm:table-cell w-1/5">Started</th></tr></thead>
+					<tbody>
+						for _, execution := range executions {
+							<tr><td class="truncate"><a class="link link-primary" href={ fmt.Sprintf("/projects/%d/runbooks/executions/%d", project.ID, execution.ID) }>{ execution.RunbookName }</a></td><td class="hidden sm:table-cell">{ strconv.FormatInt(execution.Version, 10) }</td><td class="hidden sm:table-cell truncate">{ execution.EnvironmentName }</td><td class="truncate">{ execution.Status }</td><td class="hidden sm:table-cell whitespace-nowrap">{ formatUnixTime(execution.CreatedAt) }</td></tr>
+						}
+					</tbody>
+				</table>
+				if len(executions) == 0 {
+					<p class="text-sm opacity-70 mt-3">No runbook executions yet.</p>
+				}
+			</div>
+		</div>
+	}
+}
+
+templ RunbookFormPage(project db.Project, book db.Runbook, stepsJSON string, errorMessage string, currentPath string) {
+	if !CanWrite(ctx) {
+		@ViewerForbiddenMessage("Runbook", "edit", "a runbook", fmt.Sprintf("/projects/%d/runbooks", project.ID), currentPath)
+	} else {
+		@layouts.Base("Runbook", currentPath) {
+			@components.Breadcrumbs([]components.Crumb{
+				{Label: "Home", Href: "/"},
+				{Label: project.Name, Href: fmt.Sprintf("/projects/%d", project.ID)},
+				{Label: "Runbooks", Href: fmt.Sprintf("/projects/%d/runbooks", project.ID)},
+				{Label: "Edit"},
+			})
+			<div class="space-y-6">
+				<h1 class="text-3xl font-bold">
+					if book.ID == 0 {
+						New runbook
+					} else {
+						New version of { book.Name }
+					}
+				</h1>
+				if errorMessage != "" {
+					<div class="alert alert-error">{ errorMessage }</div>
+				}
+				<form method="post" action={ runbookSaveURL(project.ID, book.ID) } class="space-y-4" x-data={ fmt.Sprintf("{ steps: %s }", stepsJSON) }>
+					if book.ID == 0 {
+						<label class="form-control"><span class="label-text">Name</span><input name="name" class="input input-bordered" required/></label>
+						<label class="form-control"><span class="label-text">Description</span><input name="description" class="input input-bordered"/></label>
+					}
+					<template x-for="(step, index) in steps" :key="index">
+						<div class="card bg-base-200 p-4 space-y-3">
+							<div class="flex justify-between items-center"><h2 class="font-bold" x-text="`Step ${index + 1}`"></h2><div class="flex gap-2"><button type="button" class="btn btn-xs" aria-label="Move step up" x-on:click="[steps[index - 1], steps[index]] = [steps[index], steps[index - 1]]" x-bind:disabled="index === 0">↑</button><button type="button" class="btn btn-xs" aria-label="Move step down" x-on:click="[steps[index], steps[index + 1]] = [steps[index + 1], steps[index]]" x-bind:disabled="index === steps.length - 1">↓</button><button type="button" class="btn btn-xs btn-error" x-on:click="steps.splice(index, 1)" x-bind:disabled="steps.length === 1">Remove</button></div></div>
+							<label class="form-control"><span class="label-text">Step name</span><input name="step_name" class="input input-bordered" x-model="step.name" required/></label>
+							<label class="form-control"><span class="label-text">Script</span><textarea name="step_script" class="textarea textarea-bordered font-mono min-h-36" x-model="step.script_body" required></textarea></label>
+							<div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+								<label class="form-control"><span class="label-text">Interpreter</span><select name="step_interpreter" class="select select-bordered" x-model="step.interpreter"><option value="bash">Bash</option><option value="pwsh">PowerShell</option><option value="python3">Python</option></select></label>
+								<label class="form-control"><span class="label-text">Timeout (seconds)</span><input name="step_timeout" type="number" min="0" class="input input-bordered" x-model="step.timeout_seconds"/></label>
+								<label class="form-control"><span class="label-text">Retries</span><input name="step_retries" type="number" min="0" class="input input-bordered" x-model="step.max_retries"/></label>
+								<label class="form-control"><span class="label-text">Execution target</span><select name="step_target" class="select select-bordered" x-model="step.execution_target"><option value="local">Local</option><option value="agent">Agent</option></select></label>
+							</div>
+								<label class="form-control" x-show="step.execution_target === 'agent'"><span class="label-text">Agent labels (comma separated)</span><input name="step_selectors" class="input input-bordered" x-bind:value="(step.agent_selectors || []).join(', ')" x-bind:disabled="step.execution_target !== 'agent'"/></label>
+							<input name="step_selectors" type="hidden" value="" x-bind:disabled="step.execution_target === 'agent'"/>
+						</div>
+					</template>
+					<button type="button" class="btn btn-secondary" x-on:click="steps.push({name:'',script_body:'',interpreter:'bash',timeout_seconds:0,max_retries:0,execution_target:'local',agent_selectors:[]})">Add step</button>
+					<div><button type="submit" class="btn btn-primary">Save immutable version</button><a class="btn btn-ghost" href={ fmt.Sprintf("/projects/%d/runbooks", project.ID) }>Cancel</a></div>
+				</form>
+			</div>
+		}
+	}
+}

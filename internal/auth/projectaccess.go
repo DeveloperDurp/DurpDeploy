@@ -107,12 +107,6 @@ func RequireDeploymentProjectAccess(
 				return
 			}
 
-			// Global admin bypasses the membership check.
-			if user.Role == "admin" {
-				next.ServeHTTP(w, r)
-				return
-			}
-
 			idStr := chi.URLParam(r, "id")
 			deploymentID, err := strconv.ParseInt(idStr, 10, 64)
 			if err != nil || deploymentID <= 0 {
@@ -128,6 +122,14 @@ func RequireDeploymentProjectAccess(
 			)
 			if err != nil {
 				http.NotFound(w, r)
+				return
+			}
+			if deployment.Kind != "deployment" {
+				http.NotFound(w, r)
+				return
+			}
+			if user.Role == "admin" {
+				next.ServeHTTP(w, r)
 				return
 			}
 			release, err := repo.Queries.GetRelease(

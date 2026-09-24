@@ -296,7 +296,7 @@ func (h *DeploymentHandler) ScheduleDeployment(
 	note := r.FormValue("note")
 	noteParam := sql.NullString{String: note, Valid: note != ""}
 
-	release, err := h.repo.Queries.GetRelease(r.Context(), releaseID)
+	release, err := h.repo.Queries.GetDeploymentRelease(r.Context(), releaseID)
 	if err != nil {
 		http.Error(w, "Release not found", http.StatusBadRequest)
 		return
@@ -523,7 +523,10 @@ func (h *DeploymentHandler) GetDeployment(
 		return
 	}
 
-	release, err := h.repo.Queries.GetRelease(r.Context(), deployment.ReleaseID)
+	release, err := h.repo.Queries.GetDeploymentRelease(
+		r.Context(),
+		deployment.ReleaseID,
+	)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -783,7 +786,10 @@ func (h *DeploymentHandler) RedeployDeployment(
 		return
 	}
 
-	release, err := h.repo.Queries.GetRelease(r.Context(), source.ReleaseID)
+	release, err := h.repo.Queries.GetDeploymentRelease(
+		r.Context(),
+		source.ReleaseID,
+	)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			http.Error(w, "Release not found", http.StatusNotFound)

@@ -670,7 +670,7 @@ func (h *ProjectHandler) DeleteProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err = h.repo.Queries.DeleteProject(r.Context(), id); err != nil {
+	if err = h.repo.DeleteProject(r.Context(), id); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

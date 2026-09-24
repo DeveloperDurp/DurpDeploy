@@ -121,6 +121,7 @@ func (s *Scheduler) tick(ctx context.Context) {
 	for _, row := range due {
 		s.fireOne(ctx, row)
 	}
+	s.tickRunbooks(ctx)
 }
 
 func (s *Scheduler) fireOne(ctx context.Context, row db.ScheduledDeployment) {

@@ -223,7 +223,10 @@ func (h *ScheduledDeploymentHandler) Create(
 		return
 	}
 
-	release, err := h.repo.Queries.GetRelease(r.Context(), submitted.ReleaseID)
+	release, err := h.repo.Queries.GetDeploymentRelease(
+		r.Context(),
+		submitted.ReleaseID,
+	)
 	if err != nil {
 		http.Error(w, "Release not found", http.StatusBadRequest)
 		return
@@ -434,7 +437,10 @@ func (h *ScheduledDeploymentHandler) Update(
 		return
 	}
 
-	release, err := h.repo.Queries.GetRelease(r.Context(), submitted.ReleaseID)
+	release, err := h.repo.Queries.GetDeploymentRelease(
+		r.Context(),
+		submitted.ReleaseID,
+	)
 	if err != nil {
 		http.Error(w, "Release not found", http.StatusBadRequest)
 		return

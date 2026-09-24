@@ -4206,6 +4206,440 @@
         ]
       }
     },
+    "/projects/{id}/runbook-executions": {
+      "get": {
+        "tags": [
+          "runbooks"
+        ],
+        "summary": "List runbook execution history.",
+        "operationId": "listRunbookExecutions",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "description": "The resource ID.",
+            "name": "id",
+            "in": "path",
+            "required": true
+          }
+        ]
+      }
+    },
+    "/projects/{id}/runbook-executions/{executionId}": {
+      "get": {
+        "tags": [
+          "runbooks"
+        ],
+        "summary": "Read a runbook execution.",
+        "operationId": "getRunbookExecution",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "description": "The resource ID.",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ExecutionID",
+            "name": "executionId",
+            "in": "path",
+            "required": true
+          }
+        ]
+      }
+    },
+    "/projects/{id}/runbook-executions/{executionId}/approve": {
+      "post": {
+        "tags": [
+          "runbooks"
+        ],
+        "summary": "Approve and start a pending runbook execution.",
+        "operationId": "approveRunbookExecution",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "description": "The resource ID.",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ExecutionID",
+            "name": "executionId",
+            "in": "path",
+            "required": true
+          }
+        ]
+      }
+    },
+    "/projects/{id}/runbook-executions/{executionId}/cancel": {
+      "post": {
+        "tags": [
+          "runbooks"
+        ],
+        "summary": "Cancel a running runbook execution.",
+        "operationId": "cancelRunbookExecution",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "description": "The resource ID.",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ExecutionID",
+            "name": "executionId",
+            "in": "path",
+            "required": true
+          }
+        ]
+      }
+    },
+    "/projects/{id}/runbook-executions/{executionId}/logs": {
+      "get": {
+        "tags": [
+          "runbooks"
+        ],
+        "summary": "Read persisted runbook logs in execution order.",
+        "operationId": "listRunbookLogs",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "description": "The resource ID.",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ExecutionID",
+            "name": "executionId",
+            "in": "path",
+            "required": true
+          }
+        ]
+      }
+    },
+    "/projects/{id}/runbook-executions/{executionId}/logs/stream": {
+      "get": {
+        "tags": [
+          "runbooks"
+        ],
+        "summary": "Stream persisted and live runbook logs.",
+        "operationId": "streamRunbookLogs",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "description": "The resource ID.",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ExecutionID",
+            "name": "executionId",
+            "in": "path",
+            "required": true
+          }
+        ]
+      }
+    },
+    "/projects/{id}/runbook-executions/{executionId}/retry": {
+      "post": {
+        "tags": [
+          "runbooks"
+        ],
+        "summary": "Retry the pinned version of a completed runbook execution.",
+        "operationId": "retryRunbookExecution",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "description": "The resource ID.",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ExecutionID",
+            "name": "executionId",
+            "in": "path",
+            "required": true
+          }
+        ]
+      }
+    },
+    "/projects/{id}/runbooks": {
+      "get": {
+        "tags": [
+          "runbooks"
+        ],
+        "summary": "List project runbooks.",
+        "operationId": "listRunbooks",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "description": "The resource ID.",
+            "name": "id",
+            "in": "path",
+            "required": true
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "runbooks"
+        ],
+        "summary": "Create a runbook and its first immutable version.",
+        "operationId": "createRunbook",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "description": "The resource ID.",
+            "name": "id",
+            "in": "path",
+            "required": true
+          }
+        ]
+      }
+    },
+    "/projects/{id}/runbooks/{runbookId}": {
+      "get": {
+        "tags": [
+          "runbooks"
+        ],
+        "summary": "Read a runbook and its saved versions.",
+        "operationId": "getRunbook",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "description": "The resource ID.",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "RunbookID",
+            "name": "runbookId",
+            "in": "path",
+            "required": true
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "runbooks"
+        ],
+        "summary": "Save the next immutable version of a runbook.",
+        "operationId": "saveRunbookVersion",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "description": "The resource ID.",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "RunbookID",
+            "name": "runbookId",
+            "in": "path",
+            "required": true
+          }
+        ]
+      }
+    },
+    "/projects/{id}/runbooks/{runbookId}/executions": {
+      "post": {
+        "tags": [
+          "runbooks"
+        ],
+        "summary": "Run one concrete version against a project environment.",
+        "operationId": "executeRunbook",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "description": "The resource ID.",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "RunbookID",
+            "name": "runbookId",
+            "in": "path",
+            "required": true
+          }
+        ]
+      }
+    },
+    "/projects/{id}/runbooks/{runbookId}/schedules": {
+      "get": {
+        "tags": [
+          "runbooks"
+        ],
+        "summary": "List runbook schedules.",
+        "operationId": "listRunbookSchedules",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "description": "The resource ID.",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "RunbookID",
+            "name": "runbookId",
+            "in": "path",
+            "required": true
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "runbooks"
+        ],
+        "summary": "Schedule a pinned version or the latest saved version.",
+        "operationId": "createRunbookSchedule",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "description": "The resource ID.",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "RunbookID",
+            "name": "runbookId",
+            "in": "path",
+            "required": true
+          }
+        ]
+      }
+    },
+    "/projects/{id}/runbooks/{runbookId}/schedules/{scheduleId}/disable": {
+      "post": {
+        "tags": [
+          "runbooks"
+        ],
+        "summary": "Disable a runbook schedule.",
+        "operationId": "disableRunbookSchedule",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "description": "The resource ID.",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "RunbookID",
+            "name": "runbookId",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ScheduleID",
+            "name": "scheduleId",
+            "in": "path",
+            "required": true
+          }
+        ]
+      }
+    },
+    "/projects/{id}/runbooks/{runbookId}/versions/{versionId}": {
+      "get": {
+        "tags": [
+          "runbooks"
+        ],
+        "summary": "Read an immutable runbook version.",
+        "operationId": "getRunbookVersion",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "description": "The resource ID.",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "RunbookID",
+            "name": "runbookId",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "VersionID",
+            "name": "versionId",
+            "in": "path",
+            "required": true
+          }
+        ]
+      }
+    },
     "/projects/{id}/schedules": {
       "get": {
         "produces": [

@@ -1,0 +1,183 @@
+package pages
+
+import (
+	"durpdeploy/internal/auth"
+	"durpdeploy/internal/db"
+	"durpdeploy/views/components"
+	"durpdeploy/views/layouts"
+	"fmt"
+	"strconv"
+)
+
+templ RunbookDetailPage(project db.Project, book db.Runbook, versions []db.RunbookVersion, schedules []db.RunbookSchedule, environments []db.Environment, currentPath string) {
+	@layouts.Base(book.Name, currentPath) {
+		@components.Breadcrumbs([]components.Crumb{
+			{Label: "Home", Href: "/"},
+			{Label: project.Name, Href: fmt.Sprintf("/projects/%d", project.ID)},
+			{Label: "Runbooks", Href: fmt.Sprintf("/projects/%d/runbooks", project.ID)},
+			{Label: book.Name},
+		})
+		<div class="space-y-6">
+			<div class="flex flex-wrap justify-between items-center gap-2">
+				<div><h1 class="text-3xl font-bold">{ book.Name }</h1><p class="opacity-70">{ book.Description }</p></div>
+				<div class="flex gap-2">
+					<a class="btn btn-ghost btn-sm" href={ fmt.Sprintf("/projects/%d/runbooks", project.ID) }>Back</a>
+					if CanWrite(ctx) {
+						<a class="btn btn-primary btn-sm" href={ fmt.Sprintf("/projects/%d/runbooks/%d/edit", project.ID, book.ID) }>Save new version</a>
+					}
+				</div>
+			</div>
+			<div class="card bg-base-200 p-4">
+				<h2 class="text-xl font-bold mb-3">Versions</h2>
+				<table class="table table-zebra table-fixed w-full">
+					<thead><tr><th class="w-1/2">Version</th><th class="w-1/2">Saved</th></tr></thead>
+					<tbody>
+						for _, version := range versions {
+							<tr><td>{ strconv.FormatInt(version.Version, 10) }</td><td class="whitespace-nowrap">{ formatUnixTime(version.CreatedAt) }</td></tr>
+						}
+					</tbody>
+				</table>
+			</div>
+			if CanWrite(ctx) {
+				<div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+					<div class="card bg-base-200 p-4">
+						<h2 class="text-xl font-bold mb-3">Run now</h2>
+						<form method="post" action={ fmt.Sprintf("/projects/%d/runbooks/%d/execute", project.ID, book.ID) } class="space-y-3">
+							@RunbookEnvironmentSelect(environments)
+							@RunbookVersionSelect(versions, "Latest saved version")
+							<button class="btn btn-primary" type="submit">Run book</button>
+						</form>
+					</div>
+					<div class="card bg-base-200 p-4">
+						<h2 class="text-xl font-bold mb-3">Schedule</h2>
+						<form method="post" action={ fmt.Sprintf("/projects/%d/runbooks/%d/schedules", project.ID, book.ID) } class="space-y-3">
+							@RunbookEnvironmentSelect(environments)
+							@RunbookVersionSelect(versions, "Always latest")
+							<label class="form-control"><span class="label-text">Cron (five fields)</span><input name="cron" class="input input-bordered" placeholder="0 3 * * *" required/></label>
+							<button class="btn btn-secondary" type="submit">Create schedule</button>
+						</form>
+					</div>
+				</div>
+			}
+			<div class="card bg-base-200 p-4">
+				<h2 class="text-xl font-bold mb-3">Schedules</h2>
+				if len(schedules) == 0 {
+					<p class="text-base-content/70">No schedules yet.</p>
+				} else {
+					<div class="overflow-x-auto">
+						<table class="table table-zebra table-fixed w-full min-w-[36rem]">
+							<thead><tr><th class="w-1/4">Cron</th><th class="w-1/4">Version</th><th class="w-1/4">Next run</th><th class="w-1/4">Action</th></tr></thead>
+							<tbody>
+								for _, schedule := range schedules {
+									<tr>
+										<td class="truncate">{ schedule.Cron }</td>
+										<td>
+											if schedule.VersionID.Valid {
+												Pinned
+											} else {
+												Latest
+											}
+										</td>
+										<td class="whitespace-nowrap">{ formatUnixTime(schedule.NextRunAt) }</td>
+										<td>
+											if schedule.Enabled != 0 && CanWrite(ctx) {
+												<form method="post" action={ fmt.Sprintf("/projects/%d/runbooks/%d/schedules/%d/disable", project.ID, book.ID, schedule.ID) }><button class="btn btn-error btn-xs" type="submit">Disable</button></form>
+											} else {
+												Disabled
+											}
+										</td>
+									</tr>
+								}
+							</tbody>
+						</table>
+					</div>
+				}
+			</div>
+		</div>
+	}
+}
+
+templ RunbookEnvironmentSelect(environments []db.Environment) {
+	<label class="form-control">
+		<span class="label-text">Environment</span>
+		<select name="environment_id" class="select select-bordered" required>
+			<option value="">Select environment</option>
+			for _, environment := range environments {
+				<option value={ strconv.FormatInt(environment.ID, 10) }>{ environment.Name }</option>
+			}
+		</select>
+	</label>
+}
+
+templ RunbookVersionSelect(versions []db.RunbookVersion, latestLabel string) {
+	<label class="form-control">
+		<span class="label-text">Version</span>
+		<select name="version_id" class="select select-bordered">
+			<option value="0">{ latestLabel }</option>
+			for _, version := range versions {
+				<option value={ strconv.FormatInt(version.ID, 10) }>Version { strconv.FormatInt(version.Version, 10) }</option>
+			}
+		</select>
+	</label>
+}
+
+templ RunbookExecutionPage(project db.Project, book db.Runbook, execution db.GetRunbookExecutionRow, logs []db.DeploymentLog, currentPath string) {
+	@layouts.Base("Runbook execution", currentPath) {
+		@components.Breadcrumbs([]components.Crumb{
+			{Label: "Home", Href: "/"},
+			{Label: "Runbooks", Href: fmt.Sprintf("/projects/%d/runbooks", project.ID)},
+			{Label: book.Name, Href: fmt.Sprintf("/projects/%d/runbooks/%d", project.ID, book.ID)},
+			{Label: fmt.Sprintf("Execution #%d", execution.ID)},
+		})
+		<div class="space-y-6">
+			<div class="flex flex-wrap justify-between items-center gap-2">
+				<div><h1 class="text-3xl font-bold">{ book.Name } execution #{ strconv.FormatInt(execution.ID, 10) }</h1><p class="opacity-70">Version { strconv.FormatInt(execution.Version, 10) } · { execution.EnvironmentName }</p></div>
+				<div class="flex gap-2 items-center">
+					<span role="status" aria-live="polite" aria-atomic="true">
+						@RunbookExecutionStatus(project.ID, execution)
+					</span>
+					if CanWrite(ctx) {
+						if execution.Status == "pending_approval" && auth.RoleFromContext(ctx) == "admin" {
+							<form method="post" action={ fmt.Sprintf("/projects/%d/runbooks/executions/%d/approve", project.ID, execution.ID) }><button class="btn btn-success btn-sm" type="submit">Approve</button></form>
+						}
+						if execution.Status == "running" {
+							<form method="post" action={ fmt.Sprintf("/projects/%d/runbooks/executions/%d/cancel", project.ID, execution.ID) }><button class="btn btn-error btn-sm" type="submit">Cancel</button></form>
+						}
+						if execution.Status == "failed" || execution.Status == "cancelled" || execution.Status == "succeeded" {
+							<form method="post" action={ fmt.Sprintf("/projects/%d/runbooks/executions/%d/retry", project.ID, execution.ID) }><button class="btn btn-primary btn-sm" type="submit">Retry</button></form>
+						}
+					}
+				</div>
+			</div>
+			<div
+				class="card bg-base-200 p-4"
+				if execution.Status == "running" || execution.Status == "pending" {
+					x-data={ fmt.Sprintf("deploymentStream({ url: '/projects/%d/runbooks/executions/%d/logs/stream' })", project.ID, execution.ID) }
+					x-on:htmx:after-swap.camel.window="status($event)"
+				}
+			>
+				<h2 class="text-xl font-bold mb-3">Live logs</h2>
+				<div class="bg-base-300 p-4 rounded overflow-x-auto font-mono text-sm space-y-1">
+					for _, log := range logs {
+						<div class="whitespace-pre-wrap">{ log.Line }</div>
+					}
+					<pre x-ref="logs" class="whitespace-pre-wrap"></pre>
+				</div>
+			</div>
+		</div>
+	}
+}
+
+templ RunbookExecutionStatus(projectID int64, execution db.GetRunbookExecutionRow) {
+	<span
+		id="status-badge"
+		class={ "badge " + statusBadgeClass(execution.Status) }
+		hx-get={ fmt.Sprintf("/projects/%d/runbooks/executions/%d/status", projectID, execution.ID) }
+		if execution.Status == "running" || execution.Status == "pending" || execution.Status == "pending_approval" {
+			hx-trigger="every 3s"
+		} else {
+			hx-trigger="none"
+		}
+		hx-swap="outerHTML"
+	>{ execution.Status }</span>
+}

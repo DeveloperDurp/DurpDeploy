@@ -2,13 +2,41 @@
 package api
 
 // ID path parameter. Linked to every operation whose path contains an {id} segment.
-// swagger:parameters addLifecycleStage addMember adminDeleteUser adminGetUser adminUpdateUser approveDeployment cancelDeployment createDeployment createRelease createSchedule createStep createVariable deleteEnvironment deleteLifecycleStage deleteProject deleteSchedule deleteStep deleteTemplate deleteVariable deploymentEvents exportLogs getDeployment getDeploymentStatus getEnvironment getLifecycle getLog getProject getProjectNotifications getRelease getSchedule getStep getTemplate getTemplateHistory getVariable listDeploymentLogs listDeployments listMembers listReleases listSchedules listSteps listVariables redeployDeployment refreshRelease removeMember reorderLifecycleStages reorderSteps retryDeployment revokeAnyToken revokeToken saveLifecycle streamLogs templatesPicker toggleSchedule updateEnvironment updateLifecycleStage updateMemberRole updateProject updateProjectNotifications updateSchedule updateStep updateTemplate updateVariable
+// swagger:parameters addLifecycleStage addMember adminDeleteUser adminGetUser adminUpdateUser approveDeployment cancelDeployment createDeployment createRelease createSchedule createStep createVariable deleteEnvironment deleteLifecycleStage deleteProject deleteSchedule deleteStep deleteTemplate deleteVariable deploymentEvents exportLogs getDeployment getDeploymentStatus getEnvironment getLifecycle getLog getProject getProjectNotifications getRelease getSchedule getStep getTemplate getTemplateHistory getVariable listDeploymentLogs listDeployments listMembers listReleases listSchedules listSteps listVariables redeployDeployment refreshRelease removeMember reorderLifecycleStages reorderSteps retryDeployment revokeAnyToken revokeToken saveLifecycle streamLogs templatesPicker toggleSchedule updateEnvironment updateLifecycleStage updateMemberRole updateProject updateProjectNotifications updateSchedule updateStep updateTemplate updateVariable listRunbooks createRunbook getRunbook saveRunbookVersion getRunbookVersion executeRunbook listRunbookExecutions getRunbookExecution listRunbookLogs streamRunbookLogs cancelRunbookExecution approveRunbookExecution retryRunbookExecution listRunbookSchedules createRunbookSchedule disableRunbookSchedule
 type idPathParam struct {
 	// The resource ID.
 	//
 	// in: path
 	// required: true
 	ID int64 `json:"id"`
+}
+
+// swagger:parameters getRunbook saveRunbookVersion getRunbookVersion executeRunbook listRunbookSchedules createRunbookSchedule disableRunbookSchedule
+type runbookIDPathParam struct {
+	// in: path
+	// required: true
+	RunbookID int64 `json:"runbookId"`
+}
+
+// swagger:parameters getRunbookExecution listRunbookLogs streamRunbookLogs cancelRunbookExecution approveRunbookExecution retryRunbookExecution
+type runbookExecutionIDPathParam struct {
+	// in: path
+	// required: true
+	ExecutionID int64 `json:"executionId"`
+}
+
+// swagger:parameters getRunbookVersion
+type runbookVersionIDPathParam struct {
+	// in: path
+	// required: true
+	VersionID int64 `json:"versionId"`
+}
+
+// swagger:parameters disableRunbookSchedule
+type runbookScheduleIDPathParam struct {
+	// in: path
+	// required: true
+	ScheduleID int64 `json:"scheduleId"`
 }
 
 // stepId path parameter.

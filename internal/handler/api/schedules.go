@@ -181,7 +181,10 @@ func (h *ScheduleHandler) CreateSchedule(
 		return
 	}
 
-	release, err := h.repo.Queries.GetRelease(r.Context(), req.ReleaseID)
+	release, err := h.repo.Queries.GetDeploymentRelease(
+		r.Context(),
+		req.ReleaseID,
+	)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			RespondError(w, http.StatusNotFound, "Release not found")
@@ -366,7 +369,10 @@ func (h *ScheduleHandler) UpdateSchedule(
 		)
 		return
 	}
-	release, err := h.repo.Queries.GetRelease(r.Context(), req.ReleaseID)
+	release, err := h.repo.Queries.GetDeploymentRelease(
+		r.Context(),
+		req.ReleaseID,
+	)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			RespondError(w, http.StatusNotFound, "Release not found")

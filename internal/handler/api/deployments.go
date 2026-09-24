@@ -86,7 +86,10 @@ func (h *DeploymentHandler) CreateDeployment(
 		return
 	}
 
-	release, err := h.repo.Queries.GetRelease(r.Context(), req.ReleaseID)
+	release, err := h.repo.Queries.GetDeploymentRelease(
+		r.Context(),
+		req.ReleaseID,
+	)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			RespondError(w, http.StatusNotFound, "Release not found")
@@ -503,7 +506,10 @@ func (h *DeploymentHandler) RedeployDeployment(
 		)
 		return
 	}
-	release, err := h.repo.Queries.GetRelease(r.Context(), deployment.ReleaseID)
+	release, err := h.repo.Queries.GetDeploymentRelease(
+		r.Context(),
+		deployment.ReleaseID,
+	)
 	if err != nil {
 		RespondError(w, http.StatusNotFound, "Release not found")
 		return
