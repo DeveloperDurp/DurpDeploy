@@ -110,12 +110,17 @@ func TestRunbookAPI_ApprovalAndSchedule(t *testing.T) {
 			approved.Body.String())
 	}
 	deadline := time.Now().Add(5 * time.Second)
+	succeeded := false
 	for time.Now().Before(deadline) {
 		detail := request(http.MethodGet, executionURL, "")
 		if strings.Contains(detail.Body.String(), `"status":"succeeded"`) {
+			succeeded = true
 			break
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+	if !succeeded {
+		t.Fatalf("approved execution did not succeed")
 	}
 	logs := request(http.MethodGet, executionURL+"/logs", "")
 	if !strings.Contains(logs.Body.String(), "approved") {

@@ -10,6 +10,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	"durpdeploy/internal/db"
@@ -103,6 +104,11 @@ func (b *Bus) Publish(ctx context.Context, evt Event) {
 			return
 		}
 		if deployment.Kind == "runbook" {
+			execution, err := b.repo.Queries.GetRunbookExecutionByDeployment(
+				ctx, evt.DeploymentID)
+			if err != nil {
+				return
+			}
 			switch evt.Type {
 			case DeploymentStarted:
 				evt.Type = RunbookStarted
@@ -112,7 +118,8 @@ func (b *Bus) Publish(ctx context.Context, evt Event) {
 				evt.Type = RunbookFailed
 			}
 			evt.Message = strings.Replace(evt.Message,
-				"Deployment #", "Runbook execution #", 1)
+				fmt.Sprintf("Deployment #%d", evt.DeploymentID),
+				fmt.Sprintf("Runbook execution #%d", execution.ID), 1)
 		}
 	}
 	if evt.ProjectID == 0 {

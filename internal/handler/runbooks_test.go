@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/repository"
 )
 
 func TestRunbookWeb_CreateAndExecuteMultiStep(t *testing.T) {
@@ -118,6 +119,39 @@ func TestRunbookWeb_ViewerReadsButCannotEdit(t *testing.T) {
 		t.Fatal(err)
 	}
 	base := fmt.Sprintf("/projects/%d/runbooks", project.ID)
+	book, first, err := h.repo.SaveRunbook(context.Background(),
+		repository.RunbookSave{
+			ProjectID: project.ID,
+			Name:      "Maintenance",
+			StepsJSON: `[{"name":"check","script_body":"echo first_version","interpreter":"bash"}]`,
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := h.repo.SaveRunbook(context.Background(),
+		repository.RunbookSave{
+			ProjectID: project.ID,
+			RunbookID: book.ID,
+			StepsJSON: `[{"name":"check","script_body":"echo second_version","interpreter":"bash"}]`,
+		}); err != nil {
+		t.Fatal(err)
+	}
+	versionURL := fmt.Sprintf("%s/%d?version_id=%d", base, book.ID, first.ID)
+	selected, err := viewer.client.Get(h.server.URL + versionURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer selected.Body.Close()
+	selectedBody, err := io.ReadAll(selected.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if selected.StatusCode != http.StatusOK ||
+		!strings.Contains(string(selectedBody), "echo first_version") ||
+		strings.Contains(string(selectedBody), "echo second_version") {
+		t.Fatalf("viewer version status=%d body=%s", selected.StatusCode,
+			selectedBody)
+	}
 	list, err := viewer.client.Get(h.server.URL + base)
 	if err != nil {
 		t.Fatal(err)

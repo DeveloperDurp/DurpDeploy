@@ -11,10 +11,14 @@ import (
 )
 
 type ReleaseStep struct {
-	Name       string `json:"name"`
-	ScriptBody string `json:"script_body"`
-	Interpreter string `json:"interpreter"`
-	SortOrder  int64  `json:"sort_order"`
+	Name            string   `json:"name"`
+	ScriptBody      string   `json:"script_body"`
+	Interpreter     string   `json:"interpreter"`
+	SortOrder       int64    `json:"sort_order"`
+	TimeoutSeconds  int64    `json:"timeout_seconds"`
+	MaxRetries      int64    `json:"max_retries"`
+	ExecutionTarget string   `json:"execution_target"`
+	AgentSelectors  []string `json:"agent_selectors"`
 }
 
 func parseReleaseSteps(stepsJSON string) []ReleaseStep {
@@ -44,10 +48,10 @@ type AvailableEnv struct {
 }
 
 type GateState struct {
-	Deployable     bool
-	Reason         string
-	Bypassable     bool
-	AlreadyDeployed bool // true = this env already has this release; caller hides the row
+	Deployable       bool
+	Reason           string
+	Bypassable       bool
+	AlreadyDeployed  bool // true = this env already has this release; caller hides the row
 	RequiresApproval bool // true = the target lifecycle stage requires manual approval before running
 }
 
@@ -159,11 +163,11 @@ templ ReleaseRow(projectID int64, rv ReleaseView) {
 							}
 						}
 						if hasForceableEnvs(rv.Envs) {
-						<optgroup label="Needs force" data-gate-group="forceable" x-bind:hidden="!forceChecked">
-							for _, e := range rv.Envs {
-								if !e.State.Deployable && e.State.Bypassable {
-									<option value={ strconv.FormatInt(e.Environment.ID, 10) } data-gate="forceable" title={ e.State.Reason } x-bind:disabled="!forceChecked">{ e.Environment.Name }</option>
-								}
+							<optgroup label="Needs force" data-gate-group="forceable" x-bind:hidden="!forceChecked">
+								for _, e := range rv.Envs {
+									if !e.State.Deployable && e.State.Bypassable {
+										<option value={ strconv.FormatInt(e.Environment.ID, 10) } data-gate="forceable" title={ e.State.Reason } x-bind:disabled="!forceChecked">{ e.Environment.Name }</option>
+									}
 								}
 							</optgroup>
 						}
@@ -181,7 +185,6 @@ templ ReleaseRow(projectID int64, rv ReleaseView) {
 		</td>
 	</tr>
 }
-
 
 templ ReleaseDetailPage(project db.Project, release db.Release, variables []db.ReleaseVariable, environments []db.Environment, currentPath string) {
 	@layouts.Base(fmt.Sprintf("Release %s", release.Version), currentPath) {

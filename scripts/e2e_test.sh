@@ -749,6 +749,42 @@ API_ENV_ID=$(echo "$API_ENV" | python3 -c "import sys,json; print(json.load(sys.
 [[ -n "$API_ENV_ID" ]] || { echo "FAIL: create env did not return id: $API_ENV"; exit 1; }
 echo "  Environment CRUD: OK ($API_ENV_ID)"
 
+echo "=== Runbook API and web contracts ==="
+RUNBOOK_CREATED=$(api_post '{"name":"e2e-maintenance","steps":[{"name":"inspect","script_body":"printf runbook-e2e-v1","interpreter":"bash"}]}' \
+    "$BASE/api/v1/projects/$API_PROJECT_ID/runbooks")
+RUNBOOK_ID=$(echo "$RUNBOOK_CREATED" | python3 -c 'import sys,json; print(json.load(sys.stdin)["runbook"]["id"])')
+RUNBOOK_V1=$(echo "$RUNBOOK_CREATED" | python3 -c 'import sys,json; print(json.load(sys.stdin)["version"]["id"])')
+RUNBOOK_UPDATED=$(api_put '{"steps":[{"name":"inspect","script_body":"printf runbook-e2e-v2","interpreter":"bash"}]}' \
+    "$BASE/api/v1/projects/$API_PROJECT_ID/runbooks/$RUNBOOK_ID")
+RUNBOOK_V2=$(echo "$RUNBOOK_UPDATED" | python3 -c 'import sys,json; print(json.load(sys.stdin)["version"]["id"])')
+[[ "$RUNBOOK_V1" != "$RUNBOOK_V2" ]] || { echo "FAIL: runbook version did not advance"; exit 1; }
+RUNBOOK_PAGE=$(curl_body "$BASE/projects/$API_PROJECT_ID/runbooks/$RUNBOOK_ID?version_id=$RUNBOOK_V1")
+grep -q 'runbook-e2e-v1' <<<"$RUNBOOK_PAGE" || { echo "FAIL: browser cannot read pinned runbook version"; exit 1; }
+if grep -q 'runbook-e2e-v2' <<<"$RUNBOOK_PAGE"; then
+    echo "FAIL: browser version view changed with a later edit"; exit 1
+fi
+RUNBOOK_EXECUTION=$(api_post "{\"environment_id\":$API_ENV_ID,\"version_id\":$RUNBOOK_V1}" \
+    "$BASE/api/v1/projects/$API_PROJECT_ID/runbooks/$RUNBOOK_ID/executions")
+RUNBOOK_EXECUTION_ID=$(echo "$RUNBOOK_EXECUTION" | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
+for i in {1..100}; do
+    RUNBOOK_STATUS=$(api_get "$BASE/api/v1/projects/$API_PROJECT_ID/runbook-executions/$RUNBOOK_EXECUTION_ID" \
+        | python3 -c 'import sys,json; print(json.load(sys.stdin)["status"])')
+    [[ "$RUNBOOK_STATUS" =~ ^(failed|succeeded|cancelled)$ ]] && break
+    sleep 0.1
+done
+[[ "$RUNBOOK_STATUS" == "succeeded" ]] || { echo "FAIL: runbook execution status=$RUNBOOK_STATUS"; exit 1; }
+RUNBOOK_LOGS=$(api_get "$BASE/api/v1/projects/$API_PROJECT_ID/runbook-executions/$RUNBOOK_EXECUTION_ID/logs")
+grep -q 'runbook-e2e-v1' <<<"$RUNBOOK_LOGS" || { echo "FAIL: pinned runbook logs missing"; exit 1; }
+if grep -q 'runbook-e2e-v2' <<<"$RUNBOOK_LOGS"; then
+    echo "FAIL: pinned runbook used a later version"; exit 1
+fi
+RUNBOOK_SCHEDULE=$(api_post "{\"environment_id\":$API_ENV_ID,\"version_id\":$RUNBOOK_V1,\"cron\":\"0 3 * * *\"}" \
+    "$BASE/api/v1/projects/$API_PROJECT_ID/runbooks/$RUNBOOK_ID/schedules")
+RUNBOOK_SCHEDULE_ID=$(echo "$RUNBOOK_SCHEDULE" | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
+api_post '{}' "$BASE/api/v1/projects/$API_PROJECT_ID/runbooks/$RUNBOOK_ID/schedules/$RUNBOOK_SCHEDULE_ID/disable" \
+    | python3 -c 'import sys,json; assert json.load(sys.stdin)["enabled"] == 0'
+echo "  Versioned runbook API execution, schedule, logs, and browser history: OK"
+
 # A4b: Interpreter validation, mixed local execution, immutable snapshots,
 # release refresh, and redeployment all use the public API.
 echo "=== API interpreter tests ==="

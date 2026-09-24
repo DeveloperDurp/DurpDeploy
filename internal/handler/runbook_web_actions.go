@@ -58,6 +58,29 @@ func (h *RunbookHandler) Detail(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Cannot list versions", http.StatusInternalServerError)
 		return
 	}
+	if len(versions) == 0 {
+		http.NotFound(w, r)
+		return
+	}
+	selected := versions[0]
+	if raw := r.URL.Query().Get("version_id"); raw != "" {
+		id, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || id <= 0 {
+			http.Error(w, "Invalid version", http.StatusBadRequest)
+			return
+		}
+		selected, err = h.repo.Queries.GetRunbookVersion(r.Context(),
+			db.GetRunbookVersionParams{ID: id, RunbookID: book.ID})
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+	}
+	release, err := h.repo.Queries.GetRelease(r.Context(), selected.ReleaseID)
+	if err != nil {
+		http.Error(w, "Cannot read version", http.StatusInternalServerError)
+		return
+	}
 	schedules, err := h.repo.Queries.ListRunbookSchedules(r.Context(), book.ID)
 	if err != nil {
 		http.Error(w, "Cannot list schedules", http.StatusInternalServerError)
@@ -72,8 +95,9 @@ func (h *RunbookHandler) Detail(w http.ResponseWriter, r *http.Request) {
 		)
 		return
 	}
-	if err := pages.RunbookDetailPage(project, book, versions, schedules,
-		environments, r.URL.Path).Render(r.Context(), w); err != nil {
+	if err := pages.RunbookDetailPage(project, book, versions, selected,
+		release.StepsJson, schedules, environments, r.URL.Path).
+		Render(r.Context(), w); err != nil {
 		http.Error(w, "Cannot render runbook", http.StatusInternalServerError)
 	}
 }

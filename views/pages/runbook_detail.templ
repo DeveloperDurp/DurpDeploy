@@ -7,9 +7,10 @@ import (
 	"durpdeploy/views/layouts"
 	"fmt"
 	"strconv"
+	"strings"
 )
 
-templ RunbookDetailPage(project db.Project, book db.Runbook, versions []db.RunbookVersion, schedules []db.RunbookSchedule, environments []db.Environment, currentPath string) {
+templ RunbookDetailPage(project db.Project, book db.Runbook, versions []db.RunbookVersion, selected db.RunbookVersion, stepsJSON string, schedules []db.RunbookSchedule, environments []db.Environment, currentPath string) {
 	@layouts.Base(book.Name, currentPath) {
 		@components.Breadcrumbs([]components.Crumb{
 			{Label: "Home", Href: "/"},
@@ -33,10 +34,25 @@ templ RunbookDetailPage(project db.Project, book db.Runbook, versions []db.Runbo
 					<thead><tr><th class="w-1/2">Version</th><th class="w-1/2">Saved</th></tr></thead>
 					<tbody>
 						for _, version := range versions {
-							<tr><td>{ strconv.FormatInt(version.Version, 10) }</td><td class="whitespace-nowrap">{ formatUnixTime(version.CreatedAt) }</td></tr>
+							<tr><td><a class="link" href={ fmt.Sprintf("/projects/%d/runbooks/%d?version_id=%d", project.ID, book.ID, version.ID) }>Version { strconv.FormatInt(version.Version, 10) }</a></td><td class="whitespace-nowrap">{ formatUnixTime(version.CreatedAt) }</td></tr>
 						}
 					</tbody>
 				</table>
+			</div>
+			<div class="card bg-base-200 p-4">
+				<h2 class="text-xl font-bold mb-3">Version { strconv.FormatInt(selected.Version, 10) } steps</h2>
+				<div class="space-y-3">
+					for _, step := range parseReleaseSteps(stepsJSON) {
+						<div class="rounded bg-base-300 p-3 space-y-2">
+							<h3 class="font-semibold">{ strconv.FormatInt(step.SortOrder+1, 10) }. { step.Name }</h3>
+							<p class="text-sm">{ releaseStepInterpreter(step) } · { step.ExecutionTarget } · Timeout { strconv.FormatInt(step.TimeoutSeconds, 10) }s · Retries { strconv.FormatInt(step.MaxRetries, 10) }</p>
+							if len(step.AgentSelectors) > 0 {
+								<p class="text-sm">Agent labels: { strings.Join(step.AgentSelectors, ", ") }</p>
+							}
+							<pre class="whitespace-pre-wrap break-words font-mono text-sm">{ step.ScriptBody }</pre>
+						</div>
+					}
+				</div>
 			</div>
 			if CanWrite(ctx) {
 				<div class="grid grid-cols-1 lg:grid-cols-2 gap-4">

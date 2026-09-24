@@ -1,8 +1,12 @@
 -- +goose Up
 ALTER TABLE releases ADD kind NVARCHAR(32) NOT NULL
     CONSTRAINT DF_releases_kind DEFAULT 'deployment';
+ALTER TABLE releases ADD CONSTRAINT CK_releases_kind
+    CHECK (kind IN ('deployment', 'runbook'));
 ALTER TABLE deployments ADD kind NVARCHAR(32) NOT NULL
     CONSTRAINT DF_deployments_kind DEFAULT 'deployment';
+ALTER TABLE deployments ADD CONSTRAINT CK_deployments_kind
+    CHECK (kind IN ('deployment', 'runbook'));
 
 CREATE TABLE runbooks (
     id BIGINT IDENTITY(1,1) PRIMARY KEY,
