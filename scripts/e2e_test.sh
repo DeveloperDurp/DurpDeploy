@@ -781,6 +781,19 @@ fi
 RUNBOOK_SCHEDULE=$(api_post "{\"environment_id\":$API_ENV_ID,\"version_id\":$RUNBOOK_V1,\"cron\":\"0 3 * * *\"}" \
     "$BASE/api/v1/projects/$API_PROJECT_ID/runbooks/$RUNBOOK_ID/schedules")
 RUNBOOK_SCHEDULE_ID=$(echo "$RUNBOOK_SCHEDULE" | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
+RUNBOOK_SCHEDULE_PAGE=$(curl_body "$BASE/projects/$API_PROJECT_ID/runbooks/$RUNBOOK_ID")
+grep -q 'space-y-3 md:hidden' <<<"$RUNBOOK_SCHEDULE_PAGE" || { echo "FAIL: mobile schedule cards missing"; exit 1; }
+grep -q 'Next run:' <<<"$RUNBOOK_SCHEDULE_PAGE" || { echo "FAIL: schedule next run missing from browser"; exit 1; }
+grep -q "/schedules/$RUNBOOK_SCHEDULE_ID/disable" <<<"$RUNBOOK_SCHEDULE_PAGE" || { echo "FAIL: schedule action missing from browser"; exit 1; }
+if [[ "${DURPDEPLOY_RUNBOOK_BROWSER_E2E:-0}" == "1" ]]; then
+    DURPDEPLOY_RUNBOOK_BROWSER_BASE="$BASE" \
+    DURPDEPLOY_RUNBOOK_BROWSER_PROJECT_ID="$API_PROJECT_ID" \
+    DURPDEPLOY_RUNBOOK_BROWSER_RUNBOOK_ID="$RUNBOOK_ID" \
+    DURPDEPLOY_RUNBOOK_BROWSER_SCHEDULE_ID="$RUNBOOK_SCHEDULE_ID" \
+    DURPDEPLOY_RUNBOOK_BROWSER_EMAIL="$ADMIN_EMAIL" \
+    DURPDEPLOY_RUNBOOK_BROWSER_PASSWORD="$ADMIN_PASS" \
+        node "$SCRIPT_DIR/runbook_browser_test.mjs"
+fi
 api_post '{}' "$BASE/api/v1/projects/$API_PROJECT_ID/runbooks/$RUNBOOK_ID/schedules/$RUNBOOK_SCHEDULE_ID/disable" \
     | python3 -c 'import sys,json; assert json.load(sys.stdin)["enabled"] == 0'
 echo "  Versioned runbook API execution, schedule, logs, and browser history: OK"
