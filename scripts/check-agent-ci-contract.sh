@@ -5,7 +5,7 @@ root=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 bash "$root/scripts/check-ci-contract.sh" "$@"
 
 ci="$root/.github/workflows/ci.yml"
-[ -f "$ci" ] || {
+[[ -f "$ci" ]] || {
 	printf 'agent CI contract: missing .github/workflows/ci.yml\n' >&2
 	exit 1
 }

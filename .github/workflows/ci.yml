@@ -214,11 +214,8 @@ jobs:
           go-version: '1.26.8'
           cache: true
 
-      - name: Install templ
-        run: go install github.com/a-h/templ/cmd/templ@v0.3.1020
-
       - name: Generate templ files
-        run: templ generate
+        run: go tool templ generate
 
       # ponytail: static/swagger-ui/ is gitignored; materialize it before
       # the test build walks the import graph (same reason as release.yml).
@@ -260,11 +257,8 @@ jobs:
           go-version: '1.26.8'
           cache: true
 
-      - name: Install templ
-        run: go install github.com/a-h/templ/cmd/templ@v0.3.1020
-
       - name: Generate templ files
-        run: templ generate
+        run: go tool templ generate
 
       - name: Materialize static/swagger-ui/
         run: make swagger-ui-copy
