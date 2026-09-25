@@ -133,7 +133,7 @@ check-openssl:
 	fi
 
 templ-generate:
-	templ generate
+	go tool templ generate
 
 swagger-spec:
 	swagger generate spec -m -o internal/swagger/spec.json ./internal/handler/api
@@ -263,7 +263,7 @@ mfa-e2e-test: e2e-test-isolated
 auth-mfa-e2e-go-prepare: check-openssl
 	@command -v go >/dev/null 2>&1 || { echo "ERROR: go is required for auth/MFA E2E." >&2; exit 1; }
 	@test -f static/swagger-ui/swagger-ui.css -a -f static/swagger-ui/swagger-ui-bundle.js || { echo "ERROR: generated Swagger UI is required; run make swagger-ui-copy first." >&2; exit 1; }
-	templ generate
+	go tool templ generate
 
 auth-mfa-e2e-browser-prepare: auth-mfa-e2e-go-prepare
 	@command -v node >/dev/null 2>&1 || { echo "ERROR: node is required for auth/MFA browser E2E." >&2; exit 1; }
