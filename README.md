@@ -116,6 +116,18 @@ the normal local user recovery process; there is no self-service password reset.
 
 The full API reference is available at `/api/swagger/` in a running server (no auth required).
 
+### Agent skills
+
+DurpDeploy serves an Agent Skills discovery index so your AI agents can
+learn to drive your instance. Two ways to install it:
+
+1. In your opencode config, add
+   `skills: { urls: ["https://your-durpdeploy-host/.well-known/skills/"] }`
+   (cached under `~/.cache/opencode/skills/`), or copy the served
+   `SKILL.md` to `~/.config/opencode/skills/durpdeploy/SKILL.md`.
+2. Generic agents: fetch `/.well-known/skills/index.json`, then the
+   listed `SKILL.md`, and follow it.
+
 Remote agents use the backward-compatible `agent/1` and `agent/2` protocols.
 The `v0.1.0` agent source tag remains compatible for Bash-only work. Protocol
 v2 agents report Bash, PowerShell, and Python capabilities so the control plane
