@@ -225,7 +225,8 @@ export async function runLifecycleFault(context) {
 		gate.drop();
 		await waitStatus(deployment.id, "succeeded");
 		check((await readOnly(`SELECT COUNT(*) FROM notification_events ` +
-			`WHERE deployment_id=${deployment.id};`)).trim() === "1",
+			`WHERE deployment_id=${deployment.id} AND ` +
+			`event_type='deployment_succeeded';`)).trim() === "1",
 		"lost result response duplicated completion notification");
 	} else if (scenario === "lost-cancelled-response") {
 		await stopAgent();

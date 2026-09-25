@@ -33,6 +33,10 @@ while (($#)); do
 		MODE=failure
 		shift
 		;;
+	--mixed-interpreter)
+		MODE=mixed
+		shift
+		;;
 	--require)
 		[[ $# -ge 2 ]] || { printf '%s\n' 'ERROR: --require needs a value' >&2; exit 2; }
 		REQUIRE=$2
@@ -57,70 +61,45 @@ EXPECTED=(
 default_require() {
 	local joined=
 	local name
-	for name in "${EXPECTED[@]}"; do
+	for name in "$@"; do
 		joined+="${joined:+|}$name"
 	done
 	printf '%s' "$joined"
 }
 
 verify_require() {
-	local value=${REQUIRE:-$(default_require)}
+	local value=${REQUIRE:-$(default_require "$@")}
 	local -a provided=()
+	local -a expected=("$@")
 	IFS='|' read -r -a provided <<<"$value"
-	[[ ${#provided[@]} -eq ${#EXPECTED[@]} ]] || {
-		printf 'ERROR: --require has %d events, want %d\n' "${#provided[@]}" "${#EXPECTED[@]}" >&2
+	[[ ${#provided[@]} -eq ${#expected[@]} ]] || {
+		printf 'ERROR: --require has %d events, want %d\n' "${#provided[@]}" "${#expected[@]}" >&2
 		return 1
 	}
 	local index
-	for index in "${!EXPECTED[@]}"; do
-		[[ ${provided[$index]} == "${EXPECTED[$index]}" ]] || {
+	for index in "${!expected[@]}"; do
+		[[ ${provided[$index]} == "${expected[$index]}" ]] || {
 			printf 'ERROR: required event %d is %q, want %q\n' \
-				"$index" "${provided[$index]}" "${EXPECTED[$index]}" >&2
+				"$index" "${provided[$index]}" "${expected[$index]}" >&2
 			return 1
 		}
 	done
 }
 
-run_failure_matrix() {
-	verify_require
-	node --test scripts/agent_fault_proxy_test.mjs
-	local matrix_status=0
-	local scenario output lifecycle_flag
-	for scenario in "${EXPECTED[@]}"; do
-		output="$RUN_DIR/$scenario.txt"
-		lifecycle_flag=--lifecycle
-		case "$scenario" in
-		crash-before-first-pair-request|lost-first-phase-response|crash-before-server-activation|crash-before-cleanup-ack|lost-cleanup-ack-response)
-			lifecycle_flag=
-			;;
-		esac
-		if ! node scripts/agent_admin_browser_proof.mjs ${lifecycle_flag:+"$lifecycle_flag"} \
-			--fault-scenario "$scenario" \
-			--evidence-dir "$EVIDENCE_DIR/failure-matrix/$scenario" \
-			>"$output" 2>&1; then
-			printf 'FAIL %s\n' "$scenario" >&2
-			matrix_status=1
-		fi
-		while IFS= read -r line; do
-			printf '%s\n' "$line"
-			[[ $line == PASS\ * ]] && printf '%s\n' "$line" >>"$EVENTS"
-		done <"$output"
-	done
-	if ! node --input-type=module - "$EVENTS" "$(default_require)" <<'JS'
+verify_events() {
+	local label=$1
+	local required=$2
+	node --input-type=module - "$EVENTS" "$required" "$label" <<'JS'
 import { readFile } from "node:fs/promises";
 import { verifyExactEvents } from "./scripts/agent_e2e_verify.mjs";
 
-const [, , path, required] = process.argv;
+const [, , path, required, label] = process.argv;
 const events = verifyExactEvents(await readFile(path, "utf8"), required.split("|"));
-console.log(`failure-matrix exact-events=${events.length} result=pass`);
+console.log(`${label} exact-events=${events.length} result=pass`);
 JS
-	then
-		matrix_status=1
-	fi
-	return "$matrix_status"
 }
 
-run_happy() {
+prepare_agent_source() {
 	local agent_root=${DURPDEPLOY_AGENT_WORKTREE:-}
 	if [[ -z $agent_root ]]; then
 		agent_root="$RUN_DIR/agent-source"
@@ -134,6 +113,46 @@ run_happy() {
 		printf 'ERROR: standalone agent source not found: %s\n' "$agent_root" >&2
 		return 1
 	}
+	printf '%s' "$agent_root"
+}
+
+run_failure_matrix() {
+	verify_require "${EXPECTED[@]}"
+	node --test scripts/agent_fault_proxy_test.mjs
+	local agent_root
+	agent_root=$(prepare_agent_source) || return 1
+	local matrix_status=0
+	local scenario output lifecycle_flag
+	for scenario in "${EXPECTED[@]}"; do
+		output="$RUN_DIR/$scenario.txt"
+		lifecycle_flag=--lifecycle
+		case "$scenario" in
+		crash-before-first-pair-request|lost-first-phase-response|crash-before-server-activation|crash-before-cleanup-ack|lost-cleanup-ack-response)
+			lifecycle_flag=
+			;;
+		esac
+		if ! DURPDEPLOY_AGENT_WORKTREE="$agent_root" node \
+			scripts/agent_admin_browser_proof.mjs ${lifecycle_flag:+"$lifecycle_flag"} \
+			--fault-scenario "$scenario" \
+			--evidence-dir "$EVIDENCE_DIR/failure-matrix/$scenario" \
+			>"$output" 2>&1; then
+			printf 'FAIL %s\n' "$scenario" >&2
+			matrix_status=1
+		fi
+		while IFS= read -r line; do
+			printf '%s\n' "$line"
+			[[ $line == PASS\ * ]] && printf '%s\n' "$line" >>"$EVENTS"
+		done <"$output"
+	done
+	if ! verify_events failure-matrix "$(default_require "${EXPECTED[@]}")"; then
+		matrix_status=1
+	fi
+	return "$matrix_status"
+}
+
+run_happy() {
+	local agent_root
+	agent_root=$(prepare_agent_source) || return 1
 	mkdir -p "$EVIDENCE_DIR/browser"
 	DURPDEPLOY_AGENT_WORKTREE="$agent_root" node \
 		scripts/agent_admin_browser_proof.mjs --lifecycle \
@@ -141,8 +160,32 @@ run_happy() {
 	printf '%s\n' 'agent E2E SQLite paired remote lifecycle: PASS'
 }
 
+run_mixed() {
+	verify_require mixed-interpreter
+	local agent_root
+	agent_root=$(prepare_agent_source) || return 1
+	mkdir -p "$EVIDENCE_DIR/mixed-interpreter"
+	local output="$RUN_DIR/mixed-interpreter.txt"
+	if ! DURPDEPLOY_AGENT_WORKTREE="$agent_root" node \
+		scripts/agent_admin_browser_proof.mjs --lifecycle --mixed-interpreter \
+		--evidence-dir "$EVIDENCE_DIR/mixed-interpreter" \
+		>"$output" 2>&1; then
+		printf 'FAIL mixed-interpreter\n' >&2
+		cat "$output" >&2
+		return 1
+	fi
+	local line
+	while IFS= read -r line; do
+		printf '%s\n' "$line"
+		[[ $line == PASS\ * ]] && printf '%s\n' "$line" >>"$EVENTS"
+	done <"$output"
+	verify_events mixed-interpreter mixed-interpreter
+	printf '%s\n' 'agent E2E mixed-interpreter remote deployment: PASS'
+}
+
 cd "$ROOT"
 case "$MODE" in
 failure) run_failure_matrix ;;
 happy) run_happy ;;
+mixed) run_mixed ;;
 esac

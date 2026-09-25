@@ -10,20 +10,37 @@ listen_port=${DURPDEPLOY_AGENT_LISTEN_ADDR##*:}
 cleanup() {
 	local status=$?
 	podman rm -f "$DURPDEPLOY_AGENT_E2E_CONTAINER" >/dev/null 2>&1 || true
+	[[ -n ${binary_volume:-} ]] &&
+		podman volume rm -f "$binary_volume" >/dev/null 2>&1 || true
 	return "$status"
 }
 trap cleanup EXIT
 trap 'exit 143' INT TERM
 
+network=(--network slirp4netns:allow_host_loopback=true)
+if ! command -v slirp4netns >/dev/null 2>&1; then
+	network=(--network pasta:--map-host-loopback,169.254.1.2)
+fi
+
+# Sandboxed filesystems can deny container read access to host bind mounts
+# (exec of a mounted binary segfaults); stage the binary through a volume.
+binary_volume="${DURPDEPLOY_AGENT_E2E_CONTAINER}-bin"
+podman volume rm -f "$binary_volume" >/dev/null 2>&1 || true
+podman volume create "$binary_volume" >/dev/null
+tar -C "$(dirname -- "$DURPDEPLOY_AGENT_E2E_BINARY")" \
+	-cf - "$(basename -- "$DURPDEPLOY_AGENT_E2E_BINARY")" |
+	podman volume import "$binary_volume" -
+binary_mount=(-v "$binary_volume:/usr/local/bin:ro")
+
 podman run --detach --name "$DURPDEPLOY_AGENT_E2E_CONTAINER" \
-	--network slirp4netns:allow_host_loopback=true --read-only \
+	"${network[@]}" --read-only \
 	--publish "127.0.0.1:$listen_port:$listen_port" \
 	--security-opt no-new-privileges:true \
 	--cap-drop ALL \
 	--memory 512m --cpus 1.0 --pids-limit 128 \
 	--tmpfs /tmp:size=64m,mode=1777 \
 	-v "$DURPDEPLOY_AGENT_E2E_STATE_VOLUME:/var/lib/durpdeploy-agent" \
-	-v "$DURPDEPLOY_AGENT_E2E_BINARY:/usr/local/bin/durpdeploy-agent:ro" \
+	"${binary_mount[@]}" \
 	-e DURPDEPLOY_AGENT_LISTEN_ADDR \
 	-e DURPDEPLOY_AGENT_STATE_DIR=/var/lib/durpdeploy-agent \
 	-e DURPDEPLOY_AGENT_VERSION \
