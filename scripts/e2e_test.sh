@@ -724,6 +724,15 @@ CODE=$(curl -s -H "Authorization: Bearer $API_TOKEN" -o /dev/null -w "%{http_cod
 [[ "$CODE" == "200" ]] || { echo "FAIL: authenticated health check got $CODE, want 200"; exit 1; }
 echo "  Health check: OK"
 
+# A2.1: Agent skills discovery is public, no auth needed.
+CODE=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/.well-known/skills/index.json")
+[[ "$CODE" == "200" ]] || { echo "FAIL: skills index got $CODE, want 200"; exit 1; }
+curl -s "$BASE/.well-known/skills/index.json" | grep -q '"durpdeploy"' || { echo "FAIL: skills index missing durpdeploy"; exit 1; }
+CODE=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/.well-known/skills/durpdeploy/SKILL.md")
+[[ "$CODE" == "200" ]] || { echo "FAIL: SKILL.md got $CODE, want 200"; exit 1; }
+curl -s "$BASE/.well-known/skills/durpdeploy/SKILL.md" | head -3 | grep -q 'name: durpdeploy' || { echo "FAIL: SKILL.md frontmatter missing name"; exit 1; }
+echo "  Agent skills discovery: OK"
+
 # A3: Project CRUD.
 API_PROJECT=$(api_post '{"name":"e2e-api-project"}' "$BASE/api/v1/projects")
 API_PROJECT_ID=$(echo "$API_PROJECT" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")

@@ -110,6 +110,29 @@ func newRouter(
 	r.Get("/healthz", healthH.Healthz)
 	r.Get("/api/v1/healthz", healthH.HealthzAPI)
 
+	// Agent skills discovery (public).
+	skillsH := handler.NewSkillsHandler()
+	r.Get("/.well-known/skills/index.json", skillsH.IndexV0x1)
+	r.Get(
+		"/.well-known/skills/durpdeploy/SKILL.md",
+		skillsH.ServeSkill,
+	)
+	r.Get("/.well-known/agent-skills/index.json", skillsH.IndexV2)
+	r.Get(
+		"/.well-known/agent-skills/durpdeploy/SKILL.md",
+		skillsH.ServeSkill,
+	)
+	r.Head("/.well-known/skills/index.json", skillsH.IndexV0x1)
+	r.Head(
+		"/.well-known/skills/durpdeploy/SKILL.md",
+		skillsH.ServeSkill,
+	)
+	r.Head("/.well-known/agent-skills/index.json", skillsH.IndexV2)
+	r.Head(
+		"/.well-known/agent-skills/durpdeploy/SKILL.md",
+		skillsH.ServeSkill,
+	)
+
 	// Auth endpoints (public).
 	r.Get("/login", authHandler.LoginGet)
 	r.Post("/login", authHandler.LoginPost)

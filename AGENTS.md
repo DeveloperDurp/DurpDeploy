@@ -40,6 +40,11 @@ is not complete until the API contract and its E2E test both pass. New or
 changed web functionality must also have a web E2E test and pass it before
 validation is complete.
 
+`skills/durpdeploy/SKILL.md` is the shipped agent skill documenting how
+external agents operate a running instance (served publicly at
+`/.well-known/skills/` and `/.well-known/agent-skills/`). When API behavior
+documented there changes, update that file in the same change.
+
 ```bash
 ./durpdeploy                       # listens on :8080 (hardcoded), creates durpdeploy.db in CWD
 go test -v -count=1 ./...          # CI's exact command
