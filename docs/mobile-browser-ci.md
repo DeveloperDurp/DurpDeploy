@@ -1,9 +1,10 @@
 # Mobile browser CI
 
-`mobile:browser` is a serialized GitLab test job with
-`resource_group: mobile-browser`. It builds `Dockerfile.mobile-browser` and
-runs `/usr/local/bin/mobile-browser-container`. The ordinary Alpine lint,
-test, and build jobs do not run this suite.
+`mobile-browser` is a serialized test job in
+`.github/workflows/ci.yml` with a `ci-mobile-browser` concurrency
+group. It builds `Dockerfile.mobile-browser` and runs
+`/usr/local/bin/mobile-browser-container`. The ordinary lint, test,
+and build jobs in `release.yml` do not run this suite.
 
 The image stays pinned to `mcr.microsoft.com/playwright:v1.61.1-noble`, which
 matches the committed Playwright 1.61.1 lockfile. It copies Go 1.26.8, installs
@@ -60,7 +61,7 @@ missing selectors, unreadable geometry, and interaction failures fail the test.
 it as a baseline when `MOBILE_STRICT` is anything other than `"1"`, including
 when it is absent or `"0"`. The normal tagged test sets it to `"1"`. Use it
 only while you diagnose the harness with its necessary environment inputs. Do not
-add it to the Make target, container entrypoint, or GitLab job.
+add it to the Make target, container entrypoint, or CI job.
 
 ## Evidence and receipts
 
@@ -72,29 +73,23 @@ an output, not a necessary checkout artifact.
 The container supplies a run-specific receipt name, then copies it on exit to
 `/artifacts/<run-id>/mobile-readability-<run-id>.json`. The harness also writes
 its JSON reports and PNG screenshots below that run directory. Local Docker
-runs export it as `artifacts/mobile/<run-id>/`. GitLab copies `/artifacts` and
-uploads `artifacts/mobile/` with `when: always` for one week. The container
+runs export it as `artifacts/mobile/<run-id>/`. CI copies `/artifacts` and
+uploads `artifacts/mobile/` with `if: always()` for seven days. The container
 does not copy source or evidence into an image layer.
 
-## GitLab Docker-in-Docker
+## CI runner Docker
 
-`mobile:browser` uses `docker:24` with `docker:24-dind`, the `docker` service
-alias, `--tls=false`, `DOCKER_TLS_CERTDIR=""`, and
-`DOCKER_HOST=tcp://docker:2375`. The job waits up to 30 seconds for
-`docker info` before building and creating the test container. If the daemon
-stops during cleanup, `after_script` records the diagnostic. Thus, it prevents
-a misleading secondary artifact-copy failure.
-
-The runner needs a privileged Docker executor, or a Kubernetes runner that can
-run privileged pods and services. GitLab copies the checkout into a created
-container because Docker-in-Docker cannot bind-mount the job checkout into the
-service daemon. It then starts the shared entrypoint, copies `/artifacts`, and
+`mobile-browser` runs on a GitHub-hosted `ubuntu-latest` runner whose docker
+daemon runs on the runner host, so there is no Docker-in-Docker service, no
+`DOCKER_HOST`/TLS plumbing, and only a one-line `docker info` guard before
+building. The job copies the checkout into a created container instead of
+bind-mounting it, starts the shared entrypoint, copies `/artifacts` back, and
 removes the container.
 
 ## Static contract check
 
 Run the lightweight contract check after changing the image, entrypoint,
-strictness wiring, receipt creation, Make target, or GitLab job:
+strictness wiring, receipt creation, Make target, or CI job:
 
 ```bash
 bash scripts/check-mobile-browser-container-contract.sh

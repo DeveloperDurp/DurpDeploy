@@ -1,0 +1,318 @@
+# PR CI: Dockerfile lint plus the six test jobs ported 1:1 from the
+# retired .gitlab-ci.yml. Release/publish lives in release.yml; this
+# workflow only gates merges.
+#
+# GitLab-only plumbing is gone by design:
+#   - docker:dind services: the docker daemon runs on the GitHub-hosted
+#     runner itself, so no DOCKER_HOST/TLS variables and no readiness
+#     loop beyond a one-line `docker info` guard.
+#   - $CI_REGISTRY_IMAGE tags: these containers are single-run and never
+#     pushed, so images are built and tagged locally only.
+#   - resource_group: replaced with job-level concurrency groups
+#     (serialized, never cancelled) for the jobs that had one.
+name: test
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main]
+
+# Cancel any in-flight run for the same ref when a new commit lands
+# (same policy as release.yml).
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ----- Dockerfile lint ---------------------------------------------------
+  lint-dockerfile:
+    name: Lint Dockerfile
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: hadolint
+        uses: hadolint/hadolint-action@2332a7b74a6de0dda2e2221d575162eba76ba5e5 # v3.3.0
+        with:
+          dockerfile: Dockerfile
+          failure-threshold: warning
+
+  # ----- Mobile browser readability -----------------------------------------
+  # Builds Dockerfile.mobile-browser, copies the checkout into a created
+  # container, and runs the strict Playwright contract via the shared
+  # entrypoint. Evidence is copied back and uploaded even on failure.
+  mobile-browser:
+    name: Mobile browser
+    runs-on: ubuntu-latest
+    # Replaces GitLab resource_group: mobile-browser. Serialized, never
+    # cancelled, so queued runs wait instead of racing.
+    concurrency:
+      group: ci-mobile-browser
+      cancel-in-progress: false
+    env:
+      MOBILE_BROWSER_IMAGE: mobile-browser:${{ github.sha }}
+      MOBILE_BROWSER_CONTAINER: mobile-browser-${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Check docker daemon
+        run: docker info >/dev/null
+
+      - name: Build image
+        run: |
+          docker build -f Dockerfile.mobile-browser \
+            -t "$MOBILE_BROWSER_IMAGE" .
+
+      - name: Create container and copy checkout
+        run: |
+          docker create --name "$MOBILE_BROWSER_CONTAINER" \
+            --entrypoint /usr/local/bin/mobile-browser-container \
+            -e MOBILE_RUN_ID="github-${{ github.run_id }}" \
+            -e MOBILE_ARTIFACT_DIR=/artifacts \
+            "$MOBILE_BROWSER_IMAGE"
+          docker cp "$GITHUB_WORKSPACE/." \
+            "$MOBILE_BROWSER_CONTAINER:/workspace"
+
+      - name: Run mobile browser contract
+        run: docker start -a "$MOBILE_BROWSER_CONTAINER"
+
+      - name: Failure diagnostics
+        if: failure()
+        run: |
+          docker container inspect "$MOBILE_BROWSER_CONTAINER" \
+            >/dev/null 2>&1 || exit 0
+          echo 'mobile-browser failure diagnostics (capped at 32 KiB):'
+          docker exec "$MOBILE_BROWSER_CONTAINER" sh -c '
+            find /artifacts -type f -name "mobile-readability-*.json" \
+              -size -33k -print -exec cat {} \;
+          ' 2>&1 | head -c 32768 || true
+
+      - name: Collect evidence and remove container
+        if: always()
+        run: |
+          mkdir -p artifacts/mobile
+          docker cp "$MOBILE_BROWSER_CONTAINER:/artifacts/." \
+            artifacts/mobile/ 2>/dev/null || true
+          docker rm -f "$MOBILE_BROWSER_CONTAINER"
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: mobile-browser-artifacts
+          path: artifacts/mobile/
+          retention-days: 7
+
+  # ----- Auth MFA E2E (SQLite) ----------------------------------------------
+  # Same shared image, but the container sleeps while the runner drives it
+  # with docker exec: swagger assets are prepared in-container, then the
+  # SQLite auth MFA E2E suite runs there.
+  auth-mfa-sqlite:
+    name: Auth MFA E2E (SQLite)
+    runs-on: ubuntu-latest
+    # Replaces GitLab resource_group: auth-mfa-e2e (shared with the
+    # parity job below). Serialized, never cancelled.
+    concurrency:
+      group: ci-auth-mfa-e2e
+      cancel-in-progress: false
+    env:
+      AUTH_MFA_IMAGE: auth-mfa-e2e:${{ github.sha }}
+      AUTH_MFA_CONTAINER: auth-mfa-e2e-${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Check docker daemon
+        run: docker info >/dev/null
+
+      - name: Build image
+        run: |
+          docker build -f Dockerfile.mobile-browser \
+            -t "$AUTH_MFA_IMAGE" .
+
+      - name: Create container and copy checkout
+        run: |
+          docker create --name "$AUTH_MFA_CONTAINER" \
+            --entrypoint sleep "$AUTH_MFA_IMAGE" infinity
+          docker cp "$GITHUB_WORKSPACE/." \
+            "$AUTH_MFA_CONTAINER:/workspace"
+
+      - name: Run auth MFA SQLite E2E
+        run: |
+          docker start "$AUTH_MFA_CONTAINER"
+          # GitHub's checkout .git makes go buildvcs stamping fail (git exit
+          # 128) inside the container; test builds don't need stamping.
+          docker exec "$AUTH_MFA_CONTAINER" rm -rf /workspace/.git
+          docker exec -e NODE_PATH=/opt/mobile-browser/node_modules \
+            "$AUTH_MFA_CONTAINER" sh -ec '
+            ln -s /opt/mobile-browser/node_modules node_modules &&
+            mkdir -p static/swagger-ui &&
+            for f in swagger-ui-bundle.js \
+              swagger-ui-standalone-preset.js swagger-ui.css \
+              favicon-32x32.png favicon-16x16.png; do
+              cp /opt/mobile-browser/node_modules/swagger-ui-dist/"$f" \
+                static/swagger-ui/
+            done &&
+            make auth-mfa-e2e-sqlite'
+
+      - name: Failure diagnostics
+        if: failure()
+        run: |
+          docker container inspect "$AUTH_MFA_CONTAINER" \
+            >/dev/null 2>&1 || exit 0
+          echo 'auth-mfa-sqlite failure diagnostics (capped at 32 KiB):'
+          docker exec "$AUTH_MFA_CONTAINER" sh -c '
+            find /workspace/artifacts -type f \( -name summary.txt \
+              -o -name "*.redacted.log" -o -name trace.redacted.json \) \
+              -size -33k -print -exec cat {} \;
+          ' 2>&1 | head -c 32768 || true
+
+      - name: Collect artifacts and remove container
+        if: always()
+        run: |
+          mkdir -p artifacts
+          docker cp "$AUTH_MFA_CONTAINER:/workspace/artifacts/." \
+            artifacts/ 2>/dev/null || true
+          docker rm -f "$AUTH_MFA_CONTAINER"
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: auth-mfa-sqlite-artifacts
+          path: artifacts/
+          retention-days: 7
+
+  # ----- Auth MFA E2E (Postgres/MSSQL parity) --------------------------------
+  # Runs on the runner host directly: Go via setup-go, docker daemon on the
+  # runner for the testcontainers the parity suites start. No testcontainer
+  # cleanup step — each job gets a fresh runner.
+  auth-mfa-parity:
+    name: Auth MFA E2E (Postgres/MSSQL)
+    runs-on: ubuntu-latest
+    # Replaces GitLab resource_group: auth-mfa-e2e (shared with the
+    # SQLite job above). Serialized, never cancelled.
+    concurrency:
+      group: ci-auth-mfa-e2e
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: '1.26.8'
+          cache: true
+
+      - name: Generate templ files
+        run: go tool templ generate
+
+      # ponytail: static/swagger-ui/ is gitignored; materialize it before
+      # the test build walks the import graph (same reason as release.yml).
+      - name: Materialize static/swagger-ui/
+        run: make swagger-ui-copy
+
+      - name: Run auth MFA database parity E2E
+        run: make auth-mfa-e2e-postgres auth-mfa-e2e-mssql
+
+      - name: Failure diagnostics
+        if: failure()
+        run: |
+          echo 'auth-mfa-parity failure diagnostics (capped at 32 KiB):'
+          find artifacts/auth-mfa -type f \( -name summary.txt \
+            -o -name '*.redacted.log' -o -name trace.redacted.json \) \
+            -size -33k -print -exec cat {} \; 2>&1 | head -c 32768 || true
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: auth-mfa-parity-artifacts
+          path: artifacts/auth-mfa/
+          retention-days: 7
+
+  # ----- Agent rollout gate ---------------------------------------------------
+  # Contract checks plus the remote-agent lifecycle Go tests; testcontainers
+  # use the docker daemon on the runner.
+  agent-rollout:
+    name: Agent rollout gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: '1.26.8'
+          cache: true
+
+      - name: Generate templ files
+        run: go tool templ generate
+
+      - name: Materialize static/swagger-ui/
+        run: make swagger-ui-copy
+
+      - name: Run agent rollout gate
+        run: make agent-rollout-gate
+
+  # ----- Agent smoke -----------------------------------------------------------
+  # Self-contained smoke check inside the shared image: the entrypoint
+  # provisions and pairs its own server and agent and writes evidence to
+  # /artifacts/agent-smoke, which is copied back and uploaded.
+  agent-smoke:
+    name: Agent smoke
+    runs-on: ubuntu-latest
+    env:
+      AGENT_SMOKE_IMAGE: agent-smoke:${{ github.sha }}
+      AGENT_SMOKE_CONTAINER: agent-smoke-${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Check docker daemon
+        run: docker info >/dev/null
+
+      - name: Build image
+        run: |
+          docker build -f Dockerfile.mobile-browser \
+            -t "$AGENT_SMOKE_IMAGE" .
+
+      - name: Create container and copy checkout
+        run: |
+          docker create --name "$AGENT_SMOKE_CONTAINER" \
+            --entrypoint /usr/local/bin/agent-smoke-container \
+            -e AGENT_E2E_EVIDENCE_DIR=/artifacts/agent-smoke \
+            "$AGENT_SMOKE_IMAGE"
+          docker cp "$GITHUB_WORKSPACE/." \
+            "$AGENT_SMOKE_CONTAINER:/workspace"
+
+      - name: Run agent smoke
+        run: docker start -a "$AGENT_SMOKE_CONTAINER"
+
+      - name: Collect evidence and remove container
+        if: always()
+        run: |
+          mkdir -p artifacts
+          docker cp "$AGENT_SMOKE_CONTAINER:/artifacts/." \
+            artifacts/ 2>/dev/null || true
+          docker rm -f "$AGENT_SMOKE_CONTAINER"
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: agent-smoke-artifacts
+          path: artifacts/agent-smoke/
+          retention-days: 7

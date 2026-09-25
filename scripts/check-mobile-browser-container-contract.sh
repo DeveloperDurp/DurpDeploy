@@ -117,7 +117,7 @@ receipt=internal/handler/mobile_browser_receipt_test.go
 strictness=internal/handler/mobile_browser_strictness_test.go
 environment=internal/handler/mobile_browser_test.go
 harness=scripts/mobile_readability_qa.mjs
-ci=.gitlab-ci.yml
+ci=.github/workflows/ci.yml
 
 for file in "$dockerfile" "$entrypoint" "$runner" "$receipt" "$strictness" \
 	"$environment" "$harness" Makefile "$ci"; do
@@ -198,22 +198,6 @@ require_text "$ci" 'docker build -f Dockerfile.mobile-browser' \
 	'CI does not build the shared browser image'
 require_text "$ci" 'mobile-browser-container' \
 	'CI does not invoke the shared browser entrypoint'
-require_text "$ci" 'alias: docker' 'CI Docker service alias is missing'
-require_text "$ci" 'command: ["--tls=false"]' 'CI Docker TLS setting is missing'
-require_text "$ci" 'DOCKER_HOST: tcp://docker:2375' 'CI Docker host is missing'
-require_text "$ci" 'DOCKER_TLS_CERTDIR: ""' 'CI Docker TLS directory setting is missing'
-require_text "$ci" 'for attempt in $(seq 1 30); do' 'CI Docker readiness loop is missing'
-require_text "$ci" 'Docker daemon did not become ready after 30 seconds' \
-	'CI Docker readiness diagnostic is missing'
-require_text "$ci" 'docker info 2>&1 || true' 'CI Docker readiness diagnostics are missing'
-require_text "$ci" 'if ! docker info >/tmp/mobile-browser-docker-info 2>&1; then' \
-	'CI Docker after-script diagnostic is missing'
-require_text "$ci" 'skipping failure diagnostics and container cleanup' \
-	'CI Docker after-script diagnostic is missing'
-require_text "$ci" 'docker container inspect "$MOBILE_BROWSER_CONTAINER"' \
-	'CI container existence check is missing'
-require_text "$ci" 'mobile:browser failure diagnostics (capped at 32 KiB):' \
-	'CI failure diagnostic heading is missing'
 require_text "$ci" 'mobile-readability-*.json' \
 	'CI failure diagnostic receipt allowlist is missing'
 require_text "$ci" 'head -c 32768' \
@@ -221,7 +205,8 @@ require_text "$ci" 'head -c 32768' \
 require_text "$ci" 'docker rm -f "$MOBILE_BROWSER_CONTAINER"' \
 	'CI container cleanup is missing'
 
-if sed -n '/^mobile:browser:/,/^auth:mfa-sqlite:/p' "$root/$ci" | \
+if sed -n '/^[[:space:]]*mobile-browser:/,/^[[:space:]]*auth-mfa-sqlite:/p' \
+	"$root/$ci" | \
 	grep -Eq 'docker start -a.*\|\| true|docker run.*\|\| true'; then
 	echo 'mobile browser contract: CI main test command must not be failure-masked' >&2
 	exit 1
@@ -252,7 +237,8 @@ for file in \
 		"legacy mobile browser mode remains in $file"
 done
 
-if sed -n '/^mobile:browser:/,/^auth:mfa-sqlite:/p' "$root/$ci" | \
+if sed -n '/^[[:space:]]*mobile-browser:/,/^[[:space:]]*auth-mfa-sqlite:/p' \
+	"$root/$ci" | \
 	grep -Eq 'apt-get|npm ci|playwright install|templ generate'; then
 	echo 'mobile browser contract: CI duplicates container provisioning' >&2
 	exit 1
