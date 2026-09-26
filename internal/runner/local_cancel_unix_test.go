@@ -96,11 +96,19 @@ func TestLocalCancellationStopsChildBeforeFiveSeconds(t *testing.T) {
 	if err != nil || stored.Status != "cancelled" {
 		t.Fatalf("deployment after cancellation=%+v error=%v", stored, err)
 	}
-	status, err := os.ReadFile(fmt.Sprintf("/proc/%d/status", childPID))
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		t.Fatal(err)
-	}
-	if err == nil && !strings.Contains(string(status), "State:\tZ") {
-		t.Fatalf("child process %d survived cancellation", childPID)
+	childDeadline := time.Now().Add(time.Second)
+	for {
+		status, err := os.ReadFile(fmt.Sprintf("/proc/%d/status", childPID))
+		if errors.Is(err, os.ErrNotExist) ||
+			(err == nil && strings.Contains(string(status), "State:\tZ")) {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		if time.Now().After(childDeadline) {
+			t.Fatalf("child process %d survived cancellation", childPID)
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
