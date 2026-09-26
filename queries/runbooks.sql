@@ -122,7 +122,7 @@ SELECT CASE WHEN EXISTS (
     JOIN runbooks b ON b.id = v.runbook_id
     JOIN deployments d ON d.id = x.deployment_id
     WHERE b.project_id = ?
-      AND d.status IN ('pending', 'running')
+      AND d.status IN ('pending', 'running', 'pending_approval')
 ) THEN 1 ELSE 0 END;
 
 -- name: DeleteRunbookRemoteStepLogSequences :exec

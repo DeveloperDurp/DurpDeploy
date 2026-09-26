@@ -118,6 +118,11 @@ func TestRunbookAPI_ApprovalAndSchedule(t *testing.T) {
 		t.Fatalf("before approval status=%d body=%s", before.Code,
 			before.Body.String())
 	}
+	deletion := request(http.MethodDelete, base, "")
+	if deletion.Code != http.StatusConflict {
+		t.Fatalf("delete pending approval status=%d body=%s",
+			deletion.Code, deletion.Body.String())
+	}
 	approved := request(http.MethodPost, executionURL+"/approve", "")
 	if approved.Code != http.StatusOK {
 		t.Fatalf("approve status=%d body=%s", approved.Code,
