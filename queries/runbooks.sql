@@ -97,7 +97,14 @@ WHERE id = ? AND enabled = 1 AND next_run_at <= ?;
 SELECT CASE WHEN EXISTS (
     SELECT 1 FROM runbook_executions x
     JOIN deployments d ON d.id = x.deployment_id
-    WHERE x.schedule_id = ? AND d.status IN ('pending', 'running', 'pending_approval')
+    WHERE x.schedule_id = ?
+      AND (d.status IN ('pending', 'running', 'pending_approval')
+        OR EXISTS (SELECT 1 FROM remote_deployment_claims c
+                   WHERE c.deployment_id = d.id
+                     AND c.state IN ('lost', 'cancel_unconfirmed'))
+        OR EXISTS (SELECT 1 FROM remote_step_runs s
+                   WHERE s.deployment_id = d.id
+                     AND s.state IN ('lost', 'cancel_unconfirmed')))
 ) THEN 1 ELSE 0 END;
 
 -- name: DisableRunbookSchedule :exec
@@ -122,7 +129,13 @@ SELECT CASE WHEN EXISTS (
     JOIN runbooks b ON b.id = v.runbook_id
     JOIN deployments d ON d.id = x.deployment_id
     WHERE b.project_id = ?
-      AND d.status IN ('pending', 'running', 'pending_approval')
+      AND (d.status IN ('pending', 'running', 'pending_approval')
+        OR EXISTS (SELECT 1 FROM remote_deployment_claims c
+                   WHERE c.deployment_id = d.id
+                     AND c.state IN ('lost', 'cancel_unconfirmed'))
+        OR EXISTS (SELECT 1 FROM remote_step_runs s
+                   WHERE s.deployment_id = d.id
+                     AND s.state IN ('lost', 'cancel_unconfirmed')))
 ) THEN 1 ELSE 0 END;
 
 -- name: DeleteRunbookRemoteStepLogSequences :exec

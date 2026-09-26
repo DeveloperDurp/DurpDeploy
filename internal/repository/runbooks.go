@@ -18,11 +18,11 @@ type RunbookSave struct {
 }
 
 var ErrProjectHasActiveRunbook = errors.New(
-	"project has active runbook executions",
+	"project has active or unconfirmed runbook executions",
 )
 
 var ErrEnvironmentHasActiveDeployment = errors.New(
-	"environment has active deployments",
+	"environment has active or unconfirmed deployments",
 )
 
 func (r *Repository) DeleteEnvironment(ctx context.Context, id int64) error {

@@ -168,10 +168,12 @@ schedule with `POST .../schedules/$SID/disable`.
 
 The web UI starts at `/projects/$PID/runbooks`. It supports editing,
 execution history, live logs, approval, cancellation, retry, and schedules.
-Deleting a project with a pending, running, or approval-gated runbook returns
-`409`. Approve an approval-gated execution, then wait for a terminal status
-(or cancel it after it starts) before deleting the project.
-Deleting an environment with any active deployment also returns `409`.
+Deleting a project with a pending, running, approval-gated, or unconfirmed
+remote runbook returns `409`. Approve an approval-gated execution, then wait
+for a confirmed terminal status (or cancel it after it starts) before deleting
+the project. An unconfirmed remote outcome needs operator inspection.
+Deleting an environment with any active or unconfirmed remote deployment
+also returns `409`.
 Once deployments are terminal, environment deletion removes their history.
 
 ## Endpoint cheat sheet
