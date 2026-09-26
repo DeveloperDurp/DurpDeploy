@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"crypto/rand"
+	"errors"
 	"fmt"
 
 	"durpdeploy/internal/db"
@@ -16,9 +17,23 @@ type RunbookSave struct {
 	StepsJSON   string
 }
 
+var ErrProjectHasActiveRunbook = errors.New(
+	"project has active runbook executions",
+)
+
 func (r *Repository) DeleteProject(ctx context.Context, projectID int64) error {
 	return withSQLiteBusyRetry(ctx, func() error {
 		return r.WithTx(ctx, func(q *db.Queries) error {
+			active, err := q.HasActiveProjectRunbookExecution(
+				ctx,
+				projectID,
+			)
+			if err != nil {
+				return err
+			}
+			if active != 0 {
+				return ErrProjectHasActiveRunbook
+			}
 			deployments, err := q.ListProjectRunbookDeploymentIDs(
 				ctx,
 				projectID,

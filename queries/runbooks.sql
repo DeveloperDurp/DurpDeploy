@@ -115,6 +115,16 @@ JOIN runbook_versions v ON v.id = x.runbook_version_id
 JOIN runbooks b ON b.id = v.runbook_id
 WHERE b.project_id = ?;
 
+-- name: HasActiveProjectRunbookExecution :one
+SELECT CASE WHEN EXISTS (
+    SELECT 1 FROM runbook_executions x
+    JOIN runbook_versions v ON v.id = x.runbook_version_id
+    JOIN runbooks b ON b.id = v.runbook_id
+    JOIN deployments d ON d.id = x.deployment_id
+    WHERE b.project_id = ?
+      AND d.status IN ('pending', 'running')
+) THEN 1 ELSE 0 END;
+
 -- name: DeleteRunbookRemoteStepLogSequences :exec
 DELETE FROM remote_step_log_sequences WHERE deployment_id = ?;
 

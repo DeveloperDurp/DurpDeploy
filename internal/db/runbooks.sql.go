@@ -493,6 +493,24 @@ func (q *Queries) GetRunbookVersion(ctx context.Context, arg GetRunbookVersionPa
 	return i, err
 }
 
+const hasActiveProjectRunbookExecution = `-- name: HasActiveProjectRunbookExecution :one
+SELECT CASE WHEN EXISTS (
+    SELECT 1 FROM runbook_executions x
+    JOIN runbook_versions v ON v.id = x.runbook_version_id
+    JOIN runbooks b ON b.id = v.runbook_id
+    JOIN deployments d ON d.id = x.deployment_id
+    WHERE b.project_id = ?
+      AND d.status IN ('pending', 'running')
+) THEN 1 ELSE 0 END
+`
+
+func (q *Queries) HasActiveProjectRunbookExecution(ctx context.Context, projectID int64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, hasActiveProjectRunbookExecution, projectID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const hasActiveRunbookScheduleExecution = `-- name: HasActiveRunbookScheduleExecution :one
 SELECT CASE WHEN EXISTS (
     SELECT 1 FROM runbook_executions x

@@ -3229,6 +3229,12 @@
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
+          "409": {
+            "description": "Conflict error response.",
+            "schema": {
+              "$ref": "#/definitions/ConflictError"
+            }
+          },
           "500": {
             "description": "Server error response.",
             "schema": {

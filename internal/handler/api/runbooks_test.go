@@ -226,6 +226,71 @@ func TestRunbookAPI_ProjectDeleteAfterVersion(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
+	updated := request(http.MethodPut,
+		fmt.Sprintf("%s/runbooks/%d", base, saved.Runbook.ID),
+		`{"steps":[{"name":"wait","script_body":"exec sleep 10"}]}`)
+	if updated.Code != http.StatusCreated {
+		t.Fatalf("update status=%d body=%s", updated.Code,
+			updated.Body.String())
+	}
+	active := request(http.MethodPost,
+		fmt.Sprintf("%s/runbooks/%d/executions", base, saved.Runbook.ID),
+		fmt.Sprintf(`{"environment_id":%d}`, environment.ID))
+	if active.Code != http.StatusCreated {
+		t.Fatalf("active execution status=%d body=%s", active.Code,
+			active.Body.String())
+	}
+	var running struct {
+		ID           int64 `json:"id"`
+		DeploymentID int64 `json:"deployment_id"`
+	}
+	if err := json.Unmarshal(active.Body.Bytes(), &running); err != nil {
+		t.Fatal(err)
+	}
+	deadline = time.Now().Add(5 * time.Second)
+	status := ""
+	for time.Now().Before(deadline) {
+		deployment, err := h.repo.Queries.GetDeployment(context.Background(),
+			running.DeploymentID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		status = deployment.Status
+		if status == "running" {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if status != "running" {
+		t.Fatalf("execution did not start: %s", status)
+	}
+	blocked := request(http.MethodDelete, base, "")
+	if blocked.Code != http.StatusConflict {
+		t.Fatalf("active delete status=%d body=%s", blocked.Code,
+			blocked.Body.String())
+	}
+	cancelled := request(http.MethodPost,
+		fmt.Sprintf("%s/runbook-executions/%d/cancel", base, running.ID), "")
+	if cancelled.Code != http.StatusOK {
+		t.Fatalf("cancel status=%d body=%s", cancelled.Code,
+			cancelled.Body.String())
+	}
+	deadline = time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		deployment, err := h.repo.Queries.GetDeployment(context.Background(),
+			running.DeploymentID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		status = deployment.Status
+		if status == "cancelled" {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if status != "cancelled" {
+		t.Fatalf("execution did not cancel: %s", status)
+	}
 	deleted := request(http.MethodDelete, base, "")
 	if deleted.Code != http.StatusNoContent {
 		t.Fatalf(

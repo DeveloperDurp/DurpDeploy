@@ -15,13 +15,14 @@ type sqliteCodeError int
 func (err sqliteCodeError) Error() string { return "sqlite test error" }
 func (err sqliteCodeError) Code() int     { return int(err) }
 
-func TestSQLiteBusyClassificationRetriesOnlyPrimaryCode(t *testing.T) {
+func TestSQLiteBusyClassificationRetriesSnapshotConflicts(t *testing.T) {
 	tests := []struct {
 		name string
 		err  error
 		busy bool
 	}{
 		{name: "primary busy", err: sqliteCodeError(5), busy: true},
+		{name: "snapshot conflict", err: sqliteCodeError(517), busy: true},
 		{name: "locked", err: sqliteCodeError(6), busy: false},
 		{name: "extended busy", err: sqliteCodeError(5 | 1<<8), busy: false},
 		{name: "arbitrary", err: errors.New("database is locked"), busy: false},
@@ -46,7 +47,7 @@ func TestSQLiteBusyRetryValueReturnsOnlySuccessfulAttempt(t *testing.T) {
 			attempts++
 			if attempts == 1 {
 				return "stale rolled-back claim", sqliteCodeError(
-					sqliteBusyCode,
+					sqliteBusySnapshotCode,
 				)
 			}
 			return "", nil

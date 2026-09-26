@@ -168,6 +168,8 @@ schedule with `POST .../schedules/$SID/disable`.
 
 The web UI starts at `/projects/$PID/runbooks`. It supports editing,
 execution history, live logs, approval, cancellation, retry, and schedules.
+Deleting a project with a pending or running runbook returns `409`;
+cancel the execution and wait for a terminal status before deleting it.
 
 ## Endpoint cheat sheet
 
