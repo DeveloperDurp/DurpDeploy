@@ -46,7 +46,6 @@ CREATE TABLE runbook_executions (
     created_at INTEGER NOT NULL DEFAULT (unixepoch())
 );
 CREATE INDEX idx_runbook_executions_version ON runbook_executions(runbook_version_id);
-CREATE INDEX idx_runbook_executions_schedule ON runbook_executions(schedule_id);
 -- +goose StatementEnd
 
 -- +goose Down

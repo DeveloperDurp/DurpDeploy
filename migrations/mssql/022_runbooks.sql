@@ -46,7 +46,6 @@ CREATE TABLE runbook_executions (
     created_at BIGINT NOT NULL DEFAULT DATEDIFF_BIG(SECOND,'1970-01-01',SYSUTCDATETIME())
 );
 CREATE INDEX idx_runbook_executions_version ON runbook_executions(runbook_version_id);
-CREATE INDEX idx_runbook_executions_schedule ON runbook_executions(schedule_id);
 
 -- +goose Down
 CREATE TABLE runbooks_rollback_refused (
