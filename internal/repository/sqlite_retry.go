@@ -7,8 +7,9 @@ import (
 )
 
 const (
-	sqliteBusyCode  = 5
-	sqliteBusyTries = 5
+	sqliteBusyCode         = 5
+	sqliteBusySnapshotCode = 517
+	sqliteBusyTries        = 5
 )
 
 type sqliteErrorCoder interface {
@@ -17,7 +18,11 @@ type sqliteErrorCoder interface {
 
 func IsSQLiteBusy(err error) bool {
 	var sqliteErr sqliteErrorCoder
-	return errors.As(err, &sqliteErr) && sqliteErr.Code() == sqliteBusyCode
+	if !errors.As(err, &sqliteErr) {
+		return false
+	}
+	return sqliteErr.Code() == sqliteBusyCode ||
+		sqliteErr.Code() == sqliteBusySnapshotCode
 }
 
 func withSQLiteBusyRetry(ctx context.Context, operation func() error) error {

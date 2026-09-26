@@ -229,7 +229,7 @@ func (h *ReleaseHandler) GetRelease(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	release, err := h.repo.Queries.GetRelease(r.Context(), releaseID)
+	release, err := h.repo.Queries.GetDeploymentRelease(r.Context(), releaseID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			http.Error(w, "Release not found", http.StatusNotFound)

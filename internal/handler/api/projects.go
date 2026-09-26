@@ -406,6 +406,7 @@ func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 //	  204: body:EmptyResponse
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
+//	  409: body:ConflictError
 //	  500: body:ServerError
 func (h *ProjectHandler) DeleteProject(w http.ResponseWriter, r *http.Request) {
 	id, err := parseParamInt(r, "id")
@@ -414,7 +415,11 @@ func (h *ProjectHandler) DeleteProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.repo.Queries.DeleteProject(r.Context(), id); err != nil {
+	if err := h.repo.DeleteProject(r.Context(), id); err != nil {
+		if errors.Is(err, repository.ErrProjectHasActiveRunbook) {
+			RespondError(w, http.StatusConflict, err.Error())
+			return
+		}
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}

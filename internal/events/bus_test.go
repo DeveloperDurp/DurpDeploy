@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"durpdeploy/internal/db"
@@ -43,6 +44,84 @@ func newTestRepo(t *testing.T) *repository.Repository {
 	}
 	t.Cleanup(func() { dbConn.Close() })
 	return repository.New(dbConn)
+}
+
+func TestBus_RunbookNotificationUsesExecutionID(t *testing.T) {
+	repo := newTestRepo(t)
+	ctx := context.Background()
+	project, err := repo.Queries.CreateProject(ctx,
+		db.CreateProjectParams{Name: "runbook-project"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	environment, err := repo.Queries.CreateEnvironment(ctx,
+		db.CreateEnvironmentParams{Name: "staging"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ordinary, err := repo.Queries.CreateRelease(ctx, db.CreateReleaseParams{
+		ProjectID: project.ID, Version: "ordinary", StepsJson: "[]",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.Queries.CreateDeployment(ctx,
+		db.CreateDeploymentParams{
+			ReleaseID: ordinary.ID, EnvironmentID: environment.ID,
+			Status: "succeeded",
+		}); err != nil {
+		t.Fatal(err)
+	}
+	book, _, err := repo.SaveRunbook(ctx, repository.RunbookSave{
+		ProjectID: project.ID, Name: "maintenance",
+		StepsJSON: `[{"name":"check","script_body":"true"}]`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	execution, deployment, err := repo.CreateRunbookExecution(ctx,
+		repository.RunbookExecutionRequest{
+			ProjectID: project.ID, RunbookID: book.ID,
+			EnvironmentID: environment.ID,
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+	notifier := &fakeNotifier{name: "capture"}
+	bus := events.NewBus(repo)
+	bus.Register(notifier)
+	bus.Publish(ctx, events.Event{
+		Type: events.DeploymentStarted, ProjectID: project.ID,
+		DeploymentID: deployment.Deployment.ID,
+		Message: fmt.Sprintf("Deployment #%d started",
+			deployment.Deployment.ID),
+	})
+	if len(notifier.calls) != 1 ||
+		notifier.calls[0].Type != events.RunbookStarted ||
+		notifier.calls[0].Message != fmt.Sprintf(
+			"Runbook execution #%d started", execution.ID) {
+		t.Fatalf("notification=%+v", notifier.calls)
+	}
+	for _, outcome := range []struct {
+		eventType events.Type
+		wantType  events.Type
+		verb      string
+	}{
+		{events.DeploymentSucceeded, events.RunbookSucceeded, "succeeded"},
+		{events.DeploymentFailed, events.RunbookFailed, "failed"},
+	} {
+		bus.Publish(ctx, events.Event{
+			Type: outcome.eventType, ProjectID: project.ID,
+			DeploymentID: deployment.Deployment.ID,
+			Message: fmt.Sprintf("Deployment #%d %s",
+				deployment.Deployment.ID, outcome.verb),
+		})
+		got := notifier.calls[len(notifier.calls)-1]
+		if got.Type != outcome.wantType || got.Message != fmt.Sprintf(
+			"Runbook execution #%d %s", execution.ID, outcome.verb) {
+			t.Fatalf("notification=%+v", got)
+		}
+	}
 }
 
 // TestBus_PublishRecordsResultsAndFillsSettings: Publish loads the

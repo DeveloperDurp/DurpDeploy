@@ -10,7 +10,7 @@ import (
 )
 
 const countReleasesByProject = `-- name: CountReleasesByProject :one
-SELECT COUNT(*) FROM releases WHERE project_id = ?
+SELECT COUNT(*) FROM releases WHERE project_id = ? AND kind = 'deployment'
 `
 
 func (q *Queries) CountReleasesByProject(ctx context.Context, projectID int64) (int64, error) {
@@ -21,7 +21,7 @@ func (q *Queries) CountReleasesByProject(ctx context.Context, projectID int64) (
 }
 
 const createRelease = `-- name: CreateRelease :one
-INSERT INTO releases (project_id, version, steps_json) VALUES (?, ?, ?) RETURNING id, project_id, version, steps_json, created_at
+INSERT INTO releases (project_id, version, steps_json) VALUES (?, ?, ?) RETURNING id, project_id, version, steps_json, created_at, kind
 `
 
 type CreateReleaseParams struct {
@@ -39,6 +39,7 @@ func (q *Queries) CreateRelease(ctx context.Context, arg CreateReleaseParams) (R
 		&i.Version,
 		&i.StepsJson,
 		&i.CreatedAt,
+		&i.Kind,
 	)
 	return i, err
 }
@@ -52,8 +53,26 @@ func (q *Queries) DeleteRelease(ctx context.Context, id int64) error {
 	return err
 }
 
+const getDeploymentRelease = `-- name: GetDeploymentRelease :one
+SELECT id, project_id, version, steps_json, created_at, kind FROM releases WHERE id = ? AND kind = 'deployment'
+`
+
+func (q *Queries) GetDeploymentRelease(ctx context.Context, id int64) (Release, error) {
+	row := q.db.QueryRowContext(ctx, getDeploymentRelease, id)
+	var i Release
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Version,
+		&i.StepsJson,
+		&i.CreatedAt,
+		&i.Kind,
+	)
+	return i, err
+}
+
 const getRelease = `-- name: GetRelease :one
-SELECT id, project_id, version, steps_json, created_at FROM releases WHERE id = ?
+SELECT id, project_id, version, steps_json, created_at, kind FROM releases WHERE id = ?
 `
 
 func (q *Queries) GetRelease(ctx context.Context, id int64) (Release, error) {
@@ -65,12 +84,13 @@ func (q *Queries) GetRelease(ctx context.Context, id int64) (Release, error) {
 		&i.Version,
 		&i.StepsJson,
 		&i.CreatedAt,
+		&i.Kind,
 	)
 	return i, err
 }
 
 const listReleasesByProject = `-- name: ListReleasesByProject :many
-SELECT id, project_id, version, steps_json, created_at FROM releases WHERE project_id = ? ORDER BY created_at DESC
+SELECT id, project_id, version, steps_json, created_at, kind FROM releases WHERE project_id = ? AND kind = 'deployment' ORDER BY created_at DESC
 `
 
 func (q *Queries) ListReleasesByProject(ctx context.Context, projectID int64) ([]Release, error) {
@@ -88,6 +108,7 @@ func (q *Queries) ListReleasesByProject(ctx context.Context, projectID int64) ([
 			&i.Version,
 			&i.StepsJson,
 			&i.CreatedAt,
+			&i.Kind,
 		); err != nil {
 			return nil, err
 		}
@@ -103,7 +124,7 @@ func (q *Queries) ListReleasesByProject(ctx context.Context, projectID int64) ([
 }
 
 const listReleasesByProjectPaginated = `-- name: ListReleasesByProjectPaginated :many
-SELECT id, project_id, version, steps_json, created_at FROM releases WHERE project_id = ? ORDER BY created_at DESC
+SELECT id, project_id, version, steps_json, created_at, kind FROM releases WHERE project_id = ? AND kind = 'deployment' ORDER BY created_at DESC
 LIMIT ? OFFSET ?
 `
 
@@ -128,6 +149,7 @@ func (q *Queries) ListReleasesByProjectPaginated(ctx context.Context, arg ListRe
 			&i.Version,
 			&i.StepsJson,
 			&i.CreatedAt,
+			&i.Kind,
 		); err != nil {
 			return nil, err
 		}
@@ -143,7 +165,7 @@ func (q *Queries) ListReleasesByProjectPaginated(ctx context.Context, arg ListRe
 }
 
 const updateRelease = `-- name: UpdateRelease :one
-UPDATE releases SET project_id = ?, version = ?, steps_json = ? WHERE id = ? RETURNING id, project_id, version, steps_json, created_at
+UPDATE releases SET project_id = ?, version = ?, steps_json = ? WHERE id = ? RETURNING id, project_id, version, steps_json, created_at, kind
 `
 
 type UpdateReleaseParams struct {
@@ -167,6 +189,7 @@ func (q *Queries) UpdateRelease(ctx context.Context, arg UpdateReleaseParams) (R
 		&i.Version,
 		&i.StepsJson,
 		&i.CreatedAt,
+		&i.Kind,
 	)
 	return i, err
 }

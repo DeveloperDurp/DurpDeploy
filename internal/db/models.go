@@ -89,6 +89,7 @@ type Deployment struct {
 	Forced          int64          `json:"forced"`
 	Note            sql.NullString `json:"note"`
 	AssignedAgentID sql.NullString `json:"assigned_agent_id"`
+	Kind            string         `json:"kind"`
 }
 
 type DeploymentApproval struct {
@@ -286,6 +287,7 @@ type Release struct {
 	Version   string `json:"version"`
 	StepsJson string `json:"steps_json"`
 	CreatedAt int64  `json:"created_at"`
+	Kind      string `json:"kind"`
 }
 
 type ReleaseVariable struct {
@@ -339,6 +341,43 @@ type RemoteStepRun struct {
 	UpdatedAt           int64          `json:"updated_at"`
 	LogBufferCiphertext sql.NullString `json:"log_buffer_ciphertext"`
 	RecoveryCancelled   int64          `json:"recovery_cancelled"`
+}
+
+type Runbook struct {
+	ID          int64  `json:"id"`
+	ProjectID   int64  `json:"project_id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	CreatedAt   int64  `json:"created_at"`
+}
+
+type RunbookExecution struct {
+	ID               int64         `json:"id"`
+	RunbookVersionID int64         `json:"runbook_version_id"`
+	DeploymentID     int64         `json:"deployment_id"`
+	ActorUserID      sql.NullInt64 `json:"actor_user_id"`
+	ScheduleID       sql.NullInt64 `json:"schedule_id"`
+	CreatedAt        int64         `json:"created_at"`
+}
+
+type RunbookSchedule struct {
+	ID            int64         `json:"id"`
+	RunbookID     int64         `json:"runbook_id"`
+	VersionID     sql.NullInt64 `json:"version_id"`
+	EnvironmentID int64         `json:"environment_id"`
+	Cron          string        `json:"cron"`
+	NextRunAt     int64         `json:"next_run_at"`
+	Enabled       int64         `json:"enabled"`
+	LastFiredAt   sql.NullInt64 `json:"last_fired_at"`
+	CreatedAt     int64         `json:"created_at"`
+}
+
+type RunbookVersion struct {
+	ID        int64 `json:"id"`
+	RunbookID int64 `json:"runbook_id"`
+	Version   int64 `json:"version"`
+	ReleaseID int64 `json:"release_id"`
+	CreatedAt int64 `json:"created_at"`
 }
 
 type ScheduledDeployment struct {

@@ -32,7 +32,14 @@ func (h *LogHandler) StreamLogs(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid deployment ID", http.StatusBadRequest)
 		return
 	}
+	h.streamDeploymentLogs(w, r, deploymentID)
+}
 
+func (h *LogHandler) streamDeploymentLogs(
+	w http.ResponseWriter,
+	r *http.Request,
+	deploymentID int64,
+) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")

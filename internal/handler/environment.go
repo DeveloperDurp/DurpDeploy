@@ -2,6 +2,7 @@ package handler
 
 import (
 	"database/sql"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -238,7 +239,11 @@ func (h *EnvironmentHandler) DeleteEnvironment(
 		return
 	}
 
-	if err := h.Repo.Queries.DeleteEnvironment(r.Context(), id); err != nil {
+	if err := h.Repo.DeleteEnvironment(r.Context(), id); err != nil {
+		if errors.Is(err, repository.ErrEnvironmentHasActiveDeployment) {
+			http.Error(w, err.Error(), http.StatusConflict)
+			return
+		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

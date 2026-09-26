@@ -27,7 +27,13 @@ func evaluateGate(
 	release db.Release,
 	environmentID int64,
 ) (gateState, error) {
-	state, err := gate.Evaluate(ctx, repo, project, release, environmentID)
+	state, err := gate.Evaluate(
+		ctx,
+		repo.Queries,
+		project,
+		release,
+		environmentID,
+	)
 	if err != nil {
 		return gateState{}, err
 	}
@@ -59,7 +65,7 @@ func CheckPromotionGate(
 	release db.Release,
 	environmentID int64,
 ) (blocked bool, reason string) {
-	return gate.Check(ctx, repo, project, release, environmentID)
+	return gate.Check(ctx, repo.Queries, project, release, environmentID)
 }
 
 // availableEnvsForRelease returns one entry per env the project is allowed to

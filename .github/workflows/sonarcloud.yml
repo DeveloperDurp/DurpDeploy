@@ -38,11 +38,7 @@ jobs:
             ghcr.io/a-h/templ@sha256:2e266c40e32de7fa67e08018a06675975ccb7e86110dae7a7c0b0131adaab41d \
             generate
       - name: Test with coverage
-        run: |
-          packages=$(go list ./... | grep -v '/internal/scheduler$')
-          go test -count=1 -covermode=atomic -coverpkg=./... \
-            -coverprofile=coverage.out $packages
-          go test -count=1 ./internal/scheduler
+        run: go test -count=1 -covermode=atomic -coverpkg=./... -coverprofile=coverage.out ./...
       - name: SonarQube Scan
         if: >-
           github.event_name == 'push' ||

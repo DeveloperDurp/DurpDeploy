@@ -449,7 +449,8 @@ func TestRecoverPendingDeployments_launchesRunnerForOrphanedDeployment(
 	ctx := context.Background()
 
 	project, err := repo.Queries.CreateProject(ctx, db.CreateProjectParams{
-		Name: "recover-proj", Description: sql.NullString{String: "x", Valid: true},
+		Name:        "recover-proj",
+		Description: sql.NullString{String: "x", Valid: true},
 	})
 	if err != nil {
 		t.Fatalf("create project: %v", err)
@@ -469,8 +470,13 @@ func TestRecoverPendingDeployments_launchesRunnerForOrphanedDeployment(
 	created, err := repo.CreateDeployment(
 		ctx,
 		db.CreateDeploymentParams{
-			ReleaseID: release.ID, EnvironmentID: env.ID, Status: "pending",
-			StartedAt: sql.NullInt64{}, FinishedAt: sql.NullInt64{}, Forced: 0, Note: sql.NullString{},
+			ReleaseID:     release.ID,
+			EnvironmentID: env.ID,
+			Status:        "pending",
+			StartedAt:     sql.NullInt64{},
+			FinishedAt:    sql.NullInt64{},
+			Forced:        0,
+			Note:          sql.NullString{},
 		},
 	)
 	if err != nil {
@@ -491,7 +497,7 @@ func TestRecoverPendingDeployments_launchesRunnerForOrphanedDeployment(
 	rnr := runner.New(repo, broker)
 	recoverPendingDeployments(ctx, rnr, repo)
 
-	// Then: the deployment leaves "pending" within a few seconds.
+	// Then: the deployment succeeds within a few seconds.
 	// (Empty steps_json means the runner marks it succeeded immediately.)
 	deadline := time.Now().Add(5 * time.Second)
 	var finalStatus string
@@ -500,16 +506,14 @@ func TestRecoverPendingDeployments_launchesRunnerForOrphanedDeployment(
 		if err != nil {
 			t.Fatalf("get deployment: %v", err)
 		}
-		if got.Status != "pending" {
+		if got.Status != "pending" && got.Status != "running" {
 			finalStatus = got.Status
 			break
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
 	if finalStatus == "" {
-		t.Fatalf(
-			"deployment stayed in pending for 5s after recoverPendingDeployments",
-		)
+		t.Fatal("deployment did not finish within 5s after recovery")
 	}
 	if finalStatus != "succeeded" {
 		t.Errorf(
@@ -877,8 +881,13 @@ func TestPruneAuditLogs_preservesLiveDeploymentAndReleaseRows(t *testing.T) {
 	created, err := repo.CreateDeployment(
 		ctx,
 		db.CreateDeploymentParams{
-			ReleaseID: release.ID, EnvironmentID: env.ID, Status: "pending",
-			StartedAt: sql.NullInt64{}, FinishedAt: sql.NullInt64{}, Forced: 0, Note: sql.NullString{},
+			ReleaseID:     release.ID,
+			EnvironmentID: env.ID,
+			Status:        "pending",
+			StartedAt:     sql.NullInt64{},
+			FinishedAt:    sql.NullInt64{},
+			Forced:        0,
+			Note:          sql.NullString{},
 		},
 	)
 	if err != nil {

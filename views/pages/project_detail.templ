@@ -49,6 +49,7 @@ templ ProjectDetail(project db.Project, panel LifecyclePanel, vars []db.Variable
 			<a href={ fmt.Sprintf("/projects/%d/steps-page", project.ID) } class="btn btn-primary">Steps</a>
 			<a href={ fmt.Sprintf("/projects/%d/variables", project.ID) } class="btn btn-secondary">Variables</a>
 			<a href={ fmt.Sprintf("/projects/%d/releases", project.ID) } class="btn btn-accent">Releases</a>
+			<a href={ fmt.Sprintf("/projects/%d/runbooks", project.ID) } class="btn btn-secondary">Runbooks</a>
 			<a href={ fmt.Sprintf("/projects/%d/notifications", project.ID) } class="btn btn-secondary">Notifications</a>
 			if CanWrite(ctx) {
 				<a href={ fmt.Sprintf("/projects/%d/deploy", project.ID) } class="btn btn-primary">Deploy</a>

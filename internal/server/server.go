@@ -305,6 +305,7 @@ func newRouter(
 		pr.Post("/api/lint", lhH.LintScript)
 
 		sdh := handler.NewScheduledDeploymentHandler(repo, parser)
+		runbookH := handler.NewRunbookHandler(repo, rnr)
 
 		lh := handler.NewLogHandler(rnr.Broker(), repo)
 
@@ -385,6 +386,47 @@ func newRouter(
 			ppr.Put("/projects/{id}/schedules/{schedId}", sdh.Update)
 			ppr.Delete("/projects/{id}/schedules/{schedId}", sdh.Delete)
 			ppr.Post("/projects/{id}/schedules/{schedId}/toggle", sdh.Toggle)
+			ppr.Get("/projects/{id}/runbooks", runbookH.List)
+			ppr.Get("/projects/{id}/runbooks/new", runbookH.Form)
+			ppr.Post("/projects/{id}/runbooks", runbookH.Save)
+			ppr.Get(
+				"/projects/{id}/runbooks/executions/{executionId}",
+				runbookH.Execution,
+			)
+			ppr.Get(
+				"/projects/{id}/runbooks/executions/{executionId}/status",
+				runbookH.Status,
+			)
+			ppr.Get(
+				"/projects/{id}/runbooks/executions/{executionId}/logs/stream",
+				runbookH.StreamLogs,
+			)
+			ppr.Post(
+				"/projects/{id}/runbooks/executions/{executionId}/cancel",
+				runbookH.Cancel,
+			)
+			ppr.Post(
+				"/projects/{id}/runbooks/executions/{executionId}/retry",
+				runbookH.Retry,
+			)
+			ppr.With(auth.RequireRole("admin")).Post(
+				"/projects/{id}/runbooks/executions/{executionId}/approve", runbookH.Approve,
+			)
+			ppr.Get("/projects/{id}/runbooks/{runbookId}", runbookH.Detail)
+			ppr.Get("/projects/{id}/runbooks/{runbookId}/edit", runbookH.Form)
+			ppr.Post("/projects/{id}/runbooks/{runbookId}/save", runbookH.Save)
+			ppr.Post(
+				"/projects/{id}/runbooks/{runbookId}/execute",
+				runbookH.Execute,
+			)
+			ppr.Post(
+				"/projects/{id}/runbooks/{runbookId}/schedules",
+				runbookH.Schedule,
+			)
+			ppr.Post(
+				"/projects/{id}/runbooks/{runbookId}/schedules/{scheduleId}/disable",
+				runbookH.DisableSchedule,
+			)
 
 			mh := handler.NewProjectMembersHandler(repo)
 			ppr.Get("/projects/{id}/members", mh.ListMembers)
@@ -548,6 +590,7 @@ func newRouter(
 
 		apiRelH := api.NewReleaseHandler(repo)
 		apiDepH := api.NewDeploymentHandler(repo, rnr)
+		apiRunbookH := api.NewRunbookHandler(repo, rnr)
 		apiSchedH := api.NewScheduleHandler(repo)
 		apiLogH := api.NewLogHandler(rnr.Broker(), repo)
 
@@ -633,6 +676,57 @@ func newRouter(
 
 			par.Post("/projects/{id}/deployments", apiDepH.CreateDeployment)
 			par.Get("/projects/{id}/deployments", apiDepH.ListDeployments)
+			par.Get("/projects/{id}/runbooks", apiRunbookH.List)
+			par.Post("/projects/{id}/runbooks", apiRunbookH.Create)
+			par.Get("/projects/{id}/runbooks/{runbookId}", apiRunbookH.Get)
+			par.Put("/projects/{id}/runbooks/{runbookId}", apiRunbookH.Save)
+			par.Get(
+				"/projects/{id}/runbooks/{runbookId}/versions/{versionId}",
+				apiRunbookH.Version,
+			)
+			par.Post(
+				"/projects/{id}/runbooks/{runbookId}/executions",
+				apiRunbookH.Execute,
+			)
+			par.Get(
+				"/projects/{id}/runbooks/{runbookId}/schedules",
+				apiRunbookH.ListSchedules,
+			)
+			par.Post(
+				"/projects/{id}/runbooks/{runbookId}/schedules",
+				apiRunbookH.CreateSchedule,
+			)
+			par.Post(
+				"/projects/{id}/runbooks/{runbookId}/schedules/{scheduleId}/disable",
+				apiRunbookH.DisableSchedule,
+			)
+			par.Get(
+				"/projects/{id}/runbook-executions",
+				apiRunbookH.ListExecutions,
+			)
+			par.Get(
+				"/projects/{id}/runbook-executions/{executionId}",
+				apiRunbookH.GetExecution,
+			)
+			par.Get(
+				"/projects/{id}/runbook-executions/{executionId}/logs",
+				apiRunbookH.Logs,
+			)
+			par.Get(
+				"/projects/{id}/runbook-executions/{executionId}/logs/stream",
+				apiRunbookH.StreamLogs,
+			)
+			par.Post(
+				"/projects/{id}/runbook-executions/{executionId}/cancel",
+				apiRunbookH.Cancel,
+			)
+			par.Post(
+				"/projects/{id}/runbook-executions/{executionId}/retry",
+				apiRunbookH.Retry,
+			)
+			par.With(auth.RequireRole("admin")).Post(
+				"/projects/{id}/runbook-executions/{executionId}/approve", apiRunbookH.Approve,
+			)
 
 			par.Get("/projects/{id}/schedules", apiSchedH.ListSchedules)
 			par.Post("/projects/{id}/schedules", apiSchedH.CreateSchedule)

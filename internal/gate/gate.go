@@ -6,7 +6,6 @@ import (
 	"fmt"
 
 	"durpdeploy/internal/db"
-	"durpdeploy/internal/repository"
 )
 
 // State describes, for a given (project, release, env) triple, whether a
@@ -21,7 +20,7 @@ type State struct {
 // receiver, no I/O outside the repository.
 func Evaluate(
 	ctx context.Context,
-	repo *repository.Repository,
+	q *db.Queries,
 	project db.Project,
 	release db.Release,
 	environmentID int64,
@@ -30,15 +29,15 @@ func Evaluate(
 		return State{Deployable: true}, nil
 	}
 
-	lc, err := repo.Queries.GetLifecycle(ctx, project.LifecycleID.Int64)
+	lc, err := q.GetLifecycle(ctx, project.LifecycleID.Int64)
 	if err != nil {
 		return State{}, err
 	}
-	stages, err := repo.Queries.ListLifecycleStages(ctx, lc.ID)
+	stages, err := q.ListLifecycleStages(ctx, lc.ID)
 	if err != nil {
 		return State{}, err
 	}
-	return evaluateStages(ctx, repo, release, environmentID, lc, stages)
+	return evaluateStages(ctx, q, release, environmentID, lc, stages)
 }
 
 // evaluateStages is the core of Evaluate, taking an already-loaded
@@ -47,7 +46,7 @@ func Evaluate(
 // stages once and reuse them, instead of querying twice.
 func evaluateStages(
 	ctx context.Context,
-	repo *repository.Repository,
+	q *db.Queries,
 	release db.Release,
 	environmentID int64,
 	lc db.Lifecycle,
@@ -61,7 +60,7 @@ func evaluateStages(
 		}
 	}
 	if idx < 0 {
-		env, _ := repo.Queries.GetEnvironment(ctx, environmentID)
+		env, _ := q.GetEnvironment(ctx, environmentID)
 		envName := "(unknown)"
 		if env.ID != 0 {
 			envName = env.Name
@@ -81,7 +80,7 @@ func evaluateStages(
 	}
 
 	prev := stages[idx-1]
-	dep, err := repo.Queries.GetLatestSuccessfulDeploymentForReleaseEnv(
+	dep, err := q.GetLatestSuccessfulDeploymentForReleaseEnv(
 		ctx,
 		db.GetLatestSuccessfulDeploymentForReleaseEnvParams{
 			ReleaseID:     release.ID,
@@ -92,7 +91,7 @@ func evaluateStages(
 		return State{}, err
 	}
 	if err == sql.ErrNoRows || dep.ReleaseID == 0 {
-		prevEnv, _ := repo.Queries.GetEnvironment(ctx, prev.EnvironmentID)
+		prevEnv, _ := q.GetEnvironment(ctx, prev.EnvironmentID)
 		prevName := "(unknown)"
 		if prevEnv.ID != 0 {
 			prevName = prevEnv.Name
@@ -114,12 +113,12 @@ func evaluateStages(
 // Exported for the scheduler; handlers that need Bypassable should use Evaluate.
 func Check(
 	ctx context.Context,
-	repo *repository.Repository,
+	q *db.Queries,
 	project db.Project,
 	release db.Release,
 	environmentID int64,
 ) (blocked bool, reason string) {
-	state, err := Evaluate(ctx, repo, project, release, environmentID)
+	state, err := Evaluate(ctx, q, project, release, environmentID)
 	if err != nil {
 		return true, err.Error()
 	}
@@ -137,14 +136,14 @@ func Check(
 // able to skip it.
 func RequiresApproval(
 	ctx context.Context,
-	repo *repository.Repository,
+	q *db.Queries,
 	project db.Project,
 	environmentID int64,
 ) (bool, error) {
 	if !project.LifecycleID.Valid {
 		return false, nil
 	}
-	stages, err := repo.Queries.ListLifecycleStages(
+	stages, err := q.ListLifecycleStages(
 		ctx,
 		project.LifecycleID.Int64,
 	)
@@ -171,7 +170,7 @@ func requiresApprovalStages(
 // in one pass — it loads the lifecycle stages once instead of twice.
 func CheckAndApproval(
 	ctx context.Context,
-	repo *repository.Repository,
+	q *db.Queries,
 	project db.Project,
 	release db.Release,
 	environmentID int64,
@@ -180,16 +179,16 @@ func CheckAndApproval(
 		return false, "", false, nil
 	}
 
-	lc, err := repo.Queries.GetLifecycle(ctx, project.LifecycleID.Int64)
+	lc, err := q.GetLifecycle(ctx, project.LifecycleID.Int64)
 	if err != nil {
 		return false, "", false, err
 	}
-	stages, err := repo.Queries.ListLifecycleStages(ctx, lc.ID)
+	stages, err := q.ListLifecycleStages(ctx, lc.ID)
 	if err != nil {
 		return false, "", false, err
 	}
 
-	state, err := evaluateStages(ctx, repo, release, environmentID, lc, stages)
+	state, err := evaluateStages(ctx, q, release, environmentID, lc, stages)
 	if err != nil {
 		return false, "", false, err
 	}

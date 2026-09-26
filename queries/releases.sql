@@ -1,15 +1,18 @@
 -- name: ListReleasesByProject :many
-SELECT * FROM releases WHERE project_id = ? ORDER BY created_at DESC;
+SELECT * FROM releases WHERE project_id = ? AND kind = 'deployment' ORDER BY created_at DESC;
 
 -- name: ListReleasesByProjectPaginated :many
-SELECT * FROM releases WHERE project_id = ? ORDER BY created_at DESC
+SELECT * FROM releases WHERE project_id = ? AND kind = 'deployment' ORDER BY created_at DESC
 LIMIT ? OFFSET ?;
 
 -- name: CountReleasesByProject :one
-SELECT COUNT(*) FROM releases WHERE project_id = ?;
+SELECT COUNT(*) FROM releases WHERE project_id = ? AND kind = 'deployment';
 
 -- name: GetRelease :one
 SELECT * FROM releases WHERE id = ?;
+
+-- name: GetDeploymentRelease :one
+SELECT * FROM releases WHERE id = ? AND kind = 'deployment';
 
 -- name: CreateRelease :one
 INSERT INTO releases (project_id, version, steps_json) VALUES (?, ?, ?) RETURNING *;

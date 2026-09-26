@@ -10,6 +10,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	"durpdeploy/internal/db"
@@ -23,6 +24,9 @@ const (
 	DeploymentStarted   Type = "deployment_started"
 	DeploymentSucceeded Type = "deployment_succeeded"
 	DeploymentFailed    Type = "deployment_failed"
+	RunbookStarted      Type = "runbook_started"
+	RunbookSucceeded    Type = "runbook_succeeded"
+	RunbookFailed       Type = "runbook_failed"
 	BackupUnhealthy     Type = "backup_unhealthy"
 	BackupHealthy       Type = "backup_healthy"
 )
@@ -94,6 +98,30 @@ func splitEmails(v sql.NullString) []string {
 // Errors loading the project or writing the history row are swallowed
 // (best-effort observability; must never fail the deployment itself).
 func (b *Bus) Publish(ctx context.Context, evt Event) {
+	if evt.DeploymentID != 0 {
+		deployment, err := b.repo.Queries.GetDeployment(ctx, evt.DeploymentID)
+		if err != nil {
+			return
+		}
+		if deployment.Kind == "runbook" {
+			execution, err := b.repo.Queries.GetRunbookExecutionByDeployment(
+				ctx, evt.DeploymentID)
+			if err != nil {
+				return
+			}
+			switch evt.Type {
+			case DeploymentStarted:
+				evt.Type = RunbookStarted
+			case DeploymentSucceeded:
+				evt.Type = RunbookSucceeded
+			case DeploymentFailed:
+				evt.Type = RunbookFailed
+			}
+			evt.Message = strings.Replace(evt.Message,
+				fmt.Sprintf("Deployment #%d", evt.DeploymentID),
+				fmt.Sprintf("Runbook execution #%d", execution.ID), 1)
+		}
+	}
 	if evt.ProjectID == 0 {
 		// Project-less/system-wide event (e.g. backup health): load
 		// channels from the global_notifications singleton instead of a
