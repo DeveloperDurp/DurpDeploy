@@ -37,7 +37,8 @@ VALUES (?, ?, ?, ?) RETURNING *;
 
 -- name: GetRunbookExecution :one
 SELECT x.*, d.environment_id, d.status, d.started_at, d.finished_at,
-    v.runbook_id, v.version, b.project_id, e.name AS environment_name
+    v.runbook_id, v.version, b.project_id, b.name AS runbook_name,
+    e.name AS environment_name
 FROM runbook_executions x
 JOIN runbook_versions v ON v.id = x.runbook_version_id
 JOIN runbooks b ON b.id = v.runbook_id

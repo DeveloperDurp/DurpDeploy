@@ -100,10 +100,14 @@ func TestRunbookAPI_VersionedExecutionStaysSeparate(t *testing.T) {
 			)
 		}
 		var state struct {
-			Status string `json:"status"`
+			Status      string `json:"status"`
+			RunbookName string `json:"runbook_name"`
 		}
 		if err := json.Unmarshal(detail.Body.Bytes(), &state); err != nil {
 			t.Fatal(err)
+		}
+		if state.RunbookName != "maintenance" {
+			t.Fatalf("detail runbook_name=%q", state.RunbookName)
 		}
 		status = state.Status
 		if status == "succeeded" || status == "failed" {

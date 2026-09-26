@@ -779,7 +779,7 @@ CODE=$(api_get_code "$BASE/api/v1/projects/$API_PROJECT_ID/runbook-executions?li
 [[ "$CODE" == "400" ]] || { echo "FAIL: invalid runbook history limit got $CODE"; exit 1; }
 for i in {1..100}; do
     RUNBOOK_STATUS=$(api_get "$BASE/api/v1/projects/$API_PROJECT_ID/runbook-executions/$RUNBOOK_EXECUTION_ID" \
-        | python3 -c 'import sys,json; print(json.load(sys.stdin)["status"])')
+        | python3 -c 'import sys,json; d=json.load(sys.stdin); assert d["runbook_name"] == "e2e-maintenance", d; print(d["status"])')
     [[ "$RUNBOOK_STATUS" =~ ^(failed|succeeded|cancelled)$ ]] && break
     sleep 0.1
 done

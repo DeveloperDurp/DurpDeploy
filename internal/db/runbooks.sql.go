@@ -357,7 +357,8 @@ func (q *Queries) GetRunbookByID(ctx context.Context, id int64) (Runbook, error)
 
 const getRunbookExecution = `-- name: GetRunbookExecution :one
 SELECT x.id, x.runbook_version_id, x.deployment_id, x.actor_user_id, x.schedule_id, x.created_at, d.environment_id, d.status, d.started_at, d.finished_at,
-    v.runbook_id, v.version, b.project_id, e.name AS environment_name
+    v.runbook_id, v.version, b.project_id, b.name AS runbook_name,
+    e.name AS environment_name
 FROM runbook_executions x
 JOIN runbook_versions v ON v.id = x.runbook_version_id
 JOIN runbooks b ON b.id = v.runbook_id
@@ -385,6 +386,7 @@ type GetRunbookExecutionRow struct {
 	RunbookID        int64         `json:"runbook_id"`
 	Version          int64         `json:"version"`
 	ProjectID        int64         `json:"project_id"`
+	RunbookName      string        `json:"runbook_name"`
 	EnvironmentName  string        `json:"environment_name"`
 }
 
@@ -405,6 +407,7 @@ func (q *Queries) GetRunbookExecution(ctx context.Context, arg GetRunbookExecuti
 		&i.RunbookID,
 		&i.Version,
 		&i.ProjectID,
+		&i.RunbookName,
 		&i.EnvironmentName,
 	)
 	return i, err
