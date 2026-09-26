@@ -55,7 +55,10 @@ func TestRunbookSchedule_LatestAndPinnedResolveConcreteVersions(t *testing.T) {
 	f.sched.SetRunFunc(func(context.Context, int64, int64, int64) {})
 	f.sched.Tick(f.ctx())
 	f.sched.Tick(f.ctx())
-	executions, err := f.repo.Queries.ListRunbookExecutions(f.ctx(), project.ID)
+	executions, err := f.repo.Queries.ListRunbookExecutions(
+		f.ctx(),
+		db.ListRunbookExecutionsParams{ProjectID: project.ID, Limit: 100},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,7 +121,7 @@ func TestRunbookSchedule_ApprovalHoldsExecution(t *testing.T) {
 	})
 	f.sched.Tick(f.ctx())
 	executions, err := f.repo.Queries.ListRunbookExecutions(f.ctx(),
-		project.ID)
+		db.ListRunbookExecutionsParams{ProjectID: project.ID, Limit: 100})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -213,7 +216,10 @@ func TestRunbookSchedule_ActiveExecutionSkipsNextOccurrence(t *testing.T) {
 		stored.LastFiredAt.Int64 != schedule.NextRunAt {
 		t.Fatalf("schedule advanced incorrectly: %+v", stored)
 	}
-	executions, err := f.repo.Queries.ListRunbookExecutions(f.ctx(), project.ID)
+	executions, err := f.repo.Queries.ListRunbookExecutions(
+		f.ctx(),
+		db.ListRunbookExecutionsParams{ProjectID: project.ID, Limit: 100},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -288,7 +294,10 @@ func TestRunbookSchedule_BlockedAndInaccessibleStages(t *testing.T) {
 	if inaccessible.Enabled != 0 {
 		t.Fatalf("inaccessible schedule remains enabled: %+v", inaccessible)
 	}
-	executions, err := f.repo.Queries.ListRunbookExecutions(f.ctx(), project.ID)
+	executions, err := f.repo.Queries.ListRunbookExecutions(
+		f.ctx(),
+		db.ListRunbookExecutionsParams{ProjectID: project.ID, Limit: 100},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

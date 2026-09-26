@@ -4222,6 +4222,20 @@
             "name": "id",
             "in": "path",
             "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "Limit",
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "Offset",
+            "name": "offset",
+            "in": "query"
           }
         ],
         "responses": {
@@ -4380,6 +4394,10 @@
     },
     "/projects/{id}/runbook-executions/{executionId}/logs/stream": {
       "get": {
+        "produces": [
+          "text/event-stream",
+          "application/x-ndjson"
+        ],
         "tags": [
           "runbooks"
         ],
@@ -4402,6 +4420,13 @@
             "name": "executionId",
             "in": "path",
             "required": true
+          },
+          {
+            "type": "string",
+            "x-go-name": "Format",
+            "description": "Format is either sse or ndjson.",
+            "name": "format",
+            "in": "query"
           }
         ],
         "responses": {
@@ -8263,9 +8288,30 @@
       "x-go-package": "durpdeploy/internal/handler/api"
     },
     "RunbookExecutionListResponse": {
-      "type": "array",
-      "items": {
-        "$ref": "#/definitions/RunbookExecutionDetail"
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RunbookExecutionDetail"
+          },
+          "x-go-name": "Items"
+        },
+        "limit": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Limit"
+        },
+        "offset": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Offset"
+        },
+        "total": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Total"
+        }
       },
       "x-go-name": "swaggerRunbookExecutionListResponse",
       "x-go-package": "durpdeploy/internal/handler/api"

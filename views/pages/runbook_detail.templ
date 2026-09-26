@@ -10,6 +10,27 @@ import (
 	"strings"
 )
 
+func runbookScheduleEnvironment(schedule db.RunbookSchedule, environments []db.Environment) string {
+	for _, environment := range environments {
+		if environment.ID == schedule.EnvironmentID {
+			return environment.Name
+		}
+	}
+	return "Unknown environment"
+}
+
+func runbookScheduleVersion(schedule db.RunbookSchedule, versions []db.RunbookVersion) string {
+	if !schedule.VersionID.Valid {
+		return "Latest"
+	}
+	for _, version := range versions {
+		if version.ID == schedule.VersionID.Int64 {
+			return fmt.Sprintf("Pinned version %d", version.Version)
+		}
+	}
+	return "Unknown version"
+}
+
 templ RunbookDetailPage(project db.Project, book db.Runbook, versions []db.RunbookVersion, selected db.RunbookVersion, stepsJSON string, schedules []db.RunbookSchedule, environments []db.Environment, currentPath string) {
 	@layouts.Base(book.Name, currentPath) {
 		@components.Breadcrumbs([]components.Crumb{
@@ -84,13 +105,10 @@ templ RunbookDetailPage(project db.Project, book db.Runbook, versions []db.Runbo
 						for _, schedule := range schedules {
 							<div class="rounded bg-base-300 p-3 space-y-2">
 								<p><span class="font-semibold">Cron:</span> { schedule.Cron }</p>
+								<p><span class="font-semibold">Environment:</span> { runbookScheduleEnvironment(schedule, environments) }</p>
 								<p>
 									<span class="font-semibold">Version:</span>
-									if schedule.VersionID.Valid {
-										Pinned
-									} else {
-										Latest
-									}
+									{ runbookScheduleVersion(schedule, versions) }
 								</p>
 								<p><span class="font-semibold">Next run:</span> { formatUnixTime(schedule.NextRunAt) }</p>
 								@RunbookScheduleAction(project.ID, book.ID, schedule)
@@ -99,18 +117,13 @@ templ RunbookDetailPage(project db.Project, book db.Runbook, versions []db.Runbo
 					</div>
 					<div class="hidden md:block">
 						<table class="table table-zebra table-fixed w-full">
-							<thead><tr><th class="w-1/4">Cron</th><th class="w-1/4">Version</th><th class="w-1/4">Next run</th><th class="w-1/4">Action</th></tr></thead>
+								<thead><tr><th class="w-1/5">Cron</th><th class="w-1/5">Environment</th><th class="w-1/5">Version</th><th class="w-1/5">Next run</th><th class="w-1/5">Action</th></tr></thead>
 							<tbody>
 								for _, schedule := range schedules {
 									<tr>
 										<td class="truncate">{ schedule.Cron }</td>
-										<td>
-											if schedule.VersionID.Valid {
-												Pinned
-											} else {
-												Latest
-											}
-										</td>
+										<td class="truncate">{ runbookScheduleEnvironment(schedule, environments) }</td>
+										<td>{ runbookScheduleVersion(schedule, versions) }</td>
 										<td class="whitespace-nowrap">{ formatUnixTime(schedule.NextRunAt) }</td>
 										<td>@RunbookScheduleAction(project.ID, book.ID, schedule)
 </td>

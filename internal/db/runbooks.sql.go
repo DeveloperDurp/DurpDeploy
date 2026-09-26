@@ -35,6 +35,20 @@ func (q *Queries) AdvanceRunbookSchedule(ctx context.Context, arg AdvanceRunbook
 	return result.RowsAffected()
 }
 
+const countRunbookExecutions = `-- name: CountRunbookExecutions :one
+SELECT COUNT(*) FROM runbook_executions x
+JOIN runbook_versions v ON v.id = x.runbook_version_id
+JOIN runbooks b ON b.id = v.runbook_id
+WHERE b.project_id = ?
+`
+
+func (q *Queries) CountRunbookExecutions(ctx context.Context, projectID int64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countRunbookExecutions, projectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createRunbook = `-- name: CreateRunbook :one
 INSERT INTO runbooks (project_id, name, description) VALUES (?, ?, ?) RETURNING id, project_id, name, description, created_at
 `
@@ -191,6 +205,87 @@ DELETE FROM runbook_versions WHERE runbook_id IN (
 
 func (q *Queries) DeleteProjectRunbookVersions(ctx context.Context, projectID int64) error {
 	_, err := q.db.ExecContext(ctx, deleteProjectRunbookVersions, projectID)
+	return err
+}
+
+const deleteRunbookDispatches = `-- name: DeleteRunbookDispatches :exec
+DELETE FROM deployment_dispatches WHERE deployment_id = ?
+`
+
+func (q *Queries) DeleteRunbookDispatches(ctx context.Context, deploymentID int64) error {
+	_, err := q.db.ExecContext(ctx, deleteRunbookDispatches, deploymentID)
+	return err
+}
+
+const deleteRunbookLogScopes = `-- name: DeleteRunbookLogScopes :exec
+DELETE FROM deployment_log_scopes WHERE deployment_id = ?
+`
+
+func (q *Queries) DeleteRunbookLogScopes(ctx context.Context, deploymentID int64) error {
+	_, err := q.db.ExecContext(ctx, deleteRunbookLogScopes, deploymentID)
+	return err
+}
+
+const deleteRunbookRemoteClaim = `-- name: DeleteRunbookRemoteClaim :exec
+DELETE FROM remote_deployment_claims WHERE deployment_id = ?
+`
+
+func (q *Queries) DeleteRunbookRemoteClaim(ctx context.Context, deploymentID int64) error {
+	_, err := q.db.ExecContext(ctx, deleteRunbookRemoteClaim, deploymentID)
+	return err
+}
+
+const deleteRunbookRemoteStepLogSequences = `-- name: DeleteRunbookRemoteStepLogSequences :exec
+DELETE FROM remote_step_log_sequences WHERE deployment_id = ?
+`
+
+func (q *Queries) DeleteRunbookRemoteStepLogSequences(ctx context.Context, deploymentID int64) error {
+	_, err := q.db.ExecContext(ctx, deleteRunbookRemoteStepLogSequences, deploymentID)
+	return err
+}
+
+const deleteRunbookRemoteStepRuns = `-- name: DeleteRunbookRemoteStepRuns :exec
+DELETE FROM remote_step_runs WHERE deployment_id = ?
+`
+
+func (q *Queries) DeleteRunbookRemoteStepRuns(ctx context.Context, deploymentID int64) error {
+	_, err := q.db.ExecContext(ctx, deleteRunbookRemoteStepRuns, deploymentID)
+	return err
+}
+
+const deleteRunbookStepAttempts = `-- name: DeleteRunbookStepAttempts :exec
+DELETE FROM deployment_step_attempts WHERE deployment_id = ?
+`
+
+func (q *Queries) DeleteRunbookStepAttempts(ctx context.Context, deploymentID int64) error {
+	_, err := q.db.ExecContext(ctx, deleteRunbookStepAttempts, deploymentID)
+	return err
+}
+
+const deleteRunbookStepSelectors = `-- name: DeleteRunbookStepSelectors :exec
+DELETE FROM deployment_step_selectors WHERE deployment_id = ?
+`
+
+func (q *Queries) DeleteRunbookStepSelectors(ctx context.Context, deploymentID int64) error {
+	_, err := q.db.ExecContext(ctx, deleteRunbookStepSelectors, deploymentID)
+	return err
+}
+
+const deleteRunbookStepSource = `-- name: DeleteRunbookStepSource :exec
+DELETE FROM deployment_step_sources WHERE deployment_id = ?
+`
+
+func (q *Queries) DeleteRunbookStepSource(ctx context.Context, deploymentID int64) error {
+	_, err := q.db.ExecContext(ctx, deleteRunbookStepSource, deploymentID)
+	return err
+}
+
+const deleteRunbookSteps = `-- name: DeleteRunbookSteps :exec
+DELETE FROM deployment_steps WHERE deployment_id = ?
+`
+
+func (q *Queries) DeleteRunbookSteps(ctx context.Context, deploymentID int64) error {
+	_, err := q.db.ExecContext(ctx, deleteRunbookSteps, deploymentID)
 	return err
 }
 
@@ -451,6 +546,36 @@ func (q *Queries) ListDueRunbookSchedules(ctx context.Context, nextRunAt int64) 
 	return items, nil
 }
 
+const listProjectRunbookDeploymentIDs = `-- name: ListProjectRunbookDeploymentIDs :many
+SELECT x.deployment_id FROM runbook_executions x
+JOIN runbook_versions v ON v.id = x.runbook_version_id
+JOIN runbooks b ON b.id = v.runbook_id
+WHERE b.project_id = ?
+`
+
+func (q *Queries) ListProjectRunbookDeploymentIDs(ctx context.Context, projectID int64) ([]int64, error) {
+	rows, err := q.db.QueryContext(ctx, listProjectRunbookDeploymentIDs, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int64
+	for rows.Next() {
+		var deployment_id int64
+		if err := rows.Scan(&deployment_id); err != nil {
+			return nil, err
+		}
+		items = append(items, deployment_id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRunbookExecutions = `-- name: ListRunbookExecutions :many
 SELECT x.id, x.runbook_version_id, x.deployment_id, x.actor_user_id, x.schedule_id, x.created_at, d.environment_id, d.status, d.started_at, d.finished_at,
     v.runbook_id, v.version, b.project_id, b.name AS runbook_name,
@@ -461,7 +586,14 @@ JOIN runbooks b ON b.id = v.runbook_id
 JOIN deployments d ON d.id = x.deployment_id
 JOIN environments e ON e.id = d.environment_id
 WHERE b.project_id = ? ORDER BY x.id DESC
+LIMIT ? OFFSET ?
 `
+
+type ListRunbookExecutionsParams struct {
+	ProjectID int64 `json:"project_id"`
+	Limit     int64 `json:"limit"`
+	Offset    int64 `json:"offset"`
+}
 
 type ListRunbookExecutionsRow struct {
 	ID               int64         `json:"id"`
@@ -481,8 +613,8 @@ type ListRunbookExecutionsRow struct {
 	EnvironmentName  string        `json:"environment_name"`
 }
 
-func (q *Queries) ListRunbookExecutions(ctx context.Context, projectID int64) ([]ListRunbookExecutionsRow, error) {
-	rows, err := q.db.QueryContext(ctx, listRunbookExecutions, projectID)
+func (q *Queries) ListRunbookExecutions(ctx context.Context, arg ListRunbookExecutionsParams) ([]ListRunbookExecutionsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listRunbookExecutions, arg.ProjectID, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}

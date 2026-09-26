@@ -17,20 +17,61 @@ type RunbookSave struct {
 }
 
 func (r *Repository) DeleteProject(ctx context.Context, projectID int64) error {
-	return r.WithTx(ctx, func(q *db.Queries) error {
-		if err := q.DeleteProjectRunbookExecutions(ctx, projectID); err != nil {
-			return err
-		}
-		if err := q.DeleteProjectRunbookSchedules(ctx, projectID); err != nil {
-			return err
-		}
-		if err := q.DeleteProjectRunbookVersions(ctx, projectID); err != nil {
-			return err
-		}
-		if err := q.DeleteProjectRunbookReleases(ctx, projectID); err != nil {
-			return err
-		}
-		return q.DeleteProject(ctx, projectID)
+	return withSQLiteBusyRetry(ctx, func() error {
+		return r.WithTx(ctx, func(q *db.Queries) error {
+			deployments, err := q.ListProjectRunbookDeploymentIDs(
+				ctx,
+				projectID,
+			)
+			if err != nil {
+				return err
+			}
+			for _, deploymentID := range deployments {
+				for _, deletePart := range []func(context.Context, int64) error{
+					q.DeleteRunbookRemoteStepLogSequences,
+					q.DeleteRunbookRemoteStepRuns,
+					q.DeleteRunbookLogScopes,
+					q.DeleteRunbookDispatches,
+					q.DeleteRunbookStepAttempts,
+					q.DeleteRunbookStepSelectors,
+					q.DeleteRunbookSteps,
+					q.DeleteRunbookStepSource,
+					q.DeleteRunbookRemoteClaim,
+				} {
+					if err := deletePart(ctx, deploymentID); err != nil {
+						return err
+					}
+				}
+				if err := q.DeleteDeployment(ctx, deploymentID); err != nil {
+					return err
+				}
+			}
+			if err := q.DeleteProjectRunbookExecutions(
+				ctx,
+				projectID,
+			); err != nil {
+				return err
+			}
+			if err := q.DeleteProjectRunbookSchedules(
+				ctx,
+				projectID,
+			); err != nil {
+				return err
+			}
+			if err := q.DeleteProjectRunbookVersions(
+				ctx,
+				projectID,
+			); err != nil {
+				return err
+			}
+			if err := q.DeleteProjectRunbookReleases(
+				ctx,
+				projectID,
+			); err != nil {
+				return err
+			}
+			return q.DeleteProject(ctx, projectID)
+		})
 	})
 }
 

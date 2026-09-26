@@ -809,7 +809,12 @@ type swaggerRunbookExecutionDetail struct {
 }
 
 // swagger:model RunbookExecutionListResponse
-type swaggerRunbookExecutionListResponse []swaggerRunbookExecutionDetail
+type swaggerRunbookExecutionListResponse struct {
+	Items  []swaggerRunbookExecutionDetail `json:"items"`
+	Total  int64                           `json:"total"`
+	Limit  int64                           `json:"limit"`
+	Offset int64                           `json:"offset"`
+}
 
 // swagger:model RunbookScheduleListResponse
 type swaggerRunbookScheduleListResponse []swaggerRunbookSchedule

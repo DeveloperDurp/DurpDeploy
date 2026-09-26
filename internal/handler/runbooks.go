@@ -45,15 +45,28 @@ func (h *RunbookHandler) List(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Cannot list runbooks", http.StatusInternalServerError)
 		return
 	}
+	const pageLimit int64 = 50
+	offset := int64(0)
+	if raw := r.URL.Query().Get("offset"); raw != "" {
+		offset, err = strconv.ParseInt(raw, 10, 64)
+		if err != nil || offset < 0 {
+			http.Error(w, "Invalid offset", http.StatusBadRequest)
+			return
+		}
+	}
 	executions, err := h.repo.Queries.ListRunbookExecutions(
 		r.Context(),
-		projectID,
+		db.ListRunbookExecutionsParams{
+			ProjectID: projectID, Limit: pageLimit,
+			Offset: offset,
+		},
 	)
 	if err != nil {
 		http.Error(w, "Cannot list executions", http.StatusInternalServerError)
 		return
 	}
-	if err := pages.RunbooksPage(project, books, executions, r.URL.Path).
+	if err := pages.RunbooksPage(project, books, executions, offset,
+		pageLimit, r.URL.Path).
 		Render(r.Context(), w); err != nil {
 		http.Error(w, "Cannot render runbooks", http.StatusInternalServerError)
 	}

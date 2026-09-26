@@ -294,12 +294,20 @@ type listDeploymentsQueryParam struct {
 	Offset int64 `json:"offset"`
 }
 
-// swagger:parameters streamLogs
+// swagger:parameters streamLogs streamRunbookLogs
 type streamLogsQueryParam struct {
 	// Format is either sse or ndjson.
 	//
 	// in: query
 	Format string `json:"format"`
+}
+
+// swagger:parameters listRunbookExecutions
+type listRunbookExecutionsQueryParam struct {
+	// in: query
+	Limit int64 `json:"limit"`
+	// in: query
+	Offset int64 `json:"offset"`
 }
 
 // swagger:parameters auditLog

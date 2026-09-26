@@ -162,10 +162,12 @@ func TestRunbookAPI_VersionedExecutionStaysSeparate(t *testing.T) {
 }
 
 func TestRunbookAPI_ProjectDeleteAfterVersion(t *testing.T) {
+	t.Setenv("DURPDEPLOY_EXECUTION_BOUNDARY", "development")
 	h := newAPIHarness(t)
 	user := seedAPIUser(t, h.repo, "runbook-delete@example.com", "admin")
 	_, token := seedAPIToken(t, h.repo, user.ID)
 	project := seedProject(t, h.repo)
+	environment := seedEnv(t, h.repo)
 	router := server.NewRouter(h.repo, h.runner,
 		cron.NewParser(cron.Minute|cron.Hour|cron.Dom|cron.Month|cron.Dow),
 		handler.NewAuthHandler(h.repo))
@@ -190,6 +192,39 @@ func TestRunbookAPI_ProjectDeleteAfterVersion(t *testing.T) {
 			created.Code,
 			created.Body.String(),
 		)
+	}
+	var saved struct {
+		Runbook struct {
+			ID int64 `json:"id"`
+		} `json:"runbook"`
+	}
+	if err := json.Unmarshal(created.Body.Bytes(), &saved); err != nil {
+		t.Fatal(err)
+	}
+	executed := request(http.MethodPost,
+		fmt.Sprintf("%s/runbooks/%d/executions", base, saved.Runbook.ID),
+		fmt.Sprintf(`{"environment_id":%d}`, environment.ID))
+	if executed.Code != http.StatusCreated {
+		t.Fatalf("execute status=%d body=%s", executed.Code,
+			executed.Body.String())
+	}
+	var execution struct {
+		DeploymentID int64 `json:"deployment_id"`
+	}
+	if err := json.Unmarshal(executed.Body.Bytes(), &execution); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		deployment, err := h.repo.Queries.GetDeployment(context.Background(),
+			execution.DeploymentID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if deployment.Status == "succeeded" || deployment.Status == "failed" {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 	deleted := request(http.MethodDelete, base, "")
 	if deleted.Code != http.StatusNoContent {

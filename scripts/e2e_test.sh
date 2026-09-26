@@ -766,6 +766,10 @@ fi
 RUNBOOK_EXECUTION=$(api_post "{\"environment_id\":$API_ENV_ID,\"version_id\":$RUNBOOK_V1}" \
     "$BASE/api/v1/projects/$API_PROJECT_ID/runbooks/$RUNBOOK_ID/executions")
 RUNBOOK_EXECUTION_ID=$(echo "$RUNBOOK_EXECUTION" | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
+RUNBOOK_HISTORY=$(api_get "$BASE/api/v1/projects/$API_PROJECT_ID/runbook-executions?limit=1&offset=0")
+echo "$RUNBOOK_HISTORY" | python3 -c 'import sys,json; p=json.load(sys.stdin); assert p["total"] >= 1 and p["limit"] == 1 and len(p["items"]) == 1'
+CODE=$(api_get_code "$BASE/api/v1/projects/$API_PROJECT_ID/runbook-executions?limit=0")
+[[ "$CODE" == "400" ]] || { echo "FAIL: invalid runbook history limit got $CODE"; exit 1; }
 for i in {1..100}; do
     RUNBOOK_STATUS=$(api_get "$BASE/api/v1/projects/$API_PROJECT_ID/runbook-executions/$RUNBOOK_EXECUTION_ID" \
         | python3 -c 'import sys,json; print(json.load(sys.stdin)["status"])')
@@ -790,6 +794,7 @@ if [[ "${DURPDEPLOY_RUNBOOK_BROWSER_E2E:-0}" == "1" ]]; then
     DURPDEPLOY_RUNBOOK_BROWSER_PROJECT_ID="$API_PROJECT_ID" \
     DURPDEPLOY_RUNBOOK_BROWSER_RUNBOOK_ID="$RUNBOOK_ID" \
     DURPDEPLOY_RUNBOOK_BROWSER_SCHEDULE_ID="$RUNBOOK_SCHEDULE_ID" \
+    DURPDEPLOY_RUNBOOK_BROWSER_ENVIRONMENT_ID="$API_ENV_ID" \
     DURPDEPLOY_RUNBOOK_BROWSER_EMAIL="$ADMIN_EMAIL" \
     DURPDEPLOY_RUNBOOK_BROWSER_PASSWORD="$ADMIN_PASS" \
         node "$SCRIPT_DIR/runbook_browser_test.mjs"

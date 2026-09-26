@@ -119,7 +119,10 @@ func TestRunbookExecutionKeepsVersionedEnvironmentSecret(t *testing.T) {
 	if err := repo.Queries.DeleteUser(ctx, actor.ID); err != nil {
 		t.Fatal(err)
 	}
-	executions, err := repo.Queries.ListRunbookExecutions(ctx, project.ID)
+	executions, err := repo.Queries.ListRunbookExecutions(
+		ctx,
+		db.ListRunbookExecutionsParams{ProjectID: project.ID, Limit: 100},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

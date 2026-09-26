@@ -24,7 +24,14 @@ func (h *RunbookHandler) ListExecutions(
 	if !ok {
 		return
 	}
-	items, err := h.repo.Queries.ListRunbookExecutions(r.Context(), projectID)
+	limit, offset, ok := parsePagination(w, r)
+	if !ok {
+		return
+	}
+	items, err := h.repo.Queries.ListRunbookExecutions(r.Context(),
+		db.ListRunbookExecutionsParams{
+			ProjectID: projectID, Limit: limit, Offset: offset,
+		})
 	if err != nil {
 		RespondError(
 			w,
@@ -33,7 +40,18 @@ func (h *RunbookHandler) ListExecutions(
 		)
 		return
 	}
-	RespondJSON(w, http.StatusOK, items)
+	total, err := h.repo.Queries.CountRunbookExecutions(r.Context(), projectID)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError,
+			"Cannot count runbook executions")
+		return
+	}
+	page := PaginatedResponse{Total: total, Limit: limit, Offset: offset,
+		Items: make([]any, len(items))}
+	for i := range items {
+		page.Items[i] = items[i]
+	}
+	RespondJSON(w, http.StatusOK, page)
 }
 
 func (h *RunbookHandler) execution(
@@ -104,6 +122,10 @@ func (h *RunbookHandler) Logs(w http.ResponseWriter, r *http.Request) {
 
 // swagger:route GET /projects/{id}/runbook-executions/{executionId}/logs/stream runbooks streamRunbookLogs
 // Stream persisted and live runbook logs.
+//
+// Produces:
+// - text/event-stream
+// - application/x-ndjson
 //
 // Responses:
 // 200: body:StreamResponse

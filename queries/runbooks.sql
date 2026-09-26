@@ -54,7 +54,14 @@ JOIN runbook_versions v ON v.id = x.runbook_version_id
 JOIN runbooks b ON b.id = v.runbook_id
 JOIN deployments d ON d.id = x.deployment_id
 JOIN environments e ON e.id = d.environment_id
-WHERE b.project_id = ? ORDER BY x.id DESC;
+WHERE b.project_id = ? ORDER BY x.id DESC
+LIMIT ? OFFSET ?;
+
+-- name: CountRunbookExecutions :one
+SELECT COUNT(*) FROM runbook_executions x
+JOIN runbook_versions v ON v.id = x.runbook_version_id
+JOIN runbooks b ON b.id = v.runbook_id
+WHERE b.project_id = ?;
 
 -- name: GetRunbookExecutionByDeployment :one
 SELECT x.*, v.runbook_id, b.project_id
@@ -101,6 +108,39 @@ DELETE FROM runbook_executions WHERE runbook_version_id IN (
     SELECT v.id FROM runbook_versions v
     JOIN runbooks b ON b.id = v.runbook_id WHERE b.project_id = ?
 );
+
+-- name: ListProjectRunbookDeploymentIDs :many
+SELECT x.deployment_id FROM runbook_executions x
+JOIN runbook_versions v ON v.id = x.runbook_version_id
+JOIN runbooks b ON b.id = v.runbook_id
+WHERE b.project_id = ?;
+
+-- name: DeleteRunbookRemoteStepLogSequences :exec
+DELETE FROM remote_step_log_sequences WHERE deployment_id = ?;
+
+-- name: DeleteRunbookRemoteStepRuns :exec
+DELETE FROM remote_step_runs WHERE deployment_id = ?;
+
+-- name: DeleteRunbookLogScopes :exec
+DELETE FROM deployment_log_scopes WHERE deployment_id = ?;
+
+-- name: DeleteRunbookDispatches :exec
+DELETE FROM deployment_dispatches WHERE deployment_id = ?;
+
+-- name: DeleteRunbookStepAttempts :exec
+DELETE FROM deployment_step_attempts WHERE deployment_id = ?;
+
+-- name: DeleteRunbookStepSelectors :exec
+DELETE FROM deployment_step_selectors WHERE deployment_id = ?;
+
+-- name: DeleteRunbookSteps :exec
+DELETE FROM deployment_steps WHERE deployment_id = ?;
+
+-- name: DeleteRunbookStepSource :exec
+DELETE FROM deployment_step_sources WHERE deployment_id = ?;
+
+-- name: DeleteRunbookRemoteClaim :exec
+DELETE FROM remote_deployment_claims WHERE deployment_id = ?;
 
 -- name: DeleteProjectRunbookSchedules :exec
 DELETE FROM runbook_schedules WHERE runbook_id IN (

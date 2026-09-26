@@ -15,7 +15,7 @@ func runbookSaveURL(projectID, runbookID int64) string {
 	return fmt.Sprintf("/projects/%d/runbooks/%d/save", projectID, runbookID)
 }
 
-templ RunbooksPage(project db.Project, books []db.Runbook, executions []db.ListRunbookExecutionsRow, currentPath string) {
+templ RunbooksPage(project db.Project, books []db.Runbook, executions []db.ListRunbookExecutionsRow, offset int64, pageLimit int64, currentPath string) {
 	@layouts.Base("Runbooks", currentPath) {
 		@components.Breadcrumbs([]components.Crumb{
 			{Label: "Home", Href: "/"},
@@ -57,6 +57,14 @@ templ RunbooksPage(project db.Project, books []db.Runbook, executions []db.ListR
 				if len(executions) == 0 {
 					<p class="text-sm opacity-70 mt-3">No runbook executions yet.</p>
 				}
+				<div class="flex gap-3 mt-3">
+					if offset > 0 {
+						<a class="link" href={ fmt.Sprintf("/projects/%d/runbooks?offset=%d", project.ID, max(0, offset-pageLimit)) }>Previous</a>
+					}
+					if int64(len(executions)) == pageLimit {
+						<a class="link" href={ fmt.Sprintf("/projects/%d/runbooks?offset=%d", project.ID, offset+pageLimit) }>Next</a>
+					}
+				</div>
 			</div>
 		</div>
 	}
