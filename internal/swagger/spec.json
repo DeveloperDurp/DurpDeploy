@@ -4483,6 +4483,12 @@
             "schema": {
               "$ref": "#/definitions/RunbookExecution"
             }
+          },
+          "409": {
+            "description": "Conflict error response.",
+            "schema": {
+              "$ref": "#/definitions/ConflictError"
+            }
           }
         }
       }

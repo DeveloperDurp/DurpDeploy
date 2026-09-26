@@ -230,6 +230,7 @@ func (h *RunbookHandler) Approve(w http.ResponseWriter, r *http.Request) {
 //
 // Responses:
 // 201: body:RunbookExecution
+// 409: body:ConflictError
 func (h *RunbookHandler) Retry(w http.ResponseWriter, r *http.Request) {
 	execution, ok := h.execution(w, r)
 	if !ok {
@@ -248,10 +249,15 @@ func (h *RunbookHandler) Retry(w http.ResponseWriter, r *http.Request) {
 	retried, result, err := h.repo.CreateRunbookExecution(
 		r.Context(), repository.RunbookExecutionRequest{
 			ProjectID: execution.ProjectID, RunbookID: execution.RunbookID,
-			VersionID:     execution.RunbookVersionID,
-			EnvironmentID: execution.EnvironmentID,
-			ActorUserID:   actor,
+			VersionID:               execution.RunbookVersionID,
+			EnvironmentID:           execution.EnvironmentID,
+			ActorUserID:             actor,
+			RetrySourceDeploymentID: execution.DeploymentID,
 		})
+	if errors.Is(err, repository.ErrRunbookRemoteOutcomeUnconfirmed) {
+		RespondError(w, http.StatusConflict, err.Error())
+		return
+	}
 	if errors.Is(err, repository.ErrRunbookGate) {
 		RespondError(w, http.StatusUnprocessableEntity, err.Error())
 		return

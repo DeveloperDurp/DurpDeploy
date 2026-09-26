@@ -157,7 +157,9 @@ underlying `deployment_id`. Read the execution at
 `/api/v1/projects/$PID/runbook-executions/$XID`, logs at `/logs`, and live
 logs at `/logs/stream` (SSE by default, `?format=ndjson` for NDJSON).
 Execution actions are `POST .../$XID/cancel`, `/approve` (admin only),
-and `/retry` (after a terminal status).
+and `/retry` (after a terminal status). Retry returns `409` while the source
+execution has a lost or unconfirmed remote outcome; inspect the agent before
+retrying.
 
 `GET /api/v1/projects/$PID/runbook-executions?limit=100&offset=0`
 returns `{items, total, limit, offset}`. The default page has 100 items;

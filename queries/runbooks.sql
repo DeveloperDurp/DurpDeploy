@@ -108,6 +108,17 @@ SELECT CASE WHEN EXISTS (
                      AND s.state IN ('lost', 'cancel_unconfirmed')))
 ) THEN 1 ELSE 0 END;
 
+-- name: HasUnconfirmedRunbookRemoteOutcome :one
+SELECT CASE WHEN EXISTS (
+    SELECT 1 FROM remote_deployment_claims
+    WHERE remote_deployment_claims.deployment_id = sqlc.arg(source_deployment_id)
+      AND remote_deployment_claims.state IN ('lost', 'cancel_unconfirmed')
+) OR EXISTS (
+    SELECT 1 FROM remote_step_runs
+    WHERE remote_step_runs.deployment_id = sqlc.arg(source_deployment_id)
+      AND remote_step_runs.state IN ('lost', 'cancel_unconfirmed')
+) THEN 1 ELSE 0 END;
+
 -- name: DisableRunbookSchedule :exec
 UPDATE runbook_schedules SET enabled = 0 WHERE id = ?;
 

@@ -11,15 +11,16 @@ import (
 )
 
 type RunbookExecutionRequest struct {
-	ProjectID             int64
-	RunbookID             int64
-	VersionID             int64
-	EnvironmentID         int64
-	ActorUserID           sql.NullInt64
-	ScheduleID            sql.NullInt64
-	ScheduleNextRunAt     int64
-	ScheduleExpectedRunAt int64
-	FiredAt               int64
+	ProjectID               int64
+	RunbookID               int64
+	VersionID               int64
+	EnvironmentID           int64
+	ActorUserID             sql.NullInt64
+	ScheduleID              sql.NullInt64
+	ScheduleNextRunAt       int64
+	ScheduleExpectedRunAt   int64
+	FiredAt                 int64
+	RetrySourceDeploymentID int64
 }
 
 var ErrRunbookScheduleConflict = errors.New("runbook schedule already fired")
@@ -28,6 +29,9 @@ var ErrRunbookScheduleOverlap = errors.New(
 	"runbook schedule execution still active",
 )
 var ErrRunbookGate = errors.New("runbook lifecycle gate blocked execution")
+var ErrRunbookRemoteOutcomeUnconfirmed = errors.New(
+	"runbook remote outcome is unconfirmed",
+)
 
 func (r *Repository) CreateRunbookExecution(
 	ctx context.Context,
@@ -39,6 +43,16 @@ func (r *Repository) CreateRunbookExecution(
 	err := withSQLiteBusyRetry(ctx, func() error {
 		skipped = false
 		return r.WithTx(ctx, func(q *db.Queries) error {
+			if arg.RetrySourceDeploymentID != 0 {
+				active, err := q.HasUnconfirmedRunbookRemoteOutcome(
+					ctx, arg.RetrySourceDeploymentID)
+				if err != nil {
+					return err
+				}
+				if active != 0 {
+					return ErrRunbookRemoteOutcomeUnconfirmed
+				}
+			}
 			if _, err := q.GetRunbook(ctx, db.GetRunbookParams{
 				ID: arg.RunbookID, ProjectID: arg.ProjectID,
 			}); err != nil {

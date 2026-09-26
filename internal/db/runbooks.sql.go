@@ -542,6 +542,25 @@ func (q *Queries) HasActiveRunbookScheduleExecution(ctx context.Context, schedul
 	return column_1, err
 }
 
+const hasUnconfirmedRunbookRemoteOutcome = `-- name: HasUnconfirmedRunbookRemoteOutcome :one
+SELECT CASE WHEN EXISTS (
+    SELECT 1 FROM remote_deployment_claims
+    WHERE remote_deployment_claims.deployment_id = ?1
+      AND remote_deployment_claims.state IN ('lost', 'cancel_unconfirmed')
+) OR EXISTS (
+    SELECT 1 FROM remote_step_runs
+    WHERE remote_step_runs.deployment_id = ?1
+      AND remote_step_runs.state IN ('lost', 'cancel_unconfirmed')
+) THEN 1 ELSE 0 END
+`
+
+func (q *Queries) HasUnconfirmedRunbookRemoteOutcome(ctx context.Context, sourceDeploymentID int64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, hasUnconfirmedRunbookRemoteOutcome, sourceDeploymentID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const listDueRunbookSchedules = `-- name: ListDueRunbookSchedules :many
 SELECT id, runbook_id, version_id, environment_id, cron, next_run_at, enabled, last_fired_at, created_at FROM runbook_schedules WHERE enabled = 1 AND next_run_at <= ?
 ORDER BY next_run_at, id

@@ -93,8 +93,18 @@ func (h *RunbookHandler) Detail(w http.ResponseWriter, r *http.Request) {
 		)
 		return
 	}
+	scheduleEnvironments, err := h.repo.Queries.ListEnvironments(r.Context())
+	if err != nil {
+		http.Error(
+			w,
+			"Cannot list environments",
+			http.StatusInternalServerError,
+		)
+		return
+	}
 	if err := pages.RunbookDetailPage(project, book, versions, selected,
-		release.StepsJson, schedules, environments, r.URL.Path).
+		release.StepsJson, schedules, environments, scheduleEnvironments,
+		r.URL.Path).
 		Render(r.Context(), w); err != nil {
 		http.Error(w, "Cannot render runbook", http.StatusInternalServerError)
 	}

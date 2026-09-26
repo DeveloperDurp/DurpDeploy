@@ -31,7 +31,7 @@ func runbookScheduleVersion(schedule db.RunbookSchedule, versions []db.RunbookVe
 	return "Unknown version"
 }
 
-templ RunbookDetailPage(project db.Project, book db.Runbook, versions []db.RunbookVersion, selected db.RunbookVersion, stepsJSON string, schedules []db.RunbookSchedule, environments []db.Environment, currentPath string) {
+templ RunbookDetailPage(project db.Project, book db.Runbook, versions []db.RunbookVersion, selected db.RunbookVersion, stepsJSON string, schedules []db.RunbookSchedule, environments []db.Environment, scheduleEnvironments []db.Environment, currentPath string) {
 	@layouts.Base(book.Name, currentPath) {
 		@components.Breadcrumbs([]components.Crumb{
 			{Label: "Home", Href: "/"},
@@ -105,7 +105,7 @@ templ RunbookDetailPage(project db.Project, book db.Runbook, versions []db.Runbo
 						for _, schedule := range schedules {
 							<div class="rounded bg-base-300 p-3 space-y-2">
 								<p><span class="font-semibold">Cron:</span> { schedule.Cron }</p>
-								<p><span class="font-semibold">Environment:</span> { runbookScheduleEnvironment(schedule, environments) }</p>
+								<p><span class="font-semibold">Environment:</span> { runbookScheduleEnvironment(schedule, scheduleEnvironments) }</p>
 								<p>
 									<span class="font-semibold">Version:</span>
 									{ runbookScheduleVersion(schedule, versions) }
@@ -122,7 +122,7 @@ templ RunbookDetailPage(project db.Project, book db.Runbook, versions []db.Runbo
 								for _, schedule := range schedules {
 									<tr>
 										<td class="truncate">{ schedule.Cron }</td>
-										<td class="truncate">{ runbookScheduleEnvironment(schedule, environments) }</td>
+										<td class="truncate">{ runbookScheduleEnvironment(schedule, scheduleEnvironments) }</td>
 										<td>{ runbookScheduleVersion(schedule, versions) }</td>
 										<td class="whitespace-nowrap">{ formatUnixTime(schedule.NextRunAt) }</td>
 										<td>@RunbookScheduleAction(project.ID, book.ID, schedule)

@@ -164,10 +164,15 @@ func (h *RunbookHandler) Retry(w http.ResponseWriter, r *http.Request) {
 	retried, result, err := h.repo.CreateRunbookExecution(r.Context(),
 		repository.RunbookExecutionRequest{
 			ProjectID: execution.ProjectID, RunbookID: execution.RunbookID,
-			VersionID:     execution.RunbookVersionID,
-			EnvironmentID: execution.EnvironmentID,
-			ActorUserID:   actor,
+			VersionID:               execution.RunbookVersionID,
+			EnvironmentID:           execution.EnvironmentID,
+			ActorUserID:             actor,
+			RetrySourceDeploymentID: execution.DeploymentID,
 		})
+	if errors.Is(err, repository.ErrRunbookRemoteOutcomeUnconfirmed) {
+		http.Error(w, err.Error(), http.StatusConflict)
+		return
+	}
 	if errors.Is(err, repository.ErrRunbookGate) {
 		http.Error(w, err.Error(), http.StatusUnprocessableEntity)
 		return
