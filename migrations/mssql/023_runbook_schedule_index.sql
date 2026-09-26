@@ -10,4 +10,8 @@ IF NOT EXISTS (
 -- +goose StatementEnd
 
 -- +goose Down
-DROP INDEX IF EXISTS idx_runbook_executions_schedule ON runbook_executions;
+CREATE TABLE runbook_schedule_index_rollback_refused (
+    guard BIGINT CONSTRAINT runbook_schedule_index_requires_forward_migration
+        CHECK (guard = 0)
+);
+INSERT INTO runbook_schedule_index_rollback_refused VALUES (1);
