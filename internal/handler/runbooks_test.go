@@ -104,6 +104,21 @@ func TestRunbookWeb_CreateAndExecuteMultiStep(t *testing.T) {
 	if status != "succeeded" {
 		t.Fatalf("status=%s", status)
 	}
+	fragment, err := h.authedClient().Get(
+		h.server.URL + base + "/executions/1/status")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer fragment.Body.Close()
+	fragmentBody, err := io.ReadAll(fragment.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fragment.StatusCode != http.StatusOK ||
+		!strings.Contains(string(fragmentBody), `hx-swap-oob="outerHTML"`) ||
+		!strings.Contains(string(fragmentBody), "Retry") {
+		t.Fatalf("status fragment did not refresh actions: %s", fragmentBody)
+	}
 	response, err = h.authedClient().Get(h.server.URL + base + "/executions/1")
 	if err != nil {
 		t.Fatal(err)

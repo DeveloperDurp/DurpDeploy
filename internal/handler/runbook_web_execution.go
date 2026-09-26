@@ -73,7 +73,7 @@ func (h *RunbookHandler) Execution(w http.ResponseWriter, r *http.Request) {
 func (h *RunbookHandler) Status(w http.ResponseWriter, r *http.Request) {
 	execution, ok := h.execution(w, r)
 	if ok {
-		_ = pages.RunbookExecutionStatus(execution.ProjectID, execution).
+		_ = pages.RunbookExecutionStatusUpdate(execution.ProjectID, execution).
 			Render(r.Context(), w)
 	}
 }

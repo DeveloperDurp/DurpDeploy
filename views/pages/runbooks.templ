@@ -47,7 +47,7 @@ templ RunbooksPage(project db.Project, books []db.Runbook, executions []db.ListR
 			<div class="card bg-base-200 p-4">
 				<h2 class="text-xl font-bold mb-3">Execution history</h2>
 				<table class="table table-zebra table-fixed w-full">
-					<thead><tr><th class="w-1/2 sm:w-1/5">Runbook</th><th class="hidden sm:table-cell w-1/5">Version</th><th class="hidden sm:table-cell w-1/5">Environment</th><th class="w-1/2 sm:w-1/5">Status</th><th class="hidden sm:table-cell w-1/5">Started</th></tr></thead>
+					<thead><tr><th class="w-1/2 sm:w-1/5">Runbook</th><th class="hidden sm:table-cell w-1/5">Version</th><th class="hidden sm:table-cell w-1/5">Environment</th><th class="w-1/2 sm:w-1/5">Status</th><th class="hidden sm:table-cell w-1/5">Created</th></tr></thead>
 					<tbody>
 						for _, execution := range executions {
 							<tr><td class="truncate"><a class="link link-primary" href={ fmt.Sprintf("/projects/%d/runbooks/executions/%d", project.ID, execution.ID) }>{ execution.RunbookName }</a></td><td class="hidden sm:table-cell">{ strconv.FormatInt(execution.Version, 10) }</td><td class="hidden sm:table-cell truncate">{ execution.EnvironmentName }</td><td class="truncate">{ execution.Status }</td><td class="hidden sm:table-cell whitespace-nowrap">{ formatUnixTime(execution.CreatedAt) }</td></tr>

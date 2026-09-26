@@ -187,17 +187,7 @@ templ RunbookExecutionPage(project db.Project, book db.Runbook, execution db.Get
 					<span role="status" aria-live="polite" aria-atomic="true">
 						@RunbookExecutionStatus(project.ID, execution)
 					</span>
-					if CanWrite(ctx) {
-						if execution.Status == "pending_approval" && auth.RoleFromContext(ctx) == "admin" {
-							<form method="post" action={ fmt.Sprintf("/projects/%d/runbooks/executions/%d/approve", project.ID, execution.ID) }><button class="btn btn-success btn-sm" type="submit">Approve</button></form>
-						}
-						if execution.Status == "running" {
-							<form method="post" action={ fmt.Sprintf("/projects/%d/runbooks/executions/%d/cancel", project.ID, execution.ID) }><button class="btn btn-error btn-sm" type="submit">Cancel</button></form>
-						}
-						if execution.Status == "failed" || execution.Status == "cancelled" || execution.Status == "succeeded" {
-							<form method="post" action={ fmt.Sprintf("/projects/%d/runbooks/executions/%d/retry", project.ID, execution.ID) }><button class="btn btn-primary btn-sm" type="submit">Retry</button></form>
-						}
-					}
+					@RunbookExecutionActions(project.ID, execution, false)
 				</div>
 			</div>
 			<div
@@ -233,4 +223,29 @@ templ RunbookExecutionStatus(projectID int64, execution db.GetRunbookExecutionRo
 		}
 		hx-swap="outerHTML"
 	>{ execution.Status }</span>
+}
+
+templ RunbookExecutionStatusUpdate(projectID int64, execution db.GetRunbookExecutionRow) {
+	@RunbookExecutionStatus(projectID, execution)
+	@RunbookExecutionActions(projectID, execution, true)
+}
+
+templ RunbookExecutionActions(projectID int64, execution db.GetRunbookExecutionRow, outOfBand bool) {
+	<div id="runbook-execution-actions" class="flex flex-wrap gap-2"
+		if outOfBand {
+			hx-swap-oob="outerHTML"
+		}
+	>
+		if CanWrite(ctx) {
+			if execution.Status == "pending_approval" && auth.RoleFromContext(ctx) == "admin" {
+				<form method="post" action={ fmt.Sprintf("/projects/%d/runbooks/executions/%d/approve", projectID, execution.ID) }><button class="btn btn-success btn-sm" type="submit">Approve</button></form>
+			}
+			if execution.Status == "running" {
+				<form method="post" action={ fmt.Sprintf("/projects/%d/runbooks/executions/%d/cancel", projectID, execution.ID) }><button class="btn btn-error btn-sm" type="submit">Cancel</button></form>
+			}
+			if execution.Status == "failed" || execution.Status == "cancelled" || execution.Status == "succeeded" {
+				<form method="post" action={ fmt.Sprintf("/projects/%d/runbooks/executions/%d/retry", projectID, execution.ID) }><button class="btn btn-primary btn-sm" type="submit">Retry</button></form>
+			}
+		}
+	</div>
 }

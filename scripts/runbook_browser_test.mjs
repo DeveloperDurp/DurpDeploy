@@ -55,7 +55,7 @@ try {
   assert.equal(await targets.nth(1).inputValue(), "agent");
   await targets.nth(1).selectOption("local");
   await page.locator('input[name="step_name"]').first().fill("browser check");
-  await page.locator('textarea[name="step_script"]').first().fill("printf browser-runbook-step");
+  await page.locator('textarea[name="step_script"]').first().fill("printf browser-runbook-step; sleep 5");
   await page.getByRole("button", { name: "Save immutable version" }).click();
   await page.waitForURL(new RegExp(`/projects/${projectID}/runbooks/${runbookID}$`));
   assert.match(await page.locator("h2").allTextContents().then((values) => values.join(" ")), /Version 3 steps/);
@@ -65,15 +65,12 @@ try {
   await executeForm.getByRole("button", { name: "Run book" }).click();
   await page.waitForURL(/\/runbooks\/executions\/\d+$/);
   await assert.doesNotReject(() => page.getByText("browser-runbook-step").first().waitFor({ timeout: 10000 }));
-  for (let attempt = 0; attempt < 40; attempt += 1) {
-    await page.reload();
-    if (await page.getByRole("button", { name: "Retry" }).count()) break;
-    await page.waitForTimeout(250);
-  }
-  assert.equal(await page.getByRole("button", { name: "Retry" }).count(), 1);
+  assert.equal(await page.getByRole("button", { name: "Retry" }).count(), 0);
+  await page.getByRole("button", { name: "Retry" }).waitFor({ timeout: 15000 });
   await page.getByRole("button", { name: "Retry" }).click();
   await page.waitForURL(/\/runbooks\/executions\/\d+$/);
   await page.goto(`${base}/projects/${projectID}/runbooks?offset=1`);
+  assert.equal(await page.getByRole("columnheader", { name: "Created" }).count(), 2);
   await page.getByRole("link", { name: "Previous" }).click();
   await page.waitForURL(new RegExp(`/projects/${projectID}/runbooks\\?offset=0$`));
   await page.goto(`${base}/projects/${projectID}/runbooks/${runbookID}`);
@@ -116,6 +113,13 @@ try {
   await longForm.getByRole("button", { name: "Run book" }).click();
   await page.waitForURL(/\/runbooks\/executions\/\d+$/);
   const longExecutionID = Number(page.url().match(/\/executions\/(\d+)$/)?.[1]);
+  await page.goto(`${base}/projects/${projectID}/edit`);
+  page.once("dialog", (dialog) => dialog.accept());
+  const blockedDelete = page.waitForResponse((response) =>
+    response.url().endsWith(`/projects/${projectID}`) && response.request().method() === "DELETE");
+  await page.getByRole("button", { name: "Delete project" }).click();
+  assert.equal((await blockedDelete).status(), 409);
+  await page.goto(`${base}/projects/${projectID}/runbooks/executions/${longExecutionID}`);
   await page.getByRole("button", { name: "Cancel" }).waitFor({ timeout: 10000 });
   await page.getByRole("button", { name: "Cancel" }).click();
   await waitForExecution(projectID, longExecutionID, "cancelled");
