@@ -685,3 +685,141 @@ type swaggerPairAgentResponse struct {
 type swaggerAgentLabelRequest struct {
 	Label string `json:"label"`
 }
+
+// swagger:model RunbookStep
+// RunbookStep is one script in an immutable runbook version.
+type swaggerRunbookStep struct {
+	Name            string   `json:"name"`
+	ScriptBody      string   `json:"script_body"`
+	Interpreter     string   `json:"interpreter"`
+	SortOrder       int64    `json:"sort_order"`
+	TimeoutSeconds  int64    `json:"timeout_seconds"`
+	MaxRetries      int64    `json:"max_retries"`
+	ExecutionTarget string   `json:"execution_target"`
+	AgentSelectors  []string `json:"agent_selectors"`
+}
+
+// swagger:model RunbookSaveRequest
+// RunbookSaveRequest creates a runbook or saves its next version.
+type swaggerRunbookSaveRequest struct {
+	Name        string               `json:"name"`
+	Description string               `json:"description"`
+	Steps       []swaggerRunbookStep `json:"steps"`
+}
+
+// swagger:model Runbook
+// Runbook is a named collection of immutable versions.
+type swaggerRunbook struct {
+	ID          int64  `json:"id"`
+	ProjectID   int64  `json:"project_id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	CreatedAt   int64  `json:"created_at"`
+}
+
+// swagger:model RunbookVersion
+// RunbookVersion identifies a release-backed snapshot.
+type swaggerRunbookVersion struct {
+	ID        int64 `json:"id"`
+	RunbookID int64 `json:"runbook_id"`
+	Version   int64 `json:"version"`
+	ReleaseID int64 `json:"release_id"`
+	CreatedAt int64 `json:"created_at"`
+}
+
+// swagger:model RunbookSaveResponse
+// RunbookSaveResponse contains the named runbook and saved version.
+type swaggerRunbookSaveResponse struct {
+	Runbook swaggerRunbook        `json:"runbook"`
+	Version swaggerRunbookVersion `json:"version"`
+}
+
+// swagger:model RunbookExecuteRequest
+// RunbookExecuteRequest chooses an environment and optional pinned version.
+type swaggerRunbookExecuteRequest struct {
+	EnvironmentID int64 `json:"environment_id"`
+	VersionID     int64 `json:"version_id"`
+}
+
+// swagger:model RunbookExecution
+// RunbookExecution records the concrete version behind a deployment.
+type swaggerRunbookExecution struct {
+	ID               int64                 `json:"id"`
+	RunbookVersionID int64                 `json:"runbook_version_id"`
+	DeploymentID     int64                 `json:"deployment_id"`
+	ActorUserID      swaggerSQLNullInteger `json:"actor_user_id"`
+	ScheduleID       swaggerSQLNullInteger `json:"schedule_id"`
+	CreatedAt        int64                 `json:"created_at"`
+}
+
+// swagger:model RunbookScheduleRequest
+// RunbookScheduleRequest pins a version or follows the latest version.
+type swaggerRunbookScheduleRequest struct {
+	EnvironmentID int64  `json:"environment_id"`
+	VersionID     int64  `json:"version_id"`
+	Cron          string `json:"cron"`
+}
+
+// swagger:model RunbookSchedule
+// RunbookSchedule is a saved cron trigger for a runbook.
+type swaggerRunbookSchedule struct {
+	ID            int64                 `json:"id"`
+	RunbookID     int64                 `json:"runbook_id"`
+	VersionID     swaggerSQLNullInteger `json:"version_id"`
+	EnvironmentID int64                 `json:"environment_id"`
+	Cron          string                `json:"cron"`
+	NextRunAt     int64                 `json:"next_run_at"`
+	Enabled       int64                 `json:"enabled"`
+	LastFiredAt   swaggerSQLNullInteger `json:"last_fired_at"`
+	CreatedAt     int64                 `json:"created_at"`
+}
+
+// swagger:model RunbookListResponse
+type swaggerRunbookListResponse []swaggerRunbook
+
+// swagger:model RunbookDetailResponse
+type swaggerRunbookDetailResponse struct {
+	Runbook  swaggerRunbook          `json:"runbook"`
+	Versions []swaggerRunbookVersion `json:"versions"`
+}
+
+// swagger:model RunbookVersionResponse
+type swaggerRunbookVersionResponse struct {
+	Version swaggerRunbookVersion `json:"version"`
+	Steps   []swaggerRunbookStep  `json:"steps"`
+}
+
+// swagger:model RunbookExecutionDetail
+type swaggerRunbookExecutionDetail struct {
+	ID               int64                 `json:"id"`
+	RunbookVersionID int64                 `json:"runbook_version_id"`
+	DeploymentID     int64                 `json:"deployment_id"`
+	ActorUserID      swaggerSQLNullInteger `json:"actor_user_id"`
+	ScheduleID       swaggerSQLNullInteger `json:"schedule_id"`
+	CreatedAt        int64                 `json:"created_at"`
+	EnvironmentID    int64                 `json:"environment_id"`
+	Status           string                `json:"status"`
+	StartedAt        swaggerSQLNullInteger `json:"started_at"`
+	FinishedAt       swaggerSQLNullInteger `json:"finished_at"`
+	RunbookID        int64                 `json:"runbook_id"`
+	Version          int64                 `json:"version"`
+	ProjectID        int64                 `json:"project_id"`
+	RunbookName      string                `json:"runbook_name"`
+	EnvironmentName  string                `json:"environment_name"`
+}
+
+// swagger:model RunbookExecutionListResponse
+type swaggerRunbookExecutionListResponse []swaggerRunbookExecutionDetail
+
+// swagger:model RunbookScheduleListResponse
+type swaggerRunbookScheduleListResponse []swaggerRunbookSchedule
+
+// swagger:model RunbookStateResponse
+type swaggerRunbookStateResponse struct {
+	Status string `json:"status"`
+}
+
+// swagger:model RunbookScheduleStateResponse
+type swaggerRunbookScheduleStateResponse struct {
+	Enabled bool `json:"enabled"`
+}

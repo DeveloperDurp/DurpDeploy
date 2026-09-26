@@ -17,6 +17,13 @@ type runbookExecuteRequest struct {
 
 // swagger:route POST /projects/{id}/runbooks/{runbookId}/executions runbooks executeRunbook
 // Run one concrete version against a project environment.
+//
+// Consumes:
+// - application/json
+//
+// Responses:
+// 201: body:RunbookExecution
+// 422: body:ValidationError
 func (h *RunbookHandler) Execute(w http.ResponseWriter, r *http.Request) {
 	projectID, ok := requireProjectFromContext(w, r)
 	if !ok {

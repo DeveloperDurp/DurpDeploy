@@ -44,6 +44,9 @@ type runbookSaveRequest struct {
 
 // swagger:route GET /projects/{id}/runbooks runbooks listRunbooks
 // List project runbooks.
+//
+// Responses:
+// 200: body:RunbookListResponse
 func (h *RunbookHandler) List(w http.ResponseWriter, r *http.Request) {
 	projectID, ok := requireProjectFromContext(w, r)
 	if !ok {
@@ -59,6 +62,9 @@ func (h *RunbookHandler) List(w http.ResponseWriter, r *http.Request) {
 
 // swagger:route GET /projects/{id}/runbooks/{runbookId} runbooks getRunbook
 // Read a runbook and its saved versions.
+//
+// Responses:
+// 200: body:RunbookDetailResponse
 func (h *RunbookHandler) Get(w http.ResponseWriter, r *http.Request) {
 	projectID, ok := requireProjectFromContext(w, r)
 	if !ok {
@@ -92,6 +98,9 @@ func (h *RunbookHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 // swagger:route GET /projects/{id}/runbooks/{runbookId}/versions/{versionId} runbooks getRunbookVersion
 // Read an immutable runbook version.
+//
+// Responses:
+// 200: body:RunbookVersionResponse
 func (h *RunbookHandler) Version(w http.ResponseWriter, r *http.Request) {
 	projectID, ok := requireProjectFromContext(w, r)
 	if !ok {
@@ -134,6 +143,13 @@ func (h *RunbookHandler) Version(w http.ResponseWriter, r *http.Request) {
 
 // swagger:route PUT /projects/{id}/runbooks/{runbookId} runbooks saveRunbookVersion
 // Save the next immutable version of a runbook.
+//
+// Consumes:
+// - application/json
+//
+// Responses:
+// 201: body:RunbookSaveResponse
+// 422: body:ValidationError
 func (h *RunbookHandler) Save(w http.ResponseWriter, r *http.Request) {
 	projectID, ok := requireProjectFromContext(w, r)
 	if !ok {
@@ -223,6 +239,13 @@ func (h *RunbookHandler) Save(w http.ResponseWriter, r *http.Request) {
 
 // swagger:route POST /projects/{id}/runbooks runbooks createRunbook
 // Create a runbook and its first immutable version.
+//
+// Consumes:
+// - application/json
+//
+// Responses:
+// 201: body:RunbookSaveResponse
+// 422: body:ValidationError
 func (h *RunbookHandler) Create(w http.ResponseWriter, r *http.Request) {
 	h.Save(w, r)
 }

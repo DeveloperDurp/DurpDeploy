@@ -399,18 +399,18 @@ func (q *Queries) GetRunbookVersion(ctx context.Context, arg GetRunbookVersionPa
 }
 
 const hasActiveRunbookScheduleExecution = `-- name: HasActiveRunbookScheduleExecution :one
-SELECT EXISTS (
+SELECT CASE WHEN EXISTS (
     SELECT 1 FROM runbook_executions x
     JOIN deployments d ON d.id = x.deployment_id
     WHERE x.schedule_id = ? AND d.status IN ('pending', 'running', 'pending_approval')
-)
+) THEN 1 ELSE 0 END
 `
 
-func (q *Queries) HasActiveRunbookScheduleExecution(ctx context.Context, scheduleID sql.NullInt64) (bool, error) {
+func (q *Queries) HasActiveRunbookScheduleExecution(ctx context.Context, scheduleID sql.NullInt64) (int64, error) {
 	row := q.db.QueryRowContext(ctx, hasActiveRunbookScheduleExecution, scheduleID)
-	var exists bool
-	err := row.Scan(&exists)
-	return exists, err
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const listDueRunbookSchedules = `-- name: ListDueRunbookSchedules :many

@@ -1,6 +1,7 @@
 package mssqldriver
 
 import (
+	"os"
 	"strings"
 	"testing"
 )
@@ -270,5 +271,30 @@ func TestRewriteSQL(t *testing.T) {
 				t.Errorf("RewriteSQL(%q) = %q, want %q", tc.query, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestRunbookOverlapQueryUsesSQLServerScalarExists(t *testing.T) {
+	source, err := os.ReadFile("../../queries/runbooks.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := strings.Index(string(source),
+		"-- name: HasActiveRunbookScheduleExecution :one")
+	end := strings.Index(
+		string(source),
+		"-- name: DisableRunbookSchedule :exec",
+	)
+	if start < 0 || end <= start {
+		t.Fatal("runbook overlap query not found")
+	}
+	rewritten, err := RewriteSQL(string(source[start:end]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(rewritten, "SELECT CASE WHEN EXISTS (") ||
+		!strings.Contains(rewritten, "x.schedule_id = @p1") ||
+		!strings.Contains(rewritten, "THEN 1 ELSE 0 END") {
+		t.Fatalf("SQL Server overlap query: %s", rewritten)
 	}
 }

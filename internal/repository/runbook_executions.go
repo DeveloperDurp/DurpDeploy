@@ -52,7 +52,7 @@ func (r *Repository) CreateRunbookExecution(
 				if err != nil {
 					return err
 				}
-				if active {
+				if active != 0 {
 					changed, err := q.SkipRunbookSchedule(ctx,
 						db.SkipRunbookScheduleParams{
 							NextRunAt:   arg.ScheduleNextRunAt,

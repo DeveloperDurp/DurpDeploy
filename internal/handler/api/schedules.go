@@ -4,18 +4,14 @@ import (
 	"database/sql"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/robfig/cron/v3"
 
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/handler"
 	"durpdeploy/internal/repository"
-)
-
-var scheduleParser = cron.NewParser(
-	cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow,
 )
 
 type ScheduleHandler struct {
@@ -41,20 +37,6 @@ type scheduledDeploymentRequest struct {
 	Enabled       bool   `json:"enabled"`
 	Active        bool   `json:"active"`
 	Note          string `json:"note"`
-}
-
-func parseAndValidateCron(expr string) (cron.Schedule, error) {
-	if strings.HasPrefix(expr, "TZ=") || strings.HasPrefix(expr, "CRON_TZ=") {
-		return nil, sql.ErrNoRows // re-used as a sentinel
-	}
-	sched, err := scheduleParser.Parse(expr)
-	if err != nil {
-		return nil, err
-	}
-	if sched.Next(time.Now()).IsZero() {
-		return nil, sql.ErrNoRows
-	}
-	return sched, nil
 }
 
 // swagger:route GET /projects/{id}/schedules schedules listSchedules
@@ -208,7 +190,7 @@ func (h *ScheduleHandler) CreateSchedule(
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	sched, err := parseAndValidateCron(cronExpr)
+	sched, err := handler.ParseAndValidateCron(cronExpr)
 	if err != nil {
 		RespondError(
 			w,
@@ -385,7 +367,7 @@ func (h *ScheduleHandler) UpdateSchedule(
 		RespondError(w, http.StatusNotFound, "Release not found")
 		return
 	}
-	sched, err := parseAndValidateCron(cronExpr)
+	sched, err := handler.ParseAndValidateCron(cronExpr)
 	if err != nil {
 		RespondError(
 			w,

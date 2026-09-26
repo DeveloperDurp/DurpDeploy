@@ -196,8 +196,10 @@ templ RunbookExecutionPage(project db.Project, book db.Runbook, execution db.Get
 			>
 				<h2 class="text-xl font-bold mb-3">Live logs</h2>
 				<div class="bg-base-300 p-4 rounded overflow-x-auto font-mono text-sm space-y-1">
-					for _, log := range logs {
-						<div class="whitespace-pre-wrap">{ log.Line }</div>
+					if execution.Status != "running" && execution.Status != "pending" && execution.Status != "pending_approval" {
+						for _, log := range logs {
+							<div class="whitespace-pre-wrap">{ log.Line }</div>
+						}
 					}
 					<pre x-ref="logs" class="whitespace-pre-wrap"></pre>
 				</div>

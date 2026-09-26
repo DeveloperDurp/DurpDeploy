@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/handler"
 )
 
 type runbookScheduleRequest struct {
@@ -17,6 +18,9 @@ type runbookScheduleRequest struct {
 
 // swagger:route GET /projects/{id}/runbooks/{runbookId}/schedules runbooks listRunbookSchedules
 // List runbook schedules.
+//
+// Responses:
+// 200: body:RunbookScheduleListResponse
 func (h *RunbookHandler) ListSchedules(w http.ResponseWriter, r *http.Request) {
 	projectID, ok := requireProjectFromContext(w, r)
 	if !ok {
@@ -42,6 +46,13 @@ func (h *RunbookHandler) ListSchedules(w http.ResponseWriter, r *http.Request) {
 
 // swagger:route POST /projects/{id}/runbooks/{runbookId}/schedules runbooks createRunbookSchedule
 // Schedule a pinned version or the latest saved version.
+//
+// Consumes:
+// - application/json
+//
+// Responses:
+// 201: body:RunbookSchedule
+// 422: body:ValidationError
 func (h *RunbookHandler) CreateSchedule(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -89,7 +100,7 @@ func (h *RunbookHandler) CreateSchedule(
 		}
 		version = sql.NullInt64{Int64: req.VersionID, Valid: true}
 	}
-	parsed, err := parseAndValidateCron(req.Cron)
+	parsed, err := handler.ParseAndValidateCron(req.Cron)
 	if err != nil {
 		RespondError(
 			w,
@@ -117,6 +128,9 @@ func (h *RunbookHandler) CreateSchedule(
 
 // swagger:route POST /projects/{id}/runbooks/{runbookId}/schedules/{scheduleId}/disable runbooks disableRunbookSchedule
 // Disable a runbook schedule.
+//
+// Responses:
+// 200: body:RunbookScheduleStateResponse
 func (h *RunbookHandler) DisableSchedule(
 	w http.ResponseWriter,
 	r *http.Request,

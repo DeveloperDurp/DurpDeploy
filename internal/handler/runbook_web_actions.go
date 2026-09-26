@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/robfig/cron/v3"
 
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
@@ -212,10 +211,7 @@ func (h *RunbookHandler) Schedule(w http.ResponseWriter, r *http.Request) {
 		}
 		version = sql.NullInt64{Int64: versionID, Valid: true}
 	}
-	parser := cron.NewParser(
-		cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow,
-	)
-	parsed, err := parser.Parse(r.FormValue("cron"))
+	parsed, err := ParseAndValidateCron(r.FormValue("cron"))
 	if err != nil {
 		http.Error(w, "Invalid cron", http.StatusUnprocessableEntity)
 		return

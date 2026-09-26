@@ -13,6 +13,9 @@ import (
 
 // swagger:route GET /projects/{id}/runbook-executions runbooks listRunbookExecutions
 // List runbook execution history.
+//
+// Responses:
+// 200: body:RunbookExecutionListResponse
 func (h *RunbookHandler) ListExecutions(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -68,6 +71,9 @@ func (h *RunbookHandler) execution(
 
 // swagger:route GET /projects/{id}/runbook-executions/{executionId} runbooks getRunbookExecution
 // Read a runbook execution.
+//
+// Responses:
+// 200: body:RunbookExecutionDetail
 func (h *RunbookHandler) GetExecution(w http.ResponseWriter, r *http.Request) {
 	execution, ok := h.execution(w, r)
 	if ok {
@@ -77,6 +83,9 @@ func (h *RunbookHandler) GetExecution(w http.ResponseWriter, r *http.Request) {
 
 // swagger:route GET /projects/{id}/runbook-executions/{executionId}/logs runbooks listRunbookLogs
 // Read persisted runbook logs in execution order.
+//
+// Responses:
+// 200: body:DeploymentLogListResponse
 func (h *RunbookHandler) Logs(w http.ResponseWriter, r *http.Request) {
 	execution, ok := h.execution(w, r)
 	if !ok {
@@ -95,6 +104,9 @@ func (h *RunbookHandler) Logs(w http.ResponseWriter, r *http.Request) {
 
 // swagger:route GET /projects/{id}/runbook-executions/{executionId}/logs/stream runbooks streamRunbookLogs
 // Stream persisted and live runbook logs.
+//
+// Responses:
+// 200: body:StreamResponse
 func (h *RunbookHandler) StreamLogs(w http.ResponseWriter, r *http.Request) {
 	execution, ok := h.execution(w, r)
 	if ok {
@@ -106,6 +118,9 @@ func (h *RunbookHandler) StreamLogs(w http.ResponseWriter, r *http.Request) {
 
 // swagger:route POST /projects/{id}/runbook-executions/{executionId}/cancel runbooks cancelRunbookExecution
 // Cancel a running runbook execution.
+//
+// Responses:
+// 200: body:RunbookStateResponse
 func (h *RunbookHandler) Cancel(w http.ResponseWriter, r *http.Request) {
 	execution, ok := h.execution(w, r)
 	if !ok {
@@ -134,11 +149,18 @@ func (h *RunbookHandler) Cancel(w http.ResponseWriter, r *http.Request) {
 		RespondError(w, http.StatusConflict, "Cannot cancel execution")
 		return
 	}
-	RespondJSON(w, http.StatusOK, map[string]string{"status": "cancelled"})
+	RespondJSON(
+		w,
+		http.StatusOK,
+		map[string]string{"status": "cancellation_requested"},
+	)
 }
 
 // swagger:route POST /projects/{id}/runbook-executions/{executionId}/approve runbooks approveRunbookExecution
 // Approve and start a pending runbook execution.
+//
+// Responses:
+// 200: body:RunbookStateResponse
 func (h *RunbookHandler) Approve(w http.ResponseWriter, r *http.Request) {
 	user := auth.UserFromContext(r.Context())
 	if user == nil || user.Role != "admin" {
@@ -183,6 +205,9 @@ func (h *RunbookHandler) Approve(w http.ResponseWriter, r *http.Request) {
 
 // swagger:route POST /projects/{id}/runbook-executions/{executionId}/retry runbooks retryRunbookExecution
 // Retry the pinned version of a completed runbook execution.
+//
+// Responses:
+// 201: body:RunbookExecution
 func (h *RunbookHandler) Retry(w http.ResponseWriter, r *http.Request) {
 	execution, ok := h.execution(w, r)
 	if !ok {

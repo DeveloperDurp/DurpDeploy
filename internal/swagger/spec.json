@@ -4223,7 +4223,15 @@
             "in": "path",
             "required": true
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/RunbookExecutionListResponse"
+            }
+          }
+        }
       }
     },
     "/projects/{id}/runbook-executions/{executionId}": {
@@ -4251,7 +4259,15 @@
             "in": "path",
             "required": true
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/RunbookExecutionDetail"
+            }
+          }
+        }
       }
     },
     "/projects/{id}/runbook-executions/{executionId}/approve": {
@@ -4279,7 +4295,15 @@
             "in": "path",
             "required": true
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/RunbookStateResponse"
+            }
+          }
+        }
       }
     },
     "/projects/{id}/runbook-executions/{executionId}/cancel": {
@@ -4307,7 +4331,15 @@
             "in": "path",
             "required": true
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/RunbookStateResponse"
+            }
+          }
+        }
       }
     },
     "/projects/{id}/runbook-executions/{executionId}/logs": {
@@ -4335,7 +4367,15 @@
             "in": "path",
             "required": true
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "description": "DeploymentLogListResponse is a list of deployment log entries.",
+            "schema": {
+              "$ref": "#/definitions/DeploymentLogListResponse"
+            }
+          }
+        }
       }
     },
     "/projects/{id}/runbook-executions/{executionId}/logs/stream": {
@@ -4363,7 +4403,15 @@
             "in": "path",
             "required": true
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "description": "StreamResponse is a server-sent event stream.",
+            "schema": {
+              "$ref": "#/definitions/StreamResponse"
+            }
+          }
+        }
       }
     },
     "/projects/{id}/runbook-executions/{executionId}/retry": {
@@ -4391,7 +4439,15 @@
             "in": "path",
             "required": true
           }
-        ]
+        ],
+        "responses": {
+          "201": {
+            "description": "Created",
+            "schema": {
+              "$ref": "#/definitions/RunbookExecution"
+            }
+          }
+        }
       }
     },
     "/projects/{id}/runbooks": {
@@ -4411,9 +4467,20 @@
             "in": "path",
             "required": true
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/RunbookListResponse"
+            }
+          }
+        }
       },
       "post": {
+        "consumes": [
+          "application/json"
+        ],
         "tags": [
           "runbooks"
         ],
@@ -4428,8 +4495,31 @@
             "name": "id",
             "in": "path",
             "required": true
+          },
+          {
+            "x-go-name": "Body",
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/RunbookSaveRequest"
+            }
           }
-        ]
+        ],
+        "responses": {
+          "201": {
+            "description": "Created",
+            "schema": {
+              "$ref": "#/definitions/RunbookSaveResponse"
+            }
+          },
+          "422": {
+            "description": "Validation error response.",
+            "schema": {
+              "$ref": "#/definitions/ValidationError"
+            }
+          }
+        }
       }
     },
     "/projects/{id}/runbooks/{runbookId}": {
@@ -4457,9 +4547,20 @@
             "in": "path",
             "required": true
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/RunbookDetailResponse"
+            }
+          }
+        }
       },
       "put": {
+        "consumes": [
+          "application/json"
+        ],
         "tags": [
           "runbooks"
         ],
@@ -4482,12 +4583,38 @@
             "name": "runbookId",
             "in": "path",
             "required": true
+          },
+          {
+            "x-go-name": "Body",
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/RunbookSaveRequest"
+            }
           }
-        ]
+        ],
+        "responses": {
+          "201": {
+            "description": "Created",
+            "schema": {
+              "$ref": "#/definitions/RunbookSaveResponse"
+            }
+          },
+          "422": {
+            "description": "Validation error response.",
+            "schema": {
+              "$ref": "#/definitions/ValidationError"
+            }
+          }
+        }
       }
     },
     "/projects/{id}/runbooks/{runbookId}/executions": {
       "post": {
+        "consumes": [
+          "application/json"
+        ],
         "tags": [
           "runbooks"
         ],
@@ -4510,8 +4637,31 @@
             "name": "runbookId",
             "in": "path",
             "required": true
+          },
+          {
+            "x-go-name": "Body",
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/RunbookExecuteRequest"
+            }
           }
-        ]
+        ],
+        "responses": {
+          "201": {
+            "description": "Created",
+            "schema": {
+              "$ref": "#/definitions/RunbookExecution"
+            }
+          },
+          "422": {
+            "description": "Validation error response.",
+            "schema": {
+              "$ref": "#/definitions/ValidationError"
+            }
+          }
+        }
       }
     },
     "/projects/{id}/runbooks/{runbookId}/schedules": {
@@ -4539,9 +4689,20 @@
             "in": "path",
             "required": true
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/RunbookScheduleListResponse"
+            }
+          }
+        }
       },
       "post": {
+        "consumes": [
+          "application/json"
+        ],
         "tags": [
           "runbooks"
         ],
@@ -4564,8 +4725,31 @@
             "name": "runbookId",
             "in": "path",
             "required": true
+          },
+          {
+            "x-go-name": "Body",
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/RunbookScheduleRequest"
+            }
           }
-        ]
+        ],
+        "responses": {
+          "201": {
+            "description": "Created",
+            "schema": {
+              "$ref": "#/definitions/RunbookSchedule"
+            }
+          },
+          "422": {
+            "description": "Validation error response.",
+            "schema": {
+              "$ref": "#/definitions/ValidationError"
+            }
+          }
+        }
       }
     },
     "/projects/{id}/runbooks/{runbookId}/schedules/{scheduleId}/disable": {
@@ -4601,7 +4785,15 @@
             "in": "path",
             "required": true
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/RunbookScheduleStateResponse"
+            }
+          }
+        }
       }
     },
     "/projects/{id}/runbooks/{runbookId}/versions/{versionId}": {
@@ -4637,7 +4829,15 @@
             "in": "path",
             "required": true
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/RunbookVersionResponse"
+            }
+          }
+        }
       }
     },
     "/projects/{id}/schedules": {
@@ -7892,6 +8092,417 @@
         }
       },
       "x-go-name": "swaggerReorderStepsRequest",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "Runbook": {
+      "type": "object",
+      "properties": {
+        "created_at": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "CreatedAt"
+        },
+        "description": {
+          "type": "string",
+          "x-go-name": "Description"
+        },
+        "id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "ID"
+        },
+        "name": {
+          "type": "string",
+          "x-go-name": "Name"
+        },
+        "project_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "ProjectID"
+        }
+      },
+      "x-go-name": "swaggerRunbook",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "RunbookDetailResponse": {
+      "type": "object",
+      "properties": {
+        "runbook": {
+          "$ref": "#/definitions/Runbook"
+        },
+        "versions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RunbookVersion"
+          },
+          "x-go-name": "Versions"
+        }
+      },
+      "x-go-name": "swaggerRunbookDetailResponse",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "RunbookExecuteRequest": {
+      "type": "object",
+      "properties": {
+        "environment_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "EnvironmentID"
+        },
+        "version_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "VersionID"
+        }
+      },
+      "x-go-name": "swaggerRunbookExecuteRequest",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "RunbookExecution": {
+      "type": "object",
+      "properties": {
+        "actor_user_id": {
+          "$ref": "#/definitions/swaggerSQLNullInteger"
+        },
+        "created_at": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "CreatedAt"
+        },
+        "deployment_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "DeploymentID"
+        },
+        "id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "ID"
+        },
+        "runbook_version_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "RunbookVersionID"
+        },
+        "schedule_id": {
+          "$ref": "#/definitions/swaggerSQLNullInteger"
+        }
+      },
+      "x-go-name": "swaggerRunbookExecution",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "RunbookExecutionDetail": {
+      "type": "object",
+      "properties": {
+        "actor_user_id": {
+          "$ref": "#/definitions/swaggerSQLNullInteger"
+        },
+        "created_at": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "CreatedAt"
+        },
+        "deployment_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "DeploymentID"
+        },
+        "environment_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "EnvironmentID"
+        },
+        "environment_name": {
+          "type": "string",
+          "x-go-name": "EnvironmentName"
+        },
+        "finished_at": {
+          "$ref": "#/definitions/swaggerSQLNullInteger"
+        },
+        "id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "ID"
+        },
+        "project_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "ProjectID"
+        },
+        "runbook_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "RunbookID"
+        },
+        "runbook_name": {
+          "type": "string",
+          "x-go-name": "RunbookName"
+        },
+        "runbook_version_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "RunbookVersionID"
+        },
+        "schedule_id": {
+          "$ref": "#/definitions/swaggerSQLNullInteger"
+        },
+        "started_at": {
+          "$ref": "#/definitions/swaggerSQLNullInteger"
+        },
+        "status": {
+          "type": "string",
+          "x-go-name": "Status"
+        },
+        "version": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Version"
+        }
+      },
+      "x-go-name": "swaggerRunbookExecutionDetail",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "RunbookExecutionListResponse": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/RunbookExecutionDetail"
+      },
+      "x-go-name": "swaggerRunbookExecutionListResponse",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "RunbookListResponse": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Runbook"
+      },
+      "x-go-name": "swaggerRunbookListResponse",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "RunbookSaveRequest": {
+      "type": "object",
+      "properties": {
+        "description": {
+          "type": "string",
+          "x-go-name": "Description"
+        },
+        "name": {
+          "type": "string",
+          "x-go-name": "Name"
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RunbookStep"
+          },
+          "x-go-name": "Steps"
+        }
+      },
+      "x-go-name": "swaggerRunbookSaveRequest",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "RunbookSaveResponse": {
+      "type": "object",
+      "properties": {
+        "runbook": {
+          "$ref": "#/definitions/Runbook"
+        },
+        "version": {
+          "$ref": "#/definitions/RunbookVersion"
+        }
+      },
+      "x-go-name": "swaggerRunbookSaveResponse",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "RunbookSchedule": {
+      "type": "object",
+      "properties": {
+        "created_at": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "CreatedAt"
+        },
+        "cron": {
+          "type": "string",
+          "x-go-name": "Cron"
+        },
+        "enabled": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Enabled"
+        },
+        "environment_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "EnvironmentID"
+        },
+        "id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "ID"
+        },
+        "last_fired_at": {
+          "$ref": "#/definitions/swaggerSQLNullInteger"
+        },
+        "next_run_at": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "NextRunAt"
+        },
+        "runbook_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "RunbookID"
+        },
+        "version_id": {
+          "$ref": "#/definitions/swaggerSQLNullInteger"
+        }
+      },
+      "x-go-name": "swaggerRunbookSchedule",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "RunbookScheduleListResponse": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/RunbookSchedule"
+      },
+      "x-go-name": "swaggerRunbookScheduleListResponse",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "RunbookScheduleRequest": {
+      "type": "object",
+      "properties": {
+        "cron": {
+          "type": "string",
+          "x-go-name": "Cron"
+        },
+        "environment_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "EnvironmentID"
+        },
+        "version_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "VersionID"
+        }
+      },
+      "x-go-name": "swaggerRunbookScheduleRequest",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "RunbookScheduleStateResponse": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "x-go-name": "Enabled"
+        }
+      },
+      "x-go-name": "swaggerRunbookScheduleStateResponse",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "RunbookStateResponse": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "x-go-name": "Status"
+        }
+      },
+      "x-go-name": "swaggerRunbookStateResponse",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "RunbookStep": {
+      "type": "object",
+      "properties": {
+        "agent_selectors": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "x-go-name": "AgentSelectors"
+        },
+        "execution_target": {
+          "type": "string",
+          "x-go-name": "ExecutionTarget"
+        },
+        "interpreter": {
+          "type": "string",
+          "x-go-name": "Interpreter"
+        },
+        "max_retries": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "MaxRetries"
+        },
+        "name": {
+          "type": "string",
+          "x-go-name": "Name"
+        },
+        "script_body": {
+          "type": "string",
+          "x-go-name": "ScriptBody"
+        },
+        "sort_order": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "SortOrder"
+        },
+        "timeout_seconds": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "TimeoutSeconds"
+        }
+      },
+      "x-go-name": "swaggerRunbookStep",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "RunbookVersion": {
+      "type": "object",
+      "properties": {
+        "created_at": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "CreatedAt"
+        },
+        "id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "ID"
+        },
+        "release_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "ReleaseID"
+        },
+        "runbook_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "RunbookID"
+        },
+        "version": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Version"
+        }
+      },
+      "x-go-name": "swaggerRunbookVersion",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "RunbookVersionResponse": {
+      "type": "object",
+      "properties": {
+        "steps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RunbookStep"
+          },
+          "x-go-name": "Steps"
+        },
+        "version": {
+          "$ref": "#/definitions/RunbookVersion"
+        }
+      },
+      "x-go-name": "swaggerRunbookVersionResponse",
       "x-go-package": "durpdeploy/internal/handler/api"
     },
     "ScheduleRequest": {

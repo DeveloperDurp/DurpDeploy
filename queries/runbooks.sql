@@ -87,11 +87,11 @@ UPDATE runbook_schedules SET next_run_at = ?
 WHERE id = ? AND enabled = 1 AND next_run_at <= ?;
 
 -- name: HasActiveRunbookScheduleExecution :one
-SELECT EXISTS (
+SELECT CASE WHEN EXISTS (
     SELECT 1 FROM runbook_executions x
     JOIN deployments d ON d.id = x.deployment_id
     WHERE x.schedule_id = ? AND d.status IN ('pending', 'running', 'pending_approval')
-);
+) THEN 1 ELSE 0 END;
 
 -- name: DisableRunbookSchedule :exec
 UPDATE runbook_schedules SET enabled = 0 WHERE id = ?;

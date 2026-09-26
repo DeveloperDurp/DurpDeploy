@@ -415,3 +415,24 @@ type listDeploymentLogsQueryParam struct {
 	// in: query
 	Offset int64 `json:"offset"`
 }
+
+// swagger:parameters createRunbook saveRunbookVersion
+type runbookSaveBodyParam struct {
+	// in: body
+	// required: true
+	Body swaggerRunbookSaveRequest `json:"body"`
+}
+
+// swagger:parameters executeRunbook
+type runbookExecuteBodyParam struct {
+	// in: body
+	// required: true
+	Body swaggerRunbookExecuteRequest `json:"body"`
+}
+
+// swagger:parameters createRunbookSchedule
+type runbookScheduleBodyParam struct {
+	// in: body
+	// required: true
+	Body swaggerRunbookScheduleRequest `json:"body"`
+}
