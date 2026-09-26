@@ -610,10 +610,13 @@ CODE=$(curl_silent -X POST -d "release_id=$RELEASE_ID&environment_id=$ENV_ID&cro
 BEFORE_DEP=$(curl_body "$BASE/deployments" | grep -oP 'href="/deployments/\K[0-9]+' | sort -n | tail -1)
 echo "Latest deployment before schedule: $BEFORE_DEP"
 
-echo "  Sleeping 100s for scheduler tick..."
-sleep 100
-
-AFTER_DEP=$(curl_body "$BASE/deployments" | grep -oP 'href="/deployments/\K[0-9]+' | sort -n | tail -1)
+echo "  Waiting for scheduler tick..."
+AFTER_DEP="$BEFORE_DEP"
+for i in {1..130}; do
+    AFTER_DEP=$(curl_body "$BASE/deployments" | grep -oP 'href="/deployments/\K[0-9]+' | sort -n | tail -1)
+    [[ "$AFTER_DEP" -gt "$BEFORE_DEP" ]] && break
+    sleep 1
+done
 echo "Latest deployment after schedule: $AFTER_DEP"
 [[ "$AFTER_DEP" -gt "$BEFORE_DEP" ]] || { echo "FAIL: scheduler did not create a new deployment"; exit 1; }
 
