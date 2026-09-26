@@ -1,12 +1,15 @@
-//go:build unix
+//go:build linux
 
 package runner_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -18,7 +21,10 @@ func TestLocalCancellationStopsChildBeforeFiveSeconds(t *testing.T) {
 	defer cancelRun()
 	repo, deploymentRunner, _ := setupRunnerHarness(t)
 	marker := filepath.Join(t.TempDir(), "started")
-	script := fmt.Sprintf("printf ready > %q; sleep 10", marker)
+	script := fmt.Sprintf(
+		`sleep 10 & child=$!; printf '%%s' "$child" > %q; wait "$child"`,
+		marker,
+	)
 	project, err := repo.Queries.CreateProject(ctx,
 		db.CreateProjectParams{Name: "cancel-child"})
 	if err != nil {
@@ -62,6 +68,14 @@ func TestLocalCancellationStopsChildBeforeFiveSeconds(t *testing.T) {
 	if _, err := os.Stat(marker); err != nil {
 		t.Fatal("local child did not start", err)
 	}
+	rawPID, err := os.ReadFile(marker)
+	if err != nil {
+		t.Fatal(err)
+	}
+	childPID, err := strconv.Atoi(string(rawPID))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := deploymentRunner.Cancel(created.Deployment.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -81,5 +95,12 @@ func TestLocalCancellationStopsChildBeforeFiveSeconds(t *testing.T) {
 	stored, err := repo.Queries.GetDeployment(ctx, created.Deployment.ID)
 	if err != nil || stored.Status != "cancelled" {
 		t.Fatalf("deployment after cancellation=%+v error=%v", stored, err)
+	}
+	status, err := os.ReadFile(fmt.Sprintf("/proc/%d/status", childPID))
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		t.Fatal(err)
+	}
+	if err == nil && !strings.Contains(string(status), "State:\tZ") {
+		t.Fatalf("child process %d survived cancellation", childPID)
 	}
 }
