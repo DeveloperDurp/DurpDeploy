@@ -158,7 +158,12 @@ func TestRunbookAPI_VersionedExecutionStaysSeparate(t *testing.T) {
 		t.Fatalf("delete scheduled environment status=%d body=%s",
 			deletedEnvironment.Code, deletedEnvironment.Body.String())
 	}
-
+	deletedEnvironment = request(http.MethodDelete,
+		fmt.Sprintf("/api/v1/environments/%d", environment.ID), "")
+	if deletedEnvironment.Code != http.StatusNoContent {
+		t.Fatalf("delete executed environment status=%d body=%s",
+			deletedEnvironment.Code, deletedEnvironment.Body.String())
+	}
 }
 
 func TestRunbookAPI_ProjectDeleteAfterVersion(t *testing.T) {
@@ -263,6 +268,12 @@ func TestRunbookAPI_ProjectDeleteAfterVersion(t *testing.T) {
 	}
 	if status != "running" {
 		t.Fatalf("execution did not start: %s", status)
+	}
+	blockedEnvironment := request(http.MethodDelete,
+		fmt.Sprintf("/api/v1/environments/%d", environment.ID), "")
+	if blockedEnvironment.Code != http.StatusConflict {
+		t.Fatalf("active environment delete status=%d body=%s",
+			blockedEnvironment.Code, blockedEnvironment.Body.String())
 	}
 	blocked := request(http.MethodDelete, base, "")
 	if blocked.Code != http.StatusConflict {

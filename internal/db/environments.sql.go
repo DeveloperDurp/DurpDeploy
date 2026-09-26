@@ -70,6 +70,47 @@ func (q *Queries) GetEnvironment(ctx context.Context, id int64) (Environment, er
 	return i, err
 }
 
+const hasActiveEnvironmentDeployment = `-- name: HasActiveEnvironmentDeployment :one
+SELECT CASE WHEN EXISTS (
+    SELECT 1 FROM deployments WHERE environment_id = ?
+      AND status IN ('pending', 'running', 'pending_approval')
+) THEN 1 ELSE 0 END
+`
+
+func (q *Queries) HasActiveEnvironmentDeployment(ctx context.Context, environmentID int64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, hasActiveEnvironmentDeployment, environmentID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const listEnvironmentDeploymentIDs = `-- name: ListEnvironmentDeploymentIDs :many
+SELECT id FROM deployments WHERE environment_id = ?
+`
+
+func (q *Queries) ListEnvironmentDeploymentIDs(ctx context.Context, environmentID int64) ([]int64, error) {
+	rows, err := q.db.QueryContext(ctx, listEnvironmentDeploymentIDs, environmentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listEnvironments = `-- name: ListEnvironments :many
 SELECT id, name, description, tags, created_at FROM environments ORDER BY created_at DESC
 `

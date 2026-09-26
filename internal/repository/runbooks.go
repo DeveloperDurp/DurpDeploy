@@ -21,6 +21,38 @@ var ErrProjectHasActiveRunbook = errors.New(
 	"project has active runbook executions",
 )
 
+var ErrEnvironmentHasActiveDeployment = errors.New(
+	"environment has active deployments",
+)
+
+func (r *Repository) DeleteEnvironment(ctx context.Context, id int64) error {
+	return withSQLiteBusyRetry(ctx, func() error {
+		return r.WithTx(ctx, func(q *db.Queries) error {
+			active, err := q.HasActiveEnvironmentDeployment(ctx, id)
+			if err != nil {
+				return err
+			}
+			if active != 0 {
+				return ErrEnvironmentHasActiveDeployment
+			}
+			deployments, err := q.ListEnvironmentDeploymentIDs(ctx, id)
+			if err != nil {
+				return err
+			}
+			for _, deploymentID := range deployments {
+				if err := deleteDeploymentHistory(
+					ctx,
+					q,
+					deploymentID,
+				); err != nil {
+					return err
+				}
+			}
+			return q.DeleteEnvironment(ctx, id)
+		})
+	})
+}
+
 func (r *Repository) DeleteProject(ctx context.Context, projectID int64) error {
 	return withSQLiteBusyRetry(ctx, func() error {
 		return r.WithTx(ctx, func(q *db.Queries) error {
@@ -42,22 +74,11 @@ func (r *Repository) DeleteProject(ctx context.Context, projectID int64) error {
 				return err
 			}
 			for _, deploymentID := range deployments {
-				for _, deletePart := range []func(context.Context, int64) error{
-					q.DeleteRunbookRemoteStepLogSequences,
-					q.DeleteRunbookRemoteStepRuns,
-					q.DeleteRunbookLogScopes,
-					q.DeleteRunbookDispatches,
-					q.DeleteRunbookStepAttempts,
-					q.DeleteRunbookStepSelectors,
-					q.DeleteRunbookSteps,
-					q.DeleteRunbookStepSource,
-					q.DeleteRunbookRemoteClaim,
-				} {
-					if err := deletePart(ctx, deploymentID); err != nil {
-						return err
-					}
-				}
-				if err := q.DeleteDeployment(ctx, deploymentID); err != nil {
+				if err := deleteDeploymentHistory(
+					ctx,
+					q,
+					deploymentID,
+				); err != nil {
 					return err
 				}
 			}
@@ -88,6 +109,29 @@ func (r *Repository) DeleteProject(ctx context.Context, projectID int64) error {
 			return q.DeleteProject(ctx, projectID)
 		})
 	})
+}
+
+func deleteDeploymentHistory(
+	ctx context.Context,
+	q *db.Queries,
+	deploymentID int64,
+) error {
+	for _, deletePart := range []func(context.Context, int64) error{
+		q.DeleteRunbookRemoteStepLogSequences,
+		q.DeleteRunbookRemoteStepRuns,
+		q.DeleteRunbookLogScopes,
+		q.DeleteRunbookDispatches,
+		q.DeleteRunbookStepAttempts,
+		q.DeleteRunbookStepSelectors,
+		q.DeleteRunbookSteps,
+		q.DeleteRunbookStepSource,
+		q.DeleteRunbookRemoteClaim,
+	} {
+		if err := deletePart(ctx, deploymentID); err != nil {
+			return err
+		}
+	}
+	return q.DeleteDeployment(ctx, deploymentID)
 }
 
 func (r *Repository) SaveRunbook(

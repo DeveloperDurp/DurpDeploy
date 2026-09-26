@@ -171,6 +171,8 @@ execution history, live logs, approval, cancellation, retry, and schedules.
 Deleting a project with a pending, running, or approval-gated runbook returns
 `409`. Approve an approval-gated execution, then wait for a terminal status
 (or cancel it after it starts) before deleting the project.
+Deleting an environment with any active deployment also returns `409`.
+Once deployments are terminal, environment deletion removes their history.
 
 ## Endpoint cheat sheet
 

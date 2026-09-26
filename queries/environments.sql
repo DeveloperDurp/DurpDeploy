@@ -19,3 +19,12 @@ UPDATE environments SET name = ?, description = ?, tags = ? WHERE id = ? RETURNI
 
 -- name: DeleteEnvironment :exec
 DELETE FROM environments WHERE id = ?;
+
+-- name: ListEnvironmentDeploymentIDs :many
+SELECT id FROM deployments WHERE environment_id = ?;
+
+-- name: HasActiveEnvironmentDeployment :one
+SELECT CASE WHEN EXISTS (
+    SELECT 1 FROM deployments WHERE environment_id = ?
+      AND status IN ('pending', 'running', 'pending_approval')
+) THEN 1 ELSE 0 END;

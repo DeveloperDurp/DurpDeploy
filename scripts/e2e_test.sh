@@ -752,6 +752,8 @@ API_ENV_ID=$(echo "$API_ENV" | python3 -c "import sys,json; print(json.load(sys.
 echo "  Environment CRUD: OK ($API_ENV_ID)"
 
 echo "=== Runbook API and web contracts ==="
+RUNBOOK_ENV=$(api_post '{"name":"runbook-e2e-env"}' "$BASE/api/v1/environments")
+RUNBOOK_ENV_ID=$(echo "$RUNBOOK_ENV" | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
 RUNBOOK_CREATED=$(api_post '{"name":"e2e-maintenance","steps":[{"name":"inspect","script_body":"printf runbook-e2e-v1","interpreter":"bash"}]}' \
     "$BASE/api/v1/projects/$API_PROJECT_ID/runbooks")
 RUNBOOK_ID=$(echo "$RUNBOOK_CREATED" | python3 -c 'import sys,json; print(json.load(sys.stdin)["runbook"]["id"])')
@@ -765,7 +767,7 @@ grep -q 'runbook-e2e-v1' <<<"$RUNBOOK_PAGE" || { echo "FAIL: browser cannot read
 if grep -q 'runbook-e2e-v2' <<<"$RUNBOOK_PAGE"; then
     echo "FAIL: browser version view changed with a later edit"; exit 1
 fi
-RUNBOOK_EXECUTION=$(api_post "{\"environment_id\":$API_ENV_ID,\"version_id\":$RUNBOOK_V1}" \
+RUNBOOK_EXECUTION=$(api_post "{\"environment_id\":$RUNBOOK_ENV_ID,\"version_id\":$RUNBOOK_V1}" \
     "$BASE/api/v1/projects/$API_PROJECT_ID/runbooks/$RUNBOOK_ID/executions")
 RUNBOOK_EXECUTION_ID=$(echo "$RUNBOOK_EXECUTION" | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
 RUNBOOK_HISTORY=$(api_get "$BASE/api/v1/projects/$API_PROJECT_ID/runbook-executions?limit=1&offset=0")
@@ -784,7 +786,7 @@ grep -q 'runbook-e2e-v1' <<<"$RUNBOOK_LOGS" || { echo "FAIL: pinned runbook logs
 if grep -q 'runbook-e2e-v2' <<<"$RUNBOOK_LOGS"; then
     echo "FAIL: pinned runbook used a later version"; exit 1
 fi
-RUNBOOK_SCHEDULE=$(api_post "{\"environment_id\":$API_ENV_ID,\"version_id\":$RUNBOOK_V1,\"cron\":\"0 3 * * *\"}" \
+RUNBOOK_SCHEDULE=$(api_post "{\"environment_id\":$RUNBOOK_ENV_ID,\"version_id\":$RUNBOOK_V1,\"cron\":\"0 3 * * *\"}" \
     "$BASE/api/v1/projects/$API_PROJECT_ID/runbooks/$RUNBOOK_ID/schedules")
 RUNBOOK_SCHEDULE_ID=$(echo "$RUNBOOK_SCHEDULE" | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
 RUNBOOK_SCHEDULE_PAGE=$(curl_body "$BASE/projects/$API_PROJECT_ID/runbooks/$RUNBOOK_ID")
@@ -796,7 +798,7 @@ if [[ "${DURPDEPLOY_RUNBOOK_BROWSER_E2E:-0}" == "1" ]]; then
     DURPDEPLOY_RUNBOOK_BROWSER_PROJECT_ID="$API_PROJECT_ID" \
     DURPDEPLOY_RUNBOOK_BROWSER_RUNBOOK_ID="$RUNBOOK_ID" \
     DURPDEPLOY_RUNBOOK_BROWSER_SCHEDULE_ID="$RUNBOOK_SCHEDULE_ID" \
-    DURPDEPLOY_RUNBOOK_BROWSER_ENVIRONMENT_ID="$API_ENV_ID" \
+    DURPDEPLOY_RUNBOOK_BROWSER_ENVIRONMENT_ID="$RUNBOOK_ENV_ID" \
     DURPDEPLOY_RUNBOOK_BROWSER_APPROVAL_PROJECT_ID="$APP_PROJ_ID" \
     DURPDEPLOY_RUNBOOK_BROWSER_APPROVAL_DEV_ID="$APP_DEV_ID" \
     DURPDEPLOY_RUNBOOK_BROWSER_APPROVAL_STAGING_ID="$APP_STAGING_ID" \
@@ -808,6 +810,15 @@ if [[ "${DURPDEPLOY_RUNBOOK_BROWSER_E2E:-0}" == "1" ]]; then
 fi
 api_post '{}' "$BASE/api/v1/projects/$API_PROJECT_ID/runbooks/$RUNBOOK_ID/schedules/$RUNBOOK_SCHEDULE_ID/disable" \
     | python3 -c 'import sys,json; assert json.load(sys.stdin)["enabled"] == 0'
+for i in {1..150}; do
+    CODE=$(do_delete "$BASE/environments/$RUNBOOK_ENV_ID")
+    [[ "$CODE" == "200" ]] && break
+    [[ "$CODE" == "409" ]] || { echo "FAIL: web delete executed runbook environment got $CODE"; exit 1; }
+    sleep 0.1
+done
+[[ "$CODE" == "200" ]] || { echo "FAIL: web delete executed runbook environment got $CODE"; exit 1; }
+CODE=$(api_get_code "$BASE/api/v1/environments/$RUNBOOK_ENV_ID")
+[[ "$CODE" == "404" ]] || { echo "FAIL: deleted runbook environment still exists, status=$CODE"; exit 1; }
 echo "  Versioned runbook API execution, schedule, logs, and browser history: OK"
 
 # A4b: Interpreter validation, mixed local execution, immutable snapshots,
@@ -1384,6 +1395,10 @@ CODE=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/api/swagger/index.html")
 SWAGGER=$(curl -s "$BASE/api/swagger/spec")
 echo "$SWAGGER" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d['swagger']=='2.0'; print('swagger spec OK')"
 echo "  Swagger UI + spec: OK"
+
+CODE=$(curl -s -H "Authorization: Bearer $API_TOKEN" -o /dev/null \
+    -w "%{http_code}" -X DELETE "$BASE/api/v1/environments/$API_ENV_ID")
+[[ "$CODE" == "204" ]] || { echo "FAIL: API delete executed environment got $CODE"; exit 1; }
 
 echo "=== APPLICATION E2E CHECKS PASSED ==="
 

@@ -275,6 +275,7 @@ func (h *EnvironmentHandler) UpdateEnvironment(
 //	  204: body:EmptyResponse
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
+//	  409: body:ConflictError
 //	  500: body:ServerError
 func (h *EnvironmentHandler) DeleteEnvironment(
 	w http.ResponseWriter,
@@ -286,7 +287,11 @@ func (h *EnvironmentHandler) DeleteEnvironment(
 		return
 	}
 
-	if err := h.repo.Queries.DeleteEnvironment(r.Context(), id); err != nil {
+	if err := h.repo.DeleteEnvironment(r.Context(), id); err != nil {
+		if errors.Is(err, repository.ErrEnvironmentHasActiveDeployment) {
+			RespondError(w, http.StatusConflict, err.Error())
+			return
+		}
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
