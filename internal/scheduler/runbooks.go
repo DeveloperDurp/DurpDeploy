@@ -25,13 +25,23 @@ func (s *Scheduler) fireRunbook(ctx context.Context, row db.RunbookSchedule) {
 	parsed, err := s.parser.Parse(row.Cron)
 	if err != nil {
 		s.log.Error("invalid runbook cron", "schedule_id", row.ID, "error", err)
-		_ = s.repo.Queries.DisableRunbookSchedule(ctx, row.ID)
+		if err := s.repo.Queries.DisableRunbookSchedule(
+			ctx, row.ID,
+		); err != nil {
+			s.log.Error("disable runbook schedule", "schedule_id", row.ID,
+				"error", err)
+		}
 		return
 	}
 	next := parsed.Next(s.now())
 	if next.IsZero() {
 		s.log.Error("unsatisfiable runbook cron", "schedule_id", row.ID)
-		_ = s.repo.Queries.DisableRunbookSchedule(ctx, row.ID)
+		if err := s.repo.Queries.DisableRunbookSchedule(
+			ctx, row.ID,
+		); err != nil {
+			s.log.Error("disable runbook schedule", "schedule_id", row.ID,
+				"error", err)
+		}
 		return
 	}
 	book, err := s.repo.Queries.GetRunbookByID(ctx, row.RunbookID)
