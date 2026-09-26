@@ -730,7 +730,9 @@ CODE=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/.well-known/skills/index.js
 curl -s "$BASE/.well-known/skills/index.json" | grep -q '"durpdeploy"' || { echo "FAIL: skills index missing durpdeploy"; exit 1; }
 CODE=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/.well-known/skills/durpdeploy/SKILL.md")
 [[ "$CODE" == "200" ]] || { echo "FAIL: SKILL.md got $CODE, want 200"; exit 1; }
-curl -s "$BASE/.well-known/skills/durpdeploy/SKILL.md" | head -3 | grep -q 'name: durpdeploy' || { echo "FAIL: SKILL.md frontmatter missing name"; exit 1; }
+SKILL_DOCUMENT=$(curl -s "$BASE/.well-known/skills/durpdeploy/SKILL.md")
+grep -q '^name: durpdeploy$' <<<"$SKILL_DOCUMENT" || { echo "FAIL: SKILL.md frontmatter missing name"; exit 1; }
+grep -q '^## Runbooks$' <<<"$SKILL_DOCUMENT" || { echo "FAIL: SKILL.md missing runbook guidance"; exit 1; }
 echo "  Agent skills discovery: OK"
 
 # A3: Project CRUD.
@@ -795,6 +797,11 @@ if [[ "${DURPDEPLOY_RUNBOOK_BROWSER_E2E:-0}" == "1" ]]; then
     DURPDEPLOY_RUNBOOK_BROWSER_RUNBOOK_ID="$RUNBOOK_ID" \
     DURPDEPLOY_RUNBOOK_BROWSER_SCHEDULE_ID="$RUNBOOK_SCHEDULE_ID" \
     DURPDEPLOY_RUNBOOK_BROWSER_ENVIRONMENT_ID="$API_ENV_ID" \
+    DURPDEPLOY_RUNBOOK_BROWSER_APPROVAL_PROJECT_ID="$APP_PROJ_ID" \
+    DURPDEPLOY_RUNBOOK_BROWSER_APPROVAL_DEV_ID="$APP_DEV_ID" \
+    DURPDEPLOY_RUNBOOK_BROWSER_APPROVAL_STAGING_ID="$APP_STAGING_ID" \
+    DURPDEPLOY_RUNBOOK_BROWSER_APPROVAL_PROD_ID="$APP_PROD_ID" \
+    DURPDEPLOY_RUNBOOK_BROWSER_API_TOKEN="$API_TOKEN" \
     DURPDEPLOY_RUNBOOK_BROWSER_EMAIL="$ADMIN_EMAIL" \
     DURPDEPLOY_RUNBOOK_BROWSER_PASSWORD="$ADMIN_PASS" \
         node "$SCRIPT_DIR/runbook_browser_test.mjs"

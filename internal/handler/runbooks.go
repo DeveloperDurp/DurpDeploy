@@ -65,8 +65,13 @@ func (h *RunbookHandler) List(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Cannot list executions", http.StatusInternalServerError)
 		return
 	}
+	total, err := h.repo.Queries.CountRunbookExecutions(r.Context(), projectID)
+	if err != nil {
+		http.Error(w, "Cannot count executions", http.StatusInternalServerError)
+		return
+	}
 	if err := pages.RunbooksPage(project, books, executions, offset,
-		pageLimit, r.URL.Path).
+		pageLimit, total, r.URL.Path).
 		Render(r.Context(), w); err != nil {
 		http.Error(w, "Cannot render runbooks", http.StatusInternalServerError)
 	}
