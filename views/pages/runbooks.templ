@@ -33,7 +33,7 @@ templ RunbooksPage(project db.Project, books []db.Runbook, executions []db.ListR
 			<div class="card bg-base-200 p-4">
 				<h2 class="text-xl font-bold mb-3">Saved procedures</h2>
 				<table class="table table-zebra table-fixed w-full">
-					<thead><tr><th class="w-full sm:w-2/5">Name</th><th class="hidden sm:table-cell w-2/5">Description</th><th class="hidden sm:table-cell w-1/5">Created</th></tr></thead>
+					<thead><tr><th class="w-full sm:w-1/4">Name</th><th class="hidden sm:table-cell w-auto">Description</th><th class="hidden sm:table-cell w-1/4">Created</th></tr></thead>
 					<tbody>
 						for _, book := range books {
 							<tr><td class="truncate"><a class="link link-primary" href={ fmt.Sprintf("/projects/%d/runbooks/%d", project.ID, book.ID) }>{ book.Name }</a></td><td class="hidden sm:table-cell truncate">{ book.Description }</td><td class="hidden sm:table-cell whitespace-nowrap">{ formatUnixTime(book.CreatedAt) }</td></tr>
