@@ -201,3 +201,50 @@ func sortedKeys(m map[string]struct{}) []string {
 	sort.Strings(out)
 	return out
 }
+
+func TestSwagger_RunbookWritesDocumentBodiesAndResponses(t *testing.T) {
+	spec, err := swagger.ReadSpec()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc struct {
+		Paths map[string]map[string]struct {
+			Parameters []struct {
+				Name   string `json:"name"`
+				Schema struct {
+					Ref string `json:"$ref"`
+				} `json:"schema"`
+			} `json:"parameters"`
+			Responses map[string]struct {
+				Schema struct {
+					Ref string `json:"$ref"`
+				} `json:"schema"`
+			} `json:"responses"`
+		} `json:"paths"`
+	}
+	if err := json.Unmarshal(spec, &doc); err != nil {
+		t.Fatal(err)
+	}
+	for _, route := range []struct {
+		path, method, request, response string
+	}{
+		{"/projects/{id}/runbooks", "post", "RunbookSaveRequest", "RunbookSaveResponse"},
+		{"/projects/{id}/runbooks/{runbookId}", "put", "RunbookSaveRequest", "RunbookSaveResponse"},
+		{"/projects/{id}/runbooks/{runbookId}/executions", "post", "RunbookExecuteRequest", "RunbookExecution"},
+		{"/projects/{id}/runbooks/{runbookId}/schedules", "post", "RunbookScheduleRequest", "RunbookSchedule"},
+	} {
+		operation := doc.Paths[route.path][route.method]
+		foundBody := false
+		for _, parameter := range operation.Parameters {
+			if parameter.Name == "body" && parameter.Schema.Ref ==
+				"#/definitions/"+route.request {
+				foundBody = true
+			}
+		}
+		if !foundBody || operation.Responses["201"].Schema.Ref !=
+			"#/definitions/"+route.response {
+			t.Fatalf("%s %s missing %s body or %s response",
+				route.method, route.path, route.request, route.response)
+		}
+	}
+}

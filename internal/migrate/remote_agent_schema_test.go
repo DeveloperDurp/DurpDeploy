@@ -58,6 +58,8 @@ func TestRemoteAgentSchemaFreshUpgradeRollback(t *testing.T) {
 
 	// When the current migrations upgrade it.
 	requireNoError(t, goose.Up(conn, "."), "upgrade")
+	upgradedVersion, err := goose.GetDBVersion(conn)
+	requireNoError(t, err, "upgraded version")
 
 	// Then the new durable table exists.
 	var count int
@@ -89,10 +91,10 @@ func TestRemoteAgentSchemaFreshUpgradeRollback(t *testing.T) {
 	assertRemoteLegacy(t, conn)
 	version, err = goose.GetDBVersion(conn)
 	requireNoError(t, err, "version after refused rollback")
-	if version != 36 {
+	if version != upgradedVersion {
 		t.Fatalf("version after rollback=%d", version)
 	}
-	t.Log("PASS: rollback preserved history and version=36")
+	t.Logf("PASS: rollback preserved history and version=%d", upgradedVersion)
 }
 
 func assertRemoteTables(t *testing.T, conn *sql.DB) {

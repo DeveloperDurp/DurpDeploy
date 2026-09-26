@@ -52,7 +52,14 @@ func (h *LogHandler) StreamLogs(w http.ResponseWriter, r *http.Request) {
 		RespondError(w, http.StatusBadRequest, "Invalid deployment ID")
 		return
 	}
+	h.streamDeploymentLogs(w, r, depID)
+}
 
+func (h *LogHandler) streamDeploymentLogs(
+	w http.ResponseWriter,
+	r *http.Request,
+	depID int64,
+) {
 	format := r.URL.Query().Get("format")
 	ndjson := format == "ndjson"
 	if format != "" && format != "sse" && format != "ndjson" {

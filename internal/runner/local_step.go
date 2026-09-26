@@ -109,15 +109,8 @@ func (r *DeploymentRunner) runStepAttempt(
 	r.trackProcessGroup(request.deploymentID, cmd.Process.Pid)
 	defer r.untrackProcessGroup(request.deploymentID)
 
-	go func() {
-		<-stepCtx.Done()
-		time.Sleep(10 * time.Second)
-		if cmd.Process != nil {
-			killProcessGroup(cmd.Process.Pid)
-		}
-	}()
-
 	err = cmd.Wait()
+	killProcessGroup(cmd.Process.Pid)
 	request.logWriter.Flush()
 
 	timedOut := stepCtx.Err() == context.DeadlineExceeded

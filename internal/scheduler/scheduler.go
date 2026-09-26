@@ -121,6 +121,7 @@ func (s *Scheduler) tick(ctx context.Context) {
 	for _, row := range due {
 		s.fireOne(ctx, row)
 	}
+	s.tickRunbooks(ctx)
 }
 
 func (s *Scheduler) fireOne(ctx context.Context, row db.ScheduledDeployment) {
@@ -257,7 +258,7 @@ func (s *Scheduler) fireOne(ctx context.Context, row db.ScheduledDeployment) {
 	// a single call so the lifecycle stages are only loaded once.
 	blocked, reason, requiresApproval, err := gate.CheckAndApproval(
 		ctx,
-		s.repo,
+		s.repo.Queries,
 		project,
 		release,
 		row.EnvironmentID,

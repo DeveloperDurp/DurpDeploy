@@ -610,10 +610,13 @@ CODE=$(curl_silent -X POST -d "release_id=$RELEASE_ID&environment_id=$ENV_ID&cro
 BEFORE_DEP=$(curl_body "$BASE/deployments" | grep -oP 'href="/deployments/\K[0-9]+' | sort -n | tail -1)
 echo "Latest deployment before schedule: $BEFORE_DEP"
 
-echo "  Sleeping 100s for scheduler tick..."
-sleep 100
-
-AFTER_DEP=$(curl_body "$BASE/deployments" | grep -oP 'href="/deployments/\K[0-9]+' | sort -n | tail -1)
+echo "  Waiting for scheduler tick..."
+AFTER_DEP="$BEFORE_DEP"
+for i in {1..130}; do
+    AFTER_DEP=$(curl_body "$BASE/deployments" | grep -oP 'href="/deployments/\K[0-9]+' | sort -n | tail -1)
+    [[ "$AFTER_DEP" -gt "$BEFORE_DEP" ]] && break
+    sleep 1
+done
 echo "Latest deployment after schedule: $AFTER_DEP"
 [[ "$AFTER_DEP" -gt "$BEFORE_DEP" ]] || { echo "FAIL: scheduler did not create a new deployment"; exit 1; }
 
@@ -730,7 +733,9 @@ CODE=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/.well-known/skills/index.js
 curl -s "$BASE/.well-known/skills/index.json" | grep -q '"durpdeploy"' || { echo "FAIL: skills index missing durpdeploy"; exit 1; }
 CODE=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/.well-known/skills/durpdeploy/SKILL.md")
 [[ "$CODE" == "200" ]] || { echo "FAIL: SKILL.md got $CODE, want 200"; exit 1; }
-curl -s "$BASE/.well-known/skills/durpdeploy/SKILL.md" | head -3 | grep -q 'name: durpdeploy' || { echo "FAIL: SKILL.md frontmatter missing name"; exit 1; }
+SKILL_DOCUMENT=$(curl -s "$BASE/.well-known/skills/durpdeploy/SKILL.md")
+grep -q '^name: durpdeploy$' <<<"$SKILL_DOCUMENT" || { echo "FAIL: SKILL.md frontmatter missing name"; exit 1; }
+grep -q '^## Runbooks$' <<<"$SKILL_DOCUMENT" || { echo "FAIL: SKILL.md missing runbook guidance"; exit 1; }
 echo "  Agent skills discovery: OK"
 
 # A3: Project CRUD.
@@ -748,6 +753,102 @@ API_ENV=$(api_post '{"name":"dev"}' "$BASE/api/v1/environments")
 API_ENV_ID=$(echo "$API_ENV" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
 [[ -n "$API_ENV_ID" ]] || { echo "FAIL: create env did not return id: $API_ENV"; exit 1; }
 echo "  Environment CRUD: OK ($API_ENV_ID)"
+
+echo "=== Runbook API and web contracts ==="
+RUNBOOK_ENV=$(api_post '{"name":"runbook-e2e-env"}' "$BASE/api/v1/environments")
+RUNBOOK_ENV_ID=$(echo "$RUNBOOK_ENV" | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
+RUNBOOK_CREATED=$(api_post '{"name":"e2e-maintenance","steps":[{"name":"inspect","script_body":"printf runbook-e2e-v1","interpreter":"bash"}]}' \
+    "$BASE/api/v1/projects/$API_PROJECT_ID/runbooks")
+RUNBOOK_ID=$(echo "$RUNBOOK_CREATED" | python3 -c 'import sys,json; print(json.load(sys.stdin)["runbook"]["id"])')
+RUNBOOK_V1=$(echo "$RUNBOOK_CREATED" | python3 -c 'import sys,json; print(json.load(sys.stdin)["version"]["id"])')
+RUNBOOK_UPDATED=$(api_put '{"steps":[{"name":"inspect","script_body":"printf runbook-e2e-v2","interpreter":"bash"}]}' \
+    "$BASE/api/v1/projects/$API_PROJECT_ID/runbooks/$RUNBOOK_ID")
+RUNBOOK_V2=$(echo "$RUNBOOK_UPDATED" | python3 -c 'import sys,json; print(json.load(sys.stdin)["version"]["id"])')
+[[ "$RUNBOOK_V1" != "$RUNBOOK_V2" ]] || { echo "FAIL: runbook version did not advance"; exit 1; }
+RUNBOOK_PAGE=$(curl_body "$BASE/projects/$API_PROJECT_ID/runbooks/$RUNBOOK_ID?version_id=$RUNBOOK_V1")
+grep -q 'runbook-e2e-v1' <<<"$RUNBOOK_PAGE" || { echo "FAIL: browser cannot read pinned runbook version"; exit 1; }
+if grep -q 'runbook-e2e-v2' <<<"$RUNBOOK_PAGE"; then
+    echo "FAIL: browser version view changed with a later edit"; exit 1
+fi
+RUNBOOK_EXECUTION=$(api_post "{\"environment_id\":$RUNBOOK_ENV_ID,\"version_id\":$RUNBOOK_V1}" \
+    "$BASE/api/v1/projects/$API_PROJECT_ID/runbooks/$RUNBOOK_ID/executions")
+RUNBOOK_EXECUTION_ID=$(echo "$RUNBOOK_EXECUTION" | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
+RUNBOOK_HISTORY=$(api_get "$BASE/api/v1/projects/$API_PROJECT_ID/runbook-executions?limit=1&offset=0")
+echo "$RUNBOOK_HISTORY" | python3 -c 'import sys,json; p=json.load(sys.stdin); assert p["total"] >= 1 and p["limit"] == 1 and len(p["items"]) == 1'
+CODE=$(api_get_code "$BASE/api/v1/projects/$API_PROJECT_ID/runbook-executions?limit=0")
+[[ "$CODE" == "400" ]] || { echo "FAIL: invalid runbook history limit got $CODE"; exit 1; }
+for i in {1..100}; do
+    RUNBOOK_STATUS=$(api_get "$BASE/api/v1/projects/$API_PROJECT_ID/runbook-executions/$RUNBOOK_EXECUTION_ID" \
+        | python3 -c 'import sys,json; d=json.load(sys.stdin); assert d["runbook_name"] == "e2e-maintenance", d; print(d["status"])')
+    [[ "$RUNBOOK_STATUS" =~ ^(failed|succeeded|cancelled)$ ]] && break
+    sleep 0.1
+done
+[[ "$RUNBOOK_STATUS" == "succeeded" ]] || { echo "FAIL: runbook execution status=$RUNBOOK_STATUS"; exit 1; }
+RUNBOOK_LOGS=$(api_get "$BASE/api/v1/projects/$API_PROJECT_ID/runbook-executions/$RUNBOOK_EXECUTION_ID/logs")
+grep -q 'runbook-e2e-v1' <<<"$RUNBOOK_LOGS" || { echo "FAIL: pinned runbook logs missing"; exit 1; }
+if grep -q 'runbook-e2e-v2' <<<"$RUNBOOK_LOGS"; then
+    echo "FAIL: pinned runbook used a later version"; exit 1
+fi
+RUNBOOK_RETRY=$(api_post '{}' \
+    "$BASE/api/v1/projects/$API_PROJECT_ID/runbook-executions/$RUNBOOK_EXECUTION_ID/retry")
+RUNBOOK_RETRY_ID=$(echo "$RUNBOOK_RETRY" | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
+for i in {1..100}; do
+    RUNBOOK_RETRY_STATUS=$(api_get "$BASE/api/v1/projects/$API_PROJECT_ID/runbook-executions/$RUNBOOK_RETRY_ID" \
+        | python3 -c 'import sys,json; print(json.load(sys.stdin)["status"])')
+    [[ "$RUNBOOK_RETRY_STATUS" =~ ^(failed|succeeded|cancelled)$ ]] && break
+    sleep 0.1
+done
+[[ "$RUNBOOK_RETRY_STATUS" == "succeeded" ]] || { echo "FAIL: runbook retry status=$RUNBOOK_RETRY_STATUS"; exit 1; }
+RUNBOOK_SCHEDULE=$(api_post "{\"environment_id\":$RUNBOOK_ENV_ID,\"version_id\":$RUNBOOK_V1,\"cron\":\"0 3 * * *\"}" \
+    "$BASE/api/v1/projects/$API_PROJECT_ID/runbooks/$RUNBOOK_ID/schedules")
+RUNBOOK_SCHEDULE_ID=$(echo "$RUNBOOK_SCHEDULE" | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
+RUNBOOK_SCHEDULE_PAGE=$(curl_body "$BASE/projects/$API_PROJECT_ID/runbooks/$RUNBOOK_ID")
+grep -q 'space-y-3 md:hidden' <<<"$RUNBOOK_SCHEDULE_PAGE" || { echo "FAIL: mobile schedule cards missing"; exit 1; }
+grep -q 'Next run:' <<<"$RUNBOOK_SCHEDULE_PAGE" || { echo "FAIL: schedule next run missing from browser"; exit 1; }
+grep -q "/schedules/$RUNBOOK_SCHEDULE_ID/disable" <<<"$RUNBOOK_SCHEDULE_PAGE" || { echo "FAIL: schedule action missing from browser"; exit 1; }
+if [[ "${DURPDEPLOY_RUNBOOK_BROWSER_E2E:-0}" == "1" ]]; then
+    DURPDEPLOY_RUNBOOK_BROWSER_BASE="$BASE" \
+    DURPDEPLOY_RUNBOOK_BROWSER_PROJECT_ID="$API_PROJECT_ID" \
+    DURPDEPLOY_RUNBOOK_BROWSER_RUNBOOK_ID="$RUNBOOK_ID" \
+    DURPDEPLOY_RUNBOOK_BROWSER_SCHEDULE_ID="$RUNBOOK_SCHEDULE_ID" \
+    DURPDEPLOY_RUNBOOK_BROWSER_ENVIRONMENT_ID="$RUNBOOK_ENV_ID" \
+    DURPDEPLOY_RUNBOOK_BROWSER_APPROVAL_PROJECT_ID="$APP_PROJ_ID" \
+    DURPDEPLOY_RUNBOOK_BROWSER_APPROVAL_DEV_ID="$APP_DEV_ID" \
+    DURPDEPLOY_RUNBOOK_BROWSER_APPROVAL_STAGING_ID="$APP_STAGING_ID" \
+    DURPDEPLOY_RUNBOOK_BROWSER_APPROVAL_PROD_ID="$APP_PROD_ID" \
+    DURPDEPLOY_RUNBOOK_BROWSER_API_TOKEN="$API_TOKEN" \
+    DURPDEPLOY_RUNBOOK_BROWSER_EMAIL="$ADMIN_EMAIL" \
+    DURPDEPLOY_RUNBOOK_BROWSER_PASSWORD="$ADMIN_PASS" \
+        node "$SCRIPT_DIR/runbook_browser_test.mjs"
+fi
+RUNBOOK_LIFECYCLE=$(api_post '{"name":"runbook-e2e-lifecycle"}' "$BASE/api/v1/lifecycles")
+RUNBOOK_LIFECYCLE_ID=$(echo "$RUNBOOK_LIFECYCLE" | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
+api_post "{\"environment_id\":$RUNBOOK_ENV_ID}" \
+    "$BASE/api/v1/lifecycles/$RUNBOOK_LIFECYCLE_ID/stages" >/dev/null
+api_put "{\"name\":\"e2e-api-project\",\"lifecycle_id\":$RUNBOOK_LIFECYCLE_ID}" \
+    "$BASE/api/v1/projects/$API_PROJECT_ID" >/dev/null
+RUNBOOK_STAGE_ID=$(api_lifecycle_stage_id "$RUNBOOK_LIFECYCLE_ID" "$RUNBOOK_ENV_ID")
+CODE=$(api_post_code '{}' "$BASE/api/v1/lifecycles/$RUNBOOK_LIFECYCLE_ID/stages/$RUNBOOK_STAGE_ID/delete")
+[[ "$CODE" == "204" ]] || { echo "FAIL: remove runbook lifecycle stage got $CODE"; exit 1; }
+RUNBOOK_SCHEDULE_PAGE=$(curl_body "$BASE/projects/$API_PROJECT_ID/runbooks/$RUNBOOK_ID")
+grep -q 'runbook-e2e-env' <<<"$RUNBOOK_SCHEDULE_PAGE" || { echo "FAIL: retained schedule lost environment label"; exit 1; }
+if grep -q 'Unknown environment' <<<"$RUNBOOK_SCHEDULE_PAGE"; then
+    echo "FAIL: retained schedule shows unknown environment"; exit 1
+fi
+api_put '{"name":"e2e-api-project","lifecycle_id":0}' \
+    "$BASE/api/v1/projects/$API_PROJECT_ID" >/dev/null
+api_post '{}' "$BASE/api/v1/projects/$API_PROJECT_ID/runbooks/$RUNBOOK_ID/schedules/$RUNBOOK_SCHEDULE_ID/disable" \
+    | python3 -c 'import sys,json; assert json.load(sys.stdin)["enabled"] == 0'
+for i in {1..150}; do
+    CODE=$(do_delete "$BASE/environments/$RUNBOOK_ENV_ID")
+    [[ "$CODE" == "200" ]] && break
+    [[ "$CODE" == "409" ]] || { echo "FAIL: web delete executed runbook environment got $CODE"; exit 1; }
+    sleep 0.1
+done
+[[ "$CODE" == "200" ]] || { echo "FAIL: web delete executed runbook environment got $CODE"; exit 1; }
+CODE=$(api_get_code "$BASE/api/v1/environments/$RUNBOOK_ENV_ID")
+[[ "$CODE" == "404" ]] || { echo "FAIL: deleted runbook environment still exists, status=$CODE"; exit 1; }
+echo "  Versioned runbook API execution, schedule, logs, and browser history: OK"
 
 # A4b: Interpreter validation, mixed local execution, immutable snapshots,
 # release refresh, and redeployment all use the public API.
@@ -1323,6 +1424,10 @@ CODE=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/api/swagger/index.html")
 SWAGGER=$(curl -s "$BASE/api/swagger/spec")
 echo "$SWAGGER" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d['swagger']=='2.0'; print('swagger spec OK')"
 echo "  Swagger UI + spec: OK"
+
+CODE=$(curl -s -H "Authorization: Bearer $API_TOKEN" -o /dev/null \
+    -w "%{http_code}" -X DELETE "$BASE/api/v1/environments/$API_ENV_ID")
+[[ "$CODE" == "204" ]] || { echo "FAIL: API delete executed environment got $CODE"; exit 1; }
 
 echo "=== APPLICATION E2E CHECKS PASSED ==="
 

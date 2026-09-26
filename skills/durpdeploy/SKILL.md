@@ -142,6 +142,42 @@ Enforced identically on web and API (source: `internal/gate/gate.go`):
 5-field `cron` (e.g. `* * * * *`), optional `note`, `enabled=true`. The
 scheduler ticks once per minute — never test sub-minute cron expectations.
 
+## Runbooks
+
+Runbooks save immutable versions of ordered steps. Create one with
+`POST /api/v1/projects/$PID/runbooks` and a JSON body containing `name` and
+`steps` (`name`, `script_body`, optional `interpreter`, `timeout_seconds`,
+`max_retries`, `execution_target`, and `agent_selectors`). Save the next
+version with `PUT /api/v1/projects/$PID/runbooks/$BID` and `steps`.
+
+`POST /api/v1/projects/$PID/runbooks/$BID/executions` takes
+`environment_id` and optional `version_id`; omit the version or pass `0`
+for the latest. Its response includes the runbook execution `id` and the
+underlying `deployment_id`. Read the execution at
+`/api/v1/projects/$PID/runbook-executions/$XID`, logs at `/logs`, and live
+logs at `/logs/stream` (SSE by default, `?format=ndjson` for NDJSON).
+Execution actions are `POST .../$XID/cancel`, `/approve` (admin only),
+and `/retry` (after a terminal status). Retry returns `409` while the source
+execution has a lost or unconfirmed remote outcome; inspect the agent before
+retrying.
+
+`GET /api/v1/projects/$PID/runbook-executions?limit=100&offset=0`
+returns `{items, total, limit, offset}`. The default page has 100 items;
+the maximum is 1000. `POST /api/v1/projects/$PID/runbooks/$BID/schedules`
+takes `environment_id`, five-field `cron`, and optional `version_id`.
+Omit the version or pass `0` to follow the latest saved version. Disable a
+schedule with `POST .../schedules/$SID/disable`.
+
+The web UI starts at `/projects/$PID/runbooks`. It supports editing,
+execution history, live logs, approval, cancellation, retry, and schedules.
+Deleting a project with a pending, running, approval-gated, or unconfirmed
+remote runbook returns `409`. Approve an approval-gated execution, then wait
+for a confirmed terminal status (or cancel it after it starts) before deleting
+the project. An unconfirmed remote outcome needs operator inspection.
+Deleting an environment with any active or unconfirmed remote deployment
+also returns `409`.
+Once deployments are terminal, environment deletion removes their history.
+
 ## Endpoint cheat sheet
 
 | Resource | Endpoints |
@@ -154,6 +190,7 @@ scheduler ticks once per minute — never test sub-minute cron expectations.
 | Deployments | `POST /api/v1/projects/{id}/deployments`, `GET /api/v1/deployments` (list) |
 | Deployment detail | `GET /deployments/{id}`, `/status`, `/logs`, `/logs/{logId}` |
 | Actions | `POST /deployments/{id}/cancel\|redeploy`; admin-only `POST .../approve` |
+| Runbooks | `/api/v1/projects/{id}/runbooks[/{runbookId}]`, `/runbook-executions[/{executionId}]` |
 | Users/tokens | admin under `/api/v1/admin/...`; `/api/v1/users/me`; `POST /api/v1/tokens` (`{"name":"..."}`) mints another token for yourself — 201, plaintext is in the `id` field of the reply |
 
 ## Getting help
