@@ -200,13 +200,16 @@ func officialUVAssertion(t *testing.T) ([]byte, []byte, []byte) {
 
 func officialUVCredentialID(t *testing.T) []byte {
 	t.Helper()
-	cache, err := exec.Command("go", "env", "GOMODCACHE").Output()
+	moduleDir, err := exec.Command(
+		"go", "list", "-m", "-f", "{{.Dir}}",
+		"github.com/go-webauthn/webauthn",
+	).Output()
 	if err != nil {
-		t.Fatalf("resolve module cache: %v", err)
+		t.Fatalf("resolve WebAuthn module: %v", err)
 	}
 	source, err := os.ReadFile(filepath.Join(
-		strings.TrimSpace(string(cache)),
-		"github.com/go-webauthn/webauthn@v0.17.4/protocol/specification_vectors_e2e_test.go",
+		strings.TrimSpace(string(moduleDir)),
+		"protocol/specification_vectors_e2e_test.go",
 	))
 	if err != nil {
 		t.Fatalf("read official WebAuthn vector: %v", err)
