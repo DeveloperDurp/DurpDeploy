@@ -113,6 +113,15 @@ func (s *Scheduler) Tick(ctx context.Context) {
 }
 
 func (s *Scheduler) tick(ctx context.Context) {
+	// Expired token-flash rows still hold a plaintext bearer
+	// credential, so purge them on schedule and not only when the
+	// next mint happens (issue #32).
+	if err := s.repo.Queries.DeleteExpiredTokenFlashSecrets(
+		ctx, s.now().Unix(),
+	); err != nil {
+		s.log.Error("token flash sweep failed", "error", err)
+	}
+
 	due, err := s.repo.Queries.ListDueScheduledDeployments(ctx, s.now().Unix())
 	if err != nil {
 		s.log.Error("list due scheduled deployments", "error", err)

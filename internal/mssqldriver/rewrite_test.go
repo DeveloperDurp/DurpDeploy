@@ -128,13 +128,13 @@ func TestRewriteSQL(t *testing.T) {
 			want:  "UPDATE projects SET notes = 'INSERT INTO' OUTPUT INSERTED.id WHERE id = @p1;",
 		},
 		{
-			name: "moves delete returning to output",
+			name: "moves delete returning to output before where",
 			query: "DELETE FROM token_flash_secrets " +
 				"WHERE id = ? AND user_id = ? AND session_id = ? AND expires_at > ? " +
 				"RETURNING token_value, token_name;",
 			want: "DELETE FROM token_flash_secrets " +
-				"WHERE id = @p1 AND user_id = @p2 AND session_id = @p3 AND expires_at > @p4 " +
-				"OUTPUT DELETED.token_value, DELETED.token_name;",
+				"OUTPUT DELETED.token_value, DELETED.token_name " +
+				"WHERE id = @p1 AND user_id = @p2 AND session_id = @p3 AND expires_at > @p4;",
 		},
 		{
 			name: "moves semicolon-less global notification returning to output",

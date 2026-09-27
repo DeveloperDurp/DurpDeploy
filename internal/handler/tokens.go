@@ -145,22 +145,8 @@ func (h *TokensHandler) MyTokensPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := h.repo.Queries.CreateApiToken(
-		r.Context(),
-		db.CreateApiTokenParams{
-			ID:          uuid.NewString(),
-			UserID:      user.ID,
-			Name:        name,
-			TokenPrefix: prefix,
-			TokenHash:   hash,
-			Scope:       "global",
-			ExpiresAt:   sql.NullInt64{},
-		},
-	); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
+	// One transaction: the flash must never dangle without its token
+	// row (an undisplayable active token), and vice versa.
 	flashID, _, err := auth.NewSessionToken()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -171,25 +157,35 @@ func (h *TokensHandler) MyTokensPost(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unauthenticated", http.StatusUnauthorized)
 		return
 	}
-	if _, err := h.repo.Queries.CreateTokenFlashSecret(
-		r.Context(),
-		db.CreateTokenFlashSecretParams{
-			ID:         flashID,
-			UserID:     user.ID,
-			SessionID:  sess.ID,
-			TokenValue: full,
-			TokenName:  name,
-			ExpiresAt:  time.Now().Add(tokenFlashTTL).Unix(),
-		},
-	); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	// Opportunistic cleanup: expired flash records have no value once
-	// abandoned, so the creator's mint is a fine place to sweep.
-	if err := h.repo.Queries.DeleteExpiredTokenFlashSecrets(
-		r.Context(), time.Now().Unix(),
-	); err != nil {
+	err = h.repo.WithTx(r.Context(), func(q *db.Queries) error {
+		if _, err := q.CreateApiToken(
+			r.Context(),
+			db.CreateApiTokenParams{
+				ID:          uuid.NewString(),
+				UserID:      user.ID,
+				Name:        name,
+				TokenPrefix: prefix,
+				TokenHash:   hash,
+				Scope:       "global",
+				ExpiresAt:   sql.NullInt64{},
+			},
+		); err != nil {
+			return err
+		}
+		_, err := q.CreateTokenFlashSecret(
+			r.Context(),
+			db.CreateTokenFlashSecretParams{
+				ID:         flashID,
+				UserID:     user.ID,
+				SessionID:  sess.ID,
+				TokenValue: full,
+				TokenName:  name,
+				ExpiresAt:  time.Now().Add(tokenFlashTTL).Unix(),
+			},
+		)
+		return err
+	})
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

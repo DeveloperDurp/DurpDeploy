@@ -198,6 +198,17 @@ func rewriteReturning(query string) (string, error) {
 		if err != nil {
 			return "", err
 		}
+		// T-SQL requires OUTPUT before WHERE.
+		if whereIndex := keywordIndexOutsideQuotes(statement, "WHERE"); whereIndex >= 0 {
+			start := whereIndex
+			for start > 0 && strings.ContainsRune(
+				" \t\r\n", rune(statement[start-1]),
+			) {
+				start--
+			}
+			separator := statement[start:whereIndex]
+			return statement[:start] + " OUTPUT " + deleted + separator + statement[whereIndex:] + trailing, nil
+		}
 		return statement + " OUTPUT " + deleted + trailing, nil
 	default:
 		return "", ErrMalformedReturning
