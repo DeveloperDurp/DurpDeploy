@@ -163,7 +163,7 @@ func rewriteReturning(query string) (string, error) {
 	if strings.TrimSpace(returningColumns) == "" {
 		return "", ErrMalformedReturning
 	}
-	output, err := outputColumns(returningColumns)
+	output, err := outputColumns(returningColumns, "INSERTED")
 	if err != nil {
 		return "", err
 	}
@@ -193,12 +193,18 @@ func rewriteReturning(query string) (string, error) {
 		}
 		separator := statement[start:whereIndex]
 		return statement[:start] + " OUTPUT " + output + separator + statement[whereIndex:] + trailing, nil
+	case containsOutsideQuotes(statement, "DELETE FROM"):
+		deleted, err := outputColumns(returningColumns, "DELETED")
+		if err != nil {
+			return "", err
+		}
+		return statement + " OUTPUT " + deleted + trailing, nil
 	default:
 		return "", ErrMalformedReturning
 	}
 }
 
-func outputColumns(returning string) (string, error) {
+func outputColumns(returning, kind string) (string, error) {
 	columns := strings.Split(strings.TrimSpace(returning), ",")
 	if len(columns) == 0 {
 		return "", ErrMalformedReturning
@@ -209,10 +215,10 @@ func outputColumns(returning string) (string, error) {
 			return "", ErrMalformedReturning
 		}
 		if column == "*" {
-			columns[i] = "INSERTED.*"
+			columns[i] = kind + ".*"
 			continue
 		}
-		columns[i] = "INSERTED." + column
+		columns[i] = kind + "." + column
 	}
 	return strings.Join(columns, ", "), nil
 }

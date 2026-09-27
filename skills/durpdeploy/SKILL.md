@@ -42,9 +42,11 @@ durpdeploy audit prune --days 180
 ### API tokens (recommended for agents)
 
 Mint a token on the server host with the CLI above, or in the web UI at
-`/settings/tokens` (Post the form `name=<label>&csrf_token=$CSRF` if
-scripting — the plaintext token appears in the `Location` query string as
-`new_token=...` and is never shown again). Then:
+`/settings/tokens` if scripting: POST the form `name=<label>&csrf_token=$CSRF`,
+then GET the redirect Location (an opaque single-use flash reference,
+`/settings/tokens?flash=<id>` — never the token itself) and take the plaintext
+from the one-time banner in that page's body. The flash is consumed on first
+read and expires if abandoned. Then:
 
 ```bash
 TOKEN="ddp_pat_..."

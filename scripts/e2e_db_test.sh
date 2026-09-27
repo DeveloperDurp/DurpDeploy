@@ -720,17 +720,27 @@ api_put() { curl -s -H "Authorization: Bearer $API_TOKEN" -H "Content-Type: appl
 api_post_code() { curl -s -H "Authorization: Bearer $API_TOKEN" -H "Content-Type: application/json" -X POST -d "$1" -o /dev/null -w "%{http_code}" "$2"; }
 api_post_noauth() { curl -s -H "Content-Type: application/json" -X POST -d "$1" -o /dev/null -w "%{http_code}" "$2"; }
 
+# mint_web_token creates an API token via the web form and prints the
+# plaintext by consuming the single-use flash record. The redirect
+# Location carries only the opaque flash id — never the token
+# (issue #32). Pass the cookie jar, token name, and CSRF token.
+mint_web_token() {
+    local jar=$1 name=$2 csrf=$3 redirect
+    redirect=$(curl -s -b "$jar" -D - -o /dev/null \
+        -X POST -d "name=$name&csrf_token=$csrf" \
+        "$BASE/settings/tokens" | grep -i "^location:" | awk '{print $2}' | tr -d '\r')
+    case "$redirect" in
+        /settings/tokens?flash=*) ;;
+        *) return 1 ;;
+    esac
+    curl -s -b "$jar" "$BASE$redirect" \
+        | grep -oE 'ddp_pat_[0-9a-f]{64}' | head -1
+}
+
 # A1: Mint an admin API token via the web UI (existing session + CSRF).
-API_TOKEN_REDIRECT=$(curl -s -b "$COOKIES" -D - -o /dev/null \
-    -X POST -d "name=e2e-api&csrf_token=$CSRF" \
-    "$BASE/settings/tokens" | grep -i "^location:" | awk '{print $2}' | tr -d '\r')
-API_TOKEN=$(echo "$API_TOKEN_REDIRECT" | python3 -c "
-import sys, urllib.parse
-url = sys.stdin.read().strip()
-qs = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
-print(urllib.parse.unquote(qs.get('new_token', [''])[0]))
-")
-[[ -n "$API_TOKEN" ]] || { echo "FAIL: could not mint API token (redirect=$API_TOKEN_REDIRECT)"; exit 1; }
+API_TOKEN=$(mint_web_token "$COOKIES" e2e-api "$CSRF") \
+    || { echo "FAIL: could not mint API token"; exit 1; }
+[[ -n "$API_TOKEN" ]] || { echo "FAIL: could not mint API token"; exit 1; }
 echo "  API token minted via /settings/tokens: OK"
 
 # A2: Health check is public; authenticated call also succeeds.
@@ -1084,14 +1094,8 @@ CODE=$(curl -s -c "$VIEWER_LOGIN" -o /dev/null -w "%{http_code}" \
 VIEWER_SESSION_ID=$(awk '$6 == "session" { print $7 }' "$VIEWER_LOGIN")
 VIEWER_CSRF=$(db_query "SELECT LTRIM(RTRIM(csrf_token)) FROM sessions WHERE id='$VIEWER_SESSION_ID';")
 [[ -n "$VIEWER_CSRF" ]] || { echo "FAIL: no CSRF token for viewer"; exit 1; }
-VIEWER_TOKEN_REDIRECT=$(curl -s -b "$VIEWER_LOGIN" -D - -o /dev/null \
-    -X POST -d "name=e2e-viewer&csrf_token=$VIEWER_CSRF" "$BASE/settings/tokens" | \
-    grep -i "^location:" | awk '{print $2}' | tr -d '\r')
-VIEWER_TOKEN=$(echo "$VIEWER_TOKEN_REDIRECT" | python3 -c "
-import sys, urllib.parse
-url = sys.stdin.read().strip()
-print(urllib.parse.unquote(urllib.parse.parse_qs(urllib.parse.urlparse(url).query).get('new_token', [''])[0]))
-")
+VIEWER_TOKEN=$(mint_web_token "$VIEWER_LOGIN" e2e-viewer "$VIEWER_CSRF") \
+    || { echo "FAIL: could not mint viewer token"; exit 1; }
 [[ -n "$VIEWER_TOKEN" ]] || { echo "FAIL: could not mint viewer token"; exit 1; }
 VIEWER_UPDATE=$(api_put '{"name":"E2E Viewer","role":"viewer"}' "$BASE/api/v1/admin/users/$VIEWER_USER_ID")
 VIEWER_ROLE=$(echo "$VIEWER_UPDATE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('role',''))")

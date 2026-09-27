@@ -18,7 +18,7 @@ CHALLENGE_SECRET='self-test-challenge-secret'
 RECOVERY_SECRET='self-test-recovery-secret'
 TOTP_SEED_SECRET='JBSWY3DPEHPK3PXP'
 WEBAUTHN_BLOB_SECRET='self-test-webauthn-blob-secret'
-BEARER_TOKEN='ddp_pat_self_test_bearer_secret'
+BEARER_TOKEN="ddp_pat_$(printf 'ab%.0s' {1..32})"
 
 fail() {
     echo "auth/MFA HTTP fixture self-test: $1" >&2
@@ -51,6 +51,8 @@ import sys
 
 port_file = Path(sys.argv[1])
 
+BEARER = "ddp_pat_" + "ab" * 32
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, _format, *_args):
         pass
@@ -76,8 +78,11 @@ class Handler(BaseHTTPRequestHandler):
                 b'recovery_code=self-test-recovery-secret '
                 b'seed=JBSWY3DPEHPK3PXP '
                 b'webauthn_blob=self-test-webauthn-blob-secret '
-                b'Authorization: Bearer ddp_pat_self_test_bearer_secret'
+                b'Authorization: Bearer ' + BEARER.encode()
             ), extra_headers=(("Set-Cookie", "pending_mfa=self-test-challenge-secret; Path=/; HttpOnly"),))
+            return
+        if self.path.startswith("/settings/tokens?flash="):
+            self.respond(body=b"token banner " + BEARER.encode())
             return
         self.respond(body=b'<meta name="csrf-token" content="self-test-csrf-secret">fixture page')
 
@@ -88,14 +93,14 @@ class Handler(BaseHTTPRequestHandler):
             self.respond(
                 status=303,
                 body=b"token created",
-                extra_headers=(("Location", "/settings/tokens?new_token=ddp_pat_self_test_bearer_secret"),),
+                extra_headers=(("Location", "/settings/tokens?flash=self-test-flash-id"),),
             )
             return
         if self.path == "/api/v1/admin/users":
             self.respond(status=201, body=b'{"id":7}')
             return
         if self.path == "/api/v1/echo":
-            authorized = self.headers.get("Authorization") == "Bearer ddp_pat_self_test_bearer_secret"
+            authorized = self.headers.get("Authorization") == "Bearer " + BEARER
             self.respond(
                 status=201 if authorized else 401,
                 body=b"api request accepted " + body,

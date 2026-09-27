@@ -715,17 +715,15 @@ auth_mfa_mint_api_token() {
         auth_mfa_fail "token mint response omitted Location header"
         return 1
     fi
-    if ! token=$(printf '%s' "$location" | python3 -c '
-import sys
-from urllib.parse import parse_qs, unquote, urlparse
-
-location = sys.stdin.read().strip()
-print(unquote(parse_qs(urlparse(location).query).get("new_token", [""])[0]))
-'); then
+    # Issue #32: the redirect carries only the opaque single-use flash
+    # id; the plaintext appears once on the flash page it points to.
+    if [[ "$location" != /settings/tokens?flash=* ]]; then
         auth_mfa_fail "token mint response had an invalid redirect"
         return 1
     fi
-    if [[ ! "$token" =~ ^ddp_pat_.+ ]]; then
+    auth_mfa_http_request "$jar" GET "$location" || return 1
+    token=$(grep -oE 'ddp_pat_[0-9a-f]{64}' "$AUTH_MFA_HTTP_BODY" | head -1)
+    if [[ -z "$token" ]]; then
         auth_mfa_fail "token mint response omitted bearer token"
         return 1
     fi
