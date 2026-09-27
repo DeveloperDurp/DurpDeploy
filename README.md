@@ -197,8 +197,8 @@ server uses a non-default database path. The harness expects the configured
 `durpdeploy admin create` through `DURPDEPLOY_E2E_CLI` (defaulting to
 `./durpdeploy` when that binary is executable). If the CLI path is unavailable,
 build DurpDeploy first and set `DURPDEPLOY_E2E_CLI` to an executable binary.
-For SQLite, start the server with WAL and `busy_timeout` enabled as in the
-default DSN. Use
+Bare SQLite paths use WAL, foreign keys, and a 5-second `busy_timeout` by
+default. Explicit DSN query options are preserved. Use
 `make e2e-test-isolated` for the previous clean-room build-and-start workflow
 used by CI.
 
