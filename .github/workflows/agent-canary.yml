@@ -63,15 +63,20 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Install templ
-        run: go install github.com/a-h/templ/cmd/templ@v0.3.1020
-
       # The harness builds ./cmd/server itself; embedded views and
       # swagger assets must exist first (same reason as release.yml).
       # swagger-ui-copy runs npm ci --ignore-scripts, which populates
       # node_modules (playwright included) without browser downloads.
+      # templ runs from the digest-pinned image rather than `go install`
+      # (Sonar githubactions:S8545) — same pattern as release.yml.
       - name: Generate templ files
-        run: templ generate
+        run: |
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            --volume "$PWD:/workspace" \
+            --workdir /workspace \
+            ghcr.io/a-h/templ@sha256:2e266c40e32de7fa67e08018a06675975ccb7e86110dae7a7c0b0131adaab41d \
+            generate
 
       - name: Materialize static/swagger-ui/
         run: make swagger-ui-copy
@@ -109,17 +114,8 @@ jobs:
           fi
           bash scripts/agent_e2e_test.sh --mixed-interpreter
 
-      - name: Record evidence presence
-        id: evidence
-        if: always()
-        run: |
-          if [ -n "$(find .omo/evidence/continue-remote-agent-rollout -type f 2>/dev/null | head -1)" ]; then
-            echo "status=agent-canary-evidence artifact uploaded" >> "$GITHUB_OUTPUT"
-          else
-            echo "status=no evidence captured" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Upload harness evidence
+        id: upload
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -127,6 +123,24 @@ jobs:
           path: .omo/evidence/continue-remote-agent-rollout/
           retention-days: 7
           if-no-files-found: ignore
+
+      # Status derives from the upload outcome: a failed upload must
+      # not be advertised as a usable diagnostic (artifact-service
+      # outages happen).
+      - name: Record evidence status
+        id: evidence
+        if: always()
+        env:
+          UPLOADED: ${{ steps.upload.outcome == 'success' }}
+        run: |
+          files=$(find .omo/evidence/continue-remote-agent-rollout -type f 2>/dev/null | head -1)
+          if [ "$UPLOADED" = "true" ] && [ -n "$files" ]; then
+            echo "status=agent-canary-evidence artifact uploaded" >> "$GITHUB_OUTPUT"
+          elif [ "$UPLOADED" = "true" ]; then
+            echo "status=no evidence captured" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=evidence upload failed" >> "$GITHUB_OUTPUT"
+          fi
 
   # Failure/timeout reporting must not live in the canary job: a job
   # killed at its 45-minute timeout never reaches a later same-job step.
