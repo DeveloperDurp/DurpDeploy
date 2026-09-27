@@ -37,6 +37,12 @@ jobs:
     timeout-minutes: 45
     permissions:
       contents: read
+    outputs:
+      # Recorded for the notify job: on early failure or timeout the
+      # values stay empty and the comment says so instead of inventing
+      # provenance.
+      agent_sha: ${{ steps.agent_sha.outputs.sha }}
+      evidence: ${{ steps.evidence.outputs.status }}
     env:
       # Host-process mode runs the freshly built agent directly on the
       # runner. GitHub runners ship python3 and pwsh, so the
@@ -79,6 +85,10 @@ jobs:
             https://github.com/DeveloperDurp/durpdeploy-agent \
             "$GITHUB_WORKSPACE/../durpdeploy-agent-main"
 
+      - name: Record agent revision
+        id: agent_sha
+        run: echo "sha=$(git -C \"$GITHUB_WORKSPACE/../durpdeploy-agent-main\" rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
       - name: Run paired-agent canary (happy)
         env:
           DURPDEPLOY_AGENT_WORKTREE: ${{ github.workspace }}/../durpdeploy-agent-main
@@ -99,6 +109,16 @@ jobs:
           fi
           bash scripts/agent_e2e_test.sh --mixed-interpreter
 
+      - name: Record evidence presence
+        id: evidence
+        if: always()
+        run: |
+          if [ -n "$(find .omo/evidence/continue-remote-agent-rollout -type f 2>/dev/null | head -1)" ]; then
+            echo "status=agent-canary-evidence artifact uploaded" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=no evidence captured" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Upload harness evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -106,6 +126,7 @@ jobs:
           name: agent-canary-evidence
           path: .omo/evidence/continue-remote-agent-rollout/
           retention-days: 7
+          if-no-files-found: ignore
 
   # Failure/timeout reporting must not live in the canary job: a job
   # killed at its 45-minute timeout never reaches a later same-job step.
@@ -123,7 +144,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RESULT: ${{ needs.canary.result }}
+          AGENT_SHA: ${{ needs.canary.outputs.agent_sha }}
+          EVIDENCE: ${{ needs.canary.outputs.evidence }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
+          sha="${AGENT_SHA:-unknown: canary ended before recording the agent revision}"
           gh issue comment 84 --repo "${{ github.repository }}" --body \
-            "agent-canary ${RESULT} (durpdeploy-agent main; evidence artifact: agent-canary-evidence). Run: ${RUN_URL}"
+            "agent-canary ${RESULT} against durpdeploy-agent main at ${sha}; evidence: ${EVIDENCE:-none}. Run: ${RUN_URL}"
