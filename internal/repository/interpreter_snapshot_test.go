@@ -31,7 +31,9 @@ func TestCreateDeploymentPreservesReleaseInterpreter(t *testing.T) {
 		t.Context(),
 		db.CreateReleaseParams{
 			ProjectID: project.ID, Version: "v1",
-			StepsJson: `[{"name":"python","script_body":"print('ok')",` +
+			StepsJson: `[{"name":"bash","script_body":"echo ok",` +
+				`"interpreter":"bash","execution_target":"local"},` +
+				`{"name":"python","script_body":"print('ok')",` +
 				`"interpreter":"python3","execution_target":"local"}]`,
 		},
 	)
@@ -50,8 +52,19 @@ func TestCreateDeploymentPreservesReleaseInterpreter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(steps) != 1 || steps[0].Interpreter != "python3" {
+	if len(steps) != 2 {
 		t.Fatalf("deployment steps = %+v", steps)
+	}
+	wantInterpreters := map[string]string{
+		"bash": "bash", "python": "python3",
+	}
+	for _, step := range steps {
+		if want := wantInterpreters[step.Name]; step.Interpreter != want {
+			t.Fatalf(
+				"step %q interpreter=%q want %q",
+				step.Name, step.Interpreter, want,
+			)
+		}
 	}
 	if _, err := repo.Queries.UpdateRelease(t.Context(), db.UpdateReleaseParams{
 		ID: release.ID, ProjectID: project.ID, Version: release.Version,
@@ -78,9 +91,16 @@ func TestCreateDeploymentPreservesReleaseInterpreter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(rerunSteps) != 1 || rerunSteps[0].Name != "python" ||
-		rerunSteps[0].Interpreter != "python3" {
+	if len(rerunSteps) != 2 {
 		t.Fatalf("rerun steps = %+v", rerunSteps)
+	}
+	for _, step := range rerunSteps {
+		if want := wantInterpreters[step.Name]; step.Interpreter != want {
+			t.Fatalf(
+				"rerun step %q interpreter=%q want %q",
+				step.Name, step.Interpreter, want,
+			)
+		}
 	}
 	rerunSource, err := repo.Queries.GetDeploymentStepSource(
 		t.Context(),
@@ -89,7 +109,9 @@ func TestCreateDeploymentPreservesReleaseInterpreter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rerunSource.StepsJson != `[{"name":"python","script_body":"print('ok')",`+
+	if rerunSource.StepsJson != `[{"name":"bash","script_body":"echo ok",`+
+		`"interpreter":"bash","execution_target":"local"},`+
+		`{"name":"python","script_body":"print('ok')",`+
 		`"interpreter":"python3","execution_target":"local"}]` {
 		t.Fatalf("rerun source = %s", rerunSource.StepsJson)
 	}

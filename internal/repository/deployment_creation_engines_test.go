@@ -262,7 +262,10 @@ func TestCreateDeploymentFromDeploymentPreservesSourceAcrossDatabases(
 			t,
 			newDeploymentCreationEngine(t, name),
 		)
-		const original = `[{"name":"python","script_body":"print('original')",` +
+		const original = `[` +
+			`{"name":"bash","script_body":"echo original",` +
+			`"interpreter":"bash","execution_target":"local"},` +
+			`{"name":"python","script_body":"print('original')",` +
 			`"interpreter":"python3","execution_target":"local"}]`
 		if _, err := repo.Queries.UpdateRelease(
 			t.Context(),
@@ -312,6 +315,27 @@ func TestCreateDeploymentFromDeploymentPreservesSourceAcrossDatabases(
 		}
 		if stepSource.StepsJson != original {
 			t.Fatalf("rerun source = %s", stepSource.StepsJson)
+		}
+		rerunSteps, err := repo.Queries.ListDeploymentSteps(
+			t.Context(),
+			rerun.Deployment.ID,
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		wantInterpreters := map[string]string{
+			"bash": "bash", "python": "python3",
+		}
+		if len(rerunSteps) != len(wantInterpreters) {
+			t.Fatalf("rerun steps = %+v", rerunSteps)
+		}
+		for _, step := range rerunSteps {
+			if want := wantInterpreters[step.Name]; step.Interpreter != want {
+				t.Fatalf(
+					"rerun step %q interpreter=%q want %q",
+					step.Name, step.Interpreter, want,
+				)
+			}
 		}
 	})
 }

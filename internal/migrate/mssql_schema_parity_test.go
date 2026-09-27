@@ -8,6 +8,35 @@ import (
 	"durpdeploy/internal/db"
 )
 
+func TestSQLServer_AgentInterpretersConstraints(t *testing.T) {
+	ctx := context.Background()
+	dbConn := newSQLServerTestDB(t)
+
+	if _, err := dbConn.ExecContext(ctx, `
+		INSERT INTO agents (id, name, endpoint)
+		VALUES (@p1, @p2, @p3)`,
+		"agent1", "Agent One", "https://agent1",
+	); err != nil {
+		t.Fatalf("create agent: %v", err)
+	}
+	_, err := dbConn.ExecContext(ctx, `
+		INSERT INTO agent_interpreters (agent_id, interpreter)
+		VALUES (@p1, @p2)`, "agent1", "python3")
+	requireNoError(t, err, "insert supported interpreter")
+	_, err = dbConn.ExecContext(ctx, `
+		INSERT INTO agent_interpreters (agent_id, interpreter)
+		VALUES (@p1, @p2)`, "agent1", "/bin/sh")
+	if err == nil {
+		t.Fatal("insert arbitrary interpreter succeeded")
+	}
+	_, err = dbConn.ExecContext(ctx, `
+		INSERT INTO agent_interpreters (agent_id, interpreter)
+		VALUES (@p1, @p2)`, "agent1", "python3")
+	if err == nil {
+		t.Fatal("insert duplicate agent interpreter succeeded")
+	}
+}
+
 func TestSQLServer_SchemaParityDefaultsAndIndexes(t *testing.T) {
 	ctx := context.Background()
 	dbConn := newSQLServerTestDB(t)
@@ -79,7 +108,10 @@ func TestSQLServer_SchemaParityDefaultsAndIndexes(t *testing.T) {
 	}
 
 	user, err := queries.CreateUser(ctx, db.CreateUserParams{
-		Email: "parity-user@example.com", PasswordHash: "hash", Name: "Parity", Role: "viewer",
+		Email:        "parity-user@example.com",
+		PasswordHash: "hash",
+		Name:         "Parity",
+		Role:         "viewer",
 	})
 	requireNoError(t, err, "create user")
 	_, err = dbConn.ExecContext(ctx, `
@@ -153,13 +185,23 @@ func TestSQLServer_SchemaParityDefaultsAndIndexes(t *testing.T) {
 		t.Fatal("create token with invalid scope succeeded")
 	}
 	_, err = queries.CreateApiToken(ctx, db.CreateApiTokenParams{
-		ID: "parity-token-1", UserID: user.ID, Name: "first", TokenPrefix: "ddp_pat_",
-		TokenHash: "parity-token-hash", Scope: "global", ExpiresAt: sql.NullInt64{},
+		ID:          "parity-token-1",
+		UserID:      user.ID,
+		Name:        "first",
+		TokenPrefix: "ddp_pat_",
+		TokenHash:   "parity-token-hash",
+		Scope:       "global",
+		ExpiresAt:   sql.NullInt64{},
 	})
 	requireNoError(t, err, "create first token")
 	_, err = queries.CreateApiToken(ctx, db.CreateApiTokenParams{
-		ID: "parity-token-2", UserID: user.ID, Name: "duplicate", TokenPrefix: "ddp_pat_",
-		TokenHash: "parity-token-hash", Scope: "global", ExpiresAt: sql.NullInt64{},
+		ID:          "parity-token-2",
+		UserID:      user.ID,
+		Name:        "duplicate",
+		TokenPrefix: "ddp_pat_",
+		TokenHash:   "parity-token-hash",
+		Scope:       "global",
+		ExpiresAt:   sql.NullInt64{},
 	})
 	if err == nil {
 		t.Fatal("create duplicate token hash succeeded")

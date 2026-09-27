@@ -2,6 +2,7 @@ package runner_test
 
 import (
 	"context"
+	"database/sql"
 	"os"
 	"path/filepath"
 	"strings"
@@ -277,6 +278,83 @@ func TestRunner_MissingInterpreterFailsClearlyBeforeExecution(t *testing.T) {
 	}
 }
 
+// TestRunner_LocalPwshStepExecutesAndLogs: a local pwsh step runs its .ps1
+// script body and its output reaches the deployment log. Uses a fake pwsh
+// shim on PATH (the same pattern as the fake python3 above) so the test is
+// deterministic on machines without PowerShell.
+func TestRunner_LocalPwshStepExecutesAndLogs(t *testing.T) {
+	ctx := context.Background()
+	repo, rnr, _ := setupRunnerHarness(t)
+	binDir := t.TempDir()
+	if err := os.WriteFile(
+		filepath.Join(binDir, "pwsh"),
+		[]byte(
+			"#!/bin/sh\ngrep -q 'Write-Output hello' \"$1\" && echo hello\n",
+		),
+		0o755,
+	); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	proj, err := repo.Queries.CreateProject(
+		ctx,
+		db.CreateProjectParams{Name: "pwsh-local"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	env, err := repo.Queries.CreateEnvironment(
+		ctx,
+		db.CreateEnvironmentParams{Name: "prod"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	release, err := repo.Queries.CreateRelease(ctx, db.CreateReleaseParams{
+		ProjectID: proj.ID,
+		Version:   "v1",
+		StepsJson: `[{"name":"pwsh","script_body":"Write-Output hello",` +
+			`"interpreter":"pwsh","sort_order":1,"timeout_seconds":5,` +
+			`"max_retries":0}]`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	created, err := repo.CreateDeployment(ctx, db.CreateDeploymentParams{
+		ReleaseID: release.ID, EnvironmentID: env.ID, Status: "pending",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rnr.Run(ctx, created.Deployment.ID, release.ID, env.ID)
+
+	deployment, err := repo.Queries.GetDeployment(ctx, created.Deployment.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if deployment.Status != "succeeded" {
+		t.Fatalf("deployment status = %q, want succeeded", deployment.Status)
+	}
+	logs, err := repo.Queries.ListDeploymentLogsByDeployment(
+		ctx,
+		created.Deployment.ID,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, log := range logs {
+		if strings.Contains(log.Line, "hello") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("pwsh output missing from logs = %+v", logs)
+	}
+}
+
 func TestRunner_FailsWhenNoAgentSupportsInterpreter(t *testing.T) {
 	ctx := context.Background()
 	repo, rnr, _ := setupRunnerHarness(t)
@@ -343,5 +421,146 @@ func TestRunner_FailsWhenNoAgentSupportsInterpreter(t *testing.T) {
 	}
 	if len(runs) != 0 {
 		t.Fatalf("remote runs = %+v, want none", runs)
+	}
+}
+
+// TestRunner_RemoteStepWithoutInterpreterDefaultsToBash: a release step
+// decoded without an interpreter field is treated as bash — the no-agent
+// failure message must report the bash default, not an empty interpreter.
+func TestRunner_RemoteStepWithoutInterpreterDefaultsToBash(t *testing.T) {
+	ctx := context.Background()
+	repo, rnr, _ := setupRunnerHarness(t)
+
+	project, err := repo.Queries.CreateProject(
+		ctx,
+		db.CreateProjectParams{Name: "legacy-interpreter"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	environment, err := repo.Queries.CreateEnvironment(
+		ctx,
+		db.CreateEnvironmentParams{Name: "test"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	release, err := repo.Queries.CreateRelease(ctx, db.CreateReleaseParams{
+		ProjectID: project.ID, Version: "v1",
+		StepsJson: `[{"name":"legacy","script_body":"echo hi",` +
+			`"execution_target":"agent"}]`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	created, err := repo.CreateDeployment(ctx, db.CreateDeploymentParams{
+		ReleaseID: release.ID, EnvironmentID: environment.ID, Status: "pending",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rnr.Run(ctx, created.Deployment.ID, release.ID, environment.ID)
+
+	logs, err := repo.Queries.ListDeploymentLogsByDeployment(
+		ctx,
+		created.Deployment.ID,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(logs) != 1 || !strings.Contains(
+		logs[0].Line,
+		`no compatible agents support interpreter "bash"`,
+	) {
+		t.Fatalf("deployment logs = %+v", logs)
+	}
+}
+
+// TestRunner_RedactsSecretsInLocalPython3Logs: a secret release variable
+// echoed by a local python3 step is scrubbed from the persisted log.
+func TestRunner_RedactsSecretsInLocalPython3Logs(t *testing.T) {
+	ctx := context.Background()
+	repo, rnr, _ := setupRunnerHarness(t)
+	binDir := t.TempDir()
+	if err := os.WriteFile(
+		filepath.Join(binDir, "python3"),
+		[]byte("#!/bin/sh\necho \"token $API_TOKEN\"\n"),
+		0o755,
+	); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	proj, err := repo.Queries.CreateProject(
+		ctx,
+		db.CreateProjectParams{Name: "py-redaction"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	env, err := repo.Queries.CreateEnvironment(
+		ctx,
+		db.CreateEnvironmentParams{Name: "prod"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	release, err := repo.Queries.CreateRelease(ctx, db.CreateReleaseParams{
+		ProjectID: proj.ID,
+		Version:   "v1",
+		StepsJson: `[{"name":"py","script_body":` +
+			`"import os; print(os.environ['API_TOKEN'])",` +
+			`"interpreter":"python3","execution_target":"local",` +
+			`"sort_order":1,"timeout_seconds":5,"max_retries":0}]`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.Queries.CreateReleaseVariable(
+		ctx,
+		db.CreateReleaseVariableParams{
+			ReleaseID: release.ID,
+			Name:      "API_TOKEN",
+			Value:     sql.NullString{String: "s3cr3t-value", Valid: true},
+			Secret:    1,
+		},
+	); err != nil {
+		t.Fatal(err)
+	}
+	created, err := repo.CreateDeployment(ctx, db.CreateDeploymentParams{
+		ReleaseID: release.ID, EnvironmentID: env.ID, Status: "pending",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rnr.Run(ctx, created.Deployment.ID, release.ID, env.ID)
+
+	deployment, err := repo.Queries.GetDeployment(ctx, created.Deployment.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if deployment.Status != "succeeded" {
+		t.Fatalf("deployment status = %q, want succeeded", deployment.Status)
+	}
+	logs, err := repo.Queries.ListDeploymentLogsByDeployment(
+		ctx,
+		created.Deployment.ID,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	redacted := false
+	for _, log := range logs {
+		if strings.Contains(log.Line, "s3cr3t-value") {
+			t.Fatalf("secret leaked into log: %q", log.Line)
+		}
+		if strings.Contains(log.Line, "token [REDACTED]") {
+			redacted = true
+		}
+	}
+	if !redacted {
+		t.Fatalf("redacted token missing from logs = %+v", logs)
 	}
 }
