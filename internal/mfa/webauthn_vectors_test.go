@@ -200,9 +200,17 @@ func webauthnOfficialLongCredentialID(t *testing.T) []byte {
 func webauthnOfficialVectorSourcePath(t *testing.T) string {
 	t.Helper()
 
+	output, err := exec.Command(
+		"go", "list", "-m", "-f", "{{.Version}}",
+		"github.com/go-webauthn/webauthn",
+	).Output()
+	if err != nil {
+		t.Fatalf("resolve WebAuthn module: %v", err)
+	}
 	return filepath.Join(
 		webauthnModuleCache(t),
-		"github.com/go-webauthn/webauthn@v0.17.4/protocol/specification_vectors_e2e_test.go",
+		"github.com/go-webauthn/webauthn@"+strings.TrimSpace(string(output)),
+		"protocol/specification_vectors_e2e_test.go",
 	)
 }
 

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/go-webauthn/webauthn/protocol"
@@ -23,11 +24,10 @@ func TestWebAuthn_OfficialVectorSourceUsesConfiguredModuleCache(t *testing.T) {
 	path := webauthnOfficialVectorSourcePath(t)
 
 	// Then: it uses the configured cache rather than a machine-specific path.
-	want := filepath.Join(
-		cache,
-		"github.com/go-webauthn/webauthn@v0.17.4/protocol/specification_vectors_e2e_test.go",
-	)
-	if path != want {
+	if !strings.HasPrefix(path, filepath.Join(cache,
+		"github.com/go-webauthn/webauthn@")) ||
+		!strings.HasSuffix(path, filepath.Join("protocol",
+			"specification_vectors_e2e_test.go")) {
 		t.Fatal("official WebAuthn vector path ignored GOMODCACHE")
 	}
 }
