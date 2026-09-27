@@ -39,7 +39,7 @@ else
     BASE="http://localhost:$PORT"
     cd "$ROOT_DIR"
 
-    DB_DSN="$TMP/durpdeploy.db?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)"
+    DB_DSN="$TMP/durpdeploy.db"
 
     if ! command -v openssl >/dev/null 2>&1; then
         echo "ERROR: openssl not found." >&2
@@ -761,6 +761,25 @@ API_ENV=$(api_post '{"name":"dev"}' "$BASE/api/v1/environments")
 API_ENV_ID=$(echo "$API_ENV" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
 [[ -n "$API_ENV_ID" ]] || { echo "FAIL: create env did not return id: $API_ENV"; exit 1; }
 echo "  Environment CRUD: OK ($API_ENV_ID)"
+
+CODE=$(api_post_code '{"name":"bare-path-step","script_body":"echo ready"}' \
+    "$BASE/api/v1/projects/$API_PROJECT_ID/steps")
+[[ "$CODE" == "201" ]] || { echo "FAIL: bare-path step create got $CODE"; exit 1; }
+STEP_ID=$(api_item_id_by_name "$BASE/api/v1/projects/$API_PROJECT_ID/steps" bare-path-step)
+[[ -n "$STEP_ID" ]] || { echo "FAIL: bare-path step not persisted"; exit 1; }
+
+CODE=$(api_post_code '{"name":"BARE_PATH_VAR","value":"ready"}' \
+    "$BASE/api/v1/projects/$API_PROJECT_ID/variables")
+[[ "$CODE" == "201" ]] || { echo "FAIL: bare-path variable create got $CODE"; exit 1; }
+VAR_ID=$(api_item_id_by_name "$BASE/api/v1/projects/$API_PROJECT_ID/variables" BARE_PATH_VAR)
+[[ -n "$VAR_ID" ]] || { echo "FAIL: bare-path variable not persisted"; exit 1; }
+
+CODE=$(api_post_code '{"name":"bare-path-template","script_body":"echo ready"}' \
+    "$BASE/api/v1/templates")
+[[ "$CODE" == "201" ]] || { echo "FAIL: bare-path template create got $CODE"; exit 1; }
+TEMPLATE_ID=$(api_item_id_by_name "$BASE/api/v1/templates" bare-path-template)
+[[ -n "$TEMPLATE_ID" ]] || { echo "FAIL: bare-path template not persisted"; exit 1; }
+echo "  Bare-path API step, variable, and template writes: OK"
 
 echo "=== Runbook API and web contracts ==="
 RUNBOOK_ENV=$(api_post '{"name":"runbook-e2e-env"}' "$BASE/api/v1/environments")

@@ -34,7 +34,21 @@ func Run(dsn string) (*sql.DB, error) {
 	if isPostgres(dsn) {
 		return runMigrations(dsn, "pgx-qmark", "postgres", migrations.FS)
 	}
-	return runMigrations(dsn, "sqlite", "sqlite3", migrations.FS)
+	return runMigrations(
+		sqliteDSNWithDefaults(dsn), "sqlite", "sqlite3", migrations.FS,
+	)
+}
+
+// sqliteDSNWithDefaults gives bare paths the same connection settings as
+// defaultDSN. A query string represents explicit operator configuration.
+func sqliteDSNWithDefaults(dsn string) string {
+	if strings.Contains(dsn, "?") {
+		return dsn
+	}
+	return dsn +
+		"?_pragma=busy_timeout(5000)" +
+		"&_pragma=foreign_keys(1)" +
+		"&_pragma=journal_mode(WAL)"
 }
 
 type migrationSettings struct {

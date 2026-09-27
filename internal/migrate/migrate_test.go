@@ -1,6 +1,7 @@
 package migrate
 
 import (
+	"context"
 	"database/sql"
 	"io/fs"
 	"net/url"
@@ -139,6 +140,79 @@ func TestMigrationConfig_SQLServerUsesWrapperAndNativeMigrations(t *testing.T) {
 	}
 	if config.gooseDialect != "mssql" {
 		t.Errorf("Goose dialect = %q, want mssql", config.gooseDialect)
+	}
+}
+
+func TestRun_BareSQLitePathGetsConcurrencyAndIntegrityPragmas(t *testing.T) {
+	// Given a production-style bare SQLite path.
+	dsn := filepath.Join(t.TempDir(), "durpdeploy.db")
+
+	// When the shared open seam opens two pooled connections.
+	pool, err := Run(dsn)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	defer pool.Close()
+	ctx := context.Background()
+	first, err := pool.Conn(ctx)
+	if err != nil {
+		t.Fatalf("first connection: %v", err)
+	}
+	defer first.Close()
+	second, err := pool.Conn(ctx)
+	if err != nil {
+		t.Fatalf("second connection: %v", err)
+	}
+	defer second.Close()
+
+	// Then each connection has the same settings as the default DSN.
+	for name, conn := range map[string]*sql.Conn{"first": first, "second": second} {
+		for _, tc := range []struct {
+			pragma string
+			want   string
+		}{
+			{"busy_timeout", "5000"},
+			{"foreign_keys", "1"},
+			{"journal_mode", "wal"},
+		} {
+			var got string
+			if err := conn.QueryRowContext(
+				ctx, "PRAGMA "+tc.pragma,
+			).Scan(&got); err != nil {
+				t.Fatalf("%s connection PRAGMA %s: %v", name, tc.pragma, err)
+			}
+			if got != tc.want {
+				t.Errorf(
+					"%s connection PRAGMA %s = %q, want %q",
+					name, tc.pragma, got, tc.want,
+				)
+			}
+		}
+	}
+}
+
+func TestRun_BareSQLitePathPreservesExplicitBusyTimeoutZero(t *testing.T) {
+	// Given an explicit busy_timeout(0), an operator's deliberate choice to
+	// fail fast instead of waiting on locks.
+	dsn := filepath.Join(t.TempDir(), "durpdeploy.db") +
+		"?_pragma=busy_timeout(0)"
+
+	// When the shared open seam runs migrations on it.
+	dbConn, err := Run(dsn)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	defer dbConn.Close()
+
+	// Then the explicit zero is preserved, not overwritten by the default.
+	var got string
+	if err := dbConn.QueryRow(
+		"PRAGMA busy_timeout",
+	).Scan(&got); err != nil {
+		t.Fatalf("PRAGMA busy_timeout: %v", err)
+	}
+	if got != "0" {
+		t.Errorf("PRAGMA busy_timeout = %q, want 0", got)
 	}
 }
 
