@@ -8,6 +8,11 @@
 #
 # The pin-based PR gate (agent smoke / rollout) still guards the module
 # version this repo consumes; this workflow only detects forward drift.
+#
+# Permission split: the canary job runs unpinned agent code, so it holds
+# contents: read only. Issue reporting lives in a dependent job that
+# alone receives issues: write, so a compromised agent branch cannot
+# intercept a token that can open issues.
 name: agent-canary
 
 on:
@@ -18,7 +23,6 @@ on:
 
 permissions:
   contents: read
-  issues: write
 
 # Never cancel an in-progress canary: a partial run would look like a
 # contract failure.
@@ -31,6 +35,8 @@ jobs:
     name: Agent main canary
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    permissions:
+      contents: read
     env:
       # Host-process mode runs the freshly built agent directly on the
       # runner. GitHub runners ship python3 and pwsh, so the
@@ -47,16 +53,25 @@ jobs:
           go-version: '1.26.8'
           cache: true
 
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+
       - name: Install templ
         run: go install github.com/a-h/templ/cmd/templ@v0.3.1020
 
       # The harness builds ./cmd/server itself; embedded views and
       # swagger assets must exist first (same reason as release.yml).
+      # swagger-ui-copy runs npm ci --ignore-scripts, which populates
+      # node_modules (playwright included) without browser downloads.
       - name: Generate templ files
         run: templ generate
 
       - name: Materialize static/swagger-ui/
         run: make swagger-ui-copy
+
+      - name: Install Chromium for the harness browser
+        run: ./node_modules/.bin/playwright install --with-deps chromium
 
       - name: Check out durpdeploy-agent main
         run: |
@@ -64,11 +79,24 @@ jobs:
             https://github.com/DeveloperDurp/durpdeploy-agent \
             "$GITHUB_WORKSPACE/../durpdeploy-agent-main"
 
-      - name: Run paired-agent canary (happy + mixed-interpreter)
+      - name: Run paired-agent canary (happy)
+        env:
+          DURPDEPLOY_AGENT_WORKTREE: ${{ github.workspace }}/../durpdeploy-agent-main
+        run: bash scripts/agent_e2e_test.sh
+
+      # --mixed-interpreter ships with the harness in PR #79. Gate on the
+      # flag so the canary fails with an explicit dependency message
+      # instead of an opaque "unknown argument" (issue #84's skip-free
+      # rule: a canary that cannot exercise the mode must stay red).
+      - name: Run paired-agent canary (mixed-interpreter)
         env:
           DURPDEPLOY_AGENT_WORKTREE: ${{ github.workspace }}/../durpdeploy-agent-main
         run: |
-          bash scripts/agent_e2e_test.sh
+          if ! grep -q -- '--mixed-interpreter' scripts/agent_e2e_test.sh; then
+            printf '%s\n' \
+              'agent-canary: --mixed-interpreter mode is not in main yet (merge PR #79 first); failing the canary so the missing mode stays visible.' >&2
+            exit 1
+          fi
           bash scripts/agent_e2e_test.sh --mixed-interpreter
 
       - name: Upload harness evidence
@@ -79,11 +107,23 @@ jobs:
           path: .omo/evidence/continue-remote-agent-rollout/
           retention-days: 7
 
-      - name: Record failure on issue #84
-        if: failure()
+  # Failure/timeout reporting must not live in the canary job: a job
+  # killed at its 45-minute timeout never reaches a later same-job step.
+  notify:
+    name: Record failure on issue #84
+    needs: canary
+    if: always() &&
+      (needs.canary.result == 'failure' ||
+        needs.canary.result == 'timed_out')
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Comment on the canary issue
         env:
           GH_TOKEN: ${{ github.token }}
+          RESULT: ${{ needs.canary.result }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          gh issue comment 84 \
-            --repo "${{ github.repository }}" \
-            --body "agent-canary failed against durpdeploy-agent main at $(git -C \"$GITHUB_WORKSPACE/../durpdeploy-agent-main\" rev-parse HEAD). Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}. Evidence artifact: agent-canary-evidence."
+          gh issue comment 84 --repo "${{ github.repository }}" --body \
+            "agent-canary ${RESULT} (durpdeploy-agent main; evidence artifact: agent-canary-evidence). Run: ${RUN_URL}"
