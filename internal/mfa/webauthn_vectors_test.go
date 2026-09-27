@@ -201,16 +201,34 @@ func webauthnOfficialVectorSourcePath(t *testing.T) string {
 	t.Helper()
 
 	output, err := exec.Command(
-		"go", "list", "-m", "-f", "{{.Dir}}",
+		"go", "list", "-m", "-f", "{{.Version}}",
 		"github.com/go-webauthn/webauthn",
 	).Output()
 	if err != nil {
 		t.Fatalf("resolve WebAuthn module: %v", err)
 	}
 	return filepath.Join(
-		strings.TrimSpace(string(output)),
+		webauthnModuleCache(t),
+		"github.com/go-webauthn/webauthn@"+strings.TrimSpace(string(output)),
 		"protocol/specification_vectors_e2e_test.go",
 	)
+}
+
+func webauthnModuleCache(t *testing.T) string {
+	t.Helper()
+
+	if cache := os.Getenv("GOMODCACHE"); cache != "" {
+		return cache
+	}
+	output, err := exec.Command("go", "env", "GOMODCACHE").Output()
+	if err != nil {
+		t.Fatalf("resolve GOMODCACHE: %v", err)
+	}
+	cache := strings.TrimSpace(string(output))
+	if cache == "" {
+		t.Fatal("GOMODCACHE is empty")
+	}
+	return cache
 }
 
 type webauthnAssertionResponseFields struct {
