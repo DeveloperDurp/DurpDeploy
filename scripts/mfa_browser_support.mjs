@@ -96,7 +96,10 @@ export async function mintToken(page, url) {
 			method: "POST",
 		});
 		if (!response.ok) return "";
-		return new URL(response.url).searchParams.get("new_token") ?? "";
+		// The 303 lands on /settings/tokens?flash=<id>; the plaintext
+		// lives only in that page's one-time banner (issue #32).
+		const body = await response.text();
+		return body.match(/ddp_pat_[0-9a-f]{64}/)?.[0] ?? "";
 	});
 	check(token !== "", "could not create isolated bearer token");
 	return token;

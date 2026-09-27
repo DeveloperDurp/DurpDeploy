@@ -112,6 +112,13 @@ the displayed values in approved protected storage. MFA ceremony and secret
 responses use `Cache-Control: no-store`. Do not put recovery codes, TOTP
 seeds, cookies, challenges, or assertions in URLs, logs, tickets, or docs.
 
+A newly minted API token is a one-time value too. The web create flow stores
+the plaintext in a short-lived single-use flash record bound to the creating
+user and session, redirects with an opaque flash identifier, and consumes the
+record on first display; abandoned records expire within minutes. The
+plaintext never appears in a URL, and the display response sends
+`Cache-Control: no-store` and `Referrer-Policy: no-referrer`.
+
 The final `session` cookie is `HttpOnly`, `SameSite=Lax`, and `Secure` when
 `DURPDEPLOY_URL` uses HTTPS. Pending MFA cookies are separate from the final
 session and do not authorize protected routes. Factor completion issues a new

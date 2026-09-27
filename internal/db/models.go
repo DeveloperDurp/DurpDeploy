@@ -453,6 +453,16 @@ type StepTemplateVersionAgentSelector struct {
 	Label             string `json:"label"`
 }
 
+type TokenFlashSecret struct {
+	ID         string `json:"id"`
+	UserID     int64  `json:"user_id"`
+	SessionID  string `json:"session_id"`
+	TokenValue string `json:"token_value"`
+	TokenName  string `json:"token_name"`
+	CreatedAt  int64  `json:"created_at"`
+	ExpiresAt  int64  `json:"expires_at"`
+}
+
 type User struct {
 	ID           int64         `json:"id"`
 	Email        string        `json:"email"`

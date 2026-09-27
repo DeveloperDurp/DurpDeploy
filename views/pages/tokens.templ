@@ -6,9 +6,10 @@ import (
 )
 
 // TokensSettings renders /settings/tokens — the user's own API tokens.
-// The newToken/newName query params render a one-time banner showing
-// the freshly-created plaintext token (cleared by clicking "Got it",
-// which navigates back to /settings/tokens with no query string).
+// The newToken/newName values come from a single-use server-side flash
+// record consumed by the handler (referenced by the ?flash= query
+// param, never carrying the plaintext itself). Cleared by clicking
+// "Got it", which navigates back to /settings/tokens with no query.
 //
 // ponytail: viewer gate wraps the whole page so a viewer who types
 // the URL sees the forbidden message instead of a half-working form.
@@ -217,8 +218,8 @@ templ adminTokensRow(t db.ListAllApiTokensRow) {
 
 // NewTokenBanner shows the freshly-created token's plaintext. The
 // user must copy it and click "Got it" (which navigates to
-// /settings/tokens with no query), so the plaintext lives in the URL
-// for one page load only.
+// /settings/tokens with no query). The handler serves this page with
+// Cache-Control: no-store, so the plaintext is never cached.
 //
 // ponytail: warning color + monospace makes the token unmissable.
 templ NewTokenBanner(token string, name string) {

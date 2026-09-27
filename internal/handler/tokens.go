@@ -2,10 +2,11 @@ package handler
 
 import (
 	"database/sql"
-	"fmt"
+	"errors"
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -24,19 +25,26 @@ import (
 // CreateApiToken query — same path the JSON API handler uses. No new
 // token-minting helper; the handler is a thin web adapter over the
 // existing primitives. The one-time plaintext token is displayed via
-// a query string banner; replacing that legacy flow is tracked separately.
+// a single-use server-side flash record (never via the URL).
 type TokensHandler struct {
 	repo *repository.Repository
 }
+
+// tokenFlashTTL bounds how long a minted plaintext token waits in the
+// flash table for its single display. The redirect is followed
+// immediately by the browser, so this only needs to tolerate a slow
+// client or proxy round-trip.
+const tokenFlashTTL = 5 * time.Minute
 
 func NewTokensHandler(repo *repository.Repository) *TokensHandler {
 	return &TokensHandler{repo: repo}
 }
 
 // MyTokens handles GET /settings/tokens. Renders the user's own
-// tokens plus an optional one-time banner showing a freshly-created
-// token's plaintext (carried via the new_token/new_name query params
-// set by MyTokensPost).
+// tokens plus a one-time banner showing a freshly-created token's
+// plaintext, consumed from the single-use flash record referenced by
+// the ?flash= query param set by MyTokensPost. The plaintext never
+// appears in any URL.
 func (h *TokensHandler) MyTokens(w http.ResponseWriter, r *http.Request) {
 	user := auth.UserFromContext(r.Context())
 	if user == nil {
@@ -44,14 +52,27 @@ func (h *TokensHandler) MyTokens(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The page can render a plaintext bearer credential: never cache
+	// it, and never leak it via Referrer on outbound navigation.
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Referrer-Policy", "no-referrer")
+
 	tokens, err := h.repo.Queries.ListApiTokensByUser(r.Context(), user.ID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	newToken := r.URL.Query().Get("new_token")
-	newName := r.URL.Query().Get("new_name")
+	newToken, newName := "", ""
+	if flashID := r.URL.Query().Get("flash"); flashID != "" {
+		newToken, newName, err = h.consumeTokenFlash(r, flashID, user.ID)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		// A miss (expired, replayed, or foreign session) silently
+		// renders the plain list — the token was already shown once.
+	}
 
 	if err := pages.TokensSettings(
 		tokens,
@@ -64,11 +85,42 @@ func (h *TokensHandler) MyTokens(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// consumeTokenFlash atomically reads and deletes the flash record for
+// the given opaque ID. Binding on user and creating session plus the
+// expiry check inside the DELETE makes the display single-use: a
+// replayed, expired, or foreign flash returns no rows (sql.ErrNoRows).
+func (h *TokensHandler) consumeTokenFlash(
+	r *http.Request,
+	flashID string,
+	userID int64,
+) (string, string, error) {
+	sess := auth.SessionFromContext(r.Context())
+	if sess == nil {
+		return "", "", sql.ErrNoRows
+	}
+	row, err := h.repo.Queries.ConsumeTokenFlashSecret(
+		r.Context(),
+		db.ConsumeTokenFlashSecretParams{
+			ID:        flashID,
+			UserID:    userID,
+			SessionID: sess.ID,
+			ExpiresAt: time.Now().Unix(),
+		},
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", "", nil
+		}
+		return "", "", err
+	}
+	return row.TokenValue, row.TokenName, nil
+}
+
 // MyTokensPost handles POST /settings/tokens. Mints a new token for
-// the current user and 303-redirects to /settings/tokens with the
-// plaintext in the query string so the list page renders the one-time
-// banner. The plaintext is gone on the next page load (the "Got it"
-// button navigates back without the query).
+// the current user, stores the plaintext in a short-lived single-use
+// flash record, and 303-redirects to /settings/tokens?flash=<opaque
+// id>. The redirect carries no credential; the flash is consumed on
+// first display (see MyTokens) and expires if abandoned.
 func (h *TokensHandler) MyTokensPost(w http.ResponseWriter, r *http.Request) {
 	user := auth.UserFromContext(r.Context())
 	if user == nil {
@@ -93,27 +145,52 @@ func (h *TokensHandler) MyTokensPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := h.repo.Queries.CreateApiToken(
-		r.Context(),
-		db.CreateApiTokenParams{
-			ID:          uuid.NewString(),
-			UserID:      user.ID,
-			Name:        name,
-			TokenPrefix: prefix,
-			TokenHash:   hash,
-			Scope:       "global",
-			ExpiresAt:   sql.NullInt64{},
-		},
-	); err != nil {
+	// One transaction: the flash must never dangle without its token
+	// row (an undisplayable active token), and vice versa.
+	flashID, _, err := auth.NewSessionToken()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	sess := auth.SessionFromContext(r.Context())
+	if sess == nil {
+		http.Error(w, "unauthenticated", http.StatusUnauthorized)
+		return
+	}
+	err = h.repo.WithTx(r.Context(), func(q *db.Queries) error {
+		if _, err := q.CreateApiToken(
+			r.Context(),
+			db.CreateApiTokenParams{
+				ID:          uuid.NewString(),
+				UserID:      user.ID,
+				Name:        name,
+				TokenPrefix: prefix,
+				TokenHash:   hash,
+				Scope:       "global",
+				ExpiresAt:   sql.NullInt64{},
+			},
+		); err != nil {
+			return err
+		}
+		_, err := q.CreateTokenFlashSecret(
+			r.Context(),
+			db.CreateTokenFlashSecretParams{
+				ID:         flashID,
+				UserID:     user.ID,
+				SessionID:  sess.ID,
+				TokenValue: full,
+				TokenName:  name,
+				ExpiresAt:  time.Now().Add(tokenFlashTTL).Unix(),
+			},
+		)
+		return err
+	})
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	redirect := fmt.Sprintf(
-		"/settings/tokens?new_token=%s&new_name=%s",
-		url.QueryEscape(full),
-		url.QueryEscape(name),
-	)
+	redirect := "/settings/tokens?flash=" + url.QueryEscape(flashID)
 	if r.Header.Get("HX-Request") == "true" {
 		w.Header().Set("HX-Redirect", redirect)
 		w.WriteHeader(http.StatusOK)

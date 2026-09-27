@@ -5,11 +5,20 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/cookiejar"
 	"net/url"
+	"regexp"
 	"strings"
-
 	"testing"
+	"time"
+
+	"durpdeploy/internal/auth"
+	"durpdeploy/internal/db"
 )
+
+// fullTokenRe matches a complete plaintext API token. The token list
+// shows only the 12-char prefix, so this can only match the banner.
+var fullTokenRe = regexp.MustCompile(`ddp_pat_[0-9a-f]{64}`)
 
 // TestTokens_SettingsPageRenders: GET /settings/tokens as an admin
 // renders the page with the create form and the empty-state message
@@ -37,13 +46,11 @@ func TestTokens_SettingsPageRenders(t *testing.T) {
 	}
 }
 
-// TestTokens_CreateShowsBanner: POST /settings/tokens creates a token
-// and the redirect's query string carries the plaintext; following
-// the redirect renders the one-time banner with the token.
-func TestTokens_CreateShowsBanner(t *testing.T) {
-	h := newProjectHarness(t)
-
-	form := url.Values{"name": {"ci-deploy"}}
+// mintTokenViaForm posts the /settings/tokens create form and returns
+// the Location header of the 303 redirect.
+func mintTokenViaForm(t *testing.T, h *projectHarness, name string) string {
+	t.Helper()
+	form := url.Values{"name": {name}}
 	form.Set("csrf_token", h.csrfToken())
 	resp, err := h.authedClient().
 		PostForm(h.server.URL+"/settings/tokens", form)
@@ -55,27 +62,108 @@ func TestTokens_CreateShowsBanner(t *testing.T) {
 	if resp.StatusCode != http.StatusSeeOther {
 		t.Fatalf("create: status = %d, want 303", resp.StatusCode)
 	}
-	loc := resp.Header.Get("Location")
-	if !strings.HasPrefix(loc, "/settings/tokens?new_token=") {
-		t.Fatalf("redirect = %q, want /settings/tokens?new_token=...", loc)
+	return resp.Header.Get("Location")
+}
+
+// secondSessionFor creates an additional session (own cookie jar) for
+// an existing user, so tests can prove flash records are bound to the
+// creating session and not merely to the user.
+func secondSessionFor(
+	t *testing.T,
+	h *projectHarness,
+	user *db.User,
+) *authedSession {
+	t.Helper()
+	ctx := context.Background()
+	token, csrf, err := auth.NewSessionToken()
+	if err != nil {
+		t.Fatalf("new session token: %v", err)
+	}
+	if _, err := h.repo.Queries.CreateSession(ctx, db.CreateSessionParams{
+		ID:        token,
+		UserID:    user.ID,
+		CsrfToken: csrf,
+		ExpiresAt: time.Now().Add(24 * time.Hour).Unix(),
+	}); err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatalf("cookiejar: %v", err)
+	}
+	u, err := url.Parse(h.server.URL)
+	if err != nil {
+		t.Fatalf("parse server URL: %v", err)
+	}
+	jar.SetCookies(u, []*http.Cookie{{Name: "session", Value: token}})
+	return &authedSession{
+		user:         user,
+		sessionToken: token,
+		csrfToken:    csrf,
+		client: &http.Client{
+			Jar: jar,
+			CheckRedirect: func(*http.Request, []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		},
+	}
+}
+
+// getTokenBody fetches a URL with the given session and returns the
+// body plus response.
+func getTokenBody(
+	t *testing.T,
+	client *http.Client,
+	baseURL, path string,
+) (string, *http.Response) {
+	t.Helper()
+	resp, err := client.Get(baseURL + path)
+	if err != nil {
+		t.Fatalf("GET %s: %v", path, err)
+	}
+	defer resp.Body.Close()
+	return readBody(t, resp), resp
+}
+
+// TestTokens_CreateShowsBanner: POST /settings/tokens creates a token
+// and redirects to an opaque single-use flash reference — never
+// carrying the plaintext (issue #32). Following the redirect renders
+// the one-time banner; replaying it shows nothing.
+func TestTokens_CreateShowsBanner(t *testing.T) {
+	h := newProjectHarness(t)
+
+	loc := mintTokenViaForm(t, h, "ci-deploy")
+	if !strings.HasPrefix(loc, "/settings/tokens?flash=") {
+		t.Fatalf("redirect = %q, want /settings/tokens?flash=...", loc)
+	}
+	if strings.Contains(loc, "ddp_pat_") ||
+		strings.Contains(loc, "new_token=") {
+		t.Fatalf("redirect leaks the token: %q", loc)
 	}
 
-	// Follow the redirect; the banner must show the plaintext token.
-	followReq, _ := http.NewRequest(http.MethodGet, h.server.URL+loc, nil)
-	followResp, err := h.authedClient().Do(followReq)
-	if err != nil {
-		t.Fatalf("GET redirect: %v", err)
+	// First display: the banner shows the plaintext token exactly once.
+	body, resp := getTokenBody(t, h.authedClient(), h.server.URL, loc)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
-	defer followResp.Body.Close()
-	if followResp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want 200", followResp.StatusCode)
+	if got := resp.Header.Get("Cache-Control"); got != "no-store" {
+		t.Fatalf("display Cache-Control = %q, want no-store", got)
 	}
-	body := readBody(t, followResp)
 	if !strings.Contains(body, "Token created") {
 		t.Fatalf("body missing 'Token created' banner: %s", body)
 	}
 	if !strings.Contains(body, "ci-deploy") {
 		t.Fatalf("body missing the token name: %s", body)
+	}
+	plaintext := fullTokenRe.FindString(body)
+	if plaintext == "" {
+		t.Fatalf("body missing the plaintext token: %s", body)
+	}
+
+	// Replay: the flash was consumed; no plaintext on the second GET.
+	body2, _ := getTokenBody(t, h.authedClient(), h.server.URL, loc)
+	if fullTokenRe.MatchString(body2) {
+		t.Fatalf("flash replay showed the token again")
 	}
 
 	// The token row exists in the DB for the current user.
@@ -90,6 +178,88 @@ func TestTokens_CreateShowsBanner(t *testing.T) {
 	}
 	if rows[0].Name != "ci-deploy" {
 		t.Fatalf("token name = %q, want ci-deploy", rows[0].Name)
+	}
+}
+
+// TestTokens_FlashBoundToSession: a flash record cannot be read from
+// another session of the same user or by another user; only the
+// creating session can consume it (issue #32).
+func TestTokens_FlashBoundToSession(t *testing.T) {
+	h := newProjectHarness(t)
+
+	loc := mintTokenViaForm(t, h, "flash-bound")
+
+	// Same user, different session: no token.
+	second := secondSessionFor(t, h, h.sess.user)
+	body, _ := getTokenBody(t, second.client, h.server.URL, loc)
+	if fullTokenRe.MatchString(body) {
+		t.Fatalf("flash readable from another session of the same user")
+	}
+
+	// Different user: no token (and the flash is not consumed).
+	other := seedSessionAs(
+		t, h.repo, h.server.URL, "flash-other@example.com", "deployer",
+	)
+	body, _ = getTokenBody(t, other.client, h.server.URL, loc)
+	if fullTokenRe.MatchString(body) {
+		t.Fatalf("flash readable by another user")
+	}
+
+	// The creating session still gets its one display.
+	body, _ = getTokenBody(t, h.authedClient(), h.server.URL, loc)
+	if !fullTokenRe.MatchString(body) {
+		t.Fatalf("creating session lost its single display: %s", body)
+	}
+}
+
+// TestTokens_FlashExpired: an expired flash record cannot be
+// retrieved (issue #32).
+func TestTokens_FlashExpired(t *testing.T) {
+	h := newProjectHarness(t)
+
+	flashID, _, err := auth.NewSessionToken()
+	if err != nil {
+		t.Fatalf("new flash id: %v", err)
+	}
+	if _, err := h.repo.Queries.CreateTokenFlashSecret(
+		context.Background(),
+		db.CreateTokenFlashSecretParams{
+			ID:         flashID,
+			UserID:     h.sess.user.ID,
+			SessionID:  h.sess.sessionToken,
+			TokenValue: "ddp_pat_" + strings.Repeat("ab", 32),
+			TokenName:  "old",
+			ExpiresAt:  time.Now().Add(-time.Minute).Unix(),
+		},
+	); err != nil {
+		t.Fatalf("seed expired flash: %v", err)
+	}
+
+	body, _ := getTokenBody(
+		t, h.authedClient(), h.server.URL, "/settings/tokens?flash="+flashID,
+	)
+	if fullTokenRe.MatchString(body) {
+		t.Fatalf("expired flash was displayed")
+	}
+}
+
+// TestTokens_PageNotCacheable: /settings/tokens always sends
+// Cache-Control: no-store and a restrictive Referrer-Policy (issue
+// #32 — the page can render a plaintext credential).
+func TestTokens_PageNotCacheable(t *testing.T) {
+	h := newProjectHarness(t)
+
+	body, resp := getTokenBody(
+		t, h.authedClient(), h.server.URL, "/settings/tokens",
+	)
+	if got := resp.Header.Get("Cache-Control"); got != "no-store" {
+		t.Fatalf("Cache-Control = %q, want no-store", got)
+	}
+	if got := resp.Header.Get("Referrer-Policy"); got != "no-referrer" {
+		t.Fatalf("Referrer-Policy = %q, want no-referrer", got)
+	}
+	if !strings.Contains(body, "API tokens") {
+		t.Fatalf("unexpected page body: %s", body)
 	}
 }
 
