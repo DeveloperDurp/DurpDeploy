@@ -1,0 +1,89 @@
+# Agent canary: weekly drift check against durpdeploy-agent main.
+#
+# The agent module lives in its own repo and its CI cannot see this one.
+# This scheduled job builds durpdeploy-agent@main and drives the real
+# paired-agent harness (mTLS pairing, poll/start/heartbeat/result, mixed
+# bash+python3 execution) so an agent change that breaks the DurpDeploy
+# contract surfaces within a week instead of at rollout.
+#
+# The pin-based PR gate (agent smoke / rollout) still guards the module
+# version this repo consumes; this workflow only detects forward drift.
+name: agent-canary
+
+on:
+  schedule:
+    # Weekly, Monday 06:17 UTC.
+    - cron: '17 6 * * 1'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write
+
+# Never cancel an in-progress canary: a partial run would look like a
+# contract failure.
+concurrency:
+  group: agent-canary
+  cancel-in-progress: false
+
+jobs:
+  canary:
+    name: Agent main canary
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      # Host-process mode runs the freshly built agent directly on the
+      # runner. GitHub runners ship python3 and pwsh, so the
+      # --mixed-interpreter deployment takes the success path and the
+      # canary exercises the full bash+python3 capability contract.
+      DURPDEPLOY_AGENT_E2E_HOST_PROCESS: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: '1.26.8'
+          cache: true
+
+      - name: Install templ
+        run: go install github.com/a-h/templ/cmd/templ@v0.3.1020
+
+      # The harness builds ./cmd/server itself; embedded views and
+      # swagger assets must exist first (same reason as release.yml).
+      - name: Generate templ files
+        run: templ generate
+
+      - name: Materialize static/swagger-ui/
+        run: make swagger-ui-copy
+
+      - name: Check out durpdeploy-agent main
+        run: |
+          git clone --depth 1 \
+            https://github.com/DeveloperDurp/durpdeploy-agent \
+            "$GITHUB_WORKSPACE/../durpdeploy-agent-main"
+
+      - name: Run paired-agent canary (happy + mixed-interpreter)
+        env:
+          DURPDEPLOY_AGENT_WORKTREE: ${{ github.workspace }}/../durpdeploy-agent-main
+        run: |
+          bash scripts/agent_e2e_test.sh
+          bash scripts/agent_e2e_test.sh --mixed-interpreter
+
+      - name: Upload harness evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: agent-canary-evidence
+          path: .omo/evidence/continue-remote-agent-rollout/
+          retention-days: 7
+
+      - name: Record failure on issue #84
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue comment 84 \
+            --repo "${{ github.repository }}" \
+            --body "agent-canary failed against durpdeploy-agent main at $(git -C \"$GITHUB_WORKSPACE/../durpdeploy-agent-main\" rev-parse HEAD). Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}. Evidence artifact: agent-canary-evidence."
