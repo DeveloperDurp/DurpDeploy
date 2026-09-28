@@ -1,7 +1,8 @@
 # syntax=docker/dockerfile:1
 # Multi-stage build for durpdeploy.
 # Builder generates templ files, bundles CSS/JS, and compiles a static Go binary.
-# Runtime is a minimal Alpine image with a non-root user and bash for step scripts.
+# Runtime is a minimal Alpine image with a non-root user, bash, and a remote
+# Podman client for container steps.
 
 # Stage 1: builder
 FROM golang:1.26.8-alpine@sha256:8ac98ca534ac3f51e1f420a1dd2c15e74c75cfa0f23f3ad27eb5d7236c349a0c AS builder
@@ -43,13 +44,13 @@ RUN make templ-generate tailwind-build js-build swagger-ui-copy && \
 # Stage 2: runtime
 FROM alpine:3.20
 
-# Install runtime essentials (CA certificates for HTTPS notifications, bash
-# because the deployment runner executes step scripts via os/exec and Alpine
-# base only provides busybox /bin/sh), then create a non-root user with a
-# stable UID. No shell, no home, no password.
+# Install runtime essentials and the remote-only Podman client (no local
+# engine). The runner invokes Podman over SSH to a separate rootless account.
+# Keep the stable non-root UID and its home for opt-in SSH credentials.
 # hadolint ignore=DL3018
-RUN apk add --no-cache ca-certificates bash && \
-	adduser -D -u 10001 durpdeploy
+RUN apk add --no-cache ca-certificates bash openssh-client podman-remote && \
+	adduser -D -u 10001 durpdeploy && \
+	ln -s /usr/bin/podman-remote /usr/local/bin/podman
 
 # Data directory for the SQLite database and WAL files. Chown to the runtime
 # user and declare it a volume so it can be mounted from the host.
@@ -65,7 +66,8 @@ VOLUME ["/data"]
 COPY --from=builder /out/durpdeploy /usr/local/bin/durpdeploy
 RUN chmod 0755 /usr/local/bin/durpdeploy
 
-ENV DURPDEPLOY_EXECUTION_BOUNDARY=service
+ENV DURPDEPLOY_EXECUTION_BOUNDARY=service \
+	XDG_CONFIG_HOME=/tmp
 USER 10001
 
 # The application listens on port 8080 (hardcoded in cmd/server/main.go).

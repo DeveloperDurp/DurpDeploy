@@ -24,6 +24,9 @@ services:
       # Shared with Caddy so the app marks browser cookies Secure for HTTPS.
       - ./compose.caddy.env
       - ./compose.app.env
+      # Optional container steps: set DURPDEPLOY_PODMAN_URL and
+      # DURPDEPLOY_PODMAN_NAMESPACE in compose.app.env. Use a separate rootless
+      # host account, e.g. ssh://exec@host/run/user/UID/podman/podman.sock.
     environment:
       DURPDEPLOY_DB: /data/durpdeploy.db
       DURPDEPLOY_EXECUTION_BOUNDARY: service
@@ -41,6 +44,10 @@ services:
     volumes:
       - durpdeploy-data:/data
       - durpdeploy-agent-identity:/var/lib/durpdeploy/agent-identity
+      # Opt in after provisioning ./secrets/podman-ssh with id_ed25519 (0600)
+      # and a verified, pinned known_hosts. Files must be readable by UID 10001;
+      # mount the directory read-only. Do not mount a host engine socket.
+      # - ./secrets/podman-ssh:/home/durpdeploy/.ssh:ro
     ports:
       - "10943:10943"
     secrets:

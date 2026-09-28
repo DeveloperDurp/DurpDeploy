@@ -44,6 +44,15 @@
 #   DURPDEPLOY_AGENT_PUBLIC_URL=https://<agent-control-host>
 #   DURPDEPLOY_AGENT_IDENTITY_DIR=/var/lib/durpdeploy/agent-identity
 #
+# Optional local container steps (set both in compose.app.env):
+#   DURPDEPLOY_PODMAN_URL=ssh://exec@host/run/user/UID/podman/podman.sock
+#   DURPDEPLOY_PODMAN_NAMESPACE=durpdeploy-prod
+# Provision a separate rootless SSH account on the host with its Podman socket.
+# Put id_ed25519 (0600) and the verified host key in known_hosts under
+# ./secrets/podman-ssh, accessible to UID 10001; uncomment the read-only mount
+# below. The host must be reachable from the app container. Never mount the
+# hosting engine socket into the app.
+#
 # Optional OIDC SSO (set all in compose.app.env together, or omit all):
 #   DURPDEPLOY_URL=https://durpdeploy.example.com
 #   DURPDEPLOY_OIDC_ISSUER=https://idp.example.com/realms/example
@@ -89,6 +98,7 @@ services:
     volumes:
       - durpdeploy-data:/data
       - durpdeploy-agent-identity:/var/lib/durpdeploy/agent-identity
+      # - ./secrets/podman-ssh:/home/durpdeploy/.ssh:ro
     # Agents connect directly with mTLS. Restrict this host port to agent networks.
     ports:
       - "10943:10943"

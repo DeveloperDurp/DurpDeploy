@@ -85,6 +85,9 @@ podman run --rm --read-only --security-opt no-new-privileges:true \
 	test "$(id -u)" = 10001
 	test -w /data
 	test ! -w /
+	test "$(getent passwd 10001 | cut -d : -f 6)" = /home/durpdeploy
+	command -v podman >/dev/null
+	podman --remote --url=ssh://exec@host/run/user/10002/podman/podman.sock --version
 	printf private > /data/service-private
 	chmod 0600 /data/service-private
 	for capability_set in CapInh CapPrm CapEff CapBnd CapAmb; do
