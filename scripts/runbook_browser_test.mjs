@@ -105,7 +105,7 @@ try {
 
   const longBook = await api("POST", `/projects/${projectID}/runbooks`, {
     name: "browser-cancel-check",
-    steps: [{ name: "wait", script_body: "sleep 15", interpreter: "bash" }],
+    steps: [{ name: "wait", script_body: "sleep 15", interpreter: "bash", container_image: "docker.io/library/bash:5.2" }],
   });
   await page.goto(`${base}/projects/${projectID}/runbooks/${longBook.runbook.id}`);
   const longForm = page.locator(`form[action$="/runbooks/${longBook.runbook.id}/execute"]`);
@@ -128,7 +128,7 @@ try {
 
   const approvalBook = await api("POST", `/projects/${approvalProjectID}/runbooks`, {
     name: "browser-approval-check",
-    steps: [{ name: "check", script_body: "true", interpreter: "bash" }],
+    steps: [{ name: "check", script_body: "true", interpreter: "bash", container_image: "docker.io/library/bash:5.2" }],
   });
   for (const envID of approvalEnvironments.slice(0, 2)) {
     const execution = await api("POST", `/projects/${approvalProjectID}/runbooks/${approvalBook.runbook.id}/executions`, { environment_id: Number(envID) });

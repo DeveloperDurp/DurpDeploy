@@ -22,6 +22,10 @@ trap cleanup EXIT
 
 ADMIN_EMAIL="${DURPDEPLOY_ADMIN_EMAIL:-e2e-admin@test.local}"
 ADMIN_PASS="${DURPDEPLOY_ADMIN_PASSWORD:-e2e-admin-password-1234}"
+BASH_IMAGE=docker.io/library/bash:5.2
+PYTHON_IMAGE=docker.io/library/python:3.12-alpine
+PWSH_IMAGE=mcr.microsoft.com/powershell:7.4-ubuntu-22.04
+CONTROL_PLANE_PORT=${DURPDEPLOY_E2E_CONTROL_PLANE_PORT:-$PORT}
 
 if [[ "$CLIENT_ONLY" == "1" ]]; then
     BASE="${DURPDEPLOY_BASE_URL:-http://localhost:8080}"
@@ -64,7 +68,7 @@ else
         DURPDEPLOY_AGENT_PUBLIC_URL="https://localhost" \
         DURPDEPLOY_AGENT_IDENTITY_DIR="$TMP/agent-identity" \
         DURPDEPLOY_DB="$DB_DSN" \
-        DURPDEPLOY_EXECUTION_BOUNDARY=development \
+        DURPDEPLOY_EXECUTION_BOUNDARY=service \
         DURPDEPLOY_URL="$BASE" \
         "$TMP/durpdeploy" >"$TMP/server.log" 2>&1 &
     SERVER_PID=$!
@@ -192,7 +196,7 @@ CODE=$(curl_silent -X POST -d "name=TestEnv&csrf_token=$CSRF" "$BASE/environment
 ENV_ID=$(curl_body "$BASE/environments" | grep -oP 'href="/environments/\K[0-9]+' | head -1)
 echo "Env ID: $ENV_ID"
 
-CODE=$(curl_silent -X POST -d "name=Step1&script_body=echo+hello&csrf_token=$CSRF" "$BASE/projects/$PROJECT_ID/steps")
+CODE=$(curl_silent -X POST -d "name=Step1&script_body=echo+hello&container_image=$BASH_IMAGE&csrf_token=$CSRF" "$BASE/projects/$PROJECT_ID/steps")
 [[ "$CODE" == "200" ]] || { echo "FAIL: create step got $CODE"; exit 1; }
 
 # Verify the dedicated steps page renders.
@@ -237,7 +241,7 @@ echo "$FIRST_PAGE" | grep -q "smoke-test-audit" && { echo "FAIL: first deploymen
 echo "  First deployment lacks note: OK"
 
 echo "=== F3.2: Cancel Path ==="
-curl -s -b "$COOKIES" -o /dev/null -X POST -d "name=LongStep&script_body=sleep+10&csrf_token=$CSRF" "$BASE/projects/$PROJECT_ID/steps"
+curl -s -b "$COOKIES" -o /dev/null -X POST -d "name=LongStep&script_body=sleep+10&container_image=$BASH_IMAGE&csrf_token=$CSRF" "$BASE/projects/$PROJECT_ID/steps"
 curl -s -b "$COOKIES" -o /dev/null -X POST -d "version=1.0.1&csrf_token=$CSRF" "$BASE/projects/$PROJECT_ID/releases"
 CANCEL_REL=$(curl_body "$BASE/projects/$PROJECT_ID/releases" | grep -oP 'href="/projects/'$PROJECT_ID'/releases/\K[0-9]+' | sort -n | tail -1)
 echo "Cancel Release ID: $CANCEL_REL"
@@ -258,22 +262,21 @@ echo "$CANCEL_STATUS" | grep -q 'running' || {
 }
 CODE=$(curl_silent -X POST -d "csrf_token=$CSRF" "$BASE/deployments/$CANCEL_DEP/cancel")
 [[ "$CODE" == "303" ]] || { echo "FAIL: cancel got $CODE"; exit 1; }
+for i in {1..200}; do
+  CANCEL_STATUS=$(curl_body "$BASE/deployments/$CANCEL_DEP/status")
+  echo "$CANCEL_STATUS" | grep -q 'cancelled' && break
+  sleep 0.1
+done
+echo "$CANCEL_STATUS" | grep -q 'cancelled' || { echo "FAIL: web cancellation did not finish"; exit 1; }
 
 echo "=== F3.2b: Per-Step Timeout ==="
-# A step with a 1-second timeout running a 10-second sleep should fail
-# instead of hanging for the 5-minute default. We delete the LongStep
-# from the cancel path so this test doesn't first run a 10s sleep.
-# The runner's pre-existing cleanup (cmd.WaitDelay=15s + a 10s goroutine
-# sleep) means the deployment status flips to 'failed' ~15s after the
-# 1s timeout fires; we poll for 20s and assert < 25s elapsed (still
-# well under the 5-minute default).
 STEPS_PAGE=$(curl_body "$BASE/projects/$PROJECT_ID/steps-page")
 LONG_STEP_ID=$(echo "$STEPS_PAGE" | grep -oP 'step-row-\K[0-9]+' | sort -n | tail -1)
 if [[ -n "$LONG_STEP_ID" ]]; then
   do_delete "$BASE/projects/$PROJECT_ID/steps/$LONG_STEP_ID"
 fi
 
-CODE=$(curl_silent -X POST -d "name=TimeoutStep&script_body=sleep+10&timeout_seconds=1&csrf_token=$CSRF" "$BASE/projects/$PROJECT_ID/steps")
+CODE=$(curl_silent -X POST -d "name=TimeoutStep&script_body=sleep+10&timeout_seconds=1&container_image=$BASH_IMAGE&csrf_token=$CSRF" "$BASE/projects/$PROJECT_ID/steps")
 [[ "$CODE" == "200" ]] || { echo "FAIL: create timeout step got $CODE"; exit 1; }
 
 CODE=$(curl_silent -X POST -d "version=1.0.2&csrf_token=$CSRF" "$BASE/projects/$PROJECT_ID/releases")
@@ -297,6 +300,7 @@ ELAPSED=$((END - START))
 
 echo "$STATUS_BODY" | grep -q 'failed' || { echo "FAIL: timeout deploy did not fail, got status: $STATUS_BODY"; exit 1; }
 [[ $ELAPSED -lt 25 ]] || { echo "FAIL: timeout deploy took ${ELAPSED}s, expected <25s"; exit 1; }
+curl_body "$BASE/deployments/$TIMEOUT_DEP/logs.txt" | grep -q 'timed out' || { echo "FAIL: timeout log missing"; exit 1; }
 echo "  Per-step timeout killed long sleep: OK (failed in ${ELAPSED}s)"
 
 echo "=== F3.2c: Re-run ==="
@@ -332,7 +336,7 @@ if [[ -n "$TIMEOUT_STEP_ID" ]]; then
   do_delete "$BASE/projects/$PROJECT_ID/steps/$TIMEOUT_STEP_ID"
 fi
 
-CODE=$(curl_silent -X POST -d "name=RetryStep&script_body=exit+1&max_retries=2&csrf_token=$CSRF" "$BASE/projects/$PROJECT_ID/steps")
+CODE=$(curl_silent -X POST -d "name=RetryStep&script_body=exit+1&max_retries=2&container_image=$BASH_IMAGE&csrf_token=$CSRF" "$BASE/projects/$PROJECT_ID/steps")
 [[ "$CODE" == "200" ]] || { echo "FAIL: create retry step got $CODE"; exit 1; }
 
 CODE=$(curl_silent -X POST -d "version=1.0.4&csrf_token=$CSRF" "$BASE/projects/$PROJECT_ID/releases")
@@ -362,7 +366,7 @@ CODE=$(curl_silent -X POST -d "name=&csrf_token=$CSRF" "$BASE/projects")
 [[ "$CODE" == "422" ]] || { echo "FAIL: empty project name should be 422, got $CODE"; exit 1; }
 
 echo "=== F3.4: Variable Fallback ==="
-curl -s -b "$COOKIES" -o /dev/null -X POST -d "name=StepMissing&script=echo+%24%7BMISSING%7D&csrf_token=$CSRF" "$BASE/projects/$PROJECT_ID/steps"
+curl -s -b "$COOKIES" -o /dev/null -X POST -d "name=StepMissing&script=echo+%24%7BMISSING%7D&container_image=$BASH_IMAGE&csrf_token=$CSRF" "$BASE/projects/$PROJECT_ID/steps"
 curl -s -b "$COOKIES" -o /dev/null -X POST -d "version=2.0.0&csrf_token=$CSRF" "$BASE/projects/$PROJECT_ID/releases"
 NEW_REL=$(curl_body "$BASE/projects/$PROJECT_ID/releases" | grep -oP 'href="/projects/'$PROJECT_ID'/releases/\K[0-9]+' | sort -n | tail -1)
 curl -s -b "$COOKIES" -o /dev/null -X POST -d "release_id=$NEW_REL&environment_id=$ENV_ID&csrf_token=$CSRF" "$BASE/projects/$PROJECT_ID/deploy"
@@ -412,31 +416,41 @@ CODE=$(curl_silent -X PUT -d "name=$LC_NAME&description=&lifecycle_id=$LC_LIFECY
 [[ "$CODE" == "303" ]] || { echo "FAIL: assign lifecycle got $CODE"; exit 1; }
 
 # Create one step + one release on the lifecycle project.
-CODE=$(curl_silent -X POST -d "name=step1&script_body=exit+0&csrf_token=$CSRF" "$BASE/projects/$LC_PROJECT_ID/steps")
+CODE=$(curl_silent -X POST -d "name=step1&script_body=exit+0&container_image=$BASH_IMAGE&csrf_token=$CSRF" "$BASE/projects/$LC_PROJECT_ID/steps")
 [[ "$CODE" == "200" ]] || { echo "FAIL: create step got $CODE"; exit 1; }
 CODE=$(curl_silent -X POST -d "version=1.0.0&csrf_token=$CSRF" "$BASE/projects/$LC_PROJECT_ID/releases")
 [[ "$CODE" == "303" ]] || { echo "FAIL: create release got $CODE"; exit 1; }
 LC_REL_ID=$(curl_body "$BASE/projects/$LC_PROJECT_ID/releases" | grep -oP 'href="/projects/'$LC_PROJECT_ID'/releases/\K[0-9]+' | sort -n | tail -1)
 echo "LC Release ID: $LC_REL_ID"
 
-# Deploy v1 to Dev -> 303
-CODE=$(curl_silent -X POST -d "release_id=$LC_REL_ID&environment_id=$LC_DEV_ID&csrf_token=$CSRF" "$BASE/projects/$LC_PROJECT_ID/deploy")
+CODE=$(curl -s -b "$COOKIES" -D "$TMP/lc-dev-headers" -o /dev/null -w '%{http_code}' -X POST -d "release_id=$LC_REL_ID&environment_id=$LC_DEV_ID&csrf_token=$CSRF" "$BASE/projects/$LC_PROJECT_ID/deploy")
 [[ "$CODE" == "303" ]] || { echo "FAIL: deploy v1 to dev got $CODE, want 303"; exit 1; }
-# Wait for the dev deploy to finish (status endpoint polling).
-for i in {1..50}; do
-  if curl_body "$BASE/deployments/$(curl_body "$BASE/deployments" | grep -oP 'release-row-[0-9]+|deployments/\K[0-9]+' | tail -1)/status" 2>/dev/null | grep -q 'succeeded'; then break; fi
+LC_DEV_URL=$(grep -i '^location:' "$TMP/lc-dev-headers" | awk '{print $2}' | tr -d '\r')
+LC_DEV_DEP=$(echo "$LC_DEV_URL" | grep -oP '/deployments/\K[0-9]+')
+[[ -n "$LC_DEV_DEP" ]] || { echo "FAIL: deploy v1 to dev did not redirect"; exit 1; }
+for i in {1..200}; do
+  LC_DEV_STATUS=$(curl_body "$BASE/deployments/$LC_DEV_DEP/status")
+  echo "$LC_DEV_STATUS" | grep -qE 'failed|succeeded|cancelled' && break
   sleep 0.1
 done
+echo "$LC_DEV_STATUS" | grep -q succeeded || { echo "FAIL: lifecycle dev deployment did not succeed"; exit 1; }
 
 # Now deploy v1 to Prod directly (skipping Test) -> 422
 CODE=$(curl_silent -X POST -d "release_id=$LC_REL_ID&environment_id=$LC_PROD_ID&csrf_token=$CSRF" "$BASE/projects/$LC_PROJECT_ID/deploy")
 [[ "$CODE" == "422" ]] || { echo "FAIL: deploy v1 to prod (skipping test) got $CODE, want 422"; exit 1; }
 echo "  Dev->Prod skip blocked: OK (422)"
 
-# Deploy v1 to Test -> 303
-CODE=$(curl_silent -X POST -d "release_id=$LC_REL_ID&environment_id=$LC_TEST_ID&csrf_token=$CSRF" "$BASE/projects/$LC_PROJECT_ID/deploy")
+CODE=$(curl -s -b "$COOKIES" -D "$TMP/lc-test-headers" -o /dev/null -w '%{http_code}' -X POST -d "release_id=$LC_REL_ID&environment_id=$LC_TEST_ID&csrf_token=$CSRF" "$BASE/projects/$LC_PROJECT_ID/deploy")
 [[ "$CODE" == "303" ]] || { echo "FAIL: deploy v1 to test got $CODE, want 303"; exit 1; }
-sleep 0.5
+LC_TEST_URL=$(grep -i '^location:' "$TMP/lc-test-headers" | awk '{print $2}' | tr -d '\r')
+LC_TEST_DEP=$(echo "$LC_TEST_URL" | grep -oP '/deployments/\K[0-9]+')
+[[ -n "$LC_TEST_DEP" ]] || { echo "FAIL: deploy v1 to test did not redirect"; exit 1; }
+for i in {1..200}; do
+  LC_TEST_STATUS=$(curl_body "$BASE/deployments/$LC_TEST_DEP/status")
+  echo "$LC_TEST_STATUS" | grep -qE 'failed|succeeded|cancelled' && break
+  sleep 0.1
+done
+echo "$LC_TEST_STATUS" | grep -q succeeded || { echo "FAIL: lifecycle test deployment did not succeed"; exit 1; }
 
 # Deploy v1 to Prod after Test succeeded -> 303
 CODE=$(curl_silent -X POST -d "release_id=$LC_REL_ID&environment_id=$LC_PROD_ID&csrf_token=$CSRF" "$BASE/projects/$LC_PROJECT_ID/deploy")
@@ -485,7 +499,7 @@ echo "App Project ID: $APP_PROJ_ID"
 CODE=$(curl_silent -X PUT -d "name=AppProject&description=&lifecycle_id=$APP_LC_ID&csrf_token=$CSRF" "$BASE/projects/$APP_PROJ_ID")
 [[ "$CODE" == "303" ]] || { echo "FAIL: assign lifecycle to app project got $CODE"; exit 1; }
 
-CODE=$(curl_silent -X POST -d "name=app-step&script_body=exit+0&csrf_token=$CSRF" "$BASE/projects/$APP_PROJ_ID/steps")
+CODE=$(curl_silent -X POST -d "name=app-step&script_body=exit+0&container_image=$BASH_IMAGE&csrf_token=$CSRF" "$BASE/projects/$APP_PROJ_ID/steps")
 [[ "$CODE" == "200" ]] || { echo "FAIL: create app step got $CODE"; exit 1; }
 CODE=$(curl_silent -X POST -d "version=1.0.0&csrf_token=$CSRF" "$BASE/projects/$APP_PROJ_ID/releases")
 [[ "$CODE" == "303" ]] || { echo "FAIL: create app release got $CODE"; exit 1; }
@@ -497,10 +511,11 @@ DEV_URL=$(curl -s -b "$COOKIES" -D - -o /dev/null -X POST -d "release_id=$APP_RE
 DEV_DEP=$(echo "$DEV_URL" | grep -oP '/deployments/\K[0-9]+')
 [[ -n "$DEV_DEP" ]] || { echo "FAIL: dev deployment did not redirect"; exit 1; }
 echo "Dev Deployment ID: $DEV_DEP"
-for i in {1..50}; do
+for i in {1..200}; do
   if curl_body "$BASE/deployments/$DEV_DEP/status" | grep -q 'succeeded'; then break; fi
   sleep 0.1
 done
+curl_body "$BASE/deployments/$DEV_DEP/status" | grep -q succeeded || { echo "FAIL: app dev deployment did not succeed"; exit 1; }
 echo "  Dev deploy succeeded: OK"
 
 # Deploy to staging -> should succeed
@@ -508,10 +523,11 @@ STAGING_URL=$(curl -s -b "$COOKIES" -D - -o /dev/null -X POST -d "release_id=$AP
 STAGING_DEP=$(echo "$STAGING_URL" | grep -oP '/deployments/\K[0-9]+')
 [[ -n "$STAGING_DEP" ]] || { echo "FAIL: staging deployment did not redirect"; exit 1; }
 echo "Staging Deployment ID: $STAGING_DEP"
-for i in {1..50}; do
+for i in {1..200}; do
   if curl_body "$BASE/deployments/$STAGING_DEP/status" | grep -q 'succeeded'; then break; fi
   sleep 0.1
 done
+curl_body "$BASE/deployments/$STAGING_DEP/status" | grep -q succeeded || { echo "FAIL: app staging deployment did not succeed"; exit 1; }
 echo "  Staging deploy succeeded: OK"
 
 # Deploy to prod -> should be pending_approval
@@ -762,7 +778,7 @@ API_ENV_ID=$(echo "$API_ENV" | python3 -c "import sys,json; print(json.load(sys.
 [[ -n "$API_ENV_ID" ]] || { echo "FAIL: create env did not return id: $API_ENV"; exit 1; }
 echo "  Environment CRUD: OK ($API_ENV_ID)"
 
-CODE=$(api_post_code '{"name":"bare-path-step","script_body":"echo ready"}' \
+CODE=$(api_post_code "{\"name\":\"bare-path-step\",\"script_body\":\"echo ready\",\"container_image\":\"$BASH_IMAGE\"}" \
     "$BASE/api/v1/projects/$API_PROJECT_ID/steps")
 [[ "$CODE" == "201" ]] || { echo "FAIL: bare-path step create got $CODE"; exit 1; }
 STEP_ID=$(api_item_id_by_name "$BASE/api/v1/projects/$API_PROJECT_ID/steps" bare-path-step)
@@ -774,7 +790,7 @@ CODE=$(api_post_code '{"name":"BARE_PATH_VAR","value":"ready"}' \
 VAR_ID=$(api_item_id_by_name "$BASE/api/v1/projects/$API_PROJECT_ID/variables" BARE_PATH_VAR)
 [[ -n "$VAR_ID" ]] || { echo "FAIL: bare-path variable not persisted"; exit 1; }
 
-CODE=$(api_post_code '{"name":"bare-path-template","script_body":"echo ready"}' \
+CODE=$(api_post_code "{\"name\":\"bare-path-template\",\"script_body\":\"echo ready\",\"container_image\":\"$BASH_IMAGE\"}" \
     "$BASE/api/v1/templates")
 [[ "$CODE" == "201" ]] || { echo "FAIL: bare-path template create got $CODE"; exit 1; }
 TEMPLATE_ID=$(api_item_id_by_name "$BASE/api/v1/templates" bare-path-template)
@@ -784,11 +800,11 @@ echo "  Bare-path API step, variable, and template writes: OK"
 echo "=== Runbook API and web contracts ==="
 RUNBOOK_ENV=$(api_post '{"name":"runbook-e2e-env"}' "$BASE/api/v1/environments")
 RUNBOOK_ENV_ID=$(echo "$RUNBOOK_ENV" | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
-RUNBOOK_CREATED=$(api_post '{"name":"e2e-maintenance","steps":[{"name":"inspect","script_body":"printf runbook-e2e-v1","interpreter":"bash"}]}' \
+RUNBOOK_CREATED=$(api_post "{\"name\":\"e2e-maintenance\",\"steps\":[{\"name\":\"inspect\",\"script_body\":\"printf runbook-e2e-v1\",\"interpreter\":\"bash\",\"container_image\":\"$BASH_IMAGE\"}]}" \
     "$BASE/api/v1/projects/$API_PROJECT_ID/runbooks")
 RUNBOOK_ID=$(echo "$RUNBOOK_CREATED" | python3 -c 'import sys,json; print(json.load(sys.stdin)["runbook"]["id"])')
 RUNBOOK_V1=$(echo "$RUNBOOK_CREATED" | python3 -c 'import sys,json; print(json.load(sys.stdin)["version"]["id"])')
-RUNBOOK_UPDATED=$(api_put '{"steps":[{"name":"inspect","script_body":"printf runbook-e2e-v2","interpreter":"bash"}]}' \
+RUNBOOK_UPDATED=$(api_put "{\"steps\":[{\"name\":\"inspect\",\"script_body\":\"printf runbook-e2e-v2\",\"interpreter\":\"bash\",\"container_image\":\"$BASH_IMAGE\"}]}" \
     "$BASE/api/v1/projects/$API_PROJECT_ID/runbooks/$RUNBOOK_ID")
 RUNBOOK_V2=$(echo "$RUNBOOK_UPDATED" | python3 -c 'import sys,json; print(json.load(sys.stdin)["version"]["id"])')
 [[ "$RUNBOOK_V1" != "$RUNBOOK_V2" ]] || { echo "FAIL: runbook version did not advance"; exit 1; }
@@ -887,6 +903,12 @@ INTERPRETER_ENV_ID=$(echo "$INTERPRETER_ENV" | python3 -c "import sys,json; prin
 [[ -n "$INTERPRETER_PROJECT_ID" && -n "$INTERPRETER_ENV_ID" ]] || {
     echo "FAIL: could not create interpreter project/environment"; exit 1;
 }
+CODE=$(api_post_code '{"name":"no-image","script_body":"true"}' \
+    "$BASE/api/v1/projects/$INTERPRETER_PROJECT_ID/steps")
+[[ "$CODE" == "400" ]] || { echo "FAIL: API accepted a local step without an image ($CODE)"; exit 1; }
+CODE=$(curl_silent -X POST -d "name=no-image&script_body=true&csrf_token=$CSRF" \
+    "$BASE/projects/$INTERPRETER_PROJECT_ID/steps")
+[[ "$CODE" == "422" ]] || { echo "FAIL: web accepted a local step without an image ($CODE)"; exit 1; }
 
 CODE=$(api_post_code '{"name":"invalid","interpreter":"/bin/sh"}' \
     "$BASE/api/v1/projects/$INTERPRETER_PROJECT_ID/steps")
@@ -900,10 +922,10 @@ CODE=$(curl_silent -X POST \
 [[ "$CODE" == "422" ]] || { echo "FAIL: web invalid interpreter got $CODE, want 422"; exit 1; }
 
 INTERPRETER_BASH_STEP=$(api_post \
-    '{"name":"bash-step","script_body":"echo bash-e2e","interpreter":"bash"}' \
+    "{\"name\":\"bash-step\",\"script_body\":\"echo bash-e2e\",\"interpreter\":\"bash\",\"container_image\":\"$BASH_IMAGE\"}" \
     "$BASE/api/v1/projects/$INTERPRETER_PROJECT_ID/steps")
 INTERPRETER_PYTHON_STEP=$(api_post \
-    '{"name":"python-step","script_body":"print(\"python-e2e\")","interpreter":"python3"}' \
+    "{\"name\":\"python-step\",\"script_body\":\"print(\\\"python-e2e\\\")\",\"interpreter\":\"python3\",\"container_image\":\"$PYTHON_IMAGE\"}" \
     "$BASE/api/v1/projects/$INTERPRETER_PROJECT_ID/steps")
 INTERPRETER_PYTHON_STEP_ID=$(echo "$INTERPRETER_PYTHON_STEP" | python3 -c \
     "import sys,json; d=json.load(sys.stdin); assert d['interpreter']=='python3'; print(d['id'])")
@@ -931,7 +953,7 @@ assert re.search(r"<option[^>]*value=\"python3\"[^>]*selected", page), page
 CODE=$(curl_silent -X PUT \
     --data-urlencode 'name=python-step' \
     --data-urlencode 'script_body=print("python-e2e")' \
-    -d "interpreter=python3&sort_order=2&execution_target=local&csrf_token=$CSRF" \
+    -d "interpreter=python3&sort_order=2&execution_target=local&container_image=$PYTHON_IMAGE&csrf_token=$CSRF" \
     "$BASE/projects/$INTERPRETER_PROJECT_ID/steps/$INTERPRETER_PYTHON_STEP_ID")
 [[ "$CODE" == "200" ]] || { echo "FAIL: web interpreter step update got $CODE"; exit 1; }
 INTERPRETER_STEPS_PAGE=$(curl_body \
@@ -941,7 +963,7 @@ grep -q 'Interpreter: python3' <<<"$INTERPRETER_STEPS_PAGE" || {
 }
 
 INTERPRETER_TEMPLATE=$(api_post \
-    '{"name":"python-template","script_body":"print(\"template\")","interpreter":"python3"}' \
+    "{\"name\":\"python-template\",\"script_body\":\"print(\\\"template\\\")\",\"interpreter\":\"python3\",\"container_image\":\"$PYTHON_IMAGE\"}" \
     "$BASE/api/v1/templates")
 INTERPRETER_TEMPLATE_ID=$(echo "$INTERPRETER_TEMPLATE" | python3 -c \
     "import sys,json; d=json.load(sys.stdin); assert d['interpreter']=='python3'; print(d['id'])")
@@ -965,7 +987,7 @@ assert re.search(r"<option[^>]*value=\"python3\"[^>]*selected", page), page
 CODE=$(curl_silent -X PUT \
     --data-urlencode 'name=python-template' \
     --data-urlencode 'script_body=Write-Output template' \
-    -d "interpreter=pwsh&csrf_token=$CSRF" \
+    -d "interpreter=pwsh&container_image=$PWSH_IMAGE&csrf_token=$CSRF" \
     "$BASE/templates/$INTERPRETER_TEMPLATE_ID")
 [[ "$CODE" == "303" ]] || { echo "FAIL: web template interpreter update got $CODE"; exit 1; }
 INTERPRETER_TEMPLATES_PAGE=$(curl_body "$BASE/templates")
@@ -981,7 +1003,7 @@ grep -q 'Interpreter: pwsh' <<<"$INTERPRETER_TEMPLATE_HISTORY_PAGE" || {
     echo "FAIL: template history did not display pwsh"; exit 1;
 }
 INTERPRETER_TEMPLATE_API_UPDATE=$(api_put \
-    '{"name":"python-template","script_body":"Write-Output template","interpreter":"pwsh"}' \
+    "{\"name\":\"python-template\",\"script_body\":\"Write-Output template\",\"interpreter\":\"pwsh\",\"container_image\":\"$PWSH_IMAGE\"}" \
     "$BASE/api/v1/templates/$INTERPRETER_TEMPLATE_ID")
 echo "$INTERPRETER_TEMPLATE_API_UPDATE" | python3 -c \
     "import sys,json; assert json.load(sys.stdin)['interpreter']=='pwsh'"
@@ -1045,7 +1067,7 @@ grep -q '>python3<' <<<"$INTERPRETER_DEPLOYMENT_PAGE" || {
 echo "  Mixed Bash/Python deployment: OK"
 
 INTERPRETER_UPDATED_STEP=$(api_put \
-    '{"name":"python-step","script_body":"Write-Output refreshed","interpreter":"pwsh","sort_order":2}' \
+    "{\"name\":\"python-step\",\"script_body\":\"Write-Output refreshed\",\"interpreter\":\"pwsh\",\"container_image\":\"$PWSH_IMAGE\",\"sort_order\":2}" \
     "$BASE/api/v1/projects/$INTERPRETER_PROJECT_ID/steps/$INTERPRETER_PYTHON_STEP_ID")
 echo "$INTERPRETER_UPDATED_STEP" | python3 -c \
     "import sys,json; assert json.load(sys.stdin)['interpreter']=='pwsh'"
@@ -1097,6 +1119,49 @@ if grep -q '>pwsh<' <<<"$INTERPRETER_REDEPLOY_PAGE"; then
 fi
 echo "  Interpreter validation and immutable redeploy snapshot: OK"
 
+MISSING_PROJECT=$(api_post '{"name":"missing-image"}' "$BASE/api/v1/projects")
+MISSING_PROJECT_ID=$(echo "$MISSING_PROJECT" | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
+MISSING_STEP=$(api_post '{"name":"missing-runtime-image","script_body":"echo should-not-run","container_image":"localhost/durpdeploy-e2e-missing:never"}' \
+    "$BASE/api/v1/projects/$MISSING_PROJECT_ID/steps")
+echo "$MISSING_STEP" | python3 -c 'import sys,json; assert json.load(sys.stdin)["container_image"] == "localhost/durpdeploy-e2e-missing:never"'
+MISSING_RELEASE=$(api_post '{"version":"missing-image"}' \
+    "$BASE/api/v1/projects/$MISSING_PROJECT_ID/releases")
+MISSING_RELEASE_ID=$(echo "$MISSING_RELEASE" | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
+MISSING_DEP=$(api_post "{\"release_id\":$MISSING_RELEASE_ID,\"environment_id\":$INTERPRETER_ENV_ID}" \
+    "$BASE/api/v1/projects/$MISSING_PROJECT_ID/deployments")
+MISSING_DEP_ID=$(echo "$MISSING_DEP" | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
+for i in {1..200}; do
+    MISSING_STATUS=$(api_get "$BASE/api/v1/deployments/$MISSING_DEP_ID/status" \
+        | python3 -c 'import sys,json; print(json.load(sys.stdin)["status"])')
+    [[ "$MISSING_STATUS" =~ ^(failed|succeeded|cancelled)$ ]] && break
+    sleep 0.1
+done
+[[ "$MISSING_STATUS" == "failed" ]] || { echo "FAIL: missing image status=$MISSING_STATUS"; exit 1; }
+MISSING_LOGS=$(api_get "$BASE/api/v1/deployments/$MISSING_DEP_ID/logs")
+grep -q 'missing-runtime-image.*failed' <<<"$MISSING_LOGS" || { echo "FAIL: missing image failure not logged"; exit 1; }
+echo "  Missing execution image fails without pulling: OK"
+
+ISOLATION_PROJECT=$(api_post '{"name":"container-isolation"}' "$BASE/api/v1/projects")
+ISOLATION_PROJECT_ID=$(echo "$ISOLATION_PROJECT" | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
+ISOLATION_STEP=$(api_post "{\"name\":\"isolation\",\"script_body\":\"test ! -e /data/durpdeploy.db && test ! -e /run/podman/podman.sock && test ! -e /run/user && if (echo hi > /dev/tcp/127.0.0.1/$CONTROL_PLANE_PORT) 2>/dev/null; then exit 1; fi; echo isolated\",\"container_image\":\"$BASH_IMAGE\"}" \
+    "$BASE/api/v1/projects/$ISOLATION_PROJECT_ID/steps")
+echo "$ISOLATION_STEP" | python3 -c 'import sys,json; assert json.load(sys.stdin)["name"] == "isolation"'
+ISOLATION_RELEASE=$(api_post '{"version":"v1"}' "$BASE/api/v1/projects/$ISOLATION_PROJECT_ID/releases")
+ISOLATION_RELEASE_ID=$(echo "$ISOLATION_RELEASE" | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
+ISOLATION_DEP=$(api_post "{\"release_id\":$ISOLATION_RELEASE_ID,\"environment_id\":$INTERPRETER_ENV_ID}" \
+    "$BASE/api/v1/projects/$ISOLATION_PROJECT_ID/deployments")
+ISOLATION_DEP_ID=$(echo "$ISOLATION_DEP" | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
+for i in {1..200}; do
+    ISOLATION_STATUS=$(api_get "$BASE/api/v1/deployments/$ISOLATION_DEP_ID/status" \
+        | python3 -c 'import sys,json; print(json.load(sys.stdin)["status"])')
+    [[ "$ISOLATION_STATUS" =~ ^(failed|succeeded|cancelled)$ ]] && break
+    sleep 0.1
+done
+[[ "$ISOLATION_STATUS" == succeeded ]] || { echo "FAIL: step isolation status=$ISOLATION_STATUS"; exit 1; }
+api_get "$BASE/api/v1/deployments/$ISOLATION_DEP_ID/logs" | grep -q isolated \
+    || { echo "FAIL: isolation probe did not execute"; exit 1; }
+echo "  Step cannot reach service state, engine socket, or control plane: OK"
+
 CODE=$(curl_silent -X POST \
     -d "csrf_token=$CSRF" \
     "$BASE/projects/$INTERPRETER_PROJECT_ID/steps/$INTERPRETER_PYTHON_STEP_ID/save-as-template")
@@ -1128,7 +1193,7 @@ assert len(matches) == 1 and matches[0]["interpreter"] == "pwsh", matches
 echo "  Web template save/insert preserves interpreter: OK"
 
 # A5: Step CRUD.
-API_STEP=$(api_post '{"name":"long-step","script_body":"sleep 10"}' "$BASE/api/v1/projects/$API_PROJECT_ID/steps")
+API_STEP=$(api_post "{\"name\":\"long-step\",\"script_body\":\"sleep 10\",\"container_image\":\"$BASH_IMAGE\"}" "$BASE/api/v1/projects/$API_PROJECT_ID/steps")
 API_STEP_ID=$(echo "$API_STEP" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
 [[ -n "$API_STEP_ID" ]] || { echo "FAIL: create step did not return id: $API_STEP"; exit 1; }
 echo "  Step CRUD: OK ($API_STEP_ID)"
@@ -1277,7 +1342,7 @@ echo "  Release snapshot secret masked: OK"
 # written in two halves so the scrubber must stitch the literal across
 # chunk boundaries; the live ndjson read below catches a regression.
 SECRET_MASKED_STEP=$(api_post \
-    '{"name":"echo-secret","script_body":"echo secret=$E2E_SECRET"}' \
+    "{\"name\":\"echo-secret\",\"script_body\":\"echo secret=\u0024E2E_SECRET\",\"container_image\":\"$BASH_IMAGE\",\"variable_names\":[\"E2E_SECRET\"]}" \
     "$BASE/api/v1/projects/$API_PROJECT_ID/steps")
 SECRET_MASKED_STEP_ID=$(echo "$SECRET_MASKED_STEP" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
 [[ -n "$SECRET_MASKED_STEP_ID" ]] || { echo "FAIL: masked round-trip step create failed: $SECRET_MASKED_STEP"; exit 1; }
@@ -1381,7 +1446,7 @@ echo "  Deployment cancelled: OK"
 
 # A8: Log streaming (ndjson). Use a fresh step + release + deployment so we can
 # read at least one line from the live stream and then cancel it.
-API_LOG_STEP=$(api_post '{"name":"streamer","script_body":"for i in 1 2 3; do echo api-line-$i; sleep 0.1; done"}' \
+API_LOG_STEP=$(api_post "{\"name\":\"streamer\",\"script_body\":\"for i in 1 2 3; do echo api-line-\$i; sleep 0.1; done\",\"container_image\":\"$BASH_IMAGE\"}" \
     "$BASE/api/v1/projects/$API_PROJECT_ID/steps")
 API_LOG_RELEASE=$(api_post '{"version":"v2"}' "$BASE/api/v1/projects/$API_PROJECT_ID/releases")
 API_LOG_RELEASE_ID=$(echo "$API_LOG_RELEASE" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
