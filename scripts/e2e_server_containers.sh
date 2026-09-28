@@ -79,7 +79,8 @@ sudo chown -R 10001:10001 "$tmp/app-ssh"
 chmod 755 "$tmp"
 
 exec_podman() {
-    sudo -u "$account" env -i HOME="/home/$account" USER="$account" \
+    sudo -D "/home/$account" -u "$account" env -i \
+        HOME="/home/$account" USER="$account" \
         LOGNAME="$account" PATH=/usr/local/bin:/usr/bin:/bin \
         XDG_RUNTIME_DIR="/run/user/$uid" \
         DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus" \
