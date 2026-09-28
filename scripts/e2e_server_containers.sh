@@ -48,10 +48,10 @@ sudo -u "$account" env XDG_RUNTIME_DIR="/run/user/$uid" \
     systemctl --user start podman.socket
 socket="/run/user/$uid/podman/podman.sock"
 for i in {1..50}; do
-    test -S "$socket" && break
+    sudo -u "$account" test -S "$socket" && break
     sleep 0.1
 done
-if ! test -S "$socket"; then
+if ! sudo -u "$account" test -S "$socket"; then
     printf 'Rootless Podman socket missing at %s\n' "$socket" >&2
     sudo -u "$account" env XDG_RUNTIME_DIR="/run/user/$uid" \
         DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus" \
