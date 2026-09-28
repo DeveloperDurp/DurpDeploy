@@ -558,6 +558,117 @@ func TestRecoverPendingDeploymentsFailsOrphanedRunningDeployment(t *testing.T) {
 	}
 }
 
+func TestStartupRecoveryBlocksLocalRetryWhenPodmanSweepFails(t *testing.T) {
+	// Given
+	dir := t.TempDir()
+	cli := `#!/bin/sh
+case "$3" in
+info) printf '{"host":{"security":{"rootless":true}}}';;
+ps) printf 'orphan-container-id\n';;
+rm) if [ "$PODMAN_SWEEP_FAIL" = 1 ]; then exit 7; fi;;
+esac
+`
+	if err := os.WriteFile(
+		filepath.Join(dir, "podman"),
+		[]byte(cli),
+		0o700,
+	); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv(
+		"DURPDEPLOY_PODMAN_URL",
+		"ssh://executor@example.invalid/run/user/1234/podman/podman.sock",
+	)
+	t.Setenv("DURPDEPLOY_PODMAN_NAMESPACE", "test-suite")
+	conn, err := migrate.Run(tempDSN(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	repo := repository.New(conn)
+	ctx := t.Context()
+	project, err := repo.Queries.CreateProject(
+		ctx,
+		db.CreateProjectParams{Name: "p"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	env, err := repo.Queries.CreateEnvironment(
+		ctx,
+		db.CreateEnvironmentParams{Name: "e"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	localRelease, err := repo.Queries.CreateRelease(ctx, db.CreateReleaseParams{
+		ProjectID: project.ID, Version: "local",
+		StepsJson: `[{"name":"local","container_image":"alpine:3.20"}]`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	local, err := repo.CreateDeployment(ctx, db.CreateDeploymentParams{
+		ReleaseID: localRelease.ID, EnvironmentID: env.ID, Status: "pending",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.Queries.UpdateDeploymentStatus(
+		ctx,
+		db.UpdateDeploymentStatusParams{
+			ID: local.Deployment.ID, Status: "running",
+		},
+	); err != nil {
+		t.Fatal(err)
+	}
+	remoteRelease, err := repo.Queries.CreateRelease(
+		ctx,
+		db.CreateReleaseParams{
+			ProjectID: project.ID, Version: "remote", StepsJson: "[]",
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	remote, err := repo.Queries.CreateDeployment(ctx, db.CreateDeploymentParams{
+		ReleaseID: remoteRelease.ID, EnvironmentID: env.ID, Status: "running",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// When: the sweep cannot remove the orphan.
+	t.Setenv("PODMAN_SWEEP_FAIL", "1")
+	recoverPendingDeployments(
+		ctx,
+		runner.New(repo, runner.NewLogBroker()),
+		repo,
+	)
+
+	// Then: local cleanup remains uncertain while unrelated recovery continues.
+	stored, err := repo.Queries.GetDeployment(ctx, local.Deployment.ID)
+	if err != nil || stored.Status != "cleanup_unconfirmed" {
+		t.Fatalf("local status = %+v: %v", stored, err)
+	}
+	other, err := repo.Queries.GetDeployment(ctx, remote.ID)
+	if err != nil || other.Status != "failed" {
+		t.Fatalf("other status = %+v: %v", other, err)
+	}
+	// When: a later startup sweep succeeds.
+	t.Setenv("PODMAN_SWEEP_FAIL", "0")
+	recoverPendingDeployments(
+		ctx,
+		runner.New(repo, runner.NewLogBroker()),
+		repo,
+	)
+	stored, err = repo.Queries.GetDeployment(ctx, local.Deployment.ID)
+	if err != nil || stored.Status != "failed" {
+		t.Fatalf("confirmed local status = %+v: %v", stored, err)
+	}
+}
+
 func TestRecoverPendingDeploymentsCancelsActiveRemoteStepBeforeFailure(
 	t *testing.T,
 ) {

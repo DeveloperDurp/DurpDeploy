@@ -370,13 +370,25 @@ func recoverPendingDeployments(
 		if _, err := q.CancelOrphanedRemoteStepRuns(ctx, now); err != nil {
 			return err
 		}
+		if !rnr.ContainerRuntimeReady() {
+			if _, err := q.MarkUnreconciledLocalDeployments(
+				ctx,
+				timestamp,
+			); err != nil {
+				return err
+			}
+		}
 		failed, err = q.FailOrphanedDeployments(ctx, timestamp)
 		return err
 	})
 	if err != nil {
 		slog.Error("startup recovery: fail orphaned deployments", "err", err)
 	} else if failed > 0 {
-		slog.Warn("startup recovery: failed orphaned deployments", "count", failed)
+		slog.Warn(
+			"startup recovery: failed orphaned deployments",
+			"count",
+			failed,
+		)
 	}
 	pending, err := repo.Queries.ListPendingDeployments(ctx)
 	if err != nil {

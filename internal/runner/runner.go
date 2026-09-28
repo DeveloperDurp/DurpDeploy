@@ -14,23 +14,16 @@ import (
 	"durpdeploy/internal/repository"
 )
 
-const (
-	defaultStepTimeout = 5 * time.Minute
-	serviceUsername    = "durpdeploy"
-)
+const defaultStepTimeout = 5 * time.Minute
 
 type DeploymentRunner struct {
-	repo    *repository.Repository
-	broker  *LogBroker
-	mu      sync.Mutex
-	cancels map[int64]context.CancelFunc
-	// pgids tracks the process group of every step currently executing,
-	// keyed by deployment ID. Populated in runStepAttempt, cleared when
-	// the step exits. Used by KillAll to reap orphans on server shutdown.
-	// ponytail: one entry per deployment (steps run sequentially, no
-	// parallel step execution), so a plain map is enough.
-	pgids      map[int64]int
-	sandboxErr error
+	repo     *repository.Repository
+	broker   *LogBroker
+	mu       sync.Mutex
+	cancels  map[int64]context.CancelFunc
+	attempts map[int64]string
+	podman   podmanEndpoint
+	localErr error
 	// bus publishes deployment_started/succeeded/failed events for the
 	// Slack/email notifiers (Stage 3). Nil until SetEventBus is called —
 	// existing callers (tests, recovery path) that never call it simply
@@ -47,17 +40,28 @@ type deploymentStep struct {
 	MaxRetries      int64    `json:"max_retries"`
 	ExecutionTarget string   `json:"execution_target"`
 	AgentSelectors  []string `json:"agent_selectors"`
+	ContainerImage  string   `json:"container_image"`
+	VariableNames   []string `json:"variable_names"`
 }
 
 func New(repo *repository.Repository, broker *LogBroker) *DeploymentRunner {
-	sandboxErr := validateExecutionBoundary()
-	return &DeploymentRunner{
-		repo:       repo,
-		broker:     broker,
-		cancels:    make(map[int64]context.CancelFunc),
-		pgids:      make(map[int64]int),
-		sandboxErr: sandboxErr,
+	endpoint, localErr := newPodmanEndpoint()
+	r := &DeploymentRunner{
+		repo:     repo,
+		broker:   broker,
+		cancels:  make(map[int64]context.CancelFunc),
+		attempts: make(map[int64]string),
+		podman:   endpoint,
+		localErr: localErr,
 	}
+	if localErr == nil {
+		r.localErr = r.reconcileAttempts()
+	}
+	return r
+}
+
+func (r *DeploymentRunner) ContainerRuntimeReady() bool {
+	return r.localErr == nil
 }
 
 func (r *DeploymentRunner) Run(
@@ -149,7 +153,8 @@ func (r *DeploymentRunner) Run(
 			ctx:          ctx,
 			scrubber:     scrubber,
 		}
-		if step.ExecutionTarget == "agent" {
+		switch step.ExecutionTarget {
+		case "agent":
 			err := r.runRemoteStep(ctx, runCtx, remoteStepRequest{
 				deploymentID: deploymentID,
 				stepIndex:    int64(stepIndex),
@@ -172,6 +177,20 @@ func (r *DeploymentRunner) Run(
 				return
 			}
 			continue
+		case "", "local":
+		default:
+			r.failStep(ctx, runCtx, events.Event{
+				Type:          events.DeploymentFailed,
+				DeploymentID:  deploymentID,
+				ProjectID:     release.ProjectID,
+				EnvironmentID: environmentID,
+				Message: fmt.Sprintf(
+					"Deployment #%d failed: unknown execution target %q",
+					deploymentID,
+					step.ExecutionTarget,
+				),
+			}, true)
+			return
 		}
 
 		var lastErr error
@@ -185,6 +204,9 @@ func (r *DeploymentRunner) Run(
 				attempt:      attempt,
 			})
 			if lastErr == nil {
+				break
+			}
+			if errors.Is(lastErr, errContainerCleanup) {
 				break
 			}
 			if runCtx.Err() != nil {
@@ -213,6 +235,11 @@ func (r *DeploymentRunner) Run(
 		}
 
 		if lastErr != nil {
+			if errors.Is(lastErr, errContainerCleanup) {
+				r.persistCompletion(ctx, runCtx, deploymentID,
+					"cleanup_unconfirmed", false)
+				return
+			}
 			r.failStep(ctx, runCtx, events.Event{
 				Type: events.DeploymentFailed, DeploymentID: deploymentID,
 				ProjectID: release.ProjectID, EnvironmentID: environmentID,

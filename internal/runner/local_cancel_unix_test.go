@@ -1,14 +1,10 @@
 //go:build linux
 
-package runner_test
+package runner
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"os"
-	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -16,99 +12,251 @@ import (
 	"durpdeploy/internal/db"
 )
 
-func TestLocalCancellationStopsChildBeforeFiveSeconds(t *testing.T) {
-	ctx, cancelRun := context.WithCancel(context.Background())
-	defer cancelRun()
-	repo, deploymentRunner, _ := setupRunnerHarness(t)
-	marker := filepath.Join(t.TempDir(), "started")
-	script := fmt.Sprintf(
-		`sleep 10 & child=$!; printf '%%s' "$child" > %q; wait "$child"`,
-		marker,
+func TestLocalCancellationRemovesRemoteAttempt(t *testing.T) {
+	// Given
+	r, repo, trace := podmanFixture(t, `
+case "$3" in
+info) printf '{"host":{"security":{"rootless":true}}}';;
+ps) ;;
+run) printf 'started\n' > "$PODMAN_TRACE"; exec sleep 30;;
+rm) printf '%s\n' "$*" > "$PODMAN_TRACE.removed";;
+esac
+`)
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	result := make(chan error, 1)
+	go func() {
+		result <- r.runStepAttempt(ctx, localStepAttempt{
+			deploymentID: 7, attempt: 1,
+			step: deploymentStep{ContainerImage: "registry.example/worker:1", ScriptBody: "exit 0"},
+			logWriter: &broadcastWriter{ctx: t.Context(), repo: repo, broker: r.broker,
+				scrubber: NewScrubber(nil)},
+		})
+	}()
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	deadline := time.NewTimer(2 * time.Second)
+	defer deadline.Stop()
+	for {
+		if _, err := os.Stat(trace); err == nil {
+			break
+		}
+		select {
+		case <-ticker.C:
+		case <-deadline.C:
+			t.Fatal("Podman attempt did not start")
+		}
+	}
+	// When
+	cancel()
+	// Then
+	select {
+	case err := <-result:
+		if err == nil {
+			t.Fatal("cancelled attempt succeeded")
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("cancelled attempt did not terminate")
+	}
+	removed, err := os.ReadFile(trace + ".removed")
+	if err != nil ||
+		!strings.Contains(
+			string(removed),
+			"--force --time=0 --ignore durpdeploy-7-1-",
+		) {
+		t.Fatalf("remote cleanup %q: %v", removed, err)
+	}
+}
+
+func TestKillAllCancelsAndRemovesTrackedContainer(t *testing.T) {
+	// Given
+	r, repo, trace := podmanFixture(t, `
+case "$3" in
+info) printf '{"host":{"security":{"rootless":true}}}';;
+ps) ;;
+run) printf 'started' > "$PODMAN_TRACE"; exec sleep 30;;
+rm) printf '%s\n' "$*" >> "$PODMAN_TRACE.removed";;
+esac
+`)
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	r.RegisterCancel(11, cancel)
+	result := make(chan error, 1)
+	go func() {
+		result <- r.runStepAttempt(ctx, localStepAttempt{
+			deploymentID: 11, attempt: 1,
+			step: deploymentStep{ContainerImage: "registry.example/worker:1"},
+			logWriter: &broadcastWriter{ctx: t.Context(), repo: repo, broker: r.broker,
+				scrubber: NewScrubber(nil)},
+		})
+	}()
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	deadline := time.NewTimer(2 * time.Second)
+	defer deadline.Stop()
+	for {
+		if _, err := os.Stat(trace); err == nil {
+			break
+		}
+		select {
+		case <-ticker.C:
+		case <-deadline.C:
+			t.Fatal("Podman attempt did not start")
+		}
+	}
+	// When
+	r.KillAll()
+	// Then
+	select {
+	case err := <-result:
+		if err == nil {
+			t.Fatal("shutdown attempt succeeded")
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("shutdown attempt did not terminate")
+	}
+	removed, err := os.ReadFile(trace + ".removed")
+	if err != nil ||
+		!strings.Contains(
+			string(removed),
+			"--force --time=0 --ignore durpdeploy-11-1-",
+		) {
+		t.Fatalf("shutdown cleanup %q: %v", removed, err)
+	}
+}
+
+func TestLocalTimeoutRemovesRemoteAttempt(t *testing.T) {
+	// Given
+	r, repo, trace := podmanFixture(t, `
+case "$3" in
+info) printf '{"host":{"security":{"rootless":true}}}';;
+ps) ;;
+run) printf '%s\n' "$@" > "$PODMAN_TRACE"; exec sleep 30;;
+rm) printf '%s\n' "$*" > "$PODMAN_TRACE.removed";;
+esac
+`)
+	// When
+	err := r.runStepAttempt(t.Context(), localStepAttempt{
+		deploymentID: 9,
+		attempt:      1,
+		step: deploymentStep{
+			ContainerImage: "registry.example/worker:1",
+			TimeoutSeconds: 1,
+		},
+		logWriter: &broadcastWriter{
+			ctx:      t.Context(),
+			repo:     repo,
+			broker:   r.broker,
+			scrubber: NewScrubber(nil),
+		},
+	})
+	// Then
+	if err == nil {
+		t.Fatal("timed-out attempt succeeded")
+	}
+	removed, err := os.ReadFile(trace + ".removed")
+	if err != nil ||
+		!strings.Contains(
+			string(removed),
+			"--force --time=0 --ignore durpdeploy-9-1-",
+		) {
+		t.Fatalf("timeout cleanup %q: %v", removed, err)
+	}
+	args, err := os.ReadFile(trace)
+	if err != nil || !strings.Contains(string(args), "--timeout=1\n") {
+		t.Fatalf("runtime timeout %q: %v", args, err)
+	}
+}
+
+func TestLocalCancellationCleanupFailureDoesNotConfirmCancellation(
+	t *testing.T,
+) {
+	// Given: the remote runtime does not acknowledge removal after a cancelled run.
+	r, repo, trace := podmanFixture(t, `
+case "$3" in
+info) printf '{"host":{"security":{"rootless":true}}}';;
+ps) ;;
+run) printf 'started\n' > "$PODMAN_TRACE"; exec sleep 30;;
+rm) printf 'cleanup failed\n'; exit 7;;
+esac
+`)
+	project, err := repo.Queries.CreateProject(
+		t.Context(),
+		db.CreateProjectParams{Name: "p"},
 	)
-	project, err := repo.Queries.CreateProject(ctx,
-		db.CreateProjectParams{Name: "cancel-child"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	environment, err := repo.Queries.CreateEnvironment(ctx,
-		db.CreateEnvironmentParams{Name: "cancel-child"})
+	env, err := repo.Queries.CreateEnvironment(
+		t.Context(),
+		db.CreateEnvironmentParams{Name: "e"},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	release, err := repo.Queries.CreateRelease(ctx, db.CreateReleaseParams{
-		ProjectID: project.ID, Version: "v1",
-		StepsJson: fmt.Sprintf(
-			`[{"name":"wait","script_body":%q,"interpreter":"bash"}]`,
-			script,
-		),
-	})
+	release, err := repo.Queries.CreateRelease(
+		t.Context(),
+		db.CreateReleaseParams{
+			ProjectID: project.ID,
+			Version:   "v1",
+			StepsJson: `[{"name":"local","container_image":"example.com/worker:1","script_body":"echo hi"}]`,
+		},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	created, err := repo.CreateDeployment(ctx, db.CreateDeploymentParams{
-		ReleaseID: release.ID, EnvironmentID: environment.ID,
-		Status: "pending",
-	})
+	created, err := repo.CreateDeployment(
+		t.Context(),
+		db.CreateDeploymentParams{
+			ReleaseID: release.ID, EnvironmentID: env.ID, Status: "pending",
+		},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		deploymentRunner.Run(ctx, created.Deployment.ID,
-			release.ID, environment.ID)
+		r.Run(t.Context(), created.Deployment.ID, release.ID, env.ID)
 	}()
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
-		if _, err := os.Stat(marker); err == nil {
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	deadline := time.NewTimer(2 * time.Second)
+	defer deadline.Stop()
+	for {
+		if _, err := os.Stat(trace); err == nil {
 			break
 		}
-		time.Sleep(10 * time.Millisecond)
+		select {
+		case <-ticker.C:
+		case <-deadline.C:
+			t.Fatal("Podman attempt did not start")
+		}
 	}
-	if _, err := os.Stat(marker); err != nil {
-		t.Fatal("local child did not start", err)
-	}
-	rawPID, err := os.ReadFile(marker)
-	if err != nil {
+	// When
+	if err := r.Cancel(created.Deployment.ID); err != nil {
 		t.Fatal(err)
 	}
-	childPID, err := strconv.Atoi(string(rawPID))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := deploymentRunner.Cancel(created.Deployment.ID); err != nil {
-		t.Fatal(err)
-	}
+	// Then: a failed rm is not proof that the remote process stopped.
 	select {
 	case <-done:
-	case <-time.After(5 * time.Second):
-		select {
-		case <-done:
-		case <-time.After(12 * time.Second):
-			cancelRun()
-			t.Fatal("cancelled local child did not stop")
-		}
-		t.Fatal(
-			"cancelled local child kept deployment running over five seconds",
-		)
+	case <-time.After(3 * time.Second):
+		t.Fatal("runner did not finish after cleanup failure")
 	}
-	stored, err := repo.Queries.GetDeployment(ctx, created.Deployment.ID)
-	if err != nil || stored.Status != "cancelled" {
-		t.Fatalf("deployment after cancellation=%+v error=%v", stored, err)
+	stored, err := repo.Queries.GetDeployment(
+		t.Context(),
+		created.Deployment.ID,
+	)
+	if err != nil || stored.Status != "cleanup_unconfirmed" ||
+		!stored.FinishedAt.Valid {
+		t.Fatalf("unconfirmed cancellation = %+v: %v", stored, err)
 	}
-	childDeadline := time.Now().Add(time.Second)
-	for {
-		status, err := os.ReadFile(fmt.Sprintf("/proc/%d/status", childPID))
-		if errors.Is(err, os.ErrNotExist) ||
-			(err == nil && strings.Contains(string(status), "State:\tZ")) {
-			break
-		}
-		if err != nil {
-			t.Fatal(err)
-		}
-		if time.Now().After(childDeadline) {
-			t.Fatalf("child process %d survived cancellation", childPID)
-		}
-		time.Sleep(10 * time.Millisecond)
+	logs, err := repo.Queries.ListDeploymentLogsByDeployment(
+		t.Context(),
+		created.Deployment.ID,
+	)
+	if err != nil || len(logs) != 1 ||
+		!strings.Contains(logs[0].Line, "container cleanup unconfirmed") {
+		t.Fatalf("unconfirmed cleanup logs = %+v: %v", logs, err)
 	}
 }

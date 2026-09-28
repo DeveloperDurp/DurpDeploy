@@ -3,6 +3,9 @@ package runner
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"strings"
+	"time"
 
 	"durpdeploy/internal/events"
 )
@@ -14,20 +17,33 @@ func (r *DeploymentRunner) SetEventBus(bus *events.Bus) {
 	r.bus = bus
 }
 
-// KillAll SIGKILLs the process group of every step currently running,
-// reaping their bash children so a server shutdown/restart never leaves
-// orphaned deploy processes behind (P1-3). Safe to call with no deployments
-// running.
+// KillAll cancels local attempts and forcibly removes their remote containers.
 func (r *DeploymentRunner) KillAll() {
 	r.mu.Lock()
-	pgids := make([]int, 0, len(r.pgids))
-	for _, pgid := range r.pgids {
-		pgids = append(pgids, pgid)
+	names := make([]string, 0, len(r.attempts))
+	for id, name := range r.attempts {
+		names = append(names, name)
+		if cancel := r.cancels[id]; cancel != nil {
+			cancel()
+		}
 	}
 	r.mu.Unlock()
-
-	for _, pgid := range pgids {
-		killProcessGroup(pgid)
+	for _, name := range names {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		output, err := r.podman.command(ctx, "rm", "--force", "--time=0", "--ignore", name).
+			CombinedOutput()
+		cancel()
+		if err != nil {
+			slog.Error(
+				"remove container on shutdown failed",
+				"name",
+				name,
+				"err",
+				err,
+				"output",
+				strings.TrimSpace(string(output)),
+			)
+		}
 	}
 }
 
@@ -35,16 +51,16 @@ func (r *DeploymentRunner) Broker() *LogBroker {
 	return r.broker
 }
 
-func (r *DeploymentRunner) trackProcessGroup(deploymentID int64, pgid int) {
+func (r *DeploymentRunner) trackAttempt(deploymentID int64, name string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.pgids[deploymentID] = pgid
+	r.attempts[deploymentID] = name
 }
 
-func (r *DeploymentRunner) untrackProcessGroup(deploymentID int64) {
+func (r *DeploymentRunner) untrackAttempt(deploymentID int64) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	delete(r.pgids, deploymentID)
+	delete(r.attempts, deploymentID)
 }
 
 func (r *DeploymentRunner) RegisterCancel(
