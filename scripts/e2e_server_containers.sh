@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
+trap 'printf "E2E failed at line %s\n" "$LINENO" >&2' ERR
 
 [[ "${GITHUB_ACTIONS:-}" == true ]] || { printf 'Run only on an ephemeral GitHub runner\n' >&2; exit 2; }
 
@@ -37,6 +38,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
+printf 'Provisioning rootless execution account\n'
 sudo useradd --create-home --shell /bin/bash "$account"
 uid=$(id -u "$account")
 sudo loginctl enable-linger "$account"
@@ -71,6 +73,7 @@ exec_podman() {
 }
 for step_image in docker.io/library/bash:5.2 docker.io/library/python:3.12-alpine \
     mcr.microsoft.com/powershell:7.4-ubuntu-22.04; do
+    printf 'Preloading %s\n' "$step_image"
     exec_podman pull "$step_image"
 done
 exec_podman run --rm --pull=never --entrypoint=bash docker.io/library/bash:5.2 -c 'test -x /usr/local/bin/bash || command -v bash'
@@ -79,6 +82,7 @@ exec_podman run --rm --pull=never --entrypoint=pwsh mcr.microsoft.com/powershell
 
 export DURPDEPLOY_PODMAN_NAMESPACE="$namespace"
 export DURPDEPLOY_PODMAN_URL="ssh://$account@127.0.0.1$socket"
+printf 'Checking rootless SSH connection\n'
 HOME="$tmp/host-home" podman --remote --url="$DURPDEPLOY_PODMAN_URL" info \
     --format '{{.Host.Security.Rootless}}' | grep -qx true
 
@@ -134,9 +138,11 @@ kill "$server_pid"
 wait "$server_pid" || true
 server_pid=
 
+printf 'Running host control-plane E2E\n'
 HOME="$tmp/host-home" DURPDEPLOY_E2E_PORT=18080 ./scripts/e2e_test.sh
 test -z "$(exec_podman ps -aq --filter "label=io.durpdeploy.namespace=$namespace")"
 
+printf 'Building containerized control plane\n'
 docker build -t "$image" .
 docker volume create "$volume" >/dev/null
 docker volume create "$identity_volume" >/dev/null
@@ -167,6 +173,7 @@ docker exec "$app_name" /bin/sh -c 'command -v podman && command -v ssh && test 
 docker exec "$app_name" podman --remote \
     --url="ssh://$account@host.containers.internal$socket" info \
     --format '{{.Host.Security.Rootless}}' | grep -qx true
+printf 'Running containerized control-plane E2E\n'
 DURPDEPLOY_E2E_CLIENT_ONLY=1 DURPDEPLOY_E2E_CONTROL_PLANE_PORT=18081 \
     DURPDEPLOY_BASE_URL=http://127.0.0.1:18081 \
     ./scripts/e2e_test.sh
