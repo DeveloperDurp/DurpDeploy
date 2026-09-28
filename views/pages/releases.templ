@@ -19,6 +19,8 @@ type ReleaseStep struct {
 	MaxRetries      int64    `json:"max_retries"`
 	ExecutionTarget string   `json:"execution_target"`
 	AgentSelectors  []string `json:"agent_selectors"`
+	ContainerImage  string   `json:"container_image"`
+	VariableNames   []string `json:"variable_names"`
 }
 
 func parseReleaseSteps(stepsJSON string) []ReleaseStep {
@@ -34,6 +36,25 @@ func releaseStepInterpreter(step ReleaseStep) string {
 		return "bash"
 	}
 	return step.Interpreter
+}
+
+// releaseStepLegacyHost flags a snapshotted step that has no container
+// image. The release cannot be deployed against any environment that
+// would run it on the host — every legacy step must be recreated and
+// re-snapshotted before the release is usable again.
+func releaseStepLegacyHost(step ReleaseStep) bool {
+	return step.ExecutionTarget == "local" && step.ContainerImage == ""
+}
+
+// releaseNeedsRecreation reports whether a release contains at least
+// one step that the runner can no longer execute.
+func releaseNeedsRecreation(steps []ReleaseStep) bool {
+	for _, step := range steps {
+		if releaseStepLegacyHost(step) {
+			return true
+		}
+	}
+	return false
 }
 
 func formatUnixTime(ts int64) string {
@@ -146,6 +167,9 @@ templ ReleaseRow(projectID int64, rv ReleaseView) {
 	<tr id={ fmt.Sprintf("release-row-%d", rv.Release.ID) }>
 		<td class="font-medium truncate">
 			<a href={ fmt.Sprintf("/projects/%d/releases/%d", projectID, rv.Release.ID) } class="link link-primary">{ rv.Release.Version }</a>
+			if releaseNeedsRecreation(parseReleaseSteps(rv.Release.StepsJson)) {
+				<span class="badge badge-warning badge-xs ml-1 align-middle" data-release-needs-recreation title="This release contains legacy local steps without a container image. Recreate those steps and snap a new release before deploying.">recreate</span>
+			}
 		</td>
 		<td class="whitespace-nowrap">{ formatUnixTime(rv.Release.CreatedAt) }</td>
 		<td>
@@ -222,6 +246,13 @@ templ ReleaseDetail(project db.Project, release db.Release, variables []db.Relea
 		</div>
 		<div class="card bg-base-200 p-4">
 			<h2 class="text-xl font-bold mb-4">Snapshotted Steps</h2>
+			if releaseNeedsRecreation(parseReleaseSteps(release.StepsJson)) {
+				<div class="alert alert-warning text-sm mb-4" data-release-needs-recreation>
+					<span>
+						This release contains legacy local steps without a container image. The runner will refuse to start them, so recreate those steps with a container image and snap a new release before deploying.
+					</span>
+				</div>
+			}
 			<table class="table table-zebra table-fixed w-full">
 				<thead>
 					<tr>
@@ -240,7 +271,12 @@ templ ReleaseDetail(project db.Project, release db.Release, variables []db.Relea
 						for _, step := range parseReleaseSteps(release.StepsJson) {
 							<tr>
 								<td>{ strconv.FormatInt(step.SortOrder, 10) }</td>
-								<td class="font-medium truncate">{ step.Name }</td>
+								<td class="font-medium truncate">
+									{ step.Name }
+									if releaseStepLegacyHost(step) {
+										<span class="badge badge-warning badge-xs ml-1 align-middle" data-release-step-legacy title="Legacy local step without a container image. Recreate with a container image before it can run again.">legacy</span>
+									}
+								</td>
 								<td class="whitespace-nowrap">{ releaseStepInterpreter(step) }</td>
 								<td class="truncate">
 									<code class="text-sm bg-base-300 px-2 py-1 rounded">

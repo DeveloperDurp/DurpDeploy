@@ -38,6 +38,7 @@ type projectHarness struct {
 
 func newProjectHarness(t *testing.T) *projectHarness {
 	t.Helper()
+	setupTestPodman(t)
 	dir := t.TempDir()
 	dsn := fmt.Sprintf(
 		"file:%s?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)",
@@ -110,7 +111,8 @@ func (h *projectHarness) makeRelease(
 ) db.Release {
 	h.t.Helper()
 	steps := []map[string]any{
-		{"name": "s1", "script_body": scriptBody, "sort_order": 1},
+		{"name": "s1", "script_body": scriptBody, "sort_order": 1,
+			"container_image": "alpine:3.20"},
 	}
 	stepsJSON, _ := json.Marshal(steps)
 	r, err := h.repo.Queries.CreateRelease(
@@ -706,7 +708,10 @@ func makeStepGlobal(
 	name, body string,
 ) {
 	t.Helper()
-	form := url.Values{"name": {name}, "script_body": {body}}
+	form := url.Values{
+		"name": {name}, "script_body": {body},
+		"container_image": {"alpine:3.20"},
+	}
 	form.Set("csrf_token", h.csrfToken())
 	resp, err := h.authedClient().PostForm(
 		fmt.Sprintf("%s/projects/%d/steps", h.server.URL, pid),
@@ -715,7 +720,10 @@ func makeStepGlobal(
 	if err != nil {
 		t.Fatalf("create step %s: %v", name, err)
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("create step %s: status %d", name, resp.StatusCode)
+	}
 }
 
 // makeVariableGlobal creates a variable via the public POST endpoint.

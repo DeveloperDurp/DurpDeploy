@@ -381,6 +381,14 @@ func (h *DeploymentHandler) ScheduleDeployment(
 		},
 	)
 	if err != nil {
+		if errors.Is(err, repository.ErrLegacyServerStep) {
+			http.Error(
+				w,
+				repository.ErrLegacyServerStep.Error(),
+				http.StatusConflict,
+			)
+			return
+		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -778,6 +786,14 @@ func (h *DeploymentHandler) RedeployDeployment(
 
 	if source.Status != "succeeded" && source.Status != "failed" &&
 		source.Status != "cancelled" {
+		if source.Status == "cleanup_unconfirmed" {
+			http.Error(
+				w,
+				repository.ErrContainerCleanupUnconfirmed.Error(),
+				http.StatusConflict,
+			)
+			return
+		}
 		http.Error(
 			w,
 			"Source deployment is not in a terminal state",
@@ -841,6 +857,22 @@ func (h *DeploymentHandler) RedeployDeployment(
 		source.ID,
 	)
 	if err != nil {
+		if errors.Is(err, repository.ErrContainerCleanupUnconfirmed) {
+			http.Error(
+				w,
+				repository.ErrContainerCleanupUnconfirmed.Error(),
+				http.StatusConflict,
+			)
+			return
+		}
+		if errors.Is(err, repository.ErrLegacyServerStep) {
+			http.Error(
+				w,
+				repository.ErrLegacyServerStep.Error(),
+				http.StatusConflict,
+			)
+			return
+		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

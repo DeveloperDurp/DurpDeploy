@@ -25,8 +25,9 @@ func TestRunbookWeb_ReplaysExistingLogsOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 	book, _, err := h.repo.SaveRunbook(ctx, repository.RunbookSave{
-		ProjectID: project.ID, Name: "maintenance",
-		StepsJSON: `[{"name":"check","script_body":"true"}]`,
+		ProjectID: project.ID,
+		Name:      "maintenance",
+		StepsJSON: `[{"name":"check","script_body":"true","container_image":"alpine:3.20"}]`,
 	})
 	if err != nil {
 		t.Fatal(err)

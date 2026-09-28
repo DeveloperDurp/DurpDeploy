@@ -175,7 +175,8 @@ func TestStepTemplate_SaveAndApplyPreservesAgentPlacement(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list template selectors: %v", err)
 	}
-	if tpl.ExecutionTarget != "agent" || len(selectors) != 1 || selectors[0] != "linux" {
+	if tpl.ExecutionTarget != "agent" || len(selectors) != 1 ||
+		selectors[0] != "linux" {
 		t.Fatalf("template placement = %q %v", tpl.ExecutionTarget, selectors)
 	}
 	versions, err := h.repo.Queries.ListStepTemplateVersions(ctx, templateID)
@@ -220,7 +221,10 @@ func TestStepTemplate_SaveAndApplyPreservesAgentPlacement(t *testing.T) {
 	if len(steps) != 2 || steps[1].ExecutionTarget != "agent" {
 		t.Fatalf("applied steps = %v", steps)
 	}
-	appliedSelectors, err := h.repo.Queries.ListStepAgentSelectors(ctx, steps[1].ID)
+	appliedSelectors, err := h.repo.Queries.ListStepAgentSelectors(
+		ctx,
+		steps[1].ID,
+	)
 	if err != nil {
 		t.Fatalf("list applied selectors: %v", err)
 	}
@@ -234,6 +238,7 @@ func (h *stepTemplateHarness) createTemplate(name, script string) int {
 	form := url.Values{}
 	form.Set("name", name)
 	form.Set("script_body", script)
+	form.Set("container_image", "alpine:3.20")
 	resp, err := h.client.PostForm(
 		h.server.URL+"/templates",
 		form,
@@ -252,6 +257,7 @@ func (h *stepTemplateHarness) updateTemplate(
 	form := url.Values{}
 	form.Set("name", name)
 	form.Set("script_body", script)
+	form.Set("container_image", "alpine:3.20")
 	req, _ := http.NewRequest(
 		"PUT",
 		fmt.Sprintf("%s/templates/%d", h.server.URL, id),

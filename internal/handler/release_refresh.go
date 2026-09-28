@@ -2,11 +2,14 @@ package handler
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
+
+	"durpdeploy/internal/repository"
 )
 
 func (h *ReleaseHandler) RefreshRelease(
@@ -41,6 +44,14 @@ func (h *ReleaseHandler) RefreshRelease(
 		h.repo,
 		release,
 	); err != nil {
+		if errors.Is(err, repository.ErrLegacyServerStep) {
+			http.Error(
+				w,
+				repository.ErrLegacyServerStep.Error(),
+				http.StatusConflict,
+			)
+			return
+		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

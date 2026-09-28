@@ -177,6 +177,14 @@ func (h *RunbookHandler) Execute(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusUnprocessableEntity)
 		return
 	}
+	if errors.Is(err, repository.ErrLegacyServerStep) {
+		http.Error(
+			w,
+			repository.ErrLegacyServerStep.Error(),
+			http.StatusConflict,
+		)
+		return
+	}
 	if err != nil {
 		http.Error(w, "Cannot execute runbook", http.StatusInternalServerError)
 		return
@@ -209,14 +217,30 @@ func (h *RunbookHandler) Schedule(w http.ResponseWriter, r *http.Request) {
 	}
 	version := sql.NullInt64{}
 	if versionID != 0 {
-		if _, err := h.repo.Queries.GetRunbookVersion(
+		pinned, err := h.repo.Queries.GetRunbookVersion(
 			r.Context(),
 			db.GetRunbookVersionParams{
 				ID:        versionID,
 				RunbookID: book.ID,
 			},
-		); err != nil {
+		)
+		if err != nil {
 			http.NotFound(w, r)
+			return
+		}
+		if err := h.repo.ValidateExecutableRelease(
+			r.Context(),
+			pinned.ReleaseID,
+		); err != nil {
+			if errors.Is(err, repository.ErrLegacyServerStep) {
+				http.Error(
+					w,
+					repository.ErrLegacyServerStep.Error(),
+					http.StatusConflict,
+				)
+			} else {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
 			return
 		}
 		version = sql.NullInt64{Int64: versionID, Valid: true}

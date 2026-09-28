@@ -61,6 +61,8 @@ func TestCreateReleaseSnapshotPreservesStepPlacement(t *testing.T) {
 		ID: step.ID, Name: step.Name, ScriptBody: step.ScriptBody,
 		SortOrder: step.SortOrder, TimeoutSeconds: step.TimeoutSeconds,
 		MaxRetries: step.MaxRetries, Interpreter: "pwsh",
+		ContainerImage: step.ContainerImage,
+		VariableNames:  step.VariableNames,
 	}); err != nil {
 		t.Fatal(err)
 	}

@@ -92,7 +92,8 @@ func (h *RunbookHandler) Form(w http.ResponseWriter, r *http.Request) {
 	stepsJSON := `[{
 		"name":"","script_body":"","interpreter":"bash",
 		"timeout_seconds":0,"max_retries":0,
-		"execution_target":"local","agent_selectors":[]
+		"execution_target":"local","agent_selectors":[],
+		"container_image":"","variable_names":[]
 	}]`
 	if idStr := chi.URLParam(r, "runbookId"); idStr != "" {
 		id, err := strconv.ParseInt(idStr, 10, 64)

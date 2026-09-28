@@ -350,11 +350,13 @@ func (h *StepTemplateHandler) InsertTemplate(
 	}
 
 	params := db.CreateStepParams{
-		ProjectID:   projectID,
-		Name:        tpl.Name,
-		ScriptBody:  tpl.ScriptBody,
-		Interpreter: tpl.Interpreter,
-		SortOrder:   sortOrder,
+		ProjectID:      projectID,
+		Name:           tpl.Name,
+		ScriptBody:     tpl.ScriptBody,
+		Interpreter:    tpl.Interpreter,
+		SortOrder:      sortOrder,
+		ContainerImage: tpl.ContainerImage,
+		VariableNames:  tpl.VariableNames,
 		// ponytail: StepTemplate has no timeout or max_retries field yet;
 		// new step inherits defaults (0/0).
 	}
@@ -422,9 +424,11 @@ func (h *StepTemplateHandler) SaveStepAsTemplate(
 	}
 
 	params := db.CreateStepTemplateParams{
-		Name:        step.Name,
-		ScriptBody:  step.ScriptBody,
-		Interpreter: step.Interpreter,
+		Name:           step.Name,
+		ScriptBody:     step.ScriptBody,
+		Interpreter:    step.Interpreter,
+		ContainerImage: step.ContainerImage,
+		VariableNames:  step.VariableNames,
 	}
 	selectors, err := h.repo.Queries.ListStepAgentSelectors(
 		r.Context(),

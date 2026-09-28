@@ -153,6 +153,14 @@ func (h *RunbookHandler) Retry(w http.ResponseWriter, r *http.Request) {
 	}
 	if execution.Status != "failed" && execution.Status != "cancelled" &&
 		execution.Status != "succeeded" {
+		if execution.Status == "cleanup_unconfirmed" {
+			http.Error(
+				w,
+				repository.ErrContainerCleanupUnconfirmed.Error(),
+				http.StatusConflict,
+			)
+			return
+		}
 		http.Error(w, "Execution is not complete", http.StatusConflict)
 		return
 	}
@@ -169,12 +177,21 @@ func (h *RunbookHandler) Retry(w http.ResponseWriter, r *http.Request) {
 			ActorUserID:             actor,
 			RetrySourceDeploymentID: execution.DeploymentID,
 		})
-	if errors.Is(err, repository.ErrRunbookRemoteOutcomeUnconfirmed) {
+	if errors.Is(err, repository.ErrRunbookRemoteOutcomeUnconfirmed) ||
+		errors.Is(err, repository.ErrContainerCleanupUnconfirmed) {
 		http.Error(w, err.Error(), http.StatusConflict)
 		return
 	}
 	if errors.Is(err, repository.ErrRunbookGate) {
 		http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+		return
+	}
+	if errors.Is(err, repository.ErrLegacyServerStep) {
+		http.Error(
+			w,
+			repository.ErrLegacyServerStep.Error(),
+			http.StatusConflict,
+		)
 		return
 	}
 	if err != nil {
