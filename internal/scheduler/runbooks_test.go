@@ -19,7 +19,7 @@ func TestRunbookSchedule_LatestAndPinnedResolveConcreteVersions(t *testing.T) {
 		repository.RunbookSave{
 			ProjectID: project.ID,
 			Name:      "maintenance",
-			StepsJSON: `[{"name":"check","script_body":"echo first","interpreter":"bash"}]`,
+			StepsJSON: `[{"name":"check","script_body":"echo first","interpreter":"bash","container_image":"alpine:3"}]`,
 		},
 	)
 	if err != nil {
@@ -36,7 +36,7 @@ func TestRunbookSchedule_LatestAndPinnedResolveConcreteVersions(t *testing.T) {
 	_, second, err := f.repo.SaveRunbook(f.ctx(), repository.RunbookSave{
 		ProjectID: project.ID,
 		RunbookID: book.ID,
-		StepsJSON: `[{"name":"check","script_body":"echo second","interpreter":"bash"}]`,
+		StepsJSON: `[{"name":"check","script_body":"echo second","interpreter":"bash","container_image":"alpine:3"}]`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -81,8 +81,9 @@ func TestRunbookSchedule_ApprovalHoldsExecution(t *testing.T) {
 	project := f.createProject()
 	environment := f.createEnvironment("approval-env")
 	book, _, err := f.repo.SaveRunbook(f.ctx(), repository.RunbookSave{
-		ProjectID: project.ID, Name: "approval-book",
-		StepsJSON: `[{"name":"check","script_body":"true"}]`,
+		ProjectID: project.ID,
+		Name:      "approval-book",
+		StepsJSON: `[{"name":"check","script_body":"true","container_image":"alpine:3"}]`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -140,8 +141,9 @@ func TestRunbookSchedule_InvalidCronDisablesSchedule(t *testing.T) {
 	project := f.createProject()
 	environment := f.createEnvironment("invalid-cron-env")
 	book, _, err := f.repo.SaveRunbook(f.ctx(), repository.RunbookSave{
-		ProjectID: project.ID, Name: "invalid-cron-book",
-		StepsJSON: `[{"name":"check","script_body":"true"}]`,
+		ProjectID: project.ID,
+		Name:      "invalid-cron-book",
+		StepsJSON: `[{"name":"check","script_body":"true","container_image":"alpine:3"}]`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -170,8 +172,9 @@ func TestRunbookSchedule_ActiveExecutionSkipsNextOccurrence(t *testing.T) {
 	project := f.createProject()
 	environment := f.createEnvironment("overlap-env")
 	book, _, err := f.repo.SaveRunbook(f.ctx(), repository.RunbookSave{
-		ProjectID: project.ID, Name: "overlap-book",
-		StepsJSON: `[{"name":"check","script_body":"true"}]`,
+		ProjectID: project.ID,
+		Name:      "overlap-book",
+		StepsJSON: `[{"name":"check","script_body":"true","container_image":"alpine:3"}]`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -235,8 +238,9 @@ func TestRunbookSchedule_BlockedAndInaccessibleStages(t *testing.T) {
 	later := f.createEnvironment("later-stage")
 	outside := f.createEnvironment("outside-stage")
 	book, _, err := f.repo.SaveRunbook(f.ctx(), repository.RunbookSave{
-		ProjectID: project.ID, Name: "gated-book",
-		StepsJSON: `[{"name":"check","script_body":"true"}]`,
+		ProjectID: project.ID,
+		Name:      "gated-book",
+		StepsJSON: `[{"name":"check","script_body":"true","container_image":"alpine:3"}]`,
 	})
 	if err != nil {
 		t.Fatal(err)

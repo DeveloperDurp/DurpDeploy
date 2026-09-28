@@ -119,6 +119,24 @@ func (s *Scheduler) fireRunbook(ctx context.Context, row db.RunbookSchedule) {
 			FiredAt:               s.now().Unix(),
 		})
 	if err != nil {
+		if errors.Is(err, repository.ErrLegacyServerStep) {
+			changed, disableErr := s.repo.Queries.DisableRunbookScheduleWithReason(
+				ctx,
+				db.DisableRunbookScheduleWithReasonParams{
+					LastError: err.Error() + "; save a new runbook version with a container image",
+					ID:        row.ID,
+					NextRunAt: row.NextRunAt,
+				},
+			)
+			if disableErr != nil {
+				s.log.Error("disable legacy runbook schedule failed",
+					"schedule_id", row.ID, "error", disableErr)
+			} else if changed == 1 {
+				s.log.Warn("disabled legacy runbook schedule",
+					"schedule_id", row.ID, "error", err)
+			}
+			return
+		}
 		if errors.Is(err, repository.ErrRunbookScheduleConflict) ||
 			errors.Is(err, repository.ErrRunbookScheduleOverlap) {
 			return

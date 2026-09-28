@@ -3,6 +3,7 @@ package scheduler
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -338,6 +339,24 @@ func (s *Scheduler) fireOne(ctx context.Context, row db.ScheduledDeployment) {
 		},
 	)
 	if err != nil {
+		if errors.Is(err, repository.ErrLegacyServerStep) {
+			changed, disableErr := s.repo.Queries.DisableScheduledDeploymentWithReason(
+				ctx,
+				db.DisableScheduledDeploymentWithReasonParams{
+					LastError: err.Error(),
+					ID:        row.ID,
+					NextRunAt: row.NextRunAt,
+				},
+			)
+			if disableErr != nil {
+				s.log.Error("disable legacy scheduled deployment failed",
+					"schedule_id", row.ID, "error", disableErr)
+			} else if changed == 1 {
+				s.log.Warn("disabled legacy scheduled deployment",
+					"schedule_id", row.ID, "error", err)
+			}
+			return
+		}
 		s.log.Error(
 			"create deployment failed",
 			"schedule_id",
