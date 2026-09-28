@@ -107,7 +107,7 @@ func (q *Queries) CreateRunbookExecution(ctx context.Context, arg CreateRunbookE
 const createRunbookSchedule = `-- name: CreateRunbookSchedule :one
 INSERT INTO runbook_schedules
     (runbook_id, version_id, environment_id, cron, next_run_at)
-VALUES (?, ?, ?, ?, ?) RETURNING id, runbook_id, version_id, environment_id, cron, next_run_at, enabled, last_fired_at, created_at
+VALUES (?, ?, ?, ?, ?) RETURNING id, runbook_id, version_id, environment_id, cron, next_run_at, enabled, last_fired_at, created_at, last_error
 `
 
 type CreateRunbookScheduleParams struct {
@@ -137,6 +137,7 @@ func (q *Queries) CreateRunbookSchedule(ctx context.Context, arg CreateRunbookSc
 		&i.Enabled,
 		&i.LastFiredAt,
 		&i.CreatedAt,
+		&i.LastError,
 	)
 	return i, err
 }
@@ -298,6 +299,25 @@ func (q *Queries) DisableRunbookSchedule(ctx context.Context, id int64) error {
 	return err
 }
 
+const disableRunbookScheduleWithReason = `-- name: DisableRunbookScheduleWithReason :execrows
+UPDATE runbook_schedules SET enabled = 0, last_error = ?
+WHERE id = ? AND enabled = 1 AND next_run_at = ?
+`
+
+type DisableRunbookScheduleWithReasonParams struct {
+	LastError string `json:"last_error"`
+	ID        int64  `json:"id"`
+	NextRunAt int64  `json:"next_run_at"`
+}
+
+func (q *Queries) DisableRunbookScheduleWithReason(ctx context.Context, arg DisableRunbookScheduleWithReasonParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, disableRunbookScheduleWithReason, arg.LastError, arg.ID, arg.NextRunAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const getLatestRunbookVersion = `-- name: GetLatestRunbookVersion :one
 SELECT id, runbook_id, version, release_id, created_at FROM runbook_versions WHERE runbook_id = ?
 ORDER BY version DESC LIMIT 1
@@ -449,7 +469,7 @@ func (q *Queries) GetRunbookExecutionByDeployment(ctx context.Context, deploymen
 }
 
 const getRunbookSchedule = `-- name: GetRunbookSchedule :one
-SELECT id, runbook_id, version_id, environment_id, cron, next_run_at, enabled, last_fired_at, created_at FROM runbook_schedules WHERE id = ? AND runbook_id = ?
+SELECT id, runbook_id, version_id, environment_id, cron, next_run_at, enabled, last_fired_at, created_at, last_error FROM runbook_schedules WHERE id = ? AND runbook_id = ?
 `
 
 type GetRunbookScheduleParams struct {
@@ -470,6 +490,7 @@ func (q *Queries) GetRunbookSchedule(ctx context.Context, arg GetRunbookSchedule
 		&i.Enabled,
 		&i.LastFiredAt,
 		&i.CreatedAt,
+		&i.LastError,
 	)
 	return i, err
 }
@@ -562,7 +583,7 @@ func (q *Queries) HasUnconfirmedRunbookRemoteOutcome(ctx context.Context, source
 }
 
 const listDueRunbookSchedules = `-- name: ListDueRunbookSchedules :many
-SELECT id, runbook_id, version_id, environment_id, cron, next_run_at, enabled, last_fired_at, created_at FROM runbook_schedules WHERE enabled = 1 AND next_run_at <= ?
+SELECT id, runbook_id, version_id, environment_id, cron, next_run_at, enabled, last_fired_at, created_at, last_error FROM runbook_schedules WHERE enabled = 1 AND next_run_at <= ?
 ORDER BY next_run_at, id
 `
 
@@ -585,6 +606,7 @@ func (q *Queries) ListDueRunbookSchedules(ctx context.Context, nextRunAt int64) 
 			&i.Enabled,
 			&i.LastFiredAt,
 			&i.CreatedAt,
+			&i.LastError,
 		); err != nil {
 			return nil, err
 		}
@@ -706,7 +728,7 @@ func (q *Queries) ListRunbookExecutions(ctx context.Context, arg ListRunbookExec
 }
 
 const listRunbookSchedules = `-- name: ListRunbookSchedules :many
-SELECT id, runbook_id, version_id, environment_id, cron, next_run_at, enabled, last_fired_at, created_at FROM runbook_schedules WHERE runbook_id = ? ORDER BY id DESC
+SELECT id, runbook_id, version_id, environment_id, cron, next_run_at, enabled, last_fired_at, created_at, last_error FROM runbook_schedules WHERE runbook_id = ? ORDER BY id DESC
 `
 
 func (q *Queries) ListRunbookSchedules(ctx context.Context, runbookID int64) ([]RunbookSchedule, error) {
@@ -728,6 +750,7 @@ func (q *Queries) ListRunbookSchedules(ctx context.Context, runbookID int64) ([]
 			&i.Enabled,
 			&i.LastFiredAt,
 			&i.CreatedAt,
+			&i.LastError,
 		); err != nil {
 			return nil, err
 		}

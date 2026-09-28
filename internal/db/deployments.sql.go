@@ -35,6 +35,19 @@ func (q *Queries) CancelOrphanedRemoteStepRuns(ctx context.Context, now int64) (
 	return result.RowsAffected()
 }
 
+const confirmContainerCleanup = `-- name: ConfirmContainerCleanup :execrows
+UPDATE deployments SET status = 'failed', finished_at = COALESCE(finished_at, ?1)
+WHERE status = 'cleanup_unconfirmed'
+`
+
+func (q *Queries) ConfirmContainerCleanup(ctx context.Context, now sql.NullInt64) (int64, error) {
+	result, err := q.db.ExecContext(ctx, confirmContainerCleanup, now)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const countDeploymentsToday = `-- name: CountDeploymentsToday :one
 SELECT COUNT(*) FROM deployments WHERE kind = 'deployment' AND created_at >= strftime('%s','now','start of day')
 `
@@ -811,6 +824,25 @@ func (q *Queries) ListRunningDeploymentsWithRefs(ctx context.Context) ([]ListRun
 		return nil, err
 	}
 	return items, nil
+}
+
+const markUnreconciledLocalDeployments = `-- name: MarkUnreconciledLocalDeployments :execrows
+UPDATE deployments SET status = 'cleanup_unconfirmed',
+    finished_at = COALESCE(finished_at, ?1)
+WHERE status = 'running' AND assigned_agent_id IS NULL
+  AND EXISTS (SELECT 1 FROM deployment_steps s
+      WHERE s.deployment_id = deployments.id AND s.execution_target = 'local')
+  AND NOT EXISTS (SELECT 1 FROM remote_step_runs r
+      WHERE r.deployment_id = deployments.id
+        AND r.state IN ('claimed', 'started', 'cancel_requested'))
+`
+
+func (q *Queries) MarkUnreconciledLocalDeployments(ctx context.Context, now sql.NullInt64) (int64, error) {
+	result, err := q.db.ExecContext(ctx, markUnreconciledLocalDeployments, now)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const updateDeployment = `-- name: UpdateDeployment :one

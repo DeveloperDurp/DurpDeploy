@@ -22,7 +22,7 @@ func (q *Queries) CountScheduledDeploymentsByProject(ctx context.Context, projec
 }
 
 const createScheduledDeployment = `-- name: CreateScheduledDeployment :one
-INSERT INTO scheduled_deployments (project_id, release_id, environment_id, cron, next_run_at, enabled, last_fired_at, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id, project_id, release_id, environment_id, cron, next_run_at, enabled, last_fired_at, note, created_at, updated_at
+INSERT INTO scheduled_deployments (project_id, release_id, environment_id, cron, next_run_at, enabled, last_fired_at, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id, project_id, release_id, environment_id, cron, next_run_at, enabled, last_fired_at, note, created_at, updated_at, last_error
 `
 
 type CreateScheduledDeploymentParams struct {
@@ -60,6 +60,7 @@ func (q *Queries) CreateScheduledDeployment(ctx context.Context, arg CreateSched
 		&i.Note,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.LastError,
 	)
 	return i, err
 }
@@ -73,8 +74,27 @@ func (q *Queries) DeleteScheduledDeployment(ctx context.Context, id int64) error
 	return err
 }
 
+const disableScheduledDeploymentWithReason = `-- name: DisableScheduledDeploymentWithReason :execrows
+UPDATE scheduled_deployments SET enabled = 0, last_error = ?, updated_at = unixepoch()
+WHERE id = ? AND enabled = 1 AND next_run_at = ?
+`
+
+type DisableScheduledDeploymentWithReasonParams struct {
+	LastError string `json:"last_error"`
+	ID        int64  `json:"id"`
+	NextRunAt int64  `json:"next_run_at"`
+}
+
+func (q *Queries) DisableScheduledDeploymentWithReason(ctx context.Context, arg DisableScheduledDeploymentWithReasonParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, disableScheduledDeploymentWithReason, arg.LastError, arg.ID, arg.NextRunAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const getScheduledDeployment = `-- name: GetScheduledDeployment :one
-SELECT id, project_id, release_id, environment_id, cron, next_run_at, enabled, last_fired_at, note, created_at, updated_at FROM scheduled_deployments WHERE id = ?
+SELECT id, project_id, release_id, environment_id, cron, next_run_at, enabled, last_fired_at, note, created_at, updated_at, last_error FROM scheduled_deployments WHERE id = ?
 `
 
 func (q *Queries) GetScheduledDeployment(ctx context.Context, id int64) (ScheduledDeployment, error) {
@@ -92,12 +112,13 @@ func (q *Queries) GetScheduledDeployment(ctx context.Context, id int64) (Schedul
 		&i.Note,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.LastError,
 	)
 	return i, err
 }
 
 const listDueScheduledDeployments = `-- name: ListDueScheduledDeployments :many
-SELECT id, project_id, release_id, environment_id, cron, next_run_at, enabled, last_fired_at, note, created_at, updated_at FROM scheduled_deployments WHERE next_run_at <= ? AND enabled = 1 ORDER BY next_run_at ASC
+SELECT id, project_id, release_id, environment_id, cron, next_run_at, enabled, last_fired_at, note, created_at, updated_at, last_error FROM scheduled_deployments WHERE next_run_at <= ? AND enabled = 1 ORDER BY next_run_at ASC
 `
 
 func (q *Queries) ListDueScheduledDeployments(ctx context.Context, nextRunAt int64) ([]ScheduledDeployment, error) {
@@ -121,6 +142,7 @@ func (q *Queries) ListDueScheduledDeployments(ctx context.Context, nextRunAt int
 			&i.Note,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.LastError,
 		); err != nil {
 			return nil, err
 		}
@@ -136,7 +158,7 @@ func (q *Queries) ListDueScheduledDeployments(ctx context.Context, nextRunAt int
 }
 
 const listScheduledDeploymentsByProject = `-- name: ListScheduledDeploymentsByProject :many
-SELECT id, project_id, release_id, environment_id, cron, next_run_at, enabled, last_fired_at, note, created_at, updated_at FROM scheduled_deployments WHERE project_id = ? ORDER BY created_at DESC
+SELECT id, project_id, release_id, environment_id, cron, next_run_at, enabled, last_fired_at, note, created_at, updated_at, last_error FROM scheduled_deployments WHERE project_id = ? ORDER BY created_at DESC
 `
 
 func (q *Queries) ListScheduledDeploymentsByProject(ctx context.Context, projectID int64) ([]ScheduledDeployment, error) {
@@ -160,6 +182,7 @@ func (q *Queries) ListScheduledDeploymentsByProject(ctx context.Context, project
 			&i.Note,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.LastError,
 		); err != nil {
 			return nil, err
 		}
@@ -175,7 +198,7 @@ func (q *Queries) ListScheduledDeploymentsByProject(ctx context.Context, project
 }
 
 const listScheduledDeploymentsByProjectPaginated = `-- name: ListScheduledDeploymentsByProjectPaginated :many
-SELECT id, project_id, release_id, environment_id, cron, next_run_at, enabled, last_fired_at, note, created_at, updated_at FROM scheduled_deployments WHERE project_id = ? ORDER BY created_at DESC
+SELECT id, project_id, release_id, environment_id, cron, next_run_at, enabled, last_fired_at, note, created_at, updated_at, last_error FROM scheduled_deployments WHERE project_id = ? ORDER BY created_at DESC
 LIMIT ? OFFSET ?
 `
 
@@ -206,6 +229,7 @@ func (q *Queries) ListScheduledDeploymentsByProjectPaginated(ctx context.Context
 			&i.Note,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.LastError,
 		); err != nil {
 			return nil, err
 		}
@@ -221,7 +245,9 @@ func (q *Queries) ListScheduledDeploymentsByProjectPaginated(ctx context.Context
 }
 
 const toggleScheduledDeploymentEnabled = `-- name: ToggleScheduledDeploymentEnabled :one
-UPDATE scheduled_deployments SET enabled = CASE WHEN enabled = 1 THEN 0 ELSE 1 END, updated_at = unixepoch() WHERE id = ? RETURNING id, project_id, release_id, environment_id, cron, next_run_at, enabled, last_fired_at, note, created_at, updated_at
+UPDATE scheduled_deployments SET enabled = CASE WHEN enabled = 1 THEN 0 ELSE 1 END,
+    last_error = CASE WHEN enabled = 0 THEN '' ELSE last_error END,
+    updated_at = unixepoch() WHERE id = ? RETURNING id, project_id, release_id, environment_id, cron, next_run_at, enabled, last_fired_at, note, created_at, updated_at, last_error
 `
 
 func (q *Queries) ToggleScheduledDeploymentEnabled(ctx context.Context, id int64) (ScheduledDeployment, error) {
@@ -239,12 +265,13 @@ func (q *Queries) ToggleScheduledDeploymentEnabled(ctx context.Context, id int64
 		&i.Note,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.LastError,
 	)
 	return i, err
 }
 
 const updateScheduledDeployment = `-- name: UpdateScheduledDeployment :one
-UPDATE scheduled_deployments SET project_id = ?, release_id = ?, environment_id = ?, cron = ?, next_run_at = ?, enabled = ?, last_fired_at = ?, note = ? WHERE id = ? RETURNING id, project_id, release_id, environment_id, cron, next_run_at, enabled, last_fired_at, note, created_at, updated_at
+UPDATE scheduled_deployments SET project_id = ?, release_id = ?, environment_id = ?, cron = ?, next_run_at = ?, enabled = ?, last_fired_at = ?, note = ?, last_error = '' WHERE id = ? RETURNING id, project_id, release_id, environment_id, cron, next_run_at, enabled, last_fired_at, note, created_at, updated_at, last_error
 `
 
 type UpdateScheduledDeploymentParams struct {
@@ -284,6 +311,7 @@ func (q *Queries) UpdateScheduledDeployment(ctx context.Context, arg UpdateSched
 		&i.Note,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.LastError,
 	)
 	return i, err
 }

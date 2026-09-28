@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"durpdeploy/internal/db"
 )
@@ -13,6 +14,17 @@ import (
 var (
 	ErrDeploymentApprovalConflict = errors.New(
 		"deployment is not pending approval",
+	)
+	ErrContainerCleanupUnconfirmed = errors.New(
+		"container cleanup unconfirmed; retry after successful runtime reconciliation",
+	)
+	// ErrLegacyServerStep is returned when a release still contains a
+	// local step without a container image. Local steps always run in a
+	// container, so such releases cannot execute; recreate the step and
+	// create a new release.
+	ErrLegacyServerStep = errors.New(
+		"legacy local step has no container image; " +
+			"recreate the step and create a new release",
 	)
 )
 
@@ -59,6 +71,9 @@ func (r *Repository) CreateDeploymentFromDeployment(
 			source, err := q.GetDeployment(ctx, sourceDeploymentID)
 			if err != nil {
 				return fmt.Errorf("get source deployment: %w", err)
+			}
+			if source.Status == "cleanup_unconfirmed" {
+				return ErrContainerCleanupUnconfirmed
 			}
 			if source.ReleaseID != arg.ReleaseID {
 				return errors.New("source deployment release mismatch")
@@ -205,6 +220,8 @@ func deploymentStepsFromRelease(raw string) ([]DeploymentStepSnapshot, error) {
 		MaxRetries      int64    `json:"max_retries"`
 		ExecutionTarget string   `json:"execution_target"`
 		AgentSelectors  []string `json:"agent_selectors"`
+		ContainerImage  string   `json:"container_image"`
+		VariableNames   []string `json:"variable_names"`
 	}
 	if err := json.Unmarshal([]byte(raw), &source); err != nil {
 		return nil, fmt.Errorf("decode release steps: %w", err)
@@ -215,6 +232,18 @@ func deploymentStepsFromRelease(raw string) ([]DeploymentStepSnapshot, error) {
 		if target == "" {
 			target = "local"
 		}
+		if target != "local" && target != "agent" {
+			return nil, fmt.Errorf(
+				"step %q has unknown execution target %q",
+				step.Name, target,
+			)
+		}
+		if target == "local" &&
+			strings.TrimSpace(step.ContainerImage) == "" {
+			return nil, fmt.Errorf(
+				"step %q: %w", step.Name, ErrLegacyServerStep,
+			)
+		}
 		steps[i] = DeploymentStepSnapshot{
 			CreateDeploymentStepParams: db.CreateDeploymentStepParams{
 				Name:            step.Name,
@@ -223,9 +252,25 @@ func deploymentStepsFromRelease(raw string) ([]DeploymentStepSnapshot, error) {
 				MaxRetries:      step.MaxRetries,
 				ExecutionTarget: target,
 				Interpreter:     step.Interpreter,
+				ContainerImage:  step.ContainerImage,
+				VariableNames:   marshalVariableNames(step.VariableNames),
 			},
 			Selectors: step.AgentSelectors,
 		}
 	}
 	return steps, nil
+}
+
+// marshalVariableNames encodes the allowlist as the JSON array text the
+// deployment_steps.variable_names column stores. Missing (legacy) and
+// empty allowlists both store "[]", never "".
+func marshalVariableNames(variableNames []string) string {
+	if variableNames == nil {
+		variableNames = []string{}
+	}
+	encoded, err := json.Marshal(variableNames)
+	if err != nil {
+		return "[]"
+	}
+	return string(encoded)
 }

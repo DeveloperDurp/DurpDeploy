@@ -122,6 +122,10 @@ SELECT CASE WHEN EXISTS (
 -- name: DisableRunbookSchedule :exec
 UPDATE runbook_schedules SET enabled = 0 WHERE id = ?;
 
+-- name: DisableRunbookScheduleWithReason :execrows
+UPDATE runbook_schedules SET enabled = 0, last_error = ?
+WHERE id = ? AND enabled = 1 AND next_run_at = ?;
+
 -- name: DeleteProjectRunbookExecutions :exec
 DELETE FROM runbook_executions WHERE runbook_version_id IN (
     SELECT v.id FROM runbook_versions v

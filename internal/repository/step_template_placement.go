@@ -33,11 +33,13 @@ func (r *Repository) CreateStepTemplateWithPlacement(
 		version, err := q.CreateStepTemplateVersion(
 			ctx,
 			db.CreateStepTemplateVersionParams{
-				TemplateID:    template.ID,
-				VersionNumber: 1,
-				Name:          template.Name,
-				ScriptBody:    template.ScriptBody,
-				Interpreter:   template.Interpreter,
+				TemplateID:     template.ID,
+				VersionNumber:  1,
+				Name:           template.Name,
+				ScriptBody:     template.ScriptBody,
+				Interpreter:    template.Interpreter,
+				ContainerImage: template.ContainerImage,
+				VariableNames:  template.VariableNames,
 			},
 		)
 		if err != nil {
@@ -87,11 +89,13 @@ func (r *Repository) UpdateStepTemplateWithPlacement(
 		version, err := q.CreateStepTemplateVersion(
 			ctx,
 			db.CreateStepTemplateVersionParams{
-				TemplateID:    template.ID,
-				VersionNumber: latest + 1,
-				Name:          template.Name,
-				ScriptBody:    template.ScriptBody,
-				Interpreter:   template.Interpreter,
+				TemplateID:     template.ID,
+				VersionNumber:  latest + 1,
+				Name:           template.Name,
+				ScriptBody:     template.ScriptBody,
+				Interpreter:    template.Interpreter,
+				ContainerImage: template.ContainerImage,
+				VariableNames:  template.VariableNames,
 			},
 		)
 		if err != nil {
