@@ -34,6 +34,7 @@ cleanup() {
         sudo systemctl stop "user@$uid.service" || true
         sudo userdel -r "$account" || true
     fi
+    sudo rm -rf -- "$tmp/app-ssh"
     rm -rf "$tmp"
 }
 trap cleanup EXIT
@@ -43,7 +44,7 @@ sudo useradd --create-home --shell /bin/bash "$account"
 uid=$(id -u "$account")
 sudo loginctl enable-linger "$account"
 sudo systemctl start "user@$uid.service"
-sudo -u "$account" env XDG_RUNTIME_DIR="/run/user/$uid" \
+sudo -u "$account" env HOME="/home/$account" XDG_RUNTIME_DIR="/run/user/$uid" \
     DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus" \
     systemctl --user start podman.socket
 socket="/run/user/$uid/podman/podman.sock"
@@ -53,7 +54,7 @@ for i in {1..50}; do
 done
 if ! sudo -u "$account" test -S "$socket"; then
     printf 'Rootless Podman socket missing at %s\n' "$socket" >&2
-    sudo -u "$account" env XDG_RUNTIME_DIR="/run/user/$uid" \
+    sudo -u "$account" env HOME="/home/$account" XDG_RUNTIME_DIR="/run/user/$uid" \
         DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus" \
         systemctl --user status podman.socket --no-pager >&2 || true
     sudo ls -ld "/run/user/$uid" "/run/user/$uid/podman" >&2 || true
@@ -78,7 +79,7 @@ sudo chown -R 10001:10001 "$tmp/app-ssh"
 chmod 755 "$tmp"
 
 exec_podman() {
-    sudo -u "$account" env XDG_RUNTIME_DIR="/run/user/$uid" \
+    sudo -u "$account" env HOME="/home/$account" XDG_RUNTIME_DIR="/run/user/$uid" \
         DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus" \
         podman "$@"
 }
