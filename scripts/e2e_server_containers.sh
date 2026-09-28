@@ -47,7 +47,18 @@ sudo -u "$account" env XDG_RUNTIME_DIR="/run/user/$uid" \
     DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus" \
     systemctl --user start podman.socket
 socket="/run/user/$uid/podman/podman.sock"
-test -S "$socket"
+for i in {1..50}; do
+    test -S "$socket" && break
+    sleep 0.1
+done
+if ! test -S "$socket"; then
+    printf 'Rootless Podman socket missing at %s\n' "$socket" >&2
+    sudo -u "$account" env XDG_RUNTIME_DIR="/run/user/$uid" \
+        DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus" \
+        systemctl --user status podman.socket --no-pager >&2 || true
+    sudo ls -ld "/run/user/$uid" "/run/user/$uid/podman" >&2 || true
+    exit 1
+fi
 
 mkdir -p "$tmp/host-home/.ssh" "$tmp/app-ssh"
 chmod 700 "$tmp/host-home" "$tmp/host-home/.ssh"
