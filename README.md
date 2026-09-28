@@ -273,13 +273,14 @@ five-minute hands-on attack drill — is documented in
   to live deployments/releases, but the default 180-day window and the
   daily systemd timer are operator-deployed, not auto-installed).
 
-The server and local Bash steps share the preselected unprivileged `durpdeploy`
-identity. Linux capabilities are absent from both processes. Because an
-unprivileged process cannot switch to another UID without a capability, local
-steps can read and change server state writable by that identity, including the
-database and visible key files. Run only operator-trusted local scripts, or use
-a separately hosted remote agent as the stronger filesystem boundary. Operators
-also own script secrets, network access, and all effects inside that boundary.
+Server-side steps require a container image and run through a separate rootless
+Podman account over SSH, including when DurpDeploy itself runs in a container.
+There is no host-execution fallback. The execution account must not be able to
+read the control-plane database or key, and step containers receive no runtime
+socket or control-plane mount. Old deployments remain readable, but old
+image-less server steps must be recreated in a new release. Remote-agent steps
+still execute on their agent hosts. See [the deployment runbook](docs/deploy.md)
+for setup and isolation limits.
 
 ## What It Does Not Do
 

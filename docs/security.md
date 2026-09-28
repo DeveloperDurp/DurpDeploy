@@ -76,13 +76,17 @@ What we do **not** defend against yet (see Known Gaps):
 
 - Audit log retention / tamper-proofing
 
-Runner orphan cleanup on shutdown/timeout and the service-level step boundary
-are shipped. Each service and its Bash children share one preselected
-unprivileged identity with zero capability sets. Private mounts, read-only
-service or container filesystems, minimal child environments, and service cgroup
-limits remain. Bash can access state writable by its service identity; use a
-separate remote agent boundary for scripts that must not access control-plane
-state. The agent does not provide SSH access.
+Server-side steps run only in containers managed by a separate rootless Podman
+account over SSH. No step receives a runtime socket or control-plane mount;
+the root filesystem is read-only, network is disabled, capabilities are
+dropped, and only step-selected resolved variables are passed. A missing
+runtime or image fails closed. The app's SSH credential grants control of the
+execution account, so that account must not read the control-plane DB, key, or
+server state. A rootless container shares its host kernel and is not a VM.
+Agent steps still execute on their agent hosts, which must be isolated from
+control-plane state if their scripts are untrusted. Historical image-less
+server releases remain readable but cannot execute; issue #28's old same-UID
+host execution is not a supported path for new work.
 
 ---
 
@@ -325,10 +329,11 @@ The runner is dispatched with `context.Background()` rather than the request
 context. This is intentional (the deploy must outlive the HTTP request), but
 it means the only cancellation path is `runner.Cancel(id)`.
 
-**Fix (P1-4, shipped):** Each step operates in its own process group. A step
-timeout or `Cancel` sends SIGKILL to the group. Thus, the signal also stops
-child processes. During shutdown, `DeploymentRunner.KillAll` stops all active
-step process groups. A server restart does not leave a Bash process active.
+**Current behavior:** A server step has a runtime-enforced maximum duration;
+cancel and shutdown ask Podman to remove its labelled container. Startup
+reconciles orphaned attempts before new server work. Killing the Podman client
+alone is not proof the container stopped. If runtime cleanup cannot be
+confirmed, the deployment fails and requires inspection before a retry.
 
 ---
 
@@ -353,9 +358,11 @@ AES-256-GCM encrypted before it ever reaches SQLite:
   It does not write plaintext to the database or a log. It does not put
   plaintext in an error message. `secret.Box.Decrypt` returns only fixed error
   text.
-- **Runner:** `DeploymentRunner.Run` receives plaintext from
-  `ListReleaseVariablesByRelease`. The runner puts these values in environment
-  variables. It also gives them to the `Scrubber` described below.
+  - **Runner:** `DeploymentRunner.Run` receives plaintext from
+    `ListReleaseVariablesByRelease`. A server step receives only the names in
+    its frozen `variable_names` allowlist through the execution runtime. The
+    scrubber still considers the resolved secret values before logs are stored
+    or streamed.
 - **Acceptance check:** `sqlite3 durpdeploy.db 'select * from variables'`
   shows only base64 ciphertext in `value`. The app reads/writes normally
   through the UI because the repository layer decrypts/encrypts
@@ -456,7 +463,7 @@ values:
 | ~~**Secret encryption at rest**~~ | ~~`release_variables.value` is plaintext. A DB read leaks secrets~~ | **shipped (P1-3)** |
 | ~~**Runner orphan cleanup**~~ | ~~Killed/restarted server left orphaned bash children~~ | **shipped** |
 | ~~**Log redaction hardening**~~ | ~~Naive per-line `strings.ReplaceAll` missed common credential formats and multi-line/split secrets~~ | **shipped (P1-5)** |
-| **Local script/state UID separation** | Local Bash shares the unprivileged server UID because no identity-switch capability is granted; it can change server-writable state | Use a separate remote agent trust boundary for untrusted scripts |
+| **Execution account compromise** | The app's SSH credential can control the separate rootless Podman account; container escape remains possible on a shared kernel | Restrict that account's filesystem access and keep untrusted agent scripts off the control-plane host |
 | ~~**Login rate limiting**~~ | ~~Password, MFA, and OIDC login surfaces lacked application limits~~ | **shipped** |
 | **Audit log retention** | No retention policy or tamper-proofing on `audit_log` | P2-5 |
 | **Password reset flow** | No self-service reset. Admin must delete + recreate the user | P2 |
