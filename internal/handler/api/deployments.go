@@ -61,6 +61,7 @@ func deploymentIDFromRequest(r *http.Request) (int64, error) {
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
 //	  404: body:NotFoundError
+//	  409: body:ConflictError
 //	  422: body:ValidationError
 //	  500: body:ServerError
 func (h *DeploymentHandler) CreateDeployment(
@@ -145,6 +146,14 @@ func (h *DeploymentHandler) CreateDeployment(
 		},
 	)
 	if err != nil {
+		if errors.Is(err, repository.ErrLegacyServerStep) {
+			RespondError(
+				w,
+				http.StatusConflict,
+				repository.ErrLegacyServerStep.Error(),
+			)
+			return
+		}
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -499,6 +508,14 @@ func (h *DeploymentHandler) RedeployDeployment(
 	}
 	if deployment.Status != "succeeded" && deployment.Status != "failed" &&
 		deployment.Status != "cancelled" {
+		if deployment.Status == "cleanup_unconfirmed" {
+			RespondError(
+				w,
+				http.StatusConflict,
+				repository.ErrContainerCleanupUnconfirmed.Error(),
+			)
+			return
+		}
 		RespondError(
 			w,
 			http.StatusConflict,
@@ -549,6 +566,22 @@ func (h *DeploymentHandler) RedeployDeployment(
 		deployment.ID,
 	)
 	if err != nil {
+		if errors.Is(err, repository.ErrContainerCleanupUnconfirmed) {
+			RespondError(
+				w,
+				http.StatusConflict,
+				repository.ErrContainerCleanupUnconfirmed.Error(),
+			)
+			return
+		}
+		if errors.Is(err, repository.ErrLegacyServerStep) {
+			RespondError(
+				w,
+				http.StatusConflict,
+				repository.ErrLegacyServerStep.Error(),
+			)
+			return
+		}
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -653,6 +686,7 @@ func (h *DeploymentHandler) CancelDeployment(
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
 //	  404: body:NotFoundError
+//	  409: body:ConflictError
 //	  500: body:ServerError
 func (h *DeploymentHandler) RetryDeployment(
 	w http.ResponseWriter,
@@ -674,6 +708,14 @@ func (h *DeploymentHandler) RetryDeployment(
 		return
 	}
 	if deployment.Status != "failed" && deployment.Status != "cancelled" {
+		if deployment.Status == "cleanup_unconfirmed" {
+			RespondError(
+				w,
+				http.StatusConflict,
+				repository.ErrContainerCleanupUnconfirmed.Error(),
+			)
+			return
+		}
 		RespondError(
 			w,
 			http.StatusBadRequest,
@@ -696,6 +738,22 @@ func (h *DeploymentHandler) RetryDeployment(
 		deployment.ID,
 	)
 	if err != nil {
+		if errors.Is(err, repository.ErrContainerCleanupUnconfirmed) {
+			RespondError(
+				w,
+				http.StatusConflict,
+				repository.ErrContainerCleanupUnconfirmed.Error(),
+			)
+			return
+		}
+		if errors.Is(err, repository.ErrLegacyServerStep) {
+			RespondError(
+				w,
+				http.StatusConflict,
+				repository.ErrLegacyServerStep.Error(),
+			)
+			return
+		}
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}

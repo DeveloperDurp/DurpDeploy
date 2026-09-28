@@ -46,6 +46,11 @@ type swaggerStep struct {
 	MaxRetries      int64    `json:"max_retries"`
 	ExecutionTarget string   `json:"execution_target"`
 	AgentSelectors  []string `json:"agent_selectors"`
+	// Container image the step runs in on the server; mandatory for
+	// local steps and rejected for agent steps.
+	ContainerImage string `json:"container_image"`
+	// Variable names the step receives; identifiers without duplicates.
+	VariableNames []string `json:"variable_names"`
 }
 
 // StepTemplate is a reusable step template.
@@ -58,6 +63,8 @@ type swaggerStepTemplate struct {
 	CreatedAt       int64    `json:"created_at"`
 	ExecutionTarget string   `json:"execution_target"`
 	AgentSelectors  []string `json:"agent_selectors"`
+	ContainerImage  string   `json:"container_image"`
+	VariableNames   []string `json:"variable_names"`
 }
 
 // StepTemplateVersion is a historical version of a step template.
@@ -72,6 +79,8 @@ type swaggerStepTemplateVersion struct {
 	CreatedAt       int64    `json:"created_at"`
 	ExecutionTarget string   `json:"execution_target"`
 	AgentSelectors  []string `json:"agent_selectors"`
+	ContainerImage  string   `json:"container_image"`
+	VariableNames   []string `json:"variable_names"`
 }
 
 // Release is an immutable snapshot of project steps and variables.
@@ -376,6 +385,12 @@ type swaggerStepRequest struct {
 	MaxRetries      int64    `json:"max_retries"`
 	ExecutionTarget string   `json:"execution_target"`
 	AgentSelectors  []string `json:"agent_selectors"`
+	// Container image the step runs in on the server; mandatory for
+	// local steps and rejected for agent steps.
+	ContainerImage string `json:"container_image"`
+	// Allowlist of variable names passed to the step; each entry must
+	// be an identifier and names cannot repeat.
+	VariableNames []string `json:"variable_names"`
 }
 
 // ReorderStepsRequest reorders project steps.
@@ -392,6 +407,12 @@ type swaggerStepTemplateRequest struct {
 	Interpreter     string   `json:"interpreter"`
 	ExecutionTarget string   `json:"execution_target"`
 	AgentSelectors  []string `json:"agent_selectors"`
+	// Container image the step runs in on the server; mandatory for
+	// local steps and rejected for agent steps.
+	ContainerImage string `json:"container_image"`
+	// Allowlist of variable names passed to the step; each entry must
+	// be an identifier and names cannot repeat.
+	VariableNames []string `json:"variable_names"`
 }
 
 // VariableRequest is the body for create/update variable.

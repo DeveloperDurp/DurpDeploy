@@ -19,6 +19,7 @@ import (
 
 func TestRunbookAPI_VersionedExecutionStaysSeparate(t *testing.T) {
 	t.Setenv("DURPDEPLOY_EXECUTION_BOUNDARY", "development")
+	fakePodman(t)
 	h := newAPIHarness(t)
 	user := seedAPIUser(t, h.repo, "runbook-admin@example.com", "admin")
 	_, token := seedAPIToken(t, h.repo, user.ID)
@@ -40,7 +41,7 @@ func TestRunbookAPI_VersionedExecutionStaysSeparate(t *testing.T) {
 	created := request(
 		http.MethodPost,
 		base+"/runbooks",
-		`{"name":"maintenance","steps":[{"name":"check","script_body":"printf 'version one\\n'"}]}`,
+		`{"name":"maintenance","steps":[{"name":"check","script_body":"printf 'version one\\n'","container_image":"alpine:3.20"}]}`,
 	)
 	if created.Code != http.StatusCreated {
 		t.Fatalf(
@@ -60,9 +61,11 @@ func TestRunbookAPI_VersionedExecutionStaysSeparate(t *testing.T) {
 	if err := json.Unmarshal(created.Body.Bytes(), &saved); err != nil {
 		t.Fatal(err)
 	}
-	updated := request(http.MethodPut,
+	updated := request(
+		http.MethodPut,
 		fmt.Sprintf("%s/runbooks/%d", base, saved.Runbook.ID),
-		`{"steps":[{"name":"check","script_body":"printf 'version two\\n'"}]}`)
+		`{"steps":[{"name":"check","script_body":"printf 'version two\\n'","container_image":"alpine:3.20"}]}`,
+	)
 	if updated.Code != http.StatusCreated {
 		t.Fatalf(
 			"update status=%d body=%s",
@@ -172,6 +175,7 @@ func TestRunbookAPI_VersionedExecutionStaysSeparate(t *testing.T) {
 
 func TestRunbookAPI_ProjectDeleteAfterVersion(t *testing.T) {
 	t.Setenv("DURPDEPLOY_EXECUTION_BOUNDARY", "development")
+	fakePodman(t)
 	h := newAPIHarness(t)
 	user := seedAPIUser(t, h.repo, "runbook-delete@example.com", "admin")
 	_, token := seedAPIToken(t, h.repo, user.ID)
@@ -193,7 +197,7 @@ func TestRunbookAPI_ProjectDeleteAfterVersion(t *testing.T) {
 	created := request(
 		http.MethodPost,
 		base+"/runbooks",
-		`{"name":"maintenance","steps":[{"name":"check","script_body":"true"}]}`,
+		`{"name":"maintenance","steps":[{"name":"check","script_body":"true","container_image":"alpine:3.20"}]}`,
 	)
 	if created.Code != http.StatusCreated {
 		t.Fatalf(
@@ -235,9 +239,11 @@ func TestRunbookAPI_ProjectDeleteAfterVersion(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	updated := request(http.MethodPut,
+	updated := request(
+		http.MethodPut,
 		fmt.Sprintf("%s/runbooks/%d", base, saved.Runbook.ID),
-		`{"steps":[{"name":"wait","script_body":"exec sleep 10"}]}`)
+		`{"steps":[{"name":"wait","script_body":"exec sleep 10","container_image":"alpine:3.20"}]}`,
+	)
 	if updated.Code != http.StatusCreated {
 		t.Fatalf("update status=%d body=%s", updated.Code,
 			updated.Body.String())

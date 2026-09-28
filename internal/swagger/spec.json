@@ -1965,6 +1965,12 @@
               "$ref": "#/definitions/NotFoundError"
             }
           },
+          "409": {
+            "description": "Conflict error response.",
+            "schema": {
+              "$ref": "#/definitions/ConflictError"
+            }
+          },
           "500": {
             "description": "Server error response.",
             "schema": {
@@ -3427,6 +3433,12 @@
               "$ref": "#/definitions/NotFoundError"
             }
           },
+          "409": {
+            "description": "Conflict error response.",
+            "schema": {
+              "$ref": "#/definitions/ConflictError"
+            }
+          },
           "422": {
             "description": "Validation error response.",
             "schema": {
@@ -4696,6 +4708,12 @@
             "description": "Created",
             "schema": {
               "$ref": "#/definitions/RunbookExecution"
+            }
+          },
+          "409": {
+            "description": "Conflict error response.",
+            "schema": {
+              "$ref": "#/definitions/ConflictError"
             }
           },
           "422": {
@@ -8744,6 +8762,11 @@
           },
           "x-go-name": "AgentSelectors"
         },
+        "container_image": {
+          "description": "Container image the step runs in on the server; mandatory for\nlocal steps and rejected for agent steps.",
+          "type": "string",
+          "x-go-name": "ContainerImage"
+        },
         "created_at": {
           "type": "integer",
           "format": "int64",
@@ -8789,6 +8812,14 @@
           "type": "integer",
           "format": "int64",
           "x-go-name": "TimeoutSeconds"
+        },
+        "variable_names": {
+          "description": "Variable names the step receives; identifiers without duplicates.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "x-go-name": "VariableNames"
         }
       },
       "x-go-name": "swaggerStep",
@@ -8813,6 +8844,11 @@
             "type": "string"
           },
           "x-go-name": "AgentSelectors"
+        },
+        "container_image": {
+          "description": "Container image the step runs in on the server; mandatory for\nlocal steps and rejected for agent steps.",
+          "type": "string",
+          "x-go-name": "ContainerImage"
         },
         "execution_target": {
           "type": "string",
@@ -8844,6 +8880,14 @@
           "type": "integer",
           "format": "int64",
           "x-go-name": "TimeoutSeconds"
+        },
+        "variable_names": {
+          "description": "Allowlist of variable names passed to the step; each entry must\nbe an identifier and names cannot repeat.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "x-go-name": "VariableNames"
         }
       },
       "x-go-name": "swaggerStepRequest",
@@ -8859,6 +8903,10 @@
             "type": "string"
           },
           "x-go-name": "AgentSelectors"
+        },
+        "container_image": {
+          "type": "string",
+          "x-go-name": "ContainerImage"
         },
         "created_at": {
           "type": "integer",
@@ -8885,6 +8933,13 @@
         "script_body": {
           "type": "string",
           "x-go-name": "ScriptBody"
+        },
+        "variable_names": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "x-go-name": "VariableNames"
         }
       },
       "x-go-name": "swaggerStepTemplate",
@@ -8910,6 +8965,11 @@
           },
           "x-go-name": "AgentSelectors"
         },
+        "container_image": {
+          "description": "Container image the step runs in on the server; mandatory for\nlocal steps and rejected for agent steps.",
+          "type": "string",
+          "x-go-name": "ContainerImage"
+        },
         "execution_target": {
           "type": "string",
           "x-go-name": "ExecutionTarget"
@@ -8925,6 +8985,14 @@
         "script_body": {
           "type": "string",
           "x-go-name": "ScriptBody"
+        },
+        "variable_names": {
+          "description": "Allowlist of variable names passed to the step; each entry must\nbe an identifier and names cannot repeat.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "x-go-name": "VariableNames"
         }
       },
       "x-go-name": "swaggerStepTemplateRequest",
@@ -8940,6 +9008,10 @@
             "type": "string"
           },
           "x-go-name": "AgentSelectors"
+        },
+        "container_image": {
+          "type": "string",
+          "x-go-name": "ContainerImage"
         },
         "created_at": {
           "type": "integer",
@@ -8971,6 +9043,13 @@
           "type": "integer",
           "format": "int64",
           "x-go-name": "TemplateID"
+        },
+        "variable_names": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "x-go-name": "VariableNames"
         },
         "version_number": {
           "type": "integer",

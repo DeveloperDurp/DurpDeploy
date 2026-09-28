@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 
 	"durpdeploy/internal/db"
@@ -12,6 +13,9 @@ import (
 type stepResponse struct {
 	db.Step
 	AgentSelectors []string `json:"agent_selectors"`
+	// VariableNames shadows the raw JSON-array string column with the
+	// decoded array the API contract exposes.
+	VariableNames []string `json:"variable_names"`
 }
 
 func validatePlacement(
@@ -41,11 +45,13 @@ func validatePlacement(
 type stepTemplateResponse struct {
 	db.StepTemplate
 	AgentSelectors []string `json:"agent_selectors"`
+	VariableNames  []string `json:"variable_names"`
 }
 
 type stepTemplateVersionResponse struct {
 	db.StepTemplateVersion
 	AgentSelectors []string `json:"agent_selectors"`
+	VariableNames  []string `json:"variable_names"`
 }
 
 func selectorList(selectors []string) []string {
@@ -53,6 +59,19 @@ func selectorList(selectors []string) []string {
 		return []string{}
 	}
 	return selectors
+}
+
+// variableNameList decodes the JSON-array string column into the
+// array the API exposes. An empty column decodes to an empty list.
+func variableNameList(raw string) []string {
+	if raw == "" {
+		return []string{}
+	}
+	var names []string
+	if err := json.Unmarshal([]byte(raw), &names); err != nil {
+		return nil
+	}
+	return names
 }
 
 func newStepResponse(
@@ -67,6 +86,7 @@ func newStepResponse(
 	return stepResponse{
 		Step:           step,
 		AgentSelectors: selectorList(selectors),
+		VariableNames:  variableNameList(step.VariableNames),
 	}, nil
 }
 
@@ -92,6 +112,7 @@ func newStepResponses(
 		responses[index] = stepResponse{
 			Step:           step,
 			AgentSelectors: selectorList(selectors[step.ID]),
+			VariableNames:  variableNameList(step.VariableNames),
 		}
 	}
 	return responses, nil
@@ -109,6 +130,7 @@ func newStepTemplateResponse(
 	return stepTemplateResponse{
 		StepTemplate:   template,
 		AgentSelectors: selectorList(selectors),
+		VariableNames:  variableNameList(template.VariableNames),
 	}, nil
 }
 
@@ -140,6 +162,7 @@ func newStepTemplateResponses(
 		responses[index] = stepTemplateResponse{
 			StepTemplate:   template,
 			AgentSelectors: selectorList(selectors[template.ID]),
+			VariableNames:  variableNameList(template.VariableNames),
 		}
 	}
 	return responses, nil
@@ -175,6 +198,7 @@ func newStepTemplateVersionResponses(
 			AgentSelectors: selectorList(
 				selectors[version.ID],
 			),
+			VariableNames: variableNameList(version.VariableNames),
 		}
 	}
 	return responses, nil

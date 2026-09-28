@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/handler"
 	"durpdeploy/internal/interpreter"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/runner"
@@ -34,6 +35,8 @@ type runbookStep struct {
 	MaxRetries      int64    `json:"max_retries"`
 	ExecutionTarget string   `json:"execution_target"`
 	AgentSelectors  []string `json:"agent_selectors,omitempty"`
+	ContainerImage  string   `json:"container_image"`
+	VariableNames   []string `json:"variable_names,omitempty"`
 }
 
 type runbookSaveRequest struct {
@@ -194,6 +197,15 @@ func (h *RunbookHandler) Save(w http.ResponseWriter, r *http.Request) {
 		}
 		step.ExecutionTarget = target
 		step.AgentSelectors = selectors
+		image, variableNames, err := handler.ValidateRunbookStepContainer(
+			target, step.ContainerImage, step.VariableNames,
+		)
+		if err != nil {
+			RespondError(w, http.StatusUnprocessableEntity, err.Error())
+			return
+		}
+		step.ContainerImage = image
+		step.VariableNames = variableNames
 		step.SortOrder = i
 	}
 	steps, err := json.Marshal(req.Steps)

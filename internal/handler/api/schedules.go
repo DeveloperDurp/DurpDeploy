@@ -2,6 +2,7 @@ package api
 
 import (
 	"database/sql"
+	"errors"
 	"net/http"
 	"strconv"
 	"time"
@@ -177,6 +178,21 @@ func (h *ScheduleHandler) CreateSchedule(
 	}
 	if release.ProjectID != projectID {
 		RespondError(w, http.StatusNotFound, "Release not found")
+		return
+	}
+	if err := h.repo.ValidateExecutableRelease(
+		r.Context(),
+		release.ID,
+	); err != nil {
+		if errors.Is(err, repository.ErrLegacyServerStep) {
+			RespondError(
+				w,
+				http.StatusConflict,
+				repository.ErrLegacyServerStep.Error(),
+			)
+		} else {
+			RespondError(w, http.StatusInternalServerError, err.Error())
+		}
 		return
 	}
 	if _, err := h.repo.Queries.GetEnvironment(
@@ -367,6 +383,21 @@ func (h *ScheduleHandler) UpdateSchedule(
 		RespondError(w, http.StatusNotFound, "Release not found")
 		return
 	}
+	if err := h.repo.ValidateExecutableRelease(
+		r.Context(),
+		release.ID,
+	); err != nil {
+		if errors.Is(err, repository.ErrLegacyServerStep) {
+			RespondError(
+				w,
+				http.StatusConflict,
+				repository.ErrLegacyServerStep.Error(),
+			)
+		} else {
+			RespondError(w, http.StatusInternalServerError, err.Error())
+		}
+		return
+	}
 	sched, err := handler.ParseAndValidateCron(cronExpr)
 	if err != nil {
 		RespondError(
@@ -514,6 +545,23 @@ func (h *ScheduleHandler) ToggleSchedule(
 	if existing.ProjectID != projectID {
 		RespondError(w, http.StatusNotFound, "Schedule not found")
 		return
+	}
+	if existing.Enabled == 0 {
+		if err := h.repo.ValidateExecutableRelease(
+			r.Context(),
+			existing.ReleaseID,
+		); err != nil {
+			if errors.Is(err, repository.ErrLegacyServerStep) {
+				RespondError(
+					w,
+					http.StatusConflict,
+					repository.ErrLegacyServerStep.Error(),
+				)
+			} else {
+				RespondError(w, http.StatusInternalServerError, err.Error())
+			}
+			return
+		}
 	}
 
 	updated, err := h.repo.Queries.ToggleScheduledDeploymentEnabled(
