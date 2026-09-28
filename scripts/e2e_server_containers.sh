@@ -79,12 +79,12 @@ sudo chown -R 10001:10001 "$tmp/app-ssh"
 chmod 755 "$tmp"
 
 exec_podman() {
-    sudo -D "/home/$account" -u "$account" env -i \
+    sudo -u "$account" env -i \
         HOME="/home/$account" USER="$account" \
         LOGNAME="$account" PATH=/usr/local/bin:/usr/bin:/bin \
         XDG_RUNTIME_DIR="/run/user/$uid" \
         DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus" \
-        podman "$@"
+        /bin/sh -c 'cd "$HOME" && exec /usr/bin/podman "$@"' sh "$@"
 }
 for step_image in docker.io/library/bash:5.2 docker.io/library/python:3.12-alpine \
     mcr.microsoft.com/powershell:7.4-ubuntu-22.04; do
