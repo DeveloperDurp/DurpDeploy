@@ -101,6 +101,15 @@ chmod 700 "$tmp/app-ssh"
 chmod 600 "$tmp/host-home/.ssh/"* "$tmp/app-ssh/"*
 sudo chown -R 10001:10001 "$tmp/app-ssh"
 chmod 755 "$tmp"
+# The native Docker SSH helper uses the passwd home, not an overridden HOME.
+install -d -m 700 "$HOME/.ssh"
+touch "$HOME/.ssh/config"
+chmod 600 "$HOME/.ssh/config"
+printf '%s\n' \
+    'Host 127.0.0.1' \
+    "    IdentityFile $tmp/host-home/.ssh/id_ed25519" \
+    "    UserKnownHostsFile $tmp/host-home/.ssh/known_hosts" \
+    '    IdentitiesOnly yes' >>"$HOME/.ssh/config"
 
 exec_podman() {
     sudo -u "$account" env -i \
