@@ -79,7 +79,9 @@ printf '%s\n' '#!/bin/sh' \
     '    [ "$2" = "$expected" ] || exit 64' \
     '    shift 2' \
     'fi' \
+    'export HOME="/home/$(id -un)"' \
     'export XDG_RUNTIME_DIR="/run/user/$(id -u)"' \
+    'export XDG_CONFIG_HOME="$HOME/.config"' \
     'export CONTAINER_HOST="unix:///run/user/$(id -u)/podman/podman.sock"' \
     'exec /usr/bin/podman "$@"' \
     | sudo tee "/home/$account/bin/docker" >/dev/null
