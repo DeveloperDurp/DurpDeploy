@@ -648,6 +648,18 @@ DEP_PAGE=$(curl_body "$BASE/deployments/$AFTER_DEP")
 echo "$DEP_PAGE" | grep -q "Scheduled:" || { echo "FAIL: scheduled deployment note missing 'Scheduled:'"; exit 1; }
 echo "  Scheduled deployment created with note: OK"
 
+SCHEDULED_STATUS=""
+for i in {1..200}; do
+    SCHEDULED_STATUS=$(api_get "$BASE/api/v1/deployments/$AFTER_DEP/status" \
+        | python3 -c 'import sys,json; print(json.load(sys.stdin)["status"])')
+    [[ "$SCHEDULED_STATUS" =~ ^(failed|succeeded|cancelled)$ ]] && break
+    sleep 0.1
+done
+[[ "$SCHEDULED_STATUS" == "succeeded" ]] || {
+    echo "FAIL: scheduled deployment status=$SCHEDULED_STATUS"; exit 1;
+}
+echo "  Scheduled deployment finished before later write contracts: OK"
+
 SCHED_LIST=$(curl_body "$BASE/projects/$PROJECT_ID/schedules")
 echo "$SCHED_LIST" | grep -qF "* * * * *" || { echo "FAIL: schedule missing from list"; exit 1; }
 echo "$SCHED_LIST" | grep -q "On" || { echo "FAIL: schedule not enabled"; exit 1; }
