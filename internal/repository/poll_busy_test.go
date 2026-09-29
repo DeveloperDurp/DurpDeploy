@@ -45,7 +45,7 @@ func TestSQLiteBusyRetryValueReturnsOnlySuccessfulAttempt(t *testing.T) {
 		t.Context(),
 		func() (string, error) {
 			attempts++
-			if attempts == 1 {
+			if attempts <= 5 {
 				return "stale rolled-back claim", sqliteCodeError(
 					sqliteBusySnapshotCode,
 				)
@@ -58,7 +58,7 @@ func TestSQLiteBusyRetryValueReturnsOnlySuccessfulAttempt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if attempts != 2 || result != "" {
+	if attempts != 6 || result != "" {
 		t.Fatalf(
 			"attempts=%d result=%q, want successful empty result",
 			attempts,
