@@ -41,6 +41,10 @@ trap cleanup EXIT
 
 printf 'Provisioning rootless execution account\n'
 sudo useradd --create-home --shell /bin/bash "$account"
+# Ubuntu's sshd closes public-key sessions for password-locked accounts.
+# An empty password unlocks this ephemeral account; sshd still rejects
+# password authentication because PermitEmptyPasswords defaults to no.
+sudo passwd --delete "$account"
 uid=$(id -u "$account")
 sudo loginctl enable-linger "$account"
 sudo systemctl start "user@$uid.service"
