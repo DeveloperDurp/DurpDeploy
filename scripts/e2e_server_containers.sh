@@ -107,7 +107,9 @@ export DURPDEPLOY_CONTAINER_RUNTIME=podman
 export DURPDEPLOY_CONTAINER_NAMESPACE="$namespace"
 export DURPDEPLOY_CONTAINER_URL="ssh://$account@127.0.0.1$socket"
 printf 'Checking rootless SSH connection\n'
-HOME="$tmp/host-home" podman --remote --ssh=native \
+HOME="$tmp/host-home" \
+    CONTAINER_SSHKEY="$tmp/host-home/.ssh/id_ed25519" \
+    podman --remote --ssh=native \
     --url="$DURPDEPLOY_CONTAINER_URL" info \
     --format '{{.Host.Security.Rootless}}' | grep -qx true
 

@@ -95,6 +95,10 @@ func (p containerEndpoint) command(
 	cmd := exec.CommandContext(ctx, p.binary, append(clientArgs, args...)...)
 	// Do not let inherited client configuration redirect execution.
 	cmd.Env = append(os.Environ(), hostEnv)
+	if p.kind == "podman" {
+		cmd.Env = append(cmd.Env, "CONTAINER_SSHKEY="+
+			os.Getenv("HOME")+"/.ssh/id_ed25519")
+	}
 	return cmd
 }
 

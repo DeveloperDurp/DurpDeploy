@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -29,6 +30,10 @@ func TestPodmanEndpointIgnoresPoisonedPATH(t *testing.T) {
 	// Then
 	if cmd.Path != "/usr/bin/podman" {
 		t.Fatalf("Podman command path = %q", cmd.Path)
+	}
+	if !slices.Contains(cmd.Env,
+		"CONTAINER_SSHKEY="+os.Getenv("HOME")+"/.ssh/id_ed25519") {
+		t.Fatalf("Podman command environment = %q", cmd.Env)
 	}
 }
 
