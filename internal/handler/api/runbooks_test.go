@@ -24,12 +24,21 @@ func TestRunbookAPI_VersionedExecutionStaysSeparate(t *testing.T) {
 	_, token := seedAPIToken(t, h.repo, user.ID)
 	project := seedProject(t, h.repo)
 	environment := seedEnv(t, h.repo)
-	router := server.NewRouter(h.repo, h.runner,
-		cron.NewParser(cron.Minute|cron.Hour|cron.Dom|cron.Month|cron.Dow),
-		handler.NewAuthHandler(h.repo))
+	router := server.NewRouter(
+		h.repo,
+		h.runner,
+		cron.NewParser(
+			cron.Minute|cron.Hour|cron.Dom|cron.Month|cron.Dow,
+		),
+		handler.NewAuthHandler(h.repo),
+	)
 	request := func(method, path, body string) *httptest.ResponseRecorder {
 		t.Helper()
-		req := httptest.NewRequest(method, path, strings.NewReader(body))
+		req := httptest.NewRequest(
+			method,
+			path,
+			strings.NewReader(body),
+		)
 		req.Header.Set("Authorization", "Bearer "+token)
 		req.Header.Set("Content-Type", "application/json")
 		rec := httptest.NewRecorder()
@@ -72,10 +81,16 @@ func TestRunbookAPI_VersionedExecutionStaysSeparate(t *testing.T) {
 			updated.Body.String(),
 		)
 	}
-	executed := request(http.MethodPost,
-		fmt.Sprintf("%s/runbooks/%d/executions", base, saved.Runbook.ID),
+	executed := request(
+		http.MethodPost,
+		fmt.Sprintf(
+			"%s/runbooks/%d/executions",
+			base,
+			saved.Runbook.ID,
+		),
 		fmt.Sprintf(`{"environment_id":%d,"version_id":%d}`,
-			environment.ID, saved.Version.ID))
+			environment.ID, saved.Version.ID),
+	)
 	if executed.Code != http.StatusCreated {
 		t.Fatalf(
 			"execute status=%d body=%s",
@@ -86,14 +101,24 @@ func TestRunbookAPI_VersionedExecutionStaysSeparate(t *testing.T) {
 	var execution struct {
 		ID int64 `json:"id"`
 	}
-	if err := json.Unmarshal(executed.Body.Bytes(), &execution); err != nil {
+	if err := json.Unmarshal(
+		executed.Body.Bytes(),
+		&execution,
+	); err != nil {
 		t.Fatal(err)
 	}
 	deadline := time.Now().Add(5 * time.Second)
 	var status string
 	for time.Now().Before(deadline) {
-		detail := request(http.MethodGet,
-			fmt.Sprintf("%s/runbook-executions/%d", base, execution.ID), "")
+		detail := request(
+			http.MethodGet,
+			fmt.Sprintf(
+				"%s/runbook-executions/%d",
+				base,
+				execution.ID,
+			),
+			"",
+		)
 		if detail.Code != http.StatusOK {
 			t.Fatalf(
 				"detail status=%d body=%s",
@@ -105,7 +130,10 @@ func TestRunbookAPI_VersionedExecutionStaysSeparate(t *testing.T) {
 			Status      string `json:"status"`
 			RunbookName string `json:"runbook_name"`
 		}
-		if err := json.Unmarshal(detail.Body.Bytes(), &state); err != nil {
+		if err := json.Unmarshal(
+			detail.Body.Bytes(),
+			&state,
+		); err != nil {
 			t.Fatal(err)
 		}
 		if state.RunbookName != "maintenance" {
@@ -127,14 +155,29 @@ func TestRunbookAPI_VersionedExecutionStaysSeparate(t *testing.T) {
 			),
 			"",
 		)
-		t.Fatalf("execution status=%s logs=%s", status, logs.Body.String())
+		t.Fatalf(
+			"execution status=%s logs=%s",
+			status,
+			logs.Body.String(),
+		)
 	}
-	logs := request(http.MethodGet,
-		fmt.Sprintf("%s/runbook-executions/%d/logs", base, execution.ID), "")
+	logs := request(
+		http.MethodGet,
+		fmt.Sprintf(
+			"%s/runbook-executions/%d/logs",
+			base,
+			execution.ID,
+		),
+		"",
+	)
 	if logs.Code != http.StatusOK ||
 		!strings.Contains(logs.Body.String(), "version one") ||
 		strings.Contains(logs.Body.String(), "version two") {
-		t.Fatalf("logs status=%d body=%s", logs.Code, logs.Body.String())
+		t.Fatalf(
+			"logs status=%d body=%s",
+			logs.Code,
+			logs.Body.String(),
+		)
 	}
 	for _, path := range []string{base + "/deployments", base + "/releases"} {
 		list := request(http.MethodGet, path, "")
@@ -150,16 +193,25 @@ func TestRunbookAPI_VersionedExecutionStaysSeparate(t *testing.T) {
 		}
 	}
 	unusedEnvironment := seedEnv(t, h.repo)
-	if _, err := h.repo.Queries.CreateRunbookSchedule(context.Background(),
+	if _, err := h.repo.Queries.CreateRunbookSchedule(
+		context.Background(),
 		db.CreateRunbookScheduleParams{
 			RunbookID:     saved.Runbook.ID,
 			EnvironmentID: unusedEnvironment.ID,
-			Cron:          "0 3 * * *", NextRunAt: time.Now().Unix() + 86400,
-		}); err != nil {
+			Cron:          "0 3 * * *",
+			NextRunAt:     time.Now().Unix() + 86400,
+		},
+	); err != nil {
 		t.Fatal(err)
 	}
-	deletedEnvironment := request(http.MethodDelete,
-		fmt.Sprintf("/api/v1/environments/%d", unusedEnvironment.ID), "")
+	deletedEnvironment := request(
+		http.MethodDelete,
+		fmt.Sprintf(
+			"/api/v1/environments/%d",
+			unusedEnvironment.ID,
+		),
+		"",
+	)
 	if deletedEnvironment.Code != http.StatusNoContent {
 		t.Fatalf("delete scheduled environment status=%d body=%s",
 			deletedEnvironment.Code, deletedEnvironment.Body.String())

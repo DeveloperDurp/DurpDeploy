@@ -41,7 +41,7 @@ func (r *DeploymentRunner) runStepAttempt(
 		)
 	}
 	if r.localErr != nil {
-		err := fmt.Errorf("initialize Podman execution: %w", r.localErr)
+		err := fmt.Errorf("initialize container execution: %w", r.localErr)
 		_, _ = io.WriteString(request.logWriter, fmt.Sprintf(
 			"step %q: attempt %d failed before execution: %v\n",
 			request.step.Name, request.attempt, err,
@@ -84,16 +84,25 @@ func (r *DeploymentRunner) runStepAttempt(
 		request.attempt,
 		hex.EncodeToString(nonce),
 	)
-	args := []string{
-		"run", "--rm", "--interactive", "--pull=never",
-		"--timeout=" + fmt.Sprint(int64(timeout/time.Second)),
+	args := []string{"run"}
+	if r.engine.kind == "podman" {
+		args = append(args, "--rm")
+	}
+	timeoutFlag := "--stop-timeout="
+	if r.engine.kind == "podman" {
+		timeoutFlag = "--timeout="
+	}
+	args = append(args,
+		"--interactive", "--pull=never",
+		timeoutFlag+fmt.Sprint(int64(timeout/time.Second)),
 		"--log-driver=none",
-		"--name=" + name, "--label=io.durpdeploy.attempt=" + name,
-		"--label=io.durpdeploy.namespace=" + r.podman.namespace,
+		"--name="+name, "--label=io.durpdeploy.attempt="+name,
+		"--label=io.durpdeploy.namespace="+r.engine.scope(),
 		"--network=none", "--read-only", "--cap-drop=ALL",
 		"--security-opt=no-new-privileges", "--user=65534:65534",
-		"--pids-limit=128", "--memory=256m", "--image-volume=ignore",
-		"--http-proxy=false",
+		"--pids-limit=128", "--memory=256m")
+	if r.engine.kind == "podman" {
+		args = append(args, "--image-volume=ignore", "--http-proxy=false")
 	}
 	args = append(args, envArgs...)
 	args = append(args, "--entrypoint="+selected, request.step.ContainerImage)
@@ -105,7 +114,7 @@ func (r *DeploymentRunner) runStepAttempt(
 	case interpreter.Python:
 		args = append(args, "-")
 	}
-	cmd := r.podman.command(stepCtx, args...)
+	cmd := r.engine.command(stepCtx, args...)
 	cmd.Env = append(cmd.Env, selectedEnv...)
 	cmd.Stdin = strings.NewReader(request.step.ScriptBody)
 	cmd.Stdout = request.logWriter
@@ -118,7 +127,9 @@ func (r *DeploymentRunner) runStepAttempt(
 			10*time.Second,
 		)
 		defer cleanupCancel()
-		output, err := r.podman.command(cleanupCtx, "rm", "--force", "--time=0", "--ignore", name).
+		output, err := r.engine.command(
+			cleanupCtx, r.engine.removeArgs(name)...,
+		).
 			CombinedOutput()
 		if err != nil {
 			result = errors.Join(

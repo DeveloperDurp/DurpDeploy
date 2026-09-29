@@ -22,7 +22,7 @@ type DeploymentRunner struct {
 	mu       sync.Mutex
 	cancels  map[int64]context.CancelFunc
 	attempts map[int64]string
-	podman   podmanEndpoint
+	engine   containerEndpoint
 	localErr error
 	// bus publishes deployment_started/succeeded/failed events for the
 	// Slack/email notifiers (Stage 3). Nil until SetEventBus is called —
@@ -182,7 +182,7 @@ func (r *DeploymentRunner) Run(
 		}
 
 		var lastErr error
-		namespace := sql.NullString{String: r.podman.namespace, Valid: true}
+		namespace := sql.NullString{String: r.engine.scope(), Valid: true}
 		recorded, err := r.repo.Queries.RecordContainerNamespace(ctx,
 			db.RecordContainerNamespaceParams{
 				DeploymentID: deploymentID, Namespace: namespace,

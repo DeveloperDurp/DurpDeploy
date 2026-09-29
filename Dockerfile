@@ -48,7 +48,7 @@ FROM alpine:3.20
 # engine). The runner invokes Podman over SSH to a separate rootless account.
 # Keep the stable non-root UID and its home for opt-in SSH credentials.
 # hadolint ignore=DL3018
-RUN apk add --no-cache ca-certificates bash openssh-client podman-remote && \
+RUN apk add --no-cache bash ca-certificates docker-cli openssh-client podman-remote && \
 	adduser -D -u 10001 durpdeploy && \
 	ln -s /usr/bin/podman-remote /usr/bin/podman
 

@@ -563,7 +563,7 @@ func TestStartupRecoveryBlocksLocalRetryWhenPodmanSweepFails(t *testing.T) {
 	dir := t.TempDir()
 	binary := filepath.Join(dir, "podman")
 	cli := `#!/bin/sh
-case "$3" in
+case "$4" in
 info) printf '{"host":{"security":{"rootless":true}}}';;
 ps) printf 'orphan-container-id\n';;
 rm) if [ "$PODMAN_SWEEP_FAIL" = 1 ]; then exit 7; fi;;
@@ -626,7 +626,10 @@ esac
 	if _, err := repo.Queries.RecordContainerNamespace(ctx,
 		db.RecordContainerNamespaceParams{
 			DeploymentID: local.Deployment.ID,
-			Namespace:    sql.NullString{String: "test-suite", Valid: true},
+			Namespace: sql.NullString{
+				String: "podman:test-suite",
+				Valid:  true,
+			},
 		}); err != nil {
 		t.Fatal(err)
 	}

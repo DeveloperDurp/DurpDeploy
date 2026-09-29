@@ -103,10 +103,12 @@ exec_podman run --rm --pull=never --entrypoint=bash docker.io/library/bash:5.2 -
 exec_podman run --rm --pull=never --entrypoint=python3 docker.io/library/python:3.12-alpine -c 'print("python ready")'
 exec_podman run --rm --pull=never --entrypoint=pwsh mcr.microsoft.com/powershell:7.4-ubuntu-22.04 -NoProfile -Command 'Write-Output "pwsh ready"'
 
-export DURPDEPLOY_PODMAN_NAMESPACE="$namespace"
-export DURPDEPLOY_PODMAN_URL="ssh://$account@127.0.0.1$socket"
+export DURPDEPLOY_CONTAINER_RUNTIME=podman
+export DURPDEPLOY_CONTAINER_NAMESPACE="$namespace"
+export DURPDEPLOY_CONTAINER_URL="ssh://$account@127.0.0.1$socket"
 printf 'Checking rootless SSH connection\n'
-HOME="$tmp/host-home" podman --remote --url="$DURPDEPLOY_PODMAN_URL" info \
+HOME="$tmp/host-home" podman --remote --ssh=native \
+    --url="$DURPDEPLOY_CONTAINER_URL" info \
     --format '{{.Host.Security.Rootless}}' | grep -qx true
 
 cd "$root"
@@ -116,7 +118,7 @@ DURPDEPLOY_SECRET_KEY=$(openssl rand -base64 32)
 DURPDEPLOY_DB="$tmp/bad-runtime.db" "$tmp/durpdeploy" admin create \
     --email e2e-admin@test.local --password e2e-admin-password-1234 >/dev/null
 HOME="$tmp/host-home" DURPDEPLOY_DB="$tmp/bad-runtime.db" \
-    DURPDEPLOY_PODMAN_URL="ssh://$account@127.0.0.1/run/user/99999/podman/podman.sock" \
+    DURPDEPLOY_CONTAINER_URL="ssh://$account@127.0.0.1/run/user/99999/podman/podman.sock" \
     DURPDEPLOY_EXECUTION_BOUNDARY=service DURPDEPLOY_ADDR=127.0.0.1:18082 \
     DURPDEPLOY_AGENT_LISTEN_ADDR=127.0.0.1:0 \
     DURPDEPLOY_AGENT_PUBLIC_URL=https://localhost \
@@ -163,7 +165,7 @@ server_pid=
 
 printf 'Running host control-plane E2E\n'
 HOME="$tmp/host-home" DURPDEPLOY_E2E_PORT=18080 ./scripts/e2e_test.sh
-test -z "$(exec_podman ps -aq --filter "label=io.durpdeploy.namespace=$namespace")"
+test -z "$(exec_podman ps -aq --filter "label=io.durpdeploy.namespace=podman:$namespace")"
 
 printf 'Building containerized control plane\n'
 docker build -t "$image" .
@@ -179,8 +181,9 @@ docker run -d --name "$app_name" --read-only --user 10001:10001 \
     --volume "$identity_volume:/var/lib/durpdeploy/agent-identity" \
     --volume "$tmp/app-ssh:/home/durpdeploy/.ssh:ro" \
     -p 127.0.0.1:18081:8080 \
-    -e DURPDEPLOY_SECRET_KEY -e DURPDEPLOY_PODMAN_NAMESPACE \
-    -e "DURPDEPLOY_PODMAN_URL=ssh://$account@host.containers.internal$socket" \
+    -e DURPDEPLOY_SECRET_KEY -e DURPDEPLOY_CONTAINER_RUNTIME \
+    -e DURPDEPLOY_CONTAINER_NAMESPACE \
+    -e "DURPDEPLOY_CONTAINER_URL=ssh://$account@host.containers.internal$socket" \
     -e DURPDEPLOY_DB=/data/durpdeploy.db \
     -e DURPDEPLOY_ADDR=0.0.0.0:8080 \
     -e DURPDEPLOY_AGENT_LISTEN_ADDR=0.0.0.0:10943 \
@@ -193,7 +196,7 @@ for i in {1..100}; do
     sleep 0.1
 done
 docker exec "$app_name" /bin/sh -c 'command -v podman && command -v ssh && test ! -e /run/docker.sock && test ! -e /run/podman/podman.sock'
-docker exec "$app_name" podman --remote \
+docker exec "$app_name" podman --remote --ssh=native \
     --url="ssh://$account@host.containers.internal$socket" info \
     --format '{{.Host.Security.Rootless}}' | grep -qx true
 printf 'Running containerized control-plane E2E\n'
@@ -201,5 +204,5 @@ DURPDEPLOY_E2E_CLIENT_ONLY=1 DURPDEPLOY_E2E_CONTROL_PLANE_PORT=18081 \
     DURPDEPLOY_BASE_URL=http://127.0.0.1:18081 \
     ./scripts/e2e_test.sh
 docker stop "$app_name" >/dev/null
-test -z "$(exec_podman ps -aq --filter "label=io.durpdeploy.namespace=$namespace")"
+test -z "$(exec_podman ps -aq --filter "label=io.durpdeploy.namespace=podman:$namespace")"
 printf 'Host and in-container API/web E2E and container cleanup: PASS\n'

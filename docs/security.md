@@ -76,7 +76,7 @@ What we do **not** defend against yet (see Known Gaps):
 
 - Audit log retention / tamper-proofing
 
-Server-side steps run only in containers managed by a separate rootless Podman
+Server-side steps run only in containers managed by a separate rootless runtime
 account over SSH. No step receives a runtime socket or control-plane mount;
 the root filesystem is read-only, network is disabled, capabilities are
 dropped, and only step-selected resolved variables are passed. A missing
@@ -330,8 +330,8 @@ context. This is intentional (the deploy must outlive the HTTP request), but
 it means the only cancellation path is `runner.Cancel(id)`.
 
 **Current behavior:** A server step has a runtime-enforced maximum duration;
-cancel and shutdown ask Podman to remove its labelled container. Startup
-reconciles orphaned attempts before new server work. Killing the Podman client
+cancel and shutdown ask the runtime to remove its labelled container. Startup
+reconciles orphaned attempts before new server work. Killing the container client
 alone is not proof the container stopped. If runtime cleanup cannot be
 confirmed, the deployment fails and requires inspection before a retry.
 
@@ -463,7 +463,7 @@ values:
 | ~~**Secret encryption at rest**~~ | ~~`release_variables.value` is plaintext. A DB read leaks secrets~~ | **shipped (P1-3)** |
 | ~~**Runner orphan cleanup**~~ | ~~Killed/restarted server left orphaned bash children~~ | **shipped** |
 | ~~**Log redaction hardening**~~ | ~~Naive per-line `strings.ReplaceAll` missed common credential formats and multi-line/split secrets~~ | **shipped (P1-5)** |
-| **Execution account compromise** | The app's SSH credential can control the separate rootless Podman account; container escape remains possible on a shared kernel | Restrict that account's filesystem access and keep untrusted agent scripts off the control-plane host |
+| **Execution account compromise** | The app's SSH credential can control the separate rootless Docker or Podman account; container escape remains possible on a shared kernel | Restrict that account's filesystem access and keep untrusted agent scripts off the control-plane host |
 | ~~**Login rate limiting**~~ | ~~Password, MFA, and OIDC login surfaces lacked application limits~~ | **shipped** |
 | **Audit log retention** | No retention policy or tamper-proofing on `audit_log` | P2-5 |
 | **Password reset flow** | No self-service reset. Admin must delete + recreate the user | P2 |

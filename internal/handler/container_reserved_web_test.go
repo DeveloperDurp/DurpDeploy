@@ -14,7 +14,7 @@ func TestTemplateWebRejectsContainerReservedVariableName(t *testing.T) {
 		"script_body":     {"echo hi"},
 		"interpreter":     {"bash"},
 		"container_image": {"alpine:3.20"},
-		"variable_names":  {"CONTAINER_SSHKEY"},
+		"variable_names":  {"DOCKER_HOST"},
 		"csrf_token":      {h.csrfToken()},
 	}
 	response, err := h.authedClient().PostForm(h.server.URL+"/templates", form)

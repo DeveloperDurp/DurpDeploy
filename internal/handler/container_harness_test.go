@@ -11,7 +11,7 @@ func setupTestPodman(t *testing.T) string {
 	dir := t.TempDir()
 	binary := filepath.Join(dir, "podman")
 	cli := `#!/bin/sh
-case "$3" in
+case "$4" in
 info) printf '{"host":{"security":{"rootless":true}}}' ;;
 ps|rm) ;;
 run) exec /bin/sh -s ;;

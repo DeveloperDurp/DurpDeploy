@@ -15,14 +15,15 @@ var ErrReserved = errors.New(
 )
 
 // ValidateName keeps agent variable names compatible while preventing local
-// selections from changing the Podman and SSH client's own environment.
+// selections from changing the container and SSH clients' own environment.
 func ValidateName(name string, local bool) error {
 	if !identifier.MatchString(name) {
 		return ErrIdentifier
 	}
 	if local && (name == "PATH" || name == "HOME" || name == "TMPDIR" ||
-		name == "REGISTRY_AUTH_FILE" || name == "DOCKER_CONFIG" ||
+		name == "REGISTRY_AUTH_FILE" ||
 		strings.HasPrefix(name, "XDG_") ||
+		strings.HasPrefix(name, "DOCKER_") ||
 		strings.HasPrefix(name, "PODMAN_") ||
 		strings.HasPrefix(name, "CONTAINER_") ||
 		strings.HasPrefix(name, "CONTAINERS_") ||

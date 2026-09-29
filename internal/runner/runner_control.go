@@ -30,7 +30,7 @@ func (r *DeploymentRunner) KillAll() {
 	r.mu.Unlock()
 	for _, name := range names {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		output, err := r.podman.command(ctx, "rm", "--force", "--time=0", "--ignore", name).
+		output, err := r.engine.command(ctx, r.engine.removeArgs(name)...).
 			CombinedOutput()
 		cancel()
 		if err != nil {

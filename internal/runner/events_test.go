@@ -36,7 +36,7 @@ func setupRunnerHarness(
 	t.Setenv("DURPDEPLOY_EXECUTION_BOUNDARY", "development")
 	binDir := t.TempDir()
 	podman := `#!/bin/sh
-case "$3" in
+case "$4" in
 info) printf '{"host":{"security":{"rootless":true}}}';;
 ps) ;;
 rm) ;;

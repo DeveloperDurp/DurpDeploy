@@ -101,7 +101,7 @@ Token placement rules:
 `bash`, `pwsh`, or `python3` installed. `agent` runs on matching remote agents
 without a container image. `variable_names` selects which resolved release
 variables enter this step; omit it or use `[]` to pass none. Local steps cannot
-select Podman/SSH client configuration names such as `PATH`, `HOME`,
+select container/SSH client configuration names such as `PATH`, `HOME`,
 `SSH_AUTH_SOCK`, or `XDG_*`; agent steps retain their host variable support.
 Images must already be present in the configured rootless execution runtime
 (`--pull=never`), and
@@ -139,7 +139,7 @@ done
      `POST /api/v1/deployments/$DID/redeploy`.
     - `POST /api/v1/deployments/$DID/cancel` stops a running deploy.
     - `cleanup_unconfirmed` means container removal failed. Retry and redeploy
-      return `409`; do not re-execute until a successful startup Podman sweep
+      return `409`; do not re-execute until a successful startup runtime sweep
       changes the deployment to `failed`.
 
 ## Gates (know the 422s)
@@ -184,7 +184,7 @@ Execution actions are `POST .../$XID/cancel`, `/approve` (admin only),
 and `/retry` (after a terminal status). Retry returns `409` while the source
 execution has a lost or unconfirmed remote outcome; inspect the agent before
 retrying. Retry also returns `409` for `cleanup_unconfirmed` until the next
-successful startup Podman sweep changes the deployment to `failed`.
+successful startup runtime sweep changes the deployment to `failed`.
 
 `GET /api/v1/projects/$PID/runbook-executions?limit=100&offset=0`
 returns `{items, total, limit, offset}`. The default page has 100 items;

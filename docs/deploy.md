@@ -364,14 +364,15 @@ secrets. Back up the key with the database.
 
 Every new server-side step (`execution_target: "local"`) requires a
 `container_image`. The control plane never executes its script on the host.
-Provision a **separate rootless Podman account** for execution, with private
-container/image storage and a user socket at
-`/run/user/<execution-uid>/podman/podman.sock`. This account must not own or be
+Provision a **separate rootless Docker or Podman account** for execution, with
+private container/image storage. A Podman endpoint uses its user socket at
+`/run/user/<execution-uid>/podman/podman.sock`; Docker uses the execution
+account's rootless Docker context over SSH. This account must not own or be
 able to read the DurpDeploy database, WAL/SHM files, encryption key, agent
 identity, or server process environment. Do not use the rootful Docker daemon,
 the engine hosting the DurpDeploy app container, or the `durpdeploy` service
 account as the execution account. Preload each step image in that account's
-Podman storage; the runner uses `--pull=never` and fails if it is missing.
+runtime storage; the runner uses `--pull=never` and fails if it is missing.
 
 Give the `durpdeploy` account SSH access to only that execution account and
 verify/pin its SSH host key. For the systemd installation, store a mode-0600
@@ -380,18 +381,29 @@ SSH identity and a verified `known_hosts` under
 `/etc/durpdeploy/durpdeploy.env`, set:
 
 ```text
-DURPDEPLOY_PODMAN_URL=ssh://exec@execution-host/run/user/EXEC_UID/podman/podman.sock
-DURPDEPLOY_PODMAN_NAMESPACE=durpdeploy-prod
+DURPDEPLOY_CONTAINER_RUNTIME=podman
+DURPDEPLOY_CONTAINER_URL=ssh://exec@execution-host/run/user/EXEC_UID/podman/podman.sock
+DURPDEPLOY_CONTAINER_NAMESPACE=durpdeploy-prod
 ```
 
+For rootless Docker, use `DURPDEPLOY_CONTAINER_RUNTIME=docker` and
+`DURPDEPLOY_CONTAINER_URL=ssh://exec@execution-host/run/user/EXEC_UID/docker.sock`.
+The explicit socket path keeps execution pinned to that account's rootless
+daemon.
+
 The SSH host can be the application host if the accounts and filesystem access
-remain separate. When DurpDeploy itself runs in a container, its image already
-includes `podman-remote` and SSH. Make the execution host reachable from the
+remain separate. When DurpDeploy itself runs in a container, its image includes
+the Docker and Podman clients plus SSH. Make the execution host reachable from the
 app container, and mount only the app user's SSH identity and pinned
 `known_hosts` read-only at `/home/durpdeploy/.ssh`. The Compose examples show
 this optional mount. **Never mount either container engine's socket into the
 app or any step container.** If the endpoint is absent or not rootless,
 server-side steps fail rather than running locally.
+
+For Kubernetes, set the chart's `containerRuntime` values. Its `sshSecret`
+must name an existing Secret with `id_ed25519` and `known_hosts` keys. The pod
+connects to the execution host over the cluster network; it does not need a
+node socket or privileged access.
 
 Each attempt runs as non-root with a read-only root filesystem, no network,
 no capabilities, no new privileges, bounded memory and process count, and no
@@ -661,7 +673,7 @@ key `ON DELETE CASCADE`.)
 
 ### The dashboard loads but deploys fail
 
-Check deployment logs and the configured rootless Podman endpoint. A missing
+Check deployment logs and the configured rootless container endpoint. A missing
 image, unavailable runtime, or interpreter absent from the image fails the
 step; installing the interpreter on the DurpDeploy host does not help. The
 runner removes attempts on completion, timeout, cancellation, and shutdown,

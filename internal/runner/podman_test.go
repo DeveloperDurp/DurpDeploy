@@ -71,7 +71,7 @@ func podmanFixture(
 func TestLocalAttemptStreamsSelectedVariablesAndRedactsOutput(t *testing.T) {
 	// Given
 	r, repo, trace := podmanFixture(t, `
-case "$3" in
+case "$4" in
 info) printf '{"host":{"security":{"rootless":true}}}';;
 ps) ;;
 run)
@@ -229,6 +229,61 @@ func TestPodmanEndpointAllowsSameHostRootlessAccount(t *testing.T) {
 	}
 }
 
+func TestDockerEndpointUsesFixedClientAndSSHHost(t *testing.T) {
+	t.Setenv("DURPDEPLOY_CONTAINER_RUNTIME", "docker")
+	t.Setenv("DURPDEPLOY_CONTAINER_URL",
+		"ssh://executor@example.invalid/run/user/1234/docker.sock")
+	t.Setenv("DURPDEPLOY_CONTAINER_NAMESPACE", "test")
+	endpoint, err := newContainerEndpoint()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := endpoint.command(t.Context(), "info")
+	if cmd.Path != "/usr/bin/docker" ||
+		strings.Join(cmd.Args[1:], " ") !=
+			"--host=ssh://executor@example.invalid/run/user/1234/docker.sock info" {
+		t.Fatalf("Docker command = %q", cmd.Args)
+	}
+}
+
+func TestDockerEndpointRejectsRootAndSocketPaths(t *testing.T) {
+	for _, endpoint := range []string{
+		"ssh://root@example.invalid",
+		"ssh://executor@example.invalid",
+		"ssh://executor@example.invalid/var/run/docker.sock",
+		"unix:///run/user/1234/docker.sock",
+	} {
+		t.Run(endpoint, func(t *testing.T) {
+			t.Setenv("DURPDEPLOY_CONTAINER_RUNTIME", "docker")
+			t.Setenv("DURPDEPLOY_CONTAINER_URL", endpoint)
+			t.Setenv("DURPDEPLOY_CONTAINER_NAMESPACE", "test")
+			if _, err := newContainerEndpoint(); err == nil {
+				t.Fatal("accepted unsafe Docker endpoint")
+			}
+		})
+	}
+}
+
+func TestDockerRootlessEngineIsAccepted(t *testing.T) {
+	dir := t.TempDir()
+	binary := filepath.Join(dir, "docker")
+	if err := os.WriteFile(binary, []byte(`#!/bin/sh
+case "$2" in
+info) printf '["name=rootless","name=seccomp"]';;
+ps) ;;
+esac
+`), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("DURPDEPLOY_CONTAINER_RUNTIME", "docker")
+	t.Setenv("DURPDEPLOY_CONTAINER_URL",
+		"ssh://executor@example.invalid/run/user/1234/docker.sock")
+	t.Setenv("DURPDEPLOY_CONTAINER_NAMESPACE", "test")
+	if r := newRunner(nil, nil, binary); r.localErr != nil {
+		t.Fatal(r.localErr)
+	}
+}
+
 func TestPodmanRootfulEngineFailsClosed(t *testing.T) {
 	// Given
 	dir := t.TempDir()
@@ -258,7 +313,7 @@ func TestPodmanRootfulEngineFailsClosed(t *testing.T) {
 func TestRunnerRetriesWithFreshContainers(t *testing.T) {
 	// Given
 	r, repo, trace := podmanFixture(t, `
-case "$3" in
+case "$4" in
 info) printf '{"host":{"security":{"rootless":true}}}';;
 ps) ;;
 run)
@@ -327,7 +382,7 @@ esac
 func TestRunnerKeepsCleanupFailureUnconfirmedWithoutRetry(t *testing.T) {
 	// Given
 	r, repo, trace := podmanFixture(t, `
-case "$3" in
+case "$4" in
 info) printf '{"host":{"security":{"rootless":true}}}';;
 ps) ;;
 run) printf 'run\n' >> "$PODMAN_TRACE";;
@@ -379,7 +434,7 @@ esac
 	)
 	if err != nil || stored.Status != "cleanup_unconfirmed" ||
 		!stored.FinishedAt.Valid ||
-		stored.ContainerNamespace.String != "test-suite" {
+		stored.ContainerNamespace.String != "podman:test-suite" {
 		t.Fatalf("cleanup status = %+v: %v", stored, err)
 	}
 	runs, err := os.ReadFile(trace)
@@ -391,7 +446,7 @@ esac
 func TestRunnerDoesNotStartInDifferentNamespace(t *testing.T) {
 	// Given: a running deployment was associated with another namespace.
 	r, repo, trace := podmanFixture(t, `
-case "$3" in
+case "$4" in
 info) printf '{"host":{"security":{"rootless":true}}}';;
 ps) ;;
 run) printf 'started' > "$PODMAN_TRACE";;
@@ -465,7 +520,7 @@ esac
 func TestRunnerRejectsUnknownTargetBeforePodman(t *testing.T) {
 	// Given
 	r, repo, trace := podmanFixture(t, `
-case "$3" in
+case "$4" in
 info) printf '{"host":{"security":{"rootless":true}}}';;
 ps) ;;
 run) printf 'ran' > "$PODMAN_TRACE";;

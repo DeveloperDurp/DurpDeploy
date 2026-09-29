@@ -18,7 +18,7 @@ func TestPodmanStartupRemovesNamespacedOrphans(t *testing.T) {
 	binary := filepath.Join(dir, "podman")
 	trace := filepath.Join(dir, "removed")
 	cli := `#!/bin/sh
-case "$3" in
+case "$4" in
 info) printf '{"host":{"security":{"rootless":true}}}';;
 ps) printf 'orphan-container-id\n';;
 rm) printf '%s\n' "$*" > "$PODMAN_TRACE";;
@@ -58,7 +58,7 @@ func TestStartupSweepConfirmsOnlyUnconfirmedCleanupAfterRemoval(t *testing.T) {
 	dir := t.TempDir()
 	binary := filepath.Join(dir, "podman")
 	cli := `#!/bin/sh
-case "$3" in
+case "$4" in
 info) if [ "$PODMAN_SWEEP_FAIL" = 2 ]; then
   printf '{"host":{"security":{"rootless":false}}}';
 else printf '{"host":{"security":{"rootless":true}}}'; fi;;
@@ -123,7 +123,7 @@ esac
 	}
 	if _, err := repo.DB.ExecContext(t.Context(),
 		"UPDATE deployments SET container_namespace = ? WHERE id = ?",
-		"test-suite", uncertain.ID); err != nil {
+		"podman:test-suite", uncertain.ID); err != nil {
 		t.Fatal(err)
 	}
 	legacy, err := repo.Queries.CreateDeployment(
@@ -153,7 +153,7 @@ esac
 		t.Fatal(err)
 	}
 	endpoint.binary = binary
-	r := &DeploymentRunner{repo: repo, podman: endpoint}
+	r := &DeploymentRunner{repo: repo, engine: endpoint}
 
 	// When: the runtime reports rootful mode.
 	t.Setenv("PODMAN_SWEEP_FAIL", "2")
@@ -198,7 +198,7 @@ func TestStartupSweepLeavesOtherNamespaceUnconfirmed(t *testing.T) {
 	// Given: an earlier execution has an unconfirmed container in another namespace.
 	binary := filepath.Join(t.TempDir(), "podman")
 	cli := `#!/bin/sh
-case "$3" in
+case "$4" in
 info) printf '{"host":{"security":{"rootless":true}}}';;
 ps) ;;
 rm) exit 9;;

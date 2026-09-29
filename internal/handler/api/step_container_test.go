@@ -198,7 +198,8 @@ func TestSteps_VariableNamesValidation(t *testing.T) {
 	for _, name := range []string{
 		"PATH", "HOME", "TMPDIR", "SSH_AUTH_SOCK", "CONTAINER_HOST",
 		"CONTAINER_SSHKEY", "XDG_CONFIG_HOME", "XDG_RUNTIME_DIR",
-		"REGISTRY_AUTH_FILE", "PODMAN_CONNECTIONS_CONF",
+		"REGISTRY_AUTH_FILE", "PODMAN_CONNECTIONS_CONF", "DOCKER_HOST",
+		"DOCKER_CONTEXT",
 		"CONTAINERS_CONF", "SSH_ASKPASS",
 	} {
 		cases = append(cases, struct {

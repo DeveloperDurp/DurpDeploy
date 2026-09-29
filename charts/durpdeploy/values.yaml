@@ -1,8 +1,8 @@
 # Default values for durpdeploy.
 # Override per-install with `-f my-values.yaml` or `--set key=value`.
 
-# -- Number of pod replicas. The runner executes bash on the host and the
-# startup recovery path has a non-atomic claim (see cmd/server/main.go
+# -- Number of pod replicas. The in-process runner and the startup recovery
+# path have a non-atomic claim (see cmd/server/main.go
 # comment on recoverPendingDeployments) — keep this at 1 unless you
 # understand the deploy-creation race.
 replicaCount: 1
@@ -35,8 +35,8 @@ serviceAccount:
 # -- Pod-level annotations.
 podAnnotations: {}
 # --- Autoscaling ---------------------------------------------------------
-# Disabled by default. The runner executes bash on the host and the
-# startup recovery path has a non-atomic claim — scaling up introduces
+# Disabled by default. The in-process runner and startup recovery path have a
+# non-atomic claim — scaling up introduces
 # deploy-creation races. Only enable if you have moved the queue out
 # of the process.
 autoscaling:
@@ -213,6 +213,16 @@ ingress:
 #     - name: DURPDEPLOY_SMTP_HOST
 #       value: smtp.example.com
 extraEnv: []
+
+# --- Server-side container execution -----------------------------------
+# Connects over SSH to a separate rootless Docker or Podman account. The
+# existing Secret must contain `id_ed25519` and `known_hosts`.
+containerRuntime:
+  enabled: false
+  type: podman
+  url: ""
+  namespace: durpdeploy
+  sshSecret: ""
 
 # --- Pod disruption budget ----------------------------------------------
 # Disabled by default — single replica means a PDB can only block

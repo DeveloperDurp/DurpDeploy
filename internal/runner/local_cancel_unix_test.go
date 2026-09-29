@@ -15,7 +15,7 @@ import (
 func TestLocalCancellationRemovesRemoteAttempt(t *testing.T) {
 	// Given
 	r, repo, trace := podmanFixture(t, `
-case "$3" in
+case "$4" in
 info) printf '{"host":{"security":{"rootless":true}}}';;
 ps) ;;
 run) printf 'started\n' > "$PODMAN_TRACE"; exec sleep 30;;
@@ -71,7 +71,7 @@ esac
 func TestKillAllCancelsAndRemovesTrackedContainer(t *testing.T) {
 	// Given
 	r, repo, trace := podmanFixture(t, `
-case "$3" in
+case "$4" in
 info) printf '{"host":{"security":{"rootless":true}}}';;
 ps) ;;
 run) printf 'started' > "$PODMAN_TRACE"; exec sleep 30;;
@@ -128,7 +128,7 @@ esac
 func TestLocalTimeoutRemovesRemoteAttempt(t *testing.T) {
 	// Given
 	r, repo, trace := podmanFixture(t, `
-case "$3" in
+case "$4" in
 info) printf '{"host":{"security":{"rootless":true}}}';;
 ps) ;;
 run) printf '%s\n' "$@" > "$PODMAN_TRACE"; exec sleep 30;;
@@ -173,7 +173,7 @@ func TestLocalCancellationCleanupFailureDoesNotConfirmCancellation(
 ) {
 	// Given: the remote runtime does not acknowledge removal after a cancelled run.
 	r, repo, trace := podmanFixture(t, `
-case "$3" in
+case "$4" in
 info) printf '{"host":{"security":{"rootless":true}}}';;
 ps) ;;
 run) printf 'started\n' > "$PODMAN_TRACE"; exec sleep 30;;

@@ -10,7 +10,7 @@ import (
 
 func TestRunnerLogsUnavailablePodmanBeforeExecution(t *testing.T) {
 	r, repo, _ := podmanFixture(t, `
-case "$3" in
+case "$4" in
 info) printf '{"host":{"security":{"rootless":true}}}';;
 ps) ;;
 esac

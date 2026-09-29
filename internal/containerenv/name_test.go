@@ -6,7 +6,9 @@ import (
 )
 
 func TestValidateNameRejectsClientConfigEnvironment(t *testing.T) {
-	for _, name := range []string{"PATH", "HOME", "SSH_AUTH_SOCK", "XDG_DATA_HOME"} {
+	for _, name := range []string{
+		"PATH", "HOME", "SSH_AUTH_SOCK", "XDG_DATA_HOME", "DOCKER_HOST",
+	} {
 		if err := ValidateName(name, true); !errors.Is(err, ErrReserved) {
 			t.Fatalf("%s: expected reserved name, got %v", name, err)
 		}

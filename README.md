@@ -274,7 +274,8 @@ five-minute hands-on attack drill — is documented in
   daily systemd timer are operator-deployed, not auto-installed).
 
 Server-side steps require a container image and run through a separate rootless
-Podman account over SSH, including when DurpDeploy itself runs in a container.
+Docker or Podman account over SSH, including when DurpDeploy itself runs in a
+container or Kubernetes pod.
 There is no host-execution fallback. The execution account must not be able to
 read the control-plane database or key, and step containers receive no runtime
 socket or control-plane mount. Old deployments remain readable, but old

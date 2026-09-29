@@ -10,7 +10,7 @@ import (
 
 func TestRunnerRejectsPersistedReservedVariableBeforePodmanRun(t *testing.T) {
 	r, repo, trace := podmanFixture(t, `
-case "$3" in
+case "$4" in
 info) printf '{"host":{"security":{"rootless":true}}}';;
 ps) ;;
 run) printf 'started' > "$PODMAN_TRACE";;
