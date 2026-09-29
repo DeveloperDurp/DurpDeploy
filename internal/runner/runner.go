@@ -187,9 +187,42 @@ func (r *DeploymentRunner) Run(
 			db.RecordContainerNamespaceParams{
 				DeploymentID: deploymentID, Namespace: namespace,
 			})
-		if err != nil || recorded != 1 {
-			r.persistCompletion(ctx, runCtx, deploymentID,
-				"cleanup_unconfirmed", false)
+		if err != nil {
+			r.failStep(ctx, runCtx, events.Event{
+				Type:          events.DeploymentFailed,
+				DeploymentID:  deploymentID,
+				ProjectID:     release.ProjectID,
+				EnvironmentID: environmentID,
+				Message: fmt.Sprintf(
+					"Deployment #%d failed before container execution: %v",
+					deploymentID,
+					err,
+				),
+			}, true)
+			return
+		}
+		if recorded != 1 {
+			deployment, loadErr := r.repo.Queries.GetDeployment(
+				ctx, deploymentID,
+			)
+			if loadErr == nil && deployment.ContainerNamespace.Valid {
+				r.persistCompletion(ctx, runCtx, deploymentID,
+					"cleanup_unconfirmed", false)
+				return
+			}
+			if loadErr == nil && deployment.Status == "cancelled" {
+				return
+			}
+			r.failStep(ctx, runCtx, events.Event{
+				Type:          events.DeploymentFailed,
+				DeploymentID:  deploymentID,
+				ProjectID:     release.ProjectID,
+				EnvironmentID: environmentID,
+				Message: fmt.Sprintf(
+					"Deployment #%d failed before container execution: container namespace was not recorded",
+					deploymentID,
+				),
+			}, true)
 			return
 		}
 		maxAttempts := int(step.MaxRetries) + 1

@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/migrate"
@@ -280,6 +281,41 @@ printf '{"/data":{}}'
 	}
 }
 
+func TestDockerImageInspectionUsesStepTimeout(t *testing.T) {
+	dir := t.TempDir()
+	binary := filepath.Join(dir, "docker")
+	if err := os.WriteFile(binary, []byte(`#!/bin/sh
+exec sleep 5
+`), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	r, repo, _ := podmanFixture(t, `
+case "$4" in
+info) printf '{"host":{"security":{"rootless":true}}}';;
+ps) ;;
+esac
+`)
+	r.engine = containerEndpoint{
+		kind: "docker", binary: binary,
+		url: "ssh://executor@example.invalid/run/user/1234/docker.sock",
+	}
+	writer := &broadcastWriter{
+		broker: NewLogBroker(), repo: repo, ctx: t.Context(),
+		scrubber: NewScrubber(nil),
+	}
+	started := time.Now()
+	err := r.runStepAttempt(t.Context(), localStepAttempt{
+		step: deploymentStep{
+			Name: "inspect", ContainerImage: "example/image:1",
+			TimeoutSeconds: 1,
+		},
+		logWriter: writer,
+	})
+	if err == nil || time.Since(started) > 3*time.Second {
+		t.Fatalf("inspection timeout after %s: %v", time.Since(started), err)
+	}
+}
+
 func TestDockerEndpointRejectsRootAndSocketPaths(t *testing.T) {
 	for _, endpoint := range []string{
 		"ssh://root@example.invalid",
@@ -474,6 +510,69 @@ esac
 	runs, err := os.ReadFile(trace)
 	if err != nil || string(runs) != "run\n" {
 		t.Fatalf("unexpected automatic retry %q: %v", runs, err)
+	}
+}
+
+func TestRunnerFailsWhenNamespaceCannotBeRecordedBeforeLaunch(t *testing.T) {
+	r, repo, trace := podmanFixture(t, `
+case "$4" in
+info) printf '{"host":{"security":{"rootless":true}}}';;
+ps) ;;
+run) printf 'started' > "$PODMAN_TRACE";;
+esac
+`)
+	project, err := repo.Queries.CreateProject(
+		t.Context(), db.CreateProjectParams{Name: "p"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	env, err := repo.Queries.CreateEnvironment(
+		t.Context(), db.CreateEnvironmentParams{Name: "e"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	release, err := repo.Queries.CreateRelease(
+		t.Context(),
+		db.CreateReleaseParams{
+			ProjectID: project.ID, Version: "v1",
+			StepsJson: `[{"name":"local","container_image":"example/image:1"}]`,
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	created, err := repo.CreateDeployment(
+		t.Context(),
+		db.CreateDeploymentParams{
+			ReleaseID: release.ID, EnvironmentID: env.ID, Status: "pending",
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.DB.ExecContext(t.Context(), `
+CREATE TRIGGER reject_container_namespace
+BEFORE UPDATE OF container_namespace ON deployments
+WHEN NEW.container_namespace IS NOT NULL
+BEGIN
+  SELECT RAISE(IGNORE);
+END`); err != nil {
+		t.Fatal(err)
+	}
+
+	r.Run(t.Context(), created.Deployment.ID, release.ID, env.ID)
+
+	stored, err := repo.Queries.GetDeployment(
+		t.Context(), created.Deployment.ID,
+	)
+	if err != nil || stored.Status != "failed" ||
+		stored.ContainerNamespace.Valid {
+		t.Fatalf("deployment = %+v: %v", stored, err)
+	}
+	if _, err := os.Stat(trace); !os.IsNotExist(err) {
+		t.Fatalf("container started before namespace record: %v", err)
 	}
 }
 

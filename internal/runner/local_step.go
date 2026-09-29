@@ -54,9 +54,15 @@ func (r *DeploymentRunner) runStepAttempt(
 	if err != nil {
 		return err
 	}
+	timeout := defaultStepTimeout
+	if request.step.TimeoutSeconds > 0 {
+		timeout = time.Duration(request.step.TimeoutSeconds) * time.Second
+	}
+	stepCtx, cancel := context.WithTimeout(runCtx, timeout)
+	defer cancel()
 	if r.engine.kind == "docker" {
 		err = r.rejectDockerImageVolumes(
-			runCtx,
+			stepCtx,
 			request.step.ContainerImage,
 		)
 		if err != nil {
@@ -83,12 +89,6 @@ func (r *DeploymentRunner) runStepAttempt(
 		envArgs = append(envArgs, "--env", name)
 	}
 
-	timeout := defaultStepTimeout
-	if request.step.TimeoutSeconds > 0 {
-		timeout = time.Duration(request.step.TimeoutSeconds) * time.Second
-	}
-	stepCtx, cancel := context.WithTimeout(runCtx, timeout)
-	defer cancel()
 	nonce := make([]byte, 12)
 	if _, err := rand.Read(nonce); err != nil {
 		return err

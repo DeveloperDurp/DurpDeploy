@@ -407,6 +407,18 @@ func (h *StepTemplateHandler) InsertTemplate(
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	target := tpl.ExecutionTarget
+	if target == "" {
+		target = "local"
+	}
+	if target == "local" && tpl.ContainerImage == "" {
+		http.Error(
+			w,
+			"Legacy local template cannot be inserted. Add a container image first.",
+			http.StatusUnprocessableEntity,
+		)
+		return
+	}
 
 	steps, err := h.repo.Queries.ListStepsByProject(r.Context(), projectID)
 	if err != nil {
