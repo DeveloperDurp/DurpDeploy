@@ -12,11 +12,16 @@ COOKIES="$TMP/admin-cookies"
 SERVER_PID=""
 
 cleanup() {
+	local status=$?
+	if ((status != 0)) && [[ -f "$TMP/server.log" ]]; then
+		tail -n 100 "$TMP/server.log" >&2
+	fi
     rm -rf "$TMP"
     if [[ -n "$SERVER_PID" ]]; then
         kill "$SERVER_PID" 2>/dev/null || true
         wait "$SERVER_PID" 2>/dev/null || true
     fi
+	return "$status"
 }
 trap cleanup EXIT
 
@@ -258,6 +263,7 @@ done
 CANCEL_STATUS=$(curl_body "$BASE/deployments/$CANCEL_DEP/status")
 CANCEL_STATE=$(echo "$CANCEL_STATUS" | grep -oP 'badge [^"]+">\K[a-z_]+' | head -1)
 echo "$CANCEL_STATUS" | grep -q 'running' || {
+	curl_body "$BASE/deployments/$CANCEL_DEP/logs.txt" >&2
   echo "FAIL: cancel deployment did not reach running (state=${CANCEL_STATE:-unknown})"; exit 1;
 }
 CODE=$(curl_silent -X POST -d "csrf_token=$CSRF" "$BASE/deployments/$CANCEL_DEP/cancel")
@@ -1151,7 +1157,7 @@ done
 [[ "$MISSING_STATUS" == "failed" ]] || { echo "FAIL: missing image status=$MISSING_STATUS"; exit 1; }
 MISSING_LOGS=$(api_get "$BASE/api/v1/deployments/$MISSING_DEP_ID/logs")
 grep -q 'missing-runtime-image.*failed' <<<"$MISSING_LOGS" || { echo "FAIL: missing image failure not logged"; exit 1; }
-echo "  Missing execution image fails without pulling: OK"
+echo "  Missing execution image fails when pull fails: OK"
 
 ISOLATION_PROJECT=$(api_post '{"name":"container-isolation"}' "$BASE/api/v1/projects")
 ISOLATION_PROJECT_ID=$(echo "$ISOLATION_PROJECT" | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')

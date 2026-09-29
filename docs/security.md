@@ -76,13 +76,13 @@ What we do **not** defend against yet (see Known Gaps):
 
 - Audit log retention / tamper-proofing
 
-Server-side steps run only in containers managed by a separate rootless runtime
-account over SSH. No step receives a runtime socket or control-plane mount;
+Server-side steps run only in containers managed through the embedded agent's
+local Docker or Podman socket. No step receives that socket or a control-plane mount;
 the root filesystem is read-only, network is disabled, capabilities are
 dropped, and only step-selected resolved variables are passed. A missing
-runtime or image fails closed. The app's SSH credential grants control of the
-execution account, so that account must not read the control-plane DB, key, or
-server state. A rootless container shares its host kernel and is not a VM.
+runtime fails closed. The socket grants the control plane broad authority over
+the container host, so use a dedicated host or standalone agent when that
+boundary is required. A container shares its host kernel and is not a VM.
 Agent steps still execute on their agent hosts, which must be isolated from
 control-plane state if their scripts are untrusted. Historical image-less
 server releases remain readable but cannot execute; issue #28's old same-UID
@@ -463,7 +463,7 @@ values:
 | ~~**Secret encryption at rest**~~ | ~~`release_variables.value` is plaintext. A DB read leaks secrets~~ | **shipped (P1-3)** |
 | ~~**Runner orphan cleanup**~~ | ~~Killed/restarted server left orphaned bash children~~ | **shipped** |
 | ~~**Log redaction hardening**~~ | ~~Naive per-line `strings.ReplaceAll` missed common credential formats and multi-line/split secrets~~ | **shipped (P1-5)** |
-| **Execution account compromise** | The app's SSH credential can control the separate rootless Docker or Podman account; container escape remains possible on a shared kernel | Restrict that account's filesystem access and keep untrusted agent scripts off the control-plane host |
+| **Container runtime compromise** | The embedded agent's socket can control the Docker or Podman host; container escape remains possible on a shared kernel | Use a dedicated host or disable the embedded agent and use standalone agents |
 | ~~**Login rate limiting**~~ | ~~Password, MFA, and OIDC login surfaces lacked application limits~~ | **shipped** |
 | **Audit log retention** | No retention policy or tamper-proofing on `audit_log` | P2-5 |
 | **Password reset flow** | No self-service reset. Admin must delete + recreate the user | P2 |

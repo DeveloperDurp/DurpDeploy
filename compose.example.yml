@@ -44,16 +44,8 @@
 #   DURPDEPLOY_AGENT_PUBLIC_URL=https://<agent-control-host>
 #   DURPDEPLOY_AGENT_IDENTITY_DIR=/var/lib/durpdeploy/agent-identity
 #
-# Server-side container steps (set all in compose.app.env):
-#   DURPDEPLOY_CONTAINER_RUNTIME=podman # or docker
-#   DURPDEPLOY_CONTAINER_URL=ssh://exec@host/run/user/UID/podman/podman.sock
-#   DURPDEPLOY_CONTAINER_NAMESPACE=durpdeploy-prod
-# Docker uses ssh://exec@host/run/user/UID/docker.sock. Provision a separate
-# rootless SSH account on the execution host.
-# Put id_ed25519 (0600) and the verified host key in known_hosts under
-# ./secrets/runtime-ssh, accessible to UID 10001; uncomment the read-only mount
-# below. The host must be reachable from the app container. Never mount the
-# hosting engine socket into the app.
+# Server-side container steps are enabled by default through the host Docker
+# socket. Set DURPDEPLOY_EMBEDDED_AGENT_ENABLED=false to disable them.
 #
 # Optional OIDC SSO (set all in compose.app.env together, or omit all):
 #   DURPDEPLOY_URL=https://durpdeploy.example.com
@@ -83,7 +75,6 @@ services:
     build: .
     image: durpdeploy:latest
     restart: unless-stopped
-    user: "10001:10001"
     # Port 8080 is internal only — Caddy talks to it over the compose network.
     # Don't publish it to the host.
     env_file:
@@ -97,10 +88,14 @@ services:
       - DURPDEPLOY_AGENT_LISTEN_ADDR=0.0.0.0:10943
       - DURPDEPLOY_AGENT_PUBLIC_URL=${DURPDEPLOY_AGENT_PUBLIC_URL:-https://localhost:10943}
       - DURPDEPLOY_AGENT_IDENTITY_DIR=/var/lib/durpdeploy/agent-identity
+      - DURPDEPLOY_EMBEDDED_AGENT_ENABLED=${DURPDEPLOY_EMBEDDED_AGENT_ENABLED:-true}
+      - DURPDEPLOY_CONTAINER_RUNTIME=docker
+      - DURPDEPLOY_CONTAINER_URL=unix:///var/run/durpdeploy-runtime.sock
+      - DURPDEPLOY_CONTAINER_NAMESPACE=durpdeploy
     volumes:
       - durpdeploy-data:/data
       - durpdeploy-agent-identity:/var/lib/durpdeploy/agent-identity
-      # - ./secrets/runtime-ssh:/home/durpdeploy/.ssh:ro
+      - /var/run/docker.sock:/var/run/durpdeploy-runtime.sock
     # Agents connect directly with mTLS. Restrict this host port to agent networks.
     ports:
       - "10943:10943"
@@ -113,11 +108,12 @@ services:
     security_opt:
       - no-new-privileges:true
     cap_drop: [ALL]
+    cap_add: [SETUID, SETGID]
     read_only: true
     tmpfs:
       - /tmp:size=64m,mode=1777
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/login"]
+      test: ["CMD", "su-exec", "10001:10001", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/login"]
       interval: 30s
       timeout: 5s
       retries: 3

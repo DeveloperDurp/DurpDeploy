@@ -79,6 +79,8 @@ if (($# == 0)); then
 fi
 
 select_container_engine
+export DURPDEPLOY_CONTAINER_RUNTIME=${DURPDEPLOY_CONTAINER_RUNTIME:-$container_engine}
+export DURPDEPLOY_CONTAINER_NAMESPACE=${DURPDEPLOY_CONTAINER_NAMESPACE:-durpdeploy-dev}
 command -v setsid >/dev/null 2>&1 || fail "setsid is required to stop the development server process group."
 
 if "$container_engine" container inspect "$container" >/dev/null 2>&1; then

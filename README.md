@@ -273,15 +273,14 @@ five-minute hands-on attack drill — is documented in
   to live deployments/releases, but the default 180-day window and the
   daily systemd timer are operator-deployed, not auto-installed).
 
-Server-side steps require a container image and run through a separate rootless
-Docker or Podman account over SSH, including when DurpDeploy itself runs in a
-container or Kubernetes pod.
-There is no host-execution fallback. The execution account must not be able to
-read the control-plane database or key, and step containers receive no runtime
-socket or control-plane mount. Old deployments remain readable, but old
-image-less server steps must be recreated in a new release. Remote-agent steps
-still execute on their agent hosts. See [the deployment runbook](docs/deploy.md)
-for setup and isolation limits.
+Server-side steps require a container image and use the embedded agent through
+a local Docker or Podman socket. The Compose stack configures Docker by default;
+`compose.podman.yml` selects the rootless Podman socket. Step containers receive
+no runtime socket or control-plane mount, and there is no host-execution
+fallback. Set `DURPDEPLOY_EMBEDDED_AGENT_ENABLED=false` to disable this path.
+Kubernetes-native execution is not implemented yet; use standalone agents for
+executable steps from a Kubernetes installation. See
+[the deployment runbook](docs/deploy.md) for setup and isolation limits.
 
 ## What It Does Not Do
 

@@ -45,9 +45,10 @@ EnvironmentFile=-/etc/durpdeploy/durpdeploy.env
 # DURPDEPLOY_AGENT_LISTEN_ADDR=0.0.0.0:10943
 # DURPDEPLOY_AGENT_PUBLIC_URL=https://<agent-control-host>
 # DURPDEPLOY_AGENT_IDENTITY_DIR=/var/lib/durpdeploy/agent-identity
-# Server-side steps use a separate rootless Docker or Podman account over SSH.
+# Server-side steps use a local Docker or Podman Unix socket.
+# DURPDEPLOY_EMBEDDED_AGENT_ENABLED=true
 # DURPDEPLOY_CONTAINER_RUNTIME=podman
-# DURPDEPLOY_CONTAINER_URL=ssh://exec@host/run/user/UID/podman/podman.sock
+# DURPDEPLOY_CONTAINER_URL=unix:///run/user/UID/podman/podman.sock
 # DURPDEPLOY_CONTAINER_NAMESPACE=durpdeploy-prod
 ExecStart=/usr/local/bin/durpdeploy
 Restart=on-failure
@@ -59,8 +60,7 @@ RestartSec=5s
 # explicitly carved out as writable. Same pattern as the audit-prune
 # service; see systemd/durpdeploy-audit-prune.service.
 ReadWritePaths=/var/lib/durpdeploy /var/lib/durpdeploy/agent-identity
-# The control plane uses this unprivileged identity; step containers run in
-# the separate rootless container account configured above.
+# The control plane uses this unprivileged identity.
 AmbientCapabilities=
 CapabilityBoundingSet=
 

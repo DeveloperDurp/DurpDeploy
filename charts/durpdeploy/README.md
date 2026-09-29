@@ -105,10 +105,10 @@ See `values.yaml`. Notable knobs:
   for TLS.
 - `extraEnv` — pass through `DURPDEPLOY_SMTP_*`, `DURPDEPLOY_DISCORD_*`,
   etc. without forking the chart.
-- `containerRuntime.*` — connect the pod to a separate rootless Docker or
-  Podman account over SSH. `sshSecret` names a Secret containing
-  `id_ed25519` and `known_hosts`; no host runtime socket is mounted. A sidecar
-  copies projected Secret updates into the client SSH directory after rotation.
+- `embeddedAgent.enabled` — keep disabled until native Kubernetes Job
+  execution is available in
+  [issue #98](https://github.com/DeveloperDurp/DurpDeploy/issues/98).
+  Standalone agents remain available for executable steps.
 
 ## Uninstalling
 

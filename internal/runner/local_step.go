@@ -108,7 +108,7 @@ func (r *DeploymentRunner) runStepAttempt(
 		timeoutFlag = "--timeout="
 	}
 	args = append(args,
-		"--interactive", "--pull=never",
+		"--interactive", "--pull=missing",
 		timeoutFlag+fmt.Sprint(int64(timeout/time.Second)),
 		"--log-driver=none",
 		"--name="+name, "--label=io.durpdeploy.attempt="+name,

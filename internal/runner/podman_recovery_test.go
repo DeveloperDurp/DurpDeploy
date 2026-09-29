@@ -18,7 +18,7 @@ func TestPodmanStartupRemovesNamespacedOrphans(t *testing.T) {
 	binary := filepath.Join(dir, "podman")
 	trace := filepath.Join(dir, "removed")
 	cli := `#!/bin/sh
-case "$4" in
+case "$3" in
 info) printf '{"host":{"security":{"rootless":true}}}';;
 ps) printf 'orphan-container-id\n';;
 rm) printf '%s\n' "$*" > "$PODMAN_TRACE";;
@@ -33,10 +33,10 @@ esac
 	}
 	t.Setenv("PODMAN_TRACE", trace)
 	t.Setenv(
-		"DURPDEPLOY_PODMAN_URL",
-		"ssh://executor@example.invalid/run/user/1234/podman/podman.sock",
+		"DURPDEPLOY_CONTAINER_URL",
+		"unix:///run/podman/podman.sock",
 	)
-	t.Setenv("DURPDEPLOY_PODMAN_NAMESPACE", "test-suite")
+	t.Setenv("DURPDEPLOY_CONTAINER_NAMESPACE", "test-suite")
 	// When
 	r := NewWithPodmanBinaryForTest(nil, nil, binary)
 	// Then
@@ -58,7 +58,7 @@ func TestStartupSweepConfirmsOnlyUnconfirmedCleanupAfterRemoval(t *testing.T) {
 	dir := t.TempDir()
 	binary := filepath.Join(dir, "podman")
 	cli := `#!/bin/sh
-case "$4" in
+case "$3" in
 info) if [ "$PODMAN_SWEEP_FAIL" = 2 ]; then
   printf '{"host":{"security":{"rootless":false}}}';
 else printf '{"host":{"security":{"rootless":true}}}'; fi;;
@@ -74,10 +74,10 @@ esac
 		t.Fatal(err)
 	}
 	t.Setenv(
-		"DURPDEPLOY_PODMAN_URL",
-		"ssh://executor@example.invalid/run/user/1234/podman/podman.sock",
+		"DURPDEPLOY_CONTAINER_URL",
+		"unix:///run/podman/podman.sock",
 	)
-	t.Setenv("DURPDEPLOY_PODMAN_NAMESPACE", "test-suite")
+	t.Setenv("DURPDEPLOY_CONTAINER_NAMESPACE", "test-suite")
 	conn, err := migrate.Run(":memory:?_pragma=foreign_keys(1)")
 	if err != nil {
 		t.Fatal(err)
@@ -155,21 +155,12 @@ esac
 	endpoint.binary = binary
 	r := &DeploymentRunner{repo: repo, engine: endpoint}
 
-	// When: the runtime reports rootful mode.
-	t.Setenv("PODMAN_SWEEP_FAIL", "2")
-	if err := r.reconcileAttempts(); err == nil {
-		t.Fatal("rootful runtime was accepted")
-	}
-	stored, err := repo.Queries.GetDeployment(t.Context(), uncertain.ID)
-	if err != nil || stored.Status != "cleanup_unconfirmed" {
-		t.Fatalf("status after unsafe runtime = %+v: %v", stored, err)
-	}
 	// When: the runtime rejects removal.
 	t.Setenv("PODMAN_SWEEP_FAIL", "1")
 	if err := r.reconcileAttempts(); err == nil {
 		t.Fatal("failed removal was accepted")
 	}
-	stored, err = repo.Queries.GetDeployment(t.Context(), uncertain.ID)
+	stored, err := repo.Queries.GetDeployment(t.Context(), uncertain.ID)
 	if err != nil || stored.Status != "cleanup_unconfirmed" {
 		t.Fatalf("status after failed removal = %+v: %v", stored, err)
 	}
@@ -198,7 +189,7 @@ func TestStartupSweepLeavesOtherNamespaceUnconfirmed(t *testing.T) {
 	// Given: an earlier execution has an unconfirmed container in another namespace.
 	binary := filepath.Join(t.TempDir(), "podman")
 	cli := `#!/bin/sh
-case "$4" in
+case "$3" in
 info) printf '{"host":{"security":{"rootless":true}}}';;
 ps) ;;
 rm) exit 9;;
@@ -207,9 +198,9 @@ esac
 	if err := os.WriteFile(binary, []byte(cli), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("DURPDEPLOY_PODMAN_URL",
-		"ssh://executor@example.invalid/run/user/1234/podman/podman.sock")
-	t.Setenv("DURPDEPLOY_PODMAN_NAMESPACE", "new-namespace")
+	t.Setenv("DURPDEPLOY_CONTAINER_URL",
+		"unix:///run/podman/podman.sock")
+	t.Setenv("DURPDEPLOY_CONTAINER_NAMESPACE", "new-namespace")
 	conn, err := migrate.Run(":memory:?_pragma=foreign_keys(1)")
 	if err != nil {
 		t.Fatal(err)

@@ -17,21 +17,22 @@ services:
     build: .
     image: durpdeploy:latest
     restart: unless-stopped
-    user: "10001:10001"
     # Port 8080 is internal only — Caddy talks to it over the compose network.
     # Don't publish it to the host.
     env_file:
       # Shared with Caddy so the app marks browser cookies Secure for HTTPS.
       - ./compose.caddy.env
       - ./compose.app.env
-      # Container steps: set DURPDEPLOY_CONTAINER_RUNTIME, _URL, and
-      # _NAMESPACE in compose.app.env. Use a separate rootless host account.
     environment:
       DURPDEPLOY_DB: /data/durpdeploy.db
       DURPDEPLOY_EXECUTION_BOUNDARY: service
       DURPDEPLOY_AGENT_LISTEN_ADDR: 0.0.0.0:10943
       DURPDEPLOY_AGENT_PUBLIC_URL: ${DURPDEPLOY_AGENT_PUBLIC_URL:-https://localhost:10943}
       DURPDEPLOY_AGENT_IDENTITY_DIR: /var/lib/durpdeploy/agent-identity
+      DURPDEPLOY_EMBEDDED_AGENT_ENABLED: ${DURPDEPLOY_EMBEDDED_AGENT_ENABLED:-true}
+      DURPDEPLOY_CONTAINER_RUNTIME: docker
+      DURPDEPLOY_CONTAINER_URL: unix:///var/run/durpdeploy-runtime.sock
+      DURPDEPLOY_CONTAINER_NAMESPACE: durpdeploy
       # Only the fixed Caddy peer may supply forwarding headers.
       DURPDEPLOY_TRUSTED_PROXIES: 172.28.0.10/32
       # Optional. The mounted secret file at /etc/durpdeploy/key is the
@@ -43,10 +44,7 @@ services:
     volumes:
       - durpdeploy-data:/data
       - durpdeploy-agent-identity:/var/lib/durpdeploy/agent-identity
-      # Opt in after provisioning ./secrets/runtime-ssh with id_ed25519 (0600)
-      # and a verified, pinned known_hosts. Files must be readable by UID 10001;
-      # mount the directory read-only. Do not mount a host engine socket.
-      # - ./secrets/runtime-ssh:/home/durpdeploy/.ssh:ro
+      - /var/run/docker.sock:/var/run/durpdeploy-runtime.sock
     ports:
       - "10943:10943"
     secrets:
@@ -58,11 +56,12 @@ services:
     security_opt:
       - no-new-privileges:true
     cap_drop: [ALL]
+    cap_add: [SETUID, SETGID]
     read_only: true
     tmpfs:
       - /tmp:size=64m,mode=1777
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/login"]
+      test: ["CMD", "su-exec", "10001:10001", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/login"]
       interval: 30s
       timeout: 5s
       retries: 3

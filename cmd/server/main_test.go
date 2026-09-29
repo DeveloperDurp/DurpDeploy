@@ -563,7 +563,7 @@ func TestStartupRecoveryBlocksLocalRetryWhenPodmanSweepFails(t *testing.T) {
 	dir := t.TempDir()
 	binary := filepath.Join(dir, "podman")
 	cli := `#!/bin/sh
-case "$4" in
+case "$3" in
 info) printf '{"host":{"security":{"rootless":true}}}';;
 ps) printf 'orphan-container-id\n';;
 rm) if [ "$PODMAN_SWEEP_FAIL" = 1 ]; then exit 7; fi;;
@@ -577,10 +577,10 @@ esac
 		t.Fatal(err)
 	}
 	t.Setenv(
-		"DURPDEPLOY_PODMAN_URL",
-		"ssh://executor@example.invalid/run/user/1234/podman/podman.sock",
+		"DURPDEPLOY_CONTAINER_URL",
+		"unix:///run/podman/podman.sock",
 	)
-	t.Setenv("DURPDEPLOY_PODMAN_NAMESPACE", "test-suite")
+	t.Setenv("DURPDEPLOY_CONTAINER_NAMESPACE", "test-suite")
 	conn, err := migrate.Run(tempDSN(t))
 	if err != nil {
 		t.Fatal(err)

@@ -11,7 +11,7 @@ func setupTestPodman(t *testing.T) string {
 	dir := t.TempDir()
 	binary := filepath.Join(dir, "podman")
 	cli := `#!/bin/sh
-case "$4" in
+case "$3" in
 info) printf '{"host":{"security":{"rootless":true}}}' ;;
 ps|rm) ;;
 run) exec /bin/sh -s ;;
@@ -25,8 +25,8 @@ esac
 	); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("DURPDEPLOY_PODMAN_URL",
-		"ssh://executor@example.invalid/run/user/1234/podman/podman.sock")
-	t.Setenv("DURPDEPLOY_PODMAN_NAMESPACE", "handler-tests")
+	t.Setenv("DURPDEPLOY_CONTAINER_URL",
+		"unix:///run/podman/podman.sock")
+	t.Setenv("DURPDEPLOY_CONTAINER_NAMESPACE", "handler-tests")
 	return binary
 }

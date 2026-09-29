@@ -11,7 +11,7 @@ func fakePodman(t *testing.T) string {
 	dir := t.TempDir()
 	binary := filepath.Join(dir, "podman")
 	cli := `#!/bin/sh
-case "$4" in
+case "$3" in
 info) printf '{"host":{"security":{"rootless":true}}}';;
 ps|rm) ;;
 run) exec bash -c "$(cat)";;
@@ -25,10 +25,10 @@ esac
 		t.Fatal(err)
 	}
 	t.Setenv(
-		"DURPDEPLOY_PODMAN_URL",
-		"ssh://executor@example.invalid/run/user/1234/podman/podman.sock",
+		"DURPDEPLOY_CONTAINER_URL",
+		"unix:///run/podman/podman.sock",
 	)
-	t.Setenv("DURPDEPLOY_PODMAN_NAMESPACE", "api-tests")
+	t.Setenv("DURPDEPLOY_CONTAINER_NAMESPACE", "api-tests")
 	return binary
 }
 
@@ -58,7 +58,7 @@ esac
 	}
 	t.Setenv("DURPDEPLOY_CONTAINER_RUNTIME", "docker")
 	t.Setenv("DURPDEPLOY_CONTAINER_URL",
-		"ssh://executor@example.invalid/run/user/1234/docker.sock")
+		"unix:///var/run/docker.sock")
 	t.Setenv("DURPDEPLOY_CONTAINER_NAMESPACE", "api-tests")
 	return binary
 }

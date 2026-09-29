@@ -3,12 +3,13 @@ package runner
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -23,81 +24,123 @@ type containerEndpoint struct {
 	namespace string
 }
 
-var rootlessSocket = regexp.MustCompile(
-	`^/run/user/[1-9][0-9]*/podman/podman\.sock$`,
-)
-var rootlessDockerSocket = regexp.MustCompile(
-	`^/run/user/[1-9][0-9]*/docker\.sock$`,
-)
 var podmanNamespace = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 
 func newContainerEndpoint() (containerEndpoint, error) {
-	kind := os.Getenv("DURPDEPLOY_CONTAINER_RUNTIME")
-	if kind == "" {
-		kind = "podman"
+	return newContainerEndpointWith("", "")
+}
+
+func newContainerEndpointWith(
+	kindOverride, binaryOverride string,
+) (containerEndpoint, error) {
+	rawEnabled := os.Getenv("DURPDEPLOY_EMBEDDED_AGENT_ENABLED")
+	if rawEnabled == "" {
+		rawEnabled = "true"
 	}
-	raw := os.Getenv("DURPDEPLOY_CONTAINER_URL")
-	namespace := os.Getenv("DURPDEPLOY_CONTAINER_NAMESPACE")
-	// Accept the Podman-specific names used by earlier configurations.
-	if kind == "podman" && raw == "" {
-		raw = os.Getenv("DURPDEPLOY_PODMAN_URL")
-	}
-	if kind == "podman" && namespace == "" {
-		namespace = os.Getenv("DURPDEPLOY_PODMAN_NAMESPACE")
-	}
-	u, err := url.Parse(raw)
-	validSSH := err == nil && u.Scheme == "ssh" && u.User != nil &&
-		u.User.Username() != "" && u.User.Username() != "root" &&
-		u.User.String() == u.User.Username() && u.Hostname() != "" &&
-		u.RawQuery == "" && u.Fragment == ""
-	if !validSSH || !podmanNamespace.MatchString(namespace) {
+	enabled, err := strconv.ParseBool(rawEnabled)
+	if err != nil {
 		return containerEndpoint{}, fmt.Errorf(
-			"configure a dedicated rootless Docker or Podman SSH endpoint and DURPDEPLOY_CONTAINER_NAMESPACE",
+			"DURPDEPLOY_EMBEDDED_AGENT_ENABLED must be true or false",
 		)
 	}
-	switch kind {
-	case "podman":
-		if !rootlessSocket.MatchString(u.Path) {
-			return containerEndpoint{}, fmt.Errorf(
-				"Podman URL must select /run/user/UID/podman/podman.sock",
-			)
-		}
-		return containerEndpoint{kind: kind, binary: "/usr/bin/podman",
-			url: raw, namespace: namespace}, nil
-	case "docker":
-		if !rootlessDockerSocket.MatchString(u.Path) {
-			return containerEndpoint{}, fmt.Errorf(
-				"Docker URL must select /run/user/UID/docker.sock",
-			)
-		}
-		return containerEndpoint{kind: kind, binary: "/usr/bin/docker",
-			url: raw, namespace: namespace}, nil
-	default:
+	if !enabled {
+		return containerEndpoint{}, fmt.Errorf("embedded agent is disabled")
+	}
+
+	kind := kindOverride
+	if kind == "" {
+		kind = os.Getenv("DURPDEPLOY_CONTAINER_RUNTIME")
+	}
+	if kind == "" {
+		kind = detectContainerRuntime()
+	}
+	if kind != "docker" && kind != "podman" {
 		return containerEndpoint{}, fmt.Errorf(
 			"DURPDEPLOY_CONTAINER_RUNTIME must be docker or podman",
 		)
 	}
+	raw := os.Getenv("DURPDEPLOY_CONTAINER_URL")
+	namespace := os.Getenv("DURPDEPLOY_CONTAINER_NAMESPACE")
+	if raw == "" {
+		if kind == "docker" {
+			raw = os.Getenv("DOCKER_HOST")
+		} else {
+			raw = os.Getenv("CONTAINER_HOST")
+		}
+	}
+	if namespace == "" {
+		namespace = "durpdeploy"
+	}
+	if !podmanNamespace.MatchString(namespace) {
+		return containerEndpoint{}, fmt.Errorf(
+			"DURPDEPLOY_CONTAINER_NAMESPACE contains invalid characters",
+		)
+	}
+	if raw != "" {
+		u, parseErr := url.Parse(raw)
+		if parseErr != nil || u.Scheme != "unix" || u.Host != "" ||
+			u.RawQuery != "" || u.Fragment != "" ||
+			!filepath.IsAbs(u.Path) {
+			return containerEndpoint{}, fmt.Errorf(
+				"DURPDEPLOY_CONTAINER_URL must be an absolute unix socket URL",
+			)
+		}
+	}
+	binary := binaryOverride
+	if binary == "" {
+		binary, err = exec.LookPath(kind)
+		if err != nil {
+			return containerEndpoint{}, fmt.Errorf(
+				"find %s client: %w", kind, err,
+			)
+		}
+	}
+	return containerEndpoint{
+		kind: kind, binary: binary, url: raw, namespace: namespace,
+	}, nil
 }
 
 func newPodmanEndpoint() (containerEndpoint, error) {
-	return newContainerEndpoint()
+	return newContainerEndpointWith("podman", "")
+}
+
+func detectContainerRuntime() string {
+	if os.Getenv("DOCKER_HOST") != "" {
+		if _, err := exec.LookPath("docker"); err == nil {
+			return "docker"
+		}
+	}
+	if os.Getenv("CONTAINER_HOST") != "" {
+		if _, err := exec.LookPath("podman"); err == nil {
+			return "podman"
+		}
+	}
+	for _, kind := range []string{"docker", "podman"} {
+		if _, err := exec.LookPath(kind); err == nil {
+			return kind
+		}
+	}
+	return ""
 }
 
 func (p containerEndpoint) command(
 	ctx context.Context, args ...string,
 ) *exec.Cmd {
-	clientArgs := []string{"--host=" + p.url}
-	hostEnv := "DOCKER_HOST=" + p.url
-	if p.kind == "podman" {
-		clientArgs = []string{"--remote", "--ssh=native", "--url=" + p.url}
-		hostEnv = "CONTAINER_HOST=" + p.url
+	clientArgs := []string{}
+	hostEnv := ""
+	if p.url != "" {
+		clientArgs = []string{"--host=" + p.url}
+		hostEnv = "DOCKER_HOST=" + p.url
+		if p.kind == "podman" {
+			clientArgs = []string{"--remote", "--url=" + p.url}
+			hostEnv = "CONTAINER_HOST=" + p.url
+		}
 	}
 	cmd := exec.CommandContext(ctx, p.binary, append(clientArgs, args...)...)
 	// Do not let inherited client configuration redirect execution.
-	cmd.Env = append(os.Environ(), hostEnv)
-	if p.kind == "podman" {
-		cmd.Env = append(cmd.Env, "CONTAINER_SSHKEY="+
-			os.Getenv("HOME")+"/.ssh/id_ed25519")
+	cmd.Env = os.Environ()
+	if hostEnv != "" {
+		cmd.Env = append(cmd.Env, hostEnv)
 	}
 	return cmd
 }
@@ -125,16 +168,21 @@ func (p containerEndpoint) scope() string {
 func NewWithPodmanBinaryForTest(
 	repo *repository.Repository, broker *LogBroker, binary string,
 ) *DeploymentRunner {
-	return newRunner(repo, broker, binary)
+	return newRunnerWithKind(repo, broker, "podman", binary)
 }
 
 func newRunner(
 	repo *repository.Repository, broker *LogBroker, testBinary string,
 ) *DeploymentRunner {
-	endpoint, localErr := newContainerEndpoint()
-	if testBinary != "" {
-		endpoint.binary = testBinary
-	}
+	return newRunnerWithKind(repo, broker, "", testBinary)
+}
+
+func newRunnerWithKind(
+	repo *repository.Repository,
+	broker *LogBroker,
+	kind, testBinary string,
+) *DeploymentRunner {
+	endpoint, localErr := newContainerEndpointWith(kind, testBinary)
 	r := &DeploymentRunner{
 		repo:     repo,
 		broker:   broker,
@@ -152,36 +200,13 @@ func newRunner(
 func (r *DeploymentRunner) reconcileAttempts() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	infoArgs := []string{"info", "--format=json"}
-	if r.engine.kind == "docker" {
-		infoArgs = []string{"info", "--format={{json .SecurityOptions}}"}
-	}
-	output, err := r.engine.command(ctx, infoArgs...).Output()
+	output, err := r.engine.command(ctx, "info").CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("check remote container runtime: %w", err)
-	}
-	rootless := false
-	if r.engine.kind == "docker" {
-		var options []string
-		if json.Unmarshal(output, &options) == nil {
-			for _, option := range options {
-				rootless = rootless || option == "name=rootless"
-			}
-		}
-	} else {
-		var info struct {
-			Host struct {
-				Security struct {
-					Rootless bool `json:"rootless"`
-				} `json:"security"`
-			} `json:"host"`
-		}
-		if json.Unmarshal(output, &info) == nil {
-			rootless = info.Host.Security.Rootless
-		}
-	}
-	if !rootless {
-		return fmt.Errorf("container runtime must report rootless mode")
+		return fmt.Errorf(
+			"check container runtime: %w: %s",
+			err,
+			strings.TrimSpace(string(output)),
+		)
 	}
 	output, err = r.engine.command(ctx, "ps", "--all", "--quiet",
 		"--filter=label=io.durpdeploy.namespace="+r.engine.scope()).Output()

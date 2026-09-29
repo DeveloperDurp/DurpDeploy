@@ -236,10 +236,10 @@ jobs:
       - name: Install Chromium for runbook browser checks
         run: ./node_modules/.bin/playwright install --with-deps chromium
 
-      - name: Install rootless execution prerequisites
+      - name: Install shell checks
         run: |
           sudo apt-get update
-          sudo apt-get install -y podman uidmap dbus-user-session openssh-server shellcheck
+          sudo apt-get install -y shellcheck
 
       - name: Check E2E shell syntax
         run: |

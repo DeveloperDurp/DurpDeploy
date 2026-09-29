@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1
 # Multi-stage build for durpdeploy.
 # Builder generates templ files, bundles CSS/JS, and compiles a static Go binary.
-# Runtime is a minimal Alpine image with a non-root user, bash, and a remote
-# Podman client for container steps.
+# Runtime is a minimal Alpine image with a non-root application user and the
+# Docker and Podman clients used by the embedded agent.
 
 # Stage 1: builder
 FROM golang:1.26.8-alpine@sha256:8ac98ca534ac3f51e1f420a1dd2c15e74c75cfa0f23f3ad27eb5d7236c349a0c AS builder
@@ -44,11 +44,10 @@ RUN make templ-generate tailwind-build js-build swagger-ui-copy && \
 # Stage 2: runtime
 FROM alpine:3.20
 
-# Install runtime essentials and the remote-only Podman client (no local
-# engine). The runner invokes Podman over SSH to a separate rootless account.
-# Keep the stable non-root UID and its home for opt-in SSH credentials.
+# Install runtime essentials and socket clients. su-exec changes from the
+# short-lived entrypoint identity to the stable non-root application user.
 # hadolint ignore=DL3018
-RUN apk add --no-cache bash ca-certificates docker-cli openssh-client podman-remote && \
+RUN apk add --no-cache bash ca-certificates docker-cli podman-remote su-exec && \
 	adduser -D -u 10001 durpdeploy && \
 	ln -s /usr/bin/podman-remote /usr/bin/podman
 
@@ -64,12 +63,16 @@ VOLUME ["/data"]
 # Copy the binary from the builder. Keep it owned by root so it cannot be
 # tampered with at runtime, and make it world-executable.
 COPY --from=builder /out/durpdeploy /usr/local/bin/durpdeploy
-RUN chmod 0755 /usr/local/bin/durpdeploy
+COPY container-entrypoint.sh /usr/local/bin/container-entrypoint
+RUN chmod 0755 /usr/local/bin/durpdeploy /usr/local/bin/container-entrypoint
 
 ENV DURPDEPLOY_EXECUTION_BOUNDARY=service \
 	HOME=/home/durpdeploy \
 	XDG_CONFIG_HOME=/tmp
-USER 10001
+# The entrypoint needs only SETUID/SETGID long enough to adopt the mounted
+# socket group, then immediately executes the application as UID 10001.
+# hadolint ignore=DL3002
+USER root
 
 # The application listens on port 8080 (hardcoded in cmd/server/main.go).
 EXPOSE 8080
@@ -77,9 +80,9 @@ EXPOSE 8080
 # Use ENTRYPOINT so the binary is the fixed executable for subcommands such as
 # `admin create`, `audit prune`, and `secret-key rotate`, as well as the default
 # HTTP server.
-ENTRYPOINT ["/usr/local/bin/durpdeploy"]
+ENTRYPOINT ["/usr/local/bin/container-entrypoint"]
 
 # Probe the /login endpoint. It returns a 303 redirect when the server is alive,
 # which is enough for an orchestrator to consider the container healthy.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-  CMD ["wget", "-q", "-O", "/dev/null", "http://localhost:8080/login"]
+  CMD ["su-exec", "10001:10001", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/login"]

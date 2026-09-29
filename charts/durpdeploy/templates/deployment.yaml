@@ -36,27 +36,6 @@ spec:
       automountServiceAccountToken: false
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
-      {{- if .Values.containerRuntime.enabled }}
-      initContainers:
-        - name: container-runtime-ssh
-          image: {{ include "durpdeploy.image" . | quote }}
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
-          securityContext:
-            {{- toYaml .Values.securityContext | nindent 12 }}
-          command: ["/bin/sh", "-ceu"]
-          args:
-            - >-
-              install -m 0600 /runtime-ssh-secret/id_ed25519
-              /runtime-ssh/id_ed25519;
-              install -m 0600 /runtime-ssh-secret/known_hosts
-              /runtime-ssh/known_hosts
-          volumeMounts:
-            - name: container-runtime-ssh-secret
-              mountPath: /runtime-ssh-secret
-              readOnly: true
-            - name: container-runtime-ssh
-              mountPath: /runtime-ssh
-      {{- end }}
       containers:
         - name: durpdeploy
           image: {{ include "durpdeploy.image" . | quote }}
@@ -95,14 +74,8 @@ spec:
               value: {{ default (printf "https://%s.%s.svc:%v" (include "durpdeploy.fullname" .) .Release.Namespace .Values.agent.port) .Values.agent.publicURL | quote }}
             - name: DURPDEPLOY_AGENT_IDENTITY_DIR
               value: {{ .Values.agent.identityDir | quote }}
-            {{- if .Values.containerRuntime.enabled }}
-            - name: DURPDEPLOY_CONTAINER_RUNTIME
-              value: {{ required "containerRuntime.type is required" .Values.containerRuntime.type | quote }}
-            - name: DURPDEPLOY_CONTAINER_URL
-              value: {{ required "containerRuntime.url is required" .Values.containerRuntime.url | quote }}
-            - name: DURPDEPLOY_CONTAINER_NAMESPACE
-              value: {{ required "containerRuntime.namespace is required" .Values.containerRuntime.namespace | quote }}
-            {{- end }}
+            - name: DURPDEPLOY_EMBEDDED_AGENT_ENABLED
+              value: {{ ternary "true" "false" .Values.embeddedAgent.enabled | quote }}
             {{- if .Values.oidc.enabled }}
             - name: DURPDEPLOY_URL
               value: {{ required "oidc.publicURL is required when OIDC is enabled" .Values.oidc.publicURL | quote }}
@@ -149,42 +122,6 @@ spec:
               mountPath: /data
             - name: agent-identity
               mountPath: {{ .Values.agent.identityDir }}
-            {{- if .Values.containerRuntime.enabled }}
-            - name: container-runtime-ssh
-              mountPath: /home/durpdeploy/.ssh
-              readOnly: true
-            {{- end }}
-        {{- if .Values.containerRuntime.enabled }}
-        - name: container-runtime-ssh-sync
-          image: {{ include "durpdeploy.image" . | quote }}
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
-          securityContext:
-            {{- toYaml .Values.securityContext | nindent 12 }}
-          command: ["/bin/sh", "-ceu"]
-          args:
-            - |
-              while true; do
-                if install -m 0600 /runtime-ssh-secret/id_ed25519 /runtime-ssh/id_ed25519.next &&
-                   install -m 0600 /runtime-ssh-secret/known_hosts /runtime-ssh/known_hosts.next; then
-                  mv -f /runtime-ssh/id_ed25519.next /runtime-ssh/id_ed25519
-                  mv -f /runtime-ssh/known_hosts.next /runtime-ssh/known_hosts
-                fi
-                sleep 10
-              done
-          resources:
-            requests:
-              cpu: 5m
-              memory: 8Mi
-            limits:
-              cpu: 50m
-              memory: 32Mi
-          volumeMounts:
-            - name: container-runtime-ssh-secret
-              mountPath: /runtime-ssh-secret
-              readOnly: true
-            - name: container-runtime-ssh
-              mountPath: /runtime-ssh
-        {{- end }}
       volumes:
         - name: tmp
           emptyDir: {}
@@ -193,14 +130,6 @@ spec:
         - name: agent-identity
           persistentVolumeClaim:
             claimName: {{ include "durpdeploy.agentIdentityClaimName" . }}
-        {{- if .Values.containerRuntime.enabled }}
-        - name: container-runtime-ssh-secret
-          secret:
-            secretName: {{ required "containerRuntime.sshSecret is required" .Values.containerRuntime.sshSecret | quote }}
-            defaultMode: 0440
-        - name: container-runtime-ssh
-          emptyDir: {}
-        {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

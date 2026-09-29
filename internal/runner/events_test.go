@@ -36,7 +36,7 @@ func setupRunnerHarness(
 	t.Setenv("DURPDEPLOY_EXECUTION_BOUNDARY", "development")
 	binDir := t.TempDir()
 	podman := `#!/bin/sh
-case "$4" in
+case "$3" in
 info) printf '{"host":{"security":{"rootless":true}}}';;
 ps) ;;
 rm) ;;
@@ -61,10 +61,10 @@ esac
 		t.Fatal(err)
 	}
 	t.Setenv(
-		"DURPDEPLOY_PODMAN_URL",
-		"ssh://executor@localhost/run/user/1234/podman/podman.sock",
+		"DURPDEPLOY_CONTAINER_URL",
+		"unix:///run/podman/podman.sock",
 	)
-	t.Setenv("DURPDEPLOY_PODMAN_NAMESPACE", "runner-tests")
+	t.Setenv("DURPDEPLOY_CONTAINER_NAMESPACE", "runner-tests")
 	dbConn, err := migrate.Run(":memory:?_pragma=foreign_keys(1)")
 	if err != nil {
 		t.Fatalf("migrate: %v", err)

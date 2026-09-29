@@ -214,15 +214,11 @@ ingress:
 #       value: smtp.example.com
 extraEnv: []
 
-# --- Server-side container execution -----------------------------------
-# Connects over SSH to a separate rootless Docker or Podman account. The
-# existing Secret must contain `id_ed25519` and `known_hosts`.
-containerRuntime:
+# --- Embedded agent ----------------------------------------------------
+# Native Kubernetes Job execution is not implemented yet. Keep this disabled
+# in Kubernetes and use standalone agents for executable steps.
+embeddedAgent:
   enabled: false
-  type: podman
-  url: ""
-  namespace: durpdeploy
-  sshSecret: ""
 
 # --- Pod disruption budget ----------------------------------------------
 # Disabled by default — single replica means a PDB can only block

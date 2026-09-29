@@ -16,10 +16,10 @@ import (
 
 func TestPodmanEndpointIgnoresPoisonedPATH(t *testing.T) {
 	// Given
-	t.Setenv("PATH", t.TempDir())
-	t.Setenv("DURPDEPLOY_PODMAN_URL",
-		"ssh://executor@example.invalid/run/user/1234/podman/podman.sock")
-	t.Setenv("DURPDEPLOY_PODMAN_NAMESPACE", "test-suite")
+	t.Setenv("DURPDEPLOY_CONTAINER_RUNTIME", "podman")
+	t.Setenv("DURPDEPLOY_CONTAINER_URL",
+		"unix:///run/podman/podman.sock")
+	t.Setenv("DURPDEPLOY_CONTAINER_NAMESPACE", "test-suite")
 
 	// When
 	endpoint, err := newPodmanEndpoint()
@@ -29,11 +29,11 @@ func TestPodmanEndpointIgnoresPoisonedPATH(t *testing.T) {
 	cmd := endpoint.command(context.Background(), "info")
 
 	// Then
-	if cmd.Path != "/usr/bin/podman" {
+	if filepath.Base(cmd.Path) != "podman" {
 		t.Fatalf("Podman command path = %q", cmd.Path)
 	}
 	if !slices.Contains(cmd.Env,
-		"CONTAINER_SSHKEY="+os.Getenv("HOME")+"/.ssh/id_ed25519") {
+		"CONTAINER_HOST=unix:///run/podman/podman.sock") {
 		t.Fatalf("Podman command environment = %q", cmd.Env)
 	}
 }
@@ -55,11 +55,9 @@ func podmanFixture(
 		t.Fatal(err)
 	}
 	t.Setenv("PODMAN_TRACE", trace)
-	t.Setenv(
-		"DURPDEPLOY_PODMAN_URL",
-		"ssh://executor@example.invalid/run/user/1234/podman/podman.sock",
-	)
-	t.Setenv("DURPDEPLOY_PODMAN_NAMESPACE", "test-suite")
+	t.Setenv("DURPDEPLOY_CONTAINER_RUNTIME", "podman")
+	t.Setenv("DURPDEPLOY_CONTAINER_URL", "unix:///run/podman/podman.sock")
+	t.Setenv("DURPDEPLOY_CONTAINER_NAMESPACE", "test-suite")
 	conn, err := migrate.Run(":memory:?_pragma=foreign_keys(1)")
 	if err != nil {
 		t.Fatal(err)
@@ -77,7 +75,7 @@ func podmanFixture(
 func TestLocalAttemptStreamsSelectedVariablesAndRedactsOutput(t *testing.T) {
 	// Given
 	r, repo, trace := podmanFixture(t, `
-case "$4" in
+case "$3" in
 info) printf '{"host":{"security":{"rootless":true}}}';;
 ps) ;;
 run)
@@ -160,7 +158,7 @@ esac
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, flag := range []string{"--remote", "--network=none", "--read-only", "--cap-drop=ALL", "--security-opt=no-new-privileges", "--user=65534:65534", "--pids-limit=128", "--memory=256m", "--cpus=1", "--entrypoint=python3", "--timeout=300", "--log-driver=none", "--env\nSECRET\n"} {
+	for _, flag := range []string{"--remote", "--pull=missing", "--network=none", "--read-only", "--cap-drop=ALL", "--security-opt=no-new-privileges", "--user=65534:65534", "--pids-limit=128", "--memory=256m", "--cpus=1", "--entrypoint=python3", "--timeout=300", "--log-driver=none", "--env\nSECRET\n"} {
 		if !strings.Contains(string(args), flag) {
 			t.Errorf("missing %s in %s", flag, args)
 		}
@@ -186,6 +184,35 @@ esac
 	}
 }
 
+func TestEmbeddedAgentCanBeDisabled(t *testing.T) {
+	t.Setenv("DURPDEPLOY_EMBEDDED_AGENT_ENABLED", "false")
+	_, err := newContainerEndpointWith("podman", "/usr/bin/podman")
+	if err == nil || !strings.Contains(err.Error(), "disabled") {
+		t.Fatalf("disabled embedded agent: %v", err)
+	}
+}
+
+func TestEmbeddedAgentRejectsInvalidToggle(t *testing.T) {
+	t.Setenv("DURPDEPLOY_EMBEDDED_AGENT_ENABLED", "sometimes")
+	_, err := newContainerEndpointWith("podman", "/usr/bin/podman")
+	if err == nil || !strings.Contains(err.Error(), "true or false") {
+		t.Fatalf("invalid embedded agent toggle: %v", err)
+	}
+}
+
+func TestRuntimeDetectionSkipsUnavailableDockerClient(t *testing.T) {
+	dir := t.TempDir()
+	binary := filepath.Join(dir, "podman")
+	if err := os.WriteFile(binary, []byte("#!/bin/sh\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir)
+	t.Setenv("DOCKER_HOST", "unix:///run/user/1000/podman/podman.sock")
+	if got := detectContainerRuntime(); got != "podman" {
+		t.Fatalf("detected runtime = %q, want podman", got)
+	}
+}
+
 func TestLocalAttemptFailsClosedWithoutImageOrEndpoint(t *testing.T) {
 	// Given
 	r := &DeploymentRunner{localErr: os.ErrNotExist}
@@ -200,16 +227,17 @@ func TestLocalAttemptFailsClosedWithoutImageOrEndpoint(t *testing.T) {
 	}
 }
 
-func TestPodmanEndpointRejectsRootfulEngines(t *testing.T) {
+func TestContainerEndpointRejectsNonUnixURLs(t *testing.T) {
 	for _, endpoint := range []string{
-		"unix:///run/podman/podman.sock",
 		"ssh://root@example.invalid/run/podman/podman.sock",
-		"ssh://user@example.invalid/run/podman/podman.sock",
+		"tcp://127.0.0.1:2375",
+		"unix://relative.sock",
 	} {
 		t.Run(endpoint, func(t *testing.T) {
 			// Given
-			t.Setenv("DURPDEPLOY_PODMAN_URL", endpoint)
-			t.Setenv("DURPDEPLOY_PODMAN_NAMESPACE", "test")
+			t.Setenv("DURPDEPLOY_CONTAINER_RUNTIME", "podman")
+			t.Setenv("DURPDEPLOY_CONTAINER_URL", endpoint)
+			t.Setenv("DURPDEPLOY_CONTAINER_NAMESPACE", "test")
 			// When
 			_, err := newPodmanEndpoint()
 			// Then
@@ -220,34 +248,33 @@ func TestPodmanEndpointRejectsRootfulEngines(t *testing.T) {
 	}
 }
 
-func TestPodmanEndpointAllowsSameHostRootlessAccount(t *testing.T) {
-	for _, host := range []string{"localhost", "127.0.0.1", "[::1]"} {
-		t.Run(host, func(t *testing.T) {
-			t.Setenv(
-				"DURPDEPLOY_PODMAN_URL",
-				"ssh://executor@"+host+"/run/user/1234/podman/podman.sock",
-			)
-			t.Setenv("DURPDEPLOY_PODMAN_NAMESPACE", "test")
-			if _, err := newPodmanEndpoint(); err != nil {
-				t.Fatal(err)
-			}
-		})
+func TestPodmanEndpointAllowsUnixSocket(t *testing.T) {
+	t.Setenv("DURPDEPLOY_CONTAINER_URL", "unix:///run/podman/podman.sock")
+	t.Setenv("DURPDEPLOY_CONTAINER_NAMESPACE", "test")
+	if _, err := newPodmanEndpoint(); err != nil {
+		t.Fatal(err)
 	}
 }
 
-func TestDockerEndpointUsesFixedClientAndSSHHost(t *testing.T) {
+func TestDockerEndpointUsesUnixSocket(t *testing.T) {
+	dir := t.TempDir()
+	binary := filepath.Join(dir, "docker")
+	if err := os.WriteFile(binary, []byte("#!/bin/sh\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir)
 	t.Setenv("DURPDEPLOY_CONTAINER_RUNTIME", "docker")
 	t.Setenv("DURPDEPLOY_CONTAINER_URL",
-		"ssh://executor@example.invalid/run/user/1234/docker.sock")
+		"unix:///var/run/docker.sock")
 	t.Setenv("DURPDEPLOY_CONTAINER_NAMESPACE", "test")
 	endpoint, err := newContainerEndpoint()
 	if err != nil {
 		t.Fatal(err)
 	}
 	cmd := endpoint.command(t.Context(), "info")
-	if cmd.Path != "/usr/bin/docker" ||
+	if filepath.Base(cmd.Path) != "docker" ||
 		strings.Join(cmd.Args[1:], " ") !=
-			"--host=ssh://executor@example.invalid/run/user/1234/docker.sock info" {
+			"--host=unix:///var/run/docker.sock info" {
 		t.Fatalf("Docker command = %q", cmd.Args)
 	}
 	if got := strings.Join(
@@ -273,7 +300,7 @@ printf '{"/data":{}}'
 		t.Fatal(err)
 	}
 	runner := &DeploymentRunner{engine: containerEndpoint{
-		kind: "docker", binary: binary, url: "ssh://executor@example.invalid",
+		kind: "docker", binary: binary, url: "unix:///var/run/docker.sock",
 	}}
 	err := runner.rejectDockerImageVolumes(t.Context(), "example/image:1")
 	if err == nil || !strings.Contains(err.Error(), "writable volumes") {
@@ -290,14 +317,14 @@ exec sleep 5
 		t.Fatal(err)
 	}
 	r, repo, _ := podmanFixture(t, `
-case "$4" in
+case "$3" in
 info) printf '{"host":{"security":{"rootless":true}}}';;
 ps) ;;
 esac
 `)
 	r.engine = containerEndpoint{
 		kind: "docker", binary: binary,
-		url: "ssh://executor@example.invalid/run/user/1234/docker.sock",
+		url: "unix:///var/run/docker.sock",
 	}
 	writer := &broadcastWriter{
 		broker: NewLogBroker(), repo: repo, ctx: t.Context(),
@@ -316,12 +343,12 @@ esac
 	}
 }
 
-func TestDockerEndpointRejectsRootAndSocketPaths(t *testing.T) {
+func TestDockerEndpointRejectsNonUnixURLs(t *testing.T) {
 	for _, endpoint := range []string{
 		"ssh://root@example.invalid",
 		"ssh://executor@example.invalid",
-		"ssh://executor@example.invalid/var/run/docker.sock",
-		"unix:///run/user/1234/docker.sock",
+		"tcp://127.0.0.1:2375",
+		"unix://relative.sock",
 	} {
 		t.Run(endpoint, func(t *testing.T) {
 			t.Setenv("DURPDEPLOY_CONTAINER_RUNTIME", "docker")
@@ -334,7 +361,7 @@ func TestDockerEndpointRejectsRootAndSocketPaths(t *testing.T) {
 	}
 }
 
-func TestDockerRootlessEngineIsAccepted(t *testing.T) {
+func TestDockerEngineIsAccepted(t *testing.T) {
 	dir := t.TempDir()
 	binary := filepath.Join(dir, "docker")
 	if err := os.WriteFile(binary, []byte(`#!/bin/sh
@@ -347,14 +374,14 @@ esac
 	}
 	t.Setenv("DURPDEPLOY_CONTAINER_RUNTIME", "docker")
 	t.Setenv("DURPDEPLOY_CONTAINER_URL",
-		"ssh://executor@example.invalid/run/user/1234/docker.sock")
+		"unix:///var/run/docker.sock")
 	t.Setenv("DURPDEPLOY_CONTAINER_NAMESPACE", "test")
 	if r := newRunner(nil, nil, binary); r.localErr != nil {
 		t.Fatal(r.localErr)
 	}
 }
 
-func TestPodmanRootfulEngineFailsClosed(t *testing.T) {
+func TestPodmanEngineDoesNotRequireRootlessMode(t *testing.T) {
 	// Given
 	dir := t.TempDir()
 	binary := filepath.Join(dir, "podman")
@@ -368,22 +395,22 @@ func TestPodmanRootfulEngineFailsClosed(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv(
-		"DURPDEPLOY_PODMAN_URL",
-		"ssh://executor@example.invalid/run/user/1234/podman/podman.sock",
+		"DURPDEPLOY_CONTAINER_URL",
+		"unix:///run/podman/podman.sock",
 	)
-	t.Setenv("DURPDEPLOY_PODMAN_NAMESPACE", "test")
+	t.Setenv("DURPDEPLOY_CONTAINER_NAMESPACE", "test")
 	// When
 	r := NewWithPodmanBinaryForTest(nil, nil, binary)
 	// Then
-	if r.localErr == nil || !strings.Contains(r.localErr.Error(), "rootless") {
-		t.Fatalf("rootful engine accepted: %v", r.localErr)
+	if r.localErr != nil {
+		t.Fatalf("container engine rejected: %v", r.localErr)
 	}
 }
 
 func TestRunnerRetriesWithFreshContainers(t *testing.T) {
 	// Given
 	r, repo, trace := podmanFixture(t, `
-case "$4" in
+case "$3" in
 info) printf '{"host":{"security":{"rootless":true}}}';;
 ps) ;;
 run)
@@ -452,7 +479,7 @@ esac
 func TestRunnerKeepsCleanupFailureUnconfirmedWithoutRetry(t *testing.T) {
 	// Given
 	r, repo, trace := podmanFixture(t, `
-case "$4" in
+case "$3" in
 info) printf '{"host":{"security":{"rootless":true}}}';;
 ps) ;;
 run) printf 'run\n' >> "$PODMAN_TRACE";;
@@ -515,7 +542,7 @@ esac
 
 func TestRunnerFailsWhenNamespaceCannotBeRecordedBeforeLaunch(t *testing.T) {
 	r, repo, trace := podmanFixture(t, `
-case "$4" in
+case "$3" in
 info) printf '{"host":{"security":{"rootless":true}}}';;
 ps) ;;
 run) printf 'started' > "$PODMAN_TRACE";;
@@ -579,7 +606,7 @@ END`); err != nil {
 func TestRunnerDoesNotStartInDifferentNamespace(t *testing.T) {
 	// Given: a running deployment was associated with another namespace.
 	r, repo, trace := podmanFixture(t, `
-case "$4" in
+case "$3" in
 info) printf '{"host":{"security":{"rootless":true}}}';;
 ps) ;;
 run) printf 'started' > "$PODMAN_TRACE";;
@@ -653,7 +680,7 @@ esac
 func TestRunnerRejectsUnknownTargetBeforePodman(t *testing.T) {
 	// Given
 	r, repo, trace := podmanFixture(t, `
-case "$4" in
+case "$3" in
 info) printf '{"host":{"security":{"rootless":true}}}';;
 ps) ;;
 run) printf 'ran' > "$PODMAN_TRACE";;

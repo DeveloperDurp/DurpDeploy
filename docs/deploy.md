@@ -64,6 +64,8 @@ EOF
 
 # 4. Build and start
 docker compose up -d --build
+# With rootless Podman, use instead:
+# podman compose -f compose.yml -f compose.podman.yml up -d --build
 
 # 5. Bootstrap the first admin
 docker compose exec app admin create \
@@ -364,48 +366,31 @@ secrets. Back up the key with the database.
 
 Every new server-side step (`execution_target: "local"`) requires a
 `container_image`. The control plane never executes its script on the host.
-Provision a **separate rootless Docker or Podman account** for execution, with
-private container/image storage. A Podman endpoint uses its user socket at
-`/run/user/<execution-uid>/podman/podman.sock`; Docker uses the execution
-account's rootless Docker context over SSH. This account must not own or be
-able to read the DurpDeploy database, WAL/SHM files, encryption key, agent
-identity, or server process environment. Do not use the rootful Docker daemon,
-the engine hosting the DurpDeploy app container, or the `durpdeploy` service
-account as the execution account. Preload each step image in that account's
-runtime storage; the runner uses `--pull=never` and fails if it is missing.
+The embedded agent connects only to a local Unix socket and pulls a missing
+step image automatically. Docker Compose mounts `/var/run/docker.sock` without
+additional configuration. For rootless Podman, start its socket and use the
+shipped override:
 
-Give the `durpdeploy` account SSH access to only that execution account and
-verify/pin its SSH host key. The execution host's SSH server must permit Unix
-socket forwarding (`AllowStreamLocalForwarding yes`) for the execution account.
-For the systemd installation, store a mode-0600
-SSH identity and a verified `known_hosts` under
-`/var/lib/durpdeploy/.ssh/` (the service sets `HOME` there). In
-`/etc/durpdeploy/durpdeploy.env`, set:
-
-```text
-DURPDEPLOY_CONTAINER_RUNTIME=podman
-DURPDEPLOY_CONTAINER_URL=ssh://exec@execution-host/run/user/EXEC_UID/podman/podman.sock
-DURPDEPLOY_CONTAINER_NAMESPACE=durpdeploy-prod
+```bash
+systemctl --user enable --now podman.socket
+podman compose -f compose.yml -f compose.podman.yml up -d
 ```
 
-For rootless Docker, use `DURPDEPLOY_CONTAINER_RUNTIME=docker` and
-`DURPDEPLOY_CONTAINER_URL=ssh://exec@execution-host/run/user/EXEC_UID/docker.sock`.
-The explicit socket path keeps execution pinned to that account's rootless
-daemon.
+The Podman override disables SELinux labelling for the control-plane container
+so it can connect to the host user's socket; step containers retain their own
+security options and receive no socket mount.
 
-The SSH host can be the application host if the accounts and filesystem access
-remain separate. When DurpDeploy itself runs in a container, its image includes
-the Docker and Podman clients plus SSH. Make the execution host reachable from the
-app container, and mount only the app user's SSH identity and pinned
-`known_hosts` read-only at `/home/durpdeploy/.ssh`. The Compose examples show
-this optional mount. **Never mount either container engine's socket into the
-app or any step container.** If the endpoint is absent or not rootless,
-server-side steps fail rather than running locally.
+For a native systemd installation, give the `durpdeploy` service identity
+permission to access the chosen socket and set `DURPDEPLOY_CONTAINER_RUNTIME`
+to `docker` or `podman`. Set `DURPDEPLOY_CONTAINER_URL` only when the socket is
+not the client's default, for example `unix:///run/user/1001/podman/podman.sock`.
+`DURPDEPLOY_CONTAINER_NAMESPACE` defaults to `durpdeploy`.
 
-For Kubernetes, set the chart's `containerRuntime` values. Its `sshSecret`
-must name an existing Secret with `id_ed25519` and `known_hosts` keys. The pod
-connects to the execution host over the cluster network; it does not need a
-node socket or privileged access.
+Set `DURPDEPLOY_EMBEDDED_AGENT_ENABLED=false` to disable server-side container
+execution. Remote mTLS agents remain available. The Helm chart disables the
+embedded agent because native Kubernetes Job execution is tracked in
+[issue #98](https://github.com/DeveloperDurp/DurpDeploy/issues/98); use
+standalone agents for executable steps in Kubernetes.
 
 Each attempt runs as non-root with a read-only root filesystem, no network,
 no capabilities, no new privileges, bounded memory and process count, and no
@@ -413,10 +398,13 @@ host mounts. It receives its script on stdin and only the resolved release
 variables named by that step's `variable_names` allowlist; an empty list sends
 none. Images supply their own interpreter and tools. Tags are mutable even
 inside an immutable release snapshot, so use digest-pinned references for
-reproducibility. Steps needing network or host filesystem access should run
+reproducibility. The mounted runtime socket gives the DurpDeploy process
+host-level container control; use a dedicated host or standalone agent when
+the control plane is exposed to untrusted users. Steps needing network or host
+filesystem access should run
 on an appropriately isolated remote agent instead. Secret redaction is
-best-effort; anyone who controls the execution account or its SSH credential
-can manage that account's containers and see the secrets sent to them.
+best-effort; anyone who controls the runtime can manage its containers and see
+the secrets sent to them.
 
 Old deployments and logs remain readable, but old server-side steps without
 images must be recreated and captured in a **new release**. Old releases
@@ -675,10 +663,10 @@ key `ON DELETE CASCADE`.)
 
 ### The dashboard loads but deploys fail
 
-Check deployment logs and the configured rootless container endpoint. A missing
+Check deployment logs and the configured container socket. A missing
 image, unavailable runtime, or interpreter absent from the image fails the
 step; installing the interpreter on the DurpDeploy host does not help. The
 runner removes attempts on completion, timeout, cancellation, and shutdown,
 and reconciles its labelled containers on startup. A cleanup error is not a
-confirmed cancellation; inspect the execution account before retrying. There
+confirmed cancellation; inspect the container runtime before retrying. There
 is no direct host execution or development-mode fallback for server steps.

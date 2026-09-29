@@ -9,7 +9,7 @@ import (
 func TestLocalAttemptPreservesMultilineSelectedVariable(t *testing.T) {
 	// Given
 	r, repo, trace := podmanFixture(t, `
-case "$4" in
+case "$3" in
 info) printf '{"host":{"security":{"rootless":true}}}';;
 ps) ;;
 run)
@@ -50,7 +50,7 @@ esac
 func TestLocalAttemptRejectsNULSelectedVariable(t *testing.T) {
 	// Given
 	r, repo, trace := podmanFixture(t, `
-case "$4" in
+case "$3" in
 info) printf '{"host":{"security":{"rootless":true}}}';;
 ps) ;;
 run) printf 'started' > "$PODMAN_TRACE";;
