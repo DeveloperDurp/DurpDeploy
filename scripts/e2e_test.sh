@@ -1454,11 +1454,15 @@ API_LOG_DEP=$(api_post "{\"release_id\":$API_LOG_RELEASE_ID,\"environment_id\":$
     "$BASE/api/v1/projects/$API_PROJECT_ID/deployments")
 API_LOG_DEP_ID=$(echo "$API_LOG_DEP" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
 
-for i in {1..100}; do
+for i in {1..300}; do
     API_LOG_STATUS=$(api_get "$BASE/api/v1/deployments/$API_LOG_DEP_ID/status" | python3 -c "import sys,json; print(json.load(sys.stdin)['status'])")
     if [[ "$API_LOG_STATUS" =~ ^(failed|succeeded|cancelled)$ ]]; then break; fi
     sleep 0.1
 done
+[[ "$API_LOG_STATUS" =~ ^(failed|succeeded|cancelled)$ ]] || {
+    echo "FAIL: log deployment did not finish, status=$API_LOG_STATUS"
+    exit 1
+}
 
 # Read the ndjson stream. The stream replays historical logs first, so we should
 # get a line almost immediately; cap the connection at 5s to avoid hanging.
