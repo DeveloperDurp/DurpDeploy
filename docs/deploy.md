@@ -383,7 +383,9 @@ security options and receive no socket mount.
 For a native systemd installation, give the `durpdeploy` service identity
 permission to access the chosen socket and set `DURPDEPLOY_CONTAINER_RUNTIME`
 to `docker` or `podman`. Set `DURPDEPLOY_CONTAINER_URL` only when the socket is
-not the client's default, for example `unix:///run/user/1001/podman/podman.sock`.
+not the client's default, for example `unix:///run/podman/podman.sock`. The
+shipped system service hides `/run/user`, so use the system Podman socket rather
+than a rootless user's socket with that unit.
 `DURPDEPLOY_CONTAINER_NAMESPACE` defaults to `durpdeploy`.
 
 Set `DURPDEPLOY_EMBEDDED_AGENT_ENABLED=false` to disable server-side container

@@ -39,6 +39,25 @@ func TestPodmanEndpointIgnoresPoisonedPATH(t *testing.T) {
 	}
 }
 
+func TestContainerCommandIgnoresInheritedRemoteEndpoints(t *testing.T) {
+	t.Setenv("DOCKER_CONTEXT", "remote-context")
+	t.Setenv("DOCKER_HOST", "ssh://remote.invalid")
+	t.Setenv("CONTAINER_CONNECTION", "remote-connection")
+	t.Setenv("CONTAINER_HOST", "ssh://remote.invalid")
+	endpoint := containerEndpoint{kind: "docker", binary: "/usr/bin/docker"}
+	cmd := endpoint.command(t.Context(), "info")
+	for _, entry := range cmd.Env {
+		for _, name := range []string{
+			"DOCKER_CONTEXT=", "DOCKER_HOST=", "CONTAINER_CONNECTION=",
+			"CONTAINER_HOST=",
+		} {
+			if strings.HasPrefix(entry, name) {
+				t.Fatalf("inherited remote endpoint %q", entry)
+			}
+		}
+	}
+}
+
 func podmanFixture(
 	t *testing.T,
 	body string,

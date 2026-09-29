@@ -138,7 +138,15 @@ func (p containerEndpoint) command(
 	}
 	cmd := exec.CommandContext(ctx, p.binary, append(clientArgs, args...)...)
 	// Do not let inherited client configuration redirect execution.
-	cmd.Env = os.Environ()
+	for _, entry := range os.Environ() {
+		name, _, _ := strings.Cut(entry, "=")
+		switch name {
+		case "DOCKER_CONTEXT", "DOCKER_HOST", "CONTAINER_CONNECTION",
+			"CONTAINER_HOST":
+			continue
+		}
+		cmd.Env = append(cmd.Env, entry)
+	}
 	if hostEnv != "" {
 		cmd.Env = append(cmd.Env, hostEnv)
 	}

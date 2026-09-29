@@ -48,7 +48,7 @@ EnvironmentFile=-/etc/durpdeploy/durpdeploy.env
 # Server-side steps use a local Docker or Podman Unix socket.
 # DURPDEPLOY_EMBEDDED_AGENT_ENABLED=true
 # DURPDEPLOY_CONTAINER_RUNTIME=podman
-# DURPDEPLOY_CONTAINER_URL=unix:///run/user/UID/podman/podman.sock
+# DURPDEPLOY_CONTAINER_URL=unix:///run/podman/podman.sock
 # DURPDEPLOY_CONTAINER_NAMESPACE=durpdeploy-prod
 ExecStart=/usr/local/bin/durpdeploy
 Restart=on-failure

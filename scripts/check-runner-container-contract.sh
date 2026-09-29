@@ -69,6 +69,7 @@ grep -Fq 'docker-cli' "$root/Dockerfile"
 grep -Fq 'su-exec' "$root/Dockerfile"
 grep -Fq 'container-entrypoint' "$root/Dockerfile"
 ! grep -Fq 'openssh-client' "$root/Dockerfile"
+! grep -Fq 'chmod g+rw "$socket"' "$root/container-entrypoint.sh"
 grep -Fq 'DURPDEPLOY_CONTAINER_RUNTIME: podman' "$root/compose.podman.yml"
 grep -Fq 'podman/podman.sock:/var/run/durpdeploy-runtime.sock' \
 	"$root/compose.podman.yml"

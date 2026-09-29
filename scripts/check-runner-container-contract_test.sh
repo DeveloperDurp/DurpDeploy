@@ -14,6 +14,7 @@ assert_rejected() {
 	fixture=$(mktemp -d)
 	mkdir -p "$fixture/internal/runner"
 	cp "$repo_root/Dockerfile" "$repo_root/Makefile" \
+		"$repo_root/container-entrypoint.sh" \
 		"$repo_root/compose.yml" \
 		"$repo_root/compose.example.yml" \
 		"$repo_root/compose.podman.yml" "$fixture/"
@@ -40,6 +41,7 @@ assert_compose_rejected() {
 	fixture=$(mktemp -d)
 	mkdir -p "$fixture/internal/runner"
 	cp "$repo_root/Dockerfile" "$repo_root/Makefile" \
+		"$repo_root/container-entrypoint.sh" \
 		"$repo_root/compose.yml" \
 		"$repo_root/compose.example.yml" \
 		"$repo_root/compose.podman.yml" "$fixture/"
@@ -105,7 +107,8 @@ assert_compose_rejected 'volumes=["/run/podman/podman.sock:/run/podman/podman.so
 comment_fixture=$(mktemp -d)
 trap 'rm -rf "$comment_fixture"' EXIT
 mkdir -p "$comment_fixture/internal/runner"
-	cp "$repo_root/Dockerfile" "$repo_root/Makefile" \
+cp "$repo_root/Dockerfile" "$repo_root/Makefile" \
+	"$repo_root/container-entrypoint.sh" \
 	"$repo_root/compose.yml" \
 	"$repo_root/compose.example.yml" \
 	"$repo_root/compose.podman.yml" "$comment_fixture/"
