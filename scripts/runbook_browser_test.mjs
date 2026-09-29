@@ -94,14 +94,16 @@ try {
   assert.equal(agentStep.execution_target, "agent");
   assert.deepEqual(agentStep.variable_names, ["REMOTE_TOKEN"]);
 
-  const agentTemplate = await api("POST", "/templates", {
-    name: "browser-agent-template-variables",
-    script_body: "printf agent-template",
-    interpreter: "bash",
-    execution_target: "agent",
-    agent_selectors: ["linux"],
-    variable_names: ["REMOTE_TOKEN"],
-  });
+  page.once("dialog", (dialog) => dialog.accept());
+  await Promise.all([
+    page.waitForResponse((response) =>
+      response.request().method() === "POST" &&
+      response.url().endsWith(`/projects/${stepProject.id}/steps/${step.id}/save-as-template`)),
+    page.locator(`#step-row-${step.id}`).getByRole("button", { name: "Save Template" }).click(),
+  ]);
+  const templates = await api("GET", "/templates?limit=1000", undefined, 200);
+  const agentTemplate = templates.items.find((template) => template.name === "agent variables");
+  assert.ok(agentTemplate);
   await page.goto(`${base}/templates/${agentTemplate.id}/edit`);
   assert.equal(await page.locator('input[name="container_image"]').count(), 0);
   const templateVariables = page.locator('input[name="variable_names"]');
