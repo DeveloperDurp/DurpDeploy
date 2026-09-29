@@ -144,7 +144,7 @@ printf 'Checking rootless SSH connection\n'
 sudo -u "$account" python3 -c \
     'import socket,sys; s=socket.socket(socket.AF_UNIX); s.connect(sys.argv[1])' \
     "$socket"
-HOME="$tmp/host-home" docker --host="$DURPDEPLOY_CONTAINER_URL" info \
+docker --host="$DURPDEPLOY_CONTAINER_URL" info \
     --format '{{json .SecurityOptions}}' | grep -q 'name=rootless'
 
 cd "$root"
@@ -153,7 +153,7 @@ export DURPDEPLOY_SECRET_KEY
 DURPDEPLOY_SECRET_KEY=$(openssl rand -base64 32)
 DURPDEPLOY_DB="$tmp/bad-runtime.db" "$tmp/durpdeploy" admin create \
     --email e2e-admin@test.local --password e2e-admin-password-1234 >/dev/null
-HOME="$tmp/host-home" DURPDEPLOY_DB="$tmp/bad-runtime.db" \
+DURPDEPLOY_DB="$tmp/bad-runtime.db" \
     DURPDEPLOY_CONTAINER_URL="ssh://$account@127.0.0.1/run/user/99999/docker.sock" \
     DURPDEPLOY_EXECUTION_BOUNDARY=service DURPDEPLOY_ADDR=127.0.0.1:18082 \
     DURPDEPLOY_AGENT_LISTEN_ADDR=127.0.0.1:0 \
@@ -200,7 +200,7 @@ wait "$server_pid" || true
 server_pid=
 
 printf 'Running host control-plane E2E\n'
-HOME="$tmp/host-home" DURPDEPLOY_E2E_PORT=18080 ./scripts/e2e_test.sh
+DURPDEPLOY_E2E_PORT=18080 ./scripts/e2e_test.sh
 test -z "$(exec_podman ps -aq --filter "label=io.durpdeploy.namespace=docker:$namespace")"
 
 printf 'Building containerized control plane\n'
