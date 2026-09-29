@@ -55,7 +55,9 @@ uid=$(id -u "$account")
 sudo loginctl enable-linger "$account"
 sudo systemctl start "user@$uid.service"
 socket="/home/$account/podman-api.sock"
-sudo -u "$account" env HOME="/home/$account" XDG_RUNTIME_DIR="/run/user/$uid" \
+sudo -u "$account" env -i HOME="/home/$account" USER="$account" \
+    LOGNAME="$account" PATH=/usr/local/bin:/usr/bin:/bin \
+    XDG_CONFIG_HOME="/home/$account/.config" XDG_RUNTIME_DIR="/run/user/$uid" \
     DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus" \
     podman system service --time=0 "unix://$socket" &
 bridge_pid=$!
