@@ -59,7 +59,8 @@ sudo -u "$account" env -i HOME="/home/$account" USER="$account" \
     LOGNAME="$account" PATH=/usr/local/bin:/usr/bin:/bin \
     XDG_CONFIG_HOME="/home/$account/.config" XDG_RUNTIME_DIR="/run/user/$uid" \
     DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus" \
-    podman system service --time=0 "unix://$socket" &
+    /bin/sh -c 'cd "$HOME" && exec /usr/bin/podman system service --time=0 "$1"' \
+    sh "unix://$socket" &
 bridge_pid=$!
 for i in {1..50}; do
     sudo -u "$account" test -S "$socket" && break
