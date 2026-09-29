@@ -13,12 +13,17 @@ volume="${app_name}-data"
 identity_volume="${app_name}-identity"
 image="${app_name}:test"
 server_pid=
+bridge_pid=
 uid=
 cleanup() {
     local result=$?
     if [[ -n "$server_pid" ]]; then
         kill "$server_pid" 2>/dev/null || true
         wait "$server_pid" 2>/dev/null || true
+    fi
+    if [[ -n "$bridge_pid" ]]; then
+        kill "$bridge_pid" 2>/dev/null || true
+        wait "$bridge_pid" 2>/dev/null || true
     fi
     if ((result != 0)); then
         docker logs "$app_name" 2>/dev/null || true
@@ -49,20 +54,19 @@ sudo passwd --delete "$account"
 uid=$(id -u "$account")
 sudo loginctl enable-linger "$account"
 sudo systemctl start "user@$uid.service"
+socket="/home/$account/podman-api.sock"
 sudo -u "$account" env HOME="/home/$account" XDG_RUNTIME_DIR="/run/user/$uid" \
     DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus" \
-    systemctl --user start podman.socket
-socket="/run/user/$uid/podman/podman.sock"
+    podman system service --time=0 "unix://$socket" &
+bridge_pid=$!
 for i in {1..50}; do
     sudo -u "$account" test -S "$socket" && break
     sleep 0.1
 done
 if ! sudo -u "$account" test -S "$socket"; then
     printf 'Rootless Podman socket missing at %s\n' "$socket" >&2
-    sudo -u "$account" env HOME="/home/$account" XDG_RUNTIME_DIR="/run/user/$uid" \
-        DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus" \
-        systemctl --user status podman.socket --no-pager >&2 || true
-    sudo ls -ld "/run/user/$uid" "/run/user/$uid/podman" >&2 || true
+    ps -fp "$bridge_pid" >&2 || true
+    sudo ls -ld "/run/user/$uid" "/home/$account" >&2 || true
     exit 1
 fi
 
@@ -82,7 +86,7 @@ printf '%s\n' '#!/bin/sh' \
     'export HOME="/home/$(id -un)"' \
     'export XDG_RUNTIME_DIR="/run/user/$(id -u)"' \
     'export XDG_CONFIG_HOME="$HOME/.config"' \
-    'export CONTAINER_HOST="unix:///run/user/$(id -u)/podman/podman.sock"' \
+    'export CONTAINER_HOST="unix://$HOME/podman-api.sock"' \
     'exec /usr/bin/podman "$@"' \
     | sudo tee "/home/$account/bin/docker" >/dev/null
 printf '%s\n' 'export PATH="$HOME/bin:$PATH"' \
