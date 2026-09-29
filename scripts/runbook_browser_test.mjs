@@ -56,6 +56,7 @@ try {
   await targets.nth(1).selectOption("local");
   await page.locator('input[name="step_name"]').first().fill("browser check");
   await page.locator('textarea[name="step_script"]').first().fill("printf browser-runbook-step; sleep 5");
+  await page.locator('input[name="step_image"]:not([type="hidden"])').first().fill("docker.io/library/bash:5.2");
   await page.getByRole("button", { name: "Save immutable version" }).click();
   await page.waitForURL(new RegExp(`/projects/${projectID}/runbooks/${runbookID}$`));
   assert.match(await page.locator("h2").allTextContents().then((values) => values.join(" ")), /Version 3 steps/);
