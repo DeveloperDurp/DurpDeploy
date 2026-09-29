@@ -77,6 +77,7 @@ printf '%s\n' \
     '    AllowStreamLocalForwarding yes' \
     'Match all' | sudo tee \
     /etc/ssh/sshd_config.d/00-durpdeploy-e2e.conf >/dev/null
+sudo install -d -m 0755 /run/sshd
 sudo sshd -t
 sudo systemctl restart ssh
 for host in 127.0.0.1 host.containers.internal; do
