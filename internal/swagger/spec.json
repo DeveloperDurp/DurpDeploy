@@ -8887,7 +8887,7 @@
           "x-go-name": "TimeoutSeconds"
         },
         "variable_names": {
-          "description": "Variable names the step receives; identifiers without duplicates.",
+          "description": "Optional variable-name restriction. Empty passes all variables.",
           "type": "array",
           "items": {
             "type": "string"
@@ -8955,7 +8955,7 @@
           "x-go-name": "TimeoutSeconds"
         },
         "variable_names": {
-          "description": "Allowlist of variable names passed to the step; each entry must\nbe an identifier and names cannot repeat.",
+          "description": "Optional variable-name restriction. Empty passes all variables;\nentries must be identifiers without duplicates.",
           "type": "array",
           "items": {
             "type": "string"
@@ -9060,7 +9060,7 @@
           "x-go-name": "ScriptBody"
         },
         "variable_names": {
-          "description": "Allowlist of variable names passed to the step; each entry must\nbe an identifier and names cannot repeat.",
+          "description": "Optional variable-name restriction. Empty passes all variables;\nentries must be identifiers without duplicates.",
           "type": "array",
           "items": {
             "type": "string"

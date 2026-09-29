@@ -24,10 +24,10 @@ func TestStepWebCreateLocalSucceedsWithImage(t *testing.T) {
 
 	form := url.Values{
 		"name":             {"deploy"},
-		"script_body":      {"echo hi"},
-		"interpreter":      {"bash"},
+		"script_body":      {"Write-Output 'hi'"},
+		"interpreter":      {"powershell"},
 		"execution_target": {"local"},
-		"container_image":  {"alpine:3.20"},
+		"container_image":  {"mcr.microsoft.com/powershell:latest"},
 		"variable_names":   {"DEPLOY_ENV, API_KEY"},
 		"csrf_token":       {h.csrfToken()},
 	}
@@ -53,9 +53,12 @@ func TestStepWebCreateLocalSucceedsWithImage(t *testing.T) {
 	if steps[0].ExecutionTarget != "local" {
 		t.Fatalf("execution_target=%q, want local", steps[0].ExecutionTarget)
 	}
-	if steps[0].ContainerImage != "alpine:3.20" {
+	if steps[0].Interpreter != "pwsh" {
+		t.Fatalf("interpreter=%q, want pwsh", steps[0].Interpreter)
+	}
+	if steps[0].ContainerImage != "mcr.microsoft.com/powershell:latest" {
 		t.Fatalf(
-			"container_image=%q, want alpine:3.20",
+			"container_image=%q, want mcr.microsoft.com/powershell:latest",
 			steps[0].ContainerImage,
 		)
 	}

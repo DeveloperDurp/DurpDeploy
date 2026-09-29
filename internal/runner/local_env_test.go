@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestLocalAttemptPreservesMultilineSelectedVariable(t *testing.T) {
+func TestLocalAttemptPassesAllVariablesByDefault(t *testing.T) {
 	// Given
 	r, repo, trace := podmanFixture(t, `
 case "$3" in
@@ -22,7 +22,6 @@ esac
 	err := r.runStepAttempt(t.Context(), localStepAttempt{
 		step: deploymentStep{
 			ContainerImage: "example.com/worker:1",
-			VariableNames:  []string{"TOKEN"},
 		},
 		logWriter: &broadcastWriter{
 			ctx:      t.Context(),
@@ -30,7 +29,11 @@ esac
 			broker:   r.broker,
 			scrubber: NewScrubber(nil),
 		},
-		environment: map[string]string{"TOKEN": "first\nsecond\rthird"},
+		environment: map[string]string{
+			"DOCKER_HOST": "tcp://attacker.invalid",
+			"MODE":        "deploy",
+			"TOKEN":       "first\nsecond\rthird",
+		},
 	})
 	// Then
 	if err != nil {
@@ -41,7 +44,9 @@ esac
 		t.Fatalf("selected variable %q: %v", value, err)
 	}
 	args, err := os.ReadFile(trace)
-	if err != nil || !strings.Contains(string(args), "--env\nTOKEN\n") ||
+	if err != nil || !strings.Contains(string(args), "--env\nMODE\n") ||
+		!strings.Contains(string(args), "--env\nTOKEN\n") ||
+		strings.Contains(string(args), "--env\nDOCKER_HOST\n") ||
 		strings.Contains(string(args), "first") {
 		t.Fatalf("variable exposed in argv %q: %v", args, err)
 	}

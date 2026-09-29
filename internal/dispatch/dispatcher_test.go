@@ -28,12 +28,12 @@ func TestSelectRemoteVariablesUsesStepAllowlists(t *testing.T) {
 		selected[1].Name != "SECOND" {
 		t.Fatalf("selected variables = %+v", selected)
 	}
-	empty, err := selectRemoteVariables(
+	all, err := selectRemoteVariables(
 		[]db.DeploymentStep{{Name: "none", VariableNames: `[]`}},
 		variables,
 	)
-	if err != nil || len(empty) != 0 {
-		t.Fatalf("empty allowlist = %+v: %v", empty, err)
+	if err != nil || len(all) != len(variables) {
+		t.Fatalf("default variables = %+v: %v", all, err)
 	}
 }
 

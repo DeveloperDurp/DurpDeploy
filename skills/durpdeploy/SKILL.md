@@ -99,9 +99,10 @@ Token placement rules:
 
 `local` means mandatory server-container execution; specify an image with
 `bash`, `pwsh`, or `python3` installed. `agent` runs on matching remote agents
-without a container image. `variable_names` selects which resolved release
-variables enter this step; omit it or use `[]` to pass none. Local steps cannot
-select container/SSH client configuration names such as `PATH`, `HOME`,
+without a container image. API requests may use `powershell`; DurpDeploy
+normalizes it to `pwsh`. All resolved release variables enter a step by
+default; set `variable_names` only to restrict the step to those names. Local
+steps exclude container/SSH client configuration names such as `PATH`, `HOME`,
 `SSH_AUTH_SOCK`, or `XDG_*`; agent steps retain their host variable support.
 The embedded agent pulls an image when it is missing. Container steps have no
 network or host mounts. A mutable image tag does not

@@ -49,7 +49,7 @@ type swaggerStep struct {
 	// Container image the step runs in on the server; mandatory for
 	// local steps and rejected for agent steps.
 	ContainerImage string `json:"container_image"`
-	// Variable names the step receives; identifiers without duplicates.
+	// Optional variable-name restriction. Empty passes all variables.
 	VariableNames []string `json:"variable_names"`
 }
 
@@ -389,8 +389,8 @@ type swaggerStepRequest struct {
 	// Container image the step runs in on the server; mandatory for
 	// local steps and rejected for agent steps.
 	ContainerImage string `json:"container_image"`
-	// Allowlist of variable names passed to the step; each entry must
-	// be an identifier and names cannot repeat.
+	// Optional variable-name restriction. Empty passes all variables;
+	// entries must be identifiers without duplicates.
 	VariableNames []string `json:"variable_names"`
 }
 
@@ -411,8 +411,8 @@ type swaggerStepTemplateRequest struct {
 	// Container image the step runs in on the server; mandatory for
 	// local steps and rejected for agent steps.
 	ContainerImage string `json:"container_image"`
-	// Allowlist of variable names passed to the step; each entry must
-	// be an identifier and names cannot repeat.
+	// Optional variable-name restriction. Empty passes all variables;
+	// entries must be identifiers without duplicates.
 	VariableNames []string `json:"variable_names"`
 }
 

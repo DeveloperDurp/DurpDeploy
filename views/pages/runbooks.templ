@@ -112,7 +112,7 @@ templ RunbookFormPage(project db.Project, book db.Runbook, stepsJSON string, err
 							<input name="step_selectors" type="hidden" value="" x-bind:disabled="step.execution_target === 'agent'"/>
 							<label class="form-control" x-show="step.execution_target === 'local'"><span class="label-text">Container image</span><input name="step_image" class="input input-bordered" x-model="step.container_image" x-bind:disabled="step.execution_target !== 'local'" required/></label>
 							<input name="step_image" type="hidden" value="" x-bind:disabled="step.execution_target === 'local'"/>
-							<label class="form-control"><span class="label-text">Variable names (comma separated, optional)</span><input name="step_variable_names" class="input input-bordered" x-model="step.variable_names_text" placeholder="DB_HOST, API_TOKEN"/></label>
+							<label class="form-control"><span class="label-text">Limit variables (optional)</span><input name="step_variable_names" class="input input-bordered" x-model="step.variable_names_text" placeholder="Empty passes all; or DB_HOST, API_TOKEN"/></label>
 						</div>
 					</template>
 					<button type="button" class="btn btn-secondary" x-on:click="steps.push({name:'',script_body:'',interpreter:'bash',timeout_seconds:0,max_retries:0,execution_target:'local',agent_selectors_text:'',container_image:'',variable_names_text:''})">Add step</button>

@@ -48,7 +48,7 @@ func validateContainerConfig(
 }
 
 // validateVariableNames checks that every entry is an identifier and
-// that no name appears twice, since the allowlist is stored as a
+// that no name appears twice, since the optional restriction is stored as a
 // JSON array.
 func validateVariableNames(
 	w http.ResponseWriter,
@@ -90,8 +90,8 @@ func validateVariableNames(
 	return variableNames, true
 }
 
-// marshalVariableNames encodes the allowlist as the JSON array string
-// the database column stores. An empty allowlist stays an empty string.
+// marshalVariableNames encodes the optional restriction as the JSON array
+// string the database column stores. No restriction stays an empty string.
 func marshalVariableNames(variableNames []string) string {
 	if len(variableNames) == 0 {
 		return ""

@@ -3,13 +3,20 @@ package interpreter
 import "testing"
 
 func TestValidate(t *testing.T) {
-	for _, value := range []string{"", Bash, PowerShell, Python} {
+	tests := map[string]string{
+		"":           Bash,
+		Bash:         Bash,
+		PowerShell:   PowerShell,
+		"powershell": PowerShell,
+		Python:       Python,
+	}
+	for value, want := range tests {
 		got, err := Validate(value)
 		if err != nil {
 			t.Fatalf("Validate(%q): %v", value, err)
 		}
-		if value == "" && got != Bash || value != "" && got != value {
-			t.Fatalf("Validate(%q) = %q", value, got)
+		if got != want {
+			t.Fatalf("Validate(%q) = %q, want %q", value, got, want)
 		}
 	}
 	if _, err := Validate("/bin/sh"); err == nil {

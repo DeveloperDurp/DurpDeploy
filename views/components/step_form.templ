@@ -186,7 +186,7 @@ templ StepForm(step db.Step, projectID int64, isNew bool, labels []string, selec
 				</div>
 				<div class="form-control min-w-0">
 					<label class="label" for={ stepInputID(step, isNew, "variable-names") }>
-						<span class="label-text">Variable names</span>
+						<span class="label-text">Limit variables (optional)</span>
 					</label>
 					<input
 						id={ stepInputID(step, isNew, "variable-names") }
@@ -196,7 +196,7 @@ templ StepForm(step db.Step, projectID int64, isNew bool, labels []string, selec
 						placeholder="comma-separated, e.g. DEPLOY_ENV, API_KEY"
 						class="input input-bordered min-w-0 w-full"
 					/>
-					<label class="label"><span class="label-text-alt">Identifiers exposed to the script. Leave empty to pass nothing.</span></label>
+					<label class="label"><span class="label-text-alt">Leave empty to pass all project variables. Enter names to restrict this step.</span></label>
 				</div>
 			</div>
 			<div x-data="stepEditor" class="form-control">
@@ -349,7 +349,7 @@ templ StepEditRow(step db.Step, projectID int64, labels []string, selectedLabel 
 					/>
 				</div>
 				<div class="form-control min-w-0 xl:col-span-2">
-					<label class="label" for={ fmt.Sprintf("step-%d-variable-names", step.ID) }><span class="label-text">Variable names</span></label>
+					<label class="label" for={ fmt.Sprintf("step-%d-variable-names", step.ID) }><span class="label-text">Limit variables (optional)</span></label>
 					<input
 						id={ fmt.Sprintf("step-%d-variable-names", step.ID) }
 						type="text"
@@ -358,6 +358,7 @@ templ StepEditRow(step db.Step, projectID int64, labels []string, selectedLabel 
 						placeholder="comma-separated, e.g. DEPLOY_ENV, API_KEY"
 						class="input input-bordered input-sm min-w-0 w-full"
 					/>
+					<label class="label"><span class="label-text-alt">Leave empty to pass all project variables.</span></label>
 				</div>
 				<div x-data="stepEditor" class="form-control flex-1 xl:col-span-2">
 					<label class="label" for={ fmt.Sprintf("step-%d-script", step.ID) }>

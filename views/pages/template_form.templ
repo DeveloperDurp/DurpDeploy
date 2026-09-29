@@ -127,7 +127,7 @@ templ TemplateFormContent(tpl *db.StepTemplate, isNew bool, errorMsg string) {
 			}
 			<div class="form-control">
 				<label class="label" for="template-variable-names">
-					<span class="label-text">Variable names</span>
+					<span class="label-text">Limit variables (optional)</span>
 				</label>
 				<input
 					id="template-variable-names"
@@ -137,7 +137,7 @@ templ TemplateFormContent(tpl *db.StepTemplate, isNew bool, errorMsg string) {
 					placeholder="comma-separated, e.g. DEPLOY_ENV, API_KEY"
 					class="input input-bordered"
 				/>
-				<label class="label"><span class="label-text-alt">Identifiers exposed to the script. Leave empty to pass nothing.</span></label>
+				<label class="label"><span class="label-text-alt">Leave empty to pass all project variables. Enter names to restrict this step.</span></label>
 			</div>
 			<div class="form-control">
 				<label class="label">

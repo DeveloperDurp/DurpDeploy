@@ -261,9 +261,9 @@ func deploymentStepsFromRelease(raw string) ([]DeploymentStepSnapshot, error) {
 	return steps, nil
 }
 
-// marshalVariableNames encodes the allowlist as the JSON array text the
-// deployment_steps.variable_names column stores. Missing (legacy) and
-// empty allowlists both store "[]", never "".
+// marshalVariableNames encodes the optional restriction as the JSON array text
+// the deployment_steps.variable_names column stores. Missing (legacy) and
+// unrestricted values both store "[]", never "".
 func marshalVariableNames(variableNames []string) string {
 	if variableNames == nil {
 		variableNames = []string{}

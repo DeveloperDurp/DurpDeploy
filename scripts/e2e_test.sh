@@ -201,7 +201,11 @@ CODE=$(curl_silent -X POST -d "name=TestEnv&csrf_token=$CSRF" "$BASE/environment
 ENV_ID=$(curl_body "$BASE/environments" | grep -oP 'href="/environments/\K[0-9]+' | head -1)
 echo "Env ID: $ENV_ID"
 
-CODE=$(curl_silent -X POST -d "name=Step1&script_body=echo+hello&container_image=$BASH_IMAGE&csrf_token=$CSRF" "$BASE/projects/$PROJECT_ID/steps")
+CODE=$(curl_silent -X POST \
+    --data-urlencode "name=Step1" \
+    --data-urlencode 'script_body=test "$VAR1" = hello && echo default-variable=$VAR1' \
+    -d "container_image=$BASH_IMAGE&csrf_token=$CSRF" \
+    "$BASE/projects/$PROJECT_ID/steps")
 [[ "$CODE" == "200" ]] || { echo "FAIL: create step got $CODE"; exit 1; }
 
 # Verify the dedicated steps page renders.
@@ -220,6 +224,20 @@ DEP_URL=$(curl -s -b "$COOKIES" -D - -o /dev/null -X POST -d "release_id=$RELEAS
 DEP_ID=$(echo "$DEP_URL" | grep -oP '/deployments/\K[0-9]+')
 [[ -n "$DEP_ID" ]] || { echo "FAIL: create deployment did not redirect"; exit 1; }
 echo "Deployment ID: $DEP_ID"
+
+for i in {1..100}; do
+  DEP_STATUS=$(curl_body "$BASE/deployments/$DEP_ID/status")
+  echo "$DEP_STATUS" | grep -qE 'failed|succeeded|cancelled' && break
+  sleep 0.2
+done
+echo "$DEP_STATUS" | grep -q succeeded || {
+    echo "FAIL: default-variable deployment did not succeed"; exit 1;
+}
+curl_body "$BASE/deployments/$DEP_ID/logs.txt" | \
+    grep -q 'default-variable=hello' || {
+        echo "FAIL: empty variable restriction did not pass VAR1"; exit 1;
+    }
+echo "  Empty variable restriction passes all project variables: OK"
 
 CODE=$(curl_silent "$BASE/deployments/$DEP_ID")
 [[ "$CODE" == "200" ]] || { echo "FAIL: deployment page got $CODE"; exit 1; }
@@ -1085,7 +1103,7 @@ grep -q '>python3<' <<<"$INTERPRETER_DEPLOYMENT_PAGE" || {
 echo "  Mixed Bash/Python deployment: OK"
 
 INTERPRETER_UPDATED_STEP=$(api_put \
-    "{\"name\":\"python-step\",\"script_body\":\"Write-Output refreshed\",\"interpreter\":\"pwsh\",\"container_image\":\"$PWSH_IMAGE\",\"sort_order\":2}" \
+    "{\"name\":\"python-step\",\"script_body\":\"Write-Output refreshed\",\"interpreter\":\"powershell\",\"container_image\":\"$PWSH_IMAGE\",\"sort_order\":2}" \
     "$BASE/api/v1/projects/$INTERPRETER_PROJECT_ID/steps/$INTERPRETER_PYTHON_STEP_ID")
 echo "$INTERPRETER_UPDATED_STEP" | python3 -c \
     "import sys,json; assert json.load(sys.stdin)['interpreter']=='pwsh'"

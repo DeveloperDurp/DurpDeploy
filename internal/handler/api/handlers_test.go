@@ -970,12 +970,13 @@ func TestStep_CreateAndList(t *testing.T) {
 		http.MethodPost,
 		"/api/v1/projects/"+itoa(p.ID)+"/steps",
 		token,
-		`{"name":"deploy","script_body":"print('deploy')",`+
-			`"interpreter":"python3","container_image":"python:3.12"}`,
+		`{"name":"deploy","script_body":"Write-Output 'deploy'",`+
+			`"interpreter":"powershell",`+
+			`"container_image":"mcr.microsoft.com/powershell:latest"}`,
 	)
 	h.assertStatus(t, rec, http.StatusCreated)
 	h.assertJSONField(t, rec, "name", "deploy")
-	h.assertJSONField(t, rec, "interpreter", "python3")
+	h.assertJSONField(t, rec, "interpreter", "pwsh")
 
 	rec = h.request(
 		t,

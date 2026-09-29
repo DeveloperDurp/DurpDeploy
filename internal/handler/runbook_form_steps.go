@@ -36,7 +36,7 @@ func ValidContainerImage(image string) bool {
 // a runbook step. Local steps run inside a mandatory server container,
 // so a container image is required; agent steps run on the remote host
 // and must not carry an image. Variable names become the container
-// environment allowlist and must be unique identifiers.
+// optional environment restriction and must be unique identifiers.
 func ValidateRunbookStepContainer(
 	target, containerImage string,
 	variableNames []string,

@@ -359,10 +359,10 @@ AES-256-GCM encrypted before it ever reaches SQLite:
   plaintext in an error message. `secret.Box.Decrypt` returns only fixed error
   text.
   - **Runner:** `DeploymentRunner.Run` receives plaintext from
-    `ListReleaseVariablesByRelease`. A server step receives only the names in
-    its frozen `variable_names` allowlist through the execution runtime. The
-    scrubber still considers the resolved secret values before logs are stored
-    or streamed.
+    `ListReleaseVariablesByRelease`. A server step receives all compatible
+    resolved variables by default; a non-empty frozen `variable_names` list
+    restricts what reaches the execution runtime. The scrubber still considers
+    the resolved secret values before logs are stored or streamed.
 - **Acceptance check:** `sqlite3 durpdeploy.db 'select * from variables'`
   shows only base64 ciphertext in `value`. The app reads/writes normally
   through the UI because the repository layer decrypts/encrypts

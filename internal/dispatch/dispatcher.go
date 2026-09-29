@@ -160,7 +160,7 @@ func selectRemoteVariables(
 	selected := make(map[string]struct{})
 	for _, step := range steps {
 		if step.VariableNames == "" {
-			continue
+			return variables, nil
 		}
 		var names []string
 		if err := json.Unmarshal(
@@ -172,6 +172,9 @@ func selectRemoteVariables(
 				step.Name,
 				err,
 			)
+		}
+		if len(names) == 0 {
+			return variables, nil
 		}
 		for _, name := range names {
 			selected[name] = struct{}{}

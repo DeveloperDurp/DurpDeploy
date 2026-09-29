@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 	"time"
 
@@ -74,9 +75,19 @@ func (r *DeploymentRunner) runStepAttempt(
 			return err
 		}
 	}
+	variableNames := request.step.VariableNames
+	if len(variableNames) == 0 {
+		variableNames = make([]string, 0, len(request.environment))
+		for name := range request.environment {
+			if containerenv.ValidateName(name, true) == nil {
+				variableNames = append(variableNames, name)
+			}
+		}
+		sort.Strings(variableNames)
+	}
 	var selectedEnv []string
 	var envArgs []string
-	for _, name := range request.step.VariableNames {
+	for _, name := range variableNames {
 		value, exists := request.environment[name]
 		if containerenv.ValidateName(name, true) != nil || !exists ||
 			strings.ContainsRune(value, '\x00') {
@@ -115,6 +126,7 @@ func (r *DeploymentRunner) runStepAttempt(
 		"--label=io.durpdeploy.namespace="+r.engine.scope(),
 		"--network=none", "--read-only", "--cap-drop=ALL",
 		"--security-opt=no-new-privileges", "--user=65534:65534",
+		"--tmpfs=/tmp:rw,nosuid,size=64m", "--env=HOME=/tmp",
 		"--pids-limit=128", "--memory=256m", "--cpus=1")
 	if r.engine.kind == "podman" {
 		args = append(args, "--image-volume=ignore", "--http-proxy=false")

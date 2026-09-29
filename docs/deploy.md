@@ -396,9 +396,10 @@ standalone agents for executable steps in Kubernetes.
 
 Each attempt runs as non-root with a read-only root filesystem, no network,
 no capabilities, no new privileges, bounded memory and process count, and no
-host mounts. It receives its script on stdin and only the resolved release
-variables named by that step's `variable_names` allowlist; an empty list sends
-none. Images supply their own interpreter and tools. Tags are mutable even
+host mounts. A 64 MiB temporary filesystem at `/tmp` supplies its writable
+home. It receives its script on stdin and all compatible resolved release
+variables by default; `variable_names` restricts the step when it is non-empty.
+Images supply their own interpreter and tools. Tags are mutable even
 inside an immutable release snapshot, so use digest-pinned references for
 reproducibility. The mounted runtime socket gives the DurpDeploy process
 host-level container control; use a dedicated host or standalone agent when

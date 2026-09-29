@@ -156,7 +156,7 @@ type releaseStepSnapshot struct {
 
 // decodeStepVariableNames parses the JSON array text stored in the
 // steps.variable_names column. The pre-migration legacy value is an
-// empty string, which decodes to an empty allowlist.
+// empty string, which decodes to the unrestricted default.
 func decodeStepVariableNames(raw string) ([]string, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
