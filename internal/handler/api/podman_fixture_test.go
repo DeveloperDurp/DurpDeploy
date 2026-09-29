@@ -39,6 +39,7 @@ func fakeDocker(t *testing.T) string {
 	cli := `#!/bin/sh
 case "$2" in
 info) printf '["name=rootless"]';;
+image) printf 'null';;
 ps|rm) ;;
 run)
   timeout=

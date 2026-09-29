@@ -249,6 +249,35 @@ func TestDockerEndpointUsesFixedClientAndSSHHost(t *testing.T) {
 			"--host=ssh://executor@example.invalid/run/user/1234/docker.sock info" {
 		t.Fatalf("Docker command = %q", cmd.Args)
 	}
+	if got := strings.Join(
+		endpoint.removeArgs("attempt"),
+		" ",
+	); got != "rm --force --volumes attempt" {
+		t.Fatalf("Docker cleanup = %q", got)
+	}
+	if err := endpoint.removalError(
+		[]byte("Error response from daemon: No such container: attempt"),
+		os.ErrNotExist,
+	); err != nil {
+		t.Fatalf("absent Docker container cleanup: %v", err)
+	}
+}
+
+func TestDockerRejectsImageDeclaredVolumes(t *testing.T) {
+	dir := t.TempDir()
+	binary := filepath.Join(dir, "docker")
+	if err := os.WriteFile(binary, []byte(`#!/bin/sh
+printf '{"/data":{}}'
+`), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	runner := &DeploymentRunner{engine: containerEndpoint{
+		kind: "docker", binary: binary, url: "ssh://executor@example.invalid",
+	}}
+	err := runner.rejectDockerImageVolumes(t.Context(), "example/image:1")
+	if err == nil || !strings.Contains(err.Error(), "writable volumes") {
+		t.Fatalf("image-declared volumes accepted: %v", err)
+	}
 }
 
 func TestDockerEndpointRejectsRootAndSocketPaths(t *testing.T) {

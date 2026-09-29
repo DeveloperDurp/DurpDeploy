@@ -179,6 +179,7 @@ templ StepForm(step db.Step, projectID int64, isNew bool, labels []string, selec
 						placeholder="e.g. alpine:3.20 or registry.example.com/build:1"
 						required?={ isNew || stepContainerTarget(step) }
 						x-bind:required="executionTarget === 'local'"
+						x-bind:disabled="executionTarget !== 'local'"
 						class="input input-bordered min-w-0 w-full"
 					/>
 					<label class="label"><span class="label-text-alt">Required for Local steps. Cleared when Agent is selected.</span></label>
@@ -344,6 +345,7 @@ templ StepEditRow(step db.Step, projectID int64, labels []string, selectedLabel 
 						value={ step.ContainerImage }
 						placeholder="e.g. alpine:3.20"
 						x-bind:required="executionTarget === 'local'"
+						x-bind:disabled="executionTarget !== 'local'"
 						class="input input-bordered input-sm min-w-0 w-full"
 					/>
 				</div>

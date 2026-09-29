@@ -8,7 +8,34 @@ import (
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/migrate"
 	"durpdeploy/internal/repository"
+	"durpdeploy/internal/runner"
 )
+
+func TestSelectRemoteVariablesUsesStepAllowlists(t *testing.T) {
+	variables := []runner.ResolvedVariable{
+		{Name: "FIRST", Value: "one"},
+		{Name: "SECRET", Value: "hidden", Secret: true},
+		{Name: "SECOND", Value: "two"},
+	}
+	selected, err := selectRemoteVariables([]db.DeploymentStep{
+		{Name: "one", VariableNames: `["SECOND"]`},
+		{Name: "two", VariableNames: `["FIRST"]`},
+	}, variables)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(selected) != 2 || selected[0].Name != "FIRST" ||
+		selected[1].Name != "SECOND" {
+		t.Fatalf("selected variables = %+v", selected)
+	}
+	empty, err := selectRemoteVariables(
+		[]db.DeploymentStep{{Name: "none", VariableNames: `[]`}},
+		variables,
+	)
+	if err != nil || len(empty) != 0 {
+		t.Fatalf("empty allowlist = %+v: %v", empty, err)
+	}
+}
 
 func TestRuntimeMaintenanceExpiresPairings(t *testing.T) {
 	conn, err := migrate.Run(":memory:?_pragma=foreign_keys(1)")

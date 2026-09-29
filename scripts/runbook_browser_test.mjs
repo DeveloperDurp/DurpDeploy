@@ -61,6 +61,14 @@ try {
   await page.waitForURL(new RegExp(`/projects/${projectID}/runbooks/${runbookID}$`));
   assert.match(await page.locator("h2").allTextContents().then((values) => values.join(" ")), /Version 3 steps/);
 
+  await page.goto(`${base}/projects/${projectID}/steps-page`);
+  await page.locator('[data-step-action="edit"]').first().click();
+  const stepEdit = page.locator('form[hx-put*="/steps/"]').first();
+  await stepEdit.waitFor();
+  await stepEdit.locator('select[name="execution_target"]').selectOption("agent");
+  assert.equal(await stepEdit.locator('input[name="container_image"]').isDisabled(), true);
+  await page.goto(`${base}/projects/${projectID}/runbooks/${runbookID}`);
+
   const executeForm = page.locator(`form[action$="/runbooks/${runbookID}/execute"]`);
   await executeForm.locator('select[name="environment_id"]').selectOption(environmentID);
   await executeForm.getByRole("button", { name: "Run book" }).click();

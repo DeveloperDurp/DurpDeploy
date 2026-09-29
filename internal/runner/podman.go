@@ -104,9 +104,17 @@ func (p containerEndpoint) command(
 
 func (p containerEndpoint) removeArgs(name string) []string {
 	if p.kind == "docker" {
-		return []string{"rm", "--force", name}
+		return []string{"rm", "--force", "--volumes", name}
 	}
 	return []string{"rm", "--force", "--time=0", "--ignore", name}
+}
+
+func (p containerEndpoint) removalError(output []byte, err error) error {
+	if err != nil && p.kind == "docker" &&
+		strings.Contains(string(output), "No such container") {
+		return nil
+	}
+	return err
 }
 
 func (p containerEndpoint) scope() string {

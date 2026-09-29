@@ -70,7 +70,9 @@ func seedPollPayload(
 	deployment, err := fixture.repo.Queries.CreateDeployment(
 		ctx,
 		db.CreateDeploymentParams{
-			ReleaseID: release.ID, EnvironmentID: environment.ID, Status: status,
+			ReleaseID:       release.ID,
+			EnvironmentID:   environment.ID,
+			Status:          status,
 			AssignedAgentID: validString(agentID),
 		},
 	)
@@ -88,6 +90,7 @@ func seedPollPayload(
 					TimeoutSeconds:  30,
 					MaxRetries:      1,
 					ExecutionTarget: "agent",
+					VariableNames:   `["MODE"]`,
 				},
 			},
 			{
@@ -96,6 +99,7 @@ func seedPollPayload(
 					ScriptBody:      "echo second",
 					TimeoutSeconds:  60,
 					ExecutionTarget: "agent",
+					VariableNames:   `["TOKEN"]`,
 				},
 			},
 		},

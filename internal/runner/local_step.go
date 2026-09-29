@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -52,6 +53,20 @@ func (r *DeploymentRunner) runStepAttempt(
 	selected, err := interpreter.Validate(request.step.Interpreter)
 	if err != nil {
 		return err
+	}
+	if r.engine.kind == "docker" {
+		err = r.rejectDockerImageVolumes(
+			runCtx,
+			request.step.ContainerImage,
+		)
+		if err != nil {
+			_, _ = io.WriteString(request.logWriter, fmt.Sprintf(
+				"step %q: attempt %d failed before execution: %v\n",
+				request.step.Name, request.attempt, err,
+			))
+			request.logWriter.Flush()
+			return err
+		}
 	}
 	var selectedEnv []string
 	var envArgs []string
@@ -131,7 +146,7 @@ func (r *DeploymentRunner) runStepAttempt(
 			cleanupCtx, r.engine.removeArgs(name)...,
 		).
 			CombinedOutput()
-		if err != nil {
+		if err = r.engine.removalError(output, err); err != nil {
 			result = errors.Join(
 				result,
 				fmt.Errorf(
@@ -178,4 +193,34 @@ func (r *DeploymentRunner) runStepAttempt(
 		}
 	}
 	return err
+}
+
+func (r *DeploymentRunner) rejectDockerImageVolumes(
+	ctx context.Context,
+	image string,
+) error {
+	output, err := r.engine.command(
+		ctx,
+		"image", "inspect", "--format={{json .Config.Volumes}}", image,
+	).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf(
+			"inspect container image: %w: %s",
+			err,
+			strings.TrimSpace(string(output)),
+		)
+	}
+	var volumes map[string]json.RawMessage
+	if err := json.Unmarshal(output, &volumes); err != nil {
+		return fmt.Errorf(
+			"inspect container image volume metadata: %w",
+			err,
+		)
+	}
+	if len(volumes) != 0 {
+		return errors.New(
+			"container image declares writable volumes, which Docker cannot disable",
+		)
+	}
+	return nil
 }
