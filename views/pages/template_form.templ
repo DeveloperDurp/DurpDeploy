@@ -23,11 +23,10 @@ func tplVariableNamesCSV(tpl *db.StepTemplate) string {
 	return strings.Join(names, ", ")
 }
 
-// tplContainerFieldsShown reports whether the web form should render
-// the container_image and variable_names inputs. Local templates run
-// inside a server-side container and need both; agent templates
-// dispatch to a remote agent host and must not carry an image.
-func tplContainerFieldsShown(tpl *db.StepTemplate) bool {
+// tplContainerImageShown reports whether the web form should render
+// container_image. Agent templates dispatch to a remote host and must
+// not carry an image, but both targets can select variables.
+func tplContainerImageShown(tpl *db.StepTemplate) bool {
 	if tpl == nil {
 		return true
 	}
@@ -109,7 +108,7 @@ templ TemplateFormContent(tpl *db.StepTemplate, isNew bool, errorMsg string) {
 					<span class="text-error text-sm mt-1">{ errorMsg }</span>
 				}
 			</div>
-			if tplContainerFieldsShown(tpl) {
+			if tplContainerImageShown(tpl) {
 				<div class="form-control">
 					<label class="label" for="template-container-image">
 						<span class="label-text">Container image</span>
@@ -125,21 +124,21 @@ templ TemplateFormContent(tpl *db.StepTemplate, isNew bool, errorMsg string) {
 					/>
 					<label class="label"><span class="label-text-alt">Required. The web form only creates local templates that run inside a server-side container.</span></label>
 				</div>
-				<div class="form-control">
-					<label class="label" for="template-variable-names">
-						<span class="label-text">Variable names</span>
-					</label>
-					<input
-						id="template-variable-names"
-						type="text"
-						name="variable_names"
-						value={ tplVariableNamesCSV(tpl) }
-						placeholder="comma-separated, e.g. DEPLOY_ENV, API_KEY"
-						class="input input-bordered"
-					/>
-					<label class="label"><span class="label-text-alt">Identifiers exposed to the script inside the container. Leave empty to pass nothing.</span></label>
-				</div>
 			}
+			<div class="form-control">
+				<label class="label" for="template-variable-names">
+					<span class="label-text">Variable names</span>
+				</label>
+				<input
+					id="template-variable-names"
+					type="text"
+					name="variable_names"
+					value={ tplVariableNamesCSV(tpl) }
+					placeholder="comma-separated, e.g. DEPLOY_ENV, API_KEY"
+					class="input input-bordered"
+				/>
+				<label class="label"><span class="label-text-alt">Identifiers exposed to the script. Leave empty to pass nothing.</span></label>
+			</div>
 			<div class="form-control">
 				<label class="label">
 					<span class="label-text">Script</span>

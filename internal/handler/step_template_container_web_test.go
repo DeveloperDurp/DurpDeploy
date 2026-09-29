@@ -389,8 +389,9 @@ func TestTemplateWebUpdateAgentPreservesTargetAndNoImage(t *testing.T) {
 	tpl, err := h.repo.CreateStepTemplateWithPlacement(
 		t.Context(),
 		db.CreateStepTemplateParams{
-			Name:       "agent-tpl",
-			ScriptBody: "uname -a",
+			Name:          "agent-tpl",
+			ScriptBody:    "uname -a",
+			VariableNames: `["REMOTE_TOKEN"]`,
 		},
 		"agent",
 		[]string{"linux"},
@@ -399,14 +400,14 @@ func TestTemplateWebUpdateAgentPreservesTargetAndNoImage(t *testing.T) {
 		t.Fatalf("seed agent template: %v", err)
 	}
 
-	// Web PUT: only name + script_body + interpreter. No
-	// container_image / variable_names, since the agent form does
-	// not render those inputs.
+	// Web PUT: no container_image because agent templates do not use one;
+	// variable_names remains editable for remote scripts.
 	form := url.Values{
-		"name":        {"agent-tpl"},
-		"script_body": {"uname -a -v"},
-		"interpreter": {"bash"},
-		"csrf_token":  {h.csrfToken()},
+		"name":           {"agent-tpl"},
+		"script_body":    {"uname -a -v"},
+		"interpreter":    {"bash"},
+		"variable_names": {"REMOTE_TOKEN"},
+		"csrf_token":     {h.csrfToken()},
 	}
 	request, err := http.NewRequestWithContext(
 		t.Context(),
@@ -452,6 +453,12 @@ func TestTemplateWebUpdateAgentPreservesTargetAndNoImage(t *testing.T) {
 		t.Fatalf(
 			"script_body=%q, want %q",
 			updated.ScriptBody, "uname -a -v",
+		)
+	}
+	if updated.VariableNames != `["REMOTE_TOKEN"]` {
+		t.Fatalf(
+			"agent variable_names=%q, want REMOTE_TOKEN",
+			updated.VariableNames,
 		)
 	}
 

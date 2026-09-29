@@ -93,6 +93,30 @@ try {
   const agentStep = await api("GET", `/projects/${stepProject.id}/steps/${step.id}`, undefined, 200);
   assert.equal(agentStep.execution_target, "agent");
   assert.deepEqual(agentStep.variable_names, ["REMOTE_TOKEN"]);
+
+  const agentTemplate = await api("POST", "/templates", {
+    name: "browser-agent-template-variables",
+    script_body: "printf agent-template",
+    interpreter: "bash",
+    execution_target: "agent",
+    agent_selectors: ["linux"],
+    variable_names: ["REMOTE_TOKEN"],
+  });
+  await page.goto(`${base}/templates/${agentTemplate.id}/edit`);
+  assert.equal(await page.locator('input[name="container_image"]').count(), 0);
+  const templateVariables = page.locator('input[name="variable_names"]');
+  assert.equal(await templateVariables.isEnabled(), true);
+  assert.equal(await templateVariables.inputValue(), "REMOTE_TOKEN");
+  await page.locator('textarea[name="script_body"]').fill("printf updated-agent-template");
+  await Promise.all([
+    page.waitForResponse((response) =>
+      response.request().method() === "PUT" &&
+      response.url().endsWith(`/templates/${agentTemplate.id}`)),
+    page.getByRole("button", { name: "Update" }).click(),
+  ]);
+  const updatedTemplate = await api("GET", `/templates/${agentTemplate.id}`, undefined, 200);
+  assert.equal(updatedTemplate.execution_target, "agent");
+  assert.deepEqual(updatedTemplate.variable_names, ["REMOTE_TOKEN"]);
   await page.goto(`${base}/projects/${projectID}/runbooks/${runbookID}`);
 
   const executeForm = page.locator(`form[action$="/runbooks/${runbookID}/execute"]`);
