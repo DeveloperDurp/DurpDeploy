@@ -71,7 +71,14 @@ ssh-keygen -q -t ed25519 -N '' -f "$tmp/host-home/.ssh/id_ed25519"
 sudo install -d -m 700 -o "$account" -g "$account" "/home/$account/.ssh"
 sudo install -m 600 -o "$account" -g "$account" \
     "$tmp/host-home/.ssh/id_ed25519.pub" "/home/$account/.ssh/authorized_keys"
-sudo systemctl start ssh
+printf '%s\n' \
+    "Match User $account" \
+    '    DisableForwarding no' \
+    '    AllowStreamLocalForwarding yes' \
+    'Match all' | sudo tee \
+    /etc/ssh/sshd_config.d/00-durpdeploy-e2e.conf >/dev/null
+sudo sshd -t
+sudo systemctl restart ssh
 for host in 127.0.0.1 host.containers.internal; do
     for public_key in /etc/ssh/ssh_host_*_key.pub; do
         host_key=$(sudo cut -d ' ' -f 1,2 "$public_key")

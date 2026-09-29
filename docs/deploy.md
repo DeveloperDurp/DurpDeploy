@@ -375,7 +375,9 @@ account as the execution account. Preload each step image in that account's
 runtime storage; the runner uses `--pull=never` and fails if it is missing.
 
 Give the `durpdeploy` account SSH access to only that execution account and
-verify/pin its SSH host key. For the systemd installation, store a mode-0600
+verify/pin its SSH host key. The execution host's SSH server must permit Unix
+socket forwarding (`AllowStreamLocalForwarding yes`) for the execution account.
+For the systemd installation, store a mode-0600
 SSH identity and a verified `known_hosts` under
 `/var/lib/durpdeploy/.ssh/` (the service sets `HOME` there). In
 `/etc/durpdeploy/durpdeploy.env`, set:
