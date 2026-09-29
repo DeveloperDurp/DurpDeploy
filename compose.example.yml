@@ -107,6 +107,9 @@ services:
         mode: 0400
     security_opt:
       - no-new-privileges:true
+    # Root is limited to SETUID/SETGID for socket-group discovery; the
+    # entrypoint immediately drops to UID 10001 before starting the app.
+    user: "0" # NOSONAR
     cap_drop: [ALL]
     cap_add: [SETUID, SETGID]
     read_only: true

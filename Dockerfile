@@ -69,10 +69,7 @@ RUN chmod 0755 /usr/local/bin/durpdeploy /usr/local/bin/container-entrypoint
 ENV DURPDEPLOY_EXECUTION_BOUNDARY=service \
 	HOME=/home/durpdeploy \
 	XDG_CONFIG_HOME=/tmp
-# The entrypoint needs only SETUID/SETGID long enough to adopt the mounted
-# socket group, then immediately executes the application as UID 10001.
-# hadolint ignore=DL3002
-USER root
+USER 10001:10001
 
 # The application listens on port 8080 (hardcoded in cmd/server/main.go).
 EXPOSE 8080

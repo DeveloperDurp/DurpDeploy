@@ -48,8 +48,8 @@ if sorted(str(value).casefold() for value in app.get("cap_add", [])) != ["setgid
     fail("does not limit startup capabilities to SETUID and SETGID")
 if [str(value).casefold() for value in app.get("cap_drop", [])] != ["all"]:
     fail("does not drop all capabilities")
-if app.get("user"):
-    fail("bypasses the socket-aware identity entrypoint")
+if str(app.get("user", "")) != "0":
+    fail("does not enable the socket-aware identity entrypoint")
 app_text = str(app).casefold()
 if any(value in app_text for value in ("setpriv", "ambient-caps", "inh-caps")):
     fail("contains a forbidden privilege")
@@ -80,7 +80,7 @@ if [ "${RUNNER_CONTAINER_CONTRACT_STATIC_ONLY:-0}" = 1 ]; then
 fi
 
 podman build -t "$image" "$root"
-podman run --rm --read-only --security-opt no-new-privileges:true \
+podman run --rm --user 0 --read-only --security-opt no-new-privileges:true \
 	--cap-drop ALL --cap-add SETUID --cap-add SETGID \
 	--memory 512m --cpus 1.0 --pids-limit 256 \
 	--tmpfs /tmp:size=64m,mode=1777 \

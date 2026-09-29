@@ -34,8 +34,8 @@ for file in compose.yml compose.example.yml; do
 		grep -Fq 'DURPDEPLOY_EXECUTION_BOUNDARY=service' "$file"
 	grep -Fq 'cap_drop: [ALL]' "$file"
 	grep -Fq 'cap_add: [SETUID, SETGID]' <<<"$app"
-	if grep -Eq '^[[:space:]]+user:' <<<"$app"; then
-		printf 'agent compose contract: app bypasses the identity entrypoint in %s\n' "$file" >&2
+	if ! grep -Eq '^[[:space:]]+user: "0"' <<<"$app"; then
+		printf 'agent compose contract: app does not enable the identity entrypoint in %s\n' "$file" >&2
 		exit 1
 	fi
 	grep -Fq 'read_only: true' "$file"

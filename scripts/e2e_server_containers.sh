@@ -119,7 +119,7 @@ docker volume create "$identity_volume" >/dev/null
 docker run --rm --volume "$volume:/data" -e DURPDEPLOY_SECRET_KEY \
 	"$image" admin create --email e2e-admin@test.local \
 	--password e2e-admin-password-1234 >/dev/null
-docker run -d --name "$app_name" --read-only \
+docker run -d --name "$app_name" --user 0 --read-only \
 	--cap-drop ALL --cap-add SETUID --cap-add SETGID \
 	--security-opt no-new-privileges --tmpfs /tmp:size=64m,mode=1777 \
 	--volume "$volume:/data" \
