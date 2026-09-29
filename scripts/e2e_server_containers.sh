@@ -40,8 +40,7 @@ cleanup() {
         sudo systemctl stop "user@$uid.service" || true
         sudo userdel -r "$account" || true
     fi
-    sudo rm -rf -- "$tmp/app-ssh"
-    rm -rf "$tmp"
+    sudo rm -rf -- "$tmp"
 }
 trap cleanup EXIT
 
