@@ -199,16 +199,32 @@ func (r *DeploymentRunner) rejectDockerImageVolumes(
 	ctx context.Context,
 	image string,
 ) error {
-	output, err := r.engine.command(
-		ctx,
-		"image", "inspect", "--format={{json .Config.Volumes}}", image,
-	).CombinedOutput()
+	inspect := func() ([]byte, error) {
+		return r.engine.command(
+			ctx,
+			"image", "inspect", "--format={{json .Config.Volumes}}", image,
+		).CombinedOutput()
+	}
+	output, err := inspect()
 	if err != nil {
-		return fmt.Errorf(
-			"inspect container image: %w: %s",
-			err,
-			strings.TrimSpace(string(output)),
-		)
+		pullOutput, pullErr := r.engine.command(
+			ctx, "pull", "--quiet", image,
+		).CombinedOutput()
+		if pullErr != nil {
+			return fmt.Errorf(
+				"pull container image: %w: %s",
+				pullErr,
+				strings.TrimSpace(string(pullOutput)),
+			)
+		}
+		output, err = inspect()
+		if err != nil {
+			return fmt.Errorf(
+				"inspect container image: %w: %s",
+				err,
+				strings.TrimSpace(string(output)),
+			)
+		}
 	}
 	var volumes map[string]json.RawMessage
 	if err := json.Unmarshal(output, &volumes); err != nil {

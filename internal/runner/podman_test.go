@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -305,6 +306,38 @@ printf '{"/data":{}}'
 	err := runner.rejectDockerImageVolumes(t.Context(), "example/image:1")
 	if err == nil || !strings.Contains(err.Error(), "writable volumes") {
 		t.Fatalf("image-declared volumes accepted: %v", err)
+	}
+}
+
+func TestDockerPullsMissingImageBeforeVolumeInspection(t *testing.T) {
+	dir := t.TempDir()
+	binary := filepath.Join(dir, "docker")
+	state := filepath.Join(dir, "pulled")
+	script := fmt.Sprintf(`#!/bin/sh
+case " $* " in
+*" pull "*)
+  : > %q
+  exit 0
+  ;;
+esac
+if [ ! -f %q ]; then
+  exit 1
+fi
+printf 'null'
+`, state, state)
+	if err := os.WriteFile(binary, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	runner := &DeploymentRunner{engine: containerEndpoint{
+		kind: "docker", binary: binary, url: "unix:///var/run/docker.sock",
+	}}
+	if err := runner.rejectDockerImageVolumes(
+		t.Context(), "example/image:1",
+	); err != nil {
+		t.Fatalf("inspect missing image after pull: %v", err)
+	}
+	if _, err := os.Stat(state); err != nil {
+		t.Fatalf("image was not pulled: %v", err)
 	}
 }
 
