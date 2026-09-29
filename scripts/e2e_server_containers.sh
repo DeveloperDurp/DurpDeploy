@@ -22,6 +22,7 @@ cleanup() {
     fi
     if ((result != 0)); then
         docker logs "$app_name" 2>/dev/null || true
+        sudo journalctl -u ssh --no-pager -n 30 >&2 || true
         if [[ -f "$tmp/bad-runtime.log" ]]; then
             grep -E 'error|ERROR|failed' "$tmp/bad-runtime.log" >&2 || true
         fi
@@ -115,6 +116,11 @@ export DURPDEPLOY_CONTAINER_RUNTIME=podman
 export DURPDEPLOY_CONTAINER_NAMESPACE="$namespace"
 export DURPDEPLOY_CONTAINER_URL="ssh://$account@127.0.0.1$socket"
 printf 'Checking rootless SSH connection\n'
+sudo sshd -T -C "user=$account,host=localhost,addr=127.0.0.1" \
+    | grep -E '^(disableforwarding|allowstreamlocalforwarding) '
+sudo -u "$account" python3 -c \
+    'import socket,sys; s=socket.socket(socket.AF_UNIX); s.connect(sys.argv[1])' \
+    "$socket"
 HOME="$tmp/host-home" \
     CONTAINER_SSHKEY="$tmp/host-home/.ssh/id_ed25519" \
     podman --remote --ssh=native \
