@@ -160,7 +160,7 @@ esac
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, flag := range []string{"--remote", "--network=none", "--read-only", "--cap-drop=ALL", "--security-opt=no-new-privileges", "--user=65534:65534", "--pids-limit=128", "--memory=256m", "--entrypoint=python3", "--timeout=300", "--log-driver=none", "--env\nSECRET\n"} {
+	for _, flag := range []string{"--remote", "--network=none", "--read-only", "--cap-drop=ALL", "--security-opt=no-new-privileges", "--user=65534:65534", "--pids-limit=128", "--memory=256m", "--cpus=1", "--entrypoint=python3", "--timeout=300", "--log-driver=none", "--env\nSECRET\n"} {
 		if !strings.Contains(string(args), flag) {
 			t.Errorf("missing %s in %s", flag, args)
 		}

@@ -37,6 +37,18 @@ func TestSelectRemoteVariablesUsesStepAllowlists(t *testing.T) {
 	}
 }
 
+func TestSelectRemoteVariablesRejectsUnavailableAllowlistEntries(t *testing.T) {
+	_, err := selectRemoteVariables(
+		[]db.DeploymentStep{
+			{Name: "deploy", VariableNames: `["MISSING","AVAILABLE"]`},
+		},
+		[]runner.ResolvedVariable{{Name: "AVAILABLE", Value: "yes"}},
+	)
+	if err == nil || !strings.Contains(err.Error(), "MISSING") {
+		t.Fatalf("missing allowlisted variable accepted: %v", err)
+	}
+}
+
 func TestRuntimeMaintenanceExpiresPairings(t *testing.T) {
 	conn, err := migrate.Run(":memory:?_pragma=foreign_keys(1)")
 	if err != nil {

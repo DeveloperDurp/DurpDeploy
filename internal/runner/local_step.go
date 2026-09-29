@@ -115,7 +115,7 @@ func (r *DeploymentRunner) runStepAttempt(
 		"--label=io.durpdeploy.namespace="+r.engine.scope(),
 		"--network=none", "--read-only", "--cap-drop=ALL",
 		"--security-opt=no-new-privileges", "--user=65534:65534",
-		"--pids-limit=128", "--memory=256m")
+		"--pids-limit=128", "--memory=256m", "--cpus=1")
 	if r.engine.kind == "podman" {
 		args = append(args, "--image-volume=ignore", "--http-proxy=false")
 	}

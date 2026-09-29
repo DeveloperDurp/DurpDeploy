@@ -154,6 +154,37 @@ spec:
               mountPath: /home/durpdeploy/.ssh
               readOnly: true
             {{- end }}
+        {{- if .Values.containerRuntime.enabled }}
+        - name: container-runtime-ssh-sync
+          image: {{ include "durpdeploy.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          command: ["/bin/sh", "-ceu"]
+          args:
+            - |
+              while true; do
+                if install -m 0600 /runtime-ssh-secret/id_ed25519 /runtime-ssh/id_ed25519.next &&
+                   install -m 0600 /runtime-ssh-secret/known_hosts /runtime-ssh/known_hosts.next; then
+                  mv -f /runtime-ssh/id_ed25519.next /runtime-ssh/id_ed25519
+                  mv -f /runtime-ssh/known_hosts.next /runtime-ssh/known_hosts
+                fi
+                sleep 10
+              done
+          resources:
+            requests:
+              cpu: 5m
+              memory: 8Mi
+            limits:
+              cpu: 50m
+              memory: 32Mi
+          volumeMounts:
+            - name: container-runtime-ssh-secret
+              mountPath: /runtime-ssh-secret
+              readOnly: true
+            - name: container-runtime-ssh
+              mountPath: /runtime-ssh
+        {{- end }}
       volumes:
         - name: tmp
           emptyDir: {}

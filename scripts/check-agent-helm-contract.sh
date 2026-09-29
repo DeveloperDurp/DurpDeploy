@@ -16,6 +16,7 @@ for required in \
 	'name: DURPDEPLOY_CONTAINER_RUNTIME' \
 	'name: DURPDEPLOY_CONTAINER_URL' \
 	'name: DURPDEPLOY_CONTAINER_NAMESPACE' \
+	'name: container-runtime-ssh-sync' \
 	'name: agent-identity' \
 	'name: container-runtime-ssh' \
 	'claimName: {{ include "durpdeploy.agentIdentityClaimName" . }}'; do

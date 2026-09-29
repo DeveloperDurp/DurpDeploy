@@ -107,7 +107,8 @@ See `values.yaml`. Notable knobs:
   etc. without forking the chart.
 - `containerRuntime.*` — connect the pod to a separate rootless Docker or
   Podman account over SSH. `sshSecret` names a Secret containing
-  `id_ed25519` and `known_hosts`; no host runtime socket is mounted.
+  `id_ed25519` and `known_hosts`; no host runtime socket is mounted. A sidecar
+  copies projected Secret updates into the client SSH directory after rotation.
 
 ## Uninstalling
 

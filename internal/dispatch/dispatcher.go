@@ -9,6 +9,8 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	"sort"
+	"strings"
 	"time"
 
 	"durpdeploy/internal/db"
@@ -179,7 +181,19 @@ func selectRemoteVariables(
 	for _, variable := range variables {
 		if _, ok := selected[variable.Name]; ok {
 			result = append(result, variable)
+			delete(selected, variable.Name)
 		}
+	}
+	if len(selected) != 0 {
+		missing := make([]string, 0, len(selected))
+		for name := range selected {
+			missing = append(missing, name)
+		}
+		sort.Strings(missing)
+		return nil, fmt.Errorf(
+			"selected remote variables are unavailable: %s",
+			strings.Join(missing, ", "),
+		)
 	}
 	return result, nil
 }
