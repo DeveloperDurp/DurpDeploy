@@ -633,6 +633,25 @@ esac
 		}); err != nil {
 		t.Fatal(err)
 	}
+	namespaceLess, err := repo.CreateDeployment(
+		ctx,
+		db.CreateDeploymentParams{
+			ReleaseID:     localRelease.ID,
+			EnvironmentID: env.ID,
+			Status:        "pending",
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.Queries.UpdateDeploymentStatus(
+		ctx,
+		db.UpdateDeploymentStatusParams{
+			ID: namespaceLess.Deployment.ID, Status: "running",
+		},
+	); err != nil {
+		t.Fatal(err)
+	}
 	oldNamespace, err := repo.CreateDeployment(ctx, db.CreateDeploymentParams{
 		ReleaseID: localRelease.ID, EnvironmentID: env.ID, Status: "pending",
 	})
@@ -682,6 +701,13 @@ esac
 	stored, err := repo.Queries.GetDeployment(ctx, local.Deployment.ID)
 	if err != nil || stored.Status != "cleanup_unconfirmed" {
 		t.Fatalf("local status = %+v: %v", stored, err)
+	}
+	withoutNamespace, err := repo.Queries.GetDeployment(
+		ctx,
+		namespaceLess.Deployment.ID,
+	)
+	if err != nil || withoutNamespace.Status != "failed" {
+		t.Fatalf("namespace-less status = %+v: %v", withoutNamespace, err)
 	}
 	older, err := repo.Queries.GetDeployment(ctx, oldNamespace.Deployment.ID)
 	if err != nil || older.Status != "cleanup_unconfirmed" {

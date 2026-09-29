@@ -166,8 +166,8 @@ templ StepForm(step db.Step, projectID int64, isNew bool, labels []string, selec
 					<label class="label"><span class="label-text-alt">Runs on every matching agent assigned to the deployment environment.</span></label>
 				</div>
 			</div>
-			<div class="grid min-w-0 gap-4 sm:grid-cols-2" x-cloak x-show="executionTarget === 'local'">
-				<div class="form-control min-w-0">
+			<div class="grid min-w-0 gap-4 sm:grid-cols-2">
+				<div class="form-control min-w-0" x-cloak x-show="executionTarget === 'local'">
 					<label class="label" for={ stepInputID(step, isNew, "container-image") }>
 						<span class="label-text">Container image</span>
 					</label>
@@ -194,10 +194,9 @@ templ StepForm(step db.Step, projectID int64, isNew bool, labels []string, selec
 						name="variable_names"
 						value={ stepVariableNamesCSV(step) }
 						placeholder="comma-separated, e.g. DEPLOY_ENV, API_KEY"
-						x-bind:disabled="executionTarget !== 'local'"
 						class="input input-bordered min-w-0 w-full"
 					/>
-					<label class="label"><span class="label-text-alt">Identifiers exposed to the script inside the container. Leave empty to pass nothing.</span></label>
+					<label class="label"><span class="label-text-alt">Identifiers exposed to the script. Leave empty to pass nothing.</span></label>
 				</div>
 			</div>
 			<div x-data="stepEditor" class="form-control">
@@ -349,7 +348,7 @@ templ StepEditRow(step db.Step, projectID int64, labels []string, selectedLabel 
 						class="input input-bordered input-sm min-w-0 w-full"
 					/>
 				</div>
-				<div class="form-control min-w-0 xl:col-span-2" x-cloak x-show="executionTarget === 'local'">
+				<div class="form-control min-w-0 xl:col-span-2">
 					<label class="label" for={ fmt.Sprintf("step-%d-variable-names", step.ID) }><span class="label-text">Variable names</span></label>
 					<input
 						id={ fmt.Sprintf("step-%d-variable-names", step.ID) }
@@ -357,7 +356,6 @@ templ StepEditRow(step db.Step, projectID int64, labels []string, selectedLabel 
 						name="variable_names"
 						value={ stepVariableNamesCSV(step) }
 						placeholder="comma-separated, e.g. DEPLOY_ENV, API_KEY"
-						x-bind:disabled="executionTarget !== 'local'"
 						class="input input-bordered input-sm min-w-0 w-full"
 					/>
 				</div>

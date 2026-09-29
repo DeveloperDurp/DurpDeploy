@@ -845,6 +845,7 @@ const markUnreconciledLocalDeployments = `-- name: MarkUnreconciledLocalDeployme
 UPDATE deployments SET status = 'cleanup_unconfirmed',
     finished_at = COALESCE(finished_at, ?1)
 WHERE status = 'running' AND assigned_agent_id IS NULL
+  AND container_namespace IS NOT NULL
   AND EXISTS (SELECT 1 FROM deployment_steps s
       WHERE s.deployment_id = deployments.id AND s.execution_target = 'local')
   AND NOT EXISTS (SELECT 1 FROM remote_step_runs r
