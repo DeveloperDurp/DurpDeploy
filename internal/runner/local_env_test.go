@@ -83,3 +83,46 @@ esac
 		t.Fatalf("Podman started for invalid variable: %v", err)
 	}
 }
+
+func TestPowerShellAttemptUsesCleanCommandMode(t *testing.T) {
+	r, repo, trace := podmanFixture(t, `
+case "$3" in
+info) printf '{"host":{"security":{"rootless":true}}}';;
+ps) ;;
+run) printf '%s\n' "$@" > "$PODMAN_TRACE";;
+rm) ;;
+esac
+`)
+	err := r.runStepAttempt(t.Context(), localStepAttempt{
+		step: deploymentStep{
+			ContainerImage: "mcr.microsoft.com/powershell:latest",
+			Interpreter:    "pwsh",
+			ScriptBody:     "Get-Host",
+		},
+		logWriter: &broadcastWriter{
+			ctx:      t.Context(),
+			repo:     repo,
+			broker:   r.broker,
+			scrubber: NewScrubber(nil),
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	args, err := os.ReadFile(trace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(args)
+	for _, flag := range []string{
+		"--env=HOME=/tmp", "--env=TERM=dumb", "--entrypoint=pwsh",
+		"-NoLogo", "-NoProfile", "-NonInteractive", "-Command\n-\n",
+	} {
+		if !strings.Contains(text, flag) {
+			t.Errorf("missing %q in %q", flag, text)
+		}
+	}
+	if strings.Contains(text, "-File") {
+		t.Fatalf("interactive file mode in %q", text)
+	}
+}

@@ -20,7 +20,8 @@ func ValidateName(name string, local bool) error {
 	if !identifier.MatchString(name) {
 		return ErrIdentifier
 	}
-	if local && (name == "PATH" || name == "HOME" || name == "TMPDIR" ||
+	if local && (name == "PATH" || name == "HOME" || name == "TERM" ||
+		name == "TMPDIR" ||
 		name == "REGISTRY_AUTH_FILE" ||
 		strings.HasPrefix(name, "XDG_") ||
 		strings.HasPrefix(name, "DOCKER_") ||
