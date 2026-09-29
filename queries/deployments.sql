@@ -16,7 +16,13 @@ UPDATE deployments SET status = ?, started_at = ?, finished_at = ? WHERE id = ?;
 
 -- name: ConfirmContainerCleanup :execrows
 UPDATE deployments SET status = 'failed', finished_at = COALESCE(finished_at, sqlc.arg(now))
-WHERE status = 'cleanup_unconfirmed';
+WHERE status IN ('running', 'cleanup_unconfirmed')
+  AND container_namespace = sqlc.arg(namespace);
+
+-- name: RecordContainerNamespace :execrows
+UPDATE deployments SET container_namespace = sqlc.arg(namespace)
+WHERE id = sqlc.arg(deployment_id) AND status = 'running'
+  AND (container_namespace IS NULL OR container_namespace = sqlc.arg(namespace));
 
 -- name: MarkUnreconciledLocalDeployments :execrows
 UPDATE deployments SET status = 'cleanup_unconfirmed',

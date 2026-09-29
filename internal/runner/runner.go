@@ -45,19 +45,7 @@ type deploymentStep struct {
 }
 
 func New(repo *repository.Repository, broker *LogBroker) *DeploymentRunner {
-	endpoint, localErr := newPodmanEndpoint()
-	r := &DeploymentRunner{
-		repo:     repo,
-		broker:   broker,
-		cancels:  make(map[int64]context.CancelFunc),
-		attempts: make(map[int64]string),
-		podman:   endpoint,
-		localErr: localErr,
-	}
-	if localErr == nil {
-		r.localErr = r.reconcileAttempts()
-	}
-	return r
+	return newRunner(repo, broker, "")
 }
 
 func (r *DeploymentRunner) ContainerRuntimeReady() bool {
@@ -194,6 +182,16 @@ func (r *DeploymentRunner) Run(
 		}
 
 		var lastErr error
+		namespace := sql.NullString{String: r.podman.namespace, Valid: true}
+		recorded, err := r.repo.Queries.RecordContainerNamespace(ctx,
+			db.RecordContainerNamespaceParams{
+				DeploymentID: deploymentID, Namespace: namespace,
+			})
+		if err != nil || recorded != 1 {
+			r.persistCompletion(ctx, runCtx, deploymentID,
+				"cleanup_unconfirmed", false)
+			return
+		}
 		maxAttempts := int(step.MaxRetries) + 1
 		for attempt := 1; attempt <= maxAttempts; attempt++ {
 			lastErr = r.runStepAttempt(runCtx, localStepAttempt{

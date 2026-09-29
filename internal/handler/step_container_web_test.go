@@ -162,7 +162,7 @@ func TestStepWebCreateAgentSucceedsWithoutImage(t *testing.T) {
 		"execution_target": {"agent"},
 		"agent_label":      {""},
 		"container_image":  {""},
-		"variable_names":   {""},
+		"variable_names":   {"PATH"},
 		"csrf_token":       {h.csrfToken()},
 	}
 	response, err := h.authedClient().PostForm(
@@ -190,10 +190,10 @@ func TestStepWebCreateAgentSucceedsWithoutImage(t *testing.T) {
 	if steps[0].ContainerImage != "" {
 		t.Fatalf("container_image=%q, want empty", steps[0].ContainerImage)
 	}
-	if steps[0].VariableNames != "[]" {
+	if steps[0].VariableNames != `["PATH"]` {
 		t.Fatalf(
-			"variable_names=%q, want %q",
-			steps[0].VariableNames, "[]",
+			"variable_names=%q, want PATH selected",
+			steps[0].VariableNames,
 		)
 	}
 }
@@ -255,6 +255,11 @@ func TestStepWebCreateRejectsInvalidVariableNames(t *testing.T) {
 			name:    "duplicates",
 			names:   "ALPHA, ALPHA",
 			message: "Variable names contain duplicates",
+		},
+		{
+			name:    "reserved",
+			names:   "HOME",
+			message: "Variable name is reserved",
 		},
 	}
 	for _, tc := range cases {

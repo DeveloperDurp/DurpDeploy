@@ -79,17 +79,18 @@ type AuditLog struct {
 }
 
 type Deployment struct {
-	ID              int64          `json:"id"`
-	ReleaseID       int64          `json:"release_id"`
-	EnvironmentID   int64          `json:"environment_id"`
-	Status          string         `json:"status"`
-	StartedAt       sql.NullInt64  `json:"started_at"`
-	FinishedAt      sql.NullInt64  `json:"finished_at"`
-	CreatedAt       int64          `json:"created_at"`
-	Forced          int64          `json:"forced"`
-	Note            sql.NullString `json:"note"`
-	AssignedAgentID sql.NullString `json:"assigned_agent_id"`
-	Kind            string         `json:"kind"`
+	ID                 int64          `json:"id"`
+	ReleaseID          int64          `json:"release_id"`
+	EnvironmentID      int64          `json:"environment_id"`
+	Status             string         `json:"status"`
+	StartedAt          sql.NullInt64  `json:"started_at"`
+	FinishedAt         sql.NullInt64  `json:"finished_at"`
+	CreatedAt          int64          `json:"created_at"`
+	Forced             int64          `json:"forced"`
+	Note               sql.NullString `json:"note"`
+	AssignedAgentID    sql.NullString `json:"assigned_agent_id"`
+	Kind               string         `json:"kind"`
+	ContainerNamespace sql.NullString `json:"container_namespace"`
 }
 
 type DeploymentApproval struct {

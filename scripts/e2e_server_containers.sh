@@ -68,9 +68,13 @@ sudo install -d -m 700 -o "$account" -g "$account" "/home/$account/.ssh"
 sudo install -m 600 -o "$account" -g "$account" \
     "$tmp/host-home/.ssh/id_ed25519.pub" "/home/$account/.ssh/authorized_keys"
 sudo systemctl start ssh
-host_key=$(sudo cut -d ' ' -f 1,2 /etc/ssh/ssh_host_ed25519_key.pub)
-printf '127.0.0.1 %s\nhost.containers.internal %s\n' "$host_key" "$host_key" \
-    >"$tmp/host-home/.ssh/known_hosts"
+for host in 127.0.0.1 host.containers.internal; do
+    for public_key in /etc/ssh/ssh_host_*_key.pub; do
+        host_key=$(sudo cut -d ' ' -f 1,2 "$public_key")
+        printf '%s %s\n' "$host" "$host_key" \
+            >>"$tmp/host-home/.ssh/known_hosts"
+    done
+done
 cp "$tmp/host-home/.ssh/id_ed25519" "$tmp/app-ssh/id_ed25519"
 cp "$tmp/host-home/.ssh/known_hosts" "$tmp/app-ssh/known_hosts"
 chmod 700 "$tmp/app-ssh"

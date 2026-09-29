@@ -73,7 +73,7 @@ func (q *Queries) GetEnvironment(ctx context.Context, id int64) (Environment, er
 const hasActiveEnvironmentDeployment = `-- name: HasActiveEnvironmentDeployment :one
 SELECT CASE WHEN EXISTS (
     SELECT 1 FROM deployments d WHERE d.environment_id = ?
-      AND (d.status IN ('pending', 'running', 'pending_approval')
+      AND (d.status IN ('pending', 'running', 'pending_approval', 'cleanup_unconfirmed')
         OR EXISTS (SELECT 1 FROM remote_deployment_claims c
                    WHERE c.deployment_id = d.id
                      AND c.state IN ('lost', 'cancel_unconfirmed'))

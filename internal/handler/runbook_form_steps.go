@@ -4,10 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"regexp"
 	"strconv"
 	"strings"
 
+	"durpdeploy/internal/containerenv"
 	"durpdeploy/internal/interpreter"
 )
 
@@ -24,10 +24,13 @@ type runbookFormStep struct {
 	VariableNames   []string `json:"variable_names,omitempty"`
 }
 
-// variableNamePattern restricts variable_names entries to Go-style
-// identifiers so they can be exported as environment variables inside
-// the step container.
-var variableNamePattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+var ErrInvalidContainerImage = errors.New("invalid container image")
+
+// ValidContainerImage mirrors the runner's image argument restrictions.
+func ValidContainerImage(image string) bool {
+	return image != "" && !strings.HasPrefix(image, "-") &&
+		!strings.ContainsAny(image, " \t\r\n\x00")
+}
 
 // ValidateRunbookStepContainer validates the server-container fields of
 // a runbook step. Local steps run inside a mandatory server container,
@@ -38,7 +41,7 @@ func ValidateRunbookStepContainer(
 	target, containerImage string,
 	variableNames []string,
 ) (string, []string, error) {
-	image := strings.TrimSpace(containerImage)
+	image := containerImage
 	switch {
 	case target == "local" && image == "":
 		return "", nil, errors.New(
@@ -48,14 +51,19 @@ func ValidateRunbookStepContainer(
 		return "", nil, errors.New(
 			"container image is only valid for local steps",
 		)
+	case target == "local" && !ValidContainerImage(image):
+		return "", nil, ErrInvalidContainerImage
 	}
 	seen := make(map[string]struct{}, len(variableNames))
 	for _, name := range variableNames {
-		if !variableNamePattern.MatchString(name) {
+		switch containerenv.ValidateName(name, target == "local") {
+		case containerenv.ErrIdentifier:
 			return "", nil, errors.New(
 				"variable names must be identifiers: letters, " +
 					"digits, underscores, and cannot start with a digit",
 			)
+		case containerenv.ErrReserved:
+			return "", nil, containerenv.ErrReserved
 		}
 		if _, dup := seen[name]; dup {
 			return "", nil, errors.New(

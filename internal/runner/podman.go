@@ -11,9 +11,13 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"durpdeploy/internal/db"
+	"durpdeploy/internal/repository"
 )
 
 type podmanEndpoint struct {
+	binary    string
 	url       string
 	namespace string
 }
@@ -38,16 +42,46 @@ func newPodmanEndpoint() (podmanEndpoint, error) {
 			"configure a dedicated rootless ssh://user@host/run/user/UID/podman/podman.sock endpoint and DURPDEPLOY_PODMAN_NAMESPACE",
 		)
 	}
-	return podmanEndpoint{url: raw, namespace: namespace}, nil
+	return podmanEndpoint{
+		binary: "/usr/bin/podman", url: raw, namespace: namespace,
+	}, nil
 }
 
 func (p podmanEndpoint) command(ctx context.Context, args ...string) *exec.Cmd {
-	cmd := exec.CommandContext(ctx, "podman", append([]string{
+	cmd := exec.CommandContext(ctx, p.binary, append([]string{
 		"--remote", "--url=" + p.url,
 	}, args...)...)
 	// Do not let inherited CONTAINER_HOST or Podman configuration redirect work.
 	cmd.Env = append(os.Environ(), "CONTAINER_HOST="+p.url)
 	return cmd
+}
+
+// NewWithPodmanBinaryForTest injects a fake client before startup reconciliation.
+func NewWithPodmanBinaryForTest(
+	repo *repository.Repository, broker *LogBroker, binary string,
+) *DeploymentRunner {
+	return newRunner(repo, broker, binary)
+}
+
+func newRunner(
+	repo *repository.Repository, broker *LogBroker, testBinary string,
+) *DeploymentRunner {
+	endpoint, localErr := newPodmanEndpoint()
+	if testBinary != "" {
+		endpoint.binary = testBinary
+	}
+	r := &DeploymentRunner{
+		repo:     repo,
+		broker:   broker,
+		cancels:  make(map[int64]context.CancelFunc),
+		attempts: make(map[int64]string),
+		podman:   endpoint,
+		localErr: localErr,
+	}
+	if localErr == nil {
+		r.localErr = r.reconcileAttempts()
+	}
+	return r
 }
 
 func (r *DeploymentRunner) reconcileAttempts() error {
@@ -88,9 +122,15 @@ func (r *DeploymentRunner) reconcileAttempts() error {
 		}
 	}
 	if r.repo != nil {
-		if _, err := r.repo.Queries.ConfirmContainerCleanup(ctx, sql.NullInt64{
-			Int64: time.Now().Unix(), Valid: true,
-		}); err != nil {
+		if _, err := r.repo.Queries.ConfirmContainerCleanup(ctx,
+			db.ConfirmContainerCleanupParams{
+				Now: sql.NullInt64{
+					Int64: time.Now().Unix(), Valid: true,
+				},
+				Namespace: sql.NullString{
+					String: r.podman.namespace, Valid: true,
+				},
+			}); err != nil {
 			return fmt.Errorf("confirm container cleanup: %w", err)
 		}
 	}

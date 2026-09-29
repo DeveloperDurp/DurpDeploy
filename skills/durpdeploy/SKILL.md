@@ -100,8 +100,11 @@ Token placement rules:
 `local` means mandatory server-container execution; specify an image with
 `bash`, `pwsh`, or `python3` installed. `agent` runs on matching remote agents
 without a container image. `variable_names` selects which resolved release
-variables enter this step; omit it or use `[]` to pass none. Images must already
-be present in the configured rootless execution runtime (`--pull=never`), and
+variables enter this step; omit it or use `[]` to pass none. Local steps cannot
+select Podman/SSH client configuration names such as `PATH`, `HOME`,
+`SSH_AUTH_SOCK`, or `XDG_*`; agent steps retain their host variable support.
+Images must already be present in the configured rootless execution runtime
+(`--pull=never`), and
 container steps have no network or host mounts. A mutable image tag does not
 freeze image contents; prefer a digest. The web/API rejects a new image-less
 server step. Old image-less releases remain readable but cannot run, re-run,

@@ -6,21 +6,17 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"regexp"
 	"strconv"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
 
+	"durpdeploy/internal/containerenv"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/interpreter"
 	"durpdeploy/internal/repository"
 	"durpdeploy/views/components"
 	"durpdeploy/views/pages"
-)
-
-var stepContainerVariablePattern = regexp.MustCompile(
-	`^[A-Za-z_][A-Za-z0-9_]*$`,
 )
 
 // IsStepContainerRequired reports whether the execution target is the
@@ -38,7 +34,7 @@ func parseStepContainerConfig(
 	r *http.Request,
 	target string,
 ) (string, []string, string) {
-	image := strings.TrimSpace(r.FormValue("container_image"))
+	image := r.FormValue("container_image")
 	names := parseStepVariableNames(r.FormValue("variable_names"))
 	if err := validateStepContainerConfig(target, image, names); err != "" {
 		return "", nil, err
@@ -72,6 +68,9 @@ func validateStepContainerConfig(
 		if image == "" {
 			return "Container image is required for local steps"
 		}
+		if !ValidContainerImage(image) {
+			return "Invalid container image"
+		}
 	case "agent":
 		if image != "" {
 			return "Agent steps cannot use a container image"
@@ -86,8 +85,11 @@ func validateStepContainerConfig(
 	}
 	seen := make(map[string]struct{}, len(variableNames))
 	for _, name := range variableNames {
-		if !stepContainerVariablePattern.MatchString(name) {
+		switch containerenv.ValidateName(name, target == "local") {
+		case containerenv.ErrIdentifier:
 			return "Variable names must be identifiers: letters, digits, underscores, and cannot start with a digit"
+		case containerenv.ErrReserved:
+			return "Variable name is reserved for the container runner"
 		}
 		if _, dup := seen[name]; dup {
 			return "Variable names contain duplicates"

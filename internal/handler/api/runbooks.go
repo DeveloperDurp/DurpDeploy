@@ -152,6 +152,8 @@ func (h *RunbookHandler) Version(w http.ResponseWriter, r *http.Request) {
 //
 // Responses:
 // 201: body:RunbookSaveResponse
+// 400: body:BadRequestError
+// 409: body:ConflictError
 // 422: body:ValidationError
 func (h *RunbookHandler) Save(w http.ResponseWriter, r *http.Request) {
 	projectID, ok := requireProjectFromContext(w, r)
@@ -201,7 +203,11 @@ func (h *RunbookHandler) Save(w http.ResponseWriter, r *http.Request) {
 			target, step.ContainerImage, step.VariableNames,
 		)
 		if err != nil {
-			RespondError(w, http.StatusUnprocessableEntity, err.Error())
+			status := http.StatusUnprocessableEntity
+			if errors.Is(err, handler.ErrInvalidContainerImage) {
+				status = http.StatusBadRequest
+			}
+			RespondError(w, status, err.Error())
 			return
 		}
 		step.ContainerImage = image
@@ -257,6 +263,8 @@ func (h *RunbookHandler) Save(w http.ResponseWriter, r *http.Request) {
 //
 // Responses:
 // 201: body:RunbookSaveResponse
+// 400: body:BadRequestError
+// 409: body:ConflictError
 // 422: body:ValidationError
 func (h *RunbookHandler) Create(w http.ResponseWriter, r *http.Request) {
 	h.Save(w, r)

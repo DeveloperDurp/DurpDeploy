@@ -53,6 +53,7 @@ func (h *RunbookHandler) ListSchedules(w http.ResponseWriter, r *http.Request) {
 //
 // Responses:
 // 201: body:RunbookSchedule
+// 409: body:ConflictError
 // 422: body:ValidationError
 func (h *RunbookHandler) CreateSchedule(
 	w http.ResponseWriter,

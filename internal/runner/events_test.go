@@ -60,7 +60,6 @@ esac
 	); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv(
 		"DURPDEPLOY_PODMAN_URL",
 		"ssh://executor@localhost/run/user/1234/podman/podman.sock",
@@ -77,7 +76,9 @@ esac
 	bus := events.NewBus(repo)
 	bus.Register(rec)
 
-	rnr := runner.New(repo, runner.NewLogBroker())
+	rnr := runner.NewWithPodmanBinaryForTest(
+		repo, runner.NewLogBroker(), filepath.Join(binDir, "podman"),
+	)
 	rnr.SetEventBus(bus)
 	return repo, rnr, rec
 }

@@ -43,7 +43,7 @@ type testHarness struct {
 
 func newHarness(t *testing.T) *testHarness {
 	t.Helper()
-	setupTestPodman(t)
+	binary := setupTestPodman(t)
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "test.db")
 	dsn := fmt.Sprintf(
@@ -61,7 +61,7 @@ func newHarness(t *testing.T) *testHarness {
 
 	repo := repository.New(conn)
 	broker := runner.NewLogBroker()
-	rnr := runner.New(repo, broker)
+	rnr := runner.NewWithPodmanBinaryForTest(repo, broker, binary)
 	parser := cron.NewParser(
 		cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow,
 	)

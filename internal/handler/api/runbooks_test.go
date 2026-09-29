@@ -19,8 +19,7 @@ import (
 
 func TestRunbookAPI_VersionedExecutionStaysSeparate(t *testing.T) {
 	t.Setenv("DURPDEPLOY_EXECUTION_BOUNDARY", "development")
-	fakePodman(t)
-	h := newAPIHarness(t)
+	h := newAPIHarness(t, fakePodman(t))
 	user := seedAPIUser(t, h.repo, "runbook-admin@example.com", "admin")
 	_, token := seedAPIToken(t, h.repo, user.ID)
 	project := seedProject(t, h.repo)
@@ -175,8 +174,7 @@ func TestRunbookAPI_VersionedExecutionStaysSeparate(t *testing.T) {
 
 func TestRunbookAPI_ProjectDeleteAfterVersion(t *testing.T) {
 	t.Setenv("DURPDEPLOY_EXECUTION_BOUNDARY", "development")
-	fakePodman(t)
-	h := newAPIHarness(t)
+	h := newAPIHarness(t, fakePodman(t))
 	user := seedAPIUser(t, h.repo, "runbook-delete@example.com", "admin")
 	_, token := seedAPIToken(t, h.repo, user.ID)
 	project := seedProject(t, h.repo)

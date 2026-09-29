@@ -135,6 +135,7 @@ func (h *ScheduleHandler) ListSchedules(
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
 //	  404: body:NotFoundError
+//	  409: body:ConflictError
 //	  422: body:ValidationError
 //	  500: body:ServerError
 func (h *ScheduleHandler) CreateSchedule(
@@ -317,6 +318,7 @@ func (h *ScheduleHandler) GetSchedule(w http.ResponseWriter, r *http.Request) {
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
 //	  404: body:NotFoundError
+//	  409: body:ConflictError
 //	  422: body:ValidationError
 //	  500: body:ServerError
 func (h *ScheduleHandler) UpdateSchedule(
@@ -514,6 +516,7 @@ func (h *ScheduleHandler) DeleteSchedule(
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
 //	  404: body:NotFoundError
+//	  409: body:ConflictError
 //	  500: body:ServerError
 func (h *ScheduleHandler) ToggleSchedule(
 	w http.ResponseWriter,

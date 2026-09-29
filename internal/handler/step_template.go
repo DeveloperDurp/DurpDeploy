@@ -75,9 +75,34 @@ func (h *StepTemplateHandler) CreateTemplate(
 		return
 	}
 
+	containerImage, variableNames, containerErr := parseStepContainerConfig(
+		r,
+		"local",
+	)
+	if containerErr != "" {
+		tpl := &db.StepTemplate{
+			Name:           name,
+			ScriptBody:     script,
+			Interpreter:    selectedInterpreter,
+			ContainerImage: containerImage,
+			VariableNames:  marshalStepVariableNames(variableNames),
+		}
+		WriteFormError(
+			w,
+			r,
+			pages.TemplateFormFragment(tpl, true, containerErr),
+			pages.TemplateForm(tpl, true, containerErr, r.URL.Path),
+		)
+		return
+	}
+
 	if name == "" {
 		tpl := &db.StepTemplate{
-			Name: name, ScriptBody: script, Interpreter: selectedInterpreter,
+			Name:           name,
+			ScriptBody:     script,
+			Interpreter:    selectedInterpreter,
+			ContainerImage: containerImage,
+			VariableNames:  marshalStepVariableNames(variableNames),
 		}
 		WriteFormError(
 			w,
@@ -89,9 +114,11 @@ func (h *StepTemplateHandler) CreateTemplate(
 	}
 
 	params := db.CreateStepTemplateParams{
-		Name:        name,
-		ScriptBody:  script,
-		Interpreter: selectedInterpreter,
+		Name:           name,
+		ScriptBody:     script,
+		Interpreter:    selectedInterpreter,
+		ContainerImage: containerImage,
+		VariableNames:  marshalStepVariableNames(variableNames),
 	}
 
 	_, err = h.repo.CreateStepTemplateWithPlacement(
@@ -103,9 +130,11 @@ func (h *StepTemplateHandler) CreateTemplate(
 	if err != nil {
 		if IsUniqueViolation(err) {
 			tplErr := &db.StepTemplate{
-				Name:        name,
-				ScriptBody:  script,
-				Interpreter: selectedInterpreter,
+				Name:           name,
+				ScriptBody:     script,
+				Interpreter:    selectedInterpreter,
+				ContainerImage: containerImage,
+				VariableNames:  marshalStepVariableNames(variableNames),
 			}
 			WriteFormError(
 				w,
@@ -170,6 +199,19 @@ func (h *StepTemplateHandler) UpdateTemplate(
 		return
 	}
 
+	// Look up the existing template first so the container-config
+	// rules match its actual execution target. Agent templates
+	// dispatch to a remote agent and must not carry a container image.
+	existing, err := h.repo.Queries.GetStepTemplate(r.Context(), id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	target := existing.ExecutionTarget
+	if target == "" {
+		target = "local"
+	}
+
 	name := strings.TrimSpace(r.FormValue("name"))
 	script := r.FormValue("script_body")
 	selectedInterpreter, err := interpreter.Validate(r.FormValue("interpreter"))
@@ -178,10 +220,38 @@ func (h *StepTemplateHandler) UpdateTemplate(
 		return
 	}
 
+	containerImage, variableNames, containerErr := parseStepContainerConfig(
+		r,
+		target,
+	)
+	if containerErr != "" {
+		tpl := &db.StepTemplate{
+			ID:              id,
+			Name:            name,
+			ScriptBody:      script,
+			Interpreter:     selectedInterpreter,
+			ContainerImage:  containerImage,
+			VariableNames:   marshalStepVariableNames(variableNames),
+			ExecutionTarget: existing.ExecutionTarget,
+		}
+		WriteFormError(
+			w,
+			r,
+			pages.TemplateFormFragment(tpl, false, containerErr),
+			pages.TemplateForm(tpl, false, containerErr, r.URL.Path),
+		)
+		return
+	}
+
 	if name == "" {
 		tpl := &db.StepTemplate{
-			ID: id, Name: name, ScriptBody: script,
-			Interpreter: selectedInterpreter,
+			ID:              id,
+			Name:            name,
+			ScriptBody:      script,
+			Interpreter:     selectedInterpreter,
+			ContainerImage:  containerImage,
+			VariableNames:   marshalStepVariableNames(variableNames),
+			ExecutionTarget: existing.ExecutionTarget,
 		}
 		WriteFormError(
 			w,
@@ -193,17 +263,14 @@ func (h *StepTemplateHandler) UpdateTemplate(
 	}
 
 	params := db.UpdateStepTemplateParams{
-		ID:          id,
-		Name:        name,
-		ScriptBody:  script,
-		Interpreter: selectedInterpreter,
+		ID:             id,
+		Name:           name,
+		ScriptBody:     script,
+		Interpreter:    selectedInterpreter,
+		ContainerImage: containerImage,
+		VariableNames:  marshalStepVariableNames(variableNames),
 	}
 
-	existing, err := h.repo.Queries.GetStepTemplate(r.Context(), id)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
 	selectors, err := h.repo.Queries.ListTemplateAgentSelectors(
 		r.Context(),
 		id,
@@ -222,8 +289,13 @@ func (h *StepTemplateHandler) UpdateTemplate(
 	if err != nil {
 		if IsUniqueViolation(err) {
 			tpl := &db.StepTemplate{
-				ID: id, Name: name, ScriptBody: script,
-				Interpreter: selectedInterpreter,
+				ID:              id,
+				Name:            name,
+				ScriptBody:      script,
+				Interpreter:     selectedInterpreter,
+				ContainerImage:  containerImage,
+				VariableNames:   marshalStepVariableNames(variableNames),
+				ExecutionTarget: existing.ExecutionTarget,
 			}
 			WriteFormError(
 				w,

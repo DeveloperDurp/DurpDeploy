@@ -370,13 +370,11 @@ func recoverPendingDeployments(
 		if _, err := q.CancelOrphanedRemoteStepRuns(ctx, now); err != nil {
 			return err
 		}
-		if !rnr.ContainerRuntimeReady() {
-			if _, err := q.MarkUnreconciledLocalDeployments(
-				ctx,
-				timestamp,
-			); err != nil {
-				return err
-			}
+		if _, err := q.MarkUnreconciledLocalDeployments(
+			ctx,
+			timestamp,
+		); err != nil {
+			return err
 		}
 		failed, err = q.FailOrphanedDeployments(ctx, timestamp)
 		return err

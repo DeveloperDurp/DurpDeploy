@@ -20,8 +20,7 @@ import (
 
 func TestRunbookAPI_CancelAcknowledgesRequestBeforeTerminalState(t *testing.T) {
 	t.Setenv("DURPDEPLOY_EXECUTION_BOUNDARY", "development")
-	fakePodman(t)
-	h := newAPIHarness(t)
+	h := newAPIHarness(t, fakePodman(t))
 	t.Cleanup(h.runner.KillAll)
 	user := seedAPIUser(t, h.repo, "runbook-cancel@example.com", "admin")
 	_, token := seedAPIToken(t, h.repo, user.ID)

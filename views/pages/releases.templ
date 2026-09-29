@@ -41,9 +41,13 @@ func releaseStepInterpreter(step ReleaseStep) string {
 // releaseStepLegacyHost flags a snapshotted step that has no container
 // image. The release cannot be deployed against any environment that
 // would run it on the host — every legacy step must be recreated and
-// re-snapshotted before the release is usable again.
+// re-snapshotted before the release is usable again. Old snapshots may
+// omit execution_target entirely (the column was added later); treat
+// the missing value the same as the explicit "local" it would have
+// defaulted to.
 func releaseStepLegacyHost(step ReleaseStep) bool {
-	return step.ExecutionTarget == "local" && step.ContainerImage == ""
+	return (step.ExecutionTarget == "" ||
+		step.ExecutionTarget == "local") && step.ContainerImage == ""
 }
 
 // releaseNeedsRecreation reports whether a release contains at least

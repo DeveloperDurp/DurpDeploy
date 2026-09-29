@@ -151,6 +151,7 @@ type swaggerScheduledDeployment struct {
 	NextRunAt     int64   `json:"next_run_at"`
 	Enabled       int64   `json:"enabled"`
 	LastFiredAt   *int64  `json:"last_fired_at"`
+	LastError     string  `json:"last_error"`
 	Note          *string `json:"note"`
 	CreatedAt     int64   `json:"created_at"`
 	UpdatedAt     int64   `json:"updated_at"`
@@ -718,6 +719,8 @@ type swaggerRunbookStep struct {
 	MaxRetries      int64    `json:"max_retries"`
 	ExecutionTarget string   `json:"execution_target"`
 	AgentSelectors  []string `json:"agent_selectors"`
+	ContainerImage  string   `json:"container_image"`
+	VariableNames   []string `json:"variable_names"`
 }
 
 // swagger:model RunbookSaveRequest
@@ -792,6 +795,7 @@ type swaggerRunbookSchedule struct {
 	NextRunAt     int64                 `json:"next_run_at"`
 	Enabled       int64                 `json:"enabled"`
 	LastFiredAt   swaggerSQLNullInteger `json:"last_fired_at"`
+	LastError     string                `json:"last_error"`
 	CreatedAt     int64                 `json:"created_at"`
 }
 

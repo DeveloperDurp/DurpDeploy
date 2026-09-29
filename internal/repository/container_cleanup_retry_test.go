@@ -44,6 +44,11 @@ func TestDeploymentRetryBlockedUntilCleanupConfirmed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if _, err := repo.DB.ExecContext(ctx,
+		"UPDATE deployments SET container_namespace = ? WHERE id = ?",
+		"original", source.ID); err != nil {
+		t.Fatal(err)
+	}
 	arg := db.CreateDeploymentParams{
 		ReleaseID:     release.ID,
 		EnvironmentID: env.ID,
@@ -59,7 +64,10 @@ func TestDeploymentRetryBlockedUntilCleanupConfirmed(t *testing.T) {
 	}
 	if _, err := repo.Queries.ConfirmContainerCleanup(
 		ctx,
-		sql.NullInt64{Int64: time.Now().Unix(), Valid: true},
+		db.ConfirmContainerCleanupParams{
+			Now:       sql.NullInt64{Int64: time.Now().Unix(), Valid: true},
+			Namespace: sql.NullString{String: "original", Valid: true},
+		},
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -116,6 +124,11 @@ func TestRunbookRetryBlockedUntilCleanupConfirmed(t *testing.T) {
 	); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := repo.DB.ExecContext(ctx,
+		"UPDATE deployments SET container_namespace = ? WHERE id = ?",
+		"original", execution.DeploymentID); err != nil {
+		t.Fatal(err)
+	}
 	arg := repository.RunbookExecutionRequest{
 		ProjectID: project.ID, RunbookID: book.ID,
 		VersionID: version.ID, EnvironmentID: env.ID,
@@ -131,7 +144,10 @@ func TestRunbookRetryBlockedUntilCleanupConfirmed(t *testing.T) {
 	}
 	if _, err := repo.Queries.ConfirmContainerCleanup(
 		ctx,
-		sql.NullInt64{Int64: time.Now().Unix(), Valid: true},
+		db.ConfirmContainerCleanupParams{
+			Now:       sql.NullInt64{Int64: time.Now().Unix(), Valid: true},
+			Namespace: sql.NullString{String: "original", Valid: true},
+		},
 	); err != nil {
 		t.Fatal(err)
 	}

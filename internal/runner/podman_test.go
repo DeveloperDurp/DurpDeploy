@@ -1,6 +1,7 @@
 package runner
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +12,26 @@ import (
 	"durpdeploy/internal/repository"
 )
 
+func TestPodmanEndpointIgnoresPoisonedPATH(t *testing.T) {
+	// Given
+	t.Setenv("PATH", t.TempDir())
+	t.Setenv("DURPDEPLOY_PODMAN_URL",
+		"ssh://executor@example.invalid/run/user/1234/podman/podman.sock")
+	t.Setenv("DURPDEPLOY_PODMAN_NAMESPACE", "test-suite")
+
+	// When
+	endpoint, err := newPodmanEndpoint()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := endpoint.command(context.Background(), "info")
+
+	// Then
+	if cmd.Path != "/usr/bin/podman" {
+		t.Fatalf("Podman command path = %q", cmd.Path)
+	}
+}
+
 func podmanFixture(
 	t *testing.T,
 	body string,
@@ -18,15 +39,15 @@ func podmanFixture(
 	t.Helper()
 	dir := t.TempDir()
 	trace := filepath.Join(dir, "trace")
+	binary := filepath.Join(dir, "podman")
 	cli := "#!/bin/sh\n" + body
 	if err := os.WriteFile(
-		filepath.Join(dir, "podman"),
+		binary,
 		[]byte(cli),
 		0o700,
 	); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("PODMAN_TRACE", trace)
 	t.Setenv(
 		"DURPDEPLOY_PODMAN_URL",
@@ -40,7 +61,7 @@ func podmanFixture(
 	t.Cleanup(func() { conn.Close() })
 	conn.SetMaxOpenConns(1)
 	repo := repository.New(conn)
-	r := New(repo, NewLogBroker())
+	r := NewWithPodmanBinaryForTest(repo, NewLogBroker(), binary)
 	if r.localErr != nil {
 		t.Fatal(r.localErr)
 	}
@@ -211,8 +232,9 @@ func TestPodmanEndpointAllowsSameHostRootlessAccount(t *testing.T) {
 func TestPodmanRootfulEngineFailsClosed(t *testing.T) {
 	// Given
 	dir := t.TempDir()
+	binary := filepath.Join(dir, "podman")
 	if err := os.WriteFile(
-		filepath.Join(dir, "podman"),
+		binary,
 		[]byte(
 			"#!/bin/sh\nprintf '{\"host\":{\"security\":{\"rootless\":false}}}'\n",
 		),
@@ -220,14 +242,13 @@ func TestPodmanRootfulEngineFailsClosed(t *testing.T) {
 	); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv(
 		"DURPDEPLOY_PODMAN_URL",
 		"ssh://executor@example.invalid/run/user/1234/podman/podman.sock",
 	)
 	t.Setenv("DURPDEPLOY_PODMAN_NAMESPACE", "test")
 	// When
-	r := New(nil, nil)
+	r := NewWithPodmanBinaryForTest(nil, nil, binary)
 	// Then
 	if r.localErr == nil || !strings.Contains(r.localErr.Error(), "rootless") {
 		t.Fatalf("rootful engine accepted: %v", r.localErr)
@@ -357,12 +378,87 @@ esac
 		created.Deployment.ID,
 	)
 	if err != nil || stored.Status != "cleanup_unconfirmed" ||
-		!stored.FinishedAt.Valid {
+		!stored.FinishedAt.Valid ||
+		stored.ContainerNamespace.String != "test-suite" {
 		t.Fatalf("cleanup status = %+v: %v", stored, err)
 	}
 	runs, err := os.ReadFile(trace)
 	if err != nil || string(runs) != "run\n" {
 		t.Fatalf("unexpected automatic retry %q: %v", runs, err)
+	}
+}
+
+func TestRunnerDoesNotStartInDifferentNamespace(t *testing.T) {
+	// Given: a running deployment was associated with another namespace.
+	r, repo, trace := podmanFixture(t, `
+case "$3" in
+info) printf '{"host":{"security":{"rootless":true}}}';;
+ps) ;;
+run) printf 'started' > "$PODMAN_TRACE";;
+esac
+`)
+	project, err := repo.Queries.CreateProject(
+		t.Context(),
+		db.CreateProjectParams{Name: "p"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	env, err := repo.Queries.CreateEnvironment(
+		t.Context(),
+		db.CreateEnvironmentParams{Name: "e"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	release, err := repo.Queries.CreateRelease(
+		t.Context(),
+		db.CreateReleaseParams{
+			ProjectID: project.ID,
+			Version:   "v1",
+			StepsJson: `[{"name":"local","container_image":"example.com/worker:1"}]`,
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	created, err := repo.CreateDeployment(
+		t.Context(),
+		db.CreateDeploymentParams{
+			ReleaseID: release.ID, EnvironmentID: env.ID, Status: "pending",
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.Queries.UpdateDeploymentStatus(
+		t.Context(),
+		db.UpdateDeploymentStatusParams{
+			ID: created.Deployment.ID, Status: "running",
+		},
+	); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.DB.ExecContext(t.Context(),
+		"UPDATE deployments SET container_namespace = ? WHERE id = ?",
+		"old-namespace", created.Deployment.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	// When: a runner with a different namespace tries to execute that deployment.
+	r.Run(t.Context(), created.Deployment.ID, release.ID, env.ID)
+
+	// Then: execution stays blocked and Podman never runs a new attempt.
+	stored, err := repo.Queries.GetDeployment(
+		t.Context(),
+		created.Deployment.ID,
+	)
+	if err != nil || stored.Status != "cleanup_unconfirmed" ||
+		stored.ContainerNamespace.String != "old-namespace" {
+		t.Fatalf("deployment = %+v: %v", stored, err)
+	}
+	if _, err := os.Stat(trace); !os.IsNotExist(err) {
+		t.Fatalf("unexpected Podman start: %v", err)
 	}
 }
 

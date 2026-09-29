@@ -4216,6 +4216,12 @@
               "$ref": "#/definitions/NotFoundError"
             }
           },
+          "409": {
+            "description": "Conflict error response.",
+            "schema": {
+              "$ref": "#/definitions/ConflictError"
+            }
+          },
           "500": {
             "description": "Server error response.",
             "schema": {
@@ -4568,6 +4574,18 @@
               "$ref": "#/definitions/RunbookSaveResponse"
             }
           },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
+          "409": {
+            "description": "Conflict error response.",
+            "schema": {
+              "$ref": "#/definitions/ConflictError"
+            }
+          },
           "422": {
             "description": "Validation error response.",
             "schema": {
@@ -4654,6 +4672,18 @@
             "description": "Created",
             "schema": {
               "$ref": "#/definitions/RunbookSaveResponse"
+            }
+          },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
+          "409": {
+            "description": "Conflict error response.",
+            "schema": {
+              "$ref": "#/definitions/ConflictError"
             }
           },
           "422": {
@@ -4802,6 +4832,12 @@
             "description": "Created",
             "schema": {
               "$ref": "#/definitions/RunbookSchedule"
+            }
+          },
+          "409": {
+            "description": "Conflict error response.",
+            "schema": {
+              "$ref": "#/definitions/ConflictError"
             }
           },
           "422": {
@@ -5039,6 +5075,12 @@
               "$ref": "#/definitions/NotFoundError"
             }
           },
+          "409": {
+            "description": "Conflict error response.",
+            "schema": {
+              "$ref": "#/definitions/ConflictError"
+            }
+          },
           "422": {
             "description": "Validation error response.",
             "schema": {
@@ -5201,6 +5243,12 @@
               "$ref": "#/definitions/NotFoundError"
             }
           },
+          "409": {
+            "description": "Conflict error response.",
+            "schema": {
+              "$ref": "#/definitions/ConflictError"
+            }
+          },
           "422": {
             "description": "Validation error response.",
             "schema": {
@@ -5340,6 +5388,12 @@
             "description": "Not found error response.",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "409": {
+            "description": "Conflict error response.",
+            "schema": {
+              "$ref": "#/definitions/ConflictError"
             }
           },
           "500": {
@@ -8422,6 +8476,10 @@
           "format": "int64",
           "x-go-name": "ID"
         },
+        "last_error": {
+          "type": "string",
+          "x-go-name": "LastError"
+        },
         "last_fired_at": {
           "$ref": "#/definitions/swaggerSQLNullInteger"
         },
@@ -8503,6 +8561,10 @@
           },
           "x-go-name": "AgentSelectors"
         },
+        "container_image": {
+          "type": "string",
+          "x-go-name": "ContainerImage"
+        },
         "execution_target": {
           "type": "string",
           "x-go-name": "ExecutionTarget"
@@ -8533,6 +8595,13 @@
           "type": "integer",
           "format": "int64",
           "x-go-name": "TimeoutSeconds"
+        },
+        "variable_names": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "x-go-name": "VariableNames"
         }
       },
       "x-go-name": "swaggerRunbookStep",
@@ -8655,6 +8724,10 @@
           "type": "integer",
           "format": "int64",
           "x-go-name": "ID"
+        },
+        "last_error": {
+          "type": "string",
+          "x-go-name": "LastError"
         },
         "last_fired_at": {
           "type": "integer",

@@ -69,6 +69,7 @@ PY
 done
 grep -Fq 'USER 10001' "$root/Dockerfile"
 grep -Fq 'chmod 0700 /data' "$root/Dockerfile"
+grep -Fq 'ln -s /usr/bin/podman-remote /usr/bin/podman' "$root/Dockerfile"
 
 if [ "${RUNNER_CONTAINER_CONTRACT_STATIC_ONLY:-0}" = 1 ]; then
 	printf '%s\n' 'runner container contract: static PASS'
@@ -86,8 +87,8 @@ podman run --rm --read-only --security-opt no-new-privileges:true \
 	test -w /data
 	test ! -w /
 	test "$(getent passwd 10001 | cut -d : -f 6)" = /home/durpdeploy
-	command -v podman >/dev/null
-	podman --remote --url=ssh://exec@host/run/user/10002/podman/podman.sock --version
+	test -x /usr/bin/podman
+	/usr/bin/podman --remote --url=ssh://exec@host/run/user/10002/podman/podman.sock --version
 	printf private > /data/service-private
 	chmod 0600 /data/service-private
 	for capability_set in CapInh CapPrm CapEff CapBnd CapAmb; do

@@ -50,7 +50,7 @@ FROM alpine:3.20
 # hadolint ignore=DL3018
 RUN apk add --no-cache ca-certificates bash openssh-client podman-remote && \
 	adduser -D -u 10001 durpdeploy && \
-	ln -s /usr/bin/podman-remote /usr/local/bin/podman
+	ln -s /usr/bin/podman-remote /usr/bin/podman
 
 # Data directory for the SQLite database and WAL files. Chown to the runtime
 # user and declare it a volume so it can be mounted from the host.
@@ -67,6 +67,7 @@ COPY --from=builder /out/durpdeploy /usr/local/bin/durpdeploy
 RUN chmod 0755 /usr/local/bin/durpdeploy
 
 ENV DURPDEPLOY_EXECUTION_BOUNDARY=service \
+	HOME=/home/durpdeploy \
 	XDG_CONFIG_HOME=/tmp
 USER 10001
 

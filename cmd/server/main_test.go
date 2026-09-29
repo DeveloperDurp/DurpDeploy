@@ -561,6 +561,7 @@ func TestRecoverPendingDeploymentsFailsOrphanedRunningDeployment(t *testing.T) {
 func TestStartupRecoveryBlocksLocalRetryWhenPodmanSweepFails(t *testing.T) {
 	// Given
 	dir := t.TempDir()
+	binary := filepath.Join(dir, "podman")
 	cli := `#!/bin/sh
 case "$3" in
 info) printf '{"host":{"security":{"rootless":true}}}';;
@@ -569,13 +570,12 @@ rm) if [ "$PODMAN_SWEEP_FAIL" = 1 ]; then exit 7; fi;;
 esac
 `
 	if err := os.WriteFile(
-		filepath.Join(dir, "podman"),
+		binary,
 		[]byte(cli),
 		0o700,
 	); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv(
 		"DURPDEPLOY_PODMAN_URL",
 		"ssh://executor@example.invalid/run/user/1234/podman/podman.sock",
@@ -623,6 +623,34 @@ esac
 	); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := repo.Queries.RecordContainerNamespace(ctx,
+		db.RecordContainerNamespaceParams{
+			DeploymentID: local.Deployment.ID,
+			Namespace:    sql.NullString{String: "test-suite", Valid: true},
+		}); err != nil {
+		t.Fatal(err)
+	}
+	oldNamespace, err := repo.CreateDeployment(ctx, db.CreateDeploymentParams{
+		ReleaseID: localRelease.ID, EnvironmentID: env.ID, Status: "pending",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.Queries.UpdateDeploymentStatus(
+		ctx,
+		db.UpdateDeploymentStatusParams{
+			ID: oldNamespace.Deployment.ID, Status: "running",
+		},
+	); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.Queries.RecordContainerNamespace(ctx,
+		db.RecordContainerNamespaceParams{
+			DeploymentID: oldNamespace.Deployment.ID,
+			Namespace:    sql.NullString{String: "old-namespace", Valid: true},
+		}); err != nil {
+		t.Fatal(err)
+	}
 	remoteRelease, err := repo.Queries.CreateRelease(
 		ctx,
 		db.CreateReleaseParams{
@@ -643,7 +671,7 @@ esac
 	t.Setenv("PODMAN_SWEEP_FAIL", "1")
 	recoverPendingDeployments(
 		ctx,
-		runner.New(repo, runner.NewLogBroker()),
+		runner.NewWithPodmanBinaryForTest(repo, runner.NewLogBroker(), binary),
 		repo,
 	)
 
@@ -652,20 +680,53 @@ esac
 	if err != nil || stored.Status != "cleanup_unconfirmed" {
 		t.Fatalf("local status = %+v: %v", stored, err)
 	}
+	older, err := repo.Queries.GetDeployment(ctx, oldNamespace.Deployment.ID)
+	if err != nil || older.Status != "cleanup_unconfirmed" {
+		t.Fatalf("old namespace status = %+v: %v", older, err)
+	}
 	other, err := repo.Queries.GetDeployment(ctx, remote.ID)
 	if err != nil || other.Status != "failed" {
 		t.Fatalf("other status = %+v: %v", other, err)
+	}
+	crashed, err := repo.CreateDeployment(ctx, db.CreateDeploymentParams{
+		ReleaseID: localRelease.ID, EnvironmentID: env.ID, Status: "pending",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.Queries.UpdateDeploymentStatus(
+		ctx,
+		db.UpdateDeploymentStatusParams{
+			ID: crashed.Deployment.ID, Status: "running",
+		},
+	); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.Queries.RecordContainerNamespace(ctx,
+		db.RecordContainerNamespaceParams{
+			DeploymentID: crashed.Deployment.ID,
+			Namespace:    sql.NullString{String: "old-namespace", Valid: true},
+		}); err != nil {
+		t.Fatal(err)
 	}
 	// When: a later startup sweep succeeds.
 	t.Setenv("PODMAN_SWEEP_FAIL", "0")
 	recoverPendingDeployments(
 		ctx,
-		runner.New(repo, runner.NewLogBroker()),
+		runner.NewWithPodmanBinaryForTest(repo, runner.NewLogBroker(), binary),
 		repo,
 	)
 	stored, err = repo.Queries.GetDeployment(ctx, local.Deployment.ID)
 	if err != nil || stored.Status != "failed" {
 		t.Fatalf("confirmed local status = %+v: %v", stored, err)
+	}
+	older, err = repo.Queries.GetDeployment(ctx, oldNamespace.Deployment.ID)
+	if err != nil || older.Status != "cleanup_unconfirmed" {
+		t.Fatalf("other namespace was confirmed = %+v: %v", older, err)
+	}
+	older, err = repo.Queries.GetDeployment(ctx, crashed.Deployment.ID)
+	if err != nil || older.Status != "cleanup_unconfirmed" {
+		t.Fatalf("crashed other namespace was unblocked = %+v: %v", older, err)
 	}
 }
 

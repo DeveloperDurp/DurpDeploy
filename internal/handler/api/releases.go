@@ -277,6 +277,7 @@ func (h *ReleaseHandler) GetRelease(w http.ResponseWriter, r *http.Request) {
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
 //	  404: body:NotFoundError
+//	  409: body:ConflictError
 //	  500: body:ServerError
 func (h *ReleaseHandler) RefreshRelease(
 	w http.ResponseWriter,

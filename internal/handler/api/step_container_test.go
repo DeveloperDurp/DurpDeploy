@@ -195,11 +195,69 @@ func TestSteps_VariableNamesValidation(t *testing.T) {
 			),
 		},
 	}
+	for _, name := range []string{
+		"PATH", "HOME", "TMPDIR", "SSH_AUTH_SOCK", "CONTAINER_HOST",
+		"CONTAINER_SSHKEY", "XDG_CONFIG_HOME", "XDG_RUNTIME_DIR",
+		"REGISTRY_AUTH_FILE", "PODMAN_CONNECTIONS_CONF",
+		"CONTAINERS_CONF", "SSH_ASKPASS",
+	} {
+		cases = append(cases, struct {
+			name string
+			body string
+		}{name: name, body: createStepBody(
+			"local", "alpine:3.20", []string{name},
+		)})
+	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			rec := h.request(t, "POST", path, token, tc.body)
 			h.assertStatus(t, rec, 400)
 		})
+	}
+}
+
+func TestSteps_UpdateRejectsReservedVariableName(t *testing.T) {
+	h := newHarness(t)
+	token := h.adminToken(t)
+	project := h.seedProject(t, h.seedUser(t, "owner@example.com", "admin"))
+	path := fmt.Sprintf("/api/v1/projects/%d/steps", project.ID)
+	rec := h.request(t, "POST", path, token,
+		createStepBody("local", "alpine:3.20", nil))
+	h.assertStatus(t, rec, 201)
+
+	rec = h.request(t, "PUT", path+"/1", token,
+		createStepBody("local", "alpine:3.20", []string{"HOME"}))
+	h.assertStatus(t, rec, 400)
+}
+
+func TestSteps_AgentAllowsContainerReservedVariableName(t *testing.T) {
+	h := newHarness(t)
+	token := h.adminToken(t)
+	project := h.seedProject(t, h.seedUser(t, "owner@example.com", "admin"))
+	rec := h.request(t, "POST",
+		fmt.Sprintf("/api/v1/projects/%d/steps", project.ID), token,
+		createStepBody("agent", "", []string{"PATH"}))
+	h.assertStatus(t, rec, 201)
+	assertStepContainerFields(t, rec.Body.String(), "", "PATH")
+}
+
+func TestTemplates_RejectReservedVariableName(t *testing.T) {
+	h := newHarness(t)
+	token := h.adminToken(t)
+	for _, tc := range []struct {
+		method, path string
+	}{
+		{"POST", "/api/v1/templates"},
+		{"PUT", "/api/v1/templates/1"},
+	} {
+		if tc.method == "PUT" {
+			rec := h.request(t, "POST", "/api/v1/templates", token,
+				createStepBody("local", "alpine:3.20", nil))
+			h.assertStatus(t, rec, 201)
+		}
+		rec := h.request(t, tc.method, tc.path, token,
+			createStepBody("local", "alpine:3.20", []string{"CONTAINER_HOST"}))
+		h.assertStatus(t, rec, 400)
 	}
 }
 

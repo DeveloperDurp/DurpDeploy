@@ -38,7 +38,7 @@ type projectHarness struct {
 
 func newProjectHarness(t *testing.T) *projectHarness {
 	t.Helper()
-	setupTestPodman(t)
+	binary := setupTestPodman(t)
 	dir := t.TempDir()
 	dsn := fmt.Sprintf(
 		"file:%s?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)",
@@ -52,7 +52,7 @@ func newProjectHarness(t *testing.T) *projectHarness {
 
 	repo := repository.New(conn)
 	broker := runner.NewLogBroker()
-	rnr := runner.New(repo, broker)
+	rnr := runner.NewWithPodmanBinaryForTest(repo, broker, binary)
 	parser := cron.NewParser(
 		cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow,
 	)

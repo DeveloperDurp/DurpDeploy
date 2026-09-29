@@ -7,14 +7,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"regexp"
 	"strings"
 	"time"
 
+	"durpdeploy/internal/containerenv"
 	"durpdeploy/internal/interpreter"
 )
 
-var envName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 var errContainerCleanup = errors.New("container cleanup unconfirmed")
 
 type localStepAttempt struct {
@@ -42,7 +41,13 @@ func (r *DeploymentRunner) runStepAttempt(
 		)
 	}
 	if r.localErr != nil {
-		return fmt.Errorf("initialize Podman execution: %w", r.localErr)
+		err := fmt.Errorf("initialize Podman execution: %w", r.localErr)
+		_, _ = io.WriteString(request.logWriter, fmt.Sprintf(
+			"step %q: attempt %d failed before execution: %v\n",
+			request.step.Name, request.attempt, err,
+		))
+		request.logWriter.Flush()
+		return err
 	}
 	selected, err := interpreter.Validate(request.step.Interpreter)
 	if err != nil {
@@ -52,7 +57,7 @@ func (r *DeploymentRunner) runStepAttempt(
 	var envArgs []string
 	for _, name := range request.step.VariableNames {
 		value, exists := request.environment[name]
-		if !envName.MatchString(name) || !exists ||
+		if containerenv.ValidateName(name, true) != nil || !exists ||
 			strings.ContainsRune(value, '\x00') {
 			return fmt.Errorf(
 				"invalid or unavailable selected variable %q",

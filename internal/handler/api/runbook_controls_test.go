@@ -20,8 +20,7 @@ import (
 
 func TestRunbookAPI_ApprovalAndSchedule(t *testing.T) {
 	t.Setenv("DURPDEPLOY_EXECUTION_BOUNDARY", "development")
-	fakePodman(t)
-	h := newAPIHarness(t)
+	h := newAPIHarness(t, fakePodman(t))
 	user := seedAPIUser(t, h.repo, "runbook-controls@example.com", "admin")
 	_, token := seedAPIToken(t, h.repo, user.ID)
 	project := seedProject(t, h.repo)

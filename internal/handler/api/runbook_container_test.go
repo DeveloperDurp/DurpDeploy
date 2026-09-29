@@ -155,6 +155,8 @@ func TestRunbookAPI_RejectsInvalidVariableNames(t *testing.T) {
 			message: "variable names must be identifiers"},
 		{name: "duplicates", names: `["ALPHA","ALPHA"]`,
 			message: "variable names contain duplicates"},
+		{name: "reserved", names: `["SSH_AUTH_SOCK"]`,
+			message: "variable name is reserved"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

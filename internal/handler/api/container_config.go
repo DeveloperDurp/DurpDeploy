@@ -3,13 +3,10 @@ package api
 import (
 	"encoding/json"
 	"net/http"
-	"regexp"
-)
 
-// variableNamePattern restricts variable_names entries to Go-style
-// identifiers so they can be exported as environment variables inside
-// the step container.
-var variableNamePattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+	"durpdeploy/internal/containerenv"
+	"durpdeploy/internal/handler"
+)
 
 // validateContainerConfig validates the container mode fields shared
 // by step and step-template requests. Local steps always run in a
@@ -22,7 +19,7 @@ func validateContainerConfig(
 	target, containerImage string,
 	variableNames []string,
 ) (string, []string, bool) {
-	image := trimSpace(containerImage)
+	image := containerImage
 	if target == "agent" {
 		if image != "" {
 			RespondError(
@@ -39,8 +36,11 @@ func validateContainerConfig(
 			"Container image is required for local steps",
 		)
 		return "", nil, false
+	} else if !handler.ValidContainerImage(image) {
+		RespondError(w, http.StatusBadRequest, "Invalid container image")
+		return "", nil, false
 	}
-	names, ok := validateVariableNames(w, variableNames)
+	names, ok := validateVariableNames(w, variableNames, target == "local")
 	if !ok {
 		return "", nil, false
 	}
@@ -53,18 +53,27 @@ func validateContainerConfig(
 func validateVariableNames(
 	w http.ResponseWriter,
 	variableNames []string,
+	local bool,
 ) ([]string, bool) {
 	if len(variableNames) == 0 {
 		return nil, true
 	}
 	seen := make(map[string]struct{}, len(variableNames))
 	for _, name := range variableNames {
-		if !variableNamePattern.MatchString(name) {
+		switch containerenv.ValidateName(name, local) {
+		case containerenv.ErrIdentifier:
 			RespondError(
 				w,
 				http.StatusBadRequest,
 				"Variable names must be identifiers: letters, digits, "+
 					"underscores, and cannot start with a digit",
+			)
+			return nil, false
+		case containerenv.ErrReserved:
+			RespondError(
+				w,
+				http.StatusBadRequest,
+				containerenv.ErrReserved.Error(),
 			)
 			return nil, false
 		}
