@@ -190,6 +190,19 @@ func (q *Queries) ListReleasesByProjectPaginated(ctx context.Context, arg ListRe
 	return items, nil
 }
 
+const lockRelease = `-- name: LockRelease :execrows
+UPDATE releases SET version = version -- NOSONAR: intentional write lock
+WHERE id = ?
+`
+
+func (q *Queries) LockRelease(ctx context.Context, id int64) (int64, error) {
+	result, err := q.db.ExecContext(ctx, lockRelease, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const updateRelease = `-- name: UpdateRelease :one
 UPDATE releases SET project_id = ?, version = ?, steps_json = ? WHERE id = ? RETURNING id, project_id, version, steps_json, created_at, kind
 `

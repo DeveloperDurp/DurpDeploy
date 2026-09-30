@@ -19,6 +19,9 @@ func (r *Repository) DeleteRelease(
 ) error {
 	return withSQLiteBusyRetry(ctx, func() error {
 		return r.WithTx(ctx, func(q *db.Queries) error {
+			if err := lockRelease(ctx, q, releaseID); err != nil {
+				return err
+			}
 			release, err := q.GetDeploymentRelease(ctx, releaseID)
 			if err != nil {
 				return err
@@ -51,4 +54,15 @@ func (r *Repository) DeleteRelease(
 			})
 		})
 	})
+}
+
+func lockRelease(ctx context.Context, q *db.Queries, releaseID int64) error {
+	rows, err := q.LockRelease(ctx, releaseID)
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
 }
