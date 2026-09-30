@@ -260,6 +260,51 @@ func (h *ReleaseHandler) GetRelease(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// swagger:route DELETE /projects/{id}/releases/{relId} releases deleteRelease
+//
+// Delete a release without deployment history or schedules.
+//
+// Schemes: http, https
+//
+// Security:
+//
+//	bearer:
+//
+// Responses:
+//
+//	204: body:EmptyResponse
+//	400: body:BadRequestError
+//	401: body:UnauthorizedError
+//	404: body:NotFoundError
+//	409: body:ConflictError
+//	500: body:ServerError
+func (h *ReleaseHandler) DeleteRelease(w http.ResponseWriter, r *http.Request) {
+	projectID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		RespondError(w, http.StatusBadRequest, "Invalid project ID")
+		return
+	}
+	releaseID, err := strconv.ParseInt(chi.URLParam(r, "relId"), 10, 64)
+	if err != nil {
+		RespondError(w, http.StatusBadRequest, "Invalid release ID")
+		return
+	}
+	if err := h.repo.DeleteRelease(
+		r.Context(), projectID, releaseID,
+	); err != nil {
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			RespondError(w, http.StatusNotFound, "Release not found")
+		case errors.Is(err, repository.ErrReleaseInUse):
+			RespondError(w, http.StatusConflict, err.Error())
+		default:
+			RespondError(w, http.StatusInternalServerError, err.Error())
+		}
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // swagger:route POST /projects/{id}/releases/{relId}/refresh releases refreshRelease
 //
 // Refresh a release snapshot from current project steps and variables.

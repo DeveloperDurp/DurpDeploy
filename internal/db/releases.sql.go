@@ -44,13 +44,24 @@ func (q *Queries) CreateRelease(ctx context.Context, arg CreateReleaseParams) (R
 	return i, err
 }
 
-const deleteRelease = `-- name: DeleteRelease :exec
-DELETE FROM releases WHERE id = ?
+const deleteRelease = `-- name: DeleteRelease :execrows
+DELETE FROM releases
+WHERE releases.id = ? AND releases.project_id = ? AND releases.kind = 'deployment'
+  AND NOT EXISTS (SELECT 1 FROM deployments WHERE release_id = releases.id)
+  AND NOT EXISTS (SELECT 1 FROM scheduled_deployments WHERE release_id = releases.id)
 `
 
-func (q *Queries) DeleteRelease(ctx context.Context, id int64) error {
-	_, err := q.db.ExecContext(ctx, deleteRelease, id)
-	return err
+type DeleteReleaseParams struct {
+	ID        int64 `json:"id"`
+	ProjectID int64 `json:"project_id"`
+}
+
+func (q *Queries) DeleteRelease(ctx context.Context, arg DeleteReleaseParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteRelease, arg.ID, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const getDeploymentRelease = `-- name: GetDeploymentRelease :one

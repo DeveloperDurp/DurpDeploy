@@ -20,5 +20,8 @@ INSERT INTO releases (project_id, version, steps_json) VALUES (?, ?, ?) RETURNIN
 -- name: UpdateRelease :one
 UPDATE releases SET project_id = ?, version = ?, steps_json = ? WHERE id = ? RETURNING *;
 
--- name: DeleteRelease :exec
-DELETE FROM releases WHERE id = ?;
+-- name: DeleteRelease :execrows
+DELETE FROM releases
+WHERE releases.id = ? AND releases.project_id = ? AND releases.kind = 'deployment'
+  AND NOT EXISTS (SELECT 1 FROM deployments WHERE release_id = releases.id)
+  AND NOT EXISTS (SELECT 1 FROM scheduled_deployments WHERE release_id = releases.id);

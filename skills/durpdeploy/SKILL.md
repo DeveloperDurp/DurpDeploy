@@ -117,6 +117,9 @@ or refresh; recreate their steps and create a new release (`409` on launch).
    `POST /api/v1/projects/$PID/releases` `{"version":"1.2.0"}` → `id`.
    Later step edits do NOT affect it; `POST /projects/$PID/releases/$RID/refresh`
    re-snapshots a current release, but cannot upgrade an old image-less one.
+   `DELETE /api/v1/projects/$PID/releases/$RID` returns `204` when removed,
+   `404` if absent or in another project, and `409` if it has deployments or
+   schedules. Remove those references first; deletion never removes history.
 6. **Deploy**
    `POST /api/v1/projects/$PID/deployments`
    `{"release_id":$RID,"environment_id":$EID}` → `201` with deployment `id`.
@@ -211,7 +214,7 @@ Once deployments are terminal, environment deletion removes their history.
 | Environments | same shape under `/environments` |
 | Steps | `/api/v1/projects/{id}/steps[/{stepId}]` (`POST/GET/PUT/DELETE`, `PATCH /steps/reorder`) |
 | Variables | `/api/v1/projects/{id}/variables[/{varId}]` |
-| Releases | `/api/v1/projects/{id}/releases[/{relId}]`, `POST .../refresh` |
+| Releases | `/api/v1/projects/{id}/releases[/{relId}]` (`GET/POST/DELETE`), `POST .../refresh` |
 | Deployments | `POST /api/v1/projects/{id}/deployments`, `GET /api/v1/deployments` (list) |
 | Deployment detail | `GET /deployments/{id}`, `/status`, `/logs`, `/logs/{logId}` |
 | Actions | `POST /deployments/{id}/cancel\|redeploy`; admin-only `POST .../approve` |

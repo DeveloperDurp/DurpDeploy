@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -264,4 +265,37 @@ func (h *ReleaseHandler) GetRelease(w http.ResponseWriter, r *http.Request) {
 		Render(r.Context(), w); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
+}
+
+func (h *ReleaseHandler) DeleteRelease(w http.ResponseWriter, r *http.Request) {
+	projectID, err := parseProjectID(r)
+	if err != nil {
+		http.Error(w, "Invalid project ID", http.StatusBadRequest)
+		return
+	}
+	releaseID, err := strconv.ParseInt(chi.URLParam(r, "releaseId"), 10, 64)
+	if err != nil {
+		http.Error(w, "Invalid release ID", http.StatusBadRequest)
+		return
+	}
+	if err := h.repo.DeleteRelease(
+		r.Context(), projectID, releaseID,
+	); err != nil {
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			http.Error(w, "Release not found", http.StatusNotFound)
+		case errors.Is(err, repository.ErrReleaseInUse):
+			http.Error(w, err.Error(), http.StatusConflict)
+		default:
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
+	path := fmt.Sprintf("/projects/%d/releases", projectID)
+	if r.Header.Get("HX-Request") == "true" {
+		w.Header().Set("HX-Redirect", path)
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	http.Redirect(w, r, path, http.StatusSeeOther)
 }

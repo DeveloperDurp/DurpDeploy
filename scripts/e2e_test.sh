@@ -1270,7 +1270,50 @@ echo "  Step CRUD: OK ($API_STEP_ID)"
 API_RELEASE=$(api_post '{"version":"v1"}' "$BASE/api/v1/projects/$API_PROJECT_ID/releases")
 API_RELEASE_ID=$(echo "$API_RELEASE" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
 [[ -n "$API_RELEASE_ID" ]] || { echo "FAIL: create release did not return id: $API_RELEASE"; exit 1; }
-echo "  Release CRUD: OK ($API_RELEASE_ID)"
+DELETE_RELEASE=$(api_post '{"version":"delete-api"}' "$BASE/api/v1/projects/$API_PROJECT_ID/releases")
+DELETE_RELEASE_ID=$(echo "$DELETE_RELEASE" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+RELEASE_DELETE_URL="$BASE/api/v1/projects/$API_PROJECT_ID/releases/$DELETE_RELEASE_ID"
+CODE=$(curl -s -H "Authorization: Bearer $API_TOKEN" -X DELETE -o /dev/null -w '%{http_code}' \
+    "$BASE/api/v1/projects/$PROJECT_ID/releases/$DELETE_RELEASE_ID")
+[[ "$CODE" == 404 ]] || { echo "FAIL: cross-project release delete got $CODE"; exit 1; }
+CODE=$(curl -s -H "Authorization: Bearer $API_TOKEN" -X DELETE -o /dev/null -w '%{http_code}' \
+    "$RELEASE_DELETE_URL")
+[[ "$CODE" == 204 ]] || { echo "FAIL: API release delete got $CODE"; exit 1; }
+[[ "$(api_get_code "$RELEASE_DELETE_URL")" == 404 ]] || { echo "FAIL: deleted release is still readable"; exit 1; }
+[[ "$(curl -s -H "Authorization: Bearer $API_TOKEN" -X DELETE -o /dev/null -w '%{http_code}' "$RELEASE_DELETE_URL")" == 404 ]] \
+    || { echo "FAIL: repeated release delete did not return 404"; exit 1; }
+[[ "$(curl -s -H "Authorization: Bearer $API_TOKEN" -X DELETE -o /dev/null -w '%{http_code}' \
+    "$BASE/api/v1/projects/$PROJECT_ID/releases/$RELEASE_ID")" == 409 ]] \
+    || { echo "FAIL: release with deployment history was deleted"; exit 1; }
+[[ "$(api_get_code "$BASE/api/v1/deployments/$DEP_ID/status")" == 200 ]] \
+    || { echo "FAIL: release deletion removed deployment history"; exit 1; }
+SCHEDULE_RELEASE=$(api_post '{"version":"delete-scheduled"}' "$BASE/api/v1/projects/$API_PROJECT_ID/releases")
+SCHEDULE_RELEASE_ID=$(echo "$SCHEDULE_RELEASE" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+SCHEDULE=$(api_post "{\"release_id\":$SCHEDULE_RELEASE_ID,\"environment_id\":$ENV_ID,\"cron\":\"0 9 * * *\",\"enabled\":false}" \
+    "$BASE/api/v1/projects/$API_PROJECT_ID/schedules")
+SCHEDULE_ID=$(echo "$SCHEDULE" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+[[ "$(curl -s -H "Authorization: Bearer $API_TOKEN" -X DELETE -o /dev/null -w '%{http_code}' \
+    "$BASE/api/v1/projects/$API_PROJECT_ID/releases/$SCHEDULE_RELEASE_ID")" == 409 ]] \
+    || { echo "FAIL: scheduled release was deleted"; exit 1; }
+[[ "$(api_get_code "$BASE/api/v1/projects/$API_PROJECT_ID/schedules/$SCHEDULE_ID")" == 200 ]] \
+    || { echo "FAIL: release deletion removed schedule"; exit 1; }
+
+WEB_DELETE=$(curl -s -b "$COOKIES" -X POST -d "version=delete-web&csrf_token=$CSRF" \
+    -o /dev/null -w '%{http_code}' "$BASE/projects/$PROJECT_ID/releases")
+[[ "$WEB_DELETE" == 303 ]] || { echo "FAIL: web release create got $WEB_DELETE"; exit 1; }
+WEB_RELEASE_ID=$(curl_body "$BASE/projects/$PROJECT_ID/releases" | grep -oP 'href="/projects/'$PROJECT_ID'/releases/\K[0-9]+' | sort -n | tail -1)
+WEB_URL="$BASE/projects/$PROJECT_ID/releases/$WEB_RELEASE_ID"
+curl_body "$BASE/projects/$PROJECT_ID/releases" | grep -q "hx-delete=\"/projects/$PROJECT_ID/releases/$WEB_RELEASE_ID\"" \
+    || { echo "FAIL: release list has no delete control"; exit 1; }
+curl_body "$WEB_URL" | grep -q "hx-delete=\"/projects/$PROJECT_ID/releases/$WEB_RELEASE_ID\"" \
+    || { echo "FAIL: release detail has no delete control"; exit 1; }
+[[ "$(curl_silent -X DELETE "$WEB_URL")" == 403 ]] || { echo "FAIL: release delete bypassed CSRF"; exit 1; }
+CODE=$(curl -s -b "$COOKIES" -H "X-CSRF-Token: $CSRF" -H 'HX-Request: true' \
+    -X DELETE -D "$TMP/delete-headers" -o /dev/null -w '%{http_code}' "$WEB_URL")
+[[ "$CODE" == 200 ]] && grep -qi "^HX-Redirect: /projects/$PROJECT_ID/releases" "$TMP/delete-headers" \
+    || { echo "FAIL: HTMX release delete did not redirect ($CODE)"; exit 1; }
+[[ "$(curl_silent "$WEB_URL")" == 404 ]] || { echo "FAIL: web-deleted release is still readable"; exit 1; }
+echo "  Release delete via API and web: OK"
 
 # A6b: Secret variables are never returned in plaintext by ordinary
 # API reads (issue #29).
