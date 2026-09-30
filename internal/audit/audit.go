@@ -140,7 +140,14 @@ func Middleware(repo *repository.Repository) func(http.Handler) http.Handler {
 			}
 
 			var entityID sql.NullInt64
-			if routeID := chi.URLParam(r, "id"); routeID != "" {
+			routeID := chi.URLParam(r, "id")
+			if action == "delete_release" {
+				routeID = chi.URLParam(r, "releaseId")
+				if routeID == "" {
+					routeID = chi.URLParam(r, "relId")
+				}
+			}
+			if routeID != "" {
 				if v, err := strconv.ParseInt(routeID, 10, 64); err == nil {
 					entityID = sql.NullInt64{Int64: v, Valid: true}
 				}

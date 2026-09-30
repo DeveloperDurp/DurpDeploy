@@ -68,6 +68,9 @@ func (r *Repository) CreateDeploymentFromDeployment(
 	err := withSQLiteBusyRetry(ctx, func() error {
 		result = DeploymentResult{}
 		return r.WithTx(ctx, func(q *db.Queries) error {
+			if err := lockRelease(ctx, q, arg.ReleaseID); err != nil {
+				return err
+			}
 			source, err := q.GetDeployment(ctx, sourceDeploymentID)
 			if err != nil {
 				return fmt.Errorf("get source deployment: %w", err)
@@ -122,6 +125,9 @@ func (r *Repository) createDeployment(
 	q *db.Queries,
 	arg db.CreateDeploymentParams,
 ) (DeploymentResult, error) {
+	if err := lockRelease(ctx, q, arg.ReleaseID); err != nil {
+		return DeploymentResult{}, err
+	}
 	release, err := q.GetRelease(ctx, arg.ReleaseID)
 	if err != nil {
 		return DeploymentResult{}, fmt.Errorf("get release: %w", err)
