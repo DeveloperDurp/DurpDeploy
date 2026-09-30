@@ -18,7 +18,7 @@ type RunbookSave struct {
 }
 
 var ErrProjectHasActiveRunbook = errors.New(
-	"project has active or unconfirmed runbook executions",
+	"project has active or unconfirmed deployments",
 )
 
 var ErrEnvironmentHasActiveDeployment = errors.New(
@@ -56,7 +56,10 @@ func (r *Repository) DeleteEnvironment(ctx context.Context, id int64) error {
 func (r *Repository) DeleteProject(ctx context.Context, projectID int64) error {
 	return withSQLiteBusyRetry(ctx, func() error {
 		return r.WithTx(ctx, func(q *db.Queries) error {
-			active, err := q.HasActiveProjectRunbookExecution(
+			if _, err := q.LockProject(ctx, projectID); err != nil {
+				return err
+			}
+			active, err := q.HasActiveProjectDeployment(
 				ctx,
 				projectID,
 			)
@@ -66,7 +69,7 @@ func (r *Repository) DeleteProject(ctx context.Context, projectID int64) error {
 			if active != 0 {
 				return ErrProjectHasActiveRunbook
 			}
-			deployments, err := q.ListProjectRunbookDeploymentIDs(
+			deployments, err := q.ListProjectDeploymentIDs(
 				ctx,
 				projectID,
 			)

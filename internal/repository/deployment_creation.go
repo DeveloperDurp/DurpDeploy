@@ -141,6 +141,17 @@ func createDeploymentWithSteps(
 	stepsJSON string,
 ) (DeploymentResult, error) {
 	arg.AssignedAgentID = sql.NullString{}
+	release, err := q.GetRelease(ctx, arg.ReleaseID)
+	if err != nil {
+		return DeploymentResult{}, err
+	}
+	locked, err := q.LockProject(ctx, release.ProjectID)
+	if err != nil {
+		return DeploymentResult{}, err
+	}
+	if locked != 1 {
+		return DeploymentResult{}, sql.ErrNoRows
+	}
 	deployment, err := q.CreateDeployment(ctx, arg)
 	if err != nil {
 		return DeploymentResult{}, fmt.Errorf("insert deployment: %w", err)
