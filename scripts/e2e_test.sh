@@ -1282,23 +1282,32 @@ CODE=$(curl -s -H "Authorization: Bearer $API_TOKEN" -X DELETE -o /dev/null -w '
 [[ "$(api_get_code "$RELEASE_DELETE_URL")" == 404 ]] || { echo "FAIL: deleted release is still readable"; exit 1; }
 [[ "$(curl -s -H "Authorization: Bearer $API_TOKEN" -X DELETE -o /dev/null -w '%{http_code}' "$RELEASE_DELETE_URL")" == 404 ]] \
     || { echo "FAIL: repeated release delete did not return 404"; exit 1; }
-[[ "$(curl -s -H "Authorization: Bearer $API_TOKEN" -X DELETE -o /dev/null -w '%{http_code}' \
-    "$BASE/api/v1/projects/$PROJECT_ID/releases/$RELEASE_ID")" == 204 ]] \
-    || { echo "FAIL: release with completed deployments was not deleted"; exit 1; }
-[[ "$(api_get_code "$BASE/api/v1/deployments/$DEP_ID/status")" == 404 ]] \
-    || { echo "FAIL: release deletion retained deployment history"; exit 1; }
-[[ "$(api_get_code "$BASE/api/v1/projects/$PROJECT_ID/releases/$RELEASE_ID")" == 404 ]] \
-    || { echo "FAIL: release deletion retained release"; exit 1; }
 SCHEDULE_RELEASE=$(api_post '{"version":"delete-scheduled"}' "$BASE/api/v1/projects/$API_PROJECT_ID/releases")
 SCHEDULE_RELEASE_ID=$(echo "$SCHEDULE_RELEASE" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
 SCHEDULE=$(api_post "{\"release_id\":$SCHEDULE_RELEASE_ID,\"environment_id\":$ENV_ID,\"cron\":\"0 9 * * *\",\"enabled\":false}" \
     "$BASE/api/v1/projects/$API_PROJECT_ID/schedules")
 SCHEDULE_ID=$(echo "$SCHEDULE" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+DELETE_HISTORY=$(api_post "{\"release_id\":$SCHEDULE_RELEASE_ID,\"environment_id\":$ENV_ID}" \
+    "$BASE/api/v1/projects/$API_PROJECT_ID/deployments")
+DELETE_HISTORY_ID=$(echo "$DELETE_HISTORY" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+DELETE_HISTORY_STATUS=""
+for i in {1..300}; do
+    DELETE_HISTORY_STATUS=$(api_get "$BASE/api/v1/deployments/$DELETE_HISTORY_ID/status" \
+        | python3 -c 'import sys,json; print(json.load(sys.stdin)["status"])')
+    [[ "$DELETE_HISTORY_STATUS" =~ ^(failed|succeeded|cancelled)$ ]] && break
+    sleep 0.1
+done
+[[ "$DELETE_HISTORY_STATUS" =~ ^(failed|succeeded|cancelled)$ ]] \
+    || { echo "FAIL: delete fixture deployment did not finish"; exit 1; }
 [[ "$(curl -s -H "Authorization: Bearer $API_TOKEN" -X DELETE -o /dev/null -w '%{http_code}' \
     "$BASE/api/v1/projects/$API_PROJECT_ID/releases/$SCHEDULE_RELEASE_ID")" == 204 ]] \
     || { echo "FAIL: scheduled release was not deleted"; exit 1; }
 [[ "$(api_get_code "$BASE/api/v1/projects/$API_PROJECT_ID/schedules/$SCHEDULE_ID")" == 404 ]] \
     || { echo "FAIL: release deletion retained schedule"; exit 1; }
+[[ "$(api_get_code "$BASE/api/v1/deployments/$DELETE_HISTORY_ID/status")" == 404 ]] \
+    || { echo "FAIL: release deletion retained deployment history"; exit 1; }
+[[ "$(api_get_code "$BASE/api/v1/projects/$API_PROJECT_ID/releases/$SCHEDULE_RELEASE_ID")" == 404 ]] \
+    || { echo "FAIL: release deletion retained release"; exit 1; }
 
 WEB_DELETE=$(curl -s -b "$COOKIES" -X POST -d "version=delete-web&csrf_token=$CSRF" \
     -o /dev/null -w '%{http_code}' "$BASE/projects/$PROJECT_ID/releases")
