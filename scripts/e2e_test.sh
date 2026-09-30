@@ -29,7 +29,7 @@ ADMIN_EMAIL="${DURPDEPLOY_ADMIN_EMAIL:-e2e-admin@test.local}"
 ADMIN_PASS="${DURPDEPLOY_ADMIN_PASSWORD:-e2e-admin-password-1234}"
 BASH_IMAGE=docker.io/library/bash:5.2
 PYTHON_IMAGE=docker.io/library/python:3.12-alpine
-PWSH_IMAGE=mcr.microsoft.com/powershell:7.4-ubuntu-22.04
+PWSH_IMAGE=mcr.microsoft.com/powershell:latest
 CONTROL_PLANE_PORT=${DURPDEPLOY_E2E_CONTROL_PLANE_PORT:-$PORT}
 
 if [[ "$CLIENT_ONLY" == "1" ]]; then
@@ -939,6 +939,9 @@ INTERPRETER_ENV_ID=$(echo "$INTERPRETER_ENV" | python3 -c "import sys,json; prin
 [[ -n "$INTERPRETER_PROJECT_ID" && -n "$INTERPRETER_ENV_ID" ]] || {
     echo "FAIL: could not create interpreter project/environment"; exit 1;
 }
+api_post \
+    '{"name":"INTERPRETER_E2E","value":"container-value"}' \
+    "$BASE/api/v1/projects/$INTERPRETER_PROJECT_ID/variables" >/dev/null
 CODE=$(api_post_code '{"name":"no-image","script_body":"true"}' \
     "$BASE/api/v1/projects/$INTERPRETER_PROJECT_ID/steps")
 [[ "$CODE" == "400" ]] || { echo "FAIL: API accepted a local step without an image ($CODE)"; exit 1; }
@@ -961,7 +964,7 @@ INTERPRETER_BASH_STEP=$(api_post \
     "{\"name\":\"bash-step\",\"script_body\":\"echo bash-e2e\",\"interpreter\":\"bash\",\"container_image\":\"$BASH_IMAGE\"}" \
     "$BASE/api/v1/projects/$INTERPRETER_PROJECT_ID/steps")
 INTERPRETER_PYTHON_STEP=$(api_post \
-    "{\"name\":\"python-step\",\"script_body\":\"print(\\\"python-e2e\\\")\",\"interpreter\":\"python3\",\"container_image\":\"$PYTHON_IMAGE\"}" \
+    "{\"name\":\"python-step\",\"script_body\":\"import os; print(\\\"python-e2e=\\\" + os.environ[\\\"INTERPRETER_E2E\\\"])\",\"interpreter\":\"python3\",\"container_image\":\"$PYTHON_IMAGE\"}" \
     "$BASE/api/v1/projects/$INTERPRETER_PROJECT_ID/steps")
 INTERPRETER_PYTHON_STEP_ID=$(echo "$INTERPRETER_PYTHON_STEP" | python3 -c \
     "import sys,json; d=json.load(sys.stdin); assert d['interpreter']=='python3'; print(d['id'])")
@@ -988,7 +991,7 @@ assert re.search(r"<option[^>]*value=\"python3\"[^>]*selected", page), page
 '
 CODE=$(curl_silent -X PUT \
     --data-urlencode 'name=python-step' \
-    --data-urlencode 'script_body=print("python-e2e")' \
+    --data-urlencode 'script_body=import os; print("python-e2e=" + os.environ["INTERPRETER_E2E"])' \
     -d "interpreter=python3&sort_order=2&execution_target=local&container_image=$PYTHON_IMAGE&csrf_token=$CSRF" \
     "$BASE/projects/$INTERPRETER_PROJECT_ID/steps/$INTERPRETER_PYTHON_STEP_ID")
 [[ "$CODE" == "200" ]] || { echo "FAIL: web interpreter step update got $CODE"; exit 1; }
@@ -1093,17 +1096,17 @@ import json
 import sys
 
 lines = "\n".join(item["line"] for item in json.load(sys.stdin))
-assert "bash-e2e" in lines and "python-e2e" in lines, lines
+assert "bash-e2e" in lines and "python-e2e=container-value" in lines, lines
 '
 INTERPRETER_DEPLOYMENT_PAGE=$(curl_body \
     "$BASE/deployments/$INTERPRETER_DEPLOYMENT_ID")
 grep -q '>python3<' <<<"$INTERPRETER_DEPLOYMENT_PAGE" || {
     echo "FAIL: deployment page did not display python3"; exit 1;
 }
-echo "  Mixed Bash/Python deployment: OK"
+echo "  Real Bash/Python containers and default variables: OK"
 
 INTERPRETER_UPDATED_STEP=$(api_put \
-    "{\"name\":\"python-step\",\"script_body\":\"Write-Output refreshed\",\"interpreter\":\"powershell\",\"container_image\":\"$PWSH_IMAGE\",\"sort_order\":2}" \
+    "{\"name\":\"python-step\",\"script_body\":\"Write-Output \\\"powershell-e2e=\\u0024env:INTERPRETER_E2E\\\"\",\"interpreter\":\"powershell\",\"container_image\":\"$PWSH_IMAGE\",\"sort_order\":2}" \
     "$BASE/api/v1/projects/$INTERPRETER_PROJECT_ID/steps/$INTERPRETER_PYTHON_STEP_ID")
 echo "$INTERPRETER_UPDATED_STEP" | python3 -c \
     "import sys,json; assert json.load(sys.stdin)['interpreter']=='pwsh'"
@@ -1121,6 +1124,34 @@ INTERPRETER_REFRESHED_RELEASE_PAGE=$(curl_body \
 grep -q '>pwsh<' <<<"$INTERPRETER_REFRESHED_RELEASE_PAGE" || {
     echo "FAIL: refreshed release page did not display pwsh"; exit 1;
 }
+
+INTERPRETER_PWSH_DEPLOYMENT=$(api_post \
+    "{\"release_id\":$INTERPRETER_RELEASE_ID,\"environment_id\":$INTERPRETER_ENV_ID}" \
+    "$BASE/api/v1/projects/$INTERPRETER_PROJECT_ID/deployments")
+INTERPRETER_PWSH_DEPLOYMENT_ID=$(echo "$INTERPRETER_PWSH_DEPLOYMENT" | \
+    python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+for i in {1..600}; do
+    INTERPRETER_PWSH_STATUS=$(api_get \
+        "$BASE/api/v1/deployments/$INTERPRETER_PWSH_DEPLOYMENT_ID/status" \
+        | python3 -c "import sys,json; print(json.load(sys.stdin)['status'])")
+    [[ "$INTERPRETER_PWSH_STATUS" =~ ^(failed|succeeded|cancelled)$ ]] && break
+    sleep 0.2
+done
+[[ "$INTERPRETER_PWSH_STATUS" == "succeeded" ]] || {
+    echo "FAIL: PowerShell deployment status=$INTERPRETER_PWSH_STATUS"; exit 1;
+}
+INTERPRETER_PWSH_LOGS=$(api_get \
+    "$BASE/api/v1/deployments/$INTERPRETER_PWSH_DEPLOYMENT_ID/logs")
+echo "$INTERPRETER_PWSH_LOGS" | python3 -c '
+import json
+import sys
+
+lines = "\n".join(item["line"] for item in json.load(sys.stdin))
+assert "powershell-e2e=container-value" in lines, lines
+assert "PS />" not in lines, lines
+assert "\x1b" not in lines, repr(lines)
+'
+echo "  Real PowerShell container, default variables, and clean logs: OK"
 
 INTERPRETER_REDEPLOY=$(api_post '{}' \
     "$BASE/api/v1/deployments/$INTERPRETER_DEPLOYMENT_ID/redeploy")
@@ -1143,7 +1174,8 @@ import json
 import sys
 
 lines = "\n".join(item["line"] for item in json.load(sys.stdin))
-assert "python-e2e" in lines and "refreshed" not in lines, lines
+assert "python-e2e=container-value" in lines, lines
+assert "powershell-e2e" not in lines, lines
 '
 INTERPRETER_REDEPLOY_PAGE=$(curl_body \
     "$BASE/deployments/$INTERPRETER_REDEPLOY_ID")
