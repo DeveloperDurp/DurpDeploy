@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
@@ -10,12 +11,105 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"durpdeploy/internal/containerenv"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/interpreter"
 	"durpdeploy/internal/repository"
 	"durpdeploy/views/components"
 	"durpdeploy/views/pages"
 )
+
+// IsStepContainerRequired reports whether the execution target is the
+// server-container path that requires a container image (local only;
+// agent runs on the remote agent and must not carry one).
+func IsStepContainerRequired(target string) bool {
+	return target == "local"
+}
+
+// parseStepContainerConfig reads container_image and variable_names
+// from the form and validates them against the chosen execution target.
+// An empty error string means the values are valid; a non-empty
+// message is rendered into the form with a 422 status.
+func parseStepContainerConfig(
+	r *http.Request,
+	target string,
+) (string, []string, string) {
+	image := r.FormValue("container_image")
+	names := parseStepVariableNames(r.FormValue("variable_names"))
+	if err := validateStepContainerConfig(target, image, names); err != "" {
+		return "", nil, err
+	}
+	return image, names, ""
+}
+
+func parseStepVariableNames(raw string) []string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	names := make([]string, 0, len(parts))
+	for _, part := range parts {
+		name := strings.TrimSpace(part)
+		if name == "" {
+			continue
+		}
+		names = append(names, name)
+	}
+	return names
+}
+
+func validateStepContainerConfig(
+	target, image string,
+	variableNames []string,
+) string {
+	switch target {
+	case "local":
+		if image == "" {
+			return "Container image is required for local steps"
+		}
+		if !ValidContainerImage(image) {
+			return "Invalid container image"
+		}
+	case "agent":
+		if image != "" {
+			return "Agent steps cannot use a container image"
+		}
+	default:
+		if image != "" {
+			return "Agent steps cannot use a container image"
+		}
+	}
+	if len(variableNames) == 0 {
+		return ""
+	}
+	seen := make(map[string]struct{}, len(variableNames))
+	for _, name := range variableNames {
+		switch containerenv.ValidateName(name, target == "local") {
+		case containerenv.ErrIdentifier:
+			return "Variable names must be identifiers: letters, digits, underscores, and cannot start with a digit"
+		case containerenv.ErrReserved:
+			return "Variable name is reserved for the container runner"
+		}
+		if _, dup := seen[name]; dup {
+			return "Variable names contain duplicates"
+		}
+		seen[name] = struct{}{}
+	}
+	return ""
+}
+
+func marshalStepVariableNames(variableNames []string) string {
+	names := variableNames
+	if names == nil {
+		names = []string{}
+	}
+	encoded, err := json.Marshal(names)
+	if err != nil {
+		return "[]"
+	}
+	return string(encoded)
+}
 
 type StepHandler struct {
 	repo *repository.Repository
@@ -216,21 +310,10 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 				TimeoutSeconds:  timeoutSeconds,
 				ExecutionTarget: r.FormValue("execution_target"),
 			}
-			WriteFormError(
-				w,
-				r,
-				components.StepForm(
-					step,
-					projectID,
-					true, labels, agentLabel,
-					"Timeout must be a non-negative integer",
-				),
-				components.StepForm(
-					step,
-					projectID,
-					true, labels, agentLabel,
-					"Timeout must be a non-negative integer",
-				),
+			writeStepFormError(
+				w, r,
+				step, projectID, true, labels, agentLabel,
+				"Timeout must be a non-negative integer",
 			)
 			return
 		}
@@ -250,25 +333,35 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 				MaxRetries:      maxRetries,
 				ExecutionTarget: r.FormValue("execution_target"),
 			}
-			WriteFormError(
-				w,
-				r,
-				components.StepForm(
-					step,
-					projectID,
-					true, labels, agentLabel,
-					"Max retries must be a non-negative integer",
-				),
-				components.StepForm(
-					step,
-					projectID,
-					true, labels, agentLabel,
-					"Max retries must be a non-negative integer",
-				),
+			writeStepFormError(
+				w, r,
+				step, projectID, true, labels, agentLabel,
+				"Max retries must be a non-negative integer",
 			)
 			return
 		}
 		maxRetries = m
+	}
+
+	containerImage, variableNames, containerErr := parseStepContainerConfig(
+		r,
+		target,
+	)
+	if containerErr != "" {
+		step := db.Step{
+			ProjectID:       projectID,
+			Name:            name,
+			ScriptBody:      script,
+			TimeoutSeconds:  timeoutSeconds,
+			MaxRetries:      maxRetries,
+			ExecutionTarget: r.FormValue("execution_target"),
+			ContainerImage:  containerImage,
+			VariableNames:   marshalStepVariableNames(variableNames),
+		}
+		writeStepFormError(
+			w, r, step, projectID, true, labels, agentLabel, containerErr,
+		)
+		return
 	}
 
 	if name == "" {
@@ -279,52 +372,29 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 			TimeoutSeconds:  timeoutSeconds,
 			MaxRetries:      maxRetries,
 			ExecutionTarget: r.FormValue("execution_target"),
+			ContainerImage:  containerImage,
+			VariableNames:   marshalStepVariableNames(variableNames),
 		}
-		WriteFormError(
-			w,
-			r,
-			components.StepForm(
-				step,
-				projectID,
-				true,
-				labels,
-				agentLabel,
-				"Name is required",
-			),
-			components.StepForm(
-				step,
-				projectID,
-				true,
-				labels,
-				agentLabel,
-				"Name is required",
-			),
+		writeStepFormError(
+			w, r, step, projectID, true, labels, agentLabel,
+			"Name is required",
 		)
 		return
 	}
 	if placementErr != nil {
-		step := db.Step{ProjectID: projectID, Name: name, ScriptBody: script,
-			TimeoutSeconds: timeoutSeconds, MaxRetries: maxRetries,
-			ExecutionTarget: r.FormValue("execution_target")}
-		WriteFormError(
-			w,
-			r,
-			components.StepForm(
-				step,
-				projectID,
-				true,
-				labels,
-				agentLabel,
-				placementErr.Error(),
-			),
-			components.StepForm(
-				step,
-				projectID,
-				true,
-				labels,
-				agentLabel,
-				placementErr.Error(),
-			),
+		step := db.Step{
+			ProjectID:       projectID,
+			Name:            name,
+			ScriptBody:      script,
+			TimeoutSeconds:  timeoutSeconds,
+			MaxRetries:      maxRetries,
+			ExecutionTarget: r.FormValue("execution_target"),
+			ContainerImage:  containerImage,
+			VariableNames:   marshalStepVariableNames(variableNames),
+		}
+		writeStepFormError(
+			w, r, step, projectID, true, labels, agentLabel,
+			placementErr.Error(),
 		)
 		return
 	}
@@ -349,6 +419,8 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 		TimeoutSeconds: timeoutSeconds,
 		MaxRetries:     maxRetries,
 		Interpreter:    selectedInterpreter,
+		ContainerImage: containerImage,
+		VariableNames:  marshalStepVariableNames(variableNames),
 	}
 
 	var selectors []string
@@ -373,6 +445,43 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 	}
 
 	components.StepList(steps, projectID).Render(r.Context(), w)
+}
+
+// writeStepFormError centralizes the StepForm/StepEditRow re-render path
+// for HTMX vs. full-page 422 responses. Both branches render the same
+// form so the displayed input values match what the user submitted.
+func writeStepFormError(
+	w http.ResponseWriter,
+	r *http.Request,
+	step db.Step,
+	projectID int64,
+	isNew bool,
+	labels []string,
+	agentLabel, errorMsg string,
+) {
+	if isNew {
+		WriteFormError(
+			w,
+			r,
+			components.StepForm(
+				step, projectID, isNew, labels, agentLabel, errorMsg,
+			),
+			components.StepForm(
+				step, projectID, isNew, labels, agentLabel, errorMsg,
+			),
+		)
+		return
+	}
+	WriteFormError(
+		w,
+		r,
+		components.StepEditRow(
+			step, projectID, labels, agentLabel, errorMsg,
+		),
+		components.StepEditRow(
+			step, projectID, labels, agentLabel, errorMsg,
+		),
+	)
 }
 
 func (h *StepHandler) EditStepForm(w http.ResponseWriter, r *http.Request) {
@@ -436,12 +545,24 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid step ID", http.StatusBadRequest)
 		return
 	}
-	if _, err := h.getProjectStep(r, projectID, stepID); err != nil {
+	existing, err := h.getProjectStep(r, projectID, stepID)
+	if err != nil {
 		if err == sql.ErrNoRows {
 			http.NotFound(w, r)
 			return
 		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	// Legacy local steps were created before the server-container
+	// requirement and cannot be upgraded in place: the runner refuses
+	// to start them, and the user must recreate the step with an image.
+	if existing.ExecutionTarget == "local" && existing.ContainerImage == "" {
+		http.Error(
+			w,
+			"Legacy local step cannot be edited. Recreate it with a container image instead.",
+			http.StatusUnprocessableEntity,
+		)
 		return
 	}
 	labels, selected, err := h.placementOptions(r.Context(), stepID)
@@ -478,19 +599,9 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 				TimeoutSeconds:  timeoutSeconds,
 				ExecutionTarget: r.FormValue("execution_target"),
 			}
-			WriteFormError(
-				w,
-				r,
-				components.StepEditRow(
-					step,
-					projectID, labels, agentLabel,
-					"Timeout must be a non-negative integer",
-				),
-				components.StepEditRow(
-					step,
-					projectID, labels, agentLabel,
-					"Timeout must be a non-negative integer",
-				),
+			writeStepFormError(
+				w, r, step, projectID, false, labels, agentLabel,
+				"Timeout must be a non-negative integer",
 			)
 			return
 		}
@@ -512,23 +623,36 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 				MaxRetries:      maxRetries,
 				ExecutionTarget: r.FormValue("execution_target"),
 			}
-			WriteFormError(
-				w,
-				r,
-				components.StepEditRow(
-					step,
-					projectID, labels, agentLabel,
-					"Max retries must be a non-negative integer",
-				),
-				components.StepEditRow(
-					step,
-					projectID, labels, agentLabel,
-					"Max retries must be a non-negative integer",
-				),
+			writeStepFormError(
+				w, r, step, projectID, false, labels, agentLabel,
+				"Max retries must be a non-negative integer",
 			)
 			return
 		}
 		maxRetries = m
+	}
+
+	containerImage, variableNames, containerErr := parseStepContainerConfig(
+		r,
+		target,
+	)
+	if containerErr != "" {
+		step := db.Step{
+			ID:              stepID,
+			ProjectID:       projectID,
+			Name:            name,
+			ScriptBody:      script,
+			SortOrder:       sortOrder,
+			TimeoutSeconds:  timeoutSeconds,
+			MaxRetries:      maxRetries,
+			ExecutionTarget: r.FormValue("execution_target"),
+			ContainerImage:  containerImage,
+			VariableNames:   marshalStepVariableNames(variableNames),
+		}
+		writeStepFormError(
+			w, r, step, projectID, false, labels, agentLabel, containerErr,
+		)
+		return
 	}
 
 	if name == "" {
@@ -541,24 +665,12 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 			TimeoutSeconds:  timeoutSeconds,
 			MaxRetries:      maxRetries,
 			ExecutionTarget: r.FormValue("execution_target"),
+			ContainerImage:  containerImage,
+			VariableNames:   marshalStepVariableNames(variableNames),
 		}
-		WriteFormError(
-			w,
-			r,
-			components.StepEditRow(
-				step,
-				projectID,
-				labels,
-				agentLabel,
-				"Name is required",
-			),
-			components.StepEditRow(
-				step,
-				projectID,
-				labels,
-				agentLabel,
-				"Name is required",
-			),
+		writeStepFormError(
+			w, r, step, projectID, false, labels, agentLabel,
+			"Name is required",
 		)
 		return
 	}
@@ -572,24 +684,12 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 			TimeoutSeconds:  timeoutSeconds,
 			MaxRetries:      maxRetries,
 			ExecutionTarget: r.FormValue("execution_target"),
+			ContainerImage:  containerImage,
+			VariableNames:   marshalStepVariableNames(variableNames),
 		}
-		WriteFormError(
-			w,
-			r,
-			components.StepEditRow(
-				step,
-				projectID,
-				labels,
-				agentLabel,
-				placementErr.Error(),
-			),
-			components.StepEditRow(
-				step,
-				projectID,
-				labels,
-				agentLabel,
-				placementErr.Error(),
-			),
+		writeStepFormError(
+			w, r, step, projectID, false, labels, agentLabel,
+			placementErr.Error(),
 		)
 		return
 	}
@@ -602,6 +702,8 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 		TimeoutSeconds: timeoutSeconds,
 		MaxRetries:     maxRetries,
 		Interpreter:    selectedInterpreter,
+		ContainerImage: containerImage,
+		VariableNames:  marshalStepVariableNames(variableNames),
 	}
 
 	var selectors []string
@@ -741,6 +843,8 @@ func (h *StepHandler) ReorderStep(w http.ResponseWriter, r *http.Request) {
 					TimeoutSeconds: s.TimeoutSeconds,
 					MaxRetries:     s.MaxRetries,
 					Interpreter:    s.Interpreter,
+					ContainerImage: s.ContainerImage,
+					VariableNames:  s.VariableNames,
 				}
 				if _, err := qtx.UpdateStep(r.Context(), p); err != nil {
 					http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -762,6 +866,8 @@ func (h *StepHandler) ReorderStep(w http.ResponseWriter, r *http.Request) {
 					TimeoutSeconds: s.TimeoutSeconds,
 					MaxRetries:     s.MaxRetries,
 					Interpreter:    s.Interpreter,
+					ContainerImage: s.ContainerImage,
+					VariableNames:  s.VariableNames,
 				}
 				if _, err := qtx.UpdateStep(r.Context(), p); err != nil {
 					http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -779,6 +885,8 @@ func (h *StepHandler) ReorderStep(w http.ResponseWriter, r *http.Request) {
 		TimeoutSeconds: target.TimeoutSeconds,
 		MaxRetries:     target.MaxRetries,
 		Interpreter:    target.Interpreter,
+		ContainerImage: target.ContainerImage,
+		VariableNames:  target.VariableNames,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

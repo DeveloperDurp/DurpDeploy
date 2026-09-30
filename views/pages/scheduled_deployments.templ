@@ -139,6 +139,15 @@ templ ScheduledDeploymentRow(projectID int64, item ScheduledDeploymentListItem) 
 			}
 		</td>
 	</tr>
+	if item.Schedule.Enabled == 0 && item.Schedule.LastError != "" {
+		<tr data-schedule-last-error={ strconv.FormatInt(item.Schedule.ID, 10) }>
+			<td colspan="5" class="bg-base-300/60 px-2 py-2">
+				<div class="alert alert-warning text-sm" role="alert">
+					<span>Disabled — { item.Schedule.LastError }</span>
+				</div>
+			</td>
+		</tr>
+	}
 }
 
 templ ScheduledDeploymentQuickEditForm(projectID int64, item ScheduledDeploymentListItem) {
@@ -241,6 +250,11 @@ templ ScheduledDeploymentMobileRecord(projectID int64, item ScheduledDeploymentL
 			</div>
 			<div x-show="editing" data-mobile-schedule-edit={ strconv.FormatInt(item.Schedule.ID, 10) } class="card bg-base-100 p-3">
 				@ScheduledDeploymentQuickEditForm(projectID, item)
+			</div>
+		}
+		if item.Schedule.Enabled == 0 && item.Schedule.LastError != "" {
+			<div class="alert alert-warning text-sm" role="alert" data-schedule-last-error={ strconv.FormatInt(item.Schedule.ID, 10) }>
+				<span>Disabled — { item.Schedule.LastError }</span>
 			</div>
 		}
 	</li>

@@ -79,17 +79,18 @@ type AuditLog struct {
 }
 
 type Deployment struct {
-	ID              int64          `json:"id"`
-	ReleaseID       int64          `json:"release_id"`
-	EnvironmentID   int64          `json:"environment_id"`
-	Status          string         `json:"status"`
-	StartedAt       sql.NullInt64  `json:"started_at"`
-	FinishedAt      sql.NullInt64  `json:"finished_at"`
-	CreatedAt       int64          `json:"created_at"`
-	Forced          int64          `json:"forced"`
-	Note            sql.NullString `json:"note"`
-	AssignedAgentID sql.NullString `json:"assigned_agent_id"`
-	Kind            string         `json:"kind"`
+	ID                 int64          `json:"id"`
+	ReleaseID          int64          `json:"release_id"`
+	EnvironmentID      int64          `json:"environment_id"`
+	Status             string         `json:"status"`
+	StartedAt          sql.NullInt64  `json:"started_at"`
+	FinishedAt         sql.NullInt64  `json:"finished_at"`
+	CreatedAt          int64          `json:"created_at"`
+	Forced             int64          `json:"forced"`
+	Note               sql.NullString `json:"note"`
+	AssignedAgentID    sql.NullString `json:"assigned_agent_id"`
+	Kind               string         `json:"kind"`
+	ContainerNamespace sql.NullString `json:"container_namespace"`
 }
 
 type DeploymentApproval struct {
@@ -137,6 +138,8 @@ type DeploymentStep struct {
 	ExecutionTarget string        `json:"execution_target"`
 	CreatedAt       int64         `json:"created_at"`
 	Interpreter     string        `json:"interpreter"`
+	ContainerImage  string        `json:"container_image"`
+	VariableNames   string        `json:"variable_names"`
 }
 
 type DeploymentStepAttempt struct {
@@ -370,6 +373,7 @@ type RunbookSchedule struct {
 	Enabled       int64         `json:"enabled"`
 	LastFiredAt   sql.NullInt64 `json:"last_fired_at"`
 	CreatedAt     int64         `json:"created_at"`
+	LastError     string        `json:"last_error"`
 }
 
 type RunbookVersion struct {
@@ -392,6 +396,7 @@ type ScheduledDeployment struct {
 	Note          sql.NullString `json:"note"`
 	CreatedAt     int64          `json:"created_at"`
 	UpdatedAt     int64          `json:"updated_at"`
+	LastError     string         `json:"last_error"`
 }
 
 type Session struct {
@@ -416,6 +421,8 @@ type Step struct {
 	MaxRetries      int64  `json:"max_retries"`
 	ExecutionTarget string `json:"execution_target"`
 	Interpreter     string `json:"interpreter"`
+	ContainerImage  string `json:"container_image"`
+	VariableNames   string `json:"variable_names"`
 }
 
 type StepAgentSelector struct {
@@ -430,6 +437,8 @@ type StepTemplate struct {
 	CreatedAt       int64  `json:"created_at"`
 	ExecutionTarget string `json:"execution_target"`
 	Interpreter     string `json:"interpreter"`
+	ContainerImage  string `json:"container_image"`
+	VariableNames   string `json:"variable_names"`
 }
 
 type StepTemplateAgentSelector struct {
@@ -446,6 +455,8 @@ type StepTemplateVersion struct {
 	CreatedAt       int64  `json:"created_at"`
 	ExecutionTarget string `json:"execution_target"`
 	Interpreter     string `json:"interpreter"`
+	ContainerImage  string `json:"container_image"`
+	VariableNames   string `json:"variable_names"`
 }
 
 type StepTemplateVersionAgentSelector struct {

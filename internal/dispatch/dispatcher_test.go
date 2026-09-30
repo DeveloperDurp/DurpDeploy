@@ -8,7 +8,46 @@ import (
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/migrate"
 	"durpdeploy/internal/repository"
+	"durpdeploy/internal/runner"
 )
+
+func TestSelectRemoteVariablesUsesStepAllowlists(t *testing.T) {
+	variables := []runner.ResolvedVariable{
+		{Name: "FIRST", Value: "one"},
+		{Name: "SECRET", Value: "hidden", Secret: true},
+		{Name: "SECOND", Value: "two"},
+	}
+	selected, err := selectRemoteVariables([]db.DeploymentStep{
+		{Name: "one", VariableNames: `["SECOND"]`},
+		{Name: "two", VariableNames: `["FIRST"]`},
+	}, variables)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(selected) != 2 || selected[0].Name != "FIRST" ||
+		selected[1].Name != "SECOND" {
+		t.Fatalf("selected variables = %+v", selected)
+	}
+	all, err := selectRemoteVariables(
+		[]db.DeploymentStep{{Name: "none", VariableNames: `[]`}},
+		variables,
+	)
+	if err != nil || len(all) != len(variables) {
+		t.Fatalf("default variables = %+v: %v", all, err)
+	}
+}
+
+func TestSelectRemoteVariablesRejectsUnavailableAllowlistEntries(t *testing.T) {
+	_, err := selectRemoteVariables(
+		[]db.DeploymentStep{
+			{Name: "deploy", VariableNames: `["MISSING","AVAILABLE"]`},
+		},
+		[]runner.ResolvedVariable{{Name: "AVAILABLE", Value: "yes"}},
+	)
+	if err == nil || !strings.Contains(err.Error(), "MISSING") {
+		t.Fatalf("missing allowlisted variable accepted: %v", err)
+	}
+}
 
 func TestRuntimeMaintenanceExpiresPairings(t *testing.T) {
 	conn, err := migrate.Run(":memory:?_pragma=foreign_keys(1)")

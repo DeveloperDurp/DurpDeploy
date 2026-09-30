@@ -25,6 +25,8 @@ type stepTemplateRequest struct {
 	Interpreter     string   `json:"interpreter"`
 	ExecutionTarget string   `json:"execution_target"`
 	AgentSelectors  []string `json:"agent_selectors"`
+	ContainerImage  string   `json:"container_image"`
+	VariableNames   []string `json:"variable_names"`
 }
 
 // swagger:route GET /templates templates listTemplates
@@ -172,13 +174,24 @@ func (h *StepTemplateHandler) CreateTemplate(
 	if !ok {
 		return
 	}
+	image, variableNames, ok := validateContainerConfig(
+		w,
+		target,
+		req.ContainerImage,
+		req.VariableNames,
+	)
+	if !ok {
+		return
+	}
 
 	tpl, err := h.repo.CreateStepTemplateWithPlacement(
 		r.Context(),
 		db.CreateStepTemplateParams{
-			Name:        name,
-			ScriptBody:  req.ScriptBody,
-			Interpreter: selectedInterpreter,
+			Name:           name,
+			ScriptBody:     req.ScriptBody,
+			Interpreter:    selectedInterpreter,
+			ContainerImage: image,
+			VariableNames:  marshalVariableNames(variableNames),
 		},
 		target,
 		selectors,
@@ -308,14 +321,25 @@ func (h *StepTemplateHandler) UpdateTemplate(
 	if !ok {
 		return
 	}
+	image, variableNames, ok := validateContainerConfig(
+		w,
+		target,
+		req.ContainerImage,
+		req.VariableNames,
+	)
+	if !ok {
+		return
+	}
 
 	updated, err := h.repo.UpdateStepTemplateWithPlacement(
 		r.Context(),
 		db.UpdateStepTemplateParams{
-			ID:          id,
-			Name:        name,
-			ScriptBody:  req.ScriptBody,
-			Interpreter: selectedInterpreter,
+			ID:             id,
+			Name:           name,
+			ScriptBody:     req.ScriptBody,
+			Interpreter:    selectedInterpreter,
+			ContainerImage: image,
+			VariableNames:  marshalVariableNames(variableNames),
 		},
 		target,
 		selectors,

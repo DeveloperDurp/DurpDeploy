@@ -5,6 +5,7 @@ import (
 	"durpdeploy/internal/db"
 	"durpdeploy/views/components"
 	"durpdeploy/views/layouts"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -29,6 +30,64 @@ func runbookScheduleVersion(schedule db.RunbookSchedule, versions []db.RunbookVe
 		}
 	}
 	return "Unknown version"
+}
+
+// runbookStepView is the per-step shape the runbook detail page renders.
+// It mirrors the JSON the snapshot stores (see runner.deploymentStep) and
+// intentionally does not share its definition with releases.templ — the
+// parallel editor owns that struct. The fields here are what the
+// historical view needs to render and to honestly flag legacy steps as
+// not runnable on the host.
+type runbookStepView struct {
+	Name            string   `json:"name"`
+	ScriptBody      string   `json:"script_body"`
+	Interpreter     string   `json:"interpreter"`
+	SortOrder       int64    `json:"sort_order"`
+	TimeoutSeconds  int64    `json:"timeout_seconds"`
+	MaxRetries      int64    `json:"max_retries"`
+	ExecutionTarget string   `json:"execution_target"`
+	AgentSelectors  []string `json:"agent_selectors"`
+	ContainerImage  string   `json:"container_image"`
+	VariableNames   []string `json:"variable_names"`
+}
+
+func parseRunbookSteps(stepsJSON string) []runbookStepView {
+	var steps []runbookStepView
+	if err := json.Unmarshal([]byte(stepsJSON), &steps); err != nil {
+		return nil
+	}
+	return steps
+}
+
+func runbookStepInterpreter(step runbookStepView) string {
+	if step.Interpreter == "" {
+		return "bash"
+	}
+	return step.Interpreter
+}
+
+// runbookStepTargetLabel renders the stored execution_target as the
+// user-facing label. "local" is the new server-container path; legacy
+// host steps (local without a container image) are still labelled here
+// but flagged separately as not runnable.
+func runbookStepTargetLabel(step runbookStepView) string {
+	if step.ExecutionTarget == "" || step.ExecutionTarget == "local" {
+		return "Server container"
+	}
+	return step.ExecutionTarget
+}
+
+// runbookStepIsLegacyHost reports whether a step stored in a historical
+// runbook version cannot be executed by the current runner: agent steps
+// still work, every other target requires a container image, and legacy
+// versions saved before the server-container requirement do not have one.
+// ponytail: keep this check local to the view — the runner is the real
+// gate; the UI just refuses to silently promise a runnable book.
+func runbookStepIsLegacyHost(step runbookStepView) bool {
+	if step.ExecutionTarget == "agent" {
+		return false
+	}
+	return step.ContainerImage == ""
 }
 
 templ RunbookDetailPage(project db.Project, book db.Runbook, versions []db.RunbookVersion, selected db.RunbookVersion, stepsJSON string, schedules []db.RunbookSchedule, environments []db.Environment, scheduleEnvironments []db.Environment, currentPath string) {
@@ -63,12 +122,23 @@ templ RunbookDetailPage(project db.Project, book db.Runbook, versions []db.Runbo
 			<div class="card bg-base-200 p-4">
 				<h2 class="text-xl font-bold mb-3">Version { strconv.FormatInt(selected.Version, 10) } steps</h2>
 				<div class="space-y-3">
-					for _, step := range parseReleaseSteps(stepsJSON) {
+					for _, step := range parseRunbookSteps(stepsJSON) {
 						<div class="rounded bg-base-300 p-3 space-y-2">
 							<h3 class="font-semibold">{ strconv.FormatInt(step.SortOrder+1, 10) }. { step.Name }</h3>
-							<p class="text-sm">{ releaseStepInterpreter(step) } · { step.ExecutionTarget } · Timeout { strconv.FormatInt(step.TimeoutSeconds, 10) }s · Retries { strconv.FormatInt(step.MaxRetries, 10) }</p>
+							<p class="text-sm">{ runbookStepInterpreter(step) } · { runbookStepTargetLabel(step) } · Timeout { strconv.FormatInt(step.TimeoutSeconds, 10) }s · Retries { strconv.FormatInt(step.MaxRetries, 10) }</p>
+							if runbookStepIsLegacyHost(step) {
+								<div class="alert alert-warning text-sm" role="alert">
+									<span>Legacy host step: no container image. This step cannot run on the host anymore — save a new version with a container image and the variable names the script needs.</span>
+								</div>
+							}
 							if len(step.AgentSelectors) > 0 {
 								<p class="text-sm">Agent labels: { strings.Join(step.AgentSelectors, ", ") }</p>
+							}
+							if step.ContainerImage != "" {
+								<p class="text-sm">Container image: <code class="font-mono">{ step.ContainerImage }</code></p>
+							}
+							if len(step.VariableNames) > 0 {
+								<p class="text-sm">Variable names: { strings.Join(step.VariableNames, ", ") }</p>
 							}
 							<pre class="whitespace-pre-wrap break-words font-mono text-sm">{ step.ScriptBody }</pre>
 						</div>
@@ -112,12 +182,17 @@ templ RunbookDetailPage(project db.Project, book db.Runbook, versions []db.Runbo
 								</p>
 								<p><span class="font-semibold">Next run:</span> { formatUnixTime(schedule.NextRunAt) }</p>
 								@RunbookScheduleAction(project.ID, book.ID, schedule)
+								if schedule.Enabled == 0 && schedule.LastError != "" {
+									<div class="alert alert-warning text-sm" role="alert" data-runbook-schedule-last-error={ strconv.FormatInt(schedule.ID, 10) }>
+										<span>Disabled — { schedule.LastError }</span>
+									</div>
+								}
 							</div>
 						}
 					</div>
 					<div class="hidden md:block">
 						<table class="table table-zebra table-fixed w-full">
-								<thead><tr><th class="w-1/5">Cron</th><th class="w-1/5">Environment</th><th class="w-1/5">Version</th><th class="w-1/5">Next run</th><th class="w-1/5">Action</th></tr></thead>
+							<thead><tr><th class="w-1/5">Cron</th><th class="w-1/5">Environment</th><th class="w-1/5">Version</th><th class="w-1/5">Next run</th><th class="w-1/5">Action</th></tr></thead>
 							<tbody>
 								for _, schedule := range schedules {
 									<tr>
@@ -125,9 +200,19 @@ templ RunbookDetailPage(project db.Project, book db.Runbook, versions []db.Runbo
 										<td class="truncate">{ runbookScheduleEnvironment(schedule, scheduleEnvironments) }</td>
 										<td>{ runbookScheduleVersion(schedule, versions) }</td>
 										<td class="whitespace-nowrap">{ formatUnixTime(schedule.NextRunAt) }</td>
-										<td>@RunbookScheduleAction(project.ID, book.ID, schedule)
-</td>
+										<td>
+											@RunbookScheduleAction(project.ID, book.ID, schedule)
+										</td>
 									</tr>
+									if schedule.Enabled == 0 && schedule.LastError != "" {
+										<tr data-runbook-schedule-last-error={ strconv.FormatInt(schedule.ID, 10) }>
+											<td colspan="5" class="bg-base-300/60 px-2 py-2">
+												<div class="alert alert-warning text-sm" role="alert">
+													<span>Disabled — { schedule.LastError }</span>
+												</div>
+											</td>
+										</tr>
+									}
 								}
 							</tbody>
 						</table>
@@ -231,7 +316,9 @@ templ RunbookExecutionStatusUpdate(projectID int64, execution db.GetRunbookExecu
 }
 
 templ RunbookExecutionActions(projectID int64, execution db.GetRunbookExecutionRow, outOfBand bool) {
-	<div id="runbook-execution-actions" class="flex flex-wrap gap-2"
+	<div
+		id="runbook-execution-actions"
+		class="flex flex-wrap gap-2"
 		if outOfBand {
 			hx-swap-oob="outerHTML"
 		}

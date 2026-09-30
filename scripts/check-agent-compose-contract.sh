@@ -4,6 +4,7 @@ set -euo pipefail
 grep -Fq 'mkdir -p /var/lib/durpdeploy/agent-identity' Dockerfile
 grep -Fq '/data /var/lib/durpdeploy/agent-identity' Dockerfile
 grep -Fq 'chmod 0700 /data /var/lib/durpdeploy/agent-identity' Dockerfile
+grep -Fq 'ENTRYPOINT ["/usr/local/bin/container-entrypoint"]' Dockerfile
 
 for file in compose.yml compose.example.yml; do
 	app=$(awk '
@@ -32,9 +33,9 @@ for file in compose.yml compose.example.yml; do
 	grep -Fq 'DURPDEPLOY_EXECUTION_BOUNDARY: service' "$file" ||
 		grep -Fq 'DURPDEPLOY_EXECUTION_BOUNDARY=service' "$file"
 	grep -Fq 'cap_drop: [ALL]' "$file"
-	grep -Fq 'user: "10001:10001"' <<<"$app"
-	if grep -Eq '^[[:space:]]+cap_add:' <<<"$app"; then
-		printf 'agent compose contract: app grants a Linux capability in %s\n' "$file" >&2
+	grep -Fq 'cap_add: [SETUID, SETGID]' <<<"$app"
+	if ! grep -Eq '^[[:space:]]+user: "0"' <<<"$app"; then
+		printf 'agent compose contract: app does not enable the identity entrypoint in %s\n' "$file" >&2
 		exit 1
 	fi
 	grep -Fq 'read_only: true' "$file"

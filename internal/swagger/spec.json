@@ -1965,6 +1965,12 @@
               "$ref": "#/definitions/NotFoundError"
             }
           },
+          "409": {
+            "description": "Conflict error response.",
+            "schema": {
+              "$ref": "#/definitions/ConflictError"
+            }
+          },
           "500": {
             "description": "Server error response.",
             "schema": {
@@ -3427,6 +3433,12 @@
               "$ref": "#/definitions/NotFoundError"
             }
           },
+          "409": {
+            "description": "Conflict error response.",
+            "schema": {
+              "$ref": "#/definitions/ConflictError"
+            }
+          },
           "422": {
             "description": "Validation error response.",
             "schema": {
@@ -4204,6 +4216,12 @@
               "$ref": "#/definitions/NotFoundError"
             }
           },
+          "409": {
+            "description": "Conflict error response.",
+            "schema": {
+              "$ref": "#/definitions/ConflictError"
+            }
+          },
           "500": {
             "description": "Server error response.",
             "schema": {
@@ -4556,6 +4574,18 @@
               "$ref": "#/definitions/RunbookSaveResponse"
             }
           },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
+          "409": {
+            "description": "Conflict error response.",
+            "schema": {
+              "$ref": "#/definitions/ConflictError"
+            }
+          },
           "422": {
             "description": "Validation error response.",
             "schema": {
@@ -4644,6 +4674,18 @@
               "$ref": "#/definitions/RunbookSaveResponse"
             }
           },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
+          "409": {
+            "description": "Conflict error response.",
+            "schema": {
+              "$ref": "#/definitions/ConflictError"
+            }
+          },
           "422": {
             "description": "Validation error response.",
             "schema": {
@@ -4696,6 +4738,12 @@
             "description": "Created",
             "schema": {
               "$ref": "#/definitions/RunbookExecution"
+            }
+          },
+          "409": {
+            "description": "Conflict error response.",
+            "schema": {
+              "$ref": "#/definitions/ConflictError"
             }
           },
           "422": {
@@ -4784,6 +4832,12 @@
             "description": "Created",
             "schema": {
               "$ref": "#/definitions/RunbookSchedule"
+            }
+          },
+          "409": {
+            "description": "Conflict error response.",
+            "schema": {
+              "$ref": "#/definitions/ConflictError"
             }
           },
           "422": {
@@ -5021,6 +5075,12 @@
               "$ref": "#/definitions/NotFoundError"
             }
           },
+          "409": {
+            "description": "Conflict error response.",
+            "schema": {
+              "$ref": "#/definitions/ConflictError"
+            }
+          },
           "422": {
             "description": "Validation error response.",
             "schema": {
@@ -5183,6 +5243,12 @@
               "$ref": "#/definitions/NotFoundError"
             }
           },
+          "409": {
+            "description": "Conflict error response.",
+            "schema": {
+              "$ref": "#/definitions/ConflictError"
+            }
+          },
           "422": {
             "description": "Validation error response.",
             "schema": {
@@ -5322,6 +5388,12 @@
             "description": "Not found error response.",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "409": {
+            "description": "Conflict error response.",
+            "schema": {
+              "$ref": "#/definitions/ConflictError"
             }
           },
           "500": {
@@ -8404,6 +8476,10 @@
           "format": "int64",
           "x-go-name": "ID"
         },
+        "last_error": {
+          "type": "string",
+          "x-go-name": "LastError"
+        },
         "last_fired_at": {
           "$ref": "#/definitions/swaggerSQLNullInteger"
         },
@@ -8485,6 +8561,10 @@
           },
           "x-go-name": "AgentSelectors"
         },
+        "container_image": {
+          "type": "string",
+          "x-go-name": "ContainerImage"
+        },
         "execution_target": {
           "type": "string",
           "x-go-name": "ExecutionTarget"
@@ -8515,6 +8595,13 @@
           "type": "integer",
           "format": "int64",
           "x-go-name": "TimeoutSeconds"
+        },
+        "variable_names": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "x-go-name": "VariableNames"
         }
       },
       "x-go-name": "swaggerRunbookStep",
@@ -8638,6 +8725,10 @@
           "format": "int64",
           "x-go-name": "ID"
         },
+        "last_error": {
+          "type": "string",
+          "x-go-name": "LastError"
+        },
         "last_fired_at": {
           "type": "integer",
           "format": "int64",
@@ -8744,6 +8835,11 @@
           },
           "x-go-name": "AgentSelectors"
         },
+        "container_image": {
+          "description": "Container image the step runs in on the server; mandatory for\nlocal steps and rejected for agent steps.",
+          "type": "string",
+          "x-go-name": "ContainerImage"
+        },
         "created_at": {
           "type": "integer",
           "format": "int64",
@@ -8789,6 +8885,14 @@
           "type": "integer",
           "format": "int64",
           "x-go-name": "TimeoutSeconds"
+        },
+        "variable_names": {
+          "description": "Optional variable-name restriction. Empty passes all variables.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "x-go-name": "VariableNames"
         }
       },
       "x-go-name": "swaggerStep",
@@ -8813,6 +8917,11 @@
             "type": "string"
           },
           "x-go-name": "AgentSelectors"
+        },
+        "container_image": {
+          "description": "Container image the step runs in on the server; mandatory for\nlocal steps and rejected for agent steps.",
+          "type": "string",
+          "x-go-name": "ContainerImage"
         },
         "execution_target": {
           "type": "string",
@@ -8844,6 +8953,14 @@
           "type": "integer",
           "format": "int64",
           "x-go-name": "TimeoutSeconds"
+        },
+        "variable_names": {
+          "description": "Optional variable-name restriction. Empty passes all variables;\nentries must be identifiers without duplicates.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "x-go-name": "VariableNames"
         }
       },
       "x-go-name": "swaggerStepRequest",
@@ -8859,6 +8976,10 @@
             "type": "string"
           },
           "x-go-name": "AgentSelectors"
+        },
+        "container_image": {
+          "type": "string",
+          "x-go-name": "ContainerImage"
         },
         "created_at": {
           "type": "integer",
@@ -8885,6 +9006,13 @@
         "script_body": {
           "type": "string",
           "x-go-name": "ScriptBody"
+        },
+        "variable_names": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "x-go-name": "VariableNames"
         }
       },
       "x-go-name": "swaggerStepTemplate",
@@ -8910,6 +9038,11 @@
           },
           "x-go-name": "AgentSelectors"
         },
+        "container_image": {
+          "description": "Container image the step runs in on the server; mandatory for\nlocal steps and rejected for agent steps.",
+          "type": "string",
+          "x-go-name": "ContainerImage"
+        },
         "execution_target": {
           "type": "string",
           "x-go-name": "ExecutionTarget"
@@ -8925,6 +9058,14 @@
         "script_body": {
           "type": "string",
           "x-go-name": "ScriptBody"
+        },
+        "variable_names": {
+          "description": "Optional variable-name restriction. Empty passes all variables;\nentries must be identifiers without duplicates.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "x-go-name": "VariableNames"
         }
       },
       "x-go-name": "swaggerStepTemplateRequest",
@@ -8940,6 +9081,10 @@
             "type": "string"
           },
           "x-go-name": "AgentSelectors"
+        },
+        "container_image": {
+          "type": "string",
+          "x-go-name": "ContainerImage"
         },
         "created_at": {
           "type": "integer",
@@ -8971,6 +9116,13 @@
           "type": "integer",
           "format": "int64",
           "x-go-name": "TemplateID"
+        },
+        "variable_names": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "x-go-name": "VariableNames"
         },
         "version_number": {
           "type": "integer",

@@ -3,6 +3,8 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"strings"
 
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/repository"
@@ -52,6 +54,9 @@ func RefreshReleaseSnapshot(
 	repo *repository.Repository,
 	release db.Release,
 ) (db.Release, error) {
+	if err := repo.ValidateExecutableRelease(ctx, release.ID); err != nil {
+		return db.Release{}, err
+	}
 	snapshot, err := buildReleaseSnapshot(ctx, repo, release.ProjectID)
 	if err != nil {
 		return db.Release{}, err
@@ -145,6 +150,26 @@ type releaseStepSnapshot struct {
 	MaxRetries      int64    `json:"max_retries"`
 	ExecutionTarget string   `json:"execution_target"`
 	AgentSelectors  []string `json:"agent_selectors,omitempty"`
+	ContainerImage  string   `json:"container_image"`
+	VariableNames   []string `json:"variable_names"`
+}
+
+// decodeStepVariableNames parses the JSON array text stored in the
+// steps.variable_names column. The pre-migration legacy value is an
+// empty string, which decodes to the unrestricted default.
+func decodeStepVariableNames(raw string) ([]string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return []string{}, nil
+	}
+	var names []string
+	if err := json.Unmarshal([]byte(raw), &names); err != nil {
+		return nil, fmt.Errorf("decode variable_names %q: %w", raw, err)
+	}
+	if names == nil {
+		names = []string{}
+	}
+	return names, nil
 }
 
 func releaseStepSnapshots(
@@ -158,6 +183,10 @@ func releaseStepSnapshots(
 		if err != nil {
 			return nil, err
 		}
+		variableNames, err := decodeStepVariableNames(step.VariableNames)
+		if err != nil {
+			return nil, err
+		}
 		snapshots[index] = releaseStepSnapshot{
 			Name:            step.Name,
 			ScriptBody:      step.ScriptBody,
@@ -167,6 +196,8 @@ func releaseStepSnapshots(
 			MaxRetries:      step.MaxRetries,
 			ExecutionTarget: step.ExecutionTarget,
 			AgentSelectors:  selectors,
+			ContainerImage:  step.ContainerImage,
+			VariableNames:   variableNames,
 		}
 	}
 	return snapshots, nil

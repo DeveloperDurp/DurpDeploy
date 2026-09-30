@@ -46,6 +46,11 @@ type swaggerStep struct {
 	MaxRetries      int64    `json:"max_retries"`
 	ExecutionTarget string   `json:"execution_target"`
 	AgentSelectors  []string `json:"agent_selectors"`
+	// Container image the step runs in on the server; mandatory for
+	// local steps and rejected for agent steps.
+	ContainerImage string `json:"container_image"`
+	// Optional variable-name restriction. Empty passes all variables.
+	VariableNames []string `json:"variable_names"`
 }
 
 // StepTemplate is a reusable step template.
@@ -58,6 +63,8 @@ type swaggerStepTemplate struct {
 	CreatedAt       int64    `json:"created_at"`
 	ExecutionTarget string   `json:"execution_target"`
 	AgentSelectors  []string `json:"agent_selectors"`
+	ContainerImage  string   `json:"container_image"`
+	VariableNames   []string `json:"variable_names"`
 }
 
 // StepTemplateVersion is a historical version of a step template.
@@ -72,6 +79,8 @@ type swaggerStepTemplateVersion struct {
 	CreatedAt       int64    `json:"created_at"`
 	ExecutionTarget string   `json:"execution_target"`
 	AgentSelectors  []string `json:"agent_selectors"`
+	ContainerImage  string   `json:"container_image"`
+	VariableNames   []string `json:"variable_names"`
 }
 
 // Release is an immutable snapshot of project steps and variables.
@@ -142,6 +151,7 @@ type swaggerScheduledDeployment struct {
 	NextRunAt     int64   `json:"next_run_at"`
 	Enabled       int64   `json:"enabled"`
 	LastFiredAt   *int64  `json:"last_fired_at"`
+	LastError     string  `json:"last_error"`
 	Note          *string `json:"note"`
 	CreatedAt     int64   `json:"created_at"`
 	UpdatedAt     int64   `json:"updated_at"`
@@ -376,6 +386,12 @@ type swaggerStepRequest struct {
 	MaxRetries      int64    `json:"max_retries"`
 	ExecutionTarget string   `json:"execution_target"`
 	AgentSelectors  []string `json:"agent_selectors"`
+	// Container image the step runs in on the server; mandatory for
+	// local steps and rejected for agent steps.
+	ContainerImage string `json:"container_image"`
+	// Optional variable-name restriction. Empty passes all variables;
+	// entries must be identifiers without duplicates.
+	VariableNames []string `json:"variable_names"`
 }
 
 // ReorderStepsRequest reorders project steps.
@@ -392,6 +408,12 @@ type swaggerStepTemplateRequest struct {
 	Interpreter     string   `json:"interpreter"`
 	ExecutionTarget string   `json:"execution_target"`
 	AgentSelectors  []string `json:"agent_selectors"`
+	// Container image the step runs in on the server; mandatory for
+	// local steps and rejected for agent steps.
+	ContainerImage string `json:"container_image"`
+	// Optional variable-name restriction. Empty passes all variables;
+	// entries must be identifiers without duplicates.
+	VariableNames []string `json:"variable_names"`
 }
 
 // VariableRequest is the body for create/update variable.
@@ -697,6 +719,8 @@ type swaggerRunbookStep struct {
 	MaxRetries      int64    `json:"max_retries"`
 	ExecutionTarget string   `json:"execution_target"`
 	AgentSelectors  []string `json:"agent_selectors"`
+	ContainerImage  string   `json:"container_image"`
+	VariableNames   []string `json:"variable_names"`
 }
 
 // swagger:model RunbookSaveRequest
@@ -771,6 +795,7 @@ type swaggerRunbookSchedule struct {
 	NextRunAt     int64                 `json:"next_run_at"`
 	Enabled       int64                 `json:"enabled"`
 	LastFiredAt   swaggerSQLNullInteger `json:"last_fired_at"`
+	LastError     string                `json:"last_error"`
 	CreatedAt     int64                 `json:"created_at"`
 }
 

@@ -19,9 +19,9 @@ func TestRetryDeploymentCreatesLocalSnapshot(t *testing.T) {
 	release := seedRelease(t, harness.repo, project.ID)
 	const mixedSteps = `[` +
 		`{"name":"bash-step","script_body":"echo hi",` +
-		`"interpreter":"bash","execution_target":"local"},` +
+		`"interpreter":"bash","execution_target":"local","container_image":"alpine:3.20"},` +
 		`{"name":"python-step","script_body":"print('ok')",` +
-		`"interpreter":"python3","execution_target":"local"}]`
+		`"interpreter":"python3","execution_target":"local","container_image":"python:3.12"}]`
 	if _, err := harness.repo.Queries.UpdateRelease(
 		context.Background(),
 		db.UpdateReleaseParams{
@@ -133,5 +133,56 @@ func TestRetryDeploymentCreatesLocalSnapshot(t *testing.T) {
 				step.Name, step.Interpreter, want,
 			)
 		}
+	}
+}
+
+func TestDeploymentRetryAndRedeployRejectUnconfirmedCleanup(t *testing.T) {
+	// Given
+	harness := newAPIHarness(t)
+	project := seedProject(t, harness.repo)
+	environment := seedEnv(t, harness.repo)
+	release := seedRelease(t, harness.repo, project.ID)
+	source, err := harness.repo.Queries.CreateDeployment(
+		t.Context(),
+		db.CreateDeploymentParams{
+			ReleaseID: release.ID, EnvironmentID: environment.ID,
+			Status: "cleanup_unconfirmed",
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, action := range []struct {
+		name string
+		call func(http.ResponseWriter, *http.Request)
+	}{
+		{"retry", api.NewDeploymentHandler(harness.repo, harness.runner).RetryDeployment},
+		{"redeploy", api.NewDeploymentHandler(harness.repo, harness.runner).RedeployDeployment},
+	} {
+		t.Run(action.name, func(t *testing.T) {
+			// When
+			request := withAPIURLParam(httptest.NewRequest(
+				http.MethodPost,
+				fmt.Sprintf(
+					"/api/v1/deployments/%d/%s",
+					source.ID,
+					action.name,
+				),
+				nil,
+			),
+				"id", fmt.Sprint(source.ID))
+			recorder := httptest.NewRecorder()
+			action.call(recorder, request)
+
+			// Then
+			if recorder.Code != http.StatusConflict {
+				t.Fatalf(
+					"status=%d body=%s",
+					recorder.Code,
+					recorder.Body.String(),
+				)
+			}
+		})
 	}
 }

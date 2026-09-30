@@ -175,7 +175,8 @@ func TestStepTemplate_SaveAndApplyPreservesAgentPlacement(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list template selectors: %v", err)
 	}
-	if tpl.ExecutionTarget != "agent" || len(selectors) != 1 || selectors[0] != "linux" {
+	if tpl.ExecutionTarget != "agent" || len(selectors) != 1 ||
+		selectors[0] != "linux" {
 		t.Fatalf("template placement = %q %v", tpl.ExecutionTarget, selectors)
 	}
 	versions, err := h.repo.Queries.ListStepTemplateVersions(ctx, templateID)
@@ -220,7 +221,10 @@ func TestStepTemplate_SaveAndApplyPreservesAgentPlacement(t *testing.T) {
 	if len(steps) != 2 || steps[1].ExecutionTarget != "agent" {
 		t.Fatalf("applied steps = %v", steps)
 	}
-	appliedSelectors, err := h.repo.Queries.ListStepAgentSelectors(ctx, steps[1].ID)
+	appliedSelectors, err := h.repo.Queries.ListStepAgentSelectors(
+		ctx,
+		steps[1].ID,
+	)
 	if err != nil {
 		t.Fatalf("list applied selectors: %v", err)
 	}
@@ -229,11 +233,52 @@ func TestStepTemplate_SaveAndApplyPreservesAgentPlacement(t *testing.T) {
 	}
 }
 
+func TestStepTemplate_InsertRejectsLegacyLocalTemplateWithoutImage(
+	t *testing.T,
+) {
+	h := newStepTemplateHarness(t)
+	project, err := h.repo.Queries.CreateProject(
+		t.Context(), db.CreateProjectParams{Name: "legacy-template-project"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tpl, err := h.repo.Queries.CreateStepTemplate(
+		t.Context(),
+		db.CreateStepTemplateParams{
+			Name: "legacy-local", ScriptBody: "hostname",
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := h.client.Post(
+		fmt.Sprintf(
+			"%s/projects/%d/steps/from-template/%d",
+			h.server.URL, project.ID, tpl.ID,
+		),
+		"application/x-www-form-urlencoded",
+		nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("insert status = %d, want 422", resp.StatusCode)
+	}
+	steps, err := h.repo.Queries.ListStepsByProject(t.Context(), project.ID)
+	if err != nil || len(steps) != 0 {
+		t.Fatalf("inserted legacy steps = %+v: %v", steps, err)
+	}
+}
+
 func (h *stepTemplateHarness) createTemplate(name, script string) int {
 	h.t.Helper()
 	form := url.Values{}
 	form.Set("name", name)
 	form.Set("script_body", script)
+	form.Set("container_image", "alpine:3.20")
 	resp, err := h.client.PostForm(
 		h.server.URL+"/templates",
 		form,
@@ -252,6 +297,7 @@ func (h *stepTemplateHarness) updateTemplate(
 	form := url.Values{}
 	form.Set("name", name)
 	form.Set("script_body", script)
+	form.Set("container_image", "alpine:3.20")
 	req, _ := http.NewRequest(
 		"PUT",
 		fmt.Sprintf("%s/templates/%d", h.server.URL, id),

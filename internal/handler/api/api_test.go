@@ -33,7 +33,7 @@ type harness struct {
 	broker *runner.LogBroker
 }
 
-func newAPIHarness(t *testing.T) *harness {
+func newAPIHarness(t *testing.T, binary ...string) *harness {
 	dir, err := os.MkdirTemp("", "api-test-")
 	if err != nil {
 		t.Fatalf("mkdtemp: %v", err)
@@ -51,7 +51,12 @@ func newAPIHarness(t *testing.T) *harness {
 
 	repo := repository.New(conn)
 	broker := runner.NewLogBroker()
-	rnr := runner.New(repo, broker)
+	var rnr *runner.DeploymentRunner
+	if len(binary) == 0 {
+		rnr = runner.New(repo, broker)
+	} else {
+		rnr = runner.NewWithPodmanBinaryForTest(repo, broker, binary[0])
+	}
 	return &harness{repo: repo, runner: rnr, broker: broker}
 }
 

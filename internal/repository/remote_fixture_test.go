@@ -59,7 +59,8 @@ func seedRemoteFixture(t *testing.T, r *repository.Repository) {
 		}
 	}
 	_, err = r.Queries.CreateRelease(ctx, db.CreateReleaseParams{
-		ProjectID: 1, Version: "v1", StepsJson: `[{"name":"frozen"}]`,
+		ProjectID: 1, Version: "v1",
+		StepsJson: `[{"name":"frozen","container_image":"alpine:3.20"}]`,
 	})
 	if err != nil {
 		t.Fatal(err)

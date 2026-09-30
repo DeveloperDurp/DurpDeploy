@@ -28,17 +28,24 @@ func TestDeploymentStepSnapshotPreservesLifecycle(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					steps := []repository.DeploymentStepSnapshot{{
-						CreateDeploymentStepParams: db.CreateDeploymentStepParams{
-							Name:            "original",
-							ScriptBody:      "echo original",
-							ExecutionTarget: "agent",
-						}, Selectors: []string{" LINUX ", "linux"},
-					}}
+					steps := []repository.DeploymentStepSnapshot{
+						{
+							CreateDeploymentStepParams: db.CreateDeploymentStepParams{
+								Name:            "original",
+								ScriptBody:      "echo original",
+								ExecutionTarget: "agent",
+							},
+							Selectors: []string{" LINUX ", "linux"},
+						},
+					}
 					if empty {
 						steps = nil
 					}
-					if err := r.SnapshotDeploymentSteps(ctx, d.ID, steps); err != nil {
+					if err := r.SnapshotDeploymentSteps(
+						ctx,
+						d.ID,
+						steps,
+					); err != nil {
 						t.Fatalf("snapshot before execution rejected: %v", err)
 					}
 					got, err := r.Queries.GetDeployment(ctx, d.ID)
@@ -53,7 +60,8 @@ func TestDeploymentStepSnapshotPreservesLifecycle(t *testing.T) {
 						)
 					}
 					source, err := r.Queries.GetDeploymentStepSource(ctx, d.ID)
-					if err != nil || source.StepsJson != `[{"name":"frozen"}]` {
+					if err != nil ||
+						source.StepsJson != `[{"name":"frozen","container_image":"alpine:3.20"}]` {
 						t.Fatalf("source=%+v error=%v", source, err)
 					}
 					before, err := r.Queries.ListDeploymentSteps(ctx, d.ID)
@@ -64,11 +72,18 @@ func TestDeploymentStepSnapshotPreservesLifecycle(t *testing.T) {
 						(before[0].Name != "original" || before[0].ScriptBody != "echo original") {
 						t.Fatal("snapshot content differs")
 					}
-					if _, err := r.DB.ExecContext(ctx, "UPDATE releases SET steps_json = '[]' WHERE id = 1"); err != nil {
+					if _, err := r.DB.ExecContext(
+						ctx,
+						"UPDATE releases SET steps_json = '[]' WHERE id = 1",
+					); err != nil {
 						t.Fatal(err)
 					}
 					for _, replacement := range [][]repository.DeploymentStepSnapshot{nil, {{CreateDeploymentStepParams: db.CreateDeploymentStepParams{Name: "replacement", ExecutionTarget: "local"}}}} {
-						if err := r.SnapshotDeploymentSteps(ctx, d.ID, replacement); !errors.Is(
+						if err := r.SnapshotDeploymentSteps(
+							ctx,
+							d.ID,
+							replacement,
+						); !errors.Is(
 							err,
 							sql.ErrNoRows,
 						) {
@@ -78,7 +93,10 @@ func TestDeploymentStepSnapshotPreservesLifecycle(t *testing.T) {
 					n, err := r.Queries.CreateDeploymentStep(
 						ctx,
 						db.CreateDeploymentStepParams{
-							DeploymentID: d.ID, StepIndex: int64(len(steps)), Name: "append", ExecutionTarget: "local",
+							DeploymentID:    d.ID,
+							StepIndex:       int64(len(steps)),
+							Name:            "append",
+							ExecutionTarget: "local",
 						},
 					)
 					assertZero(t, n, err)
@@ -181,7 +199,11 @@ func TestDeploymentStepSnapshotRejectsInvalidStateAndRollsBack(t *testing.T) {
 	n, err := r.Queries.CreateDeploymentStepAttempt(
 		ctx,
 		db.CreateDeploymentStepAttemptParams{
-			DeploymentID: d.ID, StepIndex: 0, Attempt: 1, Now: 100, WaitDeadline: 400,
+			DeploymentID: d.ID,
+			StepIndex:    0,
+			Attempt:      1,
+			Now:          100,
+			WaitDeadline: 400,
 		},
 	)
 	assertZero(t, n, err)

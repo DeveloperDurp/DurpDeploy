@@ -44,6 +44,13 @@ func (r *Repository) CreateRunbookExecution(
 		skipped = false
 		return r.WithTx(ctx, func(q *db.Queries) error {
 			if arg.RetrySourceDeploymentID != 0 {
+				source, err := q.GetDeployment(ctx, arg.RetrySourceDeploymentID)
+				if err != nil {
+					return fmt.Errorf("get retry source deployment: %w", err)
+				}
+				if source.Status == "cleanup_unconfirmed" {
+					return ErrContainerCleanupUnconfirmed
+				}
 				active, err := q.HasUnconfirmedRunbookRemoteOutcome(
 					ctx, arg.RetrySourceDeploymentID)
 				if err != nil {

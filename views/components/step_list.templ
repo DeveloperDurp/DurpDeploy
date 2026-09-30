@@ -14,6 +14,13 @@ func stepReorderLabel(step db.Step, direction string) string {
 	return fmt.Sprintf("Move step %s (ID %d) %s", step.Name, step.ID, direction)
 }
 
+// stepListLegacyHostStep mirrors the form's legacy check so the table
+// can render the "needs recreation" badge without round-tripping the
+// form re-render through the server.
+func stepListLegacyHostStep(step db.Step) bool {
+	return step.ExecutionTarget == "local" && step.ContainerImage == ""
+}
+
 templ StepList(steps []db.Step, projectID int64) {
 	<div id="step-list">
 		<table class="hidden md:table table-zebra table-fixed w-full">
@@ -45,7 +52,12 @@ templ StepList(steps []db.Step, projectID int64) {
 templ StepRow(step db.Step, projectID int64, isFirst bool, isLast bool) {
 	<tr id={ fmt.Sprintf("step-row-%d", step.ID) }>
 		<td>{ strconv.FormatInt(step.SortOrder, 10) }</td>
-		<td class="font-medium truncate">{ step.Name }</td>
+		<td class="font-medium truncate">
+			{ step.Name }
+			if stepListLegacyHostStep(step) {
+				<span class="badge badge-warning badge-xs ml-1 align-middle" data-step-legacy-badge title="Legacy local step without a container image. Recreate it with a container image before it can run again.">legacy</span>
+			}
+		</td>
 		<td class="hidden md:table-cell whitespace-nowrap">{ step.Interpreter }</td>
 		<td class="hidden md:table-cell truncate">
 			<code class="text-sm bg-base-200 px-2 py-1 rounded">
@@ -131,6 +143,11 @@ templ StepRow(step db.Step, projectID int64, isFirst bool, isLast bool) {
 
 templ StepMobileRecord(step db.Step, projectID int64, isFirst bool, isLast bool) {
 	<li class="card bg-base-200 p-4 space-y-3" data-mobile-step={ strconv.FormatInt(step.ID, 10) } x-data="{ editing: false }">
+		if stepListLegacyHostStep(step) {
+			<div class="alert alert-warning text-xs" data-step-legacy-badge>
+				Legacy local step without a container image. Recreate it with a container image before it can run again.
+			</div>
+		}
 		<div class="flex items-start justify-between gap-3">
 			<div class="min-w-0">
 				<p class="text-sm text-gray-400">Step { strconv.FormatInt(step.SortOrder, 10) }</p>

@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -239,6 +240,21 @@ func (h *ScheduledDeploymentHandler) Create(
 		)
 		return
 	}
+	if err := h.repo.ValidateExecutableRelease(
+		r.Context(),
+		release.ID,
+	); err != nil {
+		if errors.Is(err, repository.ErrLegacyServerStep) {
+			http.Error(
+				w,
+				repository.ErrLegacyServerStep.Error(),
+				http.StatusConflict,
+			)
+		} else {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
 
 	nextRun := sched.Next(time.Now())
 	if nextRun.IsZero() {
@@ -453,6 +469,21 @@ func (h *ScheduledDeploymentHandler) Update(
 		)
 		return
 	}
+	if err := h.repo.ValidateExecutableRelease(
+		r.Context(),
+		release.ID,
+	); err != nil {
+		if errors.Is(err, repository.ErrLegacyServerStep) {
+			http.Error(
+				w,
+				repository.ErrLegacyServerStep.Error(),
+				http.StatusConflict,
+			)
+		} else {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
 
 	nextRun := sched.Next(time.Now())
 	if nextRun.IsZero() {
@@ -595,6 +626,23 @@ func (h *ScheduledDeploymentHandler) Toggle(
 			http.StatusBadRequest,
 		)
 		return
+	}
+	if existing.Enabled == 0 {
+		if err := h.repo.ValidateExecutableRelease(
+			r.Context(),
+			existing.ReleaseID,
+		); err != nil {
+			if errors.Is(err, repository.ErrLegacyServerStep) {
+				http.Error(
+					w,
+					repository.ErrLegacyServerStep.Error(),
+					http.StatusConflict,
+				)
+			} else {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+			return
+		}
 	}
 
 	updated, err := h.repo.Queries.ToggleScheduledDeploymentEnabled(

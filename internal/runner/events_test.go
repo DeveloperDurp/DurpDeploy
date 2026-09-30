@@ -34,6 +34,37 @@ func setupRunnerHarness(
 ) (*repository.Repository, *runner.DeploymentRunner, *recordingNotifier) {
 	t.Helper()
 	t.Setenv("DURPDEPLOY_EXECUTION_BOUNDARY", "development")
+	binDir := t.TempDir()
+	podman := `#!/bin/sh
+case "$3" in
+info) printf '{"host":{"security":{"rootless":true}}}';;
+ps) ;;
+rm) ;;
+run)
+  script=$(cat)
+  case "$script" in
+    *"exit 1"*) exit 1;;
+    *"Write-Output ok"*) printf 'interpreter "pwsh" is not installed\n'; exit 127;;
+    *"Write-Output hello"*) printf 'hello\n';;
+    *"API_TOKEN"*) printf 'token %s\n' "$API_TOKEN";;
+    *"print(1)"*) printf 'local-python\n' >> "$PODMAN_MARKER";;
+    *"echo before >> "*) printf 'before\n' >> "$PODMAN_MARKER";;
+    *"echo after >> "*) printf 'after\n' >> "$PODMAN_MARKER";;
+  esac;;
+esac
+`
+	if err := os.WriteFile(
+		filepath.Join(binDir, "podman"),
+		[]byte(podman),
+		0o700,
+	); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(
+		"DURPDEPLOY_CONTAINER_URL",
+		"unix:///run/podman/podman.sock",
+	)
+	t.Setenv("DURPDEPLOY_CONTAINER_NAMESPACE", "runner-tests")
 	dbConn, err := migrate.Run(":memory:?_pragma=foreign_keys(1)")
 	if err != nil {
 		t.Fatalf("migrate: %v", err)
@@ -45,7 +76,9 @@ func setupRunnerHarness(
 	bus := events.NewBus(repo)
 	bus.Register(rec)
 
-	rnr := runner.New(repo, runner.NewLogBroker())
+	rnr := runner.NewWithPodmanBinaryForTest(
+		repo, runner.NewLogBroker(), filepath.Join(binDir, "podman"),
+	)
 	rnr.SetEventBus(bus)
 	return repo, rnr, rec
 }
@@ -73,15 +106,6 @@ func addAgentInterpreter(
 func TestRunner_PublishesStartedAndSucceededEvents(t *testing.T) {
 	ctx := context.Background()
 	repo, rnr, rec := setupRunnerHarness(t)
-	binDir := t.TempDir()
-	if err := os.WriteFile(
-		filepath.Join(binDir, "python3"),
-		[]byte("#!/bin/sh\nprintf 'python invoked\\n'\n"),
-		0o755,
-	); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	proj, err := repo.Queries.CreateProject(
 		ctx,
@@ -102,9 +126,10 @@ func TestRunner_PublishesStartedAndSucceededEvents(t *testing.T) {
 		Version:   "v1",
 		StepsJson: `[{"name":"bash","script_body":"echo bash",` +
 			`"interpreter":"bash","sort_order":1,"timeout_seconds":5,` +
-			`"max_retries":0},{"name":"python",` +
+			`"max_retries":0,"container_image":"example.com/worker:1"},{"name":"python",` +
 			`"script_body":"print('python')","interpreter":"python3",` +
-			`"sort_order":2,"timeout_seconds":5,"max_retries":0}]`,
+			`"sort_order":2,"timeout_seconds":5,"max_retries":0,` +
+			`"container_image":"example.com/worker:1"}]`,
 	})
 	if err != nil {
 		t.Fatalf("create release: %v", err)
@@ -187,7 +212,7 @@ func TestRunner_PublishesFailedEvent(t *testing.T) {
 	release, err := repo.Queries.CreateRelease(ctx, db.CreateReleaseParams{
 		ProjectID: proj.ID,
 		Version:   "v1",
-		StepsJson: `[{"name":"step1","script_body":"exit 1","sort_order":1,"timeout_seconds":5,"max_retries":0}]`,
+		StepsJson: `[{"name":"step1","script_body":"exit 1","sort_order":1,"timeout_seconds":5,"max_retries":0,"container_image":"example.com/worker:1"}]`,
 	})
 	if err != nil {
 		t.Fatalf("create release: %v", err)
@@ -220,10 +245,9 @@ func TestRunner_PublishesFailedEvent(t *testing.T) {
 	}
 }
 
-func TestRunner_MissingInterpreterFailsClearlyBeforeExecution(t *testing.T) {
+func TestRunner_MissingContainerInterpreterFailsClearly(t *testing.T) {
 	ctx := context.Background()
 	repo, rnr, _ := setupRunnerHarness(t)
-	t.Setenv("PATH", t.TempDir())
 
 	project, err := repo.Queries.CreateProject(
 		ctx,
@@ -242,7 +266,8 @@ func TestRunner_MissingInterpreterFailsClearlyBeforeExecution(t *testing.T) {
 	release, err := repo.Queries.CreateRelease(ctx, db.CreateReleaseParams{
 		ProjectID: project.ID, Version: "v1",
 		StepsJson: `[{"name":"powershell","script_body":"Write-Output ok",` +
-			`"interpreter":"pwsh","execution_target":"local"}]`,
+			`"interpreter":"pwsh","execution_target":"local",` +
+			`"container_image":"example.com/no-pwsh:1"}]`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -270,32 +295,20 @@ func TestRunner_MissingInterpreterFailsClearlyBeforeExecution(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(logs) != 1 || !strings.Contains(
-		logs[0].Line,
-		`interpreter "pwsh" is not installed`,
-	) {
+	found := false
+	for _, log := range logs {
+		if strings.Contains(log.Line, `interpreter "pwsh" is not installed`) {
+			found = true
+		}
+	}
+	if !found {
 		t.Fatalf("deployment logs = %+v", logs)
 	}
 }
 
-// TestRunner_LocalPwshStepExecutesAndLogs: a local pwsh step runs its .ps1
-// script body and its output reaches the deployment log. Uses a fake pwsh
-// shim on PATH (the same pattern as the fake python3 above) so the test is
-// deterministic on machines without PowerShell.
 func TestRunner_LocalPwshStepExecutesAndLogs(t *testing.T) {
 	ctx := context.Background()
 	repo, rnr, _ := setupRunnerHarness(t)
-	binDir := t.TempDir()
-	if err := os.WriteFile(
-		filepath.Join(binDir, "pwsh"),
-		[]byte(
-			"#!/bin/sh\ngrep -q 'Write-Output hello' \"$1\" && echo hello\n",
-		),
-		0o755,
-	); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	proj, err := repo.Queries.CreateProject(
 		ctx,
@@ -316,7 +329,7 @@ func TestRunner_LocalPwshStepExecutesAndLogs(t *testing.T) {
 		Version:   "v1",
 		StepsJson: `[{"name":"pwsh","script_body":"Write-Output hello",` +
 			`"interpreter":"pwsh","sort_order":1,"timeout_seconds":5,` +
-			`"max_retries":0}]`,
+			`"max_retries":0,"container_image":"example.com/worker:1"}]`,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -482,15 +495,6 @@ func TestRunner_RemoteStepWithoutInterpreterDefaultsToBash(t *testing.T) {
 func TestRunner_RedactsSecretsInLocalPython3Logs(t *testing.T) {
 	ctx := context.Background()
 	repo, rnr, _ := setupRunnerHarness(t)
-	binDir := t.TempDir()
-	if err := os.WriteFile(
-		filepath.Join(binDir, "python3"),
-		[]byte("#!/bin/sh\necho \"token $API_TOKEN\"\n"),
-		0o755,
-	); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	proj, err := repo.Queries.CreateProject(
 		ctx,
@@ -512,7 +516,9 @@ func TestRunner_RedactsSecretsInLocalPython3Logs(t *testing.T) {
 		StepsJson: `[{"name":"py","script_body":` +
 			`"import os; print(os.environ['API_TOKEN'])",` +
 			`"interpreter":"python3","execution_target":"local",` +
-			`"sort_order":1,"timeout_seconds":5,"max_retries":0}]`,
+			`"sort_order":1,"timeout_seconds":5,"max_retries":0,` +
+			`"container_image":"example.com/worker:1",` +
+			`"variable_names":["API_TOKEN"]}]`,
 	})
 	if err != nil {
 		t.Fatal(err)

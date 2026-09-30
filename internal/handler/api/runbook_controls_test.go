@@ -20,7 +20,7 @@ import (
 
 func TestRunbookAPI_ApprovalAndSchedule(t *testing.T) {
 	t.Setenv("DURPDEPLOY_EXECUTION_BOUNDARY", "development")
-	h := newAPIHarness(t)
+	h := newAPIHarness(t, fakePodman(t))
 	user := seedAPIUser(t, h.repo, "runbook-controls@example.com", "admin")
 	_, token := seedAPIToken(t, h.repo, user.ID)
 	project := seedProject(t, h.repo)
@@ -71,7 +71,7 @@ func TestRunbookAPI_ApprovalAndSchedule(t *testing.T) {
 	created := request(
 		http.MethodPost,
 		base+"/runbooks",
-		`{"name":"maintenance","steps":[{"name":"check","script_body":"printf 'approved\\n'"}]}`,
+		`{"name":"maintenance","steps":[{"name":"check","script_body":"printf 'approved\\n'","container_image":"alpine:3.20"}]}`,
 	)
 	if created.Code != http.StatusCreated {
 		t.Fatalf(

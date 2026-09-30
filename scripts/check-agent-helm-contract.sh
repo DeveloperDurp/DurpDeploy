@@ -13,6 +13,7 @@ for required in \
 	'name: DURPDEPLOY_AGENT_LISTEN_ADDR' \
 	'name: DURPDEPLOY_AGENT_PUBLIC_URL' \
 	'name: DURPDEPLOY_AGENT_IDENTITY_DIR' \
+	'name: DURPDEPLOY_EMBEDDED_AGENT_ENABLED' \
 	'name: agent-identity' \
 	'claimName: {{ include "durpdeploy.agentIdentityClaimName" . }}'; do
 	grep -Fq "$required" "$deployment" || {
@@ -28,6 +29,9 @@ grep -Fq 'size: 1Gi' "$values"
 if command -v helm >/dev/null 2>&1; then
 	helm lint "$root/charts/durpdeploy" >/dev/null
 	helm template contract "$root/charts/durpdeploy" | grep -Fq 'name: agent-identity'
+	helm template contract "$root/charts/durpdeploy" \
+		| grep -A1 -F 'name: DURPDEPLOY_EMBEDDED_AGENT_ENABLED' \
+		| grep -Fq 'value: "false"'
 fi
 
 printf '%s\n' 'agent Helm contract: PASS'

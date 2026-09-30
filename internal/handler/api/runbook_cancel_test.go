@@ -20,7 +20,7 @@ import (
 
 func TestRunbookAPI_CancelAcknowledgesRequestBeforeTerminalState(t *testing.T) {
 	t.Setenv("DURPDEPLOY_EXECUTION_BOUNDARY", "development")
-	h := newAPIHarness(t)
+	h := newAPIHarness(t, fakePodman(t))
 	t.Cleanup(h.runner.KillAll)
 	user := seedAPIUser(t, h.repo, "runbook-cancel@example.com", "admin")
 	_, token := seedAPIToken(t, h.repo, user.ID)
@@ -30,7 +30,7 @@ func TestRunbookAPI_CancelAcknowledgesRequestBeforeTerminalState(t *testing.T) {
 		repository.RunbookSave{
 			ProjectID: project.ID,
 			Name:      "long-running",
-			StepsJSON: `[{"name":"wait","script_body":"sleep 30","interpreter":"bash"}]`,
+			StepsJSON: `[{"name":"wait","script_body":"sleep 30","interpreter":"bash","container_image":"alpine:3.20"}]`,
 		})
 	if err != nil {
 		t.Fatal(err)

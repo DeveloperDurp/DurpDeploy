@@ -23,6 +23,7 @@ type runbookExecuteRequest struct {
 //
 // Responses:
 // 201: body:RunbookExecution
+// 409: body:ConflictError
 // 422: body:ValidationError
 func (h *RunbookHandler) Execute(w http.ResponseWriter, r *http.Request) {
 	projectID, ok := requireProjectFromContext(w, r)
@@ -66,6 +67,14 @@ func (h *RunbookHandler) Execute(w http.ResponseWriter, r *http.Request) {
 	}
 	if errors.Is(err, repository.ErrRunbookGate) {
 		RespondError(w, http.StatusUnprocessableEntity, err.Error())
+		return
+	}
+	if errors.Is(err, repository.ErrLegacyServerStep) {
+		RespondError(
+			w,
+			http.StatusConflict,
+			repository.ErrLegacyServerStep.Error(),
+		)
 		return
 	}
 	if err != nil {

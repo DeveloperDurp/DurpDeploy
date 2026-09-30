@@ -6,8 +6,11 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
+	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	"sort"
+	"strings"
 	"time"
 
 	"durpdeploy/internal/db"
@@ -97,6 +100,10 @@ func prepareRemoteClaim(
 	if err != nil {
 		return repository.RemotePreparedClaim{}, err
 	}
+	resolved, err = selectRemoteVariables(snapshot.Steps, resolved)
+	if err != nil {
+		return repository.RemotePreparedClaim{}, err
+	}
 	steps := make([]executor.Step, len(snapshot.Steps))
 	for index, step := range snapshot.Steps {
 		steps[index] = executor.Step{
@@ -144,6 +151,54 @@ func prepareRemoteClaim(
 	return repository.RemotePreparedClaim{
 		Token: token, TokenHash: tokenHash[:], Ciphertext: ciphertext,
 	}, nil
+}
+
+func selectRemoteVariables(
+	steps []db.DeploymentStep,
+	variables []runner.ResolvedVariable,
+) ([]runner.ResolvedVariable, error) {
+	selected := make(map[string]struct{})
+	for _, step := range steps {
+		if step.VariableNames == "" {
+			return variables, nil
+		}
+		var names []string
+		if err := json.Unmarshal(
+			[]byte(step.VariableNames),
+			&names,
+		); err != nil {
+			return nil, fmt.Errorf(
+				"decode variable allowlist for step %q: %w",
+				step.Name,
+				err,
+			)
+		}
+		if len(names) == 0 {
+			return variables, nil
+		}
+		for _, name := range names {
+			selected[name] = struct{}{}
+		}
+	}
+	result := make([]runner.ResolvedVariable, 0, len(selected))
+	for _, variable := range variables {
+		if _, ok := selected[variable.Name]; ok {
+			result = append(result, variable)
+			delete(selected, variable.Name)
+		}
+	}
+	if len(selected) != 0 {
+		missing := make([]string, 0, len(selected))
+		for name := range selected {
+			missing = append(missing, name)
+		}
+		sort.Strings(missing)
+		return nil, fmt.Errorf(
+			"selected remote variables are unavailable: %s",
+			strings.Join(missing, ", "),
+		)
+	}
+	return result, nil
 }
 
 func (d *Dispatcher) Maintain(ctx context.Context) error {

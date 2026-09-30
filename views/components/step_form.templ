@@ -2,6 +2,8 @@ package components
 
 import (
 	"context"
+	"encoding/json"
+	"strings"
 
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
@@ -24,6 +26,34 @@ func stepExecutionTarget(step db.Step) string {
 		return "agent"
 	}
 	return "local"
+}
+
+// stepContainerTarget reports whether the step's execution target runs
+// in a server-side container. Today only "local" does, but the helper
+// stays explicit so the form can grow new targets without a rewrite.
+func stepContainerTarget(step db.Step) bool {
+	return step.ExecutionTarget == "local"
+}
+
+// stepLegacyHostStep marks an existing local step with no container
+// image: it was created before the server-container requirement and
+// will fail to run until recreated. The runner refuses to start it on
+// the bare host.
+func stepLegacyHostStep(step db.Step) bool {
+	return step.ExecutionTarget == "local" && step.ContainerImage == ""
+}
+
+// stepVariableNamesCSV turns the stored JSON-array column into the
+// comma-separated form the user edits. An empty column stays empty.
+func stepVariableNamesCSV(step db.Step) string {
+	if step.VariableNames == "" {
+		return ""
+	}
+	var names []string
+	if err := json.Unmarshal([]byte(step.VariableNames), &names); err != nil {
+		return ""
+	}
+	return strings.Join(names, ", ")
 }
 
 func stepInputID(step db.Step, isNew bool, field string) string {
@@ -95,6 +125,13 @@ templ StepForm(step db.Step, projectID int64, isNew bool, labels []string, selec
 					<span class="text-error text-sm mt-1">{ errorMsg }</span>
 				}
 			</div>
+			if !isNew && stepLegacyHostStep(step) {
+				<div class="alert alert-warning text-sm" data-step-legacy-warning>
+					<span>
+						Legacy local step: no container image. This step cannot run on the host anymore — recreate it with a container image and the variable names the script needs.
+					</span>
+				</div>
+			}
 			<div class="grid min-w-0 gap-4 sm:grid-cols-2">
 				<div class="form-control min-w-0">
 					<label class="label" for={ stepInputID(step, isNew, "interpreter") }>
@@ -111,7 +148,7 @@ templ StepForm(step db.Step, projectID int64, isNew bool, labels []string, selec
 						<span class="label-text">Run step on</span>
 					</label>
 					<select id={ stepInputID(step, isNew, "execution-target") } name="execution_target" x-model="executionTarget" class="select select-bordered min-w-0 w-full">
-						<option value="local">Local</option>
+						<option value="local">Server container</option>
 						<option value="agent">Agent</option>
 					</select>
 				</div>
@@ -127,6 +164,39 @@ templ StepForm(step db.Step, projectID int64, isNew bool, labels []string, selec
 					</select>
 					<p x-cloak x-show="agentLabel" x-text="agentLabel" class="mt-1 break-all text-xs text-base-content/70"></p>
 					<label class="label"><span class="label-text-alt">Runs on every matching agent assigned to the deployment environment.</span></label>
+				</div>
+			</div>
+			<div class="grid min-w-0 gap-4 sm:grid-cols-2">
+				<div class="form-control min-w-0" x-cloak x-show="executionTarget === 'local'">
+					<label class="label" for={ stepInputID(step, isNew, "container-image") }>
+						<span class="label-text">Container image</span>
+					</label>
+					<input
+						id={ stepInputID(step, isNew, "container-image") }
+						type="text"
+						name="container_image"
+						value={ step.ContainerImage }
+						placeholder="e.g. alpine:3.20 or registry.example.com/build:1"
+						required?={ isNew || stepContainerTarget(step) }
+						x-bind:required="executionTarget === 'local'"
+						x-bind:disabled="executionTarget !== 'local'"
+						class="input input-bordered min-w-0 w-full"
+					/>
+					<label class="label"><span class="label-text-alt">Required for Local steps. Cleared when Agent is selected.</span></label>
+				</div>
+				<div class="form-control min-w-0">
+					<label class="label" for={ stepInputID(step, isNew, "variable-names") }>
+						<span class="label-text">Limit variables (optional)</span>
+					</label>
+					<input
+						id={ stepInputID(step, isNew, "variable-names") }
+						type="text"
+						name="variable_names"
+						value={ stepVariableNamesCSV(step) }
+						placeholder="comma-separated, e.g. DEPLOY_ENV, API_KEY"
+						class="input input-bordered min-w-0 w-full"
+					/>
+					<label class="label"><span class="label-text-alt">Leave empty to pass all project variables. Enter names to restrict this step.</span></label>
 				</div>
 			</div>
 			<div x-data="stepEditor" class="form-control">
@@ -226,6 +296,13 @@ templ StepEditRow(step db.Step, projectID int64, labels []string, selectedLabel 
 				data-toast-error="Failed to update step"
 				class="grid w-full grid-cols-1 gap-4 items-start xl:grid-cols-7"
 			>
+				if stepLegacyHostStep(step) {
+					<div class="alert alert-warning text-sm xl:col-span-7" data-step-legacy-warning>
+						<span>
+							Legacy local step: no container image. This step cannot run on the host anymore — recreate it with a container image and the variable names the script needs.
+						</span>
+					</div>
+				}
 				<div class="form-control flex-1">
 					<label class="label" for={ fmt.Sprintf("step-%d-name", step.ID) }>
 						<span class="label-text">Name</span>
@@ -246,7 +323,7 @@ templ StepEditRow(step db.Step, projectID int64, labels []string, selectedLabel 
 				<div class="form-control min-w-0">
 					<label class="label" for={ fmt.Sprintf("step-%d-target", step.ID) }><span class="label-text">Run on</span></label>
 					<select id={ fmt.Sprintf("step-%d-target", step.ID) } name="execution_target" x-model="executionTarget" class="select select-bordered select-sm min-w-0 w-full">
-						<option value="local">Local</option>
+						<option value="local">Server container</option>
 						<option value="agent">Agent</option>
 					</select>
 					<label class="label" for={ fmt.Sprintf("step-%d-agent-label", step.ID) }><span class="label-text">Agent label</span></label>
@@ -257,6 +334,31 @@ templ StepEditRow(step db.Step, projectID int64, labels []string, selectedLabel 
 						}
 					</select>
 					<p x-cloak x-show="agentLabel" x-text="agentLabel" class="mt-1 break-all text-xs text-base-content/70"></p>
+				</div>
+				<div class="form-control min-w-0 xl:col-span-2" x-cloak x-show="executionTarget === 'local'">
+					<label class="label" for={ fmt.Sprintf("step-%d-container-image", step.ID) }><span class="label-text">Container image</span></label>
+					<input
+						id={ fmt.Sprintf("step-%d-container-image", step.ID) }
+						type="text"
+						name="container_image"
+						value={ step.ContainerImage }
+						placeholder="e.g. alpine:3.20"
+						x-bind:required="executionTarget === 'local'"
+						x-bind:disabled="executionTarget !== 'local'"
+						class="input input-bordered input-sm min-w-0 w-full"
+					/>
+				</div>
+				<div class="form-control min-w-0 xl:col-span-2">
+					<label class="label" for={ fmt.Sprintf("step-%d-variable-names", step.ID) }><span class="label-text">Limit variables (optional)</span></label>
+					<input
+						id={ fmt.Sprintf("step-%d-variable-names", step.ID) }
+						type="text"
+						name="variable_names"
+						value={ stepVariableNamesCSV(step) }
+						placeholder="comma-separated, e.g. DEPLOY_ENV, API_KEY"
+						class="input input-bordered input-sm min-w-0 w-full"
+					/>
+					<label class="label"><span class="label-text-alt">Leave empty to pass all project variables.</span></label>
 				</div>
 				<div x-data="stepEditor" class="form-control flex-1 xl:col-span-2">
 					<label class="label" for={ fmt.Sprintf("step-%d-script", step.ID) }>

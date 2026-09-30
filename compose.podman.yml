@@ -1,0 +1,8 @@
+services:
+  app:
+    environment:
+      DURPDEPLOY_CONTAINER_RUNTIME: podman
+    security_opt:
+      - label=disable
+    volumes:
+      - ${XDG_RUNTIME_DIR}/podman/podman.sock:/var/run/durpdeploy-runtime.sock

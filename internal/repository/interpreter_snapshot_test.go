@@ -32,9 +32,11 @@ func TestCreateDeploymentPreservesReleaseInterpreter(t *testing.T) {
 		db.CreateReleaseParams{
 			ProjectID: project.ID, Version: "v1",
 			StepsJson: `[{"name":"bash","script_body":"echo ok",` +
-				`"interpreter":"bash","execution_target":"local"},` +
+				`"interpreter":"bash","execution_target":"local",` +
+				`"container_image":"alpine:3.20"},` +
 				`{"name":"python","script_body":"print('ok')",` +
-				`"interpreter":"python3","execution_target":"local"}]`,
+				`"interpreter":"python3","execution_target":"local",` +
+				`"container_image":"python:3.13-alpine"}]`,
 		},
 	)
 	if err != nil {
@@ -69,7 +71,8 @@ func TestCreateDeploymentPreservesReleaseInterpreter(t *testing.T) {
 	if _, err := repo.Queries.UpdateRelease(t.Context(), db.UpdateReleaseParams{
 		ID: release.ID, ProjectID: project.ID, Version: release.Version,
 		StepsJson: `[{"name":"changed","script_body":"Write-Output changed",` +
-			`"interpreter":"pwsh","execution_target":"local"}]`,
+			`"interpreter":"pwsh","execution_target":"local",` +
+			`"container_image":"mcr.microsoft.com/powershell:7.5-alpine-3.20"}]`,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -110,9 +113,11 @@ func TestCreateDeploymentPreservesReleaseInterpreter(t *testing.T) {
 		t.Fatal(err)
 	}
 	if rerunSource.StepsJson != `[{"name":"bash","script_body":"echo ok",`+
-		`"interpreter":"bash","execution_target":"local"},`+
+		`"interpreter":"bash","execution_target":"local",`+
+		`"container_image":"alpine:3.20"},`+
 		`{"name":"python","script_body":"print('ok')",`+
-		`"interpreter":"python3","execution_target":"local"}]` {
+		`"interpreter":"python3","execution_target":"local",`+
+		`"container_image":"python:3.13-alpine"}]` {
 		t.Fatalf("rerun source = %s", rerunSource.StepsJson)
 	}
 }

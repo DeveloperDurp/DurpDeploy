@@ -18,13 +18,19 @@ SELECT COUNT(*) FROM scheduled_deployments WHERE project_id = ?;
 SELECT * FROM scheduled_deployments WHERE next_run_at <= ? AND enabled = 1 ORDER BY next_run_at ASC;
 
 -- name: UpdateScheduledDeployment :one
-UPDATE scheduled_deployments SET project_id = ?, release_id = ?, environment_id = ?, cron = ?, next_run_at = ?, enabled = ?, last_fired_at = ?, note = ? WHERE id = ? RETURNING *;
+UPDATE scheduled_deployments SET project_id = ?, release_id = ?, environment_id = ?, cron = ?, next_run_at = ?, enabled = ?, last_fired_at = ?, note = ?, last_error = '' WHERE id = ? RETURNING *;
 
 -- name: UpdateScheduledDeploymentNextRun :exec
 UPDATE scheduled_deployments SET next_run_at = ?, updated_at = unixepoch() WHERE id = ?;
+
+-- name: DisableScheduledDeploymentWithReason :execrows
+UPDATE scheduled_deployments SET enabled = 0, last_error = ?, updated_at = unixepoch()
+WHERE id = ? AND enabled = 1 AND next_run_at = ?;
 
 -- name: DeleteScheduledDeployment :exec
 DELETE FROM scheduled_deployments WHERE id = ?;
 
 -- name: ToggleScheduledDeploymentEnabled :one
-UPDATE scheduled_deployments SET enabled = CASE WHEN enabled = 1 THEN 0 ELSE 1 END, updated_at = unixepoch() WHERE id = ? RETURNING *;
+UPDATE scheduled_deployments SET enabled = CASE WHEN enabled = 1 THEN 0 ELSE 1 END,
+    last_error = CASE WHEN enabled = 0 THEN '' ELSE last_error END,
+    updated_at = unixepoch() WHERE id = ? RETURNING *;

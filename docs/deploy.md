@@ -64,6 +64,8 @@ EOF
 
 # 4. Build and start
 docker compose up -d --build
+# With rootless Podman, use instead:
+# podman compose -f compose.yml -f compose.podman.yml up -d --build
 
 # 5. Bootstrap the first admin
 docker compose exec app admin create \
@@ -360,30 +362,58 @@ secrets. Back up the key with the database.
 
 ---
 
-## Step 5 — Set up the direct execution service boundary
+## Step 5 — Set up server-side container execution
 
-The server and deployment steps run as the preselected unprivileged
-`durpdeploy` account. Supported execution does not use an identity switch or a
-per-step filesystem root. The systemd unit supplies a read-only service
-filesystem, private mounts and `/tmp`, a single private state write path,
-`NoNewPrivileges`, empty capability sets, and service-level cgroup limits. Bash
-receives a minimal environment.
+Every new server-side step (`execution_target: "local"`) requires a
+`container_image`. The control plane never executes its script on the host.
+The embedded agent connects only to a local Unix socket and pulls a missing
+step image automatically. Docker Compose mounts `/var/run/docker.sock` without
+additional configuration. For rootless Podman, start its socket and use the
+shipped override:
 
-The operator is responsible for every deployment script, the secrets and files
-intentionally made available to it, its network access, and every effect it can
-cause inside the service boundary. Read-only paths do not prevent a script from
-reading visible files or exfiltrating supplied secrets.
+```bash
+systemctl --user enable --now podman.socket
+podman compose -f compose.yml -f compose.podman.yml up -d
+```
 
-An unprivileged server cannot change to a separate runner UID without
-`SETUID`/`SETGID`. Those capabilities are intentionally absent. The tradeoff is
-that a local step can read or change `/var/lib/durpdeploy` and any key file
-available to the `durpdeploy` account. Run only operator-trusted local steps.
-Use a remote agent on a separate host or container when scripts must not share
-the control-plane filesystem boundary.
+The Podman override disables SELinux labelling for the control-plane container
+so it can connect to the host user's socket; step containers retain their own
+security options and receive no socket mount.
 
-The supplied unit applies CPU, memory, and process limits to the complete
-service cgroup. No writable host cgroup mount, delegated subtree, mount
-capability, or chroot capability is required.
+For a native systemd installation, give the `durpdeploy` service identity
+permission to access the chosen socket and set `DURPDEPLOY_CONTAINER_RUNTIME`
+to `docker` or `podman`. Set `DURPDEPLOY_CONTAINER_URL` only when the socket is
+not the client's default, for example `unix:///run/podman/podman.sock`. The
+shipped system service hides `/run/user`, so use the system Podman socket rather
+than a rootless user's socket with that unit.
+`DURPDEPLOY_CONTAINER_NAMESPACE` defaults to `durpdeploy`.
+
+Set `DURPDEPLOY_EMBEDDED_AGENT_ENABLED=false` to disable server-side container
+execution. Remote mTLS agents remain available. The Helm chart disables the
+embedded agent because native Kubernetes Job execution is tracked in
+[issue #98](https://github.com/DeveloperDurp/DurpDeploy/issues/98); use
+standalone agents for executable steps in Kubernetes.
+
+Each attempt runs as non-root with a read-only root filesystem, no network,
+no capabilities, no new privileges, bounded memory and process count, and no
+host mounts. A 64 MiB temporary filesystem at `/tmp` supplies its writable
+home. `TERM=dumb` keeps non-interactive logs free of terminal control codes.
+It receives its script on stdin and all compatible resolved release
+variables by default; `variable_names` restricts the step when it is non-empty.
+Images supply their own interpreter and tools. Tags are mutable even
+inside an immutable release snapshot, so use digest-pinned references for
+reproducibility. The mounted runtime socket gives the DurpDeploy process
+host-level container control; use a dedicated host or standalone agent when
+the control plane is exposed to untrusted users. Steps needing network or host
+filesystem access should run
+on an appropriately isolated remote agent instead. Secret redaction is
+best-effort; anyone who controls the runtime can manage its containers and see
+the secrets sent to them.
+
+Old deployments and logs remain readable, but old server-side steps without
+images must be recreated and captured in a **new release**. Old releases
+cannot run, re-run, or refresh; due schedules that point at one disable with
+an actionable `last_error`. Agent steps retain host execution on their agent.
 
 ---
 
@@ -637,13 +667,10 @@ key `ON DELETE CASCADE`.)
 
 ### The dashboard loads but deploys fail
 
-Check the runner logs. Deployments run `bash` with a minimal environment plus
-project variables. If a step needs a tool outside the documented `PATH`, install
-it system-wide or set the variable in the project. Steps run in their own
-process group and are fully reaped on timeout, cancel, or server shutdown
-(P1-3). The supported systemd and container configurations provide the
-read-only/private filesystem and service-level cgroup boundaries described in
-Step 5. Direct foreground execution requires the explicit
-`DURPDEPLOY_EXECUTION_BOUNDARY=development` opt-in and has none of those service
-protections. An unset boundary fails deployment execution instead of silently
-selecting development mode.
+Check deployment logs and the configured container socket. A missing
+image, unavailable runtime, or interpreter absent from the image fails the
+step; installing the interpreter on the DurpDeploy host does not help. The
+runner removes attempts on completion, timeout, cancellation, and shutdown,
+and reconciles its labelled containers on startup. A cleanup error is not a
+confirmed cancellation; inspect the container runtime before retrying. There
+is no direct host execution or development-mode fallback for server steps.

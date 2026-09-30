@@ -62,8 +62,8 @@ from `values.yaml`; this chart deliberately does not bundle one.
 
 ## Replicas
 
-Default is `1`. The runner executes bash on the pod and the startup
-recovery path (`recoverPendingDeployments` in `cmd/server/main.go`) does
+Default is `1`. The in-process runner and startup recovery path
+(`recoverPendingDeployments` in `cmd/server/main.go`) use
 a non-atomic claim on `pending` rows. Two replicas would race the
 `pending → running` transition. If you scale up, you also need to move
 the queue out of the process — the chart won't stop you from setting
@@ -105,6 +105,10 @@ See `values.yaml`. Notable knobs:
   for TLS.
 - `extraEnv` — pass through `DURPDEPLOY_SMTP_*`, `DURPDEPLOY_DISCORD_*`,
   etc. without forking the chart.
+- `embeddedAgent.enabled` — keep disabled until native Kubernetes Job
+  execution is available in
+  [issue #98](https://github.com/DeveloperDurp/DurpDeploy/issues/98).
+  Standalone agents remain available for executable steps.
 
 ## Uninstalling
 

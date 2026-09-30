@@ -28,6 +28,8 @@ type stepRequest struct {
 	MaxRetries      int64    `json:"max_retries"`
 	ExecutionTarget string   `json:"execution_target"`
 	AgentSelectors  []string `json:"agent_selectors"`
+	ContainerImage  string   `json:"container_image"`
+	VariableNames   []string `json:"variable_names"`
 }
 
 type reorderStepsRequest struct {
@@ -167,6 +169,15 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	image, variableNames, ok := validateContainerConfig(
+		w,
+		target,
+		req.ContainerImage,
+		req.VariableNames,
+	)
+	if !ok {
+		return
+	}
 
 	sortOrder := req.SortOrder
 	if sortOrder <= 0 {
@@ -188,6 +199,8 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 			TimeoutSeconds: req.TimeoutSeconds,
 			MaxRetries:     req.MaxRetries,
 			Interpreter:    selectedInterpreter,
+			ContainerImage: image,
+			VariableNames:  marshalVariableNames(variableNames),
 		},
 		target,
 		selectors,
@@ -350,6 +363,15 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	image, variableNames, ok := validateContainerConfig(
+		w,
+		target,
+		req.ContainerImage,
+		req.VariableNames,
+	)
+	if !ok {
+		return
+	}
 
 	step, err := h.repo.UpdateStepWithPlacement(
 		r.Context(),
@@ -361,6 +383,8 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 			TimeoutSeconds: req.TimeoutSeconds,
 			MaxRetries:     req.MaxRetries,
 			Interpreter:    selectedInterpreter,
+			ContainerImage: image,
+			VariableNames:  marshalVariableNames(variableNames),
 		},
 		target,
 		selectors,
@@ -521,6 +545,8 @@ func (h *StepHandler) ReorderSteps(w http.ResponseWriter, r *http.Request) {
 			TimeoutSeconds: s.TimeoutSeconds,
 			MaxRetries:     s.MaxRetries,
 			Interpreter:    s.Interpreter,
+			ContainerImage: s.ContainerImage,
+			VariableNames:  s.VariableNames,
 		}); err != nil {
 			RespondError(w, http.StatusInternalServerError, err.Error())
 			return

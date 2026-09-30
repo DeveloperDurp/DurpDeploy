@@ -108,7 +108,8 @@ func (h *scheduledHarness) makeRelease(
 ) db.Release {
 	h.t.Helper()
 	steps := []map[string]any{
-		{"name": "s1", "script_body": scriptBody, "sort_order": 1},
+		{"name": "s1", "script_body": scriptBody, "sort_order": 1,
+			"container_image": "alpine:3.20"},
 	}
 	stepsJSON, _ := json.Marshal(steps)
 	r, err := h.repo.Queries.CreateRelease(
@@ -828,5 +829,64 @@ func TestCreateScheduled_TZPrefixRejected(t *testing.T) {
 	)
 	if code != http.StatusUnprocessableEntity {
 		t.Fatalf("expected 422 for TZ= prefix, got %d", code)
+	}
+}
+
+// TestScheduledList_rendersLastErrorWhenDisabled covers the regression
+// surfaced by the scheduler auto-disabling with a recreate-step reason.
+// Before the templ change, neither the desktop table nor the mobile card
+// rendered the persisted last_error, so this test fails on the previous
+// rendered HTML and passes once the page surfaces the reason.
+func TestScheduledList_rendersLastErrorWhenDisabled(t *testing.T) {
+	// Given
+	h := newScheduledHarness(t)
+	project := h.makeProject("sched-last-error")
+	env := h.makeEnv("sched-last-error-env")
+	release := h.makeRelease(project.ID, "1.0.0", "true")
+
+	if code := h.postSchedule(
+		project.ID, release.ID, env.ID, "0 0 * * *", "", true,
+	); code != http.StatusSeeOther {
+		t.Fatalf("create schedule: got %d, want %d", code, http.StatusSeeOther)
+	}
+	schedules, err := h.repo.Queries.ListScheduledDeploymentsByProject(
+		context.Background(), project.ID,
+	)
+	if err != nil {
+		t.Fatalf("list schedules: %v", err)
+	}
+	if len(schedules) != 1 {
+		t.Fatalf("schedules: got %d, want 1", len(schedules))
+	}
+	s := schedules[0]
+	const reason = "step foo no longer exists; recreate it as a new release"
+	if _, err := h.repo.Queries.DisableScheduledDeploymentWithReason(
+		context.Background(),
+		db.DisableScheduledDeploymentWithReasonParams{
+			LastError: reason, ID: s.ID, NextRunAt: s.NextRunAt,
+		},
+	); err != nil {
+		t.Fatalf("disable with reason: %v", err)
+	}
+
+	// When
+	status, body := h.scheduleRequest(
+		http.MethodGet,
+		fmt.Sprintf("/projects/%d/schedules", project.ID),
+		nil,
+	)
+
+	// Then
+	if status != http.StatusOK {
+		t.Fatalf("get schedules: got %d, want %d", status, http.StatusOK)
+	}
+	if !strings.Contains(body, "Disabled — "+reason) {
+		t.Fatalf(
+			"schedules list did not render last_error %q; body=%s",
+			reason, body,
+		)
+	}
+	if !strings.Contains(body, "data-schedule-last-error") {
+		t.Fatalf("schedules list missing schedule-last-error marker")
 	}
 }

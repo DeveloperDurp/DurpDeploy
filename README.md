@@ -273,13 +273,14 @@ five-minute hands-on attack drill — is documented in
   to live deployments/releases, but the default 180-day window and the
   daily systemd timer are operator-deployed, not auto-installed).
 
-The server and local Bash steps share the preselected unprivileged `durpdeploy`
-identity. Linux capabilities are absent from both processes. Because an
-unprivileged process cannot switch to another UID without a capability, local
-steps can read and change server state writable by that identity, including the
-database and visible key files. Run only operator-trusted local scripts, or use
-a separately hosted remote agent as the stronger filesystem boundary. Operators
-also own script secrets, network access, and all effects inside that boundary.
+Server-side steps require a container image and use the embedded agent through
+a local Docker or Podman socket. The Compose stack configures Docker by default;
+`compose.podman.yml` selects the rootless Podman socket. Step containers receive
+no runtime socket or control-plane mount, and there is no host-execution
+fallback. Set `DURPDEPLOY_EMBEDDED_AGENT_ENABLED=false` to disable this path.
+Kubernetes-native execution is not implemented yet; use standalone agents for
+executable steps from a Kubernetes installation. See
+[the deployment runbook](docs/deploy.md) for setup and isolation limits.
 
 ## What It Does Not Do
 

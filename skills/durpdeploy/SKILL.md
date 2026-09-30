@@ -89,11 +89,26 @@ Token placement rules:
 ```json
 {
   "name": "build", "script_body": "make build",
-  "interpreter": "bash",            // bash | pwsh | python3 (default bash)
+  "interpreter": "bash",
   "sort_order": 1, "timeout_seconds": 300, "max_retries": 0,
-  "execution_target": "local"       // local | remote (remote needs a paired agent)
+  "execution_target": "local",
+  "container_image": "registry.example/build@sha256:<digest>",
+  "variable_names": ["API_URL"]
 }
 ```
+
+`local` means mandatory server-container execution; specify an image with
+`bash`, `pwsh`, or `python3` installed. `agent` runs on matching remote agents
+without a container image. API requests may use `powershell`; DurpDeploy
+normalizes it to `pwsh`. All resolved release variables enter a step by
+default; set `variable_names` only to restrict the step to those names. Local
+steps exclude container/SSH client configuration names such as `PATH`, `HOME`,
+`SSH_AUTH_SOCK`, or `XDG_*`; agent steps retain their host variable support.
+The embedded agent pulls an image when it is missing. Container steps have no
+network or host mounts. A mutable image tag does not
+freeze image contents; prefer a digest. The web/API rejects a new image-less
+server step. Old image-less releases remain readable but cannot run, re-run,
+or refresh; recreate their steps and create a new release (`409` on launch).
 
 4. **Variables** (optional) `POST /api/v1/projects/$PID/variables`
    `{"name":"API_URL","value":"...","environment_id":N}` — resolved at
@@ -101,7 +116,7 @@ Token placement rules:
 5. **Release** (immutable snapshot of current steps + variables)
    `POST /api/v1/projects/$PID/releases` `{"version":"1.2.0"}` → `id`.
    Later step edits do NOT affect it; `POST /projects/$PID/releases/$RID/refresh`
-   re-snapshots.
+   re-snapshots a current release, but cannot upgrade an old image-less one.
 6. **Deploy**
    `POST /api/v1/projects/$PID/deployments`
    `{"release_id":$RID,"environment_id":$EID}` → `201` with deployment `id`.
@@ -110,7 +125,7 @@ Token placement rules:
 ```bash
 for i in {1..150}; do
   S=$(api_get "$BASE/api/v1/deployments/$DID/status" | python3 -c 'import sys,json;print(json.load(sys.stdin)["status"])')
-  [[ "$S" =~ ^(failed|succeeded|cancelled|pending_approval)$ ]] && break
+  [[ "$S" =~ ^(failed|succeeded|cancelled|cleanup_unconfirmed|pending_approval)$ ]] && break
   sleep 0.5
 done
 ```
@@ -119,9 +134,13 @@ done
    - `pending_approval` → an admin `POST /api/v1/deployments/$DID/approve`
      (`{"approved_by":"alice"}`) unblocks it. Non-admin tokens get 403.
    - failure → `GET /api/v1/deployments/$DID/logs` (JSON lines, secrets are
-     redacted) and `GET /.../logs.txt`; fix, refresh release, redeploy with
+      redacted) and `GET /.../logs.txt`; fix, create a new release or refresh
+      a current one, then redeploy with
      `POST /api/v1/deployments/$DID/redeploy`.
-   - `POST /api/v1/deployments/$DID/cancel` stops a running deploy.
+    - `POST /api/v1/deployments/$DID/cancel` stops a running deploy.
+    - `cleanup_unconfirmed` means container removal failed. Retry and redeploy
+      return `409`; do not re-execute until a successful startup runtime sweep
+      changes the deployment to `failed`.
 
 ## Gates (know the 422s)
 
@@ -143,13 +162,16 @@ Enforced identically on web and API (source: `internal/gate/gate.go`):
 `POST /api/v1/projects/$PID/schedules` with `release_id`, `environment_id`,
 5-field `cron` (e.g. `* * * * *`), optional `note`, `enabled=true`. The
 scheduler ticks once per minute — never test sub-minute cron expectations.
+An old image-less server release cannot be scheduled. Existing schedules
+pointing at one disable on their due run and expose an actionable `last_error`.
 
 ## Runbooks
 
 Runbooks save immutable versions of ordered steps. Create one with
 `POST /api/v1/projects/$PID/runbooks` and a JSON body containing `name` and
 `steps` (`name`, `script_body`, optional `interpreter`, `timeout_seconds`,
-`max_retries`, `execution_target`, and `agent_selectors`). Save the next
+`max_retries`, `execution_target`, `agent_selectors`, `container_image`, and
+`variable_names`). Local runbook steps require an image. Save the next
 version with `PUT /api/v1/projects/$PID/runbooks/$BID` and `steps`.
 
 `POST /api/v1/projects/$PID/runbooks/$BID/executions` takes
@@ -161,7 +183,8 @@ logs at `/logs/stream` (SSE by default, `?format=ndjson` for NDJSON).
 Execution actions are `POST .../$XID/cancel`, `/approve` (admin only),
 and `/retry` (after a terminal status). Retry returns `409` while the source
 execution has a lost or unconfirmed remote outcome; inspect the agent before
-retrying.
+retrying. Retry also returns `409` for `cleanup_unconfirmed` until the next
+successful startup runtime sweep changes the deployment to `failed`.
 
 `GET /api/v1/projects/$PID/runbook-executions?limit=100&offset=0`
 returns `{items, total, limit, offset}`. The default page has 100 items;

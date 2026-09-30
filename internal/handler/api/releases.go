@@ -2,6 +2,7 @@ package api
 
 import (
 	"database/sql"
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -276,6 +277,7 @@ func (h *ReleaseHandler) GetRelease(w http.ResponseWriter, r *http.Request) {
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
 //	  404: body:NotFoundError
+//	  409: body:ConflictError
 //	  500: body:ServerError
 func (h *ReleaseHandler) RefreshRelease(
 	w http.ResponseWriter,
@@ -308,6 +310,14 @@ func (h *ReleaseHandler) RefreshRelease(
 
 	updated, err := handler.RefreshReleaseSnapshot(r.Context(), h.repo, release)
 	if err != nil {
+		if errors.Is(err, repository.ErrLegacyServerStep) {
+			RespondError(
+				w,
+				http.StatusConflict,
+				repository.ErrLegacyServerStep.Error(),
+			)
+			return
+		}
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}

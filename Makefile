@@ -9,6 +9,9 @@ DEV_MSSQL_IMAGE ?= mcr.microsoft.com/mssql/server:2022-latest
 DEV_HTTPS_PROXY_CONTAINER ?= durpdeploy-dev-https
 DEV_HTTPS_PROXY_PORT ?= 8443
 DEV_HTTPS_PROXY_BACKEND ?= host.docker.internal:8080
+DEV_CONTAINER_ENGINE ?= $(shell for engine in docker podman; do \
+	command -v $$engine >/dev/null 2>&1 && \
+	$$engine info >/dev/null 2>&1 && { printf '%s' $$engine; break; }; done)
 
 build: swagger-ui-copy templ-generate tailwind-build js-build
 	go build -o $(BINARY_NAME) $(MAIN_PATH)
@@ -56,14 +59,16 @@ dev-server:
 	DURPDEPLOY_ENV_FILE="$(ENV_FILE)" go run github.com/air-verse/air@latest
 
 # Disposable database containers for manual backend testing. Stop them with
-# `docker stop $(DEV_POSTGRES_CONTAINER)` or `docker stop $(DEV_MSSQL_CONTAINER)`.
+# `$(DEV_CONTAINER_ENGINE) stop $(DEV_POSTGRES_CONTAINER)` or the matching
+# SQL Server container command.
 dev-postgres:
-	docker pull $(DEV_POSTGRES_IMAGE)
-	-docker rm -f $(DEV_POSTGRES_CONTAINER)
+	@test -n "$(DEV_CONTAINER_ENGINE)" || { echo 'Docker or Podman is unavailable.' >&2; exit 1; }
+	$(DEV_CONTAINER_ENGINE) pull $(DEV_POSTGRES_IMAGE)
+	-$(DEV_CONTAINER_ENGINE) rm -f $(DEV_POSTGRES_CONTAINER)
 	@printf '%s\n' \
 		'Database container: $(DEV_POSTGRES_CONTAINER)' \
 		'DURPDEPLOY_DB=postgres://durpdeploy:durpdeploy@localhost:5432/durpdeploy?sslmode=disable'
-	docker run -d --name $(DEV_POSTGRES_CONTAINER) \
+	$(DEV_CONTAINER_ENGINE) run -d --name $(DEV_POSTGRES_CONTAINER) \
 		-e POSTGRES_USER=durpdeploy \
 		-e POSTGRES_PASSWORD=durpdeploy \
 		-e POSTGRES_DB=durpdeploy \
@@ -71,10 +76,10 @@ dev-postgres:
 	@printf '%s\n' \
 		'Waiting for PostgreSQL...'
 	@for i in $$(seq 1 60); do \
-		if ! docker inspect -f '{{.State.Running}}' $(DEV_POSTGRES_CONTAINER) 2>/dev/null | grep -q true; then \
+		if ! $(DEV_CONTAINER_ENGINE) inspect -f '{{.State.Running}}' $(DEV_POSTGRES_CONTAINER) 2>/dev/null | grep -q true; then \
 			echo 'PostgreSQL container stopped before becoming ready.' >&2; exit 1; \
 		fi; \
-		if docker exec $(DEV_POSTGRES_CONTAINER) pg_isready -U durpdeploy -d durpdeploy >/dev/null 2>&1; then \
+		if $(DEV_CONTAINER_ENGINE) exec $(DEV_POSTGRES_CONTAINER) pg_isready -U durpdeploy -d durpdeploy >/dev/null 2>&1; then \
 			echo 'PostgreSQL is ready.'; exit 0; \
 		fi; \
 		sleep 1; \
@@ -84,12 +89,13 @@ dev-postgres:
 	DURPDEPLOY_DB='postgres://durpdeploy:durpdeploy@localhost:5432/durpdeploy?sslmode=disable' $(MAKE) dev
 
 dev-mssql:
-	docker pull $(DEV_MSSQL_IMAGE)
-	-docker rm -f $(DEV_MSSQL_CONTAINER)
+	@test -n "$(DEV_CONTAINER_ENGINE)" || { echo 'Docker or Podman is unavailable.' >&2; exit 1; }
+	$(DEV_CONTAINER_ENGINE) pull $(DEV_MSSQL_IMAGE)
+	-$(DEV_CONTAINER_ENGINE) rm -f $(DEV_MSSQL_CONTAINER)
 	@printf '%s\n' \
 		'Database container: $(DEV_MSSQL_CONTAINER)' \
 		'DURPDEPLOY_DB=sqlserver://sa:DurpDeploy%21Dev123@localhost:1433?database=master&encrypt=false&trustservercertificate=true'
-	docker run -d --name $(DEV_MSSQL_CONTAINER) \
+	$(DEV_CONTAINER_ENGINE) run -d --name $(DEV_MSSQL_CONTAINER) \
 		-e ACCEPT_EULA=Y \
 		-e MSSQL_PID=Developer \
 		-e MSSQL_SA_PASSWORD='DurpDeploy!Dev123' \
@@ -97,11 +103,11 @@ dev-mssql:
 	@printf '%s\n' \
 		'Waiting for SQL Server...'
 	@for i in $$(seq 1 120); do \
-		if ! docker inspect -f '{{.State.Running}}' $(DEV_MSSQL_CONTAINER) 2>/dev/null | grep -q true; then \
+		if ! $(DEV_CONTAINER_ENGINE) inspect -f '{{.State.Running}}' $(DEV_MSSQL_CONTAINER) 2>/dev/null | grep -q true; then \
 			echo 'SQL Server container stopped before becoming ready.' >&2; exit 1; \
 		fi; \
-		if docker exec $(DEV_MSSQL_CONTAINER) /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P 'DurpDeploy!Dev123' -Q 'SELECT 1' >/dev/null 2>&1 || \
-			docker exec $(DEV_MSSQL_CONTAINER) /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P 'DurpDeploy!Dev123' -Q 'SELECT 1' >/dev/null 2>&1; then \
+		if $(DEV_CONTAINER_ENGINE) exec $(DEV_MSSQL_CONTAINER) /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P 'DurpDeploy!Dev123' -Q 'SELECT 1' >/dev/null 2>&1 || \
+			$(DEV_CONTAINER_ENGINE) exec $(DEV_MSSQL_CONTAINER) /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P 'DurpDeploy!Dev123' -Q 'SELECT 1' >/dev/null 2>&1; then \
 			echo 'SQL Server is ready.'; exit 0; \
 		fi; \
 		sleep 1; \

@@ -13,10 +13,14 @@ func Validate(value string) (string, error) {
 		return Bash, nil
 	}
 	switch value {
+	case "powershell":
+		return PowerShell, nil
 	case Bash, PowerShell, Python:
 		return value, nil
 	default:
-		return "", fmt.Errorf("interpreter must be bash, pwsh, or python3")
+		return "", fmt.Errorf(
+			"interpreter must be bash, pwsh (or powershell), or python3",
+		)
 	}
 }
 

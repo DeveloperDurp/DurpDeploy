@@ -81,20 +81,13 @@ func TestRunnerMixedLocalAndAgentStepsSucceedInOrder(t *testing.T) {
 	}
 	seedAgentWithInterpreter(t, repo, environment.ID, "agent-a", "bash")
 	marker := filepath.Join(t.TempDir(), "order.txt")
-	binDir := t.TempDir()
-	if err := os.WriteFile(
-		filepath.Join(binDir, "python3"),
-		[]byte("#!/bin/sh\necho local-python >> "+marker+"\n"),
-		0o755,
-	); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("PODMAN_MARKER", marker)
 	steps, err := json.Marshal([]map[string]any{
 		{
 			"name": "local", "script_body": "print(1)",
 			"interpreter":      "python3",
 			"execution_target": "local",
+			"container_image":  "example.com/worker:1",
 			"sort_order":       1, "timeout_seconds": 5,
 		},
 		{
@@ -231,10 +224,12 @@ INSERT INTO agent_environment_labels(agent_id,environment_id) VALUES(?,?)`,
 		addAgentInterpreter(t, repo, agentID, "bash")
 	}
 	marker := filepath.Join(t.TempDir(), "order.txt")
+	t.Setenv("PODMAN_MARKER", marker)
 	steps, err := json.Marshal([]map[string]any{
 		{
 			"name": "before", "script_body": "echo before >> " + marker,
 			"execution_target": "local",
+			"container_image":  "example.com/worker:1",
 		},
 		{
 			"name": "remote", "script_body": "echo remote",
@@ -244,6 +239,7 @@ INSERT INTO agent_environment_labels(agent_id,environment_id) VALUES(?,?)`,
 		{
 			"name": "after", "script_body": "echo after >> " + marker,
 			"execution_target": "local",
+			"container_image":  "example.com/worker:1",
 		},
 	})
 	if err != nil {

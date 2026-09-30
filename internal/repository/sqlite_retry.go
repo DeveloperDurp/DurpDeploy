@@ -9,7 +9,7 @@ import (
 const (
 	sqliteBusyCode         = 5
 	sqliteBusySnapshotCode = 517
-	sqliteBusyTries        = 5
+	sqliteBusyTries        = 20
 )
 
 type sqliteErrorCoder interface {

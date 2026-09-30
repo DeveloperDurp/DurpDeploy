@@ -73,8 +73,9 @@ func TestBus_RunbookNotificationUsesExecutionID(t *testing.T) {
 		t.Fatal(err)
 	}
 	book, _, err := repo.SaveRunbook(ctx, repository.RunbookSave{
-		ProjectID: project.ID, Name: "maintenance",
-		StepsJSON: `[{"name":"check","script_body":"true"}]`,
+		ProjectID: project.ID,
+		Name:      "maintenance",
+		StepsJSON: `[{"name":"check","script_body":"true","container_image":"docker.io/library/bash:5.2"}]`,
 	})
 	if err != nil {
 		t.Fatal(err)

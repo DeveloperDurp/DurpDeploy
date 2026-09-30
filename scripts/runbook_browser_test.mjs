@@ -29,6 +29,16 @@ try {
   await page.getByRole("button", { name: "Login" }).click();
   await page.goto(`${base}/projects/${projectID}/runbooks/${runbookID}`);
 
+  const api = async (method, path, data, expectedStatus = 201) => {
+    const response = await page.request.fetch(`${base}/api/v1${path}`, {
+      method,
+      headers: { Authorization: `Bearer ${apiToken}` },
+      data,
+    });
+    assert.equal(response.status(), expectedStatus, await response.text());
+    return response.json();
+  };
+
   const mobile = page.locator(".md\\:hidden").filter({ hasText: "Next run:" });
   assert.equal(await mobile.isVisible(), true);
   assert.equal(await mobile.getByText("Cron:").count(), 1);
@@ -48,17 +58,68 @@ try {
   await page.getByRole("button", { name: "Add step" }).click();
   const targets = page.locator('select[name="step_target"]');
   await targets.first().selectOption("agent");
+  const variableNames = page.locator('input[name="step_variable_names"]');
+  await variableNames.first().fill("REMOTE_TOKEN");
   const selectors = page.locator('input[name="step_selectors"]:not([type="hidden"])');
   await selectors.first().fill("canary, production");
   await page.getByRole("button", { name: "Move step down" }).first().click();
   assert.equal(await selectors.nth(1).inputValue(), "canary, production");
   assert.equal(await targets.nth(1).inputValue(), "agent");
+  assert.equal(await variableNames.nth(1).inputValue(), "REMOTE_TOKEN");
   await targets.nth(1).selectOption("local");
   await page.locator('input[name="step_name"]').first().fill("browser check");
   await page.locator('textarea[name="step_script"]').first().fill("printf browser-runbook-step; sleep 5");
+  await page.locator('input[name="step_image"]:not([type="hidden"])').first().fill("docker.io/library/bash:5.2");
   await page.getByRole("button", { name: "Save immutable version" }).click();
   await page.waitForURL(new RegExp(`/projects/${projectID}/runbooks/${runbookID}$`));
   assert.match(await page.locator("h2").allTextContents().then((values) => values.join(" ")), /Version 3 steps/);
+
+  const stepProject = await api("POST", "/projects", { name: "browser-agent-variables" });
+  const step = await api("POST", `/projects/${stepProject.id}/steps`, {
+    name: "agent variables",
+    script_body: "printf agent",
+    container_image: "docker.io/library/bash:5.2",
+  });
+  await page.goto(`${base}/projects/${stepProject.id}/steps-page`);
+  await page.locator('[data-step-action="edit"]').first().click();
+  const stepEdit = page.locator('form[hx-put*="/steps/"]').first();
+  await stepEdit.waitFor();
+  await stepEdit.locator('select[name="execution_target"]').selectOption("agent");
+  assert.equal(await stepEdit.locator('input[name="container_image"]').isDisabled(), true);
+  assert.equal(await stepEdit.locator('input[name="variable_names"]').isEnabled(), true);
+  await stepEdit.locator('input[name="variable_names"]').fill("REMOTE_TOKEN");
+  await stepEdit.getByRole("button", { name: "Update" }).click();
+  await stepEdit.waitFor({ state: "detached" });
+  const agentStep = await api("GET", `/projects/${stepProject.id}/steps/${step.id}`, undefined, 200);
+  assert.equal(agentStep.execution_target, "agent");
+  assert.deepEqual(agentStep.variable_names, ["REMOTE_TOKEN"]);
+
+  page.once("dialog", (dialog) => dialog.accept());
+  await Promise.all([
+    page.waitForResponse((response) =>
+      response.request().method() === "POST" &&
+      response.url().endsWith(`/projects/${stepProject.id}/steps/${step.id}/save-as-template`)),
+    page.locator(`#step-row-${step.id}`).getByRole("button", { name: "Save Template" }).click(),
+  ]);
+  const templates = await api("GET", "/templates?limit=1000", undefined, 200);
+  const agentTemplate = templates.items.find((template) => template.name === "agent variables");
+  assert.ok(agentTemplate);
+  await page.goto(`${base}/templates/${agentTemplate.id}/edit`);
+  assert.equal(await page.locator('input[name="container_image"]').count(), 0);
+  const templateVariables = page.locator('input[name="variable_names"]');
+  assert.equal(await templateVariables.isEnabled(), true);
+  assert.equal(await templateVariables.inputValue(), "REMOTE_TOKEN");
+  await page.locator('textarea[name="script_body"]').fill("printf updated-agent-template");
+  await Promise.all([
+    page.waitForResponse((response) =>
+      response.request().method() === "PUT" &&
+      response.url().endsWith(`/templates/${agentTemplate.id}`)),
+    page.getByRole("button", { name: "Update" }).click(),
+  ]);
+  const updatedTemplate = await api("GET", `/templates/${agentTemplate.id}`, undefined, 200);
+  assert.equal(updatedTemplate.execution_target, "agent");
+  assert.deepEqual(updatedTemplate.variable_names, ["REMOTE_TOKEN"]);
+  await page.goto(`${base}/projects/${projectID}/runbooks/${runbookID}`);
 
   const executeForm = page.locator(`form[action$="/runbooks/${runbookID}/execute"]`);
   await executeForm.locator('select[name="environment_id"]').selectOption(environmentID);
@@ -85,15 +146,6 @@ try {
   await page.waitForURL(new RegExp(`/projects/${projectID}/runbooks/${runbookID}$`));
   assert.match(await page.locator(".md\\:block tr").filter({ hasText: "0 4 * * *" }).innerText(), /Disabled/);
 
-  const api = async (method, path, data, expectedStatus = 201) => {
-    const response = await page.request.fetch(`${base}/api/v1${path}`, {
-      method,
-      headers: { Authorization: `Bearer ${apiToken}` },
-      data,
-    });
-    assert.equal(response.status(), expectedStatus, await response.text());
-    return response.json();
-  };
   const waitForExecution = async (pid, id, desiredStatus) => {
     for (let attempt = 0; attempt < 100; attempt += 1) {
       const execution = await api("GET", `/projects/${pid}/runbook-executions/${id}`, undefined, 200);
@@ -105,7 +157,7 @@ try {
 
   const longBook = await api("POST", `/projects/${projectID}/runbooks`, {
     name: "browser-cancel-check",
-    steps: [{ name: "wait", script_body: "sleep 15", interpreter: "bash" }],
+    steps: [{ name: "wait", script_body: "sleep 15", interpreter: "bash", container_image: "docker.io/library/bash:5.2" }],
   });
   await page.goto(`${base}/projects/${projectID}/runbooks/${longBook.runbook.id}`);
   const longForm = page.locator(`form[action$="/runbooks/${longBook.runbook.id}/execute"]`);
@@ -128,7 +180,7 @@ try {
 
   const approvalBook = await api("POST", `/projects/${approvalProjectID}/runbooks`, {
     name: "browser-approval-check",
-    steps: [{ name: "check", script_body: "true", interpreter: "bash" }],
+    steps: [{ name: "check", script_body: "true", interpreter: "bash", container_image: "docker.io/library/bash:5.2" }],
   });
   for (const envID of approvalEnvironments.slice(0, 2)) {
     const execution = await api("POST", `/projects/${approvalProjectID}/runbooks/${approvalBook.runbook.id}/executions`, { environment_id: Number(envID) });

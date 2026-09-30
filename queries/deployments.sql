@@ -14,6 +14,27 @@ UPDATE deployments SET release_id = ?, environment_id = ?, status = ?, started_a
 -- name: UpdateDeploymentStatus :exec
 UPDATE deployments SET status = ?, started_at = ?, finished_at = ? WHERE id = ?;
 
+-- name: ConfirmContainerCleanup :execrows
+UPDATE deployments SET status = 'failed', finished_at = COALESCE(finished_at, sqlc.arg(now))
+WHERE status IN ('running', 'cleanup_unconfirmed')
+  AND container_namespace = sqlc.arg(namespace);
+
+-- name: RecordContainerNamespace :execrows
+UPDATE deployments SET container_namespace = sqlc.arg(namespace)
+WHERE id = sqlc.arg(deployment_id) AND status = 'running'
+  AND (container_namespace IS NULL OR container_namespace = sqlc.arg(namespace));
+
+-- name: MarkUnreconciledLocalDeployments :execrows
+UPDATE deployments SET status = 'cleanup_unconfirmed',
+    finished_at = COALESCE(finished_at, sqlc.arg(now))
+WHERE status = 'running' AND assigned_agent_id IS NULL
+  AND container_namespace IS NOT NULL
+  AND EXISTS (SELECT 1 FROM deployment_steps s
+      WHERE s.deployment_id = deployments.id AND s.execution_target = 'local')
+  AND NOT EXISTS (SELECT 1 FROM remote_step_runs r
+      WHERE r.deployment_id = deployments.id
+        AND r.state IN ('claimed', 'started', 'cancel_requested'));
+
 -- name: ListDeployments :many
 SELECT * FROM deployments WHERE kind = 'deployment' ORDER BY created_at DESC;
 

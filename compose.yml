@@ -17,7 +17,6 @@ services:
     build: .
     image: durpdeploy:latest
     restart: unless-stopped
-    user: "10001:10001"
     # Port 8080 is internal only — Caddy talks to it over the compose network.
     # Don't publish it to the host.
     env_file:
@@ -30,6 +29,10 @@ services:
       DURPDEPLOY_AGENT_LISTEN_ADDR: 0.0.0.0:10943
       DURPDEPLOY_AGENT_PUBLIC_URL: ${DURPDEPLOY_AGENT_PUBLIC_URL:-https://localhost:10943}
       DURPDEPLOY_AGENT_IDENTITY_DIR: /var/lib/durpdeploy/agent-identity
+      DURPDEPLOY_EMBEDDED_AGENT_ENABLED: ${DURPDEPLOY_EMBEDDED_AGENT_ENABLED:-true}
+      DURPDEPLOY_CONTAINER_RUNTIME: docker
+      DURPDEPLOY_CONTAINER_URL: unix:///var/run/durpdeploy-runtime.sock
+      DURPDEPLOY_CONTAINER_NAMESPACE: durpdeploy
       # Only the fixed Caddy peer may supply forwarding headers.
       DURPDEPLOY_TRUSTED_PROXIES: 172.28.0.10/32
       # Optional. The mounted secret file at /etc/durpdeploy/key is the
@@ -41,6 +44,7 @@ services:
     volumes:
       - durpdeploy-data:/data
       - durpdeploy-agent-identity:/var/lib/durpdeploy/agent-identity
+      - /var/run/docker.sock:/var/run/durpdeploy-runtime.sock
     ports:
       - "10943:10943"
     secrets:
@@ -51,12 +55,16 @@ services:
         mode: 0400
     security_opt:
       - no-new-privileges:true
+    # Root is limited to SETUID/SETGID for socket-group discovery; the
+    # entrypoint immediately drops to UID 10001 before starting the app.
+    user: "0" # NOSONAR
     cap_drop: [ALL]
+    cap_add: [SETUID, SETGID]
     read_only: true
     tmpfs:
       - /tmp:size=64m,mode=1777
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/login"]
+      test: ["CMD", "su-exec", "10001:10001", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/login"]
       interval: 30s
       timeout: 5s
       retries: 3

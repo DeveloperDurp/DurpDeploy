@@ -2,6 +2,7 @@ package api
 
 import (
 	"database/sql"
+	"errors"
 	"net/http"
 	"strconv"
 	"time"
@@ -134,6 +135,7 @@ func (h *ScheduleHandler) ListSchedules(
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
 //	  404: body:NotFoundError
+//	  409: body:ConflictError
 //	  422: body:ValidationError
 //	  500: body:ServerError
 func (h *ScheduleHandler) CreateSchedule(
@@ -177,6 +179,21 @@ func (h *ScheduleHandler) CreateSchedule(
 	}
 	if release.ProjectID != projectID {
 		RespondError(w, http.StatusNotFound, "Release not found")
+		return
+	}
+	if err := h.repo.ValidateExecutableRelease(
+		r.Context(),
+		release.ID,
+	); err != nil {
+		if errors.Is(err, repository.ErrLegacyServerStep) {
+			RespondError(
+				w,
+				http.StatusConflict,
+				repository.ErrLegacyServerStep.Error(),
+			)
+		} else {
+			RespondError(w, http.StatusInternalServerError, err.Error())
+		}
 		return
 	}
 	if _, err := h.repo.Queries.GetEnvironment(
@@ -301,6 +318,7 @@ func (h *ScheduleHandler) GetSchedule(w http.ResponseWriter, r *http.Request) {
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
 //	  404: body:NotFoundError
+//	  409: body:ConflictError
 //	  422: body:ValidationError
 //	  500: body:ServerError
 func (h *ScheduleHandler) UpdateSchedule(
@@ -365,6 +383,21 @@ func (h *ScheduleHandler) UpdateSchedule(
 	}
 	if release.ProjectID != projectID {
 		RespondError(w, http.StatusNotFound, "Release not found")
+		return
+	}
+	if err := h.repo.ValidateExecutableRelease(
+		r.Context(),
+		release.ID,
+	); err != nil {
+		if errors.Is(err, repository.ErrLegacyServerStep) {
+			RespondError(
+				w,
+				http.StatusConflict,
+				repository.ErrLegacyServerStep.Error(),
+			)
+		} else {
+			RespondError(w, http.StatusInternalServerError, err.Error())
+		}
 		return
 	}
 	sched, err := handler.ParseAndValidateCron(cronExpr)
@@ -483,6 +516,7 @@ func (h *ScheduleHandler) DeleteSchedule(
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
 //	  404: body:NotFoundError
+//	  409: body:ConflictError
 //	  500: body:ServerError
 func (h *ScheduleHandler) ToggleSchedule(
 	w http.ResponseWriter,
@@ -514,6 +548,23 @@ func (h *ScheduleHandler) ToggleSchedule(
 	if existing.ProjectID != projectID {
 		RespondError(w, http.StatusNotFound, "Schedule not found")
 		return
+	}
+	if existing.Enabled == 0 {
+		if err := h.repo.ValidateExecutableRelease(
+			r.Context(),
+			existing.ReleaseID,
+		); err != nil {
+			if errors.Is(err, repository.ErrLegacyServerStep) {
+				RespondError(
+					w,
+					http.StatusConflict,
+					repository.ErrLegacyServerStep.Error(),
+				)
+			} else {
+				RespondError(w, http.StatusInternalServerError, err.Error())
+			}
+			return
+		}
 	}
 
 	updated, err := h.repo.Queries.ToggleScheduledDeploymentEnabled(

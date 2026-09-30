@@ -2,6 +2,7 @@ package api_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/robfig/cron/v3"
 
+	"durpdeploy/internal/db"
 	"durpdeploy/internal/handler"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/server"
@@ -23,8 +25,9 @@ func TestRunbookRetryRejectsUnconfirmedRemoteOutcome(t *testing.T) {
 	environment := seedEnv(t, h.repo)
 	book, version, err := h.repo.SaveRunbook(context.Background(),
 		repository.RunbookSave{
-			ProjectID: project.ID, Name: "maintenance",
-			StepsJSON: `[{"name":"check","script_body":"true"}]`,
+			ProjectID: project.ID,
+			Name:      "maintenance",
+			StepsJSON: `[{"name":"check","script_body":"true","container_image":"alpine:3.20"}]`,
 		})
 	if err != nil {
 		t.Fatal(err)
@@ -71,5 +74,116 @@ VALUES(%d, 'remote', 'cancel_unconfirmed', zeroblob(32),
 		version.ID,
 	).Scan(&count); err != nil || count != 1 {
 		t.Fatalf("execution count=%d err=%v", count, err)
+	}
+}
+
+func TestRunbookRetryRejectsUnconfirmedContainerCleanup(t *testing.T) {
+	// Given
+	h := newAPIHarness(t)
+	user := seedAPIUser(t, h.repo, "cleanup-retry@example.com", "admin")
+	_, token := seedAPIToken(t, h.repo, user.ID)
+	project := seedProject(t, h.repo)
+	environment := seedEnv(t, h.repo)
+	book, version, err := h.repo.SaveRunbook(
+		t.Context(),
+		repository.RunbookSave{
+			ProjectID: project.ID,
+			Name:      "maintenance",
+			StepsJSON: `[{"name":"check","script_body":"true","container_image":"alpine:3.20"}]`,
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	execution, _, err := h.repo.CreateRunbookExecution(
+		t.Context(),
+		repository.RunbookExecutionRequest{
+			ProjectID: project.ID, RunbookID: book.ID,
+			VersionID: version.ID, EnvironmentID: environment.ID,
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.repo.DB.ExecContext(
+		t.Context(),
+		"UPDATE deployments SET status='cleanup_unconfirmed' WHERE id=?",
+		execution.DeploymentID,
+	); err != nil {
+		t.Fatal(err)
+	}
+	router := server.NewRouter(h.repo, h.runner,
+		cron.NewParser(cron.Minute|cron.Hour|cron.Dom|cron.Month|cron.Dow),
+		handler.NewAuthHandler(h.repo))
+	req := httptest.NewRequest(
+		http.MethodPost,
+		fmt.Sprintf(
+			"/api/v1/projects/%d/runbook-executions/%d/retry",
+			project.ID,
+			execution.ID,
+		),
+		nil,
+	)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+
+	// When
+	router.ServeHTTP(rec, req)
+
+	// Then
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("retry status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var count int
+	if err := h.repo.DB.QueryRowContext(
+		t.Context(),
+		"SELECT COUNT(*) FROM runbook_executions WHERE runbook_version_id=?",
+		version.ID,
+	).Scan(&count); err != nil || count != 1 {
+		t.Fatalf("execution count=%d err=%v", count, err)
+	}
+}
+
+func TestAPIStatusReportsUnconfirmedContainerCleanup(t *testing.T) {
+	// Given
+	h := newAPIHarness(t)
+	user := seedAPIUser(t, h.repo, "cleanup-status@example.com", "admin")
+	_, token := seedAPIToken(t, h.repo, user.ID)
+	project := seedProject(t, h.repo)
+	env := seedEnv(t, h.repo)
+	release := seedRelease(t, h.repo, project.ID)
+	deployment, err := h.repo.Queries.CreateDeployment(
+		t.Context(),
+		db.CreateDeploymentParams{
+			ReleaseID: release.ID, EnvironmentID: env.ID,
+			Status: "cleanup_unconfirmed",
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	router := server.NewRouter(h.repo, h.runner,
+		cron.NewParser(cron.Minute|cron.Hour|cron.Dom|cron.Month|cron.Dow),
+		handler.NewAuthHandler(h.repo))
+	req := httptest.NewRequest(http.MethodGet,
+		fmt.Sprintf("/api/v1/deployments/%d/status", deployment.ID), nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+
+	// When
+	router.ServeHTTP(rec, req)
+
+	// Then
+	var result struct {
+		Status string `json:"status"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil ||
+		rec.Code != http.StatusOK || result.Status != "cleanup_unconfirmed" {
+		t.Fatalf(
+			"status code=%d body=%s error=%v",
+			rec.Code,
+			rec.Body.String(),
+			err,
+		)
 	}
 }

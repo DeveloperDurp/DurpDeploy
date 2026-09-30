@@ -14,10 +14,11 @@ WHERE d.id = sqlc.arg(deployment_id) AND d.status IN ('pending', 'pending_approv
 SELECT * FROM deployment_step_sources WHERE deployment_id = ?;
 
 -- name: CreateDeploymentStep :execrows
-INSERT INTO deployment_steps (deployment_id, step_index, source_step_id, name, script_body, timeout_seconds, max_retries, execution_target, interpreter)
+INSERT INTO deployment_steps (deployment_id, step_index, source_step_id, name, script_body, timeout_seconds, max_retries, execution_target, interpreter, container_image, variable_names)
 SELECT sqlc.arg(deployment_id), sqlc.arg(step_index), sqlc.narg(source_step_id), sqlc.arg(name),
     sqlc.arg(script_body), sqlc.arg(timeout_seconds), sqlc.arg(max_retries), sqlc.arg(execution_target),
-    COALESCE(NULLIF(CAST(sqlc.arg(interpreter) AS TEXT), ''), 'bash')
+    COALESCE(NULLIF(CAST(sqlc.arg(interpreter) AS TEXT), ''), 'bash'),
+    sqlc.arg(container_image), sqlc.arg(variable_names)
 WHERE EXISTS (SELECT 1 FROM deployments WHERE id = sqlc.arg(deployment_id) AND status IN ('pending', 'pending_approval'))
   AND NOT EXISTS (SELECT 1 FROM deployment_step_sources WHERE deployment_id = sqlc.arg(deployment_id))
   AND NOT EXISTS (SELECT 1 FROM deployment_step_attempts WHERE deployment_id = sqlc.arg(deployment_id));
