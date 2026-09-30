@@ -4157,6 +4157,7 @@
         ]
       },
       "delete": {
+        "description": "Active or unconfirmed deployments prevent deletion.",
         "schemes": [
           "http",
           "https"
@@ -4164,7 +4165,7 @@
         "tags": [
           "releases"
         ],
-        "summary": "Delete a release without deployment history or schedules.",
+        "summary": "Delete a release, its schedules, and completed deployment history.",
         "operationId": "deleteRelease",
         "parameters": [
           {

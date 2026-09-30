@@ -262,7 +262,8 @@ func (h *ReleaseHandler) GetRelease(w http.ResponseWriter, r *http.Request) {
 
 // swagger:route DELETE /projects/{id}/releases/{relId} releases deleteRelease
 //
-// Delete a release without deployment history or schedules.
+// Delete a release, its schedules, and completed deployment history.
+// Active or unconfirmed deployments prevent deletion.
 //
 // Schemes: http, https
 //
@@ -295,7 +296,7 @@ func (h *ReleaseHandler) DeleteRelease(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case errors.Is(err, sql.ErrNoRows):
 			RespondError(w, http.StatusNotFound, "Release not found")
-		case errors.Is(err, repository.ErrReleaseInUse):
+		case errors.Is(err, repository.ErrReleaseHasActiveDeployment):
 			RespondError(w, http.StatusConflict, err.Error())
 		default:
 			RespondError(w, http.StatusInternalServerError, err.Error())

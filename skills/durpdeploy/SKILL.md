@@ -118,8 +118,9 @@ or refresh; recreate their steps and create a new release (`409` on launch).
    Later step edits do NOT affect it; `POST /projects/$PID/releases/$RID/refresh`
    re-snapshots a current release, but cannot upgrade an old image-less one.
    `DELETE /api/v1/projects/$PID/releases/$RID` returns `204` when removed,
-   `404` if absent or in another project, and `409` if it has deployments or
-   schedules. Remove those references first; deletion never removes history.
+   `404` if absent or in another project, and `409` if it has active or
+   unconfirmed deployments. It also deletes schedules and terminal deployment
+   history, including logs; this cannot be undone.
 6. **Deploy**
    `POST /api/v1/projects/$PID/deployments`
    `{"release_id":$RID,"environment_id":$EID}` → `201` with deployment `id`.
