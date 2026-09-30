@@ -35,6 +35,14 @@ func TestDeploymentReturnsNotFoundWhenReleaseDisappearsAtLock(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	schedule, err := h.repo.Queries.CreateScheduledDeployment(t.Context(),
+		db.CreateScheduledDeploymentParams{
+			ProjectID: project.ID, ReleaseID: release.ID, EnvironmentID: env.ID,
+			Cron: "0 9 * * *", NextRunAt: 9999999999,
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
 	// Simulate a release lost after the handler lookup, at the shared lock.
 	if _, err := h.repo.DB.Exec(`CREATE TRIGGER disappear_at_release_lock
 BEFORE UPDATE OF version ON releases BEGIN
@@ -47,9 +55,22 @@ END`); err != nil {
 			fmt.Sprintf("release_id=%d&environment_id=%d", release.ID, env.ID)},
 		{fmt.Sprintf("/deployments/%d/redeploy", source.ID), ""},
 		{fmt.Sprintf("/projects/%d/releases/%d/refresh", project.ID, release.ID), ""},
+		{fmt.Sprintf("/projects/%d/schedules", project.ID),
+			fmt.Sprintf("release_id=%d&environment_id=%d&cron=0+9+*+*+*",
+				release.ID, env.ID)},
+		{fmt.Sprintf("/projects/%d/schedules/%d", project.ID, schedule.ID),
+			fmt.Sprintf("release_id=%d&environment_id=%d&cron=0+9+*+*+*",
+				release.ID, env.ID)},
 	} {
 		t.Run(test.path, func(t *testing.T) {
-			req, err := http.NewRequest(http.MethodPost,
+			method := http.MethodPost
+			if strings.HasSuffix(
+				test.path,
+				fmt.Sprintf("/schedules/%d", schedule.ID),
+			) {
+				method = http.MethodPut
+			}
+			req, err := http.NewRequest(method,
 				h.server.URL+test.path, strings.NewReader(test.body))
 			if err != nil {
 				t.Fatal(err)

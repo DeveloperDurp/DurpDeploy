@@ -28,6 +28,14 @@ func TestDeploymentReturnsNotFoundWhenReleaseDisappearsAtLock(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	schedule, err := h.repo.Queries.CreateScheduledDeployment(t.Context(),
+		db.CreateScheduledDeploymentParams{
+			ProjectID: project.ID, ReleaseID: release.ID, EnvironmentID: env.ID,
+			Cron: "0 9 * * *", NextRunAt: 9999999999,
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
 	// Fault injection: the preliminary lookup succeeds, but the transaction's
 	// lock sees zero rows, as it does after a concurrent delete wins.
 	if _, err := h.repo.DB.Exec(`CREATE TRIGGER disappear_at_release_lock
@@ -46,9 +54,22 @@ END`); err != nil {
 		{fmt.Sprintf("/api/v1/deployments/%d/retry", source.ID), "{}"},
 		{fmt.Sprintf("/api/v1/projects/%d/releases/%d/refresh",
 			project.ID, release.ID), "{}"},
+		{fmt.Sprintf("/api/v1/projects/%d/schedules", project.ID),
+			fmt.Sprintf(`{"release_id":%d,"environment_id":%d,"cron":"0 9 * * *"}`,
+				release.ID, env.ID)},
+		{fmt.Sprintf("/api/v1/projects/%d/schedules/%d", project.ID, schedule.ID),
+			fmt.Sprintf(`{"release_id":%d,"environment_id":%d,"cron":"0 9 * * *"}`,
+				release.ID, env.ID)},
 	} {
 		t.Run(test.path, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodPost, test.path,
+			method := http.MethodPost
+			if strings.HasSuffix(
+				test.path,
+				fmt.Sprintf("/schedules/%d", schedule.ID),
+			) {
+				method = http.MethodPut
+			}
+			req := httptest.NewRequest(method, test.path,
 				strings.NewReader(test.body))
 			req.Header.Set("Content-Type", "application/json")
 			req.Header.Set("Authorization", "Bearer "+token)

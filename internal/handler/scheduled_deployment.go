@@ -268,7 +268,7 @@ func (h *ScheduledDeploymentHandler) Create(
 		Valid:  submitted.Note.String != "",
 	}
 
-	_, err = h.repo.Queries.CreateScheduledDeployment(
+	_, err = h.repo.CreateScheduledDeployment(
 		r.Context(),
 		db.CreateScheduledDeploymentParams{
 			ProjectID:     projectID,
@@ -282,6 +282,10 @@ func (h *ScheduledDeploymentHandler) Create(
 		},
 	)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			http.Error(w, "Release not found", http.StatusNotFound)
+			return
+		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -515,7 +519,7 @@ func (h *ScheduledDeploymentHandler) Update(
 		Valid:  submitted.Note.String != "",
 	}
 
-	_, err = h.repo.Queries.UpdateScheduledDeployment(
+	_, err = h.repo.UpdateScheduledDeployment(
 		r.Context(),
 		db.UpdateScheduledDeploymentParams{
 			ProjectID:     projectID,
@@ -530,6 +534,10 @@ func (h *ScheduledDeploymentHandler) Update(
 		},
 	)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			http.Error(w, "Release or schedule not found", http.StatusNotFound)
+			return
+		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

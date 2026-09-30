@@ -166,6 +166,8 @@ Enforced identically on web and API (source: `internal/gate/gate.go`):
 `POST /api/v1/projects/$PID/schedules` with `release_id`, `environment_id`,
 5-field `cron` (e.g. `* * * * *`), optional `note`, `enabled=true`. The
 scheduler ticks once per minute — never test sub-minute cron expectations.
+Schedule creation and updates return `404` if the selected release is deleted
+before the write commits.
 An old image-less server release cannot be scheduled. Existing schedules
 pointing at one disable on their due run and expose an actionable `last_error`.
 

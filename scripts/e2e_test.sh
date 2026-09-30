@@ -1282,6 +1282,9 @@ CODE=$(curl -s -H "Authorization: Bearer $API_TOKEN" -X DELETE -o /dev/null -w '
 [[ "$(api_get_code "$RELEASE_DELETE_URL")" == 404 ]] || { echo "FAIL: deleted release is still readable"; exit 1; }
 [[ "$(api_post_code '{}' "$RELEASE_DELETE_URL/refresh")" == 404 ]] \
     || { echo "FAIL: refreshing a deleted release did not return 404"; exit 1; }
+[[ "$(api_post_code "{\"release_id\":$DELETE_RELEASE_ID,\"environment_id\":$ENV_ID,\"cron\":\"0 9 * * *\"}" \
+    "$BASE/api/v1/projects/$API_PROJECT_ID/schedules")" == 404 ]] \
+    || { echo "FAIL: scheduling a deleted release did not return 404"; exit 1; }
 [[ "$(api_post_code "{\"release_id\":$DELETE_RELEASE_ID,\"environment_id\":$ENV_ID}" \
     "$BASE/api/v1/projects/$API_PROJECT_ID/deployments")" == 404 ]] \
     || { echo "FAIL: deploying a deleted release did not return 404"; exit 1; }

@@ -76,6 +76,37 @@ func TestReleaseDeleteSerializesCreationAcrossDatabases(t *testing.T) {
 			if err == nil || blocked.Err() == nil {
 				t.Fatalf("creation did not wait for deletion lock: %v", err)
 			}
+			for _, write := range []func(context.Context) error{
+				func(ctx context.Context) error {
+					_, err := second.CreateScheduledDeployment(ctx,
+						db.CreateScheduledDeploymentParams{
+							ProjectID: 1, ReleaseID: 1, EnvironmentID: 1,
+							Cron: "0 9 * * *", NextRunAt: 9999999999,
+						})
+					return err
+				},
+				func(ctx context.Context) error {
+					_, err := second.UpdateScheduledDeployment(ctx,
+						db.UpdateScheduledDeploymentParams{
+							ID: 1, ProjectID: 1, ReleaseID: 1, EnvironmentID: 1,
+							Cron: "0 9 * * *", NextRunAt: 9999999999,
+						})
+					return err
+				},
+			} {
+				blocked, cancel := context.WithTimeout(
+					ctx,
+					150*time.Millisecond,
+				)
+				err := write(blocked)
+				cancel()
+				if err == nil || blocked.Err() != context.DeadlineExceeded {
+					t.Fatalf(
+						"schedule write did not wait for release lock: %v",
+						err,
+					)
+				}
+			}
 			if err := tx.Rollback(); err != nil {
 				t.Fatal(err)
 			}

@@ -227,7 +227,7 @@ func (h *ScheduleHandler) CreateSchedule(
 		note = sql.NullString{String: req.Note, Valid: true}
 	}
 
-	schedule, err := h.repo.Queries.CreateScheduledDeployment(
+	schedule, err := h.repo.CreateScheduledDeployment(
 		r.Context(),
 		db.CreateScheduledDeploymentParams{
 			ProjectID:     projectID,
@@ -241,6 +241,10 @@ func (h *ScheduleHandler) CreateSchedule(
 		},
 	)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			RespondError(w, http.StatusNotFound, "Release not found")
+			return
+		}
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -420,7 +424,7 @@ func (h *ScheduleHandler) UpdateSchedule(
 		note = sql.NullString{String: req.Note, Valid: true}
 	}
 
-	schedule, err := h.repo.Queries.UpdateScheduledDeployment(
+	schedule, err := h.repo.UpdateScheduledDeployment(
 		r.Context(),
 		db.UpdateScheduledDeploymentParams{
 			ID:            schedID,
@@ -435,8 +439,12 @@ func (h *ScheduleHandler) UpdateSchedule(
 		},
 	)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			RespondError(w, http.StatusNotFound, "Schedule not found")
+		if errors.Is(err, sql.ErrNoRows) {
+			RespondError(
+				w,
+				http.StatusNotFound,
+				"Release or schedule not found",
+			)
 			return
 		}
 		RespondError(w, http.StatusInternalServerError, err.Error())
