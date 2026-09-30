@@ -44,6 +44,8 @@ END`); err != nil {
 			fmt.Sprintf(`{"release_id":%d,"environment_id":%d}`, release.ID, env.ID)},
 		{fmt.Sprintf("/api/v1/deployments/%d/redeploy", source.ID), "{}"},
 		{fmt.Sprintf("/api/v1/deployments/%d/retry", source.ID), "{}"},
+		{fmt.Sprintf("/api/v1/projects/%d/releases/%d/refresh",
+			project.ID, release.ID), "{}"},
 	} {
 		t.Run(test.path, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, test.path,

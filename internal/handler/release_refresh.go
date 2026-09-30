@@ -44,6 +44,10 @@ func (h *ReleaseHandler) RefreshRelease(
 		h.repo,
 		release,
 	); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			http.Error(w, "Release not found", http.StatusNotFound)
+			return
+		}
 		if errors.Is(err, repository.ErrLegacyServerStep) {
 			http.Error(
 				w,

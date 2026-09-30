@@ -357,13 +357,13 @@ templ ReleaseDetail(project db.Project, release db.Release, variables []db.Relea
 
 templ ReleaseDeleteControl(projectID int64, release db.Release, active bool, size string) {
 	<div x-data>
-		<button type="button" class={ "btn btn-error " + size } x-on:click="$refs.confirmDelete.showModal()">Delete</button>
+		<button type="button" class={ "btn btn-error whitespace-nowrap " + size } x-on:click="$refs.confirmDelete.showModal()">Delete</button>
 		<dialog x-ref="confirmDelete" class="modal" aria-labelledby={ fmt.Sprintf("release-delete-%d-title", release.ID) } aria-describedby={ fmt.Sprintf("release-delete-%d-description", release.ID) }>
 			<div class="modal-box bg-base-200">
 				<h2 id={ fmt.Sprintf("release-delete-%d-title", release.ID) } class="text-lg font-bold">Delete release { release.Version }?</h2>
 				<p id={ fmt.Sprintf("release-delete-%d-description", release.ID) } class="mt-2 text-sm">This permanently deletes the release, its schedules, deployment history, and logs.</p>
 				if active {
-					<p class="alert alert-warning mt-4 text-sm">This release has an active or unconfirmed deployment. Finish or cancel it before deleting.</p>
+					<p class="alert alert-warning mt-4 text-sm">This release has an active or unconfirmed deployment. Active deployments must finish or be cancelled. Unconfirmed outcomes require operator inspection and recovery before deletion.</p>
 				}
 				<div class="modal-action">
 					<form method="dialog"><button type="submit" class="btn btn-ghost" autofocus>Cancel</button></form>
