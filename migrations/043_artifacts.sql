@@ -35,8 +35,8 @@ CREATE TABLE deployment_artifacts (
 
 -- +goose Down
 -- +goose StatementBegin
-DROP TABLE deployment_artifacts;
-DROP TABLE release_artifacts;
-DROP TABLE project_artifact_repositories;
-DROP TABLE package_repositories;
+CREATE TABLE artifacts_rollback_refused (
+    guard INTEGER CONSTRAINT artifacts_require_forward_migration CHECK (guard = 0)
+);
+INSERT INTO artifacts_rollback_refused VALUES (1);
 -- +goose StatementEnd
