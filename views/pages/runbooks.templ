@@ -94,6 +94,9 @@ templ RunbookFormPage(project db.Project, book db.Runbook, stepsJSON string, art
 				}
 				<form method="post" action={ runbookSaveURL(project.ID, book.ID) } class="space-y-4" x-data={ fmt.Sprintf("{ steps: %s }", stepsJSON) } x-init="steps.forEach(step => { step.agent_selectors_text = (step.agent_selectors || []).join(', '); step.variable_names_text = (step.variable_names || []).join(', '); })">
 					<label class="form-control"><span class="label-text">Package from project release</span><select name="artifact_release_id" class="select select-bordered"><option value="0" selected?={ selectedArtifactReleaseID==0 }>No package</option>
+					if selectedArtifactReleaseID==-1 {
+						<option value="-1" selected>Keep current pinned package (source release deleted)</option>
+					}
 					for _, release := range artifactReleases {
 						<option value={ strconv.FormatInt(release.ID,10) } selected?={ selectedArtifactReleaseID==release.ID }>{ release.Version }</option>
 					}

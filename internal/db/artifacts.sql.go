@@ -76,6 +76,24 @@ func (q *Queries) CopyReleaseArtifactToRunbook(ctx context.Context, arg CopyRele
 	return result.RowsAffected()
 }
 
+const copyRunbookArtifact = `-- name: CopyRunbookArtifact :execrows
+INSERT INTO release_artifacts (release_id, repository_id, url, version, sha256, size, source_release_id)
+SELECT ?, r.repository_id, r.url, r.version, r.sha256, r.size, r.source_release_id FROM release_artifacts r WHERE r.release_id = ?
+`
+
+type CopyRunbookArtifactParams struct {
+	ReleaseID   int64 `json:"release_id"`
+	ReleaseID_2 int64 `json:"release_id_2"`
+}
+
+func (q *Queries) CopyRunbookArtifact(ctx context.Context, arg CopyRunbookArtifactParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, copyRunbookArtifact, arg.ReleaseID, arg.ReleaseID_2)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const createPackageRepository = `-- name: CreatePackageRepository :one
 INSERT INTO package_repositories (project_id, name, url_template, auth_type, username, credential)
 VALUES (?, ?, ?, ?, ?, ?) RETURNING id, project_id, name, url_template, auth_type, username, credential

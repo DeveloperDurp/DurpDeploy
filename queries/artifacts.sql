@@ -57,6 +57,10 @@ SELECT ?, d.repository_id, d.url, d.version, d.sha256, d.size FROM deployment_ar
 INSERT INTO release_artifacts (release_id, repository_id, url, version, sha256, size, source_release_id)
 SELECT ?, r.repository_id, r.url, r.version, r.sha256, r.size, r.release_id FROM release_artifacts r WHERE r.release_id = ?;
 
+-- name: CopyRunbookArtifact :execrows
+INSERT INTO release_artifacts (release_id, repository_id, url, version, sha256, size, source_release_id)
+SELECT ?, r.repository_id, r.url, r.version, r.sha256, r.size, r.source_release_id FROM release_artifacts r WHERE r.release_id = ?;
+
 -- name: DeleteDeploymentArtifact :exec
 DELETE FROM deployment_artifacts WHERE deployment_id = ?;
 

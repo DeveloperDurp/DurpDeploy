@@ -269,6 +269,10 @@ the source release do not change it. Runbook version responses include
 Deleting the source project release removes its completed deployment history and
 its own artifact pin, but retains copies held by saved runbook versions. Those
 copies clear `source_release_id` and remain executable with their pinned bytes.
+When editing a saved runbook, `keep_artifact_pin: true` copies its latest pin
+directly, including when its source release has been deleted. This cannot be
+combined with `artifact_release_id` and is not valid for creating a new runbook.
+The web edit form defaults to "Keep current pinned package" for deleted sources.
 
 Every local step receives `ARTIFACT_PATH=/artifacts`, including steps with a
 variable allowlist. This variable is reserved. Extracted files are mounted

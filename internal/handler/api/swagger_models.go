@@ -726,6 +726,7 @@ type swaggerRunbookStep struct {
 // swagger:model RunbookSaveRequest
 // RunbookSaveRequest creates a runbook or saves its next version.
 type swaggerRunbookSaveRequest struct {
+	KeepArtifactPin   bool                 `json:"keep_artifact_pin"`
 	ArtifactReleaseID int64                `json:"artifact_release_id"`
 	Name              string               `json:"name"`
 	Description       string               `json:"description"`

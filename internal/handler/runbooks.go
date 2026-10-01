@@ -135,6 +135,9 @@ func (h *RunbookHandler) Form(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		selectedArtifactReleaseID = pin.SourceReleaseID.Int64
+		if pinErr == nil && !pin.SourceReleaseID.Valid {
+			selectedArtifactReleaseID = -1
+		}
 	}
 	artifactReleases, err := h.repo.Queries.ListArtifactReleases(
 		r.Context(),
@@ -185,15 +188,20 @@ func (h *RunbookHandler) Save(w http.ResponseWriter, r *http.Request) {
 	artifactReleaseID := int64(0)
 	if raw := r.FormValue("artifact_release_id"); raw != "" {
 		artifactReleaseID, err = strconv.ParseInt(raw, 10, 64)
-		if err != nil || artifactReleaseID < 0 {
+		if err != nil || artifactReleaseID < -1 {
 			http.Error(w, "Invalid package release", 422)
 			return
 		}
+	}
+	keepArtifactPin := artifactReleaseID == -1
+	if keepArtifactPin {
+		artifactReleaseID = 0
 	}
 	book, _, err := h.repo.SaveRunbook(r.Context(), repository.RunbookSave{
 		ProjectID: projectID, RunbookID: id, Name: name,
 		Description: r.FormValue("description"), StepsJSON: stepsJSON,
 		ArtifactReleaseID: artifactReleaseID,
+		KeepArtifactPin:   keepArtifactPin,
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		http.NotFound(w, r)

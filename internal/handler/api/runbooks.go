@@ -45,6 +45,7 @@ type runbookSaveRequest struct {
 	Description       string        `json:"description"`
 	Steps             []runbookStep `json:"steps"`
 	ArtifactReleaseID int64         `json:"artifact_release_id"`
+	KeepArtifactPin   bool          `json:"keep_artifact_pin"`
 }
 
 // swagger:route GET /projects/{id}/runbooks runbooks listRunbooks
@@ -248,6 +249,7 @@ func (h *RunbookHandler) Save(w http.ResponseWriter, r *http.Request) {
 			ProjectID: projectID, RunbookID: id, Name: req.Name,
 			Description: req.Description, StepsJSON: string(steps),
 			ArtifactReleaseID: req.ArtifactReleaseID,
+			KeepArtifactPin:   req.KeepArtifactPin,
 		},
 	)
 	if errors.Is(err, sql.ErrNoRows) {

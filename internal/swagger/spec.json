@@ -8909,6 +8909,10 @@
           "type": "string",
           "x-go-name": "Description"
         },
+        "keep_artifact_pin": {
+          "type": "boolean",
+          "x-go-name": "KeepArtifactPin"
+        },
         "name": {
           "type": "string",
           "x-go-name": "Name"

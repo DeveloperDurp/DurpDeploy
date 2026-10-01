@@ -251,4 +251,5 @@ printf 'artifact-readable\n'
 		t.Fatal(err)
 	}
 	f.completion(t, execution.DeploymentID, events.RunbookSucceeded)
+	f.verifyOrphanedPinEdits(t, runbookVersion, script)
 }
