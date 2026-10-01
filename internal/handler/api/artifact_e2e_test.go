@@ -102,6 +102,18 @@ printf 'artifact-readable\n'
 		url.Values{"name": {"ARTIFACT_PATH"}, "value": {"override"}},
 		422,
 	)
+	f.changePackage("metadata-heavy")
+	quotaError := f.api(
+		t,
+		"POST",
+		base+"/releases",
+		map[string]string{"version": "metadata-rejected"},
+		422,
+	)
+	if !strings.Contains(string(quotaError), "metadata") {
+		t.Fatalf("metadata rejection not explained: %s", quotaError)
+	}
+	f.changePackage("package")
 	data = f.api(
 		t,
 		"POST",

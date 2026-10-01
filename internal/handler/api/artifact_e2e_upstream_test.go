@@ -10,11 +10,13 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
+	"fmt"
 	"io"
 	"math/big"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -78,14 +80,29 @@ func artifactHTTPSFixture(
 			mu.RUnlock()
 			var buffer bytes.Buffer
 			writer := zip.NewWriter(&buffer)
-			entry, err := writer.Create("app.txt")
-			if err != nil {
-				t.Error(err)
-				return
-			}
-			if _, err := io.WriteString(entry, text); err != nil {
-				t.Error(err)
-				return
+			if text == "metadata-heavy" {
+				comment := strings.Repeat("x", 65535)
+				for i := 0; i < 300; i++ {
+					if _, err := writer.CreateHeader(
+						&zip.FileHeader{
+							Name:    fmt.Sprintf("item-%d", i),
+							Comment: comment,
+						},
+					); err != nil {
+						t.Error(err)
+						return
+					}
+				}
+			} else {
+				entry, err := writer.Create("app.txt")
+				if err != nil {
+					t.Error(err)
+					return
+				}
+				if _, err := io.WriteString(entry, text); err != nil {
+					t.Error(err)
+					return
+				}
 			}
 			if err := writer.Close(); err != nil {
 				t.Error(err)

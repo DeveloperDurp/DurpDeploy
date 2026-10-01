@@ -3,6 +3,7 @@ package artifact
 
 import (
 	"errors"
+	"fmt"
 	"net/url"
 	"strings"
 )
@@ -12,13 +13,18 @@ const (
 	MaxDownload        = int64(300 << 20)
 	MaxExtracted       = int64(512 << 20)
 	MaxFiles           = 10000
+	MaxMetadata        = int64(16 << 20)
 	PathVariable       = "ARTIFACT_PATH"
 )
 
 var (
-	ErrInvalid  = errors.New("invalid artifact repository or ZIP")
-	ErrFetch    = errors.New("artifact download failed")
-	ErrChecksum = errors.New("artifact checksum mismatch")
+	ErrInvalid       = errors.New("invalid artifact repository or ZIP")
+	ErrFetch         = errors.New("artifact download failed")
+	ErrChecksum      = errors.New("artifact checksum mismatch")
+	ErrMetadataLimit = fmt.Errorf(
+		"ZIP metadata reads exceed 16 MiB: %w",
+		ErrInvalid,
+	)
 )
 
 type Repository struct {

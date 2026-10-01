@@ -6,7 +6,7 @@ import (
 	"errors"
 	"io"
 	"os"
-	"path/filepath"
+	"path"
 )
 
 func ValidateZIP(ctx context.Context, filename string) error {
@@ -30,11 +30,19 @@ func ExtractZIP(
 }
 
 func processZIP(ctx context.Context, filename, directory string) (err error) {
-	archive, err := zip.OpenReader(filename)
+	archive, file, err := openZIP(ctx, filename)
 	if err != nil {
-		return ErrInvalid
+		return err
 	}
-	defer func() { err = errors.Join(err, archive.Close()) }()
+	defer func() { err = errors.Join(err, file.Close()) }()
+	var root *os.Root
+	if directory != "" {
+		root, err = os.OpenRoot(directory)
+		if err != nil {
+			return err
+		}
+		defer func() { err = errors.Join(err, root.Close()) }()
+	}
 	if len(archive.File) == 0 || len(archive.File) > MaxFiles {
 		return ErrInvalid
 	}
@@ -50,7 +58,7 @@ func processZIP(ctx context.Context, filename, directory string) (err error) {
 		if entry.UncompressedSize64 > uint64(MaxExtracted-total) {
 			return ErrInvalid
 		}
-		count, err := processEntry(ctx, entry, directory, MaxExtracted-total)
+		count, err := processEntry(ctx, entry, root, MaxExtracted-total)
 		if err != nil {
 			return err
 		}
@@ -62,14 +70,14 @@ func processZIP(ctx context.Context, filename, directory string) (err error) {
 func processEntry(
 	ctx context.Context,
 	entry *zip.File,
-	directory string,
+	root *os.Root,
 	remaining int64,
 ) (size int64, err error) {
 	if entry.Mode().IsDir() {
-		if directory == "" {
+		if root == nil {
 			return 0, nil
 		}
-		return 0, os.MkdirAll(filepath.Join(directory, entry.Name), 0755)
+		return 0, root.MkdirAll(entry.Name, 0755)
 	}
 	reader, err := entry.Open()
 	if err != nil {
@@ -77,13 +85,12 @@ func processEntry(
 	}
 	defer func() { err = errors.Join(err, reader.Close()) }()
 	var target io.Writer = io.Discard
-	if directory != "" {
-		filename := filepath.Join(directory, entry.Name)
-		if err := os.MkdirAll(filepath.Dir(filename), 0755); err != nil {
+	if root != nil {
+		if err := root.MkdirAll(path.Dir(entry.Name), 0755); err != nil {
 			return 0, err
 		}
-		file, err := os.OpenFile(
-			filename,
+		file, err := root.OpenFile(
+			entry.Name,
 			os.O_CREATE|os.O_EXCL|os.O_WRONLY,
 			0644,
 		)
