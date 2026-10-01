@@ -836,7 +836,7 @@ echo "  Bare-path API step, variable, and template writes: OK"
 # Exercise streams through the running binary's real middleware stack.
 # Curl's timeout is expected: these endpoints stay open after replay.
 assert_log_stream() {
-    local path="$1" marker="$2" content_type="$3" code status=0
+    local path="$1" marker="$2" content_type="${3:-text/event-stream}" code status=0
     code=$(curl -sS -N -m 2 -b "$COOKIES" \
         -H "Authorization: Bearer $API_TOKEN" \
         -D "$TMP/stream-headers" -o "$TMP/stream-body" -w '%{http_code}' \
@@ -853,9 +853,10 @@ assert_log_stream() {
 }
 
 echo "=== Runbook API and web contracts ==="
+RUNBOOK_V1_MARKER=runbook-e2e-v1
 RUNBOOK_ENV=$(api_post '{"name":"runbook-e2e-env"}' "$BASE/api/v1/environments")
 RUNBOOK_ENV_ID=$(echo "$RUNBOOK_ENV" | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
-RUNBOOK_CREATED=$(api_post "{\"name\":\"e2e-maintenance\",\"steps\":[{\"name\":\"inspect\",\"script_body\":\"printf runbook-e2e-v1\",\"interpreter\":\"bash\",\"container_image\":\"$BASH_IMAGE\"}]}" \
+RUNBOOK_CREATED=$(api_post "{\"name\":\"e2e-maintenance\",\"steps\":[{\"name\":\"inspect\",\"script_body\":\"printf $RUNBOOK_V1_MARKER\",\"interpreter\":\"bash\",\"container_image\":\"$BASH_IMAGE\"}]}" \
     "$BASE/api/v1/projects/$API_PROJECT_ID/runbooks")
 RUNBOOK_ID=$(echo "$RUNBOOK_CREATED" | python3 -c 'import sys,json; print(json.load(sys.stdin)["runbook"]["id"])')
 RUNBOOK_V1=$(echo "$RUNBOOK_CREATED" | python3 -c 'import sys,json; print(json.load(sys.stdin)["version"]["id"])')
@@ -864,7 +865,7 @@ RUNBOOK_UPDATED=$(api_put "{\"steps\":[{\"name\":\"inspect\",\"script_body\":\"p
 RUNBOOK_V2=$(echo "$RUNBOOK_UPDATED" | python3 -c 'import sys,json; print(json.load(sys.stdin)["version"]["id"])')
 [[ "$RUNBOOK_V1" != "$RUNBOOK_V2" ]] || { echo "FAIL: runbook version did not advance"; exit 1; }
 RUNBOOK_PAGE=$(curl_body "$BASE/projects/$API_PROJECT_ID/runbooks/$RUNBOOK_ID?version_id=$RUNBOOK_V1")
-grep -q 'runbook-e2e-v1' <<<"$RUNBOOK_PAGE" || { echo "FAIL: browser cannot read pinned runbook version"; exit 1; }
+grep -q "$RUNBOOK_V1_MARKER" <<<"$RUNBOOK_PAGE" || { echo "FAIL: browser cannot read pinned runbook version"; exit 1; }
 if grep -q 'runbook-e2e-v2' <<<"$RUNBOOK_PAGE"; then
     echo "FAIL: browser version view changed with a later edit"; exit 1
 fi
@@ -883,13 +884,13 @@ for i in {1..100}; do
 done
 [[ "$RUNBOOK_STATUS" == "succeeded" ]] || { echo "FAIL: runbook execution status=$RUNBOOK_STATUS"; exit 1; }
 RUNBOOK_LOGS=$(api_get "$BASE/api/v1/projects/$API_PROJECT_ID/runbook-executions/$RUNBOOK_EXECUTION_ID/logs")
-grep -q 'runbook-e2e-v1' <<<"$RUNBOOK_LOGS" || { echo "FAIL: pinned runbook logs missing"; exit 1; }
+grep -q "$RUNBOOK_V1_MARKER" <<<"$RUNBOOK_LOGS" || { echo "FAIL: pinned runbook logs missing"; exit 1; }
 if grep -q 'runbook-e2e-v2' <<<"$RUNBOOK_LOGS"; then
     echo "FAIL: pinned runbook used a later version"; exit 1
 fi
-assert_log_stream "/projects/$API_PROJECT_ID/runbooks/executions/$RUNBOOK_EXECUTION_ID/logs/stream" 'runbook-e2e-v1' 'text/event-stream'
-assert_log_stream "/api/v1/projects/$API_PROJECT_ID/runbook-executions/$RUNBOOK_EXECUTION_ID/logs/stream" 'runbook-e2e-v1' 'text/event-stream'
-assert_log_stream "/api/v1/projects/$API_PROJECT_ID/runbook-executions/$RUNBOOK_EXECUTION_ID/logs/stream?format=ndjson" 'runbook-e2e-v1' 'application/x-ndjson'
+assert_log_stream "/projects/$API_PROJECT_ID/runbooks/executions/$RUNBOOK_EXECUTION_ID/logs/stream" "$RUNBOOK_V1_MARKER"
+assert_log_stream "/api/v1/projects/$API_PROJECT_ID/runbook-executions/$RUNBOOK_EXECUTION_ID/logs/stream" "$RUNBOOK_V1_MARKER"
+assert_log_stream "/api/v1/projects/$API_PROJECT_ID/runbook-executions/$RUNBOOK_EXECUTION_ID/logs/stream?format=ndjson" "$RUNBOOK_V1_MARKER" 'application/x-ndjson'
 echo "  Web/API runbook streams: OK"
 RUNBOOK_RETRY=$(api_post '{}' \
     "$BASE/api/v1/projects/$API_PROJECT_ID/runbook-executions/$RUNBOOK_EXECUTION_ID/retry")
@@ -1625,10 +1626,10 @@ LOG_LINE=$(echo "$LOGS" | head -1)
 echo "$LOG_LINE" | python3 -c "import sys,json; d=json.load(sys.stdin); assert 'line' in d; print('ndjson line OK')"
 echo "  Log streaming (ndjson): OK"
 
-assert_log_stream "/deployments/$API_LOG_DEP_ID/logs/stream" 'data:' 'text/event-stream'
-assert_log_stream "/api/v1/deployments/$API_LOG_DEP_ID/logs/stream" 'data:' 'text/event-stream'
+assert_log_stream "/deployments/$API_LOG_DEP_ID/logs/stream" 'data:'
+assert_log_stream "/api/v1/deployments/$API_LOG_DEP_ID/logs/stream" 'data:'
 assert_log_stream "/api/v1/deployments/$API_LOG_DEP_ID/logs/stream?format=ndjson" '"line":' 'application/x-ndjson'
-assert_log_stream "/api/v1/deployments/$API_LOG_DEP_ID/events" 'data:' 'text/event-stream'
+assert_log_stream "/api/v1/deployments/$API_LOG_DEP_ID/events" 'data:'
 echo "  Web/API deployment streams: OK"
 
 # A9: Failure paths.

@@ -143,8 +143,7 @@ jobs:
           # to the Go files this PR changes (golines' output is
           # toolchain-sensitive, so a repo-wide gate would fail on
           # main's historical formatting, not on this diff). Pinned
-          # `go run` keeps the lint job's dependency at a fixed version
-          # without touching go.mod/go.sum (no manifest churn).
+          # `go tool` uses the version locked in go.mod/go.sum.
           # checkout is shallow; unshallow so the merge base with main
           # is resolvable for the changed-file diff.
           git fetch --unshallow origin main
@@ -154,7 +153,7 @@ jobs:
           fi
           set -e
           out=(
-            $(go run github.com/segmentio/golines@v0.13.0               -m 80 --ignore-generated -l $files)
+            $(go tool golines -m 80 --ignore-generated -l $files)
           )
           if [ -n "$out" ]; then
             echo "Files needing golines:"

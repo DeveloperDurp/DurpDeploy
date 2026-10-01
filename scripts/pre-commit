@@ -7,8 +7,8 @@
 # Install: `make install-hooks` (copies this to .git/hooks/pre-commit).
 set -euo pipefail
 
-if ! command -v golines >/dev/null 2>&1; then
-	echo "golines not found in PATH. Install: go install github.com/segmentio/golines@v0.13.0" >&2
+if ! command -v go >/dev/null 2>&1; then
+	echo "Go is required to run the version-locked formatter." >&2
 	exit 1
 fi
 
@@ -19,7 +19,7 @@ git diff --cached --name-only --diff-filter=ACMRT -z -- '*.go' >"$tmp/files"
 while IFS= read -r -d '' file; do
 	# Read the index, not the working tree: partial staging must be safe.
 	git show ":$file" >"$tmp/staged.go"
-	formatted=$(golines -m 80 --ignore-generated -l "$tmp/staged.go")
+	formatted=$(go tool golines -m 80 --ignore-generated -l "$tmp/staged.go")
 	if [ -n "$formatted" ]; then
 		printf 'golines: staged file needs formatting: %s\n' "$file" >&2
 		failed=1

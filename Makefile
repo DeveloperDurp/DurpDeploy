@@ -204,7 +204,7 @@ pre-commit-test:
 	bash scripts/pre-commit_test.sh
 
 golines:
-	golines --max-len=80 --ignore-generated -w .
+	go tool golines --max-len=80 --ignore-generated -w .
 
 # Fail if any Go file the branch or working tree touches needs the
 # 80-col reformat (same tool the pre-commit hook uses). Scoped to the
@@ -222,7 +222,7 @@ golines-check:
 	files=$$(echo $$files | tr ' ' '\n' | grep -v '^$$' | sort -u | tr '\n' ' '); \
 	files=$$(echo $$files); \
 	if [ -z "$$files" ]; then exit 0; fi; \
-	out=$$(golines --max-len=80 --ignore-generated -l $$files); \
+	out=$$(go tool golines --max-len=80 --ignore-generated -l $$files); \
 	if [ -n "$$out" ]; then \
 		echo "Files needing golines:"; \
 		echo "$$out"; \
