@@ -47,6 +47,7 @@ func (f *artifactE2E) verifyRunbookPackage(
 	if err := json.Unmarshal(data, &saved); err != nil {
 		t.Fatal(err)
 	}
+	f.verifyRunbookArtifactValidation(t, saved.Runbook.ID, releaseID)
 	f.api(
 		t,
 		"GET",
