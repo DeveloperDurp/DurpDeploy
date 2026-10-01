@@ -88,17 +88,17 @@ templ RunbookFormPage(project db.Project, book db.Runbook, stepsJSON string, art
 					} else {
 						New version of { book.Name }
 					}
+				</h1>
+				if errorMessage != "" {
+					<div class="alert alert-error">{ errorMessage }</div>
+				}
+				<form method="post" action={ runbookSaveURL(project.ID, book.ID) } class="space-y-4" x-data={ fmt.Sprintf("{ steps: %s }", stepsJSON) } x-init="steps.forEach(step => { step.agent_selectors_text = (step.agent_selectors || []).join(', '); step.variable_names_text = (step.variable_names || []).join(', '); })">
 					<label class="form-control"><span class="label-text">Package from project release</span><select name="artifact_release_id" class="select select-bordered"><option value="0" selected?={ selectedArtifactReleaseID==0 }>No package</option>
 					for _, release := range artifactReleases {
 						<option value={ strconv.FormatInt(release.ID,10) } selected?={ selectedArtifactReleaseID==release.ID }>{ release.Version }</option>
 					}
 					</select></label>
 					<p class="text-sm opacity-70">Required when the project has a package repository selected. This runbook version keeps its own copy of the chosen release's artifact pin.</p>
-				</h1>
-				if errorMessage != "" {
-					<div class="alert alert-error">{ errorMessage }</div>
-				}
-				<form method="post" action={ runbookSaveURL(project.ID, book.ID) } class="space-y-4" x-data={ fmt.Sprintf("{ steps: %s }", stepsJSON) } x-init="steps.forEach(step => { step.agent_selectors_text = (step.agent_selectors || []).join(', '); step.variable_names_text = (step.variable_names || []).join(', '); })">
 					if book.ID == 0 {
 						<label class="form-control"><span class="label-text">Name</span><input name="name" class="input input-bordered" required/></label>
 						<label class="form-control"><span class="label-text">Description</span><input name="description" class="input input-bordered"/></label>

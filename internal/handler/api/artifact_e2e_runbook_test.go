@@ -11,6 +11,7 @@ import (
 
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/events"
+	"golang.org/x/net/html"
 )
 
 func (f *artifactE2E) verifyRunbookPackage(
@@ -74,9 +75,7 @@ func (f *artifactE2E) verifyRunbookPackage(
 	}
 	f.completion(t, execution.DeploymentID, events.RunbookSucceeded)
 	form := f.web(t, "GET", webBase+"/runbooks/new", nil, 200)
-	if !strings.Contains(form, `name="artifact_release_id"`) {
-		t.Fatal("runbook package selection missing")
-	}
+	assertArtifactSelectInSaveForm(t, form)
 	f.web(
 		t,
 		"POST",
@@ -96,4 +95,37 @@ func (f *artifactE2E) verifyRunbookPackage(
 		},
 		303,
 	)
+}
+
+func assertArtifactSelectInSaveForm(t *testing.T, markup string) {
+	t.Helper()
+	root, err := html.Parse(strings.NewReader(markup))
+	if err != nil {
+		t.Fatal(err)
+	}
+	selector := findArtifactSelect(root)
+	if selector == nil {
+		t.Fatal("artifact release selector is missing")
+	}
+	for parent := selector.Parent; parent != nil; parent = parent.Parent {
+		if parent.Type == html.ElementNode && parent.Data == "form" {
+			return
+		}
+	}
+	t.Fatal("artifact release selector is outside the save form")
+}
+
+func findArtifactSelect(root *html.Node) *html.Node {
+	for node := range root.Descendants() {
+		if node.Type != html.ElementNode || node.Data != "select" {
+			continue
+		}
+		for _, attribute := range node.Attr {
+			if attribute.Key == "name" &&
+				attribute.Val == "artifact_release_id" {
+				return node
+			}
+		}
+	}
+	return nil
 }

@@ -42,10 +42,10 @@ templ ArtifactRepositoriesPage(project db.Project, repositories []db.PackageRepo
 				}
 			</div></div>
 			<div class="overflow-x-auto"><table class="table table-zebra table-fixed w-full">
-				<thead><tr><th class="w-1/4">Name</th><th class="w-auto">HTTPS ZIP template</th><th class="w-48">Actions</th></tr></thead>
+				<thead><tr><th class="w-auto sm:w-1/4">Name</th><th class="hidden sm:table-cell w-auto">HTTPS ZIP template</th><th class="w-32 sm:w-48">Actions</th></tr></thead>
 				<tbody>
 				for _, repository := range repositories {
-					<tr><td class="truncate">{ repository.Name }</td><td class="truncate" title={ repository.UrlTemplate }>{ repository.UrlTemplate }</td><td>
+					<tr><td class="truncate" title={ repository.Name }>{ repository.Name }<p class="sm:hidden text-xs opacity-70 truncate" title={ repository.UrlTemplate }>{ repository.UrlTemplate }</p></td><td class="hidden sm:table-cell truncate" title={ repository.UrlTemplate }>{ repository.UrlTemplate }</td><td>
 						if CanWrite(ctx) {
 							<div class="flex gap-2 whitespace-nowrap"><a class="btn btn-xs" href={ fmt.Sprintf("/projects/%d/package-repositories/%d/edit",project.ID,repository.ID) }>Edit</a><form method="post" action={ fmt.Sprintf("/projects/%d/package-repositories/%d/delete",project.ID,repository.ID) }><button class="btn btn-xs btn-error" type="submit">Delete</button></form></div>
 						}
