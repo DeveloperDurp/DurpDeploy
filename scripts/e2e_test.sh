@@ -16,11 +16,20 @@ cleanup() {
 	if ((status != 0)) && [[ -f "$TMP/server.log" ]]; then
 		tail -n 100 "$TMP/server.log" >&2
 	fi
-    rm -rf "$TMP"
     if [[ -n "$SERVER_PID" ]]; then
+        local server_status=0
+        printf 'E2E server shutdown requested at %s\n' "$(date -u +%FT%TZ)"
         kill "$SERVER_PID" 2>/dev/null || true
-        wait "$SERVER_PID" 2>/dev/null || true
+        wait "$SERVER_PID" 2>/dev/null || server_status=$?
+        printf 'E2E server shutdown exit=%s at %s\n' "$server_status" "$(date -u +%FT%TZ)"
+        # Only lifecycle/removal messages: never print request or step data.
+        if [[ -f "$TMP/server.log" ]]; then
+            grep -E '"msg":"(shutdown signal received, draining|remove container on shutdown failed|container step cleanup failed|agent shutdown failed)"' \
+                "$TMP/server.log" || true
+        fi
     fi
+	# Keep the database and its logs alive until the server has stopped.
+    rm -rf "$TMP"
 	return "$status"
 }
 trap cleanup EXIT
