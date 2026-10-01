@@ -8,10 +8,11 @@ import (
 )
 
 const (
-	MaxDownload  = int64(300 << 20)
-	MaxExtracted = int64(512 << 20)
-	MaxFiles     = 10000
-	PathVariable = "ARTIFACT_PATH"
+	versionPlaceholder = "{version}"
+	MaxDownload        = int64(300 << 20)
+	MaxExtracted       = int64(512 << 20)
+	MaxFiles           = 10000
+	PathVariable       = "ARTIFACT_PATH"
 )
 
 var (
@@ -28,7 +29,7 @@ type Repository struct {
 }
 
 func (r Repository) Validate() error {
-	if strings.Count(r.URLTemplate, "{version}") != 1 {
+	if strings.Count(r.URLTemplate, versionPlaceholder) != 1 {
 		return ErrInvalid
 	}
 	if _, err := r.URL("1.0"); err != nil {
@@ -63,7 +64,7 @@ func (r Repository) URL(version string) (string, error) {
 	}
 	raw := strings.ReplaceAll(
 		r.URLTemplate,
-		"{version}",
+		versionPlaceholder,
 		url.PathEscape(version),
 	)
 	u, err := url.Parse(raw)
@@ -72,7 +73,7 @@ func (r Repository) URL(version string) (string, error) {
 	}
 	// Version substitution is confined to the path; it cannot select a host.
 	template, err := url.Parse(
-		strings.ReplaceAll(r.URLTemplate, "{version}", "version"),
+		strings.ReplaceAll(r.URLTemplate, versionPlaceholder, "version"),
 	)
 	if err != nil || template.Host != u.Host ||
 		!strings.Contains(template.Path, "version") ||

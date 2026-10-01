@@ -8,7 +8,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"net/url"
 	"os"
 	"time"
 )
@@ -81,38 +80,9 @@ func (c *Client) Fetch(
 	source Repository,
 	pin Pin,
 ) (result Download, err error) {
-	if err := source.Validate(); err != nil {
-		return result, err
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pin.URL, nil)
-	if err != nil || validURL(req.URL) != nil {
-		return result, ErrInvalid
-	}
-	origin, err := url.Parse(source.URLTemplate)
-	if err != nil || origin.Host != req.URL.Host {
-		return result, ErrInvalid
-	}
-	switch source.AuthType {
-	case "bearer":
-		req.Header.Set("Authorization", "Bearer "+source.Credential)
-	case "basic":
-		req.SetBasicAuth(source.Username, source.Credential)
-	}
-	client := *c.HTTP
-	client.CheckRedirect = func(next *http.Request, via []*http.Request) error {
-		if len(via) >= 5 || validURL(next.URL) != nil ||
-			next.URL.Host != req.URL.Host {
-			return ErrFetch
-		}
-		return nil
-	}
-	response, err := client.Do(req)
-	// Do errors can contain URL paths or server-controlled redirect text.
+	response, err := c.request(ctx, source, pin)
 	if err != nil {
-		if ctx.Err() != nil {
-			return result, ctx.Err()
-		}
-		return result, ErrFetch
+		return result, err
 	}
 	var temporaryPath string
 	defer func() {

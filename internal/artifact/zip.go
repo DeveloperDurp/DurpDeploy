@@ -5,11 +5,8 @@ import (
 	"context"
 	"errors"
 	"io"
-	"io/fs"
 	"os"
-	"path"
 	"path/filepath"
-	"strings"
 )
 
 func ValidateZIP(ctx context.Context, filename string) error {
@@ -41,49 +38,17 @@ func processZIP(ctx context.Context, filename, directory string) (err error) {
 	if len(archive.File) == 0 || len(archive.File) > MaxFiles {
 		return ErrInvalid
 	}
-	seen := make(map[string]bool, len(archive.File))
 	kinds := make(map[string]bool, len(archive.File))
 	var total int64
 	for _, entry := range archive.File {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		name := strings.TrimSuffix(entry.Name, "/")
-		if !fs.ValidPath(name) || path.Clean(name) != name ||
-			strings.ContainsAny(name, "\\:\x00") ||
-			seen[name] {
-			return ErrInvalid
-		}
-		seen[name] = true
-		mode := entry.Mode()
-		if !mode.IsRegular() && !mode.IsDir() {
-			return ErrInvalid
-		}
-		if directoryEntry, exists := kinds[name]; exists &&
-			(!directoryEntry || !mode.IsDir()) {
-			return ErrInvalid
-		}
-		kinds[name] = mode.IsDir()
-		for parent := path.Dir(name); parent != "."; parent = path.Dir(parent) {
-			if directoryEntry, exists := kinds[parent]; exists &&
-				!directoryEntry {
-				return ErrInvalid
-			}
-			kinds[parent] = true
+		if err := validateZIPEntry(entry, kinds); err != nil {
+			return err
 		}
 		if entry.UncompressedSize64 > uint64(MaxExtracted-total) {
 			return ErrInvalid
-		}
-		if mode.IsDir() {
-			if directory != "" {
-				if err := os.MkdirAll(
-					filepath.Join(directory, name),
-					0755,
-				); err != nil {
-					return err
-				}
-			}
-			continue
 		}
 		count, err := processEntry(ctx, entry, directory, MaxExtracted-total)
 		if err != nil {
@@ -100,6 +65,12 @@ func processEntry(
 	directory string,
 	remaining int64,
 ) (size int64, err error) {
+	if entry.Mode().IsDir() {
+		if directory == "" {
+			return 0, nil
+		}
+		return 0, os.MkdirAll(filepath.Join(directory, entry.Name), 0755)
+	}
 	reader, err := entry.Open()
 	if err != nil {
 		return 0, ErrInvalid
@@ -136,7 +107,7 @@ func processEntry(
 }
 
 type contextReader struct {
-	ctx    context.Context
+	ctx    context.Context // NOSONAR: short-lived io.Reader adapter; Read cannot accept a context.
 	reader io.Reader
 }
 

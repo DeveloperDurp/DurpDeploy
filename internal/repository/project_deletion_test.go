@@ -12,54 +12,9 @@ func TestProjectDeletionHandlesNormalDeploymentSnapshots(t *testing.T) {
 	for _, status := range []string{"pending", "running", "pending_approval", "succeeded", "failed", "cancelled"} {
 		t.Run(status, func(t *testing.T) {
 			// Given
-			repo := newTestRepo(t)
-			project, err := repo.Queries.CreateProject(
-				t.Context(),
-				db.CreateProjectParams{Name: "delete-project"},
-			)
-			if err != nil {
-				t.Fatal(err)
-			}
-			environment, err := repo.Queries.CreateEnvironment(
-				t.Context(),
-				db.CreateEnvironmentParams{Name: "delete-env"},
-			)
-			if err != nil {
-				t.Fatal(err)
-			}
-			release, err := repo.Queries.CreateRelease(
-				t.Context(),
-				db.CreateReleaseParams{
-					ProjectID: project.ID,
-					Version:   "1",
-					StepsJson: `[{"name":"normal","script_body":"true","container_image":"bash:5.2"}]`,
-				},
-			)
-			if err != nil {
-				t.Fatal(err)
-			}
-			deployment, err := repo.CreateDeployment(
-				t.Context(),
-				db.CreateDeploymentParams{
-					ReleaseID:     release.ID,
-					EnvironmentID: environment.ID,
-					Status:        "pending",
-				},
-			)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if err := repo.Queries.UpdateDeploymentStatus(
-				t.Context(),
-				db.UpdateDeploymentStatusParams{
-					ID:     deployment.Deployment.ID,
-					Status: status,
-				},
-			); err != nil {
-				t.Fatal(err)
-			}
+			repo, project := seedProjectDeletion(t, status)
 			// When
-			err = repo.DeleteProject(t.Context(), project.ID)
+			err := repo.DeleteProject(t.Context(), project.ID)
 			// Then
 			switch status {
 			case "pending", "running", "pending_approval":
@@ -73,4 +28,58 @@ func TestProjectDeletionHandlesNormalDeploymentSnapshots(t *testing.T) {
 			}
 		})
 	}
+}
+
+func seedProjectDeletion(
+	t *testing.T,
+	status string,
+) (*repository.Repository, db.Project) {
+	t.Helper()
+	repo := newTestRepo(t)
+	project, err := repo.Queries.CreateProject(
+		t.Context(),
+		db.CreateProjectParams{Name: "delete-project"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	environment, err := repo.Queries.CreateEnvironment(
+		t.Context(),
+		db.CreateEnvironmentParams{Name: "delete-env"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	release, err := repo.Queries.CreateRelease(
+		t.Context(),
+		db.CreateReleaseParams{
+			ProjectID: project.ID,
+			Version:   "1",
+			StepsJson: `[{"name":"normal","script_body":"true","container_image":"bash:5.2"}]`,
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	deployment, err := repo.CreateDeployment(
+		t.Context(),
+		db.CreateDeploymentParams{
+			ReleaseID:     release.ID,
+			EnvironmentID: environment.ID,
+			Status:        "pending",
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.Queries.UpdateDeploymentStatus(
+		t.Context(),
+		db.UpdateDeploymentStatusParams{
+			ID:     deployment.Deployment.ID,
+			Status: status,
+		},
+	); err != nil {
+		t.Fatal(err)
+	}
+	return repo, project
 }

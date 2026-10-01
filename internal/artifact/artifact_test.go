@@ -36,7 +36,7 @@ func TestExtractZIPRejectsUnsafeEntries(t *testing.T) {
 		name string
 		mode os.FileMode
 	}{
-		{"../escape", 0644}, {"/absolute", 0644}, {"a\\escape", 0644},
+		{".", 0644}, {"../escape", 0644}, {"/absolute", 0644}, {"a\\escape", 0644},
 		{"C:escape", 0644}, {"a/../escape", 0644}, {"link", os.ModeSymlink | 0644},
 		{"pipe", os.ModeNamedPipe | 0644},
 	} {
