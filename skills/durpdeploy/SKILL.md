@@ -186,6 +186,14 @@ for the latest. Its response includes the runbook execution `id` and the
 underlying `deployment_id`. Read the execution at
 `/api/v1/projects/$PID/runbook-executions/$XID`, logs at `/logs`, and live
 logs at `/logs/stream` (SSE by default, `?format=ndjson` for NDJSON).
+
+HTTP headers must arrive within 5 seconds, and the complete request body
+within 30 seconds from the start of the request read. Ordinary responses
+have a 60-second write budget. Deployment/runbook SSE and NDJSON streams
+have no total lifetime limit, but each event write/flush must finish within
+60 seconds. Consume streams continuously and reconnect after disconnects.
+An operator's reverse proxy may impose additional limits.
+
 Execution actions are `POST .../$XID/cancel`, `/approve` (admin only),
 and `/retry` (after a terminal status). Retry returns `409` while the source
 execution has a lost or unconfirmed remote outcome; inspect the agent before

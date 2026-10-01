@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -15,6 +16,7 @@ import (
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/handler"
+	"durpdeploy/internal/httpstream"
 	"durpdeploy/internal/migrate"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/runner"
@@ -185,5 +187,77 @@ func TestHTTPStreamsSurviveOrdinaryWriteTimeout(t *testing.T) {
 				t.Fatal("stream handler did not exit after client disconnect")
 			}
 		})
+	}
+}
+
+type flushFailureWriter struct {
+	http.ResponseWriter
+	remaining int
+}
+
+func (w flushFailureWriter) Unwrap() http.ResponseWriter {
+	return w.ResponseWriter
+}
+
+func (w *flushFailureWriter) FlushError() error {
+	if w.remaining > 0 {
+		w.remaining--
+		return httpstream.Flush(w.ResponseWriter)
+	}
+	return errors.New("transport flush failed")
+}
+
+func TestHTTPStreamsExitOnFlushFailure(t *testing.T) {
+	f := newStreamFixture(t)
+	for _, route := range f.paths {
+		for _, live := range []bool{false, true} {
+			t.Run(
+				fmt.Sprintf("%s/live=%t", route.path, live),
+				func(t *testing.T) {
+					// Given: the full middleware stack above a failing transport.
+					done := make(chan struct{})
+					srv := httptest.NewUnstartedServer(http.HandlerFunc(
+						func(w http.ResponseWriter, r *http.Request) {
+							defer close(done)
+							transport := &flushFailureWriter{ResponseWriter: w}
+							if live {
+								transport.remaining = 1
+							}
+							f.router.ServeHTTP(transport, r)
+						},
+					))
+					srv.Config = newHTTPServer("", srv.Config.Handler)
+					srv.Start()
+					defer srv.Close()
+					defer srv.CloseClientConnections()
+					req, err := http.NewRequest("GET", srv.URL+route.path, nil)
+					require.NoError(t, err)
+					req.Header.Set("Authorization", "Bearer ddp_pat_timeout")
+					req.AddCookie(
+						&http.Cookie{Name: "session", Value: "timeout-session"},
+					)
+					srv.Client().Timeout = 3 * time.Second
+					// When: the historical or live event's flush fails.
+					resp, err := srv.Client().Do(req)
+					require.NoError(t, err)
+					defer resp.Body.Close()
+					require.Equal(t, http.StatusOK, resp.StatusCode)
+					if live {
+						timer := time.NewTimer(200 * time.Millisecond)
+						defer timer.Stop()
+						<-timer.C
+						f.broker.Broadcast(route.id, "flush-fails")
+					}
+					// Then: the handler exits and its deferred unsubscribe runs.
+					select {
+					case <-done:
+					case <-time.After(time.Second):
+						t.Fatal(
+							"stream handler ignored a transport flush error",
+						)
+					}
+				},
+			)
+		}
 	}
 }

@@ -833,6 +833,25 @@ TEMPLATE_ID=$(api_item_id_by_name "$BASE/api/v1/templates" bare-path-template)
 [[ -n "$TEMPLATE_ID" ]] || { echo "FAIL: bare-path template not persisted"; exit 1; }
 echo "  Bare-path API step, variable, and template writes: OK"
 
+# Exercise streams through the running binary's real middleware stack.
+# Curl's timeout is expected: these endpoints stay open after replay.
+assert_log_stream() {
+    local path="$1" marker="$2" content_type="$3" code status=0
+    code=$(curl -sS -N -m 2 -b "$COOKIES" \
+        -H "Authorization: Bearer $API_TOKEN" \
+        -D "$TMP/stream-headers" -o "$TMP/stream-body" -w '%{http_code}' \
+        "$BASE$path" 2>/dev/null) || status=$?
+    [[ "$status" == "28" && "$code" == "200" ]] || {
+        echo "FAIL: stream $path returned code=$code curl=$status"; exit 1
+    }
+    grep -qi "^content-type: $content_type" "$TMP/stream-headers" || {
+        echo "FAIL: stream $path has wrong content type"; exit 1
+    }
+    grep -q "$marker" "$TMP/stream-body" || {
+        echo "FAIL: stream $path did not replay expected log"; exit 1
+    }
+}
+
 echo "=== Runbook API and web contracts ==="
 RUNBOOK_ENV=$(api_post '{"name":"runbook-e2e-env"}' "$BASE/api/v1/environments")
 RUNBOOK_ENV_ID=$(echo "$RUNBOOK_ENV" | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
@@ -868,6 +887,10 @@ grep -q 'runbook-e2e-v1' <<<"$RUNBOOK_LOGS" || { echo "FAIL: pinned runbook logs
 if grep -q 'runbook-e2e-v2' <<<"$RUNBOOK_LOGS"; then
     echo "FAIL: pinned runbook used a later version"; exit 1
 fi
+assert_log_stream "/projects/$API_PROJECT_ID/runbooks/executions/$RUNBOOK_EXECUTION_ID/logs/stream" 'runbook-e2e-v1' 'text/event-stream'
+assert_log_stream "/api/v1/projects/$API_PROJECT_ID/runbook-executions/$RUNBOOK_EXECUTION_ID/logs/stream" 'runbook-e2e-v1' 'text/event-stream'
+assert_log_stream "/api/v1/projects/$API_PROJECT_ID/runbook-executions/$RUNBOOK_EXECUTION_ID/logs/stream?format=ndjson" 'runbook-e2e-v1' 'application/x-ndjson'
+echo "  Web/API runbook streams: OK"
 RUNBOOK_RETRY=$(api_post '{}' \
     "$BASE/api/v1/projects/$API_PROJECT_ID/runbook-executions/$RUNBOOK_EXECUTION_ID/retry")
 RUNBOOK_RETRY_ID=$(echo "$RUNBOOK_RETRY" | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
@@ -1601,6 +1624,12 @@ LOGS=$(curl -s -m 5 -H "Authorization: Bearer $API_TOKEN" \
 LOG_LINE=$(echo "$LOGS" | head -1)
 echo "$LOG_LINE" | python3 -c "import sys,json; d=json.load(sys.stdin); assert 'line' in d; print('ndjson line OK')"
 echo "  Log streaming (ndjson): OK"
+
+assert_log_stream "/deployments/$API_LOG_DEP_ID/logs/stream" 'data:' 'text/event-stream'
+assert_log_stream "/api/v1/deployments/$API_LOG_DEP_ID/logs/stream" 'data:' 'text/event-stream'
+assert_log_stream "/api/v1/deployments/$API_LOG_DEP_ID/logs/stream?format=ndjson" '"line":' 'application/x-ndjson'
+assert_log_stream "/api/v1/deployments/$API_LOG_DEP_ID/events" 'data:' 'text/event-stream'
+echo "  Web/API deployment streams: OK"
 
 # A9: Failure paths.
 # 401 without token.

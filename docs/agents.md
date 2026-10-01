@@ -41,6 +41,17 @@ Keep application port 8080 private. Agents need
 outbound TCP access to the server's 10943 address. They do not need an inbound
 agent port.
 
+The direct mTLS listener enforces a 5-second header timeout, a 30-second
+whole-request read timeout, a 60-second write timeout, and a 60-second idle
+keep-alive timeout. Read deadlines are absolute: slowly sending bytes does
+not extend them. These limits do not replace protocol body-size limits or
+network firewall rules. The normal 25-second agent long poll fits inside
+the write budget, including the request read. A connection can close on a
+timeout without an HTTP error response; agents must use their normal retry
+and reconciliation flow rather than assuming a write failed before commit.
+See [HTTP connection limits](deploy.md#http-connection-limits) for the
+separate browser/API streaming and reverse-proxy policy.
+
 ## Configure the server listener
 
 Configure the direct listener through the server environment file. `make dev`
