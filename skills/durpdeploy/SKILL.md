@@ -291,6 +291,9 @@ The container image uses native `TMPDIR=/data/tmp` on its writable data volume,
 not Compose's 64 MiB `/tmp` mount. Reserve about 1.3 GiB of workspace per
 concurrent maximum-size deployment for the ZIP, extracted files, and transport
 tar. Direct installations can select a suitable directory with `TMPDIR`.
+The server holds an exclusive lease on a private `durpdeploy-artifacts`
+subdirectory and reclaims stale ZIP, extraction, and tar files at startup.
+Concurrent server instances must use separate `TMPDIR` directories.
 
 Artifact-bearing deployments currently require local steps; agent steps are
 rejected before dispatch. The future agent download contract is

@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"durpdeploy/internal/artifact"
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/events"
@@ -107,6 +108,16 @@ func newArtifactE2E(t *testing.T) *artifactE2E {
 	bus.Register(artifactNotifier{done})
 	h.runner.SetEventBus(bus)
 	upstream, client, change := artifactHTTPSFixture(t)
+	workspace, err := artifact.OpenWorkspace(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := workspace.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	client.TempDir = workspace.Directory
 	h.repo.ArtifactClient = client
 	return &artifactE2E{
 		h:      h,

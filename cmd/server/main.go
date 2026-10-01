@@ -205,6 +205,9 @@ func runServer() {
 
 	repo := repository.New(dbConn)
 	repo.SetSecretBox(box)
+	if err := prepareArtifactWorkspace(repo); err != nil {
+		log.Fatalf("artifact workspace: %v", err)
+	}
 	broker := runner.NewLogBroker()
 	rnr := runner.New(repo, broker)
 

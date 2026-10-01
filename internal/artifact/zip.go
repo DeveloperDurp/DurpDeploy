@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"path/filepath"
 )
 
 func ValidateZIP(ctx context.Context, filename string) error {
@@ -19,7 +20,10 @@ func ExtractZIP(
 	ctx context.Context,
 	filename string,
 ) (directory string, err error) {
-	directory, err = os.MkdirTemp("", "durpdeploy-artifact-")
+	directory, err = os.MkdirTemp(
+		filepath.Dir(filename),
+		"durpdeploy-artifact-",
+	)
 	if err != nil {
 		return "", err
 	}

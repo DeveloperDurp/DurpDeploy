@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -68,7 +69,10 @@ func (r *DeploymentRunner) stageArtifact(
 		return result, err
 	}
 	defer func() { err = errors.Join(err, os.RemoveAll(directory)) }()
-	archive, err := os.CreateTemp("", "durpdeploy-artifact-*.tar")
+	archive, err := os.CreateTemp(
+		filepath.Dir(download.Path),
+		"durpdeploy-artifact-*.tar",
+	)
 	if err != nil {
 		return result, err
 	}

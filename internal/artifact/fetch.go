@@ -12,7 +12,10 @@ import (
 	"time"
 )
 
-type Client struct{ HTTP *http.Client }
+type Client struct {
+	HTTP    *http.Client
+	TempDir string
+}
 
 func NewClient() *Client {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
@@ -96,7 +99,7 @@ func (c *Client) Fetch(
 		response.ContentLength > MaxDownload {
 		return result, ErrFetch
 	}
-	file, err := os.CreateTemp("", "durpdeploy-artifact-*.zip")
+	file, err := os.CreateTemp(c.TempDir, "durpdeploy-artifact-*.zip")
 	if err != nil {
 		return result, err
 	}
