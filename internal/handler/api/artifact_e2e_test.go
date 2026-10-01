@@ -53,6 +53,7 @@ func TestArtifactsAPIWebContainerE2E(t *testing.T) {
 	if err := json.Unmarshal(data, &source); err != nil {
 		t.Fatal(err)
 	}
+	f.verifyArtifactSelectionErrors(t)
 	f.api(
 		t,
 		"PUT",

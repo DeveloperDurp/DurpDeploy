@@ -37,6 +37,12 @@ func (h *ArtifactHandler) Selection(w http.ResponseWriter, r *http.Request) {
 // Select one project repository for future snapshots, or zero to disable.
 // Responses:
 // 200: body:ArtifactSelection
+// 400: body:BadRequestError
+// 401: body:UnauthorizedError
+// 403: body:ForbiddenError
+// 404: body:NotFoundError
+// 422: body:ValidationError
+// 500: body:ServerError
 func (h *ArtifactHandler) Select(w http.ResponseWriter, r *http.Request) {
 	projectID, ok := requireProjectFromContext(w, r)
 	if !ok {
