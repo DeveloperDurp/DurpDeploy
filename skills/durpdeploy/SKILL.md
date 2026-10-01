@@ -112,7 +112,10 @@ or refresh; recreate their steps and create a new release (`409` on launch).
 
 4. **Variables** (optional) `POST /api/v1/projects/$PID/variables`
    `{"name":"API_URL","value":"...","environment_id":N}` — resolved at
-   deploy time for the target environment.
+   deploy time for the target environment. Omit `environment_id` (or use
+   `null`) for Unscoped. On projects bound to a lifecycle, create and update
+   accept only its stage environments; other IDs return `422`. Projects
+   without a lifecycle can use any environment.
 5. **Release** (immutable snapshot of current steps + variables)
    `POST /api/v1/projects/$PID/releases` `{"version":"1.2.0"}` → `id`.
    Later step edits do NOT affect it; `POST /projects/$PID/releases/$RID/refresh`

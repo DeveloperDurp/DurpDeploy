@@ -221,8 +221,26 @@ func (h *VariableHandler) CreateVariable(
 	}
 
 	var envID sql.NullInt64
-	if req.EnvironmentID != nil && *req.EnvironmentID > 0 {
+	if req.EnvironmentID != nil && *req.EnvironmentID <= 0 {
+		RespondError(w, http.StatusBadRequest, "Invalid environment ID")
+		return
+	}
+	if req.EnvironmentID != nil {
 		envID = sql.NullInt64{Int64: *req.EnvironmentID, Valid: true}
+	}
+	allowed, err := h.repo.VariableEnvironmentAllowed(
+		r.Context(),
+		projectID,
+		envID,
+	)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if !allowed {
+		RespondError(w, http.StatusUnprocessableEntity,
+			"Environment is not in project lifecycle")
+		return
 	}
 
 	var secret int64
@@ -364,8 +382,26 @@ func (h *VariableHandler) UpdateVariable(
 	}
 
 	var envID sql.NullInt64
-	if req.EnvironmentID != nil && *req.EnvironmentID > 0 {
+	if req.EnvironmentID != nil && *req.EnvironmentID <= 0 {
+		RespondError(w, http.StatusBadRequest, "Invalid environment ID")
+		return
+	}
+	if req.EnvironmentID != nil {
 		envID = sql.NullInt64{Int64: *req.EnvironmentID, Valid: true}
+	}
+	allowed, err := h.repo.VariableEnvironmentAllowed(
+		r.Context(),
+		projectID,
+		envID,
+	)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if !allowed {
+		RespondError(w, http.StatusUnprocessableEntity,
+			"Environment is not in project lifecycle")
+		return
 	}
 
 	var secret int64
@@ -387,16 +423,19 @@ func (h *VariableHandler) UpdateVariable(
 			},
 		)
 	} else {
-		variable, err = h.repo.UpdateVariable(r.Context(), db.UpdateVariableParams{
-			ID:   varID,
-			Name: name,
-			Value: sql.NullString{
-				String: req.Value,
-				Valid:  req.Value != "",
+		variable, err = h.repo.UpdateVariable(
+			r.Context(),
+			db.UpdateVariableParams{
+				ID:   varID,
+				Name: name,
+				Value: sql.NullString{
+					String: req.Value,
+					Valid:  req.Value != "",
+				},
+				EnvironmentID: envID,
+				Secret:        secret,
 			},
-			EnvironmentID: envID,
-			Secret:        secret,
-		})
+		)
 	}
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
