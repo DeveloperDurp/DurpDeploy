@@ -13,6 +13,7 @@ import (
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/gate"
+	"durpdeploy/internal/httpstream"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/runner"
 )
@@ -876,8 +877,8 @@ func (h *DeploymentHandler) DeploymentEvents(
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
 
-	flusher, ok := w.(http.Flusher)
-	if !ok {
+	stream, err := httpstream.New(w)
+	if err != nil {
 		RespondError(w, http.StatusInternalServerError, "Streaming unsupported")
 		return
 	}
@@ -886,9 +887,8 @@ func (h *DeploymentHandler) DeploymentEvents(
 		r.Context(),
 		depID,
 		func(log db.DeploymentLog) error {
-			fmt.Fprintf(w, "data: %s\n\n", log.Line)
-			flusher.Flush()
-			return nil
+			_, err := fmt.Fprintf(stream, "data: %s\n\n", log.Line)
+			return err
 		},
 	); err != nil {
 		return
@@ -902,8 +902,9 @@ func (h *DeploymentHandler) DeploymentEvents(
 		case <-r.Context().Done():
 			return
 		case line := <-ch:
-			fmt.Fprintf(w, "data: %s\n\n", line)
-			flusher.Flush()
+			if _, err := fmt.Fprintf(stream, "data: %s\n\n", line); err != nil {
+				return
+			}
 		}
 	}
 }

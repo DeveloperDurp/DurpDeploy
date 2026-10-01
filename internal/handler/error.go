@@ -10,6 +10,7 @@ import (
 	"github.com/a-h/templ"
 	"github.com/go-chi/chi/v5/middleware"
 
+	"durpdeploy/internal/httpstream"
 	"durpdeploy/views/pages"
 )
 
@@ -62,17 +63,22 @@ func (w *internalErrorResponseWriter) Unwrap() http.ResponseWriter {
 }
 
 func (w *internalErrorResponseWriter) Flush() {
+	// http.Flusher cannot return an error; streaming callers use FlushError.
+	_ = w.FlushError()
+}
+
+func (w *internalErrorResponseWriter) FlushError() error {
 	if !w.passthrough {
 		w.passthrough = true
 		if w.status == 0 {
 			w.status = http.StatusOK
 		}
 		w.ResponseWriter.WriteHeader(w.status)
-		_, _ = w.body.WriteTo(w.ResponseWriter)
+		if _, err := w.body.WriteTo(w.ResponseWriter); err != nil {
+			return err
+		}
 	}
-	if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
-		flusher.Flush()
-	}
+	return httpstream.Flush(w.ResponseWriter)
 }
 
 // InternalErrorMiddleware prevents unexpected server diagnostics from being

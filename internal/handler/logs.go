@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/httpstream"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/runner"
 	"github.com/go-chi/chi/v5"
@@ -45,8 +46,8 @@ func (h *LogHandler) streamDeploymentLogs(
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
 
-	flusher, ok := w.(http.Flusher)
-	if !ok {
+	stream, err := httpstream.New(w)
+	if err != nil {
 		http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
 		return
 	}
@@ -56,9 +57,8 @@ func (h *LogHandler) streamDeploymentLogs(
 		r.Context(),
 		deploymentID,
 		func(log db.DeploymentLog) error {
-			fmt.Fprintf(w, "data: %s\n\n", log.Line)
-			flusher.Flush()
-			return nil
+			_, err := fmt.Fprintf(stream, "data: %s\n\n", log.Line)
+			return err
 		},
 	); err != nil {
 		return
@@ -72,8 +72,9 @@ func (h *LogHandler) streamDeploymentLogs(
 		case <-r.Context().Done():
 			return
 		case line := <-ch:
-			fmt.Fprintf(w, "data: %s\n\n", line)
-			flusher.Flush()
+			if _, err := fmt.Fprintf(stream, "data: %s\n\n", line); err != nil {
+				return
+			}
 		}
 	}
 }

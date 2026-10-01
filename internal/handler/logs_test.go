@@ -274,24 +274,34 @@ func TestStreamLogs_ClientDisconnect(t *testing.T) {
 	repo := setupTestRepo(t)
 	h := NewLogHandler(broker, repo)
 
-	req := httptest.NewRequest(
-		http.MethodGet,
-		"/deployments/1/logs/stream",
-		nil,
-	)
-	rr := httptest.NewRecorder()
-
-	ctx, cancel := context.WithCancel(req.Context())
-	req = req.WithContext(ctx)
-
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	started := make(chan struct{})
 	done := make(chan struct{})
+	srv := httptest.NewServer(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			close(started)
+			h.streamDeploymentLogs(w, r, 1)
+			close(done)
+		}),
+	)
+	defer srv.Close()
+	defer srv.CloseClientConnections()
+	req, err := http.NewRequestWithContext(ctx, "GET", srv.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	go func() {
-		h.StreamLogs(rr, req)
-		close(done)
+		resp, err := srv.Client().Do(req)
+		if err == nil {
+			resp.Body.Close()
+		}
 	}()
-
-	time.Sleep(50 * time.Millisecond)
-
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("handler did not start")
+	}
 	cancel()
 
 	select {

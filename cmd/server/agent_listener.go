@@ -126,8 +126,11 @@ func startAgentListener(
 	deps agentListenerDependencies,
 ) (*agentListener, error) {
 	agents, err := agentserver.New(agentserver.Config{
-		Repository: deps.repo, Dispatcher: deps.dispatcher, Identity: config.identity,
-		Broker: deps.broker, EventBus: deps.eventBus,
+		Repository: deps.repo,
+		Dispatcher: deps.dispatcher,
+		Identity:   config.identity,
+		Broker:     deps.broker,
+		EventBus:   deps.eventBus,
 	})
 	if err != nil {
 		return nil, err
@@ -137,12 +140,10 @@ func startAgentListener(
 		return nil, fmt.Errorf("DURPDEPLOY_AGENT_LISTEN_ADDR: %w", err)
 	}
 	ctx, cancel := context.WithCancel(ctx)
+	srv := newHTTPServer(config.addr, server.NewAgentRouter(agents))
+	srv.BaseContext = func(net.Listener) context.Context { return ctx }
 	result := &agentListener{
-		server: &http.Server{
-			Handler:           server.NewAgentRouter(agents),
-			ReadHeaderTimeout: 5 * time.Second, IdleTimeout: time.Minute,
-			BaseContext: func(net.Listener) context.Context { return ctx },
-		},
+		server:   srv,
 		listener: ln, done: make(chan error, 1),
 		maintain: make(chan struct{}), cancel: cancel,
 	}
