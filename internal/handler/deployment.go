@@ -384,6 +384,10 @@ func (h *DeploymentHandler) ScheduleDeployment(
 		if writeArtifactError(w, err) {
 			return
 		}
+		if errors.Is(err, sql.ErrNoRows) {
+			http.Error(w, "Release not found", http.StatusNotFound)
+			return
+		}
 		if errors.Is(err, repository.ErrLegacyServerStep) {
 			http.Error(
 				w,
@@ -860,6 +864,14 @@ func (h *DeploymentHandler) RedeployDeployment(
 		source.ID,
 	)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			http.Error(
+				w,
+				"Release or source deployment not found",
+				http.StatusNotFound,
+			)
+			return
+		}
 		if errors.Is(err, repository.ErrContainerCleanupUnconfirmed) {
 			http.Error(
 				w,

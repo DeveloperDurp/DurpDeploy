@@ -389,6 +389,7 @@ func newRouter(
 			ppr.Get("/projects/{id}/releases", rh.ListReleases)
 			ppr.Post("/projects/{id}/releases", rh.CreateRelease)
 			ppr.Get("/projects/{id}/releases/{releaseId}", rh.GetRelease)
+			ppr.Delete("/projects/{id}/releases/{releaseId}", rh.DeleteRelease)
 			ppr.Post(
 				"/projects/{id}/releases/{releaseId}/refresh",
 				rh.RefreshRelease,
@@ -708,6 +709,7 @@ func newRouter(
 			par.Get("/projects/{id}/releases", apiRelH.ListReleases)
 			par.Post("/projects/{id}/releases", apiRelH.CreateRelease)
 			par.Get("/projects/{id}/releases/{relId}", apiRelH.GetRelease)
+			par.Delete("/projects/{id}/releases/{relId}", apiRelH.DeleteRelease)
 			par.Post(
 				"/projects/{id}/releases/{relId}/refresh",
 				apiRelH.RefreshRelease,

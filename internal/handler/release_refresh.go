@@ -47,6 +47,10 @@ func (h *ReleaseHandler) RefreshRelease(
 		if writeArtifactError(w, err) {
 			return
 		}
+		if errors.Is(err, sql.ErrNoRows) {
+			http.Error(w, "Release not found", http.StatusNotFound)
+			return
+		}
 		if errors.Is(err, repository.ErrLegacyServerStep) {
 			http.Error(
 				w,

@@ -22,7 +22,9 @@ import (
 	"durpdeploy/internal/artifact"
 )
 
-func artifactHTTPSFixture(t *testing.T) (string, *artifact.Client, func()) {
+func artifactHTTPSFixture(
+	t *testing.T,
+) (string, *artifact.Client, func(string)) {
 	t.Helper()
 	addresses, err := net.InterfaceAddrs()
 	if err != nil {
@@ -120,5 +122,5 @@ func artifactHTTPSFixture(t *testing.T) (string, *artifact.Client, func()) {
 		RootCAs:    roots,
 		MinVersion: tls.VersionTLS12,
 	}
-	return srv.URL, client, func() { mu.Lock(); contents = "republished"; mu.Unlock() }
+	return srv.URL, client, func(value string) { mu.Lock(); contents = value; mu.Unlock() }
 }

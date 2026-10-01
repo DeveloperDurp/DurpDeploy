@@ -39,6 +39,9 @@ SELECT * FROM release_artifacts WHERE release_id = ?;
 -- name: DeleteReleaseArtifact :exec
 DELETE FROM release_artifacts WHERE release_id = ?;
 
+-- name: ClearArtifactSourceReleaseByRelease :exec
+UPDATE release_artifacts SET source_release_id = NULL WHERE source_release_id = ?;
+
 -- name: GetDeploymentArtifact :one
 SELECT * FROM deployment_artifacts WHERE deployment_id = ?;
 
@@ -50,7 +53,7 @@ SELECT ?, r.repository_id, r.url, r.version, r.sha256, r.size FROM release_artif
 INSERT INTO deployment_artifacts (deployment_id, repository_id, url, version, sha256, size)
 SELECT ?, d.repository_id, d.url, d.version, d.sha256, d.size FROM deployment_artifacts d WHERE d.deployment_id = ?;
 
--- name: CopyReleaseArtifactToRunbook :exec
+-- name: CopyReleaseArtifactToRunbook :execrows
 INSERT INTO release_artifacts (release_id, repository_id, url, version, sha256, size, source_release_id)
 SELECT ?, r.repository_id, r.url, r.version, r.sha256, r.size, r.release_id FROM release_artifacts r WHERE r.release_id = ?;
 

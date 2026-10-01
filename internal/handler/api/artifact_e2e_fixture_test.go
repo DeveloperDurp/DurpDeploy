@@ -36,7 +36,7 @@ type artifactE2E struct {
 	environment          db.Environment
 	upstream             string
 	done                 chan events.Event
-	changePackage        func()
+	changePackage        func(string)
 }
 
 type artifactNotifier struct{ done chan events.Event }

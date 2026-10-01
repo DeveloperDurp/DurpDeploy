@@ -80,6 +80,10 @@ func buildReleaseViews(
 ) ([]pages.ReleaseView, error) {
 	views := make([]pages.ReleaseView, len(releases))
 	for i, rel := range releases {
+		active, err := repo.Queries.HasActiveReleaseDeployment(ctx, rel.ID)
+		if err != nil {
+			return nil, err
+		}
 		envs, err := availableEnvsForRelease(ctx, repo, project, rel)
 		if err != nil {
 			return nil, err
@@ -96,7 +100,9 @@ func buildReleaseViews(
 				},
 			}
 		}
-		views[i] = pages.ReleaseView{Release: rel, Envs: mapped}
+		views[i] = pages.ReleaseView{
+			Release: rel, Envs: mapped, Active: active != 0,
+		}
 	}
 	return views, nil
 }
@@ -248,6 +254,13 @@ func (h *ReleaseHandler) GetRelease(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Release not found", http.StatusNotFound)
 		return
 	}
+	active, err := h.repo.Queries.HasActiveReleaseDeployment(
+		r.Context(), releaseID,
+	)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
 	variables, err := h.repo.ListReleaseVariablesByRelease(
 		r.Context(),
@@ -269,8 +282,41 @@ func (h *ReleaseHandler) GetRelease(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Cannot read package pin", 500)
 		return
 	}
-	if err := pages.ReleaseDetailPage(project, release, variables, environments, pin, r.URL.Path).
+	if err := pages.ReleaseDetailPage(project, release, variables, environments, pin, active != 0, r.URL.Path).
 		Render(r.Context(), w); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
+}
+
+func (h *ReleaseHandler) DeleteRelease(w http.ResponseWriter, r *http.Request) {
+	projectID, err := parseProjectID(r)
+	if err != nil {
+		http.Error(w, "Invalid project ID", http.StatusBadRequest)
+		return
+	}
+	releaseID, err := strconv.ParseInt(chi.URLParam(r, "releaseId"), 10, 64)
+	if err != nil {
+		http.Error(w, "Invalid release ID", http.StatusBadRequest)
+		return
+	}
+	if err := h.repo.DeleteRelease(
+		r.Context(), projectID, releaseID,
+	); err != nil {
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			http.Error(w, "Release not found", http.StatusNotFound)
+		case errors.Is(err, repository.ErrReleaseHasActiveDeployment):
+			http.Error(w, err.Error(), http.StatusConflict)
+		default:
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
+	path := fmt.Sprintf("/projects/%d/releases", projectID)
+	if r.Header.Get("HX-Request") == "true" {
+		w.Header().Set("HX-Redirect", path)
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	http.Redirect(w, r, path, http.StatusSeeOther)
 }

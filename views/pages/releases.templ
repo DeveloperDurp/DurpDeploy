@@ -84,6 +84,7 @@ type GateState struct {
 type ReleaseView struct {
 	Release db.Release
 	Envs    []AvailableEnv
+	Active  bool
 }
 
 templ ReleasesPage(project db.Project, releases []ReleaseView, errorMsg string, currentPath string) {
@@ -148,15 +149,16 @@ templ ReleasesTable(project db.Project, releases []ReleaseView) {
 	<table class="table table-zebra table-fixed w-full">
 		<thead>
 			<tr>
-				<th class="w-1/4">Version</th>
-				<th class="w-1/4">Created At</th>
-				<th class="w-1/2">Deploy</th>
+				<th class="w-1/5">Version</th>
+				<th class="w-1/5">Created At</th>
+				<th class="w-2/5">Deploy</th>
+				<th class="w-1/5">Actions</th>
 			</tr>
 		</thead>
 		<tbody>
 			if len(releases) == 0 {
 				<tr>
-					<td colspan="2" class="text-gray-500 italic text-center py-4">No releases yet.</td>
+					<td colspan="4" class="text-gray-500 italic text-center py-4">No releases yet.</td>
 				</tr>
 			} else {
 				for _, rv := range releases {
@@ -211,10 +213,15 @@ templ ReleaseRow(projectID int64, rv ReleaseView) {
 				</form>
 			}
 		</td>
+		<td>
+			if CanWrite(ctx) {
+				@ReleaseDeleteControl(projectID, rv.Release, rv.Active, "btn-xs")
+			}
+		</td>
 	</tr>
 }
 
-templ ReleaseDetailPage(project db.Project, release db.Release, variables []db.ReleaseVariable, environments []db.Environment, artifact db.ReleaseArtifact, currentPath string) {
+templ ReleaseDetailPage(project db.Project, release db.Release, variables []db.ReleaseVariable, environments []db.Environment, artifact db.ReleaseArtifact, active bool, currentPath string) {
 	@layouts.Base(fmt.Sprintf("Release %s", release.Version), currentPath) {
 		@components.Breadcrumbs([]components.Crumb{
 			{Label: "Home", Href: "/"},
@@ -223,11 +230,11 @@ templ ReleaseDetailPage(project db.Project, release db.Release, variables []db.R
 			{Label: "Releases", Href: fmt.Sprintf("/projects/%d/releases", project.ID)},
 			{Label: release.Version},
 		})
-		@ReleaseDetail(project, release, variables, environments,artifact)
+		@ReleaseDetail(project, release, variables, environments,artifact,active)
 	}
 }
 
-templ ReleaseDetail(project db.Project, release db.Release, variables []db.ReleaseVariable, environments []db.Environment, artifact db.ReleaseArtifact) {
+templ ReleaseDetail(project db.Project, release db.Release, variables []db.ReleaseVariable, environments []db.Environment, artifact db.ReleaseArtifact, active bool) {
 	<div class="space-y-6">
 		<div class="flex justify-between items-center">
 			<div>
@@ -246,6 +253,9 @@ templ ReleaseDetail(project db.Project, release db.Release, variables []db.Relea
 					</form>
 				}
 				<a href={ fmt.Sprintf("/projects/%d/releases", project.ID) } class="btn btn-ghost btn-sm">Back</a>
+				if CanWrite(ctx) {
+					@ReleaseDeleteControl(project.ID, release, active, "btn-sm")
+				}
 			</div>
 		</div>
 		if artifact.ReleaseID!=0 {
@@ -345,5 +355,27 @@ templ ReleaseDetail(project db.Project, release db.Release, variables []db.Relea
 				</tbody>
 			</table>
 		</div>
+	</div>
+}
+
+templ ReleaseDeleteControl(projectID int64, release db.Release, active bool, size string) {
+	<div x-data>
+		<button type="button" class={ "btn btn-error whitespace-nowrap " + size } x-on:click="$refs.confirmDelete.showModal()">Delete</button>
+		<dialog x-ref="confirmDelete" class="modal" aria-labelledby={ fmt.Sprintf("release-delete-%d-title", release.ID) } aria-describedby={ fmt.Sprintf("release-delete-%d-description", release.ID) }>
+			<div class="modal-box bg-base-200">
+				<h2 id={ fmt.Sprintf("release-delete-%d-title", release.ID) } class="text-lg font-bold">Delete release { release.Version }?</h2>
+				<p id={ fmt.Sprintf("release-delete-%d-description", release.ID) } class="mt-2 text-sm">This permanently deletes the release, its schedules, deployment history, and logs.</p>
+				if active {
+					<p class="alert alert-warning mt-4 text-sm">This release has an active or unconfirmed deployment. Active deployments must finish or be cancelled. Unconfirmed outcomes require operator inspection and recovery before deletion.</p>
+				}
+				<div class="modal-action">
+					<form method="dialog"><button type="submit" class="btn btn-ghost" autofocus>Cancel</button></form>
+					if !active {
+						<button type="button" class="btn btn-error" hx-delete={ fmt.Sprintf("/projects/%d/releases/%d", projectID, release.ID) } data-toast-success="Release deleted" data-toast-error="Failed to delete release">Confirm delete</button>
+					}
+				</div>
+			</div>
+			<form method="dialog" class="modal-backdrop"><button type="submit" aria-label="Cancel release deletion"></button></form>
+		</dialog>
 	</div>
 }

@@ -3,9 +3,11 @@ package repository
 import (
 	"context"
 	"crypto/rand"
+	"database/sql"
 	"errors"
 	"fmt"
 
+	"durpdeploy/internal/artifact"
 	"durpdeploy/internal/db"
 )
 
@@ -158,7 +160,7 @@ func (r *Repository) SaveRunbook(
 		)
 	}
 	for i := range variables {
-		if variables[i].Name == "ARTIFACT_PATH" {
+		if variables[i].Name == artifact.PathVariable {
 			return db.Runbook{}, db.RunbookVersion{}, ErrArtifactPathReserved
 		}
 		variables[i].Value, err = r.EncryptValue(variables[i].Value)
@@ -173,6 +175,13 @@ func (r *Repository) SaveRunbook(
 	var version db.RunbookVersion
 	err = withSQLiteBusyRetry(ctx, func() error {
 		return r.WithTx(ctx, func(q *db.Queries) error {
+			locked, err := q.LockProject(ctx, arg.ProjectID)
+			if err != nil {
+				return err
+			}
+			if locked == 0 {
+				return sql.ErrNoRows
+			}
 			if err := validateRunbookArtifact(ctx, q, arg); err != nil {
 				return err
 			}
@@ -219,14 +228,18 @@ func (r *Repository) SaveRunbook(
 				return err
 			}
 			if arg.ArtifactReleaseID != 0 {
-				if err := q.CopyReleaseArtifactToRunbook(
+				copied, err := q.CopyReleaseArtifactToRunbook(
 					ctx,
 					db.CopyReleaseArtifactToRunbookParams{
 						ReleaseID:   release.ID,
 						ReleaseID_2: arg.ArtifactReleaseID,
 					},
-				); err != nil {
+				)
+				if err != nil {
 					return err
+				}
+				if copied != 1 {
+					return artifact.ErrInvalid
 				}
 			}
 			for _, variable := range variables {

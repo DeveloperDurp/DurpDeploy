@@ -19,6 +19,15 @@ func (q *Queries) ClearArtifactSourceRelease(ctx context.Context, projectID int6
 	return err
 }
 
+const clearArtifactSourceReleaseByRelease = `-- name: ClearArtifactSourceReleaseByRelease :exec
+UPDATE release_artifacts SET source_release_id = NULL WHERE source_release_id = ?
+`
+
+func (q *Queries) ClearArtifactSourceReleaseByRelease(ctx context.Context, sourceReleaseID sql.NullInt64) error {
+	_, err := q.db.ExecContext(ctx, clearArtifactSourceReleaseByRelease, sourceReleaseID)
+	return err
+}
+
 const copyDeploymentArtifact = `-- name: CopyDeploymentArtifact :exec
 INSERT INTO deployment_artifacts (deployment_id, repository_id, url, version, sha256, size)
 SELECT ?, d.repository_id, d.url, d.version, d.sha256, d.size FROM deployment_artifacts d WHERE d.deployment_id = ?
@@ -49,7 +58,7 @@ func (q *Queries) CopyReleaseArtifactToDeployment(ctx context.Context, arg CopyR
 	return err
 }
 
-const copyReleaseArtifactToRunbook = `-- name: CopyReleaseArtifactToRunbook :exec
+const copyReleaseArtifactToRunbook = `-- name: CopyReleaseArtifactToRunbook :execrows
 INSERT INTO release_artifacts (release_id, repository_id, url, version, sha256, size, source_release_id)
 SELECT ?, r.repository_id, r.url, r.version, r.sha256, r.size, r.release_id FROM release_artifacts r WHERE r.release_id = ?
 `
@@ -59,9 +68,12 @@ type CopyReleaseArtifactToRunbookParams struct {
 	ReleaseID_2 int64 `json:"release_id_2"`
 }
 
-func (q *Queries) CopyReleaseArtifactToRunbook(ctx context.Context, arg CopyReleaseArtifactToRunbookParams) error {
-	_, err := q.db.ExecContext(ctx, copyReleaseArtifactToRunbook, arg.ReleaseID, arg.ReleaseID_2)
-	return err
+func (q *Queries) CopyReleaseArtifactToRunbook(ctx context.Context, arg CopyReleaseArtifactToRunbookParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, copyReleaseArtifactToRunbook, arg.ReleaseID, arg.ReleaseID_2)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const createPackageRepository = `-- name: CreatePackageRepository :one

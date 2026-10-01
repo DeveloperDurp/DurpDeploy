@@ -45,11 +45,17 @@ func (q *Queries) CreateRelease(ctx context.Context, arg CreateReleaseParams) (R
 }
 
 const deleteRelease = `-- name: DeleteRelease :exec
-DELETE FROM releases WHERE id = ?
+DELETE FROM releases
+WHERE id = ? AND project_id = ? AND kind = 'deployment'
 `
 
-func (q *Queries) DeleteRelease(ctx context.Context, id int64) error {
-	_, err := q.db.ExecContext(ctx, deleteRelease, id)
+type DeleteReleaseParams struct {
+	ID        int64 `json:"id"`
+	ProjectID int64 `json:"project_id"`
+}
+
+func (q *Queries) DeleteRelease(ctx context.Context, arg DeleteReleaseParams) error {
+	_, err := q.db.ExecContext(ctx, deleteRelease, arg.ID, arg.ProjectID)
 	return err
 }
 
@@ -87,6 +93,26 @@ func (q *Queries) GetRelease(ctx context.Context, id int64) (Release, error) {
 		&i.Kind,
 	)
 	return i, err
+}
+
+const hasActiveReleaseDeployment = `-- name: HasActiveReleaseDeployment :one
+SELECT CASE WHEN EXISTS (
+    SELECT 1 FROM deployments d WHERE d.release_id = ?
+      AND (d.status IN ('pending', 'running', 'pending_approval', 'cleanup_unconfirmed')
+        OR EXISTS (SELECT 1 FROM remote_deployment_claims c
+                   WHERE c.deployment_id = d.id
+                     AND c.state IN ('lost', 'cancel_unconfirmed'))
+        OR EXISTS (SELECT 1 FROM remote_step_runs s
+                   WHERE s.deployment_id = d.id
+                     AND s.state IN ('lost', 'cancel_unconfirmed')))
+) THEN 1 ELSE 0 END
+`
+
+func (q *Queries) HasActiveReleaseDeployment(ctx context.Context, releaseID int64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, hasActiveReleaseDeployment, releaseID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const listReleasesByProject = `-- name: ListReleasesByProject :many
@@ -162,6 +188,19 @@ func (q *Queries) ListReleasesByProjectPaginated(ctx context.Context, arg ListRe
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockRelease = `-- name: LockRelease :execrows
+UPDATE releases SET version = version -- NOSONAR: intentional write lock
+WHERE id = ?
+`
+
+func (q *Queries) LockRelease(ctx context.Context, id int64) (int64, error) {
+	result, err := q.db.ExecContext(ctx, lockRelease, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const updateRelease = `-- name: UpdateRelease :one

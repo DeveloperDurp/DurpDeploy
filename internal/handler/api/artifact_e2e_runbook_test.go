@@ -18,7 +18,7 @@ func (f *artifactE2E) verifyRunbookPackage(
 	t *testing.T,
 	releaseID int64,
 	script string,
-) {
+) db.RunbookVersion {
 	t.Helper()
 	base := f.base()
 	webBase := fmt.Sprintf("/projects/%d", f.project.ID)
@@ -95,6 +95,7 @@ func (f *artifactE2E) verifyRunbookPackage(
 		},
 		303,
 	)
+	return saved.Version
 }
 
 func assertArtifactSelectInSaveForm(t *testing.T, markup string) {

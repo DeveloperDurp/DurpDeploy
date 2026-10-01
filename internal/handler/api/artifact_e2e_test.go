@@ -160,7 +160,7 @@ printf 'artifact-readable\n'
 	if strings.Count(string(logs), "artifact-readable") != 2 {
 		t.Fatalf("step output missing: %s", logs)
 	}
-	f.verifyRunbookPackage(t, release.ID, script)
+	runbookVersion := f.verifyRunbookPackage(t, release.ID, script)
 	f.api(
 		t,
 		"DELETE",
@@ -168,7 +168,7 @@ printf 'artifact-readable\n'
 		nil,
 		409,
 	)
-	f.changePackage()
+	f.changePackage("republished")
 	data = f.api(
 		t,
 		"POST",
@@ -183,4 +183,58 @@ printf 'artifact-readable\n'
 		t.Fatal(err)
 	}
 	f.completion(t, deployment.ID, events.DeploymentFailed)
+	f.changePackage("package")
+	f.api(
+		t,
+		"DELETE",
+		fmt.Sprintf("%s/releases/%d", base, release.ID),
+		nil,
+		204,
+	)
+	data = f.api(
+		t,
+		"GET",
+		fmt.Sprintf(
+			"%s/runbooks/%d/versions/%d",
+			base,
+			runbookVersion.RunbookID,
+			runbookVersion.ID,
+		),
+		nil,
+		200,
+	)
+	var retained struct {
+		Artifact struct {
+			SHA256          string `json:"sha256"`
+			SourceReleaseID *int64 `json:"source_release_id"`
+		} `json:"artifact"`
+	}
+	if err := json.Unmarshal(data, &retained); err != nil {
+		t.Fatal(err)
+	}
+	if retained.Artifact.SHA256 == "" ||
+		retained.Artifact.SourceReleaseID != nil {
+		t.Fatal(
+			"source deletion lost the copied pin or retained a dangling reference",
+		)
+	}
+	data = f.api(
+		t,
+		"POST",
+		fmt.Sprintf(
+			"%s/runbooks/%d/executions",
+			base,
+			runbookVersion.RunbookID,
+		),
+		map[string]int64{
+			"environment_id": f.environment.ID,
+			"version_id":     runbookVersion.ID,
+		},
+		201,
+	)
+	var execution db.RunbookExecution
+	if err := json.Unmarshal(data, &execution); err != nil {
+		t.Fatal(err)
+	}
+	f.completion(t, execution.DeploymentID, events.RunbookSucceeded)
 }

@@ -145,6 +145,33 @@ func TestArtifactPinsAcrossDatabases(t *testing.T) {
 		); err != nil {
 			t.Fatal(err)
 		}
+		_, version, err := repo.SaveRunbook(
+			t.Context(),
+			RunbookSave{
+				ProjectID:         project.ID,
+				Name:              "retained-package",
+				StepsJSON:         release.StepsJson,
+				ArtifactReleaseID: release.ID,
+			},
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := repo.DeleteRelease(
+			t.Context(),
+			project.ID,
+			release.ID,
+		); err != nil {
+			t.Fatalf("artifact release deletion: %v", err)
+		}
+		retained, err := repo.Queries.GetReleaseArtifact(
+			t.Context(),
+			version.ReleaseID,
+		)
+		if err != nil || retained.Sha256 != "pinned" ||
+			retained.SourceReleaseID.Valid {
+			t.Fatalf("runbook pin not retained: %+v %v", retained, err)
+		}
 		if err := repo.DeleteProject(t.Context(), project.ID); err != nil {
 			t.Fatalf("artifact project deletion: %v", err)
 		}
