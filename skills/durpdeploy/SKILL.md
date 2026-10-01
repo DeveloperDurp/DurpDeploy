@@ -275,7 +275,8 @@ variable allowlist. This variable is reserved. Extracted files are mounted
 read-only and noexec. Direct execution and writes are blocked; interpreters can
 still read files, and steps can copy them elsewhere. ZIP paths, links, and
 special files are rejected. Limits are 300 MiB downloaded, 512 MiB extracted,
-10,000 ZIP entries, a fixed 16 MiB ZIP metadata-read budget, and a five-minute
+10,000 ZIP entries, 19,999 total distinct files/directories (including implicit
+parents), a fixed 16 MiB ZIP metadata-read budget, and a five-minute
 download timeout. The metadata budget includes footer discovery and repeated
 parser reads, not payload contents; unusually metadata-heavy ZIPs are rejected.
 It is not an exact memory limit and does not scale with server RAM. Temporary server files

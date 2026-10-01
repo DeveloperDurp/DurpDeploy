@@ -13,8 +13,10 @@ const (
 	MaxDownload        = int64(300 << 20)
 	MaxExtracted       = int64(512 << 20)
 	MaxFiles           = 10000
-	MaxMetadata        = int64(16 << 20)
-	PathVariable       = "ARTIFACT_PATH"
+	// One additional inode is needed for the staging mount's root.
+	MaxStagingNodes = 19999
+	MaxMetadata     = int64(16 << 20)
+	PathVariable    = "ARTIFACT_PATH"
 )
 
 var (

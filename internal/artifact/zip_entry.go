@@ -34,11 +34,17 @@ func validateZIPEntry(entry *zip.File, kinds map[string]bool) error {
 		return ErrInvalid
 	}
 	kinds[name] = mode.IsDir()
+	if len(kinds) > MaxStagingNodes {
+		return ErrInvalid
+	}
 	for parent := path.Dir(name); parent != "."; parent = path.Dir(parent) {
 		if directoryEntry, exists := kinds[parent]; exists && !directoryEntry {
 			return ErrInvalid
 		}
 		kinds[parent] = true
+		if len(kinds) > MaxStagingNodes {
+			return ErrInvalid
+		}
 	}
 	return nil
 }

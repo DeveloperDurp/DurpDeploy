@@ -17,6 +17,16 @@ import (
 
 const artifactMount = "/artifacts"
 
+// Unix-socket runtimes share the server kernel's page size. Each file can waste
+// at most one page; logical ZIP contents remain capped at MaxExtracted.
+func artifactStagingCapacity() int64 {
+	return artifact.MaxExtracted + int64(
+		artifact.MaxFiles,
+	)*int64(
+		os.Getpagesize(),
+	)
+}
+
 const artifactHelperImage = "docker.io/library/alpine@sha256:3c81aa9a3d770b316568f4499e30461a5cd3fbd7180bd89e28e34894c7845832"
 
 type artifactStage struct{ volume, keeper string }
@@ -94,7 +104,11 @@ func (r *DeploymentRunner) stageArtifact(
 			"--driver=local",
 			"--opt=type=tmpfs",
 			"--opt=device=tmpfs",
-			"--opt=o=noexec,nosuid,nodev,size=512m,nr_inodes=20000,uid=65534,gid=65534,mode=0755",
+			fmt.Sprintf(
+				"--opt=o=noexec,nosuid,nodev,size=%d,nr_inodes=%d,uid=65534,gid=65534,mode=0755",
+				artifactStagingCapacity(),
+				artifact.MaxStagingNodes+1,
+			),
 		)
 	}
 	args = append(args, result.volume)
@@ -117,7 +131,7 @@ func (r *DeploymentRunner) stageArtifact(
 		"--security-opt=no-new-privileges",
 		"--user=65534:65534",
 		"--pids-limit=32",
-		"--memory=640m",
+		fmt.Sprintf("--memory=%d", artifactStagingCapacity()+(128<<20)),
 		"--cpus=1",
 		"--volume=" + keeperMount,
 		"--entrypoint=/usr/bin/tail",
