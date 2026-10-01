@@ -68,7 +68,8 @@ RUN chmod 0755 /usr/local/bin/durpdeploy /usr/local/bin/container-entrypoint
 
 ENV DURPDEPLOY_EXECUTION_BOUNDARY=service \
 	HOME=/home/durpdeploy \
-	XDG_CONFIG_HOME=/tmp
+	XDG_CONFIG_HOME=/tmp \
+	TMPDIR=/data/tmp
 USER 10001:10001
 
 # The application listens on port 8080 (hardcoded in cmd/server/main.go).

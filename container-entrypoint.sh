@@ -2,6 +2,7 @@
 set -eu
 
 if [ "$(id -u)" -ne 0 ]; then
+	mkdir -p "${TMPDIR:-/tmp}"
 	exec /usr/local/bin/durpdeploy "$@"
 fi
 
@@ -19,4 +20,5 @@ for socket in /var/run/durpdeploy-runtime.sock /var/run/docker.sock \
 	fi
 done
 
+su-exec "10001:$runtime_gid" mkdir -p "${TMPDIR:-/tmp}"
 exec su-exec "10001:$runtime_gid" /usr/local/bin/durpdeploy "$@"

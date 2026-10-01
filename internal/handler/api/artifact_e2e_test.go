@@ -135,6 +135,7 @@ printf 'artifact-readable\n'
 	if !strings.Contains(string(pin), `"sha256"`) {
 		t.Fatal("release pin missing")
 	}
+	f.verifyRemoteSnapshotRejection(t, release.ID)
 	page := f.web(
 		t,
 		"GET",

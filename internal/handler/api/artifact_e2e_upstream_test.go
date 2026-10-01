@@ -94,7 +94,11 @@ func artifactHTTPSFixture(
 					}
 				}
 			} else {
-				entry, err := writer.Create("app.txt")
+				name := "app.txt"
+				if text == "long-name" {
+					name = strings.Repeat("n", 256)
+				}
+				entry, err := writer.Create(name)
 				if err != nil {
 					t.Error(err)
 					return

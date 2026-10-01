@@ -246,6 +246,10 @@ are allowed; loopback and link-local destinations are blocked. Configure normal
 system trust for a private repository's TLS certificate; TLS verification is
 never disabled.
 
+Artifact versions cannot be dot segments (`.` or `..`) or contain path
+separators. ZIP paths must fit Linux staging filesystems: at most 255 bytes per
+component and 4,000 bytes per relative path.
+
 Select with `{"repository_id":123}`; zero disables packages for future
 snapshots. Credentials are encrypted and omitted from all responses. A blank
 credential on update preserves the current secret. Pinned repositories allow
@@ -277,6 +281,11 @@ parser reads, not payload contents; unusually metadata-heavy ZIPs are rejected.
 It is not an exact memory limit and does not scale with server RAM. Temporary server files
 and runtime staging volumes are removed on completion, failure, or cancellation.
 Cleanup uncertainty blocks retries until runtime reconciliation succeeds.
+
+The container image uses native `TMPDIR=/data/tmp` on its writable data volume,
+not Compose's 64 MiB `/tmp` mount. Reserve about 1.3 GiB of workspace per
+concurrent maximum-size deployment for the ZIP, extracted files, and transport
+tar. Direct installations can select a suitable directory with `TMPDIR`.
 
 Artifact-bearing deployments currently require local steps; agent steps are
 rejected before dispatch. The future agent download contract is

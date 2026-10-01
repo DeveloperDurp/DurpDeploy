@@ -327,6 +327,7 @@ func (h *ReleaseHandler) DeleteRelease(w http.ResponseWriter, r *http.Request) {
 //	  401: body:UnauthorizedError
 //	  404: body:NotFoundError
 //	  409: body:ConflictError
+//	  422: body:ValidationError
 //	  500: body:ServerError
 func (h *ReleaseHandler) RefreshRelease(
 	w http.ResponseWriter,

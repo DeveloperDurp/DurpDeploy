@@ -120,9 +120,9 @@ func (r *DeploymentRunner) stageArtifact(
 		"--memory=640m",
 		"--cpus=1",
 		"--volume=" + keeperMount,
-		"--entrypoint=/bin/sleep",
+		"--entrypoint=/usr/bin/tail",
 		artifactHelperImage,
-		"86400",
+		"-f", "/dev/null",
 	}
 	if _, err := r.engine.command(ctx, args...).CombinedOutput(); err != nil {
 		return result, fmt.Errorf("start artifact staging: %w", err)

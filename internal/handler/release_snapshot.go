@@ -11,9 +11,10 @@ import (
 )
 
 type releaseSnapshotData struct {
-	stepsJSON string
-	variables []db.CreateReleaseVariableParams
-	artifact  *repository.ArtifactSnapshot
+	stepsJSON     string
+	variables     []db.CreateReleaseVariableParams
+	artifact      *repository.ArtifactSnapshot
+	hasAgentSteps bool
 }
 
 // CreateReleaseSnapshot snapshots the project's current steps and variables
@@ -36,6 +37,9 @@ func CreateReleaseSnapshot(
 	)
 	if err != nil {
 		return db.Release{}, err
+	}
+	if snapshot.artifact != nil && snapshot.hasAgentSteps {
+		return db.Release{}, repository.ErrRemoteArtifactsUnsupported
 	}
 	tx, err := repo.DB.BeginTx(ctx, nil)
 	if err != nil {
@@ -80,6 +84,9 @@ func RefreshReleaseSnapshot(
 	)
 	if err != nil {
 		return db.Release{}, err
+	}
+	if snapshot.artifact != nil && snapshot.hasAgentSteps {
+		return db.Release{}, repository.ErrRemoteArtifactsUnsupported
 	}
 	tx, err := repo.DB.BeginTx(ctx, nil)
 	if err != nil {
@@ -128,6 +135,13 @@ func buildReleaseSnapshot(
 	if err != nil {
 		return releaseSnapshotData{}, err
 	}
+	hasAgentSteps := false
+	for _, step := range snapshots {
+		if step.ExecutionTarget == "agent" {
+			hasAgentSteps = true
+			break
+		}
+	}
 	stepsJSON, err := json.Marshal(snapshots)
 	if err != nil {
 		return releaseSnapshotData{}, err
@@ -151,8 +165,9 @@ func buildReleaseSnapshot(
 		}
 	}
 	return releaseSnapshotData{
-		stepsJSON: string(stepsJSON),
-		variables: params,
+		stepsJSON:     string(stepsJSON),
+		variables:     params,
+		hasAgentSteps: hasAgentSteps,
 	}, nil
 }
 

@@ -65,7 +65,8 @@ func (r Repository) Validate() error {
 }
 
 func (r Repository) URL(version string) (string, error) {
-	if version == "" || strings.ContainsAny(version, "\r\n\x00") {
+	if version == "" || version == "." || version == ".." ||
+		strings.ContainsAny(version, "/\\\r\n\x00") {
 		return "", ErrInvalid
 	}
 	raw := strings.ReplaceAll(

@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -92,5 +93,45 @@ func TestEntryHonorsCancellationDuringRead(t *testing.T) {
 	// Then
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("expected cancellation, got %v", err)
+	}
+}
+
+func TestRepositoryRejectsVersionsThatEscapePathSegments(t *testing.T) {
+	for _, version := range []string{".", "..", "../other", "branch/version", `branch\version`} {
+		t.Run(version, func(t *testing.T) {
+			// Given
+			source := Repository{
+				URLTemplate: "https://repo.example/app/{version}/package.zip",
+				AuthType:    "noauth",
+			}
+			// When
+			_, err := source.URL(version)
+			// Then
+			if !errors.Is(err, ErrInvalid) {
+				t.Fatalf("unsafe version accepted: %v", err)
+			}
+		})
+	}
+}
+
+func TestValidateZIPRejectsUnstageablePathLengths(t *testing.T) {
+	for _, name := range []string{strings.Repeat("a", 256), strings.Repeat("dir/", 1001) + "file"} {
+		t.Run(fmt.Sprint(len(name)), func(t *testing.T) {
+			// Given
+			filename := filepath.Join(t.TempDir(), "package.zip")
+			if err := os.WriteFile(
+				filename,
+				zipFixture(t, name, 0644),
+				0600,
+			); err != nil {
+				t.Fatal(err)
+			}
+			// When
+			err := ValidateZIP(t.Context(), filename)
+			// Then
+			if !errors.Is(err, ErrInvalid) {
+				t.Fatalf("unstageable path accepted: %v", err)
+			}
+		})
 	}
 }
