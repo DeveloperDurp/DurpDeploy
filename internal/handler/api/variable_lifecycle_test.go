@@ -15,36 +15,8 @@ func TestVariableAPI_LifecycleScopesOnCreateAndUpdate(t *testing.T) {
 	admin := h.seedUser(t, "variable-lifecycle@example.com", "admin")
 	token := h.seedToken(t, admin)
 	project := h.seedProject(t, admin)
+	allowed, outside := seedVariableLifecycle(t, h, project.ID)
 	ctx := context.Background()
-	allowed, err := h.repo.Queries.CreateEnvironment(ctx,
-		db.CreateEnvironmentParams{Name: "api-allowed-variable-env"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	outside, err := h.repo.Queries.CreateEnvironment(ctx,
-		db.CreateEnvironmentParams{Name: "api-outside-variable-env"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	lifecycle, err := h.repo.Queries.CreateLifecycle(ctx,
-		db.CreateLifecycleParams{Name: "api-variable-lifecycle"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = h.repo.Queries.CreateLifecycleStage(ctx,
-		db.CreateLifecycleStageParams{
-			LifecycleID: lifecycle.ID, EnvironmentID: allowed.ID, SortOrder: 1,
-		})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := h.repo.Queries.SetProjectLifecycle(ctx,
-		db.SetProjectLifecycleParams{
-			ID:          project.ID,
-			LifecycleID: sql.NullInt64{Int64: lifecycle.ID, Valid: true},
-		}); err != nil {
-		t.Fatal(err)
-	}
 	path := "/api/v1/projects/" + itoa(project.ID) + "/variables"
 	create := func(scope int64) int {
 		t.Helper()
@@ -139,4 +111,43 @@ func TestVariableAPI_LifecycleScopesOnCreateAndUpdate(t *testing.T) {
 	).Code; status != http.StatusCreated {
 		t.Fatalf("unscoped create = %d", status)
 	}
+}
+
+func seedVariableLifecycle(
+	t *testing.T,
+	h *testHarness,
+	projectID int64,
+) (db.Environment, db.Environment) {
+	t.Helper()
+	ctx := t.Context()
+	allowed, err := h.repo.Queries.CreateEnvironment(ctx,
+		db.CreateEnvironmentParams{Name: "api-allowed-variable-env"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	outside, err := h.repo.Queries.CreateEnvironment(ctx,
+		db.CreateEnvironmentParams{Name: "api-outside-variable-env"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	lifecycle, err := h.repo.Queries.CreateLifecycle(ctx,
+		db.CreateLifecycleParams{Name: "api-variable-lifecycle"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = h.repo.Queries.CreateLifecycleStage(ctx,
+		db.CreateLifecycleStageParams{
+			LifecycleID: lifecycle.ID, EnvironmentID: allowed.ID, SortOrder: 1,
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h.repo.Queries.SetProjectLifecycle(ctx,
+		db.SetProjectLifecycleParams{
+			ID:          projectID,
+			LifecycleID: sql.NullInt64{Int64: lifecycle.ID, Valid: true},
+		}); err != nil {
+		t.Fatal(err)
+	}
+	return allowed, outside
 }

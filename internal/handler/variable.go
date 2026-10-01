@@ -50,18 +50,27 @@ func (h *VariableHandler) variableEnvironments(
 	return pages.VariableEnvironments{All: all, Options: options}, err
 }
 
-func (h *VariableHandler) validVariableEnvironment(
+func (h *VariableHandler) variableEnvironmentScope(
 	w http.ResponseWriter,
 	r *http.Request,
 	projectID int64,
-	environmentID sql.NullInt64,
-) bool {
+	requestedID string,
+) (sql.NullInt64, bool) {
+	var environmentID sql.NullInt64
+	if requestedID != "" {
+		id, err := strconv.ParseInt(requestedID, 10, 64)
+		if err != nil || id <= 0 {
+			http.Error(w, "Invalid environment ID", http.StatusBadRequest)
+			return environmentID, false
+		}
+		environmentID = sql.NullInt64{Int64: id, Valid: true}
+	}
 	allowed, err := h.repo.VariableEnvironmentAllowed(
 		r.Context(), projectID, environmentID,
 	)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return false
+		return environmentID, false
 	}
 	if !allowed {
 		http.Error(
@@ -69,9 +78,9 @@ func (h *VariableHandler) validVariableEnvironment(
 			"Environment is not in project lifecycle",
 			http.StatusUnprocessableEntity,
 		)
-		return false
+		return environmentID, false
 	}
-	return true
+	return environmentID, true
 }
 
 func (h *VariableHandler) ListVariables(
@@ -163,16 +172,8 @@ func (h *VariableHandler) CreateVariable(
 		return
 	}
 
-	var envID sql.NullInt64
-	if envIDStr != "" {
-		id, err := strconv.ParseInt(envIDStr, 10, 64)
-		if err != nil || id <= 0 {
-			http.Error(w, "Invalid environment ID", http.StatusBadRequest)
-			return
-		}
-		envID = sql.NullInt64{Int64: id, Valid: true}
-	}
-	if !h.validVariableEnvironment(w, r, projectID, envID) {
+	envID, ok := h.variableEnvironmentScope(w, r, projectID, envIDStr)
+	if !ok {
 		return
 	}
 
@@ -343,16 +344,8 @@ func (h *VariableHandler) UpdateVariable(
 		return
 	}
 
-	var envID sql.NullInt64
-	if envIDStr != "" {
-		id, err := strconv.ParseInt(envIDStr, 10, 64)
-		if err != nil || id <= 0 {
-			http.Error(w, "Invalid environment ID", http.StatusBadRequest)
-			return
-		}
-		envID = sql.NullInt64{Int64: id, Valid: true}
-	}
-	if !h.validVariableEnvironment(w, r, projectID, envID) {
+	envID, ok := h.variableEnvironmentScope(w, r, projectID, envIDStr)
+	if !ok {
 		return
 	}
 
