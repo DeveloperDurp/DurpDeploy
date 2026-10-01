@@ -166,26 +166,28 @@ func (r *Repository) SelectArtifactRepository(
 	ctx context.Context,
 	arg db.SelectProjectArtifactRepositoryParams,
 ) error {
-	return r.WithTx(ctx, func(q *db.Queries) error {
-		if arg.RepositoryID != 0 {
-			row, err := q.GetPackageRepository(ctx, arg.RepositoryID)
-			if err != nil {
+	return withSQLiteBusyRetry(ctx, func() error {
+		return r.WithTx(ctx, func(q *db.Queries) error {
+			if arg.RepositoryID != 0 {
+				row, err := q.GetPackageRepository(ctx, arg.RepositoryID)
+				if err != nil {
+					return err
+				}
+				if row.ProjectID != arg.ProjectID {
+					return sql.ErrNoRows
+				}
+			}
+			if err := q.DeleteProjectArtifactRepository(
+				ctx,
+				arg.ProjectID,
+			); err != nil {
 				return err
 			}
-			if row.ProjectID != arg.ProjectID {
-				return sql.ErrNoRows
+			if arg.RepositoryID == 0 {
+				return nil
 			}
-		}
-		if err := q.DeleteProjectArtifactRepository(
-			ctx,
-			arg.ProjectID,
-		); err != nil {
-			return err
-		}
-		if arg.RepositoryID == 0 {
-			return nil
-		}
-		return q.SelectProjectArtifactRepository(ctx, arg)
+			return q.SelectProjectArtifactRepository(ctx, arg)
+		})
 	})
 }
 
