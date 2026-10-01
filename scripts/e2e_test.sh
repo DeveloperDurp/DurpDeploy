@@ -439,6 +439,57 @@ done
 CODE=$(curl_silent -X PUT -d "name=$LC_NAME&description=&lifecycle_id=$LC_LIFECYCLE_ID&csrf_token=$CSRF" "$BASE/projects/$LC_PROJECT_ID")
 [[ "$CODE" == "303" ]] || { echo "FAIL: assign lifecycle got $CODE"; exit 1; }
 
+echo "=== F3.5a: Variable Lifecycle Scopes ==="
+LC_VAR_URL="$BASE/projects/$LC_PROJECT_ID/variables"
+LC_API_VAR_URL="$BASE/api/v1/projects/$LC_PROJECT_ID/variables"
+check_variable_options() {
+    curl_body "$1" | python3 -c '
+import re
+import sys
+
+markup = sys.stdin.read()
+options = re.search(r"<select name=\"environment_id\"[^>]*>(.*?)</select>", markup, re.S)
+assert options, "variable environment dropdown missing"
+options = options.group(1)
+assert "Unscoped" in options and sys.argv[1] in options, options
+assert sys.argv[2] not in options, options
+' "$LC_DEV" "$LC_OUT"
+}
+check_variable_options "$LC_VAR_URL"
+CODE=$(curl_silent -X POST -d "name=LC_WEB_VAR&value=ok&environment_id=$LC_OUT_ID&csrf_token=$CSRF" "$LC_VAR_URL")
+[[ "$CODE" == "422" ]] || { echo "FAIL: web variable outside create got $CODE"; exit 1; }
+CODE=$(curl_silent -X POST -d "name=LC_WEB_VAR&value=ok&environment_id=$LC_DEV_ID&csrf_token=$CSRF" "$LC_VAR_URL")
+[[ "$CODE" == "303" ]] || { echo "FAIL: web variable allowed create got $CODE"; exit 1; }
+LC_WEB_VAR_ID=$(api_item_id_by_name "$LC_API_VAR_URL" LC_WEB_VAR)
+check_variable_options "$LC_VAR_URL/$LC_WEB_VAR_ID/edit"
+CODE=$(curl_silent -X PUT -d "name=LC_WEB_VAR&value=ok&environment_id=$LC_OUT_ID&csrf_token=$CSRF" "$LC_VAR_URL/$LC_WEB_VAR_ID")
+[[ "$CODE" == "422" ]] || { echo "FAIL: web variable outside update got $CODE"; exit 1; }
+CODE=$(curl_silent -X PUT -d "name=LC_WEB_VAR&value=ok&environment_id=$LC_DEV_ID&csrf_token=$CSRF" "$LC_VAR_URL/$LC_WEB_VAR_ID")
+[[ "$CODE" == "303" ]] || { echo "FAIL: web variable allowed update got $CODE"; exit 1; }
+CODE=$(api_post_code "{\"name\":\"LC_API_VAR\",\"environment_id\":$LC_OUT_ID}" "$LC_API_VAR_URL")
+[[ "$CODE" == "422" ]] || { echo "FAIL: API variable outside create got $CODE"; exit 1; }
+CODE=$(api_post_code "{\"name\":\"LC_API_VAR\",\"environment_id\":$LC_DEV_ID}" "$LC_API_VAR_URL")
+[[ "$CODE" == "201" ]] || { echo "FAIL: API variable allowed create got $CODE"; exit 1; }
+LC_API_VAR_ID=$(api_item_id_by_name "$LC_API_VAR_URL" LC_API_VAR)
+CODE=$(curl -s -H "Authorization: Bearer $API_TOKEN" -H 'Content-Type: application/json' -o /dev/null -w '%{http_code}' -X PUT -d "{\"name\":\"LC_API_VAR\",\"environment_id\":$LC_OUT_ID}" "$LC_API_VAR_URL/$LC_API_VAR_ID")
+[[ "$CODE" == "422" ]] || { echo "FAIL: API variable outside update got $CODE"; exit 1; }
+CODE=$(curl -s -H "Authorization: Bearer $API_TOKEN" -H 'Content-Type: application/json' -o /dev/null -w '%{http_code}' -X PUT -d "{\"name\":\"LC_API_VAR\",\"environment_id\":null}" "$LC_API_VAR_URL/$LC_API_VAR_ID")
+[[ "$CODE" == "200" ]] || { echo "FAIL: API variable unscoped update got $CODE"; exit 1; }
+CODE=$(api_post_code "{\"name\":\"LC_UNBOUND_VAR\",\"environment_id\":$LC_OUT_ID}" "$BASE/api/v1/projects/$PROJECT_ID/variables")
+[[ "$CODE" == "201" ]] || { echo "FAIL: unbound API variable create got $CODE"; exit 1; }
+curl_body "$BASE/projects/$PROJECT_ID/variables" | python3 -c '
+import re
+import sys
+options = re.search(r"<select name=\"environment_id\"[^>]*>(.*?)</select>", sys.stdin.read(), re.S)
+assert options and sys.argv[1] in options.group(1), "unbound variable option missing"
+' "$LC_OUT"
+CODE=$(curl_silent -X POST -d "name=LC_UNBOUND_WEB&environment_id=$LC_OUT_ID&csrf_token=$CSRF" "$BASE/projects/$PROJECT_ID/variables")
+[[ "$CODE" == "303" ]] || { echo "FAIL: unbound web variable create got $CODE"; exit 1; }
+LC_UNBOUND_WEB_ID=$(api_item_id_by_name "$BASE/api/v1/projects/$PROJECT_ID/variables" LC_UNBOUND_WEB)
+CODE=$(curl_silent -X PUT -d "name=LC_UNBOUND_WEB&environment_id=$LC_OUT_ID&csrf_token=$CSRF" "$BASE/projects/$PROJECT_ID/variables/$LC_UNBOUND_WEB_ID")
+[[ "$CODE" == "303" ]] || { echo "FAIL: unbound web variable update got $CODE"; exit 1; }
+echo "  Web/API lifecycle variable options and writes: OK"
+
 # Create one step + one release on the lifecycle project.
 CODE=$(curl_silent -X POST -d "name=step1&script_body=exit+0&container_image=$BASH_IMAGE&csrf_token=$CSRF" "$BASE/projects/$LC_PROJECT_ID/steps")
 [[ "$CODE" == "200" ]] || { echo "FAIL: create step got $CODE"; exit 1; }
