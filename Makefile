@@ -196,6 +196,13 @@ js-build: npm-install
 	npx esbuild static/js/app.js --bundle --minify --outfile=static/js/app.bundle.js
 
 # Reformat Go source to 80-char width. Skips sqlc- and templ-generated files.
+.PHONY: install-hooks pre-commit-test
+install-hooks:
+	install -m 755 scripts/pre-commit "$$(git rev-parse --git-path hooks)/pre-commit"
+
+pre-commit-test:
+	bash scripts/pre-commit_test.sh
+
 golines:
 	golines --max-len=80 --ignore-generated -w .
 

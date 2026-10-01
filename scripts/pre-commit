@@ -12,12 +12,17 @@ if ! command -v golines >/dev/null 2>&1; then
 	exit 1
 fi
 
-# -m 80 matches Makefile's --max-len=80; --ignore-generated skips sqlc/templ output.
-# -l lists files that need reformatting; non-empty output => dirty.
-staged=$(golines -m 80 --ignore-generated -l . 2>/dev/null || true)
-
-if [ -n "$staged" ]; then
-	echo "golines: the following files exceed 80 cols (run 'make golines' to fix):" >&2
-	echo "$staged" >&2
-	exit 1
-fi
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+failed=0
+git diff --cached --name-only --diff-filter=ACMRT -z -- '*.go' >"$tmp/files"
+while IFS= read -r -d '' file; do
+	# Read the index, not the working tree: partial staging must be safe.
+	git show ":$file" >"$tmp/staged.go"
+	formatted=$(golines -m 80 --ignore-generated -l "$tmp/staged.go")
+	if [ -n "$formatted" ]; then
+		printf 'golines: staged file needs formatting: %s\n' "$file" >&2
+		failed=1
+	fi
+done <"$tmp/files"
+exit "$failed"
