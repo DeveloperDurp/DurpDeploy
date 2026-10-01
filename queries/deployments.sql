@@ -177,6 +177,7 @@ JOIN releases r ON d.release_id = r.id
 JOIN projects p ON r.project_id = p.id
 JOIN environments e ON d.environment_id = e.id
 WHERE d.kind = 'deployment'
+  AND (CAST(sqlc.arg(is_admin) AS INTEGER) = 1 OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = sqlc.arg(user_id)))
   AND (CAST(sqlc.narg(f_project_id) AS INTEGER) IS NULL OR d.release_id IN (SELECT id FROM releases WHERE project_id = CAST(sqlc.narg(f_project_id) AS INTEGER)))
   AND (CAST(sqlc.narg(f_env_id)     AS INTEGER) IS NULL OR d.environment_id = CAST(sqlc.narg(f_env_id) AS INTEGER))
   AND (CAST(sqlc.narg(f_status)     AS TEXT)    IS NULL OR d.status = CAST(sqlc.narg(f_status) AS TEXT))
@@ -192,6 +193,7 @@ JOIN releases r ON d.release_id = r.id
 JOIN projects p ON r.project_id = p.id
 JOIN environments e ON d.environment_id = e.id
 WHERE d.kind = 'deployment'
+  AND (CAST(sqlc.arg(is_admin) AS INTEGER) = 1 OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = sqlc.arg(user_id)))
   AND (CAST(sqlc.narg(f_project_id) AS INTEGER) IS NULL OR d.release_id IN (SELECT id FROM releases WHERE project_id = CAST(sqlc.narg(f_project_id) AS INTEGER)))
   AND (CAST(sqlc.narg(f_env_id)     AS INTEGER) IS NULL OR d.environment_id = CAST(sqlc.narg(f_env_id) AS INTEGER))
   AND (CAST(sqlc.narg(f_status)     AS TEXT)    IS NULL OR d.status = CAST(sqlc.narg(f_status) AS TEXT))

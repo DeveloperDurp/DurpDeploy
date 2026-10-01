@@ -179,6 +179,11 @@ ADMIN_ID=$(api_get "$BASE/api/v1/users/me" | python3 -c "import sys,json; print(
 [[ -n "$ADMIN_ID" ]] || { echo "FAIL: could not resolve current admin user"; exit 1; }
 echo "  API token minted via /settings/tokens: OK"
 
+if [[ "${DURPDEPLOY_DEPLOYMENT_LIST_E2E_ONLY:-0}" == "1" ]]; then
+    source "$SCRIPT_DIR/deployment_list_e2e.sh"
+    exit 0
+fi
+
 # A request with no cookie must redirect to /login.
 CODE=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/")
 [[ "$CODE" == "303" ]] || { echo "FAIL: unauth GET / got $CODE, want 303"; exit 1; }
@@ -1656,6 +1661,7 @@ CODE=$(curl -s -H "Authorization: Bearer $API_TOKEN" -o /dev/null \
 echo "=== APPLICATION E2E CHECKS PASSED ==="
 
 echo "=== MFA HTTP contracts ==="
+source "$SCRIPT_DIR/deployment_list_e2e.sh"
 
 # The initial login above proves the unenrolled contract. Enrolling this admin
 # must invalidate that browser session, and the second factor must create a new
