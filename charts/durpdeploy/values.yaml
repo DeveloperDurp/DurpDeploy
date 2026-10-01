@@ -196,6 +196,9 @@ secretKey:
 # --- Ingress -------------------------------------------------------------
 ingress:
   enabled: false
+  # -- IPs or CIDRs of the ingress controller peers. Required when ingress is
+  # enabled so authentication rate limits use the forwarded client address.
+  trustedProxies: ""
   className: ""
   annotations: {}
   hosts:
