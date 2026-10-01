@@ -21,6 +21,9 @@ func (r *DeploymentRunner) SetEventBus(bus *events.Bus) {
 func (r *DeploymentRunner) KillAll() {
 	r.mu.Lock()
 	names := make([]string, 0, len(r.attempts))
+	for _, cancel := range r.cancels {
+		cancel()
+	}
 	for id, name := range r.attempts {
 		names = append(names, name)
 		if cancel := r.cancels[id]; cancel != nil {

@@ -14,6 +14,7 @@ func setupTestPodman(t *testing.T) string {
 case "$3" in
 info) printf '{"host":{"security":{"rootless":true}}}' ;;
 ps|rm) ;;
+volume) [ "$4" = ls ] || exit 1 ;;
 run) exec /bin/sh -s ;;
 *) exit 1 ;;
 esac

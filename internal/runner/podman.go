@@ -198,6 +198,7 @@ func newRunnerWithKind(
 		attempts: make(map[int64]string),
 		engine:   endpoint,
 		localErr: localErr,
+		staging:  make(map[int64]artifactStage),
 	}
 	if localErr == nil {
 		r.localErr = r.reconcileAttempts()
@@ -231,6 +232,9 @@ func (r *DeploymentRunner) reconcileAttempts() error {
 				strings.TrimSpace(string(output)),
 			)
 		}
+	}
+	if err := r.reconcileArtifactVolumes(ctx); err != nil {
+		return err
 	}
 	if r.repo != nil {
 		if _, err := r.repo.Queries.ConfirmContainerCleanup(ctx,

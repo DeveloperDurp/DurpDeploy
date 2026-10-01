@@ -381,6 +381,9 @@ func (h *DeploymentHandler) ScheduleDeployment(
 		},
 	)
 	if err != nil {
+		if writeArtifactError(w, err) {
+			return
+		}
 		if errors.Is(err, repository.ErrLegacyServerStep) {
 			http.Error(
 				w,
@@ -863,6 +866,9 @@ func (h *DeploymentHandler) RedeployDeployment(
 				repository.ErrContainerCleanupUnconfirmed.Error(),
 				http.StatusConflict,
 			)
+			return
+		}
+		if writeArtifactError(w, err) {
 			return
 		}
 		if errors.Is(err, repository.ErrLegacyServerStep) {

@@ -4,6 +4,14 @@ package audit
 // registered in server.go. New routes need one map entry; the fallback
 // heuristic catches anything missed with a lossy name.
 var actionMap = map[string]string{
+	"POST /projects/{id}/package-repositories":                         "create_package_repository",
+	"POST /projects/{id}/package-repositories/{repositoryId}":          "update_package_repository",
+	"POST /projects/{id}/package-repositories/{repositoryId}/delete":   "delete_package_repository",
+	"POST /projects/{id}/artifact-repository":                          "select_artifact_repository",
+	"POST /api/v1/projects/{id}/package-repositories":                  "create_package_repository",
+	"PUT /api/v1/projects/{id}/package-repositories/{repositoryId}":    "update_package_repository",
+	"DELETE /api/v1/projects/{id}/package-repositories/{repositoryId}": "delete_package_repository",
+	"PUT /api/v1/projects/{id}/artifact-repository":                    "select_artifact_repository",
 	"POST /login":                                                             "login",
 	"POST /logout":                                                            "logout",
 	"POST /login/mfa/totp":                                                    "mfa_login_factor",

@@ -166,6 +166,9 @@ func (h *ReleaseHandler) CreateRelease(w http.ResponseWriter, r *http.Request) {
 		body.Version,
 	)
 	if err != nil {
+		if writeArtifactError(w, err) {
+			return
+		}
 		if handler.IsUniqueViolation(err) {
 			RespondError(
 				w,
@@ -310,6 +313,9 @@ func (h *ReleaseHandler) RefreshRelease(
 
 	updated, err := handler.RefreshReleaseSnapshot(r.Context(), h.repo, release)
 	if err != nil {
+		if writeArtifactError(w, err) {
+			return
+		}
 		if errors.Is(err, repository.ErrLegacyServerStep) {
 			RespondError(
 				w,

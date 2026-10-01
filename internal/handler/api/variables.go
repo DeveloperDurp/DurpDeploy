@@ -215,6 +215,14 @@ func (h *VariableHandler) CreateVariable(
 	}
 
 	name := trimSpace(req.Name)
+	if name == "ARTIFACT_PATH" {
+		RespondError(
+			w,
+			422,
+			"ARTIFACT_PATH is reserved for deployment artifacts",
+		)
+		return
+	}
 	if name == "" {
 		RespondError(w, http.StatusBadRequest, "Name is required")
 		return
@@ -358,6 +366,14 @@ func (h *VariableHandler) UpdateVariable(
 	}
 
 	name := trimSpace(req.Name)
+	if name == "ARTIFACT_PATH" {
+		RespondError(
+			w,
+			422,
+			"ARTIFACT_PATH is reserved for deployment artifacts",
+		)
+		return
+	}
 	if name == "" {
 		RespondError(w, http.StatusBadRequest, "Name is required")
 		return
@@ -387,16 +403,19 @@ func (h *VariableHandler) UpdateVariable(
 			},
 		)
 	} else {
-		variable, err = h.repo.UpdateVariable(r.Context(), db.UpdateVariableParams{
-			ID:   varID,
-			Name: name,
-			Value: sql.NullString{
-				String: req.Value,
-				Valid:  req.Value != "",
+		variable, err = h.repo.UpdateVariable(
+			r.Context(),
+			db.UpdateVariableParams{
+				ID:   varID,
+				Name: name,
+				Value: sql.NullString{
+					String: req.Value,
+					Valid:  req.Value != "",
+				},
+				EnvironmentID: envID,
+				Secret:        secret,
 			},
-			EnvironmentID: envID,
-			Secret:        secret,
-		})
+		)
 	}
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {

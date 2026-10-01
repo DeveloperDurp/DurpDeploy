@@ -72,6 +72,10 @@ func (r *DeploymentRunner) persistCompletion(
 	status string,
 	cancellationWins bool,
 ) (string, bool) {
+	if err := r.cleanupArtifact(deploymentID); err != nil {
+		status = "cleanup_unconfirmed"
+		cancellationWins = false
+	}
 	finalStatus, err := r.completeDeployment(
 		ctx, cancelCtx, deploymentID, status, cancellationWins,
 	)

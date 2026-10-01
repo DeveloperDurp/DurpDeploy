@@ -150,6 +150,9 @@ func (h *VariableHandler) CreateVariable(
 
 	_, err = h.repo.CreateVariable(r.Context(), params)
 	if err != nil {
+		if writeArtifactError(w, err) {
+			return
+		}
 		if IsUniqueViolation(err) {
 			environments, _ := h.repo.Queries.ListEnvironments(r.Context())
 			project, _ := h.repo.Queries.GetProject(r.Context(), projectID)
@@ -334,6 +337,9 @@ func (h *VariableHandler) UpdateVariable(
 		})
 	}
 	if err2 != nil {
+		if writeArtifactError(w, err2) {
+			return
+		}
 		if IsUniqueViolation(err2) {
 			variable := db.Variable{
 				ID:        varID,

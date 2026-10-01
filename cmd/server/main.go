@@ -787,6 +787,22 @@ func runSecretKey(args []string) int {
 		}
 	}
 
+	if err := rotateArtifactCredentials(
+		ctx,
+		qtx,
+		artifactKeyRotation{
+			oldBox:    oldBox,
+			newBox:    newBox,
+			plaintext: *plaintext,
+		},
+	); err != nil {
+		fmt.Fprintf(
+			os.Stderr,
+			"error: rotate artifact repository credentials: %v\n",
+			err,
+		)
+		return 1
+	}
 	if err := tx.Commit(); err != nil {
 		fmt.Fprintf(os.Stderr, "error: commit: %v\n", err)
 		return 1

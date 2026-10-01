@@ -726,9 +726,10 @@ type swaggerRunbookStep struct {
 // swagger:model RunbookSaveRequest
 // RunbookSaveRequest creates a runbook or saves its next version.
 type swaggerRunbookSaveRequest struct {
-	Name        string               `json:"name"`
-	Description string               `json:"description"`
-	Steps       []swaggerRunbookStep `json:"steps"`
+	ArtifactReleaseID int64                `json:"artifact_release_id"`
+	Name              string               `json:"name"`
+	Description       string               `json:"description"`
+	Steps             []swaggerRunbookStep `json:"steps"`
 }
 
 // swagger:model Runbook
@@ -810,8 +811,9 @@ type swaggerRunbookDetailResponse struct {
 
 // swagger:model RunbookVersionResponse
 type swaggerRunbookVersionResponse struct {
-	Version swaggerRunbookVersion `json:"version"`
-	Steps   []swaggerRunbookStep  `json:"steps"`
+	Artifact *releaseArtifactResponse `json:"artifact"`
+	Version  swaggerRunbookVersion    `json:"version"`
+	Steps    []swaggerRunbookStep     `json:"steps"`
 }
 
 // swagger:model RunbookExecutionDetail

@@ -44,6 +44,9 @@ func (h *ReleaseHandler) RefreshRelease(
 		h.repo,
 		release,
 	); err != nil {
+		if writeArtifactError(w, err) {
+			return
+		}
 		if errors.Is(err, repository.ErrLegacyServerStep) {
 			http.Error(
 				w,

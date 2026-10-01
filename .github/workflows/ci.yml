@@ -266,6 +266,11 @@ jobs:
       - name: Run agent rollout gate
         run: make agent-rollout-gate
 
+      - name: Verify ZIP artifact API, web forms, and container mounts
+        env:
+          DURPDEPLOY_CONTAINER_RUNTIME: docker
+        run: go test -tags=e2e -count=1 -run '^TestArtifactsAPIWebContainerE2E$' ./internal/handler/api
+
   # ----- Agent smoke -----------------------------------------------------------
   # Self-contained smoke check inside the shared image: the entrypoint
   # provisions and pairs its own server and agent and writes evidence to

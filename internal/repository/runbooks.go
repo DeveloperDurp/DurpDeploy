@@ -10,11 +10,12 @@ import (
 )
 
 type RunbookSave struct {
-	ProjectID   int64
-	RunbookID   int64
-	Name        string
-	Description string
-	StepsJSON   string
+	ProjectID         int64
+	RunbookID         int64
+	Name              string
+	Description       string
+	StepsJSON         string
+	ArtifactReleaseID int64
 }
 
 var ErrProjectHasActiveRunbook = errors.New(
@@ -103,6 +104,11 @@ func (r *Repository) DeleteProject(ctx context.Context, projectID int64) error {
 			); err != nil {
 				return err
 			}
+			for _, cleanup := range []func(context.Context, int64) error{q.ClearArtifactSourceRelease, q.DeleteProjectDeploymentArtifacts, q.DeleteProjectReleaseArtifacts, q.DeleteProjectArtifactRepository, q.DeleteProjectPackageRepositories} {
+				if err := cleanup(ctx, projectID); err != nil {
+					return err
+				}
+			}
 			if err := q.DeleteProjectRunbookReleases(
 				ctx,
 				projectID,
@@ -119,6 +125,9 @@ func deleteDeploymentHistory(
 	q *db.Queries,
 	deploymentID int64,
 ) error {
+	if err := q.DeleteDeploymentArtifact(ctx, deploymentID); err != nil {
+		return err
+	}
 	for _, deletePart := range []func(context.Context, int64) error{
 		q.DeleteRunbookRemoteStepLogSequences,
 		q.DeleteRunbookRemoteStepRuns,
@@ -149,6 +158,9 @@ func (r *Repository) SaveRunbook(
 		)
 	}
 	for i := range variables {
+		if variables[i].Name == "ARTIFACT_PATH" {
+			return db.Runbook{}, db.RunbookVersion{}, ErrArtifactPathReserved
+		}
 		variables[i].Value, err = r.EncryptValue(variables[i].Value)
 		if err != nil {
 			return db.Runbook{}, db.RunbookVersion{}, fmt.Errorf(
@@ -161,6 +173,9 @@ func (r *Repository) SaveRunbook(
 	var version db.RunbookVersion
 	err = withSQLiteBusyRetry(ctx, func() error {
 		return r.WithTx(ctx, func(q *db.Queries) error {
+			if err := validateRunbookArtifact(ctx, q, arg); err != nil {
+				return err
+			}
 			var txErr error
 			if arg.RunbookID == 0 {
 				runbook, txErr = q.CreateRunbook(ctx, db.CreateRunbookParams{
@@ -202,6 +217,17 @@ func (r *Repository) SaveRunbook(
 			}
 			if err := q.SetRunbookReleaseKind(ctx, release.ID); err != nil {
 				return err
+			}
+			if arg.ArtifactReleaseID != 0 {
+				if err := q.CopyReleaseArtifactToRunbook(
+					ctx,
+					db.CopyReleaseArtifactToRunbookParams{
+						ReleaseID:   release.ID,
+						ReleaseID_2: arg.ArtifactReleaseID,
+					},
+				); err != nil {
+					return err
+				}
 			}
 			for _, variable := range variables {
 				_, err := q.CreateReleaseVariable(

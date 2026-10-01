@@ -70,7 +70,7 @@ templ RunbooksPage(project db.Project, books []db.Runbook, executions []db.ListR
 	}
 }
 
-templ RunbookFormPage(project db.Project, book db.Runbook, stepsJSON string, errorMessage string, currentPath string) {
+templ RunbookFormPage(project db.Project, book db.Runbook, stepsJSON string, artifactReleases []db.Release, selectedArtifactReleaseID int64, errorMessage string, currentPath string) {
 	if !CanWrite(ctx) {
 		@ViewerForbiddenMessage("Runbook", "edit", "a runbook", fmt.Sprintf("/projects/%d/runbooks", project.ID), currentPath)
 	} else {
@@ -88,6 +88,12 @@ templ RunbookFormPage(project db.Project, book db.Runbook, stepsJSON string, err
 					} else {
 						New version of { book.Name }
 					}
+					<label class="form-control"><span class="label-text">Package from project release</span><select name="artifact_release_id" class="select select-bordered"><option value="0" selected?={ selectedArtifactReleaseID==0 }>No package</option>
+					for _, release := range artifactReleases {
+						<option value={ strconv.FormatInt(release.ID,10) } selected?={ selectedArtifactReleaseID==release.ID }>{ release.Version }</option>
+					}
+					</select></label>
+					<p class="text-sm opacity-70">Required when the project has a package repository selected. This runbook version keeps its own copy of the chosen release's artifact pin.</p>
 				</h1>
 				if errorMessage != "" {
 					<div class="alert alert-error">{ errorMessage }</div>

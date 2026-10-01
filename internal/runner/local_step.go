@@ -24,6 +24,7 @@ type localStepAttempt struct {
 	logWriter    *broadcastWriter
 	environment  map[string]string
 	attempt      int
+	artifact     artifactStage
 }
 
 func (r *DeploymentRunner) runStepAttempt(
@@ -50,6 +51,13 @@ func (r *DeploymentRunner) runStepAttempt(
 		))
 		request.logWriter.Flush()
 		return err
+	}
+	if request.artifact.volume != "" {
+		output, err := r.engine.command(runCtx, "inspect", "--format={{.State.Running}}", request.artifact.keeper).
+			Output()
+		if err != nil || strings.TrimSpace(string(output)) != "true" {
+			return errors.New("artifact staging container is unavailable")
+		}
 	}
 	selected, err := interpreter.Validate(request.step.Interpreter)
 	if err != nil {
@@ -100,6 +108,10 @@ func (r *DeploymentRunner) runStepAttempt(
 		envArgs = append(envArgs, "--env", name)
 	}
 
+	if request.artifact.volume != "" {
+		selectedEnv = append(selectedEnv, "ARTIFACT_PATH="+artifactMount)
+		envArgs = append(envArgs, "--env", "ARTIFACT_PATH")
+	}
 	nonce := make([]byte, 12)
 	if _, err := rand.Read(nonce); err != nil {
 		return err
@@ -133,6 +145,7 @@ func (r *DeploymentRunner) runStepAttempt(
 		args = append(args, "--image-volume=ignore", "--http-proxy=false")
 	}
 	args = append(args, envArgs...)
+	args = append(args, r.artifactMountArgs(request.artifact)...)
 	args = append(args, "--entrypoint="+selected, request.step.ContainerImage)
 	switch selected {
 	case interpreter.Bash:

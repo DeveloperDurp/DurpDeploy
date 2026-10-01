@@ -271,6 +271,9 @@ func (h *RunbookHandler) Retry(w http.ResponseWriter, r *http.Request) {
 		RespondError(w, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
+	if writeArtifactError(w, err) {
+		return
+	}
 	if errors.Is(err, repository.ErrLegacyServerStep) {
 		RespondError(
 			w,

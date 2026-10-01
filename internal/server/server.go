@@ -32,6 +32,7 @@ func NewAgentRouter(agents *agentserver.Server) http.Handler {
 	r.Post(agentproto.LogsPath, agents.Logs)
 	r.Post(agentproto.ResultPath, agents.Result)
 	r.Post(agentproto.CancelledPath, agents.Cancelled)
+	r.Post("/agent/v1/deployments/{id}/artifact", agents.Artifact)
 	return r
 }
 
@@ -332,6 +333,23 @@ func newRouter(
 		// templates, deployments, logs) stay on pr above.
 		pr.Group(func(ppr chi.Router) {
 			ppr.Use(auth.RequireProjectAccess(repo))
+			artifactH := handler.NewArtifactHandler(repo)
+			ppr.Get("/projects/{id}/package-repositories", artifactH.List)
+			ppr.Get("/projects/{id}/package-repositories/new", artifactH.Form)
+			ppr.Post("/projects/{id}/package-repositories", artifactH.Save)
+			ppr.Get(
+				"/projects/{id}/package-repositories/{repositoryId}/edit",
+				artifactH.Form,
+			)
+			ppr.Post(
+				"/projects/{id}/package-repositories/{repositoryId}",
+				artifactH.Save,
+			)
+			ppr.Post(
+				"/projects/{id}/package-repositories/{repositoryId}/delete",
+				artifactH.Delete,
+			)
+			ppr.Post("/projects/{id}/artifact-repository", artifactH.Select)
 
 			ppr.Get("/projects/{id}", ph.GetProject)
 			ppr.Get("/projects/{id}/edit", ph.EditProject)
@@ -643,6 +661,27 @@ func newRouter(
 			par.Patch("/projects/{id}/steps/reorder", apiStepH.ReorderSteps)
 
 			apiVarH := api.NewVariableHandler(repo)
+			artifactH := api.NewArtifactHandler(repo)
+			par.Get("/projects/{id}/package-repositories", artifactH.List)
+			par.Post("/projects/{id}/package-repositories", artifactH.Create)
+			par.Get(
+				"/projects/{id}/package-repositories/{repositoryId}",
+				artifactH.Get,
+			)
+			par.Put(
+				"/projects/{id}/package-repositories/{repositoryId}",
+				artifactH.Update,
+			)
+			par.Delete(
+				"/projects/{id}/package-repositories/{repositoryId}",
+				artifactH.Delete,
+			)
+			par.Get("/projects/{id}/artifact-repository", artifactH.Selection)
+			par.Put("/projects/{id}/artifact-repository", artifactH.Select)
+			par.Get(
+				"/projects/{id}/releases/{relId}/artifact",
+				artifactH.ReleasePin,
+			)
 			par.Get("/projects/{id}/variables", apiVarH.ListVariables)
 			par.Post("/projects/{id}/variables", apiVarH.CreateVariable)
 			par.Get("/projects/{id}/variables/{varId}", apiVarH.GetVariable)

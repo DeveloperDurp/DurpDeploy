@@ -222,3 +222,52 @@ Once deployments are terminal, environment deletion removes their history.
 
 - Swagger: `https://<your-host>/api/swagger/` — full request/response shapes.
 - Server docs: <https://github.com/DeveloperDurp/durpdeploy>.
+## Generic ZIP packages
+
+Projects can select one HTTPS ZIP repository for new release snapshots.
+
+- `GET/POST /api/v1/projects/{id}/package-repositories`
+- `GET/PUT/DELETE /api/v1/projects/{id}/package-repositories/{repositoryId}`
+- `GET/PUT /api/v1/projects/{id}/artifact-repository`
+- `GET /api/v1/projects/{id}/releases/{relId}/artifact` (pin or `null`)
+
+Repository bodies contain `name`, `url_template`, `auth_type` (`noauth`,
+`bearer`, or `basic`), `username` (basic only), and `credential` (token or
+password). Use exactly one `{version}` in the HTTPS URL path, for example
+`https://repo.example/app/{version}/package.zip`. URL credentials, query
+strings, and cross-origin redirects are rejected. Private HTTPS destinations
+are allowed; loopback and link-local destinations are blocked. Configure normal
+system trust for a private repository's TLS certificate; TLS verification is
+never disabled.
+
+Select with `{"repository_id":123}`; zero disables packages for future
+snapshots. Credentials are encrypted and omitted from all responses. A blank
+credential on update preserves the current secret. Pinned repositories allow
+name and credential changes only and cannot be deleted while referenced.
+
+Release creation/refresh downloads and validates the ZIP, then pins its URL,
+version, SHA-256, and size. Deployment creation freezes that pin. Re-runs keep
+the original deployment pin even after release refresh. Deployments use current
+repository credentials and reject content that no longer matches the pin.
+
+Runbook create/save accepts `artifact_release_id`, selecting an existing release
+in the same project that has a package pin. It is required while a project
+repository is selected. The runbook version copies that pin; later refreshes of
+the source release do not change it. Runbook version responses include
+`artifact` (the copied pin or `null`).
+
+Every local step receives `ARTIFACT_PATH=/artifacts`, including steps with a
+variable allowlist. This variable is reserved. Extracted files are mounted
+read-only and noexec. Direct execution and writes are blocked; interpreters can
+still read files, and steps can copy them elsewhere. ZIP paths, links, and
+special files are rejected. Limits are 300 MiB downloaded, 512 MiB extracted,
+10,000 ZIP entries, and a five-minute download timeout. Temporary server files
+and runtime staging volumes are removed on completion, failure, or cancellation.
+Cleanup uncertainty blocks retries until runtime reconciliation succeeds.
+
+Artifact-bearing deployments currently require local steps; agent steps are
+rejected before dispatch. The future agent download contract is
+`POST /agent/v1/deployments/{id}/artifact` with JSON `{"claim_token":"..."}`
+on the separate mTLS listener. It requires the assigned agent's live step claim,
+returns verified ZIP bytes with `X-Artifact-SHA256` and `X-Artifact-Size`, and
+never sends repository credentials. Agent executor support is a separate change.

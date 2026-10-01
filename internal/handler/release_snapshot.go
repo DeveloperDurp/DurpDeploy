@@ -13,6 +13,7 @@ import (
 type releaseSnapshotData struct {
 	stepsJSON string
 	variables []db.CreateReleaseVariableParams
+	artifact  *repository.ArtifactSnapshot
 }
 
 // CreateReleaseSnapshot snapshots the project's current steps and variables
@@ -25,6 +26,14 @@ func CreateReleaseSnapshot(
 	version string,
 ) (db.Release, error) {
 	snapshot, err := buildReleaseSnapshot(ctx, repo, projectID)
+	if err != nil {
+		return db.Release{}, err
+	}
+	snapshot.artifact, err = repo.ResolveProjectArtifact(
+		ctx,
+		projectID,
+		version,
+	)
 	if err != nil {
 		return db.Release{}, err
 	}
@@ -43,6 +52,9 @@ func CreateReleaseSnapshot(
 	if err := snapshot.insertVariables(ctx, queries, release.ID); err != nil {
 		return db.Release{}, err
 	}
+	if err := snapshot.artifact.Insert(ctx, queries, release.ID); err != nil {
+		return db.Release{}, err
+	}
 	if err := tx.Commit(); err != nil {
 		return db.Release{}, err
 	}
@@ -58,6 +70,14 @@ func RefreshReleaseSnapshot(
 		return db.Release{}, err
 	}
 	snapshot, err := buildReleaseSnapshot(ctx, repo, release.ProjectID)
+	if err != nil {
+		return db.Release{}, err
+	}
+	snapshot.artifact, err = repo.ResolveProjectArtifact(
+		ctx,
+		release.ProjectID,
+		release.Version,
+	)
 	if err != nil {
 		return db.Release{}, err
 	}
@@ -81,6 +101,12 @@ func RefreshReleaseSnapshot(
 		return db.Release{}, err
 	}
 	if err := snapshot.insertVariables(ctx, queries, release.ID); err != nil {
+		return db.Release{}, err
+	}
+	if err := queries.DeleteReleaseArtifact(ctx, release.ID); err != nil {
+		return db.Release{}, err
+	}
+	if err := snapshot.artifact.Insert(ctx, queries, release.ID); err != nil {
 		return db.Release{}, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -112,6 +138,9 @@ func buildReleaseSnapshot(
 	}
 	params := make([]db.CreateReleaseVariableParams, len(variables))
 	for index, variable := range variables {
+		if variable.Name == "ARTIFACT_PATH" {
+			return releaseSnapshotData{}, repository.ErrArtifactPathReserved
+		}
 		value, err := repo.EncryptValue(variable.Value)
 		if err != nil {
 			return releaseSnapshotData{}, err

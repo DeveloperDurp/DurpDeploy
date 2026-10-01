@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 
+	"durpdeploy/internal/artifact"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/handler"
 	"durpdeploy/internal/interpreter"
@@ -40,9 +41,10 @@ type runbookStep struct {
 }
 
 type runbookSaveRequest struct {
-	Name        string        `json:"name"`
-	Description string        `json:"description"`
-	Steps       []runbookStep `json:"steps"`
+	Name              string        `json:"name"`
+	Description       string        `json:"description"`
+	Steps             []runbookStep `json:"steps"`
+	ArtifactReleaseID int64         `json:"artifact_release_id"`
 }
 
 // swagger:route GET /projects/{id}/runbooks runbooks listRunbooks
@@ -138,10 +140,24 @@ func (h *RunbookHandler) Version(w http.ResponseWriter, r *http.Request) {
 		RespondError(w, http.StatusInternalServerError, "Cannot read version")
 		return
 	}
+	pin, pinErr := h.repo.Queries.GetReleaseArtifact(
+		r.Context(),
+		version.ReleaseID,
+	)
+	if pinErr != nil && !errors.Is(pinErr, sql.ErrNoRows) {
+		RespondError(w, 500, "Cannot read artifact pin")
+		return
+	}
+	var artifactPin *releaseArtifactResponse
+	if pinErr == nil {
+		value := publicReleaseArtifact(pin)
+		artifactPin = &value
+	}
 	RespondJSON(w, http.StatusOK, struct {
-		Version db.RunbookVersion `json:"version"`
-		Steps   json.RawMessage   `json:"steps"`
-	}{version, json.RawMessage(release.StepsJson)})
+		Version  db.RunbookVersion        `json:"version"`
+		Steps    json.RawMessage          `json:"steps"`
+		Artifact *releaseArtifactResponse `json:"artifact"`
+	}{version, json.RawMessage(release.StepsJson), artifactPin})
 }
 
 // swagger:route PUT /projects/{id}/runbooks/{runbookId} runbooks saveRunbookVersion
@@ -231,6 +247,7 @@ func (h *RunbookHandler) Save(w http.ResponseWriter, r *http.Request) {
 		repository.RunbookSave{
 			ProjectID: projectID, RunbookID: id, Name: req.Name,
 			Description: req.Description, StepsJSON: string(steps),
+			ArtifactReleaseID: req.ArtifactReleaseID,
 		},
 	)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -246,6 +263,12 @@ func (h *RunbookHandler) Save(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
+		if errors.Is(err, artifact.ErrInvalid) ||
+			errors.Is(err, repository.ErrRemoteArtifactsUnsupported) ||
+			errors.Is(err, repository.ErrArtifactPathReserved) {
+			artifactError(w, err)
+			return
+		}
 		RespondError(w, http.StatusInternalServerError, "Cannot save runbook")
 		return
 	}

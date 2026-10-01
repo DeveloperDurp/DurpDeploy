@@ -3261,6 +3261,66 @@
         ]
       }
     },
+    "/projects/{id}/artifact-repository": {
+      "get": {
+        "tags": [
+          "artifacts"
+        ],
+        "summary": "Read the repository selected for future release snapshots; zero disables artifacts.",
+        "operationId": "getArtifactRepository",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "name": "id",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/ArtifactSelection"
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "artifacts"
+        ],
+        "summary": "Select one project repository for future snapshots, or zero to disable.",
+        "operationId": "selectArtifactRepository",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "Body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/ArtifactSelection"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/ArtifactSelection"
+            }
+          }
+        }
+      }
+    },
     "/projects/{id}/deployments": {
       "get": {
         "produces": [
@@ -3920,6 +3980,190 @@
         ]
       }
     },
+    "/projects/{id}/package-repositories": {
+      "get": {
+        "tags": [
+          "artifacts"
+        ],
+        "summary": "List generic ZIP repositories without credentials.",
+        "operationId": "listPackageRepositories",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "name": "id",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/PackageRepositoryListResponse"
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "artifacts"
+        ],
+        "summary": "Create an HTTPS generic ZIP repository.",
+        "operationId": "createPackageRepository",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "Body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/PackageRepositoryRequest"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Created",
+            "schema": {
+              "$ref": "#/definitions/PackageRepositoryResponse"
+            }
+          },
+          "422": {
+            "description": "Validation error response.",
+            "schema": {
+              "$ref": "#/definitions/ValidationError"
+            }
+          }
+        }
+      }
+    },
+    "/projects/{id}/package-repositories/{repositoryId}": {
+      "get": {
+        "tags": [
+          "artifacts"
+        ],
+        "summary": "Read a repository without its credential.",
+        "operationId": "getPackageRepository",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "RepositoryID",
+            "name": "repositoryId",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/PackageRepositoryResponse"
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "artifacts"
+        ],
+        "summary": "Update a repository. A blank credential preserves the current secret.",
+        "operationId": "updatePackageRepository",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "RepositoryID",
+            "name": "repositoryId",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "Body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/PackageRepositoryRequest"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/PackageRepositoryResponse"
+            }
+          },
+          "409": {
+            "description": "Conflict error response.",
+            "schema": {
+              "$ref": "#/definitions/ConflictError"
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "artifacts"
+        ],
+        "summary": "Delete an unpinned repository.",
+        "operationId": "deletePackageRepository",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "RepositoryID",
+            "name": "repositoryId",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "409": {
+            "description": "Conflict error response.",
+            "schema": {
+              "$ref": "#/definitions/ConflictError"
+            }
+          }
+        }
+      }
+    },
     "/projects/{id}/releases": {
       "get": {
         "produces": [
@@ -4155,6 +4399,41 @@
             "bearer": []
           }
         ]
+      }
+    },
+    "/projects/{id}/releases/{relId}/artifact": {
+      "get": {
+        "tags": [
+          "artifacts"
+        ],
+        "summary": "Read a release's pinned ZIP; null means no artifact.",
+        "operationId": "getReleaseArtifact",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "RelID",
+            "name": "relId",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/ReleaseArtifactResponse"
+            }
+          }
+        }
       }
     },
     "/projects/{id}/releases/{relId}/refresh": {
@@ -6964,6 +7243,18 @@
       "x-go-name": "swaggerAgentListResponse",
       "x-go-package": "durpdeploy/internal/handler/api"
     },
+    "ArtifactSelection": {
+      "type": "object",
+      "properties": {
+        "repository_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "RepositoryID"
+        }
+      },
+      "x-go-name": "artifactSelection",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
     "AuditLog": {
       "type": "object",
       "title": "AuditLog is a recorded state-changing action.",
@@ -7732,6 +8023,78 @@
       "x-go-name": "swaggerNotificationEventListResponse",
       "x-go-package": "durpdeploy/internal/handler/api"
     },
+    "PackageRepositoryListResponse": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/PackageRepositoryResponse"
+      },
+      "x-go-name": "swaggerPackageRepositoryListResponse",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "PackageRepositoryRequest": {
+      "type": "object",
+      "properties": {
+        "auth_type": {
+          "type": "string",
+          "x-go-name": "AuthType"
+        },
+        "credential": {
+          "type": "string",
+          "x-go-name": "Credential"
+        },
+        "name": {
+          "type": "string",
+          "x-go-name": "Name"
+        },
+        "url_template": {
+          "type": "string",
+          "x-go-name": "URLTemplate"
+        },
+        "username": {
+          "type": "string",
+          "x-go-name": "Username"
+        }
+      },
+      "x-go-name": "packageRepositoryRequest",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "PackageRepositoryResponse": {
+      "type": "object",
+      "properties": {
+        "auth_type": {
+          "type": "string",
+          "x-go-name": "AuthType"
+        },
+        "credential_configured": {
+          "type": "boolean",
+          "x-go-name": "CredentialConfigured"
+        },
+        "id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "ID"
+        },
+        "name": {
+          "type": "string",
+          "x-go-name": "Name"
+        },
+        "project_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "ProjectID"
+        },
+        "url_template": {
+          "type": "string",
+          "x-go-name": "URLTemplate"
+        },
+        "username": {
+          "type": "string",
+          "x-go-name": "Username"
+        }
+      },
+      "x-go-name": "packageRepositoryResponse",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
     "PaginatedResponse": {
       "type": "object",
       "title": "Paginated list envelope.",
@@ -8083,6 +8446,45 @@
       "x-go-name": "swaggerRelease",
       "x-go-package": "durpdeploy/internal/handler/api"
     },
+    "ReleaseArtifactResponse": {
+      "type": "object",
+      "properties": {
+        "release_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "ReleaseID"
+        },
+        "repository_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "RepositoryID"
+        },
+        "sha256": {
+          "type": "string",
+          "x-go-name": "SHA256"
+        },
+        "size": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Size"
+        },
+        "source_release_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "SourceReleaseID"
+        },
+        "url": {
+          "type": "string",
+          "x-go-name": "URL"
+        },
+        "version": {
+          "type": "string",
+          "x-go-name": "Version"
+        }
+      },
+      "x-go-name": "releaseArtifactResponse",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
     "ReleaseListResponse": {
       "type": "array",
       "title": "ReleaseListResponse is a list of releases.",
@@ -8417,6 +8819,11 @@
     "RunbookSaveRequest": {
       "type": "object",
       "properties": {
+        "artifact_release_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "ArtifactReleaseID"
+        },
         "description": {
           "type": "string",
           "x-go-name": "Description"
@@ -8642,6 +9049,9 @@
     "RunbookVersionResponse": {
       "type": "object",
       "properties": {
+        "artifact": {
+          "$ref": "#/definitions/ReleaseArtifactResponse"
+        },
         "steps": {
           "type": "array",
           "items": {

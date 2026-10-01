@@ -214,7 +214,7 @@ templ ReleaseRow(projectID int64, rv ReleaseView) {
 	</tr>
 }
 
-templ ReleaseDetailPage(project db.Project, release db.Release, variables []db.ReleaseVariable, environments []db.Environment, currentPath string) {
+templ ReleaseDetailPage(project db.Project, release db.Release, variables []db.ReleaseVariable, environments []db.Environment, artifact db.ReleaseArtifact, currentPath string) {
 	@layouts.Base(fmt.Sprintf("Release %s", release.Version), currentPath) {
 		@components.Breadcrumbs([]components.Crumb{
 			{Label: "Home", Href: "/"},
@@ -223,11 +223,11 @@ templ ReleaseDetailPage(project db.Project, release db.Release, variables []db.R
 			{Label: "Releases", Href: fmt.Sprintf("/projects/%d/releases", project.ID)},
 			{Label: release.Version},
 		})
-		@ReleaseDetail(project, release, variables, environments)
+		@ReleaseDetail(project, release, variables, environments,artifact)
 	}
 }
 
-templ ReleaseDetail(project db.Project, release db.Release, variables []db.ReleaseVariable, environments []db.Environment) {
+templ ReleaseDetail(project db.Project, release db.Release, variables []db.ReleaseVariable, environments []db.Environment, artifact db.ReleaseArtifact) {
 	<div class="space-y-6">
 		<div class="flex justify-between items-center">
 			<div>
@@ -248,6 +248,9 @@ templ ReleaseDetail(project db.Project, release db.Release, variables []db.Relea
 				<a href={ fmt.Sprintf("/projects/%d/releases", project.ID) } class="btn btn-ghost btn-sm">Back</a>
 			</div>
 		</div>
+		if artifact.ReleaseID!=0 {
+			<div class="card bg-base-200 p-4 space-y-3"><h2 class="text-xl font-bold">Pinned ZIP package</h2><p class="break-all">{ artifact.Url }</p><p>Version: { artifact.Version }</p><p class="font-mono break-all">SHA-256: { artifact.Sha256 }</p><p>Size: { strconv.FormatInt(artifact.Size,10) } bytes</p><p class="text-sm opacity-70">Steps receive ARTIFACT_PATH. Files are read-only; direct execution is blocked.</p></div>
+		}
 		<div class="card bg-base-200 p-4">
 			<h2 class="text-xl font-bold mb-4">Snapshotted Steps</h2>
 			if releaseNeedsRecreation(parseReleaseSteps(release.StepsJson)) {
