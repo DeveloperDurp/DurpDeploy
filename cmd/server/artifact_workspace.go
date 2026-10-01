@@ -7,9 +7,9 @@ import (
 	"durpdeploy/internal/repository"
 )
 
-// Keep the lease until process exit: KillAll cancels runners but does not wait
-// for their artifact file cleanup. Releasing it earlier permits a second server
-// to sweep files still used by those goroutines.
+// Keep the lease until process exit: HTTP shutdown can time out while artifact
+// requests still run. Releasing it earlier permits a second server to sweep
+// files still used by those goroutines.
 var serverArtifactWorkspace *artifact.Workspace
 
 func prepareArtifactWorkspace(repo *repository.Repository) error {

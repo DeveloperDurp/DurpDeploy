@@ -30,6 +30,10 @@ type localStepAttempt struct {
 func (r *DeploymentRunner) runStepAttempt(
 	runCtx context.Context, request localStepAttempt,
 ) (result error) {
+	if !r.beginLocalWork() {
+		return context.Canceled
+	}
+	defer r.localWork.Done()
 	if request.step.ContainerImage == "" {
 		return fmt.Errorf(
 			"step %q has no container image (legacy local steps cannot run on the host)",

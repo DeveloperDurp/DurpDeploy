@@ -16,11 +16,11 @@ cleanup() {
 	if ((status != 0)) && [[ -f "$TMP/server.log" ]]; then
 		tail -n 100 "$TMP/server.log" >&2
 	fi
-    rm -rf "$TMP"
     if [[ -n "$SERVER_PID" ]]; then
         kill "$SERVER_PID" 2>/dev/null || true
         wait "$SERVER_PID" 2>/dev/null || true
     fi
+	rm -rf "$TMP"
 	return "$status"
 }
 trap cleanup EXIT
@@ -69,6 +69,7 @@ else
     # Start the server. The migrations it would normally run are a no-op
     # because the admin CLI just created the schema.
     DURPDEPLOY_ADDR="127.0.0.1:$PORT" \
+		TMPDIR="$TMP" \
         DURPDEPLOY_AGENT_LISTEN_ADDR="127.0.0.1:0" \
         DURPDEPLOY_AGENT_PUBLIC_URL="https://localhost" \
         DURPDEPLOY_AGENT_IDENTITY_DIR="$TMP/agent-identity" \
