@@ -407,6 +407,16 @@ func TestLogout(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get session after login: %v", err)
 	}
+	challenges := mfa.NewChallengeService(mfa.ChallengeServiceConfig{
+		Repository: h.repo,
+	})
+	if _, err := challenges.Issue(context.Background(), mfa.ChallengeIssue{
+		UserID:    session.UserID,
+		SessionID: session.ID,
+		Purpose:   mfa.ChallengePurposeTOTPVerify,
+	}); err != nil {
+		t.Fatalf("issue session-bound MFA challenge: %v", err)
+	}
 
 	logoutResp, err := client.PostForm(h.server+"/logout", url.Values{
 		"csrf_token": {session.CsrfToken},
@@ -438,6 +448,17 @@ func TestLogout(t *testing.T) {
 	)
 	if err == nil {
 		t.Fatal("session row still exists after logout")
+	}
+	var challengeCount int
+	if err := h.repo.DB.QueryRowContext(
+		context.Background(),
+		"SELECT COUNT(*) FROM mfa_challenges WHERE session_id = ?",
+		sessionToken,
+	).Scan(&challengeCount); err != nil {
+		t.Fatalf("count session-bound MFA challenges: %v", err)
+	}
+	if challengeCount != 0 {
+		t.Fatalf("session-bound MFA challenges = %d, want 0", challengeCount)
 	}
 }
 

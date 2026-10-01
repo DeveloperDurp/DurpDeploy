@@ -144,16 +144,28 @@ func (h *AuthHandler) LoginPost(w http.ResponseWriter, r *http.Request) {
 func (h *AuthHandler) LogoutPost(w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie("session")
 	if err == nil {
-		// Attribute the logout to a user before deleting the session.
-		// If the session is gone or expired, skip the audit entry —
-		// there is no user to attribute it to.
-		if sess, serr := h.repo.Queries.GetSession(
+		// Look up the user before deleting the session so a successful logout
+		// can be attributed. Missing or expired sessions are not audited.
+		sess, sessionErr := h.repo.Queries.GetSession(
 			r.Context(),
 			db.GetSessionParams{
 				ID:        cookie.Value,
 				ExpiresAt: 0,
 			},
-		); serr == nil {
+		)
+		if err := h.repo.WithTx(r.Context(), func(queries *db.Queries) error {
+			if _, err := queries.DeleteMFAChallengesBySessionID(
+				r.Context(),
+				sql.NullString{String: cookie.Value, Valid: true},
+			); err != nil {
+				return err
+			}
+			return queries.DeleteSession(r.Context(), cookie.Value)
+		}); err != nil {
+			http.Error(w, "failed to revoke session", http.StatusInternalServerError)
+			return
+		}
+		if sessionErr == nil {
 			audit.Record(r.Context(), h.repo, audit.Entry{
 				UserID:     sql.NullInt64{Int64: sess.UserID, Valid: true},
 				Action:     "logout",
@@ -163,7 +175,6 @@ func (h *AuthHandler) LogoutPost(w http.ResponseWriter, r *http.Request) {
 			})
 			audit.Suppress(r)
 		}
-		_ = h.repo.Queries.DeleteSession(r.Context(), cookie.Value)
 	}
 
 	http.SetCookie(w, &http.Cookie{
