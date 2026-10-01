@@ -87,7 +87,7 @@ func (r *DeploymentRunner) runStepAttempt(
 	if len(variableNames) == 0 {
 		variableNames = make([]string, 0, len(request.environment))
 		for name := range request.environment {
-			if containerenv.ValidateName(name, true) == nil {
+			if request.validExecutionVariable(name) {
 				variableNames = append(variableNames, name)
 			}
 		}
@@ -97,7 +97,7 @@ func (r *DeploymentRunner) runStepAttempt(
 	var envArgs []string
 	for _, name := range variableNames {
 		value, exists := request.environment[name]
-		if containerenv.ValidateName(name, true) != nil || !exists ||
+		if !request.validExecutionVariable(name) || !exists ||
 			strings.ContainsRune(value, '\x00') {
 			return fmt.Errorf(
 				"invalid or unavailable selected variable %q",
@@ -222,6 +222,15 @@ func (r *DeploymentRunner) runStepAttempt(
 		}
 	}
 	return err
+}
+
+// Existing immutable snapshots may contain this name from before packages.
+// New-write validation stays reserved; a mounted package owns the variable.
+func (request localStepAttempt) validExecutionVariable(name string) bool {
+	if name == "ARTIFACT_PATH" && request.artifact.volume == "" {
+		return true
+	}
+	return containerenv.ValidateName(name, true) == nil
 }
 
 func (r *DeploymentRunner) rejectDockerImageVolumes(

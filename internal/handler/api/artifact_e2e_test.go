@@ -17,6 +17,7 @@ func TestArtifactsAPIWebContainerE2E(t *testing.T) {
 	// Given: real HTTP, HTTPS repository, migrated DB, and Podman containers.
 	f := newArtifactE2E(t)
 	base := f.base()
+	f.verifyLegacyArtifactVariable(t)
 	webBase := fmt.Sprintf("/projects/%d", f.project.ID)
 	f.web(t, "GET", webBase+"/package-repositories/new", nil, 200)
 	f.web(
