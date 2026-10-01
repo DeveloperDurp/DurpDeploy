@@ -73,7 +73,7 @@ DELETE FROM package_repositories WHERE project_id = ?;
 UPDATE release_artifacts SET source_release_id = NULL WHERE source_release_id IN (SELECT id FROM releases WHERE project_id = ?);
 
 -- name: ListPackageRepositoryCredentials :many
-SELECT id, credential FROM package_repositories WHERE credential <> '';
+SELECT id, credential FROM package_repositories WHERE NULLIF(credential, '') IS NOT NULL;
 
 -- name: UpdatePackageRepositoryCredential :exec
 UPDATE package_repositories SET credential = ? WHERE id = ?;

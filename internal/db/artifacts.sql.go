@@ -391,7 +391,7 @@ func (q *Queries) ListPackageRepositories(ctx context.Context, projectID int64) 
 }
 
 const listPackageRepositoryCredentials = `-- name: ListPackageRepositoryCredentials :many
-SELECT id, credential FROM package_repositories WHERE credential <> ''
+SELECT id, credential FROM package_repositories WHERE NULLIF(credential, '') IS NOT NULL
 `
 
 type ListPackageRepositoryCredentialsRow struct {
