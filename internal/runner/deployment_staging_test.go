@@ -200,23 +200,32 @@ BEGIN SELECT RAISE(FAIL, 'terminal write unavailable'); END`)
 				t.Fatal(err)
 			}
 			// Then: cleanup and returning from Run do not change the outcome.
-			deadline := time.Now().Add(3 * time.Second)
-			for {
-				stored, err := repo.Queries.GetDeployment(t.Context(), dep.ID)
-				if err != nil {
-					t.Fatal(err)
-				}
-				if stored.FinishedAt.Valid {
-					if stored.Status != status || len(r.staging) != 0 {
-						t.Fatalf("deployment=%+v staging=%v", stored, r.staging)
-					}
-					return
-				}
-				if time.Now().After(deadline) {
-					t.Fatalf("terminal retry did not persist: %+v", stored)
-				}
-				time.Sleep(20 * time.Millisecond)
+			stored := awaitStagingCompletion(t, repo, dep.ID)
+			if stored.Status != status || len(r.staging) != 0 {
+				t.Fatalf("deployment=%+v staging=%v", stored, r.staging)
 			}
 		})
+	}
+}
+
+func awaitStagingCompletion(
+	t *testing.T,
+	repo *repository.Repository,
+	deploymentID int64,
+) db.Deployment {
+	t.Helper()
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		stored, err := repo.Queries.GetDeployment(t.Context(), deploymentID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if stored.FinishedAt.Valid {
+			return stored
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("terminal retry did not persist: %+v", stored)
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }

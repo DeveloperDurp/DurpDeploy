@@ -461,19 +461,23 @@ func (h *VariableHandler) UpdateVariable(
 		)
 	}
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			RespondError(w, http.StatusNotFound, "Variable not found")
-			return
-		}
-		if status := handler.ArtifactErrorStatus(err); status != 0 {
-			RespondError(w, status, err.Error())
-			return
-		}
-		RespondError(w, http.StatusInternalServerError, err.Error())
+		respondVariableUpdateError(w, err)
 		return
 	}
 
 	RespondJSON(w, http.StatusOK, toVariableResponse(variable))
+}
+
+func respondVariableUpdateError(w http.ResponseWriter, err error) {
+	if errors.Is(err, sql.ErrNoRows) {
+		RespondError(w, http.StatusNotFound, "Variable not found")
+		return
+	}
+	status := handler.ArtifactErrorStatus(err)
+	if status == 0 {
+		status = http.StatusInternalServerError
+	}
+	RespondError(w, status, err.Error())
 }
 
 // swagger:route DELETE /projects/{id}/variables/{varId} variables deleteVariable

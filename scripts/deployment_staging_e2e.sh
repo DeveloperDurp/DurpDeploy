@@ -2,12 +2,13 @@
 # Sourced by e2e_test.sh: public API and session/CSRF web deployment handoff.
 deployment_staging_e2e() {
     local project env release variable producer consumer payload code dep path state logs
+    local -r json_id='import json,sys; print(json.load(sys.stdin)["id"])'
     local prefix="stage-handoff-$(date +%s)-$$"
     echo "=== Deployment file handoff ==="
     # Given: two container steps explicitly publish and consume a shared file.
-    project=$(api_post "{\"name\":\"$prefix\"}" "$BASE/api/v1/projects" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
-    env=$(api_post "{\"name\":\"$prefix\"}" "$BASE/api/v1/environments" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
-    variable=$(api_post '{"name":"LIMITED","value":"selected"}' "$BASE/api/v1/projects/$project/variables" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
+    project=$(api_post "{\"name\":\"$prefix\"}" "$BASE/api/v1/projects" | python3 -c "$json_id")
+    env=$(api_post "{\"name\":\"$prefix\"}" "$BASE/api/v1/environments" | python3 -c "$json_id")
+    variable=$(api_post '{"name":"LIMITED","value":"selected"}' "$BASE/api/v1/projects/$project/variables" | python3 -c "$json_id")
     code=$(api_post_code '{"name":"DURPDEPLOY_STAGE_DIR","value":"/override"}' "$BASE/api/v1/projects/$project/variables")
     [[ "$code" == 422 ]] || { echo "FAIL: API staging override got $code"; return 1; }
     code=$(curl_silent -X POST --data-urlencode 'name=DURPDEPLOY_STAGE_DIR' --data-urlencode 'value=/override' -d "csrf_token=$CSRF" "$BASE/projects/$project/variables")
@@ -53,11 +54,11 @@ SCRIPT
     api_post "$payload" "$BASE/api/v1/projects/$project/steps" >/dev/null
     payload=$(python3 -c 'import json,sys; print(json.dumps({"name":"consumer","script_body":sys.argv[1],"container_image":sys.argv[2],"variable_names":["LIMITED"]}))' "$consumer" "$BASH_IMAGE")
     api_post "$payload" "$BASE/api/v1/projects/$project/steps" >/dev/null
-    release=$(api_post '{"version":"1"}' "$BASE/api/v1/projects/$project/releases" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
+    release=$(api_post '{"version":"1"}' "$BASE/api/v1/projects/$project/releases" | python3 -c "$json_id")
     for path in api web; do
         # When: each surface launches a new deployment of the same snapshot.
         if [[ "$path" == api ]]; then
-            dep=$(api_post "{\"release_id\":$release,\"environment_id\":$env}" "$BASE/api/v1/projects/$project/deployments" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
+            dep=$(api_post "{\"release_id\":$release,\"environment_id\":$env}" "$BASE/api/v1/projects/$project/deployments" | python3 -c "$json_id")
         else
             dep=$(curl -s -b "$COOKIES" -D - -o /dev/null -X POST -d "release_id=$release&environment_id=$env&csrf_token=$CSRF" "$BASE/projects/$project/deploy" | awk 'tolower($1)=="location:" {gsub("\r", "", $2); sub("/deployments/", "", $2); print $2}')
             [[ "$dep" =~ ^[0-9]+$ ]] || { echo 'FAIL: web staging deployment did not redirect'; return 1; }

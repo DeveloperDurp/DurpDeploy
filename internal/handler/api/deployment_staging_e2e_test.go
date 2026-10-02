@@ -64,41 +64,10 @@ printf 'stage-ready\n'
 				t.Fatal(err)
 			}
 			path := fmt.Sprintf("/api/v1/deployments/%d", dep.ID)
-			deadline := time.Now().Add(30 * time.Second)
 			// When: the deployment succeeds, fails, or is cancelled after writing.
-			cancelled := false
-			for {
-				logs := f.api(t, "GET", path+"/logs", nil, 200)
-				if terminal == "cancelled" && !cancelled &&
-					strings.Contains(string(logs), "stage-ready") {
-					f.api(t, "POST", path+"/cancel", nil, 200)
-					cancelled = true
-				}
-				var state struct {
-					Status string `json:"status"`
-				}
-				if err := json.Unmarshal(f.api(t, "GET", path+"/status", nil, 200), &state); err != nil {
-					t.Fatal(err)
-				}
-				if state.Status == terminal {
-					if !strings.Contains(string(logs), "stage-ready") {
-						t.Fatal(
-							"deployment completed without writing the staged file",
-						)
-					}
-					break
-				}
-				if state.Status == "cleanup_unconfirmed" ||
-					state.Status == "failed" ||
-					time.Now().After(deadline) {
-					t.Fatalf(
-						"deployment=%s want=%s logs=%s",
-						state.Status,
-						terminal,
-						logs,
-					)
-				}
-				time.Sleep(20 * time.Millisecond)
+			logs := awaitStagingTerminal(t, f, path, terminal)
+			if !strings.Contains(string(logs), "stage-ready") {
+				t.Fatal("deployment completed without writing the staged file")
 			}
 			// Then: terminal status is not visible until volume and keeper are gone.
 			filter := "--filter=label=io.durpdeploy.namespace=" +
@@ -115,5 +84,42 @@ printf 'stage-ready\n'
 				t.Fatalf("terminal deployment left containers: %s", containers)
 			}
 		})
+	}
+}
+
+func awaitStagingTerminal(
+	t *testing.T,
+	f *artifactE2E,
+	path, terminal string,
+) []byte {
+	t.Helper()
+	deadline := time.Now().Add(30 * time.Second)
+	cancelled := false
+	for {
+		logs := f.api(t, "GET", path+"/logs", nil, 200)
+		if terminal == "cancelled" && !cancelled &&
+			strings.Contains(string(logs), "stage-ready") {
+			f.api(t, "POST", path+"/cancel", nil, 200)
+			cancelled = true
+		}
+		var state struct {
+			Status string `json:"status"`
+		}
+		if err := json.Unmarshal(f.api(t, "GET", path+"/status", nil, 200), &state); err != nil {
+			t.Fatal(err)
+		}
+		if state.Status == terminal {
+			return logs
+		}
+		if state.Status == "cleanup_unconfirmed" || state.Status == "failed" ||
+			time.Now().After(deadline) {
+			t.Fatalf(
+				"deployment=%s want=%s logs=%s",
+				state.Status,
+				terminal,
+				logs,
+			)
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }
