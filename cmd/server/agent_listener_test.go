@@ -9,6 +9,7 @@ import (
 	"durpdeploy/internal/dispatch"
 	"durpdeploy/internal/migrate"
 	"durpdeploy/internal/repository"
+	"github.com/stretchr/testify/require"
 
 	agenttls "github.com/DeveloperDurp/durpdeploy-agent/transport"
 )
@@ -56,6 +57,10 @@ func TestRuntimeAgentShutdownRestart(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		require.Equal(t, 5*time.Second, listener.server.ReadHeaderTimeout)
+		require.Equal(t, 30*time.Second, listener.server.ReadTimeout)
+		require.Equal(t, time.Minute, listener.server.WriteTimeout)
+		require.Equal(t, time.Minute, listener.server.IdleTimeout)
 		addr := listener.listener.Addr().String()
 		occupied := config
 		occupied.addr = addr

@@ -108,9 +108,9 @@ wait "$server_pid" || true
 server_pid=
 
 printf 'Running host control-plane E2E\n'
+suite_started=$(date -u +%FT%TZ)
 DURPDEPLOY_E2E_PORT=18080 ./scripts/e2e_test.sh
-test -z "$(docker ps -aq \
-	--filter "label=io.durpdeploy.namespace=docker:$namespace")"
+bash scripts/check_e2e_containers.sh "$namespace" "$suite_started"
 
 printf 'Building containerized control plane\n'
 docker build -t "$image" .
@@ -143,10 +143,10 @@ done
 docker exec "$app_name" /bin/sh -ceu \
 	'test "$(awk '\''/^Uid:/{print $2}'\'' /proc/1/status)" = 10001; command -v docker; command -v podman'
 printf 'Running containerized control-plane E2E\n'
+suite_started=$(date -u +%FT%TZ)
 DURPDEPLOY_E2E_CLIENT_ONLY=1 DURPDEPLOY_E2E_CONTROL_PLANE_PORT=18081 \
 	DURPDEPLOY_BASE_URL=http://127.0.0.1:18081 \
 	./scripts/e2e_test.sh
 docker stop "$app_name" >/dev/null
-test -z "$(docker ps -aq \
-	--filter "label=io.durpdeploy.namespace=docker:$namespace")"
+bash scripts/check_e2e_containers.sh "$namespace" "$suite_started"
 printf 'Host and in-container API/web E2E and container cleanup: PASS\n'
