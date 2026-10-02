@@ -22,6 +22,9 @@ case "$3" in
 info) printf '{"host":{"security":{"rootless":true}}}';;
 ps) printf 'orphan-container-id\n';;
 rm) printf '%s\n' "$*" > "$PODMAN_TRACE";;
+volume)
+  if [ "$4" = ls ]; then printf 'orphan-staging-volume\n'; fi
+  if [ "$4" = rm ]; then printf '%s\n' "$*" > "$PODMAN_TRACE.volume"; fi;;
 esac
 `
 	if err := os.WriteFile(
@@ -50,6 +53,11 @@ esac
 			"--force --time=0 --ignore orphan-container-id",
 		) {
 		t.Fatalf("orphan cleanup %q: %v", removed, err)
+	}
+	volume, err := os.ReadFile(trace + ".volume")
+	if err != nil ||
+		!strings.Contains(string(volume), "volume rm orphan-staging-volume") {
+		t.Fatalf("orphan staging cleanup %q: %v", volume, err)
 	}
 }
 

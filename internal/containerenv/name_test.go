@@ -17,3 +17,15 @@ func TestValidateNameRejectsClientConfigEnvironment(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateNameRejectsStagingVariable(t *testing.T) {
+	// Given: the staging path is supplied by the runner for local steps.
+	for _, local := range []bool{true, false} {
+		// When: a user selects the reserved name.
+		err := ValidateName(StageVariable, local)
+		// Then: neither local nor agent selections can override the contract.
+		if !errors.Is(err, ErrReserved) {
+			t.Fatalf("local=%v: expected reserved name, got %v", local, err)
+		}
+	}
+}

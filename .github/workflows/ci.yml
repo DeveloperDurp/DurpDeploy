@@ -288,7 +288,7 @@ jobs:
       - name: Verify ZIP artifact API, web forms, and container mounts
         env:
           DURPDEPLOY_CONTAINER_RUNTIME: docker
-        run: go test -tags=e2e -count=1 -run '^(TestArtifactsAPIWebContainerE2E|TestArtifactCredentialRotationE2E|TestArtifactSourceReplacementE2E)$' ./internal/handler/api
+        run: go test -tags=e2e -count=1 -run '^(TestArtifactsAPIWebContainerE2E|TestArtifactCredentialRotationE2E|TestArtifactSourceReplacementE2E|TestDeploymentStagingCleanupE2E)$' ./internal/handler/api
 
   # ----- Artifact crash recovery and capacity ----------------------------------
   package-browser:

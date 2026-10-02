@@ -179,6 +179,13 @@ func NewWithPodmanBinaryForTest(
 	return newRunnerWithKind(repo, broker, "podman", binary)
 }
 
+// NewWithContainerBinaryForTest uses the configured runtime with a fake client.
+func NewWithContainerBinaryForTest(
+	repo *repository.Repository, broker *LogBroker, binary string,
+) *DeploymentRunner {
+	return newRunner(repo, broker, binary)
+}
+
 func newRunner(
 	repo *repository.Repository, broker *LogBroker, testBinary string,
 ) *DeploymentRunner {
@@ -198,7 +205,7 @@ func newRunnerWithKind(
 		attempts: make(map[int64]string),
 		engine:   endpoint,
 		localErr: localErr,
-		staging:  make(map[int64]artifactStage),
+		staging:  make(map[int64][]artifactStage),
 	}
 	if localErr == nil {
 		r.localErr = r.reconcileAttempts()

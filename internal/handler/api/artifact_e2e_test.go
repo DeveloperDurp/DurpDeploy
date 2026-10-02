@@ -60,13 +60,20 @@ awk '$5 == "/artifacts" { if ($6 !~ /ro/ || $6 !~ /noexec/) exit 1; found=1 } EN
 printf 'artifact-readable\n'
 `
 	for _, name := range []string{"first", "second"} {
+		handoffScript := `test "$(cat "$DURPDEPLOY_STAGE_DIR/package-copy")" = package
+test "$(wc -c < "$DURPDEPLOY_STAGE_DIR/package-copy")" -eq 7
+`
+		if name == "first" {
+			handoffScript = `cp "$ARTIFACT_PATH/app.txt" "$DURPDEPLOY_STAGE_DIR/package-copy"
+`
+		}
 		f.api(
 			t,
 			"POST",
 			base+"/steps",
 			map[string]any{
 				"name":            name,
-				"script_body":     script,
+				"script_body":     script + handoffScript,
 				"interpreter":     "bash",
 				"container_image": "docker.io/library/bash:5.2",
 				"variable_names":  []string{"LIMITED"},

@@ -2,9 +2,7 @@ package runner
 
 import (
 	"context"
-	"crypto/rand"
 	"database/sql"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -83,67 +81,9 @@ func (r *DeploymentRunner) stageArtifact(
 	if _, err := archive.Seek(0, 0); err != nil {
 		return result, err
 	}
-	var nonce [12]byte
-	if _, err := rand.Read(nonce[:]); err != nil {
+	result, err = r.createStagingVolume(ctx, deploymentID, artifactMount)
+	if err != nil {
 		return result, err
-	}
-	name := fmt.Sprintf(
-		"durpdeploy-artifact-%d-%s",
-		deploymentID,
-		hex.EncodeToString(nonce[:]),
-	)
-	result = artifactStage{volume: name, keeper: name + "-keeper"}
-	r.mu.Lock()
-	r.staging[deploymentID] = result
-	r.mu.Unlock()
-	args := []string{
-		"volume",
-		"create",
-		"--label=io.durpdeploy.artifact=true",
-		"--label=io.durpdeploy.namespace=" + r.engine.scope(),
-	}
-	if r.engine.kind == "docker" {
-		args = append(
-			args,
-			"--driver=local",
-			"--opt=type=tmpfs",
-			"--opt=device=tmpfs",
-			fmt.Sprintf(
-				"--opt=o=noexec,nosuid,nodev,size=%d,nr_inodes=%d,uid=65534,gid=65534,mode=0755",
-				artifactStagingCapacity(),
-				artifact.MaxStagingNodes+1,
-			),
-		)
-	}
-	args = append(args, result.volume)
-	if _, err := r.engine.command(ctx, args...).CombinedOutput(); err != nil {
-		return result, fmt.Errorf("create artifact volume: %w", err)
-	}
-	keeperMount := result.volume + ":/artifacts:rw,nocopy"
-	if r.engine.kind == "podman" {
-		keeperMount += ",noexec,nosuid,nodev,U"
-	}
-	args = []string{
-		"run",
-		"--detach",
-		"--pull=missing",
-		"--name=" + result.keeper,
-		"--label=io.durpdeploy.namespace=" + r.engine.scope(),
-		"--network=none",
-		"--read-only",
-		"--cap-drop=ALL",
-		"--security-opt=no-new-privileges",
-		"--user=65534:65534",
-		"--pids-limit=32",
-		fmt.Sprintf("--memory=%d", artifactStagingCapacity()+(128<<20)),
-		"--cpus=1",
-		"--volume=" + keeperMount,
-		"--entrypoint=/usr/bin/tail",
-		artifactHelperImage,
-		"-f", "/dev/null",
-	}
-	if _, err := r.engine.command(ctx, args...).CombinedOutput(); err != nil {
-		return result, fmt.Errorf("start artifact staging: %w", err)
 	}
 	command := r.engine.command(
 		ctx,
@@ -176,23 +116,33 @@ func (r *DeploymentRunner) artifactMountArgs(stage artifactStage) []string {
 
 func (r *DeploymentRunner) cleanupArtifact(deploymentID int64) error {
 	r.mu.Lock()
-	stage, exists := r.staging[deploymentID]
+	stages, exists := r.staging[deploymentID]
 	r.mu.Unlock()
 	if !exists {
 		return nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	output, err := r.engine.command(ctx, r.engine.removeArgs(stage.keeper)...).
-		CombinedOutput()
-	if err = r.engine.removalError(output, err); err != nil {
-		return errors.Join(errContainerCleanup, err)
+	var cleanupErr error
+	for _, stage := range stages {
+		output, err := r.engine.command(ctx, r.engine.removeArgs(stage.keeper)...).
+			CombinedOutput()
+		if err = r.engine.removalError(output, err); err != nil {
+			cleanupErr = errors.Join(cleanupErr, errContainerCleanup, err)
+			continue
+		}
+		output, err = r.engine.command(ctx, "volume", "rm", stage.volume).
+			CombinedOutput()
+		if err != nil &&
+			!strings.Contains(
+				strings.ToLower(string(output)),
+				"no such volume",
+			) {
+			cleanupErr = errors.Join(cleanupErr, errContainerCleanup, err)
+		}
 	}
-	output, err = r.engine.command(ctx, "volume", "rm", stage.volume).
-		CombinedOutput()
-	if err != nil &&
-		!strings.Contains(strings.ToLower(string(output)), "no such volume") {
-		return errors.Join(errContainerCleanup, err)
+	if cleanupErr != nil {
+		return cleanupErr
 	}
 	r.mu.Lock()
 	delete(r.staging, deploymentID)

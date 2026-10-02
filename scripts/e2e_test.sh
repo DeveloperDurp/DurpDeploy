@@ -194,6 +194,11 @@ if [[ "${DURPDEPLOY_DEPLOYMENT_LIST_E2E_ONLY:-0}" == "1" ]]; then
     exit 0
 fi
 
+source "$SCRIPT_DIR/deployment_staging_e2e.sh"
+if [[ "${DURPDEPLOY_STAGING_E2E_ONLY:-0}" == "1" ]]; then
+    exit 0
+fi
+
 # A request with no cookie must redirect to /login.
 CODE=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/")
 [[ "$CODE" == "303" ]] || { echo "FAIL: unauth GET / got $CODE, want 303"; exit 1; }

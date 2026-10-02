@@ -8,6 +8,7 @@ import (
 
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/handler"
 	"durpdeploy/internal/repository"
 )
 
@@ -281,6 +282,10 @@ func (h *VariableHandler) CreateVariable(
 		Secret:        secret,
 	})
 	if err != nil {
+		if status := handler.ArtifactErrorStatus(err); status != 0 {
+			RespondError(w, status, err.Error())
+			return
+		}
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -458,6 +463,10 @@ func (h *VariableHandler) UpdateVariable(
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			RespondError(w, http.StatusNotFound, "Variable not found")
+			return
+		}
+		if status := handler.ArtifactErrorStatus(err); status != 0 {
+			RespondError(w, status, err.Error())
 			return
 		}
 		RespondError(w, http.StatusInternalServerError, err.Error())

@@ -51,6 +51,23 @@ func (r *DeploymentRunner) KillAll() {
 		}
 	}
 	r.localWork.Wait()
+	r.mu.Lock()
+	staged := make([]int64, 0, len(r.staging))
+	for id := range r.staging {
+		staged = append(staged, id)
+	}
+	r.mu.Unlock()
+	for _, id := range staged {
+		if err := r.cleanupArtifact(id); err != nil {
+			slog.Error(
+				"staging cleanup on shutdown failed",
+				"deployment_id",
+				id,
+				"err",
+				err,
+			)
+		}
+	}
 }
 
 func (r *DeploymentRunner) beginLocalWork() bool {
