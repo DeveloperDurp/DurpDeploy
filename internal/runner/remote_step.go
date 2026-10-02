@@ -103,6 +103,7 @@ func (r *DeploymentRunner) runRemoteStep(
 		allSucceeded := len(runs) > 0
 		hasActive := false
 		hasFailure := false
+		expired := false
 		now := time.Now()
 		elapsed := now.Sub(lastChecked)
 		lastChecked = now
@@ -133,10 +134,15 @@ func (r *DeploymentRunner) runRemoteStep(
 				}
 				remaining[run.AgentID] = budget
 				if budget <= 0 {
-					timedOut = true
-					cancellationNeeded = true
+					expired = true
 				}
 			}
+		}
+		if expired {
+			if failureAgent == "" {
+				timedOut = true
+			}
+			cancellationNeeded = true
 		}
 		if operatorCancelled && !hasActive {
 			if hasFailure {
