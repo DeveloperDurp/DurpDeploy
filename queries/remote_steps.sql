@@ -60,6 +60,9 @@ WHERE remote_step_runs.deployment_id = sqlc.arg(deployment_id)
   AND remote_step_runs.step_index = sqlc.arg(step_index)
   AND remote_step_runs.agent_id = sqlc.arg(agent_id)
   AND remote_step_runs.state = 'waiting'
+  AND EXISTS (SELECT 1 FROM agents a
+      WHERE a.id = remote_step_runs.agent_id
+        AND a.status = 'active' AND a.draining = 0)
   AND EXISTS (
       SELECT 1 FROM deployment_steps s
       JOIN agent_interpreters i ON i.agent_id = remote_step_runs.agent_id

@@ -21,6 +21,9 @@ type Agent struct {
 	RevokedAt              sql.NullInt64  `json:"revoked_at"`
 	CreatedAt              int64          `json:"created_at"`
 	UpdatedAt              int64          `json:"updated_at"`
+	Draining               int64          `json:"draining"`
+	HealthState            string         `json:"health_state"`
+	AgentProtocol          sql.NullString `json:"agent_protocol"`
 }
 
 type AgentEnvironmentLabel struct {
