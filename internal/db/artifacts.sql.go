@@ -408,6 +408,55 @@ func (q *Queries) ListPackageRepositories(ctx context.Context, projectID int64) 
 	return items, nil
 }
 
+const listPackageRepositoriesBySource = `-- name: ListPackageRepositoriesBySource :many
+SELECT id, project_id, name, url_template, auth_type, username, credential FROM package_repositories
+WHERE project_id = ? AND url_template = ? AND auth_type = ? AND username = ?
+ORDER BY id DESC
+`
+
+type ListPackageRepositoriesBySourceParams struct {
+	ProjectID   int64  `json:"project_id"`
+	UrlTemplate string `json:"url_template"`
+	AuthType    string `json:"auth_type"`
+	Username    string `json:"username"`
+}
+
+func (q *Queries) ListPackageRepositoriesBySource(ctx context.Context, arg ListPackageRepositoriesBySourceParams) ([]PackageRepository, error) {
+	rows, err := q.db.QueryContext(ctx, listPackageRepositoriesBySource,
+		arg.ProjectID,
+		arg.UrlTemplate,
+		arg.AuthType,
+		arg.Username,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PackageRepository
+	for rows.Next() {
+		var i PackageRepository
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.Name,
+			&i.UrlTemplate,
+			&i.AuthType,
+			&i.Username,
+			&i.Credential,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPackageRepositoryCredentials = `-- name: ListPackageRepositoryCredentials :many
 SELECT id, credential FROM package_repositories WHERE NULLIF(credential, '') IS NOT NULL
 `

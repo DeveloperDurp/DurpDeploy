@@ -81,6 +81,16 @@ func artifactHTTPSFixture(
 				w.WriteHeader(401)
 				return
 			}
+			if text == "missing" {
+				w.WriteHeader(404)
+				return
+			}
+			if text == "invalid" {
+				if _, err := io.WriteString(w, "not a ZIP"); err != nil {
+					t.Error(err)
+				}
+				return
+			}
 			if strings.HasPrefix(text, "file:") ||
 				strings.HasPrefix(text, "blocked:") {
 				serveArtifactArchive(t, w, r, text)

@@ -113,25 +113,16 @@ func (f *artifactE2E) seedForeignPinnedRelease(
 ) db.Release {
 	t.Helper()
 	base := fmt.Sprintf("/api/v1/projects/%d", projectID)
-	body := f.api(t, "POST", base+"/package-repositories", map[string]string{
-		"name":         "foreign-packages",
+	f.api(t, "PUT", base+"/package-repository", map[string]string{
 		"url_template": f.upstream + "/{version}.zip",
 		"auth_type":    "bearer",
 		"credential":   "artifact-secret",
-	}, 201)
-	var source struct {
-		ID int64 `json:"id"`
-	}
-	if err := json.Unmarshal(body, &source); err != nil {
-		t.Fatal(err)
-	}
-	f.api(t, "PUT", base+"/artifact-repository",
-		map[string]int64{"repository_id": source.ID}, 200)
+	}, 200)
 	f.api(t, "POST", base+"/steps", map[string]string{
 		"name": "check", "script_body": "true", "interpreter": "bash",
 		"container_image": "docker.io/library/bash:5.2",
 	}, 201)
-	body = f.api(
+	body := f.api(
 		t,
 		"POST",
 		base+"/releases",
@@ -142,7 +133,6 @@ func (f *artifactE2E) seedForeignPinnedRelease(
 	if err := json.Unmarshal(body, &release); err != nil {
 		t.Fatal(err)
 	}
-	f.api(t, "PUT", base+"/artifact-repository",
-		map[string]int64{"repository_id": 0}, 200)
+	f.api(t, "DELETE", base+"/package-repository", nil, 204)
 	return release
 }

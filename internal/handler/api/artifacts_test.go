@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"durpdeploy/internal/artifact"
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
 )
@@ -15,21 +16,31 @@ import (
 func TestArtifactAPIEnforcesProjectAndViewerBoundaries(t *testing.T) {
 	// Given
 	h := newAPIHarness(t, fakePodman(t))
-	admin := seedAPIUser(t, h.repo, "artifact-admin@example.com", "admin")
-	_, adminToken := seedAPIToken(t, h.repo, admin.ID)
+	member := seedAPIUser(t, h.repo, "artifact-member@example.com", "deployer")
+	_, memberToken := seedAPIToken(t, h.repo, member.ID)
 	viewer := seedAPIUser(t, h.repo, "artifact-viewer@example.com", "viewer")
 	_, viewerToken := seedAPIToken(t, h.repo, viewer.ID)
 	first, second := seedProject(t, h.repo), seedProject(t, h.repo)
-	source, err := h.repo.CreatePackageRepository(
+	for _, user := range []int64{member.ID, viewer.ID} {
+		if err := h.repo.Queries.AddProjectMember(
+			t.Context(),
+			db.AddProjectMemberParams{
+				ProjectID: first.ID,
+				UserID:    user,
+				Role:      "deployer",
+			},
+		); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := h.repo.SaveProjectPackageRepository(
 		t.Context(),
-		db.CreatePackageRepositoryParams{
-			ProjectID:   first.ID,
-			Name:        "packages",
-			UrlTemplate: "https://repo.example/{version}.zip",
+		first.ID,
+		artifact.Repository{
+			URLTemplate: "https://repo.example/{version}.zip",
 			AuthType:    "noauth",
 		},
-	)
-	if err != nil {
+	); err != nil {
 		t.Fatal(err)
 	}
 	router := newMaskingRouter(h)
@@ -38,11 +49,14 @@ func TestArtifactAPIEnforcesProjectAndViewerBoundaries(t *testing.T) {
 		method, path, body, token string
 		status                    int
 	}{
-		{"GET", fmt.Sprintf("%s/package-repositories/%d", base, source.ID), "", adminToken, 404},
-		{"PUT", fmt.Sprintf("%s/package-repositories/%d", base, source.ID), `{"name":"changed","url_template":"https://repo.example/{version}.zip","auth_type":"noauth"}`, adminToken, 404},
-		{"DELETE", fmt.Sprintf("%s/package-repositories/%d", base, source.ID), "", adminToken, 404},
-		{"PUT", base + "/artifact-repository", fmt.Sprintf(`{"repository_id":%d}`, source.ID), adminToken, 404},
-		{"POST", base + "/package-repositories", `{"name":"blocked"}`, viewerToken, 403},
+		{"GET", base + "/package-repository", "", memberToken, 403},
+		{"PUT", base + "/package-repository", `{"url_template":"https://repo.example/{version}.zip","auth_type":"noauth"}`, memberToken, 403},
+		{"DELETE", base + "/package-repository", "", memberToken, 403},
+		{"POST", base + "/package-repository/test", `{"version":"1.0"}`, memberToken, 403},
+		{"GET", fmt.Sprintf("/api/v1/projects/%d/package-repository", first.ID), "", viewerToken, 200},
+		{"PUT", fmt.Sprintf("/api/v1/projects/%d/package-repository", first.ID), `{"auth_type":"noauth"}`, viewerToken, 403},
+		{"DELETE", fmt.Sprintf("/api/v1/projects/%d/package-repository", first.ID), "", viewerToken, 403},
+		{"POST", fmt.Sprintf("/api/v1/projects/%d/package-repository/test", first.ID), `{"version":"1.0"}`, viewerToken, 403},
 	} {
 		t.Run(test.method+test.path, func(t *testing.T) {
 			request := httptest.NewRequest(
@@ -104,7 +118,7 @@ func TestArtifactWebViewerCannotSeeRepositoryForm(t *testing.T) {
 	}
 	request := httptest.NewRequest(
 		"GET",
-		fmt.Sprintf("/projects/%d/package-repositories/new", project.ID),
+		fmt.Sprintf("/projects/%d/package-repository/edit", project.ID),
 		nil,
 	)
 	request.AddCookie(&http.Cookie{Name: "session", Value: session})

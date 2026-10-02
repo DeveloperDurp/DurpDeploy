@@ -1,27 +1,14 @@
 package api
 
-// swagger:model PackageRepositoryListResponse
-type swaggerPackageRepositoryListResponse []packageRepositoryResponse
-
-// swagger:parameters listPackageRepositories getArtifactRepository
+// swagger:parameters getPackageRepository removePackageRepository
 type swaggerArtifactProjectParams struct {
 	// in: path
 	// required: true
 	ID int64 `json:"id"`
 }
 
-// swagger:parameters getPackageRepository deletePackageRepository
-type swaggerArtifactRepositoryParams struct {
-	// in: path
-	// required: true
-	ID int64 `json:"id"`
-	// in: path
-	// required: true
-	RepositoryID int64 `json:"repositoryId"`
-}
-
-// swagger:parameters createPackageRepository
-type swaggerArtifactCreateParams struct {
+// swagger:parameters savePackageRepository
+type swaggerArtifactSaveParams struct {
 	// in: path
 	// required: true
 	ID int64 `json:"id"`
@@ -30,27 +17,14 @@ type swaggerArtifactCreateParams struct {
 	Body packageRepositoryRequest
 }
 
-// swagger:parameters updatePackageRepository
-type swaggerArtifactUpdateParams struct {
-	// in: path
-	// required: true
-	ID int64 `json:"id"`
-	// in: path
-	// required: true
-	RepositoryID int64 `json:"repositoryId"`
-	// in: body
-	// required: true
-	Body packageRepositoryRequest
-}
-
-// swagger:parameters selectArtifactRepository
-type swaggerArtifactSelectionParams struct {
+// swagger:parameters testPackageRepository
+type swaggerArtifactTestParams struct {
 	// in: path
 	// required: true
 	ID int64 `json:"id"`
 	// in: body
 	// required: true
-	Body artifactSelection
+	Body packageTestRequest
 }
 
 // swagger:parameters getReleaseArtifact

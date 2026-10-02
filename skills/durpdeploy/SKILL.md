@@ -230,14 +230,14 @@ Once deployments are terminal, environment deletion removes their history.
 - Server docs: <https://github.com/DeveloperDurp/durpdeploy>.
 ## Generic ZIP packages
 
-Projects can select one HTTPS ZIP repository for new release snapshots.
+Each project has one active HTTPS ZIP repository. Saving it automatically
+enables packages for future release snapshots; no separate selection is needed.
 
-- `GET/POST /api/v1/projects/{id}/package-repositories`
-- `GET/PUT/DELETE /api/v1/projects/{id}/package-repositories/{repositoryId}`
-- `GET/PUT /api/v1/projects/{id}/artifact-repository`
+- `GET/PUT/DELETE /api/v1/projects/{id}/package-repository`
+- `POST /api/v1/projects/{id}/package-repository/test` with `{"version":"1.6.0"}`
 - `GET /api/v1/projects/{id}/releases/{relId}/artifact` (pin or `null`)
 
-Repository bodies contain `name`, `url_template`, `auth_type` (`noauth`,
+Repository bodies contain `url_template`, `auth_type` (`noauth`,
 `bearer`, or `basic`), `username` (basic only), and `credential` (token or
 password). Use exactly one `{version}` in the HTTPS URL path, for example
 `https://repo.example/app/{version}/package.zip`. URL credentials, query
@@ -250,10 +250,22 @@ Artifact versions cannot be dot segments (`.` or `..`) or contain path
 separators. ZIP paths must fit Linux staging filesystems: at most 255 bytes per
 component and 4,000 bytes per relative path.
 
-Select with `{"repository_id":123}`; zero disables packages for future
-snapshots. Credentials are encrypted and omitted from all responses. A blank
-credential on update preserves the current secret. Pinned repositories allow
-name and credential changes only and cannot be deleted while referenced.
+GET returns the active configuration or `null`. PUT configures or replaces it
+and returns 200. DELETE disables packages for future snapshots, retaining source
+records and credentials required by existing pins. Replacing the URL template,
+auth type, or username creates a new source record rather than altering old pins.
+Credentials are encrypted and omitted from all responses. A blank credential
+preserves the current secret only when those source fields are unchanged.
+Supply new credentials when replacing an authenticated source.
+To rotate a retained historical source, save its exact URL template, auth type,
+and username again with an explicit credential. This reactivates that source
+record and updates the credential used by existing pins without changing them.
+
+The test endpoint downloads and validates the requested ZIP without creating a
+release. Success returns `exists: true`, the resolved `url`, `version`, `sha256`,
+and compressed ZIP `size`. Invalid versions/ZIPs return 422; missing configuration
+returns 404; upstream fetch failures return 502 and do not claim the package is
+absent. Generic templates do not provide version discovery or listing.
 
 Release creation/refresh downloads and validates the ZIP, then pins its URL,
 version, SHA-256, and size. Deployment creation freezes that pin. Re-runs keep

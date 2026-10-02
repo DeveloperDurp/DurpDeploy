@@ -5,6 +5,11 @@ VALUES (?, ?, ?, ?, ?, ?) RETURNING *;
 -- name: GetPackageRepository :one
 SELECT * FROM package_repositories WHERE id = ?;
 
+-- name: ListPackageRepositoriesBySource :many
+SELECT * FROM package_repositories
+WHERE project_id = ? AND url_template = ? AND auth_type = ? AND username = ?
+ORDER BY id DESC;
+
 -- name: ListPackageRepositories :many
 SELECT * FROM package_repositories WHERE project_id = ? ORDER BY name, id;
 

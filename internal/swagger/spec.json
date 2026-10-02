@@ -3261,102 +3261,6 @@
         ]
       }
     },
-    "/projects/{id}/artifact-repository": {
-      "get": {
-        "tags": [
-          "artifacts"
-        ],
-        "summary": "Read the repository selected for future release snapshots; zero disables artifacts.",
-        "operationId": "getArtifactRepository",
-        "parameters": [
-          {
-            "type": "integer",
-            "format": "int64",
-            "x-go-name": "ID",
-            "name": "id",
-            "in": "path",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "schema": {
-              "$ref": "#/definitions/ArtifactSelection"
-            }
-          }
-        }
-      },
-      "put": {
-        "tags": [
-          "artifacts"
-        ],
-        "summary": "Select one project repository for future snapshots, or zero to disable.",
-        "operationId": "selectArtifactRepository",
-        "parameters": [
-          {
-            "type": "integer",
-            "format": "int64",
-            "x-go-name": "ID",
-            "name": "id",
-            "in": "path",
-            "required": true
-          },
-          {
-            "name": "Body",
-            "in": "body",
-            "required": true,
-            "schema": {
-              "$ref": "#/definitions/ArtifactSelection"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "schema": {
-              "$ref": "#/definitions/ArtifactSelection"
-            }
-          },
-          "400": {
-            "description": "Bad request error response.",
-            "schema": {
-              "$ref": "#/definitions/BadRequestError"
-            }
-          },
-          "401": {
-            "description": "Unauthorized error response.",
-            "schema": {
-              "$ref": "#/definitions/UnauthorizedError"
-            }
-          },
-          "403": {
-            "description": "Forbidden error response.",
-            "schema": {
-              "$ref": "#/definitions/ForbiddenError"
-            }
-          },
-          "404": {
-            "description": "Not found error response.",
-            "schema": {
-              "$ref": "#/definitions/NotFoundError"
-            }
-          },
-          "422": {
-            "description": "Validation error response.",
-            "schema": {
-              "$ref": "#/definitions/ValidationError"
-            }
-          },
-          "500": {
-            "description": "Server error response.",
-            "schema": {
-              "$ref": "#/definitions/ServerError"
-            }
-          }
-        }
-      }
-    },
     "/projects/{id}/deployments": {
       "get": {
         "produces": [
@@ -4016,78 +3920,12 @@
         ]
       }
     },
-    "/projects/{id}/package-repositories": {
+    "/projects/{id}/package-repository": {
       "get": {
         "tags": [
           "artifacts"
         ],
-        "summary": "List generic ZIP repositories without credentials.",
-        "operationId": "listPackageRepositories",
-        "parameters": [
-          {
-            "type": "integer",
-            "format": "int64",
-            "x-go-name": "ID",
-            "name": "id",
-            "in": "path",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "schema": {
-              "$ref": "#/definitions/PackageRepositoryListResponse"
-            }
-          }
-        }
-      },
-      "post": {
-        "tags": [
-          "artifacts"
-        ],
-        "summary": "Create an HTTPS generic ZIP repository.",
-        "operationId": "createPackageRepository",
-        "parameters": [
-          {
-            "type": "integer",
-            "format": "int64",
-            "x-go-name": "ID",
-            "name": "id",
-            "in": "path",
-            "required": true
-          },
-          {
-            "name": "Body",
-            "in": "body",
-            "required": true,
-            "schema": {
-              "$ref": "#/definitions/PackageRepositoryRequest"
-            }
-          }
-        ],
-        "responses": {
-          "201": {
-            "description": "Created",
-            "schema": {
-              "$ref": "#/definitions/PackageRepositoryResponse"
-            }
-          },
-          "422": {
-            "description": "Validation error response.",
-            "schema": {
-              "$ref": "#/definitions/ValidationError"
-            }
-          }
-        }
-      }
-    },
-    "/projects/{id}/package-repositories/{repositoryId}": {
-      "get": {
-        "tags": [
-          "artifacts"
-        ],
-        "summary": "Read a repository without its credential.",
+        "summary": "Read the active project repository, or null when no package is configured.",
         "operationId": "getPackageRepository",
         "parameters": [
           {
@@ -4097,14 +3935,6 @@
             "name": "id",
             "in": "path",
             "required": true
-          },
-          {
-            "type": "integer",
-            "format": "int64",
-            "x-go-name": "RepositoryID",
-            "name": "repositoryId",
-            "in": "path",
-            "required": true
           }
         ],
         "responses": {
@@ -4113,29 +3943,46 @@
             "schema": {
               "$ref": "#/definitions/PackageRepositoryResponse"
             }
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "500": {
+            "description": "Server error response.",
+            "schema": {
+              "$ref": "#/definitions/ServerError"
+            }
           }
         }
       },
       "put": {
+        "description": "A blank credential preserves the secret only when URL template, auth type, and username are unchanged.",
         "tags": [
           "artifacts"
         ],
-        "summary": "Update a repository. A blank credential preserves the current secret.",
-        "operationId": "updatePackageRepository",
+        "summary": "Configure and activate the project repository. Replacing its source preserves existing pins.",
+        "operationId": "savePackageRepository",
         "parameters": [
           {
             "type": "integer",
             "format": "int64",
             "x-go-name": "ID",
             "name": "id",
-            "in": "path",
-            "required": true
-          },
-          {
-            "type": "integer",
-            "format": "int64",
-            "x-go-name": "RepositoryID",
-            "name": "repositoryId",
             "in": "path",
             "required": true
           },
@@ -4155,10 +4002,40 @@
               "$ref": "#/definitions/PackageRepositoryResponse"
             }
           },
-          "409": {
-            "description": "Conflict error response.",
+          "400": {
+            "description": "Bad request error response.",
             "schema": {
-              "$ref": "#/definitions/ConflictError"
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "422": {
+            "description": "Validation error response.",
+            "schema": {
+              "$ref": "#/definitions/ValidationError"
+            }
+          },
+          "500": {
+            "description": "Server error response.",
+            "schema": {
+              "$ref": "#/definitions/ServerError"
             }
           }
         }
@@ -4167,8 +4044,57 @@
         "tags": [
           "artifacts"
         ],
-        "summary": "Delete an unpinned repository.",
-        "operationId": "deletePackageRepository",
+        "summary": "Disable packages for future snapshots. Source records needed by existing pins are retained.",
+        "operationId": "removePackageRepository",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "name": "id",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Removed"
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "500": {
+            "description": "Server error response.",
+            "schema": {
+              "$ref": "#/definitions/ServerError"
+            }
+          }
+        }
+      }
+    },
+    "/projects/{id}/package-repository/test": {
+      "post": {
+        "description": "Size is the compressed ZIP byte count. Failure does not claim that the package is missing.",
+        "tags": [
+          "artifacts"
+        ],
+        "summary": "Download and validate one version using the saved repository credentials, without creating a release.",
+        "operationId": "testPackageRepository",
         "parameters": [
           {
             "type": "integer",
@@ -4179,22 +4105,61 @@
             "required": true
           },
           {
-            "type": "integer",
-            "format": "int64",
-            "x-go-name": "RepositoryID",
-            "name": "repositoryId",
-            "in": "path",
-            "required": true
+            "name": "Body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/PackageTestRequest"
+            }
           }
         ],
         "responses": {
-          "204": {
-            "description": "Deleted"
-          },
-          "409": {
-            "description": "Conflict error response.",
+          "200": {
+            "description": "OK",
             "schema": {
-              "$ref": "#/definitions/ConflictError"
+              "$ref": "#/definitions/PackageTestResponse"
+            }
+          },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "422": {
+            "description": "Validation error response.",
+            "schema": {
+              "$ref": "#/definitions/ValidationError"
+            }
+          },
+          "500": {
+            "description": "Server error response.",
+            "schema": {
+              "$ref": "#/definitions/ServerError"
+            }
+          },
+          "502": {
+            "description": "Server error response.",
+            "schema": {
+              "$ref": "#/definitions/ServerError"
             }
           }
         }
@@ -4542,6 +4507,12 @@
             "description": "OK",
             "schema": {
               "$ref": "#/definitions/ReleaseArtifactResponse"
+            }
+          },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
             }
           }
         }
@@ -7360,18 +7331,6 @@
       "x-go-name": "swaggerAgentListResponse",
       "x-go-package": "durpdeploy/internal/handler/api"
     },
-    "ArtifactSelection": {
-      "type": "object",
-      "properties": {
-        "repository_id": {
-          "type": "integer",
-          "format": "int64",
-          "x-go-name": "RepositoryID"
-        }
-      },
-      "x-go-name": "artifactSelection",
-      "x-go-package": "durpdeploy/internal/handler/api"
-    },
     "AuditLog": {
       "type": "object",
       "title": "AuditLog is a recorded state-changing action.",
@@ -8140,14 +8099,6 @@
       "x-go-name": "swaggerNotificationEventListResponse",
       "x-go-package": "durpdeploy/internal/handler/api"
     },
-    "PackageRepositoryListResponse": {
-      "type": "array",
-      "items": {
-        "$ref": "#/definitions/PackageRepositoryResponse"
-      },
-      "x-go-name": "swaggerPackageRepositoryListResponse",
-      "x-go-package": "durpdeploy/internal/handler/api"
-    },
     "PackageRepositoryRequest": {
       "type": "object",
       "properties": {
@@ -8158,10 +8109,6 @@
         "credential": {
           "type": "string",
           "x-go-name": "Credential"
-        },
-        "name": {
-          "type": "string",
-          "x-go-name": "Name"
         },
         "url_template": {
           "type": "string",
@@ -8191,10 +8138,6 @@
           "format": "int64",
           "x-go-name": "ID"
         },
-        "name": {
-          "type": "string",
-          "x-go-name": "Name"
-        },
         "project_id": {
           "type": "integer",
           "format": "int64",
@@ -8210,6 +8153,45 @@
         }
       },
       "x-go-name": "packageRepositoryResponse",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "PackageTestRequest": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "string",
+          "x-go-name": "Version"
+        }
+      },
+      "x-go-name": "packageTestRequest",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "PackageTestResponse": {
+      "type": "object",
+      "properties": {
+        "exists": {
+          "type": "boolean",
+          "x-go-name": "Exists"
+        },
+        "sha256": {
+          "type": "string",
+          "x-go-name": "SHA256"
+        },
+        "size": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Size"
+        },
+        "url": {
+          "type": "string",
+          "x-go-name": "URL"
+        },
+        "version": {
+          "type": "string",
+          "x-go-name": "Version"
+        }
+      },
+      "x-go-name": "packageTestResponse",
       "x-go-package": "durpdeploy/internal/handler/api"
     },
     "PaginatedResponse": {

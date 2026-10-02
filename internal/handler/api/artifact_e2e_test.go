@@ -19,13 +19,12 @@ func TestArtifactsAPIWebContainerE2E(t *testing.T) {
 	base := f.base()
 	f.verifyLegacyArtifactVariable(t)
 	webBase := fmt.Sprintf("/projects/%d", f.project.ID)
-	f.web(t, "GET", webBase+"/package-repositories/new", nil, 200)
+	f.web(t, "GET", webBase+"/package-repository/edit", nil, 200)
 	f.web(
 		t,
 		"POST",
-		webBase+"/package-repositories",
+		webBase+"/package-repository",
 		url.Values{
-			"name":         {"web-packages"},
 			"url_template": {f.upstream + "/{version}.zip"},
 			"auth_type":    {"bearer"},
 			"credential":   {"artifact-secret"},
@@ -34,15 +33,14 @@ func TestArtifactsAPIWebContainerE2E(t *testing.T) {
 	)
 	data := f.api(
 		t,
-		"POST",
-		base+"/package-repositories",
+		"PUT",
+		base+"/package-repository",
 		map[string]any{
-			"name":         "api-packages",
 			"url_template": f.upstream + "/{version}.zip",
 			"auth_type":    "bearer",
 			"credential":   "artifact-secret",
 		},
-		201,
+		200,
 	)
 	if strings.Contains(string(data), "artifact-secret") {
 		t.Fatal("credential exposed")
@@ -53,14 +51,7 @@ func TestArtifactsAPIWebContainerE2E(t *testing.T) {
 	if err := json.Unmarshal(data, &source); err != nil {
 		t.Fatal(err)
 	}
-	f.verifyArtifactSelectionErrors(t)
-	f.api(
-		t,
-		"PUT",
-		base+"/artifact-repository",
-		map[string]int64{"repository_id": source.ID},
-		200,
-	)
+	f.verifyPackageVersionCheck(t)
 	script := `set -eu
 test "$(cat "$ARTIFACT_PATH/app.txt")" = package
 ! touch "$ARTIFACT_PATH/write"
@@ -179,9 +170,9 @@ printf 'artifact-readable\n'
 	f.api(
 		t,
 		"DELETE",
-		fmt.Sprintf("%s/package-repositories/%d", base, source.ID),
+		base+"/package-repository",
 		nil,
-		409,
+		204,
 	)
 	f.changePackage("republished")
 	data = f.api(

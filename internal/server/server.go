@@ -334,22 +334,14 @@ func newRouter(
 		pr.Group(func(ppr chi.Router) {
 			ppr.Use(auth.RequireProjectAccess(repo))
 			artifactH := handler.NewArtifactHandler(repo)
-			ppr.Get("/projects/{id}/package-repositories", artifactH.List)
-			ppr.Get("/projects/{id}/package-repositories/new", artifactH.Form)
-			ppr.Post("/projects/{id}/package-repositories", artifactH.Save)
-			ppr.Get(
-				"/projects/{id}/package-repositories/{repositoryId}/edit",
-				artifactH.Form,
-			)
+			ppr.Get("/projects/{id}/package-repository", artifactH.Get)
+			ppr.Get("/projects/{id}/package-repository/edit", artifactH.Form)
+			ppr.Post("/projects/{id}/package-repository", artifactH.Save)
 			ppr.Post(
-				"/projects/{id}/package-repositories/{repositoryId}",
-				artifactH.Save,
-			)
-			ppr.Post(
-				"/projects/{id}/package-repositories/{repositoryId}/delete",
+				"/projects/{id}/package-repository/delete",
 				artifactH.Delete,
 			)
-			ppr.Post("/projects/{id}/artifact-repository", artifactH.Select)
+			ppr.Post("/projects/{id}/package-repository/test", artifactH.Test)
 
 			ppr.Get("/projects/{id}", ph.GetProject)
 			ppr.Get("/projects/{id}/edit", ph.EditProject)
@@ -663,22 +655,10 @@ func newRouter(
 
 			apiVarH := api.NewVariableHandler(repo)
 			artifactH := api.NewArtifactHandler(repo)
-			par.Get("/projects/{id}/package-repositories", artifactH.List)
-			par.Post("/projects/{id}/package-repositories", artifactH.Create)
-			par.Get(
-				"/projects/{id}/package-repositories/{repositoryId}",
-				artifactH.Get,
-			)
-			par.Put(
-				"/projects/{id}/package-repositories/{repositoryId}",
-				artifactH.Update,
-			)
-			par.Delete(
-				"/projects/{id}/package-repositories/{repositoryId}",
-				artifactH.Delete,
-			)
-			par.Get("/projects/{id}/artifact-repository", artifactH.Selection)
-			par.Put("/projects/{id}/artifact-repository", artifactH.Select)
+			par.Get("/projects/{id}/package-repository", artifactH.Get)
+			par.Put("/projects/{id}/package-repository", artifactH.Save)
+			par.Delete("/projects/{id}/package-repository", artifactH.Delete)
+			par.Post("/projects/{id}/package-repository/test", artifactH.Test)
 			par.Get(
 				"/projects/{id}/releases/{relId}/artifact",
 				artifactH.ReleasePin,

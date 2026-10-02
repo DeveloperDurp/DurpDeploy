@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 
+	"durpdeploy/internal/artifact"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/handler"
 	"durpdeploy/internal/repository"
@@ -12,15 +13,12 @@ import (
 
 type ArtifactHandler struct{ repo *repository.Repository }
 
-func NewArtifactHandler(
-	repo *repository.Repository,
-) *ArtifactHandler {
+func NewArtifactHandler(repo *repository.Repository) *ArtifactHandler {
 	return &ArtifactHandler{repo}
 }
 
 // swagger:model PackageRepositoryRequest
 type packageRepositoryRequest struct {
-	Name        string `json:"name"`
 	URLTemplate string `json:"url_template"`
 	AuthType    string `json:"auth_type"`
 	Username    string `json:"username"`
@@ -31,7 +29,6 @@ type packageRepositoryRequest struct {
 type packageRepositoryResponse struct {
 	ID                   int64  `json:"id"`
 	ProjectID            int64  `json:"project_id"`
-	Name                 string `json:"name"`
 	URLTemplate          string `json:"url_template"`
 	AuthType             string `json:"auth_type"`
 	Username             string `json:"username"`
@@ -44,7 +41,6 @@ func publicPackageRepository(
 	return packageRepositoryResponse{
 		row.ID,
 		row.ProjectID,
-		row.Name,
 		row.UrlTemplate,
 		row.AuthType,
 		row.Username,
@@ -57,14 +53,11 @@ func artifactError(w http.ResponseWriter, err error) {
 		RespondError(w, status, err.Error())
 		return
 	}
-	switch {
-	case errors.Is(err, sql.ErrNoRows):
-		RespondError(w, 404, "Artifact repository or pin not found")
-	case isUniqueViolation(err):
-		RespondError(w, 409, "Repository is pinned or its name already exists")
-	default:
-		RespondError(w, 500, "Cannot update artifact repository")
+	if errors.Is(err, sql.ErrNoRows) {
+		RespondError(w, 404, "Package repository or pin not found")
+		return
 	}
+	RespondError(w, 500, "Cannot access package repository")
 }
 
 func writeArtifactError(w http.ResponseWriter, err error) bool {
@@ -76,43 +69,26 @@ func writeArtifactError(w http.ResponseWriter, err error) bool {
 	return true
 }
 
-// swagger:route GET /projects/{id}/package-repositories artifacts listPackageRepositories
-// List generic ZIP repositories without credentials.
-// Responses:
-// 200: body:PackageRepositoryListResponse
-func (h *ArtifactHandler) List(w http.ResponseWriter, r *http.Request) {
-	projectID, ok := requireProjectFromContext(w, r)
-	if !ok {
-		return
-	}
-	rows, err := h.repo.Queries.ListPackageRepositories(r.Context(), projectID)
-	if err != nil {
-		artifactError(w, err)
-		return
-	}
-	items := make([]packageRepositoryResponse, 0, len(rows))
-	for _, row := range rows {
-		items = append(items, publicPackageRepository(row))
-	}
-	RespondJSON(w, 200, items)
-}
-
-// swagger:route GET /projects/{id}/package-repositories/{repositoryId} artifacts getPackageRepository
-// Read a repository without its credential.
+// swagger:route GET /projects/{id}/package-repository artifacts getPackageRepository
+// Read the active project repository, or null when no package is configured.
 // Responses:
 // 200: body:PackageRepositoryResponse
+// 401: body:UnauthorizedError
+// 403: body:ForbiddenError
+// 404: body:NotFoundError
+// 500: body:ServerError
 func (h *ArtifactHandler) Get(w http.ResponseWriter, r *http.Request) {
 	projectID, ok := requireProjectFromContext(w, r)
 	if !ok {
 		return
 	}
-	id, ok := parseIDParam(w, r, "repositoryId")
-	if !ok {
+	row, err := h.repo.Queries.GetProjectArtifactRepository(
+		r.Context(),
+		projectID,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		RespondJSON(w, 200, nil)
 		return
-	}
-	row, err := h.repo.Queries.GetPackageRepository(r.Context(), id)
-	if err == nil && row.ProjectID != projectID {
-		err = sql.ErrNoRows
 	}
 	if err != nil {
 		artifactError(w, err)
@@ -121,49 +97,19 @@ func (h *ArtifactHandler) Get(w http.ResponseWriter, r *http.Request) {
 	RespondJSON(w, 200, publicPackageRepository(row))
 }
 
-// swagger:route POST /projects/{id}/package-repositories artifacts createPackageRepository
-// Create an HTTPS generic ZIP repository.
-// Responses:
-// 201: body:PackageRepositoryResponse
-// 422: body:ValidationError
-func (h *ArtifactHandler) Create(w http.ResponseWriter, r *http.Request) {
-	projectID, ok := requireProjectFromContext(w, r)
-	if !ok {
-		return
-	}
-	var req packageRepositoryRequest
-	if !readJSONBool(w, r, &req) {
-		return
-	}
-	row, err := h.repo.CreatePackageRepository(
-		r.Context(),
-		db.CreatePackageRepositoryParams{
-			ProjectID:   projectID,
-			Name:        req.Name,
-			UrlTemplate: req.URLTemplate,
-			AuthType:    req.AuthType,
-			Username:    req.Username,
-			Credential:  req.Credential,
-		},
-	)
-	if err != nil {
-		artifactError(w, err)
-		return
-	}
-	RespondJSON(w, 201, publicPackageRepository(row))
-}
-
-// swagger:route PUT /projects/{id}/package-repositories/{repositoryId} artifacts updatePackageRepository
-// Update a repository. A blank credential preserves the current secret.
+// swagger:route PUT /projects/{id}/package-repository artifacts savePackageRepository
+// Configure and activate the project repository. Replacing its source preserves existing pins.
+// A blank credential preserves the secret only when URL template, auth type, and username are unchanged.
 // Responses:
 // 200: body:PackageRepositoryResponse
-// 409: body:ConflictError
-func (h *ArtifactHandler) Update(w http.ResponseWriter, r *http.Request) {
+// 400: body:BadRequestError
+// 401: body:UnauthorizedError
+// 403: body:ForbiddenError
+// 404: body:NotFoundError
+// 422: body:ValidationError
+// 500: body:ServerError
+func (h *ArtifactHandler) Save(w http.ResponseWriter, r *http.Request) {
 	projectID, ok := requireProjectFromContext(w, r)
-	if !ok {
-		return
-	}
-	id, ok := parseIDParam(w, r, "repositoryId")
 	if !ok {
 		return
 	}
@@ -171,13 +117,11 @@ func (h *ArtifactHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if !readJSONBool(w, r, &req) {
 		return
 	}
-	row, err := h.repo.UpdatePackageRepository(
+	row, err := h.repo.SaveProjectPackageRepository(
 		r.Context(),
-		db.UpdatePackageRepositoryParams{
-			ID:          id,
-			ProjectID:   projectID,
-			Name:        req.Name,
-			UrlTemplate: req.URLTemplate,
+		projectID,
+		artifact.Repository{
+			URLTemplate: req.URLTemplate,
 			AuthType:    req.AuthType,
 			Username:    req.Username,
 			Credential:  req.Credential,
@@ -190,26 +134,72 @@ func (h *ArtifactHandler) Update(w http.ResponseWriter, r *http.Request) {
 	RespondJSON(w, 200, publicPackageRepository(row))
 }
 
-// swagger:route DELETE /projects/{id}/package-repositories/{repositoryId} artifacts deletePackageRepository
-// Delete an unpinned repository.
+// swagger:route DELETE /projects/{id}/package-repository artifacts removePackageRepository
+// Disable packages for future snapshots. Source records needed by existing pins are retained.
 // Responses:
-// 204: description: Deleted
-// 409: body:ConflictError
+// 204: description: Removed
+// 401: body:UnauthorizedError
+// 403: body:ForbiddenError
+// 404: body:NotFoundError
+// 500: body:ServerError
 func (h *ArtifactHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	projectID, ok := requireProjectFromContext(w, r)
 	if !ok {
 		return
 	}
-	id, ok := parseIDParam(w, r, "repositoryId")
-	if !ok {
-		return
-	}
-	if err := h.repo.DeletePackageRepository(
+	if err := h.repo.RemoveProjectPackageRepository(
 		r.Context(),
-		db.DeletePackageRepositoryParams{ID: id, ProjectID: projectID},
+		projectID,
 	); err != nil {
 		artifactError(w, err)
 		return
 	}
 	w.WriteHeader(204)
+}
+
+// swagger:model PackageTestRequest
+type packageTestRequest struct {
+	Version string `json:"version"`
+}
+
+// swagger:model PackageTestResponse
+type packageTestResponse struct {
+	Exists  bool   `json:"exists"`
+	URL     string `json:"url"`
+	Version string `json:"version"`
+	SHA256  string `json:"sha256"`
+	Size    int64  `json:"size"`
+}
+
+// swagger:route POST /projects/{id}/package-repository/test artifacts testPackageRepository
+// Download and validate one version using the saved repository credentials, without creating a release.
+// Size is the compressed ZIP byte count. Failure does not claim that the package is missing.
+// Responses:
+// 200: body:PackageTestResponse
+// 400: body:BadRequestError
+// 401: body:UnauthorizedError
+// 403: body:ForbiddenError
+// 404: body:NotFoundError
+// 422: body:ValidationError
+// 500: body:ServerError
+// 502: body:ServerError
+func (h *ArtifactHandler) Test(w http.ResponseWriter, r *http.Request) {
+	projectID, ok := requireProjectFromContext(w, r)
+	if !ok {
+		return
+	}
+	var req packageTestRequest
+	if !readJSONBool(w, r, &req) {
+		return
+	}
+	pin, err := h.repo.TestProjectPackage(r.Context(), projectID, req.Version)
+	if err != nil {
+		artifactError(w, err)
+		return
+	}
+	RespondJSON(
+		w,
+		200,
+		packageTestResponse{true, pin.URL, pin.Version, pin.SHA256, pin.Size},
+	)
 }

@@ -16,7 +16,7 @@ import (
 func TestArtifactCredentialRotationE2E(t *testing.T) {
 	// Given: an immutable release pinned using the original bearer credential.
 	f := newArtifactE2E(t)
-	source, release := f.createArtifactRelease(
+	_, release := f.createArtifactRelease(
 		t,
 		`set -eu; test "$(cat "$ARTIFACT_PATH/app.txt")" = package; echo rotation-readable`,
 	)
@@ -28,10 +28,10 @@ func TestArtifactCredentialRotationE2E(t *testing.T) {
 	update := f.api(
 		t,
 		"PUT",
-		fmt.Sprintf("%s/package-repositories/%d", f.base(), source.ID),
+		f.base()+"/package-repository",
 		map[string]string{
-			"name": "packages", "url_template": f.upstream + "/{version}.zip",
-			"auth_type": "bearer", "credential": "rotated-artifact-secret",
+			"url_template": f.upstream + "/{version}.zip",
+			"auth_type":    "bearer", "credential": "rotated-artifact-secret",
 		},
 		200,
 	)
@@ -62,7 +62,7 @@ func TestArtifactCredentialRotationE2E(t *testing.T) {
 	read := f.api(
 		t,
 		"GET",
-		fmt.Sprintf("%s/package-repositories/%d", f.base(), source.ID),
+		f.base()+"/package-repository",
 		nil,
 		200,
 	)
@@ -80,25 +80,18 @@ func (f *artifactE2E) createArtifactRelease(
 	t.Helper()
 	body := f.api(
 		t,
-		"POST",
-		f.base()+"/package-repositories",
+		"PUT",
+		f.base()+"/package-repository",
 		map[string]string{
-			"name": "packages", "url_template": f.upstream + "/{version}.zip",
-			"auth_type": "bearer", "credential": "artifact-secret",
+			"url_template": f.upstream + "/{version}.zip",
+			"auth_type":    "bearer", "credential": "artifact-secret",
 		},
-		201,
+		200,
 	)
 	var source db.PackageRepository
 	if err := json.Unmarshal(body, &source); err != nil {
 		t.Fatal(err)
 	}
-	f.api(
-		t,
-		"PUT",
-		f.base()+"/artifact-repository",
-		map[string]int64{"repository_id": source.ID},
-		200,
-	)
 	f.api(t, "POST", f.base()+"/steps", map[string]string{
 		"name": "read", "script_body": script, "interpreter": "bash",
 		"container_image": "docker.io/library/bash:5.2",

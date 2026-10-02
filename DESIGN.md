@@ -62,6 +62,15 @@ keep `overflow-x-auto` and `table table-zebra table-fixed w-full`.
 - **States**: validation uses `text-error text-sm`; alerts use semantic
   `alert-*` classes.
 
+### Package repository configuration
+- One active project source is shown as a card, without a repository selector.
+- Authentication uses Alpine to show and enable only relevant credential fields;
+  `x-cloak` prevents credentials flashing before initialization.
+- Version tests use an HTMX result region with `aria-live="polite"`; the submit
+  button is disabled during the request and semantic alerts show success/error.
+- Configuration replacement preserves historical package pins, and the page
+  states that saving affects only future snapshots.
+
 ## 6. Motion & Interaction
 
 Existing interaction is intentionally minimal: native `details` disclosure,
