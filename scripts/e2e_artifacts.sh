@@ -4,4 +4,4 @@ set -euo pipefail
 # Requires Docker/Podman and a non-loopback interface.
 templ generate
 make swagger-ui-copy
-go test -tags=e2e -count=1 -run '^TestArtifactsAPIWebContainerE2E$' ./internal/handler/api
+go test -tags=e2e -count=1 -run '^(TestArtifactsAPIWebContainerE2E|TestArtifactCredentialRotationE2E)$' ./internal/handler/api

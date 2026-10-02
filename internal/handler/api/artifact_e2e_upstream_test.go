@@ -26,7 +26,7 @@ import (
 
 func artifactHTTPSFixture(
 	t *testing.T,
-) (string, *artifact.Client, func(string)) {
+) (string, *artifact.Client, func(string), func(string)) {
 	t.Helper()
 	addresses, err := net.InterfaceAddrs()
 	if err != nil {
@@ -69,15 +69,17 @@ func artifactHTTPSFixture(
 	}
 	var mu sync.RWMutex
 	contents := "package"
+	credential := "artifact-secret"
 	srv := httptest.NewUnstartedServer(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.Header.Get("Authorization") != "Bearer artifact-secret" {
+			mu.RLock()
+			expectedCredential := credential
+			text := contents
+			mu.RUnlock()
+			if r.Header.Get("Authorization") != "Bearer "+expectedCredential {
 				w.WriteHeader(401)
 				return
 			}
-			mu.RLock()
-			text := contents
-			mu.RUnlock()
 			var buffer bytes.Buffer
 			writer := zip.NewWriter(&buffer)
 			if text == "metadata-heavy" {
@@ -143,5 +145,7 @@ func artifactHTTPSFixture(
 		RootCAs:    roots,
 		MinVersion: tls.VersionTLS12,
 	}
-	return srv.URL, client, func(value string) { mu.Lock(); contents = value; mu.Unlock() }
+	return srv.URL, client,
+		func(value string) { mu.Lock(); contents = value; mu.Unlock() },
+		func(value string) { mu.Lock(); credential = value; mu.Unlock() }
 }

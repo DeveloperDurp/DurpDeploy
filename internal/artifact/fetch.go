@@ -37,14 +37,8 @@ func dialRepository(
 		return nil, ErrFetch
 	}
 	ips, err := net.DefaultResolver.LookupIPAddr(ctx, host)
-	if err != nil || len(ips) == 0 {
+	if err != nil || validateRepositoryIPs(ips) != nil {
 		return nil, ErrFetch
-	}
-	for _, ip := range ips {
-		if ip.Zone != "" || !ip.IP.IsGlobalUnicast() || ip.IP.IsLoopback() ||
-			ip.IP.IsLinkLocalUnicast() {
-			return nil, ErrFetch
-		}
 	}
 	var dialer net.Dialer
 	dialer.Timeout = 30 * time.Second
@@ -59,6 +53,19 @@ func dialRepository(
 		}
 	}
 	return nil, ErrFetch
+}
+
+func validateRepositoryIPs(ips []net.IPAddr) error {
+	if len(ips) == 0 {
+		return ErrFetch
+	}
+	for _, ip := range ips {
+		if ip.Zone != "" || !ip.IP.IsGlobalUnicast() || ip.IP.IsLoopback() ||
+			ip.IP.IsLinkLocalUnicast() {
+			return ErrFetch
+		}
+	}
+	return nil
 }
 
 type Download struct {

@@ -38,6 +38,7 @@ type artifactE2E struct {
 	upstream             string
 	done                 chan events.Event
 	changePackage        func(string)
+	changeCredential     func(string)
 }
 
 type artifactNotifier struct{ done chan events.Event }
@@ -107,7 +108,7 @@ func newArtifactE2E(t *testing.T) *artifactE2E {
 	bus := events.NewBus(h.repo)
 	bus.Register(artifactNotifier{done})
 	h.runner.SetEventBus(bus)
-	upstream, client, change := artifactHTTPSFixture(t)
+	upstream, client, change, credential := artifactHTTPSFixture(t)
 	workspace, err := artifact.OpenWorkspace(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -126,14 +127,15 @@ func newArtifactE2E(t *testing.T) *artifactE2E {
 			Timeout:       time.Minute,
 			CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse },
 		},
-		token:         token,
-		session:       session,
-		csrf:          csrf,
-		project:       seedProject(t, h.repo),
-		environment:   seedEnv(t, h.repo),
-		upstream:      upstream,
-		done:          done,
-		changePackage: change,
+		token:            token,
+		session:          session,
+		csrf:             csrf,
+		project:          seedProject(t, h.repo),
+		environment:      seedEnv(t, h.repo),
+		upstream:         upstream,
+		done:             done,
+		changePackage:    change,
+		changeCredential: credential,
 	}
 }
 
