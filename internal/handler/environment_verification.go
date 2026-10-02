@@ -31,7 +31,7 @@ func environmentVerificationAllowed(
 	r *http.Request,
 ) bool {
 	for _, name := range []string{"verification_type", "verification_target", "verification_timeout_seconds"} {
-		if r.PostForm.Has(name) &&
+		if r.Form.Has(name) &&
 			auth.RoleFromContext(r.Context()) != "admin" {
 			auth.RenderUnauthorized(w, r)
 			return false

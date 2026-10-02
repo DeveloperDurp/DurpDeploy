@@ -17,6 +17,9 @@ var ErrHTTP = errors.New("HTTP verification failed")
 // addresses, redirects, environment proxies, and DNS rebinding like packages.
 func CheckHTTP(ctx context.Context, settings Settings, output io.Writer) error {
 	transport := artifact.NewTransport()
+	transport.ResponseHeaderTimeout = time.Duration(
+		settings.TimeoutSeconds,
+	) * time.Second
 	defer transport.CloseIdleConnections()
 	client := &http.Client{
 		Transport: transport,

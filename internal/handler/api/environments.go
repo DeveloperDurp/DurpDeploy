@@ -44,6 +44,10 @@ func (req environmentRequest) verification(
 		env.VerificationTarget = *req.VerificationTarget
 	}
 	if req.VerificationTimeoutSeconds != nil {
+		if *req.VerificationTimeoutSeconds < 1 ||
+			*req.VerificationTimeoutSeconds > 300 {
+			return verification.Settings{}, verification.ErrInvalid
+		}
 		env.VerificationTimeoutSeconds = *req.VerificationTimeoutSeconds
 	}
 	return verification.Parse(

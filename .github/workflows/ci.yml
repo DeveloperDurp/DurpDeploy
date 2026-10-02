@@ -317,6 +317,8 @@ jobs:
           make swagger-ui-copy
       - name: Verify singleton setup, authentication fields, and version test
         run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^TestPackageRepositoryBrowserE2E$' ./internal/handler/api
+      - name: Verify verification forms and rollback confirmation in Chromium
+        run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^TestVerificationRollbackBrowserE2E$' ./internal/handler/api
       - name: Upload package UI evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

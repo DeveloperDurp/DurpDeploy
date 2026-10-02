@@ -24,10 +24,12 @@ func (r *DeploymentRunner) verifyDeployment(
 	if err != nil {
 		return fmt.Errorf("load verification: %w", err)
 	}
-	if !r.beginLocalWork() {
-		return context.Canceled
+	if check.Type == string(verification.HTTP) {
+		if !r.beginLocalWork() {
+			return context.Canceled
+		}
+		defer r.localWork.Done()
 	}
-	defer r.localWork.Done()
 	started, err := r.repo.Queries.StartDeploymentVerification(
 		ctx,
 		deploymentID,

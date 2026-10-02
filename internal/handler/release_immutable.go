@@ -19,24 +19,26 @@ func lockRefreshableRelease(
 	if err != nil {
 		return err
 	}
-	if _, err := q.LockProject(ctx, release.ProjectID); err != nil {
+	projectRows, err := q.LockProject(ctx, release.ProjectID)
+	if err != nil {
 		return err
+	}
+	if projectRows == 0 {
+		return sql.ErrNoRows
 	}
 	changed, err := q.LockUnusedReleaseSnapshot(ctx, releaseID)
 	if err != nil {
 		return err
 	}
 	if changed == 0 {
-		if _, err := q.GetRelease(
-			ctx,
-			releaseID,
-		); errors.Is(
-			err,
-			sql.ErrNoRows,
-		) {
+		release, err := q.GetRelease(ctx, releaseID)
+		if err != nil {
 			return err
 		}
-		return ErrReleaseSnapshotLocked
+		if release.SnapshotLocked != 0 {
+			return ErrReleaseSnapshotLocked
+		}
+		return sql.ErrNoRows
 	}
 	return nil
 }

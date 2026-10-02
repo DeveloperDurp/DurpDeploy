@@ -50,7 +50,22 @@ func TestVerificationAdminConfigurationE2E(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.session = "verification-deployer-session"
+	query := "?verification_type=bash&verification_target=echo+injected"
+	f.web(
+		t,
+		"POST",
+		"/environments"+query,
+		url.Values{"name": {"injected-query"}},
+		403,
+	)
 	webPath := fmt.Sprintf("/environments/%d", f.environment.ID)
+	f.web(
+		t,
+		"PUT",
+		webPath+query,
+		url.Values{"name": {f.environment.Name}},
+		403,
+	)
 	for _, kind := range []string{"bash", ""} {
 		f.web(t, "PUT", webPath, url.Values{
 			"name": {f.environment.Name},
@@ -95,6 +110,7 @@ func TestVerificationAdminConfigurationE2E(t *testing.T) {
 		{"verification_type": "http", "verification_target": "https://user:pass@example.com"},
 		{"verification_type": "bash", "verification_target": " "},
 		{"verification_timeout_seconds": -1},
+		{"verification_timeout_seconds": 0},
 		{"verification_timeout_seconds": 301},
 	} {
 		body["name"] = f.environment.Name

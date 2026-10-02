@@ -214,7 +214,7 @@ func (h *EnvironmentHandler) UpdateEnvironment(
 		},
 	}
 	if auth.RoleFromContext(r.Context()) == "admin" &&
-		r.PostForm.Has("verification_type") {
+		r.Form.Has("verification_type") {
 		params.ConfigureVerification = 1
 	}
 
