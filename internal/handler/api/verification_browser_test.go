@@ -54,6 +54,10 @@ func TestVerificationRollbackBrowserE2E(t *testing.T) {
 				t,
 				"document.documentElement.scrollWidth <= innerWidth",
 			)
+			browser.evaluate(t, `new Promise(resolve => {
+ window.scrollTo(0, 0);
+ requestAnimationFrame(() => requestAnimationFrame(() => resolve(true)));
+})`)
 			browser.screenshot(
 				t,
 				fmt.Sprintf("verification-%s-%d", name, width),
