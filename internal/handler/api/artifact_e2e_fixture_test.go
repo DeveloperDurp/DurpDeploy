@@ -31,6 +31,7 @@ import (
 type artifactE2E struct {
 	h                    *harness
 	server               *httptest.Server
+	baseURL              string
 	client               *http.Client
 	token, session, csrf string
 	project              db.Project
@@ -39,6 +40,7 @@ type artifactE2E struct {
 	done                 chan events.Event
 	changePackage        func(string)
 	changeCredential     func(string)
+	completionTimeout    time.Duration
 }
 
 type artifactNotifier struct{ done chan events.Event }
@@ -121,21 +123,23 @@ func newArtifactE2E(t *testing.T) *artifactE2E {
 	client.TempDir = workspace.Directory
 	h.repo.ArtifactClient = client
 	return &artifactE2E{
-		h:      h,
-		server: srv,
+		h:       h,
+		server:  srv,
+		baseURL: srv.URL,
 		client: &http.Client{
 			Timeout:       time.Minute,
 			CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse },
 		},
-		token:            token,
-		session:          session,
-		csrf:             csrf,
-		project:          seedProject(t, h.repo),
-		environment:      seedEnv(t, h.repo),
-		upstream:         upstream,
-		done:             done,
-		changePackage:    change,
-		changeCredential: credential,
+		token:             token,
+		session:           session,
+		csrf:              csrf,
+		project:           seedProject(t, h.repo),
+		environment:       seedEnv(t, h.repo),
+		upstream:          upstream,
+		done:              done,
+		changePackage:     change,
+		changeCredential:  credential,
+		completionTimeout: 30 * time.Second,
 	}
 }
 
@@ -153,7 +157,7 @@ func (f *artifactE2E) api(
 	req, err := http.NewRequestWithContext(
 		t.Context(),
 		method,
-		f.server.URL+path,
+		f.baseURL+path,
 		bytes.NewReader(data),
 	)
 	if err != nil {
@@ -197,7 +201,7 @@ func (f *artifactE2E) web(
 	req, err := http.NewRequestWithContext(
 		t.Context(),
 		method,
-		f.server.URL+path,
+		f.baseURL+path,
 		strings.NewReader(form.Encode()),
 	)
 	if err != nil {
@@ -228,7 +232,7 @@ func (f *artifactE2E) web(
 
 func (f *artifactE2E) completion(t *testing.T, id int64, want events.Type) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), f.completionTimeout)
 	defer cancel()
 	for {
 		select {

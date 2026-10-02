@@ -16,6 +16,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -78,6 +79,11 @@ func artifactHTTPSFixture(
 			mu.RUnlock()
 			if r.Header.Get("Authorization") != "Bearer "+expectedCredential {
 				w.WriteHeader(401)
+				return
+			}
+			if strings.HasPrefix(text, "file:") ||
+				strings.HasPrefix(text, "blocked:") {
+				serveArtifactArchive(t, w, r, text)
 				return
 			}
 			var buffer bytes.Buffer
@@ -148,4 +154,40 @@ func artifactHTTPSFixture(
 	return srv.URL, client,
 		func(value string) { mu.Lock(); contents = value; mu.Unlock() },
 		func(value string) { mu.Lock(); credential = value; mu.Unlock() }
+}
+
+func serveArtifactArchive(
+	t *testing.T,
+	w http.ResponseWriter,
+	r *http.Request,
+	source string,
+) {
+	t.Helper()
+	mode, filename, _ := strings.Cut(source, ":")
+	if mode == "file" {
+		http.ServeFile(w, r, filename)
+		return
+	}
+	file, err := os.Open(filename)
+	if err != nil {
+		t.Error(err)
+		w.WriteHeader(500)
+		return
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil {
+		t.Error(err)
+		w.WriteHeader(500)
+		return
+	}
+	w.Header().Set("Content-Length", fmt.Sprint(info.Size()))
+	if _, err := io.CopyN(w, file, 1024); err != nil {
+		t.Error(err)
+		return
+	}
+	w.(http.Flusher).Flush()
+	// A controlled partial response holds the deployment in download until its
+	// owning server process is killed. The request context then releases this.
+	<-r.Context().Done()
 }

@@ -274,6 +274,37 @@ jobs:
           DURPDEPLOY_CONTAINER_RUNTIME: docker
         run: go test -tags=e2e -count=1 -run '^(TestArtifactsAPIWebContainerE2E|TestArtifactCredentialRotationE2E)$' ./internal/handler/api
 
+  # ----- Artifact crash recovery and capacity ----------------------------------
+  artifact-stress:
+    name: Artifact recovery and capacity
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      DURPDEPLOY_CONTAINER_RUNTIME: docker
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: '1.26.8'
+          cache: true
+
+      - name: Check runtime and workspace capacity
+        run: |
+          docker info >/dev/null
+          available=$(df -Pk "$RUNNER_TEMP" | awk 'NR == 2 {print $4}')
+          test "$available" -ge 3145728
+
+      - name: Prepare generated assets
+        run: |
+          go tool templ generate
+          make swagger-ui-copy
+
+      - name: Verify crash recovery and maximum accepted ZIP staging
+        run: go test -tags=e2e,artifactstress -race -count=1 -timeout=15m -v -run '^TestArtifact(CrashRecovery|Capacity)E2E$' ./internal/handler/api
+
   # ----- Agent smoke -----------------------------------------------------------
   # Self-contained smoke check inside the shared image: the entrypoint
   # provisions and pairs its own server and agent and writes evidence to
