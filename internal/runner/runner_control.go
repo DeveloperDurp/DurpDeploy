@@ -17,10 +17,15 @@ func (r *DeploymentRunner) SetEventBus(bus *events.Bus) {
 	r.bus = bus
 }
 
-// KillAll cancels local attempts and forcibly removes their remote containers.
+// KillAll closes admission, cancels attempts, and drains local cleanup only.
+// Remote cancellation still requires agent acknowledgement or lease expiry.
 func (r *DeploymentRunner) KillAll() {
 	r.mu.Lock()
+	r.stopping = true
 	names := make([]string, 0, len(r.attempts))
+	for _, cancel := range r.cancels {
+		cancel()
+	}
 	for id, name := range r.attempts {
 		names = append(names, name)
 		if cancel := r.cancels[id]; cancel != nil {
@@ -45,6 +50,17 @@ func (r *DeploymentRunner) KillAll() {
 			)
 		}
 	}
+	r.localWork.Wait()
+}
+
+func (r *DeploymentRunner) beginLocalWork() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.stopping {
+		return false
+	}
+	r.localWork.Add(1)
+	return true
 }
 
 func (r *DeploymentRunner) Broker() *LogBroker {

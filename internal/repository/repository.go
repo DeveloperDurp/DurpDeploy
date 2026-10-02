@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	"durpdeploy/internal/artifact"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/secret"
 )
@@ -15,6 +16,7 @@ type Repository struct {
 	Queries         *db.Queries
 	secrets         *secret.Box
 	remoteWorkReady chan struct{}
+	ArtifactClient  *artifact.Client
 }
 
 func New(dbConn *sql.DB) *Repository {
@@ -22,6 +24,7 @@ func New(dbConn *sql.DB) *Repository {
 		DB:              dbConn,
 		Queries:         db.New(dbConn),
 		remoteWorkReady: make(chan struct{}, 1),
+		ArtifactClient:  artifact.NewClient(),
 	}
 }
 
@@ -178,6 +181,9 @@ func (r *Repository) CreateVariable(
 	ctx context.Context,
 	arg db.CreateVariableParams,
 ) (db.Variable, error) {
+	if arg.Name == artifact.PathVariable {
+		return db.Variable{}, ErrArtifactPathReserved
+	}
 	enc, err := r.encryptValue(arg.Value)
 	if err != nil {
 		return db.Variable{}, fmt.Errorf("encrypt variable value: %w", err)
@@ -196,6 +202,9 @@ func (r *Repository) UpdateVariable(
 	ctx context.Context,
 	arg db.UpdateVariableParams,
 ) (db.Variable, error) {
+	if arg.Name == artifact.PathVariable {
+		return db.Variable{}, ErrArtifactPathReserved
+	}
 	enc, err := r.encryptValue(arg.Value)
 	if err != nil {
 		return db.Variable{}, fmt.Errorf("encrypt variable value: %w", err)
@@ -217,6 +226,9 @@ func (r *Repository) UpdateVariableKeepValue(
 	ctx context.Context,
 	arg db.UpdateVariableKeepValueParams,
 ) (db.Variable, error) {
+	if arg.Name == artifact.PathVariable {
+		return db.Variable{}, ErrArtifactPathReserved
+	}
 	var v db.Variable
 	if err := r.WithTx(ctx, func(q *db.Queries) error {
 		var err error

@@ -87,10 +87,16 @@ podman run --rm --user 0 --read-only --security-opt no-new-privileges:true \
 	--tmpfs /tmp:size=64m,mode=1777 \
 	--volume "$state_volume:/data" \
 	--entrypoint /bin/sh "$image" -ceu '
+	/usr/local/bin/container-entrypoint version >/dev/null
 	exec su-exec 10001:10001 /bin/sh -ceu '\''
 	test "$(id -u)" = 10001
 	test -w /data
 	test ! -w /
+	test "$TMPDIR" = /data/tmp
+	/usr/local/bin/container-entrypoint version >/dev/null
+	test -d "$TMPDIR"
+	dd if=/dev/zero of="$TMPDIR/workspace-probe" bs=1048576 count=65 2>/dev/null
+	rm "$TMPDIR/workspace-probe"
 	test "$(getent passwd 10001 | cut -d : -f 6)" = /home/durpdeploy
 	test -x /usr/bin/podman
 	test -x /usr/bin/docker

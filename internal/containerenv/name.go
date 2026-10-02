@@ -20,6 +20,9 @@ func ValidateName(name string, local bool) error {
 	if !identifier.MatchString(name) {
 		return ErrIdentifier
 	}
+	if name == "ARTIFACT_PATH" {
+		return ErrReserved
+	}
 	if local && (name == "PATH" || name == "HOME" || name == "TERM" ||
 		name == "TMPDIR" ||
 		name == "REGISTRY_AUTH_FILE" ||

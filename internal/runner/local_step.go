@@ -24,11 +24,16 @@ type localStepAttempt struct {
 	logWriter    *broadcastWriter
 	environment  map[string]string
 	attempt      int
+	artifact     artifactStage
 }
 
 func (r *DeploymentRunner) runStepAttempt(
 	runCtx context.Context, request localStepAttempt,
 ) (result error) {
+	if !r.beginLocalWork() {
+		return context.Canceled
+	}
+	defer r.localWork.Done()
 	if request.step.ContainerImage == "" {
 		return fmt.Errorf(
 			"step %q has no container image (legacy local steps cannot run on the host)",
@@ -50,6 +55,13 @@ func (r *DeploymentRunner) runStepAttempt(
 		))
 		request.logWriter.Flush()
 		return err
+	}
+	if request.artifact.volume != "" {
+		output, err := r.engine.command(runCtx, "inspect", "--format={{.State.Running}}", request.artifact.keeper).
+			Output()
+		if err != nil || strings.TrimSpace(string(output)) != "true" {
+			return errors.New("artifact staging container is unavailable")
+		}
 	}
 	selected, err := interpreter.Validate(request.step.Interpreter)
 	if err != nil {
@@ -79,7 +91,7 @@ func (r *DeploymentRunner) runStepAttempt(
 	if len(variableNames) == 0 {
 		variableNames = make([]string, 0, len(request.environment))
 		for name := range request.environment {
-			if containerenv.ValidateName(name, true) == nil {
+			if request.validExecutionVariable(name) {
 				variableNames = append(variableNames, name)
 			}
 		}
@@ -89,7 +101,7 @@ func (r *DeploymentRunner) runStepAttempt(
 	var envArgs []string
 	for _, name := range variableNames {
 		value, exists := request.environment[name]
-		if containerenv.ValidateName(name, true) != nil || !exists ||
+		if !request.validExecutionVariable(name) || !exists ||
 			strings.ContainsRune(value, '\x00') {
 			return fmt.Errorf(
 				"invalid or unavailable selected variable %q",
@@ -100,6 +112,10 @@ func (r *DeploymentRunner) runStepAttempt(
 		envArgs = append(envArgs, "--env", name)
 	}
 
+	if request.artifact.volume != "" {
+		selectedEnv = append(selectedEnv, "ARTIFACT_PATH="+artifactMount)
+		envArgs = append(envArgs, "--env", "ARTIFACT_PATH")
+	}
 	nonce := make([]byte, 12)
 	if _, err := rand.Read(nonce); err != nil {
 		return err
@@ -133,6 +149,7 @@ func (r *DeploymentRunner) runStepAttempt(
 		args = append(args, "--image-volume=ignore", "--http-proxy=false")
 	}
 	args = append(args, envArgs...)
+	args = append(args, r.artifactMountArgs(request.artifact)...)
 	args = append(args, "--entrypoint="+selected, request.step.ContainerImage)
 	switch selected {
 	case interpreter.Bash:
@@ -209,6 +226,15 @@ func (r *DeploymentRunner) runStepAttempt(
 		}
 	}
 	return err
+}
+
+// Existing immutable snapshots may contain this name from before packages.
+// New-write validation stays reserved; a mounted package owns the variable.
+func (request localStepAttempt) validExecutionVariable(name string) bool {
+	if name == "ARTIFACT_PATH" && request.artifact.volume == "" {
+		return true
+	}
+	return containerenv.ValidateName(name, true) == nil
 }
 
 func (r *DeploymentRunner) rejectDockerImageVolumes(

@@ -205,6 +205,9 @@ func runServer() {
 
 	repo := repository.New(dbConn)
 	repo.SetSecretBox(box)
+	if err := prepareArtifactWorkspace(repo); err != nil {
+		log.Fatalf("artifact workspace: %v", err)
+	}
 	broker := runner.NewLogBroker()
 	rnr := runner.New(repo, broker)
 
@@ -787,6 +790,22 @@ func runSecretKey(args []string) int {
 		}
 	}
 
+	if err := rotateArtifactCredentials(
+		ctx,
+		qtx,
+		artifactKeyRotation{
+			oldBox:    oldBox,
+			newBox:    newBox,
+			plaintext: *plaintext,
+		},
+	); err != nil {
+		fmt.Fprintf(
+			os.Stderr,
+			"error: rotate artifact repository credentials: %v\n",
+			err,
+		)
+		return 1
+	}
 	if err := tx.Commit(); err != nil {
 		fmt.Fprintf(os.Stderr, "error: commit: %v\n", err)
 		return 1

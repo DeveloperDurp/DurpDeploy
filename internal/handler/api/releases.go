@@ -166,6 +166,9 @@ func (h *ReleaseHandler) CreateRelease(w http.ResponseWriter, r *http.Request) {
 		body.Version,
 	)
 	if err != nil {
+		if writeArtifactError(w, err) {
+			return
+		}
 		if handler.IsUniqueViolation(err) {
 			RespondError(
 				w,
@@ -324,6 +327,7 @@ func (h *ReleaseHandler) DeleteRelease(w http.ResponseWriter, r *http.Request) {
 //	  401: body:UnauthorizedError
 //	  404: body:NotFoundError
 //	  409: body:ConflictError
+//	  422: body:ValidationError
 //	  500: body:ServerError
 func (h *ReleaseHandler) RefreshRelease(
 	w http.ResponseWriter,
@@ -356,6 +360,9 @@ func (h *ReleaseHandler) RefreshRelease(
 
 	updated, err := handler.RefreshReleaseSnapshot(r.Context(), h.repo, release)
 	if err != nil {
+		if writeArtifactError(w, err) {
+			return
+		}
 		if errors.Is(err, sql.ErrNoRows) {
 			RespondError(w, http.StatusNotFound, "Release not found")
 			return

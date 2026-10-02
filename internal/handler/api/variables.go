@@ -245,6 +245,14 @@ func (h *VariableHandler) CreateVariable(
 	}
 
 	name := trimSpace(req.Name)
+	if name == "ARTIFACT_PATH" {
+		RespondError(
+			w,
+			422,
+			"ARTIFACT_PATH is reserved for deployment artifacts",
+		)
+		return
+	}
 	if name == "" {
 		RespondError(w, http.StatusBadRequest, "Name is required")
 		return
@@ -391,6 +399,14 @@ func (h *VariableHandler) UpdateVariable(
 	}
 
 	name := trimSpace(req.Name)
+	if name == "ARTIFACT_PATH" {
+		RespondError(
+			w,
+			422,
+			"ARTIFACT_PATH is reserved for deployment artifacts",
+		)
+		return
+	}
 	if name == "" {
 		RespondError(w, http.StatusBadRequest, "Name is required")
 		return

@@ -132,33 +132,6 @@ DELETE FROM runbook_executions WHERE runbook_version_id IN (
     JOIN runbooks b ON b.id = v.runbook_id WHERE b.project_id = ?
 );
 
--- name: ListProjectRunbookDeploymentIDs :many
-SELECT x.deployment_id FROM runbook_executions x
-JOIN runbook_versions v ON v.id = x.runbook_version_id
-JOIN runbooks b ON b.id = v.runbook_id
-WHERE b.project_id = ?;
-
--- name: HasActiveProjectRunbookExecution :one
-SELECT CASE WHEN EXISTS (
-    SELECT 1 FROM runbook_executions x
-    JOIN runbook_versions v ON v.id = x.runbook_version_id
-    JOIN runbooks b ON b.id = v.runbook_id
-    JOIN deployments d ON d.id = x.deployment_id
-    WHERE b.project_id = sqlc.arg(project_id)
-      AND (d.status IN ('pending', 'running', 'pending_approval', 'cleanup_unconfirmed')
-        OR EXISTS (SELECT 1 FROM remote_deployment_claims c
-                   WHERE c.deployment_id = d.id
-                     AND c.state IN ('lost', 'cancel_unconfirmed'))
-        OR EXISTS (SELECT 1 FROM remote_step_runs s
-                   WHERE s.deployment_id = d.id
-                      AND s.state IN ('lost', 'cancel_unconfirmed')))
-) OR EXISTS (
-    SELECT 1 FROM deployments d
-    JOIN releases r ON r.id = d.release_id
-    WHERE r.project_id = sqlc.arg(project_id)
-      AND d.status = 'cleanup_unconfirmed'
-) THEN 1 ELSE 0 END;
-
 -- name: DeleteRunbookRemoteStepLogSequences :exec
 DELETE FROM remote_step_log_sequences WHERE deployment_id = ?;
 

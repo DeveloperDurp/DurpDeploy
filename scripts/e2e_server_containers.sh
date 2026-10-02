@@ -24,6 +24,12 @@ cleanup() {
 	fi
 	if ((result != 0)); then
 		docker logs "$app_name" 2>/dev/null || true
+		local remaining
+		remaining=$(docker ps -aq \
+			--filter "label=io.durpdeploy.namespace=docker:$namespace") || true
+		for id in $remaining; do
+			docker inspect --format '{{.Name}} {{json .State}}' "$id" >&2 || true
+		done
 		if [[ -f "$tmp/bad-runtime.log" ]]; then
 			grep -E 'error|ERROR|failed' "$tmp/bad-runtime.log" >&2 || true
 		fi

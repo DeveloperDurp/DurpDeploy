@@ -44,6 +44,9 @@ func (h *ReleaseHandler) RefreshRelease(
 		h.repo,
 		release,
 	); err != nil {
+		if writeArtifactError(w, err) {
+			return
+		}
 		if errors.Is(err, sql.ErrNoRows) {
 			http.Error(w, "Release not found", http.StatusNotFound)
 			return

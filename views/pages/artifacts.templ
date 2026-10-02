@@ -1,0 +1,97 @@
+package pages
+
+import (
+	"durpdeploy/internal/artifact"
+	"durpdeploy/internal/db"
+	"durpdeploy/views/components"
+	"durpdeploy/views/layouts"
+	"fmt"
+	"strconv"
+)
+
+templ ArtifactRepositoryPage(project db.Project, source db.PackageRepository, result artifact.Pin, errorMessage string, currentPath string) {
+	@layouts.Base("Package repository", currentPath) {
+		@components.Breadcrumbs([]components.Crumb{{Label: "Projects", Href: "/projects"}, {Label: project.Name, Href: fmt.Sprintf("/projects/%d", project.ID)}, {Label: "Package repository"}})
+		<div class="space-y-6">
+			<div class="flex flex-wrap items-center justify-between gap-4">
+				<h1 class="text-3xl font-bold">Package repository — { project.Name }</h1>
+				if CanWrite(ctx) {
+					<a href={ fmt.Sprintf("/projects/%d/package-repository/edit", project.ID) } class="btn btn-primary btn-sm">
+						if source.ID == 0 {
+							Configure repository
+						} else {
+							Edit repository
+						}
+					</a>
+				}
+			</div>
+			<div class="card bg-base-200 shadow"><div class="card-body space-y-4">
+				<h2 class="card-title">Release package</h2>
+				if source.ID == 0 {
+					<p>No package repository is configured. Configure one to attach packages to new releases.</p>
+				} else {
+					<p class="break-all font-mono text-sm">{ source.UrlTemplate }</p>
+					<p class="text-sm opacity-70">Saving a repository enables it for new releases and refreshes. Existing releases keep their pinned package and source.</p>
+					<p class="text-sm">Authentication: { source.AuthType }</p>
+					if CanWrite(ctx) {
+						<form method="post" action={ fmt.Sprintf("/projects/%d/package-repository/delete", project.ID) } hx-confirm="Remove this repository from future releases? Existing package pins will remain usable.">
+							<button type="submit" class="btn btn-outline btn-error btn-sm">Remove repository</button>
+						</form>
+					}
+				}
+			</div></div>
+			if source.ID != 0 && CanWrite(ctx) {
+				<div class="card bg-base-200 shadow"><div class="card-body space-y-4">
+					<h2 class="card-title">Test a package version</h2>
+					<p class="text-sm opacity-70">Check that a version exists and contains a valid ZIP using the saved credentials. This does not create a release. Use the exact version text that replaces { "{version}" }.</p>
+					<form method="post" action={ fmt.Sprintf("/projects/%d/package-repository/test", project.ID) } hx-post={ fmt.Sprintf("/projects/%d/package-repository/test", project.ID) } hx-target="#package-test-result" hx-swap="innerHTML" hx-disabled-elt="find button" class="space-y-4">
+						<label class="form-control"><span class="label-text">Test version</span><input type="text" name="version" class="input input-bordered" placeholder="1.6.0" required/></label>
+						<button type="submit" class="btn btn-primary">Test package</button>
+					</form>
+					<div id="package-test-result" aria-live="polite" aria-atomic="true">@PackageTestResult(result, errorMessage)</div>
+				</div></div>
+			}
+		</div>
+	}
+}
+
+templ PackageTestResult(pin artifact.Pin, errorMessage string) {
+	if errorMessage != "" {
+		<div class="alert alert-error" role="alert">{ errorMessage }</div>
+	} else if pin.SHA256 != "" {
+		<div class="space-y-3" data-package-test="success">
+			<div class="alert alert-success">Package exists and ZIP validation passed.</div>
+			<p>Version: { pin.Version }</p>
+			<p class="break-all font-mono text-sm">{ pin.URL }</p>
+			<p class="break-all font-mono text-sm">SHA-256: { pin.SHA256 }</p>
+			<p>ZIP size: { strconv.FormatInt(pin.Size, 10) } bytes</p>
+		</div>
+	}
+}
+
+templ ArtifactRepositoryForm(project db.Project, source db.PackageRepository, errorMessage string, currentPath string) {
+	if !CanWrite(ctx) {
+		@ViewerForbiddenMessage("Package repository", "edit", "the package repository", fmt.Sprintf("/projects/%d/package-repository", project.ID), currentPath)
+	} else {
+		@layouts.Base("Package repository", currentPath) {
+			<div class="space-y-6">
+				<h1 class="text-3xl font-bold">Configure package repository</h1>
+				<div class="card bg-base-200 shadow"><div class="card-body space-y-4">
+					if errorMessage != "" {
+						<div class="alert alert-error" role="alert">{ errorMessage }</div>
+					}
+					<form method="post" action={ fmt.Sprintf("/projects/%d/package-repository", project.ID) } x-data={ fmt.Sprintf("{ auth: %q }", source.AuthType) } class="space-y-4">
+						<label class="form-control"><span class="label-text">HTTPS ZIP URL template</span><input name="url_template" value={ source.UrlTemplate } class="input input-bordered" placeholder="https://repo.example/app/{version}/package.zip" required/></label>
+						<p class="text-sm opacity-70">Use exactly one { "{version}" } in the URL path. Query strings and credentials in URLs are not allowed.</p>
+						<label class="form-control"><span class="label-text">Authentication</span><select name="auth_type" x-model="auth" class="select select-bordered"><option value="noauth">None</option><option value="bearer">Bearer token</option><option value="basic">Basic authentication</option></select></label>
+						<label class="form-control" x-show="auth === 'basic'" x-cloak><span class="label-text">Username</span><input name="username" value={ source.Username } x-bind:disabled="auth !== 'basic'" x-bind:required="auth === 'basic'" class="input input-bordered" autocomplete="off"/></label>
+						<label class="form-control" x-show="auth !== 'noauth'" x-cloak><span class="label-text" x-text="auth === 'basic' ? 'Password' : 'Bearer token'">Credential</span><input name="credential" type="password" x-bind:disabled="auth === 'noauth'" class="input input-bordered" autocomplete="new-password"/></label>
+						<p class="text-sm opacity-70" x-show="auth !== 'noauth'" x-cloak>Credentials are encrypted and never displayed. Leave blank to retain the credential only when the URL template, authentication type, and username are unchanged. Enter new credentials when replacing the source.</p>
+						<p class="text-sm opacity-70">Saving automatically enables this source for new releases. Replacing it does not change existing release pins.</p>
+						<div class="flex flex-wrap gap-2"><button type="submit" class="btn btn-primary">Save repository</button><a href={ fmt.Sprintf("/projects/%d/package-repository", project.ID) } class="btn btn-ghost">Cancel</a></div>
+					</form>
+				</div></div>
+			</div>
+		}
+	}
+}

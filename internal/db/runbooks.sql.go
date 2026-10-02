@@ -517,35 +517,6 @@ func (q *Queries) GetRunbookVersion(ctx context.Context, arg GetRunbookVersionPa
 	return i, err
 }
 
-const hasActiveProjectRunbookExecution = `-- name: HasActiveProjectRunbookExecution :one
-SELECT CASE WHEN EXISTS (
-    SELECT 1 FROM runbook_executions x
-    JOIN runbook_versions v ON v.id = x.runbook_version_id
-    JOIN runbooks b ON b.id = v.runbook_id
-    JOIN deployments d ON d.id = x.deployment_id
-    WHERE b.project_id = ?1
-      AND (d.status IN ('pending', 'running', 'pending_approval', 'cleanup_unconfirmed')
-        OR EXISTS (SELECT 1 FROM remote_deployment_claims c
-                   WHERE c.deployment_id = d.id
-                     AND c.state IN ('lost', 'cancel_unconfirmed'))
-        OR EXISTS (SELECT 1 FROM remote_step_runs s
-                   WHERE s.deployment_id = d.id
-                      AND s.state IN ('lost', 'cancel_unconfirmed')))
-) OR EXISTS (
-    SELECT 1 FROM deployments d
-    JOIN releases r ON r.id = d.release_id
-    WHERE r.project_id = ?1
-      AND d.status = 'cleanup_unconfirmed'
-) THEN 1 ELSE 0 END
-`
-
-func (q *Queries) HasActiveProjectRunbookExecution(ctx context.Context, projectID int64) (int64, error) {
-	row := q.db.QueryRowContext(ctx, hasActiveProjectRunbookExecution, projectID)
-	var column_1 int64
-	err := row.Scan(&column_1)
-	return column_1, err
-}
-
 const hasActiveRunbookScheduleExecution = `-- name: HasActiveRunbookScheduleExecution :one
 SELECT CASE WHEN EXISTS (
     SELECT 1 FROM runbook_executions x
@@ -616,36 +587,6 @@ func (q *Queries) ListDueRunbookSchedules(ctx context.Context, nextRunAt int64) 
 			return nil, err
 		}
 		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listProjectRunbookDeploymentIDs = `-- name: ListProjectRunbookDeploymentIDs :many
-SELECT x.deployment_id FROM runbook_executions x
-JOIN runbook_versions v ON v.id = x.runbook_version_id
-JOIN runbooks b ON b.id = v.runbook_id
-WHERE b.project_id = ?
-`
-
-func (q *Queries) ListProjectRunbookDeploymentIDs(ctx context.Context, projectID int64) ([]int64, error) {
-	rows, err := q.db.QueryContext(ctx, listProjectRunbookDeploymentIDs, projectID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []int64
-	for rows.Next() {
-		var deployment_id int64
-		if err := rows.Scan(&deployment_id); err != nil {
-			return nil, err
-		}
-		items = append(items, deployment_id)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err

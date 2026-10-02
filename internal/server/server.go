@@ -32,6 +32,7 @@ func NewAgentRouter(agents *agentserver.Server) http.Handler {
 	r.Post(agentproto.LogsPath, agents.Logs)
 	r.Post(agentproto.ResultPath, agents.Result)
 	r.Post(agentproto.CancelledPath, agents.Cancelled)
+	r.Post("/agent/v1/deployments/{id}/artifact", agents.Artifact)
 	return r
 }
 
@@ -332,6 +333,15 @@ func newRouter(
 		// templates, deployments, logs) stay on pr above.
 		pr.Group(func(ppr chi.Router) {
 			ppr.Use(auth.RequireProjectAccess(repo))
+			artifactH := handler.NewArtifactHandler(repo)
+			ppr.Get("/projects/{id}/package-repository", artifactH.Get)
+			ppr.Get("/projects/{id}/package-repository/edit", artifactH.Form)
+			ppr.Post("/projects/{id}/package-repository", artifactH.Save)
+			ppr.Post(
+				"/projects/{id}/package-repository/delete",
+				artifactH.Delete,
+			)
+			ppr.Post("/projects/{id}/package-repository/test", artifactH.Test)
 
 			ppr.Get("/projects/{id}", ph.GetProject)
 			ppr.Get("/projects/{id}/edit", ph.EditProject)
@@ -644,6 +654,15 @@ func newRouter(
 			par.Patch("/projects/{id}/steps/reorder", apiStepH.ReorderSteps)
 
 			apiVarH := api.NewVariableHandler(repo)
+			artifactH := api.NewArtifactHandler(repo)
+			par.Get("/projects/{id}/package-repository", artifactH.Get)
+			par.Put("/projects/{id}/package-repository", artifactH.Save)
+			par.Delete("/projects/{id}/package-repository", artifactH.Delete)
+			par.Post("/projects/{id}/package-repository/test", artifactH.Test)
+			par.Get(
+				"/projects/{id}/releases/{relId}/artifact",
+				artifactH.ReleasePin,
+			)
 			par.Get("/projects/{id}/variables", apiVarH.ListVariables)
 			par.Post("/projects/{id}/variables", apiVarH.CreateVariable)
 			par.Get("/projects/{id}/variables/{varId}", apiVarH.GetVariable)

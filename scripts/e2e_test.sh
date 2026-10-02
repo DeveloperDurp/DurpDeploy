@@ -29,7 +29,7 @@ cleanup() {
         fi
     fi
 	# Keep the database and its logs alive until the server has stopped.
-    rm -rf "$TMP"
+	rm -rf "$TMP"
 	return "$status"
 }
 trap cleanup EXIT
@@ -78,6 +78,7 @@ else
     # Start the server. The migrations it would normally run are a no-op
     # because the admin CLI just created the schema.
     DURPDEPLOY_ADDR="127.0.0.1:$PORT" \
+		TMPDIR="$TMP" \
         DURPDEPLOY_AGENT_LISTEN_ADDR="127.0.0.1:0" \
         DURPDEPLOY_AGENT_PUBLIC_URL="https://localhost" \
         DURPDEPLOY_AGENT_IDENTITY_DIR="$TMP/agent-identity" \

@@ -11,8 +11,10 @@ import (
 )
 
 type releaseSnapshotData struct {
-	stepsJSON string
-	variables []db.CreateReleaseVariableParams
+	stepsJSON     string
+	variables     []db.CreateReleaseVariableParams
+	artifact      *repository.ArtifactSnapshot
+	hasAgentSteps bool
 }
 
 // CreateReleaseSnapshot snapshots the project's current steps and variables
@@ -28,6 +30,17 @@ func CreateReleaseSnapshot(
 	if err != nil {
 		return db.Release{}, err
 	}
+	snapshot.artifact, err = repo.ResolveProjectArtifact(
+		ctx,
+		projectID,
+		version,
+	)
+	if err != nil {
+		return db.Release{}, err
+	}
+	if snapshot.artifact != nil && snapshot.hasAgentSteps {
+		return db.Release{}, repository.ErrRemoteArtifactsUnsupported
+	}
 	tx, err := repo.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return db.Release{}, err
@@ -41,6 +54,9 @@ func CreateReleaseSnapshot(
 		return db.Release{}, err
 	}
 	if err := snapshot.insertVariables(ctx, queries, release.ID); err != nil {
+		return db.Release{}, err
+	}
+	if err := snapshot.artifact.Insert(ctx, queries, release.ID); err != nil {
 		return db.Release{}, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -60,6 +76,17 @@ func RefreshReleaseSnapshot(
 	snapshot, err := buildReleaseSnapshot(ctx, repo, release.ProjectID)
 	if err != nil {
 		return db.Release{}, err
+	}
+	snapshot.artifact, err = repo.ResolveProjectArtifact(
+		ctx,
+		release.ProjectID,
+		release.Version,
+	)
+	if err != nil {
+		return db.Release{}, err
+	}
+	if snapshot.artifact != nil && snapshot.hasAgentSteps {
+		return db.Release{}, repository.ErrRemoteArtifactsUnsupported
 	}
 	tx, err := repo.DB.BeginTx(ctx, nil)
 	if err != nil {
@@ -83,6 +110,12 @@ func RefreshReleaseSnapshot(
 	if err := snapshot.insertVariables(ctx, queries, release.ID); err != nil {
 		return db.Release{}, err
 	}
+	if err := queries.DeleteReleaseArtifact(ctx, release.ID); err != nil {
+		return db.Release{}, err
+	}
+	if err := snapshot.artifact.Insert(ctx, queries, release.ID); err != nil {
+		return db.Release{}, err
+	}
 	if err := tx.Commit(); err != nil {
 		return db.Release{}, err
 	}
@@ -102,6 +135,13 @@ func buildReleaseSnapshot(
 	if err != nil {
 		return releaseSnapshotData{}, err
 	}
+	hasAgentSteps := false
+	for _, step := range snapshots {
+		if step.ExecutionTarget == "agent" {
+			hasAgentSteps = true
+			break
+		}
+	}
 	stepsJSON, err := json.Marshal(snapshots)
 	if err != nil {
 		return releaseSnapshotData{}, err
@@ -112,6 +152,9 @@ func buildReleaseSnapshot(
 	}
 	params := make([]db.CreateReleaseVariableParams, len(variables))
 	for index, variable := range variables {
+		if variable.Name == "ARTIFACT_PATH" {
+			return releaseSnapshotData{}, repository.ErrArtifactPathReserved
+		}
 		value, err := repo.EncryptValue(variable.Value)
 		if err != nil {
 			return releaseSnapshotData{}, err
@@ -122,8 +165,9 @@ func buildReleaseSnapshot(
 		}
 	}
 	return releaseSnapshotData{
-		stepsJSON: string(stepsJSON),
-		variables: params,
+		stepsJSON:     string(stepsJSON),
+		variables:     params,
+		hasAgentSteps: hasAgentSteps,
 	}, nil
 }
 

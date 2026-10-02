@@ -108,7 +108,24 @@ func (r *Repository) CreateDeploymentFromDeployment(
 				steps,
 				stepSource.StepsJson,
 			)
-			return err
+			if err != nil {
+				return err
+			}
+			if err := q.CopyDeploymentArtifact(
+				ctx,
+				db.CopyDeploymentArtifactParams{
+					DeploymentID:   result.Deployment.ID,
+					DeploymentID_2: sourceDeploymentID,
+				},
+			); err != nil {
+				return err
+			}
+			return validateDeploymentArtifact(
+				ctx,
+				q,
+				result.Deployment.ID,
+				steps,
+			)
 		})
 	})
 	if err != nil {
@@ -136,7 +153,25 @@ func (r *Repository) createDeployment(
 	if err != nil {
 		return DeploymentResult{}, err
 	}
-	return createDeploymentWithSteps(ctx, q, arg, steps, "")
+	result, err := createDeploymentWithSteps(ctx, q, arg, steps, "")
+	if err != nil {
+		return result, err
+	}
+	if err := q.CopyReleaseArtifactToDeployment(
+		ctx,
+		db.CopyReleaseArtifactToDeploymentParams{
+			DeploymentID: result.Deployment.ID,
+			ReleaseID:    arg.ReleaseID,
+		},
+	); err != nil {
+		return DeploymentResult{}, err
+	}
+	return result, validateDeploymentArtifact(
+		ctx,
+		q,
+		result.Deployment.ID,
+		steps,
+	)
 }
 
 func createDeploymentWithSteps(

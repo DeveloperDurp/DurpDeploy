@@ -89,6 +89,7 @@ func (h *RunbookHandler) Form(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	book := db.Runbook{}
+	selectedArtifactReleaseID := int64(0)
 	stepsJSON := `[{
 		"name":"","script_body":"","interpreter":"bash",
 		"timeout_seconds":0,"max_retries":0,
@@ -125,8 +126,28 @@ func (h *RunbookHandler) Form(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		stepsJSON = release.StepsJson
+		pin, pinErr := h.repo.Queries.GetReleaseArtifact(
+			r.Context(),
+			release.ID,
+		)
+		if pinErr != nil && !errors.Is(pinErr, sql.ErrNoRows) {
+			http.Error(w, "Cannot read package pin", 500)
+			return
+		}
+		selectedArtifactReleaseID = pin.SourceReleaseID.Int64
+		if pinErr == nil && !pin.SourceReleaseID.Valid {
+			selectedArtifactReleaseID = -1
+		}
 	}
-	if err := pages.RunbookFormPage(project, book, stepsJSON, "", r.URL.Path).
+	artifactReleases, err := h.repo.Queries.ListArtifactReleases(
+		r.Context(),
+		projectID,
+	)
+	if err != nil {
+		http.Error(w, "Cannot list package releases", 500)
+		return
+	}
+	if err := pages.RunbookFormPage(project, book, stepsJSON, artifactReleases, selectedArtifactReleaseID, "", r.URL.Path).
 		Render(r.Context(), w); err != nil {
 		http.Error(
 			w,
@@ -164,9 +185,23 @@ func (h *RunbookHandler) Save(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Name is required", http.StatusUnprocessableEntity)
 		return
 	}
+	artifactReleaseID := int64(0)
+	if raw := r.FormValue("artifact_release_id"); raw != "" {
+		artifactReleaseID, err = strconv.ParseInt(raw, 10, 64)
+		if err != nil || artifactReleaseID < -1 {
+			http.Error(w, "Invalid package release", 422)
+			return
+		}
+	}
+	keepArtifactPin := artifactReleaseID == -1
+	if keepArtifactPin {
+		artifactReleaseID = 0
+	}
 	book, _, err := h.repo.SaveRunbook(r.Context(), repository.RunbookSave{
 		ProjectID: projectID, RunbookID: id, Name: name,
 		Description: r.FormValue("description"), StepsJSON: stepsJSON,
+		ArtifactReleaseID: artifactReleaseID,
+		KeepArtifactPin:   keepArtifactPin,
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		http.NotFound(w, r)

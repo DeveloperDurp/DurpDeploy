@@ -102,6 +102,15 @@ type DeploymentApproval struct {
 	RequiredApproverRole string        `json:"required_approver_role"`
 }
 
+type DeploymentArtifact struct {
+	DeploymentID int64  `json:"deployment_id"`
+	RepositoryID int64  `json:"repository_id"`
+	Url          string `json:"url"`
+	Version      string `json:"version"`
+	Sha256       string `json:"sha256"`
+	Size         int64  `json:"size"`
+}
+
 type DeploymentDispatch struct {
 	DeploymentID int64          `json:"deployment_id"`
 	StepIndex    int64          `json:"step_index"`
@@ -264,6 +273,16 @@ type OidcTransaction struct {
 	ExpiresAt int64  `json:"expires_at"`
 }
 
+type PackageRepository struct {
+	ID          int64  `json:"id"`
+	ProjectID   int64  `json:"project_id"`
+	Name        string `json:"name"`
+	UrlTemplate string `json:"url_template"`
+	AuthType    string `json:"auth_type"`
+	Username    string `json:"username"`
+	Credential  string `json:"credential"`
+}
+
 type Project struct {
 	ID                int64          `json:"id"`
 	Name              string         `json:"name"`
@@ -275,6 +294,11 @@ type Project struct {
 	GotifyUrl         sql.NullString `json:"gotify_url"`
 	GotifyToken       sql.NullString `json:"gotify_token"`
 	DiscordWebhookUrl sql.NullString `json:"discord_webhook_url"`
+}
+
+type ProjectArtifactRepository struct {
+	ProjectID    int64 `json:"project_id"`
+	RepositoryID int64 `json:"repository_id"`
 }
 
 type ProjectMember struct {
@@ -291,6 +315,16 @@ type Release struct {
 	StepsJson string `json:"steps_json"`
 	CreatedAt int64  `json:"created_at"`
 	Kind      string `json:"kind"`
+}
+
+type ReleaseArtifact struct {
+	ReleaseID       int64         `json:"release_id"`
+	RepositoryID    int64         `json:"repository_id"`
+	Url             string        `json:"url"`
+	Version         string        `json:"version"`
+	Sha256          string        `json:"sha256"`
+	Size            int64         `json:"size"`
+	SourceReleaseID sql.NullInt64 `json:"source_release_id"`
 }
 
 type ReleaseVariable struct {

@@ -144,6 +144,9 @@ func (h *ReleaseHandler) CreateRelease(w http.ResponseWriter, r *http.Request) {
 
 	_, err = CreateReleaseSnapshot(r.Context(), h.repo, projectID, version)
 	if err != nil {
+		if writeArtifactError(w, err) {
+			return
+		}
 		if IsUniqueViolation(err) {
 			project, _ := h.repo.Queries.GetProject(r.Context(), projectID)
 			releases, _ := h.repo.Queries.ListReleasesByProject(
@@ -274,7 +277,12 @@ func (h *ReleaseHandler) GetRelease(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := pages.ReleaseDetailPage(project, release, variables, environments, active != 0, r.URL.Path).
+	pin, err := h.repo.Queries.GetReleaseArtifact(r.Context(), releaseID)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		http.Error(w, "Cannot read package pin", 500)
+		return
+	}
+	if err := pages.ReleaseDetailPage(project, release, variables, environments, pin, active != 0, r.URL.Path).
 		Render(r.Context(), w); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}

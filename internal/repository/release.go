@@ -49,6 +49,15 @@ func (r *Repository) DeleteRelease(
 					return err
 				}
 			}
+			if err := q.ClearArtifactSourceReleaseByRelease(
+				ctx,
+				sql.NullInt64{Int64: releaseID, Valid: true},
+			); err != nil {
+				return err
+			}
+			if err := q.DeleteReleaseArtifact(ctx, releaseID); err != nil {
+				return err
+			}
 			return q.DeleteRelease(ctx, db.DeleteReleaseParams{
 				ID: releaseID, ProjectID: projectID,
 			})
@@ -57,6 +66,17 @@ func (r *Repository) DeleteRelease(
 }
 
 func lockRelease(ctx context.Context, q *db.Queries, releaseID int64) error {
+	release, err := q.GetRelease(ctx, releaseID)
+	if err != nil {
+		return err
+	}
+	projectRows, err := q.LockProject(ctx, release.ProjectID)
+	if err != nil {
+		return err
+	}
+	if projectRows == 0 {
+		return sql.ErrNoRows
+	}
 	rows, err := q.LockRelease(ctx, releaseID)
 	if err != nil {
 		return err

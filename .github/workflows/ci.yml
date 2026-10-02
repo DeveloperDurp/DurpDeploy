@@ -282,6 +282,75 @@ jobs:
       - name: Run agent rollout gate
         run: make agent-rollout-gate
 
+      - name: Verify production artifact network boundaries
+        run: go test -race -count=1 ./internal/artifact
+
+      - name: Verify ZIP artifact API, web forms, and container mounts
+        env:
+          DURPDEPLOY_CONTAINER_RUNTIME: docker
+        run: go test -tags=e2e -count=1 -run '^(TestArtifactsAPIWebContainerE2E|TestArtifactCredentialRotationE2E|TestArtifactSourceReplacementE2E)$' ./internal/handler/api
+
+  # ----- Artifact crash recovery and capacity ----------------------------------
+  package-browser:
+    name: Package repository browser
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DURPDEPLOY_CONTAINER_RUNTIME: docker
+      DURPDEPLOY_PACKAGE_UI_EVIDENCE: ${{ github.workspace }}/artifacts/package-ui
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: '1.26.8'
+          cache: true
+      - name: Prepare generated assets
+        run: |
+          go tool templ generate
+          make swagger-ui-copy
+      - name: Verify singleton setup, authentication fields, and version test
+        run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^TestPackageRepositoryBrowserE2E$' ./internal/handler/api
+      - name: Upload package UI evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: package-repository-ui
+          path: artifacts/package-ui/
+          retention-days: 7
+
+  # ----- Artifact crash recovery and capacity ----------------------------------
+  artifact-stress:
+    name: Artifact recovery and capacity
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      DURPDEPLOY_CONTAINER_RUNTIME: docker
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: '1.26.8'
+          cache: true
+
+      - name: Check runtime and workspace capacity
+        run: |
+          docker info >/dev/null
+          available=$(df -Pk "$RUNNER_TEMP" | awk 'NR == 2 {print $4}')
+          test "$available" -ge 3145728
+
+      - name: Prepare generated assets
+        run: |
+          go tool templ generate
+          make swagger-ui-copy
+
+      - name: Verify crash recovery and maximum accepted ZIP staging
+        run: go test -tags=e2e,artifactstress -race -count=1 -timeout=15m -v -run '^TestArtifact(CrashRecovery|Capacity)E2E$' ./internal/handler/api
+
   # ----- Agent smoke -----------------------------------------------------------
   # Self-contained smoke check inside the shared image: the entrypoint
   # provisions and pairs its own server and agent and writes evidence to

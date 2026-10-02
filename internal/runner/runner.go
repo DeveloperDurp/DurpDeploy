@@ -17,13 +17,16 @@ import (
 const defaultStepTimeout = 5 * time.Minute
 
 type DeploymentRunner struct {
-	repo     *repository.Repository
-	broker   *LogBroker
-	mu       sync.Mutex
-	cancels  map[int64]context.CancelFunc
-	attempts map[int64]string
-	engine   containerEndpoint
-	localErr error
+	repo      *repository.Repository
+	broker    *LogBroker
+	mu        sync.Mutex
+	cancels   map[int64]context.CancelFunc
+	attempts  map[int64]string
+	engine    containerEndpoint
+	localErr  error
+	staging   map[int64]artifactStage
+	stopping  bool
+	localWork sync.WaitGroup
 	// bus publishes deployment_started/succeeded/failed events for the
 	// Slack/email notifiers (Stage 3). Nil until SetEventBus is called —
 	// existing callers (tests, recovery path) that never call it simply
@@ -57,7 +60,14 @@ func (r *DeploymentRunner) Run(
 	deploymentID, releaseID, environmentID int64,
 ) {
 	runCtx, cancel := context.WithCancel(ctx)
-	r.RegisterCancel(deploymentID, cancel)
+	r.mu.Lock()
+	if r.stopping {
+		r.mu.Unlock()
+		cancel()
+		return
+	}
+	r.cancels[deploymentID] = cancel
+	r.mu.Unlock()
 
 	now := time.Now().Unix()
 
@@ -127,6 +137,65 @@ func (r *DeploymentRunner) Run(
 	}
 
 	scrubber := NewScrubber(secretValues)
+	if !r.beginLocalWork() {
+		r.finalizeCancellation(ctx, deploymentID)
+		return
+	}
+	artifactWork := true
+	defer func() {
+		if artifactWork {
+			r.localWork.Done()
+		}
+	}()
+	stage, err := r.stageArtifact(runCtx, deploymentID)
+	if err != nil {
+		r.failStep(
+			ctx,
+			runCtx,
+			events.Event{
+				Type:          events.DeploymentFailed,
+				DeploymentID:  deploymentID,
+				ProjectID:     release.ProjectID,
+				EnvironmentID: environmentID,
+				Message:       "Artifact staging failed: " + err.Error(),
+			},
+			true,
+		)
+		return
+	}
+	if stage.volume == "" {
+		r.localWork.Done()
+		artifactWork = false
+	}
+	if stage.volume != "" {
+		if _, exists := envMap["ARTIFACT_PATH"]; exists {
+			r.failStep(
+				ctx,
+				runCtx,
+				events.Event{
+					Type:          events.DeploymentFailed,
+					DeploymentID:  deploymentID,
+					ProjectID:     release.ProjectID,
+					EnvironmentID: environmentID,
+					Message:       "ARTIFACT_PATH conflicts with a snapshotted variable",
+				},
+				true,
+			)
+			return
+		}
+		envMap["ARTIFACT_PATH"] = artifactMount
+	}
+	defer func() {
+		if err := r.cleanupArtifact(deploymentID); err != nil {
+			r.persistCompletion(
+				ctx,
+				runCtx,
+				deploymentID,
+				"cleanup_unconfirmed",
+				false,
+			)
+		}
+	}()
 
 	for stepIndex, step := range steps {
 		if runCtx.Err() != nil {
@@ -233,6 +302,7 @@ func (r *DeploymentRunner) Run(
 				logWriter:    logWriter,
 				environment:  envMap,
 				attempt:      attempt,
+				artifact:     stage,
 			})
 			if lastErr == nil {
 				break

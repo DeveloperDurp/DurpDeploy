@@ -88,6 +88,53 @@ func (q *Queries) GetProject(ctx context.Context, id int64) (Project, error) {
 	return i, err
 }
 
+const hasActiveProjectDeployment = `-- name: HasActiveProjectDeployment :one
+SELECT CASE WHEN EXISTS (
+    SELECT 1 FROM deployments d JOIN releases r ON r.id = d.release_id
+    WHERE r.project_id = ?1
+      AND (d.status IN ('pending', 'running', 'pending_approval', 'cleanup_unconfirmed')
+        OR EXISTS (SELECT 1 FROM remote_deployment_claims c WHERE c.deployment_id = d.id
+            AND c.state IN ('claimed', 'started', 'cancel_requested', 'lost', 'cancel_unconfirmed'))
+        OR EXISTS (SELECT 1 FROM remote_step_runs s WHERE s.deployment_id = d.id
+            AND s.state IN ('claimed', 'started', 'cancel_requested', 'lost', 'cancel_unconfirmed')))
+) THEN 1 ELSE 0 END
+`
+
+func (q *Queries) HasActiveProjectDeployment(ctx context.Context, projectID int64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, hasActiveProjectDeployment, projectID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const listProjectDeploymentIDs = `-- name: ListProjectDeploymentIDs :many
+SELECT d.id FROM deployments d JOIN releases r ON r.id = d.release_id
+WHERE r.project_id = ?
+`
+
+func (q *Queries) ListProjectDeploymentIDs(ctx context.Context, projectID int64) ([]int64, error) {
+	rows, err := q.db.QueryContext(ctx, listProjectDeploymentIDs, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listProjects = `-- name: ListProjects :many
 SELECT id, name, description, created_at, lifecycle_id, slack_webhook_url, notify_emails, gotify_url, gotify_token, discord_webhook_url FROM projects ORDER BY created_at DESC
 `
@@ -170,7 +217,20 @@ func (q *Queries) ListProjectsPaginated(ctx context.Context, arg ListProjectsPag
 	return items, nil
 }
 
+const lockProject = `-- name: LockProject :execrows
+UPDATE projects SET name = name WHERE id = ?
+`
+
+func (q *Queries) LockProject(ctx context.Context, id int64) (int64, error) {
+	result, err := q.db.ExecContext(ctx, lockProject, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const setProjectLifecycle = `-- name: SetProjectLifecycle :exec
+
 UPDATE projects SET lifecycle_id = ? WHERE id = ?
 `
 
@@ -179,6 +239,7 @@ type SetProjectLifecycleParams struct {
 	ID          int64         `json:"id"`
 }
 
+// NOSONAR: intentional write lock
 func (q *Queries) SetProjectLifecycle(ctx context.Context, arg SetProjectLifecycleParams) error {
 	_, err := q.db.ExecContext(ctx, setProjectLifecycle, arg.LifecycleID, arg.ID)
 	return err
