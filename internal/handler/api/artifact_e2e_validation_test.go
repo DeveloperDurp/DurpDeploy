@@ -32,6 +32,8 @@ func (f *artifactE2E) verifyRemoteSnapshotRejection(
 		422,
 	)
 	f.changePackage("package")
+	// Keep refresh validation on an unused snapshot; used releases are immutable.
+	unused := verificationRelease(t, f, "refresh-validation")
 	steps, err := f.h.repo.Queries.ListStepsByProject(t.Context(), f.project.ID)
 	if err != nil || len(steps) == 0 {
 		t.Fatalf("missing steps: %v", err)
@@ -56,9 +58,16 @@ func (f *artifactE2E) verifyRemoteSnapshotRejection(
 	f.api(
 		t,
 		"POST",
-		fmt.Sprintf("%s/releases/%d/refresh", f.base(), releaseID),
+		fmt.Sprintf("%s/releases/%d/refresh", f.base(), unused.ID),
 		nil,
 		422,
+	)
+	f.api(
+		t,
+		"POST",
+		fmt.Sprintf("%s/releases/%d/refresh", f.base(), releaseID),
+		nil,
+		409,
 	)
 	placement.ExecutionTarget = "local"
 	if _, err := f.h.repo.Queries.SetStepExecutionTarget(

@@ -18,14 +18,19 @@ type Client struct {
 }
 
 func NewClient() *Client {
+	return &Client{
+		HTTP: &http.Client{Transport: NewTransport(), Timeout: 5 * time.Minute},
+	}
+}
+
+// NewTransport enforces the outbound network boundary for operator URLs.
+func NewTransport() *http.Transport {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.Proxy = nil // Repository credentials must not reach environment proxies.
 	transport.DialContext = dialRepository
 	transport.TLSHandshakeTimeout = 10 * time.Second
 	transport.ResponseHeaderTimeout = 30 * time.Second
-	return &Client{
-		HTTP: &http.Client{Transport: transport, Timeout: 5 * time.Minute},
-	}
+	return transport
 }
 
 func dialRepository(

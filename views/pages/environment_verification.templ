@@ -1,0 +1,59 @@
+package pages
+
+import (
+	"durpdeploy/internal/db"
+	"fmt"
+	"strconv"
+)
+
+templ EnvironmentVerificationFields(env *db.Environment) {
+	<fieldset class="space-y-4 w-full">
+		<legend class="text-xl font-bold">Post-deployment verification</legend>
+		<p class="text-sm opacity-70">Verification must pass before a deployment succeeds. Changes apply to new deployments.</p>
+		<div class="form-control">
+			<label class="label" for="verification-type"><span class="label-text">Check type</span></label>
+			<select id="verification-type" name="verification_type" class="select select-bordered">
+				<option value="" selected?={ env.VerificationType == "" }>Disabled</option>
+				<option value="http" selected?={ env.VerificationType == "http" }>HTTP</option>
+				<option value="bash" selected?={ env.VerificationType == "bash" }>Bash</option>
+			</select>
+		</div>
+		<div class="form-control">
+			<label class="label" for="verification-target"><span class="label-text">HTTP URL or Bash command</span></label>
+			<textarea id="verification-target" name="verification_target" class="textarea textarea-bordered font-mono" aria-describedby="verification-help">{ env.VerificationTarget }</textarea>
+			<p id="verification-help" class="text-sm opacity-70 mt-1">HTTP sends one GET from the server and requires a 2xx response. Bash uses the final step's container or matching agents and selected release variables. Local containers have no network access. Use variables for secrets.</p>
+		</div>
+		<div class="form-control">
+			<label class="label" for="verification-timeout"><span class="label-text">Timeout (seconds)</span></label>
+			<input id="verification-timeout" type="number" name="verification_timeout_seconds" min="1" max="300" value={ verificationTimeoutValue(env) } class="input input-bordered" required/>
+		</div>
+	</fieldset>
+}
+
+templ DeploymentVerificationStatus(deployment db.Deployment, check db.DeploymentVerification) {
+	<div class="card bg-base-200 p-4 space-y-2"
+		hx-get={ fmt.Sprintf("/deployments/%d/verification", deployment.ID) }
+		if !isTerminalStatus(deployment.Status) && check.Status != "disabled" {
+			hx-trigger="every 3s"
+		} else {
+			hx-trigger="none"
+		}
+		hx-swap="outerHTML" aria-live="polite">
+		<h2 class="text-xl font-bold">Verification</h2>
+		<p>{ check.Status }
+			if check.Type != "" {
+				<span class="text-sm opacity-70"> ({ check.Type }, { strconv.FormatInt(check.TimeoutSeconds, 10) }s timeout)</span>
+			}
+		</p>
+		if check.Status != "disabled" {
+			<p class="text-sm opacity-70">Verification output appears in the deployment logs.</p>
+		}
+	</div>
+}
+
+func verificationTimeoutValue(env *db.Environment) string {
+	if env.VerificationTimeoutSeconds == 0 {
+		return "30"
+	}
+	return strconv.FormatInt(env.VerificationTimeoutSeconds, 10)
+}

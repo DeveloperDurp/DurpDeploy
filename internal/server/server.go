@@ -322,6 +322,9 @@ func newRouter(
 			dpr.Post("/deployments/{id}/cancel", dh.CancelDeployment)
 			dpr.Post("/deployments/{id}/approve", dh.ApproveDeployment)
 			dpr.Post("/deployments/{id}/redeploy", dh.RedeployDeployment)
+			dpr.Get("/deployments/{id}/rollback", dh.RollbackConfirmation)
+			dpr.Post("/deployments/{id}/rollback", dh.RollbackDeployment)
+			dpr.Get("/deployments/{id}/verification", dh.GetVerification)
 
 			dpr.Get("/deployments/{id}/logs/stream", lh.StreamLogs)
 			dpr.Get("/deployments/{id}/logs.txt", lh.ExportLogs)
@@ -614,6 +617,7 @@ func newRouter(
 
 			dar.Get("/deployments/{id}", apiDepH.GetDeployment)
 			dar.Get("/deployments/{id}/status", apiDepH.GetDeploymentStatus)
+			dar.Get("/deployments/{id}/verification", apiDepH.GetVerification)
 			dar.Get("/deployments/{id}/logs", apiDepH.ListDeploymentLogs)
 			dar.Get("/deployments/{id}/logs/stream", apiLogH.StreamLogs)
 			dar.Get("/deployments/{id}/logs.txt", apiLogH.ExportLogs)
@@ -622,6 +626,8 @@ func newRouter(
 			dar.Post("/deployments/{id}/cancel", apiDepH.CancelDeployment)
 			dar.Post("/deployments/{id}/retry", apiDepH.RetryDeployment)
 			dar.Post("/deployments/{id}/redeploy", apiDepH.RedeployDeployment)
+			dar.Get("/deployments/{id}/rollback", apiDepH.PreviewRollback)
+			dar.Post("/deployments/{id}/rollback", apiDepH.RollbackDeployment)
 
 			dar.Group(func(aar chi.Router) {
 				aar.Use(auth.RequireRole("admin"))

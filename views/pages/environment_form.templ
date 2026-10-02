@@ -1,6 +1,7 @@
 package pages
 
 import (
+	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
 	"durpdeploy/views/layouts"
 	"strconv"
@@ -82,6 +83,13 @@ templ EnvironmentFormContent(env *db.Environment, isNew bool, errorMsg string) {
 					<span class="label-text">Tags</span>
 				</label>
 				<input type="text" name="tags" value={ env.Tags.String } class="input input-bordered" placeholder="comma, separated, tags"/>
+			</div>
+			<div class="flex gap-2">
+				if auth.RoleFromContext(ctx) == "admin" {
+					@EnvironmentVerificationFields(env)
+				} else {
+					<p class="text-sm opacity-70">Only admins can configure post-deployment verification.</p>
+				}
 			</div>
 			<div class="flex gap-2">
 				<button type="submit" class="btn btn-primary">

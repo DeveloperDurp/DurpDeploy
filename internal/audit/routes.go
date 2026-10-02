@@ -4,6 +4,8 @@ package audit
 // registered in server.go. New routes need one map entry; the fallback
 // heuristic catches anything missed with a lossy name.
 var actionMap = map[string]string{
+	"POST /deployments/{id}/rollback":                    "rollback_deployment",
+	"POST /api/v1/deployments/{id}/rollback":             "rollback_deployment",
 	"POST /projects/{id}/package-repository":             "save_package_repository",
 	"POST /projects/{id}/package-repository/delete":      "remove_package_repository",
 	"POST /projects/{id}/package-repository/test":        "test_package_repository",

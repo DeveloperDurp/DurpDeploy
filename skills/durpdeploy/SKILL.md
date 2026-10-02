@@ -119,7 +119,9 @@ or refresh; recreate their steps and create a new release (`409` on launch).
 5. **Release** (immutable snapshot of current steps + variables)
    `POST /api/v1/projects/$PID/releases` `{"version":"1.2.0"}` → `id`.
    Later step edits do NOT affect it; `POST /projects/$PID/releases/$RID/refresh`
-   re-snapshots a current release, but cannot upgrade an old image-less one.
+   re-snapshots an unused release. Once any deployment is created, refresh
+   returns `409`; create a new release to change its variables or steps.
+   Refresh also cannot upgrade an old image-less release.
    `DELETE /api/v1/projects/$PID/releases/$RID` returns `204` when removed,
    `404` if absent or in another project, and `409` if it has active or
    unconfirmed deployments. It also deletes schedules and terminal deployment
@@ -141,13 +143,72 @@ done
    - `pending_approval` → an admin `POST /api/v1/deployments/$DID/approve`
      (`{"approved_by":"alice"}`) unblocks it. Non-admin tokens get 403.
    - failure → `GET /api/v1/deployments/$DID/logs` (JSON lines, secrets are
-      redacted) and `GET /.../logs.txt`; fix, create a new release or refresh
-      a current one, then redeploy with
+      redacted) and `GET /.../logs.txt`; fix and create a new release, then redeploy with
      `POST /api/v1/deployments/$DID/redeploy`.
     - `POST /api/v1/deployments/$DID/cancel` stops a running deploy.
     - `cleanup_unconfirmed` means container removal failed. Retry and redeploy
       return `409`; do not re-execute until a successful startup runtime sweep
       changes the deployment to `failed`.
+
+## Post-deployment verification and rollback
+
+Only global admins can configure verification, because environments are
+shared across projects. `POST /api/v1/environments` and
+`PUT /api/v1/environments/$EID` accept:
+
+```json
+{
+  "name": "prod",
+  "verification_type": "http",
+  "verification_target": "https://service.example.com/health",
+  "verification_timeout_seconds": 30
+}
+```
+
+Types are `""` (disabled), `http`, and `bash`. Timeout defaults to 30 seconds
+and must be 1–300. An update that omits verification fields preserves them.
+The configuration is frozen on deployment creation, including deployments
+waiting for approval. HTTP performs one server-side GET; only 2xx succeeds.
+Redirects, URL user credentials, loopback, link-local/metadata addresses,
+environment proxies, and DNS rebinding are rejected; private unicast service
+addresses are allowed. Use a release secret variable for sensitive Bash values.
+
+Bash runs after all steps using the last step's container image or matching
+agents, selected variables, and artifact mount. It always uses Bash, with no
+retries; agents must support Bash. Local containers retain their existing
+no-network restrictions. Bash verification requires at least one step.
+Verification output uses the same secret scrubber as deployment logs.
+Failure marks the deployment failed, records a verification audit event, and
+emits the standard failure notification. Cancellation waits for container
+cleanup or remote acknowledgement as normal.
+
+`GET /api/v1/deployments/$DID/verification` returns safe metadata (type,
+timeout, status, timestamps); commands and URLs are omitted. A deployment
+without a check returns `{"status":"disabled"}`. The deployment detail page
+also shows verification status and redacted output in its logs.
+
+Rollback is manual:
+
+1. `GET /api/v1/deployments/$DID/rollback` previews exact source and target
+   versions, environment, and lifecycle/approval state. It selects the latest
+   earlier successful different release in the same project/environment.
+2. Confirm `target_deployment_id` from that preview with
+   `POST /api/v1/deployments/$DID/rollback` and
+   `{"target_deployment_id":123}`. Success returns `201` with a **new**
+   deployment. The web confirmation is `/deployments/$DID/rollback`.
+3. Poll, approve, cancel, and inspect that new deployment as usual.
+
+The source must be the latest terminal deployment and no execution in that
+project/environment may still be active or unconfirmed. Missing history,
+stale confirmation, or an overlapping submission returns `409`; a lifecycle
+gate returns `422`. Rollback cannot force a gate. Viewers cannot submit it;
+project authorization and admin-only approval still apply. The new deployment
+reuses the prior successful deployment's frozen steps and package pin and the
+release's frozen variables, then runs the environment's current verification.
+It records rollback provenance and an audit entry. Migration locks releases
+already used by historical deployments; values overwritten by a refresh
+before this feature cannot be reconstructed. Mutable container image tags
+also remain mutable; use digests when exact image contents matter.
 
 ## Gates (know the 422s)
 

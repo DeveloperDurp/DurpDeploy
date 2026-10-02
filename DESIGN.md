@@ -71,6 +71,16 @@ keep `overflow-x-auto` and `table table-zebra table-fixed w-full`.
 - Configuration replacement preserves historical package pins, and the page
   states that saving affects only future snapshots.
 
+### Deployment verification and rollback
+- Verification uses the existing form fields, a native type selector, and
+  supporting text explaining timeout and execution placement. Every new field
+  has an explicit label; invalid input uses the existing form error region.
+- Rollback uses a secondary action and a confirmation form with source and
+  target versions, environment, and approval/gate status. The selected target
+  is submitted explicitly so stale confirmations fail safely.
+- Viewers see verification results but no rollback write control. All new
+  surfaces wrap at small widths and keep the existing semantic focus states.
+
 ## 6. Motion & Interaction
 
 Existing interaction is intentionally minimal: native `details` disclosure,

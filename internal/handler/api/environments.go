@@ -5,9 +5,11 @@ import (
 	"errors"
 	"net/http"
 
+	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/handler"
 	"durpdeploy/internal/repository"
+	"durpdeploy/internal/verification"
 )
 
 type EnvironmentHandler struct {
@@ -19,9 +21,36 @@ func NewEnvironmentHandler(repo *repository.Repository) *EnvironmentHandler {
 }
 
 type environmentRequest struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Tags        string `json:"tags"`
+	Name                       string  `json:"name"`
+	Description                string  `json:"description"`
+	Tags                       string  `json:"tags"`
+	VerificationType           *string `json:"verification_type"`
+	VerificationTarget         *string `json:"verification_target"`
+	VerificationTimeoutSeconds *int64  `json:"verification_timeout_seconds"`
+}
+
+func (req environmentRequest) hasVerification() bool {
+	return req.VerificationType != nil || req.VerificationTarget != nil ||
+		req.VerificationTimeoutSeconds != nil
+}
+
+func (req environmentRequest) verification(
+	env db.Environment,
+) (verification.Settings, error) {
+	if req.VerificationType != nil {
+		env.VerificationType = *req.VerificationType
+	}
+	if req.VerificationTarget != nil {
+		env.VerificationTarget = *req.VerificationTarget
+	}
+	if req.VerificationTimeoutSeconds != nil {
+		env.VerificationTimeoutSeconds = *req.VerificationTimeoutSeconds
+	}
+	return verification.Parse(
+		env.VerificationType,
+		env.VerificationTarget,
+		env.VerificationTimeoutSeconds,
+	)
 }
 
 // swagger:route GET /environments environments listEnvironments
@@ -116,10 +145,26 @@ func (h *EnvironmentHandler) CreateEnvironment(
 		return
 	}
 
+	if req.hasVerification() && auth.RoleFromContext(r.Context()) != "admin" {
+		RespondError(
+			w,
+			http.StatusForbidden,
+			"Only admins can configure verification",
+		)
+		return
+	}
+	check, err := req.verification(db.Environment{})
+	if err != nil {
+		RespondError(w, http.StatusUnprocessableEntity, err.Error())
+		return
+	}
 	env, err := h.repo.Queries.CreateEnvironment(
 		r.Context(),
 		db.CreateEnvironmentParams{
-			Name: name,
+			Name:                       name,
+			VerificationType:           string(check.Kind),
+			VerificationTarget:         check.Target,
+			VerificationTimeoutSeconds: check.TimeoutSeconds,
 			Description: sql.NullString{
 				String: req.Description,
 				Valid:  req.Description != "",
@@ -231,11 +276,45 @@ func (h *EnvironmentHandler) UpdateEnvironment(
 		return
 	}
 
+	if req.hasVerification() && auth.RoleFromContext(r.Context()) != "admin" {
+		RespondError(
+			w,
+			http.StatusForbidden,
+			"Only admins can configure verification",
+		)
+		return
+	}
+	current, err := h.repo.Queries.GetEnvironment(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			RespondError(w, http.StatusNotFound, "Environment not found")
+		} else {
+			RespondError(
+				w,
+				http.StatusInternalServerError,
+				"Cannot load environment",
+			)
+		}
+		return
+	}
+	check, err := req.verification(current)
+	if err != nil {
+		RespondError(w, http.StatusUnprocessableEntity, err.Error())
+		return
+	}
+	var configure int64
+	if req.hasVerification() {
+		configure = 1
+	}
 	env, err := h.repo.Queries.UpdateEnvironment(
 		r.Context(),
 		db.UpdateEnvironmentParams{
-			ID:   id,
-			Name: name,
+			ID:                         id,
+			ConfigureVerification:      configure,
+			Name:                       name,
+			VerificationType:           string(check.Kind),
+			VerificationTarget:         check.Target,
+			VerificationTimeoutSeconds: check.TimeoutSeconds,
 			Description: sql.NullString{
 				String: req.Description,
 				Valid:  req.Description != "",

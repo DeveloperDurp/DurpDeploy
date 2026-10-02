@@ -23,10 +23,15 @@ SELECT COUNT(*) FROM environments;
 SELECT * FROM environments WHERE id = ?;
 
 -- name: CreateEnvironment :one
-INSERT INTO environments (name, description, tags) VALUES (?, ?, ?) RETURNING *;
+INSERT INTO environments (name, description, tags, verification_type, verification_target, verification_timeout_seconds)
+VALUES (sqlc.arg(name), sqlc.narg(description), sqlc.narg(tags), sqlc.arg(verification_type), sqlc.arg(verification_target), COALESCE(NULLIF(CAST(sqlc.arg(verification_timeout_seconds) AS INTEGER), 0), 30)) RETURNING *;
 
 -- name: UpdateEnvironment :one
-UPDATE environments SET name = ?, description = ?, tags = ? WHERE id = ? RETURNING *;
+UPDATE environments SET name = sqlc.arg(name), description = sqlc.narg(description), tags = sqlc.narg(tags),
+verification_type = CASE WHEN CAST(sqlc.arg(configure_verification) AS INTEGER) = 1 THEN sqlc.arg(verification_type) ELSE verification_type END,
+verification_target = CASE WHEN CAST(sqlc.arg(configure_verification) AS INTEGER) = 1 THEN sqlc.arg(verification_target) ELSE verification_target END,
+verification_timeout_seconds = CASE WHEN CAST(sqlc.arg(configure_verification) AS INTEGER) = 1 THEN COALESCE(NULLIF(CAST(sqlc.arg(verification_timeout_seconds) AS INTEGER), 0), 30) ELSE verification_timeout_seconds END
+WHERE id = sqlc.arg(id) RETURNING *;
 
 -- name: DeleteEnvironment :exec
 DELETE FROM environments WHERE id = ?;

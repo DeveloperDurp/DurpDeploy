@@ -6,11 +6,14 @@ package api
 // Environment represents a deployment target.
 // swagger:model Environment
 type swaggerEnvironment struct {
-	ID          int64   `json:"id"`
-	Name        string  `json:"name"`
-	Description *string `json:"description"`
-	Tags        *string `json:"tags"`
-	CreatedAt   int64   `json:"created_at"`
+	ID                         int64   `json:"id"`
+	Name                       string  `json:"name"`
+	Description                *string `json:"description"`
+	Tags                       *string `json:"tags"`
+	CreatedAt                  int64   `json:"created_at"`
+	VerificationType           string  `json:"verification_type"`
+	VerificationTarget         string  `json:"verification_target"`
+	VerificationTimeoutSeconds int64   `json:"verification_timeout_seconds"`
 }
 
 // Lifecycle represents a deployment promotion pipeline.
@@ -86,11 +89,12 @@ type swaggerStepTemplateVersion struct {
 // Release is an immutable snapshot of project steps and variables.
 // swagger:model Release
 type swaggerRelease struct {
-	ID        int64  `json:"id"`
-	ProjectID int64  `json:"project_id"`
-	Version   string `json:"version"`
-	StepsJSON string `json:"steps_json"`
-	CreatedAt int64  `json:"created_at"`
+	ID             int64  `json:"id"`
+	ProjectID      int64  `json:"project_id"`
+	Version        string `json:"version"`
+	StepsJSON      string `json:"steps_json"`
+	CreatedAt      int64  `json:"created_at"`
+	SnapshotLocked int64  `json:"snapshot_locked"`
 }
 
 // Deployment represents a release executing against an environment.
@@ -342,9 +346,12 @@ type swaggerProjectRequest struct {
 // EnvironmentRequest is the body for create/update environment.
 // swagger:model EnvironmentRequest
 type swaggerEnvironmentRequest struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Tags        string `json:"tags"`
+	Name                       string `json:"name"`
+	Description                string `json:"description"`
+	Tags                       string `json:"tags"`
+	VerificationType           string `json:"verification_type"`
+	VerificationTarget         string `json:"verification_target"`
+	VerificationTimeoutSeconds int64  `json:"verification_timeout_seconds"`
 }
 
 // LifecycleRequest is the body for create/update lifecycle.

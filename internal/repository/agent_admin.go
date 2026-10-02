@@ -75,6 +75,9 @@ func revokeAgent(
 	); err != nil {
 		return false, err
 	}
+	if err := q.ReconcileTerminalVerifications(ctx); err != nil {
+		return false, err
+	}
 	return true, nil
 }
 

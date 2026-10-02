@@ -380,7 +380,10 @@ func recoverPendingDeployments(
 			return err
 		}
 		failed, err = q.FailOrphanedDeployments(ctx, timestamp)
-		return err
+		if err != nil {
+			return err
+		}
+		return q.ReconcileTerminalVerifications(ctx)
 	})
 	if err != nil {
 		slog.Error("startup recovery: fail orphaned deployments", "err", err)

@@ -290,6 +290,11 @@ jobs:
           DURPDEPLOY_CONTAINER_RUNTIME: docker
         run: go test -tags=e2e -count=1 -run '^(TestArtifactsAPIWebContainerE2E|TestArtifactCredentialRotationE2E|TestArtifactSourceReplacementE2E)$' ./internal/handler/api
 
+      - name: Verify deployment checks and rollback through API and web
+        env:
+          DURPDEPLOY_CONTAINER_RUNTIME: docker
+        run: go test -tags=e2e -race -count=1 -timeout=10m -run '^Test(Verification|Rollback).*E2E$' ./internal/handler/api
+
   # ----- Artifact crash recovery and capacity ----------------------------------
   package-browser:
     name: Package repository browser

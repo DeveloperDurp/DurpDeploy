@@ -68,73 +68,79 @@ func (r *Repository) CreateDeploymentFromDeployment(
 	err := withSQLiteBusyRetry(ctx, func() error {
 		result = DeploymentResult{}
 		return r.WithTx(ctx, func(q *db.Queries) error {
-			if err := lockRelease(ctx, q, arg.ReleaseID); err != nil {
-				return err
-			}
-			source, err := q.GetDeployment(ctx, sourceDeploymentID)
-			if err != nil {
-				return fmt.Errorf("get source deployment: %w", err)
-			}
-			if source.Status == "cleanup_unconfirmed" {
-				return ErrContainerCleanupUnconfirmed
-			}
-			if source.ReleaseID != arg.ReleaseID {
-				return errors.New("source deployment release mismatch")
-			}
-			stepSource, err := q.GetDeploymentStepSource(
-				ctx,
-				sourceDeploymentID,
-			)
-			if errors.Is(err, sql.ErrNoRows) {
-				release, releaseErr := q.GetRelease(ctx, arg.ReleaseID)
-				if releaseErr != nil {
-					return fmt.Errorf(
-						"get source release steps: %w",
-						releaseErr,
-					)
-				}
-				stepSource.StepsJson = release.StepsJson
-			} else if err != nil {
-				return fmt.Errorf("get source deployment steps: %w", err)
-			}
-			steps, err := deploymentStepsFromRelease(stepSource.StepsJson)
-			if err != nil {
-				return err
-			}
-			result, err = createDeploymentWithSteps(
-				ctx,
-				q,
-				arg,
-				steps,
-				stepSource.StepsJson,
-			)
-			if err != nil {
-				return err
-			}
-			if err := q.CopyDeploymentArtifact(
-				ctx,
-				db.CopyDeploymentArtifactParams{
-					DeploymentID:   result.Deployment.ID,
-					DeploymentID_2: sourceDeploymentID,
-				},
-			); err != nil {
-				return err
-			}
-			return validateDeploymentArtifact(
-				ctx,
-				q,
-				result.Deployment.ID,
-				steps,
-			)
+			var err error
+			result, err = createDeploymentFromDeployment(ctx, q, arg,
+				sourceDeploymentID)
+			return err
 		})
 	})
 	if err != nil {
 		return DeploymentResult{}, fmt.Errorf(
-			"create deployment from deployment: %w",
+			"create deployment from deployment: %w", err)
+	}
+	return result, nil
+}
+
+func createDeploymentFromDeployment(
+	ctx context.Context, q *db.Queries, arg db.CreateDeploymentParams,
+	sourceDeploymentID int64,
+) (DeploymentResult, error) {
+	if err := lockRelease(ctx, q, arg.ReleaseID); err != nil {
+		return DeploymentResult{}, err
+	}
+	source, err := q.GetDeployment(ctx, sourceDeploymentID)
+	if err != nil {
+		return DeploymentResult{}, fmt.Errorf("get source deployment: %w", err)
+	}
+	if source.Status == "cleanup_unconfirmed" {
+		return DeploymentResult{}, ErrContainerCleanupUnconfirmed
+	}
+	if source.ReleaseID != arg.ReleaseID {
+		return DeploymentResult{}, errors.New(
+			"source deployment release mismatch",
+		)
+	}
+	stepSource, err := q.GetDeploymentStepSource(ctx, sourceDeploymentID)
+	if errors.Is(err, sql.ErrNoRows) {
+		release, releaseErr := q.GetRelease(ctx, arg.ReleaseID)
+		if releaseErr != nil {
+			return DeploymentResult{}, fmt.Errorf(
+				"get source release steps: %w",
+				releaseErr,
+			)
+		}
+		stepSource.StepsJson = release.StepsJson
+	} else if err != nil {
+		return DeploymentResult{}, fmt.Errorf(
+			"get source deployment steps: %w",
 			err,
 		)
 	}
-	return result, nil
+	steps, err := deploymentStepsFromRelease(stepSource.StepsJson)
+	if err != nil {
+		return DeploymentResult{}, err
+	}
+	result, err := createDeploymentWithSteps(
+		ctx,
+		q,
+		arg,
+		steps,
+		stepSource.StepsJson,
+	)
+	if err != nil {
+		return DeploymentResult{}, err
+	}
+	if err := q.CopyDeploymentArtifact(ctx, db.CopyDeploymentArtifactParams{
+		DeploymentID: result.Deployment.ID, DeploymentID_2: sourceDeploymentID,
+	}); err != nil {
+		return DeploymentResult{}, err
+	}
+	return result, validateDeploymentArtifact(
+		ctx,
+		q,
+		result.Deployment.ID,
+		steps,
+	)
 }
 
 func (r *Repository) createDeployment(
@@ -185,6 +191,13 @@ func createDeploymentWithSteps(
 	deployment, err := q.CreateDeployment(ctx, arg)
 	if err != nil {
 		return DeploymentResult{}, fmt.Errorf("insert deployment: %w", err)
+	}
+	if err := q.MarkReleaseSnapshotLocked(ctx, arg.ReleaseID); err != nil {
+		return DeploymentResult{}, fmt.Errorf("lock release snapshot: %w", err)
+	}
+	steps, err = snapshotVerification(ctx, q, deployment, steps)
+	if err != nil {
+		return DeploymentResult{}, err
 	}
 	if err := snapshotDeploymentStepsFromSource(
 		ctx,

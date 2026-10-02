@@ -250,7 +250,7 @@ func (d *Dispatcher) Maintain(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		return nil
+		return q.ReconcileTerminalVerifications(ctx)
 	})
 	if err != nil {
 		return fmt.Errorf("maintain agent dispatch: %w", err)
