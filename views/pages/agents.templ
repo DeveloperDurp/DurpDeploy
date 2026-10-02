@@ -109,7 +109,7 @@ templ AgentsPage(agents []db.Agent, interpreters map[string][]string, health map
 										<span class="font-medium">{ agent.Name }</span>
 										<div class="truncate font-mono text-xs opacity-60">{ agent.ID }</div>
 										<div class="mt-1 text-xs opacity-70 whitespace-normal">{ fmt.Sprint(len(health[agent.ID].CurrentWork)) } current · { fmt.Sprint(health[agent.ID].QueuedWork) } queued</div>
-										<div class="mt-1 flex flex-wrap gap-1">
+										<div class="mt-1 flex flex-wrap gap-1 whitespace-normal">
 											if len(interpreters[agent.ID]) == 0 {
 												<span class="text-xs opacity-60">Interpreters not reported</span>
 											} else {
