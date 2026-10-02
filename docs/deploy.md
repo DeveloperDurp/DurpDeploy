@@ -436,6 +436,8 @@ cleanup. To verify another rootless installation, run the real API test against
 its socket:
 
 ```bash
+go tool templ generate
+make swagger-ui-copy
 DURPDEPLOY_CONTAINER_RUNTIME=podman \
 DURPDEPLOY_CONTAINER_URL="unix://${XDG_RUNTIME_DIR}/podman/podman.sock" \
 go test -tags=e2e -count=1 -run '^TestDeploymentStagingCleanupE2E$' ./internal/handler/api
