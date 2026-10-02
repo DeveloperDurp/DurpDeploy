@@ -308,7 +308,7 @@ func runServer() {
 	recoverPendingDeployments(ctx, rnr, repo)
 
 	addr := browserListener.Addr().String()
-	srv := &http.Server{Addr: addr, Handler: r}
+	srv := newHTTPServer(addr, r)
 
 	// Graceful shutdown: on SIGINT/SIGTERM, stop accepting new connections
 	// and SIGKILL any in-flight deploy step's process group so a restart

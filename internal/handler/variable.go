@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"net/http"
@@ -41,6 +42,47 @@ func NewVariableHandler(repo *repository.Repository) *VariableHandler {
 	return &VariableHandler{repo: repo}
 }
 
+func (h *VariableHandler) variableEnvironments(
+	ctx context.Context,
+	project db.Project,
+) (pages.VariableEnvironments, error) {
+	all, options, err := h.repo.VariableEnvironments(ctx, project)
+	return pages.VariableEnvironments{All: all, Options: options}, err
+}
+
+func (h *VariableHandler) variableEnvironmentScope(
+	w http.ResponseWriter,
+	r *http.Request,
+	projectID int64,
+	requestedID string,
+) (sql.NullInt64, bool) {
+	var environmentID sql.NullInt64
+	if requestedID != "" {
+		id, err := strconv.ParseInt(requestedID, 10, 64)
+		if err != nil || id <= 0 {
+			http.Error(w, "Invalid environment ID", http.StatusBadRequest)
+			return environmentID, false
+		}
+		environmentID = sql.NullInt64{Int64: id, Valid: true}
+	}
+	allowed, err := h.repo.VariableEnvironmentAllowed(
+		r.Context(), projectID, environmentID,
+	)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return environmentID, false
+	}
+	if !allowed {
+		http.Error(
+			w,
+			"Environment is not in project lifecycle",
+			http.StatusUnprocessableEntity,
+		)
+		return environmentID, false
+	}
+	return environmentID, true
+}
+
 func (h *VariableHandler) ListVariables(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -70,7 +112,7 @@ func (h *VariableHandler) ListVariables(
 		return
 	}
 
-	environments, err := h.repo.Queries.ListEnvironments(r.Context())
+	environments, err := h.variableEnvironments(r.Context(), project)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -109,8 +151,8 @@ func (h *VariableHandler) CreateVariable(
 	}
 
 	if name == "" {
-		environments, _ := h.repo.Queries.ListEnvironments(r.Context())
 		project, _ := h.repo.Queries.GetProject(r.Context(), projectID)
+		environments, _ := h.variableEnvironments(r.Context(), project)
 		variables, _ := h.repo.ListVariablesByProject(
 			r.Context(),
 			projectID,
@@ -130,14 +172,9 @@ func (h *VariableHandler) CreateVariable(
 		return
 	}
 
-	var envID sql.NullInt64
-	if envIDStr != "" {
-		id, err := strconv.ParseInt(envIDStr, 10, 64)
-		if err != nil {
-			http.Error(w, "Invalid environment ID", http.StatusBadRequest)
-			return
-		}
-		envID = sql.NullInt64{Int64: id, Valid: true}
+	envID, ok := h.variableEnvironmentScope(w, r, projectID, envIDStr)
+	if !ok {
+		return
 	}
 
 	params := db.CreateVariableParams{
@@ -154,8 +191,8 @@ func (h *VariableHandler) CreateVariable(
 			return
 		}
 		if IsUniqueViolation(err) {
-			environments, _ := h.repo.Queries.ListEnvironments(r.Context())
 			project, _ := h.repo.Queries.GetProject(r.Context(), projectID)
+			environments, _ := h.variableEnvironments(r.Context(), project)
 			variables, _ := h.repo.ListVariablesByProject(
 				r.Context(),
 				projectID,
@@ -218,7 +255,12 @@ func (h *VariableHandler) EditVariable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	environments, err := h.repo.Queries.ListEnvironments(r.Context())
+	project, err := h.repo.Queries.GetProject(r.Context(), projectID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	environments, err := h.variableEnvironments(r.Context(), project)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -275,12 +317,12 @@ func (h *VariableHandler) UpdateVariable(
 			Value:     sql.NullString{String: value, Valid: value != ""},
 			Secret:    secret,
 		}
-		environments, _ := h.repo.Queries.ListEnvironments(r.Context())
+		project, _ := h.repo.Queries.GetProject(r.Context(), projectID)
+		environments, _ := h.variableEnvironments(r.Context(), project)
 		if envIDStr != "" {
 			id, _ := strconv.ParseInt(envIDStr, 10, 64)
 			variable.EnvironmentID = sql.NullInt64{Int64: id, Valid: true}
 		}
-		project, _ := h.repo.Queries.GetProject(r.Context(), projectID)
 		variables, _ := h.repo.ListVariablesByProject(
 			r.Context(),
 			projectID,
@@ -305,14 +347,9 @@ func (h *VariableHandler) UpdateVariable(
 		return
 	}
 
-	var envID sql.NullInt64
-	if envIDStr != "" {
-		id, err := strconv.ParseInt(envIDStr, 10, 64)
-		if err != nil {
-			http.Error(w, "Invalid environment ID", http.StatusBadRequest)
-			return
-		}
-		envID = sql.NullInt64{Int64: id, Valid: true}
+	envID, ok := h.variableEnvironmentScope(w, r, projectID, envIDStr)
+	if !ok {
+		return
 	}
 
 	// Blank value on a still-secret variable preserves the
@@ -352,8 +389,8 @@ func (h *VariableHandler) UpdateVariable(
 				EnvironmentID: envID,
 				Secret:        secret,
 			}
-			environments, _ := h.repo.Queries.ListEnvironments(r.Context())
 			project, _ := h.repo.Queries.GetProject(r.Context(), projectID)
+			environments, _ := h.variableEnvironments(r.Context(), project)
 			variables, _ := h.repo.ListVariablesByProject(
 				r.Context(),
 				projectID,
@@ -446,7 +483,7 @@ func (h *VariableHandler) renderVariablesFragment(
 		return
 	}
 
-	environments, err := h.repo.Queries.ListEnvironments(r.Context())
+	environments, err := h.variableEnvironments(r.Context(), project)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

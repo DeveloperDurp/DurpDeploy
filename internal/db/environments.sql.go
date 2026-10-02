@@ -90,6 +90,47 @@ func (q *Queries) HasActiveEnvironmentDeployment(ctx context.Context, environmen
 	return column_1, err
 }
 
+const listDeploymentEnvironmentsForUser = `-- name: ListDeploymentEnvironmentsForUser :many
+SELECT e.id, e.name, e.description, e.tags, e.created_at FROM environments e
+WHERE EXISTS (
+    SELECT 1 FROM deployments d
+    JOIN releases r ON r.id = d.release_id
+    JOIN project_members pm ON pm.project_id = r.project_id
+    WHERE d.environment_id = e.id AND d.kind = 'deployment'
+      AND pm.user_id = ?1
+)
+ORDER BY e.created_at DESC
+`
+
+func (q *Queries) ListDeploymentEnvironmentsForUser(ctx context.Context, userID int64) ([]Environment, error) {
+	rows, err := q.db.QueryContext(ctx, listDeploymentEnvironmentsForUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Environment
+	for rows.Next() {
+		var i Environment
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Description,
+			&i.Tags,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listEnvironmentDeploymentIDs = `-- name: ListEnvironmentDeploymentIDs :many
 SELECT id FROM deployments WHERE environment_id = ?
 `

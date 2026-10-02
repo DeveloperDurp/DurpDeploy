@@ -26,6 +26,35 @@ type variableRequest struct {
 	Secret        bool   `json:"secret"`
 }
 
+func (h *VariableHandler) variableEnvironmentScope(
+	w http.ResponseWriter,
+	r *http.Request,
+	projectID int64,
+	requestedID *int64,
+) (sql.NullInt64, bool) {
+	var scope sql.NullInt64
+	if requestedID != nil {
+		if *requestedID <= 0 {
+			RespondError(w, http.StatusBadRequest, "Invalid environment ID")
+			return scope, false
+		}
+		scope = sql.NullInt64{Int64: *requestedID, Valid: true}
+	}
+	allowed, err := h.repo.VariableEnvironmentAllowed(
+		r.Context(), projectID, scope,
+	)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, err.Error())
+		return scope, false
+	}
+	if !allowed {
+		RespondError(w, http.StatusUnprocessableEntity,
+			"Environment is not in project lifecycle")
+		return scope, false
+	}
+	return scope, true
+}
+
 type variableResponse struct {
 	ID            int64  `json:"id"`
 	ProjectID     int64  `json:"project_id"`
@@ -197,6 +226,7 @@ func (h *VariableHandler) ListVariables(
 //	  201: body:VariableResponse
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
+//	  422: body:ValidationError
 //	  500: body:ServerError
 func (h *VariableHandler) CreateVariable(
 	w http.ResponseWriter,
@@ -228,9 +258,11 @@ func (h *VariableHandler) CreateVariable(
 		return
 	}
 
-	var envID sql.NullInt64
-	if req.EnvironmentID != nil && *req.EnvironmentID > 0 {
-		envID = sql.NullInt64{Int64: *req.EnvironmentID, Valid: true}
+	envID, ok := h.variableEnvironmentScope(
+		w, r, projectID, req.EnvironmentID,
+	)
+	if !ok {
+		return
 	}
 
 	var secret int64
@@ -326,6 +358,7 @@ func (h *VariableHandler) GetVariable(w http.ResponseWriter, r *http.Request) {
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
 //	  404: body:NotFoundError
+//	  422: body:ValidationError
 //	  500: body:ServerError
 func (h *VariableHandler) UpdateVariable(
 	w http.ResponseWriter,
@@ -379,9 +412,11 @@ func (h *VariableHandler) UpdateVariable(
 		return
 	}
 
-	var envID sql.NullInt64
-	if req.EnvironmentID != nil && *req.EnvironmentID > 0 {
-		envID = sql.NullInt64{Int64: *req.EnvironmentID, Valid: true}
+	envID, ok := h.variableEnvironmentScope(
+		w, r, projectID, req.EnvironmentID,
+	)
+	if !ok {
+		return
 	}
 
 	var secret int64

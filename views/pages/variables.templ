@@ -44,7 +44,24 @@ func variableEditValue(variable db.Variable) string {
 	return variable.Value.String
 }
 
-templ VariablesPage(project db.Project, variables []db.Variable, environments []db.Environment, errorMsg string, currentPath string) {
+func variableScopeAvailable(variable db.Variable, environments []db.Environment) bool {
+	if !variable.EnvironmentID.Valid {
+		return true
+	}
+	for _, environment := range environments {
+		if environment.ID == variable.EnvironmentID.Int64 {
+			return true
+		}
+	}
+	return false
+}
+
+type VariableEnvironments struct {
+	All     []db.Environment
+	Options []db.Environment
+}
+
+templ VariablesPage(project db.Project, variables []db.Variable, environments VariableEnvironments, errorMsg string, currentPath string) {
 	@layouts.Base("Variables", currentPath) {
 		@components.Breadcrumbs([]components.Crumb{
 			{Label: "Home", Href: "/"},
@@ -56,7 +73,7 @@ templ VariablesPage(project db.Project, variables []db.Variable, environments []
 	}
 }
 
-templ VariablesContent(project db.Project, variables []db.Variable, environments []db.Environment, errorMsg string) {
+templ VariablesContent(project db.Project, variables []db.Variable, environments VariableEnvironments, errorMsg string) {
 	<div class="space-y-6">
 		<div class="flex justify-between items-center">
 			<h1 class="text-3xl font-bold">Variables — { project.Name }</h1>
@@ -68,7 +85,7 @@ templ VariablesContent(project db.Project, variables []db.Variable, environments
 	</div>
 }
 
-templ VariablesFragment(project db.Project, variables []db.Variable, environments []db.Environment, errorMsg string) {
+templ VariablesFragment(project db.Project, variables []db.Variable, environments VariableEnvironments, errorMsg string) {
 	<div
 		id="variables-content"
 		x-data="variablesPage"
@@ -82,7 +99,7 @@ templ VariablesFragment(project db.Project, variables []db.Variable, environment
 	</div>
 }
 
-templ VariableForm(projectID int64, environments []db.Environment, errorMsg string) {
+templ VariableForm(projectID int64, environments VariableEnvironments, errorMsg string) {
 	<div class="card bg-base-200 p-4 mb-6">
 		<h3 class="text-lg font-bold mb-4">New Variable</h3>
 		<form
@@ -115,7 +132,7 @@ templ VariableForm(projectID int64, environments []db.Environment, errorMsg stri
  				</label>
 				<select name="environment_id" class="select select-bordered w-full min-w-0">
  					<option value="">Unscoped</option>
- 					for _, env := range environments {
+				for _, env := range environments.Options {
  						<option value={ strconv.FormatInt(env.ID, 10) }>{ env.Name }</option>
  					}
  				</select>
@@ -132,7 +149,7 @@ templ VariableForm(projectID int64, environments []db.Environment, errorMsg stri
 	</div>
 }
 
-templ VariablesTable(project db.Project, variables []db.Variable, environments []db.Environment) {
+templ VariablesTable(project db.Project, variables []db.Variable, environments VariableEnvironments) {
 	<table class="hidden md:table table-zebra table-fixed w-full">
 		<thead>
 			<tr>
@@ -198,7 +215,7 @@ templ VariablesTable(project db.Project, variables []db.Variable, environments [
 	</div>
 }
 
-templ VariableRow(projectID int64, variable db.Variable, environments []db.Environment) {
+templ VariableRow(projectID int64, variable db.Variable, environments VariableEnvironments) {
 	<tr id={ fmt.Sprintf("variable-row-%d", variable.ID) } x-data={ fmt.Sprintf("{ editing: false, secret: %v }", variable.Secret != 0) }>
 		<td class="font-medium truncate">{ variable.Name }</td>
  	<td class="truncate">
@@ -212,7 +229,7 @@ templ VariableRow(projectID int64, variable db.Variable, environments []db.Envir
 		</td>
 <td class="truncate">
 		if variable.EnvironmentID.Valid {
-			{ envNameForID(environments, variable.EnvironmentID.Int64) }
+			{ envNameForID(environments.All, variable.EnvironmentID.Int64) }
 		} else {
 			<span class="badge badge-ghost badge-sm">Global</span>
 		}
@@ -266,7 +283,7 @@ templ VariableRow(projectID int64, variable db.Variable, environments []db.Envir
 	</tr>
 }
 
-templ VariableQuickEditForm(projectID int64, variable db.Variable, environments []db.Environment) {
+templ VariableQuickEditForm(projectID int64, variable db.Variable, environments VariableEnvironments) {
 	<form
 		hx-put={ fmt.Sprintf("/projects/%d/variables/%d", projectID, variable.ID) }
 		hx-target="#variables-content"
@@ -287,7 +304,10 @@ templ VariableQuickEditForm(projectID int64, variable db.Variable, environments 
 			<label class="label"><span class="label-text">Environment</span></label>
 			<select name="environment_id" class="select select-bordered select-sm w-full">
 				<option value="">Unscoped</option>
-				for _, env := range environments {
+				if !variableScopeAvailable(variable, environments.Options) {
+					<option value={ strconv.FormatInt(variable.EnvironmentID.Int64, 10) } selected hidden>Choose a new scope (current scope is outside lifecycle)</option>
+				}
+				for _, env := range environments.Options {
 					if variable.EnvironmentID.Valid && env.ID == variable.EnvironmentID.Int64 {
 						<option value={ strconv.FormatInt(env.ID, 10) } selected>{ env.Name }</option>
 					} else {
@@ -307,7 +327,7 @@ templ VariableQuickEditForm(projectID int64, variable db.Variable, environments 
 	</form>
 }
 
-templ VariableMobileRecord(projectID int64, variable db.Variable, environments []db.Environment) {
+templ VariableMobileRecord(projectID int64, variable db.Variable, environments VariableEnvironments) {
 	<li class="card bg-base-200 p-4 space-y-3" data-mobile-variable={ strconv.FormatInt(variable.ID, 10) } x-data={ fmt.Sprintf("{ editing: false, secret: %v }", variable.Secret != 0) }>
 		<div class="min-w-0">
 			<p class="text-sm text-gray-400">Variable</p>
@@ -330,7 +350,7 @@ templ VariableMobileRecord(projectID int64, variable db.Variable, environments [
 				<dt class="text-gray-400">Environment</dt>
 				<dd class="break-words">
 					if variable.EnvironmentID.Valid {
-						{ envNameForID(environments, variable.EnvironmentID.Int64) }
+						{ envNameForID(environments.All, variable.EnvironmentID.Int64) }
 					} else {
 						<span class="badge badge-ghost badge-sm">Global</span>
 					}
@@ -386,7 +406,7 @@ templ VariableMobileRecord(projectID int64, variable db.Variable, environments [
 	</li>
 }
 
-templ VariableEditRow(projectID int64, variable db.Variable, environments []db.Environment, errorMsg string) {
+templ VariableEditRow(projectID int64, variable db.Variable, environments VariableEnvironments, errorMsg string) {
 	<tr id={ fmt.Sprintf("variable-row-%d", variable.ID) } x-data={ fmt.Sprintf("{ secret: %v }", variable.Secret != 0) }>
 		<td class="font-medium">
 			<form
@@ -408,7 +428,10 @@ templ VariableEditRow(projectID int64, variable db.Variable, environments []db.E
 		<td>
 			<select name="environment_id" form={ fmt.Sprintf("variable-edit-form-%d", variable.ID) } class="select select-bordered select-sm w-full">
 				<option value="">Unscoped</option>
-				for _, env := range environments {
+				if !variableScopeAvailable(variable, environments.Options) {
+					<option value={ strconv.FormatInt(variable.EnvironmentID.Int64, 10) } selected hidden>Choose a new scope (current scope is outside lifecycle)</option>
+				}
+				for _, env := range environments.Options {
 					if variable.EnvironmentID.Valid && env.ID == variable.EnvironmentID.Int64 {
 						<option value={ strconv.FormatInt(env.ID, 10) } selected>{ env.Name }</option>
 					} else {

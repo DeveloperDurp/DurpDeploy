@@ -1174,27 +1174,30 @@ func TestStreamLogs_SSE(t *testing.T) {
 		WithContext(ctx)
 	req = withAPIUser(req, u)
 	req = withAPIURLParam(req, "id", fmt.Sprint(d.ID))
-	rec := httptest.NewRecorder()
-
-	done := make(chan struct{})
-	go func() {
-		api.NewLogHandler(h.broker, h.repo).StreamLogs(rec, req)
-		close(done)
-	}()
-
-	select {
-	case <-done:
-	case <-time.After(time.Second):
-		t.Fatal("handler did not return after context timeout")
+	srv := httptest.NewServer(
+		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			api.NewLogHandler(h.broker, h.repo).StreamLogs(w, req)
+		}),
+	)
+	defer closeStreamServer(t, srv)
+	srv.Client().Timeout = time.Second
+	resp, err := srv.Client().Get(srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rec.Code)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
 	}
-	if ct := rec.Header().Get("Content-Type"); ct != "text/event-stream" {
+	if ct := resp.Header.Get("Content-Type"); ct != "text/event-stream" {
 		t.Fatalf("expected text/event-stream, got %s", ct)
 	}
-	body := rec.Body.String()
+	body := string(data)
 	if !strings.Contains(body, "data: historical log") {
 		t.Fatalf("expected historical log in body, got %s", body)
 	}
@@ -1229,27 +1232,30 @@ func TestStreamLogs_NDJSON(t *testing.T) {
 		WithContext(ctx)
 	req = withAPIUser(req, u)
 	req = withAPIURLParam(req, "id", fmt.Sprint(d.ID))
-	rec := httptest.NewRecorder()
-
-	done := make(chan struct{})
-	go func() {
-		api.NewLogHandler(h.broker, h.repo).StreamLogs(rec, req)
-		close(done)
-	}()
-
-	select {
-	case <-done:
-	case <-time.After(time.Second):
-		t.Fatal("handler did not return after context timeout")
+	srv := httptest.NewServer(
+		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			api.NewLogHandler(h.broker, h.repo).StreamLogs(w, req)
+		}),
+	)
+	defer closeStreamServer(t, srv)
+	srv.Client().Timeout = time.Second
+	resp, err := srv.Client().Get(srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rec.Code)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
 	}
-	if ct := rec.Header().Get("Content-Type"); ct != "application/x-ndjson" {
+	if ct := resp.Header.Get("Content-Type"); ct != "application/x-ndjson" {
 		t.Fatalf("expected application/x-ndjson, got %s", ct)
 	}
-	body := rec.Body.String()
+	body := string(data)
 	if !strings.Contains(body, `"line":"historical log"`) {
 		t.Fatalf("expected ndjson line in body, got %s", body)
 	}

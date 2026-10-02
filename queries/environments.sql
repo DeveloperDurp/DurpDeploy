@@ -1,6 +1,17 @@
 -- name: ListEnvironments :many
 SELECT * FROM environments ORDER BY created_at DESC;
 
+-- name: ListDeploymentEnvironmentsForUser :many
+SELECT e.* FROM environments e
+WHERE EXISTS (
+    SELECT 1 FROM deployments d
+    JOIN releases r ON r.id = d.release_id
+    JOIN project_members pm ON pm.project_id = r.project_id
+    WHERE d.environment_id = e.id AND d.kind = 'deployment'
+      AND pm.user_id = sqlc.arg(user_id)
+)
+ORDER BY e.created_at DESC;
+
 -- name: ListEnvironmentsPaginated :many
 SELECT * FROM environments ORDER BY created_at DESC
 LIMIT ? OFFSET ?;

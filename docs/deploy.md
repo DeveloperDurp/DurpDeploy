@@ -10,6 +10,37 @@ Caddy with automatic HTTPS. At the end you will have:
 
 **Time:** ~20 minutes on a fresh VM, assuming DNS is already pointed.
 
+## HTTP connection limits
+
+Both Go listeners enforce these limits, whether a proxy is present or not:
+
+| Phase | Limit |
+| --- | --- |
+| Request headers | 5 seconds |
+| Whole request read, including headers and body | 30 seconds |
+| Ordinary response writes | 60 seconds after headers are read |
+| Idle keep-alive connection | 60 seconds |
+
+Read limits are absolute deadlines, not inactivity timers. Slowly sending a
+few bytes does not extend them. Existing password-form and agent-protocol
+body-size limits still apply. A timeout can close the connection without an
+HTTP error response; clients must not depend on a particular status code.
+
+Deployment and runbook log streams (SSE and NDJSON), plus deployment SSE
+events, have no total response lifetime limit. Each event write and flush
+has a fresh 60-second deadline; a failed write ends the stream. The deadline
+is cleared between events, so quiet periods do not expire healthy streams.
+Clients must keep consuming output and reconnect after a disconnect.
+
+Caddy fronts browser/API traffic, not the direct mTLS agent listener. Keep
+the plain HTTP browser backend on a private network or loopback in production.
+The Go limits protect backend connections, not slow clients held by a proxy:
+configure defensive client header/body limits at your proxy too. Proxies must
+flush SSE/NDJSON promptly and allow long-lived responses, including quiet
+periods; a finite proxy response/idle timeout can still cut a stream short.
+The shipped Caddy configuration has no finite upstream response lifetime
+limit. Do not add a blanket response timeout to streaming paths.
+
 ---
 
 ## Quick start: Docker Compose (recommended for self-hosting)

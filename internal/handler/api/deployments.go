@@ -13,6 +13,7 @@ import (
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/gate"
+	"durpdeploy/internal/httpstream"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/runner"
 )
@@ -172,7 +173,7 @@ func (h *DeploymentHandler) CreateDeployment(
 
 // swagger:route GET /deployments deployments listAllDeployments
 //
-// List all deployments across all projects.
+// List deployments in projects accessible to the caller. Global admins see all projects.
 //
 //	Produces:
 //	- application/json
@@ -182,8 +183,16 @@ func (h *DeploymentHandler) CreateDeployment(
 //	Security:
 //	  bearer:
 //
+//	Parameters:
+//	  + name: project_id
+//	    in: query
+//	    description: Positive project ID; inaccessible or nonexistent projects return an empty list.
+//	    type: integer
+//	    format: int64
+//
 //	Responses:
 //	  200: body:DeploymentListResponse
+//	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
 //	  500: body:ServerError
 
@@ -209,6 +218,15 @@ func (h *DeploymentHandler) ListDeployments(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
+	user := auth.UserFromContext(r.Context())
+	if user == nil {
+		RespondError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+	var isAdmin int64
+	if user.Role == "admin" {
+		isAdmin = 1
+	}
 	var fProjectID sql.NullInt64
 	if idStr := chi.URLParam(r, "id"); idStr != "" {
 		projectID, err := strconv.ParseInt(idStr, 10, 64)
@@ -228,6 +246,17 @@ func (h *DeploymentHandler) ListDeployments(
 			return
 		}
 		fProjectID = sql.NullInt64{Int64: projectID, Valid: true}
+	}
+	if !fProjectID.Valid {
+		if value := r.URL.Query().Get("project_id"); value != "" {
+			projectID, err := strconv.ParseInt(value, 10, 64)
+			if err != nil || projectID <= 0 {
+				RespondError(w, http.StatusBadRequest,
+					"project_id must be a positive integer")
+				return
+			}
+			fProjectID = sql.NullInt64{Int64: projectID, Valid: true}
+		}
 	}
 	limit, offset, ok := parsePagination(w, r)
 	if !ok {
@@ -282,6 +311,8 @@ func (h *DeploymentHandler) ListDeployments(
 	deployments, err := h.repo.Queries.ListDeploymentsWithRefsFiltered(
 		r.Context(),
 		db.ListDeploymentsWithRefsFilteredParams{
+			UserID:     user.ID,
+			IsAdmin:    isAdmin,
 			FProjectID: fProjectID,
 			FEnvID:     fEnvID,
 			FStatus:    fStatus,
@@ -299,6 +330,8 @@ func (h *DeploymentHandler) ListDeployments(
 	total, err := h.repo.Queries.CountDeploymentsWithRefsFiltered(
 		r.Context(),
 		db.CountDeploymentsWithRefsFilteredParams{
+			UserID:     user.ID,
+			IsAdmin:    isAdmin,
 			FProjectID: fProjectID,
 			FEnvID:     fEnvID,
 			FStatus:    fStatus,
@@ -885,8 +918,8 @@ func (h *DeploymentHandler) DeploymentEvents(
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
 
-	flusher, ok := w.(http.Flusher)
-	if !ok {
+	stream, err := httpstream.New(w)
+	if err != nil {
 		RespondError(w, http.StatusInternalServerError, "Streaming unsupported")
 		return
 	}
@@ -895,9 +928,8 @@ func (h *DeploymentHandler) DeploymentEvents(
 		r.Context(),
 		depID,
 		func(log db.DeploymentLog) error {
-			fmt.Fprintf(w, "data: %s\n\n", log.Line)
-			flusher.Flush()
-			return nil
+			_, err := fmt.Fprintf(stream, "data: %s\n\n", log.Line)
+			return err
 		},
 	); err != nil {
 		return
@@ -911,8 +943,9 @@ func (h *DeploymentHandler) DeploymentEvents(
 		case <-r.Context().Done():
 			return
 		case line := <-ch:
-			fmt.Fprintf(w, "data: %s\n\n", line)
-			flusher.Flush()
+			if _, err := fmt.Fprintf(stream, "data: %s\n\n", line); err != nil {
+				return
+			}
 		}
 	}
 }

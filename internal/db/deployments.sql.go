@@ -72,14 +72,17 @@ JOIN releases r ON d.release_id = r.id
 JOIN projects p ON r.project_id = p.id
 JOIN environments e ON d.environment_id = e.id
 WHERE d.kind = 'deployment'
-  AND (CAST(?1 AS INTEGER) IS NULL OR d.release_id IN (SELECT id FROM releases WHERE project_id = CAST(?1 AS INTEGER)))
-  AND (CAST(?2     AS INTEGER) IS NULL OR d.environment_id = CAST(?2 AS INTEGER))
-  AND (CAST(?3     AS TEXT)    IS NULL OR d.status = CAST(?3 AS TEXT))
-  AND (CAST(?4  AS INTEGER) IS NULL OR d.created_at >= CAST(?4 AS INTEGER))
-  AND (CAST(?5    AS INTEGER) IS NULL OR d.created_at <= CAST(?5 AS INTEGER))
+  AND (CAST(?1 AS INTEGER) = 1 OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = ?2))
+  AND (CAST(?3 AS INTEGER) IS NULL OR d.release_id IN (SELECT id FROM releases WHERE project_id = CAST(?3 AS INTEGER)))
+  AND (CAST(?4     AS INTEGER) IS NULL OR d.environment_id = CAST(?4 AS INTEGER))
+  AND (CAST(?5     AS TEXT)    IS NULL OR d.status = CAST(?5 AS TEXT))
+  AND (CAST(?6  AS INTEGER) IS NULL OR d.created_at >= CAST(?6 AS INTEGER))
+  AND (CAST(?7    AS INTEGER) IS NULL OR d.created_at <= CAST(?7 AS INTEGER))
 `
 
 type CountDeploymentsWithRefsFilteredParams struct {
+	IsAdmin    int64          `json:"is_admin"`
+	UserID     int64          `json:"user_id"`
 	FProjectID sql.NullInt64  `json:"f_project_id"`
 	FEnvID     sql.NullInt64  `json:"f_env_id"`
 	FStatus    sql.NullString `json:"f_status"`
@@ -89,6 +92,8 @@ type CountDeploymentsWithRefsFilteredParams struct {
 
 func (q *Queries) CountDeploymentsWithRefsFiltered(ctx context.Context, arg CountDeploymentsWithRefsFilteredParams) (int64, error) {
 	row := q.db.QueryRowContext(ctx, countDeploymentsWithRefsFiltered,
+		arg.IsAdmin,
+		arg.UserID,
 		arg.FProjectID,
 		arg.FEnvID,
 		arg.FStatus,
@@ -464,16 +469,19 @@ JOIN releases r ON d.release_id = r.id
 JOIN projects p ON r.project_id = p.id
 JOIN environments e ON d.environment_id = e.id
 WHERE d.kind = 'deployment'
-  AND (CAST(?1 AS INTEGER) IS NULL OR d.release_id IN (SELECT id FROM releases WHERE project_id = CAST(?1 AS INTEGER)))
-  AND (CAST(?2     AS INTEGER) IS NULL OR d.environment_id = CAST(?2 AS INTEGER))
-  AND (CAST(?3     AS TEXT)    IS NULL OR d.status = CAST(?3 AS TEXT))
-  AND (CAST(?4  AS INTEGER) IS NULL OR d.created_at >= CAST(?4 AS INTEGER))
-  AND (CAST(?5    AS INTEGER) IS NULL OR d.created_at <= CAST(?5 AS INTEGER))
+  AND (CAST(?1 AS INTEGER) = 1 OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = ?2))
+  AND (CAST(?3 AS INTEGER) IS NULL OR d.release_id IN (SELECT id FROM releases WHERE project_id = CAST(?3 AS INTEGER)))
+  AND (CAST(?4     AS INTEGER) IS NULL OR d.environment_id = CAST(?4 AS INTEGER))
+  AND (CAST(?5     AS TEXT)    IS NULL OR d.status = CAST(?5 AS TEXT))
+  AND (CAST(?6  AS INTEGER) IS NULL OR d.created_at >= CAST(?6 AS INTEGER))
+  AND (CAST(?7    AS INTEGER) IS NULL OR d.created_at <= CAST(?7 AS INTEGER))
 ORDER BY d.created_at DESC
-LIMIT ?7 OFFSET ?6
+LIMIT ?9 OFFSET ?8
 `
 
 type ListDeploymentsWithRefsFilteredParams struct {
+	IsAdmin    int64          `json:"is_admin"`
+	UserID     int64          `json:"user_id"`
 	FProjectID sql.NullInt64  `json:"f_project_id"`
 	FEnvID     sql.NullInt64  `json:"f_env_id"`
 	FStatus    sql.NullString `json:"f_status"`
@@ -501,6 +509,8 @@ type ListDeploymentsWithRefsFilteredRow struct {
 
 func (q *Queries) ListDeploymentsWithRefsFiltered(ctx context.Context, arg ListDeploymentsWithRefsFilteredParams) ([]ListDeploymentsWithRefsFilteredRow, error) {
 	rows, err := q.db.QueryContext(ctx, listDeploymentsWithRefsFiltered,
+		arg.IsAdmin,
+		arg.UserID,
 		arg.FProjectID,
 		arg.FEnvID,
 		arg.FStatus,

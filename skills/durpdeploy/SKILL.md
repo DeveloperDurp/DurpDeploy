@@ -112,7 +112,10 @@ or refresh; recreate their steps and create a new release (`409` on launch).
 
 4. **Variables** (optional) `POST /api/v1/projects/$PID/variables`
    `{"name":"API_URL","value":"...","environment_id":N}` — resolved at
-   deploy time for the target environment.
+   deploy time for the target environment. Omit `environment_id` (or use
+   `null`) for Unscoped. On projects bound to a lifecycle, create and update
+   accept only its stage environments; other IDs return `422`. Projects
+   without a lifecycle can use any environment.
 5. **Release** (immutable snapshot of current steps + variables)
    `POST /api/v1/projects/$PID/releases` `{"version":"1.2.0"}` → `id`.
    Later step edits do NOT affect it; `POST /projects/$PID/releases/$RID/refresh`
@@ -186,6 +189,14 @@ for the latest. Its response includes the runbook execution `id` and the
 underlying `deployment_id`. Read the execution at
 `/api/v1/projects/$PID/runbook-executions/$XID`, logs at `/logs`, and live
 logs at `/logs/stream` (SSE by default, `?format=ndjson` for NDJSON).
+
+HTTP headers must arrive within 5 seconds, and the complete request body
+within 30 seconds from the start of the request read. Ordinary responses
+have a 60-second write budget. Deployment/runbook SSE and NDJSON streams
+have no total lifetime limit, but each event write/flush must finish within
+60 seconds. Consume streams continuously and reconnect after disconnects.
+An operator's reverse proxy may impose additional limits.
+
 Execution actions are `POST .../$XID/cancel`, `/approve` (admin only),
 and `/retry` (after a terminal status). Retry returns `409` while the source
 execution has a lost or unconfirmed remote outcome; inspect the agent before
@@ -218,7 +229,7 @@ Once deployments are terminal, environment deletion removes their history.
 | Steps | `/api/v1/projects/{id}/steps[/{stepId}]` (`POST/GET/PUT/DELETE`, `PATCH /steps/reorder`) |
 | Variables | `/api/v1/projects/{id}/variables[/{varId}]` |
 | Releases | `/api/v1/projects/{id}/releases[/{relId}]` (`GET/POST/DELETE`), `POST .../refresh` |
-| Deployments | `POST /api/v1/projects/{id}/deployments`, `GET /api/v1/deployments` (list) |
+| Deployments | `POST /api/v1/projects/{id}/deployments`, `GET /api/v1/deployments` (member projects; global admins see all; optional positive `project_id` filter) |
 | Deployment detail | `GET /deployments/{id}`, `/status`, `/logs`, `/logs/{logId}` |
 | Actions | `POST /deployments/{id}/cancel\|redeploy`; admin-only `POST .../approve` |
 | Runbooks | `/api/v1/projects/{id}/runbooks[/{runbookId}]`, `/runbook-executions[/{executionId}]` |

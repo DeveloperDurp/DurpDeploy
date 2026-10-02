@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/httpstream"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/runner"
 )
@@ -85,8 +87,8 @@ func (h *LogHandler) streamDeploymentLogs(
 		w.Header().Set("X-Accel-Buffering", "no")
 	}
 
-	flusher, ok := w.(http.Flusher)
-	if !ok {
+	stream, err := httpstream.New(w)
+	if err != nil {
 		RespondError(w, http.StatusInternalServerError, "Streaming unsupported")
 		return
 	}
@@ -95,8 +97,7 @@ func (h *LogHandler) streamDeploymentLogs(
 		r.Context(),
 		depID,
 		func(log db.DeploymentLog) error {
-			h.writeLogLine(w, flusher, log, ndjson)
-			return nil
+			return h.writeLogLine(stream, log, ndjson)
 		},
 	); err != nil {
 		return
@@ -110,33 +111,35 @@ func (h *LogHandler) streamDeploymentLogs(
 		case <-r.Context().Done():
 			return
 		case line := <-ch:
+			var err error
 			if ndjson {
-				fmt.Fprintf(w, `{"line":%q,"step":""}`+"\n", line)
+				_, err = fmt.Fprintf(stream, `{"line":%q,"step":""}`+"\n", line)
 			} else {
-				fmt.Fprintf(w, "data: %s\n\n", line)
+				_, err = fmt.Fprintf(stream, "data: %s\n\n", line)
 			}
-			flusher.Flush()
+			if err != nil {
+				return
+			}
 		}
 	}
 }
 
 func (h *LogHandler) writeLogLine(
-	w http.ResponseWriter,
-	flusher http.Flusher,
+	w io.Writer,
 	log db.DeploymentLog,
 	ndjson bool,
-) {
+) error {
 	if ndjson {
 		step := ""
 		if log.StepName.Valid {
 			step = log.StepName.String
 		}
-		enc := json.NewEncoder(w)
-		_ = enc.Encode(map[string]string{"line": log.Line, "step": step})
-	} else {
-		fmt.Fprintf(w, "data: %s\n\n", log.Line)
+		return json.NewEncoder(w).Encode(
+			map[string]string{"line": log.Line, "step": step},
+		)
 	}
-	flusher.Flush()
+	_, err := fmt.Fprintf(w, "data: %s\n\n", log.Line)
+	return err
 }
 
 // ExportLogs returns deployment logs as a plain text file.
