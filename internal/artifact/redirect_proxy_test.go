@@ -51,7 +51,7 @@ func TestProductionClientEnforcesRedirectBoundary(t *testing.T) {
 					case "cross-origin":
 						target = destination.URL + "/final.zip"
 					case "redirect-loop":
-						target = r.URL.Path
+						target = "/1.zip"
 					}
 					http.Redirect(w, r, target, http.StatusFound)
 				}),
@@ -101,13 +101,21 @@ func TestProductionClientEnforcesRedirectBoundary(t *testing.T) {
 func TestProductionClientRejectsHTTPSDowngradeOnSameAuthority(t *testing.T) {
 	// Given: the exact same host/port can receive TLS and plaintext HTTP.
 	var plaintext atomic.Bool
+	var downgradeTarget atomic.Pointer[string]
 	server, client := artifactTLSServer(
 		t,
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			http.Redirect(w, r, "http://"+r.Host+"/final.zip", http.StatusFound)
+			http.Redirect(w, r, *downgradeTarget.Load(), http.StatusFound)
 		}),
 		&plaintext,
 	)
+	target := strings.Replace(
+		server.URL,
+		"https://",
+		"http://",
+		1,
+	) + "/final.zip"
+	downgradeTarget.Store(&target)
 	probe, err := http.Get(
 		strings.Replace(server.URL, "https://", "http://", 1),
 	)
