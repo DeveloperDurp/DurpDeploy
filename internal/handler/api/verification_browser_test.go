@@ -236,10 +236,17 @@ func TestVerificationRollbackBrowserE2E(t *testing.T) {
 		"document.querySelector('[name=target_deployment_id]') !== null",
 	)
 	// When: the user confirms through the browser's native form submission.
+	browser.wire.events = nil
 	browser.evaluate(
 		t,
 		"setTimeout(() => document.querySelector('form[action$=rollback]').requestSubmit(), 100); true",
 	)
+	if err := browser.wire.waitEvent(
+		"Page.frameStoppedLoading",
+		browser.session,
+	); err != nil {
+		t.Fatal(err)
+	}
 	browser.wait(
 		t,
 		"location.pathname !== "+fmt.Sprintf(
