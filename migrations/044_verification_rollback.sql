@@ -27,11 +27,8 @@ CREATE INDEX deployment_rollback_lookup ON deployments(environment_id, kind, cre
 
 -- +goose Down
 -- +goose StatementBegin
-DROP INDEX deployment_rollback_lookup;
-DROP TABLE deployment_rollbacks;
-DROP TABLE deployment_verifications;
-ALTER TABLE releases DROP COLUMN snapshot_locked;
-ALTER TABLE environments DROP COLUMN verification_timeout_seconds;
-ALTER TABLE environments DROP COLUMN verification_target;
-ALTER TABLE environments DROP COLUMN verification_type;
+CREATE TABLE verification_rollback_refused (
+    guard INTEGER CONSTRAINT verification_requires_forward_migration CHECK (guard = 0)
+);
+INSERT INTO verification_rollback_refused VALUES (1);
 -- +goose StatementEnd
