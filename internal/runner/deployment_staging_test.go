@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"durpdeploy/internal/containerenv"
 	"durpdeploy/internal/db"
@@ -172,5 +173,50 @@ func TestShutdownRemovesStagingBetweenLocalSteps(t *testing.T) {
 	// Then: staging is drained even though no step completion triggered cleanup.
 	if len(r.staging) != 0 {
 		t.Fatal("shutdown left staging resources registered")
+	}
+}
+
+func TestDeploymentStageTerminalRetryPreservesOutcome(t *testing.T) {
+	for _, status := range []string{"succeeded", "failed"} {
+		t.Run(status, func(t *testing.T) {
+			body := ""
+			if status == "failed" {
+				body = `case "$3" in run) exit 7;; esac`
+			}
+			r, repo, _ := podmanFixture(t, body)
+			dep := stagingDeployment(t, repo)
+			// Given: only terminal status writes temporarily fail.
+			_, err := repo.DB.ExecContext(t.Context(), `
+CREATE TRIGGER reject_terminal BEFORE UPDATE OF status ON deployments
+WHEN NEW.status IN ('succeeded', 'failed')
+BEGIN SELECT RAISE(FAIL, 'terminal write unavailable'); END`)
+			if err != nil {
+				t.Fatal(err)
+			}
+			// When: Run returns before its background persistence retry.
+			r.Run(t.Context(), dep.ID, dep.ReleaseID, dep.EnvironmentID)
+			if _, err := repo.DB.ExecContext(t.Context(),
+				"DROP TRIGGER reject_terminal"); err != nil {
+				t.Fatal(err)
+			}
+			// Then: cleanup and returning from Run do not change the outcome.
+			deadline := time.Now().Add(3 * time.Second)
+			for {
+				stored, err := repo.Queries.GetDeployment(t.Context(), dep.ID)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if stored.FinishedAt.Valid {
+					if stored.Status != status || len(r.staging) != 0 {
+						t.Fatalf("deployment=%+v staging=%v", stored, r.staging)
+					}
+					return
+				}
+				if time.Now().After(deadline) {
+					t.Fatalf("terminal retry did not persist: %+v", stored)
+				}
+				time.Sleep(20 * time.Millisecond)
+			}
+		})
 	}
 }

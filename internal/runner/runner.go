@@ -60,7 +60,6 @@ func (r *DeploymentRunner) Run(
 	deploymentID, releaseID, environmentID int64,
 ) {
 	runCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
 	r.mu.Lock()
 	if r.stopping {
 		r.mu.Unlock()
