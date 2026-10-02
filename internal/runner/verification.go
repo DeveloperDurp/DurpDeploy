@@ -67,6 +67,13 @@ func (r *DeploymentRunner) verifyDeployment(
 	if check.Type == string(verification.HTTP) && checkCtx.Err() != nil {
 		err = checkCtx.Err()
 	}
+	return r.finishVerification(ctx, runCtx, deploymentID, writer, err)
+}
+
+func (r *DeploymentRunner) finishVerification(
+	ctx, runCtx context.Context, deploymentID int64,
+	writer *broadcastWriter, err error,
+) error {
 	if err != nil {
 		message := "Verification failed"
 		if errors.Is(err, context.DeadlineExceeded) {

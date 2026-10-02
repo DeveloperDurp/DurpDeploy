@@ -14,6 +14,32 @@ import (
 	"durpdeploy/internal/repository"
 )
 
+func findRollbackDeployment(
+	t *testing.T, f *artifactE2E, goodID, failedID int64,
+) db.Deployment {
+	t.Helper()
+	var list struct{ Items []db.Deployment }
+	if err := json.Unmarshal(
+		f.api(t, "GET", f.base()+"/deployments", nil, 200), &list,
+	); err != nil {
+		t.Fatal(err)
+	}
+	var rolledBack db.Deployment
+	for _, deployment := range list.Items {
+		if deployment.ID == goodID || deployment.ID == failedID {
+			continue
+		}
+		if rolledBack.ID != 0 {
+			t.Fatal("rollback created multiple deployments")
+		}
+		rolledBack = deployment
+	}
+	if rolledBack.ID == 0 {
+		t.Fatal("rollback created no new deployment")
+	}
+	return rolledBack
+}
+
 func TestRollbackAPIWebContainerE2E(t *testing.T) {
 	// Given: v1 succeeded with a pinned package and snapshotted variables;
 	// v2 failed after project scripts and variables changed.
@@ -77,30 +103,7 @@ func TestRollbackAPIWebContainerE2E(t *testing.T) {
 	f.web(t, "POST", path, url.Values{
 		"target_deployment_id": {fmt.Sprint(preview.TargetDeploymentID)},
 	}, 303)
-	var list struct {
-		Items []db.Deployment `json:"items"`
-	}
-	if err := json.Unmarshal(
-		f.api(t, "GET", f.base()+"/deployments", nil, 200),
-		&list,
-	); err != nil {
-		t.Fatal(err)
-	}
-	if len(list.Items) == 0 {
-		t.Fatal("rollback created no deployment")
-	}
-	var rolledBack db.Deployment
-	for _, deployment := range list.Items {
-		if deployment.ID != good.ID && deployment.ID != failed.ID {
-			if rolledBack.ID != 0 {
-				t.Fatal("rollback created multiple deployments")
-			}
-			rolledBack = deployment
-		}
-	}
-	if rolledBack.ID == 0 {
-		t.Fatal("rollback created no new deployment")
-	}
+	rolledBack := findRollbackDeployment(t, f, good.ID, failed.ID)
 	f.completion(t, rolledBack.ID, events.DeploymentSucceeded)
 
 	// Then: a new audited deployment uses the original script, variables, and pin.

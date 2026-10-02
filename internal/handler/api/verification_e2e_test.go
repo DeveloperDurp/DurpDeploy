@@ -63,72 +63,81 @@ func TestVerificationAPIWebContainerE2E(t *testing.T) {
 func TestVerificationHTTPFailureAndTimeoutE2E(t *testing.T) {
 	for _, scenario := range []string{"failure", "timeout", "redirect", "success"} {
 		t.Run(scenario, func(t *testing.T) {
-			// Given: a service responds unsuccessfully, stalls, redirects, or succeeds.
-			f := newVerificationE2E(t)
-			upstream := verificationUpstream(
-				t,
-				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					switch scenario {
-					case "failure":
-						w.WriteHeader(503)
-					case "timeout":
-						<-r.Context().Done()
-						return
-					case "redirect":
-						http.Redirect(w, r, "http://127.0.0.1/private", 302)
-					}
-					fmt.Fprintln(w, "verification-secret-value")
-				}),
-			)
-			configureVerification(t, f, "http", upstream, 1)
-			release := verificationRelease(t, f, "http-v1")
-
-			// When: HTTP verification runs after the deployment steps.
-			deployment := verificationDeploy(t, f, release)
-			wantEvent, wantStatus := events.DeploymentFailed, "failed"
-			if scenario == "success" {
-				wantEvent, wantStatus = events.DeploymentSucceeded, "succeeded"
-			}
-			f.completion(t, deployment.ID, wantEvent)
-
-			// Then: status, logs, audit, notification history, and web agree.
-			path := fmt.Sprintf("/deployments/%d", deployment.ID)
-			waitVerificationStatus(t, f, deployment.ID, wantStatus)
-			check := string(
-				f.api(t, "GET", "/api/v1"+path+"/verification", nil, 200),
-			)
-			if !strings.Contains(check, `"status":"`+wantStatus+`"`) {
-				t.Fatalf("verification=%s", check)
-			}
-			logs := string(f.api(t, "GET", "/api/v1"+path+"/logs", nil, 200))
-			if strings.Contains(logs, "verification-secret-value") ||
-				!strings.Contains(logs, "Verification "+wantStatus) {
-				t.Fatalf("verification logs=%s", logs)
-			}
-			if scenario == "timeout" && !strings.Contains(logs, "timed out") {
-				t.Fatalf("missing timeout reason: %s", logs)
-			}
-			audit := string(
-				f.api(
-					t,
-					"GET",
-					"/api/v1/admin/audit?action=verification_"+wantStatus,
-					nil,
-					200,
-				),
-			)
-			if !strings.Contains(audit, "verification_"+wantStatus) {
-				t.Fatalf("verification audit=%s", audit)
-			}
-			notifications := string(
-				f.api(t, "GET", "/api/v1/admin/notifications", nil, 200),
-			)
-			if !strings.Contains(notifications, string(wantEvent)) {
-				t.Fatalf("verification notification history=%s", notifications)
-			}
-			f.web(t, "GET", path+"/verification", nil, 200)
+			checkHTTPVerificationScenario(t, scenario)
 		})
 	}
+}
+
+func checkHTTPVerificationScenario(t *testing.T, scenario string) {
+	t.Helper()
+	// Given: a service responds unsuccessfully, stalls, redirects, or succeeds.
+	f := newVerificationE2E(t)
+	upstream := verificationUpstream(
+		t,
+		verificationHTTPResponse(scenario),
+	)
+	configureVerification(t, f, "http", upstream, 1)
+	release := verificationRelease(t, f, "http-v1")
+
+	// When: HTTP verification runs after the deployment steps.
+	deployment := verificationDeploy(t, f, release)
+	wantEvent, wantStatus := events.DeploymentFailed, "failed"
+	if scenario == "success" {
+		wantEvent, wantStatus = events.DeploymentSucceeded, "succeeded"
+	}
+	f.completion(t, deployment.ID, wantEvent)
+
+	// Then: status, logs, audit, notification history, and web agree.
+	path := fmt.Sprintf("/deployments/%d", deployment.ID)
+	waitVerificationStatus(t, f, deployment.ID, wantStatus)
+	check := string(
+		f.api(t, "GET", "/api/v1"+path+"/verification", nil, 200),
+	)
+	if !strings.Contains(check, `"status":"`+wantStatus+`"`) {
+		t.Fatalf("verification=%s", check)
+	}
+	logs := string(f.api(t, "GET", "/api/v1"+path+"/logs", nil, 200))
+	if strings.Contains(logs, "verification-secret-value") ||
+		!strings.Contains(logs, "Verification "+wantStatus) {
+		t.Fatalf("verification logs=%s", logs)
+	}
+	if scenario == "timeout" && !strings.Contains(logs, "timed out") {
+		t.Fatalf("missing timeout reason: %s", logs)
+	}
+	audit := string(
+		f.api(
+			t,
+			"GET",
+			"/api/v1/admin/audit?action=verification_"+wantStatus,
+			nil,
+			200,
+		),
+	)
+	if !strings.Contains(audit, "verification_"+wantStatus) {
+		t.Fatalf("verification audit=%s", audit)
+	}
+	notifications := string(
+		f.api(t, "GET", "/api/v1/admin/notifications", nil, 200),
+	)
+	if !strings.Contains(notifications, string(wantEvent)) {
+		t.Fatalf("verification notification history=%s", notifications)
+	}
+	f.web(t, "GET", path+"/verification", nil, 200)
+}
+
+func verificationHTTPResponse(scenario string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch scenario {
+		case "failure":
+			w.WriteHeader(503)
+		case "timeout":
+			<-r.Context().Done()
+			return
+		case "redirect":
+			http.Redirect(w, r, "http://127.0.0.1/private", 302)
+		}
+		fmt.Fprintln(w, "verification-secret-value")
+	})
 }
 
 func TestVerificationCancellationAndSnapshotE2E(t *testing.T) {
@@ -188,19 +197,7 @@ func TestVerificationBashCancellationAndTimeoutE2E(t *testing.T) {
 			)
 			path := fmt.Sprintf("/api/v1/deployments/%d", deployment.ID)
 			if scenario == "cancel" {
-				deadline := time.NewTimer(30 * time.Second)
-				defer deadline.Stop()
-				for {
-					logs := string(f.api(t, "GET", path+"/logs", nil, 200))
-					if strings.Contains(logs, "verification-blocking") {
-						break
-					}
-					select {
-					case <-deadline.C:
-						t.Fatal("Bash check did not start")
-					case <-time.After(50 * time.Millisecond):
-					}
-				}
+				waitVerificationLog(t, f, path, "verification-blocking")
 				// When: an operator cancels the check through the API.
 				f.api(t, "POST", path+"/cancel", nil, 200)
 				waitVerificationStatus(t, f, deployment.ID, "cancelled")
@@ -218,5 +215,22 @@ func TestVerificationBashCancellationAndTimeoutE2E(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func waitVerificationLog(t *testing.T, f *artifactE2E, path, text string) {
+	t.Helper()
+	deadline := time.NewTimer(30 * time.Second)
+	defer deadline.Stop()
+	for {
+		logs := string(f.api(t, "GET", path+"/logs", nil, 200))
+		if strings.Contains(logs, text) {
+			return
+		}
+		select {
+		case <-deadline.C:
+			t.Fatalf("verification output did not appear: %q", text)
+		case <-time.After(50 * time.Millisecond):
+		}
 	}
 }

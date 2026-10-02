@@ -49,11 +49,8 @@ func TestRemoteVerificationRoutingAndShutdown(t *testing.T) {
 	done := make(chan struct{})
 	go func() { defer close(done); rnr.Run(ctx, created.Deployment.ID, release.ID, environment.ID) }()
 	for index := int64(0); index < 2; index++ {
-		select {
-		case <-repo.RemoteWorkReady():
-		case <-time.After(5 * time.Second):
-			t.Fatal("remote step was not queued")
-		}
+		awaitVerificationSignal(t, repo.RemoteWorkReady(), 5*time.Second,
+			"remote step was not queued")
 		runs, err := repo.Queries.ListRemoteStepRuns(
 			ctx,
 			db.ListRemoteStepRunsParams{
@@ -88,11 +85,8 @@ func TestRemoteVerificationRoutingAndShutdown(t *testing.T) {
 	// When: shutdown cancels the remote check while awaiting agent acknowledgement.
 	shutdown := make(chan struct{})
 	go func() { rnr.KillAll(); close(shutdown) }()
-	select {
-	case <-shutdown:
-	case <-time.After(time.Second):
-		t.Fatal("shutdown waited for remote confirmation")
-	}
+	awaitVerificationSignal(t, shutdown, time.Second,
+		"shutdown waited for remote confirmation")
 	// Then: local shutdown drains promptly, and the remote run still needs confirmation.
 	if _, err := repo.DB.ExecContext(
 		ctx,
@@ -101,11 +95,8 @@ func TestRemoteVerificationRoutingAndShutdown(t *testing.T) {
 	); err != nil {
 		t.Fatal(err)
 	}
-	select {
-	case <-done:
-	case <-time.After(5 * time.Second):
-		t.Fatal("remote verification did not finish after confirmation")
-	}
+	awaitVerificationSignal(t, done, 5*time.Second,
+		"remote verification did not finish after confirmation")
 	deployment, err := repo.Queries.GetDeployment(ctx, created.Deployment.ID)
 	if err != nil || deployment.Status != "cancelled" {
 		t.Fatalf("deployment=%+v err=%v", deployment, err)
@@ -116,5 +107,16 @@ func TestRemoteVerificationRoutingAndShutdown(t *testing.T) {
 	)
 	if err != nil || check.Status != "cancelled" {
 		t.Fatalf("verification=%+v err=%v", check, err)
+	}
+}
+
+func awaitVerificationSignal(
+	t *testing.T, signal <-chan struct{}, timeout time.Duration, message string,
+) {
+	t.Helper()
+	select {
+	case <-signal:
+	case <-time.After(timeout):
+		t.Fatal(message)
 	}
 }

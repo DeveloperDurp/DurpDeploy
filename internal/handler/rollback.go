@@ -13,6 +13,8 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
+const rollbackRenderError = "Cannot render rollback"
+
 func RollbackErrorStatus(err error) int {
 	var gateErr *repository.RollbackGateError
 	switch {
@@ -42,11 +44,11 @@ func (h *DeploymentHandler) RollbackConfirmation(
 	preview, err := h.repo.PreviewRollback(r.Context(), id)
 	if err != nil {
 		w.WriteHeader(RollbackErrorStatus(err))
-		if renderErr := pages.RollbackUnavailable(id, err.Error(), r.URL.Path).
-			Render(r.Context(), w); renderErr != nil {
+		if pages.RollbackUnavailable(id, err.Error(), r.URL.Path).
+			Render(r.Context(), w) != nil {
 			http.Error(
 				w,
-				"Cannot render rollback",
+				rollbackRenderError,
 				http.StatusInternalServerError,
 			)
 		}
@@ -54,7 +56,7 @@ func (h *DeploymentHandler) RollbackConfirmation(
 	}
 	if err := pages.RollbackConfirmation(preview, r.URL.Path).
 		Render(r.Context(), w); err != nil {
-		http.Error(w, "Cannot render rollback", http.StatusInternalServerError)
+		http.Error(w, rollbackRenderError, http.StatusInternalServerError)
 	}
 }
 
@@ -81,11 +83,11 @@ func (h *DeploymentHandler) RollbackDeployment(
 			return
 		}
 		w.WriteHeader(RollbackErrorStatus(err))
-		if renderErr := pages.RollbackUnavailable(id, err.Error(), r.URL.Path).
-			Render(r.Context(), w); renderErr != nil {
+		if pages.RollbackUnavailable(id, err.Error(), r.URL.Path).
+			Render(r.Context(), w) != nil {
 			http.Error(
 				w,
-				"Cannot render rollback",
+				rollbackRenderError,
 				http.StatusInternalServerError,
 			)
 		}
