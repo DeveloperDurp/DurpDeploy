@@ -24,6 +24,20 @@ func TestVerificationAdminConfigurationE2E(t *testing.T) {
 	)
 	_, f.token = seedAPIToken(t, f.h.repo, deployer.ID)
 	path := fmt.Sprintf("/api/v1/environments/%d", f.environment.ID)
+	assertRedacted := func(response []byte) {
+		t.Helper()
+		if strings.Contains(string(response), "verification_target") ||
+			strings.Contains(string(response), "configured-check") {
+			t.Fatalf("non-admin received verification target: %s", response)
+		}
+	}
+	for _, role := range []string{"deployer", "viewer"} {
+		user := seedAPIUser(t, f.h.repo, role+"-read@example.test", role)
+		_, f.token = seedAPIToken(t, f.h.repo, user.ID)
+		assertRedacted(f.api(t, "GET", path, nil, 200))
+		assertRedacted(f.api(t, "GET", "/api/v1/environments", nil, 200))
+	}
+	_, f.token = seedAPIToken(t, f.h.repo, deployer.ID)
 
 	// When: a deployer tries to replace or disable the check through either surface.
 	for _, kind := range []string{"bash", ""} {
@@ -81,13 +95,13 @@ func TestVerificationAdminConfigurationE2E(t *testing.T) {
 	}
 
 	// Then: ordinary edits preserve the admin's check atomically.
-	f.api(
+	assertRedacted(f.api(
 		t,
 		"PUT",
 		path,
 		map[string]string{"name": f.environment.Name, "description": "edited"},
 		200,
-	)
+	))
 	f.web(
 		t,
 		"PUT",

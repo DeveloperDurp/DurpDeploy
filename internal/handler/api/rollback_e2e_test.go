@@ -89,7 +89,18 @@ func TestRollbackAPIWebContainerE2E(t *testing.T) {
 	if len(list.Items) == 0 {
 		t.Fatal("rollback created no deployment")
 	}
-	rolledBack := list.Items[0]
+	var rolledBack db.Deployment
+	for _, deployment := range list.Items {
+		if deployment.ID != good.ID && deployment.ID != failed.ID {
+			if rolledBack.ID != 0 {
+				t.Fatal("rollback created multiple deployments")
+			}
+			rolledBack = deployment
+		}
+	}
+	if rolledBack.ID == 0 {
+		t.Fatal("rollback created no new deployment")
+	}
 	f.completion(t, rolledBack.ID, events.DeploymentSucceeded)
 
 	// Then: a new audited deployment uses the original script, variables, and pin.

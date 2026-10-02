@@ -167,6 +167,7 @@ shared across projects. `POST /api/v1/environments` and
 
 Types are `""` (disabled), `http`, and `bash`. Timeout defaults to 30 seconds
 and must be 1–300. An update that omits verification fields preserves them.
+Environment responses omit `verification_target` for non-admin callers.
 The configuration is frozen on deployment creation, including deployments
 waiting for approval. HTTP performs one server-side GET; only 2xx succeeds.
 Redirects, URL user credentials, loopback, link-local/metadata addresses,
@@ -177,6 +178,8 @@ Bash runs after all steps using the last step's container image or matching
 agents, selected variables, and artifact mount. It always uses Bash, with no
 retries; agents must support Bash. Local containers retain their existing
 no-network restrictions. Bash verification requires at least one step.
+An empty-step Bash deployment is rejected with 422. A scheduled attempt with
+this configuration is disabled with an actionable `last_error`.
 Verification output uses the same secret scrubber as deployment logs.
 Failure marks the deployment failed, records a verification audit event, and
 emits the standard failure notification. Cancellation waits for container

@@ -6,11 +6,13 @@ import (
 
 	"durpdeploy/internal/artifact"
 	"durpdeploy/internal/repository"
+	"durpdeploy/internal/verification"
 )
 
 func ArtifactErrorStatus(err error) int {
 	switch {
 	case errors.Is(err, artifact.ErrInvalid),
+		errors.Is(err, verification.ErrInvalid),
 		errors.Is(err, artifact.ErrChecksum),
 		errors.Is(err, repository.ErrRemoteArtifactsUnsupported),
 		errors.Is(err, repository.ErrArtifactPathReserved):

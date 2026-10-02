@@ -98,8 +98,19 @@ func TestVerificationRollbackBrowserE2E(t *testing.T) {
 		"document.querySelector('[name=verification_type]').value === 'bash'",
 	)
 	v1 := verificationRelease(t, f, "browser-v1")
+	releasePath := fmt.Sprintf("/projects/%d/releases/%d", f.project.ID, v1.ID)
+	capture(
+		"release-unused",
+		releasePath,
+		"document.querySelector('form[action$=refresh]') !== null",
+	)
 	first := verificationDeploy(t, f, v1)
 	f.completion(t, first.ID, events.DeploymentSucceeded)
+	capture(
+		"release-locked",
+		releasePath,
+		"document.querySelector('form[action$=refresh]') === null && document.body.innerText.includes('snapshot is immutable')",
+	)
 	capture(
 		"succeeded",
 		fmt.Sprintf("/deployments/%d", first.ID),
@@ -254,17 +265,20 @@ func TestVerificationRollbackBrowserE2E(t *testing.T) {
 			rollbackPath,
 		)+" && location.pathname.startsWith('/deployments/') && document.body.innerText.includes('browser-rollback-verified')",
 	)
-	var list struct{ Items []db.Deployment }
+	var latest db.Deployment
+	var currentPath string
 	if err := json.Unmarshal(
-		f.api(t, "GET", f.base()+"/deployments?limit=1", nil, 200),
-		&list,
+		browser.evaluate(t, "location.pathname"),
+		&currentPath,
 	); err != nil {
 		t.Fatal(err)
 	}
-	if len(list.Items) != 1 {
-		t.Fatal("rollback deployment was not created")
+	if err := json.Unmarshal(
+		f.api(t, "GET", "/api/v1"+currentPath, nil, 200),
+		&latest,
+	); err != nil {
+		t.Fatal(err)
 	}
-	latest := list.Items[0]
 	f.completion(t, latest.ID, events.DeploymentSucceeded)
 	capture(
 		"rolled-back",

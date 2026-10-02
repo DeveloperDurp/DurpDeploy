@@ -29,6 +29,22 @@ type environmentRequest struct {
 	VerificationTimeoutSeconds *int64  `json:"verification_timeout_seconds"`
 }
 
+type environmentResponse struct {
+	db.Environment
+	VerificationTarget *string `json:"verification_target,omitempty"`
+}
+
+func environmentForUser(
+	r *http.Request,
+	env db.Environment,
+) environmentResponse {
+	response := environmentResponse{Environment: env}
+	if auth.RoleFromContext(r.Context()) == "admin" {
+		response.VerificationTarget = &env.VerificationTarget
+	}
+	return response
+}
+
 func (req environmentRequest) hasVerification() bool {
 	return req.VerificationType != nil || req.VerificationTarget != nil ||
 		req.VerificationTimeoutSeconds != nil
@@ -102,7 +118,7 @@ func (h *EnvironmentHandler) ListEnvironments(
 
 	items := make([]any, len(envs))
 	for i, e := range envs {
-		items[i] = e
+		items[i] = environmentForUser(r, e)
 	}
 	RespondJSON(w, http.StatusOK, PaginatedResponse{
 		Items:  items,
@@ -192,7 +208,7 @@ func (h *EnvironmentHandler) CreateEnvironment(
 		return
 	}
 
-	RespondJSON(w, http.StatusCreated, env)
+	RespondJSON(w, http.StatusCreated, environmentForUser(r, env))
 }
 
 // swagger:route GET /environments/{id} environments getEnvironment
@@ -233,7 +249,7 @@ func (h *EnvironmentHandler) GetEnvironment(
 		return
 	}
 
-	RespondJSON(w, http.StatusOK, env)
+	RespondJSON(w, http.StatusOK, environmentForUser(r, env))
 }
 
 // swagger:route PUT /environments/{id} environments updateEnvironment
@@ -342,7 +358,7 @@ func (h *EnvironmentHandler) UpdateEnvironment(
 		return
 	}
 
-	RespondJSON(w, http.StatusOK, env)
+	RespondJSON(w, http.StatusOK, environmentForUser(r, env))
 }
 
 // swagger:route DELETE /environments/{id} environments deleteEnvironment

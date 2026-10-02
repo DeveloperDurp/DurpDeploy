@@ -6,13 +6,14 @@ package api
 // Environment represents a deployment target.
 // swagger:model Environment
 type swaggerEnvironment struct {
-	ID                         int64   `json:"id"`
-	Name                       string  `json:"name"`
-	Description                *string `json:"description"`
-	Tags                       *string `json:"tags"`
-	CreatedAt                  int64   `json:"created_at"`
-	VerificationType           string  `json:"verification_type"`
-	VerificationTarget         string  `json:"verification_target"`
+	ID               int64   `json:"id"`
+	Name             string  `json:"name"`
+	Description      *string `json:"description"`
+	Tags             *string `json:"tags"`
+	CreatedAt        int64   `json:"created_at"`
+	VerificationType string  `json:"verification_type"`
+	// Admin-only; omitted from responses for other roles.
+	VerificationTarget         *string `json:"verification_target,omitempty"`
 	VerificationTimeoutSeconds int64   `json:"verification_timeout_seconds"`
 }
 

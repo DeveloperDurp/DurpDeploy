@@ -7986,6 +7986,7 @@
           "x-go-name": "Tags"
         },
         "verification_target": {
+          "description": "Admin-only; omitted from responses for other roles.",
           "type": "string",
           "x-go-name": "VerificationTarget"
         },
