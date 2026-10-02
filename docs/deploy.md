@@ -93,9 +93,12 @@ EOF
 # Keep root .env out of the runtime path for compose app container env to avoid
 # leaking AWS credentials into the application process.
 
-# 4. Build and start
+# 4. Cache the staging helper in the execution runtime, then build and start
+STAGING_HELPER_IMAGE=docker.io/library/alpine@sha256:3c81aa9a3d770b316568f4499e30461a5cd3fbd7180bd89e28e34894c7845832
+docker pull "$STAGING_HELPER_IMAGE"
 docker compose up -d --build
 # With rootless Podman, use instead:
+# podman pull "$STAGING_HELPER_IMAGE"
 # podman compose -f compose.yml -f compose.podman.yml up -d --build
 
 # 5. Bootstrap the first admin
@@ -418,6 +421,25 @@ not the client's default, for example `unix:///run/podman/podman.sock`. The
 shipped system service hides `/run/user`, so use the system Podman socket rather
 than a rootless user's socket with that unit.
 `DURPDEPLOY_CONTAINER_NAMESPACE` defaults to `durpdeploy`.
+
+Local deployments also require the digest-pinned Alpine staging helper from
+the quick-start pull command above. Cache it in the runtime that executes the
+steps, using the same Podman user or Docker endpoint. The runtime pulls a
+missing helper before execution. For an offline installation, transfer this
+image with the runtime's `save` and `load` commands alongside every step image
+before starting deployments.
+
+The helper keeps a per-deployment tmpfs volume mounted between local steps and
+retries. This path is exercised against a rootless Podman 5.8.7 Unix-socket
+service, including kernel byte/inode bounds and success, failure, and cancel
+cleanup. To verify another rootless installation, run the real API test against
+its socket:
+
+```bash
+DURPDEPLOY_CONTAINER_RUNTIME=podman \
+DURPDEPLOY_CONTAINER_URL="unix://${XDG_RUNTIME_DIR}/podman/podman.sock" \
+go test -tags=e2e -count=1 -run '^TestDeploymentStagingCleanupE2E$' ./internal/handler/api
+```
 
 Set `DURPDEPLOY_EMBEDDED_AGENT_ENABLED=false` to disable server-side container
 execution. Remote mTLS agents remain available. The Helm chart disables the
