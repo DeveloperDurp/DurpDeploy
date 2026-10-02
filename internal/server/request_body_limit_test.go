@@ -48,7 +48,7 @@ func TestWebRequestBody_MFARateLimitPrecedesParsing(t *testing.T) {
 		router.ServeHTTP(httptest.NewRecorder(), req)
 	}
 	for _, path := range []string{
-		"/login/mfa/totp", "/login/mfa/recovery", "/login/mfa/cancel",
+		"/login/mfa/totp", "/login/mfa/recovery",
 		"/login/mfa/webauthn/begin", "/login/mfa/webauthn/finish",
 	} {
 		body := &observedRequestBody{}
@@ -62,5 +62,12 @@ func TestWebRequestBody_MFARateLimitPrecedesParsing(t *testing.T) {
 		if body.reads != 0 || rec.Code != 429 {
 			t.Fatalf("path=%s reads=%d status=%d", path, body.reads, rec.Code)
 		}
+	}
+	// Cancellation is not a factor attempt and stays available after throttling.
+	req := httptest.NewRequest("POST", "/login/mfa/cancel", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != 403 {
+		t.Fatalf("cancel status=%d", rec.Code)
 	}
 }

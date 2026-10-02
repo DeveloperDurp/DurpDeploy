@@ -150,7 +150,7 @@ func newRouter(
 	r.With(authHandler.MFARateLimit, webRequestBodyLimit).Post(
 		"/login/mfa/webauthn/finish", authHandler.LoginMFAWebAuthnFinish,
 	)
-	r.With(authHandler.MFARateLimit, webRequestBodyLimit).Post(
+	r.With(webRequestBodyLimit).Post(
 		"/login/mfa/cancel", authHandler.LoginMFACancelPost,
 	)
 	if registerOIDC {

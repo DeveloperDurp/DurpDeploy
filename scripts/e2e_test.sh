@@ -1737,6 +1737,15 @@ CODE=$(curl -s -H "Authorization: Bearer $VIEWER_TOKEN" -H "Content-Type: applic
     -X POST -d '{"name":"viewer-proj"}' -o /dev/null -w "%{http_code}" "$BASE/api/v1/projects")
 [[ "$CODE" == "403" ]] || { echo "FAIL: viewer create project got $CODE, want 403"; exit 1; }
 echo "  403 viewer write block: OK"
+CODE=$(curl -sS -b "$VIEWER_LOGIN" -H 'HX-Request: true' \
+    --data-binary "@$BODY_DIR/oversized.form" -D "$BODY_DIR/viewer.headers" \
+    -o /dev/null -w '%{http_code}' "$BASE/projects")
+[[ "$CODE" == 200 ]] && grep -qi '^HX-Trigger:.*makeToast' "$BODY_DIR/viewer.headers" \
+    || { echo "FAIL: oversized viewer request did not toast, got $CODE"; exit 1; }
+CODE=$(curl -sS -b "$VIEWER_LOGIN" --data-binary "@$BODY_DIR/oversized.form" \
+    -o "$BODY_DIR/viewer.html" -w '%{http_code}' "$BASE/projects")
+[[ "$CODE" == 403 ]] && grep -q 'Viewers cannot perform write operations' "$BODY_DIR/viewer.html" \
+    || { echo "FAIL: oversized viewer request lost forbidden page, got $CODE"; exit 1; }
 
 # A10: Swagger endpoints.
 CODE=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/api/swagger/")

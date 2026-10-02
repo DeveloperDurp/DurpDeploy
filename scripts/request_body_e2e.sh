@@ -79,6 +79,24 @@ done
 BODY_COUNT_AFTER=$(api_get "$BASE/api/v1/environments" | python3 -c 'import sys,json;print(json.load(sys.stdin)["total"])')
 [[ "$BODY_COUNT_AFTER" == "$BODY_COUNT_BEFORE" ]] || { echo "FAIL: rejected bodies mutated environments"; exit 1; }
 
+for BODY_TOKEN_SOURCE in form header; do
+    BODY_HEADERS=()
+    BODY_FIELDS=()
+    if [[ "$BODY_TOKEN_SOURCE" == form ]]; then
+        BODY_FIELDS=(-F "csrf_token=$CSRF")
+    else
+        BODY_HEADERS=(-H "X-CSRF-Token: $CSRF")
+    fi
+    CODE=$(curl -sS -b "$COOKIES" "${BODY_HEADERS[@]}" "${BODY_FIELDS[@]}" \
+        -F "name=body-multipart-$BODY_TOKEN_SOURCE" -o /dev/null -w '%{http_code}' \
+        "$BASE/environments")
+    [[ "$CODE" == 303 ]] || { echo "FAIL: multipart $BODY_TOKEN_SOURCE token got $CODE"; exit 1; }
+    BODY_ENV_ID=$(api_item_id_by_name "$BASE/api/v1/environments" "body-multipart-$BODY_TOKEN_SOURCE")
+    CODE=$(curl -sS -H "Authorization: Bearer $API_TOKEN" -X DELETE \
+        -o /dev/null -w '%{http_code}' "$BASE/api/v1/environments/$BODY_ENV_ID")
+    [[ "$CODE" == 204 ]] || { echo "FAIL: multipart form fields lost, got $CODE"; exit 1; }
+done
+
 CODE=$(curl -sS -H "Authorization: Bearer $API_TOKEN" -H 'Content-Type: application/json' \
     --data-binary "@$BODY_DIR/maximum.json" -o "$BODY_DIR/created.json" -w '%{http_code}' \
     "$BASE/api/v1/templates")

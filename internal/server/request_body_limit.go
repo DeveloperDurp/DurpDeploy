@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"mime"
 	"net/http"
 	"strings"
 
+	"durpdeploy/internal/auth"
 	"durpdeploy/internal/handler"
 )
 
@@ -28,6 +30,9 @@ func webRequestBodyLimit(next http.Handler) http.Handler {
 			r.URL.Path == "/login" ||
 			r.URL.Path == "/settings/security/reauth" {
 			next.ServeHTTP(w, r)
+			return
+		}
+		if auth.RejectViewerWrite(w, r) {
 			return
 		}
 		limit := handler.MaxFormBodyBytes
@@ -53,7 +58,16 @@ func webRequestBodyLimit(next http.Handler) http.Handler {
 		// Keep MaxBytesReader around the restored body so ParseForm uses
 		// the deliberate form ceiling instead of its implicit 10 MiB cap.
 		r.Body = http.MaxBytesReader(w, r.Body, limit)
-		if err := r.ParseForm(); err != nil {
+		mediaType, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
+		if mediaType == "multipart/form-data" {
+			err = r.ParseMultipartForm(limit)
+			if r.MultipartForm != nil {
+				defer r.MultipartForm.RemoveAll()
+			}
+		} else {
+			err = r.ParseForm()
+		}
+		if err != nil {
 			http.Error(w, "Invalid form", 400)
 			return
 		}

@@ -1,11 +1,101 @@
 package handler_test
 
 import (
+	"bytes"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"strings"
 	"testing"
 )
+
+func TestWeb_RequestBodyPreservesMultipartFields(t *testing.T) {
+	h := newAuthHarness(t)
+	session := seedSession(t, h.repo, h.server, "admin")
+	for _, headerToken := range []bool{false, true} {
+		var body bytes.Buffer
+		form := multipart.NewWriter(&body)
+		name := "multipart-form-token"
+		if headerToken {
+			name = "multipart-header-token"
+		} else if err := form.WriteField("csrf_token", session.csrfToken); err != nil {
+			t.Fatal(err)
+		}
+		if err := form.WriteField("name", name); err != nil {
+			t.Fatal(err)
+		}
+		if err := form.Close(); err != nil {
+			t.Fatal(err)
+		}
+		req, err := http.NewRequest("POST", h.server+"/environments", &body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("Content-Type", form.FormDataContentType())
+		if headerToken {
+			req.Header.Set("X-CSRF-Token", session.csrfToken)
+		}
+		resp, err := session.client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != 303 {
+			t.Fatalf("header=%t status=%d", headerToken, resp.StatusCode)
+		}
+		var stored string
+		if err := h.repo.DB.QueryRow("SELECT name FROM environments WHERE name = ?", name).
+			Scan(&stored); err != nil ||
+			stored != name {
+			t.Fatalf("multipart fields lost: name=%q err=%v", stored, err)
+		}
+	}
+}
+
+func TestWeb_RequestBodyPreservesViewerRejection(t *testing.T) {
+	h := newAuthHarness(t)
+	session := seedSession(t, h.repo, h.server, "viewer")
+	for _, body := range []string{"name=%zz", strings.Repeat("x", 16<<20+1)} {
+		for _, htmx := range []bool{false, true} {
+			req, err := http.NewRequest(
+				"POST",
+				h.server+"/projects",
+				strings.NewReader(body),
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			if htmx {
+				req.Header.Set("HX-Request", "true")
+			}
+			resp, err := session.client.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			data, err := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if htmx {
+				if resp.StatusCode != 200 ||
+					!strings.Contains(
+						resp.Header.Get("HX-Trigger"),
+						"makeToast",
+					) {
+					t.Fatalf(
+						"viewer toast: status=%d trigger=%q",
+						resp.StatusCode,
+						resp.Header.Get("HX-Trigger"),
+					)
+				}
+			} else if resp.StatusCode != 403 || !bytes.Contains(data, []byte("Viewers cannot perform write operations")) {
+				t.Fatalf("viewer page: status=%d body=%s", resp.StatusCode, data)
+			}
+		}
+	}
+}
 
 func TestWeb_RequestBodyRejectsOversizedFormsBeforeMutation(t *testing.T) {
 	// Given: a real browser session and production HTTP server.
