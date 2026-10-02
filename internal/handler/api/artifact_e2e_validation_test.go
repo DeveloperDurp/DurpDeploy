@@ -11,7 +11,6 @@ import (
 
 func (f *artifactE2E) verifyRemoteSnapshotRejection(
 	t *testing.T,
-	releaseID int64,
 ) {
 	t.Helper()
 	for _, version := range []string{".", ".."} {
@@ -61,13 +60,6 @@ func (f *artifactE2E) verifyRemoteSnapshotRejection(
 		fmt.Sprintf("%s/releases/%d/refresh", f.base(), unused.ID),
 		nil,
 		422,
-	)
-	f.api(
-		t,
-		"POST",
-		fmt.Sprintf("%s/releases/%d/refresh", f.base(), releaseID),
-		nil,
-		409,
 	)
 	placement.ExecutionTarget = "local"
 	if _, err := f.h.repo.Queries.SetStepExecutionTarget(

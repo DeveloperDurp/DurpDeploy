@@ -128,7 +128,7 @@ printf 'artifact-readable\n'
 	if !strings.Contains(string(pin), `"sha256"`) {
 		t.Fatal("release pin missing")
 	}
-	f.verifyRemoteSnapshotRejection(t, release.ID)
+	f.verifyRemoteSnapshotRejection(t)
 	page := f.web(
 		t,
 		"GET",
@@ -155,6 +155,13 @@ printf 'artifact-readable\n'
 		t.Fatal(err)
 	}
 	f.completion(t, deployment.ID, events.DeploymentSucceeded)
+	f.api(
+		t,
+		"POST",
+		fmt.Sprintf("%s/releases/%d/refresh", base, release.ID),
+		nil,
+		409,
+	)
 	// Then: both steps read the same pin under effective ro/noexec restrictions.
 	logs := f.api(
 		t,
