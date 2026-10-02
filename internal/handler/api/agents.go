@@ -36,6 +36,14 @@ type agentResponse struct {
 	Interpreters           []string       `json:"interpreters"`
 }
 
+type agentEnvironmentResponse struct {
+	ID          int64   `json:"id"`
+	Name        string  `json:"name"`
+	Description *string `json:"description"`
+	Tags        *string `json:"tags"`
+	CreatedAt   int64   `json:"created_at"`
+}
+
 type pairAgentRequest struct {
 	Address     string `json:"address"`
 	Code        string `json:"code"`
@@ -160,11 +168,23 @@ func (h *AgentHandler) GetAgent(w http.ResponseWriter, r *http.Request) {
 		)
 		return
 	}
+	publicEnvironments := make([]agentEnvironmentResponse, len(environments))
+	for i, environment := range environments {
+		publicEnvironments[i] = agentEnvironmentResponse{
+			ID:          environment.ID,
+			Name:        environment.Name,
+			Description: nullStringPtr(environment.Description),
+			Tags: nullStringPtr(
+				environment.Tags,
+			),
+			CreatedAt: environment.CreatedAt,
+		}
+	}
 	RespondJSON(w, http.StatusOK, struct {
-		Agent             agentResponse    `json:"agent"`
-		Labels            []string         `json:"labels"`
-		EnvironmentLabels []db.Environment `json:"environment_labels"`
-	}{publicAgent(agent, interpreters, health), labels, environments})
+		Agent             agentResponse              `json:"agent"`
+		Labels            []string                   `json:"labels"`
+		EnvironmentLabels []agentEnvironmentResponse `json:"environment_labels"`
+	}{publicAgent(agent, interpreters, health), labels, publicEnvironments})
 }
 
 // swagger:route POST /admin/agents/pair admin-agents pairAgent

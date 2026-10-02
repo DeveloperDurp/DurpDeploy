@@ -96,10 +96,10 @@ templ AgentsPage(agents []db.Agent, interpreters map[string][]string, health map
 					<table class="table table-zebra table-fixed w-full">
 						<thead>
 							<tr>
-								<th class="w-1/4">Agent</th>
-								<th class="w-1/4">Status</th>
-								<th class="hidden lg:table-cell w-auto">Transport</th>
-								<th class="w-1/4">Actions</th>
+								<th class="w-1/4 lg:w-1/5">Agent</th>
+								<th class="w-auto lg:w-2/5">Status</th>
+								<th class="hidden lg:table-cell lg:w-1/5">Transport</th>
+								<th class="w-1/4 lg:w-1/5">Actions</th>
 							</tr>
 						</thead>
 						<tbody>
@@ -108,7 +108,10 @@ templ AgentsPage(agents []db.Agent, interpreters map[string][]string, health map
 									<td class="truncate">
 										<span class="font-medium">{ agent.Name }</span>
 										<div class="truncate font-mono text-xs opacity-60">{ agent.ID }</div>
-										<div class="mt-1 text-xs opacity-70 whitespace-normal">{ fmt.Sprint(len(health[agent.ID].CurrentWork)) } current · { fmt.Sprint(health[agent.ID].QueuedWork) } queued</div>
+										<div class="mt-1 text-xs opacity-70 whitespace-normal">
+											<span class="block">{ fmt.Sprint(len(health[agent.ID].CurrentWork)) } current</span>
+											<span class="block">{ fmt.Sprint(health[agent.ID].QueuedWork) } queued</span>
+										</div>
 										<div class="mt-1 flex flex-wrap gap-1 whitespace-normal">
 											if len(interpreters[agent.ID]) == 0 {
 												<span class="text-xs opacity-60">Interpreters not reported</span>

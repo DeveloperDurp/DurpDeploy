@@ -1,6 +1,8 @@
 package api
 
 import (
+	"database/sql"
+	"errors"
 	"net/http"
 
 	"durpdeploy/internal/audit"
@@ -80,7 +82,15 @@ func (h *AgentHandler) setEnvironment(
 	if _, err := h.repo.Queries.GetEnvironment(
 		r.Context(), input.EnvironmentID,
 	); err != nil {
-		writeAgentNotFound(w, err)
+		if errors.Is(err, sql.ErrNoRows) {
+			RespondError(w, http.StatusNotFound, "Environment not found")
+		} else {
+			RespondError(
+				w,
+				http.StatusInternalServerError,
+				"Could not read environment",
+			)
+		}
 		return
 	}
 	var changed int64

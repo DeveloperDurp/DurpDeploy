@@ -1,6 +1,7 @@
 package agentserver_test
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"testing"
@@ -13,7 +14,14 @@ func TestAgentFleetAssignmentsE2E(t *testing.T) {
 	f := newAgentFixture(t)
 	srv := fleetAdminServer(t, f)
 	environment, err := f.repo.Queries.CreateEnvironment(
-		t.Context(), db.CreateEnvironmentParams{Name: "fleet assignment"},
+		t.Context(),
+		db.CreateEnvironmentParams{
+			Name: "fleet assignment",
+			Description: sql.NullString{
+				String: "Production routing",
+				Valid:  true,
+			},
+		},
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -25,7 +33,11 @@ func TestAgentFleetAssignmentsE2E(t *testing.T) {
 	fleetRequest(t, srv, "POST", path, "admin", body, 204)
 	fleetRequest(t, srv, "POST", path, "admin", body, 204)
 	var detail struct {
-		Environments []db.Environment `json:"environment_labels"`
+		Environments []struct {
+			ID          int64   `json:"id"`
+			Description *string `json:"description"`
+			Tags        *string `json:"tags"`
+		} `json:"environment_labels"`
 	}
 	if err := json.Unmarshal(
 		fleetRequest(
@@ -44,6 +56,30 @@ func TestAgentFleetAssignmentsE2E(t *testing.T) {
 	if len(detail.Environments) != 1 ||
 		detail.Environments[0].ID != environment.ID {
 		t.Fatalf("environment labels=%+v", detail.Environments)
+	}
+	if detail.Environments[0].Description == nil ||
+		*detail.Environments[0].Description != "Production routing" ||
+		detail.Environments[0].Tags != nil {
+		t.Fatalf("environment wire contract=%+v", detail.Environments[0])
+	}
+	missing := fleetRequest(
+		t,
+		srv,
+		"POST",
+		path,
+		"admin",
+		`{"environment_id":999999}`,
+		404,
+	)
+	var failure struct {
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(
+		missing,
+		&failure,
+	); err != nil ||
+		failure.Error != "Environment not found" {
+		t.Fatalf("missing environment=%s err=%v", missing, err)
 	}
 	fleetRequest(t, srv, "DELETE", path, "admin", body, 204)
 	fleetRequest(t, srv, "POST", path, "admin", `{"environment_id":0}`, 400)
