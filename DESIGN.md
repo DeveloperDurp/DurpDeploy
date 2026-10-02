@@ -71,6 +71,17 @@ keep `overflow-x-auto` and `table table-zebra table-fixed w-full`.
 - Configuration replacement preserves historical package pins, and the page
   states that saving affects only future snapshots.
 
+### Agent maintenance and health
+- Show administrative state and heartbeat health as separate labelled badges:
+  active/healthy use `badge-success`, draining/stale use `badge-warning`,
+  offline/revoked use `badge-error`, and disabled/unknown use `badge-ghost`.
+- Drain and Resume are native POST form buttons, sized `btn-xs` in lists and
+  `btn-sm` on detail pages. Revocation keeps its destructive styling.
+- Workload details use existing cards and definition lists, linked deployment
+  IDs, readable empty states, and `break-all` for version identifiers.
+- Status text carries meaning independently of color. Controls retain native
+  keyboard access and focus treatment; long values wrap on narrow screens.
+
 ## 6. Motion & Interaction
 
 Existing interaction is intentionally minimal: native `details` disclosure,

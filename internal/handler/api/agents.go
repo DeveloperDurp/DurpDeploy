@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"durpdeploy/internal/agentserver"
+	"durpdeploy/internal/audit"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/repository"
 )
@@ -19,6 +20,9 @@ type AgentHandler struct {
 }
 
 type agentResponse struct {
+	repository.AgentHealthReport
+	Draining               bool           `json:"draining"`
+	AgentProtocol          sql.NullString `json:"agent_protocol"`
 	ID                     string         `json:"id"`
 	Name                   string         `json:"name"`
 	Endpoint               string         `json:"endpoint"`
@@ -78,7 +82,16 @@ func (h *AgentHandler) ListAgents(w http.ResponseWriter, r *http.Request) {
 			RespondError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		items[index] = publicAgent(agents[index], interpreters)
+		health, err := h.repo.AgentHealthReport(r.Context(), agents[index])
+		if err != nil {
+			RespondError(
+				w,
+				http.StatusInternalServerError,
+				"Could not read agent health",
+			)
+			return
+		}
+		items[index] = publicAgent(agents[index], interpreters, health)
 	}
 	RespondJSON(w, http.StatusOK, items)
 }
@@ -126,10 +139,32 @@ func (h *AgentHandler) GetAgent(w http.ResponseWriter, r *http.Request) {
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	health, err := h.repo.AgentHealthReport(r.Context(), agent)
+	if err != nil {
+		RespondError(
+			w,
+			http.StatusInternalServerError,
+			"Could not read agent health",
+		)
+		return
+	}
+	environments, err := h.repo.Queries.ListAgentEnvironmentLabels(
+		r.Context(),
+		agent.ID,
+	)
+	if err != nil {
+		RespondError(
+			w,
+			http.StatusInternalServerError,
+			"Could not read environment labels",
+		)
+		return
+	}
 	RespondJSON(w, http.StatusOK, struct {
-		Agent  agentResponse `json:"agent"`
-		Labels []string      `json:"labels"`
-	}{publicAgent(agent, interpreters), labels})
+		Agent             agentResponse    `json:"agent"`
+		Labels            []string         `json:"labels"`
+		EnvironmentLabels []db.Environment `json:"environment_labels"`
+	}{publicAgent(agent, interpreters, health), labels, environments})
 }
 
 // swagger:route POST /admin/agents/pair admin-agents pairAgent
@@ -290,13 +325,18 @@ func (h *AgentHandler) AddLabel(w http.ResponseWriter, r *http.Request) {
 		writeAgentNotFound(w, err)
 		return
 	}
-	if _, err := h.repo.Queries.AddAgentLabel(
+	changed, err := h.repo.Queries.AddAgentLabel(
 		r.Context(),
 		db.AddAgentLabelParams{AgentID: agentID, Label: request.Label},
-	); err != nil {
+	)
+	if err != nil {
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	if changed == 0 {
+		audit.Suppress(r)
+	}
+	audit.SetAgentAssignment(r, request.Label, 0)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -344,6 +384,7 @@ func (h *AgentHandler) DeleteLabel(w http.ResponseWriter, r *http.Request) {
 		RespondError(w, http.StatusNotFound, "Agent label not found")
 		return
 	}
+	audit.SetAgentAssignment(r, request.Label, 0)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -355,8 +396,15 @@ func writeAgentNotFound(w http.ResponseWriter, err error) {
 	RespondError(w, http.StatusInternalServerError, err.Error())
 }
 
-func publicAgent(agent db.Agent, interpreters []string) agentResponse {
+func publicAgent(
+	agent db.Agent,
+	interpreters []string,
+	health repository.AgentHealthReport,
+) agentResponse {
 	return agentResponse{
+		AgentHealthReport:      health,
+		Draining:               agent.Draining != 0,
+		AgentProtocol:          agent.AgentProtocol,
 		ID:                     agent.ID,
 		Name:                   agent.Name,
 		Endpoint:               agent.Endpoint,

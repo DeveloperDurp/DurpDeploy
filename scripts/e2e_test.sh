@@ -87,7 +87,21 @@ else
         DURPDEPLOY_URL="$BASE" \
         "$TMP/durpdeploy" >"$TMP/server.log" 2>&1 &
     SERVER_PID=$!
-    sleep 2
+    ready=0
+    for _ in {1..60}; do
+        if curl -fsS "$BASE/healthz" >/dev/null 2>&1; then
+            ready=1
+            break
+        fi
+        if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+            break
+        fi
+        sleep 0.5
+    done
+    if ((ready == 0)); then
+        echo "FAIL: isolated server did not become ready" >&2
+        exit 1
+    fi
 fi
 
 if [[ "${DURPDEPLOY_AUTH_MFA_HTTP_MATRIX:-0}" == "1" ]]; then

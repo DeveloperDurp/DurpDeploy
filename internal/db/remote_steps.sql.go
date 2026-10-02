@@ -422,6 +422,46 @@ func (q *Queries) ListRemoteStepRuns(ctx context.Context, arg ListRemoteStepRuns
 	return items, nil
 }
 
+const listRemoteStepRunsForRunner = `-- name: ListRemoteStepRunsForRunner :many
+SELECT r.agent_id, r.state, a.draining FROM remote_step_runs r
+JOIN agents a ON a.id = r.agent_id
+WHERE r.deployment_id = ? AND r.step_index = ? ORDER BY r.agent_id
+`
+
+type ListRemoteStepRunsForRunnerParams struct {
+	DeploymentID int64 `json:"deployment_id"`
+	StepIndex    int64 `json:"step_index"`
+}
+
+type ListRemoteStepRunsForRunnerRow struct {
+	AgentID  string `json:"agent_id"`
+	State    string `json:"state"`
+	Draining int64  `json:"draining"`
+}
+
+func (q *Queries) ListRemoteStepRunsForRunner(ctx context.Context, arg ListRemoteStepRunsForRunnerParams) ([]ListRemoteStepRunsForRunnerRow, error) {
+	rows, err := q.db.QueryContext(ctx, listRemoteStepRunsForRunner, arg.DeploymentID, arg.StepIndex)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRemoteStepRunsForRunnerRow
+	for rows.Next() {
+		var i ListRemoteStepRunsForRunnerRow
+		if err := rows.Scan(&i.AgentID, &i.State, &i.Draining); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listWaitingRemoteStepRuns = `-- name: ListWaitingRemoteStepRuns :many
 SELECT r.deployment_id, r.step_index, r.agent_id, r.state, r.claim_token_hash, r.ciphertext, r.claim_expires_at, r.last_heartbeat_at, r.started_at, r.finished_at, r.cancel_requested_at, r.created_at, r.updated_at, r.log_buffer_ciphertext, r.recovery_cancelled FROM remote_step_runs r
 JOIN deployments d ON d.id = r.deployment_id

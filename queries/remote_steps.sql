@@ -34,6 +34,11 @@ WHERE s.deployment_id = sqlc.arg(deployment_id)
 SELECT * FROM remote_step_runs
 WHERE deployment_id = ? AND step_index = ? ORDER BY agent_id;
 
+-- name: ListRemoteStepRunsForRunner :many
+SELECT r.agent_id, r.state, a.draining FROM remote_step_runs r
+JOIN agents a ON a.id = r.agent_id
+WHERE r.deployment_id = ? AND r.step_index = ? ORDER BY r.agent_id;
+
 -- name: ListWaitingRemoteStepRuns :many
 SELECT r.* FROM remote_step_runs r
 JOIN deployments d ON d.id = r.deployment_id

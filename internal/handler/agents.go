@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"durpdeploy/internal/agentserver"
+	"durpdeploy/internal/audit"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/repository"
 	"durpdeploy/views/pages"
@@ -69,12 +70,22 @@ func (h *AgentsHandler) Detail(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	health, err := h.repo.AgentHealthReport(r.Context(), agent)
+	if err != nil {
+		http.Error(
+			w,
+			"Could not read agent health",
+			http.StatusInternalServerError,
+		)
+		return
+	}
 	if err := pages.AgentDetailPage(
 		agent,
 		labels,
 		interpreters,
 		environmentLabels,
 		availableEnvironments,
+		health,
 		r.URL.Path,
 	).Render(r.Context(), w); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -156,13 +167,18 @@ func (h *AgentsHandler) AddLabel(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if _, err := h.repo.Queries.AddAgentLabel(
+	changed, err := h.repo.Queries.AddAgentLabel(
 		r.Context(),
 		db.AddAgentLabelParams{AgentID: agentID, Label: label},
-	); err != nil {
+	)
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	if changed == 0 {
+		audit.Suppress(r)
+	}
+	audit.SetAgentAssignment(r, label, 0)
 	http.Redirect(w, r, "/admin/agents/"+agentID, http.StatusSeeOther)
 }
 
@@ -193,6 +209,7 @@ func (h *AgentsHandler) DeleteLabel(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	audit.SetAgentAssignment(r, label, 0)
 	http.Redirect(w, r, "/admin/agents/"+agentID, http.StatusSeeOther)
 }
 
@@ -216,6 +233,7 @@ func (h *AgentsHandler) renderList(
 		return
 	}
 	interpreters := make(map[string][]string, len(agents))
+	health := make(map[string]repository.AgentHealthReport, len(agents))
 	for _, agent := range agents {
 		interpreters[agent.ID], err = h.repo.Queries.ListAgentInterpreters(
 			r.Context(),
@@ -225,8 +243,17 @@ func (h *AgentsHandler) renderList(
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		health[agent.ID], err = h.repo.AgentHealthReport(r.Context(), agent)
+		if err != nil {
+			http.Error(
+				w,
+				"Could not read agent health",
+				http.StatusInternalServerError,
+			)
+			return
+		}
 	}
-	if err := pages.AgentsPage(agents, interpreters, message, r.URL.Path).
+	if err := pages.AgentsPage(agents, interpreters, health, message, r.URL.Path).
 		Render(r.Context(), w); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}

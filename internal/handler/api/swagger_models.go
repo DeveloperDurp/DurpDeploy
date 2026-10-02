@@ -658,17 +658,27 @@ type swaggerStreamResponse struct {
 
 // swagger:model Agent
 type swaggerAgent struct {
-	ID                     string                `json:"id"`
-	Name                   string                `json:"name"`
-	Endpoint               string                `json:"endpoint"`
-	Status                 string                `json:"status"`
-	AgentVersion           swaggerSQLNullString  `json:"agent_version"`
-	CertificateFingerprint swaggerSQLNullString  `json:"certificate_fingerprint"`
-	LastHeartbeatAt        swaggerSQLNullInteger `json:"last_heartbeat_at"`
-	RevokedAt              swaggerSQLNullInteger `json:"revoked_at"`
-	CreatedAt              int64                 `json:"created_at"`
-	UpdatedAt              int64                 `json:"updated_at"`
-	Interpreters           []string              `json:"interpreters"`
+	Draining                 bool                  `json:"draining"`
+	AgentProtocol            swaggerSQLNullString  `json:"agent_protocol"`
+	Health                   string                `json:"health"`
+	CurrentWork              []swaggerAgentWork    `json:"current_work"`
+	QueuedWork               int64                 `json:"queued_work"`
+	LastSuccessfulDeployment *swaggerAgentSuccess  `json:"last_successful_deployment"`
+	LastError                *swaggerAgentError    `json:"last_error"`
+	ServerVersion            string                `json:"server_version"`
+	RecommendedAgentVersion  string                `json:"recommended_agent_version"`
+	Compatibility            string                `json:"compatibility"`
+	ID                       string                `json:"id"`
+	Name                     string                `json:"name"`
+	Endpoint                 string                `json:"endpoint"`
+	Status                   string                `json:"status"`
+	AgentVersion             swaggerSQLNullString  `json:"agent_version"`
+	CertificateFingerprint   swaggerSQLNullString  `json:"certificate_fingerprint"`
+	LastHeartbeatAt          swaggerSQLNullInteger `json:"last_heartbeat_at"`
+	RevokedAt                swaggerSQLNullInteger `json:"revoked_at"`
+	CreatedAt                int64                 `json:"created_at"`
+	UpdatedAt                int64                 `json:"updated_at"`
+	Interpreters             []string              `json:"interpreters"`
 }
 
 type swaggerSQLNullString struct {
@@ -686,8 +696,33 @@ type swaggerAgentListResponse []swaggerAgent
 
 // swagger:model AgentDetailResponse
 type swaggerAgentDetailResponse struct {
-	Agent  swaggerAgent `json:"agent"`
-	Labels []string     `json:"labels"`
+	Agent             swaggerAgent         `json:"agent"`
+	Labels            []string             `json:"labels"`
+	EnvironmentLabels []swaggerEnvironment `json:"environment_labels"`
+}
+
+type swaggerAgentWork struct {
+	DeploymentID int64  `json:"deployment_id"`
+	StepIndex    int64  `json:"step_index"`
+	State        string `json:"state"`
+}
+
+type swaggerAgentSuccess struct {
+	DeploymentID int64                 `json:"deployment_id"`
+	FinishedAt   swaggerSQLNullInteger `json:"finished_at"`
+}
+
+type swaggerAgentError struct {
+	DeploymentID int64                 `json:"deployment_id"`
+	StepIndex    int64                 `json:"step_index"`
+	State        string                `json:"state"`
+	Reason       string                `json:"reason"`
+	FinishedAt   swaggerSQLNullInteger `json:"finished_at"`
+}
+
+// swagger:model AgentEnvironmentRequest
+type swaggerAgentEnvironmentRequest struct {
+	EnvironmentID int64 `json:"environment_id"`
 }
 
 // swagger:model PairAgentRequest

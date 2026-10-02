@@ -58,10 +58,10 @@ func (r *DeploymentRunner) runRemoteStep(
 	if request.step.TimeoutSeconds > 0 {
 		timeout = time.Duration(request.step.TimeoutSeconds) * time.Second
 	}
-	timer := time.NewTimer(timeout)
-	defer timer.Stop()
 	ticker := time.NewTicker(250 * time.Millisecond)
 	defer ticker.Stop()
+	remaining := make(map[string]time.Duration)
+	lastChecked := time.Now()
 	timedOut := false
 	operatorCancelled := false
 	cancellationNeeded := false
@@ -90,9 +90,9 @@ func (r *DeploymentRunner) runRemoteStep(
 			}
 			cancellationRequested = true
 		}
-		runs, err := r.repo.Queries.ListRemoteStepRuns(
+		runs, err := r.repo.Queries.ListRemoteStepRunsForRunner(
 			ctx,
-			db.ListRemoteStepRunsParams{
+			db.ListRemoteStepRunsForRunnerParams{
 				DeploymentID: request.deploymentID,
 				StepIndex:    request.stepIndex,
 			},
@@ -103,6 +103,9 @@ func (r *DeploymentRunner) runRemoteStep(
 		allSucceeded := len(runs) > 0
 		hasActive := false
 		hasFailure := false
+		now := time.Now()
+		elapsed := now.Sub(lastChecked)
+		lastChecked = now
 		for _, run := range runs {
 			switch run.State {
 			case "succeeded":
@@ -120,6 +123,19 @@ func (r *DeploymentRunner) runRemoteStep(
 			default:
 				allSucceeded = false
 				hasActive = true
+				budget, exists := remaining[run.AgentID]
+				if !exists {
+					budget = timeout
+				}
+				// Maintenance pauses waiting targets, not issued execution.
+				if run.State != "waiting" || run.Draining == 0 {
+					budget -= elapsed
+				}
+				remaining[run.AgentID] = budget
+				if budget <= 0 {
+					timedOut = true
+					cancellationNeeded = true
+				}
 			}
 		}
 		if operatorCancelled && !hasActive {
@@ -158,11 +174,6 @@ func (r *DeploymentRunner) runRemoteStep(
 			operatorCancelled = true
 			cancellationNeeded = true
 			cancelSignal = nil
-		case <-timer.C:
-			if failureAgent == "" {
-				timedOut = true
-			}
-			cancellationNeeded = true
 		case <-ticker.C:
 		}
 	}

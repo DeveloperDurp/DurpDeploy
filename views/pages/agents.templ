@@ -3,29 +3,46 @@ package pages
 import (
 	"durpdeploy/internal/agentserver"
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/repository"
 	"durpdeploy/views/layouts"
 	"fmt"
-	"time"
 )
 
-func agentHealth(agent db.Agent) (string, string) {
-	if agent.Status == "revoked" {
-		return "revoked", "badge-error"
+func agentBadgeClass(state string) string {
+	switch state {
+	case "active", "healthy":
+		return "badge-success"
+	case "draining", "stale":
+		return "badge-warning"
+	case "revoked", "offline":
+		return "badge-error"
+	default:
+		return "badge-ghost"
 	}
-	if !agent.LastHeartbeatAt.Valid {
-		return "not reported", "badge-ghost"
-	}
-	age := time.Since(time.Unix(agent.LastHeartbeatAt.Int64, 0))
-	if age < 2*time.Minute {
-		return "healthy", "badge-success"
-	}
-	if age < 10*time.Minute {
-		return "stale", "badge-warning"
-	}
-	return "offline", "badge-error"
 }
 
-templ AgentsPage(agents []db.Agent, interpreters map[string][]string, formError string, currentPath string) {
+func agentAdminState(agent db.Agent) string {
+	if agent.Status == "active" && agent.Draining != 0 {
+		return "draining"
+	}
+	return agent.Status
+}
+
+templ AgentDrainControl(agent db.Agent, size string) {
+	if CanWrite(ctx) && agent.Status == "active" {
+		if agent.Draining != 0 {
+			<form method="post" action={ templ.SafeURL("/admin/agents/" + agent.ID + "/resume") }>
+				<button type="submit" class={ "btn btn-ghost whitespace-nowrap " + size }>Resume</button>
+			</form>
+		} else {
+			<form method="post" action={ templ.SafeURL("/admin/agents/" + agent.ID + "/drain") }>
+				<button type="submit" class={ "btn btn-ghost whitespace-nowrap " + size }>Drain</button>
+			</form>
+		}
+	}
+}
+
+templ AgentsPage(agents []db.Agent, interpreters map[string][]string, health map[string]repository.AgentHealthReport, formError string, currentPath string) {
 	if !CanWrite(ctx) {
 		@ViewerForbiddenMessage(
 			"Agents",
@@ -80,9 +97,9 @@ templ AgentsPage(agents []db.Agent, interpreters map[string][]string, formError 
 						<thead>
 							<tr>
 								<th class="w-1/4">Agent</th>
-								<th class="w-1/5">Status</th>
-								<th class="hidden lg:table-cell w-2/5">Transport</th>
-								<th class="w-1/5">Actions</th>
+								<th class="w-1/4">Status</th>
+								<th class="hidden lg:table-cell w-auto">Transport</th>
+								<th class="w-1/4">Actions</th>
 							</tr>
 						</thead>
 						<tbody>
@@ -91,6 +108,7 @@ templ AgentsPage(agents []db.Agent, interpreters map[string][]string, formError 
 									<td class="truncate">
 										<span class="font-medium">{ agent.Name }</span>
 										<div class="truncate font-mono text-xs opacity-60">{ agent.ID }</div>
+										<div class="mt-1 text-xs opacity-70">{ fmt.Sprint(len(health[agent.ID].CurrentWork)) } current · { fmt.Sprint(health[agent.ID].QueuedWork) } queued</div>
 										<div class="mt-1 flex flex-wrap gap-1">
 											if len(interpreters[agent.ID]) == 0 {
 												<span class="text-xs opacity-60">Interpreters not reported</span>
@@ -102,14 +120,16 @@ templ AgentsPage(agents []db.Agent, interpreters map[string][]string, formError 
 										</div>
 									</td>
 									<td>
-										{{ label, class := agentHealth(agent) }}
-										<span class={ "badge " + class }>{ label }</span>
-										<div class="mt-1 text-xs opacity-60">{ agent.Status }</div>
+										<div class="flex flex-col items-start gap-1">
+											<span class={ "badge badge-sm " + agentBadgeClass(agentAdminState(agent)) }>{ agentAdminState(agent) }</span>
+											<span class={ "badge badge-sm " + agentBadgeClass(health[agent.ID].Health) }>{ health[agent.ID].Health }</span>
+										</div>
 									</td>
 									<td class="hidden lg:table-cell truncate font-mono text-sm">{ agent.Endpoint }</td>
 									<td>
-										<div class="flex flex-col items-start gap-1 sm:flex-row">
+											<div class="flex flex-col items-start gap-1 sm:flex-row sm:flex-wrap">
 											<a class="btn btn-ghost btn-xs" href={ templ.SafeURL("/admin/agents/" + agent.ID) }>Edit</a>
+											@AgentDrainControl(agent, "btn-xs")
 											if agent.Status != "revoked" {
 												<button
 													class="btn btn-error btn-xs"
@@ -177,7 +197,7 @@ templ AgentPairingConfirmationPage(challenge agentserver.PairingChallenge, curre
 	}
 }
 
-templ AgentDetailPage(agent db.Agent, labels []string, interpreters []string, environmentLabels []db.Environment, availableEnvironments []db.Environment, currentPath string) {
+templ AgentDetailPage(agent db.Agent, labels []string, interpreters []string, environmentLabels []db.Environment, availableEnvironments []db.Environment, health repository.AgentHealthReport, currentPath string) {
 	if !CanWrite(ctx) {
 		@ViewerForbiddenMessage(
 			"Agent "+agent.Name,
@@ -196,6 +216,8 @@ templ AgentDetailPage(agent db.Agent, labels []string, interpreters []string, en
 					<p class="break-all font-mono text-sm opacity-60">{ agent.ID }</p>
 				</div>
 				if agent.Status != "revoked" {
+					<div class="flex flex-wrap items-center gap-2">
+					@AgentDrainControl(agent, "btn-sm")
 					<button
 						class="btn btn-error btn-sm"
 						hx-post={ "/admin/agents/" + agent.ID + "/revoke" }
@@ -203,8 +225,14 @@ templ AgentDetailPage(agent db.Agent, labels []string, interpreters []string, en
 					>
 						Revoke agent
 					</button>
+					</div>
 				}
 			</div>
+			if agent.Draining != 0 && agent.Status == "active" {
+				<div role="status" class="alert alert-warning">
+					<span>Draining: issued work can finish. Queued work and later remote steps wait until Resume.</span>
+				</div>
+			}
 			if agent.Status != "revoked" {
 				<div class="card bg-base-200 shadow">
 					<div class="card-body">
@@ -223,15 +251,15 @@ templ AgentDetailPage(agent db.Agent, labels []string, interpreters []string, en
 			<div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
 				<div class="stat rounded-box bg-base-200">
 					<div class="stat-title">Status</div>
-					<div class="stat-value text-lg">{ agent.Status }</div>
+					<div class="stat-value text-lg">{ agentAdminState(agent) }</div>
 				</div>
 				<div class="stat rounded-box bg-base-200">
 					<div class="stat-title">Health</div>
-					<div class="stat-value text-lg">{{ label, _ := agentHealth(agent) }}{ label }</div>
+					<div class="stat-value text-lg">{ health.Health }</div>
 				</div>
 				<div class="stat rounded-box bg-base-200">
 					<div class="stat-title">Version</div>
-					<div class="stat-value text-lg">{ agent.AgentVersion.String }</div>
+					<div class="text-sm break-all">{ agent.AgentVersion.String }</div>
 				</div>
 				<div class="stat rounded-box bg-base-200">
 					<div class="stat-title">Last heartbeat</div>
@@ -244,6 +272,7 @@ templ AgentDetailPage(agent db.Agent, labels []string, interpreters []string, en
 					</div>
 				</div>
 			</div>
+			@AgentWorkload(health)
 			<div class="card bg-base-200 shadow">
 				<div class="card-body">
 					<h2 class="card-title">Interpreters</h2>
@@ -286,6 +315,53 @@ templ AgentDetailPage(agent db.Agent, labels []string, interpreters []string, en
 		</div>
 		}
 	}
+}
+
+templ AgentWorkload(health repository.AgentHealthReport) {
+	<div class="card bg-base-200 shadow">
+		<div class="card-body">
+			<h2 class="card-title">Workload and compatibility</h2>
+			<dl class="grid gap-3 md:grid-cols-[12rem_1fr]">
+				<dt class="font-medium">Current work</dt>
+				<dd>
+					if len(health.CurrentWork) == 0 {
+						No current work
+					} else {
+						for _, work := range health.CurrentWork {
+							<div><a class="link" href={ templ.SafeURL(fmt.Sprintf("/deployments/%d", work.DeploymentID)) }>Deployment #{ fmt.Sprint(work.DeploymentID) }</a> · { work.State }
+								if work.StepIndex >= 0 {
+									 · step { fmt.Sprint(work.StepIndex + 1) }
+								}
+							</div>
+						}
+					}
+				</dd>
+				<dt class="font-medium">Queued work</dt><dd>{ fmt.Sprint(health.QueuedWork) } waiting claims</dd>
+				<dt class="font-medium">Last successful deployment</dt>
+				<dd>
+					if health.LastSuccessfulDeployment == nil {
+						No successful deployments
+					} else {
+						<a class="link" href={ templ.SafeURL(fmt.Sprintf("/deployments/%d", health.LastSuccessfulDeployment.DeploymentID)) }>Deployment #{ fmt.Sprint(health.LastSuccessfulDeployment.DeploymentID) }</a>
+						 · { formatUnixTime(health.LastSuccessfulDeployment.FinishedAt.Int64) }
+					}
+				</dd>
+				<dt class="font-medium">Last error</dt>
+				<dd>
+					if health.LastError == nil {
+						No recorded errors
+					} else {
+						<a class="link" href={ templ.SafeURL(fmt.Sprintf("/deployments/%d", health.LastError.DeploymentID)) }>Deployment #{ fmt.Sprint(health.LastError.DeploymentID) }</a>
+						 · { health.LastError.Reason } · { formatUnixTime(health.LastError.FinishedAt.Int64) }
+						<p class="text-sm opacity-70">Open the deployment for redacted logs.</p>
+					}
+				</dd>
+				<dt class="font-medium">Server version</dt><dd class="break-all font-mono text-sm">{ health.ServerVersion }</dd>
+				<dt class="font-medium">Recommended agent version</dt><dd class="break-all font-mono text-sm">{ health.RecommendedAgentVersion }</dd>
+				<dt class="font-medium">Compatibility</dt><dd>{ health.Compatibility }</dd>
+			</dl>
+		</div>
+	</div>
 }
 
 templ AgentEnvironmentLabels(agent db.Agent, labels []db.Environment, availableEnvironments []db.Environment) {

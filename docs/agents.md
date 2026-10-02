@@ -4,6 +4,43 @@ This runbook configures a DurpDeploy server and one outbound-only remote agent.
 It covers the server listener, admin pairing, agent installation, routing,
 maintenance, and recovery.
 
+## Fleet maintenance and health
+
+Admins manage the fleet at `/admin/agents`. **Drain** stops new claims and
+keeps the agent authenticated. Claims issued before Drain can still start,
+send logs and heartbeats, and finish. Waiting work stays queued; later remote
+steps also wait until **Resume**. Drain state survives server restarts.
+Waiting on a drained target does not consume its step timeout; issued work
+keeps its normal timeout. A failed or timed-out sibling still fails the step.
+Drain does not cancel, revoke, or transfer work to another agent.
+
+Administrative status (`active`, `draining`, `disabled`, `revoked`, or
+`pending`) is separate from heartbeat health. Active agents become `stale`
+after 120 seconds and `offline` after 600 seconds without contact. An agent
+that has never reported is initially `unknown` and uses enrollment age for
+these deadlines. Draining agents continue to report health. Disabled and
+revoked agents do not generate health alerts.
+
+The detail page and admin API show issued work, waiting work, the last
+successful deployment, and the last failed/lost/unconfirmed result. Follow
+the deployment link for redacted logs. Error summaries use persisted outcome
+codes; richer diagnostics require
+[agent follow-up #10](https://github.com/DeveloperDurp/durpdeploy-agent/issues/10).
+
+Compatibility shows the observed `agent/1` (legacy Bash) or `agent/2` protocol,
+the server build revision, and the agent module version pinned by that build.
+Agent-reported version strings are unverified; an unknown version is not a
+compatibility guarantee. This view does not upgrade agents.
+
+Stale, offline, and recovered transitions use the existing notification bus
+and global notification settings. Maintenance persists the last health state
+to suppress repeated alerts, including after restart. Delivery is best effort;
+it does not replay failed notification deliveries. Alerts identify the agent
+and link to its admin detail page. Drain/Resume and capability/environment
+routing-label changes have audit actions and include the agent ID plus the
+changed label or environment ID. Viewer and deployer roles cannot access the
+admin fleet pages or API.
+
 ## Two storage boundaries
 
 The **server owns the DurpDeploy database**. SQLite, its WAL and SHM files,

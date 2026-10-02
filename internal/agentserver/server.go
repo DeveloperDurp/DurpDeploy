@@ -132,5 +132,8 @@ func (s *Server) Authenticated(next http.Handler) http.Handler {
 }
 
 func (s *Server) Maintain(ctx context.Context) error {
-	return s.dispatcher.Maintain(ctx)
+	if err := s.dispatcher.Maintain(ctx); err != nil {
+		return err
+	}
+	return s.maintainHealth(ctx)
 }

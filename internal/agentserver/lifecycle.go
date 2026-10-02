@@ -45,6 +45,7 @@ func (s *Server) Poll(w http.ResponseWriter, r *http.Request) {
 			CertificateFingerprint: nullableString(fingerprint),
 		},
 		interpreters,
+		string(request.Protocol),
 	)
 	if !writeTransitionStatus(w, changed, err) {
 		return
