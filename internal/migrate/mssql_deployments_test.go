@@ -53,6 +53,7 @@ func verifyMSSQLDeploymentQueries(
 	}
 
 	filter := db.ListDeploymentsWithRefsFilteredParams{
+		IsAdmin:    1,
 		FProjectID: sql.NullInt64{Int64: fixture.projectID, Valid: true},
 		FEnvID:     sql.NullInt64{Int64: fixture.environmentID, Valid: true},
 		FStatus:    sql.NullString{String: "pending", Valid: true},
@@ -78,6 +79,7 @@ func verifyMSSQLDeploymentQueries(
 	count, err := fixture.queries.CountDeploymentsWithRefsFiltered(
 		fixture.ctx,
 		db.CountDeploymentsWithRefsFilteredParams{
+			IsAdmin:    filter.IsAdmin,
 			FProjectID: filter.FProjectID,
 			FEnvID:     filter.FEnvID,
 			FStatus:    filter.FStatus,
@@ -88,6 +90,58 @@ func verifyMSSQLDeploymentQueries(
 	requireNoError(t, err, "count filtered deployments")
 	if count != 1 {
 		t.Fatalf("filtered deployment count = %d, want 1", count)
+	}
+	for _, access := range []struct {
+		name                  string
+		userID, isAdmin, want int64
+	}{
+		{"admin", 0, 1, 1},
+		{"member", fixture.userID, 0, 1},
+		{"nonmember", 0, 0, 0},
+	} {
+		t.Run(access.name, func(t *testing.T) {
+			filter.UserID, filter.IsAdmin = access.userID, access.isAdmin
+			rows, err := fixture.queries.ListDeploymentsWithRefsFiltered(
+				fixture.ctx,
+				filter,
+			)
+			requireNoError(t, err, "list authorized deployments")
+			total, err := fixture.queries.CountDeploymentsWithRefsFiltered(
+				fixture.ctx,
+				db.CountDeploymentsWithRefsFilteredParams{
+					UserID:     access.userID,
+					IsAdmin:    access.isAdmin,
+					FProjectID: filter.FProjectID,
+					FEnvID:     filter.FEnvID,
+					FStatus:    filter.FStatus,
+					FFromUnix:  filter.FFromUnix,
+					FToUnix:    filter.FToUnix,
+				},
+			)
+			requireNoError(t, err, "count authorized deployments")
+			if int64(len(rows)) != access.want || total != access.want {
+				t.Fatalf(
+					"authorized rows/count = %d/%d, want %d",
+					len(rows),
+					total,
+					access.want,
+				)
+			}
+			if access.isAdmin == 0 {
+				envs, err := fixture.queries.ListDeploymentEnvironmentsForUser(
+					fixture.ctx,
+					access.userID,
+				)
+				requireNoError(t, err, "list authorized environment options")
+				if int64(len(envs)) != access.want {
+					t.Fatalf(
+						"environment options = %d, want %d",
+						len(envs),
+						access.want,
+					)
+				}
+			}
+		})
 	}
 
 	approval, err := fixture.queries.CreateApproval(

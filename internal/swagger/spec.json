@@ -1311,13 +1311,28 @@
         "tags": [
           "deployments"
         ],
-        "summary": "List all deployments across all projects.",
+        "summary": "List deployments in projects accessible to the caller. Global admins see all projects.",
         "operationId": "listAllDeployments",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "description": "Positive project ID; inaccessible or nonexistent projects return an empty list.",
+            "name": "project_id",
+            "in": "query"
+          }
+        ],
         "responses": {
           "200": {
             "description": "DeploymentListResponse is the paginated envelope for ListDeployments.",
             "schema": {
               "$ref": "#/definitions/DeploymentListResponse"
+            }
+          },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
             }
           },
           "401": {

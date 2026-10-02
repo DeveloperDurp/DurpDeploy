@@ -927,11 +927,22 @@ func (h *DeploymentHandler) ListDeployments(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
+	user := auth.UserFromContext(r.Context())
+	if user == nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	var isAdmin int64
+	if user.Role == "admin" {
+		isAdmin = 1
+	}
 	f := ParseDeploymentsFilter(r)
 
 	rows, err := h.repo.Queries.ListDeploymentsWithRefsFiltered(
 		r.Context(),
 		db.ListDeploymentsWithRefsFilteredParams{
+			UserID:     user.ID,
+			IsAdmin:    isAdmin,
 			FProjectID: f.ProjectID,
 			FEnvID:     f.EnvID,
 			FStatus:    f.Status,
@@ -969,6 +980,8 @@ func (h *DeploymentHandler) ListDeployments(
 	total, err := h.repo.Queries.CountDeploymentsWithRefsFiltered(
 		r.Context(),
 		db.CountDeploymentsWithRefsFilteredParams{
+			UserID:     user.ID,
+			IsAdmin:    isAdmin,
 			FProjectID: f.ProjectID,
 			FEnvID:     f.EnvID,
 			FStatus:    f.Status,
@@ -1000,12 +1013,25 @@ func (h *DeploymentHandler) ListDeployments(
 		return
 	}
 
-	projects, err := h.repo.Queries.ListProjects(r.Context())
+	var projects []db.Project
+	if isAdmin == 1 {
+		projects, err = h.repo.Queries.ListProjects(r.Context())
+	} else {
+		projects, err = h.repo.Queries.ListProjectsForUser(r.Context(), user.ID)
+	}
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	envs, err := h.repo.Queries.ListEnvironments(r.Context())
+	var envs []db.Environment
+	if isAdmin == 1 {
+		envs, err = h.repo.Queries.ListEnvironments(r.Context())
+	} else {
+		envs, err = h.repo.Queries.ListDeploymentEnvironmentsForUser(
+			r.Context(),
+			user.ID,
+		)
+	}
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

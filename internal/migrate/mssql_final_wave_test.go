@@ -14,11 +14,17 @@ func TestSQLServer_FinalWaveRuntimeParity(t *testing.T) {
 	queries := db.New(dbConn)
 
 	user, err := queries.CreateUser(ctx, db.CreateUserParams{
-		Email: "final-wave@example.com", PasswordHash: "hash", Name: "Final", Role: "admin",
+		Email:        "final-wave@example.com",
+		PasswordHash: "hash",
+		Name:         "Final",
+		Role:         "admin",
 	})
 	requireNoError(t, err, "create user")
 	session, err := queries.CreateSession(ctx, db.CreateSessionParams{
-		ID: "final-wave-session", UserID: user.ID, CsrfToken: "csrf", ExpiresAt: 2_200_000_000,
+		ID:        "final-wave-session",
+		UserID:    user.ID,
+		CsrfToken: "csrf",
+		ExpiresAt: 2_200_000_000,
 	})
 	requireNoError(t, err, "create session")
 	if session.CreatedAt <= 0 {
@@ -55,6 +61,7 @@ func TestSQLServer_FinalWaveRuntimeParity(t *testing.T) {
 	_, err = queries.ListDeploymentsWithRefsFiltered(
 		ctx,
 		db.ListDeploymentsWithRefsFilteredParams{
+			IsAdmin:    1,
 			FProjectID: sql.NullInt64{Int64: project.ID, Valid: true},
 			FEnvID:     sql.NullInt64{Int64: environment.ID, Valid: true},
 			FFromUnix:  sql.NullInt64{Int64: 2_200_000_000, Valid: true},
@@ -72,19 +79,25 @@ func TestSQLServer_FinalWaveRuntimeParity(t *testing.T) {
 	_, err = queries.CreateNotificationEvent(
 		ctx,
 		db.CreateNotificationEventParams{
-			EventType: "final-wave", DeploymentID: sql.NullInt64{Int64: deployment.ID, Valid: true},
+			EventType:    "final-wave",
+			DeploymentID: sql.NullInt64{Int64: deployment.ID, Valid: true},
 			ProjectID: sql.NullInt64{
 				Int64: project.ID,
 				Valid: true,
-			}, Message: "cascade", Results: "{}",
+			},
+			Message: "cascade",
+			Results: "{}",
 		},
 	)
 	requireNoError(t, err, "create notification event")
 	_, err = queries.CreateScheduledDeployment(
 		ctx,
 		db.CreateScheduledDeploymentParams{
-			ProjectID: project.ID, ReleaseID: release.ID, EnvironmentID: environment.ID,
-			Cron: "0 * * * *", NextRunAt: 2_200_000_000,
+			ProjectID:     project.ID,
+			ReleaseID:     release.ID,
+			EnvironmentID: environment.ID,
+			Cron:          "0 * * * *",
+			NextRunAt:     2_200_000_000,
 		},
 	)
 	requireNoError(t, err, "create scheduled deployment")
