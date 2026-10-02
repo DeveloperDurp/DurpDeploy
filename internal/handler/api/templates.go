@@ -139,6 +139,7 @@ func (h *StepTemplateHandler) TemplatesPicker(
 //	  bearer:
 //
 //	Responses:
+//	  413: body:RequestEntityTooLargeError
 //	  201: body:StepTemplate
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
@@ -149,8 +150,7 @@ func (h *StepTemplateHandler) CreateTemplate(
 	r *http.Request,
 ) {
 	var req stepTemplateRequest
-	if err := readJSON(r, &req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid JSON")
+	if !readJSONBool(w, r, &req) {
 		return
 	}
 
@@ -230,11 +230,14 @@ func (h *StepTemplateHandler) CreateTemplate(
 //	  bearer:
 //
 //	Responses:
-//	  200: body:StepTemplate
-//	  400: body:BadRequestError
-//	  401: body:UnauthorizedError
-//	  404: body:NotFoundError
-//	  500: body:ServerError
+//
+// 413: body:RequestEntityTooLargeError
+//
+//	200: body:StepTemplate
+//	400: body:BadRequestError
+//	401: body:UnauthorizedError
+//	404: body:NotFoundError
+//	500: body:ServerError
 func (h *StepTemplateHandler) GetTemplate(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -279,6 +282,7 @@ func (h *StepTemplateHandler) GetTemplate(
 //	  bearer:
 //
 //	Responses:
+//	  413: body:RequestEntityTooLargeError
 //	  200: body:StepTemplate
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
@@ -296,8 +300,7 @@ func (h *StepTemplateHandler) UpdateTemplate(
 	}
 
 	var req stepTemplateRequest
-	if err := readJSON(r, &req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid JSON")
+	if !readJSONBool(w, r, &req) {
 		return
 	}
 
@@ -375,6 +378,7 @@ func (h *StepTemplateHandler) UpdateTemplate(
 //	  bearer:
 //
 //	Responses:
+//	  413: body:RequestEntityTooLargeError
 //	  204: body:EmptyResponse
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError

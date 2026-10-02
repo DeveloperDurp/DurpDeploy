@@ -880,6 +880,8 @@ API_ENV_ID=$(echo "$API_ENV" | python3 -c "import sys,json; print(json.load(sys.
 [[ -n "$API_ENV_ID" ]] || { echo "FAIL: create env did not return id: $API_ENV"; exit 1; }
 echo "  Environment CRUD: OK ($API_ENV_ID)"
 
+source "$SCRIPT_DIR/request_body_e2e.sh"
+
 CODE=$(api_post_code "{\"name\":\"bare-path-step\",\"script_body\":\"echo ready\",\"container_image\":\"$BASH_IMAGE\"}" \
     "$BASE/api/v1/projects/$API_PROJECT_ID/steps")
 [[ "$CODE" == "201" ]] || { echo "FAIL: bare-path step create got $CODE"; exit 1; }

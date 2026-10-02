@@ -1,7 +1,6 @@
 # Issue 35: bounded and strict request bodies
 
-Status: proposed, awaiting approval. This draft PR contains the plan only.
-Implementation, tests, and API changes have not started.
+Status: approved. Implementation and verification are in progress on PR #113.
 
 Issue: https://github.com/DeveloperDurp/DurpDeploy/issues/35
 

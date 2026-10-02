@@ -52,6 +52,8 @@ func (h *RunbookHandler) ListSchedules(w http.ResponseWriter, r *http.Request) {
 // - application/json
 //
 // Responses:
+// 400: body:BadRequestError
+// 413: body:RequestEntityTooLargeError
 // 201: body:RunbookSchedule
 // 409: body:ConflictError
 // 422: body:ValidationError
@@ -148,6 +150,8 @@ func (h *RunbookHandler) CreateSchedule(
 // Disable a runbook schedule.
 //
 // Responses:
+// 400: body:BadRequestError
+// 413: body:RequestEntityTooLargeError
 // 200: body:RunbookScheduleStateResponse
 func (h *RunbookHandler) DisableSchedule(
 	w http.ResponseWriter,

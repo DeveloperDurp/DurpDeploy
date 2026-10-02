@@ -101,6 +101,7 @@ func (h *ArtifactHandler) Get(w http.ResponseWriter, r *http.Request) {
 // Configure and activate the project repository. Replacing its source preserves existing pins.
 // A blank credential preserves the secret only when URL template, auth type, and username are unchanged.
 // Responses:
+// 413: body:RequestEntityTooLargeError
 // 200: body:PackageRepositoryResponse
 // 400: body:BadRequestError
 // 401: body:UnauthorizedError
@@ -137,6 +138,8 @@ func (h *ArtifactHandler) Save(w http.ResponseWriter, r *http.Request) {
 // swagger:route DELETE /projects/{id}/package-repository artifacts removePackageRepository
 // Disable packages for future snapshots. Source records needed by existing pins are retained.
 // Responses:
+// 400: body:BadRequestError
+// 413: body:RequestEntityTooLargeError
 // 204: description: Removed
 // 401: body:UnauthorizedError
 // 403: body:ForbiddenError
@@ -175,6 +178,7 @@ type packageTestResponse struct {
 // Download and validate one version using the saved repository credentials, without creating a release.
 // Size is the compressed ZIP byte count. Failure does not claim that the package is missing.
 // Responses:
+// 413: body:RequestEntityTooLargeError
 // 200: body:PackageTestResponse
 // 400: body:BadRequestError
 // 401: body:UnauthorizedError

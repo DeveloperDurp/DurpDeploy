@@ -134,6 +134,7 @@ func (h *MemberHandler) ListMembers(w http.ResponseWriter, r *http.Request) {
 //	  bearer:
 //
 //	Responses:
+//	  413: body:RequestEntityTooLargeError
 //	  201: body:ProjectMember
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
@@ -235,6 +236,7 @@ func (h *MemberHandler) AddMember(w http.ResponseWriter, r *http.Request) {
 //	  bearer:
 //
 //	Responses:
+//	  413: body:RequestEntityTooLargeError
 //	  204: body:EmptyResponse
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
@@ -291,6 +293,7 @@ func (h *MemberHandler) RemoveMember(w http.ResponseWriter, r *http.Request) {
 //	  bearer:
 //
 //	Responses:
+//	  413: body:RequestEntityTooLargeError
 //	  200: body:ProjectMember
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
