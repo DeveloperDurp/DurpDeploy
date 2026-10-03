@@ -194,6 +194,7 @@ func (h *ProjectHandler) ListProjects(w http.ResponseWriter, r *http.Request) {
 //	  bearer:
 //
 //	Responses:
+//	  413: body:RequestEntityTooLargeError
 //	  201: body:ProjectResponse
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
@@ -201,8 +202,7 @@ func (h *ProjectHandler) ListProjects(w http.ResponseWriter, r *http.Request) {
 //	  500: body:ServerError
 func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 	var req projectRequest
-	if err := readJSON(r, &req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid JSON")
+	if !readJSONBool(w, r, &req) {
 		return
 	}
 
@@ -284,11 +284,14 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 //	  bearer:
 //
 //	Responses:
-//	  200: body:ProjectResponse
-//	  400: body:BadRequestError
-//	  401: body:UnauthorizedError
-//	  404: body:NotFoundError
-//	  500: body:ServerError
+//
+// 413: body:RequestEntityTooLargeError
+//
+//	200: body:ProjectResponse
+//	400: body:BadRequestError
+//	401: body:UnauthorizedError
+//	404: body:NotFoundError
+//	500: body:ServerError
 func (h *ProjectHandler) GetProject(w http.ResponseWriter, r *http.Request) {
 	id, err := parseParamInt(r, "id")
 	if err != nil {
@@ -325,6 +328,7 @@ func (h *ProjectHandler) GetProject(w http.ResponseWriter, r *http.Request) {
 //	  bearer:
 //
 //	Responses:
+//	  413: body:RequestEntityTooLargeError
 //	  200: body:ProjectResponse
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
@@ -339,8 +343,7 @@ func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req projectRequest
-	if err := readJSON(r, &req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid JSON")
+	if !readJSONBool(w, r, &req) {
 		return
 	}
 
@@ -403,6 +406,7 @@ func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 //	  bearer:
 //
 //	Responses:
+//	  413: body:RequestEntityTooLargeError
 //	  204: body:EmptyResponse
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
@@ -440,11 +444,14 @@ func (h *ProjectHandler) DeleteProject(w http.ResponseWriter, r *http.Request) {
 //	  bearer:
 //
 //	Responses:
-//	  200: body:ProjectNotificationResponse
-//	  400: body:BadRequestError
-//	  401: body:UnauthorizedError
-//	  404: body:NotFoundError
-//	  500: body:ServerError
+//
+// 413: body:RequestEntityTooLargeError
+//
+//	200: body:ProjectNotificationResponse
+//	400: body:BadRequestError
+//	401: body:UnauthorizedError
+//	404: body:NotFoundError
+//	500: body:ServerError
 func (h *ProjectHandler) GetProjectNotifications(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -484,6 +491,7 @@ func (h *ProjectHandler) GetProjectNotifications(
 //	  bearer:
 //
 //	Responses:
+//	  413: body:RequestEntityTooLargeError
 //	  200: body:ProjectNotificationResponse
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
@@ -500,8 +508,7 @@ func (h *ProjectHandler) UpdateProjectNotifications(
 	}
 
 	var req projectNotificationsRequest
-	if err := readJSON(r, &req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid JSON")
+	if !readJSONBool(w, r, &req) {
 		return
 	}
 

@@ -125,6 +125,7 @@ func (h *ReleaseHandler) ListReleases(w http.ResponseWriter, r *http.Request) {
 //	  bearer:
 //
 //	Responses:
+//	  413: body:RequestEntityTooLargeError
 //	  201: body:Release
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
@@ -276,6 +277,8 @@ func (h *ReleaseHandler) GetRelease(w http.ResponseWriter, r *http.Request) {
 //
 // Responses:
 //
+//	413: body:RequestEntityTooLargeError
+//
 //	204: body:EmptyResponse
 //	400: body:BadRequestError
 //	401: body:UnauthorizedError
@@ -322,6 +325,7 @@ func (h *ReleaseHandler) DeleteRelease(w http.ResponseWriter, r *http.Request) {
 //	  bearer:
 //
 //	Responses:
+//	  413: body:RequestEntityTooLargeError
 //	  200: body:Release
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError

@@ -223,6 +223,7 @@ func (h *VariableHandler) ListVariables(
 //	  bearer:
 //
 //	Responses:
+//	  413: body:RequestEntityTooLargeError
 //	  201: body:VariableResponse
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
@@ -239,8 +240,7 @@ func (h *VariableHandler) CreateVariable(
 	}
 
 	var req variableRequest
-	if err := readJSON(r, &req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid JSON")
+	if !readJSONBool(w, r, &req) {
 		return
 	}
 
@@ -301,11 +301,14 @@ func (h *VariableHandler) CreateVariable(
 //	  bearer:
 //
 //	Responses:
-//	  200: body:VariableResponse
-//	  400: body:BadRequestError
-//	  401: body:UnauthorizedError
-//	  404: body:NotFoundError
-//	  500: body:ServerError
+//
+// 413: body:RequestEntityTooLargeError
+//
+//	200: body:VariableResponse
+//	400: body:BadRequestError
+//	401: body:UnauthorizedError
+//	404: body:NotFoundError
+//	500: body:ServerError
 func (h *VariableHandler) GetVariable(w http.ResponseWriter, r *http.Request) {
 	varID, err := parseParamInt(r, "varId")
 	if err != nil {
@@ -354,6 +357,7 @@ func (h *VariableHandler) GetVariable(w http.ResponseWriter, r *http.Request) {
 //	  bearer:
 //
 //	Responses:
+//	  413: body:RequestEntityTooLargeError
 //	  200: body:VariableResponse
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
@@ -393,8 +397,7 @@ func (h *VariableHandler) UpdateVariable(
 	}
 
 	var req variableRequest
-	if err := readJSON(r, &req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid JSON")
+	if !readJSONBool(w, r, &req) {
 		return
 	}
 
@@ -474,6 +477,7 @@ func (h *VariableHandler) UpdateVariable(
 //	  bearer:
 //
 //	Responses:
+//	  413: body:RequestEntityTooLargeError
 //	  204: body:EmptyResponse
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError

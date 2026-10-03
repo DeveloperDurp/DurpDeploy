@@ -116,6 +116,7 @@ func (h *StepHandler) ListSteps(w http.ResponseWriter, r *http.Request) {
 //	  bearer:
 //
 //	Responses:
+//	  413: body:RequestEntityTooLargeError
 //	  201: body:Step
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
@@ -128,8 +129,7 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req stepRequest
-	if err := readJSON(r, &req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid JSON")
+	if !readJSONBool(w, r, &req) {
 		return
 	}
 
@@ -231,11 +231,14 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 //	  bearer:
 //
 //	Responses:
-//	  200: body:Step
-//	  400: body:BadRequestError
-//	  401: body:UnauthorizedError
-//	  404: body:NotFoundError
-//	  500: body:ServerError
+//
+// 413: body:RequestEntityTooLargeError
+//
+//	200: body:Step
+//	400: body:BadRequestError
+//	401: body:UnauthorizedError
+//	404: body:NotFoundError
+//	500: body:ServerError
 func (h *StepHandler) GetStep(w http.ResponseWriter, r *http.Request) {
 	stepID, err := parseParamInt(r, "stepId")
 	if err != nil {
@@ -288,6 +291,7 @@ func (h *StepHandler) GetStep(w http.ResponseWriter, r *http.Request) {
 //	  bearer:
 //
 //	Responses:
+//	  413: body:RequestEntityTooLargeError
 //	  200: body:Step
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
@@ -322,8 +326,7 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req stepRequest
-	if err := readJSON(r, &req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid JSON")
+	if !readJSONBool(w, r, &req) {
 		return
 	}
 
@@ -416,6 +419,7 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 //	  bearer:
 //
 //	Responses:
+//	  413: body:RequestEntityTooLargeError
 //	  204: body:EmptyResponse
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
@@ -471,6 +475,7 @@ func (h *StepHandler) DeleteStep(w http.ResponseWriter, r *http.Request) {
 //	  bearer:
 //
 //	Responses:
+//	  413: body:RequestEntityTooLargeError
 //	  200: body:StepListResponse
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
@@ -483,8 +488,7 @@ func (h *StepHandler) ReorderSteps(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req reorderStepsRequest
-	if err := readJSON(r, &req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid JSON")
+	if !readJSONBool(w, r, &req) {
 		return
 	}
 

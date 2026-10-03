@@ -142,6 +142,8 @@ func (h *RunbookHandler) StreamLogs(w http.ResponseWriter, r *http.Request) {
 // Cancel a running runbook execution.
 //
 // Responses:
+// 400: body:BadRequestError
+// 413: body:RequestEntityTooLargeError
 // 200: body:RunbookStateResponse
 func (h *RunbookHandler) Cancel(w http.ResponseWriter, r *http.Request) {
 	execution, ok := h.execution(w, r)
@@ -182,6 +184,8 @@ func (h *RunbookHandler) Cancel(w http.ResponseWriter, r *http.Request) {
 // Approve and start a pending runbook execution.
 //
 // Responses:
+// 400: body:BadRequestError
+// 413: body:RequestEntityTooLargeError
 // 200: body:RunbookStateResponse
 func (h *RunbookHandler) Approve(w http.ResponseWriter, r *http.Request) {
 	user := auth.UserFromContext(r.Context())
@@ -229,6 +233,8 @@ func (h *RunbookHandler) Approve(w http.ResponseWriter, r *http.Request) {
 // Retry the pinned version of a completed runbook execution.
 //
 // Responses:
+// 400: body:BadRequestError
+// 413: body:RequestEntityTooLargeError
 // 201: body:RunbookExecution
 // 409: body:ConflictError
 func (h *RunbookHandler) Retry(w http.ResponseWriter, r *http.Request) {

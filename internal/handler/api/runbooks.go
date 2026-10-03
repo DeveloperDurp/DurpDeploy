@@ -168,6 +168,7 @@ func (h *RunbookHandler) Version(w http.ResponseWriter, r *http.Request) {
 // - application/json
 //
 // Responses:
+// 413: body:RequestEntityTooLargeError
 // 201: body:RunbookSaveResponse
 // 400: body:BadRequestError
 // 409: body:ConflictError
@@ -287,6 +288,7 @@ func (h *RunbookHandler) Save(w http.ResponseWriter, r *http.Request) {
 // - application/json
 //
 // Responses:
+// 413: body:RequestEntityTooLargeError
 // 201: body:RunbookSaveResponse
 // 400: body:BadRequestError
 // 409: body:ConflictError

@@ -150,15 +150,19 @@ func (f *artifactE2E) api(
 	want int,
 ) []byte {
 	t.Helper()
-	data, err := json.Marshal(body)
-	if err != nil {
-		t.Fatal(err)
+	var input io.Reader
+	if body != nil {
+		data, err := json.Marshal(body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		input = bytes.NewReader(data)
 	}
 	req, err := http.NewRequestWithContext(
 		t.Context(),
 		method,
 		f.baseURL+path,
-		bytes.NewReader(data),
+		input,
 	)
 	if err != nil {
 		t.Fatal(err)

@@ -131,6 +131,7 @@ func (h *ScheduleHandler) ListSchedules(
 //	  bearer:
 //
 //	Responses:
+//	  413: body:RequestEntityTooLargeError
 //	  201: body:ScheduledDeployment
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
@@ -265,11 +266,14 @@ func (h *ScheduleHandler) CreateSchedule(
 //	  bearer:
 //
 //	Responses:
-//	  200: body:ScheduledDeployment
-//	  400: body:BadRequestError
-//	  401: body:UnauthorizedError
-//	  404: body:NotFoundError
-//	  500: body:ServerError
+//
+// 413: body:RequestEntityTooLargeError
+//
+//	200: body:ScheduledDeployment
+//	400: body:BadRequestError
+//	401: body:UnauthorizedError
+//	404: body:NotFoundError
+//	500: body:ServerError
 func (h *ScheduleHandler) GetSchedule(w http.ResponseWriter, r *http.Request) {
 	schedID, err := parseParamInt(r, "schedId")
 	if err != nil {
@@ -318,6 +322,7 @@ func (h *ScheduleHandler) GetSchedule(w http.ResponseWriter, r *http.Request) {
 //	  bearer:
 //
 //	Responses:
+//	  413: body:RequestEntityTooLargeError
 //	  200: body:ScheduledDeployment
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
@@ -463,6 +468,7 @@ func (h *ScheduleHandler) UpdateSchedule(
 //	  bearer:
 //
 //	Responses:
+//	  413: body:RequestEntityTooLargeError
 //	  204: body:EmptyResponse
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
@@ -520,6 +526,7 @@ func (h *ScheduleHandler) DeleteSchedule(
 //	  bearer:
 //
 //	Responses:
+//	  413: body:RequestEntityTooLargeError
 //	  200: body:ScheduledDeployment
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
