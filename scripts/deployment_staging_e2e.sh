@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Sourced by e2e_test.sh: public API and session/CSRF web deployment handoff.
+# Shared by both E2E harnesses: API and session/CSRF web deployment handoff.
 deployment_staging_e2e() {
     local project env release variable producer consumer payload code dep path state logs
     local -r json_id='import json,sys; print(json.load(sys.stdin)["id"])'
@@ -7,6 +7,7 @@ deployment_staging_e2e() {
     echo "=== Deployment file handoff ==="
     # Given: two container steps explicitly publish and consume a shared file.
     project=$(api_post "{\"name\":\"$prefix\"}" "$BASE/api/v1/projects" | python3 -c "$json_id")
+    echo "  Project: $prefix ($BASE/projects/$project)"
     env=$(api_post "{\"name\":\"$prefix\"}" "$BASE/api/v1/environments" | python3 -c "$json_id")
     variable=$(api_post '{"name":"LIMITED","value":"selected"}' "$BASE/api/v1/projects/$project/variables" | python3 -c "$json_id")
     code=$(api_post_code '{"name":"DURPDEPLOY_STAGE_DIR","value":"/override"}' "$BASE/api/v1/projects/$project/variables")
