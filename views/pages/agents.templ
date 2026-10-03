@@ -167,7 +167,7 @@ templ AgentPairingConfirmationPage(challenge agentserver.PairingChallenge, curre
 						<h1 class="text-3xl font-bold">Confirm agent fingerprint</h1>
 						<p class="mt-1 opacity-70">Compare this fingerprint with the one shown by the agent before you approve it.</p>
 					</div>
-					<a class="btn btn-ghost btn-sm" href="/admin/agents">Back</a>
+					<a class="btn btn-ghost btn-sm" href="/admin/agents" x-data="backNavigation" @click="back">Back</a>
 				</div>
 				<div role="alert" class="alert alert-warning">
 					<span>Approve only when every fingerprint character matches. A mismatch can indicate the wrong agent or an intercepted connection.</span>
@@ -225,7 +225,7 @@ templ AgentDetailPage(agent db.Agent, labels []string, interpreters []string, en
 						Revoke agent
 					</button>
 					}
-					<a class="btn btn-ghost btn-sm" href="/admin/agents">Back</a>
+					<a class="btn btn-ghost btn-sm" href="/admin/agents" x-data="backNavigation" @click="back">Back</a>
 				</div>
 			</div>
 			if agent.Draining != 0 && agent.Status == "active" {
