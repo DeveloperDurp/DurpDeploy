@@ -52,7 +52,8 @@ func TestAgentFleetDrainE2E(t *testing.T) {
 		t.Fatalf("drained poll status=%d", blocked.StatusCode)
 	}
 	state := fleetAgentState(t, srv)
-	if !state.Agent.Draining || state.Agent.Queued != 1 ||
+	if state.Agent.AdministrativeStatus != "draining" ||
+		!state.Agent.Draining || state.Agent.Queued != 1 ||
 		len(state.Agent.Current) != 1 || state.Agent.Current[0].ID != first ||
 		state.Agent.Health != "healthy" {
 		t.Fatalf("drained state=%+v", state)
@@ -90,7 +91,9 @@ func TestAgentFleetDrainE2E(t *testing.T) {
 		t.Fatalf("result status=%d", response.StatusCode)
 	}
 	state = fleetAgentState(t, srv)
-	if state.Agent.Success == nil || state.Agent.Success.ID != first ||
+	if state.Agent.AdministrativeStatus != "drained" ||
+		!state.Agent.Draining || state.Agent.Queued != 1 ||
+		state.Agent.Success == nil || state.Agent.Success.ID != first ||
 		len(state.Agent.Current) != 0 {
 		t.Fatalf("completed state=%+v", state)
 	}
@@ -107,6 +110,9 @@ func TestAgentFleetDrainE2E(t *testing.T) {
 		t,
 		postAgent(t, f, agentproto.PollPath, pollBody),
 	)
+	if state := fleetAgentState(t, srv); state.Agent.AdministrativeStatus != "active" {
+		t.Fatalf("resumed state=%+v", state)
+	}
 	if int64(resumed.DeploymentID) != second {
 		t.Fatalf("resumed deployment=%d want=%d", resumed.DeploymentID, second)
 	}

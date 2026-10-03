@@ -69,6 +69,26 @@ func TestAgentFleetDrainPausesRunnerTimeoutE2E(t *testing.T) {
 	); err != nil {
 		t.Fatal(err)
 	}
+	statusPath := fmt.Sprintf("/api/v1/deployments/%d/status", deployment.ID)
+	assertWaiting := func(want bool) {
+		t.Helper()
+		var status struct {
+			WaitingForAgents bool `json:"waiting_for_agents"`
+		}
+		if err := json.Unmarshal(
+			fleetRequest(t, srv, "GET", statusPath, "admin", "", 200),
+			&status,
+		); err != nil {
+			t.Fatal(err)
+		}
+		if status.WaitingForAgents != want {
+			t.Fatalf(
+				"waiting_for_agents=%v want=%v",
+				status.WaitingForAgents,
+				want,
+			)
+		}
+	}
 	waitQueued := func() {
 		t.Helper()
 		deadline := time.Now().Add(5 * time.Second)
@@ -84,9 +104,11 @@ func TestAgentFleetDrainPausesRunnerTimeoutE2E(t *testing.T) {
 		waitQueued()
 		// When: maintenance lasts beyond the configured execution timeout.
 		time.Sleep(1500 * time.Millisecond)
-		if state := fleetAgentState(t, srv); state.Agent.Queued != 1 {
+		if state := fleetAgentState(t, srv); state.Agent.Queued != 1 ||
+			state.Agent.AdministrativeStatus != "drained" {
 			t.Fatalf("maintenance consumed step %d timeout: %+v", step, state)
 		}
+		assertWaiting(true)
 		fleetRequest(t, srv, "POST", base+"/resume", "admin", "", 204)
 		poll := decodePollResponse(
 			t,
@@ -109,6 +131,10 @@ func TestAgentFleetDrainPausesRunnerTimeoutE2E(t *testing.T) {
 		}
 		// Drain again: this issued step can finish, and the next step must wait.
 		fleetRequest(t, srv, "POST", base+"/drain", "admin", "", 204)
+		if state := fleetAgentState(t, srv); state.Agent.AdministrativeStatus != "draining" {
+			t.Fatalf("issued step %d state=%+v", step, state)
+		}
+		assertWaiting(false)
 		result := fmt.Sprintf(
 			`{"protocol":"agent/1","claim_token":%q,"state":"succeeded"}`,
 			poll.ClaimToken,
@@ -120,6 +146,9 @@ func TestAgentFleetDrainPausesRunnerTimeoutE2E(t *testing.T) {
 			result,
 		); response.StatusCode != 204 {
 			t.Fatal(response.StatusCode)
+		}
+		if state := fleetAgentState(t, srv); state.Agent.AdministrativeStatus != "drained" {
+			t.Fatalf("completed step %d state=%+v", step, state)
 		}
 	}
 	// Then: both steps complete successfully through the public contracts.
@@ -136,6 +165,7 @@ func TestAgentFleetDrainPausesRunnerTimeoutE2E(t *testing.T) {
 			t.Fatal(err)
 		}
 		if status.Status == "succeeded" {
+			assertWaiting(false)
 			return
 		}
 		if status.Status == "failed" {

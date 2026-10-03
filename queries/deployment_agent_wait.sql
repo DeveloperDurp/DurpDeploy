@@ -1,0 +1,18 @@
+-- name: DeploymentWaitingForAgents :one
+SELECT CAST(CASE WHEN d.status IN ('pending', 'running')
+    AND (
+        EXISTS (SELECT 1 FROM remote_step_runs r
+            WHERE r.deployment_id = d.id AND r.state = 'waiting')
+        OR EXISTS (SELECT 1 FROM remote_deployment_claims c
+            WHERE c.deployment_id = d.id AND c.state = 'waiting')
+    )
+    AND NOT (
+        EXISTS (SELECT 1 FROM remote_step_runs r
+            WHERE r.deployment_id = d.id
+              AND r.state IN ('claimed', 'started', 'cancel_requested'))
+        OR EXISTS (SELECT 1 FROM remote_deployment_claims c
+            WHERE c.deployment_id = d.id
+              AND c.state IN ('claimed', 'started', 'cancel_requested'))
+    )
+    THEN 1 ELSE 0 END AS INTEGER) AS waiting_for_agents
+FROM deployments d WHERE d.id = sqlc.arg(deployment_id);

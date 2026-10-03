@@ -47,5 +47,9 @@ func (h *AgentsHandler) setDrain(
 	if !changed {
 		audit.Suppress(r)
 	}
-	http.Redirect(w, r, "/admin/agents/"+id, http.StatusSeeOther)
+	destination := "/admin/agents/" + id
+	if r.FormValue("return_to") == "/admin/agents" {
+		destination = "/admin/agents"
+	}
+	http.Redirect(w, r, destination, http.StatusSeeOther)
 }

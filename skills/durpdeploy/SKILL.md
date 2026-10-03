@@ -83,7 +83,7 @@ Token placement rules:
 
 All paths below use the `/api/v1` prefix and require an admin token.
 
-- `GET /admin/agents` lists agents with `draining`, `health`, `current_work`,
+- `GET /admin/agents` lists agents with `administrative_status`, `draining`, `health`, `current_work`,
   `queued_work`, `last_successful_deployment`, `last_error`, `server_version`,
   `recommended_agent_version`, and `compatibility`.
 - `GET /admin/agents/$ID` also includes capability `labels` and
@@ -93,6 +93,9 @@ All paths below use the `/api/v1` prefix and require an admin token.
   Drain blocks new claims, retains waiting work, and allows already-issued
   work to finish. Later remote steps wait for Resume. State survives restart.
   Waiting on drained targets pauses their timeout; issued work still times out.
+  `administrative_status` is `draining` while issued work remains, then `drained`
+  once none remains. Both retain `draining: true` and block claims until Resume.
+  The existing `status` field keeps the base registration state (e.g. `active`).
 - `POST` or `DELETE /admin/agents/$ID/environments` accepts
   `{"environment_id":N}` and returns `204`; invalid IDs return `400`,
   missing resources return `404`. Repeated add is harmless.
@@ -111,6 +114,11 @@ outcome code with a deployment link for redacted logs. Compatibility confirms
 the observed supported protocol, while agent versions remain unverified.
 
 ## Deploy flow (the common ask)
+
+`GET /api/v1/deployments/$ID/status` includes `waiting_for_agents`. It is
+`true` while remote work is queued with no issued claim, and `false` once
+claimed or terminal. The web deployment page shows “Waiting for agents”
+while this flag is true; polling updates it automatically.
 
 1. **Project** `POST /api/v1/projects` `{"name":"my-app"}` → reply has `id`.
 2. **Environment** `POST /api/v1/environments` `{"name":"prod"}` → `id`.

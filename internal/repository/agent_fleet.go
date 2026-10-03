@@ -50,6 +50,14 @@ func (r *Repository) AgentFleetReports(
 		)
 		reports[row.AgentID] = report
 	}
+	for _, agent := range agents {
+		report := reports[agent.ID]
+		report.AdministrativeStatus = agentAdministrativeStatus(
+			agent,
+			len(report.CurrentWork),
+		)
+		reports[agent.ID] = report
+	}
 	queued, err := r.Queries.ListFleetQueuedWork(ctx)
 	if err != nil {
 		return nil, nil, fmt.Errorf("fleet queued work: %w", err)

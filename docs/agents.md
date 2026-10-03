@@ -14,13 +14,25 @@ Waiting on a drained target does not consume its step timeout; issued work
 keeps its normal timeout. A failed or timed-out sibling still fails the step.
 Drain does not cancel, revoke, or transfer work to another agent.
 
-Administrative status (`active`, `draining`, `disabled`, `revoked`, or
+Deployments queued for remote work show **Waiting for agents** when no claim
+has been issued. The message clears automatically when an agent takes the
+work or the deployment finishes. The status API exposes `waiting_for_agents`.
+
+After Drain, status is `draining` while issued work remains, then `drained`
+when no issued work remains. Refresh the page after work finishes to see the
+updated status. Queued work still waits for Resume in either state.
+
+Administrative status (`active`, `draining`, `drained`, `disabled`, `revoked`, or
 `pending`) is separate from heartbeat health. Active agents become `stale`
 after 120 seconds and `offline` after 600 seconds without contact. An agent
 that has never reported is initially `unknown` and uses its latest completed
 pairing time for these deadlines, including after re-pairing. Draining agents
 continue to report health. Disabled and
 revoked agents do not generate health alerts.
+
+The admin API exposes this display state as `administrative_status`. The
+existing `status` field remains the base registration state; `draining: true`
+means maintenance is enabled in both `draining` and `drained` states.
 
 The detail page and admin API show issued work, waiting work, the last
 successful deployment, and the last failed/lost/unconfirmed result. Follow

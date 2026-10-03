@@ -136,8 +136,9 @@ type swaggerDeploymentListResponse struct {
 // DeploymentStatusResponse is the status payload for GetDeploymentStatus.
 // swagger:model DeploymentStatusResponse
 type swaggerDeploymentStatusResponse struct {
-	ID     string `json:"id"`
-	Status string `json:"status"`
+	ID               string `json:"id"`
+	Status           string `json:"status"`
+	WaitingForAgents bool   `json:"waiting_for_agents"`
 }
 
 // ScheduledDeployment is a cron-driven deployment configuration.
@@ -658,6 +659,7 @@ type swaggerStreamResponse struct {
 
 // swagger:model Agent
 type swaggerAgent struct {
+	AdministrativeStatus     string                `json:"administrative_status"`
 	Draining                 bool                  `json:"draining"`
 	AgentProtocol            swaggerSQLNullString  `json:"agent_protocol"`
 	Health                   string                `json:"health"`

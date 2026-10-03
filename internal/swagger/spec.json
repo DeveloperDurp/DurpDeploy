@@ -7533,6 +7533,10 @@
     "Agent": {
       "type": "object",
       "properties": {
+        "administrative_status": {
+          "type": "string",
+          "x-go-name": "AdministrativeStatus"
+        },
         "agent_protocol": {
           "$ref": "#/definitions/swaggerSQLNullString"
         },
@@ -8044,6 +8048,10 @@
         "status": {
           "type": "string",
           "x-go-name": "Status"
+        },
+        "waiting_for_agents": {
+          "type": "boolean",
+          "x-go-name": "WaitingForAgents"
         }
       },
       "x-go-name": "swaggerDeploymentStatusResponse",

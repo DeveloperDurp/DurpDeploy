@@ -12,7 +12,7 @@ func agentBadgeClass(state string) string {
 	switch state {
 	case "active", "healthy":
 		return "badge-success"
-	case "draining", "stale":
+	case "draining", "drained", "stale":
 		return "badge-warning"
 	case "revoked", "offline":
 		return "badge-error"
@@ -21,21 +21,16 @@ func agentBadgeClass(state string) string {
 	}
 }
 
-func agentAdminState(agent db.Agent) string {
-	if agent.Status == "active" && agent.Draining != 0 {
-		return "draining"
-	}
-	return agent.Status
-}
-
-templ AgentDrainControl(agent db.Agent, size string) {
+templ AgentDrainControl(agent db.Agent, size string, returnTo string) {
 	if CanWrite(ctx) && agent.Status == "active" {
 		if agent.Draining != 0 {
 			<form method="post" action={ templ.SafeURL("/admin/agents/" + agent.ID + "/resume") }>
+				<input type="hidden" name="return_to" value={ returnTo }/>
 				<button type="submit" class={ "btn btn-ghost whitespace-nowrap " + size }>Resume</button>
 			</form>
 		} else {
 			<form method="post" action={ templ.SafeURL("/admin/agents/" + agent.ID + "/drain") }>
+				<input type="hidden" name="return_to" value={ returnTo }/>
 				<button type="submit" class={ "btn btn-ghost whitespace-nowrap " + size }>Drain</button>
 			</form>
 		}
@@ -124,7 +119,7 @@ templ AgentsPage(agents []db.Agent, interpreters map[string][]string, health map
 									</td>
 									<td>
 										<div class="flex flex-col items-start gap-1">
-											<span class={ "badge badge-sm " + agentBadgeClass(agentAdminState(agent)) }>{ agentAdminState(agent) }</span>
+											<span class={ "badge badge-sm " + agentBadgeClass(health[agent.ID].AdministrativeStatus) }>{ health[agent.ID].AdministrativeStatus }</span>
 											<span class={ "badge badge-sm " + agentBadgeClass(health[agent.ID].Health) }>{ health[agent.ID].Health }</span>
 										</div>
 									</td>
@@ -132,7 +127,7 @@ templ AgentsPage(agents []db.Agent, interpreters map[string][]string, health map
 									<td>
 											<div class="flex flex-col items-start gap-1 sm:flex-row sm:flex-wrap">
 											<a class="btn btn-ghost btn-xs" href={ templ.SafeURL("/admin/agents/" + agent.ID) }>Edit</a>
-											@AgentDrainControl(agent, "btn-xs")
+											@AgentDrainControl(agent, "btn-xs", "/admin/agents")
 											if agent.Status != "revoked" {
 												<button
 													class="btn btn-error btn-xs"
@@ -167,10 +162,12 @@ templ AgentPairingConfirmationPage(challenge agentserver.PairingChallenge, curre
 	} else {
 		@layouts.Base("Confirm agent fingerprint", currentPath) {
 			<div class="mx-auto max-w-3xl space-y-6">
-				<div>
-					<a class="link text-sm" href="/admin/agents">Back to agents</a>
-					<h1 class="mt-2 text-3xl font-bold">Confirm agent fingerprint</h1>
-					<p class="mt-1 opacity-70">Compare this fingerprint with the one shown by the agent before you approve it.</p>
+				<div class="flex flex-wrap items-start justify-between gap-3">
+					<div class="min-w-0 flex-1">
+						<h1 class="text-3xl font-bold">Confirm agent fingerprint</h1>
+						<p class="mt-1 opacity-70">Compare this fingerprint with the one shown by the agent before you approve it.</p>
+					</div>
+					<a class="btn btn-ghost btn-sm" href="/admin/agents">Back</a>
 				</div>
 				<div role="alert" class="alert alert-warning">
 					<span>Approve only when every fingerprint character matches. A mismatch can indicate the wrong agent or an intercepted connection.</span>
@@ -213,14 +210,13 @@ templ AgentDetailPage(agent db.Agent, labels []string, interpreters []string, en
 		@layouts.Base("Agent "+agent.Name, currentPath) {
 		<div class="space-y-6">
 			<div class="flex flex-wrap items-start justify-between gap-3">
-				<div>
-					<a class="link text-sm" href="/admin/agents">Back to agents</a>
-					<h1 class="mt-2 text-3xl font-bold">{ agent.Name }</h1>
+				<div class="min-w-0 flex-1">
+					<h1 class="text-3xl font-bold">{ agent.Name }</h1>
 					<p class="break-all font-mono text-sm opacity-60">{ agent.ID }</p>
 				</div>
-				if agent.Status != "revoked" {
-					<div class="flex flex-wrap items-center gap-2">
-					@AgentDrainControl(agent, "btn-sm")
+				<div class="flex flex-wrap items-center gap-2">
+					if agent.Status != "revoked" {
+					@AgentDrainControl(agent, "btn-sm", "/admin/agents/" + agent.ID)
 					<button
 						class="btn btn-error btn-sm"
 						hx-post={ "/admin/agents/" + agent.ID + "/revoke" }
@@ -228,12 +224,17 @@ templ AgentDetailPage(agent db.Agent, labels []string, interpreters []string, en
 					>
 						Revoke agent
 					</button>
-					</div>
-				}
+					}
+					<a class="btn btn-ghost btn-sm" href="/admin/agents">Back</a>
+				</div>
 			</div>
 			if agent.Draining != 0 && agent.Status == "active" {
 				<div role="status" class="alert alert-warning">
-					<span>Draining: issued work can finish. Queued work and later remote steps wait until Resume.</span>
+					if health.AdministrativeStatus == "drained" {
+						<span>Drained: no issued work remains. Queued work and later remote steps wait until Resume.</span>
+					} else {
+						<span>Draining: issued work can finish. Queued work and later remote steps wait until Resume.</span>
+					}
 				</div>
 			}
 			if agent.Status != "revoked" {
@@ -254,7 +255,7 @@ templ AgentDetailPage(agent db.Agent, labels []string, interpreters []string, en
 			<div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
 				<div class="stat rounded-box bg-base-200">
 					<div class="stat-title">Status</div>
-					<div class="stat-value text-lg"><span class={ "badge " + agentBadgeClass(agentAdminState(agent)) }>{ agentAdminState(agent) }</span></div>
+					<div class="stat-value text-lg"><span class={ "badge " + agentBadgeClass(health.AdministrativeStatus) }>{ health.AdministrativeStatus }</span></div>
 				</div>
 				<div class="stat rounded-box bg-base-200">
 					<div class="stat-title">Health</div>

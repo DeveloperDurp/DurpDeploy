@@ -73,7 +73,7 @@ keep `overflow-x-auto` and `table table-zebra table-fixed w-full`.
 
 ### Agent maintenance and health
 - Show administrative state and heartbeat health as separate labelled badges:
-  active/healthy use `badge-success`, draining/stale use `badge-warning`,
+  active/healthy use `badge-success`, draining/drained/stale use `badge-warning`,
   offline/revoked use `badge-error`, and disabled/unknown use `badge-ghost`.
 - Drain and Resume are native POST form buttons, sized `btn-xs` in lists and
   `btn-sm` on detail pages. Revocation keeps its destructive styling.
@@ -81,6 +81,13 @@ keep `overflow-x-auto` and `table table-zebra table-fixed w-full`.
   IDs, readable empty states, and `break-all` for version identifiers.
 - Status text carries meaning independently of color. Controls retain native
   keyboard access and focus treatment; long values wrap on narrow screens.
+
+### Deployment waiting state
+- Queued remote work with no issued claim replaces the deployment status text
+  with “Waiting for agents” in the existing `badge-warning`, with
+  `aria-live="polite"`.
+- Reuse the deployment's existing status polling to clear the message once
+  work is claimed or the deployment finishes.
 
 ## 6. Motion & Interaction
 

@@ -108,9 +108,10 @@ func fleetRequest(
 
 type fleetState struct {
 	Agent struct {
-		Draining bool  `json:"draining"`
-		Queued   int64 `json:"queued_work"`
-		Current  []struct {
+		AdministrativeStatus string `json:"administrative_status"`
+		Draining             bool   `json:"draining"`
+		Queued               int64  `json:"queued_work"`
+		Current              []struct {
 			ID int64 `json:"deployment_id"`
 		} `json:"current_work"`
 		Success *struct {

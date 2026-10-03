@@ -11,6 +11,7 @@ import (
 )
 
 type AgentHealthReport struct {
+	AdministrativeStatus     string                                  `json:"administrative_status"`
 	Health                   string                                  `json:"health"`
 	CurrentWork              []db.ListAgentCurrentWorkRow            `json:"current_work"`
 	QueuedWork               int64                                   `json:"queued_work"`
@@ -19,6 +20,16 @@ type AgentHealthReport struct {
 	ServerVersion            string                                  `json:"server_version"`
 	RecommendedAgentVersion  string                                  `json:"recommended_agent_version"`
 	Compatibility            string                                  `json:"compatibility"`
+}
+
+func agentAdministrativeStatus(agent db.Agent, currentWork int) string {
+	if agent.Status == "active" && agent.Draining != 0 {
+		if currentWork == 0 {
+			return "drained"
+		}
+		return "draining"
+	}
+	return agent.Status
 }
 
 // AgentHealthAt shares the fleet thresholds between API, UI, and alerts.
@@ -63,6 +74,10 @@ func (r *Repository) AgentHealthReport(
 	if report.CurrentWork == nil {
 		report.CurrentWork = []db.ListAgentCurrentWorkRow{}
 	}
+	report.AdministrativeStatus = agentAdministrativeStatus(
+		agent,
+		len(report.CurrentWork),
+	)
 	report.QueuedWork, err = r.Queries.CountAgentQueuedWork(ctx, agent.ID)
 	if err != nil {
 		return report, fmt.Errorf("queued agent work: %w", err)
