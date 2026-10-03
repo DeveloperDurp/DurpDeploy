@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
+	"strings"
 	"time"
 
 	"durpdeploy/internal/audit"
@@ -15,7 +17,7 @@ import (
 
 func (r *DeploymentRunner) verifyDeployment(
 	ctx, runCtx context.Context, deploymentID int64,
-	environment map[string]string, scrubber *Scrubber, stage artifactStage,
+	environment map[string]string, secretValues []string, stage artifactStage,
 ) error {
 	check, err := r.repo.Queries.GetDeploymentVerification(ctx, deploymentID)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -43,7 +45,7 @@ func (r *DeploymentRunner) verifyDeployment(
 	writer := &broadcastWriter{
 		broker: r.broker, repo: r.repo, deploymentID: deploymentID,
 		stepName: "Post-deployment verification", ctx: ctx,
-		scrubber: scrubber,
+		scrubber: NewScrubber(secretValues),
 	}
 	defer writer.Flush()
 	if _, err := fmt.Fprintln(writer, "Verification started"); err != nil {
@@ -59,6 +61,8 @@ func (r *DeploymentRunner) verifyDeployment(
 			err = decryptErr
 			break
 		}
+		writer.scrubber = NewScrubber(append(secretValues,
+			verificationHTTPSecrets(target)...))
 		err = verification.CheckHTTP(checkCtx, verification.Settings{
 			Kind: verification.HTTP, Target: target,
 			TimeoutSeconds: check.TimeoutSeconds,
@@ -73,6 +77,26 @@ func (r *DeploymentRunner) verifyDeployment(
 		err = checkCtx.Err()
 	}
 	return r.finishVerification(ctx, runCtx, deploymentID, writer, err)
+}
+
+func verificationHTTPSecrets(target string) []string {
+	u, err := url.Parse(target)
+	if err != nil {
+		return []string{target}
+	}
+	secrets := []string{target, u.RequestURI(), u.RawQuery}
+	for _, values := range u.Query() {
+		for _, value := range values {
+			secrets = append(secrets, value,
+				url.QueryEscape(value), url.PathEscape(value))
+		}
+	}
+	for _, pair := range strings.Split(u.RawQuery, "&") {
+		if _, value, found := strings.Cut(pair, "="); found {
+			secrets = append(secrets, value)
+		}
+	}
+	return secrets
 }
 
 func (r *DeploymentRunner) finishVerification(

@@ -5,33 +5,94 @@ package api_test
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 
+	"durpdeploy/internal/db"
 	"durpdeploy/internal/events"
 )
+
+const verificationQueryCredential = "stored-query/token&proof value"
 
 func TestVerificationEncryptedTargetsE2E(t *testing.T) {
 	for _, kind := range []string{"http", "bash"} {
 		t.Run(kind, func(t *testing.T) {
 			f := newVerificationE2E(t)
-			target := "echo inline-check-proof"
-			if kind == "http" {
-				target = verificationUpstream(t, http.HandlerFunc(
-					func(w http.ResponseWriter, r *http.Request) {
-						if r.URL.Query().Get("token") != "stored-query-token" {
-							w.WriteHeader(403)
-							return
-						}
-						fmt.Fprintln(w, "healthy")
-					})) + "/health?token=stored-query-token"
-			}
+			target := encryptedVerificationTarget(t, kind)
 			configureVerification(t, f, kind, target, 5)
 			deployment := verificationDeploy(t, f,
 				verificationRelease(t, f, "encrypted-"+kind))
 			f.completion(t, deployment.ID, events.DeploymentSucceeded)
 			assertEncryptedVerificationSnapshot(t, f, deployment.ID, target)
+			if kind == "http" {
+				assertHTTPQueryRedactionForViewer(t, f, deployment.ID)
+			}
 		})
+	}
+}
+
+func encryptedVerificationTarget(t *testing.T, kind string) string {
+	t.Helper()
+	if kind == "bash" {
+		return "echo inline-check-proof"
+	}
+	return verificationUpstream(t, http.HandlerFunc(
+		func(w http.ResponseWriter, r *http.Request) {
+			value := r.URL.Query().Get("credential")
+			if value != verificationQueryCredential {
+				w.WriteHeader(http.StatusForbidden)
+				return
+			}
+			fmt.Fprintln(w, "healthy", r.URL.RequestURI())
+			fmt.Fprintln(
+				w,
+				value,
+				url.QueryEscape(value),
+				url.PathEscape(value),
+			)
+		})) + "/health?credential=" + url.QueryEscape(verificationQueryCredential)
+}
+
+func assertHTTPQueryRedactionForViewer(
+	t *testing.T, f *artifactE2E, deploymentID int64,
+) {
+	t.Helper()
+	viewer := seedAPIUser(t, f.h.repo, "query-viewer@example.test", "viewer")
+	if err := f.h.repo.Queries.AddProjectMember(t.Context(),
+		db.AddProjectMemberParams{
+			ProjectID: f.project.ID, UserID: viewer.ID, Role: "deployer",
+		}); err != nil {
+		t.Fatal(err)
+	}
+	_, f.token = seedAPIToken(t, f.h.repo, viewer.ID)
+	f.session = "verification-query-viewer"
+	if _, err := f.h.repo.Queries.CreateSession(t.Context(),
+		db.CreateSessionParams{
+			ID: f.session, UserID: viewer.ID, CsrfToken: f.csrf,
+			ExpiresAt: 4102444800,
+		}); err != nil {
+		t.Fatal(err)
+	}
+	env := string(f.api(t, "GET", fmt.Sprintf(
+		"/api/v1/environments/%d", f.environment.ID,
+	), nil, 200))
+	if strings.Contains(env, "verification_target") {
+		t.Fatal("viewer can read the private verification target")
+	}
+	path := fmt.Sprintf("/deployments/%d", deploymentID)
+	logs := string(f.api(t, "GET", "/api/v1"+path+"/logs", nil, 200))
+	page := f.web(t, "GET", path, nil, 200)
+	for _, value := range []string{verificationQueryCredential,
+		url.QueryEscape(verificationQueryCredential),
+		url.PathEscape(verificationQueryCredential)} {
+		if strings.Contains(logs, value) || strings.Contains(page, value) {
+			t.Fatal("HTTP response exposed the private target credential")
+		}
+	}
+	if !strings.Contains(logs, "healthy") ||
+		!strings.Contains(logs, "[REDACTED]") {
+		t.Fatal("HTTP response output is missing")
 	}
 }
 

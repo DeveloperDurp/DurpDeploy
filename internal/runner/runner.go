@@ -358,7 +358,7 @@ func (r *DeploymentRunner) Run(
 		return
 	}
 	if err := r.verifyDeployment(ctx, runCtx, deploymentID,
-		envMap, scrubber, stage); err != nil {
+		envMap, secretValues, stage); err != nil {
 		if errors.Is(err, errContainerCleanup) {
 			r.persistCompletion(ctx, runCtx, deploymentID,
 				"cleanup_unconfirmed", false)
