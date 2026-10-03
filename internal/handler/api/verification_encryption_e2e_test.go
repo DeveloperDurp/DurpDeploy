@@ -88,6 +88,29 @@ func TestVerificationHTTPMultilineQueryNameE2E(t *testing.T) {
 	assertHTTPQueryRedactionForViewer(t, f, deployment.ID)
 }
 
+func TestVerificationHTTPRepeatedQueryE2E(t *testing.T) {
+	// Given: a permitted target close to the 64 KiB limit, with repeated pairs.
+	f := newVerificationE2E(t)
+	target := verificationUpstream(t, http.HandlerFunc(
+		func(w http.ResponseWriter, _ *http.Request) {
+			fmt.Fprintln(w, "healthy opaque-component")
+		})) + "/probe?" + strings.Repeat("credential=opaque-component&", 2300)
+	configureVerification(t, f, "http", target, 5)
+	// When: verification starts and compiles the known credential components.
+	deployment := verificationDeploy(t, f,
+		verificationRelease(t, f, "repeated-query"))
+	f.completion(t, deployment.ID, events.DeploymentSucceeded)
+	// Then: the real API/web keep useful output and redact the credential.
+	assertHTTPQueryRedactionForViewer(t, f, deployment.ID)
+	path := fmt.Sprintf("/api/v1/deployments/%d/logs", deployment.ID)
+	if strings.Contains(
+		string(f.api(t, "GET", path, nil, 200)),
+		"opaque-component",
+	) {
+		t.Fatal("repeated HTTP credential was not redacted")
+	}
+}
+
 func checkVerificationHostnameRedaction(t *testing.T, host string) {
 	t.Helper()
 	f := newVerificationE2E(t)

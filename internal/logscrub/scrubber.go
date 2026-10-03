@@ -6,6 +6,7 @@ import (
 	"os"
 	"regexp"
 	"regexp/syntax"
+	"slices"
 	"sort"
 	"strings"
 	"unicode/utf8"
@@ -128,6 +129,16 @@ func dropEmptyWidthAssertions(expression *syntax.Regexp) {
 }
 
 func compile(parts []string) *regexp.Regexp {
+	parts = slices.Compact(slices.Sorted(slices.Values(parts)))
+	if len(parts) > 0 {
+		compiled, err := regexp.Compile(
+			"(?s)(" + strings.Join(parts, "|") + ")",
+		)
+		if err == nil {
+			compiled.Longest()
+			return compiled
+		}
+	}
 	valid := make([]string, 0, len(parts))
 	var compiled *regexp.Regexp
 	for _, part := range parts {

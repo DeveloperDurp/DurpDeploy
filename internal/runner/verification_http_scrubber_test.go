@@ -1,8 +1,20 @@
 package runner
 
 import (
+	"strings"
 	"testing"
 )
+
+func BenchmarkRepeatedVerificationURL(b *testing.B) {
+	target := "https://service.invalid/probe?" +
+		strings.Repeat("credential=opaque-component&", 100)
+	for b.Loop() {
+		if got := verificationHTTPScrubber(target, nil).
+			Scrub("healthy opaque-component"); got != "healthy [REDACTED]" {
+			b.Fatalf("unexpected output: %q", got)
+		}
+	}
+}
 
 func TestVerificationHTTPScrubberPreservesStreamRedaction(t *testing.T) {
 	for _, test := range []struct {
