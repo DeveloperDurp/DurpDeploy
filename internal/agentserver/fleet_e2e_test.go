@@ -194,7 +194,7 @@ func TestAgentFleetHealthAlertsE2E(t *testing.T) {
 }
 
 type blockedFleetNotifier struct {
-	entered chan struct{}
+	entered chan events.Type
 	release chan struct{}
 }
 
@@ -202,9 +202,9 @@ func (n blockedFleetNotifier) Name() string { return "blocked" }
 
 func (n blockedFleetNotifier) Notify(
 	_ context.Context,
-	_ events.Event,
+	evt events.Event,
 ) (bool, error) {
-	n.entered <- struct{}{}
+	n.entered <- evt.Type
 	<-n.release
 	return false, nil
 }
@@ -212,9 +212,15 @@ func (n blockedFleetNotifier) Notify(
 func TestAgentFleetSlowNotifierDoesNotBlockMaintenanceE2E(t *testing.T) {
 	f := newAgentFixture(t)
 	srv := fleetAdminServer(t, f)
-	n := blockedFleetNotifier{make(chan struct{}, 2), make(chan struct{})}
+	n := blockedFleetNotifier{make(chan events.Type, 2), make(chan struct{})}
 	f.bus.Register(n)
-	t.Cleanup(func() { close(n.release) })
+	t.Cleanup(func() {
+		select {
+		case <-n.release:
+		default:
+			close(n.release)
+		}
+	})
 	if _, err := f.repo.DB.Exec(`UPDATE agents SET
 		last_heartbeat_at=unixepoch()-120 WHERE id='test-agent'`); err != nil {
 		t.Fatal(err)
@@ -222,7 +228,10 @@ func TestAgentFleetSlowNotifierDoesNotBlockMaintenanceE2E(t *testing.T) {
 	done := make(chan error, 1)
 	go func() { done <- f.agents.Maintain(t.Context()) }()
 	select {
-	case <-n.entered:
+	case typ := <-n.entered:
+		if typ != events.AgentStale {
+			t.Fatalf("first alert=%s", typ)
+		}
 	case <-time.After(time.Second):
 		t.Fatal("health alert was not dispatched")
 	}
@@ -246,6 +255,39 @@ func TestAgentFleetSlowNotifierDoesNotBlockMaintenanceE2E(t *testing.T) {
 	state := fleetAgentState(t, srv)
 	if len(state.Agent.Current) != 0 || state.Agent.Queued != 1 {
 		t.Fatalf("expired claim did not return to queue: %+v", state)
+	}
+	select {
+	case typ := <-n.entered:
+		t.Fatalf("alert %s overtook blocked stale delivery", typ)
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(n.release)
+	select {
+	case typ := <-n.entered:
+		if typ != events.AgentRecovered {
+			t.Fatalf("second alert=%s", typ)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("queued recovery alert was not delivered")
+	}
+	var notifications []struct {
+		Type string `json:"event_type"`
+	}
+	deadline := time.Now().Add(time.Second)
+	for {
+		if err := json.Unmarshal(fleetRequest(t, srv, "GET",
+			"/api/v1/admin/notifications", "admin", "", 200),
+			&notifications); err != nil {
+			t.Fatal(err)
+		}
+		if len(notifications) == 2 || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if len(notifications) != 2 || notifications[0].Type != "agent_recovered" ||
+		notifications[1].Type != "agent_stale" {
+		t.Fatalf("notification history order=%+v", notifications)
 	}
 }
 

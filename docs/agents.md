@@ -38,6 +38,8 @@ and global notification settings. Maintenance persists the last health state
 to suppress repeated alerts, including after restart. Delivery is best effort;
 it does not replay failed notification deliveries. Alert delivery runs outside
 claim maintenance, so slow notification channels do not delay lease recovery.
+Delivery is ordered through a bounded in-memory queue; a full queue skips new
+alerts and logs a warning, without retrying them.
 Alerts identify the agent
 and link to its admin detail page. Drain/Resume and capability/environment
 routing-label changes have audit actions and include the agent ID plus the

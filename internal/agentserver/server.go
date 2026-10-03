@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"net/http"
+	"sync"
 	"time"
 
 	"durpdeploy/internal/db"
@@ -27,11 +28,13 @@ type Config struct {
 }
 
 type Server struct {
-	repository *repository.Repository
-	dispatcher *dispatch.Dispatcher
-	identity   agenttls.Identity
-	broker     *runner.LogBroker
-	eventBus   *events.Bus
+	repository       *repository.Repository
+	dispatcher       *dispatch.Dispatcher
+	identity         agenttls.Identity
+	broker           *runner.LogBroker
+	eventBus         *events.Bus
+	healthAlerts     chan events.Event
+	healthAlertsOnce sync.Once
 }
 
 func New(config Config) (*Server, error) {

@@ -105,7 +105,8 @@ Before the first heartbeat, health deadlines use the latest completed pairing
 time, so re-pairing starts a new grace period. Draining agents still heartbeat.
 Global notifications emit each stale/offline
 transition and recovery once; delivery is best effort and does not block claim
-maintenance. Last error is a stable
+maintenance. Alerts stay ordered; a full in-memory queue skips new alerts and
+logs a warning without retry. Last error is a stable
 outcome code with a deployment link for redacted logs. Compatibility confirms
 the observed supported protocol, while agent versions remain unverified.
 
