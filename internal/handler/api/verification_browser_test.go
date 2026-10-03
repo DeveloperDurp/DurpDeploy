@@ -33,7 +33,8 @@ func TestVerificationPollingBrowserE2E(t *testing.T) {
 		"url": fmt.Sprintf("%s/deployments/%d", f.baseURL, deployment.ID),
 	}, &struct{}{})
 	const card = `document.querySelector('[hx-get$="/verification"]')`
-	browser.wait(t, card+`?.getAttribute('hx-trigger') === 'every 3s'`)
+	browser.wait(t, `document.readyState === 'complete' && window.htmx && `+
+		card+`?.getAttribute('hx-trigger') === 'every 3s'`)
 	browser.evaluate(t, "document.fonts.ready.then(() => true)")
 	capture := func(status string) {
 		for _, width := range []int{375, 768, 1280} {
