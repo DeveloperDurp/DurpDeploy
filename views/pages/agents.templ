@@ -254,11 +254,11 @@ templ AgentDetailPage(agent db.Agent, labels []string, interpreters []string, en
 			<div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
 				<div class="stat rounded-box bg-base-200">
 					<div class="stat-title">Status</div>
-					<div class="stat-value text-lg">{ agentAdminState(agent) }</div>
+					<div class="stat-value text-lg"><span class={ "badge " + agentBadgeClass(agentAdminState(agent)) }>{ agentAdminState(agent) }</span></div>
 				</div>
 				<div class="stat rounded-box bg-base-200">
 					<div class="stat-title">Health</div>
-					<div class="stat-value text-lg">{ health.Health }</div>
+					<div class="stat-value text-lg"><span class={ "badge " + agentBadgeClass(health.Health) }>{ health.Health }</span></div>
 				</div>
 				<div class="stat rounded-box bg-base-200">
 					<div class="stat-title">Version</div>
