@@ -78,7 +78,8 @@ keep `overflow-x-auto` and `table table-zebra table-fixed w-full`.
   `flex flex-wrap gap-2`. Back remains available to viewers and keyboard users.
 - The existing parent URL is the fallback for an empty history. Package
   repository Back falls back to its project; the standalone viewer rejection
-  page falls back to Projects. Links also work without JavaScript.
+  page falls back to Projects. JavaScript replaces the direct entry to avoid a
+  Back loop; links also work without JavaScript.
 - The Navigation API distinguishes a first entry with forward history from a
   real previous page when all entries are visible. Cross-origin entries and old
   browsers hide that position; in those cases Back favors browser history over

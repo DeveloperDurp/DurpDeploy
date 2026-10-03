@@ -11,9 +11,12 @@ Alpine.data('backNavigation', () => ({
 		const navigation = window.navigation;
 		// Navigation entries omit other origins. Only fall back when the
 		// browser proves there is no previous entry; otherwise use real history.
-		if (history.length === 1 || (navigation && !navigation.canGoBack &&
-			navigation.entries().length === history.length)) return;
 		event.preventDefault();
+		if (history.length === 1 || (navigation && !navigation.canGoBack &&
+			navigation.entries().length === history.length)) {
+			location.replace(event.currentTarget.href);
+			return;
+		}
 		history.back();
 	},
 }));

@@ -24,7 +24,20 @@ func TestBackHistoryBrowserE2E(t *testing.T) {
 	// When / Then: a direct link uses the project fallback.
 	browser.clickBackTest(t)
 	browser.waitBackTestURL(t, project)
+	if string(browser.evaluate(t, "history.length === 1")) != "true" {
+		t.Fatal(
+			"fallback must replace the direct entry, not create a Back loop",
+		)
+	}
+	browser.clickBackTest(t)
+	browser.waitBackTestURL(t, f.baseURL+"/projects")
+	if string(browser.evaluate(t, "history.length === 1")) != "true" {
+		t.Fatal("repeated fallback must not add history entries")
+	}
 	// Return to the first entry: total history still includes the forward page.
+	browser.navigateBackTest(t, repository)
+	browser.call(t, "Page.resetNavigationHistory", struct{}{}, &struct{}{})
+	browser.navigateBackTest(t, project)
 	browser.evaluate(t, "history.back(); true")
 	browser.waitBackTestURL(t, repository)
 	if string(browser.evaluate(
@@ -35,6 +48,9 @@ func TestBackHistoryBrowserE2E(t *testing.T) {
 	}
 	browser.clickBackTest(t)
 	browser.waitBackTestURL(t, project)
+	if string(browser.evaluate(t, "!navigation.canGoBack")) != "true" {
+		t.Fatal("fallback with forward history created a previous entry")
+	}
 
 	// Given: several pages in sequence, including a filtered entry URL.
 	previous := f.baseURL + "/projects?limit=20&offset=0"
