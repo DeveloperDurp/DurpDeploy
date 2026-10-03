@@ -26,7 +26,7 @@ func artifactStagingCapacity() int64 {
 	)
 }
 
-const artifactHelperImage = "docker.io/library/alpine@sha256:3c81aa9a3d770b316568f4499e30461a5cd3fbd7180bd89e28e34894c7845832"
+const artifactHelperImage = "docker.io/library/alpine@sha256:ce64758a109eb420d874a118f87920e625e12d3634e03b4a5573fd9f6e5d3507"
 
 type artifactStage struct{ volume, keeper string }
 

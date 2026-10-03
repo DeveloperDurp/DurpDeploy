@@ -94,7 +94,7 @@ EOF
 # leaking AWS credentials into the application process.
 
 # 4. Cache the staging helper in the execution runtime, then build and start
-STAGING_HELPER_IMAGE=docker.io/library/alpine@sha256:3c81aa9a3d770b316568f4499e30461a5cd3fbd7180bd89e28e34894c7845832
+STAGING_HELPER_IMAGE=docker.io/library/alpine@sha256:ce64758a109eb420d874a118f87920e625e12d3634e03b4a5573fd9f6e5d3507
 docker pull "$STAGING_HELPER_IMAGE"
 docker compose up -d --build
 # With rootless Podman, use instead:
