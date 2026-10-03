@@ -452,7 +452,11 @@ standalone agents for executable steps in Kubernetes.
 Each attempt runs as non-root with a read-only root filesystem, no network,
 no capabilities, no new privileges, bounded memory and process count, and no
 host mounts. A 64 MiB temporary filesystem at `/tmp` supplies its writable
-home. `TERM=dumb` keeps non-interactive logs free of terminal control codes.
+home. Attempts sharing `/stage` have a combined memory ceiling of the staging
+capacity plus 256 MiB, so staging writes fit alongside the script process.
+This is a shared ceiling for process memory, `/tmp`, and staging pages;
+it does not reserve separate memory budgets. `TERM=dumb` keeps non-interactive
+logs free of terminal control codes.
 It receives its script on stdin and all compatible resolved release
 variables by default; `variable_names` restricts the step when it is non-empty.
 Images supply their own interpreter and tools. Tags are mutable even

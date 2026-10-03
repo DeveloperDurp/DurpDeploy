@@ -29,6 +29,7 @@ test "$DURPDEPLOY_STAGE_DIR" = /stage
 test ! -e /tmp/attempt-marker
 touch /tmp/attempt-marker
 mkdir -p "$DURPDEPLOY_STAGE_DIR/nested folder"
+dd if=/dev/zero of="$DURPDEPLOY_STAGE_DIR/bulk" bs=1M count=512 status=none
 if ! test -e "$DURPDEPLOY_STAGE_DIR/retry-marker"; then
     test ! -e "$DURPDEPLOY_STAGE_DIR/nested folder/payload"
     printf partial > "$DURPDEPLOY_STAGE_DIR/nested folder/payload"
@@ -47,6 +48,7 @@ test ! -e /tmp/attempt-marker
 file="$DURPDEPLOY_STAGE_DIR/nested folder/payload"
 test "$(cat "$file")" = "$(printf 'hello\nworld')"
 test "$(wc -c < "$file")" -eq 12
+test "$(wc -c < "$DURPDEPLOY_STAGE_DIR/bulk")" -eq 536870912
 awk '$5 == "/stage" { if ($6 !~ /rw/ || $6 !~ /noexec/ || $6 !~ /nosuid/ || $6 !~ /nodev/) exit 1; found=1 } END { exit !found }' /proc/self/mountinfo
 printf 'stage-handoff-content-and-size-ok\n'
 SCRIPT
@@ -70,7 +72,11 @@ SCRIPT
             [[ "$state" =~ ^(succeeded|failed|cancelled|cleanup_unconfirmed)$ ]] && break
             sleep 0.2
         done
-        [[ "$state" == succeeded ]] || { echo "FAIL: $path staging deployment status=$state"; return 1; }
+        [[ "$state" == succeeded ]] || {
+            echo "FAIL: $path staging deployment status=$state"
+            curl_body "$BASE/deployments/$dep/logs.txt" | tail -n 20 >&2
+            return 1
+        }
         logs=$(curl_body "$BASE/deployments/$dep/logs.txt")
         [[ "$logs" == *stage-handoff-content-and-size-ok* && "$logs" == *retrying* ]] || {
             echo "FAIL: $path staging handoff or retry evidence missing"; return 1;
