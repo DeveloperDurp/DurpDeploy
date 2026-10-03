@@ -204,44 +204,43 @@ func TestVerificationCancellationAndSnapshotE2E(t *testing.T) {
 func TestVerificationBashCancellationAndTimeoutE2E(t *testing.T) {
 	for _, scenario := range []string{"cancel", "timeout"} {
 		t.Run(scenario, func(t *testing.T) {
-			// Given: Bash verification blocks after ordinary deployment succeeds.
-			f := newVerificationE2E(t)
-			timeout := int64(30)
-			if scenario == "timeout" {
-				timeout = 1
-			}
-			configureVerification(
-				t,
-				f,
-				"bash",
-				"echo verification-blocking; sleep 60",
-				timeout,
-			)
-			deployment := verificationDeploy(
-				t,
-				f,
-				verificationRelease(t, f, "bash-"+scenario),
-			)
-			path := fmt.Sprintf("/api/v1/deployments/%d", deployment.ID)
-			if scenario == "cancel" {
-				waitVerificationLog(t, f, path, "verification-blocking")
-				// When: an operator cancels the check through the API.
-				f.api(t, "POST", path+"/cancel", nil, 200)
-				waitVerificationStatus(t, f, deployment.ID, "cancelled")
-				check := string(f.api(t, "GET", path+"/verification", nil, 200))
-				if !strings.Contains(check, `"status":"cancelled"`) {
-					t.Fatalf("check=%s", check)
-				}
-			} else {
-				// Then: the deadline fails verification and the deployment.
-				f.completion(t, deployment.ID, events.DeploymentFailed)
-				waitVerificationStatus(t, f, deployment.ID, "failed")
-				logs := string(f.api(t, "GET", path+"/logs", nil, 200))
-				if !strings.Contains(logs, "timed out") {
-					t.Fatalf("timeout logs=%s", logs)
-				}
-			}
+			checkBashCancellationAndTimeout(t, scenario)
 		})
+	}
+}
+
+func checkBashCancellationAndTimeout(t *testing.T, scenario string) {
+	t.Helper()
+	// Given: Bash verification blocks after ordinary deployment succeeds.
+	f := newVerificationE2E(t)
+	timeout := int64(30)
+	if scenario == "timeout" {
+		timeout = 1
+	}
+	configureVerification(
+		t, f, "bash", "echo verification-blocking; sleep 60", timeout,
+	)
+	deployment := verificationDeploy(
+		t, f, verificationRelease(t, f, "bash-"+scenario),
+	)
+	path := fmt.Sprintf("/api/v1/deployments/%d", deployment.ID)
+	if scenario == "cancel" {
+		waitVerificationLog(t, f, path, "verification-blocking")
+		// When: an operator cancels the check through the API.
+		f.api(t, "POST", path+"/cancel", nil, 200)
+		waitVerificationStatus(t, f, deployment.ID, "cancelled")
+		check := string(f.api(t, "GET", path+"/verification", nil, 200))
+		if !strings.Contains(check, `"status":"cancelled"`) {
+			t.Fatalf("check=%s", check)
+		}
+	} else {
+		// Then: the deadline fails verification and the deployment.
+		f.completion(t, deployment.ID, events.DeploymentFailed)
+		waitVerificationStatus(t, f, deployment.ID, "failed")
+		logs := string(f.api(t, "GET", path+"/logs", nil, 200))
+		if !strings.Contains(logs, "timed out") {
+			t.Fatalf("timeout logs=%s", logs)
+		}
 	}
 }
 
