@@ -10,6 +10,44 @@ import (
 
 var ErrAgentUnavailable = errors.New("agent is not active and paired")
 
+func (r *Repository) SetAgentDraining(
+	ctx context.Context,
+	agentID string,
+	draining bool,
+) (bool, error) {
+	var changed int64
+	err := withSQLiteBusyRetry(ctx, func() error {
+		changed = 0
+		return r.WithTx(ctx, func(q *db.Queries) error {
+			locked, err := q.LockClaimAgent(ctx, agentID)
+			if err != nil {
+				return err
+			}
+			if _, err := q.GetAgent(ctx, agentID); err != nil {
+				return err
+			}
+			if locked != 1 {
+				return ErrAgentUnavailable
+			}
+			var value int64
+			if draining {
+				value = 1
+			}
+			changed, err = q.SetAgentDraining(ctx, db.SetAgentDrainingParams{
+				ID: agentID, Draining: value,
+			})
+			return err
+		})
+	})
+	if err != nil {
+		return false, err
+	}
+	if changed != 0 && !draining {
+		r.notifyRemoteWork()
+	}
+	return changed != 0, nil
+}
+
 func (r *Repository) RevokeAgent(
 	ctx context.Context,
 	agentID string,

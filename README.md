@@ -202,6 +202,11 @@ default. Explicit DSN query options are preserved. Use
 `make e2e-test-isolated` for the previous clean-room build-and-start workflow
 used by CI.
 
+Both suites test file handoff between deployment steps through the API and
+web form. `make e2e-test` prints the `stage-handoff-…` project URL and leaves
+that project in the running server's database for inspection. The isolated
+suite removes its temporary database after the run.
+
 ## Production Deploy
 
 For a small team deployment, DurpDeploy runs as a single Go process behind

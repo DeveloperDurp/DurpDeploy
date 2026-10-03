@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"durpdeploy/internal/artifact"
+	"durpdeploy/internal/containerenv"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/handler"
 	"durpdeploy/internal/interpreter"
@@ -267,6 +268,7 @@ func (h *RunbookHandler) Save(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		if errors.Is(err, artifact.ErrInvalid) ||
+			errors.Is(err, containerenv.ErrReserved) ||
 			errors.Is(err, repository.ErrRemoteArtifactsUnsupported) ||
 			errors.Is(err, repository.ErrArtifactPathReserved) {
 			artifactError(w, err)

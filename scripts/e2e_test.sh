@@ -87,7 +87,16 @@ else
         DURPDEPLOY_URL="$BASE" \
         "$TMP/durpdeploy" >"$TMP/server.log" 2>&1 &
     SERVER_PID=$!
-    sleep 2
+    for attempt in {1..60}; do
+        if curl -fsS --max-time 2 "$BASE/healthz" >/dev/null 2>&1; then
+            break
+        fi
+        if ! kill -0 "$SERVER_PID" 2>/dev/null || ((attempt == 60)); then
+            echo "FAIL: DurpDeploy did not become ready at $BASE" >&2
+            exit 1
+        fi
+        sleep 1
+    done
 fi
 
 if [[ "${DURPDEPLOY_AUTH_MFA_HTTP_MATRIX:-0}" == "1" ]]; then
@@ -191,6 +200,11 @@ echo "  API token minted via /settings/tokens: OK"
 
 if [[ "${DURPDEPLOY_DEPLOYMENT_LIST_E2E_ONLY:-0}" == "1" ]]; then
     source "$SCRIPT_DIR/deployment_list_e2e.sh"
+    exit 0
+fi
+
+source "$SCRIPT_DIR/deployment_staging_e2e.sh"
+if [[ "${DURPDEPLOY_STAGING_E2E_ONLY:-0}" == "1" ]]; then
     exit 0
 fi
 

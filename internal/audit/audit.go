@@ -57,8 +57,18 @@ func Record(ctx context.Context, repo *repository.Repository, e Entry) {
 type requestStateKey struct{}
 
 type requestState struct {
-	suppress   bool
-	overridden *actionOverride
+	suppress           bool
+	overridden         *actionOverride
+	agentLabel         string
+	agentEnvironmentID int64
+}
+
+// SetAgentAssignment retains parsed JSON values for the middleware audit.
+func SetAgentAssignment(r *http.Request, label string, environmentID int64) {
+	if state, ok := r.Context().Value(requestStateKey{}).(*requestState); ok {
+		state.agentLabel = label
+		state.agentEnvironmentID = environmentID
+	}
 }
 
 type actionOverride struct {
@@ -278,6 +288,17 @@ func buildDetails(
 	}
 	if name := r.FormValue("name"); name != "" {
 		details["name"] = name
+	}
+	if strings.Contains(action, "agent") {
+		details["agent_id"] = chi.URLParam(r, "id")
+		if state, ok := r.Context().Value(requestStateKey{}).(*requestState); ok {
+			if state.agentLabel != "" {
+				details["label"] = state.agentLabel
+			}
+			if state.agentEnvironmentID != 0 {
+				details["environment_id"] = state.agentEnvironmentID
+			}
+		}
 	}
 	if action == "mfa_admin_reset" {
 		reason := canonicalReason

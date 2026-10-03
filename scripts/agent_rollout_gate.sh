@@ -12,6 +12,24 @@ fi
 grep -Fq 'FROM remote_step_runs' "$ROOT/scripts/agent_lifecycle_faults.mjs"
 
 tests=(
+	TestAgentFleetDrainE2E
+	TestAgentFleetDrainPausesRunnerTimeoutE2E
+	TestRunnerPreservesOriginalFailureWhileCancellingSiblings
+	TestRunnerRequestsCancellationBeforeTimeoutFailure
+	TestAgentFleetHealthAlertsE2E
+	TestAgentFleetSlowNotifierDoesNotBlockMaintenanceE2E
+	TestAgentFleetRepairedIdentityGetsHeartbeatGraceE2E
+	TestAgentFleetListMatchesDetailsE2E
+	TestAgentFleetAdminBoundaryE2E
+	TestAgentFleetAssignmentsE2E
+	TestAgentFleetLastErrorE2E
+	TestAgentDrainBlocksNewClaimsUntilResume
+	TestAgentDrainPreservesIssuedWork
+	TestAgentDrainPreservesIssuedStep
+	TestAgentDrainSerializesWithStepClaim
+	TestAgentDrainAndHealthSurviveDatabaseRestart
+	TestAgentHealthThresholds
+	TestAgentHealthIncludesNeverReportedAndExcludesDisabled
 	TestRemoteStepResultCompletesRun
 	TestRemoteLogsOrderBySequence
 	TestRemoteResultCompletesOnce

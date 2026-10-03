@@ -4,6 +4,60 @@ This runbook configures a DurpDeploy server and one outbound-only remote agent.
 It covers the server listener, admin pairing, agent installation, routing,
 maintenance, and recovery.
 
+## Fleet maintenance and health
+
+Admins manage the fleet at `/admin/agents`. **Drain** stops new claims and
+keeps the agent authenticated. Claims issued before Drain can still start,
+send logs and heartbeats, and finish. Waiting work stays queued; later remote
+steps also wait until **Resume**. Drain state survives server restarts.
+Waiting on a drained target does not consume its step timeout; issued work
+keeps its normal timeout. A failed or timed-out sibling still fails the step.
+Drain does not cancel, revoke, or transfer work to another agent.
+
+Deployments queued for remote work show **Waiting for agents** when no claim
+has been issued. The message clears automatically when an agent takes the
+work or the deployment finishes. The status API exposes `waiting_for_agents`.
+
+After Drain, status is `draining` while issued work remains, then `drained`
+when no issued work remains. Refresh the page after work finishes to see the
+updated status. Queued work still waits for Resume in either state.
+
+Administrative status (`active`, `draining`, `drained`, `disabled`, `revoked`, or
+`pending`) is separate from heartbeat health. Active agents become `stale`
+after 120 seconds and `offline` after 600 seconds without contact. An agent
+that has never reported is initially `unknown` and uses its latest completed
+pairing time for these deadlines, including after re-pairing. Draining agents
+continue to report health. Disabled and
+revoked agents do not generate health alerts.
+
+The admin API exposes this display state as `administrative_status`. The
+existing `status` field remains the base registration state; `draining: true`
+means maintenance is enabled in both `draining` and `drained` states.
+
+The detail page and admin API show issued work, waiting work, the last
+successful deployment, and the last failed/lost/unconfirmed result. Follow
+the deployment link for redacted logs. Error summaries use persisted outcome
+codes; richer diagnostics require
+[agent follow-up #10](https://github.com/DeveloperDurp/durpdeploy-agent/issues/10).
+
+Compatibility shows the observed `agent/1` (legacy Bash) or `agent/2` protocol,
+the server build revision, and the agent module version pinned by that build.
+Agent-reported version strings are unverified; an unknown version is not a
+compatibility guarantee. This view does not upgrade agents.
+
+Stale, offline, and recovered transitions use the existing notification bus
+and global notification settings. Maintenance persists the last health state
+to suppress repeated alerts, including after restart. Delivery is best effort;
+it does not replay failed notification deliveries. Alert delivery runs outside
+claim maintenance, so slow notification channels do not delay lease recovery.
+Delivery is ordered through a bounded in-memory queue; a full queue skips new
+alerts and logs a warning, without retrying them.
+Alerts identify the agent
+and link to its admin detail page. Drain/Resume and capability/environment
+routing-label changes have audit actions and include the agent ID plus the
+changed label or environment ID. Viewer and deployer roles cannot access the
+admin fleet pages or API.
+
 ## Two storage boundaries
 
 The **server owns the DurpDeploy database**. SQLite, its WAL and SHM files,
@@ -188,6 +242,55 @@ heartbeats, log uploads, and result or cancellation acknowledgements. The agent
 stores no server secret or deployment payload at rest. A current claim marker
 contains only the deployment ID and a SHA-256 hash of the claim token and is
 removed after the claim completes.
+
+## Development container
+
+With `make dev` running in another terminal, start the published agent image:
+
+```bash
+make dev-agent
+```
+
+This pulls `ghcr.io/developerdurp/durpdeploy-agent:ec04223` and runs it in the
+foreground using Docker or Podman. In **Admin > Agents > Pair agent**, enter
+`https://127.0.0.1:10944`, the terminal's pairing code, and fingerprint, then
+compare the fingerprint and approve. The development server advertises
+`https://host.containers.internal:10943`, which the container can reach.
+The server's agent listener must be reachable from the container; `make dev`
+sets its listen address to `0.0.0.0:10943` by default.
+
+`make dev` reloads the server when watched Go, templ, or SQL files change.
+Server restart recovery cancels in-flight remote steps; an agent can finish
+its script before it receives that cancellation. Avoid source edits during
+deployment tests, then rerun any deployment interrupted by a reload.
+
+Stop with Ctrl-C, or from another terminal:
+
+```bash
+make dev-agent-down
+```
+
+The container is removed, but its private `durpdeploy-dev-agent-state` volume
+retains the paired identity for the next run. To stop and delete that identity:
+
+```bash
+make dev-agent-reset
+```
+
+Reset requires pairing again. Revoke the old agent in the admin UI when
+discarding it. Pairing output is terminal-only; container logging is disabled.
+The image supplies Bash; this image does not install Python or PowerShell.
+
+Override the image, host pairing port, or container name when needed:
+
+```bash
+make dev-agent DEV_AGENT_IMAGE=ghcr.io/developerdurp/durpdeploy-agent:ec04223 DEV_AGENT_PORT=10945
+```
+
+`DEV_AGENT_CONTAINER` also determines the default state-volume name. Supply
+the same overrides to the down/reset targets. Set `DEV_CONTAINER_ENGINE=podman`
+or `DEV_CONTAINER_ENGINE=docker` to select an engine explicitly. This target
+does not start or modify the server, and does not mount its database or secrets.
 
 ## Agent execution boundary
 

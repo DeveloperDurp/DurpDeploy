@@ -72,7 +72,7 @@ func TestRunnerPreservesOriginalFailureWhileCancellingSiblings(t *testing.T) {
 			"script_body":"echo remote",
 			"execution_target":"agent",
 			"agent_selectors":["linux"],
-			"timeout_seconds":10
+			"timeout_seconds":1
 		}]`,
 	})
 	if err != nil {
@@ -142,6 +142,8 @@ func TestRunnerPreservesOriginalFailureWhileCancellingSiblings(t *testing.T) {
 		case <-ticker.C:
 		}
 	}
+	// A slow cancellation acknowledgement must not replace B's failure.
+	time.Sleep(1500 * time.Millisecond)
 	aHash := hashes["a"]
 	if changed, handled, err := repo.AcknowledgeRemoteStepCancellation(
 		ctx,

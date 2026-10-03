@@ -43,6 +43,8 @@ jobs:
         run: make pre-commit-test
         env:
           GOFLAGS: -mod=readonly
+      - name: Test development agent lifecycle
+        run: make dev-agent-test
 
   # ----- Dockerfile lint ---------------------------------------------------
   lint-dockerfile:
@@ -288,7 +290,7 @@ jobs:
       - name: Verify ZIP artifact API, web forms, and container mounts
         env:
           DURPDEPLOY_CONTAINER_RUNTIME: docker
-        run: go test -tags=e2e -count=1 -run '^(TestArtifactsAPIWebContainerE2E|TestArtifactCredentialRotationE2E|TestArtifactSourceReplacementE2E)$' ./internal/handler/api
+        run: go test -tags=e2e -count=1 -run '^(TestArtifactsAPIWebContainerE2E|TestArtifactCredentialRotationE2E|TestArtifactSourceReplacementE2E|TestDeploymentStagingCleanupE2E)$' ./internal/handler/api
 
       - name: Verify deployment checks and rollback through API and web
         env:
@@ -319,6 +321,8 @@ jobs:
         run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^TestPackageRepositoryBrowserE2E$' ./internal/handler/api
       - name: Verify verification forms and rollback confirmation in Chromium
         run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^TestVerificationRollbackBrowserE2E$' ./internal/handler/api
+      - name: Verify agent fleet controls and responsive health pages
+        run: go test -tags=e2e,agentbrowser -race -count=1 -timeout=5m -v -run '^(TestAgentFleetBrowserE2E|TestDeploymentWaitingForAgentsBrowserE2E)$' ./internal/handler/api
       - name: Upload package UI evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

@@ -24,7 +24,7 @@ type DeploymentRunner struct {
 	attempts  map[int64]string
 	engine    containerEndpoint
 	localErr  error
-	staging   map[int64]artifactStage
+	staging   map[int64][]artifactStage
 	stopping  bool
 	localWork sync.WaitGroup
 	// bus publishes deployment_started/succeeded/failed events for the
@@ -163,6 +163,7 @@ func (r *DeploymentRunner) Run(
 		)
 		return
 	}
+	var handoff artifactStage
 	if stage.volume == "" {
 		r.localWork.Done()
 		artifactWork = false
@@ -212,6 +213,11 @@ func (r *DeploymentRunner) Run(
 		}
 		switch step.ExecutionTarget {
 		case "agent":
+			// Shutdown drains local resources without waiting for agent ACKs.
+			if artifactWork {
+				r.localWork.Done()
+				artifactWork = false
+			}
 			err := r.runRemoteStep(ctx, runCtx, remoteStepRequest{
 				deploymentID: deploymentID,
 				stepIndex:    int64(stepIndex),
@@ -235,6 +241,13 @@ func (r *DeploymentRunner) Run(
 			}
 			continue
 		case "", "local":
+			if !artifactWork {
+				if !r.beginLocalWork() {
+					r.finalizeCancellation(ctx, deploymentID)
+					return
+				}
+				artifactWork = true
+			}
 		default:
 			r.failStep(ctx, runCtx, events.Event{
 				Type:          events.DeploymentFailed,
@@ -294,6 +307,24 @@ func (r *DeploymentRunner) Run(
 			}, true)
 			return
 		}
+		if handoff.volume == "" {
+			handoff, err = r.stageDeployment(runCtx, deploymentID, envMap)
+			if err != nil {
+				_, writeErr := logWriter.Write([]byte(fmt.Sprintf(
+					"step %q: staging failed before execution: %v\n",
+					step.Name,
+					err,
+				)))
+				logWriter.Flush()
+				r.failStep(ctx, runCtx, events.Event{
+					Type: events.DeploymentFailed, DeploymentID: deploymentID,
+					ProjectID: release.ProjectID, EnvironmentID: environmentID,
+					Message: "Deployment staging failed: " + errors.Join(err, writeErr).
+						Error(),
+				}, true)
+				return
+			}
+		}
 		maxAttempts := int(step.MaxRetries) + 1
 		for attempt := 1; attempt <= maxAttempts; attempt++ {
 			lastErr = r.runStepAttempt(runCtx, localStepAttempt{
@@ -303,6 +334,7 @@ func (r *DeploymentRunner) Run(
 				environment:  envMap,
 				attempt:      attempt,
 				artifact:     stage,
+				handoff:      handoff,
 			})
 			if lastErr == nil {
 				break

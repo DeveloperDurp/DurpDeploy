@@ -1,0 +1,71 @@
+package agentserver
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+
+	"durpdeploy/internal/events"
+)
+
+func (s *Server) maintainHealth(ctx context.Context) error {
+	if s.eventBus == nil {
+		return nil
+	}
+	transitions, err := s.repository.AdvanceAgentHealth(ctx)
+	if err != nil {
+		return err
+	}
+	if len(transitions) == 0 {
+		return nil
+	}
+	for _, transition := range transitions {
+		var typ events.Type
+		switch transition.Health {
+		case "stale":
+			typ = events.AgentStale
+		case "offline":
+			typ = events.AgentOffline
+		case "healthy":
+			if transition.Previous == "stale" ||
+				transition.Previous == "offline" {
+				typ = events.AgentRecovered
+			}
+		}
+		if typ == "" {
+			continue
+		}
+		s.publishHealthAlert(ctx, events.Event{
+			Type: typ,
+			Message: fmt.Sprintf(
+				"Agent %s (%s) is %s. Inspect /admin/agents/%s",
+				transition.Agent.Name, transition.Agent.ID,
+				transition.Health, transition.Agent.ID,
+			),
+		})
+	}
+	return nil
+}
+
+func (s *Server) publishHealthAlert(ctx context.Context, evt events.Event) {
+	s.healthAlertsOnce.Do(func() {
+		// ponytail: bounded, ordered best-effort delivery; a durable outbox
+		// is only needed if full queues or failed deliveries must retry.
+		s.healthAlerts = make(chan events.Event, 128)
+		go func() {
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case alert := <-s.healthAlerts:
+					s.eventBus.Publish(ctx, alert)
+				}
+			}
+		}()
+	})
+	select {
+	case s.healthAlerts <- evt:
+	default:
+		slog.Warn("Agent health alert queue full", "event_type", evt.Type)
+	}
+}

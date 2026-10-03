@@ -55,7 +55,7 @@ func newAPIHarness(t *testing.T, binary ...string) *harness {
 	if len(binary) == 0 {
 		rnr = runner.New(repo, broker)
 	} else {
-		rnr = runner.NewWithPodmanBinaryForTest(repo, broker, binary[0])
+		rnr = runner.NewWithContainerBinaryForTest(repo, broker, binary[0])
 	}
 	return &harness{repo: repo, runner: rnr, broker: broker}
 }
@@ -493,10 +493,13 @@ func TestGetDeploymentStatus(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
-	var resp map[string]string
+	var resp struct {
+		Status           string `json:"status"`
+		WaitingForAgents bool   `json:"waiting_for_agents"`
+	}
 	mustDecode(t, rec.Body, &resp)
-	if resp["status"] != "running" {
-		t.Fatalf("expected running, got %v", resp["status"])
+	if resp.Status != "running" || resp.WaitingForAgents {
+		t.Fatalf("expected running without queued remote work, got %+v", resp)
 	}
 }
 

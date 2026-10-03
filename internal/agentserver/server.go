@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"net/http"
+	"sync"
 	"time"
 
 	"durpdeploy/internal/db"
@@ -27,11 +28,13 @@ type Config struct {
 }
 
 type Server struct {
-	repository *repository.Repository
-	dispatcher *dispatch.Dispatcher
-	identity   agenttls.Identity
-	broker     *runner.LogBroker
-	eventBus   *events.Bus
+	repository       *repository.Repository
+	dispatcher       *dispatch.Dispatcher
+	identity         agenttls.Identity
+	broker           *runner.LogBroker
+	eventBus         *events.Bus
+	healthAlerts     chan events.Event
+	healthAlertsOnce sync.Once
 }
 
 func New(config Config) (*Server, error) {
@@ -132,5 +135,8 @@ func (s *Server) Authenticated(next http.Handler) http.Handler {
 }
 
 func (s *Server) Maintain(ctx context.Context) error {
-	return s.dispatcher.Maintain(ctx)
+	if err := s.dispatcher.Maintain(ctx); err != nil {
+		return err
+	}
+	return s.maintainHealth(ctx)
 }

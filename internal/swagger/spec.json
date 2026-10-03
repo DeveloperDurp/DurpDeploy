@@ -188,6 +188,229 @@
         ]
       }
     },
+    "/admin/agents/{id}/drain": {
+      "post": {
+        "tags": [
+          "admin-agents"
+        ],
+        "summary": "Stop new claims without cancelling issued work. Repeated calls are harmless.",
+        "operationId": "drainAgent",
+        "parameters": [
+          {
+            "type": "string",
+            "x-go-name": "ID",
+            "name": "id",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "EmptyResponse is returned for no-content endpoints.",
+            "schema": {
+              "$ref": "#/definitions/EmptyResponse"
+            }
+          },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "409": {
+            "description": "Conflict error response.",
+            "schema": {
+              "$ref": "#/definitions/ConflictError"
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
+            }
+          },
+          "500": {
+            "description": "Server error response.",
+            "schema": {
+              "$ref": "#/definitions/ServerError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/admin/agents/{id}/environments": {
+      "post": {
+        "tags": [
+          "admin-agents"
+        ],
+        "summary": "Assign an environment routing label to an agent.",
+        "operationId": "addAgentEnvironment",
+        "parameters": [
+          {
+            "type": "string",
+            "x-go-name": "ID",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "x-go-name": "Body",
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/AgentEnvironmentRequest"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "EmptyResponse is returned for no-content endpoints.",
+            "schema": {
+              "$ref": "#/definitions/EmptyResponse"
+            }
+          },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
+            }
+          },
+          "500": {
+            "description": "Server error response.",
+            "schema": {
+              "$ref": "#/definitions/ServerError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "admin-agents"
+        ],
+        "summary": "Remove an environment routing label from an agent.",
+        "operationId": "deleteAgentEnvironment",
+        "parameters": [
+          {
+            "type": "string",
+            "x-go-name": "ID",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "x-go-name": "Body",
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/AgentEnvironmentRequest"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "EmptyResponse is returned for no-content endpoints.",
+            "schema": {
+              "$ref": "#/definitions/EmptyResponse"
+            }
+          },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
+            }
+          },
+          "500": {
+            "description": "Server error response.",
+            "schema": {
+              "$ref": "#/definitions/ServerError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/admin/agents/{id}/labels": {
       "post": {
         "tags": [
@@ -316,6 +539,79 @@
             "description": "Not found error response.",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
+            }
+          },
+          "500": {
+            "description": "Server error response.",
+            "schema": {
+              "$ref": "#/definitions/ServerError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/admin/agents/{id}/resume": {
+      "post": {
+        "tags": [
+          "admin-agents"
+        ],
+        "summary": "Resume new claims. Repeated calls are harmless.",
+        "operationId": "resumeAgent",
+        "parameters": [
+          {
+            "type": "string",
+            "x-go-name": "ID",
+            "name": "id",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "EmptyResponse is returned for no-content endpoints.",
+            "schema": {
+              "$ref": "#/definitions/EmptyResponse"
+            }
+          },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "409": {
+            "description": "Conflict error response.",
+            "schema": {
+              "$ref": "#/definitions/ConflictError"
             }
           },
           "413": {
@@ -7976,20 +8272,46 @@
     "Agent": {
       "type": "object",
       "properties": {
+        "administrative_status": {
+          "type": "string",
+          "x-go-name": "AdministrativeStatus"
+        },
+        "agent_protocol": {
+          "$ref": "#/definitions/swaggerSQLNullString"
+        },
         "agent_version": {
           "$ref": "#/definitions/swaggerSQLNullString"
         },
         "certificate_fingerprint": {
           "$ref": "#/definitions/swaggerSQLNullString"
         },
+        "compatibility": {
+          "type": "string",
+          "x-go-name": "Compatibility"
+        },
         "created_at": {
           "type": "integer",
           "format": "int64",
           "x-go-name": "CreatedAt"
         },
+        "current_work": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/swaggerAgentWork"
+          },
+          "x-go-name": "CurrentWork"
+        },
+        "draining": {
+          "type": "boolean",
+          "x-go-name": "Draining"
+        },
         "endpoint": {
           "type": "string",
           "x-go-name": "Endpoint"
+        },
+        "health": {
+          "type": "string",
+          "x-go-name": "Health"
         },
         "id": {
           "type": "string",
@@ -8002,15 +8324,34 @@
           },
           "x-go-name": "Interpreters"
         },
+        "last_error": {
+          "$ref": "#/definitions/swaggerAgentError"
+        },
         "last_heartbeat_at": {
           "$ref": "#/definitions/swaggerSQLNullInteger"
+        },
+        "last_successful_deployment": {
+          "$ref": "#/definitions/swaggerAgentSuccess"
         },
         "name": {
           "type": "string",
           "x-go-name": "Name"
         },
+        "queued_work": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "QueuedWork"
+        },
+        "recommended_agent_version": {
+          "type": "string",
+          "x-go-name": "RecommendedAgentVersion"
+        },
         "revoked_at": {
           "$ref": "#/definitions/swaggerSQLNullInteger"
+        },
+        "server_version": {
+          "type": "string",
+          "x-go-name": "ServerVersion"
         },
         "status": {
           "type": "string",
@@ -8031,6 +8372,13 @@
         "agent": {
           "$ref": "#/definitions/Agent"
         },
+        "environment_labels": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Environment"
+          },
+          "x-go-name": "EnvironmentLabels"
+        },
         "labels": {
           "type": "array",
           "items": {
@@ -8040,6 +8388,18 @@
         }
       },
       "x-go-name": "swaggerAgentDetailResponse",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "AgentEnvironmentRequest": {
+      "type": "object",
+      "properties": {
+        "environment_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "EnvironmentID"
+        }
+      },
+      "x-go-name": "swaggerAgentEnvironmentRequest",
       "x-go-package": "durpdeploy/internal/handler/api"
     },
     "AgentLabelRequest": {
@@ -8427,6 +8787,10 @@
         "status": {
           "type": "string",
           "x-go-name": "Status"
+        },
+        "waiting_for_agents": {
+          "type": "boolean",
+          "x-go-name": "WaitingForAgents"
         }
       },
       "x-go-name": "swaggerDeploymentStatusResponse",
@@ -10891,6 +11255,67 @@
           "type": "integer",
           "format": "int64",
           "x-go-name": "TargetDeploymentID"
+        }
+      },
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "swaggerAgentError": {
+      "type": "object",
+      "properties": {
+        "deployment_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "DeploymentID"
+        },
+        "finished_at": {
+          "$ref": "#/definitions/swaggerSQLNullInteger"
+        },
+        "reason": {
+          "type": "string",
+          "x-go-name": "Reason"
+        },
+        "state": {
+          "type": "string",
+          "x-go-name": "State"
+        },
+        "step_index": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "StepIndex"
+        }
+      },
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "swaggerAgentSuccess": {
+      "type": "object",
+      "properties": {
+        "deployment_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "DeploymentID"
+        },
+        "finished_at": {
+          "$ref": "#/definitions/swaggerSQLNullInteger"
+        }
+      },
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "swaggerAgentWork": {
+      "type": "object",
+      "properties": {
+        "deployment_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "DeploymentID"
+        },
+        "state": {
+          "type": "string",
+          "x-go-name": "State"
+        },
+        "step_index": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "StepIndex"
         }
       },
       "x-go-package": "durpdeploy/internal/handler/api"

@@ -66,7 +66,13 @@ func podmanFixture(
 	dir := t.TempDir()
 	trace := filepath.Join(dir, "trace")
 	binary := filepath.Join(dir, "podman")
-	cli := "#!/bin/sh\n" + body
+	// Step-focused fixtures also provide the deployment's idle staging keeper.
+	cli := `#!/bin/sh
+case "$3" in
+inspect) printf 'true\n'; exit 0;;
+run) for arg do case "$arg" in --detach) exit 0;; esac; done;;
+esac
+` + body
 	if err := os.WriteFile(
 		binary,
 		[]byte(cli),

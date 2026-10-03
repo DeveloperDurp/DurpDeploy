@@ -132,7 +132,7 @@ type tokenIDPathParam struct {
 	TokenID string `json:"id"`
 }
 
-// swagger:parameters getAgent retryPairAgent revokeAgent addAgentLabel deleteAgentLabel
+// swagger:parameters getAgent retryPairAgent revokeAgent drainAgent resumeAgent addAgentLabel deleteAgentLabel addAgentEnvironment deleteAgentEnvironment
 type agentIDPathParam struct {
 	// in: path
 	// required: true
@@ -258,6 +258,13 @@ type pairAgentBodyParam struct {
 	// in: body
 	// required: true
 	Body swaggerPairAgentRequest `json:"body"`
+}
+
+// swagger:parameters addAgentEnvironment deleteAgentEnvironment
+type agentEnvironmentBodyParam struct {
+	// in: body
+	// required: true
+	Body swaggerAgentEnvironmentRequest `json:"body"`
 }
 
 // swagger:parameters addAgentLabel deleteAgentLabel
