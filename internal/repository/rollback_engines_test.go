@@ -1,12 +1,85 @@
 package repository
 
 import (
+	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/secret"
 )
+
+func TestRollbackWaitsForCompetingReleaseCreationAcrossDatabases(t *testing.T) {
+	forEachDeploymentCreationEngine(t, func(t *testing.T, name string) {
+		creator, rollback := openDeploymentCreationEngine(t,
+			newDeploymentCreationEngine(t, name))
+		good, failed := seedRollbackEngine(t, creator)
+		release, err := creator.Queries.CreateRelease(t.Context(),
+			db.CreateReleaseParams{
+				ProjectID: 1, Version: "competing-v3", StepsJson: "[]",
+			})
+		if err != nil {
+			t.Fatal(err)
+		}
+		created, commit, done := holdCompetingDeployment(t, creator, release.ID)
+		defer commit()
+		select {
+		case <-created:
+		case err := <-done:
+			t.Fatalf("create competing deployment: %v", err)
+		}
+		// A different release still holds the shared project lock. The rollback
+		// must wait before checking whether its source remains current.
+		ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
+		defer cancel()
+		_, err = rollback.CreateRollback(ctx, failed, good)
+		if err == nil || ctx.Err() != context.DeadlineExceeded {
+			t.Fatalf("rollback escaped the competing project lock: %v", err)
+		}
+		commit()
+		if err := <-done; err != nil {
+			t.Fatal(err)
+		}
+		if _, err := rollback.CreateRollback(
+			t.Context(),
+			failed,
+			good,
+		); !errors.Is(
+			err,
+			ErrRollbackConflict,
+		) {
+			t.Fatalf(
+				"rollback accepted a stale source after competing commit: %v",
+				err,
+			)
+		}
+	})
+}
+
+func holdCompetingDeployment(
+	t *testing.T, repo *Repository, releaseID int64,
+) (<-chan struct{}, context.CancelFunc, <-chan error) {
+	t.Helper()
+	created := make(chan struct{})
+	ctx, commit := context.WithCancel(t.Context())
+	done := make(chan error, 1)
+	go func() {
+		done <- repo.WithTx(t.Context(), func(q *db.Queries) error {
+			_, err := repo.createDeployment(t.Context(), q,
+				db.CreateDeploymentParams{
+					ReleaseID: releaseID, EnvironmentID: 1, Status: "pending",
+				})
+			close(created)
+			if err != nil {
+				return err
+			}
+			<-ctx.Done()
+			return nil
+		})
+	}()
+	return created, commit, done
+}
 
 func TestVerificationRollbackAcrossDatabases(t *testing.T) {
 	forEachDeploymentCreationEngine(t, func(t *testing.T, name string) {
