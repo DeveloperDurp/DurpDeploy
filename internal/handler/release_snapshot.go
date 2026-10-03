@@ -98,7 +98,7 @@ func RefreshReleaseSnapshot(
 	}
 	defer tx.Rollback()
 	queries := repo.Queries.WithTx(tx)
-	if err := lockRefreshableRelease(ctx, queries, release.ID); err != nil {
+	if err := lockRefreshableRelease(ctx, queries, release); err != nil {
 		return db.Release{}, err
 	}
 	updated, err := queries.UpdateRelease(ctx, db.UpdateReleaseParams{

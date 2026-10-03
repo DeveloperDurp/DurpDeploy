@@ -13,12 +13,9 @@ var ErrReleaseSnapshotLocked = errors.New(
 )
 
 func lockRefreshableRelease(
-	ctx context.Context, q *db.Queries, releaseID int64,
+	ctx context.Context, q *db.Queries, release db.Release,
 ) error {
-	release, err := q.GetRelease(ctx, releaseID)
-	if err != nil {
-		return err
-	}
+	// Acquire the write lock before a SQLite read snapshot can block its upgrade.
 	projectRows, err := q.LockProject(ctx, release.ProjectID)
 	if err != nil {
 		return err
@@ -26,12 +23,12 @@ func lockRefreshableRelease(
 	if projectRows == 0 {
 		return sql.ErrNoRows
 	}
-	changed, err := q.LockUnusedReleaseSnapshot(ctx, releaseID)
+	changed, err := q.LockUnusedReleaseSnapshot(ctx, release.ID)
 	if err != nil {
 		return err
 	}
 	if changed == 0 {
-		release, err := q.GetRelease(ctx, releaseID)
+		release, err := q.GetRelease(ctx, release.ID)
 		if err != nil {
 			return err
 		}
