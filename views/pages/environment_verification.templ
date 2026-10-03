@@ -33,7 +33,7 @@ templ EnvironmentVerificationFields(env *db.Environment) {
 templ DeploymentVerificationStatus(deployment db.Deployment, check db.DeploymentVerification) {
 	<div class="card bg-base-200 p-4 space-y-2"
 		hx-get={ fmt.Sprintf("/deployments/%d/verification", deployment.ID) }
-		if !isTerminalStatus(deployment.Status) && check.Status != "disabled" {
+		if check.Status == "pending" || check.Status == "running" {
 			hx-trigger="every 3s"
 		} else {
 			hx-trigger="none"

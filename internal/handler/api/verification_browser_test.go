@@ -12,6 +12,60 @@ import (
 	"durpdeploy/internal/events"
 )
 
+func TestVerificationPollingBrowserE2E(t *testing.T) {
+	// Given: a terminal deployment and the stale verification state from a read.
+	f := newVerificationE2E(t)
+	configureVerification(t, f, "bash", "echo healthy", 5)
+	deployment := verificationDeploy(t, f,
+		verificationRelease(t, f, "browser-poll"))
+	f.completion(t, deployment.ID, events.DeploymentSucceeded)
+	setVerificationPollingState(t, f, deployment.ID, "pending")
+	browser := startPackageBrowser(t)
+	var cookie struct{ Success bool }
+	browser.call(t, "Network.setCookie", map[string]any{
+		"name": "session", "value": f.session, "url": f.baseURL,
+		"httpOnly": true,
+	}, &cookie)
+	if !cookie.Success {
+		t.Fatal("browser session was not established")
+	}
+	browser.call(t, "Page.navigate", map[string]string{
+		"url": fmt.Sprintf("%s/deployments/%d", f.baseURL, deployment.ID),
+	}, &struct{}{})
+	const card = `document.querySelector('[hx-get$="/verification"]')`
+	browser.wait(t, card+`?.getAttribute('hx-trigger') === 'every 3s'`)
+	capture := func(status string) {
+		for _, width := range []int{375, 768, 1280} {
+			browser.call(
+				t,
+				"Emulation.setDeviceMetricsOverride",
+				map[string]any{
+					"width":             width,
+					"height":            900,
+					"deviceScaleFactor": 1,
+					"mobile":            false,
+				},
+				&struct{}{},
+			)
+			browser.wait(
+				t,
+				"document.documentElement.scrollWidth <= innerWidth",
+			)
+			browser.screenshot(
+				t,
+				fmt.Sprintf("verification-poll-%s-%d", status, width),
+			)
+		}
+	}
+	capture("pending")
+	// When: the authoritative check becomes terminal after the page loaded.
+	setVerificationPollingState(t, f, deployment.ID, "succeeded")
+	// Then: HTMX polling updates the status without a navigation or reload.
+	browser.wait(t, card+`?.getAttribute('hx-trigger') === 'none' && `+
+		card+`.innerText.includes('succeeded')`)
+	capture("succeeded")
+}
+
 func TestVerificationRollbackBrowserE2E(t *testing.T) {
 	// Given: the real web/API server and installed browser harness.
 	f := newVerificationE2E(t)
