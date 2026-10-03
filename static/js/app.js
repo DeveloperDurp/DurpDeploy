@@ -388,7 +388,7 @@ Alpine.data('deploymentStepLogs', ({ url, status, view }) => ({
 	finish(status) {
 		this.deploymentStatus = status;
 		for (const panel of this.panels) {
-			if (panel.state === 'pending') panel.state = 'not_run';
+			if (panel.state === 'pending') panel.state = 'unknown';
 			if (['running', 'waiting'].includes(panel.state)) {
 				panel.state = 'unknown';
 			}

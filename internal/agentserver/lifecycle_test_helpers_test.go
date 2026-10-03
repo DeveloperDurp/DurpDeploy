@@ -48,6 +48,8 @@ func seedAgentLifecycle(t *testing.T, repo *repository.Repository) {
 				firstHash[:], expiresAt, lastHeartbeat, lastHeartbeat,
 				lastHeartbeat, lastHeartbeat,
 			}},
+		{`INSERT INTO deployment_step_sources(deployment_id,steps_json)
+			SELECT id,'[]' FROM deployments`, nil},
 	}
 	for _, statement := range statements {
 		if _, err := repo.DB.Exec(

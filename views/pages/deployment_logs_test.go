@@ -35,7 +35,7 @@ func TestDeploymentLogPanelsKeepAmbiguousLegacyOutputSeparate(t *testing.T) {
 			},
 		},
 	)
-	if view.LastID != 3 || view.Panels[0].State != "not_run" ||
+	if view.LastID != 3 || view.Panels[0].State != "unknown" ||
 		view.Panels[1].State != "failed" || view.Panels[1].Logs[0].Line != "indexed" ||
 		view.Panels[2].State != "unknown" || view.Panels[2].Logs[0].Line != "legacy" ||
 		view.Panels[3].Logs[0].Line != "ambiguous" {

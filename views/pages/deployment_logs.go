@@ -92,7 +92,7 @@ func deploymentLogPanels(
 			panel.State = "unknown"
 		}
 		if terminal && panel.State == "pending" {
-			panel.State = "not_run"
+			panel.State = "unknown"
 		}
 		panel.Open = panel.State == "running" || panel.State == "waiting" ||
 			panel.State == "failed" ||

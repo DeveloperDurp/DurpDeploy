@@ -134,6 +134,9 @@ func attemptLogWriter(
 	if _, err := repo.DB.ExecContext(t.Context(), `INSERT INTO deployments(id,release_id,environment_id,status) VALUES(?,?,?,'running')`, id, release.ID, env.ID); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := repo.DB.ExecContext(t.Context(), `INSERT INTO deployment_step_sources(deployment_id,steps_json) VALUES(?,'[]')`, id); err != nil {
+		t.Fatal(err)
+	}
 	return &broadcastWriter{ctx: t.Context(), repo: repo, broker: r.broker,
 		deploymentID: id, stepIndex: sql.NullInt64{Valid: true}, scrubber: NewScrubber(nil)}
 }
@@ -195,6 +198,9 @@ esac
 		deploymentID: dep.ID,
 		stepName:     "step",
 		scrubber:     NewScrubber([]string{"topsecret"}),
+	}
+	if _, err := repo.DB.ExecContext(t.Context(), `INSERT INTO deployment_step_sources(deployment_id,steps_json) VALUES(?,'[]')`, dep.ID); err != nil {
+		t.Fatal(err)
 	}
 	// When
 	err = r.runStepAttempt(

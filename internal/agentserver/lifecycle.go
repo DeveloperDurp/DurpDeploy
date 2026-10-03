@@ -187,23 +187,13 @@ func (s *Server) Result(w http.ResponseWriter, r *http.Request) {
 	if !writeLifecycleStatus(w, err) {
 		return
 	}
-	handled, err := s.repository.FinishRemoteStep(
-		r.Context(), claim, string(request.State),
+	inserted, handled, err := s.repository.FinishRemoteStepWithLogs(
+		r.Context(), claim, string(request.State), scrubber,
 	)
 	result := repository.RemoteTerminalResult{}
 	if err == nil && !handled {
-		result, err = s.repository.FinishRemoteDeploymentLifecycle(
-			r.Context(), claim, string(request.State),
-		)
-	}
-	var inserted []db.DeploymentLog
-	if err == nil && handled {
-		inserted, _, err = s.repository.FlushRemoteStepLogs(
-			r.Context(), claim, scrubber,
-		)
-	} else if err == nil {
-		inserted, err = s.repository.FlushRemoteDeploymentLogs(
-			r.Context(), claim, scrubber,
+		inserted, result, err = s.repository.FinishRemoteDeploymentWithLogs(
+			r.Context(), claim, string(request.State), scrubber,
 		)
 	}
 	if !writeLifecycleStatus(w, err) {
@@ -235,22 +225,12 @@ func (s *Server) Cancelled(w http.ResponseWriter, r *http.Request) {
 	if !writeLifecycleStatus(w, err) {
 		return
 	}
-	_, handled, err := s.repository.AcknowledgeRemoteStepCancellation(
-		r.Context(), claim,
+	inserted, handled, err := s.repository.FinishRemoteStepWithLogs(
+		r.Context(), claim, "cancelled", scrubber,
 	)
 	if err == nil && !handled {
-		_, err = s.repository.AcknowledgeRemoteCancellation(
-			r.Context(), claim,
-		)
-	}
-	var inserted []db.DeploymentLog
-	if err == nil && handled {
-		inserted, _, err = s.repository.FlushRemoteStepLogs(
-			r.Context(), claim, scrubber,
-		)
-	} else if err == nil {
-		inserted, err = s.repository.FlushRemoteDeploymentLogs(
-			r.Context(), claim, scrubber,
+		inserted, _, err = s.repository.FinishRemoteDeploymentWithLogs(
+			r.Context(), claim, "cancelled", scrubber,
 		)
 	}
 	if !writeLifecycleStatus(w, err) {

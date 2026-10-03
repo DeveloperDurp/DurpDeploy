@@ -303,6 +303,19 @@ func (q *Queries) ListDeploymentLogsByDeployment(ctx context.Context, deployment
 	return items, nil
 }
 
+const lockDeploymentLogStream = `-- name: LockDeploymentLogStream :execrows
+UPDATE deployment_step_sources SET steps_json = steps_json -- NOSONAR: intentional write lock
+WHERE deployment_id = ?
+`
+
+func (q *Queries) LockDeploymentLogStream(ctx context.Context, deploymentID int64) (int64, error) {
+	result, err := q.db.ExecContext(ctx, lockDeploymentLogStream, deploymentID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const updateDeploymentLog = `-- name: UpdateDeploymentLog :one
 UPDATE deployment_logs SET deployment_id = ?, step_name = ?, line = ? WHERE id = ? RETURNING id, deployment_id, step_name, line, created_at, step_index, step_state
 `

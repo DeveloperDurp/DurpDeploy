@@ -81,7 +81,7 @@ func (w *broadcastWriter) finishState(result error, cancelled bool) {
 }
 
 func (w *broadcastWriter) writeLine(line, state string) error {
-	_, err := w.repo.Queries.CreateStepDeploymentLog(
+	_, err := w.repo.CreateStepDeploymentLog(
 		w.ctx,
 		db.CreateStepDeploymentLogParams{
 			DeploymentID: w.deploymentID,

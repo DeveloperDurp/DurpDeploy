@@ -4,6 +4,7 @@ package api_test
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -130,6 +131,65 @@ func TestDeploymentStepLogsBrowserE2E(t *testing.T) {
 		t.Fatal("viewer logs missing or write controls exposed")
 	}
 	browser.captureStepLogs(t, "viewer-completed")
+}
+
+func TestDeploymentStepLogsHistoricalQuietBrowserE2E(t *testing.T) {
+	f := newArtifactE2E(t)
+	f.api(t, "POST", f.base()+"/steps", map[string]string{
+		"name": "Historical quiet step", "script_body": "true",
+		"container_image": "docker.io/library/bash:5.2",
+	}, 201)
+	var release db.Release
+	decodeStepLogTest(
+		t,
+		f.api(
+			t,
+			"POST",
+			f.base()+"/releases",
+			map[string]string{"version": "historical-quiet"},
+			201,
+		),
+		&release,
+	)
+	deployment, err := f.h.repo.Queries.CreateDeployment(
+		t.Context(),
+		db.CreateDeploymentParams{
+			ReleaseID:     release.ID,
+			EnvironmentID: f.environment.ID,
+			Status:        "succeeded",
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.api(
+		t,
+		"GET",
+		fmt.Sprintf("/api/v1/deployments/%d", deployment.ID),
+		nil,
+		200,
+	)
+	page := f.web(
+		t,
+		"GET",
+		fmt.Sprintf("/deployments/%d", deployment.ID),
+		nil,
+		200,
+	)
+	if !strings.Contains(page, "State unavailable") ||
+		strings.Contains(page, ">Not run<") {
+		t.Fatal("historical page inferred a step outcome without evidence")
+	}
+	browser := startPackageBrowser(t)
+	browser.setStepLogSession(t, f.baseURL, f.session)
+	browser.openStepLogPage(
+		t,
+		fmt.Sprintf("%s/deployments/%d", f.baseURL, deployment.ID),
+	)
+	browser.wait(
+		t,
+		`document.querySelector('[data-step-index="0"] .badge').textContent === 'State unavailable' && Alpine.$data(document.querySelector('[x-data^="deploymentStepLogs"]')).source === null`,
+	)
 }
 
 func (b *packageBrowser) setStepLogSession(
