@@ -221,6 +221,7 @@ async function main() {
 	await writeFile(join(sentinelDir, "bash"), `#!/bin/sh\n: > '${sentinelMarker}'\nexit 97\n`, { mode: 0o700 });
 	const serverEnvironment = {
 		...process.env,
+		TMPDIR: runDir,
 		LANG: "ddp-server-execution-sentinel",
 		PATH: `${sentinelDir}:${process.env.PATH}`,
 		DURPDEPLOY_ADDR: browserReservation.address,
