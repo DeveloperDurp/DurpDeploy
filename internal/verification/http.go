@@ -35,11 +35,7 @@ func CheckHTTP(ctx context.Context, settings Settings, output io.Writer) error {
 	}
 	response, err := client.Do(req)
 	if err != nil {
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		// Transport errors may include credentials in URL query parameters.
-		return ErrHTTP
+		return httpFailure(ctx, err)
 	}
 	defer response.Body.Close()
 	if _, err := fmt.Fprintf(output, "HTTP status: %d\n",
@@ -49,7 +45,7 @@ func CheckHTTP(ctx context.Context, settings Settings, output io.Writer) error {
 	const maxOutput = 64 * 1024
 	if _, err := io.Copy(output, io.LimitReader(response.Body,
 		maxOutput)); err != nil {
-		return ErrHTTP
+		return httpFailure(ctx, err)
 	}
 	if _, err := io.WriteString(output, "\n"); err != nil {
 		return fmt.Errorf("write verification output: %w", err)
@@ -58,4 +54,15 @@ func CheckHTTP(ctx context.Context, settings Settings, output io.Writer) error {
 		return ErrHTTP
 	}
 	return nil
+}
+
+func httpFailure(ctx context.Context, err error) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return context.DeadlineExceeded
+	}
+	// Transport errors may include credentials in URL query parameters.
+	return ErrHTTP
 }

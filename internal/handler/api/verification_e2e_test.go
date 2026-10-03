@@ -3,7 +3,10 @@
 package api_test
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -11,7 +14,31 @@ import (
 	"time"
 
 	"durpdeploy/internal/events"
+	"durpdeploy/internal/verification"
 )
+
+func TestVerificationHTTPTransportTimeoutPreservesDeadline(t *testing.T) {
+	for _, phase := range []string{"headers", "body"} {
+		t.Run(phase, func(t *testing.T) {
+			upstream := verificationUpstream(t,
+				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					if phase == "body" {
+						w.WriteHeader(http.StatusOK)
+						w.(http.Flusher).Flush()
+					}
+					<-r.Context().Done()
+				}))
+			// The client deadline expires while the caller's context stays live.
+			err := verification.CheckHTTP(t.Context(), verification.Settings{
+				Target: upstream, TimeoutSeconds: 1,
+			}, io.Discard)
+			if !errors.Is(err, context.DeadlineExceeded) ||
+				t.Context().Err() != nil {
+				t.Fatalf("%s timeout lost its deadline: %v", phase, err)
+			}
+		})
+	}
+}
 
 func TestVerificationAPIWebContainerE2E(t *testing.T) {
 	// Given: a real server, encrypted release variables, and local containers.
