@@ -1240,7 +1240,18 @@ CODE=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/api/swagger/")
 CODE=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/api/swagger/index.html")
 [[ "$CODE" == "200" ]] || { echo "FAIL: swagger UI got $CODE, want 200"; exit 1; }
 SWAGGER=$(curl -s "$BASE/api/swagger/spec")
-echo "$SWAGGER" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d['swagger']=='2.0'; print('swagger spec OK')"
+echo "$SWAGGER" | python3 -c '
+import sys,json
+d=json.load(sys.stdin)
+assert d["swagger"] == "2.0"
+for path,method in [
+    ("/deployments/{id}/verification", "get"),
+    ("/deployments/{id}/rollback", "get"),
+    ("/deployments/{id}/rollback", "post"),
+]:
+    assert d["paths"][path][method].get("security") == [{"bearer": []}], (path,method)
+print("swagger spec OK")
+'
 echo "  Swagger UI + spec: OK"
 
 echo "=== ALL E2E CHECKS PASSED ==="

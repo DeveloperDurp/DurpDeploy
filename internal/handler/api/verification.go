@@ -10,6 +10,9 @@ import (
 //
 // Get the snapshotted verification check and its outcome.
 //
+//	Security:
+//	  bearer:
+//
 // Responses:
 //
 //	200: body:DeploymentVerification

@@ -10,6 +10,9 @@ import (
 //
 // Preview the latest prior successful different release in the same project and environment.
 //
+//	Security:
+//	  bearer:
+//
 // Responses:
 //
 //	200: body:RollbackPreview
@@ -42,6 +45,9 @@ type rollbackRequest struct {
 // swagger:route POST /deployments/{id}/rollback deployments rollbackDeployment
 //
 // Create an audited deployment of the confirmed rollback target. Normal gates and approvals apply.
+//
+//	Security:
+//	  bearer:
 //
 // Responses:
 //

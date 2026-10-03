@@ -2478,7 +2478,12 @@
               "$ref": "#/definitions/ServerError"
             }
           }
-        }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
       },
       "post": {
         "tags": [
@@ -2560,7 +2565,12 @@
               "$ref": "#/definitions/ServerError"
             }
           }
-        }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
       }
     },
     "/deployments/{id}/status": {
@@ -2681,7 +2691,12 @@
               "$ref": "#/definitions/ServerError"
             }
           }
-        }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
       }
     },
     "/environments": {
