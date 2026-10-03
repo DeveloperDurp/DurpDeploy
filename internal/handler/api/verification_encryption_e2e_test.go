@@ -74,6 +74,20 @@ func TestVerificationHTTPBinaryQueryNameE2E(t *testing.T) {
 	assertHTTPQueryRedactionForViewer(t, f, deployment.ID)
 }
 
+func TestVerificationHTTPMultilineQueryNameE2E(t *testing.T) {
+	f := newVerificationE2E(t)
+	const name = "newlineprivateone\nnewlinesecrettwo"
+	target := verificationUpstream(t, http.HandlerFunc(
+		func(w http.ResponseWriter, _ *http.Request) {
+			fmt.Fprint(w, "healthy ", name, " suffix")
+		})) + "/probe?mode=ready&" + url.QueryEscape(name)
+	configureVerification(t, f, "http", target, 5)
+	deployment := verificationDeploy(t, f,
+		verificationRelease(t, f, "multiline-query-name"))
+	f.completion(t, deployment.ID, events.DeploymentSucceeded)
+	assertHTTPQueryRedactionForViewer(t, f, deployment.ID)
+}
+
 func checkVerificationHostnameRedaction(t *testing.T, host string) {
 	t.Helper()
 	f := newVerificationE2E(t)
@@ -195,6 +209,7 @@ func assertHTTPQueryRedactionForViewer(
 	logs := strings.Join(lines, "\n")
 	page := html.UnescapeString(f.web(t, "GET", path, nil, 200))
 	for _, value := range []string{verificationQueryCredential,
+		"newlineprivateone", "newlinesecrettwo",
 		"private�proof", "private%FFproof",
 		verificationQueryNameCredential,
 		url.QueryEscape(verificationQueryNameCredential),
