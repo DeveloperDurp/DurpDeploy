@@ -48,7 +48,7 @@ templ LifecycleDetail(lc db.Lifecycle, stages []LifecycleStageView, availableEnv
 				if CanWrite(ctx) {
 					<button type="submit" form="lifecycle-settings-form" class="btn btn-primary btn-sm">Save</button>
 				}
-				<a href="/lifecycles" class="btn btn-ghost btn-sm">Back</a>
+				<a href="/lifecycles" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>
 			</div>
 		</div>
 		<div class="card bg-base-200 p-4">

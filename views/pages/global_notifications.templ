@@ -145,7 +145,7 @@ templ GlobalNotificationsPage(global db.GlobalNotification, currentPath string) 
 					<h1 class="text-3xl font-bold">Notification Settings</h1>
 					<div class="flex gap-2">
 						<button type="submit" class="btn btn-primary btn-sm">Save</button>
-						<a href="/admin/notifications" class="btn btn-ghost btn-sm">Back</a>
+						<a href="/admin/notifications" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>
 					</div>
 				</div>
 				@GlobalNotificationCards(global)
@@ -154,7 +154,7 @@ templ GlobalNotificationsPage(global db.GlobalNotification, currentPath string) 
 			<div class="flex justify-between items-center mb-4">
 				<h1 class="text-3xl font-bold">Notification Settings</h1>
 				<div class="flex gap-2">
-					<a href="/admin/notifications" class="btn btn-ghost btn-sm">Back</a>
+					<a href="/admin/notifications" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>
 				</div>
 			</div>
 			@GlobalNotificationCards(global)

@@ -39,7 +39,7 @@ templ DeployFormPage(project db.Project, releases []db.Release, selectedRelease 
 		<div class="flex justify-between items-center">
 			<h1 class="text-3xl font-bold">Deploy { project.Name }</h1>
 			<div class="flex gap-2">
-				<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost btn-sm">Back</a>
+				<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>
 			</div>
 		</div>
 		if len(releases) == 0 {

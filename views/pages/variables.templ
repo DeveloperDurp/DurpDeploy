@@ -78,7 +78,7 @@ templ VariablesContent(project db.Project, variables []db.Variable, environments
 		<div class="flex justify-between items-center">
 			<h1 class="text-3xl font-bold">Variables — { project.Name }</h1>
 			<div class="flex gap-2">
-				<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost btn-sm">Back</a>
+				<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>
 			</div>
 		</div>
 		@VariablesFragment(project, variables, environments, errorMsg)

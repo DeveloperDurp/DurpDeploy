@@ -460,7 +460,7 @@ func TestStepTemplate_VersioningShadowHistory(t *testing.T) {
 	if !strings.Contains(body, "T1") {
 		t.Errorf("history body missing template name %q\nbody=%s", "T1", body)
 	}
-	const back = `<a href="/templates" class="btn btn-ghost btn-sm">Back</a>`
+	const back = `<a href="/templates" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>`
 	if strings.Count(body, back) != 1 {
 		t.Errorf("history back control = %q, want exactly one %q", body, back)
 	}

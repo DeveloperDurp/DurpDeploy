@@ -176,6 +176,8 @@ func (b *packageBrowser) wait(t *testing.T, predicate string) {
 				predicate,
 			), "returnByValue": true,
 		}, &result)
+		// A navigation destroys promises tied to the old document. Poll from
+		// the driver instead, allowing only that transient context failure.
 		if err != nil &&
 			!strings.Contains(
 				err.Error(),

@@ -37,7 +37,7 @@ templ ScheduledDeploymentsContent(project db.Project, items []ScheduledDeploymen
 				if CanWrite(ctx) {
 					<a href={ fmt.Sprintf("/projects/%d/schedules/new", project.ID) } class="btn btn-primary btn-sm">New Schedule</a>
 				}
-				<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost btn-sm">Back</a>
+				<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>
 			</div>
 		</div>
 		@ScheduledDeploymentsList(project, items)

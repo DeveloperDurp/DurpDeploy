@@ -71,6 +71,22 @@ keep `overflow-x-auto` and `table table-zebra table-fixed w-full`.
 - Configuration replacement preserves historical package pins, and the page
   states that saving affects only future snapshots.
 
+### Back navigation
+- Generic Back/Go back links use native browser history, preserving previous
+  URLs, filters, and pagination. They do not add entries or maintain a URL stack.
+- Header links use `btn btn-ghost btn-sm`, grouped beside the other actions with
+  `flex flex-wrap gap-2`. Back remains available to viewers and keyboard users.
+- The existing parent URL is the fallback for an empty history. Package
+  repository Back falls back to its project; the standalone viewer rejection
+  page falls back to Projects. JavaScript replaces the direct entry to avoid a
+  Back loop; links also work without JavaScript.
+- The Navigation API distinguishes a first entry with forward history from a
+  real previous page when all entries are visible. Cross-origin entries and old
+  browsers hide that position; in those cases Back favors browser history over
+  a guessed fallback. Modified clicks retain normal anchor behavior.
+- Breadcrumbs, named destination links, and Cancel controls retain their
+  explicit destinations.
+
 ## 6. Motion & Interaction
 
 Deployment logs use one native `details` disclosure per release step, in release

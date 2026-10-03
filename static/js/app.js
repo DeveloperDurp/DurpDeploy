@@ -4,6 +4,23 @@ import htmx from 'htmx.org'
 window.Alpine = Alpine
 window.htmx = htmx
 
+Alpine.data('backNavigation', () => ({
+	back(event) {
+		if (event.defaultPrevented || event.button !== 0 || event.ctrlKey ||
+			event.metaKey || event.shiftKey || event.altKey) return;
+		const navigation = window.navigation;
+		// Navigation entries omit other origins. Only fall back when the
+		// browser proves there is no previous entry; otherwise use real history.
+		event.preventDefault();
+		if (history.length === 1 || (navigation && !navigation.canGoBack &&
+			navigation.entries().length === history.length)) {
+			location.replace(event.currentTarget.href);
+			return;
+		}
+		history.back();
+	},
+}));
+
 Alpine.data('toast', () => ({
 	visible: false,
 	message: '',

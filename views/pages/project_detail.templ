@@ -35,7 +35,7 @@ templ ProjectDetail(project db.Project, panel LifecyclePanel, vars []db.Variable
 				if CanWrite(ctx) {
 					<a href={ fmt.Sprintf("/projects/%d/edit", project.ID) } class="btn btn-secondary btn-sm">Edit</a>
 				}
-				<a href="/projects" class="btn btn-ghost btn-sm">Back</a>
+				<a href="/projects" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>
 			</div>
 		</div>
 		<p class="mb-6 text-gray-400">
@@ -426,7 +426,7 @@ templ ProjectNotificationsPage(project db.Project, currentPath string) {
 					<h1 class="text-3xl font-bold">Notifications</h1>
 					<div class="flex gap-2">
 						<button type="submit" class="btn btn-primary btn-sm">Save</button>
-						<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost btn-sm">Back</a>
+						<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>
 					</div>
 				</div>
 				@NotificationSettingsSection(project)
@@ -435,7 +435,7 @@ templ ProjectNotificationsPage(project db.Project, currentPath string) {
 			<div class="flex justify-between items-center mb-4">
 				<h1 class="text-3xl font-bold">Notifications</h1>
 				<div class="flex gap-2">
-					<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost btn-sm">Back</a>
+					<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>
 				</div>
 			</div>
 			@NotificationSettingsSection(project)

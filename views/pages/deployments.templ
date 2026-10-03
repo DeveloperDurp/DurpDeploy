@@ -377,7 +377,7 @@ templ DeploymentDetail(project db.Project, release db.Release, environment db.En
 					}
 				}
 				@StatusBadgeContainer(deployment)
-				<a href={ fmt.Sprintf("/projects/%d/releases/%d", project.ID, release.ID) } class="btn btn-ghost btn-sm">Back</a>
+				<a href={ fmt.Sprintf("/projects/%d/releases/%d", project.ID, release.ID) } class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>
 			</div>
 		</div>
 		<div class="card bg-base-200 p-4">
