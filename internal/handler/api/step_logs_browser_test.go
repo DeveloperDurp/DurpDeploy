@@ -81,6 +81,7 @@ func TestDeploymentStepLogsBrowserE2E(t *testing.T) {
 		t,
 		`document.querySelector('[data-step-index="1"] summary').focus(); true`,
 	)
+	browser.captureStepLogs(t, "keyboard-focused")
 	for _, kind := range []string{"keyDown", "keyUp"} {
 		text := ""
 		if kind == "keyDown" {
@@ -92,6 +93,7 @@ func TestDeploymentStepLogsBrowserE2E(t *testing.T) {
 		}, &struct{}{})
 	}
 	browser.wait(t, `!document.querySelector('[data-step-index="1"]').open`)
+	browser.captureStepLogs(t, "keyboard-collapsed")
 	f.completion(t, deployment.ID, events.DeploymentSucceeded)
 	browser.wait(
 		t,
