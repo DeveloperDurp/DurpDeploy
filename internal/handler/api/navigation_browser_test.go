@@ -232,6 +232,10 @@ func (b *packageBrowser) captureNavigation(t *testing.T, name string) {
 			) != "true" {
 				t.Fatal("navigation overflows viewport")
 			}
+			b.wait(
+				t,
+				`!document.querySelector('.htmx-settling') && document.getAnimations().every(a => a.playState !== 'running')`,
+			)
 			b.screenshot(
 				t,
 				fmt.Sprintf("navigation-%s-%s-%d", name, theme, width),

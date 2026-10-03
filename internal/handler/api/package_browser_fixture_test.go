@@ -213,10 +213,26 @@ func (b *packageBrowser) screenshot(t *testing.T, name string) {
 	var result struct {
 		Data string `json:"data"`
 	}
+	var clip struct {
+		X, Y, Width, Height, Scale float64
+	}
+	if err := json.Unmarshal(b.evaluate(t, `({x: 0, y: 0, width: innerWidth, height: Math.max(innerHeight, document.documentElement.scrollHeight), scale: 1})`), &clip); err != nil {
+		t.Fatal(err)
+	}
 	b.call(
 		t,
 		"Page.captureScreenshot",
-		map[string]any{"format": "png", "captureBeyondViewport": false},
+		map[string]any{
+			"format":                "png",
+			"captureBeyondViewport": true,
+			"clip": map[string]float64{
+				"x":      clip.X,
+				"y":      clip.Y,
+				"width":  clip.Width,
+				"height": clip.Height,
+				"scale":  clip.Scale,
+			},
+		},
 		&result,
 	)
 	image, err := base64.StdEncoding.DecodeString(result.Data)
