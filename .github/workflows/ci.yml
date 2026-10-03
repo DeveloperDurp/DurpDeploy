@@ -43,6 +43,8 @@ jobs:
         run: make pre-commit-test
         env:
           GOFLAGS: -mod=readonly
+      - name: Test development agent lifecycle
+        run: make dev-agent-test
 
   # ----- Dockerfile lint ---------------------------------------------------
   lint-dockerfile:

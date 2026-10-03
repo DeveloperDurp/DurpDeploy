@@ -231,6 +231,55 @@ stores no server secret or deployment payload at rest. A current claim marker
 contains only the deployment ID and a SHA-256 hash of the claim token and is
 removed after the claim completes.
 
+## Development container
+
+With `make dev` running in another terminal, start the published agent image:
+
+```bash
+make dev-agent
+```
+
+This pulls `ghcr.io/developerdurp/durpdeploy-agent:ec04223` and runs it in the
+foreground using Docker or Podman. In **Admin > Agents > Pair agent**, enter
+`https://127.0.0.1:10944`, the terminal's pairing code, and fingerprint, then
+compare the fingerprint and approve. The development server advertises
+`https://host.containers.internal:10943`, which the container can reach.
+The server's agent listener must be reachable from the container; `make dev`
+sets its listen address to `0.0.0.0:10943` by default.
+
+`make dev` reloads the server when watched Go, templ, or SQL files change.
+Server restart recovery cancels in-flight remote steps; an agent can finish
+its script before it receives that cancellation. Avoid source edits during
+deployment tests, then rerun any deployment interrupted by a reload.
+
+Stop with Ctrl-C, or from another terminal:
+
+```bash
+make dev-agent-down
+```
+
+The container is removed, but its private `durpdeploy-dev-agent-state` volume
+retains the paired identity for the next run. To stop and delete that identity:
+
+```bash
+make dev-agent-reset
+```
+
+Reset requires pairing again. Revoke the old agent in the admin UI when
+discarding it. Pairing output is terminal-only; container logging is disabled.
+The image supplies Bash; this image does not install Python or PowerShell.
+
+Override the image, host pairing port, or container name when needed:
+
+```bash
+make dev-agent DEV_AGENT_IMAGE=ghcr.io/developerdurp/durpdeploy-agent:ec04223 DEV_AGENT_PORT=10945
+```
+
+`DEV_AGENT_CONTAINER` also determines the default state-volume name. Supply
+the same overrides to the down/reset targets. Set `DEV_CONTAINER_ENGINE=podman`
+or `DEV_CONTAINER_ENGINE=docker` to select an engine explicitly. This target
+does not start or modify the server, and does not mount its database or secrets.
+
 ## Agent execution boundary
 
 Agent execution does **not** use a per-step `chroot`. The container or systemd
