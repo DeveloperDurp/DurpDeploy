@@ -163,13 +163,37 @@ func (b *packageBrowser) evaluate(
 
 func (b *packageBrowser) wait(t *testing.T, predicate string) {
 	t.Helper()
-	expression := fmt.Sprintf(
-		`new Promise((resolve, reject) => { const deadline = Date.now() + 15000; function check() { if (%s) return resolve(true); if (Date.now() > deadline) return reject(new Error('condition timeout')); requestAnimationFrame(check); } check(); })`,
-		predicate,
-	)
-	if string(b.evaluate(t, expression)) != "true" {
-		t.Fatal("browser condition did not become true")
+	for deadline := time.Now().Add(15 * time.Second); time.Now().Before(deadline); {
+		var result struct {
+			Result struct {
+				Value json.RawMessage `json:"value"`
+			} `json:"result"`
+			Exception json.RawMessage `json:"exceptionDetails"`
+		}
+		err := b.wire.call("Runtime.evaluate", b.session, map[string]any{
+			"expression": fmt.Sprintf(
+				"Boolean(%s)",
+				predicate,
+			), "returnByValue": true,
+		}, &result)
+		if err != nil &&
+			!strings.Contains(
+				err.Error(),
+				"Inspected target navigated or closed",
+			) {
+			t.Fatal(err)
+		}
+		if err == nil {
+			if len(result.Exception) != 0 {
+				t.Fatal("browser predicate evaluation failed")
+			}
+			if string(result.Result.Value) == "true" {
+				return
+			}
+		}
+		time.Sleep(25 * time.Millisecond)
 	}
+	t.Fatalf("browser condition timed out: %s", predicate)
 }
 
 func (b *packageBrowser) screenshot(t *testing.T, name string) {
@@ -187,7 +211,7 @@ func (b *packageBrowser) screenshot(t *testing.T, name string) {
 	b.call(
 		t,
 		"Page.captureScreenshot",
-		map[string]any{"format": "png", "captureBeyondViewport": true},
+		map[string]any{"format": "png", "captureBeyondViewport": false},
 		&result,
 	)
 	image, err := base64.StdEncoding.DecodeString(result.Data)

@@ -159,6 +159,30 @@ finished_at=unixepoch() WHERE deployment_id=? AND step_index=1`,
 	if err != nil || len(runs) != 1 || runs[0].State != "succeeded" {
 		t.Fatalf("remote runs = %+v, error = %v", runs, err)
 	}
+	logs, err := repo.Queries.ListDeploymentLogsByDeployment(
+		ctx,
+		created.Deployment.ID,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	states := make(map[int64][]string)
+	for _, log := range logs {
+		if log.StepState.Valid {
+			if !log.StepIndex.Valid {
+				t.Fatal("step lifecycle event has no release step index")
+			}
+			states[log.StepIndex.Int64] = append(
+				states[log.StepIndex.Int64],
+				log.StepState.String,
+			)
+		}
+	}
+	// The query returns newest rows first.
+	if strings.Join(states[0], ",") != "succeeded,running" ||
+		strings.Join(states[1], ",") != "succeeded,running,waiting" {
+		t.Fatalf("local/agent lifecycle states=%v", states)
+	}
 	contents, err = os.ReadFile(marker)
 	if err != nil {
 		t.Fatal(err)

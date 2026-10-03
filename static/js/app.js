@@ -325,6 +325,81 @@ Alpine.data('deploymentStream', ({ url }) => ({
 	},
 }));
 
+Alpine.data('deploymentStepLogs', ({ url, status, view }) => ({
+	url,
+	deploymentStatus: status,
+	panels: view.panels,
+	lastID: view.lastID,
+	source: null,
+	init() {
+		// Cancellation can set terminal status before the runner writes final logs.
+		const address = new URL(this.url, location.href);
+		address.searchParams.set('after', this.lastID);
+		this.source = new EventSource(address);
+		this.source.addEventListener('log', event => this.message(event));
+		this.source.addEventListener('complete', event => {
+			this.finish(JSON.parse(event.data).status);
+			this.source?.close();
+			this.source = null;
+		});
+	},
+	terminal() {
+		return ['succeeded', 'failed', 'cancelled', 'cleanup_unconfirmed'].includes(this.deploymentStatus);
+	},
+	message(event) {
+		const entry = JSON.parse(event.data);
+		if (entry.id <= this.lastID) return;
+		this.lastID = entry.id;
+		let panel = this.panels.find(item => item.index === entry.step_index);
+		if (!panel && entry.step) {
+			const matches = this.panels.filter(item => item.index >= 0 &&
+				(entry.step === item.name || entry.step.startsWith(`${item.name} @ `)));
+			if (matches.length === 1) panel = matches[0];
+		}
+		panel ??= this.panels.find(item => item.index === -1);
+		panel.live.push(entry);
+		if (entry.state) {
+			panel.state = entry.state;
+			if (['running', 'waiting', 'failed'].includes(entry.state)) {
+				this.$el.querySelector(`[data-step-index="${panel.index}"]`).open = true;
+			}
+		} else if (panel.state === 'pending') {
+			panel.state = 'unknown';
+		}
+	},
+	stateLabel(state) {
+		return ({ waiting: 'Waiting for agents', running: 'Running',
+			succeeded: 'Succeeded', failed: 'Failed', cancelled: 'Cancelled',
+			not_run: 'Not run', unknown: 'State unavailable' })[state] ?? 'Pending';
+	},
+	activeStepText() {
+		const active = this.panels.find(panel => panel.index >= 0 && ['running', 'waiting'].includes(panel.state));
+		if (active) return `${this.stateLabel(active.state)}: Step ${active.index + 1} — ${active.name}`;
+		if (this.terminal()) return `Deployment ${this.deploymentStatus.replaceAll('_', ' ')}`;
+		if (this.deploymentStatus === 'running') return 'Current step unavailable';
+		return 'Waiting to start';
+	},
+	statusChanged(event) {
+		const target = event.target instanceof Element ? event.target : event.detail?.target;
+		if (!(target instanceof Element) || target.id !== 'status-badge') return;
+		this.deploymentStatus = target.textContent.trim();
+		// The stream drains final logs before sending its complete event.
+	},
+	finish(status) {
+		this.deploymentStatus = status;
+		for (const panel of this.panels) {
+			if (panel.state === 'pending') panel.state = 'not_run';
+			if (['running', 'waiting'].includes(panel.state)) {
+				panel.state = 'unknown';
+			}
+		}
+	},
+	destroy() {
+		this.source?.close();
+		this.source = null;
+	},
+}));
+
 function base64URLToBuffer(value) {
 	const padded = value.replace(/-/g, '+').replace(/_/g, '/').padEnd(
 		value.length + ((4 - (value.length % 4)) % 4),

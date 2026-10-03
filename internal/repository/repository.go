@@ -73,7 +73,8 @@ WHERE deployment_id = ?`, deploymentID).Scan(&watermark); err != nil {
 	var offset int64
 	for {
 		rows, err := r.DB.QueryContext(ctx, `
-SELECT l.id, l.deployment_id, l.step_name, l.line, l.created_at
+SELECT l.id, l.deployment_id, l.step_name, l.line, l.created_at,
+    l.step_index, l.step_state
 FROM deployment_logs l
 LEFT JOIN deployment_log_scopes s ON s.log_id = l.id
 WHERE l.deployment_id = ?
@@ -100,6 +101,8 @@ LIMIT ? OFFSET ?`, deploymentID, watermark, batchSize, offset)
 				&log.StepName,
 				&log.Line,
 				&log.CreatedAt,
+				&log.StepIndex,
+				&log.StepState,
 			); err != nil {
 				return errors.Join(err, rows.Close())
 			}

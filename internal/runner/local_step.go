@@ -35,6 +35,12 @@ func (r *DeploymentRunner) runStepAttempt(
 		return context.Canceled
 	}
 	defer r.localWork.Done()
+	if err := request.logWriter.state("running"); err != nil {
+		return err
+	}
+	defer func() {
+		request.logWriter.finishState(result, runCtx.Err() != nil)
+	}()
 	if request.step.ContainerImage == "" {
 		return fmt.Errorf(
 			"step %q has no container image (legacy local steps cannot run on the host)",

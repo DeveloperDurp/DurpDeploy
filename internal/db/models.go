@@ -126,6 +126,8 @@ type DeploymentLog struct {
 	StepName     sql.NullString `json:"step_name"`
 	Line         string         `json:"line"`
 	CreatedAt    int64          `json:"created_at"`
+	StepIndex    sql.NullInt64  `json:"step_index"`
+	StepState    sql.NullString `json:"step_state"`
 }
 
 type DeploymentLogScope struct {

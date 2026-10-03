@@ -273,7 +273,7 @@ func (q *Queries) GetLastRemoteStepLogSequence(ctx context.Context, arg GetLastR
 }
 
 const getRemoteStepLogBySequence = `-- name: GetRemoteStepLogBySequence :one
-SELECT l.id, l.deployment_id, l.step_name, l.line, l.created_at FROM deployment_logs l
+SELECT l.id, l.deployment_id, l.step_name, l.line, l.created_at, l.step_index, l.step_state FROM deployment_logs l
 JOIN remote_step_log_sequences s ON s.log_id = l.id
 WHERE s.deployment_id = ? AND s.step_index = ? AND s.agent_id = ?
   AND s.sequence = ?
@@ -300,6 +300,8 @@ func (q *Queries) GetRemoteStepLogBySequence(ctx context.Context, arg GetRemoteS
 		&i.StepName,
 		&i.Line,
 		&i.CreatedAt,
+		&i.StepIndex,
+		&i.StepState,
 	)
 	return i, err
 }

@@ -41,6 +41,10 @@ func (h *LogHandler) streamDeploymentLogs(
 	r *http.Request,
 	deploymentID int64,
 ) {
+	if r.URL.Query().Get("format") == "structured" {
+		httpstream.StreamStepLogs(w, r, h.repo, h.broker, deploymentID)
+		return
+	}
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")

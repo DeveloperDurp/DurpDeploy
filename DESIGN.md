@@ -73,6 +73,12 @@ keep `overflow-x-auto` and `table table-zebra table-fixed w-full`.
 
 ## 6. Motion & Interaction
 
+Deployment logs use one native `details` disclosure per release step, in release
+order, with a semantic state badge. Running, waiting, and failed steps open
+automatically; users can collapse them with the keyboard. A polite status line
+names the active step even while its script is quiet. Unattributed historical
+logs appear as deployment messages, with unavailable states shown explicitly.
+
 Existing interaction is intentionally minimal: native `details` disclosure,
 Alpine theme/dropdown state, HTMX swaps, and `x-transition.opacity.duration.300ms`
 for toasts. New controls reuse native disclosure and existing Alpine behavior;

@@ -59,6 +59,8 @@ func (r *DeploymentRunner) Run(
 	ctx context.Context,
 	deploymentID, releaseID, environmentID int64,
 ) {
+	r.broker.beginDeployment(deploymentID)
+	defer r.broker.endDeployment(deploymentID)
 	runCtx, cancel := context.WithCancel(ctx)
 	r.mu.Lock()
 	if r.stopping {
@@ -208,6 +210,7 @@ func (r *DeploymentRunner) Run(
 			repo:         r.repo,
 			deploymentID: deploymentID,
 			stepName:     step.Name,
+			stepIndex:    sql.NullInt64{Int64: int64(stepIndex), Valid: true},
 			ctx:          ctx,
 			scrubber:     scrubber,
 		}

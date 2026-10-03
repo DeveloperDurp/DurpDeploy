@@ -16,6 +16,14 @@ SELECT * FROM deployment_logs WHERE id = ?;
 -- name: CreateDeploymentLog :one
 INSERT INTO deployment_logs (deployment_id, step_name, line) VALUES (?, ?, ?) RETURNING *;
 
+-- name: CreateStepDeploymentLog :one
+INSERT INTO deployment_logs (deployment_id, step_name, line, step_index, step_state)
+VALUES (?, ?, ?, ?, ?) RETURNING *;
+
+-- name: ListDeploymentLogsAfter :many
+SELECT * FROM deployment_logs WHERE deployment_id = ? AND id > ?
+ORDER BY id LIMIT 256;
+
 -- name: CreateRemoteDeploymentLog :one
 INSERT INTO deployment_logs (deployment_id, step_name, line, created_at)
 VALUES (?, NULL, ?, ?) RETURNING *;
