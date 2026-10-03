@@ -259,6 +259,42 @@ Once deployments are terminal, environment deletion removes their history.
 
 - Swagger: `https://<your-host>/api/swagger/` — full request/response shapes.
 - Server docs: <https://github.com/DeveloperDurp/durpdeploy>.
+## Passing files between deployment steps
+
+Local container steps receive `DURPDEPLOY_STAGE_DIR=/stage`, even with a
+`variable_names` restriction. Write or copy files into this directory to pass
+them to later local steps of the same deployment. For example, a producing step
+runs `cp build.tar "$DURPDEPLOY_STAGE_DIR/build.tar"`; a later step reads that
+file at the same path. This works with the existing step, release, deployment,
+and runbook endpoints; no artifact publication request is needed.
+
+Each deployment starts with an empty directory. Files survive step completion
+and retries; failed attempts can leave partial files. Publish completed outputs
+with a temporary file and atomic rename when a retry must not consume partial
+data. Ordinary step `/tmp` files remain private to each attempt.
+
+The runtime also needs the digest-pinned Alpine staging helper documented in
+`docs/deploy.md`; an offline installation must preload it alongside step
+images before launching deployments.
+
+The staging path is reserved: variable create/update requests return 422 for
+`DURPDEPLOY_STAGE_DIR`, and step variable selections cannot include it. Staging
+is writable, noexec, nosuid, and nodev, backed by a bounded temporary volume
+(512 MiB plus 10,000 host pages, 20,000 inodes). Local attempts have a combined
+memory ceiling of that staging capacity plus 256 MiB; process memory and
+`/tmp` share this allowance with staging writes. It is removed on success,
+failure, cancellation, or shutdown; startup reclaims orphaned volumes within
+the configured runtime namespace. Unconfirmed removal yields
+`cleanup_unconfirmed` and blocks retry until a successful startup runtime sweep
+changes the deployment to `failed`, even if a later cleanup attempt removed
+the remaining resources. This preserves the existing conservative recovery
+contract for local execution.
+
+Only local Docker/Podman container steps share these files. Remote agent steps
+do not receive the staging directory or transferred files. Staging is neither
+a cross-deployment cache nor durable storage for an approval pause or restart.
+Pinned release packages remain read-only at `ARTIFACT_PATH=/artifacts`.
+
 ## Generic ZIP packages
 
 Each project has one active HTTPS ZIP repository. Saving it automatically

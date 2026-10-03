@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"durpdeploy/internal/containerenv"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/repository"
 )
@@ -152,6 +153,9 @@ func buildReleaseSnapshot(
 	}
 	params := make([]db.CreateReleaseVariableParams, len(variables))
 	for index, variable := range variables {
+		if variable.Name == containerenv.StageVariable {
+			return releaseSnapshotData{}, containerenv.ErrReserved
+		}
 		if variable.Name == "ARTIFACT_PATH" {
 			return releaseSnapshotData{}, repository.ErrArtifactPathReserved
 		}

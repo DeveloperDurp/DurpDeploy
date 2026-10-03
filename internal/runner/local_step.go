@@ -25,6 +25,7 @@ type localStepAttempt struct {
 	environment  map[string]string
 	attempt      int
 	artifact     artifactStage
+	handoff      artifactStage
 }
 
 func (r *DeploymentRunner) runStepAttempt(
@@ -56,11 +57,20 @@ func (r *DeploymentRunner) runStepAttempt(
 		request.logWriter.Flush()
 		return err
 	}
-	if request.artifact.volume != "" {
-		output, err := r.engine.command(runCtx, "inspect", "--format={{.State.Running}}", request.artifact.keeper).
+	if _, exists := request.environment[containerenv.StageVariable]; exists {
+		return fmt.Errorf(
+			"%s conflicts with a snapshotted variable",
+			containerenv.StageVariable,
+		)
+	}
+	for _, stage := range []artifactStage{request.artifact, request.handoff} {
+		if stage.volume == "" {
+			continue
+		}
+		output, err := r.engine.command(runCtx, "inspect", "--format={{.State.Running}}", stage.keeper).
 			Output()
 		if err != nil || strings.TrimSpace(string(output)) != "true" {
-			return errors.New("artifact staging container is unavailable")
+			return errors.New("staging container is unavailable")
 		}
 	}
 	selected, err := interpreter.Validate(request.step.Interpreter)
@@ -116,6 +126,13 @@ func (r *DeploymentRunner) runStepAttempt(
 		selectedEnv = append(selectedEnv, "ARTIFACT_PATH="+artifactMount)
 		envArgs = append(envArgs, "--env", "ARTIFACT_PATH")
 	}
+	if request.handoff.volume != "" {
+		selectedEnv = append(
+			selectedEnv,
+			containerenv.StageVariable+"="+deploymentStageMount,
+		)
+		envArgs = append(envArgs, "--env", containerenv.StageVariable)
+	}
 	nonce := make([]byte, 12)
 	if _, err := rand.Read(nonce); err != nil {
 		return err
@@ -134,6 +151,13 @@ func (r *DeploymentRunner) runStepAttempt(
 	if r.engine.kind == "podman" {
 		timeoutFlag = "--timeout="
 	}
+	memoryLimit := "--memory=256m"
+	if request.handoff.volume != "" {
+		// The writing attempt is charged for shared tmpfs pages.
+		memoryLimit = fmt.Sprintf(
+			"--memory=%d", artifactStagingCapacity()+(256<<20),
+		)
+	}
 	args = append(args,
 		"--interactive", "--pull=missing",
 		timeoutFlag+fmt.Sprint(int64(timeout/time.Second)),
@@ -144,12 +168,13 @@ func (r *DeploymentRunner) runStepAttempt(
 		"--security-opt=no-new-privileges", "--user=65534:65534",
 		"--tmpfs=/tmp:rw,nosuid,size=64m",
 		"--env=HOME=/tmp", "--env=TERM=dumb",
-		"--pids-limit=128", "--memory=256m", "--cpus=1")
+		"--pids-limit=128", memoryLimit, "--cpus=1")
 	if r.engine.kind == "podman" {
 		args = append(args, "--image-volume=ignore", "--http-proxy=false")
 	}
 	args = append(args, envArgs...)
 	args = append(args, r.artifactMountArgs(request.artifact)...)
+	args = append(args, r.deploymentMountArgs(request.handoff)...)
 	args = append(args, "--entrypoint="+selected, request.step.ContainerImage)
 	switch selected {
 	case interpreter.Bash:
