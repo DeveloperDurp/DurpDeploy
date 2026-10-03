@@ -34,6 +34,7 @@ func TestVerificationPollingBrowserE2E(t *testing.T) {
 	}, &struct{}{})
 	const card = `document.querySelector('[hx-get$="/verification"]')`
 	browser.wait(t, card+`?.getAttribute('hx-trigger') === 'every 3s'`)
+	browser.evaluate(t, "document.fonts.ready.then(() => true)")
 	capture := func(status string) {
 		for _, width := range []int{375, 768, 1280} {
 			browser.call(
@@ -51,6 +52,9 @@ func TestVerificationPollingBrowserE2E(t *testing.T) {
 				t,
 				"document.documentElement.scrollWidth <= innerWidth",
 			)
+			browser.evaluate(t, `new Promise(resolve => {
+ requestAnimationFrame(() => requestAnimationFrame(() => resolve(true)));
+})`)
 			browser.screenshot(
 				t,
 				fmt.Sprintf("verification-poll-%s-%d", status, width),
