@@ -21,72 +21,7 @@ func Install(t *testing.T, answers func(network string) []net.IP) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		buffer := make([]byte, 4096)
-		for {
-			count, peer, err := server.ReadFrom(buffer)
-			if errors.Is(err, net.ErrClosed) {
-				return
-			}
-			if err != nil {
-				t.Error(err)
-				return
-			}
-			var request dnsmessage.Message
-			if err := request.Unpack(buffer[:count]); err != nil {
-				t.Error(err)
-				return
-			}
-			response := dnsmessage.Message{
-				Header: dnsmessage.Header{
-					ID:            request.ID,
-					Response:      true,
-					Authoritative: true,
-				},
-				Questions: request.Questions,
-			}
-			for _, question := range request.Questions {
-				network := "ip4"
-				if question.Type == dnsmessage.TypeAAAA {
-					network = "ip6"
-				} else if question.Type != dnsmessage.TypeA {
-					continue
-				}
-				for _, ip := range answers(network) {
-					var body dnsmessage.ResourceBody
-					if network == "ip4" && ip.To4() != nil {
-						body = &dnsmessage.AResource{A: [4]byte(ip.To4())}
-					} else if network == "ip6" && ip.To4() == nil && ip.To16() != nil {
-						body = &dnsmessage.AAAAResource{
-							AAAA: [16]byte(ip.To16()),
-						}
-					} else {
-						continue
-					}
-					response.Answers = append(
-						response.Answers,
-						dnsmessage.Resource{
-							Header: dnsmessage.ResourceHeader{
-								Name:  question.Name,
-								Type:  question.Type,
-								Class: dnsmessage.ClassINET,
-							},
-							Body: body,
-						},
-					)
-				}
-			}
-			packet, err := response.Pack()
-			if err != nil {
-				t.Error(err)
-				return
-			}
-			if _, err := server.WriteTo(packet, peer); err != nil {
-				if !errors.Is(err, net.ErrClosed) {
-					t.Error(err)
-				}
-				return
-			}
-		}
+		serve(t, server, answers)
 	}()
 	previous := net.DefaultResolver
 	net.DefaultResolver = &net.Resolver{
@@ -106,4 +41,74 @@ func Install(t *testing.T, answers func(network string) []net.IP) {
 		}
 		<-done
 	})
+}
+
+func serve(t *testing.T, server net.PacketConn, answers func(string) []net.IP) {
+	buffer := make([]byte, 4096)
+	for {
+		count, peer, err := server.ReadFrom(buffer)
+		if errors.Is(err, net.ErrClosed) {
+			return
+		}
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		var request dnsmessage.Message
+		if err := request.Unpack(buffer[:count]); err != nil {
+			t.Error(err)
+			return
+		}
+		response := responseFor(request, answers)
+		packet, err := response.Pack()
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		if _, err := server.WriteTo(packet, peer); err != nil {
+			if !errors.Is(err, net.ErrClosed) {
+				t.Error(err)
+			}
+			return
+		}
+	}
+}
+
+func responseFor(
+	request dnsmessage.Message,
+	answers func(string) []net.IP,
+) dnsmessage.Message {
+	response := dnsmessage.Message{
+		Header: dnsmessage.Header{
+			ID: request.ID, Response: true, Authoritative: true,
+		},
+		Questions: request.Questions,
+	}
+	for _, question := range request.Questions {
+		network := "ip4"
+		if question.Type == dnsmessage.TypeAAAA {
+			network = "ip6"
+		} else if question.Type != dnsmessage.TypeA {
+			continue
+		}
+		for _, ip := range answers(network) {
+			var body dnsmessage.ResourceBody
+			if network == "ip4" && ip.To4() != nil {
+				body = &dnsmessage.AResource{A: [4]byte(ip.To4())}
+			} else if network == "ip6" && ip.To4() == nil && ip.To16() != nil {
+				body = &dnsmessage.AAAAResource{AAAA: [16]byte(ip.To16())}
+			} else {
+				continue
+			}
+			response.Answers = append(response.Answers, dnsmessage.Resource{
+				Header: dnsmessage.ResourceHeader{
+					Name:  question.Name,
+					Type:  question.Type,
+					Class: dnsmessage.ClassINET,
+				},
+				Body: body,
+			})
+		}
+	}
+	return response
 }

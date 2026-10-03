@@ -87,28 +87,6 @@ func verificationHTTPScrubber(target string, secrets []string) *Scrubber {
 		return NewScrubber(append(secrets, target))
 	}
 	secrets = append(secrets, target, u.RequestURI(), u.RawQuery, u.Host)
-	hosts := []string{u.Hostname()}
-	for _, convert := range []func(string) (string, error){
-		idna.Lookup.ToASCII, idna.Lookup.ToUnicode,
-	} {
-		host, err := convert(u.Hostname())
-		if err == nil && host != u.Hostname() {
-			hosts = append(hosts, host)
-		}
-	}
-	var patterns []string
-	for _, host := range hosts {
-		host = strings.TrimSuffix(host, ".")
-		values := []string{host}
-		if net.ParseIP(host) == nil {
-			values = append(values, strings.Split(host, ".")...)
-		}
-		for _, value := range values {
-			if value != "" {
-				patterns = append(patterns, "(?i:"+regexp.QuoteMeta(value)+")")
-			}
-		}
-	}
 	values := strings.Split(u.Path, "/")
 	for _, segment := range strings.Split(u.EscapedPath(), "/") {
 		value, err := url.PathUnescape(segment)
@@ -134,7 +112,33 @@ func verificationHTTPScrubber(target string, secrets []string) *Scrubber {
 			secrets = append(secrets, value)
 		}
 	}
-	return NewScrubber(secrets, patterns...)
+	return NewScrubber(secrets, verificationHTTPHostPatterns(u.Hostname())...)
+}
+
+func verificationHTTPHostPatterns(hostname string) []string {
+	hosts := []string{hostname}
+	for _, convert := range []func(string) (string, error){
+		idna.Lookup.ToASCII, idna.Lookup.ToUnicode,
+	} {
+		host, err := convert(hostname)
+		if err == nil && host != hostname {
+			hosts = append(hosts, host)
+		}
+	}
+	var patterns []string
+	for _, host := range hosts {
+		host = strings.TrimSuffix(host, ".")
+		values := []string{host}
+		if net.ParseIP(host) == nil {
+			values = append(values, strings.Split(host, ".")...)
+		}
+		for _, value := range values {
+			if value != "" {
+				patterns = append(patterns, "(?i:"+regexp.QuoteMeta(value)+")")
+			}
+		}
+	}
+	return patterns
 }
 
 func (r *DeploymentRunner) finishVerification(
