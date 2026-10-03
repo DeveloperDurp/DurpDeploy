@@ -213,7 +213,8 @@ in secret-key rotation. Bash snapshots retain selected variables without storing
 second plaintext copy of the check script. Explicit HTTP ports must be 1–65535.
 The configuration is frozen on deployment creation, including deployments
 waiting for approval. HTTP performs one server-side GET; only 2xx succeeds.
-Redirects, URL user credentials, loopback, link-local/metadata addresses,
+Redirects, URL user credentials, loopback, link-local/metadata addresses
+(including Alibaba ECS's `100.100.100.200` and AWS's `fd00:ec2::254`),
 environment proxies, and DNS rebinding are rejected; private unicast service
 addresses are allowed. Use a release secret variable for sensitive Bash values.
 

@@ -6,6 +6,8 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+
+	"durpdeploy/internal/artifact"
 )
 
 type Kind string
@@ -63,7 +65,7 @@ func validateHTTPURL(target string) error {
 		return ErrInvalid
 	}
 	if ip := net.ParseIP(u.Hostname()); ip != nil &&
-		(!ip.IsGlobalUnicast() || ip.IsLoopback()) {
+		!artifact.AllowedDestinationIP(ip) {
 		return ErrInvalid
 	}
 	if port := u.Port(); port != "" {

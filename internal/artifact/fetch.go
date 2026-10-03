@@ -65,12 +65,19 @@ func validateRepositoryIPs(ips []net.IPAddr) error {
 		return ErrFetch
 	}
 	for _, ip := range ips {
-		if ip.Zone != "" || !ip.IP.IsGlobalUnicast() || ip.IP.IsLoopback() ||
-			ip.IP.IsLinkLocalUnicast() {
+		if ip.Zone != "" || !AllowedDestinationIP(ip.IP) {
 			return ErrFetch
 		}
 	}
 	return nil
+}
+
+// AllowedDestinationIP permits private services but excludes local and cloud
+// metadata destinations, including Alibaba ECS and AWS's IPv6 endpoint.
+func AllowedDestinationIP(ip net.IP) bool {
+	return ip.IsGlobalUnicast() && !ip.IsLoopback() &&
+		!ip.IsLinkLocalUnicast() && !ip.Equal(net.IPv4(100, 100, 100, 200)) &&
+		!ip.Equal(net.ParseIP("fd00:ec2::254"))
 }
 
 type Download struct {
