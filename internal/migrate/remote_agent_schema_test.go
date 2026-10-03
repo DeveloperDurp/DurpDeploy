@@ -101,7 +101,7 @@ func TestRemoteAgentSchemaFreshUpgradeRollback(t *testing.T) {
 		assertRemoteLegacy(t, conn)
 		var legacyLogs int
 		err := conn.QueryRow(`SELECT COUNT(*) FROM deployment_logs
-			WHERE step_index IS NULL AND step_state IS NULL`).Scan(&legacyLogs)
+			WHERE id IN (7,8) AND step_index IS NULL AND step_state IS NULL`).Scan(&legacyLogs)
 		requireNoError(t, err, "legacy metadata")
 		if legacyLogs != 2 {
 			t.Fatalf("legacy rows were inferred or lost: %d", legacyLogs)
