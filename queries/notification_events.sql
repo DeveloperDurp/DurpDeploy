@@ -11,5 +11,5 @@ SELECT
 FROM notification_events ne
 LEFT JOIN projects p ON p.id = ne.project_id
 LEFT JOIN environments e ON e.id = ne.environment_id
-ORDER BY ne.created_at DESC
+ORDER BY ne.created_at DESC, ne.id DESC
 LIMIT ?;

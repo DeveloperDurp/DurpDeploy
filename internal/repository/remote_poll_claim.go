@@ -50,6 +50,10 @@ func (r *Repository) ClaimRemoteDeploymentPayload(
 			if locked == 0 {
 				return nil
 			}
+			agent, err := q.GetAgent(ctx, agentID)
+			if err != nil || agent.Draining != 0 {
+				return err
+			}
 			now, err := q.CurrentUnixTime(ctx)
 			if err != nil {
 				return fmt.Errorf("read database time: %w", err)

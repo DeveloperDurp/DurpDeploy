@@ -6,6 +6,10 @@ DEV_POSTGRES_CONTAINER ?= durpdeploy-dev-postgres
 DEV_POSTGRES_IMAGE ?= postgres:16-alpine
 DEV_MSSQL_CONTAINER ?= durpdeploy-dev-mssql
 DEV_MSSQL_IMAGE ?= mcr.microsoft.com/mssql/server:2022-latest
+DEV_AGENT_CONTAINER ?= durpdeploy-dev-agent
+DEV_AGENT_IMAGE ?= ghcr.io/developerdurp/durpdeploy-agent:ec04223
+DEV_AGENT_PORT ?= 10944
+DEV_AGENT_STATE_VOLUME ?= $(DEV_AGENT_CONTAINER)-state
 DEV_HTTPS_PROXY_CONTAINER ?= durpdeploy-dev-https
 DEV_HTTPS_PROXY_PORT ?= 8443
 DEV_HTTPS_PROXY_BACKEND ?= host.docker.internal:8080
@@ -57,6 +61,51 @@ dev-server:
 	DURPDEPLOY_SECRET_KEY=$${DURPDEPLOY_SECRET_KEY:-$$(openssl rand -base64 32)} \
 	DURPDEPLOY_EXECUTION_BOUNDARY=development \
 	DURPDEPLOY_ENV_FILE="$(ENV_FILE)" go run github.com/air-verse/air@latest
+
+.PHONY: dev-agent dev-agent-down dev-agent-reset dev-agent-test
+# Foreground pairing output stays on the terminal, outside container logs.
+dev-agent:
+	@test -n "$(DEV_CONTAINER_ENGINE)" || { echo 'Docker or Podman is unavailable.' >&2; exit 1; }
+	$(DEV_CONTAINER_ENGINE) pull '$(DEV_AGENT_IMAGE)'
+	@printf '%s\n' \
+		'Pair this agent at /admin/agents using https://127.0.0.1:$(DEV_AGENT_PORT).' \
+		'Compare the fingerprint and approve. Ctrl-C or make dev-agent-down stops it.'
+	@network_args='--add-host=host.containers.internal:host-gateway'; \
+	if [ '$(notdir $(DEV_CONTAINER_ENGINE))' = podman ]; then \
+		if command -v slirp4netns >/dev/null 2>&1; then \
+			network_args='--network=slirp4netns:allow_host_loopback=true'; \
+		else \
+			network_args='--network=pasta:--map-host-loopback,169.254.1.2'; \
+		fi; \
+	fi; \
+	$(DEV_CONTAINER_ENGINE) run --rm --name '$(DEV_AGENT_CONTAINER)' \
+		$$network_args --log-driver=none --read-only --user=10001:10001 \
+		--publish '127.0.0.1:$(DEV_AGENT_PORT):10943' \
+		--cap-drop=ALL --security-opt=no-new-privileges:true \
+		--memory=512m --cpus=1 --pids-limit=128 \
+		--tmpfs /tmp:size=64m,mode=1777 \
+		--volume '$(DEV_AGENT_STATE_VOLUME):/var/lib/durpdeploy-agent' \
+		--env DURPDEPLOY_AGENT_STATE_DIR=/var/lib/durpdeploy-agent \
+		--env DURPDEPLOY_AGENT_LISTEN_ADDR=0.0.0.0:10943 \
+		--env 'DURPDEPLOY_AGENT_VERSION=$(lastword $(subst :, ,$(DEV_AGENT_IMAGE)))' \
+		'$(DEV_AGENT_IMAGE)'
+
+# Stop the --rm container; retain identity so the next run resumes pairing.
+dev-agent-down:
+	@test -n "$(DEV_CONTAINER_ENGINE)" || { echo 'Docker or Podman is unavailable.' >&2; exit 1; }
+	@$(DEV_CONTAINER_ENGINE) info >/dev/null
+	@if $(DEV_CONTAINER_ENGINE) container inspect '$(DEV_AGENT_CONTAINER)' >/dev/null 2>&1; then \
+		$(DEV_CONTAINER_ENGINE) stop '$(DEV_AGENT_CONTAINER)'; \
+	fi
+
+# Explicitly discard this dev agent's identity; the next run needs pairing.
+dev-agent-reset: dev-agent-down
+	@if $(DEV_CONTAINER_ENGINE) volume inspect '$(DEV_AGENT_STATE_VOLUME)' >/dev/null 2>&1; then \
+		$(DEV_CONTAINER_ENGINE) volume rm '$(DEV_AGENT_STATE_VOLUME)'; \
+	fi
+
+dev-agent-test:
+	bash scripts/dev_agent_test.sh
 
 # Disposable database containers for manual backend testing. Stop them with
 # `$(DEV_CONTAINER_ENGINE) stop $(DEV_POSTGRES_CONTAINER)` or the matching

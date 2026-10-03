@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"durpdeploy/internal/audit"
 	"durpdeploy/internal/db"
 )
 
@@ -40,15 +41,20 @@ func (h *AgentsHandler) AddEnvironmentLabel(
 		writeAgentEnvironmentLabelNotFound(w, r, err)
 		return
 	}
-	if _, err := h.repo.Queries.AddAgentEnvironmentLabel(
+	changed, err := h.repo.Queries.AddAgentEnvironmentLabel(
 		r.Context(),
 		db.AddAgentEnvironmentLabelParams{
 			AgentID: agentID, EnvironmentID: environmentID,
 		},
-	); err != nil {
+	)
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	if changed == 0 {
+		audit.Suppress(r)
+	}
+	audit.SetAgentAssignment(r, "", environmentID)
 	http.Redirect(w, r, "/admin/agents/"+agentID, http.StatusSeeOther)
 }
 
@@ -84,6 +90,7 @@ func (h *AgentsHandler) DeleteEnvironmentLabel(
 		http.NotFound(w, r)
 		return
 	}
+	audit.SetAgentAssignment(r, "", environmentID)
 	http.Redirect(w, r, "/admin/agents/"+agentID, http.StatusSeeOther)
 }
 

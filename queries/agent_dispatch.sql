@@ -73,7 +73,7 @@ WHERE remote_deployment_claims.deployment_id = sqlc.arg(deployment_id)
         AND d.assigned_agent_id = remote_deployment_claims.agent_id
         AND d.status = 'pending')
   AND EXISTS (SELECT 1 FROM agents a
-      WHERE a.id = remote_deployment_claims.agent_id AND a.status = 'active'
+      WHERE a.id = remote_deployment_claims.agent_id AND a.status = 'active' AND a.draining = 0
         AND EXISTS (SELECT 1 FROM agent_pairings p
             WHERE p.agent_id = a.id AND p.state = 'paired'))
   AND NOT EXISTS (SELECT 1 FROM remote_deployment_claims busy

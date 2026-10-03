@@ -32,6 +32,7 @@ type agentFixture struct {
 	identity       agenttls.Identity
 	serverIdentity agenttls.Identity
 	broker         *runner.LogBroker
+	bus            *events.Bus
 }
 
 func newAgentFixture(t *testing.T) agentFixture {
@@ -128,7 +129,7 @@ func newAgentFixtureWithDSN(
 	return agentFixture{
 		repo: repo, agents: agents, server: srv,
 		client:   &http.Client{Transport: transport, Timeout: 3 * time.Second},
-		identity: peer, serverIdentity: identity, broker: broker,
+		identity: peer, serverIdentity: identity, broker: broker, bus: bus,
 	}
 }
 
