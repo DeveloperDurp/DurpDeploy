@@ -3,7 +3,9 @@
 package api_test
 
 import (
+	"encoding/json"
 	"fmt"
+	"html"
 	"net/http"
 	"net/url"
 	"strings"
@@ -81,8 +83,17 @@ func assertHTTPQueryRedactionForViewer(
 		t.Fatal("viewer can read the private verification target")
 	}
 	path := fmt.Sprintf("/deployments/%d", deploymentID)
-	logs := string(f.api(t, "GET", "/api/v1"+path+"/logs", nil, 200))
-	page := f.web(t, "GET", path, nil, 200)
+	var entries []db.DeploymentLog
+	if err := json.Unmarshal(f.api(t, "GET", "/api/v1"+path+"/logs", nil, 200),
+		&entries); err != nil {
+		t.Fatal(err)
+	}
+	var lines []string
+	for _, entry := range entries {
+		lines = append(lines, entry.Line)
+	}
+	logs := strings.Join(lines, "\n")
+	page := html.UnescapeString(f.web(t, "GET", path, nil, 200))
 	for _, value := range []string{verificationQueryCredential,
 		url.QueryEscape(verificationQueryCredential),
 		url.PathEscape(verificationQueryCredential)} {
