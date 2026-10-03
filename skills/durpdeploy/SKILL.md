@@ -216,7 +216,8 @@ waiting for approval. HTTP performs one server-side GET; only 2xx succeeds.
 Redirects, URL user credentials, loopback, link-local/metadata addresses
 (including Alibaba ECS's `100.100.100.200` and AWS's `fd00:ec2::254`),
 environment proxies, and DNS rebinding are rejected; private unicast service
-addresses are allowed. Use a release secret variable for sensitive Bash values.
+addresses are allowed. Use a release secret variable for sensitive Bash values;
+arbitrary literals embedded in a script are not automatically identified as secrets.
 
 Bash runs after all steps in a fixed, digest-pinned official Bash 5.2 server
 container, using the last step's selected variables and artifact mount. Project
@@ -231,7 +232,7 @@ requires at least one step.
 An empty-step Bash deployment is rejected with 422. A scheduled attempt with
 this configuration is disabled with an actionable `last_error`.
 Verification output uses the same secret scrubber as deployment logs.
-HTTP output also redacts the frozen URL, path segments, and all query values,
+HTTP output also redacts the frozen URL, path segments, and query names and values,
 including their URL-encoded forms. Hostnames and DNS labels are redacted without
 case sensitivity, including Unicode and IDNA forms, so an echoed request cannot
 expose configuration credentials.

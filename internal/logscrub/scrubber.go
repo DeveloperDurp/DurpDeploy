@@ -67,6 +67,9 @@ func newScrubber(
 			continue
 		}
 		literals = append(literals, secret)
+		if !utf8.ValidString(secret) {
+			literals = append(literals, string([]rune(secret)))
+		}
 	}
 	effectivePatterns := append([]string(nil), patterns...)
 	pendingPatterns := make([]pendingPattern, 0, len(streamPatterns))
@@ -100,7 +103,8 @@ func newScrubber(
 	})
 	knownParts := make([]string, len(literals))
 	for index, literal := range literals {
-		knownParts[index] = regexp.QuoteMeta(literal)
+		// Go regex treats invalid UTF-8 bytes as replacement runes.
+		knownParts[index] = regexp.QuoteMeta(string([]rune(literal)))
 	}
 	return &Scrubber{
 		all:             compile(append(knownParts, effectivePatterns...)),

@@ -95,21 +95,19 @@ func verificationHTTPScrubber(target string, secrets []string) *Scrubber {
 			values = append(values, value)
 		}
 	}
+	for _, pair := range strings.Split(u.RawQuery, "&") {
+		for _, value := range strings.SplitN(pair, "=", 2) {
+			secrets = append(secrets, value)
+			decoded, err := url.QueryUnescape(value)
+			if err == nil {
+				values = append(values, decoded)
+			}
+		}
+	}
 	for _, value := range values {
 		if value != "" {
 			secrets = append(secrets, value,
 				url.QueryEscape(value), url.PathEscape(value))
-		}
-	}
-	for _, values := range u.Query() {
-		for _, value := range values {
-			secrets = append(secrets, value,
-				url.QueryEscape(value), url.PathEscape(value))
-		}
-	}
-	for _, pair := range strings.Split(u.RawQuery, "&") {
-		if _, value, found := strings.Cut(pair, "="); found {
-			secrets = append(secrets, value)
 		}
 	}
 	return NewScrubber(secrets, verificationHTTPHostPatterns(u.Hostname())...)

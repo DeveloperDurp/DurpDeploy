@@ -18,6 +18,7 @@ import (
 )
 
 const verificationQueryCredential = "stored-query/token&proof value"
+const verificationQueryNameCredential = "stored-query-name/opaque&name payload"
 const verificationPathCredential = "stored-path/token&proof value"
 const verificationHostCredential = "stored-host-credential"
 
@@ -57,6 +58,20 @@ func TestVerificationHTTPHostnameCredentialE2E(t *testing.T) {
 			checkVerificationHostnameRedaction(t, host)
 		})
 	}
+}
+
+func TestVerificationHTTPBinaryQueryNameE2E(t *testing.T) {
+	f := newVerificationE2E(t)
+	const name = "private\xffproof"
+	target := verificationUpstream(t, http.HandlerFunc(
+		func(w http.ResponseWriter, _ *http.Request) {
+			fmt.Fprintln(w, "healthy", name, string([]rune(name)))
+		})) + "/probe?mode=ready&private%FFproof"
+	configureVerification(t, f, "http", target, 5)
+	deployment := verificationDeploy(t, f,
+		verificationRelease(t, f, "binary-query-name"))
+	f.completion(t, deployment.ID, events.DeploymentSucceeded)
+	assertHTTPQueryRedactionForViewer(t, f, deployment.ID)
 }
 
 func checkVerificationHostnameRedaction(t *testing.T, host string) {
@@ -107,8 +122,9 @@ func encryptedVerificationTarget(t *testing.T, kind string) string {
 	return verificationUpstream(t, http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
 			value := r.URL.Query().Get("credential")
+			_, hasName := r.URL.Query()[verificationQueryNameCredential]
 			if value != verificationQueryCredential ||
-				r.URL.Path != "/hooks/"+verificationPathCredential {
+				r.URL.Path != "/hooks/"+verificationPathCredential || !hasName {
 				w.WriteHeader(http.StatusForbidden)
 				return
 			}
@@ -123,9 +139,21 @@ func encryptedVerificationTarget(t *testing.T, kind string) string {
 				url.QueryEscape(verificationPathCredential),
 				url.PathEscape(verificationPathCredential),
 				strings.TrimPrefix(r.URL.EscapedPath(), "/hooks/"))
+			fmt.Fprintln(w, verificationQueryNameCredential,
+				url.QueryEscape(verificationQueryNameCredential),
+				url.PathEscape(verificationQueryNameCredential),
+				strings.ReplaceAll(
+					url.QueryEscape(
+						verificationQueryNameCredential,
+					),
+					"%2F",
+					"%2f",
+				))
 		})) + "/hooks/" + strings.ReplaceAll(
 		url.PathEscape(verificationPathCredential), "%2F", "%2f",
-	) + "?credential=" + url.QueryEscape(verificationQueryCredential)
+	) + "?credential=" + url.QueryEscape(verificationQueryCredential) +
+		"&mode=ready&" + strings.ReplaceAll(
+		url.QueryEscape(verificationQueryNameCredential), "%2F", "%2f")
 }
 
 func assertHTTPQueryRedactionForViewer(
@@ -167,6 +195,12 @@ func assertHTTPQueryRedactionForViewer(
 	logs := strings.Join(lines, "\n")
 	page := html.UnescapeString(f.web(t, "GET", path, nil, 200))
 	for _, value := range []string{verificationQueryCredential,
+		"private�proof", "private%FFproof",
+		verificationQueryNameCredential,
+		url.QueryEscape(verificationQueryNameCredential),
+		url.PathEscape(verificationQueryNameCredential),
+		strings.ReplaceAll(
+			url.QueryEscape(verificationQueryNameCredential), "%2F", "%2f"),
 		url.QueryEscape(verificationQueryCredential),
 		url.PathEscape(verificationQueryCredential), verificationPathCredential,
 		url.QueryEscape(verificationPathCredential),

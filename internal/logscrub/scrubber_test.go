@@ -30,6 +30,29 @@ func TestScrubPartsRedactsOneLiteralAcrossChunks(t *testing.T) {
 	}
 }
 
+func TestInvalidUTF8LiteralRedaction(t *testing.T) {
+	// Given: a known credential can contain percent-decoded non-UTF-8 bytes.
+	for _, secret := range []string{"private\xffproof", "private\xff\xfeproof"} {
+		scrubber := New([]string{secret})
+		// When: the log contains original bytes or their displayed rune form.
+		for _, value := range []string{secret, string([]rune(secret))} {
+			got := scrubber.ScrubParts([]string{"safe pri", value[3:], " done"})
+			// Then: the whole credential is redacted across chunks.
+			if !reflect.DeepEqual(
+				got,
+				[]string{"safe [REDACTED]", "", " done"},
+			) {
+				t.Fatalf("invalid UTF-8 literal leaked: %q", got)
+			}
+		}
+		if got := scrubber.Scrub(
+			"safe privateXproof done",
+		); got != "safe privateXproof done" {
+			t.Fatalf("ordinary output changed: %q", got)
+		}
+	}
+}
+
 func TestPendingBytesDoesNotHoldCredentialNameSuffixInWord(t *testing.T) {
 	if got := New(nil).PendingBytes("monkey"); got != 0 {
 		t.Fatalf("PendingBytes(monkey)=%d want=0", got)
