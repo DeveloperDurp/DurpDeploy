@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"durpdeploy/internal/artifact"
+	"durpdeploy/internal/containerenv"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/secret"
 )
@@ -184,6 +185,9 @@ func (r *Repository) CreateVariable(
 	if arg.Name == artifact.PathVariable {
 		return db.Variable{}, ErrArtifactPathReserved
 	}
+	if arg.Name == containerenv.StageVariable {
+		return db.Variable{}, containerenv.ErrReserved
+	}
 	enc, err := r.encryptValue(arg.Value)
 	if err != nil {
 		return db.Variable{}, fmt.Errorf("encrypt variable value: %w", err)
@@ -204,6 +208,9 @@ func (r *Repository) UpdateVariable(
 ) (db.Variable, error) {
 	if arg.Name == artifact.PathVariable {
 		return db.Variable{}, ErrArtifactPathReserved
+	}
+	if arg.Name == containerenv.StageVariable {
+		return db.Variable{}, containerenv.ErrReserved
 	}
 	enc, err := r.encryptValue(arg.Value)
 	if err != nil {
@@ -228,6 +235,9 @@ func (r *Repository) UpdateVariableKeepValue(
 ) (db.Variable, error) {
 	if arg.Name == artifact.PathVariable {
 		return db.Variable{}, ErrArtifactPathReserved
+	}
+	if arg.Name == containerenv.StageVariable {
+		return db.Variable{}, containerenv.ErrReserved
 	}
 	var v db.Variable
 	if err := r.WithTx(ctx, func(q *db.Queries) error {

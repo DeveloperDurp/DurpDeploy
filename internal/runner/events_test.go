@@ -40,7 +40,9 @@ case "$3" in
 info) printf '{"host":{"security":{"rootless":true}}}';;
 ps) ;;
 rm) ;;
+inspect) printf 'true\n';;
 run)
+  for arg do case "$arg" in --detach) exit 0;; esac; done
   script=$(cat)
   case "$script" in
     *"exit 1"*) exit 1;;

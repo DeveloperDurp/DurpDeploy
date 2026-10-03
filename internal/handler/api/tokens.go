@@ -181,6 +181,7 @@ func apiTokenFromAdminUserPaginatedRow(
 //	  bearer:
 //
 //	Responses:
+//	  413: body:RequestEntityTooLargeError
 //	  201: body:CreateTokenResponse
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
@@ -190,8 +191,7 @@ func (h *APITokenHandler) CreateToken(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	var req createTokenRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid JSON")
+	if !readJSONBool(w, r, &req) {
 		return
 	}
 
@@ -318,6 +318,8 @@ func (h *APITokenHandler) ListTokens(w http.ResponseWriter, r *http.Request) {
 //	  bearer:
 //
 //	Responses:
+//	  400: body:BadRequestError
+//	  413: body:RequestEntityTooLargeError
 //	  204: body:EmptyResponse
 //	  401: body:UnauthorizedError
 //	  404: body:NotFoundError
@@ -478,6 +480,8 @@ func (h *APITokenHandler) ListAllTokens(
 //	  bearer:
 //
 //	Responses:
+//	  400: body:BadRequestError
+//	  413: body:RequestEntityTooLargeError
 //	  204: body:EmptyResponse
 //	  401: body:UnauthorizedError
 //	  403: body:ForbiddenError

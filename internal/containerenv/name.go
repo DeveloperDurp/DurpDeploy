@@ -14,13 +14,15 @@ var ErrReserved = errors.New(
 	"variable name is reserved for the container runner",
 )
 
+const StageVariable = "DURPDEPLOY_STAGE_DIR"
+
 // ValidateName keeps agent variable names compatible while preventing local
 // selections from changing the container and SSH clients' own environment.
 func ValidateName(name string, local bool) error {
 	if !identifier.MatchString(name) {
 		return ErrIdentifier
 	}
-	if name == "ARTIFACT_PATH" {
+	if name == "ARTIFACT_PATH" || name == StageVariable {
 		return ErrReserved
 	}
 	if local && (name == "PATH" || name == "HOME" || name == "TERM" ||

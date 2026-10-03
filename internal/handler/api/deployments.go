@@ -58,6 +58,7 @@ func deploymentIDFromRequest(r *http.Request) (int64, error) {
 //	  bearer:
 //
 //	Responses:
+//	  413: body:RequestEntityTooLargeError
 //	  201: body:Deployment
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
@@ -369,11 +370,14 @@ func (h *DeploymentHandler) ListDeployments(
 //	  bearer:
 //
 //	Responses:
-//	  200: body:Deployment
-//	  400: body:BadRequestError
-//	  401: body:UnauthorizedError
-//	  404: body:NotFoundError
-//	  500: body:ServerError
+//
+// 413: body:RequestEntityTooLargeError
+//
+//	200: body:Deployment
+//	400: body:BadRequestError
+//	401: body:UnauthorizedError
+//	404: body:NotFoundError
+//	500: body:ServerError
 func (h *DeploymentHandler) GetDeployment(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -455,6 +459,7 @@ func (h *DeploymentHandler) GetDeploymentStatus(
 //	  bearer:
 //
 //	Responses:
+//	  413: body:RequestEntityTooLargeError
 //	  200: body:Deployment
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
@@ -528,6 +533,7 @@ func (h *DeploymentHandler) ApproveDeployment(
 //	  bearer:
 //
 //	Responses:
+//	  413: body:RequestEntityTooLargeError
 //	  201: body:Deployment
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
@@ -657,6 +663,7 @@ func (h *DeploymentHandler) RedeployDeployment(
 //	  bearer:
 //
 //	Responses:
+//	  413: body:RequestEntityTooLargeError
 //	  200: body:Deployment
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
@@ -740,6 +747,7 @@ func (h *DeploymentHandler) CancelDeployment(
 //	  bearer:
 //
 //	Responses:
+//	  413: body:RequestEntityTooLargeError
 //	  201: body:Deployment
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError

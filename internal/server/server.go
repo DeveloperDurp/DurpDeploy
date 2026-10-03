@@ -109,7 +109,7 @@ func newRouter(
 	// System endpoints (public).
 	healthH := handler.NewHealthHandler(repo)
 	r.Get("/healthz", healthH.Healthz)
-	r.Get("/api/v1/healthz", healthH.HealthzAPI)
+	r.Get("/api/v1/healthz", api.EmptyBody(healthH.HealthzAPI))
 
 	// Agent skills discovery (public).
 	skillsH := handler.NewSkillsHandler()
@@ -138,19 +138,21 @@ func newRouter(
 	r.Get("/login", authHandler.LoginGet)
 	r.Post("/login", authHandler.LoginPost)
 	r.Get("/login/mfa", authHandler.LoginMFAGet)
-	r.With(authHandler.MFARateLimit).Post(
+	r.With(authHandler.MFARateLimit, webRequestBodyLimit).Post(
 		"/login/mfa/totp", authHandler.LoginMFATOTPPost,
 	)
-	r.With(authHandler.MFARateLimit).Post(
+	r.With(authHandler.MFARateLimit, webRequestBodyLimit).Post(
 		"/login/mfa/recovery", authHandler.LoginMFARecoveryPost,
 	)
-	r.With(authHandler.MFARateLimit).Post(
+	r.With(authHandler.MFARateLimit, webRequestBodyLimit).Post(
 		"/login/mfa/webauthn/begin", authHandler.LoginMFAWebAuthnBegin,
 	)
-	r.With(authHandler.MFARateLimit).Post(
+	r.With(authHandler.MFARateLimit, webRequestBodyLimit).Post(
 		"/login/mfa/webauthn/finish", authHandler.LoginMFAWebAuthnFinish,
 	)
-	r.Post("/login/mfa/cancel", authHandler.LoginMFACancelPost)
+	r.With(webRequestBodyLimit).Post(
+		"/login/mfa/cancel", authHandler.LoginMFACancelPost,
+	)
 	if registerOIDC {
 		r.With(authHandler.OIDCRateLimit).Get(
 			"/login/oidc", authHandler.LoginOIDCGet,
@@ -165,6 +167,7 @@ func newRouter(
 	// per-route RequireRole middleware for finer-grained authorization.
 	r.Group(func(pr chi.Router) {
 		pr.Use(auth.AuthMiddleware(repo))
+		pr.Use(webRequestBodyLimit)
 		pr.Use(auth.CSRFMiddleware())
 		pr.Use(audit.Middleware(repo))
 
@@ -515,6 +518,7 @@ func newRouter(
 	r.Route("/api/v1", func(ar chi.Router) {
 		ar.Use(auth.ApiTokenMiddleware(repo))
 		ar.Use(auth.WriteBlockMiddleware())
+		ar.Use(api.RequestBodyLimit)
 		ar.Use(audit.Middleware(repo))
 
 		// JSON 404/405 so unmatched /api/v1/* paths return a JSON
@@ -536,9 +540,18 @@ func newRouter(
 				"/admin/agents/{id}/retry-pair",
 				agentsH.RetryPairAgent,
 			)
-			aar.Post("/admin/agents/{id}/revoke", agentsH.RevokeAgent)
-			aar.Post("/admin/agents/{id}/drain", agentsH.DrainAgent)
-			aar.Post("/admin/agents/{id}/resume", agentsH.ResumeAgent)
+			aar.Post(
+				"/admin/agents/{id}/revoke",
+				api.EmptyBody(agentsH.RevokeAgent),
+			)
+			aar.Post(
+				"/admin/agents/{id}/drain",
+				api.EmptyBody(agentsH.DrainAgent),
+			)
+			aar.Post(
+				"/admin/agents/{id}/resume",
+				api.EmptyBody(agentsH.ResumeAgent),
+			)
 			aar.Post("/admin/agents/{id}/labels", agentsH.AddLabel)
 			aar.Delete("/admin/agents/{id}/labels", agentsH.DeleteLabel)
 			aar.Post("/admin/agents/{id}/environments", agentsH.AddEnvironment)
@@ -547,12 +560,15 @@ func newRouter(
 				agentsH.DeleteEnvironment,
 			)
 			aar.Get("/admin/tokens", tokensH.ListAllTokens)
-			aar.Delete("/admin/tokens/{id}", tokensH.RevokeAnyToken)
+			aar.Delete(
+				"/admin/tokens/{id}",
+				api.EmptyBody(tokensH.RevokeAnyToken),
+			)
 
 			adminH := api.NewAdminHandler(repo)
 			aar.Get("/admin/audit", adminH.AuditLog)
 			aar.Get("/admin/stats", adminH.Stats)
-			aar.Post("/admin/maintenance", adminH.Maintenance)
+			aar.Post("/admin/maintenance", api.EmptyBody(adminH.Maintenance))
 			aar.Get("/admin/db-tables", adminH.DbTables)
 			aar.Get("/admin/notifications", adminH.ListNotifications)
 			aar.Get(
@@ -572,12 +588,12 @@ func newRouter(
 			aar.Post("/admin/users", usersH.CreateUser)
 			aar.Get("/admin/users/{id}", usersH.GetUser)
 			aar.Put("/admin/users/{id}", usersH.UpdateUser)
-			aar.Delete("/admin/users/{id}", usersH.DeleteUser)
+			aar.Delete("/admin/users/{id}", api.EmptyBody(usersH.DeleteUser))
 		})
 
 		ar.Post("/tokens", tokensH.CreateToken)
 		ar.Get("/tokens", tokensH.ListTokens)
-		ar.Delete("/tokens/{id}", tokensH.RevokeToken)
+		ar.Delete("/tokens/{id}", api.EmptyBody(tokensH.RevokeToken))
 
 		apiProjH := api.NewProjectHandler(repo)
 		ar.Get("/projects", apiProjH.ListProjects)
@@ -588,7 +604,10 @@ func newRouter(
 		ar.Post("/environments", apiEnvH.CreateEnvironment)
 		ar.Get("/environments/{id}", apiEnvH.GetEnvironment)
 		ar.Put("/environments/{id}", apiEnvH.UpdateEnvironment)
-		ar.Delete("/environments/{id}", apiEnvH.DeleteEnvironment)
+		ar.Delete(
+			"/environments/{id}",
+			api.EmptyBody(apiEnvH.DeleteEnvironment),
+		)
 
 		apiLcH := api.NewLifecycleHandler(repo)
 		ar.Get("/lifecycles", apiLcH.ListLifecycles)
@@ -598,14 +617,17 @@ func newRouter(
 		ar.Post("/lifecycles/{id}/stages", apiLcH.AddStage)
 		ar.Post("/lifecycles/{id}/stages/reorder", apiLcH.ReorderStages)
 		ar.Patch("/lifecycles/{id}/stages/{stageId}", apiLcH.UpdateStage)
-		ar.Post("/lifecycles/{id}/stages/{stageId}/delete", apiLcH.DeleteStage)
+		ar.Post(
+			"/lifecycles/{id}/stages/{stageId}/delete",
+			api.EmptyBody(apiLcH.DeleteStage),
+		)
 
 		apiTplH := api.NewStepTemplateHandler(repo)
 		ar.Get("/templates", apiTplH.ListTemplates)
 		ar.Post("/templates", apiTplH.CreateTemplate)
 		ar.Get("/templates/{id}", apiTplH.GetTemplate)
 		ar.Put("/templates/{id}", apiTplH.UpdateTemplate)
-		ar.Delete("/templates/{id}", apiTplH.DeleteTemplate)
+		ar.Delete("/templates/{id}", api.EmptyBody(apiTplH.DeleteTemplate))
 		ar.Get("/templates/{id}/history", apiTplH.ListTemplateHistory)
 
 		apiRelH := api.NewReleaseHandler(repo)
@@ -628,13 +650,25 @@ func newRouter(
 			dar.Get("/deployments/{id}/logs.txt", apiLogH.ExportLogs)
 			dar.Get("/deployments/{id}/logs/{logId}", apiLogH.GetLog)
 			dar.Get("/deployments/{id}/events", apiDepH.DeploymentEvents)
-			dar.Post("/deployments/{id}/cancel", apiDepH.CancelDeployment)
-			dar.Post("/deployments/{id}/retry", apiDepH.RetryDeployment)
-			dar.Post("/deployments/{id}/redeploy", apiDepH.RedeployDeployment)
+			dar.Post(
+				"/deployments/{id}/cancel",
+				api.EmptyBody(apiDepH.CancelDeployment),
+			)
+			dar.Post(
+				"/deployments/{id}/retry",
+				api.EmptyBody(apiDepH.RetryDeployment),
+			)
+			dar.Post(
+				"/deployments/{id}/redeploy",
+				api.EmptyBody(apiDepH.RedeployDeployment),
+			)
 
 			dar.Group(func(aar chi.Router) {
 				aar.Use(auth.RequireRole("admin"))
-				aar.Post("/deployments/{id}/approve", apiDepH.ApproveDeployment)
+				aar.Post(
+					"/deployments/{id}/approve",
+					api.EmptyBody(apiDepH.ApproveDeployment),
+				)
 			})
 		})
 
@@ -644,7 +678,7 @@ func newRouter(
 
 			par.Get("/projects/{id}", apiProjH.GetProject)
 			par.Put("/projects/{id}", apiProjH.UpdateProject)
-			par.Delete("/projects/{id}", apiProjH.DeleteProject)
+			par.Delete("/projects/{id}", api.EmptyBody(apiProjH.DeleteProject))
 			par.Get(
 				"/projects/{id}/notifications",
 				apiProjH.GetProjectNotifications,
@@ -659,14 +693,20 @@ func newRouter(
 			par.Post("/projects/{id}/steps", apiStepH.CreateStep)
 			par.Get("/projects/{id}/steps/{stepId}", apiStepH.GetStep)
 			par.Put("/projects/{id}/steps/{stepId}", apiStepH.UpdateStep)
-			par.Delete("/projects/{id}/steps/{stepId}", apiStepH.DeleteStep)
+			par.Delete(
+				"/projects/{id}/steps/{stepId}",
+				api.EmptyBody(apiStepH.DeleteStep),
+			)
 			par.Patch("/projects/{id}/steps/reorder", apiStepH.ReorderSteps)
 
 			apiVarH := api.NewVariableHandler(repo)
 			artifactH := api.NewArtifactHandler(repo)
 			par.Get("/projects/{id}/package-repository", artifactH.Get)
 			par.Put("/projects/{id}/package-repository", artifactH.Save)
-			par.Delete("/projects/{id}/package-repository", artifactH.Delete)
+			par.Delete(
+				"/projects/{id}/package-repository",
+				api.EmptyBody(artifactH.Delete),
+			)
 			par.Post("/projects/{id}/package-repository/test", artifactH.Test)
 			par.Get(
 				"/projects/{id}/releases/{relId}/artifact",
@@ -678,7 +718,7 @@ func newRouter(
 			par.Put("/projects/{id}/variables/{varId}", apiVarH.UpdateVariable)
 			par.Delete(
 				"/projects/{id}/variables/{varId}",
-				apiVarH.DeleteVariable,
+				api.EmptyBody(apiVarH.DeleteVariable),
 			)
 
 			par.Get("/projects/{id}/templates-picker", apiTplH.TemplatesPicker)
@@ -688,7 +728,7 @@ func newRouter(
 			par.Post("/projects/{id}/members", apiMemberH.AddMember)
 			par.Delete(
 				"/projects/{id}/members/{userId}",
-				apiMemberH.RemoveMember,
+				api.EmptyBody(apiMemberH.RemoveMember),
 			)
 			par.Put(
 				"/projects/{id}/members/{userId}",
@@ -698,10 +738,13 @@ func newRouter(
 			par.Get("/projects/{id}/releases", apiRelH.ListReleases)
 			par.Post("/projects/{id}/releases", apiRelH.CreateRelease)
 			par.Get("/projects/{id}/releases/{relId}", apiRelH.GetRelease)
-			par.Delete("/projects/{id}/releases/{relId}", apiRelH.DeleteRelease)
+			par.Delete(
+				"/projects/{id}/releases/{relId}",
+				api.EmptyBody(apiRelH.DeleteRelease),
+			)
 			par.Post(
 				"/projects/{id}/releases/{relId}/refresh",
-				apiRelH.RefreshRelease,
+				api.EmptyBody(apiRelH.RefreshRelease),
 			)
 
 			par.Post("/projects/{id}/deployments", apiDepH.CreateDeployment)
@@ -728,7 +771,7 @@ func newRouter(
 			)
 			par.Post(
 				"/projects/{id}/runbooks/{runbookId}/schedules/{scheduleId}/disable",
-				apiRunbookH.DisableSchedule,
+				api.EmptyBody(apiRunbookH.DisableSchedule),
 			)
 			par.Get(
 				"/projects/{id}/runbook-executions",
@@ -748,14 +791,14 @@ func newRouter(
 			)
 			par.Post(
 				"/projects/{id}/runbook-executions/{executionId}/cancel",
-				apiRunbookH.Cancel,
+				api.EmptyBody(apiRunbookH.Cancel),
 			)
 			par.Post(
 				"/projects/{id}/runbook-executions/{executionId}/retry",
-				apiRunbookH.Retry,
+				api.EmptyBody(apiRunbookH.Retry),
 			)
 			par.With(auth.RequireRole("admin")).Post(
-				"/projects/{id}/runbook-executions/{executionId}/approve", apiRunbookH.Approve,
+				"/projects/{id}/runbook-executions/{executionId}/approve", api.EmptyBody(apiRunbookH.Approve),
 			)
 
 			par.Get("/projects/{id}/schedules", apiSchedH.ListSchedules)
@@ -767,11 +810,11 @@ func newRouter(
 			)
 			par.Delete(
 				"/projects/{id}/schedules/{schedId}",
-				apiSchedH.DeleteSchedule,
+				api.EmptyBody(apiSchedH.DeleteSchedule),
 			)
 			par.Post(
 				"/projects/{id}/schedules/{schedId}/toggle",
-				apiSchedH.ToggleSchedule,
+				api.EmptyBody(apiSchedH.ToggleSchedule),
 			)
 		})
 

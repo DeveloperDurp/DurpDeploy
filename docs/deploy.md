@@ -93,9 +93,12 @@ EOF
 # Keep root .env out of the runtime path for compose app container env to avoid
 # leaking AWS credentials into the application process.
 
-# 4. Build and start
+# 4. Cache the staging helper in the execution runtime, then build and start
+STAGING_HELPER_IMAGE=docker.io/library/alpine@sha256:ce64758a109eb420d874a118f87920e625e12d3634e03b4a5573fd9f6e5d3507
+docker pull "$STAGING_HELPER_IMAGE"
 docker compose up -d --build
 # With rootless Podman, use instead:
+# podman pull "$STAGING_HELPER_IMAGE"
 # podman compose -f compose.yml -f compose.podman.yml up -d --build
 
 # 5. Bootstrap the first admin
@@ -419,6 +422,27 @@ shipped system service hides `/run/user`, so use the system Podman socket rather
 than a rootless user's socket with that unit.
 `DURPDEPLOY_CONTAINER_NAMESPACE` defaults to `durpdeploy`.
 
+Local deployments also require the digest-pinned Alpine staging helper from
+the quick-start pull command above. Cache it in the runtime that executes the
+steps, using the same Podman user or Docker endpoint. The runtime pulls a
+missing helper before execution. For an offline installation, transfer this
+image with the runtime's `save` and `load` commands alongside every step image
+before starting deployments.
+
+The helper keeps a per-deployment tmpfs volume mounted between local steps and
+retries. This path is exercised against a rootless Podman 5.8.7 Unix-socket
+service, including kernel byte/inode bounds and success, failure, and cancel
+cleanup. To verify another rootless installation, run the real API test against
+its socket:
+
+```bash
+go tool templ generate
+make swagger-ui-copy
+DURPDEPLOY_CONTAINER_RUNTIME=podman \
+DURPDEPLOY_CONTAINER_URL="unix://${XDG_RUNTIME_DIR}/podman/podman.sock" \
+go test -tags=e2e -count=1 -run '^TestDeploymentStagingCleanupE2E$' ./internal/handler/api
+```
+
 Set `DURPDEPLOY_EMBEDDED_AGENT_ENABLED=false` to disable server-side container
 execution. Remote mTLS agents remain available. The Helm chart disables the
 embedded agent because native Kubernetes Job execution is tracked in
@@ -428,7 +452,11 @@ standalone agents for executable steps in Kubernetes.
 Each attempt runs as non-root with a read-only root filesystem, no network,
 no capabilities, no new privileges, bounded memory and process count, and no
 host mounts. A 64 MiB temporary filesystem at `/tmp` supplies its writable
-home. `TERM=dumb` keeps non-interactive logs free of terminal control codes.
+home. Attempts sharing `/stage` have a combined memory ceiling of the staging
+capacity plus 256 MiB, so staging writes fit alongside the script process.
+This is a shared ceiling for process memory, `/tmp`, and staging pages;
+it does not reserve separate memory budgets. `TERM=dumb` keeps non-interactive
+logs free of terminal control codes.
 It receives its script on stdin and all compatible resolved release
 variables by default; `variable_names` restricts the step when it is non-empty.
 Images supply their own interpreter and tools. Tags are mutable even

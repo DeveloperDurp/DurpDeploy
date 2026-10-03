@@ -11,6 +11,7 @@
   ],
   "swagger": "2.0",
   "info": {
+    "description": "JSON request bodies are limited to 4 MiB of encoded bytes and must contain\nexactly one object matching the endpoint schema. Unknown fields, null, and\ntrailing data return 400. Oversized bodies return 413 before mutation.\nControl actions accept an empty body or an empty JSON object.",
     "title": "durpdeploy REST API.",
     "version": "1.0.0"
   },
@@ -104,6 +105,12 @@
             "description": "Conflict error response.",
             "schema": {
               "$ref": "#/definitions/ConflictError"
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
             }
           },
           "422": {
@@ -204,6 +211,12 @@
               "$ref": "#/definitions/EmptyResponse"
             }
           },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
           "401": {
             "description": "Unauthorized error response.",
             "schema": {
@@ -226,6 +239,12 @@
             "description": "Conflict error response.",
             "schema": {
               "$ref": "#/definitions/ConflictError"
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
             }
           },
           "500": {
@@ -298,6 +317,12 @@
               "$ref": "#/definitions/NotFoundError"
             }
           },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
+            }
+          },
           "500": {
             "description": "Server error response.",
             "schema": {
@@ -364,6 +389,12 @@
             "description": "Not found error response.",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
             }
           },
           "500": {
@@ -436,6 +467,12 @@
               "$ref": "#/definitions/NotFoundError"
             }
           },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
+            }
+          },
           "500": {
             "description": "Server error response.",
             "schema": {
@@ -504,6 +541,12 @@
               "$ref": "#/definitions/NotFoundError"
             }
           },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
+            }
+          },
           "500": {
             "description": "Server error response.",
             "schema": {
@@ -541,6 +584,12 @@
               "$ref": "#/definitions/EmptyResponse"
             }
           },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
           "401": {
             "description": "Unauthorized error response.",
             "schema": {
@@ -563,6 +612,12 @@
             "description": "Conflict error response.",
             "schema": {
               "$ref": "#/definitions/ConflictError"
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
             }
           },
           "500": {
@@ -635,6 +690,12 @@
               "$ref": "#/definitions/ConflictError"
             }
           },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
+            }
+          },
           "422": {
             "description": "Validation error response.",
             "schema": {
@@ -678,6 +739,12 @@
               "$ref": "#/definitions/EmptyResponse"
             }
           },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
           "401": {
             "description": "Unauthorized error response.",
             "schema": {
@@ -700,6 +767,12 @@
             "description": "Conflict error response.",
             "schema": {
               "$ref": "#/definitions/ConflictError"
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
             }
           }
         },
@@ -850,6 +923,12 @@
               "$ref": "#/definitions/EmptyResponse"
             }
           },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
           "401": {
             "description": "Unauthorized error response.",
             "schema": {
@@ -860,6 +939,12 @@
             "description": "Forbidden error response.",
             "schema": {
               "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
             }
           },
           "500": {
@@ -1005,6 +1090,12 @@
             "description": "Forbidden error response.",
             "schema": {
               "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
             }
           },
           "500": {
@@ -1166,6 +1257,12 @@
               "$ref": "#/definitions/EmptyResponse"
             }
           },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
           "401": {
             "description": "Unauthorized error response.",
             "schema": {
@@ -1182,6 +1279,12 @@
             "description": "Not found error response.",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
             }
           },
           "500": {
@@ -1318,6 +1421,12 @@
               "$ref": "#/definitions/ConflictError"
             }
           },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
+            }
+          },
           "422": {
             "description": "Validation error response.",
             "schema": {
@@ -1392,6 +1501,12 @@
             "description": "Not found error response.",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
             }
           },
           "500": {
@@ -1480,6 +1595,12 @@
               "$ref": "#/definitions/ConflictError"
             }
           },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
+            }
+          },
           "422": {
             "description": "Validation error response.",
             "schema": {
@@ -1543,6 +1664,12 @@
             "description": "Forbidden error response.",
             "schema": {
               "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
             }
           },
           "500": {
@@ -1665,6 +1792,12 @@
               "$ref": "#/definitions/NotFoundError"
             }
           },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
+            }
+          },
           "500": {
             "description": "Server error response.",
             "schema": {
@@ -1723,6 +1856,12 @@
             "description": "Not found error response.",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
             }
           },
           "500": {
@@ -1784,6 +1923,12 @@
             "description": "Not found error response.",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
             }
           },
           "500": {
@@ -2179,6 +2324,12 @@
               "$ref": "#/definitions/ConflictError"
             }
           },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
+            }
+          },
           "500": {
             "description": "Server error response.",
             "schema": {
@@ -2244,6 +2395,12 @@
             "description": "Conflict error response.",
             "schema": {
               "$ref": "#/definitions/ConflictError"
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
             }
           },
           "500": {
@@ -2431,6 +2588,12 @@
               "$ref": "#/definitions/ConflictError"
             }
           },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
+            }
+          },
           "500": {
             "description": "Server error response.",
             "schema": {
@@ -2493,6 +2656,12 @@
             "description": "Not found error response.",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
             }
           },
           "500": {
@@ -2575,6 +2744,12 @@
               "$ref": "#/definitions/ConflictError"
             }
           },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
+            }
+          },
           "500": {
             "description": "Server error response.",
             "schema": {
@@ -2632,6 +2807,12 @@
             "description": "Conflict error response.",
             "schema": {
               "$ref": "#/definitions/ConflictError"
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
             }
           },
           "500": {
@@ -2756,6 +2937,12 @@
               "$ref": "#/definitions/ConflictError"
             }
           },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
+            }
+          },
           "500": {
             "description": "Server error response.",
             "schema": {
@@ -2818,6 +3005,12 @@
             "description": "Not found error response.",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
             }
           },
           "500": {
@@ -2902,6 +3095,12 @@
               "$ref": "#/definitions/ConflictError"
             }
           },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
+            }
+          },
           "500": {
             "description": "Server error response.",
             "schema": {
@@ -2978,6 +3177,12 @@
               "$ref": "#/definitions/ConflictError"
             }
           },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
+            }
+          },
           "500": {
             "description": "Server error response.",
             "schema": {
@@ -3046,6 +3251,12 @@
             "description": "Unauthorized error response.",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
             }
           },
           "500": {
@@ -3133,6 +3344,12 @@
               "$ref": "#/definitions/NotFoundError"
             }
           },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
+            }
+          },
           "500": {
             "description": "Server error response.",
             "schema": {
@@ -3195,6 +3412,12 @@
             "description": "Unauthorized error response.",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
             }
           },
           "500": {
@@ -3319,6 +3542,12 @@
               "$ref": "#/definitions/ConflictError"
             }
           },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
+            }
+          },
           "500": {
             "description": "Server error response.",
             "schema": {
@@ -3381,6 +3610,12 @@
             "description": "Not found error response.",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
             }
           },
           "500": {
@@ -3463,6 +3698,12 @@
               "$ref": "#/definitions/ConflictError"
             }
           },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
+            }
+          },
           "500": {
             "description": "Server error response.",
             "schema": {
@@ -3520,6 +3761,12 @@
             "description": "Conflict error response.",
             "schema": {
               "$ref": "#/definitions/ConflictError"
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
             }
           },
           "500": {
@@ -3714,6 +3961,12 @@
               "$ref": "#/definitions/ConflictError"
             }
           },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
+            }
+          },
           "422": {
             "description": "Validation error response.",
             "schema": {
@@ -3878,6 +4131,12 @@
               "$ref": "#/definitions/ConflictError"
             }
           },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
+            }
+          },
           "422": {
             "description": "Validation error response.",
             "schema": {
@@ -3969,6 +4228,12 @@
               "$ref": "#/definitions/NotFoundError"
             }
           },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
+            }
+          },
           "422": {
             "description": "Validation error response.",
             "schema": {
@@ -4043,6 +4308,12 @@
               "$ref": "#/definitions/NotFoundError"
             }
           },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
+            }
+          },
           "500": {
             "description": "Server error response.",
             "schema": {
@@ -4105,6 +4376,12 @@
             "description": "Not found error response.",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
             }
           },
           "500": {
@@ -4179,6 +4456,12 @@
             "description": "Not found error response.",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
             }
           },
           "500": {
@@ -4301,6 +4584,12 @@
               "$ref": "#/definitions/NotFoundError"
             }
           },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
+            }
+          },
           "422": {
             "description": "Validation error response.",
             "schema": {
@@ -4335,6 +4624,12 @@
           "204": {
             "description": "Removed"
           },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
           "401": {
             "description": "Unauthorized error response.",
             "schema": {
@@ -4351,6 +4646,12 @@
             "description": "Not found error response.",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
             }
           },
           "500": {
@@ -4417,6 +4718,12 @@
             "description": "Not found error response.",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
             }
           },
           "422": {
@@ -4584,6 +4891,12 @@
               "$ref": "#/definitions/ConflictError"
             }
           },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
+            }
+          },
           "422": {
             "description": "Validation error response.",
             "schema": {
@@ -4738,6 +5051,12 @@
               "$ref": "#/definitions/ConflictError"
             }
           },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
+            }
+          },
           "500": {
             "description": "Server error response.",
             "schema": {
@@ -4856,6 +5175,12 @@
             "description": "Conflict error response.",
             "schema": {
               "$ref": "#/definitions/ConflictError"
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
             }
           },
           "422": {
@@ -4988,6 +5313,18 @@
             "schema": {
               "$ref": "#/definitions/RunbookStateResponse"
             }
+          },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
+            }
           }
         }
       }
@@ -5023,6 +5360,18 @@
             "description": "OK",
             "schema": {
               "$ref": "#/definitions/RunbookStateResponse"
+            }
+          },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
             }
           }
         }
@@ -5144,10 +5493,22 @@
               "$ref": "#/definitions/RunbookExecution"
             }
           },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
           "409": {
             "description": "Conflict error response.",
             "schema": {
               "$ref": "#/definitions/ConflictError"
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
             }
           }
         }
@@ -5226,6 +5587,12 @@
             "description": "Conflict error response.",
             "schema": {
               "$ref": "#/definitions/ConflictError"
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
             }
           },
           "422": {
@@ -5328,6 +5695,12 @@
               "$ref": "#/definitions/ConflictError"
             }
           },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
+            }
+          },
           "422": {
             "description": "Validation error response.",
             "schema": {
@@ -5382,10 +5755,22 @@
               "$ref": "#/definitions/RunbookExecution"
             }
           },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
           "409": {
             "description": "Conflict error response.",
             "schema": {
               "$ref": "#/definitions/ConflictError"
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
             }
           },
           "422": {
@@ -5476,10 +5861,22 @@
               "$ref": "#/definitions/RunbookSchedule"
             }
           },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
           "409": {
             "description": "Conflict error response.",
             "schema": {
               "$ref": "#/definitions/ConflictError"
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
             }
           },
           "422": {
@@ -5530,6 +5927,18 @@
             "description": "OK",
             "schema": {
               "$ref": "#/definitions/RunbookScheduleStateResponse"
+            }
+          },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
             }
           }
         }
@@ -5723,6 +6132,12 @@
               "$ref": "#/definitions/ConflictError"
             }
           },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
+            }
+          },
           "422": {
             "description": "Validation error response.",
             "schema": {
@@ -5800,6 +6215,12 @@
             "description": "Not found error response.",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
             }
           },
           "500": {
@@ -5891,6 +6312,12 @@
               "$ref": "#/definitions/ConflictError"
             }
           },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
+            }
+          },
           "422": {
             "description": "Validation error response.",
             "schema": {
@@ -5957,6 +6384,12 @@
             "description": "Unauthorized error response.",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
             }
           },
           "500": {
@@ -6036,6 +6469,12 @@
             "description": "Conflict error response.",
             "schema": {
               "$ref": "#/definitions/ConflictError"
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
             }
           },
           "500": {
@@ -6178,6 +6617,12 @@
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
+            }
+          },
           "500": {
             "description": "Server error response.",
             "schema": {
@@ -6246,6 +6691,12 @@
             "description": "Unauthorized error response.",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
             }
           },
           "500": {
@@ -6319,6 +6770,12 @@
             "description": "Not found error response.",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
             }
           },
           "500": {
@@ -6404,6 +6861,12 @@
               "$ref": "#/definitions/NotFoundError"
             }
           },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
+            }
+          },
           "500": {
             "description": "Server error response.",
             "schema": {
@@ -6464,6 +6927,12 @@
             "description": "Unauthorized error response.",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
             }
           },
           "500": {
@@ -6677,6 +7146,12 @@
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
+            }
+          },
           "422": {
             "description": "Validation error response.",
             "schema": {
@@ -6754,6 +7229,12 @@
             "description": "Not found error response.",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
             }
           },
           "500": {
@@ -6839,6 +7320,12 @@
               "$ref": "#/definitions/NotFoundError"
             }
           },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
+            }
+          },
           "422": {
             "description": "Validation error response.",
             "schema": {
@@ -6905,6 +7392,12 @@
             "description": "Unauthorized error response.",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
             }
           },
           "500": {
@@ -7029,6 +7522,12 @@
               "$ref": "#/definitions/ConflictError"
             }
           },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
+            }
+          },
           "500": {
             "description": "Server error response.",
             "schema": {
@@ -7091,6 +7590,12 @@
             "description": "Not found error response.",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
             }
           },
           "500": {
@@ -7173,6 +7678,12 @@
               "$ref": "#/definitions/ConflictError"
             }
           },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
+            }
+          },
           "500": {
             "description": "Server error response.",
             "schema": {
@@ -7224,6 +7735,12 @@
             "description": "Unauthorized error response.",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
             }
           },
           "500": {
@@ -7413,6 +7930,12 @@
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
+            }
+          },
           "422": {
             "description": "Validation error response.",
             "schema": {
@@ -7461,6 +7984,12 @@
               "$ref": "#/definitions/EmptyResponse"
             }
           },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
           "401": {
             "description": "Unauthorized error response.",
             "schema": {
@@ -7471,6 +8000,12 @@
             "description": "Not found error response.",
             "schema": {
               "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
             }
           },
           "500": {
@@ -9063,6 +9598,18 @@
         }
       },
       "x-go-name": "swaggerReorderStepsRequest",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "RequestEntityTooLargeError": {
+      "type": "object",
+      "title": "Request body exceeds the 4 MiB encoded byte ceiling.",
+      "properties": {
+        "error": {
+          "type": "string",
+          "x-go-name": "Error"
+        }
+      },
+      "x-go-name": "swaggerRequestEntityTooLargeError",
       "x-go-package": "durpdeploy/internal/handler/api"
     },
     "Runbook": {

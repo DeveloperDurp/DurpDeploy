@@ -55,7 +55,7 @@ func newAPIHarness(t *testing.T, binary ...string) *harness {
 	if len(binary) == 0 {
 		rnr = runner.New(repo, broker)
 	} else {
-		rnr = runner.NewWithPodmanBinaryForTest(repo, broker, binary[0])
+		rnr = runner.NewWithContainerBinaryForTest(repo, broker, binary[0])
 	}
 	return &harness{repo: repo, runner: rnr, broker: broker}
 }

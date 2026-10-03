@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
@@ -12,16 +11,8 @@ import (
 	"durpdeploy/internal/handler"
 )
 
-func readJSON(r *http.Request, v any) error {
-	return json.NewDecoder(r.Body).Decode(v)
-}
-
 func readJSONBool(w http.ResponseWriter, r *http.Request, v any) bool {
-	if err := json.NewDecoder(r.Body).Decode(v); err != nil {
-		RespondError(w, http.StatusBadRequest, "Invalid JSON body")
-		return false
-	}
-	return true
+	return handler.ReadJSON(w, r, v)
 }
 
 func parseParamInt(r *http.Request, name string) (int64, error) {

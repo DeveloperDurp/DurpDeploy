@@ -87,21 +87,16 @@ else
         DURPDEPLOY_URL="$BASE" \
         "$TMP/durpdeploy" >"$TMP/server.log" 2>&1 &
     SERVER_PID=$!
-    ready=0
-    for _ in {1..60}; do
-        if curl -fsS "$BASE/healthz" >/dev/null 2>&1; then
-            ready=1
+    for attempt in {1..60}; do
+        if curl -fsS --max-time 2 "$BASE/healthz" >/dev/null 2>&1; then
             break
         fi
-        if ! kill -0 "$SERVER_PID" 2>/dev/null; then
-            break
+        if ! kill -0 "$SERVER_PID" 2>/dev/null || ((attempt == 60)); then
+            echo "FAIL: DurpDeploy did not become ready at $BASE" >&2
+            exit 1
         fi
-        sleep 0.5
+        sleep 1
     done
-    if ((ready == 0)); then
-        echo "FAIL: isolated server did not become ready" >&2
-        exit 1
-    fi
 fi
 
 if [[ "${DURPDEPLOY_AUTH_MFA_HTTP_MATRIX:-0}" == "1" ]]; then
@@ -205,6 +200,11 @@ echo "  API token minted via /settings/tokens: OK"
 
 if [[ "${DURPDEPLOY_DEPLOYMENT_LIST_E2E_ONLY:-0}" == "1" ]]; then
     source "$SCRIPT_DIR/deployment_list_e2e.sh"
+    exit 0
+fi
+
+source "$SCRIPT_DIR/deployment_staging_e2e.sh"
+if [[ "${DURPDEPLOY_STAGING_E2E_ONLY:-0}" == "1" ]]; then
     exit 0
 fi
 
@@ -893,6 +893,8 @@ API_ENV=$(api_post '{"name":"dev"}' "$BASE/api/v1/environments")
 API_ENV_ID=$(echo "$API_ENV" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
 [[ -n "$API_ENV_ID" ]] || { echo "FAIL: create env did not return id: $API_ENV"; exit 1; }
 echo "  Environment CRUD: OK ($API_ENV_ID)"
+
+source "$SCRIPT_DIR/request_body_e2e.sh"
 
 CODE=$(api_post_code "{\"name\":\"bare-path-step\",\"script_body\":\"echo ready\",\"container_image\":\"$BASH_IMAGE\"}" \
     "$BASE/api/v1/projects/$API_PROJECT_ID/steps")
@@ -1749,6 +1751,15 @@ CODE=$(curl -s -H "Authorization: Bearer $VIEWER_TOKEN" -H "Content-Type: applic
     -X POST -d '{"name":"viewer-proj"}' -o /dev/null -w "%{http_code}" "$BASE/api/v1/projects")
 [[ "$CODE" == "403" ]] || { echo "FAIL: viewer create project got $CODE, want 403"; exit 1; }
 echo "  403 viewer write block: OK"
+CODE=$(curl -sS -b "$VIEWER_LOGIN" -H 'HX-Request: true' \
+    --data-binary "@$BODY_DIR/oversized.form" -D "$BODY_DIR/viewer.headers" \
+    -o /dev/null -w '%{http_code}' "$BASE/projects")
+[[ "$CODE" == 200 ]] && grep -qi '^HX-Trigger:.*makeToast' "$BODY_DIR/viewer.headers" \
+    || { echo "FAIL: oversized viewer request did not toast, got $CODE"; exit 1; }
+CODE=$(curl -sS -b "$VIEWER_LOGIN" --data-binary "@$BODY_DIR/oversized.form" \
+    -o "$BODY_DIR/viewer.html" -w '%{http_code}' "$BASE/projects")
+[[ "$CODE" == 403 ]] && grep -q 'Viewers cannot perform write operations' "$BODY_DIR/viewer.html" \
+    || { echo "FAIL: oversized viewer request lost forbidden page, got $CODE"; exit 1; }
 
 # A10: Swagger endpoints.
 CODE=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/api/swagger/")

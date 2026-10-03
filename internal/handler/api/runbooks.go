@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"durpdeploy/internal/artifact"
+	"durpdeploy/internal/containerenv"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/handler"
 	"durpdeploy/internal/interpreter"
@@ -168,6 +169,7 @@ func (h *RunbookHandler) Version(w http.ResponseWriter, r *http.Request) {
 // - application/json
 //
 // Responses:
+// 413: body:RequestEntityTooLargeError
 // 201: body:RunbookSaveResponse
 // 400: body:BadRequestError
 // 409: body:ConflictError
@@ -266,6 +268,7 @@ func (h *RunbookHandler) Save(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		if errors.Is(err, artifact.ErrInvalid) ||
+			errors.Is(err, containerenv.ErrReserved) ||
 			errors.Is(err, repository.ErrRemoteArtifactsUnsupported) ||
 			errors.Is(err, repository.ErrArtifactPathReserved) {
 			artifactError(w, err)
@@ -287,6 +290,7 @@ func (h *RunbookHandler) Save(w http.ResponseWriter, r *http.Request) {
 // - application/json
 //
 // Responses:
+// 413: body:RequestEntityTooLargeError
 // 201: body:RunbookSaveResponse
 // 400: body:BadRequestError
 // 409: body:ConflictError

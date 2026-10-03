@@ -828,6 +828,8 @@ CODE=$(curl -s -H "Authorization: Bearer $API_TOKEN" -o /dev/null -w "%{http_cod
 [[ "$CODE" == "200" ]] || { echo "FAIL: authenticated health check got $CODE, want 200"; exit 1; }
 echo "  Health check: OK"
 
+source "$(dirname -- "${BASH_SOURCE[0]}")/deployment_staging_e2e.sh"
+
 # A3: Project CRUD.
 API_PROJECT_NAME="e2e-api-project-$E2E_RUN_ID"
 API_PROJECT=$(api_post "{\"name\":\"$API_PROJECT_NAME\"}" "$BASE/api/v1/projects")

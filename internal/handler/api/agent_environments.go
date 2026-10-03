@@ -24,6 +24,7 @@ type agentEnvironmentRequest struct {
 //
 // Responses:
 //
+//	413: body:RequestEntityTooLargeError
 //	204: body:EmptyResponse
 //	400: body:BadRequestError
 //	401: body:UnauthorizedError
@@ -44,6 +45,7 @@ func (h *AgentHandler) AddEnvironment(w http.ResponseWriter, r *http.Request) {
 //
 // Responses:
 //
+//	413: body:RequestEntityTooLargeError
 //	204: body:EmptyResponse
 //	400: body:BadRequestError
 //	401: body:UnauthorizedError
