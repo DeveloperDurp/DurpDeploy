@@ -34,8 +34,7 @@ func NewLintHandler() *LintHandler {
 // requires a valid authenticated session.
 func (h *LintHandler) LintScript(w http.ResponseWriter, r *http.Request) {
 	var req LintRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid request body", http.StatusBadRequest)
+	if !ReadJSON(w, r, &req) {
 		return
 	}
 

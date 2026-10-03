@@ -192,6 +192,7 @@ func newNotificationSettingsResponse(
 //	  bearer:
 //
 //	Responses:
+//	  413: body:RequestEntityTooLargeError
 //	  200: body:GlobalNotification
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
@@ -317,6 +318,8 @@ func countRows(ctx context.Context, db *sql.DB, table string) (int64, error) {
 //	  bearer:
 //
 //	Responses:
+//	  400: body:BadRequestError
+//	  413: body:RequestEntityTooLargeError
 //	  200: body:EmptyResponse
 //	  401: body:UnauthorizedError
 //	  403: body:ForbiddenError

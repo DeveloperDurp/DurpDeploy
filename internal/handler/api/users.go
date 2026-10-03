@@ -117,6 +117,7 @@ func (h *UserHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 //	  bearer:
 //
 //	Responses:
+//	  413: body:RequestEntityTooLargeError
 //	  201: body:User
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
@@ -188,12 +189,15 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 //	  bearer:
 //
 //	Responses:
-//	  200: body:User
-//	  400: body:BadRequestError
-//	  401: body:UnauthorizedError
-//	  403: body:ForbiddenError
-//	  404: body:NotFoundError
-//	  500: body:ServerError
+//
+// 413: body:RequestEntityTooLargeError
+//
+//	200: body:User
+//	400: body:BadRequestError
+//	401: body:UnauthorizedError
+//	403: body:ForbiddenError
+//	404: body:NotFoundError
+//	500: body:ServerError
 func (h *UserHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
@@ -238,6 +242,7 @@ func (h *UserHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 //	  bearer:
 //
 //	Responses:
+//	  413: body:RequestEntityTooLargeError
 //	  200: body:User
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
@@ -316,6 +321,7 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 //	  bearer:
 //
 //	Responses:
+//	  413: body:RequestEntityTooLargeError
 //	  204: body:EmptyResponse
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError

@@ -51,6 +51,7 @@ type rollbackRequest struct {
 //	403: body:ForbiddenError
 //	404: body:NotFoundError
 //	409: body:ConflictError
+//	413: body:RequestEntityTooLargeError
 //	422: body:ValidationError
 //	500: body:ServerError
 func (h *DeploymentHandler) RollbackDeployment(
@@ -62,7 +63,10 @@ func (h *DeploymentHandler) RollbackDeployment(
 		return
 	}
 	var req rollbackRequest
-	if err := readJSON(r, &req); err != nil || req.TargetDeploymentID <= 0 {
+	if !readJSONBool(w, r, &req) {
+		return
+	}
+	if req.TargetDeploymentID <= 0 {
 		RespondError(
 			w,
 			http.StatusBadRequest,

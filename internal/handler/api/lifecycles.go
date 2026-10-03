@@ -125,6 +125,7 @@ func (h *LifecycleHandler) ListLifecycles(
 //	  bearer:
 //
 //	Responses:
+//	  413: body:RequestEntityTooLargeError
 //	  201: body:Lifecycle
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
@@ -135,8 +136,7 @@ func (h *LifecycleHandler) CreateLifecycle(
 	r *http.Request,
 ) {
 	var req lifecycleRequest
-	if err := readJSON(r, &req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid JSON")
+	if !readJSONBool(w, r, &req) {
 		return
 	}
 
@@ -185,11 +185,14 @@ func (h *LifecycleHandler) CreateLifecycle(
 //	  bearer:
 //
 //	Responses:
-//	  200: body:LifecycleResponse
-//	  400: body:BadRequestError
-//	  401: body:UnauthorizedError
-//	  404: body:NotFoundError
-//	  500: body:ServerError
+//
+// 413: body:RequestEntityTooLargeError
+//
+//	200: body:LifecycleResponse
+//	400: body:BadRequestError
+//	401: body:UnauthorizedError
+//	404: body:NotFoundError
+//	500: body:ServerError
 func (h *LifecycleHandler) GetLifecycle(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -239,6 +242,7 @@ func (h *LifecycleHandler) GetLifecycle(
 //	  bearer:
 //
 //	Responses:
+//	  413: body:RequestEntityTooLargeError
 //	  200: body:LifecycleResponse
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
@@ -256,8 +260,7 @@ func (h *LifecycleHandler) SaveLifecycle(
 	}
 
 	var req lifecycleRequest
-	if err := readJSON(r, &req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid JSON")
+	if !readJSONBool(w, r, &req) {
 		return
 	}
 
@@ -320,6 +323,7 @@ func (h *LifecycleHandler) SaveLifecycle(
 //	  bearer:
 //
 //	Responses:
+//	  413: body:RequestEntityTooLargeError
 //	  201: body:LifecycleStage
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
@@ -333,8 +337,7 @@ func (h *LifecycleHandler) AddStage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req lifecycleStageRequest
-	if err := readJSON(r, &req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid JSON")
+	if !readJSONBool(w, r, &req) {
 		return
 	}
 
@@ -405,6 +408,7 @@ func (h *LifecycleHandler) AddStage(w http.ResponseWriter, r *http.Request) {
 //	  bearer:
 //
 //	Responses:
+//	  413: body:RequestEntityTooLargeError
 //	  200: body:LifecycleStageListResponse
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
@@ -420,8 +424,7 @@ func (h *LifecycleHandler) ReorderStages(
 	}
 
 	var req reorderStagesRequest
-	if err := readJSON(r, &req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid JSON")
+	if !readJSONBool(w, r, &req) {
 		return
 	}
 
@@ -532,6 +535,7 @@ func (h *LifecycleHandler) ReorderStages(
 //	  bearer:
 //
 //	Responses:
+//	  413: body:RequestEntityTooLargeError
 //	  200: body:LifecycleStage
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
@@ -545,8 +549,7 @@ func (h *LifecycleHandler) UpdateStage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req lifecycleStageRequest
-	if err := readJSON(r, &req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid JSON")
+	if !readJSONBool(w, r, &req) {
 		return
 	}
 
@@ -603,6 +606,7 @@ func (h *LifecycleHandler) UpdateStage(w http.ResponseWriter, r *http.Request) {
 //	  bearer:
 //
 //	Responses:
+//	  413: body:RequestEntityTooLargeError
 //	  204: body:EmptyResponse
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError

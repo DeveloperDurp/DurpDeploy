@@ -5,6 +5,8 @@ package api_test
 import (
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"net/url"
 	"strings"
 	"testing"
@@ -162,13 +164,53 @@ func TestRollbackAPICreatesDeploymentE2E(t *testing.T) {
 	v2 := verificationRelease(t, f, "api-v2")
 	second := verificationDeploy(t, f, v2)
 	f.completion(t, second.ID, events.DeploymentSucceeded)
+	path := fmt.Sprintf("/api/v1/deployments/%d/rollback", second.ID)
+	validBody := fmt.Sprintf(`{"target_deployment_id":%d}`, first.ID)
+	for _, tc := range []struct {
+		body   string
+		status int
+	}{
+		{`{"target_deployment_id":1,"extra":true}`, 400},
+		{validBody + " {}", 400},
+		{validBody + " junk", 400},
+		{"null", 400},
+		{validBody + strings.Repeat(" ", 4<<20), 413},
+	} {
+		req, err := http.NewRequestWithContext(t.Context(), "POST",
+			f.baseURL+path, strings.NewReader(tc.body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.ContentLength = -1
+		req.Header.Set("Authorization", "Bearer "+f.token)
+		req.Header.Set("Content-Type", "application/json")
+		response, err := f.client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, err := io.ReadAll(response.Body)
+		response.Body.Close()
+		if err != nil || response.StatusCode != tc.status {
+			t.Fatalf("invalid rollback status=%d body=%.200s err=%v",
+				response.StatusCode, body, err)
+		}
+	}
+	var count int
+	if err := f.h.repo.DB.QueryRow("SELECT count(*) FROM deployments").
+		Scan(&count); err != nil || count != 2 {
+		t.Fatalf(
+			"invalid bodies created deployments: count=%d err=%v",
+			count,
+			err,
+		)
+	}
 
 	// When: the API submits the confirmed target.
 	var rollback db.Deployment
 	if err := json.Unmarshal(f.api(
 		t,
 		"POST",
-		fmt.Sprintf("/api/v1/deployments/%d/rollback", second.ID),
+		path,
 		map[string]int64{
 			"target_deployment_id": first.ID,
 		},

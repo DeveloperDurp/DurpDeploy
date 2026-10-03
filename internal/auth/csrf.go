@@ -58,9 +58,7 @@ func CSRFMiddleware() func(http.Handler) http.Handler {
 				return
 			}
 
-			if RoleFromContext(r.Context()) == "viewer" &&
-				!viewerSecurityWrite(r.URL.Path) {
-				blockViewerWrite(w, r)
+			if RejectViewerWrite(w, r) {
 				return
 			}
 
@@ -77,6 +75,16 @@ func CSRFMiddleware() func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// RejectViewerWrite preserves the viewer response before any body parsing.
+func RejectViewerWrite(w http.ResponseWriter, r *http.Request) bool {
+	if RoleFromContext(r.Context()) != "viewer" ||
+		viewerSecurityWrite(r.URL.Path) {
+		return false
+	}
+	blockViewerWrite(w, r)
+	return true
 }
 
 func viewerSecurityWrite(path string) bool {

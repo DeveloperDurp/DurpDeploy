@@ -243,6 +243,26 @@ before the write commits.
 An old image-less server release cannot be scheduled. Existing schedules
 pointing at one disable on their due run and expose an actionable `last_error`.
 
+## Request bodies
+
+API JSON bodies and `/api/lint` bodies are limited to **4 MiB (4,194,304
+encoded bytes)**, including all script text, escaping, and JSON overhead.
+Send exactly one JSON object matching the documented request schema. Unknown
+fields (including nested fields), top-level `null`, additional documents, and
+trailing non-whitespace data return `400 {"error":"Invalid JSON body"}`.
+Oversized input returns `413 {"error":"Request body too large"}` before any
+mutation, including chunked requests. Whitespace after the object is allowed
+and counts toward the ceiling. Control actions with no fields accept an empty
+body or `{}`; additional fields are rejected.
+
+General web request bodies, including multipart bodies, have a **16 MiB encoded
+byte** ceiling and return 413 when exceeded. Package repository forms have a
+64 KiB ceiling. Login and password reauthentication retain their separate
+64 KiB limits and existing 400/422 error responses. Scripts must fit within
+the applicable ceiling after JSON or form encoding; runbooks share one JSON
+ceiling across all steps. These are server limits; proxies may impose lower
+limits.
+
 ## Runbooks
 
 Runbooks save immutable versions of ordered steps. Create one with

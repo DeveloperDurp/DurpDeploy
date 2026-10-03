@@ -22,6 +22,8 @@ type runbookExecuteRequest struct {
 // - application/json
 //
 // Responses:
+// 400: body:BadRequestError
+// 413: body:RequestEntityTooLargeError
 // 201: body:RunbookExecution
 // 409: body:ConflictError
 // 422: body:ValidationError

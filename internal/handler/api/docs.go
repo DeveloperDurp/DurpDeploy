@@ -1,5 +1,10 @@
 // Package api durpdeploy REST API.
 //
+// JSON request bodies are limited to 4 MiB of encoded bytes and must contain
+// exactly one object matching the endpoint schema. Unknown fields, null, and
+// trailing data return 400. Oversized bodies return 413 before mutation.
+// Control actions accept an empty body or an empty JSON object.
+//
 //	Schemes: http, https
 //	BasePath: /api/v1
 //	Version: 1.0.0
@@ -54,6 +59,13 @@ type swaggerNotFoundError struct {
 // Bad request error response.
 // swagger:model BadRequestError
 type swaggerBadRequestError struct {
+	// in: body
+	Error string `json:"error"`
+}
+
+// Request body exceeds the 4 MiB encoded byte ceiling.
+// swagger:model RequestEntityTooLargeError
+type swaggerRequestEntityTooLargeError struct {
 	// in: body
 	Error string `json:"error"`
 }

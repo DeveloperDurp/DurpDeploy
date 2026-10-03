@@ -140,6 +140,7 @@ func (h *AgentHandler) GetAgent(w http.ResponseWriter, r *http.Request) {
 //   bearer:
 //
 // Responses:
+//   413: body:RequestEntityTooLargeError
 //   201: body:PairAgentResponse
 //   400: body:BadRequestError
 //   401: body:UnauthorizedError
@@ -164,6 +165,7 @@ func (h *AgentHandler) PairAgent(w http.ResponseWriter, r *http.Request) {
 //   bearer:
 //
 // Responses:
+//   413: body:RequestEntityTooLargeError
 //   201: body:PairAgentResponse
 //   400: body:BadRequestError
 //   401: body:UnauthorizedError
@@ -237,6 +239,8 @@ func (h *AgentHandler) pair(
 //   bearer:
 //
 // Responses:
+//   400: body:BadRequestError
+//   413: body:RequestEntityTooLargeError
 //   204: body:EmptyResponse
 //   401: body:UnauthorizedError
 //   403: body:ForbiddenError
@@ -264,6 +268,7 @@ func (h *AgentHandler) RevokeAgent(w http.ResponseWriter, r *http.Request) {
 //   bearer:
 //
 // Responses:
+//   413: body:RequestEntityTooLargeError
 //   204: body:EmptyResponse
 //   400: body:BadRequestError
 //   401: body:UnauthorizedError
@@ -308,6 +313,7 @@ func (h *AgentHandler) AddLabel(w http.ResponseWriter, r *http.Request) {
 //   bearer:
 //
 // Responses:
+//   413: body:RequestEntityTooLargeError
 //   204: body:EmptyResponse
 //   400: body:BadRequestError
 //   401: body:UnauthorizedError

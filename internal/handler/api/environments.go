@@ -144,6 +144,7 @@ func (h *EnvironmentHandler) ListEnvironments(
 //	  bearer:
 //
 //	Responses:
+//	  413: body:RequestEntityTooLargeError
 //	  201: body:Environment
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
@@ -154,8 +155,7 @@ func (h *EnvironmentHandler) CreateEnvironment(
 	r *http.Request,
 ) {
 	var req environmentRequest
-	if err := readJSON(r, &req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid JSON")
+	if !readJSONBool(w, r, &req) {
 		return
 	}
 
@@ -224,11 +224,14 @@ func (h *EnvironmentHandler) CreateEnvironment(
 //	  bearer:
 //
 //	Responses:
-//	  200: body:Environment
-//	  400: body:BadRequestError
-//	  401: body:UnauthorizedError
-//	  404: body:NotFoundError
-//	  500: body:ServerError
+//
+// 413: body:RequestEntityTooLargeError
+//
+//	200: body:Environment
+//	400: body:BadRequestError
+//	401: body:UnauthorizedError
+//	404: body:NotFoundError
+//	500: body:ServerError
 func (h *EnvironmentHandler) GetEnvironment(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -268,6 +271,7 @@ func (h *EnvironmentHandler) GetEnvironment(
 //	  bearer:
 //
 //	Responses:
+//	  413: body:RequestEntityTooLargeError
 //	  200: body:Environment
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
@@ -285,8 +289,7 @@ func (h *EnvironmentHandler) UpdateEnvironment(
 	}
 
 	var req environmentRequest
-	if err := readJSON(r, &req); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid JSON")
+	if !readJSONBool(w, r, &req) {
 		return
 	}
 
@@ -371,6 +374,7 @@ func (h *EnvironmentHandler) UpdateEnvironment(
 //	  bearer:
 //
 //	Responses:
+//	  413: body:RequestEntityTooLargeError
 //	  204: body:EmptyResponse
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
