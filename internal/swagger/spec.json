@@ -2417,6 +2417,162 @@
         ]
       }
     },
+    "/deployments/{id}/rollback": {
+      "get": {
+        "tags": [
+          "deployments"
+        ],
+        "summary": "Preview the latest prior successful different release in the same project and environment.",
+        "operationId": "previewRollback",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "description": "The resource ID.",
+            "name": "id",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/RollbackPreview"
+            }
+          },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "409": {
+            "description": "Conflict error response.",
+            "schema": {
+              "$ref": "#/definitions/ConflictError"
+            }
+          },
+          "500": {
+            "description": "Server error response.",
+            "schema": {
+              "$ref": "#/definitions/ServerError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "deployments"
+        ],
+        "summary": "Create an audited deployment of the confirmed rollback target. Normal gates and approvals apply.",
+        "operationId": "rollbackDeployment",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "description": "The resource ID.",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "Body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/rollbackRequest"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Deployment represents a release executing against an environment.",
+            "schema": {
+              "$ref": "#/definitions/Deployment"
+            }
+          },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "409": {
+            "description": "Conflict error response.",
+            "schema": {
+              "$ref": "#/definitions/ConflictError"
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
+            }
+          },
+          "422": {
+            "description": "Validation error response.",
+            "schema": {
+              "$ref": "#/definitions/ValidationError"
+            }
+          },
+          "500": {
+            "description": "Server error response.",
+            "schema": {
+              "$ref": "#/definitions/ServerError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/deployments/{id}/status": {
       "get": {
         "produces": [
@@ -2458,6 +2614,69 @@
             "description": "Unauthorized error response.",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "500": {
+            "description": "Server error response.",
+            "schema": {
+              "$ref": "#/definitions/ServerError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/deployments/{id}/verification": {
+      "get": {
+        "tags": [
+          "deployments"
+        ],
+        "summary": "Get the snapshotted verification check and its outcome.",
+        "operationId": "getDeploymentVerification",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "description": "The resource ID.",
+            "name": "id",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/DeploymentVerification"
+            }
+          },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
             }
           },
           "404": {
@@ -2582,6 +2801,12 @@
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
           "409": {
             "description": "Conflict error response.",
             "schema": {
@@ -2592,6 +2817,12 @@
             "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
             "schema": {
               "$ref": "#/definitions/RequestEntityTooLargeError"
+            }
+          },
+          "422": {
+            "description": "Validation error response.",
+            "schema": {
+              "$ref": "#/definitions/ValidationError"
             }
           },
           "500": {
@@ -2732,6 +2963,12 @@
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
           "404": {
             "description": "Not found error response.",
             "schema": {
@@ -2748,6 +2985,12 @@
             "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
             "schema": {
               "$ref": "#/definitions/RequestEntityTooLargeError"
+            }
+          },
+          "422": {
+            "description": "Validation error response.",
+            "schema": {
+              "$ref": "#/definitions/ValidationError"
             }
           },
           "500": {
@@ -8592,6 +8835,32 @@
       "x-go-name": "swaggerDeploymentStatusResponse",
       "x-go-package": "durpdeploy/internal/handler/api"
     },
+    "DeploymentVerification": {
+      "type": "object",
+      "properties": {
+        "finished_at": {
+          "$ref": "#/definitions/NullInt64"
+        },
+        "started_at": {
+          "$ref": "#/definitions/NullInt64"
+        },
+        "status": {
+          "type": "string",
+          "x-go-name": "Status"
+        },
+        "timeout_seconds": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "TimeoutSeconds"
+        },
+        "type": {
+          "type": "string",
+          "x-go-name": "Type"
+        }
+      },
+      "x-go-name": "verificationResponse",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
     "EmptyResponse": {
       "type": "object",
       "title": "EmptyResponse is returned for no-content endpoints.",
@@ -8623,6 +8892,20 @@
         "tags": {
           "type": "string",
           "x-go-name": "Tags"
+        },
+        "verification_target": {
+          "description": "Admin-only; omitted from responses for other roles.",
+          "type": "string",
+          "x-go-name": "VerificationTarget"
+        },
+        "verification_timeout_seconds": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "VerificationTimeoutSeconds"
+        },
+        "verification_type": {
+          "type": "string",
+          "x-go-name": "VerificationType"
         }
       },
       "x-go-name": "swaggerEnvironment",
@@ -8652,6 +8935,19 @@
         "tags": {
           "type": "string",
           "x-go-name": "Tags"
+        },
+        "verification_target": {
+          "type": "string",
+          "x-go-name": "VerificationTarget"
+        },
+        "verification_timeout_seconds": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "VerificationTimeoutSeconds"
+        },
+        "verification_type": {
+          "type": "string",
+          "x-go-name": "VerificationType"
         }
       },
       "x-go-name": "swaggerEnvironmentRequest",
@@ -8988,6 +9284,21 @@
       },
       "x-go-name": "swaggerNotificationEventListResponse",
       "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "NullInt64": {
+      "description": "NullInt64 implements the [Scanner] interface so\nit can be used as a scan destination, similar to [NullString].",
+      "type": "object",
+      "title": "NullInt64 represents an int64 that may be null.",
+      "properties": {
+        "Int64": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "Valid": {
+          "type": "boolean"
+        }
+      },
+      "x-go-package": "database/sql"
     },
     "PackageRepositoryRequest": {
       "type": "object",
@@ -9423,6 +9734,11 @@
           "format": "int64",
           "x-go-name": "ProjectID"
         },
+        "snapshot_locked": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "SnapshotLocked"
+        },
         "steps_json": {
           "type": "string",
           "x-go-name": "StepsJSON"
@@ -9611,6 +9927,66 @@
       },
       "x-go-name": "swaggerRequestEntityTooLargeError",
       "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "RollbackPreview": {
+      "type": "object",
+      "properties": {
+        "blocked": {
+          "type": "boolean",
+          "x-go-name": "Blocked"
+        },
+        "environment_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "EnvironmentID"
+        },
+        "environment_name": {
+          "type": "string",
+          "x-go-name": "EnvironmentName"
+        },
+        "project_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "ProjectID"
+        },
+        "reason": {
+          "type": "string",
+          "x-go-name": "Reason"
+        },
+        "requires_approval": {
+          "type": "boolean",
+          "x-go-name": "RequiresApproval"
+        },
+        "source_deployment_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "SourceDeploymentID"
+        },
+        "source_release_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "SourceReleaseID"
+        },
+        "source_version": {
+          "type": "string",
+          "x-go-name": "SourceVersion"
+        },
+        "target_deployment_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "TargetDeploymentID"
+        },
+        "target_release_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "TargetReleaseID"
+        },
+        "target_version": {
+          "type": "string",
+          "x-go-name": "TargetVersion"
+        }
+      },
+      "x-go-package": "durpdeploy/internal/repository"
     },
     "Runbook": {
       "type": "object",
@@ -10909,6 +11285,17 @@
         }
       },
       "x-go-name": "swaggerVariableResponse",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "rollbackRequest": {
+      "type": "object",
+      "properties": {
+        "target_deployment_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "TargetDeploymentID"
+        }
+      },
       "x-go-package": "durpdeploy/internal/handler/api"
     },
     "swaggerAgentError": {

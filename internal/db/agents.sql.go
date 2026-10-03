@@ -218,7 +218,7 @@ func (q *Queries) HeartbeatAgent(ctx context.Context, arg HeartbeatAgentParams) 
 }
 
 const listAgentEnvironmentLabels = `-- name: ListAgentEnvironmentLabels :many
-SELECT e.id, e.name, e.description, e.tags, e.created_at FROM environments e
+SELECT e.id, e.name, e.description, e.tags, e.created_at, e.verification_type, e.verification_target, e.verification_timeout_seconds FROM environments e
 JOIN agent_environment_labels l ON l.environment_id = e.id
 WHERE l.agent_id = ? ORDER BY e.name, e.id
 `
@@ -238,6 +238,9 @@ func (q *Queries) ListAgentEnvironmentLabels(ctx context.Context, agentID string
 			&i.Description,
 			&i.Tags,
 			&i.CreatedAt,
+			&i.VerificationType,
+			&i.VerificationTarget,
+			&i.VerificationTimeoutSeconds,
 		); err != nil {
 			return nil, err
 		}
@@ -351,7 +354,7 @@ func (q *Queries) ListAgents(ctx context.Context) ([]Agent, error) {
 }
 
 const listAvailableAgentEnvironmentLabels = `-- name: ListAvailableAgentEnvironmentLabels :many
-SELECT e.id, e.name, e.description, e.tags, e.created_at FROM environments e
+SELECT e.id, e.name, e.description, e.tags, e.created_at, e.verification_type, e.verification_target, e.verification_timeout_seconds FROM environments e
 WHERE NOT EXISTS (SELECT 1 FROM agent_environment_labels l
  WHERE l.agent_id = ?1 AND l.environment_id = e.id)
 ORDER BY e.name, e.id
@@ -372,6 +375,9 @@ func (q *Queries) ListAvailableAgentEnvironmentLabels(ctx context.Context, agent
 			&i.Description,
 			&i.Tags,
 			&i.CreatedAt,
+			&i.VerificationType,
+			&i.VerificationTarget,
+			&i.VerificationTimeoutSeconds,
 		); err != nil {
 			return nil, err
 		}

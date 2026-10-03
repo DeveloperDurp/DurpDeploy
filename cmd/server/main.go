@@ -380,7 +380,10 @@ func recoverPendingDeployments(
 			return err
 		}
 		failed, err = q.FailOrphanedDeployments(ctx, timestamp)
-		return err
+		if err != nil {
+			return err
+		}
+		return q.ReconcileTerminalVerifications(ctx)
 	})
 	if err != nil {
 		slog.Error("startup recovery: fail orphaned deployments", "err", err)
@@ -629,8 +632,8 @@ func runAudit(args []string) int {
 }
 
 // runSecretKey implements `durpdeploy secret-key rotate [--plaintext]`. It
-// generates a fresh 32-byte key, decrypts every variables/release_variables
-// row with the currently configured key (secret.LoadKey), and re-encrypts it
+// generates a fresh 32-byte key, decrypts variable rows, repository credentials,
+// and verification targets with the current key, and re-encrypts them
 // with the new one — all inside a single transaction, so a crash mid-rotation
 // leaves the DB entirely on the old key, never half-migrated. The new key
 // is printed to stdout; the operator must install it (file or env) and
@@ -790,10 +793,10 @@ func runSecretKey(args []string) int {
 		}
 	}
 
-	if err := rotateArtifactCredentials(
+	if err := rotateStoredCredentials(
 		ctx,
 		qtx,
-		artifactKeyRotation{
+		secretKeyRotation{
 			oldBox:    oldBox,
 			newBox:    newBox,
 			plaintext: *plaintext,
@@ -801,7 +804,7 @@ func runSecretKey(args []string) int {
 	); err != nil {
 		fmt.Fprintf(
 			os.Stderr,
-			"error: rotate artifact repository credentials: %v\n",
+			"error: rotate stored credentials: %v\n",
 			err,
 		)
 		return 1

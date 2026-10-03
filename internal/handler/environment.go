@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"durpdeploy/internal/auth"
 	"github.com/go-chi/chi/v5"
 
 	"durpdeploy/internal/db"
@@ -76,8 +77,19 @@ func (h *EnvironmentHandler) CreateEnvironment(
 		return
 	}
 
+	if !environmentVerificationAllowed(w, r) {
+		return
+	}
+	check, err := environmentVerificationForm(r)
+	if err != nil {
+		environmentVerificationError(w, r, 0, true)
+		return
+	}
 	params := db.CreateEnvironmentParams{
-		Name: name,
+		Name:                       name,
+		VerificationType:           string(check.Kind),
+		VerificationTarget:         check.Target,
+		VerificationTimeoutSeconds: check.TimeoutSeconds,
 		Description: sql.NullString{
 			String: r.FormValue("description"),
 			Valid:  r.FormValue("description") != "",
@@ -88,7 +100,7 @@ func (h *EnvironmentHandler) CreateEnvironment(
 		},
 	}
 
-	_, err := h.Repo.Queries.CreateEnvironment(r.Context(), params)
+	_, err = h.Repo.CreateEnvironment(r.Context(), params)
 	if err != nil {
 		if IsUniqueViolation(err) {
 			env := &db.Environment{Name: name}
@@ -136,7 +148,7 @@ func (h *EnvironmentHandler) EditEnvironment(
 		return
 	}
 
-	env, err := h.Repo.Queries.GetEnvironment(r.Context(), id)
+	env, err := h.Repo.GetEnvironment(r.Context(), id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -178,9 +190,20 @@ func (h *EnvironmentHandler) UpdateEnvironment(
 		return
 	}
 
+	if !environmentVerificationAllowed(w, r) {
+		return
+	}
+	check, err := environmentVerificationForm(r)
+	if err != nil {
+		environmentVerificationError(w, r, id, false)
+		return
+	}
 	params := db.UpdateEnvironmentParams{
-		ID:   id,
-		Name: name,
+		ID:                         id,
+		Name:                       name,
+		VerificationType:           string(check.Kind),
+		VerificationTarget:         check.Target,
+		VerificationTimeoutSeconds: check.TimeoutSeconds,
 		Description: sql.NullString{
 			String: r.FormValue("description"),
 			Valid:  r.FormValue("description") != "",
@@ -190,8 +213,12 @@ func (h *EnvironmentHandler) UpdateEnvironment(
 			Valid:  r.FormValue("tags") != "",
 		},
 	}
+	if auth.RoleFromContext(r.Context()) == "admin" &&
+		r.Form.Has("verification_type") {
+		params.ConfigureVerification = 1
+	}
 
-	_, err = h.Repo.Queries.UpdateEnvironment(r.Context(), params)
+	_, err = h.Repo.UpdateEnvironment(r.Context(), params)
 	if err != nil {
 		if IsUniqueViolation(err) {
 			env := &db.Environment{ID: id, Name: name}

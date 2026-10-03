@@ -71,6 +71,9 @@ func RefreshReleaseSnapshot(
 	repo *repository.Repository,
 	release db.Release,
 ) (db.Release, error) {
+	if release.SnapshotLocked != 0 {
+		return db.Release{}, ErrReleaseSnapshotLocked
+	}
 	if err := repo.ValidateExecutableRelease(ctx, release.ID); err != nil {
 		return db.Release{}, err
 	}
@@ -95,6 +98,9 @@ func RefreshReleaseSnapshot(
 	}
 	defer tx.Rollback()
 	queries := repo.Queries.WithTx(tx)
+	if err := lockRefreshableRelease(ctx, queries, release); err != nil {
+		return db.Release{}, err
+	}
 	updated, err := queries.UpdateRelease(ctx, db.UpdateReleaseParams{
 		ID: release.ID, ProjectID: release.ProjectID,
 		Version: release.Version, StepsJson: snapshot.stepsJSON,

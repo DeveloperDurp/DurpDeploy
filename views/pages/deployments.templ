@@ -308,6 +308,7 @@ templ DeploymentDetail(project db.Project, release db.Release, environment db.En
 				<a href={ fmt.Sprintf("/deployments/%d/logs.txt", deployment.ID) } class="btn btn-sm btn-ghost">Export</a>
 				if CanWrite(ctx) {
 					if isTerminalStatus(deployment.Status) {
+						<a href={ fmt.Sprintf("/deployments/%d/rollback", deployment.ID) } class="btn btn-sm btn-secondary">Rollback</a>
 						<button
 							class="btn btn-sm btn-primary"
 							hx-post={ fmt.Sprintf("/deployments/%d/redeploy", deployment.ID) }
@@ -348,6 +349,7 @@ templ DeploymentDetail(project db.Project, release db.Release, environment db.En
 				<a href={ fmt.Sprintf("/projects/%d/releases/%d", project.ID, release.ID) } class="btn btn-ghost btn-sm">Back</a>
 			</div>
 		</div>
+		<div hx-get={ fmt.Sprintf("/deployments/%d/verification", deployment.ID) } hx-trigger="load" hx-swap="outerHTML" aria-live="polite"></div>
 		<div class="card bg-base-200 p-4">
 			<h2 class="text-xl font-bold mb-4">Steps</h2>
 			<table class="table table-zebra table-fixed w-full">

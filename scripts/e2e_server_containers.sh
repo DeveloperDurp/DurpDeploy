@@ -113,6 +113,31 @@ kill "$server_pid"
 wait "$server_pid" || true
 server_pid=
 
+printf 'Running existing-server SQLite E2E\n'
+DURPDEPLOY_DB="$tmp/running-server.db" "$tmp/durpdeploy" admin create \
+	--email e2e-admin@test.local \
+	--password e2e-admin-password-1234 >/dev/null
+DURPDEPLOY_DB="$tmp/running-server.db" \
+	DURPDEPLOY_EXECUTION_BOUNDARY=service DURPDEPLOY_ADDR=127.0.0.1:18082 \
+	DURPDEPLOY_AGENT_LISTEN_ADDR=127.0.0.1:0 \
+	DURPDEPLOY_AGENT_PUBLIC_URL=https://localhost \
+	DURPDEPLOY_AGENT_IDENTITY_DIR="$tmp/running-agent" \
+	DURPDEPLOY_URL=http://127.0.0.1:18082 \
+	"$tmp/durpdeploy" >"$tmp/running-server.log" 2>&1 &
+server_pid=$!
+for _ in {1..100}; do
+	curl -fsS http://127.0.0.1:18082/healthz >/dev/null 2>&1 && break
+	sleep 0.1
+done
+suite_started=$(date -u +%FT%TZ)
+DURPDEPLOY_BASE_URL=http://127.0.0.1:18082 \
+	DURPDEPLOY_DB="$tmp/running-server.db" \
+	DURPDEPLOY_E2E_CLI="$tmp/durpdeploy" make e2e-test
+kill "$server_pid"
+wait "$server_pid"
+server_pid=
+bash scripts/check_e2e_containers.sh "$namespace" "$suite_started"
+
 printf 'Running host control-plane E2E\n'
 suite_started=$(date -u +%FT%TZ)
 DURPDEPLOY_E2E_PORT=18080 ./scripts/e2e_test.sh

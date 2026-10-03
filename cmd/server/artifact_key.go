@@ -8,16 +8,16 @@ import (
 	"durpdeploy/internal/secret"
 )
 
-type artifactKeyRotation struct {
+type secretKeyRotation struct {
 	oldBox    *secret.Box
 	newBox    *secret.Box
 	plaintext bool
 }
 
-func rotateArtifactCredentials(
+func rotateStoredCredentials(
 	ctx context.Context,
 	q *db.Queries,
-	rotation artifactKeyRotation,
+	rotation secretKeyRotation,
 ) error {
 	rows, err := q.ListPackageRepositoryCredentials(ctx)
 	if err != nil {
@@ -48,5 +48,5 @@ func rotateArtifactCredentials(
 			return err
 		}
 	}
-	return nil
+	return rotateVerificationTargets(ctx, q, rotation)
 }

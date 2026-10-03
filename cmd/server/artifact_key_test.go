@@ -55,10 +55,10 @@ func TestArtifactCredentialsRotateAtomically(t *testing.T) {
 	}
 	// When
 	err = repo.WithTx(t.Context(), func(q *db.Queries) error {
-		return rotateArtifactCredentials(
+		return rotateStoredCredentials(
 			t.Context(),
 			q,
-			artifactKeyRotation{oldBox: oldBox, newBox: newBox},
+			secretKeyRotation{oldBox: oldBox, newBox: newBox},
 		)
 	})
 	// Then

@@ -51,6 +51,16 @@ func (r *DeploymentRunner) completeDeployment(
 		)
 	}
 	if err == nil {
+		verificationStatus := "failed"
+		if status == "cancelled" {
+			verificationStatus = "cancelled"
+		}
+		err = r.repo.Queries.FinishDeploymentVerification(ctx,
+			db.FinishDeploymentVerificationParams{
+				DeploymentID: deploymentID, Status: verificationStatus,
+			})
+	}
+	if err == nil {
 		delete(r.cancels, deploymentID)
 	}
 	return status, err

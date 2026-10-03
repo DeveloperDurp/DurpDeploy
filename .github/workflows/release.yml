@@ -238,12 +238,12 @@ jobs:
       - name: Install shell checks
         run: |
           sudo apt-get update
-          sudo apt-get install -y shellcheck
+          sudo apt-get install -y shellcheck sqlite3
 
       - name: Check E2E shell syntax
         run: |
-          bash -n scripts/e2e_test.sh scripts/e2e_server_containers.sh scripts/check_e2e_containers.sh scripts/check_e2e_containers_test.sh
-          shellcheck -S error scripts/e2e_test.sh scripts/e2e_server_containers.sh scripts/check_e2e_containers.sh scripts/check_e2e_containers_test.sh
+          bash -n scripts/e2e_test.sh scripts/e2e_db_test.sh scripts/e2e_server_containers.sh scripts/check_e2e_containers.sh scripts/check_e2e_containers_test.sh
+          shellcheck -S error scripts/e2e_test.sh scripts/e2e_db_test.sh scripts/e2e_server_containers.sh scripts/check_e2e_containers.sh scripts/check_e2e_containers_test.sh
           bash scripts/check_e2e_containers_test.sh
 
       - name: E2E contract checks

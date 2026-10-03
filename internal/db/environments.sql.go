@@ -22,17 +22,28 @@ func (q *Queries) CountEnvironments(ctx context.Context) (int64, error) {
 }
 
 const createEnvironment = `-- name: CreateEnvironment :one
-INSERT INTO environments (name, description, tags) VALUES (?, ?, ?) RETURNING id, name, description, tags, created_at
+INSERT INTO environments (name, description, tags, verification_type, verification_target, verification_timeout_seconds)
+VALUES (?1, ?2, ?3, ?4, ?5, COALESCE(NULLIF(CAST(?6 AS INTEGER), 0), 30)) RETURNING id, name, description, tags, created_at, verification_type, verification_target, verification_timeout_seconds
 `
 
 type CreateEnvironmentParams struct {
-	Name        string         `json:"name"`
-	Description sql.NullString `json:"description"`
-	Tags        sql.NullString `json:"tags"`
+	Name                       string         `json:"name"`
+	Description                sql.NullString `json:"description"`
+	Tags                       sql.NullString `json:"tags"`
+	VerificationType           string         `json:"verification_type"`
+	VerificationTarget         string         `json:"verification_target"`
+	VerificationTimeoutSeconds int64          `json:"verification_timeout_seconds"`
 }
 
 func (q *Queries) CreateEnvironment(ctx context.Context, arg CreateEnvironmentParams) (Environment, error) {
-	row := q.db.QueryRowContext(ctx, createEnvironment, arg.Name, arg.Description, arg.Tags)
+	row := q.db.QueryRowContext(ctx, createEnvironment,
+		arg.Name,
+		arg.Description,
+		arg.Tags,
+		arg.VerificationType,
+		arg.VerificationTarget,
+		arg.VerificationTimeoutSeconds,
+	)
 	var i Environment
 	err := row.Scan(
 		&i.ID,
@@ -40,6 +51,9 @@ func (q *Queries) CreateEnvironment(ctx context.Context, arg CreateEnvironmentPa
 		&i.Description,
 		&i.Tags,
 		&i.CreatedAt,
+		&i.VerificationType,
+		&i.VerificationTarget,
+		&i.VerificationTimeoutSeconds,
 	)
 	return i, err
 }
@@ -54,7 +68,7 @@ func (q *Queries) DeleteEnvironment(ctx context.Context, id int64) error {
 }
 
 const getEnvironment = `-- name: GetEnvironment :one
-SELECT id, name, description, tags, created_at FROM environments WHERE id = ?
+SELECT id, name, description, tags, created_at, verification_type, verification_target, verification_timeout_seconds FROM environments WHERE id = ?
 `
 
 func (q *Queries) GetEnvironment(ctx context.Context, id int64) (Environment, error) {
@@ -66,6 +80,9 @@ func (q *Queries) GetEnvironment(ctx context.Context, id int64) (Environment, er
 		&i.Description,
 		&i.Tags,
 		&i.CreatedAt,
+		&i.VerificationType,
+		&i.VerificationTarget,
+		&i.VerificationTimeoutSeconds,
 	)
 	return i, err
 }
@@ -91,7 +108,7 @@ func (q *Queries) HasActiveEnvironmentDeployment(ctx context.Context, environmen
 }
 
 const listDeploymentEnvironmentsForUser = `-- name: ListDeploymentEnvironmentsForUser :many
-SELECT e.id, e.name, e.description, e.tags, e.created_at FROM environments e
+SELECT e.id, e.name, e.description, e.tags, e.created_at, e.verification_type, e.verification_target, e.verification_timeout_seconds FROM environments e
 WHERE EXISTS (
     SELECT 1 FROM deployments d
     JOIN releases r ON r.id = d.release_id
@@ -117,6 +134,9 @@ func (q *Queries) ListDeploymentEnvironmentsForUser(ctx context.Context, userID 
 			&i.Description,
 			&i.Tags,
 			&i.CreatedAt,
+			&i.VerificationType,
+			&i.VerificationTarget,
+			&i.VerificationTimeoutSeconds,
 		); err != nil {
 			return nil, err
 		}
@@ -159,7 +179,7 @@ func (q *Queries) ListEnvironmentDeploymentIDs(ctx context.Context, environmentI
 }
 
 const listEnvironments = `-- name: ListEnvironments :many
-SELECT id, name, description, tags, created_at FROM environments ORDER BY created_at DESC
+SELECT id, name, description, tags, created_at, verification_type, verification_target, verification_timeout_seconds FROM environments ORDER BY created_at DESC
 `
 
 func (q *Queries) ListEnvironments(ctx context.Context) ([]Environment, error) {
@@ -177,6 +197,9 @@ func (q *Queries) ListEnvironments(ctx context.Context) ([]Environment, error) {
 			&i.Description,
 			&i.Tags,
 			&i.CreatedAt,
+			&i.VerificationType,
+			&i.VerificationTarget,
+			&i.VerificationTimeoutSeconds,
 		); err != nil {
 			return nil, err
 		}
@@ -192,7 +215,7 @@ func (q *Queries) ListEnvironments(ctx context.Context) ([]Environment, error) {
 }
 
 const listEnvironmentsPaginated = `-- name: ListEnvironmentsPaginated :many
-SELECT id, name, description, tags, created_at FROM environments ORDER BY created_at DESC
+SELECT id, name, description, tags, created_at, verification_type, verification_target, verification_timeout_seconds FROM environments ORDER BY created_at DESC
 LIMIT ? OFFSET ?
 `
 
@@ -216,6 +239,9 @@ func (q *Queries) ListEnvironmentsPaginated(ctx context.Context, arg ListEnviron
 			&i.Description,
 			&i.Tags,
 			&i.CreatedAt,
+			&i.VerificationType,
+			&i.VerificationTarget,
+			&i.VerificationTimeoutSeconds,
 		); err != nil {
 			return nil, err
 		}
@@ -231,14 +257,22 @@ func (q *Queries) ListEnvironmentsPaginated(ctx context.Context, arg ListEnviron
 }
 
 const updateEnvironment = `-- name: UpdateEnvironment :one
-UPDATE environments SET name = ?, description = ?, tags = ? WHERE id = ? RETURNING id, name, description, tags, created_at
+UPDATE environments SET name = ?1, description = ?2, tags = ?3,
+verification_type = CASE WHEN CAST(?4 AS INTEGER) = 1 THEN ?5 ELSE verification_type END,
+verification_target = CASE WHEN CAST(?4 AS INTEGER) = 1 THEN ?6 ELSE verification_target END,
+verification_timeout_seconds = CASE WHEN CAST(?4 AS INTEGER) = 1 THEN COALESCE(NULLIF(CAST(?7 AS INTEGER), 0), 30) ELSE verification_timeout_seconds END
+WHERE id = ?8 RETURNING id, name, description, tags, created_at, verification_type, verification_target, verification_timeout_seconds
 `
 
 type UpdateEnvironmentParams struct {
-	Name        string         `json:"name"`
-	Description sql.NullString `json:"description"`
-	Tags        sql.NullString `json:"tags"`
-	ID          int64          `json:"id"`
+	Name                       string         `json:"name"`
+	Description                sql.NullString `json:"description"`
+	Tags                       sql.NullString `json:"tags"`
+	ConfigureVerification      int64          `json:"configure_verification"`
+	VerificationType           string         `json:"verification_type"`
+	VerificationTarget         string         `json:"verification_target"`
+	VerificationTimeoutSeconds int64          `json:"verification_timeout_seconds"`
+	ID                         int64          `json:"id"`
 }
 
 func (q *Queries) UpdateEnvironment(ctx context.Context, arg UpdateEnvironmentParams) (Environment, error) {
@@ -246,6 +280,10 @@ func (q *Queries) UpdateEnvironment(ctx context.Context, arg UpdateEnvironmentPa
 		arg.Name,
 		arg.Description,
 		arg.Tags,
+		arg.ConfigureVerification,
+		arg.VerificationType,
+		arg.VerificationTarget,
+		arg.VerificationTimeoutSeconds,
 		arg.ID,
 	)
 	var i Environment
@@ -255,6 +293,9 @@ func (q *Queries) UpdateEnvironment(ctx context.Context, arg UpdateEnvironmentPa
 		&i.Description,
 		&i.Tags,
 		&i.CreatedAt,
+		&i.VerificationType,
+		&i.VerificationTarget,
+		&i.VerificationTimeoutSeconds,
 	)
 	return i, err
 }

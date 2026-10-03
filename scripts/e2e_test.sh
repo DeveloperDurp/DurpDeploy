@@ -1216,9 +1216,16 @@ INTERPRETER_UPDATED_STEP=$(api_put \
     "$BASE/api/v1/projects/$INTERPRETER_PROJECT_ID/steps/$INTERPRETER_PYTHON_STEP_ID")
 echo "$INTERPRETER_UPDATED_STEP" | python3 -c \
     "import sys,json; assert json.load(sys.stdin)['interpreter']=='pwsh'"
-INTERPRETER_REFRESHED=$(api_post '{}' \
+INTERPRETER_REFRESH_CODE=$(api_post_code '{}' \
     "$BASE/api/v1/projects/$INTERPRETER_PROJECT_ID/releases/$INTERPRETER_RELEASE_ID/refresh")
-echo "$INTERPRETER_REFRESHED" | python3 -c '
+[[ "$INTERPRETER_REFRESH_CODE" == 409 ]] || {
+    echo "FAIL: used release refresh should be blocked ($INTERPRETER_REFRESH_CODE)"; exit 1;
+}
+INTERPRETER_PWSH_RELEASE=$(api_post '{"version":"powershell-immutable"}' \
+    "$BASE/api/v1/projects/$INTERPRETER_PROJECT_ID/releases")
+INTERPRETER_PWSH_RELEASE_ID=$(echo "$INTERPRETER_PWSH_RELEASE" | python3 -c \
+    "import sys,json; print(json.load(sys.stdin)['id'])")
+echo "$INTERPRETER_PWSH_RELEASE" | python3 -c '
 import json
 import sys
 
@@ -1226,13 +1233,13 @@ steps = {step["name"]: step["interpreter"] for step in json.loads(json.load(sys.
 assert steps["python-step"] == "pwsh", steps
 '
 INTERPRETER_REFRESHED_RELEASE_PAGE=$(curl_body \
-    "$BASE/projects/$INTERPRETER_PROJECT_ID/releases/$INTERPRETER_RELEASE_ID")
+    "$BASE/projects/$INTERPRETER_PROJECT_ID/releases/$INTERPRETER_PWSH_RELEASE_ID")
 grep -q '>pwsh<' <<<"$INTERPRETER_REFRESHED_RELEASE_PAGE" || {
     echo "FAIL: refreshed release page did not display pwsh"; exit 1;
 }
 
 INTERPRETER_PWSH_DEPLOYMENT=$(api_post \
-    "{\"release_id\":$INTERPRETER_RELEASE_ID,\"environment_id\":$INTERPRETER_ENV_ID}" \
+    "{\"release_id\":$INTERPRETER_PWSH_RELEASE_ID,\"environment_id\":$INTERPRETER_ENV_ID}" \
     "$BASE/api/v1/projects/$INTERPRETER_PROJECT_ID/deployments")
 INTERPRETER_PWSH_DEPLOYMENT_ID=$(echo "$INTERPRETER_PWSH_DEPLOYMENT" | \
     python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")

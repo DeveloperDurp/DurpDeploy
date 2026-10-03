@@ -135,7 +135,7 @@ test "$(wc -c < "$DURPDEPLOY_STAGE_DIR/package-copy")" -eq 7
 	if !strings.Contains(string(pin), `"sha256"`) {
 		t.Fatal("release pin missing")
 	}
-	f.verifyRemoteSnapshotRejection(t, release.ID)
+	f.verifyRemoteSnapshotRejection(t)
 	page := f.web(
 		t,
 		"GET",
@@ -162,6 +162,13 @@ test "$(wc -c < "$DURPDEPLOY_STAGE_DIR/package-copy")" -eq 7
 		t.Fatal(err)
 	}
 	f.completion(t, deployment.ID, events.DeploymentSucceeded)
+	f.api(
+		t,
+		"POST",
+		fmt.Sprintf("%s/releases/%d/refresh", base, release.ID),
+		nil,
+		409,
+	)
 	// Then: both steps read the same pin under effective ro/noexec restrictions.
 	logs := f.api(
 		t,
