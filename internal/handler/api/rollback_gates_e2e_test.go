@@ -135,6 +135,6 @@ func TestRollbackPermissionsAndApprovalE2E(t *testing.T) {
 		409,
 	)
 	f.api(t, "POST", fmt.Sprintf("/api/v1/deployments/%d/approve", rollback.ID),
-		map[string]string{"approved_by": "operator"}, 200)
+		nil, 200)
 	f.completion(t, rollback.ID, events.DeploymentSucceeded)
 }
