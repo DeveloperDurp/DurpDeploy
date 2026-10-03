@@ -122,6 +122,8 @@ func TestVerificationAdminConfigurationE2E(t *testing.T) {
 		{"verification_type": "http", "verification_target": "http://127.0.0.1/private"},
 		{"verification_type": "http", "verification_target": "file:///etc/passwd"},
 		{"verification_type": "http", "verification_target": "https://user:pass@example.com"},
+		{"verification_type": "http", "verification_target": "https://service.example:99999/health"},
+		{"verification_type": "http", "verification_target": "https://service.example:0/health"},
 		{"verification_type": "bash", "verification_target": " "},
 		{"verification_timeout_seconds": -1},
 		{"verification_timeout_seconds": 0},

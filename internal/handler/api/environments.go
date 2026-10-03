@@ -98,7 +98,7 @@ func (h *EnvironmentHandler) ListEnvironments(
 		return
 	}
 
-	envs, err := h.repo.Queries.ListEnvironmentsPaginated(
+	envs, err := h.repo.ListEnvironmentsPaginated(
 		r.Context(),
 		db.ListEnvironmentsPaginatedParams{
 			Limit:  limit,
@@ -178,7 +178,7 @@ func (h *EnvironmentHandler) CreateEnvironment(
 		RespondError(w, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
-	env, err := h.repo.Queries.CreateEnvironment(
+	env, err := h.repo.CreateEnvironment(
 		r.Context(),
 		db.CreateEnvironmentParams{
 			Name:                       name,
@@ -239,7 +239,7 @@ func (h *EnvironmentHandler) GetEnvironment(
 		return
 	}
 
-	env, err := h.repo.Queries.GetEnvironment(r.Context(), id)
+	env, err := h.repo.GetEnvironment(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			RespondError(w, http.StatusNotFound, "Environment not found")
@@ -304,7 +304,7 @@ func (h *EnvironmentHandler) UpdateEnvironment(
 		)
 		return
 	}
-	current, err := h.repo.Queries.GetEnvironment(r.Context(), id)
+	current, err := h.repo.GetEnvironment(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			RespondError(w, http.StatusNotFound, "Environment not found")
@@ -326,7 +326,7 @@ func (h *EnvironmentHandler) UpdateEnvironment(
 	if req.hasVerification() {
 		configure = 1
 	}
-	env, err := h.repo.Queries.UpdateEnvironment(
+	env, err := h.repo.UpdateEnvironment(
 		r.Context(),
 		db.UpdateEnvironmentParams{
 			ID:                         id,

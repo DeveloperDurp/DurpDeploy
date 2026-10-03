@@ -2,6 +2,8 @@ package repository
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 
 	"durpdeploy/internal/db"
@@ -32,7 +34,8 @@ func snapshotVerification(
 		}
 		step := steps[len(steps)-1]
 		step.Name = "Post-deployment verification"
-		step.ScriptBody = environment.VerificationTarget
+		// The encrypted target is the source of truth, not a plaintext script copy.
+		step.ScriptBody = ""
 		step.Interpreter = "bash"
 		step.TimeoutSeconds = environment.VerificationTimeoutSeconds
 		step.MaxRetries = 0
@@ -48,4 +51,21 @@ func snapshotVerification(
 			StepIndex:      index,
 		})
 	return steps, err
+}
+
+func (r *Repository) VerificationStepScript(
+	ctx context.Context, q *db.Queries, step db.DeploymentStep,
+) (string, error) {
+	check, err := q.GetDeploymentVerification(ctx, step.DeploymentID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return step.ScriptBody, nil
+	}
+	if err != nil {
+		return "", err
+	}
+	if check.Type != string(verification.Bash) ||
+		check.StepIndex != step.StepIndex {
+		return step.ScriptBody, nil
+	}
+	return r.DecryptVerificationTarget(check.Target)
 }

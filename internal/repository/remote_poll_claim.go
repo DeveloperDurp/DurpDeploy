@@ -173,6 +173,20 @@ func (r *Repository) remotePayloadSnapshot(
 	if err != nil {
 		return RemotePayloadSnapshot{}, fmt.Errorf("list claim steps: %w", err)
 	}
+	if len(steps) > 0 {
+		last := len(steps) - 1
+		steps[last].ScriptBody, err = r.VerificationStepScript(
+			ctx,
+			q,
+			steps[last],
+		)
+		if err != nil {
+			return RemotePayloadSnapshot{}, fmt.Errorf(
+				"decrypt claim verification: %w",
+				err,
+			)
+		}
+	}
 	variables, err := q.ListReleaseVariablesByRelease(ctx, release.ID)
 	if err != nil {
 		return RemotePayloadSnapshot{}, fmt.Errorf(

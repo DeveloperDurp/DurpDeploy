@@ -67,6 +67,38 @@ func (q *Queries) GetDeploymentVerification(ctx context.Context, deploymentID in
 	return i, err
 }
 
+const listDeploymentVerificationTargets = `-- name: ListDeploymentVerificationTargets :many
+SELECT deployment_id, target FROM deployment_verifications WHERE target != ''
+`
+
+type ListDeploymentVerificationTargetsRow struct {
+	DeploymentID int64  `json:"deployment_id"`
+	Target       string `json:"target"`
+}
+
+func (q *Queries) ListDeploymentVerificationTargets(ctx context.Context) ([]ListDeploymentVerificationTargetsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listDeploymentVerificationTargets)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDeploymentVerificationTargetsRow
+	for rows.Next() {
+		var i ListDeploymentVerificationTargetsRow
+		if err := rows.Scan(&i.DeploymentID, &i.Target); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockUnusedReleaseSnapshot = `-- name: LockUnusedReleaseSnapshot :execrows
 UPDATE releases SET version = version -- NOSONAR: intentional write lock
 WHERE id = ? AND snapshot_locked = 0
@@ -115,4 +147,32 @@ func (q *Queries) StartDeploymentVerification(ctx context.Context, deploymentID 
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+const updateDeploymentVerificationTarget = `-- name: UpdateDeploymentVerificationTarget :exec
+UPDATE deployment_verifications SET target = ? WHERE deployment_id = ?
+`
+
+type UpdateDeploymentVerificationTargetParams struct {
+	Target       string `json:"target"`
+	DeploymentID int64  `json:"deployment_id"`
+}
+
+func (q *Queries) UpdateDeploymentVerificationTarget(ctx context.Context, arg UpdateDeploymentVerificationTargetParams) error {
+	_, err := q.db.ExecContext(ctx, updateDeploymentVerificationTarget, arg.Target, arg.DeploymentID)
+	return err
+}
+
+const updateEnvironmentVerificationTarget = `-- name: UpdateEnvironmentVerificationTarget :exec
+UPDATE environments SET verification_target = ? WHERE id = ?
+`
+
+type UpdateEnvironmentVerificationTargetParams struct {
+	VerificationTarget string `json:"verification_target"`
+	ID                 int64  `json:"id"`
+}
+
+func (q *Queries) UpdateEnvironmentVerificationTarget(ctx context.Context, arg UpdateEnvironmentVerificationTargetParams) error {
+	_, err := q.db.ExecContext(ctx, updateEnvironmentVerificationTarget, arg.VerificationTarget, arg.ID)
+	return err
 }

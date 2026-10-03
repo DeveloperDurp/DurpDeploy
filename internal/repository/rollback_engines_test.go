@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/secret"
 )
 
 func TestVerificationRollbackAcrossDatabases(t *testing.T) {
@@ -13,6 +14,12 @@ func TestVerificationRollbackAcrossDatabases(t *testing.T) {
 			t,
 			newDeploymentCreationEngine(t, name),
 		)
+		box, err := secret.NewBox(make([]byte, 32))
+		if err != nil {
+			t.Fatal(err)
+		}
+		firstRepo.SetSecretBox(box)
+		secondRepo.SetSecretBox(box)
 		good, failed := seedRollbackEngine(t, firstRepo)
 		preview, err := firstRepo.PreviewRollback(t.Context(), failed)
 		if err != nil || preview.TargetDeploymentID != good {
@@ -27,7 +34,7 @@ func TestVerificationRollbackAcrossDatabases(t *testing.T) {
 func seedRollbackEngine(t *testing.T, firstRepo *Repository) (int64, int64) {
 	t.Helper()
 	ctx := t.Context()
-	if _, err := firstRepo.Queries.UpdateEnvironment(
+	if _, err := firstRepo.UpdateEnvironment(
 		ctx,
 		db.UpdateEnvironmentParams{
 			ID:                         1,
@@ -172,6 +179,10 @@ func assertRollbackEngineSnapshot(
 	)
 	if err != nil || check.Type != "http" || check.TimeoutSeconds != 5 {
 		t.Fatalf("verification=%+v err=%v", check, err)
+	}
+	plain, err := firstRepo.DecryptVerificationTarget(check.Target)
+	if err != nil || plain != "https://example.com/health" {
+		t.Fatal("encrypted verification target did not survive rollback")
 	}
 	return latest.ID
 }

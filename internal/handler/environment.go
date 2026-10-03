@@ -100,7 +100,7 @@ func (h *EnvironmentHandler) CreateEnvironment(
 		},
 	}
 
-	_, err = h.Repo.Queries.CreateEnvironment(r.Context(), params)
+	_, err = h.Repo.CreateEnvironment(r.Context(), params)
 	if err != nil {
 		if IsUniqueViolation(err) {
 			env := &db.Environment{Name: name}
@@ -148,7 +148,7 @@ func (h *EnvironmentHandler) EditEnvironment(
 		return
 	}
 
-	env, err := h.Repo.Queries.GetEnvironment(r.Context(), id)
+	env, err := h.Repo.GetEnvironment(r.Context(), id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -218,7 +218,7 @@ func (h *EnvironmentHandler) UpdateEnvironment(
 		params.ConfigureVerification = 1
 	}
 
-	_, err = h.Repo.Queries.UpdateEnvironment(r.Context(), params)
+	_, err = h.Repo.UpdateEnvironment(r.Context(), params)
 	if err != nil {
 		if IsUniqueViolation(err) {
 			env := &db.Environment{ID: id, Name: name}

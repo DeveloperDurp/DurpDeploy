@@ -5,11 +5,22 @@ import (
 	"time"
 
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/repository"
+	"durpdeploy/internal/runner"
+	"durpdeploy/internal/secret"
 )
 
-func TestRemoteVerificationRoutingAndShutdown(t *testing.T) {
+func startRemoteVerification(t *testing.T) (
+	*repository.Repository, *runner.DeploymentRunner, <-chan struct{}, db.Deployment,
+) {
+	t.Helper()
 	// Given: a final step selects one remote Bash agent; verification uses it too.
 	repo, rnr, _ := setupRunnerHarness(t)
+	box, err := secret.NewBox(make([]byte, 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo.SetSecretBox(box)
 	repo.DB.SetMaxOpenConns(1)
 	ctx := t.Context()
 	project, err := repo.Queries.CreateProject(
@@ -19,7 +30,7 @@ func TestRemoteVerificationRoutingAndShutdown(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	environment, err := repo.Queries.CreateEnvironment(
+	environment, err := repo.CreateEnvironment(
 		ctx,
 		db.CreateEnvironmentParams{
 			Name:                       "production",
@@ -48,13 +59,19 @@ func TestRemoteVerificationRoutingAndShutdown(t *testing.T) {
 	}
 	done := make(chan struct{})
 	go func() { defer close(done); rnr.Run(ctx, created.Deployment.ID, release.ID, environment.ID) }()
+	return repo, rnr, done, created.Deployment
+}
+
+func TestRemoteVerificationRoutingAndShutdown(t *testing.T) {
+	repo, rnr, done, created := startRemoteVerification(t)
+	ctx := t.Context()
 	for index := int64(0); index < 2; index++ {
 		awaitVerificationSignal(t, repo.RemoteWorkReady(), 5*time.Second,
 			"remote step was not queued")
 		runs, err := repo.Queries.ListRemoteStepRuns(
 			ctx,
 			db.ListRemoteStepRunsParams{
-				DeploymentID: created.Deployment.ID,
+				DeploymentID: created.ID,
 				StepIndex:    index,
 			},
 		)
@@ -64,12 +81,13 @@ func TestRemoteVerificationRoutingAndShutdown(t *testing.T) {
 		state := "succeeded"
 		if index == 1 {
 			state = "claimed"
+			assertRemoteVerificationPayload(t, repo)
 		}
 		if _, err := repo.DB.ExecContext(
 			ctx,
 			"UPDATE remote_step_runs SET state=? WHERE deployment_id=? AND step_index=?",
 			state,
-			created.Deployment.ID,
+			created.ID,
 			index,
 		); err != nil {
 			t.Fatal(err)
@@ -77,7 +95,7 @@ func TestRemoteVerificationRoutingAndShutdown(t *testing.T) {
 	}
 	check, err := repo.Queries.GetDeploymentVerification(
 		ctx,
-		created.Deployment.ID,
+		created.ID,
 	)
 	if err != nil || check.Status != "running" {
 		t.Fatalf("verification=%+v err=%v", check, err)
@@ -91,22 +109,48 @@ func TestRemoteVerificationRoutingAndShutdown(t *testing.T) {
 	if _, err := repo.DB.ExecContext(
 		ctx,
 		"UPDATE remote_step_runs SET state='cancelled' WHERE deployment_id=? AND step_index=1",
-		created.Deployment.ID,
+		created.ID,
 	); err != nil {
 		t.Fatal(err)
 	}
 	awaitVerificationSignal(t, done, 5*time.Second,
 		"remote verification did not finish after confirmation")
-	deployment, err := repo.Queries.GetDeployment(ctx, created.Deployment.ID)
+	deployment, err := repo.Queries.GetDeployment(ctx, created.ID)
 	if err != nil || deployment.Status != "cancelled" {
 		t.Fatalf("deployment=%+v err=%v", deployment, err)
 	}
 	check, err = repo.Queries.GetDeploymentVerification(
 		ctx,
-		created.Deployment.ID,
+		created.ID,
 	)
 	if err != nil || check.Status != "cancelled" {
 		t.Fatalf("verification=%+v err=%v", check, err)
+	}
+}
+
+func assertRemoteVerificationPayload(
+	t *testing.T,
+	repo *repository.Repository,
+) {
+	t.Helper()
+	_, claimed, err := repo.ClaimRemoteStepPayload(
+		t.Context(),
+		"verification-a",
+		func(snapshot repository.RemotePayloadSnapshot) (repository.RemotePreparedClaim, error) {
+			if len(snapshot.Steps) != 1 ||
+				snapshot.Steps[0].ScriptBody != "echo remote-check" {
+				t.Fatal(
+					"agent payload did not recover the encrypted verification script",
+				)
+			}
+			return repository.RemotePreparedClaim{
+				Token: "verification-claim", TokenHash: make([]byte, 32),
+				Ciphertext: []byte("test-encrypted-payload"),
+			}, nil
+		},
+	)
+	if err != nil || !claimed {
+		t.Fatalf("verification claim failed: %v", err)
 	}
 }
 

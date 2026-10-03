@@ -54,8 +54,13 @@ func (r *DeploymentRunner) verifyDeployment(
 	defer cancel()
 	switch verification.Kind(check.Type) {
 	case verification.HTTP:
+		target, decryptErr := r.repo.DecryptVerificationTarget(check.Target)
+		if decryptErr != nil {
+			err = decryptErr
+			break
+		}
 		err = verification.CheckHTTP(checkCtx, verification.Settings{
-			Kind: verification.HTTP, Target: check.Target,
+			Kind: verification.HTTP, Target: target,
 			TimeoutSeconds: check.TimeoutSeconds,
 		}, writer)
 	case verification.Bash:
@@ -126,9 +131,13 @@ func (r *DeploymentRunner) verifyBash(
 		return errors.New("verification step is missing")
 	}
 	frozen := steps[index]
+	script, err := r.repo.VerificationStepScript(ctx, r.repo.Queries, frozen)
+	if err != nil {
+		return fmt.Errorf("decrypt verification step: %w", err)
+	}
 	step := deploymentStep{
 		Name:            frozen.Name,
-		ScriptBody:      frozen.ScriptBody,
+		ScriptBody:      script,
 		Interpreter:     frozen.Interpreter,
 		ExecutionTarget: frozen.ExecutionTarget,
 		ContainerImage:  frozen.ContainerImage,

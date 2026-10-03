@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net"
 	"net/url"
+	"strconv"
 	"strings"
 )
 
@@ -39,15 +40,8 @@ func Parse(kind, target string, timeout int64) (Settings, error) {
 		settings.Target = ""
 	case HTTP:
 		settings.Target = strings.TrimSpace(target)
-		u, err := url.Parse(settings.Target)
-		if err != nil || (u.Scheme != "http" && u.Scheme != "https") ||
-			u.Hostname() == "" || u.User != nil || u.Fragment != "" ||
-			u.Opaque != "" {
-			return Settings{}, ErrInvalid
-		}
-		if ip := net.ParseIP(u.Hostname()); ip != nil &&
-			(!ip.IsGlobalUnicast() || ip.IsLoopback()) {
-			return Settings{}, ErrInvalid
+		if err := validateHTTPURL(settings.Target); err != nil {
+			return Settings{}, err
 		}
 	case Bash:
 		if strings.TrimSpace(target) == "" {
@@ -57,4 +51,24 @@ func Parse(kind, target string, timeout int64) (Settings, error) {
 		return Settings{}, ErrInvalid
 	}
 	return settings, nil
+}
+
+func validateHTTPURL(target string) error {
+	u, err := url.Parse(target)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") ||
+		u.Hostname() == "" || u.User != nil || u.Fragment != "" ||
+		u.Opaque != "" {
+		return ErrInvalid
+	}
+	if ip := net.ParseIP(u.Hostname()); ip != nil &&
+		(!ip.IsGlobalUnicast() || ip.IsLoopback()) {
+		return ErrInvalid
+	}
+	if port := u.Port(); port != "" {
+		value, err := strconv.Atoi(port)
+		if err != nil || value < 1 || value > 65535 {
+			return ErrInvalid
+		}
+	}
+	return nil
 }

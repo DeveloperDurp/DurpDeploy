@@ -168,6 +168,9 @@ shared across projects. `POST /api/v1/environments` and
 Types are `""` (disabled), `http`, and `bash`. Timeout defaults to 30 seconds
 and must be 1–300. An update that omits verification fields preserves them.
 Environment responses omit `verification_target` for non-admin callers.
+Targets and frozen verification snapshots are encrypted at rest and included
+in secret-key rotation. Bash snapshots retain placement without storing a
+second plaintext copy of the check script. Explicit HTTP ports must be 1–65535.
 The configuration is frozen on deployment creation, including deployments
 waiting for approval. HTTP performs one server-side GET; only 2xx succeeds.
 Redirects, URL user credentials, loopback, link-local/metadata addresses,
