@@ -148,7 +148,9 @@ func (h *EnvironmentHandler) ListEnvironments(
 //	  201: body:Environment
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
+//	  403: body:ForbiddenError
 //	  409: body:ConflictError
+//	  422: body:ValidationError
 //	  500: body:ServerError
 func (h *EnvironmentHandler) CreateEnvironment(
 	w http.ResponseWriter,
@@ -275,8 +277,10 @@ func (h *EnvironmentHandler) GetEnvironment(
 //	  200: body:Environment
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
+//	  403: body:ForbiddenError
 //	  404: body:NotFoundError
 //	  409: body:ConflictError
+//	  422: body:ValidationError
 //	  500: body:ServerError
 func (h *EnvironmentHandler) UpdateEnvironment(
 	w http.ResponseWriter,

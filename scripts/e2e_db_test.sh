@@ -1250,6 +1250,8 @@ for path,method in [
     ("/deployments/{id}/rollback", "post"),
 ]:
     assert d["paths"][path][method].get("security") == [{"bearer": []}], (path,method)
+for path,method in [("/environments", "post"), ("/environments/{id}", "put")]:
+    assert {"403", "422"} <= d["paths"][path][method]["responses"].keys(), (path,method)
 print("swagger spec OK")
 '
 echo "  Swagger UI + spec: OK"

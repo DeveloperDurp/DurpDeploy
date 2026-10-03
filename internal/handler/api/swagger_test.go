@@ -120,6 +120,32 @@ func TestSwagger_DeploymentRetryDocumentsCreatedResponse(t *testing.T) {
 	}
 }
 
+func TestSwagger_EnvironmentVerificationResponses(t *testing.T) {
+	// Given: the publicly served API contract.
+	rr := httptest.NewRecorder()
+	NewSwaggerHandler().Spec(rr,
+		httptest.NewRequest(http.MethodGet, "/api/swagger/spec", nil))
+	var doc struct {
+		Paths map[string]map[string]struct {
+			Responses map[string]json.RawMessage `json:"responses"`
+		} `json:"paths"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &doc); err != nil {
+		t.Fatal(err)
+	}
+	// When: clients read environment creation and update outcomes.
+	for _, route := range []struct{ path, method string }{
+		{"/environments", "post"}, {"/environments/{id}", "put"},
+	} {
+		// Then: verification authorization and validation errors are declared.
+		for _, status := range []string{"403", "422"} {
+			if _, ok := doc.Paths[route.path][route.method].Responses[status]; !ok {
+				t.Fatalf("%s %s omits %s", route.method, route.path, status)
+			}
+		}
+	}
+}
+
 func TestSwagger_DocumentsAgentEndpoints(t *testing.T) {
 	spec, err := swagger.ReadSpec()
 	if err != nil {
