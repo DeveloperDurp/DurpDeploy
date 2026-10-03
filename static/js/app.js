@@ -29,8 +29,8 @@ htmx.onLoad((root) => {
 	}
 });
 
-document.addEventListener('htmx:afterSettle', (event) => {
-	if (event.detail.requestConfig?.boosted) {
+document.addEventListener('htmx:afterSwap', (event) => {
+	if (event.target.id === 'page-content' && event.detail.requestConfig?.boosted) {
 		document.getElementById('page-content')?.focus({ preventScroll: true });
 	}
 });
