@@ -85,6 +85,20 @@ func verificationHTTPSecrets(target string) []string {
 		return []string{target}
 	}
 	secrets := []string{target, u.RequestURI(), u.RawQuery}
+	values := strings.Split(u.Path, "/")
+	for _, segment := range strings.Split(u.EscapedPath(), "/") {
+		value, err := url.PathUnescape(segment)
+		if err == nil && value != "" {
+			secrets = append(secrets, segment)
+			values = append(values, value)
+		}
+	}
+	for _, value := range values {
+		if value != "" {
+			secrets = append(secrets, value,
+				url.QueryEscape(value), url.PathEscape(value))
+		}
+	}
 	for _, values := range u.Query() {
 		for _, value := range values {
 			secrets = append(secrets, value,

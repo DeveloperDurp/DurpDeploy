@@ -16,6 +16,7 @@ import (
 )
 
 const verificationQueryCredential = "stored-query/token&proof value"
+const verificationPathCredential = "stored-path/token&proof value"
 
 func TestVerificationEncryptedTargetsE2E(t *testing.T) {
 	for _, kind := range []string{"http", "bash"} {
@@ -34,6 +35,17 @@ func TestVerificationEncryptedTargetsE2E(t *testing.T) {
 	}
 }
 
+func TestVerificationHTTPEncodedPathSeparatorE2E(t *testing.T) {
+	f := newVerificationE2E(t)
+	target := strings.Replace(encryptedVerificationTarget(t, "http"),
+		"/hooks/", "/hooks%2f", 1)
+	configureVerification(t, f, "http", target, 5)
+	deployment := verificationDeploy(t, f,
+		verificationRelease(t, f, "encoded-path-separator"))
+	f.completion(t, deployment.ID, events.DeploymentSucceeded)
+	assertHTTPQueryRedactionForViewer(t, f, deployment.ID)
+}
+
 func encryptedVerificationTarget(t *testing.T, kind string) string {
 	t.Helper()
 	if kind == "bash" {
@@ -42,7 +54,8 @@ func encryptedVerificationTarget(t *testing.T, kind string) string {
 	return verificationUpstream(t, http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
 			value := r.URL.Query().Get("credential")
-			if value != verificationQueryCredential {
+			if value != verificationQueryCredential ||
+				r.URL.Path != "/hooks/"+verificationPathCredential {
 				w.WriteHeader(http.StatusForbidden)
 				return
 			}
@@ -53,7 +66,13 @@ func encryptedVerificationTarget(t *testing.T, kind string) string {
 				url.QueryEscape(value),
 				url.PathEscape(value),
 			)
-		})) + "/health?credential=" + url.QueryEscape(verificationQueryCredential)
+			fmt.Fprintln(w, verificationPathCredential,
+				url.QueryEscape(verificationPathCredential),
+				url.PathEscape(verificationPathCredential),
+				strings.TrimPrefix(r.URL.EscapedPath(), "/hooks/"))
+		})) + "/hooks/" + strings.ReplaceAll(
+		url.PathEscape(verificationPathCredential), "%2F", "%2f",
+	) + "?credential=" + url.QueryEscape(verificationQueryCredential)
 }
 
 func assertHTTPQueryRedactionForViewer(
@@ -96,7 +115,10 @@ func assertHTTPQueryRedactionForViewer(
 	page := html.UnescapeString(f.web(t, "GET", path, nil, 200))
 	for _, value := range []string{verificationQueryCredential,
 		url.QueryEscape(verificationQueryCredential),
-		url.PathEscape(verificationQueryCredential)} {
+		url.PathEscape(verificationQueryCredential), verificationPathCredential,
+		url.QueryEscape(verificationPathCredential),
+		url.PathEscape(verificationPathCredential),
+		strings.ReplaceAll(url.PathEscape(verificationPathCredential), "%2F", "%2f")} {
 		if strings.Contains(logs, value) || strings.Contains(page, value) {
 			t.Fatal("HTTP response exposed the private target credential")
 		}
