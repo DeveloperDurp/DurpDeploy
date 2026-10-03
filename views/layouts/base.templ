@@ -58,7 +58,7 @@ templ Base(title string, currentPath string) {
 			<script src={ static.URL("js/app.bundle.js") } defer></script>
 		</head>
 		<body class="bg-base-100 text-base-content min-h-screen">
-			<div class="navbar bg-base-200 border-b border-base-300" x-data="navbar" @keydown.escape.window="closeFocusedMenu($event)" @click.window="closeOutsideMenu($event)">
+			<div id="app-navbar" class="navbar bg-base-200 border-b border-base-300" x-data="navbar" @keydown.escape.window="closeFocusedMenu($event)" @click.window="closeOutsideMenu($event)">
 				<div class="w-full px-4 sm:px-6 lg:px-8 flex flex-nowrap items-center gap-2">
 					<div class="min-w-0 shrink-0">
 						<a href="/" class="btn btn-ghost text-xl whitespace-nowrap">DurpDeploy</a>
@@ -174,11 +174,11 @@ templ Base(title string, currentPath string) {
 					</div>
 				</div>
 			</div>
-			<div class="w-full px-4 sm:px-6 lg:px-8 py-4">
+			<main id="page-content" tabindex="-1" class="w-full px-4 sm:px-6 lg:px-8 py-4">
 				<div id="form-container">
 					{ children... }
 				</div>
-			</div>
+			</main>
 			<div
 				x-data="toast"
 				x-show="visible"

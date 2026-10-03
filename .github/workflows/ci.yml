@@ -288,7 +288,7 @@ jobs:
       - name: Verify ZIP artifact API, web forms, and container mounts
         env:
           DURPDEPLOY_CONTAINER_RUNTIME: docker
-        run: go test -tags=e2e -count=1 -run '^(TestArtifactsAPIWebContainerE2E|TestArtifactCredentialRotationE2E|TestArtifactSourceReplacementE2E|TestDeploymentStagingCleanupE2E|TestDeploymentStepLogsAPIWebE2E|TestDeploymentStepLogOutcomesAPIWebE2E)$' ./internal/handler/api
+        run: go test -tags=e2e -count=1 -run '^(TestArtifactsAPIWebContainerE2E|TestArtifactCredentialRotationE2E|TestArtifactSourceReplacementE2E|TestDeploymentStagingCleanupE2E|TestDeploymentStepLogsAPIWebE2E|TestDeploymentStepLogOutcomesAPIWebE2E|TestPageNavigationHTTPAPIWebE2E)$' ./internal/handler/api
 
   # ----- Artifact crash recovery and capacity ----------------------------------
   package-browser:
@@ -310,8 +310,8 @@ jobs:
         run: |
           go tool templ generate
           make swagger-ui-copy
-      - name: Verify package UI, Back navigation, and step logs
-        run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^Test(PackageRepository|PackageRepositoryBack|BackNavigation|BackHistory|DeploymentStepLogs|DeploymentStepLogsHistoricalQuiet)BrowserE2E$' ./internal/handler/api
+      - name: Verify UI navigation, caching, package forms, and step logs
+        run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^Test(PackageRepository|PackageRepositoryBack|BackNavigation|BackHistory|DeploymentStepLogs|DeploymentStepLogsHistoricalQuiet|PageNavigation|PageNavigationExpiredSession)BrowserE2E$' ./internal/handler/api
       - name: Upload package UI evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

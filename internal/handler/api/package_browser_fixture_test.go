@@ -187,7 +187,10 @@ func (b *packageBrowser) wait(t *testing.T, predicate string) {
 		}
 		if err == nil {
 			if len(result.Exception) != 0 {
-				t.Fatal("browser predicate evaluation failed")
+				t.Fatalf(
+					"browser predicate evaluation failed: %s",
+					result.Exception,
+				)
 			}
 			if string(result.Result.Value) == "true" {
 				return

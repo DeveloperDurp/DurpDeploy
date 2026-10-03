@@ -89,6 +89,14 @@ keep `overflow-x-auto` and `table table-zebra table-fixed w-full`.
 
 ## 6. Motion & Interaction
 
+Normal internal page links use HTMX to replace the main content, update the
+navbar and title, and push the existing URL into browser history. The document
+and its styles stay loaded; no page fade or layout animation is added. Focus
+moves to the main landmark after navigation. Native forms, downloads, login,
+logout, external links, and modified clicks keep their existing behavior.
+History restoration fetches fresh content without saving protected markup in
+browser storage. Existing Alpine components release their streams on removal.
+
 Deployment logs use one native `details` disclosure per release step, in release
 order, with a semantic state badge. Running, waiting, and failed steps open
 automatically; users can collapse them with the keyboard. A polite status line

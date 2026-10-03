@@ -4,6 +4,47 @@ import htmx from 'htmx.org'
 window.Alpine = Alpine
 window.htmx = htmx
 
+// Re-fetch history entries rather than storing protected page content.
+htmx.config.historyCacheSize = 0;
+htmx.config.historyRestoreAsHxRequest = false;
+
+htmx.onLoad((root) => {
+	if (!document.querySelector('meta[name="csrf-token"]')) return;
+	const links = [...root.querySelectorAll('a[href]')];
+	if (root.matches?.('a[href]')) links.push(root);
+	for (const link of links) {
+		if (!link.getAttribute('href').startsWith('/') || link.origin !== location.origin ||
+			link.hash || link.target || link.hasAttribute('download') ||
+			link.closest('[hx-boost], [data-hx-boost], [x-data="backNavigation"]') ||
+			link.matches('[hx-get], [hx-post], [hx-put], [hx-patch], [hx-delete]') ||
+			/^\/(login|logout|auth|api|static|swagger|healthz|\.well-known)(\/|$)/.test(link.pathname) ||
+			link.pathname.endsWith('/logs.txt')) continue;
+		link.setAttribute('hx-boost', 'true');
+		link.setAttribute('hx-target', '#page-content');
+		link.setAttribute('hx-select', '#page-content');
+		link.setAttribute('hx-select-oob', '#app-navbar');
+		link.setAttribute('hx-swap', 'outerHTML show:window:top');
+		link.setAttribute('hx-sync', 'body:replace');
+		htmx.process(link);
+	}
+});
+
+document.addEventListener('htmx:afterSettle', (event) => {
+	if (event.detail.requestConfig?.boosted) {
+		document.getElementById('page-content')?.focus({ preventScroll: true });
+	}
+});
+document.addEventListener('htmx:beforeSwap', (event) => {
+	if (event.detail.requestConfig?.boosted && event.detail.xhr.status >= 400) {
+		event.preventDefault();
+		location.assign(event.detail.xhr.responseURL);
+	}
+});
+document.addEventListener('htmx:historyCacheMissLoadError', (event) => {
+	const redirect = event.detail.xhr.getResponseHeader('HX-Redirect');
+	if (redirect) location.replace(redirect);
+});
+
 Alpine.data('backNavigation', () => ({
 	back(event) {
 		if (event.defaultPrevented || event.button !== 0 || event.ctrlKey ||

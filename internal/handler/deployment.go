@@ -576,7 +576,7 @@ func (h *DeploymentHandler) GetDeployment(
 		return
 	}
 
-	if r.Header.Get("HX-Request") == "true" {
+	if isFragmentRequest(r) {
 		if err := pages.DeploymentDetail(project, release, environment, deployment, logs).
 			Render(r.Context(), w); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -1000,7 +1000,7 @@ func (h *DeploymentHandler) ListDeployments(
 		return
 	}
 
-	if r.Header.Get("HX-Request") == "true" {
+	if isFragmentRequest(r) {
 		view := pages.DeploymentsView{
 			Items:         items,
 			Total:         total,

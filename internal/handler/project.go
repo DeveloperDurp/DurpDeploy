@@ -51,7 +51,7 @@ func (h *ProjectHandler) renderProjectsList(
 		}
 		panels[i] = panel
 	}
-	if r.Header.Get("HX-Request") == "true" {
+	if isFragmentRequest(r) {
 		return pages.ProjectsList(projects, panels).Render(r.Context(), w)
 	}
 	return pages.ProjectsListPage(projects, panels, r.URL.Path).
@@ -311,7 +311,7 @@ func (h *ProjectHandler) GetProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if r.Header.Get("HX-Request") == "true" {
+	if isFragmentRequest(r) {
 		if err := pages.ProjectDetail(project, panel, variables, environments).
 			Render(r.Context(), w); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)

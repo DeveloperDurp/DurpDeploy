@@ -18,6 +18,13 @@ const internalErrorMessage = "Internal server error"
 
 const safeErrorHeader = "X-DurpDeploy-Safe-Error"
 
+// Page navigation needs the complete document for its title and shell.
+func isFragmentRequest(r *http.Request) bool {
+	return r.Header.Get("HX-Request") == "true" &&
+		!(r.Method == http.MethodGet && (r.Header.Get("HX-Boosted") == "true" ||
+			r.Header.Get("HX-History-Restore-Request") == "true"))
+}
+
 func markSafeErrorResponse(w http.ResponseWriter) {
 	w.Header().Set(safeErrorHeader, "true")
 }
