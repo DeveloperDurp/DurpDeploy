@@ -42,3 +42,7 @@ SELECT deployment_id, step_index, state, reason, finished_at FROM (
       AND c.state IN ('failed', 'lost', 'cancel_unconfirmed')
 ) failures ORDER BY finished_at DESC, deployment_id DESC, step_index DESC
 LIMIT 1;
+-- name: GetAgentHealthBaseline :one
+SELECT CAST(COALESCE(p.paired_at, a.created_at) AS INTEGER) AS baseline
+FROM agents a LEFT JOIN agent_pairings p ON p.agent_id = a.id
+WHERE a.id = ?;

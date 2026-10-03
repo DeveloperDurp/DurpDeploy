@@ -18,7 +18,7 @@ func TestAgentHealthThresholds(t *testing.T) {
 		want string
 	}{{119, "healthy"}, {120, "stale"}, {599, "stale"}, {600, "offline"}} {
 		// When: health is evaluated at a threshold.
-		got := repository.AgentHealthAt(agent, 1000+test.age)
+		got := repository.AgentHealthAt(agent, 1000+test.age, 1000)
 		// Then: the boundary agrees with the fleet contract.
 		if got != test.want {
 			t.Fatalf("age=%d health=%s want=%s", test.age, got, test.want)
@@ -78,7 +78,7 @@ func TestAgentHealthIncludesNeverReportedAndExcludesDisabled(t *testing.T) {
 		want string
 	}{{1119, "unknown"}, {1120, "stale"}, {1600, "offline"}} {
 		// When: its initial heartbeat grace period expires.
-		got := repository.AgentHealthAt(agent, test.now)
+		got := repository.AgentHealthAt(agent, test.now, 1000)
 		// Then: it progresses to stale and offline.
 		if got != test.want {
 			t.Fatalf("health=%s want=%s", got, test.want)
@@ -86,7 +86,7 @@ func TestAgentHealthIncludesNeverReportedAndExcludesDisabled(t *testing.T) {
 	}
 	agent.Status = "disabled"
 	agent.LastHeartbeatAt = sql.NullInt64{Int64: 1, Valid: true}
-	if got := repository.AgentHealthAt(agent, 1600); got != "unknown" {
+	if got := repository.AgentHealthAt(agent, 1600, 1000); got != "unknown" {
 		t.Fatalf("disabled health=%s", got)
 	}
 }

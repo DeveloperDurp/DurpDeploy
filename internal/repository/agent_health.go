@@ -22,11 +22,11 @@ type AgentHealthReport struct {
 }
 
 // AgentHealthAt shares the fleet thresholds between API, UI, and alerts.
-func AgentHealthAt(agent db.Agent, now int64) string {
+func AgentHealthAt(agent db.Agent, now, graceStartedAt int64) string {
 	if agent.Status != "active" {
 		return "unknown"
 	}
-	last := agent.CreatedAt
+	last := graceStartedAt
 	if agent.LastHeartbeatAt.Valid {
 		last = agent.LastHeartbeatAt.Int64
 	}
@@ -51,7 +51,11 @@ func (r *Repository) AgentHealthReport(
 	if err != nil {
 		return report, fmt.Errorf("agent health clock: %w", err)
 	}
-	report.Health = AgentHealthAt(agent, now)
+	baseline, err := r.Queries.GetAgentHealthBaseline(ctx, agent.ID)
+	if err != nil {
+		return report, fmt.Errorf("agent health baseline: %w", err)
+	}
+	report.Health = AgentHealthAt(agent, now, baseline)
 	report.CurrentWork, err = r.Queries.ListAgentCurrentWork(ctx, agent.ID)
 	if err != nil {
 		return report, fmt.Errorf("current agent work: %w", err)
@@ -78,14 +82,18 @@ func (r *Repository) AgentHealthReport(
 		report.LastError = &failure
 	}
 	report.ServerVersion, report.RecommendedAgentVersion = fleetBuildVersions()
-	report.Compatibility = "unknown"
+	report.Compatibility = agentCompatibility(agent)
+	return report, nil
+}
+
+func agentCompatibility(agent db.Agent) string {
 	switch agent.AgentProtocol.String {
 	case "agent/1":
-		report.Compatibility = "Supported legacy protocol (Bash only); version unverified"
+		return "Supported legacy protocol (Bash only); version unverified"
 	case "agent/2":
-		report.Compatibility = "Supported protocol; version unverified"
+		return "Supported protocol; version unverified"
 	}
-	return report, nil
+	return "unknown"
 }
 
 func fleetBuildVersions() (string, string) {
@@ -144,7 +152,11 @@ func (r *Repository) AdvanceAgentHealth(
 				if err != nil {
 					return err
 				}
-				health := AgentHealthAt(agent, now)
+				baseline, err := q.GetAgentHealthBaseline(ctx, agent.ID)
+				if err != nil {
+					return err
+				}
+				health := AgentHealthAt(agent, now, baseline)
 				changed, err := q.SetAgentHealthState(
 					ctx,
 					db.SetAgentHealthStateParams{

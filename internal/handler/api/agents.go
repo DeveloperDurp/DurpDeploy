@@ -81,25 +81,21 @@ func (h *AgentHandler) ListAgents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	items := make([]agentResponse, len(agents))
-	for index := range agents {
-		interpreters, err := h.repo.Queries.ListAgentInterpreters(
-			r.Context(),
-			agents[index].ID,
+	health, interpreters, err := h.repo.AgentFleetReports(r.Context(), agents)
+	if err != nil {
+		RespondError(
+			w,
+			http.StatusInternalServerError,
+			"Could not read agent health",
 		)
-		if err != nil {
-			RespondError(w, http.StatusInternalServerError, err.Error())
-			return
-		}
-		health, err := h.repo.AgentHealthReport(r.Context(), agents[index])
-		if err != nil {
-			RespondError(
-				w,
-				http.StatusInternalServerError,
-				"Could not read agent health",
-			)
-			return
-		}
-		items[index] = publicAgent(agents[index], interpreters, health)
+		return
+	}
+	for index, agent := range agents {
+		items[index] = publicAgent(
+			agent,
+			interpreters[agent.ID],
+			health[agent.ID],
+		)
 	}
 	RespondJSON(w, http.StatusOK, items)
 }

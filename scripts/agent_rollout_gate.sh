@@ -17,6 +17,9 @@ tests=(
 	TestRunnerPreservesOriginalFailureWhileCancellingSiblings
 	TestRunnerRequestsCancellationBeforeTimeoutFailure
 	TestAgentFleetHealthAlertsE2E
+	TestAgentFleetSlowNotifierDoesNotBlockMaintenanceE2E
+	TestAgentFleetRepairedIdentityGetsHeartbeatGraceE2E
+	TestAgentFleetListMatchesDetailsE2E
 	TestAgentFleetAdminBoundaryE2E
 	TestAgentFleetAssignmentsE2E
 	TestAgentFleetLastErrorE2E

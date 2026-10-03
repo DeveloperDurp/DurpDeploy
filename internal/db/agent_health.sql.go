@@ -26,6 +26,19 @@ func (q *Queries) CountAgentQueuedWork(ctx context.Context, agentID string) (int
 	return queued_work, err
 }
 
+const getAgentHealthBaseline = `-- name: GetAgentHealthBaseline :one
+SELECT CAST(COALESCE(p.paired_at, a.created_at) AS INTEGER) AS baseline
+FROM agents a LEFT JOIN agent_pairings p ON p.agent_id = a.id
+WHERE a.id = ?
+`
+
+func (q *Queries) GetAgentHealthBaseline(ctx context.Context, id string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, getAgentHealthBaseline, id)
+	var baseline int64
+	err := row.Scan(&baseline)
+	return baseline, err
+}
+
 const getAgentLastError = `-- name: GetAgentLastError :one
 SELECT deployment_id, step_index, state, reason, finished_at FROM (
     SELECT r.deployment_id, r.step_index, r.state, r.state AS reason, r.finished_at

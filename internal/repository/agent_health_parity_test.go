@@ -1,6 +1,7 @@
 package repository_test
 
 import (
+	"reflect"
 	"testing"
 
 	"durpdeploy/internal/repository"
@@ -31,6 +32,14 @@ func runAgentFleetDatabaseParity(t *testing.T, repo *repository.Repository) {
 	if err != nil || report.QueuedWork != 2 || len(report.CurrentWork) != 0 ||
 		report.Health != "offline" {
 		t.Fatalf("health report=%+v err=%v", report, err)
+	}
+	agents, err := repo.Queries.ListAgents(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	fleet, _, err := repo.AgentFleetReports(t.Context(), agents)
+	if err != nil || !reflect.DeepEqual(fleet["a"], report) {
+		t.Fatalf("fleet/detail parity=%+v err=%v", fleet, err)
 	}
 	if transitions, err := repo.AdvanceAgentHealth(
 		t.Context(),

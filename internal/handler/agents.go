@@ -232,26 +232,14 @@ func (h *AgentsHandler) renderList(
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	interpreters := make(map[string][]string, len(agents))
-	health := make(map[string]repository.AgentHealthReport, len(agents))
-	for _, agent := range agents {
-		interpreters[agent.ID], err = h.repo.Queries.ListAgentInterpreters(
-			r.Context(),
-			agent.ID,
+	health, interpreters, err := h.repo.AgentFleetReports(r.Context(), agents)
+	if err != nil {
+		http.Error(
+			w,
+			"Could not read agent health",
+			http.StatusInternalServerError,
 		)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		health[agent.ID], err = h.repo.AgentHealthReport(r.Context(), agent)
-		if err != nil {
-			http.Error(
-				w,
-				"Could not read agent health",
-				http.StatusInternalServerError,
-			)
-			return
-		}
+		return
 	}
 	if err := pages.AgentsPage(agents, interpreters, health, message, r.URL.Path).
 		Render(r.Context(), w); err != nil {

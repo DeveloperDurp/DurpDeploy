@@ -17,8 +17,9 @@ Drain does not cancel, revoke, or transfer work to another agent.
 Administrative status (`active`, `draining`, `disabled`, `revoked`, or
 `pending`) is separate from heartbeat health. Active agents become `stale`
 after 120 seconds and `offline` after 600 seconds without contact. An agent
-that has never reported is initially `unknown` and uses enrollment age for
-these deadlines. Draining agents continue to report health. Disabled and
+that has never reported is initially `unknown` and uses its latest completed
+pairing time for these deadlines, including after re-pairing. Draining agents
+continue to report health. Disabled and
 revoked agents do not generate health alerts.
 
 The detail page and admin API show issued work, waiting work, the last
@@ -35,7 +36,9 @@ compatibility guarantee. This view does not upgrade agents.
 Stale, offline, and recovered transitions use the existing notification bus
 and global notification settings. Maintenance persists the last health state
 to suppress repeated alerts, including after restart. Delivery is best effort;
-it does not replay failed notification deliveries. Alerts identify the agent
+it does not replay failed notification deliveries. Alert delivery runs outside
+claim maintenance, so slow notification channels do not delay lease recovery.
+Alerts identify the agent
 and link to its admin detail page. Drain/Resume and capability/environment
 routing-label changes have audit actions and include the agent ID plus the
 changed label or environment ID. Viewer and deployer roles cannot access the

@@ -1,12 +1,15 @@
 package agentserver_test
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
 	"testing"
 	"time"
+
+	"durpdeploy/internal/events"
 
 	agentproto "github.com/DeveloperDurp/durpdeploy-agent/protocol"
 )
@@ -158,19 +161,26 @@ func TestAgentFleetHealthAlertsE2E(t *testing.T) {
 	var notifications []struct {
 		Type string `json:"event_type"`
 	}
-	if err := json.Unmarshal(
-		fleetRequest(
-			t,
-			srv,
-			"GET",
-			"/api/v1/admin/notifications",
-			"admin",
-			"",
-			200,
-		),
-		&notifications,
-	); err != nil {
-		t.Fatal(err)
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		if err := json.Unmarshal(
+			fleetRequest(
+				t,
+				srv,
+				"GET",
+				"/api/v1/admin/notifications",
+				"admin",
+				"",
+				200,
+			),
+			&notifications,
+		); err != nil {
+			t.Fatal(err)
+		}
+		if len(notifications) == 3 || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 	counts := make(map[string]int)
 	for _, event := range notifications {
@@ -180,6 +190,92 @@ func TestAgentFleetHealthAlertsE2E(t *testing.T) {
 		counts["agent_offline"] != 1 ||
 		counts["agent_recovered"] != 1 {
 		t.Fatalf("health events=%+v", notifications)
+	}
+}
+
+type blockedFleetNotifier struct {
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (n blockedFleetNotifier) Name() string { return "blocked" }
+
+func (n blockedFleetNotifier) Notify(
+	_ context.Context,
+	_ events.Event,
+) (bool, error) {
+	n.entered <- struct{}{}
+	<-n.release
+	return false, nil
+}
+
+func TestAgentFleetSlowNotifierDoesNotBlockMaintenanceE2E(t *testing.T) {
+	f := newAgentFixture(t)
+	srv := fleetAdminServer(t, f)
+	n := blockedFleetNotifier{make(chan struct{}, 2), make(chan struct{})}
+	f.bus.Register(n)
+	t.Cleanup(func() { close(n.release) })
+	if _, err := f.repo.DB.Exec(`UPDATE agents SET
+		last_heartbeat_at=unixepoch()-120 WHERE id='test-agent'`); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- f.agents.Maintain(t.Context()) }()
+	select {
+	case <-n.entered:
+	case <-time.After(time.Second):
+		t.Fatal("health alert was not dispatched")
+	}
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("notifier blocked maintenance")
+	}
+	deployment := seedPollPayload(t, f, "pending", "test-agent")
+	decodePollResponse(t, postAgent(t, f, agentproto.PollPath, pollBody))
+	if _, err := f.repo.DB.Exec(`UPDATE remote_deployment_claims
+		SET claim_expires_at=0 WHERE deployment_id=?`, deployment); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.agents.Maintain(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	state := fleetAgentState(t, srv)
+	if len(state.Agent.Current) != 0 || state.Agent.Queued != 1 {
+		t.Fatalf("expired claim did not return to queue: %+v", state)
+	}
+}
+
+func TestAgentFleetRepairedIdentityGetsHeartbeatGraceE2E(t *testing.T) {
+	f := newAgentFixture(t)
+	srv := fleetAdminServer(t, f)
+	if _, err := f.repo.DB.Exec(`UPDATE agents SET
+		created_at=unixepoch()-3600, last_heartbeat_at=NULL,
+		health_state='unknown' WHERE id='test-agent'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.repo.DB.Exec(`UPDATE agent_pairings
+		SET paired_at=unixepoch() WHERE agent_id='test-agent'`); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.agents.Maintain(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if state := fleetAgentState(t, srv); state.Agent.Health != "unknown" {
+		t.Fatalf("fresh re-pair health=%s", state.Agent.Health)
+	}
+	if _, err := f.repo.DB.Exec(`UPDATE agent_pairings
+		SET paired_at=unixepoch()-120 WHERE agent_id='test-agent'`); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.agents.Maintain(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if state := fleetAgentState(t, srv); state.Agent.Health != "stale" {
+		t.Fatalf("expired re-pair grace health=%s", state.Agent.Health)
 	}
 }
 
