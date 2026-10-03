@@ -6,13 +6,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
 	"durpdeploy/internal/audit"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/verification"
+	"golang.org/x/net/idna"
 )
 
 func (r *DeploymentRunner) verifyDeployment(
@@ -61,8 +64,7 @@ func (r *DeploymentRunner) verifyDeployment(
 			err = decryptErr
 			break
 		}
-		writer.scrubber = NewScrubber(append(secretValues,
-			verificationHTTPSecrets(target)...))
+		writer.scrubber = verificationHTTPScrubber(target, secretValues)
 		err = verification.CheckHTTP(checkCtx, verification.Settings{
 			Kind: verification.HTTP, Target: target,
 			TimeoutSeconds: check.TimeoutSeconds,
@@ -79,12 +81,34 @@ func (r *DeploymentRunner) verifyDeployment(
 	return r.finishVerification(ctx, runCtx, deploymentID, writer, err)
 }
 
-func verificationHTTPSecrets(target string) []string {
+func verificationHTTPScrubber(target string, secrets []string) *Scrubber {
 	u, err := url.Parse(target)
 	if err != nil {
-		return []string{target}
+		return NewScrubber(append(secrets, target))
 	}
-	secrets := []string{target, u.RequestURI(), u.RawQuery}
+	secrets = append(secrets, target, u.RequestURI(), u.RawQuery, u.Host)
+	hosts := []string{u.Hostname()}
+	for _, convert := range []func(string) (string, error){
+		idna.Lookup.ToASCII, idna.Lookup.ToUnicode,
+	} {
+		host, err := convert(u.Hostname())
+		if err == nil && host != u.Hostname() {
+			hosts = append(hosts, host)
+		}
+	}
+	var patterns []string
+	for _, host := range hosts {
+		host = strings.TrimSuffix(host, ".")
+		values := []string{host}
+		if net.ParseIP(host) == nil {
+			values = append(values, strings.Split(host, ".")...)
+		}
+		for _, value := range values {
+			if value != "" {
+				patterns = append(patterns, "(?i:"+regexp.QuoteMeta(value)+")")
+			}
+		}
+	}
 	values := strings.Split(u.Path, "/")
 	for _, segment := range strings.Split(u.EscapedPath(), "/") {
 		value, err := url.PathUnescape(segment)
@@ -110,7 +134,7 @@ func verificationHTTPSecrets(target string) []string {
 			secrets = append(secrets, value)
 		}
 	}
-	return secrets
+	return NewScrubber(secrets, patterns...)
 }
 
 func (r *DeploymentRunner) finishVerification(

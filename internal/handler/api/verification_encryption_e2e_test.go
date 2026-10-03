@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -13,10 +14,12 @@ import (
 
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/events"
+	"durpdeploy/internal/testdns"
 )
 
 const verificationQueryCredential = "stored-query/token&proof value"
 const verificationPathCredential = "stored-path/token&proof value"
+const verificationHostCredential = "stored-host-credential"
 
 func TestVerificationEncryptedTargetsE2E(t *testing.T) {
 	for _, kind := range []string{"http", "bash"} {
@@ -42,6 +45,56 @@ func TestVerificationHTTPEncodedPathSeparatorE2E(t *testing.T) {
 	configureVerification(t, f, "http", target, 5)
 	deployment := verificationDeploy(t, f,
 		verificationRelease(t, f, "encoded-path-separator"))
+	f.completion(t, deployment.ID, events.DeploymentSucceeded)
+	assertHTTPQueryRedactionForViewer(t, f, deployment.ID)
+}
+
+func TestVerificationHTTPHostnameCredentialE2E(t *testing.T) {
+	for _, host := range []string{
+		verificationHostCredential, "api.apikey-123456789", "bücher", "xn--bcher-kva",
+	} {
+		t.Run(host, func(t *testing.T) {
+			checkVerificationHostnameRedaction(t, host)
+		})
+	}
+}
+
+func checkVerificationHostnameRedaction(t *testing.T, host string) {
+	t.Helper()
+	f := newVerificationE2E(t)
+	upstream := verificationUpstream(t, http.HandlerFunc(
+		func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprintln(w, "healthy", r.Host)
+			if host == "api.apikey-123456789" {
+				fmt.Fprintln(w, "apikey-123456789", "APIKEY-123456789")
+			} else if host == verificationHostCredential {
+				fmt.Fprintln(
+					w,
+					host,
+					strings.ToUpper(host),
+					"StOrEd-HoSt-CrEdEnTiAl",
+				)
+			} else {
+				fmt.Fprintln(
+					w,
+					"bücher",
+					"BÜCHER",
+					"xn--bcher-kva",
+					"XN--BCHER-KVA",
+				)
+			}
+		}))
+	u, err := url.Parse(upstream)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ip := net.ParseIP(u.Hostname())
+	testdns.Install(t, func(_ string) []net.IP { return []net.IP{ip} })
+	u.Host = host + ".hooks.invalid.:" + u.Port()
+	u.Path = "/probe"
+	configureVerification(t, f, "http", u.String(), 5)
+	deployment := verificationDeploy(t, f,
+		verificationRelease(t, f, "hostname-credential"))
 	f.completion(t, deployment.ID, events.DeploymentSucceeded)
 	assertHTTPQueryRedactionForViewer(t, f, deployment.ID)
 }
@@ -118,9 +171,18 @@ func assertHTTPQueryRedactionForViewer(
 		url.PathEscape(verificationQueryCredential), verificationPathCredential,
 		url.QueryEscape(verificationPathCredential),
 		url.PathEscape(verificationPathCredential),
-		strings.ReplaceAll(url.PathEscape(verificationPathCredential), "%2F", "%2f")} {
+		strings.ReplaceAll(url.PathEscape(verificationPathCredential), "%2F", "%2f"),
+		verificationHostCredential, strings.ToUpper(verificationHostCredential),
+		"StOrEd-HoSt-CrEdEnTiAl", "bücher", "BÜCHER", "xn--bcher-kva", "XN--BCHER-KVA"} {
 		if strings.Contains(logs, value) || strings.Contains(page, value) {
 			t.Fatal("HTTP response exposed the private target credential")
+		}
+	}
+	for _, suffix := range []string{"key-123456789", "KEY-123456789"} {
+		if strings.Contains(logs, suffix) || strings.Contains(page, suffix) {
+			t.Fatal(
+				"HTTP response exposed a partially redacted hostname credential",
+			)
 		}
 	}
 	if !strings.Contains(logs, "healthy") ||

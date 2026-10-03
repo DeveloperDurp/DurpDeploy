@@ -231,8 +231,10 @@ requires at least one step.
 An empty-step Bash deployment is rejected with 422. A scheduled attempt with
 this configuration is disabled with an actionable `last_error`.
 Verification output uses the same secret scrubber as deployment logs.
-HTTP output also redacts the frozen URL, path segments, and all query values, including their
-URL-encoded forms, so an echoed request cannot expose configuration credentials.
+HTTP output also redacts the frozen URL, path segments, and all query values,
+including their URL-encoded forms. Hostnames and DNS labels are redacted without
+case sensitivity, including Unicode and IDNA forms, so an echoed request cannot
+expose configuration credentials.
 Failure marks the deployment failed, records a verification audit event, and
 emits the standard failure notification. Cancellation waits for container
 cleanup as normal.

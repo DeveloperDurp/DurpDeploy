@@ -5,6 +5,22 @@ import (
 	"testing"
 )
 
+func TestAdditionalPatternsPreserveConfiguredAndDefaultRedaction(t *testing.T) {
+	previous := extraSecretPatterns
+	extraSecretPatterns = []string{`configured-proof`}
+	t.Cleanup(func() { extraSecretPatterns = previous })
+	scrubber := New([]string{"release-proof"}, `(?i:hostname-proof)`)
+	got := scrubber.Scrub(
+		"release-proof configured-proof HoStNaMe-PrOoF Bearer common-proof",
+	)
+	if got != "[REDACTED] [REDACTED] [REDACTED] [REDACTED]" {
+		t.Fatalf("additional pattern disabled existing redaction: %q", got)
+	}
+	if got := New(nil).Scrub("hostname-proof"); got != "hostname-proof" {
+		t.Fatalf("per-check pattern changed global defaults: %q", got)
+	}
+}
+
 func TestScrubPartsRedactsOneLiteralAcrossChunks(t *testing.T) {
 	scrubber := New([]string{"top-secret"})
 	got := scrubber.ScrubParts([]string{"prefix top", "-sec", "ret suffix"})

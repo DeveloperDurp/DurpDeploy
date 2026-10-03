@@ -46,8 +46,10 @@ type pendingPattern struct {
 	program *syntax.Prog
 }
 
-func New(secrets []string) *Scrubber {
-	return newScrubber(secrets, commonSecretPatterns, extraSecretPatterns)
+func New(secrets []string, patterns ...string) *Scrubber {
+	additional := append([]string(nil), extraSecretPatterns...)
+	return newScrubber(secrets, commonSecretPatterns,
+		append(additional, patterns...))
 }
 
 func NewWithPatterns(secrets []string, patterns []string) *Scrubber {
@@ -133,6 +135,10 @@ func compile(parts []string) *regexp.Regexp {
 			valid = candidate
 			compiled = combined
 		}
+	}
+	if compiled != nil {
+		// A shorter secret or pattern must not expose a longer match's suffix.
+		compiled.Longest()
 	}
 	return compiled
 }
