@@ -152,10 +152,24 @@ func (r *Repository) AdvanceAgentHealth(
 			if err != nil {
 				return err
 			}
+			baselines, err := q.ListFleetHealthBaselines(ctx)
+			if err != nil {
+				return err
+			}
+			started := make(map[string]int64, len(baselines))
+			for _, row := range baselines {
+				started[row.ID] = row.Baseline
+			}
 			for _, candidate := range agents {
-				if candidate.Status != "active" {
+				if candidate.Status != "active" ||
+					AgentHealthAt(
+						candidate,
+						now,
+						started[candidate.ID],
+					) == candidate.HealthState {
 					continue
 				}
+				// Recheck transition candidates under lock against fresh heartbeats.
 				locked, err := q.LockClaimAgent(ctx, candidate.ID)
 				if err != nil {
 					return err

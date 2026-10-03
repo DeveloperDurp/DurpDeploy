@@ -90,3 +90,30 @@ func TestAgentHealthIncludesNeverReportedAndExcludesDisabled(t *testing.T) {
 		t.Fatalf("disabled health=%s", got)
 	}
 }
+
+func TestAgentHealthSkipsWritesForUnchangedAgents(t *testing.T) {
+	// Given: one offline agent and one agent that needs to become offline.
+	conn, err := migrate.Run(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { conn.Close() })
+	repo := repository.New(conn)
+	seedRemoteFixture(t, repo)
+	if _, err := conn.Exec(`UPDATE agents SET health_state='offline'
+		WHERE id='a';
+		CREATE TRIGGER reject_unchanged_health_write BEFORE UPDATE ON agents
+		WHEN OLD.health_state='offline'
+		BEGIN SELECT RAISE(ABORT, 'unchanged agent was write-locked'); END`); err != nil {
+		t.Fatal(err)
+	}
+
+	// When: maintenance advances health without touching unchanged agents.
+	transitions, err := repo.AdvanceAgentHealth(t.Context())
+
+	// Then: only the other agent transitions; unchanged rows need no writes.
+	if err != nil || len(transitions) != 1 ||
+		transitions[0].Agent.ID != "b" || transitions[0].Health != "offline" {
+		t.Fatalf("transitions=%+v error=%v", transitions, err)
+	}
+}
