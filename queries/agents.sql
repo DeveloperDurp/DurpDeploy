@@ -24,10 +24,24 @@ WHERE id = sqlc.arg(id) AND status IN ('pending', 'active', 'disabled')
 
 -- name: ResetRevokedAgentForPairing :execrows
 UPDATE agents SET endpoint = sqlc.arg(endpoint), status = 'pending',
+    draining = 0, health_state = 'unknown', agent_protocol = NULL,
     agent_version = NULL, certificate_pem = NULL,
     certificate_fingerprint = NULL, encrypted_identity = NULL,
     last_heartbeat_at = NULL, revoked_at = NULL, updated_at = unixepoch()
 WHERE id = sqlc.arg(id) AND status = 'revoked';
+
+-- name: SetAgentDraining :execrows
+UPDATE agents SET draining = sqlc.arg(draining), updated_at = unixepoch()
+WHERE id = sqlc.arg(id) AND status = 'active'
+  AND draining <> sqlc.arg(draining);
+
+-- name: SetAgentHealthState :execrows
+UPDATE agents SET health_state = sqlc.arg(health_state)
+WHERE id = sqlc.arg(id) AND status = 'active'
+  AND health_state <> sqlc.arg(health_state);
+
+-- name: SetAgentProtocol :exec
+UPDATE agents SET agent_protocol = ? WHERE id = ? AND status = 'active';
 
 -- name: DeletePendingAgent :execrows
 DELETE FROM agents WHERE id = ? AND status = 'pending'

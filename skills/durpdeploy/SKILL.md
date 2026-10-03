@@ -79,7 +79,46 @@ Token placement rules:
 - Status contract: `303` = success (id or path in the `Location` header),
   `422` = validation failure, `403` = missing CSRF or viewer write.
 
+## Agent fleet (admin only)
+
+All paths below use the `/api/v1` prefix and require an admin token.
+
+- `GET /admin/agents` lists agents with `administrative_status`, `draining`, `health`, `current_work`,
+  `queued_work`, `last_successful_deployment`, `last_error`, `server_version`,
+  `recommended_agent_version`, and `compatibility`.
+- `GET /admin/agents/$ID` also includes capability `labels` and
+  `environment_labels` (environment routing labels).
+- `POST /admin/agents/$ID/drain` and `POST /admin/agents/$ID/resume` return
+  `204`, including repeats; `404` if missing and `409` unless active/paired.
+  Drain blocks new claims, retains waiting work, and allows already-issued
+  work to finish. Later remote steps wait for Resume. State survives restart.
+  Waiting on drained targets pauses their timeout; issued work still times out.
+  `administrative_status` is `draining` while issued work remains, then `drained`
+  once none remains. Both retain `draining: true` and block claims until Resume.
+  The existing `status` field keeps the base registration state (e.g. `active`).
+- `POST` or `DELETE /admin/agents/$ID/environments` accepts
+  `{"environment_id":N}` and returns `204`; invalid IDs return `400`,
+  missing resources return `404`. Repeated add is harmless.
+- Capability label changes use `POST` or `DELETE /admin/agents/$ID/labels`
+  with `{"label":"linux"}`. Routing changes and Drain/Resume are audited.
+
+Health is `healthy`, `stale` (120 seconds), `offline` (600 seconds), or
+`unknown`. It is separate from administrative status and uses server time.
+Before the first heartbeat, health deadlines use the latest completed pairing
+time, so re-pairing starts a new grace period. Draining agents still heartbeat.
+Global notifications emit each stale/offline
+transition and recovery once; delivery is best effort and does not block claim
+maintenance. Alerts stay ordered; a full in-memory queue skips new alerts and
+logs a warning without retry. Last error is a stable
+outcome code with a deployment link for redacted logs. Compatibility confirms
+the observed supported protocol, while agent versions remain unverified.
+
 ## Deploy flow (the common ask)
+
+`GET /api/v1/deployments/$ID/status` includes `waiting_for_agents`. It is
+`true` while remote work is queued with no issued claim, and `false` once
+claimed or terminal. The web deployment page shows “Waiting for agents”
+while this flag is true; polling updates it automatically.
 
 1. **Project** `POST /api/v1/projects` `{"name":"my-app"}` → reply has `id`.
 2. **Environment** `POST /api/v1/environments` `{"name":"prod"}` → `id`.

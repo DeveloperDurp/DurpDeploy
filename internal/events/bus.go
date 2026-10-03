@@ -29,6 +29,9 @@ const (
 	RunbookFailed       Type = "runbook_failed"
 	BackupUnhealthy     Type = "backup_unhealthy"
 	BackupHealthy       Type = "backup_healthy"
+	AgentStale          Type = "agent_stale"
+	AgentOffline        Type = "agent_offline"
+	AgentRecovered      Type = "agent_recovered"
 )
 
 // Event carries everything a Notifier needs to describe and deliver a

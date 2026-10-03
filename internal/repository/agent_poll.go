@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 
 	"durpdeploy/internal/db"
@@ -11,6 +12,7 @@ func (r *Repository) RecordAgentPoll(
 	ctx context.Context,
 	heartbeat db.HeartbeatAgentParams,
 	interpreters []string,
+	protocol string,
 ) (int64, error) {
 	var changed int64
 	err := withSQLiteBusyRetry(ctx, func() error {
@@ -23,6 +25,12 @@ func (r *Repository) RecordAgentPoll(
 			}
 			if changed == 0 {
 				return nil
+			}
+			if err := q.SetAgentProtocol(ctx, db.SetAgentProtocolParams{
+				ID:            heartbeat.ID,
+				AgentProtocol: sql.NullString{String: protocol, Valid: true},
+			}); err != nil {
+				return fmt.Errorf("record agent protocol: %w", err)
 			}
 			if _, err := q.DeleteAgentInterpreters(
 				ctx,

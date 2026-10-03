@@ -1,4 +1,4 @@
-//go:build e2e && packagebrowser
+//go:build e2e && (packagebrowser || agentbrowser)
 
 package api_test
 

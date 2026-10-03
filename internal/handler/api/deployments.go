@@ -436,11 +436,18 @@ func (h *DeploymentHandler) GetDeploymentStatus(
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	RespondJSON(
-		w,
-		http.StatusOK,
-		map[string]string{"status": deployment.Status},
+	waiting, err := h.repo.Queries.DeploymentWaitingForAgents(
+		r.Context(),
+		depID,
 	)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	RespondJSON(w, http.StatusOK, struct {
+		Status           string `json:"status"`
+		WaitingForAgents bool   `json:"waiting_for_agents"`
+	}{Status: deployment.Status, WaitingForAgents: waiting != 0})
 }
 
 // ApproveDeployment approves a deployment pending approval.

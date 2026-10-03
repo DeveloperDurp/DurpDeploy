@@ -31,6 +31,7 @@ func TestAgentPollCapabilityReplacementIsTransactional(t *testing.T) {
 			},
 		},
 		[]string{"python3", "/bin/sh"},
+		"agent/2",
 	)
 
 	// Then
@@ -89,6 +90,7 @@ WHERE deployment_id = 3 AND step_index = 0;`); err != nil {
 			CertificateFingerprint: agent.CertificateFingerprint,
 		},
 		[]string{"bash"},
+		"agent/2",
 	)
 
 	// Then

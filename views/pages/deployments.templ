@@ -294,7 +294,7 @@ templ StatusBadge(deployment db.Deployment) {
 	</span>
 }
 
-templ StatusBadgeContainer(deployment db.Deployment) {
+templ StatusBadgeContainer(deployment db.Deployment, waitingForAgents bool) {
 	<div
 		id="status-badge"
 		hx-get={ fmt.Sprintf("/deployments/%d/status", deployment.ID) }
@@ -304,23 +304,28 @@ templ StatusBadgeContainer(deployment db.Deployment) {
 			hx-trigger="every 3s"
 		}
 		hx-swap="outerHTML"
+		aria-live="polite"
 	>
-		@StatusBadge(deployment)
+		if waitingForAgents {
+			<span class="badge badge-warning">Waiting for agents</span>
+		} else {
+			@StatusBadge(deployment)
+		}
 	</div>
 }
 
-templ DeploymentDetailPage(project db.Project, release db.Release, environment db.Environment, deployment db.Deployment, logs []db.DeploymentLog, currentPath string) {
+templ DeploymentDetailPage(project db.Project, release db.Release, environment db.Environment, deployment db.Deployment, logs []db.DeploymentLog, waitingForAgents bool, currentPath string) {
 	@layouts.Base(fmt.Sprintf("Deployment %d", deployment.ID), currentPath) {
 		@components.Breadcrumbs([]components.Crumb{
 			{Label: "Home", Href: "/"},
 			{Label: "Deployments", Href: "/deployments"},
 			{Label: fmt.Sprintf("#%d", deployment.ID)},
 		})
-		@DeploymentDetail(project, release, environment, deployment, logs)
+		@DeploymentDetail(project, release, environment, deployment, logs, waitingForAgents)
 	}
 }
 
-templ DeploymentDetail(project db.Project, release db.Release, environment db.Environment, deployment db.Deployment, logs []db.DeploymentLog) {
+templ DeploymentDetail(project db.Project, release db.Release, environment db.Environment, deployment db.Deployment, logs []db.DeploymentLog, waitingForAgents bool) {
 	{{ logView := deploymentLogPanels(release, deployment, logs) }}
 	<div class="space-y-6" x-data={ fmt.Sprintf("deploymentStepLogs({ url: '/deployments/%d/logs/stream?format=structured', status: %q, view: %s })", deployment.ID, deployment.Status, deploymentLogConfig(logView)) } x-on:htmx:after-swap.camel.window="statusChanged($event)">
 		<div class="flex flex-wrap justify-between items-center gap-2">
@@ -376,7 +381,7 @@ templ DeploymentDetail(project db.Project, release db.Release, environment db.En
 						</button>
 					}
 				}
-				@StatusBadgeContainer(deployment)
+				@StatusBadgeContainer(deployment, waitingForAgents)
 				<a href={ fmt.Sprintf("/projects/%d/releases/%d", project.ID, release.ID) } class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>
 			</div>
 		</div>

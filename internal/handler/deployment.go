@@ -576,13 +576,18 @@ func (h *DeploymentHandler) GetDeployment(
 		return
 	}
 
+	waiting, err := h.repo.Queries.DeploymentWaitingForAgents(r.Context(), id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	if isFragmentRequest(r) {
-		if err := pages.DeploymentDetail(project, release, environment, deployment, logs).
+		if err := pages.DeploymentDetail(project, release, environment, deployment, logs, waiting != 0).
 			Render(r.Context(), w); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	} else {
-		if err := pages.DeploymentDetailPage(project, release, environment, deployment, logs, r.URL.Path).
+		if err := pages.DeploymentDetailPage(project, release, environment, deployment, logs, waiting != 0, r.URL.Path).
 			Render(r.Context(), w); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
@@ -610,7 +615,12 @@ func (h *DeploymentHandler) GetDeploymentStatus(
 		return
 	}
 
-	if err := pages.StatusBadgeContainer(deployment).
+	waiting, err := h.repo.Queries.DeploymentWaitingForAgents(r.Context(), id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err := pages.StatusBadgeContainer(deployment, waiting != 0).
 		Render(r.Context(), w); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -680,7 +690,7 @@ func (h *DeploymentHandler) CancelDeployment(
 	}
 
 	if r.Header.Get("HX-Request") == "true" {
-		if err := pages.StatusBadgeContainer(deployment).
+		if err := pages.StatusBadgeContainer(deployment, false).
 			Render(r.Context(), w); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}

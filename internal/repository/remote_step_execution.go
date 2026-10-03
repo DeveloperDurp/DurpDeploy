@@ -45,6 +45,14 @@ func (r *Repository) ClaimRemoteStepPayload(
 		func() (claimResult, error) {
 			attempt := claimResult{}
 			err := r.WithTx(ctx, func(q *db.Queries) error {
+				locked, err := q.LockClaimAgent(ctx, agentID)
+				if err != nil || locked == 0 {
+					return err
+				}
+				agent, err := q.GetAgent(ctx, agentID)
+				if err != nil || agent.Draining != 0 {
+					return err
+				}
 				waiting, err := q.ListWaitingRemoteStepRuns(ctx, agentID)
 				if err != nil || len(waiting) == 0 {
 					return err

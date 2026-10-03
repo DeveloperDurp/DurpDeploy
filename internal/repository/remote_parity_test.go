@@ -56,8 +56,12 @@ func TestDispatchDatabaseParity(t *testing.T) {
 						ContainerRequest: testcontainers.ContainerRequest{
 							Image:        "mcr.microsoft.com/mssql/server:2022-latest",
 							ExposedPorts: []string{"1433/tcp"},
-							Env:          map[string]string{"ACCEPT_EULA": "Y", "MSSQL_SA_PASSWORD": password},
-							WaitingFor:   wait.ForLog("SQL Server is now ready for client connections").WithStartupTimeout(2 * time.Minute),
+							Env: map[string]string{
+								"ACCEPT_EULA":       "Y",
+								"MSSQL_SA_PASSWORD": password,
+							},
+							WaitingFor: wait.ForLog("SQL Server is now ready for client connections").
+								WithStartupTimeout(2 * time.Minute),
 						}, Started: true,
 					})
 				if err != nil {
@@ -101,6 +105,7 @@ func TestDispatchDatabaseParity(t *testing.T) {
 			})
 			r := repository.New(conn)
 			seedRemoteFixture(t, r)
+			runAgentFleetDatabaseParity(t, r)
 			runRemoteAtomicity(t, r)
 			runRemoteStepStartEligibility(t, r)
 			runProjectMembershipIntegerContract(t, r)

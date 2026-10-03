@@ -51,6 +51,9 @@ WHERE remote_step_runs.deployment_id = ?5
   AND remote_step_runs.step_index = ?6
   AND remote_step_runs.agent_id = ?7
   AND remote_step_runs.state = 'waiting'
+  AND EXISTS (SELECT 1 FROM agents a
+      WHERE a.id = remote_step_runs.agent_id
+        AND a.status = 'active' AND a.draining = 0)
   AND EXISTS (
       SELECT 1 FROM deployment_steps s
       JOIN agent_interpreters i ON i.agent_id = remote_step_runs.agent_id
@@ -407,6 +410,52 @@ func (q *Queries) ListRemoteStepRuns(ctx context.Context, arg ListRemoteStepRuns
 			&i.UpdatedAt,
 			&i.LogBufferCiphertext,
 			&i.RecoveryCancelled,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRemoteStepRunsForRunner = `-- name: ListRemoteStepRunsForRunner :many
+SELECT r.agent_id, r.state, r.started_at, a.draining FROM remote_step_runs r
+JOIN agents a ON a.id = r.agent_id
+WHERE r.deployment_id = ? AND r.step_index = ? ORDER BY r.agent_id
+`
+
+type ListRemoteStepRunsForRunnerParams struct {
+	DeploymentID int64 `json:"deployment_id"`
+	StepIndex    int64 `json:"step_index"`
+}
+
+type ListRemoteStepRunsForRunnerRow struct {
+	AgentID   string        `json:"agent_id"`
+	State     string        `json:"state"`
+	StartedAt sql.NullInt64 `json:"started_at"`
+	Draining  int64         `json:"draining"`
+}
+
+func (q *Queries) ListRemoteStepRunsForRunner(ctx context.Context, arg ListRemoteStepRunsForRunnerParams) ([]ListRemoteStepRunsForRunnerRow, error) {
+	rows, err := q.db.QueryContext(ctx, listRemoteStepRunsForRunner, arg.DeploymentID, arg.StepIndex)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRemoteStepRunsForRunnerRow
+	for rows.Next() {
+		var i ListRemoteStepRunsForRunnerRow
+		if err := rows.Scan(
+			&i.AgentID,
+			&i.State,
+			&i.StartedAt,
+			&i.Draining,
 		); err != nil {
 			return nil, err
 		}

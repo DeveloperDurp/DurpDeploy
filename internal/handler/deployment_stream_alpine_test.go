@@ -22,6 +22,7 @@ func TestDeploymentDetailsOwnsEventSourceLifecycle(t *testing.T) {
 		db.Environment{Name: "stream-environment"},
 		deployment,
 		nil,
+		false,
 	).Render(context.Background(), &rendered)
 	if err != nil {
 		t.Fatalf("render deployment detail: %v", err)

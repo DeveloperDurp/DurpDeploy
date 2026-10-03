@@ -4,6 +4,12 @@ package audit
 // registered in server.go. New routes need one map entry; the fallback
 // heuristic catches anything missed with a lossy name.
 var actionMap = map[string]string{
+	"POST /api/v1/admin/agents/{id}/environments":        "add_agent_environment_label",
+	"DELETE /api/v1/admin/agents/{id}/environments":      "delete_agent_environment_label",
+	"POST /admin/agents/{id}/drain":                      "drain_agent",
+	"POST /admin/agents/{id}/resume":                     "resume_agent",
+	"POST /api/v1/admin/agents/{id}/drain":               "drain_agent",
+	"POST /api/v1/admin/agents/{id}/resume":              "resume_agent",
 	"POST /projects/{id}/package-repository":             "save_package_repository",
 	"POST /projects/{id}/package-repository/delete":      "remove_package_repository",
 	"POST /projects/{id}/package-repository/test":        "test_package_repository",

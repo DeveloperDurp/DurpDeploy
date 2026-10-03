@@ -427,6 +427,12 @@ func TestRunnerRequestsCancellationBeforeTimeoutFailure(t *testing.T) {
 	); err != nil {
 		t.Fatal(err)
 	}
+	// Issued work still times out when its waiting sibling is in maintenance.
+	for _, agentID := range []string{"a", "b"} {
+		if _, err := repo.SetAgentDraining(ctx, agentID, true); err != nil {
+			t.Fatal(err)
+		}
+	}
 	deadline := time.NewTimer(5 * time.Second)
 	defer deadline.Stop()
 	ticker := time.NewTicker(20 * time.Millisecond)
