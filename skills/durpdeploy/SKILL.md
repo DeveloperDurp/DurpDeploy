@@ -141,7 +141,8 @@ done
 
 8. **Act on state**:
    - `pending_approval` → an admin `POST /api/v1/deployments/$DID/approve`
-     (`{"approved_by":"alice"}`) unblocks it. Non-admin tokens get 403.
+     with an empty body or `{}` unblocks it. The authenticated admin is
+     recorded as the approver. Non-admin tokens get 403.
    - failure → `GET /api/v1/deployments/$DID/logs` (JSON lines, secrets are
       redacted) and `GET /.../logs.txt`; fix and create a new release, then redeploy with
      `POST /api/v1/deployments/$DID/redeploy`.
