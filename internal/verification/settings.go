@@ -15,6 +15,8 @@ const (
 	HTTP           Kind  = "http"
 	Bash           Kind  = "bash"
 	DefaultTimeout int64 = 30
+	// BashImage is application-owned, never selected by a project deployer.
+	BashImage = "docker.io/library/bash@sha256:a54fb4422b18f05dd3107c36f39d67b26334fda7ec89f4126052b45e228e2f15"
 )
 
 var ErrInvalid = errors.New("invalid verification configuration")

@@ -25,6 +25,7 @@ type localStepAttempt struct {
 	environment  map[string]string
 	attempt      int
 	artifact     artifactStage
+	verification bool
 }
 
 func (r *DeploymentRunner) runStepAttempt(
@@ -153,6 +154,9 @@ func (r *DeploymentRunner) runStepAttempt(
 	args = append(args, "--entrypoint="+selected, request.step.ContainerImage)
 	switch selected {
 	case interpreter.Bash:
+		if request.verification {
+			args = append(args, "-p")
+		}
 		args = append(args, "-s")
 	case interpreter.PowerShell:
 		args = append(
@@ -231,6 +235,16 @@ func (r *DeploymentRunner) runStepAttempt(
 // Existing immutable snapshots may contain this name from before packages.
 // New-write validation stays reserved; a mounted package owns the variable.
 func (request localStepAttempt) validExecutionVariable(name string) bool {
+	if request.verification {
+		if strings.HasPrefix(name, "LD_") {
+			return false
+		}
+		switch name {
+		case "BASH_ENV", "ENV", "SHELLOPTS", "BASHOPTS", "CDPATH",
+			"GLOBIGNORE", "PS4", "GCONV_PATH", "GLIBC_TUNABLES":
+			return false
+		}
+	}
 	if name == "ARTIFACT_PATH" && request.artifact.volume == "" {
 		return true
 	}

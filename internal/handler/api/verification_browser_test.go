@@ -67,7 +67,8 @@ func TestVerificationRollbackBrowserE2E(t *testing.T) {
 	capture(
 		"environment-new",
 		"/environments/new",
-		"document.querySelector('[name=verification_type]') !== null",
+		"document.querySelector('[name=verification_type]') !== null && "+
+			"document.getElementById('verification-help').textContent.includes('fixed server container')",
 	)
 	editPath := fmt.Sprintf("/environments/%d/edit", f.environment.ID)
 	capture(

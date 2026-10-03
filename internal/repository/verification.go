@@ -37,6 +37,9 @@ func snapshotVerification(
 		// The encrypted target is the source of truth, not a plaintext script copy.
 		step.ScriptBody = ""
 		step.Interpreter = "bash"
+		step.ExecutionTarget = "local"
+		step.ContainerImage = verification.BashImage
+		step.Selectors = nil
 		step.TimeoutSeconds = environment.VerificationTimeoutSeconds
 		step.MaxRetries = 0
 		step.SourceStepID.Valid = false

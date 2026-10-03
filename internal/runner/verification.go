@@ -176,24 +176,30 @@ func (r *DeploymentRunner) verifyBash(
 	step := deploymentStep{
 		Name:            frozen.Name,
 		ScriptBody:      script,
-		Interpreter:     frozen.Interpreter,
-		ExecutionTarget: frozen.ExecutionTarget,
-		ContainerImage:  frozen.ContainerImage,
+		Interpreter:     "bash",
+		ExecutionTarget: "local",
+		ContainerImage:  verification.BashImage,
 		TimeoutSeconds:  frozen.TimeoutSeconds,
 	}
 	if err := json.Unmarshal([]byte(frozen.VariableNames),
 		&step.VariableNames); err != nil {
 		return fmt.Errorf("load verification variables: %w", err)
 	}
-	if step.ExecutionTarget == "agent" {
-		return r.runRemoteStep(ctx, runCtx, remoteStepRequest{
-			deploymentID: deploymentID, stepIndex: index, step: step,
-			logWriter: writer,
+	recorded, err := r.repo.Queries.RecordContainerNamespace(ctx,
+		db.RecordContainerNamespaceParams{
+			DeploymentID: deploymentID,
+			Namespace:    sql.NullString{String: r.engine.scope(), Valid: true},
 		})
+	if err != nil {
+		return fmt.Errorf("record verification container namespace: %w", err)
+	}
+	if recorded != 1 {
+		return errContainerCleanup
 	}
 	err = r.runStepAttempt(runCtx, localStepAttempt{
 		deploymentID: deploymentID, step: step, logWriter: writer,
 		environment: environment, attempt: 1, artifact: stage,
+		verification: true,
 	})
 	if runCtx.Err() != nil && !errors.Is(err, errContainerCleanup) {
 		return runCtx.Err()

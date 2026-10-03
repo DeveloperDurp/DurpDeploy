@@ -170,7 +170,7 @@ Types are `""` (disabled), `http`, and `bash`. Timeout defaults to 30 seconds
 and must be 1–300. An update that omits verification fields preserves them.
 Environment responses omit `verification_target` for non-admin callers.
 Targets and frozen verification snapshots are encrypted at rest and included
-in secret-key rotation. Bash snapshots retain placement without storing a
+in secret-key rotation. Bash snapshots retain selected variables without storing a
 second plaintext copy of the check script. Explicit HTTP ports must be 1–65535.
 The configuration is frozen on deployment creation, including deployments
 waiting for approval. HTTP performs one server-side GET; only 2xx succeeds.
@@ -178,10 +178,16 @@ Redirects, URL user credentials, loopback, link-local/metadata addresses,
 environment proxies, and DNS rebinding are rejected; private unicast service
 addresses are allowed. Use a release secret variable for sensitive Bash values.
 
-Bash runs after all steps using the last step's container image or matching
-agents, selected variables, and artifact mount. It always uses Bash, with no
-retries; agents must support Bash. Local containers retain their existing
-no-network restrictions. Bash verification requires at least one step.
+Bash runs after all steps in a fixed, digest-pinned official Bash 5.2 server
+container, using the last step's selected variables and artifact mount. Project
+images and agents never receive the check script, including for older snapshots.
+The server container runtime is required even for all-agent deployments. Tools
+from project images and remote host/network access are unavailable. Containers
+retain the existing no-network restrictions; Bash uses privileged startup mode,
+with no retries. Shell startup and loader variables (`BASH_ENV`, `ENV`, `SHELLOPTS`,
+`BASHOPTS`, `CDPATH`, `GLOBIGNORE`, `PS4`, `GCONV_PATH`, `GLIBC_TUNABLES`, and `LD_*`)
+are excluded by default and rejected when explicitly selected. Bash verification
+requires at least one step.
 An empty-step Bash deployment is rejected with 422. A scheduled attempt with
 this configuration is disabled with an actionable `last_error`.
 Verification output uses the same secret scrubber as deployment logs.
@@ -189,7 +195,7 @@ HTTP output also redacts the frozen URL, path segments, and all query values, in
 URL-encoded forms, so an echoed request cannot expose configuration credentials.
 Failure marks the deployment failed, records a verification audit event, and
 emits the standard failure notification. Cancellation waits for container
-cleanup or remote acknowledgement as normal.
+cleanup as normal.
 
 `GET /api/v1/deployments/$DID/verification` returns safe metadata (type,
 timeout, status, timestamps); commands and URLs are omitted. A deployment

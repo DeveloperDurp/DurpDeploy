@@ -21,7 +21,7 @@ templ EnvironmentVerificationFields(env *db.Environment) {
 		<div class="form-control">
 			<label class="label" for="verification-target"><span class="label-text">HTTP URL or Bash command</span></label>
 			<textarea id="verification-target" name="verification_target" class="textarea textarea-bordered font-mono" aria-describedby="verification-help">{ env.VerificationTarget }</textarea>
-			<p id="verification-help" class="text-sm opacity-70 mt-1">HTTP sends one GET from the server and requires a 2xx response. Bash uses the final step's container or matching agents and selected release variables. Local containers have no network access. Use variables for secrets.</p>
+			<p id="verification-help" class="text-sm opacity-70 mt-1">HTTP sends one GET from the server and requires a 2xx response. Bash runs in a fixed server container with no network access, using the final step's selected release variables and artifact mount. Project images and agents cannot receive the check script. Use variables for secrets.</p>
 		</div>
 		<div class="form-control">
 			<label class="label" for="verification-timeout"><span class="label-text">Timeout (seconds)</span></label>
