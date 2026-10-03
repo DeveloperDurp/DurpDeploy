@@ -61,7 +61,7 @@ func validateHTTPURL(target string) error {
 	u, err := url.Parse(target)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") ||
 		u.Hostname() == "" || u.User != nil || u.Fragment != "" ||
-		u.Opaque != "" {
+		u.Opaque != "" || strings.Contains(u.Hostname(), "%") {
 		return ErrInvalid
 	}
 	if ip := net.ParseIP(u.Hostname()); ip != nil &&

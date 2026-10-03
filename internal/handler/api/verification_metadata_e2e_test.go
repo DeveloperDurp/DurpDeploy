@@ -20,6 +20,7 @@ func TestVerificationHTTPMetadataBoundaryE2E(t *testing.T) {
 	for _, host := range []string{
 		"100.100.100.200", "[::ffff:100.100.100.200]",
 		"[fd00:ec2::254]", "[fd00:0ec2:0:0:0:0:0:0254]",
+		"[fe80::1%25eth0]", "[fd00::1%25eth0]",
 	} {
 		target := "http://" + host + "/latest/meta-data/"
 		f.api(t, "PUT", "/api/v1"+path, map[string]any{
