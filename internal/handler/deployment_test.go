@@ -738,7 +738,7 @@ func TestNewDeploymentPage_RendersForm(t *testing.T) {
 		`action="/projects/` + fmt.Sprintf("%d", proj.ID) + `/deploy"`,
 		`>Deploy<`,
 		fmt.Sprintf(
-			`<a href="/projects/%d" class="btn btn-ghost btn-sm">Back</a>`,
+			`<a href="/projects/%d" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>`,
 			proj.ID,
 		),
 		fmt.Sprintf(
@@ -754,7 +754,7 @@ func TestNewDeploymentPage_RendersForm(t *testing.T) {
 		t,
 		body,
 		fmt.Sprintf(
-			`(?s)<div class="flex justify-between items-center">\s*<h1 class="text-3xl font-bold">Deploy .*?</h1>\s*<div class="flex gap-2">\s*<a href="/projects/%d" class="btn btn-ghost btn-sm">Back</a>`,
+			`(?s)<div class="flex justify-between items-center">\s*<h1 class="text-3xl font-bold">Deploy .*?</h1>\s*<div class="flex gap-2">\s*<a href="/projects/%d" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>`,
 			proj.ID,
 		),
 	)
@@ -937,7 +937,7 @@ func TestReleaseAndDeploymentPages_RenderBackControls(t *testing.T) {
 			path:     fmt.Sprintf("/projects/%d/releases", hc.project.ID),
 			backHref: fmt.Sprintf("/projects/%d", hc.project.ID),
 			headerPattern: fmt.Sprintf(
-				`(?s)<div class="flex justify-between items-center">\s*<h1 class="text-3xl font-bold">Releases.*?</h1>\s*<div class="flex gap-2">\s*<a href="/projects/%d" class="btn btn-ghost btn-sm">Back</a>`,
+				`(?s)<div class="flex justify-between items-center">\s*<h1 class="text-3xl font-bold">Releases.*?</h1>\s*<div class="flex gap-2">\s*<a href="/projects/%d" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>`,
 				hc.project.ID,
 			),
 		},
@@ -950,7 +950,7 @@ func TestReleaseAndDeploymentPages_RenderBackControls(t *testing.T) {
 			),
 			backHref: fmt.Sprintf("/projects/%d/releases", hc.project.ID),
 			headerPattern: fmt.Sprintf(
-				`(?s)<div class="flex gap-2">\s*<form[^>]*action="/projects/%d/releases/%d/refresh"[^>]*>.*?Refresh.*?</form>\s*<a href="/projects/%d/releases" class="btn btn-ghost btn-sm">Back</a>`,
+				`(?s)<div class="flex gap-2">\s*<form[^>]*action="/projects/%d/releases/%d/refresh"[^>]*>.*?Refresh.*?</form>\s*<a href="/projects/%d/releases" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>`,
 				hc.project.ID,
 				release.ID,
 				hc.project.ID,
@@ -965,7 +965,7 @@ func TestReleaseAndDeploymentPages_RenderBackControls(t *testing.T) {
 				release.ID,
 			),
 			headerPattern: fmt.Sprintf(
-				`(?s)<div class="flex flex-wrap items-center gap-2 ml-auto">\s*<a href="/deployments/%d/logs.txt" class="btn btn-sm btn-ghost">Export</a>.*?<a href="/projects/%d/releases/%d" class="btn btn-ghost btn-sm">Back</a>`,
+				`(?s)<div class="flex flex-wrap items-center gap-2 ml-auto">\s*<a href="/deployments/%d/logs.txt" class="btn btn-sm btn-ghost">Export</a>.*?<a href="/projects/%d/releases/%d" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>`,
 				deployment.ID,
 				hc.project.ID,
 				release.ID,
@@ -991,7 +991,7 @@ func TestReleaseAndDeploymentPages_RenderBackControls(t *testing.T) {
 
 			// Then
 			want := fmt.Sprintf(
-				`<a href="%s" class="btn btn-ghost btn-sm">Back</a>`,
+				`<a href="%s" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>`,
 				page.backHref,
 			)
 			if got := strings.Count(string(body), want); got != 1 {

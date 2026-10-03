@@ -106,7 +106,7 @@ func TestMobile_RenderedHTML_rendersLifecycleBackAndKeepsPermissionGoBack(
 	// Given
 	fixture := newMobileStructuralFixture(t)
 	const lifecycleSave = `<button type="submit" form="lifecycle-settings-form" class="btn btn-primary btn-sm">Save</button>`
-	const lifecycleBack = `<a href="/lifecycles" class="btn btn-ghost btn-sm">Back</a>`
+	const lifecycleBack = `<a href="/lifecycles" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>`
 
 	// When
 	detailBody := fixture.getHTML(
@@ -142,9 +142,9 @@ func TestMobile_RenderedHTML_rendersLifecycleBackAndKeepsPermissionGoBack(
 		detailBody,
 		`<form id="lifecycle-settings-form" method="post" action="/lifecycles/\d+"`,
 	)
-	const lifecycleFormHeader = `(?s)<div class="flex justify-between items-center">\s*<h1 class="text-3xl font-bold">New Lifecycle</h1>\s*<div class="flex gap-2">\s*<a href="/lifecycles" class="btn btn-ghost btn-sm">Back</a>\s*</div>\s*</div>`
+	const lifecycleFormHeader = `(?s)<div class="flex justify-between items-center">\s*<h1 class="text-3xl font-bold">New Lifecycle</h1>\s*<div class="flex gap-2">\s*<a href="/lifecycles" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>\s*</div>\s*</div>`
 	requireHTMLPattern(t, formBody, lifecycleFormHeader)
-	const permissionGoBack = `<a href="/lifecycles" class="btn btn-ghost btn-sm">Go back</a>`
+	const permissionGoBack = `<a href="/lifecycles" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Go back</a>`
 	if strings.Count(viewerFormBody, permissionGoBack) != 1 {
 		t.Errorf(
 			"viewer permission control = %q, want exactly one %q",
@@ -160,7 +160,7 @@ func TestMobile_RenderedHTML_renders_project_back_controls_when_authenticated(
 	// Given
 	fixture := newMobileStructuralFixture(t)
 	back := fmt.Sprintf(
-		`<a href="/projects/%d" class="btn btn-ghost btn-sm">Back</a>`,
+		`<a href="/projects/%d" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>`,
 		fixture.project.ID,
 	)
 	pages := []struct {
@@ -172,7 +172,7 @@ func TestMobile_RenderedHTML_renders_project_back_controls_when_authenticated(
 			name: "steps",
 			path: fmt.Sprintf("/projects/%d/steps-page", fixture.project.ID),
 			headerPattern: fmt.Sprintf(
-				`(?s)<div class="flex justify-between items-center">\s*<h1 class="text-3xl font-bold">Steps for .*?</h1>\s*<div class="flex gap-2">\s*<a href="/projects/%d" class="btn btn-ghost btn-sm">Back</a>`,
+				`(?s)<div class="flex justify-between items-center">\s*<h1 class="text-3xl font-bold">Steps for .*?</h1>\s*<div class="flex gap-2">\s*<a href="/projects/%d" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>`,
 				fixture.project.ID,
 			),
 		},
@@ -180,7 +180,7 @@ func TestMobile_RenderedHTML_renders_project_back_controls_when_authenticated(
 			name: "variables",
 			path: fmt.Sprintf("/projects/%d/variables", fixture.project.ID),
 			headerPattern: fmt.Sprintf(
-				`(?s)<div class="flex justify-between items-center">\s*<h1 class="text-3xl font-bold">Variables.*?</h1>\s*<div class="flex gap-2">\s*<a href="/projects/%d" class="btn btn-ghost btn-sm">Back</a>`,
+				`(?s)<div class="flex justify-between items-center">\s*<h1 class="text-3xl font-bold">Variables.*?</h1>\s*<div class="flex gap-2">\s*<a href="/projects/%d" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>`,
 				fixture.project.ID,
 			),
 		},
@@ -188,7 +188,7 @@ func TestMobile_RenderedHTML_renders_project_back_controls_when_authenticated(
 			name: "schedules",
 			path: fmt.Sprintf("/projects/%d/schedules", fixture.project.ID),
 			headerPattern: fmt.Sprintf(
-				`(?s)<div class="flex flex-wrap items-center justify-between gap-2">\s*<h1 class="text-3xl font-bold">Schedules.*?</h1>\s*<div class="flex gap-2 ml-auto">\s*<a href="/projects/%d/schedules/new" class="btn btn-primary btn-sm">New Schedule</a>\s*<a href="/projects/%d" class="btn btn-ghost btn-sm">Back</a>`,
+				`(?s)<div class="flex flex-wrap items-center justify-between gap-2">\s*<h1 class="text-3xl font-bold">Schedules.*?</h1>\s*<div class="flex gap-2 ml-auto">\s*<a href="/projects/%d/schedules/new" class="btn btn-primary btn-sm">New Schedule</a>\s*<a href="/projects/%d" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>`,
 				fixture.project.ID,
 				fixture.project.ID,
 			),
@@ -393,7 +393,10 @@ func TestSteps_RenderedHTML_uses_named_Alpine_state_when_authenticated(
 			`x-data="{`,
 		} {
 			if strings.Contains(body, forbidden) {
-				t.Errorf("step editor contains forbidden inline behavior %q", forbidden)
+				t.Errorf(
+					"step editor contains forbidden inline behavior %q",
+					forbidden,
+				)
 			}
 		}
 	}
@@ -428,7 +431,10 @@ func TestSteps_RenderedHTML_uses_named_Alpine_state_when_authenticated(
 	for _, body := range []string{pageBody, pickerBody} {
 		for _, forbidden := range []string{"hx-on:", "onclick=", "innerHTML ="} {
 			if strings.Contains(body, forbidden) {
-				t.Errorf("step host contains forbidden inline behavior %q", forbidden)
+				t.Errorf(
+					"step host contains forbidden inline behavior %q",
+					forbidden,
+				)
 			}
 		}
 	}

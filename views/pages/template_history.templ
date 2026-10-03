@@ -32,7 +32,7 @@ templ TemplateHistoryContent(
 		<div class="flex flex-wrap justify-between items-center gap-2">
 			<h1 class="text-3xl font-bold">{ template.Name }</h1>
 			<div class="flex gap-2 ml-auto">
-				<a href="/templates" class="btn btn-ghost btn-sm">Back</a>
+				<a href="/templates" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>
 			</div>
 		</div>
 		@TemplateHistoryFragment(template, versions)

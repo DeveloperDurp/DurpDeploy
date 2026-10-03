@@ -104,7 +104,7 @@ templ ReleasesContent(project db.Project, releases []ReleaseView, errorMsg strin
 		<div class="flex justify-between items-center">
 			<h1 class="text-3xl font-bold">Releases — { project.Name }</h1>
 			<div class="flex gap-2">
-				<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost btn-sm">Back</a>
+				<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>
 			</div>
 		</div>
 		@ReleasesFragment(project, releases, errorMsg)
@@ -252,7 +252,7 @@ templ ReleaseDetail(project db.Project, release db.Release, variables []db.Relea
 						<button type="submit" class="btn btn-outline btn-warning btn-sm">Refresh</button>
 					</form>
 				}
-				<a href={ fmt.Sprintf("/projects/%d/releases", project.ID) } class="btn btn-ghost btn-sm">Back</a>
+				<a href={ fmt.Sprintf("/projects/%d/releases", project.ID) } class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>
 				if CanWrite(ctx) {
 					@ReleaseDeleteControl(project.ID, release, active, "btn-sm")
 				}

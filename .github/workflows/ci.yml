@@ -310,8 +310,8 @@ jobs:
         run: |
           go tool templ generate
           make swagger-ui-copy
-      - name: Verify singleton setup, authentication fields, and version test
-        run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^TestPackageRepositoryBrowserE2E$' ./internal/handler/api
+      - name: Verify package UI and Back navigation
+        run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^Test(PackageRepository|PackageRepositoryBack|BackNavigation|BackHistory)BrowserE2E$' ./internal/handler/api
       - name: Upload package UI evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

@@ -187,7 +187,7 @@ func (b *packageBrowser) screenshot(t *testing.T, name string) {
 	b.call(
 		t,
 		"Page.captureScreenshot",
-		map[string]any{"format": "png", "captureBeyondViewport": true},
+		map[string]any{"format": "png", "captureBeyondViewport": false},
 		&result,
 	)
 	image, err := base64.StdEncoding.DecodeString(result.Data)
