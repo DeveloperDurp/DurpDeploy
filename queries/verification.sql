@@ -29,7 +29,7 @@ UPDATE releases SET version = version -- NOSONAR: intentional write lock
 WHERE id = ? AND snapshot_locked = 0;
 
 -- name: ListDeploymentVerificationTargets :many
-SELECT deployment_id, target FROM deployment_verifications WHERE target != '';
+SELECT deployment_id, target FROM deployment_verifications;
 
 -- name: UpdateDeploymentVerificationTarget :exec
 UPDATE deployment_verifications SET target = ? WHERE deployment_id = ?;

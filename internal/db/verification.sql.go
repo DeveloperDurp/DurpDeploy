@@ -68,7 +68,7 @@ func (q *Queries) GetDeploymentVerification(ctx context.Context, deploymentID in
 }
 
 const listDeploymentVerificationTargets = `-- name: ListDeploymentVerificationTargets :many
-SELECT deployment_id, target FROM deployment_verifications WHERE target != ''
+SELECT deployment_id, target FROM deployment_verifications
 `
 
 type ListDeploymentVerificationTargetsRow struct {
