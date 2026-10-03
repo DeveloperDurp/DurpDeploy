@@ -33,7 +33,7 @@ func (r *DeploymentRunner) runRemoteStep(
 	defer func() {
 		request.logWriter.finishState(
 			result,
-			cancelCtx.Err() != nil || errors.Is(result, errDeploymentCancelled),
+			errors.Is(result, errDeploymentCancelled),
 		)
 	}()
 	created, err := r.repo.QueueRemoteStepRuns(

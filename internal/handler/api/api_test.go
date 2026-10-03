@@ -21,6 +21,7 @@ import (
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/handler"
 	"durpdeploy/internal/handler/api"
+	"durpdeploy/internal/httpstream"
 	"durpdeploy/internal/migrate"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/runner"
@@ -1200,6 +1201,106 @@ func TestStreamLogs_SSE(t *testing.T) {
 	body := string(data)
 	if !strings.Contains(body, "data: historical log") {
 		t.Fatalf("expected historical log in body, got %s", body)
+	}
+}
+
+func TestStreamLogs_StructuredReplayAcrossBatchBoundary(t *testing.T) {
+	h := newAPIHarness(t)
+	p := seedProject(t, h.repo)
+	e := seedEnv(t, h.repo)
+	r := seedRelease(t, h.repo, p.ID)
+	d := seedDeployment(t, h.repo, r.ID, e.ID, "succeeded")
+	var ids []int64
+	for i := range 261 {
+		log, err := h.repo.Queries.CreateStepDeploymentLog(
+			t.Context(),
+			db.CreateStepDeploymentLogParams{
+				DeploymentID: d.ID, StepName: sql.NullString{String: "duplicate", Valid: true},
+				StepIndex: sql.NullInt64{
+					Int64: 1,
+					Valid: true,
+				}, Line: fmt.Sprintf("line-%d", i),
+			},
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, log.ID)
+	}
+	for _, test := range []struct {
+		name, query, header string
+		start, status       int
+	}{
+		{"all", "", "", 0, 200},
+		{"after", "&after=" + fmt.Sprint(ids[254]), "", 255, 200},
+		{"header", "&after=0", fmt.Sprint(ids[258]), 259, 200},
+		{"negative", "&after=-1", "", 0, 400},
+		{"malformed_header", "", "invalid", 0, 400},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			req := httptest.NewRequest(
+				"GET",
+				fmt.Sprintf(
+					"/api/v1/deployments/%d/logs/stream?format=structured%s",
+					d.ID,
+					test.query,
+				),
+				nil,
+			)
+			req = withAPIURLParam(req, "id", fmt.Sprint(d.ID))
+			req.Header.Set("Last-Event-ID", test.header)
+			server := httptest.NewServer(
+				http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+					api.NewLogHandler(h.broker, h.repo).StreamLogs(w, req)
+				}),
+			)
+			defer server.Close()
+			server.Client().Timeout = 5 * time.Second
+			response, err := server.Client().Get(server.URL)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer response.Body.Close()
+			body, err := io.ReadAll(response.Body)
+			if err != nil || response.StatusCode != test.status {
+				t.Fatalf(
+					"status=%d body=%s error=%v",
+					response.StatusCode,
+					body,
+					err,
+				)
+			}
+			if test.status != 200 {
+				return
+			}
+			count := 0
+			for _, frame := range strings.Split(string(body), "\n\n") {
+				if !strings.Contains(frame, "event: log\n") {
+					continue
+				}
+				_, data, found := strings.Cut(frame, "data: ")
+				var log httpstream.StepLog
+				if !found || json.Unmarshal([]byte(data), &log) != nil {
+					t.Fatalf("invalid log event %q", frame)
+				}
+				index := test.start + count
+				if index >= len(ids) || log.ID != ids[index] ||
+					log.StepIndex == nil ||
+					*log.StepIndex != 1 ||
+					log.Step != "duplicate" ||
+					log.Line != fmt.Sprintf("line-%d", index) {
+					t.Fatalf("replay entry=%+v expected index=%d", log, index)
+				}
+				count++
+			}
+			if count != len(ids)-test.start ||
+				!strings.Contains(
+					string(body),
+					"event: complete\ndata: {\"status\":\"succeeded\"}",
+				) {
+				t.Fatalf("incomplete stream: count=%d", count)
+			}
+		})
 	}
 }
 

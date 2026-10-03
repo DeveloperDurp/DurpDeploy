@@ -59,8 +59,6 @@ func (r *DeploymentRunner) Run(
 	ctx context.Context,
 	deploymentID, releaseID, environmentID int64,
 ) {
-	r.broker.beginDeployment(deploymentID)
-	defer r.broker.endDeployment(deploymentID)
 	runCtx, cancel := context.WithCancel(ctx)
 	r.mu.Lock()
 	if r.stopping {
@@ -68,6 +66,8 @@ func (r *DeploymentRunner) Run(
 		cancel()
 		return
 	}
+	r.broker.beginDeployment(deploymentID)
+	defer r.broker.endDeployment(deploymentID)
 	r.cancels[deploymentID] = cancel
 	r.mu.Unlock()
 

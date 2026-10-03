@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -67,7 +68,9 @@ func (w *broadcastWriter) state(state string) error {
 
 func (w *broadcastWriter) finishState(result error, cancelled bool) {
 	state := "succeeded"
-	if cancelled {
+	if errors.Is(result, errContainerCleanup) {
+		state = "failed"
+	} else if cancelled {
 		state = "cancelled"
 	} else if result != nil {
 		state = "failed"

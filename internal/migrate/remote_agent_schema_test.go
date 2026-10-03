@@ -56,8 +56,9 @@ func TestRemoteAgentSchemaFreshUpgradeRollback(t *testing.T) {
 		"baseline: version=24 releases=1 deployments=1 logs=2; duplicate log text accepted; no sequence column",
 	)
 
-	// When the current migrations upgrade it.
-	requireNoError(t, goose.Up(conn, "."), "upgrade")
+	// Upgrade through the irreversible artifact migration; newer additive
+	// migrations have their own rollback contract.
+	requireNoError(t, goose.UpTo(conn, ".", 43), "upgrade")
 	upgradedVersion, err := goose.GetDBVersion(conn)
 	requireNoError(t, err, "upgraded version")
 
@@ -95,6 +96,19 @@ func TestRemoteAgentSchemaFreshUpgradeRollback(t *testing.T) {
 		t.Fatalf("version after rollback=%d", version)
 	}
 	t.Logf("PASS: rollback preserved history and version=%d", upgradedVersion)
+	t.Run("step_log_metadata", func(t *testing.T) {
+		requireNoError(t, goose.UpTo(conn, ".", 44), "add step metadata")
+		assertRemoteLegacy(t, conn)
+		var legacyLogs int
+		err := conn.QueryRow(`SELECT COUNT(*) FROM deployment_logs
+			WHERE step_index IS NULL AND step_state IS NULL`).Scan(&legacyLogs)
+		requireNoError(t, err, "legacy metadata")
+		if legacyLogs != 2 {
+			t.Fatalf("legacy rows were inferred or lost: %d", legacyLogs)
+		}
+		requireNoError(t, goose.Down(conn, "."), "remove step metadata")
+		assertRemoteLegacy(t, conn)
+	})
 }
 
 func assertRemoteTables(t *testing.T, conn *sql.DB) {

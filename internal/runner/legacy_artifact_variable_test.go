@@ -27,12 +27,7 @@ esac
 					ContainerImage: "example.com/worker:1",
 					VariableNames:  names,
 				},
-				logWriter: &broadcastWriter{
-					ctx:      t.Context(),
-					repo:     repo,
-					broker:   r.broker,
-					scrubber: NewScrubber(nil),
-				},
+				logWriter: attemptLogWriter(t, r, repo, 0),
 				environment: map[string]string{
 					"ARTIFACT_PATH": "/legacy/package",
 				},
