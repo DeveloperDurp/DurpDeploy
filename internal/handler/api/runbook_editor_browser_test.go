@@ -43,54 +43,120 @@ func TestRunbookEditorBrowserE2E(t *testing.T) {
 	b := startPackageBrowser(t)
 	b.setBackTestSession(t, f.baseURL, f.session)
 	b.navigateBackTest(t, f.baseURL+book)
+	b.wait(
+		t,
+		`document.querySelector('.page-header [x-data="backNavigation"]')?.nextElementSibling === null`,
+	)
 	// Reach the editor through a real boosted link.
 	b.evaluate(t, fmt.Sprintf(
 		`document.querySelector('a[href=%q]').click(); true`, book+"/edit",
 	))
 	b.wait(
 		t,
-		`document.querySelectorAll('[name=step_name]').length === 2 && document.querySelector('[name=step_selectors]:not([type=hidden])').value === 'canary' && document.querySelector('[name=step_variable_names]').value === 'DB_HOST, API_TOKEN'`,
+		`document.querySelectorAll('#runbook-version-form [name=step_name]').length === 2`,
 	)
-	b.captureNavigation(t, "runbook-editor")
-	// When adding, removing, and moving whole steps in both directions.
 	b.evaluate(
 		t,
-		`document.querySelector('button.btn-secondary').click(); true`,
-	)
-	b.wait(t, `document.querySelectorAll('[name=step_name]').length === 3`)
-	b.evaluate(
-		t,
-		`[...document.querySelectorAll('button')].filter(e => e.textContent === 'Remove')[2].click(); document.querySelector('[aria-label="Move step down"]').click(); true`,
+		`document.querySelector('#runbook-version-form button.btn-secondary').click(); true`,
 	)
 	b.wait(
 		t,
-		`document.querySelectorAll('[name=step_name]').length === 2 && document.querySelector('[name=step_name]').value === 'local & <one>' && document.querySelectorAll('[name=step_selectors]:not([type=hidden])')[1].value === 'canary'`,
+		`document.querySelector('dialog').matches(':modal') && document.querySelector('dialog [name=step_selectors]').value === 'canary'`,
 	)
 	b.evaluate(
 		t,
-		`document.querySelectorAll('[aria-label="Move step up"]')[1].click(); true`,
+		`document.querySelector('dialog [name=step_name]').value = 'discarded'; document.querySelector('dialog [name=step_name]').dispatchEvent(new Event('input')); document.querySelector('dialog button.btn-ghost').click(); true`,
 	)
-	b.wait(t, `document.querySelector('[name=step_name]').value === 'remote'`)
+	b.wait(
+		t,
+		`!document.querySelector('dialog').open && document.querySelector('#runbook-version-form [name=step_name]').value === 'remote'`,
+	)
+	b.evaluate(
+		t,
+		`[...document.querySelectorAll('button')].find(e => e.textContent === 'Add step').click(); true`,
+	)
+	b.wait(t, `document.querySelector('dialog').matches(':modal')`)
+	for _, kind := range []string{"mousePressed", "mouseReleased"} {
+		b.call(
+			t,
+			"Input.dispatchMouseEvent",
+			map[string]any{
+				"type":       kind,
+				"x":          1,
+				"y":          100,
+				"button":     "left",
+				"clickCount": 1,
+			},
+			&struct{}{},
+		)
+	}
+	b.wait(
+		t,
+		`!document.querySelector('dialog').open && document.querySelectorAll('#runbook-version-form [name=step_name]').length === 2`,
+	)
+	b.evaluate(
+		t,
+		`[...document.querySelectorAll('button')].find(e => e.textContent === 'Add step').click(); true`,
+	)
+	b.wait(t, `document.querySelector('dialog').matches(':modal')`)
+	b.evaluate(t, `(() => {
+ const values = {step_name:'temporary', step_script:'echo temporary', step_image:'alpine:3.20'};
+ for (const [name, value] of Object.entries(values)) {
+  const input = document.querySelector('dialog [name=' + name + ']:not([type=hidden])');
+  input.value = value; input.dispatchEvent(new Event('input'));
+ }
+ document.querySelector('dialog button[type=submit]').click(); return true;
+})()`)
+	b.wait(
+		t,
+		`!document.querySelector('dialog').open && document.querySelectorAll('#runbook-version-form [name=step_name]').length === 3`,
+	)
+	b.evaluate(
+		t,
+		`document.querySelectorAll('#runbook-version-form button.btn-secondary')[2].click(); true`,
+	)
+	b.wait(t, `document.querySelector('dialog').matches(':modal')`)
+	b.evaluate(
+		t,
+		`window.confirm = () => false; document.querySelector('dialog button.btn-error').click(); true`,
+	)
+	b.wait(
+		t,
+		`document.querySelector('dialog').open && document.querySelectorAll('#runbook-version-form [name=step_name]').length === 3`,
+	)
+	b.evaluate(
+		t,
+		`window.confirm = () => true; document.querySelector('dialog button.btn-error').click(); true`,
+	)
+	b.wait(
+		t,
+		`!document.querySelector('dialog').open && document.querySelectorAll('#runbook-version-form [name=step_name]').length === 2`,
+	)
 	b.evaluate(
 		t,
 		`document.querySelector('[aria-label="Move step down"]').click(); true`,
 	)
 	b.wait(
 		t,
-		`document.querySelector('[name=step_name]').value === 'local & <one>'`,
+		`document.querySelector('#runbook-version-form [name=step_name]').value === 'local & <one>'`,
 	)
-	b.captureNavigation(t, "runbook-reordered")
-	if string(
-		b.evaluate(
-			t,
-			`[...document.querySelectorAll('[name=step_name]')].every(input => { const card = input.closest('.card'); const target = card.querySelector('[name=step_target]').value; return ['step_image', 'step_selectors'].every(name => { const label = card.querySelector('label > [name=' + name + ']').parentElement; return (label.getBoundingClientRect().height > 0) === (target === (name === 'step_image' ? 'local' : 'agent')); }); })`,
-		),
-	) != "true" {
-		t.Fatal("reordered step shows an inactive execution-target field")
-	}
 	b.evaluate(
 		t,
-		`document.querySelector('form[x-data="runbookEditor"]').requestSubmit(); true`,
+		`document.querySelector('#runbook-version-form button.btn-secondary').click(); true`,
+	)
+	b.wait(
+		t,
+		`document.querySelector('dialog').matches(':modal') && document.querySelector('dialog [name=step_image]:not([type=hidden])')?.value === 'alpine:3.20'`,
+	)
+	b.captureNavigation(t, "runbook-step")
+	b.evaluate(
+		t,
+		`document.querySelector('dialog button[type=submit]').click(); true`,
+	)
+	b.wait(t, `!document.querySelector('dialog').open`)
+	b.evaluate(
+		t,
+		`document.querySelector('#runbook-version-form').requestSubmit(); true`,
 	)
 	b.waitBackTestURL(t, f.baseURL+book)
 	// Then the public API exposes the new version with all fields intact.
@@ -131,7 +197,7 @@ func TestRunbookEditorBrowserE2E(t *testing.T) {
 	))
 	b.wait(
 		t,
-		`document.querySelectorAll('[name=step_name]').length === 1 && [...document.querySelectorAll('button')].find(e => e.textContent === 'Remove').disabled && document.querySelector('[aria-label="Move step up"]').disabled && document.querySelector('[aria-label="Move step down"]').disabled`,
+		`document.querySelectorAll('#runbook-version-form [name=step_name]').length === 1 && document.querySelector('[aria-label="Move step up"]').disabled && document.querySelector('[aria-label="Move step down"]').disabled`,
 	)
 	b.captureNavigation(t, "runbook-new")
 }

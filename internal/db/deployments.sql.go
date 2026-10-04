@@ -159,6 +159,63 @@ func (q *Queries) DeleteDeployment(ctx context.Context, id int64) error {
 	return err
 }
 
+const deploymentActivity = `-- name: DeploymentActivity :many
+SELECT CAST(d.created_at / 86400 AS INTEGER) AS day,
+       d.status, COUNT(*) AS count
+FROM deployments d
+JOIN releases r ON r.id = d.release_id
+WHERE d.kind = 'deployment'
+  AND d.created_at >= ?1
+  AND d.created_at < ?2
+  AND (CAST(?3 AS INTEGER) = 1 OR EXISTS (
+      SELECT 1 FROM project_members pm
+      WHERE pm.project_id = r.project_id AND pm.user_id = ?4
+  ))
+GROUP BY CAST(d.created_at / 86400 AS INTEGER), d.status
+ORDER BY day, d.status
+`
+
+type DeploymentActivityParams struct {
+	FromUnix int64 `json:"from_unix"`
+	ToUnix   int64 `json:"to_unix"`
+	IsAdmin  int64 `json:"is_admin"`
+	UserID   int64 `json:"user_id"`
+}
+
+type DeploymentActivityRow struct {
+	Day    int64  `json:"day"`
+	Status string `json:"status"`
+	Count  int64  `json:"count"`
+}
+
+func (q *Queries) DeploymentActivity(ctx context.Context, arg DeploymentActivityParams) ([]DeploymentActivityRow, error) {
+	rows, err := q.db.QueryContext(ctx, deploymentActivity,
+		arg.FromUnix,
+		arg.ToUnix,
+		arg.IsAdmin,
+		arg.UserID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DeploymentActivityRow
+	for rows.Next() {
+		var i DeploymentActivityRow
+		if err := rows.Scan(&i.Day, &i.Status, &i.Count); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const failDeploymentsWithTerminalRemoteStepRuns = `-- name: FailDeploymentsWithTerminalRemoteStepRuns :execrows
 UPDATE deployments SET status = 'failed', finished_at = ?1
 WHERE status = 'running' AND assigned_agent_id IS NULL

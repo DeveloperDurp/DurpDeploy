@@ -4,6 +4,124 @@ import htmx from 'htmx.org'
 window.Alpine = Alpine
 window.htmx = htmx
 
+let chartLibrary;
+function loadChartLibrary(src) {
+	if (!chartLibrary) {
+		chartLibrary = new Promise((resolve, reject) => {
+			const script = document.createElement('script');
+			script.src = src;
+			script.onload = () => resolve(window.DashboardChart);
+			script.onerror = () => {
+				script.remove();
+				chartLibrary = null;
+				reject(new Error('Chart bundle could not be loaded'));
+			};
+			document.head.appendChild(script);
+		});
+	}
+	return chartLibrary;
+}
+
+Alpine.data('homeCharts', () => {
+	// Keep Chart instances outside Alpine's reactive proxy.
+	let charts = [], observer, request, Chart;
+	let destroyed = false;
+	return {
+		days: [], totals: [], loading: true, error: false, ready: false, empty: false,
+		init() { this.load(); },
+		label(status) {
+			return ({ succeeded: 'Succeeded', failed: 'Failed', cancelled: 'Cancelled',
+				running: 'Running', pending: 'Pending', pending_approval: 'Awaiting approval',
+				cleanup_unconfirmed: 'Cleanup unconfirmed' })[status] || status;
+		},
+		daySummary(day) {
+			return Object.entries(day.counts).map(([status, count]) =>
+				`${this.label(status)}: ${count}`).join(', ') || 'No deployments';
+		},
+		async load() {
+			request?.abort();
+			request = new AbortController();
+			this.loading = true;
+			this.error = false;
+			try {
+				const response = await fetch('/dashboard/activity', {
+					signal: request.signal, headers: { Accept: 'application/json' },
+				});
+				if (!response.ok) throw new Error('Activity could not be loaded');
+				const days = await response.json();
+				if (destroyed) return;
+				this.days = days;
+				const counts = {};
+				for (const day of days) for (const [status, count] of Object.entries(day.counts)) {
+					counts[status] = (counts[status] || 0) + count;
+				}
+				this.totals = Object.entries(counts).map(([status, count]) =>
+					({ status, count, label: this.label(status) }));
+				this.empty = this.totals.length === 0;
+				if (this.empty) return;
+				Chart = await loadChartLibrary(this.$el.dataset.chartSrc);
+				if (destroyed) return;
+				this.ready = true;
+				await this.$nextTick();
+				if (destroyed) return;
+				this.render();
+				observer = new MutationObserver(() => this.render());
+				observer.observe(document.documentElement, {
+					attributes: true, attributeFilter: ['data-theme'],
+				});
+			} catch (error) {
+				if (!destroyed && error.name !== 'AbortError') this.error = true;
+			} finally {
+				if (!destroyed) this.loading = false;
+			}
+		},
+		render() {
+			if (destroyed || !this.$el.isConnected) return;
+			charts.forEach(chart => chart.destroy());
+			const ink = getComputedStyle(this.$el).color;
+			const colors = this.totals.map(item => {
+				const token = this.$el.querySelector(`[data-chart-color="${item.status}"]`);
+				return token ? getComputedStyle(token).color : ink;
+			});
+			const options = {
+				responsive: true, maintainAspectRatio: false, animation: false,
+				color: ink, plugins: { legend: { position: 'bottom',
+					labels: { color: ink, boxWidth: 12, boxHeight: 12 } } },
+			};
+			charts = [new Chart(this.$refs.outcomes, {
+				type: 'doughnut', options,
+				data: {
+					labels: this.totals.map(item => item.label),
+					datasets: [{ data: this.totals.map(item => item.count),
+						backgroundColor: colors, borderWidth: 0 }],
+				},
+			}), new Chart(this.$refs.activity, {
+				type: 'bar',
+				options: { ...options, scales: {
+					x: { stacked: true, grid: { display: false },
+						ticks: { color: ink, maxRotation: 0, maxTicksLimit: 7 } },
+					y: { stacked: true, beginAtZero: true,
+						ticks: { color: ink, precision: 0 }, grid: { color:
+							getComputedStyle(this.$refs.gridColor).color } },
+				} },
+				data: {
+					labels: this.days.map(day => day.date.slice(5)),
+					datasets: this.totals.map((item, index) => ({
+						label: item.label, backgroundColor: colors[index],
+						data: this.days.map(day => day.counts[item.status] || 0),
+					})),
+				},
+			})];
+		},
+		destroy() {
+			destroyed = true;
+			request?.abort();
+			observer?.disconnect();
+			charts.forEach(chart => chart.destroy());
+		},
+	};
+});
+
 // Re-fetch history entries rather than storing protected page content.
 htmx.config.historyCacheSize = 0;
 htmx.config.historyRestoreAsHxRequest = false;
@@ -219,6 +337,9 @@ Alpine.data('stepPlacement', (executionTarget = 'local', agentLabel = '') => ({
 Alpine.data('runbookEditor', () => ({
 	steps: [],
 	nextStepID: 0,
+	draft: null,
+	editingID: null,
+	opener: null,
 	init() {
 		this.steps = JSON.parse(this.$el.dataset.steps);
 		for (const step of this.steps) {
@@ -235,13 +356,38 @@ Alpine.data('runbookEditor', () => ({
 		this.steps.splice(index, 1);
 	},
 	addStep() {
-		this.steps.push({
+		this.openStep({
 			editorID: this.nextStepID++,
 			name: '', script_body: '', interpreter: 'bash', timeout_seconds: 0,
 			max_retries: 0, execution_target: 'local', agent_selectors_text: '',
 			container_image: '', variable_names_text: '',
 		});
 	},
+	editStep(step) { this.openStep({ ...step }, step.editorID); },
+	openStep(draft, editingID = null) {
+		this.draft = draft;
+		this.editingID = editingID;
+		this.opener = document.activeElement;
+		this.$nextTick(() => {
+			this.$refs.stepDialog.showModal();
+			this.$refs.stepDialog.querySelector('input').focus();
+		});
+	},
+	saveStep() {
+		const step = { ...this.draft };
+		if (step.execution_target === 'agent') step.container_image = '';
+		else step.agent_selectors_text = '';
+		if (this.editingID === null) this.steps.push(step);
+		else this.steps.splice(this.steps.findIndex(item => item.editorID === this.editingID), 1, step);
+		this.$refs.stepDialog.close();
+	},
+	deleteStep() {
+		if (!confirm('Remove this step from the new version?')) return;
+		this.removeStep(this.steps.findIndex(step => step.editorID === this.editingID));
+		this.$refs.stepDialog.close();
+	},
+	stepClosed() { if (!this.$refs.stepDialog.open) this.opener?.focus(); },
+	destroy() { this.$refs.stepDialog?.close(); },
 }));
 
 Alpine.data('formDialogHost', () => ({

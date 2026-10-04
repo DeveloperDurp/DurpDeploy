@@ -201,3 +201,18 @@ WHERE d.kind = 'deployment'
   AND (CAST(sqlc.narg(f_status)     AS TEXT)    IS NULL OR d.status = CAST(sqlc.narg(f_status) AS TEXT))
   AND (CAST(sqlc.narg(f_from_unix)  AS INTEGER) IS NULL OR d.created_at >= CAST(sqlc.narg(f_from_unix) AS INTEGER))
   AND (CAST(sqlc.narg(f_to_unix)    AS INTEGER) IS NULL OR d.created_at <= CAST(sqlc.narg(f_to_unix) AS INTEGER));
+
+-- name: DeploymentActivity :many
+SELECT CAST(d.created_at / 86400 AS INTEGER) AS day,
+       d.status, COUNT(*) AS count
+FROM deployments d
+JOIN releases r ON r.id = d.release_id
+WHERE d.kind = 'deployment'
+  AND d.created_at >= sqlc.arg(from_unix)
+  AND d.created_at < sqlc.arg(to_unix)
+  AND (CAST(sqlc.arg(is_admin) AS INTEGER) = 1 OR EXISTS (
+      SELECT 1 FROM project_members pm
+      WHERE pm.project_id = r.project_id AND pm.user_id = sqlc.arg(user_id)
+  ))
+GROUP BY CAST(d.created_at / 86400 AS INTEGER), d.status
+ORDER BY day, d.status;

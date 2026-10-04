@@ -58,6 +58,10 @@ func TestHomeMobileBrowserE2E(t *testing.T) {
 		201,
 	), &environment)
 	b.navigateBackTest(t, f.baseURL+"/")
+	b.wait(
+		t,
+		`document.querySelector('[data-home-charts]') && Alpine.$data(document.querySelector('[data-home-charts]')).empty`,
+	)
 	b.captureNavigation(t, "home-empty-deployments")
 	var release db.Release
 	decodeStepLogTest(t, f.api(
@@ -81,8 +85,34 @@ func TestHomeMobileBrowserE2E(t *testing.T) {
 	if deployments.Total != 3 {
 		t.Fatal("public deployment API lost dashboard data")
 	}
+	var activity []struct {
+		Date   string           `json:"date"`
+		Counts map[string]int64 `json:"counts"`
+	}
+	decodeStepLogTest(
+		t,
+		f.api(t, "GET", "/api/v1/deployments/activity", nil, 200),
+		&activity,
+	)
+	if len(activity) != 14 || activity[13].Counts["succeeded"] != 1 ||
+		activity[13].Counts["failed"] != 1 || activity[13].Counts["running"] != 1 {
+		t.Fatalf("dashboard API counts: %+v", activity)
+	}
 	b.navigateBackTest(t, f.baseURL+"/")
+	b.wait(
+		t,
+		`document.querySelectorAll('[data-home-charts] canvas').length === 2 && [...document.querySelectorAll('[data-home-charts] canvas')].every(c => DashboardChart.getChart(c)?.width > 0)`,
+	)
 	b.captureNavigation(t, "home-populated", func() {
+		b.wait(t, `(() => {
+ const section = document.querySelector('[data-home-charts]');
+ const ink = getComputedStyle(section).color;
+ return [...section.querySelectorAll('canvas')].every(canvas => {
+  const chart = DashboardChart.getChart(canvas);
+  return chart && chart.options.color === ink && chart.width <= canvas.parentElement.clientWidth &&
+   chart.data.datasets.flatMap(d => d.data).reduce((a,b) => a+b, 0) === 3;
+ }) && section.querySelectorAll('[data-chart-totals] dd').length === 3;
+})()`)
 		if string(b.evaluate(t, `(() => {
  const tables = [...document.querySelectorAll('[data-home-deployments]')];
  const summary = document.querySelector('[data-home-summary]');
@@ -101,4 +131,29 @@ func TestHomeMobileBrowserE2E(t *testing.T) {
 			)
 		}
 	})
+	// HTMX navigation destroys old charts and creates one fresh pair on return.
+	b.evaluate(
+		t,
+		`window.oldHomeCharts = [...document.querySelectorAll('[data-home-charts] canvas')].map(c => DashboardChart.getChart(c)); document.querySelector('#app-navbar a[href="/projects"]').click(); true`,
+	)
+	b.wait(
+		t,
+		`location.pathname === '/projects' && !document.querySelector('[data-home-charts]')`,
+	)
+	b.wait(
+		t,
+		`oldHomeCharts.every(c => c.ctx === null) && Object.keys(DashboardChart.instances).length === 0`,
+	)
+	b.wait(
+		t,
+		`document.querySelector('#app-navbar a[href="/"]').getAttribute('hx-boost') === 'true' && !document.querySelector('.htmx-settling')`,
+	)
+	b.evaluate(
+		t,
+		`document.querySelector('#app-navbar a[href="/"]').click(); true`,
+	)
+	b.wait(
+		t,
+		`location.pathname === '/' && window.DashboardChart && Object.keys(DashboardChart.instances).length === 2`,
+	)
 }

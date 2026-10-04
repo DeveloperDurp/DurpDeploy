@@ -192,6 +192,14 @@ done
 
 ## Post-deployment verification and rollback
 
+`GET /api/v1/deployments/activity` returns 14 UTC calendar days, including
+today, in ascending order: `[{"date":"2026-10-04","counts":{"succeeded":2}}]`.
+Each `counts` object groups deployments by their current status; dates with
+no deployments have `{}`. Only accessible projects are counted (all projects
+for global admins). Runbook executions are excluded. The home-page charts use
+these counts. The API requires a bearer token; the equivalent
+`GET /dashboard/activity` endpoint uses the authenticated web session.
+
 Only global admins can configure verification, because environments are
 shared across projects. `POST /api/v1/environments` and
 `PUT /api/v1/environments/$EID` accept:

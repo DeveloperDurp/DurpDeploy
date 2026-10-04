@@ -243,6 +243,8 @@ tailwind-build: npm-install
 
 js-build: npm-install
 	npx esbuild static/js/app.js --bundle --minify --outfile=static/js/app.bundle.js
+	npx esbuild static/js/charts.js --bundle --minify --outfile=static/js/charts.bundle.js
+	cat node_modules/chart.js/LICENSE.md node_modules/@kurkle/color/LICENSE.md > static/js/charts.licenses.txt
 
 # Reformat Go source to 80-char width. Skips sqlc- and templ-generated files.
 .PHONY: install-hooks pre-commit-test

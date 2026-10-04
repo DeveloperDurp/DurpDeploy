@@ -102,10 +102,10 @@ templ RunbookDetailPage(project db.Project, book db.Runbook, versions []db.Runbo
 			<div class="page-header">
 				<div><h1 class="text-3xl font-bold">{ book.Name }</h1><p class="opacity-70">{ book.Description }</p></div>
 				<div class="flex gap-2">
-					<a class="btn btn-ghost btn-sm" href={ fmt.Sprintf("/projects/%d/runbooks", project.ID) } x-data="backNavigation" @click="back">Back</a>
 					if CanWrite(ctx) {
-						<a class="btn btn-primary btn-sm" href={ fmt.Sprintf("/projects/%d/runbooks/%d/edit", project.ID, book.ID) }>Save new version</a>
+						<a class="btn btn-primary btn-sm" href={ fmt.Sprintf("/projects/%d/runbooks/%d/edit", project.ID, book.ID) }>Create new version</a>
 					}
+					<a class="btn btn-ghost btn-sm" href={ fmt.Sprintf("/projects/%d/runbooks", project.ID) } x-data="backNavigation" @click="back">Back</a>
 				</div>
 			</div>
 			<div class="card bg-base-200 p-4">
@@ -273,6 +273,7 @@ templ RunbookExecutionPage(project db.Project, book db.Runbook, execution db.Get
 						@RunbookExecutionStatus(project.ID, execution)
 					</span>
 					@RunbookExecutionActions(project.ID, execution, false)
+					<a href={ fmt.Sprintf("/projects/%d/runbooks/%d", project.ID, book.ID) } class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>
 				</div>
 			</div>
 			<div

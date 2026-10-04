@@ -14,6 +14,7 @@ var Assets embed.FS
 var versions = map[string]string{
 	"css/tailwind.min.css": assetVersion("css/tailwind.min.css"),
 	"js/app.bundle.js":     assetVersion("js/app.bundle.js"),
+	"js/charts.bundle.js":  assetVersion("js/charts.bundle.js"),
 }
 
 func assetVersion(name string) string {

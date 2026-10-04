@@ -57,6 +57,19 @@ keep `overflow-x-auto` and `table table-zebra table-fixed w-full`.
   attributes.
 
 ### Cards and forms
+
+- Runbook version editors show compact step summaries and reuse the project
+  step modal layout for Add/Edit. Save/Cancel stay in the modal header; Remove
+  stays at the bottom. Cancel, Escape, and backdrop dismissal discard draft
+  changes. The page action is “Create new version”; Back is the last header
+  action, including on runbook execution pages.
+
+- Home charts use Chart.js in separate `bg-base-200` cards below summary
+  metrics: one column on phones, two at `lg`. Fixed-height responsive canvases
+  use semantic theme colors, no entrance animation, and visible status labels.
+  Exact totals and expandable daily counts provide text alternatives. The
+  chart bundle loads only when chart data exists; HTMX removal destroys chart
+  instances and theme observers. The document owns scrolling.
 - Projects, Deployments, Environments, Lifecycles, and Templates use full-width resource cards on all
   screen sizes. Names remain plain bold headings; the entire card is a native
   navigation link, with a chevron, hover ring, and visible keyboard focus.

@@ -1742,6 +1742,43 @@
         ]
       }
     },
+    "/deployments/activity": {
+      "get": {
+        "tags": [
+          "deployments"
+        ],
+        "summary": "Deployment counts for the last 14 UTC calendar days, including today.",
+        "operationId": "deploymentActivity",
+        "responses": {
+          "200": {
+            "description": "DeploymentActivityDay contains counts by current status for one UTC date.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/DeploymentActivityDay"
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "500": {
+            "description": "Server error response.",
+            "schema": {
+              "$ref": "#/definitions/ServerError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/deployments/{id}": {
       "get": {
         "produces": [
@@ -8670,6 +8707,26 @@
         }
       },
       "x-go-name": "swaggerDeployment",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "DeploymentActivityDay": {
+      "type": "object",
+      "title": "DeploymentActivityDay contains counts by current status for one UTC date.",
+      "properties": {
+        "counts": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "x-go-name": "Counts"
+        },
+        "date": {
+          "type": "string",
+          "x-go-name": "Date"
+        }
+      },
+      "x-go-name": "deploymentActivityDay",
       "x-go-package": "durpdeploy/internal/handler/api"
     },
     "DeploymentListItem": {

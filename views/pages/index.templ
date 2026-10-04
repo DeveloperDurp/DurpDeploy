@@ -2,6 +2,7 @@ package pages
 
 import (
 	"durpdeploy/views/layouts"
+	"durpdeploy/static"
 	"strconv"
 )
 
@@ -38,6 +39,7 @@ templ IndexPage(
 					@HomeStat("Deployments today", strconv.FormatInt(deploymentsToday, 10))
 					@HomeStat("Currently running", strconv.Itoa(len(runningDeployments)))
 				</div>
+				@HomeCharts()
 				<div>
 					<h2 class="text-xl font-bold mb-4">Currently running</h2>
 					if len(runningDeployments) == 0 {
@@ -65,6 +67,54 @@ templ IndexPage(
 			</div>
 		}
 	}
+}
+
+templ HomeCharts() {
+	<section x-data="homeCharts" @htmx:before-cleanup-element.camel.self="destroy" data-home-charts data-chart-src={ static.URL("js/charts.bundle.js") } aria-label="Deployment charts" class="space-y-4">
+		<p x-show="loading" role="status" class="text-sm opacity-70">Loading deployment charts…</p>
+		<p x-show="error" x-cloak role="alert" class="text-error">Charts could not be loaded. <button type="button" class="btn btn-ghost btn-sm" @click="load">Retry</button></p>
+		<p x-show="empty" x-cloak class="text-sm opacity-70">No deployments in the last 14 days.</p>
+		<noscript><p>Enable JavaScript to view charts, or <a href="/deployments" class="link">view deployments</a>.</p></noscript>
+		<div x-show="ready" x-cloak class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+			<div class="card bg-base-200 min-w-0">
+				<div class="card-body p-4 sm:p-6">
+					<h2 class="text-xl font-bold">Deployment outcomes</h2>
+					<p class="text-sm opacity-70">Current status · last 14 days (UTC)</p>
+					<div class="relative h-64 min-w-0"><canvas x-ref="outcomes" role="img" aria-label="Deployment status totals. Exact counts follow below."></canvas></div>
+					<dl class="flex flex-wrap gap-x-4 gap-y-2 text-sm" data-chart-totals>
+						<template x-for="item in totals" :key="item.status">
+							<div class="flex gap-2"><dt x-text="item.label"></dt><dd class="font-bold" x-text="item.count"></dd></div>
+						</template>
+					</dl>
+				</div>
+			</div>
+			<div class="card bg-base-200 min-w-0">
+				<div class="card-body p-4 sm:p-6">
+					<h2 class="text-xl font-bold">Daily deployment activity</h2>
+					<p class="text-sm opacity-70">Grouped by creation date · last 14 days (UTC)</p>
+					<div class="relative h-64 min-w-0"><canvas x-ref="activity" role="img" aria-label="Daily deployment counts by status. Expand daily counts for exact values."></canvas></div>
+					<details class="text-sm">
+						<summary class="cursor-pointer py-2">Daily counts</summary>
+						<dl class="space-y-2 mt-2">
+							<template x-for="day in days" :key="day.date">
+								<div class="flex flex-wrap gap-x-4"><dt class="font-bold" x-text="day.date"></dt><dd x-text="daySummary(day)"></dd></div>
+							</template>
+						</dl>
+					</details>
+				</div>
+			</div>
+		</div>
+		<div class="hidden" aria-hidden="true">
+			<span x-ref="gridColor" class="text-base-300"></span>
+			<span data-chart-color="succeeded" class="text-success"></span>
+			<span data-chart-color="failed" class="text-error"></span>
+			<span data-chart-color="cancelled" class="text-secondary"></span>
+			<span data-chart-color="running" class="text-info"></span>
+			<span data-chart-color="pending" class="text-primary"></span>
+			<span data-chart-color="pending_approval" class="text-warning"></span>
+			<span data-chart-color="cleanup_unconfirmed" class="text-warning"></span>
+		</div>
+	</section>
 }
 
 templ HomeStat(label, value string) {
