@@ -95,6 +95,16 @@ keep `overflow-x-auto` and `table table-zebra table-fixed w-full`.
 - Breadcrumbs, named destination links, and Cancel controls retain their
   explicit destinations.
 
+### Deployment verification and rollback
+- Verification uses the existing form fields, a native type selector, and
+  supporting text explaining timeout and execution placement. Every new field
+  has an explicit label; invalid input uses the existing form error region.
+- Rollback uses a secondary action and a confirmation form with source and
+  target versions, environment, and approval/gate status. The selected target
+  is submitted explicitly so stale confirmations fail safely.
+- Viewers see verification results but no rollback write control. All new
+  surfaces wrap at small widths and keep the existing semantic focus states.
+
 ### Agent maintenance and health
 - Show administrative state and heartbeat health as separate labelled badges:
   active/healthy use `badge-success`, draining/drained/stale use `badge-warning`,

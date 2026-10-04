@@ -6,9 +6,13 @@ type Scrubber = logscrub.Scrubber
 
 var commonSecretPatterns []string
 
-func NewScrubber(secrets []string) *Scrubber {
+func NewScrubber(secrets []string, patterns ...string) *Scrubber {
 	if len(commonSecretPatterns) != 0 {
-		return logscrub.NewWithPatterns(secrets, commonSecretPatterns)
+		additional := append([]string(nil), commonSecretPatterns...)
+		return logscrub.NewWithPatterns(
+			secrets,
+			append(additional, patterns...),
+		)
 	}
-	return logscrub.New(secrets)
+	return logscrub.New(secrets, patterns...)
 }

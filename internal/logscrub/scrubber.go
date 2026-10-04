@@ -6,6 +6,7 @@ import (
 	"os"
 	"regexp"
 	"regexp/syntax"
+	"slices"
 	"sort"
 	"strings"
 	"unicode/utf8"
@@ -46,8 +47,10 @@ type pendingPattern struct {
 	program *syntax.Prog
 }
 
-func New(secrets []string) *Scrubber {
-	return newScrubber(secrets, commonSecretPatterns, extraSecretPatterns)
+func New(secrets []string, patterns ...string) *Scrubber {
+	additional := append([]string(nil), extraSecretPatterns...)
+	return newScrubber(secrets, commonSecretPatterns,
+		append(additional, patterns...))
 }
 
 func NewWithPatterns(secrets []string, patterns []string) *Scrubber {
@@ -65,6 +68,9 @@ func newScrubber(
 			continue
 		}
 		literals = append(literals, secret)
+		if !utf8.ValidString(secret) {
+			literals = append(literals, string([]rune(secret)))
+		}
 	}
 	effectivePatterns := append([]string(nil), patterns...)
 	pendingPatterns := make([]pendingPattern, 0, len(streamPatterns))
@@ -98,7 +104,8 @@ func newScrubber(
 	})
 	knownParts := make([]string, len(literals))
 	for index, literal := range literals {
-		knownParts[index] = regexp.QuoteMeta(literal)
+		// Go regex treats invalid UTF-8 bytes as replacement runes.
+		knownParts[index] = regexp.QuoteMeta(string([]rune(literal)))
 	}
 	return &Scrubber{
 		all:             compile(append(knownParts, effectivePatterns...)),
@@ -122,6 +129,16 @@ func dropEmptyWidthAssertions(expression *syntax.Regexp) {
 }
 
 func compile(parts []string) *regexp.Regexp {
+	parts = slices.Compact(slices.Sorted(slices.Values(parts)))
+	if len(parts) > 0 {
+		compiled, err := regexp.Compile(
+			"(?s)(" + strings.Join(parts, "|") + ")",
+		)
+		if err == nil {
+			compiled.Longest()
+			return compiled
+		}
+	}
 	valid := make([]string, 0, len(parts))
 	var compiled *regexp.Regexp
 	for _, part := range parts {
@@ -133,6 +150,10 @@ func compile(parts []string) *regexp.Regexp {
 			valid = candidate
 			compiled = combined
 		}
+	}
+	if compiled != nil {
+		// A shorter secret or pattern must not expose a longer match's suffix.
+		compiled.Longest()
 	}
 	return compiled
 }

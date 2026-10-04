@@ -5,12 +5,51 @@ import (
 	"testing"
 )
 
+func TestAdditionalPatternsPreserveConfiguredAndDefaultRedaction(t *testing.T) {
+	previous := extraSecretPatterns
+	extraSecretPatterns = []string{`configured-proof`}
+	t.Cleanup(func() { extraSecretPatterns = previous })
+	scrubber := New([]string{"release-proof"}, `(?i:hostname-proof)`)
+	got := scrubber.Scrub(
+		"release-proof configured-proof HoStNaMe-PrOoF Bearer common-proof",
+	)
+	if got != "[REDACTED] [REDACTED] [REDACTED] [REDACTED]" {
+		t.Fatalf("additional pattern disabled existing redaction: %q", got)
+	}
+	if got := New(nil).Scrub("hostname-proof"); got != "hostname-proof" {
+		t.Fatalf("per-check pattern changed global defaults: %q", got)
+	}
+}
+
 func TestScrubPartsRedactsOneLiteralAcrossChunks(t *testing.T) {
 	scrubber := New([]string{"top-secret"})
 	got := scrubber.ScrubParts([]string{"prefix top", "-sec", "ret suffix"})
 	want := []string{"prefix [REDACTED]", "", " suffix"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("ScrubKnownParts()=%q want=%q", got, want)
+	}
+}
+
+func TestInvalidUTF8LiteralRedaction(t *testing.T) {
+	// Given: a known credential can contain percent-decoded non-UTF-8 bytes.
+	for _, secret := range []string{"private\xffproof", "private\xff\xfeproof"} {
+		scrubber := New([]string{secret})
+		// When: the log contains original bytes or their displayed rune form.
+		for _, value := range []string{secret, string([]rune(secret))} {
+			got := scrubber.ScrubParts([]string{"safe pri", value[3:], " done"})
+			// Then: the whole credential is redacted across chunks.
+			if !reflect.DeepEqual(
+				got,
+				[]string{"safe [REDACTED]", "", " done"},
+			) {
+				t.Fatalf("invalid UTF-8 literal leaked: %q", got)
+			}
+		}
+		if got := scrubber.Scrub(
+			"safe privateXproof done",
+		); got != "safe privateXproof done" {
+			t.Fatalf("ordinary output changed: %q", got)
+		}
 	}
 }
 

@@ -141,6 +141,14 @@ type DeploymentLogScope struct {
 	Sequence     int64         `json:"sequence"`
 }
 
+type DeploymentRollback struct {
+	DeploymentID       int64  `json:"deployment_id"`
+	SourceDeploymentID int64  `json:"source_deployment_id"`
+	TargetDeploymentID int64  `json:"target_deployment_id"`
+	SourceVersion      string `json:"source_version"`
+	TargetVersion      string `json:"target_version"`
+}
+
 type DeploymentStep struct {
 	DeploymentID    int64         `json:"deployment_id"`
 	StepIndex       int64         `json:"step_index"`
@@ -187,12 +195,26 @@ type DeploymentStepSource struct {
 	CreatedAt              int64  `json:"created_at"`
 }
 
+type DeploymentVerification struct {
+	DeploymentID   int64         `json:"deployment_id"`
+	Type           string        `json:"type"`
+	Target         string        `json:"target"`
+	TimeoutSeconds int64         `json:"timeout_seconds"`
+	StepIndex      int64         `json:"step_index"`
+	Status         string        `json:"status"`
+	StartedAt      sql.NullInt64 `json:"started_at"`
+	FinishedAt     sql.NullInt64 `json:"finished_at"`
+}
+
 type Environment struct {
-	ID          int64          `json:"id"`
-	Name        string         `json:"name"`
-	Description sql.NullString `json:"description"`
-	Tags        sql.NullString `json:"tags"`
-	CreatedAt   int64          `json:"created_at"`
+	ID                         int64          `json:"id"`
+	Name                       string         `json:"name"`
+	Description                sql.NullString `json:"description"`
+	Tags                       sql.NullString `json:"tags"`
+	CreatedAt                  int64          `json:"created_at"`
+	VerificationType           string         `json:"verification_type"`
+	VerificationTarget         string         `json:"verification_target"`
+	VerificationTimeoutSeconds int64          `json:"verification_timeout_seconds"`
 }
 
 type GlobalNotification struct {
@@ -314,12 +336,13 @@ type ProjectMember struct {
 }
 
 type Release struct {
-	ID        int64  `json:"id"`
-	ProjectID int64  `json:"project_id"`
-	Version   string `json:"version"`
-	StepsJson string `json:"steps_json"`
-	CreatedAt int64  `json:"created_at"`
-	Kind      string `json:"kind"`
+	ID             int64  `json:"id"`
+	ProjectID      int64  `json:"project_id"`
+	Version        string `json:"version"`
+	StepsJson      string `json:"steps_json"`
+	CreatedAt      int64  `json:"created_at"`
+	Kind           string `json:"kind"`
+	SnapshotLocked int64  `json:"snapshot_locked"`
 }
 
 type ReleaseArtifact struct {

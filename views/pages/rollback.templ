@@ -1,0 +1,52 @@
+package pages
+
+import (
+	"durpdeploy/internal/repository"
+	"durpdeploy/views/layouts"
+	"fmt"
+	"strconv"
+)
+
+templ RollbackConfirmation(preview repository.RollbackPreview, currentPath string) {
+	if !CanWrite(ctx) {
+		@ViewerForbiddenMessage("Rollback", "roll back", "a deployment", fmt.Sprintf("/deployments/%d", preview.SourceDeploymentID), currentPath)
+	} else {
+		@layouts.Base("Confirm rollback", currentPath) {
+			<div class="max-w-2xl mx-auto space-y-6">
+				<h1 class="text-3xl font-bold">Confirm rollback</h1>
+				<div class="card bg-base-200 shadow">
+					<div class="card-body space-y-4">
+						<p>Deploy the previous successful release to <strong>{ preview.EnvironmentName }</strong>.</p>
+						<dl class="space-y-4">
+							<div><dt class="text-sm opacity-70">Source release</dt><dd class="font-mono break-all">{ preview.SourceVersion }</dd></div>
+							<div><dt class="text-sm opacity-70">Target release</dt><dd class="font-mono break-all">{ preview.TargetVersion }</dd></div>
+						</dl>
+						<p class="text-sm opacity-70">Creates a new deployment from successful deployment #{ strconv.FormatInt(preview.TargetDeploymentID, 10) }. The frozen steps, variables, and package pin are reused. Environment verification applies again.</p>
+						if preview.Blocked {
+							<div class="alert alert-warning" role="status">{ preview.Reason }</div>
+						} else {
+							if preview.RequiresApproval {
+								<div class="alert alert-info" role="status">Approval is required before this rollback runs.</div>
+							}
+							<form method="post" action={ fmt.Sprintf("/deployments/%d/rollback", preview.SourceDeploymentID) }>
+								<input type="hidden" name="target_deployment_id" value={ strconv.FormatInt(preview.TargetDeploymentID, 10) }/>
+								<button type="submit" class="btn btn-primary h-auto min-h-12 py-3 whitespace-normal break-all">Rollback to { preview.TargetVersion }</button>
+							</form>
+						}
+						<a href={ fmt.Sprintf("/deployments/%d", preview.SourceDeploymentID) } class="btn btn-ghost">Cancel</a>
+					</div>
+				</div>
+			</div>
+		}
+	}
+}
+
+templ RollbackUnavailable(id int64, reason, currentPath string) {
+	@layouts.Base("Rollback unavailable", currentPath) {
+		<div class="max-w-2xl mx-auto space-y-6">
+			<h1 class="text-3xl font-bold">Rollback unavailable</h1>
+			<div class="alert alert-warning" role="status">{ reason }</div>
+			<a href={ fmt.Sprintf("/deployments/%d", id) } class="btn btn-ghost">Back to deployment</a>
+		</div>
+	}
+}

@@ -4,6 +4,8 @@ package audit
 // registered in server.go. New routes need one map entry; the fallback
 // heuristic catches anything missed with a lossy name.
 var actionMap = map[string]string{
+	"POST /deployments/{id}/rollback":                    "rollback_deployment",
+	"POST /api/v1/deployments/{id}/rollback":             "rollback_deployment",
 	"POST /api/v1/admin/agents/{id}/environments":        "add_agent_environment_label",
 	"DELETE /api/v1/admin/agents/{id}/environments":      "delete_agent_environment_label",
 	"POST /admin/agents/{id}/drain":                      "drain_agent",

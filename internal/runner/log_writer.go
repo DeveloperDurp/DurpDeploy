@@ -33,6 +33,13 @@ func (w *broadcastWriter) Write(p []byte) (n int, err error) {
 	data := w.buf.Bytes()
 	safeEnd := len(data) - w.scrubber.PendingBytes(string(data))
 	lastNL := bytes.LastIndexByte(data[:safeEnd], '\n')
+	for lastNL >= 0 {
+		pending := w.scrubber.PendingBytes(string(data[:lastNL+1]))
+		if pending == 0 {
+			break
+		}
+		lastNL = bytes.LastIndexByte(data[:lastNL+1-pending], '\n')
+	}
 	if lastNL == -1 {
 		return len(p), nil
 	}

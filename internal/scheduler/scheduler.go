@@ -13,6 +13,7 @@ import (
 	"durpdeploy/internal/gate"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/runner"
+	"durpdeploy/internal/verification"
 
 	"github.com/robfig/cron/v3"
 )
@@ -339,7 +340,8 @@ func (s *Scheduler) fireOne(ctx context.Context, row db.ScheduledDeployment) {
 		},
 	)
 	if err != nil {
-		if errors.Is(err, repository.ErrLegacyServerStep) {
+		if errors.Is(err, repository.ErrLegacyServerStep) ||
+			errors.Is(err, verification.ErrInvalid) {
 			changed, disableErr := s.repo.Queries.DisableScheduledDeploymentWithReason(
 				ctx,
 				db.DisableScheduledDeploymentWithReasonParams{
@@ -349,10 +351,10 @@ func (s *Scheduler) fireOne(ctx context.Context, row db.ScheduledDeployment) {
 				},
 			)
 			if disableErr != nil {
-				s.log.Error("disable legacy scheduled deployment failed",
+				s.log.Error("disable invalid scheduled deployment failed",
 					"schedule_id", row.ID, "error", disableErr)
 			} else if changed == 1 {
-				s.log.Warn("disabled legacy scheduled deployment",
+				s.log.Warn("disabled invalid scheduled deployment",
 					"schedule_id", row.ID, "error", err)
 			}
 			return

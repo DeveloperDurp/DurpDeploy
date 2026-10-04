@@ -21,7 +21,7 @@ func (q *Queries) CountReleasesByProject(ctx context.Context, projectID int64) (
 }
 
 const createRelease = `-- name: CreateRelease :one
-INSERT INTO releases (project_id, version, steps_json) VALUES (?, ?, ?) RETURNING id, project_id, version, steps_json, created_at, kind
+INSERT INTO releases (project_id, version, steps_json) VALUES (?, ?, ?) RETURNING id, project_id, version, steps_json, created_at, kind, snapshot_locked
 `
 
 type CreateReleaseParams struct {
@@ -40,6 +40,7 @@ func (q *Queries) CreateRelease(ctx context.Context, arg CreateReleaseParams) (R
 		&i.StepsJson,
 		&i.CreatedAt,
 		&i.Kind,
+		&i.SnapshotLocked,
 	)
 	return i, err
 }
@@ -60,7 +61,7 @@ func (q *Queries) DeleteRelease(ctx context.Context, arg DeleteReleaseParams) er
 }
 
 const getDeploymentRelease = `-- name: GetDeploymentRelease :one
-SELECT id, project_id, version, steps_json, created_at, kind FROM releases WHERE id = ? AND kind = 'deployment'
+SELECT id, project_id, version, steps_json, created_at, kind, snapshot_locked FROM releases WHERE id = ? AND kind = 'deployment'
 `
 
 func (q *Queries) GetDeploymentRelease(ctx context.Context, id int64) (Release, error) {
@@ -73,12 +74,13 @@ func (q *Queries) GetDeploymentRelease(ctx context.Context, id int64) (Release, 
 		&i.StepsJson,
 		&i.CreatedAt,
 		&i.Kind,
+		&i.SnapshotLocked,
 	)
 	return i, err
 }
 
 const getRelease = `-- name: GetRelease :one
-SELECT id, project_id, version, steps_json, created_at, kind FROM releases WHERE id = ?
+SELECT id, project_id, version, steps_json, created_at, kind, snapshot_locked FROM releases WHERE id = ?
 `
 
 func (q *Queries) GetRelease(ctx context.Context, id int64) (Release, error) {
@@ -91,6 +93,7 @@ func (q *Queries) GetRelease(ctx context.Context, id int64) (Release, error) {
 		&i.StepsJson,
 		&i.CreatedAt,
 		&i.Kind,
+		&i.SnapshotLocked,
 	)
 	return i, err
 }
@@ -116,7 +119,7 @@ func (q *Queries) HasActiveReleaseDeployment(ctx context.Context, releaseID int6
 }
 
 const listReleasesByProject = `-- name: ListReleasesByProject :many
-SELECT id, project_id, version, steps_json, created_at, kind FROM releases WHERE project_id = ? AND kind = 'deployment' ORDER BY created_at DESC
+SELECT id, project_id, version, steps_json, created_at, kind, snapshot_locked FROM releases WHERE project_id = ? AND kind = 'deployment' ORDER BY created_at DESC
 `
 
 func (q *Queries) ListReleasesByProject(ctx context.Context, projectID int64) ([]Release, error) {
@@ -135,6 +138,7 @@ func (q *Queries) ListReleasesByProject(ctx context.Context, projectID int64) ([
 			&i.StepsJson,
 			&i.CreatedAt,
 			&i.Kind,
+			&i.SnapshotLocked,
 		); err != nil {
 			return nil, err
 		}
@@ -150,7 +154,7 @@ func (q *Queries) ListReleasesByProject(ctx context.Context, projectID int64) ([
 }
 
 const listReleasesByProjectPaginated = `-- name: ListReleasesByProjectPaginated :many
-SELECT id, project_id, version, steps_json, created_at, kind FROM releases WHERE project_id = ? AND kind = 'deployment' ORDER BY created_at DESC
+SELECT id, project_id, version, steps_json, created_at, kind, snapshot_locked FROM releases WHERE project_id = ? AND kind = 'deployment' ORDER BY created_at DESC
 LIMIT ? OFFSET ?
 `
 
@@ -176,6 +180,7 @@ func (q *Queries) ListReleasesByProjectPaginated(ctx context.Context, arg ListRe
 			&i.StepsJson,
 			&i.CreatedAt,
 			&i.Kind,
+			&i.SnapshotLocked,
 		); err != nil {
 			return nil, err
 		}
@@ -204,7 +209,7 @@ func (q *Queries) LockRelease(ctx context.Context, id int64) (int64, error) {
 }
 
 const updateRelease = `-- name: UpdateRelease :one
-UPDATE releases SET project_id = ?, version = ?, steps_json = ? WHERE id = ? RETURNING id, project_id, version, steps_json, created_at, kind
+UPDATE releases SET project_id = ?, version = ?, steps_json = ? WHERE id = ? RETURNING id, project_id, version, steps_json, created_at, kind, snapshot_locked
 `
 
 type UpdateReleaseParams struct {
@@ -229,6 +234,7 @@ func (q *Queries) UpdateRelease(ctx context.Context, arg UpdateReleaseParams) (R
 		&i.StepsJson,
 		&i.CreatedAt,
 		&i.Kind,
+		&i.SnapshotLocked,
 	)
 	return i, err
 }

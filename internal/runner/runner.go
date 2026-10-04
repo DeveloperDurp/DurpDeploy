@@ -392,6 +392,31 @@ func (r *DeploymentRunner) Run(
 		r.finalizeCancellation(ctx, deploymentID)
 		return
 	}
+	if err := r.verifyDeployment(ctx, runCtx, deploymentID,
+		envMap, secretValues, stage); err != nil {
+		if errors.Is(err, errContainerCleanup) {
+			r.persistCompletion(ctx, runCtx, deploymentID,
+				"cleanup_unconfirmed", false)
+			return
+		}
+		if errors.Is(err, errDeploymentCancelled) ||
+			(errors.Is(err, context.Canceled) && runCtx.Err() != nil) {
+			r.finalizeCancellation(ctx, deploymentID)
+			return
+		}
+		r.failStep(ctx, runCtx, events.Event{
+			Type:          events.DeploymentFailed,
+			DeploymentID:  deploymentID,
+			ProjectID:     release.ProjectID,
+			EnvironmentID: environmentID,
+			Message: fmt.Sprintf(
+				"Deployment #%d failed on %s: verification failed",
+				deploymentID,
+				envName,
+			),
+		}, runCtx.Err() == nil)
+		return
+	}
 	status, persisted := r.persistCompletion(
 		ctx, runCtx, deploymentID, "succeeded", true,
 	)

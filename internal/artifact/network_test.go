@@ -8,12 +8,16 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"durpdeploy/internal/testdns"
 )
 
 func TestRepositoryAddressesRejectUnsafeRanges(t *testing.T) {
 	for _, address := range []string{
 		"127.0.0.1", "::1", "::ffff:127.0.0.1",
 		"169.254.169.254", "fe80::1", "fe80::1%eth0",
+		"100.100.100.200", "::ffff:100.100.100.200",
+		"fd00:ec2::254", "fd00:0ec2:0:0:0:0:0:0254",
 		"0.0.0.0", "::", "224.0.0.1", "ff02::1", "255.255.255.255",
 	} {
 		t.Run(address, func(t *testing.T) {
@@ -28,6 +32,24 @@ func TestRepositoryAddressesRejectUnsafeRanges(t *testing.T) {
 				t.Fatalf("unsafe destination accepted: %v", err)
 			}
 		})
+	}
+}
+
+func TestRepositoryAddressesAllowPrivateServices(t *testing.T) {
+	for _, address := range []string{
+		"10.0.0.1", "172.16.0.1", "192.168.0.1", "fd00::1",
+		"100.100.100.199", "100.100.100.201",
+		"fd00:ec2::253", "fd00:ec2::255",
+	} {
+		if err := validateRepositoryIPs(
+			[]net.IPAddr{{IP: net.ParseIP(address)}},
+		); err != nil {
+			t.Fatalf(
+				"permitted private destination %s rejected: %v",
+				address,
+				err,
+			)
+		}
 	}
 }
 
@@ -66,14 +88,23 @@ func TestRepositoryDialRejectsReachableLoopback(t *testing.T) {
 }
 
 func TestRepositoryDialRejectsMixedDNSAnswers(t *testing.T) {
-	// Given: one permitted private address and one forbidden loopback answer.
+	for _, blocked := range []string{"127.0.0.1", "100.100.100.200", "fd00:ec2::254"} {
+		t.Run(blocked, func(t *testing.T) {
+			checkRepositoryMixedDNSAnswers(t, blocked)
+		})
+	}
+}
+
+func checkRepositoryMixedDNSAnswers(t *testing.T, blocked string) {
+	t.Helper()
+	// Given: one permitted private address and one forbidden DNS answer.
 	ip := artifactTestIP(t)
 	var lookups atomic.Int32
-	installArtifactDNS(
+	testdns.Install(
 		t,
-		func() []net.IP {
+		func(_ string) []net.IP {
 			lookups.Add(1)
-			return []net.IP{ip, net.ParseIP("127.0.0.1")}
+			return []net.IP{ip, net.ParseIP(blocked)}
 		},
 	)
 	listener, err := net.Listen("tcp", net.JoinHostPort(ip.String(), "0"))
@@ -100,7 +131,10 @@ func TestRepositoryDialPinsValidatedIPAcrossRebinding(t *testing.T) {
 	// Given: DNS switches to loopback immediately after its first A answer.
 	ip := artifactTestIP(t)
 	var lookups atomic.Int32
-	installArtifactDNS(t, func() []net.IP {
+	testdns.Install(t, func(network string) []net.IP {
+		if network != "ip4" {
+			return nil
+		}
 		if lookups.Add(1) == 1 {
 			return []net.IP{ip}
 		}

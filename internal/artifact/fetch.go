@@ -18,14 +18,19 @@ type Client struct {
 }
 
 func NewClient() *Client {
+	return &Client{
+		HTTP: &http.Client{Transport: NewTransport(), Timeout: 5 * time.Minute},
+	}
+}
+
+// NewTransport enforces the outbound network boundary for operator URLs.
+func NewTransport() *http.Transport {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.Proxy = nil // Repository credentials must not reach environment proxies.
 	transport.DialContext = dialRepository
 	transport.TLSHandshakeTimeout = 10 * time.Second
 	transport.ResponseHeaderTimeout = 30 * time.Second
-	return &Client{
-		HTTP: &http.Client{Transport: transport, Timeout: 5 * time.Minute},
-	}
+	return transport
 }
 
 func dialRepository(
@@ -60,12 +65,19 @@ func validateRepositoryIPs(ips []net.IPAddr) error {
 		return ErrFetch
 	}
 	for _, ip := range ips {
-		if ip.Zone != "" || !ip.IP.IsGlobalUnicast() || ip.IP.IsLoopback() ||
-			ip.IP.IsLinkLocalUnicast() {
+		if ip.Zone != "" || !AllowedDestinationIP(ip.IP) {
 			return ErrFetch
 		}
 	}
 	return nil
+}
+
+// AllowedDestinationIP permits private services but excludes local and cloud
+// metadata destinations, including Alibaba ECS and AWS's IPv6 endpoint.
+func AllowedDestinationIP(ip net.IP) bool {
+	return ip.IsGlobalUnicast() && !ip.IsLoopback() &&
+		!ip.IsLinkLocalUnicast() && !ip.Equal(net.IPv4(100, 100, 100, 200)) &&
+		!ip.Equal(net.ParseIP("fd00:ec2::254"))
 }
 
 type Download struct {

@@ -950,7 +950,7 @@ func TestReleaseAndDeploymentPages_RenderBackControls(t *testing.T) {
 			),
 			backHref: fmt.Sprintf("/projects/%d/releases", hc.project.ID),
 			headerPattern: fmt.Sprintf(
-				`(?s)<div class="flex gap-2">\s*<form[^>]*action="/projects/%d/releases/%d/refresh"[^>]*>.*?Refresh.*?</form>\s*<a href="/projects/%d/releases" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>`,
+				`(?s)<form[^>]*action="/projects/%d/releases/%d/refresh"[^>]*>.*?Refresh.*?</form>\s*<a href="/projects/%d/releases" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>`,
 				hc.project.ID,
 				release.ID,
 				hc.project.ID,

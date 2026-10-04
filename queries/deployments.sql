@@ -29,8 +29,10 @@ UPDATE deployments SET status = 'cleanup_unconfirmed',
     finished_at = COALESCE(finished_at, sqlc.arg(now))
 WHERE status = 'running' AND assigned_agent_id IS NULL
   AND container_namespace IS NOT NULL
-  AND EXISTS (SELECT 1 FROM deployment_steps s
+  AND (EXISTS (SELECT 1 FROM deployment_steps s
       WHERE s.deployment_id = deployments.id AND s.execution_target = 'local')
+    OR EXISTS (SELECT 1 FROM deployment_verifications v
+      WHERE v.deployment_id = deployments.id AND v.type = 'bash'))
   AND NOT EXISTS (SELECT 1 FROM remote_step_runs r
       WHERE r.deployment_id = deployments.id
         AND r.state IN ('claimed', 'started', 'cancel_requested'));
