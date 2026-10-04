@@ -64,6 +64,9 @@ keep `overflow-x-auto` and `table table-zebra table-fixed w-full`.
 - Initially hidden Alpine edit forms use `x-cloak` to prevent a flash before
   initialization. Runbook editor methods live in the shared JavaScript bundle;
   templates carry initial data and short method calls.
+- Runbook steps keep stable editor IDs when reordered; IDs are local UI state.
+- Schedule tables reserve space for timestamps and controls, with the Schedule
+  column taking the remaining width. Flex action groups sit inside table cells.
 - Native dialogs connect their visible heading with `aria-labelledby`.
   Script editor headings use Alpine-generated IDs to keep repeated editors
   distinct.

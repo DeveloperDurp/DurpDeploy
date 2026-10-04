@@ -51,14 +51,14 @@ templ ScheduledDeploymentsList(project db.Project, items []ScheduledDeploymentLi
 				<p class="text-gray-400">No schedules yet. Create one to run a release on a cron.</p>
 			</div>
 		} else {
-			<table class="hidden md:table table-zebra table-fixed w-full">
+			<table class="hidden md:table table table-zebra table-fixed w-full">
 				<thead>
 					<tr>
-						<th class="w-1/4 md:w-2/5">Schedule</th>
-						<th class="w-1/4 md:w-1/5">Cron</th>
-						<th class="hidden md:table-cell w-1/5">Next run</th>
-						<th class="w-1/4 md:w-1/5">Enabled</th>
-						<th class="w-1/4 md:w-96">Actions</th>
+						<th class="w-auto">Schedule</th>
+						<th class="w-1/6">Cron</th>
+						<th class="hidden md:table-cell w-1/4">Next run</th>
+						<th class="w-20">Enabled</th>
+						<th class="w-48">Actions</th>
 					</tr>
 				</thead>
 				<tbody>
@@ -92,51 +92,53 @@ templ ScheduledDeploymentRow(projectID int64, item ScheduledDeploymentListItem) 
 				<span class="badge badge-ghost">Off</span>
 			}
 		</td>
-		<td class="flex flex-wrap gap-2">
-			if CanWrite(ctx) {
-				<button
-					class="btn btn-xs btn-ghost"
-					data-schedule-action="edit"
-					x-on:click.capture="editing = true; $event.stopImmediatePropagation()"
-					hx-get={ fmt.Sprintf("/projects/%d/schedules/%d/edit", projectID, item.Schedule.ID) }
-					hx-target={ fmt.Sprintf("#schedule-row-%d", item.Schedule.ID) }
-					hx-swap="outerHTML"
-				>
-					Edit
-				</button>
-				<button
-					class="btn btn-xs btn-primary"
-					data-schedule-action="toggle"
-					hx-post={ fmt.Sprintf("/projects/%d/schedules/%d/toggle", projectID, item.Schedule.ID) }
-					hx-target="#schedules-content"
-					hx-swap="outerHTML"
-					data-toast-success="Schedule toggled"
-					data-toast-error="Failed to toggle schedule"
-				>
-					if item.Schedule.Enabled == 1 {
-						Disable
-					} else {
-						Enable
-					}
-				</button>
-				<button
-					class="btn btn-xs btn-error"
-					data-schedule-action="delete"
-					hx-delete={ fmt.Sprintf("/projects/%d/schedules/%d", projectID, item.Schedule.ID) }
-					hx-target="#schedules-content"
-					hx-swap="outerHTML"
-					hx-confirm="Delete this schedule?"
-					data-toast-success="Schedule deleted"
-					data-toast-error="Failed to delete schedule"
-				>
-					Delete
-				</button>
-			}
-			if CanWrite(ctx) {
-				<div x-cloak x-show="editing" data-desktop-schedule-edit={ strconv.FormatInt(item.Schedule.ID, 10) } class="basis-full mt-2">
-					@ScheduledDeploymentQuickEditForm(projectID, item)
-				</div>
-			}
+		<td>
+			<div class="flex flex-wrap gap-2">
+				if CanWrite(ctx) {
+					<button
+						class="btn btn-xs btn-ghost"
+						data-schedule-action="edit"
+						x-on:click.capture="editing = true; $event.stopImmediatePropagation()"
+						hx-get={ fmt.Sprintf("/projects/%d/schedules/%d/edit", projectID, item.Schedule.ID) }
+						hx-target={ fmt.Sprintf("#schedule-row-%d", item.Schedule.ID) }
+						hx-swap="outerHTML"
+					>
+						Edit
+					</button>
+					<button
+						class="btn btn-xs btn-primary"
+						data-schedule-action="toggle"
+						hx-post={ fmt.Sprintf("/projects/%d/schedules/%d/toggle", projectID, item.Schedule.ID) }
+						hx-target="#schedules-content"
+						hx-swap="outerHTML"
+						data-toast-success="Schedule toggled"
+						data-toast-error="Failed to toggle schedule"
+					>
+						if item.Schedule.Enabled == 1 {
+							Disable
+						} else {
+							Enable
+						}
+					</button>
+					<button
+						class="btn btn-xs btn-error"
+						data-schedule-action="delete"
+						hx-delete={ fmt.Sprintf("/projects/%d/schedules/%d", projectID, item.Schedule.ID) }
+						hx-target="#schedules-content"
+						hx-swap="outerHTML"
+						hx-confirm="Delete this schedule?"
+						data-toast-success="Schedule deleted"
+						data-toast-error="Failed to delete schedule"
+					>
+						Delete
+					</button>
+				}
+				if CanWrite(ctx) {
+					<div x-cloak x-show="editing" data-desktop-schedule-edit={ strconv.FormatInt(item.Schedule.ID, 10) } class="basis-full mt-2">
+						@ScheduledDeploymentQuickEditForm(projectID, item)
+					</div>
+				}
+			</div>
 		</td>
 	</tr>
 	if item.Schedule.Enabled == 0 && item.Schedule.LastError != "" {

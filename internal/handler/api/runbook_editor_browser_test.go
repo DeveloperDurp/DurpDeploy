@@ -80,6 +80,14 @@ func TestRunbookEditorBrowserE2E(t *testing.T) {
 		`document.querySelector('[name=step_name]').value === 'local & <one>'`,
 	)
 	b.captureNavigation(t, "runbook-reordered")
+	if string(
+		b.evaluate(
+			t,
+			`[...document.querySelectorAll('[name=step_name]')].every(input => { const card = input.closest('.card'); const target = card.querySelector('[name=step_target]').value; return ['step_image', 'step_selectors'].every(name => { const label = card.querySelector('label > [name=' + name + ']').parentElement; return (label.getBoundingClientRect().height > 0) === (target === (name === 'step_image' ? 'local' : 'agent')); }); })`,
+		),
+	) != "true" {
+		t.Fatal("reordered step shows an inactive execution-target field")
+	}
 	b.evaluate(
 		t,
 		`document.querySelector('form[x-data="runbookEditor"]').requestSubmit(); true`,

@@ -51,7 +51,18 @@ func TestAlpineEditFormsBrowserE2E(t *testing.T) {
 		b.call(t, "Emulation.setScriptExecutionDisabled",
 			map[string]bool{"value": false}, &struct{}{})
 		b.navigateBackTest(t, address)
-		b.captureNavigation(t, page.name+"-closed")
+		checkScheduleLayout := func() {
+			if page.name == "schedules" &&
+				string(
+					b.evaluate(
+						t,
+						`(() => { const table = document.querySelector('#schedules-content table'); return !table.getClientRects().length || [...table.querySelectorAll('tbody td:not(.truncate)')].every(cell => cell.scrollWidth <= cell.clientWidth); })()`,
+					),
+				) != "true" {
+				t.Fatal("schedule cell contents overlap adjacent columns")
+			}
+		}
+		b.captureNavigation(t, page.name+"-closed", checkScheduleLayout)
 		b.evaluate(t, fmt.Sprintf(
 			`[...document.querySelectorAll(%q)].forEach(e => e.click()); true`,
 			page.action,
@@ -60,7 +71,7 @@ func TestAlpineEditFormsBrowserE2E(t *testing.T) {
 			`[...document.querySelectorAll(%q)].some(e => e.getClientRects().length > 0)`,
 			page.selector,
 		))
-		b.captureNavigation(t, page.name+"-editing")
+		b.captureNavigation(t, page.name+"-editing", checkScheduleLayout)
 		b.evaluate(t, fmt.Sprintf(
 			`[...document.querySelectorAll(%q)].forEach(e => e.querySelector('button[type=button]').click()); true`,
 			page.selector,

@@ -106,7 +106,7 @@ templ RunbookFormPage(project db.Project, book db.Runbook, stepsJSON string, art
 						<label class="form-control"><span class="label-text">Name</span><input name="name" class="input input-bordered" required/></label>
 						<label class="form-control"><span class="label-text">Description</span><input name="description" class="input input-bordered"/></label>
 					}
-					<template x-for="(step, index) in steps" :key="index">
+					<template x-for="(step, index) in steps" :key="step.editorID">
 						<div class="card bg-base-200 p-4 space-y-3">
 							<div class="flex justify-between items-center"><h2 class="font-bold" x-text="`Step ${index + 1}`"></h2><div class="flex gap-2"><button type="button" class="btn btn-xs" aria-label="Move step up" x-on:click="moveStep(index, -1)" x-bind:disabled="index === 0">↑</button><button type="button" class="btn btn-xs" aria-label="Move step down" x-on:click="moveStep(index, 1)" x-bind:disabled="index === steps.length - 1">↓</button><button type="button" class="btn btn-xs btn-error" x-on:click="removeStep(index)" x-bind:disabled="steps.length === 1">Remove</button></div></div>
 							<label class="form-control"><span class="label-text">Step name</span><input name="step_name" class="input input-bordered" x-model="step.name" required/></label>

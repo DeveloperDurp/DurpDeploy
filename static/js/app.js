@@ -217,9 +217,11 @@ Alpine.data('stepPlacement', (executionTarget = 'local', agentLabel = '') => ({
 
 Alpine.data('runbookEditor', () => ({
 	steps: [],
+	nextStepID: 0,
 	init() {
 		this.steps = JSON.parse(this.$el.dataset.steps);
 		for (const step of this.steps) {
+			step.editorID = this.nextStepID++;
 			step.agent_selectors_text = (step.agent_selectors || []).join(', ');
 			step.variable_names_text = (step.variable_names || []).join(', ');
 		}
@@ -233,6 +235,7 @@ Alpine.data('runbookEditor', () => ({
 	},
 	addStep() {
 		this.steps.push({
+			editorID: this.nextStepID++,
 			name: '', script_body: '', interpreter: 'bash', timeout_seconds: 0,
 			max_retries: 0, execution_target: 'local', agent_selectors_text: '',
 			container_image: '', variable_names_text: '',
