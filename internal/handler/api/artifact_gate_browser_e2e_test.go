@@ -608,6 +608,9 @@ setTimeout(()=>form.requestSubmit(),100); return true;
 			); err != nil {
 				t.Fatal(err)
 			}
+			if err := f.h.repo.MaintainArtifactGates(t.Context()); err != nil {
+				t.Fatal(err)
+			}
 			f.api(t, "GET", gateAPIPath(next.ID), nil, 200)
 		}
 		browser.wait(

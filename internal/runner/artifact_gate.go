@@ -170,7 +170,7 @@ func (r *DeploymentRunner) pinArtifactGateImages(
 	steps []deploymentStep,
 ) error {
 	for index, step := range steps {
-		_, err := r.repo.Queries.GetArtifactGateImage(
+		id, err := r.repo.Queries.GetArtifactGateImage(
 			ctx,
 			db.GetArtifactGateImageParams{
 				DeploymentID: deploymentID,
@@ -178,6 +178,10 @@ func (r *DeploymentRunner) pinArtifactGateImages(
 			},
 		)
 		if err == nil {
+			if err := r.retainArtifactGateImage(ctx, deploymentID,
+				int64(index), id); err != nil {
+				return err
+			}
 			continue
 		}
 		if !errors.Is(err, sql.ErrNoRows) {
@@ -196,9 +200,13 @@ func (r *DeploymentRunner) pinArtifactGateImages(
 				return repository.ErrArtifactGate
 			}
 		}
-		id := strings.TrimSpace(string(output))
+		id = strings.TrimSpace(string(output))
 		if id == "" {
 			return repository.ErrArtifactGate
+		}
+		if err := r.retainArtifactGateImage(ctx, deploymentID,
+			int64(index), id); err != nil {
+			return err
 		}
 		if err := r.repo.Queries.CreateArtifactGateImage(
 			ctx,

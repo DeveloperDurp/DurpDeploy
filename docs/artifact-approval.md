@@ -63,6 +63,10 @@ describe these contracts. Review JSON may contain plaintext sensitive values;
 never publish it as a log or separate public artifact.
 
 The server pins every step image ID and release variables before generation.
+Stopped container references retain those exact images through approval waits
+and server restarts, including locally built images. Minute maintenance removes
+the references after terminal decisions. Explicit container removal can remove
+these references; image pruning alone preserves them.
 It encrypts the whole staging context in authenticated database chunks.
 Unlinked temporary descriptors are used during capture, restore, and download.
 The bundle is limited to 300 MiB; review JSON is limited to 1 MiB. Unsafe
@@ -72,6 +76,8 @@ An administrator reviews and approves the exact revision and SHA-256 in the
 deployment page or API. Project members with write access can download the
 sensitive artifact; viewers can see the count summary only. Approval expires
 after 24 hours. Rejection, cancellation, and expiry stop the deployment.
+The minute worker records expiry and advances queues; polling reads state only.
+Expired artifacts and decisions are blocked immediately, before that worker runs.
 Terminal bundle chunks are deleted after seven days. Audit records retain the
 decision, and gate records retain checksums, counts, times, and approver ID.
 

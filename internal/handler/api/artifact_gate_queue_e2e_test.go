@@ -88,6 +88,9 @@ func TestArtifactGateEnvironmentQueueE2E(t *testing.T) {
 				); err != nil {
 					t.Fatal(err)
 				}
+				if err := f.h.repo.MaintainArtifactGates(t.Context()); err != nil {
+					t.Fatal(err)
+				}
 				f.api(t, "GET", path+"/artifact-gates", nil, 200)
 			case "cancel-approved":
 				// Commit approval without dispatch to exercise prestart cancellation.

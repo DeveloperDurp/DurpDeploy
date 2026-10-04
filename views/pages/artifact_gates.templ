@@ -47,7 +47,7 @@ templ ArtifactGates(gates []ArtifactGateInfo) {
 						if gate.ExpiresAt > time.Now().Unix() {
 							<a class="btn btn-sm btn-ghost" href={ fmt.Sprintf("/deployments/%d/artifact-gates/%d/artifact", gate.DeploymentID, gate.StepIndex) }>Download sensitive artifact</a>
 						}
-						if CanManageAgents(ctx) && gate.Status == "awaiting" {
+						if CanManageAgents(ctx) && gate.Status == "awaiting" && gate.ExpiresAt > time.Now().Unix() {
 							for _, action := range []string{"approve", "reject"} {
 								<form method="post" action={ fmt.Sprintf("/deployments/%d/artifact-gates/%d/%s", gate.DeploymentID, gate.StepIndex, action) }>
 									if sess := auth.SessionFromContext(ctx); sess != nil {

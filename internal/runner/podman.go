@@ -244,6 +244,11 @@ func (r *DeploymentRunner) reconcileAttempts() error {
 		return err
 	}
 	if r.repo != nil {
+		if err := r.CleanupArtifactGateImages(ctx); err != nil {
+			return err
+		}
+	}
+	if r.repo != nil {
 		if err := r.repo.WithQueueMaintenanceTx(ctx, func(ctx context.Context, q *db.Queries) error {
 			_, err := q.ConfirmContainerCleanup(ctx,
 				db.ConfirmContainerCleanupParams{

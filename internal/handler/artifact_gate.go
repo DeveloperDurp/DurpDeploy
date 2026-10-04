@@ -54,10 +54,6 @@ func (h *ArtifactGateHandler) List(w http.ResponseWriter, r *http.Request) {
 		gateHTTPError(w, r, 400, "Invalid deployment ID")
 		return
 	}
-	if err := h.repo.MaintainArtifactGates(r.Context()); err != nil {
-		gateHTTPError(w, r, 500, "Gate maintenance failed")
-		return
-	}
 	gates, err := h.repo.Queries.ListArtifactGates(r.Context(), id)
 	if err != nil {
 		gateHTTPError(w, r, 500, "Gate lookup failed")

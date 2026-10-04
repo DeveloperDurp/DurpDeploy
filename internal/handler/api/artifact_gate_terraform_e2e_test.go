@@ -48,7 +48,18 @@ func terraformGateNetwork(t *testing.T, stale bool) {
 		),
 		filepath.Join("..", "..", ".."),
 	)
-	t.Cleanup(func() { stagingRuntime(t, "image", "rm", image) })
+	t.Cleanup(func() {
+		ids := stagingRuntime(t, "ps", "--all", "--quiet",
+			"--filter=label=io.durpdeploy.namespace="+
+				os.Getenv("DURPDEPLOY_CONTAINER_RUNTIME")+":"+
+				os.Getenv("DURPDEPLOY_CONTAINER_NAMESPACE")+":gate-images",
+			"--filter=ancestor="+image)
+		if ids != "" {
+			stagingRuntime(t, append([]string{"rm", "--force", "--volumes"},
+				strings.Fields(ids)...)...)
+		}
+		stagingRuntime(t, "image", "rm", image)
+	})
 	var mutex sync.Mutex
 	var state []byte
 	var writes, locks int

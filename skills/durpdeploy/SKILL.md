@@ -466,8 +466,11 @@ cannot. Administrator-only
 `{"revision":1,"sha256":"..."}`. Stale or duplicate decisions return 409.
 Approved context is read-only at `DURPDEPLOY_APPROVED_DIR`; apply the saved
 artifact exactly, never regenerate it. Gated script output is hidden. Gates
-expire after 24 hours and encrypted terminal bundles are removed after seven
-days. See `docs/artifact-approval.md` for Terraform plan/apply setup.
+expire after 24 hours; the minute worker records expiry and releases queues.
+Polling is read-only, and expired downloads and decisions return 409 immediately.
+Stopped container references retain pinned image IDs through waits and restarts;
+maintenance removes them after terminal decisions. Encrypted terminal bundles
+are removed after seven days. See `docs/artifact-approval.md` for Terraform setup.
 
 ## Generic ZIP packages
 

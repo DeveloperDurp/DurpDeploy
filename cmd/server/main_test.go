@@ -565,7 +565,10 @@ func TestStartupRecoveryBlocksLocalRetryWhenPodmanSweepFails(t *testing.T) {
 	cli := `#!/bin/sh
 case "$3" in
 info) printf '{"host":{"security":{"rootless":true}}}';;
-ps) printf 'orphan-container-id\n';;
+ps) case "$*" in
+  *"--filter=label=io.durpdeploy.gate-image"*) ;;
+  *) printf 'orphan-container-id\n';;
+esac;;
 rm) if [ "$PODMAN_SWEEP_FAIL" = 1 ]; then exit 7; fi;;
 esac
 `

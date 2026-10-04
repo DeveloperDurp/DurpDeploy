@@ -46,6 +46,9 @@ func TestArtifactGateTerminalVerificationAndRerunE2E(t *testing.T) {
 				); err != nil {
 					t.Fatal(err)
 				}
+				if err := f.h.repo.MaintainArtifactGates(t.Context()); err != nil {
+					t.Fatal(err)
+				}
 				f.api(t, "GET", path+"/artifact-gates", nil, 200)
 			}
 			// Then: the API reports completed verification immediately.

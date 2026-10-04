@@ -76,7 +76,19 @@ func newArtifactE2E(t *testing.T) *artifactE2E {
 	if !h.runner.ContainerRuntimeReady() {
 		t.Fatal("a working container endpoint is required for artifact E2E")
 	}
-	t.Cleanup(h.runner.KillAll)
+	t.Cleanup(func() {
+		h.runner.KillAll()
+		// Test-owned references may outlive an awaiting fixture.
+		ids := stagingRuntime(t, "ps", "--all", "--quiet",
+			"--filter=label=io.durpdeploy.namespace="+
+				os.Getenv("DURPDEPLOY_CONTAINER_RUNTIME")+":"+
+				os.Getenv("DURPDEPLOY_CONTAINER_NAMESPACE")+":gate-images",
+			"--filter=label=io.durpdeploy.gate-image")
+		if ids != "" {
+			stagingRuntime(t, append([]string{"rm", "--force", "--volumes"},
+				strings.Fields(ids)...)...)
+		}
+	})
 	box, err := secret.NewBox(make([]byte, 32))
 	if err != nil {
 		t.Fatal(err)

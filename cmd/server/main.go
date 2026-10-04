@@ -306,7 +306,7 @@ func runServer() {
 	if err := repo.MaintainArtifactGates(ctx); err != nil {
 		slog.Error("artifact gate maintenance", "err", err)
 	}
-	go maintainArtifactGates(ctx, repo)
+	go maintainArtifactGates(ctx, repo, rnr)
 	recoverPendingDeployments(ctx, rnr, repo)
 	go rnr.ServeQueue(ctx)
 	sched.Start(ctx)

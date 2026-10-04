@@ -20,7 +20,10 @@ func TestPodmanStartupRemovesNamespacedOrphans(t *testing.T) {
 	cli := `#!/bin/sh
 case "$3" in
 info) printf '{"host":{"security":{"rootless":true}}}';;
-ps) printf 'orphan-container-id\n';;
+ps) case "$*" in
+  *"--filter=label=io.durpdeploy.gate-image"*) ;;
+  *) printf 'orphan-container-id\n';;
+esac;;
 rm) printf '%s\n' "$*" > "$PODMAN_TRACE";;
 volume)
   if [ "$4" = ls ]; then printf 'orphan-staging-volume\n'; fi
@@ -70,7 +73,10 @@ case "$3" in
 info) if [ "$PODMAN_SWEEP_FAIL" = 2 ]; then
   printf '{"host":{"security":{"rootless":false}}}';
 else printf '{"host":{"security":{"rootless":true}}}'; fi;;
-ps) printf 'orphan-container-id\n';;
+ps) case "$*" in
+  *"--filter=label=io.durpdeploy.gate-image"*) ;;
+  *) printf 'orphan-container-id\n';;
+esac;;
 rm) if [ "$PODMAN_SWEEP_FAIL" = 1 ]; then exit 7; fi;;
 esac
 `

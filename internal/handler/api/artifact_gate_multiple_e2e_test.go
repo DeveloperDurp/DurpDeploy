@@ -100,6 +100,9 @@ func testArtifactGateMultipleReviews(t *testing.T, expire bool) {
 		); err != nil {
 			t.Fatal(err)
 		}
+		if err := f.h.repo.MaintainArtifactGates(t.Context()); err != nil {
+			t.Fatal(err)
+		}
 		if err := json.Unmarshal(
 			f.api(t, "GET", gateAPIPath(deployment.ID), nil, 200),
 			&gates,
