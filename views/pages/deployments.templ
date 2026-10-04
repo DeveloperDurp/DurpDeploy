@@ -317,6 +317,9 @@ templ StatusBadgeContainer(deployment db.Deployment, waitingForAgents bool) {
 		hx-swap="outerHTML"
 		aria-live="polite"
 	>
+		if isTerminalStatus(deployment.Status) {
+			<span id="deployment-cancel" hx-swap-oob="delete"></span>
+		}
 		if waitingForAgents {
 			<span class="badge badge-warning">Waiting for agents</span>
 		} else {

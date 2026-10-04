@@ -102,6 +102,7 @@ func TestArtifactGateBrowserE2E(t *testing.T) {
 		t,
 		`document.querySelector('#status-badge')?.innerText.includes('succeeded')`,
 	)
+	browser.wait(t, `!document.querySelector('[hx-post$="/cancel"]')`)
 	browser.screenshot(t, "artifact-approved")
 	browser.wait(
 		t,
@@ -128,6 +129,7 @@ func TestArtifactGateBrowserE2E(t *testing.T) {
 		t,
 		`document.querySelector('#status-badge')?.innerText.includes('cancelled')`,
 	)
+	browser.wait(t, `!document.querySelector('[hx-post$="/cancel"]')`)
 	browser.wait(
 		t,
 		`!document.querySelector('[data-artifact-gates]').hasAttribute('hx-trigger')`,
