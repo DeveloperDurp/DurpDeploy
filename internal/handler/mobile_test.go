@@ -86,11 +86,11 @@ func TestMobile_RenderedHTML_includes_responsive_classes_when_authenticated(
 			},
 		},
 		{
-			name: "projects description column",
+			name: "projects labeled phone cards",
 			path: "/projects",
 			patterns: []string{
-				responsiveHeaderPattern(mdTableCell),
-				responsiveCellPattern(mdTableCell),
+				`(?s)<tr[^>]*class="[^"]*grid-cols-2[^"]*md:table-row[^"]*"`,
+				`(?s)<span[^>]*class="[^"]*md:hidden[^"]*"[^>]*>Description</span>`,
 			},
 		},
 		{

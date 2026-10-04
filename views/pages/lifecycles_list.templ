@@ -29,7 +29,7 @@ templ LifecyclesListPage(rows []LifecycleRow, currentPath string) {
 
 templ LifecyclesListContent(rows []LifecycleRow) {
 	<div class="space-y-4">
-		<div class="flex justify-between items-center">
+		<div class="flex flex-wrap justify-between items-center gap-2">
 			<h1 class="text-3xl font-bold">Lifecycles</h1>
 			if CanWrite(ctx) {
 				<a href="/lifecycles/new" class="btn btn-primary">New Lifecycle</a>
@@ -49,16 +49,16 @@ templ LifecyclesListFragment(rows []LifecycleRow) {
 				}
 			</div>
 		} else {
-			<table class="table table-zebra table-fixed w-full">
-				<thead>
+			<table class="table table-zebra table-fixed w-full block md:table">
+				<thead class="hidden md:table-header-group">
 					<tr>
- 					<th class="w-1/5">Name</th>
-						<th class="w-2/5 hidden md:table-cell">Description</th>
- 					<th class="w-1/5">Stages</th>
- 					<th class="w-1/5">Actions</th>
+						<th class="w-1/5">Name</th>
+						<th class="w-2/5">Description</th>
+						<th class="w-1/5">Stages</th>
+						<th class="w-48">Actions</th>
 					</tr>
 				</thead>
-				<tbody>
+				<tbody class="block md:table-row-group">
 					for _, row := range rows {
 						@LifecycleListRow(row)
 					}
@@ -69,25 +69,32 @@ templ LifecyclesListFragment(rows []LifecycleRow) {
 }
 
 templ LifecycleListRow(row LifecycleRow) {
-	<tr>
-		<td class="truncate font-medium">
+	<tr class="grid grid-cols-2 gap-3 md:table-row max-md:rounded-box max-md:bg-base-200 max-md:p-4 max-md:mb-3">
+		<td class="col-span-2 min-w-0 break-all md:truncate font-medium">
+			<span class="block md:hidden text-xs opacity-70 mb-1">Name</span>
 			{ row.Lifecycle.Name }
 		</td>
-		<td class="truncate hidden md:table-cell">
+		<td class="col-span-2 min-w-0 break-all md:truncate">
+			<span class="block md:hidden text-xs opacity-70 mb-1">Description</span>
 			if row.Lifecycle.Description.Valid {
 				{ row.Lifecycle.Description.String }
 			} else {
 				<span class="text-gray-500">-</span>
 			}
 		</td>
-		<td class="whitespace-nowrap">{ strconv.FormatInt(row.StageCount, 10) }</td>
-		<td class="flex flex-nowrap gap-2 whitespace-nowrap">
+		<td class="col-span-2 md:whitespace-nowrap">
+			<span class="block md:hidden text-xs opacity-70 mb-1">Stages</span>
+			{ strconv.FormatInt(row.StageCount, 10) }
+		</td>
+		<td class="col-span-2">
 			if CanWrite(ctx) {
-				<a href={ templ.SafeURL("/lifecycles/" + strconv.FormatInt(row.Lifecycle.ID, 10)) } class="btn btn-sm btn-ghost">Edit</a>
+				<div class="flex flex-wrap gap-2">
+				<a href={ templ.SafeURL("/lifecycles/" + strconv.FormatInt(row.Lifecycle.ID, 10)) } class="btn md:btn-sm btn-ghost">Edit</a>
 				<form method="post" action={ templ.SafeURL("/lifecycles/" + strconv.FormatInt(row.Lifecycle.ID, 10)) }>
 					<input type="hidden" name="_method" value="delete"/>
-					<button type="submit" class="btn btn-sm btn-error" hx-confirm="Delete this lifecycle? Projects using it will be unset.">Delete</button>
+					<button type="submit" class="btn md:btn-sm btn-error" hx-confirm="Delete this lifecycle? Projects using it will be unset.">Delete</button>
 				</form>
+				</div>
 			}
 		</td>
 	</tr>
