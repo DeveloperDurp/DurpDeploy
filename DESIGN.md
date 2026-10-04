@@ -169,9 +169,18 @@ keep `overflow-x-auto` and `table table-zebra table-fixed w-full`.
 
 ## 6. Motion & Interaction
 
+### Home dashboard
+Summary counts use a full-width two-column grid on phones and four columns on
+desktop. Deployment sections share card rows below `md` and a fixed five-column
+table above it. Every card shows project, version, environment, status, and
+date with wrapping values and visible field labels.
+
 ### Shared page structure
-Main list and detail pages use `page-header`: a wrapping title/action row with
-consistent spacing, titles that can wrap, and full-size phone controls.
+Main list and detail pages use `page-header`: a title column and an action
+column aligned to the upper right on desktop. On phones, actions occupy the
+next row, aligned right, so title length cannot change their position.
+Header buttons share a compact desktop height and full-size phone controls.
+Home has no creation actions; Projects and Environments provide those controls.
 Edit forms put Save and Back together in that header; creation forms keep
 Create and Cancel together below the fields. Destructive actions remain in
 their separate section. Domain actions such as Deploy and Save immutable
@@ -181,6 +190,10 @@ Releases uses accent, and Edit and the other section links use secondary.
 Shared spacing and responsive sizing provide consistency without removing color.
 Environment and template forms fill the main content width, including their
 headers and fields, without a centered maximum-width container.
+Template Delete appears only below the edit form, with confirmation; the list
+offers Edit and History. New forms and viewer pages have no Delete control.
+New Environment uses the same header Save/Back controls as Edit Environment;
+Save submits its native creation form and Back uses the shared history behavior.
 Step editing uses one native modal dialog with a vertical form. The list stays
 visible behind an inert backdrop; Save refreshes the list and closes the
 dialog, while validation errors stay inside it. Cancel and Escape discard the

@@ -81,8 +81,9 @@ func TestMobile_RenderedHTML_includes_responsive_classes_when_authenticated(
 			path: "/",
 			patterns: []string{
 				`(?s)<details[^>]*class="[^"]*xl:hidden[^"]*"`,
-				responsiveHeaderPattern(mdTableCell),
-				responsiveCellPattern(mdTableCell),
+				`(?s)<thead class="hidden md:table-header-group">`,
+				`(?s)<tr[^>]*class="[^"]*grid-cols-2[^"]*md:table-row[^"]*"`,
+				`(?s)<span[^>]*class="[^"]*md:hidden[^"]*"[^>]*>Version</span>`,
 			},
 		},
 		{

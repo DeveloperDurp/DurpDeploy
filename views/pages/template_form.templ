@@ -169,5 +169,24 @@ templ TemplateFormContent(tpl *db.StepTemplate, isNew bool, errorMsg string) {
 				</div>
 			}
 		</form>
+		if !isNew && CanWrite(ctx) {
+			<div class="mt-6 pt-4 border-t border-base-300 flex flex-wrap items-center justify-between gap-4">
+				<div class="font-medium">Delete this template</div>
+				<button
+					type="button"
+					data-template-action="delete"
+					hx-delete={ "/templates/" + strconv.FormatInt(tpl.ID, 10) }
+					hx-target="#form-container"
+					hx-swap="innerHTML"
+					hx-replace-url="/templates"
+					hx-confirm="Delete this template?"
+					class="btn btn-error"
+					data-toast-success="Template deleted"
+					data-toast-error="Failed to delete template"
+				>
+					Delete template
+				</button>
+			</div>
+		}
 	</div>
 }

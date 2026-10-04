@@ -248,7 +248,7 @@ func TestMobile_RenderedHTML_preserves_disclosures_and_containment_when_authenti
 				),
 				`(?s)<div[^>]*id="templates-list"[^>]*>.*?<table[^>]*class="[^"]*hidden lg:table[^"]*"`,
 				`(?s)<ol[^>]*class="[^"]*lg:hidden[^"]*"[^>]*data-mobile-template-list`,
-				`(?s)data-template-action="edit"[^>]*href="/templates/[0-9]+/edit".*?data-template-action="delete".*?data-template-action="history"[^>]*href="/templates/[0-9]+/history"`,
+				`(?s)data-template-action="edit"[^>]*href="/templates/[0-9]+/edit".*?data-template-action="history"[^>]*href="/templates/[0-9]+/history"`,
 				`(?s)<div class="flex flex-wrap lg:flex-nowrap justify-start gap-2">`,
 			},
 			contents: []string{fixture.template.ScriptBody},

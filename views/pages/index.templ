@@ -17,87 +17,33 @@ templ IndexPage(
 	@layouts.Base("DurpDeploy", currentPath) {
 		if projectCount == 0 && envCount == 0 && len(recentDeployments) == 0 && len(runningDeployments) == 0 {
 			<div class="hero min-h-[50vh]">
-				<div class="hero-content text-center">
-					<div class="max-w-md">
-						<h1 class="text-4xl font-bold">Welcome to DurpDeploy</h1>
+				<div class="hero-content min-w-0 text-center">
+					<div class="min-w-0 max-w-md">
+						<h1 class="text-3xl sm:text-4xl font-bold break-words">Welcome to DurpDeploy</h1>
 						<p class="py-6 text-gray-400">Simple deployment tool for bash scripts</p>
-						if CanWrite(ctx) {
-							<p class="py-4">Get started by creating your first project or environment</p>
-							<div class="flex flex-wrap gap-4 justify-center">
-								<a href="/projects/new" class="btn btn-primary">Create Project</a>
-								<a href="/environments/new" class="btn btn-secondary">Create Environment</a>
-							</div>
-						}
 					</div>
 				</div>
 			</div>
 		} else {
 			<div class="space-y-6">
-				<div>
-					<h1 class="text-3xl font-bold">Welcome to DurpDeploy</h1>
-					<p class="text-gray-400">Simple deployment tool for bash scripts</p>
-				</div>
-				<div class="stats stats-vertical lg:stats-horizontal shadow">
-					<div class="stat">
-						<div class="stat-title">Projects</div>
-						<div class="stat-value">{ strconv.Itoa(projectCount) }</div>
-					</div>
-					<div class="stat">
-						<div class="stat-title">Environments</div>
-						<div class="stat-value">{ strconv.Itoa(envCount) }</div>
-					</div>
-					<div class="stat">
-						<div class="stat-title">Deployments</div>
-						<div class="stat-value">{ strconv.FormatInt(deploymentsToday, 10) }</div>
+				<div class="page-header">
+					<div>
+						<h1 class="text-3xl font-bold">Welcome to DurpDeploy</h1>
+						<p class="text-gray-400">Simple deployment tool for bash scripts</p>
 					</div>
 				</div>
-				<div class="stats stats-vertical lg:stats-horizontal shadow">
-					<div class="stat">
-						<div class="stat-title">Deployments today</div>
-						<div class="stat-value">{ strconv.FormatInt(deploymentsToday, 10) }</div>
-					</div>
-					<div class="stat">
-						<div class="stat-title">Currently running</div>
-						<div class="stat-value">{ strconv.Itoa(len(runningDeployments)) }</div>
-					</div>
+				<div class="grid grid-cols-2 lg:grid-cols-4 gap-3" data-home-summary>
+					@HomeStat("Projects", strconv.Itoa(projectCount))
+					@HomeStat("Environments", strconv.Itoa(envCount))
+					@HomeStat("Deployments today", strconv.FormatInt(deploymentsToday, 10))
+					@HomeStat("Currently running", strconv.Itoa(len(runningDeployments)))
 				</div>
-				if CanWrite(ctx) {
-					<div class="flex flex-wrap gap-4">
-						<a href="/projects/new" class="btn btn-primary">Create Project</a>
-						<a href="/environments/new" class="btn btn-secondary">Create Environment</a>
-					</div>
-				}
 				<div>
 					<h2 class="text-xl font-bold mb-4">Currently running</h2>
 					if len(runningDeployments) == 0 {
 						<p class="text-gray-500 italic">No deployments in progress.</p>
 					} else {
-						<div class="overflow-x-auto">
-							<table class="table table-zebra table-fixed w-full">
-								<thead>
-									<tr>
-										<th class="w-1/5 truncate">Project</th>
-										<th class="w-1/5 hidden md:table-cell">Version</th>
-										<th class="w-1/5 truncate">Environment</th>
-										<th class="w-2/5">Status</th>
-										<th class="w-1/5 truncate">Date</th>
-									</tr>
-								</thead>
-								<tbody>
-									for _, item := range runningDeployments {
-										<tr>
-											<td class="truncate">{ item.ProjectName }</td>
-											<td class="truncate hidden md:table-cell">{ item.ReleaseVersion }</td>
-											<td class="truncate">{ item.EnvironmentName }</td>
-											<td>
-												@StatusBadge(item.Deployment)
-											</td>
-											<td class="truncate md:whitespace-nowrap">{ formatUnixTime(item.Deployment.CreatedAt) }</td>
-										</tr>
-									}
-								</tbody>
-							</table>
-						</div>
+						@HomeDeploymentTable(runningDeployments)
 					}
 				</div>
 				<div>
@@ -105,32 +51,7 @@ templ IndexPage(
 					if len(latestPerReleaseEnv) == 0 {
 						<p class="text-gray-500 italic">No deployments yet.</p>
 					} else {
-						<div class="overflow-x-auto">
-							<table class="table table-zebra table-fixed w-full">
-								<thead>
-									<tr>
-										<th class="w-1/5 truncate">Project</th>
-										<th class="w-1/5 hidden md:table-cell">Version</th>
-										<th class="w-1/5 truncate">Environment</th>
-										<th class="w-2/5">Status</th>
-										<th class="w-1/5 truncate">Date</th>
-									</tr>
-								</thead>
-								<tbody>
-									for _, item := range latestPerReleaseEnv {
-										<tr>
-											<td class="truncate">{ item.ProjectName }</td>
-											<td class="truncate hidden md:table-cell">{ item.ReleaseVersion }</td>
-											<td class="truncate">{ item.EnvironmentName }</td>
-											<td>
-												@StatusBadge(item.Deployment)
-											</td>
-											<td class="truncate md:whitespace-nowrap">{ formatUnixTime(item.Deployment.CreatedAt) }</td>
-										</tr>
-									}
-								</tbody>
-							</table>
-						</div>
+						@HomeDeploymentTable(latestPerReleaseEnv)
 					}
 				</div>
 				<div>
@@ -138,35 +59,57 @@ templ IndexPage(
 					if len(recentDeployments) == 0 {
 						<p class="text-gray-500 italic">No deployments yet.</p>
 					} else {
-						<div class="overflow-x-auto">
-							<table class="table table-zebra table-fixed w-full">
-								<thead>
-									<tr>
-										<th class="w-1/5 truncate">Project</th>
-										<th class="w-1/5 hidden md:table-cell">Version</th>
-										<th class="w-1/5 truncate">Environment</th>
-										<th class="w-2/5">Status</th>
-										<th class="w-1/5 truncate">Date</th>
-									</tr>
-								</thead>
-								<tbody>
-									for _, item := range recentDeployments {
-										<tr>
-											<td class="truncate">{ item.ProjectName }</td>
-											<td class="truncate hidden md:table-cell">{ item.ReleaseVersion }</td>
-											<td class="truncate">{ item.EnvironmentName }</td>
-											<td>
-												@StatusBadge(item.Deployment)
-											</td>
-											<td class="truncate md:whitespace-nowrap">{ formatUnixTime(item.Deployment.CreatedAt) }</td>
-										</tr>
-									}
-								</tbody>
-							</table>
-						</div>
+						@HomeDeploymentTable(recentDeployments)
 					}
 				</div>
 			</div>
 		}
 	}
+}
+
+templ HomeStat(label, value string) {
+	<div class="stat min-w-0 bg-base-200 rounded-box p-4">
+		<div class="stat-title whitespace-normal">{ label }</div>
+		<div class="stat-value text-3xl sm:text-4xl">{ value }</div>
+	</div>
+}
+
+templ HomeDeploymentTable(items []DeploymentListItem) {
+	<table class="table table-zebra table-fixed w-full block md:table" data-home-deployments>
+		<thead class="hidden md:table-header-group">
+			<tr>
+				<th class="w-1/5">Project</th>
+				<th class="w-1/5">Version</th>
+				<th class="w-1/5">Environment</th>
+				<th class="w-1/5">Status</th>
+				<th class="w-1/5">Date</th>
+			</tr>
+		</thead>
+		<tbody class="block md:table-row-group">
+			for _, item := range items {
+				<tr class="grid grid-cols-2 gap-3 md:table-row max-md:rounded-box max-md:bg-base-200 max-md:p-4 max-md:mb-3">
+					<td class="col-span-2 min-w-0 break-all md:truncate">
+						<span class="block md:hidden text-xs opacity-70 mb-1">Project</span>
+						{ item.ProjectName }
+					</td>
+					<td class="col-span-2 min-w-0 break-all md:truncate">
+						<span class="block md:hidden text-xs opacity-70 mb-1">Version</span>
+						{ item.ReleaseVersion }
+					</td>
+					<td class="col-span-2 min-w-0 break-all md:truncate">
+						<span class="block md:hidden text-xs opacity-70 mb-1">Environment</span>
+						{ item.EnvironmentName }
+					</td>
+					<td class="col-span-2 min-w-0">
+						<span class="block md:hidden text-xs opacity-70 mb-1">Status</span>
+						@StatusBadge(item.Deployment)
+					</td>
+					<td class="col-span-2 min-w-0 md:truncate md:whitespace-nowrap">
+						<span class="block md:hidden text-xs opacity-70 mb-1">Date</span>
+						{ formatUnixTime(item.Deployment.CreatedAt) }
+					</td>
+				</tr>
+			}
+		</tbody>
+	</table>
 }

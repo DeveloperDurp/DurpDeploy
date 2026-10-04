@@ -23,6 +23,7 @@ func TestMainPagePatternBrowserE2E(t *testing.T) {
 	paths := []string{
 		"/projects", "/environments", "/lifecycles", "/templates",
 		"/deployments", "/admin/agents",
+		"/environments/new",
 		fmt.Sprintf("/environments/%d/edit", f.environment.ID),
 		fmt.Sprintf("/lifecycles/%d", lifecycle.ID),
 		fmt.Sprintf("/templates/%d/edit", template.ID),
@@ -40,19 +41,35 @@ func TestMainPagePatternBrowserE2E(t *testing.T) {
 		b.navigateBackTest(t, f.baseURL+path)
 		b.wait(t, `document.querySelector('main .page-header h1') !== null`)
 		b.captureNavigation(t, fmt.Sprintf("main-page-%d", i), func() {
+			b.wait(
+				t,
+				`document.getAnimations().every(a => a.playState !== 'running')`,
+			)
 			if string(b.evaluate(t, `(() => {
  const header = document.querySelector('main .page-header');
  const title = header.querySelector('h1');
  const controls = [...header.querySelectorAll('.btn')];
+ const titleBox = title.getBoundingClientRect();
+ const headerBox = header.getBoundingClientRect();
+ const actionBox = header.lastElementChild.getBoundingClientRect();
  const form = document.querySelector('#environment-settings-form, #template-settings-form');
  const sections = [...document.querySelectorAll('nav[aria-label="Project sections"] a')];
  return (!form || Math.abs(form.getBoundingClientRect().width - document.querySelector('#form-container').getBoundingClientRect().width) <= 1) &&
  sections.every(el => ['btn-primary', 'btn-secondary', 'btn-accent'].some(cls => el.classList.contains(cls))) &&
  title.scrollWidth <= title.clientWidth &&
+ (!controls.length || (Math.abs(actionBox.right - headerBox.right) <= 1 &&
+ (innerWidth >= 768 ? Math.abs(actionBox.top - headerBox.top) <= 1 : actionBox.top >= titleBox.bottom))) &&
  controls.every(el => el.getBoundingClientRect().right <= innerWidth &&
  (innerWidth >= 768 || el.getBoundingClientRect().height >= 44));
 })()`)) != "true" {
-				t.Fatalf("header clips text or phone controls on %s", path)
+				t.Fatalf(
+					"header clips text or phone controls on %s: %s",
+					path,
+					b.evaluate(
+						t,
+						`JSON.stringify([...document.querySelector('main .page-header').children].map(el => ({tag: el.tagName, box: el.getBoundingClientRect().toJSON()})))`,
+					),
+				)
 			}
 		})
 	}
@@ -87,4 +104,96 @@ func TestMainPagePatternBrowserE2E(t *testing.T) {
 			t.Fatalf("header Save did not persist %s", edit.api)
 		}
 	}
+	testTemplateDeleteOnEdit(t, f, b, template.ID)
+	testNewEnvironmentHeaderSave(t, f, b)
+}
+
+func testTemplateDeleteOnEdit(
+	t *testing.T,
+	f *artifactE2E,
+	b *packageBrowser,
+	id int64,
+) {
+	t.Helper()
+	b.navigateBackTest(t, f.baseURL+"/templates")
+	if string(
+		b.evaluate(
+			t,
+			`!document.querySelector('main [data-template-action="delete"]')`,
+		),
+	) != "true" {
+		t.Fatal("template list still exposes Delete")
+	}
+	b.navigateBackTest(t, fmt.Sprintf("%s/templates/%d/edit", f.baseURL, id))
+	b.captureNavigation(t, "template-edit-delete", func() {
+		if string(b.evaluate(t, `(() => {
+ const button = document.querySelector('[data-template-action="delete"]');
+ return button.type === 'button' && !button.closest('form') && button.getBoundingClientRect().height >= 44;
+})()`)) != "true" {
+			t.Fatal("template Delete is not separate from Save")
+		}
+	})
+	b.evaluate(
+		t,
+		`window.confirm = () => false; document.querySelector('[data-template-action="delete"]').click(); true`,
+	)
+	f.api(t, "GET", fmt.Sprintf("/api/v1/templates/%d", id), nil, 200)
+	b.evaluate(
+		t,
+		`window.confirm = () => true; document.querySelector('[data-template-action="delete"]').click(); true`,
+	)
+	b.wait(
+		t,
+		`location.pathname === '/templates' && document.querySelector('main h1')?.textContent === 'Templates' && !document.querySelector('[data-template-action="delete"]')`,
+	)
+	f.api(t, "GET", fmt.Sprintf("/api/v1/templates/%d", id), nil, 404)
+	b.navigateBackTest(t, f.baseURL+"/templates/new")
+	if string(
+		b.evaluate(
+			t,
+			`!document.querySelector('main [data-template-action="delete"]')`,
+		),
+	) != "true" {
+		t.Fatal("new template exposes Delete")
+	}
+}
+
+func testNewEnvironmentHeaderSave(
+	t *testing.T,
+	f *artifactE2E,
+	b *packageBrowser,
+) {
+	t.Helper()
+	b.navigateBackTest(t, f.baseURL+"/environments")
+	b.clickPageNavigation(t, "/environments/new", "Environment")
+	if string(
+		b.evaluate(
+			t,
+			`document.querySelector('.page-header button')?.textContent === 'Save' && document.querySelector('.page-header a')?.textContent === 'Back' && !document.querySelector('main form button[type="submit"]')`,
+		),
+	) != "true" {
+		t.Fatal("new environment does not use header Save/Back")
+	}
+	b.evaluate(
+		t,
+		`document.querySelector('input[name="name"]').value = 'header-created-environment'; document.querySelector('.page-header button[type="submit"]').click(); true`,
+	)
+	b.wait(
+		t,
+		`location.pathname === '/environments' && document.querySelector('main').textContent.includes('header-created-environment')`,
+	)
+	var result struct{ Items []struct{ Name string } }
+	decodeStepLogTest(
+		t,
+		f.api(t, "GET", "/api/v1/environments", nil, 200),
+		&result,
+	)
+	for _, item := range result.Items {
+		if item.Name == "header-created-environment" {
+			return
+		}
+	}
+	t.Fatal(
+		"header Save did not create the environment through the public contract",
+	)
 }
