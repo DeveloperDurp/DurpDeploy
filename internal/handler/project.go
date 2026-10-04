@@ -544,6 +544,14 @@ func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 
 	if name == "" {
 		project := db.Project{ID: id, Name: name}
+		project.Description = sql.NullString{String: desc, Valid: desc != ""}
+		if lifecycleID, parseErr := strconv.ParseInt(
+			r.FormValue("lifecycle_id"),
+			10,
+			64,
+		); parseErr == nil {
+			project.LifecycleID = sql.NullInt64{Int64: lifecycleID, Valid: true}
+		}
 		lifecycles, _ := h.repo.Queries.ListLifecycles(r.Context())
 		members, available, canManage := h.loadMembersContext(r, id)
 		WriteFormError(
@@ -582,6 +590,17 @@ func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 	if _, err = h.repo.Queries.UpdateProject(r.Context(), params); err != nil {
 		if IsUniqueViolation(err) {
 			project := db.Project{ID: id, Name: name}
+			project.Description = params.Description
+			if lifecycleID, parseErr := strconv.ParseInt(
+				r.FormValue("lifecycle_id"),
+				10,
+				64,
+			); parseErr == nil {
+				project.LifecycleID = sql.NullInt64{
+					Int64: lifecycleID,
+					Valid: true,
+				}
+			}
 			lifecycles, _ := h.repo.Queries.ListLifecycles(r.Context())
 			members, available, canManage := h.loadMembersContext(r, id)
 			WriteFormError(
@@ -611,6 +630,16 @@ func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.applyLifecycleSelection(r, id); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if r.Header.Get("HX-Request") == "true" &&
+		r.Header.Get("X-Project-Dialog") == "true" {
+		w.Header().Set("HX-Retarget", "#project-detail")
+		w.Header().Set("HX-Reswap", "outerHTML")
+		w.Header().Set("HX-Reselect", "#project-detail")
+		w.Header().Set("HX-Trigger-After-Settle", "project-saved")
+		h.GetProject(w, r)
 		return
 	}
 

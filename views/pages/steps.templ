@@ -78,7 +78,6 @@ templ StepsContent(project db.Project, steps []db.Step) {
 		if CanWrite(ctx) {
 			<dialog id="step-edit-dialog" x-ref="stepEditDialog" class="modal" aria-labelledby="step-edit-title" x-on:close="editClosed">
 				<div class="modal-box w-full max-w-5xl">
-					<h2 id="step-edit-title" class="text-xl font-bold mb-4">Edit Step</h2>
 					<div id="step-edit-content" x-ref="stepEditContent"></div>
 				</div>
 			</dialog>

@@ -45,11 +45,15 @@ func TestStepEditModalBrowserE2E(t *testing.T) {
 		if string(b.evaluate(t, `(() => {
  const dialog = document.querySelector('#step-edit-dialog');
  const box = dialog.querySelector('.modal-box');
+ box.scrollTop = box.scrollHeight;
  const save = dialog.querySelector('form button[type="submit"]').getBoundingClientRect();
+ const cancel = [...dialog.querySelectorAll('form button')].find(el => el.textContent === 'Cancel').getBoundingClientRect();
+ const header = dialog.querySelector('.page-header').getBoundingClientRect();
  return dialog.matches(':modal') && dialog.querySelectorAll('form[data-step-edit-form]').length === 1 &&
  !document.querySelector('#step-list form') && box.scrollWidth <= box.clientWidth &&
  box.getBoundingClientRect().right <= innerWidth && save.bottom <= innerHeight &&
- save.top >= box.getBoundingClientRect().top && (innerWidth >= 768 || save.height >= 44);
+ save.top >= box.getBoundingClientRect().top && cancel.top === save.top &&
+ Math.abs(cancel.right - header.right) < 2 && (innerWidth >= 768 || save.height >= 44);
 })()`)) != "true" {
 			b.screenshot(t, "step-modal-layout-failure")
 			t.Fatal("step editor is not one contained modal form")

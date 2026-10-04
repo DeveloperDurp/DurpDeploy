@@ -28,12 +28,12 @@ type LifecyclePanelStage struct {
 const variablesPreviewCap = 6
 
 templ ProjectDetail(project db.Project, panel LifecyclePanel, vars []db.Variable, envs []db.Environment) {
-	<div id="project-detail">
+	<div id="project-detail" x-data="projectEditHost" x-on:htmx:after-settle.camel="afterSettle" x-on:htmx:before-swap.camel="beforeSwap" x-on:project-saved="saved">
 		<div class="page-header">
 			<h1 class="text-3xl font-bold">{ project.Name }</h1>
 			<div class="flex gap-2 ml-auto">
 				if CanWrite(ctx) {
-					<a href={ fmt.Sprintf("/projects/%d/edit", project.ID) } class="btn btn-secondary btn-sm">Edit</a>
+					<a href={ fmt.Sprintf("/projects/%d/edit", project.ID) } hx-get={ fmt.Sprintf("/projects/%d/edit", project.ID) } hx-target="#project-edit-content" hx-select="[data-project-form]" hx-swap="innerHTML" hx-push-url="false" hx-boost="false" x-ref="editButton" class="btn btn-secondary btn-sm">Edit</a>
 				}
 				<a href="/projects" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>
 			</div>
@@ -59,6 +59,13 @@ templ ProjectDetail(project db.Project, panel LifecyclePanel, vars []db.Variable
 		</nav>
 		@LifecyclePanelSection(project, panel)
 		@VariablesPreviewSection(project, vars, envs)
+		if CanWrite(ctx) {
+			<dialog x-ref="dialog" id="project-edit-dialog" class="modal" aria-label="Edit Project" x-on:close="closed" x-on:click.capture="backClicked" hx-headers={ `{"X-Project-Dialog":"true"}` } hx-target="#project-edit-content" hx-select="[data-project-form]" hx-swap="innerHTML" hx-boost="false">
+				<div class="modal-box w-full max-w-4xl">
+					<div id="project-edit-content" x-ref="content" class="[&_.page-header]:sticky [&_.page-header]:top-0 [&_.page-header]:z-10 [&_.page-header]:bg-base-100 [&_.page-header]:py-2"></div>
+				</div>
+			</dialog>
+		}
 	</div>
 }
 

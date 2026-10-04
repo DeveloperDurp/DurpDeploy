@@ -244,6 +244,34 @@ Alpine.data('runbookEditor', () => ({
 	},
 }));
 
+Alpine.data('projectEditHost', () => ({
+	afterSettle(event) {
+		if (event.detail?.target?.id !== 'project-edit-content') return;
+		if (!this.$refs.dialog.open) this.$refs.dialog.showModal();
+		this.$refs.content.querySelector('input[name="name"]')?.focus();
+	},
+	beforeSwap(event) {
+		if (!this.$refs.dialog?.open || event.detail.xhr.status !== 422) return;
+		event.detail.target = this.$refs.content;
+		event.detail.swapOverride = 'innerHTML';
+		event.detail.shouldSwap = true;
+		event.detail.isError = false;
+	},
+	backClicked(event) {
+		if (!event.target.closest('[x-data="backNavigation"]')) return;
+		event.preventDefault();
+		event.stopImmediatePropagation();
+		this.$refs.dialog.close();
+	},
+	closed() {
+		for (const child of this.$refs.content.children) Alpine.destroyTree(child);
+		this.$refs.content.replaceChildren();
+		this.$refs.editButton.focus();
+	},
+	saved() { this.$refs.editButton?.focus(); },
+	destroy() { this.$refs.dialog?.close(); },
+}));
+
 Alpine.data('stepFormHost', () => ({
 	editOpener: null,
 	beforeSwap(event) {

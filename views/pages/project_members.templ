@@ -15,8 +15,8 @@ templ ProjectMembersSection(project db.Project, members []db.ListProjectMembersR
 	<div class="mt-8 pt-6 border-t border-base-300">
 		<h2 class="text-xl font-bold mb-4">Members</h2>
 		<div class="overflow-x-auto">
-			<table class="table table-zebra table-fixed w-full">
-				<thead>
+			<table class="table table-zebra table-fixed w-full block md:table">
+				<thead class="hidden md:table-header-group">
 					<tr>
 						<th class="w-1/4">Name</th>
 						<th class="w-2/5">Email</th>
@@ -24,16 +24,16 @@ templ ProjectMembersSection(project db.Project, members []db.ListProjectMembersR
 						<th class="w-48">Actions</th>
 					</tr>
 				</thead>
-				<tbody>
+				<tbody class="block md:table-row-group">
 					for _, m := range members {
-						<tr>
-							<td class="truncate">{ m.Name }</td>
-							<td class="truncate">{ m.Email }</td>
-							<td>{ m.Role }</td>
+						<tr class="grid grid-cols-2 gap-3 md:table-row max-md:rounded-box max-md:bg-base-200 max-md:p-4 max-md:mb-3">
+							<td class="col-span-2 min-w-0 break-all md:truncate"><span class="block md:hidden text-xs opacity-70 mb-1">Name</span>{ m.Name }</td>
+							<td class="col-span-2 min-w-0 break-all md:truncate"><span class="block md:hidden text-xs opacity-70 mb-1">Email</span>{ m.Email }</td>
+							<td><span class="block md:hidden text-xs opacity-70 mb-1">Role</span>{ m.Role }</td>
 					<td class="whitespace-nowrap">
 						if canManage && CanWrite(ctx) {
 							<button
-								class="btn btn-error btn-xs"
+								class="btn btn-error md:btn-xs"
 								hx-delete={ fmt.Sprintf("/projects/%d/members/%d", project.ID, m.UserID) }
 								hx-confirm={ fmt.Sprintf("Remove %s from this project?", m.Name) }
 								data-toast-success="Member removed"
@@ -52,13 +52,14 @@ templ ProjectMembersSection(project db.Project, members []db.ListProjectMembersR
 			<form
 				method="post"
 				action={ fmt.Sprintf("/projects/%d/members", project.ID) }
+				hx-post={ fmt.Sprintf("/projects/%d/members", project.ID) }
 				class="flex flex-wrap gap-2 mt-4 items-end"
 			>
 				<div class="form-control">
 					<label class="label">
 						<span class="label-text">User</span>
 					</label>
-					<select name="user_id" class="select select-bordered select-sm">
+					<select name="user_id" class="select select-bordered md:select-sm max-w-full">
 						for _, u := range availableUsers {
 							<option value={ fmt.Sprintf("%d", u.ID) }>{ u.Name } ({ u.Email })</option>
 						}
@@ -68,12 +69,12 @@ templ ProjectMembersSection(project db.Project, members []db.ListProjectMembersR
 					<label class="label">
 						<span class="label-text">Role</span>
 					</label>
-					<select name="role" class="select select-bordered select-sm">
+					<select name="role" class="select select-bordered md:select-sm">
 						<option value="deployer">deployer</option>
 						<option value="admin">admin</option>
 					</select>
 				</div>
-				<button type="submit" class="btn btn-primary btn-sm">Add member</button>
+				<button type="submit" class="btn btn-primary md:btn-sm">Add member</button>
 			</form>
 		}
 	</div>

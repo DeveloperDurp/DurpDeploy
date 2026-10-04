@@ -117,6 +117,15 @@ templ StepForm(step db.Step, projectID int64, isNew bool, labels []string, selec
 			data-toast-error="Failed to save step"
 			class="space-y-4"
 		>
+			if !isNew {
+				<div class="page-header sticky -top-6 z-10 bg-base-200 py-2">
+					<h2 id="step-edit-title" class="text-xl font-bold">Edit Step</h2>
+					<div class="flex gap-2">
+						<button type="submit" class="btn btn-primary md:btn-sm">Save</button>
+						<button type="button" class="btn btn-ghost md:btn-sm" x-on:click="$dispatch('step-form-cancel')">Cancel</button>
+					</div>
+				</div>
+			}
 			<div class="form-control">
 				<label class="label" for={ stepInputID(step, isNew, "name") }>
 					<span class="label-text">Name</span>
@@ -266,16 +275,14 @@ templ StepForm(step db.Step, projectID int64, isNew bool, labels []string, selec
 		if !isNew {
 			<input type="hidden" name="dialog" value="1"/>
 		}
-			<div class={ "flex gap-2", templ.KV("sticky bottom-0 bg-base-200 py-2", !isNew) }>
+		if isNew {
+			<div class="flex gap-2">
 				<button type="submit" class="btn btn-primary md:btn-sm">
-					if isNew {
-						Add Step
-					} else {
-						Save
-					}
+					Add Step
 				</button>
 				<button type="button" class="btn btn-ghost md:btn-sm" x-on:click="$dispatch('step-form-cancel')">Cancel</button>
 			</div>
+		}
 		</form>
 	</div>
 	}

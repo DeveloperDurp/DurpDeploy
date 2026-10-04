@@ -20,7 +20,7 @@ func projectFormID(project db.Project, isEdit bool) string {
 }
 
 templ ProjectForm(project db.Project, isEdit bool, errorMsg string, lifecycles []db.Lifecycle, members []db.ListProjectMembersRow, availableUsers []db.ListUsersRow, canManage bool) {
-	<div class="max-w-2xl mx-auto">
+	<div id="project-settings-panel" data-project-form class="max-w-2xl mx-auto">
 		<div class="page-header">
 			<h1 class="text-3xl font-bold">
 				if isEdit {
@@ -40,8 +40,8 @@ templ ProjectForm(project db.Project, isEdit bool, errorMsg string, lifecycles [
 			if isEdit {
 				id={ projectFormID(project, isEdit) }
 				hx-put={ fmt.Sprintf("/projects/%d", project.ID) }
-				hx-target="#form-container"
-				hx-swap="innerHTML"
+				hx-target="#project-settings-panel"
+				hx-swap="outerHTML"
 				data-toast-success="Project updated"
 				data-toast-error="Failed to update project"
 			} else {

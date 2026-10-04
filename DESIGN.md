@@ -207,7 +207,13 @@ New forms and viewer pages have no Delete control.
 New Environment uses the same header Save/Back controls as Edit Environment;
 Save submits its native creation form and Back uses the shared history behavior.
 Project deletion is the final edit section, below Members and all settings.
-Step editing uses one native modal dialog with a vertical form. The list stays
+Project detail opens its existing editor in a native modal. Save refreshes the
+detail and closes the dialog; Back and Escape discard unsaved fields. Members
+stay inside the modal, validation errors retain submitted fields, and Delete
+remains last. The standalone edit URL remains supported. The modal scrolls
+internally with Save/Back in a sticky header and restores focus on closing.
+Step editing uses one native modal dialog with a vertical form and Save/Cancel
+in its sticky top-right header, matching project editing. The list stays
 visible behind an inert backdrop; Save refreshes the list and closes the
 dialog, while validation errors stay inside it. Cancel and Escape discard the
 edit and return focus to its Edit button.
