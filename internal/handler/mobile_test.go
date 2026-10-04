@@ -6,10 +6,7 @@ import (
 	"testing"
 )
 
-const (
-	mdTableCell = "md:table-cell"
-	smTableCell = "sm:table-cell"
-)
+const mdTableCell = "md:table-cell"
 
 func breakpointClassPattern(first, second string) string {
 	return fmt.Sprintf(
@@ -105,11 +102,14 @@ func TestMobile_RenderedHTML_includes_responsive_classes_when_authenticated(
 			},
 		},
 		{
-			name: "deployment detail script column",
+			name: "deployment detail step cards and table",
 			path: fmt.Sprintf("/deployments/%d", fixture.deployment.ID),
 			patterns: []string{
-				responsiveHeaderPattern(smTableCell),
-				responsiveCellPattern(smTableCell),
+				fmt.Sprintf(
+					`(?s)<table[^>]*%s`,
+					breakpointClassPattern("hidden", "sm:table"),
+				),
+				`(?s)<div[^>]*class="[^"]*sm:hidden[^"]*"[^>]*>\s*<details[^>]*>\s*<summary[^>]*>.*?Step 1: deploy.*?</summary>\s*<pre[^>]*>echo deploy</pre>`,
 			},
 		},
 		{
