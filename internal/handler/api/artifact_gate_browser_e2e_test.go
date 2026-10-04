@@ -55,6 +55,10 @@ func TestArtifactGateBrowserE2E(t *testing.T) {
 			t,
 			`document.querySelector('section[aria-label="Artifact approval"]') && document.querySelector('form[action$="/approve"]')`,
 		)
+		browser.wait(
+			t,
+			`document.querySelector('section[aria-label="Artifact approval"]').innerText.includes('Unverified summary supplied by the deployment step.')`,
+		)
 		if string(
 			browser.evaluate(
 				t,

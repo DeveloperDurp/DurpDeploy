@@ -14,6 +14,7 @@ templ ArtifactGates(gates []ArtifactGateInfo) {
 					<span class={ "badge", artifactGateBadge(gate.Status) }>{ gate.Status }</span>
 				</div>
 				<p class="text-sm">Review the generated changes before continuing. Sensitive values and step output are hidden.</p>
+				<p class="text-sm"><strong>Unverified summary supplied by the deployment step.</strong> The server does not verify that these counts describe the artifact. Download and independently inspect the exact artifact before approval; checksums identify bytes, not their meaning.</p>
 				<dl class="grid grid-cols-2 sm:grid-cols-4 gap-4">
 					<div><dt>Create</dt><dd class="text-xl font-semibold">{ strconv.FormatInt(gate.Review.Create, 10) }</dd></div>
 					<div><dt>Update</dt><dd class="text-xl font-semibold">{ strconv.FormatInt(gate.Review.Update, 10) }</dd></div>

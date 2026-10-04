@@ -8737,6 +8737,14 @@
         "review": {
           "$ref": "#/definitions/GateReview"
         },
+        "review_source": {
+          "type": "string",
+          "x-go-name": "ReviewSource"
+        },
+        "review_verified": {
+          "type": "boolean",
+          "x-go-name": "ReviewVerified"
+        },
         "revision": {
           "type": "integer",
           "format": "int64",

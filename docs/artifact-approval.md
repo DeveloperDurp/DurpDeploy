@@ -7,6 +7,17 @@ for `terraform show -json`, or `summary` for nonnegative `create`, `update`,
 `delete`, and `read` counts. Reviews expose counts only. Generated names,
 values, outputs, and all gated script output are hidden.
 
+Review counts are unverified claims supplied by the deployment step. The API
+reports `review_source: "step_output"` and `review_verified: false`. A separate
+review file can be stale or misleading even when every checksum is valid.
+Before approval, download and independently inspect the exact artifact using
+trusted tools. For Terraform, run `terraform show` with a trusted toolchain and
+providers, then compare the result with the review. Checksums bind immutable
+bytes; they do not establish that the summary accurately describes those bytes.
+Generation and continuation scripts, container images, and credentials belong
+to the existing trusted-team deployment model. Gates do not constrain a
+malicious script to only plan, or prove that it applies the approved artifact.
+
 Set `network_mode: "bridge"` on each step that needs network access. The
 default remains `none`. Host networking, privileged containers, and host
 mounts are not allowed. Network access can reach services accessible from

@@ -8,18 +8,20 @@ import (
 )
 
 type ArtifactGateInfo struct {
-	DeploymentID int64               `json:"deployment_id"`
-	StepIndex    int64               `json:"step_index"`
-	Revision     int64               `json:"revision"`
-	Status       string              `json:"status"`
-	SHA256       string              `json:"sha256"`
-	BundleSHA256 string              `json:"bundle_sha256"`
-	BundleSize   int64               `json:"bundle_size"`
-	Review       artifact.GateReview `json:"review"`
-	CreatedAt    int64               `json:"created_at"`
-	ExpiresAt    int64               `json:"expires_at"`
-	ApprovedBy   int64               `json:"approved_by,omitempty"`
-	ApprovedAt   int64               `json:"approved_at,omitempty"`
+	DeploymentID   int64               `json:"deployment_id"`
+	StepIndex      int64               `json:"step_index"`
+	Revision       int64               `json:"revision"`
+	Status         string              `json:"status"`
+	SHA256         string              `json:"sha256"`
+	BundleSHA256   string              `json:"bundle_sha256"`
+	BundleSize     int64               `json:"bundle_size"`
+	Review         artifact.GateReview `json:"review"`
+	ReviewSource   string              `json:"review_source"`
+	ReviewVerified bool                `json:"review_verified"`
+	CreatedAt      int64               `json:"created_at"`
+	ExpiresAt      int64               `json:"expires_at"`
+	ApprovedBy     int64               `json:"approved_by,omitempty"`
+	ApprovedAt     int64               `json:"approved_at,omitempty"`
 }
 
 func artifactGateBadge(status string) string {
@@ -39,6 +41,7 @@ func NewArtifactGateInfo(gate db.ArtifactGate) ArtifactGateInfo {
 		review = artifact.GateReview{}
 	}
 	return ArtifactGateInfo{
+		ReviewSource: "step_output",
 		DeploymentID: gate.DeploymentID,
 		StepIndex:    gate.StepIndex,
 		Revision:     gate.Revision,

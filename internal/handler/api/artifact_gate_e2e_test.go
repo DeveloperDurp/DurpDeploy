@@ -63,7 +63,8 @@ printf 'applied' > "$DURPDEPLOY_STAGE_DIR/result"`,
 		len(gates) != 1 {
 		t.Fatalf("gates=%v err=%v", gates, err)
 	}
-	if gates[0].Review.Create != 1 || gates[0].Status != "awaiting" {
+	if gates[0].Review.Create != 1 || gates[0].Status != "awaiting" ||
+		gates[0].ReviewSource != "step_output" || gates[0].ReviewVerified {
 		t.Fatalf("gate=%+v", gates[0])
 	}
 	return f, deployment, gates[0]
@@ -97,6 +98,22 @@ func TestArtifactGateApproveExactBytesE2E(t *testing.T) {
 		nil,
 		200,
 	)
+	// The separate review claims a create for opaque, non-Terraform bytes.
+	// Even a valid checksum must not present that summary as verified.
+	if !strings.Contains(page, "Unverified summary") ||
+		!strings.Contains(page, "independently inspect the exact artifact") {
+		t.Fatal("producer-controlled review is not identified as unverified")
+	}
+	var raw []map[string]any
+	if err := json.Unmarshal(
+		f.api(t, "GET", path, nil, 200),
+		&raw,
+	); err != nil ||
+		len(raw) != 1 ||
+		raw[0]["review_verified"] != false ||
+		raw[0]["review_source"] != "step_output" {
+		t.Fatalf("review trust metadata=%v err=%v", raw, err)
+	}
 	logs := string(
 		f.api(
 			t,

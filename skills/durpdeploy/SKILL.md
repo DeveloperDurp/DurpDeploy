@@ -439,8 +439,14 @@ gates use `approval_artifact_path`, `approval_review_path`, and
 reserves its environment. Only local deployment steps without retries are
 supported; runbooks and agent steps cannot use gates.
 `GET /api/v1/deployments/{id}/artifact-gates` returns counts, checksums,
-revision, expiry, status, and approver metadata. Write-capable project members
-can download `/{stepIndex}/artifact`; viewers cannot. Administrator-only
+revision, expiry, status, and approver metadata, including
+`review_source: "step_output"` and `review_verified: false`: counts are
+unverified producer claims, not an independent analysis of the artifact.
+Use trusted tools to inspect the exact downloaded artifact before approving.
+Checksums establish byte identity, not review accuracy. Generation and apply
+scripts remain trusted; a gate does not sandbox them to plan/apply semantics.
+Write-capable project members can download `/{stepIndex}/artifact`; viewers
+cannot. Administrator-only
 `/{stepIndex}/approve` and `/{stepIndex}/reject` accept
 `{"revision":1,"sha256":"..."}`. Stale or duplicate decisions return 409.
 Approved context is read-only at `DURPDEPLOY_APPROVED_DIR`; apply the saved
