@@ -7,6 +7,123 @@ import (
 	"testing"
 )
 
+func TestStepAddModalBrowserE2E(t *testing.T) {
+	f := newArtifactE2E(t)
+	api := fmt.Sprintf("/api/v1/projects/%d/steps", f.project.ID)
+	b := startPackageBrowser(t)
+	b.setBackTestSession(t, f.baseURL, f.session)
+	path := fmt.Sprintf("/projects/%d/steps-page", f.project.ID)
+	b.navigateBackTest(t, f.baseURL+path)
+	open := func() {
+		b.wait(t, `!document.querySelector('.htmx-settling, .htmx-request')`)
+		b.evaluate(
+			t,
+			`document.querySelector('[x-ref="addStepButton"]').click(); true`,
+		)
+		b.wait(
+			t,
+			`document.querySelector('#step-edit-dialog')?.matches(':modal') && document.querySelector('#step-edit-content form[data-step-add-form]')`,
+		)
+	}
+	open()
+	b.captureNavigation(t, "step-add-modal", func() {
+		b.wait(
+			t,
+			`document.getAnimations().every(a => a.playState !== 'running')`,
+		)
+		if string(b.evaluate(t, `(() => {
+ const dialog = document.querySelector('#step-edit-dialog');
+ const box = dialog.querySelector('.modal-box');
+ box.scrollTop = box.scrollHeight;
+ const save = dialog.querySelector('.page-header button[type="submit"]').getBoundingClientRect();
+ return box.scrollWidth <= box.clientWidth && save.top >= box.getBoundingClientRect().top &&
+ save.bottom <= innerHeight && (innerWidth >= 768 || save.height >= 44) &&
+ !dialog.querySelector('[hx-delete]') && !document.querySelector('#step-list form');
+})()`)) != "true" {
+			t.Fatal("Add Step modal clips fields or hides Save")
+		}
+	})
+	b.evaluate(
+		t,
+		`document.querySelector('#step-edit-content input[name="name"]').value = 'discard'; [...document.querySelectorAll('#step-edit-content button')].find(b => b.textContent === 'Cancel').click(); true`,
+	)
+	b.wait(
+		t,
+		`!document.querySelector('#step-edit-dialog').open && document.activeElement?.getAttribute('x-ref') === 'addStepButton'`,
+	)
+	open()
+	for _, kind := range []string{"mousePressed", "mouseReleased"} {
+		b.call(
+			t,
+			"Input.dispatchMouseEvent",
+			map[string]any{
+				"type":       kind,
+				"x":          1,
+				"y":          100,
+				"button":     "left",
+				"clickCount": 1,
+			},
+			&struct{}{},
+		)
+	}
+	b.wait(t, `!document.querySelector('#step-edit-dialog').open`)
+	var list struct {
+		Items []struct {
+			ID     int64
+			Name   string
+			Script string `json:"script_body"`
+		}
+	}
+	decodeStepLogTest(t, f.api(t, "GET", api, nil, 200), &list)
+	if len(list.Items) != 0 {
+		t.Fatal("canceling created a step")
+	}
+	open()
+	b.wait(t, `!document.querySelector('.htmx-settling, .htmx-request')`)
+	b.evaluate(
+		t,
+		`const form = document.querySelector('#step-edit-content form'); form.querySelector('[name="script_body"]').value = 'echo retained'; form.querySelector('[name="container_image"]').value = 'alpine:3.20'; form.querySelector('[type="submit"]').click(); true`,
+	)
+	b.wait(
+		t,
+		`document.querySelector('#step-edit-dialog').open && document.querySelector('#step-edit-content').textContent.includes('Name is required')`,
+	)
+	if string(
+		b.evaluate(
+			t,
+			`document.querySelector('#step-edit-content [name="script_body"]').value === 'echo retained' && document.querySelector('#step-edit-content [name="container_image"]').value === 'alpine:3.20'`,
+		),
+	) != "true" {
+		t.Fatal("validation discarded step fields")
+	}
+	b.wait(t, `!document.querySelector('.htmx-settling, .htmx-request')`)
+	b.evaluate(
+		t,
+		`window.stepCreateSentinel = true; document.querySelector('#step-edit-content [name="name"]').value = 'modal-created-step'; document.querySelector('#step-edit-content [type="submit"]').click(); true`,
+	)
+	b.wait(
+		t,
+		`!document.querySelector('#step-edit-dialog').open && document.querySelector('#step-list').textContent.includes('modal-created-step') && document.activeElement?.getAttribute('x-ref') === 'addStepButton'`,
+	)
+	if string(
+		b.evaluate(
+			t,
+			fmt.Sprintf(
+				`location.pathname === %q && window.stepCreateSentinel === true`,
+				path,
+			),
+		),
+	) != "true" {
+		t.Fatal("adding reloaded or navigated the document")
+	}
+	decodeStepLogTest(t, f.api(t, "GET", api, nil, 200), &list)
+	if len(list.Items) != 1 || list.Items[0].Name != "modal-created-step" ||
+		list.Items[0].Script != "echo retained" {
+		t.Fatal("added step differs from API contract")
+	}
+	f.api(t, "GET", fmt.Sprintf("%s/%d", api, list.Items[0].ID), nil, 200)
+}
+
 func TestStepEditModalBrowserE2E(t *testing.T) {
 	f := newArtifactE2E(t)
 	api := fmt.Sprintf("/api/v1/projects/%d/steps", f.project.ID)

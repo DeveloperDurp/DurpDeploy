@@ -227,6 +227,11 @@ the same modal. Save remains in the top-right header while scrolling. Cancel,
 Back, Escape, and backdrop clicks close without creating a resource. Validation
 stays inside the dialog; successful creation closes it and refreshes the list
 without a document reload. Direct form URLs and native POSTs remain supported.
+Add Step uses the same dialog as Edit Step, with Save/Cancel in its sticky
+header. Validation preserves the script and placement fields inside the modal;
+Save refreshes the list and returns focus to Add Step. Cancel, Escape, and
+outside clicks discard the new step. The fullscreen script editor still works
+inside this dialog.
 
 Normal internal page links use HTMX to replace the main content, update the
 navbar and title, and push the existing URL into browser history. The document

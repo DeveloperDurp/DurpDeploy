@@ -302,13 +302,6 @@ Alpine.data('stepFormHost', () => ({
 			[...this.$root.querySelectorAll('[data-step-action="edit"]')].find(button => button.getClientRects().length) ||
 			this.$refs.addStepButton)?.focus();
 	},
-	afterRequest(event) {
-		const source = event.detail?.elt;
-		if (!(source instanceof Element) || !event.detail.successful) return;
-		const form = source.closest('form[data-step-add-form]');
-		if (!(form instanceof HTMLFormElement)) return;
-		this.cancel(form);
-	},
 	add(event) {
 		if (event.detail?.listURL) {
 			htmx.ajax('GET', event.detail.listURL, {
@@ -316,14 +309,6 @@ Alpine.data('stepFormHost', () => ({
 				swap: 'innerHTML',
 			});
 		}
-	},
-	cancel(form) {
-		const host = this.$refs.addStepForm;
-		const target = form || host?.querySelector('form');
-		if (!(target instanceof HTMLFormElement)) return;
-		const editor = target.querySelector('[x-data="stepEditor"]');
-		if (editor) Alpine.destroyTree(editor);
-		if (host?.contains(target)) host.replaceChildren();
 	},
 	// step-form-add, step-form-cancel, and step-form-edit are the host contract.
 	handleEvent(event) {
@@ -336,11 +321,9 @@ Alpine.data('stepFormHost', () => ({
 					this.$refs.stepEditDialog.close();
 					break;
 				}
-				this.cancel(event.target.closest('form'));
 				break;
 			case 'step-form-edit':
 				this.editOpener = event.target;
-				this.cancel(event.target.closest('form'));
 				break;
 		}
 	},

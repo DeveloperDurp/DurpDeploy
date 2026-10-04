@@ -459,7 +459,7 @@ func writeStepFormError(
 	labels []string,
 	agentLabel, errorMsg string,
 ) {
-	if !isNew && r.FormValue("dialog") == "1" {
+	if r.FormValue("dialog") == "1" {
 		step.Interpreter = r.FormValue("interpreter")
 		step.ContainerImage = r.FormValue("container_image")
 		_, names, _ := parseStepContainerConfig(r, step.ExecutionTarget)
@@ -468,7 +468,7 @@ func writeStepFormError(
 		w.Header().Set("HX-Reswap", "innerHTML")
 		w.WriteHeader(http.StatusUnprocessableEntity)
 		if err := components.StepForm(
-			step, projectID, false, labels, agentLabel, errorMsg,
+			step, projectID, isNew, labels, agentLabel, errorMsg,
 		).Render(r.Context(), w); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}

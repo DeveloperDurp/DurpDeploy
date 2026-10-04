@@ -52,18 +52,14 @@ func TestAlpineRegistryDefinesComplianceComponents(t *testing.T) {
 			name:        "stepFormHost",
 			constructor: `\(\)`,
 			members: []string{
-				"afterRequest",
 				"add",
-				"cancel",
 				"handleEvent",
 			},
 			methods: []string{
 				"beforeSwap",
 				"afterSettle",
 				"editClosed",
-				"afterRequest",
 				"add",
-				"cancel",
 				"handleEvent",
 			},
 			events: []string{
@@ -206,7 +202,7 @@ func TestAlpineRegistryDefinesComplianceComponents(t *testing.T) {
 		`(?ms)Alpine\.data\('stepFormHost'.*?^\}\)\);`,
 	)
 	host := hostPattern.FindString(source)
-	destroyEditor := strings.Index(host, "Alpine.destroyTree(editor)")
+	destroyEditor := strings.Index(host, "Alpine.destroyTree(child)")
 	removeForm := strings.LastIndex(host, "replaceChildren()")
 	if destroyEditor < 0 || removeForm < 0 || destroyEditor > removeForm {
 		t.Error(

@@ -142,7 +142,7 @@ func TestMobile_RenderedHTML_rendersLifecycleBackAndKeepsPermissionGoBack(
 		detailBody,
 		`<form id="lifecycle-settings-form" method="post" action="/lifecycles/\d+"`,
 	)
-	const lifecycleFormHeader = `(?s)<div class="page-header">\s*<h1 class="text-3xl font-bold">New Lifecycle</h1>\s*<div class="flex gap-2">\s*<a href="/lifecycles" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>\s*</div>\s*</div>`
+	const lifecycleFormHeader = `(?s)<div class="page-header">\s*<h1 class="text-3xl font-bold">New Lifecycle</h1>\s*<div class="flex gap-2">\s*` + lifecycleSave + `\s*<a href="/lifecycles" class="btn btn-ghost md:btn-sm" x-data="backNavigation" @click="back">\s*Cancel\s*</a>\s*</div>\s*</div>`
 	requireHTMLPattern(t, formBody, lifecycleFormHeader)
 	const permissionGoBack = `<a href="/lifecycles" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Go back</a>`
 	if strings.Count(viewerFormBody, permissionGoBack) != 1 {
@@ -343,10 +343,9 @@ func TestSteps_RenderedHTML_uses_named_Alpine_state_when_authenticated(
 		`x-on:step-form-add="handleEvent"`,
 		`x-on:step-form-cancel="handleEvent"`,
 		`x-on:step-form-edit="handleEvent"`,
-		`x-on:htmx:after-request.camel="afterRequest"`,
-		`x-ref="addStepForm"`,
+		`x-ref="stepEditContent"`,
 		fmt.Sprintf(`hx-get="/projects/%d/steps/new"`, projectID),
-		`hx-target="#add-step-form"`,
+		`hx-target="#step-edit-content"`,
 		`hx-swap="innerHTML"`,
 		`hx-target="#step-edit-content" hx-swap="innerHTML"`,
 		`id="step-edit-dialog"`,

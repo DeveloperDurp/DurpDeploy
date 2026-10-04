@@ -153,8 +153,20 @@ func TestMobile_RenderedHTML_renders_writer_controls_when_authorized(
 					fixture.secondStep.ID,
 				),
 				`data-step-action="edit"`,
-				`data-step-action="delete"`,
+				`id="step-edit-dialog"`,
 				`data-step-action="save-template"`,
+			},
+		},
+		{
+			name: "step edit modal",
+			path: fmt.Sprintf(
+				"/projects/%d/steps/%d/edit?dialog=1",
+				fixture.project.ID,
+				fixture.step.ID,
+			),
+			markers: []string{
+				`data-step-action="delete"`,
+				`data-step-edit-form`,
 			},
 		},
 		{
@@ -235,6 +247,12 @@ func TestMobile_RenderedHTML_renders_writer_controls_when_authorized(
 					// Then
 					for _, marker := range page.markers {
 						requireHTMLPattern(t, body, marker)
+					}
+					if page.name == "steps" &&
+						strings.Contains(body, `data-step-action="delete"`) {
+						t.Error(
+							"step list includes Delete outside the edit modal",
+						)
 					}
 				})
 			}

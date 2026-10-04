@@ -85,7 +85,7 @@ func stepPlacementData(step db.Step, selectedLabel string) string {
 // CanWrite guards; this is the typed-URL fallback.)
 //
 // ponytail: inline fragment, not a full page — StepForm is rendered
-// into a #add-step-form or #step-row-{id} div via HTMX swap, not as
+// into a #step-edit-content or #step-row-{id} div via HTMX swap, not as
 // a standalone page.
 templ ViewerStepFormMessage() {
 	<div class="p-4 border border-base-300 rounded bg-base-200 text-sm text-gray-400 italic">
@@ -117,15 +117,19 @@ templ StepForm(step db.Step, projectID int64, isNew bool, labels []string, selec
 			data-toast-error="Failed to save step"
 			class="space-y-4"
 		>
-			if !isNew {
-				<div class="page-header sticky -top-6 z-10 bg-base-200 py-2">
-					<h2 id="step-edit-title" class="text-xl font-bold">Edit Step</h2>
-					<div class="flex gap-2">
-						<button type="submit" class="btn btn-primary md:btn-sm">Save</button>
-						<button type="button" class="btn btn-ghost md:btn-sm" x-on:click="$dispatch('step-form-cancel')">Cancel</button>
-					</div>
+			<div class="page-header sticky -top-6 z-10 bg-base-200 py-2">
+				<h2 id="step-edit-title" class="text-xl font-bold">
+					if isNew {
+						Add Step
+					} else {
+						Edit Step
+					}
+				</h2>
+				<div class="flex gap-2">
+					<button type="submit" class="btn btn-primary md:btn-sm">Save</button>
+					<button type="button" class="btn btn-ghost md:btn-sm" x-on:click="$dispatch('step-form-cancel')">Cancel</button>
 				</div>
-			}
+			</div>
 			<div class="form-control">
 				<label class="label" for={ stepInputID(step, isNew, "name") }>
 					<span class="label-text">Name</span>
@@ -272,17 +276,8 @@ templ StepForm(step db.Step, projectID int64, isNew bool, labels []string, selec
 			<input id={ stepInputID(step, isNew, "retries") } type="number" name="max_retries" min="0" value={ strconv.FormatInt(step.MaxRetries, 10) } class="input input-bordered"/>
 		</div>
 		<input type="hidden" name="sort_order" value={ strconv.FormatInt(step.SortOrder, 10) }/>
+		<input type="hidden" name="dialog" value="1"/>
 		if !isNew {
-			<input type="hidden" name="dialog" value="1"/>
-		}
-		if isNew {
-			<div class="flex gap-2">
-				<button type="submit" class="btn btn-primary md:btn-sm">
-					Add Step
-				</button>
-				<button type="button" class="btn btn-ghost md:btn-sm" x-on:click="$dispatch('step-form-cancel')">Cancel</button>
-			</div>
-		} else {
 			<div class="flex flex-wrap items-center justify-between gap-4 border-t border-base-300 pt-6" data-step-delete-section>
 				<p>Delete this step</p>
 				<button type="button" class="btn btn-error md:btn-sm" data-step-action="delete"

@@ -174,7 +174,10 @@ func TestAlpineCompliancePolicy(t *testing.T) {
 			},
 			{
 				"views/pages/steps.templ",
-				[]string{`hx-target="#add-step-form"`, `hx-swap="innerHTML"`},
+				[]string{
+					`hx-target="#step-edit-content"`,
+					`hx-swap="innerHTML"`,
+				},
 			},
 			{
 				"views/pages/variables.templ",

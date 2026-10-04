@@ -104,7 +104,7 @@ func TestAlpineDialogsBrowserE2E(t *testing.T) {
 	b.setBackTestSession(t, f.baseURL, f.session)
 	b.navigateBackTest(t, f.baseURL+path)
 	for _, control := range []struct{ name, selector string }{
-		{"script-add", "button[hx-target='#add-step-form']"},
+		{"script-add", "button[x-ref='addStepButton']"},
 		{"script-edit", "[data-step-action=edit]"},
 	} {
 		b.captureNavigation(t, control.name+"-dialog", func() {
