@@ -2,12 +2,15 @@ package runner
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
 	"time"
 
 	"durpdeploy/internal/events"
+	"durpdeploy/internal/repository"
 )
 
 // SetEventBus wires the runner to publish deployment lifecycle events. Kept
@@ -113,12 +116,22 @@ func (r *DeploymentRunner) UnregisterCancel(deploymentID int64) {
 
 func (r *DeploymentRunner) Cancel(deploymentID int64) error {
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	cancel, ok := r.cancels[deploymentID]
-	if !ok {
-		return fmt.Errorf("deployment %d is not running", deploymentID)
+	if ok {
+		cancel()
+		r.mu.Unlock()
+		return nil
 	}
-
-	cancel()
-	return nil
+	r.mu.Unlock()
+	// Publication can finish between the HTTP status read and this lookup.
+	if r.repo != nil {
+		ctx, finish := context.WithTimeout(context.Background(), 5*time.Second)
+		defer finish()
+		err := r.repo.RejectArtifact(ctx, deploymentID, "cancelled")
+		if !errors.Is(err, repository.ErrArtifactGate) &&
+			!errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+	}
+	return fmt.Errorf("deployment %d is not running", deploymentID)
 }

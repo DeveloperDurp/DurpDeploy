@@ -185,17 +185,27 @@ or refresh; recreate their steps and create a new release (`409` on launch).
 6. **Deploy**
    `POST /api/v1/projects/$PID/deployments`
    `{"release_id":$RID,"environment_id":$EID}` → `201` with deployment `id`.
-7. **Poll** until terminal:
+7. **Poll** until terminal or operator action is required:
 
 ```bash
 for i in {1..150}; do
   S=$(api_get "$BASE/api/v1/deployments/$DID/status" | python3 -c 'import sys,json;print(json.load(sys.stdin)["status"])')
-  [[ "$S" =~ ^(failed|succeeded|cancelled|cleanup_unconfirmed|pending_approval)$ ]] && break
+  [[ "$S" =~ ^(failed|succeeded|cancelled|rejected|expired|cleanup_unconfirmed|pending_approval|awaiting_artifact_approval)$ ]] && break
   sleep 0.5
 done
 ```
 
 8. **Act on state**:
+   - `awaiting_artifact_approval` → list
+     `GET /api/v1/deployments/$DID/artifact-gates`, use the current gate's
+     `step_index` as `$STEP`, download `/$STEP/artifact` under that gate URL,
+     and independently inspect it with trusted tools.
+     Review counts are unverified step claims. An admin then sends the listed
+     revision and artifact SHA-256 to `/$STEP/approve` or `/$STEP/reject`
+     under that gate URL. After approval, return to polling; another step can
+     require another review. Follow the artifact-gate details below.
+   - `rejected` or `expired` → stop polling. Resolve the rejection or expiry,
+     then redeploy to generate a fresh artifact and review.
    - `pending_approval` → an admin `POST /api/v1/deployments/$DID/approve`
      with an empty body or `{}` unblocks it. The authenticated admin is
      recorded as the approver. Non-admin tokens get 403.

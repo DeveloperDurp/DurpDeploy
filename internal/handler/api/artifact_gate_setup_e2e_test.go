@@ -25,6 +25,81 @@ type failedGateLookupDB struct {
 	failRelease bool
 }
 
+type stalePublishingStatusDB struct {
+	*sql.DB
+	stale atomic.Bool
+}
+
+func (d *stalePublishingStatusDB) QueryRowContext(
+	ctx context.Context,
+	query string,
+	args ...any,
+) *sql.Row {
+	if strings.Contains(query, "-- name: GetDeployment :one") &&
+		len(args) == 1 {
+		var status string
+		if err := d.DB.QueryRowContext(ctx, "SELECT status FROM deployments WHERE id=?", args[0]).
+			Scan(&status); err == nil &&
+			status == "awaiting_artifact_approval" {
+			// Return the phase observed immediately before publication finished.
+			query = strings.Replace(
+				query,
+				"environment_id, status, started_at",
+				"environment_id, 'publishing_artifact', started_at",
+				1,
+			)
+			d.stale.Store(true)
+		}
+	}
+	return d.DB.QueryRowContext(ctx, query, args...)
+}
+
+func TestArtifactGateCancellationAcrossPublicationE2E(t *testing.T) {
+	for _, surface := range []string{"api", "web"} {
+		t.Run(surface, func(t *testing.T) {
+			f, deployment, _ := newGateDeployment(t)
+			stale := &stalePublishingStatusDB{DB: f.h.repo.DB}
+			f.h.repo.Queries = db.New(stale)
+			if surface == "api" {
+				f.api(
+					t,
+					"POST",
+					fmt.Sprintf("/api/v1/deployments/%d/cancel", deployment.ID),
+					nil,
+					200,
+				)
+			} else {
+				f.web(
+					t,
+					"POST",
+					fmt.Sprintf("/deployments/%d/cancel", deployment.ID),
+					url.Values{},
+					303,
+				)
+			}
+			var stored db.Deployment
+			if err := json.Unmarshal(
+				f.api(
+					t,
+					"GET",
+					fmt.Sprintf("/api/v1/deployments/%d", deployment.ID),
+					nil,
+					200,
+				),
+				&stored,
+			); err != nil || stored.Status != "cancelled" ||
+				!stale.stale.Load() {
+				t.Fatalf(
+					"publication cancellation=%+v err=%v stale=%v",
+					stored,
+					err,
+					stale.stale.Load(),
+				)
+			}
+		})
+	}
+}
+
 func (d *failedGateLookupDB) QueryRowContext(
 	ctx context.Context,
 	query string,
