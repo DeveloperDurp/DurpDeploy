@@ -51,6 +51,14 @@ func TestSetupFailureAfterCancellationFinalizesCancelled(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err := repo.Queries.CreateArtifactGate(t.Context(),
+		db.CreateArtifactGateParams{
+			DeploymentID: deployment.ID, ArtifactPath: "plan",
+			ArtifactSha256: "artifact", BundleSha256: "bundle",
+			Review: `{"create":1}`, ExpiresAt: time.Now().Add(time.Hour).Unix(),
+		}); err != nil {
+		t.Fatal(err)
+	}
 	cancelCtx, cancel := context.WithCancel(t.Context())
 	cancel()
 	deploymentRunner := New(repo, NewLogBroker())
@@ -64,6 +72,11 @@ func TestSetupFailureAfterCancellationFinalizesCancelled(t *testing.T) {
 	}
 	if stored.Status != "cancelled" || !stored.FinishedAt.Valid {
 		t.Fatalf("deployment after cancelled setup failure=%+v", stored)
+	}
+	gate, err := repo.Queries.GetArtifactGate(t.Context(),
+		db.GetArtifactGateParams{DeploymentID: deployment.ID})
+	if err != nil || gate.Status != "cancelled" {
+		t.Fatalf("terminal transaction left a review open: %+v %v", gate, err)
 	}
 }
 

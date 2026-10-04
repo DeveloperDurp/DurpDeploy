@@ -290,6 +290,11 @@ func TestArtifactGatePublishingCancellationE2E(t *testing.T) {
 			); err != nil {
 				t.Fatal(err)
 			}
+			// This synthetic runner writes only deployment state. Exercise
+			// worker reconciliation rather than relying on a polling write.
+			if err := f.h.repo.MaintainArtifactGates(t.Context()); err != nil {
+				t.Fatal(err)
+			}
 			var gates []pages.ArtifactGateInfo
 			if err := json.Unmarshal(
 				f.api(t, "GET", gateAPIPath(deployment.ID), nil, 200),

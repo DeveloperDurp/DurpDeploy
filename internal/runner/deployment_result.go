@@ -55,6 +55,11 @@ func (r *DeploymentRunner) completeDeployment(
 				)
 			}
 			if err == nil {
+				err = q.FinishArtifactGates(ctx, db.FinishArtifactGatesParams{
+					DeploymentID: deploymentID, Status: "cancelled",
+				})
+			}
+			if err == nil {
 				verificationStatus := "failed"
 				if status == "cancelled" {
 					verificationStatus = "cancelled"
