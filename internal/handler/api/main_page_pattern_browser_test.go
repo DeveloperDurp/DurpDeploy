@@ -112,7 +112,17 @@ func TestMainPagePatternBrowserE2E(t *testing.T) {
 			"code":                  "Enter",
 			"windowsVirtualKeyCode": 13,
 		}, &struct{}{})
-		b.wait(t, fmt.Sprintf(`location.pathname === %q`, card.destination))
+		if card.list == "/projects" {
+			b.wait(t, fmt.Sprintf(`location.pathname === %q`, card.destination))
+		} else {
+			b.wait(
+				t,
+				fmt.Sprintf(
+					`location.pathname === %q && document.querySelector('#project-edit-dialog')?.matches(':modal')`,
+					card.list,
+				),
+			)
+		}
 	}
 	// Header Save controls submit the real edit form and persist through the API.
 	for _, edit := range []struct {

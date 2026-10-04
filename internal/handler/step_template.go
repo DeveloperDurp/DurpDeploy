@@ -327,6 +327,10 @@ func (h *StepTemplateHandler) UpdateTemplate(
 		return
 	}
 
+	if retargetFormDialog(w, r, "#templates-content") {
+		h.ListTemplates(w, r)
+		return
+	}
 	if r.Header.Get("HX-Request") == "true" {
 		if err := pages.TemplateFormFragment(&updated, false, "").
 			Render(r.Context(), w); err != nil {
@@ -353,6 +357,10 @@ func (h *StepTemplateHandler) DeleteTemplate(
 		return
 	}
 
+	if retargetFormDialog(w, r, "#templates-content") {
+		h.ListTemplates(w, r)
+		return
+	}
 	http.Redirect(w, r, "/templates", http.StatusSeeOther)
 }
 

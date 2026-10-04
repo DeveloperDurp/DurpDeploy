@@ -108,7 +108,10 @@ func TestResourceListMobileBrowserE2E(t *testing.T) {
 	edit := fmt.Sprintf("/environments/%d/edit", f.environment.ID)
 	b.evaluate(t, fmt.Sprintf(
 		`document.querySelector('main a[href=%q]').click(); true`, edit))
-	b.wait(t, `document.querySelector('main button[hx-delete]') !== null`)
+	b.wait(
+		t,
+		`document.querySelector('#project-edit-dialog').matches(':modal') && document.querySelector('main button[hx-delete]') !== null`,
+	)
 	b.captureNavigation(t, "mobile-environment-edit", func() {
 		assertEditDeleteControl(t, b, `main button[hx-delete]`)
 	})
@@ -118,7 +121,7 @@ func TestResourceListMobileBrowserE2E(t *testing.T) {
 	)
 	b.wait(
 		t,
-		`document.querySelector('form[hx-put]') !== window.environmentFormBeforeSave && document.querySelector('input[name="name"]')?.value === 'saved-phone-environment'`,
+		`!document.querySelector('#project-edit-dialog').open && document.querySelector('main').textContent.includes('saved-phone-environment')`,
 	)
 	var saved struct{ Name string }
 	decodeStepLogTest(
@@ -135,6 +138,18 @@ func TestResourceListMobileBrowserE2E(t *testing.T) {
 	if saved.Name != "saved-phone-environment" {
 		t.Fatal("Save did not persist environment settings")
 	}
+	b.wait(t, `!document.querySelector('.htmx-settling, .htmx-request')`)
+	b.evaluate(
+		t,
+		fmt.Sprintf(
+			`document.querySelector('main a[href=%q]').click(); true`,
+			edit,
+		),
+	)
+	b.wait(
+		t,
+		`document.querySelector('#project-edit-dialog').matches(':modal')`,
+	)
 	b.captureNavigation(t, "mobile-environment-saved", func() {
 		assertEditDeleteControl(t, b, `main button[hx-delete]`)
 	})
@@ -144,7 +159,7 @@ func TestResourceListMobileBrowserE2E(t *testing.T) {
 	)
 	b.wait(
 		t,
-		`location.pathname === '/environments' && document.querySelector('main h1')?.textContent === 'Environments'`,
+		`location.pathname === '/environments' && !document.querySelector('#project-edit-dialog').open && !document.querySelector('#project-edit-content').childElementCount && !document.querySelector('.htmx-settling, .htmx-request')`,
 	)
 	b.evaluate(
 		t,
@@ -153,7 +168,10 @@ func TestResourceListMobileBrowserE2E(t *testing.T) {
 			edit,
 		),
 	)
-	b.wait(t, `document.querySelector('main button[hx-delete]') !== null`)
+	b.wait(
+		t,
+		`document.querySelector('#project-edit-dialog').matches(':modal') && document.querySelector('main button[hx-delete]') !== null`,
+	)
 	b.evaluate(
 		t,
 		`window.confirm = () => false; document.querySelector('main button[hx-delete]').click(); true`,
@@ -191,7 +209,7 @@ func TestResourceListMobileBrowserE2E(t *testing.T) {
 	))
 	b.wait(
 		t,
-		`document.querySelector('main form[hx-confirm^="Delete this lifecycle"]') !== null`,
+		`document.querySelector('#project-edit-dialog').matches(':modal') && document.querySelector('main form[hx-confirm^="Delete this lifecycle"]') !== null`,
 	)
 	b.captureNavigation(t, "mobile-lifecycle-edit", func() {
 		assertEditDeleteControl(

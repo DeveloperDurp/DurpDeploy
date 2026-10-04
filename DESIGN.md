@@ -233,6 +233,14 @@ Save refreshes the list and returns focus to Add Step. Cancel, Escape, and
 outside clicks discard the new step. The fullscreen script editor still works
 inside this dialog.
 
+Environment, Lifecycle, and Template cards open their editors in the same
+dialog. Save and Delete refresh the list and close the dialog without changing
+its URL. Back, Escape, and outside clicks discard unsaved settings and return
+focus to the card. Validation retains submitted fields inside the dialog.
+Lifecycle stage controls remain usable inside the modal. Delete is the last
+section, and standalone editor URLs and read-only viewer behavior remain.
+Deployments keep their existing pages.
+
 Normal internal page links use HTMX to replace the main content, update the
 navbar and title, and push the existing URL into browser history. The document
 and its styles stay loaded; no page fade or layout animation is added. Focus

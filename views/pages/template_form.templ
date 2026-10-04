@@ -104,8 +104,9 @@ templ TemplateFormContent(tpl *db.StepTemplate, isNew bool, errorMsg string) {
 				hx-post="/templates"
 			} else {
 				hx-put={ "/templates/" + strconv.FormatInt(tpl.ID, 10) }
-				hx-target="#form-container"
-				hx-swap="innerHTML"
+				hx-target="closest [data-create-form]"
+				hx-select="[data-create-form]"
+				hx-swap="outerHTML"
 				data-toast-success="Template updated"
 				data-toast-error="Failed to update template"
 			}

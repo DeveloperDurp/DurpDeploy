@@ -464,13 +464,13 @@ func TestGlobalNotificationSettings_RendersBackForBothPageBranches(
 				requireHTMLPattern(
 					t,
 					string(body),
-					`(?s)<div class="flex justify-between items-center mb-4">\s*<h1 class="text-3xl font-bold">Notification Settings</h1>\s*<div class="flex gap-2">\s*<button type="submit" class="btn btn-primary btn-sm">Save</button>\s*`+back,
+					`(?s)<div class="page-header">\s*<h1 class="text-3xl font-bold">Notification Settings</h1>\s*<div class="flex gap-2">\s*<button type="submit" class="btn btn-primary btn-sm">Save</button>\s*`+back,
 				)
 			} else {
 				requireHTMLPattern(
 					t,
 					string(body),
-					`(?s)<div class="flex justify-between items-center mb-4">\s*<h1 class="text-3xl font-bold">Notification Settings</h1>\s*<div class="flex gap-2">\s*`+back,
+					`(?s)<div class="page-header">\s*<h1 class="text-3xl font-bold">Notification Settings</h1>\s*<div class="flex gap-2">\s*`+back,
 				)
 			}
 			hasSave := strings.Contains(string(body), `>Save</button>`)

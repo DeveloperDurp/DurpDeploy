@@ -245,8 +245,12 @@ Alpine.data('runbookEditor', () => ({
 }));
 
 Alpine.data('formDialogHost', () => ({
+	opener: null,
+	rememberOpener(event) { this.opener = event.currentTarget; },
 	afterSettle(event) {
 		if (event.detail?.target?.id !== 'project-edit-content') return;
+		const title = this.$refs.content.querySelector('.page-header h1')?.textContent.trim();
+		if (title) this.$refs.dialog.setAttribute('aria-label', title);
 		if (!this.$refs.dialog.open) this.$refs.dialog.showModal();
 		this.$refs.content.querySelector('input[name="name"]')?.focus();
 	},
@@ -266,7 +270,8 @@ Alpine.data('formDialogHost', () => ({
 	closed() {
 		for (const child of this.$refs.content.children) Alpine.destroyTree(child);
 		this.$refs.content.replaceChildren();
-		this.$refs.editButton.focus();
+		(this.opener?.isConnected ? this.opener : this.$refs.editButton)?.focus();
+		this.opener = null;
 	},
 	saved() { this.$refs.editButton?.focus(); },
 	destroy() { this.$refs.dialog?.close(); },

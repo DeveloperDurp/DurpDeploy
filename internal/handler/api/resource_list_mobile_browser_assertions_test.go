@@ -65,16 +65,17 @@ func captureResourceLists(
 
 func assertEditDeleteControl(t *testing.T, b *packageBrowser, selector string) {
 	t.Helper()
+	b.wait(t, `document.getAnimations().every(a => a.playState !== 'running')`)
 	if string(b.evaluate(t, fmt.Sprintf(`(() => {
  const button = document.querySelector(%q);
  const save = document.querySelector('button[form="environment-settings-form"]');
  const back = document.querySelector('a[x-data="backNavigation"]');
  return button && button.getBoundingClientRect().height >= 44 &&
  button.closest('form')?.id !== 'lifecycle-settings-form' &&
- (location.pathname.startsWith('/lifecycles/') ||
+ (document.querySelector('[data-lifecycle-settings]') !== null ||
  save?.textContent === 'Save' && back?.textContent === 'Back' &&
  ![...document.querySelectorAll('main a, main button')].some(el => ['Update', 'Cancel'].includes(el.textContent)));
-})()`, selector))) != "true" {
+	})()`, selector))) != "true" {
 		t.Fatal("edit Delete control is small or submits the settings form")
 	}
 }

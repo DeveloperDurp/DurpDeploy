@@ -45,7 +45,7 @@ templ TemplatesListFragment(templates []db.StepTemplate) {
 			<div class="space-y-3">
 				for _, tpl := range templates {
 					if CanWrite(ctx) {
-						@ResourceCard(tpl.Name, "/templates/" + strconv.FormatInt(tpl.ID, 10) + "/edit") {
+						@ResourceDialogCard(tpl.Name, "/templates/" + strconv.FormatInt(tpl.ID, 10) + "/edit") {
 							@TemplateCardDetails(tpl)
 						}
 					} else {

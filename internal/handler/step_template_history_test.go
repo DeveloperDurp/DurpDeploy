@@ -467,7 +467,7 @@ func TestStepTemplate_VersioningShadowHistory(t *testing.T) {
 	requireHTMLPattern(
 		t,
 		body,
-		`(?s)<div class="flex flex-wrap justify-between items-center gap-2">\s*<h1 class="text-3xl font-bold">T1</h1>\s*<div class="flex gap-2 ml-auto">\s*`+back,
+		`(?s)<div class="page-header">\s*<h1 class="text-3xl font-bold">T1</h1>\s*<div class="flex gap-2 ml-auto">\s*`+back,
 	)
 
 	// 5. Delete the template; CASCADE should drop versions. History -> 404.

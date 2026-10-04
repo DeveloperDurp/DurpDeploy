@@ -754,7 +754,7 @@ func TestNewDeploymentPage_RendersForm(t *testing.T) {
 		t,
 		body,
 		fmt.Sprintf(
-			`(?s)<div class="flex justify-between items-center">\s*<h1 class="text-3xl font-bold">Deploy .*?</h1>\s*<div class="flex gap-2">\s*<a href="/projects/%d" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>`,
+			`(?s)<div class="page-header">\s*<h1 class="text-3xl font-bold">Deploy .*?</h1>\s*<div class="flex gap-2">\s*<a href="/projects/%d" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>`,
 			proj.ID,
 		),
 	)

@@ -55,7 +55,7 @@ templ EnvironmentsListFragment(environments []db.Environment) {
 
 templ EnvironmentRow(environment db.Environment) {
 	if CanWrite(ctx) {
-		@ResourceCard(environment.Name, "/environments/" + strconv.FormatInt(environment.ID, 10) + "/edit") {
+		@ResourceDialogCard(environment.Name, "/environments/" + strconv.FormatInt(environment.ID, 10) + "/edit") {
 			@EnvironmentCardDetails(environment)
 		}
 	} else {

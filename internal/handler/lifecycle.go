@@ -216,6 +216,10 @@ func (h *LifecycleHandler) SaveLifecycle(
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		if retargetFormDialog(w, r, "#lifecycles-content") {
+			h.ListLifecycles(w, r)
+			return
+		}
 		http.Redirect(w, r, lifecyclesPath, http.StatusSeeOther)
 	case "put":
 		name := strings.TrimSpace(r.FormValue("name"))
@@ -264,12 +268,15 @@ func (h *LifecycleHandler) SaveLifecycle(
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		http.Redirect(
-			w,
-			r,
-			lifecyclesPath,
-			http.StatusSeeOther,
-		)
+		if retargetFormDialog(w, r, "#lifecycles-content") {
+			h.ListLifecycles(w, r)
+			return
+		}
+		if r.Header.Get("HX-Request") == "true" {
+			w.Header().Set("HX-Redirect", lifecyclesPath)
+			return
+		}
+		http.Redirect(w, r, lifecyclesPath, http.StatusSeeOther)
 	default:
 		http.Error(w, "Unknown method", http.StatusBadRequest)
 	}
