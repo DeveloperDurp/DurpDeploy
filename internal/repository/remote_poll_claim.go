@@ -37,6 +37,9 @@ func (r *Repository) ClaimRemoteDeploymentPayload(
 	agentID string,
 	prepare func(RemotePayloadSnapshot) (RemotePreparedClaim, error),
 ) (RemoteClaim, bool, error) {
+	if err := r.ReconcileDeploymentQueues(ctx); err != nil {
+		return RemoteClaim{}, false, err
+	}
 	var result RemoteClaim
 	claimed := false
 	err := withSQLiteBusyRetry(ctx, func() error {

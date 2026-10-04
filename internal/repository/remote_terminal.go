@@ -24,11 +24,20 @@ func (r *Repository) FinishRemoteDeploymentLifecycle(
 	state string,
 ) (RemoteTerminalResult, error) {
 	result := RemoteTerminalResult{}
-	err := r.WithTx(ctx, func(q *db.Queries) error {
-		var err error
-		result, err = finishRemoteDeploymentLifecycle(ctx, q, identity, state)
-		return err
-	})
+	err := r.WithDeploymentTx(
+		ctx,
+		identity.DeploymentID,
+		func(q *db.Queries) error {
+			var err error
+			result, err = finishRemoteDeploymentLifecycle(
+				ctx,
+				q,
+				identity,
+				state,
+			)
+			return err
+		},
+	)
 	return result, err
 }
 
@@ -108,11 +117,15 @@ func (r *Repository) AcknowledgeRemoteCancellation(
 	identity RemoteLifecycleClaim,
 ) (bool, error) {
 	changed := false
-	err := r.WithTx(ctx, func(q *db.Queries) error {
-		var err error
-		changed, err = acknowledgeRemoteCancellation(ctx, q, identity)
-		return err
-	})
+	err := r.WithDeploymentTx(
+		ctx,
+		identity.DeploymentID,
+		func(q *db.Queries) error {
+			var err error
+			changed, err = acknowledgeRemoteCancellation(ctx, q, identity)
+			return err
+		},
+	)
 	return changed, err
 }
 

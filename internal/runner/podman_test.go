@@ -704,14 +704,6 @@ esac
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := repo.Queries.UpdateDeploymentStatus(
-		t.Context(),
-		db.UpdateDeploymentStatusParams{
-			ID: created.Deployment.ID, Status: "running",
-		},
-	); err != nil {
-		t.Fatal(err)
-	}
 	if _, err := repo.DB.ExecContext(t.Context(),
 		"UPDATE deployments SET container_namespace = ? WHERE id = ?",
 		"old-namespace", created.Deployment.ID); err != nil {

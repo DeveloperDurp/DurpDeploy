@@ -93,6 +93,9 @@ keep `overflow-x-auto` and `table table-zebra table-fixed w-full`.
   keyboard access and focus treatment; long values wrap on narrow screens.
 
 ### Deployment waiting state
+- Environment queues use a `badge-primary` queued status, a readable queue
+  position, and a project-authorized link to active work. Reuse status polling
+  and native Cancel buttons; viewers see queue state without write controls.
 - Queued remote work with no issued claim replaces the deployment status text
   with “Waiting for agents” in the existing `badge-warning`, with
   `aria-live="polite"`.

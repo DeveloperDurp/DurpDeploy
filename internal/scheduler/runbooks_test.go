@@ -3,7 +3,6 @@ package scheduler_test
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"testing"
 
 	"durpdeploy/internal/db"
@@ -167,7 +166,7 @@ func TestRunbookSchedule_InvalidCronDisablesSchedule(t *testing.T) {
 	}
 }
 
-func TestRunbookSchedule_ActiveExecutionSkipsNextOccurrence(t *testing.T) {
+func TestRunbookSchedule_ActiveExecutionQueuesNextOccurrence(t *testing.T) {
 	f := newFixture(t)
 	project := f.createProject()
 	environment := f.createEnvironment("overlap-env")
@@ -194,7 +193,7 @@ func TestRunbookSchedule_ActiveExecutionSkipsNextOccurrence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, _, err = f.repo.CreateRunbookExecution(f.ctx(),
+	_, result, err := f.repo.CreateRunbookExecution(f.ctx(),
 		repository.RunbookExecutionRequest{
 			ProjectID:     project.ID,
 			RunbookID:     book.ID,
@@ -207,8 +206,8 @@ func TestRunbookSchedule_ActiveExecutionSkipsNextOccurrence(t *testing.T) {
 			ScheduleNextRunAt:     stored.NextRunAt + 60,
 			FiredAt:               stored.NextRunAt,
 		})
-	if !errors.Is(err, repository.ErrRunbookScheduleOverlap) {
-		t.Fatalf("overlap error=%v", err)
+	if err != nil || result.Deployment.Status != "queued" {
+		t.Fatalf("status=%s, error=%v", result.Deployment.Status, err)
 	}
 	stored, err = f.repo.Queries.GetRunbookSchedule(f.ctx(),
 		db.GetRunbookScheduleParams{ID: schedule.ID, RunbookID: book.ID})
@@ -216,7 +215,7 @@ func TestRunbookSchedule_ActiveExecutionSkipsNextOccurrence(t *testing.T) {
 		t.Fatal(err)
 	}
 	if stored.NextRunAt != schedule.NextRunAt+120 ||
-		stored.LastFiredAt.Int64 != schedule.NextRunAt {
+		stored.LastFiredAt.Int64 != schedule.NextRunAt+60 {
 		t.Fatalf("schedule advanced incorrectly: %+v", stored)
 	}
 	executions, err := f.repo.Queries.ListRunbookExecutions(
@@ -226,8 +225,8 @@ func TestRunbookSchedule_ActiveExecutionSkipsNextOccurrence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(executions) != 1 {
-		t.Fatalf("executions=%d want 1", len(executions))
+	if len(executions) != 2 {
+		t.Fatalf("executions=%d want 2", len(executions))
 	}
 }
 

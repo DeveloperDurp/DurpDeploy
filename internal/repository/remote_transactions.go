@@ -13,11 +13,20 @@ func (r *Repository) ClaimRemoteDeployment(
 	arg db.ClaimRemoteDeploymentParams,
 ) (int64, error) {
 	var changed int64
-	err := r.WithTx(ctx, func(q *db.Queries) error {
-		var err error
+	err := r.WithDeploymentTx(ctx, arg.DeploymentID, func(q *db.Queries) error {
+		d, err := q.GetDeployment(ctx, arg.DeploymentID)
+		if err != nil {
+			return err
+		}
+		if err := advanceEnvironmentQueue(ctx, q, d.EnvironmentID); err != nil {
+			return err
+		}
 		changed, err = claimRemoteDeployment(ctx, q, arg)
 		return err
 	})
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, nil
+	}
 	if err != nil {
 		return 0, err
 	}
@@ -75,7 +84,7 @@ func (r *Repository) CancelRemoteDeployment(
 	arg db.RequestRemoteDeploymentCancellationParams,
 ) (int64, error) {
 	var changed int64
-	err := r.WithTx(ctx, func(q *db.Queries) error {
+	err := r.WithDeploymentTx(ctx, arg.DeploymentID, func(q *db.Queries) error {
 		var err error
 		changed, err = q.CancelStepDeployment(ctx, arg.DeploymentID)
 		if err != nil || changed == 0 {

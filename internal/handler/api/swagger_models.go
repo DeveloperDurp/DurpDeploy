@@ -101,15 +101,18 @@ type swaggerRelease struct {
 // Deployment represents a release executing against an environment.
 // swagger:model Deployment
 type swaggerDeployment struct {
-	ID            int64   `json:"id"`
-	ReleaseID     int64   `json:"release_id"`
-	EnvironmentID int64   `json:"environment_id"`
-	Status        string  `json:"status"`
-	StartedAt     *int64  `json:"started_at"`
-	FinishedAt    *int64  `json:"finished_at"`
-	CreatedAt     int64   `json:"created_at"`
-	Forced        int64   `json:"forced"`
-	Note          *string `json:"note"`
+	QueuePosition      int64   `json:"queue_position"`
+	ActiveDeploymentID int64   `json:"active_deployment_id,omitempty"`
+	ActiveWorkURL      string  `json:"active_work_url,omitempty"`
+	ID                 int64   `json:"id"`
+	ReleaseID          int64   `json:"release_id"`
+	EnvironmentID      int64   `json:"environment_id"`
+	Status             string  `json:"status"`
+	StartedAt          *int64  `json:"started_at"`
+	FinishedAt         *int64  `json:"finished_at"`
+	CreatedAt          int64   `json:"created_at"`
+	Forced             int64   `json:"forced"`
+	Note               *string `json:"note"`
 }
 
 // DeploymentListItem is the enriched row returned by ListDeployments.
@@ -141,9 +144,12 @@ type swaggerDeploymentListResponse struct {
 // DeploymentStatusResponse is the status payload for GetDeploymentStatus.
 // swagger:model DeploymentStatusResponse
 type swaggerDeploymentStatusResponse struct {
-	ID               string `json:"id"`
-	Status           string `json:"status"`
-	WaitingForAgents bool   `json:"waiting_for_agents"`
+	ID                 string `json:"id"`
+	Status             string `json:"status"`
+	WaitingForAgents   bool   `json:"waiting_for_agents"`
+	QueuePosition      int64  `json:"queue_position"`
+	ActiveDeploymentID int64  `json:"active_deployment_id,omitempty"`
+	ActiveWorkURL      string `json:"active_work_url,omitempty"`
 }
 
 // ScheduledDeployment is a cron-driven deployment configuration.
@@ -864,21 +870,24 @@ type swaggerRunbookVersionResponse struct {
 
 // swagger:model RunbookExecutionDetail
 type swaggerRunbookExecutionDetail struct {
-	ID               int64                 `json:"id"`
-	RunbookVersionID int64                 `json:"runbook_version_id"`
-	DeploymentID     int64                 `json:"deployment_id"`
-	ActorUserID      swaggerSQLNullInteger `json:"actor_user_id"`
-	ScheduleID       swaggerSQLNullInteger `json:"schedule_id"`
-	CreatedAt        int64                 `json:"created_at"`
-	EnvironmentID    int64                 `json:"environment_id"`
-	Status           string                `json:"status"`
-	StartedAt        swaggerSQLNullInteger `json:"started_at"`
-	FinishedAt       swaggerSQLNullInteger `json:"finished_at"`
-	RunbookID        int64                 `json:"runbook_id"`
-	Version          int64                 `json:"version"`
-	ProjectID        int64                 `json:"project_id"`
-	RunbookName      string                `json:"runbook_name"`
-	EnvironmentName  string                `json:"environment_name"`
+	QueuePosition      int64                 `json:"queue_position"`
+	ActiveDeploymentID int64                 `json:"active_deployment_id,omitempty"`
+	ActiveWorkURL      string                `json:"active_work_url,omitempty"`
+	ID                 int64                 `json:"id"`
+	RunbookVersionID   int64                 `json:"runbook_version_id"`
+	DeploymentID       int64                 `json:"deployment_id"`
+	ActorUserID        swaggerSQLNullInteger `json:"actor_user_id"`
+	ScheduleID         swaggerSQLNullInteger `json:"schedule_id"`
+	CreatedAt          int64                 `json:"created_at"`
+	EnvironmentID      int64                 `json:"environment_id"`
+	Status             string                `json:"status"`
+	StartedAt          swaggerSQLNullInteger `json:"started_at"`
+	FinishedAt         swaggerSQLNullInteger `json:"finished_at"`
+	RunbookID          int64                 `json:"runbook_id"`
+	Version            int64                 `json:"version"`
+	ProjectID          int64                 `json:"project_id"`
+	RunbookName        string                `json:"runbook_name"`
+	EnvironmentName    string                `json:"environment_name"`
 }
 
 // swagger:model RunbookExecutionListResponse

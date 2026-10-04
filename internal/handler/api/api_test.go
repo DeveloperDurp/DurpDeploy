@@ -540,13 +540,13 @@ func TestCancelDeployment_Success(t *testing.T) {
 	}
 }
 
-func TestCancelDeployment_NotRunning(t *testing.T) {
+func TestCancelDeployment_TerminalConflict(t *testing.T) {
 	h := newAPIHarness(t)
 	u := seedAPIUser(t, h.repo, "admin@example.com", "admin")
 	p := seedProject(t, h.repo)
 	e := seedEnv(t, h.repo)
 	r := seedRelease(t, h.repo, p.ID)
-	d := seedDeployment(t, h.repo, r.ID, e.ID, "pending")
+	d := seedDeployment(t, h.repo, r.ID, e.ID, "succeeded")
 
 	req := httptest.NewRequest(
 		http.MethodPost,

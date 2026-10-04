@@ -397,7 +397,19 @@ func (h *DeploymentHandler) GetDeployment(
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	RespondJSON(w, http.StatusOK, deployment)
+	queue, err := auth.ReadDeploymentQueue(r.Context(), h.repo, depID)
+	if err != nil {
+		RespondError(
+			w,
+			http.StatusInternalServerError,
+			"Cannot read deployment queue",
+		)
+		return
+	}
+	RespondJSON(w, http.StatusOK, struct {
+		db.Deployment
+		auth.DeploymentQueueInfo
+	}{deployment, queue})
 }
 
 // GetDeploymentStatus returns the current deployment status.
@@ -444,10 +456,20 @@ func (h *DeploymentHandler) GetDeploymentStatus(
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	queue, err := auth.ReadDeploymentQueue(r.Context(), h.repo, depID)
+	if err != nil {
+		RespondError(
+			w,
+			http.StatusInternalServerError,
+			"Cannot read deployment queue",
+		)
+		return
+	}
 	RespondJSON(w, http.StatusOK, struct {
 		Status           string `json:"status"`
 		WaitingForAgents bool   `json:"waiting_for_agents"`
-	}{Status: deployment.Status, WaitingForAgents: waiting != 0})
+		auth.DeploymentQueueInfo
+	}{Status: deployment.Status, WaitingForAgents: waiting != 0, DeploymentQueueInfo: queue})
 }
 
 // ApproveDeployment approves a deployment pending approval.
@@ -521,7 +543,11 @@ func (h *DeploymentHandler) ApproveDeployment(
 	}
 	h.startLocalDeployment(result)
 
-	RespondJSON(w, http.StatusOK, map[string]string{"status": "pending"})
+	RespondJSON(
+		w,
+		http.StatusOK,
+		map[string]string{"status": result.Deployment.Status},
+	)
 }
 
 // RedeployDeployment creates a new deployment from a terminal one.
@@ -686,6 +712,20 @@ func (h *DeploymentHandler) CancelDeployment(
 			return
 		}
 		RespondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if deployment.Status == "queued" ||
+		!deployment.AssignedAgentID.Valid &&
+			(deployment.Status == "pending" || deployment.Status == "pending_approval") {
+		if err := h.repo.CancelQueuedDeployment(r.Context(), depID); err != nil {
+			RespondError(
+				w,
+				http.StatusConflict,
+				"Cannot cancel deployment in its current state",
+			)
+			return
+		}
+		RespondJSON(w, http.StatusOK, map[string]string{"status": "cancelled"})
 		return
 	}
 	if deployment.AssignedAgentID.Valid {

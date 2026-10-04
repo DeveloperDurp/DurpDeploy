@@ -95,7 +95,23 @@ func (h *RunbookHandler) execution(
 func (h *RunbookHandler) GetExecution(w http.ResponseWriter, r *http.Request) {
 	execution, ok := h.execution(w, r)
 	if ok {
-		RespondJSON(w, http.StatusOK, execution)
+		queue, err := auth.ReadDeploymentQueue(
+			r.Context(),
+			h.repo,
+			execution.DeploymentID,
+		)
+		if err != nil {
+			RespondError(
+				w,
+				http.StatusInternalServerError,
+				"Cannot read execution queue",
+			)
+			return
+		}
+		RespondJSON(w, http.StatusOK, struct {
+			db.GetRunbookExecutionRow
+			auth.DeploymentQueueInfo
+		}{execution, queue})
 	}
 }
 
@@ -158,7 +174,11 @@ func (h *RunbookHandler) Cancel(w http.ResponseWriter, r *http.Request) {
 		RespondError(w, http.StatusInternalServerError, "Cannot read execution")
 		return
 	}
-	if dep.AssignedAgentID.Valid {
+	if dep.Status == "queued" ||
+		!dep.AssignedAgentID.Valid &&
+			(dep.Status == "pending" || dep.Status == "pending_approval") {
+		err = h.repo.CancelQueuedDeployment(r.Context(), dep.ID)
+	} else if dep.AssignedAgentID.Valid {
 		err = h.repo.CancelAssignedRemoteDeployment(r.Context(),
 			repository.RemoteAssignedDeployment{
 				DeploymentID: dep.ID, AgentID: dep.AssignedAgentID.String,
@@ -226,7 +246,11 @@ func (h *RunbookHandler) Approve(w http.ResponseWriter, r *http.Request) {
 	}
 	go h.runner.Run(context.Background(), result.Deployment.ID,
 		result.Deployment.ReleaseID, result.Deployment.EnvironmentID)
-	RespondJSON(w, http.StatusOK, map[string]string{"status": "pending"})
+	RespondJSON(
+		w,
+		http.StatusOK,
+		map[string]string{"status": result.Deployment.Status},
+	)
 }
 
 // swagger:route POST /projects/{id}/runbook-executions/{executionId}/retry runbooks retryRunbookExecution

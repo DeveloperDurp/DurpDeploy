@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -66,19 +67,28 @@ func (r *DeploymentRunner) Run(
 		cancel()
 		return
 	}
+	if _, exists := r.cancels[deploymentID]; exists {
+		r.mu.Unlock()
+		cancel()
+		return
+	}
+	started, err := r.repo.StartLocalDeployment(ctx, deploymentID)
+	if err != nil || !started {
+		r.mu.Unlock()
+		cancel()
+		if err != nil {
+			slog.Error(
+				"claim deployment",
+				"deployment_id",
+				deploymentID,
+				"err",
+				err,
+			)
+		}
+		return
+	}
 	r.cancels[deploymentID] = cancel
 	r.mu.Unlock()
-
-	now := time.Now().Unix()
-
-	_ = r.repo.Queries.UpdateDeploymentStatus(
-		ctx,
-		db.UpdateDeploymentStatusParams{
-			ID:        deploymentID,
-			Status:    "running",
-			StartedAt: sql.NullInt64{Int64: now, Valid: true},
-		},
-	)
 
 	release, err := r.repo.Queries.GetRelease(ctx, releaseID)
 	if err != nil {

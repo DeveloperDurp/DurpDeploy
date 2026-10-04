@@ -202,7 +202,7 @@ func selectRemoteVariables(
 }
 
 func (d *Dispatcher) Maintain(ctx context.Context) error {
-	err := d.repository.WithTx(ctx, func(q *db.Queries) error {
+	err := d.repository.WithQueueMaintenanceTx(ctx, func(q *db.Queries) error {
 		now, err := q.CurrentUnixTime(ctx)
 		if err != nil {
 			return err

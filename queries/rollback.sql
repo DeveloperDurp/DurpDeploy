@@ -18,7 +18,7 @@ ORDER BY d.created_at DESC, d.id DESC LIMIT 1;
 SELECT CASE WHEN EXISTS (
     SELECT 1 FROM deployments d JOIN releases r ON r.id = d.release_id
     WHERE r.project_id = ? AND d.environment_id = ? AND d.kind = 'deployment'
-      AND (d.status IN ('pending', 'running', 'pending_approval', 'cleanup_unconfirmed')
+      AND (d.status IN ('queued', 'pending', 'running', 'pending_approval', 'cleanup_unconfirmed')
         OR EXISTS (SELECT 1 FROM remote_deployment_claims c WHERE c.deployment_id = d.id AND c.state IN ('lost', 'cancel_unconfirmed'))
         OR EXISTS (SELECT 1 FROM remote_step_runs s WHERE s.deployment_id = d.id AND s.state IN ('lost', 'cancel_unconfirmed')))
 ) THEN 1 ELSE 0 END;

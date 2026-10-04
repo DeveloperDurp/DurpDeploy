@@ -25,9 +25,6 @@ type RunbookExecutionRequest struct {
 
 var ErrRunbookScheduleConflict = errors.New("runbook schedule already fired")
 
-var ErrRunbookScheduleOverlap = errors.New(
-	"runbook schedule execution still active",
-)
 var ErrRunbookGate = errors.New("runbook lifecycle gate blocked execution")
 var ErrRunbookRemoteOutcomeUnconfirmed = errors.New(
 	"runbook remote outcome is unconfirmed",
@@ -39,9 +36,7 @@ func (r *Repository) CreateRunbookExecution(
 ) (db.RunbookExecution, DeploymentResult, error) {
 	var execution db.RunbookExecution
 	var result DeploymentResult
-	var skipped bool
 	err := withSQLiteBusyRetry(ctx, func() error {
-		skipped = false
 		return r.WithTx(ctx, func(q *db.Queries) error {
 			if arg.RetrySourceDeploymentID != 0 {
 				source, err := q.GetDeployment(ctx, arg.RetrySourceDeploymentID)
@@ -66,29 +61,6 @@ func (r *Repository) CreateRunbookExecution(
 				return err
 			}
 			if arg.ScheduleID.Valid {
-				active, err := q.HasActiveRunbookScheduleExecution(
-					ctx,
-					arg.ScheduleID,
-				)
-				if err != nil {
-					return err
-				}
-				if active != 0 {
-					changed, err := q.SkipRunbookSchedule(ctx,
-						db.SkipRunbookScheduleParams{
-							NextRunAt:   arg.ScheduleNextRunAt,
-							ID:          arg.ScheduleID.Int64,
-							NextRunAt_2: arg.ScheduleExpectedRunAt,
-						})
-					if err != nil {
-						return err
-					}
-					if changed != 1 {
-						return ErrRunbookScheduleConflict
-					}
-					skipped = true
-					return nil
-				}
 				changed, err := q.AdvanceRunbookSchedule(ctx,
 					db.AdvanceRunbookScheduleParams{
 						NextRunAt: arg.ScheduleNextRunAt,
@@ -169,10 +141,6 @@ func (r *Repository) CreateRunbookExecution(
 	if err != nil {
 		return db.RunbookExecution{}, DeploymentResult{},
 			fmt.Errorf("create runbook execution: %w", err)
-	}
-	if skipped {
-		return db.RunbookExecution{}, DeploymentResult{},
-			ErrRunbookScheduleOverlap
 	}
 	return execution, result, nil
 }

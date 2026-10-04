@@ -244,15 +244,18 @@ func (r *DeploymentRunner) reconcileAttempts() error {
 		return err
 	}
 	if r.repo != nil {
-		if _, err := r.repo.Queries.ConfirmContainerCleanup(ctx,
-			db.ConfirmContainerCleanupParams{
-				Now: sql.NullInt64{
-					Int64: time.Now().Unix(), Valid: true,
-				},
-				Namespace: sql.NullString{
-					String: r.engine.scope(), Valid: true,
-				},
-			}); err != nil {
+		if err := r.repo.WithQueueMaintenanceTx(ctx, func(q *db.Queries) error {
+			_, err := q.ConfirmContainerCleanup(ctx,
+				db.ConfirmContainerCleanupParams{
+					Now: sql.NullInt64{
+						Int64: time.Now().Unix(), Valid: true,
+					},
+					Namespace: sql.NullString{
+						String: r.engine.scope(), Valid: true,
+					},
+				})
+			return err
+		}); err != nil {
 			return fmt.Errorf("confirm container cleanup: %w", err)
 		}
 	}

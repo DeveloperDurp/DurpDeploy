@@ -660,7 +660,7 @@ UPDATE deployments SET
     finished_at = ?1
 WHERE id = ?2
   AND assigned_agent_id = ?3
-  AND status IN ('pending', 'pending_approval', 'running')
+  AND status IN ('queued', 'pending', 'pending_approval', 'running')
 `
 
 type TerminateRevokedRemoteDeploymentParams struct {

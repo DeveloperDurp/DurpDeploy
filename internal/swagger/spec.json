@@ -8609,6 +8609,15 @@
       "type": "object",
       "title": "Deployment represents a release executing against an environment.",
       "properties": {
+        "active_deployment_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "ActiveDeploymentID"
+        },
+        "active_work_url": {
+          "type": "string",
+          "x-go-name": "ActiveWorkURL"
+        },
         "created_at": {
           "type": "integer",
           "format": "int64",
@@ -8637,6 +8646,11 @@
         "note": {
           "type": "string",
           "x-go-name": "Note"
+        },
+        "queue_position": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "QueuePosition"
         },
         "release_id": {
           "type": "integer",
@@ -8819,9 +8833,23 @@
       "type": "object",
       "title": "DeploymentStatusResponse is the status payload for GetDeploymentStatus.",
       "properties": {
+        "active_deployment_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "ActiveDeploymentID"
+        },
+        "active_work_url": {
+          "type": "string",
+          "x-go-name": "ActiveWorkURL"
+        },
         "id": {
           "type": "string",
           "x-go-name": "ID"
+        },
+        "queue_position": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "QueuePosition"
         },
         "status": {
           "type": "string",
@@ -10088,6 +10116,15 @@
     "RunbookExecutionDetail": {
       "type": "object",
       "properties": {
+        "active_deployment_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "ActiveDeploymentID"
+        },
+        "active_work_url": {
+          "type": "string",
+          "x-go-name": "ActiveWorkURL"
+        },
         "actor_user_id": {
           "$ref": "#/definitions/swaggerSQLNullInteger"
         },
@@ -10122,6 +10159,11 @@
           "type": "integer",
           "format": "int64",
           "x-go-name": "ProjectID"
+        },
+        "queue_position": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "QueuePosition"
         },
         "runbook_id": {
           "type": "integer",

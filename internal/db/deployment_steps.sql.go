@@ -13,7 +13,7 @@ import (
 const addDeploymentStepSelector = `-- name: AddDeploymentStepSelector :execrows
 INSERT INTO deployment_step_selectors (deployment_id, step_index, label)
 SELECT ?1, ?2, ?3
-WHERE EXISTS (SELECT 1 FROM deployments WHERE id = ?1 AND status IN ('pending', 'pending_approval'))
+WHERE EXISTS (SELECT 1 FROM deployments WHERE id = ?1 AND status IN ('queued', 'pending', 'pending_approval'))
   AND NOT EXISTS (SELECT 1 FROM deployment_step_sources WHERE deployment_id = ?1)
   AND NOT EXISTS (SELECT 1 FROM deployment_step_attempts WHERE deployment_id = ?1)
 `
@@ -38,7 +38,7 @@ SELECT ?1, ?2, ?3, ?4,
     ?5, ?6, ?7, ?8,
     COALESCE(NULLIF(CAST(?9 AS TEXT), ''), 'bash'),
     ?10, ?11
-WHERE EXISTS (SELECT 1 FROM deployments WHERE id = ?1 AND status IN ('pending', 'pending_approval'))
+WHERE EXISTS (SELECT 1 FROM deployments WHERE id = ?1 AND status IN ('queued', 'pending', 'pending_approval'))
   AND NOT EXISTS (SELECT 1 FROM deployment_step_sources WHERE deployment_id = ?1)
   AND NOT EXISTS (SELECT 1 FROM deployment_step_attempts WHERE deployment_id = ?1)
 `
@@ -166,7 +166,7 @@ func (q *Queries) FinishLocalDeploymentStep(ctx context.Context, arg FinishLocal
 const freezeDeploymentStepSource = `-- name: FreezeDeploymentStepSource :execrows
 INSERT INTO deployment_step_sources (deployment_id, steps_json)
 SELECT d.id, r.steps_json FROM deployments d JOIN releases r ON r.id = d.release_id
-WHERE d.id = ?1 AND d.status IN ('pending', 'pending_approval')
+WHERE d.id = ?1 AND d.status IN ('queued', 'pending', 'pending_approval')
   AND NOT EXISTS (SELECT 1 FROM deployment_step_sources s WHERE s.deployment_id = d.id)
 `
 
@@ -181,7 +181,7 @@ func (q *Queries) FreezeDeploymentStepSource(ctx context.Context, deploymentID i
 const freezeDeploymentStepSourceJSON = `-- name: FreezeDeploymentStepSourceJSON :execrows
 INSERT INTO deployment_step_sources (deployment_id, steps_json)
 SELECT d.id, ?1 FROM deployments d
-WHERE d.id = ?2 AND d.status IN ('pending', 'pending_approval')
+WHERE d.id = ?2 AND d.status IN ('queued', 'pending', 'pending_approval')
   AND NOT EXISTS (SELECT 1 FROM deployment_step_sources s WHERE s.deployment_id = d.id)
 `
 

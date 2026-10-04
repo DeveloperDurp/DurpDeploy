@@ -38,6 +38,7 @@ SELECT c.* FROM remote_deployment_claims c
 JOIN deployments d ON d.id = c.deployment_id
 WHERE c.agent_id = sqlc.arg(agent_id) AND c.state = 'waiting'
   AND d.assigned_agent_id = c.agent_id AND d.status = 'pending'
+  AND EXISTS (SELECT 1 FROM environment_deployment_slots slot WHERE slot.deployment_id = d.id)
 ORDER BY c.created_at, c.deployment_id;
 
 -- name: LockWaitingRemoteDeploymentClaim :execrows
@@ -71,7 +72,8 @@ WHERE remote_deployment_claims.deployment_id = sqlc.arg(deployment_id)
   AND EXISTS (SELECT 1 FROM deployments d
       WHERE d.id = remote_deployment_claims.deployment_id
         AND d.assigned_agent_id = remote_deployment_claims.agent_id
-        AND d.status = 'pending')
+        AND d.status = 'pending'
+        AND EXISTS (SELECT 1 FROM environment_deployment_slots slot WHERE slot.deployment_id = d.id))
   AND EXISTS (SELECT 1 FROM agents a
       WHERE a.id = remote_deployment_claims.agent_id AND a.status = 'active' AND a.draining = 0
         AND EXISTS (SELECT 1 FROM agent_pairings p
@@ -185,7 +187,7 @@ WHERE deployment_id = sqlc.arg(deployment_id)
 UPDATE deployments SET status = 'cancelled', finished_at = sqlc.arg(now)
 WHERE id = sqlc.arg(deployment_id)
   AND assigned_agent_id = sqlc.arg(agent_id)
-  AND status IN ('pending', 'pending_approval', 'running');
+  AND status IN ('queued', 'pending', 'pending_approval', 'running');
 
 -- name: AcknowledgeRemoteDeploymentCancellation :execrows
 UPDATE remote_deployment_claims SET state = 'cancelled',

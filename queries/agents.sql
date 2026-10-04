@@ -143,4 +143,4 @@ UPDATE deployments SET
     finished_at = sqlc.arg(now)
 WHERE id = sqlc.arg(deployment_id)
   AND assigned_agent_id = sqlc.arg(agent_id)
-  AND status IN ('pending', 'pending_approval', 'running');
+  AND status IN ('queued', 'pending', 'pending_approval', 'running');
