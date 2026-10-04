@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 
@@ -190,11 +191,16 @@ func checkProjectMembership(
 		},
 	)
 	if err != nil {
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		RenderRequestError(w, r, http.StatusInternalServerError,
+			"Internal server error")
 		return false
 	}
 	if member != 1 {
-		RenderUnauthorized(w, r)
+		if strings.HasPrefix(r.URL.Path, "/api/v1/") {
+			RenderJSONError(w, http.StatusForbidden, unauthorizedMessage)
+		} else {
+			RenderUnauthorized(w, r)
+		}
 		return false
 	}
 	return true

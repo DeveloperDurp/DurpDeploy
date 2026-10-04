@@ -87,6 +87,21 @@ func TestDeploymentStepLogsAPIWebE2E(t *testing.T) {
 		nil, 404); missing != "404 page not found\n" {
 		t.Fatalf("web missing-deployment response changed: %q", missing)
 	}
+	nonMember := seedAPIUser(
+		t,
+		f.h.repo,
+		"logs-non-member@example.com",
+		"deployer",
+	)
+	_, token := seedAPIToken(t, f.h.repo, nonMember.ID)
+	adminToken := f.token
+	f.token = token
+	var denied map[string]string
+	decodeStepLogTest(t, f.api(t, "GET", path, nil, 403), &denied)
+	f.token = adminToken
+	if denied["error"] == "" {
+		t.Fatal("non-member denial omitted its JSON error envelope")
+	}
 	page := f.web(
 		t,
 		"GET",

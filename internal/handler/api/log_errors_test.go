@@ -2,12 +2,15 @@ package api_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"durpdeploy/internal/auth"
 	"durpdeploy/internal/handler/api"
+	"github.com/go-chi/chi/v5"
 )
 
 func TestStructuredStreamStartupErrors(t *testing.T) {
@@ -51,5 +54,45 @@ func TestStructuredStreamStartupErrors(t *testing.T) {
 				t.Fatal("missing JSON error")
 			}
 		})
+	}
+}
+
+func TestStructuredStreamNonMemberWithHTMXHeader(t *testing.T) {
+	// Given: a non-member calling the API with an HTMX header.
+	h := newAPIHarness(t)
+	u := seedAPIUser(t, h.repo, "non-member@example.com", "deployer")
+	p := seedProject(t, h.repo)
+	e := seedEnv(t, h.repo)
+	release := seedRelease(t, h.repo, p.ID)
+	d := seedDeployment(t, h.repo, release.ID, e.ID, "succeeded")
+	router := chi.NewRouter()
+	router.With(auth.RequireDeploymentProjectAccess(h.repo)).Get(
+		"/api/v1/deployments/{id}/logs/stream",
+		api.NewLogHandler(h.broker, h.repo).StreamLogs)
+	req := httptest.NewRequest(
+		http.MethodGet,
+		fmt.Sprintf(
+			"/api/v1/deployments/%d/logs/stream?format=structured",
+			d.ID,
+		),
+		nil,
+	)
+	req = auth.SetUser(req, u)
+	req.Header.Set("HX-Request", "true")
+	rec := httptest.NewRecorder()
+
+	// When: authorization denies the stream.
+	router.ServeHTTP(rec, req)
+
+	// Then: API errors remain JSON 403 rather than a web toast response.
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status=%d", rec.Code)
+	}
+	var body map[string]string
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body["error"] == "" || rec.Header().Get("HX-Trigger") != "" {
+		t.Fatal("API denial lost JSON error contract")
 	}
 }
