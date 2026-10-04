@@ -172,7 +172,7 @@ func TestMobile_RenderedHTML_renders_project_back_controls_when_authenticated(
 			name: "steps",
 			path: fmt.Sprintf("/projects/%d/steps-page", fixture.project.ID),
 			headerPattern: fmt.Sprintf(
-				`(?s)<div class="flex justify-between items-center">\s*<h1 class="text-3xl font-bold">Steps for .*?</h1>\s*<div class="flex gap-2">\s*<a href="/projects/%d" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>`,
+				`(?s)<div class="flex flex-wrap gap-2 justify-between items-center">\s*<h1 class="min-w-0 w-full break-words sm:w-auto sm:flex-1 text-3xl font-bold">Steps for .*?</h1>\s*<div class="flex gap-2">\s*<a href="/projects/%d" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>`,
 				fixture.project.ID,
 			),
 		},
@@ -180,7 +180,7 @@ func TestMobile_RenderedHTML_renders_project_back_controls_when_authenticated(
 			name: "variables",
 			path: fmt.Sprintf("/projects/%d/variables", fixture.project.ID),
 			headerPattern: fmt.Sprintf(
-				`(?s)<div class="flex justify-between items-center">\s*<h1 class="text-3xl font-bold">Variables.*?</h1>\s*<div class="flex gap-2">\s*<a href="/projects/%d" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>`,
+				`(?s)<div class="flex flex-wrap gap-2 justify-between items-center">\s*<h1 class="min-w-0 w-full break-words sm:w-auto sm:flex-1 text-3xl font-bold">Variables.*?</h1>\s*<div class="flex gap-2">\s*<a href="/projects/%d" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>`,
 				fixture.project.ID,
 			),
 		},
