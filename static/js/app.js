@@ -322,7 +322,7 @@ Alpine.data('deploymentStream', ({ url }) => ({
 			: event.detail?.target;
 		if (!(target instanceof Element) || target.id !== 'status-badge') return;
 		const status = target.textContent.trim();
-		if (!['succeeded', 'failed', 'cancelled'].includes(status)) return;
+		if (!['succeeded', 'failed', 'cancelled', 'rejected', 'expired'].includes(status)) return;
 		if (this.source) this.source.close();
 		this.source = null;
 	},

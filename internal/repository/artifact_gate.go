@@ -144,6 +144,9 @@ func (r *Repository) ApproveArtifact(
 					StepIndex:    stepIndex,
 				},
 			)
+			if errors.Is(err, sql.ErrNoRows) {
+				return ErrArtifactGate
+			}
 			if err != nil {
 				return err
 			}
@@ -216,7 +219,17 @@ func (r *Repository) RejectArtifactGate(
 					StepIndex:    stepIndex,
 				},
 			)
-			if err != nil || gate.Status != "awaiting" ||
+			if errors.Is(err, sql.ErrNoRows) {
+				return ErrArtifactGate
+			}
+			if err != nil {
+				return err
+			}
+			now, err := q.CurrentUnixTime(ctx)
+			if err != nil {
+				return err
+			}
+			if gate.Status != "awaiting" || gate.ExpiresAt <= now ||
 				gate.Revision != revision ||
 				gate.ArtifactSha256 != checksum {
 				return ErrArtifactGate

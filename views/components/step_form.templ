@@ -199,18 +199,7 @@ templ StepForm(step db.Step, projectID int64, isNew bool, labels []string, selec
 					<label class="label"><span class="label-text-alt">Leave empty to pass all project variables. Enter names to restrict this step.</span></label>
 				</div>
 			</div>
-			<fieldset class="space-y-3">
-<legend class="font-semibold">Network and artifact approval</legend>
-<label class="label" for={ stepInputID(step, isNew, "network-mode") }>Container network</label>
-<select id={ stepInputID(step, isNew, "network-mode") } name="network_mode" class="select select-bordered w-full"><option value="none" selected?={ step.NetworkMode != "bridge" }>Isolated</option><option value="bridge" selected?={ step.NetworkMode == "bridge" }>Network enabled</option></select>
-<label class="label" for={ stepInputID(step, isNew, "approval_artifact_path") }>Artifact path to approve</label>
-<input id={ stepInputID(step, isNew, "approval_artifact_path") } name="approval_artifact_path" value={ step.ApprovalArtifactPath } class="input input-bordered w-full" type="text"/>
-<label class="label" for={ stepInputID(step, isNew, "approval_review_path") }>Review JSON path</label>
-<input id={ stepInputID(step, isNew, "approval_review_path") } name="approval_review_path" value={ step.ApprovalReviewPath } class="input input-bordered w-full" type="text"/>
-<label class="label" for={ stepInputID(step, isNew, "review-format") }>Review format</label>
-<select id={ stepInputID(step, isNew, "review-format") } name="approval_review_format" class="select select-bordered w-full"><option value="" selected?={ step.ApprovalReviewFormat == "" }>No approval gate</option><option value="summary" selected?={ step.ApprovalReviewFormat == "summary" }>Action counts</option><option value="terraform" selected?={ step.ApprovalReviewFormat == "terraform" }>Terraform show JSON</option></select>
-<p class="text-sm">Paths are relative to DURPDEPLOY_STAGE_DIR. A gate pauses after this step; subsequent steps use DURPDEPLOY_APPROVED_DIR. Gated deployments require local execution and zero retries.</p>
-</fieldset>
+			@StepArtifactFields(step, isNew)
 <div x-data="stepEditor" class="form-control">
 				<label class="label" for={ stepInputID(step, isNew, "script") }>
 					<span class="label-text">Script Body</span>
@@ -429,6 +418,7 @@ templ StepEditRow(step db.Step, projectID int64, labels []string, selectedLabel 
 				<input id={ fmt.Sprintf("step-%d-retries", step.ID) } type="number" name="max_retries" min="0" value={ strconv.FormatInt(step.MaxRetries, 10) } class="input input-bordered input-sm"/>
 			</div>
 			<input type="hidden" name="sort_order" value={ strconv.FormatInt(step.SortOrder, 10) }/>
+				@StepArtifactFields(step, false)
 				<div class="flex gap-2 pt-9">
 					<button type="submit" class="btn btn-primary btn-sm">Update</button>
 					<button type="button" class="btn btn-ghost btn-sm" x-on:click="$dispatch('step-form-cancel')" hx-get={ fmt.Sprintf("/projects/%d/steps", projectID) } hx-target="#step-list" hx-swap="innerHTML">Cancel</button>
@@ -437,4 +427,19 @@ templ StepEditRow(step db.Step, projectID int64, labels []string, selectedLabel 
 		</td>
 	</tr>
 	}
+}
+
+templ StepArtifactFields(step db.Step, isNew bool) {
+	<fieldset class="space-y-3 xl:col-span-7" x-cloak x-show="executionTarget === 'local'" x-bind:disabled="executionTarget !== 'local'">
+		<legend class="font-semibold">Network and artifact approval</legend>
+		<label class="label" for={ stepInputID(step, isNew, "network-mode") }>Container network</label>
+		<select id={ stepInputID(step, isNew, "network-mode") } name="network_mode" class="select select-bordered w-full"><option value="none" selected?={ step.NetworkMode != "bridge" }>Isolated</option><option value="bridge" selected?={ step.NetworkMode == "bridge" }>Network enabled</option></select>
+		<label class="label" for={ stepInputID(step, isNew, "approval_artifact_path") }>Artifact path to approve</label>
+		<input id={ stepInputID(step, isNew, "approval_artifact_path") } name="approval_artifact_path" value={ step.ApprovalArtifactPath } class="input input-bordered w-full" type="text"/>
+		<label class="label" for={ stepInputID(step, isNew, "approval_review_path") }>Review JSON path</label>
+		<input id={ stepInputID(step, isNew, "approval_review_path") } name="approval_review_path" value={ step.ApprovalReviewPath } class="input input-bordered w-full" type="text"/>
+		<label class="label" for={ stepInputID(step, isNew, "review-format") }>Review format</label>
+		<select id={ stepInputID(step, isNew, "review-format") } name="approval_review_format" class="select select-bordered w-full"><option value="" selected?={ step.ApprovalReviewFormat == "" }>No approval gate</option><option value="summary" selected?={ step.ApprovalReviewFormat == "summary" }>Action counts</option><option value="terraform" selected?={ step.ApprovalReviewFormat == "terraform" }>Terraform show JSON</option></select>
+		<p class="text-sm">Paths are relative to DURPDEPLOY_STAGE_DIR. A gate pauses after this step; subsequent steps use DURPDEPLOY_APPROVED_DIR. Gated deployments require local execution and zero retries.</p>
+	</fieldset>
 }

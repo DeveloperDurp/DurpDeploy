@@ -299,6 +299,67 @@ func TestArtifactGateBrowserE2E(t *testing.T) {
 					t.Fatal("saved agent runbook missing from public API")
 				}
 			}
+			if surface.name == "step" {
+				browser.evaluate(
+					t,
+					`const form=document.querySelector('form[data-step-add-form]'); form.querySelector('[name="network_mode"]').value='bridge'; form.querySelector('[name="approval_artifact_path"]').value='plan'; const target=form.querySelector('[name="execution_target"]'); target.value='agent'; target.dispatchEvent(new Event('change',{bubbles:true}));`,
+				)
+				browser.wait(
+					t,
+					`document.querySelector('form[data-step-add-form] fieldset').disabled`,
+				)
+				if string(
+					browser.evaluate(
+						t,
+						`!new FormData(document.querySelector('form[data-step-add-form]')).has('network_mode') && !new FormData(document.querySelector('form[data-step-add-form]')).has('approval_artifact_path')`,
+					),
+				) != "true" {
+					t.Fatal("agent step submits unsupported artifact controls")
+				}
+				browser.screenshot(
+					t,
+					fmt.Sprintf("artifact-agent-step-%d", width),
+				)
+				browser.evaluate(
+					t,
+					fmt.Sprintf(
+						`(() => { const form=document.querySelector('form[data-step-add-form]'); form.querySelector('[name="name"]').value='Agent step %d'; const script=form.querySelector('[name="script_body"]'); script.value='true'; script.dispatchEvent(new Event('input',{bubbles:true})); form.requestSubmit(); return true; })()`,
+						width,
+					),
+				)
+				browser.wait(
+					t,
+					`!document.querySelector('form[data-step-add-form]')`,
+				)
+				var steps struct {
+					Items []struct {
+						Name                 string `json:"name"`
+						ExecutionTarget      string `json:"execution_target"`
+						NetworkMode          string `json:"network_mode"`
+						ApprovalArtifactPath string `json:"approval_artifact_path"`
+					} `json:"items"`
+				}
+				if err := json.Unmarshal(
+					f.api(t, "GET", f.base()+"/steps", nil, 200),
+					&steps,
+				); err != nil {
+					t.Fatal(err)
+				}
+				found := false
+				for _, step := range steps.Items {
+					if step.Name == fmt.Sprintf("Agent step %d", width) {
+						found = true
+						if step.ExecutionTarget != "agent" ||
+							step.NetworkMode != "" ||
+							step.ApprovalArtifactPath != "" {
+							t.Fatalf("saved agent step=%+v", step)
+						}
+					}
+				}
+				if !found {
+					t.Fatal("saved agent step missing from API")
+				}
+			}
 		}
 	}
 	for _, width := range []int{375, 1280} {
@@ -314,6 +375,61 @@ func TestArtifactGateBrowserE2E(t *testing.T) {
 			`document.querySelector('[name="status"]')?.value === 'awaiting_artifact_approval'`,
 		)
 		browser.screenshot(t, fmt.Sprintf("artifact-status-filter-%d", width))
+	}
+	for _, terminal := range []string{"rejected", "expired"} {
+		next := verificationDeploy(t, f, db.Release{ID: deployment.ReleaseID})
+		f.completion(t, next.ID, events.ArtifactAwaitingApproval)
+		browser.call(
+			t,
+			"Page.navigate",
+			map[string]string{
+				"url": fmt.Sprintf("%s/deployments/%d", f.baseURL, next.ID),
+			},
+			&struct{}{},
+		)
+		browser.wait(
+			t,
+			`window.Alpine && document.querySelector('[x-data^="deploymentStream"]') && Alpine.$data(document.querySelector('[x-data^="deploymentStream"]')).source !== null`,
+		)
+		if terminal == "rejected" {
+			var gates []struct {
+				SHA256 string `json:"sha256"`
+			}
+			if err := json.Unmarshal(
+				f.api(t, "GET", gateAPIPath(next.ID), nil, 200),
+				&gates,
+			); err != nil ||
+				len(gates) != 1 {
+				t.Fatalf("gate=%+v err=%v", gates, err)
+			}
+			f.api(
+				t,
+				"POST",
+				gateAPIPath(next.ID)+"/0/reject",
+				map[string]any{"revision": 1, "sha256": gates[0].SHA256},
+				200,
+			)
+		} else {
+			if _, err := f.h.repo.DB.Exec(
+				"UPDATE artifact_gates SET expires_at=0 WHERE deployment_id=?",
+				next.ID,
+			); err != nil {
+				t.Fatal(err)
+			}
+			f.api(t, "GET", gateAPIPath(next.ID), nil, 200)
+		}
+		browser.wait(
+			t,
+			fmt.Sprintf(
+				`document.querySelector('#status-badge')?.innerText.includes('%s') && Alpine.$data(document.querySelector('[x-data^="deploymentStream"]')).source === null`,
+				terminal,
+			),
+		)
+		browser.wait(
+			t,
+			`!document.querySelector('[data-artifact-gates]').hasAttribute('hx-trigger')`,
+		)
+		browser.screenshot(t, "artifact-stream-"+terminal)
 	}
 	var gates json.RawMessage
 	if err := json.Unmarshal(

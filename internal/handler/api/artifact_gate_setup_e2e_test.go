@@ -177,6 +177,16 @@ func TestArtifactGatePublishingCancellationE2E(t *testing.T) {
 				t.Fatal(err)
 			}
 			ctx, cancel := context.WithCancel(t.Context())
+			detail := f.web(
+				t,
+				"GET",
+				fmt.Sprintf("/deployments/%d", deployment.ID),
+				nil,
+				200,
+			)
+			if !strings.Contains(detail, `id="deployment-cancel"`) {
+				t.Fatal("publishing deployment has no cancel control")
+			}
 			defer cancel()
 			f.h.runner.RegisterCancel(deployment.ID, cancel)
 			if surface == "api" {
