@@ -61,6 +61,14 @@ keep `overflow-x-auto` and `table table-zebra table-fixed w-full`.
   `form-control`, `label`, and `input input-bordered`.
 - **States**: validation uses `text-error text-sm`; alerts use semantic
   `alert-*` classes.
+- Initially hidden Alpine edit forms use `x-cloak` to prevent a flash before
+  initialization. Runbook editor methods live in the shared JavaScript bundle;
+  templates carry initial data and short method calls.
+- Native dialogs connect their visible heading with `aria-labelledby`.
+  Script editor headings use Alpine-generated IDs to keep repeated editors
+  distinct.
+- Headers containing project names wrap their heading above Back on narrow
+  screens, so long names cannot push the control outside the viewport.
 
 ### Package repository configuration
 - One active project source is shown as a card, without a repository selector.

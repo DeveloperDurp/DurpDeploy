@@ -133,7 +133,7 @@ templ ScheduledDeploymentRow(projectID int64, item ScheduledDeploymentListItem) 
 				</button>
 			}
 			if CanWrite(ctx) {
-				<div x-show="editing" data-desktop-schedule-edit={ strconv.FormatInt(item.Schedule.ID, 10) } class="basis-full mt-2">
+				<div x-cloak x-show="editing" data-desktop-schedule-edit={ strconv.FormatInt(item.Schedule.ID, 10) } class="basis-full mt-2">
 					@ScheduledDeploymentQuickEditForm(projectID, item)
 				</div>
 			}
@@ -248,7 +248,7 @@ templ ScheduledDeploymentMobileRecord(projectID int64, item ScheduledDeploymentL
 					Delete
 				</button>
 			</div>
-			<div x-show="editing" data-mobile-schedule-edit={ strconv.FormatInt(item.Schedule.ID, 10) } class="card bg-base-100 p-3">
+			<div x-cloak x-show="editing" data-mobile-schedule-edit={ strconv.FormatInt(item.Schedule.ID, 10) } class="card bg-base-100 p-3">
 				@ScheduledDeploymentQuickEditForm(projectID, item)
 			</div>
 		}

@@ -216,7 +216,13 @@ func (b *packageBrowser) screenshot(t *testing.T, name string) {
 	var clip struct {
 		X, Y, Width, Height, Scale float64
 	}
-	if err := json.Unmarshal(b.evaluate(t, `({x: 0, y: 0, width: innerWidth, height: Math.max(innerHeight, document.documentElement.scrollHeight), scale: 1})`), &clip); err != nil {
+	if err := json.Unmarshal(
+		b.evaluate(
+			t,
+			`({x: 0, y: 0, width: innerWidth, height: document.querySelector('dialog[open]') ? innerHeight : Math.max(innerHeight, document.documentElement.scrollHeight), scale: 1})`,
+		),
+		&clip,
+	); err != nil {
 		t.Fatal(err)
 	}
 	b.call(

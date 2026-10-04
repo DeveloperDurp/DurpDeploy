@@ -312,8 +312,8 @@ jobs:
         run: |
           go tool templ generate
           make swagger-ui-copy
-      - name: Verify UI navigation, caching, package forms, and step logs
-        run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^Test(PackageRepository|PackageRepositoryBack|BackNavigation|BackHistory|DeploymentStepLogs|DeploymentStepLogsHistoricalQuiet|PageNavigation|PageNavigationExpiredSession)BrowserE2E$' ./internal/handler/api
+      - name: Verify UI navigation, caching, forms, dialogs, and step logs
+        run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^Test(PackageRepository|PackageRepositoryBack|BackNavigation|BackHistory|DeploymentStepLogs|DeploymentStepLogsHistoricalQuiet|PageNavigation|PageNavigationExpiredSession|RunbookEditor|AlpineEditForms|AlpineDialogs)BrowserE2E$' ./internal/handler/api
       - name: Verify agent fleet controls and responsive health pages
         run: go test -tags=e2e,agentbrowser -race -count=1 -timeout=5m -v -run '^(TestAgentFleetBrowserE2E|TestDeploymentWaitingForAgentsBrowserE2E)$' ./internal/handler/api
       - name: Upload package UI evidence

@@ -159,13 +159,20 @@ func TestPageNavigationExpiredSessionBrowserE2E(t *testing.T) {
 			if history {
 				b.clickPageNavigation(t, "/environments", "Environments")
 			}
-			if _, err := f.h.repo.DB.ExecContext(t.Context(), "UPDATE sessions SET expires_at=0 WHERE id=?", f.session); err != nil {
+			if _, err := f.h.repo.DB.ExecContext(
+				t.Context(),
+				"UPDATE sessions SET expires_at=0 WHERE id=?",
+				f.session,
+			); err != nil {
 				t.Fatal(err)
 			}
 			if history {
 				b.evaluate(t, `history.back(); true`)
 			} else {
-				b.evaluate(t, `document.querySelector('a[href="/environments"]').click(); true`)
+				b.evaluate(
+					t,
+					`document.querySelector('a[href="/environments"]').click(); true`,
+				)
 			}
 			b.wait(
 				t,
@@ -230,6 +237,10 @@ func (b *packageBrowser) captureNavigation(t *testing.T, name string) {
 					`document.documentElement.scrollWidth <= innerWidth`,
 				),
 			) != "true" {
+				b.screenshot(
+					t,
+					"overflow-"+name+"-"+theme+"-"+fmt.Sprint(width),
+				)
 				t.Fatal("navigation overflows viewport")
 			}
 			b.wait(

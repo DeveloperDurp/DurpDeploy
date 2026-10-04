@@ -32,8 +32,8 @@ templ StepsContent(project db.Project, steps []db.Step) {
 		x-on:step-form-edit="handleEvent"
 		x-on:htmx:after-request.camel="afterRequest"
 	>
-		<div class="flex justify-between items-center">
-			<h1 class="text-3xl font-bold">Steps for { project.Name }</h1>
+		<div class="flex flex-wrap gap-2 justify-between items-center">
+			<h1 class="min-w-0 w-full break-words sm:w-auto sm:flex-1 text-3xl font-bold">Steps for { project.Name }</h1>
 			<div class="flex gap-2">
 				<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>
 			</div>
