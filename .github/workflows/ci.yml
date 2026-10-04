@@ -301,7 +301,7 @@ jobs:
   package-browser:
     name: Package repository browser
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     env:
       DURPDEPLOY_CONTAINER_RUNTIME: docker
       DURPDEPLOY_PACKAGE_UI_EVIDENCE: ${{ github.workspace }}/artifacts/package-ui
@@ -318,9 +318,14 @@ jobs:
           go tool templ generate
           make swagger-ui-copy
       - name: Verify UI navigation, caching, forms, dialogs, and step logs
-        run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^Test(PackageRepository|PackageRepositoryBack|BackNavigation|BackHistory|DeploymentMobile|DeploymentListMobile|ResourceListMobile|HomeMobile|MainPagePattern|ProjectEditModal|ResourceCreateModal|ResourceEditModal|StepEditModal|StepAddModal|DeploymentStepLogs|DeploymentStepLogsHistoricalQuiet|DeploymentStagingFailure|PageNavigation|PageNavigationExpiredSession|OIDCNavigation|RunbookEditor|AlpineEditForms|AlpineDialogs)BrowserE2E$' ./internal/handler/api
+        run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^Test(PackageRepository|PackageRepositoryBack|BackNavigation|BackHistory|DeploymentMobile|DeploymentListMobile|ResourceListMobile|HomeMobile|MainPagePattern|ProjectEditModal|ResourceCreateModal|ResourceEditModal|StepEditModal|StepAddModal|DeploymentStepLogs|DeploymentStepLogsHistoricalQuiet|DeploymentStagingFailure|PageNavigation|PageNavigationExpiredSession|OIDCNavigation|RunbookEditor|AlpineEditForms|AlpineDialogs|RunningServer)BrowserE2E$' ./internal/handler/api
       - name: Verify verification forms, polling, and rollback in Chromium
         run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^TestVerification(Rollback|Polling)BrowserE2E$' ./internal/handler/api
+      - name: Verify the running-instance API and browser suite
+        env:
+          DURPDEPLOY_E2E_RUNNING_SUITE: '1'
+          DURPDEPLOY_E2E_PORT: '18087'
+        run: bash scripts/e2e_test.sh
       - name: Verify agent fleet controls and responsive health pages
         run: go test -tags=e2e,agentbrowser -race -count=1 -timeout=5m -v -run '^(TestAgentFleetBrowserE2E|TestDeploymentWaitingForAgentsBrowserE2E)$' ./internal/handler/api
       - name: Upload package UI evidence

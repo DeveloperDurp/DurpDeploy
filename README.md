@@ -207,6 +207,21 @@ web form. `make e2e-test` prints the `stage-handoff-…` project URL and leaves
 that project in the running server's database for inspection. The isolated
 suite removes its temporary database after the run.
 
+The running-instance suite includes API and web CRUD, roles and CSRF,
+templates and interpreters, step file handoff, deployment lists and exports,
+request validation, secret masking, verification and rollback, and runbook
+creation, execution, immutable versions, retry, and schedules. It also uses a
+real browser against that same server to check resource create/edit/delete
+dialogs, step dialogs, runbook version creation, home charts, both themes, and
+mobile layouts. Browser
+checks require a working Docker or Podman engine. Test runbooks and deployment
+fixtures remain available for inspection; test schedules are disabled.
+
+Startup/recovery, other database engines, external package repositories, OIDC
+providers, and remote-agent protocols have dedicated fixture suites. A test
+against one running instance does not replace those configuration-specific
+checks.
+
 ## Production Deploy
 
 For a small team deployment, DurpDeploy runs as a single Go process behind

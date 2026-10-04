@@ -99,6 +99,19 @@ else
     done
 fi
 
+if [[ "${DURPDEPLOY_E2E_RUNNING_SUITE:-0}" == "1" ]]; then
+    if [[ "$CLIENT_ONLY" == "1" ]]; then
+        echo "FAIL: use make e2e-test for a caller-owned running instance" >&2
+        exit 1
+    fi
+    # CI starts one app with the existing lifecycle, then runs the same
+    # client-only suite used against make dev. The suite starts no app server.
+    E2E_ADMIN_EMAIL="$ADMIN_EMAIL" E2E_ADMIN_PASSWORD="$ADMIN_PASS" \
+    DURPDEPLOY_E2E_CLI="$TMP/durpdeploy" DURPDEPLOY_DB="$DB_DSN" \
+    DURPDEPLOY_BASE_URL="$BASE" bash "$SCRIPT_DIR/e2e_db_test.sh" sqlite
+    exit 0
+fi
+
 if [[ "${DURPDEPLOY_AUTH_MFA_HTTP_MATRIX:-0}" == "1" ]]; then
     if [[ "$CLIENT_ONLY" == "1" ]]; then
         echo "FAIL: the auth/MFA HTTP matrix requires the isolated E2E lifecycle" >&2

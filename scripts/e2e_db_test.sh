@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+
 BASE="${DURPDEPLOY_BASE_URL:-http://localhost:8080}"
 BASE="${BASE%/}"
 curl_options=()
@@ -797,6 +799,12 @@ api_post() { curl -s -H "Authorization: Bearer $API_TOKEN" -H "Content-Type: app
 api_put() { curl -s -H "Authorization: Bearer $API_TOKEN" -H "Content-Type: application/json" -X PUT -d "$1" "$2"; }
 api_post_code() { curl -s -H "Authorization: Bearer $API_TOKEN" -H "Content-Type: application/json" -X POST -d "$1" -o /dev/null -w "%{http_code}" "$2"; }
 api_post_noauth() { curl -s -H "Content-Type: application/json" -X POST -d "$1" -o /dev/null -w "%{http_code}" "$2"; }
+csrf_from_cookies() {
+    curl -s -b "$1" "$BASE/" | grep -oP '<meta name="csrf-token" content="\K[^"]+' | head -1
+}
+api_item_id_by_name() {
+    api_get "$1?limit=1000" | python3 -c 'import sys,json; print(next(item["id"] for item in json.load(sys.stdin)["items"] if item["name"] == sys.argv[1]))' "$2"
+}
 
 # mint_web_token creates an API token via the web form and prints the
 # plaintext by consuming the single-use flash record. The redirect
@@ -1197,6 +1205,37 @@ LOG_LINE=$(echo "$LOGS" | head -1)
 echo "$LOG_LINE" | python3 -c "import sys,json; d=json.load(sys.stdin); assert 'line' in d; print('ndjson line OK')"
 echo "  Log streaming (ndjson): OK"
 
+# Runbooks: leave a real runbook and successful execution in the selected
+# dev database, just like the project/deployment fixtures above.
+echo "=== Runbook creation and execution ==="
+RUNBOOK_NAME="e2e-runbook-$E2E_RUN_ID"
+RUNBOOK_MARKER="runbook-e2e-ok"
+RUNBOOK_CREATED=$(api_post "{\"name\":\"$RUNBOOK_NAME\",\"steps\":[{\"name\":\"inspect\",\"script_body\":\"printf $RUNBOOK_MARKER\",\"interpreter\":\"bash\",\"container_image\":\"$BASH_IMAGE\"}]}" \
+    "$BASE/api/v1/projects/$API_PROJECT_ID/runbooks")
+RUNBOOK_ID=$(echo "$RUNBOOK_CREATED" | python3 -c 'import sys,json; print(json.load(sys.stdin)["runbook"]["id"])')
+RUNBOOK_VERSION=$(echo "$RUNBOOK_CREATED" | python3 -c 'import sys,json; print(json.load(sys.stdin)["version"]["id"])')
+RUNBOOK_SNAPSHOT=$(api_get "$BASE/api/v1/projects/$API_PROJECT_ID/runbooks/$RUNBOOK_ID/versions/$RUNBOOK_VERSION")
+echo "$RUNBOOK_SNAPSHOT" | python3 -c 'import sys,json; d=json.load(sys.stdin); assert len(d["steps"]) == 1 and d["steps"][0]["script_body"] == "printf runbook-e2e-ok"'
+RUNBOOK_LIST=$(api_get "$BASE/api/v1/projects/$API_PROJECT_ID/runbooks")
+echo "$RUNBOOK_LIST" | python3 -c 'import sys,json; assert any(b["id"] == int(sys.argv[1]) for b in json.load(sys.stdin))' "$RUNBOOK_ID"
+RUNBOOK_PAGE=$(curl_body "$BASE/projects/$API_PROJECT_ID/runbooks/$RUNBOOK_ID")
+grep -q "$RUNBOOK_NAME" <<<"$RUNBOOK_PAGE" || { echo "FAIL: runbook missing from web detail"; exit 1; }
+RUNBOOK_EXECUTION=$(api_post "{\"environment_id\":$API_ENV_ID,\"version_id\":$RUNBOOK_VERSION}" \
+    "$BASE/api/v1/projects/$API_PROJECT_ID/runbooks/$RUNBOOK_ID/executions")
+RUNBOOK_EXECUTION_ID=$(echo "$RUNBOOK_EXECUTION" | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
+for i in {1..100}; do
+    RUNBOOK_STATUS=$(api_get "$BASE/api/v1/projects/$API_PROJECT_ID/runbook-executions/$RUNBOOK_EXECUTION_ID" \
+        | python3 -c 'import sys,json; print(json.load(sys.stdin)["status"])')
+    [[ "$RUNBOOK_STATUS" =~ ^(succeeded|failed|cancelled|cleanup_unconfirmed)$ ]] && break
+    sleep 0.1
+done
+[[ "$RUNBOOK_STATUS" == "succeeded" ]] || { echo "FAIL: runbook status=$RUNBOOK_STATUS"; exit 1; }
+RUNBOOK_LOGS=$(api_get "$BASE/api/v1/projects/$API_PROJECT_ID/runbook-executions/$RUNBOOK_EXECUTION_ID/logs")
+grep -q "$RUNBOOK_MARKER" <<<"$RUNBOOK_LOGS" || { echo "FAIL: runbook log marker missing"; exit 1; }
+RUNBOOK_EXECUTION_PAGE=$(curl_body "$BASE/projects/$API_PROJECT_ID/runbooks/executions/$RUNBOOK_EXECUTION_ID")
+[[ "$RUNBOOK_EXECUTION_PAGE" == *'x-data="backNavigation"'* && "$RUNBOOK_EXECUTION_PAGE" == *'>Back</a>'* ]] || { echo "FAIL: runbook execution Back button missing"; exit 1; }
+echo "  Runbook created, listed, and executed: OK ($RUNBOOK_ID)"
+
 # A9: Failure paths.
 # 401 without token.
 CODE=$(api_post_noauth '{"name":"noauth"}' "$BASE/api/v1/projects")
@@ -1255,5 +1294,7 @@ for path,method in [("/environments", "post"), ("/environments/{id}", "put")]:
 print("swagger spec OK")
 '
 echo "  Swagger UI + spec: OK"
+
+source "$SCRIPT_DIR/running_features_e2e.sh"
 
 echo "=== ALL E2E CHECKS PASSED ==="

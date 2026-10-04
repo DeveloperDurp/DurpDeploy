@@ -303,9 +303,9 @@ verify: golines-check templ-generate swagger-ui-copy e2e-test-isolated
 sonar-issues:
 	./scripts/sonar_issues.sh $(PR)
 
-# Running-server E2E checks. Start `make dev` (or the matching database dev
-# target) in another terminal first; this target never starts another server.
-e2e-test:
+# API, web, and browser E2E checks against the running server. Start `make dev`
+# first; this target never starts another app server. Browser tests use Podman.
+e2e-test: templ-generate swagger-ui-copy
 	DURPDEPLOY_BASE_URL="$${DURPDEPLOY_BASE_URL:-http://localhost:8080}" \
 	DURPDEPLOY_DB="$${DURPDEPLOY_DB:-durpdeploy.db}" ./scripts/e2e_db_test.sh sqlite
 
