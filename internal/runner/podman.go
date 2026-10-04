@@ -244,7 +244,7 @@ func (r *DeploymentRunner) reconcileAttempts() error {
 		return err
 	}
 	if r.repo != nil {
-		if err := r.repo.WithQueueMaintenanceTx(ctx, func(q *db.Queries) error {
+		if err := r.repo.WithQueueMaintenanceTx(ctx, func(ctx context.Context, q *db.Queries) error {
 			_, err := q.ConfirmContainerCleanup(ctx,
 				db.ConfirmContainerCleanupParams{
 					Now: sql.NullInt64{

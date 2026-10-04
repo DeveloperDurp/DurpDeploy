@@ -174,10 +174,12 @@ func (h *RunbookHandler) Cancel(w http.ResponseWriter, r *http.Request) {
 		RespondError(w, http.StatusInternalServerError, "Cannot read execution")
 		return
 	}
+	status := "cancellation_requested"
 	if dep.Status == "queued" ||
 		!dep.AssignedAgentID.Valid &&
 			(dep.Status == "pending" || dep.Status == "pending_approval") {
 		err = h.repo.CancelQueuedDeployment(r.Context(), dep.ID)
+		status = "cancelled"
 	} else if dep.AssignedAgentID.Valid {
 		err = h.repo.CancelAssignedRemoteDeployment(r.Context(),
 			repository.RemoteAssignedDeployment{
@@ -196,7 +198,7 @@ func (h *RunbookHandler) Cancel(w http.ResponseWriter, r *http.Request) {
 	RespondJSON(
 		w,
 		http.StatusOK,
-		map[string]string{"status": "cancellation_requested"},
+		map[string]string{"status": status},
 	)
 }
 

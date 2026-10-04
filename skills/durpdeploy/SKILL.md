@@ -127,6 +127,8 @@ Deployment GET/status responses and runbook execution GET responses include
 caller. Viewers can read queue state. Authorized writers can cancel queued
 work through the existing cancel endpoint; this does not signal the active
 deployment. Server restart preserves order and repairs missed launches.
+Queued runbook cancellation returns `status: "cancelled"`; active runbook
+cancellation returns `status: "cancellation_requested"` while stopping work.
 Unconfirmed container cleanup, lost agents, or unacknowledged cancellation
 keep the environment blocked: a timeout is not proof that execution stopped.
 

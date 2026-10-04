@@ -114,7 +114,8 @@ WHERE agent_id = ? AND state IN ('waiting', 'claimed', 'started', 'cancel_reques
 ORDER BY deployment_id;
 
 -- name: RevokeAgentRemoteStepRuns :execrows
-UPDATE remote_step_runs SET state = 'lost', finished_at = sqlc.arg(now),
+UPDATE remote_step_runs SET state = CASE WHEN state = 'waiting'
+    THEN 'failed' ELSE 'lost' END, finished_at = sqlc.arg(now),
     updated_at = sqlc.arg(now), log_buffer_ciphertext = NULL
 WHERE agent_id = sqlc.arg(agent_id)
   AND state IN ('waiting', 'claimed', 'started', 'cancel_requested');

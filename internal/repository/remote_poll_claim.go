@@ -53,7 +53,7 @@ func (r *Repository) ClaimRemoteDeploymentPayload(
 		return r.WithDeploymentTx(
 			ctx,
 			candidate.DeploymentID,
-			func(q *db.Queries) error {
+			func(ctx context.Context, q *db.Queries) error {
 				locked, err := q.LockClaimAgent(ctx, agentID)
 				if err != nil {
 					return fmt.Errorf("lock active agent: %w", err)

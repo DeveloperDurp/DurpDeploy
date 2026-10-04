@@ -116,55 +116,61 @@ func (r *Repository) CreateRollback(
 	var result DeploymentResult
 	err := withSQLiteBusyRetry(ctx, func() error {
 		result = DeploymentResult{}
-		return r.WithTx(ctx, func(q *db.Queries) error {
-			source, err := q.GetDeployment(ctx, sourceID)
-			if err != nil {
-				return err
-			}
-			if _, err := q.LockDeploymentEnvironment(ctx, source.EnvironmentID); err != nil {
-				return err
-			}
-			if err := lockRelease(ctx, q, source.ReleaseID); err != nil {
-				return err
-			}
-			preview, err := previewRollback(ctx, q, sourceID)
-			if err != nil {
-				return err
-			}
-			if expectedTargetID != preview.TargetDeploymentID {
-				return ErrRollbackTargetChanged
-			}
-			if preview.Blocked {
-				return &RollbackGateError{Reason: preview.Reason}
-			}
-			status := "pending"
-			if preview.RequiresApproval {
-				status = "pending_approval"
-			}
-			result, err = createDeploymentFromDeployment(ctx, q,
-				db.CreateDeploymentParams{
-					ReleaseID:     preview.TargetReleaseID,
-					EnvironmentID: preview.EnvironmentID, Status: status,
-					Note: sql.NullString{String: fmt.Sprintf(
-						"Rollback of #%d: %s → %s (from successful deployment #%d)",
-						sourceID,
-						preview.SourceVersion,
-						preview.TargetVersion,
-						preview.TargetDeploymentID,
-					), Valid: true},
-				}, preview.TargetDeploymentID)
-			if err != nil {
-				return err
-			}
-			return q.CreateDeploymentRollback(ctx,
-				db.CreateDeploymentRollbackParams{
-					DeploymentID:       result.Deployment.ID,
-					SourceDeploymentID: sourceID,
-					TargetDeploymentID: preview.TargetDeploymentID,
-					SourceVersion:      preview.SourceVersion,
-					TargetVersion:      preview.TargetVersion,
-				})
-		})
+		return r.withQueueTx(
+			ctx,
+			func(ctx context.Context, q *db.Queries) error {
+				source, err := q.GetDeployment(ctx, sourceID)
+				if err != nil {
+					return err
+				}
+				if _, err := q.LockDeploymentEnvironment(
+					ctx,
+					source.EnvironmentID,
+				); err != nil {
+					return err
+				}
+				if err := lockRelease(ctx, q, source.ReleaseID); err != nil {
+					return err
+				}
+				preview, err := previewRollback(ctx, q, sourceID)
+				if err != nil {
+					return err
+				}
+				if expectedTargetID != preview.TargetDeploymentID {
+					return ErrRollbackTargetChanged
+				}
+				if preview.Blocked {
+					return &RollbackGateError{Reason: preview.Reason}
+				}
+				status := "pending"
+				if preview.RequiresApproval {
+					status = "pending_approval"
+				}
+				result, err = createDeploymentFromDeployment(ctx, q,
+					db.CreateDeploymentParams{
+						ReleaseID:     preview.TargetReleaseID,
+						EnvironmentID: preview.EnvironmentID, Status: status,
+						Note: sql.NullString{String: fmt.Sprintf(
+							"Rollback of #%d: %s → %s (from successful deployment #%d)",
+							sourceID,
+							preview.SourceVersion,
+							preview.TargetVersion,
+							preview.TargetDeploymentID,
+						), Valid: true},
+					}, preview.TargetDeploymentID)
+				if err != nil {
+					return err
+				}
+				return q.CreateDeploymentRollback(ctx,
+					db.CreateDeploymentRollbackParams{
+						DeploymentID:       result.Deployment.ID,
+						SourceDeploymentID: sourceID,
+						TargetDeploymentID: preview.TargetDeploymentID,
+						SourceVersion:      preview.SourceVersion,
+						TargetVersion:      preview.TargetVersion,
+					})
+			},
+		)
 	})
 	return result, err
 }

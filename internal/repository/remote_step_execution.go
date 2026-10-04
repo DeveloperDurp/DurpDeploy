@@ -19,20 +19,28 @@ func (r *Repository) QueueRemoteStepRuns(
 	stepIndex int64,
 ) (int64, error) {
 	var created int64
-	err := r.WithDeploymentTx(ctx, deploymentID, func(q *db.Queries) error {
-		d, err := q.GetDeployment(ctx, deploymentID)
-		if err != nil {
+	err := r.WithDeploymentTx(
+		ctx,
+		deploymentID,
+		func(ctx context.Context, q *db.Queries) error {
+			d, err := q.GetDeployment(ctx, deploymentID)
+			if err != nil {
+				return err
+			}
+			if err := advanceEnvironmentQueue(
+				ctx,
+				q,
+				d.EnvironmentID,
+			); err != nil {
+				return err
+			}
+			created, err = q.CreateRemoteStepRuns(ctx,
+				db.CreateRemoteStepRunsParams{
+					DeploymentID: deploymentID, StepIndex: stepIndex,
+				})
 			return err
-		}
-		if err := advanceEnvironmentQueue(ctx, q, d.EnvironmentID); err != nil {
-			return err
-		}
-		created, err = q.CreateRemoteStepRuns(ctx,
-			db.CreateRemoteStepRunsParams{
-				DeploymentID: deploymentID, StepIndex: stepIndex,
-			})
-		return err
-	})
+		},
+	)
 	if err == nil && created > 0 {
 		r.notifyRemoteWork()
 	}
@@ -60,7 +68,7 @@ func (r *Repository) ClaimRemoteStepPayload(
 			err = r.WithDeploymentTx(
 				ctx,
 				candidate.DeploymentID,
-				func(q *db.Queries) error {
+				func(ctx context.Context, q *db.Queries) error {
 					locked, err := q.LockClaimAgent(ctx, agentID)
 					if err != nil || locked == 0 {
 						return err
@@ -187,7 +195,7 @@ func (r *Repository) FinishRemoteStep(
 	err := r.WithDeploymentTx(
 		ctx,
 		identity.DeploymentID,
-		func(q *db.Queries) error {
+		func(ctx context.Context, q *db.Queries) error {
 			run, err := remoteStepRun(ctx, q, identity)
 			if errors.Is(err, sql.ErrNoRows) {
 				return nil
@@ -209,9 +217,12 @@ func (r *Repository) FinishRemoteStep(
 			changed, err := q.FinishRemoteStepRun(
 				ctx,
 				db.FinishRemoteStepRunParams{
-					State: state, Now: sql.NullInt64{Int64: now, Valid: true},
-					DeploymentID: run.DeploymentID, StepIndex: run.StepIndex,
-					AgentID: run.AgentID, ClaimTokenHash: identity.ClaimTokenHash,
+					State:          state,
+					Now:            sql.NullInt64{Int64: now, Valid: true},
+					DeploymentID:   run.DeploymentID,
+					StepIndex:      run.StepIndex,
+					AgentID:        run.AgentID,
+					ClaimTokenHash: identity.ClaimTokenHash,
 				},
 			)
 			if err != nil || changed != 1 {
@@ -404,7 +415,7 @@ func (r *Repository) AcknowledgeRemoteStepCancellation(
 	err := r.WithDeploymentTx(
 		ctx,
 		identity.DeploymentID,
-		func(q *db.Queries) error {
+		func(ctx context.Context, q *db.Queries) error {
 			run, err := remoteStepRun(ctx, q, identity)
 			if errors.Is(err, sql.ErrNoRows) {
 				return nil
@@ -423,9 +434,11 @@ func (r *Repository) AcknowledgeRemoteStepCancellation(
 			rows, err := q.AcknowledgeRemoteStepCancellation(
 				ctx,
 				db.AcknowledgeRemoteStepCancellationParams{
-					Now:          sql.NullInt64{Int64: now, Valid: true},
-					DeploymentID: run.DeploymentID, StepIndex: run.StepIndex,
-					AgentID: run.AgentID, ClaimTokenHash: identity.ClaimTokenHash,
+					Now:            sql.NullInt64{Int64: now, Valid: true},
+					DeploymentID:   run.DeploymentID,
+					StepIndex:      run.StepIndex,
+					AgentID:        run.AgentID,
+					ClaimTokenHash: identity.ClaimTokenHash,
 				},
 			)
 			if err != nil || rows != 1 {

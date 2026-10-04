@@ -358,27 +358,30 @@ func recoverPendingDeployments(
 	repo *repository.Repository,
 ) {
 	var failed int64
-	err := repo.WithQueueMaintenanceTx(ctx, func(q *db.Queries) error {
-		now, err := q.CurrentUnixTime(ctx)
-		if err != nil {
-			return err
-		}
-		timestamp := sql.NullInt64{Int64: now, Valid: true}
-		if _, err := q.CancelOrphanedRemoteStepRuns(ctx, now); err != nil {
-			return err
-		}
-		if _, err := q.MarkUnreconciledLocalDeployments(
-			ctx,
-			timestamp,
-		); err != nil {
-			return err
-		}
-		failed, err = q.FailOrphanedDeployments(ctx, timestamp)
-		if err != nil {
-			return err
-		}
-		return q.ReconcileTerminalVerifications(ctx)
-	})
+	err := repo.WithQueueMaintenanceTx(
+		ctx,
+		func(ctx context.Context, q *db.Queries) error {
+			now, err := q.CurrentUnixTime(ctx)
+			if err != nil {
+				return err
+			}
+			timestamp := sql.NullInt64{Int64: now, Valid: true}
+			if _, err := q.CancelOrphanedRemoteStepRuns(ctx, now); err != nil {
+				return err
+			}
+			if _, err := q.MarkUnreconciledLocalDeployments(
+				ctx,
+				timestamp,
+			); err != nil {
+				return err
+			}
+			failed, err = q.FailOrphanedDeployments(ctx, timestamp)
+			if err != nil {
+				return err
+			}
+			return q.ReconcileTerminalVerifications(ctx)
+		},
+	)
 	if err != nil {
 		slog.Error("startup recovery: fail orphaned deployments", "err", err)
 	} else if failed > 0 {

@@ -28,7 +28,7 @@ func (r *Repository) StartRemoteDeployment(
 	return r.WithDeploymentTx(
 		ctx,
 		identity.DeploymentID,
-		func(q *db.Queries) error {
+		func(ctx context.Context, q *db.Queries) error {
 			d, err := q.GetDeployment(ctx, identity.DeploymentID)
 			if err != nil {
 				return err

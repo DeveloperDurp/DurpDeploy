@@ -53,11 +53,14 @@ func (r *Repository) RevokeAgent(
 	agentID string,
 ) (bool, error) {
 	changed := false
-	err := r.WithQueueMaintenanceTx(ctx, func(q *db.Queries) error {
-		var err error
-		changed, err = revokeAgent(ctx, q, agentID)
-		return err
-	})
+	err := r.WithQueueMaintenanceTx(
+		ctx,
+		func(ctx context.Context, q *db.Queries) error {
+			var err error
+			changed, err = revokeAgent(ctx, q, agentID)
+			return err
+		},
+	)
 	return changed, err
 }
 

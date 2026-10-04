@@ -27,7 +27,7 @@ func (r *Repository) FinishRemoteDeploymentLifecycle(
 	err := r.WithDeploymentTx(
 		ctx,
 		identity.DeploymentID,
-		func(q *db.Queries) error {
+		func(ctx context.Context, q *db.Queries) error {
 			var err error
 			result, err = finishRemoteDeploymentLifecycle(
 				ctx,
@@ -120,7 +120,7 @@ func (r *Repository) AcknowledgeRemoteCancellation(
 	err := r.WithDeploymentTx(
 		ctx,
 		identity.DeploymentID,
-		func(q *db.Queries) error {
+		func(ctx context.Context, q *db.Queries) error {
 			var err error
 			changed, err = acknowledgeRemoteCancellation(ctx, q, identity)
 			return err

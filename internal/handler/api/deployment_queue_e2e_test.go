@@ -231,6 +231,14 @@ func TestEnvironmentQueueRunbookE2E(t *testing.T) {
 	) {
 		t.Fatalf("cancelled runbook=%s", state)
 	}
+	apiCancelled := queueRunbookExecution(t, f, book)
+	cancelPath := fmt.Sprintf("%s/runbook-executions/%d/cancel",
+		f.base(), apiCancelled.ID)
+	if response := f.api(t, "POST", cancelPath, nil, 200); !strings.Contains(
+		string(response), `"status":"cancelled"`,
+	) {
+		t.Fatalf("queued runbook cancel response=%s", response)
+	}
 	var retried db.RunbookExecution
 	if err := json.Unmarshal(f.api(t, "POST", apiPath+"/retry", nil, 201), &retried); err != nil {
 		t.Fatal(err)

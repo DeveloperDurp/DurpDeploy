@@ -162,10 +162,40 @@ func finishQueueFixture(
 	t *testing.T, repo *Repository, id int64, status string,
 ) {
 	t.Helper()
-	if err := repo.WithDeploymentTx(t.Context(), id, func(q *db.Queries) error {
+	if err := repo.WithDeploymentTx(t.Context(), id, func(ctx context.Context, q *db.Queries) error {
 		return q.UpdateDeploymentStatus(context.WithoutCancel(t.Context()),
 			db.UpdateDeploymentStatusParams{ID: id, Status: status})
 	}); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func TestEnvironmentQueueAuditFailureDoesNotUndoState(t *testing.T) {
+	forEachDeploymentCreationEngine(t, func(t *testing.T, name string) {
+		repo, _ := openDeploymentCreationEngine(t,
+			newDeploymentCreationEngine(t, name))
+		if _, err := repo.DB.ExecContext(t.Context(),
+			`DROP TABLE audit_log`); err != nil {
+			t.Fatal(err)
+		}
+		create := func() db.Deployment {
+			t.Helper()
+			result, err := repo.CreateDeployment(t.Context(),
+				db.CreateDeploymentParams{
+					ReleaseID: 1, EnvironmentID: 1, Status: "pending",
+				})
+			if err != nil {
+				t.Fatal(err)
+			}
+			return result.Deployment
+		}
+		owner, next := create(), create()
+		if err := repo.CancelQueuedDeployment(t.Context(), owner.ID); err != nil {
+			t.Fatal(err)
+		}
+		persisted, err := repo.Queries.GetDeployment(t.Context(), next.ID)
+		if err != nil || persisted.Status != "pending" {
+			t.Fatalf("next=%+v error=%v", persisted, err)
+		}
+	})
 }

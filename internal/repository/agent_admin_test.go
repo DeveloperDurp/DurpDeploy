@@ -229,3 +229,37 @@ func assertRevokedUnstarted(
 		t.Fatalf("deployment=%+v err=%v", deployment, err)
 	}
 }
+
+func TestRevocationWaitingStepReleasesEnvironment(t *testing.T) {
+	repo := remoteFixture(t)
+	if _, err := repo.DB.Exec(`UPDATE deployments SET status='running'
+		WHERE id=3`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.DB.Exec(`INSERT INTO remote_step_runs
+		(deployment_id, step_index, agent_id, state, updated_at)
+		VALUES (3, 0, 'a', 'waiting', 100)`); err != nil {
+		t.Fatal(err)
+	}
+	next, err := repo.CreateDeployment(t.Context(), db.CreateDeploymentParams{
+		ReleaseID: 1, EnvironmentID: 2, Status: "pending",
+	})
+	if err != nil || next.Deployment.Status != "queued" {
+		t.Fatalf("next=%+v error=%v", next, err)
+	}
+	if _, err := repo.RevokeAgent(t.Context(), "a"); err != nil {
+		t.Fatal(err)
+	}
+	var state string
+	if err := repo.DB.QueryRow(`SELECT state FROM remote_step_runs
+		WHERE deployment_id=3 AND step_index=0`).Scan(&state); err != nil {
+		t.Fatal(err)
+	}
+	persisted, err := repo.Queries.GetDeployment(
+		t.Context(),
+		next.Deployment.ID,
+	)
+	if state != "failed" || err != nil || persisted.Status != "pending" {
+		t.Fatalf("step=%s next=%+v error=%v", state, persisted, err)
+	}
+}

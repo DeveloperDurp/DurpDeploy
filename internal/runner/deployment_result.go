@@ -39,7 +39,7 @@ func (r *DeploymentRunner) completeDeployment(
 	err := r.repo.WithDeploymentTx(
 		ctx,
 		deploymentID,
-		func(q *db.Queries) error {
+		func(ctx context.Context, q *db.Queries) error {
 			var err error
 			if status == "cancelled" {
 				_, err = q.CancelStepDeployment(ctx, deploymentID)

@@ -22,7 +22,7 @@ func (r *Repository) CancelAssignedRemoteDeployment(
 	return r.WithDeploymentTx(
 		ctx,
 		assigned.DeploymentID,
-		func(q *db.Queries) error {
+		func(ctx context.Context, q *db.Queries) error {
 			now, err := q.CurrentUnixTime(ctx)
 			if err != nil {
 				return err
@@ -102,7 +102,7 @@ func (r *Repository) maintainRemoteClaim(
 	return r.WithDeploymentTx(
 		ctx,
 		candidate.DeploymentID,
-		func(q *db.Queries) error {
+		func(ctx context.Context, q *db.Queries) error {
 			now, err := q.CurrentUnixTime(ctx)
 			if err != nil {
 				return err
