@@ -174,7 +174,7 @@ func (r *DeploymentRunner) runStepAttempt(
 		request.approved.volume != "" {
 		// Providers execute in /tmp; staging and approved context stay noexec.
 		tmpfs = fmt.Sprintf(
-			"--tmpfs=/tmp:rw,nosuid,size=%d",
+			"--tmpfs=/tmp:rw,exec,nosuid,nodev,size=%d",
 			artifact.MaxDownload+(64<<20),
 		)
 	}
