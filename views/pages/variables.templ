@@ -75,7 +75,7 @@ templ VariablesPage(project db.Project, variables []db.Variable, environments Va
 
 templ VariablesContent(project db.Project, variables []db.Variable, environments VariableEnvironments, errorMsg string) {
 	<div class="space-y-6">
-		<div class="flex flex-wrap gap-2 justify-between items-center">
+		<div class="page-header">
 			<h1 class="min-w-0 w-full break-words sm:w-auto sm:flex-1 text-3xl font-bold">Variables — { project.Name }</h1>
 			<div class="flex gap-2">
 				<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>

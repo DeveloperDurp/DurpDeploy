@@ -49,9 +49,11 @@ templ AgentsPage(agents []db.Agent, interpreters map[string][]string, health map
 	} else {
 		@layouts.Base("Agents", currentPath) {
 		<div class="space-y-6">
-			<div>
+			<div class="page-header">
+				<div>
 				<h1 class="text-3xl font-bold">Agents</h1>
 				<p class="mt-1 opacity-70">Pair and monitor remote deployment agents.</p>
+				</div>
 			</div>
 			<div class="card bg-base-200 shadow">
 				<div class="card-body">
@@ -209,7 +211,7 @@ templ AgentDetailPage(agent db.Agent, labels []string, interpreters []string, en
 	} else {
 		@layouts.Base("Agent "+agent.Name, currentPath) {
 		<div class="space-y-6">
-			<div class="flex flex-wrap items-start justify-between gap-3">
+			<div class="page-header">
 				<div class="min-w-0 w-full sm:w-auto sm:flex-1">
 					<h1 class="text-3xl font-bold">{ agent.Name }</h1>
 					<p class="break-all font-mono text-sm opacity-60">{ agent.ID }</p>

@@ -46,7 +46,7 @@ templ DeploymentsListPage(view DeploymentsView, currentPath string) {
 
 templ DeploymentsContent(view DeploymentsView) {
 	<div class="space-y-6">
-		<div class="flex justify-between items-center">
+		<div class="page-header">
 			<h1 class="text-3xl font-bold">Deployments</h1>
 		</div>
 		@DeploymentsFilterBar(view)
@@ -344,7 +344,7 @@ templ DeploymentDetail(project db.Project, release db.Release, environment db.En
 	{{ logView := deploymentLogPanels(release, deployment, logs) }}
 	<div class="space-y-6" x-data={ fmt.Sprintf("deploymentStepLogs({ url: '/deployments/%d/logs/stream?format=structured', status: %q, view: %s })", deployment.ID, deployment.Status, deploymentLogConfig(logView)) } x-on:htmx:after-swap.camel.window="statusChanged($event)">
 		<div class="space-y-4">
-			<div class="flex flex-wrap items-center justify-between gap-2">
+			<div class="page-header">
 				<div class="flex flex-wrap items-center gap-2 min-w-0">
 					<h1 class="text-3xl font-bold break-words">Deployment #{ strconv.FormatInt(deployment.ID, 10) }</h1>
 					@StatusBadgeContainer(deployment, waitingForAgents)

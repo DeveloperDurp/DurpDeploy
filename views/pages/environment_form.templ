@@ -43,7 +43,7 @@ templ EnvironmentFormFragment(env *db.Environment, isNew bool, errorMsg string) 
 
 templ EnvironmentFormContent(env *db.Environment, isNew bool, errorMsg string) {
 	<div class="max-w-2xl mx-auto">
-		<div class="flex flex-wrap items-start justify-between gap-4 mb-6">
+		<div class="page-header">
 			<h1 class="text-3xl font-bold">
 				if isNew {
 					New Environment

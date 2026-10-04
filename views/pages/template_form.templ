@@ -69,18 +69,27 @@ templ TemplateFormFragment(tpl *db.StepTemplate, isNew bool, errorMsg string) {
 
 templ TemplateFormContent(tpl *db.StepTemplate, isNew bool, errorMsg string) {
 	<div class="max-w-2xl mx-auto">
-		<h1 class="text-3xl font-bold mb-6">
-			if isNew {
-				New Template
-			} else {
-				Edit Template
+		<div class="page-header">
+			<h1 class="text-3xl font-bold">
+				if isNew {
+					New Template
+				} else {
+					Edit Template
+				}
+			</h1>
+			if !isNew {
+				<div class="flex flex-wrap gap-2">
+					<button type="submit" form="template-settings-form" class="btn btn-primary md:btn-sm">Save</button>
+					<a href="/templates" class="btn btn-ghost md:btn-sm" x-data="backNavigation" @click="back">Back</a>
+				</div>
 			}
-		</h1>
+		</div>
 		<form
 			if isNew {
 				method="post"
 				action="/templates"
 			} else {
+				id="template-settings-form"
 				hx-put={ "/templates/" + strconv.FormatInt(tpl.ID, 10) }
 				hx-target="#form-container"
 				hx-swap="innerHTML"
@@ -145,16 +154,14 @@ templ TemplateFormContent(tpl *db.StepTemplate, isNew bool, errorMsg string) {
 				</label>
 				<textarea name="script_body" class="textarea textarea-bordered" rows="6">{ tpl.ScriptBody }</textarea>
 			</div>
-			<div class="flex gap-2">
-				<button type="submit" class="btn btn-primary">
-					if isNew {
+			if isNew {
+				<div class="flex gap-2">
+					<button type="submit" class="btn btn-primary">
 						Create
-					} else {
-						Update
-					}
-				</button>
-				<a href="/templates" class="btn btn-ghost">Cancel</a>
-			</div>
+					</button>
+					<a href="/templates" class="btn btn-ghost">Cancel</a>
+				</div>
+			}
 		</form>
 	</div>
 }

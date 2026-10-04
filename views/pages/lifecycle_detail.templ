@@ -40,7 +40,7 @@ templ LifecycleDetailPage(lc db.Lifecycle, stages []LifecycleStageView, availabl
 
 templ LifecycleDetail(lc db.Lifecycle, stages []LifecycleStageView, availableEnvs []db.Environment, errorMsg string) {
 	<div class="space-y-6">
-		<div class="flex flex-wrap items-start justify-between gap-4">
+		<div class="page-header">
 			<div class="min-w-0">
 				<h1 class="text-3xl font-bold break-all">{ lc.Name }</h1>
 			</div>

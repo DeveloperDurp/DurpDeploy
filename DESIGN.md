@@ -169,6 +169,16 @@ keep `overflow-x-auto` and `table table-zebra table-fixed w-full`.
 
 ## 6. Motion & Interaction
 
+### Shared page structure
+Main list and detail pages use `page-header`: a wrapping title/action row with
+consistent spacing, titles that can wrap, and full-size phone controls.
+Edit forms put Save and Back together in that header; creation forms keep
+Create and Cancel together below the fields. Destructive actions remain in
+their separate section. Domain actions such as Deploy and Save immutable
+version retain their specific labels and existing submit behavior.
+Project section links use the same neutral button style; the Deploy action
+uses primary color. Color indicates action priority, not the destination.
+
 Normal internal page links use HTMX to replace the main content, update the
 navbar and title, and push the existing URL into browser history. The document
 and its styles stay loaded; no page fade or layout animation is added. Focus

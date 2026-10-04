@@ -5,6 +5,21 @@
 [x-cloak] { display: none !important; }
 
 @layer components {
+  .page-header {
+    @apply flex flex-wrap items-start justify-between gap-4 mb-6;
+  }
+  .page-header h1 {
+    @apply min-w-0 max-w-full break-words;
+    overflow-wrap: anywhere;
+  }
+  .page-header > div {
+    @apply min-w-0 max-w-full flex-wrap;
+  }
+  @media (max-width: 767px) {
+    .page-header .btn {
+      @apply min-h-12 h-auto py-2;
+    }
+  }
   /* Tables: fill viewport width, columns scale with window */
   .table {
     width: 100% !important;

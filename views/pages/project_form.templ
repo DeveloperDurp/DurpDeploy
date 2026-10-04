@@ -21,13 +21,21 @@ func projectFormID(project db.Project, isEdit bool) string {
 
 templ ProjectForm(project db.Project, isEdit bool, errorMsg string, lifecycles []db.Lifecycle, members []db.ListProjectMembersRow, availableUsers []db.ListUsersRow, canManage bool) {
 	<div class="max-w-2xl mx-auto">
-		<h1 class="text-3xl font-bold mb-6">
+		<div class="page-header">
+			<h1 class="text-3xl font-bold">
+				if isEdit {
+					Edit Project
+				} else {
+					New Project
+				}
+			</h1>
 			if isEdit {
-				Edit Project
-			} else {
-				New Project
+				<div class="flex flex-wrap gap-2">
+					<button type="submit" form={ projectFormID(project, isEdit) } class="btn btn-primary md:btn-sm">Save</button>
+					<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost md:btn-sm" x-data="backNavigation" @click="back">Back</a>
+				</div>
 			}
-		</h1>
+		</div>
 		<form
 			if isEdit {
 				id={ projectFormID(project, isEdit) }
@@ -61,8 +69,8 @@ templ ProjectForm(project db.Project, isEdit bool, errorMsg string, lifecycles [
 			<div class="form-control">
 				<label class="label">
 					<span class="label-text">Lifecycle</span>
-					<span class="label-text-alt text-gray-500">Optional. Gates deployments to environments in order.</span>
 				</label>
+				<p class="text-sm opacity-70 mb-2">Optional. Gates deployments to environments in order.</p>
 				<select name="lifecycle_id" class="select select-bordered">
 					<option value="">— No lifecycle —</option>
 					for _, lc := range lifecycles {
@@ -78,12 +86,8 @@ templ ProjectForm(project db.Project, isEdit bool, errorMsg string, lifecycles [
 				</select>
 			</div>
 		</form>
-		// Both action rows live below the form tag: the destructive Delete
-		// section first, then the primary Update + Cancel. This puts the
-		// safe action at the very bottom where the eye lands after editing
-		// a field, with the danger zone visually separated above it.
 		if isEdit {
-			<div class="mt-8 pt-6 border-t border-base-300 flex items-center justify-between">
+			<div class="mt-8 pt-6 border-t border-base-300 flex flex-wrap items-center justify-between gap-4">
 				<div>
 					<div class="font-medium">Delete this project</div>
 					<div class="text-sm text-gray-500">Steps, variables, and releases will be deleted too.</div>
@@ -100,20 +104,14 @@ templ ProjectForm(project db.Project, isEdit bool, errorMsg string, lifecycles [
 			</div>
 			@ProjectMembersSection(project, members, availableUsers, canManage)
 		}
-		<div class="mt-8 pt-6 border-t border-base-300 flex gap-2 justify-end">
-			<button type="submit" form={ projectFormID(project, isEdit) } class="btn btn-primary">
-				if isEdit {
-					Update
-				} else {
+		if !isEdit {
+			<div class="mt-8 pt-6 border-t border-base-300 flex gap-2">
+				<button type="submit" form={ projectFormID(project, isEdit) } class="btn btn-primary">
 					Create
-				}
-			</button>
-			if isEdit {
-				<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost">Cancel</a>
-			} else {
+				</button>
 				<a href="/projects" class="btn btn-ghost">Cancel</a>
-			}
-		</div>
+			</div>
+		}
 	</div>
 }
 

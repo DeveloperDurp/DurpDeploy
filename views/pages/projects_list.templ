@@ -9,7 +9,7 @@ import (
 
 templ ProjectsList(projects []db.Project, panels []LifecyclePanel) {
 	<div id="projects-list">
-		<div class="flex flex-wrap justify-between items-center gap-2 mb-4">
+		<div class="page-header">
 			<h1 class="text-3xl font-bold">Projects</h1>
 			if CanWrite(ctx) {
 				<a href="/projects/new" class="btn btn-primary">New Project</a>

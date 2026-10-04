@@ -31,7 +31,7 @@ templ ScheduledDeploymentsListPage(project db.Project, items []ScheduledDeployme
 
 templ ScheduledDeploymentsContent(project db.Project, items []ScheduledDeploymentListItem) {
 	<div class="space-y-6">
-		<div class="flex flex-wrap items-center justify-between gap-2">
+		<div class="page-header">
 			<h1 class="text-3xl font-bold">Schedules — { project.Name }</h1>
 			<div class="flex gap-2 ml-auto">
 				if CanWrite(ctx) {

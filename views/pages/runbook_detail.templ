@@ -99,7 +99,7 @@ templ RunbookDetailPage(project db.Project, book db.Runbook, versions []db.Runbo
 			{Label: book.Name},
 		})
 		<div class="space-y-6">
-			<div class="flex flex-wrap justify-between items-center gap-2">
+			<div class="page-header">
 				<div><h1 class="text-3xl font-bold">{ book.Name }</h1><p class="opacity-70">{ book.Description }</p></div>
 				<div class="flex gap-2">
 					<a class="btn btn-ghost btn-sm" href={ fmt.Sprintf("/projects/%d/runbooks", project.ID) } x-data="backNavigation" @click="back">Back</a>
@@ -266,7 +266,7 @@ templ RunbookExecutionPage(project db.Project, book db.Runbook, execution db.Get
 			{Label: fmt.Sprintf("Execution #%d", execution.ID)},
 		})
 		<div class="space-y-6">
-			<div class="flex flex-wrap justify-between items-center gap-2">
+			<div class="page-header">
 				<div><h1 class="text-3xl font-bold">{ book.Name } execution #{ strconv.FormatInt(execution.ID, 10) }</h1><p class="opacity-70">Version { strconv.FormatInt(execution.Version, 10) } · { execution.EnvironmentName }</p></div>
 				<div class="flex gap-2 items-center">
 					<span role="status" aria-live="polite" aria-atomic="true">

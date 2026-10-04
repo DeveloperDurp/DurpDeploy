@@ -751,14 +751,14 @@ func makeVariableGlobal(
 }
 
 // TestUpdateProject_AfterSubmitLandsOnProject verifies the two navigation
-// paths out of the edit form: Cancel returns the user to the project
-// page, and Update also returns the user to the project page (not the
+// paths out of the edit form: Back falls back to the project
+// page, and Save also returns the user to the project page (not the
 // projects list, which was the bug).
 func TestUpdateProject_AfterSubmitLandsOnProject(t *testing.T) {
 	h := newProjectHarness(t)
 	proj := h.makeProject("nav-redirect")
 
-	// Cancel link on the edit form should point to the project's detail page.
+	// Back keeps a working fallback to the project's detail page.
 	editPage, err := h.authedClient().Get(
 		fmt.Sprintf("%s/projects/%d/edit", h.server.URL, proj.ID),
 	)
@@ -774,8 +774,9 @@ func TestUpdateProject_AfterSubmitLandsOnProject(t *testing.T) {
 	if !strings.Contains(body, cancelHref) {
 		t.Errorf("edit form Cancel link should contain %s", cancelHref)
 	}
-	if !strings.Contains(body, `>Cancel</a>`) {
-		t.Error("edit form Cancel control should remain distinct from Back")
+	if !strings.Contains(body, `>Back</a>`) ||
+		!strings.Contains(body, `@click="back"`) {
+		t.Error("edit form should use the shared Back navigation control")
 	}
 
 	wantRedirect := fmt.Sprintf("/projects/%d", proj.ID)

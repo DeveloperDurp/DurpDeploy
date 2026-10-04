@@ -13,7 +13,7 @@ templ ArtifactRepositoryPage(project db.Project, source db.PackageRepository, re
 	@layouts.Base("Package repository", currentPath) {
 		@components.Breadcrumbs([]components.Crumb{{Label: "Projects", Href: "/projects"}, {Label: project.Name, Href: fmt.Sprintf("/projects/%d", project.ID)}, {Label: "Package repository"}})
 		<div class="space-y-6">
-			<div class="flex flex-wrap items-center justify-between gap-4">
+			<div class="page-header">
 				<h1 class="text-3xl font-bold">Package repository — { project.Name }</h1>
 				<div class="flex flex-wrap gap-2 ml-auto">
 					if CanWrite(ctx) {

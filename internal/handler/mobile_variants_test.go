@@ -135,14 +135,14 @@ func TestMobile_RenderedHTML_rendersLifecycleBackAndKeepsPermissionGoBack(
 	requireHTMLPattern(
 		t,
 		detailBody,
-		`(?s)<div class="flex flex-wrap items-start justify-between gap-4">\s*<div class="min-w-0">.*?</div>\s*<div class="flex gap-2 shrink-0">\s*`+lifecycleSave+`\s*`+lifecycleBack,
+		`(?s)<div class="page-header">\s*<div class="min-w-0">.*?</div>\s*<div class="flex gap-2 shrink-0">\s*`+lifecycleSave+`\s*`+lifecycleBack,
 	)
 	requireHTMLPattern(
 		t,
 		detailBody,
 		`<form id="lifecycle-settings-form" method="post" action="/lifecycles/\d+"`,
 	)
-	const lifecycleFormHeader = `(?s)<div class="flex justify-between items-center">\s*<h1 class="text-3xl font-bold">New Lifecycle</h1>\s*<div class="flex gap-2">\s*<a href="/lifecycles" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>\s*</div>\s*</div>`
+	const lifecycleFormHeader = `(?s)<div class="page-header">\s*<h1 class="text-3xl font-bold">New Lifecycle</h1>\s*<div class="flex gap-2">\s*<a href="/lifecycles" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>\s*</div>\s*</div>`
 	requireHTMLPattern(t, formBody, lifecycleFormHeader)
 	const permissionGoBack = `<a href="/lifecycles" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Go back</a>`
 	if strings.Count(viewerFormBody, permissionGoBack) != 1 {
@@ -172,7 +172,7 @@ func TestMobile_RenderedHTML_renders_project_back_controls_when_authenticated(
 			name: "steps",
 			path: fmt.Sprintf("/projects/%d/steps-page", fixture.project.ID),
 			headerPattern: fmt.Sprintf(
-				`(?s)<div class="flex flex-wrap gap-2 justify-between items-center">\s*<h1 class="min-w-0 w-full break-words sm:w-auto sm:flex-1 text-3xl font-bold">Steps for .*?</h1>\s*<div class="flex gap-2">\s*<a href="/projects/%d" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>`,
+				`(?s)<div class="page-header">\s*<h1 class="min-w-0 w-full break-words sm:w-auto sm:flex-1 text-3xl font-bold">Steps for .*?</h1>\s*<div class="flex gap-2">\s*<a href="/projects/%d" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>`,
 				fixture.project.ID,
 			),
 		},
@@ -180,7 +180,7 @@ func TestMobile_RenderedHTML_renders_project_back_controls_when_authenticated(
 			name: "variables",
 			path: fmt.Sprintf("/projects/%d/variables", fixture.project.ID),
 			headerPattern: fmt.Sprintf(
-				`(?s)<div class="flex flex-wrap gap-2 justify-between items-center">\s*<h1 class="min-w-0 w-full break-words sm:w-auto sm:flex-1 text-3xl font-bold">Variables.*?</h1>\s*<div class="flex gap-2">\s*<a href="/projects/%d" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>`,
+				`(?s)<div class="page-header">\s*<h1 class="min-w-0 w-full break-words sm:w-auto sm:flex-1 text-3xl font-bold">Variables.*?</h1>\s*<div class="flex gap-2">\s*<a href="/projects/%d" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>`,
 				fixture.project.ID,
 			),
 		},
@@ -188,7 +188,7 @@ func TestMobile_RenderedHTML_renders_project_back_controls_when_authenticated(
 			name: "schedules",
 			path: fmt.Sprintf("/projects/%d/schedules", fixture.project.ID),
 			headerPattern: fmt.Sprintf(
-				`(?s)<div class="flex flex-wrap items-center justify-between gap-2">\s*<h1 class="text-3xl font-bold">Schedules.*?</h1>\s*<div class="flex gap-2 ml-auto">\s*<a href="/projects/%d/schedules/new" class="btn btn-primary btn-sm">New Schedule</a>\s*<a href="/projects/%d" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>`,
+				`(?s)<div class="page-header">\s*<h1 class="text-3xl font-bold">Schedules.*?</h1>\s*<div class="flex gap-2 ml-auto">\s*<a href="/projects/%d/schedules/new" class="btn btn-primary btn-sm">New Schedule</a>\s*<a href="/projects/%d" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>`,
 				fixture.project.ID,
 				fixture.project.ID,
 			),
@@ -253,7 +253,7 @@ func TestMobile_RenderedHTML_preserves_disclosures_and_containment_when_authenti
 				`(?s)<div[^>]*id="templates-list"[^>]*>.*?<table[^>]*class="[^"]*hidden lg:table[^"]*"`,
 				`(?s)<ol[^>]*class="[^"]*lg:hidden[^"]*"[^>]*data-mobile-template-list`,
 				`(?s)data-template-action="edit"[^>]*href="/templates/[0-9]+/edit".*?data-template-action="delete".*?data-template-action="history"[^>]*href="/templates/[0-9]+/history"`,
-				`(?s)<div class="flex flex-nowrap justify-start gap-2 whitespace-nowrap">`,
+				`(?s)<div class="flex flex-wrap lg:flex-nowrap justify-start gap-2">`,
 			},
 			contents: []string{fixture.template.ScriptBody},
 		},

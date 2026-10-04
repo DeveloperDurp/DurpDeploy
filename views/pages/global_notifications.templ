@@ -141,7 +141,7 @@ templ GlobalNotificationsPage(global db.GlobalNotification, currentPath string) 
 		})
 		if CanWrite(ctx) {
 			<form method="post" action="/admin/notifications/settings">
-				<div class="flex justify-between items-center mb-4">
+				<div class="page-header">
 					<h1 class="text-3xl font-bold">Notification Settings</h1>
 					<div class="flex gap-2">
 						<button type="submit" class="btn btn-primary btn-sm">Save</button>
@@ -151,7 +151,7 @@ templ GlobalNotificationsPage(global db.GlobalNotification, currentPath string) 
 				@GlobalNotificationCards(global)
 			</form>
 		} else {
-			<div class="flex justify-between items-center mb-4">
+			<div class="page-header">
 				<h1 class="text-3xl font-bold">Notification Settings</h1>
 				<div class="flex gap-2">
 					<a href="/admin/notifications" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>

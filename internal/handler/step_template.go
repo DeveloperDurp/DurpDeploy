@@ -280,7 +280,7 @@ func (h *StepTemplateHandler) UpdateTemplate(
 		return
 	}
 
-	_, err = h.repo.UpdateStepTemplateWithPlacement(
+	updated, err := h.repo.UpdateStepTemplateWithPlacement(
 		r.Context(),
 		params,
 		existing.ExecutionTarget,
@@ -318,6 +318,13 @@ func (h *StepTemplateHandler) UpdateTemplate(
 		return
 	}
 
+	if r.Header.Get("HX-Request") == "true" {
+		if err := pages.TemplateFormFragment(&updated, false, "").
+			Render(r.Context(), w); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
 	http.Redirect(w, r, "/templates", http.StatusSeeOther)
 }
 

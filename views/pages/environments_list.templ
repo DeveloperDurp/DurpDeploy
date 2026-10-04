@@ -19,7 +19,7 @@ templ EnvironmentsList(environments []db.Environment, currentPath string) {
 
 templ EnvironmentsListContent(environments []db.Environment) {
 	<div id="environments-content" class="space-y-4">
-		<div class="flex flex-wrap justify-between items-center gap-2">
+		<div class="page-header">
 			<h1 class="text-3xl font-bold">Environments</h1>
 			if CanWrite(ctx) {
 				<a href="/environments/new" class="btn btn-primary">New Environment</a>
