@@ -185,7 +185,7 @@ func (q *Queries) FailDeploymentsWithTerminalRemoteStepRuns(ctx context.Context,
 
 const failOrphanedDeployments = `-- name: FailOrphanedDeployments :execrows
 UPDATE deployments SET status = 'failed', finished_at = ?1
-WHERE status = 'running' AND assigned_agent_id IS NULL
+WHERE status IN ('running', 'publishing_artifact') AND assigned_agent_id IS NULL
   AND NOT EXISTS (
       SELECT 1 FROM remote_step_runs r
       WHERE r.deployment_id = deployments.id

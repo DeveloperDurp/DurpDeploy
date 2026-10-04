@@ -686,6 +686,15 @@ func (h *DeploymentHandler) CancelDeployment(
 			)
 			return
 		}
+	} else if deployment.Status == "awaiting_artifact_approval" {
+		if err := h.repo.RejectArtifact(
+			r.Context(),
+			id,
+			"cancelled",
+		); err != nil {
+			http.Error(w, "Artifact cancellation failed", http.StatusConflict)
+			return
+		}
 	} else if deployment.AssignedAgentID.Valid {
 		err := h.repo.CancelAssignedRemoteDeployment(
 			r.Context(),

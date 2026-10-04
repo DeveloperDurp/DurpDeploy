@@ -270,7 +270,11 @@ func statusBadgeClass(status string) string {
 	switch status {
 	case "pending", "queued":
 		return "badge-primary"
-	case "pending_approval":
+	case "awaiting_artifact_approval", "publishing_artifact":
+return "badge-warning"
+case "rejected", "expired":
+return "badge-error"
+case "pending_approval":
 		return "badge-info"
 	case "running":
 		return "badge-warning"
@@ -287,7 +291,7 @@ func statusBadgeClass(status string) string {
 
 func isTerminalStatus(status string) bool {
 	switch status {
-	case "succeeded", "failed", "cancelled":
+	case "succeeded", "failed", "cancelled", "rejected", "expired":
 		return true
 	default:
 		return false
@@ -398,7 +402,7 @@ templ DeploymentDetail(project db.Project, release db.Release, environment db.En
 					Project: { project.Name } | Release: { release.Version } | Environment: { environment.Name }
 				</p>
 				if deployment.Note.Valid {
-					<blockquote class="border-l-4 border-accent pl-3 mt-2 text-sm text-gray-300 italic">
+					<blockquote class="bg-base-200 rounded p-3 mt-2 text-sm text-gray-300 italic">
 						{ deployment.Note.String }
 					</blockquote>
 				}
@@ -411,7 +415,8 @@ templ DeploymentDetail(project db.Project, release db.Release, environment db.En
 		</div>
 		<div hx-get={ fmt.Sprintf("/deployments/%d/verification", deployment.ID) } hx-trigger="load" hx-swap="outerHTML" aria-live="polite"></div>
 		<div class="card bg-base-200 p-4">
-			<h2 class="text-xl font-bold mb-4">Steps</h2>
+			<div hx-get={ fmt.Sprintf("/deployments/%d/artifact-gates", deployment.ID) } hx-trigger="load, every 3s" hx-swap="innerHTML" hx-on::before-swap="if (this.contains(document.activeElement)) event.detail.shouldSwap = false" aria-live="polite"></div>
+<h2 class="text-xl font-bold mb-4">Steps</h2>
 			<table class="table table-zebra table-fixed w-full">
 				<thead>
 					<tr>
@@ -434,7 +439,9 @@ templ DeploymentDetail(project db.Project, release db.Release, environment db.En
 								<td class="whitespace-nowrap">{ releaseStepInterpreter(step) }</td>
 								<td class="truncate hidden sm:table-cell">
 									<code class="text-sm bg-base-300 px-2 py-1 rounded">
-										if len(step.ScriptBody) > 60 {
+										if hasArtifactGate(release.StepsJson) {
+											Sensitive script hidden
+										} else if len(step.ScriptBody) > 60 {
 											{ step.ScriptBody[:60] + "..." }
 										} else {
 											{ step.ScriptBody }

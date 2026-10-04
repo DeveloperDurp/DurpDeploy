@@ -12,14 +12,16 @@ import (
 
 func ArtifactErrorStatus(err error) int {
 	switch {
-	case errors.Is(err, artifact.ErrInvalid),
+	case errors.Is(err, artifact.ErrGateConfig),
+		errors.Is(err, artifact.ErrInvalid),
 		errors.Is(err, verification.ErrInvalid),
 		errors.Is(err, containerenv.ErrReserved),
 		errors.Is(err, artifact.ErrChecksum),
 		errors.Is(err, repository.ErrRemoteArtifactsUnsupported),
 		errors.Is(err, repository.ErrArtifactPathReserved):
 		return http.StatusUnprocessableEntity
-	case errors.Is(err, repository.ErrArtifactRepositoryPinned):
+	case errors.Is(err, repository.ErrEnvironmentReserved),
+		errors.Is(err, repository.ErrArtifactRepositoryPinned):
 		return http.StatusConflict
 	case errors.Is(err, artifact.ErrFetch):
 		return http.StatusBadGateway

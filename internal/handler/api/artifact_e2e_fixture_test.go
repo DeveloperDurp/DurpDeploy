@@ -52,7 +52,8 @@ func (n artifactNotifier) Notify(
 	e events.Event,
 ) (bool, error) {
 	switch e.Type {
-	case events.DeploymentSucceeded,
+	case events.ArtifactAwaitingApproval,
+		events.DeploymentSucceeded,
 		events.DeploymentFailed,
 		events.RunbookSucceeded,
 		events.RunbookFailed:

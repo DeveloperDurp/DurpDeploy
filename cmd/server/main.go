@@ -303,6 +303,10 @@ func runServer() {
 	// etc.). Without this, a deployment sitting in "pending" stays there
 	// forever — the HTTP handler launched the runner as a goroutine and
 	// that goroutine dies with the process.
+	if err := repo.MaintainArtifactGates(ctx); err != nil {
+		slog.Error("artifact gate maintenance", "err", err)
+	}
+	go maintainArtifactGates(ctx, repo)
 	recoverPendingDeployments(ctx, rnr, repo)
 	go rnr.ServeQueue(ctx)
 	sched.Start(ctx)

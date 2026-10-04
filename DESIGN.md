@@ -102,6 +102,12 @@ keep `overflow-x-auto` and `table table-zebra table-fixed w-full`.
 - Reuse the deployment's existing status polling to clear the message once
   work is claimed or the deployment finishes.
 
+### Generated artifact approval
+- Reuse `card bg-base-200 shadow`, labelled badges, definition lists, and existing small buttons for gate review.
+- Show action counts, checksums, expiry, and approver; hide resource values and sensitive step output. Long checksums wrap.
+- Native labelled form fields configure network and approval paths. Native POST forms approve or reject the exact revision and checksum. Viewers receive no write or download control.
+- Awaiting gates use warning badges; approved uses success; rejected or expired uses error. State text carries meaning without color.
+
 ## 6. Motion & Interaction
 
 Existing interaction is intentionally minimal: native `details` disclosure,

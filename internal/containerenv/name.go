@@ -22,7 +22,8 @@ func ValidateName(name string, local bool) error {
 	if !identifier.MatchString(name) {
 		return ErrIdentifier
 	}
-	if name == "ARTIFACT_PATH" || name == StageVariable {
+	if name == "ARTIFACT_PATH" || name == StageVariable ||
+		name == "DURPDEPLOY_APPROVED_DIR" {
 		return ErrReserved
 	}
 	if local && (name == "PATH" || name == "HOME" || name == "TERM" ||

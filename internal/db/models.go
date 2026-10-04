@@ -71,6 +71,41 @@ type ApiToken struct {
 	RevokedAt   sql.NullInt64 `json:"revoked_at"`
 }
 
+type ArtifactGate struct {
+	DeploymentID   int64         `json:"deployment_id"`
+	StepIndex      int64         `json:"step_index"`
+	Revision       int64         `json:"revision"`
+	Status         string        `json:"status"`
+	ArtifactPath   string        `json:"artifact_path"`
+	ArtifactSha256 string        `json:"artifact_sha256"`
+	BundleSha256   string        `json:"bundle_sha256"`
+	BundleSize     int64         `json:"bundle_size"`
+	Review         string        `json:"review"`
+	CreatedAt      int64         `json:"created_at"`
+	ExpiresAt      int64         `json:"expires_at"`
+	ApprovedBy     sql.NullInt64 `json:"approved_by"`
+	ApprovedAt     sql.NullInt64 `json:"approved_at"`
+}
+
+type ArtifactGateChunk struct {
+	DeploymentID int64  `json:"deployment_id"`
+	StepIndex    int64  `json:"step_index"`
+	ChunkIndex   int64  `json:"chunk_index"`
+	Ciphertext   string `json:"ciphertext"`
+}
+
+type ArtifactGateImage struct {
+	DeploymentID int64  `json:"deployment_id"`
+	StepIndex    int64  `json:"step_index"`
+	ImageID      string `json:"image_id"`
+}
+
+type ArtifactGateRun struct {
+	DeploymentID int64 `json:"deployment_id"`
+	NextStep     int64 `json:"next_step"`
+	Claimed      int64 `json:"claimed"`
+}
+
 type AuditLog struct {
 	ID         int64          `json:"id"`
 	UserID     sql.NullInt64  `json:"user_id"`
@@ -148,18 +183,22 @@ type DeploymentRollback struct {
 }
 
 type DeploymentStep struct {
-	DeploymentID    int64         `json:"deployment_id"`
-	StepIndex       int64         `json:"step_index"`
-	SourceStepID    sql.NullInt64 `json:"source_step_id"`
-	Name            string        `json:"name"`
-	ScriptBody      string        `json:"script_body"`
-	TimeoutSeconds  int64         `json:"timeout_seconds"`
-	MaxRetries      int64         `json:"max_retries"`
-	ExecutionTarget string        `json:"execution_target"`
-	CreatedAt       int64         `json:"created_at"`
-	Interpreter     string        `json:"interpreter"`
-	ContainerImage  string        `json:"container_image"`
-	VariableNames   string        `json:"variable_names"`
+	DeploymentID         int64         `json:"deployment_id"`
+	StepIndex            int64         `json:"step_index"`
+	SourceStepID         sql.NullInt64 `json:"source_step_id"`
+	Name                 string        `json:"name"`
+	ScriptBody           string        `json:"script_body"`
+	TimeoutSeconds       int64         `json:"timeout_seconds"`
+	MaxRetries           int64         `json:"max_retries"`
+	ExecutionTarget      string        `json:"execution_target"`
+	CreatedAt            int64         `json:"created_at"`
+	Interpreter          string        `json:"interpreter"`
+	ContainerImage       string        `json:"container_image"`
+	VariableNames        string        `json:"variable_names"`
+	NetworkMode          string        `json:"network_mode"`
+	ApprovalArtifactPath string        `json:"approval_artifact_path"`
+	ApprovalReviewPath   string        `json:"approval_review_path"`
+	ApprovalReviewFormat string        `json:"approval_review_format"`
 }
 
 type DeploymentStepAttempt struct {
@@ -476,18 +515,22 @@ type Session struct {
 }
 
 type Step struct {
-	ID              int64  `json:"id"`
-	ProjectID       int64  `json:"project_id"`
-	Name            string `json:"name"`
-	ScriptBody      string `json:"script_body"`
-	SortOrder       int64  `json:"sort_order"`
-	CreatedAt       int64  `json:"created_at"`
-	TimeoutSeconds  int64  `json:"timeout_seconds"`
-	MaxRetries      int64  `json:"max_retries"`
-	ExecutionTarget string `json:"execution_target"`
-	Interpreter     string `json:"interpreter"`
-	ContainerImage  string `json:"container_image"`
-	VariableNames   string `json:"variable_names"`
+	ID                   int64  `json:"id"`
+	ProjectID            int64  `json:"project_id"`
+	Name                 string `json:"name"`
+	ScriptBody           string `json:"script_body"`
+	SortOrder            int64  `json:"sort_order"`
+	CreatedAt            int64  `json:"created_at"`
+	TimeoutSeconds       int64  `json:"timeout_seconds"`
+	MaxRetries           int64  `json:"max_retries"`
+	ExecutionTarget      string `json:"execution_target"`
+	Interpreter          string `json:"interpreter"`
+	ContainerImage       string `json:"container_image"`
+	VariableNames        string `json:"variable_names"`
+	NetworkMode          string `json:"network_mode"`
+	ApprovalArtifactPath string `json:"approval_artifact_path"`
+	ApprovalReviewPath   string `json:"approval_review_path"`
+	ApprovalReviewFormat string `json:"approval_review_format"`
 }
 
 type StepAgentSelector struct {
@@ -496,14 +539,18 @@ type StepAgentSelector struct {
 }
 
 type StepTemplate struct {
-	ID              int64  `json:"id"`
-	Name            string `json:"name"`
-	ScriptBody      string `json:"script_body"`
-	CreatedAt       int64  `json:"created_at"`
-	ExecutionTarget string `json:"execution_target"`
-	Interpreter     string `json:"interpreter"`
-	ContainerImage  string `json:"container_image"`
-	VariableNames   string `json:"variable_names"`
+	ID                   int64  `json:"id"`
+	Name                 string `json:"name"`
+	ScriptBody           string `json:"script_body"`
+	CreatedAt            int64  `json:"created_at"`
+	ExecutionTarget      string `json:"execution_target"`
+	Interpreter          string `json:"interpreter"`
+	ContainerImage       string `json:"container_image"`
+	VariableNames        string `json:"variable_names"`
+	NetworkMode          string `json:"network_mode"`
+	ApprovalArtifactPath string `json:"approval_artifact_path"`
+	ApprovalReviewPath   string `json:"approval_review_path"`
+	ApprovalReviewFormat string `json:"approval_review_format"`
 }
 
 type StepTemplateAgentSelector struct {
@@ -512,16 +559,20 @@ type StepTemplateAgentSelector struct {
 }
 
 type StepTemplateVersion struct {
-	ID              int64  `json:"id"`
-	TemplateID      int64  `json:"template_id"`
-	VersionNumber   int64  `json:"version_number"`
-	Name            string `json:"name"`
-	ScriptBody      string `json:"script_body"`
-	CreatedAt       int64  `json:"created_at"`
-	ExecutionTarget string `json:"execution_target"`
-	Interpreter     string `json:"interpreter"`
-	ContainerImage  string `json:"container_image"`
-	VariableNames   string `json:"variable_names"`
+	ID                   int64  `json:"id"`
+	TemplateID           int64  `json:"template_id"`
+	VersionNumber        int64  `json:"version_number"`
+	Name                 string `json:"name"`
+	ScriptBody           string `json:"script_body"`
+	CreatedAt            int64  `json:"created_at"`
+	ExecutionTarget      string `json:"execution_target"`
+	Interpreter          string `json:"interpreter"`
+	ContainerImage       string `json:"container_image"`
+	VariableNames        string `json:"variable_names"`
+	NetworkMode          string `json:"network_mode"`
+	ApprovalArtifactPath string `json:"approval_artifact_path"`
+	ApprovalReviewPath   string `json:"approval_review_path"`
+	ApprovalReviewFormat string `json:"approval_review_format"`
 }
 
 type StepTemplateVersionAgentSelector struct {

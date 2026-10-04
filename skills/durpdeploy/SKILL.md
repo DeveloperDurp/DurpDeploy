@@ -432,6 +432,22 @@ do not receive the staging directory or transferred files. Staging is neither
 a cross-deployment cache nor durable storage for an approval pause or restart.
 Pinned release packages remain read-only at `ARTIFACT_PATH=/artifacts`.
 
+Local steps accept `network_mode` (`none` by default, or `bridge`). Artifact
+gates use `approval_artifact_path`, `approval_review_path`, and
+`approval_review_format` (`summary` or `terraform`), relative to
+`DURPDEPLOY_STAGE_DIR`. A gated deployment pauses before the next step and
+reserves its environment. Only local deployment steps without retries are
+supported; runbooks and agent steps cannot use gates.
+`GET /api/v1/deployments/{id}/artifact-gates` returns counts, checksums,
+revision, expiry, status, and approver metadata. Write-capable project members
+can download `/{stepIndex}/artifact`; viewers cannot. Administrator-only
+`/{stepIndex}/approve` and `/{stepIndex}/reject` accept
+`{"revision":1,"sha256":"..."}`. Stale or duplicate decisions return 409.
+Approved context is read-only at `DURPDEPLOY_APPROVED_DIR`; apply the saved
+artifact exactly, never regenerate it. Gated script output is hidden. Gates
+expire after 24 hours and encrypted terminal bundles are removed after seven
+days. See `docs/artifact-approval.md` for Terraform plan/apply setup.
+
 ## Generic ZIP packages
 
 Each project has one active HTTPS ZIP repository. Saving it automatically

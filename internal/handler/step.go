@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"durpdeploy/internal/artifact"
 	"durpdeploy/internal/containerenv"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/interpreter"
@@ -34,6 +35,15 @@ func parseStepContainerConfig(
 	r *http.Request,
 	target string,
 ) (string, []string, string) {
+	if err := artifact.ValidateGateConfig(
+		target,
+		r.FormValue("network_mode"),
+		r.FormValue("approval_artifact_path"),
+		r.FormValue("approval_review_path"),
+		r.FormValue("approval_review_format"),
+	); err != nil {
+		return "", nil, err.Error()
+	}
 	image := r.FormValue("container_image")
 	names := parseStepVariableNames(r.FormValue("variable_names"))
 	if err := validateStepContainerConfig(target, image, names); err != "" {
@@ -349,14 +359,18 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 	)
 	if containerErr != "" {
 		step := db.Step{
-			ProjectID:       projectID,
-			Name:            name,
-			ScriptBody:      script,
-			TimeoutSeconds:  timeoutSeconds,
-			MaxRetries:      maxRetries,
-			ExecutionTarget: r.FormValue("execution_target"),
-			ContainerImage:  containerImage,
-			VariableNames:   marshalStepVariableNames(variableNames),
+			ProjectID:            projectID,
+			Name:                 name,
+			ScriptBody:           script,
+			TimeoutSeconds:       timeoutSeconds,
+			MaxRetries:           maxRetries,
+			ExecutionTarget:      r.FormValue("execution_target"),
+			ContainerImage:       containerImage,
+			NetworkMode:          r.FormValue("network_mode"),
+			ApprovalArtifactPath: r.FormValue("approval_artifact_path"),
+			ApprovalReviewPath:   r.FormValue("approval_review_path"),
+			ApprovalReviewFormat: r.FormValue("approval_review_format"),
+			VariableNames:        marshalStepVariableNames(variableNames),
 		}
 		writeStepFormError(
 			w, r, step, projectID, true, labels, agentLabel, containerErr,
@@ -366,14 +380,18 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 
 	if name == "" {
 		step := db.Step{
-			ProjectID:       projectID,
-			Name:            name,
-			ScriptBody:      script,
-			TimeoutSeconds:  timeoutSeconds,
-			MaxRetries:      maxRetries,
-			ExecutionTarget: r.FormValue("execution_target"),
-			ContainerImage:  containerImage,
-			VariableNames:   marshalStepVariableNames(variableNames),
+			ProjectID:            projectID,
+			Name:                 name,
+			ScriptBody:           script,
+			TimeoutSeconds:       timeoutSeconds,
+			MaxRetries:           maxRetries,
+			ExecutionTarget:      r.FormValue("execution_target"),
+			ContainerImage:       containerImage,
+			NetworkMode:          r.FormValue("network_mode"),
+			ApprovalArtifactPath: r.FormValue("approval_artifact_path"),
+			ApprovalReviewPath:   r.FormValue("approval_review_path"),
+			ApprovalReviewFormat: r.FormValue("approval_review_format"),
+			VariableNames:        marshalStepVariableNames(variableNames),
 		}
 		writeStepFormError(
 			w, r, step, projectID, true, labels, agentLabel,
@@ -383,14 +401,18 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 	}
 	if placementErr != nil {
 		step := db.Step{
-			ProjectID:       projectID,
-			Name:            name,
-			ScriptBody:      script,
-			TimeoutSeconds:  timeoutSeconds,
-			MaxRetries:      maxRetries,
-			ExecutionTarget: r.FormValue("execution_target"),
-			ContainerImage:  containerImage,
-			VariableNames:   marshalStepVariableNames(variableNames),
+			ProjectID:            projectID,
+			Name:                 name,
+			ScriptBody:           script,
+			TimeoutSeconds:       timeoutSeconds,
+			MaxRetries:           maxRetries,
+			ExecutionTarget:      r.FormValue("execution_target"),
+			ContainerImage:       containerImage,
+			NetworkMode:          r.FormValue("network_mode"),
+			ApprovalArtifactPath: r.FormValue("approval_artifact_path"),
+			ApprovalReviewPath:   r.FormValue("approval_review_path"),
+			ApprovalReviewFormat: r.FormValue("approval_review_format"),
+			VariableNames:        marshalStepVariableNames(variableNames),
 		}
 		writeStepFormError(
 			w, r, step, projectID, true, labels, agentLabel,
@@ -412,15 +434,19 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 	}
 
 	params := db.CreateStepParams{
-		ProjectID:      projectID,
-		Name:           name,
-		ScriptBody:     script,
-		SortOrder:      sortOrder,
-		TimeoutSeconds: timeoutSeconds,
-		MaxRetries:     maxRetries,
-		Interpreter:    selectedInterpreter,
-		ContainerImage: containerImage,
-		VariableNames:  marshalStepVariableNames(variableNames),
+		ProjectID:            projectID,
+		Name:                 name,
+		ScriptBody:           script,
+		SortOrder:            sortOrder,
+		TimeoutSeconds:       timeoutSeconds,
+		MaxRetries:           maxRetries,
+		Interpreter:          selectedInterpreter,
+		ContainerImage:       containerImage,
+		NetworkMode:          r.FormValue("network_mode"),
+		ApprovalArtifactPath: r.FormValue("approval_artifact_path"),
+		ApprovalReviewPath:   r.FormValue("approval_review_path"),
+		ApprovalReviewFormat: r.FormValue("approval_review_format"),
+		VariableNames:        marshalStepVariableNames(variableNames),
 	}
 
 	var selectors []string
@@ -638,16 +664,20 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 	)
 	if containerErr != "" {
 		step := db.Step{
-			ID:              stepID,
-			ProjectID:       projectID,
-			Name:            name,
-			ScriptBody:      script,
-			SortOrder:       sortOrder,
-			TimeoutSeconds:  timeoutSeconds,
-			MaxRetries:      maxRetries,
-			ExecutionTarget: r.FormValue("execution_target"),
-			ContainerImage:  containerImage,
-			VariableNames:   marshalStepVariableNames(variableNames),
+			ID:                   stepID,
+			ProjectID:            projectID,
+			Name:                 name,
+			ScriptBody:           script,
+			SortOrder:            sortOrder,
+			TimeoutSeconds:       timeoutSeconds,
+			MaxRetries:           maxRetries,
+			ExecutionTarget:      r.FormValue("execution_target"),
+			ContainerImage:       containerImage,
+			NetworkMode:          r.FormValue("network_mode"),
+			ApprovalArtifactPath: r.FormValue("approval_artifact_path"),
+			ApprovalReviewPath:   r.FormValue("approval_review_path"),
+			ApprovalReviewFormat: r.FormValue("approval_review_format"),
+			VariableNames:        marshalStepVariableNames(variableNames),
 		}
 		writeStepFormError(
 			w, r, step, projectID, false, labels, agentLabel, containerErr,
@@ -657,16 +687,20 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 
 	if name == "" {
 		step := db.Step{
-			ID:              stepID,
-			ProjectID:       projectID,
-			Name:            name,
-			ScriptBody:      script,
-			SortOrder:       sortOrder,
-			TimeoutSeconds:  timeoutSeconds,
-			MaxRetries:      maxRetries,
-			ExecutionTarget: r.FormValue("execution_target"),
-			ContainerImage:  containerImage,
-			VariableNames:   marshalStepVariableNames(variableNames),
+			ID:                   stepID,
+			ProjectID:            projectID,
+			Name:                 name,
+			ScriptBody:           script,
+			SortOrder:            sortOrder,
+			TimeoutSeconds:       timeoutSeconds,
+			MaxRetries:           maxRetries,
+			ExecutionTarget:      r.FormValue("execution_target"),
+			ContainerImage:       containerImage,
+			NetworkMode:          r.FormValue("network_mode"),
+			ApprovalArtifactPath: r.FormValue("approval_artifact_path"),
+			ApprovalReviewPath:   r.FormValue("approval_review_path"),
+			ApprovalReviewFormat: r.FormValue("approval_review_format"),
+			VariableNames:        marshalStepVariableNames(variableNames),
 		}
 		writeStepFormError(
 			w, r, step, projectID, false, labels, agentLabel,
@@ -676,16 +710,20 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 	}
 	if placementErr != nil {
 		step := db.Step{
-			ID:              stepID,
-			ProjectID:       projectID,
-			Name:            name,
-			ScriptBody:      script,
-			SortOrder:       sortOrder,
-			TimeoutSeconds:  timeoutSeconds,
-			MaxRetries:      maxRetries,
-			ExecutionTarget: r.FormValue("execution_target"),
-			ContainerImage:  containerImage,
-			VariableNames:   marshalStepVariableNames(variableNames),
+			ID:                   stepID,
+			ProjectID:            projectID,
+			Name:                 name,
+			ScriptBody:           script,
+			SortOrder:            sortOrder,
+			TimeoutSeconds:       timeoutSeconds,
+			MaxRetries:           maxRetries,
+			ExecutionTarget:      r.FormValue("execution_target"),
+			ContainerImage:       containerImage,
+			NetworkMode:          r.FormValue("network_mode"),
+			ApprovalArtifactPath: r.FormValue("approval_artifact_path"),
+			ApprovalReviewPath:   r.FormValue("approval_review_path"),
+			ApprovalReviewFormat: r.FormValue("approval_review_format"),
+			VariableNames:        marshalStepVariableNames(variableNames),
 		}
 		writeStepFormError(
 			w, r, step, projectID, false, labels, agentLabel,
@@ -695,15 +733,19 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 	}
 
 	params := db.UpdateStepParams{
-		ID:             stepID,
-		Name:           name,
-		ScriptBody:     script,
-		SortOrder:      sortOrder,
-		TimeoutSeconds: timeoutSeconds,
-		MaxRetries:     maxRetries,
-		Interpreter:    selectedInterpreter,
-		ContainerImage: containerImage,
-		VariableNames:  marshalStepVariableNames(variableNames),
+		ID:                   stepID,
+		Name:                 name,
+		ScriptBody:           script,
+		SortOrder:            sortOrder,
+		TimeoutSeconds:       timeoutSeconds,
+		MaxRetries:           maxRetries,
+		Interpreter:          selectedInterpreter,
+		ContainerImage:       containerImage,
+		NetworkMode:          r.FormValue("network_mode"),
+		ApprovalArtifactPath: r.FormValue("approval_artifact_path"),
+		ApprovalReviewPath:   r.FormValue("approval_review_path"),
+		ApprovalReviewFormat: r.FormValue("approval_review_format"),
+		VariableNames:        marshalStepVariableNames(variableNames),
 	}
 
 	var selectors []string
@@ -836,15 +878,19 @@ func (h *StepHandler) ReorderStep(w http.ResponseWriter, r *http.Request) {
 			}
 			if s.SortOrder >= newOrder && s.SortOrder < oldOrder {
 				p := db.UpdateStepParams{
-					ID:             s.ID,
-					Name:           s.Name,
-					ScriptBody:     s.ScriptBody,
-					SortOrder:      s.SortOrder + 1,
-					TimeoutSeconds: s.TimeoutSeconds,
-					MaxRetries:     s.MaxRetries,
-					Interpreter:    s.Interpreter,
-					ContainerImage: s.ContainerImage,
-					VariableNames:  s.VariableNames,
+					ID:                   s.ID,
+					Name:                 s.Name,
+					ScriptBody:           s.ScriptBody,
+					SortOrder:            s.SortOrder + 1,
+					TimeoutSeconds:       s.TimeoutSeconds,
+					MaxRetries:           s.MaxRetries,
+					Interpreter:          s.Interpreter,
+					ContainerImage:       s.ContainerImage,
+					NetworkMode:          s.NetworkMode,
+					ApprovalArtifactPath: s.ApprovalArtifactPath,
+					ApprovalReviewPath:   s.ApprovalReviewPath,
+					ApprovalReviewFormat: s.ApprovalReviewFormat,
+					VariableNames:        s.VariableNames,
 				}
 				if _, err := qtx.UpdateStep(r.Context(), p); err != nil {
 					http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -859,15 +905,19 @@ func (h *StepHandler) ReorderStep(w http.ResponseWriter, r *http.Request) {
 			}
 			if s.SortOrder > oldOrder && s.SortOrder <= newOrder {
 				p := db.UpdateStepParams{
-					ID:             s.ID,
-					Name:           s.Name,
-					ScriptBody:     s.ScriptBody,
-					SortOrder:      s.SortOrder - 1,
-					TimeoutSeconds: s.TimeoutSeconds,
-					MaxRetries:     s.MaxRetries,
-					Interpreter:    s.Interpreter,
-					ContainerImage: s.ContainerImage,
-					VariableNames:  s.VariableNames,
+					ID:                   s.ID,
+					Name:                 s.Name,
+					ScriptBody:           s.ScriptBody,
+					SortOrder:            s.SortOrder - 1,
+					TimeoutSeconds:       s.TimeoutSeconds,
+					MaxRetries:           s.MaxRetries,
+					Interpreter:          s.Interpreter,
+					ContainerImage:       s.ContainerImage,
+					NetworkMode:          s.NetworkMode,
+					ApprovalArtifactPath: s.ApprovalArtifactPath,
+					ApprovalReviewPath:   s.ApprovalReviewPath,
+					ApprovalReviewFormat: s.ApprovalReviewFormat,
+					VariableNames:        s.VariableNames,
 				}
 				if _, err := qtx.UpdateStep(r.Context(), p); err != nil {
 					http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -878,15 +928,19 @@ func (h *StepHandler) ReorderStep(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_, err = qtx.UpdateStep(r.Context(), db.UpdateStepParams{
-		ID:             target.ID,
-		Name:           target.Name,
-		ScriptBody:     target.ScriptBody,
-		SortOrder:      newOrder,
-		TimeoutSeconds: target.TimeoutSeconds,
-		MaxRetries:     target.MaxRetries,
-		Interpreter:    target.Interpreter,
-		ContainerImage: target.ContainerImage,
-		VariableNames:  target.VariableNames,
+		ID:                   target.ID,
+		Name:                 target.Name,
+		ScriptBody:           target.ScriptBody,
+		SortOrder:            newOrder,
+		TimeoutSeconds:       target.TimeoutSeconds,
+		MaxRetries:           target.MaxRetries,
+		Interpreter:          target.Interpreter,
+		ContainerImage:       target.ContainerImage,
+		NetworkMode:          target.NetworkMode,
+		ApprovalArtifactPath: target.ApprovalArtifactPath,
+		ApprovalReviewPath:   target.ApprovalReviewPath,
+		ApprovalReviewFormat: target.ApprovalReviewFormat,
+		VariableNames:        target.VariableNames,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

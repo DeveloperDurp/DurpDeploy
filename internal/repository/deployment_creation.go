@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 
+	"durpdeploy/internal/artifact"
 	"durpdeploy/internal/db"
 )
 
@@ -44,6 +45,9 @@ func (r *Repository) CreateDeployment(
 	ctx context.Context,
 	arg db.CreateDeploymentParams,
 ) (DeploymentResult, error) {
+	if err := r.MaintainArtifactGates(ctx); err != nil {
+		return DeploymentResult{}, err
+	}
 	var result DeploymentResult
 	err := withSQLiteBusyRetry(ctx, func() error {
 		result = DeploymentResult{}
@@ -67,6 +71,9 @@ func (r *Repository) CreateDeploymentFromDeployment(
 	arg db.CreateDeploymentParams,
 	sourceDeploymentID int64,
 ) (DeploymentResult, error) {
+	if err := r.MaintainArtifactGates(ctx); err != nil {
+		return DeploymentResult{}, err
+	}
 	var result DeploymentResult
 	err := withSQLiteBusyRetry(ctx, func() error {
 		result = DeploymentResult{}
@@ -205,6 +212,39 @@ func createDeploymentWithSteps(
 	steps []DeploymentStepSnapshot,
 	stepsJSON string,
 ) (DeploymentResult, error) {
+	releaseKind, err := q.GetRelease(ctx, arg.ReleaseID)
+	if err != nil {
+		return DeploymentResult{}, err
+	}
+	gated := false
+	for _, step := range steps {
+		if step.ApprovalArtifactPath != "" {
+			gated = true
+		}
+	}
+	if gated {
+		if releaseKind.Kind != "deployment" {
+			return DeploymentResult{}, artifact.ErrGateConfig
+		}
+		for i, step := range steps {
+			if step.ExecutionTarget != "local" || step.MaxRetries != 0 {
+				return DeploymentResult{}, artifact.ErrGateConfig
+			}
+			if i == len(steps)-1 && step.ApprovalArtifactPath != "" {
+				return DeploymentResult{}, artifact.ErrGateConfig
+			}
+		}
+
+	}
+	if err := gateAdmission(
+		ctx,
+		q,
+		arg.EnvironmentID,
+		0,
+		gated && arg.Status != "pending_approval",
+	); err != nil {
+		return DeploymentResult{}, err
+	}
 	arg.AssignedAgentID = sql.NullString{}
 	if arg.Status == "pending" {
 		arg.Status = "queued"
@@ -215,6 +255,11 @@ func createDeploymentWithSteps(
 	}
 	if err := q.MarkReleaseSnapshotLocked(ctx, arg.ReleaseID); err != nil {
 		return DeploymentResult{}, fmt.Errorf("lock release snapshot: %w", err)
+	}
+	if gated {
+		if err := q.CreateArtifactGateRun(ctx, deployment.ID); err != nil {
+			return DeploymentResult{}, err
+		}
 	}
 	steps, err = snapshotVerification(ctx, q, deployment, steps)
 	if err != nil {
@@ -310,15 +355,19 @@ func deploymentResult(deployment db.Deployment) DeploymentResult {
 
 func deploymentStepsFromRelease(raw string) ([]DeploymentStepSnapshot, error) {
 	var source []struct {
-		Name            string   `json:"name"`
-		ScriptBody      string   `json:"script_body"`
-		Interpreter     string   `json:"interpreter"`
-		TimeoutSeconds  int64    `json:"timeout_seconds"`
-		MaxRetries      int64    `json:"max_retries"`
-		ExecutionTarget string   `json:"execution_target"`
-		AgentSelectors  []string `json:"agent_selectors"`
-		ContainerImage  string   `json:"container_image"`
-		VariableNames   []string `json:"variable_names"`
+		Name                 string   `json:"name"`
+		ScriptBody           string   `json:"script_body"`
+		Interpreter          string   `json:"interpreter"`
+		TimeoutSeconds       int64    `json:"timeout_seconds"`
+		MaxRetries           int64    `json:"max_retries"`
+		ExecutionTarget      string   `json:"execution_target"`
+		AgentSelectors       []string `json:"agent_selectors"`
+		ContainerImage       string   `json:"container_image"`
+		NetworkMode          string   `json:"network_mode"`
+		ApprovalArtifactPath string   `json:"approval_artifact_path"`
+		ApprovalReviewPath   string   `json:"approval_review_path"`
+		ApprovalReviewFormat string   `json:"approval_review_format"`
+		VariableNames        []string `json:"variable_names"`
 	}
 	if err := json.Unmarshal([]byte(raw), &source); err != nil {
 		return nil, fmt.Errorf("decode release steps: %w", err)
@@ -341,16 +390,29 @@ func deploymentStepsFromRelease(raw string) ([]DeploymentStepSnapshot, error) {
 				"step %q: %w", step.Name, ErrLegacyServerStep,
 			)
 		}
+		if err := artifact.ValidateGateConfig(
+			target,
+			step.NetworkMode,
+			step.ApprovalArtifactPath,
+			step.ApprovalReviewPath,
+			step.ApprovalReviewFormat,
+		); err != nil {
+			return nil, err
+		}
 		steps[i] = DeploymentStepSnapshot{
 			CreateDeploymentStepParams: db.CreateDeploymentStepParams{
-				Name:            step.Name,
-				ScriptBody:      step.ScriptBody,
-				TimeoutSeconds:  step.TimeoutSeconds,
-				MaxRetries:      step.MaxRetries,
-				ExecutionTarget: target,
-				Interpreter:     step.Interpreter,
-				ContainerImage:  step.ContainerImage,
-				VariableNames:   marshalVariableNames(step.VariableNames),
+				Name:                 step.Name,
+				ScriptBody:           step.ScriptBody,
+				TimeoutSeconds:       step.TimeoutSeconds,
+				MaxRetries:           step.MaxRetries,
+				ExecutionTarget:      target,
+				Interpreter:          step.Interpreter,
+				ContainerImage:       step.ContainerImage,
+				NetworkMode:          step.NetworkMode,
+				ApprovalArtifactPath: step.ApprovalArtifactPath,
+				ApprovalReviewPath:   step.ApprovalReviewPath,
+				ApprovalReviewFormat: step.ApprovalReviewFormat,
+				VariableNames:        marshalVariableNames(step.VariableNames),
 			},
 			Selectors: step.AgentSelectors,
 		}

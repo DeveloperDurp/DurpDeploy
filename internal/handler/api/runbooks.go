@@ -29,16 +29,20 @@ func NewRunbookHandler(
 }
 
 type runbookStep struct {
-	Name            string   `json:"name"`
-	ScriptBody      string   `json:"script_body"`
-	Interpreter     string   `json:"interpreter"`
-	SortOrder       int      `json:"sort_order"`
-	TimeoutSeconds  int64    `json:"timeout_seconds"`
-	MaxRetries      int64    `json:"max_retries"`
-	ExecutionTarget string   `json:"execution_target"`
-	AgentSelectors  []string `json:"agent_selectors,omitempty"`
-	ContainerImage  string   `json:"container_image"`
-	VariableNames   []string `json:"variable_names,omitempty"`
+	Name                 string   `json:"name"`
+	ScriptBody           string   `json:"script_body"`
+	Interpreter          string   `json:"interpreter"`
+	SortOrder            int      `json:"sort_order"`
+	TimeoutSeconds       int64    `json:"timeout_seconds"`
+	MaxRetries           int64    `json:"max_retries"`
+	ExecutionTarget      string   `json:"execution_target"`
+	AgentSelectors       []string `json:"agent_selectors,omitempty"`
+	ContainerImage       string   `json:"container_image"`
+	NetworkMode          string   `json:"network_mode"`
+	ApprovalArtifactPath string   `json:"approval_artifact_path"`
+	ApprovalReviewPath   string   `json:"approval_review_path"`
+	ApprovalReviewFormat string   `json:"approval_review_format"`
+	VariableNames        []string `json:"variable_names,omitempty"`
 }
 
 type runbookSaveRequest struct {
@@ -217,6 +221,21 @@ func (h *RunbookHandler) Save(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		step.ExecutionTarget = target
+		if err := artifact.ValidateGateConfig(
+			target,
+			step.NetworkMode,
+			step.ApprovalArtifactPath,
+			step.ApprovalReviewPath,
+			step.ApprovalReviewFormat,
+		); err != nil ||
+			step.ApprovalArtifactPath != "" {
+			RespondError(
+				w,
+				http.StatusUnprocessableEntity,
+				"Runbooks do not support artifact gates; invalid network configuration",
+			)
+			return
+		}
 		step.AgentSelectors = selectors
 		image, variableNames, err := handler.ValidateRunbookStepContainer(
 			target, step.ContainerImage, step.VariableNames,

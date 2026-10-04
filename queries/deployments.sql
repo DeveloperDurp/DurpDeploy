@@ -127,7 +127,7 @@ WHERE state IN ('waiting', 'claimed', 'started', 'cancel_requested')
 
 -- name: FailOrphanedDeployments :execrows
 UPDATE deployments SET status = 'failed', finished_at = sqlc.arg(now)
-WHERE status = 'running' AND assigned_agent_id IS NULL
+WHERE status IN ('running', 'publishing_artifact') AND assigned_agent_id IS NULL
   AND NOT EXISTS (
       SELECT 1 FROM remote_step_runs r
       WHERE r.deployment_id = deployments.id

@@ -199,7 +199,19 @@ templ StepForm(step db.Step, projectID int64, isNew bool, labels []string, selec
 					<label class="label"><span class="label-text-alt">Leave empty to pass all project variables. Enter names to restrict this step.</span></label>
 				</div>
 			</div>
-			<div x-data="stepEditor" class="form-control">
+			<fieldset class="space-y-3">
+<legend class="font-semibold">Network and artifact approval</legend>
+<label class="label" for={ stepInputID(step, isNew, "network-mode") }>Container network</label>
+<select id={ stepInputID(step, isNew, "network-mode") } name="network_mode" class="select select-bordered w-full"><option value="none" selected?={ step.NetworkMode != "bridge" }>Isolated</option><option value="bridge" selected?={ step.NetworkMode == "bridge" }>Network enabled</option></select>
+<label class="label" for={ stepInputID(step, isNew, "approval_artifact_path") }>Artifact path to approve</label>
+<input id={ stepInputID(step, isNew, "approval_artifact_path") } name="approval_artifact_path" value={ step.ApprovalArtifactPath } class="input input-bordered w-full" type="text"/>
+<label class="label" for={ stepInputID(step, isNew, "approval_review_path") }>Review JSON path</label>
+<input id={ stepInputID(step, isNew, "approval_review_path") } name="approval_review_path" value={ step.ApprovalReviewPath } class="input input-bordered w-full" type="text"/>
+<label class="label" for={ stepInputID(step, isNew, "review-format") }>Review format</label>
+<select id={ stepInputID(step, isNew, "review-format") } name="approval_review_format" class="select select-bordered w-full"><option value="" selected?={ step.ApprovalReviewFormat == "" }>No approval gate</option><option value="summary" selected?={ step.ApprovalReviewFormat == "summary" }>Action counts</option><option value="terraform" selected?={ step.ApprovalReviewFormat == "terraform" }>Terraform show JSON</option></select>
+<p class="text-sm">Paths are relative to DURPDEPLOY_STAGE_DIR. A gate pauses after this step; subsequent steps use DURPDEPLOY_APPROVED_DIR. Gated deployments require local execution and zero retries.</p>
+</fieldset>
+<div x-data="stepEditor" class="form-control">
 				<label class="label" for={ stepInputID(step, isNew, "script") }>
 					<span class="label-text">Script Body</span>
 					<button type="button" class="btn btn-ghost btn-xs" x-on:click="fullscreen">Fullscreen</button>

@@ -21,21 +21,25 @@ func (q *Queries) CountStepsByProject(ctx context.Context, projectID int64) (int
 }
 
 const createStep = `-- name: CreateStep :one
-INSERT INTO steps (project_id, name, script_body, sort_order, timeout_seconds, max_retries, interpreter, container_image, variable_names)
-VALUES (?, ?, ?, ?, ?, ?, COALESCE(NULLIF(CAST(?7 AS TEXT), ''), 'bash'), ?8, ?9)
-RETURNING id, project_id, name, script_body, sort_order, created_at, timeout_seconds, max_retries, execution_target, interpreter, container_image, variable_names
+INSERT INTO steps (project_id, name, script_body, sort_order, timeout_seconds, max_retries, interpreter, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format)
+VALUES (?, ?, ?, ?, ?, ?, COALESCE(NULLIF(CAST(?7 AS TEXT), ''), 'bash'), ?8, ?9, ?10, ?11, ?12, ?13)
+RETURNING id, project_id, name, script_body, sort_order, created_at, timeout_seconds, max_retries, execution_target, interpreter, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format
 `
 
 type CreateStepParams struct {
-	ProjectID      int64  `json:"project_id"`
-	Name           string `json:"name"`
-	ScriptBody     string `json:"script_body"`
-	SortOrder      int64  `json:"sort_order"`
-	TimeoutSeconds int64  `json:"timeout_seconds"`
-	MaxRetries     int64  `json:"max_retries"`
-	Interpreter    string `json:"interpreter"`
-	ContainerImage string `json:"container_image"`
-	VariableNames  string `json:"variable_names"`
+	ProjectID            int64  `json:"project_id"`
+	Name                 string `json:"name"`
+	ScriptBody           string `json:"script_body"`
+	SortOrder            int64  `json:"sort_order"`
+	TimeoutSeconds       int64  `json:"timeout_seconds"`
+	MaxRetries           int64  `json:"max_retries"`
+	Interpreter          string `json:"interpreter"`
+	ContainerImage       string `json:"container_image"`
+	VariableNames        string `json:"variable_names"`
+	NetworkMode          string `json:"network_mode"`
+	ApprovalArtifactPath string `json:"approval_artifact_path"`
+	ApprovalReviewPath   string `json:"approval_review_path"`
+	ApprovalReviewFormat string `json:"approval_review_format"`
 }
 
 func (q *Queries) CreateStep(ctx context.Context, arg CreateStepParams) (Step, error) {
@@ -49,6 +53,10 @@ func (q *Queries) CreateStep(ctx context.Context, arg CreateStepParams) (Step, e
 		arg.Interpreter,
 		arg.ContainerImage,
 		arg.VariableNames,
+		arg.NetworkMode,
+		arg.ApprovalArtifactPath,
+		arg.ApprovalReviewPath,
+		arg.ApprovalReviewFormat,
 	)
 	var i Step
 	err := row.Scan(
@@ -64,6 +72,10 @@ func (q *Queries) CreateStep(ctx context.Context, arg CreateStepParams) (Step, e
 		&i.Interpreter,
 		&i.ContainerImage,
 		&i.VariableNames,
+		&i.NetworkMode,
+		&i.ApprovalArtifactPath,
+		&i.ApprovalReviewPath,
+		&i.ApprovalReviewFormat,
 	)
 	return i, err
 }
@@ -78,7 +90,7 @@ func (q *Queries) DeleteStep(ctx context.Context, id int64) error {
 }
 
 const getStep = `-- name: GetStep :one
-SELECT id, project_id, name, script_body, sort_order, created_at, timeout_seconds, max_retries, execution_target, interpreter, container_image, variable_names FROM steps WHERE id = ?
+SELECT id, project_id, name, script_body, sort_order, created_at, timeout_seconds, max_retries, execution_target, interpreter, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format FROM steps WHERE id = ?
 `
 
 func (q *Queries) GetStep(ctx context.Context, id int64) (Step, error) {
@@ -97,12 +109,16 @@ func (q *Queries) GetStep(ctx context.Context, id int64) (Step, error) {
 		&i.Interpreter,
 		&i.ContainerImage,
 		&i.VariableNames,
+		&i.NetworkMode,
+		&i.ApprovalArtifactPath,
+		&i.ApprovalReviewPath,
+		&i.ApprovalReviewFormat,
 	)
 	return i, err
 }
 
 const listStepsByProject = `-- name: ListStepsByProject :many
-SELECT id, project_id, name, script_body, sort_order, created_at, timeout_seconds, max_retries, execution_target, interpreter, container_image, variable_names FROM steps WHERE project_id = ? ORDER BY sort_order ASC, created_at ASC
+SELECT id, project_id, name, script_body, sort_order, created_at, timeout_seconds, max_retries, execution_target, interpreter, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format FROM steps WHERE project_id = ? ORDER BY sort_order ASC, created_at ASC
 `
 
 func (q *Queries) ListStepsByProject(ctx context.Context, projectID int64) ([]Step, error) {
@@ -127,6 +143,10 @@ func (q *Queries) ListStepsByProject(ctx context.Context, projectID int64) ([]St
 			&i.Interpreter,
 			&i.ContainerImage,
 			&i.VariableNames,
+			&i.NetworkMode,
+			&i.ApprovalArtifactPath,
+			&i.ApprovalReviewPath,
+			&i.ApprovalReviewFormat,
 		); err != nil {
 			return nil, err
 		}
@@ -142,7 +162,7 @@ func (q *Queries) ListStepsByProject(ctx context.Context, projectID int64) ([]St
 }
 
 const listStepsByProjectPaginated = `-- name: ListStepsByProjectPaginated :many
-SELECT id, project_id, name, script_body, sort_order, created_at, timeout_seconds, max_retries, execution_target, interpreter, container_image, variable_names FROM steps WHERE project_id = ? ORDER BY sort_order ASC, created_at ASC
+SELECT id, project_id, name, script_body, sort_order, created_at, timeout_seconds, max_retries, execution_target, interpreter, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format FROM steps WHERE project_id = ? ORDER BY sort_order ASC, created_at ASC
 LIMIT ? OFFSET ?
 `
 
@@ -174,6 +194,10 @@ func (q *Queries) ListStepsByProjectPaginated(ctx context.Context, arg ListSteps
 			&i.Interpreter,
 			&i.ContainerImage,
 			&i.VariableNames,
+			&i.NetworkMode,
+			&i.ApprovalArtifactPath,
+			&i.ApprovalReviewPath,
+			&i.ApprovalReviewFormat,
 		); err != nil {
 			return nil, err
 		}
@@ -191,20 +215,24 @@ func (q *Queries) ListStepsByProjectPaginated(ctx context.Context, arg ListSteps
 const updateStep = `-- name: UpdateStep :one
 UPDATE steps SET name = ?, script_body = ?, sort_order = ?, timeout_seconds = ?, max_retries = ?,
 interpreter = COALESCE(NULLIF(CAST(?6 AS TEXT), ''), 'bash'),
-container_image = ?7, variable_names = ?8
-WHERE id = ?9 RETURNING id, project_id, name, script_body, sort_order, created_at, timeout_seconds, max_retries, execution_target, interpreter, container_image, variable_names
+container_image = ?7, variable_names = ?8, network_mode = ?9, approval_artifact_path = ?10, approval_review_path = ?11, approval_review_format = ?12
+WHERE id = ?13 RETURNING id, project_id, name, script_body, sort_order, created_at, timeout_seconds, max_retries, execution_target, interpreter, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format
 `
 
 type UpdateStepParams struct {
-	Name           string `json:"name"`
-	ScriptBody     string `json:"script_body"`
-	SortOrder      int64  `json:"sort_order"`
-	TimeoutSeconds int64  `json:"timeout_seconds"`
-	MaxRetries     int64  `json:"max_retries"`
-	Interpreter    string `json:"interpreter"`
-	ContainerImage string `json:"container_image"`
-	VariableNames  string `json:"variable_names"`
-	ID             int64  `json:"id"`
+	Name                 string `json:"name"`
+	ScriptBody           string `json:"script_body"`
+	SortOrder            int64  `json:"sort_order"`
+	TimeoutSeconds       int64  `json:"timeout_seconds"`
+	MaxRetries           int64  `json:"max_retries"`
+	Interpreter          string `json:"interpreter"`
+	ContainerImage       string `json:"container_image"`
+	VariableNames        string `json:"variable_names"`
+	NetworkMode          string `json:"network_mode"`
+	ApprovalArtifactPath string `json:"approval_artifact_path"`
+	ApprovalReviewPath   string `json:"approval_review_path"`
+	ApprovalReviewFormat string `json:"approval_review_format"`
+	ID                   int64  `json:"id"`
 }
 
 func (q *Queries) UpdateStep(ctx context.Context, arg UpdateStepParams) (Step, error) {
@@ -217,6 +245,10 @@ func (q *Queries) UpdateStep(ctx context.Context, arg UpdateStepParams) (Step, e
 		arg.Interpreter,
 		arg.ContainerImage,
 		arg.VariableNames,
+		arg.NetworkMode,
+		arg.ApprovalArtifactPath,
+		arg.ApprovalReviewPath,
+		arg.ApprovalReviewFormat,
 		arg.ID,
 	)
 	var i Step
@@ -233,6 +265,10 @@ func (q *Queries) UpdateStep(ctx context.Context, arg UpdateStepParams) (Step, e
 		&i.Interpreter,
 		&i.ContainerImage,
 		&i.VariableNames,
+		&i.NetworkMode,
+		&i.ApprovalArtifactPath,
+		&i.ApprovalReviewPath,
+		&i.ApprovalReviewFormat,
 	)
 	return i, err
 }

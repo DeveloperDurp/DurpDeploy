@@ -20,6 +20,7 @@ type ReleaseStep struct {
 	ExecutionTarget string   `json:"execution_target"`
 	AgentSelectors  []string `json:"agent_selectors"`
 	ContainerImage  string   `json:"container_image"`
+	ApprovalArtifactPath string `json:"approval_artifact_path"`
 	VariableNames   []string `json:"variable_names"`
 }
 
@@ -29,6 +30,13 @@ func parseReleaseSteps(stepsJSON string) []ReleaseStep {
 		return nil
 	}
 	return steps
+}
+
+func hasArtifactGate(stepsJSON string) bool {
+	for _, step := range parseReleaseSteps(stepsJSON) {
+		if step.ApprovalArtifactPath != "" { return true }
+	}
+	return false
 }
 
 func releaseStepInterpreter(step ReleaseStep) string {
