@@ -34,7 +34,7 @@ WHERE state IN ('claimed', 'started', 'cancel_requested')
 ORDER BY agent_id, deployment_id;
 
 -- name: ListWaitingRemoteDeploymentClaims :many
-SELECT c.* FROM remote_deployment_claims c
+SELECT c.deployment_id FROM remote_deployment_claims c
 JOIN deployments d ON d.id = c.deployment_id
 WHERE c.agent_id = sqlc.arg(agent_id) AND c.state = 'waiting'
   AND d.assigned_agent_id = c.agent_id AND d.status = 'pending'

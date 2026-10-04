@@ -429,7 +429,7 @@ func (q *Queries) ListRemoteLifecycleClaims(ctx context.Context) ([]RemoteDeploy
 }
 
 const listWaitingRemoteDeploymentClaims = `-- name: ListWaitingRemoteDeploymentClaims :many
-SELECT c.deployment_id, c.agent_id, c.state, c.reason, c.claim_token_hash, c.ciphertext, c.claim_expires_at, c.last_heartbeat_at, c.started_at, c.finished_at, c.cancel_requested_at, c.created_at, c.updated_at, c.log_buffer_ciphertext FROM remote_deployment_claims c
+SELECT c.deployment_id FROM remote_deployment_claims c
 JOIN deployments d ON d.id = c.deployment_id
 WHERE c.agent_id = ?1 AND c.state = 'waiting'
   AND d.assigned_agent_id = c.agent_id AND d.status = 'pending'
@@ -437,34 +437,19 @@ WHERE c.agent_id = ?1 AND c.state = 'waiting'
 ORDER BY c.created_at, c.deployment_id
 `
 
-func (q *Queries) ListWaitingRemoteDeploymentClaims(ctx context.Context, agentID string) ([]RemoteDeploymentClaim, error) {
+func (q *Queries) ListWaitingRemoteDeploymentClaims(ctx context.Context, agentID string) ([]int64, error) {
 	rows, err := q.db.QueryContext(ctx, listWaitingRemoteDeploymentClaims, agentID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []RemoteDeploymentClaim
+	var items []int64
 	for rows.Next() {
-		var i RemoteDeploymentClaim
-		if err := rows.Scan(
-			&i.DeploymentID,
-			&i.AgentID,
-			&i.State,
-			&i.Reason,
-			&i.ClaimTokenHash,
-			&i.Ciphertext,
-			&i.ClaimExpiresAt,
-			&i.LastHeartbeatAt,
-			&i.StartedAt,
-			&i.FinishedAt,
-			&i.CancelRequestedAt,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.LogBufferCiphertext,
-		); err != nil {
+		var deployment_id int64
+		if err := rows.Scan(&deployment_id); err != nil {
 			return nil, err
 		}
-		items = append(items, i)
+		items = append(items, deployment_id)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err

@@ -52,7 +52,7 @@ func (r *Repository) ClaimRemoteDeploymentPayload(
 		candidate := waiting[0]
 		return r.WithDeploymentTx(
 			ctx,
-			candidate.DeploymentID,
+			candidate,
 			func(ctx context.Context, q *db.Queries) error {
 				locked, err := q.LockClaimAgent(ctx, agentID)
 				if err != nil {
@@ -77,13 +77,13 @@ func (r *Repository) ClaimRemoteDeploymentPayload(
 					return fmt.Errorf("list waiting remote claims: %w", err)
 				}
 				if len(waiting) == 0 ||
-					waiting[0].DeploymentID != candidate.DeploymentID {
+					waiting[0] != candidate {
 					return nil
 				}
 				locked, err = q.LockWaitingRemoteDeploymentClaim(
 					ctx,
 					db.LockWaitingRemoteDeploymentClaimParams{
-						DeploymentID: candidate.DeploymentID,
+						DeploymentID: candidate,
 						AgentID:      agentID,
 					},
 				)
@@ -96,7 +96,7 @@ func (r *Repository) ClaimRemoteDeploymentPayload(
 				locked, err = q.LockPendingRemoteDeployment(
 					ctx,
 					db.LockPendingRemoteDeploymentParams{
-						DeploymentID: candidate.DeploymentID,
+						DeploymentID: candidate,
 						AgentID: sql.NullString{
 							String: agentID,
 							Valid:  true,
@@ -113,7 +113,7 @@ func (r *Repository) ClaimRemoteDeploymentPayload(
 					ctx,
 					q,
 					agentID,
-					candidate.DeploymentID,
+					candidate,
 				)
 				if err != nil {
 					return err
@@ -134,7 +134,7 @@ func (r *Repository) ClaimRemoteDeploymentPayload(
 							agentproto.PreStartClaimTimeout/time.Second,
 						),
 						Now:          now,
-						DeploymentID: candidate.DeploymentID,
+						DeploymentID: candidate,
 						AgentID:      agentID,
 					},
 				)
@@ -146,7 +146,7 @@ func (r *Repository) ClaimRemoteDeploymentPayload(
 				}
 				claimed = true
 				result = RemoteClaim{
-					DeploymentID: candidate.DeploymentID,
+					DeploymentID: candidate,
 					Token:        prepared.Token,
 					Ciphertext:   prepared.Ciphertext,
 				}

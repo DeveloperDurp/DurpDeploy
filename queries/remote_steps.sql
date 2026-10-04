@@ -41,7 +41,7 @@ JOIN agents a ON a.id = r.agent_id
 WHERE r.deployment_id = ? AND r.step_index = ? ORDER BY r.agent_id;
 
 -- name: ListWaitingRemoteStepRuns :many
-SELECT r.* FROM remote_step_runs r
+SELECT r.deployment_id, r.step_index FROM remote_step_runs r
 JOIN deployments d ON d.id = r.deployment_id
 JOIN deployment_steps s ON s.deployment_id = r.deployment_id
     AND s.step_index = r.step_index
