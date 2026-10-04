@@ -108,6 +108,19 @@ keep `overflow-x-auto` and `table table-zebra table-fixed w-full`.
 - Viewers see verification results but no rollback write control. All new
   surfaces wrap at small widths and keep the existing semantic focus states.
 
+### Deployment detail on narrow screens
+- Use a vertical stack with document scrolling. Status and the active step sit
+  with the title; labeled metadata wraps long values in `text-sm`.
+- Live step logs precede verification and step definitions in source order.
+  Disabled verification is a compact `text-sm` line, not a card.
+- Primary actions and Back use `btn` on narrow screens and `sm:btn-sm` above
+  that breakpoint. Export and Rollback use the existing native dropdown.
+- Step definitions use native expandable cards below `sm`, with full names and
+  wrapped scripts; the existing fixed table remains above `sm`.
+- Action groups use the [cluster pattern](https://github.com/changeroa/StyleGallery/blob/main/patterns/in-line-grouping/cluster.md):
+  `flex flex-wrap gap-2`, with no internal scroll container. Summary controls
+  use `min-h-12` from the existing spacing scale for touch access.
+
 ### Agent maintenance and health
 - Show administrative state and heartbeat health as separate labelled badges:
   active/healthy use `badge-success`, draining/drained/stale use `badge-warning`,

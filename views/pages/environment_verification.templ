@@ -31,7 +31,7 @@ templ EnvironmentVerificationFields(env *db.Environment) {
 }
 
 templ DeploymentVerificationStatus(deployment db.Deployment, check db.DeploymentVerification) {
-	<div class="card bg-base-200 p-4 space-y-2"
+	<div class={ templ.KV("card bg-base-200 p-4 space-y-2", check.Status != "disabled"), templ.KV("text-sm opacity-70", check.Status == "disabled") }
 		hx-get={ fmt.Sprintf("/deployments/%d/verification", deployment.ID) }
 		if check.Status == "pending" || check.Status == "running" {
 			hx-trigger="every 3s"
@@ -39,13 +39,15 @@ templ DeploymentVerificationStatus(deployment db.Deployment, check db.Deployment
 			hx-trigger="none"
 		}
 		hx-swap="outerHTML" aria-live="polite">
-		<h2 class="text-xl font-bold">Verification</h2>
-		<p>{ check.Status }
+		if check.Status == "disabled" {
+			<p>Verification disabled</p>
+		} else {
+			<h2 class="text-xl font-bold">Verification</h2>
+			<p>{ check.Status }
 			if check.Type != "" {
 				<span class="text-sm opacity-70"> ({ check.Type }, { strconv.FormatInt(check.TimeoutSeconds, 10) }s timeout)</span>
 			}
-		</p>
-		if check.Status != "disabled" {
+			</p>
 			<p class="text-sm opacity-70">Verification output appears in the deployment logs.</p>
 		}
 	</div>
