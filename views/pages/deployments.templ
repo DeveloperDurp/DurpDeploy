@@ -146,30 +146,18 @@ templ DeploymentsList(view DeploymentsView, appendRows bool) {
 					<p class="text-gray-400">No deployments yet. Deploy a release to see results here.</p>
 				</div>
 			} else {
-				@DeploymentListTable(view)
+				@DeploymentListCards(view)
 			}
 		</div>
 	}
 }
 
-templ DeploymentListTable(view DeploymentsView) {
-	<table class="table table-zebra table-fixed w-full block md:table">
-		<thead class="hidden md:table-header-group">
-			<tr>
-				<th class="w-1/6">Project</th>
-				<th class="w-1/6 hidden md:table-cell">Version</th>
-				<th class="w-1/6">Environment</th>
-				<th class="w-1/6">Status</th>
-				<th class="w-1/6">Date</th>
-				<th class="w-1/4 md:w-1/6">Actions</th>
-			</tr>
-		</thead>
-		<tbody id="deployments-tbody" class="block md:table-row-group">
-			for _, item := range view.Items {
-				@DeploymentListRow(item)
-			}
-		</tbody>
-	</table>
+templ DeploymentListCards(view DeploymentsView) {
+	<div id="deployments-tbody" class="space-y-3">
+		for _, item := range view.Items {
+			@DeploymentListRow(item)
+		}
+	</div>
 	<div id="load-more-region">
 		if hasMoreDeployments(view) {
 			@LoadMoreButton(loadMoreURL(view))
@@ -178,34 +166,16 @@ templ DeploymentListTable(view DeploymentsView) {
 }
 
 templ DeploymentListRow(item DeploymentListItem) {
-	<tr class="grid grid-cols-2 gap-3 md:table-row max-md:rounded-box max-md:bg-base-200 max-md:p-4 max-md:mb-3" data-deployment-id={ strconv.FormatInt(item.Deployment.ID, 10) }>
-		<td class="min-w-0 col-span-2 md:col-span-1 max-md:p-0 break-all md:truncate">
-			<span class="block md:hidden text-xs opacity-70 mb-1">Project</span>
-			{ item.ProjectName }
-		</td>
-		<td class="min-w-0 max-md:p-0 break-all md:truncate">
-			<span class="block md:hidden text-xs opacity-70 mb-1">Version</span>
-			{ item.ReleaseVersion }
-		</td>
-		<td class="min-w-0 max-md:p-0 break-all md:truncate">
-			<span class="block md:hidden text-xs opacity-70 mb-1">Environment</span>
-			{ item.EnvironmentName }
-		</td>
-		<td class="min-w-0 max-md:p-0">
-			<span class="block md:hidden text-xs opacity-70 mb-1">Status</span>
-			@StatusBadge(item.Deployment)
-		</td>
-		<td class="min-w-0 max-md:p-0 md:truncate md:whitespace-nowrap">
-			<span class="block md:hidden text-xs opacity-70 mb-1">Date</span>
-			{ formatUnixTime(item.Deployment.CreatedAt) }
-		</td>
-		<td class="col-span-2 md:col-span-1 max-md:p-0">
-			<div class="flex flex-wrap gap-2">
-				<a href={ fmt.Sprintf("/deployments/%d", item.Deployment.ID) } class="btn md:btn-sm btn-secondary">View</a>
-				<a href={ fmt.Sprintf("/deployments/%d/logs.txt", item.Deployment.ID) } class="btn md:btn-sm btn-ghost">Export</a>
-			</div>
-		</td>
-	</tr>
+	<div data-deployment-id={ strconv.FormatInt(item.Deployment.ID, 10) }>
+		@ResourceCard(item.ProjectName, fmt.Sprintf("/deployments/%d", item.Deployment.ID)) {
+			<dl class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+				<div class="min-w-0"><dt class="text-xs opacity-70 mb-1">Version</dt><dd>{ item.ReleaseVersion }</dd></div>
+				<div class="min-w-0"><dt class="text-xs opacity-70 mb-1">Environment</dt><dd>{ item.EnvironmentName }</dd></div>
+				<div class="min-w-0"><dt class="text-xs opacity-70 mb-1">Status</dt><dd>@StatusBadge(item.Deployment)</dd></div>
+				<div class="min-w-0"><dt class="text-xs opacity-70 mb-1">Date</dt><dd>{ formatUnixTime(item.Deployment.CreatedAt) }</dd></div>
+			</dl>
+		}
+	</div>
 }
 
 templ LoadMoreButton(url string) {

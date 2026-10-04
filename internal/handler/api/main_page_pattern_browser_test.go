@@ -74,6 +74,7 @@ func TestMainPagePatternBrowserE2E(t *testing.T) {
 		})
 	}
 	for _, card := range []struct{ list, destination string }{
+		{"/projects", fmt.Sprintf("/projects/%d", f.project.ID)},
 		{"/environments", fmt.Sprintf("/environments/%d/edit", f.environment.ID)},
 		{"/lifecycles", fmt.Sprintf("/lifecycles/%d", lifecycle.ID)},
 		{"/templates", fmt.Sprintf("/templates/%d/edit", template.ID)},

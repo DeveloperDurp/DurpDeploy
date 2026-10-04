@@ -42,7 +42,7 @@ func captureResourceLists(
 		b.navigateBackTest(t, f.baseURL+"/"+page.path)
 		b.wait(
 			t,
-			`document.querySelector('main table tbody tr, main [data-resource-card]') !== null`,
+			`document.querySelector('main [data-resource-card]') !== null`,
 		)
 		// Then: fields stay readable and only authorized Edit links appear.
 		b.captureNavigation(t, "mobile-"+page.path+"-"+role, func() {
@@ -85,7 +85,9 @@ func assertResourceListMobile(t *testing.T, b *packageBrowser) {
  const table = document.querySelector('main table');
  if (!table) {
    const cards = [...document.querySelectorAll('[data-resource-card]')];
-   return cards.length > 0 && cards.every(card => {
+   const stages = [...document.querySelectorAll('[data-project-environment-grid] > div')];
+   return cards.length > 0 && stages.every(stage =>
+     [...stage.children].every(el => el.scrollWidth <= el.clientWidth && el.scrollHeight <= el.clientHeight)) && cards.every(card => {
      const link = card.querySelector('a');
      const box = card.getBoundingClientRect();
      return box.height >= 44 && card.scrollWidth <= card.clientWidth &&

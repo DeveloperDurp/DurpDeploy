@@ -939,7 +939,7 @@ func TestReleaseAndDeploymentPages_RenderBackControls(t *testing.T) {
 			backHref:  fmt.Sprintf("/projects/%d", hc.project.ID),
 			backClass: "btn btn-ghost btn-sm",
 			headerPattern: fmt.Sprintf(
-				`(?s)<div class="flex justify-between items-center">\s*<h1 class="text-3xl font-bold">Releases.*?</h1>\s*<div class="flex gap-2">\s*<a href="/projects/%d" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>`,
+				`(?s)<div class="page-header">\s*<h1 class="text-3xl font-bold">Releases.*?</h1>\s*<div class="flex gap-2">\s*<a href="/projects/%d" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>`,
 				hc.project.ID,
 			),
 		},
@@ -1534,12 +1534,9 @@ func (h *projectHarness) waitForDeploymentToSucceed(
 // /deployments filter + pagination tests
 // ---------------------------------------------------------------------------
 
-// rowCount counts the deployment data rows in a page response. Each data
-// row renders exactly one "View" button; the thead has no such button,
-// the Export link uses a different label, and the OOB region (in HX
-// responses) uses hx-get, not an anchor.
+// rowCount counts deployments in full pages and appended HTMX fragments.
 func rowCount(body string) int {
-	return strings.Count(body, ">View</a>")
+	return strings.Count(body, `data-deployment-id="`)
 }
 
 func TestListDeployments_FilterAndPaginate(t *testing.T) {

@@ -23,45 +23,22 @@ templ ProjectsList(projects []db.Project, panels []LifecyclePanel) {
 				}
 			</div>
 		} else {
-			<div class="overflow-x-auto">
-				<table class="table table-zebra table-fixed w-full block md:table">
-					<thead class="hidden md:table-header-group">
-						<tr>
-							<th class="w-1/4">Name</th>
-							<th class="w-1/4">Description</th>
-							<th class="w-auto">Deployments</th>
-						</tr>
-					</thead>
-					<tbody class="block md:table-row-group">
-						for i, p := range projects {
-							@ProjectsListRow(p, panels[i])
-						}
-					</tbody>
-				</table>
+			<div class="space-y-3">
+				for i, p := range projects {
+					@ProjectsListRow(p, panels[i])
+				}
 			</div>
 		}
 	</div>
 }
 
 templ ProjectsListRow(p db.Project, panel LifecyclePanel) {
-	<tr class="grid grid-cols-2 gap-3 md:table-row max-md:rounded-box max-md:bg-base-200 max-md:p-4 max-md:mb-3">
-		<td class="col-span-2 min-w-0 break-all md:truncate">
-			<span class="block md:hidden text-xs opacity-70 mb-1">Name</span>
-			<a href={ fmt.Sprintf("/projects/%d", p.ID) } class="link link-primary inline-flex items-center max-md:min-h-12">{ p.Name }</a>
-		</td>
-		<td class="col-span-2 min-w-0 break-all md:truncate">
-			<span class="block md:hidden text-xs opacity-70 mb-1">Description</span>
-			if p.Description.Valid {
-				{ p.Description.String }
-			} else {
-				<span class="text-gray-500">-</span>
-			}
-		</td>
-		<td class="col-span-2 min-w-0">
-			<span class="block md:hidden text-xs opacity-70 mb-1">Deployments</span>
-			@ProjectsListDeployments(panel)
-		</td>
-	</tr>
+	@ResourceCard(p.Name, fmt.Sprintf("/projects/%d", p.ID)) {
+		if p.Description.Valid {
+			<p class="opacity-70">{ p.Description.String }</p>
+		}
+		@ProjectsListDeployments(panel)
+	}
 }
 
 // ProjectsListDeployments renders one environment/version pair per stage.
@@ -74,10 +51,10 @@ templ ProjectsListDeployments(panel LifecyclePanel) {
 	if len(panel.Stages) == 0 {
 		<span class="text-gray-500 italic text-sm">No environments</span>
 	} else {
-		<div class="grid gap-3 md:grid-flow-col md:auto-cols-fr min-w-0" data-project-environment-grid>
+		<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 min-w-0" data-project-environment-grid>
 			for _, s := range panel.Stages {
 				<div class="min-w-0 space-y-1">
-					<div class="break-all md:truncate text-xs font-medium opacity-70" title={ s.Environment.Name }>{ s.Environment.Name }</div>
+					<div class="break-all text-xs font-medium opacity-70" title={ s.Environment.Name }>{ s.Environment.Name }</div>
 					if s.LatestAttempt == nil {
 						<span class="badge badge-sm bg-base-300 text-base-content border-0 font-mono">—</span>
 					} else {
@@ -94,7 +71,7 @@ templ ProjectsListDeployments(panel LifecyclePanel) {
 templ VersionPill(d db.Deployment, version string) {
 	<span
 		class={
-			templ.KV("badge badge-sm max-w-full max-md:h-auto max-md:whitespace-normal max-md:break-all font-mono", true),
+			templ.KV("badge badge-sm max-w-full h-auto whitespace-normal break-all font-mono", true),
 			templ.KV("bg-success text-success-content border-0", d.Status == "succeeded"),
 			templ.KV("bg-error text-error-content border-0", d.Status == "failed"),
 			templ.KV("bg-warning text-warning-content border-0", d.Status == "cancelled"),
@@ -102,7 +79,7 @@ templ VersionPill(d db.Deployment, version string) {
 			templ.KV("bg-base-300 text-base-content border-0", d.Status == "pending" || (d.Status != "succeeded" && d.Status != "failed" && d.Status != "cancelled" && d.Status != "running")),
 		}
 		title={ d.Status }
-	><span class="min-w-0 md:truncate">{ version }</span></span>
+	><span class="min-w-0">{ version }</span></span>
 }
 
 templ ProjectsListPage(projects []db.Project, panels []LifecyclePanel, currentPath string) {

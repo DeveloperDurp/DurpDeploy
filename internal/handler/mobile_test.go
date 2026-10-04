@@ -90,17 +90,15 @@ func TestMobile_RenderedHTML_includes_responsive_classes_when_authenticated(
 			name: "projects labeled phone cards",
 			path: "/projects",
 			patterns: []string{
-				`(?s)<tr[^>]*class="[^"]*grid-cols-2[^"]*md:table-row[^"]*"`,
-				`(?s)<span[^>]*class="[^"]*md:hidden[^"]*"[^>]*>Description</span>`,
+				`(?s)<article[^>]*data-resource-card>.*?<a href="/projects/[0-9]+"[^>]*class="absolute inset-0`,
 			},
 		},
 		{
 			name: "deployment list labeled phone cards",
 			path: "/deployments",
 			patterns: []string{
-				responsiveHeaderPattern(mdTableCell),
-				`(?s)<tr[^>]*class="[^"]*grid-cols-2[^"]*md:table-row[^"]*"[^>]*data-deployment-id=`,
-				`(?s)<span[^>]*class="[^"]*md:hidden[^"]*"[^>]*>Version</span>`,
+				`(?s)<div[^>]*data-deployment-id=.*?<article[^>]*data-resource-card>`,
+				`(?s)<dt[^>]*>Version</dt>`,
 			},
 		},
 		{

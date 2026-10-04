@@ -57,7 +57,7 @@ keep `overflow-x-auto` and `table table-zebra table-fixed w-full`.
   attributes.
 
 ### Cards and forms
-- Environments, Lifecycles, and Templates use full-width resource cards on all
+- Projects, Deployments, Environments, Lifecycles, and Templates use full-width resource cards on all
   screen sizes. Names remain plain bold headings; the entire card is a native
   navigation link, with a chevron, hover ring, and visible keyboard focus.
   Details wrap below the heading. No action column or repeated Edit buttons.
@@ -66,6 +66,9 @@ keep `overflow-x-auto` and `table table-zebra table-fixed w-full`.
   the editors, where Template History is available in the header.
 - Card navigation uses a positioned anchor, with no nested controls or script.
   The document owns scrolling; cards stay full width at every breakpoint.
+- Project cards preserve environment/version pairs and status colors.
+  Deployment cards show version, environment, status, and date. Filters and
+  Load more stay above/below the card list; Export remains on deployment detail.
 - **Structure**: `card bg-base-200 shadow` with `card-body`; fields use
   `form-control`, `label`, and `input input-bordered`.
 - **States**: validation uses `text-error text-sm`; alerts use semantic
@@ -130,25 +133,24 @@ keep `overflow-x-auto` and `table table-zebra table-fixed w-full`.
   `flex flex-wrap gap-2`, with no internal scroll container. Summary controls
   use `min-h-12` from the existing spacing scale for touch access.
 
-### Deployment list on narrow screens
-- Below `md`, the existing table rows become two-column cards with visible
-  field labels, wrapped project/version/environment values, and full-width
-  actions. The same rows are appended by Load more; no duplicate mobile DOM.
+### Deployment list cards
+- Full-width resource cards show project headings and labeled version,
+  environment, status, and date fields at every size. The same cards are
+  appended by Load more; no duplicate mobile DOM or action column.
 - Filters use a two-column grid on phones with project/environment spanning
   both columns. Native inputs and View/Export/Filter/Clear/Load more controls
   use normal touch-sized controls; desktop keeps compact table controls.
-- At `md` and above, retain the fixed six-column table and percentage widths.
-  The document owns scrolling; no sideways scrolling is needed on phones.
+- Metadata uses one column on phones, two on tablets, and four on desktop.
+  The document owns scrolling; no sideways scrolling is needed.
 
-### Project lists on narrow screens
-- Reuse the deployment list's labeled cards below `md`: names and descriptions
-  wrap in full, tags and stage counts remain visible, and actions span the card.
+### Project list cards
+- Use the same resource cards at every size; names and descriptions wrap in full.
 - Header controls keep normal touch sizes on phones.
-- Project environment/version pairs stack on phones and use equal columns on
-  larger screens. Each version stays with its environment; long phone versions
+- Project environment/version pairs use one, two, or four columns by screen
+  size. Each version stays with its environment; long versions
   wrap without hiding status colors or text.
-- Keep one set of rows for full pages and HTMX fragments, the existing viewer
-  guards, fixed desktop tables, and document scrolling.
+- Keep one set of cards for full pages and HTMX fragments, the existing viewer
+  guards, and document scrolling.
 - Environment and lifecycle deletion lives in a separate section of the edit
   page, with a confirmation and normal-sized destructive button. Their lists
   use the resource cards above. Canceling confirmation leaves the item intact; deletion returns

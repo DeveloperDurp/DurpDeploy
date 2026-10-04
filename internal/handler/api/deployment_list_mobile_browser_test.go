@@ -50,7 +50,10 @@ func TestDeploymentListMobileBrowserE2E(t *testing.T) {
 
 	// When: the list is opened on phones, tablets, and desktops.
 	b.navigateBackTest(t, f.baseURL+"/deployments?limit=2")
-	b.wait(t, `document.querySelectorAll('#deployments-tbody tr').length === 2`)
+	b.wait(
+		t,
+		`document.querySelectorAll('#deployments-tbody [data-deployment-id]').length === 2`,
+	)
 	b.captureNavigation(t, "mobile-deployment-list", func() {
 		assertDeploymentListMobile(t, b)
 	})
@@ -60,7 +63,10 @@ func TestDeploymentListMobileBrowserE2E(t *testing.T) {
 		t,
 		`document.querySelector('button[hx-target="#deployments-tbody"]').click(); true`,
 	)
-	b.wait(t, `document.querySelectorAll('#deployments-tbody tr').length === 3`)
+	b.wait(
+		t,
+		`document.querySelectorAll('#deployments-tbody [data-deployment-id]').length === 3`,
+	)
 	if string(b.evaluate(t, `(() => {
  const ids = [...document.querySelectorAll('[data-deployment-id]')].map(row => row.dataset.deploymentId);
  return new Set(ids).size === 3 && !document.querySelector('button[hx-target="#deployments-tbody"]');
@@ -76,7 +82,7 @@ func TestDeploymentListMobileBrowserE2E(t *testing.T) {
 	)
 	b.wait(
 		t,
-		`document.readyState === 'complete' && window.Alpine && document.querySelectorAll('#deployments-tbody tr').length === 1`,
+		`document.readyState === 'complete' && window.Alpine && document.querySelectorAll('#deployments-tbody [data-deployment-id]').length === 1`,
 	)
 	b.captureNavigation(t, "mobile-deployment-list-filtered")
 	b.navigateBackTest(t, f.baseURL+"/deployments?status=pending")
@@ -88,18 +94,18 @@ func assertDeploymentListMobile(t *testing.T, b *packageBrowser) {
 	t.Helper()
 	if string(b.evaluate(t, `(() => {
  const row = document.querySelector('#deployments-tbody tr');
- const table = row.closest('table');
+ const cards = [...document.querySelectorAll('#deployments-tbody [data-resource-card]')];
  const visible = el => el.getBoundingClientRect().height > 0;
  const buttons = [...document.querySelectorAll('main button, main a.btn, main select, main input')].filter(visible);
- const view = row.querySelector('a[href^="/deployments/"]');
- const download = row.querySelector('a[href$="/logs.txt"]');
- return download && !download.hasAttribute('hx-boost') && view.getAttribute('hx-boost') === 'true' &&
- (innerWidth >= 768 ? getComputedStyle(row).display === 'table-row' && visible(table.tHead) &&
- [...row.cells].every(cell => cell.scrollWidth <= cell.clientWidth || getComputedStyle(cell).overflowX === 'hidden') :
- getComputedStyle(row).display === 'grid' && !visible(table.tHead) &&
- [...row.cells].every(cell => cell.scrollWidth <= cell.clientWidth) &&
- buttons.every(el => el.getBoundingClientRect().height >= 44) &&
- [...row.querySelectorAll('span')].filter(el => el.classList.contains('md:hidden')).every(visible));
+ return !document.querySelector('main table') && cards.length > 0 && cards.every(card => {
+ const view = card.querySelector('a');
+ const box = card.getBoundingClientRect();
+ const fields = [...card.querySelectorAll('dd')];
+ return view && view.getAttribute('hx-boost') === 'true' && box.height >= 44 &&
+ Math.abs(view.getBoundingClientRect().width - box.width) <= 2 &&
+ Math.abs(view.getBoundingClientRect().height - box.height) <= 2 &&
+ fields.length === 4 && fields.every(el => visible(el) && el.scrollWidth <= el.clientWidth);
+ }) && (innerWidth >= 768 || buttons.every(el => el.getBoundingClientRect().height >= 44));
 })()`)) != "true" {
 		b.screenshot(t, "mobile-list-unusable")
 		t.Fatal(

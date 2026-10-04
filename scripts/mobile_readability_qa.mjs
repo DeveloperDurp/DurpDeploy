@@ -226,8 +226,9 @@ const allTargets = [
     name: "projects",
     path: "/projects",
     surface: "#projects-list",
-    row: "#projects-list > div > table > tbody > tr",
-    controls: "#projects-list button",
+    row: "#projects-list [data-resource-card]",
+    controls: "#projects-list [data-resource-card] a",
+    readOnly: true,
   },
   {
     name: "audit",
