@@ -446,10 +446,10 @@ for E in "$LC_DEV" "$LC_TEST" "$LC_PROD" "$LC_OUT"; do
   CODE=$(curl_silent -X POST -d "name=$E&csrf_token=$CSRF" "$BASE/environments")
   [[ "$CODE" == "303" ]] || { echo "FAIL: create env $E got $CODE"; exit 1; }
 done
-LC_DEV_ID=$(curl_body "$BASE/environments" | python3 -c "import sys,re; html=sys.stdin.read(); m=re.search(r'<td class=\"truncate\">$LC_DEV</td>.*?href=\"/environments/(\d+)/edit\"', html, re.S); print(m.group(1) if m else '')")
-LC_TEST_ID=$(curl_body "$BASE/environments" | python3 -c "import sys,re; html=sys.stdin.read(); m=re.search(r'<td class=\"truncate\">$LC_TEST</td>.*?href=\"/environments/(\d+)/edit\"', html, re.S); print(m.group(1) if m else '')")
-LC_PROD_ID=$(curl_body "$BASE/environments" | python3 -c "import sys,re; html=sys.stdin.read(); m=re.search(r'<td class=\"truncate\">$LC_PROD</td>.*?href=\"/environments/(\d+)/edit\"', html, re.S); print(m.group(1) if m else '')")
-LC_OUT_ID=$(curl_body "$BASE/environments" | python3 -c "import sys,re; html=sys.stdin.read(); m=re.search(r'<td class=\"truncate\">$LC_OUT</td>.*?href=\"/environments/(\d+)/edit\"', html, re.S); print(m.group(1) if m else '')")
+LC_DEV_ID=$(api_item_id_by_name "$BASE/api/v1/environments" "$LC_DEV")
+LC_TEST_ID=$(api_item_id_by_name "$BASE/api/v1/environments" "$LC_TEST")
+LC_PROD_ID=$(api_item_id_by_name "$BASE/api/v1/environments" "$LC_PROD")
+LC_OUT_ID=$(api_item_id_by_name "$BASE/api/v1/environments" "$LC_OUT")
 echo "Env IDs: dev=$LC_DEV_ID test=$LC_TEST_ID prod=$LC_PROD_ID out=$LC_OUT_ID"
 
 # Lifecycle: Dev -> Test -> Prod
