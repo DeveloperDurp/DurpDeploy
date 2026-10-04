@@ -447,7 +447,9 @@ Local steps accept `network_mode` (`none` by default, or `bridge`). Artifact
 gates use `approval_artifact_path`, `approval_review_path`, and
 `approval_review_format` (`summary` or `terraform`), relative to
 `DURPDEPLOY_STAGE_DIR`. A gated deployment pauses before the next step and
-reserves its environment. Only local deployment steps without retries are
+reserves its environment; later deployments queue until it completes, is
+rejected, is cancelled, or expires. Artifact approval retains its queue slot.
+Only local deployment steps without retries are
 supported; runbooks and agent steps cannot use gates. Both approval paths and
 an explicit review format are required together; an empty format is rejected.
 `GET /api/v1/deployments/{id}/artifact-gates` returns counts, checksums,

@@ -236,15 +236,6 @@ func createDeploymentWithSteps(
 		}
 
 	}
-	if err := gateAdmission(
-		ctx,
-		q,
-		arg.EnvironmentID,
-		0,
-		gated && arg.Status != "pending_approval",
-	); err != nil {
-		return DeploymentResult{}, err
-	}
 	arg.AssignedAgentID = sql.NullString{}
 	if arg.Status == "pending" {
 		arg.Status = "queued"

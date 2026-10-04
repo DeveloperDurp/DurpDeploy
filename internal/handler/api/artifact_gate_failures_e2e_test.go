@@ -61,6 +61,17 @@ func TestArtifactGateDelayedNotificationE2E(t *testing.T) {
 func TestArtifactGateRestartConcurrentApprovalE2E(t *testing.T) {
 	// Given: a persisted gate, with server, runner and DB connection restarted.
 	f, deployment, gate := newGateDeployment(t)
+	release, err := f.h.repo.Queries.GetRelease(
+		t.Context(),
+		deployment.ReleaseID,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	queued := verificationDeploy(t, f, release)
+	if queued.Status != "queued" {
+		t.Fatalf("waiting gate did not queue later work: %+v", queued)
+	}
 	var filename string
 	if err := f.h.repo.DB.QueryRow("SELECT file FROM pragma_database_list WHERE name = 'main'").
 		Scan(&filename); err != nil {
@@ -105,8 +116,10 @@ func TestArtifactGateRestartConcurrentApprovalE2E(t *testing.T) {
 	)
 	t.Cleanup(f.server.Close)
 	f.baseURL = f.server.URL
+	go rnr.ServeQueue(t.Context())
 	path := gateAPIPath(deployment.ID)
 	f.api(t, "GET", path, nil, 200)
+	waitVerificationStatus(t, f, queued.ID, "queued")
 	// When: concurrent requests approve the same stored identity.
 	data, err := json.Marshal(
 		map[string]any{"sha256": gate.SHA256, "revision": gate.Revision},
@@ -154,6 +167,14 @@ func TestArtifactGateRestartConcurrentApprovalE2E(t *testing.T) {
 		t.Fatalf("accepted=%d", accepted)
 	}
 	f.completion(t, deployment.ID, events.DeploymentSucceeded)
+	f.completion(t, queued.ID, events.ArtifactAwaitingApproval)
+	f.api(
+		t,
+		"POST",
+		fmt.Sprintf("/api/v1/deployments/%d/cancel", queued.ID),
+		nil,
+		200,
+	)
 }
 
 func TestArtifactGateBlocksInvalidArtifactsE2E(t *testing.T) {

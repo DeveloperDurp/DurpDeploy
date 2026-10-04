@@ -111,8 +111,9 @@ func TestArtifactGateApproveExactBytesE2E(t *testing.T) {
 	} {
 		f.api(t, "DELETE", parent, nil, 409)
 	}
-	// A waiting review reserves the environment against another admission.
-	f.api(
+	// A waiting review keeps the slot while later work joins the queue.
+	var queued db.Deployment
+	if err := json.Unmarshal(f.api(
 		t,
 		"POST",
 		f.base()+"/deployments",
@@ -120,7 +121,16 @@ func TestArtifactGateApproveExactBytesE2E(t *testing.T) {
 			"release_id":     deployment.ReleaseID,
 			"environment_id": deployment.EnvironmentID,
 		},
-		409,
+		201,
+	), &queued); err != nil || queued.Status != "queued" {
+		t.Fatalf("queued deployment=%+v err=%v", queued, err)
+	}
+	f.api(
+		t,
+		"POST",
+		fmt.Sprintf("/api/v1/deployments/%d/cancel", queued.ID),
+		nil,
+		200,
 	)
 	page := f.web(
 		t,

@@ -74,7 +74,9 @@ Terminal bundle chunks are deleted after seven days. Audit records retain the
 decision, and gate records retain checksums, counts, times, and approver ID.
 
 An active gated deployment reserves its environment, including while waiting.
-Conflicting admissions return 409; this is not a FIFO deployment queue. Gates
+Later deployments enter the environment's FIFO queue. Approval resumes the
+same deployment without giving up its slot; rejection, cancellation, or expiry
+releases the slot for the next deployment. Gates
 require local steps with no automatic retries, a later continuation step, and
 a deployment release. Runbooks, remote agents, and mixed execution are excluded.
 Restart resumes a waiting review or an approved pending continuation; a crash

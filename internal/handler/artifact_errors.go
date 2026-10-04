@@ -20,8 +20,7 @@ func ArtifactErrorStatus(err error) int {
 		errors.Is(err, repository.ErrRemoteArtifactsUnsupported),
 		errors.Is(err, repository.ErrArtifactPathReserved):
 		return http.StatusUnprocessableEntity
-	case errors.Is(err, repository.ErrEnvironmentReserved),
-		errors.Is(err, repository.ErrArtifactRepositoryPinned):
+	case errors.Is(err, repository.ErrArtifactRepositoryPinned):
 		return http.StatusConflict
 	case errors.Is(err, artifact.ErrFetch):
 		return http.StatusBadGateway

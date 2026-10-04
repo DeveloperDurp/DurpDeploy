@@ -5,12 +5,33 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"io"
 	"sync"
 	"testing"
 
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/secret"
 )
+
+type retryGateSource struct {
+	*bytes.Reader
+	reads int
+	seeks int
+}
+
+func (s *retryGateSource) Read(data []byte) (int, error) {
+	s.reads++
+	if s.reads == 2 {
+		n, _ := s.Reader.Read(data[:1])
+		return n, sqliteCodeError(sqliteBusyCode)
+	}
+	return s.Reader.Read(data)
+}
+
+func (s *retryGateSource) Seek(offset int64, whence int) (int64, error) {
+	s.seeks++
+	return s.Reader.Seek(offset, whence)
+}
 
 func TestArtifactGateClaimsAcrossDatabases(t *testing.T) {
 	forEachDeploymentCreationEngine(t, func(t *testing.T, name string) {
@@ -54,7 +75,8 @@ func TestArtifactGateClaimsAcrossDatabases(t *testing.T) {
 		); err != nil {
 			t.Fatal(err)
 		}
-		data := []byte("immutable-sensitive-plan")
+		data := bytes.Repeat([]byte("immutable-sensitive-plan"), 100000)
+		source := &retryGateSource{Reader: bytes.NewReader(data)}
 		hash := sha256.Sum256(data)
 		checksum := hex.EncodeToString(hash[:])
 		now, err := first.Queries.CurrentUnixTime(t.Context())
@@ -74,7 +96,27 @@ func TestArtifactGateClaimsAcrossDatabases(t *testing.T) {
 				CreatedAt:      now,
 				ExpiresAt:      now + 86400,
 			},
-			bytes.NewReader(data),
+			source,
+		); err != nil {
+			t.Fatal(err)
+		}
+		if source.seeks < 2 {
+			t.Fatal("publication did not rewind after a partial chunk retry")
+		}
+		stored, err := first.Queries.GetArtifactGate(
+			t.Context(),
+			db.GetArtifactGateParams{
+				DeploymentID: id, StepIndex: 0,
+			},
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := first.WriteArtifactGateBundle(
+			t.Context(),
+			first.Queries,
+			stored,
+			io.Discard,
 		); err != nil {
 			t.Fatal(err)
 		}

@@ -70,20 +70,6 @@ func (r *DeploymentRunner) Run(
 	if stopping {
 		return
 	}
-	gateRun, gated, gateErr := r.repo.BeginArtifactGateRun(ctx, deploymentID)
-	if gateErr != nil {
-		if !errors.Is(gateErr, repository.ErrArtifactGate) {
-			slog.Error(
-				"claim deployment run",
-				"deployment_id",
-				deploymentID,
-				"err",
-				gateErr,
-			)
-			r.failUnlessCancelled(context.WithoutCancel(ctx), ctx, deploymentID)
-		}
-		return
-	}
 	runCtx, cancel := context.WithCancel(ctx)
 	r.mu.Lock()
 	if r.stopping {
@@ -96,20 +82,38 @@ func (r *DeploymentRunner) Run(
 		cancel()
 		return
 	}
-	started, err := r.repo.StartLocalDeployment(ctx, deploymentID)
-	if err != nil || !started {
+	gateRun, gated, gateErr := r.repo.BeginArtifactGateRun(ctx, deploymentID)
+	if gateErr != nil {
 		r.mu.Unlock()
 		cancel()
-		if err != nil {
+		if !errors.Is(gateErr, repository.ErrArtifactGate) {
 			slog.Error(
-				"claim deployment",
+				"claim deployment run",
 				"deployment_id",
 				deploymentID,
 				"err",
-				err,
+				gateErr,
 			)
+			r.failUnlessCancelled(context.WithoutCancel(ctx), ctx, deploymentID)
 		}
 		return
+	}
+	if !gated {
+		started, err := r.repo.StartLocalDeployment(ctx, deploymentID)
+		if err != nil || !started {
+			r.mu.Unlock()
+			cancel()
+			if err != nil {
+				slog.Error(
+					"claim deployment",
+					"deployment_id",
+					deploymentID,
+					"err",
+					err,
+				)
+			}
+			return
+		}
 	}
 	r.cancels[deploymentID] = cancel
 	r.mu.Unlock()

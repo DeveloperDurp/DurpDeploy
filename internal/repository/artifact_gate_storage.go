@@ -24,63 +24,77 @@ var ErrArtifactGate = errors.New(
 func (r *Repository) SaveArtifactGate(
 	ctx context.Context,
 	gate db.CreateArtifactGateParams,
-	source io.Reader,
+	source io.ReadSeeker,
 ) error {
 	if r.secrets == nil || gate.BundleSize <= 0 ||
 		gate.BundleSize > artifact.MaxDownload {
 		return ErrArtifactGate
 	}
-	return r.WithTx(ctx, func(q *db.Queries) error {
-		changed, err := q.PublishArtifactGateDeployment(ctx, gate.DeploymentID)
-		if err != nil {
-			return err
-		}
-		if changed != 1 {
-			return ErrArtifactGate
-		}
-		if err := q.CreateArtifactGate(ctx, gate); err != nil {
-			return err
-		}
-		hash := sha256.New()
-		buffer := make([]byte, gateChunkSize)
-		remaining := gate.BundleSize
-		for index := int64(0); remaining > 0; index++ {
-			n, err := io.ReadFull(
-				source,
-				buffer[:min(int64(len(buffer)), remaining)],
-			)
-			if err != nil {
+	return r.WithDeploymentTx(
+		ctx,
+		gate.DeploymentID,
+		func(ctx context.Context, q *db.Queries) error {
+			if _, err := source.Seek(0, io.SeekStart); err != nil {
 				return err
 			}
-			if _, err := hash.Write(buffer[:n]); err != nil {
-				return err
-			}
-			prefix := fmt.Sprintf(
-				"%d/%d/%d\n",
-				gate.DeploymentID,
-				gate.StepIndex,
-				index,
-			)
-			ciphertext, err := r.secrets.Encrypt(prefix + string(buffer[:n]))
-			if err != nil {
-				return err
-			}
-			if err := q.CreateArtifactGateChunk(
+			changed, err := q.PublishArtifactGateDeployment(
 				ctx,
-				db.CreateArtifactGateChunkParams{
-					DeploymentID: gate.DeploymentID, StepIndex: gate.StepIndex,
-					ChunkIndex: index, Ciphertext: ciphertext,
-				},
-			); err != nil {
+				gate.DeploymentID,
+			)
+			if err != nil {
 				return err
 			}
-			remaining -= int64(n)
-		}
-		if hex.EncodeToString(hash.Sum(nil)) != gate.BundleSha256 {
-			return ErrArtifactGate
-		}
-		return nil
-	})
+			if changed != 1 {
+				return ErrArtifactGate
+			}
+			if err := q.CreateArtifactGate(ctx, gate); err != nil {
+				return err
+			}
+			hash := sha256.New()
+			buffer := make([]byte, gateChunkSize)
+			remaining := gate.BundleSize
+			for index := int64(0); remaining > 0; index++ {
+				n, err := io.ReadFull(
+					source,
+					buffer[:min(int64(len(buffer)), remaining)],
+				)
+				if err != nil {
+					return err
+				}
+				if _, err := hash.Write(buffer[:n]); err != nil {
+					return err
+				}
+				prefix := fmt.Sprintf(
+					"%d/%d/%d\n",
+					gate.DeploymentID,
+					gate.StepIndex,
+					index,
+				)
+				ciphertext, err := r.secrets.Encrypt(
+					prefix + string(buffer[:n]),
+				)
+				if err != nil {
+					return err
+				}
+				if err := q.CreateArtifactGateChunk(
+					ctx,
+					db.CreateArtifactGateChunkParams{
+						DeploymentID: gate.DeploymentID,
+						StepIndex:    gate.StepIndex,
+						ChunkIndex:   index,
+						Ciphertext:   ciphertext,
+					},
+				); err != nil {
+					return err
+				}
+				remaining -= int64(n)
+			}
+			if hex.EncodeToString(hash.Sum(nil)) != gate.BundleSha256 {
+				return ErrArtifactGate
+			}
+			return nil
+		},
+	)
 }
 
 func (r *Repository) WriteArtifactGateBundle(

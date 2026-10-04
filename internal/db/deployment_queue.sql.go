@@ -142,7 +142,7 @@ func (q *Queries) GetNextQueuedDeployment(ctx context.Context, environmentID int
 }
 
 const listDeploymentQueueEnvironments = `-- name: ListDeploymentQueueEnvironments :many
-SELECT environment_id FROM deployments WHERE status IN ('queued', 'pending', 'running', 'cleanup_unconfirmed')
+SELECT environment_id FROM deployments WHERE status IN ('queued', 'pending', 'running', 'publishing_artifact', 'awaiting_artifact_approval', 'cleanup_unconfirmed')
 UNION SELECT environment_id FROM environment_deployment_slots
 ORDER BY environment_id
 `
@@ -173,7 +173,7 @@ func (q *Queries) ListDeploymentQueueEnvironments(ctx context.Context) ([]int64,
 const listEnvironmentQueueBlockers = `-- name: ListEnvironmentQueueBlockers :many
 SELECT d.id FROM deployments d
 WHERE d.environment_id = ? AND (
-    d.status IN ('pending', 'running', 'cleanup_unconfirmed')
+    d.status IN ('pending', 'running', 'publishing_artifact', 'awaiting_artifact_approval', 'cleanup_unconfirmed')
     OR EXISTS (SELECT 1 FROM remote_deployment_claims c WHERE c.deployment_id = d.id
         AND c.state IN ('claimed', 'started', 'cancel_requested', 'lost', 'cancel_unconfirmed'))
     OR EXISTS (SELECT 1 FROM remote_step_runs s WHERE s.deployment_id = d.id
@@ -219,7 +219,7 @@ func (q *Queries) LockDeploymentEnvironment(ctx context.Context, id int64) (int6
 }
 
 const startQueuedLocalDeployment = `-- name: StartQueuedLocalDeployment :execrows
-UPDATE deployments SET status = 'running', started_at = unixepoch()
+UPDATE deployments SET status = 'running', started_at = COALESCE(started_at, unixepoch())
 WHERE id = ? AND status = 'pending' AND assigned_agent_id IS NULL
 AND EXISTS (SELECT 1 FROM environment_deployment_slots s
     WHERE s.deployment_id = deployments.id AND s.environment_id = deployments.environment_id)
