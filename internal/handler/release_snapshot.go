@@ -159,7 +159,8 @@ func buildReleaseSnapshot(
 	}
 	params := make([]db.CreateReleaseVariableParams, len(variables))
 	for index, variable := range variables {
-		if variable.Name == containerenv.StageVariable {
+		if variable.Name == containerenv.StageVariable ||
+			variable.Name == containerenv.ApprovedVariable {
 			return releaseSnapshotData{}, containerenv.ErrReserved
 		}
 		if variable.Name == "ARTIFACT_PATH" {

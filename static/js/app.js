@@ -5,6 +5,10 @@ window.Alpine = Alpine
 window.htmx = htmx
 
 document.addEventListener('htmx:beforeSwap', (event) => {
+	if (event.detail.xhr.status === 422 &&
+		event.detail.xhr.getResponseHeader('HX-Retarget')) {
+		event.detail.shouldSwap = true;
+	}
 	const target = event.detail.target;
 	if (target.hasAttribute('data-artifact-gates') &&
 		target.contains(document.activeElement)) {

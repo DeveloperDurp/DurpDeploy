@@ -449,10 +449,12 @@ embedded agent because native Kubernetes Job execution is tracked in
 [issue #98](https://github.com/DeveloperDurp/DurpDeploy/issues/98); use
 standalone agents for executable steps in Kubernetes.
 
-Each attempt runs as non-root with a read-only root filesystem, no network,
+Each attempt runs as non-root with a read-only root filesystem, no network by
+default (`network_mode: "bridge"` explicitly enables networking for local steps),
 no capabilities, no new privileges, bounded memory and process count, and no
 host mounts. A 64 MiB temporary filesystem at `/tmp` supplies its writable
-home. Attempts sharing `/stage` have a combined memory ceiling of the staging
+home; artifact-gated steps use 364 MiB to preserve provider context. Attempts
+sharing `/stage` have a combined memory ceiling of the staging
 capacity plus 256 MiB, so staging writes fit alongside the script process.
 This is a shared ceiling for process memory, `/tmp`, and staging pages;
 it does not reserve separate memory budgets. `TERM=dumb` keeps non-interactive

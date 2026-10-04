@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -35,6 +36,8 @@ func parseStepContainerConfig(
 	r *http.Request,
 	target string,
 ) (string, []string, string) {
+	image := r.FormValue("container_image")
+	names := parseStepVariableNames(r.FormValue("variable_names"))
 	if err := artifact.ValidateGateConfig(
 		target,
 		r.FormValue("network_mode"),
@@ -42,12 +45,10 @@ func parseStepContainerConfig(
 		r.FormValue("approval_review_path"),
 		r.FormValue("approval_review_format"),
 	); err != nil {
-		return "", nil, err.Error()
+		return image, names, err.Error()
 	}
-	image := r.FormValue("container_image")
-	names := parseStepVariableNames(r.FormValue("variable_names"))
 	if err := validateStepContainerConfig(target, image, names); err != "" {
-		return "", nil, err
+		return image, names, err
 	}
 	return image, names, ""
 }
@@ -485,7 +486,19 @@ func writeStepFormError(
 	labels []string,
 	agentLabel, errorMsg string,
 ) {
-	if isNew {
+	mobile := r.URL.Query().Get("mobile") == "1"
+	if r.Header.Get("HX-Request") == "true" {
+		if isNew {
+			w.Header().Set("HX-Retarget", "#add-step-form")
+		} else if mobile {
+			w.Header().Set("HX-Retarget",
+				fmt.Sprintf("#mobile-step-edit-%d", step.ID))
+		} else {
+			w.Header().Set("HX-Retarget", fmt.Sprintf("#step-row-%d", step.ID))
+			w.Header().Set("HX-Reswap", "outerHTML")
+		}
+	}
+	if isNew || mobile {
 		WriteFormError(
 			w,
 			r,

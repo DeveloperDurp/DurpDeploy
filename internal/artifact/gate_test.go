@@ -44,6 +44,27 @@ func TestGateReviewNeverExposesTerraformValues(t *testing.T) {
 	}
 }
 
+func TestGateSummaryRejectsMalformedCounts(t *testing.T) {
+	for _, raw := range []string{"null", "{}", `[]`, `{"creates":5}`, `{"create":null}`, `{"create":1,"unknown":0}`, `{"create":-1}`} {
+		if _, err := ParseGateReview(
+			[]byte(raw),
+			"summary",
+		); !errors.Is(
+			err,
+			ErrGateConfig,
+		) {
+			t.Fatalf("accepted malformed summary %s: %v", raw, err)
+		}
+	}
+	if review, err := ParseGateReview(
+		[]byte(`{"create":0}`),
+		"summary",
+	); err != nil ||
+		review != (GateReview{}) {
+		t.Fatalf("explicit zero review=%+v err=%v", review, err)
+	}
+}
+
 func TestGateBundleRejectsUnsafeEntries(t *testing.T) {
 	for _, header := range []tar.Header{
 		{Name: "../plan", Typeflag: tar.TypeReg},

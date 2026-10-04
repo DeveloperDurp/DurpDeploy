@@ -34,6 +34,112 @@ func TestArtifactGateBrowserE2E(t *testing.T) {
 		t.Fatal("session cookie rejected")
 	}
 	page := fmt.Sprintf("%s/deployments/%d", f.baseURL, deployment.ID)
+	for _, width := range []int{375, 1280} {
+		browser.call(t, "Emulation.setDeviceMetricsOverride", map[string]any{
+			"width":             width,
+			"height":            900,
+			"deviceScaleFactor": 1,
+			"mobile":            false,
+		}, &struct{}{})
+		browser.call(
+			t,
+			"Page.navigate",
+			map[string]string{"url": f.baseURL + "/"},
+			&struct{}{},
+		)
+		browser.wait(
+			t,
+			`Array.from(document.querySelectorAll('h2')).find(e=>e.textContent==='Currently running')?.parentElement.innerText.includes('awaiting_artifact_approval')`,
+		)
+		browser.screenshot(
+			t,
+			fmt.Sprintf("artifact-dashboard-waiting-%d", width),
+		)
+		for _, formPage := range []string{fmt.Sprintf("/projects/%d/steps-page", f.project.ID), "/templates/new"} {
+			browser.call(
+				t,
+				"Page.navigate",
+				map[string]string{"url": f.baseURL + formPage},
+				&struct{}{},
+			)
+			if formPage != "/templates/new" {
+				browser.wait(
+					t,
+					`document.querySelector('[hx-get$="/steps/new"]') && window.htmx && document.readyState==='complete'`,
+				)
+				browser.evaluate(
+					t,
+					`document.querySelector('[hx-get$="/steps/new"]').click()`,
+				)
+			}
+			browser.wait(
+				t,
+				`document.querySelector('[name="approval_artifact_path"]') && window.htmx && document.readyState==='complete'`,
+			)
+			browser.wire.events = nil
+			browser.evaluate(t, `(() => {
+const form=document.querySelector('[name="approval_artifact_path"]').form;
+form.querySelector('[name="name"]').value='Invalid gate';
+const script=form.querySelector('[name="script_body"]'); script.value='true'; script.dispatchEvent(new Event('input',{bubbles:true}));
+form.querySelector('[name="container_image"]').value='docker.io/library/bash:5.2';
+form.querySelector('[name="variable_names"]').value='KEEP_THIS';
+form.querySelector('[name="approval_artifact_path"]').value='../plan';
+form.querySelector('[name="approval_review_path"]').value='review';
+form.querySelector('[name="approval_review_format"]').value='summary';
+setTimeout(()=>form.requestSubmit(),100); return true;
+})()`)
+			if formPage == "/templates/new" {
+				if err := browser.wire.waitEvent(
+					"Page.loadEventFired",
+					browser.session,
+				); err != nil {
+					t.Fatal(err)
+				}
+			}
+			browser.wait(
+				t,
+				`document.body.innerText.includes('invalid artifact approval configuration') && document.querySelector('[name="container_image"]').value==='docker.io/library/bash:5.2' && document.querySelector('[name="variable_names"]').value==='KEEP_THIS'`,
+			)
+			browser.screenshot(
+				t,
+				fmt.Sprintf(
+					"artifact-invalid-form-%d-%d",
+					width,
+					len(formPage),
+				),
+			)
+		}
+		browser.call(t, "Page.navigate", map[string]string{
+			"url": fmt.Sprintf(
+				"%s/projects/%d/steps-page",
+				f.baseURL,
+				f.project.ID,
+			),
+		}, &struct{}{})
+		browser.wait(
+			t,
+			`window.htmx && document.readyState==='complete' && Array.from(document.querySelectorAll('[data-step-action="edit"]')).some(e=>e.getClientRects().length)`,
+		)
+		browser.evaluate(
+			t,
+			`Array.from(document.querySelectorAll('[data-step-action="edit"]')).find(e=>e.getClientRects().length).click()`,
+		)
+		browser.wait(
+			t,
+			`Array.from(document.querySelectorAll('[name="approval_artifact_path"]')).some(e=>e.getClientRects().length)`,
+		)
+		browser.evaluate(t, `(() => {
+const field=Array.from(document.querySelectorAll('[name="approval_artifact_path"]')).find(e=>e.getClientRects().length);
+const form=field.form; field.value='../plan';
+form.querySelector('[name="variable_names"]').value='KEEP_EDIT';
+setTimeout(()=>form.requestSubmit(),100); return true;
+})()`)
+		browser.wait(
+			t,
+			`Array.from(document.querySelectorAll('[name="approval_artifact_path"]')).some(e=>e.getClientRects().length && e.value==='../plan' && e.form.innerText.includes('invalid artifact approval configuration') && e.form.querySelector('[name="variable_names"]').value==='KEEP_EDIT') && document.querySelector('#step-list')`,
+		)
+		browser.screenshot(t, fmt.Sprintf("artifact-invalid-edit-%d", width))
+	}
 	var agentTemplate struct {
 		ID int64 `json:"id"`
 	}

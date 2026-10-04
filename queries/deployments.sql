@@ -16,7 +16,7 @@ UPDATE deployments SET status = ?, started_at = ?, finished_at = ? WHERE id = ?;
 
 -- name: ConfirmContainerCleanup :execrows
 UPDATE deployments SET status = 'failed', finished_at = COALESCE(finished_at, sqlc.arg(now))
-WHERE status IN ('running', 'cleanup_unconfirmed')
+WHERE status IN ('running', 'publishing_artifact', 'cleanup_unconfirmed')
   AND container_namespace = sqlc.arg(namespace);
 
 -- name: RecordContainerNamespace :execrows
@@ -27,7 +27,7 @@ WHERE id = sqlc.arg(deployment_id) AND status = 'running'
 -- name: MarkUnreconciledLocalDeployments :execrows
 UPDATE deployments SET status = 'cleanup_unconfirmed',
     finished_at = COALESCE(finished_at, sqlc.arg(now))
-WHERE status = 'running' AND assigned_agent_id IS NULL
+WHERE status IN ('running', 'publishing_artifact') AND assigned_agent_id IS NULL
   AND container_namespace IS NOT NULL
   AND (EXISTS (SELECT 1 FROM deployment_steps s
       WHERE s.deployment_id = deployments.id AND s.execution_target = 'local')
@@ -88,7 +88,7 @@ FROM deployments d
 JOIN releases r ON d.release_id = r.id
 JOIN projects p ON r.project_id = p.id
 JOIN environments e ON d.environment_id = e.id
-WHERE d.kind = 'deployment' AND d.status IN ('pending','running')
+WHERE d.kind = 'deployment' AND d.status IN ('pending', 'running', 'publishing_artifact', 'awaiting_artifact_approval')
 ORDER BY d.created_at DESC;
 
 -- name: ListPendingDeployments :many

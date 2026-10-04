@@ -160,8 +160,9 @@ normalizes it to `pwsh`. All resolved release variables enter a step by
 default; set `variable_names` only to restrict the step to those names. Local
 steps exclude container/SSH client configuration names such as `PATH`, `HOME`,
 `SSH_AUTH_SOCK`, or `XDG_*`; agent steps retain their host variable support.
-The embedded agent pulls an image when it is missing. Container steps have no
-network or host mounts. A mutable image tag does not
+The embedded agent pulls an image when it is missing. Container steps default
+to no network; local steps can opt into `network_mode: "bridge"`. They have no
+host mounts. A mutable image tag does not
 freeze image contents; prefer a digest. The web/API rejects a new image-less
 server step. Old image-less releases remain readable but cannot run, re-run,
 or refresh; recreate their steps and create a new release (`409` on launch).

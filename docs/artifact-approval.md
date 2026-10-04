@@ -4,7 +4,9 @@ Local Docker/Podman steps can save an artifact and pause before a later step.
 Set `approval_artifact_path` and `approval_review_path` to distinct relative
 paths under `DURPDEPLOY_STAGE_DIR`. Set `approval_review_format` to `terraform`
 for `terraform show -json`, or `summary` for nonnegative `create`, `update`,
-`delete`, and `read` counts. Reviews expose counts only. Generated names,
+`delete`, and `read` counts in a nonempty JSON object. Omitted counts are zero;
+unknown keys, null counts, and non-object summaries are rejected.
+Reviews expose counts only. Generated names,
 values, outputs, and all gated script output are hidden. Both paths and an
 explicit review format are required together; an empty format is rejected.
 

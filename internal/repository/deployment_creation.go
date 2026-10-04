@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"durpdeploy/internal/artifact"
+	"durpdeploy/internal/containerenv"
 	"durpdeploy/internal/db"
 )
 
@@ -215,6 +216,16 @@ func createDeploymentWithSteps(
 	releaseKind, err := q.GetRelease(ctx, arg.ReleaseID)
 	if err != nil {
 		return DeploymentResult{}, err
+	}
+	variables, err := q.ListReleaseVariablesByRelease(ctx, arg.ReleaseID)
+	if err != nil {
+		return DeploymentResult{}, err
+	}
+	for _, variable := range variables {
+		if variable.Name == containerenv.StageVariable ||
+			variable.Name == containerenv.ApprovedVariable {
+			return DeploymentResult{}, containerenv.ErrReserved
+		}
 	}
 	gated := false
 	for _, step := range steps {

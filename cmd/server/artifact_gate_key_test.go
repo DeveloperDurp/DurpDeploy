@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"path/filepath"
 	"testing"
@@ -78,6 +79,19 @@ func TestRecoverPendingDeploymentsCancelsPublishedGate(t *testing.T) {
 	}
 	repo.SetSecretBox(box)
 	gate, _ := seedRotationGate(t, repo)
+	if _, err := repo.DB.Exec(
+		"UPDATE deployments SET container_namespace='orphan-publication' WHERE id=?",
+		gate.DeploymentID,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.DB.Exec(
+		"INSERT INTO deployment_steps (deployment_id, step_index, name, script_body) VALUES (?, 0, 'Generate', 'true')",
+		gate.DeploymentID,
+	); err != nil {
+		t.Fatal(err)
+	}
+
 	recoverPendingDeployments(
 		t.Context(),
 		runner.New(repo, runner.NewLogBroker()),
@@ -89,6 +103,28 @@ func TestRecoverPendingDeploymentsCancelsPublishedGate(t *testing.T) {
 	)
 	if err != nil || stored.Status != "cancelled" {
 		t.Fatalf("orphaned published gate=%+v err=%v", stored, err)
+	}
+	deployment, err := repo.Queries.GetDeployment(
+		t.Context(),
+		gate.DeploymentID,
+	)
+	if err != nil || deployment.Status != "cleanup_unconfirmed" {
+		t.Fatalf("orphaned publication cleanup=%+v err=%v", deployment, err)
+	}
+	if _, err := repo.Queries.ConfirmContainerCleanup(
+		t.Context(),
+		db.ConfirmContainerCleanupParams{
+			Namespace: sql.NullString{
+				String: "orphan-publication",
+				Valid:  true,
+			},
+		},
+	); err != nil {
+		t.Fatal(err)
+	}
+	deployment, err = repo.Queries.GetDeployment(t.Context(), gate.DeploymentID)
+	if err != nil || deployment.Status != "failed" {
+		t.Fatalf("confirmed publication cleanup=%+v err=%v", deployment, err)
 	}
 }
 

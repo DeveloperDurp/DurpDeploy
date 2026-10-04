@@ -103,7 +103,7 @@ templ StepForm(step db.Step, projectID int64, isNew bool, labels []string, selec
 			if isNew {
 				hx-post={ fmt.Sprintf("/projects/%d/steps", projectID) }
 			} else {
-				hx-put={ fmt.Sprintf("/projects/%d/steps/%d", projectID, step.ID) }
+				hx-put={ fmt.Sprintf("/projects/%d/steps/%d?mobile=1", projectID, step.ID) }
 			}
 			hx-target="#step-list"
 			hx-swap="innerHTML"
