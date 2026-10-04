@@ -54,8 +54,12 @@ func TestMainPagePatternBrowserE2E(t *testing.T) {
  const actionBox = header.lastElementChild.getBoundingClientRect();
  const form = document.querySelector('#environment-settings-form, #template-settings-form');
  const sections = [...document.querySelectorAll('nav[aria-label="Project sections"] a')];
+ const projectDelete = [...document.querySelectorAll('main button[hx-delete]')].find(el => /^\/projects\/\d+$/.test(el.getAttribute('hx-delete')));
+ const deleteSection = projectDelete?.parentElement;
  return (!form || Math.abs(form.getBoundingClientRect().width - document.querySelector('#form-container').getBoundingClientRect().width) <= 1) &&
+ (!deleteSection || deleteSection === deleteSection.parentElement.lastElementChild) &&
  sections.every(el => ['btn-primary', 'btn-secondary', 'btn-accent'].some(cls => el.classList.contains(cls))) &&
+ sections.every((el, i) => i === 0 || getComputedStyle(el).backgroundColor !== getComputedStyle(sections[i - 1]).backgroundColor) &&
  title.scrollWidth <= title.clientWidth &&
  (!controls.length || (Math.abs(actionBox.right - headerBox.right) <= 1 &&
  (innerWidth >= 768 ? Math.abs(actionBox.top - headerBox.top) <= 1 : actionBox.top >= titleBox.bottom))) &&

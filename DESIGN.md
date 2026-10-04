@@ -195,8 +195,9 @@ Edit forms put Save and Back together in that header; creation forms keep
 Create and Cancel together below the fields. Destructive actions remain in
 their separate section. Domain actions such as Deploy and Save immutable
 version retain their specific labels and existing submit behavior.
-Project buttons retain the established colors: Steps and Deploy use primary,
-Releases uses accent, and Edit and the other section links use secondary.
+Project section buttons repeat primary, secondary, and accent in order so
+neighbors differ. Steps, Releases, and Deploy use primary; Variables, Runbooks,
+and Schedules use secondary; Packages and Notifications use accent.
 Shared spacing and responsive sizing provide consistency without removing color.
 Environment and template forms fill the main content width, including their
 headers and fields, without a centered maximum-width container.
@@ -205,6 +206,7 @@ opens the editor and History is in its header. Viewer cards open History.
 New forms and viewer pages have no Delete control.
 New Environment uses the same header Save/Back controls as Edit Environment;
 Save submits its native creation form and Back uses the shared history behavior.
+Project deletion is the final edit section, below Members and all settings.
 Step editing uses one native modal dialog with a vertical form. The list stays
 visible behind an inert backdrop; Save refreshes the list and closes the
 dialog, while validation errors stay inside it. Cancel and Escape discard the
