@@ -585,7 +585,7 @@ func TestProjectPages_RenderExpectedBackControls(t *testing.T) {
 	requireHTMLPattern(
 		t,
 		projectPage,
-		`(?s)<div class="flex flex-wrap justify-between items-center gap-2 mb-4">\s*<h1 class="text-3xl font-bold">back-controls</h1>\s*<div class="flex gap-2 ml-auto">.*?`+projectBack,
+		`(?s)<div class="page-header">\s*<h1 class="text-3xl font-bold">back-controls</h1>\s*<div class="flex gap-2 ml-auto">.*?`+projectBack,
 	)
 	if strings.Count(notificationPage, notificationBack) != 1 {
 		t.Errorf(
@@ -600,7 +600,7 @@ func TestProjectPages_RenderExpectedBackControls(t *testing.T) {
 	requireHTMLPattern(
 		t,
 		notificationPage,
-		`(?s)<div class="flex justify-between items-center mb-4">\s*<h1 class="text-3xl font-bold">Notifications</h1>\s*<div class="flex gap-2">\s*<button type="submit" class="btn btn-primary btn-sm">Save</button>\s*`+notificationBack,
+		`(?s)<div class="page-header">\s*<h1 class="text-3xl font-bold">Notifications</h1>\s*<div class="flex gap-2">\s*<button type="submit" class="btn btn-primary btn-sm">Save</button>\s*`+notificationBack,
 	)
 	if strings.Count(viewerNotificationPage, notificationBack) != 1 {
 		t.Errorf(
@@ -615,7 +615,7 @@ func TestProjectPages_RenderExpectedBackControls(t *testing.T) {
 	requireHTMLPattern(
 		t,
 		viewerNotificationPage,
-		`(?s)<div class="flex justify-between items-center mb-4">\s*<h1 class="text-3xl font-bold">Notifications</h1>\s*<div class="flex gap-2">\s*`+notificationBack,
+		`(?s)<div class="page-header">\s*<h1 class="text-3xl font-bold">Notifications</h1>\s*<div class="flex gap-2">\s*`+notificationBack,
 	)
 }
 
@@ -661,7 +661,7 @@ func TestStepsPage_RendersFullPage(t *testing.T) {
 		t,
 		body,
 		fmt.Sprintf(
-			`(?s)<div class="flex flex-wrap gap-2 justify-between items-center">\s*<h1 class="min-w-0 w-full break-words sm:w-auto sm:flex-1 text-3xl font-bold">Steps for .*?</h1>\s*<div class="flex gap-2">\s*<a href="/projects/%d" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>`,
+			`(?s)<div class="page-header">\s*<h1 class="min-w-0 w-full break-words sm:w-auto sm:flex-1 text-3xl font-bold">Steps for .*?</h1>\s*<div class="flex gap-2">\s*<a href="/projects/%d" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>`,
 			proj.ID,
 		),
 	)

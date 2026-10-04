@@ -848,14 +848,14 @@ async function mobileInteractionFailure(page, target, viewport) {
         element.setAttribute("data-desktop-interaction-probe", "before");
       });
       await row.locator('[data-step-action="edit"]').click();
-      const editor = page.locator(`#step-row-${config.stepID} form`);
+      const editor = page.locator('#step-edit-dialog[open] form[data-step-edit-form]');
       await editor.waitFor({ state: "visible", timeout: 2_000 });
-      if (await row.getAttribute("data-desktop-interaction-probe") === "before") {
-        return "steps desktop edit did not swap the visible table row";
+      if (await row.getAttribute("data-desktop-interaction-probe") !== "before") {
+        return "steps desktop edit replaced the table row instead of opening a modal";
       }
       return null;
     } catch {
-      return "steps desktop edit did not render a visible table-row form";
+      return "steps desktop edit did not render a visible modal form";
     }
   }
   if (viewport.name !== "phone" || config.role === "viewer") {
@@ -865,11 +865,11 @@ async function mobileInteractionFailure(page, target, viewport) {
     try {
       const record = page.locator(`[data-mobile-step="${config.stepID}"]`);
       await record.locator('[data-step-action="edit"]').click();
-      const editor = record.locator(`[data-mobile-step-editor="${config.stepID}"] form`);
+      const editor = page.locator('#step-edit-dialog[open] form[data-step-edit-form]');
       await editor.waitFor({ state: "visible", timeout: 2_000 });
       return null;
     } catch {
-      return "steps mobile edit did not render a visible mobile form";
+      return "steps mobile edit did not render a visible modal form";
     }
   }
 	if (target.name === "schedules" || target.name === "variables") {

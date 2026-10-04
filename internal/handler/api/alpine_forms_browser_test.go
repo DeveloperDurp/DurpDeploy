@@ -132,7 +132,10 @@ func TestAlpineDialogsBrowserE2E(t *testing.T) {
 			"type": "keyUp", "key": "Escape", "code": "Escape",
 			"windowsVirtualKeyCode": 27,
 		}, &struct{}{})
-		b.wait(t, `!document.querySelector('dialog[open]')`)
+		b.wait(
+			t,
+			`!document.querySelector('dialog[open]:not(#step-edit-dialog)')`,
+		)
 		b.navigateBackTest(t, f.baseURL+path)
 	}
 	b.navigateBackTest(t, f.baseURL+"/admin/notifications")
@@ -154,7 +157,7 @@ func (b *packageBrowser) assertAlpineDialogName(t *testing.T, want string) {
 	t.Helper()
 	b.wait(
 		t,
-		`document.querySelector('dialog[open]')?.getClientRects().length > 0 && !document.querySelector('dialog[open]').hasAttribute('x-cloak')`,
+		`document.querySelector('dialog[open]:not(#step-edit-dialog)')?.getClientRects().length > 0 && !document.querySelector('dialog[open]:not(#step-edit-dialog)').hasAttribute('x-cloak')`,
 	)
 	b.call(t, "Accessibility.enable", struct{}{}, &struct{}{})
 	var document struct {
@@ -167,7 +170,8 @@ func (b *packageBrowser) assertAlpineDialogName(t *testing.T, want string) {
 		NodeID int `json:"nodeId"`
 	}
 	b.call(t, "DOM.querySelector", map[string]any{
-		"nodeId": document.Root.NodeID, "selector": "dialog[open]",
+		"nodeId":   document.Root.NodeID,
+		"selector": "dialog[open]:not(#step-edit-dialog)",
 	}, &selected)
 	var tree struct {
 		Nodes []struct {

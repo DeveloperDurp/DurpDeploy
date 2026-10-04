@@ -4,6 +4,7 @@ import (
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
 	"durpdeploy/views/layouts"
+	"durpdeploy/views/components"
 	"strconv"
 )
 
@@ -42,7 +43,12 @@ templ EnvironmentFormFragment(env *db.Environment, isNew bool, errorMsg string) 
 }
 
 templ EnvironmentFormContent(env *db.Environment, isNew bool, errorMsg string) {
-	<div class="max-w-2xl mx-auto">
+	@components.Breadcrumbs([]components.Crumb{
+		{Label: "Home", Href: "/"},
+		{Label: "Environments", Href: "/environments"},
+		{Label: envFormTitle(isNew)},
+	})
+	<div class="w-full">
 		<div class="page-header">
 			<h1 class="text-3xl font-bold">
 				if isNew {

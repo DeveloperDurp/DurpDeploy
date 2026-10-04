@@ -30,7 +30,7 @@ func TestMobile_RenderedHTML_hides_write_controls_and_secret_values_when_viewer(
 				`data-step-action="edit"`,
 				`data-step-action="delete"`,
 				`data-step-action="save-template"`,
-				`data-mobile-step-editor=`,
+				`id="step-edit-dialog"`,
 			},
 		},
 		{

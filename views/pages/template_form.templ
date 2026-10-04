@@ -7,6 +7,7 @@ import (
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/interpreter"
 	"durpdeploy/views/layouts"
+	"durpdeploy/views/components"
 	"strconv"
 )
 
@@ -68,7 +69,12 @@ templ TemplateFormFragment(tpl *db.StepTemplate, isNew bool, errorMsg string) {
 }
 
 templ TemplateFormContent(tpl *db.StepTemplate, isNew bool, errorMsg string) {
-	<div class="max-w-2xl mx-auto">
+	@components.Breadcrumbs([]components.Crumb{
+		{Label: "Home", Href: "/"},
+		{Label: "Templates", Href: "/templates"},
+		{Label: tplFormTitle(isNew)},
+	})
+	<div class="w-full">
 		<div class="page-header">
 			<h1 class="text-3xl font-bold">
 				if isNew {

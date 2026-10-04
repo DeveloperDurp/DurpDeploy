@@ -26,7 +26,7 @@ func TestMobile_RenderedHTML_renders_breakpoint_gated_variants_when_authenticate
 				`data-mobile-step-list`,
 				fmt.Sprintf(`data-mobile-step="%d"`, fixture.step.ID),
 				fmt.Sprintf(`id="step-row-%d"`, fixture.step.ID),
-				fmt.Sprintf(`data-mobile-step-editor="%d"`, fixture.step.ID),
+				`id="step-edit-dialog"`,
 				`aria-label="Deployment steps"`,
 			},
 		},
@@ -230,15 +230,11 @@ func TestMobile_RenderedHTML_preserves_disclosures_and_containment_when_authenti
 					fixture.step.ID,
 				),
 				fmt.Sprintf(
-					`(?s)data-step-action="edit"[^>]*hx-get="/projects/%d/steps/%d/edit\?mobile=1"[^>]*hx-target="#mobile-step-edit-%d"`,
+					`(?s)data-step-action="edit"[^>]*hx-get="/projects/%d/steps/%d/edit\?dialog=1"[^>]*hx-target="#step-edit-content"`,
 					fixture.project.ID,
 					fixture.step.ID,
-					fixture.step.ID,
 				),
-				fmt.Sprintf(
-					`data-mobile-step-editor="%d"[^>]*x-show="editing"`,
-					fixture.step.ID,
-				),
+				`(?s)<dialog[^>]*id="step-edit-dialog"[^>]*aria-labelledby="step-edit-title"`,
 				`(?s)<details[^>]*>.*?<pre[^>]*class="[^"]*whitespace-pre-wrap[^"]*"`,
 			},
 			contents: []string{fixture.step.ScriptBody},
@@ -357,14 +353,8 @@ func TestSteps_RenderedHTML_uses_named_Alpine_state_when_authenticated(
 		fmt.Sprintf(`hx-get="/projects/%d/steps/new"`, projectID),
 		`hx-target="#add-step-form"`,
 		`hx-swap="innerHTML"`,
-		fmt.Sprintf(
-			`hx-target="#step-row-%d" hx-swap="outerHTML"`,
-			stepID,
-		),
-		fmt.Sprintf(
-			`data-mobile-step-editor="%d"[^>]*x-bind:hidden="!editing"`,
-			stepID,
-		),
+		`hx-target="#step-edit-content" hx-swap="innerHTML"`,
+		`id="step-edit-dialog"`,
 		`\$dispatch\('step-form-edit'\)`,
 	} {
 		requireHTMLPattern(t, pageBody, pattern)

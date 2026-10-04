@@ -111,6 +111,7 @@ templ StepForm(step db.Step, projectID int64, isNew bool, labels []string, selec
 				data-step-add-form
 				data-toast-success="Step added"
 			} else {
+				data-step-edit-form
 				data-toast-success="Step updated"
 			}
 			data-toast-error="Failed to save step"
@@ -262,19 +263,18 @@ templ StepForm(step db.Step, projectID int64, isNew bool, labels []string, selec
 			<input id={ stepInputID(step, isNew, "retries") } type="number" name="max_retries" min="0" value={ strconv.FormatInt(step.MaxRetries, 10) } class="input input-bordered"/>
 		</div>
 		<input type="hidden" name="sort_order" value={ strconv.FormatInt(step.SortOrder, 10) }/>
-			<div class="flex gap-2">
-				<button type="submit" class="btn btn-primary btn-sm">
+		if !isNew {
+			<input type="hidden" name="dialog" value="1"/>
+		}
+			<div class={ "flex gap-2", templ.KV("sticky bottom-0 bg-base-200 py-2", !isNew) }>
+				<button type="submit" class="btn btn-primary md:btn-sm">
 					if isNew {
 						Add Step
 					} else {
-						Update
+						Save
 					}
 				</button>
-				if isNew {
-					<button type="button" class="btn btn-ghost btn-sm" x-on:click="$dispatch('step-form-cancel')">Cancel</button>
-				} else {
-					<button type="button" class="btn btn-ghost btn-sm" x-on:click="$dispatch('step-form-cancel')" hx-get={ fmt.Sprintf("/projects/%d/steps", projectID) } hx-target="#step-list" hx-swap="innerHTML">Cancel</button>
-				}
+				<button type="button" class="btn btn-ghost md:btn-sm" x-on:click="$dispatch('step-form-cancel')">Cancel</button>
 			</div>
 		</form>
 	</div>

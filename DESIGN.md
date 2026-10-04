@@ -176,8 +176,15 @@ Edit forms put Save and Back together in that header; creation forms keep
 Create and Cancel together below the fields. Destructive actions remain in
 their separate section. Domain actions such as Deploy and Save immutable
 version retain their specific labels and existing submit behavior.
-Project section links use the same neutral button style; the Deploy action
-uses primary color. Color indicates action priority, not the destination.
+Project buttons retain the established colors: Steps and Deploy use primary,
+Releases uses accent, and Edit and the other section links use secondary.
+Shared spacing and responsive sizing provide consistency without removing color.
+Environment and template forms fill the main content width, including their
+headers and fields, without a centered maximum-width container.
+Step editing uses one native modal dialog with a vertical form. The list stays
+visible behind an inert backdrop; Save refreshes the list and closes the
+dialog, while validation errors stay inside it. Cancel and Escape discard the
+edit and return focus to its Edit button.
 
 Normal internal page links use HTMX to replace the main content, update the
 navbar and title, and push the existing URL into browser history. The document

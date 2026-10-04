@@ -31,6 +31,8 @@ templ StepsContent(project db.Project, steps []db.Step) {
 		x-on:step-form-cancel="handleEvent"
 		x-on:step-form-edit="handleEvent"
 		x-on:htmx:after-request.camel="afterRequest"
+		x-on:htmx:after-settle.camel="afterSettle"
+		x-on:htmx:before-swap.camel="beforeSwap"
 	>
 		<div class="page-header">
 			<h1 class="min-w-0 w-full break-words sm:w-auto sm:flex-1 text-3xl font-bold">Steps for { project.Name }</h1>
@@ -73,5 +75,13 @@ templ StepsContent(project db.Project, steps []db.Step) {
 			<div id="add-step-form" x-ref="addStepForm" class="mt-4"></div>
 			<div id="template-picker" class="mt-4"></div>
 		</div>
+		if CanWrite(ctx) {
+			<dialog id="step-edit-dialog" x-ref="stepEditDialog" class="modal" aria-labelledby="step-edit-title" x-on:close="editClosed">
+				<div class="modal-box w-full max-w-5xl">
+					<h2 id="step-edit-title" class="text-xl font-bold mb-4">Edit Step</h2>
+					<div id="step-edit-content" x-ref="stepEditContent"></div>
+				</div>
+			</dialog>
+		}
 	</div>
 }

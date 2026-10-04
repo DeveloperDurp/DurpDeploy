@@ -44,7 +44,11 @@ func TestMainPagePatternBrowserE2E(t *testing.T) {
  const header = document.querySelector('main .page-header');
  const title = header.querySelector('h1');
  const controls = [...header.querySelectorAll('.btn')];
- return title.scrollWidth <= title.clientWidth &&
+ const form = document.querySelector('#environment-settings-form, #template-settings-form');
+ const sections = [...document.querySelectorAll('nav[aria-label="Project sections"] a')];
+ return (!form || Math.abs(form.getBoundingClientRect().width - document.querySelector('#form-container').getBoundingClientRect().width) <= 1) &&
+ sections.every(el => ['btn-primary', 'btn-secondary', 'btn-accent'].some(cls => el.classList.contains(cls))) &&
+ title.scrollWidth <= title.clientWidth &&
  controls.every(el => el.getBoundingClientRect().right <= innerWidth &&
  (innerWidth >= 768 || el.getBoundingClientRect().height >= 44));
 })()`)) != "true" {

@@ -33,7 +33,7 @@ templ ProjectDetail(project db.Project, panel LifecyclePanel, vars []db.Variable
 			<h1 class="text-3xl font-bold">{ project.Name }</h1>
 			<div class="flex gap-2 ml-auto">
 				if CanWrite(ctx) {
-					<a href={ fmt.Sprintf("/projects/%d/edit", project.ID) } class="btn btn-ghost btn-sm">Edit</a>
+					<a href={ fmt.Sprintf("/projects/%d/edit", project.ID) } class="btn btn-secondary btn-sm">Edit</a>
 				}
 				<a href="/projects" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>
 			</div>
@@ -46,15 +46,15 @@ templ ProjectDetail(project db.Project, panel LifecyclePanel, vars []db.Variable
 			}
 		</p>
 		<nav aria-label="Project sections" class="flex gap-2 flex-wrap">
-			<a href={ fmt.Sprintf("/projects/%d/steps-page", project.ID) } class="btn">Steps</a>
-			<a href={ fmt.Sprintf("/projects/%d/variables", project.ID) } class="btn">Variables</a>
-			<a href={ fmt.Sprintf("/projects/%d/package-repository", project.ID) } class="btn">Packages</a>
-			<a href={ fmt.Sprintf("/projects/%d/releases", project.ID) } class="btn">Releases</a>
-			<a href={ fmt.Sprintf("/projects/%d/runbooks", project.ID) } class="btn">Runbooks</a>
-			<a href={ fmt.Sprintf("/projects/%d/notifications", project.ID) } class="btn">Notifications</a>
+			<a href={ fmt.Sprintf("/projects/%d/steps-page", project.ID) } class="btn btn-primary">Steps</a>
+			<a href={ fmt.Sprintf("/projects/%d/variables", project.ID) } class="btn btn-secondary">Variables</a>
+			<a href={ fmt.Sprintf("/projects/%d/package-repository", project.ID) } class="btn btn-secondary">Packages</a>
+			<a href={ fmt.Sprintf("/projects/%d/releases", project.ID) } class="btn btn-accent">Releases</a>
+			<a href={ fmt.Sprintf("/projects/%d/runbooks", project.ID) } class="btn btn-secondary">Runbooks</a>
+			<a href={ fmt.Sprintf("/projects/%d/notifications", project.ID) } class="btn btn-secondary">Notifications</a>
 			if CanWrite(ctx) {
 				<a href={ fmt.Sprintf("/projects/%d/deploy", project.ID) } class="btn btn-primary">Deploy</a>
-				<a href={ fmt.Sprintf("/projects/%d/schedules", project.ID) } class="btn">Schedules</a>
+				<a href={ fmt.Sprintf("/projects/%d/schedules", project.ID) } class="btn btn-secondary">Schedules</a>
 			}
 		</nav>
 		@LifecyclePanelSection(project, panel)

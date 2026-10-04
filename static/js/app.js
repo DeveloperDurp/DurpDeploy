@@ -245,9 +245,36 @@ Alpine.data('runbookEditor', () => ({
 }));
 
 Alpine.data('stepFormHost', () => ({
+	editOpener: null,
+	beforeSwap(event) {
+		if (event.detail.xhr.status !== 422 ||
+			event.detail.xhr.getResponseHeader('HX-Retarget') !== '#step-edit-content') return;
+		event.detail.shouldSwap = true;
+		event.detail.isError = false;
+	},
+	afterSettle(event) {
+		if (event.detail?.target?.id !== 'step-edit-content') return;
+		const dialog = this.$refs.stepEditDialog;
+		if (!dialog.open) dialog.showModal();
+		this.$nextTick(() => this.$refs.stepEditContent.querySelector('input[name="name"]')?.focus());
+	},
+	editClosed() {
+		const content = this.$refs.stepEditContent;
+		for (const child of content.children) Alpine.destroyTree(child);
+		content.replaceChildren();
+		const opener = this.editOpener;
+		this.editOpener = null;
+		const replacement = [...this.$el.querySelectorAll('[data-step-action="edit"]')]
+			.find(button => button.getAttribute('hx-get') === opener?.getAttribute('hx-get') && button.getClientRects().length);
+		(opener?.isConnected ? opener : replacement)?.focus();
+	},
 	afterRequest(event) {
 		const source = event.detail?.elt;
 		if (!(source instanceof Element) || !event.detail.successful) return;
+		if (source.closest('form[data-step-edit-form]')) {
+			if (event.detail.xhr.status === 200) this.$refs.stepEditDialog.close();
+			return;
+		}
 		const form = source.closest('form[data-step-add-form]');
 		if (!(form instanceof HTMLFormElement)) return;
 		this.cancel(form);
@@ -275,7 +302,14 @@ Alpine.data('stepFormHost', () => ({
 				this.add(event);
 				break;
 			case 'step-form-cancel':
+				if (event.target.closest('#step-edit-dialog')) {
+					this.$refs.stepEditDialog.close();
+					break;
+				}
+				this.cancel(event.target.closest('form'));
+				break;
 			case 'step-form-edit':
+				this.editOpener = event.target;
 				this.cancel(event.target.closest('form'));
 				break;
 		}

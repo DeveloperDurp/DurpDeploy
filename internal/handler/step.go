@@ -459,6 +459,21 @@ func writeStepFormError(
 	labels []string,
 	agentLabel, errorMsg string,
 ) {
+	if !isNew && r.FormValue("dialog") == "1" {
+		step.Interpreter = r.FormValue("interpreter")
+		step.ContainerImage = r.FormValue("container_image")
+		_, names, _ := parseStepContainerConfig(r, step.ExecutionTarget)
+		step.VariableNames = marshalStepVariableNames(names)
+		w.Header().Set("HX-Retarget", "#step-edit-content")
+		w.Header().Set("HX-Reswap", "innerHTML")
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		if err := components.StepForm(
+			step, projectID, false, labels, agentLabel, errorMsg,
+		).Render(r.Context(), w); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
 	if isNew {
 		WriteFormError(
 			w,
@@ -517,7 +532,8 @@ func (h *StepHandler) EditStepForm(w http.ResponseWriter, r *http.Request) {
 	if len(selected) > 0 {
 		selectedLabel = selected[0]
 	}
-	if r.URL.Query().Get("mobile") == "1" {
+	if r.URL.Query().Get("dialog") == "1" ||
+		r.URL.Query().Get("mobile") == "1" {
 		components.StepForm(
 			step, projectID, false, labels, selectedLabel, "",
 		).Render(r.Context(), w)
@@ -558,10 +574,15 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 	// requirement and cannot be upgraded in place: the runner refuses
 	// to start them, and the user must recreate the step with an image.
 	if existing.ExecutionTarget == "local" && existing.ContainerImage == "" {
-		http.Error(
+		writeStepFormError(
 			w,
+			r,
+			existing,
+			projectID,
+			false,
+			nil,
+			"",
 			"Legacy local step cannot be edited. Recreate it with a container image instead.",
-			http.StatusUnprocessableEntity,
 		)
 		return
 	}
@@ -580,7 +601,11 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 	script := r.FormValue("script_body")
 	selectedInterpreter, err := interpreter.Validate(r.FormValue("interpreter"))
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+		step := existing
+		step.Name, step.ScriptBody = name, script
+		writeStepFormError(
+			w, r, step, projectID, false, labels, agentLabel, err.Error(),
+		)
 		return
 	}
 	sortOrder, _ := strconv.ParseInt(r.FormValue("sort_order"), 10, 64)
