@@ -84,12 +84,16 @@ try {
   await page.locator('[data-step-action="edit"]').first().click();
   const stepEdit = page.locator('form[hx-put*="/steps/"]').first();
   await stepEdit.waitFor();
+  await page.waitForFunction(() => document.querySelector('#step-edit-dialog')?.matches(':modal') && !document.querySelector('.htmx-settling, .htmx-request'));
   await stepEdit.locator('select[name="execution_target"]').selectOption("agent");
   assert.equal(await stepEdit.locator('input[name="container_image"]').isDisabled(), true);
   assert.equal(await stepEdit.locator('input[name="variable_names"]').isEnabled(), true);
   await stepEdit.locator('input[name="variable_names"]').fill("REMOTE_TOKEN");
-  await stepEdit.getByRole("button", { name: "Update" }).click();
+  const stepRequest = page.waitForRequest(request => request.method() === "PUT" && request.url().endsWith(`/steps/${step.id}`));
+  await page.locator('#step-edit-dialog').getByRole("button", { name: "Save", exact: true }).click();
+  assert.equal(new URLSearchParams((await stepRequest).postData()).get("variable_names"), "REMOTE_TOKEN");
   await stepEdit.waitFor({ state: "detached" });
+  await page.waitForFunction(() => !document.querySelector('#step-edit-dialog').open && !document.querySelector('.htmx-settling, .htmx-request'));
   const agentStep = await api("GET", `/projects/${stepProject.id}/steps/${step.id}`, undefined, 200);
   assert.equal(agentStep.execution_target, "agent");
   assert.deepEqual(agentStep.variable_names, ["REMOTE_TOKEN"]);
@@ -114,7 +118,7 @@ try {
     page.waitForResponse((response) =>
       response.request().method() === "PUT" &&
       response.url().endsWith(`/templates/${agentTemplate.id}`)),
-    page.getByRole("button", { name: "Update" }).click(),
+    page.getByRole("button", { name: "Save", exact: true }).click(),
   ]);
   const updatedTemplate = await api("GET", `/templates/${agentTemplate.id}`, undefined, 200);
   assert.equal(updatedTemplate.execution_target, "agent");

@@ -87,7 +87,15 @@ func TestPageNavigationBrowserE2E(t *testing.T) {
 	}
 	b.clickPageNavigation(t, "/environments", "Environments")
 	b.wait(t, `window.previousLogSource.readyState === 2`)
-	b.clickPageNavigation(t, "/environments/new", "Environment")
+	b.wait(t, `!document.querySelector('.htmx-settling, .htmx-request')`)
+	b.evaluate(
+		t,
+		`document.querySelector('a[href="/environments/new"]').click(); true`,
+	)
+	b.wait(
+		t,
+		`document.querySelector('#project-edit-dialog')?.matches(':modal') && document.querySelector('#project-edit-content input[name="name"]')`,
+	)
 	if string(
 		b.evaluate(
 			t,
@@ -102,9 +110,10 @@ func TestPageNavigationBrowserE2E(t *testing.T) {
 	)
 	b.wait(
 		t,
-		`location.pathname === '/environments' && document.readyState === 'complete' && document.querySelector('main').textContent.includes('navigation-created') && !window.navigationDocument`,
+		`location.pathname === '/environments' && !document.querySelector('#project-edit-dialog').open && document.querySelector('main').textContent.includes('navigation-created') && !!window.navigationDocument`,
 	)
 	// An ordinary full page load reuses the cached CSS and JS.
+	b.navigateBackTest(t, f.baseURL+"/environments")
 	b.wait(
 		t,
 		`performance.getEntriesByType('resource').filter(e => /tailwind.min.css|app.bundle.js/.test(e.name)).length === 2`,

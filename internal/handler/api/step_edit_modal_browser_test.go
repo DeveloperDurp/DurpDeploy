@@ -128,9 +128,10 @@ func TestStepEditModalBrowserE2E(t *testing.T) {
 	f := newArtifactE2E(t)
 	api := fmt.Sprintf("/api/v1/projects/%d/steps", f.project.ID)
 	type stepView struct {
-		ID         int64
-		Name       string
-		ScriptBody string `json:"script_body"`
+		ID            int64
+		Name          string
+		ScriptBody    string   `json:"script_body"`
+		VariableNames []string `json:"variable_names"`
 	}
 	var first, second stepView
 	for i, step := range []*stepView{&first, &second} {
@@ -247,7 +248,15 @@ func TestStepEditModalBrowserE2E(t *testing.T) {
 	b.captureNavigation(t, "step-edit-modal-validation")
 	b.evaluate(
 		t,
-		`document.querySelector('#step-edit-content [name="name"]').value = 'saved-step'; document.querySelector('#step-edit-content [type="submit"]').click(); true`,
+		`const target = document.querySelector('#step-edit-content [name="execution_target"]'); target.value = 'agent'; target.dispatchEvent(new Event('change', {bubbles: true})); true`,
+	)
+	b.wait(
+		t,
+		`document.querySelector('#step-edit-content [name="container_image"]').disabled`,
+	)
+	b.evaluate(
+		t,
+		`document.querySelector('#step-edit-content [name="name"]').value = 'saved-step'; document.querySelector('#step-edit-content [name="variable_names"]').value = 'REMOTE_TOKEN'; document.querySelector('#step-edit-content [type="submit"]').click(); true`,
 	)
 	b.wait(
 		t,
@@ -260,6 +269,13 @@ func TestStepEditModalBrowserE2E(t *testing.T) {
 	)
 	if saved.Name != "saved-step" || saved.ScriptBody != "echo edited" {
 		t.Fatal("Save did not persist the edited step")
+	}
+	if len(saved.VariableNames) != 1 ||
+		saved.VariableNames[0] != "REMOTE_TOKEN" {
+		t.Fatalf(
+			"Save did not persist variable restrictions: %v",
+			saved.VariableNames,
+		)
 	}
 	decodeStepLogTest(
 		t,

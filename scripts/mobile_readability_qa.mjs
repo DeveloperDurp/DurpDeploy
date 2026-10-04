@@ -152,8 +152,8 @@ const allTargets = [
     controls: `#step-row-${config.stepID} [data-step-action]`,
     mobileControls: `[data-mobile-step="${config.stepID}"] [data-step-action]`,
     actionAttribute: "data-step-action",
-    writerActions: ["move-down", "edit", "delete", "save-template"],
-    writerControlCount: 4,
+    writerActions: ["move-down", "edit", "save-template"],
+    writerControlCount: 3,
     desktopTable: "#step-list > table",
     mobileRecord: "[data-mobile-step-list]",
   },
@@ -228,6 +228,7 @@ const allTargets = [
     surface: "#projects-list",
     row: "#projects-list [data-resource-card]",
     controls: "#projects-list [data-resource-card] a",
+    writerControls: "#projects-list a[href$='/new'], #projects-list a[href$='/edit']",
     readOnly: true,
   },
   {

@@ -92,6 +92,7 @@ func TestDeploymentListMobileBrowserE2E(t *testing.T) {
 
 func assertDeploymentListMobile(t *testing.T, b *packageBrowser) {
 	t.Helper()
+	b.wait(t, `!document.querySelector('.htmx-settling, .htmx-request')`)
 	if string(b.evaluate(t, `(() => {
  const row = document.querySelector('#deployments-tbody tr');
  const cards = [...document.querySelectorAll('#deployments-tbody [data-resource-card]')];
