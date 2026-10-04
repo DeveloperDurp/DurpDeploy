@@ -319,6 +319,7 @@ func (r *DeploymentRunner) Run(
 					err,
 				)))
 				logWriter.Flush()
+				logWriter.finishState(err, runCtx.Err() != nil)
 				r.failStep(ctx, runCtx, events.Event{
 					Type: events.DeploymentFailed, DeploymentID: deploymentID,
 					ProjectID: release.ProjectID, EnvironmentID: environmentID,

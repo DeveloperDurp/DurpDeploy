@@ -61,7 +61,7 @@ func (n artifactNotifier) Notify(
 	return true, nil
 }
 
-func newArtifactE2E(t *testing.T) *artifactE2E {
+func newArtifactE2E(t *testing.T, binary ...string) *artifactE2E {
 	t.Helper()
 	if os.Getenv("DURPDEPLOY_CONTAINER_RUNTIME") == "" {
 		kind := "docker"
@@ -71,7 +71,7 @@ func newArtifactE2E(t *testing.T) *artifactE2E {
 		t.Setenv("DURPDEPLOY_CONTAINER_RUNTIME", kind)
 	}
 	t.Setenv("DURPDEPLOY_CONTAINER_NAMESPACE", "artifact-e2e-"+uuid.NewString())
-	h := newAPIHarness(t)
+	h := newAPIHarness(t, binary...)
 	if !h.runner.ContainerRuntimeReady() {
 		t.Fatal("a working container endpoint is required for artifact E2E")
 	}

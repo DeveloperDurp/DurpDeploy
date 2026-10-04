@@ -18,6 +18,7 @@ htmx.onLoad((root) => {
 			link.closest('[hx-boost], [data-hx-boost], [x-data="backNavigation"]') ||
 			link.matches('[hx-get], [hx-post], [hx-put], [hx-patch], [hx-delete]') ||
 			/^\/(login|logout|auth|api|static|swagger|healthz|\.well-known)(\/|$)/.test(link.pathname) ||
+			link.pathname === '/settings/security/reauth/oidc' ||
 			link.pathname.endsWith('/logs.txt')) continue;
 		link.setAttribute('hx-boost', 'true');
 		link.setAttribute('hx-target', '#page-content');
