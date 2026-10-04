@@ -347,6 +347,8 @@ events are trusted lifecycle records, not parsed script output. Resume with
 drains its logs, sends `event: complete` with JSON `status`, then closes;
 clients should close their EventSource on that event. Default SSE/NDJSON and
 plain-text export retain their formats.
+Errors before a structured stream starts use the usual JSON `error` envelope,
+including invalid cursors, missing deployments, and startup failures.
 
 Execution actions are `POST .../$XID/cancel`, `/approve` (admin only),
 and `/retry` (after a terminal status). Retry returns `409` while the source

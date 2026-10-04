@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"time"
 
+	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/runner"
@@ -43,7 +44,12 @@ func StreamStepLogs(
 ) {
 	after, err := LogCursor(r)
 	if err != nil {
-		http.Error(w, "Invalid log cursor", http.StatusBadRequest)
+		auth.RenderRequestError(
+			w,
+			r,
+			http.StatusBadRequest,
+			"Invalid log cursor",
+		)
 		return
 	}
 	streamStepLogs(w, r, repo, broker, deploymentID, after)
@@ -74,7 +80,7 @@ func streamStepLogs(
 		if errors.Is(err, sql.ErrNoRows) {
 			status = http.StatusNotFound
 		}
-		http.Error(w, http.StatusText(status), status)
+		auth.RenderRequestError(w, r, status, http.StatusText(status))
 		return
 	}
 	w.Header().Set("Content-Type", "text/event-stream")
@@ -82,7 +88,12 @@ func streamStepLogs(
 	w.Header().Set("X-Accel-Buffering", "no")
 	stream, err := New(w)
 	if err != nil {
-		http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
+		auth.RenderRequestError(
+			w,
+			r,
+			http.StatusInternalServerError,
+			"Streaming unsupported",
+		)
 		return
 	}
 	if _, err := fmt.Fprint(stream, ": connected\n\n"); err != nil {

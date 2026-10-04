@@ -69,7 +69,24 @@ func TestDeploymentStepLogsAPIWebE2E(t *testing.T) {
 	if len(resumed) != len(logs)-2 || resumed[0].ID != logs[2].ID {
 		t.Fatal("resumed stream duplicated or omitted events")
 	}
-	f.api(t, "GET", path+"&after=-1", nil, 400)
+	for _, failure := range []struct {
+		path   string
+		status int
+	}{
+		{path + "&after=-1", 400},
+		{"/api/v1/deployments/9223372036854775807/logs/stream?format=structured", 404},
+	} {
+		var envelope map[string]string
+		decodeStepLogTest(t, f.api(t, "GET", failure.path,
+			nil, failure.status), &envelope)
+		if envelope["error"] == "" {
+			t.Fatal("stream failure omitted its JSON error envelope")
+		}
+	}
+	if missing := f.web(t, "GET", "/deployments/9223372036854775807",
+		nil, 404); missing != "404 page not found\n" {
+		t.Fatalf("web missing-deployment response changed: %q", missing)
+	}
 	page := f.web(
 		t,
 		"GET",
