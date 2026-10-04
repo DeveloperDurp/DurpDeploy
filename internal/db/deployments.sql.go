@@ -37,7 +37,7 @@ func (q *Queries) CancelOrphanedRemoteStepRuns(ctx context.Context, now int64) (
 
 const confirmContainerCleanup = `-- name: ConfirmContainerCleanup :execrows
 UPDATE deployments SET status = 'failed', finished_at = COALESCE(finished_at, ?1)
-WHERE status IN ('running', 'cleanup_unconfirmed')
+WHERE status IN ('running', 'publishing_artifact', 'cleanup_unconfirmed')
   AND container_namespace = ?2
 `
 
@@ -185,7 +185,7 @@ func (q *Queries) FailDeploymentsWithTerminalRemoteStepRuns(ctx context.Context,
 
 const failOrphanedDeployments = `-- name: FailOrphanedDeployments :execrows
 UPDATE deployments SET status = 'failed', finished_at = ?1
-WHERE status = 'running' AND assigned_agent_id IS NULL
+WHERE status IN ('running', 'publishing_artifact') AND assigned_agent_id IS NULL
   AND NOT EXISTS (
       SELECT 1 FROM remote_step_runs r
       WHERE r.deployment_id = deployments.id
@@ -794,7 +794,7 @@ FROM deployments d
 JOIN releases r ON d.release_id = r.id
 JOIN projects p ON r.project_id = p.id
 JOIN environments e ON d.environment_id = e.id
-WHERE d.kind = 'deployment' AND d.status IN ('pending','running')
+WHERE d.kind = 'deployment' AND d.status IN ('pending', 'running', 'publishing_artifact', 'awaiting_artifact_approval')
 ORDER BY d.created_at DESC
 `
 
@@ -854,7 +854,7 @@ func (q *Queries) ListRunningDeploymentsWithRefs(ctx context.Context) ([]ListRun
 const markUnreconciledLocalDeployments = `-- name: MarkUnreconciledLocalDeployments :execrows
 UPDATE deployments SET status = 'cleanup_unconfirmed',
     finished_at = COALESCE(finished_at, ?1)
-WHERE status = 'running' AND assigned_agent_id IS NULL
+WHERE status IN ('running', 'publishing_artifact') AND assigned_agent_id IS NULL
   AND container_namespace IS NOT NULL
   AND (EXISTS (SELECT 1 FROM deployment_steps s
       WHERE s.deployment_id = deployments.id AND s.execution_target = 'local')

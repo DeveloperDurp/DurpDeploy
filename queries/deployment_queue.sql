@@ -12,7 +12,7 @@ INSERT INTO environment_deployment_slots (environment_id, deployment_id) VALUES 
 DELETE FROM environment_deployment_slots WHERE environment_id = ?;
 
 -- name: ListDeploymentQueueEnvironments :many
-SELECT environment_id FROM deployments WHERE status IN ('queued', 'pending', 'running', 'cleanup_unconfirmed')
+SELECT environment_id FROM deployments WHERE status IN ('queued', 'pending', 'running', 'publishing_artifact', 'awaiting_artifact_approval', 'cleanup_unconfirmed')
 UNION SELECT environment_id FROM environment_deployment_slots
 ORDER BY environment_id;
 
@@ -23,7 +23,7 @@ WHERE deployment_id = ? AND state = 'waiting';
 -- name: ListEnvironmentQueueBlockers :many
 SELECT d.id FROM deployments d
 WHERE d.environment_id = ? AND (
-    d.status IN ('pending', 'running', 'cleanup_unconfirmed')
+    d.status IN ('pending', 'running', 'publishing_artifact', 'awaiting_artifact_approval', 'cleanup_unconfirmed')
     OR EXISTS (SELECT 1 FROM remote_deployment_claims c WHERE c.deployment_id = d.id
         AND c.state IN ('claimed', 'started', 'cancel_requested', 'lost', 'cancel_unconfirmed'))
     OR EXISTS (SELECT 1 FROM remote_step_runs s WHERE s.deployment_id = d.id
@@ -39,7 +39,7 @@ ORDER BY created_at, id LIMIT 1;
 UPDATE deployments SET status = 'pending' WHERE id = ? AND status = 'queued';
 
 -- name: StartQueuedLocalDeployment :execrows
-UPDATE deployments SET status = 'running', started_at = unixepoch()
+UPDATE deployments SET status = 'running', started_at = COALESCE(started_at, unixepoch())
 WHERE id = ? AND status = 'pending' AND assigned_agent_id IS NULL
 AND EXISTS (SELECT 1 FROM environment_deployment_slots s
     WHERE s.deployment_id = deployments.id AND s.environment_id = deployments.environment_id);

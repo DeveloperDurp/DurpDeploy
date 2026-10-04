@@ -88,42 +88,16 @@ templ DeploymentsFilterBar(view DeploymentsView) {
 			<span class="label-text">Status</span>
 			<select name="status" class="select select-bordered select-sm">
 				<option value="">All</option>
-				<option
-					value="pending"
-					if view.FilterStatus.String == "pending" {
-						selected
-					}
-				>pending</option>
-				<option
-					value="queued"
-					if view.FilterStatus.String == "queued" {
-						selected
-					}
-				>queued</option>
-				<option
-					value="running"
-					if view.FilterStatus.String == "running" {
-						selected
-					}
-				>running</option>
-				<option
-					value="succeeded"
-					if view.FilterStatus.String == "succeeded" {
-						selected
-					}
-				>succeeded</option>
-				<option
-					value="failed"
-					if view.FilterStatus.String == "failed" {
-						selected
-					}
-				>failed</option>
-				<option
-					value="cancelled"
-					if view.FilterStatus.String == "cancelled" {
-						selected
-					}
-				>cancelled</option>
+				<option value="queued" selected?={ view.FilterStatus.String == "queued" }>queued</option>
+				<option value="pending" if view.FilterStatus.String == "pending" { selected }>pending</option>
+				<option value="running" if view.FilterStatus.String == "running" { selected }>running</option>
+				<option value="succeeded" if view.FilterStatus.String == "succeeded" { selected }>succeeded</option>
+				<option value="failed" if view.FilterStatus.String == "failed" { selected }>failed</option>
+				<option value="cancelled" if view.FilterStatus.String == "cancelled" { selected }>cancelled</option>
+				<option value="publishing_artifact" selected?={ view.FilterStatus.String == "publishing_artifact" }>publishing_artifact</option>
+				<option value="awaiting_artifact_approval" selected?={ view.FilterStatus.String == "awaiting_artifact_approval" }>awaiting_artifact_approval</option>
+				<option value="rejected" selected?={ view.FilterStatus.String == "rejected" }>rejected</option>
+				<option value="expired" selected?={ view.FilterStatus.String == "expired" }>expired</option>
 			</select>
 		</label>
 		<label class="form-control">
@@ -270,7 +244,11 @@ func statusBadgeClass(status string) string {
 	switch status {
 	case "pending", "queued":
 		return "badge-primary"
-	case "pending_approval":
+	case "awaiting_artifact_approval", "publishing_artifact":
+return "badge-warning"
+case "rejected", "expired":
+return "badge-error"
+case "pending_approval":
 		return "badge-info"
 	case "running":
 		return "badge-warning"
@@ -287,7 +265,7 @@ func statusBadgeClass(status string) string {
 
 func isTerminalStatus(status string) bool {
 	switch status {
-	case "succeeded", "failed", "cancelled":
+	case "succeeded", "failed", "cancelled", "rejected", "expired":
 		return true
 	default:
 		return false
@@ -295,7 +273,7 @@ func isTerminalStatus(status string) bool {
 }
 
 templ StatusBadge(deployment db.Deployment) {
-	<span class={ fmt.Sprintf("badge %s", statusBadgeClass(deployment.Status)) }>
+	<span class={ fmt.Sprintf("badge max-w-full h-auto whitespace-normal break-all %s", statusBadgeClass(deployment.Status)) }>
 		{ deployment.Status }
 	</span>
 }
@@ -313,6 +291,9 @@ templ StatusBadgeContainer(deployment db.Deployment, waitingForAgents bool) {
 		hx-swap="outerHTML"
 		aria-live="polite"
 	>
+		if isTerminalStatus(deployment.Status) {
+			<span id="deployment-cancel" hx-swap-oob="delete"></span>
+		}
 		if waitingForAgents {
 			<span class="badge badge-warning">Waiting for agents</span>
 		} else {
@@ -333,7 +314,9 @@ templ DeploymentActions(deployment db.Deployment, outOfBand bool) {
 		<a href={ fmt.Sprintf("/deployments/%d/logs.txt", deployment.ID) } class="btn btn-sm btn-ghost">Export</a>
 		if CanWrite(ctx) {
 			if isTerminalStatus(deployment.Status) {
+				if deployment.Status == "succeeded" || deployment.Status == "failed" || deployment.Status == "cancelled" {
 				<a href={ fmt.Sprintf("/deployments/%d/rollback", deployment.ID) } class="btn btn-sm btn-secondary">Rollback</a>
+				}
 				<button
 					class="btn btn-sm btn-primary"
 					hx-post={ fmt.Sprintf("/deployments/%d/redeploy", deployment.ID) }
@@ -357,8 +340,9 @@ templ DeploymentActions(deployment db.Deployment, outOfBand bool) {
 					Approve
 				</button>
 			}
-			if deployment.Status == "running" || deployment.Status == "pending_approval" || deployment.Status == "queued" || deployment.Status == "pending" {
+			if deployment.Status == "running" || deployment.Status == "publishing_artifact" || deployment.Status == "awaiting_artifact_approval" || deployment.Status == "pending_approval" || deployment.Status == "queued" || deployment.Status == "pending" {
 				<button
+					id="deployment-cancel"
 					class="btn btn-sm btn-error"
 					hx-post={ fmt.Sprintf("/deployments/%d/cancel", deployment.ID) }
 					hx-target="#status-badge"
@@ -398,7 +382,7 @@ templ DeploymentDetail(project db.Project, release db.Release, environment db.En
 					Project: { project.Name } | Release: { release.Version } | Environment: { environment.Name }
 				</p>
 				if deployment.Note.Valid {
-					<blockquote class="border-l-4 border-accent pl-3 mt-2 text-sm text-gray-300 italic">
+					<blockquote class="bg-base-200 rounded p-3 mt-2 text-sm text-gray-300 italic">
 						{ deployment.Note.String }
 					</blockquote>
 				}
@@ -411,7 +395,8 @@ templ DeploymentDetail(project db.Project, release db.Release, environment db.En
 		</div>
 		<div hx-get={ fmt.Sprintf("/deployments/%d/verification", deployment.ID) } hx-trigger="load" hx-swap="outerHTML" aria-live="polite"></div>
 		<div class="card bg-base-200 p-4">
-			<h2 class="text-xl font-bold mb-4">Steps</h2>
+			<div hx-get={ fmt.Sprintf("/deployments/%d/artifact-gates", deployment.ID) } hx-trigger="load" hx-swap="outerHTML" data-artifact-gates aria-live="polite"></div>
+<h2 class="text-xl font-bold mb-4">Steps</h2>
 			<table class="table table-zebra table-fixed w-full">
 				<thead>
 					<tr>
@@ -434,7 +419,9 @@ templ DeploymentDetail(project db.Project, release db.Release, environment db.En
 								<td class="whitespace-nowrap">{ releaseStepInterpreter(step) }</td>
 								<td class="truncate hidden sm:table-cell">
 									<code class="text-sm bg-base-300 px-2 py-1 rounded">
-										if len(step.ScriptBody) > 60 {
+										if hasArtifactGate(release.StepsJson) {
+											Sensitive script hidden
+										} else if len(step.ScriptBody) > 60 {
 											{ step.ScriptBody[:60] + "..." }
 										} else {
 											{ step.ScriptBody }

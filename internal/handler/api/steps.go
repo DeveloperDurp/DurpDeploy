@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 
+	"durpdeploy/internal/artifact"
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/interpreter"
@@ -20,16 +21,20 @@ func NewStepHandler(repo *repository.Repository) *StepHandler {
 }
 
 type stepRequest struct {
-	Name            string   `json:"name"`
-	ScriptBody      string   `json:"script_body"`
-	Interpreter     string   `json:"interpreter"`
-	SortOrder       int64    `json:"sort_order"`
-	TimeoutSeconds  int64    `json:"timeout_seconds"`
-	MaxRetries      int64    `json:"max_retries"`
-	ExecutionTarget string   `json:"execution_target"`
-	AgentSelectors  []string `json:"agent_selectors"`
-	ContainerImage  string   `json:"container_image"`
-	VariableNames   []string `json:"variable_names"`
+	Name                 string   `json:"name"`
+	ScriptBody           string   `json:"script_body"`
+	Interpreter          string   `json:"interpreter"`
+	SortOrder            int64    `json:"sort_order"`
+	TimeoutSeconds       int64    `json:"timeout_seconds"`
+	MaxRetries           int64    `json:"max_retries"`
+	ExecutionTarget      string   `json:"execution_target"`
+	AgentSelectors       []string `json:"agent_selectors"`
+	ContainerImage       string   `json:"container_image"`
+	NetworkMode          string   `json:"network_mode"`
+	ApprovalArtifactPath string   `json:"approval_artifact_path"`
+	ApprovalReviewPath   string   `json:"approval_review_path"`
+	ApprovalReviewFormat string   `json:"approval_review_format"`
+	VariableNames        []string `json:"variable_names"`
 }
 
 type reorderStepsRequest struct {
@@ -169,6 +174,16 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if err := artifact.ValidateGateConfig(
+		target,
+		req.NetworkMode,
+		req.ApprovalArtifactPath,
+		req.ApprovalReviewPath,
+		req.ApprovalReviewFormat,
+	); err != nil {
+		RespondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	image, variableNames, ok := validateContainerConfig(
 		w,
 		target,
@@ -192,15 +207,19 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 	step, err := h.repo.CreateStepWithPlacement(
 		r.Context(),
 		db.CreateStepParams{
-			ProjectID:      projectID,
-			Name:           name,
-			ScriptBody:     req.ScriptBody,
-			SortOrder:      sortOrder,
-			TimeoutSeconds: req.TimeoutSeconds,
-			MaxRetries:     req.MaxRetries,
-			Interpreter:    selectedInterpreter,
-			ContainerImage: image,
-			VariableNames:  marshalVariableNames(variableNames),
+			ProjectID:            projectID,
+			Name:                 name,
+			ScriptBody:           req.ScriptBody,
+			SortOrder:            sortOrder,
+			TimeoutSeconds:       req.TimeoutSeconds,
+			MaxRetries:           req.MaxRetries,
+			Interpreter:          selectedInterpreter,
+			ContainerImage:       image,
+			NetworkMode:          req.NetworkMode,
+			ApprovalArtifactPath: req.ApprovalArtifactPath,
+			ApprovalReviewPath:   req.ApprovalReviewPath,
+			ApprovalReviewFormat: req.ApprovalReviewFormat,
+			VariableNames:        marshalVariableNames(variableNames),
 		},
 		target,
 		selectors,
@@ -366,6 +385,16 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if err := artifact.ValidateGateConfig(
+		target,
+		req.NetworkMode,
+		req.ApprovalArtifactPath,
+		req.ApprovalReviewPath,
+		req.ApprovalReviewFormat,
+	); err != nil {
+		RespondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	image, variableNames, ok := validateContainerConfig(
 		w,
 		target,
@@ -379,15 +408,19 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 	step, err := h.repo.UpdateStepWithPlacement(
 		r.Context(),
 		db.UpdateStepParams{
-			ID:             stepID,
-			Name:           name,
-			ScriptBody:     req.ScriptBody,
-			SortOrder:      req.SortOrder,
-			TimeoutSeconds: req.TimeoutSeconds,
-			MaxRetries:     req.MaxRetries,
-			Interpreter:    selectedInterpreter,
-			ContainerImage: image,
-			VariableNames:  marshalVariableNames(variableNames),
+			ID:                   stepID,
+			Name:                 name,
+			ScriptBody:           req.ScriptBody,
+			SortOrder:            req.SortOrder,
+			TimeoutSeconds:       req.TimeoutSeconds,
+			MaxRetries:           req.MaxRetries,
+			Interpreter:          selectedInterpreter,
+			ContainerImage:       image,
+			NetworkMode:          req.NetworkMode,
+			ApprovalArtifactPath: req.ApprovalArtifactPath,
+			ApprovalReviewPath:   req.ApprovalReviewPath,
+			ApprovalReviewFormat: req.ApprovalReviewFormat,
+			VariableNames:        marshalVariableNames(variableNames),
 		},
 		target,
 		selectors,
@@ -542,15 +575,19 @@ func (h *StepHandler) ReorderSteps(w http.ResponseWriter, r *http.Request) {
 	for i, sid := range req.StepIDs {
 		s := existing[sid]
 		if _, err := qtx.UpdateStep(r.Context(), db.UpdateStepParams{
-			ID:             s.ID,
-			Name:           s.Name,
-			ScriptBody:     s.ScriptBody,
-			SortOrder:      int64(i + 1),
-			TimeoutSeconds: s.TimeoutSeconds,
-			MaxRetries:     s.MaxRetries,
-			Interpreter:    s.Interpreter,
-			ContainerImage: s.ContainerImage,
-			VariableNames:  s.VariableNames,
+			ID:                   s.ID,
+			Name:                 s.Name,
+			ScriptBody:           s.ScriptBody,
+			SortOrder:            int64(i + 1),
+			TimeoutSeconds:       s.TimeoutSeconds,
+			MaxRetries:           s.MaxRetries,
+			Interpreter:          s.Interpreter,
+			ContainerImage:       s.ContainerImage,
+			NetworkMode:          s.NetworkMode,
+			ApprovalArtifactPath: s.ApprovalArtifactPath,
+			ApprovalReviewPath:   s.ApprovalReviewPath,
+			ApprovalReviewFormat: s.ApprovalReviewFormat,
+			VariableNames:        s.VariableNames,
 		}); err != nil {
 			RespondError(w, http.StatusInternalServerError, err.Error())
 			return

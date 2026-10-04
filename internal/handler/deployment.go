@@ -686,6 +686,15 @@ func (h *DeploymentHandler) CancelDeployment(
 			)
 			return
 		}
+	} else if deployment.Status == "awaiting_artifact_approval" {
+		if err := h.repo.RejectArtifact(
+			r.Context(),
+			id,
+			"cancelled",
+		); err != nil {
+			http.Error(w, "Artifact cancellation failed", http.StatusConflict)
+			return
+		}
 	} else if deployment.AssignedAgentID.Valid {
 		err := h.repo.CancelAssignedRemoteDeployment(
 			r.Context(),
@@ -708,6 +717,7 @@ func (h *DeploymentHandler) CancelDeployment(
 		}
 	} else {
 		if deployment.Status != "running" &&
+			deployment.Status != "publishing_artifact" &&
 			deployment.Status != "pending_approval" {
 			http.Error(
 				w,
@@ -841,7 +851,8 @@ func (h *DeploymentHandler) RedeployDeployment(
 	}
 
 	if source.Status != "succeeded" && source.Status != "failed" &&
-		source.Status != "cancelled" {
+		source.Status != "cancelled" && source.Status != "rejected" &&
+		source.Status != "expired" {
 		if source.Status == "cleanup_unconfirmed" {
 			http.Error(
 				w,
@@ -1114,13 +1125,17 @@ func (h *DeploymentHandler) ListDeployments(
 // ponytail: matches the StatusBadge switch; adding a new status here means
 // adding it to the switch in views/pages/deployments.templ too.
 var allowedStatuses = map[string]struct{}{
-	"pending":          {},
-	"queued":           {},
-	"running":          {},
-	"succeeded":        {},
-	"failed":           {},
-	"cancelled":        {},
-	"pending_approval": {},
+	"queued":                     {},
+	"pending":                    {},
+	"running":                    {},
+	"succeeded":                  {},
+	"failed":                     {},
+	"cancelled":                  {},
+	"pending_approval":           {},
+	"publishing_artifact":        {},
+	"awaiting_artifact_approval": {},
+	"rejected":                   {},
+	"expired":                    {},
 }
 
 const (

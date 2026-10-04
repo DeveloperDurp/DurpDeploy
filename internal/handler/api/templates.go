@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 
+	"durpdeploy/internal/artifact"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/handler"
 	"durpdeploy/internal/interpreter"
@@ -20,13 +21,17 @@ func NewStepTemplateHandler(repo *repository.Repository) *StepTemplateHandler {
 }
 
 type stepTemplateRequest struct {
-	Name            string   `json:"name"`
-	ScriptBody      string   `json:"script_body"`
-	Interpreter     string   `json:"interpreter"`
-	ExecutionTarget string   `json:"execution_target"`
-	AgentSelectors  []string `json:"agent_selectors"`
-	ContainerImage  string   `json:"container_image"`
-	VariableNames   []string `json:"variable_names"`
+	Name                 string   `json:"name"`
+	ScriptBody           string   `json:"script_body"`
+	Interpreter          string   `json:"interpreter"`
+	ExecutionTarget      string   `json:"execution_target"`
+	AgentSelectors       []string `json:"agent_selectors"`
+	ContainerImage       string   `json:"container_image"`
+	NetworkMode          string   `json:"network_mode"`
+	ApprovalArtifactPath string   `json:"approval_artifact_path"`
+	ApprovalReviewPath   string   `json:"approval_review_path"`
+	ApprovalReviewFormat string   `json:"approval_review_format"`
+	VariableNames        []string `json:"variable_names"`
 }
 
 // swagger:route GET /templates templates listTemplates
@@ -174,6 +179,16 @@ func (h *StepTemplateHandler) CreateTemplate(
 	if !ok {
 		return
 	}
+	if err := artifact.ValidateGateConfig(
+		target,
+		req.NetworkMode,
+		req.ApprovalArtifactPath,
+		req.ApprovalReviewPath,
+		req.ApprovalReviewFormat,
+	); err != nil {
+		RespondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	image, variableNames, ok := validateContainerConfig(
 		w,
 		target,
@@ -187,11 +202,15 @@ func (h *StepTemplateHandler) CreateTemplate(
 	tpl, err := h.repo.CreateStepTemplateWithPlacement(
 		r.Context(),
 		db.CreateStepTemplateParams{
-			Name:           name,
-			ScriptBody:     req.ScriptBody,
-			Interpreter:    selectedInterpreter,
-			ContainerImage: image,
-			VariableNames:  marshalVariableNames(variableNames),
+			Name:                 name,
+			ScriptBody:           req.ScriptBody,
+			Interpreter:          selectedInterpreter,
+			ContainerImage:       image,
+			NetworkMode:          req.NetworkMode,
+			ApprovalArtifactPath: req.ApprovalArtifactPath,
+			ApprovalReviewPath:   req.ApprovalReviewPath,
+			ApprovalReviewFormat: req.ApprovalReviewFormat,
+			VariableNames:        marshalVariableNames(variableNames),
 		},
 		target,
 		selectors,
@@ -324,6 +343,16 @@ func (h *StepTemplateHandler) UpdateTemplate(
 	if !ok {
 		return
 	}
+	if err := artifact.ValidateGateConfig(
+		target,
+		req.NetworkMode,
+		req.ApprovalArtifactPath,
+		req.ApprovalReviewPath,
+		req.ApprovalReviewFormat,
+	); err != nil {
+		RespondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	image, variableNames, ok := validateContainerConfig(
 		w,
 		target,
@@ -337,12 +366,16 @@ func (h *StepTemplateHandler) UpdateTemplate(
 	updated, err := h.repo.UpdateStepTemplateWithPlacement(
 		r.Context(),
 		db.UpdateStepTemplateParams{
-			ID:             id,
-			Name:           name,
-			ScriptBody:     req.ScriptBody,
-			Interpreter:    selectedInterpreter,
-			ContainerImage: image,
-			VariableNames:  marshalVariableNames(variableNames),
+			ID:                   id,
+			Name:                 name,
+			ScriptBody:           req.ScriptBody,
+			Interpreter:          selectedInterpreter,
+			ContainerImage:       image,
+			NetworkMode:          req.NetworkMode,
+			ApprovalArtifactPath: req.ApprovalArtifactPath,
+			ApprovalReviewPath:   req.ApprovalReviewPath,
+			ApprovalReviewFormat: req.ApprovalReviewFormat,
+			VariableNames:        marshalVariableNames(variableNames),
 		},
 		target,
 		selectors,

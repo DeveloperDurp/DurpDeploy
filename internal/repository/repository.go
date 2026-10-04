@@ -185,7 +185,8 @@ func (r *Repository) CreateVariable(
 	if arg.Name == artifact.PathVariable {
 		return db.Variable{}, ErrArtifactPathReserved
 	}
-	if arg.Name == containerenv.StageVariable {
+	if arg.Name == containerenv.StageVariable ||
+		arg.Name == containerenv.ApprovedVariable {
 		return db.Variable{}, containerenv.ErrReserved
 	}
 	enc, err := r.encryptValue(arg.Value)
@@ -209,7 +210,8 @@ func (r *Repository) UpdateVariable(
 	if arg.Name == artifact.PathVariable {
 		return db.Variable{}, ErrArtifactPathReserved
 	}
-	if arg.Name == containerenv.StageVariable {
+	if arg.Name == containerenv.StageVariable ||
+		arg.Name == containerenv.ApprovedVariable {
 		return db.Variable{}, containerenv.ErrReserved
 	}
 	enc, err := r.encryptValue(arg.Value)
@@ -236,7 +238,8 @@ func (r *Repository) UpdateVariableKeepValue(
 	if arg.Name == artifact.PathVariable {
 		return db.Variable{}, ErrArtifactPathReserved
 	}
-	if arg.Name == containerenv.StageVariable {
+	if arg.Name == containerenv.StageVariable ||
+		arg.Name == containerenv.ApprovedVariable {
 		return db.Variable{}, containerenv.ErrReserved
 	}
 	var v db.Variable

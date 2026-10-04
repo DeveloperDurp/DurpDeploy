@@ -33,28 +33,32 @@ func (q *Queries) AddDeploymentStepSelector(ctx context.Context, arg AddDeployme
 }
 
 const createDeploymentStep = `-- name: CreateDeploymentStep :execrows
-INSERT INTO deployment_steps (deployment_id, step_index, source_step_id, name, script_body, timeout_seconds, max_retries, execution_target, interpreter, container_image, variable_names)
+INSERT INTO deployment_steps (deployment_id, step_index, source_step_id, name, script_body, timeout_seconds, max_retries, execution_target, interpreter, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format)
 SELECT ?1, ?2, ?3, ?4,
     ?5, ?6, ?7, ?8,
     COALESCE(NULLIF(CAST(?9 AS TEXT), ''), 'bash'),
-    ?10, ?11
+    ?10, ?11, ?12, ?13, ?14, ?15
 WHERE EXISTS (SELECT 1 FROM deployments WHERE id = ?1 AND status IN ('queued', 'pending', 'pending_approval'))
   AND NOT EXISTS (SELECT 1 FROM deployment_step_sources WHERE deployment_id = ?1)
   AND NOT EXISTS (SELECT 1 FROM deployment_step_attempts WHERE deployment_id = ?1)
 `
 
 type CreateDeploymentStepParams struct {
-	DeploymentID    int64         `json:"deployment_id"`
-	StepIndex       int64         `json:"step_index"`
-	SourceStepID    sql.NullInt64 `json:"source_step_id"`
-	Name            string        `json:"name"`
-	ScriptBody      string        `json:"script_body"`
-	TimeoutSeconds  int64         `json:"timeout_seconds"`
-	MaxRetries      int64         `json:"max_retries"`
-	ExecutionTarget string        `json:"execution_target"`
-	Interpreter     string        `json:"interpreter"`
-	ContainerImage  string        `json:"container_image"`
-	VariableNames   string        `json:"variable_names"`
+	DeploymentID         int64         `json:"deployment_id"`
+	StepIndex            int64         `json:"step_index"`
+	SourceStepID         sql.NullInt64 `json:"source_step_id"`
+	Name                 string        `json:"name"`
+	ScriptBody           string        `json:"script_body"`
+	TimeoutSeconds       int64         `json:"timeout_seconds"`
+	MaxRetries           int64         `json:"max_retries"`
+	ExecutionTarget      string        `json:"execution_target"`
+	Interpreter          string        `json:"interpreter"`
+	ContainerImage       string        `json:"container_image"`
+	VariableNames        string        `json:"variable_names"`
+	NetworkMode          string        `json:"network_mode"`
+	ApprovalArtifactPath string        `json:"approval_artifact_path"`
+	ApprovalReviewPath   string        `json:"approval_review_path"`
+	ApprovalReviewFormat string        `json:"approval_review_format"`
 }
 
 func (q *Queries) CreateDeploymentStep(ctx context.Context, arg CreateDeploymentStepParams) (int64, error) {
@@ -70,6 +74,10 @@ func (q *Queries) CreateDeploymentStep(ctx context.Context, arg CreateDeployment
 		arg.Interpreter,
 		arg.ContainerImage,
 		arg.VariableNames,
+		arg.NetworkMode,
+		arg.ApprovalArtifactPath,
+		arg.ApprovalReviewPath,
+		arg.ApprovalReviewFormat,
 	)
 	if err != nil {
 		return 0, err
@@ -232,7 +240,7 @@ func (q *Queries) GetDeploymentStepAttempt(ctx context.Context, arg GetDeploymen
 }
 
 const getDeploymentStepCursor = `-- name: GetDeploymentStepCursor :one
-SELECT s.deployment_id, s.step_index, s.source_step_id, s.name, s.script_body, s.timeout_seconds, s.max_retries, s.execution_target, s.created_at, s.interpreter, s.container_image, s.variable_names FROM deployment_steps s
+SELECT s.deployment_id, s.step_index, s.source_step_id, s.name, s.script_body, s.timeout_seconds, s.max_retries, s.execution_target, s.created_at, s.interpreter, s.container_image, s.variable_names, s.network_mode, s.approval_artifact_path, s.approval_review_path, s.approval_review_format FROM deployment_steps s
 WHERE s.deployment_id = ?1
   AND NOT EXISTS (SELECT 1 FROM deployment_step_attempts a WHERE a.deployment_id = s.deployment_id
       AND a.step_index = s.step_index AND a.state = 'succeeded')
@@ -256,6 +264,10 @@ func (q *Queries) GetDeploymentStepCursor(ctx context.Context, deploymentID int6
 		&i.Interpreter,
 		&i.ContainerImage,
 		&i.VariableNames,
+		&i.NetworkMode,
+		&i.ApprovalArtifactPath,
+		&i.ApprovalReviewPath,
+		&i.ApprovalReviewFormat,
 	)
 	return i, err
 }
@@ -352,7 +364,7 @@ func (q *Queries) ListDeploymentStepSelectors(ctx context.Context, arg ListDeplo
 }
 
 const listDeploymentSteps = `-- name: ListDeploymentSteps :many
-SELECT deployment_id, step_index, source_step_id, name, script_body, timeout_seconds, max_retries, execution_target, created_at, interpreter, container_image, variable_names FROM deployment_steps WHERE deployment_id = ? ORDER BY step_index
+SELECT deployment_id, step_index, source_step_id, name, script_body, timeout_seconds, max_retries, execution_target, created_at, interpreter, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format FROM deployment_steps WHERE deployment_id = ? ORDER BY step_index
 `
 
 func (q *Queries) ListDeploymentSteps(ctx context.Context, deploymentID int64) ([]DeploymentStep, error) {
@@ -377,6 +389,10 @@ func (q *Queries) ListDeploymentSteps(ctx context.Context, deploymentID int64) (
 			&i.Interpreter,
 			&i.ContainerImage,
 			&i.VariableNames,
+			&i.NetworkMode,
+			&i.ApprovalArtifactPath,
+			&i.ApprovalReviewPath,
+			&i.ApprovalReviewFormat,
 		); err != nil {
 			return nil, err
 		}

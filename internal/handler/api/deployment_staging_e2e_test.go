@@ -3,6 +3,7 @@
 package api_test
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -25,7 +26,12 @@ func stagingRuntime(t *testing.T, args ...string) string {
 		}
 		args = append(prefix, args...)
 	}
-	output, err := exec.CommandContext(t.Context(), kind, args...).
+	ctx, cancel := context.WithTimeout(
+		context.WithoutCancel(t.Context()),
+		time.Minute,
+	)
+	defer cancel()
+	output, err := exec.CommandContext(ctx, kind, args...).
 		CombinedOutput()
 	if err != nil {
 		t.Fatalf("runtime %v: %v: %s", args, err, output)
@@ -59,8 +65,16 @@ printf 'stage-ready\n'
 				t.Fatal(err)
 			}
 			var dep db.Deployment
-			if err := json.Unmarshal(f.api(t, "POST", f.base()+"/deployments",
-				map[string]int64{"release_id": release.ID, "environment_id": f.environment.ID}, 201), &dep); err != nil {
+			if err := json.Unmarshal(f.api(
+				t,
+				"POST",
+				f.base()+"/deployments",
+				map[string]int64{
+					"release_id":     release.ID,
+					"environment_id": f.environment.ID,
+				},
+				201,
+			), &dep); err != nil {
 				t.Fatal(err)
 			}
 			path := fmt.Sprintf("/api/v1/deployments/%d", dep.ID)
@@ -74,13 +88,25 @@ printf 'stage-ready\n'
 				os.Getenv(
 					"DURPDEPLOY_CONTAINER_RUNTIME",
 				) + ":" + os.Getenv("DURPDEPLOY_CONTAINER_NAMESPACE")
-			if volumes := stagingRuntime(t, "volume", "ls", "--quiet", filter); volumes != "" {
+			if volumes := stagingRuntime(
+				t,
+				"volume",
+				"ls",
+				"--quiet",
+				filter,
+			); volumes != "" {
 				t.Fatalf(
 					"terminal deployment left staging volumes: %s",
 					volumes,
 				)
 			}
-			if containers := stagingRuntime(t, "ps", "--all", "--quiet", filter); containers != "" {
+			if containers := stagingRuntime(
+				t,
+				"ps",
+				"--all",
+				"--quiet",
+				filter,
+			); containers != "" {
 				t.Fatalf("terminal deployment left containers: %s", containers)
 			}
 		})
@@ -105,7 +131,10 @@ func awaitStagingTerminal(
 		var state struct {
 			Status string `json:"status"`
 		}
-		if err := json.Unmarshal(f.api(t, "GET", path+"/status", nil, 200), &state); err != nil {
+		if err := json.Unmarshal(
+			f.api(t, "GET", path+"/status", nil, 200),
+			&state,
+		); err != nil {
 			t.Fatal(err)
 		}
 		if state.Status == terminal {

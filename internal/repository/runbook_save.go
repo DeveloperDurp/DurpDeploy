@@ -23,7 +23,8 @@ func (r *Repository) SaveRunbook(
 		)
 	}
 	for i := range variables {
-		if variables[i].Name == containerenv.StageVariable {
+		if variables[i].Name == containerenv.StageVariable ||
+			variables[i].Name == containerenv.ApprovedVariable {
 			return db.Runbook{}, db.RunbookVersion{}, containerenv.ErrReserved
 		}
 		if variables[i].Name == artifact.PathVariable {

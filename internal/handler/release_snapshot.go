@@ -159,7 +159,8 @@ func buildReleaseSnapshot(
 	}
 	params := make([]db.CreateReleaseVariableParams, len(variables))
 	for index, variable := range variables {
-		if variable.Name == containerenv.StageVariable {
+		if variable.Name == containerenv.StageVariable ||
+			variable.Name == containerenv.ApprovedVariable {
 			return releaseSnapshotData{}, containerenv.ErrReserved
 		}
 		if variable.Name == "ARTIFACT_PATH" {
@@ -196,16 +197,20 @@ func (snapshot releaseSnapshotData) insertVariables(
 }
 
 type releaseStepSnapshot struct {
-	Name            string   `json:"name"`
-	ScriptBody      string   `json:"script_body"`
-	Interpreter     string   `json:"interpreter"`
-	SortOrder       int64    `json:"sort_order"`
-	TimeoutSeconds  int64    `json:"timeout_seconds"`
-	MaxRetries      int64    `json:"max_retries"`
-	ExecutionTarget string   `json:"execution_target"`
-	AgentSelectors  []string `json:"agent_selectors,omitempty"`
-	ContainerImage  string   `json:"container_image"`
-	VariableNames   []string `json:"variable_names"`
+	Name                 string   `json:"name"`
+	ScriptBody           string   `json:"script_body"`
+	Interpreter          string   `json:"interpreter"`
+	SortOrder            int64    `json:"sort_order"`
+	TimeoutSeconds       int64    `json:"timeout_seconds"`
+	MaxRetries           int64    `json:"max_retries"`
+	ExecutionTarget      string   `json:"execution_target"`
+	AgentSelectors       []string `json:"agent_selectors,omitempty"`
+	ContainerImage       string   `json:"container_image"`
+	NetworkMode          string   `json:"network_mode"`
+	ApprovalArtifactPath string   `json:"approval_artifact_path"`
+	ApprovalReviewPath   string   `json:"approval_review_path"`
+	ApprovalReviewFormat string   `json:"approval_review_format"`
+	VariableNames        []string `json:"variable_names"`
 }
 
 // decodeStepVariableNames parses the JSON array text stored in the
@@ -242,16 +247,20 @@ func releaseStepSnapshots(
 			return nil, err
 		}
 		snapshots[index] = releaseStepSnapshot{
-			Name:            step.Name,
-			ScriptBody:      step.ScriptBody,
-			Interpreter:     step.Interpreter,
-			SortOrder:       step.SortOrder,
-			TimeoutSeconds:  step.TimeoutSeconds,
-			MaxRetries:      step.MaxRetries,
-			ExecutionTarget: step.ExecutionTarget,
-			AgentSelectors:  selectors,
-			ContainerImage:  step.ContainerImage,
-			VariableNames:   variableNames,
+			Name:                 step.Name,
+			ScriptBody:           step.ScriptBody,
+			Interpreter:          step.Interpreter,
+			SortOrder:            step.SortOrder,
+			TimeoutSeconds:       step.TimeoutSeconds,
+			MaxRetries:           step.MaxRetries,
+			ExecutionTarget:      step.ExecutionTarget,
+			AgentSelectors:       selectors,
+			ContainerImage:       step.ContainerImage,
+			NetworkMode:          step.NetworkMode,
+			ApprovalArtifactPath: step.ApprovalArtifactPath,
+			ApprovalReviewPath:   step.ApprovalReviewPath,
+			ApprovalReviewFormat: step.ApprovalReviewFormat,
+			VariableNames:        variableNames,
 		}
 	}
 	return snapshots, nil

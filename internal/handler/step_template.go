@@ -81,11 +81,15 @@ func (h *StepTemplateHandler) CreateTemplate(
 	)
 	if containerErr != "" {
 		tpl := &db.StepTemplate{
-			Name:           name,
-			ScriptBody:     script,
-			Interpreter:    selectedInterpreter,
-			ContainerImage: containerImage,
-			VariableNames:  marshalStepVariableNames(variableNames),
+			Name:                 name,
+			ScriptBody:           script,
+			Interpreter:          selectedInterpreter,
+			ContainerImage:       containerImage,
+			NetworkMode:          r.FormValue("network_mode"),
+			ApprovalArtifactPath: r.FormValue("approval_artifact_path"),
+			ApprovalReviewPath:   r.FormValue("approval_review_path"),
+			ApprovalReviewFormat: r.FormValue("approval_review_format"),
+			VariableNames:        marshalStepVariableNames(variableNames),
 		}
 		WriteFormError(
 			w,
@@ -98,11 +102,15 @@ func (h *StepTemplateHandler) CreateTemplate(
 
 	if name == "" {
 		tpl := &db.StepTemplate{
-			Name:           name,
-			ScriptBody:     script,
-			Interpreter:    selectedInterpreter,
-			ContainerImage: containerImage,
-			VariableNames:  marshalStepVariableNames(variableNames),
+			Name:                 name,
+			ScriptBody:           script,
+			Interpreter:          selectedInterpreter,
+			ContainerImage:       containerImage,
+			NetworkMode:          r.FormValue("network_mode"),
+			ApprovalArtifactPath: r.FormValue("approval_artifact_path"),
+			ApprovalReviewPath:   r.FormValue("approval_review_path"),
+			ApprovalReviewFormat: r.FormValue("approval_review_format"),
+			VariableNames:        marshalStepVariableNames(variableNames),
 		}
 		WriteFormError(
 			w,
@@ -114,11 +122,15 @@ func (h *StepTemplateHandler) CreateTemplate(
 	}
 
 	params := db.CreateStepTemplateParams{
-		Name:           name,
-		ScriptBody:     script,
-		Interpreter:    selectedInterpreter,
-		ContainerImage: containerImage,
-		VariableNames:  marshalStepVariableNames(variableNames),
+		Name:                 name,
+		ScriptBody:           script,
+		Interpreter:          selectedInterpreter,
+		ContainerImage:       containerImage,
+		NetworkMode:          r.FormValue("network_mode"),
+		ApprovalArtifactPath: r.FormValue("approval_artifact_path"),
+		ApprovalReviewPath:   r.FormValue("approval_review_path"),
+		ApprovalReviewFormat: r.FormValue("approval_review_format"),
+		VariableNames:        marshalStepVariableNames(variableNames),
 	}
 
 	_, err = h.repo.CreateStepTemplateWithPlacement(
@@ -130,11 +142,15 @@ func (h *StepTemplateHandler) CreateTemplate(
 	if err != nil {
 		if IsUniqueViolation(err) {
 			tplErr := &db.StepTemplate{
-				Name:           name,
-				ScriptBody:     script,
-				Interpreter:    selectedInterpreter,
-				ContainerImage: containerImage,
-				VariableNames:  marshalStepVariableNames(variableNames),
+				Name:                 name,
+				ScriptBody:           script,
+				Interpreter:          selectedInterpreter,
+				ContainerImage:       containerImage,
+				NetworkMode:          r.FormValue("network_mode"),
+				ApprovalArtifactPath: r.FormValue("approval_artifact_path"),
+				ApprovalReviewPath:   r.FormValue("approval_review_path"),
+				ApprovalReviewFormat: r.FormValue("approval_review_format"),
+				VariableNames:        marshalStepVariableNames(variableNames),
 			}
 			WriteFormError(
 				w,
@@ -226,13 +242,17 @@ func (h *StepTemplateHandler) UpdateTemplate(
 	)
 	if containerErr != "" {
 		tpl := &db.StepTemplate{
-			ID:              id,
-			Name:            name,
-			ScriptBody:      script,
-			Interpreter:     selectedInterpreter,
-			ContainerImage:  containerImage,
-			VariableNames:   marshalStepVariableNames(variableNames),
-			ExecutionTarget: existing.ExecutionTarget,
+			ID:                   id,
+			Name:                 name,
+			ScriptBody:           script,
+			Interpreter:          selectedInterpreter,
+			ContainerImage:       containerImage,
+			NetworkMode:          r.FormValue("network_mode"),
+			ApprovalArtifactPath: r.FormValue("approval_artifact_path"),
+			ApprovalReviewPath:   r.FormValue("approval_review_path"),
+			ApprovalReviewFormat: r.FormValue("approval_review_format"),
+			VariableNames:        marshalStepVariableNames(variableNames),
+			ExecutionTarget:      existing.ExecutionTarget,
 		}
 		WriteFormError(
 			w,
@@ -245,13 +265,17 @@ func (h *StepTemplateHandler) UpdateTemplate(
 
 	if name == "" {
 		tpl := &db.StepTemplate{
-			ID:              id,
-			Name:            name,
-			ScriptBody:      script,
-			Interpreter:     selectedInterpreter,
-			ContainerImage:  containerImage,
-			VariableNames:   marshalStepVariableNames(variableNames),
-			ExecutionTarget: existing.ExecutionTarget,
+			ID:                   id,
+			Name:                 name,
+			ScriptBody:           script,
+			Interpreter:          selectedInterpreter,
+			ContainerImage:       containerImage,
+			NetworkMode:          r.FormValue("network_mode"),
+			ApprovalArtifactPath: r.FormValue("approval_artifact_path"),
+			ApprovalReviewPath:   r.FormValue("approval_review_path"),
+			ApprovalReviewFormat: r.FormValue("approval_review_format"),
+			VariableNames:        marshalStepVariableNames(variableNames),
+			ExecutionTarget:      existing.ExecutionTarget,
 		}
 		WriteFormError(
 			w,
@@ -263,12 +287,16 @@ func (h *StepTemplateHandler) UpdateTemplate(
 	}
 
 	params := db.UpdateStepTemplateParams{
-		ID:             id,
-		Name:           name,
-		ScriptBody:     script,
-		Interpreter:    selectedInterpreter,
-		ContainerImage: containerImage,
-		VariableNames:  marshalStepVariableNames(variableNames),
+		ID:                   id,
+		Name:                 name,
+		ScriptBody:           script,
+		Interpreter:          selectedInterpreter,
+		ContainerImage:       containerImage,
+		NetworkMode:          r.FormValue("network_mode"),
+		ApprovalArtifactPath: r.FormValue("approval_artifact_path"),
+		ApprovalReviewPath:   r.FormValue("approval_review_path"),
+		ApprovalReviewFormat: r.FormValue("approval_review_format"),
+		VariableNames:        marshalStepVariableNames(variableNames),
 	}
 
 	selectors, err := h.repo.Queries.ListTemplateAgentSelectors(
@@ -289,13 +317,17 @@ func (h *StepTemplateHandler) UpdateTemplate(
 	if err != nil {
 		if IsUniqueViolation(err) {
 			tpl := &db.StepTemplate{
-				ID:              id,
-				Name:            name,
-				ScriptBody:      script,
-				Interpreter:     selectedInterpreter,
-				ContainerImage:  containerImage,
-				VariableNames:   marshalStepVariableNames(variableNames),
-				ExecutionTarget: existing.ExecutionTarget,
+				ID:                   id,
+				Name:                 name,
+				ScriptBody:           script,
+				Interpreter:          selectedInterpreter,
+				ContainerImage:       containerImage,
+				NetworkMode:          r.FormValue("network_mode"),
+				ApprovalArtifactPath: r.FormValue("approval_artifact_path"),
+				ApprovalReviewPath:   r.FormValue("approval_review_path"),
+				ApprovalReviewFormat: r.FormValue("approval_review_format"),
+				VariableNames:        marshalStepVariableNames(variableNames),
+				ExecutionTarget:      existing.ExecutionTarget,
 			}
 			WriteFormError(
 				w,
@@ -434,13 +466,17 @@ func (h *StepTemplateHandler) InsertTemplate(
 	}
 
 	params := db.CreateStepParams{
-		ProjectID:      projectID,
-		Name:           tpl.Name,
-		ScriptBody:     tpl.ScriptBody,
-		Interpreter:    tpl.Interpreter,
-		SortOrder:      sortOrder,
-		ContainerImage: tpl.ContainerImage,
-		VariableNames:  tpl.VariableNames,
+		ProjectID:            projectID,
+		Name:                 tpl.Name,
+		ScriptBody:           tpl.ScriptBody,
+		Interpreter:          tpl.Interpreter,
+		SortOrder:            sortOrder,
+		ContainerImage:       tpl.ContainerImage,
+		NetworkMode:          tpl.NetworkMode,
+		ApprovalArtifactPath: tpl.ApprovalArtifactPath,
+		ApprovalReviewPath:   tpl.ApprovalReviewPath,
+		ApprovalReviewFormat: tpl.ApprovalReviewFormat,
+		VariableNames:        tpl.VariableNames,
 		// ponytail: StepTemplate has no timeout or max_retries field yet;
 		// new step inherits defaults (0/0).
 	}
@@ -508,11 +544,15 @@ func (h *StepTemplateHandler) SaveStepAsTemplate(
 	}
 
 	params := db.CreateStepTemplateParams{
-		Name:           step.Name,
-		ScriptBody:     step.ScriptBody,
-		Interpreter:    step.Interpreter,
-		ContainerImage: step.ContainerImage,
-		VariableNames:  step.VariableNames,
+		Name:                 step.Name,
+		ScriptBody:           step.ScriptBody,
+		Interpreter:          step.Interpreter,
+		ContainerImage:       step.ContainerImage,
+		NetworkMode:          step.NetworkMode,
+		ApprovalArtifactPath: step.ApprovalArtifactPath,
+		ApprovalReviewPath:   step.ApprovalReviewPath,
+		ApprovalReviewFormat: step.ApprovalReviewFormat,
+		VariableNames:        step.VariableNames,
 	}
 	selectors, err := h.repo.Queries.ListStepAgentSelectors(
 		r.Context(),

@@ -52,7 +52,11 @@ type swaggerStep struct {
 	AgentSelectors  []string `json:"agent_selectors"`
 	// Container image the step runs in on the server; mandatory for
 	// local steps and rejected for agent steps.
-	ContainerImage string `json:"container_image"`
+	ContainerImage       string `json:"container_image"`
+	NetworkMode          string `json:"network_mode"`
+	ApprovalArtifactPath string `json:"approval_artifact_path"`
+	ApprovalReviewPath   string `json:"approval_review_path"`
+	ApprovalReviewFormat string `json:"approval_review_format"`
 	// Optional variable-name restriction. Empty passes all variables.
 	VariableNames []string `json:"variable_names"`
 }
@@ -60,31 +64,39 @@ type swaggerStep struct {
 // StepTemplate is a reusable step template.
 // swagger:model StepTemplate
 type swaggerStepTemplate struct {
-	ID              int64    `json:"id"`
-	Name            string   `json:"name"`
-	ScriptBody      string   `json:"script_body"`
-	Interpreter     string   `json:"interpreter"`
-	CreatedAt       int64    `json:"created_at"`
-	ExecutionTarget string   `json:"execution_target"`
-	AgentSelectors  []string `json:"agent_selectors"`
-	ContainerImage  string   `json:"container_image"`
-	VariableNames   []string `json:"variable_names"`
+	ID                   int64    `json:"id"`
+	Name                 string   `json:"name"`
+	ScriptBody           string   `json:"script_body"`
+	Interpreter          string   `json:"interpreter"`
+	CreatedAt            int64    `json:"created_at"`
+	ExecutionTarget      string   `json:"execution_target"`
+	AgentSelectors       []string `json:"agent_selectors"`
+	ContainerImage       string   `json:"container_image"`
+	NetworkMode          string   `json:"network_mode"`
+	ApprovalArtifactPath string   `json:"approval_artifact_path"`
+	ApprovalReviewPath   string   `json:"approval_review_path"`
+	ApprovalReviewFormat string   `json:"approval_review_format"`
+	VariableNames        []string `json:"variable_names"`
 }
 
 // StepTemplateVersion is a historical version of a step template.
 // swagger:model StepTemplateVersion
 type swaggerStepTemplateVersion struct {
-	ID              int64    `json:"id"`
-	TemplateID      int64    `json:"template_id"`
-	VersionNumber   int64    `json:"version_number"`
-	Name            string   `json:"name"`
-	ScriptBody      string   `json:"script_body"`
-	Interpreter     string   `json:"interpreter"`
-	CreatedAt       int64    `json:"created_at"`
-	ExecutionTarget string   `json:"execution_target"`
-	AgentSelectors  []string `json:"agent_selectors"`
-	ContainerImage  string   `json:"container_image"`
-	VariableNames   []string `json:"variable_names"`
+	ID                   int64    `json:"id"`
+	TemplateID           int64    `json:"template_id"`
+	VersionNumber        int64    `json:"version_number"`
+	Name                 string   `json:"name"`
+	ScriptBody           string   `json:"script_body"`
+	Interpreter          string   `json:"interpreter"`
+	CreatedAt            int64    `json:"created_at"`
+	ExecutionTarget      string   `json:"execution_target"`
+	AgentSelectors       []string `json:"agent_selectors"`
+	ContainerImage       string   `json:"container_image"`
+	NetworkMode          string   `json:"network_mode"`
+	ApprovalArtifactPath string   `json:"approval_artifact_path"`
+	ApprovalReviewPath   string   `json:"approval_review_path"`
+	ApprovalReviewFormat string   `json:"approval_review_format"`
+	VariableNames        []string `json:"variable_names"`
 }
 
 // Release is an immutable snapshot of project steps and variables.
@@ -403,7 +415,11 @@ type swaggerStepRequest struct {
 	AgentSelectors  []string `json:"agent_selectors"`
 	// Container image the step runs in on the server; mandatory for
 	// local steps and rejected for agent steps.
-	ContainerImage string `json:"container_image"`
+	ContainerImage       string `json:"container_image"`
+	NetworkMode          string `json:"network_mode"`
+	ApprovalArtifactPath string `json:"approval_artifact_path"`
+	ApprovalReviewPath   string `json:"approval_review_path"`
+	ApprovalReviewFormat string `json:"approval_review_format"`
 	// Optional variable-name restriction. Empty passes all variables;
 	// entries must be identifiers without duplicates.
 	VariableNames []string `json:"variable_names"`
@@ -425,7 +441,11 @@ type swaggerStepTemplateRequest struct {
 	AgentSelectors  []string `json:"agent_selectors"`
 	// Container image the step runs in on the server; mandatory for
 	// local steps and rejected for agent steps.
-	ContainerImage string `json:"container_image"`
+	ContainerImage       string `json:"container_image"`
+	NetworkMode          string `json:"network_mode"`
+	ApprovalArtifactPath string `json:"approval_artifact_path"`
+	ApprovalReviewPath   string `json:"approval_review_path"`
+	ApprovalReviewFormat string `json:"approval_review_format"`
 	// Optional variable-name restriction. Empty passes all variables;
 	// entries must be identifiers without duplicates.
 	VariableNames []string `json:"variable_names"`
@@ -762,16 +782,20 @@ type swaggerAgentLabelRequest struct {
 // swagger:model RunbookStep
 // RunbookStep is one script in an immutable runbook version.
 type swaggerRunbookStep struct {
-	Name            string   `json:"name"`
-	ScriptBody      string   `json:"script_body"`
-	Interpreter     string   `json:"interpreter"`
-	SortOrder       int64    `json:"sort_order"`
-	TimeoutSeconds  int64    `json:"timeout_seconds"`
-	MaxRetries      int64    `json:"max_retries"`
-	ExecutionTarget string   `json:"execution_target"`
-	AgentSelectors  []string `json:"agent_selectors"`
-	ContainerImage  string   `json:"container_image"`
-	VariableNames   []string `json:"variable_names"`
+	Name                 string   `json:"name"`
+	ScriptBody           string   `json:"script_body"`
+	Interpreter          string   `json:"interpreter"`
+	SortOrder            int64    `json:"sort_order"`
+	TimeoutSeconds       int64    `json:"timeout_seconds"`
+	MaxRetries           int64    `json:"max_retries"`
+	ExecutionTarget      string   `json:"execution_target"`
+	AgentSelectors       []string `json:"agent_selectors"`
+	ContainerImage       string   `json:"container_image"`
+	NetworkMode          string   `json:"network_mode"`
+	ApprovalArtifactPath string   `json:"approval_artifact_path"`
+	ApprovalReviewPath   string   `json:"approval_review_path"`
+	ApprovalReviewFormat string   `json:"approval_review_format"`
+	VariableNames        []string `json:"variable_names"`
 }
 
 // swagger:model RunbookSaveRequest

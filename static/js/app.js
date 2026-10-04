@@ -4,6 +4,18 @@ import htmx from 'htmx.org'
 window.Alpine = Alpine
 window.htmx = htmx
 
+document.addEventListener('htmx:beforeSwap', (event) => {
+	if (event.detail.xhr.status === 422 &&
+		event.detail.xhr.getResponseHeader('HX-Retarget')) {
+		event.detail.shouldSwap = true;
+	}
+	const target = event.detail.target;
+	if (target.hasAttribute('data-artifact-gates') &&
+		target.contains(document.activeElement)) {
+		event.detail.shouldSwap = false;
+	}
+});
+
 Alpine.data('toast', () => ({
 	visible: false,
 	message: '',
@@ -314,7 +326,7 @@ Alpine.data('deploymentStream', ({ url }) => ({
 			: event.detail?.target;
 		if (!(target instanceof Element) || target.id !== 'status-badge') return;
 		const status = target.textContent.trim();
-		if (!['succeeded', 'failed', 'cancelled'].includes(status)) return;
+		if (!['succeeded', 'failed', 'cancelled', 'rejected', 'expired'].includes(status)) return;
 		if (this.source) this.source.close();
 		this.source = null;
 	},

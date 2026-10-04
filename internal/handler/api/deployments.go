@@ -587,7 +587,7 @@ func (h *DeploymentHandler) RedeployDeployment(
 		return
 	}
 	if deployment.Status != "succeeded" && deployment.Status != "failed" &&
-		deployment.Status != "cancelled" {
+		deployment.Status != "cancelled" && deployment.Status != "rejected" && deployment.Status != "expired" {
 		if deployment.Status == "cleanup_unconfirmed" {
 			RespondError(
 				w,
@@ -730,6 +730,18 @@ func (h *DeploymentHandler) CancelDeployment(
 		RespondJSON(w, http.StatusOK, map[string]string{"status": status})
 		return
 	}
+	if deployment.Status == "awaiting_artifact_approval" {
+		if err := h.repo.RejectArtifact(
+			r.Context(),
+			depID,
+			"cancelled",
+		); err != nil {
+			RespondError(w, http.StatusConflict, "Artifact cancellation failed")
+			return
+		}
+		RespondJSON(w, http.StatusOK, map[string]string{"status": "cancelled"})
+		return
+	}
 	if deployment.AssignedAgentID.Valid {
 		err := h.repo.CancelAssignedRemoteDeployment(
 			r.Context(),
@@ -759,7 +771,8 @@ func (h *DeploymentHandler) CancelDeployment(
 			map[string]string{"status": updated.Status})
 		return
 	}
-	if deployment.Status != "running" {
+	if deployment.Status != "running" &&
+		deployment.Status != "publishing_artifact" {
 		RespondError(
 			w,
 			http.StatusUnprocessableEntity,
@@ -815,7 +828,9 @@ func (h *DeploymentHandler) RetryDeployment(
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	if deployment.Status != "failed" && deployment.Status != "cancelled" {
+	if deployment.Status != "failed" && deployment.Status != "cancelled" &&
+		deployment.Status != "rejected" &&
+		deployment.Status != "expired" {
 		if deployment.Status == "cleanup_unconfirmed" {
 			RespondError(
 				w,

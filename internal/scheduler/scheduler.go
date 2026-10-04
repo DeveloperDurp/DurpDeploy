@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"durpdeploy/internal/artifact"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/gate"
 	"durpdeploy/internal/repository"
@@ -286,6 +287,7 @@ func (s *Scheduler) fireOne(ctx context.Context, row db.ScheduledDeployment) {
 	)
 	if err != nil {
 		if errors.Is(err, repository.ErrLegacyServerStep) ||
+			errors.Is(err, artifact.ErrGateConfig) ||
 			errors.Is(err, verification.ErrInvalid) {
 			changed, disableErr := s.repo.Queries.DisableScheduledDeploymentWithReason(
 				ctx,

@@ -25,7 +25,7 @@ func (q *Queries) ApproveDeploymentStatus(ctx context.Context, deploymentID int6
 
 const cancelStepDeployment = `-- name: CancelStepDeployment :execrows
 UPDATE deployments SET status = 'cancelled', finished_at = unixepoch()
-WHERE id = ? AND status IN ('pending', 'running')
+WHERE id = ? AND status IN ('pending', 'running', 'publishing_artifact', 'awaiting_artifact_approval')
 `
 
 func (q *Queries) CancelStepDeployment(ctx context.Context, id int64) (int64, error) {

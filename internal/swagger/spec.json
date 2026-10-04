@@ -1878,6 +1878,243 @@
         ]
       }
     },
+    "/deployments/{id}/artifact-gates": {
+      "get": {
+        "tags": [
+          "deployments"
+        ],
+        "summary": "List checksum-bound artifact reviews. Sensitive contents are omitted.",
+        "operationId": "listArtifactGates",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "name": "id",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/ArtifactGateListResponse"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/deployments/{id}/artifact-gates/{stepIndex}/approve": {
+      "post": {
+        "tags": [
+          "deployments"
+        ],
+        "summary": "Approve this exact artifact revision and resume. Administrator only.",
+        "operationId": "approveArtifactGate",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "StepIndex",
+            "description": "Zero-based generation step index.",
+            "name": "stepIndex",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "Body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": [
+                "revision",
+                "sha256"
+              ],
+              "properties": {
+                "revision": {
+                  "type": "integer",
+                  "format": "int64",
+                  "x-go-name": "Revision"
+                },
+                "sha256": {
+                  "type": "string",
+                  "x-go-name": "SHA256"
+                }
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Decision accepted"
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "409": {
+            "description": "Conflict error response.",
+            "schema": {
+              "$ref": "#/definitions/ConflictError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/deployments/{id}/artifact-gates/{stepIndex}/artifact": {
+      "get": {
+        "produces": [
+          "application/octet-stream"
+        ],
+        "tags": [
+          "deployments"
+        ],
+        "summary": "Download the exact sensitive artifact. Viewers cannot download artifacts.",
+        "operationId": "downloadArtifactGate",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "StepIndex",
+            "description": "Zero-based generation step index.",
+            "name": "stepIndex",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Verified binary artifact"
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "409": {
+            "description": "Conflict error response.",
+            "schema": {
+              "$ref": "#/definitions/ConflictError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/deployments/{id}/artifact-gates/{stepIndex}/reject": {
+      "post": {
+        "tags": [
+          "deployments"
+        ],
+        "summary": "Reject this exact artifact revision. Administrator only.",
+        "operationId": "rejectArtifactGate",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "StepIndex",
+            "description": "Zero-based generation step index.",
+            "name": "stepIndex",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "Body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": [
+                "revision",
+                "sha256"
+              ],
+              "properties": {
+                "revision": {
+                  "type": "integer",
+                  "format": "int64",
+                  "x-go-name": "Revision"
+                },
+                "sha256": {
+                  "type": "string",
+                  "x-go-name": "SHA256"
+                }
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Decision accepted"
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "409": {
+            "description": "Conflict error response.",
+            "schema": {
+              "$ref": "#/definitions/ConflictError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/deployments/{id}/cancel": {
       "post": {
         "schemes": [
@@ -8460,6 +8697,75 @@
       "x-go-name": "swaggerAgentListResponse",
       "x-go-package": "durpdeploy/internal/handler/api"
     },
+    "ArtifactGateInfo": {
+      "type": "object",
+      "properties": {
+        "approved_at": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "ApprovedAt"
+        },
+        "approved_by": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "ApprovedBy"
+        },
+        "bundle_sha256": {
+          "type": "string",
+          "x-go-name": "BundleSHA256"
+        },
+        "bundle_size": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "BundleSize"
+        },
+        "created_at": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "CreatedAt"
+        },
+        "deployment_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "DeploymentID"
+        },
+        "expires_at": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "ExpiresAt"
+        },
+        "review": {
+          "$ref": "#/definitions/GateReview"
+        },
+        "review_source": {
+          "type": "string",
+          "x-go-name": "ReviewSource"
+        },
+        "review_verified": {
+          "type": "boolean",
+          "x-go-name": "ReviewVerified"
+        },
+        "revision": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Revision"
+        },
+        "sha256": {
+          "type": "string",
+          "x-go-name": "SHA256"
+        },
+        "status": {
+          "type": "string",
+          "x-go-name": "Status"
+        },
+        "step_index": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "StepIndex"
+        }
+      },
+      "x-go-package": "durpdeploy/views/pages"
+    },
     "AuditLog": {
       "type": "object",
       "title": "AuditLog is a recorded state-changing action.",
@@ -9004,6 +9310,33 @@
       },
       "x-go-name": "swaggerForbiddenError",
       "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "GateReview": {
+      "type": "object",
+      "title": "GateReview deliberately exposes counts only, never names, values or outputs.",
+      "properties": {
+        "create": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Create"
+        },
+        "delete": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Delete"
+        },
+        "read": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Read"
+        },
+        "update": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Update"
+        }
+      },
+      "x-go-package": "durpdeploy/internal/artifact"
     },
     "GlobalNotification": {
       "type": "object",
@@ -10391,6 +10724,18 @@
           },
           "x-go-name": "AgentSelectors"
         },
+        "approval_artifact_path": {
+          "type": "string",
+          "x-go-name": "ApprovalArtifactPath"
+        },
+        "approval_review_format": {
+          "type": "string",
+          "x-go-name": "ApprovalReviewFormat"
+        },
+        "approval_review_path": {
+          "type": "string",
+          "x-go-name": "ApprovalReviewPath"
+        },
         "container_image": {
           "type": "string",
           "x-go-name": "ContainerImage"
@@ -10411,6 +10756,10 @@
         "name": {
           "type": "string",
           "x-go-name": "Name"
+        },
+        "network_mode": {
+          "type": "string",
+          "x-go-name": "NetworkMode"
         },
         "script_body": {
           "type": "string",
@@ -10668,6 +11017,18 @@
           },
           "x-go-name": "AgentSelectors"
         },
+        "approval_artifact_path": {
+          "type": "string",
+          "x-go-name": "ApprovalArtifactPath"
+        },
+        "approval_review_format": {
+          "type": "string",
+          "x-go-name": "ApprovalReviewFormat"
+        },
+        "approval_review_path": {
+          "type": "string",
+          "x-go-name": "ApprovalReviewPath"
+        },
         "container_image": {
           "description": "Container image the step runs in on the server; mandatory for\nlocal steps and rejected for agent steps.",
           "type": "string",
@@ -10699,6 +11060,10 @@
         "name": {
           "type": "string",
           "x-go-name": "Name"
+        },
+        "network_mode": {
+          "type": "string",
+          "x-go-name": "NetworkMode"
         },
         "project_id": {
           "type": "integer",
@@ -10751,6 +11116,18 @@
           },
           "x-go-name": "AgentSelectors"
         },
+        "approval_artifact_path": {
+          "type": "string",
+          "x-go-name": "ApprovalArtifactPath"
+        },
+        "approval_review_format": {
+          "type": "string",
+          "x-go-name": "ApprovalReviewFormat"
+        },
+        "approval_review_path": {
+          "type": "string",
+          "x-go-name": "ApprovalReviewPath"
+        },
         "container_image": {
           "description": "Container image the step runs in on the server; mandatory for\nlocal steps and rejected for agent steps.",
           "type": "string",
@@ -10772,6 +11149,10 @@
         "name": {
           "type": "string",
           "x-go-name": "Name"
+        },
+        "network_mode": {
+          "type": "string",
+          "x-go-name": "NetworkMode"
         },
         "script_body": {
           "type": "string",
@@ -10810,6 +11191,18 @@
           },
           "x-go-name": "AgentSelectors"
         },
+        "approval_artifact_path": {
+          "type": "string",
+          "x-go-name": "ApprovalArtifactPath"
+        },
+        "approval_review_format": {
+          "type": "string",
+          "x-go-name": "ApprovalReviewFormat"
+        },
+        "approval_review_path": {
+          "type": "string",
+          "x-go-name": "ApprovalReviewPath"
+        },
         "container_image": {
           "type": "string",
           "x-go-name": "ContainerImage"
@@ -10835,6 +11228,10 @@
         "name": {
           "type": "string",
           "x-go-name": "Name"
+        },
+        "network_mode": {
+          "type": "string",
+          "x-go-name": "NetworkMode"
         },
         "script_body": {
           "type": "string",
@@ -10871,6 +11268,18 @@
           },
           "x-go-name": "AgentSelectors"
         },
+        "approval_artifact_path": {
+          "type": "string",
+          "x-go-name": "ApprovalArtifactPath"
+        },
+        "approval_review_format": {
+          "type": "string",
+          "x-go-name": "ApprovalReviewFormat"
+        },
+        "approval_review_path": {
+          "type": "string",
+          "x-go-name": "ApprovalReviewPath"
+        },
         "container_image": {
           "description": "Container image the step runs in on the server; mandatory for\nlocal steps and rejected for agent steps.",
           "type": "string",
@@ -10887,6 +11296,10 @@
         "name": {
           "type": "string",
           "x-go-name": "Name"
+        },
+        "network_mode": {
+          "type": "string",
+          "x-go-name": "NetworkMode"
         },
         "script_body": {
           "type": "string",
@@ -10915,6 +11328,18 @@
           },
           "x-go-name": "AgentSelectors"
         },
+        "approval_artifact_path": {
+          "type": "string",
+          "x-go-name": "ApprovalArtifactPath"
+        },
+        "approval_review_format": {
+          "type": "string",
+          "x-go-name": "ApprovalReviewFormat"
+        },
+        "approval_review_path": {
+          "type": "string",
+          "x-go-name": "ApprovalReviewPath"
+        },
         "container_image": {
           "type": "string",
           "x-go-name": "ContainerImage"
@@ -10940,6 +11365,10 @@
         "name": {
           "type": "string",
           "x-go-name": "Name"
+        },
+        "network_mode": {
+          "type": "string",
+          "x-go-name": "NetworkMode"
         },
         "script_body": {
           "type": "string",
@@ -11425,6 +11854,17 @@
         }
       },
       "x-go-package": "durpdeploy/internal/handler/api"
+    }
+  },
+  "responses": {
+    "ArtifactGateListResponse": {
+      "description": "",
+      "schema": {
+        "type": "array",
+        "items": {
+          "$ref": "#/definitions/ArtifactGateInfo"
+        }
+      }
     }
   },
   "securityDefinitions": {

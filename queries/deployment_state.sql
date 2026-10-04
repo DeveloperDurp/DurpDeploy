@@ -19,7 +19,7 @@ WHERE id = sqlc.arg(deployment_id) AND status = 'pending_approval';
 
 -- name: CancelStepDeployment :execrows
 UPDATE deployments SET status = 'cancelled', finished_at = unixepoch()
-WHERE id = ? AND status IN ('pending', 'running');
+WHERE id = ? AND status IN ('pending', 'running', 'publishing_artifact', 'awaiting_artifact_approval');
 
 -- name: ReplaceDeploymentDispatch :execrows
 UPDATE deployment_dispatches SET ciphertext = sqlc.narg(ciphertext), updated_at = unixepoch()

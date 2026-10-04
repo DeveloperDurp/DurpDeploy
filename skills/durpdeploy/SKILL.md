@@ -160,8 +160,9 @@ normalizes it to `pwsh`. All resolved release variables enter a step by
 default; set `variable_names` only to restrict the step to those names. Local
 steps exclude container/SSH client configuration names such as `PATH`, `HOME`,
 `SSH_AUTH_SOCK`, or `XDG_*`; agent steps retain their host variable support.
-The embedded agent pulls an image when it is missing. Container steps have no
-network or host mounts. A mutable image tag does not
+The embedded agent pulls an image when it is missing. Container steps default
+to no network; local steps can opt into `network_mode: "bridge"`. They have no
+host mounts. A mutable image tag does not
 freeze image contents; prefer a digest. The web/API rejects a new image-less
 server step. Old image-less releases remain readable but cannot run, re-run,
 or refresh; recreate their steps and create a new release (`409` on launch).
@@ -185,17 +186,27 @@ or refresh; recreate their steps and create a new release (`409` on launch).
 6. **Deploy**
    `POST /api/v1/projects/$PID/deployments`
    `{"release_id":$RID,"environment_id":$EID}` → `201` with deployment `id`.
-7. **Poll** until terminal:
+7. **Poll** until terminal or operator action is required:
 
 ```bash
 for i in {1..150}; do
   S=$(api_get "$BASE/api/v1/deployments/$DID/status" | python3 -c 'import sys,json;print(json.load(sys.stdin)["status"])')
-  [[ "$S" =~ ^(failed|succeeded|cancelled|cleanup_unconfirmed|pending_approval)$ ]] && break
+  [[ "$S" =~ ^(failed|succeeded|cancelled|rejected|expired|cleanup_unconfirmed|pending_approval|awaiting_artifact_approval)$ ]] && break
   sleep 0.5
 done
 ```
 
 8. **Act on state**:
+   - `awaiting_artifact_approval` → list
+     `GET /api/v1/deployments/$DID/artifact-gates`, use the current gate's
+     `step_index` as `$STEP`, download `/$STEP/artifact` under that gate URL,
+     and independently inspect it with trusted tools.
+     Review counts are unverified step claims. An admin then sends the listed
+     revision and artifact SHA-256 to `/$STEP/approve` or `/$STEP/reject`
+     under that gate URL. After approval, return to polling; another step can
+     require another review. Follow the artifact-gate details below.
+   - `rejected` or `expired` → stop polling. Resolve the rejection or expiry,
+     then redeploy to generate a fresh artifact and review.
    - `pending_approval` → an admin `POST /api/v1/deployments/$DID/approve`
      with an empty body or `{}` unblocks it. The authenticated admin is
      recorded as the approver. Non-admin tokens get 403.
@@ -414,8 +425,9 @@ The runtime also needs the digest-pinned Alpine staging helper documented in
 `docs/deploy.md`; an offline installation must preload it alongside step
 images before launching deployments.
 
-The staging path is reserved: variable create/update requests return 422 for
-`DURPDEPLOY_STAGE_DIR`, and step variable selections cannot include it. Staging
+The staging and approved paths are reserved: variable create/update requests
+return 422 for `DURPDEPLOY_STAGE_DIR` and `DURPDEPLOY_APPROVED_DIR`, including
+blank-secret updates. Step variable selections cannot include them. Staging
 is writable, noexec, nosuid, and nodev, backed by a bounded temporary volume
 (512 MiB plus 10,000 host pages, 20,000 inodes). Local attempts have a combined
 memory ceiling of that staging capacity plus 256 MiB; process memory and
@@ -431,6 +443,34 @@ Only local Docker/Podman container steps share these files. Remote agent steps
 do not receive the staging directory or transferred files. Staging is neither
 a cross-deployment cache nor durable storage for an approval pause or restart.
 Pinned release packages remain read-only at `ARTIFACT_PATH=/artifacts`.
+
+Local steps accept `network_mode` (`none` by default, or `bridge`). Artifact
+gates use `approval_artifact_path`, `approval_review_path`, and
+`approval_review_format` (`summary` or `terraform`), relative to
+`DURPDEPLOY_STAGE_DIR`. A gated deployment pauses before the next step and
+reserves its environment; later deployments queue until it completes, is
+rejected, is cancelled, or expires. Artifact approval retains its queue slot.
+Only local deployment steps without retries are
+supported; runbooks and agent steps cannot use gates. Both approval paths and
+an explicit review format are required together; an empty format is rejected.
+`GET /api/v1/deployments/{id}/artifact-gates` returns counts, checksums,
+revision, expiry, status, and approver metadata, including
+`review_source: "step_output"` and `review_verified: false`: counts are
+unverified producer claims, not an independent analysis of the artifact.
+Use trusted tools to inspect the exact downloaded artifact before approving.
+Checksums establish byte identity, not review accuracy. Generation and apply
+scripts remain trusted; a gate does not sandbox them to plan/apply semantics.
+Write-capable project members can download `/{stepIndex}/artifact`; viewers
+cannot. Administrator-only
+`/{stepIndex}/approve` and `/{stepIndex}/reject` accept
+`{"revision":1,"sha256":"..."}`. Stale or duplicate decisions return 409.
+Approved context is read-only at `DURPDEPLOY_APPROVED_DIR`; apply the saved
+artifact exactly, never regenerate it. Gated script output is hidden. Gates
+expire after 24 hours; the minute worker records expiry and releases queues.
+Polling is read-only, and expired downloads and decisions return 409 immediately.
+Stopped container references retain pinned image IDs through waits and restarts;
+maintenance removes them after terminal decisions. Encrypted terminal bundles
+are removed after seven days. See `docs/artifact-approval.md` for Terraform setup.
 
 ## Generic ZIP packages
 

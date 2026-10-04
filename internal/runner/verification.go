@@ -50,6 +50,11 @@ func (r *DeploymentRunner) verifyDeployment(
 		stepName: "Post-deployment verification", ctx: ctx,
 		scrubber: NewScrubber(secretValues),
 	}
+	_, gateErr := r.repo.Queries.GetArtifactGateRun(ctx, deploymentID)
+	if gateErr != nil && !errors.Is(gateErr, sql.ErrNoRows) {
+		return gateErr
+	}
+	writer.sensitive = gateErr == nil
 	defer writer.Flush()
 	if _, err := fmt.Fprintln(writer, "Verification started"); err != nil {
 		return err

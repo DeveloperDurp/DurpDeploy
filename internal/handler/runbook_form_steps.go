@@ -7,21 +7,26 @@ import (
 	"strconv"
 	"strings"
 
+	"durpdeploy/internal/artifact"
 	"durpdeploy/internal/containerenv"
 	"durpdeploy/internal/interpreter"
 )
 
 type runbookFormStep struct {
-	Name            string   `json:"name"`
-	ScriptBody      string   `json:"script_body"`
-	Interpreter     string   `json:"interpreter"`
-	SortOrder       int64    `json:"sort_order"`
-	TimeoutSeconds  int64    `json:"timeout_seconds"`
-	MaxRetries      int64    `json:"max_retries"`
-	ExecutionTarget string   `json:"execution_target"`
-	AgentSelectors  []string `json:"agent_selectors"`
-	ContainerImage  string   `json:"container_image"`
-	VariableNames   []string `json:"variable_names,omitempty"`
+	Name                 string   `json:"name"`
+	ScriptBody           string   `json:"script_body"`
+	Interpreter          string   `json:"interpreter"`
+	SortOrder            int64    `json:"sort_order"`
+	TimeoutSeconds       int64    `json:"timeout_seconds"`
+	MaxRetries           int64    `json:"max_retries"`
+	ExecutionTarget      string   `json:"execution_target"`
+	AgentSelectors       []string `json:"agent_selectors"`
+	ContainerImage       string   `json:"container_image"`
+	NetworkMode          string   `json:"network_mode"`
+	ApprovalArtifactPath string   `json:"approval_artifact_path"`
+	ApprovalReviewPath   string   `json:"approval_review_path"`
+	ApprovalReviewFormat string   `json:"approval_review_format"`
+	VariableNames        []string `json:"variable_names,omitempty"`
 }
 
 var ErrInvalidContainerImage = errors.New("invalid container image")
@@ -95,10 +100,12 @@ func (h *RunbookHandler) formSteps(r *http.Request) (string, error) {
 		}
 	}
 	images := r.Form["step_image"]
+	networks := r.Form["step_network"]
 	variableLists := r.Form["step_variable_names"]
 	// Absent arrays mean empty values for every step; a partially
 	// submitted array is a malformed form.
 	if len(images) != 0 && len(images) != len(names) ||
+		len(networks) != 0 && len(networks) != len(names) ||
 		len(variableLists) != 0 && len(variableLists) != len(names) {
 		return "", errors.New("incomplete step fields")
 	}
@@ -155,11 +162,25 @@ func (h *RunbookHandler) formSteps(r *http.Request) (string, error) {
 		if err != nil {
 			return "", err
 		}
+		network := ""
+		if len(networks) == len(names) {
+			network = networks[i]
+		}
+		if err := artifact.ValidateGateConfig(
+			target,
+			network,
+			"",
+			"",
+			"",
+		); err != nil {
+			return "", err
+		}
 		steps[i] = runbookFormStep{
 			Name: name, ScriptBody: script, Interpreter: selected,
 			SortOrder: int64(i), TimeoutSeconds: timeout,
 			MaxRetries: retries, ExecutionTarget: target,
 			AgentSelectors: selectors, ContainerImage: image,
+			NetworkMode:   network,
 			VariableNames: variableNames,
 		}
 	}

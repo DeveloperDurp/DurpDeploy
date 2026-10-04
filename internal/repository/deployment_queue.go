@@ -194,36 +194,42 @@ func (r *Repository) StartLocalDeployment(
 		ctx,
 		id,
 		func(ctx context.Context, q *db.Queries) error {
-			d, err := q.GetDeployment(ctx, id)
-			if err != nil {
-				return err
-			}
-			if err := advanceEnvironmentQueue(
-				ctx,
-				q,
-				d.EnvironmentID,
-			); err != nil {
-				return err
-			}
-			blockers, err := q.ListEnvironmentQueueBlockers(
-				ctx,
-				d.EnvironmentID,
-			)
-			if err != nil {
-				return err
-			}
-			for _, blocker := range blockers {
-				if blocker != id {
-					started = false
-					return nil
-				}
-			}
-			changed, err := q.StartQueuedLocalDeployment(ctx, id)
-			started = changed == 1
+			var err error
+			started, err = startLocalDeployment(ctx, q, id)
 			return err
 		},
 	)
 	return started, err
+}
+
+func startLocalDeployment(
+	ctx context.Context, q *db.Queries, id int64,
+) (bool, error) {
+	d, err := q.GetDeployment(ctx, id)
+	if err != nil {
+		return false, err
+	}
+	if err := advanceEnvironmentQueue(
+		ctx,
+		q,
+		d.EnvironmentID,
+	); err != nil {
+		return false, err
+	}
+	blockers, err := q.ListEnvironmentQueueBlockers(
+		ctx,
+		d.EnvironmentID,
+	)
+	if err != nil {
+		return false, err
+	}
+	for _, blocker := range blockers {
+		if blocker != id {
+			return false, nil
+		}
+	}
+	changed, err := q.StartQueuedLocalDeployment(ctx, id)
+	return changed == 1, err
 }
 
 func (r *Repository) CancelQueuedDeployment(

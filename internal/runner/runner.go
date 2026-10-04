@@ -36,16 +36,20 @@ type DeploymentRunner struct {
 }
 
 type deploymentStep struct {
-	Name            string   `json:"name"`
-	ScriptBody      string   `json:"script_body"`
-	Interpreter     string   `json:"interpreter"`
-	SortOrder       int64    `json:"sort_order"`
-	TimeoutSeconds  int64    `json:"timeout_seconds"`
-	MaxRetries      int64    `json:"max_retries"`
-	ExecutionTarget string   `json:"execution_target"`
-	AgentSelectors  []string `json:"agent_selectors"`
-	ContainerImage  string   `json:"container_image"`
-	VariableNames   []string `json:"variable_names"`
+	Name                 string   `json:"name"`
+	ScriptBody           string   `json:"script_body"`
+	Interpreter          string   `json:"interpreter"`
+	SortOrder            int64    `json:"sort_order"`
+	TimeoutSeconds       int64    `json:"timeout_seconds"`
+	MaxRetries           int64    `json:"max_retries"`
+	ExecutionTarget      string   `json:"execution_target"`
+	AgentSelectors       []string `json:"agent_selectors"`
+	ContainerImage       string   `json:"container_image"`
+	NetworkMode          string   `json:"network_mode"`
+	ApprovalArtifactPath string   `json:"approval_artifact_path"`
+	ApprovalReviewPath   string   `json:"approval_review_path"`
+	ApprovalReviewFormat string   `json:"approval_review_format"`
+	VariableNames        []string `json:"variable_names"`
 }
 
 func New(repo *repository.Repository, broker *LogBroker) *DeploymentRunner {
@@ -60,6 +64,12 @@ func (r *DeploymentRunner) Run(
 	ctx context.Context,
 	deploymentID, releaseID, environmentID int64,
 ) {
+	r.mu.Lock()
+	stopping := r.stopping
+	r.mu.Unlock()
+	if stopping {
+		return
+	}
 	runCtx, cancel := context.WithCancel(ctx)
 	r.mu.Lock()
 	if r.stopping {
@@ -72,20 +82,38 @@ func (r *DeploymentRunner) Run(
 		cancel()
 		return
 	}
-	started, err := r.repo.StartLocalDeployment(ctx, deploymentID)
-	if err != nil || !started {
+	gateRun, gated, gateErr := r.repo.BeginArtifactGateRun(ctx, deploymentID)
+	if gateErr != nil {
 		r.mu.Unlock()
 		cancel()
-		if err != nil {
+		if !errors.Is(gateErr, repository.ErrArtifactGate) {
 			slog.Error(
-				"claim deployment",
+				"claim deployment run",
 				"deployment_id",
 				deploymentID,
 				"err",
-				err,
+				gateErr,
 			)
+			r.failUnlessCancelled(context.WithoutCancel(ctx), ctx, deploymentID)
 		}
 		return
+	}
+	if !gated {
+		started, err := r.repo.StartLocalDeployment(ctx, deploymentID)
+		if err != nil || !started {
+			r.mu.Unlock()
+			cancel()
+			if err != nil {
+				slog.Error(
+					"claim deployment",
+					"deployment_id",
+					deploymentID,
+					"err",
+					err,
+				)
+			}
+			return
+		}
 	}
 	r.cancels[deploymentID] = cancel
 	r.mu.Unlock()
@@ -103,17 +131,19 @@ func (r *DeploymentRunner) Run(
 	); err == nil {
 		envName = env.Name
 	}
-	r.publish(ctx, events.Event{
-		Type:          events.DeploymentStarted,
-		DeploymentID:  deploymentID,
-		ProjectID:     release.ProjectID,
-		EnvironmentID: environmentID,
-		Message: fmt.Sprintf(
-			"Deployment #%d started on %s",
-			deploymentID,
-			envName,
-		),
-	})
+	if !gated || gateRun.NextStep == 0 {
+		r.publish(ctx, events.Event{
+			Type:          events.DeploymentStarted,
+			DeploymentID:  deploymentID,
+			ProjectID:     release.ProjectID,
+			EnvironmentID: environmentID,
+			Message: fmt.Sprintf(
+				"Deployment #%d started on %s",
+				deploymentID,
+				envName,
+			),
+		})
+	}
 
 	var steps []deploymentStep
 	stepSource, err := r.repo.Queries.GetDeploymentStepSource(ctx, deploymentID)
@@ -157,6 +187,16 @@ func (r *DeploymentRunner) Run(
 			r.localWork.Done()
 		}
 	}()
+	if gated {
+		if err := r.pinArtifactGateImages(
+			runCtx,
+			deploymentID,
+			steps,
+		); err != nil {
+			r.failUnlessCancelled(ctx, runCtx, deploymentID)
+			return
+		}
+	}
 	stage, err := r.stageArtifact(runCtx, deploymentID)
 	if err != nil {
 		r.failStep(
@@ -196,7 +236,11 @@ func (r *DeploymentRunner) Run(
 		}
 		envMap["ARTIFACT_PATH"] = artifactMount
 	}
+	cleanupDone := false
 	defer func() {
+		if cleanupDone {
+			return
+		}
 		if err := r.cleanupArtifact(deploymentID); err != nil {
 			r.persistCompletion(
 				ctx,
@@ -208,7 +252,37 @@ func (r *DeploymentRunner) Run(
 		}
 	}()
 
+	var approved artifactStage
+	if gated && gateRun.NextStep > 0 {
+		approved, err = r.restoreArtifactGate(
+			runCtx,
+			deploymentID,
+			gateRun.NextStep-1,
+		)
+		if err != nil {
+			r.failUnlessCancelled(ctx, runCtx, deploymentID)
+			return
+		}
+	}
+
 	for stepIndex, step := range steps {
+		if gated && int64(stepIndex) < gateRun.NextStep {
+			continue
+		}
+		if gated {
+			imageID, err := r.repo.Queries.GetArtifactGateImage(
+				ctx,
+				db.GetArtifactGateImageParams{
+					DeploymentID: deploymentID,
+					StepIndex:    int64(stepIndex),
+				},
+			)
+			if err != nil {
+				r.failUnlessCancelled(ctx, runCtx, deploymentID)
+				return
+			}
+			step.ContainerImage = imageID
+		}
 		if runCtx.Err() != nil {
 			r.finalizeCancellation(ctx, deploymentID)
 			return
@@ -220,6 +294,12 @@ func (r *DeploymentRunner) Run(
 			stepName:     step.Name,
 			ctx:          ctx,
 			scrubber:     scrubber,
+			sensitive:    gated,
+		}
+		if gated {
+			const progress = "Executing step; sensitive output hidden"
+			logWriter.writeLine(progress)
+			r.broker.Broadcast(deploymentID, progress)
 		}
 		switch step.ExecutionTarget {
 		case "agent":
@@ -327,8 +407,10 @@ func (r *DeploymentRunner) Run(
 				)))
 				logWriter.Flush()
 				r.failStep(ctx, runCtx, events.Event{
-					Type: events.DeploymentFailed, DeploymentID: deploymentID,
-					ProjectID: release.ProjectID, EnvironmentID: environmentID,
+					Type:          events.DeploymentFailed,
+					DeploymentID:  deploymentID,
+					ProjectID:     release.ProjectID,
+					EnvironmentID: environmentID,
 					Message: "Deployment staging failed: " + errors.Join(err, writeErr).
 						Error(),
 				}, true)
@@ -345,6 +427,7 @@ func (r *DeploymentRunner) Run(
 				attempt:      attempt,
 				artifact:     stage,
 				handoff:      handoff,
+				approved:     approved,
 			})
 			if lastErr == nil {
 				break
@@ -393,6 +476,52 @@ func (r *DeploymentRunner) Run(
 			}, true)
 			return
 		}
+		if step.ApprovalArtifactPath != "" {
+			err := r.captureArtifactGate(
+				runCtx,
+				deploymentID,
+				int64(stepIndex),
+				step,
+				handoff,
+			)
+			if err == nil {
+				err = r.cleanupArtifact(deploymentID)
+				cleanupDone = err == nil
+			}
+			if err == nil {
+				r.mu.Lock()
+				if runCtx.Err() != nil {
+					err = runCtx.Err()
+				} else {
+					err = r.repo.PauseArtifactGate(
+						ctx,
+						deploymentID,
+						int64(stepIndex)+1,
+					)
+					if err == nil {
+						delete(r.cancels, deploymentID)
+					}
+				}
+				r.mu.Unlock()
+			}
+			if err != nil {
+				r.failUnlessCancelled(ctx, runCtx, deploymentID)
+				return
+			}
+			cancel()
+			r.publish(
+				ctx,
+				events.Event{
+					Type:          events.ArtifactAwaitingApproval,
+					DeploymentID:  deploymentID,
+					ProjectID:     release.ProjectID,
+					EnvironmentID: environmentID,
+					Message:       "Deployment artifact is ready for approval",
+				},
+			)
+			return
+		}
+
 	}
 
 	if runCtx.Err() != nil {

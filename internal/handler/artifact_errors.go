@@ -12,7 +12,8 @@ import (
 
 func ArtifactErrorStatus(err error) int {
 	switch {
-	case errors.Is(err, artifact.ErrInvalid),
+	case errors.Is(err, artifact.ErrGateConfig),
+		errors.Is(err, artifact.ErrInvalid),
 		errors.Is(err, verification.ErrInvalid),
 		errors.Is(err, containerenv.ErrReserved),
 		errors.Is(err, artifact.ErrChecksum),

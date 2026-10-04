@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"durpdeploy/internal/artifact"
 	"durpdeploy/internal/containerenv"
 	"durpdeploy/internal/interpreter"
 )
@@ -27,6 +28,7 @@ type localStepAttempt struct {
 	artifact     artifactStage
 	verification bool
 	handoff      artifactStage
+	approved     artifactStage
 }
 
 func (r *DeploymentRunner) runStepAttempt(
@@ -64,7 +66,7 @@ func (r *DeploymentRunner) runStepAttempt(
 			containerenv.StageVariable,
 		)
 	}
-	for _, stage := range []artifactStage{request.artifact, request.handoff} {
+	for _, stage := range []artifactStage{request.artifact, request.handoff, request.approved} {
 		if stage.volume == "" {
 			continue
 		}
@@ -134,6 +136,13 @@ func (r *DeploymentRunner) runStepAttempt(
 		)
 		envArgs = append(envArgs, "--env", containerenv.StageVariable)
 	}
+	if request.approved.volume != "" {
+		selectedEnv = append(
+			selectedEnv,
+			"DURPDEPLOY_APPROVED_DIR="+approvedMount,
+		)
+		envArgs = append(envArgs, "--env", "DURPDEPLOY_APPROVED_DIR")
+	}
 	nonce := make([]byte, 12)
 	if _, err := rand.Read(nonce); err != nil {
 		return err
@@ -159,15 +168,28 @@ func (r *DeploymentRunner) runStepAttempt(
 			"--memory=%d", artifactStagingCapacity()+(256<<20),
 		)
 	}
+	network := request.step.NetworkMode
+	tmpfs := "--tmpfs=/tmp:rw,nosuid,size=64m"
+	if request.step.ApprovalArtifactPath != "" ||
+		request.approved.volume != "" {
+		// Providers execute in /tmp; staging and approved context stay noexec.
+		tmpfs = fmt.Sprintf(
+			"--tmpfs=/tmp:rw,exec,nosuid,nodev,size=%d",
+			artifact.MaxDownload+(64<<20),
+		)
+	}
+	if network == "" {
+		network = "none"
+	}
 	args = append(args,
 		"--interactive", "--pull=missing",
 		timeoutFlag+fmt.Sprint(int64(timeout/time.Second)),
 		"--log-driver=none",
 		"--name="+name, "--label=io.durpdeploy.attempt="+name,
 		"--label=io.durpdeploy.namespace="+r.engine.scope(),
-		"--network=none", "--read-only", "--cap-drop=ALL",
+		"--network="+network, "--read-only", "--cap-drop=ALL",
 		"--security-opt=no-new-privileges", "--user=65534:65534",
-		"--tmpfs=/tmp:rw,nosuid,size=64m",
+		tmpfs,
 		"--env=HOME=/tmp", "--env=TERM=dumb",
 		"--pids-limit=128", memoryLimit, "--cpus=1")
 	if r.engine.kind == "podman" {
@@ -176,6 +198,12 @@ func (r *DeploymentRunner) runStepAttempt(
 	args = append(args, envArgs...)
 	args = append(args, r.artifactMountArgs(request.artifact)...)
 	args = append(args, r.deploymentMountArgs(request.handoff)...)
+	if request.approved.volume != "" {
+		args = append(
+			args,
+			"--volume="+request.approved.volume+":"+approvedMount+":ro,nocopy",
+		)
+	}
 	args = append(args, "--entrypoint="+selected, request.step.ContainerImage)
 	switch selected {
 	case interpreter.Bash:
