@@ -273,7 +273,7 @@ func isTerminalStatus(status string) bool {
 }
 
 templ StatusBadge(deployment db.Deployment) {
-	<span class={ fmt.Sprintf("badge %s", statusBadgeClass(deployment.Status)) }>
+	<span class={ fmt.Sprintf("badge max-w-full h-auto whitespace-normal break-all %s", statusBadgeClass(deployment.Status)) }>
 		{ deployment.Status }
 	</span>
 }

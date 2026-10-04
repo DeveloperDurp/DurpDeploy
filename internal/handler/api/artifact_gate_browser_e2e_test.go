@@ -51,6 +51,14 @@ func TestArtifactGateBrowserE2E(t *testing.T) {
 			t,
 			`Array.from(document.querySelectorAll('h2')).find(e=>e.textContent==='Currently running')?.parentElement.innerText.includes('awaiting_artifact_approval')`,
 		)
+		if string(
+			browser.evaluate(
+				t,
+				`Array.from(document.querySelectorAll('table .badge')).every(b=>b.getBoundingClientRect().right<=b.closest('td').getBoundingClientRect().right)`,
+			),
+		) != "true" {
+			t.Fatal("dashboard status badge overlaps the date column")
+		}
 		browser.screenshot(
 			t,
 			fmt.Sprintf("artifact-dashboard-waiting-%d", width),
