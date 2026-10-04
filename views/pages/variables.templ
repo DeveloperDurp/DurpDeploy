@@ -75,10 +75,10 @@ templ VariablesPage(project db.Project, variables []db.Variable, environments Va
 
 templ VariablesContent(project db.Project, variables []db.Variable, environments VariableEnvironments, errorMsg string) {
 	<div class="space-y-6">
-		<div class="flex justify-between items-center">
-			<h1 class="text-3xl font-bold">Variables — { project.Name }</h1>
+		<div class="flex flex-wrap gap-2 justify-between items-center">
+			<h1 class="min-w-0 w-full break-words sm:w-auto sm:flex-1 text-3xl font-bold">Variables — { project.Name }</h1>
 			<div class="flex gap-2">
-				<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost btn-sm">Back</a>
+				<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>
 			</div>
 		</div>
 		@VariablesFragment(project, variables, environments, errorMsg)
@@ -275,7 +275,7 @@ templ VariableRow(projectID int64, variable db.Variable, environments VariableEn
 				</button>
 			}
 			if CanWrite(ctx) {
-				<div x-show="editing" data-desktop-variable-edit={ strconv.FormatInt(variable.ID, 10) } class="basis-full mt-2">
+				<div x-cloak x-show="editing" data-desktop-variable-edit={ strconv.FormatInt(variable.ID, 10) } class="basis-full mt-2">
 					@VariableQuickEditForm(projectID, variable, environments)
 				</div>
 			}
@@ -399,7 +399,7 @@ templ VariableMobileRecord(projectID int64, variable db.Variable, environments V
 					Delete
 				</button>
 			</div>
-			<div x-show="editing" data-mobile-variable-edit={ strconv.FormatInt(variable.ID, 10) } class="card bg-base-100 p-3">
+			<div x-cloak x-show="editing" data-mobile-variable-edit={ strconv.FormatInt(variable.ID, 10) } class="card bg-base-100 p-3">
 				@VariableQuickEditForm(projectID, variable, environments)
 			</div>
 		}

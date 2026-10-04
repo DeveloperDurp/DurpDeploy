@@ -61,6 +61,17 @@ keep `overflow-x-auto` and `table table-zebra table-fixed w-full`.
   `form-control`, `label`, and `input input-bordered`.
 - **States**: validation uses `text-error text-sm`; alerts use semantic
   `alert-*` classes.
+- Initially hidden Alpine edit forms use `x-cloak` to prevent a flash before
+  initialization. Runbook editor methods live in the shared JavaScript bundle;
+  templates carry initial data and short method calls.
+- Runbook steps keep stable editor IDs when reordered; IDs are local UI state.
+- Schedule tables reserve space for timestamps and controls, with the Schedule
+  column taking the remaining width. Flex action groups sit inside table cells.
+- Native dialogs connect their visible heading with `aria-labelledby`.
+  Script editor headings use Alpine-generated IDs to keep repeated editors
+  distinct.
+- Headers containing project names wrap their heading above Back on narrow
+  screens, so long names cannot push the control outside the viewport.
 
 ### Package repository configuration
 - One active project source is shown as a card, without a repository selector.
@@ -71,6 +82,22 @@ keep `overflow-x-auto` and `table table-zebra table-fixed w-full`.
 - Configuration replacement preserves historical package pins, and the page
   states that saving affects only future snapshots.
 
+### Back navigation
+- Generic Back/Go back links use native browser history, preserving previous
+  URLs, filters, and pagination. They do not add entries or maintain a URL stack.
+- Header links use `btn btn-ghost btn-sm`, grouped beside the other actions with
+  `flex flex-wrap gap-2`. Back remains available to viewers and keyboard users.
+- The existing parent URL is the fallback for an empty history. Package
+  repository Back falls back to its project; the standalone viewer rejection
+  page falls back to Projects. JavaScript replaces the direct entry to avoid a
+  Back loop; links also work without JavaScript.
+- The Navigation API distinguishes a first entry with forward history from a
+  real previous page when all entries are visible. Cross-origin entries and old
+  browsers hide that position; in those cases Back favors browser history over
+  a guessed fallback. Modified clicks retain normal anchor behavior.
+- Breadcrumbs, named destination links, and Cancel controls retain their
+  explicit destinations.
+
 ### Deployment verification and rollback
 - Verification uses the existing form fields, a native type selector, and
   supporting text explaining timeout and execution placement. Every new field
@@ -80,6 +107,19 @@ keep `overflow-x-auto` and `table table-zebra table-fixed w-full`.
   is submitted explicitly so stale confirmations fail safely.
 - Viewers see verification results but no rollback write control. All new
   surfaces wrap at small widths and keep the existing semantic focus states.
+
+### Deployment detail on narrow screens
+- Use a vertical stack with document scrolling. Status and the active step sit
+  with the title; labeled metadata wraps long values in `text-sm`.
+- Live step logs precede verification and step definitions in source order.
+  Disabled verification is a compact `text-sm` line, not a card.
+- Primary actions and Back use `btn` on narrow screens and `sm:btn-sm` above
+  that breakpoint. Export and Rollback use the existing native dropdown.
+- Step definitions use native expandable cards below `sm`, with full names and
+  wrapped scripts; the existing fixed table remains above `sm`.
+- Action groups use the [cluster pattern](https://github.com/changeroa/StyleGallery/blob/main/patterns/in-line-grouping/cluster.md):
+  `flex flex-wrap gap-2`, with no internal scroll container. Summary controls
+  use `min-h-12` from the existing spacing scale for touch access.
 
 ### Agent maintenance and health
 - Show administrative state and heartbeat health as separate labelled badges:
@@ -100,6 +140,20 @@ keep `overflow-x-auto` and `table table-zebra table-fixed w-full`.
   work is claimed or the deployment finishes.
 
 ## 6. Motion & Interaction
+
+Normal internal page links use HTMX to replace the main content, update the
+navbar and title, and push the existing URL into browser history. The document
+and its styles stay loaded; no page fade or layout animation is added. Focus
+moves to the main landmark after navigation. Native forms, downloads, login,
+logout, external links, and modified clicks keep their existing behavior.
+History restoration fetches fresh content without saving protected markup in
+browser storage. Existing Alpine components release their streams on removal.
+
+Deployment logs use one native `details` disclosure per release step, in release
+order, with a semantic state badge. Running, waiting, and failed steps open
+automatically; users can collapse them with the keyboard. A polite status line
+names the active step even while its script is quiet. Unattributed historical
+logs appear as deployment messages, with unavailable states shown explicitly.
 
 Existing interaction is intentionally minimal: native `details` disclosure,
 Alpine theme/dropdown state, HTMX swaps, and `x-transition.opacity.duration.300ms`

@@ -34,7 +34,7 @@ func (h *StepTemplateHandler) ListTemplates(
 		return
 	}
 
-	if r.Header.Get("HX-Request") == "true" {
+	if isFragmentRequest(r) {
 		if err := pages.TemplatesListContent(templates).
 			Render(r.Context(), w); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -371,7 +371,7 @@ func (h *StepTemplateHandler) ListTemplateHistory(
 		return
 	}
 
-	if r.Header.Get("HX-Request") == "true" {
+	if isFragmentRequest(r) {
 		if err := pages.TemplateHistoryContent(tpl, versions).
 			Render(r.Context(), w); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)

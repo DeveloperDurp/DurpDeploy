@@ -92,7 +92,7 @@ templ RunbookFormPage(project db.Project, book db.Runbook, stepsJSON string, art
 				if errorMessage != "" {
 					<div class="alert alert-error">{ errorMessage }</div>
 				}
-				<form method="post" action={ runbookSaveURL(project.ID, book.ID) } class="space-y-4" x-data={ fmt.Sprintf("{ steps: %s }", stepsJSON) } x-init="steps.forEach(step => { step.agent_selectors_text = (step.agent_selectors || []).join(', '); step.variable_names_text = (step.variable_names || []).join(', '); })">
+				<form method="post" action={ runbookSaveURL(project.ID, book.ID) } class="space-y-4" x-data="runbookEditor" data-steps={ stepsJSON }>
 					<label class="form-control"><span class="label-text">Package from project release</span><select name="artifact_release_id" class="select select-bordered"><option value="0" selected?={ selectedArtifactReleaseID==0 }>No package</option>
 					if selectedArtifactReleaseID==-1 {
 						<option value="-1" selected>Keep current pinned package (source release deleted)</option>
@@ -106,9 +106,9 @@ templ RunbookFormPage(project db.Project, book db.Runbook, stepsJSON string, art
 						<label class="form-control"><span class="label-text">Name</span><input name="name" class="input input-bordered" required/></label>
 						<label class="form-control"><span class="label-text">Description</span><input name="description" class="input input-bordered"/></label>
 					}
-					<template x-for="(step, index) in steps" :key="index">
+					<template x-for="(step, index) in steps" :key="step.editorID">
 						<div class="card bg-base-200 p-4 space-y-3">
-							<div class="flex justify-between items-center"><h2 class="font-bold" x-text="`Step ${index + 1}`"></h2><div class="flex gap-2"><button type="button" class="btn btn-xs" aria-label="Move step up" x-on:click="[steps[index - 1], steps[index]] = [steps[index], steps[index - 1]]" x-bind:disabled="index === 0">↑</button><button type="button" class="btn btn-xs" aria-label="Move step down" x-on:click="[steps[index], steps[index + 1]] = [steps[index + 1], steps[index]]" x-bind:disabled="index === steps.length - 1">↓</button><button type="button" class="btn btn-xs btn-error" x-on:click="steps.splice(index, 1)" x-bind:disabled="steps.length === 1">Remove</button></div></div>
+							<div class="flex justify-between items-center"><h2 class="font-bold" x-text="`Step ${index + 1}`"></h2><div class="flex gap-2"><button type="button" class="btn btn-xs" aria-label="Move step up" x-on:click="moveStep(index, -1)" x-bind:disabled="index === 0">↑</button><button type="button" class="btn btn-xs" aria-label="Move step down" x-on:click="moveStep(index, 1)" x-bind:disabled="index === steps.length - 1">↓</button><button type="button" class="btn btn-xs btn-error" x-on:click="removeStep(index)" x-bind:disabled="steps.length === 1">Remove</button></div></div>
 							<label class="form-control"><span class="label-text">Step name</span><input name="step_name" class="input input-bordered" x-model="step.name" required/></label>
 							<label class="form-control"><span class="label-text">Script</span><textarea name="step_script" class="textarea textarea-bordered font-mono min-h-36" x-model="step.script_body" required></textarea></label>
 							<div class="grid grid-cols-1 md:grid-cols-4 gap-3">
@@ -124,7 +124,7 @@ templ RunbookFormPage(project db.Project, book db.Runbook, stepsJSON string, art
 							<label class="form-control"><span class="label-text">Limit variables (optional)</span><input name="step_variable_names" class="input input-bordered" x-model="step.variable_names_text" placeholder="Empty passes all; or DB_HOST, API_TOKEN"/></label>
 						</div>
 					</template>
-					<button type="button" class="btn btn-secondary" x-on:click="steps.push({name:'',script_body:'',interpreter:'bash',timeout_seconds:0,max_retries:0,execution_target:'local',agent_selectors_text:'',container_image:'',variable_names_text:''})">Add step</button>
+					<button type="button" class="btn btn-secondary" x-on:click="addStep">Add step</button>
 					<div><button type="submit" class="btn btn-primary">Save immutable version</button><a class="btn btn-ghost" href={ fmt.Sprintf("/projects/%d/runbooks", project.ID) }>Cancel</a></div>
 				</form>
 			</div>

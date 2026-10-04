@@ -91,7 +91,7 @@ func newRouter(
 	// Serve static files from embedded assets (public).
 	r.Handle(
 		"/static/*",
-		http.StripPrefix("/static/", http.FileServer(http.FS(static.Assets))),
+		static.Handler(),
 	)
 	r.Get("/favicon.ico", func(w http.ResponseWriter, req *http.Request) {
 		http.Redirect(

@@ -66,6 +66,8 @@ func (r *DeploymentRunner) Run(
 		cancel()
 		return
 	}
+	r.broker.beginDeployment(deploymentID)
+	defer r.broker.endDeployment(deploymentID)
 	r.cancels[deploymentID] = cancel
 	r.mu.Unlock()
 
@@ -208,6 +210,7 @@ func (r *DeploymentRunner) Run(
 			repo:         r.repo,
 			deploymentID: deploymentID,
 			stepName:     step.Name,
+			stepIndex:    sql.NullInt64{Int64: int64(stepIndex), Valid: true},
 			ctx:          ctx,
 			scrubber:     scrubber,
 		}
@@ -316,6 +319,7 @@ func (r *DeploymentRunner) Run(
 					err,
 				)))
 				logWriter.Flush()
+				logWriter.finishState(err, runCtx.Err() != nil)
 				r.failStep(ctx, runCtx, events.Event{
 					Type: events.DeploymentFailed, DeploymentID: deploymentID,
 					ProjectID: release.ProjectID, EnvironmentID: environmentID,

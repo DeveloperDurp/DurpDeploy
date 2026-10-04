@@ -58,7 +58,7 @@ func (h *ReleaseHandler) ListReleases(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if r.Header.Get("HX-Request") == "true" {
+	if isFragmentRequest(r) {
 		if err := pages.ReleasesFragment(project, views, "").
 			Render(r.Context(), w); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)

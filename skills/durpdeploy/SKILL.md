@@ -336,6 +336,20 @@ have no total lifetime limit, but each event write/flush must finish within
 60 seconds. Consume streams continuously and reconnect after disconnects.
 An operator's reverse proxy may impose additional limits.
 
+Deployment logs also support structured SSE at
+`GET /api/v1/deployments/$DID/logs/stream?format=structured`. Each `log`
+event has an SSE `id` and JSON fields `id`, `line`, `step`, `step_index`
+(nullable for legacy/unassigned output), `created_at`, and optional `state`
+(`waiting`, `running`, `succeeded`, `failed`, or `cancelled`). Step indices
+are zero-based snapshot positions; duplicate names remain separate. State
+events are trusted lifecycle records, not parsed script output. Resume with
+`Last-Event-ID` or an initial `after` query parameter. A terminal deployment
+drains its logs, sends `event: complete` with JSON `status`, then closes;
+clients should close their EventSource on that event. Default SSE/NDJSON and
+plain-text export retain their formats.
+Errors before a structured stream starts use the usual JSON `error` envelope,
+including invalid cursors, missing deployments, and startup failures.
+
 Execution actions are `POST .../$XID/cancel`, `/approve` (admin only),
 and `/retry` (after a terminal status). Retry returns `409` while the source
 execution has a lost or unconfirmed remote outcome; inspect the agent before

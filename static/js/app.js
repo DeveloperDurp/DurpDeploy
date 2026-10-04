@@ -4,6 +4,65 @@ import htmx from 'htmx.org'
 window.Alpine = Alpine
 window.htmx = htmx
 
+// Re-fetch history entries rather than storing protected page content.
+htmx.config.historyCacheSize = 0;
+htmx.config.historyRestoreAsHxRequest = false;
+
+htmx.onLoad((root) => {
+	if (!document.querySelector('meta[name="csrf-token"]')) return;
+	const links = [...root.querySelectorAll('a[href]')];
+	if (root.matches?.('a[href]')) links.push(root);
+	for (const link of links) {
+		if (!link.getAttribute('href').startsWith('/') || link.origin !== location.origin ||
+			link.hash || link.target || link.hasAttribute('download') ||
+			link.closest('[hx-boost], [data-hx-boost], [x-data="backNavigation"]') ||
+			link.matches('[hx-get], [hx-post], [hx-put], [hx-patch], [hx-delete]') ||
+			/^\/(login|logout|auth|api|static|swagger|healthz|\.well-known)(\/|$)/.test(link.pathname) ||
+			link.pathname === '/settings/security/reauth/oidc' ||
+			link.pathname.endsWith('/logs.txt')) continue;
+		link.setAttribute('hx-boost', 'true');
+		link.setAttribute('hx-target', '#page-content');
+		link.setAttribute('hx-select', '#page-content');
+		link.setAttribute('hx-select-oob', '#app-navbar');
+		link.setAttribute('hx-swap', 'outerHTML show:window:top');
+		link.setAttribute('hx-sync', 'body:replace');
+		htmx.process(link);
+	}
+});
+
+document.addEventListener('htmx:afterSwap', (event) => {
+	if (event.target.id === 'page-content' && event.detail.requestConfig?.boosted) {
+		document.getElementById('page-content')?.focus({ preventScroll: true });
+	}
+});
+document.addEventListener('htmx:beforeSwap', (event) => {
+	if (event.detail.requestConfig?.boosted && event.detail.xhr.status >= 400) {
+		event.preventDefault();
+		location.assign(event.detail.xhr.responseURL);
+	}
+});
+document.addEventListener('htmx:historyCacheMissLoadError', (event) => {
+	const redirect = event.detail.xhr.getResponseHeader('HX-Redirect');
+	if (redirect) location.replace(redirect);
+});
+
+Alpine.data('backNavigation', () => ({
+	back(event) {
+		if (event.defaultPrevented || event.button !== 0 || event.ctrlKey ||
+			event.metaKey || event.shiftKey || event.altKey) return;
+		const navigation = window.navigation;
+		// Navigation entries omit other origins. Only fall back when the
+		// browser proves there is no previous entry; otherwise use real history.
+		event.preventDefault();
+		if (history.length === 1 || (navigation && !navigation.canGoBack &&
+			navigation.entries().length === history.length)) {
+			location.replace(event.currentTarget.href);
+			return;
+		}
+		history.back();
+	},
+}));
+
 Alpine.data('toast', () => ({
 	visible: false,
 	message: '',
@@ -155,6 +214,34 @@ Alpine.data('releaseDeployRow', () => ({
 Alpine.data('stepPlacement', (executionTarget = 'local', agentLabel = '') => ({
 	executionTarget,
 	agentLabel,
+}));
+
+Alpine.data('runbookEditor', () => ({
+	steps: [],
+	nextStepID: 0,
+	init() {
+		this.steps = JSON.parse(this.$el.dataset.steps);
+		for (const step of this.steps) {
+			step.editorID = this.nextStepID++;
+			step.agent_selectors_text = (step.agent_selectors || []).join(', ');
+			step.variable_names_text = (step.variable_names || []).join(', ');
+		}
+	},
+	moveStep(index, offset) {
+		const other = index + offset;
+		[this.steps[index], this.steps[other]] = [this.steps[other], this.steps[index]];
+	},
+	removeStep(index) {
+		this.steps.splice(index, 1);
+	},
+	addStep() {
+		this.steps.push({
+			editorID: this.nextStepID++,
+			name: '', script_body: '', interpreter: 'bash', timeout_seconds: 0,
+			max_retries: 0, execution_target: 'local', agent_selectors_text: '',
+			container_image: '', variable_names_text: '',
+		});
+	},
 }));
 
 Alpine.data('stepFormHost', () => ({
@@ -321,6 +408,81 @@ Alpine.data('deploymentStream', ({ url }) => ({
 	destroy() {
 		this.destroyed = true;
 		if (this.source) this.source.close();
+		this.source = null;
+	},
+}));
+
+Alpine.data('deploymentStepLogs', ({ url, status, view }) => ({
+	url,
+	deploymentStatus: status,
+	panels: view.panels,
+	lastID: view.lastID,
+	source: null,
+	init() {
+		// Cancellation can set terminal status before the runner writes final logs.
+		const address = new URL(this.url, location.href);
+		address.searchParams.set('after', this.lastID);
+		this.source = new EventSource(address);
+		this.source.addEventListener('log', event => this.message(event));
+		this.source.addEventListener('complete', event => {
+			this.finish(JSON.parse(event.data).status);
+			this.source?.close();
+			this.source = null;
+		});
+	},
+	terminal() {
+		return ['succeeded', 'failed', 'cancelled', 'cleanup_unconfirmed'].includes(this.deploymentStatus);
+	},
+	message(event) {
+		const entry = JSON.parse(event.data);
+		if (entry.id <= this.lastID) return;
+		this.lastID = entry.id;
+		let panel = this.panels.find(item => item.index === entry.step_index);
+		if (!panel && entry.step) {
+			const matches = this.panels.filter(item => item.index >= 0 &&
+				(entry.step === item.name || entry.step.startsWith(`${item.name} @ `)));
+			if (matches.length === 1) panel = matches[0];
+		}
+		panel ??= this.panels.find(item => item.index === -1);
+		panel.live.push(entry);
+		if (entry.state) {
+			panel.state = entry.state;
+			if (['running', 'waiting', 'failed'].includes(entry.state)) {
+				this.$el.querySelector(`[data-step-index="${panel.index}"]`).open = true;
+			}
+		} else if (panel.state === 'pending') {
+			panel.state = 'unknown';
+		}
+	},
+	stateLabel(state) {
+		return ({ waiting: 'Waiting for agents', running: 'Running',
+			succeeded: 'Succeeded', failed: 'Failed', cancelled: 'Cancelled',
+			not_run: 'Not run', unknown: 'State unavailable' })[state] ?? 'Pending';
+	},
+	activeStepText() {
+		const active = this.panels.find(panel => panel.index >= 0 && ['running', 'waiting'].includes(panel.state));
+		if (active) return `${this.stateLabel(active.state)}: Step ${active.index + 1} — ${active.name}`;
+		if (this.terminal()) return `Deployment ${this.deploymentStatus.replaceAll('_', ' ')}`;
+		if (this.deploymentStatus === 'running') return 'Current step unavailable';
+		return 'Waiting to start';
+	},
+	statusChanged(event) {
+		const target = event.target instanceof Element ? event.target : event.detail?.target;
+		if (!(target instanceof Element) || target.id !== 'status-badge') return;
+		this.deploymentStatus = target.textContent.trim();
+		// The stream drains final logs before sending its complete event.
+	},
+	finish(status) {
+		this.deploymentStatus = status;
+		for (const panel of this.panels) {
+			if (panel.state === 'pending') panel.state = 'unknown';
+			if (['running', 'waiting'].includes(panel.state)) {
+				panel.state = 'unknown';
+			}
+		}
+	},
+	destroy() {
+		this.source?.close();
 		this.source = null;
 	},
 }));

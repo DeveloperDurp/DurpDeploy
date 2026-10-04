@@ -118,7 +118,7 @@ func (h *VariableHandler) ListVariables(
 		return
 	}
 
-	if r.Header.Get("HX-Request") == "true" {
+	if isFragmentRequest(r) {
 		pages.VariablesFragment(project, variables, environments, "").
 			Render(r.Context(), w)
 	} else {

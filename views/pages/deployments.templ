@@ -61,7 +61,12 @@ templ DeploymentsFilterBar(view DeploymentsView) {
 			<select name="project_id" class="select select-bordered select-sm">
 				<option value="">All</option>
 				for _, p := range view.Projects {
-					<option value={ strconv.FormatInt(p.ID, 10) } if view.FilterProject.Valid && view.FilterProject.Int64 == p.ID { selected }>{ p.Name }</option>
+					<option
+						value={ strconv.FormatInt(p.ID, 10) }
+						if view.FilterProject.Valid && view.FilterProject.Int64 == p.ID {
+							selected
+						}
+					>{ p.Name }</option>
 				}
 			</select>
 		</label>
@@ -70,7 +75,12 @@ templ DeploymentsFilterBar(view DeploymentsView) {
 			<select name="env_id" class="select select-bordered select-sm">
 				<option value="">All</option>
 				for _, e := range view.Envs {
-					<option value={ strconv.FormatInt(e.ID, 10) } if view.FilterEnv.Valid && view.FilterEnv.Int64 == e.ID { selected }>{ e.Name }</option>
+					<option
+						value={ strconv.FormatInt(e.ID, 10) }
+						if view.FilterEnv.Valid && view.FilterEnv.Int64 == e.ID {
+							selected
+						}
+					>{ e.Name }</option>
 				}
 			</select>
 		</label>
@@ -78,11 +88,36 @@ templ DeploymentsFilterBar(view DeploymentsView) {
 			<span class="label-text">Status</span>
 			<select name="status" class="select select-bordered select-sm">
 				<option value="">All</option>
-				<option value="pending" if view.FilterStatus.String == "pending" { selected }>pending</option>
-				<option value="running" if view.FilterStatus.String == "running" { selected }>running</option>
-				<option value="succeeded" if view.FilterStatus.String == "succeeded" { selected }>succeeded</option>
-				<option value="failed" if view.FilterStatus.String == "failed" { selected }>failed</option>
-				<option value="cancelled" if view.FilterStatus.String == "cancelled" { selected }>cancelled</option>
+				<option
+					value="pending"
+					if view.FilterStatus.String == "pending" {
+						selected
+					}
+				>pending</option>
+				<option
+					value="running"
+					if view.FilterStatus.String == "running" {
+						selected
+					}
+				>running</option>
+				<option
+					value="succeeded"
+					if view.FilterStatus.String == "succeeded" {
+						selected
+					}
+				>succeeded</option>
+				<option
+					value="failed"
+					if view.FilterStatus.String == "failed" {
+						selected
+					}
+				>failed</option>
+				<option
+					value="cancelled"
+					if view.FilterStatus.String == "cancelled" {
+						selected
+					}
+				>cancelled</option>
 			</select>
 		</label>
 		<label class="form-control">
@@ -291,50 +326,65 @@ templ DeploymentDetailPage(project db.Project, release db.Release, environment d
 }
 
 templ DeploymentDetail(project db.Project, release db.Release, environment db.Environment, deployment db.Deployment, logs []db.DeploymentLog, waitingForAgents bool) {
-	<div class="space-y-6">
-		<div class="flex flex-wrap justify-between items-center gap-2">
-			<div>
-				<h1 class="text-3xl font-bold">Deployment #{ strconv.FormatInt(deployment.ID, 10) }</h1>
-				<p class="text-gray-400">
-					Project: { project.Name } | Release: { release.Version } | Environment: { environment.Name }
-				</p>
-				if deployment.Note.Valid {
-					<blockquote class="border-l-4 border-accent pl-3 mt-2 text-sm text-gray-300 italic">
-						{ deployment.Note.String }
-					</blockquote>
-				}
+	{{ logView := deploymentLogPanels(release, deployment, logs) }}
+	<div class="space-y-6" x-data={ fmt.Sprintf("deploymentStepLogs({ url: '/deployments/%d/logs/stream?format=structured', status: %q, view: %s })", deployment.ID, deployment.Status, deploymentLogConfig(logView)) } x-on:htmx:after-swap.camel.window="statusChanged($event)">
+		<div class="space-y-4">
+			<div class="flex flex-wrap items-center justify-between gap-2">
+				<div class="flex flex-wrap items-center gap-2 min-w-0">
+					<h1 class="text-3xl font-bold break-words">Deployment #{ strconv.FormatInt(deployment.ID, 10) }</h1>
+					@StatusBadgeContainer(deployment, waitingForAgents)
+				</div>
+				<a href={ fmt.Sprintf("/projects/%d/releases/%d", project.ID, release.ID) } class="btn btn-ghost sm:btn-sm" x-data="backNavigation" @click="back">Back</a>
 			</div>
-			<div class="flex flex-wrap items-center gap-2 ml-auto">
-				<a href={ fmt.Sprintf("/deployments/%d/logs.txt", deployment.ID) } class="btn btn-sm btn-ghost">Export</a>
+			<p class="font-medium break-words" role="status" x-text="activeStepText()">{ deploymentActiveStepLabel(logView, deployment.Status) }</p>
+			<dl class="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-4 text-sm">
+				<div class="flex gap-2 sm:block min-w-0">
+					<dt class="w-24 shrink-0 sm:w-auto opacity-70">Project</dt>
+					<dd class="min-w-0 break-all">{ project.Name }</dd>
+				</div>
+				<div class="flex gap-2 sm:block min-w-0">
+					<dt class="w-24 shrink-0 sm:w-auto opacity-70">Release</dt>
+					<dd class="min-w-0 break-all">{ release.Version }</dd>
+				</div>
+				<div class="flex gap-2 sm:block min-w-0">
+					<dt class="w-24 shrink-0 sm:w-auto opacity-70">Environment</dt>
+					<dd class="min-w-0 break-all">{ environment.Name }</dd>
+				</div>
+			</dl>
+			if deployment.Note.Valid {
+				<blockquote class="bg-base-200 rounded-box p-4 text-sm break-words italic">
+					{ deployment.Note.String }
+				</blockquote>
+			}
+			<div class="flex flex-wrap items-center gap-2">
 				if CanWrite(ctx) {
 					if isTerminalStatus(deployment.Status) {
-						<a href={ fmt.Sprintf("/deployments/%d/rollback", deployment.ID) } class="btn btn-sm btn-secondary">Rollback</a>
 						<button
-							class="btn btn-sm btn-primary"
+							class="btn btn-primary sm:btn-sm"
 							hx-post={ fmt.Sprintf("/deployments/%d/redeploy", deployment.ID) }
 							hx-confirm={ fmt.Sprintf("Re-run this deployment with the same release (%s) and environment (%s)?", release.Version, environment.Name) }
 							hx-disable-elt
 							data-toast-success="Re-run started"
 							data-toast-error="Failed to re-run"
 						>
-				Re-run
-					</button>
-				}
-				if deployment.Status == "pending_approval" {
-					<button
-						class="btn btn-sm btn-success"
-						hx-post={ fmt.Sprintf("/deployments/%d/approve", deployment.ID) }
-						hx-confirm="Approve this deployment and start the runner?"
-						hx-disable-elt
-						data-toast-success="Deployment approved"
-						data-toast-error="Failed to approve"
-					>
-						Approve
-					</button>
-				}
-				if deployment.Status == "running" || deployment.Status == "pending_approval" {
+							Re-run
+						</button>
+					}
+					if deployment.Status == "pending_approval" {
 						<button
-							class="btn btn-sm btn-error"
+							class="btn btn-success sm:btn-sm"
+							hx-post={ fmt.Sprintf("/deployments/%d/approve", deployment.ID) }
+							hx-confirm="Approve this deployment and start the runner?"
+							hx-disable-elt
+							data-toast-success="Deployment approved"
+							data-toast-error="Failed to approve"
+						>
+							Approve
+						</button>
+					}
+					if deployment.Status == "running" || deployment.Status == "pending_approval" {
+						<button
+							class="btn btn-error sm:btn-sm"
 							hx-post={ fmt.Sprintf("/deployments/%d/cancel", deployment.ID) }
 							hx-target="#status-badge"
 							hx-swap="outerHTML"
@@ -345,34 +395,93 @@ templ DeploymentDetail(project db.Project, release db.Release, environment db.En
 						</button>
 					}
 				}
-				@StatusBadgeContainer(deployment, waitingForAgents)
-				<a href={ fmt.Sprintf("/projects/%d/releases/%d", project.ID, release.ID) } class="btn btn-ghost btn-sm">Back</a>
+				<details class="dropdown dropdown-end ml-auto" data-focus-menu @click.outside="$el.open = false">
+					<summary class="btn btn-ghost sm:btn-sm">More</summary>
+					<ul class="dropdown-content menu bg-base-200 rounded-box z-[1] w-44 p-2 shadow">
+						<li><a href={ fmt.Sprintf("/deployments/%d/logs.txt", deployment.ID) } class="min-h-12 sm:min-h-0">Export logs</a></li>
+						if CanWrite(ctx) && isTerminalStatus(deployment.Status) {
+							<li><a href={ fmt.Sprintf("/deployments/%d/rollback", deployment.ID) } class="min-h-12 sm:min-h-0">Rollback</a></li>
+						}
+					</ul>
+				</details>
 			</div>
 		</div>
+		<section class="space-y-4" aria-label="Step logs">
+			<h2 class="text-xl font-bold">Step logs</h2>
+			for position, panel := range logView.Panels {
+				<details
+					class="bg-base-200 rounded-box p-4"
+					data-step-index={ strconv.Itoa(panel.Index) }
+					open?={ panel.Open }
+					if panel.Index == -1 {
+						if len(panel.Logs) == 0 {
+							style="display:none"
+						}
+						x-show={ fmt.Sprintf("panels[%d].live.length > 0 || %t", position, len(panel.Logs) > 0) }
+					}
+				>
+					<summary class="cursor-pointer font-medium break-words min-h-12 sm:min-h-0">
+						if panel.Index >= 0 {
+							<span>Step { strconv.Itoa(panel.Index+1) }: </span>
+						}
+						{ panel.Name }
+						if panel.Index >= 0 {
+							<span class="badge badge-outline ml-2" x-text={ fmt.Sprintf("stateLabel(panels[%d].state)", position) } x-bind:class={ fmt.Sprintf("{ 'badge-info': panels[%d].state === 'running', 'badge-error': panels[%d].state === 'failed' }", position, position) }>{ deploymentStepStateLabel(panel.State) }</span>
+						}
+					</summary>
+					<div class="mt-4 space-y-1 overflow-x-auto">
+						for _, log := range panel.Logs {
+							<div class="font-mono text-sm whitespace-pre-wrap break-words" data-log-id={ strconv.FormatInt(log.ID, 10) }>
+								<span class="text-gray-500">[{ formatUnixTime(log.CreatedAt) }] </span>
+								if log.StepName.Valid && log.StepName.String != panel.Name {
+									<span class="text-accent">[{ log.StepName.String }] </span>
+								}
+								{ log.Line }
+							</div>
+						}
+						<template x-for={ fmt.Sprintf("entry in panels[%d].live", position) } x-bind:key="entry.id">
+							<div class="font-mono text-sm whitespace-pre-wrap break-words" x-bind:data-log-id="entry.id" x-text="entry.step.includes(' @ ') ? '[' + entry.step + '] ' + entry.line : entry.line"></div>
+						</template>
+						if len(panel.Logs) == 0 {
+							<p class="text-gray-500 italic" x-show={ fmt.Sprintf("panels[%d].live.length === 0", position) }>No output yet.</p>
+						}
+					</div>
+				</details>
+			}
+		</section>
 		<div hx-get={ fmt.Sprintf("/deployments/%d/verification", deployment.ID) } hx-trigger="load" hx-swap="outerHTML" aria-live="polite"></div>
-		<div class="card bg-base-200 p-4">
+		<section class="card bg-base-200 p-4" aria-label="Step definitions">
 			<h2 class="text-xl font-bold mb-4">Steps</h2>
-			<table class="table table-zebra table-fixed w-full">
-				<thead>
-					<tr>
-						<th class="w-16">Order</th>
-						<th class="w-1/4">Name</th>
-						<th class="w-24">Interpreter</th>
-						<th class="w-auto hidden sm:table-cell">Script</th>
-					</tr>
-				</thead>
-				<tbody>
-					if len(parseReleaseSteps(release.StepsJson)) == 0 {
+			if len(parseReleaseSteps(release.StepsJson)) == 0 {
+				<p class="opacity-70 italic">No steps in this release.</p>
+			} else {
+				<div class="space-y-2 sm:hidden">
+					for index, step := range parseReleaseSteps(release.StepsJson) {
+						<details class="bg-base-100 rounded-box p-4">
+							<summary class="cursor-pointer font-medium break-words min-h-12">
+								Step { strconv.Itoa(index+1) }: { step.Name }
+								<span class="badge badge-outline ml-2">{ releaseStepInterpreter(step) }</span>
+							</summary>
+							<pre class="font-mono text-sm whitespace-pre-wrap break-all mt-2">{ step.ScriptBody }</pre>
+						</details>
+					}
+				</div>
+				<table class="table table-zebra table-fixed w-full hidden sm:table">
+					<thead>
 						<tr>
-							<td colspan="4" class="text-gray-500 italic text-center py-4">No steps in this release.</td>
+							<th class="w-16">Order</th>
+							<th class="w-1/4">Name</th>
+							<th class="w-24">Interpreter</th>
+							<th class="w-auto">Script</th>
 						</tr>
-					} else {
+					</thead>
+					<tbody>
 						for _, step := range parseReleaseSteps(release.StepsJson) {
 							<tr>
 								<td>{ strconv.FormatInt(step.SortOrder, 10) }</td>
 								<td class="font-medium truncate">{ step.Name }</td>
 								<td class="whitespace-nowrap">{ releaseStepInterpreter(step) }</td>
-								<td class="truncate hidden sm:table-cell">
+								<td class="truncate">
 									<code class="text-sm bg-base-300 px-2 py-1 rounded">
 										if len(step.ScriptBody) > 60 {
 											{ step.ScriptBody[:60] + "..." }
@@ -383,34 +492,9 @@ templ DeploymentDetail(project db.Project, release db.Release, environment db.En
 								</td>
 							</tr>
 						}
-					}
-				</tbody>
-			</table>
-		</div>
-		<div
-			class="card bg-base-200 p-4"
-			if !isTerminalStatus(deployment.Status) {
-				x-data={ fmt.Sprintf("deploymentStream({ url: '/deployments/%d/logs/stream' })", deployment.ID) }
-				x-on:htmx:after-swap.camel.window="status($event)"
+					</tbody>
+				</table>
 			}
-		>
-			<h2 class="text-xl font-bold mb-4">Logs</h2>
-			if len(logs) == 0 {
-				<p id="no-logs-message" x-ref="noLogs" class="text-gray-500 italic">No logs yet.</p>
-			} else {
-				<div class="space-y-1">
-					for _, log := range logs {
-						<div class="font-mono text-sm">
-							<span class="text-gray-500">[{ formatUnixTime(log.CreatedAt) }]</span>
-							if log.StepName.Valid {
-								<span class="text-accent">[{ log.StepName.String }]</span>
-							}
-							<span class="text-base-content">{ log.Line }</span>
-						</div>
-					}
-				</div>
-			}
-			<pre id="log-container" x-ref="logs" class="font-mono text-sm mt-4 whitespace-pre-wrap"></pre>
-		</div>
+		</section>
 	</div>
 }

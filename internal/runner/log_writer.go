@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"errors"
+	"fmt"
+	"log/slog"
 	"strings"
 
 	"durpdeploy/internal/db"
@@ -15,6 +18,7 @@ type broadcastWriter struct {
 	repo         *repository.Repository
 	deploymentID int64
 	stepName     string
+	stepIndex    sql.NullInt64
 	ctx          context.Context
 	buf          bytes.Buffer
 	scrubber     *Scrubber
@@ -44,12 +48,13 @@ func (w *broadcastWriter) Write(p []byte) (n int, err error) {
 	scrubbed := w.scrubber.Scrub(toScrub)
 
 	lines := strings.Split(strings.TrimSuffix(scrubbed, "\n"), "\n")
+	w.buf.Next(lastNL + 1)
 	for _, line := range lines {
-		w.broker.Broadcast(w.deploymentID, line)
-		w.writeLine(line)
+		if err := w.writeLine(line, ""); err != nil {
+			return len(p), err
+		}
 	}
 
-	w.buf.Next(lastNL + 1)
 	return len(p), nil
 }
 
@@ -57,19 +62,44 @@ func (w *broadcastWriter) Flush() {
 	remaining := w.buf.String()
 	if remaining != "" {
 		remaining = w.scrubber.Scrub(remaining)
-		w.broker.Broadcast(w.deploymentID, remaining)
-		w.writeLine(remaining)
+		if err := w.writeLine(remaining, ""); err != nil {
+			slog.Error("persist deployment output", "error", err)
+		}
 		w.buf.Reset()
 	}
 }
 
-func (w *broadcastWriter) writeLine(line string) {
-	_, _ = w.repo.Queries.CreateDeploymentLog(
+func (w *broadcastWriter) state(state string) error {
+	return w.writeLine(fmt.Sprintf("Step %s.", state), state)
+}
+
+func (w *broadcastWriter) finishState(result error, cancelled bool) {
+	state := "succeeded"
+	if errors.Is(result, errContainerCleanup) {
+		state = "failed"
+	} else if cancelled {
+		state = "cancelled"
+	} else if result != nil {
+		state = "failed"
+	}
+	if err := w.state(state); err != nil {
+		slog.Error("persist deployment step state", "error", err)
+	}
+}
+
+func (w *broadcastWriter) writeLine(line, state string) error {
+	_, err := w.repo.CreateStepDeploymentLog(
 		w.ctx,
-		db.CreateDeploymentLogParams{
+		db.CreateStepDeploymentLogParams{
 			DeploymentID: w.deploymentID,
 			StepName:     sql.NullString{String: w.stepName, Valid: true},
 			Line:         line,
+			StepIndex:    w.stepIndex,
+			StepState:    sql.NullString{String: state, Valid: state != ""},
 		},
 	)
+	if err == nil {
+		w.broker.Broadcast(w.deploymentID, line)
+	}
+	return err
 }

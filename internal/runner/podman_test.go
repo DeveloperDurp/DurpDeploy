@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -98,6 +99,48 @@ esac
 	return r, repo, trace
 }
 
+func attemptLogWriter(
+	t *testing.T,
+	r *DeploymentRunner,
+	repo *repository.Repository,
+	id int64,
+) *broadcastWriter {
+	t.Helper()
+	project, err := repo.Queries.CreateProject(
+		t.Context(),
+		db.CreateProjectParams{Name: "attempt"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	env, err := repo.Queries.CreateEnvironment(
+		t.Context(),
+		db.CreateEnvironmentParams{Name: "attempt"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	release, err := repo.Queries.CreateRelease(
+		t.Context(),
+		db.CreateReleaseParams{
+			ProjectID: project.ID,
+			Version:   "attempt",
+			StepsJson: "[]",
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.DB.ExecContext(t.Context(), `INSERT INTO deployments(id,release_id,environment_id,status) VALUES(?,?,?,'running')`, id, release.ID, env.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.DB.ExecContext(t.Context(), `INSERT INTO deployment_step_sources(deployment_id,steps_json) VALUES(?,'[]')`, id); err != nil {
+		t.Fatal(err)
+	}
+	return &broadcastWriter{ctx: t.Context(), repo: repo, broker: r.broker,
+		deploymentID: id, stepIndex: sql.NullInt64{Valid: true}, scrubber: NewScrubber(nil)}
+}
+
 func TestLocalAttemptStreamsSelectedVariablesAndRedactsOutput(t *testing.T) {
 	// Given
 	r, repo, trace := podmanFixture(t, `
@@ -156,6 +199,9 @@ esac
 		stepName:     "step",
 		scrubber:     NewScrubber([]string{"topsecret"}),
 	}
+	if _, err := repo.DB.ExecContext(t.Context(), `INSERT INTO deployment_step_sources(deployment_id,steps_json) VALUES(?,'[]')`, dep.ID); err != nil {
+		t.Fatal(err)
+	}
 	// When
 	err = r.runStepAttempt(
 		t.Context(),
@@ -202,7 +248,7 @@ esac
 		t.Fatalf("script %q: %v", script, err)
 	}
 	var line string
-	if err := repo.DB.QueryRowContext(t.Context(), "SELECT line FROM deployment_logs WHERE deployment_id=?", dep.ID).
+	if err := repo.DB.QueryRowContext(t.Context(), "SELECT line FROM deployment_logs WHERE deployment_id=? AND step_state IS NULL", dep.ID).
 		Scan(&line); err != nil ||
 		strings.Contains(line, "topsecret") ||
 		!strings.Contains(line, "[REDACTED]") {
@@ -241,11 +287,15 @@ func TestRuntimeDetectionSkipsUnavailableDockerClient(t *testing.T) {
 
 func TestLocalAttemptFailsClosedWithoutImageOrEndpoint(t *testing.T) {
 	// Given
-	r := &DeploymentRunner{localErr: os.ErrNotExist}
+	r, repo, _ := podmanFixture(t, "")
+	r.localErr = os.ErrNotExist
 	// When
 	err := r.runStepAttempt(
 		t.Context(),
-		localStepAttempt{step: deploymentStep{Name: "legacy"}},
+		localStepAttempt{
+			step:      deploymentStep{Name: "legacy"},
+			logWriter: attemptLogWriter(t, r, repo, 0),
+		},
 	)
 	// Then
 	if err == nil || !strings.Contains(err.Error(), "no container image") {
@@ -384,10 +434,7 @@ esac
 		kind: "docker", binary: binary,
 		url: "unix:///var/run/docker.sock",
 	}
-	writer := &broadcastWriter{
-		broker: NewLogBroker(), repo: repo, ctx: t.Context(),
-		scrubber: NewScrubber(nil),
-	}
+	writer := attemptLogWriter(t, r, repo, 0)
 	started := time.Now()
 	err := r.runStepAttempt(t.Context(), localStepAttempt{
 		step: deploymentStep{

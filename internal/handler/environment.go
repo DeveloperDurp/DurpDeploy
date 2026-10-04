@@ -39,7 +39,7 @@ func (h *EnvironmentHandler) NewEnvironment(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	if r.Header.Get("HX-Request") == "true" {
+	if isFragmentRequest(r) {
 		pages.EnvironmentFormFragment(&db.Environment{}, true, "").
 			Render(r.Context(), w)
 	} else {
@@ -154,7 +154,7 @@ func (h *EnvironmentHandler) EditEnvironment(
 		return
 	}
 
-	if r.Header.Get("HX-Request") == "true" {
+	if isFragmentRequest(r) {
 		pages.EnvironmentFormFragment(&env, false, "").Render(r.Context(), w)
 	} else {
 		pages.EnvironmentForm(&env, false, "", r.URL.Path).

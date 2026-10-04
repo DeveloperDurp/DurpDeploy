@@ -82,7 +82,7 @@ matrix_csrf_viewer_role_write_rejection() {
     auth_mfa_assert_header_contains Content-Type text/html
     auth_mfa_assert_body_contains "styled viewer 403" '<h1>Forbidden</h1>'
     auth_mfa_assert_body_contains "viewer 403 message" 'Viewers cannot perform write operations'
-    auth_mfa_assert_body_contains "viewer back link" 'javascript:history.back()'
+    auth_mfa_assert_body_contains "viewer back link" 'href="/projects" x-data="backNavigation" @click="back"'
 
     auth_mfa_http_request "$viewer_jar" POST /projects '{"name":"viewer-htmx"}' \
         application/json 'HX-Request: true'

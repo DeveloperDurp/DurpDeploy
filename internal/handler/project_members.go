@@ -101,7 +101,7 @@ func (h *ProjectMembersHandler) ListMembers(
 		return
 	}
 	editURL := fmt.Sprintf("/projects/%d/edit", id)
-	if r.Header.Get("HX-Request") == "true" {
+	if isFragmentRequest(r) {
 		w.Header().Set("HX-Redirect", editURL)
 		w.WriteHeader(http.StatusOK)
 		return

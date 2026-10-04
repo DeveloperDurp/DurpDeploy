@@ -163,13 +163,42 @@ func (b *packageBrowser) evaluate(
 
 func (b *packageBrowser) wait(t *testing.T, predicate string) {
 	t.Helper()
-	expression := fmt.Sprintf(
-		`new Promise((resolve, reject) => { const deadline = Date.now() + 15000; function check() { if (%s) return resolve(true); if (Date.now() > deadline) return reject(new Error('condition timeout')); requestAnimationFrame(check); } check(); })`,
-		predicate,
-	)
-	if string(b.evaluate(t, expression)) != "true" {
-		t.Fatal("browser condition did not become true")
+	for deadline := time.Now().Add(15 * time.Second); time.Now().Before(deadline); {
+		var result struct {
+			Result struct {
+				Value json.RawMessage `json:"value"`
+			} `json:"result"`
+			Exception json.RawMessage `json:"exceptionDetails"`
+		}
+		err := b.wire.call("Runtime.evaluate", b.session, map[string]any{
+			"expression": fmt.Sprintf(
+				"Boolean(%s)",
+				predicate,
+			), "returnByValue": true,
+		}, &result)
+		// A navigation destroys promises tied to the old document. Poll from
+		// the driver instead, allowing only that transient context failure.
+		if err != nil &&
+			!strings.Contains(
+				err.Error(),
+				"Inspected target navigated or closed",
+			) {
+			t.Fatal(err)
+		}
+		if err == nil {
+			if len(result.Exception) != 0 {
+				t.Fatalf(
+					"browser predicate evaluation failed: %s",
+					result.Exception,
+				)
+			}
+			if string(result.Result.Value) == "true" {
+				return
+			}
+		}
+		time.Sleep(25 * time.Millisecond)
 	}
+	t.Fatalf("browser condition timed out: %s", predicate)
 }
 
 func (b *packageBrowser) screenshot(t *testing.T, name string) {
@@ -184,20 +213,31 @@ func (b *packageBrowser) screenshot(t *testing.T, name string) {
 	var result struct {
 		Data string `json:"data"`
 	}
-	var size struct{ Width, Height int }
-	if err := json.Unmarshal(b.evaluate(
-		t,
-		"({Width: innerWidth, Height: Math.max(innerHeight, document.documentElement.scrollHeight)})",
-	), &size); err != nil {
+	var clip struct {
+		X, Y, Width, Height, Scale float64
+	}
+	if err := json.Unmarshal(
+		b.evaluate(
+			t,
+			`({x: 0, y: 0, width: innerWidth, height: document.querySelector('dialog[open]') ? innerHeight : Math.max(innerHeight, document.documentElement.scrollHeight), scale: 1})`,
+		),
+		&clip,
+	); err != nil {
 		t.Fatal(err)
 	}
 	b.call(
 		t,
 		"Page.captureScreenshot",
 		map[string]any{
-			"format": "png", "captureBeyondViewport": true,
-			"clip": map[string]any{"x": 0, "y": 0, "width": size.Width,
-				"height": size.Height, "scale": 1},
+			"format":                "png",
+			"captureBeyondViewport": true,
+			"clip": map[string]float64{
+				"x":      clip.X,
+				"y":      clip.Y,
+				"width":  clip.Width,
+				"height": clip.Height,
+				"scale":  clip.Scale,
+			},
 		},
 		&result,
 	)

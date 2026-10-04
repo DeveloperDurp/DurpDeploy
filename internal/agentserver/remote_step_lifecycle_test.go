@@ -45,7 +45,10 @@ func TestRemoteStepResultCompletesRun(t *testing.T) {
 func TestRemoteStepLogsRedactSplitSecret(t *testing.T) {
 	fixture := newAgentFixture(t)
 	deploymentID, claim := claimedRemoteStep(t, fixture)
-	deployment, err := fixture.repo.Queries.GetDeployment(t.Context(), deploymentID)
+	deployment, err := fixture.repo.Queries.GetDeployment(
+		t.Context(),
+		deploymentID,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,8 +95,12 @@ func TestRemoteStepLogsRedactSplitSecret(t *testing.T) {
 	logs, err := fixture.repo.Queries.ListDeploymentLogsByDeployment(
 		t.Context(), deploymentID,
 	)
-	if err != nil || len(logs) != 2 || logs[0].Line+logs[1].Line != "[REDACTED]" ||
-		!logs[0].StepName.Valid {
+	if err != nil || len(logs) != 2 ||
+		logs[0].Line+logs[1].Line != "[REDACTED]" ||
+		!logs[0].StepName.Valid ||
+		!logs[0].StepIndex.Valid ||
+		logs[0].StepIndex.Int64 != 0 ||
+		logs[0].StepState.Valid {
 		t.Fatalf("stored step logs=%+v error=%v", logs, err)
 	}
 	var streamed strings.Builder
