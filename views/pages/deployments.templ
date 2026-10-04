@@ -415,7 +415,7 @@ templ DeploymentDetail(project db.Project, release db.Release, environment db.En
 		</div>
 		<div hx-get={ fmt.Sprintf("/deployments/%d/verification", deployment.ID) } hx-trigger="load" hx-swap="outerHTML" aria-live="polite"></div>
 		<div class="card bg-base-200 p-4">
-			<div hx-get={ fmt.Sprintf("/deployments/%d/artifact-gates", deployment.ID) } hx-trigger="load, every 3s" hx-swap="innerHTML" hx-on::before-swap="if (this.contains(document.activeElement)) event.detail.shouldSwap = false" aria-live="polite"></div>
+			<div hx-get={ fmt.Sprintf("/deployments/%d/artifact-gates", deployment.ID) } hx-trigger="load, every 3s" hx-swap="innerHTML" data-artifact-gates aria-live="polite"></div>
 <h2 class="text-xl font-bold mb-4">Steps</h2>
 			<table class="table table-zebra table-fixed w-full">
 				<thead>

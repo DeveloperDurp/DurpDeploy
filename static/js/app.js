@@ -4,6 +4,14 @@ import htmx from 'htmx.org'
 window.Alpine = Alpine
 window.htmx = htmx
 
+document.addEventListener('htmx:beforeSwap', (event) => {
+	const target = event.detail.target;
+	if (target.hasAttribute('data-artifact-gates') &&
+		target.contains(document.activeElement)) {
+		event.detail.shouldSwap = false;
+	}
+});
+
 Alpine.data('toast', () => ({
 	visible: false,
 	message: '',
