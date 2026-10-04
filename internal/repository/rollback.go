@@ -121,6 +121,9 @@ func (r *Repository) CreateRollback(
 			if err != nil {
 				return err
 			}
+			if _, err := q.LockDeploymentEnvironment(ctx, source.EnvironmentID); err != nil {
+				return err
+			}
 			if err := lockRelease(ctx, q, source.ReleaseID); err != nil {
 				return err
 			}

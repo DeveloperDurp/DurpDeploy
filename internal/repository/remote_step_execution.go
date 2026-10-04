@@ -44,9 +44,6 @@ func (r *Repository) ClaimRemoteStepPayload(
 	agentID string,
 	prepare func(RemotePayloadSnapshot) (RemotePreparedClaim, error),
 ) (RemoteClaim, bool, error) {
-	if err := r.ReconcileDeploymentQueues(ctx); err != nil {
-		return RemoteClaim{}, false, err
-	}
 	type claimResult struct {
 		claim   RemoteClaim
 		claimed bool
@@ -55,72 +52,89 @@ func (r *Repository) ClaimRemoteStepPayload(
 		ctx,
 		func() (claimResult, error) {
 			attempt := claimResult{}
-			err := r.WithTx(ctx, func(q *db.Queries) error {
-				locked, err := q.LockClaimAgent(ctx, agentID)
-				if err != nil || locked == 0 {
-					return err
-				}
-				agent, err := q.GetAgent(ctx, agentID)
-				if err != nil || agent.Draining != 0 {
-					return err
-				}
-				waiting, err := q.ListWaitingRemoteStepRuns(ctx, agentID)
-				if err != nil || len(waiting) == 0 {
-					return err
-				}
-				candidate := waiting[0]
-				snapshot, err := r.remotePayloadSnapshot(
-					ctx, q, agentID, candidate.DeploymentID,
-				)
-				if err != nil {
-					return err
-				}
-				if candidate.StepIndex < 0 ||
-					candidate.StepIndex >= int64(len(snapshot.Steps)) {
-					return fmt.Errorf(
-						"remote step index %d is out of range",
-						candidate.StepIndex,
+			waiting, err := r.Queries.ListWaitingRemoteStepRuns(ctx, agentID)
+			if err != nil || len(waiting) == 0 {
+				return attempt, err
+			}
+			candidate := waiting[0]
+			err = r.WithDeploymentTx(
+				ctx,
+				candidate.DeploymentID,
+				func(q *db.Queries) error {
+					locked, err := q.LockClaimAgent(ctx, agentID)
+					if err != nil || locked == 0 {
+						return err
+					}
+					agent, err := q.GetAgent(ctx, agentID)
+					if err != nil || agent.Draining != 0 {
+						return err
+					}
+					waiting, err := q.ListWaitingRemoteStepRuns(ctx, agentID)
+					if err != nil || len(waiting) == 0 {
+						return err
+					}
+					if waiting[0].DeploymentID != candidate.DeploymentID ||
+						waiting[0].StepIndex != candidate.StepIndex {
+						return nil
+					}
+					snapshot, err := r.remotePayloadSnapshot(
+						ctx, q, agentID, candidate.DeploymentID,
 					)
-				}
-				snapshot.Steps = snapshot.Steps[candidate.StepIndex : candidate.StepIndex+1]
-				prepared, err := prepare(snapshot)
-				if err != nil {
-					return err
-				}
-				now, err := q.CurrentUnixTime(ctx)
-				if err != nil {
-					return err
-				}
-				changed, err := q.ClaimRemoteStepRun(
-					ctx,
-					db.ClaimRemoteStepRunParams{
-						ClaimTokenHash: prepared.TokenHash,
-						Ciphertext: sql.NullString{
-							String: string(prepared.Ciphertext), Valid: true,
+					if err != nil {
+						return err
+					}
+					if candidate.StepIndex < 0 ||
+						candidate.StepIndex >= int64(len(snapshot.Steps)) {
+						return fmt.Errorf(
+							"remote step index %d is out of range",
+							candidate.StepIndex,
+						)
+					}
+					snapshot.Steps = snapshot.Steps[candidate.StepIndex : candidate.StepIndex+1]
+					prepared, err := prepare(snapshot)
+					if err != nil {
+						return err
+					}
+					now, err := q.CurrentUnixTime(ctx)
+					if err != nil {
+						return err
+					}
+					changed, err := q.ClaimRemoteStepRun(
+						ctx,
+						db.ClaimRemoteStepRunParams{
+							ClaimTokenHash: prepared.TokenHash,
+							Ciphertext: sql.NullString{
+								String: string(
+									prepared.Ciphertext,
+								), Valid: true,
+							},
+							ClaimExpiresAt: sql.NullInt64{
+								Int64: now + int64(
+									agentproto.PreStartClaimTimeout/time.Second,
+								),
+								Valid: true,
+							},
+							Now: sql.NullInt64{
+								Int64: now,
+								Valid: true,
+							},
+							DeploymentID: candidate.DeploymentID,
+							StepIndex:    candidate.StepIndex,
+							AgentID:      agentID,
 						},
-						ClaimExpiresAt: sql.NullInt64{
-							Int64: now + int64(
-								agentproto.PreStartClaimTimeout/time.Second,
-							),
-							Valid: true,
-						},
-						Now:          sql.NullInt64{Int64: now, Valid: true},
+					)
+					if err != nil || changed == 0 {
+						return err
+					}
+					attempt.claimed = true
+					attempt.claim = RemoteClaim{
 						DeploymentID: candidate.DeploymentID,
-						StepIndex:    candidate.StepIndex,
-						AgentID:      agentID,
-					},
-				)
-				if err != nil || changed == 0 {
-					return err
-				}
-				attempt.claimed = true
-				attempt.claim = RemoteClaim{
-					DeploymentID: candidate.DeploymentID,
-					Token:        prepared.Token,
-					Ciphertext:   prepared.Ciphertext,
-				}
-				return nil
-			})
+						Token:        prepared.Token,
+						Ciphertext:   prepared.Ciphertext,
+					}
+					return nil
+				},
+			)
 			if err != nil {
 				return claimResult{}, err
 			}

@@ -85,6 +85,9 @@ func createDeploymentFromDeployment(
 	ctx context.Context, q *db.Queries, arg db.CreateDeploymentParams,
 	sourceDeploymentID int64,
 ) (DeploymentResult, error) {
+	if _, err := q.LockDeploymentEnvironment(ctx, arg.EnvironmentID); err != nil {
+		return DeploymentResult{}, err
+	}
 	if err := lockRelease(ctx, q, arg.ReleaseID); err != nil {
 		return DeploymentResult{}, err
 	}
@@ -148,6 +151,9 @@ func (r *Repository) createDeployment(
 	q *db.Queries,
 	arg db.CreateDeploymentParams,
 ) (DeploymentResult, error) {
+	if _, err := q.LockDeploymentEnvironment(ctx, arg.EnvironmentID); err != nil {
+		return DeploymentResult{}, err
+	}
 	if err := lockRelease(ctx, q, arg.ReleaseID); err != nil {
 		return DeploymentResult{}, err
 	}
@@ -187,9 +193,6 @@ func createDeploymentWithSteps(
 	steps []DeploymentStepSnapshot,
 	stepsJSON string,
 ) (DeploymentResult, error) {
-	if _, err := q.LockDeploymentEnvironment(ctx, arg.EnvironmentID); err != nil {
-		return DeploymentResult{}, err
-	}
 	arg.AssignedAgentID = sql.NullString{}
 	if arg.Status == "pending" {
 		arg.Status = "queued"
