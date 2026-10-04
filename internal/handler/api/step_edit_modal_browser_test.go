@@ -49,7 +49,9 @@ func TestStepEditModalBrowserE2E(t *testing.T) {
  const save = dialog.querySelector('form button[type="submit"]').getBoundingClientRect();
  const cancel = [...dialog.querySelectorAll('form button')].find(el => el.textContent === 'Cancel').getBoundingClientRect();
  const header = dialog.querySelector('.page-header').getBoundingClientRect();
+ const deletion = dialog.querySelector('[data-step-delete-section]');
  return dialog.matches(':modal') && dialog.querySelectorAll('form[data-step-edit-form]').length === 1 &&
+ deletion === deletion.parentElement.lastElementChild && !document.querySelector('#step-list [data-step-action="delete"]') &&
  !document.querySelector('#step-list form') && box.scrollWidth <= box.clientWidth &&
  box.getBoundingClientRect().right <= innerWidth && save.bottom <= innerHeight &&
  save.top >= box.getBoundingClientRect().top && cancel.top === save.top &&
@@ -133,4 +135,40 @@ func TestStepEditModalBrowserE2E(t *testing.T) {
 		t,
 		`!document.querySelector('#step-edit-dialog').open && !document.querySelector('#step-edit-content form') && document.activeElement?.dataset.stepAction === 'edit'`,
 	)
+	open()
+	b.wait(t, `!document.querySelector('.htmx-settling, .htmx-request')`)
+	b.evaluate(
+		t,
+		`window.confirm = () => false; document.querySelector('#step-edit-content [data-step-action="delete"]').click(); true`,
+	)
+	f.api(t, "GET", fmt.Sprintf("%s/%d", api, first.ID), nil, 200)
+	if string(
+		b.evaluate(
+			t,
+			`document.querySelector('#step-edit-dialog').matches(':modal')`,
+		),
+	) != "true" {
+		t.Fatal("canceling deletion closed the editor")
+	}
+	b.evaluate(
+		t,
+		`window.confirm = () => true; document.querySelector('#step-edit-content [data-step-action="delete"]').click(); true`,
+	)
+	b.wait(
+		t,
+		`!document.querySelector('#step-edit-dialog').open && !document.querySelector('#step-list').textContent.includes('saved-step') && document.activeElement?.dataset.stepAction === 'edit'`,
+	)
+	f.api(t, "GET", fmt.Sprintf("%s/%d", api, first.ID), nil, 404)
+	f.api(t, "GET", fmt.Sprintf("%s/%d", api, second.ID), nil, 200)
+	open()
+	b.wait(t, `!document.querySelector('.htmx-settling, .htmx-request')`)
+	b.evaluate(
+		t,
+		`document.querySelector('#step-edit-content [data-step-action="delete"]').click(); true`,
+	)
+	b.wait(
+		t,
+		`!document.querySelector('#step-edit-dialog').open && document.activeElement?.getAttribute('x-ref') === 'addStepButton'`,
+	)
+	f.api(t, "GET", fmt.Sprintf("%s/%d", api, second.ID), nil, 404)
 }

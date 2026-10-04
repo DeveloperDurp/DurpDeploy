@@ -281,6 +281,10 @@ Alpine.data('stepFormHost', () => ({
 		event.detail.isError = false;
 	},
 	afterSettle(event) {
+		if (event.detail?.target?.id === 'step-list' && this.$refs.stepEditDialog?.open) {
+			this.$refs.stepEditDialog.close();
+			return;
+		}
 		if (event.detail?.target?.id !== 'step-edit-content') return;
 		const dialog = this.$refs.stepEditDialog;
 		if (!dialog.open) dialog.showModal();
@@ -292,17 +296,15 @@ Alpine.data('stepFormHost', () => ({
 		content.replaceChildren();
 		const opener = this.editOpener;
 		this.editOpener = null;
-		const replacement = [...this.$el.querySelectorAll('[data-step-action="edit"]')]
+		const replacement = [...this.$root.querySelectorAll('[data-step-action="edit"]')]
 			.find(button => button.getAttribute('hx-get') === opener?.getAttribute('hx-get') && button.getClientRects().length);
-		(opener?.isConnected ? opener : replacement)?.focus();
+		(opener?.isConnected ? opener : replacement ||
+			[...this.$root.querySelectorAll('[data-step-action="edit"]')].find(button => button.getClientRects().length) ||
+			this.$refs.addStepButton)?.focus();
 	},
 	afterRequest(event) {
 		const source = event.detail?.elt;
 		if (!(source instanceof Element) || !event.detail.successful) return;
-		if (source.closest('form[data-step-edit-form]')) {
-			if (event.detail.xhr.status === 200) this.$refs.stepEditDialog.close();
-			return;
-		}
 		const form = source.closest('form[data-step-add-form]');
 		if (!(form instanceof HTMLFormElement)) return;
 		this.cancel(form);

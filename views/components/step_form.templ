@@ -282,6 +282,13 @@ templ StepForm(step db.Step, projectID int64, isNew bool, labels []string, selec
 				</button>
 				<button type="button" class="btn btn-ghost md:btn-sm" x-on:click="$dispatch('step-form-cancel')">Cancel</button>
 			</div>
+		} else {
+			<div class="flex flex-wrap items-center justify-between gap-4 border-t border-base-300 pt-6" data-step-delete-section>
+				<p>Delete this step</p>
+				<button type="button" class="btn btn-error md:btn-sm" data-step-action="delete"
+					hx-delete={ fmt.Sprintf("/projects/%d/steps/%d", projectID, step.ID) }
+					hx-target="#step-list" hx-swap="innerHTML" hx-confirm="Delete this step?">Delete step</button>
+			</div>
 		}
 		</form>
 	</div>

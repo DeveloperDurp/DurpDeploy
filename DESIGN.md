@@ -216,7 +216,9 @@ Step editing uses one native modal dialog with a vertical form and Save/Cancel
 in its sticky top-right header, matching project editing. The list stays
 visible behind an inert backdrop; Save refreshes the list and closes the
 dialog, while validation errors stay inside it. Cancel and Escape discard the
-edit and return focus to its Edit button.
+edit and return focus to its Edit button. Delete appears only at the bottom
+of the edit modal. Confirmation refreshes the list and closes the modal;
+focus moves to another step's Edit button, or Add Step when the list is empty.
 
 Normal internal page links use HTMX to replace the main content, update the
 navbar and title, and push the existing URL into browser history. The document
