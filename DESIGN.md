@@ -134,13 +134,17 @@ keep `overflow-x-auto` and `table table-zebra table-fixed w-full`.
 ### Project, environment, and lifecycle lists on narrow screens
 - Reuse the deployment list's labeled cards below `md`: names and descriptions
   wrap in full, tags and stage counts remain visible, and actions span the card.
-- New/Edit/Delete controls keep normal touch sizes on phones; table actions
+- New/Edit controls keep normal touch sizes on phones; table actions
   use `md:btn-sm` above the breakpoint. Headers and action groups wrap.
 - Project environment/version pairs stack on phones and use equal columns on
   larger screens. Each version stays with its environment; long phone versions
   wrap without hiding status colors or text.
 - Keep one set of rows for full pages and HTMX fragments, the existing viewer
   guards, fixed desktop tables, and document scrolling.
+- Environment and lifecycle deletion lives in a separate section of the edit
+  page, with a confirmation and normal-sized destructive button. Lists show
+  only Edit. Canceling confirmation leaves the item intact; deletion returns
+  to the list. New forms and viewer pages have no Delete control.
 
 ### Agent maintenance and health
 - Show administrative state and heartbeat health as separate labelled badges:

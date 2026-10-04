@@ -55,7 +55,7 @@ templ LifecyclesListFragment(rows []LifecycleRow) {
 						<th class="w-1/5">Name</th>
 						<th class="w-2/5">Description</th>
 						<th class="w-1/5">Stages</th>
-						<th class="w-48">Actions</th>
+						<th class="w-24">Actions</th>
 					</tr>
 				</thead>
 				<tbody class="block md:table-row-group">
@@ -88,13 +88,7 @@ templ LifecycleListRow(row LifecycleRow) {
 		</td>
 		<td class="col-span-2">
 			if CanWrite(ctx) {
-				<div class="flex flex-wrap gap-2">
 				<a href={ templ.SafeURL("/lifecycles/" + strconv.FormatInt(row.Lifecycle.ID, 10)) } class="btn md:btn-sm btn-ghost">Edit</a>
-				<form method="post" action={ templ.SafeURL("/lifecycles/" + strconv.FormatInt(row.Lifecycle.ID, 10)) }>
-					<input type="hidden" name="_method" value="delete"/>
-					<button type="submit" class="btn md:btn-sm btn-error" hx-confirm="Delete this lifecycle? Projects using it will be unset.">Delete</button>
-				</form>
-				</div>
 			}
 		</td>
 	</tr>

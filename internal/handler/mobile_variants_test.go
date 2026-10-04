@@ -105,8 +105,8 @@ func TestMobile_RenderedHTML_rendersLifecycleBackAndKeepsPermissionGoBack(
 ) {
 	// Given
 	fixture := newMobileStructuralFixture(t)
-	const lifecycleSave = `<button type="submit" form="lifecycle-settings-form" class="btn btn-primary btn-sm">Save</button>`
-	const lifecycleBack = `<a href="/lifecycles" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>`
+	const lifecycleSave = `<button type="submit" form="lifecycle-settings-form" class="btn btn-primary md:btn-sm">Save</button>`
+	const lifecycleBack = `<a href="/lifecycles" class="btn btn-ghost md:btn-sm" x-data="backNavigation" @click="back">Back</a>`
 
 	// When
 	detailBody := fixture.getHTML(
@@ -135,7 +135,7 @@ func TestMobile_RenderedHTML_rendersLifecycleBackAndKeepsPermissionGoBack(
 	requireHTMLPattern(
 		t,
 		detailBody,
-		`(?s)<div class="flex items-start justify-between gap-4">\s*<div>.*?</div>\s*<div class="flex gap-2 shrink-0">\s*`+lifecycleSave+`\s*`+lifecycleBack,
+		`(?s)<div class="flex flex-wrap items-start justify-between gap-4">\s*<div class="min-w-0">.*?</div>\s*<div class="flex gap-2 shrink-0">\s*`+lifecycleSave+`\s*`+lifecycleBack,
 	)
 	requireHTMLPattern(
 		t,

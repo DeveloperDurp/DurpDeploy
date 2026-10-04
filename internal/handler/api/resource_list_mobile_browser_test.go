@@ -96,6 +96,12 @@ func TestResourceListMobileBrowserE2E(t *testing.T) {
 			// Then: fields stay readable, actions usable, and viewers read-only.
 			b.captureNavigation(t, "mobile-"+page.path+"-"+role, func() {
 				assertResourceListMobile(t, b)
+				if string(b.evaluate(
+					t,
+					`![...document.querySelectorAll('main button')].some(button => button.textContent.includes('Delete')) && !document.querySelector('main input[name="_method"][value="delete"]')`,
+				)) != "true" {
+					t.Fatal("resource list still exposes Delete")
+				}
 				if role == "viewer" && string(b.evaluate(
 					t,
 					`!document.querySelector('main a[href$="/new"], main a[href$="/edit"], main button, main form') && ![...document.querySelectorAll('main a')].some(a => a.textContent === 'Edit')`,
@@ -105,8 +111,29 @@ func TestResourceListMobileBrowserE2E(t *testing.T) {
 			})
 		}
 	}
+	for _, path := range []string{
+		fmt.Sprintf("/environments/%d/edit", f.environment.ID),
+		fmt.Sprintf("/lifecycles/%d", lifecycle.ID),
+	} {
+		b.navigateBackTest(t, f.baseURL+path)
+		if string(b.evaluate(
+			t,
+			`!document.querySelector('main button[hx-delete], main input[name="_method"][value="delete"]')`,
+		)) != "true" {
+			t.Fatal("viewer edit page exposes Delete")
+		}
+	}
 	// And: the project link still opens its detail through HTMX.
 	b.setBackTestSession(t, f.baseURL, f.session)
+	for _, path := range []string{"/environments/new", "/lifecycles/new"} {
+		b.navigateBackTest(t, f.baseURL+path)
+		if string(b.evaluate(
+			t,
+			`!document.querySelector('main button[hx-delete], main input[name="_method"][value="delete"]')`,
+		)) != "true" {
+			t.Fatal("new form exposes Delete")
+		}
+	}
 	b.navigateBackTest(t, f.baseURL+"/projects")
 	b.evaluate(t, fmt.Sprintf(
 		`document.querySelector('main a[href="/projects/%d"]').click(); true`,
@@ -123,14 +150,27 @@ func TestResourceListMobileBrowserE2E(t *testing.T) {
 	edit := fmt.Sprintf("/environments/%d/edit", f.environment.ID)
 	b.evaluate(t, fmt.Sprintf(
 		`document.querySelector('main a[href=%q]').click(); true`, edit))
-	b.wait(t, `document.querySelector('main input[name="name"]') !== null`)
-	b.navigateBackTest(t, f.baseURL+"/environments")
+	b.wait(t, `document.querySelector('main button[hx-delete]') !== null`)
+	b.captureNavigation(t, "mobile-environment-edit", func() {
+		assertEditDeleteControl(t, b, `main button[hx-delete]`)
+	})
+	b.evaluate(
+		t,
+		`window.confirm = () => false; document.querySelector('main button[hx-delete]').click(); true`,
+	)
+	f.api(
+		t,
+		"GET",
+		fmt.Sprintf("/api/v1/environments/%d", f.environment.ID),
+		nil,
+		200,
+	)
 	b.evaluate(t, fmt.Sprintf(
 		`window.confirm = () => true; document.querySelector('button[hx-delete="/environments/%d"]').click(); true`,
 		f.environment.ID,
 	))
 	b.wait(t, fmt.Sprintf(
-		`!document.querySelector('button[hx-delete="/environments/%d"]')`,
+		`location.pathname === '/environments' && !document.querySelector('button[hx-delete="/environments/%d"]')`,
 		f.environment.ID,
 	))
 	f.api(
@@ -149,15 +189,43 @@ func TestResourceListMobileBrowserE2E(t *testing.T) {
 		`document.querySelector('main a[href=%q]').click(); true`,
 		lifecyclePath,
 	))
-	b.wait(t, `document.querySelector('main input[name="name"]') !== null`)
-	b.navigateBackTest(t, f.baseURL+"/lifecycles")
-	b.evaluate(t, `document.querySelector('main form button').click(); true`)
 	b.wait(
 		t,
-		`document.readyState === 'complete' && window.Alpine && document.querySelector('main h1')?.textContent === 'Lifecycles' && !document.querySelector('main table')`,
+		`document.querySelector('main form[hx-confirm^="Delete this lifecycle"]') !== null`,
+	)
+	b.captureNavigation(t, "mobile-lifecycle-edit", func() {
+		assertEditDeleteControl(
+			t,
+			b,
+			`main form[hx-confirm^="Delete this lifecycle"] button`,
+		)
+	})
+	b.evaluate(
+		t,
+		`window.confirm = () => false; document.querySelector('main form[hx-confirm^="Delete this lifecycle"] button').click(); true`,
+	)
+	f.api(t, "GET", "/api/v1"+lifecyclePath, nil, 200)
+	b.evaluate(
+		t,
+		`window.confirm = () => true; document.querySelector('main form[hx-confirm^="Delete this lifecycle"] button').click(); true`,
+	)
+	b.wait(
+		t,
+		`location.pathname === '/lifecycles' && document.readyState === 'complete' && window.Alpine && document.querySelector('main h1')?.textContent === 'Lifecycles' && !document.querySelector('main table')`,
 	)
 	f.api(t, "GET", "/api/v1"+lifecyclePath, nil, 404)
 	b.captureNavigation(t, "mobile-lifecycles-empty")
+}
+
+func assertEditDeleteControl(t *testing.T, b *packageBrowser, selector string) {
+	t.Helper()
+	if string(b.evaluate(t, fmt.Sprintf(`(() => {
+ const button = document.querySelector(%q);
+ return button && button.getBoundingClientRect().height >= 44 &&
+ button.closest('form')?.id !== 'lifecycle-settings-form';
+})()`, selector))) != "true" {
+		t.Fatal("edit Delete control is small or submits the settings form")
+	}
 }
 
 func assertResourceListMobile(t *testing.T, b *packageBrowser) {

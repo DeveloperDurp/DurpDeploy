@@ -102,5 +102,23 @@ templ EnvironmentFormContent(env *db.Environment, isNew bool, errorMsg string) {
 				<a href="/environments" class="btn btn-ghost">Cancel</a>
 			</div>
 		</form>
+		if !isNew && CanWrite(ctx) {
+			<div class="mt-6 pt-4 border-t border-base-300 flex flex-wrap items-center justify-between gap-4">
+				<div class="font-medium">Delete this environment</div>
+				<button
+					type="button"
+					hx-delete={ "/environments/" + strconv.FormatInt(env.ID, 10) }
+					hx-target="#form-container"
+					hx-swap="innerHTML"
+					hx-replace-url="/environments"
+					hx-confirm="Delete this environment?"
+					class="btn btn-error"
+					data-toast-success="Environment deleted"
+					data-toast-error="Failed to delete environment"
+				>
+					Delete environment
+				</button>
+			</div>
+		}
 	</div>
 }

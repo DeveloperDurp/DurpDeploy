@@ -40,15 +40,15 @@ templ LifecycleDetailPage(lc db.Lifecycle, stages []LifecycleStageView, availabl
 
 templ LifecycleDetail(lc db.Lifecycle, stages []LifecycleStageView, availableEnvs []db.Environment, errorMsg string) {
 	<div class="space-y-6">
-		<div class="flex items-start justify-between gap-4">
-			<div>
-				<h1 class="text-3xl font-bold">{ lc.Name }</h1>
+		<div class="flex flex-wrap items-start justify-between gap-4">
+			<div class="min-w-0">
+				<h1 class="text-3xl font-bold break-all">{ lc.Name }</h1>
 			</div>
 			<div class="flex gap-2 shrink-0">
 				if CanWrite(ctx) {
-					<button type="submit" form="lifecycle-settings-form" class="btn btn-primary btn-sm">Save</button>
+					<button type="submit" form="lifecycle-settings-form" class="btn btn-primary md:btn-sm">Save</button>
 				}
-				<a href="/lifecycles" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>
+				<a href="/lifecycles" class="btn btn-ghost md:btn-sm" x-data="backNavigation" @click="back">Back</a>
 			</div>
 		</div>
 		<div class="card bg-base-200 p-4">
@@ -73,6 +73,25 @@ templ LifecycleDetail(lc db.Lifecycle, stages []LifecycleStageView, availableEnv
 						<textarea id="lifecycle-description" name="description" class="textarea textarea-bordered w-full" rows="3">{ lc.Description.String }</textarea>
 					</div>
 				</form>
+				<div class="mt-6 pt-4 border-t border-base-300 flex flex-wrap items-center justify-between gap-4">
+					<div>
+						<div class="font-medium">Delete this lifecycle</div>
+						<p class="text-sm opacity-70">Projects using it will be unset.</p>
+					</div>
+					<form
+						method="post"
+						action={ templ.SafeURL("/lifecycles/" + strconv.FormatInt(lc.ID, 10)) }
+						hx-boost="true"
+						hx-target="#page-content"
+						hx-select="#page-content"
+						hx-swap="outerHTML"
+						hx-replace-url="/lifecycles"
+						hx-confirm="Delete this lifecycle? Projects using it will be unset."
+					>
+						<input type="hidden" name="_method" value="delete"/>
+						<button type="submit" class="btn btn-error">Delete lifecycle</button>
+					</form>
+				</div>
 			</div>
 		} else if lc.Description.Valid {
 			<p class="text-gray-400">{ lc.Description.String }</p>
