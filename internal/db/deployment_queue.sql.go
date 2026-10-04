@@ -70,18 +70,52 @@ func (q *Queries) DeleteEnvironmentDeploymentSlot(ctx context.Context, environme
 	return err
 }
 
-const getDeploymentQueuePosition = `-- name: GetDeploymentQueuePosition :one
-SELECT COUNT(*) FROM deployments ahead JOIN deployments target ON target.id = ?1
-WHERE target.status = 'queued' AND ahead.environment_id = target.environment_id
-AND ahead.status = 'queued'
-AND (ahead.created_at < target.created_at OR (ahead.created_at = target.created_at AND ahead.id <= target.id))
+const getDeploymentQueueState = `-- name: GetDeploymentQueueState :one
+SELECT d.status,
+    (SELECT COUNT(*) FROM deployments ahead
+     WHERE d.status = 'queued' AND ahead.environment_id = d.environment_id
+       AND ahead.status = 'queued'
+       AND (ahead.created_at < d.created_at OR (ahead.created_at = d.created_at AND ahead.id <= d.id))) AS queue_position,
+    active.id AS active_deployment_id, active.kind, r.project_id,
+    x.id AS runbook_execution_id
+FROM deployments d
+LEFT JOIN environment_deployment_slots s ON s.environment_id = d.environment_id
+LEFT JOIN deployments active ON active.id = s.deployment_id
+    AND (CAST(?1 AS INTEGER) = 1 OR EXISTS (
+        SELECT 1 FROM releases visible JOIN project_members m ON m.project_id = visible.project_id
+        WHERE visible.id = active.release_id AND m.user_id = ?2))
+LEFT JOIN releases r ON r.id = active.release_id
+LEFT JOIN runbook_executions x ON x.deployment_id = active.id
+WHERE d.id = ?3
 `
 
-func (q *Queries) GetDeploymentQueuePosition(ctx context.Context, deploymentID int64) (int64, error) {
-	row := q.db.QueryRowContext(ctx, getDeploymentQueuePosition, deploymentID)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
+type GetDeploymentQueueStateParams struct {
+	IsAdmin      int64 `json:"is_admin"`
+	UserID       int64 `json:"user_id"`
+	DeploymentID int64 `json:"deployment_id"`
+}
+
+type GetDeploymentQueueStateRow struct {
+	Status             string         `json:"status"`
+	QueuePosition      int64          `json:"queue_position"`
+	ActiveDeploymentID sql.NullInt64  `json:"active_deployment_id"`
+	Kind               sql.NullString `json:"kind"`
+	ProjectID          sql.NullInt64  `json:"project_id"`
+	RunbookExecutionID sql.NullInt64  `json:"runbook_execution_id"`
+}
+
+func (q *Queries) GetDeploymentQueueState(ctx context.Context, arg GetDeploymentQueueStateParams) (GetDeploymentQueueStateRow, error) {
+	row := q.db.QueryRowContext(ctx, getDeploymentQueueState, arg.IsAdmin, arg.UserID, arg.DeploymentID)
+	var i GetDeploymentQueueStateRow
+	err := row.Scan(
+		&i.Status,
+		&i.QueuePosition,
+		&i.ActiveDeploymentID,
+		&i.Kind,
+		&i.ProjectID,
+		&i.RunbookExecutionID,
+	)
+	return i, err
 }
 
 const getEnvironmentDeploymentSlot = `-- name: GetEnvironmentDeploymentSlot :one
@@ -105,42 +139,6 @@ func (q *Queries) GetNextQueuedDeployment(ctx context.Context, environmentID int
 	var id int64
 	err := row.Scan(&id)
 	return id, err
-}
-
-const getVisibleEnvironmentDeploymentSlot = `-- name: GetVisibleEnvironmentDeploymentSlot :one
-SELECT d.id, d.kind, r.project_id, x.id AS runbook_execution_id
-FROM environment_deployment_slots s
-JOIN deployments d ON d.id = s.deployment_id
-JOIN releases r ON r.id = d.release_id
-LEFT JOIN runbook_executions x ON x.deployment_id = d.id
-WHERE s.environment_id = ?1
-AND (CAST(?2 AS INTEGER) = 1 OR EXISTS (
-    SELECT 1 FROM project_members p WHERE p.project_id = r.project_id AND p.user_id = ?3))
-`
-
-type GetVisibleEnvironmentDeploymentSlotParams struct {
-	EnvironmentID int64 `json:"environment_id"`
-	IsAdmin       int64 `json:"is_admin"`
-	UserID        int64 `json:"user_id"`
-}
-
-type GetVisibleEnvironmentDeploymentSlotRow struct {
-	ID                 int64         `json:"id"`
-	Kind               string        `json:"kind"`
-	ProjectID          int64         `json:"project_id"`
-	RunbookExecutionID sql.NullInt64 `json:"runbook_execution_id"`
-}
-
-func (q *Queries) GetVisibleEnvironmentDeploymentSlot(ctx context.Context, arg GetVisibleEnvironmentDeploymentSlotParams) (GetVisibleEnvironmentDeploymentSlotRow, error) {
-	row := q.db.QueryRowContext(ctx, getVisibleEnvironmentDeploymentSlot, arg.EnvironmentID, arg.IsAdmin, arg.UserID)
-	var i GetVisibleEnvironmentDeploymentSlotRow
-	err := row.Scan(
-		&i.ID,
-		&i.Kind,
-		&i.ProjectID,
-		&i.RunbookExecutionID,
-	)
-	return i, err
 }
 
 const listDeploymentQueueEnvironments = `-- name: ListDeploymentQueueEnvironments :many

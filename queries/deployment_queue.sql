@@ -50,18 +50,20 @@ WHERE id = ? AND status IN ('queued', 'pending_approval', 'pending')
 AND NOT EXISTS (SELECT 1 FROM remote_deployment_claims c WHERE c.deployment_id = deployments.id
     AND c.state NOT IN ('waiting', 'cancelled'));
 
--- name: GetDeploymentQueuePosition :one
-SELECT COUNT(*) FROM deployments ahead JOIN deployments target ON target.id = sqlc.arg(deployment_id)
-WHERE target.status = 'queued' AND ahead.environment_id = target.environment_id
-AND ahead.status = 'queued'
-AND (ahead.created_at < target.created_at OR (ahead.created_at = target.created_at AND ahead.id <= target.id));
-
--- name: GetVisibleEnvironmentDeploymentSlot :one
-SELECT d.id, d.kind, r.project_id, x.id AS runbook_execution_id
-FROM environment_deployment_slots s
-JOIN deployments d ON d.id = s.deployment_id
-JOIN releases r ON r.id = d.release_id
-LEFT JOIN runbook_executions x ON x.deployment_id = d.id
-WHERE s.environment_id = sqlc.arg(environment_id)
-AND (CAST(sqlc.arg(is_admin) AS INTEGER) = 1 OR EXISTS (
-    SELECT 1 FROM project_members p WHERE p.project_id = r.project_id AND p.user_id = sqlc.arg(user_id)));
+-- name: GetDeploymentQueueState :one
+SELECT d.status,
+    (SELECT COUNT(*) FROM deployments ahead
+     WHERE d.status = 'queued' AND ahead.environment_id = d.environment_id
+       AND ahead.status = 'queued'
+       AND (ahead.created_at < d.created_at OR (ahead.created_at = d.created_at AND ahead.id <= d.id))) AS queue_position,
+    active.id AS active_deployment_id, active.kind, r.project_id,
+    x.id AS runbook_execution_id
+FROM deployments d
+LEFT JOIN environment_deployment_slots s ON s.environment_id = d.environment_id
+LEFT JOIN deployments active ON active.id = s.deployment_id
+    AND (CAST(sqlc.arg(is_admin) AS INTEGER) = 1 OR EXISTS (
+        SELECT 1 FROM releases visible JOIN project_members m ON m.project_id = visible.project_id
+        WHERE visible.id = active.release_id AND m.user_id = sqlc.arg(user_id)))
+LEFT JOIN releases r ON r.id = active.release_id
+LEFT JOIN runbook_executions x ON x.deployment_id = active.id
+WHERE d.id = sqlc.arg(deployment_id);

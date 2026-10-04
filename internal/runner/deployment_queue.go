@@ -2,8 +2,11 @@ package runner
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"time"
+
+	"durpdeploy/internal/repository"
 )
 
 // ServeQueue repairs missed launches without relying on an in-memory wakeup.
@@ -31,4 +34,15 @@ func (r *DeploymentRunner) ServeQueue(ctx context.Context) {
 			}
 		}
 	}
+}
+
+// CancelPrestart also handles work admitted between the handler read and lock.
+func (r *DeploymentRunner) CancelPrestart(
+	ctx context.Context, id int64,
+) (string, error) {
+	err := r.repo.CancelQueuedDeployment(ctx, id)
+	if errors.Is(err, repository.ErrDeploymentQueueConflict) {
+		return "cancellation_requested", r.Cancel(id)
+	}
+	return "cancelled", err
 }

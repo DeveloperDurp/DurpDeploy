@@ -47,12 +47,16 @@ func TestEnvironmentQueueConcurrentAdmission(t *testing.T) {
 			}
 		}
 		var admitted, queued int
-		if err := first.DB.QueryRowContext(ctx,
-			`SELECT COUNT(*) FROM deployments WHERE status='pending'`).Scan(&admitted); err != nil {
+		if err := first.DB.QueryRowContext(
+			ctx,
+			`SELECT COUNT(*) FROM deployments WHERE status='pending'`,
+		).Scan(&admitted); err != nil {
 			t.Fatal(err)
 		}
-		if err := first.DB.QueryRowContext(ctx,
-			`SELECT COUNT(*) FROM deployments WHERE status='queued'`).Scan(&queued); err != nil {
+		if err := first.DB.QueryRowContext(
+			ctx,
+			`SELECT COUNT(*) FROM deployments WHERE status='queued'`,
+		).Scan(&queued); err != nil {
 			t.Fatal(err)
 		}
 		if admitted != 1 || queued != 7 {
@@ -84,6 +88,12 @@ func TestEnvironmentQueueFIFOApprovalCancellationAndRecovery(t *testing.T) {
 		if owner.Status != "pending" || next.Status != "queued" {
 			t.Fatalf("owner=%s next=%s", owner.Status, next.Status)
 		}
+		state, err := repo.Queries.GetDeploymentQueueState(ctx,
+			db.GetDeploymentQueueStateParams{DeploymentID: next.ID, IsAdmin: 1})
+		if err != nil || state.Status != "queued" ||
+			state.QueuePosition != 2 || state.ActiveDeploymentID.Int64 != owner.ID {
+			t.Fatalf("queue snapshot=%+v error=%v", state, err)
+		}
 		otherEnvironment, err := repo.Queries.CreateEnvironment(ctx,
 			db.CreateEnvironmentParams{Name: "independent"})
 		if err != nil {
@@ -92,7 +102,9 @@ func TestEnvironmentQueueFIFOApprovalCancellationAndRecovery(t *testing.T) {
 		independent, err := repo.CreateDeployment(
 			ctx,
 			db.CreateDeploymentParams{
-				ReleaseID: 1, EnvironmentID: otherEnvironment.ID, Status: "pending",
+				ReleaseID:     1,
+				EnvironmentID: otherEnvironment.ID,
+				Status:        "pending",
 			},
 		)
 		if err != nil || independent.Deployment.Status != "pending" {
@@ -116,9 +128,10 @@ func TestEnvironmentQueueFIFOApprovalCancellationAndRecovery(t *testing.T) {
 		if err != nil || active != approval.ID {
 			t.Fatalf("active=%d, want %d: %v", active, approval.ID, err)
 		}
-		position, err := repo.Queries.GetDeploymentQueuePosition(ctx, next.ID)
-		if err != nil || position != 1 {
-			t.Fatalf("position=%d, want 1: %v", position, err)
+		state, err = repo.Queries.GetDeploymentQueueState(ctx,
+			db.GetDeploymentQueueStateParams{DeploymentID: next.ID})
+		if err != nil || state.QueuePosition != 1 {
+			t.Fatalf("position=%d, want 1: %v", state.QueuePosition, err)
 		}
 		finishQueueFixture(t, restarted, approval.ID, "failed")
 		active, err = repo.Queries.GetEnvironmentDeploymentSlot(ctx, 1)
@@ -162,10 +175,14 @@ func finishQueueFixture(
 	t *testing.T, repo *Repository, id int64, status string,
 ) {
 	t.Helper()
-	if err := repo.WithDeploymentTx(t.Context(), id, func(ctx context.Context, q *db.Queries) error {
-		return q.UpdateDeploymentStatus(context.WithoutCancel(t.Context()),
-			db.UpdateDeploymentStatusParams{ID: id, Status: status})
-	}); err != nil {
+	if err := repo.WithDeploymentTx(
+		t.Context(),
+		id,
+		func(ctx context.Context, q *db.Queries) error {
+			return q.UpdateDeploymentStatus(context.WithoutCancel(t.Context()),
+				db.UpdateDeploymentStatusParams{ID: id, Status: status})
+		},
+	); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -190,7 +207,10 @@ func TestEnvironmentQueueAuditFailureDoesNotUndoState(t *testing.T) {
 			return result.Deployment
 		}
 		owner, next := create(), create()
-		if err := repo.CancelQueuedDeployment(t.Context(), owner.ID); err != nil {
+		if err := repo.CancelQueuedDeployment(
+			t.Context(),
+			owner.ID,
+		); err != nil {
 			t.Fatal(err)
 		}
 		persisted, err := repo.Queries.GetDeployment(t.Context(), next.ID)

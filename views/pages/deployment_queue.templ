@@ -13,8 +13,11 @@ func WithDeploymentQueue(ctx context.Context, info auth.DeploymentQueueInfo) con
 	return context.WithValue(ctx, deploymentQueueKey{}, info)
 }
 
-func DeploymentQueueContext(ctx context.Context, repo *repository.Repository, id int64) (context.Context, error) {
+func DeploymentQueueContext(ctx context.Context, repo *repository.Repository, id int64, status *string) (context.Context, error) {
 	info, err := auth.ReadDeploymentQueue(ctx, repo, id)
+	if err == nil {
+		*status = info.Status
+	}
 	return WithDeploymentQueue(ctx, info), err
 }
 

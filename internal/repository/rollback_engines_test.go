@@ -65,8 +65,8 @@ func holdCompetingDeployment(
 	ctx, commit := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	go func() {
-		done <- repo.WithTx(t.Context(), func(q *db.Queries) error {
-			_, err := repo.createDeployment(t.Context(), q,
+		done <- repo.withQueueTx(t.Context(), func(txCtx context.Context, q *db.Queries) error {
+			_, err := repo.createDeployment(txCtx, q,
 				db.CreateDeploymentParams{
 					ReleaseID: releaseID, EnvironmentID: 1, Status: "pending",
 				})

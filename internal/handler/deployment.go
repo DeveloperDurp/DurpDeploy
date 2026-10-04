@@ -581,7 +581,12 @@ func (h *DeploymentHandler) GetDeployment(
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	queueCtx, err := pages.DeploymentQueueContext(r.Context(), h.repo, id)
+	queueCtx, err := pages.DeploymentQueueContext(
+		r.Context(),
+		h.repo,
+		id,
+		&deployment.Status,
+	)
 	if err != nil {
 		http.Error(
 			w,
@@ -629,7 +634,12 @@ func (h *DeploymentHandler) GetDeploymentStatus(
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	queueCtx, err := pages.DeploymentQueueContext(r.Context(), h.repo, id)
+	queueCtx, err := pages.DeploymentQueueContext(
+		r.Context(),
+		h.repo,
+		id,
+		&deployment.Status,
+	)
 	if err != nil {
 		http.Error(
 			w,
@@ -668,7 +678,7 @@ func (h *DeploymentHandler) CancelDeployment(
 	if deployment.Status == "queued" ||
 		!deployment.AssignedAgentID.Valid &&
 			(deployment.Status == "pending" || deployment.Status == "pending_approval") {
-		if err := h.repo.CancelQueuedDeployment(r.Context(), id); err != nil {
+		if _, err := h.runner.CancelPrestart(r.Context(), id); err != nil {
 			http.Error(
 				w,
 				"Deployment cannot be cancelled in its current state",

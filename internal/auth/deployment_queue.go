@@ -2,8 +2,6 @@ package auth
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"fmt"
 
 	"durpdeploy/internal/db"
@@ -11,6 +9,7 @@ import (
 )
 
 type DeploymentQueueInfo struct {
+	Status             string `json:"-"`
 	QueuePosition      int64  `json:"queue_position"`
 	ActiveDeploymentID int64  `json:"active_deployment_id,omitempty"`
 	ActiveWorkURL      string `json:"active_work_url,omitempty"`
@@ -20,38 +19,31 @@ type DeploymentQueueInfo struct {
 func ReadDeploymentQueue(
 	ctx context.Context, repo *repository.Repository, deploymentID int64,
 ) (DeploymentQueueInfo, error) {
-	d, err := repo.Queries.GetDeployment(ctx, deploymentID)
-	if err != nil {
-		return DeploymentQueueInfo{}, err
-	}
-	position, err := repo.Queries.GetDeploymentQueuePosition(ctx, deploymentID)
-	if err != nil {
-		return DeploymentQueueInfo{}, err
-	}
-	info := DeploymentQueueInfo{QueuePosition: position}
 	user := UserFromContext(ctx)
-	if user == nil {
-		return info, nil
+	var userID, isAdmin int64
+	if user != nil {
+		userID = user.ID
+		if user.Role == "admin" {
+			isAdmin = 1
+		}
 	}
-	var isAdmin int64
-	if user.Role == "admin" {
-		isAdmin = 1
-	}
-	active, err := repo.Queries.GetVisibleEnvironmentDeploymentSlot(ctx,
-		db.GetVisibleEnvironmentDeploymentSlotParams{
-			EnvironmentID: d.EnvironmentID, UserID: user.ID, IsAdmin: isAdmin,
+	state, err := repo.Queries.GetDeploymentQueueState(ctx,
+		db.GetDeploymentQueueStateParams{
+			DeploymentID: deploymentID, UserID: userID, IsAdmin: isAdmin,
 		})
-	if errors.Is(err, sql.ErrNoRows) {
-		return info, nil
-	}
 	if err != nil {
 		return DeploymentQueueInfo{}, err
 	}
-	info.ActiveDeploymentID = active.ID
-	info.ActiveWorkURL = fmt.Sprintf("/deployments/%d", active.ID)
-	if active.Kind == "runbook" && active.RunbookExecutionID.Valid {
+	info := DeploymentQueueInfo{Status: state.Status,
+		QueuePosition: state.QueuePosition}
+	if !state.ActiveDeploymentID.Valid {
+		return info, nil
+	}
+	info.ActiveDeploymentID = state.ActiveDeploymentID.Int64
+	info.ActiveWorkURL = fmt.Sprintf("/deployments/%d", info.ActiveDeploymentID)
+	if state.Kind.String == "runbook" && state.RunbookExecutionID.Valid {
 		info.ActiveWorkURL = fmt.Sprintf("/projects/%d/runbooks/executions/%d",
-			active.ProjectID, active.RunbookExecutionID.Int64)
+			state.ProjectID.Int64, state.RunbookExecutionID.Int64)
 	}
 	return info, nil
 }

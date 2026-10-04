@@ -68,6 +68,7 @@ func (h *RunbookHandler) Execution(w http.ResponseWriter, r *http.Request) {
 		r.Context(),
 		h.repo,
 		execution.DeploymentID,
+		&execution.Status,
 	)
 	if err != nil {
 		http.Error(
@@ -90,6 +91,7 @@ func (h *RunbookHandler) Status(w http.ResponseWriter, r *http.Request) {
 			r.Context(),
 			h.repo,
 			execution.DeploymentID,
+			&execution.Status,
 		)
 		if err != nil {
 			http.Error(
@@ -134,7 +136,7 @@ func (h *RunbookHandler) Cancel(w http.ResponseWriter, r *http.Request) {
 	if dep.Status == "queued" ||
 		!dep.AssignedAgentID.Valid &&
 			(dep.Status == "pending" || dep.Status == "pending_approval") {
-		err = h.repo.CancelQueuedDeployment(r.Context(), dep.ID)
+		_, err = h.runner.CancelPrestart(r.Context(), dep.ID)
 	} else if dep.AssignedAgentID.Valid {
 		err = h.repo.CancelAssignedRemoteDeployment(r.Context(),
 			repository.RemoteAssignedDeployment{

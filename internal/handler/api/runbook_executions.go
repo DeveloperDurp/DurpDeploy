@@ -108,6 +108,7 @@ func (h *RunbookHandler) GetExecution(w http.ResponseWriter, r *http.Request) {
 			)
 			return
 		}
+		execution.Status = queue.Status
 		RespondJSON(w, http.StatusOK, struct {
 			db.GetRunbookExecutionRow
 			auth.DeploymentQueueInfo
@@ -178,8 +179,7 @@ func (h *RunbookHandler) Cancel(w http.ResponseWriter, r *http.Request) {
 	if dep.Status == "queued" ||
 		!dep.AssignedAgentID.Valid &&
 			(dep.Status == "pending" || dep.Status == "pending_approval") {
-		err = h.repo.CancelQueuedDeployment(r.Context(), dep.ID)
-		status = "cancelled"
+		status, err = h.runner.CancelPrestart(r.Context(), dep.ID)
 	} else if dep.AssignedAgentID.Valid {
 		err = h.repo.CancelAssignedRemoteDeployment(r.Context(),
 			repository.RemoteAssignedDeployment{

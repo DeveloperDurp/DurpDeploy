@@ -406,6 +406,7 @@ func (h *DeploymentHandler) GetDeployment(
 		)
 		return
 	}
+	deployment.Status = queue.Status
 	RespondJSON(w, http.StatusOK, struct {
 		db.Deployment
 		auth.DeploymentQueueInfo
@@ -439,7 +440,7 @@ func (h *DeploymentHandler) GetDeploymentStatus(
 		return
 	}
 
-	deployment, err := h.repo.Queries.GetDeployment(r.Context(), depID)
+	_, err = h.repo.Queries.GetDeployment(r.Context(), depID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			RespondError(w, http.StatusNotFound, "Deployment not found")
@@ -469,7 +470,7 @@ func (h *DeploymentHandler) GetDeploymentStatus(
 		Status           string `json:"status"`
 		WaitingForAgents bool   `json:"waiting_for_agents"`
 		auth.DeploymentQueueInfo
-	}{Status: deployment.Status, WaitingForAgents: waiting != 0, DeploymentQueueInfo: queue})
+	}{Status: queue.Status, WaitingForAgents: waiting != 0, DeploymentQueueInfo: queue})
 }
 
 // ApproveDeployment approves a deployment pending approval.
@@ -717,7 +718,8 @@ func (h *DeploymentHandler) CancelDeployment(
 	if deployment.Status == "queued" ||
 		!deployment.AssignedAgentID.Valid &&
 			(deployment.Status == "pending" || deployment.Status == "pending_approval") {
-		if err := h.repo.CancelQueuedDeployment(r.Context(), depID); err != nil {
+		status, err := h.runner.CancelPrestart(r.Context(), depID)
+		if err != nil {
 			RespondError(
 				w,
 				http.StatusConflict,
@@ -725,7 +727,7 @@ func (h *DeploymentHandler) CancelDeployment(
 			)
 			return
 		}
-		RespondJSON(w, http.StatusOK, map[string]string{"status": "cancelled"})
+		RespondJSON(w, http.StatusOK, map[string]string{"status": status})
 		return
 	}
 	if deployment.AssignedAgentID.Valid {

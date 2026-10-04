@@ -244,6 +244,12 @@ func (r *Repository) CancelQueuedDeployment(
 			if err := q.CancelWaitingQueuedRemoteClaim(ctx, id); err != nil {
 				return err
 			}
+			if err := q.FinishDeploymentVerification(ctx,
+				db.FinishDeploymentVerificationParams{
+					DeploymentID: id, Status: "cancelled",
+				}); err != nil {
+				return err
+			}
 			queueAudit(ctx, id, "deployment_queue_cancelled")
 			return nil
 		},

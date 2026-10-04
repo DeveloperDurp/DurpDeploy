@@ -37,6 +37,7 @@ func newQueueE2E(t *testing.T) (*artifactE2E, db.Release, db.Release) {
 func TestEnvironmentQueueAPIWebE2E(t *testing.T) {
 	// Given: an executing local deployment and two later API requests.
 	f, slow, fast := newQueueE2E(t)
+	configureVerification(t, f, "bash", "true", 5)
 	head := verificationDeploy(t, f, slow)
 	waitVerificationLog(t, f,
 		fmt.Sprintf("/api/v1/deployments/%d", head.ID), "queue-head")
@@ -47,8 +48,16 @@ func TestEnvironmentQueueAPIWebE2E(t *testing.T) {
 		QueuePosition      int64  `json:"queue_position"`
 		ActiveDeploymentID int64  `json:"active_deployment_id"`
 	}
-	if err := json.Unmarshal(f.api(t, "GET",
-		fmt.Sprintf("/api/v1/deployments/%d/status", next.ID), nil, 200), &status); err != nil {
+	if err := json.Unmarshal(f.api(
+		t,
+		"GET",
+		fmt.Sprintf(
+			"/api/v1/deployments/%d/status",
+			next.ID,
+		),
+		nil,
+		200,
+	), &status); err != nil {
 		t.Fatal(err)
 	}
 	if status.Status != "queued" || status.QueuePosition != 2 ||
@@ -70,6 +79,11 @@ func TestEnvironmentQueueAPIWebE2E(t *testing.T) {
 	)
 	waitVerificationStatus(t, f, head.ID, "running")
 	waitVerificationStatus(t, f, cancelled.ID, "cancelled")
+	verification := f.api(t, "GET", fmt.Sprintf(
+		"/api/v1/deployments/%d/verification", cancelled.ID), nil, 200)
+	if !strings.Contains(string(verification), `"status":"cancelled"`) {
+		t.Fatalf("queued cancellation verification=%s", verification)
+	}
 	f.api(
 		t,
 		"POST",
@@ -98,9 +112,12 @@ func TestEnvironmentQueueViewerAndProjectBoundaryE2E(t *testing.T) {
 	queued := verificationDeploy(t, f, fast)
 	adminToken := f.token
 	viewer := seedAPIUser(t, f.h.repo, "queue-viewer@example.test", "viewer")
-	if err := f.h.repo.Queries.AddProjectMember(t.Context(), db.AddProjectMemberParams{
-		ProjectID: f.project.ID, UserID: viewer.ID, Role: "deployer",
-	}); err != nil {
+	if err := f.h.repo.Queries.AddProjectMember(
+		t.Context(),
+		db.AddProjectMemberParams{
+			ProjectID: f.project.ID, UserID: viewer.ID, Role: "deployer",
+		},
+	); err != nil {
 		t.Fatal(err)
 	}
 	_, f.token = seedAPIToken(t, f.h.repo, viewer.ID)
@@ -125,24 +142,49 @@ func TestEnvironmentQueueViewerAndProjectBoundaryE2E(t *testing.T) {
 	var privateProject struct {
 		ID int64 `json:"id"`
 	}
-	if err := json.Unmarshal(f.api(t, "POST", "/api/v1/projects",
-		map[string]string{"name": "Other queue project"}, 201), &privateProject); err != nil {
+	if err := json.Unmarshal(f.api(
+		t,
+		"POST",
+		"/api/v1/projects",
+		map[string]string{
+			"name": "Other queue project",
+		},
+		201,
+	), &privateProject); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.h.repo.Queries.AddProjectMember(t.Context(), db.AddProjectMemberParams{
-		ProjectID: privateProject.ID, UserID: outsider.ID, Role: "deployer",
-	}); err != nil {
+	if err := f.h.repo.Queries.AddProjectMember(
+		t.Context(),
+		db.AddProjectMemberParams{
+			ProjectID: privateProject.ID, UserID: outsider.ID, Role: "deployer",
+		},
+	); err != nil {
 		t.Fatal(err)
 	}
 	var privateRelease db.Release
 	privateBase := fmt.Sprintf("/api/v1/projects/%d", privateProject.ID)
-	if err := json.Unmarshal(f.api(t, "POST", privateBase+"/releases",
-		map[string]string{"version": "private-queue"}, 201), &privateRelease); err != nil {
+	if err := json.Unmarshal(f.api(
+		t,
+		"POST",
+		privateBase+"/releases",
+		map[string]string{
+			"version": "private-queue",
+		},
+		201,
+	), &privateRelease); err != nil {
 		t.Fatal(err)
 	}
 	var privateQueue db.Deployment
-	if err := json.Unmarshal(f.api(t, "POST", privateBase+"/deployments",
-		map[string]int64{"release_id": privateRelease.ID, "environment_id": f.environment.ID}, 201), &privateQueue); err != nil {
+	if err := json.Unmarshal(f.api(
+		t,
+		"POST",
+		privateBase+"/deployments",
+		map[string]int64{
+			"release_id":     privateRelease.ID,
+			"environment_id": f.environment.ID,
+		},
+		201,
+	), &privateQueue); err != nil {
 		t.Fatal(err)
 	}
 	_, f.token = seedAPIToken(t, f.h.repo, outsider.ID)
@@ -170,10 +212,19 @@ func queueRunbook(t *testing.T, f *artifactE2E) db.Runbook {
 	var saved struct {
 		Runbook db.Runbook `json:"runbook"`
 	}
-	if err := json.Unmarshal(f.api(t, "POST", f.base()+"/runbooks", map[string]any{
-		"name":  "Queued maintenance",
-		"steps": []map[string]any{{"name": "Maintenance", "script_body": "echo queue-runbook-work", "container_image": "docker.io/library/bash:5.2"}},
-	}, 201), &saved); err != nil {
+	if err := json.Unmarshal(
+		f.api(t, "POST", f.base()+"/runbooks", map[string]any{
+			"name": "Queued maintenance",
+			"steps": []map[string]any{
+				{
+					"name":            "Maintenance",
+					"script_body":     "echo queue-runbook-work",
+					"container_image": "docker.io/library/bash:5.2",
+				},
+			},
+		}, 201),
+		&saved,
+	); err != nil {
 		t.Fatal(err)
 	}
 	return saved.Runbook
@@ -186,9 +237,18 @@ func queueRunbookExecution(
 ) db.RunbookExecution {
 	t.Helper()
 	var execution db.RunbookExecution
-	if err := json.Unmarshal(f.api(t, "POST", fmt.Sprintf("%s/runbooks/%d/executions", f.base(), book.ID), map[string]int64{
-		"environment_id": f.environment.ID,
-	}, 201), &execution); err != nil {
+	if err := json.Unmarshal(
+		f.api(
+			t,
+			"POST",
+			fmt.Sprintf("%s/runbooks/%d/executions", f.base(), book.ID),
+			map[string]int64{
+				"environment_id": f.environment.ID,
+			},
+			201,
+		),
+		&execution,
+	); err != nil {
 		t.Fatal(err)
 	}
 	return execution
@@ -240,7 +300,10 @@ func TestEnvironmentQueueRunbookE2E(t *testing.T) {
 		t.Fatalf("queued runbook cancel response=%s", response)
 	}
 	var retried db.RunbookExecution
-	if err := json.Unmarshal(f.api(t, "POST", apiPath+"/retry", nil, 201), &retried); err != nil {
+	if err := json.Unmarshal(
+		f.api(t, "POST", apiPath+"/retry", nil, 201),
+		&retried,
+	); err != nil {
 		t.Fatal(err)
 	}
 	retryPath := fmt.Sprintf("%s/runbook-executions/%d", f.base(), retried.ID)

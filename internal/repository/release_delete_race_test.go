@@ -17,28 +17,31 @@ func TestReleaseDeleteSerializesCreationAcrossDatabases(t *testing.T) {
 		)
 		t.Run("creation first", func(t *testing.T) {
 			ctx := t.Context()
-			tx, err := first.DB.BeginTx(ctx, nil)
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer tx.Rollback()
-			q := first.Queries.WithTx(tx)
-			result, err := first.createDeployment(ctx, q,
-				db.CreateDeploymentParams{
-					ReleaseID: 1, EnvironmentID: 1, Status: "pending",
+			var result DeploymentResult
+			err := first.withQueueTx(ctx,
+				func(ctx context.Context, q *db.Queries) error {
+					var err error
+					result, err = first.createDeployment(ctx, q,
+						db.CreateDeploymentParams{
+							ReleaseID: 1, EnvironmentID: 1, Status: "pending",
+						})
+					if err != nil {
+						return err
+					}
+					blocked, cancel := context.WithTimeout(
+						ctx,
+						150*time.Millisecond,
+					)
+					defer cancel()
+					if err := second.DeleteRelease(blocked, 1, 1); err == nil {
+						t.Fatal("delete passed an uncommitted deployment")
+					}
+					if blocked.Err() == nil {
+						t.Fatal("delete did not wait for the release lock")
+					}
+					return nil
 				})
 			if err != nil {
-				t.Fatal(err)
-			}
-			blocked, cancel := context.WithTimeout(ctx, 150*time.Millisecond)
-			defer cancel()
-			if err := second.DeleteRelease(blocked, 1, 1); err == nil {
-				t.Fatal("delete passed an uncommitted deployment")
-			}
-			if blocked.Err() == nil {
-				t.Fatal("delete did not wait for the release lock")
-			}
-			if err := tx.Commit(); err != nil {
 				t.Fatal(err)
 			}
 			if err := second.DeleteRelease(ctx, 1, 1); !errors.Is(
