@@ -74,7 +74,7 @@ templ TemplateFormContent(tpl *db.StepTemplate, isNew bool, errorMsg string) {
 		{Label: "Templates", Href: "/templates"},
 		{Label: tplFormTitle(isNew)},
 	})
-	<div class="w-full">
+	<div class="w-full" data-create-form>
 		<div class="page-header">
 			<h1 class="text-3xl font-bold">
 				if isNew {
@@ -83,7 +83,12 @@ templ TemplateFormContent(tpl *db.StepTemplate, isNew bool, errorMsg string) {
 					Edit Template
 				}
 			</h1>
-			if !isNew {
+			if isNew {
+				<div class="flex gap-2">
+					<button type="submit" form="template-settings-form" class="btn btn-primary md:btn-sm">Save</button>
+					<a href="/templates" class="btn btn-ghost md:btn-sm" x-data="backNavigation" @click="back">Cancel</a>
+				</div>
+			} else {
 				<div class="flex flex-wrap gap-2">
 					<button type="submit" form="template-settings-form" class="btn btn-primary md:btn-sm">Save</button>
 					<a data-template-action="history" href={ templ.SafeURL("/templates/" + strconv.FormatInt(tpl.ID, 10) + "/history") } class="btn btn-ghost md:btn-sm">History</a>
@@ -92,11 +97,12 @@ templ TemplateFormContent(tpl *db.StepTemplate, isNew bool, errorMsg string) {
 			}
 		</div>
 		<form
+			id="template-settings-form"
 			if isNew {
 				method="post"
 				action="/templates"
+				hx-post="/templates"
 			} else {
-				id="template-settings-form"
 				hx-put={ "/templates/" + strconv.FormatInt(tpl.ID, 10) }
 				hx-target="#form-container"
 				hx-swap="innerHTML"
@@ -161,14 +167,6 @@ templ TemplateFormContent(tpl *db.StepTemplate, isNew bool, errorMsg string) {
 				</label>
 				<textarea name="script_body" class="textarea textarea-bordered" rows="6">{ tpl.ScriptBody }</textarea>
 			</div>
-			if isNew {
-				<div class="flex gap-2">
-					<button type="submit" class="btn btn-primary">
-						Create
-					</button>
-					<a href="/templates" class="btn btn-ghost">Cancel</a>
-				</div>
-			}
 		</form>
 		if !isNew && CanWrite(ctx) {
 			<div class="mt-6 pt-4 border-t border-base-300 flex flex-wrap items-center justify-between gap-4">

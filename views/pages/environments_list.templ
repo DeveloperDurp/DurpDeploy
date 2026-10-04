@@ -18,14 +18,17 @@ templ EnvironmentsList(environments []db.Environment, currentPath string) {
 }
 
 templ EnvironmentsListContent(environments []db.Environment) {
-	<div id="environments-content" class="space-y-4">
+	<div id="environments-content" class="space-y-4" x-data="formDialogHost" x-on:htmx:after-settle.camel="afterSettle" x-on:htmx:before-swap.camel="beforeSwap" x-on:form-saved="saved">
 		<div class="page-header">
 			<h1 class="text-3xl font-bold">Environments</h1>
 			if CanWrite(ctx) {
-				<a href="/environments/new" class="btn btn-primary">New Environment</a>
+				@NewResourceButton("/environments/new", "New Environment")
 			}
 		</div>
 		@EnvironmentsListFragment(environments)
+		if CanWrite(ctx) {
+			@ResourceFormDialog("New Environment", "[data-create-form]")
+		}
 	</div>
 }
 
@@ -35,7 +38,7 @@ templ EnvironmentsListFragment(environments []db.Environment) {
 			<div class="card bg-base-200 p-8 text-center">
 				if CanWrite(ctx) {
 					<p class="text-gray-400 mb-4">No environments yet. Create your first environment to define deployment targets.</p>
-					<a href="/environments/new" class="btn btn-primary">New Environment</a>
+					@NewResourceButton("/environments/new", "New Environment")
 				} else {
 					<p class="text-gray-400">No environments are available.</p>
 				}

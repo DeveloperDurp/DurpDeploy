@@ -222,6 +222,11 @@ focus moves to another step's Edit button, or Add Step when the list is empty.
 Editor modals use the same clickable backdrop as confirmation and notification
 dialogs. Clicking outside closes the dialog and discards unsaved fields, while
 clicks inside keep it open. The fullscreen script editor has no outside area.
+New Project, Environment, Lifecycle, and Template open the existing forms in
+the same modal. Save remains in the top-right header while scrolling. Cancel,
+Back, Escape, and backdrop clicks close without creating a resource. Validation
+stays inside the dialog; successful creation closes it and refreshes the list
+without a document reload. Direct form URLs and native POSTs remain supported.
 
 Normal internal page links use HTMX to replace the main content, update the
 navbar and title, and push the existing URL into browser history. The document

@@ -89,6 +89,17 @@ func (h *ProjectHandler) NewProject(w http.ResponseWriter, r *http.Request) {
 func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimSpace(r.FormValue("name"))
 	desc := r.FormValue("description")
+	submitted := db.Project{
+		Name:        name,
+		Description: sql.NullString{String: desc, Valid: desc != ""},
+	}
+	if lifecycleID, parseErr := strconv.ParseInt(
+		r.FormValue("lifecycle_id"),
+		10,
+		64,
+	); parseErr == nil {
+		submitted.LifecycleID = sql.NullInt64{Int64: lifecycleID, Valid: true}
+	}
 
 	if name == "" {
 		lifecycles, _ := h.repo.Queries.ListLifecycles(r.Context())
@@ -96,14 +107,14 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 			w,
 			r,
 			pages.ProjectForm(
-				db.Project{},
+				submitted,
 				false,
 				"Name is required",
 				lifecycles,
 				nil, nil, false,
 			),
 			pages.ProjectFormPage(
-				db.Project{},
+				submitted,
 				false,
 				"Name is required",
 				lifecycles,
@@ -152,14 +163,14 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 				w,
 				r,
 				pages.ProjectForm(
-					db.Project{Name: name},
+					submitted,
 					false,
 					"A project with this name already exists",
 					lifecycles,
 					nil, nil, false,
 				),
 				pages.ProjectFormPage(
-					db.Project{Name: name},
+					submitted,
 					false,
 					"A project with this name already exists",
 					lifecycles,
@@ -178,6 +189,14 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if retargetFormDialog(w, r, "#projects-list") {
+		h.ListProjects(w, r)
+		return
+	}
+	if r.Header.Get("HX-Request") == "true" {
+		w.Header().Set("HX-Redirect", "/projects")
+		return
+	}
 	http.Redirect(w, r, "/projects", http.StatusSeeOther)
 }
 
@@ -633,12 +652,7 @@ func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if r.Header.Get("HX-Request") == "true" &&
-		r.Header.Get("X-Project-Dialog") == "true" {
-		w.Header().Set("HX-Retarget", "#project-detail")
-		w.Header().Set("HX-Reswap", "outerHTML")
-		w.Header().Set("HX-Reselect", "#project-detail")
-		w.Header().Set("HX-Trigger-After-Settle", "project-saved")
+	if retargetFormDialog(w, r, "#project-detail") {
 		h.GetProject(w, r)
 		return
 	}

@@ -101,7 +101,7 @@ func (h *ProjectMembersHandler) ListMembers(
 		return
 	}
 	editURL := fmt.Sprintf("/projects/%d/edit", id)
-	if isFragmentRequest(r) && r.Header.Get("X-Project-Dialog") != "true" {
+	if isFragmentRequest(r) && r.Header.Get("X-Form-Dialog") != "true" {
 		w.Header().Set("HX-Redirect", editURL)
 		w.WriteHeader(http.StatusOK)
 		return
@@ -176,7 +176,7 @@ func (h *ProjectMembersHandler) AddMember(
 
 	editURL := fmt.Sprintf("/projects/%d/edit", id)
 	if r.Header.Get("HX-Request") == "true" &&
-		r.Header.Get("X-Project-Dialog") != "true" {
+		r.Header.Get("X-Form-Dialog") != "true" {
 		w.Header().Set("HX-Redirect", editURL)
 		w.WriteHeader(http.StatusOK)
 		return
@@ -225,7 +225,7 @@ func (h *ProjectMembersHandler) RemoveMember(
 
 	editURL := fmt.Sprintf("/projects/%d/edit", id)
 	if r.Header.Get("HX-Request") == "true" &&
-		r.Header.Get("X-Project-Dialog") != "true" {
+		r.Header.Get("X-Form-Dialog") != "true" {
 		w.Header().Set("HX-Redirect", editURL)
 		w.WriteHeader(http.StatusOK)
 		return

@@ -205,8 +205,7 @@ func testNewEnvironmentHeaderSave(
 	b *packageBrowser,
 ) {
 	t.Helper()
-	b.navigateBackTest(t, f.baseURL+"/environments")
-	b.clickPageNavigation(t, "/environments/new", "Environment")
+	b.navigateBackTest(t, f.baseURL+"/environments/new")
 	if string(
 		b.evaluate(
 			t,

@@ -157,6 +157,15 @@ func (h *StepTemplateHandler) CreateTemplate(
 		return
 	}
 
+	if retargetFormDialog(w, r, "#templates-content") {
+		h.ListTemplates(w, r)
+		return
+	}
+
+	if r.Header.Get("HX-Request") == "true" {
+		w.Header().Set("HX-Redirect", "/templates")
+		return
+	}
 	http.Redirect(w, r, "/templates", http.StatusSeeOther)
 }
 

@@ -138,6 +138,22 @@ func IsUniqueViolation(err error) bool {
 		strings.Contains(err.Error(), "UNIQUE constraint failed")
 }
 
+func retargetFormDialog(
+	w http.ResponseWriter,
+	r *http.Request,
+	target string,
+) bool {
+	if r.Header.Get("HX-Request") != "true" ||
+		r.Header.Get("X-Form-Dialog") != "true" {
+		return false
+	}
+	w.Header().Set("HX-Retarget", target)
+	w.Header().Set("HX-Reswap", "outerHTML")
+	w.Header().Set("HX-Reselect", target)
+	w.Header().Set("HX-Trigger-After-Settle", "form-saved")
+	return true
+}
+
 func WriteFormError(
 	w http.ResponseWriter,
 	r *http.Request,

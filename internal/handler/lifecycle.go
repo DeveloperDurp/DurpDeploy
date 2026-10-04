@@ -75,7 +75,13 @@ func (h *LifecycleHandler) CreateLifecycle(
 
 	name := strings.TrimSpace(r.FormValue("name"))
 	if name == "" {
-		lc := db.Lifecycle{Name: name}
+		lc := db.Lifecycle{
+			Name: name,
+			Description: sql.NullString{
+				String: r.FormValue("description"),
+				Valid:  r.FormValue("description") != "",
+			},
+		}
 		WriteFormError(
 			w,
 			r,
@@ -95,7 +101,13 @@ func (h *LifecycleHandler) CreateLifecycle(
 	)
 	if err != nil {
 		if IsUniqueViolation(err) {
-			lc := db.Lifecycle{Name: name}
+			lc := db.Lifecycle{
+				Name: name,
+				Description: sql.NullString{
+					String: r.FormValue("description"),
+					Valid:  r.FormValue("description") != "",
+				},
+			}
 			WriteFormError(
 				w,
 				r,
@@ -117,6 +129,15 @@ func (h *LifecycleHandler) CreateLifecycle(
 		return
 	}
 
+	if retargetFormDialog(w, r, "#lifecycles-content") {
+		h.ListLifecycles(w, r)
+		return
+	}
+
+	if r.Header.Get("HX-Request") == "true" {
+		w.Header().Set("HX-Redirect", "/lifecycles")
+		return
+	}
 	http.Redirect(w, r, lifecyclesPath, http.StatusSeeOther)
 }
 
@@ -223,9 +244,12 @@ func (h *LifecycleHandler) SaveLifecycle(
 		if err != nil {
 			if IsUniqueViolation(err) {
 				lc := db.Lifecycle{
-					ID:          id,
-					Name:        name,
-					Description: sql.NullString{String: desc, Valid: desc != ""},
+					ID:   id,
+					Name: name,
+					Description: sql.NullString{
+						String: desc,
+						Valid:  desc != "",
+					},
 				}
 				if err := h.writeLifecycleDetailError(
 					w,

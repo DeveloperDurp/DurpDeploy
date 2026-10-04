@@ -244,7 +244,7 @@ Alpine.data('runbookEditor', () => ({
 	},
 }));
 
-Alpine.data('projectEditHost', () => ({
+Alpine.data('formDialogHost', () => ({
 	afterSettle(event) {
 		if (event.detail?.target?.id !== 'project-edit-content') return;
 		if (!this.$refs.dialog.open) this.$refs.dialog.showModal();

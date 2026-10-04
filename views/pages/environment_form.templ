@@ -48,7 +48,7 @@ templ EnvironmentFormContent(env *db.Environment, isNew bool, errorMsg string) {
 		{Label: "Environments", Href: "/environments"},
 		{Label: envFormTitle(isNew)},
 	})
-	<div class="w-full">
+	<div class="w-full" data-create-form>
 		<div class="page-header">
 			<h1 class="text-3xl font-bold">
 				if isNew {
@@ -69,6 +69,7 @@ templ EnvironmentFormContent(env *db.Environment, isNew bool, errorMsg string) {
 			if isNew {
 				method="post"
 				action="/environments"
+				hx-post="/environments"
 			} else {
 				hx-put={ "/environments/" + strconv.FormatInt(env.ID, 10) }
 				hx-target="#form-container"

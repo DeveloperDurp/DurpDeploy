@@ -18,14 +18,17 @@ templ TemplatesList(templates []db.StepTemplate, currentPath string) {
 }
 
 templ TemplatesListContent(templates []db.StepTemplate) {
-	<div id="templates-content" class="space-y-4">
+	<div id="templates-content" class="space-y-4" x-data="formDialogHost" x-on:htmx:after-settle.camel="afterSettle" x-on:htmx:before-swap.camel="beforeSwap" x-on:form-saved="saved">
 		<div class="page-header">
 			<h1 class="text-3xl font-bold">Templates</h1>
 			if CanWrite(ctx) {
-				<a href="/templates/new" class="btn btn-primary">New Template</a>
+				@NewResourceButton("/templates/new", "New Template")
 			}
 		</div>
 		@TemplatesListFragment(templates)
+		if CanWrite(ctx) {
+			@ResourceFormDialog("New Template", "[data-create-form]")
+		}
 	</div>
 }
 
@@ -35,7 +38,7 @@ templ TemplatesListFragment(templates []db.StepTemplate) {
 			<div class="card bg-base-200 p-8 text-center">
 				<p class="text-gray-400 mb-4">No templates yet. Create your first template to reuse deployment steps.</p>
 				if CanWrite(ctx) {
-					<a href="/templates/new" class="btn btn-primary">New Template</a>
+					@NewResourceButton("/templates/new", "New Template")
 				}
 			</div>
 		} else {

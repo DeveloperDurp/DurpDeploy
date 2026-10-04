@@ -9,7 +9,7 @@ import (
 
 // projectFormID returns the form's id attribute. The submit button
 // rendered below the form uses the same id so its `form=` attribute
-// actually binds to the form — without this, clicking Create on the
+// actually binds to the form — without this, clicking Save on the
 // "new" page is a no-op (the button references "project-form-0" while
 // the form is "project-form-new").
 func projectFormID(project db.Project, isEdit bool) string {
@@ -34,6 +34,11 @@ templ ProjectForm(project db.Project, isEdit bool, errorMsg string, lifecycles [
 					<button type="submit" form={ projectFormID(project, isEdit) } class="btn btn-primary md:btn-sm">Save</button>
 					<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost md:btn-sm" x-data="backNavigation" @click="back">Back</a>
 				</div>
+			} else {
+				<div class="flex gap-2">
+					<button type="submit" form={ projectFormID(project, isEdit) } class="btn btn-primary md:btn-sm">Save</button>
+					<a href="/projects" class="btn btn-ghost md:btn-sm" x-data="backNavigation" @click="back">Cancel</a>
+				</div>
 			}
 		</div>
 		<form
@@ -48,6 +53,10 @@ templ ProjectForm(project db.Project, isEdit bool, errorMsg string, lifecycles [
 				id={ projectFormID(project, isEdit) }
 				method="post"
 				action="/projects"
+				hx-post="/projects"
+				hx-target="#project-settings-panel"
+				hx-swap="outerHTML"
+				data-toast-success="Project created"
 			}
 			class="space-y-4"
 		>
@@ -104,15 +113,16 @@ templ ProjectForm(project db.Project, isEdit bool, errorMsg string, lifecycles [
 				</button>
 			</div>
 		}
-		if !isEdit {
-			<div class="mt-8 pt-6 border-t border-base-300 flex gap-2">
-				<button type="submit" form={ projectFormID(project, isEdit) } class="btn btn-primary">
-					Create
-				</button>
-				<a href="/projects" class="btn btn-ghost">Cancel</a>
-			</div>
-		}
 	</div>
+}
+
+templ ResourceFormDialog(title string, selector string) {
+	<dialog x-ref="dialog" id="project-edit-dialog" class="modal" aria-label={ title } x-on:close="closed" x-on:click.capture="backClicked" hx-headers={ `{"X-Form-Dialog":"true"}` } hx-target="#project-edit-content" hx-select={ selector } hx-swap="innerHTML" hx-boost="false">
+		<div class="modal-box w-full max-w-4xl">
+			<div id="project-edit-content" x-ref="content" class="[&_.page-header]:sticky [&_.page-header]:-top-6 [&_.page-header]:z-10 [&_.page-header]:bg-base-100 [&_.page-header]:py-2 [&_.page-header]:-mx-6 [&_.page-header]:px-6"></div>
+		</div>
+		<form method="dialog" class="modal-backdrop"><button type="submit" aria-label={ "Close " + title }></button></form>
+	</dialog>
 }
 
 templ ProjectFormPage(project db.Project, isEdit bool, errorMsg string, lifecycles []db.Lifecycle, members []db.ListProjectMembersRow, availableUsers []db.ListUsersRow, canManage bool, currentPath string) {
@@ -149,4 +159,9 @@ func projectFormBackHref(isEdit bool) string {
 	// Both new and edit land back on the project list; on the new
 	// path there's no project detail to return to.
 	return "/projects"
+}
+
+
+templ NewResourceButton(path string, title string) {
+	<a href={ templ.SafeURL(path) } hx-get={ path } hx-target="#project-edit-content" hx-select="[data-create-form], [data-project-form]" hx-swap="innerHTML" hx-push-url="false" hx-boost="false" x-ref="editButton" class="btn btn-primary">{ title }</a>
 }
