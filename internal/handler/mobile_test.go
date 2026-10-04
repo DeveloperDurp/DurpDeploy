@@ -94,11 +94,12 @@ func TestMobile_RenderedHTML_includes_responsive_classes_when_authenticated(
 			},
 		},
 		{
-			name: "deployments version column",
+			name: "deployment list labeled phone cards",
 			path: "/deployments",
 			patterns: []string{
 				responsiveHeaderPattern(mdTableCell),
-				responsiveCellPattern(mdTableCell),
+				`(?s)<tr[^>]*class="[^"]*grid-cols-2[^"]*md:table-row[^"]*"[^>]*data-deployment-id=`,
+				`(?s)<span[^>]*class="[^"]*md:hidden[^"]*"[^>]*>Version</span>`,
 			},
 		},
 		{

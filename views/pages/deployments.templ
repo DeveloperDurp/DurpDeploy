@@ -55,10 +55,10 @@ templ DeploymentsContent(view DeploymentsView) {
 }
 
 templ DeploymentsFilterBar(view DeploymentsView) {
-	<form method="get" action="/deployments" class="flex flex-wrap gap-2 items-end">
-		<label class="form-control">
+	<form method="get" action="/deployments" class="grid grid-cols-2 md:flex md:flex-wrap gap-2 items-end">
+		<label class="form-control min-w-0 col-span-2 md:col-span-1">
 			<span class="label-text">Project</span>
-			<select name="project_id" class="select select-bordered select-sm">
+			<select name="project_id" class="select select-bordered md:select-sm w-full">
 				<option value="">All</option>
 				for _, p := range view.Projects {
 					<option
@@ -70,9 +70,9 @@ templ DeploymentsFilterBar(view DeploymentsView) {
 				}
 			</select>
 		</label>
-		<label class="form-control">
+		<label class="form-control min-w-0 col-span-2 md:col-span-1">
 			<span class="label-text">Environment</span>
-			<select name="env_id" class="select select-bordered select-sm">
+			<select name="env_id" class="select select-bordered md:select-sm w-full">
 				<option value="">All</option>
 				for _, e := range view.Envs {
 					<option
@@ -84,9 +84,9 @@ templ DeploymentsFilterBar(view DeploymentsView) {
 				}
 			</select>
 		</label>
-		<label class="form-control">
+		<label class="form-control min-w-0 col-span-2 md:col-span-1">
 			<span class="label-text">Status</span>
-			<select name="status" class="select select-bordered select-sm">
+			<select name="status" class="select select-bordered md:select-sm w-full">
 				<option value="">All</option>
 				<option
 					value="pending"
@@ -120,16 +120,16 @@ templ DeploymentsFilterBar(view DeploymentsView) {
 				>cancelled</option>
 			</select>
 		</label>
-		<label class="form-control">
+		<label class="form-control min-w-0">
 			<span class="label-text">From</span>
-			<input type="date" name="from" value={ filterFromDate(view.FilterFrom) } class="input input-bordered input-sm"/>
+			<input type="date" name="from" value={ filterFromDate(view.FilterFrom) } class="input input-bordered md:input-sm w-full min-w-0"/>
 		</label>
-		<label class="form-control">
+		<label class="form-control min-w-0">
 			<span class="label-text">To</span>
-			<input type="date" name="to" value={ filterToDate(view.FilterTo) } class="input input-bordered input-sm"/>
+			<input type="date" name="to" value={ filterToDate(view.FilterTo) } class="input input-bordered md:input-sm w-full min-w-0"/>
 		</label>
-		<button type="submit" class="btn btn-sm btn-primary">Filter</button>
-		<a href="/deployments" class="btn btn-sm btn-ghost">Clear</a>
+		<button type="submit" class="btn md:btn-sm btn-primary">Filter</button>
+		<a href="/deployments" class="btn md:btn-sm btn-ghost">Clear</a>
 	</form>
 }
 
@@ -153,8 +153,8 @@ templ DeploymentsList(view DeploymentsView, appendRows bool) {
 }
 
 templ DeploymentListTable(view DeploymentsView) {
-	<table class="table table-zebra table-fixed w-full">
-		<thead>
+	<table class="table table-zebra table-fixed w-full block md:table">
+		<thead class="hidden md:table-header-group">
 			<tr>
 				<th class="w-1/6">Project</th>
 				<th class="w-1/6 hidden md:table-cell">Version</th>
@@ -164,7 +164,7 @@ templ DeploymentListTable(view DeploymentsView) {
 				<th class="w-1/4 md:w-1/6">Actions</th>
 			</tr>
 		</thead>
-		<tbody id="deployments-tbody">
+		<tbody id="deployments-tbody" class="block md:table-row-group">
 			for _, item := range view.Items {
 				@DeploymentListRow(item)
 			}
@@ -178,24 +178,39 @@ templ DeploymentListTable(view DeploymentsView) {
 }
 
 templ DeploymentListRow(item DeploymentListItem) {
-	<tr>
-		<td class="truncate">{ item.ProjectName }</td>
-		<td class="truncate hidden md:table-cell">{ item.ReleaseVersion }</td>
-		<td class="truncate">{ item.EnvironmentName }</td>
-		<td>
+	<tr class="grid grid-cols-2 gap-3 md:table-row max-md:rounded-box max-md:bg-base-200 max-md:p-4 max-md:mb-3" data-deployment-id={ strconv.FormatInt(item.Deployment.ID, 10) }>
+		<td class="min-w-0 col-span-2 md:col-span-1 max-md:p-0 break-all md:truncate">
+			<span class="block md:hidden text-xs opacity-70 mb-1">Project</span>
+			{ item.ProjectName }
+		</td>
+		<td class="min-w-0 max-md:p-0 break-all md:truncate">
+			<span class="block md:hidden text-xs opacity-70 mb-1">Version</span>
+			{ item.ReleaseVersion }
+		</td>
+		<td class="min-w-0 max-md:p-0 break-all md:truncate">
+			<span class="block md:hidden text-xs opacity-70 mb-1">Environment</span>
+			{ item.EnvironmentName }
+		</td>
+		<td class="min-w-0 max-md:p-0">
+			<span class="block md:hidden text-xs opacity-70 mb-1">Status</span>
 			@StatusBadge(item.Deployment)
 		</td>
-		<td class="truncate md:whitespace-nowrap">{ formatUnixTime(item.Deployment.CreatedAt) }</td>
-		<td class="flex flex-wrap gap-1">
-			<a href={ fmt.Sprintf("/deployments/%d", item.Deployment.ID) } class="btn btn-sm btn-secondary">View</a>
-			<a href={ fmt.Sprintf("/deployments/%d/logs.txt", item.Deployment.ID) } class="btn btn-sm btn-ghost">Export</a>
+		<td class="min-w-0 max-md:p-0 md:whitespace-nowrap">
+			<span class="block md:hidden text-xs opacity-70 mb-1">Date</span>
+			{ formatUnixTime(item.Deployment.CreatedAt) }
+		</td>
+		<td class="col-span-2 md:col-span-1 max-md:p-0">
+			<div class="flex flex-wrap gap-2">
+				<a href={ fmt.Sprintf("/deployments/%d", item.Deployment.ID) } class="btn md:btn-sm btn-secondary">View</a>
+				<a href={ fmt.Sprintf("/deployments/%d/logs.txt", item.Deployment.ID) } class="btn md:btn-sm btn-ghost">Export</a>
+			</div>
 		</td>
 	</tr>
 }
 
 templ LoadMoreButton(url string) {
 	<button
-		class="btn btn-sm btn-ghost mt-2"
+		class="btn md:btn-sm btn-ghost mt-2"
 		hx-get={ templ.URL(url) }
 		hx-target="#deployments-tbody"
 		hx-swap="beforeend"

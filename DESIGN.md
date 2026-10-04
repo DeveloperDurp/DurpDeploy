@@ -121,6 +121,16 @@ keep `overflow-x-auto` and `table table-zebra table-fixed w-full`.
   `flex flex-wrap gap-2`, with no internal scroll container. Summary controls
   use `min-h-12` from the existing spacing scale for touch access.
 
+### Deployment list on narrow screens
+- Below `md`, the existing table rows become two-column cards with visible
+  field labels, wrapped project/version/environment values, and full-width
+  actions. The same rows are appended by Load more; no duplicate mobile DOM.
+- Filters use a two-column grid on phones with project/environment spanning
+  both columns. Native inputs and View/Export/Filter/Clear/Load more controls
+  use normal touch-sized controls; desktop keeps compact table controls.
+- At `md` and above, retain the fixed six-column table and percentage widths.
+  The document owns scrolling; no sideways scrolling is needed on phones.
+
 ### Agent maintenance and health
 - Show administrative state and heartbeat health as separate labelled badges:
   active/healthy use `badge-success`, draining/drained/stale use `badge-warning`,
