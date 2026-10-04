@@ -50,6 +50,15 @@ AND (sqlc.arg(gated) = 1 OR EXISTS (SELECT 1 FROM artifact_gate_runs g WHERE g.d
 UPDATE deployments SET status = status -- NOSONAR: intentional gate lock
 WHERE id = ?;
 
+-- name: ListArtifactGateChunkKeys :many
+SELECT deployment_id, step_index, chunk_index FROM artifact_gate_chunks
+ORDER BY deployment_id, step_index, chunk_index;
+
+-- name: UpdateArtifactGateChunkCiphertext :exec
+UPDATE artifact_gate_chunks SET ciphertext = sqlc.arg(ciphertext)
+WHERE deployment_id = sqlc.arg(deployment_id)
+AND step_index = sqlc.arg(step_index) AND chunk_index = sqlc.arg(chunk_index);
+
 -- name: PauseArtifactGateDeployment :execrows
 UPDATE deployments SET status = 'awaiting_artifact_approval' WHERE id = ? AND status = 'publishing_artifact';
 

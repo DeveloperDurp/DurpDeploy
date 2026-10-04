@@ -1124,13 +1124,17 @@ func (h *DeploymentHandler) ListDeployments(
 // ponytail: matches the StatusBadge switch; adding a new status here means
 // adding it to the switch in views/pages/deployments.templ too.
 var allowedStatuses = map[string]struct{}{
-	"pending":          {},
-	"queued":           {},
-	"running":          {},
-	"succeeded":        {},
-	"failed":           {},
-	"cancelled":        {},
-	"pending_approval": {},
+	"queued": {},
+	"pending":                    {},
+	"running":                    {},
+	"succeeded":                  {},
+	"failed":                     {},
+	"cancelled":                  {},
+	"pending_approval":           {},
+	"publishing_artifact":        {},
+	"awaiting_artifact_approval": {},
+	"rejected":                   {},
+	"expired":                    {},
 }
 
 const (

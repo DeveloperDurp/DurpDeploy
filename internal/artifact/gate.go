@@ -32,7 +32,7 @@ func ValidateGateConfig(
 		}
 	}
 	if artifactPath == reviewPath ||
-		(format != "" && format != "summary" && format != "terraform") {
+		(format != "summary" && format != "terraform") {
 		return ErrGateConfig
 	}
 	return nil

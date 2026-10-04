@@ -290,6 +290,40 @@ func (q *Queries) GetArtifactGateRun(ctx context.Context, deploymentID int64) (A
 	return i, err
 }
 
+const listArtifactGateChunkKeys = `-- name: ListArtifactGateChunkKeys :many
+SELECT deployment_id, step_index, chunk_index FROM artifact_gate_chunks
+ORDER BY deployment_id, step_index, chunk_index
+`
+
+type ListArtifactGateChunkKeysRow struct {
+	DeploymentID int64 `json:"deployment_id"`
+	StepIndex    int64 `json:"step_index"`
+	ChunkIndex   int64 `json:"chunk_index"`
+}
+
+func (q *Queries) ListArtifactGateChunkKeys(ctx context.Context) ([]ListArtifactGateChunkKeysRow, error) {
+	rows, err := q.db.QueryContext(ctx, listArtifactGateChunkKeys)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListArtifactGateChunkKeysRow
+	for rows.Next() {
+		var i ListArtifactGateChunkKeysRow
+		if err := rows.Scan(&i.DeploymentID, &i.StepIndex, &i.ChunkIndex); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listArtifactGates = `-- name: ListArtifactGates :many
 SELECT deployment_id, step_index, revision, status, artifact_path, artifact_sha256, bundle_sha256, bundle_size, review, created_at, expires_at, approved_by, approved_at FROM artifact_gates WHERE deployment_id = ? ORDER BY step_index
 `
@@ -391,4 +425,27 @@ func (q *Queries) ResumeArtifactGateDeployment(ctx context.Context, id int64) (i
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+const updateArtifactGateChunkCiphertext = `-- name: UpdateArtifactGateChunkCiphertext :exec
+UPDATE artifact_gate_chunks SET ciphertext = ?1
+WHERE deployment_id = ?2
+AND step_index = ?3 AND chunk_index = ?4
+`
+
+type UpdateArtifactGateChunkCiphertextParams struct {
+	Ciphertext   string `json:"ciphertext"`
+	DeploymentID int64  `json:"deployment_id"`
+	StepIndex    int64  `json:"step_index"`
+	ChunkIndex   int64  `json:"chunk_index"`
+}
+
+func (q *Queries) UpdateArtifactGateChunkCiphertext(ctx context.Context, arg UpdateArtifactGateChunkCiphertextParams) error {
+	_, err := q.db.ExecContext(ctx, updateArtifactGateChunkCiphertext,
+		arg.Ciphertext,
+		arg.DeploymentID,
+		arg.StepIndex,
+		arg.ChunkIndex,
+	)
+	return err
 }

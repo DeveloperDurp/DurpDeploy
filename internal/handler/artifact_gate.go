@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"durpdeploy/internal/auth"
+	"durpdeploy/internal/db"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/runner"
 	"durpdeploy/views/pages"
@@ -145,7 +146,13 @@ func (h *ArtifactGateHandler) decide(
 		}
 		request.SHA256 = r.FormValue("sha256")
 	}
+	var deployment db.Deployment
 	if approve {
+		deployment, err = h.repo.Queries.GetDeployment(r.Context(), id)
+		if err != nil {
+			gateHTTPError(w, r, 500, "Continuation lookup failed")
+			return
+		}
 		err = h.repo.ApproveArtifact(
 			r.Context(),
 			id,
@@ -177,11 +184,6 @@ func (h *ArtifactGateHandler) decide(
 		return
 	}
 	if approve {
-		deployment, err := h.repo.Queries.GetDeployment(r.Context(), id)
-		if err != nil {
-			gateHTTPError(w, r, 500, "Continuation lookup failed")
-			return
-		}
 		go h.runner.Run(
 			context.Background(),
 			deployment.ID,

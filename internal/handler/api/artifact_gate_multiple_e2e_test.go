@@ -93,4 +93,11 @@ func TestArtifactGateMultipleReviewsE2E(t *testing.T) {
 		200,
 	)
 	f.completion(t, deployment.ID, events.DeploymentSucceeded)
+	var starts int
+	if err := f.h.repo.DB.QueryRow(
+		"SELECT COUNT(*) FROM notification_events WHERE deployment_id=? AND event_type='deployment_started'",
+		deployment.ID,
+	).Scan(&starts); err != nil || starts != 1 {
+		t.Fatalf("deployment started events=%d err=%v", starts, err)
+	}
 }

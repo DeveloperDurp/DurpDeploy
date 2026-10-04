@@ -5,7 +5,8 @@ Set `approval_artifact_path` and `approval_review_path` to distinct relative
 paths under `DURPDEPLOY_STAGE_DIR`. Set `approval_review_format` to `terraform`
 for `terraform show -json`, or `summary` for nonnegative `create`, `update`,
 `delete`, and `read` counts. Reviews expose counts only. Generated names,
-values, outputs, and all gated script output are hidden.
+values, outputs, and all gated script output are hidden. Both paths and an
+explicit review format are required together; an empty format is rejected.
 
 Review counts are unverified claims supplied by the deployment step. The API
 reports `review_source: "step_output"` and `review_verified: false`. A separate
@@ -14,6 +15,9 @@ Before approval, download and independently inspect the exact artifact using
 trusted tools. For Terraform, run `terraform show` with a trusted toolchain and
 providers, then compare the result with the review. Checksums bind immutable
 bytes; they do not establish that the summary accurately describes those bytes.
+Secret-key rotation re-encrypts retained artifact chunks in the same
+transaction as other encrypted data. `--plaintext` cannot migrate encrypted
+artifact gates. Stop the server for rotation, then restart with the new key.
 Generation and continuation scripts, container images, and credentials belong
 to the existing trusted-team deployment model. Gates do not constrain a
 malicious script to only plan, or prove that it applies the approved artifact.

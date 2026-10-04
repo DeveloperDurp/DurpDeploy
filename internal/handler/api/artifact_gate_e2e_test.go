@@ -88,6 +88,21 @@ func TestArtifactGateApproveExactBytesE2E(t *testing.T) {
 	// Given: a generated artifact paused before apply, visible through API/web.
 	f, deployment, gate := newGateDeployment(t)
 	path := gateAPIPath(deployment.ID)
+	// A status filter must not silently become an unfiltered web list.
+	filtered := f.web(t, "GET", "/deployments?status=rejected", nil, 200)
+	if strings.Contains(filtered,
+		fmt.Sprintf(`href="/deployments/%d"`, deployment.ID)) {
+		t.Fatal("rejected filter returned an awaiting deployment")
+	}
+	var listed struct {
+		Items []db.Deployment `json:"items"`
+	}
+	if err := json.Unmarshal(f.api(t, "GET",
+		"/api/v1/deployments?status=awaiting_artifact_approval", nil, 200),
+		&listed); err != nil || len(listed.Items) != 1 ||
+		listed.Items[0].ID != deployment.ID {
+		t.Fatalf("filtered gates=%v err=%v", listed, err)
+	}
 	// Parent deletion must preserve the active review and encrypted context.
 	for _, parent := range []string{
 		f.base(),
@@ -171,6 +186,25 @@ func TestArtifactGateApproveExactBytesE2E(t *testing.T) {
 		map[string]any{"sha256": gate.SHA256, "revision": gate.Revision},
 		409,
 	)
+}
+
+func TestArtifactGateRequiresReviewFormatE2E(t *testing.T) {
+	f := newArtifactE2E(t)
+	f.api(t, "POST", f.base()+"/steps", map[string]string{
+		"name": "Generate", "script_body": "true",
+		"container_image":        "docker.io/library/bash:5.2",
+		"approval_artifact_path": "plan", "approval_review_path": "review",
+	}, 400)
+	f.web(t, "POST", fmt.Sprintf("/projects/%d/steps", f.project.ID),
+		url.Values{
+			"name":            {"Generate"},
+			"script_body":     {"true"},
+			"container_image": {"docker.io/library/bash:5.2"},
+			"approval_artifact_path": {
+				"plan",
+			},
+			"approval_review_path": {"review"},
+		}, 422)
 }
 
 func TestArtifactGateWebRejectE2E(t *testing.T) {

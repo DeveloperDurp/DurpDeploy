@@ -88,42 +88,16 @@ templ DeploymentsFilterBar(view DeploymentsView) {
 			<span class="label-text">Status</span>
 			<select name="status" class="select select-bordered select-sm">
 				<option value="">All</option>
-				<option
-					value="pending"
-					if view.FilterStatus.String == "pending" {
-						selected
-					}
-				>pending</option>
-				<option
-					value="queued"
-					if view.FilterStatus.String == "queued" {
-						selected
-					}
-				>queued</option>
-				<option
-					value="running"
-					if view.FilterStatus.String == "running" {
-						selected
-					}
-				>running</option>
-				<option
-					value="succeeded"
-					if view.FilterStatus.String == "succeeded" {
-						selected
-					}
-				>succeeded</option>
-				<option
-					value="failed"
-					if view.FilterStatus.String == "failed" {
-						selected
-					}
-				>failed</option>
-				<option
-					value="cancelled"
-					if view.FilterStatus.String == "cancelled" {
-						selected
-					}
-				>cancelled</option>
+				<option value="queued" selected?={ view.FilterStatus.String == "queued" }>queued</option>
+				<option value="pending" if view.FilterStatus.String == "pending" { selected }>pending</option>
+				<option value="running" if view.FilterStatus.String == "running" { selected }>running</option>
+				<option value="succeeded" if view.FilterStatus.String == "succeeded" { selected }>succeeded</option>
+				<option value="failed" if view.FilterStatus.String == "failed" { selected }>failed</option>
+				<option value="cancelled" if view.FilterStatus.String == "cancelled" { selected }>cancelled</option>
+				<option value="publishing_artifact" selected?={ view.FilterStatus.String == "publishing_artifact" }>publishing_artifact</option>
+				<option value="awaiting_artifact_approval" selected?={ view.FilterStatus.String == "awaiting_artifact_approval" }>awaiting_artifact_approval</option>
+				<option value="rejected" selected?={ view.FilterStatus.String == "rejected" }>rejected</option>
+				<option value="expired" selected?={ view.FilterStatus.String == "expired" }>expired</option>
 			</select>
 		</label>
 		<label class="form-control">

@@ -437,7 +437,8 @@ gates use `approval_artifact_path`, `approval_review_path`, and
 `approval_review_format` (`summary` or `terraform`), relative to
 `DURPDEPLOY_STAGE_DIR`. A gated deployment pauses before the next step and
 reserves its environment. Only local deployment steps without retries are
-supported; runbooks and agent steps cannot use gates.
+supported; runbooks and agent steps cannot use gates. Both approval paths and
+an explicit review format are required together; an empty format is rejected.
 `GET /api/v1/deployments/{id}/artifact-gates` returns counts, checksums,
 revision, expiry, status, and approver metadata, including
 `review_source: "step_output"` and `review_verified: false`: counts are

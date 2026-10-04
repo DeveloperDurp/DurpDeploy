@@ -82,6 +82,7 @@ func TestGateConfigRejectsInvalidNetworkAndPaths(t *testing.T) {
 		{"agent", "", "plan", "review", "summary"},
 		{"local", "bridge", "../plan", "review", "summary"},
 		{"local", "bridge", "plan", "plan", "summary"},
+		{"local", "bridge", "plan", "review", ""},
 	} {
 		// Given: invalid HTTP configuration.
 		// When: it is parsed at the boundary.

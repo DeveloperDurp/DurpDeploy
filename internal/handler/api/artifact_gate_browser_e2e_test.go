@@ -202,6 +202,20 @@ func TestArtifactGateBrowserE2E(t *testing.T) {
 			}
 		}
 	}
+	for _, width := range []int{375, 1280} {
+		browser.call(t, "Emulation.setDeviceMetricsOverride", map[string]any{
+			"width": width, "height": 900,
+			"deviceScaleFactor": 1, "mobile": false,
+		}, &struct{}{})
+		browser.call(t, "Page.navigate", map[string]string{
+			"url": f.baseURL + "/deployments?status=awaiting_artifact_approval",
+		}, &struct{}{})
+		browser.wait(
+			t,
+			`document.querySelector('[name="status"]')?.value === 'awaiting_artifact_approval'`,
+		)
+		browser.screenshot(t, fmt.Sprintf("artifact-status-filter-%d", width))
+	}
 	var gates json.RawMessage
 	if err := json.Unmarshal(
 		f.api(t, "GET", gateAPIPath(deployment.ID), nil, 200),

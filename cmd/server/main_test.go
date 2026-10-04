@@ -954,6 +954,7 @@ func TestRunSecretKeyRotate_reencryptsAllRowsWithoutDataLoss(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateReleaseVariable: %v", err)
 	}
+	gate, bundle := seedRotationGate(t, repo)
 	conn.Close()
 
 	// When: the key is rotated. Capture stdout to recover the newly
@@ -993,6 +994,18 @@ func TestRunSecretKeyRotate_reencryptsAllRowsWithoutDataLoss(t *testing.T) {
 	}
 	defer conn2.Close()
 	q := db.New(conn2)
+	rotatedRepo := repository.New(conn2)
+	rotatedRepo.SetSecretBox(oldBox)
+	if err := rotatedRepo.WriteArtifactGateBundle(ctx, q, gate,
+		io.Discard); err == nil {
+		t.Fatal("old key still decrypts the gate bundle")
+	}
+	rotatedRepo.SetSecretBox(newBox)
+	var recovered bytes.Buffer
+	if err := rotatedRepo.WriteArtifactGateBundle(ctx, q, gate,
+		&recovered); err != nil || !bytes.Equal(recovered.Bytes(), bundle) {
+		t.Fatalf("rotated gate lost exact bytes: %v", err)
+	}
 
 	rawVar, err := q.GetVariable(ctx, variable.ID)
 	if err != nil {

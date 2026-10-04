@@ -117,17 +117,19 @@ func (r *DeploymentRunner) Run(
 	); err == nil {
 		envName = env.Name
 	}
-	r.publish(ctx, events.Event{
-		Type:          events.DeploymentStarted,
-		DeploymentID:  deploymentID,
-		ProjectID:     release.ProjectID,
-		EnvironmentID: environmentID,
-		Message: fmt.Sprintf(
-			"Deployment #%d started on %s",
-			deploymentID,
-			envName,
-		),
-	})
+	if !gated || gateRun.NextStep == 0 {
+		r.publish(ctx, events.Event{
+			Type:          events.DeploymentStarted,
+			DeploymentID:  deploymentID,
+			ProjectID:     release.ProjectID,
+			EnvironmentID: environmentID,
+			Message: fmt.Sprintf(
+				"Deployment #%d started on %s",
+				deploymentID,
+				envName,
+			),
+		})
+	}
 
 	var steps []deploymentStep
 	stepSource, err := r.repo.Queries.GetDeploymentStepSource(ctx, deploymentID)
