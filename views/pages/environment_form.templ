@@ -43,18 +43,29 @@ templ EnvironmentFormFragment(env *db.Environment, isNew bool, errorMsg string) 
 
 templ EnvironmentFormContent(env *db.Environment, isNew bool, errorMsg string) {
 	<div class="max-w-2xl mx-auto">
-		<h1 class="text-3xl font-bold mb-6">
-			if isNew {
-				New Environment
-			} else {
-				Edit Environment
+		<div class="flex flex-wrap items-start justify-between gap-4 mb-6">
+			<h1 class="text-3xl font-bold">
+				if isNew {
+					New Environment
+				} else {
+					Edit Environment
+				}
+			</h1>
+			if !isNew {
+				<div class="flex gap-2 shrink-0">
+					if CanWrite(ctx) {
+						<button type="submit" form="environment-settings-form" class="btn btn-primary md:btn-sm">Save</button>
+					}
+					<a href="/environments" class="btn btn-ghost md:btn-sm" x-data="backNavigation" @click="back">Back</a>
+				</div>
 			}
-		</h1>
+		</div>
 		<form
 			if isNew {
 				method="post"
 				action="/environments"
 			} else {
+				id="environment-settings-form"
 				hx-put={ "/environments/" + strconv.FormatInt(env.ID, 10) }
 				hx-target="#form-container"
 				hx-swap="innerHTML"
@@ -91,16 +102,12 @@ templ EnvironmentFormContent(env *db.Environment, isNew bool, errorMsg string) {
 					<p class="text-sm opacity-70">Only admins can configure post-deployment verification.</p>
 				}
 			</div>
-			<div class="flex gap-2">
-				<button type="submit" class="btn btn-primary">
-					if isNew {
-						Create
-					} else {
-						Update
-					}
-				</button>
-				<a href="/environments" class="btn btn-ghost">Cancel</a>
-			</div>
+			if isNew {
+				<div class="flex gap-2">
+					<button type="submit" class="btn btn-primary">Create</button>
+					<a href="/environments" class="btn btn-ghost">Cancel</a>
+				</div>
+			}
 		</form>
 		if !isNew && CanWrite(ctx) {
 			<div class="mt-6 pt-4 border-t border-base-300 flex flex-wrap items-center justify-between gap-4">

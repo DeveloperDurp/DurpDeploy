@@ -145,6 +145,9 @@ keep `overflow-x-auto` and `table table-zebra table-fixed w-full`.
   page, with a confirmation and normal-sized destructive button. Lists show
   only Edit. Canceling confirmation leaves the item intact; deletion returns
   to the list. New forms and viewer pages have no Delete control.
+- Both edit pages put Save and Back in a wrapping header. Save updates the
+  settings and keeps the edit page open; Back uses the shared history behavior.
+  Environment creation retains Create and Cancel.
 
 ### Agent maintenance and health
 - Show administrative state and heartbeat health as separate labelled badges:

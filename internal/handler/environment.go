@@ -218,7 +218,7 @@ func (h *EnvironmentHandler) UpdateEnvironment(
 		params.ConfigureVerification = 1
 	}
 
-	_, err = h.Repo.UpdateEnvironment(r.Context(), params)
+	env, err := h.Repo.UpdateEnvironment(r.Context(), params)
 	if err != nil {
 		if IsUniqueViolation(err) {
 			env := &db.Environment{ID: id, Name: name}
@@ -244,12 +244,7 @@ func (h *EnvironmentHandler) UpdateEnvironment(
 	}
 
 	if r.Header.Get("HX-Request") == "true" {
-		envs, err := h.Repo.Queries.ListEnvironments(r.Context())
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		pages.EnvironmentsListContent(envs).Render(r.Context(), w)
+		pages.EnvironmentFormFragment(&env, false, "").Render(r.Context(), w)
 	} else {
 		http.Redirect(w, r, "/environments", http.StatusSeeOther)
 	}

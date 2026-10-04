@@ -67,49 +67,7 @@ func TestResourceListMobileBrowserE2E(t *testing.T) {
 	}
 	b := startPackageBrowser(t)
 	for _, session := range []string{f.session, "resource-list-viewer"} {
-		b.setBackTestSession(t, f.baseURL, session)
-		for _, page := range []struct {
-			path string
-			id   int64
-		}{
-			{"projects", project.ID},
-			{"environments", f.environment.ID},
-			{"lifecycles", lifecycle.ID},
-		} {
-			// When: reading each public API and its web list as admin/viewer.
-			var result struct{ Items []struct{ ID int64 } }
-			decodeStepLogTest(t, f.api(t, "GET", "/api/v1/"+page.path,
-				nil, 200), &result)
-			found := false
-			for _, item := range result.Items {
-				found = found || item.ID == page.id
-			}
-			if !found {
-				t.Fatalf("API list %s lost item %d", page.path, page.id)
-			}
-			b.navigateBackTest(t, f.baseURL+"/"+page.path)
-			b.wait(t, `document.querySelector('main table tbody tr') !== null`)
-			role := "admin"
-			if session != f.session {
-				role = "viewer"
-			}
-			// Then: fields stay readable, actions usable, and viewers read-only.
-			b.captureNavigation(t, "mobile-"+page.path+"-"+role, func() {
-				assertResourceListMobile(t, b)
-				if string(b.evaluate(
-					t,
-					`![...document.querySelectorAll('main button')].some(button => button.textContent.includes('Delete')) && !document.querySelector('main input[name="_method"][value="delete"]')`,
-				)) != "true" {
-					t.Fatal("resource list still exposes Delete")
-				}
-				if role == "viewer" && string(b.evaluate(
-					t,
-					`!document.querySelector('main a[href$="/new"], main a[href$="/edit"], main button, main form') && ![...document.querySelectorAll('main a')].some(a => a.textContent === 'Edit')`,
-				)) != "true" {
-					t.Fatal("viewer sees write controls")
-				}
-			})
-		}
+		captureResourceLists(t, f, b, session, project.ID, lifecycle.ID)
 	}
 	for _, path := range []string{
 		fmt.Sprintf("/environments/%d/edit", f.environment.ID),
@@ -154,6 +112,48 @@ func TestResourceListMobileBrowserE2E(t *testing.T) {
 	b.captureNavigation(t, "mobile-environment-edit", func() {
 		assertEditDeleteControl(t, b, `main button[hx-delete]`)
 	})
+	b.evaluate(
+		t,
+		`window.environmentFormBeforeSave = document.querySelector('form[hx-put]'); document.querySelector('input[name="name"]').value = 'saved-phone-environment'; document.querySelector('button[form="environment-settings-form"]').click(); true`,
+	)
+	b.wait(
+		t,
+		`document.querySelector('form[hx-put]') !== window.environmentFormBeforeSave && document.querySelector('input[name="name"]')?.value === 'saved-phone-environment'`,
+	)
+	var saved struct{ Name string }
+	decodeStepLogTest(
+		t,
+		f.api(
+			t,
+			"GET",
+			fmt.Sprintf("/api/v1/environments/%d", f.environment.ID),
+			nil,
+			200,
+		),
+		&saved,
+	)
+	if saved.Name != "saved-phone-environment" {
+		t.Fatal("Save did not persist environment settings")
+	}
+	b.captureNavigation(t, "mobile-environment-saved", func() {
+		assertEditDeleteControl(t, b, `main button[hx-delete]`)
+	})
+	b.evaluate(
+		t,
+		`document.querySelector('main a[x-data="backNavigation"]').click(); true`,
+	)
+	b.wait(
+		t,
+		`location.pathname === '/environments' && document.querySelector('main h1')?.textContent === 'Environments'`,
+	)
+	b.evaluate(
+		t,
+		fmt.Sprintf(
+			`document.querySelector('main a[href=%q]').click(); true`,
+			edit,
+		),
+	)
+	b.wait(t, `document.querySelector('main button[hx-delete]') !== null`)
 	b.evaluate(
 		t,
 		`window.confirm = () => false; document.querySelector('main button[hx-delete]').click(); true`,
@@ -215,40 +215,4 @@ func TestResourceListMobileBrowserE2E(t *testing.T) {
 	)
 	f.api(t, "GET", "/api/v1"+lifecyclePath, nil, 404)
 	b.captureNavigation(t, "mobile-lifecycles-empty")
-}
-
-func assertEditDeleteControl(t *testing.T, b *packageBrowser, selector string) {
-	t.Helper()
-	if string(b.evaluate(t, fmt.Sprintf(`(() => {
- const button = document.querySelector(%q);
- return button && button.getBoundingClientRect().height >= 44 &&
- button.closest('form')?.id !== 'lifecycle-settings-form';
-})()`, selector))) != "true" {
-		t.Fatal("edit Delete control is small or submits the settings form")
-	}
-}
-
-func assertResourceListMobile(t *testing.T, b *packageBrowser) {
-	t.Helper()
-	if string(b.evaluate(t, `(() => {
- const table = document.querySelector('main table');
- const rows = [...table.tBodies[0].rows];
- const visible = el => el.getBoundingClientRect().height > 0;
- const cells = rows.flatMap(row => [...row.cells]);
- const controls = [...document.querySelectorAll('main a.btn, main button, main a.link')].filter(visible);
- const stageGrid = document.querySelector('[data-project-environment-grid]');
- const labels = [...table.querySelectorAll('span.md\\:hidden')];
- return innerWidth >= 768 ? getComputedStyle(rows[0]).display === 'table-row' && visible(table.tHead) &&
- cells.every(cell => cell.scrollWidth <= cell.clientWidth || getComputedStyle(cell).overflowX === 'hidden') :
- getComputedStyle(rows[0]).display === 'grid' && !visible(table.tHead) &&
- labels.length > 0 && labels.every(visible) && cells.every(cell => visible(cell) && cell.scrollWidth <= cell.clientWidth) &&
- controls.every(el => el.getBoundingClientRect().height >= 44) &&
- (!stageGrid || [...stageGrid.children].every(stage => stage.scrollWidth <= stage.clientWidth &&
- [...stage.children].every(el => el.scrollWidth <= el.clientWidth && el.scrollHeight <= el.clientHeight)));
-})()`)) != "true" {
-		b.screenshot(t, "resource-list-unusable")
-		t.Fatal(
-			"resource list hides or clips fields or has small phone controls",
-		)
-	}
 }

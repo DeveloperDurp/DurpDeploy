@@ -138,12 +138,16 @@ func TestVerificationRollbackBrowserE2E(t *testing.T) {
 	// When: the operator configures verification through the actual HTMX form.
 	browser.evaluate(t, `(() => {
  const form = document.querySelector('form[hx-put]');
+ window.environmentFormBeforeSave = form;
  form.querySelector('[name=verification_type]').value = 'bash';
  form.querySelector('[name=verification_target]').value = 'echo browser-verified';
  form.querySelector('[name=verification_timeout_seconds]').value = '5';
  form.requestSubmit(); return true;
 })()`)
-	browser.wait(t, "document.querySelector('form[hx-put]') === null")
+	browser.wait(
+		t,
+		"document.querySelector('form[hx-put]') !== window.environmentFormBeforeSave && document.querySelector('[name=verification_type]').value === 'bash'",
+	)
 	configured := string(
 		f.api(
 			t,
