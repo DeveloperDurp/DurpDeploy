@@ -16,11 +16,13 @@ For Terraform, use an image containing Bash and Terraform. The generation
 step can run:
 
 ```bash
-cd "$DURPDEPLOY_STAGE_DIR"
+mkdir /tmp/terraform-context
+cd /tmp/terraform-context
 # Write main.tf here, including the remote backend configuration.
 terraform init -input=false
 terraform plan -input=false -out=tfplan
 terraform show -json tfplan > review.json
+cp -a /tmp/terraform-context/. "$DURPDEPLOY_STAGE_DIR/"
 ```
 
 Configure paths `tfplan` and `review.json`. The later apply step runs:
@@ -31,6 +33,9 @@ cd /tmp/approved-context
 terraform apply -input=false "$DURPDEPLOY_APPROVED_DIR/tfplan"
 ```
 
+Staging is `noexec`. Execute Terraform and provider plugins from `/tmp`, then
+copy the generated files into staging. Gated generation and continuation steps
+have 364 MiB of bounded executable scratch space; other steps have 64 MiB.
 The approved directory is read-only. The copied working directory preserves
 configuration, initialized backend data, modules, and provider lock files.
 Terraform applies the saved plan; it must not generate a replacement plan.

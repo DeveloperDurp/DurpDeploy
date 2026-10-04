@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"durpdeploy/internal/artifact"
 	"durpdeploy/internal/containerenv"
 	"durpdeploy/internal/interpreter"
 )
@@ -168,6 +169,15 @@ func (r *DeploymentRunner) runStepAttempt(
 		)
 	}
 	network := request.step.NetworkMode
+	tmpfs := "--tmpfs=/tmp:rw,nosuid,size=64m"
+	if request.step.ApprovalArtifactPath != "" ||
+		request.approved.volume != "" {
+		// Providers execute in /tmp; staging and approved context stay noexec.
+		tmpfs = fmt.Sprintf(
+			"--tmpfs=/tmp:rw,nosuid,size=%d",
+			artifact.MaxDownload+(64<<20),
+		)
+	}
 	if network == "" {
 		network = "none"
 	}
@@ -179,7 +189,7 @@ func (r *DeploymentRunner) runStepAttempt(
 		"--label=io.durpdeploy.namespace="+r.engine.scope(),
 		"--network="+network, "--read-only", "--cap-drop=ALL",
 		"--security-opt=no-new-privileges", "--user=65534:65534",
-		"--tmpfs=/tmp:rw,nosuid,size=64m",
+		tmpfs,
 		"--env=HOME=/tmp", "--env=TERM=dumb",
 		"--pids-limit=128", memoryLimit, "--cpus=1")
 	if r.engine.kind == "podman" {

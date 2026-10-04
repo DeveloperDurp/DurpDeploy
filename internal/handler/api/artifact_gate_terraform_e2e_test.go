@@ -22,6 +22,12 @@ import (
 )
 
 func TestArtifactGateTerraformNetworkE2E(t *testing.T) {
+	t.Run("apply", func(t *testing.T) { terraformGateNetwork(t, false) })
+	t.Run("stale state", func(t *testing.T) { terraformGateNetwork(t, true) })
+}
+
+func terraformGateNetwork(t *testing.T, stale bool) {
+	t.Helper()
 	// Given: real Terraform, a networked HTTP state backend with locking,
 	// and two API-created immutable plan/apply steps.
 	f := newArtifactE2E(t)
@@ -100,21 +106,34 @@ func TestArtifactGateTerraformNetworkE2E(t *testing.T) {
 		"approval_review_path":   "context/review.json",
 		"approval_review_format": "terraform",
 		"script_body": `set -eu
-mkdir "$DURPDEPLOY_STAGE_DIR/context"
-cd "$DURPDEPLOY_STAGE_DIR/context"
+mkdir /tmp/context
+cd /tmp/context
+cat > /tmp/terraform.rc <<'RC'
+provider_installation {
+  filesystem_mirror { path = "/opt/providers" }
+}
+RC
+export TF_CLI_CONFIG_FILE=/tmp/terraform.rc
 cat > main.tf <<'TF'
 terraform {
   backend "http" {}
+  required_providers {
+    random = {
+      source = "hashicorp/random"
+      version = "3.7.2"
+    }
+  }
 }
-resource "terraform_data" "example" { input = "terraform-sensitive-value" }
+resource "random_password" "example" { length = 16 }
 output "password" {
-  value = "terraform-sensitive-value"
+  value = random_password.example.result
   sensitive = true
 }
 TF
 terraform init -input=false
 terraform plan -input=false -out=tfplan
-terraform show -json tfplan > review.json`,
+terraform show -json tfplan > review.json
+cp -a /tmp/context "$DURPDEPLOY_STAGE_DIR/context"`,
 	}, 201)
 	f.api(t, "POST", f.base()+"/steps", map[string]any{
 		"name":            "Terraform apply",
@@ -123,6 +142,9 @@ terraform show -json tfplan > review.json`,
 		"script_body": `set -eu
 cp -a "$DURPDEPLOY_APPROVED_DIR/context" /tmp/context
 cd /tmp/context
+test -f .terraform.lock.hcl
+# A real provider and context larger than the ordinary 64 MiB scratch limit.
+dd if=/dev/zero of=/tmp/scratch bs=1M count=70
 terraform apply -input=false "$DURPDEPLOY_APPROVED_DIR/context/tfplan"`,
 	}, 201)
 	deployment := verificationDeploy(
@@ -151,6 +173,13 @@ terraform apply -input=false "$DURPDEPLOY_APPROVED_DIR/context/tfplan"`,
 	if before != 0 {
 		t.Fatal("Terraform applied before approval")
 	}
+	if stale {
+		mutex.Lock()
+		state = []byte(
+			`{"version":4,"terraform_version":"1.13.5","serial":1,"lineage":"ad93c268-710a-49a0-841b-02ce7a28e124","outputs":{},"resources":[]}`,
+		)
+		mutex.Unlock()
+	}
 	// When: this saved plan is approved through the public API.
 	f.api(
 		t,
@@ -160,11 +189,32 @@ terraform apply -input=false "$DURPDEPLOY_APPROVED_DIR/context/tfplan"`,
 		200,
 	)
 	// Then: Terraform applies it over the network, with backend locking.
+	if stale {
+		f.completion(t, deployment.ID, events.DeploymentFailed)
+		mutex.Lock()
+		defer mutex.Unlock()
+		if writes != 0 {
+			t.Fatal("a stale saved plan changed the backend")
+		}
+		return
+	}
 	f.completion(t, deployment.ID, events.DeploymentSucceeded)
 	mutex.Lock()
 	defer mutex.Unlock()
 	if writes != 1 || locks < 2 || len(state) == 0 {
 		t.Fatalf("backend writes=%d locks=%d", writes, locks)
+	}
+	var saved struct {
+		Outputs map[string]struct {
+			Value string `json:"value"`
+		} `json:"outputs"`
+	}
+	if err := json.Unmarshal(state, &saved); err != nil {
+		t.Fatal("invalid saved state")
+	}
+	password := saved.Outputs["password"].Value
+	if password == "" {
+		t.Fatal("external provider did not generate a result")
 	}
 	logs := f.api(
 		t,
@@ -174,7 +224,13 @@ terraform apply -input=false "$DURPDEPLOY_APPROVED_DIR/context/tfplan"`,
 		200,
 	)
 	if len(logs) == 0 ||
-		strings.Contains(string(logs), "terraform-sensitive-value") {
+		strings.Contains(string(logs), password) {
 		t.Fatal("unsafe or missing progress logs")
+	}
+	if strings.Contains(
+		string(f.api(t, "GET", gateAPIPath(deployment.ID), nil, 200)),
+		password,
+	) {
+		t.Fatal("generated sensitive value leaked into review")
 	}
 }
