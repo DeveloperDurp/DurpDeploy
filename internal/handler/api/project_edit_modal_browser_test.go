@@ -82,6 +82,32 @@ func TestProjectEditModalBrowserE2E(t *testing.T) {
 	)
 	b.wait(t, `!document.querySelector('#project-edit-dialog').open`)
 	open()
+	b.evaluate(
+		t,
+		`const input = document.querySelector('#project-edit-content input[name="name"]'); input.value = 'discard outside'; input.click(); true`,
+	)
+	if string(
+		b.evaluate(
+			t,
+			`document.querySelector('#project-edit-dialog').matches(':modal')`,
+		),
+	) != "true" {
+		t.Fatal("clicking inside closed the project modal")
+	}
+	for _, kind := range []string{"mousePressed", "mouseReleased"} {
+		b.call(t, "Input.dispatchMouseEvent", map[string]any{
+			"type": kind, "x": 1, "y": 100, "button": "left", "clickCount": 1,
+		}, &struct{}{})
+	}
+	b.wait(
+		t,
+		`!document.querySelector('#project-edit-dialog').open && document.activeElement?.hasAttribute('hx-get')`,
+	)
+	decodeStepLogTest(t, f.api(t, "GET", api, nil, 200), &project)
+	if project.Name != f.project.Name {
+		t.Fatal("outside click persisted a project edit")
+	}
+	open()
 	// Server validation remains in the modal with all submitted values.
 	b.evaluate(
 		t,

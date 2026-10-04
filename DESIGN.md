@@ -219,6 +219,9 @@ dialog, while validation errors stay inside it. Cancel and Escape discard the
 edit and return focus to its Edit button. Delete appears only at the bottom
 of the edit modal. Confirmation refreshes the list and closes the modal;
 focus moves to another step's Edit button, or Add Step when the list is empty.
+Editor modals use the same clickable backdrop as confirmation and notification
+dialogs. Clicking outside closes the dialog and discards unsaved fields, while
+clicks inside keep it open. The fullscreen script editor has no outside area.
 
 Normal internal page links use HTMX to replace the main content, update the
 navbar and title, and push the existing URL into browser history. The document

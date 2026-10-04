@@ -80,6 +80,36 @@ func TestStepEditModalBrowserE2E(t *testing.T) {
 		t.Fatal("Cancel persisted an edit")
 	}
 	open()
+	b.evaluate(
+		t,
+		`const input = document.querySelector('#step-edit-content input[name="name"]'); input.value = 'discard outside'; input.click(); true`,
+	)
+	if string(
+		b.evaluate(
+			t,
+			`document.querySelector('#step-edit-dialog').matches(':modal')`,
+		),
+	) != "true" {
+		t.Fatal("clicking inside closed the step modal")
+	}
+	for _, kind := range []string{"mousePressed", "mouseReleased"} {
+		b.call(t, "Input.dispatchMouseEvent", map[string]any{
+			"type": kind, "x": 1, "y": 100, "button": "left", "clickCount": 1,
+		}, &struct{}{})
+	}
+	b.wait(
+		t,
+		`!document.querySelector('#step-edit-dialog').open && document.activeElement?.dataset.stepAction === 'edit'`,
+	)
+	decodeStepLogTest(
+		t,
+		f.api(t, "GET", fmt.Sprintf("%s/%d", api, first.ID), nil, 200),
+		&saved,
+	)
+	if saved.Name != first.Name {
+		t.Fatal("outside click persisted an edit")
+	}
+	open()
 	// A server validation error keeps the modal and submitted values.
 	b.evaluate(
 		t,
