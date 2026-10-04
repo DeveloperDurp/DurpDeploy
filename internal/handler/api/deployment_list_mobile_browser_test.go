@@ -94,7 +94,8 @@ func assertDeploymentListMobile(t *testing.T, b *packageBrowser) {
  const view = row.querySelector('a[href^="/deployments/"]');
  const download = row.querySelector('a[href$="/logs.txt"]');
  return download && !download.hasAttribute('hx-boost') && view.getAttribute('hx-boost') === 'true' &&
- (innerWidth >= 768 ? getComputedStyle(row).display === 'table-row' && visible(table.tHead) :
+ (innerWidth >= 768 ? getComputedStyle(row).display === 'table-row' && visible(table.tHead) &&
+ [...row.cells].every(cell => cell.scrollWidth <= cell.clientWidth || getComputedStyle(cell).overflowX === 'hidden') :
  getComputedStyle(row).display === 'grid' && !visible(table.tHead) &&
  [...row.cells].every(cell => cell.scrollWidth <= cell.clientWidth) &&
  buttons.every(el => el.getBoundingClientRect().height >= 44) &&

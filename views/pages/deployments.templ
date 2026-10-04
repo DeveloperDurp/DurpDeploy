@@ -195,7 +195,7 @@ templ DeploymentListRow(item DeploymentListItem) {
 			<span class="block md:hidden text-xs opacity-70 mb-1">Status</span>
 			@StatusBadge(item.Deployment)
 		</td>
-		<td class="min-w-0 max-md:p-0 md:whitespace-nowrap">
+		<td class="min-w-0 max-md:p-0 md:truncate md:whitespace-nowrap">
 			<span class="block md:hidden text-xs opacity-70 mb-1">Date</span>
 			{ formatUnixTime(item.Deployment.CreatedAt) }
 		</td>
