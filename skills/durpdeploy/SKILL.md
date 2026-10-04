@@ -414,8 +414,9 @@ The runtime also needs the digest-pinned Alpine staging helper documented in
 `docs/deploy.md`; an offline installation must preload it alongside step
 images before launching deployments.
 
-The staging path is reserved: variable create/update requests return 422 for
-`DURPDEPLOY_STAGE_DIR`, and step variable selections cannot include it. Staging
+The staging and approved paths are reserved: variable create/update requests
+return 422 for `DURPDEPLOY_STAGE_DIR` and `DURPDEPLOY_APPROVED_DIR`, including
+blank-secret updates. Step variable selections cannot include them. Staging
 is writable, noexec, nosuid, and nodev, backed by a bounded temporary volume
 (512 MiB plus 10,000 host pages, 20,000 inodes). Local attempts have a combined
 memory ceiling of that staging capacity plus 256 MiB; process memory and

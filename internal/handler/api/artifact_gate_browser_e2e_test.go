@@ -34,6 +34,25 @@ func TestArtifactGateBrowserE2E(t *testing.T) {
 		t.Fatal("session cookie rejected")
 	}
 	page := fmt.Sprintf("%s/deployments/%d", f.baseURL, deployment.ID)
+	var agentTemplate struct {
+		ID int64 `json:"id"`
+	}
+	if err := json.Unmarshal(
+		f.api(
+			t,
+			"POST",
+			"/api/v1/templates",
+			map[string]any{
+				"name":             "Agent template",
+				"script_body":      "true",
+				"execution_target": "agent",
+			},
+			201,
+		),
+		&agentTemplate,
+	); err != nil {
+		t.Fatal(err)
+	}
 	for _, width := range []int{375, 768, 1280} {
 		browser.call(
 			t,
@@ -358,6 +377,65 @@ func TestArtifactGateBrowserE2E(t *testing.T) {
 				}
 				if !found {
 					t.Fatal("saved agent step missing from API")
+				}
+			}
+			if surface.name == "template" {
+				browser.call(
+					t,
+					"Page.navigate",
+					map[string]string{
+						"url": fmt.Sprintf(
+							"%s/templates/%d/edit",
+							f.baseURL,
+							agentTemplate.ID,
+						),
+					},
+					&struct{}{},
+				)
+				browser.wait(
+					t,
+					`document.querySelector('form[hx-put]') && document.readyState === 'complete' && window.htmx`,
+				)
+				if string(
+					browser.evaluate(
+						t,
+						`document.querySelector('[name="network_mode"], [name="approval_artifact_path"], [name="approval_review_path"], [name="approval_review_format"]') === null`,
+					),
+				) != "true" {
+					t.Fatal("agent template offers unsupported gate fields")
+				}
+				browser.screenshot(
+					t,
+					fmt.Sprintf("artifact-agent-template-%d", width),
+				)
+				browser.evaluate(
+					t,
+					fmt.Sprintf(
+						`const form=document.querySelector('form[hx-put]'); form.querySelector('[name="name"]').value='Agent template %d'; form.requestSubmit();`,
+						width,
+					),
+				)
+				browser.wait(
+					t,
+					`document.body.innerText.includes('Template updated')`,
+				)
+				var saved struct {
+					Name            string `json:"name"`
+					ExecutionTarget string `json:"execution_target"`
+					NetworkMode     string `json:"network_mode"`
+				}
+				if err := json.Unmarshal(
+					f.api(
+						t,
+						"GET",
+						fmt.Sprintf("/api/v1/templates/%d", agentTemplate.ID),
+						nil,
+						200,
+					),
+					&saved,
+				); err != nil || saved.Name != fmt.Sprintf("Agent template %d", width) || saved.ExecutionTarget != "agent" ||
+					saved.NetworkMode != "" {
+					t.Fatalf("saved agent template=%+v err=%v", saved, err)
 				}
 			}
 		}

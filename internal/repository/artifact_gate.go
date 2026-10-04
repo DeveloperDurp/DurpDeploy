@@ -122,6 +122,35 @@ func (r *Repository) ApproveArtifact(
 	deploymentID, stepIndex, revision, userID int64,
 	checksum string,
 ) error {
+	verified, err := r.Queries.GetArtifactGate(ctx, db.GetArtifactGateParams{
+		DeploymentID: deploymentID, StepIndex: stepIndex,
+	})
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrArtifactGate
+	}
+	if err != nil {
+		return err
+	}
+	if verified.Status != "awaiting" || verified.Revision != revision ||
+		verified.ArtifactSha256 != checksum {
+		return ErrArtifactGate
+	}
+	now, err := r.Queries.CurrentUnixTime(ctx)
+	if err != nil {
+		return err
+	}
+	if verified.ExpiresAt <= now {
+		return ErrArtifactGate
+	}
+	// Chunks are immutable. Scan without a write lock, then recheck identity.
+	if err := r.WriteArtifactGateBundle(
+		ctx,
+		r.Queries,
+		verified,
+		io.Discard,
+	); err != nil {
+		return err
+	}
 	return withSQLiteBusyRetry(ctx, func() error {
 		return r.WithTx(ctx, func(q *db.Queries) error {
 			if _, err := q.LockArtifactGateDeployment(
@@ -156,16 +185,9 @@ func (r *Repository) ApproveArtifact(
 			}
 			if gate.Status != "awaiting" || gate.Revision != revision ||
 				gate.ArtifactSha256 != checksum ||
+				gate.BundleSha256 != verified.BundleSha256 || gate.BundleSize != verified.BundleSize ||
 				gate.ExpiresAt <= now {
 				return ErrArtifactGate
-			}
-			if err := r.WriteArtifactGateBundle(
-				ctx,
-				q,
-				gate,
-				io.Discard,
-			); err != nil {
-				return err
 			}
 			n, err := q.ApproveArtifactGate(ctx, db.ApproveArtifactGateParams{
 				DeploymentID:   deploymentID,

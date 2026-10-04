@@ -139,6 +139,7 @@ templ TemplateFormContent(tpl *db.StepTemplate, isNew bool, errorMsg string) {
 				/>
 				<label class="label"><span class="label-text-alt">Leave empty to pass all project variables. Enter names to restrict this step.</span></label>
 			</div>
+			if tplContainerImageShown(tpl) {
 			<fieldset class="space-y-3">
 <legend class="font-semibold">Network and artifact approval</legend>
 <label class="label" for={ "template-network-mode" }>Container network</label>
@@ -151,6 +152,7 @@ templ TemplateFormContent(tpl *db.StepTemplate, isNew bool, errorMsg string) {
 <select id={ "template-review-format" } name="approval_review_format" class="select select-bordered w-full"><option value="" selected?={ tpl.ApprovalReviewFormat == "" }>No approval gate</option><option value="summary" selected?={ tpl.ApprovalReviewFormat == "summary" }>Action counts</option><option value="terraform" selected?={ tpl.ApprovalReviewFormat == "terraform" }>Terraform show JSON</option></select>
 <p class="text-sm">Paths are relative to DURPDEPLOY_STAGE_DIR. A gate pauses after this step; subsequent steps use DURPDEPLOY_APPROVED_DIR. Gated deployments require local execution and zero retries.</p>
 </fieldset>
+			}
 <div class="form-control">
 				<label class="label">
 					<span class="label-text">Script</span>

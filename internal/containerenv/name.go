@@ -15,6 +15,7 @@ var ErrReserved = errors.New(
 )
 
 const StageVariable = "DURPDEPLOY_STAGE_DIR"
+const ApprovedVariable = "DURPDEPLOY_APPROVED_DIR"
 
 // ValidateName keeps agent variable names compatible while preventing local
 // selections from changing the container and SSH clients' own environment.
@@ -23,7 +24,7 @@ func ValidateName(name string, local bool) error {
 		return ErrIdentifier
 	}
 	if name == "ARTIFACT_PATH" || name == StageVariable ||
-		name == "DURPDEPLOY_APPROVED_DIR" {
+		name == ApprovedVariable {
 		return ErrReserved
 	}
 	if local && (name == "PATH" || name == "HOME" || name == "TERM" ||
