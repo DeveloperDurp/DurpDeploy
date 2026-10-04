@@ -25,6 +25,8 @@ import (
 // package that read it via ProjectIDFromContext.
 type ProjectAccessKey struct{}
 
+const deploymentNotFoundMessage = "404 page not found"
+
 // ProjectIDFromContext returns the project id injected by
 // RequireProjectAccess, or 0 (and false) if absent.
 func ProjectIDFromContext(ctx context.Context) (int64, bool) {
@@ -136,7 +138,7 @@ func RequireDeploymentProjectAccess(
 					w,
 					r,
 					http.StatusNotFound,
-					"404 page not found",
+					deploymentNotFoundMessage,
 				)
 				return
 			}
@@ -145,7 +147,7 @@ func RequireDeploymentProjectAccess(
 					w,
 					r,
 					http.StatusNotFound,
-					"404 page not found",
+					deploymentNotFoundMessage,
 				)
 				return
 			}
@@ -162,7 +164,7 @@ func RequireDeploymentProjectAccess(
 					w,
 					r,
 					http.StatusNotFound,
-					"404 page not found",
+					deploymentNotFoundMessage,
 				)
 				return
 			}
