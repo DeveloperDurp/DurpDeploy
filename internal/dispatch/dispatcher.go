@@ -202,56 +202,59 @@ func selectRemoteVariables(
 }
 
 func (d *Dispatcher) Maintain(ctx context.Context) error {
-	err := d.repository.WithTx(ctx, func(q *db.Queries) error {
-		now, err := q.CurrentUnixTime(ctx)
-		if err != nil {
-			return err
-		}
-		if _, err := q.ExpireAgentPairings(ctx, now); err != nil {
-			return err
-		}
-		if _, err := q.ExpireRemoteStepClaims(ctx, now); err != nil {
-			return err
-		}
-		cancelStaleBefore := now - int64(
-			agentproto.CancelAcknowledgementTimeout/time.Second,
-		)
-		if _, err := q.ExpireRemoteStepCancellations(
-			ctx,
-			db.ExpireRemoteStepCancellationsParams{
-				Now: sql.NullInt64{Int64: now, Valid: true},
-				StaleBefore: sql.NullInt64{
-					Int64: cancelStaleBefore,
-					Valid: true,
+	err := d.repository.WithQueueMaintenanceTx(
+		ctx,
+		func(ctx context.Context, q *db.Queries) error {
+			now, err := q.CurrentUnixTime(ctx)
+			if err != nil {
+				return err
+			}
+			if _, err := q.ExpireAgentPairings(ctx, now); err != nil {
+				return err
+			}
+			if _, err := q.ExpireRemoteStepClaims(ctx, now); err != nil {
+				return err
+			}
+			cancelStaleBefore := now - int64(
+				agentproto.CancelAcknowledgementTimeout/time.Second,
+			)
+			if _, err := q.ExpireRemoteStepCancellations(
+				ctx,
+				db.ExpireRemoteStepCancellationsParams{
+					Now: sql.NullInt64{Int64: now, Valid: true},
+					StaleBefore: sql.NullInt64{
+						Int64: cancelStaleBefore,
+						Valid: true,
+					},
 				},
-			},
-		); err != nil {
-			return err
-		}
-		heartbeatStaleBefore := now - int64(
-			agentproto.LostThreshold/time.Second,
-		)
-		if _, err := q.LoseStaleRemoteStepRuns(
-			ctx,
-			db.LoseStaleRemoteStepRunsParams{
-				Now: sql.NullInt64{Int64: now, Valid: true},
-				StaleBefore: sql.NullInt64{
-					Int64: heartbeatStaleBefore,
-					Valid: true,
+			); err != nil {
+				return err
+			}
+			heartbeatStaleBefore := now - int64(
+				agentproto.LostThreshold/time.Second,
+			)
+			if _, err := q.LoseStaleRemoteStepRuns(
+				ctx,
+				db.LoseStaleRemoteStepRunsParams{
+					Now: sql.NullInt64{Int64: now, Valid: true},
+					StaleBefore: sql.NullInt64{
+						Int64: heartbeatStaleBefore,
+						Valid: true,
+					},
 				},
-			},
-		); err != nil {
-			return err
-		}
-		_, err = q.FailDeploymentsWithTerminalRemoteStepRuns(
-			ctx,
-			sql.NullInt64{Int64: now, Valid: true},
-		)
-		if err != nil {
-			return err
-		}
-		return q.ReconcileTerminalVerifications(ctx)
-	})
+			); err != nil {
+				return err
+			}
+			_, err = q.FailDeploymentsWithTerminalRemoteStepRuns(
+				ctx,
+				sql.NullInt64{Int64: now, Valid: true},
+			)
+			if err != nil {
+				return err
+			}
+			return q.ReconcileTerminalVerifications(ctx)
+		},
+	)
 	if err != nil {
 		return fmt.Errorf("maintain agent dispatch: %w", err)
 	}

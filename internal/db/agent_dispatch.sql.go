@@ -43,7 +43,7 @@ const cancelRemoteDeploymentStatus = `-- name: CancelRemoteDeploymentStatus :exe
 UPDATE deployments SET status = 'cancelled', finished_at = ?1
 WHERE id = ?2
   AND assigned_agent_id = ?3
-  AND status IN ('pending', 'pending_approval', 'running')
+  AND status IN ('queued', 'pending', 'pending_approval', 'running')
 `
 
 type CancelRemoteDeploymentStatusParams struct {
@@ -77,7 +77,8 @@ WHERE remote_deployment_claims.deployment_id = ?5
   AND EXISTS (SELECT 1 FROM deployments d
       WHERE d.id = remote_deployment_claims.deployment_id
         AND d.assigned_agent_id = remote_deployment_claims.agent_id
-        AND d.status = 'pending')
+        AND d.status = 'pending'
+        AND EXISTS (SELECT 1 FROM environment_deployment_slots slot WHERE slot.deployment_id = d.id))
   AND EXISTS (SELECT 1 FROM agents a
       WHERE a.id = remote_deployment_claims.agent_id AND a.status = 'active' AND a.draining = 0
         AND EXISTS (SELECT 1 FROM agent_pairings p
@@ -428,41 +429,27 @@ func (q *Queries) ListRemoteLifecycleClaims(ctx context.Context) ([]RemoteDeploy
 }
 
 const listWaitingRemoteDeploymentClaims = `-- name: ListWaitingRemoteDeploymentClaims :many
-SELECT c.deployment_id, c.agent_id, c.state, c.reason, c.claim_token_hash, c.ciphertext, c.claim_expires_at, c.last_heartbeat_at, c.started_at, c.finished_at, c.cancel_requested_at, c.created_at, c.updated_at, c.log_buffer_ciphertext FROM remote_deployment_claims c
+SELECT c.deployment_id FROM remote_deployment_claims c
 JOIN deployments d ON d.id = c.deployment_id
 WHERE c.agent_id = ?1 AND c.state = 'waiting'
   AND d.assigned_agent_id = c.agent_id AND d.status = 'pending'
+  AND EXISTS (SELECT 1 FROM environment_deployment_slots slot WHERE slot.deployment_id = d.id)
 ORDER BY c.created_at, c.deployment_id
 `
 
-func (q *Queries) ListWaitingRemoteDeploymentClaims(ctx context.Context, agentID string) ([]RemoteDeploymentClaim, error) {
+func (q *Queries) ListWaitingRemoteDeploymentClaims(ctx context.Context, agentID string) ([]int64, error) {
 	rows, err := q.db.QueryContext(ctx, listWaitingRemoteDeploymentClaims, agentID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []RemoteDeploymentClaim
+	var items []int64
 	for rows.Next() {
-		var i RemoteDeploymentClaim
-		if err := rows.Scan(
-			&i.DeploymentID,
-			&i.AgentID,
-			&i.State,
-			&i.Reason,
-			&i.ClaimTokenHash,
-			&i.Ciphertext,
-			&i.ClaimExpiresAt,
-			&i.LastHeartbeatAt,
-			&i.StartedAt,
-			&i.FinishedAt,
-			&i.CancelRequestedAt,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.LogBufferCiphertext,
-		); err != nil {
+		var deployment_id int64
+		if err := rows.Scan(&deployment_id); err != nil {
 			return nil, err
 		}
-		items = append(items, i)
+		items = append(items, deployment_id)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err

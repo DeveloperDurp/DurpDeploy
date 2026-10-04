@@ -499,7 +499,8 @@ func (q *Queries) ResetRevokedAgentForPairing(ctx context.Context, arg ResetRevo
 }
 
 const revokeAgentRemoteStepRuns = `-- name: RevokeAgentRemoteStepRuns :execrows
-UPDATE remote_step_runs SET state = 'lost', finished_at = ?1,
+UPDATE remote_step_runs SET state = CASE WHEN state = 'waiting'
+    THEN 'failed' ELSE 'lost' END, finished_at = ?1,
     updated_at = ?1, log_buffer_ciphertext = NULL
 WHERE agent_id = ?2
   AND state IN ('waiting', 'claimed', 'started', 'cancel_requested')
@@ -660,7 +661,7 @@ UPDATE deployments SET
     finished_at = ?1
 WHERE id = ?2
   AND assigned_agent_id = ?3
-  AND status IN ('pending', 'pending_approval', 'running')
+  AND status IN ('queued', 'pending', 'pending_approval', 'running')
 `
 
 type TerminateRevokedRemoteDeploymentParams struct {

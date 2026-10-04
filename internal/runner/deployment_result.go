@@ -36,30 +36,37 @@ func (r *DeploymentRunner) completeDeployment(
 	if cancellationWins && cancelCtx.Err() != nil {
 		status = "cancelled"
 	}
-	var err error
-	if status == "cancelled" {
-		_, err = r.repo.Queries.CancelStepDeployment(ctx, deploymentID)
-	} else {
-		err = r.repo.Queries.UpdateDeploymentStatus(
-			ctx,
-			db.UpdateDeploymentStatusParams{
-				ID: deploymentID, Status: status,
-				FinishedAt: sql.NullInt64{
-					Int64: time.Now().Unix(), Valid: true,
-				},
-			},
-		)
-	}
-	if err == nil {
-		verificationStatus := "failed"
-		if status == "cancelled" {
-			verificationStatus = "cancelled"
-		}
-		err = r.repo.Queries.FinishDeploymentVerification(ctx,
-			db.FinishDeploymentVerificationParams{
-				DeploymentID: deploymentID, Status: verificationStatus,
-			})
-	}
+	err := r.repo.WithDeploymentTx(
+		ctx,
+		deploymentID,
+		func(ctx context.Context, q *db.Queries) error {
+			var err error
+			if status == "cancelled" {
+				_, err = q.CancelStepDeployment(ctx, deploymentID)
+			} else {
+				err = q.UpdateDeploymentStatus(
+					ctx,
+					db.UpdateDeploymentStatusParams{
+						ID: deploymentID, Status: status,
+						FinishedAt: sql.NullInt64{
+							Int64: time.Now().Unix(), Valid: true,
+						},
+					},
+				)
+			}
+			if err == nil {
+				verificationStatus := "failed"
+				if status == "cancelled" {
+					verificationStatus = "cancelled"
+				}
+				err = q.FinishDeploymentVerification(ctx,
+					db.FinishDeploymentVerificationParams{
+						DeploymentID: deploymentID, Status: verificationStatus,
+					})
+			}
+			return err
+		},
+	)
 	if err == nil {
 		delete(r.cancels, deploymentID)
 	}

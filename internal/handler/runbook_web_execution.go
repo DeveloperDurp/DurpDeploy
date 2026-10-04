@@ -64,8 +64,22 @@ func (h *RunbookHandler) Execution(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Cannot read logs", http.StatusInternalServerError)
 		return
 	}
+	queueCtx, err := pages.DeploymentQueueContext(
+		r.Context(),
+		h.repo,
+		execution.DeploymentID,
+		&execution.Status,
+	)
+	if err != nil {
+		http.Error(
+			w,
+			"Cannot read execution queue",
+			http.StatusInternalServerError,
+		)
+		return
+	}
 	if err := pages.RunbookExecutionPage(project, book, execution, logs, r.URL.Path).
-		Render(r.Context(), w); err != nil {
+		Render(queueCtx, w); err != nil {
 		http.Error(w, "Cannot render execution", http.StatusInternalServerError)
 	}
 }
@@ -73,8 +87,28 @@ func (h *RunbookHandler) Execution(w http.ResponseWriter, r *http.Request) {
 func (h *RunbookHandler) Status(w http.ResponseWriter, r *http.Request) {
 	execution, ok := h.execution(w, r)
 	if ok {
-		_ = pages.RunbookExecutionStatusUpdate(execution.ProjectID, execution).
-			Render(r.Context(), w)
+		queueCtx, err := pages.DeploymentQueueContext(
+			r.Context(),
+			h.repo,
+			execution.DeploymentID,
+			&execution.Status,
+		)
+		if err != nil {
+			http.Error(
+				w,
+				"Cannot read execution queue",
+				http.StatusInternalServerError,
+			)
+			return
+		}
+		if err := pages.RunbookExecutionStatusUpdate(execution.ProjectID, execution).
+			Render(queueCtx, w); err != nil {
+			http.Error(
+				w,
+				"Cannot render execution",
+				http.StatusInternalServerError,
+			)
+		}
 	}
 }
 
@@ -99,7 +133,11 @@ func (h *RunbookHandler) Cancel(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Cannot read execution", http.StatusInternalServerError)
 		return
 	}
-	if dep.AssignedAgentID.Valid {
+	if dep.Status == "queued" ||
+		!dep.AssignedAgentID.Valid &&
+			(dep.Status == "pending" || dep.Status == "pending_approval") {
+		_, err = h.runner.CancelPrestart(r.Context(), dep.ID)
+	} else if dep.AssignedAgentID.Valid {
 		err = h.repo.CancelAssignedRemoteDeployment(r.Context(),
 			repository.RemoteAssignedDeployment{
 				DeploymentID: dep.ID, AgentID: dep.AssignedAgentID.String,

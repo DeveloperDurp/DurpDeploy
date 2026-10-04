@@ -115,6 +115,23 @@ the observed supported protocol, while agent versions remain unverified.
 
 ## Deploy flow (the common ask)
 
+Deployments and runbook executions share a durable FIFO queue per environment.
+Only one item owns the environment, including while it waits for agents or
+verification. Later eligible items have status `queued`; approval waits do not
+own a slot. Approval makes work eligible in original creation order without
+preempting active work. Different environments can execute independently.
+
+Deployment GET/status responses and runbook execution GET responses include
+`queue_position` (1-based for queued work, otherwise 0), plus
+`active_deployment_id` and `active_work_url` when that work is visible to the
+caller. Viewers can read queue state. Authorized writers can cancel queued
+work through the existing cancel endpoint; this does not signal the active
+deployment. Server restart preserves order and repairs missed launches.
+Queued runbook cancellation returns `status: "cancelled"`; active runbook
+cancellation returns `status: "cancellation_requested"` while stopping work.
+Unconfirmed container cleanup, lost agents, or unacknowledged cancellation
+keep the environment blocked: a timeout is not proof that execution stopped.
+
 `GET /api/v1/deployments/$ID/status` includes `waiting_for_agents`. It is
 `true` while remote work is queued with no issued claim, and `false` once
 claimed or terminal. The web deployment page shows “Waiting for agents”
@@ -185,7 +202,8 @@ done
    - failure → `GET /api/v1/deployments/$DID/logs` (JSON lines, secrets are
       redacted) and `GET /.../logs.txt`; fix and create a new release, then redeploy with
      `POST /api/v1/deployments/$DID/redeploy`.
-    - `POST /api/v1/deployments/$DID/cancel` stops a running deploy.
+    - `POST /api/v1/deployments/$DID/cancel` cancels queued work or requests
+      cancellation of a running deploy.
     - `cleanup_unconfirmed` means container removal failed. Retry and redeploy
       return `409`; do not re-execute until a successful startup runtime sweep
       changes the deployment to `failed`.

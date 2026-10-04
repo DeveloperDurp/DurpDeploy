@@ -38,6 +38,18 @@ const unixEpoch = "DATEDIFF_BIG(SECOND, '1970-01-01T00:00:00Z', SYSUTCDATETIME()
 // accepts only source query shapes used by the application rather than acting as
 // a general SQL dialect translator.
 func RewriteSQL(query string) (string, error) {
+	// Polling skips rows being claimed; indexed reads must not wait on a
+	// claim/deployment row while holding the waiting index's shared lock.
+	if strings.Contains(query, "-- name: ListWaitingRemoteDeploymentClaims") ||
+		strings.Contains(query, "-- name: ListWaitingRemoteStepRuns") {
+		const hint = " WITH (READPAST, READCOMMITTEDLOCK)"
+		query = strings.ReplaceAll(query, "remote_deployment_claims c\n",
+			"remote_deployment_claims c"+hint+"\n")
+		query = strings.ReplaceAll(query, "remote_step_runs r\n",
+			"remote_step_runs r"+hint+"\n")
+		query = strings.ReplaceAll(query, "JOIN deployments d ON",
+			"JOIN deployments d"+hint+" ON")
+	}
 	query = rewriteTimes(query)
 	query = rewritePlaceholders(query)
 	query = replaceOutsideQuotes(query, " AS TEXT", " AS NVARCHAR(MAX)")
@@ -199,7 +211,10 @@ func rewriteReturning(query string) (string, error) {
 			return "", err
 		}
 		// T-SQL requires OUTPUT before WHERE.
-		if whereIndex := keywordIndexOutsideQuotes(statement, "WHERE"); whereIndex >= 0 {
+		if whereIndex := keywordIndexOutsideQuotes(
+			statement,
+			"WHERE",
+		); whereIndex >= 0 {
 			start := whereIndex
 			for start > 0 && strings.ContainsRune(
 				" \t\r\n", rune(statement[start-1]),

@@ -137,8 +137,7 @@ func (s *Scheduler) fireRunbook(ctx context.Context, row db.RunbookSchedule) {
 			}
 			return
 		}
-		if errors.Is(err, repository.ErrRunbookScheduleConflict) ||
-			errors.Is(err, repository.ErrRunbookScheduleOverlap) {
+		if errors.Is(err, repository.ErrRunbookScheduleConflict) {
 			return
 		}
 		if errors.Is(err, repository.ErrRunbookGate) {

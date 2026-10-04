@@ -148,61 +148,6 @@ func (s *Scheduler) fireOne(ctx context.Context, row db.ScheduledDeployment) {
 		return
 	}
 
-	// overlap check
-	overlap, err := s.repo.Queries.GetLatestDeploymentForReleaseEnv(
-		ctx,
-		db.GetLatestDeploymentForReleaseEnvParams{
-			ReleaseID:     row.ReleaseID,
-			EnvironmentID: row.EnvironmentID,
-		},
-	)
-	if err != nil && err != sql.ErrNoRows {
-		s.log.Error(
-			"overlap check failed",
-			"schedule_id",
-			row.ID,
-			"project_id",
-			row.ProjectID,
-			"error",
-			err,
-		)
-		if err := s.advance(ctx, row, next); err != nil {
-			s.log.Error(
-				"advance failed",
-				"schedule_id",
-				row.ID,
-				"project_id",
-				row.ProjectID,
-				"error",
-				err,
-			)
-		}
-		return
-	}
-	if err == nil && overlap.Status == "running" {
-		s.log.Info(
-			"skipped_overlap",
-			"schedule_id",
-			row.ID,
-			"project_id",
-			row.ProjectID,
-			"reason",
-			"running deployment exists",
-		)
-		if err := s.advance(ctx, row, next); err != nil {
-			s.log.Error(
-				"advance failed",
-				"schedule_id",
-				row.ID,
-				"project_id",
-				row.ProjectID,
-				"error",
-				err,
-			)
-		}
-		return
-	}
-
 	// gate check
 	project, err := s.repo.Queries.GetProject(ctx, row.ProjectID)
 	if err != nil {
@@ -395,7 +340,7 @@ func (s *Scheduler) fireOne(ctx context.Context, row db.ScheduledDeployment) {
 	)
 
 	if result.Mode == repository.ExecutionLocal &&
-		initialStatus == "pending" {
+		result.Deployment.Status == "pending" {
 		// spawn runner without blocking the ticker
 		go s.runFunc(
 			context.Background(),

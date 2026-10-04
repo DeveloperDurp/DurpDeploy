@@ -297,6 +297,11 @@ jobs:
           DURPDEPLOY_CONTAINER_RUNTIME: docker
         run: go test -tags=e2e -race -count=1 -timeout=10m -run '^Test(Verification|Rollback).*E2E$' ./internal/handler/api
 
+      - name: Verify environment queue through API and web
+        env:
+          DURPDEPLOY_CONTAINER_RUNTIME: docker
+        run: go test -tags=e2e -race -count=1 -timeout=5m -run '^TestEnvironmentQueue.*E2E$' ./internal/handler/api
+
   # ----- Artifact crash recovery and capacity ----------------------------------
   package-browser:
     name: Package repository browser
@@ -321,6 +326,8 @@ jobs:
         run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^TestPackageRepositoryBrowserE2E$' ./internal/handler/api
       - name: Verify verification forms, polling, and rollback in Chromium
         run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^TestVerification(Rollback|Polling)BrowserE2E$' ./internal/handler/api
+      - name: Verify environment queue position, permissions, and cancellation
+        run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^TestEnvironmentQueueBrowserE2E$' ./internal/handler/api
       - name: Verify agent fleet controls and responsive health pages
         run: go test -tags=e2e,agentbrowser -race -count=1 -timeout=5m -v -run '^(TestAgentFleetBrowserE2E|TestDeploymentWaitingForAgentsBrowserE2E)$' ./internal/handler/api
       - name: Upload package UI evidence

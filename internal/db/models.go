@@ -215,6 +215,11 @@ type Environment struct {
 	VerificationTimeoutSeconds int64          `json:"verification_timeout_seconds"`
 }
 
+type EnvironmentDeploymentSlot struct {
+	EnvironmentID int64 `json:"environment_id"`
+	DeploymentID  int64 `json:"deployment_id"`
+}
+
 type GlobalNotification struct {
 	ID                int64          `json:"id"`
 	SlackWebhookUrl   sql.NullString `json:"slack_webhook_url"`

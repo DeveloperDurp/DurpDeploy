@@ -11,7 +11,7 @@ import (
 )
 
 const approveDeploymentStatus = `-- name: ApproveDeploymentStatus :execrows
-UPDATE deployments SET status = 'pending'
+UPDATE deployments SET status = 'queued'
 WHERE id = ?1 AND status = 'pending_approval'
 `
 
@@ -70,7 +70,7 @@ func (q *Queries) LockDeploymentApproval(ctx context.Context, deploymentID int64
 
 const lockDeploymentSnapshot = `-- name: LockDeploymentSnapshot :execrows
 UPDATE deployments SET status = status -- NOSONAR: intentional write lock
-WHERE id = ?1 AND status IN ('pending', 'pending_approval')
+WHERE id = ?1 AND status IN ('queued', 'pending', 'pending_approval')
 AND NOT EXISTS (SELECT 1 FROM deployment_step_sources WHERE deployment_id = ?1)
 AND NOT EXISTS (SELECT 1 FROM deployment_steps WHERE deployment_id = ?1)
 `

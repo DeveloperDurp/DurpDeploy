@@ -522,7 +522,7 @@ SELECT CASE WHEN EXISTS (
     SELECT 1 FROM runbook_executions x
     JOIN deployments d ON d.id = x.deployment_id
     WHERE x.schedule_id = ?
-      AND (d.status IN ('pending', 'running', 'pending_approval', 'cleanup_unconfirmed')
+      AND (d.status IN ('queued', 'pending', 'running', 'pending_approval', 'cleanup_unconfirmed')
         OR EXISTS (SELECT 1 FROM remote_deployment_claims c
                    WHERE c.deployment_id = d.id
                      AND c.state IN ('lost', 'cancel_unconfirmed'))

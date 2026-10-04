@@ -129,6 +129,7 @@ WHERE s.deployment_id = ?1
   AND s.step_index = ?2
   AND s.execution_target = 'agent'
   AND d.status = 'running'
+  AND EXISTS (SELECT 1 FROM environment_deployment_slots slot WHERE slot.deployment_id = d.id)
   AND NOT EXISTS (
       SELECT 1 FROM deployment_step_selectors wanted
       WHERE wanted.deployment_id = s.deployment_id
@@ -463,7 +464,7 @@ func (q *Queries) ListRemoteStepRunsForRunner(ctx context.Context, arg ListRemot
 }
 
 const listWaitingRemoteStepRuns = `-- name: ListWaitingRemoteStepRuns :many
-SELECT r.deployment_id, r.step_index, r.agent_id, r.state, r.claim_token_hash, r.ciphertext, r.claim_expires_at, r.last_heartbeat_at, r.started_at, r.finished_at, r.cancel_requested_at, r.created_at, r.updated_at, r.log_buffer_ciphertext, r.recovery_cancelled FROM remote_step_runs r
+SELECT r.deployment_id, r.step_index FROM remote_step_runs r
 JOIN deployments d ON d.id = r.deployment_id
 JOIN deployment_steps s ON s.deployment_id = r.deployment_id
     AND s.step_index = r.step_index
@@ -471,6 +472,7 @@ JOIN agent_interpreters i ON i.agent_id = r.agent_id
     AND i.interpreter = s.interpreter
 WHERE r.agent_id = ?1 AND r.state = 'waiting'
   AND d.status = 'running'
+  AND EXISTS (SELECT 1 FROM environment_deployment_slots slot WHERE slot.deployment_id = d.id)
   AND NOT EXISTS (
       SELECT 1 FROM remote_deployment_claims legacy
       WHERE legacy.agent_id = r.agent_id
@@ -479,32 +481,21 @@ WHERE r.agent_id = ?1 AND r.state = 'waiting'
 ORDER BY r.created_at, r.deployment_id, r.step_index
 `
 
-func (q *Queries) ListWaitingRemoteStepRuns(ctx context.Context, agentID string) ([]RemoteStepRun, error) {
+type ListWaitingRemoteStepRunsRow struct {
+	DeploymentID int64 `json:"deployment_id"`
+	StepIndex    int64 `json:"step_index"`
+}
+
+func (q *Queries) ListWaitingRemoteStepRuns(ctx context.Context, agentID string) ([]ListWaitingRemoteStepRunsRow, error) {
 	rows, err := q.db.QueryContext(ctx, listWaitingRemoteStepRuns, agentID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []RemoteStepRun
+	var items []ListWaitingRemoteStepRunsRow
 	for rows.Next() {
-		var i RemoteStepRun
-		if err := rows.Scan(
-			&i.DeploymentID,
-			&i.StepIndex,
-			&i.AgentID,
-			&i.State,
-			&i.ClaimTokenHash,
-			&i.Ciphertext,
-			&i.ClaimExpiresAt,
-			&i.LastHeartbeatAt,
-			&i.StartedAt,
-			&i.FinishedAt,
-			&i.CancelRequestedAt,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.LogBufferCiphertext,
-			&i.RecoveryCancelled,
-		); err != nil {
+		var i ListWaitingRemoteStepRunsRow
+		if err := rows.Scan(&i.DeploymentID, &i.StepIndex); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

@@ -47,11 +47,14 @@ func (r *Repository) CreateDeployment(
 	var result DeploymentResult
 	err := withSQLiteBusyRetry(ctx, func() error {
 		result = DeploymentResult{}
-		return r.WithTx(ctx, func(q *db.Queries) error {
-			var createErr error
-			result, createErr = r.createDeployment(ctx, q, arg)
-			return createErr
-		})
+		return r.withQueueTx(
+			ctx,
+			func(ctx context.Context, q *db.Queries) error {
+				var createErr error
+				result, createErr = r.createDeployment(ctx, q, arg)
+				return createErr
+			},
+		)
 	})
 	if err != nil {
 		return DeploymentResult{}, fmt.Errorf("create deployment: %w", err)
@@ -67,12 +70,15 @@ func (r *Repository) CreateDeploymentFromDeployment(
 	var result DeploymentResult
 	err := withSQLiteBusyRetry(ctx, func() error {
 		result = DeploymentResult{}
-		return r.WithTx(ctx, func(q *db.Queries) error {
-			var err error
-			result, err = createDeploymentFromDeployment(ctx, q, arg,
-				sourceDeploymentID)
-			return err
-		})
+		return r.withQueueTx(
+			ctx,
+			func(ctx context.Context, q *db.Queries) error {
+				var err error
+				result, err = createDeploymentFromDeployment(ctx, q, arg,
+					sourceDeploymentID)
+				return err
+			},
+		)
 	})
 	if err != nil {
 		return DeploymentResult{}, fmt.Errorf(
@@ -85,6 +91,12 @@ func createDeploymentFromDeployment(
 	ctx context.Context, q *db.Queries, arg db.CreateDeploymentParams,
 	sourceDeploymentID int64,
 ) (DeploymentResult, error) {
+	if _, err := q.LockDeploymentEnvironment(
+		ctx,
+		arg.EnvironmentID,
+	); err != nil {
+		return DeploymentResult{}, err
+	}
 	if err := lockRelease(ctx, q, arg.ReleaseID); err != nil {
 		return DeploymentResult{}, err
 	}
@@ -148,6 +160,12 @@ func (r *Repository) createDeployment(
 	q *db.Queries,
 	arg db.CreateDeploymentParams,
 ) (DeploymentResult, error) {
+	if _, err := q.LockDeploymentEnvironment(
+		ctx,
+		arg.EnvironmentID,
+	); err != nil {
+		return DeploymentResult{}, err
+	}
 	if err := lockRelease(ctx, q, arg.ReleaseID); err != nil {
 		return DeploymentResult{}, err
 	}
@@ -188,6 +206,9 @@ func createDeploymentWithSteps(
 	stepsJSON string,
 ) (DeploymentResult, error) {
 	arg.AssignedAgentID = sql.NullString{}
+	if arg.Status == "pending" {
+		arg.Status = "queued"
+	}
 	deployment, err := q.CreateDeployment(ctx, arg)
 	if err != nil {
 		return DeploymentResult{}, fmt.Errorf("insert deployment: %w", err)
@@ -208,7 +229,12 @@ func createDeploymentWithSteps(
 	); err != nil {
 		return DeploymentResult{}, fmt.Errorf("snapshot release steps: %w", err)
 	}
-	return DeploymentResult{Deployment: deployment, Mode: ExecutionLocal}, nil
+	queueAudit(ctx, deployment.ID, "deployment_queue_created")
+	if err := advanceEnvironmentQueue(ctx, q, arg.EnvironmentID); err != nil {
+		return DeploymentResult{}, err
+	}
+	deployment, err = q.GetDeployment(ctx, deployment.ID)
+	return DeploymentResult{Deployment: deployment, Mode: ExecutionLocal}, err
 }
 
 func (r *Repository) ApproveDeployment(
@@ -216,38 +242,55 @@ func (r *Repository) ApproveDeployment(
 	approval db.CreateApprovalParams,
 ) (DeploymentResult, error) {
 	var result DeploymentResult
-	err := r.WithTx(ctx, func(q *db.Queries) error {
-		locked, err := q.LockDeploymentApproval(ctx, approval.DeploymentID)
-		if err != nil {
-			return fmt.Errorf("lock deployment approval: %w", err)
-		}
-		if locked == 0 {
-			if _, err := q.GetDeployment(
+	err := r.WithDeploymentTx(
+		ctx,
+		approval.DeploymentID,
+		func(ctx context.Context, q *db.Queries) error {
+			locked, err := q.LockDeploymentApproval(ctx, approval.DeploymentID)
+			if err != nil {
+				return fmt.Errorf("lock deployment approval: %w", err)
+			}
+			if locked == 0 {
+				if _, err := q.GetDeployment(
+					ctx,
+					approval.DeploymentID,
+				); err != nil {
+					return err
+				}
+				return ErrDeploymentApprovalConflict
+			}
+			deployment, err := q.GetDeployment(ctx, approval.DeploymentID)
+			if err != nil {
+				return fmt.Errorf("get deployment: %w", err)
+			}
+			if _, err := q.CreateApproval(ctx, approval); err != nil {
+				return fmt.Errorf("create approval: %w", err)
+			}
+			changed, err := q.ApproveDeploymentStatus(
 				ctx,
 				approval.DeploymentID,
+			)
+			if err != nil {
+				return fmt.Errorf("approve deployment status: %w", err)
+			}
+			if changed != 1 {
+				return ErrDeploymentApprovalConflict
+			}
+			if err := advanceEnvironmentQueue(
+				ctx,
+				q,
+				deployment.EnvironmentID,
 			); err != nil {
 				return err
 			}
-			return ErrDeploymentApprovalConflict
-		}
-		deployment, err := q.GetDeployment(ctx, approval.DeploymentID)
-		if err != nil {
-			return fmt.Errorf("get deployment: %w", err)
-		}
-		if _, err := q.CreateApproval(ctx, approval); err != nil {
-			return fmt.Errorf("create approval: %w", err)
-		}
-		changed, err := q.ApproveDeploymentStatus(ctx, approval.DeploymentID)
-		if err != nil {
-			return fmt.Errorf("approve deployment status: %w", err)
-		}
-		if changed != 1 {
-			return ErrDeploymentApprovalConflict
-		}
-		deployment.Status = "pending"
-		result = deploymentResult(deployment)
-		return nil
-	})
+			deployment, err = q.GetDeployment(ctx, deployment.ID)
+			if err != nil {
+				return err
+			}
+			result = deploymentResult(deployment)
+			return nil
+		},
+	)
 	if err != nil {
 		return DeploymentResult{}, fmt.Errorf("approve deployment: %w", err)
 	}

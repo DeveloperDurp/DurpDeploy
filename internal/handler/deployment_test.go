@@ -965,7 +965,7 @@ func TestReleaseAndDeploymentPages_RenderBackControls(t *testing.T) {
 				release.ID,
 			),
 			headerPattern: fmt.Sprintf(
-				`(?s)<div class="flex flex-wrap items-center gap-2 ml-auto">\s*<a href="/deployments/%d/logs.txt" class="btn btn-sm btn-ghost">Export</a>.*?<a href="/projects/%d/releases/%d" class="btn btn-ghost btn-sm">Back</a>`,
+				`(?s)<div class="flex flex-wrap items-center gap-2 ml-auto">\s*<div id="deployment-actions" class="flex flex-wrap items-center gap-2">\s*<a href="/deployments/%d/logs.txt" class="btn btn-sm btn-ghost">Export</a>.*?<a href="/projects/%d/releases/%d" class="btn btn-ghost btn-sm">Back</a>`,
 				deployment.ID,
 				hc.project.ID,
 				release.ID,

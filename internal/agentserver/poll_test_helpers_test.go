@@ -79,6 +79,14 @@ func seedPollPayload(
 	if err != nil {
 		t.Fatal(err)
 	}
+	if status == "pending" || status == "running" {
+		if err := fixture.repo.Queries.CreateEnvironmentDeploymentSlot(ctx,
+			db.CreateEnvironmentDeploymentSlotParams{
+				EnvironmentID: environment.ID, DeploymentID: deployment.ID,
+			}); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if err := fixture.repo.SnapshotDeploymentSteps(
 		ctx,
 		deployment.ID,

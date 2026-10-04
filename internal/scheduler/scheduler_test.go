@@ -420,7 +420,7 @@ func TestTick_UnsatisfiableCron_ParksAndLogs(t *testing.T) {
 	}
 }
 
-func TestTick_Overlap_SkipsAndAdvances(t *testing.T) {
+func TestTick_Overlap_QueuesAndAdvances(t *testing.T) {
 	f := newFixture(t)
 	proj := f.createProject()
 	rel := f.createRelease(proj.ID)
@@ -444,10 +444,19 @@ func TestTick_Overlap_SkipsAndAdvances(t *testing.T) {
 		t.Fatalf("expected 0 run calls, got %d", len(calls))
 	}
 
-	// assert no new deployment
+	// The occurrence persists behind active work, without another runner.
 	deps, _ := f.repo.Queries.ListDeploymentsByRelease(f.ctx(), rel.ID)
-	if len(deps) != 1 {
-		t.Fatalf("expected 1 deployment (the existing one), got %d", len(deps))
+	if len(deps) != 2 {
+		t.Fatalf("expected active and queued deployments, got %d", len(deps))
+	}
+	var queued int
+	for _, d := range deps {
+		if d.Status == "queued" {
+			queued++
+		}
+	}
+	if queued != 1 {
+		t.Fatalf("queued=%d, want 1", queued)
 	}
 
 	// assert next_run_at advanced
@@ -460,10 +469,6 @@ func TestTick_Overlap_SkipsAndAdvances(t *testing.T) {
 		)
 	}
 
-	logs := f.logBuf.String()
-	if !strings.Contains(logs, "skipped_overlap") {
-		t.Fatalf("log missing 'skipped_overlap': %s", logs)
-	}
 }
 
 func TestTick_GateBlock_SkipsAndAdvances(t *testing.T) {

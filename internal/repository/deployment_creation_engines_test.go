@@ -231,10 +231,19 @@ func createLegacyRemoteDeployment(
 	repo *Repository,
 ) db.Deployment {
 	t.Helper()
+	environment, err := repo.Queries.CreateEnvironment(
+		t.Context(),
+		db.CreateEnvironmentParams{
+			Name: fmt.Sprintf("legacy-%d", time.Now().UnixNano()),
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
 	deployment, err := repo.Queries.CreateDeployment(
 		t.Context(),
 		db.CreateDeploymentParams{
-			ReleaseID: 1, EnvironmentID: 1, Status: "pending",
+			ReleaseID: 1, EnvironmentID: environment.ID, Status: "pending",
 			AssignedAgentID: sql.NullString{
 				String: "race-agent",
 				Valid:  true,
@@ -242,6 +251,12 @@ func createLegacyRemoteDeployment(
 		},
 	)
 	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.Queries.CreateEnvironmentDeploymentSlot(t.Context(),
+		db.CreateEnvironmentDeploymentSlotParams{
+			EnvironmentID: environment.ID, DeploymentID: deployment.ID,
+		}); err != nil {
 		t.Fatal(err)
 	}
 	created, err := repo.Queries.CreateRemoteDeploymentClaim(

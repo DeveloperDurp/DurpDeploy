@@ -13,6 +13,7 @@ WHERE s.deployment_id = sqlc.arg(deployment_id)
   AND s.step_index = sqlc.arg(step_index)
   AND s.execution_target = 'agent'
   AND d.status = 'running'
+  AND EXISTS (SELECT 1 FROM environment_deployment_slots slot WHERE slot.deployment_id = d.id)
   AND NOT EXISTS (
       SELECT 1 FROM deployment_step_selectors wanted
       WHERE wanted.deployment_id = s.deployment_id
@@ -40,7 +41,7 @@ JOIN agents a ON a.id = r.agent_id
 WHERE r.deployment_id = ? AND r.step_index = ? ORDER BY r.agent_id;
 
 -- name: ListWaitingRemoteStepRuns :many
-SELECT r.* FROM remote_step_runs r
+SELECT r.deployment_id, r.step_index FROM remote_step_runs r
 JOIN deployments d ON d.id = r.deployment_id
 JOIN deployment_steps s ON s.deployment_id = r.deployment_id
     AND s.step_index = r.step_index
@@ -48,6 +49,7 @@ JOIN agent_interpreters i ON i.agent_id = r.agent_id
     AND i.interpreter = s.interpreter
 WHERE r.agent_id = sqlc.arg(agent_id) AND r.state = 'waiting'
   AND d.status = 'running'
+  AND EXISTS (SELECT 1 FROM environment_deployment_slots slot WHERE slot.deployment_id = d.id)
   AND NOT EXISTS (
       SELECT 1 FROM remote_deployment_claims legacy
       WHERE legacy.agent_id = r.agent_id
