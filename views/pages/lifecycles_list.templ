@@ -49,49 +49,20 @@ templ LifecyclesListFragment(rows []LifecycleRow) {
 				}
 			</div>
 		} else {
-			<table class="table table-zebra table-fixed w-full block md:table">
-				<thead class="hidden md:table-header-group">
-					<tr>
-						<th class="w-1/5">Name</th>
-						<th class="w-2/5">Description</th>
-						<th class="w-1/5">Stages</th>
-						<th class="w-24">Actions</th>
-					</tr>
-				</thead>
-				<tbody class="block md:table-row-group">
-					for _, row := range rows {
-						@LifecycleListRow(row)
-					}
-				</tbody>
-			</table>
+			<div class="space-y-3">
+				for _, row := range rows {
+					@LifecycleListRow(row)
+				}
+			</div>
 		}
 	</div>
 }
 
 templ LifecycleListRow(row LifecycleRow) {
-	<tr class="grid grid-cols-2 gap-3 md:table-row max-md:rounded-box max-md:bg-base-200 max-md:p-4 max-md:mb-3">
-		<td class="col-span-2 min-w-0 break-all md:truncate font-medium">
-			<span class="block md:hidden text-xs opacity-70 mb-1">Name</span>
-			{ row.Lifecycle.Name }
-		</td>
-		<td class="col-span-2 min-w-0 break-all md:truncate">
-			<span class="block md:hidden text-xs opacity-70 mb-1">Description</span>
-			if row.Lifecycle.Description.Valid {
-				{ row.Lifecycle.Description.String }
-			} else {
-				<span class="text-gray-500">-</span>
-			}
-		</td>
-		<td class="col-span-2 md:whitespace-nowrap">
-			<span class="block md:hidden text-xs opacity-70 mb-1">Stages</span>
-			{ strconv.FormatInt(row.StageCount, 10) }
-		</td>
-		<td class="col-span-2">
-			if CanWrite(ctx) {
-				<a href={ templ.SafeURL("/lifecycles/" + strconv.FormatInt(row.Lifecycle.ID, 10)) } class="btn md:btn-sm btn-ghost">Edit</a>
-			}
-		</td>
-	</tr>
+	@ResourceCard(row.Lifecycle.Name, "/lifecycles/" + strconv.FormatInt(row.Lifecycle.ID, 10)) {
+		<p class="opacity-70">{ row.Lifecycle.Description.String }</p>
+		<p><span class="opacity-70">Stages: </span>{ strconv.FormatInt(row.StageCount, 10) }</p>
+	}
 }
 
 	templ LifecycleForm(lc db.Lifecycle, isEdit bool, errorMsg string) {

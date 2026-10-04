@@ -243,13 +243,8 @@ func TestMobile_RenderedHTML_preserves_disclosures_and_containment_when_authenti
 			name: "template script",
 			path: "/templates",
 			patterns: []string{
-				disclosurePattern(
-					fmt.Sprintf("template-script-%d", fixture.template.ID),
-				),
-				`(?s)<div[^>]*id="templates-list"[^>]*>.*?<table[^>]*class="[^"]*hidden lg:table[^"]*"`,
-				`(?s)<ol[^>]*class="[^"]*lg:hidden[^"]*"[^>]*data-mobile-template-list`,
-				`(?s)data-template-action="edit"[^>]*href="/templates/[0-9]+/edit".*?data-template-action="history"[^>]*href="/templates/[0-9]+/history"`,
-				`(?s)<div class="flex flex-wrap lg:flex-nowrap justify-start gap-2">`,
+				`(?s)<article[^>]*data-resource-card>.*?<pre[^>]*line-clamp-2`,
+				`(?s)<a href="/templates/[0-9]+/edit"[^>]*class="absolute inset-0`,
 			},
 			contents: []string{fixture.template.ScriptBody},
 		},

@@ -57,6 +57,15 @@ keep `overflow-x-auto` and `table table-zebra table-fixed w-full`.
   attributes.
 
 ### Cards and forms
+- Environments, Lifecycles, and Templates use full-width resource cards on all
+  screen sizes. Names remain plain bold headings; the entire card is a native
+  navigation link, with a chevron, hover ring, and visible keyboard focus.
+  Details wrap below the heading. No action column or repeated Edit buttons.
+- Viewer environment cards are read-only. Lifecycle cards open the read-only
+  workspace for viewers; template cards open History for viewers. Writers open
+  the editors, where Template History is available in the header.
+- Card navigation uses a positioned anchor, with no nested controls or script.
+  The document owns scrolling; cards stay full width at every breakpoint.
 - **Structure**: `card bg-base-200 shadow` with `card-body`; fields use
   `form-control`, `label`, and `input input-bordered`.
 - **States**: validation uses `text-error text-sm`; alerts use semantic
@@ -131,23 +140,22 @@ keep `overflow-x-auto` and `table table-zebra table-fixed w-full`.
 - At `md` and above, retain the fixed six-column table and percentage widths.
   The document owns scrolling; no sideways scrolling is needed on phones.
 
-### Project, environment, and lifecycle lists on narrow screens
+### Project lists on narrow screens
 - Reuse the deployment list's labeled cards below `md`: names and descriptions
   wrap in full, tags and stage counts remain visible, and actions span the card.
-- New/Edit controls keep normal touch sizes on phones; table actions
-  use `md:btn-sm` above the breakpoint. Headers and action groups wrap.
+- Header controls keep normal touch sizes on phones.
 - Project environment/version pairs stack on phones and use equal columns on
   larger screens. Each version stays with its environment; long phone versions
   wrap without hiding status colors or text.
 - Keep one set of rows for full pages and HTMX fragments, the existing viewer
   guards, fixed desktop tables, and document scrolling.
 - Environment and lifecycle deletion lives in a separate section of the edit
-  page, with a confirmation and normal-sized destructive button. Lists show
-  only Edit. Canceling confirmation leaves the item intact; deletion returns
+  page, with a confirmation and normal-sized destructive button. Their lists
+  use the resource cards above. Canceling confirmation leaves the item intact; deletion returns
   to the list. New forms and viewer pages have no Delete control.
 - Both edit pages put Save and Back in a wrapping header. Save updates the
   settings and keeps the edit page open; Back uses the shared history behavior.
-  Environment creation retains Create and Cancel.
+  Environment creation uses header Save and Back.
 
 ### Agent maintenance and health
 - Show administrative state and heartbeat health as separate labelled badges:
@@ -191,7 +199,8 @@ Shared spacing and responsive sizing provide consistency without removing color.
 Environment and template forms fill the main content width, including their
 headers and fields, without a centered maximum-width container.
 Template Delete appears only below the edit form, with confirmation; the list
-offers Edit and History. New forms and viewer pages have no Delete control.
+opens the editor and History is in its header. Viewer cards open History.
+New forms and viewer pages have no Delete control.
 New Environment uses the same header Save/Back controls as Edit Environment;
 Save submits its native creation form and Back uses the shared history behavior.
 Step editing uses one native modal dialog with a vertical form. The list stays

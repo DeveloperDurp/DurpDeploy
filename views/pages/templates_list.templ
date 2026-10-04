@@ -39,57 +39,24 @@ templ TemplatesListFragment(templates []db.StepTemplate) {
 				}
 			</div>
 		} else {
-			<table class="hidden lg:table table-zebra table-fixed w-full">
-				<thead>
-					<tr>
-						<th class="w-auto">Name</th>
-						<th class="w-64 text-left">Actions</th>
-					</tr>
-				</thead>
-				<tbody>
-					for _, tpl := range templates {
-						@TemplateRow(tpl)
-					}
-				</tbody>
-			</table>
-			<ol class="space-y-3 lg:hidden" data-mobile-template-list>
+			<div class="space-y-3">
 				for _, tpl := range templates {
-					<li class="card bg-base-200 p-4 space-y-3">
-						<p class="break-words font-medium">{ tpl.Name }</p>
-						<p class="text-xs text-gray-400">{ "Interpreter: " + tpl.Interpreter }</p>
-						<details class="text-sm" data-disclosure={ "template-script-mobile-" + strconv.FormatInt(tpl.ID, 10) }>
-							<summary class="cursor-pointer text-primary">View full script</summary>
-							<pre class="mt-2 max-w-full overflow-x-auto whitespace-pre-wrap break-words rounded bg-base-100 p-3 text-xs"><code>{ tpl.ScriptBody }</code></pre>
-						</details>
-						@TemplateActions(tpl)
-					</li>
+					if CanWrite(ctx) {
+						@ResourceCard(tpl.Name, "/templates/" + strconv.FormatInt(tpl.ID, 10) + "/edit") {
+							@TemplateCardDetails(tpl)
+						}
+					} else {
+						@ResourceCard(tpl.Name, "/templates/" + strconv.FormatInt(tpl.ID, 10) + "/history") {
+							@TemplateCardDetails(tpl)
+						}
+					}
 				}
-			</ol>
+			</div>
 		}
 	</div>
 }
 
-templ TemplateRow(tpl db.StepTemplate) {
-	<tr>
-		<td class="min-w-0">
-			<p class="break-words">{ tpl.Name }</p>
-			<p class="text-xs text-gray-400">{ "Interpreter: " + tpl.Interpreter }</p>
-			<details class="mt-1 text-sm" data-disclosure={ "template-script-" + strconv.FormatInt(tpl.ID, 10) }>
-				<summary class="cursor-pointer text-primary">View full script</summary>
-				<pre class="mt-2 whitespace-pre-wrap break-words rounded bg-base-100 p-3 text-xs"><code>{ tpl.ScriptBody }</code></pre>
-			</details>
-		</td>
-		<td class="align-top text-left">
-			@TemplateActions(tpl)
-		</td>
-	</tr>
-}
-
-templ TemplateActions(tpl db.StepTemplate) {
-	<div class="flex flex-wrap lg:flex-nowrap justify-start gap-2">
-			if CanWrite(ctx) {
-				<a data-template-action="edit" href={ templ.SafeURL("/templates/" + strconv.FormatInt(tpl.ID, 10) + "/edit") } class="btn lg:btn-sm btn-ghost whitespace-nowrap">Edit</a>
-			}
-			<a data-template-action="history" href={ templ.SafeURL("/templates/" + strconv.FormatInt(tpl.ID, 10) + "/history") } class="btn lg:btn-sm btn-ghost whitespace-nowrap">History</a>
-	</div>
+templ TemplateCardDetails(tpl db.StepTemplate) {
+	<p class="opacity-70">{ "Interpreter: " + tpl.Interpreter }</p>
+	<pre class="line-clamp-2 whitespace-pre-wrap break-all font-mono text-xs opacity-70">{ tpl.ScriptBody }</pre>
 }

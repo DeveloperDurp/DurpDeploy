@@ -86,6 +86,7 @@ templ TemplateFormContent(tpl *db.StepTemplate, isNew bool, errorMsg string) {
 			if !isNew {
 				<div class="flex flex-wrap gap-2">
 					<button type="submit" form="template-settings-form" class="btn btn-primary md:btn-sm">Save</button>
+					<a data-template-action="history" href={ templ.SafeURL("/templates/" + strconv.FormatInt(tpl.ID, 10) + "/history") } class="btn btn-ghost md:btn-sm">History</a>
 					<a href="/templates" class="btn btn-ghost md:btn-sm" x-data="backNavigation" @click="back">Back</a>
 				</div>
 			}

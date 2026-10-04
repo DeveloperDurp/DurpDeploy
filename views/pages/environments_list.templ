@@ -41,45 +41,30 @@ templ EnvironmentsListFragment(environments []db.Environment) {
 				}
 			</div>
 		} else {
-			<table class="table table-zebra table-fixed w-full block md:table">
-				<thead class="hidden md:table-header-group">
-					<tr>
-						<th class="w-1/4">Name</th>
-						<th class="w-2/5">Description</th>
-						<th class="w-1/5">Tags</th>
-						if CanWrite(ctx) {
-							<th class="w-24">Actions</th>
-						}
-					</tr>
-				</thead>
-				<tbody class="block md:table-row-group">
-					for _, environment := range environments {
-						@EnvironmentRow(environment)
-					}
-				</tbody>
-			</table>
+			<div class="space-y-3">
+				for _, environment := range environments {
+					@EnvironmentRow(environment)
+				}
+			</div>
 		}
 	</div>
 }
 
 templ EnvironmentRow(environment db.Environment) {
-	<tr class="grid grid-cols-2 gap-3 md:table-row max-md:rounded-box max-md:bg-base-200 max-md:p-4 max-md:mb-3">
-		<td class="col-span-2 min-w-0 break-all md:truncate">
-			<span class="block md:hidden text-xs opacity-70 mb-1">Name</span>
-			{ environment.Name }
-		</td>
-		<td class="col-span-2 min-w-0 break-all md:truncate">
-			<span class="block md:hidden text-xs opacity-70 mb-1">Description</span>
-			{ environment.Description.String }
-		</td>
-		<td class="col-span-2 min-w-0 break-all md:truncate">
-			<span class="block md:hidden text-xs opacity-70 mb-1">Tags</span>
-			{ environment.Tags.String }
-		</td>
-		if CanWrite(ctx) {
-			<td class="col-span-2">
-				<a href={ templ.SafeURL("/environments/" + strconv.FormatInt(environment.ID, 10) + "/edit") } class="btn md:btn-sm btn-ghost">Edit</a>
-			</td>
+	if CanWrite(ctx) {
+		@ResourceCard(environment.Name, "/environments/" + strconv.FormatInt(environment.ID, 10) + "/edit") {
+			@EnvironmentCardDetails(environment)
 		}
-	</tr>
+	} else {
+		@ResourceCard(environment.Name, "") {
+			@EnvironmentCardDetails(environment)
+		}
+	}
+}
+
+templ EnvironmentCardDetails(environment db.Environment) {
+	<p class="opacity-70">{ environment.Description.String }</p>
+	if environment.Tags.String != "" {
+		<p><span class="opacity-70">Tags: </span>{ environment.Tags.String }</p>
+	}
 }

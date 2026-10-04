@@ -123,12 +123,10 @@ func TestMobile_RenderedHTML_includes_responsive_classes_when_authenticated(
 			},
 		},
 		{
-			name: "templates script disclosure",
+			name: "templates card script preview",
 			path: "/templates",
 			patterns: []string{
-				disclosurePattern(
-					fmt.Sprintf("template-script-%d", fixture.template.ID),
-				),
+				`(?s)<article[^>]*data-resource-card>.*?<pre[^>]*line-clamp-2`,
 			},
 		},
 	}

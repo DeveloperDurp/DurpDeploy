@@ -12,7 +12,7 @@ import (
 	"durpdeploy/views/pages"
 )
 
-func TestLifecycleListRow_renders_plain_name_and_merged_edit_action(
+func TestLifecycleListRow_renders_plain_name_and_full_card_navigation(
 	t *testing.T,
 ) {
 	// Given
@@ -47,9 +47,9 @@ func TestLifecycleListRow_renders_plain_name_and_merged_edit_action(
 	}
 	if !strings.Contains(
 		body,
-		`<a href="/lifecycles/42" class="btn md:btn-sm btn-ghost">Edit</a>`,
+		`<a href="/lifecycles/42" class="absolute inset-0`,
 	) {
-		t.Errorf("writer Edit link missing: %s", body)
+		t.Errorf("full card link missing: %s", body)
 	}
 	if strings.Contains(body, `/lifecycles/42/edit`) {
 		t.Errorf("writer Edit link still opens separate page: %s", body)

@@ -73,6 +73,42 @@ func TestMainPagePatternBrowserE2E(t *testing.T) {
 			}
 		})
 	}
+	for _, card := range []struct{ list, destination string }{
+		{"/environments", fmt.Sprintf("/environments/%d/edit", f.environment.ID)},
+		{"/lifecycles", fmt.Sprintf("/lifecycles/%d", lifecycle.ID)},
+		{"/templates", fmt.Sprintf("/templates/%d/edit", template.ID)},
+	} {
+		b.navigateBackTest(t, f.baseURL+card.list)
+		if string(b.evaluate(t, fmt.Sprintf(`(() => {
+ const link = document.querySelector('main [data-resource-card] a[href=%q]');
+ if (!link) return false;
+ const card = link.closest('[data-resource-card]');
+ const box = card.getBoundingClientRect();
+ link.focus();
+ const style = getComputedStyle(link);
+ return !document.querySelector('main table') && box.height >= 44 &&
+ style.outlineStyle !== 'none' && parseFloat(style.outlineWidth) >= 2 &&
+ document.elementFromPoint(box.left + 8, box.bottom - 8) === link &&
+ ![...document.querySelectorAll('main a, main button')].some(el => el.textContent === 'Edit');
+})()`, card.destination))) != "true" {
+			t.Fatal(
+				"resource card lacks full-card navigation or keyboard focus",
+			)
+		}
+		b.call(t, "Input.dispatchKeyEvent", map[string]any{
+			"type":                  "keyDown",
+			"key":                   "Enter",
+			"code":                  "Enter",
+			"windowsVirtualKeyCode": 13,
+		}, &struct{}{})
+		b.call(t, "Input.dispatchKeyEvent", map[string]any{
+			"type":                  "keyUp",
+			"key":                   "Enter",
+			"code":                  "Enter",
+			"windowsVirtualKeyCode": 13,
+		}, &struct{}{})
+		b.wait(t, fmt.Sprintf(`location.pathname === %q`, card.destination))
+	}
 	// Header Save controls submit the real edit form and persist through the API.
 	for _, edit := range []struct {
 		path, api, name string

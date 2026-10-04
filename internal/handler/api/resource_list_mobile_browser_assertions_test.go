@@ -40,7 +40,10 @@ func captureResourceLists(
 			t.Fatalf("API list %s lost item %d", page.path, page.id)
 		}
 		b.navigateBackTest(t, f.baseURL+"/"+page.path)
-		b.wait(t, `document.querySelector('main table tbody tr') !== null`)
+		b.wait(
+			t,
+			`document.querySelector('main table tbody tr, main [data-resource-card]') !== null`,
+		)
 		// Then: fields stay readable and only authorized Edit links appear.
 		b.captureNavigation(t, "mobile-"+page.path+"-"+role, func() {
 			assertResourceListMobile(t, b)
@@ -80,6 +83,16 @@ func assertResourceListMobile(t *testing.T, b *packageBrowser) {
 	t.Helper()
 	if string(b.evaluate(t, `(() => {
  const table = document.querySelector('main table');
+ if (!table) {
+   const cards = [...document.querySelectorAll('[data-resource-card]')];
+   return cards.length > 0 && cards.every(card => {
+     const link = card.querySelector('a');
+     const box = card.getBoundingClientRect();
+     return box.height >= 44 && card.scrollWidth <= card.clientWidth &&
+       (!link || Math.abs(link.getBoundingClientRect().width - box.width) <= 2 &&
+       Math.abs(link.getBoundingClientRect().height - box.height) <= 2);
+   });
+ }
  const rows = [...table.tBodies[0].rows];
  const visible = el => el.getBoundingClientRect().height > 0;
  const cells = rows.flatMap(row => [...row.cells]);
