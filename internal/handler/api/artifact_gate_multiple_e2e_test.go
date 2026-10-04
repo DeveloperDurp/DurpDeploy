@@ -12,6 +12,14 @@ import (
 )
 
 func TestArtifactGateMultipleReviewsE2E(t *testing.T) {
+	for _, expire := range []bool{false, true} {
+		t.Run(fmt.Sprint("expire=", expire), func(t *testing.T) {
+			testArtifactGateMultipleReviews(t, expire)
+		})
+	}
+}
+
+func testArtifactGateMultipleReviews(t *testing.T, expire bool) {
 	// Given: two generation gates before one final apply.
 	f := newArtifactE2E(t)
 	for index := range 2 {
@@ -85,6 +93,25 @@ func TestArtifactGateMultipleReviewsE2E(t *testing.T) {
 		409,
 	)
 	// Then: the fresh current gate still approves and applies its own bytes.
+	if expire {
+		if _, err := f.h.repo.DB.Exec(
+			"UPDATE artifact_gates SET expires_at=0 WHERE deployment_id=? AND step_index=1",
+			deployment.ID,
+		); err != nil {
+			t.Fatal(err)
+		}
+		if err := json.Unmarshal(
+			f.api(t, "GET", gateAPIPath(deployment.ID), nil, 200),
+			&gates,
+		); err != nil {
+			t.Fatal(err)
+		}
+		if len(gates) != 2 || gates[0].Status != "approved" ||
+			gates[1].Status != "expired" {
+			t.Fatalf("expiry changed consumed approval: %+v", gates)
+		}
+		return
+	}
 	f.api(
 		t,
 		"POST",

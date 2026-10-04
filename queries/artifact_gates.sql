@@ -89,4 +89,5 @@ WHERE g.deployment_id = deployments.id AND g.step_index = r.next_step - 1 AND g.
 -- name: ExpireArtifactGates :exec
 UPDATE artifact_gates SET status = 'expired'
 WHERE status IN ('awaiting', 'approved') AND expires_at <= sqlc.arg(now)
-AND EXISTS (SELECT 1 FROM deployments d WHERE d.id = artifact_gates.deployment_id AND d.status = 'expired');
+AND EXISTS (SELECT 1 FROM deployments d JOIN artifact_gate_runs r ON r.deployment_id = d.id
+WHERE d.id = artifact_gates.deployment_id AND d.status = 'expired' AND artifact_gates.step_index = r.next_step - 1);

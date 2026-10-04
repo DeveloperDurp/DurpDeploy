@@ -194,7 +194,8 @@ func (q *Queries) ExpireArtifactGateDeployments(ctx context.Context, now sql.Nul
 const expireArtifactGates = `-- name: ExpireArtifactGates :exec
 UPDATE artifact_gates SET status = 'expired'
 WHERE status IN ('awaiting', 'approved') AND expires_at <= ?1
-AND EXISTS (SELECT 1 FROM deployments d WHERE d.id = artifact_gates.deployment_id AND d.status = 'expired')
+AND EXISTS (SELECT 1 FROM deployments d JOIN artifact_gate_runs r ON r.deployment_id = d.id
+WHERE d.id = artifact_gates.deployment_id AND d.status = 'expired' AND artifact_gates.step_index = r.next_step - 1)
 `
 
 func (q *Queries) ExpireArtifactGates(ctx context.Context, now int64) error {

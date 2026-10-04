@@ -314,7 +314,9 @@ templ DeploymentActions(deployment db.Deployment, outOfBand bool) {
 		<a href={ fmt.Sprintf("/deployments/%d/logs.txt", deployment.ID) } class="btn btn-sm btn-ghost">Export</a>
 		if CanWrite(ctx) {
 			if isTerminalStatus(deployment.Status) {
+				if deployment.Status == "succeeded" || deployment.Status == "failed" || deployment.Status == "cancelled" {
 				<a href={ fmt.Sprintf("/deployments/%d/rollback", deployment.ID) } class="btn btn-sm btn-secondary">Rollback</a>
+				}
 				<button
 					class="btn btn-sm btn-primary"
 					hx-post={ fmt.Sprintf("/deployments/%d/redeploy", deployment.ID) }

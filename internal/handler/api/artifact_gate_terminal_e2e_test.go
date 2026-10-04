@@ -62,6 +62,15 @@ func TestArtifactGateTerminalVerificationAndRerunE2E(t *testing.T) {
 				t.Fatalf("verification=%+v", verification)
 			}
 			webPath := fmt.Sprintf("/deployments/%d", deployment.ID)
+			detail := f.web(t, "GET", webPath, nil, 200)
+			if strings.Contains(
+				detail,
+				webPath+"/rollback",
+			) != (terminal == "cancelled") {
+				t.Fatal(
+					"rollback control does not match supported terminal statuses",
+				)
+			}
 			panel := f.web(t, "GET", webPath+"/artifact-gates", nil, 200)
 			if strings.Contains(panel, "every 3s") {
 				t.Fatal("terminal review still polls")
