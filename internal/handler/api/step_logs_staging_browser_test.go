@@ -8,8 +8,8 @@ import (
 )
 
 func TestDeploymentStagingFailureBrowserE2E(t *testing.T) {
-	f, deployment := stagingFailureE2E(t)
 	b := startPackageBrowser(t)
+	f, deployment := stagingFailureE2E(t)
 	b.setStepLogSession(t, f.baseURL, f.session)
 	b.openStepLogPage(
 		t,

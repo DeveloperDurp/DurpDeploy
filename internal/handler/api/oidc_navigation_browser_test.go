@@ -19,6 +19,8 @@ import (
 )
 
 func TestOIDCNavigationBrowserE2E(t *testing.T) {
+	// Start Chromium before the fake runner changes the runtime setting.
+	b := startPackageBrowser(t)
 	f := newArtifactE2E(t, fakePodman(t))
 	// A different-origin callback records whether SSO used a document request.
 	destination := httptest.NewServer(
@@ -116,7 +118,6 @@ func TestOIDCNavigationBrowserE2E(t *testing.T) {
 			response.Header.Get("Location"),
 		)
 	}
-	b := startPackageBrowser(t)
 	// The only ignored certificate is the process-local fixture's browser TLS.
 	b.call(
 		t,
