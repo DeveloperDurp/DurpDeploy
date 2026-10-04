@@ -267,11 +267,14 @@ func (r *Repository) rejectArtifact(
 		); err != nil {
 			return err
 		}
-		return q.UpdateDeploymentStatus(ctx, db.UpdateDeploymentStatusParams{
+		if err := q.UpdateDeploymentStatus(ctx, db.UpdateDeploymentStatusParams{
 			ID:         deploymentID,
 			Status:     status,
 			FinishedAt: sql.NullInt64{Int64: now, Valid: true},
-		})
+		}); err != nil {
+			return err
+		}
+		return q.ReconcileTerminalVerifications(ctx)
 	})
 }
 
@@ -289,6 +292,9 @@ func (r *Repository) MaintainArtifactGates(ctx context.Context) error {
 				return err
 			}
 			if err := q.ExpireArtifactGates(ctx, now); err != nil {
+				return err
+			}
+			if err := q.ReconcileTerminalVerifications(ctx); err != nil {
 				return err
 			}
 			return q.DeleteExpiredArtifactGateChunks(

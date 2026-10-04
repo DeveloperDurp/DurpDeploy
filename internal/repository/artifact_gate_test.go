@@ -78,6 +78,35 @@ func TestArtifactGateClaimsAcrossDatabases(t *testing.T) {
 		); err != nil {
 			t.Fatal(err)
 		}
+		// Publishing is active on every engine; parent deletion must be blocked.
+		if err := first.DeleteEnvironment(
+			t.Context(),
+			1,
+		); !errors.Is(
+			err,
+			ErrEnvironmentHasActiveDeployment,
+		) {
+			t.Fatalf("delete publishing environment: %v", err)
+		}
+		if err := first.DeleteProject(
+			t.Context(),
+			1,
+		); !errors.Is(
+			err,
+			ErrProjectHasActiveRunbook,
+		) {
+			t.Fatalf("delete publishing project: %v", err)
+		}
+		if err := first.DeleteRelease(
+			t.Context(),
+			1,
+			1,
+		); !errors.Is(
+			err,
+			ErrReleaseHasActiveDeployment,
+		) {
+			t.Fatalf("delete publishing release: %v", err)
+		}
 		if err := first.PauseArtifactGate(t.Context(), id, 1); err != nil {
 			t.Fatal(err)
 		}

@@ -850,7 +850,8 @@ func (h *DeploymentHandler) RedeployDeployment(
 	}
 
 	if source.Status != "succeeded" && source.Status != "failed" &&
-		source.Status != "cancelled" {
+		source.Status != "cancelled" && source.Status != "rejected" &&
+		source.Status != "expired" {
 		if source.Status == "cleanup_unconfirmed" {
 			http.Error(
 				w,

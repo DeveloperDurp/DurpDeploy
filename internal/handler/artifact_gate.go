@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -72,7 +73,22 @@ func (h *ArtifactGateHandler) List(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	if err := pages.ArtifactGates(info).Render(r.Context(), w); err != nil {
+	deployment, err := h.repo.Queries.GetDeployment(r.Context(), id)
+	if err != nil {
+		gateHTTPError(w, r, 500, "Deployment lookup failed")
+		return
+	}
+	_, err = h.repo.Queries.GetArtifactGateRun(r.Context(), id)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		gateHTTPError(w, r, 500, "Gate run lookup failed")
+		return
+	}
+	poll := err == nil && (deployment.Status == "pending" ||
+		deployment.Status == "running" || deployment.Status == "pending_approval" ||
+		deployment.Status == "publishing_artifact" ||
+		deployment.Status == "awaiting_artifact_approval")
+	if err := pages.ArtifactGatePanel(id, info, poll).
+		Render(r.Context(), w); err != nil {
 		gateHTTPError(w, r, 500, "Gate rendering failed")
 	}
 }

@@ -5,6 +5,19 @@ import "strconv"
 import "time"
 import "durpdeploy/internal/auth"
 
+templ ArtifactGatePanel(deploymentID int64, gates []ArtifactGateInfo, poll bool) {
+	<div
+		data-artifact-gates aria-live="polite"
+		if poll {
+			hx-get={ fmt.Sprintf("/deployments/%d/artifact-gates", deploymentID) }
+			hx-trigger="every 3s"
+			hx-swap="outerHTML"
+		}
+	>
+		@ArtifactGates(gates)
+	</div>
+}
+
 templ ArtifactGates(gates []ArtifactGateInfo) {
 	for _, gate := range gates {
 		<section class="card bg-base-200 shadow" aria-label="Artifact approval">

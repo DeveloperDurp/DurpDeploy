@@ -103,6 +103,41 @@ func TestArtifactGateBrowserE2E(t *testing.T) {
 		`document.querySelector('#status-badge')?.innerText.includes('succeeded')`,
 	)
 	browser.screenshot(t, "artifact-approved")
+	browser.wait(
+		t,
+		`!document.querySelector('[data-artifact-gates]').hasAttribute('hx-trigger')`,
+	)
+	// HTMX cancellation must swap only the badge, then stop gate polling.
+	release, err := f.h.repo.Queries.GetDeploymentRelease(
+		t.Context(), deployment.ReleaseID,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	paused := verificationDeploy(t, f, release)
+	f.completion(t, paused.ID, events.ArtifactAwaitingApproval)
+	browser.call(t, "Page.navigate", map[string]string{
+		"url": fmt.Sprintf("%s/deployments/%d", f.baseURL, paused.ID),
+	}, &struct{}{})
+	browser.wait(t, `document.querySelector('form[action$="/approve"]')`)
+	browser.evaluate(
+		t,
+		`document.querySelector('[hx-post$="/cancel"]').click()`,
+	)
+	browser.wait(
+		t,
+		`document.querySelector('#status-badge')?.innerText.includes('cancelled')`,
+	)
+	browser.wait(
+		t,
+		`!document.querySelector('[data-artifact-gates]').hasAttribute('hx-trigger')`,
+	)
+	if string(
+		browser.evaluate(t, `document.querySelectorAll('h1').length`),
+	) != "1" {
+		t.Fatal("cancellation swapped a full page into the status badge")
+	}
+	browser.screenshot(t, "artifact-cancelled")
 	// And: configuration fields render at mobile and desktop widths.
 	for _, width := range []int{375, 1280} {
 		browser.call(

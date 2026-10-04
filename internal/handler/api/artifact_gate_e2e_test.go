@@ -21,7 +21,15 @@ func newGateDeployment(
 	notifiers ...events.Notifier,
 ) (*artifactE2E, db.Deployment, pages.ArtifactGateInfo) {
 	t.Helper()
-	f := newArtifactE2E(t)
+	return createGateDeployment(t, newArtifactE2E(t), notifiers...)
+}
+
+func createGateDeployment(
+	t *testing.T,
+	f *artifactE2E,
+	notifiers ...events.Notifier,
+) (*artifactE2E, db.Deployment, pages.ArtifactGateInfo) {
+	t.Helper()
 	if len(notifiers) != 0 {
 		bus := events.NewBus(f.h.repo)
 		bus.Register(artifactNotifier{f.done})
@@ -80,6 +88,14 @@ func TestArtifactGateApproveExactBytesE2E(t *testing.T) {
 	// Given: a generated artifact paused before apply, visible through API/web.
 	f, deployment, gate := newGateDeployment(t)
 	path := gateAPIPath(deployment.ID)
+	// Parent deletion must preserve the active review and encrypted context.
+	for _, parent := range []string{
+		f.base(),
+		fmt.Sprintf("/api/v1/environments/%d", deployment.EnvironmentID),
+		fmt.Sprintf("%s/releases/%d", f.base(), deployment.ReleaseID),
+	} {
+		f.api(t, "DELETE", parent, nil, 409)
+	}
 	// A waiting review reserves the environment against another admission.
 	f.api(
 		t,
