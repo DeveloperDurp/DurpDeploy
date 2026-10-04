@@ -717,6 +717,7 @@ func (h *DeploymentHandler) CancelDeployment(
 		}
 	} else {
 		if deployment.Status != "running" &&
+			deployment.Status != "publishing_artifact" &&
 			deployment.Status != "pending_approval" {
 			http.Error(
 				w,

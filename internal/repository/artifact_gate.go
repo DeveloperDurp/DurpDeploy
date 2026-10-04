@@ -297,6 +297,9 @@ func (r *Repository) MaintainArtifactGates(ctx context.Context) error {
 			if err := q.ReconcileTerminalVerifications(ctx); err != nil {
 				return err
 			}
+			if err := q.CancelTerminalArtifactGates(ctx); err != nil {
+				return err
+			}
 			return q.DeleteExpiredArtifactGateChunks(
 				ctx,
 				sql.NullInt64{Int64: now - 7*24*60*60, Valid: true},

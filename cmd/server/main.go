@@ -383,6 +383,9 @@ func recoverPendingDeployments(
 			if err != nil {
 				return err
 			}
+			if err := q.CancelTerminalArtifactGates(ctx); err != nil {
+				return err
+			}
 			return q.ReconcileTerminalVerifications(ctx)
 		},
 	)

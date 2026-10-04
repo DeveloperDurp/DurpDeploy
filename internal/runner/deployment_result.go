@@ -190,7 +190,21 @@ func (r *DeploymentRunner) failUnlessCancelled(
 	if deployment.Status == "cancelled" {
 		return
 	}
-	r.persistCompletion(
-		ctx, cancelCtx, deploymentID, "failed", true,
-	)
+	release, err := r.repo.Queries.GetRelease(ctx, deployment.ReleaseID)
+	if err != nil {
+		slog.Error(
+			"load release after runner failure",
+			"deployment_id",
+			deploymentID,
+			"err",
+			err,
+		)
+		r.persistCompletion(ctx, cancelCtx, deploymentID, "failed", true)
+		return
+	}
+	r.failStep(ctx, cancelCtx, events.Event{
+		Type: events.DeploymentFailed, DeploymentID: deploymentID,
+		ProjectID: release.ProjectID, EnvironmentID: deployment.EnvironmentID,
+		Message: "Deployment failed",
+	}, true)
 }

@@ -771,7 +771,8 @@ func (h *DeploymentHandler) CancelDeployment(
 			map[string]string{"status": updated.Status})
 		return
 	}
-	if deployment.Status != "running" {
+	if deployment.Status != "running" &&
+		deployment.Status != "publishing_artifact" {
 		RespondError(
 			w,
 			http.StatusUnprocessableEntity,

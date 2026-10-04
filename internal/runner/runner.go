@@ -72,6 +72,16 @@ func (r *DeploymentRunner) Run(
 	}
 	gateRun, gated, gateErr := r.repo.BeginArtifactGateRun(ctx, deploymentID)
 	if gateErr != nil {
+		if !errors.Is(gateErr, repository.ErrArtifactGate) {
+			slog.Error(
+				"claim deployment run",
+				"deployment_id",
+				deploymentID,
+				"err",
+				gateErr,
+			)
+			r.failUnlessCancelled(context.WithoutCancel(ctx), ctx, deploymentID)
+		}
 		return
 	}
 	runCtx, cancel := context.WithCancel(ctx)

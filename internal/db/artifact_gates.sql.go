@@ -56,6 +56,17 @@ func (q *Queries) ApproveArtifactGate(ctx context.Context, arg ApproveArtifactGa
 	return result.RowsAffected()
 }
 
+const cancelTerminalArtifactGates = `-- name: CancelTerminalArtifactGates :exec
+UPDATE artifact_gates SET status = 'cancelled' WHERE status = 'awaiting'
+AND EXISTS (SELECT 1 FROM deployments d WHERE d.id = artifact_gates.deployment_id
+AND d.status IN ('failed', 'cancelled', 'cleanup_unconfirmed'))
+`
+
+func (q *Queries) CancelTerminalArtifactGates(ctx context.Context) error {
+	_, err := q.db.ExecContext(ctx, cancelTerminalArtifactGates)
+	return err
+}
+
 const claimArtifactGateRun = `-- name: ClaimArtifactGateRun :execrows
 UPDATE artifact_gate_runs SET claimed = 1
 WHERE deployment_id = ? AND claimed = 0

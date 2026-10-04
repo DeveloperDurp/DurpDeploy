@@ -10,6 +10,7 @@ import (
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/migrate"
 	"durpdeploy/internal/repository"
+	"durpdeploy/internal/runner"
 	"durpdeploy/internal/secret"
 )
 
@@ -62,6 +63,33 @@ func seedRotationGate(
 		t.Fatal(err)
 	}
 	return gate, data
+}
+
+func TestRecoverPendingDeploymentsCancelsPublishedGate(t *testing.T) {
+	conn, err := migrate.Run(filepath.Join(t.TempDir(), "orphan.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	repo := repository.New(conn)
+	box, err := secret.NewBox(make([]byte, 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo.SetSecretBox(box)
+	gate, _ := seedRotationGate(t, repo)
+	recoverPendingDeployments(
+		t.Context(),
+		runner.New(repo, runner.NewLogBroker()),
+		repo,
+	)
+	stored, err := repo.Queries.GetArtifactGate(
+		t.Context(),
+		db.GetArtifactGateParams{DeploymentID: gate.DeploymentID},
+	)
+	if err != nil || stored.Status != "cancelled" {
+		t.Fatalf("orphaned published gate=%+v err=%v", stored, err)
+	}
 }
 
 func TestArtifactGateKeyRotationFailureIsAtomic(t *testing.T) {

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"testing"
 
+	"durpdeploy/internal/db"
 	"durpdeploy/internal/events"
 )
 
@@ -199,6 +200,104 @@ func TestArtifactGateBrowserE2E(t *testing.T) {
 						`Array.from(document.querySelectorAll('body *')).filter(e=>e.getBoundingClientRect().right>innerWidth+1).map(e=>({tag:e.tagName,class:e.className,width:e.clientWidth})).slice(-12)`,
 					),
 				)
+			}
+			if surface.name == "runbook" {
+				browser.evaluate(
+					t,
+					`const network = document.querySelector('select[name="step_network"]'); network.value = 'bridge'; network.dispatchEvent(new Event('change', {bubbles:true}));`,
+				)
+				browser.evaluate(
+					t,
+					`const target = document.querySelector('[name="step_target"]'); target.value = 'agent'; target.dispatchEvent(new Event('change', {bubbles:true}));`,
+				)
+				browser.wait(
+					t,
+					`document.querySelector('select[name="step_network"]').disabled && document.querySelector('select[name="step_network"]').value === ''`,
+				)
+				if string(
+					browser.evaluate(
+						t,
+						`new FormData(document.querySelector('form[x-data]')).getAll('step_network').join(',') === ''`,
+					),
+				) != "true" {
+					t.Fatal("agent form retains network access")
+				}
+				browser.screenshot(
+					t,
+					fmt.Sprintf("artifact-agent-runbook-%d", width),
+				)
+				browser.evaluate(
+					t,
+					fmt.Sprintf(
+						`for (const [name,value] of [['name','Agent runbook %d'],['step_name','Agent'],['step_script','true'],['step_selectors','']]) { const field=document.querySelector('[name="'+name+'"]'); field.value=value; field.dispatchEvent(new Event('input',{bubbles:true})); } setTimeout(() => document.querySelector('form[x-data]').requestSubmit(), 100); true`,
+						width,
+					),
+				)
+				browser.wire.events = nil
+				if err := browser.wire.waitEvent(
+					"Page.loadEventFired",
+					browser.session,
+				); err != nil {
+					t.Fatal(err)
+				}
+				browser.wait(
+					t,
+					`location.pathname.match(/\/runbooks\/\d+$/) && document.readyState === 'complete'`,
+				)
+				var books []db.Runbook
+				if err := json.Unmarshal(
+					f.api(t, "GET", f.base()+"/runbooks", nil, 200),
+					&books,
+				); err != nil {
+					t.Fatal(err)
+				}
+				if len(books) == 0 {
+					t.Fatal("agent runbook form did not save")
+				}
+				found := false
+				for _, book := range books {
+					if book.Name != fmt.Sprintf("Agent runbook %d", width) {
+						continue
+					}
+					found = true
+					var detail struct {
+						Versions []db.RunbookVersion `json:"versions"`
+					}
+					bookPath := fmt.Sprintf("%s/runbooks/%d", f.base(), book.ID)
+					if err := json.Unmarshal(
+						f.api(t, "GET", bookPath, nil, 200),
+						&detail,
+					); err != nil ||
+						len(detail.Versions) != 1 {
+						t.Fatalf("saved versions=%+v err=%v", detail, err)
+					}
+					var version struct {
+						Steps []struct {
+							ExecutionTarget string `json:"execution_target"`
+							NetworkMode     string `json:"network_mode"`
+						} `json:"steps"`
+					}
+					if err := json.Unmarshal(
+						f.api(
+							t,
+							"GET",
+							fmt.Sprintf(
+								"%s/versions/%d",
+								bookPath,
+								detail.Versions[0].ID,
+							),
+							nil,
+							200,
+						),
+						&version,
+					); err != nil || len(version.Steps) != 1 || version.Steps[0].ExecutionTarget != "agent" ||
+						version.Steps[0].NetworkMode != "" {
+						t.Fatalf("saved agent network=%+v err=%v", version, err)
+					}
+				}
+				if !found {
+					t.Fatal("saved agent runbook missing from public API")
+				}
 			}
 		}
 	}

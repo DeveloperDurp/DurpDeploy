@@ -91,3 +91,8 @@ UPDATE artifact_gates SET status = 'expired'
 WHERE status IN ('awaiting', 'approved') AND expires_at <= sqlc.arg(now)
 AND EXISTS (SELECT 1 FROM deployments d JOIN artifact_gate_runs r ON r.deployment_id = d.id
 WHERE d.id = artifact_gates.deployment_id AND d.status = 'expired' AND artifact_gates.step_index = r.next_step - 1);
+
+-- name: CancelTerminalArtifactGates :exec
+UPDATE artifact_gates SET status = 'cancelled' WHERE status = 'awaiting'
+AND EXISTS (SELECT 1 FROM deployments d WHERE d.id = artifact_gates.deployment_id
+AND d.status IN ('failed', 'cancelled', 'cleanup_unconfirmed'));
