@@ -205,7 +205,11 @@ func (b *packageBrowser) clickPageNavigation(t *testing.T, path, title string) {
 	)
 }
 
-func (b *packageBrowser) captureNavigation(t *testing.T, name string) {
+func (b *packageBrowser) captureNavigation(
+	t *testing.T,
+	name string,
+	prepare ...func(),
+) {
 	t.Helper()
 	for _, theme := range []string{"mocha", "light"} {
 		b.evaluate(
@@ -231,6 +235,9 @@ func (b *packageBrowser) captureNavigation(t *testing.T, name string) {
 				},
 				&struct{}{},
 			)
+			for _, action := range prepare {
+				action()
+			}
 			if string(
 				b.evaluate(
 					t,

@@ -96,21 +96,23 @@ func TestAlpineDialogsBrowserE2E(t *testing.T) {
 		{"script-add", "button[hx-target='#add-step-form']"},
 		{"script-edit", "[data-step-action=edit]"},
 	} {
-		b.evaluate(t, fmt.Sprintf(
-			`[...document.querySelectorAll(%q)].find(e => e.getClientRects().length).click(); true`,
-			control.selector,
-		))
-		b.wait(
-			t,
-			`!!document.querySelector('[x-data="stepEditor"]') && [...document.querySelectorAll('[x-data="stepEditor"] button')].some(e => e.getClientRects().length)`,
-		)
-		b.evaluate(
-			t,
-			`[...document.querySelectorAll('[x-data="stepEditor"] button')].find(e => e.textContent === 'Fullscreen' && e.getClientRects().length).click(); true`,
-		)
-		b.wait(t, `!!document.querySelector('dialog[open]')`)
-		b.assertAlpineDialogName(t, "Script Body")
-		b.captureNavigation(t, control.name+"-dialog")
+		b.captureNavigation(t, control.name+"-dialog", func() {
+			b.navigateBackTest(t, f.baseURL+path)
+			b.evaluate(t, fmt.Sprintf(
+				`[...document.querySelectorAll(%q)].find(e => e.getClientRects().length).click(); true`,
+				control.selector,
+			))
+			b.wait(
+				t,
+				`!!document.querySelector('[x-data="stepEditor"]') && [...document.querySelectorAll('[x-data="stepEditor"] button')].some(e => e.getClientRects().length)`,
+			)
+			b.evaluate(
+				t,
+				`[...document.querySelectorAll('[x-data="stepEditor"] button')].find(e => e.textContent === 'Fullscreen' && e.getClientRects().length).click(); true`,
+			)
+			b.wait(t, `!!document.querySelector('dialog[open]')`)
+			b.assertAlpineDialogName(t, "Script Body")
+		})
 		b.call(t, "Input.dispatchKeyEvent", map[string]any{
 			"type": "keyDown", "key": "Escape", "code": "Escape",
 			"windowsVirtualKeyCode": 27,
