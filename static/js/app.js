@@ -18,7 +18,7 @@ document.addEventListener('htmx:beforeSwap', (event) => {
 
 document.addEventListener('htmx:afterRequest', (event) => {
 	const element = event.detail.elt;
-	if (element.hasAttribute('data-terraform-review') &&
+	if (element.dataset.terraformReview !== undefined &&
 		!event.detail.successful) {
 		element.querySelector('.terraform-plan').textContent =
 			'Resource changes could not be loaded. Reload this page to retry.';

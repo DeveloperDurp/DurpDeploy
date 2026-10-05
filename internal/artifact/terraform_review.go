@@ -3,10 +3,13 @@ package artifact
 import (
 	"bytes"
 	"encoding/json"
+	"maps"
 	"strings"
 
 	"durpdeploy/internal/logscrub"
 )
+
+const terraformRedacted = "[REDACTED]"
 
 type TerraformResourceChange struct {
 	Address string   `json:"address"`
@@ -79,78 +82,78 @@ func terraformValue(value, sensitive, unknown any) any {
 		if value == nil && unknown == nil {
 			return nil
 		}
-		return "[REDACTED]"
+		return terraformRedacted
 	}
 	if unknown == true {
 		return "(known after apply)"
 	}
 	switch data := value.(type) {
 	case map[string]any:
-		masks, ok := sensitive.(map[string]any)
-		if !ok && sensitive != false {
-			return "[REDACTED]"
-		}
-		unknowns, ok := unknown.(map[string]any)
-		if unknown != nil && unknown != false && !ok {
-			return "[REDACTED]"
-		}
-		result := make(map[string]any, len(data)+len(unknowns))
-		for key, item := range data {
-			mask, exists := masks[key]
-			if exists && mask == nil {
-				return "[REDACTED]"
-			}
-			if !exists {
-				mask = false
-			}
-			result[key] = terraformValue(item, mask, unknowns[key])
-		}
-		for key, mask := range unknowns {
-			if _, exists := data[key]; !exists {
-				sensitiveMask, exists := masks[key]
-				if exists && sensitiveMask == nil {
-					return "[REDACTED]"
-				}
-				if !exists {
-					sensitiveMask = false
-				}
-				result[key] = terraformValue(nil, sensitiveMask, mask)
-			}
-		}
-		return result
+		return terraformObject(data, sensitive, unknown)
 	case []any:
-		masks, ok := sensitive.([]any)
-		if !ok && sensitive != false {
-			return "[REDACTED]"
-		}
-		if ok && len(masks) != len(data) {
-			return "[REDACTED]"
-		}
-		unknowns, ok := unknown.([]any)
-		if unknown != nil && unknown != false && !ok {
-			return "[REDACTED]"
-		}
-		if ok && len(unknowns) != len(data) {
-			return "[REDACTED]"
-		}
-		result := make([]any, len(data))
-		for index, item := range data {
-			var mask, pending any = false, nil
-			if index < len(masks) {
-				mask = masks[index]
-			}
-			if index < len(unknowns) {
-				pending = unknowns[index]
-			}
-			result[index] = terraformValue(item, mask, pending)
-		}
-		return result
+		return terraformArray(data, sensitive, unknown)
 	default:
 		if sensitive != false || (unknown != nil && unknown != false) {
-			return "[REDACTED]"
+			return terraformRedacted
 		}
 		return value
 	}
+}
+
+func terraformObject(data map[string]any, sensitive, unknown any) any {
+	masks, ok := sensitive.(map[string]any)
+	if !ok && sensitive != false {
+		return terraformRedacted
+	}
+	unknowns, ok := unknown.(map[string]any)
+	if unknown != nil && unknown != false && !ok {
+		return terraformRedacted
+	}
+	result := make(map[string]any, len(data)+len(unknowns))
+	for key := range unknowns {
+		result[key] = nil
+	}
+	maps.Copy(result, data)
+	for key, item := range result {
+		mask, exists := masks[key]
+		if exists && mask == nil {
+			return terraformRedacted
+		}
+		if !exists {
+			mask = false
+		}
+		result[key] = terraformValue(item, mask, unknowns[key])
+	}
+	return result
+}
+
+func terraformArray(data []any, sensitive, unknown any) any {
+	masks, ok := sensitive.([]any)
+	if !ok && sensitive != false {
+		return terraformRedacted
+	}
+	if ok && len(masks) != len(data) {
+		return terraformRedacted
+	}
+	unknowns, ok := unknown.([]any)
+	if unknown != nil && unknown != false && !ok {
+		return terraformRedacted
+	}
+	if ok && len(unknowns) != len(data) {
+		return terraformRedacted
+	}
+	result := make([]any, len(data))
+	for index, item := range data {
+		var mask, pending any = false, nil
+		if index < len(masks) {
+			mask = masks[index]
+		}
+		if index < len(unknowns) {
+			pending = unknowns[index]
+		}
+		result[index] = terraformValue(item, mask, pending)
+	}
+	return result
 }
 
 func scrubTerraformValue(value any, scrubber *logscrub.Scrubber) any {
@@ -159,7 +162,7 @@ func scrubTerraformValue(value any, scrubber *logscrub.Scrubber) any {
 		return scrubber.Scrub(data)
 	case json.Number:
 		if scrubber.Scrub(string(data)) != string(data) {
-			return "[REDACTED]"
+			return terraformRedacted
 		}
 	case map[string]any:
 		result := make(map[string]any, len(data))

@@ -169,15 +169,17 @@ func TestArtifactGateApproveExactBytesE2E(t *testing.T) {
 		strings.Contains(page, gateBytes) {
 		t.Fatal("sensitive content leaked")
 	}
-	if !strings.Contains(logs, "generation-output-visible") {
-		t.Fatal("artifact gate suppressed normal step output")
-	}
-	detail := f.web(t, "GET",
-		fmt.Sprintf("/deployments/%d", deployment.ID), nil, 200)
-	if strings.Contains(detail, "Sensitive script hidden") ||
-		!strings.Contains(detail, "printf") {
-		t.Fatal("artifact gate suppressed script source")
-	}
+	t.Run("normal scripts and logs remain visible", func(t *testing.T) {
+		if !strings.Contains(logs, "generation-output-visible") {
+			t.Fatal("artifact gate suppressed normal step output")
+		}
+		detail := f.web(t, "GET",
+			fmt.Sprintf("/deployments/%d", deployment.ID), nil, 200)
+		if strings.Contains(detail, "Sensitive script hidden") ||
+			!strings.Contains(detail, "printf") {
+			t.Fatal("artifact gate suppressed script source")
+		}
+	})
 	if data := f.api(
 		t,
 		"GET",
