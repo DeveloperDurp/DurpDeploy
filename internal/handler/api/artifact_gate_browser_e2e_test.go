@@ -204,10 +204,19 @@ setTimeout(()=>form.requestSubmit(),100); return true;
 		if string(
 			browser.evaluate(
 				t,
-				`document.body.innerText.includes('generated-sensitive-value') || document.body.innerText.includes('exact-approved-plan-secret')`,
+				`document.querySelector('[aria-label="Artifact approval"]').innerText.includes('generated-sensitive-value') || document.querySelector('[aria-label="Artifact approval"]').innerText.includes('exact-approved-plan-secret')`,
 			),
 		) != "false" {
 			t.Fatal("sensitive content leaked")
+		}
+		browser.wait(
+			t,
+			`document.querySelector('#log-container')?.innerText.includes('generation-output-visible')`,
+		)
+		if string(browser.evaluate(t,
+			`document.body.innerText.includes('Sensitive script hidden')`,
+		)) != "false" {
+			t.Fatal("artifact gate suppressed script source")
 		}
 		browser.screenshot(t, fmt.Sprintf("artifact-review-%d", width))
 	}

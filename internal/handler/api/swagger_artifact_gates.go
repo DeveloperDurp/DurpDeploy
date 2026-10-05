@@ -25,6 +25,18 @@ import "durpdeploy/views/pages"
 //   403: body:ForbiddenError
 //   409: body:ConflictError
 
+// swagger:route GET /deployments/{id}/artifact-gates/{stepIndex}/review deployments reviewArtifactGate
+//
+// Read redacted Terraform resource changes supplied by the step. Writers only.
+// Review metadata is not independent verification of the saved plan.
+//
+// Security:
+//   bearer:
+// Responses:
+//   200: description:Redacted resources and unverified review provenance
+//   403: body:ForbiddenError
+//   409: body:ConflictError
+
 // swagger:route POST /deployments/{id}/artifact-gates/{stepIndex}/approve deployments approveArtifactGate
 //
 // Approve this exact artifact revision and resume. Administrator only.
@@ -47,14 +59,14 @@ import "durpdeploy/views/pages"
 //   403: body:ForbiddenError
 //   409: body:ConflictError
 
-// swagger:parameters listArtifactGates downloadArtifactGate approveArtifactGate rejectArtifactGate
+// swagger:parameters listArtifactGates downloadArtifactGate reviewArtifactGate approveArtifactGate rejectArtifactGate
 type artifactGatePathParam struct {
 	// in: path
 	// required: true
 	ID int64 `json:"id"`
 }
 
-// swagger:parameters downloadArtifactGate approveArtifactGate rejectArtifactGate
+// swagger:parameters downloadArtifactGate reviewArtifactGate approveArtifactGate rejectArtifactGate
 type artifactGateStepParam struct {
 	// Zero-based generation step index.
 	// in: path

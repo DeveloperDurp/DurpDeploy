@@ -2115,6 +2115,57 @@
         ]
       }
     },
+    "/deployments/{id}/artifact-gates/{stepIndex}/review": {
+      "get": {
+        "description": "Review metadata is not independent verification of the saved plan.",
+        "tags": [
+          "deployments"
+        ],
+        "summary": "Read redacted Terraform resource changes supplied by the step. Writers only.",
+        "operationId": "reviewArtifactGate",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "StepIndex",
+            "description": "Zero-based generation step index.",
+            "name": "stepIndex",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Redacted resources and unverified review provenance"
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "409": {
+            "description": "Conflict error response.",
+            "schema": {
+              "$ref": "#/definitions/ConflictError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/deployments/{id}/cancel": {
       "post": {
         "schemes": [

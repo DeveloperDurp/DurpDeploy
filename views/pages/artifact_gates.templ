@@ -4,6 +4,8 @@ import "fmt"
 import "strconv"
 import "time"
 import "durpdeploy/internal/auth"
+import "durpdeploy/internal/artifact"
+import "strings"
 
 templ ArtifactGatePanel(deploymentID int64, gates []ArtifactGateInfo, poll bool) {
 	<div
@@ -26,7 +28,7 @@ templ ArtifactGates(gates []ArtifactGateInfo) {
 					<h2 class="card-title">Artifact review · Step { strconv.FormatInt(gate.StepIndex+1, 10) }</h2>
 					<span class={ "badge", artifactGateBadge(gate.Status) }>{ gate.Status }</span>
 				</div>
-				<p class="text-sm">Review the generated changes before continuing. Sensitive values and step output are hidden.</p>
+				<p class="text-sm">Review the generated changes before continuing. Sensitive values in this review are masked.</p>
 				<p class="text-sm"><strong>Unverified summary supplied by the deployment step.</strong> The server does not verify that these counts describe the artifact. Download and independently inspect the exact artifact before approval; checksums identify bytes, not their meaning.</p>
 				<dl class="grid grid-cols-2 sm:grid-cols-4 gap-4">
 					<div><dt>Create</dt><dd class="text-xl font-semibold">{ strconv.FormatInt(gate.Review.Create, 10) }</dd></div>
@@ -34,6 +36,21 @@ templ ArtifactGates(gates []ArtifactGateInfo) {
 					<div><dt>Delete</dt><dd class="text-xl font-semibold">{ strconv.FormatInt(gate.Review.Delete, 10) }</dd></div>
 					<div><dt>Read</dt><dd class="text-xl font-semibold">{ strconv.FormatInt(gate.Review.Read, 10) }</dd></div>
 				</dl>
+				if CanWrite(ctx) && gate.ExpiresAt > time.Now().Unix() {
+					<details
+						id={ fmt.Sprintf("gate-plan-%d-%d-%d", gate.DeploymentID, gate.StepIndex, gate.Revision) }
+						hx-preserve
+						hx-get={ fmt.Sprintf("/deployments/%d/artifact-gates/%d/review", gate.DeploymentID, gate.StepIndex) }
+						hx-trigger="toggle once"
+						hx-target="find .terraform-plan"
+							hx-swap="innerHTML"
+						data-terraform-review
+						class="rounded-lg bg-base-100 p-4"
+					>
+						<summary class="cursor-pointer font-semibold">View resource changes</summary>
+						<div class="terraform-plan mt-4" aria-live="polite">Loading resource changes…</div>
+					</details>
+				}
 				<dl class="space-y-2 text-sm">
 					<div><dt>Artifact SHA-256</dt><dd class="font-mono break-all">{ gate.SHA256 }</dd></div>
 					<div><dt>Context SHA-256</dt><dd class="font-mono break-all">{ gate.BundleSHA256 }</dd></div>
@@ -53,6 +70,7 @@ templ ArtifactGates(gates []ArtifactGateInfo) {
 									if sess := auth.SessionFromContext(ctx); sess != nil {
 <input type="hidden" name="csrf_token" value={ sess.CsrfToken }/>
 }
+
 									<input type="hidden" name="revision" value={ strconv.FormatInt(gate.Revision, 10) }/>
 									<input type="hidden" name="sha256" value={ gate.SHA256 }/>
 									if action == "approve" {
@@ -68,4 +86,24 @@ templ ArtifactGates(gates []ArtifactGateInfo) {
 			</div>
 		</section>
 	}
+}
+
+templ TerraformPlanView(resources []artifact.TerraformResourceChange) {
+	<div data-terraform-plan class="space-y-4">
+		if len(resources) == 0 {
+			<p class="text-sm">No Terraform resource changes are available in this review.</p>
+		}
+		for _, resource := range resources {
+			<section class="space-y-2" aria-label={ resource.Address }>
+				<div class="flex flex-wrap items-center gap-2">
+					<h3 class="font-mono text-sm break-all">{ resource.Address }</h3>
+					<span class="badge badge-outline">{ strings.Join(resource.Actions, " → ") }</span>
+				</div>
+				<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+					<div class="min-w-0"><h4 class="text-sm font-semibold mb-2">Before</h4><pre class="font-mono text-xs whitespace-pre-wrap break-all rounded bg-base-200 p-4">{ resource.Before }</pre></div>
+					<div class="min-w-0"><h4 class="text-sm font-semibold mb-2">After</h4><pre class="font-mono text-xs whitespace-pre-wrap break-all rounded bg-base-200 p-4">{ resource.After }</pre></div>
+				</div>
+			</section>
+		}
+	</div>
 }

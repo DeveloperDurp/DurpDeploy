@@ -34,6 +34,15 @@ All applicable Go and end-to-end tests must pass before work is complete. Run
 the full relevant suites only at final verification; use focused tests while
 working. Do not treat focused tests as a substitute for final verification.
 
+Every scenario in `make e2e-test` must remain available for manual checks
+after the command exits. Retain its projects, environments, release snapshots,
+deployment history, templates, and test accounts. For destructive checks,
+retain or recreate a disposable example. Print links to the retained examples
+and keep `docs/manual-e2e.md` current with repeat steps and expected results.
+Schedules must remain disabled after testing; document how to enable them.
+Pending approvals can expire; retain the release so a fresh plan can be made.
+This rule applies to the running-server suite, not isolated test databases.
+
 Every new or changed functionality must be available through a corresponding
 public API endpoint and have end-to-end coverage through that API. Validation
 is not complete until the API contract and its E2E test both pass. New or

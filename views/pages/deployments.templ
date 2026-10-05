@@ -419,9 +419,7 @@ templ DeploymentDetail(project db.Project, release db.Release, environment db.En
 								<td class="whitespace-nowrap">{ releaseStepInterpreter(step) }</td>
 								<td class="truncate hidden sm:table-cell">
 									<code class="text-sm bg-base-300 px-2 py-1 rounded">
-										if hasArtifactGate(release.StepsJson) {
-											Sensitive script hidden
-										} else if len(step.ScriptBody) > 60 {
+										if len(step.ScriptBody) > 60 {
 											{ step.ScriptBody[:60] + "..." }
 										} else {
 											{ step.ScriptBody }
@@ -435,7 +433,7 @@ templ DeploymentDetail(project db.Project, release db.Release, environment db.En
 			</table>
 		</div>
 		<div
-			class="card bg-base-200 p-4"
+			class="card bg-base-200 p-4 break-all"
 			if !isTerminalStatus(deployment.Status) {
 				x-data={ fmt.Sprintf("deploymentStream({ url: '/deployments/%d/logs/stream' })", deployment.ID) }
 				x-on:htmx:after-swap.camel.window="status($event)"

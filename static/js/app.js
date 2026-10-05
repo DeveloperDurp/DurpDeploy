@@ -16,6 +16,15 @@ document.addEventListener('htmx:beforeSwap', (event) => {
 	}
 });
 
+document.addEventListener('htmx:afterRequest', (event) => {
+	const element = event.detail.elt;
+	if (element.hasAttribute('data-terraform-review') &&
+		!event.detail.successful) {
+		element.querySelector('.terraform-plan').textContent =
+			'Resource changes could not be loaded. Reload this page to retry.';
+	}
+});
+
 Alpine.data('toast', () => ({
 	visible: false,
 	message: '',

@@ -207,6 +207,20 @@ web form. `make e2e-test` prints the `stage-handoff-…` project URL and leaves
 that project in the running server's database for inspection. The isolated
 suite removes its temporary database after the run.
 
+`make e2e-test` also leaves a `terraform-approval-…` project with real Terraform
+plan/apply steps and three deployments: approved, rejected, and awaiting your
+approval. It prints their URLs. The demo uses Terraform's built-in
+`terraform_data` resource and creates no cloud resources. The pending plan
+expires after 24 hours; re-run the deployment to generate a fresh plan.
+All scenarios from this command remain repeatable manually. See
+[the manual E2E checklist](docs/manual-e2e.md) for retained examples, test
+accounts, API checks, and expected results. The command prints project links
+and leaves a lifecycle approval waiting for review as well.
+The harness builds the existing pinned Terraform test image on the server's
+container engine. Set `DURPDEPLOY_CONTAINER_RUNTIME` and
+`DURPDEPLOY_CONTAINER_URL` to match the server when it uses a non-default engine
+or socket. The project, release, and deployment history remain after expiry.
+
 ## Production Deploy
 
 For a small team deployment, DurpDeploy runs as a single Go process behind

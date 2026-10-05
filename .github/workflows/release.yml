@@ -242,8 +242,10 @@ jobs:
 
       - name: Check E2E shell syntax
         run: |
-          bash -n scripts/e2e_test.sh scripts/e2e_db_test.sh scripts/e2e_server_containers.sh scripts/check_e2e_containers.sh scripts/check_e2e_containers_test.sh
-          shellcheck -S error scripts/e2e_test.sh scripts/e2e_db_test.sh scripts/e2e_server_containers.sh scripts/check_e2e_containers.sh scripts/check_e2e_containers_test.sh
+          for script in scripts/e2e_test.sh scripts/e2e_db_test.sh scripts/terraform_approval_e2e.sh scripts/e2e_server_containers.sh scripts/check_e2e_containers.sh scripts/check_e2e_containers_test.sh; do
+            bash -n "$script"
+          done
+          shellcheck -S error scripts/e2e_test.sh scripts/e2e_db_test.sh scripts/terraform_approval_e2e.sh scripts/e2e_server_containers.sh scripts/check_e2e_containers.sh scripts/check_e2e_containers_test.sh
           bash scripts/check_e2e_containers_test.sh
 
       - name: E2E contract checks
