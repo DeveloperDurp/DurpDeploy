@@ -36,7 +36,7 @@ templ ArtifactGates(gates []ArtifactGateInfo) {
 					<div><dt>Delete</dt><dd class="text-xl font-semibold">{ strconv.FormatInt(gate.Review.Delete, 10) }</dd></div>
 					<div><dt>Read</dt><dd class="text-xl font-semibold">{ strconv.FormatInt(gate.Review.Read, 10) }</dd></div>
 				</dl>
-				if CanWrite(ctx) && gate.ExpiresAt > time.Now().Unix() {
+				if CanWrite(ctx) && gate.ReviewFormat == "terraform" && gate.ExpiresAt > time.Now().Unix() {
 					<details
 						id={ fmt.Sprintf("gate-plan-%d-%d-%d", gate.DeploymentID, gate.StepIndex, gate.Revision) }
 						hx-preserve

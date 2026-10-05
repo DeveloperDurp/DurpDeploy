@@ -1,6 +1,7 @@
 package api
 
 import "durpdeploy/views/pages"
+import "durpdeploy/internal/artifact"
 
 // swagger:route GET /deployments/{id}/artifact-gates deployments listArtifactGates
 //
@@ -33,7 +34,7 @@ import "durpdeploy/views/pages"
 // Security:
 //   bearer:
 // Responses:
-//   200: description:Redacted resources and unverified review provenance
+//   200: ArtifactGateReviewResponse
 //   403: body:ForbiddenError
 //   409: body:ConflictError
 
@@ -90,4 +91,10 @@ type artifactGateDecisionParam struct {
 type artifactGateListResponse struct {
 	// in: body
 	Body []pages.ArtifactGateInfo
+}
+
+// swagger:response ArtifactGateReviewResponse
+type artifactGateReviewResponse struct {
+	// in: body
+	Body artifact.TerraformReviewResponse
 }

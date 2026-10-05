@@ -455,7 +455,8 @@ supported; runbooks and agent steps cannot use gates. Both approval paths and
 an explicit review format are required together; an empty format is rejected.
 `GET /api/v1/deployments/{id}/artifact-gates` returns counts, checksums,
 revision, expiry, status, and approver metadata, including
-`review_source: "step_output"` and `review_verified: false`: counts are
+`review_format` (`terraform` or `summary`), `review_source: "step_output"`
+and `review_verified: false`: counts are
 unverified producer claims, not an independent analysis of the artifact.
 Use trusted tools to inspect the exact downloaded artifact before approving.
 Checksums establish byte identity, not review accuracy. Generation and apply

@@ -2144,7 +2144,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Redacted resources and unverified review provenance"
+            "$ref": "#/responses/ArtifactGateReviewResponse"
           },
           "403": {
             "description": "Forbidden error response.",
@@ -8788,6 +8788,10 @@
         "review": {
           "$ref": "#/definitions/GateReview"
         },
+        "review_format": {
+          "type": "string",
+          "x-go-name": "ReviewFormat"
+        },
         "review_source": {
           "type": "string",
           "x-go-name": "ReviewSource"
@@ -11473,6 +11477,52 @@
       "x-go-name": "swaggerUIResponse",
       "x-go-package": "durpdeploy/internal/handler/api"
     },
+    "TerraformResourceChange": {
+      "type": "object",
+      "properties": {
+        "actions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "x-go-name": "Actions"
+        },
+        "address": {
+          "type": "string",
+          "x-go-name": "Address"
+        },
+        "after": {
+          "type": "string",
+          "x-go-name": "After"
+        },
+        "before": {
+          "type": "string",
+          "x-go-name": "Before"
+        }
+      },
+      "x-go-package": "durpdeploy/internal/artifact"
+    },
+    "TerraformReviewResponse": {
+      "type": "object",
+      "properties": {
+        "resources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/TerraformResourceChange"
+          },
+          "x-go-name": "Resources"
+        },
+        "review_source": {
+          "type": "string",
+          "x-go-name": "ReviewSource"
+        },
+        "review_verified": {
+          "type": "boolean",
+          "x-go-name": "ReviewVerified"
+        }
+      },
+      "x-go-package": "durpdeploy/internal/artifact"
+    },
     "TextResponse": {
       "type": "object",
       "title": "TextResponse is a plain text response.",
@@ -11915,6 +11965,12 @@
         "items": {
           "$ref": "#/definitions/ArtifactGateInfo"
         }
+      }
+    },
+    "ArtifactGateReviewResponse": {
+      "description": "",
+      "schema": {
+        "$ref": "#/definitions/TerraformReviewResponse"
       }
     }
   },

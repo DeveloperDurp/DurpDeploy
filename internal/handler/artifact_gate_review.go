@@ -19,15 +19,8 @@ func (h *ArtifactGateHandler) Review(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer file.Close()
-	source, err := h.repo.Queries.GetDeploymentStepSource(
-		r.Context(),
-		gate.DeploymentID,
-	)
-	var steps []struct {
-		ReviewPath   string `json:"approval_review_path"`
-		ReviewFormat string `json:"approval_review_format"`
-	}
-	if err != nil || json.Unmarshal([]byte(source.StepsJson), &steps) != nil ||
+	steps, err := h.artifactReviewSteps(r.Context(), gate.DeploymentID)
+	if err != nil ||
 		gate.StepIndex < 0 || gate.StepIndex >= int64(len(steps)) {
 		gateHTTPError(w, r, 409, "Review configuration unavailable")
 		return
@@ -48,11 +41,9 @@ func (h *ArtifactGateHandler) Review(w http.ResponseWriter, r *http.Request) {
 	}
 	if strings.HasPrefix(r.URL.Path, "/api/v1/") {
 		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(struct {
-			Resources      []artifact.TerraformResourceChange `json:"resources"`
-			ReviewSource   string                             `json:"review_source"`
-			ReviewVerified bool                               `json:"review_verified"`
-		}{resources, "step_output", false}); err != nil {
+		if err := json.NewEncoder(w).Encode(artifact.TerraformReviewResponse{
+			Resources: resources, ReviewSource: "step_output",
+		}); err != nil {
 			return
 		}
 		return
@@ -61,6 +52,50 @@ func (h *ArtifactGateHandler) Review(w http.ResponseWriter, r *http.Request) {
 		Render(r.Context(), w); err != nil {
 		gateHTTPError(w, r, 500, "Review rendering failed")
 	}
+}
+
+type artifactReviewStep struct {
+	ReviewPath   string `json:"approval_review_path"`
+	ReviewFormat string `json:"approval_review_format"`
+}
+
+func (h *ArtifactGateHandler) artifactGateInfo(
+	ctx context.Context,
+	deploymentID int64,
+) ([]pages.ArtifactGateInfo, error) {
+	gates, err := h.repo.Queries.ListArtifactGates(ctx, deploymentID)
+	if err != nil {
+		return nil, err
+	}
+	info := make([]pages.ArtifactGateInfo, 0, len(gates))
+	if len(gates) == 0 {
+		return info, nil
+	}
+	steps, err := h.artifactReviewSteps(ctx, deploymentID)
+	if err != nil {
+		return nil, err
+	}
+	for _, gate := range gates {
+		item := pages.NewArtifactGateInfo(gate)
+		if gate.StepIndex >= 0 && gate.StepIndex < int64(len(steps)) {
+			item.ReviewFormat = steps[gate.StepIndex].ReviewFormat
+		}
+		info = append(info, item)
+	}
+	return info, nil
+}
+
+func (h *ArtifactGateHandler) artifactReviewSteps(
+	ctx context.Context,
+	deploymentID int64,
+) ([]artifactReviewStep, error) {
+	source, err := h.repo.Queries.GetDeploymentStepSource(ctx, deploymentID)
+	if err != nil {
+		return nil, err
+	}
+	var steps []artifactReviewStep
+	err = json.Unmarshal([]byte(source.StepsJson), &steps)
+	return steps, err
 }
 
 func (h *ArtifactGateHandler) artifactReviewSecrets(

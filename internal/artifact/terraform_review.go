@@ -11,6 +11,12 @@ import (
 
 const terraformRedacted = "[REDACTED]"
 
+type TerraformReviewResponse struct {
+	Resources      []TerraformResourceChange `json:"resources"`
+	ReviewSource   string                    `json:"review_source"`
+	ReviewVerified bool                      `json:"review_verified"`
+}
+
 type TerraformResourceChange struct {
 	Address string   `json:"address"`
 	Actions []string `json:"actions"`
