@@ -1,7 +1,9 @@
 package api
 
-import "durpdeploy/views/pages"
-import "durpdeploy/internal/artifact"
+import (
+	"durpdeploy/internal/artifact"
+	"durpdeploy/views/pages"
+)
 
 // swagger:route GET /deployments/{id}/artifact-gates deployments listArtifactGates
 //
