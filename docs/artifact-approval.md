@@ -6,8 +6,16 @@ paths under `DURPDEPLOY_STAGE_DIR`. Set `approval_review_format` to `terraform`
 for `terraform show -json`, or `summary` for nonnegative `create`, `update`,
 `delete`, and `read` counts in a nonempty JSON object. Omitted counts are zero;
 unknown keys, null counts, and non-object summaries are rejected.
-Reviews expose counts only. Generated names,
-values, outputs, and all gated script output are hidden. Both paths and an
+The count summary is available to viewers. Write-capable project members can
+open **View resource changes** on the deployment page to inspect Terraform
+resource addresses, actions, and before/after values. Sensitive subtrees are
+masked using Terraform's sensitivity metadata; missing or malformed metadata
+hides the affected subtree. Known secret release variables are scrubbed too.
+Unknown values are labelled `(known after apply)`. Configuration, variables,
+and outputs are omitted from the resource review. Gated scripts and logs use
+the same display rules as other deployments, including normal secret-variable
+log redaction. Terraform's JSON output can contain plaintext sensitive values;
+write it to the review file rather than printing it. Both paths and an
 explicit review format are required together; an empty format is rejected.
 
 Review counts are unverified claims supplied by the deployment step. The API
@@ -94,6 +102,10 @@ API routes under `/api/v1/deployments/{id}/artifact-gates`:
 
 - `GET /`: review metadata and counts.
 - `GET /{stepIndex}/artifact`: exact binary download, with `Cache-Control: no-store`.
+- `GET /{stepIndex}/review`: writer-only redacted Terraform resource changes,
+  with `review_source: "step_output"`, `review_verified: false`, and
+  `Cache-Control: no-store`. The web equivalent renders the same changes on
+  demand. Summary-format gates return an empty resource list.
 - `POST /{stepIndex}/approve`: `{"revision":1,"sha256":"..."}`.
 - `POST /{stepIndex}/reject`: the same checksum-bound body.
 

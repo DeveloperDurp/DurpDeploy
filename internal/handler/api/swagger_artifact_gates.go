@@ -1,6 +1,9 @@
 package api
 
-import "durpdeploy/views/pages"
+import (
+	"durpdeploy/internal/artifact"
+	"durpdeploy/views/pages"
+)
 
 // swagger:route GET /deployments/{id}/artifact-gates deployments listArtifactGates
 //
@@ -22,6 +25,18 @@ import "durpdeploy/views/pages"
 //   bearer:
 // Responses:
 //   200: description:Verified binary artifact
+//   403: body:ForbiddenError
+//   409: body:ConflictError
+
+// swagger:route GET /deployments/{id}/artifact-gates/{stepIndex}/review deployments reviewArtifactGate
+//
+// Read redacted Terraform resource changes supplied by the step. Writers only.
+// Review metadata is not independent verification of the saved plan.
+//
+// Security:
+//   bearer:
+// Responses:
+//   200: ArtifactGateReviewResponse
 //   403: body:ForbiddenError
 //   409: body:ConflictError
 
@@ -47,14 +62,14 @@ import "durpdeploy/views/pages"
 //   403: body:ForbiddenError
 //   409: body:ConflictError
 
-// swagger:parameters listArtifactGates downloadArtifactGate approveArtifactGate rejectArtifactGate
+// swagger:parameters listArtifactGates downloadArtifactGate reviewArtifactGate approveArtifactGate rejectArtifactGate
 type artifactGatePathParam struct {
 	// in: path
 	// required: true
 	ID int64 `json:"id"`
 }
 
-// swagger:parameters downloadArtifactGate approveArtifactGate rejectArtifactGate
+// swagger:parameters downloadArtifactGate reviewArtifactGate approveArtifactGate rejectArtifactGate
 type artifactGateStepParam struct {
 	// Zero-based generation step index.
 	// in: path
@@ -78,4 +93,10 @@ type artifactGateDecisionParam struct {
 type artifactGateListResponse struct {
 	// in: body
 	Body []pages.ArtifactGateInfo
+}
+
+// swagger:response ArtifactGateReviewResponse
+type artifactGateReviewResponse struct {
+	// in: body
+	Body artifact.TerraformReviewResponse
 }

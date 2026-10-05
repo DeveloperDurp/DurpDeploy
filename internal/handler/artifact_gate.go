@@ -54,14 +54,10 @@ func (h *ArtifactGateHandler) List(w http.ResponseWriter, r *http.Request) {
 		gateHTTPError(w, r, 400, "Invalid deployment ID")
 		return
 	}
-	gates, err := h.repo.Queries.ListArtifactGates(r.Context(), id)
+	info, err := h.artifactGateInfo(r.Context(), id)
 	if err != nil {
 		gateHTTPError(w, r, 500, "Gate lookup failed")
 		return
-	}
-	info := make([]pages.ArtifactGateInfo, 0, len(gates))
-	for _, gate := range gates {
-		info = append(info, pages.NewArtifactGateInfo(gate))
 	}
 	if strings.HasPrefix(r.URL.Path, "/api/v1/") {
 		w.Header().Set("Content-Type", "application/json")

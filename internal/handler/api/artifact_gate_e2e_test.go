@@ -47,8 +47,9 @@ func createGateDeployment(
 		"approval_review_format": "terraform",
 		"script_body": `set -eu
 printf 'exact-approved-plan-secret' > "$DURPDEPLOY_STAGE_DIR/tfplan"
-printf '%s' '{"format_version":"1.2","resource_changes":[{"change":{"actions":["create"],"after":{"password":"generated-sensitive-value"}}}],"outputs":{"secret":"generated-sensitive-value"}}' > "$DURPDEPLOY_STAGE_DIR/review.json"
-echo generated-sensitive-value
+printf '%s' '{"format_version":"1.2","resource_changes":[{"address":"example.review","change":{"actions":["create"],"after":{"message":"visible resource value","password":"generated-sensitive-value"},"after_sensitive":{"password":true}}}],"outputs":{"secret":"generated-sensitive-value"}}' > "$DURPDEPLOY_STAGE_DIR/review.json"
+echo generation-output-visible
+printf '%0150d\n' 0
 test -e /sys/class/net/eth0`,
 	}, 201)
 	f.api(t, "POST", f.base()+"/steps", map[string]any{
@@ -168,6 +169,7 @@ func TestArtifactGateApproveExactBytesE2E(t *testing.T) {
 		strings.Contains(page, gateBytes) {
 		t.Fatal("sensitive content leaked")
 	}
+	assertNormalGateOutput(t, f, deployment.ID, logs)
 	if data := f.api(
 		t,
 		"GET",
@@ -196,6 +198,23 @@ func TestArtifactGateApproveExactBytesE2E(t *testing.T) {
 		map[string]any{"sha256": gate.SHA256, "revision": gate.Revision},
 		409,
 	)
+}
+
+func assertNormalGateOutput(
+	t *testing.T,
+	f *artifactE2E,
+	id int64,
+	logs string,
+) {
+	t.Helper()
+	if !strings.Contains(logs, "generation-output-visible") {
+		t.Fatal("artifact gate suppressed normal step output")
+	}
+	detail := f.web(t, "GET", fmt.Sprintf("/deployments/%d", id), nil, 200)
+	if strings.Contains(detail, "Sensitive script hidden") ||
+		!strings.Contains(detail, "printf") {
+		t.Fatal("artifact gate suppressed script source")
+	}
 }
 
 func TestArtifactGateRequiresReviewFormatE2E(t *testing.T) {

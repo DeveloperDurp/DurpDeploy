@@ -325,6 +325,10 @@ func newRouter(
 			dpr.Get("/deployments/{id}/status", dh.GetDeploymentStatus)
 			dpr.Get("/deployments/{id}/artifact-gates", artifactGateH.List)
 			dpr.Get(
+				"/deployments/{id}/artifact-gates/{stepIndex}/review",
+				artifactGateH.Review,
+			)
+			dpr.Get(
 				"/deployments/{id}/artifact-gates/{stepIndex}/artifact",
 				artifactGateH.Download,
 			)
@@ -664,6 +668,10 @@ func newRouter(
 			dar.Get("/deployments/{id}", apiDepH.GetDeployment)
 			dar.Get("/deployments/{id}/status", apiDepH.GetDeploymentStatus)
 			dar.Get("/deployments/{id}/artifact-gates", artifactGateH.List)
+			dar.Get(
+				"/deployments/{id}/artifact-gates/{stepIndex}/review",
+				artifactGateH.Review,
+			)
 			dar.Get(
 				"/deployments/{id}/artifact-gates/{stepIndex}/artifact",
 				artifactGateH.Download,

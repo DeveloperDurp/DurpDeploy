@@ -5,6 +5,7 @@ package api_test
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 
 	"durpdeploy/internal/events"
@@ -63,6 +64,7 @@ func testArtifactGateMultipleReviews(t *testing.T, expire bool) {
 		t.Fatal(err)
 	}
 	first := gates[0]
+	assertSummaryGate(t, f, deployment.ID, first.ReviewFormat)
 	f.api(
 		t,
 		"POST",
@@ -129,5 +131,22 @@ func testArtifactGateMultipleReviews(t *testing.T, expire bool) {
 		deployment.ID,
 	).Scan(&starts); err != nil || starts != 1 {
 		t.Fatalf("deployment started events=%d err=%v", starts, err)
+	}
+}
+
+func assertSummaryGate(t *testing.T, f *artifactE2E, id int64, format string) {
+	t.Helper()
+	if format != "summary" {
+		t.Fatal("summary review format missing from API")
+	}
+	page := f.web(
+		t,
+		"GET",
+		fmt.Sprintf("/deployments/%d/artifact-gates", id),
+		nil,
+		200,
+	)
+	if strings.Contains(page, "data-terraform-review") {
+		t.Fatal("summary gate exposed Terraform resource disclosure")
 	}
 }

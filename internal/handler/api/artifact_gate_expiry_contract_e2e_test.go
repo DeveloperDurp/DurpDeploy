@@ -39,6 +39,7 @@ func TestArtifactGateExpiryDecisionContractE2E(t *testing.T) {
 		f.api(t, "POST", path+"/0/"+action, identity, 409)
 	}
 	f.api(t, "GET", path+"/0/artifact", nil, 409)
+	f.api(t, "GET", path+"/0/review", nil, 409)
 	panel := f.web(
 		t,
 		"GET",

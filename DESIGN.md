@@ -104,8 +104,9 @@ keep `overflow-x-auto` and `table table-zebra table-fixed w-full`.
 
 ### Generated artifact approval
 - Reuse `card bg-base-200 shadow`, labelled badges, definition lists, and existing small buttons for gate review.
-- Show action counts, checksums, expiry, and approver; hide resource values and sensitive step output. Long checksums wrap.
+- Show action counts, checksums, expiry, and approver. Resource details are writer-only; mask sensitive review values. Scripts and logs use the same display rules as other deployments. Long checksums wrap.
 - Native labelled form fields configure network and approval paths. Native POST forms approve or reject the exact revision and checksum. Viewers receive no write or download control.
+- Write-capable members can open a native details disclosure for Terraform resource changes. Load it on demand and preserve the open disclosure during status polling. Resource addresses and actions wrap; Before and After use labelled, wrapping monospace blocks, stacked on small screens. Mask sensitive values and show unknown values as known after apply. Keep the producer-supplied review warning visible; viewers see counts only.
 - Awaiting gates use warning badges; approved uses success; rejected or expired uses error. State text carries meaning without color.
 
 ## 6. Motion & Interaction

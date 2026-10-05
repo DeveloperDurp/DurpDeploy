@@ -294,12 +294,6 @@ func (r *DeploymentRunner) Run(
 			stepName:     step.Name,
 			ctx:          ctx,
 			scrubber:     scrubber,
-			sensitive:    gated,
-		}
-		if gated {
-			const progress = "Executing step; sensitive output hidden"
-			logWriter.writeLine(progress)
-			r.broker.Broadcast(deploymentID, progress)
 		}
 		switch step.ExecutionTarget {
 		case "agent":

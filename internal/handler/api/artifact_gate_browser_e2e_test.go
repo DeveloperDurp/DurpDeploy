@@ -193,6 +193,26 @@ setTimeout(()=>form.requestSubmit(),100); return true;
 			t,
 			`document.querySelector('section[aria-label="Artifact approval"]').innerText.includes('Unverified summary supplied by the deployment step.')`,
 		)
+		browser.evaluate(
+			t,
+			`new Promise(resolve => { function settled(event) { if (event.target.matches('[data-artifact-gates]')) { document.body.removeEventListener('htmx:afterSettle', settled); resolve(true); } } document.body.addEventListener('htmx:afterSettle', settled); })`,
+		)
+		browser.evaluate(
+			t,
+			`document.querySelector('[data-terraform-review]').open = true`,
+		)
+		browser.wait(
+			t,
+			`!!document.querySelector('[data-terraform-plan]') && document.querySelector('[data-terraform-plan]').innerText.includes('example.review') && document.querySelector('[data-terraform-plan]').innerText.includes('visible resource value') && document.querySelector('[data-terraform-plan]').innerText.includes('[REDACTED]')`,
+		)
+		if string(
+			browser.evaluate(
+				t,
+				`new Promise(resolve => { const disclosure = document.querySelector('[data-terraform-review]'); setTimeout(() => resolve(disclosure === document.querySelector('[data-terraform-review]') && disclosure.open && disclosure.innerText.includes('visible resource value')), 3500); })`,
+			),
+		) != "true" {
+			t.Fatal("resource disclosure was lost during polling")
+		}
 		if string(
 			browser.evaluate(
 				t,
@@ -204,10 +224,19 @@ setTimeout(()=>form.requestSubmit(),100); return true;
 		if string(
 			browser.evaluate(
 				t,
-				`document.body.innerText.includes('generated-sensitive-value') || document.body.innerText.includes('exact-approved-plan-secret')`,
+				`document.querySelector('[aria-label="Artifact approval"]').innerText.includes('generated-sensitive-value') || document.querySelector('[aria-label="Artifact approval"]').innerText.includes('exact-approved-plan-secret')`,
 			),
 		) != "false" {
 			t.Fatal("sensitive content leaked")
+		}
+		browser.wait(
+			t,
+			`document.querySelector('#log-container')?.innerText.includes('generation-output-visible')`,
+		)
+		if string(browser.evaluate(t,
+			`document.body.innerText.includes('Sensitive script hidden')`,
+		)) != "false" {
+			t.Fatal("artifact gate suppressed script source")
 		}
 		browser.screenshot(t, fmt.Sprintf("artifact-review-%d", width))
 	}

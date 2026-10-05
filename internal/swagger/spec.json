@@ -2115,6 +2115,57 @@
         ]
       }
     },
+    "/deployments/{id}/artifact-gates/{stepIndex}/review": {
+      "get": {
+        "description": "Review metadata is not independent verification of the saved plan.",
+        "tags": [
+          "deployments"
+        ],
+        "summary": "Read redacted Terraform resource changes supplied by the step. Writers only.",
+        "operationId": "reviewArtifactGate",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "StepIndex",
+            "description": "Zero-based generation step index.",
+            "name": "stepIndex",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/responses/ArtifactGateReviewResponse"
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "409": {
+            "description": "Conflict error response.",
+            "schema": {
+              "$ref": "#/definitions/ConflictError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/deployments/{id}/cancel": {
       "post": {
         "schemes": [
@@ -8737,6 +8788,10 @@
         "review": {
           "$ref": "#/definitions/GateReview"
         },
+        "review_format": {
+          "type": "string",
+          "x-go-name": "ReviewFormat"
+        },
         "review_source": {
           "type": "string",
           "x-go-name": "ReviewSource"
@@ -11422,6 +11477,52 @@
       "x-go-name": "swaggerUIResponse",
       "x-go-package": "durpdeploy/internal/handler/api"
     },
+    "TerraformResourceChange": {
+      "type": "object",
+      "properties": {
+        "actions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "x-go-name": "Actions"
+        },
+        "address": {
+          "type": "string",
+          "x-go-name": "Address"
+        },
+        "after": {
+          "type": "string",
+          "x-go-name": "After"
+        },
+        "before": {
+          "type": "string",
+          "x-go-name": "Before"
+        }
+      },
+      "x-go-package": "durpdeploy/internal/artifact"
+    },
+    "TerraformReviewResponse": {
+      "type": "object",
+      "properties": {
+        "resources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/TerraformResourceChange"
+          },
+          "x-go-name": "Resources"
+        },
+        "review_source": {
+          "type": "string",
+          "x-go-name": "ReviewSource"
+        },
+        "review_verified": {
+          "type": "boolean",
+          "x-go-name": "ReviewVerified"
+        }
+      },
+      "x-go-package": "durpdeploy/internal/artifact"
+    },
     "TextResponse": {
       "type": "object",
       "title": "TextResponse is a plain text response.",
@@ -11864,6 +11965,12 @@
         "items": {
           "$ref": "#/definitions/ArtifactGateInfo"
         }
+      }
+    },
+    "ArtifactGateReviewResponse": {
+      "description": "",
+      "schema": {
+        "$ref": "#/definitions/TerraformReviewResponse"
       }
     }
   },

@@ -18,7 +18,6 @@ type broadcastWriter struct {
 	ctx          context.Context
 	buf          bytes.Buffer
 	scrubber     *Scrubber
-	sensitive    bool
 }
 
 // Write buffers output and scrubs everything up to the last newline before
@@ -26,9 +25,6 @@ type broadcastWriter struct {
 // line at a time) lets the Scrubber catch secrets that span multiple Write
 // calls or contain embedded newlines (e.g. a multi-line SSH key).
 func (w *broadcastWriter) Write(p []byte) (n int, err error) {
-	if w.sensitive {
-		return len(p), nil
-	}
 	w.buf.Write(p)
 	data := w.buf.Bytes()
 	safeEnd := len(data) - w.scrubber.PendingBytes(string(data))

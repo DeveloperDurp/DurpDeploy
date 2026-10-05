@@ -405,10 +405,19 @@ CODE=$(curl_silent -X POST -d "name=&csrf_token=$CSRF" "$BASE/projects")
 [[ "$CODE" == "422" ]] || { echo "FAIL: empty project name should be 422, got $CODE"; exit 1; }
 
 echo "=== F3.4: Variable Fallback ==="
-curl -s -b "$COOKIES" -o /dev/null -X POST -d "name=StepMissing&script=echo+%24%7BMISSING%7D&container_image=$BASH_IMAGE&csrf_token=$CSRF" "$BASE/projects/$PROJECT_ID/steps"
+RETRY_STEP_ID=$(db_query "SELECT id FROM steps WHERE project_id=$PROJECT_ID AND name='RetryStep';")
+do_delete "$BASE/projects/$PROJECT_ID/steps/$RETRY_STEP_ID" >/dev/null
+curl -s -b "$COOKIES" -o /dev/null -X POST --data-urlencode 'name=StepMissing' --data-urlencode 'script_body=test -z "${MISSING:-}" && echo missing-variable-empty' -d "container_image=$BASH_IMAGE&csrf_token=$CSRF" "$BASE/projects/$PROJECT_ID/steps"
 curl -s -b "$COOKIES" -o /dev/null -X POST -d "version=2.0.0&csrf_token=$CSRF" "$BASE/projects/$PROJECT_ID/releases"
 NEW_REL=$(curl_body "$BASE/projects/$PROJECT_ID/releases" | grep -oP 'href="/projects/'$PROJECT_ID'/releases/\K[0-9]+' | sort -n | tail -1)
-curl -s -b "$COOKIES" -o /dev/null -X POST -d "release_id=$NEW_REL&environment_id=$ENV_ID&csrf_token=$CSRF" "$BASE/projects/$PROJECT_ID/deploy"
+MISSING_URL=$(curl -s -b "$COOKIES" -D - -o /dev/null -X POST -d "release_id=$NEW_REL&environment_id=$ENV_ID&csrf_token=$CSRF" "$BASE/projects/$PROJECT_ID/deploy" | awk 'tolower($1)=="location:" {gsub("\r", "", $2); print $2}')
+for _ in {1..100}; do
+  MISSING_STATUS=$(curl_body "$BASE$MISSING_URL/status")
+  [[ "$MISSING_STATUS" =~ failed|succeeded|cancelled ]] && break
+  sleep 0.2
+done
+[[ "$MISSING_STATUS" == *succeeded* ]] || { echo 'FAIL: missing-variable deployment did not succeed'; exit 1; }
+curl_body "$BASE$MISSING_URL/logs.txt" | grep -q missing-variable-empty
 
 echo "=== F3.5: Lifecycle Gate ==="
 # Separate project + envs + lifecycle so the F3.1 project stays free-floating.
@@ -1255,5 +1264,19 @@ for path,method in [("/environments", "post"), ("/environments/{id}", "put")]:
 print("swagger spec OK")
 '
 echo "  Swagger UI + spec: OK"
+
+source "$(dirname -- "${BASH_SOURCE[0]}")/terraform_approval_e2e.sh"
+
+# Recreate the disposable account after the deletion contract has passed.
+api_post "{\"email\":\"$NEW_EMAIL\",\"name\":\"Manual E2E Deployer\",\"role\":\"deployer\",\"password\":\"$NEW_PASS\"}" "$BASE/api/v1/admin/users" | python3 -c 'import json,sys; assert json.load(sys.stdin)["id"] > 0'
+MANUAL_APPROVAL=$(api_post "{\"release_id\":$APP_REL_ID,\"environment_id\":$APP_PROD_ID}" "$BASE/api/v1/projects/$APP_PROJ_ID/deployments" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["status"]=="pending_approval"; print(d["id"])')
+echo '=== Retained manual checks (docs/manual-e2e.md) ==='
+for id in "$PROJECT_ID" "$LC_PROJECT_ID" "$APP_PROJ_ID" "$CROSS_PROJ_ID" "$API_PROJECT_ID" "$INTERPRETER_PROJECT_ID"; do
+    echo "  Project: $BASE/projects/$id"
+done
+echo "  Lifecycle approval: $BASE/deployments/$MANUAL_APPROVAL"
+echo "  Test accounts: $NEW_EMAIL (deployer), $VIEWER_EMAIL (viewer)"
+echo "  Templates: $BASE/templates"
+echo "  Users and audit: $BASE/admin/users, $BASE/admin/audit"
 
 echo "=== ALL E2E CHECKS PASSED ==="

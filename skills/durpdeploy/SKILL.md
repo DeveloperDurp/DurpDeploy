@@ -455,17 +455,29 @@ supported; runbooks and agent steps cannot use gates. Both approval paths and
 an explicit review format are required together; an empty format is rejected.
 `GET /api/v1/deployments/{id}/artifact-gates` returns counts, checksums,
 revision, expiry, status, and approver metadata, including
-`review_source: "step_output"` and `review_verified: false`: counts are
+`review_format` (`terraform` or `summary`), `review_source: "step_output"`
+and `review_verified: false`: counts are
 unverified producer claims, not an independent analysis of the artifact.
 Use trusted tools to inspect the exact downloaded artifact before approving.
 Checksums establish byte identity, not review accuracy. Generation and apply
 scripts remain trusted; a gate does not sandbox them to plan/apply semantics.
 Write-capable project members can download `/{stepIndex}/artifact`; viewers
-cannot. Administrator-only
+cannot. They can also inspect `/{stepIndex}/review`, which returns `resources`
+with resource addresses, ordered actions, and formatted before/after JSON
+strings. Terraform sensitivity masks and known secret release variables are
+redacted; unknown values are labelled `(known after apply)`. Configuration,
+variables, and outputs are omitted. This producer-supplied view retains
+`review_source: "step_output"` and `review_verified: false`; it is not an
+independent decoding of the saved binary plan. Summary-format gates return no
+resources. Expired or unavailable reviews return 409. The deployment UI's
+**View resource changes** disclosure loads this view on demand.
+Administrator-only
 `/{stepIndex}/approve` and `/{stepIndex}/reject` accept
 `{"revision":1,"sha256":"..."}`. Stale or duplicate decisions return 409.
 Approved context is read-only at `DURPDEPLOY_APPROVED_DIR`; apply the saved
-artifact exactly, never regenerate it. Gated script output is hidden. Gates
+artifact exactly, never regenerate it. Gated scripts and logs remain visible
+under normal permissions and secret-variable log redaction. Keep Terraform
+JSON in the review file; printing it can expose plaintext sensitive values. Gates
 expire after 24 hours; the minute worker records expiry and releases queues.
 Polling is read-only, and expired downloads and decisions return 409 immediately.
 Stopped container references retain pinned image IDs through waits and restarts;

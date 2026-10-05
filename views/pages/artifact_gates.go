@@ -17,6 +17,7 @@ type ArtifactGateInfo struct {
 	BundleSize     int64               `json:"bundle_size"`
 	Review         artifact.GateReview `json:"review"`
 	ReviewSource   string              `json:"review_source"`
+	ReviewFormat   string              `json:"review_format"`
 	ReviewVerified bool                `json:"review_verified"`
 	CreatedAt      int64               `json:"created_at"`
 	ExpiresAt      int64               `json:"expires_at"`

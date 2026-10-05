@@ -206,6 +206,15 @@ func TestArtifactGateBlocksInvalidArtifactsE2E(t *testing.T) {
 				t.Fatal(err)
 			}
 			// When: approval is attempted through the API.
+			if change != "wrong-checksum" {
+				f.api(
+					t,
+					"GET",
+					gateAPIPath(deployment.ID)+"/0/review",
+					nil,
+					409,
+				)
+			}
 			f.api(
 				t,
 				"POST",
@@ -257,6 +266,7 @@ func TestArtifactGateCancellationAndAccessE2E(t *testing.T) {
 		}
 		_, f.token = seedAPIToken(t, f.h.repo, user.ID)
 		f.api(t, "GET", gateAPIPath(deployment.ID)+"/0/artifact", nil, 403)
+		f.api(t, "GET", gateAPIPath(deployment.ID)+"/0/review", nil, 403)
 		f.api(
 			t,
 			"POST",
