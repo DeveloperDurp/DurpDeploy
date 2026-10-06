@@ -47,6 +47,16 @@ for target in postgres mssql; do
         exit 1
     fi
     grep -Fq 'server is unavailable' <<<"$output"
+
+    if [[ "$target" == mssql ]]; then
+        if output=$(env -u SQLCMDPASSWORD PATH="$tmp/bin:$PATH" \
+            DURPDEPLOY_DB="$dsn" MSSQL_PASSWORD=contract-only bash \
+            "$root/scripts/e2e_db_test.sh" sqlserver 2>&1); then
+            echo 'FAIL: SQL Server ignored the unavailable test server' >&2
+            exit 1
+        fi
+        grep -Fq 'server is unavailable' <<<"$output"
+    fi
 done
 
 printf '%s\n' 'Development database boundary contract: PASS'
