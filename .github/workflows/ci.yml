@@ -73,6 +73,7 @@ jobs:
     concurrency:
       group: ci-mobile-browser
       cancel-in-progress: false
+      queue: max
     env:
       MOBILE_BROWSER_IMAGE: mobile-browser:${{ github.sha }}
       MOBILE_BROWSER_CONTAINER: mobile-browser-${{ github.run_id }}
@@ -141,6 +142,7 @@ jobs:
     concurrency:
       group: ci-auth-mfa-e2e
       cancel-in-progress: false
+      queue: max
     env:
       AUTH_MFA_IMAGE: auth-mfa-e2e:${{ github.sha }}
       AUTH_MFA_CONTAINER: auth-mfa-e2e-${{ github.run_id }}
@@ -222,6 +224,7 @@ jobs:
     concurrency:
       group: ci-auth-mfa-e2e
       cancel-in-progress: false
+      queue: max
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
