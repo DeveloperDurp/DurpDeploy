@@ -4,6 +4,7 @@ set -euo pipefail
 root=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 tmp=$(mktemp -d)
 trap 'rm -rf -- "$tmp"' EXIT
+fixture_password=$(openssl rand -hex 16)
 
 # Inspect the real targets without starting or replacing any database.
 for target in postgres mssql; do
@@ -41,7 +42,7 @@ for target in postgres mssql; do
     mkdir -p "$tmp/bin"
     printf '#!/usr/bin/env bash\nexit 1\n' > "$tmp/bin/curl"
     chmod +x "$tmp/bin/curl"
-    if output=$(PATH="$tmp/bin:$PATH" DURPDEPLOY_DB="$dsn" SQLCMDPASSWORD=contract-only bash \
+    if output=$(PATH="$tmp/bin:$PATH" DURPDEPLOY_DB="$dsn" SQLCMDPASSWORD="$fixture_password" bash \
         "$root/scripts/e2e_db_test.sh" "$target" 2>&1); then
         echo "FAIL: $target ignored the unavailable test server" >&2
         exit 1
@@ -50,7 +51,7 @@ for target in postgres mssql; do
 
     if [[ "$target" == mssql ]]; then
         if output=$(env -u SQLCMDPASSWORD PATH="$tmp/bin:$PATH" \
-            DURPDEPLOY_DB="$dsn" MSSQL_PASSWORD=contract-only bash \
+            DURPDEPLOY_DB="$dsn" MSSQL_PASSWORD="$fixture_password" bash \
             "$root/scripts/e2e_db_test.sh" sqlserver 2>&1); then
             echo 'FAIL: SQL Server ignored the unavailable test server' >&2
             exit 1
