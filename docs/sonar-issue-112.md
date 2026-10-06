@@ -21,10 +21,11 @@ still contain those values: stop or replace them only after preserving any
 needed manual-test data. Use new secret-manager credentials when recreating
 them. This PR does not delete, rotate, or modify existing databases.
 
-## Proposed reviewed false-positive dispositions
+## Reviewed false-positive dispositions
 
-These are proposals pending maintainer review and SonarCloud disposition.
-They do not accept a confirmed vulnerability.
+The maintainer approved these 13 dispositions on 2026-10-06 after security
+review. Each was applied with its rationale through SonarCloud and read back
+as FALSE_POSITIVE. They do not accept a confirmed vulnerability.
 
 | Finding key | Rule / location | Source-specific rationale |
 | --- | --- | --- |
