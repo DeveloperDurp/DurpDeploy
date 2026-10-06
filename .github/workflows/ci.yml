@@ -46,6 +46,9 @@ jobs:
       - name: Test development agent lifecycle
         run: make dev-agent-test
 
+      - name: Check development database boundaries
+        run: bash scripts/check-dev-database-contract.sh
+
   # ----- Dockerfile lint ---------------------------------------------------
   lint-dockerfile:
     name: Lint Dockerfile

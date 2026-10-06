@@ -176,6 +176,17 @@ browser warning, import the printed CA certificate into your browser, or use
 `curl -k`. The proxy and certificate files are removed when the dev command
 exits.
 
+The database targets replace their named development containers. Before
+`make dev-postgres`, export `POSTGRES_PASSWORD` and a matching
+`DURPDEPLOY_DB` PostgreSQL DSN. Before `make dev-mssql`, export
+`MSSQL_SA_PASSWORD` and a matching SQL Server DSN. Supply credentials from
+your secret manager; percent-encode passwords in DSNs. Both database ports
+are bound to `127.0.0.1`. The targets do not print connection credentials.
+For `make e2e-postgres` or `make e2e-mssql`, keep the same DSN exported.
+The SQL Server E2E client uses `SQLCMDPASSWORD` (or `MSSQL_PASSWORD`), or the exported
+`MSSQL_SA_PASSWORD` when invoked through Make. These checks retain their
+examples for manual testing as described in `docs/manual-e2e.md`.
+
 Configure the ephemeral proxy without installing Caddy on the host:
 
 ```bash
