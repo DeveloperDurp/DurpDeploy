@@ -28,7 +28,13 @@ UPDATE agents SET endpoint = sqlc.arg(endpoint), status = 'pending',
     agent_version = NULL, certificate_pem = NULL,
     certificate_fingerprint = NULL, encrypted_identity = NULL,
     last_heartbeat_at = NULL, revoked_at = NULL, updated_at = unixepoch()
-WHERE id = sqlc.arg(id) AND status = 'revoked';
+WHERE id = sqlc.arg(id) AND status = 'revoked'
+  AND NOT EXISTS (SELECT 1 FROM remote_step_runs s
+      WHERE s.agent_id = agents.id AND s.state = 'cleanup_unconfirmed'
+        AND s.cleanup_confirmed_at IS NULL)
+  AND NOT EXISTS (SELECT 1 FROM remote_deployment_claims c
+      WHERE c.agent_id = agents.id AND c.state = 'cleanup_unconfirmed'
+        AND c.cleanup_confirmed_at IS NULL);
 
 -- name: SetAgentDraining :execrows
 UPDATE agents SET draining = sqlc.arg(draining), updated_at = unixepoch()

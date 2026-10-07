@@ -177,6 +177,9 @@ fails its incompatible waiting work before claim.
 An agent result of `cleanup_unconfirmed` blocks the environment queue and
 retry until that agent reconciles its containers and reports a ready v3 poll.
 The original terminal result remains visible after confirmation.
+Re-pairing a revoked agent returns `409` while its remote cleanup remains
+unconfirmed. Reconcile its workloads before revocation; a replacement
+installation cannot confirm cleanup for the old installation.
 After a heartbeat or cancellation timeout, the same paired agent can replay
 its durable terminal report with the original claim token. This resolves the
 remote uncertainty without changing a failed deployment to success. A late
@@ -202,7 +205,7 @@ or refresh; recreate their steps and create a new release (`409` on launch).
    wait for completion and log flushing, then retry.
    Existing deployment steps and pinned artifacts stay unchanged. New
    deployments use the refreshed release; re-runs use the original deployment
-   steps and artifact pin.
+   steps and artifact pin, with the release's current variables.
    Refresh also cannot upgrade an old image-less release.
    `DELETE /api/v1/projects/$PID/releases/$RID` returns `204` when removed,
    `404` if absent or in another project, and `409` if it has active or
@@ -316,10 +319,11 @@ stale confirmation, or an overlapping submission returns `409`; a lifecycle
 gate returns `422`. Rollback cannot force a gate. Viewers cannot submit it;
 project authorization and admin-only approval still apply. The new deployment
 reuses the prior successful deployment's frozen steps and package pin and the
-release's frozen variables, then runs the environment's current verification.
-It records rollback provenance and an audit entry. Migration locks releases
-already used by historical deployments; values overwritten by a refresh
-before this feature cannot be reconstructed. Mutable container image tags
+release's current snapshot of variables, then runs the environment's current
+verification. An explicit release refresh replaces those variables for future
+deployments, re-runs, and rollbacks; historical variable values cannot be
+reconstructed. It records rollback provenance and an audit entry.
+Mutable container image tags
 also remain mutable; use digests when exact image contents matter.
 
 ## Gates (know the 422s)

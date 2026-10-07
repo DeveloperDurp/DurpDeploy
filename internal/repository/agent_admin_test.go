@@ -1,13 +1,74 @@
 package repository_test
 
 import (
+	"bytes"
 	"errors"
+	"strings"
 	"testing"
 
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/logscrub"
 	"durpdeploy/internal/repository"
 )
+
+func TestRevokedAgentCannotReplaceUnconfirmedCleanupIdentity(t *testing.T) {
+	for _, table := range []string{"remote_step_runs", "remote_deployment_claims"} {
+		t.Run(table, func(t *testing.T) {
+			repo := remoteFixture(t)
+			statement := `UPDATE remote_deployment_claims
+SET state='cleanup_unconfirmed',claim_token_hash=zeroblob(32),
+ciphertext='ciphertext',claim_expires_at=200,last_heartbeat_at=100,
+started_at=100,finished_at=101 WHERE deployment_id=1`
+			if table == "remote_step_runs" {
+				statement = `INSERT INTO remote_step_runs(deployment_id,step_index,agent_id,state)
+VALUES(1,0,'a','cleanup_unconfirmed')`
+			}
+			if _, err := repo.DB.Exec(statement); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := repo.RevokeAgent(t.Context(), "a"); err != nil {
+				t.Fatal(err)
+			}
+			tuple := repository.AgentPairingTuple{
+				ExpectedAgentID:   "a",
+				EncryptedIdentity: "encrypted-test-identity",
+				Endpoint:          "https://replacement.example",
+				PairingCodeHash:   bytes.Repeat([]byte{9}, 32),
+				AgentPin: strings.Repeat(
+					"c",
+					64,
+				),
+				AgentPublicIdentity: "replacement",
+				Now:                 200,
+				ExpiresAt:           500,
+			}
+			if _, err := repo.PrepareAgentPairing(
+				t.Context(),
+				tuple,
+			); !errors.Is(
+				err,
+				repository.ErrPairingTupleConflict,
+			) {
+				t.Fatalf("unconfirmed replacement error=%v", err)
+			}
+			agent, err := repo.Queries.GetAgent(t.Context(), "a")
+			if err != nil || agent.Status != "revoked" {
+				t.Fatalf("agent=%+v error=%v", agent, err)
+			}
+			if _, err := repo.DB.Exec(
+				"UPDATE " + table + " SET cleanup_confirmed_at=200",
+			); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := repo.PrepareAgentPairing(
+				t.Context(),
+				tuple,
+			); err != nil {
+				t.Fatalf("confirmed replacement error=%v", err)
+			}
+		})
+	}
+}
 
 func TestRevokePendingAgentWithCommittingPairing(t *testing.T) {
 	repo := remoteFixture(t)
