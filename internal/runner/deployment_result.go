@@ -40,7 +40,22 @@ func (r *DeploymentRunner) completeDeployment(
 		ctx,
 		deploymentID,
 		func(ctx context.Context, q *db.Queries) error {
-			var err error
+			deployment, err := q.GetDeployment(ctx, deploymentID)
+			if err != nil {
+				return err
+			}
+			switch deployment.Status {
+			case "succeeded",
+				"failed",
+				"cancelled",
+				"rejected",
+				"expired",
+				"cleanup_unconfirmed":
+				if status != "cleanup_unconfirmed" {
+					status = deployment.Status
+					return nil
+				}
+			}
 			if status == "cancelled" {
 				_, err = q.CancelStepDeployment(ctx, deploymentID)
 			} else {
