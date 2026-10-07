@@ -69,7 +69,7 @@ func (q *Queries) AddAgentLabel(ctx context.Context, arg AddAgentLabelParams) (i
 }
 
 const createAgent = `-- name: CreateAgent :one
-INSERT INTO agents (id, name, endpoint) VALUES (?, ?, ?) RETURNING id, name, endpoint, status, agent_version, certificate_pem, certificate_fingerprint, encrypted_identity, last_heartbeat_at, revoked_at, created_at, updated_at, draining, health_state, agent_protocol, deleted_at
+INSERT INTO agents (id, name, endpoint) VALUES (?, ?, ?) RETURNING id, name, endpoint, status, agent_version, certificate_pem, certificate_fingerprint, encrypted_identity, last_heartbeat_at, revoked_at, created_at, updated_at, draining, health_state, agent_protocol, deleted_at, deleted_pairing_code_hash
 `
 
 type CreateAgentParams struct {
@@ -98,6 +98,7 @@ func (q *Queries) CreateAgent(ctx context.Context, arg CreateAgentParams) (Agent
 		&i.HealthState,
 		&i.AgentProtocol,
 		&i.DeletedAt,
+		&i.DeletedPairingCodeHash,
 	)
 	return i, err
 }
@@ -150,7 +151,7 @@ func (q *Queries) DeleteAgentLabel(ctx context.Context, arg DeleteAgentLabelPara
 }
 
 const getAgent = `-- name: GetAgent :one
-SELECT id, name, endpoint, status, agent_version, certificate_pem, certificate_fingerprint, encrypted_identity, last_heartbeat_at, revoked_at, created_at, updated_at, draining, health_state, agent_protocol, deleted_at FROM agents WHERE id = ? AND deleted_at IS NULL
+SELECT id, name, endpoint, status, agent_version, certificate_pem, certificate_fingerprint, encrypted_identity, last_heartbeat_at, revoked_at, created_at, updated_at, draining, health_state, agent_protocol, deleted_at, deleted_pairing_code_hash FROM agents WHERE id = ? AND deleted_at IS NULL
 `
 
 func (q *Queries) GetAgent(ctx context.Context, id string) (Agent, error) {
@@ -173,12 +174,13 @@ func (q *Queries) GetAgent(ctx context.Context, id string) (Agent, error) {
 		&i.HealthState,
 		&i.AgentProtocol,
 		&i.DeletedAt,
+		&i.DeletedPairingCodeHash,
 	)
 	return i, err
 }
 
 const getAgentForPairing = `-- name: GetAgentForPairing :one
-SELECT id, name, endpoint, status, agent_version, certificate_pem, certificate_fingerprint, encrypted_identity, last_heartbeat_at, revoked_at, created_at, updated_at, draining, health_state, agent_protocol, deleted_at FROM agents WHERE id = ?
+SELECT id, name, endpoint, status, agent_version, certificate_pem, certificate_fingerprint, encrypted_identity, last_heartbeat_at, revoked_at, created_at, updated_at, draining, health_state, agent_protocol, deleted_at, deleted_pairing_code_hash FROM agents WHERE id = ?
 `
 
 func (q *Queries) GetAgentForPairing(ctx context.Context, id string) (Agent, error) {
@@ -201,6 +203,7 @@ func (q *Queries) GetAgentForPairing(ctx context.Context, id string) (Agent, err
 		&i.HealthState,
 		&i.AgentProtocol,
 		&i.DeletedAt,
+		&i.DeletedPairingCodeHash,
 	)
 	return i, err
 }
@@ -328,7 +331,7 @@ func (q *Queries) ListAgentLabels(ctx context.Context, agentID string) ([]string
 }
 
 const listAgents = `-- name: ListAgents :many
-SELECT id, name, endpoint, status, agent_version, certificate_pem, certificate_fingerprint, encrypted_identity, last_heartbeat_at, revoked_at, created_at, updated_at, draining, health_state, agent_protocol, deleted_at FROM agents WHERE deleted_at IS NULL ORDER BY name, id
+SELECT id, name, endpoint, status, agent_version, certificate_pem, certificate_fingerprint, encrypted_identity, last_heartbeat_at, revoked_at, created_at, updated_at, draining, health_state, agent_protocol, deleted_at, deleted_pairing_code_hash FROM agents WHERE deleted_at IS NULL ORDER BY name, id
 `
 
 func (q *Queries) ListAgents(ctx context.Context) ([]Agent, error) {
@@ -357,6 +360,7 @@ func (q *Queries) ListAgents(ctx context.Context) ([]Agent, error) {
 			&i.HealthState,
 			&i.AgentProtocol,
 			&i.DeletedAt,
+			&i.DeletedPairingCodeHash,
 		); err != nil {
 			return nil, err
 		}
@@ -496,7 +500,8 @@ func (q *Queries) LockRevocableAgent(ctx context.Context, id string) (int64, err
 }
 
 const markAgentDeleted = `-- name: MarkAgentDeleted :execrows
-UPDATE agents SET deleted_at = unixepoch(), updated_at = unixepoch()
+UPDATE agents SET deleted_at = unixepoch(), updated_at = unixepoch(),
+    deleted_pairing_code_hash = (SELECT pairing_code_hash FROM agent_pairings WHERE agent_id = agents.id)
 WHERE id = ? AND status = 'revoked' AND deleted_at IS NULL
   AND NOT EXISTS (SELECT 1 FROM remote_step_runs s
       WHERE s.agent_id = agents.id
@@ -677,7 +682,7 @@ UPDATE agents SET status = ?1, updated_at = unixepoch(),
     revoked_at = CASE WHEN ?1 = 'revoked' THEN unixepoch() ELSE revoked_at END
 WHERE id = ?2 AND status IN ('pending', 'active', 'disabled')
   AND (?1 = 'revoked'
-       OR (status IN ('active', 'disabled') AND (?1 = 'active' OR ?1 = 'disabled'))) RETURNING id, name, endpoint, status, agent_version, certificate_pem, certificate_fingerprint, encrypted_identity, last_heartbeat_at, revoked_at, created_at, updated_at, draining, health_state, agent_protocol, deleted_at
+       OR (status IN ('active', 'disabled') AND (?1 = 'active' OR ?1 = 'disabled'))) RETURNING id, name, endpoint, status, agent_version, certificate_pem, certificate_fingerprint, encrypted_identity, last_heartbeat_at, revoked_at, created_at, updated_at, draining, health_state, agent_protocol, deleted_at, deleted_pairing_code_hash
 `
 
 type SetAgentStatusParams struct {
@@ -705,6 +710,7 @@ func (q *Queries) SetAgentStatus(ctx context.Context, arg SetAgentStatusParams) 
 		&i.HealthState,
 		&i.AgentProtocol,
 		&i.DeletedAt,
+		&i.DeletedPairingCodeHash,
 	)
 	return i, err
 }
@@ -754,7 +760,7 @@ func (q *Queries) TouchAgentHeartbeat(ctx context.Context, arg TouchAgentHeartbe
 
 const updateAgent = `-- name: UpdateAgent :one
 UPDATE agents SET name = ?, endpoint = ?, updated_at = unixepoch()
-WHERE id = ? AND status IN ('pending', 'active', 'disabled') RETURNING id, name, endpoint, status, agent_version, certificate_pem, certificate_fingerprint, encrypted_identity, last_heartbeat_at, revoked_at, created_at, updated_at, draining, health_state, agent_protocol, deleted_at
+WHERE id = ? AND status IN ('pending', 'active', 'disabled') RETURNING id, name, endpoint, status, agent_version, certificate_pem, certificate_fingerprint, encrypted_identity, last_heartbeat_at, revoked_at, created_at, updated_at, draining, health_state, agent_protocol, deleted_at, deleted_pairing_code_hash
 `
 
 type UpdateAgentParams struct {
@@ -783,6 +789,7 @@ func (q *Queries) UpdateAgent(ctx context.Context, arg UpdateAgentParams) (Agent
 		&i.HealthState,
 		&i.AgentProtocol,
 		&i.DeletedAt,
+		&i.DeletedPairingCodeHash,
 	)
 	return i, err
 }

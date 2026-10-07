@@ -248,6 +248,23 @@ func TestDeletedAgentCanRejoinWithFreshPairing(t *testing.T) {
 	) {
 		t.Fatalf("concurrent pairing overwrite error=%v", err)
 	}
+	// A caller that read before preparation must also lose at the SQL boundary.
+	if _, err := repo.Queries.ResetRevokedAgentPairing(t.Context(),
+		db.ResetRevokedAgentPairingParams{
+			AgentID:              "a",
+			PairingCodeHash:      conflicting.PairingCodeHash,
+			AgentPublicIdentity:  tuple.AgentPublicIdentity,
+			AgentPin:             tuple.AgentPin,
+			ServerPublicIdentity: ns(tuple.ServerPublicIdentity),
+			ServerPin: ns(
+				tuple.ServerPin,
+			),
+			EncryptedIdentity: ns("stale"),
+			Now:               201,
+			ExpiresAt:         500,
+		}); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("stale SQL reset error=%v", err)
+	}
 	staleHash := bytes.Repeat([]byte{8}, 32)
 	changed, err := repo.CommitAgentPairing(t.Context(),
 		db.CompleteAgentPairingParams{

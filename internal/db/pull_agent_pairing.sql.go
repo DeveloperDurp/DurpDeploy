@@ -13,7 +13,8 @@ import (
 const activatePairedAgent = `-- name: ActivatePairedAgent :execrows
 UPDATE agents SET status = 'active', certificate_pem = ?1,
     certificate_fingerprint = ?2, encrypted_identity = ?3,
-    deleted_at = NULL, revoked_at = NULL, updated_at = unixepoch()
+    deleted_at = NULL, deleted_pairing_code_hash = NULL,
+    revoked_at = NULL, updated_at = unixepoch()
 WHERE id = ?4
   AND (status = 'pending' OR (status = 'revoked' AND deleted_at IS NOT NULL))
   AND EXISTS (SELECT 1 FROM agent_pairings WHERE agent_id = agents.id AND state = 'paired')
@@ -282,7 +283,7 @@ func (q *Queries) GetAgentPairing(ctx context.Context, agentID string) (AgentPai
 }
 
 const listAgentPairingRecoveryCandidates = `-- name: ListAgentPairingRecoveryCandidates :many
-SELECT p.agent_id, p.pairing_code_hash, p.agent_public_identity, p.agent_pin, p.server_public_identity, p.server_pin, p.encrypted_identity, p.state, p.expires_at, p.paired_at, p.created_at, p.updated_at, p.server_pull_endpoint, a.endpoint, a.deleted_at
+SELECT p.agent_id, p.pairing_code_hash, p.agent_public_identity, p.agent_pin, p.server_public_identity, p.server_pin, p.encrypted_identity, p.state, p.expires_at, p.paired_at, p.created_at, p.updated_at, p.server_pull_endpoint, a.endpoint, a.deleted_at, a.deleted_pairing_code_hash
 FROM agent_pairings p
 JOIN agents a ON a.id = p.agent_id
 WHERE p.pairing_code_hash = ?1
@@ -298,21 +299,22 @@ type ListAgentPairingRecoveryCandidatesParams struct {
 }
 
 type ListAgentPairingRecoveryCandidatesRow struct {
-	AgentID              string         `json:"agent_id"`
-	PairingCodeHash      []byte         `json:"pairing_code_hash"`
-	AgentPublicIdentity  string         `json:"agent_public_identity"`
-	AgentPin             string         `json:"agent_pin"`
-	ServerPublicIdentity sql.NullString `json:"server_public_identity"`
-	ServerPin            sql.NullString `json:"server_pin"`
-	EncryptedIdentity    sql.NullString `json:"encrypted_identity"`
-	State                string         `json:"state"`
-	ExpiresAt            int64          `json:"expires_at"`
-	PairedAt             sql.NullInt64  `json:"paired_at"`
-	CreatedAt            int64          `json:"created_at"`
-	UpdatedAt            int64          `json:"updated_at"`
-	ServerPullEndpoint   sql.NullString `json:"server_pull_endpoint"`
-	Endpoint             string         `json:"endpoint"`
-	DeletedAt            sql.NullInt64  `json:"deleted_at"`
+	AgentID                string         `json:"agent_id"`
+	PairingCodeHash        []byte         `json:"pairing_code_hash"`
+	AgentPublicIdentity    string         `json:"agent_public_identity"`
+	AgentPin               string         `json:"agent_pin"`
+	ServerPublicIdentity   sql.NullString `json:"server_public_identity"`
+	ServerPin              sql.NullString `json:"server_pin"`
+	EncryptedIdentity      sql.NullString `json:"encrypted_identity"`
+	State                  string         `json:"state"`
+	ExpiresAt              int64          `json:"expires_at"`
+	PairedAt               sql.NullInt64  `json:"paired_at"`
+	CreatedAt              int64          `json:"created_at"`
+	UpdatedAt              int64          `json:"updated_at"`
+	ServerPullEndpoint     sql.NullString `json:"server_pull_endpoint"`
+	Endpoint               string         `json:"endpoint"`
+	DeletedAt              sql.NullInt64  `json:"deleted_at"`
+	DeletedPairingCodeHash []byte         `json:"deleted_pairing_code_hash"`
 }
 
 func (q *Queries) ListAgentPairingRecoveryCandidates(ctx context.Context, arg ListAgentPairingRecoveryCandidatesParams) ([]ListAgentPairingRecoveryCandidatesRow, error) {
@@ -340,6 +342,7 @@ func (q *Queries) ListAgentPairingRecoveryCandidates(ctx context.Context, arg Li
 			&i.ServerPullEndpoint,
 			&i.Endpoint,
 			&i.DeletedAt,
+			&i.DeletedPairingCodeHash,
 		); err != nil {
 			return nil, err
 		}
@@ -367,7 +370,8 @@ UPDATE agent_pairings SET
     server_pull_endpoint = ?9
 WHERE agent_id = ?10
   AND EXISTS (SELECT 1 FROM agents
-      WHERE id = agent_pairings.agent_id AND status = 'revoked')
+      WHERE id = agent_pairings.agent_id AND status = 'revoked'
+        AND (deleted_at IS NULL OR agent_pairings.state <> 'committing'))
 RETURNING agent_id, pairing_code_hash, agent_public_identity, agent_pin, server_public_identity, server_pin, encrypted_identity, state, expires_at, paired_at, created_at, updated_at, server_pull_endpoint
 `
 

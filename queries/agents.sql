@@ -15,7 +15,8 @@ WHERE id = ? AND status IN ('pending', 'active', 'disabled');
 SELECT * FROM agents WHERE deleted_at IS NULL ORDER BY name, id;
 
 -- name: MarkAgentDeleted :execrows
-UPDATE agents SET deleted_at = unixepoch(), updated_at = unixepoch()
+UPDATE agents SET deleted_at = unixepoch(), updated_at = unixepoch(),
+    deleted_pairing_code_hash = (SELECT pairing_code_hash FROM agent_pairings WHERE agent_id = agents.id)
 WHERE id = ? AND status = 'revoked' AND deleted_at IS NULL
   AND NOT EXISTS (SELECT 1 FROM remote_step_runs s
       WHERE s.agent_id = agents.id

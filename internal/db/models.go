@@ -25,6 +25,7 @@ type Agent struct {
 	HealthState            string         `json:"health_state"`
 	AgentProtocol          sql.NullString `json:"agent_protocol"`
 	DeletedAt              sql.NullInt64  `json:"deleted_at"`
+	DeletedPairingCodeHash []byte         `json:"deleted_pairing_code_hash"`
 }
 
 type AgentContainerInterpreter struct {

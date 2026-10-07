@@ -53,6 +53,11 @@ func (r *Repository) PrepareAgentPairing(
 						tuple.ExpectedAgentID != candidate.AgentID) {
 					return ErrPairingTupleConflict
 				}
+				if subtle.ConstantTimeCompare(
+					candidate.DeletedPairingCodeHash, tuple.PairingCodeHash,
+				) == 1 {
+					return ErrPairingTupleConflict
+				}
 				if candidate.State == "committing" {
 					if !samePairingTuple(candidate, tuple) {
 						return ErrPairingTupleConflict
@@ -100,6 +105,9 @@ func (r *Repository) PrepareAgentPairing(
 					},
 				)
 				if err != nil {
+					if errors.Is(err, sql.ErrNoRows) {
+						return ErrPairingTupleConflict
+					}
 					return err
 				}
 				changed, err := q.ResetRevokedAgentForPairing(

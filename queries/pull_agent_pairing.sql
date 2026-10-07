@@ -6,7 +6,7 @@ VALUES (?, ?, ?, ?, ?) RETURNING *;
 SELECT * FROM agent_pairings WHERE agent_id = ?;
 
 -- name: ListAgentPairingRecoveryCandidates :many
-SELECT p.*, a.endpoint, a.deleted_at
+SELECT p.*, a.endpoint, a.deleted_at, a.deleted_pairing_code_hash
 FROM agent_pairings p
 JOIN agents a ON a.id = p.agent_id
 WHERE p.pairing_code_hash = sqlc.arg(pairing_code_hash)
@@ -42,7 +42,8 @@ UPDATE agent_pairings SET
     server_pull_endpoint = sqlc.arg(server_pull_endpoint)
 WHERE agent_id = sqlc.arg(agent_id)
   AND EXISTS (SELECT 1 FROM agents
-      WHERE id = agent_pairings.agent_id AND status = 'revoked')
+      WHERE id = agent_pairings.agent_id AND status = 'revoked'
+        AND (deleted_at IS NULL OR agent_pairings.state <> 'committing'))
 RETURNING *;
 
 -- name: BeginPairingCommit :execrows
@@ -75,7 +76,8 @@ WHERE agent_id = sqlc.arg(agent_id) AND state = 'expired';
 -- name: ActivatePairedAgent :execrows
 UPDATE agents SET status = 'active', certificate_pem = sqlc.arg(certificate_pem),
     certificate_fingerprint = sqlc.arg(certificate_fingerprint), encrypted_identity = sqlc.arg(encrypted_identity),
-    deleted_at = NULL, revoked_at = NULL, updated_at = unixepoch()
+    deleted_at = NULL, deleted_pairing_code_hash = NULL,
+    revoked_at = NULL, updated_at = unixepoch()
 WHERE id = sqlc.arg(id)
   AND (status = 'pending' OR (status = 'revoked' AND deleted_at IS NOT NULL))
   AND EXISTS (SELECT 1 FROM agent_pairings WHERE agent_id = agents.id AND state = 'paired');
