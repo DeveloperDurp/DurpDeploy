@@ -209,15 +209,19 @@ func TestAgentContainerAPIE2E(t *testing.T) {
 		map[string]string{"name": "UNRELATED", "value": "unrelated"},
 		201,
 	)
-	for _, step := range []struct{ interpreter, image, script string }{
-		{"bash", "docker.io/library/bash:5.2", `test "$SELECTED" = selected; test "${UNRELATED-unset}" = unset; printf 'bash-ok\n'`},
-		{"python3", "docker.io/library/python:3.12-alpine", `import os; assert os.environ['SELECTED']=='selected'; assert 'UNRELATED' not in os.environ; print('python-ok')`},
-		{"pwsh", "mcr.microsoft.com/powershell:latest", `if ($env:SELECTED -ne 'selected' -or $env:UNRELATED) { exit 1 }; Write-Output 'pwsh-ok'`},
+	for _, step := range []struct {
+		interpreter, image, script string
+		variables                  []string
+	}{
+		{"bash", "docker.io/library/bash:5.2", `test "$SELECTED" = selected; test "${UNRELATED-unset}" = unset; printf 'bash-ok\n'`, []string{"SELECTED"}},
+		{"python3", "docker.io/library/python:3.12-alpine", `import os; assert os.environ['SELECTED']=='selected'; assert 'UNRELATED' not in os.environ; print('python-ok')`, []string{"SELECTED"}},
+		{"pwsh", "mcr.microsoft.com/powershell:latest", `if ($env:SELECTED -ne 'selected' -or $env:UNRELATED) { exit 1 }; Write-Output 'pwsh-ok'`, []string{"SELECTED"}},
+		{"bash", "docker.io/library/bash:5.2", `test "$SELECTED" = selected; test "$UNRELATED" = unrelated; printf 'all-ok\n'`, []string{}},
 	} {
 		request("POST", base+"/steps", map[string]any{
 			"name": step.interpreter, "script_body": step.script, "interpreter": step.interpreter,
 			"execution_target": "agent", "agent_execution_mode": "container", "container_image": step.image,
-			"variable_names": []string{"SELECTED"}, "timeout_seconds": 120,
+			"variable_names": step.variables, "timeout_seconds": 120,
 		}, 201)
 	}
 	var release, deployment struct{ ID int64 }
@@ -251,7 +255,7 @@ func TestAgentContainerAPIE2E(t *testing.T) {
 		nil,
 		200,
 	)
-	for _, marker := range []string{"bash-ok", "python-ok", "pwsh-ok"} {
+	for _, marker := range []string{"bash-ok", "python-ok", "pwsh-ok", "all-ok"} {
 		if !strings.Contains(string(logs), marker) {
 			t.Fatalf("missing %s in deployment logs", marker)
 		}
@@ -271,7 +275,7 @@ func TestAgentContainerAPIE2E(t *testing.T) {
 		t.Context(),
 		deployment.ID,
 	)
-	if err != nil || len(snapshots) != 3 ||
+	if err != nil || len(snapshots) != 4 ||
 		snapshots[0].AgentExecutionMode != "container" {
 		t.Fatalf("snapshots=%+v error=%v", snapshots, err)
 	}
