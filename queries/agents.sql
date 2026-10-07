@@ -7,6 +7,10 @@ SELECT * FROM agents WHERE id = ? AND deleted_at IS NULL;
 -- name: GetAgentForPairing :one
 SELECT * FROM agents WHERE id = ?;
 
+-- name: LockAgentForPairing :execrows
+UPDATE agents SET updated_at = updated_at -- NOSONAR: intentional write lock
+WHERE id = ?;
+
 -- name: LockRevocableAgent :execrows
 UPDATE agents SET updated_at = updated_at -- NOSONAR: intentional write lock
 WHERE id = ? AND status IN ('pending', 'active', 'disabled');
@@ -50,6 +54,8 @@ UPDATE agents SET endpoint = sqlc.arg(endpoint),
     revoked_at = CASE WHEN deleted_at IS NULL THEN NULL ELSE revoked_at END,
     updated_at = unixepoch()
 WHERE id = sqlc.arg(id) AND status = 'revoked'
+  AND (deleted_pairing_code_hash IS NULL
+       OR deleted_pairing_code_hash <> sqlc.arg(pairing_code_hash))
   AND NOT EXISTS (SELECT 1 FROM remote_step_runs s
       WHERE s.agent_id = agents.id
         AND (s.state IN ('lost', 'cancel_unconfirmed')

@@ -486,6 +486,19 @@ func (q *Queries) ListRevocableAgentClaims(ctx context.Context, agentID string) 
 	return items, nil
 }
 
+const lockAgentForPairing = `-- name: LockAgentForPairing :execrows
+UPDATE agents SET updated_at = updated_at -- NOSONAR: intentional write lock
+WHERE id = ?
+`
+
+func (q *Queries) LockAgentForPairing(ctx context.Context, id string) (int64, error) {
+	result, err := q.db.ExecContext(ctx, lockAgentForPairing, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const lockRevocableAgent = `-- name: LockRevocableAgent :execrows
 UPDATE agents SET updated_at = updated_at -- NOSONAR: intentional write lock
 WHERE id = ? AND status IN ('pending', 'active', 'disabled')
@@ -533,6 +546,8 @@ UPDATE agents SET endpoint = ?1,
     revoked_at = CASE WHEN deleted_at IS NULL THEN NULL ELSE revoked_at END,
     updated_at = unixepoch()
 WHERE id = ?2 AND status = 'revoked'
+  AND (deleted_pairing_code_hash IS NULL
+       OR deleted_pairing_code_hash <> ?3)
   AND NOT EXISTS (SELECT 1 FROM remote_step_runs s
       WHERE s.agent_id = agents.id
         AND (s.state IN ('lost', 'cancel_unconfirmed')
@@ -544,12 +559,13 @@ WHERE id = ?2 AND status = 'revoked'
 `
 
 type ResetRevokedAgentForPairingParams struct {
-	Endpoint string `json:"endpoint"`
-	ID       string `json:"id"`
+	Endpoint        string `json:"endpoint"`
+	ID              string `json:"id"`
+	PairingCodeHash []byte `json:"pairing_code_hash"`
 }
 
 func (q *Queries) ResetRevokedAgentForPairing(ctx context.Context, arg ResetRevokedAgentForPairingParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, resetRevokedAgentForPairing, arg.Endpoint, arg.ID)
+	result, err := q.db.ExecContext(ctx, resetRevokedAgentForPairing, arg.Endpoint, arg.ID, arg.PairingCodeHash)
 	if err != nil {
 		return 0, err
 	}

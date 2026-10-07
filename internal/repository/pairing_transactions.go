@@ -35,16 +35,34 @@ func (r *Repository) PrepareAgentPairing(
 ) (db.AgentPairing, error) {
 	var pairing db.AgentPairing
 	err := r.WithTx(ctx, func(q *db.Queries) error {
-		candidates, err := q.ListAgentPairingRecoveryCandidates(
-			ctx,
-			db.ListAgentPairingRecoveryCandidatesParams{
-				PairingCodeHash: tuple.PairingCodeHash,
-				AgentPin:        tuple.AgentPin,
-				Endpoint:        tuple.Endpoint,
-			},
-		)
+		lookup := db.ListAgentPairingRecoveryCandidatesParams{
+			PairingCodeHash: tuple.PairingCodeHash,
+			AgentPin:        tuple.AgentPin,
+			Endpoint:        tuple.Endpoint,
+		}
+		candidates, err := q.ListAgentPairingRecoveryCandidates(ctx, lookup)
 		if err != nil {
 			return err
+		}
+		if len(candidates) > 1 {
+			return ErrPairingTupleConflict
+		}
+		lockID := tuple.ExpectedAgentID
+		if lockID == "" && len(candidates) == 1 {
+			lockID = candidates[0].AgentID
+		}
+		if lockID != "" {
+			changed, err := q.LockAgentForPairing(ctx, lockID)
+			if err != nil {
+				return err
+			}
+			if changed != 1 {
+				return ErrPairingTupleConflict
+			}
+			candidates, err = q.ListAgentPairingRecoveryCandidates(ctx, lookup)
+			if err != nil {
+				return err
+			}
 		}
 		for _, candidate := range candidates {
 			if candidate.DeletedAt.Valid {
@@ -113,8 +131,9 @@ func (r *Repository) PrepareAgentPairing(
 				changed, err := q.ResetRevokedAgentForPairing(
 					ctx,
 					db.ResetRevokedAgentForPairingParams{
-						Endpoint: tuple.Endpoint,
-						ID:       tuple.ExpectedAgentID,
+						Endpoint:        tuple.Endpoint,
+						ID:              tuple.ExpectedAgentID,
+						PairingCodeHash: tuple.PairingCodeHash,
 					},
 				)
 				if err != nil || changed != 1 {
