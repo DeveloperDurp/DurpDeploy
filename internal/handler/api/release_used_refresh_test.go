@@ -22,6 +22,8 @@ func TestRefreshReleaseAfterDeployment(t *testing.T) {
 		{state: "succeeded", buffer: "remote_step_runs"},
 		{state: "failed", buffer: "remote_deployment_claims", remoteState: "cleanup_unconfirmed"},
 		{state: "failed", buffer: "remote_step_runs", remoteState: "cleanup_unconfirmed"},
+		{state: "cleanup_unconfirmed", buffer: "remote_deployment_claims", remoteState: "cleanup_unconfirmed"},
+		{state: "cleanup_unconfirmed", buffer: "remote_step_runs", remoteState: "cleanup_unconfirmed"},
 	} {
 		name := fmt.Sprintf("%s/%s/%s", scenario.state, scenario.buffer,
 			scenario.remoteState)
@@ -148,11 +150,14 @@ VALUES(?, 0, 'buffer-agent', ?, ?)`
 						t.Fatal(err)
 					}
 				}
-				if err := h.repo.Queries.UpdateDeploymentStatus(t.Context(),
-					db.UpdateDeploymentStatusParams{
-						ID: deployment.Deployment.ID, Status: "failed",
-					}); err != nil {
-					t.Fatal(err)
+				if scenario.state != "cleanup_unconfirmed" ||
+					scenario.remoteState == "" {
+					if err := h.repo.Queries.UpdateDeploymentStatus(t.Context(),
+						db.UpdateDeploymentStatusParams{
+							ID: deployment.Deployment.ID, Status: "failed",
+						}); err != nil {
+						t.Fatal(err)
+					}
 				}
 				rec = httptest.NewRecorder()
 				api.NewReleaseHandler(h.repo).RefreshRelease(rec, req)

@@ -101,7 +101,13 @@ func (q *Queries) GetRelease(ctx context.Context, id int64) (Release, error) {
 const hasActiveReleaseDeployment = `-- name: HasActiveReleaseDeployment :one
 SELECT CASE WHEN EXISTS (
     SELECT 1 FROM deployments d WHERE d.release_id = ?
-      AND (d.status IN ('queued', 'pending', 'running', 'pending_approval', 'publishing_artifact', 'awaiting_artifact_approval', 'cleanup_unconfirmed')
+      AND (d.status IN ('queued', 'pending', 'running', 'pending_approval', 'publishing_artifact', 'awaiting_artifact_approval')
+        OR (d.status = 'cleanup_unconfirmed'
+            AND (d.container_namespace IS NOT NULL OR (
+            NOT EXISTS (SELECT 1 FROM remote_step_runs s
+                WHERE s.deployment_id = d.id AND s.state = 'cleanup_unconfirmed')
+            AND NOT EXISTS (SELECT 1 FROM remote_deployment_claims c
+                WHERE c.deployment_id = d.id AND c.state = 'cleanup_unconfirmed'))))
         OR EXISTS (SELECT 1 FROM remote_deployment_claims c
                    WHERE c.deployment_id = d.id
                      AND (c.state IN ('lost', 'cancel_unconfirmed')
