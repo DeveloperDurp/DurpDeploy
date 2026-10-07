@@ -50,7 +50,7 @@ Do not change these items to make their spelling agree with normal text.
 | payload | The encrypted deployment data that the server sends to an agent. |
 | project | A DurpDeploy object that contains steps, variables, and releases. |
 | recovery code | A one-time MFA credential. |
-| release | An immutable snapshot of project steps and variables. |
+| release | A snapshot of project steps and variables. Refresh updates it for new deployments. |
 | reverse proxy | The HTTP service between a client and DurpDeploy. |
 | role | The authorization level of a user or project member. |
 | runner | The DurpDeploy component that runs deployment steps. |

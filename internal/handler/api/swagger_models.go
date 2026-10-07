@@ -101,15 +101,16 @@ type swaggerStepTemplateVersion struct {
 	VariableNames        []string `json:"variable_names"`
 }
 
-// Release is an immutable snapshot of project steps and variables.
+// Release is a refreshable snapshot of project steps and variables.
 // swagger:model Release
 type swaggerRelease struct {
-	ID             int64  `json:"id"`
-	ProjectID      int64  `json:"project_id"`
-	Version        string `json:"version"`
-	StepsJSON      string `json:"steps_json"`
-	CreatedAt      int64  `json:"created_at"`
-	SnapshotLocked int64  `json:"snapshot_locked"`
+	ID        int64  `json:"id"`
+	ProjectID int64  `json:"project_id"`
+	Version   string `json:"version"`
+	StepsJSON string `json:"steps_json"`
+	CreatedAt int64  `json:"created_at"`
+	// Deprecated: retained for compatibility; does not prevent refresh.
+	SnapshotLocked int64 `json:"snapshot_locked"`
 }
 
 // Deployment represents a release executing against an environment.

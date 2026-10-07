@@ -31,7 +31,7 @@ func (f *artifactE2E) verifyRemoteSnapshotRejection(
 		422,
 	)
 	f.changePackage("package")
-	// Keep refresh validation on an unused snapshot; used releases are immutable.
+	// Use a separate release for malformed-package refresh validation.
 	unused := verificationRelease(t, f, "refresh-validation")
 	steps, err := f.h.repo.Queries.ListStepsByProject(t.Context(), f.project.ID)
 	if err != nil || len(steps) == 0 {

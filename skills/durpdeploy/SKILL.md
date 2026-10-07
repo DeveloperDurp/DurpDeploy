@@ -194,11 +194,13 @@ or refresh; recreate their steps and create a new release (`409` on launch).
    `null`) for Unscoped. On projects bound to a lifecycle, create and update
    accept only its stage environments; other IDs return `422`. Projects
    without a lifecycle can use any environment.
-5. **Release** (immutable snapshot of current steps + variables)
+5. **Release** (snapshot of current steps + variables)
    `POST /api/v1/projects/$PID/releases` `{"version":"1.2.0"}` → `id`.
    Later step edits do NOT affect it; `POST /projects/$PID/releases/$RID/refresh`
-   re-snapshots an unused release. Once any deployment is created, refresh
-   returns `409`; create a new release to change its variables or steps.
+   re-snapshots the release, including after failed or successful deployments.
+   Existing deployment steps and pinned artifacts stay unchanged. New
+   deployments use the refreshed release; re-runs use the original deployment
+   steps and artifact pin.
    Refresh also cannot upgrade an old image-less release.
    `DELETE /api/v1/projects/$PID/releases/$RID` returns `204` when removed,
    `404` if absent or in another project, and `409` if it has active or

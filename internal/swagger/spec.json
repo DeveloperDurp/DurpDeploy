@@ -5393,7 +5393,7 @@
         ],
         "responses": {
           "201": {
-            "description": "Release is an immutable snapshot of project steps and variables.",
+            "description": "Release is a refreshable snapshot of project steps and variables.",
             "schema": {
               "$ref": "#/definitions/Release"
             }
@@ -5679,7 +5679,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Release is an immutable snapshot of project steps and variables.",
+            "description": "Release is a refreshable snapshot of project steps and variables.",
             "schema": {
               "$ref": "#/definitions/Release"
             }
@@ -10154,7 +10154,7 @@
     },
     "Release": {
       "type": "object",
-      "title": "Release is an immutable snapshot of project steps and variables.",
+      "title": "Release is a refreshable snapshot of project steps and variables.",
       "properties": {
         "created_at": {
           "type": "integer",
@@ -10172,8 +10172,10 @@
           "x-go-name": "ProjectID"
         },
         "snapshot_locked": {
+          "description": "Deprecated: retained for compatibility; does not prevent refresh.",
           "type": "integer",
           "format": "int64",
+          "x-deprecated": true,
           "x-go-name": "SnapshotLocked"
         },
         "steps_json": {

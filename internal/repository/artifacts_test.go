@@ -144,7 +144,7 @@ func TestArtifactPinsSurviveRefreshAndRerun(t *testing.T) {
 		t.Context(),
 		f.repo,
 		release,
-	); !errors.Is(err, handler.ErrReleaseSnapshotLocked) {
+	); err != nil {
 		t.Fatalf("used release refresh=%v", err)
 	}
 	// When

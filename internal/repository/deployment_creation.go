@@ -260,9 +260,6 @@ func createDeploymentWithSteps(
 	if err != nil {
 		return DeploymentResult{}, fmt.Errorf("insert deployment: %w", err)
 	}
-	if err := q.MarkReleaseSnapshotLocked(ctx, arg.ReleaseID); err != nil {
-		return DeploymentResult{}, fmt.Errorf("lock release snapshot: %w", err)
-	}
 	if gated {
 		if err := q.CreateArtifactGateRun(ctx, deployment.ID); err != nil {
 			return DeploymentResult{}, err

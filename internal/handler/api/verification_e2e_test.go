@@ -83,7 +83,7 @@ func TestVerificationAPIWebContainerE2E(t *testing.T) {
 		"POST",
 		fmt.Sprintf("%s/releases/%d/refresh", f.base(), release.ID),
 		nil,
-		409,
+		200,
 	)
 }
 

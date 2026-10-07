@@ -51,8 +51,7 @@ func (h *ReleaseHandler) RefreshRelease(
 			http.Error(w, "Release not found", http.StatusNotFound)
 			return
 		}
-		if errors.Is(err, repository.ErrLegacyServerStep) ||
-			errors.Is(err, ErrReleaseSnapshotLocked) {
+		if errors.Is(err, repository.ErrLegacyServerStep) {
 			http.Error(
 				w,
 				err.Error(),
