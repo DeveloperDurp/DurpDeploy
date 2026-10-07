@@ -12,7 +12,7 @@ var ErrAgentDeletionBlocked = errors.New(
 	"agent has unresolved remote work or buffered logs; reconcile execution, cleanup, and logs before deleting",
 )
 
-// DeleteAgent retains a revoked tombstone for deployment history and pin reuse.
+// DeleteAgent hides a revoked record until a fresh, explicit pairing.
 func (r *Repository) DeleteAgent(ctx context.Context, agentID string) error {
 	err := r.WithQueueMaintenanceTx(
 		ctx,

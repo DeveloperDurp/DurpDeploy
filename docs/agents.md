@@ -20,8 +20,13 @@ Administrators can call `DELETE /api/v1/admin/agents/{id}` with an empty body or
 remote work or buffered logs return `409`. Successful deletion records `delete_agent` in the
 audit log. The existing `POST /api/v1/admin/agents/{id}/revoke` remains available
 for revoking access while retaining the inventory entry and re-pairing option.
-A deleted identity cannot be re-paired. Register a new agent identity to reuse
-the same endpoint.
+The same installed agent can rejoin later with a fresh pairing code and
+fingerprint approval. Pair it from the list as usual; the server restores its
+original agent ID and historical references. Old pairing codes are rejected.
+To generate a fresh code, stop the idle agent, move only `state.json` out of its
+private state directory, and restart it. Keep its identity certificate and key.
+Do this only after execution, cleanup, and log delivery have been reconciled.
+The agent remains blocked until an administrator completes the new pairing.
 
 Admins manage the fleet at `/admin/agents`. **Drain** stops new claims and
 keeps the agent authenticated. Claims issued before Drain can still start,

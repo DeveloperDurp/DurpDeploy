@@ -187,8 +187,12 @@ unknown/deleted agent returns `404`; unresolved execution, cleanup, or buffered
 logs return `409` and leave the agent unchanged. Drain and reconcile workloads
 and log delivery first.
 Deletion revokes access and retains historical deployment references. Deleted
-agents disappear from admin list/detail endpoints and cannot be re-paired with
-their old identity. A new identity can register the same endpoint. The existing
+agents disappear from admin list/detail endpoints. The same installed agent can
+rejoin through `POST /api/v1/admin/agents/pair` with its fingerprint and a fresh
+pairing code; its original agent ID and history are restored. Old pairing codes
+are rejected. Stop the reconciled idle agent, move only `state.json` out of its
+private state directory, preserve its identity keys, and restart to obtain a
+fresh code. It remains blocked until explicit administrator pairing. The existing
 `POST /api/v1/admin/agents/{id}/revoke` keeps the agent visible for later re-pairing.
 After a heartbeat or cancellation timeout, the same paired agent can replay
 its durable terminal report with the original claim token. This resolves the

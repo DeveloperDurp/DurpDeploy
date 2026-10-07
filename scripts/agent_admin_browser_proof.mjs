@@ -310,7 +310,7 @@ async function main() {
 	]);
 	await startServer();
 	startAgent();
-	const offer = await pairingOffer(agent);
+	let offer = await pairingOffer(agent);
 	browser = await chromium.launch({ headless: true });
 	const context = await browser.newContext();
 	const page = await context.newPage();
@@ -707,6 +707,44 @@ async function main() {
 		]);
 		check(await page.locator(`[hx-post="/admin/agents/${pairedAgentID}/delete"]`).count() === 0,
 			"deleted agent remains in inventory");
+		const freshOffer = async () => {
+			await stopAgent();
+			const directory = hostAgent ? agentStateDir : (await command("podman", [
+				"volume", "inspect", "--format", "{{.Mountpoint}}", agentStateVolume,
+			])).trim();
+			await rm(join(directory, "state.json"));
+			startAgent();
+			const next = await pairingOffer(agent);
+			check(next.fingerprint === offer.fingerprint && next.code !== offer.code,
+				"fresh pairing changed identity or reused the old code");
+			return next;
+		};
+		const next = await freshOffer();
+		const token = (await command(serverBinary, ["tokens", "create", "--user", admin.email,
+			"--name", "rejoin-e2e"], { cwd: runDir, env: serverEnvironment })).trim();
+		const pairRequest = { address: bootstrapURL, code: offer.code, fingerprint: next.fingerprint };
+		const headers = { Authorization: `Bearer ${token}` };
+		const stale = await context.request.post(`${baseURL}/api/v1/admin/agents/pair`,
+			{ headers, data: pairRequest });
+		check(stale.status() === 409, "deleted agent accepted its old pairing code");
+		pairRequest.code = next.code;
+		const rejoined = await context.request.post(`${baseURL}/api/v1/admin/agents/pair`,
+			{ headers, data: pairRequest });
+		check(rejoined.status() === 201 && (await rejoined.json()).agent_id === pairedAgentID,
+			"API fresh pairing did not restore the same agent");
+		offer = next;
+		await page.goto(`${baseURL}/admin/agents/${pairedAgentID}`);
+		page.once("dialog", (dialog) => dialog.accept());
+		await Promise.all([
+			page.waitForURL(`${baseURL}/admin/agents`),
+			page.getByRole("button", { name: "Delete agent" }).click(),
+		]);
+		offer = await freshOffer();
+		await fillPairingRequest();
+		await submitPairing();
+		check(page.url() === `${baseURL}/admin/agents/${pairedAgentID}`,
+			"web fresh pairing did not restore the same agent");
+		for (const width of [375, 768, 1280]) await capture(page, "agent-rejoined", width);
 	}
 	const unexpectedConsoleErrors = consoleErrors.filter((message) =>
 		!pairingScenarios.has(faultScenario) ||
@@ -739,6 +777,7 @@ async function main() {
 		readOnlyState: state.trim(),
 		revoked: true,
 		deleted: !faultScenario,
+		rejoined: !faultScenario,
 		viewerControlsHidden: true,
 		viewerHTMXToast: true,
 		viewports: [375, 768, 1280],

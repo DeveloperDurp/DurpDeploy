@@ -190,6 +190,34 @@ func (q *Queries) GetAgent(ctx context.Context, id string) (Agent, error) {
 	return i, err
 }
 
+const getAgentForPairing = `-- name: GetAgentForPairing :one
+SELECT id, name, endpoint, status, agent_version, certificate_pem, certificate_fingerprint, encrypted_identity, last_heartbeat_at, revoked_at, created_at, updated_at, draining, health_state, agent_protocol, deleted_at FROM agents WHERE id = ?
+`
+
+func (q *Queries) GetAgentForPairing(ctx context.Context, id string) (Agent, error) {
+	row := q.db.QueryRowContext(ctx, getAgentForPairing, id)
+	var i Agent
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Endpoint,
+		&i.Status,
+		&i.AgentVersion,
+		&i.CertificatePem,
+		&i.CertificateFingerprint,
+		&i.EncryptedIdentity,
+		&i.LastHeartbeatAt,
+		&i.RevokedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Draining,
+		&i.HealthState,
+		&i.AgentProtocol,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
 const heartbeatAgent = `-- name: HeartbeatAgent :execrows
 UPDATE agents SET last_heartbeat_at = ?1, agent_version = ?2,
     updated_at = ?1
@@ -505,6 +533,7 @@ func (q *Queries) MarkAgentDeleted(ctx context.Context, id string) (int64, error
 
 const resetRevokedAgentForPairing = `-- name: ResetRevokedAgentForPairing :execrows
 UPDATE agents SET endpoint = ?1, status = 'pending',
+    deleted_at = NULL,
     draining = 0, health_state = 'unknown', agent_protocol = NULL,
     agent_version = NULL, certificate_pem = NULL,
     certificate_fingerprint = NULL, encrypted_identity = NULL,

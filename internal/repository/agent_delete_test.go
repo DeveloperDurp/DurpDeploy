@@ -196,3 +196,36 @@ func TestDeletedAgentPairingCannotBeReplayed(t *testing.T) {
 		t.Fatalf("pairing error=%v", err)
 	}
 }
+
+func TestDeletedAgentCanRejoinWithFreshPairing(t *testing.T) {
+	// Given: the same installation retains its certificate after deletion.
+	repo := remoteFixture(t)
+	if err := repo.DeleteAgent(t.Context(), "a"); err != nil {
+		t.Fatal(err)
+	}
+	tuple := repository.AgentPairingTuple{
+		AgentID: "unused-new-id", AgentName: "rejoined agent",
+		Endpoint: "https://rejoined.invalid", AgentPin: strings.Repeat("a", 64),
+		PairingCodeHash:     bytes.Repeat([]byte{9}, 32),
+		AgentPublicIdentity: "certificate", ServerPublicIdentity: "server",
+		ServerPin: strings.Repeat("c", 64), EncryptedIdentity: "encrypted",
+		Now: 200, ExpiresAt: 500,
+	}
+
+	// When: an administrator starts a fresh pairing with the original pin.
+	pairing, err := repo.PrepareAgentPairing(t.Context(), tuple)
+
+	// Then: the original record is restored, with history and a new pairing code.
+	if err != nil || pairing.AgentID != "a" || pairing.State != "committing" {
+		t.Fatalf("pairing=%+v error=%v", pairing, err)
+	}
+	agent, err := repo.Queries.GetAgent(t.Context(), "a")
+	if err != nil || agent.DeletedAt.Valid || agent.Status != "pending" ||
+		agent.Name != "a" || agent.CertificateFingerprint.Valid {
+		t.Fatalf("agent=%+v error=%v", agent, err)
+	}
+	deployment, err := repo.Queries.GetDeployment(t.Context(), 1)
+	if err != nil || deployment.AssignedAgentID.String != "a" {
+		t.Fatalf("history=%+v error=%v", deployment, err)
+	}
+}

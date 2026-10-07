@@ -4,6 +4,9 @@ INSERT INTO agents (id, name, endpoint) VALUES (?, ?, ?) RETURNING *;
 -- name: GetAgent :one
 SELECT * FROM agents WHERE id = ? AND deleted_at IS NULL;
 
+-- name: GetAgentForPairing :one
+SELECT * FROM agents WHERE id = ?;
+
 -- name: LockRevocableAgent :execrows
 UPDATE agents SET updated_at = updated_at -- NOSONAR: intentional write lock
 WHERE id = ? AND status IN ('pending', 'active', 'disabled');
@@ -38,6 +41,7 @@ WHERE id = sqlc.arg(id) AND status IN ('pending', 'active', 'disabled')
 
 -- name: ResetRevokedAgentForPairing :execrows
 UPDATE agents SET endpoint = sqlc.arg(endpoint), status = 'pending',
+    deleted_at = NULL,
     draining = 0, health_state = 'unknown', agent_protocol = NULL,
     agent_version = NULL, certificate_pem = NULL,
     certificate_fingerprint = NULL, encrypted_identity = NULL,
