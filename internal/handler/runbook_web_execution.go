@@ -190,15 +190,7 @@ func (h *RunbookHandler) Retry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if execution.Status != "failed" && execution.Status != "cancelled" &&
-		execution.Status != "succeeded" {
-		if execution.Status == "cleanup_unconfirmed" {
-			http.Error(
-				w,
-				repository.ErrContainerCleanupUnconfirmed.Error(),
-				http.StatusConflict,
-			)
-			return
-		}
+		execution.Status != "succeeded" && execution.Status != "cleanup_unconfirmed" {
 		http.Error(w, "Execution is not complete", http.StatusConflict)
 		return
 	}

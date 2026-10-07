@@ -852,15 +852,7 @@ func (h *DeploymentHandler) RedeployDeployment(
 
 	if source.Status != "succeeded" && source.Status != "failed" &&
 		source.Status != "cancelled" && source.Status != "rejected" &&
-		source.Status != "expired" {
-		if source.Status == "cleanup_unconfirmed" {
-			http.Error(
-				w,
-				repository.ErrContainerCleanupUnconfirmed.Error(),
-				http.StatusConflict,
-			)
-			return
-		}
+		source.Status != "expired" && source.Status != "cleanup_unconfirmed" {
 		http.Error(
 			w,
 			"Source deployment is not in a terminal state",

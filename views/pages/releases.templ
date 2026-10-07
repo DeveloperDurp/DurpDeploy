@@ -242,7 +242,7 @@ templ ReleaseDetail(project db.Project, release db.Release, variables []db.Relea
 				<p class="text-gray-400">Project: { project.Name }</p>
 			</div>
 			<div class="flex flex-wrap shrink-0 gap-2">
-				if CanWrite(ctx) && release.SnapshotLocked == 0 {
+				if CanWrite(ctx) {
 					<form
 						method="post"
 						action={ fmt.Sprintf("/projects/%d/releases/%d/refresh", project.ID, release.ID) }
@@ -258,9 +258,6 @@ templ ReleaseDetail(project db.Project, release db.Release, variables []db.Relea
 				}
 			</div>
 		</div>
-		if release.SnapshotLocked != 0 {
-			<p class="alert alert-info text-sm">This release has been deployed. Its snapshot is immutable; create a new release to change steps or variables.</p>
-		}
 		if artifact.ReleaseID!=0 {
 			<div class="card bg-base-200 p-4 space-y-3"><h2 class="text-xl font-bold">Pinned ZIP package</h2><p class="break-all">{ artifact.Url }</p><p>Version: { artifact.Version }</p><p class="font-mono break-all">SHA-256: { artifact.Sha256 }</p><p>Size: { strconv.FormatInt(artifact.Size,10) } bytes</p><p class="text-sm opacity-70">Steps receive ARTIFACT_PATH. Files are read-only; direct execution is blocked.</p></div>
 		}

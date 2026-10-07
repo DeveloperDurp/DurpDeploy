@@ -45,7 +45,10 @@ func TestRemoteStepResultCompletesRun(t *testing.T) {
 func TestRemoteStepLogsRedactSplitSecret(t *testing.T) {
 	fixture := newAgentFixture(t)
 	deploymentID, claim := claimedRemoteStep(t, fixture)
-	deployment, err := fixture.repo.Queries.GetDeployment(t.Context(), deploymentID)
+	deployment, err := fixture.repo.Queries.GetDeployment(
+		t.Context(),
+		deploymentID,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,7 +95,8 @@ func TestRemoteStepLogsRedactSplitSecret(t *testing.T) {
 	logs, err := fixture.repo.Queries.ListDeploymentLogsByDeployment(
 		t.Context(), deploymentID,
 	)
-	if err != nil || len(logs) != 2 || logs[0].Line+logs[1].Line != "[REDACTED]" ||
+	if err != nil || len(logs) != 2 ||
+		logs[0].Line+logs[1].Line != "[REDACTED]" ||
 		!logs[0].StepName.Valid {
 		t.Fatalf("stored step logs=%+v error=%v", logs, err)
 	}
@@ -168,6 +172,15 @@ func claimedRemoteStep(
 	fixture agentFixture,
 ) (int64, string) {
 	t.Helper()
+	return claimedRemoteStepWithMode(t, fixture, "host", pollBody)
+}
+
+func claimedRemoteStepWithMode(
+	t *testing.T,
+	fixture agentFixture,
+	mode, body string,
+) (int64, string) {
+	t.Helper()
 	deploymentID := seedPollPayload(t, fixture, "pending", "test-agent")
 	deployment, err := fixture.repo.Queries.GetDeployment(
 		t.Context(),
@@ -189,6 +202,18 @@ func claimedRemoteStep(
 	); err != nil {
 		t.Fatal(err)
 	}
+	if mode == "container" {
+		if _, err := fixture.repo.DB.ExecContext(t.Context(), `
+        UPDATE agents SET agent_protocol = 'agent/3' WHERE id = 'test-agent';
+        INSERT INTO agent_execution_modes VALUES('test-agent','container');
+        INSERT INTO agent_container_runtimes VALUES('test-agent','podman');
+        INSERT INTO agent_container_interpreters VALUES('test-agent','bash');
+        UPDATE deployment_steps SET agent_execution_mode = 'container',
+            container_image = 'alpine:3.20', variable_names = '["MODE"]'
+            WHERE deployment_id = ?;`, deploymentID); err != nil {
+			t.Fatal(err)
+		}
+	}
 	created, err := fixture.repo.QueueRemoteStepRuns(
 		t.Context(),
 		deploymentID,
@@ -200,11 +225,14 @@ func claimedRemoteStep(
 
 	poll := decodePollResponse(
 		t,
-		postAgent(t, fixture, agentproto.PollPath, pollBody),
+		postAgent(t, fixture, agentproto.PollPath, body),
 	)
 	claim := fmt.Sprintf(
 		`{"protocol":"agent/1","claim_token":%q}`,
 		poll.ClaimToken,
 	)
+	if mode == "container" {
+		claim = strings.Replace(claim, "agent/1", "agent/3", 1)
+	}
 	return deploymentID, claim
 }

@@ -225,6 +225,7 @@ func (f *artifactE2E) web(
 		t.Fatal(err)
 	}
 	req.AddCookie(&http.Cookie{Name: "session", Value: f.session})
+	req.Header.Set("X-CSRF-Token", f.csrf)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	response, err := f.client.Do(req)
 	if err != nil {

@@ -118,7 +118,7 @@ func TestRunbookWeb_AgentStepRejectsContainerImage(t *testing.T) {
 	}
 	if !strings.Contains(
 		body,
-		"container image is only valid for local steps",
+		"container image is not valid for agent-host steps",
 	) {
 		t.Fatalf("body missing image-rejection message: %s", body)
 	}

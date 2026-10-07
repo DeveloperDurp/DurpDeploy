@@ -21,15 +21,16 @@ func (q *Queries) CountStepTemplates(ctx context.Context) (int64, error) {
 }
 
 const createStepTemplate = `-- name: CreateStepTemplate :one
-INSERT INTO step_templates (name, script_body, interpreter, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format)
-VALUES (?, ?, COALESCE(NULLIF(CAST(?3 AS TEXT), ''), 'bash'), ?4, ?5, ?6, ?7, ?8, ?9)
-RETURNING id, name, script_body, created_at, execution_target, interpreter, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format
+INSERT INTO step_templates (name, script_body, interpreter, agent_execution_mode, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format)
+VALUES (?, ?, COALESCE(NULLIF(CAST(?3 AS TEXT), ''), 'bash'), COALESCE(NULLIF(CAST(?4 AS TEXT), ''), 'host'), ?5, ?6, ?7, ?8, ?9, ?10)
+RETURNING id, name, script_body, created_at, execution_target, interpreter, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format, agent_execution_mode
 `
 
 type CreateStepTemplateParams struct {
 	Name                 string `json:"name"`
 	ScriptBody           string `json:"script_body"`
 	Interpreter          string `json:"interpreter"`
+	AgentExecutionMode   string `json:"agent_execution_mode"`
 	ContainerImage       string `json:"container_image"`
 	VariableNames        string `json:"variable_names"`
 	NetworkMode          string `json:"network_mode"`
@@ -43,6 +44,7 @@ func (q *Queries) CreateStepTemplate(ctx context.Context, arg CreateStepTemplate
 		arg.Name,
 		arg.ScriptBody,
 		arg.Interpreter,
+		arg.AgentExecutionMode,
 		arg.ContainerImage,
 		arg.VariableNames,
 		arg.NetworkMode,
@@ -64,14 +66,15 @@ func (q *Queries) CreateStepTemplate(ctx context.Context, arg CreateStepTemplate
 		&i.ApprovalArtifactPath,
 		&i.ApprovalReviewPath,
 		&i.ApprovalReviewFormat,
+		&i.AgentExecutionMode,
 	)
 	return i, err
 }
 
 const createStepTemplateVersion = `-- name: CreateStepTemplateVersion :one
-INSERT INTO step_template_versions (template_id, version_number, name, script_body, interpreter, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format)
-VALUES (?, ?, ?, ?, COALESCE(NULLIF(CAST(?5 AS TEXT), ''), 'bash'), ?6, ?7, ?8, ?9, ?10, ?11)
-RETURNING id, template_id, version_number, name, script_body, created_at, execution_target, interpreter, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format
+INSERT INTO step_template_versions (template_id, version_number, name, script_body, interpreter, agent_execution_mode, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format)
+VALUES (?, ?, ?, ?, COALESCE(NULLIF(CAST(?5 AS TEXT), ''), 'bash'), COALESCE(NULLIF(CAST(?6 AS TEXT), ''), 'host'), ?7, ?8, ?9, ?10, ?11, ?12)
+RETURNING id, template_id, version_number, name, script_body, created_at, execution_target, interpreter, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format, agent_execution_mode
 `
 
 type CreateStepTemplateVersionParams struct {
@@ -80,6 +83,7 @@ type CreateStepTemplateVersionParams struct {
 	Name                 string `json:"name"`
 	ScriptBody           string `json:"script_body"`
 	Interpreter          string `json:"interpreter"`
+	AgentExecutionMode   string `json:"agent_execution_mode"`
 	ContainerImage       string `json:"container_image"`
 	VariableNames        string `json:"variable_names"`
 	NetworkMode          string `json:"network_mode"`
@@ -95,6 +99,7 @@ func (q *Queries) CreateStepTemplateVersion(ctx context.Context, arg CreateStepT
 		arg.Name,
 		arg.ScriptBody,
 		arg.Interpreter,
+		arg.AgentExecutionMode,
 		arg.ContainerImage,
 		arg.VariableNames,
 		arg.NetworkMode,
@@ -118,6 +123,7 @@ func (q *Queries) CreateStepTemplateVersion(ctx context.Context, arg CreateStepT
 		&i.ApprovalArtifactPath,
 		&i.ApprovalReviewPath,
 		&i.ApprovalReviewFormat,
+		&i.AgentExecutionMode,
 	)
 	return i, err
 }
@@ -144,7 +150,7 @@ func (q *Queries) GetLatestStepTemplateVersionNumber(ctx context.Context, templa
 }
 
 const getStepTemplate = `-- name: GetStepTemplate :one
-SELECT id, name, script_body, created_at, execution_target, interpreter, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format FROM step_templates WHERE id = ?
+SELECT id, name, script_body, created_at, execution_target, interpreter, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format, agent_execution_mode FROM step_templates WHERE id = ?
 `
 
 func (q *Queries) GetStepTemplate(ctx context.Context, id int64) (StepTemplate, error) {
@@ -163,12 +169,13 @@ func (q *Queries) GetStepTemplate(ctx context.Context, id int64) (StepTemplate, 
 		&i.ApprovalArtifactPath,
 		&i.ApprovalReviewPath,
 		&i.ApprovalReviewFormat,
+		&i.AgentExecutionMode,
 	)
 	return i, err
 }
 
 const getStepTemplateVersion = `-- name: GetStepTemplateVersion :one
-SELECT id, template_id, version_number, name, script_body, created_at, execution_target, interpreter, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format FROM step_template_versions WHERE id = ?
+SELECT id, template_id, version_number, name, script_body, created_at, execution_target, interpreter, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format, agent_execution_mode FROM step_template_versions WHERE id = ?
 `
 
 func (q *Queries) GetStepTemplateVersion(ctx context.Context, id int64) (StepTemplateVersion, error) {
@@ -189,12 +196,13 @@ func (q *Queries) GetStepTemplateVersion(ctx context.Context, id int64) (StepTem
 		&i.ApprovalArtifactPath,
 		&i.ApprovalReviewPath,
 		&i.ApprovalReviewFormat,
+		&i.AgentExecutionMode,
 	)
 	return i, err
 }
 
 const listStepTemplateVersions = `-- name: ListStepTemplateVersions :many
-SELECT id, template_id, version_number, name, script_body, created_at, execution_target, interpreter, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format FROM step_template_versions WHERE template_id = ? ORDER BY version_number DESC
+SELECT id, template_id, version_number, name, script_body, created_at, execution_target, interpreter, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format, agent_execution_mode FROM step_template_versions WHERE template_id = ? ORDER BY version_number DESC
 `
 
 func (q *Queries) ListStepTemplateVersions(ctx context.Context, templateID int64) ([]StepTemplateVersion, error) {
@@ -221,6 +229,7 @@ func (q *Queries) ListStepTemplateVersions(ctx context.Context, templateID int64
 			&i.ApprovalArtifactPath,
 			&i.ApprovalReviewPath,
 			&i.ApprovalReviewFormat,
+			&i.AgentExecutionMode,
 		); err != nil {
 			return nil, err
 		}
@@ -236,7 +245,7 @@ func (q *Queries) ListStepTemplateVersions(ctx context.Context, templateID int64
 }
 
 const listStepTemplates = `-- name: ListStepTemplates :many
-SELECT id, name, script_body, created_at, execution_target, interpreter, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format FROM step_templates ORDER BY name ASC
+SELECT id, name, script_body, created_at, execution_target, interpreter, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format, agent_execution_mode FROM step_templates ORDER BY name ASC
 `
 
 func (q *Queries) ListStepTemplates(ctx context.Context) ([]StepTemplate, error) {
@@ -261,6 +270,7 @@ func (q *Queries) ListStepTemplates(ctx context.Context) ([]StepTemplate, error)
 			&i.ApprovalArtifactPath,
 			&i.ApprovalReviewPath,
 			&i.ApprovalReviewFormat,
+			&i.AgentExecutionMode,
 		); err != nil {
 			return nil, err
 		}
@@ -276,7 +286,7 @@ func (q *Queries) ListStepTemplates(ctx context.Context) ([]StepTemplate, error)
 }
 
 const listStepTemplatesPaginated = `-- name: ListStepTemplatesPaginated :many
-SELECT id, name, script_body, created_at, execution_target, interpreter, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format FROM step_templates ORDER BY name ASC
+SELECT id, name, script_body, created_at, execution_target, interpreter, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format, agent_execution_mode FROM step_templates ORDER BY name ASC
 LIMIT ? OFFSET ?
 `
 
@@ -307,6 +317,7 @@ func (q *Queries) ListStepTemplatesPaginated(ctx context.Context, arg ListStepTe
 			&i.ApprovalArtifactPath,
 			&i.ApprovalReviewPath,
 			&i.ApprovalReviewFormat,
+			&i.AgentExecutionMode,
 		); err != nil {
 			return nil, err
 		}
@@ -324,14 +335,16 @@ func (q *Queries) ListStepTemplatesPaginated(ctx context.Context, arg ListStepTe
 const updateStepTemplate = `-- name: UpdateStepTemplate :one
 UPDATE step_templates SET name = ?, script_body = ?,
 interpreter = COALESCE(NULLIF(CAST(?3 AS TEXT), ''), 'bash'),
-container_image = ?4, variable_names = ?5, network_mode = ?6, approval_artifact_path = ?7, approval_review_path = ?8, approval_review_format = ?9
-WHERE id = ?10 RETURNING id, name, script_body, created_at, execution_target, interpreter, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format
+agent_execution_mode = COALESCE(NULLIF(CAST(?4 AS TEXT), ''), 'host'),
+container_image = ?5, variable_names = ?6, network_mode = ?7, approval_artifact_path = ?8, approval_review_path = ?9, approval_review_format = ?10
+WHERE id = ?11 RETURNING id, name, script_body, created_at, execution_target, interpreter, container_image, variable_names, network_mode, approval_artifact_path, approval_review_path, approval_review_format, agent_execution_mode
 `
 
 type UpdateStepTemplateParams struct {
 	Name                 string `json:"name"`
 	ScriptBody           string `json:"script_body"`
 	Interpreter          string `json:"interpreter"`
+	AgentExecutionMode   string `json:"agent_execution_mode"`
 	ContainerImage       string `json:"container_image"`
 	VariableNames        string `json:"variable_names"`
 	NetworkMode          string `json:"network_mode"`
@@ -346,6 +359,7 @@ func (q *Queries) UpdateStepTemplate(ctx context.Context, arg UpdateStepTemplate
 		arg.Name,
 		arg.ScriptBody,
 		arg.Interpreter,
+		arg.AgentExecutionMode,
 		arg.ContainerImage,
 		arg.VariableNames,
 		arg.NetworkMode,
@@ -368,6 +382,7 @@ func (q *Queries) UpdateStepTemplate(ctx context.Context, arg UpdateStepTemplate
 		&i.ApprovalArtifactPath,
 		&i.ApprovalReviewPath,
 		&i.ApprovalReviewFormat,
+		&i.AgentExecutionMode,
 	)
 	return i, err
 }

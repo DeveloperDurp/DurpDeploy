@@ -154,12 +154,37 @@ while this flag is true; polling updates it automatically.
 ```
 
 `local` means mandatory server-container execution; specify an image with
-`bash`, `pwsh`, or `python3` installed. `agent` runs on matching remote agents
-without a container image. API requests may use `powershell`; DurpDeploy
+`bash`, `pwsh`, or `python3` installed. `agent` runs on matching remote agents.
+`agent_execution_mode` defaults to `host`, which rejects a container image.
+For remote containers, set `execution_target: "agent"`,
+`agent_execution_mode: "container"`, and a valid `container_image`.
+This requires an `agent/3` agent reporting a ready Docker or Podman runtime
+and support for the selected container interpreter. API requests may use `powershell`; DurpDeploy
 normalizes it to `pwsh`. All resolved release variables enter a step by
 default; set `variable_names` only to restrict the step to those names. Local
 steps exclude container/SSH client configuration names such as `PATH`, `HOME`,
-`SSH_AUTH_SOCK`, or `XDG_*`; agent steps retain their host variable support.
+`SSH_AUTH_SOCK`, or `XDG_*`; agent-host steps retain their host variable support.
+Agent-container steps apply the same reserved-name restrictions as local containers.
+Steps, template versions, releases, and runbook versions preserve these fields.
+An empty `variable_names` list passes all resolved variables; a non-empty
+list restricts that step, including remote host steps.
+The admin agent API reports `execution_modes`, `container_runtimes`, and
+`container_interpreters` from the last valid poll.
+Upgrade the server before enabling agent containers. Keep old agents on host
+steps. Do not downgrade the server while container work is pending or cleanup
+is unresolved. Downgrading an agent clears its container capabilities and
+fails its incompatible waiting work before claim.
+An agent result of `cleanup_unconfirmed` blocks the environment queue, retry,
+and project/environment deletion until that agent reconciles its containers
+and reports a ready v3 poll.
+The original terminal result remains visible after confirmation.
+Re-pairing a revoked agent returns `409` while its remote execution or cleanup
+remains unconfirmed. Reconcile its workloads before revocation; a replacement
+installation cannot confirm cleanup for the old installation.
+After a heartbeat or cancellation timeout, the same paired agent can replay
+its durable terminal report with the original claim token. This resolves the
+remote uncertainty without changing a failed deployment to success. A late
+`cleanup_unconfirmed` report still requires a ready v3 poll before retry.
 The embedded agent pulls an image when it is missing. Container steps default
 to no network; local steps can opt into `network_mode: "bridge"`. They have no
 host mounts. A mutable image tag does not
@@ -173,11 +198,15 @@ or refresh; recreate their steps and create a new release (`409` on launch).
    `null`) for Unscoped. On projects bound to a lifecycle, create and update
    accept only its stage environments; other IDs return `422`. Projects
    without a lifecycle can use any environment.
-5. **Release** (immutable snapshot of current steps + variables)
+5. **Release** (snapshot of current steps + variables)
    `POST /api/v1/projects/$PID/releases` `{"version":"1.2.0"}` → `id`.
    Later step edits do NOT affect it; `POST /projects/$PID/releases/$RID/refresh`
-   re-snapshots an unused release. Once any deployment is created, refresh
-   returns `409`; create a new release to change its variables or steps.
+   re-snapshots the release, including after failed or successful deployments.
+   Active or unconfirmed deployments and buffered agent logs return `409`;
+   wait for completion and log flushing, then retry.
+   Existing deployment steps and pinned artifacts stay unchanged. New
+   deployments use the refreshed release; re-runs use the original deployment
+   steps and artifact pin, with the release's current variables.
    Refresh also cannot upgrade an old image-less release.
    `DELETE /api/v1/projects/$PID/releases/$RID` returns `204` when removed,
    `404` if absent or in another project, and `409` if it has active or
@@ -216,8 +245,10 @@ done
     - `POST /api/v1/deployments/$DID/cancel` cancels queued work or requests
       cancellation of a running deploy.
     - `cleanup_unconfirmed` means container removal failed. Retry and redeploy
-      return `409`; do not re-execute until a successful startup runtime sweep
-      changes the deployment to `failed`.
+      return `409` while cleanup remains unconfirmed. For local execution, a
+      successful startup runtime sweep changes the deployment to `failed`.
+      For agent execution, a ready v3 poll confirms cleanup and permits retry
+      or redeploy while preserving the original terminal result.
 
 ## Post-deployment verification and rollback
 
@@ -291,10 +322,11 @@ stale confirmation, or an overlapping submission returns `409`; a lifecycle
 gate returns `422`. Rollback cannot force a gate. Viewers cannot submit it;
 project authorization and admin-only approval still apply. The new deployment
 reuses the prior successful deployment's frozen steps and package pin and the
-release's frozen variables, then runs the environment's current verification.
-It records rollback provenance and an audit entry. Migration locks releases
-already used by historical deployments; values overwritten by a refresh
-before this feature cannot be reconstructed. Mutable container image tags
+release's current snapshot of variables, then runs the environment's current
+verification. An explicit release refresh replaces those variables for future
+deployments, re-runs, and rollbacks; historical variable values cannot be
+reconstructed. It records rollback provenance and an audit entry.
+Mutable container image tags
 also remain mutable; use digests when exact image contents matter.
 
 ## Gates (know the 422s)
@@ -368,8 +400,10 @@ An operator's reverse proxy may impose additional limits.
 Execution actions are `POST .../$XID/cancel`, `/approve` (admin only),
 and `/retry` (after a terminal status). Retry returns `409` while the source
 execution has a lost or unconfirmed remote outcome; inspect the agent before
-retrying. Retry also returns `409` for `cleanup_unconfirmed` until the next
-successful startup runtime sweep changes the deployment to `failed`.
+retrying. Retry also returns `409` while container cleanup remains unconfirmed.
+Local cleanup requires a successful startup runtime sweep; agent cleanup
+requires a ready v3 poll. Confirmed agent cleanup permits retry without
+changing the historical `cleanup_unconfirmed` result.
 
 `GET /api/v1/projects/$PID/runbook-executions?limit=100&offset=0`
 returns `{items, total, limit, offset}`. The default page has 100 items;

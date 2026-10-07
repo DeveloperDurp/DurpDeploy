@@ -286,8 +286,4 @@ func assertRollbackVerificationRecovery(
 	if err != nil || check.Status != "failed" || !check.FinishedAt.Valid {
 		t.Fatalf("recovered verification=%+v err=%v", check, err)
 	}
-	locked, err := firstRepo.Queries.LockUnusedReleaseSnapshot(ctx, 1)
-	if err != nil || locked != 0 {
-		t.Fatalf("used release lock=%d err=%v", locked, err)
-	}
 }

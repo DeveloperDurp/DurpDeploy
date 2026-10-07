@@ -26,10 +26,25 @@ type Agent struct {
 	AgentProtocol          sql.NullString `json:"agent_protocol"`
 }
 
+type AgentContainerInterpreter struct {
+	AgentID     string `json:"agent_id"`
+	Interpreter string `json:"interpreter"`
+}
+
+type AgentContainerRuntime struct {
+	AgentID string `json:"agent_id"`
+	Runtime string `json:"runtime"`
+}
+
 type AgentEnvironmentLabel struct {
 	AgentID       string `json:"agent_id"`
 	EnvironmentID int64  `json:"environment_id"`
 	CreatedAt     int64  `json:"created_at"`
+}
+
+type AgentExecutionMode struct {
+	AgentID       string `json:"agent_id"`
+	ExecutionMode string `json:"execution_mode"`
 }
 
 type AgentInterpreter struct {
@@ -56,6 +71,12 @@ type AgentPairing struct {
 	CreatedAt            int64          `json:"created_at"`
 	UpdatedAt            int64          `json:"updated_at"`
 	ServerPullEndpoint   sql.NullString `json:"server_pull_endpoint"`
+}
+
+type AgentStepCapability struct {
+	AgentID       string `json:"agent_id"`
+	ExecutionMode string `json:"execution_mode"`
+	Interpreter   string `json:"interpreter"`
 }
 
 type ApiToken struct {
@@ -199,6 +220,7 @@ type DeploymentStep struct {
 	ApprovalArtifactPath string        `json:"approval_artifact_path"`
 	ApprovalReviewPath   string        `json:"approval_review_path"`
 	ApprovalReviewFormat string        `json:"approval_review_format"`
+	AgentExecutionMode   string        `json:"agent_execution_mode"`
 }
 
 type DeploymentStepAttempt struct {
@@ -241,6 +263,12 @@ type DeploymentVerification struct {
 	Status         string        `json:"status"`
 	StartedAt      sql.NullInt64 `json:"started_at"`
 	FinishedAt     sql.NullInt64 `json:"finished_at"`
+}
+
+type EligibleRemoteStepAgent struct {
+	DeploymentID int64  `json:"deployment_id"`
+	StepIndex    int64  `json:"step_index"`
+	AgentID      string `json:"agent_id"`
 }
 
 type Environment struct {
@@ -422,6 +450,7 @@ type RemoteDeploymentClaim struct {
 	CreatedAt           int64          `json:"created_at"`
 	UpdatedAt           int64          `json:"updated_at"`
 	LogBufferCiphertext sql.NullString `json:"log_buffer_ciphertext"`
+	CleanupConfirmedAt  sql.NullInt64  `json:"cleanup_confirmed_at"`
 }
 
 type RemoteStepLogSequence struct {
@@ -448,6 +477,7 @@ type RemoteStepRun struct {
 	UpdatedAt           int64          `json:"updated_at"`
 	LogBufferCiphertext sql.NullString `json:"log_buffer_ciphertext"`
 	RecoveryCancelled   int64          `json:"recovery_cancelled"`
+	CleanupConfirmedAt  sql.NullInt64  `json:"cleanup_confirmed_at"`
 }
 
 type Runbook struct {
@@ -531,6 +561,7 @@ type Step struct {
 	ApprovalArtifactPath string `json:"approval_artifact_path"`
 	ApprovalReviewPath   string `json:"approval_review_path"`
 	ApprovalReviewFormat string `json:"approval_review_format"`
+	AgentExecutionMode   string `json:"agent_execution_mode"`
 }
 
 type StepAgentSelector struct {
@@ -551,6 +582,7 @@ type StepTemplate struct {
 	ApprovalArtifactPath string `json:"approval_artifact_path"`
 	ApprovalReviewPath   string `json:"approval_review_path"`
 	ApprovalReviewFormat string `json:"approval_review_format"`
+	AgentExecutionMode   string `json:"agent_execution_mode"`
 }
 
 type StepTemplateAgentSelector struct {
@@ -573,6 +605,7 @@ type StepTemplateVersion struct {
 	ApprovalArtifactPath string `json:"approval_artifact_path"`
 	ApprovalReviewPath   string `json:"approval_review_path"`
 	ApprovalReviewFormat string `json:"approval_review_format"`
+	AgentExecutionMode   string `json:"agent_execution_mode"`
 }
 
 type StepTemplateVersionAgentSelector struct {

@@ -1218,8 +1218,13 @@ echo "$INTERPRETER_UPDATED_STEP" | python3 -c \
     "import sys,json; assert json.load(sys.stdin)['interpreter']=='pwsh'"
 INTERPRETER_REFRESH_CODE=$(api_post_code '{}' \
     "$BASE/api/v1/projects/$INTERPRETER_PROJECT_ID/releases/$INTERPRETER_RELEASE_ID/refresh")
-[[ "$INTERPRETER_REFRESH_CODE" == 409 ]] || {
-    echo "FAIL: used release refresh should be blocked ($INTERPRETER_REFRESH_CODE)"; exit 1;
+[[ "$INTERPRETER_REFRESH_CODE" == 200 ]] || {
+    echo "FAIL: used release refresh should succeed ($INTERPRETER_REFRESH_CODE)"; exit 1;
+}
+INTERPRETER_USED_RELEASE_PAGE=$(curl_body \
+    "$BASE/projects/$INTERPRETER_PROJECT_ID/releases/$INTERPRETER_RELEASE_ID")
+grep -q '>pwsh<' <<<"$INTERPRETER_USED_RELEASE_PAGE" || {
+    echo "FAIL: used release did not refresh to pwsh"; exit 1;
 }
 INTERPRETER_PWSH_RELEASE=$(api_post '{"version":"powershell-immutable"}' \
     "$BASE/api/v1/projects/$INTERPRETER_PROJECT_ID/releases")

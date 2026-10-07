@@ -43,6 +43,7 @@ type deploymentStep struct {
 	TimeoutSeconds       int64    `json:"timeout_seconds"`
 	MaxRetries           int64    `json:"max_retries"`
 	ExecutionTarget      string   `json:"execution_target"`
+	AgentExecutionMode   string   `json:"agent_execution_mode"`
 	AgentSelectors       []string `json:"agent_selectors"`
 	ContainerImage       string   `json:"container_image"`
 	NetworkMode          string   `json:"network_mode"`
@@ -309,6 +310,11 @@ func (r *DeploymentRunner) Run(
 				logWriter:    logWriter,
 			})
 			if err != nil {
+				if errors.Is(err, errContainerCleanup) {
+					r.persistCompletion(ctx, runCtx, deploymentID,
+						"cleanup_unconfirmed", false)
+					return
+				}
 				if errors.Is(err, errDeploymentCancelled) {
 					r.finalizeCancellation(ctx, deploymentID)
 					return

@@ -62,6 +62,13 @@ keep `overflow-x-auto` and `table table-zebra table-fixed w-full`.
 - **States**: validation uses `text-error text-sm`; alerts use semantic
   `alert-*` classes.
 
+### Remote step execution
+- Reuse native labelled selects for Server container / Agent and Host / Container.
+- Show agent mode only for Agent steps. Show and require an image for either container path.
+- Disable fields that do not apply. Keep variable restrictions visible for all modes.
+- Explain that agent containers require a ready Docker or Podman runtime and agent/3.
+- Reuse the existing form error region and viewer guards; controls wrap on small screens.
+
 ### Package repository configuration
 - One active project source is shown as a card, without a repository selector.
 - Authentication uses Alpine to show and enable only relevant credential fields;

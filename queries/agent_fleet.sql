@@ -6,13 +6,21 @@ FROM agents a LEFT JOIN agent_pairings p ON p.agent_id = a.id;
 SELECT agent_id, interpreter FROM agent_interpreters
 ORDER BY agent_id, interpreter;
 
+-- name: ListFleetExecutionCapabilities :many
+SELECT agent_id, 'mode' AS kind, execution_mode AS value FROM agent_execution_modes
+UNION ALL SELECT agent_id, 'runtime' AS kind, runtime AS value FROM agent_container_runtimes
+UNION ALL SELECT agent_id, 'interpreter' AS kind, interpreter AS value FROM agent_container_interpreters
+ORDER BY agent_id, kind, value;
+
 -- name: ListFleetCurrentWork :many
 SELECT agent_id, deployment_id, step_index, state FROM remote_step_runs
 WHERE state IN ('claimed', 'started', 'cancel_requested')
+    OR (state = 'cleanup_unconfirmed' AND cleanup_confirmed_at IS NULL)
 UNION ALL
 SELECT agent_id, deployment_id, CAST(-1 AS INTEGER) AS step_index, state
 FROM remote_deployment_claims
 WHERE state IN ('claimed', 'started', 'cancel_requested')
+    OR (state = 'cleanup_unconfirmed' AND cleanup_confirmed_at IS NULL)
 ORDER BY agent_id, deployment_id, step_index;
 
 -- name: ListFleetQueuedWork :many
@@ -45,11 +53,11 @@ SELECT agent_id, deployment_id, step_index, state, reason, finished_at FROM (
             deployment_id DESC, step_index DESC) AS ordinal
     FROM (
         SELECT agent_id, deployment_id, step_index, state, state AS reason, finished_at
-        FROM remote_step_runs WHERE state IN ('failed', 'lost', 'cancel_unconfirmed')
+        FROM remote_step_runs WHERE state IN ('failed', 'lost', 'cancel_unconfirmed', 'cleanup_unconfirmed')
         UNION ALL
         SELECT agent_id, deployment_id, CAST(-1 AS INTEGER) AS step_index, state,
             COALESCE(reason, state) AS reason, finished_at
         FROM remote_deployment_claims
-        WHERE state IN ('failed', 'lost', 'cancel_unconfirmed')
+        WHERE state IN ('failed', 'lost', 'cancel_unconfirmed', 'cleanup_unconfirmed')
     ) failures
 ) ranked WHERE ordinal = 1;

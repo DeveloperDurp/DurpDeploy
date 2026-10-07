@@ -39,7 +39,44 @@ JOIN deployments d ON d.id = c.deployment_id
 WHERE c.agent_id = sqlc.arg(agent_id) AND c.state = 'waiting'
   AND d.assigned_agent_id = c.agent_id AND d.status = 'pending'
   AND EXISTS (SELECT 1 FROM environment_deployment_slots slot WHERE slot.deployment_id = d.id)
+  AND NOT EXISTS (SELECT 1 FROM deployment_steps s
+      WHERE s.deployment_id = d.id AND NOT EXISTS (
+          SELECT 1 FROM agent_step_capabilities capability
+          WHERE capability.agent_id = c.agent_id
+            AND capability.interpreter = s.interpreter
+            AND capability.execution_mode = s.agent_execution_mode))
+  AND NOT EXISTS (SELECT 1 FROM remote_step_runs busy WHERE busy.agent_id = c.agent_id
+      AND busy.state = 'cleanup_unconfirmed' AND busy.cleanup_confirmed_at IS NULL)
+  AND NOT EXISTS (SELECT 1 FROM remote_deployment_claims busy WHERE busy.agent_id = c.agent_id
+      AND busy.state = 'cleanup_unconfirmed' AND busy.cleanup_confirmed_at IS NULL)
 ORDER BY c.created_at, c.deployment_id;
+
+-- name: FailUnsupportedWaitingRemoteDeploymentClaims :exec
+UPDATE remote_deployment_claims SET state = 'failed',
+    reason = 'remote_execution_capability_unavailable',
+    finished_at = sqlc.arg(now), updated_at = sqlc.arg(now)
+WHERE remote_deployment_claims.agent_id = sqlc.arg(agent_id)
+  AND remote_deployment_claims.state = 'waiting'
+  AND EXISTS (SELECT 1 FROM deployment_steps s
+      WHERE s.deployment_id = remote_deployment_claims.deployment_id
+        AND NOT EXISTS (SELECT 1 FROM agent_step_capabilities capability
+            WHERE capability.agent_id = remote_deployment_claims.agent_id
+              AND capability.interpreter = s.interpreter
+              AND capability.execution_mode = s.agent_execution_mode));
+
+-- name: FailUnsupportedRemoteDeploymentStatus :exec
+UPDATE deployments SET status = 'failed', finished_at = sqlc.arg(now)
+WHERE status IN ('queued', 'pending', 'pending_approval')
+  AND EXISTS (SELECT 1 FROM remote_deployment_claims c
+      WHERE c.deployment_id = deployments.id AND c.agent_id = sqlc.arg(agent_id)
+        AND c.state = 'failed');
+
+-- name: FailWaitingRemotePayload :exec
+UPDATE remote_deployment_claims SET state = 'failed',
+    reason = 'remote_payload_requires_agent_3', finished_at = sqlc.arg(now),
+    updated_at = sqlc.arg(now)
+WHERE deployment_id = sqlc.arg(deployment_id) AND agent_id = sqlc.arg(agent_id)
+  AND state = 'waiting';
 
 -- name: LockWaitingRemoteDeploymentClaim :execrows
 UPDATE remote_deployment_claims SET updated_at = updated_at -- NOSONAR: intentional write lock
@@ -81,7 +118,19 @@ WHERE remote_deployment_claims.deployment_id = sqlc.arg(deployment_id)
   AND NOT EXISTS (SELECT 1 FROM remote_deployment_claims busy
       WHERE busy.agent_id = remote_deployment_claims.agent_id
         AND busy.deployment_id <> remote_deployment_claims.deployment_id
-        AND busy.state IN ('claimed', 'started', 'cancel_requested'));
+        AND busy.state IN ('claimed', 'started', 'cancel_requested'))
+  AND NOT EXISTS (SELECT 1 FROM deployment_steps s
+      WHERE s.deployment_id = remote_deployment_claims.deployment_id
+        AND NOT EXISTS (SELECT 1 FROM agent_step_capabilities capability
+            WHERE capability.agent_id = remote_deployment_claims.agent_id
+              AND capability.interpreter = s.interpreter
+              AND capability.execution_mode = s.agent_execution_mode))
+  AND NOT EXISTS (SELECT 1 FROM remote_step_runs busy
+      WHERE busy.agent_id = remote_deployment_claims.agent_id
+        AND busy.state = 'cleanup_unconfirmed' AND busy.cleanup_confirmed_at IS NULL)
+  AND NOT EXISTS (SELECT 1 FROM remote_deployment_claims busy
+      WHERE busy.agent_id = remote_deployment_claims.agent_id
+        AND busy.state = 'cleanup_unconfirmed' AND busy.cleanup_confirmed_at IS NULL);
 
 -- name: ExpireRemoteClaims :execrows
 UPDATE remote_deployment_claims SET state = 'waiting', reason = NULL,
@@ -139,17 +188,20 @@ WHERE remote_deployment_claims.deployment_id = sqlc.arg(deployment_id)
 -- name: FinishRemoteDeployment :execrows
 UPDATE remote_deployment_claims SET state = sqlc.arg(state),
     reason = sqlc.narg(reason), finished_at = sqlc.arg(now),
+    cancel_requested_at = NULL,
     updated_at = sqlc.arg(now)
 WHERE remote_deployment_claims.deployment_id = sqlc.arg(deployment_id)
   AND remote_deployment_claims.agent_id = sqlc.arg(agent_id)
   AND remote_deployment_claims.claim_token_hash = sqlc.arg(claim_token_hash)
-  AND remote_deployment_claims.state = 'started'
+  AND (remote_deployment_claims.state IN ('started', 'lost', 'cancel_unconfirmed') OR
+      (remote_deployment_claims.state = 'cancel_requested' AND sqlc.arg(state) = 'cleanup_unconfirmed'))
   AND remote_deployment_claims.started_at IS NOT NULL
-  AND (sqlc.arg(state) = 'succeeded' OR sqlc.arg(state) = 'failed')
+  AND (sqlc.arg(state) = 'succeeded' OR sqlc.arg(state) = 'failed'
+      OR sqlc.arg(state) = 'cleanup_unconfirmed')
   AND EXISTS (SELECT 1 FROM deployments d
       WHERE d.id = remote_deployment_claims.deployment_id
         AND d.assigned_agent_id = remote_deployment_claims.agent_id
-        AND d.status IN ('pending', 'running'))
+        AND d.status IN ('running', 'failed'))
   AND EXISTS (SELECT 1 FROM agents a
       WHERE a.id = remote_deployment_claims.agent_id AND a.status = 'active'
         AND EXISTS (SELECT 1 FROM agent_pairings p
@@ -159,7 +211,7 @@ WHERE remote_deployment_claims.deployment_id = sqlc.arg(deployment_id)
 UPDATE deployments SET status = sqlc.arg(state), finished_at = sqlc.arg(now)
 WHERE id = sqlc.arg(deployment_id)
   AND assigned_agent_id = sqlc.arg(agent_id)
-  AND status = 'running';
+  AND (status = 'running' OR (status = 'failed' AND sqlc.arg(state) = 'cleanup_unconfirmed'));
 
 -- name: LockRemoteDeploymentClaim :execrows
 UPDATE remote_deployment_claims SET updated_at = updated_at -- NOSONAR: intentional write lock
@@ -195,7 +247,7 @@ UPDATE remote_deployment_claims SET state = 'cancelled',
 WHERE deployment_id = sqlc.arg(deployment_id)
   AND agent_id = sqlc.arg(agent_id)
   AND claim_token_hash = sqlc.arg(claim_token_hash)
-  AND state = 'cancel_requested';
+  AND state IN ('cancel_requested', 'cancel_unconfirmed');
 
 -- name: ExpireRemoteCancellation :execrows
 UPDATE remote_deployment_claims SET state = 'cancel_unconfirmed',
@@ -234,3 +286,8 @@ UPDATE deployments SET status = 'failed', finished_at = sqlc.arg(now)
 WHERE id = sqlc.arg(deployment_id)
   AND assigned_agent_id = sqlc.arg(agent_id)
   AND status = 'running';
+
+-- name: ConfirmRemoteDeploymentCleanup :exec
+UPDATE remote_deployment_claims SET cleanup_confirmed_at = sqlc.arg(now)
+WHERE agent_id = sqlc.arg(agent_id) AND state = 'cleanup_unconfirmed'
+  AND cleanup_confirmed_at IS NULL;

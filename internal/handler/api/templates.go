@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 
+	"durpdeploy/internal/agentexecution"
 	"durpdeploy/internal/artifact"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/handler"
@@ -25,6 +26,7 @@ type stepTemplateRequest struct {
 	ScriptBody           string   `json:"script_body"`
 	Interpreter          string   `json:"interpreter"`
 	ExecutionTarget      string   `json:"execution_target"`
+	AgentExecutionMode   string   `json:"agent_execution_mode"`
 	AgentSelectors       []string `json:"agent_selectors"`
 	ContainerImage       string   `json:"container_image"`
 	NetworkMode          string   `json:"network_mode"`
@@ -190,10 +192,10 @@ func (h *StepTemplateHandler) CreateTemplate(
 		return
 	}
 	image, variableNames, ok := validateContainerConfig(
-		w,
-		target,
-		req.ContainerImage,
-		req.VariableNames,
+		w, agentexecution.Config{
+			Target: target, Mode: req.AgentExecutionMode,
+			Image: req.ContainerImage, VariableNames: req.VariableNames,
+		},
 	)
 	if !ok {
 		return
@@ -206,6 +208,7 @@ func (h *StepTemplateHandler) CreateTemplate(
 			ScriptBody:           req.ScriptBody,
 			Interpreter:          selectedInterpreter,
 			ContainerImage:       image,
+			AgentExecutionMode:   req.AgentExecutionMode,
 			NetworkMode:          req.NetworkMode,
 			ApprovalArtifactPath: req.ApprovalArtifactPath,
 			ApprovalReviewPath:   req.ApprovalReviewPath,
@@ -354,10 +357,10 @@ func (h *StepTemplateHandler) UpdateTemplate(
 		return
 	}
 	image, variableNames, ok := validateContainerConfig(
-		w,
-		target,
-		req.ContainerImage,
-		req.VariableNames,
+		w, agentexecution.Config{
+			Target: target, Mode: req.AgentExecutionMode,
+			Image: req.ContainerImage, VariableNames: req.VariableNames,
+		},
 	)
 	if !ok {
 		return
@@ -371,6 +374,7 @@ func (h *StepTemplateHandler) UpdateTemplate(
 			ScriptBody:           req.ScriptBody,
 			Interpreter:          selectedInterpreter,
 			ContainerImage:       image,
+			AgentExecutionMode:   req.AgentExecutionMode,
 			NetworkMode:          req.NetworkMode,
 			ApprovalArtifactPath: req.ApprovalArtifactPath,
 			ApprovalReviewPath:   req.ApprovalReviewPath,

@@ -334,7 +334,7 @@ templ RunbookExecutionActions(projectID int64, execution db.GetRunbookExecutionR
 			if execution.Status == "running" || execution.Status == "queued" || execution.Status == "pending" || execution.Status == "pending_approval" {
 				<form method="post" action={ fmt.Sprintf("/projects/%d/runbooks/executions/%d/cancel", projectID, execution.ID) }><button class="btn btn-error btn-sm" type="submit">Cancel</button></form>
 			}
-			if execution.Status == "failed" || execution.Status == "cancelled" || execution.Status == "succeeded" {
+			if execution.Status == "failed" || execution.Status == "cancelled" || execution.Status == "succeeded" || execution.Status == "cleanup_unconfirmed" {
 				<form method="post" action={ fmt.Sprintf("/projects/%d/runbooks/executions/%d/retry", projectID, execution.ID) }><button class="btn btn-primary btn-sm" type="submit">Retry</button></form>
 			}
 		}

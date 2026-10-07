@@ -71,9 +71,6 @@ func RefreshReleaseSnapshot(
 	repo *repository.Repository,
 	release db.Release,
 ) (db.Release, error) {
-	if release.SnapshotLocked != 0 {
-		return db.Release{}, ErrReleaseSnapshotLocked
-	}
 	if err := repo.ValidateExecutableRelease(ctx, release.ID); err != nil {
 		return db.Release{}, err
 	}
@@ -98,7 +95,7 @@ func RefreshReleaseSnapshot(
 	}
 	defer tx.Rollback()
 	queries := repo.Queries.WithTx(tx)
-	if err := lockRefreshableRelease(ctx, queries, release); err != nil {
+	if err := lockReleaseForRefresh(ctx, queries, release); err != nil {
 		return db.Release{}, err
 	}
 	updated, err := queries.UpdateRelease(ctx, db.UpdateReleaseParams{
@@ -204,6 +201,7 @@ type releaseStepSnapshot struct {
 	TimeoutSeconds       int64    `json:"timeout_seconds"`
 	MaxRetries           int64    `json:"max_retries"`
 	ExecutionTarget      string   `json:"execution_target"`
+	AgentExecutionMode   string   `json:"agent_execution_mode"`
 	AgentSelectors       []string `json:"agent_selectors,omitempty"`
 	ContainerImage       string   `json:"container_image"`
 	NetworkMode          string   `json:"network_mode"`
@@ -254,6 +252,7 @@ func releaseStepSnapshots(
 			TimeoutSeconds:       step.TimeoutSeconds,
 			MaxRetries:           step.MaxRetries,
 			ExecutionTarget:      step.ExecutionTarget,
+			AgentExecutionMode:   step.AgentExecutionMode,
 			AgentSelectors:       selectors,
 			ContainerImage:       step.ContainerImage,
 			NetworkMode:          step.NetworkMode,

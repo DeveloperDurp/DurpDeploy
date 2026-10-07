@@ -5393,7 +5393,7 @@
         ],
         "responses": {
           "201": {
-            "description": "Release is an immutable snapshot of project steps and variables.",
+            "description": "Release is a refreshable snapshot of project steps and variables.",
             "schema": {
               "$ref": "#/definitions/Release"
             }
@@ -5679,7 +5679,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Release is an immutable snapshot of project steps and variables.",
+            "description": "Release is a refreshable snapshot of project steps and variables.",
             "schema": {
               "$ref": "#/definitions/Release"
             }
@@ -8616,6 +8616,20 @@
           "type": "string",
           "x-go-name": "Compatibility"
         },
+        "container_interpreters": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "x-go-name": "ContainerInterpreters"
+        },
+        "container_runtimes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "x-go-name": "ContainerRuntimes"
+        },
         "created_at": {
           "type": "integer",
           "format": "int64",
@@ -8635,6 +8649,13 @@
         "endpoint": {
           "type": "string",
           "x-go-name": "Endpoint"
+        },
+        "execution_modes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "x-go-name": "ExecutionModes"
         },
         "health": {
           "type": "string",
@@ -10133,7 +10154,7 @@
     },
     "Release": {
       "type": "object",
-      "title": "Release is an immutable snapshot of project steps and variables.",
+      "title": "Release is a refreshable snapshot of project steps and variables.",
       "properties": {
         "created_at": {
           "type": "integer",
@@ -10151,8 +10172,10 @@
           "x-go-name": "ProjectID"
         },
         "snapshot_locked": {
+          "description": "Deprecated: retained for compatibility; does not prevent refresh.",
           "type": "integer",
           "format": "int64",
+          "x-deprecated": true,
           "x-go-name": "SnapshotLocked"
         },
         "steps_json": {
@@ -10772,6 +10795,10 @@
     "RunbookStep": {
       "type": "object",
       "properties": {
+        "agent_execution_mode": {
+          "type": "string",
+          "x-go-name": "AgentExecutionMode"
+        },
         "agent_selectors": {
           "type": "array",
           "items": {
@@ -11065,6 +11092,10 @@
       "type": "object",
       "title": "Step is an executable script step within a project.",
       "properties": {
+        "agent_execution_mode": {
+          "type": "string",
+          "x-go-name": "AgentExecutionMode"
+        },
         "agent_selectors": {
           "type": "array",
           "items": {
@@ -11085,7 +11116,7 @@
           "x-go-name": "ApprovalReviewPath"
         },
         "container_image": {
-          "description": "Container image the step runs in on the server; mandatory for\nlocal steps and rejected for agent steps.",
+          "description": "Container image required for local steps and agent container mode.",
           "type": "string",
           "x-go-name": "ContainerImage"
         },
@@ -11164,6 +11195,10 @@
       "type": "object",
       "title": "StepRequest is the body for create/update step.",
       "properties": {
+        "agent_execution_mode": {
+          "type": "string",
+          "x-go-name": "AgentExecutionMode"
+        },
         "agent_selectors": {
           "type": "array",
           "items": {
@@ -11184,7 +11219,7 @@
           "x-go-name": "ApprovalReviewPath"
         },
         "container_image": {
-          "description": "Container image the step runs in on the server; mandatory for\nlocal steps and rejected for agent steps.",
+          "description": "Required for local steps and agent container mode; rejected for agent host mode.",
           "type": "string",
           "x-go-name": "ContainerImage"
         },
@@ -11239,6 +11274,10 @@
       "type": "object",
       "title": "StepTemplate is a reusable step template.",
       "properties": {
+        "agent_execution_mode": {
+          "type": "string",
+          "x-go-name": "AgentExecutionMode"
+        },
         "agent_selectors": {
           "type": "array",
           "items": {
@@ -11316,6 +11355,10 @@
       "type": "object",
       "title": "StepTemplateRequest is the body for create/update step template.",
       "properties": {
+        "agent_execution_mode": {
+          "type": "string",
+          "x-go-name": "AgentExecutionMode"
+        },
         "agent_selectors": {
           "type": "array",
           "items": {
@@ -11336,7 +11379,7 @@
           "x-go-name": "ApprovalReviewPath"
         },
         "container_image": {
-          "description": "Container image the step runs in on the server; mandatory for\nlocal steps and rejected for agent steps.",
+          "description": "Required for local steps and agent container mode; rejected for agent host mode.",
           "type": "string",
           "x-go-name": "ContainerImage"
         },
@@ -11376,6 +11419,10 @@
       "type": "object",
       "title": "StepTemplateVersion is a historical version of a step template.",
       "properties": {
+        "agent_execution_mode": {
+          "type": "string",
+          "x-go-name": "AgentExecutionMode"
+        },
         "agent_selectors": {
           "type": "array",
           "items": {

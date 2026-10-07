@@ -172,7 +172,7 @@ func TestMobile_RenderedHTML_renders_project_back_controls_when_authenticated(
 			name: "steps",
 			path: fmt.Sprintf("/projects/%d/steps-page", fixture.project.ID),
 			headerPattern: fmt.Sprintf(
-				`(?s)<div class="flex justify-between items-center">\s*<h1 class="text-3xl font-bold">Steps for .*?</h1>\s*<div class="flex gap-2">\s*<a href="/projects/%d" class="btn btn-ghost btn-sm">Back</a>`,
+				`(?s)<div class="flex flex-wrap justify-between items-center gap-2">\s*<h1 class="text-3xl font-bold break-all">Steps for .*?</h1>\s*<div class="flex gap-2">\s*<a href="/projects/%d" class="btn btn-ghost btn-sm">Back</a>`,
 				fixture.project.ID,
 			),
 		},
@@ -393,7 +393,10 @@ func TestSteps_RenderedHTML_uses_named_Alpine_state_when_authenticated(
 			`x-data="{`,
 		} {
 			if strings.Contains(body, forbidden) {
-				t.Errorf("step editor contains forbidden inline behavior %q", forbidden)
+				t.Errorf(
+					"step editor contains forbidden inline behavior %q",
+					forbidden,
+				)
 			}
 		}
 	}
@@ -428,7 +431,10 @@ func TestSteps_RenderedHTML_uses_named_Alpine_state_when_authenticated(
 	for _, body := range []string{pageBody, pickerBody} {
 		for _, forbidden := range []string{"hx-on:", "onclick=", "innerHTML ="} {
 			if strings.Contains(body, forbidden) {
-				t.Errorf("step host contains forbidden inline behavior %q", forbidden)
+				t.Errorf(
+					"step host contains forbidden inline behavior %q",
+					forbidden,
+				)
 			}
 		}
 	}

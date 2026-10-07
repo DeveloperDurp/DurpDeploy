@@ -29,10 +29,9 @@ func stepExecutionTarget(step db.Step) string {
 }
 
 // stepContainerTarget reports whether the step's execution target runs
-// in a server-side container. Today only "local" does, but the helper
-// stays explicit so the form can grow new targets without a rewrite.
+// in a server container or an agent container.
 func stepContainerTarget(step db.Step) bool {
-	return step.ExecutionTarget == "local"
+	return step.ExecutionTarget == "local" || step.AgentExecutionMode == "container"
 }
 
 // stepLegacyHostStep marks an existing local step with no container
@@ -70,11 +69,12 @@ func stepInterpreter(step db.Step) string {
 	return step.Interpreter
 }
 
-func stepPlacementData(step db.Step, selectedLabel string) string {
+func StepPlacementData(step db.Step, selectedLabel string) string {
 	return fmt.Sprintf(
-		"stepPlacement(%s, %s)",
+		"stepPlacement(%s, %s, %s)",
 		strconv.Quote(stepExecutionTarget(step)),
 		strconv.Quote(selectedLabel),
+		strconv.Quote(step.AgentExecutionMode),
 	)
 }
 
@@ -99,7 +99,7 @@ templ StepForm(step db.Step, projectID int64, isNew bool, labels []string, selec
 	} else {
 	<div class="p-4 border border-base-300 rounded bg-base-200">
 		<form
-			x-data={ stepPlacementData(step, selectedLabel) }
+			x-data={ StepPlacementData(step, selectedLabel) }
 			if isNew {
 				hx-post={ fmt.Sprintf("/projects/%d/steps", projectID) }
 			} else {
@@ -152,6 +152,7 @@ templ StepForm(step db.Step, projectID int64, isNew bool, labels []string, selec
 						<option value="agent">Agent</option>
 					</select>
 				</div>
+				@AgentExecutionMode(step.AgentExecutionMode, stepInputID(step, isNew, "agent-mode"))
 				<div class="form-control min-w-0" x-cloak x-show="executionTarget === 'agent'">
 					<label class="label" for={ stepInputID(step, isNew, "agent-label") }>
 						<span class="label-text">Agent label</span>
@@ -167,7 +168,7 @@ templ StepForm(step db.Step, projectID int64, isNew bool, labels []string, selec
 				</div>
 			</div>
 			<div class="grid min-w-0 gap-4 sm:grid-cols-2">
-				<div class="form-control min-w-0" x-cloak x-show="executionTarget === 'local'">
+				<div class="form-control min-w-0" x-cloak x-show="usesContainer">
 					<label class="label" for={ stepInputID(step, isNew, "container-image") }>
 						<span class="label-text">Container image</span>
 					</label>
@@ -178,11 +179,11 @@ templ StepForm(step db.Step, projectID int64, isNew bool, labels []string, selec
 						value={ step.ContainerImage }
 						placeholder="e.g. alpine:3.20 or registry.example.com/build:1"
 						required?={ isNew || stepContainerTarget(step) }
-						x-bind:required="executionTarget === 'local'"
-						x-bind:disabled="executionTarget !== 'local'"
+						x-bind:required="usesContainer"
+						x-bind:disabled="!usesContainer"
 						class="input input-bordered min-w-0 w-full"
 					/>
-					<label class="label"><span class="label-text-alt">Required for Local steps. Cleared when Agent is selected.</span></label>
+					<label class="label"><span class="label-text-alt">Required for container execution. The image must contain the selected interpreter.</span></label>
 				</div>
 				<div class="form-control min-w-0">
 					<label class="label" for={ stepInputID(step, isNew, "variable-names") }>
@@ -289,7 +290,7 @@ templ StepEditRow(step db.Step, projectID int64, labels []string, selectedLabel 
 	<tr id={ fmt.Sprintf("step-row-%d", step.ID) }>
 		<td colspan="7" class="w-full p-4">
 			<form
-				x-data={ stepPlacementData(step, selectedLabel) }
+				x-data={ StepPlacementData(step, selectedLabel) }
 				hx-put={ fmt.Sprintf("/projects/%d/steps/%d", projectID, step.ID) }
 				hx-target="#step-list"
 				hx-swap="innerHTML"
@@ -336,7 +337,8 @@ templ StepEditRow(step db.Step, projectID int64, labels []string, selectedLabel 
 					</select>
 					<p x-cloak x-show="agentLabel" x-text="agentLabel" class="mt-1 break-all text-xs text-base-content/70"></p>
 				</div>
-				<div class="form-control min-w-0 xl:col-span-2" x-cloak x-show="executionTarget === 'local'">
+				@AgentExecutionMode(step.AgentExecutionMode, stepInputID(step, false, "agent-mode"))
+				<div class="form-control min-w-0 xl:col-span-2" x-cloak x-show="usesContainer">
 					<label class="label" for={ fmt.Sprintf("step-%d-container-image", step.ID) }><span class="label-text">Container image</span></label>
 					<input
 						id={ fmt.Sprintf("step-%d-container-image", step.ID) }
@@ -344,8 +346,8 @@ templ StepEditRow(step db.Step, projectID int64, labels []string, selectedLabel 
 						name="container_image"
 						value={ step.ContainerImage }
 						placeholder="e.g. alpine:3.20"
-						x-bind:required="executionTarget === 'local'"
-						x-bind:disabled="executionTarget !== 'local'"
+						x-bind:required="usesContainer"
+						x-bind:disabled="!usesContainer"
 						class="input input-bordered input-sm min-w-0 w-full"
 					/>
 				</div>
@@ -427,6 +429,17 @@ templ StepEditRow(step db.Step, projectID int64, labels []string, selectedLabel 
 		</td>
 	</tr>
 	}
+}
+
+templ AgentExecutionMode(mode string, inputID string) {
+	<div class="form-control min-w-0" x-cloak x-show="executionTarget === 'agent'">
+		<label class="label" for={ inputID }><span class="label-text">Agent execution mode</span></label>
+		<select id={ inputID } name="agent_execution_mode" x-model="agentExecutionMode" x-bind:disabled="executionTarget !== 'agent'" class="select select-bordered min-w-0 w-full">
+			<option value="host" selected?={ mode != "container" }>Host</option>
+			<option value="container" selected?={ mode == "container" }>Container</option>
+		</select>
+		<p class="text-sm opacity-70">Containers require agent/3 and a ready Docker or Podman runtime.</p>
+	</div>
 }
 
 templ StepArtifactFields(step db.Step, isNew bool) {

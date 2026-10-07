@@ -207,7 +207,8 @@ func (r *Repository) FinishRemoteStep(
 			if run.State == state {
 				return nil
 			}
-			if state != "succeeded" && state != "failed" {
+			if state != "succeeded" && state != "failed" &&
+				state != "cleanup_unconfirmed" {
 				return ErrRemoteLifecycleConflict
 			}
 			now, err := q.CurrentUnixTime(ctx)

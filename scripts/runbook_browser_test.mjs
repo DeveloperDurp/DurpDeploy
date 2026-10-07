@@ -105,7 +105,8 @@ try {
   const agentTemplate = templates.items.find((template) => template.name === "agent variables");
   assert.ok(agentTemplate);
   await page.goto(`${base}/templates/${agentTemplate.id}/edit`);
-  assert.equal(await page.locator('input[name="container_image"]').count(), 0);
+  assert.equal(await page.locator('input[name="container_image"]').isVisible(), false);
+  assert.equal(await page.locator('input[name="container_image"]').isDisabled(), true);
   const templateVariables = page.locator('input[name="variable_names"]');
   assert.equal(await templateVariables.isEnabled(), true);
   assert.equal(await templateVariables.inputValue(), "REMOTE_TOKEN");

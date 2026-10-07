@@ -30,6 +30,7 @@ func (r *DeploymentRunner) completeDeployment(
 	deploymentID int64,
 	status string,
 	cancellationWins bool,
+	localCleanupConfirmed bool,
 ) (string, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -40,7 +41,30 @@ func (r *DeploymentRunner) completeDeployment(
 		ctx,
 		deploymentID,
 		func(ctx context.Context, q *db.Queries) error {
-			var err error
+			deployment, err := q.GetDeployment(ctx, deploymentID)
+			if err != nil {
+				return err
+			}
+			if localCleanupConfirmed && status == "cleanup_unconfirmed" {
+				if err := q.ConfirmRemoteDeploymentLocalCleanup(
+					ctx,
+					deploymentID,
+				); err != nil {
+					return err
+				}
+			}
+			switch deployment.Status {
+			case "succeeded",
+				"failed",
+				"cancelled",
+				"rejected",
+				"expired",
+				"cleanup_unconfirmed":
+				if status != "cleanup_unconfirmed" {
+					status = deployment.Status
+					return nil
+				}
+			}
 			if status == "cancelled" {
 				_, err = q.CancelStepDeployment(ctx, deploymentID)
 			} else {
@@ -94,12 +118,18 @@ func (r *DeploymentRunner) persistCompletion(
 	status string,
 	cancellationWins bool,
 ) (string, bool) {
-	if err := r.cleanupArtifact(deploymentID); err != nil {
+	localCleanupConfirmed := r.cleanupArtifact(deploymentID) == nil
+	if !localCleanupConfirmed {
 		status = "cleanup_unconfirmed"
 		cancellationWins = false
 	}
 	finalStatus, err := r.completeDeployment(
-		ctx, cancelCtx, deploymentID, status, cancellationWins,
+		ctx,
+		cancelCtx,
+		deploymentID,
+		status,
+		cancellationWins,
+		localCleanupConfirmed,
 	)
 	if err == nil {
 		return finalStatus, true
@@ -121,6 +151,7 @@ func (r *DeploymentRunner) persistCompletion(
 		deploymentID,
 		status,
 		cancellationWins,
+		localCleanupConfirmed,
 	)
 	return finalStatus, false
 }
@@ -132,6 +163,7 @@ func (r *DeploymentRunner) retryCompletion(
 	deploymentID int64,
 	status string,
 	cancellationWins bool,
+	localCleanupConfirmed bool,
 ) {
 	defer cancel()
 	ticker := time.NewTicker(time.Second)
@@ -148,7 +180,12 @@ func (r *DeploymentRunner) retryCompletion(
 			return
 		case <-ticker.C:
 			finalStatus, err := r.completeDeployment(
-				ctx, cancelCtx, deploymentID, status, cancellationWins,
+				ctx,
+				cancelCtx,
+				deploymentID,
+				status,
+				cancellationWins,
+				localCleanupConfirmed,
 			)
 			if err == nil {
 				slog.Info(

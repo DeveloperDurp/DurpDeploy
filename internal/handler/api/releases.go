@@ -372,7 +372,7 @@ func (h *ReleaseHandler) RefreshRelease(
 			return
 		}
 		if errors.Is(err, repository.ErrLegacyServerStep) ||
-			errors.Is(err, handler.ErrReleaseSnapshotLocked) {
+			errors.Is(err, repository.ErrReleaseHasActiveDeployment) {
 			RespondError(
 				w,
 				http.StatusConflict,

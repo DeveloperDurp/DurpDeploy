@@ -52,7 +52,7 @@ func (h *ReleaseHandler) RefreshRelease(
 			return
 		}
 		if errors.Is(err, repository.ErrLegacyServerStep) ||
-			errors.Is(err, ErrReleaseSnapshotLocked) {
+			errors.Is(err, repository.ErrReleaseHasActiveDeployment) {
 			http.Error(
 				w,
 				err.Error(),

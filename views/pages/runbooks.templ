@@ -92,7 +92,7 @@ templ RunbookFormPage(project db.Project, book db.Runbook, stepsJSON string, art
 				if errorMessage != "" {
 					<div class="alert alert-error">{ errorMessage }</div>
 				}
-				<form method="post" action={ runbookSaveURL(project.ID, book.ID) } class="space-y-4" x-data={ fmt.Sprintf("{ steps: %s }", stepsJSON) } x-init="steps.forEach(step => { step.agent_selectors_text = (step.agent_selectors || []).join(', '); step.variable_names_text = (step.variable_names || []).join(', '); })">
+				<form method="post" action={ runbookSaveURL(project.ID, book.ID) } class="space-y-4" x-data={ fmt.Sprintf("runbookForm(%s)", stepsJSON) }>
 					<label class="form-control"><span class="label-text">Package from project release</span><select name="artifact_release_id" class="select select-bordered"><option value="0" selected?={ selectedArtifactReleaseID==0 }>No package</option>
 					if selectedArtifactReleaseID==-1 {
 						<option value="-1" selected>Keep current pinned package (source release deleted)</option>
@@ -115,18 +115,21 @@ templ RunbookFormPage(project db.Project, book db.Runbook, stepsJSON string, art
 								<label class="form-control"><span class="label-text">Interpreter</span><select name="step_interpreter" class="select select-bordered" x-model="step.interpreter"><option value="bash">Bash</option><option value="pwsh">PowerShell</option><option value="python3">Python</option></select></label>
 								<label class="form-control"><span class="label-text">Timeout (seconds)</span><input name="step_timeout" type="number" min="0" class="input input-bordered" x-model="step.timeout_seconds"/></label>
 								<label class="form-control"><span class="label-text">Retries</span><input name="step_retries" type="number" min="0" class="input input-bordered" x-model="step.max_retries"/></label>
-								<label class="form-control"><span class="label-text">Execution target</span><select name="step_target" class="select select-bordered" x-model="step.execution_target" x-on:change="step.network_mode = ''"><option value="local">Server container</option><option value="agent">Agent</option></select></label>
+								<label class="form-control"><span class="label-text">Execution target</span><select name="step_target" class="select select-bordered" x-model="step.execution_target" x-on:change="changeTarget(step)"><option value="local">Server container</option><option value="agent">Agent</option></select></label>
 							</div>
 							<label class="form-control" x-show="step.execution_target === 'agent'"><span class="label-text">Agent labels (comma separated)</span><input name="step_selectors" class="input input-bordered" x-model="step.agent_selectors_text" x-bind:disabled="step.execution_target !== 'agent'"/></label>
 							<input name="step_selectors" type="hidden" value="" x-bind:disabled="step.execution_target === 'agent'"/>
-							<label class="form-control" x-show="step.execution_target === 'local'"><span class="label-text">Container image</span><input name="step_image" class="input input-bordered" x-model="step.container_image" x-bind:disabled="step.execution_target !== 'local'" required/></label>
-							<input name="step_image" type="hidden" value="" x-bind:disabled="step.execution_target === 'local'"/>
+							<label class="form-control" x-show="step.execution_target === 'agent'"><span class="label-text">Agent execution mode</span><select name="step_agent_mode" class="select select-bordered" x-model="step.agent_execution_mode" x-bind:disabled="step.execution_target !== 'agent'"><option value="host">Host</option><option value="container">Container</option></select></label>
+							<p class="text-sm opacity-70" x-show="step.execution_target === 'agent'">Containers require agent/3 and a ready Docker or Podman runtime.</p>
+							<input name="step_agent_mode" type="hidden" value="host" x-bind:disabled="step.execution_target === 'agent'"/>
+							<label class="form-control" x-show="usesContainer(step)"><span class="label-text">Container image</span><input name="step_image" class="input input-bordered" x-model="step.container_image" x-bind:disabled="!usesContainer(step)" x-bind:required="usesContainer(step)"/></label>
+							<input name="step_image" type="hidden" value="" x-bind:disabled="usesContainer(step)"/>
 							<label class="form-control" x-show="step.execution_target === 'local'"><span class="label-text">Container network</span><select name="step_network" class="select select-bordered" x-model="step.network_mode" x-bind:disabled="step.execution_target !== 'local'"><option value="">Isolated (default)</option><option value="none">Isolated</option><option value="bridge">Network access</option></select></label>
 							<input name="step_network" type="hidden" value="" x-bind:disabled="step.execution_target === 'local'"/>
 							<label class="form-control"><span class="label-text">Limit variables (optional)</span><input name="step_variable_names" class="input input-bordered" x-model="step.variable_names_text" placeholder="Empty passes all; or DB_HOST, API_TOKEN"/></label>
 						</div>
 					</template>
-					<button type="button" class="btn btn-secondary" x-on:click="steps.push({name:'',script_body:'',interpreter:'bash',timeout_seconds:0,max_retries:0,execution_target:'local',agent_selectors_text:'',container_image:'',variable_names_text:''})">Add step</button>
+					<button type="button" class="btn btn-secondary" x-on:click="addStep">Add step</button>
 					<div><button type="submit" class="btn btn-primary">Save immutable version</button><a class="btn btn-ghost" href={ fmt.Sprintf("/projects/%d/runbooks", project.ID) }>Cancel</a></div>
 				</form>
 			</div>

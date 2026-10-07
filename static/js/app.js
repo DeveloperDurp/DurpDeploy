@@ -173,9 +173,37 @@ Alpine.data('releaseDeployRow', () => ({
 	forceChecked: false,
 }));
 
-Alpine.data('stepPlacement', (executionTarget = 'local', agentLabel = '') => ({
+Alpine.data('stepPlacement', (executionTarget = 'local', agentLabel = '', agentExecutionMode = 'host') => ({
 	executionTarget,
 	agentLabel,
+	agentExecutionMode: agentExecutionMode || 'host',
+	get usesContainer() {
+		return this.executionTarget === 'local' || this.agentExecutionMode === 'container';
+	},
+}));
+
+Alpine.data('runbookForm', (steps) => ({
+	steps,
+	init() {
+		this.steps.forEach(step => {
+			step.agent_execution_mode ||= 'host';
+			step.agent_selectors_text = (step.agent_selectors || []).join(', ');
+			step.variable_names_text = (step.variable_names || []).join(', ');
+		});
+	},
+	usesContainer(step) {
+		return step.execution_target === 'local' || step.agent_execution_mode === 'container';
+	},
+	changeTarget(step) {
+		step.network_mode = '';
+		if (step.execution_target === 'local') step.agent_execution_mode = 'host';
+	},
+	addStep() {
+		this.steps.push({name: '', script_body: '', interpreter: 'bash',
+			timeout_seconds: 0, max_retries: 0, execution_target: 'local',
+			agent_execution_mode: 'host', agent_selectors_text: '',
+			container_image: '', variable_names_text: ''});
+	},
 }));
 
 Alpine.data('stepFormHost', () => ({
