@@ -539,14 +539,10 @@ setTimeout(()=>form.requestSubmit(),100); return true;
 					t,
 					`document.querySelector('form[hx-put]') && document.readyState === 'complete' && window.htmx`,
 				)
-				if string(
-					browser.evaluate(
-						t,
-						`document.querySelector('[name="network_mode"], [name="approval_artifact_path"], [name="approval_review_path"], [name="approval_review_format"]') === null`,
-					),
-				) != "true" {
-					t.Fatal("agent template offers unsupported gate fields")
-				}
+				browser.wait(t, `(() => {
+					const fields = Array.from(document.querySelectorAll('[name="network_mode"], [name="approval_artifact_path"], [name="approval_review_path"], [name="approval_review_format"]'));
+					return fields.length === 4 && fields.every(e => e.matches(':disabled') && getComputedStyle(e.closest('fieldset')).display === 'none');
+				})()`)
 				browser.screenshot(
 					t,
 					fmt.Sprintf("artifact-agent-template-%d", width),

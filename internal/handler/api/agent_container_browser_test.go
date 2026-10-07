@@ -41,14 +41,27 @@ func TestAgentContainerBrowserE2E(t *testing.T) {
 	base := fmt.Sprintf("/projects/%d", project.ID)
 	set := func(name, value string) {
 		t.Helper()
-		browser.evaluate(t, fmt.Sprintf(`(() => {
+		browser.evaluate(t, fmt.Sprintf(`(async () => {
 			const e = document.querySelector('[name=%q]:not([type=hidden]):not(:disabled)');
 			e.value = %q; e.dispatchEvent(new Event('input', {bubbles:true}));
-			e.dispatchEvent(new Event('change', {bubbles:true})); return true;
+			e.dispatchEvent(new Event('change', {bubbles:true}));
+			await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+			return true;
 		})()`, name, value))
 	}
 	capture := func(name string) {
 		t.Helper()
+		if name == "template-local-gates-new" ||
+			name == "template-local-gates-edit" {
+			t.Logf("local template DOM: %s", browser.evaluate(t, `(() => {
+				const e = document.querySelector('[name=agent_execution_mode]').closest('.form-control');
+				return {target: Alpine.$data(e).executionTarget, display: getComputedStyle(e).display, style: e.getAttribute('style'), shown: e._x_isShown};
+			})()`))
+			browser.wait(
+				t,
+				`getComputedStyle(document.querySelector('[name=agent_execution_mode]').closest('.form-control')).display === 'none'`,
+			)
+		}
 		for _, width := range []int{375, 768, 1280} {
 			browser.call(
 				t,
