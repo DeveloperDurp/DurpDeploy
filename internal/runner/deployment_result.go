@@ -30,6 +30,7 @@ func (r *DeploymentRunner) completeDeployment(
 	deploymentID int64,
 	status string,
 	cancellationWins bool,
+	localCleanupConfirmed bool,
 ) (string, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -43,6 +44,14 @@ func (r *DeploymentRunner) completeDeployment(
 			deployment, err := q.GetDeployment(ctx, deploymentID)
 			if err != nil {
 				return err
+			}
+			if localCleanupConfirmed && status == "cleanup_unconfirmed" {
+				if err := q.ConfirmRemoteDeploymentLocalCleanup(
+					ctx,
+					deploymentID,
+				); err != nil {
+					return err
+				}
 			}
 			switch deployment.Status {
 			case "succeeded",
@@ -109,16 +118,18 @@ func (r *DeploymentRunner) persistCompletion(
 	status string,
 	cancellationWins bool,
 ) (string, bool) {
-	if err := r.cleanupArtifact(deploymentID); err != nil {
+	localCleanupConfirmed := r.cleanupArtifact(deploymentID) == nil
+	if !localCleanupConfirmed {
 		status = "cleanup_unconfirmed"
 		cancellationWins = false
-	} else if status == "cleanup_unconfirmed" {
-		if err := r.repo.Queries.ConfirmRemoteDeploymentLocalCleanup(ctx, deploymentID); err != nil {
-			slog.Error("confirm local cleanup for remote outcome", "deployment_id", deploymentID, "err", err)
-		}
 	}
 	finalStatus, err := r.completeDeployment(
-		ctx, cancelCtx, deploymentID, status, cancellationWins,
+		ctx,
+		cancelCtx,
+		deploymentID,
+		status,
+		cancellationWins,
+		localCleanupConfirmed,
 	)
 	if err == nil {
 		return finalStatus, true
@@ -140,6 +151,7 @@ func (r *DeploymentRunner) persistCompletion(
 		deploymentID,
 		status,
 		cancellationWins,
+		localCleanupConfirmed,
 	)
 	return finalStatus, false
 }
@@ -151,6 +163,7 @@ func (r *DeploymentRunner) retryCompletion(
 	deploymentID int64,
 	status string,
 	cancellationWins bool,
+	localCleanupConfirmed bool,
 ) {
 	defer cancel()
 	ticker := time.NewTicker(time.Second)
@@ -167,7 +180,12 @@ func (r *DeploymentRunner) retryCompletion(
 			return
 		case <-ticker.C:
 			finalStatus, err := r.completeDeployment(
-				ctx, cancelCtx, deploymentID, status, cancellationWins,
+				ctx,
+				cancelCtx,
+				deploymentID,
+				status,
+				cancellationWins,
+				localCleanupConfirmed,
 			)
 			if err == nil {
 				slog.Info(
