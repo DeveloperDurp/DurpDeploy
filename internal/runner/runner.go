@@ -310,6 +310,11 @@ func (r *DeploymentRunner) Run(
 				logWriter:    logWriter,
 			})
 			if err != nil {
+				if errors.Is(err, errContainerCleanup) {
+					r.persistCompletion(ctx, runCtx, deploymentID,
+						"cleanup_unconfirmed", false)
+					return
+				}
 				if errors.Is(err, errDeploymentCancelled) {
 					r.finalizeCancellation(ctx, deploymentID)
 					return

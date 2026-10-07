@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -62,6 +63,14 @@ func seedAgentWithInterpreter(
 }
 
 func TestRunnerMixedLocalAndAgentStepsSucceedInOrder(t *testing.T) {
+	for _, state := range []string{"succeeded", "cleanup_unconfirmed"} {
+		t.Run(state, func(t *testing.T) {
+			testRunnerMixedLocalAndAgentSteps(t, state)
+		})
+	}
+}
+
+func testRunnerMixedLocalAndAgentSteps(t *testing.T, terminalState string) {
 	ctx := context.Background()
 	repo, rnr, _ := setupRunnerHarness(t)
 	repo.DB.SetMaxOpenConns(1)
@@ -135,8 +144,9 @@ func TestRunnerMixedLocalAndAgentStepsSucceedInOrder(t *testing.T) {
 		)
 	}
 	if _, err := repo.DB.ExecContext(ctx, `
-UPDATE remote_step_runs SET state='succeeded', started_at=unixepoch(),
+UPDATE remote_step_runs SET state=?, started_at=unixepoch(),
 finished_at=unixepoch() WHERE deployment_id=? AND step_index=1`,
+		terminalState,
 		created.Deployment.ID,
 	); err != nil {
 		t.Fatal(err)
@@ -147,7 +157,7 @@ finished_at=unixepoch() WHERE deployment_id=? AND step_index=1`,
 		t.Fatal("deployment did not finish after the agent step succeeded")
 	}
 	deployment, err := repo.Queries.GetDeployment(ctx, created.Deployment.ID)
-	if err != nil || deployment.Status != "succeeded" {
+	if err != nil || deployment.Status != terminalState {
 		t.Fatalf("deployment = %+v, error = %v", deployment, err)
 	}
 	runs, err := repo.Queries.ListRemoteStepRuns(
@@ -156,8 +166,33 @@ finished_at=unixepoch() WHERE deployment_id=? AND step_index=1`,
 			DeploymentID: created.Deployment.ID, StepIndex: 1,
 		},
 	)
-	if err != nil || len(runs) != 1 || runs[0].State != "succeeded" {
+	if err != nil || len(runs) != 1 || runs[0].State != terminalState {
 		t.Fatalf("remote runs = %+v, error = %v", runs, err)
+	}
+	if terminalState == "cleanup_unconfirmed" {
+		if deployment.ContainerNamespace.Valid {
+			t.Fatal("successful local cleanup left a namespace blocker")
+		}
+		if err := repo.Queries.ConfirmRemoteStepCleanup(
+			ctx,
+			db.ConfirmRemoteStepCleanupParams{
+				AgentID: "agent-a",
+				Now:     sql.NullInt64{Int64: time.Now().Unix(), Valid: true},
+			},
+		); err != nil {
+			t.Fatal(err)
+		}
+		blocked, err := repo.Queries.HasUnconfirmedContainerCleanup(
+			ctx,
+			deployment.ID,
+		)
+		if err != nil || blocked != 0 {
+			t.Fatalf(
+				"reconciled cleanup remains blocked=%d error=%v",
+				blocked,
+				err,
+			)
+		}
 	}
 	contents, err = os.ReadFile(marker)
 	if err != nil {
