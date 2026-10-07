@@ -6,14 +6,23 @@ import (
 	"fmt"
 
 	"durpdeploy/internal/db"
+
+	agentproto "github.com/DeveloperDurp/durpdeploy-agent/protocol"
 )
 
 func (r *Repository) RecordAgentPoll(
 	ctx context.Context,
 	heartbeat db.HeartbeatAgentParams,
-	interpreters []string,
-	protocol string,
+	request agentproto.PollRequest,
 ) (int64, error) {
+	interpreters := request.SupportedInterpreters
+	modes := request.ExecutionModes
+	if request.Protocol == agentproto.AgentV1 {
+		interpreters = []agentproto.Interpreter{agentproto.InterpreterBash}
+	}
+	if request.Protocol != agentproto.AgentV3 {
+		modes = []agentproto.ExecutionMode{agentproto.ExecutionHost}
+	}
 	var changed int64
 	err := withSQLiteBusyRetry(ctx, func() error {
 		changed = 0
@@ -27,15 +36,14 @@ func (r *Repository) RecordAgentPoll(
 				return nil
 			}
 			if err := q.SetAgentProtocol(ctx, db.SetAgentProtocolParams{
-				ID:            heartbeat.ID,
-				AgentProtocol: sql.NullString{String: protocol, Valid: true},
+				ID: heartbeat.ID,
+				AgentProtocol: sql.NullString{
+					String: string(request.Protocol), Valid: true,
+				},
 			}); err != nil {
 				return fmt.Errorf("record agent protocol: %w", err)
 			}
-			if _, err := q.DeleteAgentInterpreters(
-				ctx,
-				heartbeat.ID,
-			); err != nil {
+			if err := clearAgentCapabilities(ctx, q, heartbeat.ID); err != nil {
 				return fmt.Errorf("replace agent interpreters: %w", err)
 			}
 			for _, value := range interpreters {
@@ -43,10 +51,31 @@ func (r *Repository) RecordAgentPoll(
 					ctx,
 					db.AddAgentInterpreterParams{
 						AgentID:     heartbeat.ID,
-						Interpreter: value,
+						Interpreter: string(value),
 					},
 				); err != nil {
 					return fmt.Errorf("record agent interpreter: %w", err)
+				}
+			}
+			for _, mode := range modes {
+				if err := q.AddAgentExecutionMode(ctx, db.AddAgentExecutionModeParams{
+					AgentID: heartbeat.ID, ExecutionMode: string(mode),
+				}); err != nil {
+					return fmt.Errorf("record execution mode: %w", err)
+				}
+			}
+			for _, runtime := range request.ContainerRuntimes {
+				if err := q.AddAgentContainerRuntime(ctx, db.AddAgentContainerRuntimeParams{
+					AgentID: heartbeat.ID, Runtime: string(runtime),
+				}); err != nil {
+					return fmt.Errorf("record container runtime: %w", err)
+				}
+			}
+			for _, interpreter := range request.ContainerInterpreters {
+				if err := q.AddAgentContainerInterpreter(ctx, db.AddAgentContainerInterpreterParams{
+					AgentID: heartbeat.ID, Interpreter: string(interpreter),
+				}); err != nil {
+					return fmt.Errorf("record container interpreter: %w", err)
 				}
 			}
 			if _, err := q.FailUnsupportedWaitingRemoteStepRuns(
@@ -62,4 +91,24 @@ func (r *Repository) RecordAgentPoll(
 		})
 	})
 	return changed, err
+}
+
+func clearAgentCapabilities(
+	ctx context.Context,
+	q *db.Queries,
+	agentID string,
+) error {
+	if _, err := q.DeleteAgentInterpreters(ctx, agentID); err != nil {
+		return fmt.Errorf("clear host interpreters: %w", err)
+	}
+	if err := q.DeleteAgentExecutionModes(ctx, agentID); err != nil {
+		return fmt.Errorf("clear execution modes: %w", err)
+	}
+	if err := q.DeleteAgentContainerRuntimes(ctx, agentID); err != nil {
+		return fmt.Errorf("clear container runtimes: %w", err)
+	}
+	if err := q.DeleteAgentContainerInterpreters(ctx, agentID); err != nil {
+		return fmt.Errorf("clear container interpreters: %w", err)
+	}
+	return nil
 }

@@ -26,14 +26,6 @@ func (s *Server) Poll(w http.ResponseWriter, r *http.Request) {
 	fingerprint := agenttls.FingerprintOf(
 		r.TLS.PeerCertificates[0].Raw,
 	).String()
-	interpreters := make([]string, 0, len(request.SupportedInterpreters))
-	if request.Protocol == agentproto.AgentV1 {
-		interpreters = append(interpreters, string(agentproto.InterpreterBash))
-	} else {
-		for _, value := range request.SupportedInterpreters {
-			interpreters = append(interpreters, string(value))
-		}
-	}
 	changed, err := s.repository.RecordAgentPoll(
 		r.Context(),
 		db.HeartbeatAgentParams{
@@ -44,8 +36,7 @@ func (s *Server) Poll(w http.ResponseWriter, r *http.Request) {
 			ID:                     string(agentID),
 			CertificateFingerprint: nullableString(fingerprint),
 		},
-		interpreters,
-		string(request.Protocol),
+		request,
 	)
 	if !writeTransitionStatus(w, changed, err) {
 		return

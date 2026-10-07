@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"durpdeploy/internal/db"
+
+	agentproto "github.com/DeveloperDurp/durpdeploy-agent/protocol"
 )
 
 func TestAgentPollCapabilityReplacementIsTransactional(t *testing.T) {
@@ -30,8 +32,15 @@ func TestAgentPollCapabilityReplacementIsTransactional(t *testing.T) {
 				String: agent.CertificateFingerprint.String, Valid: true,
 			},
 		},
-		[]string{"python3", "/bin/sh"},
-		"agent/2",
+		agentproto.PollRequest{
+			ProtocolEnvelope: agentproto.ProtocolEnvelope{
+				Protocol: agentproto.AgentV2,
+			},
+			SupportedInterpreters: []agentproto.Interpreter{
+				"python3",
+				"/bin/sh",
+			},
+		},
 	)
 
 	// Then
@@ -89,8 +98,14 @@ WHERE deployment_id = 3 AND step_index = 0;`); err != nil {
 			ID:                     "a",
 			CertificateFingerprint: agent.CertificateFingerprint,
 		},
-		[]string{"bash"},
-		"agent/2",
+		agentproto.PollRequest{
+			ProtocolEnvelope: agentproto.ProtocolEnvelope{
+				Protocol: agentproto.AgentV2,
+			},
+			SupportedInterpreters: []agentproto.Interpreter{
+				agentproto.InterpreterBash,
+			},
+		},
 	)
 
 	// Then

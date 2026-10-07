@@ -26,10 +26,25 @@ type Agent struct {
 	AgentProtocol          sql.NullString `json:"agent_protocol"`
 }
 
+type AgentContainerInterpreter struct {
+	AgentID     string `json:"agent_id"`
+	Interpreter string `json:"interpreter"`
+}
+
+type AgentContainerRuntime struct {
+	AgentID string `json:"agent_id"`
+	Runtime string `json:"runtime"`
+}
+
 type AgentEnvironmentLabel struct {
 	AgentID       string `json:"agent_id"`
 	EnvironmentID int64  `json:"environment_id"`
 	CreatedAt     int64  `json:"created_at"`
+}
+
+type AgentExecutionMode struct {
+	AgentID       string `json:"agent_id"`
+	ExecutionMode string `json:"execution_mode"`
 }
 
 type AgentInterpreter struct {

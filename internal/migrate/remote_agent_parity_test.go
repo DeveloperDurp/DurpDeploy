@@ -29,6 +29,7 @@ func TestRemoteAgentSQLParityFixtures(t *testing.T) {
 			"mssql/019_remote_step_recovery_cancellation.sql",
 		},
 		{"036_agent_interpreters.sql", "mssql/021_agent_interpreters.sql"},
+		{"048_agent_execution_capabilities.sql", "mssql/033_agent_execution_capabilities.sql"},
 	} {
 		t.Run(pair[0], func(t *testing.T) {
 			shared, err := migrations.FS.ReadFile(pair[0])

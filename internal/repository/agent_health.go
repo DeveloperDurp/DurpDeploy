@@ -105,7 +105,7 @@ func agentCompatibility(agent db.Agent) string {
 	switch agent.AgentProtocol.String {
 	case "agent/1":
 		return "Supported legacy protocol (Bash only); version unverified"
-	case "agent/2":
+	case "agent/2", "agent/3":
 		return "Supported protocol; version unverified"
 	}
 	return "unknown"
