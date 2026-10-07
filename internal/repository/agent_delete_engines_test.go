@@ -168,6 +168,12 @@ func assertAgentDeleteEngineMaintenance(
 		{"project", func() (int64, error) {
 			return repo.Queries.HasActiveProjectDeployment(t.Context(), 1)
 		}},
+		{"rollback", func() (int64, error) {
+			return repo.Queries.HasActiveProjectEnvironmentDeployment(t.Context(),
+				db.HasActiveProjectEnvironmentDeploymentParams{
+					ProjectID: 1, EnvironmentID: d.EnvironmentID,
+				})
+		}},
 	} {
 		active, err := check.run()
 		if err != nil || active != 0 {

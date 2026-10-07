@@ -1,14 +1,16 @@
 package server
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 )
 
 func TestAgentDeleteConfirmedCleanupKeepsMaintenanceAvailable(t *testing.T) {
-	for _, action := range []string{"refresh", "project", "environment"} {
+	for _, action := range []string{"refresh", "project", "environment", "rollback"} {
 		t.Run(action, func(t *testing.T) {
 			testAgentDeleteConfirmedCleanupMaintenance(t, action)
 		})
@@ -52,6 +54,10 @@ func testAgentDeleteConfirmedCleanupMaintenance(t *testing.T, action string) {
 	if history.StatusCode != http.StatusOK {
 		t.Fatalf("history status=%d", history.StatusCode)
 	}
+	if action == "rollback" {
+		assertAgentDeleteCleanupRollback(t, h, srv)
+		return
+	}
 	method, path, want := http.MethodPost,
 		"/api/v1/projects/1/releases/1/refresh", http.StatusOK
 	if action == "project" {
@@ -74,5 +80,70 @@ func testAgentDeleteConfirmedCleanupMaintenance(t *testing.T, action string) {
 			result.StatusCode,
 			want,
 		)
+	}
+}
+
+func assertAgentDeleteCleanupRollback(
+	t *testing.T,
+	h *oidcRouterHarness,
+	srv *httptest.Server,
+) {
+	t.Helper()
+	if _, err := h.repo.DB.ExecContext(t.Context(), `
+	INSERT INTO releases(id,project_id,version,steps_json) VALUES(2,1,'2','[]');
+	INSERT INTO deployments(id,release_id,environment_id,status,finished_at)
+	SELECT 2,1,environment_id,'succeeded',300 FROM deployments WHERE id=1;
+	INSERT INTO deployments(id,release_id,environment_id,status,finished_at)
+	SELECT 3,2,environment_id,'succeeded',400 FROM deployments WHERE id=1`); err != nil {
+		t.Fatal(err)
+	}
+	res := agentDeleteRequest(
+		t,
+		srv,
+		http.MethodGet,
+		"/api/v1/deployments/3/rollback",
+	)
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("rollback preview status=%d", res.StatusCode)
+	}
+	var preview struct {
+		TargetDeploymentID int64 `json:"target_deployment_id"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&preview); err != nil ||
+		preview.TargetDeploymentID != 2 {
+		t.Fatalf("rollback preview=%+v error=%v", preview, err)
+	}
+	assertAgentDeleteCleanupRollbackExecution(t, srv)
+}
+
+func assertAgentDeleteCleanupRollbackExecution(
+	t *testing.T,
+	srv *httptest.Server,
+) {
+	t.Helper()
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
+		srv.URL+"/api/v1/deployments/3/rollback",
+		strings.NewReader(`{"target_deployment_id":2}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer ddp_pat_delete-admin")
+	req.Header.Set("Content-Type", "application/json")
+	res, err := srv.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusCreated {
+		t.Fatalf("rollback execution status=%d", res.StatusCode)
+	}
+	var result struct {
+		ID        int64 `json:"id"`
+		ReleaseID int64 `json:"release_id"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&result); err != nil ||
+		result.ID <= 3 ||
+		result.ReleaseID != 1 {
+		t.Fatalf("rollback execution=%+v error=%v", result, err)
 	}
 }
