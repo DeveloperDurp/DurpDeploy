@@ -19,10 +19,17 @@ func TestAgentContainerBrowserE2E(t *testing.T) {
 	h := newAPIHarness(t)
 	project := seedProject(t, h.repo)
 	user := seedAPIUser(t, h.repo, "container-browser@test.local", "admin")
-	if _, err := h.repo.Queries.CreateSession(t.Context(), db.CreateSessionParams{
-		ID: fmt.Sprint(user.ID), UserID: user.ID, CsrfToken: "container-browser",
-		ExpiresAt: time.Now().Add(time.Hour).Unix(),
-	}); err != nil {
+	if _, err := h.repo.Queries.CreateSession(
+		t.Context(),
+		db.CreateSessionParams{
+			ID: fmt.Sprint(
+				user.ID,
+			),
+			UserID:    user.ID,
+			CsrfToken: "container-browser",
+			ExpiresAt: time.Now().Add(time.Hour).Unix(),
+		},
+	); err != nil {
 		t.Fatal(err)
 	}
 	srv := httptest.NewServer(server.NewRouter(h.repo, h.runner,
@@ -47,7 +54,10 @@ func TestAgentContainerBrowserE2E(t *testing.T) {
 				t,
 				"Emulation.setDeviceMetricsOverride",
 				map[string]any{
-					"width": width, "height": 900, "deviceScaleFactor": 1, "mobile": false,
+					"width":             width,
+					"height":            900,
+					"deviceScaleFactor": 1,
+					"mobile":            false,
 				},
 				&struct{}{},
 			)
@@ -113,7 +123,10 @@ func TestAgentContainerBrowserE2E(t *testing.T) {
 	// The table and mobile edit components both retain the saved mode.
 	for _, width := range []int{375, 1280} {
 		browser.call(t, "Emulation.setDeviceMetricsOverride", map[string]any{
-			"width": width, "height": 900, "deviceScaleFactor": 1, "mobile": false,
+			"width":             width,
+			"height":            900,
+			"deviceScaleFactor": 1,
+			"mobile":            false,
 		}, &struct{}{})
 		fleetBrowserNavigate(t, browser, srv.URL+base+"/steps-page")
 		browser.evaluate(
@@ -128,8 +141,17 @@ func TestAgentContainerBrowserE2E(t *testing.T) {
 	}
 	// A native template form saves and reopens container placement.
 	fleetBrowserNavigate(t, browser, srv.URL+"/templates/new")
+	set("container_image", "alpine:3.21")
 	set("execution_target", "agent")
+	browser.wait(
+		t,
+		`document.querySelector('[name=container_image]').disabled && document.querySelector('[name=container_image]').value === 'alpine:3.21'`,
+	)
 	set("agent_execution_mode", "container")
+	browser.wait(
+		t,
+		`!document.querySelector('[name=container_image]').disabled && document.querySelector('[name=container_image]').value === 'alpine:3.21'`,
+	)
 	set("name", "browser-template")
 	set("script_body", "echo template")
 	set("container_image", "alpine:3.20")
@@ -152,7 +174,20 @@ func TestAgentContainerBrowserE2E(t *testing.T) {
 	)
 	capture("template-edit")
 	set("agent_execution_mode", "host")
-	browser.wait(t, `document.querySelector('[name=container_image]') === null`)
+	set("execution_target", "local")
+	set("container_image", "alpine:3.21")
+	set("execution_target", "agent")
+	browser.wait(
+		t,
+		`document.querySelector('[name=container_image]').disabled && document.querySelector('[name=container_image]').value === 'alpine:3.21'`,
+	)
+	set("agent_execution_mode", "container")
+	browser.wait(
+		t,
+		`!document.querySelector('[name=container_image]').disabled && document.querySelector('[name=container_image]').value === 'alpine:3.21'`,
+	)
+	set("agent_execution_mode", "host")
+	browser.wait(t, `document.querySelector('[name=container_image]').disabled`)
 	browser.evaluate(
 		t,
 		`document.querySelector('form[hx-put="/templates/1"] button[type=submit]').click(); true`,
