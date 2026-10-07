@@ -55,10 +55,9 @@ WHERE remote_step_runs.deployment_id = ?5
       WHERE a.id = remote_step_runs.agent_id
         AND a.status = 'active' AND a.draining = 0)
   AND EXISTS (
-      SELECT 1 FROM deployment_steps s
-      JOIN agent_interpreters i ON i.agent_id = remote_step_runs.agent_id
-          AND i.interpreter = s.interpreter
-      WHERE s.deployment_id = remote_step_runs.deployment_id
+      SELECT 1 FROM eligible_remote_step_agents s
+      WHERE s.agent_id = remote_step_runs.agent_id
+        AND s.deployment_id = remote_step_runs.deployment_id
         AND s.step_index = remote_step_runs.step_index
   )
 `
@@ -89,6 +88,22 @@ func (q *Queries) ClaimRemoteStepRun(ctx context.Context, arg ClaimRemoteStepRun
 	return result.RowsAffected()
 }
 
+const confirmRemoteStepCleanup = `-- name: ConfirmRemoteStepCleanup :exec
+UPDATE remote_step_runs SET cleanup_confirmed_at = ?1
+WHERE agent_id = ?2 AND state = 'cleanup_unconfirmed'
+  AND cleanup_confirmed_at IS NULL
+`
+
+type ConfirmRemoteStepCleanupParams struct {
+	Now     sql.NullInt64 `json:"now"`
+	AgentID string        `json:"agent_id"`
+}
+
+func (q *Queries) ConfirmRemoteStepCleanup(ctx context.Context, arg ConfirmRemoteStepCleanupParams) error {
+	_, err := q.db.ExecContext(ctx, confirmRemoteStepCleanup, arg.Now, arg.AgentID)
+	return err
+}
+
 const createRemoteStepLogSequence = `-- name: CreateRemoteStepLogSequence :exec
 INSERT INTO remote_step_log_sequences
     (deployment_id, step_index, agent_id, sequence, log_id)
@@ -116,35 +131,17 @@ func (q *Queries) CreateRemoteStepLogSequence(ctx context.Context, arg CreateRem
 
 const createRemoteStepRuns = `-- name: CreateRemoteStepRuns :execrows
 INSERT INTO remote_step_runs (deployment_id, step_index, agent_id)
-SELECT s.deployment_id, s.step_index, a.id
-FROM deployment_steps s
-JOIN deployments d ON d.id = s.deployment_id
-JOIN agents a ON a.status = 'active' AND a.revoked_at IS NULL
-JOIN agent_pairings p ON p.agent_id = a.id AND p.state = 'paired'
-JOIN agent_environment_labels e ON e.agent_id = a.id
-    AND e.environment_id = d.environment_id
-JOIN agent_interpreters i ON i.agent_id = a.id
-    AND i.interpreter = s.interpreter
+SELECT s.deployment_id, s.step_index, s.agent_id
+FROM eligible_remote_step_agents s JOIN deployments d ON d.id = s.deployment_id
 WHERE s.deployment_id = ?1
   AND s.step_index = ?2
-  AND s.execution_target = 'agent'
   AND d.status = 'running'
   AND EXISTS (SELECT 1 FROM environment_deployment_slots slot WHERE slot.deployment_id = d.id)
-  AND NOT EXISTS (
-      SELECT 1 FROM deployment_step_selectors wanted
-      WHERE wanted.deployment_id = s.deployment_id
-        AND wanted.step_index = s.step_index
-        AND NOT EXISTS (
-            SELECT 1 FROM agent_labels owned
-            WHERE owned.agent_id = a.id
-              AND lower(owned.label) = lower(wanted.label)
-        )
-  )
   AND NOT EXISTS (
       SELECT 1 FROM remote_step_runs existing
       WHERE existing.deployment_id = s.deployment_id
         AND existing.step_index = s.step_index
-        AND existing.agent_id = a.id
+        AND existing.agent_id = s.agent_id
   )
 `
 
@@ -203,10 +200,9 @@ UPDATE remote_step_runs SET state = 'failed',
 WHERE remote_step_runs.agent_id = ?2
   AND remote_step_runs.state = 'waiting'
   AND NOT EXISTS (
-      SELECT 1 FROM deployment_steps s
-      JOIN agent_interpreters i ON i.agent_id = remote_step_runs.agent_id
-          AND i.interpreter = s.interpreter
-      WHERE s.deployment_id = remote_step_runs.deployment_id
+      SELECT 1 FROM eligible_remote_step_agents s
+      WHERE s.agent_id = remote_step_runs.agent_id
+        AND s.deployment_id = remote_step_runs.deployment_id
         AND s.step_index = remote_step_runs.step_index
   )
 `
@@ -229,7 +225,8 @@ UPDATE remote_step_runs SET state = ?1, finished_at = ?2,
     updated_at = ?2
 WHERE deployment_id = ?3
   AND step_index = ?4 AND agent_id = ?5
-  AND claim_token_hash = ?6 AND state = 'started'
+  AND claim_token_hash = ?6
+  AND (state = 'started' OR (state = 'cancel_requested' AND ?1 = 'cleanup_unconfirmed'))
 `
 
 type FinishRemoteStepRunParams struct {
@@ -309,7 +306,7 @@ func (q *Queries) GetRemoteStepLogBySequence(ctx context.Context, arg GetRemoteS
 }
 
 const getRemoteStepRunByClaim = `-- name: GetRemoteStepRunByClaim :one
-SELECT deployment_id, step_index, agent_id, state, claim_token_hash, ciphertext, claim_expires_at, last_heartbeat_at, started_at, finished_at, cancel_requested_at, created_at, updated_at, log_buffer_ciphertext, recovery_cancelled FROM remote_step_runs
+SELECT deployment_id, step_index, agent_id, state, claim_token_hash, ciphertext, claim_expires_at, last_heartbeat_at, started_at, finished_at, cancel_requested_at, created_at, updated_at, log_buffer_ciphertext, recovery_cancelled, cleanup_confirmed_at FROM remote_step_runs
 WHERE deployment_id = ?1
   AND agent_id = ?2
   AND claim_token_hash = ?3
@@ -340,6 +337,7 @@ func (q *Queries) GetRemoteStepRunByClaim(ctx context.Context, arg GetRemoteStep
 		&i.UpdatedAt,
 		&i.LogBufferCiphertext,
 		&i.RecoveryCancelled,
+		&i.CleanupConfirmedAt,
 	)
 	return i, err
 }
@@ -375,7 +373,7 @@ func (q *Queries) HeartbeatRemoteStepRun(ctx context.Context, arg HeartbeatRemot
 }
 
 const listRemoteStepRuns = `-- name: ListRemoteStepRuns :many
-SELECT deployment_id, step_index, agent_id, state, claim_token_hash, ciphertext, claim_expires_at, last_heartbeat_at, started_at, finished_at, cancel_requested_at, created_at, updated_at, log_buffer_ciphertext, recovery_cancelled FROM remote_step_runs
+SELECT deployment_id, step_index, agent_id, state, claim_token_hash, ciphertext, claim_expires_at, last_heartbeat_at, started_at, finished_at, cancel_requested_at, created_at, updated_at, log_buffer_ciphertext, recovery_cancelled, cleanup_confirmed_at FROM remote_step_runs
 WHERE deployment_id = ? AND step_index = ? ORDER BY agent_id
 `
 
@@ -409,6 +407,7 @@ func (q *Queries) ListRemoteStepRuns(ctx context.Context, arg ListRemoteStepRuns
 			&i.UpdatedAt,
 			&i.LogBufferCiphertext,
 			&i.RecoveryCancelled,
+			&i.CleanupConfirmedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -466,10 +465,8 @@ func (q *Queries) ListRemoteStepRunsForRunner(ctx context.Context, arg ListRemot
 const listWaitingRemoteStepRuns = `-- name: ListWaitingRemoteStepRuns :many
 SELECT r.deployment_id, r.step_index FROM remote_step_runs r
 JOIN deployments d ON d.id = r.deployment_id
-JOIN deployment_steps s ON s.deployment_id = r.deployment_id
-    AND s.step_index = r.step_index
-JOIN agent_interpreters i ON i.agent_id = r.agent_id
-    AND i.interpreter = s.interpreter
+JOIN eligible_remote_step_agents s ON s.deployment_id = r.deployment_id
+    AND s.step_index = r.step_index AND s.agent_id = r.agent_id
 WHERE r.agent_id = ?1 AND r.state = 'waiting'
   AND d.status = 'running'
   AND EXISTS (SELECT 1 FROM environment_deployment_slots slot WHERE slot.deployment_id = d.id)
@@ -478,6 +475,10 @@ WHERE r.agent_id = ?1 AND r.state = 'waiting'
       WHERE legacy.agent_id = r.agent_id
         AND legacy.state IN ('claimed', 'started', 'cancel_requested')
   )
+  AND NOT EXISTS (SELECT 1 FROM remote_step_runs busy WHERE busy.agent_id = r.agent_id
+      AND busy.state = 'cleanup_unconfirmed' AND busy.cleanup_confirmed_at IS NULL)
+  AND NOT EXISTS (SELECT 1 FROM remote_deployment_claims busy WHERE busy.agent_id = r.agent_id
+      AND busy.state = 'cleanup_unconfirmed' AND busy.cleanup_confirmed_at IS NULL)
 ORDER BY r.created_at, r.deployment_id, r.step_index
 `
 

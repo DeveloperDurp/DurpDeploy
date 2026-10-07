@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"durpdeploy/internal/agentexecution"
 	"durpdeploy/internal/artifact"
 	"durpdeploy/internal/containerenv"
 	"durpdeploy/internal/db"
@@ -47,7 +48,10 @@ func parseStepContainerConfig(
 	); err != nil {
 		return image, names, err.Error()
 	}
-	if err := validateStepContainerConfig(target, image, names); err != "" {
+	if err := ValidateStepExecutionConfig(agentexecution.Config{
+		Target: target, Mode: r.FormValue("agent_execution_mode"),
+		Image: image, VariableNames: names,
+	}); err != "" {
 		return image, names, err
 	}
 	return image, names, ""
@@ -108,6 +112,22 @@ func validateStepContainerConfig(
 		seen[name] = struct{}{}
 	}
 	return ""
+}
+
+func ValidateStepExecutionConfig(config agentexecution.Config) string {
+	mode, err := agentexecution.Parse(config)
+	if err != nil {
+		return err.Error()
+	}
+	target := config.Target
+	if mode == "container" {
+		target = "local"
+	}
+	return validateStepContainerConfig(
+		target,
+		config.Image,
+		config.VariableNames,
+	)
 }
 
 func marshalStepVariableNames(variableNames []string) string {
@@ -367,6 +387,7 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 			MaxRetries:           maxRetries,
 			ExecutionTarget:      r.FormValue("execution_target"),
 			ContainerImage:       containerImage,
+			AgentExecutionMode:   r.FormValue("agent_execution_mode"),
 			NetworkMode:          r.FormValue("network_mode"),
 			ApprovalArtifactPath: r.FormValue("approval_artifact_path"),
 			ApprovalReviewPath:   r.FormValue("approval_review_path"),
@@ -388,6 +409,7 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 			MaxRetries:           maxRetries,
 			ExecutionTarget:      r.FormValue("execution_target"),
 			ContainerImage:       containerImage,
+			AgentExecutionMode:   r.FormValue("agent_execution_mode"),
 			NetworkMode:          r.FormValue("network_mode"),
 			ApprovalArtifactPath: r.FormValue("approval_artifact_path"),
 			ApprovalReviewPath:   r.FormValue("approval_review_path"),
@@ -409,6 +431,7 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 			MaxRetries:           maxRetries,
 			ExecutionTarget:      r.FormValue("execution_target"),
 			ContainerImage:       containerImage,
+			AgentExecutionMode:   r.FormValue("agent_execution_mode"),
 			NetworkMode:          r.FormValue("network_mode"),
 			ApprovalArtifactPath: r.FormValue("approval_artifact_path"),
 			ApprovalReviewPath:   r.FormValue("approval_review_path"),
@@ -443,6 +466,7 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 		MaxRetries:           maxRetries,
 		Interpreter:          selectedInterpreter,
 		ContainerImage:       containerImage,
+		AgentExecutionMode:   r.FormValue("agent_execution_mode"),
 		NetworkMode:          r.FormValue("network_mode"),
 		ApprovalArtifactPath: r.FormValue("approval_artifact_path"),
 		ApprovalReviewPath:   r.FormValue("approval_review_path"),
@@ -686,6 +710,7 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 			MaxRetries:           maxRetries,
 			ExecutionTarget:      r.FormValue("execution_target"),
 			ContainerImage:       containerImage,
+			AgentExecutionMode:   r.FormValue("agent_execution_mode"),
 			NetworkMode:          r.FormValue("network_mode"),
 			ApprovalArtifactPath: r.FormValue("approval_artifact_path"),
 			ApprovalReviewPath:   r.FormValue("approval_review_path"),
@@ -709,6 +734,7 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 			MaxRetries:           maxRetries,
 			ExecutionTarget:      r.FormValue("execution_target"),
 			ContainerImage:       containerImage,
+			AgentExecutionMode:   r.FormValue("agent_execution_mode"),
 			NetworkMode:          r.FormValue("network_mode"),
 			ApprovalArtifactPath: r.FormValue("approval_artifact_path"),
 			ApprovalReviewPath:   r.FormValue("approval_review_path"),
@@ -732,6 +758,7 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 			MaxRetries:           maxRetries,
 			ExecutionTarget:      r.FormValue("execution_target"),
 			ContainerImage:       containerImage,
+			AgentExecutionMode:   r.FormValue("agent_execution_mode"),
 			NetworkMode:          r.FormValue("network_mode"),
 			ApprovalArtifactPath: r.FormValue("approval_artifact_path"),
 			ApprovalReviewPath:   r.FormValue("approval_review_path"),
@@ -754,6 +781,7 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 		MaxRetries:           maxRetries,
 		Interpreter:          selectedInterpreter,
 		ContainerImage:       containerImage,
+		AgentExecutionMode:   r.FormValue("agent_execution_mode"),
 		NetworkMode:          r.FormValue("network_mode"),
 		ApprovalArtifactPath: r.FormValue("approval_artifact_path"),
 		ApprovalReviewPath:   r.FormValue("approval_review_path"),
@@ -899,6 +927,7 @@ func (h *StepHandler) ReorderStep(w http.ResponseWriter, r *http.Request) {
 					MaxRetries:           s.MaxRetries,
 					Interpreter:          s.Interpreter,
 					ContainerImage:       s.ContainerImage,
+					AgentExecutionMode:   s.AgentExecutionMode,
 					NetworkMode:          s.NetworkMode,
 					ApprovalArtifactPath: s.ApprovalArtifactPath,
 					ApprovalReviewPath:   s.ApprovalReviewPath,
@@ -926,6 +955,7 @@ func (h *StepHandler) ReorderStep(w http.ResponseWriter, r *http.Request) {
 					MaxRetries:           s.MaxRetries,
 					Interpreter:          s.Interpreter,
 					ContainerImage:       s.ContainerImage,
+					AgentExecutionMode:   s.AgentExecutionMode,
 					NetworkMode:          s.NetworkMode,
 					ApprovalArtifactPath: s.ApprovalArtifactPath,
 					ApprovalReviewPath:   s.ApprovalReviewPath,
@@ -949,6 +979,7 @@ func (h *StepHandler) ReorderStep(w http.ResponseWriter, r *http.Request) {
 		MaxRetries:           target.MaxRetries,
 		Interpreter:          target.Interpreter,
 		ContainerImage:       target.ContainerImage,
+		AgentExecutionMode:   target.AgentExecutionMode,
 		NetworkMode:          target.NetworkMode,
 		ApprovalArtifactPath: target.ApprovalArtifactPath,
 		ApprovalReviewPath:   target.ApprovalReviewPath,

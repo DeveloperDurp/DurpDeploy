@@ -13,10 +13,12 @@ import (
 const listFleetCurrentWork = `-- name: ListFleetCurrentWork :many
 SELECT agent_id, deployment_id, step_index, state FROM remote_step_runs
 WHERE state IN ('claimed', 'started', 'cancel_requested')
+    OR (state = 'cleanup_unconfirmed' AND cleanup_confirmed_at IS NULL)
 UNION ALL
 SELECT agent_id, deployment_id, CAST(-1 AS INTEGER) AS step_index, state
 FROM remote_deployment_claims
 WHERE state IN ('claimed', 'started', 'cancel_requested')
+    OR (state = 'cleanup_unconfirmed' AND cleanup_confirmed_at IS NULL)
 ORDER BY agent_id, deployment_id, step_index
 `
 
@@ -42,6 +44,42 @@ func (q *Queries) ListFleetCurrentWork(ctx context.Context) ([]ListFleetCurrentW
 			&i.StepIndex,
 			&i.State,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listFleetExecutionCapabilities = `-- name: ListFleetExecutionCapabilities :many
+SELECT agent_id, 'mode' AS kind, execution_mode AS value FROM agent_execution_modes
+UNION ALL SELECT agent_id, 'runtime' AS kind, runtime AS value FROM agent_container_runtimes
+UNION ALL SELECT agent_id, 'interpreter' AS kind, interpreter AS value FROM agent_container_interpreters
+ORDER BY agent_id, kind, value
+`
+
+type ListFleetExecutionCapabilitiesRow struct {
+	AgentID string `json:"agent_id"`
+	Kind    string `json:"kind"`
+	Value   string `json:"value"`
+}
+
+func (q *Queries) ListFleetExecutionCapabilities(ctx context.Context) ([]ListFleetExecutionCapabilitiesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listFleetExecutionCapabilities)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListFleetExecutionCapabilitiesRow
+	for rows.Next() {
+		var i ListFleetExecutionCapabilitiesRow
+		if err := rows.Scan(&i.AgentID, &i.Kind, &i.Value); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -123,12 +161,12 @@ SELECT agent_id, deployment_id, step_index, state, reason, finished_at FROM (
             deployment_id DESC, step_index DESC) AS ordinal
     FROM (
         SELECT agent_id, deployment_id, step_index, state, state AS reason, finished_at
-        FROM remote_step_runs WHERE state IN ('failed', 'lost', 'cancel_unconfirmed')
+        FROM remote_step_runs WHERE state IN ('failed', 'lost', 'cancel_unconfirmed', 'cleanup_unconfirmed')
         UNION ALL
         SELECT agent_id, deployment_id, CAST(-1 AS INTEGER) AS step_index, state,
             COALESCE(reason, state) AS reason, finished_at
         FROM remote_deployment_claims
-        WHERE state IN ('failed', 'lost', 'cancel_unconfirmed')
+        WHERE state IN ('failed', 'lost', 'cancel_unconfirmed', 'cleanup_unconfirmed')
     ) failures
 ) ranked WHERE ordinal = 1
 `

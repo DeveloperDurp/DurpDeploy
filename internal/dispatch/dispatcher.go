@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -105,7 +106,39 @@ func prepareRemoteClaim(
 		return repository.RemotePreparedClaim{}, err
 	}
 	steps := make([]executor.Step, len(snapshot.Steps))
+	protocol := agentproto.AgentV1
+	if snapshot.Agent.AgentProtocol.Valid {
+		protocol, err = agentproto.ParseProtocolVersion(
+			snapshot.Agent.AgentProtocol.String,
+		)
+		if err != nil {
+			return repository.RemotePreparedClaim{}, err
+		}
+	}
 	for index, step := range snapshot.Steps {
+		var names []string
+		if step.VariableNames != "" {
+			if err := json.Unmarshal([]byte(step.VariableNames), &names); err != nil {
+				return repository.RemotePreparedClaim{}, fmt.Errorf(
+					"decode step variables: %w",
+					err,
+				)
+			}
+		}
+		if protocol != agentproto.AgentV3 && len(names) != 0 {
+			selected, err := selectRemoteVariables(
+				[]db.DeploymentStep{step},
+				resolved,
+			)
+			if err != nil {
+				return repository.RemotePreparedClaim{}, err
+			}
+			if !slices.Equal(selected, resolved) {
+				return repository.RemotePreparedClaim{}, agentproto.ErrUnsupportedProtocol
+			}
+			// Every legacy step must receive the same selected variables.
+			names = nil
+		}
 		steps[index] = executor.Step{
 			Name:           step.Name,
 			ScriptBody:     step.ScriptBody,
@@ -113,6 +146,9 @@ func prepareRemoteClaim(
 			SortOrder:      int64(index + 1),
 			TimeoutSeconds: step.TimeoutSeconds,
 			MaxRetries:     step.MaxRetries,
+			ExecutionMode:  agentproto.ExecutionMode(step.AgentExecutionMode),
+			ContainerImage: step.ContainerImage,
+			VariableNames:  names,
 		}
 	}
 	payload := Payload{
@@ -135,7 +171,7 @@ func prepareRemoteClaim(
 			"decode agent certificate",
 		)
 	}
-	ciphertext, err := payload.Seal(certificate.Bytes)
+	ciphertext, err := payload.SealForProtocol(certificate.Bytes, protocol)
 	if err != nil {
 		return repository.RemotePreparedClaim{}, err
 	}

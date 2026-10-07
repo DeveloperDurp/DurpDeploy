@@ -11,7 +11,13 @@ import (
 func TestPollPersistsContainerOnlyCapabilities(t *testing.T) {
 	// Given
 	f := newAgentFixture(t)
-	seedPollPayload(t, f, "pending", "test-agent")
+	id := seedPollPayload(t, f, "pending", "test-agent")
+	if _, err := f.repo.DB.ExecContext(t.Context(),
+		`UPDATE deployment_steps SET agent_execution_mode = 'container',
+		 container_image = 'alpine:3.20' WHERE deployment_id = ?`, id,
+	); err != nil {
+		t.Fatal(err)
+	}
 
 	// When
 	response := postAgent(t, f, agentproto.PollPath,

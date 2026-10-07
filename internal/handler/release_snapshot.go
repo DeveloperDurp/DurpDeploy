@@ -204,6 +204,7 @@ type releaseStepSnapshot struct {
 	TimeoutSeconds       int64    `json:"timeout_seconds"`
 	MaxRetries           int64    `json:"max_retries"`
 	ExecutionTarget      string   `json:"execution_target"`
+	AgentExecutionMode   string   `json:"agent_execution_mode"`
 	AgentSelectors       []string `json:"agent_selectors,omitempty"`
 	ContainerImage       string   `json:"container_image"`
 	NetworkMode          string   `json:"network_mode"`
@@ -254,6 +255,7 @@ func releaseStepSnapshots(
 			TimeoutSeconds:       step.TimeoutSeconds,
 			MaxRetries:           step.MaxRetries,
 			ExecutionTarget:      step.ExecutionTarget,
+			AgentExecutionMode:   step.AgentExecutionMode,
 			AgentSelectors:       selectors,
 			ContainerImage:       step.ContainerImage,
 			NetworkMode:          step.NetworkMode,

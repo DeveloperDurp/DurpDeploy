@@ -6,6 +6,7 @@ import (
 
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/interpreter"
+	"durpdeploy/views/components"
 	"durpdeploy/views/layouts"
 	"strconv"
 )
@@ -21,16 +22,6 @@ func tplVariableNamesCSV(tpl *db.StepTemplate) string {
 		return ""
 	}
 	return strings.Join(names, ", ")
-}
-
-// tplContainerImageShown reports whether the web form should render
-// container_image. Agent templates dispatch to a remote host and must
-// not carry an image, but both targets can select variables.
-func tplContainerImageShown(tpl *db.StepTemplate) bool {
-	if tpl == nil {
-		return true
-	}
-	return tpl.ExecutionTarget != "agent"
 }
 
 templ TemplateForm(tpl *db.StepTemplate, isNew bool, errorMsg string, currentPath string) {
@@ -77,6 +68,7 @@ templ TemplateFormContent(tpl *db.StepTemplate, isNew bool, errorMsg string) {
 			}
 		</h1>
 		<form
+			x-data={ components.StepPlacementData(db.Step{ExecutionTarget: tpl.ExecutionTarget, AgentExecutionMode: tpl.AgentExecutionMode}, "") }
 			if isNew {
 				method="post"
 				action="/templates"
@@ -108,8 +100,14 @@ templ TemplateFormContent(tpl *db.StepTemplate, isNew bool, errorMsg string) {
 					<span class="text-error text-sm mt-1">{ errorMsg }</span>
 				}
 			</div>
-			if tplContainerImageShown(tpl) {
-				<div class="form-control">
+			<div class="form-control">
+				<label class="label" for="template-target"><span class="label-text">Run step on</span></label>
+				<select id="template-target" name="execution_target" x-model="executionTarget" class="select select-bordered">
+					<option value="local">Server container</option><option value="agent">Agent</option>
+				</select>
+			</div>
+			@components.AgentExecutionMode(tpl.AgentExecutionMode, "template-agent-mode")
+				<div class="form-control" x-cloak x-show="usesContainer">
 					<label class="label" for="template-container-image">
 						<span class="label-text">Container image</span>
 					</label>
@@ -119,12 +117,12 @@ templ TemplateFormContent(tpl *db.StepTemplate, isNew bool, errorMsg string) {
 						name="container_image"
 						value={ tpl.ContainerImage }
 						placeholder="e.g. alpine:3.20 or registry.example.com/build:1"
-						required
+						x-bind:required="usesContainer"
+						x-bind:disabled="!usesContainer"
 						class="input input-bordered"
 					/>
-					<label class="label"><span class="label-text-alt">Required. The web form only creates local templates that run inside a server-side container.</span></label>
+					<label class="label"><span class="label-text-alt">Required for container execution. The image must contain the selected interpreter.</span></label>
 				</div>
-			}
 			<div class="form-control">
 				<label class="label" for="template-variable-names">
 					<span class="label-text">Limit variables (optional)</span>
@@ -139,8 +137,7 @@ templ TemplateFormContent(tpl *db.StepTemplate, isNew bool, errorMsg string) {
 				/>
 				<label class="label"><span class="label-text-alt">Leave empty to pass all project variables. Enter names to restrict this step.</span></label>
 			</div>
-			if tplContainerImageShown(tpl) {
-			<fieldset class="space-y-3">
+			<fieldset class="space-y-3" x-cloak x-show="executionTarget === 'local'" x-bind:disabled="executionTarget !== 'local'">
 <legend class="font-semibold">Network and artifact approval</legend>
 <label class="label" for={ "template-network-mode" }>Container network</label>
 <select id={ "template-network-mode" } name="network_mode" class="select select-bordered w-full"><option value="none" selected?={ tpl.NetworkMode != "bridge" }>Isolated</option><option value="bridge" selected?={ tpl.NetworkMode == "bridge" }>Network enabled</option></select>
@@ -152,7 +149,6 @@ templ TemplateFormContent(tpl *db.StepTemplate, isNew bool, errorMsg string) {
 <select id={ "template-review-format" } name="approval_review_format" class="select select-bordered w-full"><option value="" selected?={ tpl.ApprovalReviewFormat == "" }>No approval gate</option><option value="summary" selected?={ tpl.ApprovalReviewFormat == "summary" }>Action counts</option><option value="terraform" selected?={ tpl.ApprovalReviewFormat == "terraform" }>Terraform show JSON</option></select>
 <p class="text-sm">Paths are relative to DURPDEPLOY_STAGE_DIR. A gate pauses after this step; subsequent steps use DURPDEPLOY_APPROVED_DIR. Gated deployments require local execution and zero retries.</p>
 </fieldset>
-			}
 <div class="form-control">
 				<label class="label">
 					<span class="label-text">Script</span>

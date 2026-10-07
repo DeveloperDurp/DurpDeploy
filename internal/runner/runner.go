@@ -43,6 +43,7 @@ type deploymentStep struct {
 	TimeoutSeconds       int64    `json:"timeout_seconds"`
 	MaxRetries           int64    `json:"max_retries"`
 	ExecutionTarget      string   `json:"execution_target"`
+	AgentExecutionMode   string   `json:"agent_execution_mode"`
 	AgentSelectors       []string `json:"agent_selectors"`
 	ContainerImage       string   `json:"container_image"`
 	NetworkMode          string   `json:"network_mode"`

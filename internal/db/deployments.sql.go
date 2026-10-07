@@ -160,12 +160,15 @@ func (q *Queries) DeleteDeployment(ctx context.Context, id int64) error {
 }
 
 const failDeploymentsWithTerminalRemoteStepRuns = `-- name: FailDeploymentsWithTerminalRemoteStepRuns :execrows
-UPDATE deployments SET status = 'failed', finished_at = ?1
+UPDATE deployments SET status = CASE WHEN EXISTS (
+    SELECT 1 FROM remote_step_runs r WHERE r.deployment_id = deployments.id
+      AND r.state = 'cleanup_unconfirmed') THEN 'cleanup_unconfirmed' ELSE 'failed' END,
+    finished_at = ?1
 WHERE status = 'running' AND assigned_agent_id IS NULL
   AND EXISTS (
       SELECT 1 FROM remote_step_runs r
       WHERE r.deployment_id = deployments.id
-        AND (r.state IN ('failed', 'lost', 'cancel_unconfirmed')
+        AND (r.state IN ('failed', 'lost', 'cancel_unconfirmed', 'cleanup_unconfirmed')
           OR (r.state = 'cancelled' AND r.recovery_cancelled = 1))
   )
   AND NOT EXISTS (
@@ -305,6 +308,30 @@ func (q *Queries) GetLatestSuccessfulDeploymentForReleaseEnv(ctx context.Context
 		&i.ContainerNamespace,
 	)
 	return i, err
+}
+
+const hasUnconfirmedContainerCleanup = `-- name: HasUnconfirmedContainerCleanup :one
+SELECT CASE WHEN EXISTS (
+    SELECT 1 FROM deployments d WHERE d.id = ?1
+      AND d.status = 'cleanup_unconfirmed'
+      AND NOT EXISTS (SELECT 1 FROM remote_step_runs s
+          WHERE s.deployment_id = d.id AND s.state = 'cleanup_unconfirmed')
+      AND NOT EXISTS (SELECT 1 FROM remote_deployment_claims c
+          WHERE c.deployment_id = d.id AND c.state = 'cleanup_unconfirmed')
+) OR EXISTS (
+    SELECT 1 FROM remote_step_runs s WHERE s.deployment_id = ?1
+      AND s.state = 'cleanup_unconfirmed' AND s.cleanup_confirmed_at IS NULL
+) OR EXISTS (
+    SELECT 1 FROM remote_deployment_claims c WHERE c.deployment_id = ?1
+      AND c.state = 'cleanup_unconfirmed' AND c.cleanup_confirmed_at IS NULL
+) THEN 1 ELSE 0 END
+`
+
+func (q *Queries) HasUnconfirmedContainerCleanup(ctx context.Context, deploymentID int64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, hasUnconfirmedContainerCleanup, deploymentID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const listDeployments = `-- name: ListDeployments :many

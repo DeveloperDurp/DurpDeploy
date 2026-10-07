@@ -30,6 +30,7 @@ type agentFixture struct {
 	server         *httptest.Server
 	client         *http.Client
 	identity       agenttls.Identity
+	identityDir    string
 	serverIdentity agenttls.Identity
 	broker         *runner.LogBroker
 	bus            *events.Bus
@@ -61,7 +62,8 @@ func newAgentFixtureWithDSN(
 	if err != nil {
 		t.Fatal(err)
 	}
-	peer, err := agenttls.LoadOrCreate(t.TempDir(), "https://agent")
+	identityDir := t.TempDir()
+	peer, err := agenttls.LoadOrCreate(identityDir, "https://agent")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,7 +131,8 @@ func newAgentFixtureWithDSN(
 	return agentFixture{
 		repo: repo, agents: agents, server: srv,
 		client:   &http.Client{Transport: transport, Timeout: 3 * time.Second},
-		identity: peer, serverIdentity: identity, broker: broker, bus: bus,
+		identity: peer, identityDir: identityDir,
+		serverIdentity: identity, broker: broker, bus: bus,
 	}
 }
 

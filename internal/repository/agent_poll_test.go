@@ -78,6 +78,7 @@ func TestAgentPollCapabilityRemovalFailsWaitingRuns(t *testing.T) {
 	if _, err := repo.DB.ExecContext(ctx, `
 INSERT INTO agent_environment_labels(agent_id, environment_id) VALUES('a', 2);
 INSERT INTO agent_interpreters(agent_id, interpreter) VALUES('a', 'python3');
+UPDATE agents SET agent_protocol = 'agent/2' WHERE id = 'a';
 INSERT INTO agent_labels(agent_id, label) VALUES('a', 'other');
 UPDATE deployments SET status = 'running' WHERE id = 3;
 UPDATE deployment_steps SET interpreter = 'python3'

@@ -39,19 +39,19 @@ type swaggerLifecycleStage struct {
 // Step is an executable script step within a project.
 // swagger:model Step
 type swaggerStep struct {
-	ID              int64    `json:"id"`
-	ProjectID       int64    `json:"project_id"`
-	Name            string   `json:"name"`
-	ScriptBody      string   `json:"script_body"`
-	Interpreter     string   `json:"interpreter"`
-	SortOrder       int64    `json:"sort_order"`
-	CreatedAt       int64    `json:"created_at"`
-	TimeoutSeconds  int64    `json:"timeout_seconds"`
-	MaxRetries      int64    `json:"max_retries"`
-	ExecutionTarget string   `json:"execution_target"`
-	AgentSelectors  []string `json:"agent_selectors"`
-	// Container image the step runs in on the server; mandatory for
-	// local steps and rejected for agent steps.
+	ID                 int64    `json:"id"`
+	ProjectID          int64    `json:"project_id"`
+	Name               string   `json:"name"`
+	ScriptBody         string   `json:"script_body"`
+	Interpreter        string   `json:"interpreter"`
+	SortOrder          int64    `json:"sort_order"`
+	CreatedAt          int64    `json:"created_at"`
+	TimeoutSeconds     int64    `json:"timeout_seconds"`
+	MaxRetries         int64    `json:"max_retries"`
+	ExecutionTarget    string   `json:"execution_target"`
+	AgentExecutionMode string   `json:"agent_execution_mode"`
+	AgentSelectors     []string `json:"agent_selectors"`
+	// Container image required for local steps and agent container mode.
 	ContainerImage       string `json:"container_image"`
 	NetworkMode          string `json:"network_mode"`
 	ApprovalArtifactPath string `json:"approval_artifact_path"`
@@ -70,6 +70,7 @@ type swaggerStepTemplate struct {
 	Interpreter          string   `json:"interpreter"`
 	CreatedAt            int64    `json:"created_at"`
 	ExecutionTarget      string   `json:"execution_target"`
+	AgentExecutionMode   string   `json:"agent_execution_mode"`
 	AgentSelectors       []string `json:"agent_selectors"`
 	ContainerImage       string   `json:"container_image"`
 	NetworkMode          string   `json:"network_mode"`
@@ -90,6 +91,7 @@ type swaggerStepTemplateVersion struct {
 	Interpreter          string   `json:"interpreter"`
 	CreatedAt            int64    `json:"created_at"`
 	ExecutionTarget      string   `json:"execution_target"`
+	AgentExecutionMode   string   `json:"agent_execution_mode"`
 	AgentSelectors       []string `json:"agent_selectors"`
 	ContainerImage       string   `json:"container_image"`
 	NetworkMode          string   `json:"network_mode"`
@@ -405,16 +407,16 @@ type swaggerReorderStagesRequest struct {
 // StepRequest is the body for create/update step.
 // swagger:model StepRequest
 type swaggerStepRequest struct {
-	Name            string   `json:"name"`
-	ScriptBody      string   `json:"script_body"`
-	Interpreter     string   `json:"interpreter"`
-	SortOrder       int64    `json:"sort_order"`
-	TimeoutSeconds  int64    `json:"timeout_seconds"`
-	MaxRetries      int64    `json:"max_retries"`
-	ExecutionTarget string   `json:"execution_target"`
-	AgentSelectors  []string `json:"agent_selectors"`
-	// Container image the step runs in on the server; mandatory for
-	// local steps and rejected for agent steps.
+	Name               string   `json:"name"`
+	ScriptBody         string   `json:"script_body"`
+	Interpreter        string   `json:"interpreter"`
+	SortOrder          int64    `json:"sort_order"`
+	TimeoutSeconds     int64    `json:"timeout_seconds"`
+	MaxRetries         int64    `json:"max_retries"`
+	ExecutionTarget    string   `json:"execution_target"`
+	AgentExecutionMode string   `json:"agent_execution_mode"`
+	AgentSelectors     []string `json:"agent_selectors"`
+	// Required for local steps and agent container mode; rejected for agent host mode.
 	ContainerImage       string `json:"container_image"`
 	NetworkMode          string `json:"network_mode"`
 	ApprovalArtifactPath string `json:"approval_artifact_path"`
@@ -434,13 +436,13 @@ type swaggerReorderStepsRequest struct {
 // StepTemplateRequest is the body for create/update step template.
 // swagger:model StepTemplateRequest
 type swaggerStepTemplateRequest struct {
-	Name            string   `json:"name"`
-	ScriptBody      string   `json:"script_body"`
-	Interpreter     string   `json:"interpreter"`
-	ExecutionTarget string   `json:"execution_target"`
-	AgentSelectors  []string `json:"agent_selectors"`
-	// Container image the step runs in on the server; mandatory for
-	// local steps and rejected for agent steps.
+	Name               string   `json:"name"`
+	ScriptBody         string   `json:"script_body"`
+	Interpreter        string   `json:"interpreter"`
+	ExecutionTarget    string   `json:"execution_target"`
+	AgentExecutionMode string   `json:"agent_execution_mode"`
+	AgentSelectors     []string `json:"agent_selectors"`
+	// Required for local steps and agent container mode; rejected for agent host mode.
 	ContainerImage       string `json:"container_image"`
 	NetworkMode          string `json:"network_mode"`
 	ApprovalArtifactPath string `json:"approval_artifact_path"`
@@ -715,6 +717,9 @@ type swaggerAgent struct {
 	CreatedAt                int64                 `json:"created_at"`
 	UpdatedAt                int64                 `json:"updated_at"`
 	Interpreters             []string              `json:"interpreters"`
+	ExecutionModes           []string              `json:"execution_modes"`
+	ContainerRuntimes        []string              `json:"container_runtimes"`
+	ContainerInterpreters    []string              `json:"container_interpreters"`
 }
 
 type swaggerSQLNullString struct {
@@ -789,6 +794,7 @@ type swaggerRunbookStep struct {
 	TimeoutSeconds       int64    `json:"timeout_seconds"`
 	MaxRetries           int64    `json:"max_retries"`
 	ExecutionTarget      string   `json:"execution_target"`
+	AgentExecutionMode   string   `json:"agent_execution_mode"`
 	AgentSelectors       []string `json:"agent_selectors"`
 	ContainerImage       string   `json:"container_image"`
 	NetworkMode          string   `json:"network_mode"`

@@ -20,6 +20,9 @@ type AgentHealthReport struct {
 	ServerVersion            string                                  `json:"server_version"`
 	RecommendedAgentVersion  string                                  `json:"recommended_agent_version"`
 	Compatibility            string                                  `json:"compatibility"`
+	ExecutionModes           []string                                `json:"execution_modes"`
+	ContainerRuntimes        []string                                `json:"container_runtimes"`
+	ContainerInterpreters    []string                                `json:"container_interpreters"`
 }
 
 func agentAdministrativeStatus(agent db.Agent, currentWork int) string {
@@ -58,6 +61,28 @@ func (r *Repository) AgentHealthReport(
 	agent db.Agent,
 ) (AgentHealthReport, error) {
 	var report AgentHealthReport
+	var err error
+	report.ExecutionModes, err = r.Queries.ListAgentExecutionModes(
+		ctx,
+		agent.ID,
+	)
+	if err != nil {
+		return report, fmt.Errorf("agent execution modes: %w", err)
+	}
+	report.ContainerRuntimes, err = r.Queries.ListAgentContainerRuntimes(
+		ctx,
+		agent.ID,
+	)
+	if err != nil {
+		return report, fmt.Errorf("agent container runtimes: %w", err)
+	}
+	report.ContainerInterpreters, err = r.Queries.ListAgentContainerInterpreters(
+		ctx,
+		agent.ID,
+	)
+	if err != nil {
+		return report, fmt.Errorf("agent container interpreters: %w", err)
+	}
 	now, err := r.Queries.CurrentUnixTime(ctx)
 	if err != nil {
 		return report, fmt.Errorf("agent health clock: %w", err)

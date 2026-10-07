@@ -309,13 +309,20 @@ func (s *Server) publishRemoteResult(
 		result.DeploymentID,
 		result.EnvironmentName,
 	)
-	if result.State == "failed" {
+	if result.State != "succeeded" {
 		typ = events.DeploymentFailed
 		message = fmt.Sprintf(
 			"Deployment #%d failed on %s",
 			result.DeploymentID,
 			result.EnvironmentName,
 		)
+		if result.State == "cleanup_unconfirmed" {
+			message = fmt.Sprintf(
+				"Deployment #%d container cleanup is unconfirmed on %s; restore agent runtime access",
+				result.DeploymentID,
+				result.EnvironmentName,
+			)
+		}
 	}
 	s.eventBus.Publish(r.Context(), events.Event{
 		Type:          typ,

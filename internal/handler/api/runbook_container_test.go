@@ -69,7 +69,7 @@ func TestRunbookAPI_AgentStepRejectsContainerImage(t *testing.T) {
 		t.Fatalf("status=%d body=%s", created.Code, created.Body.String())
 	}
 	if !strings.Contains(created.Body.String(),
-		"container image is only valid for local steps") {
+		"container image is not valid for agent-host steps") {
 		t.Fatalf("body missing image-rejection message: %s",
 			created.Body.String())
 	}

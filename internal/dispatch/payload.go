@@ -38,7 +38,11 @@ type VariableSnapshot struct {
 func VariableSnapshots(variables []runner.ResolvedVariable) []VariableSnapshot {
 	result := make([]VariableSnapshot, len(variables))
 	for i, variable := range variables {
-		result[i] = VariableSnapshot{Name: variable.Name, Value: variable.Value, Secret: variable.Secret}
+		result[i] = VariableSnapshot{
+			Name:   variable.Name,
+			Value:  variable.Value,
+			Secret: variable.Secret,
+		}
 	}
 	return result
 }
@@ -50,5 +54,37 @@ func (snapshot Payload) Seal(certificateDER []byte) ([]byte, error) {
 	}
 	return agentpayload.Seal(
 		certificateDER, int64(snapshot.DeploymentID), plaintext,
+	)
+}
+
+func (snapshot Payload) SealForProtocol(
+	certificateDER []byte,
+	protocol agentproto.ProtocolVersion,
+) ([]byte, error) {
+	steps := make([]json.RawMessage, len(snapshot.Release.Steps))
+	for index, step := range snapshot.Release.Steps {
+		encoded, err := step.MarshalForProtocol(protocol)
+		if err != nil {
+			return nil, fmt.Errorf("encode step %q: %w", step.Name, err)
+		}
+		steps[index] = encoded
+	}
+	wire := struct {
+		Payload
+		Release struct {
+			ReleaseSnapshot
+			Steps []json.RawMessage `json:"steps"`
+		} `json:"release"`
+	}{Payload: snapshot}
+	wire.Release.ReleaseSnapshot = snapshot.Release
+	wire.Release.Steps = steps
+	plaintext, err := json.Marshal(wire)
+	if err != nil {
+		return nil, fmt.Errorf("marshal deployment payload: %w", err)
+	}
+	return agentpayload.Seal(
+		certificateDER,
+		int64(snapshot.DeploymentID),
+		plaintext,
 	)
 }

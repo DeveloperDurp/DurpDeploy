@@ -420,7 +420,7 @@ func (q *Queries) ListAvailableAgentLabels(ctx context.Context) ([]string, error
 }
 
 const listRevocableAgentClaims = `-- name: ListRevocableAgentClaims :many
-SELECT deployment_id, agent_id, state, reason, claim_token_hash, ciphertext, claim_expires_at, last_heartbeat_at, started_at, finished_at, cancel_requested_at, created_at, updated_at, log_buffer_ciphertext FROM remote_deployment_claims
+SELECT deployment_id, agent_id, state, reason, claim_token_hash, ciphertext, claim_expires_at, last_heartbeat_at, started_at, finished_at, cancel_requested_at, created_at, updated_at, log_buffer_ciphertext, cleanup_confirmed_at FROM remote_deployment_claims
 WHERE agent_id = ? AND state IN ('waiting', 'claimed', 'started', 'cancel_requested')
 ORDER BY deployment_id
 `
@@ -449,6 +449,7 @@ func (q *Queries) ListRevocableAgentClaims(ctx context.Context, agentID string) 
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.LogBufferCiphertext,
+			&i.CleanupConfirmedAt,
 		); err != nil {
 			return nil, err
 		}

@@ -154,12 +154,29 @@ while this flag is true; polling updates it automatically.
 ```
 
 `local` means mandatory server-container execution; specify an image with
-`bash`, `pwsh`, or `python3` installed. `agent` runs on matching remote agents
-without a container image. API requests may use `powershell`; DurpDeploy
+`bash`, `pwsh`, or `python3` installed. `agent` runs on matching remote agents.
+`agent_execution_mode` defaults to `host`, which rejects a container image.
+For remote containers, set `execution_target: "agent"`,
+`agent_execution_mode: "container"`, and a valid `container_image`.
+This requires an `agent/3` agent reporting a ready Docker or Podman runtime
+and support for the selected container interpreter. API requests may use `powershell`; DurpDeploy
 normalizes it to `pwsh`. All resolved release variables enter a step by
 default; set `variable_names` only to restrict the step to those names. Local
 steps exclude container/SSH client configuration names such as `PATH`, `HOME`,
-`SSH_AUTH_SOCK`, or `XDG_*`; agent steps retain their host variable support.
+`SSH_AUTH_SOCK`, or `XDG_*`; agent-host steps retain their host variable support.
+Agent-container steps apply the same reserved-name restrictions as local containers.
+Steps, template versions, releases, and runbook versions preserve these fields.
+An empty `variable_names` list passes all resolved variables; a non-empty
+list restricts that step, including remote host steps.
+The admin agent API reports `execution_modes`, `container_runtimes`, and
+`container_interpreters` from the last valid poll.
+Upgrade the server before enabling agent containers. Keep old agents on host
+steps. Do not downgrade the server while container work is pending or cleanup
+is unresolved. Downgrading an agent clears its container capabilities and
+fails its incompatible waiting work before claim.
+An agent result of `cleanup_unconfirmed` blocks the environment queue and
+retry until that agent reconciles its containers and reports a ready v3 poll.
+The original terminal result remains visible after confirmation.
 The embedded agent pulls an image when it is missing. Container steps default
 to no network; local steps can opt into `network_mode: "bridge"`. They have no
 host mounts. A mutable image tag does not

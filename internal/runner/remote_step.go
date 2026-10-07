@@ -103,6 +103,7 @@ func (r *DeploymentRunner) runRemoteStep(
 		allSucceeded := len(runs) > 0
 		hasActive := false
 		hasFailure := false
+		cleanupUnconfirmed := false
 		expired := false
 		now := time.Now()
 		elapsed := now.Sub(lastChecked)
@@ -115,7 +116,9 @@ func (r *DeploymentRunner) runRemoteStep(
 				if !operatorCancelled {
 					hasFailure = true
 				}
-			case "failed", "lost", "cancel_unconfirmed":
+			case "failed", "lost", "cancel_unconfirmed", "cleanup_unconfirmed":
+				cleanupUnconfirmed = cleanupUnconfirmed ||
+					run.State == "cleanup_unconfirmed"
 				allSucceeded = false
 				hasFailure = true
 				if failureAgent == "" {
@@ -143,6 +146,9 @@ func (r *DeploymentRunner) runRemoteStep(
 				timedOut = true
 			}
 			cancellationNeeded = true
+		}
+		if cleanupUnconfirmed && !hasActive {
+			return errContainerCleanup
 		}
 		if operatorCancelled && !hasActive {
 			if hasFailure {

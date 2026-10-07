@@ -51,7 +51,14 @@ func (r *Repository) CreateRunbookExecution(
 							err,
 						)
 					}
-					if source.Status == "cleanup_unconfirmed" {
+					unconfirmed, err := q.HasUnconfirmedContainerCleanup(
+						ctx,
+						source.ID,
+					)
+					if err != nil {
+						return err
+					}
+					if unconfirmed != 0 {
 						return ErrContainerCleanupUnconfirmed
 					}
 					active, err := q.HasUnconfirmedRunbookRemoteOutcome(

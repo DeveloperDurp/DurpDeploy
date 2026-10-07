@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 
+	"durpdeploy/internal/agentexecution"
 	"durpdeploy/internal/artifact"
 	"durpdeploy/internal/containerenv"
 	"durpdeploy/internal/db"
@@ -112,7 +113,11 @@ func createDeploymentFromDeployment(
 	if err != nil {
 		return DeploymentResult{}, fmt.Errorf("get source deployment: %w", err)
 	}
-	if source.Status == "cleanup_unconfirmed" {
+	unconfirmed, err := q.HasUnconfirmedContainerCleanup(ctx, source.ID)
+	if err != nil {
+		return DeploymentResult{}, err
+	}
+	if unconfirmed != 0 {
 		return DeploymentResult{}, ErrContainerCleanupUnconfirmed
 	}
 	if source.ReleaseID != arg.ReleaseID {
@@ -363,6 +368,7 @@ func deploymentStepsFromRelease(raw string) ([]DeploymentStepSnapshot, error) {
 		TimeoutSeconds       int64    `json:"timeout_seconds"`
 		MaxRetries           int64    `json:"max_retries"`
 		ExecutionTarget      string   `json:"execution_target"`
+		AgentExecutionMode   string   `json:"agent_execution_mode"`
 		AgentSelectors       []string `json:"agent_selectors"`
 		ContainerImage       string   `json:"container_image"`
 		NetworkMode          string   `json:"network_mode"`
@@ -392,6 +398,13 @@ func deploymentStepsFromRelease(raw string) ([]DeploymentStepSnapshot, error) {
 				"step %q: %w", step.Name, ErrLegacyServerStep,
 			)
 		}
+		mode, err := agentexecution.Parse(agentexecution.Config{
+			Target: target, Mode: step.AgentExecutionMode,
+			Image: step.ContainerImage, VariableNames: step.VariableNames,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("step %q: %w", step.Name, err)
+		}
 		if err := artifact.ValidateGateConfig(
 			target,
 			step.NetworkMode,
@@ -408,6 +421,7 @@ func deploymentStepsFromRelease(raw string) ([]DeploymentStepSnapshot, error) {
 				TimeoutSeconds:       step.TimeoutSeconds,
 				MaxRetries:           step.MaxRetries,
 				ExecutionTarget:      target,
+				AgentExecutionMode:   string(mode),
 				Interpreter:          step.Interpreter,
 				ContainerImage:       step.ContainerImage,
 				NetworkMode:          step.NetworkMode,

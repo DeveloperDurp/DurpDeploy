@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -120,6 +121,21 @@ func (r *Repository) ClaimRemoteDeploymentPayload(
 				}
 				prepared, err := prepare(snapshot)
 				if err != nil {
+					if errors.Is(err, agentproto.ErrUnsupportedProtocol) {
+						if err := q.FailWaitingRemotePayload(ctx, db.FailWaitingRemotePayloadParams{
+							DeploymentID: candidate, AgentID: agentID,
+							Now: sql.NullInt64{Int64: now, Valid: true},
+						}); err != nil {
+							return err
+						}
+						return q.FailUnsupportedRemoteDeploymentStatus(ctx,
+							db.FailUnsupportedRemoteDeploymentStatusParams{
+								Now: sql.NullInt64{
+									Int64: now,
+									Valid: true,
+								}, AgentID: agentID,
+							})
+					}
 					return err
 				}
 				changed, err := q.ClaimRemoteDeployment(

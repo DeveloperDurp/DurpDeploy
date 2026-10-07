@@ -113,6 +113,22 @@ func (q *Queries) ClaimRemoteDeployment(ctx context.Context, arg ClaimRemoteDepl
 	return result.RowsAffected()
 }
 
+const confirmRemoteDeploymentCleanup = `-- name: ConfirmRemoteDeploymentCleanup :exec
+UPDATE remote_deployment_claims SET cleanup_confirmed_at = ?1
+WHERE agent_id = ?2 AND state = 'cleanup_unconfirmed'
+  AND cleanup_confirmed_at IS NULL
+`
+
+type ConfirmRemoteDeploymentCleanupParams struct {
+	Now     sql.NullInt64 `json:"now"`
+	AgentID string        `json:"agent_id"`
+}
+
+func (q *Queries) ConfirmRemoteDeploymentCleanup(ctx context.Context, arg ConfirmRemoteDeploymentCleanupParams) error {
+	_, err := q.db.ExecContext(ctx, confirmRemoteDeploymentCleanup, arg.Now, arg.AgentID)
+	return err
+}
+
 const createRemoteDeploymentClaim = `-- name: CreateRemoteDeploymentClaim :execrows
 INSERT INTO remote_deployment_claims (deployment_id, agent_id)
 SELECT d.id, d.assigned_agent_id FROM deployments d
@@ -253,6 +269,67 @@ func (q *Queries) FailRemoteDeploymentStatus(ctx context.Context, arg FailRemote
 	return result.RowsAffected()
 }
 
+const failUnsupportedRemoteDeploymentStatus = `-- name: FailUnsupportedRemoteDeploymentStatus :exec
+UPDATE deployments SET status = 'failed', finished_at = ?1
+WHERE status IN ('queued', 'pending', 'pending_approval')
+  AND EXISTS (SELECT 1 FROM remote_deployment_claims c
+      WHERE c.deployment_id = deployments.id AND c.agent_id = ?2
+        AND c.state = 'failed')
+`
+
+type FailUnsupportedRemoteDeploymentStatusParams struct {
+	Now     sql.NullInt64 `json:"now"`
+	AgentID string        `json:"agent_id"`
+}
+
+func (q *Queries) FailUnsupportedRemoteDeploymentStatus(ctx context.Context, arg FailUnsupportedRemoteDeploymentStatusParams) error {
+	_, err := q.db.ExecContext(ctx, failUnsupportedRemoteDeploymentStatus, arg.Now, arg.AgentID)
+	return err
+}
+
+const failUnsupportedWaitingRemoteDeploymentClaims = `-- name: FailUnsupportedWaitingRemoteDeploymentClaims :exec
+UPDATE remote_deployment_claims SET state = 'failed',
+    reason = 'remote_execution_capability_unavailable',
+    finished_at = ?1, updated_at = ?1
+WHERE remote_deployment_claims.agent_id = ?2
+  AND remote_deployment_claims.state = 'waiting'
+  AND EXISTS (SELECT 1 FROM deployment_steps s
+      WHERE s.deployment_id = remote_deployment_claims.deployment_id
+        AND NOT EXISTS (SELECT 1 FROM agent_step_capabilities capability
+            WHERE capability.agent_id = remote_deployment_claims.agent_id
+              AND capability.interpreter = s.interpreter
+              AND capability.execution_mode = s.agent_execution_mode))
+`
+
+type FailUnsupportedWaitingRemoteDeploymentClaimsParams struct {
+	Now     sql.NullInt64 `json:"now"`
+	AgentID string        `json:"agent_id"`
+}
+
+func (q *Queries) FailUnsupportedWaitingRemoteDeploymentClaims(ctx context.Context, arg FailUnsupportedWaitingRemoteDeploymentClaimsParams) error {
+	_, err := q.db.ExecContext(ctx, failUnsupportedWaitingRemoteDeploymentClaims, arg.Now, arg.AgentID)
+	return err
+}
+
+const failWaitingRemotePayload = `-- name: FailWaitingRemotePayload :exec
+UPDATE remote_deployment_claims SET state = 'failed',
+    reason = 'remote_payload_requires_agent_3', finished_at = ?1,
+    updated_at = ?1
+WHERE deployment_id = ?2 AND agent_id = ?3
+  AND state = 'waiting'
+`
+
+type FailWaitingRemotePayloadParams struct {
+	Now          sql.NullInt64 `json:"now"`
+	DeploymentID int64         `json:"deployment_id"`
+	AgentID      string        `json:"agent_id"`
+}
+
+func (q *Queries) FailWaitingRemotePayload(ctx context.Context, arg FailWaitingRemotePayloadParams) error {
+	_, err := q.db.ExecContext(ctx, failWaitingRemotePayload, arg.Now, arg.DeploymentID, arg.AgentID)
+	return err
+}
+
 const finishRemoteDeployment = `-- name: FinishRemoteDeployment :execrows
 UPDATE remote_deployment_claims SET state = ?1,
     reason = ?2, finished_at = ?3,
@@ -260,9 +337,11 @@ UPDATE remote_deployment_claims SET state = ?1,
 WHERE remote_deployment_claims.deployment_id = ?4
   AND remote_deployment_claims.agent_id = ?5
   AND remote_deployment_claims.claim_token_hash = ?6
-  AND remote_deployment_claims.state = 'started'
+  AND (remote_deployment_claims.state = 'started' OR
+      (remote_deployment_claims.state = 'cancel_requested' AND ?1 = 'cleanup_unconfirmed'))
   AND remote_deployment_claims.started_at IS NOT NULL
-  AND (?1 = 'succeeded' OR ?1 = 'failed')
+  AND (?1 = 'succeeded' OR ?1 = 'failed'
+      OR ?1 = 'cleanup_unconfirmed')
   AND EXISTS (SELECT 1 FROM deployments d
       WHERE d.id = remote_deployment_claims.deployment_id
         AND d.assigned_agent_id = remote_deployment_claims.agent_id
@@ -325,7 +404,7 @@ func (q *Queries) FinishRemoteDeploymentStatus(ctx context.Context, arg FinishRe
 }
 
 const getRemoteDeploymentClaim = `-- name: GetRemoteDeploymentClaim :one
-SELECT deployment_id, agent_id, state, reason, claim_token_hash, ciphertext, claim_expires_at, last_heartbeat_at, started_at, finished_at, cancel_requested_at, created_at, updated_at, log_buffer_ciphertext FROM remote_deployment_claims WHERE deployment_id = ?
+SELECT deployment_id, agent_id, state, reason, claim_token_hash, ciphertext, claim_expires_at, last_heartbeat_at, started_at, finished_at, cancel_requested_at, created_at, updated_at, log_buffer_ciphertext, cleanup_confirmed_at FROM remote_deployment_claims WHERE deployment_id = ?
 `
 
 func (q *Queries) GetRemoteDeploymentClaim(ctx context.Context, deploymentID int64) (RemoteDeploymentClaim, error) {
@@ -346,6 +425,7 @@ func (q *Queries) GetRemoteDeploymentClaim(ctx context.Context, deploymentID int
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.LogBufferCiphertext,
+		&i.CleanupConfirmedAt,
 	)
 	return i, err
 }
@@ -385,7 +465,7 @@ func (q *Queries) HeartbeatRemoteDeployment(ctx context.Context, arg HeartbeatRe
 }
 
 const listRemoteLifecycleClaims = `-- name: ListRemoteLifecycleClaims :many
-SELECT deployment_id, agent_id, state, reason, claim_token_hash, ciphertext, claim_expires_at, last_heartbeat_at, started_at, finished_at, cancel_requested_at, created_at, updated_at, log_buffer_ciphertext FROM remote_deployment_claims
+SELECT deployment_id, agent_id, state, reason, claim_token_hash, ciphertext, claim_expires_at, last_heartbeat_at, started_at, finished_at, cancel_requested_at, created_at, updated_at, log_buffer_ciphertext, cleanup_confirmed_at FROM remote_deployment_claims
 WHERE state IN ('claimed', 'started', 'cancel_requested')
 ORDER BY agent_id, deployment_id
 `
@@ -414,6 +494,7 @@ func (q *Queries) ListRemoteLifecycleClaims(ctx context.Context) ([]RemoteDeploy
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.LogBufferCiphertext,
+			&i.CleanupConfirmedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -434,6 +515,16 @@ JOIN deployments d ON d.id = c.deployment_id
 WHERE c.agent_id = ?1 AND c.state = 'waiting'
   AND d.assigned_agent_id = c.agent_id AND d.status = 'pending'
   AND EXISTS (SELECT 1 FROM environment_deployment_slots slot WHERE slot.deployment_id = d.id)
+  AND NOT EXISTS (SELECT 1 FROM deployment_steps s
+      WHERE s.deployment_id = d.id AND NOT EXISTS (
+          SELECT 1 FROM agent_step_capabilities capability
+          WHERE capability.agent_id = c.agent_id
+            AND capability.interpreter = s.interpreter
+            AND capability.execution_mode = s.agent_execution_mode))
+  AND NOT EXISTS (SELECT 1 FROM remote_step_runs busy WHERE busy.agent_id = c.agent_id
+      AND busy.state = 'cleanup_unconfirmed' AND busy.cleanup_confirmed_at IS NULL)
+  AND NOT EXISTS (SELECT 1 FROM remote_deployment_claims busy WHERE busy.agent_id = c.agent_id
+      AND busy.state = 'cleanup_unconfirmed' AND busy.cleanup_confirmed_at IS NULL)
 ORDER BY c.created_at, c.deployment_id
 `
 

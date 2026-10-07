@@ -1,13 +1,14 @@
 # Agent protocol
 
-`agent/1` and `agent/2` are the outbound-only JSON contracts between DurpDeploy
-and a remote agent. Version 2 adds fixed interpreter capability reporting while
-the server continues to accept version 1 as Bash-only.
+`agent/1`, `agent/2`, and `agent/3` are the outbound-only JSON contracts
+between DurpDeploy and a remote agent. Version 1 is Bash-only host execution.
+Version 2 adds fixed host interpreter reporting. Version 3 adds explicit
+host/container modes and ready Docker/Podman container capabilities.
 
 ## Endpoints and payloads
 
 All JSON requests are exactly one object and require a present, non-null
-`protocol` of `agent/1` or `agent/2`. They reject unknown fields, trailing JSON
+`protocol` of `agent/1`, `agent/2`, or `agent/3`. They reject unknown fields, trailing JSON
 values, malformed JSON, and every other protocol value. Pairing remains
 `agent/1` so existing identities can upgrade without re-pairing.
 
@@ -18,7 +19,30 @@ values, malformed JSON, and every other protocol value. Pairing remains
 | `POST /agent/v1/deployments/{id}/start` | `StartRequest` | Acknowledges that the claimed work started. |
 | `POST /agent/v1/deployments/{id}/heartbeat` | `HeartbeatRequest` | Response carries cancellation state and staged server fingerprints. |
 | `POST /agent/v1/deployments/{id}/logs` | `LogBatchRequest` | Ordered line events. |
-| `POST /agent/v1/deployments/{id}/result` | `ResultRequest` | Result state is only `succeeded` or `failed`. |
+| `POST /agent/v1/deployments/{id}/result` | `ResultRequest` | Result is `succeeded` or `failed`; v3 also accepts `cleanup_unconfirmed`. |
+
+Version 3 polls require all four capability arrays:
+`supported_interpreters`, `execution_modes`, `container_runtimes`, and
+`container_interpreters`. Values are fixed: modes `host`/`container`,
+runtimes `docker`/`podman`, interpreters `bash`/`pwsh`/`python3`.
+Host-only and container-only reports are valid. Missing/null arrays, duplicates,
+unknown values, or container readiness without container mode are rejected.
+A failed capability report changes no heartbeat or stored capabilities.
+
+Encrypted v3 steps carry `execution_mode`, `container_image`, and
+`variable_names`. The server matches mode, interpreter, runtime readiness,
+environment, and selector labels before fan-out and checks eligibility again
+before claim. Legacy payloads omit v3 fields. A single restricted legacy step
+receives a server-filtered variable set. A legacy multi-step payload is safe
+only when every step receives the same resolved variables; otherwise it fails
+before claim with `remote_payload_requires_agent_3`.
+
+A cleanup-uncertain result is terminal and idempotent only for the same
+authenticated claim and outcome. It never restarts execution or changes to
+success. The environment and agent remain blocked while cleanup is unresolved.
+After local reconciliation, a ready authenticated v3 poll records
+`cleanup_confirmed_at` separately and releases the queue. Older polls cannot
+confirm cleanup. Pairing reactivation cannot clear this obligation.
 | `POST /agent/v1/deployments/{id}/cancelled` | `CancelledRequest` | Cancellation acknowledgement is distinct from a normal result. |
 
 The endpoint route, active mTLS identity, and later persistence checks bind a

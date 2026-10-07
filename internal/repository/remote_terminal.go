@@ -58,8 +58,9 @@ func finishRemoteDeploymentLifecycle(
 	if claim.State == state && deployment.Status == state {
 		return RemoteTerminalResult{}, nil
 	}
-	if (state != "succeeded" && state != "failed") ||
-		claim.State != "started" || deployment.Status != "running" {
+	if (state != "succeeded" && state != "failed" && state != "cleanup_unconfirmed") ||
+		(claim.State != "started" && !(claim.State == "cancel_requested" && state == "cleanup_unconfirmed")) ||
+		deployment.Status != "running" {
 		return RemoteTerminalResult{}, ErrRemoteLifecycleConflict
 	}
 	release, err := q.GetRelease(ctx, deployment.ReleaseID)

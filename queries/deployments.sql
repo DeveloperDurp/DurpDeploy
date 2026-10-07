@@ -19,6 +19,22 @@ UPDATE deployments SET status = 'failed', finished_at = COALESCE(finished_at, sq
 WHERE status IN ('running', 'publishing_artifact', 'cleanup_unconfirmed')
   AND container_namespace = sqlc.arg(namespace);
 
+-- name: HasUnconfirmedContainerCleanup :one
+SELECT CASE WHEN EXISTS (
+    SELECT 1 FROM deployments d WHERE d.id = sqlc.arg(deployment_id)
+      AND d.status = 'cleanup_unconfirmed'
+      AND NOT EXISTS (SELECT 1 FROM remote_step_runs s
+          WHERE s.deployment_id = d.id AND s.state = 'cleanup_unconfirmed')
+      AND NOT EXISTS (SELECT 1 FROM remote_deployment_claims c
+          WHERE c.deployment_id = d.id AND c.state = 'cleanup_unconfirmed')
+) OR EXISTS (
+    SELECT 1 FROM remote_step_runs s WHERE s.deployment_id = sqlc.arg(deployment_id)
+      AND s.state = 'cleanup_unconfirmed' AND s.cleanup_confirmed_at IS NULL
+) OR EXISTS (
+    SELECT 1 FROM remote_deployment_claims c WHERE c.deployment_id = sqlc.arg(deployment_id)
+      AND c.state = 'cleanup_unconfirmed' AND c.cleanup_confirmed_at IS NULL
+) THEN 1 ELSE 0 END;
+
 -- name: RecordContainerNamespace :execrows
 UPDATE deployments SET container_namespace = sqlc.arg(namespace)
 WHERE id = sqlc.arg(deployment_id) AND status = 'running'
@@ -135,12 +151,15 @@ WHERE status IN ('running', 'publishing_artifact') AND assigned_agent_id IS NULL
   );
 
 -- name: FailDeploymentsWithTerminalRemoteStepRuns :execrows
-UPDATE deployments SET status = 'failed', finished_at = sqlc.arg(now)
+UPDATE deployments SET status = CASE WHEN EXISTS (
+    SELECT 1 FROM remote_step_runs r WHERE r.deployment_id = deployments.id
+      AND r.state = 'cleanup_unconfirmed') THEN 'cleanup_unconfirmed' ELSE 'failed' END,
+    finished_at = sqlc.arg(now)
 WHERE status = 'running' AND assigned_agent_id IS NULL
   AND EXISTS (
       SELECT 1 FROM remote_step_runs r
       WHERE r.deployment_id = deployments.id
-        AND (r.state IN ('failed', 'lost', 'cancel_unconfirmed')
+        AND (r.state IN ('failed', 'lost', 'cancel_unconfirmed', 'cleanup_unconfirmed')
           OR (r.state = 'cancelled' AND r.recovery_cancelled = 1))
   )
   AND NOT EXISTS (
