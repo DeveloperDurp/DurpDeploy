@@ -51,12 +51,12 @@ SELECT CASE WHEN EXISTS (
                 WHERE c.deployment_id = d.id AND c.state = 'cleanup_unconfirmed'))))
         OR EXISTS (SELECT 1 FROM remote_deployment_claims c
                    WHERE c.deployment_id = d.id
-                     AND (c.state IN ('lost', 'cancel_unconfirmed')
+                     AND (c.state IN ('claimed', 'started', 'cancel_requested', 'lost', 'cancel_unconfirmed')
                        OR (c.state = 'cleanup_unconfirmed'
                            AND c.cleanup_confirmed_at IS NULL)))
         OR EXISTS (SELECT 1 FROM remote_step_runs s
                    WHERE s.deployment_id = d.id
-                     AND (s.state IN ('lost', 'cancel_unconfirmed')
+                     AND (s.state IN ('claimed', 'started', 'cancel_requested', 'lost', 'cancel_unconfirmed')
                        OR (s.state = 'cleanup_unconfirmed'
                            AND s.cleanup_confirmed_at IS NULL))))
 ) THEN 1 ELSE 0 END;

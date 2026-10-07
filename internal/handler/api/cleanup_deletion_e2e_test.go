@@ -62,6 +62,64 @@ VALUES(?,'cleanup','cleanup_unconfirmed',zeroblob(32),'fixture',1,1,1,1)`
 						); err != nil {
 							t.Fatal(err)
 						}
+						if state == "failed" {
+							for _, active := range []string{"claimed", "started", "cancel_requested"} {
+								started := sql.NullInt64{
+									Int64: 1,
+									Valid: active != "claimed",
+								}
+								cancelled := sql.NullInt64{
+									Int64: 1,
+									Valid: active == "cancel_requested",
+								}
+								if _, err := f.h.repo.DB.Exec(
+									"UPDATE "+table+" SET state=?,started_at=?,finished_at=NULL,cancel_requested_at=?",
+									active,
+									started,
+									cancelled,
+								); err != nil {
+									t.Fatal(err)
+								}
+								f.api(
+									t,
+									"DELETE",
+									"/api/v1"+path,
+									nil,
+									http.StatusConflict,
+								)
+								f.web(
+									t,
+									"DELETE",
+									path,
+									nil,
+									http.StatusConflict,
+								)
+								refresh := fmt.Sprintf(
+									"%s/releases/%d/refresh",
+									f.base(),
+									release.ID,
+								)
+								f.api(
+									t,
+									"POST",
+									refresh,
+									nil,
+									http.StatusConflict,
+								)
+								f.web(
+									t,
+									"POST",
+									refresh[len("/api/v1"):],
+									nil,
+									http.StatusConflict,
+								)
+							}
+							if _, err := f.h.repo.DB.Exec(
+								"UPDATE " + table + " SET state='cleanup_unconfirmed',started_at=1,finished_at=1,cancel_requested_at=NULL",
+							); err != nil {
+								t.Fatal(err)
+							}
+						}
 						f.api(
 							t,
 							"DELETE",
