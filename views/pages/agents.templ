@@ -130,6 +130,15 @@ templ AgentsPage(agents []db.Agent, interpreters map[string][]string, health map
 											<a class="btn btn-ghost btn-xs" href={ templ.SafeURL("/admin/agents/" + agent.ID) }>Edit</a>
 											@AgentDrainControl(agent, "btn-xs", "/admin/agents")
 											if CanWrite(ctx) {
+												if agent.Status != "revoked" {
+													<button
+														class="btn btn-error btn-xs"
+														hx-post={ "/admin/agents/" + agent.ID + "/revoke" }
+														hx-confirm={ "Revoke agent " + agent.Name + " (" + agent.ID + ")? Active remote work will be terminated." }
+													>
+														Revoke
+													</button>
+												}
 												<button
 													class="btn btn-error btn-xs"
 													hx-post={ "/admin/agents/" + agent.ID + "/delete" }
@@ -220,6 +229,15 @@ templ AgentDetailPage(agent db.Agent, labels []string, interpreters []string, en
 					@AgentDrainControl(agent, "btn-sm", "/admin/agents/" + agent.ID)
 					}
 					if CanWrite(ctx) {
+					if agent.Status != "revoked" {
+					<button
+						class="btn btn-error btn-sm"
+						hx-post={ "/admin/agents/" + agent.ID + "/revoke" }
+						hx-confirm={ "Revoke agent " + agent.Name + " (" + agent.ID + ")? Active remote work will be terminated." }
+					>
+						Revoke agent
+					</button>
+					}
 					<button
 						class="btn btn-error btn-sm"
 						hx-post={ "/admin/agents/" + agent.ID + "/delete" }

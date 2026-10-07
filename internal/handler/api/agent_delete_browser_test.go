@@ -3,8 +3,10 @@
 package api_test
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -29,6 +31,22 @@ func TestAgentDeleteBrowserE2E(t *testing.T) {
 	}
 	project := seedProject(t, h.repo)
 	environment := seedEnv(t, h.repo)
+	if _, err := h.repo.Queries.AddAgentLabel(t.Context(), db.AddAgentLabelParams{
+		AgentID: "pending-delete", Label: strings.Repeat("longlabel", 7),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	longEnvironment, err := h.repo.Queries.CreateEnvironment(t.Context(),
+		db.CreateEnvironmentParams{Name: strings.Repeat("LongEnvironment", 6)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.repo.Queries.AddAgentEnvironmentLabel(t.Context(),
+		db.AddAgentEnvironmentLabelParams{
+			AgentID: "pending-delete", EnvironmentID: longEnvironment.ID,
+		}); err != nil {
+		t.Fatal(err)
+	}
 	release := seedRelease(t, h.repo, project.ID)
 	deployment := seedDeployment(
 		t,
@@ -66,6 +84,23 @@ func TestAgentDeleteBrowserE2E(t *testing.T) {
 		browser.call(t, "Emulation.setDeviceMetricsOverride", map[string]any{
 			"width": width, "height": 900, "deviceScaleFactor": 1, "mobile": false,
 		}, &struct{}{})
+		browser.screenshot(t, fmt.Sprintf("delete-rest-labels-%d", width))
+		browser.evaluate(
+			t,
+			`document.querySelector('button[hx-post$="/delete"]').scrollIntoView(); true`,
+		)
+		var target struct{ X, Y float64 }
+		if err := json.Unmarshal(browser.evaluate(t, `(() => {
+			const r=document.querySelector('button[hx-post$="/delete"]').getBoundingClientRect();
+			return {X:r.x+r.width/2,Y:r.y+r.height/2};
+		})()`), &target); err != nil {
+			t.Fatal(err)
+		}
+		browser.call(t, "Input.dispatchMouseEvent", map[string]any{
+			"type": "mouseMoved", "x": target.X, "y": target.Y,
+		}, &struct{}{})
+		browser.screenshot(t, fmt.Sprintf("delete-hover-%d", width))
+		browser.screenshot(t, fmt.Sprintf("delete-hover-settled-%d", width))
 		browser.evaluate(
 			t,
 			`document.querySelector('button[hx-post$="/delete"]').focus(); true`,
@@ -107,6 +142,28 @@ func TestAgentDeleteBrowserE2E(t *testing.T) {
 		}, &struct{}{})
 		browser.screenshot(t, fmt.Sprintf("delete-blocked-list-%d", width))
 	}
+	fleetRevokeConfirm(t, browser, "busy-delete")
+	browser.wait(t, `document.body.innerText.includes('revoked')`)
+	agent, err = h.repo.Queries.GetAgent(t.Context(), "busy-delete")
+	if err != nil || agent.Status != "revoked" {
+		t.Fatalf("emergency revocation agent=%+v error=%v", agent, err)
+	}
+}
+
+func fleetRevokeConfirm(t *testing.T, browser *packageBrowser, id string) {
+	t.Helper()
+	browser.wire.events = nil
+	browser.evaluate(t, fmt.Sprintf(`setTimeout(() => document.querySelector(
+		'[hx-post="/admin/agents/%s/revoke"]').click(), 0); true`, id))
+	if err := browser.wire.waitEvent("Page.javascriptDialogOpening", browser.session); err != nil {
+		t.Fatal(err)
+	}
+	browser.call(
+		t,
+		"Page.handleJavaScriptDialog",
+		map[string]bool{"accept": true},
+		&struct{}{},
+	)
 }
 
 func fleetDeleteConfirm(

@@ -21,6 +21,8 @@ Administrators can call `DELETE /api/v1/admin/agents/{id}` with an empty body or
 remote work or buffered logs return `409`. Successful deletion records `delete_agent` in the
 audit log. The existing `POST /api/v1/admin/agents/{id}/revoke` remains available
 for revoking access while retaining the inventory entry and re-pairing option.
+The Revoke button remains available for an immediate access stop when unresolved
+work prevents deletion.
 The same installed agent can pair again as a new registration with the same
 identity fingerprint. The server retains no tombstone or duplicate-identity
 block. Pair it from the list as usual; it receives a new agent ID and default

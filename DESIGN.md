@@ -96,6 +96,7 @@ keep `overflow-x-auto` and `table table-zebra table-fixed w-full`.
   `btn-sm` on detail pages. Delete uses `btn-error`, the same sizes, and the
   existing HTMX confirmation. Confirmation explains inventory removal and
   retained history; success returns to the fleet list.
+  Keep Revoke available for immediate access removal when work blocks Delete.
 - Workload details use existing cards and definition lists, linked deployment
   IDs, readable empty states, and `break-all` for version identifiers.
 - Status text carries meaning independently of color. Controls retain native
