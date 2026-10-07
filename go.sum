@@ -20,6 +20,8 @@ github.com/DeveloperDurp/durpdeploy-agent v0.1.1-0.20260921105742-a63b344bf6eb h
 github.com/DeveloperDurp/durpdeploy-agent v0.1.1-0.20260921105742-a63b344bf6eb/go.mod h1:GjvYh0EVVCngIKUh1v2MLb3WyZCHlrqE9ID2meUAJTQ=
 github.com/DeveloperDurp/durpdeploy-agent v0.1.1-0.20261007012438-fed5120aba29 h1:nyQ651vY0+H0S1IO0AQc9kLOpBsezg8VgHVKpKNjMY8=
 github.com/DeveloperDurp/durpdeploy-agent v0.1.1-0.20261007012438-fed5120aba29/go.mod h1:GjvYh0EVVCngIKUh1v2MLb3WyZCHlrqE9ID2meUAJTQ=
+github.com/DeveloperDurp/durpdeploy-agent v0.1.1-0.20261007133227-59413429c31b h1:YO3STonHvH8RIeFFKw/VGb8gmSnz2vIYXNC7oGO4C44=
+github.com/DeveloperDurp/durpdeploy-agent v0.1.1-0.20261007133227-59413429c31b/go.mod h1:GjvYh0EVVCngIKUh1v2MLb3WyZCHlrqE9ID2meUAJTQ=
 github.com/Microsoft/go-winio v0.6.2 h1:F2VQgta7ecxGYO8k3ZZz3RS8fVIXVxONVUPlNERoyfY=
 github.com/Microsoft/go-winio v0.6.2/go.mod h1:yd8OoFMLzJbo9gZq8j5qaps8bJ9aShtEA8Ipt1oGCvU=
 github.com/a-h/parse v0.0.0-20250122154542-74294addb73e h1:HjVbSQHy+dnlS6C3XajZ69NYAb5jbGNfHanvm1+iYlo=
