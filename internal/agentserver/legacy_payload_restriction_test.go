@@ -20,14 +20,14 @@ func TestLegacyDifferingRestrictionsFailBeforeClaimWithoutPoisoningPoll(
             WHEN 0 THEN '["MODE"]' ELSE '["TOKEN"]' END WHERE deployment_id=?`, id); err != nil {
 		t.Fatal(err)
 	}
-	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
-	defer cancel()
 	request := agentproto.PollRequest{
 		ProtocolEnvelope: agentproto.ProtocolEnvelope{
 			Protocol: agentproto.AgentV1,
 		},
 	}
 	recordFixturePoll(t, f, request)
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+	defer cancel()
 	_, claimed, err := dispatch.New(f.repo).Poll(ctx, "test-agent", request)
 	if claimed || !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("claimed=%v error=%v", claimed, err)
