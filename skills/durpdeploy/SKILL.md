@@ -177,8 +177,8 @@ fails its incompatible waiting work before claim.
 An agent result of `cleanup_unconfirmed` blocks the environment queue and
 retry until that agent reconciles its containers and reports a ready v3 poll.
 The original terminal result remains visible after confirmation.
-Re-pairing a revoked agent returns `409` while its remote cleanup remains
-unconfirmed. Reconcile its workloads before revocation; a replacement
+Re-pairing a revoked agent returns `409` while its remote execution or cleanup
+remains unconfirmed. Reconcile its workloads before revocation; a replacement
 installation cannot confirm cleanup for the old installation.
 After a heartbeat or cancellation timeout, the same paired agent can replay
 its durable terminal report with the original claim token. This resolves the

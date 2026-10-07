@@ -12,8 +12,16 @@ import (
 )
 
 func TestRevokedAgentCannotReplaceUnconfirmedCleanupIdentity(t *testing.T) {
-	for _, table := range []string{"remote_step_runs", "remote_deployment_claims"} {
-		t.Run(table, func(t *testing.T) {
+	for _, scenario := range []struct{ table, state string }{
+		{"remote_step_runs", "cleanup_unconfirmed"},
+		{"remote_deployment_claims", "cleanup_unconfirmed"},
+		{"remote_step_runs", "lost"},
+		{"remote_deployment_claims", "lost"},
+		{"remote_step_runs", "cancel_unconfirmed"},
+		{"remote_deployment_claims", "cancel_unconfirmed"},
+	} {
+		t.Run(scenario.table+"/"+scenario.state, func(t *testing.T) {
+			table := scenario.table
 			repo := remoteFixture(t)
 			statement := `UPDATE remote_deployment_claims
 SET state='cleanup_unconfirmed',claim_token_hash=zeroblob(32),
@@ -27,6 +35,15 @@ VALUES(1,0,'a','cleanup_unconfirmed')`
 				t.Fatal(err)
 			}
 			if _, err := repo.RevokeAgent(t.Context(), "a"); err != nil {
+				t.Fatal(err)
+			}
+			var cancelRequestedAt any
+			if scenario.state == "cancel_unconfirmed" {
+				cancelRequestedAt = 100
+			}
+			if _, err := repo.DB.Exec("UPDATE "+table+
+				" SET state=?,claim_token_hash=zeroblob(32),started_at=100,finished_at=101,cancel_requested_at=? WHERE agent_id='a' AND deployment_id=1",
+				scenario.state, cancelRequestedAt); err != nil {
 				t.Fatal(err)
 			}
 			tuple := repository.AgentPairingTuple{
@@ -56,7 +73,7 @@ VALUES(1,0,'a','cleanup_unconfirmed')`
 				t.Fatalf("agent=%+v error=%v", agent, err)
 			}
 			if _, err := repo.DB.Exec(
-				"UPDATE " + table + " SET cleanup_confirmed_at=200",
+				"UPDATE " + table + " SET state='cleanup_unconfirmed',cleanup_confirmed_at=200 WHERE deployment_id=1",
 			); err != nil {
 				t.Fatal(err)
 			}

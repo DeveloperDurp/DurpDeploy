@@ -103,13 +103,26 @@ started_at=100,finished_at=101 WHERE deployment_id=?`, deploymentID); err != nil
 	if response.StatusCode != http.StatusUnprocessableEntity {
 		t.Fatalf("web cleanup conflict status=%d", response.StatusCode)
 	}
+	// Revocation can leave lost work while an authenticated result is in flight.
+	for _, state := range []string{"lost", "cancel_unconfirmed"} {
+		var cancelRequestedAt any
+		if state == "cancel_unconfirmed" {
+			cancelRequestedAt = 100
+		}
+		if _, err := f.repo.DB.Exec(`UPDATE remote_deployment_claims
+SET state=?,cancel_requested_at=? WHERE deployment_id=?`,
+			state, cancelRequestedAt, deploymentID); err != nil {
+			t.Fatal(err)
+		}
+		fleetRequest(t, srv, "POST", path, "admin", body, http.StatusConflict)
+	}
 	if requests.Load() != 0 {
 		t.Fatal(
 			"replacement received pairing while old cleanup was unconfirmed",
 		)
 	}
 	if _, err := f.repo.DB.Exec(`UPDATE remote_deployment_claims
-SET cleanup_confirmed_at=200 WHERE deployment_id=?`, deploymentID); err != nil {
+SET state='cleanup_unconfirmed',cleanup_confirmed_at=200 WHERE deployment_id=?`, deploymentID); err != nil {
 		t.Fatal(err)
 	}
 	fleetRequest(t, srv, "POST", path, "admin", body, http.StatusCreated)

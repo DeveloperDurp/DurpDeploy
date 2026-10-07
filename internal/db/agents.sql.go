@@ -485,11 +485,13 @@ UPDATE agents SET endpoint = ?1, status = 'pending',
     last_heartbeat_at = NULL, revoked_at = NULL, updated_at = unixepoch()
 WHERE id = ?2 AND status = 'revoked'
   AND NOT EXISTS (SELECT 1 FROM remote_step_runs s
-      WHERE s.agent_id = agents.id AND s.state = 'cleanup_unconfirmed'
-        AND s.cleanup_confirmed_at IS NULL)
+      WHERE s.agent_id = agents.id
+        AND (s.state IN ('lost', 'cancel_unconfirmed')
+          OR (s.state = 'cleanup_unconfirmed' AND s.cleanup_confirmed_at IS NULL)))
   AND NOT EXISTS (SELECT 1 FROM remote_deployment_claims c
-      WHERE c.agent_id = agents.id AND c.state = 'cleanup_unconfirmed'
-        AND c.cleanup_confirmed_at IS NULL)
+      WHERE c.agent_id = agents.id
+        AND (c.state IN ('lost', 'cancel_unconfirmed')
+          OR (c.state = 'cleanup_unconfirmed' AND c.cleanup_confirmed_at IS NULL)))
 `
 
 type ResetRevokedAgentForPairingParams struct {
