@@ -192,7 +192,8 @@ rejoin through `POST /api/v1/admin/agents/pair` with its fingerprint and a fresh
 pairing code; its original agent ID and history are restored. Old pairing codes
 are rejected. Stop the reconciled idle agent, move only `state.json` out of its
 private state directory, preserve its identity keys, and restart to obtain a
-fresh code. It remains blocked until explicit administrator pairing. The existing
+fresh code. It remains hidden and blocked until administrator pairing completes;
+an incorrect code leaves it deleted. The existing
 `POST /api/v1/admin/agents/{id}/revoke` keeps the agent visible for later re-pairing.
 After a heartbeat or cancellation timeout, the same paired agent can replay
 its durable terminal report with the original claim token. This resolves the

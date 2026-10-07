@@ -39,7 +39,9 @@ func TestAgentDeleteRetainsHistoryAndRevokesAccess(t *testing.T) {
 	rows, err = repo.Queries.HeartbeatAgent(
 		t.Context(),
 		db.HeartbeatAgentParams{
-			ID: "a", Now: ni(200), CertificateFingerprint: ns(strings.Repeat("a", 64)),
+			ID:                     "a",
+			Now:                    ni(200),
+			CertificateFingerprint: ns(strings.Repeat("a", 64)),
 		},
 	)
 	if err != nil || rows != 0 {
@@ -159,7 +161,8 @@ func TestAgentDeletePreservesBufferedTerminalLogs(t *testing.T) {
 				}
 				var buffer string
 				if err := repo.DB.QueryRow("SELECT log_buffer_ciphertext FROM " +
-					table + " WHERE deployment_id=1").Scan(&buffer); err != nil ||
+					table + " WHERE deployment_id=1").
+					Scan(&buffer); err != nil ||
 					buffer != "buffered-logs" {
 					t.Fatalf("buffer=%q error=%v", buffer, err)
 				}
@@ -215,17 +218,76 @@ func TestDeletedAgentCanRejoinWithFreshPairing(t *testing.T) {
 	// When: an administrator starts a fresh pairing with the original pin.
 	pairing, err := repo.PrepareAgentPairing(t.Context(), tuple)
 
-	// Then: the original record is restored, with history and a new pairing code.
+	// Then: fresh preparation preserves the hidden record and history.
 	if err != nil || pairing.AgentID != "a" || pairing.State != "committing" {
 		t.Fatalf("pairing=%+v error=%v", pairing, err)
 	}
-	agent, err := repo.Queries.GetAgent(t.Context(), "a")
-	if err != nil || agent.DeletedAt.Valid || agent.Status != "pending" ||
+	if _, err := repo.Queries.GetAgent(t.Context(), "a"); !errors.Is(
+		err, sql.ErrNoRows,
+	) {
+		t.Fatalf("prepared deleted lookup error=%v", err)
+	}
+	agent, err := repo.Queries.GetAgentForPairing(t.Context(), "a")
+	if err != nil || !agent.DeletedAt.Valid || agent.Status != "revoked" ||
 		agent.Name != "a" || agent.CertificateFingerprint.Valid {
 		t.Fatalf("agent=%+v error=%v", agent, err)
 	}
 	deployment, err := repo.Queries.GetDeployment(t.Context(), 1)
 	if err != nil || deployment.AssignedAgentID.String != "a" {
 		t.Fatalf("history=%+v error=%v", deployment, err)
+	}
+	recovered, err := repo.PrepareAgentPairing(t.Context(), tuple)
+	if err != nil || recovered.AgentID != pairing.AgentID ||
+		!bytes.Equal(recovered.PairingCodeHash, pairing.PairingCodeHash) {
+		t.Fatalf("recovered pairing=%+v error=%v", recovered, err)
+	}
+	conflicting := tuple
+	conflicting.PairingCodeHash = bytes.Repeat([]byte{7}, 32)
+	if _, err := repo.PrepareAgentPairing(t.Context(), conflicting); !errors.Is(
+		err, repository.ErrPairingTupleConflict,
+	) {
+		t.Fatalf("concurrent pairing overwrite error=%v", err)
+	}
+	staleHash := bytes.Repeat([]byte{8}, 32)
+	changed, err := repo.CommitAgentPairing(t.Context(),
+		db.CompleteAgentPairingParams{
+			AgentID: "a", ServerPin: pairing.ServerPin,
+			PairingCodeHash: staleHash, Now: ni(201),
+		}, db.ActivatePairedAgentParams{})
+	assertZero(t, changed, err)
+	changed, err = repo.Queries.ExpireCommittingAgentPairing(t.Context(),
+		db.ExpireCommittingAgentPairingParams{
+			AgentID: "a", PairingCodeHash: staleHash, Now: 201,
+		})
+	assertZero(t, changed, err)
+	changed, err = repo.CommitAgentPairing(t.Context(),
+		db.CompleteAgentPairingParams{
+			AgentID: "a", ServerPin: pairing.ServerPin,
+			PairingCodeHash: pairing.PairingCodeHash, Now: ni(201),
+		}, db.ActivatePairedAgentParams{
+			CertificatePem:         ns("certificate"),
+			CertificateFingerprint: ns(tuple.AgentPin),
+		})
+	assertOne(t, changed, err)
+	agent, err = repo.Queries.GetAgent(t.Context(), "a")
+	if err != nil || agent.DeletedAt.Valid || agent.Status != "active" ||
+		agent.Name != "a" {
+		t.Fatalf("activated agent=%+v error=%v", agent, err)
+	}
+}
+
+func TestDeletingAgentExpiresIncompletePairing(t *testing.T) {
+	repo := remoteFixture(t)
+	if _, err := repo.DB.Exec(`UPDATE agent_pairings
+		SET state='committing', paired_at=NULL
+		WHERE agent_id='a'`); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.DeleteAgent(t.Context(), "a"); err != nil {
+		t.Fatal(err)
+	}
+	pairing, err := repo.Queries.GetAgentPairing(t.Context(), "a")
+	if err != nil || pairing.State != "expired" {
+		t.Fatalf("deleted incomplete pairing=%+v error=%v", pairing, err)
 	}
 }

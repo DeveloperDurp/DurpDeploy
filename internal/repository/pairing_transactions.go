@@ -48,9 +48,19 @@ func (r *Repository) PrepareAgentPairing(
 		}
 		for _, candidate := range candidates {
 			if candidate.DeletedAt.Valid {
-				if samePairingCode(candidate, tuple) ||
+				if len(candidates) != 1 ||
 					(tuple.ExpectedAgentID != "" &&
 						tuple.ExpectedAgentID != candidate.AgentID) {
+					return ErrPairingTupleConflict
+				}
+				if candidate.State == "committing" {
+					if !samePairingTuple(candidate, tuple) {
+						return ErrPairingTupleConflict
+					}
+					pairing = candidatePairing(candidate)
+					return nil
+				}
+				if samePairingCode(candidate, tuple) {
 					return ErrPairingTupleConflict
 				}
 				tuple.ExpectedAgentID = candidate.AgentID
@@ -152,7 +162,9 @@ func (r *Repository) PrepareAgentPairing(
 		}
 		if len(candidates) == 0 {
 			if _, err := q.CreateAgent(ctx, db.CreateAgentParams{
-				ID: tuple.AgentID, Name: tuple.AgentName, Endpoint: tuple.Endpoint,
+				ID:       tuple.AgentID,
+				Name:     tuple.AgentName,
+				Endpoint: tuple.Endpoint,
 			}); err != nil {
 				return err
 			}

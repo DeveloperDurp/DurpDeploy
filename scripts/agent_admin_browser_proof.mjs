@@ -731,6 +731,8 @@ async function main() {
 		const wrong = await context.request.post(`${baseURL}/api/v1/admin/agents/pair`,
 			{ headers, data: pairRequest });
 		check(wrong.status() === 409, "agent accepted an incorrect fresh pairing code");
+		const hidden = await context.request.get(`${baseURL}/api/v1/admin/agents/${pairedAgentID}`, { headers });
+		check(hidden.status() === 404, "failed pairing made a deleted agent visible");
 		pairRequest.code = next.code;
 		const rejoined = await context.request.post(`${baseURL}/api/v1/admin/agents/pair`,
 			{ headers, data: pairRequest });

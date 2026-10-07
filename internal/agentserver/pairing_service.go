@@ -118,6 +118,7 @@ func (service *PairingService) Pair(
 				requestCtx,
 				db.ExpireCommittingAgentPairingParams{
 					Now: service.now().Unix(), AgentID: pairing.AgentID,
+					PairingCodeHash: pairing.PairingCodeHash,
 				},
 			)
 			if expireErr != nil {
@@ -218,6 +219,7 @@ func (service *PairingService) activate(
 		db.CompleteAgentPairingParams{
 			Now:     sql.NullInt64{Int64: now, Valid: true},
 			AgentID: pairing.AgentID, ServerPin: pairing.ServerPin,
+			PairingCodeHash: pairing.PairingCodeHash,
 		},
 		db.ActivatePairedAgentParams{
 			CertificatePem: sql.NullString{

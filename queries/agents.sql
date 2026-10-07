@@ -40,12 +40,14 @@ WHERE id = sqlc.arg(id) AND status IN ('pending', 'active', 'disabled')
        OR (status IN ('active', 'disabled') AND (sqlc.arg(status) = 'active' OR sqlc.arg(status) = 'disabled'))) RETURNING *;
 
 -- name: ResetRevokedAgentForPairing :execrows
-UPDATE agents SET endpoint = sqlc.arg(endpoint), status = 'pending',
-    deleted_at = NULL,
+UPDATE agents SET endpoint = sqlc.arg(endpoint),
+    status = CASE WHEN deleted_at IS NULL THEN 'pending' ELSE 'revoked' END,
     draining = 0, health_state = 'unknown', agent_protocol = NULL,
     agent_version = NULL, certificate_pem = NULL,
     certificate_fingerprint = NULL, encrypted_identity = NULL,
-    last_heartbeat_at = NULL, revoked_at = NULL, updated_at = unixepoch()
+    last_heartbeat_at = NULL,
+    revoked_at = CASE WHEN deleted_at IS NULL THEN NULL ELSE revoked_at END,
+    updated_at = unixepoch()
 WHERE id = sqlc.arg(id) AND status = 'revoked'
   AND NOT EXISTS (SELECT 1 FROM remote_step_runs s
       WHERE s.agent_id = agents.id

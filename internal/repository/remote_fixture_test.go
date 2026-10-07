@@ -89,6 +89,7 @@ func seedRemoteFixture(t *testing.T, r *repository.Repository) {
 		assertOne(t, n, err)
 		n, err = r.CommitAgentPairing(ctx, db.CompleteAgentPairingParams{
 			AgentID: id, Now: ni(100), ServerPin: ns(pin),
+			PairingCodeHash: code,
 		}, db.ActivatePairedAgentParams{
 			CertificatePem:         ns("fixture-public-certificate"),
 			CertificateFingerprint: ns(pin),

@@ -27,7 +27,7 @@ func (r *Repository) DeleteAgent(ctx context.Context, agentID string) error {
 			if changed != 1 {
 				return ErrAgentDeletionBlocked
 			}
-			return nil
+			return q.ExpireDeletedAgentPairing(ctx, agentID)
 		},
 	)
 	if err != nil {

@@ -78,7 +78,8 @@ func seedRemoteLifecycle(
 		ctx,
 		db.CompleteAgentPairingParams{
 			AgentID: agentID, Now: sql.NullInt64{Int64: 100, Valid: true},
-			ServerPin: sql.NullString{String: pin, Valid: true},
+			ServerPin:       sql.NullString{String: pin, Valid: true},
+			PairingCodeHash: code,
 		},
 		db.ActivatePairedAgentParams{
 			CertificatePem: sql.NullString{String: "cert", Valid: true},
@@ -92,7 +93,9 @@ func seedRemoteLifecycle(
 	deployment, err := repo.Queries.CreateDeployment(
 		ctx,
 		db.CreateDeploymentParams{
-			ReleaseID: release.ID, EnvironmentID: environment.ID, Status: "pending",
+			ReleaseID:       release.ID,
+			EnvironmentID:   environment.ID,
+			Status:          "pending",
 			AssignedAgentID: sql.NullString{String: agentID, Valid: true},
 		},
 	)

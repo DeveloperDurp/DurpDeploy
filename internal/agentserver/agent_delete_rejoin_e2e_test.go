@@ -36,8 +36,11 @@ func TestAgentDeleteRejoinE2E(t *testing.T) {
 		t.Fatal(err)
 	}
 	manager, err := agentserver.NewPairingService(agentserver.PairingConfig{
-		Repository: f.repo, Identity: f.serverIdentity, PullEndpoint: pullEndpoint,
-		Secrets: box, Now: time.Now,
+		Repository:   f.repo,
+		Identity:     f.serverIdentity,
+		PullEndpoint: pullEndpoint,
+		Secrets:      box,
+		Now:          time.Now,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -84,6 +87,8 @@ func TestAgentDeleteRejoinE2E(t *testing.T) {
 	}
 	fleetRequest(t, srv, "POST", "/api/v1/admin/agents/pair", "admin",
 		string(body), http.StatusConflict)
+	fleetRequest(t, srv, "GET", "/api/v1/admin/agents/test-agent",
+		"admin", "", http.StatusNotFound)
 	request["code"] = listener.Offer().Code
 	body, err = json.Marshal(request)
 	if err != nil {

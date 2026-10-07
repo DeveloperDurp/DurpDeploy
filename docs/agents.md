@@ -26,7 +26,9 @@ original agent ID and historical references. Old pairing codes are rejected.
 To generate a fresh code, stop the idle agent, move only `state.json` out of its
 private state directory, and restart it. Keep its identity certificate and key.
 Do this only after execution, cleanup, and log delivery have been reconciled.
-The agent remains blocked until an administrator completes the new pairing.
+The agent remains hidden and blocked until an administrator completes the new
+pairing. An incorrect code leaves the agent deleted and can be retried with
+the correct fresh code.
 
 Admins manage the fleet at `/admin/agents`. **Drain** stops new claims and
 keeps the agent authenticated. Claims issued before Drain can still start,

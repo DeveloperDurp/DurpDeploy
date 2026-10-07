@@ -1,6 +1,7 @@
 package repository_test
 
 import (
+	"bytes"
 	"context"
 	"strings"
 	"sync"
@@ -56,6 +57,7 @@ paired_at = NULL WHERE agent_id = 'a'`)
 	}
 	p := db.CompleteAgentPairingParams{
 		AgentID: "a", Now: ni(101), ServerPin: ns(strings.Repeat("a", 64)),
+		PairingCodeHash: bytes.Repeat([]byte{1}, 32),
 	}
 	n, err := r.CommitAgentPairing(ctx, p, db.ActivatePairedAgentParams{})
 	assertZero(t, n, err)
