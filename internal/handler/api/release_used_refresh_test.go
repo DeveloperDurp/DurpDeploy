@@ -14,8 +14,14 @@ import (
 )
 
 func TestRefreshReleaseAfterDeployment(t *testing.T) {
-	for _, state := range []string{"failed", "succeeded"} {
-		t.Run(state, func(t *testing.T) {
+	for _, scenario := range []struct{ state, buffer string }{
+		{state: "failed"}, {state: "succeeded"},
+		{state: "pending"}, {state: "running"},
+		{state: "cleanup_unconfirmed"},
+		{state: "failed", buffer: "remote_deployment_claims"},
+		{state: "succeeded", buffer: "remote_step_runs"},
+	} {
+		t.Run(scenario.state+"/"+scenario.buffer, func(t *testing.T) {
 			// Given: a deployed release with the historical lock flag.
 			h := newAPIHarness(t)
 			user := seedAPIUser(t, h.repo, "admin@example.com", "admin")
@@ -44,9 +50,31 @@ func TestRefreshReleaseAfterDeployment(t *testing.T) {
 			}
 			if err := h.repo.Queries.UpdateDeploymentStatus(
 				t.Context(), db.UpdateDeploymentStatusParams{
-					ID: deployment.Deployment.ID, Status: state,
+					ID: deployment.Deployment.ID, Status: scenario.state,
 				}); err != nil {
 				t.Fatal(err)
+			}
+			if scenario.buffer != "" {
+				if _, err := h.repo.DB.ExecContext(t.Context(),
+					`INSERT INTO agents(id, name, endpoint)
+VALUES('buffer-agent', 'Buffer', 'https://agent.example')`); err != nil {
+					t.Fatal(err)
+				}
+				statement := `INSERT INTO remote_deployment_claims(
+deployment_id, agent_id, state, claim_token_hash, ciphertext,
+claim_expires_at, last_heartbeat_at, started_at, finished_at,
+log_buffer_ciphertext)
+VALUES(?, 'buffer-agent', 'failed', zeroblob(32), 'fixture', 1, 1, 1, 2,
+'buffered-fixture')`
+				if scenario.buffer == "remote_step_runs" {
+					statement = `INSERT INTO remote_step_runs(
+deployment_id, step_index, agent_id, state, log_buffer_ciphertext)
+VALUES(?, 0, 'buffer-agent', 'succeeded', 'buffered-fixture')`
+				}
+				if _, err := h.repo.DB.ExecContext(t.Context(), statement,
+					deployment.Deployment.ID); err != nil {
+					t.Fatal(err)
+				}
 			}
 			if _, err := h.repo.DB.ExecContext(t.Context(),
 				"UPDATE releases SET snapshot_locked=1 WHERE id=?",
@@ -75,6 +103,42 @@ func TestRefreshReleaseAfterDeployment(t *testing.T) {
 			req = withAPIURLParam(req, "relId", fmt.Sprint(release.ID))
 			rec := httptest.NewRecorder()
 			api.NewReleaseHandler(h.repo).RefreshRelease(rec, req)
+			if scenario.state == "pending" || scenario.state == "running" ||
+				scenario.state == "cleanup_unconfirmed" || scenario.buffer != "" {
+				if rec.Code != http.StatusConflict {
+					t.Fatalf("busy refresh=%d: %s", rec.Code, rec.Body.String())
+				}
+				unchanged, err := h.repo.Queries.GetRelease(
+					t.Context(),
+					release.ID,
+				)
+				if err != nil || unchanged.StepsJson != release.StepsJson {
+					t.Fatalf("busy refresh changed steps: %v", err)
+				}
+				variables, err := h.repo.ListReleaseVariablesByRelease(
+					t.Context(), release.ID)
+				if err != nil || len(variables) != 0 {
+					t.Fatalf(
+						"busy refresh changed variables: %+v %v",
+						variables,
+						err,
+					)
+				}
+				if scenario.buffer != "" {
+					if _, err := h.repo.DB.ExecContext(t.Context(),
+						"UPDATE "+scenario.buffer+" SET log_buffer_ciphertext=NULL"); err != nil {
+						t.Fatal(err)
+					}
+				}
+				if err := h.repo.Queries.UpdateDeploymentStatus(t.Context(),
+					db.UpdateDeploymentStatusParams{
+						ID: deployment.Deployment.ID, Status: "failed",
+					}); err != nil {
+					t.Fatal(err)
+				}
+				rec = httptest.NewRecorder()
+				api.NewReleaseHandler(h.repo).RefreshRelease(rec, req)
+			}
 
 			// Then: the release changes; historical deployment steps do not.
 			if rec.Code != http.StatusOK {

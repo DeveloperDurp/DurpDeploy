@@ -134,6 +134,12 @@ func TestArtifactPinsSurviveRefreshAndRerun(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err := f.repo.Queries.UpdateDeploymentStatus(t.Context(),
+		db.UpdateDeploymentStatusParams{
+			ID: first.Deployment.ID, Status: "succeeded",
+		}); err != nil {
+		t.Fatal(err)
+	}
 	if err := f.repo.SelectArtifactRepository(
 		t.Context(),
 		db.SelectProjectArtifactRepositoryParams{ProjectID: f.project.ID},

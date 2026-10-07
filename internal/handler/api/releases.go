@@ -371,7 +371,8 @@ func (h *ReleaseHandler) RefreshRelease(
 			RespondError(w, http.StatusNotFound, "Release not found")
 			return
 		}
-		if errors.Is(err, repository.ErrLegacyServerStep) {
+		if errors.Is(err, repository.ErrLegacyServerStep) ||
+			errors.Is(err, repository.ErrReleaseHasActiveDeployment) {
 			RespondError(
 				w,
 				http.StatusConflict,

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/repository"
 )
 
 func lockReleaseForRefresh(
@@ -24,6 +25,18 @@ func lockReleaseForRefresh(
 	}
 	if changed == 0 {
 		return sql.ErrNoRows
+	}
+	active, err := q.HasActiveReleaseDeployment(ctx, release.ID)
+	if err != nil {
+		return err
+	}
+	buffered, err := q.HasUnflushedReleaseLogs(ctx, release.ID)
+	if err != nil {
+		return err
+	}
+	// Keep secrets stable until active agents and buffered logs finish using them.
+	if active != 0 || buffered != 0 {
+		return repository.ErrReleaseHasActiveDeployment
 	}
 	return nil
 }

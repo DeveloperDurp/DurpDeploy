@@ -118,6 +118,25 @@ func (q *Queries) HasActiveReleaseDeployment(ctx context.Context, releaseID int6
 	return column_1, err
 }
 
+const hasUnflushedReleaseLogs = `-- name: HasUnflushedReleaseLogs :one
+SELECT CASE WHEN EXISTS (
+    SELECT 1 FROM deployments d WHERE d.release_id = ?
+      AND (EXISTS (SELECT 1 FROM remote_deployment_claims c
+                   WHERE c.deployment_id = d.id
+                     AND COALESCE(c.log_buffer_ciphertext, '') <> '')
+        OR EXISTS (SELECT 1 FROM remote_step_runs s
+                   WHERE s.deployment_id = d.id
+                     AND COALESCE(s.log_buffer_ciphertext, '') <> ''))
+) THEN 1 ELSE 0 END
+`
+
+func (q *Queries) HasUnflushedReleaseLogs(ctx context.Context, releaseID int64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, hasUnflushedReleaseLogs, releaseID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const listReleasesByProject = `-- name: ListReleasesByProject :many
 SELECT id, project_id, version, steps_json, created_at, kind, snapshot_locked FROM releases WHERE project_id = ? AND kind = 'deployment' ORDER BY created_at DESC
 `

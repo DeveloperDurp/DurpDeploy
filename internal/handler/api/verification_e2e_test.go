@@ -13,9 +13,39 @@ import (
 	"testing"
 	"time"
 
+	"durpdeploy/internal/db"
 	"durpdeploy/internal/events"
 	"durpdeploy/internal/verification"
 )
+
+func TestRefreshReleaseAPIWebWaitsForDeploymentE2E(t *testing.T) {
+	f := newVerificationE2E(t)
+	release := verificationRelease(t, f, "refresh-after-attempt")
+	// Hold a pending deployment without starting its runner.
+	pending, err := f.h.repo.CreateDeployment(t.Context(),
+		db.CreateDeploymentParams{
+			ReleaseID: release.ID, EnvironmentID: f.environment.ID,
+			Status: "pending",
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := fmt.Sprintf(
+		"/projects/%d/releases/%d/refresh",
+		f.project.ID,
+		release.ID,
+	)
+	f.api(t, "POST", "/api/v1"+path, nil, http.StatusConflict)
+	f.web(t, "POST", path, url.Values{}, http.StatusConflict)
+	if err := f.h.repo.Queries.UpdateDeploymentStatus(t.Context(),
+		db.UpdateDeploymentStatusParams{
+			ID: pending.Deployment.ID, Status: "failed",
+		}); err != nil {
+		t.Fatal(err)
+	}
+	f.api(t, "POST", "/api/v1"+path, nil, http.StatusOK)
+	f.web(t, "POST", path, url.Values{}, http.StatusSeeOther)
+}
 
 func TestVerificationHTTPTransportTimeoutPreservesDeadline(t *testing.T) {
 	for _, phase := range []string{"headers", "body"} {

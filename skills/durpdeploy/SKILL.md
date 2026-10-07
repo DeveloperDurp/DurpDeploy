@@ -198,6 +198,8 @@ or refresh; recreate their steps and create a new release (`409` on launch).
    `POST /api/v1/projects/$PID/releases` `{"version":"1.2.0"}` → `id`.
    Later step edits do NOT affect it; `POST /projects/$PID/releases/$RID/refresh`
    re-snapshots the release, including after failed or successful deployments.
+   Active or unconfirmed deployments and buffered agent logs return `409`;
+   wait for completion and log flushing, then retry.
    Existing deployment steps and pinned artifacts stay unchanged. New
    deployments use the refreshed release; re-runs use the original deployment
    steps and artifact pin.

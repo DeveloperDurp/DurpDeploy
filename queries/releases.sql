@@ -39,3 +39,14 @@ SELECT CASE WHEN EXISTS (
                    WHERE s.deployment_id = d.id
                      AND s.state IN ('lost', 'cancel_unconfirmed')))
 ) THEN 1 ELSE 0 END;
+
+-- name: HasUnflushedReleaseLogs :one
+SELECT CASE WHEN EXISTS (
+    SELECT 1 FROM deployments d WHERE d.release_id = ?
+      AND (EXISTS (SELECT 1 FROM remote_deployment_claims c
+                   WHERE c.deployment_id = d.id
+                     AND COALESCE(c.log_buffer_ciphertext, '') <> '')
+        OR EXISTS (SELECT 1 FROM remote_step_runs s
+                   WHERE s.deployment_id = d.id
+                     AND COALESCE(s.log_buffer_ciphertext, '') <> ''))
+) THEN 1 ELSE 0 END;
