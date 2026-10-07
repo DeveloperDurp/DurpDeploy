@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"slices"
 	"sort"
@@ -34,8 +35,12 @@ func New(repo *repository.Repository) *Dispatcher {
 func (d *Dispatcher) Poll(
 	ctx context.Context,
 	agentID agentproto.AgentID,
+	request agentproto.PollRequest,
 ) (agentproto.PollResponse, bool, error) {
-	response, claimed, err := d.claim(ctx, agentID)
+	response, claimed, err := d.claim(ctx, agentID, request)
+	if errors.Is(err, errStaleAgentPoll) {
+		return agentproto.PollResponse{}, false, nil
+	}
 	if err != nil || claimed {
 		return response, claimed, err
 	}
@@ -50,10 +55,16 @@ func (d *Dispatcher) Poll(
 		case <-d.repository.RemoteWorkReady():
 		case <-fallback.C:
 		case <-deadline.C:
-			response, claimed, err = d.claim(ctx, agentID)
+			response, claimed, err = d.claim(ctx, agentID, request)
+			if errors.Is(err, errStaleAgentPoll) {
+				return agentproto.PollResponse{}, false, nil
+			}
 			return response, claimed, err
 		}
-		response, claimed, err = d.claim(ctx, agentID)
+		response, claimed, err = d.claim(ctx, agentID, request)
+		if errors.Is(err, errStaleAgentPoll) {
+			return agentproto.PollResponse{}, false, nil
+		}
 		if err != nil || claimed {
 			return response, claimed, err
 		}
@@ -63,11 +74,18 @@ func (d *Dispatcher) Poll(
 func (d *Dispatcher) claim(
 	ctx context.Context,
 	agentID agentproto.AgentID,
+	request agentproto.PollRequest,
 ) (agentproto.PollResponse, bool, error) {
+	prepare := func(snapshot repository.RemotePayloadSnapshot) (repository.RemotePreparedClaim, error) {
+		if !pollCapabilitiesMatch(request, snapshot) {
+			return repository.RemotePreparedClaim{}, errStaleAgentPoll
+		}
+		return prepareRemoteClaim(snapshot)
+	}
 	claim, claimed, err := d.repository.ClaimRemoteStepPayload(
 		ctx,
 		string(agentID),
-		prepareRemoteClaim,
+		prepare,
 	)
 	if err != nil || claimed {
 		return pollResponse(claim), claimed, err
@@ -75,7 +93,7 @@ func (d *Dispatcher) claim(
 	claim, claimed, err = d.repository.ClaimRemoteDeploymentPayload(
 		ctx,
 		string(agentID),
-		prepareRemoteClaim,
+		prepare,
 	)
 	if err != nil || !claimed {
 		return agentproto.PollResponse{}, false, err

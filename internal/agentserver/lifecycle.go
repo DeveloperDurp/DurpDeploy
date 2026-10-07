@@ -41,7 +41,7 @@ func (s *Server) Poll(w http.ResponseWriter, r *http.Request) {
 	if !writeTransitionStatus(w, changed, err) {
 		return
 	}
-	response, claimed, err := s.dispatcher.Poll(r.Context(), agentID)
+	response, claimed, err := s.dispatcher.Poll(r.Context(), agentID, request)
 	if err != nil {
 		if r.Context().Err() == nil {
 			writePollErrorStatus(w, err)

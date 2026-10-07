@@ -13,12 +13,16 @@ import (
 )
 
 type RemotePayloadSnapshot struct {
-	Agent       db.Agent
-	Deployment  db.Deployment
-	Release     db.Release
-	Environment db.Environment
-	Steps       []db.DeploymentStep
-	Variables   []db.ReleaseVariable
+	Agent                 db.Agent
+	Deployment            db.Deployment
+	Release               db.Release
+	Environment           db.Environment
+	Steps                 []db.DeploymentStep
+	Variables             []db.ReleaseVariable
+	HostInterpreters      []string
+	ExecutionModes        []string
+	ContainerRuntimes     []string
+	ContainerInterpreters []string
 }
 
 type RemotePreparedClaim struct {
@@ -186,6 +190,22 @@ func (r *Repository) remotePayloadSnapshot(
 	if err != nil {
 		return RemotePayloadSnapshot{}, fmt.Errorf("get claim agent: %w", err)
 	}
+	host, err := q.ListAgentInterpreters(ctx, agentID)
+	if err != nil {
+		return RemotePayloadSnapshot{}, err
+	}
+	modes, err := q.ListAgentExecutionModes(ctx, agentID)
+	if err != nil {
+		return RemotePayloadSnapshot{}, err
+	}
+	runtimes, err := q.ListAgentContainerRuntimes(ctx, agentID)
+	if err != nil {
+		return RemotePayloadSnapshot{}, err
+	}
+	container, err := q.ListAgentContainerInterpreters(ctx, agentID)
+	if err != nil {
+		return RemotePayloadSnapshot{}, err
+	}
 	deployment, err := q.GetDeployment(ctx, deploymentID)
 	if err != nil {
 		return RemotePayloadSnapshot{}, fmt.Errorf(
@@ -222,11 +242,13 @@ func (r *Repository) remotePayloadSnapshot(
 		}
 	}
 	return RemotePayloadSnapshot{
-		Agent:       agent,
-		Deployment:  deployment,
-		Release:     release,
-		Environment: environment,
-		Steps:       steps,
-		Variables:   variables,
+		Agent:            agent,
+		Deployment:       deployment,
+		Release:          release,
+		Environment:      environment,
+		Steps:            steps,
+		Variables:        variables,
+		HostInterpreters: host, ExecutionModes: modes,
+		ContainerRuntimes: runtimes, ContainerInterpreters: container,
 	}, nil
 }

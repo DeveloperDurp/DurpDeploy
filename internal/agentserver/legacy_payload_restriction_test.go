@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"durpdeploy/internal/dispatch"
+	agentproto "github.com/DeveloperDurp/durpdeploy-agent/protocol"
 )
 
 func TestLegacyDifferingRestrictionsFailBeforeClaimWithoutPoisoningPoll(
@@ -21,7 +22,13 @@ func TestLegacyDifferingRestrictionsFailBeforeClaimWithoutPoisoningPoll(
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
 	defer cancel()
-	_, claimed, err := dispatch.New(f.repo).Poll(ctx, "test-agent")
+	request := agentproto.PollRequest{
+		ProtocolEnvelope: agentproto.ProtocolEnvelope{
+			Protocol: agentproto.AgentV1,
+		},
+	}
+	recordFixturePoll(t, f, request)
+	_, claimed, err := dispatch.New(f.repo).Poll(ctx, "test-agent", request)
 	if claimed || !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("claimed=%v error=%v", claimed, err)
 	}
@@ -35,7 +42,7 @@ func TestLegacyDifferingRestrictionsFailBeforeClaimWithoutPoisoningPoll(
 	assertDeploymentStatus(t, f, id, "failed")
 	next := seedPollPayload(t, f, "pending", "test-agent")
 	response, claimed, err := dispatch.New(f.repo).
-		Poll(t.Context(), "test-agent")
+		Poll(t.Context(), "test-agent", request)
 	if err != nil || !claimed || int64(response.DeploymentID) != next {
 		t.Fatalf(
 			"healthy claim=%v response=%+v error=%v",
@@ -53,7 +60,14 @@ func TestLegacyEqualRestrictionsRemainRepresentable(t *testing.T) {
 		`UPDATE deployment_steps SET variable_names='["MODE"]' WHERE deployment_id=?`, id); err != nil {
 		t.Fatal(err)
 	}
-	_, claimed, err := dispatch.New(f.repo).Poll(t.Context(), "test-agent")
+	request := agentproto.PollRequest{
+		ProtocolEnvelope: agentproto.ProtocolEnvelope{
+			Protocol: agentproto.AgentV1,
+		},
+	}
+	recordFixturePoll(t, f, request)
+	_, claimed, err := dispatch.New(f.repo).
+		Poll(t.Context(), "test-agent", request)
 	if err != nil || !claimed {
 		t.Fatalf("claim=%v error=%v", claimed, err)
 	}
