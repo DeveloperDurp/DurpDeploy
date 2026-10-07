@@ -174,8 +174,9 @@ Upgrade the server before enabling agent containers. Keep old agents on host
 steps. Do not downgrade the server while container work is pending or cleanup
 is unresolved. Downgrading an agent clears its container capabilities and
 fails its incompatible waiting work before claim.
-An agent result of `cleanup_unconfirmed` blocks the environment queue and
-retry until that agent reconciles its containers and reports a ready v3 poll.
+An agent result of `cleanup_unconfirmed` blocks the environment queue, retry,
+and project/environment deletion until that agent reconciles its containers
+and reports a ready v3 poll.
 The original terminal result remains visible after confirmation.
 Re-pairing a revoked agent returns `409` while its remote execution or cleanup
 remains unconfirmed. Reconcile its workloads before revocation; a replacement
