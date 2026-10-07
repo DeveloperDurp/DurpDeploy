@@ -80,39 +80,7 @@ func TestAgentDeleteBrowserE2E(t *testing.T) {
 	browser := startPackageBrowser(t)
 	fleetBrowserSession(t, browser, srv.URL, user.ID)
 	fleetBrowserNavigate(t, browser, srv.URL+"/admin/agents/pending-delete")
-	for _, width := range []int{375, 768, 1280} {
-		browser.call(t, "Emulation.setDeviceMetricsOverride", map[string]any{
-			"width": width, "height": 900, "deviceScaleFactor": 1, "mobile": false,
-		}, &struct{}{})
-		if string(
-			browser.evaluate(t, `Array.from(document.querySelectorAll('.badge'))
-			.every(el => el.scrollWidth <= el.clientWidth + 2)`),
-		) != "true" {
-			t.Fatalf("agent labels overflow at width %d", width)
-		}
-		browser.screenshot(t, fmt.Sprintf("delete-rest-labels-%d", width))
-		browser.evaluate(
-			t,
-			`document.querySelector('button[hx-post$="/delete"]').scrollIntoView(); true`,
-		)
-		var target struct{ X, Y float64 }
-		if err := json.Unmarshal(browser.evaluate(t, `(() => {
-			const r=document.querySelector('button[hx-post$="/delete"]').getBoundingClientRect();
-			return {X:r.x+r.width/2,Y:r.y+r.height/2};
-		})()`), &target); err != nil {
-			t.Fatal(err)
-		}
-		browser.call(t, "Input.dispatchMouseEvent", map[string]any{
-			"type": "mouseMoved", "x": target.X, "y": target.Y,
-		}, &struct{}{})
-		browser.screenshot(t, fmt.Sprintf("delete-hover-%d", width))
-		browser.screenshot(t, fmt.Sprintf("delete-hover-settled-%d", width))
-		browser.evaluate(
-			t,
-			`document.querySelector('button[hx-post$="/delete"]').focus(); true`,
-		)
-		browser.screenshot(t, fmt.Sprintf("delete-focused-%d", width))
-	}
+	checkAgentDeleteBrowserLabels(t, browser)
 
 	// When: the native confirmation is cancelled, then accepted on each page.
 	fleetDeleteConfirm(t, browser, "pending-delete", false)
@@ -191,4 +159,41 @@ func fleetDeleteConfirm(
 		map[string]bool{"accept": accept},
 		&struct{}{},
 	)
+}
+
+func checkAgentDeleteBrowserLabels(t *testing.T, browser *packageBrowser) {
+	t.Helper()
+	for _, width := range []int{375, 768, 1280} {
+		browser.call(t, "Emulation.setDeviceMetricsOverride", map[string]any{
+			"width": width, "height": 900, "deviceScaleFactor": 1, "mobile": false,
+		}, &struct{}{})
+		if string(
+			browser.evaluate(t, `Array.from(document.querySelectorAll('.badge'))
+			.every(el => el.scrollWidth <= el.clientWidth + 2)`),
+		) != "true" {
+			t.Fatalf("agent labels overflow at width %d", width)
+		}
+		browser.screenshot(t, fmt.Sprintf("delete-rest-labels-%d", width))
+		browser.evaluate(
+			t,
+			`document.querySelector('button[hx-post$="/delete"]').scrollIntoView(); true`,
+		)
+		var target struct{ X, Y float64 }
+		if err := json.Unmarshal(browser.evaluate(t, `(() => {
+			const r=document.querySelector('button[hx-post$="/delete"]').getBoundingClientRect();
+			return {X:r.x+r.width/2,Y:r.y+r.height/2};
+		})()`), &target); err != nil {
+			t.Fatal(err)
+		}
+		browser.call(t, "Input.dispatchMouseEvent", map[string]any{
+			"type": "mouseMoved", "x": target.X, "y": target.Y,
+		}, &struct{}{})
+		browser.screenshot(t, fmt.Sprintf("delete-hover-%d", width))
+		browser.screenshot(t, fmt.Sprintf("delete-hover-settled-%d", width))
+		browser.evaluate(
+			t,
+			`document.querySelector('button[hx-post$="/delete"]').focus(); true`,
+		)
+		browser.screenshot(t, fmt.Sprintf("delete-focused-%d", width))
+	}
 }
