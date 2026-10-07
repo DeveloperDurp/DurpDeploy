@@ -43,6 +43,25 @@ func TestRefreshReleaseAPIWebWaitsForDeploymentE2E(t *testing.T) {
 		}); err != nil {
 		t.Fatal(err)
 	}
+	// A failed parent can still have an agent waiting to confirm cleanup.
+	if _, err := f.h.repo.DB.ExecContext(t.Context(),
+		`INSERT INTO agents(id, name, endpoint)
+VALUES('cleanup-agent', 'Cleanup', 'https://agent.example')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.h.repo.DB.ExecContext(t.Context(),
+		`INSERT INTO remote_step_runs(deployment_id, step_index, agent_id, state)
+VALUES(?, 0, 'cleanup-agent', 'cleanup_unconfirmed')`,
+		pending.Deployment.ID); err != nil {
+		t.Fatal(err)
+	}
+	f.api(t, "POST", "/api/v1"+path, nil, http.StatusConflict)
+	f.web(t, "POST", path, url.Values{}, http.StatusConflict)
+	if _, err := f.h.repo.DB.ExecContext(t.Context(),
+		"UPDATE remote_step_runs SET cleanup_confirmed_at=1 WHERE deployment_id=?",
+		pending.Deployment.ID); err != nil {
+		t.Fatal(err)
+	}
 	f.api(t, "POST", "/api/v1"+path, nil, http.StatusOK)
 	f.web(t, "POST", path, url.Values{}, http.StatusSeeOther)
 }

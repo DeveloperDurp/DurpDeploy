@@ -14,14 +14,18 @@ import (
 )
 
 func TestRefreshReleaseAfterDeployment(t *testing.T) {
-	for _, scenario := range []struct{ state, buffer string }{
+	for _, scenario := range []struct{ state, buffer, remoteState string }{
 		{state: "failed"}, {state: "succeeded"},
 		{state: "pending"}, {state: "running"},
 		{state: "cleanup_unconfirmed"},
 		{state: "failed", buffer: "remote_deployment_claims"},
 		{state: "succeeded", buffer: "remote_step_runs"},
+		{state: "failed", buffer: "remote_deployment_claims", remoteState: "cleanup_unconfirmed"},
+		{state: "failed", buffer: "remote_step_runs", remoteState: "cleanup_unconfirmed"},
 	} {
-		t.Run(scenario.state+"/"+scenario.buffer, func(t *testing.T) {
+		name := fmt.Sprintf("%s/%s/%s", scenario.state, scenario.buffer,
+			scenario.remoteState)
+		t.Run(name, func(t *testing.T) {
 			// Given: a deployed release with the historical lock flag.
 			h := newAPIHarness(t)
 			user := seedAPIUser(t, h.repo, "admin@example.com", "admin")
@@ -64,15 +68,24 @@ VALUES('buffer-agent', 'Buffer', 'https://agent.example')`); err != nil {
 deployment_id, agent_id, state, claim_token_hash, ciphertext,
 claim_expires_at, last_heartbeat_at, started_at, finished_at,
 log_buffer_ciphertext)
-VALUES(?, 'buffer-agent', 'failed', zeroblob(32), 'fixture', 1, 1, 1, 2,
-'buffered-fixture')`
+VALUES(?, 'buffer-agent', ?, zeroblob(32), 'fixture', 1, 1, 1, 2, ?)`
 				if scenario.buffer == "remote_step_runs" {
 					statement = `INSERT INTO remote_step_runs(
 deployment_id, step_index, agent_id, state, log_buffer_ciphertext)
-VALUES(?, 0, 'buffer-agent', 'succeeded', 'buffered-fixture')`
+VALUES(?, 0, 'buffer-agent', ?, ?)`
+				}
+				remoteState := scenario.remoteState
+				buffer := sql.NullString{
+					String: "buffered-fixture",
+					Valid:  true,
+				}
+				if remoteState == "" {
+					remoteState = "failed"
+				} else {
+					buffer = sql.NullString{}
 				}
 				if _, err := h.repo.DB.ExecContext(t.Context(), statement,
-					deployment.Deployment.ID); err != nil {
+					deployment.Deployment.ID, remoteState, buffer); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -106,7 +119,11 @@ VALUES(?, 0, 'buffer-agent', 'succeeded', 'buffered-fixture')`
 			if scenario.state == "pending" || scenario.state == "running" ||
 				scenario.state == "cleanup_unconfirmed" || scenario.buffer != "" {
 				if rec.Code != http.StatusConflict {
-					t.Fatalf("busy refresh=%d: %s", rec.Code, rec.Body.String())
+					t.Fatalf(
+						"busy refresh=%d: %s",
+						rec.Code,
+						rec.Body.String(),
+					)
 				}
 				unchanged, err := h.repo.Queries.GetRelease(
 					t.Context(),
@@ -126,7 +143,8 @@ VALUES(?, 0, 'buffer-agent', 'succeeded', 'buffered-fixture')`
 				}
 				if scenario.buffer != "" {
 					if _, err := h.repo.DB.ExecContext(t.Context(),
-						"UPDATE "+scenario.buffer+" SET log_buffer_ciphertext=NULL"); err != nil {
+						"UPDATE "+scenario.buffer+
+							" SET log_buffer_ciphertext=NULL, cleanup_confirmed_at=1"); err != nil {
 						t.Fatal(err)
 					}
 				}
@@ -144,10 +162,17 @@ VALUES(?, 0, 'buffer-agent', 'succeeded', 'buffered-fixture')`
 			if rec.Code != http.StatusOK {
 				t.Fatalf("refresh=%d: %s", rec.Code, rec.Body.String())
 			}
-			updated, err := h.repo.Queries.GetRelease(t.Context(), release.ID)
+			updated, err := h.repo.Queries.GetRelease(
+				t.Context(),
+				release.ID,
+			)
 			if err != nil ||
 				!strings.Contains(updated.StepsJson, "echo after") {
-				t.Fatalf("refreshed steps=%s error=%v", updated.StepsJson, err)
+				t.Fatalf(
+					"refreshed steps=%s error=%v",
+					updated.StepsJson,
+					err,
+				)
 			}
 			variables, err := h.repo.ListReleaseVariablesByRelease(
 				t.Context(), release.ID)
