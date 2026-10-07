@@ -51,7 +51,7 @@ func (q *Queries) GetDeploymentRollback(ctx context.Context, deploymentID int64)
 }
 
 const getLatestProjectEnvironmentDeployment = `-- name: GetLatestProjectEnvironmentDeployment :one
-SELECT d.id, d.release_id, d.environment_id, d.status, d.started_at, d.finished_at, d.created_at, d.forced, d.note, d.assigned_agent_id, d.kind, d.container_namespace FROM deployments d JOIN releases r ON r.id = d.release_id
+SELECT d.id, d.release_id, d.environment_id, d.status, d.started_at, d.finished_at, d.created_at, d.forced, d.note, d.assigned_agent_id, d.kind, d.container_namespace, d.cleanup_confirmed_at FROM deployments d JOIN releases r ON r.id = d.release_id
 WHERE r.project_id = ? AND d.environment_id = ? AND d.kind = 'deployment'
 ORDER BY d.created_at DESC, d.id DESC LIMIT 1
 `
@@ -77,12 +77,13 @@ func (q *Queries) GetLatestProjectEnvironmentDeployment(ctx context.Context, arg
 		&i.AssignedAgentID,
 		&i.Kind,
 		&i.ContainerNamespace,
+		&i.CleanupConfirmedAt,
 	)
 	return i, err
 }
 
 const getRollbackTarget = `-- name: GetRollbackTarget :one
-SELECT d.id, d.release_id, d.environment_id, d.status, d.started_at, d.finished_at, d.created_at, d.forced, d.note, d.assigned_agent_id, d.kind, d.container_namespace FROM deployments d JOIN releases r ON r.id = d.release_id
+SELECT d.id, d.release_id, d.environment_id, d.status, d.started_at, d.finished_at, d.created_at, d.forced, d.note, d.assigned_agent_id, d.kind, d.container_namespace, d.cleanup_confirmed_at FROM deployments d JOIN releases r ON r.id = d.release_id
 JOIN deployments source ON source.id = ?1
 JOIN releases source_release ON source_release.id = source.release_id
 WHERE r.project_id = source_release.project_id
@@ -109,6 +110,7 @@ func (q *Queries) GetRollbackTarget(ctx context.Context, sourceDeploymentID int6
 		&i.AssignedAgentID,
 		&i.Kind,
 		&i.ContainerNamespace,
+		&i.CleanupConfirmedAt,
 	)
 	return i, err
 }

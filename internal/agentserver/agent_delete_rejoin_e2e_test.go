@@ -5,11 +5,13 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"durpdeploy/internal/agentserver"
+	"durpdeploy/internal/db"
 	"durpdeploy/internal/secret"
 
 	agentbootstrap "github.com/DeveloperDurp/durpdeploy-agent/bootstrap"
@@ -103,18 +105,38 @@ func TestAgentDeleteRejoinE2E(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Then: the original ID is visible, history survives, and polling works again.
-	if pairing.AgentID != "test-agent" || pairing.State != "paired" {
+	// Then: a new ID is visible, history is detached, and polling works again.
+	if pairing.AgentID == "test-agent" || pairing.AgentID == "" ||
+		pairing.State != "paired" {
 		t.Fatalf("rejoined result=%+v", pairing)
 	}
+	fleetRequest(
+		t,
+		srv,
+		"GET",
+		"/api/v1/admin/agents/"+pairing.AgentID,
+		"admin",
+		"",
+		http.StatusOK,
+	)
 	fleetRequest(t, srv, "GET", "/api/v1/admin/agents/test-agent", "admin",
-		"", http.StatusOK)
+		"", http.StatusNotFound)
 	deployment, err := f.repo.Queries.GetDeployment(t.Context(), history)
-	if err != nil || deployment.AssignedAgentID.String != "test-agent" ||
+	if err != nil || deployment.AssignedAgentID.Valid ||
 		deployment.Status != "failed" {
 		t.Fatalf("history=%+v error=%v", deployment, err)
 	}
-	next := seedPollPayload(t, f, "pending", "test-agent")
+	historyBody := fleetRequest(t, srv, "GET",
+		"/api/v1/deployments/"+strconv.FormatInt(history, 10),
+		"admin", "", http.StatusOK)
+	var historyResult db.Deployment
+	if err := json.Unmarshal(historyBody, &historyResult); err != nil {
+		t.Fatal(err)
+	}
+	if historyResult.ID != history || historyResult.AssignedAgentID.Valid {
+		t.Fatalf("API history=%+v", historyResult)
+	}
+	next := seedPollPayload(t, f, "pending", pairing.AgentID)
 	poll := decodePollResponse(
 		t,
 		postAgent(t, f, agentproto.PollPath, pollBody),

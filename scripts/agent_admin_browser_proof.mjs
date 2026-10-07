@@ -418,7 +418,7 @@ async function main() {
 	const agentID = new URL(page.url()).pathname.split("/").at(-1);
 	const durableAgentID = (await readOnly("SELECT id FROM agents LIMIT 1;")).trim();
 	check(durableAgentID, "paired agent ID was not durable");
-	const pairedAgentID = pairingScenarios.has(faultScenario) ? durableAgentID : agentID;
+	let pairedAgentID = pairingScenarios.has(faultScenario) ? durableAgentID : agentID;
 	check(pairedAgentID, "paired agent ID was not present in redirect");
 	await page.goto(`${baseURL}/environments/new`);
 	await page.locator('input[name="name"]').fill("Todo 12 browser environment");
@@ -736,8 +736,11 @@ async function main() {
 		pairRequest.code = next.code;
 		const rejoined = await context.request.post(`${baseURL}/api/v1/admin/agents/pair`,
 			{ headers, data: pairRequest });
-		check(rejoined.status() === 201 && (await rejoined.json()).agent_id === pairedAgentID,
-			"API fresh pairing did not restore the same agent");
+		check(rejoined.status() === 201, "API pairing of the same identity failed");
+		const previousAgentID = pairedAgentID;
+		pairedAgentID = (await rejoined.json()).agent_id;
+		check(pairedAgentID && pairedAgentID !== previousAgentID,
+			"API pairing reused the deleted registration");
 		offer = next;
 		await page.goto(`${baseURL}/admin/agents/${pairedAgentID}`);
 		page.once("dialog", (dialog) => dialog.accept());
@@ -746,10 +749,13 @@ async function main() {
 			page.getByRole("button", { name: "Delete agent" }).click(),
 		]);
 		offer = await freshOffer();
+		const deletedRejoinID = pairedAgentID;
 		await fillPairingRequest();
 		await submitPairing();
-		check(page.url() === `${baseURL}/admin/agents/${pairedAgentID}`,
-			"web fresh pairing did not restore the same agent");
+		pairedAgentID = page.url().split("/").at(-1);
+		check(page.url() === `${baseURL}/admin/agents/${pairedAgentID}` &&
+			pairedAgentID !== deletedRejoinID,
+			"web pairing reused the deleted registration");
 		for (const width of [375, 768, 1280]) await capture(page, "agent-rejoined", width);
 	}
 	const unexpectedConsoleErrors = consoleErrors.filter((message) =>

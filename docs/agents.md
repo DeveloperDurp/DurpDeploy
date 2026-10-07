@@ -6,9 +6,10 @@ maintenance, and recovery.
 
 ## Fleet maintenance and health
 
-**Delete** removes an agent from the list and prevents further access. Both the
-list and detail page ask for confirmation. Deployment history keeps its agent
-references; the server retains a revoked tombstone and its identity pins.
+**Delete** removes the agent's server registration, pairing credentials, and
+configuration and prevents further access. Both the list and detail page ask
+for confirmation. Deployments, snapshots, logs, and step attempts remain;
+their agent references are cleared. Agent-owned remote protocol state is removed.
 Deletion is refused while execution or cleanup is unconfirmed or remote logs
 remain buffered. Drain the agent, let its work finish, and reconcile cleanup
 and log delivery before deleting it. A refused delete
@@ -20,15 +21,15 @@ Administrators can call `DELETE /api/v1/admin/agents/{id}` with an empty body or
 remote work or buffered logs return `409`. Successful deletion records `delete_agent` in the
 audit log. The existing `POST /api/v1/admin/agents/{id}/revoke` remains available
 for revoking access while retaining the inventory entry and re-pairing option.
-The same installed agent can rejoin later with a fresh pairing code and
-fingerprint approval. Pair it from the list as usual; the server restores its
-original agent ID and historical references. Old pairing codes are rejected.
+The same installed agent can pair again as a new registration with the same
+identity fingerprint. The server retains no tombstone or duplicate-identity
+block. Pair it from the list as usual; it receives a new agent ID and default
+configuration. Previous deployments stay detached from the new registration.
 To generate a fresh code, stop the idle agent, move only `state.json` out of its
 private state directory, and restart it. Keep its identity certificate and key.
 Do this only after execution, cleanup, and log delivery have been reconciled.
-The agent remains hidden and blocked until an administrator completes the new
-pairing. An incorrect code leaves the agent deleted and can be retried with
-the correct fresh code.
+The agent's bootstrap listener validates its current pairing code; an incorrect
+code does not restore the deleted registration.
 
 Admins manage the fleet at `/admin/agents`. **Drain** stops new claims and
 keeps the agent authenticated. Claims issued before Drain can still start,

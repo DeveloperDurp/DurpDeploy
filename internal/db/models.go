@@ -24,8 +24,6 @@ type Agent struct {
 	Draining               int64          `json:"draining"`
 	HealthState            string         `json:"health_state"`
 	AgentProtocol          sql.NullString `json:"agent_protocol"`
-	DeletedAt              sql.NullInt64  `json:"deleted_at"`
-	DeletedPairingCodeHash []byte         `json:"deleted_pairing_code_hash"`
 }
 
 type AgentContainerInterpreter struct {
@@ -152,6 +150,7 @@ type Deployment struct {
 	AssignedAgentID    sql.NullString `json:"assigned_agent_id"`
 	Kind               string         `json:"kind"`
 	ContainerNamespace sql.NullString `json:"container_namespace"`
+	CleanupConfirmedAt sql.NullInt64  `json:"cleanup_confirmed_at"`
 }
 
 type DeploymentApproval struct {

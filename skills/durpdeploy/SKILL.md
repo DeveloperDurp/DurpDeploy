@@ -186,14 +186,15 @@ Administrators may remove an agent from inventory with
 unknown/deleted agent returns `404`; unresolved execution, cleanup, or buffered
 logs return `409` and leave the agent unchanged. Drain and reconcile workloads
 and log delivery first.
-Deletion revokes access and retains historical deployment references. Deleted
-agents disappear from admin list/detail endpoints. The same installed agent can
-rejoin through `POST /api/v1/admin/agents/pair` with its fingerprint and a fresh
-pairing code; its original agent ID and history are restored. Old pairing codes
-are rejected. Stop the reconciled idle agent, move only `state.json` out of its
+Deletion removes the server registration, credentials, and configuration.
+Deployments, snapshots, logs, and step attempts remain with agent references
+cleared; agent-owned remote protocol state is removed. The same identity can
+pair through `POST /api/v1/admin/agents/pair` as a new registration with a new ID
+and default configuration; no tombstone blocks it. Stop the reconciled idle
+agent, move only `state.json` out of its
 private state directory, preserve its identity keys, and restart to obtain a
-fresh code. It remains hidden and blocked until administrator pairing completes;
-an incorrect code leaves it deleted. The existing
+fresh code. The bootstrap listener validates that code; an incorrect code does
+not restore the deleted registration. The existing
 `POST /api/v1/admin/agents/{id}/revoke` keeps the agent visible for later re-pairing.
 After a heartbeat or cancellation timeout, the same paired agent can replay
 its durable terminal report with the original claim token. This resolves the

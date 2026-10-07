@@ -59,7 +59,6 @@ func seedRevocationRaceFixture(
 	}
 	if rows, err := repo.CommitAgentPairing(ctx, db.CompleteAgentPairingParams{
 		AgentID: agentID, Now: raceInt(100), ServerPin: raceString(serverPin),
-		PairingCodeHash: code,
 	}, db.ActivatePairedAgentParams{
 		CertificatePem:         raceString("public"),
 		CertificateFingerprint: raceString(pin),

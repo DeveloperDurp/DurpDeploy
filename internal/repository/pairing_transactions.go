@@ -35,62 +35,19 @@ func (r *Repository) PrepareAgentPairing(
 ) (db.AgentPairing, error) {
 	var pairing db.AgentPairing
 	err := r.WithTx(ctx, func(q *db.Queries) error {
-		lookup := db.ListAgentPairingRecoveryCandidatesParams{
-			PairingCodeHash: tuple.PairingCodeHash,
-			AgentPin:        tuple.AgentPin,
-			Endpoint:        tuple.Endpoint,
-		}
-		candidates, err := q.ListAgentPairingRecoveryCandidates(ctx, lookup)
+		candidates, err := q.ListAgentPairingRecoveryCandidates(
+			ctx,
+			db.ListAgentPairingRecoveryCandidatesParams{
+				PairingCodeHash: tuple.PairingCodeHash,
+				AgentPin:        tuple.AgentPin,
+				Endpoint:        tuple.Endpoint,
+			},
+		)
 		if err != nil {
 			return err
 		}
-		if len(candidates) > 1 {
-			return ErrPairingTupleConflict
-		}
-		lockID := tuple.ExpectedAgentID
-		if lockID == "" && len(candidates) == 1 {
-			lockID = candidates[0].AgentID
-		}
-		if lockID != "" {
-			changed, err := q.LockAgentForPairing(ctx, lockID)
-			if err != nil {
-				return err
-			}
-			if changed != 1 {
-				return ErrPairingTupleConflict
-			}
-			candidates, err = q.ListAgentPairingRecoveryCandidates(ctx, lookup)
-			if err != nil {
-				return err
-			}
-		}
-		for _, candidate := range candidates {
-			if candidate.DeletedAt.Valid {
-				if len(candidates) != 1 ||
-					(tuple.ExpectedAgentID != "" &&
-						tuple.ExpectedAgentID != candidate.AgentID) {
-					return ErrPairingTupleConflict
-				}
-				if subtle.ConstantTimeCompare(
-					candidate.DeletedPairingCodeHash, tuple.PairingCodeHash,
-				) == 1 {
-					return ErrPairingTupleConflict
-				}
-				if candidate.State == "committing" {
-					if !samePairingTuple(candidate, tuple) {
-						return ErrPairingTupleConflict
-					}
-					pairing = candidatePairing(candidate)
-					return nil
-				}
-				if samePairingCode(candidate, tuple) {
-					return ErrPairingTupleConflict
-				}
-				tuple.ExpectedAgentID = candidate.AgentID
-			}
-		}
 		if tuple.ExpectedAgentID != "" {
-			agent, err := q.GetAgentForPairing(ctx, tuple.ExpectedAgentID)
+			agent, err := q.GetAgent(ctx, tuple.ExpectedAgentID)
 			if err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
 					return ErrPairingTupleConflict
@@ -123,17 +80,13 @@ func (r *Repository) PrepareAgentPairing(
 					},
 				)
 				if err != nil {
-					if errors.Is(err, sql.ErrNoRows) {
-						return ErrPairingTupleConflict
-					}
 					return err
 				}
 				changed, err := q.ResetRevokedAgentForPairing(
 					ctx,
 					db.ResetRevokedAgentForPairingParams{
-						Endpoint:        tuple.Endpoint,
-						ID:              tuple.ExpectedAgentID,
-						PairingCodeHash: tuple.PairingCodeHash,
+						Endpoint: tuple.Endpoint,
+						ID:       tuple.ExpectedAgentID,
 					},
 				)
 				if err != nil || changed != 1 {
@@ -166,16 +119,10 @@ func (r *Repository) PrepareAgentPairing(
 				if err != nil || deleted != 1 {
 					return ErrPairingTupleConflict
 				}
-				agent, err := q.GetAgentForPairing(ctx, candidate.AgentID)
-				if err != nil || agent.Status != "pending" {
+				deleted, err = q.DeletePendingAgent(ctx, candidate.AgentID)
+				if err != nil || deleted != 1 {
 					return ErrPairingTupleConflict
 				}
-				if _, err := q.UpdateAgent(ctx, db.UpdateAgentParams{
-					ID: agent.ID, Name: agent.Name, Endpoint: tuple.Endpoint,
-				}); err != nil {
-					return err
-				}
-				tuple.AgentID = agent.ID
 			} else if !samePairingTuple(
 				candidate,
 				tuple,
@@ -187,14 +134,10 @@ func (r *Repository) PrepareAgentPairing(
 				return nil
 			}
 		}
-		if len(candidates) == 0 {
-			if _, err := q.CreateAgent(ctx, db.CreateAgentParams{
-				ID:       tuple.AgentID,
-				Name:     tuple.AgentName,
-				Endpoint: tuple.Endpoint,
-			}); err != nil {
-				return err
-			}
+		if _, err := q.CreateAgent(ctx, db.CreateAgentParams{
+			ID: tuple.AgentID, Name: tuple.AgentName, Endpoint: tuple.Endpoint,
+		}); err != nil {
+			return err
 		}
 		pairing, err = q.CreateCommittingAgentPairing(
 			ctx,

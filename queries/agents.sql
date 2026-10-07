@@ -2,36 +2,14 @@
 INSERT INTO agents (id, name, endpoint) VALUES (?, ?, ?) RETURNING *;
 
 -- name: GetAgent :one
-SELECT * FROM agents WHERE id = ? AND deleted_at IS NULL;
-
--- name: GetAgentForPairing :one
 SELECT * FROM agents WHERE id = ?;
-
--- name: LockAgentForPairing :execrows
-UPDATE agents SET updated_at = updated_at -- NOSONAR: intentional write lock
-WHERE id = ?;
 
 -- name: LockRevocableAgent :execrows
 UPDATE agents SET updated_at = updated_at -- NOSONAR: intentional write lock
 WHERE id = ? AND status IN ('pending', 'active', 'disabled');
 
 -- name: ListAgents :many
-SELECT * FROM agents WHERE deleted_at IS NULL ORDER BY name, id;
-
--- name: MarkAgentDeleted :execrows
-UPDATE agents SET deleted_at = unixepoch(), updated_at = unixepoch(),
-    deleted_pairing_code_hash = (SELECT pairing_code_hash FROM agent_pairings WHERE agent_id = agents.id)
-WHERE id = ? AND status = 'revoked' AND deleted_at IS NULL
-  AND NOT EXISTS (SELECT 1 FROM remote_step_runs s
-      WHERE s.agent_id = agents.id
-        AND (s.state IN ('claimed', 'started', 'cancel_requested', 'lost', 'cancel_unconfirmed')
-          OR (s.state = 'cleanup_unconfirmed' AND s.cleanup_confirmed_at IS NULL)
-          OR COALESCE(s.log_buffer_ciphertext, '') <> ''))
-  AND NOT EXISTS (SELECT 1 FROM remote_deployment_claims c
-      WHERE c.agent_id = agents.id
-        AND (c.state IN ('claimed', 'started', 'cancel_requested', 'lost', 'cancel_unconfirmed')
-          OR (c.state = 'cleanup_unconfirmed' AND c.cleanup_confirmed_at IS NULL)
-          OR COALESCE(c.log_buffer_ciphertext, '') <> ''));
+SELECT * FROM agents ORDER BY name, id;
 
 -- name: UpdateAgent :one
 UPDATE agents SET name = ?, endpoint = ?, updated_at = unixepoch()
@@ -45,17 +23,12 @@ WHERE id = sqlc.arg(id) AND status IN ('pending', 'active', 'disabled')
        OR (status IN ('active', 'disabled') AND (sqlc.arg(status) = 'active' OR sqlc.arg(status) = 'disabled'))) RETURNING *;
 
 -- name: ResetRevokedAgentForPairing :execrows
-UPDATE agents SET endpoint = sqlc.arg(endpoint),
-    status = CASE WHEN deleted_at IS NULL THEN 'pending' ELSE 'revoked' END,
+UPDATE agents SET endpoint = sqlc.arg(endpoint), status = 'pending',
     draining = 0, health_state = 'unknown', agent_protocol = NULL,
     agent_version = NULL, certificate_pem = NULL,
     certificate_fingerprint = NULL, encrypted_identity = NULL,
-    last_heartbeat_at = NULL,
-    revoked_at = CASE WHEN deleted_at IS NULL THEN NULL ELSE revoked_at END,
-    updated_at = unixepoch()
+    last_heartbeat_at = NULL, revoked_at = NULL, updated_at = unixepoch()
 WHERE id = sqlc.arg(id) AND status = 'revoked'
-  AND (deleted_pairing_code_hash IS NULL
-       OR deleted_pairing_code_hash <> sqlc.arg(pairing_code_hash))
   AND NOT EXISTS (SELECT 1 FROM remote_step_runs s
       WHERE s.agent_id = agents.id
         AND (s.state IN ('lost', 'cancel_unconfirmed')
@@ -77,6 +50,10 @@ WHERE id = sqlc.arg(id) AND status = 'active'
 
 -- name: SetAgentProtocol :exec
 UPDATE agents SET agent_protocol = ? WHERE id = ? AND status = 'active';
+
+-- name: DeletePendingAgent :execrows
+DELETE FROM agents WHERE id = ? AND status = 'pending'
+AND NOT EXISTS (SELECT 1 FROM agent_pairings WHERE agent_id = agents.id);
 
 -- name: HeartbeatAgent :execrows
 UPDATE agents SET last_heartbeat_at = sqlc.arg(now), agent_version = sqlc.narg(agent_version),
