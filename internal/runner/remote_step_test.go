@@ -28,8 +28,8 @@ func seedAgentWithInterpreter(
 	fingerprint := strings.Repeat(agentID[len(agentID)-1:], 64)
 	if _, err := repo.DB.ExecContext(ctx, `INSERT INTO agents(
 		id,name,endpoint,status,certificate_pem,certificate_fingerprint,
-		encrypted_identity)
-		VALUES(?,?,?,'active','certificate',?,'identity')`,
+		encrypted_identity,agent_protocol)
+		VALUES(?,?,?,'active','certificate',?,'identity','agent/2')`,
 		agentID, agentID, "https://agent.invalid", fingerprint,
 	); err != nil {
 		t.Fatal(err)

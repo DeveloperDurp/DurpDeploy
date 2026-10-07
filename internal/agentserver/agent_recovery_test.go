@@ -16,9 +16,24 @@ import (
 
 func TestAgentDurableOutcomeAfterMaintenanceAndRestart(t *testing.T) {
 	for _, legacy := range []bool{false, true} {
-		for _, state := range []string{"cleanup_unconfirmed", "succeeded", "failed", "cancelled"} {
+		for _, outcome := range []struct {
+			state  string
+			cancel bool
+		}{
+			{"cleanup_unconfirmed", false},
+			{"cleanup_unconfirmed", true},
+			{"succeeded", false},
+			{"failed", false},
+			{"cancelled", true},
+		} {
+			state := outcome.state
 			t.Run(
-				fmt.Sprintf("legacy=%v/%s", legacy, state),
+				fmt.Sprintf(
+					"legacy=%v/%s/cancel=%v",
+					legacy,
+					state,
+					outcome.cancel,
+				),
 				func(t *testing.T) {
 					// Given a started container claim whose agent stops responding.
 					dsn := filepath.Join(t.TempDir(), "recovery.db") +
@@ -63,8 +78,7 @@ func TestAgentDurableOutcomeAfterMaintenanceAndRestart(t *testing.T) {
 						postAgent(t, f, path(agentproto.StartPath), claim),
 						204,
 					)
-					cancel := state == "cancelled"
-					if cancel {
+					if outcome.cancel {
 						if _, err := f.repo.DB.ExecContext(t.Context(), "UPDATE "+table+
 							" SET state='cancel_requested', cancel_requested_at=1 WHERE deployment_id=?", id); err != nil {
 							t.Fatal(err)
@@ -117,7 +131,7 @@ func TestAgentDurableOutcomeAfterMaintenanceAndRestart(t *testing.T) {
 						`,"state":%q,"error":""}`,
 						state,
 					)
-					if cancel {
+					if state == "cancelled" {
 						endpoint, body = path(agentproto.CancelledPath), claim
 					}
 					assertAgentStatus(t, postAgent(

@@ -177,6 +177,10 @@ fails its incompatible waiting work before claim.
 An agent result of `cleanup_unconfirmed` blocks the environment queue and
 retry until that agent reconciles its containers and reports a ready v3 poll.
 The original terminal result remains visible after confirmation.
+After a heartbeat or cancellation timeout, the same paired agent can replay
+its durable terminal report with the original claim token. This resolves the
+remote uncertainty without changing a failed deployment to success. A late
+`cleanup_unconfirmed` report still requires a ready v3 poll before retry.
 The embedded agent pulls an image when it is missing. Container steps default
 to no network; local steps can opt into `network_mode: "bridge"`. They have no
 host mounts. A mutable image tag does not

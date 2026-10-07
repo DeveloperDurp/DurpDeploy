@@ -270,6 +270,11 @@ work. Do not downgrade the server while container work or cleanup is pending.
 If cleanup is uncertain, the deployment remains `cleanup_unconfirmed` and
 blocks its environment. Restore runtime access and let the same paired agent
 reconcile and send a ready v3 poll. Confirmation releases the queue and permits
+retry while preserving the original outcome. If maintenance already marked a
+claim lost or cancellation unconfirmed, the agent can replay its durable
+terminal report using the original claim token. A late success does not change
+the failed deployment to success. A late cleanup failure still requires the
+ready v3 poll before the queue can advance.
 an explicit retry; it preserves the original terminal result. Never re-pair
 or remove state as a substitute for cleanup.
 

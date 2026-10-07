@@ -118,11 +118,19 @@ and are sent only to compatible `agent/2` agents.
 | `claimed` | `started`, `cancel_requested` | The agent starts, or cancellation overlays the claim. |
 | `started` | `succeeded`, `failed`, `cancelled`, `lost`, `cancel_requested` | Started work reaches a terminal state, becomes lost after missed heartbeats, or receives cancellation. |
 | `cancel_requested` | `cancelled`, `cancel_unconfirmed`, `lost` | The agent acknowledges cancellation, misses the 30-second acknowledgement deadline, or is lost. |
+| `lost`, `cancel_unconfirmed` | `succeeded`, `failed`, `cleanup_unconfirmed` | The same authenticated claim reports its durable outcome after recovery; a failed deployment stays failed unless cleanup is uncertain. |
+| `cancel_unconfirmed` | `cancelled` | The same authenticated claim replays its durable cancellation acknowledgement; the deployment stays failed. |
 
 All other edges, including `started` to `waiting`, are invalid. A pre-start
 claim may be reclaimed, but started work is never automatically replayed or
 requeued and does not fall back to local execution. Recovery is an explicit new
 deployment.
+
+Terminal reports are idempotent for the same claim token and outcome. A changed
+outcome is rejected. Cleanup uncertainty remains blocked until the same paired
+agent reconciles containers and sends a ready v3 poll; that confirmation does
+not change the reported terminal outcome. A waiting poll whose protocol or
+capabilities have changed receives no work and must poll again.
 
 ## Transport trust
 
