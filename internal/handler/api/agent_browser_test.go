@@ -191,7 +191,7 @@ func TestAgentFleetBrowserE2E(t *testing.T) {
 	fleetBrowserNavigate(t, browser, srv.URL+"/admin/agents/active")
 	browser.wait(
 		t,
-		`document.body.innerText.includes('No current work') && document.body.innerText.includes('Compatibility') && document.body.innerText.includes('version unverified') && document.body.innerText.includes('Container runtimes') && document.body.innerText.includes('podman')`,
+		`document.body.innerText.includes('No current work') && document.body.innerText.includes('Compatibility') && document.body.innerText.includes('version unverified') && document.body.innerText.includes('Ready container runtimes') && document.body.innerText.includes('podman')`,
 	)
 	// An adjacent security regression: viewers cannot open the admin pages.
 	fleetBrowserSession(t, browser, srv.URL, viewer.ID)

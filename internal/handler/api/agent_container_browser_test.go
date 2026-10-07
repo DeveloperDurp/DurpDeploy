@@ -152,7 +152,7 @@ func TestAgentContainerBrowserE2E(t *testing.T) {
 	)
 	capture("template-edit")
 	set("agent_execution_mode", "host")
-	browser.wait(t, `document.querySelector('[name=container_image]').disabled`)
+	browser.wait(t, `document.querySelector('[name=container_image]') === null`)
 	browser.evaluate(
 		t,
 		`document.querySelector('form[hx-put="/templates/1"] button[type=submit]').click(); true`,

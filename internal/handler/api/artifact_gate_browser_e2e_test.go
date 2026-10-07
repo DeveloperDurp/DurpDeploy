@@ -542,7 +542,7 @@ setTimeout(()=>form.requestSubmit(),100); return true;
 				if string(
 					browser.evaluate(
 						t,
-						`Array.from(document.querySelectorAll('[name="network_mode"], [name="approval_artifact_path"], [name="approval_review_path"], [name="approval_review_format"]')).every(e => e.matches(':disabled') && e.getBoundingClientRect().width === 0)`,
+						`document.querySelector('[name="network_mode"], [name="approval_artifact_path"], [name="approval_review_path"], [name="approval_review_format"]') === null`,
 					),
 				) != "true" {
 					t.Fatal("agent template offers unsupported gate fields")

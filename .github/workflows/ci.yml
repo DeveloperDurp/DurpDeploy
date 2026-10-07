@@ -331,6 +331,7 @@ jobs:
         env:
           ENGINE: ${{ matrix.runtime }}
         run: |
+          go mod download github.com/DeveloperDurp/durpdeploy-agent
           agent_source=$(go list -m -f '{{.Dir}}' github.com/DeveloperDurp/durpdeploy-agent)
           image=localhost/durpdeploy-agent:issue99
           if [ "$ENGINE" = docker ]; then
