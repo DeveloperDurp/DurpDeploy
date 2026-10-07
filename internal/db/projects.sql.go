@@ -95,6 +95,7 @@ SELECT CASE WHEN EXISTS (
       AND (d.status IN ('queued', 'pending', 'running', 'pending_approval', 'publishing_artifact', 'awaiting_artifact_approval')
         OR (d.status = 'cleanup_unconfirmed'
             AND (d.container_namespace IS NOT NULL OR (
+            d.cleanup_confirmed_at IS NULL AND
             NOT EXISTS (SELECT 1 FROM remote_step_runs s
                 WHERE s.deployment_id = d.id AND s.state = 'cleanup_unconfirmed')
             AND NOT EXISTS (SELECT 1 FROM remote_deployment_claims c

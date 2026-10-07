@@ -87,6 +87,30 @@ func TestAgentDeleteHistoryAcrossDatabases(t *testing.T) {
 				if err != nil || unconfirmed != 0 {
 					t.Fatalf("cleanup=%d error=%v", unconfirmed, err)
 				}
+				for _, check := range []struct {
+					name string
+					run  func() (int64, error)
+				}{
+					{"environment", func() (int64, error) {
+						return repo.Queries.HasActiveEnvironmentDeployment(t.Context(), d.EnvironmentID)
+					}},
+					{"release", func() (int64, error) {
+						return repo.Queries.HasActiveReleaseDeployment(t.Context(), d.ReleaseID)
+					}},
+					{"project", func() (int64, error) {
+						return repo.Queries.HasActiveProjectDeployment(t.Context(), 1)
+					}},
+				} {
+					active, err := check.run()
+					if err != nil || active != 0 {
+						t.Fatalf(
+							"%s active=%d error=%v",
+							check.name,
+							active,
+							err,
+						)
+					}
+				}
 				rejoined, err := repo.PrepareAgentPairing(
 					t.Context(),
 					AgentPairingTuple{
