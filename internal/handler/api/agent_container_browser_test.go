@@ -142,6 +142,21 @@ func TestAgentContainerBrowserE2E(t *testing.T) {
 	// A native template form saves and reopens container placement.
 	fleetBrowserNavigate(t, browser, srv.URL+"/templates/new")
 	set("container_image", "alpine:3.21")
+	set("network_mode", "bridge")
+	set("approval_artifact_path", "plan.out")
+	set("approval_review_path", "review.json")
+	set("approval_review_format", "summary")
+	set("execution_target", "agent")
+	browser.wait(
+		t,
+		`document.querySelector('[name=network_mode]').closest('fieldset').disabled`,
+	)
+	set("execution_target", "local")
+	browser.wait(
+		t,
+		`!document.querySelector('[name=network_mode]').closest('fieldset').disabled && document.querySelector('[name=network_mode]').value === 'bridge' && document.querySelector('[name=approval_artifact_path]').value === 'plan.out' && document.querySelector('[name=approval_review_path]').value === 'review.json' && document.querySelector('[name=approval_review_format]').value === 'summary'`,
+	)
+	capture("template-local-gates-new")
 	set("execution_target", "agent")
 	browser.wait(
 		t,
@@ -176,6 +191,21 @@ func TestAgentContainerBrowserE2E(t *testing.T) {
 	set("agent_execution_mode", "host")
 	set("execution_target", "local")
 	set("container_image", "alpine:3.21")
+	set("network_mode", "bridge")
+	set("approval_artifact_path", "edited-plan.out")
+	set("approval_review_path", "edited-review.json")
+	set("approval_review_format", "summary")
+	set("execution_target", "agent")
+	browser.wait(
+		t,
+		`document.querySelector('[name=network_mode]').closest('fieldset').disabled`,
+	)
+	set("execution_target", "local")
+	browser.wait(
+		t,
+		`!document.querySelector('[name=network_mode]').closest('fieldset').disabled && document.querySelector('[name=network_mode]').value === 'bridge' && document.querySelector('[name=approval_artifact_path]').value === 'edited-plan.out' && document.querySelector('[name=approval_review_path]').value === 'edited-review.json' && document.querySelector('[name=approval_review_format]').value === 'summary'`,
+	)
+	capture("template-local-gates-edit")
 	set("execution_target", "agent")
 	browser.wait(
 		t,
