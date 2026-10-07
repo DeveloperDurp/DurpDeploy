@@ -97,6 +97,10 @@ func (r *DeploymentRunner) persistCompletion(
 	if err := r.cleanupArtifact(deploymentID); err != nil {
 		status = "cleanup_unconfirmed"
 		cancellationWins = false
+	} else if status == "cleanup_unconfirmed" {
+		if err := r.repo.Queries.ConfirmRemoteDeploymentLocalCleanup(ctx, deploymentID); err != nil {
+			slog.Error("confirm local cleanup for remote outcome", "deployment_id", deploymentID, "err", err)
+		}
 	}
 	finalStatus, err := r.completeDeployment(
 		ctx, cancelCtx, deploymentID, status, cancellationWins,

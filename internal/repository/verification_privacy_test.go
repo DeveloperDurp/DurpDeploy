@@ -12,6 +12,11 @@ func TestVerificationNeverDecryptedInLegacyAgentPayload(t *testing.T) {
 	repo, _ := openDeploymentCreationEngine(t,
 		newDeploymentCreationEngine(t, "SQLite"))
 	deployment := createLegacyRemoteDeployment(t, repo)
+	if _, err := repo.Queries.AddAgentInterpreter(t.Context(), db.AddAgentInterpreterParams{
+		AgentID: "race-agent", Interpreter: "bash",
+	}); err != nil {
+		t.Fatal(err)
+	}
 	box, err := secret.NewBox(make([]byte, 32))
 	if err != nil {
 		t.Fatal(err)

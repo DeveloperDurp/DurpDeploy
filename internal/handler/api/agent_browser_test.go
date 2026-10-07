@@ -47,6 +47,14 @@ func TestAgentFleetBrowserE2E(t *testing.T) {
 		}
 	}
 	project := seedProject(t, h.repo)
+	if _, err := h.repo.DB.ExecContext(t.Context(), `
+		UPDATE agents SET agent_protocol='agent/3' WHERE id='active';
+		INSERT INTO agent_execution_modes VALUES ('active','host'),('active','container');
+		INSERT INTO agent_container_runtimes VALUES ('active','podman');
+		INSERT INTO agent_container_interpreters VALUES ('active','bash'),('active','python3'),('active','pwsh');
+	`); err != nil {
+		t.Fatal(err)
+	}
 	environment := seedEnv(t, h.repo)
 	release := seedRelease(t, h.repo, project.ID)
 	issued := seedDeployment(t, h.repo, release.ID, environment.ID, "running")
@@ -183,7 +191,7 @@ func TestAgentFleetBrowserE2E(t *testing.T) {
 	fleetBrowserNavigate(t, browser, srv.URL+"/admin/agents/active")
 	browser.wait(
 		t,
-		`document.body.innerText.includes('No current work') && document.body.innerText.includes('Compatibility') && document.body.innerText.includes('version unverified')`,
+		`document.body.innerText.includes('No current work') && document.body.innerText.includes('Compatibility') && document.body.innerText.includes('version unverified') && document.body.innerText.includes('Container runtimes') && document.body.innerText.includes('podman')`,
 	)
 	// An adjacent security regression: viewers cannot open the admin pages.
 	fleetBrowserSession(t, browser, srv.URL, viewer.ID)

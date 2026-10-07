@@ -63,6 +63,12 @@ func TestAgentV3CleanupBlocksQueueUntilReadyPoll(t *testing.T) {
 			if _, err := f.repo.Queries.FailDeploymentsWithTerminalRemoteStepRuns(t.Context(), validInt(101)); err != nil {
 				t.Fatal(err)
 			}
+			if cancelFirst {
+				if _, err := f.repo.DB.ExecContext(t.Context(),
+					`UPDATE deployments SET container_namespace='local-test' WHERE id=?`, id); err != nil {
+					t.Fatal(err)
+				}
+			}
 			next, err := f.repo.Queries.CreateDeployment(
 				t.Context(),
 				db.CreateDeploymentParams{
@@ -114,6 +120,24 @@ func TestAgentV3CleanupBlocksQueueUntilReadyPoll(t *testing.T) {
 				t.Fatal(err)
 			}
 			recordFixturePoll(t, f, ready)
+			if cancelFirst {
+				assertDeploymentStatus(t, f, next.ID, "queued")
+				blocked, err := f.repo.Queries.HasUnconfirmedContainerCleanup(
+					t.Context(),
+					id,
+				)
+				if err != nil || blocked != 1 {
+					t.Fatalf("local cleanup block=%v error=%v", blocked, err)
+				}
+				if _, err := f.repo.Queries.ConfirmContainerCleanup(t.Context(), db.ConfirmContainerCleanupParams{
+					Now: validInt(103), Namespace: validString("local-test"),
+				}); err != nil {
+					t.Fatal(err)
+				}
+				if err := f.repo.ReconcileDeploymentQueues(t.Context()); err != nil {
+					t.Fatal(err)
+				}
+			}
 			assertDeploymentStatus(t, f, next.ID, "pending")
 			assertDeploymentStatus(t, f, id, "cleanup_unconfirmed")
 			runs, err := f.repo.Queries.ListRemoteStepRuns(

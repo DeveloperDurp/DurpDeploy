@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -64,6 +65,7 @@ func TestAgentContainerAPIE2E(t *testing.T) {
 		"--read-only",
 		"--cap-drop=ALL",
 		"--security-opt=no-new-privileges",
+		"--security-opt=label=disable",
 		fmt.Sprintf("--user=%d:%d", os.Getuid(), os.Getgid()),
 		"--tmpfs=/tmp:size=64m,mode=1777",
 		"--volume="+f.identityDir+":/var/lib/durpdeploy-agent",
@@ -74,6 +76,13 @@ func TestAgentContainerAPIE2E(t *testing.T) {
 	)
 	if runtime == "podman" {
 		args = append(args, "--userns=keep-id")
+	}
+	info, err := os.Stat(socket.Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stat, ok := info.Sys().(*syscall.Stat_t); ok {
+		args = append(args, fmt.Sprintf("--group-add=%d", stat.Gid))
 	}
 	args = append(args, image)
 	if output, err := exec.Command(runtime, args...).CombinedOutput(); err != nil {

@@ -87,6 +87,18 @@ WHERE remote_deployment_claims.deployment_id = ?5
       WHERE busy.agent_id = remote_deployment_claims.agent_id
         AND busy.deployment_id <> remote_deployment_claims.deployment_id
         AND busy.state IN ('claimed', 'started', 'cancel_requested'))
+  AND NOT EXISTS (SELECT 1 FROM deployment_steps s
+      WHERE s.deployment_id = remote_deployment_claims.deployment_id
+        AND NOT EXISTS (SELECT 1 FROM agent_step_capabilities capability
+            WHERE capability.agent_id = remote_deployment_claims.agent_id
+              AND capability.interpreter = s.interpreter
+              AND capability.execution_mode = s.agent_execution_mode))
+  AND NOT EXISTS (SELECT 1 FROM remote_step_runs busy
+      WHERE busy.agent_id = remote_deployment_claims.agent_id
+        AND busy.state = 'cleanup_unconfirmed' AND busy.cleanup_confirmed_at IS NULL)
+  AND NOT EXISTS (SELECT 1 FROM remote_deployment_claims busy
+      WHERE busy.agent_id = remote_deployment_claims.agent_id
+        AND busy.state = 'cleanup_unconfirmed' AND busy.cleanup_confirmed_at IS NULL)
 `
 
 type ClaimRemoteDeploymentParams struct {

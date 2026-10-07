@@ -307,6 +307,47 @@ jobs:
           DURPDEPLOY_CONTAINER_RUNTIME: docker
         run: go test -tags=e2e -race -count=1 -timeout=5m -run '^TestEnvironmentQueue.*E2E$' ./internal/handler/api
 
+  agent-container:
+    name: Agent container API (${{ matrix.runtime }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        runtime: [docker, podman]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: '1.26.8'
+          cache: true
+      - name: Prepare generated assets
+        run: |
+          go tool templ generate
+          make swagger-ui-copy
+      - name: Build the pinned agent for the local engine
+        env:
+          ENGINE: ${{ matrix.runtime }}
+        run: |
+          agent_source=$(go list -m -f '{{.Dir}}' github.com/DeveloperDurp/durpdeploy-agent)
+          image=localhost/durpdeploy-agent:issue99
+          if [ "$ENGINE" = docker ]; then
+            socket=unix:///var/run/docker.sock
+            docker build -t "$image" "$agent_source"
+          else
+            systemctl --user start podman.socket
+            socket="unix://$XDG_RUNTIME_DIR/podman/podman.sock"
+            podman build -t "$image" "$agent_source"
+          fi
+          printf 'AGENT_TEST_RUNTIME=%s\nAGENT_TEST_SOCKET=%s\nAGENT_TEST_IMAGE=%s\nAGENT_SOURCE=%s\n' \
+            "$ENGINE" "$socket" "$image" "$agent_source" >> "$GITHUB_ENV"
+      - name: Verify real engine execution and crash recovery
+        run: make -C "$AGENT_SOURCE" container-executor-contract
+      - name: Verify public API through a socket-mounted agent container
+        run: go test -tags=e2e,agentcontainer -race -count=1 -timeout=8m -v -run '^TestAgentContainerAPIE2E$' ./internal/agentserver
+
   # ----- Artifact crash recovery and capacity ----------------------------------
   package-browser:
     name: Package repository browser
@@ -337,6 +378,8 @@ jobs:
         run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^TestArtifactGateBrowserE2E$' ./internal/handler/api
       - name: Verify agent fleet controls and responsive health pages
         run: go test -tags=e2e,agentbrowser -race -count=1 -timeout=5m -v -run '^(TestAgentFleetBrowserE2E|TestDeploymentWaitingForAgentsBrowserE2E)$' ./internal/handler/api
+      - name: Verify agent container step, template, and runbook forms
+        run: go test -tags=e2e,agentbrowser -race -count=1 -timeout=5m -v -run '^TestAgentContainerBrowserE2E$' ./internal/handler/api
       - name: Upload package UI evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

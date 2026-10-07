@@ -25,10 +25,11 @@ SELECT d.id FROM deployments d
 WHERE d.environment_id = ? AND (
     d.status IN ('pending', 'running', 'publishing_artifact', 'awaiting_artifact_approval')
     OR (d.status = 'cleanup_unconfirmed'
-        AND NOT EXISTS (SELECT 1 FROM remote_deployment_claims c
+        AND (d.container_namespace IS NOT NULL OR (
+        NOT EXISTS (SELECT 1 FROM remote_deployment_claims c
             WHERE c.deployment_id = d.id AND c.state = 'cleanup_unconfirmed')
         AND NOT EXISTS (SELECT 1 FROM remote_step_runs s
-            WHERE s.deployment_id = d.id AND s.state = 'cleanup_unconfirmed'))
+            WHERE s.deployment_id = d.id AND s.state = 'cleanup_unconfirmed'))))
     OR EXISTS (SELECT 1 FROM remote_deployment_claims c WHERE c.deployment_id = d.id
         AND c.state = 'cleanup_unconfirmed' AND c.cleanup_confirmed_at IS NULL)
     OR EXISTS (SELECT 1 FROM remote_step_runs s WHERE s.deployment_id = d.id

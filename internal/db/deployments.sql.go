@@ -36,7 +36,11 @@ func (q *Queries) CancelOrphanedRemoteStepRuns(ctx context.Context, now int64) (
 }
 
 const confirmContainerCleanup = `-- name: ConfirmContainerCleanup :execrows
-UPDATE deployments SET status = 'failed', finished_at = COALESCE(finished_at, ?1)
+UPDATE deployments SET status = CASE WHEN EXISTS (
+    SELECT 1 FROM remote_step_runs s WHERE s.deployment_id = deployments.id
+      AND s.state = 'cleanup_unconfirmed'
+) THEN status ELSE 'failed' END,
+    container_namespace = NULL, finished_at = COALESCE(finished_at, ?1)
 WHERE status IN ('running', 'publishing_artifact', 'cleanup_unconfirmed')
   AND container_namespace = ?2
 `
@@ -52,6 +56,17 @@ func (q *Queries) ConfirmContainerCleanup(ctx context.Context, arg ConfirmContai
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+const confirmRemoteDeploymentLocalCleanup = `-- name: ConfirmRemoteDeploymentLocalCleanup :exec
+UPDATE deployments SET container_namespace = NULL WHERE id = ?
+AND EXISTS (SELECT 1 FROM remote_step_runs s
+    WHERE s.deployment_id = deployments.id AND s.state = 'cleanup_unconfirmed')
+`
+
+func (q *Queries) ConfirmRemoteDeploymentLocalCleanup(ctx context.Context, id int64) error {
+	_, err := q.db.ExecContext(ctx, confirmRemoteDeploymentLocalCleanup, id)
+	return err
 }
 
 const countDeploymentsToday = `-- name: CountDeploymentsToday :one
@@ -314,10 +329,11 @@ const hasUnconfirmedContainerCleanup = `-- name: HasUnconfirmedContainerCleanup 
 SELECT CASE WHEN EXISTS (
     SELECT 1 FROM deployments d WHERE d.id = ?1
       AND d.status = 'cleanup_unconfirmed'
-      AND NOT EXISTS (SELECT 1 FROM remote_step_runs s
+      AND (d.container_namespace IS NOT NULL OR (
+      NOT EXISTS (SELECT 1 FROM remote_step_runs s
           WHERE s.deployment_id = d.id AND s.state = 'cleanup_unconfirmed')
       AND NOT EXISTS (SELECT 1 FROM remote_deployment_claims c
-          WHERE c.deployment_id = d.id AND c.state = 'cleanup_unconfirmed')
+          WHERE c.deployment_id = d.id AND c.state = 'cleanup_unconfirmed')))
 ) OR EXISTS (
     SELECT 1 FROM remote_step_runs s WHERE s.deployment_id = ?1
       AND s.state = 'cleanup_unconfirmed' AND s.cleanup_confirmed_at IS NULL

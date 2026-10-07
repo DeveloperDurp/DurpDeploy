@@ -59,7 +59,13 @@ WHERE remote_step_runs.deployment_id = sqlc.arg(deployment_id)
       WHERE s.agent_id = remote_step_runs.agent_id
         AND s.deployment_id = remote_step_runs.deployment_id
         AND s.step_index = remote_step_runs.step_index
-  );
+  )
+  AND NOT EXISTS (SELECT 1 FROM remote_step_runs busy
+      WHERE busy.agent_id = remote_step_runs.agent_id
+        AND busy.state = 'cleanup_unconfirmed' AND busy.cleanup_confirmed_at IS NULL)
+  AND NOT EXISTS (SELECT 1 FROM remote_deployment_claims busy
+      WHERE busy.agent_id = remote_step_runs.agent_id
+        AND busy.state = 'cleanup_unconfirmed' AND busy.cleanup_confirmed_at IS NULL);
 
 -- name: FailUnsupportedWaitingRemoteStepRuns :execrows
 UPDATE remote_step_runs SET state = 'failed',
