@@ -192,7 +192,7 @@ UPDATE remote_deployment_claims SET state = sqlc.arg(state),
 WHERE remote_deployment_claims.deployment_id = sqlc.arg(deployment_id)
   AND remote_deployment_claims.agent_id = sqlc.arg(agent_id)
   AND remote_deployment_claims.claim_token_hash = sqlc.arg(claim_token_hash)
-  AND (remote_deployment_claims.state = 'started' OR
+  AND (remote_deployment_claims.state IN ('started', 'lost', 'cancel_unconfirmed') OR
       (remote_deployment_claims.state = 'cancel_requested' AND sqlc.arg(state) = 'cleanup_unconfirmed'))
   AND remote_deployment_claims.started_at IS NOT NULL
   AND (sqlc.arg(state) = 'succeeded' OR sqlc.arg(state) = 'failed'
@@ -200,7 +200,7 @@ WHERE remote_deployment_claims.deployment_id = sqlc.arg(deployment_id)
   AND EXISTS (SELECT 1 FROM deployments d
       WHERE d.id = remote_deployment_claims.deployment_id
         AND d.assigned_agent_id = remote_deployment_claims.agent_id
-        AND d.status IN ('pending', 'running'))
+        AND d.status IN ('running', 'failed'))
   AND EXISTS (SELECT 1 FROM agents a
       WHERE a.id = remote_deployment_claims.agent_id AND a.status = 'active'
         AND EXISTS (SELECT 1 FROM agent_pairings p
@@ -210,7 +210,7 @@ WHERE remote_deployment_claims.deployment_id = sqlc.arg(deployment_id)
 UPDATE deployments SET status = sqlc.arg(state), finished_at = sqlc.arg(now)
 WHERE id = sqlc.arg(deployment_id)
   AND assigned_agent_id = sqlc.arg(agent_id)
-  AND status = 'running';
+  AND (status = 'running' OR (status = 'failed' AND sqlc.arg(state) = 'cleanup_unconfirmed'));
 
 -- name: LockRemoteDeploymentClaim :execrows
 UPDATE remote_deployment_claims SET updated_at = updated_at -- NOSONAR: intentional write lock
@@ -246,7 +246,7 @@ UPDATE remote_deployment_claims SET state = 'cancelled',
 WHERE deployment_id = sqlc.arg(deployment_id)
   AND agent_id = sqlc.arg(agent_id)
   AND claim_token_hash = sqlc.arg(claim_token_hash)
-  AND state = 'cancel_requested';
+  AND state IN ('cancel_requested', 'cancel_unconfirmed');
 
 -- name: ExpireRemoteCancellation :execrows
 UPDATE remote_deployment_claims SET state = 'cancel_unconfirmed',

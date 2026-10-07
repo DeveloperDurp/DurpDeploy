@@ -137,7 +137,8 @@ UPDATE remote_step_runs SET state = sqlc.arg(state), finished_at = sqlc.arg(now)
 WHERE deployment_id = sqlc.arg(deployment_id)
   AND step_index = sqlc.arg(step_index) AND agent_id = sqlc.arg(agent_id)
   AND claim_token_hash = sqlc.arg(claim_token_hash)
-  AND (state = 'started' OR (state = 'cancel_requested' AND sqlc.arg(state) = 'cleanup_unconfirmed'));
+  AND (state IN ('started', 'lost', 'cancel_unconfirmed')
+      OR (state = 'cancel_requested' AND sqlc.arg(state) = 'cleanup_unconfirmed'));
 
 -- name: RequestRemoteStepCancellation :execrows
 UPDATE remote_step_runs SET
@@ -156,7 +157,7 @@ UPDATE remote_step_runs SET state = 'cancelled', finished_at = sqlc.arg(now),
 WHERE deployment_id = sqlc.arg(deployment_id)
   AND step_index = sqlc.arg(step_index) AND agent_id = sqlc.arg(agent_id)
   AND claim_token_hash = sqlc.arg(claim_token_hash)
-  AND state = 'cancel_requested';
+  AND state IN ('cancel_requested', 'cancel_unconfirmed');
 
 -- name: GetRemoteStepLogBySequence :one
 SELECT l.* FROM deployment_logs l

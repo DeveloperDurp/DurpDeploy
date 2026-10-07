@@ -16,7 +16,7 @@ UPDATE remote_deployment_claims SET state = 'cancelled',
 WHERE deployment_id = ?2
   AND agent_id = ?3
   AND claim_token_hash = ?4
-  AND state = 'cancel_requested'
+  AND state IN ('cancel_requested', 'cancel_unconfirmed')
 `
 
 type AcknowledgeRemoteDeploymentCancellationParams struct {
@@ -349,7 +349,7 @@ UPDATE remote_deployment_claims SET state = ?1,
 WHERE remote_deployment_claims.deployment_id = ?4
   AND remote_deployment_claims.agent_id = ?5
   AND remote_deployment_claims.claim_token_hash = ?6
-  AND (remote_deployment_claims.state = 'started' OR
+  AND (remote_deployment_claims.state IN ('started', 'lost', 'cancel_unconfirmed') OR
       (remote_deployment_claims.state = 'cancel_requested' AND ?1 = 'cleanup_unconfirmed'))
   AND remote_deployment_claims.started_at IS NOT NULL
   AND (?1 = 'succeeded' OR ?1 = 'failed'
@@ -357,7 +357,7 @@ WHERE remote_deployment_claims.deployment_id = ?4
   AND EXISTS (SELECT 1 FROM deployments d
       WHERE d.id = remote_deployment_claims.deployment_id
         AND d.assigned_agent_id = remote_deployment_claims.agent_id
-        AND d.status IN ('pending', 'running'))
+        AND d.status IN ('running', 'failed'))
   AND EXISTS (SELECT 1 FROM agents a
       WHERE a.id = remote_deployment_claims.agent_id AND a.status = 'active'
         AND EXISTS (SELECT 1 FROM agent_pairings p
@@ -392,7 +392,7 @@ const finishRemoteDeploymentStatus = `-- name: FinishRemoteDeploymentStatus :exe
 UPDATE deployments SET status = ?1, finished_at = ?2
 WHERE id = ?3
   AND assigned_agent_id = ?4
-  AND status = 'running'
+  AND (status = 'running' OR (status = 'failed' AND ?1 = 'cleanup_unconfirmed'))
 `
 
 type FinishRemoteDeploymentStatusParams struct {

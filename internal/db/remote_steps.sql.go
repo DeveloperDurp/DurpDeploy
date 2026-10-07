@@ -16,7 +16,7 @@ UPDATE remote_step_runs SET state = 'cancelled', finished_at = ?1,
 WHERE deployment_id = ?2
   AND step_index = ?3 AND agent_id = ?4
   AND claim_token_hash = ?5
-  AND state = 'cancel_requested'
+  AND state IN ('cancel_requested', 'cancel_unconfirmed')
 `
 
 type AcknowledgeRemoteStepCancellationParams struct {
@@ -232,7 +232,8 @@ UPDATE remote_step_runs SET state = ?1, finished_at = ?2,
 WHERE deployment_id = ?3
   AND step_index = ?4 AND agent_id = ?5
   AND claim_token_hash = ?6
-  AND (state = 'started' OR (state = 'cancel_requested' AND ?1 = 'cleanup_unconfirmed'))
+  AND (state IN ('started', 'lost', 'cancel_unconfirmed')
+      OR (state = 'cancel_requested' AND ?1 = 'cleanup_unconfirmed'))
 `
 
 type FinishRemoteStepRunParams struct {

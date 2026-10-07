@@ -55,12 +55,13 @@ func finishRemoteDeploymentLifecycle(
 	if err != nil {
 		return RemoteTerminalResult{}, err
 	}
-	if claim.State == state && deployment.Status == state {
+	if claim.State == state {
 		return RemoteTerminalResult{}, nil
 	}
 	if (state != "succeeded" && state != "failed" && state != "cleanup_unconfirmed") ||
-		(claim.State != "started" && !(claim.State == "cancel_requested" && state == "cleanup_unconfirmed")) ||
-		deployment.Status != "running" {
+		(claim.State != "started" && claim.State != "lost" && claim.State != "cancel_unconfirmed" &&
+			!(claim.State == "cancel_requested" && state == "cleanup_unconfirmed")) ||
+		(deployment.Status != "running" && deployment.Status != "failed") {
 		return RemoteTerminalResult{}, ErrRemoteLifecycleConflict
 	}
 	release, err := q.GetRelease(ctx, deployment.ReleaseID)
@@ -87,6 +88,10 @@ func finishRemoteDeploymentLifecycle(
 	)
 	if err != nil || changed != 1 {
 		return RemoteTerminalResult{}, transitionError(err)
+	}
+	// A late outcome resolves the claim without reviving a failed deployment.
+	if deployment.Status == "failed" && state != "cleanup_unconfirmed" {
+		return RemoteTerminalResult{}, nil
 	}
 	changed, err = q.FinishRemoteDeploymentStatus(
 		ctx,
@@ -143,10 +148,11 @@ func acknowledgeRemoteCancellation(
 	if err != nil {
 		return false, err
 	}
-	if claim.State == "cancelled" && deployment.Status == "cancelled" {
+	if claim.State == "cancelled" {
 		return false, nil
 	}
-	if claim.State != "cancel_requested" || deployment.Status != "running" {
+	if (claim.State != "cancel_requested" && claim.State != "cancel_unconfirmed") ||
+		(deployment.Status != "running" && deployment.Status != "failed") {
 		return false, ErrRemoteLifecycleConflict
 	}
 	rows, err := q.AcknowledgeRemoteDeploymentCancellation(
@@ -160,6 +166,9 @@ func acknowledgeRemoteCancellation(
 	)
 	if err != nil || rows != 1 {
 		return false, transitionError(err)
+	}
+	if deployment.Status == "failed" {
+		return true, nil
 	}
 	if err := cancelRemoteDeploymentStatus(ctx, q, now, identity); err != nil {
 		return false, err

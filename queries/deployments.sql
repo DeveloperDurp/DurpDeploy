@@ -165,7 +165,9 @@ UPDATE deployments SET status = CASE WHEN EXISTS (
     SELECT 1 FROM remote_step_runs r WHERE r.deployment_id = deployments.id
       AND r.state = 'cleanup_unconfirmed') THEN 'cleanup_unconfirmed' ELSE 'failed' END,
     finished_at = sqlc.arg(now)
-WHERE status = 'running' AND assigned_agent_id IS NULL
+WHERE (status = 'running' OR (status = 'failed' AND EXISTS (
+    SELECT 1 FROM remote_step_runs r WHERE r.deployment_id = deployments.id
+      AND r.state = 'cleanup_unconfirmed'))) AND assigned_agent_id IS NULL
   AND EXISTS (
       SELECT 1 FROM remote_step_runs r
       WHERE r.deployment_id = deployments.id
