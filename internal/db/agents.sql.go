@@ -69,7 +69,7 @@ func (q *Queries) AddAgentLabel(ctx context.Context, arg AddAgentLabelParams) (i
 }
 
 const createAgent = `-- name: CreateAgent :one
-INSERT INTO agents (id, name, endpoint) VALUES (?, ?, ?) RETURNING id, name, endpoint, status, agent_version, certificate_pem, certificate_fingerprint, encrypted_identity, last_heartbeat_at, revoked_at, created_at, updated_at, draining, health_state, agent_protocol
+INSERT INTO agents (id, name, endpoint) VALUES (?, ?, ?) RETURNING id, name, endpoint, status, agent_version, certificate_pem, certificate_fingerprint, encrypted_identity, last_heartbeat_at, revoked_at, created_at, updated_at, draining, health_state, agent_protocol, deleted_at
 `
 
 type CreateAgentParams struct {
@@ -97,6 +97,7 @@ func (q *Queries) CreateAgent(ctx context.Context, arg CreateAgentParams) (Agent
 		&i.Draining,
 		&i.HealthState,
 		&i.AgentProtocol,
+		&i.DeletedAt,
 	)
 	return i, err
 }
@@ -162,7 +163,7 @@ func (q *Queries) DeletePendingAgent(ctx context.Context, id string) (int64, err
 }
 
 const getAgent = `-- name: GetAgent :one
-SELECT id, name, endpoint, status, agent_version, certificate_pem, certificate_fingerprint, encrypted_identity, last_heartbeat_at, revoked_at, created_at, updated_at, draining, health_state, agent_protocol FROM agents WHERE id = ?
+SELECT id, name, endpoint, status, agent_version, certificate_pem, certificate_fingerprint, encrypted_identity, last_heartbeat_at, revoked_at, created_at, updated_at, draining, health_state, agent_protocol, deleted_at FROM agents WHERE id = ? AND deleted_at IS NULL
 `
 
 func (q *Queries) GetAgent(ctx context.Context, id string) (Agent, error) {
@@ -184,6 +185,7 @@ func (q *Queries) GetAgent(ctx context.Context, id string) (Agent, error) {
 		&i.Draining,
 		&i.HealthState,
 		&i.AgentProtocol,
+		&i.DeletedAt,
 	)
 	return i, err
 }
@@ -311,7 +313,7 @@ func (q *Queries) ListAgentLabels(ctx context.Context, agentID string) ([]string
 }
 
 const listAgents = `-- name: ListAgents :many
-SELECT id, name, endpoint, status, agent_version, certificate_pem, certificate_fingerprint, encrypted_identity, last_heartbeat_at, revoked_at, created_at, updated_at, draining, health_state, agent_protocol FROM agents ORDER BY name, id
+SELECT id, name, endpoint, status, agent_version, certificate_pem, certificate_fingerprint, encrypted_identity, last_heartbeat_at, revoked_at, created_at, updated_at, draining, health_state, agent_protocol, deleted_at FROM agents WHERE deleted_at IS NULL ORDER BY name, id
 `
 
 func (q *Queries) ListAgents(ctx context.Context) ([]Agent, error) {
@@ -339,6 +341,7 @@ func (q *Queries) ListAgents(ctx context.Context) ([]Agent, error) {
 			&i.Draining,
 			&i.HealthState,
 			&i.AgentProtocol,
+			&i.DeletedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -471,6 +474,27 @@ WHERE id = ? AND status IN ('pending', 'active', 'disabled')
 
 func (q *Queries) LockRevocableAgent(ctx context.Context, id string) (int64, error) {
 	result, err := q.db.ExecContext(ctx, lockRevocableAgent, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const markAgentDeleted = `-- name: MarkAgentDeleted :execrows
+UPDATE agents SET deleted_at = unixepoch(), updated_at = unixepoch()
+WHERE id = ? AND status = 'revoked' AND deleted_at IS NULL
+  AND NOT EXISTS (SELECT 1 FROM remote_step_runs s
+      WHERE s.agent_id = agents.id
+        AND (s.state IN ('claimed', 'started', 'cancel_requested', 'lost', 'cancel_unconfirmed')
+          OR (s.state = 'cleanup_unconfirmed' AND s.cleanup_confirmed_at IS NULL)))
+  AND NOT EXISTS (SELECT 1 FROM remote_deployment_claims c
+      WHERE c.agent_id = agents.id
+        AND (c.state IN ('claimed', 'started', 'cancel_requested', 'lost', 'cancel_unconfirmed')
+          OR (c.state = 'cleanup_unconfirmed' AND c.cleanup_confirmed_at IS NULL)))
+`
+
+func (q *Queries) MarkAgentDeleted(ctx context.Context, id string) (int64, error) {
+	result, err := q.db.ExecContext(ctx, markAgentDeleted, id)
 	if err != nil {
 		return 0, err
 	}
@@ -633,7 +657,7 @@ UPDATE agents SET status = ?1, updated_at = unixepoch(),
     revoked_at = CASE WHEN ?1 = 'revoked' THEN unixepoch() ELSE revoked_at END
 WHERE id = ?2 AND status IN ('pending', 'active', 'disabled')
   AND (?1 = 'revoked'
-       OR (status IN ('active', 'disabled') AND (?1 = 'active' OR ?1 = 'disabled'))) RETURNING id, name, endpoint, status, agent_version, certificate_pem, certificate_fingerprint, encrypted_identity, last_heartbeat_at, revoked_at, created_at, updated_at, draining, health_state, agent_protocol
+       OR (status IN ('active', 'disabled') AND (?1 = 'active' OR ?1 = 'disabled'))) RETURNING id, name, endpoint, status, agent_version, certificate_pem, certificate_fingerprint, encrypted_identity, last_heartbeat_at, revoked_at, created_at, updated_at, draining, health_state, agent_protocol, deleted_at
 `
 
 type SetAgentStatusParams struct {
@@ -660,6 +684,7 @@ func (q *Queries) SetAgentStatus(ctx context.Context, arg SetAgentStatusParams) 
 		&i.Draining,
 		&i.HealthState,
 		&i.AgentProtocol,
+		&i.DeletedAt,
 	)
 	return i, err
 }
@@ -709,7 +734,7 @@ func (q *Queries) TouchAgentHeartbeat(ctx context.Context, arg TouchAgentHeartbe
 
 const updateAgent = `-- name: UpdateAgent :one
 UPDATE agents SET name = ?, endpoint = ?, updated_at = unixepoch()
-WHERE id = ? AND status IN ('pending', 'active', 'disabled') RETURNING id, name, endpoint, status, agent_version, certificate_pem, certificate_fingerprint, encrypted_identity, last_heartbeat_at, revoked_at, created_at, updated_at, draining, health_state, agent_protocol
+WHERE id = ? AND status IN ('pending', 'active', 'disabled') RETURNING id, name, endpoint, status, agent_version, certificate_pem, certificate_fingerprint, encrypted_identity, last_heartbeat_at, revoked_at, created_at, updated_at, draining, health_state, agent_protocol, deleted_at
 `
 
 type UpdateAgentParams struct {
@@ -737,6 +762,7 @@ func (q *Queries) UpdateAgent(ctx context.Context, arg UpdateAgentParams) (Agent
 		&i.Draining,
 		&i.HealthState,
 		&i.AgentProtocol,
+		&i.DeletedAt,
 	)
 	return i, err
 }

@@ -24,6 +24,7 @@ type Agent struct {
 	Draining               int64          `json:"draining"`
 	HealthState            string         `json:"health_state"`
 	AgentProtocol          sql.NullString `json:"agent_protocol"`
+	DeletedAt              sql.NullInt64  `json:"deleted_at"`
 }
 
 type AgentContainerInterpreter struct {

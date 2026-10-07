@@ -181,6 +181,14 @@ The original terminal result remains visible after confirmation.
 Re-pairing a revoked agent returns `409` while its remote execution or cleanup
 remains unconfirmed. Reconcile its workloads before revocation; a replacement
 installation cannot confirm cleanup for the old installation.
+Administrators may remove an agent from inventory with
+`DELETE /api/v1/admin/agents/{id}` (empty body or `{}`). Success is `204`; an
+unknown/deleted agent returns `404`; unresolved execution or cleanup returns
+`409` and leaves the agent unchanged. Drain and reconcile workloads first.
+Deletion revokes access and retains historical deployment references. Deleted
+agents disappear from admin list/detail endpoints and cannot be re-paired with
+their old identity. A new identity can register the same endpoint. The existing
+`POST /api/v1/admin/agents/{id}/revoke` keeps the agent visible for later re-pairing.
 After a heartbeat or cancellation timeout, the same paired agent can replay
 its durable terminal report with the original claim token. This resolves the
 remote uncertainty without changing a failed deployment to success. A late

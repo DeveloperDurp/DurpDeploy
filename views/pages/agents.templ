@@ -129,13 +129,13 @@ templ AgentsPage(agents []db.Agent, interpreters map[string][]string, health map
 											<div class="flex flex-col items-start gap-1 sm:flex-row sm:flex-wrap">
 											<a class="btn btn-ghost btn-xs" href={ templ.SafeURL("/admin/agents/" + agent.ID) }>Edit</a>
 											@AgentDrainControl(agent, "btn-xs", "/admin/agents")
-											if agent.Status != "revoked" {
+											if CanWrite(ctx) {
 												<button
 													class="btn btn-error btn-xs"
-													hx-post={ "/admin/agents/" + agent.ID + "/revoke" }
-													hx-confirm={ "Revoke agent " + agent.Name + " (" + agent.ID + ")? Active remote work will be terminated." }
+													hx-post={ "/admin/agents/" + agent.ID + "/delete" }
+													hx-confirm={ "Delete agent " + agent.Name + " (" + agent.ID + ")? It will be removed from the inventory and lose access. Deployment history is retained." }
 												>
-													Revoke
+													Delete
 												</button>
 											}
 										</div>
@@ -218,12 +218,14 @@ templ AgentDetailPage(agent db.Agent, labels []string, interpreters []string, en
 				<div class="flex flex-wrap items-center gap-2">
 					if agent.Status != "revoked" {
 					@AgentDrainControl(agent, "btn-sm", "/admin/agents/" + agent.ID)
+					}
+					if CanWrite(ctx) {
 					<button
 						class="btn btn-error btn-sm"
-						hx-post={ "/admin/agents/" + agent.ID + "/revoke" }
-						hx-confirm={ "Revoke agent " + agent.Name + " (" + agent.ID + ")? Active remote work will be terminated." }
+						hx-post={ "/admin/agents/" + agent.ID + "/delete" }
+						hx-confirm={ "Delete agent " + agent.Name + " (" + agent.ID + ")? It will be removed from the inventory and lose access. Deployment history is retained." }
 					>
-						Revoke agent
+						Delete agent
 					</button>
 					}
 					<a class="btn btn-ghost btn-sm" href="/admin/agents">Back</a>

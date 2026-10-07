@@ -6,6 +6,22 @@ maintenance, and recovery.
 
 ## Fleet maintenance and health
 
+**Delete** removes an agent from the list and prevents further access. Both the
+list and detail page ask for confirmation. Deployment history keeps its agent
+references; the server retains a revoked tombstone and its identity pins.
+Deletion is refused while execution or cleanup is unconfirmed. Drain the agent,
+let its work finish, and reconcile cleanup before deleting it. A refused delete
+leaves the agent unchanged. Previously revoked agents can also be deleted when
+no unresolved work remains.
+
+Administrators can call `DELETE /api/v1/admin/agents/{id}` with an empty body or
+`{}`. Success returns `204`; missing or deleted agents return `404`; unresolved
+remote work returns `409`. Successful deletion records `delete_agent` in the
+audit log. The existing `POST /api/v1/admin/agents/{id}/revoke` remains available
+for revoking access while retaining the inventory entry and re-pairing option.
+A deleted identity cannot be re-paired. Register a new agent identity to reuse
+the same endpoint.
+
 Admins manage the fleet at `/admin/agents`. **Drain** stops new claims and
 keeps the agent authenticated. Claims issued before Drain can still start,
 send logs and heartbeats, and finish. Waiting work stays queued; later remote

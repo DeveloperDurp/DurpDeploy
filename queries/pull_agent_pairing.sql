@@ -6,12 +6,12 @@ VALUES (?, ?, ?, ?, ?) RETURNING *;
 SELECT * FROM agent_pairings WHERE agent_id = ?;
 
 -- name: ListAgentPairingRecoveryCandidates :many
-SELECT p.*, a.endpoint
+SELECT p.*, a.endpoint, a.deleted_at
 FROM agent_pairings p
 JOIN agents a ON a.id = p.agent_id
 WHERE p.pairing_code_hash = sqlc.arg(pairing_code_hash)
    OR p.agent_pin = sqlc.arg(agent_pin)
-   OR a.endpoint = sqlc.arg(endpoint)
+   OR (a.endpoint = sqlc.arg(endpoint) AND a.deleted_at IS NULL)
 ORDER BY p.agent_id;
 
 -- name: CreateCommittingAgentPairing :one

@@ -2,14 +2,26 @@
 INSERT INTO agents (id, name, endpoint) VALUES (?, ?, ?) RETURNING *;
 
 -- name: GetAgent :one
-SELECT * FROM agents WHERE id = ?;
+SELECT * FROM agents WHERE id = ? AND deleted_at IS NULL;
 
 -- name: LockRevocableAgent :execrows
 UPDATE agents SET updated_at = updated_at -- NOSONAR: intentional write lock
 WHERE id = ? AND status IN ('pending', 'active', 'disabled');
 
 -- name: ListAgents :many
-SELECT * FROM agents ORDER BY name, id;
+SELECT * FROM agents WHERE deleted_at IS NULL ORDER BY name, id;
+
+-- name: MarkAgentDeleted :execrows
+UPDATE agents SET deleted_at = unixepoch(), updated_at = unixepoch()
+WHERE id = ? AND status = 'revoked' AND deleted_at IS NULL
+  AND NOT EXISTS (SELECT 1 FROM remote_step_runs s
+      WHERE s.agent_id = agents.id
+        AND (s.state IN ('claimed', 'started', 'cancel_requested', 'lost', 'cancel_unconfirmed')
+          OR (s.state = 'cleanup_unconfirmed' AND s.cleanup_confirmed_at IS NULL)))
+  AND NOT EXISTS (SELECT 1 FROM remote_deployment_claims c
+      WHERE c.agent_id = agents.id
+        AND (c.state IN ('claimed', 'started', 'cancel_requested', 'lost', 'cancel_unconfirmed')
+          OR (c.state = 'cleanup_unconfirmed' AND c.cleanup_confirmed_at IS NULL)));
 
 -- name: UpdateAgent :one
 UPDATE agents SET name = ?, endpoint = ?, updated_at = unixepoch()

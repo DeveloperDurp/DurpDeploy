@@ -46,6 +46,11 @@ func (r *Repository) PrepareAgentPairing(
 		if err != nil {
 			return err
 		}
+		for _, candidate := range candidates {
+			if candidate.DeletedAt.Valid {
+				return ErrPairingTupleConflict
+			}
+		}
 		if tuple.ExpectedAgentID != "" {
 			agent, err := q.GetAgent(ctx, tuple.ExpectedAgentID)
 			if err != nil {

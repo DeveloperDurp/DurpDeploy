@@ -186,6 +186,68 @@
             "bearer": []
           }
         ]
+      },
+      "delete": {
+        "tags": [
+          "admin-agents"
+        ],
+        "summary": "Delete an agent from the inventory, retaining deployment history.",
+        "operationId": "deleteAgent",
+        "responses": {
+          "204": {
+            "description": "EmptyResponse is returned for no-content endpoints.",
+            "schema": {
+              "$ref": "#/definitions/EmptyResponse"
+            }
+          },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "409": {
+            "description": "Conflict error response.",
+            "schema": {
+              "$ref": "#/definitions/ConflictError"
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
+            }
+          },
+          "500": {
+            "description": "Server error response.",
+            "schema": {
+              "$ref": "#/definitions/ServerError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
       }
     },
     "/admin/agents/{id}/drain": {

@@ -261,12 +261,12 @@ func (q *Queries) GetAgentPairing(ctx context.Context, agentID string) (AgentPai
 }
 
 const listAgentPairingRecoveryCandidates = `-- name: ListAgentPairingRecoveryCandidates :many
-SELECT p.agent_id, p.pairing_code_hash, p.agent_public_identity, p.agent_pin, p.server_public_identity, p.server_pin, p.encrypted_identity, p.state, p.expires_at, p.paired_at, p.created_at, p.updated_at, p.server_pull_endpoint, a.endpoint
+SELECT p.agent_id, p.pairing_code_hash, p.agent_public_identity, p.agent_pin, p.server_public_identity, p.server_pin, p.encrypted_identity, p.state, p.expires_at, p.paired_at, p.created_at, p.updated_at, p.server_pull_endpoint, a.endpoint, a.deleted_at
 FROM agent_pairings p
 JOIN agents a ON a.id = p.agent_id
 WHERE p.pairing_code_hash = ?1
    OR p.agent_pin = ?2
-   OR a.endpoint = ?3
+   OR (a.endpoint = ?3 AND a.deleted_at IS NULL)
 ORDER BY p.agent_id
 `
 
@@ -291,6 +291,7 @@ type ListAgentPairingRecoveryCandidatesRow struct {
 	UpdatedAt            int64          `json:"updated_at"`
 	ServerPullEndpoint   sql.NullString `json:"server_pull_endpoint"`
 	Endpoint             string         `json:"endpoint"`
+	DeletedAt            sql.NullInt64  `json:"deleted_at"`
 }
 
 func (q *Queries) ListAgentPairingRecoveryCandidates(ctx context.Context, arg ListAgentPairingRecoveryCandidatesParams) ([]ListAgentPairingRecoveryCandidatesRow, error) {
@@ -317,6 +318,7 @@ func (q *Queries) ListAgentPairingRecoveryCandidates(ctx context.Context, arg Li
 			&i.UpdatedAt,
 			&i.ServerPullEndpoint,
 			&i.Endpoint,
+			&i.DeletedAt,
 		); err != nil {
 			return nil, err
 		}
