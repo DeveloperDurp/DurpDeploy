@@ -210,9 +210,9 @@ templ AgentDetailPage(agent db.Agent, labels []string, interpreters []string, en
 	} else {
 		@layouts.Base("Agent "+agent.Name, currentPath) {
 		<div class="space-y-6">
-			<div class="flex flex-wrap items-start justify-between gap-3">
+			<div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
 				<div class="min-w-0 flex-1">
-					<h1 class="text-3xl font-bold">{ agent.Name }</h1>
+					<h1 class="break-words text-3xl font-bold">{ agent.Name }</h1>
 					<p class="break-all font-mono text-sm opacity-60">{ agent.ID }</p>
 				</div>
 				<div class="flex flex-wrap items-center gap-2">
@@ -390,10 +390,10 @@ templ AgentEnvironmentLabels(agent db.Agent, labels []db.Environment, availableE
 			} else {
 				<div class="flex flex-wrap gap-2">
 					for _, environment := range labels {
-						<form method="post" action={ templ.SafeURL("/admin/agents/" + agent.ID + "/environments/delete") } class="flex items-center gap-1 rounded-box bg-base-100 p-2">
+						<form method="post" action={ templ.SafeURL("/admin/agents/" + agent.ID + "/environments/delete") } class="flex max-w-full flex-wrap items-center gap-1 rounded-box bg-base-100 p-2">
 							<input type="hidden" name="environment_id" value={ fmt.Sprint(environment.ID) }/>
-							<span class="badge badge-outline">{ environment.Name }</span>
-							<button type="submit" class="btn btn-error btn-xs" aria-label={ "Remove environment label " + environment.Name }>Remove</button>
+							<span class="badge badge-outline h-auto min-w-0 max-w-full break-words whitespace-normal py-1">{ environment.Name }</span>
+							<button type="submit" class="btn btn-error btn-xs shrink-0" aria-label={ "Remove environment label " + environment.Name }>Remove</button>
 						</form>
 					}
 				</div>
@@ -430,10 +430,10 @@ templ AgentLabels(agent db.Agent, labels []string) {
 			} else {
 				<div class="flex flex-wrap gap-2">
 					for _, label := range labels {
-						<form method="post" action={ templ.SafeURL("/admin/agents/" + agent.ID + "/labels/delete") } class="flex items-center gap-1 rounded-box bg-base-100 p-2">
+						<form method="post" action={ templ.SafeURL("/admin/agents/" + agent.ID + "/labels/delete") } class="flex max-w-full flex-wrap items-center gap-1 rounded-box bg-base-100 p-2">
 							<input type="hidden" name="label" value={ label }/>
-							<span class="badge badge-outline">{ label }</span>
-							<button type="submit" class="btn btn-error btn-xs" aria-label={ "Remove label " + label }>Remove</button>
+							<span class="badge badge-outline h-auto min-w-0 max-w-full break-words whitespace-normal py-1">{ label }</span>
+							<button type="submit" class="btn btn-error btn-xs shrink-0" aria-label={ "Remove label " + label }>Remove</button>
 						</form>
 					}
 				</div>
