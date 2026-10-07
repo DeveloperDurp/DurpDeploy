@@ -23,7 +23,9 @@ func TestAgentDurableOutcomeAfterMaintenanceAndRestart(t *testing.T) {
 			{"cleanup_unconfirmed", false},
 			{"cleanup_unconfirmed", true},
 			{"succeeded", false},
+			{"succeeded", true},
 			{"failed", false},
+			{"failed", true},
 			{"cancelled", true},
 		} {
 			state := outcome.state

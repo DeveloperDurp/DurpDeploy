@@ -188,6 +188,7 @@ WHERE remote_deployment_claims.deployment_id = sqlc.arg(deployment_id)
 -- name: FinishRemoteDeployment :execrows
 UPDATE remote_deployment_claims SET state = sqlc.arg(state),
     reason = sqlc.narg(reason), finished_at = sqlc.arg(now),
+    cancel_requested_at = NULL,
     updated_at = sqlc.arg(now)
 WHERE remote_deployment_claims.deployment_id = sqlc.arg(deployment_id)
   AND remote_deployment_claims.agent_id = sqlc.arg(agent_id)

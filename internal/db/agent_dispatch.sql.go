@@ -345,6 +345,7 @@ func (q *Queries) FailWaitingRemotePayload(ctx context.Context, arg FailWaitingR
 const finishRemoteDeployment = `-- name: FinishRemoteDeployment :execrows
 UPDATE remote_deployment_claims SET state = ?1,
     reason = ?2, finished_at = ?3,
+    cancel_requested_at = NULL,
     updated_at = ?3
 WHERE remote_deployment_claims.deployment_id = ?4
   AND remote_deployment_claims.agent_id = ?5
