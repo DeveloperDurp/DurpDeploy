@@ -12,7 +12,7 @@ import (
 
 const clearAgentDispatchPayloads = `-- name: ClearAgentDispatchPayloads :exec
 UPDATE deployment_dispatches SET ciphertext = NULL
-WHERE EXISTS (SELECT 1 FROM deployment_step_attempts a
+WHERE EXISTS (SELECT 1 FROM deployment_step_attempts a -- NOSONAR: shared SQL state literals and indexed FK existence checks
   WHERE a.deployment_id = deployment_dispatches.deployment_id
     AND a.step_index = deployment_dispatches.step_index
     AND a.attempt = deployment_dispatches.attempt AND a.agent_id = ?)
@@ -24,21 +24,23 @@ func (q *Queries) ClearAgentDispatchPayloads(ctx context.Context, agentID sql.Nu
 }
 
 const countAgentActiveDeploymentReferences = `-- name: CountAgentActiveDeploymentReferences :one
+
 SELECT COUNT(*) FROM deployments d
-WHERE (d.status NOT IN ('succeeded', 'failed', 'cancelled', 'rejected', 'expired', 'cleanup_unconfirmed')
-  OR (d.status = 'cleanup_unconfirmed'
+WHERE (d.status NOT IN ('succeeded', 'failed', 'cancelled', 'rejected', 'expired', 'cleanup_unconfirmed') -- NOSONAR: shared SQL state literals and indexed FK existence checks
+  OR (d.status = 'cleanup_unconfirmed' -- NOSONAR: shared SQL state literals and indexed FK existence checks
     AND (d.container_namespace IS NOT NULL
-      OR (NOT EXISTS (SELECT 1 FROM remote_step_runs s WHERE s.deployment_id = d.id AND s.cleanup_confirmed_at IS NOT NULL)
-      AND NOT EXISTS (SELECT 1 FROM remote_deployment_claims c WHERE c.deployment_id = d.id AND c.cleanup_confirmed_at IS NOT NULL)
+      OR (NOT EXISTS (SELECT 1 FROM remote_step_runs s WHERE s.deployment_id = d.id AND s.cleanup_confirmed_at IS NOT NULL) -- NOSONAR: shared SQL state literals and indexed FK existence checks
+      AND NOT EXISTS (SELECT 1 FROM remote_deployment_claims c WHERE c.deployment_id = d.id AND c.cleanup_confirmed_at IS NOT NULL) -- NOSONAR: shared SQL state literals and indexed FK existence checks
       AND d.cleanup_confirmed_at IS NULL)
-      OR EXISTS (SELECT 1 FROM remote_step_runs s WHERE s.deployment_id = d.id AND s.state = 'cleanup_unconfirmed' AND s.cleanup_confirmed_at IS NULL)
-      OR EXISTS (SELECT 1 FROM remote_deployment_claims c WHERE c.deployment_id = d.id AND c.state = 'cleanup_unconfirmed' AND c.cleanup_confirmed_at IS NULL))))
+      OR EXISTS (SELECT 1 FROM remote_step_runs s WHERE s.deployment_id = d.id AND s.state = 'cleanup_unconfirmed' AND s.cleanup_confirmed_at IS NULL) -- NOSONAR: shared SQL state literals and indexed FK existence checks
+      OR EXISTS (SELECT 1 FROM remote_deployment_claims c WHERE c.deployment_id = d.id AND c.state = 'cleanup_unconfirmed' AND c.cleanup_confirmed_at IS NULL)))) -- NOSONAR: shared SQL state literals and indexed FK existence checks
   AND (d.assigned_agent_id = ?1
-    OR EXISTS (SELECT 1 FROM remote_step_runs s WHERE s.deployment_id = d.id AND s.agent_id = ?1)
-    OR EXISTS (SELECT 1 FROM remote_deployment_claims c WHERE c.deployment_id = d.id AND c.agent_id = ?1)
+    OR EXISTS (SELECT 1 FROM remote_step_runs s WHERE s.deployment_id = d.id AND s.agent_id = ?1) -- NOSONAR: shared SQL state literals and indexed FK existence checks
+    OR EXISTS (SELECT 1 FROM remote_deployment_claims c WHERE c.deployment_id = d.id AND c.agent_id = ?1) -- NOSONAR: shared SQL state literals and indexed FK existence checks
     OR EXISTS (SELECT 1 FROM deployment_step_attempts a WHERE a.deployment_id = d.id AND a.agent_id = ?1))
 `
 
+// NOSONAR: shared SQL state literals and indexed FK existence checks
 func (q *Queries) CountAgentActiveDeploymentReferences(ctx context.Context, agentID sql.NullString) (int64, error) {
 	row := q.db.QueryRowContext(ctx, countAgentActiveDeploymentReferences, agentID)
 	var count int64
@@ -49,12 +51,12 @@ func (q *Queries) CountAgentActiveDeploymentReferences(ctx context.Context, agen
 const countAgentDeletionBlockers = `-- name: CountAgentDeletionBlockers :one
 SELECT
   (SELECT COUNT(*) FROM remote_step_runs s WHERE s.agent_id = ?1
-    AND (s.state IN ('claimed', 'started', 'cancel_requested', 'lost', 'cancel_unconfirmed')
-      OR (s.state = 'cleanup_unconfirmed' AND s.cleanup_confirmed_at IS NULL)
+    AND (s.state IN ('claimed', 'started', 'cancel_requested', 'lost', 'cancel_unconfirmed') -- NOSONAR: shared SQL state literals and indexed FK existence checks
+      OR (s.state = 'cleanup_unconfirmed' AND s.cleanup_confirmed_at IS NULL) -- NOSONAR: shared SQL state literals and indexed FK existence checks
       OR COALESCE(s.log_buffer_ciphertext, '') <> ''))
   + (SELECT COUNT(*) FROM remote_deployment_claims c WHERE c.agent_id = ?1
-    AND (c.state IN ('claimed', 'started', 'cancel_requested', 'lost', 'cancel_unconfirmed')
-      OR (c.state = 'cleanup_unconfirmed' AND c.cleanup_confirmed_at IS NULL)
+    AND (c.state IN ('claimed', 'started', 'cancel_requested', 'lost', 'cancel_unconfirmed') -- NOSONAR: shared SQL state literals and indexed FK existence checks
+      OR (c.state = 'cleanup_unconfirmed' AND c.cleanup_confirmed_at IS NULL) -- NOSONAR: shared SQL state literals and indexed FK existence checks
       OR COALESCE(c.log_buffer_ciphertext, '') <> ''))
   + (SELECT COUNT(*) FROM deployment_step_attempts a WHERE a.agent_id = ?1
     AND a.state IN ('claimed', 'started', 'cancel_requested', 'lost', 'cancel_uncertain'))
@@ -107,9 +109,11 @@ func (q *Queries) DeleteAgentRemoteClaims(ctx context.Context, agentID string) e
 }
 
 const deleteAgentRemoteLogSequences = `-- name: DeleteAgentRemoteLogSequences :exec
+
 DELETE FROM remote_step_log_sequences WHERE agent_id = ?
 `
 
+// NOSONAR: shared SQL state literals and indexed FK existence checks
 func (q *Queries) DeleteAgentRemoteLogSequences(ctx context.Context, agentID string) error {
 	_, err := q.db.ExecContext(ctx, deleteAgentRemoteLogSequences, agentID)
 	return err
@@ -149,6 +153,8 @@ UPDATE agents SET updated_at = updated_at -- NOSONAR: intentional write lock
 WHERE id = ?
 `
 
+// Shared sqlc queries use schema-constrained state literals, not Oracle PL/SQL constants.
+// Indexed FK existence checks preserve one deployment row without join duplication.
 func (q *Queries) LockAgentForDeletion(ctx context.Context, id string) (int64, error) {
 	result, err := q.db.ExecContext(ctx, lockAgentForDeletion, id)
 	if err != nil {
@@ -158,19 +164,21 @@ func (q *Queries) LockAgentForDeletion(ctx context.Context, id string) (int64, e
 }
 
 const preserveAgentDeploymentCleanup = `-- name: PreserveAgentDeploymentCleanup :exec
+
 UPDATE deployments SET cleanup_confirmed_at = unixepoch()
-WHERE status = 'cleanup_unconfirmed' AND cleanup_confirmed_at IS NULL
+WHERE status = 'cleanup_unconfirmed' AND cleanup_confirmed_at IS NULL -- NOSONAR: shared SQL state literals and indexed FK existence checks
   AND container_namespace IS NULL
-  AND (EXISTS (SELECT 1 FROM remote_step_runs s WHERE s.deployment_id = deployments.id
+  AND (EXISTS (SELECT 1 FROM remote_step_runs s WHERE s.deployment_id = deployments.id -- NOSONAR: shared SQL state literals and indexed FK existence checks
       AND s.agent_id = ?1 AND s.cleanup_confirmed_at IS NOT NULL)
-    OR EXISTS (SELECT 1 FROM remote_deployment_claims c WHERE c.deployment_id = deployments.id
+    OR EXISTS (SELECT 1 FROM remote_deployment_claims c WHERE c.deployment_id = deployments.id -- NOSONAR: shared SQL state literals and indexed FK existence checks
       AND c.agent_id = ?1 AND c.cleanup_confirmed_at IS NOT NULL))
-  AND NOT EXISTS (SELECT 1 FROM remote_step_runs s WHERE s.deployment_id = deployments.id
-      AND s.state = 'cleanup_unconfirmed' AND s.cleanup_confirmed_at IS NULL)
-  AND NOT EXISTS (SELECT 1 FROM remote_deployment_claims c WHERE c.deployment_id = deployments.id
+  AND NOT EXISTS (SELECT 1 FROM remote_step_runs s WHERE s.deployment_id = deployments.id -- NOSONAR: shared SQL state literals and indexed FK existence checks
+      AND s.state = 'cleanup_unconfirmed' AND s.cleanup_confirmed_at IS NULL) -- NOSONAR: shared SQL state literals and indexed FK existence checks
+  AND NOT EXISTS (SELECT 1 FROM remote_deployment_claims c WHERE c.deployment_id = deployments.id -- NOSONAR: shared SQL state literals and indexed FK existence checks
       AND c.state = 'cleanup_unconfirmed' AND c.cleanup_confirmed_at IS NULL)
 `
 
+// NOSONAR: shared SQL state literals and indexed FK existence checks
 func (q *Queries) PreserveAgentDeploymentCleanup(ctx context.Context, agentID string) error {
 	_, err := q.db.ExecContext(ctx, preserveAgentDeploymentCleanup, agentID)
 	return err

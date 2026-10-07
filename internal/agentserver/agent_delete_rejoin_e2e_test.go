@@ -74,32 +74,20 @@ func TestAgentDeleteRejoinE2E(t *testing.T) {
 		"address": listener.Endpoint(), "code": oldCode,
 		"fingerprint": f.identity.Fingerprint.String(),
 	}
-	body, err := json.Marshal(request)
-	if err != nil {
-		t.Fatal(err)
-	}
 	fleetRequest(t, srv, "POST", "/api/v1/admin/agents/pair", "admin",
-		string(body), http.StatusConflict)
+		agentDeletePairBody(t, request), http.StatusConflict)
 	request["code"] = base64.RawURLEncoding.EncodeToString(
 		bytes.Repeat([]byte{8}, 32),
 	)
-	body, err = json.Marshal(request)
-	if err != nil {
-		t.Fatal(err)
-	}
 	fleetRequest(t, srv, "POST", "/api/v1/admin/agents/pair", "admin",
-		string(body), http.StatusConflict)
+		agentDeletePairBody(t, request), http.StatusConflict)
 	fleetRequest(t, srv, "GET", "/api/v1/admin/agents/test-agent",
 		"admin", "", http.StatusNotFound)
 	request["code"] = listener.Offer().Code
-	body, err = json.Marshal(request)
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	// When: an administrator pairs the same fingerprint with its fresh code.
 	result := fleetRequest(t, srv, "POST", "/api/v1/admin/agents/pair", "admin",
-		string(body), http.StatusCreated)
+		agentDeletePairBody(t, request), http.StatusCreated)
 	var pairing agentserver.PairingResult
 	if err := json.Unmarshal(result, &pairing); err != nil {
 		t.Fatal(err)
@@ -144,4 +132,16 @@ func TestAgentDeleteRejoinE2E(t *testing.T) {
 	if int64(poll.DeploymentID) != next {
 		t.Fatalf("rejoined poll=%+v expected deployment=%d", poll, next)
 	}
+}
+
+func agentDeletePairBody(
+	t *testing.T,
+	request map[string]any,
+) string {
+	t.Helper()
+	body, err := json.Marshal(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(body)
 }
