@@ -201,7 +201,7 @@ func TestVerificationRollbackBrowserE2E(t *testing.T) {
 		t.Context(),
 		first.ID,
 	)
-	if err != nil || len(historical) != 1 ||
+	if err != nil || len(historical) != 2 ||
 		historical[0].ScriptBody != steps[0].ScriptBody {
 		t.Fatalf("historical steps=%+v error=%v", historical, err)
 	}
@@ -374,6 +374,13 @@ func TestVerificationRollbackBrowserE2E(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.completion(t, latest.ID, events.DeploymentSucceeded)
+	rollbackLogs := string(
+		f.api(t, "GET", "/api/v1"+currentPath+"/logs", nil, 200),
+	)
+	if !strings.Contains(rollbackLogs, "deployment-step-complete") ||
+		strings.Contains(rollbackLogs, "refreshed-release-step") {
+		t.Fatal("rollback did not execute the original deployment steps")
+	}
 	capture(
 		"rolled-back",
 		fmt.Sprintf("/deployments/%d", latest.ID),
