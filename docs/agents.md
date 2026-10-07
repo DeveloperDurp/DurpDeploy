@@ -274,9 +274,8 @@ retry while preserving the original outcome. If maintenance already marked a
 claim lost or cancellation unconfirmed, the agent can replay its durable
 terminal report using the original claim token. A late success does not change
 the failed deployment to success. A late cleanup failure still requires the
-ready v3 poll before the queue can advance.
-an explicit retry; it preserves the original terminal result. Never re-pair
-or remove state as a substitute for cleanup.
+ready v3 poll before the queue can advance. Never re-pair or remove state as
+a substitute for cleanup.
 
 ## Development container
 
