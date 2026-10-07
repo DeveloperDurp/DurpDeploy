@@ -129,10 +129,16 @@ func (r *Repository) PrepareAgentPairing(
 				if err != nil || deleted != 1 {
 					return ErrPairingTupleConflict
 				}
-				deleted, err = q.DeletePendingAgent(ctx, candidate.AgentID)
-				if err != nil || deleted != 1 {
+				agent, err := q.GetAgentForPairing(ctx, candidate.AgentID)
+				if err != nil || agent.Status != "pending" {
 					return ErrPairingTupleConflict
 				}
+				if _, err := q.UpdateAgent(ctx, db.UpdateAgentParams{
+					ID: agent.ID, Name: agent.Name, Endpoint: tuple.Endpoint,
+				}); err != nil {
+					return err
+				}
+				tuple.AgentID = agent.ID
 			} else if !samePairingTuple(
 				candidate,
 				tuple,
@@ -144,10 +150,12 @@ func (r *Repository) PrepareAgentPairing(
 				return nil
 			}
 		}
-		if _, err := q.CreateAgent(ctx, db.CreateAgentParams{
-			ID: tuple.AgentID, Name: tuple.AgentName, Endpoint: tuple.Endpoint,
-		}); err != nil {
-			return err
+		if len(candidates) == 0 {
+			if _, err := q.CreateAgent(ctx, db.CreateAgentParams{
+				ID: tuple.AgentID, Name: tuple.AgentName, Endpoint: tuple.Endpoint,
+			}); err != nil {
+				return err
+			}
 		}
 		pairing, err = q.CreateCommittingAgentPairing(
 			ctx,

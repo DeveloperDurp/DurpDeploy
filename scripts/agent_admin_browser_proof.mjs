@@ -727,6 +727,10 @@ async function main() {
 		const stale = await context.request.post(`${baseURL}/api/v1/admin/agents/pair`,
 			{ headers, data: pairRequest });
 		check(stale.status() === 409, "deleted agent accepted its old pairing code");
+		pairRequest.code = randomBytes(32).toString("base64url");
+		const wrong = await context.request.post(`${baseURL}/api/v1/admin/agents/pair`,
+			{ headers, data: pairRequest });
+		check(wrong.status() === 409, "agent accepted an incorrect fresh pairing code");
 		pairRequest.code = next.code;
 		const rejoined = await context.request.post(`${baseURL}/api/v1/admin/agents/pair`,
 			{ headers, data: pairRequest });

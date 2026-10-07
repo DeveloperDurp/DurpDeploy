@@ -149,19 +149,6 @@ func (q *Queries) DeleteAgentLabel(ctx context.Context, arg DeleteAgentLabelPara
 	return result.RowsAffected()
 }
 
-const deletePendingAgent = `-- name: DeletePendingAgent :execrows
-DELETE FROM agents WHERE id = ? AND status = 'pending'
-AND NOT EXISTS (SELECT 1 FROM agent_pairings WHERE agent_id = agents.id)
-`
-
-func (q *Queries) DeletePendingAgent(ctx context.Context, id string) (int64, error) {
-	result, err := q.db.ExecContext(ctx, deletePendingAgent, id)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
-}
-
 const getAgent = `-- name: GetAgent :one
 SELECT id, name, endpoint, status, agent_version, certificate_pem, certificate_fingerprint, encrypted_identity, last_heartbeat_at, revoked_at, created_at, updated_at, draining, health_state, agent_protocol, deleted_at FROM agents WHERE id = ? AND deleted_at IS NULL
 `

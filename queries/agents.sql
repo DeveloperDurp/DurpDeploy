@@ -69,10 +69,6 @@ WHERE id = sqlc.arg(id) AND status = 'active'
 -- name: SetAgentProtocol :exec
 UPDATE agents SET agent_protocol = ? WHERE id = ? AND status = 'active';
 
--- name: DeletePendingAgent :execrows
-DELETE FROM agents WHERE id = ? AND status = 'pending'
-AND NOT EXISTS (SELECT 1 FROM agent_pairings WHERE agent_id = agents.id);
-
 -- name: HeartbeatAgent :execrows
 UPDATE agents SET last_heartbeat_at = sqlc.arg(now), agent_version = sqlc.narg(agent_version),
     updated_at = sqlc.arg(now)

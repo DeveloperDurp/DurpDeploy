@@ -75,6 +75,15 @@ func TestAgentDeleteRejoinE2E(t *testing.T) {
 	}
 	fleetRequest(t, srv, "POST", "/api/v1/admin/agents/pair", "admin",
 		string(body), http.StatusConflict)
+	request["code"] = base64.RawURLEncoding.EncodeToString(
+		bytes.Repeat([]byte{8}, 32),
+	)
+	body, err = json.Marshal(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fleetRequest(t, srv, "POST", "/api/v1/admin/agents/pair", "admin",
+		string(body), http.StatusConflict)
 	request["code"] = listener.Offer().Code
 	body, err = json.Marshal(request)
 	if err != nil {
