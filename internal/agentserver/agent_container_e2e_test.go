@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"testing"
@@ -39,7 +40,13 @@ func TestAgentContainerAPIE2E(t *testing.T) {
 			"set AGENT_TEST_RUNTIME, AGENT_TEST_SOCKET, and AGENT_TEST_IMAGE",
 		)
 	}
-	f := newAgentFixture(t)
+	t.Setenv("TMPDIR", t.TempDir())
+	t.Setenv(
+		"DURPDEPLOY_CONTAINER_NAMESPACE",
+		fmt.Sprintf("issue99-api-%d", os.Getpid()),
+	)
+	f := newAgentFixtureWithDSN(t, filepath.Join(t.TempDir(), "agent.db")+
+		"?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)", nil)
 	state, err := agentstate.New(
 		f.server.URL,
 		[]agenttls.Fingerprint{f.serverIdentity.Fingerprint},
