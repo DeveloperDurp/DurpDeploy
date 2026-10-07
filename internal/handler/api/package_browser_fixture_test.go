@@ -174,6 +174,10 @@ func (b *packageBrowser) wait(t *testing.T, predicate string) {
 
 func (b *packageBrowser) screenshot(t *testing.T, name string) {
 	t.Helper()
+	b.evaluate(
+		t,
+		`new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve(true))))`,
+	)
 	directory := os.Getenv("DURPDEPLOY_PACKAGE_UI_EVIDENCE")
 	if directory == "" {
 		directory = t.TempDir()

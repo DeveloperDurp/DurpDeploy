@@ -120,6 +120,7 @@ templ RunbookFormPage(project db.Project, book db.Runbook, stepsJSON string, art
 							<label class="form-control" x-show="step.execution_target === 'agent'"><span class="label-text">Agent labels (comma separated)</span><input name="step_selectors" class="input input-bordered" x-model="step.agent_selectors_text" x-bind:disabled="step.execution_target !== 'agent'"/></label>
 							<input name="step_selectors" type="hidden" value="" x-bind:disabled="step.execution_target === 'agent'"/>
 							<label class="form-control" x-show="step.execution_target === 'agent'"><span class="label-text">Agent execution mode</span><select name="step_agent_mode" class="select select-bordered" x-model="step.agent_execution_mode" x-bind:disabled="step.execution_target !== 'agent'"><option value="host">Host</option><option value="container">Container</option></select></label>
+							<p class="text-sm opacity-70" x-show="step.execution_target === 'agent'">Containers require agent/3 and a ready Docker or Podman runtime.</p>
 							<input name="step_agent_mode" type="hidden" value="host" x-bind:disabled="step.execution_target === 'agent'"/>
 							<label class="form-control" x-show="usesContainer(step)"><span class="label-text">Container image</span><input name="step_image" class="input input-bordered" x-model="step.container_image" x-bind:disabled="!usesContainer(step)" x-bind:required="usesContainer(step)"/></label>
 							<input name="step_image" type="hidden" value="" x-bind:disabled="usesContainer(step)"/>
