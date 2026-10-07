@@ -198,6 +198,17 @@ func TestDeletedAgentPairingCannotBeReplayed(t *testing.T) {
 	if !errors.Is(err, repository.ErrPairingTupleConflict) {
 		t.Fatalf("pairing error=%v", err)
 	}
+	// A retry that read before deletion must still reject the consumed code.
+	if _, err := repo.Queries.ResetRevokedAgentPairing(t.Context(),
+		db.ResetRevokedAgentPairingParams{
+			AgentID: "a", PairingCodeHash: tuple.PairingCodeHash,
+			AgentPublicIdentity: "public", AgentPin: tuple.AgentPin,
+			ServerPublicIdentity: ns("server"),
+			ServerPin:            ns(strings.Repeat("b", 64)),
+			EncryptedIdentity:    ns("identity"), Now: 200, ExpiresAt: 500,
+		}); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("stale SQL retry accepted deleted code: %v", err)
+	}
 }
 
 func TestDeletedAgentCanRejoinWithFreshPairing(t *testing.T) {

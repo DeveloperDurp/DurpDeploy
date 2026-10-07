@@ -43,7 +43,9 @@ UPDATE agent_pairings SET
 WHERE agent_id = sqlc.arg(agent_id)
   AND EXISTS (SELECT 1 FROM agents
       WHERE id = agent_pairings.agent_id AND status = 'revoked'
-        AND (deleted_at IS NULL OR agent_pairings.state <> 'committing'))
+        AND (deleted_at IS NULL OR agent_pairings.state <> 'committing')
+        AND (deleted_pairing_code_hash IS NULL
+             OR deleted_pairing_code_hash <> sqlc.arg(pairing_code_hash)))
 RETURNING *;
 
 -- name: BeginPairingCommit :execrows

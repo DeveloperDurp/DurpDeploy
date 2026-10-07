@@ -371,7 +371,9 @@ UPDATE agent_pairings SET
 WHERE agent_id = ?10
   AND EXISTS (SELECT 1 FROM agents
       WHERE id = agent_pairings.agent_id AND status = 'revoked'
-        AND (deleted_at IS NULL OR agent_pairings.state <> 'committing'))
+        AND (deleted_at IS NULL OR agent_pairings.state <> 'committing')
+        AND (deleted_pairing_code_hash IS NULL
+             OR deleted_pairing_code_hash <> ?1))
 RETURNING agent_id, pairing_code_hash, agent_public_identity, agent_pin, server_public_identity, server_pin, encrypted_identity, state, expires_at, paired_at, created_at, updated_at, server_pull_endpoint
 `
 
