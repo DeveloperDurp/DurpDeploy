@@ -265,7 +265,7 @@ case "pending_approval":
 
 func isTerminalStatus(status string) bool {
 	switch status {
-	case "succeeded", "failed", "cancelled", "rejected", "expired":
+	case "succeeded", "failed", "cancelled", "rejected", "expired", "cleanup_unconfirmed":
 		return true
 	default:
 		return false

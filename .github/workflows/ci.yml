@@ -372,7 +372,7 @@ jobs:
       - name: Verify singleton setup, authentication fields, and version test
         run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^TestPackageRepositoryBrowserE2E$' ./internal/handler/api
       - name: Verify verification forms, polling, and rollback in Chromium
-        run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^TestVerification(Rollback|Polling)BrowserE2E$' ./internal/handler/api
+        run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^TestVerification(Rollback|Polling|CleanupRetry)BrowserE2E$' ./internal/handler/api
       - name: Verify environment queue position, permissions, and cancellation
         run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^TestEnvironmentQueueBrowserE2E$' ./internal/handler/api
       - name: Verify artifact approval controls in Chromium

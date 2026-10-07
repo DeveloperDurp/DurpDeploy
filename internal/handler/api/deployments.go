@@ -587,15 +587,8 @@ func (h *DeploymentHandler) RedeployDeployment(
 		return
 	}
 	if deployment.Status != "succeeded" && deployment.Status != "failed" &&
-		deployment.Status != "cancelled" && deployment.Status != "rejected" && deployment.Status != "expired" {
-		if deployment.Status == "cleanup_unconfirmed" {
-			RespondError(
-				w,
-				http.StatusConflict,
-				repository.ErrContainerCleanupUnconfirmed.Error(),
-			)
-			return
-		}
+		deployment.Status != "cancelled" && deployment.Status != "rejected" &&
+		deployment.Status != "expired" && deployment.Status != "cleanup_unconfirmed" {
 		RespondError(
 			w,
 			http.StatusConflict,
@@ -830,15 +823,7 @@ func (h *DeploymentHandler) RetryDeployment(
 	}
 	if deployment.Status != "failed" && deployment.Status != "cancelled" &&
 		deployment.Status != "rejected" &&
-		deployment.Status != "expired" {
-		if deployment.Status == "cleanup_unconfirmed" {
-			RespondError(
-				w,
-				http.StatusConflict,
-				repository.ErrContainerCleanupUnconfirmed.Error(),
-			)
-			return
-		}
+		deployment.Status != "expired" && deployment.Status != "cleanup_unconfirmed" {
 		RespondError(
 			w,
 			http.StatusBadRequest,

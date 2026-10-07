@@ -244,8 +244,10 @@ done
     - `POST /api/v1/deployments/$DID/cancel` cancels queued work or requests
       cancellation of a running deploy.
     - `cleanup_unconfirmed` means container removal failed. Retry and redeploy
-      return `409`; do not re-execute until a successful startup runtime sweep
-      changes the deployment to `failed`.
+      return `409` while cleanup remains unconfirmed. For local execution, a
+      successful startup runtime sweep changes the deployment to `failed`.
+      For agent execution, a ready v3 poll confirms cleanup and permits retry
+      or redeploy while preserving the original terminal result.
 
 ## Post-deployment verification and rollback
 
@@ -397,8 +399,10 @@ An operator's reverse proxy may impose additional limits.
 Execution actions are `POST .../$XID/cancel`, `/approve` (admin only),
 and `/retry` (after a terminal status). Retry returns `409` while the source
 execution has a lost or unconfirmed remote outcome; inspect the agent before
-retrying. Retry also returns `409` for `cleanup_unconfirmed` until the next
-successful startup runtime sweep changes the deployment to `failed`.
+retrying. Retry also returns `409` while container cleanup remains unconfirmed.
+Local cleanup requires a successful startup runtime sweep; agent cleanup
+requires a ready v3 poll. Confirmed agent cleanup permits retry without
+changing the historical `cleanup_unconfirmed` result.
 
 `GET /api/v1/projects/$PID/runbook-executions?limit=100&offset=0`
 returns `{items, total, limit, offset}`. The default page has 100 items;
