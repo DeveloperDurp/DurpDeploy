@@ -84,6 +84,12 @@ func TestAgentDeleteBrowserE2E(t *testing.T) {
 		browser.call(t, "Emulation.setDeviceMetricsOverride", map[string]any{
 			"width": width, "height": 900, "deviceScaleFactor": 1, "mobile": false,
 		}, &struct{}{})
+		if string(
+			browser.evaluate(t, `Array.from(document.querySelectorAll('.badge'))
+			.every(el => el.scrollWidth <= el.clientWidth + 2)`),
+		) != "true" {
+			t.Fatalf("agent labels overflow at width %d", width)
+		}
 		browser.screenshot(t, fmt.Sprintf("delete-rest-labels-%d", width))
 		browser.evaluate(
 			t,

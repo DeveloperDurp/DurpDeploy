@@ -410,7 +410,9 @@ templ AgentEnvironmentLabels(agent db.Agent, labels []db.Environment, availableE
 					for _, environment := range labels {
 						<form method="post" action={ templ.SafeURL("/admin/agents/" + agent.ID + "/environments/delete") } class="flex max-w-full flex-wrap items-center gap-1 rounded-box bg-base-100 p-2">
 							<input type="hidden" name="environment_id" value={ fmt.Sprint(environment.ID) }/>
-							<span class="badge badge-outline h-auto min-w-0 max-w-full break-words whitespace-normal py-1">{ environment.Name }</span>
+							<span class="badge badge-outline h-auto min-w-0 max-w-full whitespace-normal py-1">
+								<span class="min-w-0 break-all">{ environment.Name }</span>
+							</span>
 							<button type="submit" class="btn btn-error btn-xs shrink-0" aria-label={ "Remove environment label " + environment.Name }>Remove</button>
 						</form>
 					}
@@ -450,7 +452,9 @@ templ AgentLabels(agent db.Agent, labels []string) {
 					for _, label := range labels {
 						<form method="post" action={ templ.SafeURL("/admin/agents/" + agent.ID + "/labels/delete") } class="flex max-w-full flex-wrap items-center gap-1 rounded-box bg-base-100 p-2">
 							<input type="hidden" name="label" value={ label }/>
-							<span class="badge badge-outline h-auto min-w-0 max-w-full break-words whitespace-normal py-1">{ label }</span>
+							<span class="badge badge-outline h-auto min-w-0 max-w-full whitespace-normal py-1">
+								<span class="min-w-0 break-all">{ label }</span>
+							</span>
 							<button type="submit" class="btn btn-error btn-xs shrink-0" aria-label={ "Remove label " + label }>Remove</button>
 						</form>
 					}
