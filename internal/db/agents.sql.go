@@ -486,11 +486,13 @@ WHERE id = ? AND status = 'revoked' AND deleted_at IS NULL
   AND NOT EXISTS (SELECT 1 FROM remote_step_runs s
       WHERE s.agent_id = agents.id
         AND (s.state IN ('claimed', 'started', 'cancel_requested', 'lost', 'cancel_unconfirmed')
-          OR (s.state = 'cleanup_unconfirmed' AND s.cleanup_confirmed_at IS NULL)))
+          OR (s.state = 'cleanup_unconfirmed' AND s.cleanup_confirmed_at IS NULL)
+          OR COALESCE(s.log_buffer_ciphertext, '') <> ''))
   AND NOT EXISTS (SELECT 1 FROM remote_deployment_claims c
       WHERE c.agent_id = agents.id
         AND (c.state IN ('claimed', 'started', 'cancel_requested', 'lost', 'cancel_unconfirmed')
-          OR (c.state = 'cleanup_unconfirmed' AND c.cleanup_confirmed_at IS NULL)))
+          OR (c.state = 'cleanup_unconfirmed' AND c.cleanup_confirmed_at IS NULL)
+          OR COALESCE(c.log_buffer_ciphertext, '') <> ''))
 `
 
 func (q *Queries) MarkAgentDeleted(ctx context.Context, id string) (int64, error) {

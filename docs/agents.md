@@ -9,14 +9,15 @@ maintenance, and recovery.
 **Delete** removes an agent from the list and prevents further access. Both the
 list and detail page ask for confirmation. Deployment history keeps its agent
 references; the server retains a revoked tombstone and its identity pins.
-Deletion is refused while execution or cleanup is unconfirmed. Drain the agent,
-let its work finish, and reconcile cleanup before deleting it. A refused delete
+Deletion is refused while execution or cleanup is unconfirmed or remote logs
+remain buffered. Drain the agent, let its work finish, and reconcile cleanup
+and log delivery before deleting it. A refused delete
 leaves the agent unchanged. Previously revoked agents can also be deleted when
 no unresolved work remains.
 
 Administrators can call `DELETE /api/v1/admin/agents/{id}` with an empty body or
 `{}`. Success returns `204`; missing or deleted agents return `404`; unresolved
-remote work returns `409`. Successful deletion records `delete_agent` in the
+remote work or buffered logs return `409`. Successful deletion records `delete_agent` in the
 audit log. The existing `POST /api/v1/admin/agents/{id}/revoke` remains available
 for revoking access while retaining the inventory entry and re-pairing option.
 A deleted identity cannot be re-paired. Register a new agent identity to reuse

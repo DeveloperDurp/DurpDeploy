@@ -9,7 +9,7 @@ import (
 )
 
 var ErrAgentDeletionBlocked = errors.New(
-	"agent has unresolved remote work; reconcile execution and cleanup before deleting",
+	"agent has unresolved remote work or buffered logs; reconcile execution, cleanup, and logs before deleting",
 )
 
 // DeleteAgent retains a revoked tombstone for deployment history and pin reuse.

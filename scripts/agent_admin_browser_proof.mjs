@@ -688,13 +688,26 @@ async function main() {
 	await logout(page, baseURL);
 	await login(page, baseURL, admin);
 	await page.goto(`${baseURL}/admin/agents/${pairedAgentID}`);
-	page.once("dialog", (dialog) => dialog.accept());
-	await Promise.all([
-		page.waitForResponse((response) => response.request().method() === "POST" && response.url().endsWith(`/admin/agents/${pairedAgentID}/revoke`)),
-		page.getByRole("button", { name: "Revoke agent" }).click(),
-	]);
+	const revokeStatus = await page.evaluate(async (agentID) => {
+		const csrf = document.querySelector('meta[name="csrf-token"]').content;
+		const response = await fetch(`/admin/agents/${agentID}/revoke`, {
+			method: "POST", headers: { "X-CSRF-Token": csrf },
+		});
+		return response.status;
+	}, pairedAgentID);
+	check(revokeStatus === 200, `legacy revocation returned ${revokeStatus}`);
 	await page.goto(`${baseURL}/admin/agents`);
 	check((await page.locator("body").innerText()).includes("revoked"), "revoked agent is not visible");
+	if (!faultScenario) {
+		await page.goto(`${baseURL}/admin/agents/${pairedAgentID}`);
+		page.once("dialog", (dialog) => dialog.accept());
+		await Promise.all([
+			page.waitForURL(`${baseURL}/admin/agents`),
+			page.getByRole("button", { name: "Delete agent" }).click(),
+		]);
+		check(await page.locator(`[hx-post="/admin/agents/${pairedAgentID}/delete"]`).count() === 0,
+			"deleted agent remains in inventory");
+	}
 	const unexpectedConsoleErrors = consoleErrors.filter((message) =>
 		!pairingScenarios.has(faultScenario) ||
 		(!message.includes("422") && !message.includes("ERR_CONNECTION")));
@@ -725,6 +738,7 @@ async function main() {
 		},
 		readOnlyState: state.trim(),
 		revoked: true,
+		deleted: !faultScenario,
 		viewerControlsHidden: true,
 		viewerHTMXToast: true,
 		viewports: [375, 768, 1280],
