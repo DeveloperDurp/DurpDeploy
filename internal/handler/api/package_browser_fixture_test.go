@@ -178,6 +178,14 @@ func (b *packageBrowser) screenshot(t *testing.T, name string) {
 		t,
 		`new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve(true))))`,
 	)
+	b.evaluate(t, `(async () => {
+		await document.fonts.ready;
+		for (let y = 0; y < document.documentElement.scrollHeight; y += innerHeight) {
+			window.scrollTo(0, y); await new Promise(resolve => setTimeout(resolve, 50));
+		}
+		window.scrollTo(0, 0); await new Promise(resolve => setTimeout(resolve, 300));
+		return true;
+	})()`)
 	directory := os.Getenv("DURPDEPLOY_PACKAGE_UI_EVIDENCE")
 	if directory == "" {
 		directory = t.TempDir()

@@ -147,9 +147,13 @@ func TestAgentContainerAPIE2E(t *testing.T) {
 	t.Cleanup(app.Close)
 	request := func(method, path string, body any, status int) []byte {
 		t.Helper()
-		raw, err := json.Marshal(body)
-		if err != nil {
-			t.Fatal(err)
+		var raw []byte
+		if body != nil {
+			var err error
+			raw, err = json.Marshal(body)
+			if err != nil {
+				t.Fatal(err)
+			}
 		}
 		req, err := http.NewRequestWithContext(
 			t.Context(),
