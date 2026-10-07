@@ -193,6 +193,15 @@
         ],
         "summary": "Delete an agent from the inventory, retaining deployment history.",
         "operationId": "deleteAgent",
+        "parameters": [
+          {
+            "type": "string",
+            "x-go-name": "ID",
+            "name": "id",
+            "in": "path",
+            "required": true
+          }
+        ],
         "responses": {
           "204": {
             "description": "EmptyResponse is returned for no-content endpoints.",
