@@ -88,51 +88,82 @@ release_write_barrier() {
     fi
 }
 trap release_write_barrier EXIT
-coproc DEMO_WRITE_BARRIER {
-    exec 9>&-
-    exec sqlite3 -bail -cmd '.timeout 5000' "$directory/durpdeploy.db"
+acquire_write_barrier() {
+    coproc DEMO_WRITE_BARRIER {
+        exec 9>&-
+        exec sqlite3 -bail -cmd '.timeout 5000' "$directory/durpdeploy.db"
+    }
+    barrier_pid=$DEMO_WRITE_BARRIER_PID
+    barrier_input=${DEMO_WRITE_BARRIER[1]}
+    printf "BEGIN IMMEDIATE;\nSELECT 'refresh-locked';\n" >&"$barrier_input"
+    if ! IFS= read -r -t 6 barrier_state <&"${DEMO_WRITE_BARRIER[0]}" || \
+        [[ "$barrier_state" != refresh-locked ]]; then
+        echo 'Could not close deployment admission; server left running.' >&2
+        return 1
+    fi
 }
-barrier_pid=$DEMO_WRITE_BARRIER_PID
-barrier_input=${DEMO_WRITE_BARRIER[1]}
-printf "BEGIN IMMEDIATE;\nSELECT 'refresh-locked';\n" >&"$barrier_input"
-if ! IFS= read -r -t 6 barrier_state <&"${DEMO_WRITE_BARRIER[0]}" || \
-    [[ "$barrier_state" != refresh-locked ]]; then
-    echo 'Could not close deployment admission; server left running.' >&2
-    exit 1
-fi
-check_idle
-kill "$pid"
-for _ in {1..150}; do
+stop_server() {
     command_line=$(ps -p "$pid" -o args= || true)
-    [[ -z "$command_line" || "$command_line" == *'<defunct>'* ]] && break
-    sleep 0.1
-done
-if [[ -n "$command_line" && "$command_line" != *'<defunct>'* ]]; then
+    [[ -z "$command_line" || "$command_line" == *'<defunct>'* ]] && return 0
+    check_server || return 1
+    kill "$pid"
+    for _ in {1..150}; do
+        command_line=$(ps -p "$pid" -o args= || true)
+        [[ -z "$command_line" || "$command_line" == *'<defunct>'* ]] && return 0
+        sleep 0.1
+    done
     echo 'Server did not stop; check server.log. Agent and proxy were left running.' >&2
-    exit 1
-fi
+    return 1
+}
+start_server() {
+    (
+        cd "$directory"
+        exec 9>&-
+        exec nohup setsid "$directory/bin/durpdeploy"
+    ) >"$directory/server.log" 2>&1 </dev/null &
+    pid=$!
+    printf '%s\n' "$pid" >"$directory/server.pid"
+}
+wait_ready() {
+    local deadline=$((SECONDS + 15))
+    while ((SECONDS < deadline)); do
+        kill -0 "$pid" 2>/dev/null || return 1
+        if grep -q '"msg":"server starting"' "$directory/server.log" && \
+            curl --cacert "$directory/tls/cert.pem" -fsS --max-time 2 "$url/healthz" >/dev/null 2>&1 && \
+            check_server; then
+            return 0
+        fi
+        sleep 0.1
+    done
+    return 1
+}
+acquire_write_barrier
+check_idle
+stop_server
 release_write_barrier
+mv "$directory/bin/durpdeploy" "$directory/bin/durpdeploy.previous"
 mv "$directory/bin/durpdeploy.next" "$directory/bin/durpdeploy"
 mv "$directory/server.log" "$directory/server-before-refresh.log"
-(
-    cd "$directory"
-    exec 9>&-
-    exec nohup setsid "$directory/bin/durpdeploy"
-) >"$directory/server.log" 2>&1 </dev/null &
-pid=$!
-printf '%s\n' "$pid" >"$directory/server.pid"
 url=$(cat "$directory/url")
-for _ in {1..150}; do
-    kill -0 "$pid" 2>/dev/null || break
-    if grep -q '"msg":"server starting"' "$directory/server.log" && \
-        curl --cacert "$directory/tls/cert.pem" -fsS --max-time 2 "$url/healthz" >/dev/null 2>&1; then
-        check_server
-        printf 'Demo server refreshed: %s\n' "$url"
-        cat "$directory/login.txt"
-        printf 'Database, paired agent, HTTPS proxy and certificate retained: %s\n' "$directory"
-        exit 0
-    fi
-    sleep 0.1
-done
-echo "Server refresh failed; inspect $directory/server.log. Agent, proxy and data retained." >&2
+start_server
+if wait_ready; then
+    printf 'Demo server refreshed: %s\n' "$url"
+    cat "$directory/login.txt"
+    printf 'Database, paired agent, HTTPS proxy and certificate retained: %s\n' "$directory"
+    exit 0
+fi
+echo 'Replacement failed readiness; restoring the previous server.' >&2
+acquire_write_barrier
+check_idle
+stop_server
+release_write_barrier
+mv "$directory/bin/durpdeploy" "$directory/bin/durpdeploy.failed"
+mv "$directory/bin/durpdeploy.previous" "$directory/bin/durpdeploy"
+mv "$directory/server.log" "$directory/server-refresh-failed.log"
+start_server
+if wait_ready; then
+    echo "Server refresh failed; previous server restored. Inspect $directory/server-refresh-failed.log." >&2
+else
+    echo "Server rollback failed; inspect $directory/server.log. Data and binaries retained." >&2
+fi
 exit 1

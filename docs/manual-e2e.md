@@ -77,6 +77,9 @@ new deployments cannot be admitted until the replacement is ready to start.
 The existing server must be running so its configuration can be retained.
 Startup settings are preserved rather than taken from the caller's environment.
 Inspect `server-refresh-build.log` and `server.log` if refresh fails.
+Replacement startup/health failure restores the previous server when idle and
+retains `server-refresh-failed.log` and `bin/durpdeploy.failed` for inspection.
+Fix the source and retry the same server-only refresh command.
 
 Database query/schema/migration changes require
 `make demo-refresh-full DEMO_DIR=/absolute/old/demo/path`. Also use full refresh

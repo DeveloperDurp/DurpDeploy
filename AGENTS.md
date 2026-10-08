@@ -62,6 +62,8 @@ database, encryption key, server identity, paired agent, proxy and certificate.
 It refuses unfinished deployments, lost remote work, or unconfirmed cleanup.
 It blocks database writes during its final idle check and server shutdown so
 new deployments cannot slip between them; failed checks release the barrier.
+If replacement startup or health fails, it restores the previous binary and
+server when idle; inspect `server-refresh-failed.log`, fix the source and retry.
 It does not re-pair the agent or rerun the population suite. Finish and save script edits
 before invoking them; never edit a Bash script while it is running.
 Database query/schema/migration changes require

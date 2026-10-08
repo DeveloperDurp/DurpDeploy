@@ -135,12 +135,20 @@ cp "$DEMO_TEST_SERVER_BINARY" "$3"
 GO
 cat >"$tmp/tools/nohup" <<'NOHUP'
 #!/usr/bin/env bash
+if [[ ${DEMO_TEST_FAIL_START:-0} != 0 && ! -e "$DEMO_TEST_LOG.start-failed" ]]; then
+    touch "$DEMO_TEST_LOG.start-failed"
+    echo "deliberate $DEMO_TEST_FAIL_START failure" >&2
+    [[ $DEMO_TEST_FAIL_START == startup ]] && exit 1
+elif [[ ${DEMO_TEST_FAIL_START:-0} == health ]]; then
+    touch "$DEMO_TEST_LOG.restored"
+fi
 printf '%s\n' '{"msg":"server starting","addr":"127.0.0.1:12345"}'
 printf 'docker=%s\npodman=%s\n' "${DOCKER_HOST-unset}" "${CONTAINER_HOST-unset}"
 exec "$@" <"$DEMO_TEST_FIFO"
 NOHUP
 cat >"$tmp/tools/curl" <<'CURL'
 #!/usr/bin/env bash
+if [[ ${DEMO_TEST_FAIL_START:-0} == health && ! -e "$DEMO_TEST_LOG.restored" ]]; then exit 1; fi
 exit 0
 CURL
 chmod 0755 "$tmp/tools/"*
@@ -181,6 +189,29 @@ grep -q 'database is locked' "$DEMO_TEST_LOG.writer"
 # Shutdown releases the write barrier before the replacement starts.
 sqlite3 "$tmp/demo/durpdeploy.db" "$DEMO_TEST_ADMIT_SQL"
 printf 'Refresh blocks concurrent admission and releases its barrier: PASS\n'
+
+# A compiled replacement that fails startup or health restores the old server.
+for failure in startup health; do
+    rm -f "$DEMO_TEST_LOG.start-failed" "$DEMO_TEST_LOG.restored"
+    sqlite3 "$tmp/demo/durpdeploy.db" 'DELETE FROM deployments;'
+    previous_pid=$pid
+    if PATH="$tmp/tools:$PATH" DEMO_TEST_BUILD_OK=1 DEMO_TEST_REAL_DB=1 \
+        DEMO_TEST_FAIL_START="$failure" DEMO_TEST_DB="$tmp/demo/durpdeploy.db" \
+        DEMO_TEST_SERVER_BINARY="$(command -v cat)" DEMO_TEST_FIFO="$tmp/input" \
+        bash "$root/scripts/demo-server-refresh.sh" "$tmp/demo" >"$tmp/output" 2>&1; then
+        echo 'FAIL: refresh reported success for a failed replacement' >&2; exit 1
+    fi
+    wait "$previous_pid" 2>/dev/null || true
+    pid=$(cat "$tmp/demo/server.pid")
+    if ! kill -0 "$pid" 2>/dev/null; then
+        echo 'FAIL: refresh did not restore the previous server' >&2; exit 1
+    fi
+    grep -q 'previous server restored' "$tmp/output"
+    grep -q "deliberate $failure failure" "$tmp/demo/server-refresh-failed.log"
+    cmp "$(command -v cat)" "$tmp/demo/bin/durpdeploy"
+    sqlite3 "$tmp/demo/durpdeploy.db" "$DEMO_TEST_ADMIT_SQL"
+    printf 'Refresh restores previous server after replacement %s failure: PASS\n' "$failure"
+done
 rm "$tmp/demo/durpdeploy.db"
 printf 'retained\n' >"$tmp/demo/durpdeploy.db"
 grep -Fxq docker=unix:///original/docker.sock "$tmp/demo/server.log"
