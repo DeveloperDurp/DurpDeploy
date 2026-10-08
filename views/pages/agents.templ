@@ -6,6 +6,7 @@ import (
 	"durpdeploy/internal/repository"
 	"durpdeploy/views/layouts"
 	"fmt"
+	"strings"
 )
 
 func agentBadgeClass(state string) string {
@@ -283,6 +284,15 @@ templ AgentDetailPage(agent db.Agent, labels []string, interpreters []string, en
 				<div class="card-body">
 					<h2 class="card-title">Interpreters</h2>
 					<p class="opacity-70">Capabilities reported by the agent during its latest poll.</p>
+					if len(health.ExecutionModes) == 0 {
+						<p class="text-sm">Execution modes not reported</p>
+					} else {
+						<p class="text-sm">Execution modes: { strings.Join(health.ExecutionModes, ", ") }</p>
+					}
+					if len(health.ContainerRuntimes) > 0 {
+						<p class="text-sm">Ready container runtimes: { strings.Join(health.ContainerRuntimes, ", ") }</p>
+						<p class="text-sm">Container interpreters: { strings.Join(health.ContainerInterpreters, ", ") }</p>
+					}
 					if len(interpreters) == 0 {
 						<p class="text-sm opacity-60">No interpreter capabilities reported.</p>
 					} else {

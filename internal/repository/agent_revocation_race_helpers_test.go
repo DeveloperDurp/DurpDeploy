@@ -75,6 +75,12 @@ func seedRevocationRaceFixture(
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err := repo.Queries.CreateEnvironmentDeploymentSlot(ctx,
+		db.CreateEnvironmentDeploymentSlotParams{
+			EnvironmentID: environment.ID, DeploymentID: deployment.ID,
+		}); err != nil {
+		t.Fatal(err)
+	}
 	if rows, err := repo.Queries.CreateRemoteDeploymentClaim(
 		ctx,
 		deployment.ID,

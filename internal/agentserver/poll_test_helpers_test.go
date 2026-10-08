@@ -79,6 +79,14 @@ func seedPollPayload(
 	if err != nil {
 		t.Fatal(err)
 	}
+	if status == "pending" || status == "running" {
+		if err := fixture.repo.Queries.CreateEnvironmentDeploymentSlot(ctx,
+			db.CreateEnvironmentDeploymentSlotParams{
+				EnvironmentID: environment.ID, DeploymentID: deployment.ID,
+			}); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if err := fixture.repo.SnapshotDeploymentSteps(
 		ctx,
 		deployment.ID,
@@ -90,7 +98,7 @@ func seedPollPayload(
 					TimeoutSeconds:  30,
 					MaxRetries:      1,
 					ExecutionTarget: "agent",
-					VariableNames:   `["MODE"]`,
+					VariableNames:   `[]`,
 				},
 			},
 			{
@@ -99,7 +107,7 @@ func seedPollPayload(
 					ScriptBody:      "echo second",
 					TimeoutSeconds:  60,
 					ExecutionTarget: "agent",
-					VariableNames:   `["TOKEN"]`,
+					VariableNames:   `[]`,
 				},
 			},
 		},

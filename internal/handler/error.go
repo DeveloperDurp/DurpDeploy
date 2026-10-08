@@ -161,11 +161,15 @@ func WriteFormError(
 	page templ.Component,
 ) {
 	if r.Header.Get("HX-Request") == "true" {
-		w.Header().Set("HX-Retarget", "#form-container")
+		if w.Header().Get("HX-Retarget") == "" {
+			w.Header().Set("HX-Retarget", "#form-container")
+		}
+		if w.Header().Get("HX-Reswap") == "" {
+			w.Header().Set("HX-Reswap", "innerHTML")
+		}
 		if r.Header.Get("X-Form-Dialog") == "true" {
 			w.Header().Set("HX-Retarget", "#project-edit-content")
 		}
-		w.Header().Set("HX-Reswap", "innerHTML")
 		w.WriteHeader(http.StatusUnprocessableEntity)
 		if err := fragment.Render(r.Context(), w); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)

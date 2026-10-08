@@ -118,7 +118,7 @@ func TestRunbookWeb_AgentStepRejectsContainerImage(t *testing.T) {
 	}
 	if !strings.Contains(
 		body,
-		"container image is only valid for local steps",
+		"container image is not valid for agent-host steps",
 	) {
 		t.Fatalf("body missing image-rejection message: %s", body)
 	}
@@ -135,9 +135,10 @@ func TestRunbookWeb_ContainerFieldsSurviveVersionSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	response, body := postRunbookForm(t, h, project.ID,
-		runbookContainerForm(h.csrfToken(), []string{"local"},
-			[]string{"alpine:3.20"}, []string{"DEPLOY_ENV, API_KEY"}))
+	form := runbookContainerForm(h.csrfToken(), []string{"local"},
+		[]string{"alpine:3.20"}, []string{"DEPLOY_ENV, API_KEY"})
+	form.Set("step_network", "bridge")
+	response, body := postRunbookForm(t, h, project.ID, form)
 	if response.StatusCode != http.StatusSeeOther ||
 		!strings.Contains(response.Header.Get("Location"), "/runbooks/") {
 		t.Fatalf("status=%d location=%s body=%s", response.StatusCode,
@@ -155,6 +156,7 @@ func TestRunbookWeb_ContainerFieldsSurviveVersionSnapshot(t *testing.T) {
 	}
 	var steps []struct {
 		ExecutionTarget string   `json:"execution_target"`
+		NetworkMode     string   `json:"network_mode"`
 		ContainerImage  string   `json:"container_image"`
 		VariableNames   []string `json:"variable_names"`
 	}
@@ -165,7 +167,7 @@ func TestRunbookWeb_ContainerFieldsSurviveVersionSnapshot(t *testing.T) {
 		t.Fatalf("steps=%+v", steps)
 	}
 	if steps[0].ExecutionTarget != "local" ||
-		steps[0].ContainerImage != "alpine:3.20" {
+		steps[0].ContainerImage != "alpine:3.20" || steps[0].NetworkMode != "bridge" {
 		t.Fatalf("step=%+v", steps[0])
 	}
 	if strings.Join(steps[0].VariableNames, ",") != "DEPLOY_ENV,API_KEY" {

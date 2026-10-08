@@ -397,7 +397,20 @@ func (h *DeploymentHandler) GetDeployment(
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	RespondJSON(w, http.StatusOK, deployment)
+	queue, err := auth.ReadDeploymentQueue(r.Context(), h.repo, depID)
+	if err != nil {
+		RespondError(
+			w,
+			http.StatusInternalServerError,
+			"Cannot read deployment queue",
+		)
+		return
+	}
+	deployment.Status = queue.Status
+	RespondJSON(w, http.StatusOK, struct {
+		db.Deployment
+		auth.DeploymentQueueInfo
+	}{deployment, queue})
 }
 
 // GetDeploymentStatus returns the current deployment status.
@@ -427,7 +440,7 @@ func (h *DeploymentHandler) GetDeploymentStatus(
 		return
 	}
 
-	deployment, err := h.repo.Queries.GetDeployment(r.Context(), depID)
+	_, err = h.repo.Queries.GetDeployment(r.Context(), depID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			RespondError(w, http.StatusNotFound, "Deployment not found")
@@ -444,10 +457,20 @@ func (h *DeploymentHandler) GetDeploymentStatus(
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	queue, err := auth.ReadDeploymentQueue(r.Context(), h.repo, depID)
+	if err != nil {
+		RespondError(
+			w,
+			http.StatusInternalServerError,
+			"Cannot read deployment queue",
+		)
+		return
+	}
 	RespondJSON(w, http.StatusOK, struct {
 		Status           string `json:"status"`
 		WaitingForAgents bool   `json:"waiting_for_agents"`
-	}{Status: deployment.Status, WaitingForAgents: waiting != 0})
+		auth.DeploymentQueueInfo
+	}{Status: queue.Status, WaitingForAgents: waiting != 0, DeploymentQueueInfo: queue})
 }
 
 // ApproveDeployment approves a deployment pending approval.
@@ -521,7 +544,11 @@ func (h *DeploymentHandler) ApproveDeployment(
 	}
 	h.startLocalDeployment(result)
 
-	RespondJSON(w, http.StatusOK, map[string]string{"status": "pending"})
+	RespondJSON(
+		w,
+		http.StatusOK,
+		map[string]string{"status": result.Deployment.Status},
+	)
 }
 
 // RedeployDeployment creates a new deployment from a terminal one.
@@ -560,15 +587,8 @@ func (h *DeploymentHandler) RedeployDeployment(
 		return
 	}
 	if deployment.Status != "succeeded" && deployment.Status != "failed" &&
-		deployment.Status != "cancelled" {
-		if deployment.Status == "cleanup_unconfirmed" {
-			RespondError(
-				w,
-				http.StatusConflict,
-				repository.ErrContainerCleanupUnconfirmed.Error(),
-			)
-			return
-		}
+		deployment.Status != "cancelled" && deployment.Status != "rejected" &&
+		deployment.Status != "expired" && deployment.Status != "cleanup_unconfirmed" {
 		RespondError(
 			w,
 			http.StatusConflict,
@@ -688,6 +708,33 @@ func (h *DeploymentHandler) CancelDeployment(
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	if deployment.Status == "queued" ||
+		!deployment.AssignedAgentID.Valid &&
+			(deployment.Status == "pending" || deployment.Status == "pending_approval") {
+		status, err := h.runner.CancelPrestart(r.Context(), depID)
+		if err != nil {
+			RespondError(
+				w,
+				http.StatusConflict,
+				"Cannot cancel deployment in its current state",
+			)
+			return
+		}
+		RespondJSON(w, http.StatusOK, map[string]string{"status": status})
+		return
+	}
+	if deployment.Status == "awaiting_artifact_approval" {
+		if err := h.repo.RejectArtifact(
+			r.Context(),
+			depID,
+			"cancelled",
+		); err != nil {
+			RespondError(w, http.StatusConflict, "Artifact cancellation failed")
+			return
+		}
+		RespondJSON(w, http.StatusOK, map[string]string{"status": "cancelled"})
+		return
+	}
 	if deployment.AssignedAgentID.Valid {
 		err := h.repo.CancelAssignedRemoteDeployment(
 			r.Context(),
@@ -717,7 +764,8 @@ func (h *DeploymentHandler) CancelDeployment(
 			map[string]string{"status": updated.Status})
 		return
 	}
-	if deployment.Status != "running" {
+	if deployment.Status != "running" &&
+		deployment.Status != "publishing_artifact" {
 		RespondError(
 			w,
 			http.StatusUnprocessableEntity,
@@ -773,15 +821,9 @@ func (h *DeploymentHandler) RetryDeployment(
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	if deployment.Status != "failed" && deployment.Status != "cancelled" {
-		if deployment.Status == "cleanup_unconfirmed" {
-			RespondError(
-				w,
-				http.StatusConflict,
-				repository.ErrContainerCleanupUnconfirmed.Error(),
-			)
-			return
-		}
+	if deployment.Status != "failed" && deployment.Status != "cancelled" &&
+		deployment.Status != "rejected" &&
+		deployment.Status != "expired" && deployment.Status != "cleanup_unconfirmed" {
 		RespondError(
 			w,
 			http.StatusBadRequest,

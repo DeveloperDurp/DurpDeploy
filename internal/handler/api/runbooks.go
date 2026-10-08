@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 
+	"durpdeploy/internal/agentexecution"
 	"durpdeploy/internal/artifact"
 	"durpdeploy/internal/containerenv"
 	"durpdeploy/internal/db"
@@ -29,16 +30,21 @@ func NewRunbookHandler(
 }
 
 type runbookStep struct {
-	Name            string   `json:"name"`
-	ScriptBody      string   `json:"script_body"`
-	Interpreter     string   `json:"interpreter"`
-	SortOrder       int      `json:"sort_order"`
-	TimeoutSeconds  int64    `json:"timeout_seconds"`
-	MaxRetries      int64    `json:"max_retries"`
-	ExecutionTarget string   `json:"execution_target"`
-	AgentSelectors  []string `json:"agent_selectors,omitempty"`
-	ContainerImage  string   `json:"container_image"`
-	VariableNames   []string `json:"variable_names,omitempty"`
+	Name                 string   `json:"name"`
+	ScriptBody           string   `json:"script_body"`
+	Interpreter          string   `json:"interpreter"`
+	SortOrder            int      `json:"sort_order"`
+	TimeoutSeconds       int64    `json:"timeout_seconds"`
+	MaxRetries           int64    `json:"max_retries"`
+	ExecutionTarget      string   `json:"execution_target"`
+	AgentExecutionMode   string   `json:"agent_execution_mode"`
+	AgentSelectors       []string `json:"agent_selectors,omitempty"`
+	ContainerImage       string   `json:"container_image"`
+	NetworkMode          string   `json:"network_mode"`
+	ApprovalArtifactPath string   `json:"approval_artifact_path"`
+	ApprovalReviewPath   string   `json:"approval_review_path"`
+	ApprovalReviewFormat string   `json:"approval_review_format"`
+	VariableNames        []string `json:"variable_names,omitempty"`
 }
 
 type runbookSaveRequest struct {
@@ -217,20 +223,38 @@ func (h *RunbookHandler) Save(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		step.ExecutionTarget = target
-		step.AgentSelectors = selectors
-		image, variableNames, err := handler.ValidateRunbookStepContainer(
-			target, step.ContainerImage, step.VariableNames,
-		)
-		if err != nil {
-			status := http.StatusUnprocessableEntity
-			if errors.Is(err, handler.ErrInvalidContainerImage) {
-				status = http.StatusBadRequest
-			}
-			RespondError(w, status, err.Error())
+		if err := artifact.ValidateGateConfig(
+			target,
+			step.NetworkMode,
+			step.ApprovalArtifactPath,
+			step.ApprovalReviewPath,
+			step.ApprovalReviewFormat,
+		); err != nil ||
+			step.ApprovalArtifactPath != "" {
+			RespondError(
+				w,
+				http.StatusUnprocessableEntity,
+				"Runbooks do not support artifact gates; invalid network configuration",
+			)
 			return
 		}
-		step.ContainerImage = image
-		step.VariableNames = variableNames
+		step.AgentSelectors = selectors
+		config := agentexecution.Config{
+			Target: target, Mode: step.AgentExecutionMode,
+			Image: step.ContainerImage, VariableNames: step.VariableNames,
+		}
+		if message := handler.ValidateStepExecutionConfig(config); message != "" {
+			status := http.StatusUnprocessableEntity
+			if step.ContainerImage != "" &&
+				!handler.ValidContainerImage(step.ContainerImage) {
+				status = http.StatusBadRequest
+			}
+			RespondError(w, status, strings.ToLower(message[:1])+message[1:])
+			return
+		}
+		if step.AgentExecutionMode == "" {
+			step.AgentExecutionMode = "host"
+		}
 		step.SortOrder = i
 	}
 	steps, err := json.Marshal(req.Steps)

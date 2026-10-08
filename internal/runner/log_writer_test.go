@@ -53,10 +53,10 @@ func TestBroadcastWriterHoldsMultilineSecretPrefixAcrossWrites(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			broker := NewLogBroker()
 			if _, err := repo.DB.ExecContext(t.Context(), `INSERT INTO deployment_step_sources(deployment_id,steps_json) VALUES(?,'[]')`, deployment.ID); err != nil {
 				t.Fatal(err)
 			}
-			broker := NewLogBroker()
 			stream := broker.Subscribe(deployment.ID)
 			t.Cleanup(func() { broker.Unsubscribe(deployment.ID, stream) })
 			writer := &broadcastWriter{

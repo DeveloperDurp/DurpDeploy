@@ -581,14 +581,28 @@ func (h *DeploymentHandler) GetDeployment(
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	queueCtx, err := pages.DeploymentQueueContext(
+		r.Context(),
+		h.repo,
+		id,
+		&deployment.Status,
+	)
+	if err != nil {
+		http.Error(
+			w,
+			"Cannot read deployment queue",
+			http.StatusInternalServerError,
+		)
+		return
+	}
 	if isFragmentRequest(r) {
 		if err := pages.DeploymentDetail(project, release, environment, deployment, logs, waiting != 0).
-			Render(r.Context(), w); err != nil {
+			Render(queueCtx, w); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	} else {
 		if err := pages.DeploymentDetailPage(project, release, environment, deployment, logs, waiting != 0, r.URL.Path).
-			Render(r.Context(), w); err != nil {
+			Render(queueCtx, w); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	}
@@ -620,8 +634,22 @@ func (h *DeploymentHandler) GetDeploymentStatus(
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if err := pages.StatusBadgeContainer(deployment, waiting != 0).
-		Render(r.Context(), w); err != nil {
+	queueCtx, err := pages.DeploymentQueueContext(
+		r.Context(),
+		h.repo,
+		id,
+		&deployment.Status,
+	)
+	if err != nil {
+		http.Error(
+			w,
+			"Cannot read deployment queue",
+			http.StatusInternalServerError,
+		)
+		return
+	}
+	if err := pages.DeploymentStatusUpdate(deployment, waiting != 0).
+		Render(queueCtx, w); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
@@ -647,7 +675,27 @@ func (h *DeploymentHandler) CancelDeployment(
 		return
 	}
 
-	if deployment.AssignedAgentID.Valid {
+	if deployment.Status == "queued" ||
+		!deployment.AssignedAgentID.Valid &&
+			(deployment.Status == "pending" || deployment.Status == "pending_approval") {
+		if _, err := h.runner.CancelPrestart(r.Context(), id); err != nil {
+			http.Error(
+				w,
+				"Deployment cannot be cancelled in its current state",
+				http.StatusConflict,
+			)
+			return
+		}
+	} else if deployment.Status == "awaiting_artifact_approval" {
+		if err := h.repo.RejectArtifact(
+			r.Context(),
+			id,
+			"cancelled",
+		); err != nil {
+			http.Error(w, "Artifact cancellation failed", http.StatusConflict)
+			return
+		}
+	} else if deployment.AssignedAgentID.Valid {
 		err := h.repo.CancelAssignedRemoteDeployment(
 			r.Context(),
 			repository.RemoteAssignedDeployment{
@@ -669,6 +717,7 @@ func (h *DeploymentHandler) CancelDeployment(
 		}
 	} else {
 		if deployment.Status != "running" &&
+			deployment.Status != "publishing_artifact" &&
 			deployment.Status != "pending_approval" {
 			http.Error(
 				w,
@@ -690,7 +739,7 @@ func (h *DeploymentHandler) CancelDeployment(
 	}
 
 	if r.Header.Get("HX-Request") == "true" {
-		if err := pages.StatusBadgeContainer(deployment, false).
+		if err := pages.DeploymentStatusUpdate(deployment, false).
 			Render(r.Context(), w); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
@@ -802,15 +851,8 @@ func (h *DeploymentHandler) RedeployDeployment(
 	}
 
 	if source.Status != "succeeded" && source.Status != "failed" &&
-		source.Status != "cancelled" {
-		if source.Status == "cleanup_unconfirmed" {
-			http.Error(
-				w,
-				repository.ErrContainerCleanupUnconfirmed.Error(),
-				http.StatusConflict,
-			)
-			return
-		}
+		source.Status != "cancelled" && source.Status != "rejected" &&
+		source.Status != "expired" && source.Status != "cleanup_unconfirmed" {
 		http.Error(
 			w,
 			"Source deployment is not in a terminal state",
@@ -1075,12 +1117,17 @@ func (h *DeploymentHandler) ListDeployments(
 // ponytail: matches the StatusBadge switch; adding a new status here means
 // adding it to the switch in views/pages/deployments.templ too.
 var allowedStatuses = map[string]struct{}{
-	"pending":          {},
-	"running":          {},
-	"succeeded":        {},
-	"failed":           {},
-	"cancelled":        {},
-	"pending_approval": {},
+	"queued":                     {},
+	"pending":                    {},
+	"running":                    {},
+	"succeeded":                  {},
+	"failed":                     {},
+	"cancelled":                  {},
+	"pending_approval":           {},
+	"publishing_artifact":        {},
+	"awaiting_artifact_approval": {},
+	"rejected":                   {},
+	"expired":                    {},
 }
 
 const (

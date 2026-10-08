@@ -44,11 +44,6 @@ func TestAlpineRegistryDefinesComplianceComponents(t *testing.T) {
 			},
 		},
 		{
-			name:        "releaseDeployRow",
-			constructor: `\(\)`,
-			members:     []string{"forceChecked"},
-		},
-		{
 			name:        "stepFormHost",
 			constructor: `\(\)`,
 			members: []string{
@@ -57,6 +52,7 @@ func TestAlpineRegistryDefinesComplianceComponents(t *testing.T) {
 			},
 			methods: []string{
 				"beforeSwap",
+				"afterSwap",
 				"afterSettle",
 				"editClosed",
 				"add",
@@ -179,7 +175,7 @@ func TestAlpineRegistryDefinesComplianceComponents(t *testing.T) {
 		t.Error("production app source must not contain debug console logging")
 	}
 	registryOrder := []string{
-		"toast", "navbar", "deploymentForm", "releaseDeployRow",
+		"toast", "navbar", "deploymentForm",
 		"stepFormHost", "stepEditor", "variablesPage", "deploymentStream",
 	}
 	previous := strings.Index(source, "window.htmx = htmx")

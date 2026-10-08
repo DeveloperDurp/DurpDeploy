@@ -43,6 +43,13 @@ This produces a single `durpdeploy` binary.
 
 Server starts on `http://localhost:8080`. A `durpdeploy.db` SQLite file is created automatically on first run.
 
+For local development, `make dev` reuses the encryption key from `.env` or
+`DURPDEPLOY_SECRET_KEY`. When neither is configured, it creates a private,
+gitignored `.local/dev-secret-key` once and reuses it across restarts. Keep this
+file with the development database; losing it makes encrypted values unreadable.
+An existing `/etc/durpdeploy/key` remains the server's first choice. This change
+cannot recover values encrypted with a previously discarded temporary key.
+
 ## Usage
 
 1. **Create a project** - Navigate to Projects → New Project
@@ -168,6 +175,16 @@ make build
 make dev
 ```
 
+The asset build uses Tailwind CSS 4 and DaisyUI 5. Sources and both custom
+themes live in `static/css/input.css`; there is no JavaScript Tailwind config.
+`make tailwind-build` runs `@tailwindcss/cli` and bundles the MIT license
+notices in `static/css/tailwind.licenses.txt`. The UI requires Safari 16.4+,
+Chrome 111+, or Firefox 128+.
+
+Tailwind and its CLI are pinned to 4.3.0 because CLI 4.3.3 pins an older
+Parcel watcher that pulls in vulnerable `braces`. Check `npm audit` and the
+resolved watcher dependencies before upgrading the CLI.
+
 `make dev`, `make dev-postgres`, and `make dev-mssql` keep the app on
 `http://localhost:8080` and expose it through `https://localhost:8443`. The
 proxy creates a temporary local CA and one certificate for `localhost`, the
@@ -206,6 +223,20 @@ Both suites test file handoff between deployment steps through the API and
 web form. `make e2e-test` prints the `stage-handoff-…` project URL and leaves
 that project in the running server's database for inspection. The isolated
 suite removes its temporary database after the run.
+
+`make e2e-test` also leaves a `terraform-approval-…` project with real Terraform
+plan/apply steps and three deployments: approved, rejected, and awaiting your
+approval. It prints their URLs. The demo uses Terraform's built-in
+`terraform_data` resource and creates no cloud resources. The pending plan
+expires after 24 hours; re-run the deployment to generate a fresh plan.
+All scenarios from this command remain repeatable manually. See
+[the manual E2E checklist](docs/manual-e2e.md) for retained examples, test
+accounts, API checks, and expected results. The command prints project links
+and leaves a lifecycle approval waiting for review as well.
+The harness builds the existing pinned Terraform test image on the server's
+container engine. Set `DURPDEPLOY_CONTAINER_RUNTIME` and
+`DURPDEPLOY_CONTAINER_URL` to match the server when it uses a non-default engine
+or socket. The project, release, and deployment history remain after expiry.
 
 The running-instance suite includes API and web CRUD, roles and CSRF,
 templates and interpreters, step file handoff, deployment lists and exports,

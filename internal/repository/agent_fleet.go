@@ -34,6 +34,28 @@ func (r *Repository) AgentFleetReports(
 			Compatibility: agentCompatibility(agent),
 		}
 	}
+	execution, err := r.Queries.ListFleetExecutionCapabilities(ctx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("fleet execution capabilities: %w", err)
+	}
+	for _, row := range execution {
+		report := reports[row.AgentID]
+		switch row.Kind {
+		case "mode":
+			report.ExecutionModes = append(report.ExecutionModes, row.Value)
+		case "runtime":
+			report.ContainerRuntimes = append(
+				report.ContainerRuntimes,
+				row.Value,
+			)
+		case "interpreter":
+			report.ContainerInterpreters = append(
+				report.ContainerInterpreters,
+				row.Value,
+			)
+		}
+		reports[row.AgentID] = report
+	}
 	current, err := r.Queries.ListFleetCurrentWork(ctx)
 	if err != nil {
 		return nil, nil, fmt.Errorf("fleet current work: %w", err)

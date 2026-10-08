@@ -8,6 +8,9 @@ import (
 	"fmt"
 	"strings"
 
+	"durpdeploy/internal/agentexecution"
+	"durpdeploy/internal/artifact"
+	"durpdeploy/internal/containerenv"
 	"durpdeploy/internal/db"
 )
 
@@ -44,14 +47,20 @@ func (r *Repository) CreateDeployment(
 	ctx context.Context,
 	arg db.CreateDeploymentParams,
 ) (DeploymentResult, error) {
+	if err := r.MaintainArtifactGates(ctx); err != nil {
+		return DeploymentResult{}, err
+	}
 	var result DeploymentResult
 	err := withSQLiteBusyRetry(ctx, func() error {
 		result = DeploymentResult{}
-		return r.WithTx(ctx, func(q *db.Queries) error {
-			var createErr error
-			result, createErr = r.createDeployment(ctx, q, arg)
-			return createErr
-		})
+		return r.withQueueTx(
+			ctx,
+			func(ctx context.Context, q *db.Queries) error {
+				var createErr error
+				result, createErr = r.createDeployment(ctx, q, arg)
+				return createErr
+			},
+		)
 	})
 	if err != nil {
 		return DeploymentResult{}, fmt.Errorf("create deployment: %w", err)
@@ -64,15 +73,21 @@ func (r *Repository) CreateDeploymentFromDeployment(
 	arg db.CreateDeploymentParams,
 	sourceDeploymentID int64,
 ) (DeploymentResult, error) {
+	if err := r.MaintainArtifactGates(ctx); err != nil {
+		return DeploymentResult{}, err
+	}
 	var result DeploymentResult
 	err := withSQLiteBusyRetry(ctx, func() error {
 		result = DeploymentResult{}
-		return r.WithTx(ctx, func(q *db.Queries) error {
-			var err error
-			result, err = createDeploymentFromDeployment(ctx, q, arg,
-				sourceDeploymentID)
-			return err
-		})
+		return r.withQueueTx(
+			ctx,
+			func(ctx context.Context, q *db.Queries) error {
+				var err error
+				result, err = createDeploymentFromDeployment(ctx, q, arg,
+					sourceDeploymentID)
+				return err
+			},
+		)
 	})
 	if err != nil {
 		return DeploymentResult{}, fmt.Errorf(
@@ -85,6 +100,12 @@ func createDeploymentFromDeployment(
 	ctx context.Context, q *db.Queries, arg db.CreateDeploymentParams,
 	sourceDeploymentID int64,
 ) (DeploymentResult, error) {
+	if _, err := q.LockDeploymentEnvironment(
+		ctx,
+		arg.EnvironmentID,
+	); err != nil {
+		return DeploymentResult{}, err
+	}
 	if err := lockRelease(ctx, q, arg.ReleaseID); err != nil {
 		return DeploymentResult{}, err
 	}
@@ -92,7 +113,11 @@ func createDeploymentFromDeployment(
 	if err != nil {
 		return DeploymentResult{}, fmt.Errorf("get source deployment: %w", err)
 	}
-	if source.Status == "cleanup_unconfirmed" {
+	unconfirmed, err := q.HasUnconfirmedContainerCleanup(ctx, source.ID)
+	if err != nil {
+		return DeploymentResult{}, err
+	}
+	if unconfirmed != 0 {
 		return DeploymentResult{}, ErrContainerCleanupUnconfirmed
 	}
 	if source.ReleaseID != arg.ReleaseID {
@@ -148,6 +173,12 @@ func (r *Repository) createDeployment(
 	q *db.Queries,
 	arg db.CreateDeploymentParams,
 ) (DeploymentResult, error) {
+	if _, err := q.LockDeploymentEnvironment(
+		ctx,
+		arg.EnvironmentID,
+	); err != nil {
+		return DeploymentResult{}, err
+	}
 	if err := lockRelease(ctx, q, arg.ReleaseID); err != nil {
 		return DeploymentResult{}, err
 	}
@@ -187,13 +218,52 @@ func createDeploymentWithSteps(
 	steps []DeploymentStepSnapshot,
 	stepsJSON string,
 ) (DeploymentResult, error) {
+	releaseKind, err := q.GetRelease(ctx, arg.ReleaseID)
+	if err != nil {
+		return DeploymentResult{}, err
+	}
+	variables, err := q.ListReleaseVariablesByRelease(ctx, arg.ReleaseID)
+	if err != nil {
+		return DeploymentResult{}, err
+	}
+	for _, variable := range variables {
+		if variable.Name == containerenv.StageVariable ||
+			variable.Name == containerenv.ApprovedVariable {
+			return DeploymentResult{}, containerenv.ErrReserved
+		}
+	}
+	gated := false
+	for _, step := range steps {
+		if step.ApprovalArtifactPath != "" {
+			gated = true
+		}
+	}
+	if gated {
+		if releaseKind.Kind != "deployment" {
+			return DeploymentResult{}, artifact.ErrGateConfig
+		}
+		for i, step := range steps {
+			if step.ExecutionTarget != "local" || step.MaxRetries != 0 {
+				return DeploymentResult{}, artifact.ErrGateConfig
+			}
+			if i == len(steps)-1 && step.ApprovalArtifactPath != "" {
+				return DeploymentResult{}, artifact.ErrGateConfig
+			}
+		}
+
+	}
 	arg.AssignedAgentID = sql.NullString{}
+	if arg.Status == "pending" {
+		arg.Status = "queued"
+	}
 	deployment, err := q.CreateDeployment(ctx, arg)
 	if err != nil {
 		return DeploymentResult{}, fmt.Errorf("insert deployment: %w", err)
 	}
-	if err := q.MarkReleaseSnapshotLocked(ctx, arg.ReleaseID); err != nil {
-		return DeploymentResult{}, fmt.Errorf("lock release snapshot: %w", err)
+	if gated {
+		if err := q.CreateArtifactGateRun(ctx, deployment.ID); err != nil {
+			return DeploymentResult{}, err
+		}
 	}
 	steps, err = snapshotVerification(ctx, q, deployment, steps)
 	if err != nil {
@@ -208,7 +278,12 @@ func createDeploymentWithSteps(
 	); err != nil {
 		return DeploymentResult{}, fmt.Errorf("snapshot release steps: %w", err)
 	}
-	return DeploymentResult{Deployment: deployment, Mode: ExecutionLocal}, nil
+	queueAudit(ctx, deployment.ID, "deployment_queue_created")
+	if err := advanceEnvironmentQueue(ctx, q, arg.EnvironmentID); err != nil {
+		return DeploymentResult{}, err
+	}
+	deployment, err = q.GetDeployment(ctx, deployment.ID)
+	return DeploymentResult{Deployment: deployment, Mode: ExecutionLocal}, err
 }
 
 func (r *Repository) ApproveDeployment(
@@ -216,38 +291,55 @@ func (r *Repository) ApproveDeployment(
 	approval db.CreateApprovalParams,
 ) (DeploymentResult, error) {
 	var result DeploymentResult
-	err := r.WithTx(ctx, func(q *db.Queries) error {
-		locked, err := q.LockDeploymentApproval(ctx, approval.DeploymentID)
-		if err != nil {
-			return fmt.Errorf("lock deployment approval: %w", err)
-		}
-		if locked == 0 {
-			if _, err := q.GetDeployment(
+	err := r.WithDeploymentTx(
+		ctx,
+		approval.DeploymentID,
+		func(ctx context.Context, q *db.Queries) error {
+			locked, err := q.LockDeploymentApproval(ctx, approval.DeploymentID)
+			if err != nil {
+				return fmt.Errorf("lock deployment approval: %w", err)
+			}
+			if locked == 0 {
+				if _, err := q.GetDeployment(
+					ctx,
+					approval.DeploymentID,
+				); err != nil {
+					return err
+				}
+				return ErrDeploymentApprovalConflict
+			}
+			deployment, err := q.GetDeployment(ctx, approval.DeploymentID)
+			if err != nil {
+				return fmt.Errorf("get deployment: %w", err)
+			}
+			if _, err := q.CreateApproval(ctx, approval); err != nil {
+				return fmt.Errorf("create approval: %w", err)
+			}
+			changed, err := q.ApproveDeploymentStatus(
 				ctx,
 				approval.DeploymentID,
+			)
+			if err != nil {
+				return fmt.Errorf("approve deployment status: %w", err)
+			}
+			if changed != 1 {
+				return ErrDeploymentApprovalConflict
+			}
+			if err := advanceEnvironmentQueue(
+				ctx,
+				q,
+				deployment.EnvironmentID,
 			); err != nil {
 				return err
 			}
-			return ErrDeploymentApprovalConflict
-		}
-		deployment, err := q.GetDeployment(ctx, approval.DeploymentID)
-		if err != nil {
-			return fmt.Errorf("get deployment: %w", err)
-		}
-		if _, err := q.CreateApproval(ctx, approval); err != nil {
-			return fmt.Errorf("create approval: %w", err)
-		}
-		changed, err := q.ApproveDeploymentStatus(ctx, approval.DeploymentID)
-		if err != nil {
-			return fmt.Errorf("approve deployment status: %w", err)
-		}
-		if changed != 1 {
-			return ErrDeploymentApprovalConflict
-		}
-		deployment.Status = "pending"
-		result = deploymentResult(deployment)
-		return nil
-	})
+			deployment, err = q.GetDeployment(ctx, deployment.ID)
+			if err != nil {
+				return err
+			}
+			result = deploymentResult(deployment)
+			return nil
+		},
+	)
 	if err != nil {
 		return DeploymentResult{}, fmt.Errorf("approve deployment: %w", err)
 	}
@@ -267,15 +359,20 @@ func deploymentResult(deployment db.Deployment) DeploymentResult {
 
 func deploymentStepsFromRelease(raw string) ([]DeploymentStepSnapshot, error) {
 	var source []struct {
-		Name            string   `json:"name"`
-		ScriptBody      string   `json:"script_body"`
-		Interpreter     string   `json:"interpreter"`
-		TimeoutSeconds  int64    `json:"timeout_seconds"`
-		MaxRetries      int64    `json:"max_retries"`
-		ExecutionTarget string   `json:"execution_target"`
-		AgentSelectors  []string `json:"agent_selectors"`
-		ContainerImage  string   `json:"container_image"`
-		VariableNames   []string `json:"variable_names"`
+		Name                 string   `json:"name"`
+		ScriptBody           string   `json:"script_body"`
+		Interpreter          string   `json:"interpreter"`
+		TimeoutSeconds       int64    `json:"timeout_seconds"`
+		MaxRetries           int64    `json:"max_retries"`
+		ExecutionTarget      string   `json:"execution_target"`
+		AgentExecutionMode   string   `json:"agent_execution_mode"`
+		AgentSelectors       []string `json:"agent_selectors"`
+		ContainerImage       string   `json:"container_image"`
+		NetworkMode          string   `json:"network_mode"`
+		ApprovalArtifactPath string   `json:"approval_artifact_path"`
+		ApprovalReviewPath   string   `json:"approval_review_path"`
+		ApprovalReviewFormat string   `json:"approval_review_format"`
+		VariableNames        []string `json:"variable_names"`
 	}
 	if err := json.Unmarshal([]byte(raw), &source); err != nil {
 		return nil, fmt.Errorf("decode release steps: %w", err)
@@ -298,16 +395,37 @@ func deploymentStepsFromRelease(raw string) ([]DeploymentStepSnapshot, error) {
 				"step %q: %w", step.Name, ErrLegacyServerStep,
 			)
 		}
+		mode, err := agentexecution.Parse(agentexecution.Config{
+			Target: target, Mode: step.AgentExecutionMode,
+			Image: step.ContainerImage, VariableNames: step.VariableNames,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("step %q: %w", step.Name, err)
+		}
+		if err := artifact.ValidateGateConfig(
+			target,
+			step.NetworkMode,
+			step.ApprovalArtifactPath,
+			step.ApprovalReviewPath,
+			step.ApprovalReviewFormat,
+		); err != nil {
+			return nil, err
+		}
 		steps[i] = DeploymentStepSnapshot{
 			CreateDeploymentStepParams: db.CreateDeploymentStepParams{
-				Name:            step.Name,
-				ScriptBody:      step.ScriptBody,
-				TimeoutSeconds:  step.TimeoutSeconds,
-				MaxRetries:      step.MaxRetries,
-				ExecutionTarget: target,
-				Interpreter:     step.Interpreter,
-				ContainerImage:  step.ContainerImage,
-				VariableNames:   marshalVariableNames(step.VariableNames),
+				Name:                 step.Name,
+				ScriptBody:           step.ScriptBody,
+				TimeoutSeconds:       step.TimeoutSeconds,
+				MaxRetries:           step.MaxRetries,
+				ExecutionTarget:      target,
+				AgentExecutionMode:   string(mode),
+				Interpreter:          step.Interpreter,
+				ContainerImage:       step.ContainerImage,
+				NetworkMode:          step.NetworkMode,
+				ApprovalArtifactPath: step.ApprovalArtifactPath,
+				ApprovalReviewPath:   step.ApprovalReviewPath,
+				ApprovalReviewFormat: step.ApprovalReviewFormat,
+				VariableNames:        marshalVariableNames(step.VariableNames),
 			},
 			Selectors: step.AgentSelectors,
 		}

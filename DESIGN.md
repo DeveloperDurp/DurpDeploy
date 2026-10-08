@@ -50,7 +50,7 @@ keep `overflow-x-auto` and `table table-zebra table-fixed w-full`.
 - **Structure**: native `details.dropdown.dropdown-end` with a focusable
   `summary.btn.btn-ghost.btn-sm`, then `ul.dropdown-content.menu`.
 - **Spacing**: `w-52 p-2` for the mobile menu and compact `btn-sm` controls.
-- **States**: active links use DaisyUI's `active`; summaries retain the native
+- **States**: active links use DaisyUI's `menu-active`; summaries retain the native
   keyboard interaction and DaisyUI focus treatment.
 - **Accessibility**: links remain anchors, actions remain buttons in POST
   forms, and Escape/outside-click behavior is supplied by existing Alpine
@@ -67,9 +67,28 @@ keep `overflow-x-auto` and `table table-zebra table-fixed w-full`.
 - Home charts use Chart.js in separate `bg-base-200` cards below summary
   metrics: one column on phones, two at `lg`. Fixed-height responsive canvases
   use semantic theme colors, no entrance animation, and visible status labels.
-  Exact totals and expandable daily counts provide text alternatives. The
+  Exact totals and screen-reader daily counts provide text alternatives. The
   chart bundle loads only when chart data exists; HTMX removal destroys chart
   instances and theme observers. The document owns scrolling.
+- The home's running, waiting, latest-per-release/environment, and recent deployments
+  refresh together every five seconds through one HTMX fragment request, along
+  with running/today counts. Its completion event refreshes chart data through
+  the existing activity endpoint. Summary cards remain mounted; only their
+  count text changes. Charts update in place without animation, and unchanged
+  activity does not redraw them;
+  the main page remains mounted, including when the running list becomes empty.
+- Dashboard refreshes use native view transitions through HTMX. Each deployment
+  section keeps its visual identity while it moves or changes size, with a
+  200ms ease-in-out transition. The header and charts stay outside the transition.
+  Reduced-motion settings disable these layout transitions; browsers without
+  the native API continue to refresh normally.
+- Waiting lists queued deployments, deployment approvals, and artifact approvals
+  separately from running work; none of these states counts as running.
+- Home deployment entries use full-width `bg-base-200 rounded-box` cards with
+  `p-4` and `mb-3` below `md`, then zebra tables at `md` and above. One DOM
+  serves both layouts and the five-second refresh. Whole-entry links retain
+  hover/focus highlights, follow the card radius, and show all labelled fields
+  on phones; desktop rows keep their existing columns.
 - Projects, Deployments, Environments, Lifecycles, and Templates use full-width resource cards on all
   screen sizes. Names remain plain bold headings; the entire card is a native
   navigation link, with a chevron, hover ring, and visible keyboard focus.
@@ -84,6 +103,10 @@ keep `overflow-x-auto` and `table table-zebra table-fixed w-full`.
   Load more stay above/below the card list; Export remains on deployment detail.
 - **Structure**: `card bg-base-200 shadow` with `card-body`; fields use
   `form-control`, `label`, and `input input-bordered`.
+  Shared CSS owns the form wrappers and labels, which DaisyUI 5 no longer
+  supplies. It preserves full-width fields, semantic label colors, and 48px
+  default controls. Tailwind 4 source scanning and both theme definitions
+  live in `static/css/input.css`.
 - **States**: validation uses `text-error text-sm`; alerts use semantic
   `alert-*` classes.
 - Initially hidden Alpine edit forms use `x-cloak` to prevent a flash before
@@ -98,6 +121,13 @@ keep `overflow-x-auto` and `table table-zebra table-fixed w-full`.
 - Headers containing project names wrap their heading above Back on narrow
   screens, so long names cannot push the control outside the viewport.
 
+### Remote step execution
+- Reuse native labelled selects for Server container / Agent and Host / Container.
+- Show agent mode only for Agent steps. Show and require an image for either container path.
+- Disable fields that do not apply. Keep variable restrictions visible for all modes.
+- Explain that agent containers require a ready Docker or Podman runtime and agent/3.
+- Reuse the existing form error region and viewer guards; controls wrap on small screens.
+
 ### Package repository configuration
 - One active project source is shown as a card, without a repository selector.
 - Authentication uses Alpine to show and enable only relevant credential fields;
@@ -106,22 +136,6 @@ keep `overflow-x-auto` and `table table-zebra table-fixed w-full`.
   button is disabled during the request and semantic alerts show success/error.
 - Configuration replacement preserves historical package pins, and the page
   states that saving affects only future snapshots.
-
-### Back navigation
-- Generic Back/Go back links use native browser history, preserving previous
-  URLs, filters, and pagination. They do not add entries or maintain a URL stack.
-- Header links use `btn btn-ghost btn-sm`, grouped beside the other actions with
-  `flex flex-wrap gap-2`. Back remains available to viewers and keyboard users.
-- The existing parent URL is the fallback for an empty history. Package
-  repository Back falls back to its project; the standalone viewer rejection
-  page falls back to Projects. JavaScript replaces the direct entry to avoid a
-  Back loop; links also work without JavaScript.
-- The Navigation API distinguishes a first entry with forward history from a
-  real previous page when all entries are visible. Cross-origin entries and old
-  browsers hide that position; in those cases Back favors browser history over
-  a guessed fallback. Modified clicks retain normal anchor behavior.
-- Breadcrumbs, named destination links, and Cancel controls retain their
-  explicit destinations.
 
 ### Deployment verification and rollback
 - Verification uses the existing form fields, a native type selector, and
@@ -147,6 +161,9 @@ keep `overflow-x-auto` and `table table-zebra table-fixed w-full`.
   use `min-h-12` from the existing spacing scale for touch access.
 
 ### Deployment list cards
+- Filters start collapsed below `md`, with an Alpine toggle and an Active badge
+  when filters apply. Closing the panel retains its values. At `md` and above,
+  the filter form stays visible and the toggle is hidden.
 - Full-width resource cards show project headings and labeled version,
   environment, status, and date fields at every size. The same cards are
   appended by Load more; no duplicate mobile DOM or action column.
@@ -184,19 +201,60 @@ keep `overflow-x-auto` and `table table-zebra table-fixed w-full`.
   keyboard access and focus treatment; long values wrap on narrow screens.
 
 ### Deployment waiting state
+- Project/environment queues use a `badge-primary` queued status, a readable queue
+  position, and a project-authorized link to active work. Reuse status polling
+  and native Cancel buttons; viewers see queue state without write controls.
 - Queued remote work with no issued claim replaces the deployment status text
   with “Waiting for agents” in the existing `badge-warning`, with
   `aria-live="polite"`.
 - Reuse the deployment's existing status polling to clear the message once
   work is claimed or the deployment finishes.
 
+### Generated artifact approval
+- Step and template network/approval fields remain inside the existing editor
+  modals. Runbook step modals preserve container network settings. Deployment
+  approval cards sit above step logs, use wrapping metadata and full phone
+  touch targets, and keep all permissions and exact-revision confirmations.
+- Deployment actions use one shared polling fragment, with Export/Rollback in
+  More. Queue and approval transitions update Cancel/Re-run without moving Back.
+  Dashboard charts label and color queue and artifact approval states.
+- Reuse `card bg-base-200 shadow`, labelled badges, definition lists, and existing small buttons for gate review.
+- Show action counts, checksums, expiry, and approver. Resource details are writer-only; mask sensitive review values. Scripts and logs use the same display rules as other deployments. Long checksums wrap.
+- Native labelled form fields configure network and approval paths. Native POST forms approve or reject the exact revision and checksum. Viewers receive no write or download control.
+- Write-capable members can open a native details disclosure for Terraform resource changes. Load it on demand and preserve the open disclosure during status polling. Resource addresses and actions wrap; Before and After use labelled, wrapping monospace blocks, stacked on small screens. Mask sensitive values and show unknown values as known after apply. Keep the producer-supplied review warning visible; viewers see counts only.
+- Awaiting gates use warning badges; approved uses success; rejected or expired uses error. State text carries meaning without color.
+- Terraform actions use green `success` for additions, red `error` for removals,
+  and yellow `warning` for modifications, with visible action labels and signs.
+  Before/After blocks retain red/green borders. Step logs render terminal red,
+  green, yellow, and bold cues as escaped text spans; plain plan diff markers
+  receive the same colors. Stored and streamed logs share this renderer.
+  In the light theme, colored text mixes 55% `base-content` into its semantic
+  color to keep small log text and review labels readable on pale surfaces.
+
+### Back navigation
+- Generic Back/Go back links use native browser history, preserving previous
+  URLs, filters, and pagination. They do not add entries or maintain a URL stack.
+- Header links use `btn btn-ghost btn-sm`, grouped beside the other actions with
+  `flex flex-wrap gap-2`. Back remains available to viewers and keyboard users.
+- The existing parent URL is the fallback for an empty history. Package
+  repository Back falls back to its project; the standalone viewer rejection
+  page falls back to Projects. JavaScript replaces the direct entry to avoid a
+  Back loop; links also work without JavaScript.
+- The Navigation API distinguishes a first entry with forward history from a
+  real previous page when all entries are visible. Cross-origin entries and old
+  browsers hide that position; in those cases Back favors browser history over
+  a guessed fallback. Modified clicks retain normal anchor behavior.
+- Breadcrumbs, named destination links, and Cancel controls retain their
+  explicit destinations.
+
 ## 6. Motion & Interaction
 
 ### Home dashboard
 Summary counts use a full-width two-column grid on phones and four columns on
-desktop. Deployment sections share card rows below `md` and a fixed five-column
-table above it. Every card shows project, version, environment, status, and
-date with wrapping values and visible field labels.
+desktop. Deployment sections use a fixed five-column table, with stacked,
+labelled rows below `md`. Each row has one native link over the whole row,
+with a hover highlight and keyboard focus. Names and values remain plain
+text; rows have no buttons or card styling.
 
 ### Shared page structure
 Main list and detail pages use `page-header`: a title column and an action
@@ -208,9 +266,21 @@ Edit forms put Save and Back together in that header; creation forms keep
 Create and Cancel together below the fields. Destructive actions remain in
 their separate section. Domain actions such as Deploy and Save immutable
 version retain their specific labels and existing submit behavior.
-Project section buttons repeat primary, secondary, and accent in order so
-neighbors differ. Steps, Releases, and Deploy use primary; Variables, Runbooks,
-and Schedules use secondary; Packages and Notifications use accent.
+Project overview navigation uses a single Project menu control in the header.
+It opens a native dialog drawer on the right, with Configuration, Operations,
+and Settings groups of plain menu links. Deploy remains a primary header action
+beside Edit and Back. Viewers retain navigation but do not see Deploy or Schedules.
+The drawer uses `bg-base-100`, `border-base-300`, and the existing menu hover/focus
+states. Its width is 24rem, capped at the viewport minus 1rem. The drawer and
+backdrop start at the visible navbar's lower edge and fill the remaining
+viewport height; opening and resizing measure the navbar instead of assuming
+a fixed header height. The panel owns vertical scrolling, with a sticky title/Close header.
+Outside click, Escape, and Close dismiss it and restore focus to Project menu.
+Selecting a link closes it and uses the existing HTMX navigation and URLs.
+Drawer motion follows the side-panel mechanism from beui.dev's drawer: enter
+from `translateX(100%)` over 200ms ease-out and leave toward the right over
+180ms ease-in. Only transform moves; reduced-motion preferences disable travel.
+Native modal focus and dismissal remain active until the exit finishes.
 Shared spacing and responsive sizing provide consistency without removing color.
 Environment and template forms fill the main content width, including their
 headers and fields, without a centered maximum-width container.
@@ -235,6 +305,10 @@ focus moves to another step's Edit button, or Add Step when the list is empty.
 Editor modals use the same clickable backdrop as confirmation and notification
 dialogs. Clicking outside closes the dialog and discards unsaved fields, while
 clicks inside keep it open. The fullscreen script editor has no outside area.
+On devices with a coarse primary pointer, opening or refreshing forms does not
+automatically focus an input, textarea, or select. Native dialog focus remains
+on a header control; users tap a field to open the keyboard. Desktop field focus,
+keyboard navigation, and focus restoration on dismissal remain available.
 New Project, Environment, Lifecycle, and Template open the existing forms in
 the same modal. Save remains in the top-right header while scrolling. Cancel,
 Back, Escape, and backdrop clicks close without creating a resource. Validation
@@ -253,6 +327,9 @@ focus to the card. Validation retains submitted fields inside the dialog.
 Lifecycle stage controls remain usable inside the modal. Delete is the last
 section, and standalone editor URLs and read-only viewer behavior remain.
 Deployments keep their existing pages.
+The releases list contains Version, Created At, and Actions columns. Deployment
+environment selectors and Deploy/Force controls belong to the project Deploy
+page. Release creation, snapshot links, and deletion remain on the releases page.
 
 Normal internal page links use HTMX to replace the main content, update the
 navbar and title, and push the existing URL into browser history. The document

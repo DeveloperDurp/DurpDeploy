@@ -33,13 +33,18 @@ func (r *Repository) CreateStepTemplateWithPlacement(
 		version, err := q.CreateStepTemplateVersion(
 			ctx,
 			db.CreateStepTemplateVersionParams{
-				TemplateID:     template.ID,
-				VersionNumber:  1,
-				Name:           template.Name,
-				ScriptBody:     template.ScriptBody,
-				Interpreter:    template.Interpreter,
-				ContainerImage: template.ContainerImage,
-				VariableNames:  template.VariableNames,
+				TemplateID:           template.ID,
+				VersionNumber:        1,
+				Name:                 template.Name,
+				ScriptBody:           template.ScriptBody,
+				Interpreter:          template.Interpreter,
+				AgentExecutionMode:   template.AgentExecutionMode,
+				ContainerImage:       template.ContainerImage,
+				NetworkMode:          template.NetworkMode,
+				ApprovalArtifactPath: template.ApprovalArtifactPath,
+				ApprovalReviewPath:   template.ApprovalReviewPath,
+				ApprovalReviewFormat: template.ApprovalReviewFormat,
+				VariableNames:        template.VariableNames,
 			},
 		)
 		if err != nil {
@@ -89,13 +94,18 @@ func (r *Repository) UpdateStepTemplateWithPlacement(
 		version, err := q.CreateStepTemplateVersion(
 			ctx,
 			db.CreateStepTemplateVersionParams{
-				TemplateID:     template.ID,
-				VersionNumber:  latest + 1,
-				Name:           template.Name,
-				ScriptBody:     template.ScriptBody,
-				Interpreter:    template.Interpreter,
-				ContainerImage: template.ContainerImage,
-				VariableNames:  template.VariableNames,
+				TemplateID:           template.ID,
+				VersionNumber:        latest + 1,
+				Name:                 template.Name,
+				ScriptBody:           template.ScriptBody,
+				Interpreter:          template.Interpreter,
+				AgentExecutionMode:   template.AgentExecutionMode,
+				ContainerImage:       template.ContainerImage,
+				NetworkMode:          template.NetworkMode,
+				ApprovalArtifactPath: template.ApprovalArtifactPath,
+				ApprovalReviewPath:   template.ApprovalReviewPath,
+				ApprovalReviewFormat: template.ApprovalReviewFormat,
+				VariableNames:        template.VariableNames,
 			},
 		)
 		if err != nil {

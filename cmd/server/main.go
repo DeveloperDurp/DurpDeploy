@@ -289,8 +289,6 @@ func runServer() {
 		agentRuntime.listener.Addr().String(),
 	)
 	maintenance.StartLitestreamCheck(ctx, bus)
-	sched.Start(ctx)
-	defer sched.Stop()
 	r := server.NewRouterWithAgentManagement(
 		repo,
 		rnr,
@@ -305,7 +303,14 @@ func runServer() {
 	// etc.). Without this, a deployment sitting in "pending" stays there
 	// forever — the HTTP handler launched the runner as a goroutine and
 	// that goroutine dies with the process.
+	if err := repo.MaintainArtifactGates(ctx); err != nil {
+		slog.Error("artifact gate maintenance", "err", err)
+	}
+	go maintainArtifactGates(ctx, repo, rnr)
 	recoverPendingDeployments(ctx, rnr, repo)
+	go rnr.ServeQueue(ctx)
+	sched.Start(ctx)
+	defer sched.Stop()
 
 	addr := browserListener.Addr().String()
 	srv := newHTTPServer(addr, r)
@@ -349,42 +354,41 @@ func runServer() {
 // status and re-launches their runners. Called once at server startup
 // (see runServer).
 //
-// ponytail: the runner.Run call does NOT use a SELECT ... FOR UPDATE
-// or any atomic claim — the runner transitions status to "running"
-// on its first DB write (internal/runner/runner.go:188). If two
-// goroutines ever saw the same pending row (recovery at startup + a
-// concurrent HTTP create), both would transition it to "running" and
-// run the steps. In practice this can't happen — recovery runs once
-// at boot, before any HTTP handler is reachable — but the race
-// remains in the contract. Fix with a conditional UPDATE (WHERE
-// status='pending') if the startup window ever overlaps with traffic.
+// Runner admission uses a conditional transition under the environment lock,
+// so the queue worker and recovery can safely observe the same pending row.
 func recoverPendingDeployments(
 	ctx context.Context,
 	rnr *runner.DeploymentRunner,
 	repo *repository.Repository,
 ) {
 	var failed int64
-	err := repo.WithTx(ctx, func(q *db.Queries) error {
-		now, err := q.CurrentUnixTime(ctx)
-		if err != nil {
-			return err
-		}
-		timestamp := sql.NullInt64{Int64: now, Valid: true}
-		if _, err := q.CancelOrphanedRemoteStepRuns(ctx, now); err != nil {
-			return err
-		}
-		if _, err := q.MarkUnreconciledLocalDeployments(
-			ctx,
-			timestamp,
-		); err != nil {
-			return err
-		}
-		failed, err = q.FailOrphanedDeployments(ctx, timestamp)
-		if err != nil {
-			return err
-		}
-		return q.ReconcileTerminalVerifications(ctx)
-	})
+	err := repo.WithQueueMaintenanceTx(
+		ctx,
+		func(ctx context.Context, q *db.Queries) error {
+			now, err := q.CurrentUnixTime(ctx)
+			if err != nil {
+				return err
+			}
+			timestamp := sql.NullInt64{Int64: now, Valid: true}
+			if _, err := q.CancelOrphanedRemoteStepRuns(ctx, now); err != nil {
+				return err
+			}
+			if _, err := q.MarkUnreconciledLocalDeployments(
+				ctx,
+				timestamp,
+			); err != nil {
+				return err
+			}
+			failed, err = q.FailOrphanedDeployments(ctx, timestamp)
+			if err != nil {
+				return err
+			}
+			if err := q.CancelTerminalArtifactGates(ctx); err != nil {
+				return err
+			}
+			return q.ReconcileTerminalVerifications(ctx)
+		},
+	)
 	if err != nil {
 		slog.Error("startup recovery: fail orphaned deployments", "err", err)
 	} else if failed > 0 {
@@ -393,6 +397,10 @@ func recoverPendingDeployments(
 			"count",
 			failed,
 		)
+	}
+	if err := repo.ReconcileDeploymentQueues(ctx); err != nil {
+		slog.Error("startup recovery: reconcile deployment queues", "err", err)
+		return
 	}
 	pending, err := repo.Queries.ListPendingDeployments(ctx)
 	if err != nil {

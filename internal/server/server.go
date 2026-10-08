@@ -174,6 +174,7 @@ func newRouter(
 		// Home page
 		indexHandler := handler.NewIndexHandler(repo)
 		pr.Get("/", indexHandler.Index)
+		pr.Get("/dashboard/deployments", indexHandler.RefreshDeployments)
 		pr.Get("/dashboard/activity",
 			api.NewDeploymentHandler(repo, rnr).DeploymentActivity)
 		pr.Post("/logout", authHandler.LogoutPost)
@@ -305,6 +306,7 @@ func newRouter(
 		rh := handler.NewReleaseHandler(repo)
 
 		dh := handler.NewDeploymentHandler(repo, rnr)
+		artifactGateH := handler.NewArtifactGateHandler(repo, rnr)
 		pr.Get("/deployments", dh.ListDeployments)
 
 		lhH := handler.NewLintHandler()
@@ -324,6 +326,23 @@ func newRouter(
 
 			dpr.Get("/deployments/{id}", dh.GetDeployment)
 			dpr.Get("/deployments/{id}/status", dh.GetDeploymentStatus)
+			dpr.Get("/deployments/{id}/artifact-gates", artifactGateH.List)
+			dpr.Get(
+				"/deployments/{id}/artifact-gates/{stepIndex}/review",
+				artifactGateH.Review,
+			)
+			dpr.Get(
+				"/deployments/{id}/artifact-gates/{stepIndex}/artifact",
+				artifactGateH.Download,
+			)
+			dpr.Post(
+				"/deployments/{id}/artifact-gates/{stepIndex}/approve",
+				artifactGateH.Approve,
+			)
+			dpr.Post(
+				"/deployments/{id}/artifact-gates/{stepIndex}/reject",
+				artifactGateH.Reject,
+			)
 			dpr.Post("/deployments/{id}/cancel", dh.CancelDeployment)
 			dpr.Post("/deployments/{id}/approve", dh.ApproveDeployment)
 			dpr.Post("/deployments/{id}/redeploy", dh.RedeployDeployment)
@@ -637,6 +656,7 @@ func newRouter(
 
 		apiRelH := api.NewReleaseHandler(repo)
 		apiDepH := api.NewDeploymentHandler(repo, rnr)
+		artifactGateH := handler.NewArtifactGateHandler(repo, rnr)
 		apiRunbookH := api.NewRunbookHandler(repo, rnr)
 		apiSchedH := api.NewScheduleHandler(repo)
 		apiLogH := api.NewLogHandler(rnr.Broker(), repo)
@@ -651,6 +671,23 @@ func newRouter(
 
 			dar.Get("/deployments/{id}", apiDepH.GetDeployment)
 			dar.Get("/deployments/{id}/status", apiDepH.GetDeploymentStatus)
+			dar.Get("/deployments/{id}/artifact-gates", artifactGateH.List)
+			dar.Get(
+				"/deployments/{id}/artifact-gates/{stepIndex}/review",
+				artifactGateH.Review,
+			)
+			dar.Get(
+				"/deployments/{id}/artifact-gates/{stepIndex}/artifact",
+				artifactGateH.Download,
+			)
+			dar.Post(
+				"/deployments/{id}/artifact-gates/{stepIndex}/approve",
+				artifactGateH.Approve,
+			)
+			dar.Post(
+				"/deployments/{id}/artifact-gates/{stepIndex}/reject",
+				artifactGateH.Reject,
+			)
 			dar.Get("/deployments/{id}/verification", apiDepH.GetVerification)
 			dar.Get("/deployments/{id}/logs", apiDepH.ListDeploymentLogs)
 			dar.Get("/deployments/{id}/logs/stream", apiLogH.StreamLogs)

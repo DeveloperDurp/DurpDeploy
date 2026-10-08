@@ -1,0 +1,119 @@
+package pages
+
+import "fmt"
+import "strconv"
+import "time"
+import "durpdeploy/internal/auth"
+import "durpdeploy/internal/artifact"
+
+templ ArtifactGatePanel(deploymentID int64, gates []ArtifactGateInfo, poll bool) {
+	<div
+		data-artifact-gates aria-live="polite"
+		if poll {
+			hx-get={ fmt.Sprintf("/deployments/%d/artifact-gates", deploymentID) }
+			hx-trigger="every 3s"
+			hx-swap="outerHTML"
+		}
+	>
+		@ArtifactGates(gates)
+	</div>
+}
+
+templ ArtifactGates(gates []ArtifactGateInfo) {
+	for _, gate := range gates {
+		<section class="card bg-base-200 shadow" aria-label="Artifact approval">
+			<div class="card-body space-y-4">
+				<div class="flex flex-wrap items-center justify-between gap-2">
+					<h2 class="card-title">Artifact review · Step { strconv.FormatInt(gate.StepIndex+1, 10) }</h2>
+					<span class={ "badge", artifactGateBadge(gate.Status) }>{ gate.Status }</span>
+				</div>
+				<p class="text-sm">Review the generated changes before continuing. Sensitive values in this review are masked.</p>
+				<p class="text-sm"><strong>Unverified summary supplied by the deployment step.</strong> The server does not verify that these counts describe the artifact. Download and independently inspect the exact artifact before approval; checksums identify bytes, not their meaning.</p>
+				<dl class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+					<div class="text-success"><dt>+ Create</dt><dd class="text-xl font-semibold">{ strconv.FormatInt(gate.Review.Create, 10) }</dd></div>
+					<div class="text-warning"><dt>~ Update</dt><dd class="text-xl font-semibold">{ strconv.FormatInt(gate.Review.Update, 10) }</dd></div>
+					<div class="text-error"><dt>− Delete</dt><dd class="text-xl font-semibold">{ strconv.FormatInt(gate.Review.Delete, 10) }</dd></div>
+					<div><dt>Read</dt><dd class="text-xl font-semibold">{ strconv.FormatInt(gate.Review.Read, 10) }</dd></div>
+				</dl>
+				if CanWrite(ctx) && gate.ReviewFormat == "terraform" && gate.ExpiresAt > time.Now().Unix() {
+					<details
+						id={ fmt.Sprintf("gate-plan-%d-%d-%d", gate.DeploymentID, gate.StepIndex, gate.Revision) }
+						hx-preserve
+						hx-get={ fmt.Sprintf("/deployments/%d/artifact-gates/%d/review", gate.DeploymentID, gate.StepIndex) }
+						hx-trigger="toggle once"
+						hx-target="find .terraform-plan"
+							hx-swap="innerHTML"
+						data-terraform-review
+						class="rounded-lg bg-base-100 p-4"
+					>
+						<summary class="cursor-pointer font-semibold">View resource changes</summary>
+						<div class="terraform-plan mt-4" aria-live="polite">Loading resource changes…</div>
+					</details>
+				}
+				<dl class="space-y-2 text-sm">
+					<div><dt>Artifact SHA-256</dt><dd class="font-mono break-all">{ gate.SHA256 }</dd></div>
+					<div><dt>Context SHA-256</dt><dd class="font-mono break-all">{ gate.BundleSHA256 }</dd></div>
+					<div><dt>Approval expires</dt><dd>{ time.Unix(gate.ExpiresAt, 0).UTC().Format(time.RFC3339) }</dd></div>
+					if gate.ApprovedBy != 0 {
+						<div><dt>Approved by user #{ strconv.FormatInt(gate.ApprovedBy, 10) }</dt><dd>{ time.Unix(gate.ApprovedAt, 0).UTC().Format(time.RFC3339) }</dd></div>
+					}
+				</dl>
+				if CanWrite(ctx) {
+					<div class="flex flex-wrap gap-2">
+						if gate.ExpiresAt > time.Now().Unix() {
+							<a class="btn sm:btn-sm btn-ghost" href={ fmt.Sprintf("/deployments/%d/artifact-gates/%d/artifact", gate.DeploymentID, gate.StepIndex) }>Download sensitive artifact</a>
+						}
+						if CanManageAgents(ctx) && gate.Status == "awaiting" && gate.ExpiresAt > time.Now().Unix() {
+							for _, action := range []string{"approve", "reject"} {
+								<form method="post" action={ fmt.Sprintf("/deployments/%d/artifact-gates/%d/%s", gate.DeploymentID, gate.StepIndex, action) }>
+									if sess := auth.SessionFromContext(ctx); sess != nil {
+<input type="hidden" name="csrf_token" value={ sess.CsrfToken }/>
+}
+
+									<input type="hidden" name="revision" value={ strconv.FormatInt(gate.Revision, 10) }/>
+									<input type="hidden" name="sha256" value={ gate.SHA256 }/>
+									if action == "approve" {
+<button class="btn sm:btn-sm btn-success" type="submit">Approve and continue</button>
+} else {
+<button class="btn sm:btn-sm btn-error" type="submit">Reject</button>
+}
+								</form>
+							}
+						}
+					</div>
+				}
+			</div>
+		</section>
+	}
+}
+
+templ TerraformPlanView(resources []artifact.TerraformResourceChange) {
+	<div data-terraform-plan class="space-y-4">
+		if len(resources) == 0 {
+			<p class="text-sm">No Terraform resource changes are available in this review.</p>
+		}
+		for _, resource := range resources {
+			<section class="space-y-2" aria-label={ resource.Address }>
+				<div class="flex flex-wrap items-center gap-2">
+					<h3 class="font-mono text-sm break-all">{ resource.Address }</h3>
+					for _, action := range resource.Actions {
+						switch action {
+							case "create":
+								<span class="badge badge-success">+ Add</span>
+							case "delete":
+								<span class="badge badge-error">− Remove</span>
+							case "update":
+								<span class="badge badge-warning">~ Modify</span>
+							default:
+								<span class="badge badge-outline">{ action }</span>
+						}
+					}
+				</div>
+				<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+					<div class="min-w-0"><h4 class="text-sm font-semibold mb-2 text-error">− Before</h4><pre class="font-mono text-xs whitespace-pre-wrap break-all rounded bg-base-200 border-l-2 border-error p-4">{ resource.Before }</pre></div>
+					<div class="min-w-0"><h4 class="text-sm font-semibold mb-2 text-success">+ After</h4><pre class="font-mono text-xs whitespace-pre-wrap break-all rounded bg-base-200 border-l-2 border-success p-4">{ resource.After }</pre></div>
+				</div>
+			</section>
+		}
+	</div>
+}

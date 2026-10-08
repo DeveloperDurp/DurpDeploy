@@ -1,6 +1,6 @@
 -- name: LockDeploymentSnapshot :execrows
 UPDATE deployments SET status = status -- NOSONAR: intentional write lock
-WHERE id = sqlc.arg(deployment_id) AND status IN ('pending', 'pending_approval')
+WHERE id = sqlc.arg(deployment_id) AND status IN ('queued', 'pending', 'pending_approval')
 AND NOT EXISTS (SELECT 1 FROM deployment_step_sources WHERE deployment_id = sqlc.arg(deployment_id))
 AND NOT EXISTS (SELECT 1 FROM deployment_steps WHERE deployment_id = sqlc.arg(deployment_id));
 
@@ -14,12 +14,12 @@ WHERE id = sqlc.arg(deployment_id)
   AND assigned_agent_id = sqlc.arg(agent_id);
 
 -- name: ApproveDeploymentStatus :execrows
-UPDATE deployments SET status = 'pending'
+UPDATE deployments SET status = 'queued'
 WHERE id = sqlc.arg(deployment_id) AND status = 'pending_approval';
 
 -- name: CancelStepDeployment :execrows
 UPDATE deployments SET status = 'cancelled', finished_at = unixepoch()
-WHERE id = ? AND status IN ('pending', 'running');
+WHERE id = ? AND status IN ('pending', 'running', 'publishing_artifact', 'awaiting_artifact_approval');
 
 -- name: ReplaceDeploymentDispatch :execrows
 UPDATE deployment_dispatches SET ciphertext = sqlc.narg(ciphertext), updated_at = unixepoch()

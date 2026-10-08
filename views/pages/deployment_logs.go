@@ -102,6 +102,10 @@ func deploymentLogPanels(
 }
 
 func deploymentActiveStepLabel(view deploymentLogView, status string) string {
+	switch status {
+	case "queued", "publishing_artifact", "awaiting_artifact_approval":
+		return strings.ReplaceAll(status, "_", " ")
+	}
 	for _, panel := range view.Panels {
 		if panel.Index >= 0 &&
 			(panel.State == "running" || panel.State == "waiting") {

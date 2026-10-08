@@ -104,6 +104,139 @@ func TestResourceListMobileBrowserE2E(t *testing.T) {
 		),
 	)
 	// And: row actions retain their navigation and fragment behavior.
+	historyPath := fmt.Sprintf("/deployments?project_id=%d", project.ID)
+	var history struct{ Total int64 }
+	decodeStepLogTest(t, f.api(t, "GET", "/api/v1"+historyPath,
+		nil, 200), &history)
+	if history.Total != 3 {
+		t.Fatal("project deployment API filter lost its history")
+	}
+	for _, session := range []string{f.session, "resource-list-viewer"} {
+		b.setBackTestSession(t, f.baseURL, session)
+		b.navigateBackTest(t, fmt.Sprintf("%s/projects/%d", f.baseURL,
+			project.ID))
+		if session == "resource-list-viewer" && string(b.evaluate(
+			t,
+			`!document.querySelector('main .page-header a[href$="/deploy"], #project-menu-dialog a[href$="/schedules"]')`,
+		)) != "true" {
+			t.Fatal("viewer project menu exposes write controls")
+		}
+		b.captureNavigation(t, "project-menu-overview")
+		if string(b.evaluate(t, `(() => {
+ document.querySelector('button[aria-controls="project-menu-dialog"]').click();
+ const panel = document.querySelector('.project-menu-panel');
+ const animation = panel.getAnimations().find(a => a.animationName === 'project-menu-enter');
+ if (!animation) return false;
+ animation.pause();
+ animation.currentTime = 0;
+ const start = panel.getBoundingClientRect().left;
+ animation.currentTime = 100;
+ const middle = panel.getBoundingClientRect().left;
+ animation.currentTime = 200;
+ const end = panel.getBoundingClientRect().left;
+ animation.play();
+ return start >= innerWidth - 16 && end < middle && middle < start;
+})()`)) != "true" {
+			t.Fatal("project drawer does not enter from the right")
+		}
+		b.captureNavigation(t, "project-deployment-history", func() {
+			b.wait(t, fmt.Sprintf(`(() => {
+ const link = document.querySelector('nav[aria-label="Project sections"] a[href=%q]');
+ if (!link || link.textContent !== 'Deployment history') return false;
+ const rect = link.getBoundingClientRect();
+ const dialog = link.closest('dialog');
+ const panel = dialog.querySelector('.modal-box');
+ const box = panel.getBoundingClientRect();
+ const navbarBottom = Math.max(0, document.querySelector('#app-navbar').getBoundingClientRect().bottom);
+ const close = panel.querySelector('button').getBoundingClientRect();
+ return dialog.matches(':modal') && Math.abs(box.right - innerWidth) <= 16 &&
+ Math.abs(box.top - navbarBottom) <= 1 && Math.abs(box.bottom - innerHeight) <= 1 &&
+ panel.scrollWidth <= panel.clientWidth && box.left >= 0 &&
+ close.top >= 0 && close.bottom <= innerHeight &&
+ ![...dialog.querySelectorAll('nav a')].some(a => a.classList.contains('btn')) &&
+ rect.height >= 44 && rect.right <= innerWidth && rect.left >= 0;
+})()`, historyPath))
+		})
+		// Closing by Escape, backdrop, and Close keeps the page and restores focus.
+		b.call(t, "Input.dispatchKeyEvent", map[string]any{
+			"type": "keyDown", "key": "Escape", "code": "Escape",
+			"windowsVirtualKeyCode": 27,
+		}, &struct{}{})
+		b.wait(t, `!document.querySelector('#project-menu-dialog').open`)
+		b.evaluate(
+			t,
+			`document.querySelector('button[aria-controls="project-menu-dialog"]').focus(); document.activeElement.click(); true`,
+		)
+		b.wait(
+			t,
+			`document.querySelector('#project-menu-dialog').matches(':modal')`,
+		)
+		for _, kind := range []string{"mousePressed", "mouseReleased"} {
+			b.call(t, "Input.dispatchMouseEvent", map[string]any{
+				"type":       kind,
+				"x":          1,
+				"y":          100,
+				"button":     "left",
+				"clickCount": 1,
+			}, &struct{}{})
+		}
+		b.wait(
+			t,
+			`!document.querySelector('#project-menu-dialog').open && document.activeElement?.getAttribute('aria-controls') === 'project-menu-dialog'`,
+		)
+		b.call(t, "Emulation.setEmulatedMedia", map[string]any{
+			"features": []map[string]string{
+				{"name": "prefers-reduced-motion", "value": "reduce"},
+			},
+		}, &struct{}{})
+		if string(b.evaluate(t, `(() => {
+ document.activeElement.click();
+ const dialog = document.querySelector('#project-menu-dialog');
+ const still = getComputedStyle(dialog.querySelector('.project-menu-panel')).animationName === 'none';
+ dialog.querySelector('button[aria-label="Close project menu"]').click();
+ return still && !dialog.open;
+})()`)) != "true" {
+			t.Fatal("reduced-motion project drawer still slides")
+		}
+		b.call(t, "Emulation.setEmulatedMedia", map[string]any{
+			"features": []map[string]string{},
+		}, &struct{}{})
+		b.evaluate(t, `document.activeElement.click(); true`)
+		b.wait(
+			t,
+			`document.querySelector('#project-menu-dialog').matches(':modal')`,
+		)
+		b.evaluate(
+			t,
+			`document.querySelector('#project-menu-dialog button[aria-label="Close project menu"]').click(); true`,
+		)
+		b.wait(
+			t,
+			`!document.querySelector('#project-menu-dialog').open && document.activeElement?.getAttribute('aria-controls') === 'project-menu-dialog'`,
+		)
+		b.evaluate(t, `document.activeElement.click(); true`)
+		b.wait(
+			t,
+			`document.querySelector('#project-menu-dialog').matches(':modal')`,
+		)
+		b.evaluate(t, fmt.Sprintf(
+			`window.projectHistoryNavigation = true; document.querySelector('nav[aria-label="Project sections"] a[href=%q]').focus(); true`,
+			historyPath,
+		))
+		for _, kind := range []string{"keyDown", "keyUp"} {
+			b.call(t, "Input.dispatchKeyEvent", map[string]any{
+				"type": kind, "key": "Enter", "code": "Enter",
+				"windowsVirtualKeyCode": 13,
+			}, &struct{}{})
+		}
+		b.wait(t, fmt.Sprintf(`location.pathname === '/deployments' &&
+ new URLSearchParams(location.search).get('project_id') === '%d' &&
+ document.querySelector('select[name="project_id"]')?.value === '%d' &&
+ document.querySelectorAll('#deployments-tbody [data-deployment-id]').length === 3 &&
+ !document.querySelector('#project-menu-dialog') &&
+ window.projectHistoryNavigation === true`, project.ID, project.ID))
+	}
+	b.setBackTestSession(t, f.baseURL, f.session)
 	b.navigateBackTest(t, f.baseURL+"/environments")
 	edit := fmt.Sprintf("/environments/%d/edit", f.environment.ID)
 	b.evaluate(t, fmt.Sprintf(

@@ -50,9 +50,7 @@ func (h *ReleaseHandler) ListReleases(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Build one entry per (release, env) pair with the current gate state, so
-	// the template can decide which envs to show and what tooltip to render.
-	views, err := buildReleaseViews(r.Context(), h.repo, project, releases)
+	views, err := buildReleaseViews(r.Context(), h.repo, releases)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -75,7 +73,6 @@ func (h *ReleaseHandler) ListReleases(w http.ResponseWriter, r *http.Request) {
 func buildReleaseViews(
 	ctx context.Context,
 	repo *repository.Repository,
-	project db.Project,
 	releases []db.Release,
 ) ([]pages.ReleaseView, error) {
 	views := make([]pages.ReleaseView, len(releases))
@@ -84,24 +81,8 @@ func buildReleaseViews(
 		if err != nil {
 			return nil, err
 		}
-		envs, err := availableEnvsForRelease(ctx, repo, project, rel)
-		if err != nil {
-			return nil, err
-		}
-		mapped := make([]pages.AvailableEnv, len(envs))
-		for j, e := range envs {
-			mapped[j] = pages.AvailableEnv{
-				Environment: e.Environment,
-				State: pages.GateState{
-					Deployable:      e.State.deployable,
-					Reason:          e.State.reason,
-					Bypassable:      e.State.bypassable,
-					AlreadyDeployed: false,
-				},
-			}
-		}
 		views[i] = pages.ReleaseView{
-			Release: rel, Envs: mapped, Active: active != 0,
+			Release: rel, Active: active != 0,
 		}
 	}
 	return views, nil
@@ -127,7 +108,7 @@ func (h *ReleaseHandler) CreateRelease(w http.ResponseWriter, r *http.Request) {
 			r.Context(),
 			projectID,
 		)
-		views, _ := buildReleaseViews(r.Context(), h.repo, project, releases)
+		views, _ := buildReleaseViews(r.Context(), h.repo, releases)
 		WriteFormError(
 			w,
 			r,
@@ -156,7 +137,6 @@ func (h *ReleaseHandler) CreateRelease(w http.ResponseWriter, r *http.Request) {
 			views, _ := buildReleaseViews(
 				r.Context(),
 				h.repo,
-				project,
 				releases,
 			)
 			WriteFormError(
@@ -195,7 +175,7 @@ func (h *ReleaseHandler) CreateRelease(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		views, err := buildReleaseViews(r.Context(), h.repo, project, releases)
+		views, err := buildReleaseViews(r.Context(), h.repo, releases)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return

@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"durpdeploy/internal/db"
+
+	agentproto "github.com/DeveloperDurp/durpdeploy-agent/protocol"
 )
 
 func TestAgentPollCapabilityReplacementIsTransactional(t *testing.T) {
@@ -30,8 +32,15 @@ func TestAgentPollCapabilityReplacementIsTransactional(t *testing.T) {
 				String: agent.CertificateFingerprint.String, Valid: true,
 			},
 		},
-		[]string{"python3", "/bin/sh"},
-		"agent/2",
+		agentproto.PollRequest{
+			ProtocolEnvelope: agentproto.ProtocolEnvelope{
+				Protocol: agentproto.AgentV2,
+			},
+			SupportedInterpreters: []agentproto.Interpreter{
+				"python3",
+				"/bin/sh",
+			},
+		},
 	)
 
 	// Then
@@ -69,6 +78,7 @@ func TestAgentPollCapabilityRemovalFailsWaitingRuns(t *testing.T) {
 	if _, err := repo.DB.ExecContext(ctx, `
 INSERT INTO agent_environment_labels(agent_id, environment_id) VALUES('a', 2);
 INSERT INTO agent_interpreters(agent_id, interpreter) VALUES('a', 'python3');
+UPDATE agents SET agent_protocol = 'agent/2' WHERE id = 'a';
 INSERT INTO agent_labels(agent_id, label) VALUES('a', 'other');
 UPDATE deployments SET status = 'running' WHERE id = 3;
 UPDATE deployment_steps SET interpreter = 'python3'
@@ -89,8 +99,14 @@ WHERE deployment_id = 3 AND step_index = 0;`); err != nil {
 			ID:                     "a",
 			CertificateFingerprint: agent.CertificateFingerprint,
 		},
-		[]string{"bash"},
-		"agent/2",
+		agentproto.PollRequest{
+			ProtocolEnvelope: agentproto.ProtocolEnvelope{
+				Protocol: agentproto.AgentV2,
+			},
+			SupportedInterpreters: []agentproto.Interpreter{
+				agentproto.InterpreterBash,
+			},
+		},
 	)
 
 	// Then

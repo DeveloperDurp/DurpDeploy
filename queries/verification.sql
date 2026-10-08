@@ -18,15 +18,8 @@ UPDATE deployment_verifications SET status = CASE
     ELSE 'failed' END, finished_at = unixepoch()
 WHERE status IN ('pending', 'running') AND EXISTS (
     SELECT 1 FROM deployments WHERE id = deployment_id
-    AND status IN ('succeeded', 'failed', 'cancelled', 'cleanup_unconfirmed')
+    AND status IN ('succeeded', 'failed', 'cancelled', 'rejected', 'expired', 'cleanup_unconfirmed')
 );
-
--- name: MarkReleaseSnapshotLocked :exec
-UPDATE releases SET snapshot_locked = 1 WHERE id = ?;
-
--- name: LockUnusedReleaseSnapshot :execrows
-UPDATE releases SET version = version -- NOSONAR: intentional write lock
-WHERE id = ? AND snapshot_locked = 0;
 
 -- name: ListDeploymentVerificationTargets :many
 SELECT deployment_id, target FROM deployment_verifications;

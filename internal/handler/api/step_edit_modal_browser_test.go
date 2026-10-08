@@ -145,6 +145,7 @@ func TestStepEditModalBrowserE2E(t *testing.T) {
 	path := fmt.Sprintf("%s/projects/%d/steps-page", f.baseURL, f.project.ID)
 	b.navigateBackTest(t, path)
 	open := func() {
+		b.wait(t, `!document.querySelector('.htmx-settling, .htmx-request')`)
 		b.evaluate(
 			t,
 			`[...document.querySelectorAll('[data-step-action="edit"]')].find(el => el.getClientRects().length).click(); true`,

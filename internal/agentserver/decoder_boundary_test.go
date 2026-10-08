@@ -80,7 +80,12 @@ func TestAgentRejectsMalformedPayloads(t *testing.T) {
 		body string
 	}{
 		{"malformed", `{"protocol":"agent/1",`},
-		{"unsupported protocol", `{"protocol":"agent/3","agent_version":"v1"}`},
+		{"unsupported protocol", `{"protocol":"agent/4","agent_version":"v1"}`},
+		{"missing v3 capabilities", `{"protocol":"agent/3","agent_version":"v3"}`},
+		{"null v3 capabilities", `{"protocol":"agent/3","agent_version":"v3","supported_interpreters":[],"execution_modes":null,"container_runtimes":[],"container_interpreters":[]}`},
+		{"inconsistent v3 capabilities", `{"protocol":"agent/3","agent_version":"v3","supported_interpreters":["bash"],"execution_modes":["container"],"container_runtimes":["docker"],"container_interpreters":["bash"]}`},
+		{"duplicate v3 runtime", `{"protocol":"agent/3","agent_version":"v3","supported_interpreters":[],"execution_modes":["container"],"container_runtimes":["docker","docker"],"container_interpreters":["bash"]}`},
+		{"unknown v3 interpreter", `{"protocol":"agent/3","agent_version":"v3","supported_interpreters":[],"execution_modes":["container"],"container_runtimes":["podman"],"container_interpreters":["sh"]}`},
 		{"missing v2 capabilities", `{"protocol":"agent/2","agent_version":"v2"}`},
 		{"duplicate member", `{"protocol":"agent/1","protocol":"agent/1","agent_version":"v1"}`},
 		{"trailing value", `{"protocol":"agent/1","agent_version":"v1"} {}`},

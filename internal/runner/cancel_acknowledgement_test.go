@@ -43,7 +43,8 @@ func TestCancelDoesNotFinalizeDeploymentBeforeRunnerStops(t *testing.T) {
 	cancelled := false
 	deploymentRunner.RegisterCancel(deployment.ID, func() { cancelled = true })
 
-	if err := deploymentRunner.Cancel(deployment.ID); err != nil {
+	status, err := deploymentRunner.CancelPrestart(t.Context(), deployment.ID)
+	if err != nil || status != "cancellation_requested" {
 		t.Fatal(err)
 	}
 	if !cancelled {

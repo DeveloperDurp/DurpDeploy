@@ -39,20 +39,24 @@ type swaggerLifecycleStage struct {
 // Step is an executable script step within a project.
 // swagger:model Step
 type swaggerStep struct {
-	ID              int64    `json:"id"`
-	ProjectID       int64    `json:"project_id"`
-	Name            string   `json:"name"`
-	ScriptBody      string   `json:"script_body"`
-	Interpreter     string   `json:"interpreter"`
-	SortOrder       int64    `json:"sort_order"`
-	CreatedAt       int64    `json:"created_at"`
-	TimeoutSeconds  int64    `json:"timeout_seconds"`
-	MaxRetries      int64    `json:"max_retries"`
-	ExecutionTarget string   `json:"execution_target"`
-	AgentSelectors  []string `json:"agent_selectors"`
-	// Container image the step runs in on the server; mandatory for
-	// local steps and rejected for agent steps.
-	ContainerImage string `json:"container_image"`
+	ID                 int64    `json:"id"`
+	ProjectID          int64    `json:"project_id"`
+	Name               string   `json:"name"`
+	ScriptBody         string   `json:"script_body"`
+	Interpreter        string   `json:"interpreter"`
+	SortOrder          int64    `json:"sort_order"`
+	CreatedAt          int64    `json:"created_at"`
+	TimeoutSeconds     int64    `json:"timeout_seconds"`
+	MaxRetries         int64    `json:"max_retries"`
+	ExecutionTarget    string   `json:"execution_target"`
+	AgentExecutionMode string   `json:"agent_execution_mode"`
+	AgentSelectors     []string `json:"agent_selectors"`
+	// Container image required for local steps and agent container mode.
+	ContainerImage       string `json:"container_image"`
+	NetworkMode          string `json:"network_mode"`
+	ApprovalArtifactPath string `json:"approval_artifact_path"`
+	ApprovalReviewPath   string `json:"approval_review_path"`
+	ApprovalReviewFormat string `json:"approval_review_format"`
 	// Optional variable-name restriction. Empty passes all variables.
 	VariableNames []string `json:"variable_names"`
 }
@@ -60,56 +64,70 @@ type swaggerStep struct {
 // StepTemplate is a reusable step template.
 // swagger:model StepTemplate
 type swaggerStepTemplate struct {
-	ID              int64    `json:"id"`
-	Name            string   `json:"name"`
-	ScriptBody      string   `json:"script_body"`
-	Interpreter     string   `json:"interpreter"`
-	CreatedAt       int64    `json:"created_at"`
-	ExecutionTarget string   `json:"execution_target"`
-	AgentSelectors  []string `json:"agent_selectors"`
-	ContainerImage  string   `json:"container_image"`
-	VariableNames   []string `json:"variable_names"`
+	ID                   int64    `json:"id"`
+	Name                 string   `json:"name"`
+	ScriptBody           string   `json:"script_body"`
+	Interpreter          string   `json:"interpreter"`
+	CreatedAt            int64    `json:"created_at"`
+	ExecutionTarget      string   `json:"execution_target"`
+	AgentExecutionMode   string   `json:"agent_execution_mode"`
+	AgentSelectors       []string `json:"agent_selectors"`
+	ContainerImage       string   `json:"container_image"`
+	NetworkMode          string   `json:"network_mode"`
+	ApprovalArtifactPath string   `json:"approval_artifact_path"`
+	ApprovalReviewPath   string   `json:"approval_review_path"`
+	ApprovalReviewFormat string   `json:"approval_review_format"`
+	VariableNames        []string `json:"variable_names"`
 }
 
 // StepTemplateVersion is a historical version of a step template.
 // swagger:model StepTemplateVersion
 type swaggerStepTemplateVersion struct {
-	ID              int64    `json:"id"`
-	TemplateID      int64    `json:"template_id"`
-	VersionNumber   int64    `json:"version_number"`
-	Name            string   `json:"name"`
-	ScriptBody      string   `json:"script_body"`
-	Interpreter     string   `json:"interpreter"`
-	CreatedAt       int64    `json:"created_at"`
-	ExecutionTarget string   `json:"execution_target"`
-	AgentSelectors  []string `json:"agent_selectors"`
-	ContainerImage  string   `json:"container_image"`
-	VariableNames   []string `json:"variable_names"`
+	ID                   int64    `json:"id"`
+	TemplateID           int64    `json:"template_id"`
+	VersionNumber        int64    `json:"version_number"`
+	Name                 string   `json:"name"`
+	ScriptBody           string   `json:"script_body"`
+	Interpreter          string   `json:"interpreter"`
+	CreatedAt            int64    `json:"created_at"`
+	ExecutionTarget      string   `json:"execution_target"`
+	AgentExecutionMode   string   `json:"agent_execution_mode"`
+	AgentSelectors       []string `json:"agent_selectors"`
+	ContainerImage       string   `json:"container_image"`
+	NetworkMode          string   `json:"network_mode"`
+	ApprovalArtifactPath string   `json:"approval_artifact_path"`
+	ApprovalReviewPath   string   `json:"approval_review_path"`
+	ApprovalReviewFormat string   `json:"approval_review_format"`
+	VariableNames        []string `json:"variable_names"`
 }
 
-// Release is an immutable snapshot of project steps and variables.
+// Release is a refreshable snapshot of project steps and variables.
 // swagger:model Release
 type swaggerRelease struct {
-	ID             int64  `json:"id"`
-	ProjectID      int64  `json:"project_id"`
-	Version        string `json:"version"`
-	StepsJSON      string `json:"steps_json"`
-	CreatedAt      int64  `json:"created_at"`
-	SnapshotLocked int64  `json:"snapshot_locked"`
+	ID        int64  `json:"id"`
+	ProjectID int64  `json:"project_id"`
+	Version   string `json:"version"`
+	StepsJSON string `json:"steps_json"`
+	CreatedAt int64  `json:"created_at"`
+	// Deprecated: retained for compatibility; does not prevent refresh.
+	SnapshotLocked int64 `json:"snapshot_locked"`
 }
 
 // Deployment represents a release executing against an environment.
 // swagger:model Deployment
 type swaggerDeployment struct {
-	ID            int64   `json:"id"`
-	ReleaseID     int64   `json:"release_id"`
-	EnvironmentID int64   `json:"environment_id"`
-	Status        string  `json:"status"`
-	StartedAt     *int64  `json:"started_at"`
-	FinishedAt    *int64  `json:"finished_at"`
-	CreatedAt     int64   `json:"created_at"`
-	Forced        int64   `json:"forced"`
-	Note          *string `json:"note"`
+	QueuePosition      int64   `json:"queue_position"`
+	ActiveDeploymentID int64   `json:"active_deployment_id,omitempty"`
+	ActiveWorkURL      string  `json:"active_work_url,omitempty"`
+	ID                 int64   `json:"id"`
+	ReleaseID          int64   `json:"release_id"`
+	EnvironmentID      int64   `json:"environment_id"`
+	Status             string  `json:"status"`
+	StartedAt          *int64  `json:"started_at"`
+	FinishedAt         *int64  `json:"finished_at"`
+	CreatedAt          int64   `json:"created_at"`
+	Forced             int64   `json:"forced"`
+	Note               *string `json:"note"`
 }
 
 // DeploymentListItem is the enriched row returned by ListDeployments.
@@ -141,9 +159,12 @@ type swaggerDeploymentListResponse struct {
 // DeploymentStatusResponse is the status payload for GetDeploymentStatus.
 // swagger:model DeploymentStatusResponse
 type swaggerDeploymentStatusResponse struct {
-	ID               string `json:"id"`
-	Status           string `json:"status"`
-	WaitingForAgents bool   `json:"waiting_for_agents"`
+	ID                 string `json:"id"`
+	Status             string `json:"status"`
+	WaitingForAgents   bool   `json:"waiting_for_agents"`
+	QueuePosition      int64  `json:"queue_position"`
+	ActiveDeploymentID int64  `json:"active_deployment_id,omitempty"`
+	ActiveWorkURL      string `json:"active_work_url,omitempty"`
 }
 
 // ScheduledDeployment is a cron-driven deployment configuration.
@@ -387,17 +408,21 @@ type swaggerReorderStagesRequest struct {
 // StepRequest is the body for create/update step.
 // swagger:model StepRequest
 type swaggerStepRequest struct {
-	Name            string   `json:"name"`
-	ScriptBody      string   `json:"script_body"`
-	Interpreter     string   `json:"interpreter"`
-	SortOrder       int64    `json:"sort_order"`
-	TimeoutSeconds  int64    `json:"timeout_seconds"`
-	MaxRetries      int64    `json:"max_retries"`
-	ExecutionTarget string   `json:"execution_target"`
-	AgentSelectors  []string `json:"agent_selectors"`
-	// Container image the step runs in on the server; mandatory for
-	// local steps and rejected for agent steps.
-	ContainerImage string `json:"container_image"`
+	Name               string   `json:"name"`
+	ScriptBody         string   `json:"script_body"`
+	Interpreter        string   `json:"interpreter"`
+	SortOrder          int64    `json:"sort_order"`
+	TimeoutSeconds     int64    `json:"timeout_seconds"`
+	MaxRetries         int64    `json:"max_retries"`
+	ExecutionTarget    string   `json:"execution_target"`
+	AgentExecutionMode string   `json:"agent_execution_mode"`
+	AgentSelectors     []string `json:"agent_selectors"`
+	// Required for local steps and agent container mode; rejected for agent host mode.
+	ContainerImage       string `json:"container_image"`
+	NetworkMode          string `json:"network_mode"`
+	ApprovalArtifactPath string `json:"approval_artifact_path"`
+	ApprovalReviewPath   string `json:"approval_review_path"`
+	ApprovalReviewFormat string `json:"approval_review_format"`
 	// Optional variable-name restriction. Empty passes all variables;
 	// entries must be identifiers without duplicates.
 	VariableNames []string `json:"variable_names"`
@@ -412,14 +437,18 @@ type swaggerReorderStepsRequest struct {
 // StepTemplateRequest is the body for create/update step template.
 // swagger:model StepTemplateRequest
 type swaggerStepTemplateRequest struct {
-	Name            string   `json:"name"`
-	ScriptBody      string   `json:"script_body"`
-	Interpreter     string   `json:"interpreter"`
-	ExecutionTarget string   `json:"execution_target"`
-	AgentSelectors  []string `json:"agent_selectors"`
-	// Container image the step runs in on the server; mandatory for
-	// local steps and rejected for agent steps.
-	ContainerImage string `json:"container_image"`
+	Name               string   `json:"name"`
+	ScriptBody         string   `json:"script_body"`
+	Interpreter        string   `json:"interpreter"`
+	ExecutionTarget    string   `json:"execution_target"`
+	AgentExecutionMode string   `json:"agent_execution_mode"`
+	AgentSelectors     []string `json:"agent_selectors"`
+	// Required for local steps and agent container mode; rejected for agent host mode.
+	ContainerImage       string `json:"container_image"`
+	NetworkMode          string `json:"network_mode"`
+	ApprovalArtifactPath string `json:"approval_artifact_path"`
+	ApprovalReviewPath   string `json:"approval_review_path"`
+	ApprovalReviewFormat string `json:"approval_review_format"`
 	// Optional variable-name restriction. Empty passes all variables;
 	// entries must be identifiers without duplicates.
 	VariableNames []string `json:"variable_names"`
@@ -689,6 +718,9 @@ type swaggerAgent struct {
 	CreatedAt                int64                 `json:"created_at"`
 	UpdatedAt                int64                 `json:"updated_at"`
 	Interpreters             []string              `json:"interpreters"`
+	ExecutionModes           []string              `json:"execution_modes"`
+	ContainerRuntimes        []string              `json:"container_runtimes"`
+	ContainerInterpreters    []string              `json:"container_interpreters"`
 }
 
 type swaggerSQLNullString struct {
@@ -756,16 +788,21 @@ type swaggerAgentLabelRequest struct {
 // swagger:model RunbookStep
 // RunbookStep is one script in an immutable runbook version.
 type swaggerRunbookStep struct {
-	Name            string   `json:"name"`
-	ScriptBody      string   `json:"script_body"`
-	Interpreter     string   `json:"interpreter"`
-	SortOrder       int64    `json:"sort_order"`
-	TimeoutSeconds  int64    `json:"timeout_seconds"`
-	MaxRetries      int64    `json:"max_retries"`
-	ExecutionTarget string   `json:"execution_target"`
-	AgentSelectors  []string `json:"agent_selectors"`
-	ContainerImage  string   `json:"container_image"`
-	VariableNames   []string `json:"variable_names"`
+	Name                 string   `json:"name"`
+	ScriptBody           string   `json:"script_body"`
+	Interpreter          string   `json:"interpreter"`
+	SortOrder            int64    `json:"sort_order"`
+	TimeoutSeconds       int64    `json:"timeout_seconds"`
+	MaxRetries           int64    `json:"max_retries"`
+	ExecutionTarget      string   `json:"execution_target"`
+	AgentExecutionMode   string   `json:"agent_execution_mode"`
+	AgentSelectors       []string `json:"agent_selectors"`
+	ContainerImage       string   `json:"container_image"`
+	NetworkMode          string   `json:"network_mode"`
+	ApprovalArtifactPath string   `json:"approval_artifact_path"`
+	ApprovalReviewPath   string   `json:"approval_review_path"`
+	ApprovalReviewFormat string   `json:"approval_review_format"`
+	VariableNames        []string `json:"variable_names"`
 }
 
 // swagger:model RunbookSaveRequest
@@ -864,21 +901,24 @@ type swaggerRunbookVersionResponse struct {
 
 // swagger:model RunbookExecutionDetail
 type swaggerRunbookExecutionDetail struct {
-	ID               int64                 `json:"id"`
-	RunbookVersionID int64                 `json:"runbook_version_id"`
-	DeploymentID     int64                 `json:"deployment_id"`
-	ActorUserID      swaggerSQLNullInteger `json:"actor_user_id"`
-	ScheduleID       swaggerSQLNullInteger `json:"schedule_id"`
-	CreatedAt        int64                 `json:"created_at"`
-	EnvironmentID    int64                 `json:"environment_id"`
-	Status           string                `json:"status"`
-	StartedAt        swaggerSQLNullInteger `json:"started_at"`
-	FinishedAt       swaggerSQLNullInteger `json:"finished_at"`
-	RunbookID        int64                 `json:"runbook_id"`
-	Version          int64                 `json:"version"`
-	ProjectID        int64                 `json:"project_id"`
-	RunbookName      string                `json:"runbook_name"`
-	EnvironmentName  string                `json:"environment_name"`
+	QueuePosition      int64                 `json:"queue_position"`
+	ActiveDeploymentID int64                 `json:"active_deployment_id,omitempty"`
+	ActiveWorkURL      string                `json:"active_work_url,omitempty"`
+	ID                 int64                 `json:"id"`
+	RunbookVersionID   int64                 `json:"runbook_version_id"`
+	DeploymentID       int64                 `json:"deployment_id"`
+	ActorUserID        swaggerSQLNullInteger `json:"actor_user_id"`
+	ScheduleID         swaggerSQLNullInteger `json:"schedule_id"`
+	CreatedAt          int64                 `json:"created_at"`
+	EnvironmentID      int64                 `json:"environment_id"`
+	Status             string                `json:"status"`
+	StartedAt          swaggerSQLNullInteger `json:"started_at"`
+	FinishedAt         swaggerSQLNullInteger `json:"finished_at"`
+	RunbookID          int64                 `json:"runbook_id"`
+	Version            int64                 `json:"version"`
+	ProjectID          int64                 `json:"project_id"`
+	RunbookName        string                `json:"runbook_name"`
+	EnvironmentName    string                `json:"environment_name"`
 }
 
 // swagger:model RunbookExecutionListResponse

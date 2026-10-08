@@ -55,10 +55,18 @@ CODE=$(api_post_code '{}' "$BASE/api/v1/projects/$API_PROJECT_ID/runbooks/$RUNBO
 echo "  Immutable versions, pinned retry, and schedule disable: OK"
 
 echo "=== Verification and rollback ==="
-VERIFY_PROJECT=$(api_post "{\"name\":\"e2e-verify-$E2E_RUN_ID\"}" "$BASE/api/v1/projects")
+VERIFY_PROJECT=$(api_post "{\"name\":\"e2e-verify\"}" "$BASE/api/v1/projects")
 VERIFY_PROJECT_ID=$(echo "$VERIFY_PROJECT" | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
-VERIFY_ENV=$(api_post "{\"name\":\"e2e-verify-env-$E2E_RUN_ID\",\"verification_type\":\"bash\",\"verification_target\":\"printf verification-e2e-ok\",\"verification_timeout_seconds\":5}" "$BASE/api/v1/environments")
-VERIFY_ENV_ID=$(echo "$VERIFY_ENV" | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
+VERIFY_ENV_ID=$TEST_ENV_ID
+VERIFY_ENV_RESTORE=$(api_get "$BASE/api/v1/environments/$VERIFY_ENV_ID" | python3 -c '
+import json,sys
+d=json.load(sys.stdin)
+def text(v):
+    return (v.get("String", "") if v.get("Valid") else "") if isinstance(v,dict) else v
+print(json.dumps({k:text(d[k]) for k in ("name","description","tags","verification_type","verification_target","verification_timeout_seconds")}))
+')
+VERIFY_ENV=$(echo "$VERIFY_ENV_RESTORE" | python3 -c 'import json,sys; d=json.load(sys.stdin); d.update(verification_type="bash",verification_target="printf verification-e2e-ok",verification_timeout_seconds=5); print(json.dumps(d))')
+api_put "$VERIFY_ENV" "$BASE/api/v1/environments/$VERIFY_ENV_ID" >/dev/null
 VERIFY_STEP=$(api_post "{\"name\":\"verify-step\",\"script_body\":\"printf release-v1\",\"container_image\":\"$BASH_IMAGE\"}" "$BASE/api/v1/projects/$VERIFY_PROJECT_ID/steps")
 VERIFY_STEP_ID=$(echo "$VERIFY_STEP" | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
 
@@ -113,6 +121,45 @@ wait_running_deployment "$SECRET_DEP_ID" succeeded
 SECRET_LOGS=$(api_get "$BASE/api/v1/deployments/$SECRET_DEP_ID/logs")
 [[ "$SECRET_LOGS" == *'[REDACTED]'* && "$SECRET_LOGS" != *e2e-masked-value* ]] || { echo "FAIL: secret value leaked or step did not print it"; exit 1; }
 echo "  Test-project notification settings and API/log secret masking: OK"
+api_put "$VERIFY_ENV_RESTORE" "$BASE/api/v1/environments/$VERIFY_ENV_ID" >/dev/null
+VERIFY_ENV_RESTORE=
+
+echo "=== Project/environment queue isolation ==="
+api_put "{\"name\":\"long-step\",\"script_body\":\"sleep 120\",\"container_image\":\"$BASH_IMAGE\"}" "$BASE/api/v1/projects/$API_PROJECT_ID/steps/$API_STEP_ID" >/dev/null
+QUEUE_RELEASE=$(api_post '{"version":"queue-check"}' "$BASE/api/v1/projects/$API_PROJECT_ID/releases")
+QUEUE_RELEASE_ID=$(echo "$QUEUE_RELEASE" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
+api_put "{\"name\":\"long-step\",\"script_body\":\"sleep 10\",\"container_image\":\"$BASH_IMAGE\"}" "$BASE/api/v1/projects/$API_PROJECT_ID/steps/$API_STEP_ID" >/dev/null
+QUEUE_HEAD=$(api_post "{\"release_id\":$QUEUE_RELEASE_ID,\"environment_id\":$ENV_ID}" "$BASE/api/v1/projects/$API_PROJECT_ID/deployments")
+QUEUE_HEAD_ID=$(echo "$QUEUE_HEAD" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
+QUEUE_NEXT=$(api_post "{\"release_id\":$API_LOG_RELEASE_ID,\"environment_id\":$ENV_ID}" "$BASE/api/v1/projects/$API_PROJECT_ID/deployments")
+QUEUE_NEXT_ID=$(echo "$QUEUE_NEXT" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["status"]=="queued"; print(d["id"])')
+QUEUE_STATE=$(api_get "$BASE/api/v1/deployments/$QUEUE_NEXT_ID/status")
+echo "$QUEUE_STATE" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["queue_position"]==1 and d["active_deployment_id"]==int(sys.argv[1])' "$QUEUE_HEAD_ID"
+QUEUE_PAGE=$(curl_body "$BASE/deployments/$QUEUE_NEXT_ID")
+[[ "$QUEUE_PAGE" == *'Queue position: 1'* ]] || { echo "FAIL: web queue position missing"; exit 1; }
+QUEUE_OTHER=$(api_post "{\"release_id\":$RELEASE_ID,\"environment_id\":$ENV_ID}" "$BASE/api/v1/projects/$PROJECT_ID/deployments")
+QUEUE_OTHER_ID=$(echo "$QUEUE_OTHER" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["status"]!="queued"; print(d["id"])')
+wait_running_deployment "$QUEUE_OTHER_ID" succeeded
+QUEUE_OTHER_ENV=$(api_post "{\"release_id\":$QUEUE_RELEASE_ID,\"environment_id\":$TEST_ENV_ID}" "$BASE/api/v1/projects/$API_PROJECT_ID/deployments")
+QUEUE_OTHER_ENV_ID=$(echo "$QUEUE_OTHER_ENV" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["status"]!="queued"; print(d["id"])')
+for i in {1..100}; do
+    QUEUE_OTHER_STATUS=$(api_get "$BASE/api/v1/deployments/$QUEUE_OTHER_ENV_ID/status" | python3 -c 'import json,sys; print(json.load(sys.stdin)["status"])')
+    [[ "$QUEUE_OTHER_STATUS" == running ]] && break
+    sleep 0.1
+done
+[[ "$QUEUE_OTHER_STATUS" == running ]] || { echo "FAIL: other environment did not run concurrently"; exit 1; }
+api_get "$BASE/api/v1/deployments/$QUEUE_HEAD_ID/status" | python3 -c 'import json,sys; assert json.load(sys.stdin)["status"]=="running"'
+CODE=$(api_post_code '{}' "$BASE/api/v1/deployments/$QUEUE_OTHER_ENV_ID/cancel")
+[[ "$CODE" == 200 ]] || { echo "FAIL: cancel parallel environment=$CODE"; exit 1; }
+wait_running_deployment "$QUEUE_OTHER_ENV_ID" cancelled
+CODE=$(curl_silent -X POST -d "csrf_token=$CSRF" "$BASE/deployments/$QUEUE_HEAD_ID/cancel")
+[[ "$CODE" == 303 ]] || { echo "FAIL: cancel queue head=$CODE"; exit 1; }
+wait_running_deployment "$QUEUE_HEAD_ID" cancelled
+wait_running_deployment "$QUEUE_NEXT_ID" succeeded
+echo "  Same pair queues; other projects/environments execute; cancellation advances FIFO: OK"
+echo "  Queue release: $BASE/projects/$API_PROJECT_ID/releases/$QUEUE_RELEASE_ID"
+echo "  Parallel project: $BASE/deployments/$QUEUE_OTHER_ID"
+echo "  Parallel environment: $BASE/deployments/$QUEUE_OTHER_ENV_ID"
 
 echo "=== Running-server browser checks ==="
 DURPDEPLOY_LIVE_BASE="$BASE" \

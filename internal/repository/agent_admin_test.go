@@ -1,13 +1,91 @@
 package repository_test
 
 import (
+	"bytes"
 	"errors"
+	"strings"
 	"testing"
 
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/logscrub"
 	"durpdeploy/internal/repository"
 )
+
+func TestRevokedAgentCannotReplaceUnconfirmedCleanupIdentity(t *testing.T) {
+	for _, scenario := range []struct{ table, state string }{
+		{"remote_step_runs", "cleanup_unconfirmed"},
+		{"remote_deployment_claims", "cleanup_unconfirmed"},
+		{"remote_step_runs", "lost"},
+		{"remote_deployment_claims", "lost"},
+		{"remote_step_runs", "cancel_unconfirmed"},
+		{"remote_deployment_claims", "cancel_unconfirmed"},
+	} {
+		t.Run(scenario.table+"/"+scenario.state, func(t *testing.T) {
+			table := scenario.table
+			repo := remoteFixture(t)
+			statement := `UPDATE remote_deployment_claims
+SET state='cleanup_unconfirmed',claim_token_hash=zeroblob(32),
+ciphertext='ciphertext',claim_expires_at=200,last_heartbeat_at=100,
+started_at=100,finished_at=101 WHERE deployment_id=1`
+			if table == "remote_step_runs" {
+				statement = `INSERT INTO remote_step_runs(deployment_id,step_index,agent_id,state)
+VALUES(1,0,'a','cleanup_unconfirmed')`
+			}
+			if _, err := repo.DB.Exec(statement); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := repo.RevokeAgent(t.Context(), "a"); err != nil {
+				t.Fatal(err)
+			}
+			var cancelRequestedAt any
+			if scenario.state == "cancel_unconfirmed" {
+				cancelRequestedAt = 100
+			}
+			if _, err := repo.DB.Exec("UPDATE "+table+
+				" SET state=?,claim_token_hash=zeroblob(32),started_at=100,finished_at=101,cancel_requested_at=? WHERE agent_id='a' AND deployment_id=1",
+				scenario.state, cancelRequestedAt); err != nil {
+				t.Fatal(err)
+			}
+			tuple := repository.AgentPairingTuple{
+				ExpectedAgentID:   "a",
+				EncryptedIdentity: "encrypted-test-identity",
+				Endpoint:          "https://replacement.example",
+				PairingCodeHash:   bytes.Repeat([]byte{9}, 32),
+				AgentPin: strings.Repeat(
+					"c",
+					64,
+				),
+				AgentPublicIdentity: "replacement",
+				Now:                 200,
+				ExpiresAt:           500,
+			}
+			if _, err := repo.PrepareAgentPairing(
+				t.Context(),
+				tuple,
+			); !errors.Is(
+				err,
+				repository.ErrPairingTupleConflict,
+			) {
+				t.Fatalf("unconfirmed replacement error=%v", err)
+			}
+			agent, err := repo.Queries.GetAgent(t.Context(), "a")
+			if err != nil || agent.Status != "revoked" {
+				t.Fatalf("agent=%+v error=%v", agent, err)
+			}
+			if _, err := repo.DB.Exec(
+				"UPDATE " + table + " SET state='cleanup_unconfirmed',cleanup_confirmed_at=200 WHERE deployment_id=1",
+			); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := repo.PrepareAgentPairing(
+				t.Context(),
+				tuple,
+			); err != nil {
+				t.Fatalf("confirmed replacement error=%v", err)
+			}
+		})
+	}
+}
 
 func TestRevokePendingAgentWithCommittingPairing(t *testing.T) {
 	repo := remoteFixture(t)
@@ -172,6 +250,21 @@ func TestRevocationAfterStartMarksLost(t *testing.T) {
 	if err != nil || deployment.Status != "failed" {
 		t.Fatalf("deployment=%+v err=%v", deployment, err)
 	}
+	// Lost work can still run remotely; its environment must stay occupied.
+	queued, err := repo.CreateDeployment(t.Context(), db.CreateDeploymentParams{
+		ReleaseID: 1, EnvironmentID: 1, Status: "pending",
+	})
+	if err != nil || queued.Deployment.Status != "queued" {
+		t.Fatalf("queue after lost agent=%+v: %v", queued, err)
+	}
+	started, err := repo.StartLocalDeployment(t.Context(), queued.Deployment.ID)
+	if err != nil || started {
+		t.Fatalf("local admission after lost agent=%v: %v", started, err)
+	}
+	owner, err := repo.Queries.GetDeploymentSlot(t.Context(), 1)
+	if err != nil || owner != deployment.ID {
+		t.Fatalf("lost environment owner=%d: %v", owner, err)
+	}
 }
 
 func remoteIdentity(
@@ -212,5 +305,39 @@ func assertRevokedUnstarted(
 	deployment, err := repo.Queries.GetDeployment(t.Context(), 1)
 	if err != nil || deployment.Status != "failed" {
 		t.Fatalf("deployment=%+v err=%v", deployment, err)
+	}
+}
+
+func TestRevocationWaitingStepReleasesEnvironment(t *testing.T) {
+	repo := remoteFixture(t)
+	if _, err := repo.DB.Exec(`UPDATE deployments SET status='running'
+		WHERE id=3`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.DB.Exec(`INSERT INTO remote_step_runs
+		(deployment_id, step_index, agent_id, state, updated_at)
+		VALUES (3, 0, 'a', 'waiting', 100)`); err != nil {
+		t.Fatal(err)
+	}
+	next, err := repo.CreateDeployment(t.Context(), db.CreateDeploymentParams{
+		ReleaseID: 1, EnvironmentID: 2, Status: "pending",
+	})
+	if err != nil || next.Deployment.Status != "queued" {
+		t.Fatalf("next=%+v error=%v", next, err)
+	}
+	if _, err := repo.RevokeAgent(t.Context(), "a"); err != nil {
+		t.Fatal(err)
+	}
+	var state string
+	if err := repo.DB.QueryRow(`SELECT state FROM remote_step_runs
+		WHERE deployment_id=3 AND step_index=0`).Scan(&state); err != nil {
+		t.Fatal(err)
+	}
+	persisted, err := repo.Queries.GetDeployment(
+		t.Context(),
+		next.Deployment.ID,
+	)
+	if state != "failed" || err != nil || persisted.Status != "pending" {
+		t.Fatalf("step=%s next=%+v error=%v", state, persisted, err)
 	}
 }

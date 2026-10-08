@@ -99,35 +99,13 @@ func (q *Queries) ListDeploymentVerificationTargets(ctx context.Context) ([]List
 	return items, nil
 }
 
-const lockUnusedReleaseSnapshot = `-- name: LockUnusedReleaseSnapshot :execrows
-UPDATE releases SET version = version -- NOSONAR: intentional write lock
-WHERE id = ? AND snapshot_locked = 0
-`
-
-func (q *Queries) LockUnusedReleaseSnapshot(ctx context.Context, id int64) (int64, error) {
-	result, err := q.db.ExecContext(ctx, lockUnusedReleaseSnapshot, id)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
-}
-
-const markReleaseSnapshotLocked = `-- name: MarkReleaseSnapshotLocked :exec
-UPDATE releases SET snapshot_locked = 1 WHERE id = ?
-`
-
-func (q *Queries) MarkReleaseSnapshotLocked(ctx context.Context, id int64) error {
-	_, err := q.db.ExecContext(ctx, markReleaseSnapshotLocked, id)
-	return err
-}
-
 const reconcileTerminalVerifications = `-- name: ReconcileTerminalVerifications :exec
 UPDATE deployment_verifications SET status = CASE
     WHEN (SELECT status FROM deployments WHERE id = deployment_id) = 'cancelled' THEN 'cancelled'
     ELSE 'failed' END, finished_at = unixepoch()
 WHERE status IN ('pending', 'running') AND EXISTS (
     SELECT 1 FROM deployments WHERE id = deployment_id
-    AND status IN ('succeeded', 'failed', 'cancelled', 'cleanup_unconfirmed')
+    AND status IN ('succeeded', 'failed', 'cancelled', 'rejected', 'expired', 'cleanup_unconfirmed')
 )
 `
 

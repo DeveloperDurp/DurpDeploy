@@ -97,7 +97,7 @@ func TestRemoteAgentSchemaFreshUpgradeRollback(t *testing.T) {
 	}
 	t.Logf("PASS: rollback preserved history and version=%d", upgradedVersion)
 	t.Run("step_log_metadata", func(t *testing.T) {
-		requireNoError(t, goose.UpTo(conn, ".", 46), "add step metadata")
+		requireNoError(t, goose.UpTo(conn, ".", 51), "add step metadata")
 		assertRemoteLegacy(t, conn)
 		var legacyLogs int
 		err := conn.QueryRow(`SELECT COUNT(*) FROM deployment_logs

@@ -420,7 +420,7 @@ func (q *Queries) ListAvailableAgentLabels(ctx context.Context) ([]string, error
 }
 
 const listRevocableAgentClaims = `-- name: ListRevocableAgentClaims :many
-SELECT deployment_id, agent_id, state, reason, claim_token_hash, ciphertext, claim_expires_at, last_heartbeat_at, started_at, finished_at, cancel_requested_at, created_at, updated_at, log_buffer_ciphertext FROM remote_deployment_claims
+SELECT deployment_id, agent_id, state, reason, claim_token_hash, ciphertext, claim_expires_at, last_heartbeat_at, started_at, finished_at, cancel_requested_at, created_at, updated_at, log_buffer_ciphertext, cleanup_confirmed_at FROM remote_deployment_claims
 WHERE agent_id = ? AND state IN ('waiting', 'claimed', 'started', 'cancel_requested')
 ORDER BY deployment_id
 `
@@ -449,6 +449,7 @@ func (q *Queries) ListRevocableAgentClaims(ctx context.Context, agentID string) 
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.LogBufferCiphertext,
+			&i.CleanupConfirmedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -483,6 +484,14 @@ UPDATE agents SET endpoint = ?1, status = 'pending',
     certificate_fingerprint = NULL, encrypted_identity = NULL,
     last_heartbeat_at = NULL, revoked_at = NULL, updated_at = unixepoch()
 WHERE id = ?2 AND status = 'revoked'
+  AND NOT EXISTS (SELECT 1 FROM remote_step_runs s
+      WHERE s.agent_id = agents.id
+        AND (s.state IN ('lost', 'cancel_unconfirmed')
+          OR (s.state = 'cleanup_unconfirmed' AND s.cleanup_confirmed_at IS NULL)))
+  AND NOT EXISTS (SELECT 1 FROM remote_deployment_claims c
+      WHERE c.agent_id = agents.id
+        AND (c.state IN ('lost', 'cancel_unconfirmed')
+          OR (c.state = 'cleanup_unconfirmed' AND c.cleanup_confirmed_at IS NULL)))
 `
 
 type ResetRevokedAgentForPairingParams struct {
@@ -499,7 +508,8 @@ func (q *Queries) ResetRevokedAgentForPairing(ctx context.Context, arg ResetRevo
 }
 
 const revokeAgentRemoteStepRuns = `-- name: RevokeAgentRemoteStepRuns :execrows
-UPDATE remote_step_runs SET state = 'lost', finished_at = ?1,
+UPDATE remote_step_runs SET state = CASE WHEN state = 'waiting'
+    THEN 'failed' ELSE 'lost' END, finished_at = ?1,
     updated_at = ?1, log_buffer_ciphertext = NULL
 WHERE agent_id = ?2
   AND state IN ('waiting', 'claimed', 'started', 'cancel_requested')
@@ -660,7 +670,7 @@ UPDATE deployments SET
     finished_at = ?1
 WHERE id = ?2
   AND assigned_agent_id = ?3
-  AND status IN ('pending', 'pending_approval', 'running')
+  AND status IN ('queued', 'pending', 'pending_approval', 'running')
 `
 
 type TerminateRevokedRemoteDeploymentParams struct {

@@ -114,7 +114,7 @@ func TestAlpineCompliancePolicy(t *testing.T) {
 	t.Run("registry and generated assets comply", func(t *testing.T) {
 		app := readComplianceFile(t, repositoryRoot, "static/js/app.js")
 		order := []string{
-			"toast", "navbar", "deploymentForm", "releaseDeployRow",
+			"toast", "navbar", "deploymentForm",
 			"stepFormHost", "stepEditor", "variablesPage", "deploymentStream",
 		}
 		previous := strings.Index(app, "window.htmx = htmx")

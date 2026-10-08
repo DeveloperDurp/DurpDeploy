@@ -28,7 +28,15 @@ UPDATE agents SET endpoint = sqlc.arg(endpoint), status = 'pending',
     agent_version = NULL, certificate_pem = NULL,
     certificate_fingerprint = NULL, encrypted_identity = NULL,
     last_heartbeat_at = NULL, revoked_at = NULL, updated_at = unixepoch()
-WHERE id = sqlc.arg(id) AND status = 'revoked';
+WHERE id = sqlc.arg(id) AND status = 'revoked'
+  AND NOT EXISTS (SELECT 1 FROM remote_step_runs s
+      WHERE s.agent_id = agents.id
+        AND (s.state IN ('lost', 'cancel_unconfirmed')
+          OR (s.state = 'cleanup_unconfirmed' AND s.cleanup_confirmed_at IS NULL)))
+  AND NOT EXISTS (SELECT 1 FROM remote_deployment_claims c
+      WHERE c.agent_id = agents.id
+        AND (c.state IN ('lost', 'cancel_unconfirmed')
+          OR (c.state = 'cleanup_unconfirmed' AND c.cleanup_confirmed_at IS NULL)));
 
 -- name: SetAgentDraining :execrows
 UPDATE agents SET draining = sqlc.arg(draining), updated_at = unixepoch()
@@ -114,7 +122,8 @@ WHERE agent_id = ? AND state IN ('waiting', 'claimed', 'started', 'cancel_reques
 ORDER BY deployment_id;
 
 -- name: RevokeAgentRemoteStepRuns :execrows
-UPDATE remote_step_runs SET state = 'lost', finished_at = sqlc.arg(now),
+UPDATE remote_step_runs SET state = CASE WHEN state = 'waiting'
+    THEN 'failed' ELSE 'lost' END, finished_at = sqlc.arg(now),
     updated_at = sqlc.arg(now), log_buffer_ciphertext = NULL
 WHERE agent_id = sqlc.arg(agent_id)
   AND state IN ('waiting', 'claimed', 'started', 'cancel_requested');
@@ -143,4 +152,4 @@ UPDATE deployments SET
     finished_at = sqlc.arg(now)
 WHERE id = sqlc.arg(deployment_id)
   AND assigned_agent_id = sqlc.arg(agent_id)
-  AND status IN ('pending', 'pending_approval', 'running');
+  AND status IN ('queued', 'pending', 'pending_approval', 'running');

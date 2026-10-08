@@ -9,6 +9,8 @@ import (
 
 func TestMainPagePatternBrowserE2E(t *testing.T) {
 	f := newArtifactE2E(t)
+	f.api(t, "POST", fmt.Sprintf("/api/v1/projects/%d/releases", f.project.ID),
+		map[string]string{"version": "design-v1"}, 201)
 	var template, lifecycle struct{ ID int64 }
 	decodeStepLogTest(t, f.api(t, "POST", "/api/v1/templates",
 		map[string]string{
@@ -40,6 +42,47 @@ func TestMainPagePatternBrowserE2E(t *testing.T) {
 	for i, path := range paths {
 		b.navigateBackTest(t, f.baseURL+path)
 		b.wait(t, `document.querySelector('main .page-header h1') !== null`)
+		if path == fmt.Sprintf("/projects/%d/releases", f.project.ID) {
+			b.evaluate(t, `(() => {
+ const form = document.querySelector('#releases-content form[hx-post]');
+ form.querySelector('[name=version]').value = 'design-v2';
+ form.querySelector('[type=submit]').click();
+ return true;
+})()`)
+			b.wait(
+				t,
+				`document.querySelector('#releases-content').textContent.includes('design-v2') && !document.querySelector('.htmx-request, .htmx-settling')`,
+			)
+			if string(b.evaluate(t, `(() => {
+ const content = document.querySelector('#releases-content');
+ return content.querySelectorAll('thead th').length === 3 &&
+ [...content.querySelectorAll('tbody tr')].every(row => row.children.length === 3) &&
+ !content.querySelector('select[name=environment_id], input[name=force], form[action$="/deploy"]') &&
+ [...content.querySelectorAll('thead th')].map(e => e.textContent).join(',') === 'Version,Created At,Actions';
+})()`)) != "true" {
+				t.Fatal(
+					"releases list retained deployment controls or mismatched columns",
+				)
+			}
+			var releases struct{ Total int64 }
+			decodeStepLogTest(
+				t,
+				f.api(t, "GET", "/api/v1"+path, nil, 200),
+				&releases,
+			)
+			if releases.Total != 2 {
+				t.Fatal("release creation did not persist through the API")
+			}
+		}
+		if path == fmt.Sprintf("/projects/%d/runbooks", f.project.ID) &&
+			string(
+				b.evaluate(
+					t,
+					`document.querySelector('main .page-header').lastElementChild.lastElementChild.textContent === 'Back'`,
+				),
+			) != "true" {
+			t.Fatal("runbooks list is missing its last header Back action")
+		}
 		b.captureNavigation(t, fmt.Sprintf("main-page-%d", i), func() {
 			b.wait(
 				t,
@@ -58,8 +101,7 @@ func TestMainPagePatternBrowserE2E(t *testing.T) {
  const deleteSection = projectDelete?.parentElement;
  return (!form || Math.abs(form.getBoundingClientRect().width - document.querySelector('#form-container').getBoundingClientRect().width) <= 1) &&
  (!deleteSection || deleteSection === deleteSection.parentElement.lastElementChild) &&
- sections.every(el => ['btn-primary', 'btn-secondary', 'btn-accent'].some(cls => el.classList.contains(cls))) &&
- sections.every((el, i) => i === 0 || getComputedStyle(el).backgroundColor !== getComputedStyle(sections[i - 1]).backgroundColor) &&
+ sections.every(el => !el.classList.contains('btn')) &&
  title.scrollWidth <= title.clientWidth &&
  (!controls.length || (Math.abs(actionBox.right - headerBox.right) <= 1 &&
  (innerWidth >= 768 ? Math.abs(actionBox.top - headerBox.top) <= 1 : actionBox.top >= titleBox.bottom))) &&

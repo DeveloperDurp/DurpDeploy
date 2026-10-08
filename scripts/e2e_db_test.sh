@@ -147,6 +147,10 @@ E2E_RUN_ID="${DURPDEPLOY_E2E_RUN_ID:-$(date -u +%Y%m%d%H%M%S)-$$}"
 SCHEDULE_NOTE="e2e-scheduled-$E2E_RUN_ID"
 cleanup() {
     local status=$?
+    if [[ -n "${VERIFY_ENV_RESTORE:-}" ]]; then
+        api_put "$VERIFY_ENV_RESTORE" "$BASE/api/v1/environments/$TEST_ENV_ID" >/dev/null || \
+            { echo "FAIL: could not restore test environment verification" >&2; status=1; }
+    fi
     db_query "UPDATE scheduled_deployments SET enabled=0 WHERE note='$SCHEDULE_NOTE';" \
         >/dev/null 2>&1 || true
     rm -rf "$TMP"
@@ -203,17 +207,28 @@ CODE=$(curl -s -b "$COOKIES" -o /dev/null -w "%{http_code}" \
 [[ "$CODE" == "403" ]] || { echo "FAIL: POST without CSRF got $CODE, want 403"; exit 1; }
 echo "  CSRF gate: OK"
 
+source "$SCRIPT_DIR/e2e_fixture_reset.sh"
+reset_e2e_fixtures
+
 echo "=== F3.1: Happy Path ==="
-PROJECT_NAME="TestProject-$E2E_RUN_ID"
-ENV_NAME="TestEnv-$E2E_RUN_ID"
-CODE=$(curl_silent -X POST -d "name=$PROJECT_NAME&csrf_token=$CSRF" "$BASE/projects")
+OTHER_ENV_COUNT=$(db_query "SELECT COUNT(*) FROM environments WHERE name NOT IN ('dev','test','prod');")
+PROJECT_NAME="TestProject"
+ENV_NAME=dev
+CODE=$(curl_silent -X POST -d "name=$PROJECT_NAME&description=Managed by make e2e-test.&csrf_token=$CSRF" "$BASE/projects")
 [[ "$CODE" == "303" ]] || { echo "FAIL: create project got $CODE"; exit 1; }
 PROJECT_ID=$(db_query "SELECT id FROM projects WHERE name='$PROJECT_NAME';")
 echo "Project ID: $PROJECT_ID"
 
-CODE=$(curl_silent -X POST -d "name=$ENV_NAME&csrf_token=$CSRF" "$BASE/environments")
-[[ "$CODE" == "303" ]] || { echo "FAIL: create env got $CODE"; exit 1; }
+for shared_env in dev test prod; do
+    shared_env_id=$(db_query "SELECT id FROM environments WHERE name='$shared_env';")
+    if [[ -z "$shared_env_id" ]]; then
+        CODE=$(curl_silent -X POST -d "name=$shared_env&csrf_token=$CSRF" "$BASE/environments")
+        [[ "$CODE" == "303" ]] || { echo "FAIL: create $shared_env environment got $CODE"; exit 1; }
+    fi
+done
 ENV_ID=$(db_query "SELECT id FROM environments WHERE name='$ENV_NAME';")
+TEST_ENV_ID=$(db_query "SELECT id FROM environments WHERE name='test';")
+PROD_ENV_ID=$(db_query "SELECT id FROM environments WHERE name='prod';")
 echo "Env ID: $ENV_ID"
 
 CODE=$(curl_silent -X POST \
@@ -407,38 +422,41 @@ CODE=$(curl_silent -X POST -d "name=&csrf_token=$CSRF" "$BASE/projects")
 [[ "$CODE" == "422" ]] || { echo "FAIL: empty project name should be 422, got $CODE"; exit 1; }
 
 echo "=== F3.4: Variable Fallback ==="
-curl -s -b "$COOKIES" -o /dev/null -X POST -d "name=StepMissing&script=echo+%24%7BMISSING%7D&container_image=$BASH_IMAGE&csrf_token=$CSRF" "$BASE/projects/$PROJECT_ID/steps"
+RETRY_STEP_ID=$(db_query "SELECT id FROM steps WHERE project_id=$PROJECT_ID AND name='RetryStep';")
+do_delete "$BASE/projects/$PROJECT_ID/steps/$RETRY_STEP_ID" >/dev/null
+curl -s -b "$COOKIES" -o /dev/null -X POST --data-urlencode 'name=StepMissing' --data-urlencode 'script_body=test -z "${MISSING:-}" && echo missing-variable-empty' -d "container_image=$BASH_IMAGE&csrf_token=$CSRF" "$BASE/projects/$PROJECT_ID/steps"
 curl -s -b "$COOKIES" -o /dev/null -X POST -d "version=2.0.0&csrf_token=$CSRF" "$BASE/projects/$PROJECT_ID/releases"
 NEW_REL=$(curl_body "$BASE/projects/$PROJECT_ID/releases" | grep -oP 'href="/projects/'$PROJECT_ID'/releases/\K[0-9]+' | sort -n | tail -1)
-curl -s -b "$COOKIES" -o /dev/null -X POST -d "release_id=$NEW_REL&environment_id=$ENV_ID&csrf_token=$CSRF" "$BASE/projects/$PROJECT_ID/deploy"
+MISSING_URL=$(curl -s -b "$COOKIES" -D - -o /dev/null -X POST -d "release_id=$NEW_REL&environment_id=$ENV_ID&csrf_token=$CSRF" "$BASE/projects/$PROJECT_ID/deploy" | awk 'tolower($1)=="location:" {gsub("\r", "", $2); print $2}')
+for _ in {1..100}; do
+  MISSING_STATUS=$(curl_body "$BASE$MISSING_URL/status")
+  [[ "$MISSING_STATUS" =~ failed|succeeded|cancelled ]] && break
+  sleep 0.2
+done
+[[ "$MISSING_STATUS" == *succeeded* ]] || { echo 'FAIL: missing-variable deployment did not succeed'; exit 1; }
+curl_body "$BASE$MISSING_URL/logs.txt" | grep -q missing-variable-empty
 
 echo "=== F3.5: Lifecycle Gate ==="
 # Separate project + envs + lifecycle so the F3.1 project stays free-floating.
-LC_NAME="LC-Project-$E2E_RUN_ID"
-CODE=$(curl_silent -X POST -d "name=$LC_NAME&csrf_token=$CSRF" "$BASE/projects")
+LC_NAME="LC-Project"
+CODE=$(curl_silent -X POST -d "name=$LC_NAME&description=Managed by make e2e-test.&csrf_token=$CSRF" "$BASE/projects")
 [[ "$CODE" == "303" ]] || { echo "FAIL: create lifecycle project got $CODE"; exit 1; }
 LC_PROJECT_ID=$(db_query "SELECT id FROM projects WHERE name='$LC_NAME';")
 echo "Lifecycle Project ID: $LC_PROJECT_ID"
 
-# Three envs: LC-Dev, LC-Test, LC-Prod + an "outside" env.
-LC_TS=$E2E_RUN_ID
-LC_DEV="LC-Dev-$LC_TS"
-LC_TEST="LC-Test-$LC_TS"
-LC_PROD="LC-Prod-$LC_TS"
-LC_OUT="LC-Out-$LC_TS"
-for E in "$LC_DEV" "$LC_TEST" "$LC_PROD" "$LC_OUT"; do
-  CODE=$(curl_silent -X POST -d "name=$E&csrf_token=$CSRF" "$BASE/environments")
-  [[ "$CODE" == "303" ]] || { echo "FAIL: create env $E got $CODE"; exit 1; }
-done
-LC_DEV_ID=$(db_query "SELECT id FROM environments WHERE name='$LC_DEV';")
-LC_TEST_ID=$(db_query "SELECT id FROM environments WHERE name='$LC_TEST';")
-LC_PROD_ID=$(db_query "SELECT id FROM environments WHERE name='$LC_PROD';")
-LC_OUT_ID=$(db_query "SELECT id FROM environments WHERE name='$LC_OUT';")
+# Reuse the same environments across projects and test runs.
+LC_DEV=dev
+LC_TEST=test
+LC_PROD=prod
+LC_DEV_ID=$ENV_ID
+LC_TEST_ID=$TEST_ENV_ID
+LC_PROD_ID=$PROD_ENV_ID
+LC_OUT_ID=$PROD_ENV_ID
 echo "Env IDs: dev=$LC_DEV_ID test=$LC_TEST_ID prod=$LC_PROD_ID out=$LC_OUT_ID"
 
 # Lifecycle: Dev -> Test -> Prod
-LC_LIFECYCLE_NAME="LC-$LC_TS"
-CODE=$(curl_silent -X POST -d "name=$LC_LIFECYCLE_NAME&csrf_token=$CSRF" "$BASE/lifecycles")
+LC_LIFECYCLE_NAME="LC"
+CODE=$(curl_silent -X POST -d "name=$LC_LIFECYCLE_NAME&description=Managed by make e2e-test.&csrf_token=$CSRF" "$BASE/lifecycles")
 [[ "$CODE" == "303" ]] || { echo "FAIL: create lifecycle got $CODE"; exit 1; }
 LC_LIFECYCLE_ID=$(db_query "SELECT id FROM lifecycles WHERE name='$LC_LIFECYCLE_NAME';")
 [[ -n "$LC_LIFECYCLE_ID" ]] || { echo "FAIL: could not find lifecycle $LC_LIFECYCLE_NAME"; exit 1; }
@@ -450,7 +468,7 @@ for EID in "$LC_DEV_ID" "$LC_TEST_ID" "$LC_PROD_ID"; do
 done
 
 # Assign lifecycle to project.
-CODE=$(curl_silent -X PUT -d "name=$LC_NAME&description=&lifecycle_id=$LC_LIFECYCLE_ID&csrf_token=$CSRF" "$BASE/projects/$LC_PROJECT_ID")
+CODE=$(curl_silent -X PUT -d "name=$LC_NAME&description=Managed by make e2e-test.&lifecycle_id=$LC_LIFECYCLE_ID&csrf_token=$CSRF" "$BASE/projects/$LC_PROJECT_ID")
 [[ "$CODE" == "303" ]] || { echo "FAIL: assign lifecycle got $CODE"; exit 1; }
 
 # Create one step + one release on the lifecycle project.
@@ -518,21 +536,14 @@ echo "  New version without chain: blocked (422)"
 echo "=== F3.5b: Approval Gate ==="
 # A separate lifecycle where the prod stage requires approval. Deployments
 # to prod should pause at pending_approval until explicitly approved.
-APP_DEV="app-dev-$E2E_RUN_ID"
-APP_STAGING="app-staging-$E2E_RUN_ID"
-APP_PROD="app-prod-$E2E_RUN_ID"
-APP_LIFECYCLE="app-lifecycle-$E2E_RUN_ID"
-APP_PROJECT="AppProject-$E2E_RUN_ID"
-for E in "$APP_DEV" "$APP_STAGING" "$APP_PROD"; do
-  CODE=$(curl_silent -X POST -d "name=$E&csrf_token=$CSRF" "$BASE/environments")
-  [[ "$CODE" == "303" ]] || { echo "FAIL: create env $E got $CODE"; exit 1; }
-done
-APP_DEV_ID=$(db_query "SELECT id FROM environments WHERE name='$APP_DEV';")
-APP_STAGING_ID=$(db_query "SELECT id FROM environments WHERE name='$APP_STAGING';")
-APP_PROD_ID=$(db_query "SELECT id FROM environments WHERE name='$APP_PROD';")
+APP_LIFECYCLE="app-lifecycle"
+APP_PROJECT="AppProject"
+APP_DEV_ID=$ENV_ID
+APP_STAGING_ID=$TEST_ENV_ID
+APP_PROD_ID=$PROD_ENV_ID
 echo "App Env IDs: dev=$APP_DEV_ID staging=$APP_STAGING_ID prod=$APP_PROD_ID"
 
-CODE=$(curl_silent -X POST -d "name=$APP_LIFECYCLE&csrf_token=$CSRF" "$BASE/lifecycles")
+CODE=$(curl_silent -X POST -d "name=$APP_LIFECYCLE&description=Managed by make e2e-test.&csrf_token=$CSRF" "$BASE/lifecycles")
 [[ "$CODE" == "303" ]] || { echo "FAIL: create app-lifecycle got $CODE"; exit 1; }
 APP_LC_ID=$(db_query "SELECT id FROM lifecycles WHERE name='$APP_LIFECYCLE';")
 echo "App Lifecycle ID: $APP_LC_ID"
@@ -546,12 +557,12 @@ APP_PROD_STAGE_ID=$(db_query "SELECT id FROM lifecycle_stages WHERE lifecycle_id
 CODE=$(curl_silent -X PATCH -d "requires_approval=1&csrf_token=$CSRF" "$BASE/lifecycles/$APP_LC_ID/stages/$APP_PROD_STAGE_ID")
 [[ "$CODE" == "303" ]] || { echo "FAIL: patch prod stage got $CODE"; exit 1; }
 
-CODE=$(curl_silent -X POST -d "name=$APP_PROJECT&csrf_token=$CSRF" "$BASE/projects")
+CODE=$(curl_silent -X POST -d "name=$APP_PROJECT&description=Managed by make e2e-test.&csrf_token=$CSRF" "$BASE/projects")
 [[ "$CODE" == "303" ]] || { echo "FAIL: create app project got $CODE"; exit 1; }
 APP_PROJ_ID=$(db_query "SELECT id FROM projects WHERE name='$APP_PROJECT';")
 echo "App Project ID: $APP_PROJ_ID"
 
-CODE=$(curl_silent -X PUT -d "name=$APP_PROJECT&description=&lifecycle_id=$APP_LC_ID&csrf_token=$CSRF" "$BASE/projects/$APP_PROJ_ID")
+CODE=$(curl_silent -X PUT -d "name=$APP_PROJECT&description=Managed by make e2e-test.&lifecycle_id=$APP_LC_ID&csrf_token=$CSRF" "$BASE/projects/$APP_PROJ_ID")
 [[ "$CODE" == "303" ]] || { echo "FAIL: assign lifecycle to app project got $CODE"; exit 1; }
 
 CODE=$(curl_silent -X POST -d "name=app-step&script_body=exit+0&container_image=$BASH_IMAGE&csrf_token=$CSRF" "$BASE/projects/$APP_PROJ_ID/steps")
@@ -566,10 +577,13 @@ DEV_URL=$(curl -s -b "$COOKIES" -D - -o /dev/null -X POST -d "release_id=$APP_RE
 DEV_DEP=$(echo "$DEV_URL" | grep -oP '/deployments/\K[0-9]+')
 [[ -n "$DEV_DEP" ]] || { echo "FAIL: dev deployment did not redirect"; exit 1; }
 echo "Dev Deployment ID: $DEV_DEP"
-for i in {1..50}; do
+for i in {1..200}; do
   if curl_body "$BASE/deployments/$DEV_DEP/status" | grep -q 'succeeded'; then break; fi
   sleep 0.1
 done
+curl_body "$BASE/deployments/$DEV_DEP/status" | grep -q 'succeeded' || {
+  echo "FAIL: approval lifecycle dev deployment did not succeed"; exit 1;
+}
 echo "  Dev deploy succeeded: OK"
 
 # Deploy to staging -> should succeed
@@ -577,10 +591,13 @@ STAGING_URL=$(curl -s -b "$COOKIES" -D - -o /dev/null -X POST -d "release_id=$AP
 STAGING_DEP=$(echo "$STAGING_URL" | grep -oP '/deployments/\K[0-9]+')
 [[ -n "$STAGING_DEP" ]] || { echo "FAIL: staging deployment did not redirect"; exit 1; }
 echo "Staging Deployment ID: $STAGING_DEP"
-for i in {1..50}; do
+for i in {1..200}; do
   if curl_body "$BASE/deployments/$STAGING_DEP/status" | grep -q 'succeeded'; then break; fi
   sleep 0.1
 done
+curl_body "$BASE/deployments/$STAGING_DEP/status" | grep -q 'succeeded' || {
+  echo "FAIL: approval lifecycle staging deployment did not succeed"; exit 1;
+}
 echo "  Staging deploy succeeded: OK"
 
 # Deploy to prod -> should be pending_approval
@@ -618,6 +635,10 @@ CODE=$(curl_silent -X POST -d "release_id=$V3_REL_ID&environment_id=$LC_PROD_ID&
 echo "  Force deploy to prod: OK (303)"
 
 echo "=== F3.7: Env Restriction ==="
+# Temporarily exclude prod from this run's lifecycle instead of creating a fourth environment.
+LC_PROD_STAGE_ID=$(db_query "SELECT id FROM lifecycle_stages WHERE lifecycle_id=$LC_LIFECYCLE_ID AND environment_id=$LC_PROD_ID;")
+CODE=$(curl_silent -X POST -d "csrf_token=$CSRF" "$BASE/lifecycles/$LC_LIFECYCLE_ID/stages/$LC_PROD_STAGE_ID/delete")
+[[ "$CODE" == "303" ]] || { echo "FAIL: exclude prod stage got $CODE"; exit 1; }
 # Project is bound to lifecycle. Try to deploy v3 to the "out" env (not in lifecycle).
 # Force should NOT bypass this restriction.
 CODE=$(curl_silent -X POST -d "release_id=$V3_REL_ID&environment_id=$LC_OUT_ID&csrf_token=$CSRF" "$BASE/projects/$LC_PROJECT_ID/deploy")
@@ -629,7 +650,7 @@ echo "  Force deploy to non-lifecycle env: still blocked (422)"
 
 echo "=== F3.8: Deploy Page ==="
 # Verify the dedicated deploy page renders for the existing TestProject
-# (free-floating, has release 1.0.0 and env TestEnv). A second test exercises
+# (free-floating, has release 1.0.0 and env dev). A second test exercises
 # the lifecycle-bound case via the LC project.
 CODE=$(curl_silent "$BASE/projects/$PROJECT_ID/deploy")
 [[ "$CODE" == "200" ]] || { echo "FAIL: GET /projects/$PROJECT_ID/deploy got $CODE"; exit 1; }
@@ -638,17 +659,20 @@ echo "  Free-floating deploy page renders: OK (200)"
 # Page should contain the form with the release version and env name.
 PAGE=$(curl_body "$BASE/projects/$PROJECT_ID/deploy")
 echo "$PAGE" | grep -q "1.0.0" || { echo "FAIL: release 1.0.0 missing from deploy page"; exit 1; }
-echo "$PAGE" | grep -q "TestEnv" || { echo "FAIL: TestEnv missing from deploy page"; exit 1; }
+echo "$PAGE" | grep -q "value=\"$ENV_ID\"" || { echo "FAIL: dev missing from deploy page"; exit 1; }
 echo "$PAGE" | grep -q "action=\"/projects/$PROJECT_ID/deploy\"" || { echo "FAIL: form action missing"; exit 1; }
 
 # Lifecycle-bound deploy page: only stage envs should appear.
 CODE=$(curl_silent "$BASE/projects/$LC_PROJECT_ID/deploy")
 [[ "$CODE" == "200" ]] || { echo "FAIL: GET lifecycle deploy page got $CODE"; exit 1; }
 LCPAGE=$(curl_body "$BASE/projects/$LC_PROJECT_ID/deploy")
-echo "$LCPAGE" | grep -q "LC-Dev-$LC_TS" || { echo "FAIL: LC-Dev not in lifecycle deploy page"; exit 1; }
-echo "$LCPAGE" | grep -q "LC-Test-$LC_TS" || { echo "FAIL: LC-Test not in lifecycle deploy page"; exit 1; }
-echo "$LCPAGE" | grep -q "LC-Prod-$LC_TS" || { echo "FAIL: LC-Prod not in lifecycle deploy page"; exit 1; }
-echo "$LCPAGE" | grep -q "LC-Out-$LC_TS" && { echo "FAIL: LC-Out should NOT appear in lifecycle deploy page"; exit 1; } || true
+echo "$LCPAGE" | python3 -c '
+import re,sys
+select=re.search(r"<select[^>]*name=\"environment_id\"[^>]*>(.*?)</select>",sys.stdin.read(),re.S)
+assert select, "deployment environment selector missing"
+ids=set(re.findall(r"value=\"([0-9]+)\"",select[1]))
+assert sys.argv[1] in ids and sys.argv[2] in ids and sys.argv[3] not in ids, ids
+' "$LC_DEV_ID" "$LC_TEST_ID" "$LC_OUT_ID"
 echo "  Lifecycle deploy page filters non-stage envs: OK"
 
 # F3.9: POST to the deploy page — env restriction. Try to deploy an
@@ -658,11 +682,13 @@ echo "  Lifecycle deploy page filters non-stage envs: OK"
 CODE=$(curl_silent -X POST -d "release_id=$LC_REL_ID&environment_id=$LC_OUT_ID&csrf_token=$CSRF" "$BASE/projects/$LC_PROJECT_ID/deploy")
 [[ "$CODE" == "422" ]] || { echo "FAIL: deploy page gate-block got $CODE, want 422"; exit 1; }
 echo "  Deploy page env restriction: blocked (422)"
+CODE=$(curl_silent -X POST -d "environment_id=$LC_PROD_ID&csrf_token=$CSRF" "$BASE/lifecycles/$LC_LIFECYCLE_ID/stages")
+[[ "$CODE" == "303" ]] || { echo "FAIL: restore prod stage got $CODE"; exit 1; }
 
 # F3.10: cross-project release rejected (400) — the project-scoped route
 # validates that the release belongs to this project.
-CROSS_PROJECT="DP-cross-proj-$E2E_RUN_ID"
-curl -s -b "$COOKIES" -o /dev/null -X POST -d "name=$CROSS_PROJECT&csrf_token=$CSRF" "$BASE/projects"
+CROSS_PROJECT="DP-cross-proj"
+curl -s -b "$COOKIES" -o /dev/null -X POST -d "name=$CROSS_PROJECT&description=Managed by make e2e-test.&csrf_token=$CSRF" "$BASE/projects"
 CROSS_PROJ_ID=$(db_query "SELECT id FROM projects WHERE name='$CROSS_PROJECT';")
 CODE=$(curl_silent -X POST -d "release_id=$LC_REL_ID&environment_id=$LC_DEV_ID&csrf_token=$CSRF" "$BASE/projects/$CROSS_PROJ_ID/deploy")
 [[ "$CODE" == "400" ]] || { echo "FAIL: cross-project deploy got $CODE, want 400"; exit 1; }
@@ -795,7 +821,13 @@ echo "=== API tests ==="
 
 api_get() { curl -s -H "Authorization: Bearer $API_TOKEN" "$@"; }
 api_get_code() { curl -s -H "Authorization: Bearer $API_TOKEN" -o /dev/null -w "%{http_code}" "$@"; }
-api_post() { curl -s -H "Authorization: Bearer $API_TOKEN" -H "Content-Type: application/json" -X POST -d "$1" "$2"; }
+api_post() {
+    local payload=$1
+    if [[ "$2" == "$BASE/api/v1/projects" ]]; then
+        payload=$(python3 -c 'import json,sys; d=json.loads(sys.argv[1]); d["description"]="Managed by make e2e-test. " + d.get("description", ""); print(json.dumps(d))' "$payload")
+    fi
+    curl -s -H "Authorization: Bearer $API_TOKEN" -H "Content-Type: application/json" -X POST -d "$payload" "$2";
+}
 api_put() { curl -s -H "Authorization: Bearer $API_TOKEN" -H "Content-Type: application/json" -X PUT -d "$1" "$2"; }
 api_post_code() { curl -s -H "Authorization: Bearer $API_TOKEN" -H "Content-Type: application/json" -X POST -d "$1" -o /dev/null -w "%{http_code}" "$2"; }
 api_post_noauth() { curl -s -H "Content-Type: application/json" -X POST -d "$1" -o /dev/null -w "%{http_code}" "$2"; }
@@ -839,31 +871,37 @@ echo "  Health check: OK"
 source "$(dirname -- "${BASH_SOURCE[0]}")/deployment_staging_e2e.sh"
 
 # A3: Project CRUD.
-API_PROJECT_NAME="e2e-api-project-$E2E_RUN_ID"
+API_PROJECT_NAME="e2e-api-project"
 API_PROJECT=$(api_post "{\"name\":\"$API_PROJECT_NAME\"}" "$BASE/api/v1/projects")
 API_PROJECT_ID=$(echo "$API_PROJECT" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
 [[ -n "$API_PROJECT_ID" ]] || { echo "FAIL: create project did not return id: $API_PROJECT"; exit 1; }
 CODE=$(api_get_code "$BASE/api/v1/projects")
 [[ "$CODE" == "200" ]] || { echo "FAIL: list projects got $CODE, want 200"; exit 1; }
 API_PROJECT_NAME=$(api_get "$BASE/api/v1/projects/$API_PROJECT_ID" | python3 -c "import sys,json; print(json.load(sys.stdin)['name'])")
-[[ "$API_PROJECT_NAME" == "e2e-api-project-$E2E_RUN_ID" ]] || { echo "FAIL: project name = $API_PROJECT_NAME"; exit 1; }
+[[ "$API_PROJECT_NAME" == "e2e-api-project" ]] || { echo "FAIL: project name = $API_PROJECT_NAME"; exit 1; }
 echo "  Project CRUD: OK ($API_PROJECT_ID)"
 
 # A4: Environment CRUD.
-API_ENV=$(api_post "{\"name\":\"dev-$E2E_RUN_ID\"}" "$BASE/api/v1/environments")
-API_ENV_ID=$(echo "$API_ENV" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+API_ENV_ID=$ENV_ID
+API_ENV=$(api_get "$BASE/api/v1/environments/$API_ENV_ID")
 [[ -n "$API_ENV_ID" ]] || { echo "FAIL: create env did not return id: $API_ENV"; exit 1; }
+CRUD_ENV=$(api_post "{\"name\":\"environment-crud-$E2E_RUN_ID\"}" "$BASE/api/v1/environments")
+CRUD_ENV_ID=$(echo "$CRUD_ENV" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
+api_get "$BASE/api/v1/environments/$CRUD_ENV_ID" | python3 -c 'import json,sys; assert json.load(sys.stdin)["id"] == int(sys.argv[1])' "$CRUD_ENV_ID"
+api_put "{\"name\":\"environment-crud-$E2E_RUN_ID\",\"description\":\"Updated by E2E\"}" "$BASE/api/v1/environments/$CRUD_ENV_ID" >/dev/null
+CODE=$(curl -sS -H "Authorization: Bearer $API_TOKEN" -X DELETE -o /dev/null -w '%{http_code}' "$BASE/api/v1/environments/$CRUD_ENV_ID")
+[[ "$CODE" == 204 ]] || { echo "FAIL: delete temporary environment got $CODE"; exit 1; }
+[[ "$(api_get_code "$BASE/api/v1/environments/$CRUD_ENV_ID")" == 404 ]] || { echo "FAIL: deleted temporary environment still exists"; exit 1; }
 echo "  Environment CRUD: OK ($API_ENV_ID)"
 
 # A4b: Interpreter validation, mixed local execution, immutable snapshots,
 # release refresh, and redeployment all use the public API.
 echo "=== API interpreter tests ==="
-export INTERPRETER_PYTHON_STEP_NAME="python-step-$E2E_RUN_ID"
-export INTERPRETER_TEMPLATE_NAME="python-template-$E2E_RUN_ID"
-INTERPRETER_PROJECT=$(api_post "{\"name\":\"e2e-interpreters-$E2E_RUN_ID\"}" "$BASE/api/v1/projects")
+export INTERPRETER_PYTHON_STEP_NAME="python-step"
+export INTERPRETER_TEMPLATE_NAME="python-template"
+INTERPRETER_PROJECT=$(api_post "{\"name\":\"e2e-interpreters\"}" "$BASE/api/v1/projects")
 INTERPRETER_PROJECT_ID=$(echo "$INTERPRETER_PROJECT" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
-INTERPRETER_ENV=$(api_post "{\"name\":\"interpreter-env-$E2E_RUN_ID\"}" "$BASE/api/v1/environments")
-INTERPRETER_ENV_ID=$(echo "$INTERPRETER_ENV" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+INTERPRETER_ENV_ID=$ENV_ID
 [[ -n "$INTERPRETER_PROJECT_ID" && -n "$INTERPRETER_ENV_ID" ]] || {
     echo "FAIL: could not create interpreter project/environment"; exit 1;
 }
@@ -1028,8 +1066,8 @@ echo "$INTERPRETER_UPDATED_STEP" | python3 -c \
     "import sys,json; assert json.load(sys.stdin)['interpreter']=='pwsh'"
 INTERPRETER_REFRESH_CODE=$(api_post_code '{}' \
     "$BASE/api/v1/projects/$INTERPRETER_PROJECT_ID/releases/$INTERPRETER_RELEASE_ID/refresh")
-[[ "$INTERPRETER_REFRESH_CODE" == 409 ]] || {
-    echo "FAIL: used release refresh should be blocked ($INTERPRETER_REFRESH_CODE)"; exit 1;
+[[ "$INTERPRETER_REFRESH_CODE" == 200 ]] || {
+    echo "FAIL: used release refresh should succeed ($INTERPRETER_REFRESH_CODE)"; exit 1;
 }
 INTERPRETER_PWSH_RELEASE=$(api_post '{"version":"powershell-immutable"}' \
     "$BASE/api/v1/projects/$INTERPRETER_PROJECT_ID/releases")
@@ -1295,6 +1333,47 @@ print("swagger spec OK")
 '
 echo "  Swagger UI + spec: OK"
 
+# Recreate the disposable account after the deletion contract has passed.
+api_post "{\"email\":\"$NEW_EMAIL\",\"name\":\"Manual E2E Deployer\",\"role\":\"deployer\",\"password\":\"$NEW_PASS\"}" "$BASE/api/v1/admin/users" | python3 -c 'import json,sys; assert json.load(sys.stdin)["id"] > 0'
+MANUAL_APPROVAL=$(api_post "{\"release_id\":$APP_REL_ID,\"environment_id\":$APP_PROD_ID}" "$BASE/api/v1/projects/$APP_PROJ_ID/deployments" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["status"]=="pending_approval"; print(d["id"])')
+echo '=== Retained manual checks (docs/manual-e2e.md) ==='
+for id in "$PROJECT_ID" "$LC_PROJECT_ID" "$APP_PROJ_ID" "$CROSS_PROJ_ID" "$API_PROJECT_ID" "$INTERPRETER_PROJECT_ID"; do
+    echo "  Project: $BASE/projects/$id"
+done
+echo "  Lifecycle approval: $BASE/deployments/$MANUAL_APPROVAL"
+echo "  Test accounts: $NEW_EMAIL (deployer), $VIEWER_EMAIL (viewer)"
+echo "  Templates: $BASE/templates"
+echo "  Users and audit: $BASE/admin/users, $BASE/admin/audit"
+
 source "$SCRIPT_DIR/running_features_e2e.sh"
+# Retain the pending artifact example last: it owns this project's dev slot
+# until approved, rejected, expired, or cancelled.
+source "$SCRIPT_DIR/terraform_approval_e2e.sh"
+[[ "$(db_query "SELECT COUNT(*) FROM environments WHERE name NOT IN ('dev','test','prod');")" == "$OTHER_ENV_COUNT" ]] || {
+    echo "FAIL: E2E left extra temporary environments behind"; exit 1;
+}
+echo "  Shared dev/test/prod environments reused; temporary environments removed: OK"
+
+echo '=== Retained lifecycle promotion fixture ==='
+api_get "$BASE/api/v1/projects/$LC_PROJECT_ID" | python3 -c '
+import json,sys
+p=json.load(sys.stdin)
+assert p["lifecycle_id"] == int(sys.argv[1]), "LC-Project lost its lifecycle"
+' "$LC_LIFECYCLE_ID"
+api_get "$BASE/api/v1/lifecycles/$LC_LIFECYCLE_ID" | python3 -c '
+import json,sys
+lc=json.load(sys.stdin)
+stages=sorted(lc["stages"], key=lambda s:s["sort_order"])
+assert [s["environment_id"] for s in stages] == list(map(int,sys.argv[1:])), "LC stages must remain dev -> test -> prod"
+' "$LC_DEV_ID" "$LC_TEST_ID" "$LC_PROD_ID"
+api_get "$BASE/api/v1/deployments?project_id=$LC_PROJECT_ID&release_id=$LC_REL_ID&limit=100" | python3 -c '
+import json,sys
+deployments=json.load(sys.stdin)["items"]
+succeeded={d["environment_id"] for d in deployments if d["status"] == "succeeded"}
+assert set(map(int,sys.argv[1:])) <= succeeded, "LC-Project must retain a successful deployment in every stage"
+' "$LC_DEV_ID" "$LC_TEST_ID" "$LC_PROD_ID"
+echo "  LC-Project: dev -> test -> prod, promotion gates, and successful history retained: OK"
+echo "  Lifecycle promotion project: $BASE/projects/$LC_PROJECT_ID"
+echo "  Lifecycle stages: $BASE/lifecycles/$LC_LIFECYCLE_ID"
 
 echo "=== ALL E2E CHECKS PASSED ==="

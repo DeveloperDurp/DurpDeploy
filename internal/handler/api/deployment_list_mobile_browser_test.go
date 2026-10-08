@@ -33,17 +33,30 @@ func TestDeploymentListMobileBrowserE2E(t *testing.T) {
 		},
 		201,
 	), &release)
-	for _, state := range []string{"running", "failed", "succeeded"} {
+	for _, state := range []string{"pending_approval", "failed", "succeeded"} {
 		seedDeployment(t, f.h.repo, release.ID, f.environment.ID, state)
 	}
 	var page struct {
-		Items []struct{ ID int64 } `json:"items"`
-		Total int64                `json:"total"`
+		Items []struct {
+			ID     int64
+			Status string
+		} `json:"items"`
+		Total int64 `json:"total"`
 	}
 	decodeStepLogTest(t, f.api(t, "GET", "/api/v1/deployments?limit=2",
 		nil, 200), &page)
 	if len(page.Items) != 2 || page.Total != 3 {
 		t.Fatal("public deployment list lost its pagination contract")
+	}
+	decodeStepLogTest(
+		t,
+		f.api(t, "GET", "/api/v1/deployments?status=pending_approval",
+			nil, 200),
+		&page,
+	)
+	if len(page.Items) != 1 || page.Total != 1 ||
+		page.Items[0].Status != "pending_approval" {
+		t.Fatal("public deployment list did not filter pending approval")
 	}
 	b := startPackageBrowser(t)
 	b.setBackTestSession(t, f.baseURL, f.session)
@@ -54,6 +67,14 @@ func TestDeploymentListMobileBrowserE2E(t *testing.T) {
 		t,
 		`document.querySelectorAll('#deployments-tbody [data-deployment-id]').length === 2`,
 	)
+	if string(
+		b.evaluate(
+			t,
+			`!!document.querySelector('select[name="status"] option[value="pending_approval"]')`,
+		),
+	) != "true" {
+		t.Fatal("deployment filter has no pending approval option")
+	}
 	b.captureNavigation(t, "mobile-deployment-list", func() {
 		assertDeploymentListMobile(t, b)
 	})
@@ -78,11 +99,19 @@ func TestDeploymentListMobileBrowserE2E(t *testing.T) {
 	})
 	b.evaluate(
 		t,
-		`document.querySelector('select[name="status"]').value = 'failed'; document.querySelector('form[action="/deployments"] button[type="submit"]').click(); true`,
+		`document.querySelector('[aria-controls="deployment-filters"]').click(); true`,
 	)
 	b.wait(
 		t,
-		`document.readyState === 'complete' && window.Alpine && document.querySelectorAll('#deployments-tbody [data-deployment-id]').length === 1`,
+		`document.querySelector('#deployment-filters').getBoundingClientRect().height > 0`,
+	)
+	b.evaluate(
+		t,
+		`document.querySelector('select[name="status"]').value = 'pending_approval'; document.querySelector('form[action="/deployments"] button[type="submit"]').click(); true`,
+	)
+	b.wait(
+		t,
+		`document.readyState === 'complete' && window.Alpine && document.querySelectorAll('#deployments-tbody [data-deployment-id]').length === 1 && document.querySelector('select[name="status"]').value === 'pending_approval' && document.querySelector('#deployments-tbody .badge').textContent === 'pending_approval'`,
 	)
 	b.captureNavigation(t, "mobile-deployment-list-filtered")
 	b.navigateBackTest(t, f.baseURL+"/deployments?status=pending")
@@ -93,6 +122,31 @@ func TestDeploymentListMobileBrowserE2E(t *testing.T) {
 func assertDeploymentListMobile(t *testing.T, b *packageBrowser) {
 	t.Helper()
 	b.wait(t, `!document.querySelector('.htmx-settling, .htmx-request')`)
+	if string(b.evaluate(t, `(() => {
+ const form = document.querySelector('#deployment-filters');
+ const toggle = document.querySelector('[aria-controls="deployment-filters"]');
+ const visible = el => el.getBoundingClientRect().height > 0;
+ if (innerWidth >= 768) return visible(form) && !visible(toggle);
+ if (visible(form) || !visible(toggle)) return false;
+ toggle.click();
+ return true;
+})()`)) != "true" {
+		t.Fatal("filters are not collapsed on mobile or visible on desktop")
+	}
+	if string(b.evaluate(t, `innerWidth < 768`)) == "true" {
+		b.wait(
+			t,
+			`document.querySelector('#deployment-filters').getBoundingClientRect().height > 0`,
+		)
+		b.evaluate(
+			t,
+			`document.querySelector('[aria-controls="deployment-filters"]').click(); true`,
+		)
+		b.wait(
+			t,
+			`document.querySelector('#deployment-filters').getBoundingClientRect().height === 0`,
+		)
+	}
 	if string(b.evaluate(t, `(() => {
  const row = document.querySelector('#deployments-tbody tr');
  const cards = [...document.querySelectorAll('#deployments-tbody [data-resource-card]')];

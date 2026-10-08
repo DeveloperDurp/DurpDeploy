@@ -13,8 +13,8 @@ type LifecyclePanel struct {
 }
 
 type LifecyclePanelStage struct {
-	Stage           db.LifecycleStage
-	Environment     db.Environment
+	Stage            db.LifecycleStage
+	Environment      db.Environment
 	LatestDeployment *db.Deployment
 	LatestVersion    string
 	LatestAttempt    *db.Deployment
@@ -28,41 +28,78 @@ type LifecyclePanelStage struct {
 const variablesPreviewCap = 6
 
 templ ProjectDetail(project db.Project, panel LifecyclePanel, vars []db.Variable, envs []db.Environment) {
-	<div id="project-detail" x-data="formDialogHost" x-on:htmx:after-settle.camel="afterSettle" x-on:htmx:before-swap.camel="beforeSwap" x-on:form-saved="saved">
-		<div class="page-header">
-			<h1 class="text-3xl font-bold">{ project.Name }</h1>
-			<div class="flex gap-2 ml-auto">
-				if CanWrite(ctx) {
-					<a href={ fmt.Sprintf("/projects/%d/edit", project.ID) } hx-get={ fmt.Sprintf("/projects/%d/edit", project.ID) } hx-target="#project-edit-content" hx-select="[data-project-form]" hx-swap="innerHTML" hx-push-url="false" hx-boost="false" x-ref="editButton" class="btn btn-secondary btn-sm">Edit</a>
-				}
-				<a href="/projects" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>
+	<div id="project-detail" x-data="projectMenu">
+		<div x-data="formDialogHost" x-on:htmx:after-settle.camel="afterSettle" x-on:htmx:before-swap.camel="beforeSwap" x-on:form-saved="saved">
+			<div class="page-header">
+				<h1 class="text-3xl font-bold">{ project.Name }</h1>
+				<div class="flex gap-2 ml-auto">
+					<button type="button" class="btn btn-outline btn-sm" @click="open" aria-haspopup="dialog" aria-controls="project-menu-dialog">Project menu</button>
+					if CanWrite(ctx) {
+						<a href={ fmt.Sprintf("/projects/%d/deploy", project.ID) } class="btn btn-primary btn-sm">Deploy</a>
+						<a href={ fmt.Sprintf("/projects/%d/edit", project.ID) } hx-get={ fmt.Sprintf("/projects/%d/edit", project.ID) } hx-target="#project-edit-content" hx-select="[data-project-form]" hx-swap="innerHTML" hx-push-url="false" hx-boost="false" x-ref="editButton" class="btn btn-secondary btn-sm">Edit</a>
+					}
+					<a href="/projects" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>
+				</div>
 			</div>
-		</div>
-		<p class="mb-6 text-gray-400">
-			if project.Description.Valid {
-				{ project.Description.String }
-			} else {
-				<span>No description</span>
-			}
-		</p>
-		<nav aria-label="Project sections" class="flex gap-2 flex-wrap">
-			<a href={ fmt.Sprintf("/projects/%d/steps-page", project.ID) } class="btn btn-primary">Steps</a>
-			<a href={ fmt.Sprintf("/projects/%d/variables", project.ID) } class="btn btn-secondary">Variables</a>
-			<a href={ fmt.Sprintf("/projects/%d/package-repository", project.ID) } class="btn btn-accent">Packages</a>
-			<a href={ fmt.Sprintf("/projects/%d/releases", project.ID) } class="btn btn-primary">Releases</a>
-			<a href={ fmt.Sprintf("/projects/%d/runbooks", project.ID) } class="btn btn-secondary">Runbooks</a>
-			<a href={ fmt.Sprintf("/projects/%d/notifications", project.ID) } class="btn btn-accent">Notifications</a>
+			<p class="mb-6 text-gray-400">
+				if project.Description.Valid {
+					{ project.Description.String }
+				} else {
+					<span>No description</span>
+				}
+			</p>
+			@LifecyclePanelSection(project, panel)
+			@VariablesPreviewSection(project, vars, envs)
 			if CanWrite(ctx) {
-				<a href={ fmt.Sprintf("/projects/%d/deploy", project.ID) } class="btn btn-primary">Deploy</a>
-				<a href={ fmt.Sprintf("/projects/%d/schedules", project.ID) } class="btn btn-secondary">Schedules</a>
+				@ResourceFormDialog("Edit Project", "[data-project-form]")
 			}
-		</nav>
-		@LifecyclePanelSection(project, panel)
-		@VariablesPreviewSection(project, vars, envs)
-		if CanWrite(ctx) {
-			@ResourceFormDialog("Edit Project", "[data-project-form]")
-		}
+		</div>
+		@ProjectMenuDialog(project)
 	</div>
+}
+
+// Keep the drawer inside the detail fragment so navigation removes it too.
+templ ProjectMenuDialog(project db.Project) {
+	<dialog
+		id="project-menu-dialog"
+		x-ref="menu"
+		class="modal project-menu-dialog"
+		aria-labelledby="project-menu-title"
+		@cancel.prevent="close"
+		@resize.window="alignWithNavbar"
+	>
+		<div class="modal-box project-menu-panel">
+			<div class="sticky top-0 z-10 bg-base-100 border-b border-base-300 p-6">
+				<div class="flex items-center justify-between gap-4">
+					<h2 id="project-menu-title" class="text-xl font-bold">Project menu</h2>
+					<button type="button" class="btn btn-ghost" @click="close" aria-label="Close project menu">Close</button>
+				</div>
+				<p class="mt-2 text-sm opacity-70 break-words">{ project.Name }</p>
+			</div>
+			<nav aria-label="Project sections" @click="closeForLink" class="p-4 space-y-4" hx-boost="true" hx-target="#page-content" hx-select="#page-content" hx-select-oob="#app-navbar" hx-swap="outerHTML show:window:top" hx-sync="body:replace">
+				<ul class="menu w-full">
+					<li class="menu-title">Configuration</li>
+					<li><a href={ fmt.Sprintf("/projects/%d/steps-page", project.ID) }>Steps</a></li>
+					<li><a href={ fmt.Sprintf("/projects/%d/variables", project.ID) }>Variables</a></li>
+					<li><a href={ fmt.Sprintf("/projects/%d/package-repository", project.ID) }>Packages</a></li>
+				</ul>
+				<ul class="menu w-full">
+					<li class="menu-title">Operations</li>
+					<li><a href={ fmt.Sprintf("/projects/%d/releases", project.ID) }>Releases</a></li>
+					<li><a href={ fmt.Sprintf("/deployments?project_id=%d", project.ID) }>Deployment history</a></li>
+					<li><a href={ fmt.Sprintf("/projects/%d/runbooks", project.ID) }>Runbooks</a></li>
+					if CanWrite(ctx) {
+						<li><a href={ fmt.Sprintf("/projects/%d/schedules", project.ID) }>Schedules</a></li>
+					}
+				</ul>
+				<ul class="menu w-full">
+					<li class="menu-title">Settings</li>
+					<li><a href={ fmt.Sprintf("/projects/%d/notifications", project.ID) }>Notifications</a></li>
+				</ul>
+			</nav>
+		</div>
+		<form method="dialog" class="modal-backdrop" @submit.prevent="close"><button type="submit" aria-label="Dismiss project menu"></button></form>
+	</dialog>
 }
 
 // NotificationSettingsSection renders the Slack/Email/Gotify/Discord cards

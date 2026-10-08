@@ -93,8 +93,8 @@ func TestOtherNamespaceSweepKeepsRunbookExecutionBlocked(t *testing.T) {
 		t.Fatalf("wrong namespace confirmed %d records: %v", confirmed, err)
 	}
 
-	// Then: no duplicate scheduled run or deletion can erase the evidence.
-	_, _, err = repo.CreateRunbookExecution(ctx,
+	// Then: the next scheduled run waits and deletion preserves the evidence.
+	_, queued, err := repo.CreateRunbookExecution(ctx,
 		repository.RunbookExecutionRequest{
 			ProjectID:     project.ID,
 			RunbookID:     book.ID,
@@ -108,11 +108,11 @@ func TestOtherNamespaceSweepKeepsRunbookExecutionBlocked(t *testing.T) {
 			ScheduleNextRunAt:     220,
 			FiredAt:               160,
 		})
-	if !errors.Is(err, repository.ErrRunbookScheduleOverlap) {
-		t.Fatalf("schedule overlap = %v", err)
+	if err != nil || queued.Deployment.Status != "queued" {
+		t.Fatalf("scheduled queue entry = %+v: %v", queued, err)
 	}
 	count, err := repo.Queries.CountRunbookExecutions(ctx, project.ID)
-	if err != nil || count != 1 {
+	if err != nil || count != 2 {
 		t.Fatalf("executions after overlap = %d: %v", count, err)
 	}
 	if err := repo.DeleteProject(ctx, project.ID); !errors.Is(err,

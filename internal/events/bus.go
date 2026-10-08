@@ -21,17 +21,18 @@ import (
 type Type string
 
 const (
-	DeploymentStarted   Type = "deployment_started"
-	DeploymentSucceeded Type = "deployment_succeeded"
-	DeploymentFailed    Type = "deployment_failed"
-	RunbookStarted      Type = "runbook_started"
-	RunbookSucceeded    Type = "runbook_succeeded"
-	RunbookFailed       Type = "runbook_failed"
-	BackupUnhealthy     Type = "backup_unhealthy"
-	BackupHealthy       Type = "backup_healthy"
-	AgentStale          Type = "agent_stale"
-	AgentOffline        Type = "agent_offline"
-	AgentRecovered      Type = "agent_recovered"
+	ArtifactAwaitingApproval Type = "artifact_awaiting_approval"
+	DeploymentStarted        Type = "deployment_started"
+	DeploymentSucceeded      Type = "deployment_succeeded"
+	DeploymentFailed         Type = "deployment_failed"
+	RunbookStarted           Type = "runbook_started"
+	RunbookSucceeded         Type = "runbook_succeeded"
+	RunbookFailed            Type = "runbook_failed"
+	BackupUnhealthy          Type = "backup_unhealthy"
+	BackupHealthy            Type = "backup_healthy"
+	AgentStale               Type = "agent_stale"
+	AgentOffline             Type = "agent_offline"
+	AgentRecovered           Type = "agent_recovered"
 )
 
 // Event carries everything a Notifier needs to describe and deliver a

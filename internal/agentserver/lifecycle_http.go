@@ -62,7 +62,8 @@ func writePollErrorStatus(w http.ResponseWriter, err error) {
 }
 
 func writeLifecycleStatus(w http.ResponseWriter, err error) bool {
-	if errors.Is(err, repository.ErrRemoteLifecycleConflict) {
+	if errors.Is(err, repository.ErrRemoteLifecycleConflict) ||
+		errors.Is(err, sql.ErrNoRows) {
 		w.WriteHeader(http.StatusConflict)
 		return false
 	}

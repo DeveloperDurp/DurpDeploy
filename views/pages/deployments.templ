@@ -55,7 +55,14 @@ templ DeploymentsContent(view DeploymentsView) {
 }
 
 templ DeploymentsFilterBar(view DeploymentsView) {
-	<form method="get" action="/deployments" class="grid grid-cols-2 md:flex md:flex-wrap gap-2 items-end">
+	<div x-data="{ open: false }" class="space-y-2">
+		<button type="button" class="btn btn-ghost md:hidden" @click="open = !open" aria-expanded="false" :aria-expanded="open" aria-controls="deployment-filters">
+			<span x-text="open ? 'Hide filters' : 'Filters'">Filters</span>
+			if view.FilterProject.Valid || view.FilterEnv.Valid || view.FilterStatus.Valid || view.FilterFrom.Valid || view.FilterTo.Valid {
+				<span class="badge badge-primary">Active</span>
+			}
+		</button>
+	<form id="deployment-filters" method="get" action="/deployments" class="hidden grid grid-cols-2 md:!flex md:flex-wrap gap-2 items-end" :class="{ hidden: !open }">
 		<label class="form-control min-w-0 col-span-2 md:col-span-1">
 			<span class="label-text">Project</span>
 			<select name="project_id" class="select select-bordered md:select-sm w-full">
@@ -88,36 +95,17 @@ templ DeploymentsFilterBar(view DeploymentsView) {
 			<span class="label-text">Status</span>
 			<select name="status" class="select select-bordered md:select-sm w-full">
 				<option value="">All</option>
-				<option
-					value="pending"
-					if view.FilterStatus.String == "pending" {
-						selected
-					}
-				>pending</option>
-				<option
-					value="running"
-					if view.FilterStatus.String == "running" {
-						selected
-					}
-				>running</option>
-				<option
-					value="succeeded"
-					if view.FilterStatus.String == "succeeded" {
-						selected
-					}
-				>succeeded</option>
-				<option
-					value="failed"
-					if view.FilterStatus.String == "failed" {
-						selected
-					}
-				>failed</option>
-				<option
-					value="cancelled"
-					if view.FilterStatus.String == "cancelled" {
-						selected
-					}
-				>cancelled</option>
+				<option value="queued" selected?={ view.FilterStatus.String == "queued" }>queued</option>
+				<option value="pending" if view.FilterStatus.String == "pending" { selected }>pending</option>
+				<option value="pending_approval" selected?={ view.FilterStatus.String == "pending_approval" }>pending_approval</option>
+				<option value="running" if view.FilterStatus.String == "running" { selected }>running</option>
+				<option value="succeeded" if view.FilterStatus.String == "succeeded" { selected }>succeeded</option>
+				<option value="failed" if view.FilterStatus.String == "failed" { selected }>failed</option>
+				<option value="cancelled" if view.FilterStatus.String == "cancelled" { selected }>cancelled</option>
+				<option value="publishing_artifact" selected?={ view.FilterStatus.String == "publishing_artifact" }>publishing_artifact</option>
+				<option value="awaiting_artifact_approval" selected?={ view.FilterStatus.String == "awaiting_artifact_approval" }>awaiting_artifact_approval</option>
+				<option value="rejected" selected?={ view.FilterStatus.String == "rejected" }>rejected</option>
+				<option value="expired" selected?={ view.FilterStatus.String == "expired" }>expired</option>
 			</select>
 		</label>
 		<label class="form-control min-w-0">
@@ -131,6 +119,7 @@ templ DeploymentsFilterBar(view DeploymentsView) {
 		<button type="submit" class="btn md:btn-sm btn-primary">Filter</button>
 		<a href="/deployments" class="btn md:btn-sm btn-ghost">Clear</a>
 	</form>
+	</div>
 }
 
 templ DeploymentsList(view DeploymentsView, appendRows bool) {
@@ -247,9 +236,13 @@ func unixToDate(t int64) string {
 
 func statusBadgeClass(status string) string {
 	switch status {
-	case "pending":
+	case "pending", "queued":
 		return "badge-primary"
-	case "pending_approval":
+	case "awaiting_artifact_approval", "publishing_artifact":
+return "badge-warning"
+case "rejected", "expired":
+return "badge-error"
+case "pending_approval":
 		return "badge-info"
 	case "running":
 		return "badge-warning"
@@ -266,7 +259,7 @@ func statusBadgeClass(status string) string {
 
 func isTerminalStatus(status string) bool {
 	switch status {
-	case "succeeded", "failed", "cancelled":
+	case "succeeded", "failed", "cancelled", "rejected", "expired", "cleanup_unconfirmed":
 		return true
 	default:
 		return false
@@ -274,7 +267,7 @@ func isTerminalStatus(status string) bool {
 }
 
 templ StatusBadge(deployment db.Deployment) {
-	<span class={ fmt.Sprintf("badge %s", statusBadgeClass(deployment.Status)) }>
+	<span class={ fmt.Sprintf("badge max-w-full h-auto whitespace-normal break-all %s", statusBadgeClass(deployment.Status)) }>
 		{ deployment.Status }
 	</span>
 }
@@ -282,6 +275,8 @@ templ StatusBadge(deployment db.Deployment) {
 templ StatusBadgeContainer(deployment db.Deployment, waitingForAgents bool) {
 	<div
 		id="status-badge"
+		data-deployment-status={ deployment.Status }
+		class="flex flex-wrap items-center gap-2"
 		hx-get={ fmt.Sprintf("/deployments/%d/status", deployment.ID) }
 		if isTerminalStatus(deployment.Status) {
 			hx-trigger="none"
@@ -291,12 +286,80 @@ templ StatusBadgeContainer(deployment db.Deployment, waitingForAgents bool) {
 		hx-swap="outerHTML"
 		aria-live="polite"
 	>
+		if isTerminalStatus(deployment.Status) {
+			<span id="deployment-cancel" hx-swap-oob="delete"></span>
+		}
 		if waitingForAgents {
 			<span class="badge badge-warning">Waiting for agents</span>
 		} else {
 			@StatusBadge(deployment)
 		}
+		@DeploymentQueueStatus()
 	</div>
+}
+
+templ DeploymentActions(deployment db.Deployment, outOfBand bool) {
+	<div
+		id="deployment-actions"
+		class="flex flex-wrap items-center gap-2"
+		if outOfBand {
+			hx-swap-oob="outerHTML"
+		}
+	>
+		if CanWrite(ctx) {
+			if isTerminalStatus(deployment.Status) {
+				<button
+					class="btn btn-primary sm:btn-sm"
+					hx-post={ fmt.Sprintf("/deployments/%d/redeploy", deployment.ID) }
+					hx-confirm="Re-run this deployment with the same release and environment?"
+					hx-disable-elt
+					data-toast-success="Re-run started"
+					data-toast-error="Failed to re-run"
+				>
+					Re-run
+				</button>
+			}
+			if deployment.Status == "pending_approval" {
+				<button
+					class="btn btn-success sm:btn-sm"
+					hx-post={ fmt.Sprintf("/deployments/%d/approve", deployment.ID) }
+					hx-confirm="Approve this deployment and start the runner?"
+					hx-disable-elt
+					data-toast-success="Deployment approved"
+					data-toast-error="Failed to approve"
+				>
+					Approve
+				</button>
+			}
+			if deployment.Status == "running" || deployment.Status == "publishing_artifact" || deployment.Status == "awaiting_artifact_approval" || deployment.Status == "pending_approval" || deployment.Status == "queued" || deployment.Status == "pending" {
+				<button
+					id="deployment-cancel"
+					class="btn btn-error sm:btn-sm"
+					hx-post={ fmt.Sprintf("/deployments/%d/cancel", deployment.ID) }
+					hx-target="#status-badge"
+					hx-swap="outerHTML"
+					data-toast-success="Cancellation requested"
+					data-toast-error="Failed to cancel deployment"
+				>
+					Cancel
+				</button>
+			}
+		}
+		<details class="dropdown dropdown-end ml-auto" data-focus-menu @click.outside="$el.open = false">
+			<summary class="btn btn-ghost sm:btn-sm">More</summary>
+			<ul class="dropdown-content menu bg-base-200 rounded-box z-[1] w-44 p-2 shadow">
+				<li><a href={ fmt.Sprintf("/deployments/%d/logs.txt", deployment.ID) } class="min-h-12 sm:min-h-0">Export logs</a></li>
+				if CanWrite(ctx) && (deployment.Status == "succeeded" || deployment.Status == "failed" || deployment.Status == "cancelled") {
+					<li><a href={ fmt.Sprintf("/deployments/%d/rollback", deployment.ID) } class="min-h-12 sm:min-h-0">Rollback</a></li>
+				}
+			</ul>
+		</details>
+	</div>
+}
+
+templ DeploymentStatusUpdate(deployment db.Deployment, waitingForAgents bool) {
+	@StatusBadgeContainer(deployment, waitingForAgents)
+	@DeploymentActions(deployment, true)
 }
 
 templ DeploymentDetailPage(project db.Project, release db.Release, environment db.Environment, deployment db.Deployment, logs []db.DeploymentLog, waitingForAgents bool, currentPath string) {
@@ -341,56 +404,9 @@ templ DeploymentDetail(project db.Project, release db.Release, environment db.En
 					{ deployment.Note.String }
 				</blockquote>
 			}
-			<div class="flex flex-wrap items-center gap-2">
-				if CanWrite(ctx) {
-					if isTerminalStatus(deployment.Status) {
-						<button
-							class="btn btn-primary sm:btn-sm"
-							hx-post={ fmt.Sprintf("/deployments/%d/redeploy", deployment.ID) }
-							hx-confirm={ fmt.Sprintf("Re-run this deployment with the same release (%s) and environment (%s)?", release.Version, environment.Name) }
-							hx-disable-elt
-							data-toast-success="Re-run started"
-							data-toast-error="Failed to re-run"
-						>
-							Re-run
-						</button>
-					}
-					if deployment.Status == "pending_approval" {
-						<button
-							class="btn btn-success sm:btn-sm"
-							hx-post={ fmt.Sprintf("/deployments/%d/approve", deployment.ID) }
-							hx-confirm="Approve this deployment and start the runner?"
-							hx-disable-elt
-							data-toast-success="Deployment approved"
-							data-toast-error="Failed to approve"
-						>
-							Approve
-						</button>
-					}
-					if deployment.Status == "running" || deployment.Status == "pending_approval" {
-						<button
-							class="btn btn-error sm:btn-sm"
-							hx-post={ fmt.Sprintf("/deployments/%d/cancel", deployment.ID) }
-							hx-target="#status-badge"
-							hx-swap="outerHTML"
-							data-toast-success="Cancellation requested"
-							data-toast-error="Failed to cancel deployment"
-						>
-							Cancel
-						</button>
-					}
-				}
-				<details class="dropdown dropdown-end ml-auto" data-focus-menu @click.outside="$el.open = false">
-					<summary class="btn btn-ghost sm:btn-sm">More</summary>
-					<ul class="dropdown-content menu bg-base-200 rounded-box z-[1] w-44 p-2 shadow">
-						<li><a href={ fmt.Sprintf("/deployments/%d/logs.txt", deployment.ID) } class="min-h-12 sm:min-h-0">Export logs</a></li>
-						if CanWrite(ctx) && isTerminalStatus(deployment.Status) {
-							<li><a href={ fmt.Sprintf("/deployments/%d/rollback", deployment.ID) } class="min-h-12 sm:min-h-0">Rollback</a></li>
-						}
-					</ul>
-				</details>
-			</div>
+			@DeploymentActions(deployment, false)
 		</div>
+		<div hx-get={ fmt.Sprintf("/deployments/%d/artifact-gates", deployment.ID) } hx-trigger="load" hx-swap="outerHTML" data-artifact-gates aria-live="polite"></div>
 		<section class="space-y-4" aria-label="Step logs">
 			<h2 class="text-xl font-bold">Step logs</h2>
 			for position, panel := range logView.Panels {
@@ -421,11 +437,13 @@ templ DeploymentDetail(project db.Project, release db.Release, environment db.En
 								if log.StepName.Valid && log.StepName.String != panel.Name {
 									<span class="text-accent">[{ log.StepName.String }] </span>
 								}
-								{ log.Line }
+								<span x-init="renderLogLine($el)">
+									{ log.Line }
+								</span>
 							</div>
 						}
 						<template x-for={ fmt.Sprintf("entry in panels[%d].live", position) } x-bind:key="entry.id">
-							<div class="font-mono text-sm whitespace-pre-wrap break-words" x-bind:data-log-id="entry.id" x-text="entry.step.includes(' @ ') ? '[' + entry.step + '] ' + entry.line : entry.line"></div>
+							<div class="font-mono text-sm whitespace-pre-wrap break-words" x-bind:data-log-id="entry.id" x-effect="renderEntry($el, entry)"></div>
 						</template>
 						if len(panel.Logs) == 0 {
 							<p class="text-gray-500 italic" x-show={ fmt.Sprintf("panels[%d].live.length === 0", position) }>No output yet.</p>
@@ -451,7 +469,7 @@ templ DeploymentDetail(project db.Project, release db.Release, environment db.En
 						</details>
 					}
 				</div>
-				<table class="table table-zebra table-fixed w-full hidden sm:table">
+				<table class="table table-zebra table-fixed w-full hidden! sm:table!">
 					<thead>
 						<tr>
 							<th class="w-16">Order</th>

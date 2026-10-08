@@ -52,7 +52,7 @@ func seedRemoteFixture(t *testing.T, r *repository.Repository) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"one", "two"} {
+	for _, name := range []string{"one", "two", "three"} {
 		if _, err := r.Queries.CreateEnvironment(ctx,
 			db.CreateEnvironmentParams{Name: name}); err != nil {
 			t.Fatal(err)
@@ -109,7 +109,7 @@ func seedRemoteFixture(t *testing.T, r *repository.Repository) {
 		)
 		assertOne(t, n, err)
 	}
-	for _, env := range []int64{1, 1, 2} {
+	for _, env := range []int64{1, 3, 2} {
 		assignedAgentID := ns("a")
 		if env == 2 {
 			assignedAgentID = sql.NullString{}
@@ -124,6 +124,14 @@ func seedRemoteFixture(t *testing.T, r *repository.Repository) {
 	for _, deploymentID := range []int64{1, 2} {
 		n, err := r.Queries.CreateRemoteDeploymentClaim(ctx, deploymentID)
 		assertOne(t, n, err)
+	}
+	for i, env := range []int64{1, 3, 2} {
+		if err := r.Queries.CreateEnvironmentDeploymentSlot(ctx,
+			db.CreateEnvironmentDeploymentSlotParams{
+				EnvironmentID: env, DeploymentID: int64(i + 1),
+			}); err != nil {
+			t.Fatal(err)
+		}
 	}
 	for _, id := range []int64{1, 2, 3} {
 		err := r.SnapshotDeploymentSteps(

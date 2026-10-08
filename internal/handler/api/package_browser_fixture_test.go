@@ -171,10 +171,8 @@ func (b *packageBrowser) wait(t *testing.T, predicate string) {
 			Exception json.RawMessage `json:"exceptionDetails"`
 		}
 		err := b.wire.call("Runtime.evaluate", b.session, map[string]any{
-			"expression": fmt.Sprintf(
-				"Boolean(%s)",
-				predicate,
-			), "returnByValue": true,
+			"expression":    fmt.Sprintf("Boolean(%s)", predicate),
+			"returnByValue": true,
 		}, &result)
 		// A navigation destroys promises tied to the old document. Poll from
 		// the driver instead, allowing only that transient context failure.
@@ -203,6 +201,18 @@ func (b *packageBrowser) wait(t *testing.T, predicate string) {
 
 func (b *packageBrowser) screenshot(t *testing.T, name string) {
 	t.Helper()
+	b.evaluate(
+		t,
+		`new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve(true))))`,
+	)
+	b.evaluate(t, `(async () => {
+		await document.fonts.ready;
+		for (let y = 0; y < document.documentElement.scrollHeight; y += innerHeight) {
+			window.scrollTo(0, y); await new Promise(resolve => setTimeout(resolve, 50));
+		}
+		window.scrollTo(0, 0); await new Promise(resolve => setTimeout(resolve, 300));
+		return true;
+	})()`)
 	directory := os.Getenv("DURPDEPLOY_PACKAGE_UI_EVIDENCE")
 	if directory == "" {
 		directory = t.TempDir()

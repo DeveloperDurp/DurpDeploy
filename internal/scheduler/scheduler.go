@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"durpdeploy/internal/artifact"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/gate"
 	"durpdeploy/internal/repository"
@@ -145,61 +146,6 @@ func (s *Scheduler) fireOne(ctx context.Context, row db.ScheduledDeployment) {
 	next := schedule.Next(s.now())
 	if next.IsZero() {
 		s.park(ctx, row, "invalid cron: unsatisfiable")
-		return
-	}
-
-	// overlap check
-	overlap, err := s.repo.Queries.GetLatestDeploymentForReleaseEnv(
-		ctx,
-		db.GetLatestDeploymentForReleaseEnvParams{
-			ReleaseID:     row.ReleaseID,
-			EnvironmentID: row.EnvironmentID,
-		},
-	)
-	if err != nil && err != sql.ErrNoRows {
-		s.log.Error(
-			"overlap check failed",
-			"schedule_id",
-			row.ID,
-			"project_id",
-			row.ProjectID,
-			"error",
-			err,
-		)
-		if err := s.advance(ctx, row, next); err != nil {
-			s.log.Error(
-				"advance failed",
-				"schedule_id",
-				row.ID,
-				"project_id",
-				row.ProjectID,
-				"error",
-				err,
-			)
-		}
-		return
-	}
-	if err == nil && overlap.Status == "running" {
-		s.log.Info(
-			"skipped_overlap",
-			"schedule_id",
-			row.ID,
-			"project_id",
-			row.ProjectID,
-			"reason",
-			"running deployment exists",
-		)
-		if err := s.advance(ctx, row, next); err != nil {
-			s.log.Error(
-				"advance failed",
-				"schedule_id",
-				row.ID,
-				"project_id",
-				row.ProjectID,
-				"error",
-				err,
-			)
-		}
 		return
 	}
 
@@ -341,6 +287,7 @@ func (s *Scheduler) fireOne(ctx context.Context, row db.ScheduledDeployment) {
 	)
 	if err != nil {
 		if errors.Is(err, repository.ErrLegacyServerStep) ||
+			errors.Is(err, artifact.ErrGateConfig) ||
 			errors.Is(err, verification.ErrInvalid) {
 			changed, disableErr := s.repo.Queries.DisableScheduledDeploymentWithReason(
 				ctx,
@@ -395,7 +342,7 @@ func (s *Scheduler) fireOne(ctx context.Context, row db.ScheduledDeployment) {
 	)
 
 	if result.Mode == repository.ExecutionLocal &&
-		initialStatus == "pending" {
+		result.Deployment.Status == "pending" {
 		// spawn runner without blocking the ticker
 		go s.runFunc(
 			context.Background(),

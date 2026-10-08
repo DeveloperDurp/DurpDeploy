@@ -278,14 +278,14 @@ templ RunbookExecutionPage(project db.Project, book db.Runbook, execution db.Get
 			</div>
 			<div
 				class="card bg-base-200 p-4"
-				if execution.Status == "running" || execution.Status == "pending" || execution.Status == "pending_approval" {
+				if execution.Status == "running" || execution.Status == "pending" || execution.Status == "pending_approval" || execution.Status == "queued" {
 					x-data={ fmt.Sprintf("deploymentStream({ url: '/projects/%d/runbooks/executions/%d/logs/stream' })", project.ID, execution.ID) }
 					x-on:htmx:after-swap.camel.window="status($event)"
 				}
 			>
 				<h2 class="text-xl font-bold mb-3">Live logs</h2>
 				<div class="bg-base-300 p-4 rounded overflow-x-auto font-mono text-sm space-y-1">
-					if execution.Status != "running" && execution.Status != "pending" && execution.Status != "pending_approval" {
+					if execution.Status != "running" && execution.Status != "pending" && execution.Status != "pending_approval" && execution.Status != "queued" {
 						for _, log := range logs {
 							<div class="whitespace-pre-wrap">{ log.Line }</div>
 						}
@@ -298,17 +298,21 @@ templ RunbookExecutionPage(project db.Project, book db.Runbook, execution db.Get
 }
 
 templ RunbookExecutionStatus(projectID int64, execution db.GetRunbookExecutionRow) {
-	<span
+	<div
 		id="status-badge"
-		class={ "badge " + statusBadgeClass(execution.Status) }
+		class="flex flex-wrap items-center gap-2"
+		aria-live="polite"
 		hx-get={ fmt.Sprintf("/projects/%d/runbooks/executions/%d/status", projectID, execution.ID) }
-		if execution.Status == "running" || execution.Status == "pending" || execution.Status == "pending_approval" {
+		if execution.Status == "running" || execution.Status == "pending" || execution.Status == "pending_approval" || execution.Status == "queued" {
 			hx-trigger="every 3s"
 		} else {
 			hx-trigger="none"
 		}
 		hx-swap="outerHTML"
-	>{ execution.Status }</span>
+	>
+		<span class={ "badge " + statusBadgeClass(execution.Status) }>{ execution.Status }</span>
+		@DeploymentQueueStatus()
+	</div>
 }
 
 templ RunbookExecutionStatusUpdate(projectID int64, execution db.GetRunbookExecutionRow) {
@@ -328,10 +332,10 @@ templ RunbookExecutionActions(projectID int64, execution db.GetRunbookExecutionR
 			if execution.Status == "pending_approval" && auth.RoleFromContext(ctx) == "admin" {
 				<form method="post" action={ fmt.Sprintf("/projects/%d/runbooks/executions/%d/approve", projectID, execution.ID) }><button class="btn btn-success btn-sm" type="submit">Approve</button></form>
 			}
-			if execution.Status == "running" {
+			if execution.Status == "running" || execution.Status == "queued" || execution.Status == "pending" || execution.Status == "pending_approval" {
 				<form method="post" action={ fmt.Sprintf("/projects/%d/runbooks/executions/%d/cancel", projectID, execution.ID) }><button class="btn btn-error btn-sm" type="submit">Cancel</button></form>
 			}
-			if execution.Status == "failed" || execution.Status == "cancelled" || execution.Status == "succeeded" {
+			if execution.Status == "failed" || execution.Status == "cancelled" || execution.Status == "succeeded" || execution.Status == "cleanup_unconfirmed" {
 				<form method="post" action={ fmt.Sprintf("/projects/%d/runbooks/executions/%d/retry", projectID, execution.ID) }><button class="btn btn-primary btn-sm" type="submit">Retry</button></form>
 			}
 		}

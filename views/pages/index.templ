@@ -6,22 +6,24 @@ import (
 	"strconv"
 )
 
+type HomeDeploymentsView struct {
+ Today int64
+ Recent, Running, Waiting, Latest []DeploymentListItem
+}
+
 templ IndexPage(
 	currentPath string,
 	projectCount int,
 	envCount int,
-	deploymentsToday int64,
-	recentDeployments []DeploymentListItem,
-	runningDeployments []DeploymentListItem,
-	latestPerReleaseEnv []DeploymentListItem,
+	data HomeDeploymentsView,
 ) {
 	@layouts.Base("DurpDeploy", currentPath) {
-		if projectCount == 0 && envCount == 0 && len(recentDeployments) == 0 && len(runningDeployments) == 0 {
+		if projectCount == 0 && envCount == 0 && len(data.Recent) == 0 && len(data.Running) == 0 {
 			<div class="hero min-h-[50vh]">
 				<div class="hero-content min-w-0 text-center">
 					<div class="min-w-0 max-w-md">
-						<h1 class="text-3xl sm:text-4xl font-bold break-words">Welcome to DurpDeploy</h1>
-						<p class="py-6 text-gray-400">Simple deployment tool for bash scripts</p>
+						<h1 class="text-3xl sm:text-4xl font-bold break-words">Deployment overview</h1>
+						<p class="py-6 text-gray-400">Manage releases, automate operations, and track deployments across environments.</p>
 					</div>
 				</div>
 			</div>
@@ -29,48 +31,25 @@ templ IndexPage(
 			<div class="space-y-6">
 				<div class="page-header">
 					<div>
-						<h1 class="text-3xl font-bold">Welcome to DurpDeploy</h1>
-						<p class="text-gray-400">Simple deployment tool for bash scripts</p>
+						<h1 class="text-3xl font-bold">Deployment overview</h1>
+						<p class="text-gray-400">Manage releases, automate operations, and track deployments across environments.</p>
 					</div>
 				</div>
 				<div class="grid grid-cols-2 lg:grid-cols-4 gap-3" data-home-summary>
-					@HomeStat("Projects", strconv.Itoa(projectCount))
-					@HomeStat("Environments", strconv.Itoa(envCount))
-					@HomeStat("Deployments today", strconv.FormatInt(deploymentsToday, 10))
-					@HomeStat("Currently running", strconv.Itoa(len(runningDeployments)))
+					@HomeStat("Projects", strconv.Itoa(projectCount), nil)
+					@HomeStat("Environments", strconv.Itoa(envCount), nil)
+					@HomeStat("Deployments today", strconv.FormatInt(data.Today, 10), templ.Attributes{"id": "home-today-count"})
+					@HomeStat("Currently running", strconv.Itoa(len(data.Running)), templ.Attributes{"id": "home-running-count"})
 				</div>
 				@HomeCharts()
-				<div>
-					<h2 class="text-xl font-bold mb-4">Currently running</h2>
-					if len(runningDeployments) == 0 {
-						<p class="text-gray-500 italic">No deployments in progress.</p>
-					} else {
-						@HomeDeploymentTable(runningDeployments)
-					}
-				</div>
-				<div>
-					<h2 class="text-xl font-bold mb-4">Latest per release / environment</h2>
-					if len(latestPerReleaseEnv) == 0 {
-						<p class="text-gray-500 italic">No deployments yet.</p>
-					} else {
-						@HomeDeploymentTable(latestPerReleaseEnv)
-					}
-				</div>
-				<div>
-					<h2 class="text-xl font-bold mb-4">Recent deployments</h2>
-					if len(recentDeployments) == 0 {
-						<p class="text-gray-500 italic">No deployments yet.</p>
-					} else {
-						@HomeDeploymentTable(recentDeployments)
-					}
-				</div>
+				@HomeDeploymentSections(data)
 			</div>
 		}
 	}
 }
 
 templ HomeCharts() {
-	<section x-data="homeCharts" @htmx:before-cleanup-element.camel.self="destroy" data-home-charts data-chart-src={ static.URL("js/charts.bundle.js") } aria-label="Deployment charts" class="space-y-4">
+	<section x-data="homeCharts" @home-deployments-refreshed.window="load" @htmx:before-cleanup-element.camel.self="destroy" data-home-charts data-chart-src={ static.URL("js/charts.bundle.js") } aria-label="Deployment charts" class="space-y-4">
 		<p x-show="loading" role="status" class="text-sm opacity-70">Loading deployment charts…</p>
 		<p x-show="error" x-cloak role="alert" class="text-error">Charts could not be loaded. <button type="button" class="btn btn-ghost btn-sm" @click="load">Retry</button></p>
 		<p x-show="empty" x-cloak class="text-sm opacity-70">No deployments in the last 14 days.</p>
@@ -92,15 +71,12 @@ templ HomeCharts() {
 				<div class="card-body p-4 sm:p-6">
 					<h2 class="text-xl font-bold">Daily deployment activity</h2>
 					<p class="text-sm opacity-70">Grouped by creation date · last 14 days (UTC)</p>
-					<div class="relative h-64 min-w-0"><canvas x-ref="activity" role="img" aria-label="Daily deployment counts by status. Expand daily counts for exact values."></canvas></div>
-					<details class="text-sm">
-						<summary class="cursor-pointer py-2">Daily counts</summary>
-						<dl class="space-y-2 mt-2">
+					<div class="relative h-64 min-w-0"><canvas x-ref="activity" role="img" aria-label="Daily deployment counts by status." aria-describedby="home-daily-counts"></canvas></div>
+						<dl id="home-daily-counts" class="sr-only">
 							<template x-for="day in days" :key="day.date">
 								<div class="flex flex-wrap gap-x-4"><dt class="font-bold" x-text="day.date"></dt><dd x-text="daySummary(day)"></dd></div>
 							</template>
 						</dl>
-					</details>
 				</div>
 			</div>
 		</div>
@@ -111,21 +87,66 @@ templ HomeCharts() {
 			<span data-chart-color="cancelled" class="text-secondary"></span>
 			<span data-chart-color="running" class="text-info"></span>
 			<span data-chart-color="pending" class="text-primary"></span>
+			<span data-chart-color="queued" class="text-primary"></span>
+			<span data-chart-color="publishing_artifact" class="text-warning"></span>
+			<span data-chart-color="awaiting_artifact_approval" class="text-warning"></span>
+			<span data-chart-color="rejected" class="text-error"></span>
+			<span data-chart-color="expired" class="text-error"></span>
 			<span data-chart-color="pending_approval" class="text-warning"></span>
 			<span data-chart-color="cleanup_unconfirmed" class="text-warning"></span>
 		</div>
 	</section>
 }
 
-templ HomeStat(label, value string) {
-	<div class="stat min-w-0 bg-base-200 rounded-box p-4">
+templ HomeDeploymentsRefresh(data HomeDeploymentsView) {
+ @HomeDeploymentSections(data)
+ <div hx-swap-oob="innerHTML:#home-running-count .stat-value">{ strconv.Itoa(len(data.Running)) }</div>
+ <div hx-swap-oob="innerHTML:#home-today-count .stat-value">{ strconv.FormatInt(data.Today, 10) }</div>
+}
+
+templ HomeDeploymentSections(data HomeDeploymentsView) {
+ <div id="home-deployments" class="space-y-6" hx-get="/dashboard/deployments" hx-trigger="every 5s" hx-swap="outerHTML transition:true">
+  <section id="home-running" aria-label="Currently running">
+   <h2 class="text-xl font-bold mb-4">Currently running</h2>
+   if len(data.Running) == 0 {
+    <p class="text-gray-500 italic">No deployments in progress.</p>
+   } else {
+    @HomeDeploymentTable(data.Running)
+   }
+  </section>
+  <section id="home-waiting" aria-label="Waiting">
+   <h2 class="text-xl font-bold mb-4">Waiting</h2>
+   if len(data.Waiting) == 0 {
+    <p class="text-gray-500 italic">No deployments waiting.</p>
+   } else {
+    @HomeDeploymentTable(data.Waiting)
+   }
+  </section>
+  @HomeDeploymentSection("home-latest", "Latest per release / environment", data.Latest)
+  @HomeDeploymentSection("home-recent", "Recent deployments", data.Recent)
+ </div>
+}
+
+templ HomeDeploymentSection(id, title string, items []DeploymentListItem) {
+ <section id={ id } aria-label={ title }>
+  <h2 class="text-xl font-bold mb-4">{ title }</h2>
+  if len(items) == 0 {
+   <p class="text-gray-500 italic">No deployments yet.</p>
+  } else {
+   @HomeDeploymentTable(items)
+  }
+ </section>
+}
+
+templ HomeStat(label, value string, attrs templ.Attributes) {
+	<div class="stat min-w-0 bg-base-200 rounded-box p-4" { attrs... }>
 		<div class="stat-title whitespace-normal">{ label }</div>
 		<div class="stat-value text-3xl sm:text-4xl">{ value }</div>
 	</div>
 }
 
 templ HomeDeploymentTable(items []DeploymentListItem) {
-	<table class="table table-zebra table-fixed w-full block md:table" data-home-deployments>
+	<table class="table table-zebra table-fixed w-full block! md:table!" data-home-deployments>
 		<thead class="hidden md:table-header-group">
 			<tr>
 				<th class="w-1/5">Project</th>
@@ -137,10 +158,19 @@ templ HomeDeploymentTable(items []DeploymentListItem) {
 		</thead>
 		<tbody class="block md:table-row-group">
 			for _, item := range items {
-				<tr class="grid grid-cols-2 gap-3 md:table-row max-md:rounded-box max-md:bg-base-200 max-md:p-4 max-md:mb-3">
-					<td class="col-span-2 min-w-0 break-all md:truncate">
+				<tr
+					class="home-deployment-row relative grid grid-cols-2 gap-3 md:table-row max-md:p-4 max-md:mb-3 max-md:rounded-box max-md:bg-base-200 md:border-b border-base-300"
+				>
+					<td class="col-span-2 min-w-0 break-all">
 						<span class="block md:hidden text-xs opacity-70 mb-1">Project</span>
-						{ item.ProjectName }
+						<span class="block font-semibold md:font-normal md:truncate">{ item.ProjectName }</span>
+						<a
+							href={ "/deployments/" + strconv.FormatInt(item.Deployment.ID, 10) }
+							class="absolute inset-0 max-md:rounded-box focus-visible:outline-2 focus-visible:outline-primary focus-visible:-outline-offset-2"
+							aria-label={ "Open deployment #" + strconv.FormatInt(item.Deployment.ID, 10) + ": " + item.ProjectName + " / " + item.ReleaseVersion + " / " + item.EnvironmentName }
+						>
+							<span class="sr-only">Open deployment #{ strconv.FormatInt(item.Deployment.ID, 10) }</span>
+						</a>
 					</td>
 					<td class="col-span-2 min-w-0 break-all md:truncate">
 						<span class="block md:hidden text-xs opacity-70 mb-1">Version</span>

@@ -7,7 +7,7 @@ DEV_POSTGRES_IMAGE ?= postgres:16-alpine
 DEV_MSSQL_CONTAINER ?= durpdeploy-dev-mssql
 DEV_MSSQL_IMAGE ?= mcr.microsoft.com/mssql/server:2022-latest
 DEV_AGENT_CONTAINER ?= durpdeploy-dev-agent
-DEV_AGENT_IMAGE ?= ghcr.io/developerdurp/durpdeploy-agent:ec04223
+DEV_AGENT_IMAGE ?= ghcr.io/developerdurp/durpdeploy-agent:5941342
 DEV_AGENT_PORT ?= 10944
 DEV_AGENT_STATE_VOLUME ?= $(DEV_AGENT_CONTAINER)-state
 DEV_HTTPS_PROXY_CONTAINER ?= durpdeploy-dev-https
@@ -23,8 +23,7 @@ build: swagger-ui-copy templ-generate tailwind-build js-build
 # Hot-reload dev server. Watches .go/.templ/.sql in cmd, internal, views, migrations.
 # Reads the shell-compatible DURPDEPLOY_SECRET_KEY assignment from ENV_FILE
 # (default repository/.env), then uses inherited DURPDEPLOY_SECRET_KEY, then
-# generates a throwaway key if needed. Other .env assignments stay in the
-# subshell.
+# creates a persistent private key in .local/dev-secret-key if needed.
 # ponytail: CSS/JS source changes need a separate `make tailwind-build && make js-build`
 # and the air build to retrigger. Add a second air include_dir entry when that hurts.
 MAKEFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
@@ -38,11 +37,8 @@ dev: check-openssl
 	./scripts/dev_https_proxy.sh "$${MAKE:-make}" --no-print-directory dev-server
 
 dev-server:
-	env_secret_key=$$(unset DURPDEPLOY_SECRET_KEY; \
-		if [ -f "$(ENV_FILE)" ]; then . "$(ENV_FILE)"; fi; \
-		printf '%s' "$${DURPDEPLOY_SECRET_KEY:-}"); \
-	if [ -n "$$env_secret_key" ]; then DURPDEPLOY_SECRET_KEY="$$env_secret_key"; fi; \
-	if [ -f "$(ENV_FILE)" ]; then . "$(ENV_FILE)"; fi; \
+	DURPDEPLOY_ENV_FILE="$(ENV_FILE)"; \
+	. ./scripts/dev_secret_key.sh || exit 1; \
 	DURPDEPLOY_AGENT_LISTEN_ADDR=$${DURPDEPLOY_AGENT_LISTEN_ADDR:-0.0.0.0:10943}; \
 	DURPDEPLOY_AGENT_PUBLIC_URL=$${DURPDEPLOY_AGENT_PUBLIC_URL:-https://host.containers.internal:10943}; \
 	DURPDEPLOY_AGENT_IDENTITY_DIR=$${DURPDEPLOY_AGENT_IDENTITY_DIR:-$(MAKEFILE_DIR)tmp/dev-agent-identity}; \
@@ -58,9 +54,12 @@ dev-server:
 	if [ "$${DURPDEPLOY_OIDC_DISPLAY_NAME+x}" != "" ]; then export DURPDEPLOY_OIDC_DISPLAY_NAME; fi; \
 	if [ "$${DURPDEPLOY_OIDC_GROUP_CLAIM+x}" != "" ]; then export DURPDEPLOY_OIDC_GROUP_CLAIM; fi; \
 	if [ "$${DURPDEPLOY_OIDC_REQUIRE_EMAIL_VERIFIED+x}" != "" ]; then export DURPDEPLOY_OIDC_REQUIRE_EMAIL_VERIFIED; fi; \
-	DURPDEPLOY_SECRET_KEY=$${DURPDEPLOY_SECRET_KEY:-$$(openssl rand -base64 32)} \
 	DURPDEPLOY_EXECUTION_BOUNDARY=development \
 	DURPDEPLOY_ENV_FILE="$(ENV_FILE)" go run github.com/air-verse/air@latest
+
+.PHONY: dev-secret-key-test
+dev-secret-key-test:
+	bash scripts/dev_secret_key_test.sh
 
 .PHONY: dev-agent dev-agent-down dev-agent-reset dev-agent-test
 # Foreground pairing output stays on the terminal, outside container logs.
@@ -239,7 +238,8 @@ npm-install:
 	npm ci --ignore-scripts
 
 tailwind-build: npm-install
-	npx tailwindcss -i static/css/input.css -o static/css/tailwind.min.css --minify
+	npx @tailwindcss/cli -i static/css/input.css -o static/css/tailwind.min.css --minify
+	cat node_modules/tailwindcss/LICENSE node_modules/daisyui/LICENSE > static/css/tailwind.licenses.txt
 
 js-build: npm-install
 	npx esbuild static/js/app.js --bundle --minify --outfile=static/js/app.bundle.js

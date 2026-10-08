@@ -15,9 +15,35 @@ UPDATE deployments SET release_id = ?, environment_id = ?, status = ?, started_a
 UPDATE deployments SET status = ?, started_at = ?, finished_at = ? WHERE id = ?;
 
 -- name: ConfirmContainerCleanup :execrows
-UPDATE deployments SET status = 'failed', finished_at = COALESCE(finished_at, sqlc.arg(now))
-WHERE status IN ('running', 'cleanup_unconfirmed')
+UPDATE deployments SET status = CASE WHEN EXISTS (
+    SELECT 1 FROM remote_step_runs s WHERE s.deployment_id = deployments.id
+      AND s.state = 'cleanup_unconfirmed'
+) THEN status ELSE 'failed' END,
+    container_namespace = NULL, finished_at = COALESCE(finished_at, sqlc.arg(now))
+WHERE status IN ('running', 'publishing_artifact', 'cleanup_unconfirmed')
   AND container_namespace = sqlc.arg(namespace);
+
+-- name: ConfirmRemoteDeploymentLocalCleanup :exec
+UPDATE deployments SET container_namespace = NULL WHERE id = ?
+AND EXISTS (SELECT 1 FROM remote_step_runs s
+    WHERE s.deployment_id = deployments.id AND s.state = 'cleanup_unconfirmed');
+
+-- name: HasUnconfirmedContainerCleanup :one
+SELECT CASE WHEN EXISTS (
+    SELECT 1 FROM deployments d WHERE d.id = sqlc.arg(deployment_id)
+      AND d.status = 'cleanup_unconfirmed'
+      AND (d.container_namespace IS NOT NULL OR (
+      NOT EXISTS (SELECT 1 FROM remote_step_runs s
+          WHERE s.deployment_id = d.id AND s.state = 'cleanup_unconfirmed')
+      AND NOT EXISTS (SELECT 1 FROM remote_deployment_claims c
+          WHERE c.deployment_id = d.id AND c.state = 'cleanup_unconfirmed')))
+) OR EXISTS (
+    SELECT 1 FROM remote_step_runs s WHERE s.deployment_id = sqlc.arg(deployment_id)
+      AND s.state = 'cleanup_unconfirmed' AND s.cleanup_confirmed_at IS NULL
+) OR EXISTS (
+    SELECT 1 FROM remote_deployment_claims c WHERE c.deployment_id = sqlc.arg(deployment_id)
+      AND c.state = 'cleanup_unconfirmed' AND c.cleanup_confirmed_at IS NULL
+) THEN 1 ELSE 0 END;
 
 -- name: RecordContainerNamespace :execrows
 UPDATE deployments SET container_namespace = sqlc.arg(namespace)
@@ -27,7 +53,7 @@ WHERE id = sqlc.arg(deployment_id) AND status = 'running'
 -- name: MarkUnreconciledLocalDeployments :execrows
 UPDATE deployments SET status = 'cleanup_unconfirmed',
     finished_at = COALESCE(finished_at, sqlc.arg(now))
-WHERE status = 'running' AND assigned_agent_id IS NULL
+WHERE status IN ('running', 'publishing_artifact') AND assigned_agent_id IS NULL
   AND container_namespace IS NOT NULL
   AND (EXISTS (SELECT 1 FROM deployment_steps s
       WHERE s.deployment_id = deployments.id AND s.execution_target = 'local')
@@ -76,7 +102,7 @@ SELECT * FROM deployments WHERE environment_id = ? AND kind = 'deployment' ORDER
 -- name: CountDeploymentsToday :one
 SELECT COUNT(*) FROM deployments WHERE kind = 'deployment' AND created_at >= strftime('%s','now','start of day');
 
--- name: ListRunningDeploymentsWithRefs :many
+-- name: ListActiveDeploymentsWithRefs :many
 SELECT
     d.id, d.release_id, d.environment_id, d.status,
     d.started_at, d.finished_at, d.created_at, d.forced, d.note,
@@ -88,7 +114,7 @@ FROM deployments d
 JOIN releases r ON d.release_id = r.id
 JOIN projects p ON r.project_id = p.id
 JOIN environments e ON d.environment_id = e.id
-WHERE d.kind = 'deployment' AND d.status IN ('pending','running')
+WHERE d.kind = 'deployment' AND d.status IN ('queued', 'pending', 'running', 'publishing_artifact', 'pending_approval', 'awaiting_artifact_approval')
 ORDER BY d.created_at DESC;
 
 -- name: ListPendingDeployments :many
@@ -127,7 +153,7 @@ WHERE state IN ('waiting', 'claimed', 'started', 'cancel_requested')
 
 -- name: FailOrphanedDeployments :execrows
 UPDATE deployments SET status = 'failed', finished_at = sqlc.arg(now)
-WHERE status = 'running' AND assigned_agent_id IS NULL
+WHERE status IN ('running', 'publishing_artifact') AND assigned_agent_id IS NULL
   AND NOT EXISTS (
       SELECT 1 FROM remote_step_runs r
       WHERE r.deployment_id = deployments.id
@@ -135,12 +161,17 @@ WHERE status = 'running' AND assigned_agent_id IS NULL
   );
 
 -- name: FailDeploymentsWithTerminalRemoteStepRuns :execrows
-UPDATE deployments SET status = 'failed', finished_at = sqlc.arg(now)
-WHERE status = 'running' AND assigned_agent_id IS NULL
+UPDATE deployments SET status = CASE WHEN EXISTS (
+    SELECT 1 FROM remote_step_runs r WHERE r.deployment_id = deployments.id
+      AND r.state = 'cleanup_unconfirmed') THEN 'cleanup_unconfirmed' ELSE 'failed' END,
+    finished_at = sqlc.arg(now)
+WHERE (status = 'running' OR (status = 'failed' AND EXISTS (
+    SELECT 1 FROM remote_step_runs r WHERE r.deployment_id = deployments.id
+      AND r.state = 'cleanup_unconfirmed'))) AND assigned_agent_id IS NULL
   AND EXISTS (
       SELECT 1 FROM remote_step_runs r
       WHERE r.deployment_id = deployments.id
-        AND (r.state IN ('failed', 'lost', 'cancel_unconfirmed')
+        AND (r.state IN ('failed', 'lost', 'cancel_unconfirmed', 'cleanup_unconfirmed')
           OR (r.state = 'cancelled' AND r.recovery_cancelled = 1))
   )
   AND NOT EXISTS (

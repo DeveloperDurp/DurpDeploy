@@ -26,14 +26,6 @@ func (s *Server) Poll(w http.ResponseWriter, r *http.Request) {
 	fingerprint := agenttls.FingerprintOf(
 		r.TLS.PeerCertificates[0].Raw,
 	).String()
-	interpreters := make([]string, 0, len(request.SupportedInterpreters))
-	if request.Protocol == agentproto.AgentV1 {
-		interpreters = append(interpreters, string(agentproto.InterpreterBash))
-	} else {
-		for _, value := range request.SupportedInterpreters {
-			interpreters = append(interpreters, string(value))
-		}
-	}
 	changed, err := s.repository.RecordAgentPoll(
 		r.Context(),
 		db.HeartbeatAgentParams{
@@ -44,13 +36,12 @@ func (s *Server) Poll(w http.ResponseWriter, r *http.Request) {
 			ID:                     string(agentID),
 			CertificateFingerprint: nullableString(fingerprint),
 		},
-		interpreters,
-		string(request.Protocol),
+		request,
 	)
 	if !writeTransitionStatus(w, changed, err) {
 		return
 	}
-	response, claimed, err := s.dispatcher.Poll(r.Context(), agentID)
+	response, claimed, err := s.dispatcher.Poll(r.Context(), agentID, request)
 	if err != nil {
 		if r.Context().Err() == nil {
 			writePollErrorStatus(w, err)
@@ -298,13 +289,20 @@ func (s *Server) publishRemoteResult(
 		result.DeploymentID,
 		result.EnvironmentName,
 	)
-	if result.State == "failed" {
+	if result.State != "succeeded" {
 		typ = events.DeploymentFailed
 		message = fmt.Sprintf(
 			"Deployment #%d failed on %s",
 			result.DeploymentID,
 			result.EnvironmentName,
 		)
+		if result.State == "cleanup_unconfirmed" {
+			message = fmt.Sprintf(
+				"Deployment #%d container cleanup is unconfirmed on %s; restore agent runtime access",
+				result.DeploymentID,
+				result.EnvironmentName,
+			)
+		}
 	}
 	s.eventBus.Publish(r.Context(), events.Event{
 		Type:          typ,

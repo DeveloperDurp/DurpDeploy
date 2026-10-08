@@ -65,8 +65,8 @@ func holdCompetingDeployment(
 	ctx, commit := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	go func() {
-		done <- repo.WithTx(t.Context(), func(q *db.Queries) error {
-			_, err := repo.createDeployment(t.Context(), q,
+		done <- repo.withQueueTx(t.Context(), func(txCtx context.Context, q *db.Queries) error {
+			_, err := repo.createDeployment(txCtx, q,
 				db.CreateDeploymentParams{
 					ReleaseID: releaseID, EnvironmentID: 1, Status: "pending",
 				})
@@ -285,9 +285,5 @@ func assertRollbackVerificationRecovery(
 	check, err := firstRepo.Queries.GetDeploymentVerification(ctx, deploymentID)
 	if err != nil || check.Status != "failed" || !check.FinishedAt.Valid {
 		t.Fatalf("recovered verification=%+v err=%v", check, err)
-	}
-	locked, err := firstRepo.Queries.LockUnusedReleaseSnapshot(ctx, 1)
-	if err != nil || locked != 0 {
-		t.Fatalf("used release lock=%d err=%v", locked, err)
 	}
 }

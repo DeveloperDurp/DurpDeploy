@@ -167,7 +167,7 @@ test "$(wc -c < "$DURPDEPLOY_STAGE_DIR/package-copy")" -eq 7
 		"POST",
 		fmt.Sprintf("%s/releases/%d/refresh", base, release.ID),
 		nil,
-		409,
+		200,
 	)
 	// Then: both steps read the same pin under effective ro/noexec restrictions.
 	logs := f.api(

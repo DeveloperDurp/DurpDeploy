@@ -101,18 +101,47 @@ func (q *Queries) GetRelease(ctx context.Context, id int64) (Release, error) {
 const hasActiveReleaseDeployment = `-- name: HasActiveReleaseDeployment :one
 SELECT CASE WHEN EXISTS (
     SELECT 1 FROM deployments d WHERE d.release_id = ?
-      AND (d.status IN ('pending', 'running', 'pending_approval', 'cleanup_unconfirmed')
+      AND (d.status IN ('queued', 'pending', 'running', 'pending_approval', 'publishing_artifact', 'awaiting_artifact_approval')
+        OR (d.status = 'cleanup_unconfirmed'
+            AND (d.container_namespace IS NOT NULL OR (
+            NOT EXISTS (SELECT 1 FROM remote_step_runs s
+                WHERE s.deployment_id = d.id AND s.state = 'cleanup_unconfirmed')
+            AND NOT EXISTS (SELECT 1 FROM remote_deployment_claims c
+                WHERE c.deployment_id = d.id AND c.state = 'cleanup_unconfirmed'))))
         OR EXISTS (SELECT 1 FROM remote_deployment_claims c
                    WHERE c.deployment_id = d.id
-                     AND c.state IN ('lost', 'cancel_unconfirmed'))
+                     AND (c.state IN ('claimed', 'started', 'cancel_requested', 'lost', 'cancel_unconfirmed')
+                       OR (c.state = 'cleanup_unconfirmed'
+                           AND c.cleanup_confirmed_at IS NULL)))
         OR EXISTS (SELECT 1 FROM remote_step_runs s
                    WHERE s.deployment_id = d.id
-                     AND s.state IN ('lost', 'cancel_unconfirmed')))
+                     AND (s.state IN ('claimed', 'started', 'cancel_requested', 'lost', 'cancel_unconfirmed')
+                       OR (s.state = 'cleanup_unconfirmed'
+                           AND s.cleanup_confirmed_at IS NULL))))
 ) THEN 1 ELSE 0 END
 `
 
 func (q *Queries) HasActiveReleaseDeployment(ctx context.Context, releaseID int64) (int64, error) {
 	row := q.db.QueryRowContext(ctx, hasActiveReleaseDeployment, releaseID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const hasUnflushedReleaseLogs = `-- name: HasUnflushedReleaseLogs :one
+SELECT CASE WHEN EXISTS (
+    SELECT 1 FROM deployments d WHERE d.release_id = ?
+      AND (EXISTS (SELECT 1 FROM remote_deployment_claims c
+                   WHERE c.deployment_id = d.id
+                     AND COALESCE(c.log_buffer_ciphertext, '') <> '')
+        OR EXISTS (SELECT 1 FROM remote_step_runs s
+                   WHERE s.deployment_id = d.id
+                     AND COALESCE(s.log_buffer_ciphertext, '') <> ''))
+) THEN 1 ELSE 0 END
+`
+
+func (q *Queries) HasUnflushedReleaseLogs(ctx context.Context, releaseID int64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, hasUnflushedReleaseLogs, releaseID)
 	var column_1 int64
 	err := row.Scan(&column_1)
 	return column_1, err

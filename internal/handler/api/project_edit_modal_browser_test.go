@@ -120,7 +120,7 @@ func TestProjectEditModalBrowserE2E(t *testing.T) {
 	if string(
 		b.evaluate(
 			t,
-			`document.querySelector('#project-edit-content textarea').value === 'retain description' && document.querySelector('#project-detail > .page-header h1').textContent !== 'duplicate-project'`,
+			`document.querySelector('#project-edit-content textarea').value === 'retain description' && document.querySelector('#project-detail .page-header h1').textContent !== 'duplicate-project'`,
 		),
 	) != "true" {
 		t.Fatal("validation lost fields or replaced the underlying project")

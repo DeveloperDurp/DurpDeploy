@@ -29,10 +29,9 @@ func stepExecutionTarget(step db.Step) string {
 }
 
 // stepContainerTarget reports whether the step's execution target runs
-// in a server-side container. Today only "local" does, but the helper
-// stays explicit so the form can grow new targets without a rewrite.
+// in a server container or an agent container.
 func stepContainerTarget(step db.Step) bool {
-	return step.ExecutionTarget == "local"
+	return step.ExecutionTarget == "local" || step.AgentExecutionMode == "container"
 }
 
 // stepLegacyHostStep marks an existing local step with no container
@@ -70,11 +69,12 @@ func stepInterpreter(step db.Step) string {
 	return step.Interpreter
 }
 
-func stepPlacementData(step db.Step, selectedLabel string) string {
+func StepPlacementData(step db.Step, selectedLabel string) string {
 	return fmt.Sprintf(
-		"stepPlacement(%s, %s)",
+		"stepPlacement(%s, %s, %s)",
 		strconv.Quote(stepExecutionTarget(step)),
 		strconv.Quote(selectedLabel),
+		strconv.Quote(step.AgentExecutionMode),
 	)
 }
 
@@ -99,11 +99,11 @@ templ StepForm(step db.Step, projectID int64, isNew bool, labels []string, selec
 	} else {
 	<div class="p-4 border border-base-300 rounded bg-base-200">
 		<form
-			x-data={ stepPlacementData(step, selectedLabel) }
+			x-data={ StepPlacementData(step, selectedLabel) }
 			if isNew {
 				hx-post={ fmt.Sprintf("/projects/%d/steps", projectID) }
 			} else {
-				hx-put={ fmt.Sprintf("/projects/%d/steps/%d", projectID, step.ID) }
+				hx-put={ fmt.Sprintf("/projects/%d/steps/%d?mobile=1", projectID, step.ID) }
 			}
 			hx-target="#step-list"
 			hx-swap="innerHTML"
@@ -166,6 +166,7 @@ templ StepForm(step db.Step, projectID int64, isNew bool, labels []string, selec
 						<option value="agent">Agent</option>
 					</select>
 				</div>
+				@AgentExecutionMode(step.AgentExecutionMode, stepInputID(step, isNew, "agent-mode"))
 				<div class="form-control min-w-0" x-cloak x-show="executionTarget === 'agent'">
 					<label class="label" for={ stepInputID(step, isNew, "agent-label") }>
 						<span class="label-text">Agent label</span>
@@ -181,7 +182,7 @@ templ StepForm(step db.Step, projectID int64, isNew bool, labels []string, selec
 				</div>
 			</div>
 			<div class="grid min-w-0 gap-4 sm:grid-cols-2">
-				<div class="form-control min-w-0" x-cloak x-show="executionTarget === 'local'">
+				<div class="form-control min-w-0" x-cloak x-show="usesContainer">
 					<label class="label" for={ stepInputID(step, isNew, "container-image") }>
 						<span class="label-text">Container image</span>
 					</label>
@@ -192,11 +193,11 @@ templ StepForm(step db.Step, projectID int64, isNew bool, labels []string, selec
 						value={ step.ContainerImage }
 						placeholder="e.g. alpine:3.20 or registry.example.com/build:1"
 						required?={ isNew || stepContainerTarget(step) }
-						x-bind:required="executionTarget === 'local'"
-						x-bind:disabled="executionTarget !== 'local'"
+						x-bind:required="usesContainer"
+						x-bind:disabled="!usesContainer"
 						class="input input-bordered min-w-0 w-full"
 					/>
-					<label class="label"><span class="label-text-alt">Required for Local steps. Cleared when Agent is selected.</span></label>
+					<label class="label"><span class="label-text-alt">Required for container execution. The image must contain the selected interpreter.</span></label>
 				</div>
 				<div class="form-control min-w-0">
 					<label class="label" for={ stepInputID(step, isNew, "variable-names") }>
@@ -213,7 +214,8 @@ templ StepForm(step db.Step, projectID int64, isNew bool, labels []string, selec
 					<label class="label"><span class="label-text-alt">Leave empty to pass all project variables. Enter names to restrict this step.</span></label>
 				</div>
 			</div>
-			<div x-data="stepEditor" class="form-control">
+			@StepArtifactFields(step, isNew)
+<div x-data="stepEditor" class="form-control">
 				<label class="label" for={ stepInputID(step, isNew, "script") }>
 					<span class="label-text">Script Body</span>
 					<button type="button" class="btn btn-ghost btn-xs" x-on:click="fullscreen">Fullscreen</button>
@@ -222,7 +224,7 @@ templ StepForm(step db.Step, projectID int64, isNew bool, labels []string, selec
 					<pre x-ref="gutter" x-text="lineNumbers" class="select-none text-right px-2 py-2 text-gray-500 bg-base-200 overflow-hidden" rows="4" style="line-height:1.5rem"></pre>
 					<textarea id={ stepInputID(step, isNew, "script") } x-model="script" x-ref="textarea" x-on:scroll="scroll" x-on:input="input" name="script_body" class="textarea textarea-bordered rounded-none border-0 flex-1 !bg-base-100 !text-base-content" style="line-height:1.5rem; color: var(--fallback-bc, oklch(var(--bc) / 1)) !important; -webkit-text-fill-color: var(--fallback-bc, oklch(var(--bc) / 1)) !important" rows="4">{ step.ScriptBody }</textarea>
 				</div>
-				<dialog x-cloak x-show="modalOpen" x-ref="modal" x-id="['script-editor-title']" :aria-labelledby="$id('script-editor-title')" x-on:close="modalOpen = false" class="fixed inset-0 z-50 bg-base-100 text-base-content p-4 flex flex-col gap-4 w-screen h-screen max-w-none max-h-none">
+				<dialog x-cloak :class="{ hidden: !modalOpen }" x-ref="modal" x-id="['script-editor-title']" :aria-labelledby="$id('script-editor-title')" x-on:close="modalOpen = false" class="fixed inset-0 z-50 bg-base-100 text-base-content p-4 flex flex-col gap-4 w-screen h-screen max-w-none max-h-none">
 					<div class="flex items-center justify-between gap-4">
 						<h3 :id="$id('script-editor-title')" class="text-lg font-semibold">Script Body</h3>
 						<button type="button" class="btn btn-sm" x-on:click="$refs.modal.close()">Close</button>
@@ -297,7 +299,7 @@ templ StepEditRow(step db.Step, projectID int64, labels []string, selectedLabel 
 	<tr id={ fmt.Sprintf("step-row-%d", step.ID) }>
 		<td colspan="7" class="w-full p-4">
 			<form
-				x-data={ stepPlacementData(step, selectedLabel) }
+				x-data={ StepPlacementData(step, selectedLabel) }
 				hx-put={ fmt.Sprintf("/projects/%d/steps/%d", projectID, step.ID) }
 				hx-target="#step-list"
 				hx-swap="innerHTML"
@@ -344,7 +346,8 @@ templ StepEditRow(step db.Step, projectID int64, labels []string, selectedLabel 
 					</select>
 					<p x-cloak x-show="agentLabel" x-text="agentLabel" class="mt-1 break-all text-xs text-base-content/70"></p>
 				</div>
-				<div class="form-control min-w-0 xl:col-span-2" x-cloak x-show="executionTarget === 'local'">
+				@AgentExecutionMode(step.AgentExecutionMode, stepInputID(step, false, "agent-mode"))
+				<div class="form-control min-w-0 xl:col-span-2" x-cloak x-show="usesContainer">
 					<label class="label" for={ fmt.Sprintf("step-%d-container-image", step.ID) }><span class="label-text">Container image</span></label>
 					<input
 						id={ fmt.Sprintf("step-%d-container-image", step.ID) }
@@ -352,8 +355,8 @@ templ StepEditRow(step db.Step, projectID int64, labels []string, selectedLabel 
 						name="container_image"
 						value={ step.ContainerImage }
 						placeholder="e.g. alpine:3.20"
-						x-bind:required="executionTarget === 'local'"
-						x-bind:disabled="executionTarget !== 'local'"
+						x-bind:required="usesContainer"
+						x-bind:disabled="!usesContainer"
 						class="input input-bordered input-sm min-w-0 w-full"
 					/>
 				</div>
@@ -378,7 +381,7 @@ templ StepEditRow(step db.Step, projectID int64, labels []string, selectedLabel 
 						<pre x-ref="gutter" x-text="lineNumbers" class="select-none text-right px-2 py-2 text-gray-500 bg-base-200 overflow-hidden" style="line-height:1.25rem"></pre>
 					<textarea id={ fmt.Sprintf("step-%d-script", step.ID) } x-model="script" x-ref="textarea" x-on:scroll="scroll" x-on:input="input" name="script_body" class="textarea textarea-bordered textarea-sm resize-y rounded-none border-0 flex-1 !bg-base-100 !text-base-content" style="line-height:1.25rem; color: var(--fallback-bc, oklch(var(--bc) / 1)) !important; -webkit-text-fill-color: var(--fallback-bc, oklch(var(--bc) / 1)) !important" rows="2">{ step.ScriptBody }</textarea>
 					</div>
-					<dialog x-cloak x-show="modalOpen" x-ref="modal" x-id="['script-editor-title']" :aria-labelledby="$id('script-editor-title')" x-on:close="modalOpen = false" class="fixed inset-0 z-50 bg-base-100 text-base-content p-4 flex flex-col gap-4 w-screen h-screen max-w-none max-h-none">
+					<dialog x-cloak :class="{ hidden: !modalOpen }" x-ref="modal" x-id="['script-editor-title']" :aria-labelledby="$id('script-editor-title')" x-on:close="modalOpen = false" class="fixed inset-0 z-50 bg-base-100 text-base-content p-4 flex flex-col gap-4 w-screen h-screen max-w-none max-h-none">
 						<div class="flex items-center justify-between gap-4">
 							<h3 :id="$id('script-editor-title')" class="text-lg font-semibold">Script Body</h3>
 							<button type="button" class="btn btn-sm" x-on:click="$refs.modal.close()">Close</button>
@@ -426,6 +429,7 @@ templ StepEditRow(step db.Step, projectID int64, labels []string, selectedLabel 
 				<input id={ fmt.Sprintf("step-%d-retries", step.ID) } type="number" name="max_retries" min="0" value={ strconv.FormatInt(step.MaxRetries, 10) } class="input input-bordered input-sm"/>
 			</div>
 			<input type="hidden" name="sort_order" value={ strconv.FormatInt(step.SortOrder, 10) }/>
+				@StepArtifactFields(step, false)
 				<div class="flex gap-2 pt-9">
 					<button type="submit" class="btn btn-primary btn-sm">Update</button>
 					<button type="button" class="btn btn-ghost btn-sm" x-on:click="$dispatch('step-form-cancel')" hx-get={ fmt.Sprintf("/projects/%d/steps", projectID) } hx-target="#step-list" hx-swap="innerHTML">Cancel</button>
@@ -434,4 +438,30 @@ templ StepEditRow(step db.Step, projectID int64, labels []string, selectedLabel 
 		</td>
 	</tr>
 	}
+}
+
+templ AgentExecutionMode(mode string, inputID string) {
+	<div class="form-control min-w-0" x-cloak x-show="executionTarget === 'agent'">
+		<label class="label" for={ inputID }><span class="label-text">Agent execution mode</span></label>
+		<select id={ inputID } name="agent_execution_mode" x-model="agentExecutionMode" x-bind:disabled="executionTarget !== 'agent'" class="select select-bordered min-w-0 w-full">
+			<option value="host" selected?={ mode != "container" }>Host</option>
+			<option value="container" selected?={ mode == "container" }>Container</option>
+		</select>
+		<p class="text-sm opacity-70">Containers require agent/3 and a ready Docker or Podman runtime.</p>
+	</div>
+}
+
+templ StepArtifactFields(step db.Step, isNew bool) {
+	<fieldset class="space-y-3 xl:col-span-7" x-cloak x-show="executionTarget === 'local'" x-bind:disabled="executionTarget !== 'local'">
+		<legend class="font-semibold">Network and artifact approval</legend>
+		<label class="label" for={ stepInputID(step, isNew, "network-mode") }>Container network</label>
+		<select id={ stepInputID(step, isNew, "network-mode") } name="network_mode" class="select select-bordered w-full"><option value="none" selected?={ step.NetworkMode != "bridge" }>Isolated</option><option value="bridge" selected?={ step.NetworkMode == "bridge" }>Network enabled</option></select>
+		<label class="label" for={ stepInputID(step, isNew, "approval_artifact_path") }>Artifact path to approve</label>
+		<input id={ stepInputID(step, isNew, "approval_artifact_path") } name="approval_artifact_path" value={ step.ApprovalArtifactPath } class="input input-bordered w-full" type="text"/>
+		<label class="label" for={ stepInputID(step, isNew, "approval_review_path") }>Review JSON path</label>
+		<input id={ stepInputID(step, isNew, "approval_review_path") } name="approval_review_path" value={ step.ApprovalReviewPath } class="input input-bordered w-full" type="text"/>
+		<label class="label" for={ stepInputID(step, isNew, "review-format") }>Review format</label>
+		<select id={ stepInputID(step, isNew, "review-format") } name="approval_review_format" class="select select-bordered w-full"><option value="" selected?={ step.ApprovalReviewFormat == "" }>No approval gate</option><option value="summary" selected?={ step.ApprovalReviewFormat == "summary" }>Action counts</option><option value="terraform" selected?={ step.ApprovalReviewFormat == "terraform" }>Terraform show JSON</option></select>
+		<p class="text-sm">Paths are relative to DURPDEPLOY_STAGE_DIR. A gate pauses after this step; subsequent steps use DURPDEPLOY_APPROVED_DIR. Gated deployments require local execution and zero retries.</p>
+	</fieldset>
 }

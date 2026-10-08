@@ -4,6 +4,39 @@ import htmx from 'htmx.org'
 window.Alpine = Alpine
 window.htmx = htmx
 
+function focusFormField(field) {
+	// Touch users choose when to open the on-screen keyboard.
+	if (!matchMedia('(pointer: coarse)').matches) field?.focus();
+}
+
+document.addEventListener('htmx:beforeTransition', (event) => {
+	if (event.target.id === 'home-deployments' &&
+		matchMedia('(prefers-reduced-motion: reduce)').matches) {
+		event.preventDefault();
+	}
+});
+
+document.addEventListener('htmx:beforeSwap', (event) => {
+	if (event.detail.xhr.status === 422 &&
+		event.detail.xhr.getResponseHeader('HX-Retarget')) {
+		event.detail.shouldSwap = true;
+	}
+	const target = event.detail.target;
+	if (target.hasAttribute('data-artifact-gates') &&
+		target.contains(document.activeElement)) {
+		event.detail.shouldSwap = false;
+	}
+});
+
+document.addEventListener('htmx:afterRequest', (event) => {
+	const element = event.detail.elt;
+	if (element.dataset.terraformReview !== undefined &&
+		!event.detail.successful) {
+		element.querySelector('.terraform-plan').textContent =
+			'Resource changes could not be loaded. Reload this page to retry.';
+	}
+});
+
 let chartLibrary;
 function loadChartLibrary(src) {
 	if (!chartLibrary) {
@@ -32,6 +65,9 @@ Alpine.data('homeCharts', () => {
 		label(status) {
 			return ({ succeeded: 'Succeeded', failed: 'Failed', cancelled: 'Cancelled',
 				running: 'Running', pending: 'Pending', pending_approval: 'Awaiting approval',
+				queued: 'Queued', publishing_artifact: 'Publishing artifact',
+				awaiting_artifact_approval: 'Awaiting artifact approval',
+				rejected: 'Rejected', expired: 'Expired',
 				cleanup_unconfirmed: 'Cleanup unconfirmed' })[status] || status;
 		},
 		daySummary(day) {
@@ -41,7 +77,7 @@ Alpine.data('homeCharts', () => {
 		async load() {
 			request?.abort();
 			request = new AbortController();
-			this.loading = true;
+			this.loading = this.days.length === 0;
 			this.error = false;
 			try {
 				const response = await fetch('/dashboard/activity', {
@@ -50,6 +86,7 @@ Alpine.data('homeCharts', () => {
 				if (!response.ok) throw new Error('Activity could not be loaded');
 				const days = await response.json();
 				if (destroyed) return;
+				if ((this.ready || this.empty) && JSON.stringify(days) === JSON.stringify(this.days)) return;
 				this.days = days;
 				const counts = {};
 				for (const day of days) for (const [status, count] of Object.entries(day.counts)) {
@@ -58,14 +95,14 @@ Alpine.data('homeCharts', () => {
 				this.totals = Object.entries(counts).map(([status, count]) =>
 					({ status, count, label: this.label(status) }));
 				this.empty = this.totals.length === 0;
-				if (this.empty) return;
+				if (this.empty) { this.ready = false; return; }
 				Chart = await loadChartLibrary(this.$el.dataset.chartSrc);
 				if (destroyed) return;
 				this.ready = true;
 				await this.$nextTick();
 				if (destroyed) return;
 				this.render();
-				observer = new MutationObserver(() => this.render());
+				observer ??= new MutationObserver(() => this.render());
 				observer.observe(document.documentElement, {
 					attributes: true, attributeFilter: ['data-theme'],
 				});
@@ -77,7 +114,6 @@ Alpine.data('homeCharts', () => {
 		},
 		render() {
 			if (destroyed || !this.$el.isConnected) return;
-			charts.forEach(chart => chart.destroy());
 			const ink = getComputedStyle(this.$el).color;
 			const colors = this.totals.map(item => {
 				const token = this.$el.querySelector(`[data-chart-color="${item.status}"]`);
@@ -88,14 +124,14 @@ Alpine.data('homeCharts', () => {
 				color: ink, plugins: { legend: { position: 'bottom',
 					labels: { color: ink, boxWidth: 12, boxHeight: 12 } } },
 			};
-			charts = [new Chart(this.$refs.outcomes, {
+			const configs = [{
 				type: 'doughnut', options,
 				data: {
 					labels: this.totals.map(item => item.label),
 					datasets: [{ data: this.totals.map(item => item.count),
 						backgroundColor: colors, borderWidth: 0 }],
 				},
-			}), new Chart(this.$refs.activity, {
+			}, {
 				type: 'bar',
 				options: { ...options, scales: {
 					x: { stacked: true, grid: { display: false },
@@ -111,7 +147,17 @@ Alpine.data('homeCharts', () => {
 						data: this.days.map(day => day.counts[item.status] || 0),
 					})),
 				},
-			})];
+			}];
+			configs.forEach((config, index) => {
+				if (charts[index]) {
+					charts[index].data = config.data;
+					charts[index].options = config.options;
+					charts[index].update('none');
+				} else {
+					const canvas = index === 0 ? this.$refs.outcomes : this.$refs.activity;
+					charts[index] = new Chart(canvas, config);
+				}
+			});
 		},
 		destroy() {
 			destroyed = true;
@@ -325,13 +371,13 @@ Alpine.data('deploymentForm', ({ releaseID, environmentID }) => ({
 	},
 }));
 
-Alpine.data('releaseDeployRow', () => ({
-	forceChecked: false,
-}));
-
-Alpine.data('stepPlacement', (executionTarget = 'local', agentLabel = '') => ({
+Alpine.data('stepPlacement', (executionTarget = 'local', agentLabel = '', agentExecutionMode = 'host') => ({
 	executionTarget,
 	agentLabel,
+	agentExecutionMode: agentExecutionMode || 'host',
+	get usesContainer() {
+		return this.executionTarget === 'local' || this.agentExecutionMode === 'container';
+	},
 }));
 
 Alpine.data('runbookEditor', () => ({
@@ -344,6 +390,8 @@ Alpine.data('runbookEditor', () => ({
 		this.steps = JSON.parse(this.$el.dataset.steps);
 		for (const step of this.steps) {
 			step.editorID = this.nextStepID++;
+			step.network_mode ||= '';
+			step.agent_execution_mode ||= 'host';
 			step.agent_selectors_text = (step.agent_selectors || []).join(', ');
 			step.variable_names_text = (step.variable_names || []).join(', ');
 		}
@@ -355,12 +403,20 @@ Alpine.data('runbookEditor', () => ({
 	removeStep(index) {
 		this.steps.splice(index, 1);
 	},
+	usesContainer(step) {
+		return step.execution_target === 'local' || step.agent_execution_mode === 'container';
+	},
+	changeTarget() {
+		this.draft.network_mode = '';
+		if (this.draft.execution_target === 'local') this.draft.agent_execution_mode = 'host';
+	},
 	addStep() {
 		this.openStep({
 			editorID: this.nextStepID++,
 			name: '', script_body: '', interpreter: 'bash', timeout_seconds: 0,
 			max_retries: 0, execution_target: 'local', agent_selectors_text: '',
-			container_image: '', variable_names_text: '',
+			agent_execution_mode: 'host',
+			container_image: '', network_mode: '', variable_names_text: '',
 		});
 	},
 	editStep(step) { this.openStep({ ...step }, step.editorID); },
@@ -370,13 +426,14 @@ Alpine.data('runbookEditor', () => ({
 		this.opener = document.activeElement;
 		this.$nextTick(() => {
 			this.$refs.stepDialog.showModal();
-			this.$refs.stepDialog.querySelector('input').focus();
+			focusFormField(this.$refs.stepDialog.querySelector('input'));
 		});
 	},
 	saveStep() {
 		const step = { ...this.draft };
-		if (step.execution_target === 'agent') step.container_image = '';
-		else step.agent_selectors_text = '';
+		if (!this.usesContainer(step)) step.container_image = '';
+		if (step.execution_target === 'agent') step.network_mode = '';
+		else { step.agent_selectors_text = ''; step.agent_execution_mode = 'host'; }
 		if (this.editingID === null) this.steps.push(step);
 		else this.steps.splice(this.steps.findIndex(item => item.editorID === this.editingID), 1, step);
 		this.$refs.stepDialog.close();
@@ -390,6 +447,44 @@ Alpine.data('runbookEditor', () => ({
 	destroy() { this.$refs.stepDialog?.close(); },
 }));
 
+Alpine.data('projectMenu', () => ({
+	closingAnimation: null,
+	open() {
+		this.closingAnimation?.cancel();
+		this.closingAnimation = null;
+		this.alignWithNavbar();
+		this.$refs.menu.showModal();
+	},
+	alignWithNavbar() {
+		const bottom = document.getElementById('app-navbar').getBoundingClientRect().bottom;
+		this.$refs.menu.style.setProperty('--project-menu-top', `${Math.max(0, bottom)}px`);
+	},
+	close() {
+		const dialog = this.$refs.menu;
+		if (!dialog.open || this.closingAnimation) return;
+		if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
+			dialog.close();
+			return;
+		}
+		const panel = dialog.querySelector('.project-menu-panel');
+		this.closingAnimation = panel.animate([
+			{ transform: getComputedStyle(panel).transform },
+			{ transform: 'translateX(100%)' },
+		], { duration: 180, easing: 'ease-in' });
+		this.closingAnimation.addEventListener('finish', () => {
+			this.closingAnimation = null;
+			dialog.close();
+		}, { once: true });
+	},
+	closeForLink(event) {
+		if (event.target.closest('a')) this.close();
+	},
+	destroy() {
+		this.closingAnimation?.cancel();
+		this.$refs.menu.close();
+	},
+}));
+
 Alpine.data('formDialogHost', () => ({
 	opener: null,
 	rememberOpener(event) { this.opener = event.currentTarget; },
@@ -398,7 +493,7 @@ Alpine.data('formDialogHost', () => ({
 		const title = this.$refs.content.querySelector('.page-header h1')?.textContent.trim();
 		if (title) this.$refs.dialog.setAttribute('aria-label', title);
 		if (!this.$refs.dialog.open) this.$refs.dialog.showModal();
-		this.$refs.content.querySelector('input[name="name"]')?.focus();
+		focusFormField(this.$refs.content.querySelector('input[name="name"]'));
 	},
 	beforeSwap(event) {
 		if (!this.$refs.dialog?.open || event.detail.xhr.status !== 422) return;
@@ -431,18 +526,24 @@ Alpine.data('stepFormHost', () => ({
 		event.detail.shouldSwap = true;
 		event.detail.isError = false;
 	},
-	afterSettle(event) {
+	afterSwap(event) {
 		if (event.detail?.target?.id === 'step-list' && this.$refs.stepEditDialog?.open) {
 			this.$refs.stepEditDialog.close();
-			return;
 		}
+	},
+	afterSettle(event) {
 		if (event.detail?.target?.id !== 'step-edit-content') return;
 		const dialog = this.$refs.stepEditDialog;
+		if (this.$refs.stepEditContent.querySelector('[data-step-add-form]')) {
+			this.editOpener = this.$refs.addStepButton;
+		}
 		if (!dialog.open) dialog.showModal();
-		this.$nextTick(() => this.$refs.stepEditContent.querySelector('input[name="name"]')?.focus());
+		this.$nextTick(() => focusFormField(this.$refs.stepEditContent.querySelector('input[name="name"]')));
 	},
-	editClosed() {
+	editClosed(event) {
+		if (event.target !== this.$refs.stepEditDialog || this.$refs.stepEditDialog.open) return;
 		const content = this.$refs.stepEditContent;
+		if (!content.hasChildNodes()) return;
 		for (const child of content.children) Alpine.destroyTree(child);
 		content.replaceChildren();
 		const opener = this.editOpener;
@@ -535,7 +636,7 @@ Alpine.data('stepEditor', () => ({
 		this.modalOpen = true;
 		this.$nextTick(() => {
 			this.$refs.modal.showModal();
-			this.$refs.modalTextarea.focus();
+			focusFormField(this.$refs.modalTextarea);
 		});
 	},
 	destroy() {
@@ -557,14 +658,14 @@ Alpine.data('variablesPage', () => ({
 		const nameInput = form.querySelector('input[name="name"]');
 		const environment = form.querySelector('select[name="environment_id"]');
 		if (nameInput) nameInput.value = button.dataset.overrideFor;
-		if (environment) environment.focus();
+		focusFormField(environment);
 		form.scrollIntoView({ behavior: 'smooth', block: 'start' });
 	},
 	focusAfterSwap(event) {
 		const target = event.detail?.target;
 		if (!(target instanceof Element) || !this.$el.contains(target)) return;
 		const input = target.querySelector('input[name="name"]');
-		if (input) input.focus();
+		focusFormField(input);
 	},
 	init() {
 		this.afterSwap = this.focusAfterSwap.bind(this);
@@ -599,7 +700,7 @@ Alpine.data('deploymentStream', ({ url }) => ({
 			: event.detail?.target;
 		if (!(target instanceof Element) || target.id !== 'status-badge') return;
 		const status = target.textContent.trim();
-		if (!['succeeded', 'failed', 'cancelled'].includes(status)) return;
+		if (!['succeeded', 'failed', 'cancelled', 'rejected', 'expired'].includes(status)) return;
 		if (this.source) this.source.close();
 		this.source = null;
 	},
@@ -610,7 +711,42 @@ Alpine.data('deploymentStream', ({ url }) => ({
 	},
 }));
 
+function renderLogLine(element, line = element.textContent) {
+	const fragment = document.createDocumentFragment();
+	let color = /^\s*[-+]\/[-+]/.test(line) ? 'text-warning'
+		: ({ '+': 'text-success', '-': 'text-error', '~': 'text-warning' })[line.trimStart().match(/^([+~-])\s/)?.[1]] || '';
+	let bold = false;
+	const append = text => {
+		if (!text) return;
+		const span = document.createElement('span');
+		span.className = [color, bold ? 'font-bold' : ''].filter(Boolean).join(' ');
+		span.textContent = text;
+		fragment.append(span);
+	};
+	let offset = 0;
+	for (const match of line.matchAll(/\x1b\[([0-9;]*)m/g)) {
+		append(line.slice(offset, match.index));
+		for (const code of match[1].split(';').map(Number)) {
+			if (code === 0) { color = ''; bold = false; }
+			else if (code === 1) bold = true;
+			else if (code === 22) bold = false;
+			else if (code === 39) color = '';
+			else if ([31, 91].includes(code)) color = 'text-error';
+			else if ([32, 92].includes(code)) color = 'text-success';
+			else if ([33, 93].includes(code)) color = 'text-warning';
+		}
+		offset = match.index + match[0].length;
+	}
+	append(line.slice(offset));
+	element.replaceChildren(fragment);
+}
+
 Alpine.data('deploymentStepLogs', ({ url, status, view }) => ({
+	renderLogLine,
+	renderEntry(element, entry) {
+		renderLogLine(element, entry.line);
+		if (entry.step.includes(' @ ')) element.prepend(`[${entry.step}] `);
+	},
 	url,
 	deploymentStatus: status,
 	panels: view.panels,
@@ -629,7 +765,7 @@ Alpine.data('deploymentStepLogs', ({ url, status, view }) => ({
 		});
 	},
 	terminal() {
-		return ['succeeded', 'failed', 'cancelled', 'cleanup_unconfirmed'].includes(this.deploymentStatus);
+		return ['succeeded', 'failed', 'cancelled', 'rejected', 'expired', 'cleanup_unconfirmed'].includes(this.deploymentStatus);
 	},
 	message(event) {
 		const entry = JSON.parse(event.data);
@@ -658,6 +794,9 @@ Alpine.data('deploymentStepLogs', ({ url, status, view }) => ({
 			not_run: 'Not run', unknown: 'State unavailable' })[state] ?? 'Pending';
 	},
 	activeStepText() {
+		if (['queued', 'publishing_artifact', 'awaiting_artifact_approval'].includes(this.deploymentStatus)) {
+			return this.deploymentStatus.replaceAll('_', ' ');
+		}
 		const active = this.panels.find(panel => panel.index >= 0 && ['running', 'waiting'].includes(panel.state));
 		if (active) return `${this.stateLabel(active.state)}: Step ${active.index + 1} — ${active.name}`;
 		if (this.terminal()) return `Deployment ${this.deploymentStatus.replaceAll('_', ' ')}`;
@@ -667,7 +806,7 @@ Alpine.data('deploymentStepLogs', ({ url, status, view }) => ({
 	statusChanged(event) {
 		const target = event.target instanceof Element ? event.target : event.detail?.target;
 		if (!(target instanceof Element) || target.id !== 'status-badge') return;
-		this.deploymentStatus = target.textContent.trim();
+		this.deploymentStatus = target.dataset.deploymentStatus || target.textContent.trim();
 		// The stream drains final logs before sending its complete event.
 	},
 	finish(status) {

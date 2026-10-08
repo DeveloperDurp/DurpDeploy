@@ -31,6 +31,7 @@ templ StepsContent(project db.Project, steps []db.Step) {
 		x-on:step-form-cancel="handleEvent"
 		x-on:step-form-edit="handleEvent"
 		x-on:htmx:after-settle.camel="afterSettle"
+		x-on:htmx:after-swap.camel="afterSwap"
 		x-on:htmx:before-swap.camel="beforeSwap"
 	>
 		<div class="page-header">

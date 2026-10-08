@@ -36,8 +36,12 @@ func (q *Queries) CancelOrphanedRemoteStepRuns(ctx context.Context, now int64) (
 }
 
 const confirmContainerCleanup = `-- name: ConfirmContainerCleanup :execrows
-UPDATE deployments SET status = 'failed', finished_at = COALESCE(finished_at, ?1)
-WHERE status IN ('running', 'cleanup_unconfirmed')
+UPDATE deployments SET status = CASE WHEN EXISTS (
+    SELECT 1 FROM remote_step_runs s WHERE s.deployment_id = deployments.id
+      AND s.state = 'cleanup_unconfirmed'
+) THEN status ELSE 'failed' END,
+    container_namespace = NULL, finished_at = COALESCE(finished_at, ?1)
+WHERE status IN ('running', 'publishing_artifact', 'cleanup_unconfirmed')
   AND container_namespace = ?2
 `
 
@@ -52,6 +56,17 @@ func (q *Queries) ConfirmContainerCleanup(ctx context.Context, arg ConfirmContai
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+const confirmRemoteDeploymentLocalCleanup = `-- name: ConfirmRemoteDeploymentLocalCleanup :exec
+UPDATE deployments SET container_namespace = NULL WHERE id = ?
+AND EXISTS (SELECT 1 FROM remote_step_runs s
+    WHERE s.deployment_id = deployments.id AND s.state = 'cleanup_unconfirmed')
+`
+
+func (q *Queries) ConfirmRemoteDeploymentLocalCleanup(ctx context.Context, id int64) error {
+	_, err := q.db.ExecContext(ctx, confirmRemoteDeploymentLocalCleanup, id)
+	return err
 }
 
 const countDeploymentsToday = `-- name: CountDeploymentsToday :one
@@ -217,12 +232,17 @@ func (q *Queries) DeploymentActivity(ctx context.Context, arg DeploymentActivity
 }
 
 const failDeploymentsWithTerminalRemoteStepRuns = `-- name: FailDeploymentsWithTerminalRemoteStepRuns :execrows
-UPDATE deployments SET status = 'failed', finished_at = ?1
-WHERE status = 'running' AND assigned_agent_id IS NULL
+UPDATE deployments SET status = CASE WHEN EXISTS (
+    SELECT 1 FROM remote_step_runs r WHERE r.deployment_id = deployments.id
+      AND r.state = 'cleanup_unconfirmed') THEN 'cleanup_unconfirmed' ELSE 'failed' END,
+    finished_at = ?1
+WHERE (status = 'running' OR (status = 'failed' AND EXISTS (
+    SELECT 1 FROM remote_step_runs r WHERE r.deployment_id = deployments.id
+      AND r.state = 'cleanup_unconfirmed'))) AND assigned_agent_id IS NULL
   AND EXISTS (
       SELECT 1 FROM remote_step_runs r
       WHERE r.deployment_id = deployments.id
-        AND (r.state IN ('failed', 'lost', 'cancel_unconfirmed')
+        AND (r.state IN ('failed', 'lost', 'cancel_unconfirmed', 'cleanup_unconfirmed')
           OR (r.state = 'cancelled' AND r.recovery_cancelled = 1))
   )
   AND NOT EXISTS (
@@ -242,7 +262,7 @@ func (q *Queries) FailDeploymentsWithTerminalRemoteStepRuns(ctx context.Context,
 
 const failOrphanedDeployments = `-- name: FailOrphanedDeployments :execrows
 UPDATE deployments SET status = 'failed', finished_at = ?1
-WHERE status = 'running' AND assigned_agent_id IS NULL
+WHERE status IN ('running', 'publishing_artifact') AND assigned_agent_id IS NULL
   AND NOT EXISTS (
       SELECT 1 FROM remote_step_runs r
       WHERE r.deployment_id = deployments.id
@@ -362,6 +382,100 @@ func (q *Queries) GetLatestSuccessfulDeploymentForReleaseEnv(ctx context.Context
 		&i.ContainerNamespace,
 	)
 	return i, err
+}
+
+const hasUnconfirmedContainerCleanup = `-- name: HasUnconfirmedContainerCleanup :one
+SELECT CASE WHEN EXISTS (
+    SELECT 1 FROM deployments d WHERE d.id = ?1
+      AND d.status = 'cleanup_unconfirmed'
+      AND (d.container_namespace IS NOT NULL OR (
+      NOT EXISTS (SELECT 1 FROM remote_step_runs s
+          WHERE s.deployment_id = d.id AND s.state = 'cleanup_unconfirmed')
+      AND NOT EXISTS (SELECT 1 FROM remote_deployment_claims c
+          WHERE c.deployment_id = d.id AND c.state = 'cleanup_unconfirmed')))
+) OR EXISTS (
+    SELECT 1 FROM remote_step_runs s WHERE s.deployment_id = ?1
+      AND s.state = 'cleanup_unconfirmed' AND s.cleanup_confirmed_at IS NULL
+) OR EXISTS (
+    SELECT 1 FROM remote_deployment_claims c WHERE c.deployment_id = ?1
+      AND c.state = 'cleanup_unconfirmed' AND c.cleanup_confirmed_at IS NULL
+) THEN 1 ELSE 0 END
+`
+
+func (q *Queries) HasUnconfirmedContainerCleanup(ctx context.Context, deploymentID int64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, hasUnconfirmedContainerCleanup, deploymentID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const listActiveDeploymentsWithRefs = `-- name: ListActiveDeploymentsWithRefs :many
+SELECT
+    d.id, d.release_id, d.environment_id, d.status,
+    d.started_at, d.finished_at, d.created_at, d.forced, d.note,
+    d.assigned_agent_id,
+    p.name AS project_name,
+    r.version AS release_version,
+    e.name AS environment_name
+FROM deployments d
+JOIN releases r ON d.release_id = r.id
+JOIN projects p ON r.project_id = p.id
+JOIN environments e ON d.environment_id = e.id
+WHERE d.kind = 'deployment' AND d.status IN ('queued', 'pending', 'running', 'publishing_artifact', 'pending_approval', 'awaiting_artifact_approval')
+ORDER BY d.created_at DESC
+`
+
+type ListActiveDeploymentsWithRefsRow struct {
+	ID              int64          `json:"id"`
+	ReleaseID       int64          `json:"release_id"`
+	EnvironmentID   int64          `json:"environment_id"`
+	Status          string         `json:"status"`
+	StartedAt       sql.NullInt64  `json:"started_at"`
+	FinishedAt      sql.NullInt64  `json:"finished_at"`
+	CreatedAt       int64          `json:"created_at"`
+	Forced          int64          `json:"forced"`
+	Note            sql.NullString `json:"note"`
+	AssignedAgentID sql.NullString `json:"assigned_agent_id"`
+	ProjectName     string         `json:"project_name"`
+	ReleaseVersion  string         `json:"release_version"`
+	EnvironmentName string         `json:"environment_name"`
+}
+
+func (q *Queries) ListActiveDeploymentsWithRefs(ctx context.Context) ([]ListActiveDeploymentsWithRefsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listActiveDeploymentsWithRefs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListActiveDeploymentsWithRefsRow
+	for rows.Next() {
+		var i ListActiveDeploymentsWithRefsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ReleaseID,
+			&i.EnvironmentID,
+			&i.Status,
+			&i.StartedAt,
+			&i.FinishedAt,
+			&i.CreatedAt,
+			&i.Forced,
+			&i.Note,
+			&i.AssignedAgentID,
+			&i.ProjectName,
+			&i.ReleaseVersion,
+			&i.EnvironmentName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listDeployments = `-- name: ListDeployments :many
@@ -839,79 +953,10 @@ func (q *Queries) ListRecentDeploymentsForEnv(ctx context.Context, arg ListRecen
 	return items, nil
 }
 
-const listRunningDeploymentsWithRefs = `-- name: ListRunningDeploymentsWithRefs :many
-SELECT
-    d.id, d.release_id, d.environment_id, d.status,
-    d.started_at, d.finished_at, d.created_at, d.forced, d.note,
-    d.assigned_agent_id,
-    p.name AS project_name,
-    r.version AS release_version,
-    e.name AS environment_name
-FROM deployments d
-JOIN releases r ON d.release_id = r.id
-JOIN projects p ON r.project_id = p.id
-JOIN environments e ON d.environment_id = e.id
-WHERE d.kind = 'deployment' AND d.status IN ('pending','running')
-ORDER BY d.created_at DESC
-`
-
-type ListRunningDeploymentsWithRefsRow struct {
-	ID              int64          `json:"id"`
-	ReleaseID       int64          `json:"release_id"`
-	EnvironmentID   int64          `json:"environment_id"`
-	Status          string         `json:"status"`
-	StartedAt       sql.NullInt64  `json:"started_at"`
-	FinishedAt      sql.NullInt64  `json:"finished_at"`
-	CreatedAt       int64          `json:"created_at"`
-	Forced          int64          `json:"forced"`
-	Note            sql.NullString `json:"note"`
-	AssignedAgentID sql.NullString `json:"assigned_agent_id"`
-	ProjectName     string         `json:"project_name"`
-	ReleaseVersion  string         `json:"release_version"`
-	EnvironmentName string         `json:"environment_name"`
-}
-
-func (q *Queries) ListRunningDeploymentsWithRefs(ctx context.Context) ([]ListRunningDeploymentsWithRefsRow, error) {
-	rows, err := q.db.QueryContext(ctx, listRunningDeploymentsWithRefs)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListRunningDeploymentsWithRefsRow
-	for rows.Next() {
-		var i ListRunningDeploymentsWithRefsRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.ReleaseID,
-			&i.EnvironmentID,
-			&i.Status,
-			&i.StartedAt,
-			&i.FinishedAt,
-			&i.CreatedAt,
-			&i.Forced,
-			&i.Note,
-			&i.AssignedAgentID,
-			&i.ProjectName,
-			&i.ReleaseVersion,
-			&i.EnvironmentName,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const markUnreconciledLocalDeployments = `-- name: MarkUnreconciledLocalDeployments :execrows
 UPDATE deployments SET status = 'cleanup_unconfirmed',
     finished_at = COALESCE(finished_at, ?1)
-WHERE status = 'running' AND assigned_agent_id IS NULL
+WHERE status IN ('running', 'publishing_artifact') AND assigned_agent_id IS NULL
   AND container_namespace IS NOT NULL
   AND (EXISTS (SELECT 1 FROM deployment_steps s
       WHERE s.deployment_id = deployments.id AND s.execution_target = 'local')

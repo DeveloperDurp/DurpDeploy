@@ -224,9 +224,9 @@ DURPDEPLOY_AGENT_VERSION=<agent-version>
 `DURPDEPLOY_AGENT_STATE_DIR` defaults to the platform configuration directory,
 but production services set it explicitly. `DURPDEPLOY_AGENT_LISTEN_ADDR` is
 needed only while the local pairing listener is open. `DURPDEPLOY_AGENT_VERSION`
-is sent in heartbeats after pairing. The protocol is fixed by the binary as
-`agent/2` for current agents. The server also accepts legacy `agent/1` polls as
-Bash-only. There is no protocol variable.
+is sent in heartbeats after pairing. Host agents use `agent/2`; enabling
+container execution selects `agent/3`. The server also accepts legacy
+`agent/1` polls as Bash-only. There is no protocol variable.
 
 The first run prints a short-lived pairing code and agent fingerprint. Enter
 the code in the authenticated admin pairing flow, compare the displayed
@@ -239,9 +239,43 @@ After pairing, restart with `DURPDEPLOY_AGENT_STATE_DIR` and
 `DURPDEPLOY_AGENT_VERSION`. Do not supply a server URL, certificate,
 fingerprint, token, or agent ID manually. Normal work is outbound polling,
 heartbeats, log uploads, and result or cancellation acknowledgements. The agent
-stores no server secret or deployment payload at rest. A current claim marker
-contains only the deployment ID and a SHA-256 hash of the claim token and is
-removed after the claim completes.
+persists pairing identity and encrypted terminal reports in its private state
+directory. It preserves the claim recovery marker until the result is
+acknowledged and owned containers are reconciled. Never delete this state to
+clear a cleanup warning.
+
+For opt-in container execution, set:
+
+```bash
+DURPDEPLOY_AGENT_CONTAINER_ENABLED=true
+DURPDEPLOY_AGENT_CONTAINER_RUNTIME=podman
+DURPDEPLOY_AGENT_CONTAINER_SOCKET=unix:///run/user/10001/podman/podman.sock
+```
+
+Use `docker` with its local Unix socket instead where appropriate. The runtime
+must enforce the agent's CPU, memory, PID, seccomp, and filesystem limits.
+For an agent in a container, mount the local socket into that agent and set
+the socket URL to the mounted path. The workload receives no runtime socket.
+Do not grant socket permissions automatically or configure TCP/SSH endpoints.
+See the pinned agent's [container setup](https://github.com/DeveloperDurp/durpdeploy-agent/blob/59413429c31bebf7e828e691ccc5e329f0b29dc4/docs/agents.md#container-step-execution-agent3).
+
+Remote steps use `agent_execution_mode: "host"` by default. Select
+`"container"` and an image to opt in. Labels still route the step, and only
+agents reporting a ready runtime and the container interpreter can claim it.
+The admin detail API and page show the last reported capabilities.
+
+Upgrade the server before enabling v3 agents. An agent downgrade clears v3
+capabilities and fails incompatible waiting work; it does not restart issued
+work. Do not downgrade the server while container work or cleanup is pending.
+If cleanup is uncertain, the deployment remains `cleanup_unconfirmed` and
+blocks its environment. Restore runtime access and let the same paired agent
+reconcile and send a ready v3 poll. Confirmation releases the queue and permits
+retry while preserving the original outcome. If maintenance already marked a
+claim lost or cancellation unconfirmed, the agent can replay its durable
+terminal report using the original claim token. A late success does not change
+the failed deployment to success. A late cleanup failure still requires the
+ready v3 poll before the queue can advance. Never re-pair or remove state as
+a substitute for cleanup.
 
 ## Development container
 
@@ -251,7 +285,7 @@ With `make dev` running in another terminal, start the published agent image:
 make dev-agent
 ```
 
-This pulls `ghcr.io/developerdurp/durpdeploy-agent:ec04223` and runs it in the
+This pulls `ghcr.io/developerdurp/durpdeploy-agent:5941342` and runs it in the
 foreground using Docker or Podman. In **Admin > Agents > Pair agent**, enter
 `https://127.0.0.1:10944`, the terminal's pairing code, and fingerprint, then
 compare the fingerprint and approve. The development server advertises
@@ -284,7 +318,7 @@ The image supplies Bash; this image does not install Python or PowerShell.
 Override the image, host pairing port, or container name when needed:
 
 ```bash
-make dev-agent DEV_AGENT_IMAGE=ghcr.io/developerdurp/durpdeploy-agent:ec04223 DEV_AGENT_PORT=10945
+make dev-agent DEV_AGENT_IMAGE=ghcr.io/developerdurp/durpdeploy-agent:5941342 DEV_AGENT_PORT=10945
 ```
 
 `DEV_AGENT_CONTAINER` also determines the default state-volume name. Supply
@@ -368,7 +402,7 @@ fail closed if a tag was rewritten:
 ```bash
 set -euo pipefail
 AGENT_MODULE=github.com/DeveloperDurp/durpdeploy-agent
-AGENT_VERSION=v0.1.1-0.20260921105742-a63b344bf6eb # use the value recorded from the server checkout
+AGENT_VERSION=v0.1.1-0.20261007133227-59413429c31b # use the value recorded from the server checkout
 AGENT_SUM='h1:...' # use the value recorded from the server checkout
 AGENT_COMMIT=... # use the value recorded from the server checkout
 AGENT_DOWNLOAD=$(go mod download -json "$AGENT_MODULE@$AGENT_VERSION")
@@ -402,10 +436,11 @@ standalone repository does not create or open a database. Keep the printed
 digest with the deployment record so the installed artifact can be checked
 later.
 
-The server accepts protocol `agent/1` for legacy Bash-only agents and `agent/2`
-for capability-aware agents. Prefer the exact agent version pinned by the
-server, and upgrade the server and agent together when a release changes that
-pin.
+The server accepts `agent/1` for legacy Bash-only host agents, `agent/2` for
+host interpreter capabilities, and `agent/3` for remote containers. Upgrade
+the server first, then enable container agents. Prefer the exact agent revision
+pinned by the server. This change pins the reviewed PR revision; the agent tag
+is a later release step.
 
 Create the service account and private state directory:
 

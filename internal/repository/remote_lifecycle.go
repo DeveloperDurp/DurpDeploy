@@ -25,9 +25,40 @@ func (r *Repository) StartRemoteDeployment(
 	ctx context.Context,
 	identity RemoteLifecycleClaim,
 ) error {
-	return r.WithTx(ctx, func(q *db.Queries) error {
-		return startRemoteDeployment(ctx, q, identity)
-	})
+	return r.WithDeploymentTx(
+		ctx,
+		identity.DeploymentID,
+		func(ctx context.Context, q *db.Queries) error {
+			d, err := q.GetDeployment(ctx, identity.DeploymentID)
+			if err != nil {
+				return err
+			}
+			if err := advanceEnvironmentQueue(
+				ctx,
+				q,
+				d.EnvironmentID,
+			); err != nil {
+				return err
+			}
+			owner, err := q.GetDeploymentSlot(ctx, d.ID)
+			if err != nil || owner != d.ID {
+				return ErrRemoteLifecycleConflict
+			}
+			blockers, err := q.ListDeploymentQueueBlockers(
+				ctx,
+				d.ID,
+			)
+			if err != nil {
+				return err
+			}
+			for _, blocker := range blockers {
+				if blocker != d.ID {
+					return ErrRemoteLifecycleConflict
+				}
+			}
+			return startRemoteDeployment(ctx, q, identity)
+		},
+	)
 }
 
 func startRemoteDeployment(

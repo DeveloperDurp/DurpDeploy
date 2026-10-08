@@ -30,7 +30,7 @@ func TestRunbookEditorBrowserE2E(t *testing.T) {
 			 "execution_target":"agent","agent_selectors":["canary"],
 			 "variable_names":["DB_HOST","API_TOKEN"]},
 			{"name":"local & <one>","script_body":"printf local",
-			 "container_image":"alpine:3.20"}
+			 "container_image":"alpine:3.20","network_mode":"bridge"}
 		]}`), 201)
 	var saved struct {
 		Runbook db.Runbook `json:"runbook"`
@@ -146,7 +146,7 @@ func TestRunbookEditorBrowserE2E(t *testing.T) {
 	)
 	b.wait(
 		t,
-		`document.querySelector('dialog').matches(':modal') && document.querySelector('dialog [name=step_image]:not([type=hidden])')?.value === 'alpine:3.20'`,
+		`document.querySelector('dialog').matches(':modal') && document.querySelector('dialog [name=step_image]:not([type=hidden])')?.value === 'alpine:3.20' && document.querySelector('dialog [name=step_network]')?.value === 'bridge'`,
 	)
 	b.captureNavigation(t, "runbook-step")
 	b.evaluate(
@@ -175,6 +175,7 @@ func TestRunbookEditorBrowserE2E(t *testing.T) {
 		Steps []struct {
 			Name           string   `json:"name"`
 			ContainerImage string   `json:"container_image"`
+			NetworkMode    string   `json:"network_mode"`
 			AgentSelectors []string `json:"agent_selectors"`
 			VariableNames  []string `json:"variable_names"`
 		} `json:"steps"`
@@ -187,6 +188,7 @@ func TestRunbookEditorBrowserE2E(t *testing.T) {
 	if len(version.Steps) != 2 ||
 		version.Steps[0].Name != "local & <one>" ||
 		version.Steps[0].ContainerImage != "alpine:3.20" ||
+		version.Steps[0].NetworkMode != "bridge" ||
 		version.Steps[1].Name != "remote" ||
 		fmt.Sprint(version.Steps[1].AgentSelectors) != "[canary]" ||
 		fmt.Sprint(version.Steps[1].VariableNames) != "[DB_HOST API_TOKEN]" {

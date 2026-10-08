@@ -78,7 +78,8 @@ What we do **not** defend against yet (see Known Gaps):
 
 Server-side steps run only in containers managed through the embedded agent's
 local Docker or Podman socket. No step receives that socket or a control-plane mount;
-the root filesystem is read-only, network is disabled, capabilities are
+the root filesystem is read-only, network is disabled by default (local steps
+can explicitly opt into `network_mode: "bridge"`), capabilities are
 dropped, and only step-selected resolved variables are passed. A missing
 runtime fails closed. The socket grants the control plane broad authority over
 the container host, so use a dedicated host or standalone agent when that

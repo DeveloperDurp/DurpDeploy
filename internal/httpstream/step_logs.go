@@ -75,7 +75,10 @@ func streamStepLogs(
 	w http.ResponseWriter, r *http.Request, repo *repository.Repository,
 	broker *runner.LogBroker, deploymentID, after int64,
 ) {
-	if _, err := repo.Queries.GetDeployment(r.Context(), deploymentID); err != nil {
+	if _, err := repo.Queries.GetDeployment(
+		r.Context(),
+		deploymentID,
+	); err != nil {
 		status := http.StatusInternalServerError
 		if errors.Is(err, sql.ErrNoRows) {
 			status = http.StatusNotFound
@@ -120,7 +123,12 @@ func streamStepLogs(
 			if err != nil {
 				return
 			}
-			if _, err := fmt.Fprintf(stream, "id: %d\nevent: log\ndata: %s\n\n", log.ID, data); err != nil {
+			if _, err := fmt.Fprintf(
+				stream,
+				"id: %d\nevent: log\ndata: %s\n\n",
+				log.ID,
+				data,
+			); err != nil {
 				return
 			}
 			after = log.ID
@@ -133,7 +141,12 @@ func streamStepLogs(
 			return
 		}
 		switch deployment.Status {
-		case "succeeded", "failed", "cancelled", "cleanup_unconfirmed":
+		case "succeeded",
+			"failed",
+			"cancelled",
+			"rejected",
+			"expired",
+			"cleanup_unconfirmed":
 			if broker.DeploymentActive(deploymentID) {
 				break
 			}

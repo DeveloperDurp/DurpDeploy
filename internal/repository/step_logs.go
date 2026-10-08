@@ -38,11 +38,17 @@ func (r *Repository) FinishRemoteStepWithLogs(
 ) ([]db.DeploymentLog, bool, error) {
 	var inserted []db.DeploymentLog
 	handled := false
-	err := r.withDeploymentLogTx(
+	err := r.WithDeploymentTx(
 		ctx,
 		identity.DeploymentID,
-		func(q *db.Queries) error {
-			var err error
+		func(ctx context.Context, q *db.Queries) error {
+			locked, err := q.LockDeploymentLogStream(ctx, identity.DeploymentID)
+			if err != nil {
+				return err
+			}
+			if locked != 1 {
+				return sql.ErrNoRows
+			}
 			if state == "cancelled" {
 				_, handled, err = acknowledgeRemoteStepCancellation(
 					ctx,
@@ -82,15 +88,26 @@ func (r *Repository) FinishRemoteDeploymentWithLogs(
 ) ([]db.DeploymentLog, RemoteTerminalResult, error) {
 	var inserted []db.DeploymentLog
 	var result RemoteTerminalResult
-	err := r.withDeploymentLogTx(
+	err := r.WithDeploymentTx(
 		ctx,
 		identity.DeploymentID,
-		func(q *db.Queries) error {
-			var err error
+		func(ctx context.Context, q *db.Queries) error {
+			locked, err := q.LockDeploymentLogStream(ctx, identity.DeploymentID)
+			if err != nil {
+				return err
+			}
+			if locked != 1 {
+				return sql.ErrNoRows
+			}
 			if state == "cancelled" {
 				_, err = acknowledgeRemoteCancellation(ctx, q, identity)
 			} else {
-				result, err = finishRemoteDeploymentLifecycle(ctx, q, identity, state)
+				result, err = finishRemoteDeploymentLifecycle(
+					ctx,
+					q,
+					identity,
+					state,
+				)
 			}
 			if err != nil {
 				return err

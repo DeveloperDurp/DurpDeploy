@@ -1,0 +1,35 @@
+package pages
+
+import (
+	"context"
+	"durpdeploy/internal/auth"
+	"durpdeploy/internal/repository"
+	"fmt"
+)
+
+type deploymentQueueKey struct{}
+
+func WithDeploymentQueue(ctx context.Context, info auth.DeploymentQueueInfo) context.Context {
+	return context.WithValue(ctx, deploymentQueueKey{}, info)
+}
+
+func DeploymentQueueContext(ctx context.Context, repo *repository.Repository, id int64, status *string) (context.Context, error) {
+	info, err := auth.ReadDeploymentQueue(ctx, repo, id)
+	if err == nil {
+		*status = info.Status
+	}
+	return WithDeploymentQueue(ctx, info), err
+}
+
+templ DeploymentQueueStatus() {
+	if info, ok := ctx.Value(deploymentQueueKey{}).(auth.DeploymentQueueInfo); ok {
+		if info.QueuePosition > 0 {
+			<span class="text-sm opacity-70">{ fmt.Sprintf("Queue position: %d", info.QueuePosition) }</span>
+			if info.ActiveDeploymentID > 0 {
+				<a class="link text-sm" href={ templ.SafeURL(info.ActiveWorkURL) }>{ fmt.Sprintf("Active work #%d", info.ActiveDeploymentID) }</a>
+			} else {
+				<span class="text-sm opacity-70">Waiting for this environment</span>
+			}
+		}
+	}
+}
