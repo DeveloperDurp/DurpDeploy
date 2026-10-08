@@ -56,12 +56,21 @@ func seedAgentDeleteEngineHistory(
 		t.Fatal(err)
 	}
 	if err := repo.Queries.UpdateDeploymentStatus(t.Context(),
-		db.UpdateDeploymentStatusParams{ID: f.deploymentID,
-			Status: outcome, StartedAt: raceInt(100), FinishedAt: raceInt(200)}); err != nil {
+		db.UpdateDeploymentStatusParams{
+			ID:         f.deploymentID,
+			Status:     outcome,
+			StartedAt:  raceInt(100),
+			FinishedAt: raceInt(200),
+		}); err != nil {
 		t.Fatal(err)
 	}
-	if err := repo.Queries.ConfirmRemoteDeploymentCleanup(t.Context(),
-		db.ConfirmRemoteDeploymentCleanupParams{AgentID: f.agentID, Now: raceInt(201)}); err != nil {
+	if err := repo.Queries.ConfirmRemoteDeploymentCleanup(
+		t.Context(),
+		db.ConfirmRemoteDeploymentCleanupParams{
+			AgentID: f.agentID,
+			Now:     raceInt(201),
+		},
+	); err != nil {
 		t.Fatal(err)
 	}
 
@@ -80,6 +89,11 @@ func testAgentDeleteEngineOutcome(
 	t.Helper()
 	given := seedAgentDeleteEngineHistory(t, repo, outcome)
 	f, pairing := given.fixture, given.pairing
+	if _, err := repo.Queries.GetRegisteredAgentPairing(
+		t.Context(), f.agentID,
+	); err != nil {
+		t.Fatalf("registered pairing before deletion: %v", err)
+	}
 	// When
 	if err := repo.DeleteAgent(t.Context(), f.agentID); err != nil {
 		t.Fatal(err)
@@ -87,16 +101,25 @@ func testAgentDeleteEngineOutcome(
 
 	d := assertAgentDeleteEngineHistory(t, repo, given)
 	assertAgentDeleteEngineMaintenance(t, repo, d)
+	if _, err := repo.Queries.GetRegisteredAgentPairing(
+		t.Context(), f.agentID,
+	); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("registered pairing after deletion: %v", err)
+	}
 	rejoined, err := repo.PrepareAgentPairing(
 		t.Context(),
 		AgentPairingTuple{
-			AgentID: "new-" + f.agentID, AgentName: "new registration",
-			Endpoint: "https://agent.invalid/" + f.agentID,
-			AgentPin: pairing.AgentPin, PairingCodeHash: pairing.PairingCodeHash,
+			AgentID:              "new-" + f.agentID,
+			AgentName:            "new registration",
+			Endpoint:             "https://agent.invalid/" + f.agentID,
+			AgentPin:             pairing.AgentPin,
+			PairingCodeHash:      pairing.PairingCodeHash,
 			AgentPublicIdentity:  pairing.AgentPublicIdentity,
 			ServerPublicIdentity: pairing.ServerPublicIdentity.String,
 			ServerPin:            pairing.ServerPin.String,
-			EncryptedIdentity:    "new-ciphertext", Now: 300, ExpiresAt: 500,
+			EncryptedIdentity:    "new-ciphertext",
+			Now:                  300,
+			ExpiresAt:            500,
 		},
 	)
 	if err != nil || rejoined.AgentID != "new-"+f.agentID {
@@ -126,7 +149,10 @@ func assertAgentDeleteEngineHistory(
 	) {
 		t.Fatalf("retained registration: %v", err)
 	}
-	if _, err := repo.Queries.GetAgentPairing(t.Context(), f.agentID); !errors.Is(
+	if _, err := repo.Queries.GetAgentPairing(
+		t.Context(),
+		f.agentID,
+	); !errors.Is(
 		err,
 		sql.ErrNoRows,
 	) {

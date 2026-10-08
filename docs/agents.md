@@ -262,6 +262,10 @@ fingerprint, endpoint, or private key in documentation, tickets, shell history,
 or logs. Pairing persists the agent identity, pull URL, server pins, and agent
 ID in the private state directory.
 
+Pairing recovery checks the registration again after the completion exchange.
+If deletion or revocation finishes while it waits on the agent, the API returns
+`409` and the web flow reports a conflict instead of a stale paired success.
+
 After pairing, restart with `DURPDEPLOY_AGENT_STATE_DIR` and
 `DURPDEPLOY_AGENT_VERSION`. Do not supply a server URL, certificate,
 fingerprint, token, or agent ID manually. Normal work is outbound polling,
