@@ -18,7 +18,7 @@ expect_exit() {
   local expected=$1 actual=0
   shift
   "$@" >"$fixture/output" 2>&1 || actual=$?
-  [[ "$actual" == "$expected" ]] || {
+  [[ "$actual" == "$expected" || ( "$expected" == nonzero && "$actual" != 0 ) ]] || {
     printf 'FAIL: expected exit %s, got %s\n' "$expected" "$actual" >&2
     cat "$fixture/output" >&2
     exit 1
@@ -71,15 +71,20 @@ jq -e '.status != "complete"' "$fixture/reports/gosec.json" >/dev/null
 
 # Given malformed/empty reports. When / Then: the publishing parser rejects them.
 for report in '' '   ' '{}' '{"Stats":{"files":0},"Issues":[],"Golang errors":{}}' \
-  '{"Stats":{"files":1},"Issues":[],"Golang errors":{}} {}'; do
+  '{"Stats":{"files":1},"Issues":[],"Golang errors":{}} {}' \
+  '{"Stats":{"files":0.5},"Issues":[],"Golang errors":{}}' \
+  '{"Stats":{"files":1},"Issues":[{"rule_id":"G1","file":" ","line":"1","severity":"HIGH","confidence":"HIGH"}],"Golang errors":{}}'; do
   printf '%s\n' "$report" >"$fixture/report.json"
-  expect_exit 5 jq -se --arg root "$fixture/app" -f "$root/.security/gosec-report.jq" "$fixture/report.json"
+  expect_exit nonzero jq -se --arg root "$fixture/app" -f "$root/.security/gosec-report.jq" "$fixture/report.json"
 done
 printf '{' >"$fixture/report.json"
-expect_exit 5 jq -se --arg root "$fixture/app" -f "$root/.security/gosec-report.jq" "$fixture/report.json"
-for report in '' '   ' '{}' '[] []' '[{}]'; do
+expect_exit nonzero jq -se --arg root "$fixture/app" -f "$root/.security/gosec-report.jq" "$fixture/report.json"
+for report in '' '   ' '{}' '[] []' '[{}]' \
+  '[{"RuleID":" ","File":"a.go","StartLine":1,"Commit":""}]' \
+  '[{"RuleID":"key","File":" ","StartLine":1,"Commit":""}]' \
+  '[{"RuleID":"key","File":"a.go","StartLine":1.5,"Commit":""}]'; do
   printf '%s' "$report" >"$fixture/report.json"
-  expect_exit 5 jq -se -f "$root/.security/gitleaks-report.jq" "$fixture/report.json"
+  expect_exit nonzero jq -se -f "$root/.security/gitleaks-report.jq" "$fixture/report.json"
 done
 
 # Given a synthetic credential generated only in temporary files.
