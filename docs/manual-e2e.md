@@ -70,7 +70,8 @@ For server/template/asset changes, finish script edits first, then run
 CSS/JS, then restarts only the server on the same ports. URL, login, database,
 encryption key, server identity, paired agent, proxy, firewall watcher and
 certificate remain in place. No re-pairing or E2E repopulation occurs. Wait for
-deployments to finish and confirm cleanup; unfinished work blocks refresh.
+deployments to finish and confirm cleanup; unfinished or lost remote work blocks
+refresh.
 The existing server must be running so its configuration can be retained.
 Startup settings are preserved rather than taken from the caller's environment.
 Inspect `server-refresh-build.log` and `server.log` if refresh fails.

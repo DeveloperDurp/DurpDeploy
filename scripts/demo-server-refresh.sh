@@ -29,10 +29,10 @@ check_idle() {
              NOT EXISTS (SELECT 1 FROM remote_deployment_claims c
                WHERE c.deployment_id=d.id AND c.state='cleanup_unconfirmed')))))
         + (SELECT count(*) FROM remote_step_runs
-          WHERE state IN ('waiting','claimed','started','cancel_requested','cancel_unconfirmed')
+          WHERE state IN ('waiting','claimed','started','cancel_requested','lost','cancel_unconfirmed')
           OR (state='cleanup_unconfirmed' AND cleanup_confirmed_at IS NULL))
         + (SELECT count(*) FROM remote_deployment_claims
-          WHERE state IN ('waiting','claimed','started','cancel_requested','cancel_unconfirmed')
+          WHERE state IN ('waiting','claimed','started','cancel_requested','lost','cancel_unconfirmed')
           OR (state='cleanup_unconfirmed' AND cleanup_confirmed_at IS NULL));") == 0 ]] || {
         echo 'Finish/cancel deployments and confirm agent cleanup before refreshing.' >&2
         return 1

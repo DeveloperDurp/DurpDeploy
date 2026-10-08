@@ -59,8 +59,8 @@ After server code, template or asset changes, use
 `make demo-refresh DEMO_DIR=/absolute/demo/path`. It rebuilds the server and
 CSS/JS before restarting only the server, retaining the same URL, login,
 database, encryption key, server identity, paired agent, proxy and certificate.
-It refuses unfinished deployments or unconfirmed remote cleanup. It does not
-re-pair the agent or rerun the population suite. Finish and save script edits
+It refuses unfinished deployments, lost remote work, or unconfirmed cleanup.
+It does not re-pair the agent or rerun the population suite. Finish and save script edits
 before invoking them; never edit a Bash script while it is running.
 Database query/schema/migration changes require
 `make demo-refresh-full DEMO_DIR=/absolute/old/demo/path`. Full refresh stops

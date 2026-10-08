@@ -9,6 +9,7 @@ cleanup() {
 }
 trap cleanup EXIT
 export DEMO_TEST_LOG="$tmp/commands"
+export DEMO_TEST_SQLITE=$(command -v sqlite3)
 cat >"$tmp/engine" <<'ENGINE'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >>"$DEMO_TEST_LOG"
@@ -50,6 +51,7 @@ printf '%s\n' "$pid" >"$tmp/demo/server.pid"
 mkdir "$tmp/tools"
 cat >"$tmp/tools/sqlite3" <<'SQLITE'
 #!/usr/bin/env bash
+if [[ ${DEMO_TEST_REAL_DB:-0} == 1 ]]; then exec "$DEMO_TEST_SQLITE" "$@"; fi
 printf '%s\n' "${DEMO_TEST_BUSY:-0}"
 SQLITE
 cat >"$tmp/tools/make" <<'MAKE'
@@ -68,6 +70,31 @@ if PATH="$tmp/tools:$PATH" DEMO_TEST_BUSY=1 bash "$root/scripts/demo-server-refr
     echo 'FAIL: refresh interrupted active work' >&2; exit 1
 fi
 grep -q 'confirm agent cleanup' "$tmp/output"
+
+# Lost remote work remains unresolved even after its parent has failed.
+rm "$tmp/demo/durpdeploy.db"
+sqlite3 "$tmp/demo/durpdeploy.db" <<'SQL'
+CREATE TABLE deployments (id INTEGER, status TEXT, container_namespace TEXT, cleanup_confirmed_at INTEGER);
+CREATE TABLE remote_step_runs (deployment_id INTEGER, state TEXT, cleanup_confirmed_at INTEGER);
+CREATE TABLE remote_deployment_claims (deployment_id INTEGER, state TEXT, cleanup_confirmed_at INTEGER);
+INSERT INTO deployments VALUES (1, 'failed', NULL, NULL);
+SQL
+for table in remote_step_runs remote_deployment_claims; do
+    sqlite3 "$tmp/demo/durpdeploy.db" "INSERT INTO $table VALUES (1, 'lost', NULL);"
+    if PATH="$tmp/tools:$PATH" DEMO_TEST_REAL_DB=1 bash "$root/scripts/demo-server-refresh.sh" "$tmp/demo" >"$tmp/output" 2>&1; then
+        echo "FAIL: refresh interrupted lost work in $table" >&2; exit 1
+    fi
+    if ! grep -q 'confirm agent cleanup' "$tmp/output"; then
+        echo "FAIL: refresh did not reject lost work in $table before building" >&2
+        cat "$tmp/output" >&2; exit 1
+    fi
+    kill -0 "$pid"
+    [[ ! -e "$tmp/demo/server.env" ]]
+    sqlite3 "$tmp/demo/durpdeploy.db" "DELETE FROM $table;"
+    printf 'Refresh refuses lost work in %s: PASS\n' "$table"
+done
+rm "$tmp/demo/durpdeploy.db"
+printf 'retained\n' >"$tmp/demo/durpdeploy.db"
 if PATH="$tmp/tools:$PATH" bash "$root/scripts/demo-server-refresh.sh" "$tmp/demo" >"$tmp/output" 2>&1; then
     echo 'FAIL: refresh ignored a failed build' >&2; exit 1
 fi
