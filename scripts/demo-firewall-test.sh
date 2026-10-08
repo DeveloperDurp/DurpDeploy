@@ -96,6 +96,14 @@ fi
 exec 7>&-
 
 # Validate the actual installer policy with visudo, without installing files.
+# Its account guard is tested separately; policy tests also run in root CI.
+export DEMO_TEST_ROOT="$root"
+sed -e 's/\[\[ $EUID != 0 \&\& $# == 0 \]\]/[[ $# == 0 ]]/' \
+    -e 's/^root=.*/root=${DEMO_TEST_ROOT:?}/' \
+    "$root/scripts/install-demo-firewall.sh" >"$tmp/installer"
+if [[ $EUID == 0 ]] && PATH="$tmp:$PATH" bash "$root/scripts/install-demo-firewall.sh" >/dev/null 2>&1; then
+    echo 'FAIL: installer accepted root invocation' >&2; exit 1
+fi
 printf "$script_header" "$tmp" >"$tmp/sudo"
 cat >>"$tmp/sudo" <<'INSTALL'
 printf '%s\n' "$*" >>"$tmp/install-calls"
@@ -104,7 +112,7 @@ if [[ $1 == /usr/sbin/visudo ]]; then
     /usr/sbin/visudo -cf "$3"
 fi
 INSTALL
-PATH="$tmp:$PATH" bash "$root/scripts/install-demo-firewall.sh"
+PATH="$tmp:$PATH" bash "$tmp/installer"
 [[ $(wc -l <"$tmp/install-calls") == 5 ]]
 grep -Fxq "$(id -un) ALL=(root) NOPASSWD: /usr/local/libexec/durpdeploy-demo-firewall" "$tmp/sudoers"
 grep -Fq -- '-o root -g root -m 0755' "$tmp/install-calls"
@@ -112,7 +120,7 @@ grep -Fq -- '-o root -g root -m 0440' "$tmp/install-calls"
 printf '#!/bin/bash\necho bad,user\n' >"$tmp/id"
 chmod 0755 "$tmp/id"
 : >"$tmp/install-calls"
-if PATH="$tmp:$PATH" bash "$root/scripts/install-demo-firewall.sh" >/dev/null 2>&1; then
+if PATH="$tmp:$PATH" bash "$tmp/installer" >/dev/null 2>&1; then
     echo 'FAIL: installer accepted sudoers metacharacters in account name' >&2; exit 1
 fi
 [[ ! -s "$tmp/install-calls" ]]
