@@ -417,16 +417,19 @@ auth-mfa-e2e:
 
 # Runs the strict Playwright browser contract in the shared CI image. The source checkout
 # and secret-free evidence directory stay on the host; Docker owns the browser.
-MOBILE_BROWSER_IMAGE ?= durpdeploy-mobile-browser:local
+MOBILE_BROWSER_IMAGE ?=
 MOBILE_BROWSER_RUN_ID ?= local-$$(date -u +%Y%m%dT%H%M%SZ)-$$$$
 
 mobile-browser-container:
-	mkdir -p artifacts/mobile
-	docker build -f Dockerfile.mobile-browser -t $(MOBILE_BROWSER_IMAGE) .
+	run_id="$(MOBILE_BROWSER_RUN_ID)"; \
+	image="$(MOBILE_BROWSER_IMAGE)"; \
+	if [ -z "$$image" ]; then image="durpdeploy-mobile-browser:$$run_id"; fi; \
+	mkdir -p artifacts/mobile && \
+	docker build -f Dockerfile.mobile-browser -t "$$image" . && \
 	docker run --rm --init \
 		--entrypoint /usr/local/bin/mobile-browser-container \
-		-e MOBILE_RUN_ID="$(MOBILE_BROWSER_RUN_ID)" \
+		-e MOBILE_RUN_ID="$$run_id" \
 		-e MOBILE_ARTIFACT_DIR=/artifacts \
 		-v "$(CURDIR):/workspace" \
 		-v "$(CURDIR)/artifacts/mobile:/artifacts" \
-		$(MOBILE_BROWSER_IMAGE)
+		"$$image"

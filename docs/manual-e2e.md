@@ -104,6 +104,26 @@ configured `E2E_ADMIN_EMAIL` (default `e2e-admin@test.local`); use the password
 you configured, or the default test password `e2e-admin-password-1234`.
 The command also ensures the test admin `admin@durp.info` exists.
 
+For concurrent agent work, use a separate worktree and isolated server per
+agent. `make e2e-test-isolated` chooses its own browser port, agent listener,
+SQLite database, identity directory, and container namespace. Ordinary Go
+test processes also replace inherited container namespaces before constructing
+runners. Keep generated assets current in each worktree before Go tests.
+Startup cleanup can only affect containers belonging to that test process.
+
+Run `DURPDEPLOY_CONTAINER_RUNTIME=podman bash scripts/e2e_parallel_test.sh`
+to exercise two simultaneous API/web staging and retry suites. It also checks
+that an occupied explicit port fails and a neighboring container survives Go
+test startup. CI runs the same regression with Docker.
+
+The isolated suite prints its chosen URL and namespace. Set
+`DURPDEPLOY_E2E_PORT` or `DURPDEPLOY_CONTAINER_NAMESPACE` only when you own
+that port or namespace; explicit overrides must be unique across concurrent
+runs. Browser and HTTP failure evidence uses a separate run directory by
+default. Explicit evidence-directory overrides must also belong to one run.
+`make e2e-test` intentionally changes its configured running instance and
+retains examples; concurrent agents must each point it at their own instance.
+
 Projects, environments, lifecycle stages, release snapshots, deployment logs,
 templates, and test users remain in the database. Steps removed during tests
 remain in immutable release snapshots: deploy the named release to repeat

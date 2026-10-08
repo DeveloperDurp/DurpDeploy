@@ -1,7 +1,7 @@
 import { createHmac } from "node:crypto";
 import { chromium } from "playwright";
 import { mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 
 import {
 	addAuthenticator,
@@ -463,7 +463,7 @@ async function fallbackContract(browser, url, kind, errors) {
 async function run() {
 	const app = await startApp(root);
 	const artifactDir = process.env.DURPDEPLOY_MFA_ARTIFACT_DIR ||
-		join(root, ".omo", "evidence", "task-14-browser");
+		join(root, ".omo", "evidence", "task-14-browser", basename(app.dir));
 	let browser;
 	try {
 		await mkdir(artifactDir, { recursive: true });
@@ -499,7 +499,7 @@ async function run() {
 		await fallbackContract(browser, app.url, "unsupported", browserErrors);
 		await passkeyLogin(deployerPage, app.url);
 		emitScenario("webauthn-login-ceremony");
-		await deployerPage.goto("http://127.0.0.1:8081/login");
+		await deployerPage.goto(`${app.url.replace("localhost", "127.0.0.1")}/login`);
 		await deployerPage.locator('input[name="email"]').fill("deployer@mfa.test");
 		await deployerPage.locator('input[name="password"]').fill(passwords.deployer);
 		await deployerPage.getByRole("button", { name: "Login" }).click();
