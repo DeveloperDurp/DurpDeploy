@@ -283,6 +283,9 @@ need to trigger deploys. Full details in [`docs/roles.md`](docs/roles.md).
 
 ## Security
 
+Pinned Go vulnerability, source-analysis, and secret-scanning gates run in CI.
+See [local commands, blocking policy, and reviewed baseline](docs/security-scanning.md).
+
 The threat model — what DurpDeploy defends against, what it doesn't, and the
 five-minute hands-on attack drill — is documented in
 [`docs/attack-drill.md`](docs/attack-drill.md). The summary:

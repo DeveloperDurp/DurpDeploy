@@ -1,0 +1,72 @@
+name: Security gates
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main]
+  schedule:
+    - cron: '23 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  scan:
+    name: Go and secret scanning
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GOFLAGS: -mod=readonly
+      GOTOOLCHAIN: go1.26.8
+      PR_BASE: ${{ github.event.pull_request.base.sha }}
+      PR_HEAD: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: '1.26.8'
+          cache: true
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+      - name: Verify CI contract
+        run: bash scripts/check-ci-contract.sh
+      - name: Prepare pinned tools and generated Go assets
+        id: prepare
+        run: make security-tools templ-generate swagger-ui-copy
+      - name: Prove detection, error handling, and report redaction
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        run: make security-scan-test
+      - name: Verify bounded token telemetry through the public API
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        run: go test -race -count=1 -run '^TestAPITokenTelemetryE2E$' ./internal/handler/api
+      - name: Reachable Go vulnerabilities
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        run: bash scripts/security_scan.sh govulncheck
+      - name: Contextual Go source analysis
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        run: bash scripts/security_scan.sh gosec
+      - name: Git history and current-tree credentials
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        run: |
+          if [[ -n "$PR_BASE" && -n "$PR_HEAD" ]]; then
+            export SECURITY_GIT_RANGE="$PR_BASE..$PR_HEAD"
+          fi
+          bash scripts/security_scan.sh gitleaks
+      - name: Publish safe evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: security-reports
+          path: artifacts/security/
+          retention-days: 7
+          if-no-files-found: warn

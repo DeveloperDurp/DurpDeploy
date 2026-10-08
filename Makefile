@@ -342,6 +342,22 @@ verify: golines-check templ-generate swagger-ui-copy e2e-test-isolated
 sonar-issues:
 	./scripts/sonar_issues.sh $(PR)
 
+# Task-local binaries; Go's checksum database verifies pinned modules.
+.PHONY: security-tools security-scan security-scan-test
+security-tools:
+	mkdir -p bin/security
+	GOTOOLCHAIN=go1.26.8 GOBIN="$(CURDIR)/bin/security" go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
+	GOTOOLCHAIN=go1.26.8 GOBIN="$(CURDIR)/bin/security" go install github.com/securego/gosec/v2/cmd/gosec@v2.29.0
+	GOTOOLCHAIN=go1.26.8 GOBIN="$(CURDIR)/bin/security" go install github.com/zricethezav/gitleaks/v8@v8.30.1
+
+security-scan: templ-generate swagger-ui-copy
+	@result=0; for scanner in govulncheck gosec gitleaks; do \
+		bash scripts/security_scan.sh $$scanner || result=1; \
+	done; exit $$result
+
+security-scan-test:
+	bash scripts/security_scan_test.sh
+
 # Running-server E2E checks. Start `make dev` (or the matching database dev
 # target) in another terminal first; this target never starts another server.
 e2e-test:
