@@ -59,23 +59,45 @@ templ TemplateFormFragment(tpl *db.StepTemplate, isNew bool, errorMsg string) {
 }
 
 templ TemplateFormContent(tpl *db.StepTemplate, isNew bool, errorMsg string) {
-	<div class="max-w-2xl mx-auto">
-		<h1 class="text-3xl font-bold mb-6">
+	@components.Breadcrumbs([]components.Crumb{
+		{Label: "Home", Href: "/"},
+		{Label: "Templates", Href: "/templates"},
+		{Label: tplFormTitle(isNew)},
+	})
+	<div class="w-full" data-create-form>
+		<div class="page-header">
+			<h1 class="text-3xl font-bold">
+				if isNew {
+					New Template
+				} else {
+					Edit Template
+				}
+			</h1>
 			if isNew {
-				New Template
+				<div class="flex gap-2">
+					<button type="submit" form="template-settings-form" class="btn btn-primary md:btn-sm">Save</button>
+					<a href="/templates" class="btn btn-ghost md:btn-sm" x-data="backNavigation" @click="back">Cancel</a>
+				</div>
 			} else {
-				Edit Template
+				<div class="flex flex-wrap gap-2">
+					<button type="submit" form="template-settings-form" class="btn btn-primary md:btn-sm">Save</button>
+					<a data-template-action="history" href={ templ.SafeURL("/templates/" + strconv.FormatInt(tpl.ID, 10) + "/history") } class="btn btn-ghost md:btn-sm">History</a>
+					<a href="/templates" class="btn btn-ghost md:btn-sm" x-data="backNavigation" @click="back">Back</a>
+				</div>
 			}
-		</h1>
+		</div>
 		<form
+			id="template-settings-form"
 			x-data={ components.StepPlacementData(db.Step{ExecutionTarget: tpl.ExecutionTarget, AgentExecutionMode: tpl.AgentExecutionMode}, "") }
 			if isNew {
 				method="post"
 				action="/templates"
+				hx-post="/templates"
 			} else {
 				hx-put={ "/templates/" + strconv.FormatInt(tpl.ID, 10) }
-				hx-target="#form-container"
-				hx-swap="innerHTML"
+				hx-target="closest [data-create-form]"
+				hx-select="[data-create-form]"
+				hx-swap="outerHTML"
 				data-toast-success="Template updated"
 				data-toast-error="Failed to update template"
 			}
@@ -155,16 +177,25 @@ templ TemplateFormContent(tpl *db.StepTemplate, isNew bool, errorMsg string) {
 				</label>
 				<textarea name="script_body" class="textarea textarea-bordered" rows="6">{ tpl.ScriptBody }</textarea>
 			</div>
-			<div class="flex gap-2">
-				<button type="submit" class="btn btn-primary">
-					if isNew {
-						Create
-					} else {
-						Update
-					}
-				</button>
-				<a href="/templates" class="btn btn-ghost">Cancel</a>
-			</div>
 		</form>
+		if !isNew && CanWrite(ctx) {
+			<div class="mt-6 pt-4 border-t border-base-300 flex flex-wrap items-center justify-between gap-4">
+				<div class="font-medium">Delete this template</div>
+				<button
+					type="button"
+					data-template-action="delete"
+					hx-delete={ "/templates/" + strconv.FormatInt(tpl.ID, 10) }
+					hx-target="#form-container"
+					hx-swap="innerHTML"
+					hx-replace-url="/templates"
+					hx-confirm="Delete this template?"
+					class="btn btn-error"
+					data-toast-success="Template deleted"
+					data-toast-error="Failed to delete template"
+				>
+					Delete template
+				</button>
+			</div>
+		}
 	</div>
 }

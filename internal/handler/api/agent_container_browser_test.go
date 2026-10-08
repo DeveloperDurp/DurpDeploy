@@ -188,7 +188,7 @@ func TestAgentContainerBrowserE2E(t *testing.T) {
 	browser.wire.events = nil
 	browser.evaluate(
 		t,
-		`document.querySelector('form[action="/templates"] button[type=submit]').click(); true`,
+		`document.querySelector('button[form="template-settings-form"]').click(); true`,
 	)
 	fleetBrowserLoaded(t, browser)
 	browser.wait(
@@ -233,7 +233,7 @@ func TestAgentContainerBrowserE2E(t *testing.T) {
 	browser.wait(t, `document.querySelector('[name=container_image]').disabled`)
 	browser.evaluate(
 		t,
-		`document.querySelector('form[hx-put="/templates/1"] button[type=submit]').click(); true`,
+		`document.querySelector('button[form="template-settings-form"]').click(); true`,
 	)
 	browser.wait(
 		t,
@@ -247,8 +247,12 @@ func TestAgentContainerBrowserE2E(t *testing.T) {
 	}
 	// Dynamic runbook arrays preserve each step's mode and empty host image.
 	fleetBrowserNavigate(t, browser, srv.URL+base+"/runbooks/new")
-	browser.wait(t, `document.querySelector('[name=step_agent_mode]') !== null`)
 	set("name", "browser-runbook")
+	browser.evaluate(
+		t,
+		`document.querySelector('#runbook-version-form button.btn-secondary').click(); true`,
+	)
+	browser.wait(t, `document.querySelector('dialog').matches(':modal')`)
 	set("step_name", "container")
 	set("step_script", "echo container")
 	set("step_target", "agent")
@@ -258,26 +262,36 @@ func TestAgentContainerBrowserE2E(t *testing.T) {
 	capture("runbook-new")
 	browser.evaluate(
 		t,
+		`document.querySelector('dialog button[type=submit]').click(); true`,
+	)
+	browser.wait(t, `!document.querySelector('dialog').open`)
+	browser.evaluate(
+		t,
 		`Array.from(document.querySelectorAll('button')).find(e => e.textContent.trim() === 'Add step').click(); true`,
 	)
 	browser.wait(
 		t,
-		`document.querySelectorAll('[name=step_name]').length === 2`,
+		`document.querySelector('dialog').matches(':modal')`,
 	)
-	browser.evaluate(t, `(() => {
-		for (const [name,value] of [['step_name','host'],['step_script','echo host'],['step_target','agent']]) {
-			const e=document.querySelectorAll('[name='+name+']')[1]; e.value=value;
-			e.dispatchEvent(new Event('input',{bubbles:true})); e.dispatchEvent(new Event('change',{bubbles:true}));
-		} return true;
-	})()`)
+	set("step_name", "host")
+	set("step_script", "echo host")
+	set("step_target", "agent")
 	browser.wait(
 		t,
-		`document.querySelectorAll('[name=step_image]:not([type=hidden])')[1].disabled`,
+		`document.querySelector('dialog [name=step_image]').disabled`,
+	)
+	browser.evaluate(
+		t,
+		`document.querySelector('dialog button[type=submit]').click(); true`,
+	)
+	browser.wait(
+		t,
+		`!document.querySelector('dialog').open && document.querySelectorAll('#runbook-version-form [name=step_name]').length === 2`,
 	)
 	browser.wire.events = nil
 	browser.evaluate(
 		t,
-		`document.querySelector('form[action$="/runbooks"] button[type=submit]').click(); true`,
+		`document.querySelector('button[form="runbook-version-form"]').click(); true`,
 	)
 	fleetBrowserLoaded(t, browser)
 	version, err := h.repo.Queries.GetLatestRunbookVersion(t.Context(), 1)
@@ -301,9 +315,13 @@ func TestAgentContainerBrowserE2E(t *testing.T) {
 		t.Fatalf("snapshot=%+v", snapshot)
 	}
 	fleetBrowserNavigate(t, browser, srv.URL+base+"/runbooks/1/edit")
+	browser.evaluate(
+		t,
+		`document.querySelector('#runbook-version-form button.btn-secondary').click(); true`,
+	)
 	browser.wait(
 		t,
-		`document.querySelector('[name=step_agent_mode]:not(:disabled)').value === 'container' && document.querySelector('[name=step_variable_names]').value === 'DEPLOY_ENV'`,
+		`document.querySelector('dialog').matches(':modal') && document.querySelector('dialog [name=step_agent_mode]').value === 'container' && document.querySelector('dialog [name=step_variable_names]').value === 'DEPLOY_ENV'`,
 	)
 	capture("runbook-edit")
 }

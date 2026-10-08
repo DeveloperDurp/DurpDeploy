@@ -281,7 +281,7 @@ func (q *Queries) GetLastRemoteStepLogSequence(ctx context.Context, arg GetLastR
 }
 
 const getRemoteStepLogBySequence = `-- name: GetRemoteStepLogBySequence :one
-SELECT l.id, l.deployment_id, l.step_name, l.line, l.created_at FROM deployment_logs l
+SELECT l.id, l.deployment_id, l.step_name, l.line, l.created_at, l.step_index, l.step_state FROM deployment_logs l
 JOIN remote_step_log_sequences s ON s.log_id = l.id
 WHERE s.deployment_id = ? AND s.step_index = ? AND s.agent_id = ?
   AND s.sequence = ?
@@ -308,6 +308,8 @@ func (q *Queries) GetRemoteStepLogBySequence(ctx context.Context, arg GetRemoteS
 		&i.StepName,
 		&i.Line,
 		&i.CreatedAt,
+		&i.StepIndex,
+		&i.StepState,
 	)
 	return i, err
 }
@@ -430,7 +432,7 @@ func (q *Queries) ListRemoteStepRuns(ctx context.Context, arg ListRemoteStepRuns
 }
 
 const listRemoteStepRunsForRunner = `-- name: ListRemoteStepRunsForRunner :many
-SELECT r.agent_id, r.state, a.draining FROM remote_step_runs r
+SELECT r.agent_id, r.state, r.started_at, a.draining FROM remote_step_runs r
 JOIN agents a ON a.id = r.agent_id
 WHERE r.deployment_id = ? AND r.step_index = ? ORDER BY r.agent_id
 `
@@ -441,9 +443,10 @@ type ListRemoteStepRunsForRunnerParams struct {
 }
 
 type ListRemoteStepRunsForRunnerRow struct {
-	AgentID  string `json:"agent_id"`
-	State    string `json:"state"`
-	Draining int64  `json:"draining"`
+	AgentID   string        `json:"agent_id"`
+	State     string        `json:"state"`
+	StartedAt sql.NullInt64 `json:"started_at"`
+	Draining  int64         `json:"draining"`
 }
 
 func (q *Queries) ListRemoteStepRunsForRunner(ctx context.Context, arg ListRemoteStepRunsForRunnerParams) ([]ListRemoteStepRunsForRunnerRow, error) {
@@ -455,7 +458,12 @@ func (q *Queries) ListRemoteStepRunsForRunner(ctx context.Context, arg ListRemot
 	var items []ListRemoteStepRunsForRunnerRow
 	for rows.Next() {
 		var i ListRemoteStepRunsForRunnerRow
-		if err := rows.Scan(&i.AgentID, &i.State, &i.Draining); err != nil {
+		if err := rows.Scan(
+			&i.AgentID,
+			&i.State,
+			&i.StartedAt,
+			&i.Draining,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

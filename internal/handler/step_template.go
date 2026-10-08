@@ -34,7 +34,7 @@ func (h *StepTemplateHandler) ListTemplates(
 		return
 	}
 
-	if r.Header.Get("HX-Request") == "true" {
+	if isFragmentRequest(r) {
 		if err := pages.TemplatesListContent(templates).
 			Render(r.Context(), w); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -189,6 +189,15 @@ func (h *StepTemplateHandler) CreateTemplate(
 		return
 	}
 
+	if retargetFormDialog(w, r, "#templates-content") {
+		h.ListTemplates(w, r)
+		return
+	}
+
+	if r.Header.Get("HX-Request") == "true" {
+		w.Header().Set("HX-Redirect", "/templates")
+		return
+	}
 	http.Redirect(w, r, "/templates", http.StatusSeeOther)
 }
 
@@ -335,7 +344,7 @@ func (h *StepTemplateHandler) UpdateTemplate(
 		return
 	}
 
-	_, err = h.repo.UpdateStepTemplateWithPlacement(
+	updated, err := h.repo.UpdateStepTemplateWithPlacement(
 		r.Context(),
 		params,
 		target,
@@ -378,6 +387,17 @@ func (h *StepTemplateHandler) UpdateTemplate(
 		return
 	}
 
+	if retargetFormDialog(w, r, "#templates-content") {
+		h.ListTemplates(w, r)
+		return
+	}
+	if r.Header.Get("HX-Request") == "true" {
+		if err := pages.TemplateFormFragment(&updated, false, "").
+			Render(r.Context(), w); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
 	http.Redirect(w, r, "/templates", http.StatusSeeOther)
 }
 
@@ -397,6 +417,10 @@ func (h *StepTemplateHandler) DeleteTemplate(
 		return
 	}
 
+	if retargetFormDialog(w, r, "#templates-content") {
+		h.ListTemplates(w, r)
+		return
+	}
 	http.Redirect(w, r, "/templates", http.StatusSeeOther)
 }
 
@@ -431,7 +455,7 @@ func (h *StepTemplateHandler) ListTemplateHistory(
 		return
 	}
 
-	if r.Header.Get("HX-Request") == "true" {
+	if isFragmentRequest(r) {
 		if err := pages.TemplateHistoryContent(tpl, versions).
 			Render(r.Context(), w); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)

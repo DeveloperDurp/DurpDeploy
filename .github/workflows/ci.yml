@@ -45,6 +45,8 @@ jobs:
           GOFLAGS: -mod=readonly
       - name: Test development agent lifecycle
         run: make dev-agent-test
+      - name: Test development encryption key persistence
+        run: make dev-secret-key-test
       - name: Test demo lifecycle safety
         run: make demo-test
 
@@ -292,7 +294,7 @@ jobs:
       - name: Verify ZIP artifact API, web forms, and container mounts
         env:
           DURPDEPLOY_CONTAINER_RUNTIME: docker
-        run: go test -tags=e2e -count=1 -run '^(TestArtifactsAPIWebContainerE2E|TestArtifactCredentialRotationE2E|TestArtifactSourceReplacementE2E|TestDeploymentStagingCleanupE2E)$' ./internal/handler/api
+        run: go test -tags=e2e -count=1 -run '^(TestArtifactsAPIWebContainerE2E|TestArtifactCredentialRotationE2E|TestArtifactSourceReplacementE2E|TestDeploymentStagingCleanupE2E|TestDeploymentStagingFailureAPIWebE2E|TestDeploymentStepLogsAPIWebE2E|TestDeploymentStepLogOutcomesAPIWebE2E|TestPageNavigationHTTPAPIWebE2E)$' ./internal/handler/api
 
       - name: Verify generated artifact approvals and live Terraform
         env:
@@ -355,7 +357,7 @@ jobs:
   package-browser:
     name: Package repository browser
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     env:
       DURPDEPLOY_CONTAINER_RUNTIME: docker
       DURPDEPLOY_PACKAGE_UI_EVIDENCE: ${{ github.workspace }}/artifacts/package-ui
@@ -371,14 +373,26 @@ jobs:
         run: |
           go tool templ generate
           make swagger-ui-copy
-      - name: Verify singleton setup, authentication fields, and version test
-        run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^TestPackageRepositoryBrowserE2E$' ./internal/handler/api
+      - name: Verify navigation, caching, and package repositories
+        run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^Test(ThemeStyles|PackageRepository|PackageRepositoryBack|BackNavigation|BackHistory|PageNavigation|PageNavigationExpiredSession|OIDCNavigation)BrowserE2E$' ./internal/handler/api
+      - name: Verify mobile lists and dashboard updates
+        run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^Test(DeploymentMobile|DeploymentListMobile|ResourceListMobile|HomeMobile|HomeRunningPoll|MainPagePattern)BrowserE2E$' ./internal/handler/api
+      - name: Verify forms and dialogs
+        run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^Test(ProjectEditModal|ResourceCreateModal|ResourceEditModal|StepEditModal|StepAddModal|MobileFormFocus|RunbookEditor|AlpineEditForms|AlpineDialogs|RunningServer)BrowserE2E$' ./internal/handler/api
+      - name: Verify deployment step logs
+        run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^Test(DeploymentStepLogs|DeploymentStepLogsHistoricalQuiet|DeploymentStagingFailure)BrowserE2E$' ./internal/handler/api
       - name: Verify verification forms, polling, and rollback in Chromium
         run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^TestVerification(Rollback|Polling|CleanupRetry)BrowserE2E$' ./internal/handler/api
       - name: Verify environment queue position, permissions, and cancellation
         run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^TestEnvironmentQueueBrowserE2E$' ./internal/handler/api
       - name: Verify artifact approval controls in Chromium
-        run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^TestArtifactGateBrowserE2E$' ./internal/handler/api
+        run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^Test(ArtifactGate|TerraformPlanColors)BrowserE2E$' ./internal/handler/api
+
+      - name: Verify the running-instance API and browser suite
+        env:
+          DURPDEPLOY_E2E_RUNNING_SUITE: '1'
+          DURPDEPLOY_E2E_PORT: '18087'
+        run: bash scripts/e2e_test.sh
       - name: Verify agent fleet controls and responsive health pages
         run: go test -tags=e2e,agentbrowser -race -count=1 -timeout=5m -v -run '^(TestAgentFleetBrowserE2E|TestAgentDeleteBrowserE2E|TestDeploymentWaitingForAgentsBrowserE2E)$' ./internal/handler/api
       - name: Verify agent container step, template, and runbook forms

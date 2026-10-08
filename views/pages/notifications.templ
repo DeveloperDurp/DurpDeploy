@@ -142,9 +142,10 @@ templ NotificationEventModal(entry db.ListNotificationEventsRow) {
 		id={ fmt.Sprintf("notification_modal_%d", entry.ID) }
 		x-ref={ fmt.Sprintf("notification_modal_%d", entry.ID) }
 		class="modal"
+		aria-labelledby={ fmt.Sprintf("notification-title-%d", entry.ID) }
 	>
 		<div class="modal-box w-11/12 max-w-2xl rounded-2xl shadow-2xl border border-base-300 bg-base-200">
-			<h3 class="text-lg font-bold mb-4">Notification Event</h3>
+			<h3 id={ fmt.Sprintf("notification-title-%d", entry.ID) } class="text-lg font-bold mb-4">Notification Event</h3>
 			<dl class="grid grid-cols-1 sm:grid-cols-[8rem_1fr] gap-y-2 text-sm">
 				<dt class="text-gray-500">Time</dt>
 				<dd>{ formatUnixTime(entry.CreatedAt) }</dd>

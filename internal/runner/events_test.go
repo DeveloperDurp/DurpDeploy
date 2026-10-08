@@ -419,10 +419,12 @@ func TestRunner_FailsWhenNoAgentSupportsInterpreter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(logs) != 1 || !strings.Contains(
-		logs[0].Line,
-		`no compatible agents support interpreter "python3"`,
-	) {
+	if len(logs) != 3 || logs[0].StepState.String != "failed" ||
+		logs[2].StepState.String != "waiting" ||
+		!strings.Contains(
+			logs[1].Line,
+			`no compatible agents support interpreter "python3"`,
+		) {
 		t.Fatalf("deployment logs = %+v", logs)
 	}
 	runs, err := repo.Queries.ListRemoteStepRuns(
@@ -484,10 +486,12 @@ func TestRunner_RemoteStepWithoutInterpreterDefaultsToBash(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(logs) != 1 || !strings.Contains(
-		logs[0].Line,
-		`no compatible agents support interpreter "bash"`,
-	) {
+	if len(logs) != 3 || logs[0].StepState.String != "failed" ||
+		logs[2].StepState.String != "waiting" ||
+		!strings.Contains(
+			logs[1].Line,
+			`no compatible agents support interpreter "bash"`,
+		) {
 		t.Fatalf("deployment logs = %+v", logs)
 	}
 }

@@ -25,12 +25,12 @@ esac
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	result := make(chan error, 1)
+	writer := attemptLogWriter(t, r, repo, 7)
 	go func() {
 		result <- r.runStepAttempt(ctx, localStepAttempt{
 			deploymentID: 7, attempt: 1,
-			step: deploymentStep{ContainerImage: "registry.example/worker:1", ScriptBody: "exit 0"},
-			logWriter: &broadcastWriter{ctx: t.Context(), repo: repo, broker: r.broker,
-				scrubber: NewScrubber(nil)},
+			step:      deploymentStep{ContainerImage: "registry.example/worker:1", ScriptBody: "exit 0"},
+			logWriter: writer,
 		})
 	}()
 	ticker := time.NewTicker(10 * time.Millisecond)
@@ -82,12 +82,12 @@ esac
 	defer cancel()
 	r.RegisterCancel(11, cancel)
 	result := make(chan error, 1)
+	writer := attemptLogWriter(t, r, repo, 11)
 	go func() {
 		result <- r.runStepAttempt(ctx, localStepAttempt{
 			deploymentID: 11, attempt: 1,
-			step: deploymentStep{ContainerImage: "registry.example/worker:1"},
-			logWriter: &broadcastWriter{ctx: t.Context(), repo: repo, broker: r.broker,
-				scrubber: NewScrubber(nil)},
+			step:      deploymentStep{ContainerImage: "registry.example/worker:1"},
+			logWriter: writer,
 		})
 	}()
 	ticker := time.NewTicker(10 * time.Millisecond)
@@ -143,12 +143,7 @@ esac
 			ContainerImage: "registry.example/worker:1",
 			TimeoutSeconds: 1,
 		},
-		logWriter: &broadcastWriter{
-			ctx:      t.Context(),
-			repo:     repo,
-			broker:   r.broker,
-			scrubber: NewScrubber(nil),
-		},
+		logWriter: attemptLogWriter(t, r, repo, 9),
 	})
 	// Then
 	if err == nil {
@@ -255,8 +250,9 @@ esac
 		t.Context(),
 		created.Deployment.ID,
 	)
-	if err != nil || len(logs) != 1 ||
-		!strings.Contains(logs[0].Line, "container cleanup unconfirmed") {
+	if err != nil || len(logs) != 3 || logs[0].StepState.String != "failed" ||
+		!strings.Contains(logs[1].Line, "container cleanup unconfirmed") ||
+		logs[2].StepState.String != "running" {
 		t.Fatalf("unconfirmed cleanup logs = %+v: %v", logs, err)
 	}
 }

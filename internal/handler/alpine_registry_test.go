@@ -44,23 +44,18 @@ func TestAlpineRegistryDefinesComplianceComponents(t *testing.T) {
 			},
 		},
 		{
-			name:        "releaseDeployRow",
-			constructor: `\(\)`,
-			members:     []string{"forceChecked"},
-		},
-		{
 			name:        "stepFormHost",
 			constructor: `\(\)`,
 			members: []string{
-				"afterRequest",
 				"add",
-				"cancel",
 				"handleEvent",
 			},
 			methods: []string{
-				"afterRequest",
+				"beforeSwap",
+				"afterSwap",
+				"afterSettle",
+				"editClosed",
 				"add",
-				"cancel",
 				"handleEvent",
 			},
 			events: []string{
@@ -180,7 +175,7 @@ func TestAlpineRegistryDefinesComplianceComponents(t *testing.T) {
 		t.Error("production app source must not contain debug console logging")
 	}
 	registryOrder := []string{
-		"toast", "navbar", "deploymentForm", "releaseDeployRow",
+		"toast", "navbar", "deploymentForm",
 		"stepFormHost", "stepEditor", "variablesPage", "deploymentStream",
 	}
 	previous := strings.Index(source, "window.htmx = htmx")
@@ -203,8 +198,8 @@ func TestAlpineRegistryDefinesComplianceComponents(t *testing.T) {
 		`(?ms)Alpine\.data\('stepFormHost'.*?^\}\)\);`,
 	)
 	host := hostPattern.FindString(source)
-	destroyEditor := strings.Index(host, "Alpine.destroyTree(editor)")
-	removeForm := strings.Index(host, "replaceChildren()")
+	destroyEditor := strings.Index(host, "Alpine.destroyTree(child)")
+	removeForm := strings.LastIndex(host, "replaceChildren()")
 	if destroyEditor < 0 || removeForm < 0 || destroyEditor > removeForm {
 		t.Error(
 			"stepFormHost must synchronously destroy editors before removing the form",

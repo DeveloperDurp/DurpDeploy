@@ -124,7 +124,7 @@ func TestEnvironmentQueueFIFOApprovalCancellationAndRecovery(t *testing.T) {
 		}
 		finishQueueFixture(t, restarted, owner.ID, "succeeded")
 		// Then: approval retains creation order, without preempting the owner.
-		active, err := repo.Queries.GetEnvironmentDeploymentSlot(ctx, 1)
+		active, err := repo.Queries.GetDeploymentSlot(ctx, next.ID)
 		if err != nil || active != approval.ID {
 			t.Fatalf("active=%d, want %d: %v", active, approval.ID, err)
 		}
@@ -134,7 +134,7 @@ func TestEnvironmentQueueFIFOApprovalCancellationAndRecovery(t *testing.T) {
 			t.Fatalf("position=%d, want 1: %v", state.QueuePosition, err)
 		}
 		finishQueueFixture(t, restarted, approval.ID, "failed")
-		active, err = repo.Queries.GetEnvironmentDeploymentSlot(ctx, 1)
+		active, err = repo.Queries.GetDeploymentSlot(ctx, next.ID)
 		if err != nil || active != next.ID {
 			t.Fatalf("active=%d, want %d: %v", active, next.ID, err)
 		}
@@ -165,7 +165,7 @@ func TestEnvironmentQueueKeepsUnconfirmedCleanup(t *testing.T) {
 	// When: cleanup cannot confirm that execution stopped.
 	finishQueueFixture(t, repo, first.Deployment.ID, "cleanup_unconfirmed")
 	// Then: the environment remains owned by the uncertain deployment.
-	active, err := repo.Queries.GetEnvironmentDeploymentSlot(ctx, 1)
+	active, err := repo.Queries.GetDeploymentSlot(ctx, first.Deployment.ID)
 	if err != nil || active != first.Deployment.ID {
 		t.Fatalf("active=%d, want %d: %v", active, first.Deployment.ID, err)
 	}

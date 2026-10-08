@@ -28,14 +28,17 @@ templ LifecyclesListPage(rows []LifecycleRow, currentPath string) {
 }
 
 templ LifecyclesListContent(rows []LifecycleRow) {
-	<div class="space-y-4">
-		<div class="flex justify-between items-center">
+	<div id="lifecycles-content" class="space-y-4" x-data="formDialogHost" x-on:htmx:after-settle.camel="afterSettle" x-on:htmx:before-swap.camel="beforeSwap" x-on:form-saved="saved">
+		<div class="page-header">
 			<h1 class="text-3xl font-bold">Lifecycles</h1>
 			if CanWrite(ctx) {
-				<a href="/lifecycles/new" class="btn btn-primary">New Lifecycle</a>
+				@NewResourceButton("/lifecycles/new", "New Lifecycle")
 			}
 		</div>
 		@LifecyclesListFragment(rows)
+		if CanWrite(ctx) {
+			@ResourceFormDialog("New Lifecycle", "[data-create-form]")
+		}
 	</div>
 }
 
@@ -45,57 +48,29 @@ templ LifecyclesListFragment(rows []LifecycleRow) {
 			<div class="card bg-base-200 p-8 text-center">
 				<p class="text-gray-400 mb-4">No lifecycles yet. A lifecycle defines the order in which releases can be promoted across environments (e.g. dev → test → prod).</p>
 				if CanWrite(ctx) {
-					<a href="/lifecycles/new" class="btn btn-primary">New Lifecycle</a>
+					@NewResourceButton("/lifecycles/new", "New Lifecycle")
 				}
 			</div>
 		} else {
-			<table class="table table-zebra table-fixed w-full">
-				<thead>
-					<tr>
- 					<th class="w-1/5">Name</th>
-						<th class="w-2/5 hidden md:table-cell">Description</th>
- 					<th class="w-1/5">Stages</th>
- 					<th class="w-1/5">Actions</th>
-					</tr>
-				</thead>
-				<tbody>
-					for _, row := range rows {
-						@LifecycleListRow(row)
-					}
-				</tbody>
-			</table>
+			<div class="space-y-3">
+				for _, row := range rows {
+					@LifecycleListRow(row)
+				}
+			</div>
 		}
 	</div>
 }
 
 templ LifecycleListRow(row LifecycleRow) {
-	<tr>
-		<td class="truncate font-medium">
-			{ row.Lifecycle.Name }
-		</td>
-		<td class="truncate hidden md:table-cell">
-			if row.Lifecycle.Description.Valid {
-				{ row.Lifecycle.Description.String }
-			} else {
-				<span class="text-gray-500">-</span>
-			}
-		</td>
-		<td class="whitespace-nowrap">{ strconv.FormatInt(row.StageCount, 10) }</td>
-		<td class="flex flex-nowrap gap-2 whitespace-nowrap">
-			if CanWrite(ctx) {
-				<a href={ templ.SafeURL("/lifecycles/" + strconv.FormatInt(row.Lifecycle.ID, 10)) } class="btn btn-sm btn-ghost">Edit</a>
-				<form method="post" action={ templ.SafeURL("/lifecycles/" + strconv.FormatInt(row.Lifecycle.ID, 10)) }>
-					<input type="hidden" name="_method" value="delete"/>
-					<button type="submit" class="btn btn-sm btn-error" hx-confirm="Delete this lifecycle? Projects using it will be unset.">Delete</button>
-				</form>
-			}
-		</td>
-	</tr>
+	@ResourceCardContent(row.Lifecycle.Name, "/lifecycles/" + strconv.FormatInt(row.Lifecycle.ID, 10), CanWrite(ctx)) {
+		<p class="opacity-70">{ row.Lifecycle.Description.String }</p>
+		<p><span class="opacity-70">Stages: </span>{ strconv.FormatInt(row.StageCount, 10) }</p>
+	}
 }
 
 	templ LifecycleForm(lc db.Lifecycle, isEdit bool, errorMsg string) {
-	<div class="space-y-6">
-		<div class="flex justify-between items-center">
+	<div class="space-y-6" data-create-form>
+		<div class="page-header">
 			<h1 class="text-3xl font-bold">
 				if isEdit {
 					Edit Lifecycle
@@ -104,17 +79,28 @@ templ LifecycleListRow(row LifecycleRow) {
 				}
 			</h1>
 			<div class="flex gap-2">
-				<a href="/lifecycles" class="btn btn-ghost btn-sm">Back</a>
+				if !isEdit {
+					<button type="submit" form="lifecycle-settings-form" class="btn btn-primary md:btn-sm">Save</button>
+				}
+				<a href="/lifecycles" class="btn btn-ghost md:btn-sm" x-data="backNavigation" @click="back">
+					if isEdit {
+						Back
+					} else {
+						Cancel
+					}
+				</a>
 			</div>
 		</div>
 		<div class="card bg-base-200 p-4 mt-4">
 		<form
+			id="lifecycle-settings-form"
 			if isEdit {
 				method="post"
 				action={ templ.SafeURL("/lifecycles/" + strconv.FormatInt(lc.ID, 10)) }
 			} else {
 				method="post"
 				action="/lifecycles"
+				hx-post="/lifecycles"
 			}
 			class="space-y-4"
 		>
@@ -136,16 +122,12 @@ templ LifecycleListRow(row LifecycleRow) {
 				</label>
 				<textarea name="description" class="textarea textarea-bordered" rows="3">{ lc.Description.String }</textarea>
 			</div>
-			<div class="flex gap-2">
-				<button type="submit" class="btn btn-primary">
-					if isEdit {
-						Update
-					} else {
-						Create
-					}
-				</button>
- 			<a href="/lifecycles" class="btn btn-ghost">Cancel</a>
-			</div>
+			if isEdit {
+				<div class="flex gap-2">
+					<button type="submit" class="btn btn-primary">Update</button>
+					<a href="/lifecycles" class="btn btn-ghost">Cancel</a>
+				</div>
+			}
 		</form>
 		</div>
 	</div>

@@ -249,10 +249,11 @@ jobs:
 
       - name: Check E2E shell syntax
         run: |
-          for script in scripts/e2e_test.sh scripts/e2e_lifecycle.sh scripts/e2e_wait.sh scripts/e2e_parallel_test.sh scripts/e2e_db_test.sh scripts/terraform_approval_e2e.sh scripts/e2e_server_containers.sh scripts/check_e2e_containers.sh scripts/check_e2e_containers_test.sh; do
+          for script in scripts/e2e_test.sh scripts/e2e_lifecycle.sh scripts/e2e_wait.sh scripts/e2e_parallel_test.sh scripts/e2e_db_test.sh scripts/e2e_fixture_reset.sh scripts/e2e_fixture_reset_test.sh scripts/terraform_approval_e2e.sh scripts/e2e_server_containers.sh scripts/check_e2e_containers.sh scripts/check_e2e_containers_test.sh; do
             bash -n "$script"
           done
-          shellcheck -S error scripts/e2e_test.sh scripts/e2e_lifecycle.sh scripts/e2e_wait.sh scripts/e2e_parallel_test.sh scripts/e2e_db_test.sh scripts/terraform_approval_e2e.sh scripts/e2e_server_containers.sh scripts/check_e2e_containers.sh scripts/check_e2e_containers_test.sh
+          shellcheck -S error scripts/e2e_test.sh scripts/e2e_lifecycle.sh scripts/e2e_wait.sh scripts/e2e_parallel_test.sh scripts/e2e_db_test.sh scripts/e2e_fixture_reset.sh scripts/e2e_fixture_reset_test.sh scripts/terraform_approval_e2e.sh scripts/e2e_server_containers.sh scripts/check_e2e_containers.sh scripts/check_e2e_containers_test.sh
+          bash scripts/e2e_fixture_reset_test.sh
           bash scripts/check_e2e_containers_test.sh
           bash -n scripts/mobile-browser-image-cleanup-test.sh
           shellcheck -S error scripts/mobile-browser-image-cleanup-test.sh

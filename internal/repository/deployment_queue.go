@@ -81,11 +81,30 @@ func (r *Repository) WithDeploymentTx(
 func advanceEnvironmentQueue(
 	ctx context.Context, q *db.Queries, environmentID int64,
 ) error {
-	blockers, err := q.ListEnvironmentQueueBlockers(ctx, environmentID)
+	projects, err := q.ListEnvironmentQueueProjects(ctx, environmentID)
+	if err != nil {
+		return err
+	}
+	for _, deploymentID := range projects {
+		if err := advanceDeploymentQueue(ctx, q, deploymentID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func advanceDeploymentQueue(
+	ctx context.Context, q *db.Queries, deploymentID int64,
+) error {
+	d, err := q.GetDeployment(ctx, deploymentID)
+	if err != nil {
+		return err
+	}
+	blockers, err := q.ListDeploymentQueueBlockers(ctx, deploymentID)
 	if err != nil {
 		return fmt.Errorf("read environment blockers: %w", err)
 	}
-	owner, err := q.GetEnvironmentDeploymentSlot(ctx, environmentID)
+	owner, err := q.GetDeploymentSlot(ctx, deploymentID)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return err
 	}
@@ -93,21 +112,21 @@ func advanceEnvironmentQueue(
 		if errors.Is(err, sql.ErrNoRows) {
 			return q.CreateEnvironmentDeploymentSlot(ctx,
 				db.CreateEnvironmentDeploymentSlotParams{
-					EnvironmentID: environmentID, DeploymentID: blockers[0],
+					EnvironmentID: d.EnvironmentID, DeploymentID: blockers[0],
 				})
 		}
 		return nil
 	}
 	if err == nil {
-		if err := q.DeleteEnvironmentDeploymentSlot(
+		if err := q.DeleteDeploymentSlot(
 			ctx,
-			environmentID,
+			owner,
 		); err != nil {
 			return err
 		}
 		queueAudit(ctx, owner, "deployment_queue_released")
 	}
-	next, err := q.GetNextQueuedDeployment(ctx, environmentID)
+	next, err := q.GetNextQueuedDeployment(ctx, deploymentID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil
 	}
@@ -116,7 +135,7 @@ func advanceEnvironmentQueue(
 	}
 	if err := q.CreateEnvironmentDeploymentSlot(ctx,
 		db.CreateEnvironmentDeploymentSlotParams{
-			EnvironmentID: environmentID, DeploymentID: next,
+			EnvironmentID: d.EnvironmentID, DeploymentID: next,
 		}); err != nil {
 		return err
 	}
@@ -216,9 +235,9 @@ func startLocalDeployment(
 	); err != nil {
 		return false, err
 	}
-	blockers, err := q.ListEnvironmentQueueBlockers(
+	blockers, err := q.ListDeploymentQueueBlockers(
 		ctx,
-		d.EnvironmentID,
+		d.ID,
 	)
 	if err != nil {
 		return false, err

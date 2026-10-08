@@ -3,6 +3,15 @@
 Single-binary Go app: deploy bash scripts against environments with live SSE logs.
 Stack: Go 1.26 + chi + SQLite (modernc.org/sqlite, pure Go, no CGO) + sqlc + goose + templ + HTMX + Alpine + Tailwind/DaisyUI.
 
+## Dependency licenses
+
+All packages used by this project must be open source. Prefer permissive
+licenses such as MIT, BSD, ISC, or Apache-2.0. Check the license of the exact
+version before adding or upgrading a dependency, including its transitive
+dependencies. Do not add proprietary, source-available, revenue-limited, or
+commercial-license-only packages. Keep required license notices with bundled
+assets.
+
 ## Critical build gotcha
 
 `*_templ.go` are **gitignored** (see `.gitignore`). A fresh checkout cannot `go vet`/`go test`/`go build` until templ runs:

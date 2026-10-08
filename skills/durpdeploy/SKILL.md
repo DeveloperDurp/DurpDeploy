@@ -115,11 +115,12 @@ the observed supported protocol, while agent versions remain unverified.
 
 ## Deploy flow (the common ask)
 
-Deployments and runbook executions share a durable FIFO queue per environment.
-Only one item owns the environment, including while it waits for agents or
+Deployments and runbook executions share a durable FIFO queue per project and
+environment pair. Only one item owns that pair, including while it waits for agents or
 verification. Later eligible items have status `queued`; approval waits do not
 own a slot. Approval makes work eligible in original creation order without
-preempting active work. Different environments can execute independently.
+preempting active work. Different projects in the same environment and the
+same project in different environments can execute independently.
 
 Deployment GET/status responses and runbook execution GET responses include
 `queue_position` (1-based for queued work, otherwise 0), plus
@@ -130,7 +131,7 @@ deployment. Server restart preserves order and repairs missed launches.
 Queued runbook cancellation returns `status: "cancelled"`; active runbook
 cancellation returns `status: "cancellation_requested"` while stopping work.
 Unconfirmed container cleanup, lost agents, or unacknowledged cancellation
-keep the environment blocked: a timeout is not proof that execution stopped.
+keep that project/environment pair blocked: a timeout is not proof that execution stopped.
 
 `GET /api/v1/deployments/$ID/status` includes `waiting_for_agents`. It is
 `true` while remote work is queued with no issued claim, and `false` once
@@ -270,6 +271,14 @@ done
       or redeploy while preserving the original terminal result.
 
 ## Post-deployment verification and rollback
+
+`GET /api/v1/deployments/activity` returns 14 UTC calendar days, including
+today, in ascending order: `[{"date":"2026-10-04","counts":{"succeeded":2}}]`.
+Each `counts` object groups deployments by their current status; dates with
+no deployments have `{}`. Only accessible projects are counted (all projects
+for global admins). Runbook executions are excluded. The home-page charts use
+these counts. The API requires a bearer token; the equivalent
+`GET /dashboard/activity` endpoint uses the authenticated web session.
 
 Only global admins can configure verification, because environments are
 shared across projects. `POST /api/v1/environments` and
@@ -416,6 +425,20 @@ have no total lifetime limit, but each event write/flush must finish within
 60 seconds. Consume streams continuously and reconnect after disconnects.
 An operator's reverse proxy may impose additional limits.
 
+Deployment logs also support structured SSE at
+`GET /api/v1/deployments/$DID/logs/stream?format=structured`. Each `log`
+event has an SSE `id` and JSON fields `id`, `line`, `step`, `step_index`
+(nullable for legacy/unassigned output), `created_at`, and optional `state`
+(`waiting`, `running`, `succeeded`, `failed`, or `cancelled`). Step indices
+are zero-based snapshot positions; duplicate names remain separate. State
+events are trusted lifecycle records, not parsed script output. Resume with
+`Last-Event-ID` or an initial `after` query parameter. A terminal deployment
+drains its logs, sends `event: complete` with JSON `status`, then closes;
+clients should close their EventSource on that event. Default SSE/NDJSON and
+plain-text export retain their formats.
+Errors before a structured stream starts use the usual JSON `error` envelope,
+including invalid cursors, missing deployments, and startup failures.
+
 Execution actions are `POST .../$XID/cancel`, `/approve` (admin only),
 and `/retry` (after a terminal status). Retry returns `409` while the source
 execution has a lost or unconfirmed remote outcome; inspect the agent before
@@ -501,8 +524,12 @@ Local steps accept `network_mode` (`none` by default, or `bridge`). Artifact
 gates use `approval_artifact_path`, `approval_review_path`, and
 `approval_review_format` (`summary` or `terraform`), relative to
 `DURPDEPLOY_STAGE_DIR`. A gated deployment pauses before the next step and
-reserves its environment; later deployments queue until it completes, is
+reserves its project/environment slot; later deployments and runbooks for that
+same project and environment queue until it completes, is
 rejected, is cancelled, or expires. Artifact approval retains its queue slot.
+Other projects can deploy to that environment concurrently. The same project
+can also deploy to other environments concurrently. Queue positions and active
+work links refer only to the deployment's project/environment pair.
 Only local deployment steps without retries are
 supported; runbooks and agent steps cannot use gates. Both approval paths and
 an explicit review format are required together; an empty format is rejected.

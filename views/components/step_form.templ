@@ -85,7 +85,7 @@ func StepPlacementData(step db.Step, selectedLabel string) string {
 // CanWrite guards; this is the typed-URL fallback.)
 //
 // ponytail: inline fragment, not a full page — StepForm is rendered
-// into a #add-step-form or #step-row-{id} div via HTMX swap, not as
+// into a #step-edit-content or #step-row-{id} div via HTMX swap, not as
 // a standalone page.
 templ ViewerStepFormMessage() {
 	<div class="p-4 border border-base-300 rounded bg-base-200 text-sm text-gray-400 italic">
@@ -111,11 +111,25 @@ templ StepForm(step db.Step, projectID int64, isNew bool, labels []string, selec
 				data-step-add-form
 				data-toast-success="Step added"
 			} else {
+				data-step-edit-form
 				data-toast-success="Step updated"
 			}
 			data-toast-error="Failed to save step"
 			class="space-y-4"
 		>
+			<div class="page-header sticky -top-6 z-10 bg-base-200 py-2">
+				<h2 id="step-edit-title" class="text-xl font-bold">
+					if isNew {
+						Add Step
+					} else {
+						Edit Step
+					}
+				</h2>
+				<div class="flex gap-2">
+					<button type="submit" class="btn btn-primary md:btn-sm">Save</button>
+					<button type="button" class="btn btn-ghost md:btn-sm" x-on:click="$dispatch('step-form-cancel')">Cancel</button>
+				</div>
+			</div>
 			<div class="form-control">
 				<label class="label" for={ stepInputID(step, isNew, "name") }>
 					<span class="label-text">Name</span>
@@ -210,9 +224,9 @@ templ StepForm(step db.Step, projectID int64, isNew bool, labels []string, selec
 					<pre x-ref="gutter" x-text="lineNumbers" class="select-none text-right px-2 py-2 text-gray-500 bg-base-200 overflow-hidden" rows="4" style="line-height:1.5rem"></pre>
 					<textarea id={ stepInputID(step, isNew, "script") } x-model="script" x-ref="textarea" x-on:scroll="scroll" x-on:input="input" name="script_body" class="textarea textarea-bordered rounded-none border-0 flex-1 !bg-base-100 !text-base-content" style="line-height:1.5rem; color: var(--fallback-bc, oklch(var(--bc) / 1)) !important; -webkit-text-fill-color: var(--fallback-bc, oklch(var(--bc) / 1)) !important" rows="4">{ step.ScriptBody }</textarea>
 				</div>
-				<dialog x-cloak x-show="modalOpen" x-ref="modal" x-on:close="modalOpen = false" class="fixed inset-0 z-50 bg-base-100 text-base-content p-4 flex flex-col gap-4 w-screen h-screen max-w-none max-h-none">
+				<dialog x-cloak :class="{ hidden: !modalOpen }" x-ref="modal" x-id="['script-editor-title']" :aria-labelledby="$id('script-editor-title')" x-on:close="modalOpen = false" class="fixed inset-0 z-50 bg-base-100 text-base-content p-4 flex flex-col gap-4 w-screen h-screen max-w-none max-h-none">
 					<div class="flex items-center justify-between gap-4">
-						<h3 class="text-lg font-semibold">Script Body</h3>
+						<h3 :id="$id('script-editor-title')" class="text-lg font-semibold">Script Body</h3>
 						<button type="button" class="btn btn-sm" x-on:click="$refs.modal.close()">Close</button>
 					</div>
 					<div class="flex min-h-0 flex-1 font-mono text-sm border border-base-300 rounded bg-base-100 overflow-hidden">
@@ -264,20 +278,15 @@ templ StepForm(step db.Step, projectID int64, isNew bool, labels []string, selec
 			<input id={ stepInputID(step, isNew, "retries") } type="number" name="max_retries" min="0" value={ strconv.FormatInt(step.MaxRetries, 10) } class="input input-bordered"/>
 		</div>
 		<input type="hidden" name="sort_order" value={ strconv.FormatInt(step.SortOrder, 10) }/>
-			<div class="flex gap-2">
-				<button type="submit" class="btn btn-primary btn-sm">
-					if isNew {
-						Add Step
-					} else {
-						Update
-					}
-				</button>
-				if isNew {
-					<button type="button" class="btn btn-ghost btn-sm" x-on:click="$dispatch('step-form-cancel')">Cancel</button>
-				} else {
-					<button type="button" class="btn btn-ghost btn-sm" x-on:click="$dispatch('step-form-cancel')" hx-get={ fmt.Sprintf("/projects/%d/steps", projectID) } hx-target="#step-list" hx-swap="innerHTML">Cancel</button>
-				}
+		<input type="hidden" name="dialog" value="1"/>
+		if !isNew {
+			<div class="flex flex-wrap items-center justify-between gap-4 border-t border-base-300 pt-6" data-step-delete-section>
+				<p>Delete this step</p>
+				<button type="button" class="btn btn-error md:btn-sm" data-step-action="delete"
+					hx-delete={ fmt.Sprintf("/projects/%d/steps/%d", projectID, step.ID) }
+					hx-target="#step-list" hx-swap="innerHTML" hx-confirm="Delete this step?">Delete step</button>
 			</div>
+		}
 		</form>
 	</div>
 	}
@@ -372,9 +381,9 @@ templ StepEditRow(step db.Step, projectID int64, labels []string, selectedLabel 
 						<pre x-ref="gutter" x-text="lineNumbers" class="select-none text-right px-2 py-2 text-gray-500 bg-base-200 overflow-hidden" style="line-height:1.25rem"></pre>
 					<textarea id={ fmt.Sprintf("step-%d-script", step.ID) } x-model="script" x-ref="textarea" x-on:scroll="scroll" x-on:input="input" name="script_body" class="textarea textarea-bordered textarea-sm resize-y rounded-none border-0 flex-1 !bg-base-100 !text-base-content" style="line-height:1.25rem; color: var(--fallback-bc, oklch(var(--bc) / 1)) !important; -webkit-text-fill-color: var(--fallback-bc, oklch(var(--bc) / 1)) !important" rows="2">{ step.ScriptBody }</textarea>
 					</div>
-					<dialog x-cloak x-show="modalOpen" x-ref="modal" x-on:close="modalOpen = false" class="fixed inset-0 z-50 bg-base-100 text-base-content p-4 flex flex-col gap-4 w-screen h-screen max-w-none max-h-none">
+					<dialog x-cloak :class="{ hidden: !modalOpen }" x-ref="modal" x-id="['script-editor-title']" :aria-labelledby="$id('script-editor-title')" x-on:close="modalOpen = false" class="fixed inset-0 z-50 bg-base-100 text-base-content p-4 flex flex-col gap-4 w-screen h-screen max-w-none max-h-none">
 						<div class="flex items-center justify-between gap-4">
-							<h3 class="text-lg font-semibold">Script Body</h3>
+							<h3 :id="$id('script-editor-title')" class="text-lg font-semibold">Script Body</h3>
 							<button type="button" class="btn btn-sm" x-on:click="$refs.modal.close()">Close</button>
 						</div>
 						<div class="flex min-h-0 flex-1 font-mono text-sm border border-base-300 rounded bg-base-100 overflow-hidden">

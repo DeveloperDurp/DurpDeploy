@@ -1,10 +1,219 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss" source(none);
+@source "../../views/**/*.templ";
+@source "../js/app.js";
+@source "../js/charts.js";
+
+@theme {
+  --color-rosewater: #f5e0dc;
+  --color-flamingo: #f2cdcd;
+  --color-pink: #f5c2e7;
+  --color-mauve: #cba6f7;
+  --color-red: #f38ba8;
+  --color-maroon: #eba0ac;
+  --color-peach: #fab387;
+  --color-yellow: #f9e2af;
+  --color-green: #a6e3a1;
+  --color-teal: #94e2d5;
+  --color-sky: #89dceb;
+  --color-sapphire: #74c7ec;
+  --color-blue: #89b4fa;
+  --color-lavender: #b4befe;
+  --color-text: #cdd6f4;
+  --color-subtext1: #bac2de;
+  --color-subtext0: #a6adc8;
+  --color-overlay2: #9399b2;
+  --color-overlay1: #7f849c;
+  --color-overlay0: #6c7086;
+  --color-surface2: #585b70;
+  --color-surface1: #45475a;
+  --color-surface0: #313244;
+  --color-base: #1e1e2e;
+  --color-mantle: #181825;
+  --color-crust: #11111b;
+}
+
+@plugin "daisyui" {
+  themes: false;
+  exclude: rootscrollgutter;
+}
+
+@plugin "daisyui/theme" {
+  name: "mocha";
+  default: true;
+  prefersdark: false;
+  color-scheme: dark;
+  --color-primary: oklch(76.642% 0.111344 259.884973);
+  --color-primary-content: oklch(15.3284% 0.022269 259.884973);
+  --color-secondary: oklch(78.7146% 0.11867 304.769311);
+  --color-secondary-content: oklch(15.7429% 0.023734 304.769311);
+  --color-accent: oklch(85.8489% 0.079207 182.74949);
+  --color-accent-content: oklch(17.1698% 0.015841 182.74949);
+  --color-neutral: oklch(40.3691% 0.031955 280.152008);
+  --color-neutral-content: oklch(88.0738% 0.006391 280.152008);
+  --color-base-100: oklch(24.2867% 0.030357 283.910973);
+  --color-base-200: oklch(21.5522% 0.025417 284.064702);
+  --color-base-300: oklch(18.2782% 0.020375 284.203852);
+  --color-base-content: oklch(84.8573% 0.006071 283.910973);
+  --color-info: oklch(84.6711% 0.083336 210.254523);
+  --color-info-content: oklch(16.9342% 0.016667 210.254523);
+  --color-success: oklch(85.7704% 0.109229 142.715274);
+  --color-success-content: oklch(17.1541% 0.021846 142.715274);
+  --color-warning: oklch(91.9303% 0.070415 86.528084);
+  --color-warning-content: oklch(18.3861% 0.014083 86.528084);
+  --color-error: oklch(75.5592% 0.129702 2.764177);
+  --color-error-content: oklch(15.1118% 0.02594 2.764177);
+  --radius-selector: 0.5rem;
+  --radius-field: 0.5rem;
+  --radius-box: 1rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+}
+
+@plugin "daisyui/theme" {
+  name: "light";
+  default: false;
+  prefersdark: false;
+  color-scheme: light;
+  --color-primary: oklch(49.12% 0.3096 275.75);
+  --color-primary-content: oklch(89.824% 0.06192 275.75);
+  --color-secondary: oklch(69.71% 0.329 342.55);
+  --color-secondary-content: oklch(98.71% 0.0106 342.55);
+  --color-accent: oklch(76.76% 0.184 183.61);
+  --color-accent-content: oklch(15.352% 0.0368 183.61);
+  --color-neutral: oklch(32.1785% 0.02476 255.701624);
+  --color-neutral-content: oklch(89.4994% 0.011585 252.096176);
+  --color-base-100: oklch(100% 0 0);
+  --color-base-200: oklch(96.1151% 0 0);
+  --color-base-300: oklch(92.4169% 0.00108 197.137559);
+  --color-base-content: oklch(27.8078% 0.029596 256.847952);
+  --color-info: oklch(72.06% 0.191 231.6);
+  --color-info-content: oklch(0% 0 0);
+  --color-success: oklch(64.8% 0.150 160);
+  --color-success-content: oklch(0% 0 0);
+  --color-warning: oklch(84.71% 0.199 83.87);
+  --color-warning-content: oklch(0% 0 0);
+  --color-error: oklch(71.76% 0.221 22.18);
+  --color-error-content: oklch(0% 0 0);
+  --radius-selector: 0.5rem;
+  --radius-field: 0.5rem;
+  --radius-box: 1rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+}
 
 [x-cloak] { display: none !important; }
+/* Keep dialog scroll locking without daisyUI's perpetual scroll animation. */
+html { scrollbar-gutter: stable; }
 
-@layer components {
+html:has(#home-deployments) { view-transition-name: none; }
+#home-running { view-transition-name: home-running; }
+#home-waiting { view-transition-name: home-waiting; }
+#home-latest { view-transition-name: home-latest; }
+#home-recent { view-transition-name: home-recent; }
+html:has(#home-deployments)::view-transition-group(*) {
+  animation-duration: 200ms;
+  animation-timing-function: ease-in-out;
+}
+
+@layer utilities.daisyui.l1.l2.l3 {
+  .btn { --size: calc(var(--size-field) * 12); }
+  .input, .select { --size: calc(var(--size-field) * 12); }
+}
+
+@layer utilities {
+  [data-theme="light"] :is([data-artifact-gates], [aria-label="Step logs"]) .text-success {
+    color: color-mix(in oklab, var(--color-success), var(--color-base-content) 55%);
+  }
+  [data-theme="light"] :is([data-artifact-gates], [aria-label="Step logs"]) .text-error {
+    color: color-mix(in oklab, var(--color-error), var(--color-base-content) 55%);
+  }
+  [data-theme="light"] :is([data-artifact-gates], [aria-label="Step logs"]) .text-warning {
+    color: color-mix(in oklab, var(--color-warning), var(--color-base-content) 55%);
+  }
+  .project-menu-dialog {
+    top: var(--project-menu-top);
+    height: calc(100dvh - var(--project-menu-top));
+    align-items: stretch;
+    justify-items: end;
+    padding: 0;
+  }
+  .project-menu-panel {
+    @apply w-96 max-w-[calc(100vw-1rem)] h-full max-h-full rounded-none p-0;
+    translate: none;
+    scale: 1;
+    transition: none;
+  }
+  .project-menu-panel .menu a {
+    @apply min-h-12;
+  }
+  .project-menu-dialog[open] .project-menu-panel {
+    animation: project-menu-enter 200ms ease-out;
+  }
+  @keyframes project-menu-enter {
+    from { transform: translateX(100%); }
+    to { transform: translateX(0); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .project-menu-dialog[open] .project-menu-panel { animation: none; }
+  }
+  .home-deployment-row a {
+    cursor: pointer;
+    transition: background-color 150ms ease, box-shadow 150ms ease;
+  }
+  .home-deployment-row a:hover,
+  .home-deployment-row a:focus-visible {
+    background-color: color-mix(in oklab, var(--color-primary) 18%, transparent);
+    box-shadow: inset 4px 0 var(--color-primary);
+  }
+  .home-deployment-row a:active {
+    background-color: color-mix(in oklab, var(--color-primary) 26%, transparent);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .home-deployment-row a { transition: none; }
+  }
+  /* Shared form and header rules override daisyUI's nested utility layer. */
+  .form-control {
+    @apply flex flex-col;
+  }
+  .label {
+    @apply flex items-center justify-between px-1 py-2 whitespace-normal text-sm text-base-content;
+  }
+  .label-text { @apply text-sm; }
+  .label-text-alt { @apply text-xs; }
+  /* Native close must release the top layer before restoring opener focus. */
+  .modal { transition: background-color 0.3s ease-out, opacity 0.1s ease-out; }
+  .form-control > .input,
+  .form-control > .select,
+  .form-control > .textarea {
+    @apply w-full;
+  }
+  .page-header {
+    @apply grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_auto] items-start gap-4 mb-6;
+  }
+  .page-header > :not(:first-child) {
+    @apply justify-self-end;
+  }
+  .page-header .btn {
+    @apply min-h-8 h-8 px-3 text-sm;
+  }
+  .page-header h1 {
+    @apply min-w-0 max-w-full break-words;
+    overflow-wrap: anywhere;
+  }
+  .page-header > div {
+    @apply min-w-0 max-w-full flex-wrap;
+  }
+  @media (max-width: 767px) {
+    .page-header .btn {
+      @apply min-h-12 h-auto py-2;
+    }
+  }
   /* Tables: fill viewport width, columns scale with window */
   .table {
     width: 100% !important;

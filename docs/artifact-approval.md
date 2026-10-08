@@ -89,8 +89,10 @@ Expired artifacts and decisions are blocked immediately, before that worker runs
 Terminal bundle chunks are deleted after seven days. Audit records retain the
 decision, and gate records retain checksums, counts, times, and approver ID.
 
-An active gated deployment reserves its environment, including while waiting.
-Later deployments enter the environment's FIFO queue. Approval resumes the
+An active gated deployment reserves its project/environment pair, including
+while waiting. Later jobs for that pair enter its FIFO queue. Other projects
+can deploy to the same environment concurrently, and that project can deploy
+to other environments concurrently. Approval resumes the
 same deployment without giving up its slot; rejection, cancellation, or expiry
 releases the slot for the next deployment. Gates
 require local steps with no automatic retries, a later continuation step, and

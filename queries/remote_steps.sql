@@ -18,7 +18,7 @@ SELECT * FROM remote_step_runs
 WHERE deployment_id = ? AND step_index = ? ORDER BY agent_id;
 
 -- name: ListRemoteStepRunsForRunner :many
-SELECT r.agent_id, r.state, a.draining FROM remote_step_runs r
+SELECT r.agent_id, r.state, r.started_at, a.draining FROM remote_step_runs r
 JOIN agents a ON a.id = r.agent_id
 WHERE r.deployment_id = ? AND r.step_index = ? ORDER BY r.agent_id;
 

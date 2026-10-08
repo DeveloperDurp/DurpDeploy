@@ -49,7 +49,8 @@ func TestArtifactGateBrowserE2E(t *testing.T) {
 		)
 		browser.wait(
 			t,
-			`Array.from(document.querySelectorAll('h2')).find(e=>e.textContent==='Currently running')?.parentElement.innerText.includes('awaiting_artifact_approval')`,
+			`document.querySelector('#home-waiting')?.innerText.includes('awaiting_artifact_approval') &&
+			 !document.querySelector('#home-running')?.innerText.includes('awaiting_artifact_approval')`,
 		)
 		if string(
 			browser.evaluate(
@@ -96,14 +97,6 @@ form.querySelector('[name="approval_review_path"]').value='review';
 form.querySelector('[name="approval_review_format"]').value='summary';
 setTimeout(()=>form.requestSubmit(),100); return true;
 })()`)
-			if formPage == "/templates/new" {
-				if err := browser.wire.waitEvent(
-					"Page.loadEventFired",
-					browser.session,
-				); err != nil {
-					t.Fatal(err)
-				}
-			}
 			browser.wait(
 				t,
 				`document.body.innerText.includes('invalid artifact approval configuration') && document.querySelector('[name="container_image"]').value==='docker.io/library/bash:5.2' && document.querySelector('[name="variable_names"]').value==='KEEP_THIS'`,
@@ -229,9 +222,13 @@ setTimeout(()=>form.requestSubmit(),100); return true;
 		) != "false" {
 			t.Fatal("sensitive content leaked")
 		}
+		browser.evaluate(
+			t,
+			`document.querySelector('[data-step-index="0"]').open = true`,
+		)
 		browser.wait(
 			t,
-			`document.querySelector('#log-container')?.innerText.includes('generation-output-visible')`,
+			`document.querySelector('[aria-label="Step logs"]')?.innerText.includes('generation-output-visible')`,
 		)
 		if string(browser.evaluate(t,
 			`document.body.innerText.includes('Sensitive script hidden')`,
@@ -337,6 +334,16 @@ setTimeout(()=>form.requestSubmit(),100); return true;
 					`document.querySelector('[hx-get$="/steps/new"]').click()`,
 				)
 			}
+			if surface.name == "runbook" {
+				browser.evaluate(
+					t,
+					`document.querySelector('#runbook-version-form button.btn-secondary').click()`,
+				)
+				browser.wait(
+					t,
+					`document.querySelector('dialog').matches(':modal')`,
+				)
+			}
 			browser.wait(
 				t,
 				fmt.Sprintf(
@@ -366,11 +373,11 @@ setTimeout(()=>form.requestSubmit(),100); return true;
 			if surface.name == "runbook" {
 				browser.evaluate(
 					t,
-					`const network = document.querySelector('select[name="step_network"]'); network.value = 'bridge'; network.dispatchEvent(new Event('change', {bubbles:true}));`,
+					`const network = document.querySelector('dialog select[name="step_network"]'); network.value = 'bridge'; network.dispatchEvent(new Event('change', {bubbles:true}));`,
 				)
 				browser.evaluate(
 					t,
-					`const target = document.querySelector('[name="step_target"]'); target.value = 'agent'; target.dispatchEvent(new Event('change', {bubbles:true}));`,
+					`const target = document.querySelector('dialog [name="step_target"]'); target.value = 'agent'; target.dispatchEvent(new Event('change', {bubbles:true}));`,
 				)
 				browser.wait(
 					t,
@@ -379,7 +386,7 @@ setTimeout(()=>form.requestSubmit(),100); return true;
 				if string(
 					browser.evaluate(
 						t,
-						`new FormData(document.querySelector('form[x-data]')).getAll('step_network').join(',') === ''`,
+						`new FormData(document.querySelector('dialog form')).getAll('step_network').join(',') === ''`,
 					),
 				) != "true" {
 					t.Fatal("agent form retains network access")
@@ -390,18 +397,20 @@ setTimeout(()=>form.requestSubmit(),100); return true;
 				)
 				browser.evaluate(
 					t,
+					`for (const [name,value] of [['step_name','Agent'],['step_script','true'],['step_selectors','']]) { const field=document.querySelector('dialog [name="'+name+'"]'); field.value=value; field.dispatchEvent(new Event('input',{bubbles:true})); } document.querySelector('dialog form').requestSubmit(); true`,
+				)
+				browser.wait(
+					t,
+					`!document.querySelector('dialog').open && document.querySelector('#runbook-version-form [name="step_target"]').value === 'agent' && document.querySelector('#runbook-version-form [name="step_network"]').value === ''`,
+				)
+				browser.evaluate(
+					t,
 					fmt.Sprintf(
-						`for (const [name,value] of [['name','Agent runbook %d'],['step_name','Agent'],['step_script','true'],['step_selectors','']]) { const field=document.querySelector('[name="'+name+'"]'); field.value=value; field.dispatchEvent(new Event('input',{bubbles:true})); } setTimeout(() => document.querySelector('form[x-data]').requestSubmit(), 100); true`,
+						`document.querySelector('#runbook-version-form [name="name"]').value = 'Agent runbook %d'; document.querySelector('#runbook-version-form').requestSubmit(); true`,
 						width,
 					),
 				)
 				browser.wire.events = nil
-				if err := browser.wire.waitEvent(
-					"Page.loadEventFired",
-					browser.session,
-				); err != nil {
-					t.Fatal(err)
-				}
 				browser.wait(
 					t,
 					`location.pathname.match(/\/runbooks\/\d+$/) && document.readyState === 'complete'`,
@@ -606,7 +615,7 @@ setTimeout(()=>form.requestSubmit(),100); return true;
 		)
 		browser.wait(
 			t,
-			`window.Alpine && document.querySelector('[x-data^="deploymentStream"]') && Alpine.$data(document.querySelector('[x-data^="deploymentStream"]')).source !== null`,
+			`window.Alpine && document.querySelector('[x-data^="deploymentStepLogs"]') && Alpine.$data(document.querySelector('[x-data^="deploymentStepLogs"]')).source !== null`,
 		)
 		if terminal == "rejected" {
 			var gates []struct {
@@ -641,7 +650,7 @@ setTimeout(()=>form.requestSubmit(),100); return true;
 		browser.wait(
 			t,
 			fmt.Sprintf(
-				`document.querySelector('#status-badge')?.innerText.includes('%s') && Alpine.$data(document.querySelector('[x-data^="deploymentStream"]')).source === null`,
+				`document.querySelector('#status-badge')?.innerText.includes('%s') && Alpine.$data(document.querySelector('[x-data^="deploymentStepLogs"]')).source === null`,
 				terminal,
 			),
 		)
@@ -650,6 +659,17 @@ setTimeout(()=>form.requestSubmit(),100); return true;
 			`!document.querySelector('[data-artifact-gates]').hasAttribute('hx-trigger')`,
 		)
 		browser.screenshot(t, "artifact-stream-"+terminal)
+		logs := f.readStepLogs(
+			t,
+			fmt.Sprintf(
+				"/api/v1/deployments/%d/logs/stream?format=structured",
+				next.ID,
+			),
+			"",
+		)
+		if len(logs) == 0 {
+			t.Fatal("terminal approval stream omitted persisted logs")
+		}
 	}
 	var gates json.RawMessage
 	if err := json.Unmarshal(

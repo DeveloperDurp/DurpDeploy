@@ -186,6 +186,8 @@ type DeploymentLog struct {
 	StepName     sql.NullString `json:"step_name"`
 	Line         string         `json:"line"`
 	CreatedAt    int64          `json:"created_at"`
+	StepIndex    sql.NullInt64  `json:"step_index"`
+	StepState    sql.NullString `json:"step_state"`
 }
 
 type DeploymentLogScope struct {
@@ -285,6 +287,7 @@ type Environment struct {
 
 type EnvironmentDeploymentSlot struct {
 	EnvironmentID int64 `json:"environment_id"`
+	ProjectID     int64 `json:"project_id"`
 	DeploymentID  int64 `json:"deployment_id"`
 }
 

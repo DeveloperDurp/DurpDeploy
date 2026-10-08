@@ -91,7 +91,7 @@ func newRouter(
 	// Serve static files from embedded assets (public).
 	r.Handle(
 		"/static/*",
-		http.StripPrefix("/static/", http.FileServer(http.FS(static.Assets))),
+		static.Handler(),
 	)
 	r.Get("/favicon.ico", func(w http.ResponseWriter, req *http.Request) {
 		http.Redirect(
@@ -174,6 +174,9 @@ func newRouter(
 		// Home page
 		indexHandler := handler.NewIndexHandler(repo)
 		pr.Get("/", indexHandler.Index)
+		pr.Get("/dashboard/deployments", indexHandler.RefreshDeployments)
+		pr.Get("/dashboard/activity",
+			api.NewDeploymentHandler(repo, rnr).DeploymentActivity)
 		pr.Post("/logout", authHandler.LogoutPost)
 
 		envHandler := handler.NewEnvironmentHandler(repo)
@@ -665,6 +668,7 @@ func newRouter(
 
 		// Non-scoped deployment list (filtered by query params).
 		ar.Get("/deployments", apiDepH.ListDeployments)
+		ar.Get("/deployments/activity", apiDepH.DeploymentActivity)
 
 		// Deployment-scoped sub-group (deployment → release → project).
 		ar.Group(func(dar chi.Router) {

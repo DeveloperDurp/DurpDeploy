@@ -6,6 +6,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"durpdeploy/static"
 )
 
 func Test_Base_advertises_favicon_in_document_head(t *testing.T) {
@@ -53,7 +55,7 @@ func TestBaseLayoutUsesSingleAlpineEntryPoint(t *testing.T) {
 	}
 	if !strings.Contains(
 		rendered,
-		`<script src="/static/js/app.bundle.js" defer></script>`,
+		`<script src="`+static.URL("js/app.bundle.js")+`" defer></script>`,
 	) {
 		t.Fatal("active Alpine entry is not deferred")
 	}
@@ -63,7 +65,7 @@ func TestBaseLayoutUsesSingleAlpineEntryPoint(t *testing.T) {
 	}
 	activeEntry := strings.Index(
 		rendered,
-		`<script src="/static/js/app.bundle.js"`,
+		`<script src="`+static.URL("js/app.bundle.js")+`"`,
 	)
 	if activeEntry < 0 {
 		t.Fatal("active Alpine entry marker is missing")

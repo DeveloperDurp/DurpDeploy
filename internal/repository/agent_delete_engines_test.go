@@ -158,9 +158,9 @@ func assertAgentDeleteEngineHistory(
 	) {
 		t.Fatalf("retained pairing: %v", err)
 	}
-	blockers, err := repo.Queries.ListEnvironmentQueueBlockers(
+	blockers, err := repo.Queries.ListDeploymentQueueBlockers(
 		t.Context(),
-		d.EnvironmentID,
+		d.ID,
 	)
 	if err != nil || len(blockers) != 0 {
 		t.Fatalf("blockers=%v error=%v", blockers, err)

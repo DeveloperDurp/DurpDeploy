@@ -262,10 +262,10 @@ type swaggerLogEntry struct {
 	Line string `json:"line"`
 }
 
-// LogStreamParams controls the format of StreamLogs.
+// LogStreamParams controls the log stream format.
 // swagger:model LogStreamParams
 type swaggerLogStreamParams struct {
-	// Format is either sse or ndjson.
+	// Format is sse or ndjson; deployment streams also support structured SSE.
 	//
 	// in: query
 	Format string `json:"format"`

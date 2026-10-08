@@ -152,8 +152,8 @@ const allTargets = [
     controls: `#step-row-${config.stepID} [data-step-action]`,
     mobileControls: `[data-mobile-step="${config.stepID}"] [data-step-action]`,
     actionAttribute: "data-step-action",
-    writerActions: ["move-down", "edit", "delete", "save-template"],
-    writerControlCount: 4,
+    writerActions: ["move-down", "edit", "save-template"],
+    writerControlCount: 3,
     desktopTable: "#step-list > table",
     mobileRecord: "[data-mobile-step-list]",
   },
@@ -204,21 +204,10 @@ const allTargets = [
     name: "templates",
     path: "/templates",
     surface: "#templates-content",
-    row: "#templates-list tbody > tr",
-		mobileRow: "[data-mobile-template-list] > li",
-    controls: "#templates-list tbody > tr [data-template-action]",
-		mobileControls: "[data-mobile-template-list] [data-template-action]",
-    writerControls: "#templates-list tbody > tr [data-template-action]:not([data-template-action=history])",
-		mobileWriterControls: "[data-mobile-template-list] [data-template-action]:not([data-template-action=history])",
-    actionAttribute: "data-template-action",
-    writerActions: ["edit", "delete"],
-    writerControlCount: 2,
-    disclosure: `[data-disclosure="template-script-${config.templateID}"]`,
-		mobileDisclosure: `[data-disclosure="template-script-mobile-${config.templateID}"]`,
-		desktopTable: "#templates-list > table",
-		mobileRecord: "[data-mobile-template-list]",
-		mobileUntilWidth: 1024,
-		singleLineControls: true,
+    row: "#templates-list [data-resource-card]",
+    controls: "#templates-list [data-resource-card] a",
+    writerControls: "#templates-list [data-resource-card] a[href$='/edit']",
+    writerControlCount: 1,
   },
   {
     name: "template-history",
@@ -237,8 +226,10 @@ const allTargets = [
     name: "projects",
     path: "/projects",
     surface: "#projects-list",
-    row: "#projects-list > div > table > tbody > tr",
-    controls: "#projects-list button",
+    row: "#projects-list [data-resource-card]",
+    controls: "#projects-list [data-resource-card] a",
+    writerControls: "#projects-list a[href$='/new'], #projects-list a[href$='/edit']",
+    readOnly: true,
   },
   {
     name: "audit",
@@ -848,14 +839,14 @@ async function mobileInteractionFailure(page, target, viewport) {
         element.setAttribute("data-desktop-interaction-probe", "before");
       });
       await row.locator('[data-step-action="edit"]').click();
-      const editor = page.locator(`#step-row-${config.stepID} form`);
+      const editor = page.locator('#step-edit-dialog[open] form[data-step-edit-form]');
       await editor.waitFor({ state: "visible", timeout: 2_000 });
-      if (await row.getAttribute("data-desktop-interaction-probe") === "before") {
-        return "steps desktop edit did not swap the visible table row";
+      if (await row.getAttribute("data-desktop-interaction-probe") !== "before") {
+        return "steps desktop edit replaced the table row instead of opening a modal";
       }
       return null;
     } catch {
-      return "steps desktop edit did not render a visible table-row form";
+      return "steps desktop edit did not render a visible modal form";
     }
   }
   if (viewport.name !== "phone" || config.role === "viewer") {
@@ -865,11 +856,11 @@ async function mobileInteractionFailure(page, target, viewport) {
     try {
       const record = page.locator(`[data-mobile-step="${config.stepID}"]`);
       await record.locator('[data-step-action="edit"]').click();
-      const editor = record.locator(`[data-mobile-step-editor="${config.stepID}"] form`);
+      const editor = page.locator('#step-edit-dialog[open] form[data-step-edit-form]');
       await editor.waitFor({ state: "visible", timeout: 2_000 });
       return null;
     } catch {
-      return "steps mobile edit did not render a visible mobile form";
+      return "steps mobile edit did not render a visible modal form";
     }
   }
 	if (target.name === "schedules" || target.name === "variables") {

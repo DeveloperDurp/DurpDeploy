@@ -114,7 +114,7 @@ func TestAlpineCompliancePolicy(t *testing.T) {
 	t.Run("registry and generated assets comply", func(t *testing.T) {
 		app := readComplianceFile(t, repositoryRoot, "static/js/app.js")
 		order := []string{
-			"toast", "navbar", "deploymentForm", "releaseDeployRow",
+			"toast", "navbar", "deploymentForm",
 			"stepFormHost", "stepEditor", "variablesPage", "deploymentStream",
 		}
 		previous := strings.Index(app, "window.htmx = htmx")
@@ -134,7 +134,9 @@ func TestAlpineCompliancePolicy(t *testing.T) {
 			MatchString(app) {
 			t.Error("production app contains console logging")
 		}
-		if _, err := os.Stat(filepath.Join(repositoryRoot, "static/js/alpine.bundle.js")); !os.IsNotExist(
+		if _, err := os.Stat(
+			filepath.Join(repositoryRoot, "static/js/alpine.bundle.js"),
+		); !os.IsNotExist(
 			err,
 		) {
 			t.Errorf(
@@ -161,8 +163,8 @@ func TestAlpineCompliancePolicy(t *testing.T) {
 			{
 				"views/components/step_list.templ",
 				[]string{
-					`#step-row-%d`,
-					`hx-swap="outerHTML"`,
+					`hx-target="#step-edit-content"`,
+					`hx-swap="innerHTML"`,
 					`hx-target="#step-list"`,
 				},
 			},
@@ -172,7 +174,10 @@ func TestAlpineCompliancePolicy(t *testing.T) {
 			},
 			{
 				"views/pages/steps.templ",
-				[]string{`hx-target="#add-step-form"`, `hx-swap="innerHTML"`},
+				[]string{
+					`hx-target="#step-edit-content"`,
+					`hx-swap="innerHTML"`,
+				},
 			},
 			{
 				"views/pages/variables.templ",

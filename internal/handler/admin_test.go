@@ -456,7 +456,7 @@ func TestGlobalNotificationSettings_RendersBackForBothPageBranches(
 			if resp.StatusCode != http.StatusOK {
 				t.Fatalf("status = %d, want 200", resp.StatusCode)
 			}
-			const back = `<a href="/admin/notifications" class="btn btn-ghost btn-sm">Back</a>`
+			const back = `<a href="/admin/notifications" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>`
 			if strings.Count(string(body), back) != 1 {
 				t.Fatalf("back control = %q, want exactly one %q", body, back)
 			}
@@ -464,13 +464,13 @@ func TestGlobalNotificationSettings_RendersBackForBothPageBranches(
 				requireHTMLPattern(
 					t,
 					string(body),
-					`(?s)<div class="flex justify-between items-center mb-4">\s*<h1 class="text-3xl font-bold">Notification Settings</h1>\s*<div class="flex gap-2">\s*<button type="submit" class="btn btn-primary btn-sm">Save</button>\s*`+back,
+					`(?s)<div class="page-header">\s*<h1 class="text-3xl font-bold">Notification Settings</h1>\s*<div class="flex gap-2">\s*<button type="submit" class="btn btn-primary btn-sm">Save</button>\s*`+back,
 				)
 			} else {
 				requireHTMLPattern(
 					t,
 					string(body),
-					`(?s)<div class="flex justify-between items-center mb-4">\s*<h1 class="text-3xl font-bold">Notification Settings</h1>\s*<div class="flex gap-2">\s*`+back,
+					`(?s)<div class="page-header">\s*<h1 class="text-3xl font-bold">Notification Settings</h1>\s*<div class="flex gap-2">\s*`+back,
 				)
 			}
 			hasSave := strings.Contains(string(body), `>Save</button>`)

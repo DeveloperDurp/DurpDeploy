@@ -30,12 +30,14 @@ templ StepsContent(project db.Project, steps []db.Step) {
 		x-on:step-form-add="handleEvent"
 		x-on:step-form-cancel="handleEvent"
 		x-on:step-form-edit="handleEvent"
-		x-on:htmx:after-request.camel="afterRequest"
+		x-on:htmx:after-settle.camel="afterSettle"
+		x-on:htmx:after-swap.camel="afterSwap"
+		x-on:htmx:before-swap.camel="beforeSwap"
 	>
-		<div class="flex flex-wrap justify-between items-center gap-2">
-			<h1 class="text-3xl font-bold break-all">Steps for { project.Name }</h1>
+		<div class="page-header">
+			<h1 class="min-w-0 w-full break-words sm:w-auto sm:flex-1 text-3xl font-bold">Steps for { project.Name }</h1>
 			<div class="flex gap-2">
-				<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost btn-sm">Back</a>
+				<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>
 			</div>
 		</div>
 		<div class="card bg-base-200 p-4">
@@ -53,9 +55,11 @@ templ StepsContent(project db.Project, steps []db.Step) {
 			if CanWrite(ctx) {
 				<div class="mt-4 flex gap-2">
 					<button
+						x-ref="addStepButton"
+						x-on:click="$dispatch('step-form-edit')"
 						class="btn btn-primary btn-sm"
 						hx-get={ fmt.Sprintf("/projects/%d/steps/new", project.ID) }
-						hx-target="#add-step-form"
+						hx-target="#step-edit-content"
 						hx-swap="innerHTML"
 					>
 						Add Step
@@ -70,8 +74,15 @@ templ StepsContent(project db.Project, steps []db.Step) {
 					</button>
 				</div>
 			}
-			<div id="add-step-form" x-ref="addStepForm" class="mt-4"></div>
 			<div id="template-picker" class="mt-4"></div>
 		</div>
+		if CanWrite(ctx) {
+			<dialog id="step-edit-dialog" x-ref="stepEditDialog" class="modal" aria-labelledby="step-edit-title" x-on:close="editClosed">
+				<div class="modal-box w-full max-w-5xl">
+					<div id="step-edit-content" x-ref="stepEditContent"></div>
+				</div>
+				<form method="dialog" class="modal-backdrop"><button type="submit" aria-label="Cancel step form"></button></form>
+			</dialog>
+		}
 	</div>
 }

@@ -4,6 +4,7 @@ import (
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
 	"durpdeploy/views/layouts"
+	"durpdeploy/views/components"
 	"strconv"
 )
 
@@ -42,22 +43,38 @@ templ EnvironmentFormFragment(env *db.Environment, isNew bool, errorMsg string) 
 }
 
 templ EnvironmentFormContent(env *db.Environment, isNew bool, errorMsg string) {
-	<div class="max-w-2xl mx-auto">
-		<h1 class="text-3xl font-bold mb-6">
-			if isNew {
-				New Environment
-			} else {
-				Edit Environment
-			}
-		</h1>
+	@components.Breadcrumbs([]components.Crumb{
+		{Label: "Home", Href: "/"},
+		{Label: "Environments", Href: "/environments"},
+		{Label: envFormTitle(isNew)},
+	})
+	<div class="w-full" data-create-form>
+		<div class="page-header">
+			<h1 class="text-3xl font-bold">
+				if isNew {
+					New Environment
+				} else {
+					Edit Environment
+				}
+			</h1>
+			<div class="flex gap-2 shrink-0">
+				if CanWrite(ctx) {
+					<button type="submit" form="environment-settings-form" class="btn btn-primary md:btn-sm">Save</button>
+				}
+				<a href="/environments" class="btn btn-ghost md:btn-sm" x-data="backNavigation" @click="back">Back</a>
+			</div>
+		</div>
 		<form
+			id="environment-settings-form"
 			if isNew {
 				method="post"
 				action="/environments"
+				hx-post="/environments"
 			} else {
 				hx-put={ "/environments/" + strconv.FormatInt(env.ID, 10) }
-				hx-target="#form-container"
-				hx-swap="innerHTML"
+				hx-target="closest [data-create-form]"
+				hx-select="[data-create-form]"
+				hx-swap="outerHTML"
 				data-toast-success="Environment updated"
 				data-toast-error="Failed to update environment"
 			}
@@ -91,16 +108,24 @@ templ EnvironmentFormContent(env *db.Environment, isNew bool, errorMsg string) {
 					<p class="text-sm opacity-70">Only admins can configure post-deployment verification.</p>
 				}
 			</div>
-			<div class="flex gap-2">
-				<button type="submit" class="btn btn-primary">
-					if isNew {
-						Create
-					} else {
-						Update
-					}
-				</button>
-				<a href="/environments" class="btn btn-ghost">Cancel</a>
-			</div>
 		</form>
+		if !isNew && CanWrite(ctx) {
+			<div class="mt-6 pt-4 border-t border-base-300 flex flex-wrap items-center justify-between gap-4">
+				<div class="font-medium">Delete this environment</div>
+				<button
+					type="button"
+					hx-delete={ "/environments/" + strconv.FormatInt(env.ID, 10) }
+					hx-target="#form-container"
+					hx-swap="innerHTML"
+					hx-replace-url="/environments"
+					hx-confirm="Delete this environment?"
+					class="btn btn-error"
+					data-toast-success="Environment deleted"
+					data-toast-error="Failed to delete environment"
+				>
+					Delete environment
+				</button>
+			</div>
+		}
 	</div>
 }

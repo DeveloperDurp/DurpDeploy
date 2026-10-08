@@ -23,10 +23,19 @@ func (r *DeploymentRunner) runRemoteStep(
 	ctx context.Context,
 	cancelCtx context.Context,
 	request remoteStepRequest,
-) error {
+) (result error) {
 	if cancelCtx.Err() != nil {
 		return errDeploymentCancelled
 	}
+	if err := request.logWriter.state("waiting"); err != nil {
+		return err
+	}
+	defer func() {
+		request.logWriter.finishState(
+			result,
+			errors.Is(result, errDeploymentCancelled),
+		)
+	}()
 	created, err := r.repo.QueueRemoteStepRuns(
 		ctx, request.deploymentID, request.stepIndex,
 	)
@@ -68,6 +77,7 @@ func (r *DeploymentRunner) runRemoteStep(
 	cancellationRequested := false
 	failureAgent := ""
 	cancelSignal := cancelCtx.Done()
+	started := false
 	for {
 		if cancellationNeeded && !cancellationRequested {
 			_, err := r.repo.Queries.RequestRemoteStepCancellation(
@@ -109,6 +119,12 @@ func (r *DeploymentRunner) runRemoteStep(
 		elapsed := now.Sub(lastChecked)
 		lastChecked = now
 		for _, run := range runs {
+			if !started && run.StartedAt.Valid {
+				if err := request.logWriter.state("running"); err != nil {
+					return err
+				}
+				started = true
+			}
 			switch run.State {
 			case "succeeded":
 			case "cancelled":

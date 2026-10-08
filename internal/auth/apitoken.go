@@ -48,6 +48,17 @@ func RenderJSONError(w http.ResponseWriter, status int, msg string) {
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": msg})
 }
 
+// RenderRequestError preserves the API envelope on shared API/web paths.
+func RenderRequestError(
+	w http.ResponseWriter, r *http.Request, status int, msg string,
+) {
+	if strings.HasPrefix(r.URL.Path, "/api/v1/") {
+		RenderJSONError(w, status, msg)
+		return
+	}
+	http.Error(w, msg, status)
+}
+
 // WriteBlockMiddleware blocks viewers from performing write operations.
 // Returns 403 JSON with {"error":"viewers cannot perform write operations"}.
 // This is the API counterpart to the CSRFMiddleware's viewer block.

@@ -32,7 +32,9 @@ func NewLogHandler(
 // StreamLogs streams deployment logs as SSE or NDJSON.
 // swagger:route GET /deployments/{id}/logs/stream logs streamLogs
 //
-// Stream deployment logs.
+// Stream deployment logs. The format=structured SSE option emits indexed
+// step logs and lifecycle states, supports after and Last-Event-ID cursors,
+// and ends with a complete event. Default SSE and NDJSON remain text streams.
 //
 //	Produces:
 //	- text/event-stream
@@ -63,9 +65,21 @@ func (h *LogHandler) streamDeploymentLogs(
 	depID int64,
 ) {
 	format := r.URL.Query().Get("format")
+	if format == "structured" {
+		if _, err := httpstream.LogCursor(r); err != nil {
+			RespondError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		httpstream.StreamStepLogs(w, r, h.repo, h.broker, depID)
+		return
+	}
 	ndjson := format == "ndjson"
 	if format != "" && format != "sse" && format != "ndjson" {
-		RespondError(w, http.StatusBadRequest, "format must be sse or ndjson")
+		RespondError(
+			w,
+			http.StatusBadRequest,
+			"format must be sse, ndjson or structured",
+		)
 		return
 	}
 

@@ -40,7 +40,7 @@ func TestNotificationsPageUsesAlpineDialogTrigger(t *testing.T) {
 	}
 	if !strings.Contains(
 		rendered,
-		`<dialog id="notification_modal_42" x-ref="notification_modal_42" class="modal">`,
+		`<dialog id="notification_modal_42" x-ref="notification_modal_42" class="modal" aria-labelledby="notification-title-42">`,
 	) {
 		t.Fatal(
 			"notification dialog does not expose its existing ID as an Alpine ref",

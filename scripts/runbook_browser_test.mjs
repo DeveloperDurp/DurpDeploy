@@ -47,7 +47,7 @@ try {
   assert.match(await mobile.innerText(), /Pinned version 1/);
   assert.equal(await mobile.getByText("Next run:").count(), 1);
   assert.equal(await mobile.locator(`form[action$="/schedules/${scheduleID}/disable"]`).count(), 1);
-  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), 375);
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), true);
 
   await page.setViewportSize({ width: 1440, height: 900 });
   assert.equal(await mobile.isVisible(), false);
@@ -55,22 +55,25 @@ try {
   assert.equal(await table.isVisible(), true);
   assert.equal(await table.locator(`form[action$="/schedules/${scheduleID}/disable"]`).count(), 1);
   await page.goto(`${base}/projects/${projectID}/runbooks/${runbookID}/edit`);
-  await page.getByRole("button", { name: "Add step" }).click();
-  const targets = page.locator('select[name="step_target"]');
-  await targets.first().selectOption("agent");
-  const variableNames = page.locator('input[name="step_variable_names"]');
-  await variableNames.first().fill("REMOTE_TOKEN");
-  const selectors = page.locator('input[name="step_selectors"]:not([type="hidden"])');
-  await selectors.first().fill("canary, production");
+  await page.locator('#runbook-version-form button').filter({ hasText: /^Edit$/ }).first().click();
+  const editor = page.locator('dialog[open]');
+  await editor.locator('select[name="step_target"]').selectOption("agent");
+  await editor.locator('input[name="step_variable_names"]').fill("REMOTE_TOKEN");
+  await editor.locator('input[name="step_selectors"]:not([type="hidden"])').fill("canary, production");
+  await editor.getByRole("button", { name: "Save", exact: true }).click();
+  await page.getByRole("button", { name: "Add step", exact: true }).click();
+  await editor.locator('input[name="step_name"]').fill("browser check");
+  await editor.locator('textarea[name="step_script"]').fill("printf browser-runbook-step; sleep 5");
+  await editor.locator('input[name="step_image"]:not([type="hidden"])').fill("docker.io/library/bash:5.2");
+  await editor.getByRole("button", { name: "Save", exact: true }).click();
   await page.getByRole("button", { name: "Move step down" }).first().click();
-  assert.equal(await selectors.nth(1).inputValue(), "canary, production");
-  assert.equal(await targets.nth(1).inputValue(), "agent");
-  assert.equal(await variableNames.nth(1).inputValue(), "REMOTE_TOKEN");
-  await targets.nth(1).selectOption("local");
-  await page.locator('input[name="step_name"]').first().fill("browser check");
-  await page.locator('textarea[name="step_script"]').first().fill("printf browser-runbook-step; sleep 5");
-  await page.locator('input[name="step_image"]:not([type="hidden"])').first().fill("docker.io/library/bash:5.2");
-  await page.getByRole("button", { name: "Save immutable version" }).click();
+  assert.equal(await page.locator('#runbook-version-form input[name="step_selectors"]').nth(1).inputValue(), "canary, production");
+  assert.equal(await page.locator('#runbook-version-form input[name="step_variable_names"]').nth(1).inputValue(), "REMOTE_TOKEN");
+  await page.locator('#runbook-version-form button').filter({ hasText: /^Edit$/ }).nth(1).click();
+  await editor.locator('select[name="step_target"]').selectOption("local");
+  await editor.locator('input[name="step_image"]:not([type="hidden"])').fill("docker.io/library/bash:5.2");
+  await editor.getByRole("button", { name: "Save", exact: true }).click();
+  await page.getByRole("button", { name: "Create new version", exact: true }).click();
   await page.waitForURL(new RegExp(`/projects/${projectID}/runbooks/${runbookID}$`));
   assert.match(await page.locator("h2").allTextContents().then((values) => values.join(" ")), /Version 3 steps/);
 
@@ -84,12 +87,16 @@ try {
   await page.locator('[data-step-action="edit"]').first().click();
   const stepEdit = page.locator('form[hx-put*="/steps/"]').first();
   await stepEdit.waitFor();
+  await page.waitForFunction(() => document.querySelector('#step-edit-dialog')?.matches(':modal') && !document.querySelector('.htmx-settling, .htmx-request'));
   await stepEdit.locator('select[name="execution_target"]').selectOption("agent");
   assert.equal(await stepEdit.locator('input[name="container_image"]').isDisabled(), true);
   assert.equal(await stepEdit.locator('input[name="variable_names"]').isEnabled(), true);
   await stepEdit.locator('input[name="variable_names"]').fill("REMOTE_TOKEN");
-  await stepEdit.getByRole("button", { name: "Update" }).click();
+  const stepRequest = page.waitForRequest(request => request.method() === "PUT" && new URL(request.url()).pathname === `/projects/${stepProject.id}/steps/${step.id}`);
+  await page.locator('#step-edit-dialog').getByRole("button", { name: "Save", exact: true }).click();
+  assert.equal(new URLSearchParams((await stepRequest).postData()).get("variable_names"), "REMOTE_TOKEN");
   await stepEdit.waitFor({ state: "detached" });
+  await page.waitForFunction(() => !document.querySelector('#step-edit-dialog').open && !document.querySelector('.htmx-settling, .htmx-request'));
   const agentStep = await api("GET", `/projects/${stepProject.id}/steps/${step.id}`, undefined, 200);
   assert.equal(agentStep.execution_target, "agent");
   assert.deepEqual(agentStep.variable_names, ["REMOTE_TOKEN"]);
@@ -115,7 +122,7 @@ try {
     page.waitForResponse((response) =>
       response.request().method() === "PUT" &&
       response.url().endsWith(`/templates/${agentTemplate.id}`)),
-    page.getByRole("button", { name: "Update" }).click(),
+    page.getByRole("button", { name: "Save", exact: true }).click(),
   ]);
   const updatedTemplate = await api("GET", `/templates/${agentTemplate.id}`, undefined, 200);
   assert.equal(updatedTemplate.execution_target, "agent");

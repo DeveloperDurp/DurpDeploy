@@ -103,7 +103,7 @@ SELECT * FROM deployments WHERE environment_id = ? AND kind = 'deployment' ORDER
 -- name: CountDeploymentsToday :one
 SELECT COUNT(*) FROM deployments WHERE kind = 'deployment' AND created_at >= strftime('%s','now','start of day');
 
--- name: ListRunningDeploymentsWithRefs :many
+-- name: ListActiveDeploymentsWithRefs :many
 SELECT
     d.id, d.release_id, d.environment_id, d.status,
     d.started_at, d.finished_at, d.created_at, d.forced, d.note,
@@ -115,7 +115,7 @@ FROM deployments d
 JOIN releases r ON d.release_id = r.id
 JOIN projects p ON r.project_id = p.id
 JOIN environments e ON d.environment_id = e.id
-WHERE d.kind = 'deployment' AND d.status IN ('pending', 'running', 'publishing_artifact', 'awaiting_artifact_approval')
+WHERE d.kind = 'deployment' AND d.status IN ('queued', 'pending', 'running', 'publishing_artifact', 'pending_approval', 'awaiting_artifact_approval')
 ORDER BY d.created_at DESC;
 
 -- name: ListPendingDeployments :many
@@ -233,3 +233,18 @@ WHERE d.kind = 'deployment'
   AND (CAST(sqlc.narg(f_status)     AS TEXT)    IS NULL OR d.status = CAST(sqlc.narg(f_status) AS TEXT))
   AND (CAST(sqlc.narg(f_from_unix)  AS INTEGER) IS NULL OR d.created_at >= CAST(sqlc.narg(f_from_unix) AS INTEGER))
   AND (CAST(sqlc.narg(f_to_unix)    AS INTEGER) IS NULL OR d.created_at <= CAST(sqlc.narg(f_to_unix) AS INTEGER));
+
+-- name: DeploymentActivity :many
+SELECT CAST(d.created_at / 86400 AS INTEGER) AS day,
+       d.status, COUNT(*) AS count
+FROM deployments d
+JOIN releases r ON r.id = d.release_id
+WHERE d.kind = 'deployment'
+  AND d.created_at >= sqlc.arg(from_unix)
+  AND d.created_at < sqlc.arg(to_unix)
+  AND (CAST(sqlc.arg(is_admin) AS INTEGER) = 1 OR EXISTS (
+      SELECT 1 FROM project_members pm
+      WHERE pm.project_id = r.project_id AND pm.user_id = sqlc.arg(user_id)
+  ))
+GROUP BY CAST(d.created_at / 86400 AS INTEGER), d.status
+ORDER BY day, d.status;

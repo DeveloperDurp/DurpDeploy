@@ -26,7 +26,7 @@ func TestMobile_RenderedHTML_renders_breakpoint_gated_variants_when_authenticate
 				`data-mobile-step-list`,
 				fmt.Sprintf(`data-mobile-step="%d"`, fixture.step.ID),
 				fmt.Sprintf(`id="step-row-%d"`, fixture.step.ID),
-				fmt.Sprintf(`data-mobile-step-editor="%d"`, fixture.step.ID),
+				`id="step-edit-dialog"`,
 				`aria-label="Deployment steps"`,
 			},
 		},
@@ -105,8 +105,8 @@ func TestMobile_RenderedHTML_rendersLifecycleBackAndKeepsPermissionGoBack(
 ) {
 	// Given
 	fixture := newMobileStructuralFixture(t)
-	const lifecycleSave = `<button type="submit" form="lifecycle-settings-form" class="btn btn-primary btn-sm">Save</button>`
-	const lifecycleBack = `<a href="/lifecycles" class="btn btn-ghost btn-sm">Back</a>`
+	const lifecycleSave = `<button type="submit" form="lifecycle-settings-form" class="btn btn-primary md:btn-sm">Save</button>`
+	const lifecycleBack = `<a href="/lifecycles" class="btn btn-ghost md:btn-sm" x-data="backNavigation" @click="back">Back</a>`
 
 	// When
 	detailBody := fixture.getHTML(
@@ -135,16 +135,16 @@ func TestMobile_RenderedHTML_rendersLifecycleBackAndKeepsPermissionGoBack(
 	requireHTMLPattern(
 		t,
 		detailBody,
-		`(?s)<div class="flex items-start justify-between gap-4">\s*<div>.*?</div>\s*<div class="flex gap-2 shrink-0">\s*`+lifecycleSave+`\s*`+lifecycleBack,
+		`(?s)<div class="page-header">\s*<div class="min-w-0">.*?</div>\s*<div class="flex gap-2 shrink-0">\s*`+lifecycleSave+`\s*`+lifecycleBack,
 	)
 	requireHTMLPattern(
 		t,
 		detailBody,
 		`<form id="lifecycle-settings-form" method="post" action="/lifecycles/\d+"`,
 	)
-	const lifecycleFormHeader = `(?s)<div class="flex justify-between items-center">\s*<h1 class="text-3xl font-bold">New Lifecycle</h1>\s*<div class="flex gap-2">\s*<a href="/lifecycles" class="btn btn-ghost btn-sm">Back</a>\s*</div>\s*</div>`
+	const lifecycleFormHeader = `(?s)<div class="page-header">\s*<h1 class="text-3xl font-bold">New Lifecycle</h1>\s*<div class="flex gap-2">\s*` + lifecycleSave + `\s*<a href="/lifecycles" class="btn btn-ghost md:btn-sm" x-data="backNavigation" @click="back">\s*Cancel\s*</a>\s*</div>\s*</div>`
 	requireHTMLPattern(t, formBody, lifecycleFormHeader)
-	const permissionGoBack = `<a href="/lifecycles" class="btn btn-ghost btn-sm">Go back</a>`
+	const permissionGoBack = `<a href="/lifecycles" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Go back</a>`
 	if strings.Count(viewerFormBody, permissionGoBack) != 1 {
 		t.Errorf(
 			"viewer permission control = %q, want exactly one %q",
@@ -160,7 +160,7 @@ func TestMobile_RenderedHTML_renders_project_back_controls_when_authenticated(
 	// Given
 	fixture := newMobileStructuralFixture(t)
 	back := fmt.Sprintf(
-		`<a href="/projects/%d" class="btn btn-ghost btn-sm">Back</a>`,
+		`<a href="/projects/%d" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>`,
 		fixture.project.ID,
 	)
 	pages := []struct {
@@ -172,7 +172,7 @@ func TestMobile_RenderedHTML_renders_project_back_controls_when_authenticated(
 			name: "steps",
 			path: fmt.Sprintf("/projects/%d/steps-page", fixture.project.ID),
 			headerPattern: fmt.Sprintf(
-				`(?s)<div class="flex flex-wrap justify-between items-center gap-2">\s*<h1 class="text-3xl font-bold break-all">Steps for .*?</h1>\s*<div class="flex gap-2">\s*<a href="/projects/%d" class="btn btn-ghost btn-sm">Back</a>`,
+				`(?s)<div class="page-header">\s*<h1 class="min-w-0 w-full break-words sm:w-auto sm:flex-1 text-3xl font-bold">Steps for .*?</h1>\s*<div class="flex gap-2">\s*<a href="/projects/%d" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>`,
 				fixture.project.ID,
 			),
 		},
@@ -180,7 +180,7 @@ func TestMobile_RenderedHTML_renders_project_back_controls_when_authenticated(
 			name: "variables",
 			path: fmt.Sprintf("/projects/%d/variables", fixture.project.ID),
 			headerPattern: fmt.Sprintf(
-				`(?s)<div class="flex justify-between items-center">\s*<h1 class="text-3xl font-bold">Variables.*?</h1>\s*<div class="flex gap-2">\s*<a href="/projects/%d" class="btn btn-ghost btn-sm">Back</a>`,
+				`(?s)<div class="page-header">\s*<h1 class="min-w-0 w-full break-words sm:w-auto sm:flex-1 text-3xl font-bold">Variables.*?</h1>\s*<div class="flex gap-2">\s*<a href="/projects/%d" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>`,
 				fixture.project.ID,
 			),
 		},
@@ -188,7 +188,7 @@ func TestMobile_RenderedHTML_renders_project_back_controls_when_authenticated(
 			name: "schedules",
 			path: fmt.Sprintf("/projects/%d/schedules", fixture.project.ID),
 			headerPattern: fmt.Sprintf(
-				`(?s)<div class="flex flex-wrap items-center justify-between gap-2">\s*<h1 class="text-3xl font-bold">Schedules.*?</h1>\s*<div class="flex gap-2 ml-auto">\s*<a href="/projects/%d/schedules/new" class="btn btn-primary btn-sm">New Schedule</a>\s*<a href="/projects/%d" class="btn btn-ghost btn-sm">Back</a>`,
+				`(?s)<div class="page-header">\s*<h1 class="text-3xl font-bold">Schedules.*?</h1>\s*<div class="flex gap-2 ml-auto">\s*<a href="/projects/%d/schedules/new" class="btn btn-primary btn-sm">New Schedule</a>\s*<a href="/projects/%d" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>`,
 				fixture.project.ID,
 				fixture.project.ID,
 			),
@@ -230,15 +230,11 @@ func TestMobile_RenderedHTML_preserves_disclosures_and_containment_when_authenti
 					fixture.step.ID,
 				),
 				fmt.Sprintf(
-					`(?s)data-step-action="edit"[^>]*hx-get="/projects/%d/steps/%d/edit\?mobile=1"[^>]*hx-target="#mobile-step-edit-%d"`,
+					`(?s)data-step-action="edit"[^>]*hx-get="/projects/%d/steps/%d/edit\?dialog=1"[^>]*hx-target="#step-edit-content"`,
 					fixture.project.ID,
 					fixture.step.ID,
-					fixture.step.ID,
 				),
-				fmt.Sprintf(
-					`data-mobile-step-editor="%d"[^>]*x-show="editing"`,
-					fixture.step.ID,
-				),
+				`(?s)<dialog[^>]*id="step-edit-dialog"[^>]*aria-labelledby="step-edit-title"`,
 				`(?s)<details[^>]*>.*?<pre[^>]*class="[^"]*whitespace-pre-wrap[^"]*"`,
 			},
 			contents: []string{fixture.step.ScriptBody},
@@ -247,13 +243,8 @@ func TestMobile_RenderedHTML_preserves_disclosures_and_containment_when_authenti
 			name: "template script",
 			path: "/templates",
 			patterns: []string{
-				disclosurePattern(
-					fmt.Sprintf("template-script-%d", fixture.template.ID),
-				),
-				`(?s)<div[^>]*id="templates-list"[^>]*>.*?<table[^>]*class="[^"]*hidden lg:table[^"]*"`,
-				`(?s)<ol[^>]*class="[^"]*lg:hidden[^"]*"[^>]*data-mobile-template-list`,
-				`(?s)data-template-action="edit"[^>]*href="/templates/[0-9]+/edit".*?data-template-action="delete".*?data-template-action="history"[^>]*href="/templates/[0-9]+/history"`,
-				`(?s)<div class="flex flex-nowrap justify-start gap-2 whitespace-nowrap">`,
+				`(?s)<article[^>]*data-resource-card>.*?<pre[^>]*line-clamp-2`,
+				`(?s)<a href="/templates/[0-9]+/edit"[^>]*class="absolute inset-0`,
 			},
 			contents: []string{fixture.template.ScriptBody},
 		},
@@ -278,7 +269,7 @@ func TestMobile_RenderedHTML_preserves_disclosures_and_containment_when_authenti
 			name: "project environment grid",
 			path: "/projects",
 			patterns: []string{
-				`(?s)<div[^>]*data-project-environment-grid[^>]*>\s*<table[^>]*class="[^"]*table-fixed[^"]*w-full[^"]*"`,
+				`(?s)<div[^>]*class="[^"]*grid[^"]*lg:grid-cols-4[^"]*"[^>]*data-project-environment-grid`,
 			},
 		},
 		{
@@ -352,19 +343,12 @@ func TestSteps_RenderedHTML_uses_named_Alpine_state_when_authenticated(
 		`x-on:step-form-add="handleEvent"`,
 		`x-on:step-form-cancel="handleEvent"`,
 		`x-on:step-form-edit="handleEvent"`,
-		`x-on:htmx:after-request.camel="afterRequest"`,
-		`x-ref="addStepForm"`,
+		`x-ref="stepEditContent"`,
 		fmt.Sprintf(`hx-get="/projects/%d/steps/new"`, projectID),
-		`hx-target="#add-step-form"`,
+		`hx-target="#step-edit-content"`,
 		`hx-swap="innerHTML"`,
-		fmt.Sprintf(
-			`hx-target="#step-row-%d" hx-swap="outerHTML"`,
-			stepID,
-		),
-		fmt.Sprintf(
-			`data-mobile-step-editor="%d"[^>]*x-bind:hidden="!editing"`,
-			stepID,
-		),
+		`hx-target="#step-edit-content" hx-swap="innerHTML"`,
+		`id="step-edit-dialog"`,
 		`\$dispatch\('step-form-edit'\)`,
 	} {
 		requireHTMLPattern(t, pageBody, pattern)

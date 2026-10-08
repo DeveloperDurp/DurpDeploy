@@ -39,7 +39,7 @@ func (h *EnvironmentHandler) NewEnvironment(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	if r.Header.Get("HX-Request") == "true" {
+	if isFragmentRequest(r) {
 		pages.EnvironmentFormFragment(&db.Environment{}, true, "").
 			Render(r.Context(), w)
 	} else {
@@ -103,7 +103,14 @@ func (h *EnvironmentHandler) CreateEnvironment(
 	_, err = h.Repo.CreateEnvironment(r.Context(), params)
 	if err != nil {
 		if IsUniqueViolation(err) {
-			env := &db.Environment{Name: name}
+			env := &db.Environment{
+				Name:                       name,
+				Description:                params.Description,
+				Tags:                       params.Tags,
+				VerificationType:           params.VerificationType,
+				VerificationTarget:         params.VerificationTarget,
+				VerificationTimeoutSeconds: params.VerificationTimeoutSeconds,
+			}
 			WriteFormError(
 				w,
 				r,
@@ -125,16 +132,16 @@ func (h *EnvironmentHandler) CreateEnvironment(
 		return
 	}
 
-	if r.Header.Get("HX-Request") == "true" {
-		envs, err := h.Repo.Queries.ListEnvironments(r.Context())
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		pages.EnvironmentsListContent(envs).Render(r.Context(), w)
-	} else {
-		http.Redirect(w, r, "/environments", http.StatusSeeOther)
+	if retargetFormDialog(w, r, "#environments-content") {
+		h.ListEnvironments(w, r)
+		return
 	}
+
+	if r.Header.Get("HX-Request") == "true" {
+		w.Header().Set("HX-Redirect", "/environments")
+		return
+	}
+	http.Redirect(w, r, "/environments", http.StatusSeeOther)
 }
 
 func (h *EnvironmentHandler) EditEnvironment(
@@ -154,7 +161,7 @@ func (h *EnvironmentHandler) EditEnvironment(
 		return
 	}
 
-	if r.Header.Get("HX-Request") == "true" {
+	if isFragmentRequest(r) {
 		pages.EnvironmentFormFragment(&env, false, "").Render(r.Context(), w)
 	} else {
 		pages.EnvironmentForm(&env, false, "", r.URL.Path).
@@ -218,10 +225,15 @@ func (h *EnvironmentHandler) UpdateEnvironment(
 		params.ConfigureVerification = 1
 	}
 
-	_, err = h.Repo.UpdateEnvironment(r.Context(), params)
+	env, err := h.Repo.UpdateEnvironment(r.Context(), params)
 	if err != nil {
 		if IsUniqueViolation(err) {
-			env := &db.Environment{ID: id, Name: name}
+			env := &db.Environment{
+				ID: id, Name: name, Description: params.Description,
+				Tags: params.Tags, VerificationType: params.VerificationType,
+				VerificationTarget:         params.VerificationTarget,
+				VerificationTimeoutSeconds: params.VerificationTimeoutSeconds,
+			}
 			WriteFormError(
 				w,
 				r,
@@ -243,13 +255,12 @@ func (h *EnvironmentHandler) UpdateEnvironment(
 		return
 	}
 
+	if retargetFormDialog(w, r, "#environments-content") {
+		h.ListEnvironments(w, r)
+		return
+	}
 	if r.Header.Get("HX-Request") == "true" {
-		envs, err := h.Repo.Queries.ListEnvironments(r.Context())
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		pages.EnvironmentsListContent(envs).Render(r.Context(), w)
+		pages.EnvironmentFormFragment(&env, false, "").Render(r.Context(), w)
 	} else {
 		http.Redirect(w, r, "/environments", http.StatusSeeOther)
 	}
@@ -280,5 +291,6 @@ func (h *EnvironmentHandler) DeleteEnvironment(
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	retargetFormDialog(w, r, "#environments-content")
 	pages.EnvironmentsListContent(envs).Render(r.Context(), w)
 }
