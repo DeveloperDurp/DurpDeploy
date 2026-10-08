@@ -26,6 +26,7 @@ WHERE d.environment_id = ? AND (
     d.status IN ('pending', 'running', 'publishing_artifact', 'awaiting_artifact_approval')
     OR (d.status = 'cleanup_unconfirmed'
         AND (d.container_namespace IS NOT NULL OR (
+        d.cleanup_confirmed_at IS NULL AND
         NOT EXISTS (SELECT 1 FROM remote_deployment_claims c
             WHERE c.deployment_id = d.id AND c.state = 'cleanup_unconfirmed')
         AND NOT EXISTS (SELECT 1 FROM remote_step_runs s

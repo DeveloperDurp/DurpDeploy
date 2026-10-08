@@ -492,6 +492,7 @@ func newRouter(
 			ar.Post("/admin/agents/{id}/name", agentsH.UpdateName)
 			ar.Post("/admin/agents/{id}/retry-pair", agentsH.RetryPair)
 			ar.Post("/admin/agents/{id}/revoke", agentsH.Revoke)
+			ar.Post("/admin/agents/{id}/delete", agentsH.Delete)
 			ar.Post("/admin/agents/{id}/drain", agentsH.Drain)
 			ar.Post("/admin/agents/{id}/resume", agentsH.Resume)
 			ar.Post("/admin/agents/{id}/labels", agentsH.AddLabel)
@@ -557,6 +558,10 @@ func newRouter(
 			aar.Get("/admin/agents", agentsH.ListAgents)
 			aar.Post("/admin/agents/pair", agentsH.PairAgent)
 			aar.Get("/admin/agents/{id}", agentsH.GetAgent)
+			aar.Delete(
+				"/admin/agents/{id}",
+				api.EmptyBody(agentsH.DeleteAgent),
+			)
 			aar.Post(
 				"/admin/agents/{id}/retry-pair",
 				agentsH.RetryPairAgent,

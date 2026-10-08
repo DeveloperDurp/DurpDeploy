@@ -45,6 +45,8 @@ jobs:
           GOFLAGS: -mod=readonly
       - name: Test development agent lifecycle
         run: make dev-agent-test
+      - name: Test demo lifecycle safety
+        run: make demo-test
 
   # ----- Dockerfile lint ---------------------------------------------------
   lint-dockerfile:
@@ -378,7 +380,7 @@ jobs:
       - name: Verify artifact approval controls in Chromium
         run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^TestArtifactGateBrowserE2E$' ./internal/handler/api
       - name: Verify agent fleet controls and responsive health pages
-        run: go test -tags=e2e,agentbrowser -race -count=1 -timeout=5m -v -run '^(TestAgentFleetBrowserE2E|TestDeploymentWaitingForAgentsBrowserE2E)$' ./internal/handler/api
+        run: go test -tags=e2e,agentbrowser -race -count=1 -timeout=5m -v -run '^(TestAgentFleetBrowserE2E|TestAgentDeleteBrowserE2E|TestDeploymentWaitingForAgentsBrowserE2E)$' ./internal/handler/api
       - name: Verify agent container step, template, and runbook forms
         run: go test -tags=e2e,agentbrowser -race -count=1 -timeout=5m -v -run '^TestAgentContainerBrowserE2E$' ./internal/handler/api
       - name: Upload package UI evidence

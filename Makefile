@@ -10,6 +10,7 @@ DEV_AGENT_CONTAINER ?= durpdeploy-dev-agent
 DEV_AGENT_IMAGE ?= ghcr.io/developerdurp/durpdeploy-agent:5941342
 DEV_AGENT_PORT ?= 10944
 DEV_AGENT_STATE_VOLUME ?= $(DEV_AGENT_CONTAINER)-state
+DEV_AGENT_RUNTIME_SOCKET ?=
 DEV_HTTPS_PROXY_CONTAINER ?= durpdeploy-dev-https
 DEV_HTTPS_PROXY_PORT ?= 8443
 DEV_HTTPS_PROXY_BACKEND ?= host.docker.internal:8080
@@ -63,14 +64,41 @@ dev-server:
 	DURPDEPLOY_ENV_FILE="$(ENV_FILE)" go run github.com/air-verse/air@latest
 
 .PHONY: dev-agent dev-agent-down dev-agent-reset dev-agent-test
+.PHONY: demo demo-stop demo-refresh demo-refresh-full demo-test
+
+# Persistent, isolated demo for coding agents and manual testing.
+demo:
+	./scripts/demo.sh
+
+demo-stop:
+	./scripts/demo.sh stop "$(DEMO_DIR)"
+
+# Rebuild only the server, retaining the URL, database, login and paired agent.
+demo-refresh:
+	bash scripts/demo-server-refresh.sh "$(DEMO_DIR)"
+
+# Database changes require rebuilding and populating a fresh demo.
+demo-refresh-full: demo-stop
+	./scripts/demo.sh
+
+demo-test:
+	bash scripts/demo_test.sh
+	bash scripts/demo-firewall-test.sh
+
 # Foreground pairing output stays on the terminal, outside container logs.
 dev-agent:
 	@test -n "$(DEV_CONTAINER_ENGINE)" || { echo 'Docker or Podman is unavailable.' >&2; exit 1; }
+	@if [ -n '$(DEV_AGENT_RUNTIME_SOCKET)' ]; then \
+		case '$(DEV_AGENT_RUNTIME_SOCKET)' in /*) ;; *) echo 'Agent runtime socket must be an absolute path.' >&2; exit 1 ;; esac; \
+		test -S '$(DEV_AGENT_RUNTIME_SOCKET)' || { echo 'Agent runtime Unix socket is unavailable.' >&2; exit 1; }; \
+	fi
 	$(DEV_CONTAINER_ENGINE) pull '$(DEV_AGENT_IMAGE)'
 	@printf '%s\n' \
 		'Pair this agent at /admin/agents using https://127.0.0.1:$(DEV_AGENT_PORT).' \
 		'Compare the fingerprint and approve. Ctrl-C or make dev-agent-down stops it.'
 	@network_args='--add-host=host.containers.internal:host-gateway'; \
+	state_volume='$(DEV_AGENT_STATE_VOLUME):/var/lib/durpdeploy-agent'; \
+	set --; \
 	if [ '$(notdir $(DEV_CONTAINER_ENGINE))' = podman ]; then \
 		if command -v slirp4netns >/dev/null 2>&1; then \
 			network_args='--network=slirp4netns:allow_host_loopback=true'; \
@@ -78,13 +106,26 @@ dev-agent:
 			network_args='--network=pasta:--map-host-loopback,169.254.1.2'; \
 		fi; \
 	fi; \
+	if [ -n '$(DEV_AGENT_RUNTIME_SOCKET)' ]; then \
+		runtime='$(notdir $(DEV_CONTAINER_ENGINE))'; \
+		case "$$runtime" in \
+			podman) set -- --userns=keep-id:uid=10001,gid=10001; state_volume="$$state_volume:U" ;; \
+			docker) set -- --group-add=$$(stat -c %g '$(DEV_AGENT_RUNTIME_SOCKET)') ;; \
+			*) echo 'Agent containers require Docker or Podman.' >&2; exit 1 ;; \
+		esac; \
+		set -- "$$@" --security-opt=label=disable \
+			--volume '$(DEV_AGENT_RUNTIME_SOCKET):/run/durpdeploy/runtime.sock:ro' \
+			--env DURPDEPLOY_AGENT_CONTAINER_ENABLED=true \
+			--env "DURPDEPLOY_AGENT_CONTAINER_RUNTIME=$$runtime" \
+			--env DURPDEPLOY_AGENT_CONTAINER_SOCKET=unix:///run/durpdeploy/runtime.sock; \
+	fi; \
 	$(DEV_CONTAINER_ENGINE) run --rm --name '$(DEV_AGENT_CONTAINER)' \
-		$$network_args --log-driver=none --read-only --user=10001:10001 \
+		$$network_args "$$@" --log-driver=none --read-only --user=10001:10001 \
 		--publish '127.0.0.1:$(DEV_AGENT_PORT):10943' \
 		--cap-drop=ALL --security-opt=no-new-privileges:true \
 		--memory=512m --cpus=1 --pids-limit=128 \
 		--tmpfs /tmp:size=64m,mode=1777 \
-		--volume '$(DEV_AGENT_STATE_VOLUME):/var/lib/durpdeploy-agent' \
+		--volume "$$state_volume" \
 		--env DURPDEPLOY_AGENT_STATE_DIR=/var/lib/durpdeploy-agent \
 		--env DURPDEPLOY_AGENT_LISTEN_ADDR=0.0.0.0:10943 \
 		--env 'DURPDEPLOY_AGENT_VERSION=$(lastword $(subst :, ,$(DEV_AGENT_IMAGE)))' \

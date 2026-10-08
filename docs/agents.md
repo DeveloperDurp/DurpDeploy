@@ -6,6 +6,33 @@ maintenance, and recovery.
 
 ## Fleet maintenance and health
 
+**Delete** removes the agent's server registration, pairing credentials, and
+configuration and prevents further access. Both the list and detail page ask
+for confirmation. Deployments, snapshots, logs, and step attempts remain;
+their agent references are cleared. Agent-owned remote protocol state is removed.
+Deletion is refused while execution or cleanup is unconfirmed or remote logs
+remain buffered. Drain the agent, let its work finish, and reconcile cleanup
+and log delivery before deleting it. A refused delete
+leaves the agent unchanged. Previously revoked agents can also be deleted when
+no unresolved work remains.
+
+Administrators can call `DELETE /api/v1/admin/agents/{id}` with an empty body or
+`{}`. Success returns `204`; missing or deleted agents return `404`; unresolved
+remote work or buffered logs return `409`. Successful deletion records `delete_agent` in the
+audit log. The existing `POST /api/v1/admin/agents/{id}/revoke` remains available
+for revoking access while retaining the inventory entry and re-pairing option.
+The Revoke button remains available for an immediate access stop when unresolved
+work prevents deletion.
+The same installed agent can pair again as a new registration with the same
+identity fingerprint. The server retains no tombstone or duplicate-identity
+block. Pair it from the list as usual; it receives a new agent ID and default
+configuration. Previous deployments stay detached from the new registration.
+To generate a fresh code, stop the idle agent, move only `state.json` out of its
+private state directory, and restart it. Keep its identity certificate and key.
+Do this only after execution, cleanup, and log delivery have been reconciled.
+The agent's bootstrap listener validates its current pairing code; an incorrect
+code does not restore the deleted registration.
+
 Admins manage the fleet at `/admin/agents`. **Drain** stops new claims and
 keeps the agent authenticated. Claims issued before Drain can still start,
 send logs and heartbeats, and finish. Waiting work stays queued; later remote
@@ -235,6 +262,12 @@ fingerprint, endpoint, or private key in documentation, tickets, shell history,
 or logs. Pairing persists the agent identity, pull URL, server pins, and agent
 ID in the private state directory.
 
+Pairing recovery checks the registration again after the completion exchange.
+If deletion or revocation finishes while it waits on the agent, the API returns
+`409` and the web flow reports a conflict instead of a stale paired success.
+If the completion acknowledgement times out after activation commits, a separate
+bounded registration check still determines paired success or conflict.
+
 After pairing, restart with `DURPDEPLOY_AGENT_STATE_DIR` and
 `DURPDEPLOY_AGENT_VERSION`. Do not supply a server URL, certificate,
 fingerprint, token, or agent ID manually. Normal work is outbound polling,
@@ -255,7 +288,9 @@ DURPDEPLOY_AGENT_CONTAINER_SOCKET=unix:///run/user/10001/podman/podman.sock
 Use `docker` with its local Unix socket instead where appropriate. The runtime
 must enforce the agent's CPU, memory, PID, seccomp, and filesystem limits.
 For an agent in a container, mount the local socket into that agent and set
-the socket URL to the mounted path. The workload receives no runtime socket.
+the socket URL to the mounted path. Container-mode workloads receive no runtime
+socket. Host-mode scripts run inside the supervisor and inherit socket access
+and the operator's runtime authority; use only scripts trusted with that account.
 Do not grant socket permissions automatically or configure TCP/SSH endpoints.
 See the pinned agent's [container setup](https://github.com/DeveloperDurp/durpdeploy-agent/blob/59413429c31bebf7e828e691ccc5e329f0b29dc4/docs/agents.md#container-step-execution-agent3).
 
@@ -278,6 +313,27 @@ ready v3 poll before the queue can advance. Never re-pair or remove state as
 a substitute for cleanup.
 
 ## Development container
+
+For a populated demo with both host and container steps, use `make demo`.
+For the standalone development agent, explicitly pass the existing local
+Unix socket to enable container execution, for example:
+
+```sh
+make dev-agent DEV_AGENT_RUNTIME_SOCKET="$(podman info --format '{{.Host.RemoteSocket.Path}}')"
+```
+
+The socket must already be active and accessible; this does not change its
+permissions. Rootless Podman uses `keep-id:uid=10001,gid=10001` and adjusts
+only the private named state volume's ownership via `:U`, preserving pairing
+keys and state during a stopped upgrade. Continue using the same profile for
+that retained volume. Docker adds the existing socket's group. The socket is
+mounted in the supervisor; container-mode workloads receive no socket.
+Host-mode scripts run inside the supervisor and inherit its runtime authority.
+The supervisor's SELinux label separation is disabled for that socket mount;
+workload restrictions remain enforced. Ordinary `make dev-agent` remains
+host-only and does not mount an engine socket. Finish/cancel workloads and
+confirm cleanup before `make dev-agent-down`; do not reset pairing to clear a
+cleanup warning.
 
 With `make dev` running in another terminal, start the published agent image:
 
@@ -328,14 +384,16 @@ does not start or modify the server, and does not mount its database or secrets.
 
 ## Agent execution boundary
 
-Agent execution does **not** use a per-step `chroot`. The container or systemd
-service is the filesystem and cgroup boundary, and the operator or user is responsible for every
+Host-mode agent execution does **not** use a per-step `chroot`. The container
+or systemd service is the filesystem and cgroup boundary, and the operator or
+user is responsible for every
 deployment script they run there, including its contents, the secrets supplied
 to it, its network access, and all effects available inside the agent
 container. A read-only root filesystem does not stop a script from reading
 files that are visible in the container or exfiltrating secrets supplied to it.
 
-The container contract is deliberately limited and explicit:
+The default socket-free agent container contract is deliberately limited
+and explicit:
 
 * The agent process and selected interpreter run as the preselected unprivileged service UID
   `10001`; neither process has Linux capabilities.
@@ -351,12 +409,18 @@ The container contract is deliberately limited and explicit:
 
 An unprivileged agent cannot change to a separate runner UID without
 `SETUID`/`SETGID`. Those capabilities are intentionally absent. Scripts therefore
-shares the agent UID and can read or change its private state volume, including
+share the agent UID and can read or change its private state volume, including
 the paired identity. Use one agent boundary per trusted script domain, and
 re-pair the agent if a script may have altered that state. The separate host or
-container still prevents access to control-plane state and arbitrary host data.
+container still prevents access to control-plane state and arbitrary host data
+in the default socket-free profile. With the opt-in runtime socket, host-mode
+scripts can use the runtime API to access host data with the operator's
+authority. The filesystem restrictions do not contain that access.
+Container-mode steps run in separate restricted containers without that socket
+or the supervisor's private state volume.
 
-These controls reduce the agent container's access to its host. They do not
+In the default socket-free profile, these controls reduce the agent container's
+access to its host. They do not
 turn deployment scripts into trusted code, restrict the network destinations
 available to the container, or prevent scripts from using secrets and files
 that the operator makes available. Co-locating the agent with the control
@@ -499,8 +563,9 @@ podman compose -f /path/to/durpdeploy-agent/compose.yml ps agent
 podman compose -f /path/to/durpdeploy-agent/compose.yml logs -f agent
 ```
 
-The service mounts one private volume at `/var/lib/durpdeploy-agent` and a
-private `/tmp`. It has no `/data` mount, server secret, Docker socket, host
+The default socket-free service mounts one private volume at
+`/var/lib/durpdeploy-agent` and a private `/tmp`. It has no `/data` mount,
+server secret, Docker socket, host
 network, host cgroup mount, or persistent inbound listener. Its root is
 read-only and its CPU, memory, and process count are limited. The state volume
 contains agent identity, not SQLite or a server backup.

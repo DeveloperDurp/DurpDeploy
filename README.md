@@ -188,6 +188,23 @@ The container engine must support `host-gateway`; startup fails clearly if the
 host backend cannot be reached through that mapping. Docker is preferred when
 available, with a healthy Podman engine used otherwise.
 
+For a populated demo, run `make demo`. It starts a server on a random local
+HTTPS port at `citadel.durp.loc`, creates `admin@durp.info` with a generated
+simple password, pairs an agent with host and container execution, verifies
+remote Bash/Python/PowerShell containers, and runs `make e2e-test`. Start the
+local engine's Unix socket first (`systemctl --user start podman.socket` on
+Citadel). The command prints the URL,
+credentials and stop command, then leaves the app and agent running. Each
+demo has separate data and resources. See [manual demo checks](docs/manual-e2e.md)
+for requirements, retained examples and teardown.
+After server/template/asset changes, run `make demo-refresh DEMO_DIR=/old/demo/path`
+to rebuild and restart only the server, preserving its URL, login, database
+and paired agent. Database changes require
+`make demo-refresh-full DEMO_DIR=/old/demo/path`, which creates a fresh populated
+demo and retains the old data. Use full refresh for agent/startup configuration
+changes too. Stop it with
+`make demo-stop DEMO_DIR=/new/demo/path` after workloads have finished.
+
 `make e2e-test` exercises the SQLite database of an already-running server; it
 does not build or start one. Override the target with
 `DURPDEPLOY_BASE_URL=https://localhost:8443 make e2e-test` (the local internal

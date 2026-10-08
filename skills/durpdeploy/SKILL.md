@@ -181,6 +181,25 @@ The original terminal result remains visible after confirmation.
 Re-pairing a revoked agent returns `409` while its remote execution or cleanup
 remains unconfirmed. Reconcile its workloads before revocation; a replacement
 installation cannot confirm cleanup for the old installation.
+Administrators may remove an agent from inventory with
+`DELETE /api/v1/admin/agents/{id}` (empty body or `{}`). Success is `204`; an
+unknown/deleted agent returns `404`; unresolved execution, cleanup, or buffered
+logs return `409` and leave the agent unchanged. Drain and reconcile workloads
+and log delivery first.
+Deletion removes the server registration, credentials, and configuration.
+Deployments, snapshots, logs, and step attempts remain with agent references
+cleared; agent-owned remote protocol state is removed. The same identity can
+pair through `POST /api/v1/admin/agents/pair` as a new registration with a new ID
+and default configuration; no tombstone blocks it. Stop the reconciled idle
+agent, move only `state.json` out of its
+private state directory, preserve its identity keys, and restart to obtain a
+fresh code. The bootstrap listener validates that code; an incorrect code does
+not restore the deleted registration. The existing
+`POST /api/v1/admin/agents/{id}/revoke` keeps the agent visible for later re-pairing.
+Pairing and recovery recheck the registration after the agent's completion
+acknowledgement using a separate bounded context, including after an ACK timeout.
+If deletion or revocation wins during that exchange, pairing returns `409`
+instead of reporting the removed registration as paired.
 After a heartbeat or cancellation timeout, the same paired agent can replay
 its durable terminal report with the original claim token. This resolves the
 remote uncertainty without changing a failed deployment to success. A late

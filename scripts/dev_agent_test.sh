@@ -16,6 +16,9 @@ esac
 ENGINE
 chmod 0755 "$tmp/docker"
 cp "$tmp/docker" "$tmp/podman"
+python3 -c 'import socket,sys
+with socket.socket(socket.AF_UNIX) as listener:
+    listener.bind(sys.argv[1])' "$tmp/runtime.sock"
 
 run_make() {
 	make --no-print-directory -C "$root" "$@" \
@@ -25,6 +28,26 @@ run_make() {
 }
 
 for engine in "$tmp/docker" "$tmp/podman"; do
+    : >"$DEV_AGENT_TEST_LOG"
+    run_make dev-agent
+    if grep -q 'DURPDEPLOY_AGENT_CONTAINER_ENABLED\|/run/durpdeploy/runtime.sock' "$DEV_AGENT_TEST_LOG"; then
+        echo 'FAIL: default dev agent received runtime access' >&2; exit 1
+    fi
+    : >"$DEV_AGENT_TEST_LOG"
+    if run_make dev-agent DEV_AGENT_RUNTIME_SOCKET="$tmp/missing.sock"; then
+        echo 'FAIL: missing runtime socket accepted' >&2; exit 1
+    fi
+    [[ ! -s "$DEV_AGENT_TEST_LOG" ]]
+    run_make dev-agent DEV_AGENT_RUNTIME_SOCKET="$tmp/runtime.sock"
+    grep -Fq -- "--volume $tmp/runtime.sock:/run/durpdeploy/runtime.sock:ro" "$DEV_AGENT_TEST_LOG"
+    grep -Fq -- '--env DURPDEPLOY_AGENT_CONTAINER_ENABLED=true' "$DEV_AGENT_TEST_LOG"
+    grep -Fq -- '--env DURPDEPLOY_AGENT_CONTAINER_SOCKET=unix:///run/durpdeploy/runtime.sock' "$DEV_AGENT_TEST_LOG"
+    if [[ ${engine##*/} == podman ]]; then
+        grep -Fq -- '--userns=keep-id:uid=10001,gid=10001' "$DEV_AGENT_TEST_LOG"
+        grep -Fq -- '--volume isolated-state:/var/lib/durpdeploy-agent:U' "$DEV_AGENT_TEST_LOG"
+    else
+        grep -Fq -- "--group-add=$(stat -c %g "$tmp/runtime.sock")" "$DEV_AGENT_TEST_LOG"
+    fi
 	# A failed pull must leave any existing container and state untouched.
 	: >"$DEV_AGENT_TEST_LOG"
 	if DEV_AGENT_TEST_FAIL_PULL=31 run_make dev-agent; then

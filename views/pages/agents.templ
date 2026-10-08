@@ -129,13 +129,22 @@ templ AgentsPage(agents []db.Agent, interpreters map[string][]string, health map
 											<div class="flex flex-col items-start gap-1 sm:flex-row sm:flex-wrap">
 											<a class="btn btn-ghost btn-xs" href={ templ.SafeURL("/admin/agents/" + agent.ID) }>Edit</a>
 											@AgentDrainControl(agent, "btn-xs", "/admin/agents")
-											if agent.Status != "revoked" {
+											if CanWrite(ctx) {
+												if agent.Status != "revoked" {
+													<button
+														class="btn btn-error btn-xs"
+														hx-post={ "/admin/agents/" + agent.ID + "/revoke" }
+														hx-confirm={ "Revoke agent " + agent.Name + " (" + agent.ID + ")? Active remote work will be terminated." }
+													>
+														Revoke
+													</button>
+												}
 												<button
 													class="btn btn-error btn-xs"
-													hx-post={ "/admin/agents/" + agent.ID + "/revoke" }
-													hx-confirm={ "Revoke agent " + agent.Name + " (" + agent.ID + ")? Active remote work will be terminated." }
+													hx-post={ "/admin/agents/" + agent.ID + "/delete" }
+													hx-confirm={ "Delete agent " + agent.Name + " (" + agent.ID + ")? It will be removed from the inventory and lose access. Deployment history is retained." }
 												>
-													Revoke
+													Delete
 												</button>
 											}
 										</div>
@@ -210,20 +219,31 @@ templ AgentDetailPage(agent db.Agent, labels []string, interpreters []string, en
 	} else {
 		@layouts.Base("Agent "+agent.Name, currentPath) {
 		<div class="space-y-6">
-			<div class="flex flex-wrap items-start justify-between gap-3">
+			<div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
 				<div class="min-w-0 flex-1">
-					<h1 class="text-3xl font-bold">{ agent.Name }</h1>
+					<h1 class="break-words text-3xl font-bold">{ agent.Name }</h1>
 					<p class="break-all font-mono text-sm opacity-60">{ agent.ID }</p>
 				</div>
 				<div class="flex flex-wrap items-center gap-2">
 					if agent.Status != "revoked" {
 					@AgentDrainControl(agent, "btn-sm", "/admin/agents/" + agent.ID)
+					}
+					if CanWrite(ctx) {
+					if agent.Status != "revoked" {
 					<button
 						class="btn btn-error btn-sm"
 						hx-post={ "/admin/agents/" + agent.ID + "/revoke" }
 						hx-confirm={ "Revoke agent " + agent.Name + " (" + agent.ID + ")? Active remote work will be terminated." }
 					>
 						Revoke agent
+					</button>
+					}
+					<button
+						class="btn btn-error btn-sm"
+						hx-post={ "/admin/agents/" + agent.ID + "/delete" }
+						hx-confirm={ "Delete agent " + agent.Name + " (" + agent.ID + ")? It will be removed from the inventory and lose access. Deployment history is retained." }
+					>
+						Delete agent
 					</button>
 					}
 					<a class="btn btn-ghost btn-sm" href="/admin/agents">Back</a>
@@ -388,10 +408,12 @@ templ AgentEnvironmentLabels(agent db.Agent, labels []db.Environment, availableE
 			} else {
 				<div class="flex flex-wrap gap-2">
 					for _, environment := range labels {
-						<form method="post" action={ templ.SafeURL("/admin/agents/" + agent.ID + "/environments/delete") } class="flex items-center gap-1 rounded-box bg-base-100 p-2">
+						<form method="post" action={ templ.SafeURL("/admin/agents/" + agent.ID + "/environments/delete") } class="flex max-w-full flex-wrap items-center gap-1 rounded-box bg-base-100 p-2">
 							<input type="hidden" name="environment_id" value={ fmt.Sprint(environment.ID) }/>
-							<span class="badge badge-outline">{ environment.Name }</span>
-							<button type="submit" class="btn btn-error btn-xs" aria-label={ "Remove environment label " + environment.Name }>Remove</button>
+							<span class="badge badge-outline h-auto min-w-0 max-w-full whitespace-normal py-1">
+								<span class="min-w-0 break-all">{ environment.Name }</span>
+							</span>
+							<button type="submit" class="btn btn-error btn-xs shrink-0" aria-label={ "Remove environment label " + environment.Name }>Remove</button>
 						</form>
 					}
 				</div>
@@ -428,10 +450,12 @@ templ AgentLabels(agent db.Agent, labels []string) {
 			} else {
 				<div class="flex flex-wrap gap-2">
 					for _, label := range labels {
-						<form method="post" action={ templ.SafeURL("/admin/agents/" + agent.ID + "/labels/delete") } class="flex items-center gap-1 rounded-box bg-base-100 p-2">
+						<form method="post" action={ templ.SafeURL("/admin/agents/" + agent.ID + "/labels/delete") } class="flex max-w-full flex-wrap items-center gap-1 rounded-box bg-base-100 p-2">
 							<input type="hidden" name="label" value={ label }/>
-							<span class="badge badge-outline">{ label }</span>
-							<button type="submit" class="btn btn-error btn-xs" aria-label={ "Remove label " + label }>Remove</button>
+							<span class="badge badge-outline h-auto min-w-0 max-w-full whitespace-normal py-1">
+								<span class="min-w-0 break-all">{ label }</span>
+							</span>
+							<button type="submit" class="btn btn-error btn-xs shrink-0" aria-label={ "Remove label " + label }>Remove</button>
 						</form>
 					}
 				</div>

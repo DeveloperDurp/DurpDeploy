@@ -150,6 +150,7 @@ type Deployment struct {
 	AssignedAgentID    sql.NullString `json:"assigned_agent_id"`
 	Kind               string         `json:"kind"`
 	ContainerNamespace sql.NullString `json:"container_namespace"`
+	CleanupConfirmedAt sql.NullInt64  `json:"cleanup_confirmed_at"`
 }
 
 type DeploymentApproval struct {
