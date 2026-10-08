@@ -72,6 +72,14 @@ done
 # Registration and assertion must use each allocated server's real origin.
 for lane in 1 2; do
 	base=$(awk '/^E2E instance:/ { sub(/^url=/, "", $3); print $3 }' "$tmp/$lane.log")
+	(
+		unset DURPDEPLOY_E2E_CONTROL_PLANE_PORT
+		export DURPDEPLOY_E2E_CLIENT_ONLY=1 DURPDEPLOY_BASE_URL="$base"
+		ROOT_DIR=$root
+		source "$root/scripts/e2e_wait.sh"
+		source "$root/scripts/e2e_lifecycle.sh"
+		[[ $CONTROL_PLANE_PORT == "${BASE##*:}" ]]
+	)
 	DURPDEPLOY_BASE_URL="$base" node "$root/scripts/e2e_origin_test.mjs" \
 		>"$tmp/origin-$lane.log" 2>&1 &
 	pids+=("$!")
@@ -84,6 +92,20 @@ for lane in 1 2; do
 	cat "$tmp/origin-$lane.log"
 done
 pids=("${pids[0]}" "${pids[1]}")
+printf 'Client-only control-plane port: PASS\n'
+for invalid_port in 0 65536 18446744073709551617; do
+	if (
+		export DURPDEPLOY_E2E_CLIENT_ONLY=1 DURPDEPLOY_BASE_URL="$base"
+		export DURPDEPLOY_E2E_CONTROL_PLANE_PORT="$invalid_port"
+		ROOT_DIR=$root
+		source "$root/scripts/e2e_wait.sh"
+		source "$root/scripts/e2e_lifecycle.sh"
+	) >"$tmp/client-invalid.log" 2>&1; then
+		echo 'FAIL: client-only probe accepted an invalid port' >&2
+		exit 1
+	fi
+	grep -q 'FAIL: control-plane probe port must be from 1 to 65535' "$tmp/client-invalid.log"
+done
 
 # A real input failure must fail the check without logging its password.
 probe_password=$(openssl rand -hex 16)
