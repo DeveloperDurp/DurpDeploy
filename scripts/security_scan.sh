@@ -70,11 +70,11 @@ case "$scanner" in
       then error("invalid exceptions") else . end
       |
       map(. as $finding | . + {disposition:
-        if any($exceptions[0][];
+        (if any($exceptions[0][];
           .rule == $finding.rule and .file == $finding.file
           and .line == $finding.line and .source_sha256 == $finding.source_sha256
           and .expires > $today and (.reason | length) > 0) then "reviewed"
-        elif .severity == "LOW" then "advisory" else "blocking" end})
+        elif .severity == "LOW" then "advisory" else "blocking" end)})
       | {version: $version, status: "complete", issues: .,
          blocking: ([.[] | select(.disposition == "blocking")] | length)}
     ' "$private/issues.jsonl" >"$private/report.json" 2>"$private/parse-errors" || {
