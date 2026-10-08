@@ -85,6 +85,21 @@ for lane in 1 2; do
 done
 pids=("${pids[0]}" "${pids[1]}")
 
+# A real input failure must fail the check without logging its password.
+probe_password=$(openssl rand -hex 16)
+if DURPDEPLOY_BASE_URL="$base" DURPDEPLOY_ADMIN_PASSWORD="$probe_password" \
+	node "$root/scripts/e2e_origin_test.mjs" --force-selector-failure \
+	>"$tmp/origin-failure.log" 2>&1; then
+	echo 'FAIL: forced origin input error succeeded' >&2
+	exit 1
+fi
+if grep -Fq -- "$probe_password" "$tmp/origin-failure.log"; then
+	echo 'FAIL: origin input error exposed its password' >&2
+	exit 1
+fi
+grep -q '^Allocated E2E WebAuthn origin: FAIL (details redacted)$' "$tmp/origin-failure.log"
+printf 'Origin browser failure redaction: PASS\n'
+
 # An occupied explicit port must fail even though the other app is healthy.
 port=$(awk '/^E2E instance:/ { sub(/^.*:/, "", $3); print $3 }' "$tmp/1.log")
 status=0
