@@ -18,6 +18,14 @@ import (
 
 func stagingRuntime(t *testing.T, args ...string) string {
 	t.Helper()
+	return stagingRuntimeBinary(
+		t,
+		os.Getenv("DURPDEPLOY_CONTAINER_RUNTIME"),
+		args...)
+}
+
+func stagingRuntimeBinary(t *testing.T, binary string, args ...string) string {
+	t.Helper()
 	kind := os.Getenv("DURPDEPLOY_CONTAINER_RUNTIME")
 	if endpoint := os.Getenv("DURPDEPLOY_CONTAINER_URL"); endpoint != "" {
 		prefix := []string{"--host=" + endpoint}
@@ -31,12 +39,36 @@ func stagingRuntime(t *testing.T, args ...string) string {
 		time.Minute,
 	)
 	defer cancel()
-	output, err := exec.CommandContext(ctx, kind, args...).
+	output, err := exec.CommandContext(ctx, binary, args...).
 		CombinedOutput()
 	if err != nil {
 		t.Fatalf("runtime %v: %v: %s", args, err, output)
 	}
 	return strings.TrimSpace(string(output))
+}
+
+func cleanupArtifactRuntime(t *testing.T, h *harness, binary ...string) {
+	t.Helper()
+	cleanupBinary := os.Getenv("DURPDEPLOY_CONTAINER_RUNTIME")
+	if len(binary) != 0 {
+		cleanupBinary = binary[0]
+	}
+	t.Cleanup(func() {
+		h.runner.KillAll()
+		// Test-owned references may outlive an awaiting fixture.
+		ids := stagingRuntimeBinary(t, cleanupBinary, "ps", "--all", "--quiet",
+			"--filter=label=io.durpdeploy.namespace="+
+				os.Getenv("DURPDEPLOY_CONTAINER_RUNTIME")+":"+
+				os.Getenv("DURPDEPLOY_CONTAINER_NAMESPACE")+":gate-images",
+			"--filter=label=io.durpdeploy.gate-image")
+		if ids != "" {
+			stagingRuntimeBinary(
+				t,
+				cleanupBinary,
+				append([]string{"rm", "--force", "--volumes"},
+					strings.Fields(ids)...)...)
+		}
+	})
 }
 
 func TestDeploymentStagingCleanupE2E(t *testing.T) {
