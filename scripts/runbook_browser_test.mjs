@@ -47,7 +47,7 @@ try {
   assert.match(await mobile.innerText(), /Pinned version 1/);
   assert.equal(await mobile.getByText("Next run:").count(), 1);
   assert.equal(await mobile.locator(`form[action$="/schedules/${scheduleID}/disable"]`).count(), 1);
-  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), 375);
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), true);
 
   await page.setViewportSize({ width: 1440, height: 900 });
   assert.equal(await mobile.isVisible(), false);
@@ -92,7 +92,7 @@ try {
   assert.equal(await stepEdit.locator('input[name="container_image"]').isDisabled(), true);
   assert.equal(await stepEdit.locator('input[name="variable_names"]').isEnabled(), true);
   await stepEdit.locator('input[name="variable_names"]').fill("REMOTE_TOKEN");
-  const stepRequest = page.waitForRequest(request => request.method() === "PUT" && request.url().endsWith(`/steps/${step.id}`));
+  const stepRequest = page.waitForRequest(request => request.method() === "PUT" && new URL(request.url()).pathname === `/projects/${stepProject.id}/steps/${step.id}`);
   await page.locator('#step-edit-dialog').getByRole("button", { name: "Save", exact: true }).click();
   assert.equal(new URLSearchParams((await stepRequest).postData()).get("variable_names"), "REMOTE_TOKEN");
   await stepEdit.waitFor({ state: "detached" });

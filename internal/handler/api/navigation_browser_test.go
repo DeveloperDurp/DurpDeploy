@@ -37,12 +37,12 @@ func TestPageNavigationBrowserE2E(t *testing.T) {
 	b.evaluate(t, `history.back(); true`)
 	b.wait(
 		t,
-		`location.pathname === '/environments' && document.title === 'Environments' && document.querySelector('#app-navbar a[href="/environments"]').classList.contains('active')`,
+		`location.pathname === '/environments' && document.title === 'Environments' && document.querySelector('#app-navbar a[href="/environments"]').classList.contains('menu-active')`,
 	)
 	b.evaluate(t, `history.forward(); true`)
 	b.wait(
 		t,
-		`location.pathname === '/templates' && document.title === 'Templates' && document.querySelector('#app-navbar a[href="/templates"]').classList.contains('active')`,
+		`location.pathname === '/templates' && document.title === 'Templates' && document.querySelector('#app-navbar a[href="/templates"]').classList.contains('menu-active')`,
 	)
 	// Then the shell and bundles remain loaded, without persisted HTML history.
 	if string(

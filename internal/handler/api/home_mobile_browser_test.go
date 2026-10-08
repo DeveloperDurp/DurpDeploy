@@ -106,7 +106,7 @@ func TestHomeMobileBrowserE2E(t *testing.T) {
 	b.navigateBackTest(t, f.baseURL+"/")
 	b.wait(
 		t,
-		`document.querySelectorAll('[data-home-charts] canvas').length === 2 && [...document.querySelectorAll('[data-home-charts] canvas')].every(c => DashboardChart.getChart(c)?.width > 0)`,
+		`window.DashboardChart && document.querySelectorAll('[data-home-charts] canvas').length === 2 && [...document.querySelectorAll('[data-home-charts] canvas')].every(c => DashboardChart.getChart(c)?.width > 0)`,
 	)
 	b.captureNavigation(t, "home-populated", func() {
 		b.wait(t, `(() => {
@@ -302,7 +302,7 @@ func TestHomeRunningPollBrowserE2E(t *testing.T) {
 	b.wait(t, `!document.querySelector('#home-deployments.htmx-settling')`)
 	b.wait(
 		t,
-		`document.querySelector('#home-latest .badge').textContent === 'running' && document.querySelector('#home-recent .badge').textContent === 'running' && document.querySelector('#home-today-count .stat-value').textContent === '1' && Object.keys(DashboardChart.instances).length === 2`,
+		`window.DashboardChart && document.querySelector('#home-latest .badge').textContent === 'running' && document.querySelector('#home-recent .badge').textContent === 'running' && document.querySelector('#home-today-count .stat-value').textContent === '1' && Object.keys(DashboardChart.instances).length === 2`,
 	)
 	b.evaluate(
 		t,
