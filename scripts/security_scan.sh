@@ -47,10 +47,10 @@ case "$scanner" in
       '{version: $version, status: "complete", exit_code: $result}' >"$report"
     ;;
   gosec)
-    "$tool_dir/gosec" -nosec=true -exclude-generated -fmt=json \
+    "$tool_dir/gosec" -nosec=true -tests=false -exclude-generated -fmt=json \
       -out="$private/raw.json" ./... >"$private/log" 2>&1 || scan_exit=$?
     [[ "$scan_exit" == 0 || "$scan_exit" == 1 ]] || fail 'scanner execution failed'
-    jq --arg root "$scan_root" -f "$root/.security/gosec-report.jq" \
+    jq -se --arg root "$scan_root" -f "$root/.security/gosec-report.jq" \
       "$private/raw.json" >"$private/safe.json" 2>"$private/parse-errors" \
       || fail 'incomplete or malformed report; no raw output published'
     while IFS= read -r finding; do
@@ -112,12 +112,15 @@ case "$scanner" in
     "$tool_dir/gitleaks" dir "${args[@]}" --report-path="$private/tree.json" \
       . >"$private/tree.log" 2>&1 || tree_exit=$?
     [[ "$tree_exit" == 0 || "$tree_exit" == 10 ]] || fail 'tree scan failed'
+    for kind in history tree; do
+      jq -se -f "$root/.security/gitleaks-report.jq" "$private/$kind.json" \
+        >"$private/$kind.safe.json" 2>"$private/parse-errors" \
+        || fail 'incomplete or malformed report'
+    done
     jq -s --arg version "$version" '
-      if any(.[]; type != "array") then error("invalid report") else . end
-      | {version: $version, status: "complete", findings:
-          [(.[][]) | {rule: .RuleID, file: .File, line: .StartLine, commit: .Commit}]}
+      {version: $version, status: "complete", findings: (.[0] + .[1])}
       | . + {blocking: (.findings | length)}
-    ' "$private/history.json" "$private/tree.json" >"$private/report.json" \
+    ' "$private/history.safe.json" "$private/tree.safe.json" >"$private/report.json" \
       2>"$private/parse-errors" || fail 'incomplete or malformed report'
     cp "$private/report.json" "$report"
     if [[ "$scan_exit" == 10 || "$tree_exit" == 10 ]] \

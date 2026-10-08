@@ -1,4 +1,8 @@
 # Raw scanner output stays private. Publish only location/rule metadata.
+if length != 1 or (.[0] | type) != "object" then
+  error("expected exactly one report")
+else .[0] end
+|
 if (.Stats.files | type) != "number" or .Stats.files <= 0
    or (.Issues | type) != "array"
    or (.["Golang errors"] | type) != "object"

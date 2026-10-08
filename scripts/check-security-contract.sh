@@ -3,7 +3,7 @@ set -euo pipefail
 root=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 workflow=${1:-$root/.github/workflows/security.yml}
 require() {
-  rg -Fq -- "$2" "$1" || { printf 'Security contract missing: %s\n' "$2" >&2; exit 1; }
+  grep -Fq -- "$2" "$1" || { printf 'Security contract missing: %s\n' "$2" >&2; exit 1; }
 }
 for token in 'pull_request:' 'branches: [main]' 'schedule:' 'workflow_dispatch:' \
   'contents: read' 'persist-credentials: false' 'fetch-depth: 0' \
@@ -12,7 +12,7 @@ for token in 'pull_request:' 'branches: [main]' 'schedule:' 'workflow_dispatch:'
   'bash scripts/security_scan.sh gitleaks'; do
   require "$workflow" "$token"
 done
-if rg -q 'secrets\.|pull_request_target|continue-on-error:|contents: write|permissions: write-all' "$workflow"; then
+if grep -Eq 'secrets\.|pull_request_target|continue-on-error:|contents: write|permissions: write-all' "$workflow"; then
   printf 'Security contract: privileged or non-blocking workflow\n' >&2
   exit 1
 fi

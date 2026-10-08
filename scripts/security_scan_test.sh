@@ -12,7 +12,7 @@ runner="$root/scripts/security_scan.sh"
 mkdir -p "$fixture/app" "$fixture/db/index" "$fixture/db/ID"
 printf 'module security-fixture\n\ngo 1.26.0\n' >"$fixture/app/go.mod"
 printf '\nrequire github.com/google/uuid v1.6.0\n' >>"$fixture/app/go.mod"
-rg '^github.com/google/uuid v1.6.0' "$root/go.sum" >"$fixture/app/go.sum"
+grep -E '^github.com/google/uuid v1.6.0' "$root/go.sum" >"$fixture/app/go.sum"
 
 expect_exit() {
   local expected=$1 actual=0
@@ -70,12 +70,17 @@ expect_exit 2 bash "$runner" gosec "$fixture/app"
 jq -e '.status != "complete"' "$fixture/reports/gosec.json" >/dev/null
 
 # Given malformed/empty reports. When / Then: the publishing parser rejects them.
-for report in '{}' '{"Stats":{"files":0},"Issues":[],"Golang errors":{}}'; do
+for report in '' '   ' '{}' '{"Stats":{"files":0},"Issues":[],"Golang errors":{}}' \
+  '{"Stats":{"files":1},"Issues":[],"Golang errors":{}} {}'; do
   printf '%s\n' "$report" >"$fixture/report.json"
-  expect_exit 5 jq --arg root "$fixture/app" -f "$root/.security/gosec-report.jq" "$fixture/report.json"
+  expect_exit 5 jq -se --arg root "$fixture/app" -f "$root/.security/gosec-report.jq" "$fixture/report.json"
 done
 printf '{' >"$fixture/report.json"
-expect_exit 5 jq --arg root "$fixture/app" -f "$root/.security/gosec-report.jq" "$fixture/report.json"
+expect_exit 5 jq -se --arg root "$fixture/app" -f "$root/.security/gosec-report.jq" "$fixture/report.json"
+for report in '' '   ' '{}' '[] []' '[{}]'; do
+  printf '%s' "$report" >"$fixture/report.json"
+  expect_exit 5 jq -se -f "$root/.security/gitleaks-report.jq" "$fixture/report.json"
+done
 
 # Given a synthetic credential generated only in temporary files.
 canary="ghp_$(openssl rand -hex 20)"
@@ -83,7 +88,7 @@ printf 'api_key = "%s"\n' "$canary" >"$fixture/app/canary.txt"
 # When / Then: actual Gitleaks blocks it and the published evidence has no value.
 expect_exit 1 bash "$runner" gitleaks "$fixture/app"
 jq -e '.blocking > 0' "$fixture/reports/gitleaks.json" >/dev/null
-if rg --fixed-strings --quiet "$canary" "$fixture/reports" "$fixture/output"; then
+if grep -FRq -- "$canary" "$fixture/reports" "$fixture/output"; then
   printf 'FAIL: evidence exposed synthetic credential\n' >&2
   exit 1
 fi
@@ -116,7 +121,7 @@ head=$(git -C "$fixture/history" rev-parse HEAD)
 # When / Then: both the PR range and full-history modes detect the removal.
 expect_exit 1 env SECURITY_GIT_RANGE="$base..$head" bash "$runner" gitleaks "$fixture/history"
 expect_exit 1 bash "$runner" gitleaks "$fixture/history"
-if rg --fixed-strings --quiet "$canary" "$fixture/reports" "$fixture/output"; then
+if grep -FRq -- "$canary" "$fixture/reports" "$fixture/output"; then
   printf 'FAIL: history evidence exposed synthetic credential\n' >&2
   exit 1
 fi

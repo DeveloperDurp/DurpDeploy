@@ -26,8 +26,9 @@ Pins: govulncheck 1.8.0, gosec 2.29.0, Gitleaks 8.30.1.
   with a locally customized Go version string.
 - Gosec fails on every new medium/high finding outside reviewed exceptions.
   Low findings remain advisory and visible. Inline `nosec` comments cannot
-  bypass this gate. Generated Go is excluded; hand-maintained application
-  and test source is analyzed. Compile/load errors, empty analysis, and
+  bypass this gate. Generated Go and `*_test.go` are excluded; application
+  source and ordinary Go fixture-helper packages are analyzed. Gitleaks
+  scans test sources as well as application sources. Compile/load errors, empty analysis, and
   invalid reports fail.
 - Gitleaks fails on credentials in the current source tree or Git history.
   PRs scan base SHA..head SHA plus the merge checkout's source tree. Main,
