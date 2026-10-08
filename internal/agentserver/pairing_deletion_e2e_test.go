@@ -2,6 +2,7 @@ package agentserver_test
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
@@ -23,19 +24,40 @@ import (
 func TestAgentPairingDeletionConflictE2E(t *testing.T) {
 	for _, surface := range []string{"api", "web"} {
 		t.Run(surface, func(t *testing.T) {
-			testAgentPairingDeletionConflict(t, surface)
+			testAgentPairingDeletionConflict(t, surface, false)
 		})
 	}
 }
 
-func testAgentPairingDeletionConflict(t *testing.T, surface string) {
+func TestAgentPairingDeletionAfterAcknowledgementDeadlineE2E(t *testing.T) {
+	for _, surface := range []string{"api", "web"} {
+		t.Run(surface, func(t *testing.T) {
+			testAgentPairingDeletionConflict(t, surface, true)
+		})
+	}
+}
+
+func testAgentPairingDeletionConflict(
+	t *testing.T,
+	surface string,
+	expireAck bool,
+) {
 	t.Helper()
 	// Given: a paired identity recovered over a real TLS connection.
 	f := newAgentFixture(t)
 	var admin *httptest.Server
-	peer := httptest.NewUnstartedServer(
-		deleteAgentOnPairingAck(t, &admin),
-	)
+	var peerHandler http.Handler = deleteAgentOnPairingAck(t, &admin)
+	if expireAck {
+		completion := peerHandler
+		peerHandler = http.HandlerFunc(
+			func(w http.ResponseWriter, r *http.Request) {
+				completion.ServeHTTP(w, r)
+				// Hold the response until the pairing request's deadline disconnects.
+				<-r.Context().Done()
+			},
+		)
+	}
+	peer := httptest.NewUnstartedServer(peerHandler)
 	peer.TLS = &tls.Config{
 		Certificates: []tls.Certificate{f.identity.Certificate},
 		MinVersion:   tls.VersionTLS13,
@@ -88,6 +110,21 @@ func testAgentPairingDeletionConflict(t *testing.T, surface string) {
 		t.Fatal(err)
 	}
 	admin = fleetAdminServer(t, f, pairing)
+	if expireAck {
+		handler := admin.Config.Handler
+		admin.Close()
+		admin = httptest.NewServer(
+			http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method == "POST" && strings.Contains(r.URL.Path, "pair") {
+					ctx, cancel := context.WithTimeout(r.Context(), time.Second)
+					defer cancel()
+					r = r.WithContext(ctx)
+				}
+				handler.ServeHTTP(w, r)
+			}),
+		)
+		t.Cleanup(admin.Close)
+	}
 
 	// When: deletion finishes before the agent acknowledges recovery.
 	if surface == "api" {

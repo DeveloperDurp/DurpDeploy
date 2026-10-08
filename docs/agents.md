@@ -265,6 +265,8 @@ ID in the private state directory.
 Pairing recovery checks the registration again after the completion exchange.
 If deletion or revocation finishes while it waits on the agent, the API returns
 `409` and the web flow reports a conflict instead of a stale paired success.
+If the completion acknowledgement times out after activation commits, a separate
+bounded registration check still determines paired success or conflict.
 
 After pairing, restart with `DURPDEPLOY_AGENT_STATE_DIR` and
 `DURPDEPLOY_AGENT_VERSION`. Do not supply a server URL, certificate,

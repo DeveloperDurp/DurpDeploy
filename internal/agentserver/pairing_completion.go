@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"time"
 
 	agentproto "github.com/DeveloperDurp/durpdeploy-agent/protocol"
 )
@@ -34,8 +35,14 @@ func (service *PairingService) cleanup(
 	}
 	// Completion can race deletion, revocation or replacement while waiting
 	// on the agent. Verify the live tuple after that network round trip.
+	// Activation already committed; an expired ACK must not skip this check.
+	checkCtx, cancel := context.WithTimeout(
+		context.WithoutCancel(ctx),
+		5*time.Second,
+	)
+	defer cancel()
 	pairing, err := service.repository.Queries.GetRegisteredAgentPairing(
-		ctx,
+		checkCtx,
 		result.AgentID,
 	)
 	if errors.Is(err, sql.ErrNoRows) {

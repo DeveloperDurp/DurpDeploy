@@ -197,8 +197,9 @@ fresh code. The bootstrap listener validates that code; an incorrect code does
 not restore the deleted registration. The existing
 `POST /api/v1/admin/agents/{id}/revoke` keeps the agent visible for later re-pairing.
 Pairing and recovery recheck the registration after the agent's completion
-acknowledgement. If deletion or revocation wins during that exchange, pairing
-returns `409` instead of reporting the removed registration as paired.
+acknowledgement using a separate bounded context, including after an ACK timeout.
+If deletion or revocation wins during that exchange, pairing returns `409`
+instead of reporting the removed registration as paired.
 After a heartbeat or cancellation timeout, the same paired agent can replay
 its durable terminal report with the original claim token. This resolves the
 remote uncertainty without changing a failed deployment to success. A late
