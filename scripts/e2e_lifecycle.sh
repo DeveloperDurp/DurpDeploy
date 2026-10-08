@@ -54,11 +54,6 @@ except ValueError:
     sys.exit("FAIL: invalid E2E base URL")
 PY
     )}
-    if [[ ! $CONTROL_PLANE_PORT =~ ^[0-9]{1,5}$ ]] || \
-        ((10#$CONTROL_PLANE_PORT < 1 || 10#$CONTROL_PLANE_PORT > 65535)); then
-        echo 'FAIL: control-plane probe port must be from 1 to 65535' >&2
-        exit 2
-    fi
     echo "=== Running client-only E2E assertions against $BASE ==="
     if ! curl -fsS "$BASE/healthz" >/dev/null; then
         echo "FAIL: DurpDeploy server is unavailable at $BASE (set DURPDEPLOY_BASE_URL)" >&2
@@ -128,4 +123,10 @@ else
             sleep 0.25
         done
     fi
+fi
+
+if [[ ! $CONTROL_PLANE_PORT =~ ^[0-9]{1,5}$ ]] || \
+    ((10#$CONTROL_PLANE_PORT < 1 || 10#$CONTROL_PLANE_PORT > 65535)); then
+    echo 'FAIL: control-plane probe port must be from 1 to 65535' >&2
+    exit 2
 fi

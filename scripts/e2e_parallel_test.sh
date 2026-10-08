@@ -107,6 +107,20 @@ for invalid_port in 0 65536 18446744073709551617; do
 	grep -q 'FAIL: control-plane probe port must be from 1 to 65535' "$tmp/client-invalid.log"
 done
 
+# The isolated server path must validate the same explicit override.
+if (
+	unset DURPDEPLOY_CONTAINER_NAMESPACE DURPDEPLOY_E2E_START_GATE
+	export DURPDEPLOY_E2E_CLIENT_ONLY=0 DURPDEPLOY_E2E_PORT=0
+	export DURPDEPLOY_E2E_CONTROL_PLANE_PORT=0
+	ROOT_DIR=$root
+	source "$root/scripts/e2e_wait.sh"
+	source "$root/scripts/e2e_lifecycle.sh"
+) >"$tmp/server-invalid.log" 2>&1; then
+	echo 'FAIL: isolated server probe accepted an invalid port' >&2
+	exit 1
+fi
+grep -q 'FAIL: control-plane probe port must be from 1 to 65535' "$tmp/server-invalid.log"
+
 # A real input failure must fail the check without logging its password.
 probe_password=$(openssl rand -hex 16)
 if DURPDEPLOY_BASE_URL="$base" DURPDEPLOY_ADMIN_PASSWORD="$probe_password" \
