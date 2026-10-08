@@ -47,6 +47,8 @@ func (r *Repository) QueueRemoteStepRuns(
 	return created, err
 }
 
+// ClaimRemoteStepPayload may repeat prepare after a rolled-back claim.
+// The callback must only prepare the payload, without external side effects.
 func (r *Repository) ClaimRemoteStepPayload(
 	ctx context.Context,
 	agentID string,
@@ -56,7 +58,7 @@ func (r *Repository) ClaimRemoteStepPayload(
 		claim   RemoteClaim
 		claimed bool
 	}
-	result, err := withSQLiteBusyRetryValue(
+	result, err := withPollClaimRetryValue(
 		ctx,
 		func() (claimResult, error) {
 			attempt := claimResult{}
