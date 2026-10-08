@@ -72,6 +72,8 @@ encryption key, server identity, paired agent, proxy, firewall watcher and
 certificate remain in place. No re-pairing or E2E repopulation occurs. Wait for
 deployments to finish and confirm cleanup; unfinished or lost remote work blocks
 refresh.
+The final idle check and old-server shutdown hold a database write barrier;
+new deployments cannot be admitted until the replacement is ready to start.
 The existing server must be running so its configuration can be retained.
 Startup settings are preserved rather than taken from the caller's environment.
 Inspect `server-refresh-build.log` and `server.log` if refresh fails.

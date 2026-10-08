@@ -60,6 +60,8 @@ After server code, template or asset changes, use
 CSS/JS before restarting only the server, retaining the same URL, login,
 database, encryption key, server identity, paired agent, proxy and certificate.
 It refuses unfinished deployments, lost remote work, or unconfirmed cleanup.
+It blocks database writes during its final idle check and server shutdown so
+new deployments cannot slip between them; failed checks release the barrier.
 It does not re-pair the agent or rerun the population suite. Finish and save script edits
 before invoking them; never edit a Bash script while it is running.
 Database query/schema/migration changes require

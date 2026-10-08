@@ -10,6 +10,7 @@ cleanup() {
 trap cleanup EXIT
 export DEMO_TEST_LOG="$tmp/commands"
 export DEMO_TEST_SQLITE=$(command -v sqlite3)
+export DEMO_TEST_ADMIT_SQL="INSERT INTO deployments VALUES (2, 'pending', NULL, NULL);"
 cat >"$tmp/engine" <<'ENGINE'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >>"$DEMO_TEST_LOG"
@@ -51,7 +52,25 @@ printf '%s\n' "$pid" >"$tmp/demo/server.pid"
 mkdir "$tmp/tools"
 cat >"$tmp/tools/sqlite3" <<'SQLITE'
 #!/usr/bin/env bash
-if [[ ${DEMO_TEST_REAL_DB:-0} == 1 ]]; then exec "$DEMO_TEST_SQLITE" "$@"; fi
+if [[ ${DEMO_TEST_REAL_DB:-0} == 1 ]]; then
+    if [[ ${DEMO_TEST_ADMISSION:-0} == 1 && $1 == -readonly ]]; then
+        result=$("$DEMO_TEST_SQLITE" "$@")
+        if [[ -f "$DEMO_TEST_LOG.idle" ]]; then
+            if "$DEMO_TEST_SQLITE" -cmd '.timeout 100' "$DEMO_TEST_DB" \
+                "$DEMO_TEST_ADMIT_SQL" \
+                >"$DEMO_TEST_LOG.writer" 2>&1; then
+                touch "$DEMO_TEST_LOG.admitted"
+            else
+                touch "$DEMO_TEST_LOG.blocked"
+            fi
+        else
+            touch "$DEMO_TEST_LOG.idle"
+        fi
+        printf '%s\n' "$result"
+        exit
+    fi
+    exec "$DEMO_TEST_SQLITE" "$@"
+fi
 printf '%s\n' "${DEMO_TEST_BUSY:-0}"
 SQLITE
 cat >"$tmp/tools/make" <<'MAKE'
@@ -109,6 +128,9 @@ grep -q 'Building server in place' "$tmp/output"
 # even when the caller supplies different container endpoints.
 cat >"$tmp/tools/go" <<'GO'
 #!/usr/bin/env bash
+if [[ ${DEMO_TEST_BUSY_AFTER_BUILD:-0} == 1 ]]; then
+    "$DEMO_TEST_SQLITE" "$DEMO_TEST_DB" "$DEMO_TEST_ADMIT_SQL"
+fi
 cp "$DEMO_TEST_SERVER_BINARY" "$3"
 GO
 cat >"$tmp/tools/nohup" <<'NOHUP'
@@ -125,13 +147,42 @@ chmod 0755 "$tmp/tools/"*
 mkdir -p "$tmp/demo/tmp" "$tmp/demo/tls"
 printf '%s\n' https://citadel.durp.loc:12345 >"$tmp/demo/url"
 printf '%s\n' 'retained login' >"$tmp/demo/login.txt"
+rm "$tmp/demo/durpdeploy.db"
+sqlite3 "$tmp/demo/durpdeploy.db" <<'SQL'
+CREATE TABLE deployments (id INTEGER, status TEXT, container_namespace TEXT, cleanup_confirmed_at INTEGER);
+CREATE TABLE remote_step_runs (deployment_id INTEGER, state TEXT, cleanup_confirmed_at INTEGER);
+CREATE TABLE remote_deployment_claims (deployment_id INTEGER, state TEXT, cleanup_confirmed_at INTEGER);
+SQL
+if PATH="$tmp/tools:$PATH" DEMO_TEST_BUILD_OK=1 DEMO_TEST_REAL_DB=1 \
+    DEMO_TEST_BUSY_AFTER_BUILD=1 DEMO_TEST_DB="$tmp/demo/durpdeploy.db" \
+    DEMO_TEST_SERVER_BINARY="$(command -v cat)" \
+    bash "$root/scripts/demo-server-refresh.sh" "$tmp/demo" >"$tmp/output" 2>&1; then
+    echo 'FAIL: refresh ignored work admitted during its build' >&2; exit 1
+fi
+kill -0 "$pid"
+[[ $(cat "$tmp/demo/server.pid") == "$pid" ]]
+grep -q 'confirm agent cleanup' "$tmp/output"
+# A rejected final check releases its barrier and leaves the original server.
+sqlite3 "$tmp/demo/durpdeploy.db" 'DELETE FROM deployments;'
+printf 'Refresh rejects work admitted during build and releases its barrier: PASS\n'
 PATH="$tmp/tools:$PATH" DEMO_TEST_BUILD_OK=1 \
+    DEMO_TEST_REAL_DB=1 DEMO_TEST_ADMISSION=1 DEMO_TEST_DB="$tmp/demo/durpdeploy.db" \
     DEMO_TEST_SERVER_BINARY="$(command -v cat)" DEMO_TEST_FIFO="$tmp/input" \
     DOCKER_HOST=unix:///caller/docker.sock CONTAINER_HOST=unix:///caller/podman.sock \
     bash "$root/scripts/demo-server-refresh.sh" "$tmp/demo" >"$tmp/output" 2>&1
 wait "$pid" 2>/dev/null || true
 pid=$(cat "$tmp/demo/server.pid")
 kill -0 "$pid"
+if [[ ! -f "$DEMO_TEST_LOG.blocked" || -e "$DEMO_TEST_LOG.admitted" ]]; then
+    echo 'FAIL: refresh admitted new deployment after its final idle check' >&2; exit 1
+fi
+grep -q 'database is locked' "$DEMO_TEST_LOG.writer"
+[[ $(sqlite3 "$tmp/demo/durpdeploy.db" 'SELECT count(*) FROM deployments;') == 0 ]]
+# Shutdown releases the write barrier before the replacement starts.
+sqlite3 "$tmp/demo/durpdeploy.db" "$DEMO_TEST_ADMIT_SQL"
+printf 'Refresh blocks concurrent admission and releases its barrier: PASS\n'
+rm "$tmp/demo/durpdeploy.db"
+printf 'retained\n' >"$tmp/demo/durpdeploy.db"
 grep -Fxq docker=unix:///original/docker.sock "$tmp/demo/server.log"
 grep -Fxq podman=unset "$tmp/demo/server.log"
 grep -Fxq retained "$tmp/demo/durpdeploy.db"

@@ -67,7 +67,6 @@ make --no-print-directory templ-generate swagger-ui-copy tailwind-build js-build
 go build -o "$directory/bin/durpdeploy.next" ./cmd/server \
     >>"$directory/server-refresh-build.log" 2>&1
 check_server
-check_idle
 
 for variable in ${!DURPDEPLOY_@}; do unset "$variable"; done
 unset DOCKER_HOST CONTAINER_HOST
@@ -79,6 +78,29 @@ while IFS= read -r -d '' setting; do
 done <"$directory/server.env"
 export DURPDEPLOY_ADDR="$address" TMPDIR="$directory/tmp"
 
+# All deployment admission and agent claims write SQLite before execution.
+# Hold its writer lock from the final idle check until the old server exits.
+release_write_barrier() {
+    if [[ -n ${barrier_pid:-} ]]; then
+        printf 'ROLLBACK;\n.quit\n' >&"$barrier_input" || true
+        wait "$barrier_pid" || true
+        barrier_pid=
+    fi
+}
+trap release_write_barrier EXIT
+coproc DEMO_WRITE_BARRIER {
+    exec 9>&-
+    exec sqlite3 -bail -cmd '.timeout 5000' "$directory/durpdeploy.db"
+}
+barrier_pid=$DEMO_WRITE_BARRIER_PID
+barrier_input=${DEMO_WRITE_BARRIER[1]}
+printf "BEGIN IMMEDIATE;\nSELECT 'refresh-locked';\n" >&"$barrier_input"
+if ! IFS= read -r -t 6 barrier_state <&"${DEMO_WRITE_BARRIER[0]}" || \
+    [[ "$barrier_state" != refresh-locked ]]; then
+    echo 'Could not close deployment admission; server left running.' >&2
+    exit 1
+fi
+check_idle
 kill "$pid"
 for _ in {1..150}; do
     command_line=$(ps -p "$pid" -o args= || true)
@@ -89,6 +111,7 @@ if [[ -n "$command_line" && "$command_line" != *'<defunct>'* ]]; then
     echo 'Server did not stop; check server.log. Agent and proxy were left running.' >&2
     exit 1
 fi
+release_write_barrier
 mv "$directory/bin/durpdeploy.next" "$directory/bin/durpdeploy"
 mv "$directory/server.log" "$directory/server-before-refresh.log"
 (
