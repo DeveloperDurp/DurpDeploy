@@ -69,6 +69,22 @@ for lane in 1 2; do
 	fi
 done
 
+# Registration and assertion must use each allocated server's real origin.
+for lane in 1 2; do
+	base=$(awk '/^E2E instance:/ { sub(/^url=/, "", $3); print $3 }' "$tmp/$lane.log")
+	DURPDEPLOY_BASE_URL="$base" node "$root/scripts/e2e_origin_test.mjs" \
+		>"$tmp/origin-$lane.log" 2>&1 &
+	pids+=("$!")
+done
+for lane in 1 2; do
+	if ! wait "${pids[lane+1]}"; then
+		cat "$tmp/origin-$lane.log" >&2
+		exit 1
+	fi
+	cat "$tmp/origin-$lane.log"
+done
+pids=("${pids[0]}" "${pids[1]}")
+
 # An occupied explicit port must fail even though the other app is healthy.
 port=$(awk '/^E2E instance:/ { sub(/^.*:/, "", $3); print $3 }' "$tmp/1.log")
 status=0

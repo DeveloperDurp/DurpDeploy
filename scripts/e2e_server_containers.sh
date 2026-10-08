@@ -21,6 +21,7 @@ server_pid=
 
 cleanup() {
 	local result=$?
+	e2e_release_port
 	if [[ -n "$server_pid" ]]; then
 		kill "$server_pid" 2>/dev/null || true
 		wait "$server_pid" 2>/dev/null || true
@@ -58,13 +59,16 @@ DURPDEPLOY_SECRET_KEY=$(openssl rand -base64 32)
 DURPDEPLOY_DB="$tmp/bad-runtime.db" "$tmp/durpdeploy" admin create \
 	--email e2e-admin@test.local \
 	--password e2e-admin-password-1234 >/dev/null
+e2e_reserve_port "$tmp"
+base="http://localhost:$E2E_RESERVED_PORT"
+e2e_release_port
 DURPDEPLOY_DB="$tmp/bad-runtime.db" \
 	DURPDEPLOY_EMBEDDED_AGENT_ENABLED=false \
-	DURPDEPLOY_EXECUTION_BOUNDARY=service DURPDEPLOY_ADDR=127.0.0.1:0 \
+	DURPDEPLOY_EXECUTION_BOUNDARY=service DURPDEPLOY_ADDR="127.0.0.1:${base##*:}" \
 	DURPDEPLOY_AGENT_LISTEN_ADDR=127.0.0.1:0 \
 	DURPDEPLOY_AGENT_PUBLIC_URL=https://localhost \
 	DURPDEPLOY_AGENT_IDENTITY_DIR="$tmp/bad-agent" \
-	DURPDEPLOY_URL=http://localhost \
+	DURPDEPLOY_URL="$base" \
 	"$tmp/durpdeploy" >"$tmp/bad-runtime.log" 2>&1 &
 server_pid=$!
 base=$(e2e_wait_for_server "$server_pid" "$tmp/bad-runtime.log")
@@ -116,12 +120,15 @@ printf 'Running existing-server SQLite E2E\n'
 DURPDEPLOY_DB="$tmp/running-server.db" "$tmp/durpdeploy" admin create \
 	--email e2e-admin@test.local \
 	--password e2e-admin-password-1234 >/dev/null
+e2e_reserve_port "$tmp"
+base="http://localhost:$E2E_RESERVED_PORT"
+e2e_release_port
 DURPDEPLOY_DB="$tmp/running-server.db" \
-	DURPDEPLOY_EXECUTION_BOUNDARY=service DURPDEPLOY_ADDR=127.0.0.1:0 \
+	DURPDEPLOY_EXECUTION_BOUNDARY=service DURPDEPLOY_ADDR="127.0.0.1:${base##*:}" \
 	DURPDEPLOY_AGENT_LISTEN_ADDR=127.0.0.1:0 \
 	DURPDEPLOY_AGENT_PUBLIC_URL=https://localhost \
 	DURPDEPLOY_AGENT_IDENTITY_DIR="$tmp/running-agent" \
-	DURPDEPLOY_URL=http://localhost \
+	DURPDEPLOY_URL="$base" \
 	"$tmp/durpdeploy" >"$tmp/running-server.log" 2>&1 &
 server_pid=$!
 base=$(e2e_wait_for_server "$server_pid" "$tmp/running-server.log")
@@ -146,13 +153,16 @@ docker volume create "$identity_volume" >/dev/null
 docker run --rm --volume "$volume:/data" -e DURPDEPLOY_SECRET_KEY \
 	"$image" admin create --email e2e-admin@test.local \
 	--password e2e-admin-password-1234 >/dev/null
+e2e_reserve_port "$tmp"
+base="http://localhost:$E2E_RESERVED_PORT"
+e2e_release_port
 docker run -d --name "$app_name" --user 0 --read-only \
 	--cap-drop ALL --cap-add SETUID --cap-add SETGID \
 	--security-opt no-new-privileges --tmpfs /tmp:size=64m,mode=1777 \
 	--volume "$volume:/data" \
 	--volume "$identity_volume:/var/lib/durpdeploy/agent-identity" \
 	--volume /var/run/docker.sock:/var/run/durpdeploy-runtime.sock \
-	-p 127.0.0.1::8080 \
+	-p "127.0.0.1:${base##*:}:8080" \
 	-e DURPDEPLOY_SECRET_KEY -e DURPDEPLOY_CONTAINER_RUNTIME \
 	-e DURPDEPLOY_CONTAINER_NAMESPACE \
 	-e DURPDEPLOY_CONTAINER_URL=unix:///var/run/durpdeploy-runtime.sock \
@@ -161,14 +171,15 @@ docker run -d --name "$app_name" --user 0 --read-only \
 	-e DURPDEPLOY_AGENT_LISTEN_ADDR=0.0.0.0:10943 \
 	-e DURPDEPLOY_AGENT_PUBLIC_URL=https://localhost \
 	-e DURPDEPLOY_AGENT_IDENTITY_DIR=/var/lib/durpdeploy/agent-identity \
-	-e DURPDEPLOY_URL=http://localhost \
+	-e DURPDEPLOY_URL="$base" \
 	"$image" >/dev/null
 binding=$(docker port "$app_name" 8080/tcp)
-base="http://127.0.0.1:${binding##*:}"
+[[ ${binding##*:} == "${base##*:}" ]]
 for _ in {1..100}; do
 	curl -fsS "$base/healthz" >/dev/null 2>&1 && break
 	sleep 0.1
 done
+DURPDEPLOY_BASE_URL="$base" node scripts/e2e_origin_test.mjs
 docker exec "$app_name" /bin/sh -ceu \
 	'test "$(awk '\''/^Uid:/{print $2}'\'' /proc/1/status)" = 10001; command -v docker; command -v podman'
 printf 'Running containerized control-plane E2E\n'

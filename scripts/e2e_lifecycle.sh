@@ -8,6 +8,7 @@ SERVER_PID=""
 
 cleanup() {
 	local status=$?
+	e2e_release_port
 	if ((status != 0)) && [[ -f "$TMP/server.log" ]]; then
 		tail -n 100 "$TMP/server.log" >&2
 	fi
@@ -74,6 +75,13 @@ else
     # production flow described in docs/deploy.md.
     DURPDEPLOY_DB="$DB_DSN" "$TMP/durpdeploy" admin create \
         --email "$ADMIN_EMAIL" --password "$ADMIN_PASS" >/dev/null
+
+    if ((10#$PORT == 0)); then
+        e2e_reserve_port "$TMP"
+        PORT=$E2E_RESERVED_PORT
+    fi
+    BASE="http://localhost:$PORT"
+    e2e_release_port
 
     # Start the server. The migrations it would normally run are a no-op
     # because the admin CLI just created the schema.

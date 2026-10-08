@@ -1,4 +1,48 @@
 #!/usr/bin/env bash
+E2E_PORT_RESERVATION_PID=
+
+e2e_release_port() {
+    if [[ -n $E2E_PORT_RESERVATION_PID ]]; then
+        kill "$E2E_PORT_RESERVATION_PID" 2>/dev/null || true
+        wait "$E2E_PORT_RESERVATION_PID" 2>/dev/null || true
+        E2E_PORT_RESERVATION_PID=
+    fi
+}
+
+# Keep the chosen port bound until immediately before the owned server starts.
+e2e_reserve_port() {
+    local file
+    file=$(mktemp "$1/port.XXXXXX")
+    python3 - "$file" <<'PY' &
+import os
+from pathlib import Path
+import socket
+import sys
+import time
+
+with socket.socket() as listener:
+    listener.bind(("127.0.0.1", 0))
+    listener.listen()
+    pending = Path(sys.argv[1] + ".pending")
+    pending.write_text(str(listener.getsockname()[1]))
+    os.replace(pending, sys.argv[1])
+    while True:
+        time.sleep(60)
+PY
+    E2E_PORT_RESERVATION_PID=$!
+    for _ in {1..120}; do
+        if [[ -s $file ]]; then
+            E2E_RESERVED_PORT=$(cat "$file")
+            return 0
+        fi
+        kill -0 "$E2E_PORT_RESERVATION_PID" 2>/dev/null || break
+        sleep 0.05
+    done
+    echo 'FAIL: could not reserve an E2E port' >&2
+    e2e_release_port
+    return 1
+}
+
 # The caller owns the process and log; only that process's bound port is ready.
 e2e_wait_for_server() {
     local pid=$1 log=$2 base

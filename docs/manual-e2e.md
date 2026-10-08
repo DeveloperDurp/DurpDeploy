@@ -113,8 +113,10 @@ Startup cleanup can only affect containers belonging to that test process.
 
 Run `DURPDEPLOY_CONTAINER_RUNTIME=podman bash scripts/e2e_parallel_test.sh`
 to exercise two simultaneous API/web staging and retry suites. It also checks
-that an occupied explicit port fails and a neighboring container survives Go
-test startup. CI runs the same regression with Docker.
+valid passkey registration and assertion against each allocated origin,
+that an occupied explicit port fails, and that a neighboring container survives
+Go test startup. It requires the installed Playwright Chromium browser.
+CI runs the same regression with Docker.
 
 The isolated suite prints its chosen URL and namespace. Set
 `DURPDEPLOY_E2E_PORT` or `DURPDEPLOY_CONTAINER_NAMESPACE` only when you own
