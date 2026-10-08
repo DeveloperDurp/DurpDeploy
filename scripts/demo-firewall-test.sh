@@ -3,6 +3,7 @@ set -euo pipefail
 root=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 tmp=$(mktemp -d)
 trap 'rm -rf -- "$tmp"' EXIT
+script_header='#!/bin/bash\ntmp=%q\n'
 
 # Exercise the helper with an isolated firewall transport and lock. No root
 # permissions or real firewall changes are needed for these regressions.
@@ -10,7 +11,7 @@ sed -e '/^\[\[ \$EUID == 0 \]\]/d' \
     -e "s|/usr/bin/firewall-cmd|$tmp/firewall|g" \
     -e "s|/run/durpdeploy-demo-firewall.lock|$tmp/lock|g" \
     "$root/scripts/demo-firewall-helper.sh" >"$tmp/helper"
-printf '#!/bin/bash\ntmp=%q\n' "$tmp" >"$tmp/firewall"
+printf "$script_header" "$tmp" >"$tmp/firewall"
 cat >>"$tmp/firewall" <<'FIREWALL'
 printf '%s\n' "$*" >>"$tmp/calls"
 [[ ! -f "$tmp/fail-remove" || $2 != --remove-rich-rule=* ]] || exit 1
@@ -59,7 +60,7 @@ rm "$tmp/fail-add"
 mkdir "$tmp/demo"
 printf '%s\n' "$tmp/engine" >"$tmp/demo/runtime"
 printf '%s\n' durpdeploy-demo-test >"$tmp/demo/container"
-printf '#!/bin/bash\ntmp=%q\n' "$tmp" >"$tmp/engine"
+printf "$script_header" "$tmp" >"$tmp/engine"
 cat >>"$tmp/engine" <<'ENGINE'
 case "$*" in
     *'{{.Id}}'*) printf '%064d\n' 1 ;;
@@ -68,7 +69,7 @@ case "$*" in
     *) exit 2 ;;
 esac
 ENGINE
-printf '#!/bin/bash\ntmp=%q\n' "$tmp" >"$tmp/sudo"
+printf "$script_header" "$tmp" >"$tmp/sudo"
 cat >>"$tmp/sudo" <<'SUDO'
 [[ $1 == -n && $2 == /usr/local/libexec/durpdeploy-demo-firewall ]] || exit 2
 [[ ! -f "$tmp/fail-lease" || $3 != lease ]] || exit 1
@@ -95,7 +96,7 @@ fi
 exec 7>&-
 
 # Validate the actual installer policy with visudo, without installing files.
-printf '#!/bin/bash\ntmp=%q\n' "$tmp" >"$tmp/sudo"
+printf "$script_header" "$tmp" >"$tmp/sudo"
 cat >>"$tmp/sudo" <<'INSTALL'
 printf '%s\n' "$*" >>"$tmp/install-calls"
 if [[ $1 == /usr/sbin/visudo ]]; then

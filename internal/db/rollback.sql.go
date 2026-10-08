@@ -120,7 +120,7 @@ SELECT CASE WHEN EXISTS (
     SELECT 1 FROM deployments d JOIN releases r ON r.id = d.release_id
     WHERE r.project_id = ? AND d.environment_id = ? AND d.kind = 'deployment'
       AND (d.status IN ('queued', 'pending', 'running', 'pending_approval', 'publishing_artifact', 'awaiting_artifact_approval')
-        OR (d.status = 'cleanup_unconfirmed'
+        OR (d.status = 'cleanup_unconfirmed' -- NOSONAR: schema-constrained sqlc state literals; PL/SQL constants are not portable
             AND (d.container_namespace IS NOT NULL OR (
             d.cleanup_confirmed_at IS NULL AND
             NOT EXISTS (SELECT 1 FROM remote_step_runs s

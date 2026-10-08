@@ -262,7 +262,7 @@ func (q *Queries) GetAgentPairing(ctx context.Context, agentID string) (AgentPai
 
 const getRegisteredAgentPairing = `-- name: GetRegisteredAgentPairing :one
 SELECT p.agent_id, p.pairing_code_hash, p.agent_public_identity, p.agent_pin, p.server_public_identity, p.server_pin, p.encrypted_identity, p.state, p.expires_at, p.paired_at, p.created_at, p.updated_at, p.server_pull_endpoint FROM agent_pairings p JOIN agents a ON a.id = p.agent_id
-WHERE p.agent_id = ? AND p.state = 'paired'
+WHERE p.agent_id = ? AND p.state = 'paired' -- NOSONAR: schema-constrained sqlc state literals; PL/SQL constants are not portable
   AND a.status IN ('active', 'disabled')
   AND a.certificate_fingerprint = p.agent_pin
 `

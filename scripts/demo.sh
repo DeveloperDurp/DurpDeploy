@@ -268,12 +268,13 @@ fingerprint=$(sed -n 's/^Agent fingerprint: //p' "$directory/agent.log" | head -
 token=$("$directory/bin/durpdeploy" tokens create --user admin@durp.info \
     --name "$container-bootstrap" 2>>"$directory/bootstrap.log")
 api() {
+    local method=$1 path=$2
     local arguments=()
     if [[ $# == 3 ]]; then arguments=(--data "$3"); fi
     curl --cacert "$directory/tls/cert.pem" -fsS --max-time 30 \
         -H "Authorization: Bearer $token" \
-        -H 'Content-Type: application/json' -X "$1" \
-        "${arguments[@]}" "$DURPDEPLOY_BASE_URL/api/v1/$2"
+        -H 'Content-Type: application/json' -X "$method" \
+        "${arguments[@]}" "$DURPDEPLOY_BASE_URL/api/v1/$path"
 }
 pair_body=$(python3 -c 'import json,sys
 print(json.dumps(dict(zip(("address", "code", "fingerprint"), sys.argv[1:], strict=True))))' \
@@ -284,8 +285,9 @@ printf '%s\n' "$agent_id" >"$directory/agent.id"
 
 # Retain an actual remote execution, not just an inventory registration.
 api POST "admin/agents/$agent_id/labels" '{"label":"demo"}' >/dev/null
+read_id='import json,sys; print(json.load(sys.stdin)["id"])'
 environment_id=$(api POST environments '{"name":"Demo agent"}' | \
-    python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
+    python3 -c "$read_id")
 api POST "admin/agents/$agent_id/environments" \
     "{\"environment_id\":$environment_id}" >/dev/null
 agent_container_ready() {
@@ -305,7 +307,7 @@ done
 # Keep the last probe failure visible instead of seeding work that cannot run.
 agent_container_ready || { echo 'Agent container capabilities did not become ready; inspect agent.log.' >&2; exit 1; }
 project_id=$(api POST projects '{"name":"Demo agent execution"}' | \
-    python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
+    python3 -c "$read_id")
 api POST "projects/$project_id/steps" \
     '{"name":"Agent hello","script_body":"echo demo-agent-connected","execution_target":"agent","agent_selectors":["demo"]}' >/dev/null
 api POST "projects/$project_id/steps" \
@@ -315,10 +317,10 @@ api POST "projects/$project_id/steps" \
 api POST "projects/$project_id/steps" \
     '{"name":"Agent PowerShell container","script_body":"if (Test-Path /run/durpdeploy/runtime.sock) { throw \"Unexpected runtime socket\" }; Write-Output demo-agent-container-pwsh","interpreter":"pwsh","container_image":"mcr.microsoft.com/powershell:latest","execution_target":"agent","agent_execution_mode":"container","agent_selectors":["demo"]}' >/dev/null
 release_id=$(api POST "projects/$project_id/releases" '{"version":"demo-v1"}' | \
-    python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
+    python3 -c "$read_id")
 deployment_id=$(api POST "projects/$project_id/deployments" \
     "{\"release_id\":$release_id,\"environment_id\":$environment_id}" | \
-    python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
+    python3 -c "$read_id")
 for _ in {1..300}; do
     status=$(api GET "deployments/$deployment_id/status" | \
         python3 -c 'import json,sys; print(json.load(sys.stdin)["status"])')

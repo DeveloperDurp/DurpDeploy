@@ -26,47 +26,9 @@ func TestAgentPairingDeletionConflictE2E(t *testing.T) {
 			// Given: a paired identity recovered over a real TLS connection.
 			f := newAgentFixture(t)
 			var admin *httptest.Server
-			peer := httptest.NewUnstartedServer(http.HandlerFunc(
-				func(w http.ResponseWriter, r *http.Request) {
-					var payload agentproto.PairRequest
-					if err := json.NewDecoder(r.Body).
-						Decode(&payload); err != nil ||
-						!payload.CompletionAck {
-						t.Errorf(
-							"completion request=%+v error=%v",
-							payload,
-							err,
-						)
-						w.WriteHeader(http.StatusBadRequest)
-						return
-					}
-					request, err := http.NewRequestWithContext(
-						r.Context(),
-						"DELETE",
-						admin.URL+"/api/v1/admin/agents/test-agent",
-						nil,
-					)
-					if err != nil {
-						t.Error(err)
-						w.WriteHeader(http.StatusInternalServerError)
-						return
-					}
-					request.Header.Set(
-						"Authorization",
-						"Bearer ddp_pat_fleet_admin",
-					)
-					response, err := admin.Client().Do(request)
-					if err != nil {
-						t.Error(err)
-						w.WriteHeader(http.StatusInternalServerError)
-						return
-					}
-					response.Body.Close()
-					if response.StatusCode != http.StatusNoContent {
-						t.Errorf("delete status=%d", response.StatusCode)
-					}
-					w.WriteHeader(http.StatusNoContent)
-				}))
+			peer := httptest.NewUnstartedServer(
+				deleteAgentOnPairingAck(t, &admin),
+			)
 			peer.TLS = &tls.Config{
 				Certificates: []tls.Certificate{f.identity.Certificate},
 				MinVersion:   tls.VersionTLS13,
@@ -135,37 +97,77 @@ func TestAgentPairingDeletionConflictE2E(t *testing.T) {
 					},
 					"csrf_token": {"csrf"},
 				}
-				request, err := http.NewRequestWithContext(
-					t.Context(),
-					"POST",
-					admin.URL+"/admin/agents/test-agent/retry-pair",
-					strings.NewReader(form.Encode()),
-				)
-				if err != nil {
-					t.Fatal(err)
-				}
-				request.Header.Set(
-					"Content-Type",
-					"application/x-www-form-urlencoded",
-				)
-				request.AddCookie(
-					&http.Cookie{Name: "session", Value: "fleet-admin"},
-				)
-				client := *admin.Client()
-				client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-				response, err := client.Do(request)
-				if err != nil {
-					t.Fatal(err)
-				}
-				response.Body.Close()
-				if response.StatusCode != http.StatusUnprocessableEntity {
-					t.Fatalf("web pairing status=%d", response.StatusCode)
-				}
+				assertWebPairingConflict(t, admin, form)
 			}
 
 			// Then: neither surface reports success for the deleted registration.
 			fleetRequest(t, admin, "GET", "/api/v1/admin/agents/test-agent",
 				"admin", "", http.StatusNotFound)
 		})
+	}
+}
+
+func deleteAgentOnPairingAck(
+	t *testing.T,
+	admin **httptest.Server,
+) http.HandlerFunc {
+	t.Helper()
+	return func(w http.ResponseWriter, r *http.Request) {
+		var payload agentproto.PairRequest
+		if err := json.NewDecoder(r.Body).
+			Decode(&payload); err != nil ||
+			!payload.CompletionAck {
+			t.Errorf("completion request=%+v error=%v", payload, err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		request, err := http.NewRequestWithContext(r.Context(), "DELETE",
+			(*admin).URL+"/api/v1/admin/agents/test-agent", nil)
+		if err != nil {
+			t.Error(err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		request.Header.Set("Authorization", "Bearer ddp_pat_fleet_admin")
+		response, err := (*admin).Client().Do(request)
+		if err != nil {
+			t.Error(err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		response.Body.Close()
+		if response.StatusCode != http.StatusNoContent {
+			t.Errorf("delete status=%d", response.StatusCode)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+func assertWebPairingConflict(
+	t *testing.T,
+	admin *httptest.Server,
+	form url.Values,
+) {
+	t.Helper()
+	request, err := http.NewRequestWithContext(
+		t.Context(),
+		"POST",
+		admin.URL+"/admin/agents/test-agent/retry-pair",
+		strings.NewReader(form.Encode()),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	request.AddCookie(&http.Cookie{Name: "session", Value: "fleet-admin"})
+	client := *admin.Client()
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	response, err := client.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response.Body.Close()
+	if response.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("web pairing status=%d", response.StatusCode)
 	}
 }
