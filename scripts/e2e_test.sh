@@ -201,6 +201,17 @@ FIRST_PAGE=$(curl_body "$BASE/deployments/$DEP_ID")
 echo "$FIRST_PAGE" | grep -q "smoke-test-audit" && { echo "FAIL: first deployment should not have note text"; exit 1; } || true
 echo "  First deployment lacks note: OK"
 
+# Finish the note deployment before reusing this environment's queue.
+for i in {1..100}; do
+  NOTE_STATUS=$(curl_body "$BASE/deployments/$NOTE_DEP/status")
+  echo "$NOTE_STATUS" | grep -qE 'failed|succeeded|cancelled' && break
+  sleep 0.2
+done
+echo "$NOTE_STATUS" | grep -q succeeded || {
+  curl_body "$BASE/deployments/$NOTE_DEP/logs.txt" >&2
+  echo "FAIL: note deployment did not succeed before cancellation test"; exit 1;
+}
+
 echo "=== F3.2: Cancel Path ==="
 curl -s -b "$COOKIES" -o /dev/null -X POST -d "name=LongStep&script_body=sleep+10&container_image=$BASH_IMAGE&csrf_token=$CSRF" "$BASE/projects/$PROJECT_ID/steps"
 curl -s -b "$COOKIES" -o /dev/null -X POST -d "version=1.0.1&csrf_token=$CSRF" "$BASE/projects/$PROJECT_ID/releases"
