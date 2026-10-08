@@ -23,88 +23,93 @@ import (
 func TestAgentPairingDeletionConflictE2E(t *testing.T) {
 	for _, surface := range []string{"api", "web"} {
 		t.Run(surface, func(t *testing.T) {
-			// Given: a paired identity recovered over a real TLS connection.
-			f := newAgentFixture(t)
-			var admin *httptest.Server
-			peer := httptest.NewUnstartedServer(
-				deleteAgentOnPairingAck(t, &admin),
-			)
-			peer.TLS = &tls.Config{
-				Certificates: []tls.Certificate{f.identity.Certificate},
-				MinVersion:   tls.VersionTLS13,
-			}
-			peer.StartTLS()
-			t.Cleanup(peer.Close)
-			code := base64.RawURLEncoding.EncodeToString(
-				bytes.Repeat([]byte{3}, 32),
-			)
-			parsed, err := agentproto.ParsePairingCode(code)
-			if err != nil {
-				t.Fatal(err)
-			}
-			hash := parsed.Hash()
-			serverPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE",
-				Bytes: f.serverIdentity.Certificate.Certificate[0]})
-			if _, err := f.repo.DB.Exec(
-				`UPDATE agents SET endpoint=? WHERE id='test-agent'`,
-				peer.URL,
-			); err != nil {
-				t.Fatal(err)
-			}
-			if _, err := f.repo.DB.Exec(
-				`UPDATE agent_pairings SET pairing_code_hash=?,
-				server_public_identity=?,server_pull_endpoint=? WHERE agent_id='test-agent'`,
-				hash[:],
-				string(serverPEM),
-				f.server.URL,
-			); err != nil {
-				t.Fatal(err)
-			}
-			box, err := secret.NewBox(bytes.Repeat([]byte{7}, 32))
-			if err != nil {
-				t.Fatal(err)
-			}
-			endpoint, err := agentproto.ParsePullEndpoint(f.server.URL)
-			if err != nil {
-				t.Fatal(err)
-			}
-			pairing, err := agentserver.NewPairingService(
-				agentserver.PairingConfig{
-					Repository:   f.repo,
-					Identity:     f.serverIdentity,
-					PullEndpoint: endpoint,
-					Secrets:      box,
-					Now:          time.Now,
-				},
-			)
-			if err != nil {
-				t.Fatal(err)
-			}
-			admin = fleetAdminServer(t, f, pairing)
-
-			// When: deletion finishes before the agent acknowledges recovery.
-			if surface == "api" {
-				body := fmt.Sprintf(`{"address":%q,"code":%q,"fingerprint":%q}`,
-					peer.URL, code, f.identity.Fingerprint.String())
-				fleetRequest(t, admin, "POST", "/api/v1/admin/agents/pair",
-					"admin", body, http.StatusConflict)
-			} else {
-				form := url.Values{
-					"address": {peer.URL},
-					"code":    {code},
-					"fingerprint": {
-						f.identity.Fingerprint.String(),
-					},
-					"csrf_token": {"csrf"},
-				}
-				assertWebPairingConflict(t, admin, form)
-			}
-
-			// Then: neither surface reports success for the deleted registration.
-			fleetRequest(t, admin, "GET", "/api/v1/admin/agents/test-agent",
-				"admin", "", http.StatusNotFound)
+			testAgentPairingDeletionConflict(t, surface)
 		})
 	}
+}
+
+func testAgentPairingDeletionConflict(t *testing.T, surface string) {
+	t.Helper()
+	// Given: a paired identity recovered over a real TLS connection.
+	f := newAgentFixture(t)
+	var admin *httptest.Server
+	peer := httptest.NewUnstartedServer(
+		deleteAgentOnPairingAck(t, &admin),
+	)
+	peer.TLS = &tls.Config{
+		Certificates: []tls.Certificate{f.identity.Certificate},
+		MinVersion:   tls.VersionTLS13,
+	}
+	peer.StartTLS()
+	t.Cleanup(peer.Close)
+	code := base64.RawURLEncoding.EncodeToString(
+		bytes.Repeat([]byte{3}, 32),
+	)
+	parsed, err := agentproto.ParsePairingCode(code)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hash := parsed.Hash()
+	serverPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE",
+		Bytes: f.serverIdentity.Certificate.Certificate[0]})
+	if _, err := f.repo.DB.Exec(
+		`UPDATE agents SET endpoint=? WHERE id='test-agent'`,
+		peer.URL,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.repo.DB.Exec(
+		`UPDATE agent_pairings SET pairing_code_hash=?,
+				server_public_identity=?,server_pull_endpoint=? WHERE agent_id='test-agent'`,
+		hash[:],
+		string(serverPEM),
+		f.server.URL,
+	); err != nil {
+		t.Fatal(err)
+	}
+	box, err := secret.NewBox(bytes.Repeat([]byte{7}, 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+	endpoint, err := agentproto.ParsePullEndpoint(f.server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pairing, err := agentserver.NewPairingService(
+		agentserver.PairingConfig{
+			Repository:   f.repo,
+			Identity:     f.serverIdentity,
+			PullEndpoint: endpoint,
+			Secrets:      box,
+			Now:          time.Now,
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	admin = fleetAdminServer(t, f, pairing)
+
+	// When: deletion finishes before the agent acknowledges recovery.
+	if surface == "api" {
+		body := fmt.Sprintf(`{"address":%q,"code":%q,"fingerprint":%q}`,
+			peer.URL, code, f.identity.Fingerprint.String())
+		fleetRequest(t, admin, "POST", "/api/v1/admin/agents/pair",
+			"admin", body, http.StatusConflict)
+	} else {
+		form := url.Values{
+			"address": {peer.URL},
+			"code":    {code},
+			"fingerprint": {
+				f.identity.Fingerprint.String(),
+			},
+			"csrf_token": {"csrf"},
+		}
+		assertWebPairingConflict(t, admin, form)
+	}
+
+	// Then: neither surface reports success for the deleted registration.
+	fleetRequest(t, admin, "GET", "/api/v1/admin/agents/test-agent",
+		"admin", "", http.StatusNotFound)
 }
 
 func deleteAgentOnPairingAck(
