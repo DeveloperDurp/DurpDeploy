@@ -129,6 +129,7 @@ case "$scanner" in
     if [[ "$scan_exit" == 10 || "$tree_exit" == 10 ]] \
       || jq -e '.blocking > 0' "$report" >/dev/null; then scan_exit=1; fi
     ;;
+  *) fail 'unknown scanner' ;;
 esac
 printf '%s: complete (exit %s); report %s\n' "$scanner" "$scan_exit" "$report"
 exit "$scan_exit"

@@ -3,7 +3,8 @@ set -euo pipefail
 root=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 workflow=${1:-$root/.github/workflows/security.yml}
 require() {
-  grep -Fq -- "$2" "$1" || { printf 'Security contract missing: %s\n' "$2" >&2; exit 1; }
+  local file=$1 token=$2
+  grep -Fq -- "$token" "$file" || { printf 'Security contract missing: %s\n' "$token" >&2; exit 1; }
 }
 for token in 'pull_request:' 'branches: [main]' 'schedule:' 'workflow_dispatch:' \
   'contents: read' 'persist-credentials: false' 'fetch-depth: 0' \

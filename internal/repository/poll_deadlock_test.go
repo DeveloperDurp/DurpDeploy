@@ -13,29 +13,94 @@ import (
 func TestPollRetriesRolledBackSQLServerClaims(t *testing.T) {
 	for _, kind := range []string{"deployment", "step"} {
 		t.Run(kind, func(t *testing.T) {
-			repo, locker := openDeploymentCreationEngine(t,
-				newDeploymentCreationEngine(t, "SQLServer"))
-			deployment := createLegacyRemoteDeployment(t, repo)
-			table := "remote_deployment_claims"
-			claim := repo.ClaimRemoteDeploymentPayload
-			if kind == "step" {
-				table, claim = "remote_step_runs", repo.ClaimRemoteStepPayload
-				seedDeadlockStep(t, repo, deployment)
-			}
-			ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-			defer cancel()
-			// The trigger makes the real claim transaction lock row 1 then row 2.
-			if _, err := repo.DB.ExecContext(
-				ctx,
-				`CREATE TABLE poll_retry_locks (
+			testRolledBackPollClaim(t, kind)
+		})
+	}
+}
+
+func testRolledBackPollClaim(t *testing.T, kind string) {
+	t.Helper()
+	repo, locker := openDeploymentCreationEngine(t,
+		newDeploymentCreationEngine(t, "SQLServer"))
+	deployment := createLegacyRemoteDeployment(t, repo)
+	table := "remote_deployment_claims"
+	claim := repo.ClaimRemoteDeploymentPayload
+	if kind == "step" {
+		table, claim = "remote_step_runs", repo.ClaimRemoteStepPayload
+		seedDeadlockStep(t, repo, deployment)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	installPollDeadlock(t, ctx, repo, table)
+	tx, spid := holdPollDeadlockRow(t, ctx, locker)
+	var preparations atomic.Int32
+	done := make(chan error, 1)
+	go func() {
+		_, claimed, err := claim(ctx, "race-agent",
+			func(RemotePayloadSnapshot) (RemotePreparedClaim, error) {
+				preparations.Add(1)
+				return RemotePreparedClaim{TokenHash: make([]byte, 32),
+					Ciphertext: []byte("sealed")}, nil
+			})
+		if err == nil && !claimed {
+			err = sql.ErrNoRows
+		}
+		done <- err
+	}()
+	waitForPollDeadlock(t, ctx, repo, spid, done)
+	if _, err := tx.ExecContext(
+		ctx,
+		"UPDATE poll_retry_locks SET attempts=attempts WHERE id=1",
+	); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-done; err != nil {
+		t.Fatalf(
+			"rolled-back %s claim was not recovered: %v",
+			kind,
+			err,
+		)
+	}
+	if preparations.Load() != 2 {
+		t.Fatalf("payload preparations=%d, want 2", preparations.Load())
+	}
+	var attempts int
+	if err := repo.DB.QueryRowContext(
+		ctx,
+		"SELECT SUM(attempts) FROM poll_retry_locks",
+	).Scan(&attempts); err != nil {
+		t.Fatal(err)
+	}
+	if attempts != 2 {
+		t.Fatalf(
+			"partial victim writes survived rollback: attempts=%d",
+			attempts,
+		)
+	}
+}
+
+func installPollDeadlock(
+	t *testing.T,
+	ctx context.Context,
+	repo *Repository,
+	table string,
+) {
+	t.Helper()
+	// The trigger makes the real claim transaction lock row 1 then row 2.
+	if _, err := repo.DB.ExecContext(
+		ctx,
+		`CREATE TABLE poll_retry_locks (
 id INT PRIMARY KEY, attempts INT NOT NULL);
 INSERT INTO poll_retry_locks VALUES (1,0),(2,0);`,
-			); err != nil {
-				t.Fatal(err)
-			}
-			if _, err := repo.DB.ExecContext(
-				ctx,
-				`CREATE TRIGGER poll_retry_deadlock
+	); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.DB.ExecContext(
+		ctx,
+		`CREATE TRIGGER poll_retry_deadlock
 ON `+table+` AFTER UPDATE AS
 BEGIN
   IF EXISTS (SELECT 1 FROM inserted WHERE state='claimed')
@@ -44,97 +109,68 @@ BEGIN
     UPDATE poll_retry_locks SET attempts=attempts+1 WHERE id=2;
   END
 END;`,
-			); err != nil {
-				t.Fatal(err)
-			}
-			conn, err := locker.DB.Conn(ctx)
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer conn.Close()
-			tx, err := conn.BeginTx(ctx, nil)
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer tx.Rollback()
-			// Force the application transaction to be the deadlock victim.
-			if _, err := tx.ExecContext(ctx, `SET DEADLOCK_PRIORITY HIGH;
+	); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func holdPollDeadlockRow(
+	t *testing.T,
+	ctx context.Context,
+	locker *Repository,
+) (*sql.Tx, int) {
+	t.Helper()
+	conn, err := locker.DB.Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+	tx, err := conn.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = tx.Rollback() })
+	// Force the application transaction to be the deadlock victim.
+	if _, err := tx.ExecContext(ctx, `SET DEADLOCK_PRIORITY HIGH;
 UPDATE poll_retry_locks SET attempts=attempts WHERE id=2;`); err != nil {
-				t.Fatal(err)
-			}
-			var spid int
-			if err := tx.QueryRowContext(ctx, "SELECT @@SPID").
-				Scan(&spid); err != nil {
-				t.Fatal(err)
-			}
-			var preparations atomic.Int32
-			done := make(chan error, 1)
-			go func() {
-				_, claimed, err := claim(ctx, "race-agent",
-					func(RemotePayloadSnapshot) (RemotePreparedClaim, error) {
-						preparations.Add(1)
-						return RemotePreparedClaim{TokenHash: make([]byte, 32),
-							Ciphertext: []byte("sealed")}, nil
-					})
-				if err == nil && !claimed {
-					err = sql.ErrNoRows
-				}
-				done <- err
-			}()
-			// Observe this claim blocked on our transaction's row 2 before
-			// requesting its row 1; this forms a real, repeatable lock cycle.
-			for {
-				var waiting int
-				if err := repo.DB.QueryRowContext(ctx, `SELECT COUNT(*)
+		t.Fatal(err)
+	}
+	var spid int
+	if err := tx.QueryRowContext(ctx, "SELECT @@SPID").
+		Scan(&spid); err != nil {
+		t.Fatal(err)
+	}
+	return tx, spid
+}
+
+func waitForPollDeadlock(
+	t *testing.T,
+	ctx context.Context,
+	repo *Repository,
+	spid int,
+	done <-chan error,
+) {
+	t.Helper()
+	// Observe this claim blocked on our transaction's row 2 before
+	// requesting its row 1; this forms a real, repeatable lock cycle.
+	for {
+		var waiting int
+		if err := repo.DB.QueryRowContext(ctx, `SELECT COUNT(*)
 FROM sys.dm_exec_requests WHERE blocking_session_id=?
 AND database_id=DB_ID() AND wait_type LIKE 'LCK_M%'`, spid).
-					Scan(&waiting); err != nil {
-					t.Fatal(err)
-				}
-				if waiting > 0 {
-					break
-				}
-				select {
-				case err := <-done:
-					t.Fatalf("claim did not reach lock cycle: %v", err)
-				case <-ctx.Done():
-					t.Fatal(ctx.Err())
-				case <-time.After(10 * time.Millisecond):
-				}
-			}
-			if _, err := tx.ExecContext(
-				ctx,
-				"UPDATE poll_retry_locks SET attempts=attempts WHERE id=1",
-			); err != nil {
-				t.Fatal(err)
-			}
-			if err := tx.Commit(); err != nil {
-				t.Fatal(err)
-			}
-			if err := <-done; err != nil {
-				t.Fatalf(
-					"rolled-back %s claim was not recovered: %v",
-					kind,
-					err,
-				)
-			}
-			if preparations.Load() != 2 {
-				t.Fatalf("payload preparations=%d, want 2", preparations.Load())
-			}
-			var attempts int
-			if err := repo.DB.QueryRowContext(
-				ctx,
-				"SELECT SUM(attempts) FROM poll_retry_locks",
-			).Scan(&attempts); err != nil {
-				t.Fatal(err)
-			}
-			if attempts != 2 {
-				t.Fatalf(
-					"partial victim writes survived rollback: attempts=%d",
-					attempts,
-				)
-			}
-		})
+			Scan(&waiting); err != nil {
+			t.Fatal(err)
+		}
+		if waiting > 0 {
+			break
+		}
+		select {
+		case err := <-done:
+			t.Fatalf("claim did not reach lock cycle: %v", err)
+		case <-ctx.Done():
+			t.Fatal(ctx.Err())
+		case <-time.After(10 * time.Millisecond):
+		}
 	}
 }
 

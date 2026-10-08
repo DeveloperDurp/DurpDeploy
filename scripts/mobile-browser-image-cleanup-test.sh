@@ -25,9 +25,11 @@ for scenario in success build run image signal supplied supplied-failure; do
   image=""
   fail=""
   case "$scenario" in
+    success) ;;
     build | run | image | signal) fail=$scenario ;;
     supplied) image=caller-owned:fixture ;;
     supplied-failure) image=caller-owned:fixture; fail=run ;;
+    *) printf 'unknown mobile cleanup scenario: %s\n' "$scenario" >&2; exit 1 ;;
   esac
   result=0
   PATH="$test_dir/bin:$PATH" FAKE_DOCKER_LOG="$case_dir/docker.log" \

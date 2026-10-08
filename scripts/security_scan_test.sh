@@ -109,8 +109,9 @@ git clone -q --no-checkout "$root" "$fixture/history"
 git -C "$fixture/history" read-tree --empty
 # Explicit paths keep worktree-aware hooks working in reference transactions.
 fixture_commit() {
+  local message=$1
   GIT_DIR="$fixture/history/.git" GIT_WORK_TREE="$fixture/history" \
-    git -c user.name=Fixture -c user.email=fixture@example.invalid commit -qm "$1"
+    git -c user.name=Fixture -c user.email=fixture@example.invalid commit -qm "$message"
 }
 printf 'safe\n' >"$fixture/history/config.txt"
 git -C "$fixture/history" add config.txt

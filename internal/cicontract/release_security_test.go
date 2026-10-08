@@ -54,20 +54,7 @@ func TestEveryPublisherRequiresSuccessfulSecurityScan(t *testing.T) {
 	}
 	for _, publisher := range []string{"docker", "helm"} {
 		t.Run(publisher, func(t *testing.T) {
-			job, ok := release.Jobs[publisher]
-			if !ok || !slices.Contains(job.Needs, "security") {
-				t.Fatal("publisher can run without a completed security scan")
-			}
-			// GitHub implicitly requires success when no status function is used.
-			// These overrides could publish despite a failed/cancelled dependency.
-			for _, override := range []string{"always(", "failure(", "cancelled("} {
-				if strings.Contains(job.If, override) {
-					t.Fatalf(
-						"publisher bypasses successful dependencies: %s",
-						override,
-					)
-				}
-			}
+			assertPublisherRequiresSecurity(t, release.Jobs[publisher])
 		})
 	}
 	var push struct {
@@ -84,6 +71,20 @@ func TestEveryPublisherRequiresSuccessfulSecurityScan(t *testing.T) {
 	if !slices.Contains(push.Branches, "main") ||
 		!slices.Contains(push.Tags, "*") {
 		t.Fatal("main and all release tags must enter the security-gated graph")
+	}
+}
+
+func assertPublisherRequiresSecurity(t *testing.T, job workflowJob) {
+	t.Helper()
+	if !slices.Contains(job.Needs, "security") {
+		t.Fatal("publisher can run without a completed security scan")
+	}
+	// GitHub implicitly requires success when no status function is used.
+	// These overrides could publish despite a failed/cancelled dependency.
+	for _, override := range []string{"always(", "failure(", "cancelled("} {
+		if strings.Contains(job.If, override) {
+			t.Fatalf("publisher bypasses successful dependencies: %s", override)
+		}
 	}
 }
 
