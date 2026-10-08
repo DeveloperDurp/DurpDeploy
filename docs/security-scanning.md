@@ -3,6 +3,10 @@
 The Security gates workflow runs on pull requests, main, Mondays at 06:23
 UTC, and manual dispatch. It complements SonarCloud; it does not replace
 the existing test or quality gates. No production credentials are needed.
+The release workflow calls the same scanner workflow for PRs, main pushes,
+all release tags, and manual dispatch. Docker image and Helm chart publication
+require that scan to succeed. Standalone and called scans have separate
+concurrency groups so they cannot cancel each other on the same ref.
 
 Install the pinned, task-local tools and reproduce the gates:
 
@@ -10,6 +14,7 @@ Install the pinned, task-local tools and reproduce the gates:
 make security-tools
 make security-scan-test
 make security-scan
+go test -count=1 ./internal/cicontract
 ```
 
 Requirements: Go (able to download the official 1.26.8 toolchain), npm,
