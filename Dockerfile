@@ -8,11 +8,10 @@
 FROM golang:1.26.8-alpine@sha256:8ac98ca534ac3f51e1f420a1dd2c15e74c75cfa0f23f3ad27eb5d7236c349a0c AS builder
 
 # Install build tooling (npm for Tailwind/esbuild, make for the Makefile, git
-# and ca-certificates for Go module proxy / npm registry HTTPS fetches), then
-# install the templ CLI pinned to a specific version for reproducible builds.
+# and ca-certificates for Go module proxy / npm registry HTTPS fetches).
+# The Makefile runs templ from the version and checksums locked in go.mod/go.sum.
 # hadolint ignore=DL3018
-RUN apk add --no-cache ca-certificates git make npm && \
-    go install github.com/a-h/templ/cmd/templ@v0.3.1020
+RUN apk add --no-cache ca-certificates git make npm
 
 WORKDIR /build
 
@@ -23,7 +22,7 @@ RUN go mod download
 # Copy Node dependency files and install them deterministically before copying
 # the full source tree, so node_modules is cached independently of source edits.
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm ci --ignore-scripts
 
 # Copy the full source tree (views, static, migrations, queries, etc.).
 COPY . .

@@ -216,7 +216,7 @@ Alpine.data('stepFormHost', () => ({
 	},
 	add(event) {
 		if (event.detail?.listURL) {
-			htmx.ajax('GET', event.detail.listURL, {
+			void htmx.ajax('GET', event.detail.listURL, {
 				target: '#step-list',
 				swap: 'innerHTML',
 			});
@@ -577,14 +577,14 @@ document.addEventListener('submit', (event) => {
 	if (!(target instanceof Element)) return;
 	const form = target.closest('[data-webauthn-register]');
 	if (!(form instanceof HTMLFormElement)) return;
-	registerPasskey(event, form);
+	void registerPasskey(event, form);
 });
 document.addEventListener('click', (event) => {
 	const target = event.target;
 	if (!(target instanceof Element)) return;
 	const button = target.closest('[data-webauthn-authenticate]');
 	if (!(button instanceof HTMLButtonElement)) return;
-	authenticatePasskey(event, button);
+	void authenticatePasskey(event, button);
 });
 
 const mfaResetOpeners = new WeakMap();

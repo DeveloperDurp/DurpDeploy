@@ -78,13 +78,15 @@ case "$DB_KIND" in
         ;;
     postgres|postgresql)
         DB_KIND=postgres
-        DB_DSN="${DURPDEPLOY_DB:-postgres://durpdeploy:durpdeploy@localhost:5432/durpdeploy?sslmode=disable}"
+        DB_DSN="${DURPDEPLOY_DB:?Set DURPDEPLOY_DB to the PostgreSQL test database DSN}"
         DB_CLIENT="postgres"
         ;;
     mssql|sqlserver)
         DB_KIND=mssql
-        DB_DSN="${DURPDEPLOY_DB:-sqlserver://sa:DurpDeploy%21Dev123@localhost:1433?database=master&encrypt=false&trustservercertificate=true}"
+        DB_DSN="${DURPDEPLOY_DB:?Set DURPDEPLOY_DB to the SQL Server test database DSN}"
         DB_CLIENT="mssql"
+        SQLCMDPASSWORD="${SQLCMDPASSWORD:-${MSSQL_PASSWORD:-}}"
+        export SQLCMDPASSWORD="${SQLCMDPASSWORD:?Set SQLCMDPASSWORD or MSSQL_PASSWORD for the SQL Server test client}"
         ;;
     *)
         echo "Usage: $0 {sqlite|postgres|mssql}"
@@ -121,17 +123,17 @@ db_query() {
             ;;
         mssql)
             if [[ -n "$DB_CONTAINER" ]]; then
-                docker exec "$DB_CONTAINER" /opt/mssql-tools18/bin/sqlcmd -C \
+                docker exec -e SQLCMDPASSWORD "$DB_CONTAINER" /opt/mssql-tools18/bin/sqlcmd -C \
                     -b -h -1 -r 1 -S localhost -U sa \
-                    -P 'DurpDeploy!Dev123' -d master \
+                    -d master \
                     -Q "SET NOCOUNT ON; $query" 2>/dev/null || \
-                docker exec "$DB_CONTAINER" /opt/mssql-tools/bin/sqlcmd \
+                docker exec -e SQLCMDPASSWORD "$DB_CONTAINER" /opt/mssql-tools/bin/sqlcmd \
                     -b -h -1 -r 1 -S localhost -U sa \
-                    -P 'DurpDeploy!Dev123' -d master \
+                    -d master \
                     -Q "SET NOCOUNT ON; $query"
             else
                 sqlcmd -C -b -h -1 -r 1 -S "${MSSQL_SERVER:-localhost,1433}" \
-                    -U "${MSSQL_USER:-sa}" -P "${MSSQL_PASSWORD:-DurpDeploy!Dev123}" \
+                    -U "${MSSQL_USER:-sa}" \
                     -d "${MSSQL_DATABASE:-master}" \
                     -Q "SET NOCOUNT ON; $query"
             fi | sed '/^[[:space:]]*$/d; s/^[[:space:]]*//; s/[[:space:]]*$//'
