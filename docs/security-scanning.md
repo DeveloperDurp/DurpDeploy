@@ -73,7 +73,8 @@ and incident review before any narrowly justified history exception.
 Safe reports are written to `artifacts/security/` and retained for seven days
 in CI. Gosec and Gitleaks reports contain rules, locations, and dispositions,
 not source snippets, matches, or secret values. Raw output and diagnostic
-logs stay in a private temporary directory removed on exit. Govulncheck
+scanner logs stay in a private temporary directory removed on exit. Policy
+parser errors operate only on safe metadata and may appear in CI. Govulncheck
 publishes dependency/advisory metadata and reachability traces. An
 `incomplete` marker identifies a failed scan; a missing report is also a
 failure, never evidence that analysis passed.

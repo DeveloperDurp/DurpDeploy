@@ -77,8 +77,11 @@ case "$scanner" in
         elif .severity == "LOW" then "advisory" else "blocking" end})
       | {version: $version, status: "complete", issues: .,
          blocking: ([.[] | select(.disposition == "blocking")] | length)}
-    ' "$private/issues.jsonl" >"$private/report.json" 2>"$private/parse-errors" \
-      || fail 'invalid exception registry'
+    ' "$private/issues.jsonl" >"$private/report.json" 2>"$private/parse-errors" || {
+      # This phase reads only sanitized metadata and the public policy.
+      cat "$private/parse-errors" >&2
+      fail 'invalid exception registry'
+    }
     cp "$private/report.json" "$report"
     if jq -e '.blocking > 0' "$report" >/dev/null; then scan_exit=1; else scan_exit=0; fi
     ;;
