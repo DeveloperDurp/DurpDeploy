@@ -5,8 +5,12 @@ BASE="${DURPDEPLOY_BASE_URL:-http://localhost:8080}"
 BASE="${BASE%/}"
 curl_options=()
 if [[ "$BASE" == https://* ]]; then
-    # The local Caddy proxy deliberately uses an internal CA.
-    curl_options=(-k)
+    if [[ -n "${DURPDEPLOY_E2E_CA_FILE:-}" ]]; then
+        curl_options=(--cacert "$DURPDEPLOY_E2E_CA_FILE")
+    else
+        # The legacy local Caddy proxy deliberately uses an internal CA.
+        curl_options=(-k)
+    fi
 fi
 curl() { command curl "${curl_options[@]}" "$@"; }
 

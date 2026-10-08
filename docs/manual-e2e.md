@@ -1,5 +1,97 @@
 # Manual checks after `make e2e-test`
 
+For a complete local demo, run `make demo` (or ask a coding agent to run it).
+The launcher builds the server, serves `https://citadel.durp.loc:<random-port>`
+through Caddy with a certificate for that hostname, pairs a
+separate containerized agent, verifies a remote deployment, and runs
+`make e2e-test` against the same server. It then exits while the app and agent
+remain running. Sign in as `admin@durp.info` with the generated `demo-…`
+password printed by the launcher. The login details are also in the private
+`login.txt` in its printed data directory.
+
+Each invocation uses its own database, server identity, encryption key, agent
+state volume and container names, so multiple demos can run together. The
+HTTPS port listens on the computer's network interfaces; `citadel.durp.loc`
+must resolve to this computer. The plaintext backend stays on loopback
+(Podman) or Docker's private bridge. The agent's authenticated TLS listener
+also has a random port and is reachable by the local container runtime.
+The exact HTTPS origin configures secure cookies and passkeys; TOTP and
+password login remain available. Each demo uses a temporary self-signed
+certificate in its private `tls/cert.pem`; browsers may require trusting it.
+The script validates that certificate and hostname on its API calls without
+disabling TLS verification, and passes the certificate to `make e2e-test`
+through `DURPDEPLOY_E2E_CA_FILE`. Requirements: Linux with `setsid`, Go, Node/npm,
+make, OpenSSL,
+Python 3, SQLite CLI, curl, and working local Podman or Docker. The existing development agent
+image is pulled by `make dev-agent`; Caddy uses the existing development
+proxy image `docker.io/library/caddy:2-alpine`.
+
+Optional firewalld access: install `scripts/demo-firewall-helper.sh` root-owned
+at `/usr/local/libexec/durpdeploy-demo-firewall` (mode 0755), and authorize only
+that executable through a passwordless sudoers entry for your account. Run
+`bash scripts/install-demo-firewall.sh` once as your regular account; it asks
+for sudo authentication and validates its sudoers file before installing it.
+To undo authorization, remove `/etc/sudoers.d/durpdeploy-demo` with sudo;
+existing leases expire within 120 seconds when renewal fails. Future
+`make demo` runs automatically start an unprivileged watcher. For an existing
+demo, run `nohup setsid bash scripts/demo-firewall-watch.sh DEMO_DIRECTORY
+>DEMO_DIRECTORY/firewall.log 2>&1 </dev/null &`. The helper grants TCP ports
+32768-60999 in the `public` zone using a tagged runtime rich rule. It removes
+only that tagged rule before renewing its fixed 120-second lease every 30
+seconds; this briefly interrupts permission for new connections during renewal.
+The watcher checks the original HTTPS container identity every second and
+releases the rule when it stops. If the watcher dies, the last lease expires
+within 120 seconds. Existing port/service permissions remain intact. This
+permission allows the authorized account to lease any port in that range;
+it does not verify that an individual port belongs to a demo. No permanent
+firewall permissions are changed. Rule logging is limited to one per minute.
+If setup or renewal fails, inspect `firewall.log`; initial failure aborts a new
+demo instead of reporting a reachable URL. Ports outside the allowed range
+require a new demo or administrator adjustment of the installed helper.
+
+The demo agent enables `agent/3` container execution through the same local
+Docker/Podman Unix socket used by the server. Start that socket before launch
+(on Citadel: `systemctl --user start podman.socket`). It verifies Bash, Python
+and PowerShell container capabilities, then retains a deployment that runs
+all three interpreters remotely as well as a host step. Inspect the printed
+agent deployment and `agent-capabilities.json` / `agent-deployment-logs.json`
+in its data directory. The rootless Podman agent maps the operator to its
+service UID/GID using `keep-id`; `:U` adjusts only the private named state
+volume's ownership. Host socket permissions and labels stay unchanged. The
+supervisor's SELinux label separation is disabled for socket access; each
+container-mode workload retains its seccomp, non-root user, resource limits,
+read-only root and no-network boundary, with no socket or host directory mounted. The agent
+supervisor has the operator's runtime API authority, as does the server.
+Host-mode scripts run inside that supervisor and inherit its socket access;
+use only scripts trusted with the operator's account.
+
+For server/template/asset changes, finish script edits first, then run
+`make demo-refresh DEMO_DIR=/absolute/demo/path`. It rebuilds the server and
+CSS/JS, then restarts only the server on the same ports. URL, login, database,
+encryption key, server identity, paired agent, proxy, firewall watcher and
+certificate remain in place. No re-pairing or E2E repopulation occurs. Wait for
+deployments to finish and confirm cleanup; unfinished work blocks refresh.
+The existing server must be running so its configuration can be retained.
+Startup settings are preserved rather than taken from the caller's environment.
+Inspect `server-refresh-build.log` and `server.log` if refresh fails.
+
+Database query/schema/migration changes require
+`make demo-refresh-full DEMO_DIR=/absolute/old/demo/path`. Also use full refresh
+for agent version/configuration or demo startup configuration changes.
+It stops the old demo and builds/populates a new one. Return the new URL,
+login, data directory and certificate path; the old data remains on disk.
+
+Let active deployments finish or cancel them and wait for confirmed cleanup.
+Use the printed stop command, or `make demo-stop DEMO_DIR=/absolute/demo/path`.
+Stopping stops the HTTPS proxy, server and agent, and retains the database,
+certificate, logs, encryption key and agent identity for
+inspection. It does not stop other demos or your development server. Startup
+failure stops the resources started by that invocation and retains logs.
+`build.log`, `bootstrap.log`, `server.log`, `agent.log`, and `e2e.log` are in
+the private data directory. The retained `Demo agent execution` project has
+a successful remote deployment and can be run again. All E2E schedules stay
+disabled; the table below explains how to enable one for a manual check.
+
 Run `make e2e-test` against your running server. Use the printed project links.
 Names end in a run ID so each run keeps its own examples. Log in as the
 configured `E2E_ADMIN_EMAIL` (default `e2e-admin@test.local`); use the password

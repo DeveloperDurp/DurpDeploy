@@ -30,6 +30,56 @@ CI runs `templ generate` as `before_script` for every stage — mirror that for 
 
 ## Running / testing
 
+When asked to spin up a populated demo for manual testing, run `make demo`.
+It starts an isolated SQLite server behind Caddy at
+`https://citadel.durp.loc:<random-port>`, pairs a
+separate agent with host and container execution enabled, verifies a remote
+deployment with Bash, Python and PowerShell containers, and runs `make e2e-test`
+against that server. The agent must report `agent/3`, `container` execution,
+the server's selected Docker/Podman runtime, and all three container
+interpreters before the demo is ready. A containerized agent alone is not
+evidence that container steps work. Use the retained remote deployment and
+`agent-capabilities.json` in the printed data directory as proof.
+The selected engine's local Unix socket must already be active (on this
+machine: `systemctl --user start podman.socket`). The launcher mounts it into
+the agent supervisor; container-mode workloads receive no socket. Host-mode
+scripts run inside the supervisor and inherit its runtime authority, so use
+only scripts trusted with the operator's account. It maps the
+operator to UID/GID 10001 for rootless Podman and keeps the private state volume;
+it does not change host socket permissions. This grants the agent the same
+runtime authority as the server's operator account.
+Leave the server, agent and proxy running and return the printed URL, `admin@durp.info`
+login with its generated password, data directory, and stop command. Each run
+has its own ports, database, encryption key, identities and container names.
+The HTTPS certificate is temporary; return its printed path for browser trust.
+Use `make demo-stop DEMO_DIR=/absolute/path/from/output` to stop only that demo;
+its data remains. See `docs/manual-e2e.md` for retained examples.
+
+After server code, template or asset changes, use
+`make demo-refresh DEMO_DIR=/absolute/demo/path`. It rebuilds the server and
+CSS/JS before restarting only the server, retaining the same URL, login,
+database, encryption key, server identity, paired agent, proxy and certificate.
+It refuses unfinished deployments or unconfirmed remote cleanup. It does not
+re-pair the agent or rerun the population suite. Finish and save script edits
+before invoking them; never edit a Bash script while it is running.
+Database query/schema/migration changes require
+`make demo-refresh-full DEMO_DIR=/absolute/old/demo/path`. Full refresh stops
+that demo and creates a newly built, populated demo with a new URL, credentials
+and data directory, retaining the old deployment history on disk. Also use a
+full refresh when changing the demo's agent version/configuration or startup
+configuration. Return the new details and stop command after a full refresh.
+If either refresh fails, inspect its printed logs and fix the failure before
+claiming readiness. Server-only refresh requires the old server to be running
+and uses its saved process settings; it does not apply new startup settings.
+
+For teardown, let deployments finish or cancel them through the API/UI and
+wait for confirmed cleanup before `make demo-stop DEMO_DIR=/absolute/demo/path`.
+It stops that demo's agent, HTTPS proxy and server, retaining its database,
+encryption key, identity volume, certificate and logs. Its firewall watcher
+releases temporary access when the proxy stops; if the watcher dies, its lease
+expires within 120 seconds. Do not remove the volume or identity to clear a
+cleanup warning, stop the shared engine/socket service, or stop another demo.
+
 All applicable Go and end-to-end tests must pass before work is complete. Run
 the full relevant suites only at final verification; use focused tests while
 working. Do not treat focused tests as a substitute for final verification.
