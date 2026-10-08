@@ -423,7 +423,19 @@ MOBILE_BROWSER_RUN_ID ?= local-$$(date -u +%Y%m%dT%H%M%SZ)-$$$$
 mobile-browser-container:
 	run_id="$(MOBILE_BROWSER_RUN_ID)"; \
 	image="$(MOBILE_BROWSER_IMAGE)"; \
-	if [ -z "$$image" ]; then image="durpdeploy-mobile-browser:$$run_id"; fi; \
+	owned_image=0; \
+	if [ -z "$$image" ]; then \
+		image="durpdeploy-mobile-browser:$$run_id"; owned_image=1; \
+	fi; \
+	cleanup() { \
+		result=$$?; trap - EXIT INT TERM; \
+		if [ "$$owned_image" = 1 ]; then \
+			docker image rm "$$image" >/dev/null || \
+				echo "Could not remove mobile browser image $$image" >&2; \
+		fi; \
+		exit "$$result"; \
+	}; \
+	trap cleanup EXIT; trap 'exit 130' INT; trap 'exit 143' TERM; \
 	mkdir -p artifacts/mobile && \
 	docker build -f Dockerfile.mobile-browser -t "$$image" . && \
 	docker run --rm --init \
