@@ -119,7 +119,7 @@ documented there changes, update that file in the same change.
 
 ```bash
 ./durpdeploy                       # listens on :8080 (hardcoded), creates durpdeploy.db in CWD
-go test -v -count=1 ./...          # CI's exact command
+go test -v -count=1 -timeout=20m ./...          # CI's exact command
 go test -run TestName ./internal/handler/...   # single test, single package
 ./scripts/e2e_test.sh              # bash end-to-end: builds, runs server, curl happy/cancel/validation paths (~10s+)
 ```

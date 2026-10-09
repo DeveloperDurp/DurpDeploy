@@ -329,8 +329,9 @@ clean:
 	-podman rm -f $(DEV_POSTGRES_CONTAINER) $(DEV_MSSQL_CONTAINER)
 
 # Go unit/integration tests (mirrors CI's exact command).
+# Fresh per-test SQL Server fixtures can exceed Go's default 10-minute limit.
 test: templ-generate
-	go test -v -count=1 ./...
+	go test -v -count=1 -timeout=20m ./...
 
 # One-command pre-push gate: repo-wide 80-col check, go vet, the full
 # test suite, and the clean-room E2E contracts. Engine tests only need
@@ -339,7 +340,7 @@ test: templ-generate
 # socket and export TESTCONTAINERS_RYUK_DISABLED=true.
 verify: golines-check templ-generate swagger-ui-copy e2e-test-isolated
 	go vet ./...
-	go test -count=1 ./...
+	go test -count=1 -timeout=20m ./...
 
 # Read unresolved SonarCloud findings for a pull request. Requires SONAR_TOKEN.
 sonar-issues:
