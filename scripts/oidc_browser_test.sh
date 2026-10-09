@@ -2,8 +2,8 @@
 set -euo pipefail
 
 ROOT_DIR=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
-EVIDENCE_DIR=${DURPDEPLOY_OIDC_BROWSER_EVIDENCE_DIR:-"$ROOT_DIR/.omo/evidence/task-17-oidc-browser"}
 RUN_DIR=$(mktemp -d "${TMPDIR:-/tmp}/durpdeploy-oidc-browser.XXXXXX")
+EVIDENCE_DIR=${DURPDEPLOY_OIDC_BROWSER_EVIDENCE_DIR:-"$ROOT_DIR/.omo/evidence/task-17-oidc-browser/${RUN_DIR##*/}"}
 READY_FILE="$RUN_DIR/readiness.json"
 FIXTURE_PID=""
 FIXTURE_STOPPED=false
@@ -92,7 +92,8 @@ if [[ $OUTAGE == true ]]; then
     FIXTURE_ARGS+=(--outage)
     BROWSER_ARGS+=(--outage)
 fi
-"$RUN_DIR/oidc-browser-fixture" "${FIXTURE_ARGS[@]}" >/dev/null 2>&1 &
+DURPDEPLOY_CONTAINER_NAMESPACE="oidc_${RUN_DIR##*.}" \
+    "$RUN_DIR/oidc-browser-fixture" "${FIXTURE_ARGS[@]}" >/dev/null 2>&1 &
 FIXTURE_PID=$!
 wait_for_readiness
 node "$ROOT_DIR/scripts/oidc_browser_test.mjs" "${BROWSER_ARGS[@]}"

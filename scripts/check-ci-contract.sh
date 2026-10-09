@@ -35,9 +35,10 @@ done
 [ "$failed" -eq 0 ] || exit 1
 
 grep -Fqx \
-	'sonar.test.inclusions=**/*_test.go,scripts/*.mjs,scripts/run_named_go_tests_verify.go' \
+	'sonar.test.inclusions=**/*_test.go,internal/testdns/**,internal/testenv/**,scripts/*.mjs,scripts/run_named_go_tests_verify.go' \
 	"$repo_root/sonar-project.properties" || {
 	echo 'sonar: script test harnesses must be classified as tests' >&2
 	exit 1
 }
+bash "$repo_root/scripts/check-security-contract.sh" "$workflow_dir/security.yml"
 printf '%s\n' 'CI contract: PASS'

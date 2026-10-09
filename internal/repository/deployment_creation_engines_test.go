@@ -4,20 +4,18 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"net/url"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
 
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/migrate"
 	"durpdeploy/internal/mssqldriver"
 	"durpdeploy/internal/pgdriver"
+	"durpdeploy/internal/testutil"
 )
 
 type deploymentCreationEngine struct {
@@ -90,63 +88,9 @@ func newSQLServerDeploymentCreationEngine(
 	t *testing.T,
 ) deploymentCreationEngine {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
-	defer cancel()
-	const password = "CreationFixtureOnly!123"
-	container, err := testcontainers.GenericContainer(
-		ctx,
-		testcontainers.GenericContainerRequest{
-			ContainerRequest: testcontainers.ContainerRequest{
-				Image:        "mcr.microsoft.com/mssql/server:2022-latest",
-				ExposedPorts: []string{"1433/tcp"},
-				Env: map[string]string{
-					"ACCEPT_EULA": "Y", "MSSQL_SA_PASSWORD": password,
-				},
-				WaitingFor: wait.ForLog(
-					"SQL Server is now ready for client connections",
-				).WithStartupTimeout(3 * time.Minute),
-			},
-			Started: true,
-		},
-	)
-	if err != nil {
-		t.Fatalf("start required SQL Server backend: %v", err)
-	}
-	t.Cleanup(func() {
-		if err := container.Terminate(context.Background()); err != nil {
-			t.Errorf("remove SQL Server container: %v", err)
-		}
-	})
-	host, err := container.Host(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	port, err := container.MappedPort(ctx, "1433/tcp")
-	if err != nil {
-		t.Fatal(err)
-	}
-	dsn := (&url.URL{
-		Scheme: "sqlserver",
-		User:   url.UserPassword("sa", password),
-		Host:   fmt.Sprintf("%s:%s", host, port.Port()),
-	}).String() + "?database=master&encrypt=false&trustservercertificate=true"
-	probe, err := sql.Open(mssqldriver.DriverName, dsn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer probe.Close()
-	for {
-		if err := probe.PingContext(ctx); err == nil {
-			break
-		}
-		select {
-		case <-ctx.Done():
-			t.Fatalf("wait for SQL Server login: %v", ctx.Err())
-		case <-time.After(250 * time.Millisecond):
-		}
-	}
 	return deploymentCreationEngine{
-		name: "SQLServer", dsn: dsn, driver: mssqldriver.DriverName,
+		name: "SQLServer", dsn: testutil.SQLServerDSN(t),
+		driver: mssqldriver.DriverName,
 	}
 }
 

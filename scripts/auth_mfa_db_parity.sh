@@ -3,7 +3,7 @@ set -euo pipefail
 
 engine=${1:-}
 required=${DURPDEPLOY_AUTH_MFA_PARITY_REQUIRED:-0}
-artifact_root=${AUTH_MFA_ARTIFACT_DIR:-artifacts/auth-mfa}
+artifact_root=${AUTH_MFA_ARTIFACT_DIR:-"artifacts/auth-mfa/parity-$(openssl rand -hex 12)"}
 tmp=
 
 cleanup() {

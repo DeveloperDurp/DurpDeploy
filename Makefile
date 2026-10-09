@@ -342,6 +342,22 @@ verify: golines-check templ-generate swagger-ui-copy e2e-test-isolated
 sonar-issues:
 	./scripts/sonar_issues.sh $(PR)
 
+# Task-local binaries; Go's checksum database verifies pinned modules.
+.PHONY: security-tools security-scan security-scan-test
+security-tools:
+	mkdir -p bin/security
+	GOTOOLCHAIN=go1.26.8 GOBIN="$(CURDIR)/bin/security" go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
+	GOTOOLCHAIN=go1.26.8 GOBIN="$(CURDIR)/bin/security" go install github.com/securego/gosec/v2/cmd/gosec@v2.29.0
+	GOTOOLCHAIN=go1.26.8 GOBIN="$(CURDIR)/bin/security" go install github.com/zricethezav/gitleaks/v8@v8.30.1
+
+security-scan: templ-generate swagger-ui-copy
+	@result=0; for scanner in govulncheck gosec gitleaks; do \
+		bash scripts/security_scan.sh $$scanner || result=1; \
+	done; exit $$result
+
+security-scan-test:
+	bash scripts/security_scan_test.sh
+
 # Running-server E2E checks. Start `make dev` (or the matching database dev
 # target) in another terminal first; this target never starts another server.
 e2e-test:
@@ -401,16 +417,31 @@ auth-mfa-e2e:
 
 # Runs the strict Playwright browser contract in the shared CI image. The source checkout
 # and secret-free evidence directory stay on the host; Docker owns the browser.
-MOBILE_BROWSER_IMAGE ?= durpdeploy-mobile-browser:local
+MOBILE_BROWSER_IMAGE ?=
 MOBILE_BROWSER_RUN_ID ?= local-$$(date -u +%Y%m%dT%H%M%SZ)-$$$$
 
 mobile-browser-container:
-	mkdir -p artifacts/mobile
-	docker build -f Dockerfile.mobile-browser -t $(MOBILE_BROWSER_IMAGE) .
+	run_id="$(MOBILE_BROWSER_RUN_ID)"; \
+	image="$(MOBILE_BROWSER_IMAGE)"; \
+	owned_image=0; \
+	if [ -z "$$image" ]; then \
+		image="durpdeploy-mobile-browser:$$run_id"; owned_image=1; \
+	fi; \
+	cleanup() { \
+		result=$$?; trap - EXIT INT TERM; \
+		if [ "$$owned_image" = 1 ]; then \
+			docker image rm "$$image" >/dev/null || \
+				echo "Could not remove mobile browser image $$image" >&2; \
+		fi; \
+		exit "$$result"; \
+	}; \
+	trap cleanup EXIT; trap 'exit 130' INT; trap 'exit 143' TERM; \
+	mkdir -p artifacts/mobile && \
+	docker build -f Dockerfile.mobile-browser -t "$$image" . && \
 	docker run --rm --init \
 		--entrypoint /usr/local/bin/mobile-browser-container \
-		-e MOBILE_RUN_ID="$(MOBILE_BROWSER_RUN_ID)" \
+		-e MOBILE_RUN_ID="$$run_id" \
 		-e MOBILE_ARTIFACT_DIR=/artifacts \
 		-v "$(CURDIR):/workspace" \
 		-v "$(CURDIR)/artifacts/mobile:/artifacts" \
-		$(MOBILE_BROWSER_IMAGE)
+		"$$image"

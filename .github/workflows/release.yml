@@ -54,6 +54,13 @@ env:
   CACHE_IMAGE_NAME: durpdeploy-cache
 
 jobs:
+  # Reuse the same-commit scanner gates for PRs, main, tags, and dispatch.
+  # Both publishing jobs require success; no registry secrets reach the scan.
+  security:
+    uses: ./.github/workflows/security.yml
+    permissions:
+      contents: read
+
   # ----- Compute version once, share with downstream jobs ----------------
   version:
     name: Compute version
@@ -242,11 +249,19 @@ jobs:
 
       - name: Check E2E shell syntax
         run: |
-          for script in scripts/e2e_test.sh scripts/e2e_db_test.sh scripts/terraform_approval_e2e.sh scripts/e2e_server_containers.sh scripts/check_e2e_containers.sh scripts/check_e2e_containers_test.sh; do
+          for script in scripts/e2e_test.sh scripts/e2e_lifecycle.sh scripts/e2e_wait.sh scripts/e2e_parallel_test.sh scripts/e2e_db_test.sh scripts/terraform_approval_e2e.sh scripts/e2e_server_containers.sh scripts/check_e2e_containers.sh scripts/check_e2e_containers_test.sh; do
             bash -n "$script"
           done
-          shellcheck -S error scripts/e2e_test.sh scripts/e2e_db_test.sh scripts/terraform_approval_e2e.sh scripts/e2e_server_containers.sh scripts/check_e2e_containers.sh scripts/check_e2e_containers_test.sh
+          shellcheck -S error scripts/e2e_test.sh scripts/e2e_lifecycle.sh scripts/e2e_wait.sh scripts/e2e_parallel_test.sh scripts/e2e_db_test.sh scripts/terraform_approval_e2e.sh scripts/e2e_server_containers.sh scripts/check_e2e_containers.sh scripts/check_e2e_containers_test.sh
           bash scripts/check_e2e_containers_test.sh
+          bash -n scripts/mobile-browser-image-cleanup-test.sh
+          shellcheck -S error scripts/mobile-browser-image-cleanup-test.sh
+          bash scripts/mobile-browser-image-cleanup-test.sh
+
+      - name: Concurrent agent E2E isolation
+        env:
+          DURPDEPLOY_CONTAINER_RUNTIME: docker
+        run: bash scripts/e2e_parallel_test.sh
 
       - name: E2E contract checks
         env:
@@ -263,7 +278,7 @@ jobs:
       github.event_name == 'push' ||
       github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    needs: [version, test, e2e]
+    needs: [version, test, e2e, security]
     permissions:
       contents: read
       packages: write
@@ -336,7 +351,7 @@ jobs:
       github.event_name == 'push' ||
       github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    needs: [version, test, e2e]
+    needs: [version, test, e2e, security]
     permissions:
       contents: read
       packages: write

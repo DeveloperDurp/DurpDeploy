@@ -2,6 +2,7 @@ package agentserver_test
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/tls"
 	"encoding/json"
 	"encoding/pem"
@@ -81,11 +82,20 @@ func newAgentFixtureWithDSN(
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = conn.Exec(`INSERT INTO agent_pairings
+	pairingHash := make([]byte, 32)
+	if _, err := rand.Read(pairingHash); err != nil {
+		t.Fatal(err)
+	}
+	_, err = conn.Exec(
+		`INSERT INTO agent_pairings
 		(agent_id,pairing_code_hash,agent_public_identity,agent_pin,state,expires_at,
 		paired_at,server_public_identity,server_pin,encrypted_identity)
-		VALUES ('test-agent',randomblob(32),?,?,'paired',1,1,'fixture',?,'fixture')`,
-		cert, peer.Fingerprint.String(), identity.Fingerprint.String())
+		VALUES ('test-agent',?,?,?,'paired',1,1,'fixture',?,'fixture')`,
+		pairingHash,
+		cert,
+		peer.Fingerprint.String(),
+		identity.Fingerprint.String(),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

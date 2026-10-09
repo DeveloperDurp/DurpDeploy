@@ -136,9 +136,15 @@ func ApiTokenMiddleware(
 			}
 			r = SetUser(r, user)
 
+			// Telemetry survives the request, but cannot wait indefinitely.
+			ctx, cancel := context.WithTimeout(
+				context.Background(),
+				5*time.Second,
+			)
 			go func() {
+				defer cancel()
 				_ = repo.Queries.TouchApiTokenLastUsed(
-					context.Background(),
+					ctx,
 					db.TouchApiTokenLastUsedParams{
 						LastUsedAt: sql.NullInt64{
 							Int64: time.Now().Unix(),

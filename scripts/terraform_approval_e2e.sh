@@ -22,7 +22,7 @@ terraform_approval_e2e() {
             runtime_args=("--host=$DURPDEPLOY_CONTAINER_URL")
         fi
     fi
-    image=localhost/durpdeploy-gate-terraform:e2e
+    image="localhost/durpdeploy-gate-terraform:e2e-$E2E_RUN_ID"
     echo '=== Persistent Terraform approval examples ==='
     "$engine" "${runtime_args[@]}" build --tag "$image" \
         --file "$script_dir/testdata/artifact-gate-terraform.Dockerfile" \

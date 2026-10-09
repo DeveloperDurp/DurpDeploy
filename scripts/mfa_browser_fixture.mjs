@@ -1,6 +1,6 @@
 import { chromium } from "playwright";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 
 import {
 	addAuthenticator,
@@ -118,7 +118,7 @@ export async function startBrowserFixture(root) {
 	const secrets = new Set();
 	const fixture = {
 		app,
-		artifactRoot: join(root, "artifacts", "auth-mfa", "browser"),
+		artifactRoot: join(root, "artifacts", "auth-mfa", "browser", basename(app.dir)),
 		artifacts: new Set(),
 		browser: null,
 		observability: { errors: [] },

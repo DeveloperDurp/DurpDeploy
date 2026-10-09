@@ -1,0 +1,551 @@
+[
+  {
+    "rule": "G115",
+    "file": "internal/logscrub/scrubber.go",
+    "line": "352",
+    "source_sha256": "640d83b7d32fa86ad57589123ae70519c4d6b95301af7833afa676cf61c8db73",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Arg is narrowed only for compiler-created InstEmptyWidth, whose standard-library EmptyOp bitmask fits uint8. Evidence: regexp/syntax compiler; scrubber_test.go boundary/streaming coverage."
+  },
+  {
+    "rule": "G115",
+    "file": "internal/logscrub/scrubber.go",
+    "line": "289",
+    "source_sha256": "640d83b7d32fa86ad57589123ae70519c4d6b95301af7833afa676cf61c8db73",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Instruction index is produced exclusively by successful regexp/syntax.Compile and fits its uint32 program addresses. Evidence: scrubber.go compile path; scrubber_test.go streaming-pattern coverage."
+  },
+  {
+    "rule": "G115",
+    "file": "internal/auth/auth.go",
+    "line": "108",
+    "source_sha256": "0f49c5588102bcc877d430f693a75a9473003a3b42f86ba512da70593f2672cb",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Stored PHC comes from HashPassword's 32-byte output; HTTP callers supply plaintext, not PHC. A huge decoded hash needs independent DB tampering. Evidence: users.go writers; auth_test.go generated-format and malformed-input tests."
+  },
+  {
+    "rule": "G115",
+    "file": "internal/artifact/workspace_unix.go",
+    "line": "27",
+    "source_sha256": "3e215ce0a6797a8db017d58bc059f8916266fdea19a41ac044db4387373b48f9",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "os.Geteuid is a kernel-provided UID with Stat_t.Uid width, not request input; foreign ownership fails. Evidence: workspace_unix_test.go foreign-owner case."
+  },
+  {
+    "rule": "G101",
+    "file": "internal/handler/security_passkey_verification_helpers.go",
+    "line": "14",
+    "source_sha256": "4f677154b19487d026a8747cedf4809c1d0fe1bb77e96f45c7d82333410a83fc",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Cookie name or audit action/route metadata, not a credential value. Evidence: passkey binding readers/setters or internal/audit/audit.go consumers."
+  },
+  {
+    "rule": "G101",
+    "file": "internal/handler/security_passkey_verification_helpers.go",
+    "line": "13",
+    "source_sha256": "4f677154b19487d026a8747cedf4809c1d0fe1bb77e96f45c7d82333410a83fc",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Cookie name or audit action/route metadata, not a credential value. Evidence: passkey binding readers/setters or internal/audit/audit.go consumers."
+  },
+  {
+    "rule": "G101",
+    "file": "internal/audit/routes.go",
+    "line": "6-174",
+    "source_sha256": "300d1d831c9615f641e9737e8778b6cc752a2f228c361649e21d6c100943b480",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Cookie name or audit action/route metadata, not a credential value. Evidence: passkey binding readers/setters or internal/audit/audit.go consumers."
+  },
+  {
+    "rule": "G703",
+    "file": "internal/agentserver/artifact.go",
+    "line": "61",
+    "source_sha256": "ac510a2cd7d888792e2bb1ae3b4064f49ce869c484585807a39fd77edeebfe7e",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Removed path is returned by os.CreateTemp inside the private artifact workspace, not a request path. Evidence: repository/artifact_snapshot.go, artifact/fetch.go, agentserver/artifact_test.go."
+  },
+  {
+    "rule": "G118",
+    "file": "internal/scheduler/scheduler.go",
+    "line": "347",
+    "source_sha256": "174c6ac07ca0e8aa135bcbe7860e9285356f7eb1719b61b784c2f38b31243d8b",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Detached persisted deployment must outlive its HTTP/scheduler/startup request. DeploymentRunner.Run owns cancel registration; Cancel and KillAll cancel/drain work. Evidence: runner_control.go, shutdown_test.go, runbook_cancel_test.go."
+  },
+  {
+    "rule": "G118",
+    "file": "internal/handler/runbook_web_execution.go",
+    "line": "232",
+    "source_sha256": "97705135369624866a0577ede55f7659966e713da46aa03d3a03221dd1c5284e",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Detached persisted deployment must outlive its HTTP/scheduler/startup request. DeploymentRunner.Run owns cancel registration; Cancel and KillAll cancel/drain work. Evidence: runner_control.go, shutdown_test.go, runbook_cancel_test.go."
+  },
+  {
+    "rule": "G118",
+    "file": "internal/handler/runbook_web_execution.go",
+    "line": "181",
+    "source_sha256": "97705135369624866a0577ede55f7659966e713da46aa03d3a03221dd1c5284e",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Detached persisted deployment must outlive its HTTP/scheduler/startup request. DeploymentRunner.Run owns cancel registration; Cancel and KillAll cancel/drain work. Evidence: runner_control.go, shutdown_test.go, runbook_cancel_test.go."
+  },
+  {
+    "rule": "G118",
+    "file": "internal/handler/runbook_web_actions.go",
+    "line": "193",
+    "source_sha256": "e554eb262a632f6909f309acb45ae928d428ac5681b8f177555af40cff8d7dbb",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Detached persisted deployment must outlive its HTTP/scheduler/startup request. DeploymentRunner.Run owns cancel registration; Cancel and KillAll cancel/drain work. Evidence: runner_control.go, shutdown_test.go, runbook_cancel_test.go."
+  },
+  {
+    "rule": "G118",
+    "file": "internal/handler/artifact_gate.go",
+    "line": "179",
+    "source_sha256": "6e0c3c1872bf0722fd2b8e0b91cc7e294da545e4017fb620da8da3a253de11d3",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Detached persisted deployment must outlive its HTTP/scheduler/startup request. DeploymentRunner.Run owns cancel registration; Cancel and KillAll cancel/drain work. Evidence: runner_control.go, shutdown_test.go, runbook_cancel_test.go."
+  },
+  {
+    "rule": "G118",
+    "file": "internal/handler/api/runbook_executions.go",
+    "line": "318",
+    "source_sha256": "5ade74c068a1af3cc84c44f557f57f0cea1baf231169c7f16ddda139aee6298f",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Detached persisted deployment must outlive its HTTP/scheduler/startup request. DeploymentRunner.Run owns cancel registration; Cancel and KillAll cancel/drain work. Evidence: runner_control.go, shutdown_test.go, runbook_cancel_test.go."
+  },
+  {
+    "rule": "G118",
+    "file": "internal/handler/api/runbook_executions.go",
+    "line": "249",
+    "source_sha256": "5ade74c068a1af3cc84c44f557f57f0cea1baf231169c7f16ddda139aee6298f",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Detached persisted deployment must outlive its HTTP/scheduler/startup request. DeploymentRunner.Run owns cancel registration; Cancel and KillAll cancel/drain work. Evidence: runner_control.go, shutdown_test.go, runbook_cancel_test.go."
+  },
+  {
+    "rule": "G118",
+    "file": "internal/handler/api/runbook_execute.go",
+    "line": "94",
+    "source_sha256": "4a4884b575ad5c3454e1ae98aa44dc2eb975b25c5f71d188f3124adc315b5308",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Detached persisted deployment must outlive its HTTP/scheduler/startup request. DeploymentRunner.Run owns cancel registration; Cancel and KillAll cancel/drain work. Evidence: runner_control.go, shutdown_test.go, runbook_cancel_test.go."
+  },
+  {
+    "rule": "G118",
+    "file": "cmd/server/main.go",
+    "line": "436",
+    "source_sha256": "3cebf1dfd1dbe29021094e2b995f7d2b18ede6609183a564820137b199bf2e4a",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Detached persisted deployment must outlive its HTTP/scheduler/startup request. DeploymentRunner.Run owns cancel registration; Cancel and KillAll cancel/drain work. Evidence: runner_control.go, shutdown_test.go, runbook_cancel_test.go."
+  },
+  {
+    "rule": "G122",
+    "file": "internal/artifact/tar.go",
+    "line": "63",
+    "source_sha256": "a10b0c907ffe13041edab68c314c38d31e124cf7460598f9c837304dbfcc7c22",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Only production caller tars a newly-created private directory written through os.Root; extraction rejects archive links/special entries. Not an API for concurrently mutable caller directories. Evidence: runner/artifact_staging.go, artifact/zip.go and artifact_test.go."
+  },
+  {
+    "rule": "G702",
+    "file": "internal/maintenance/litestream.go",
+    "line": "84",
+    "source_sha256": "04a79ae3b5390be2901dd5cc09ab0daf0b82a09cecfe2be1fca7b86e99580f74",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Explicit operator environment command, documented to execute through /bin/sh; sole caller is startup, no HTTP/DB/deployment-variable source. Evidence: cmd/server/main.go and docs/deploy.md. No dedicated runtime test."
+  },
+  {
+    "rule": "G124",
+    "file": "internal/oidc/transaction_cookie.go",
+    "line": "154",
+    "source_sha256": "bf084e990786b14a604034dec66d31ee23f099ca00e85c59d9e29f3bb467cf0e",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Cookie explicitly sets HttpOnly and SameSite=Lax; Secure follows mfa.LoadConfig HTTPS policy. Public HTTP URL is rejected; unset URL is documented development. Evidence: internal/mfa/config.go; docs/deploy.md HTTPS requirement; auth/transaction-cookie tests."
+  },
+  {
+    "rule": "G124",
+    "file": "internal/oidc/transaction_cookie.go",
+    "line": "113",
+    "source_sha256": "bf084e990786b14a604034dec66d31ee23f099ca00e85c59d9e29f3bb467cf0e",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Cookie explicitly sets HttpOnly and SameSite=Lax; Secure follows mfa.LoadConfig HTTPS policy. Public HTTP URL is rejected; unset URL is documented development. Evidence: internal/mfa/config.go; docs/deploy.md HTTPS requirement; auth/transaction-cookie tests."
+  },
+  {
+    "rule": "G124",
+    "file": "internal/handler/security_passkey_verification_helpers.go",
+    "line": "93",
+    "source_sha256": "4f677154b19487d026a8747cedf4809c1d0fe1bb77e96f45c7d82333410a83fc",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Cookie explicitly sets HttpOnly and SameSite=Lax; Secure follows mfa.LoadConfig HTTPS policy. Public HTTP URL is rejected; unset URL is documented development. Evidence: internal/mfa/config.go; docs/deploy.md HTTPS requirement; auth/transaction-cookie tests."
+  },
+  {
+    "rule": "G124",
+    "file": "internal/handler/security_passkey_verification_helpers.go",
+    "line": "74",
+    "source_sha256": "4f677154b19487d026a8747cedf4809c1d0fe1bb77e96f45c7d82333410a83fc",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Cookie explicitly sets HttpOnly and SameSite=Lax; Secure follows mfa.LoadConfig HTTPS policy. Public HTTP URL is rejected; unset URL is documented development. Evidence: internal/mfa/config.go; docs/deploy.md HTTPS requirement; auth/transaction-cookie tests."
+  },
+  {
+    "rule": "G124",
+    "file": "internal/handler/security_passkey_verification_helpers.go",
+    "line": "65",
+    "source_sha256": "4f677154b19487d026a8747cedf4809c1d0fe1bb77e96f45c7d82333410a83fc",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Cookie explicitly sets HttpOnly and SameSite=Lax; Secure follows mfa.LoadConfig HTTPS policy. Public HTTP URL is rejected; unset URL is documented development. Evidence: internal/mfa/config.go; docs/deploy.md HTTPS requirement; auth/transaction-cookie tests."
+  },
+  {
+    "rule": "G124",
+    "file": "internal/handler/security.go",
+    "line": "91",
+    "source_sha256": "0eafb11e6acb9a851a512629843b954a3406bf3fe99cc762e96e751f8233befb",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Cookie explicitly sets HttpOnly and SameSite=Lax; Secure follows mfa.LoadConfig HTTPS policy. Public HTTP URL is rejected; unset URL is documented development. Evidence: internal/mfa/config.go; docs/deploy.md HTTPS requirement; auth/transaction-cookie tests."
+  },
+  {
+    "rule": "G124",
+    "file": "internal/handler/login_session.go",
+    "line": "78",
+    "source_sha256": "eb5d1910aaf8d1952b0ce9535158722cf7b7aa5565dcb607dedf8710bb30a172",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Cookie explicitly sets HttpOnly and SameSite=Lax; Secure follows mfa.LoadConfig HTTPS policy. Public HTTP URL is rejected; unset URL is documented development. Evidence: internal/mfa/config.go; docs/deploy.md HTTPS requirement; auth/transaction-cookie tests."
+  },
+  {
+    "rule": "G124",
+    "file": "internal/handler/login_mfa_pending.go",
+    "line": "31",
+    "source_sha256": "1debd72498e9a939781f58bf26a1a76112c28d78bead68d6cdeec0c75e3fccef",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Cookie explicitly sets HttpOnly and SameSite=Lax; Secure follows mfa.LoadConfig HTTPS policy. Public HTTP URL is rejected; unset URL is documented development. Evidence: internal/mfa/config.go; docs/deploy.md HTTPS requirement; auth/transaction-cookie tests."
+  },
+  {
+    "rule": "G124",
+    "file": "internal/handler/login_mfa_pending.go",
+    "line": "20",
+    "source_sha256": "1debd72498e9a939781f58bf26a1a76112c28d78bead68d6cdeec0c75e3fccef",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Cookie explicitly sets HttpOnly and SameSite=Lax; Secure follows mfa.LoadConfig HTTPS policy. Public HTTP URL is rejected; unset URL is documented development. Evidence: internal/mfa/config.go; docs/deploy.md HTTPS requirement; auth/transaction-cookie tests."
+  },
+  {
+    "rule": "G124",
+    "file": "internal/handler/login_mfa_pending.go",
+    "line": "16",
+    "source_sha256": "1debd72498e9a939781f58bf26a1a76112c28d78bead68d6cdeec0c75e3fccef",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Cookie explicitly sets HttpOnly and SameSite=Lax; Secure follows mfa.LoadConfig HTTPS policy. Public HTTP URL is rejected; unset URL is documented development. Evidence: internal/mfa/config.go; docs/deploy.md HTTPS requirement; auth/transaction-cookie tests."
+  },
+  {
+    "rule": "G124",
+    "file": "internal/handler/auth.go",
+    "line": "252",
+    "source_sha256": "c81d614699a91b1168daf372be86f781a734379a8a64c008d72e247570970e66",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Cookie explicitly sets HttpOnly and SameSite=Lax; Secure follows mfa.LoadConfig HTTPS policy. Public HTTP URL is rejected; unset URL is documented development. Evidence: internal/mfa/config.go; docs/deploy.md HTTPS requirement; auth/transaction-cookie tests."
+  },
+  {
+    "rule": "G120",
+    "file": "internal/server/request_body_limit.go",
+    "line": "63",
+    "source_sha256": "555340b0816cbdd0104dd1a19add7f072880a600f5c3d121d3a0acf93a0a9012",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Entire encoded body is capped (16MiB or 64KiB) before ParseMultipartForm, including unknown lengths; temporary files removed. Evidence: server/request_body_limit.go and handler/request_body_web_test.go."
+  },
+  {
+    "rule": "G204",
+    "file": "internal/maintenance/litestream.go",
+    "line": "84",
+    "source_sha256": "04a79ae3b5390be2901dd5cc09ab0daf0b82a09cecfe2be1fca7b86e99580f74",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Explicit operator environment command, documented to execute through /bin/sh; sole caller is startup, no HTTP/DB/deployment-variable source. Evidence: cmd/server/main.go and docs/deploy.md. No dedicated runtime test."
+  },
+  {
+    "rule": "G204",
+    "file": "internal/runner/podman.go",
+    "line": "139",
+    "source_sha256": "ce3f2202b5ceac0721d2178e41952251517f0438b96c1dca723f4a1280b9e7f3",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Startup-resolved docker/podman binary with separate argv; validated image and sandbox flags; script passed via stdin, no host shell. Operator PATH is trusted. Evidence: local_step.go, podman.go, podman_test.go."
+  },
+  {
+    "rule": "G304",
+    "file": "internal/artifact/zip_reader.go",
+    "line": "43",
+    "source_sha256": "a66059257f12cba57e21b653b6ae912c0df18686dd6d25bb52d6f231760e47a4",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Source comes from private os.CreateTemp ZIP download or private os.Root extraction, never request filesystem paths. Evidence: artifact/fetch.go, zip.go, metadata_test.go and artifact_test.go."
+  },
+  {
+    "rule": "G304",
+    "file": "internal/artifact/tar.go",
+    "line": "63",
+    "source_sha256": "a10b0c907ffe13041edab68c314c38d31e124cf7460598f9c837304dbfcc7c22",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Source comes from private os.CreateTemp ZIP download or private os.Root extraction, never request filesystem paths. Evidence: artifact/fetch.go, zip.go, metadata_test.go and artifact_test.go."
+  },
+  {
+    "rule": "G110",
+    "file": "internal/handler/artifact_gate_download.go",
+    "line": "117",
+    "source_sha256": "f11ac74ba0b4aa1cc779b1e7d91bd86dfbdd3d4a35f84c1c280241b51f1c0bdc",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Reading uncompressed tar from a bounded (300MiB), authenticated and checksum-verified spool; tar.Reader limits entry reads. Evidence: repository/artifact_gate_storage.go, artifact/gate_bundle.go and artifact_gate_failures_e2e_test.go."
+  },
+  {
+    "rule": "G110",
+    "file": "internal/handler/artifact_gate_download.go",
+    "line": "91-94",
+    "source_sha256": "f11ac74ba0b4aa1cc779b1e7d91bd86dfbdd3d4a35f84c1c280241b51f1c0bdc",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Reading uncompressed tar from a bounded (300MiB), authenticated and checksum-verified spool; tar.Reader limits entry reads. Evidence: repository/artifact_gate_storage.go, artifact/gate_bundle.go and artifact_gate_failures_e2e_test.go."
+  },
+  {
+    "rule": "G710",
+    "file": "internal/handler/variable.go",
+    "line": "424",
+    "source_sha256": "be73260ca439fab081ce24fa8135d33e53635e81ec60c8db1dc6730b80e30a75",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Destination has a fixed same-origin path prefix; project/release IDs are parsed integers. Agent routes retain /admin/agents/. Evidence: corresponding handler and internal/server/server.go route; workflow redirect tests."
+  },
+  {
+    "rule": "G710",
+    "file": "internal/handler/variable.go",
+    "line": "225",
+    "source_sha256": "be73260ca439fab081ce24fa8135d33e53635e81ec60c8db1dc6730b80e30a75",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Destination has a fixed same-origin path prefix; project/release IDs are parsed integers. Agent routes retain /admin/agents/. Evidence: corresponding handler and internal/server/server.go route; workflow redirect tests."
+  },
+  {
+    "rule": "G710",
+    "file": "internal/handler/scheduled_deployment.go",
+    "line": "726",
+    "source_sha256": "0319d2893515eddbf5cb74723c02100b56a3361e33dac75eeb435fa207db729d",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Destination has a fixed same-origin path prefix; project/release IDs are parsed integers. Agent routes retain /admin/agents/. Evidence: corresponding handler and internal/server/server.go route; workflow redirect tests."
+  },
+  {
+    "rule": "G710",
+    "file": "internal/handler/scheduled_deployment.go",
+    "line": "596",
+    "source_sha256": "0319d2893515eddbf5cb74723c02100b56a3361e33dac75eeb435fa207db729d",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Destination has a fixed same-origin path prefix; project/release IDs are parsed integers. Agent routes retain /admin/agents/. Evidence: corresponding handler and internal/server/server.go route; workflow redirect tests."
+  },
+  {
+    "rule": "G710",
+    "file": "internal/handler/scheduled_deployment.go",
+    "line": "545",
+    "source_sha256": "0319d2893515eddbf5cb74723c02100b56a3361e33dac75eeb435fa207db729d",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Destination has a fixed same-origin path prefix; project/release IDs are parsed integers. Agent routes retain /admin/agents/. Evidence: corresponding handler and internal/server/server.go route; workflow redirect tests."
+  },
+  {
+    "rule": "G710",
+    "file": "internal/handler/scheduled_deployment.go",
+    "line": "293",
+    "source_sha256": "0319d2893515eddbf5cb74723c02100b56a3361e33dac75eeb435fa207db729d",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Destination has a fixed same-origin path prefix; project/release IDs are parsed integers. Agent routes retain /admin/agents/. Evidence: corresponding handler and internal/server/server.go route; workflow redirect tests."
+  },
+  {
+    "rule": "G710",
+    "file": "internal/handler/runbooks.go",
+    "line": "218",
+    "source_sha256": "9476f628c2440d828f9ef8d2cd3c48dca6c5c22e9942d3db231c4aeffa87214f",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Destination has a fixed same-origin path prefix; project/release IDs are parsed integers. Agent routes retain /admin/agents/. Evidence: corresponding handler and internal/server/server.go route; workflow redirect tests."
+  },
+  {
+    "rule": "G710",
+    "file": "internal/handler/release_refresh.go",
+    "line": "66",
+    "source_sha256": "5f2dcc48fd54d368f7972f740714327f0e4de13b21b237f84636d95b66d3ea86",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Destination has a fixed same-origin path prefix; project/release IDs are parsed integers. Agent routes retain /admin/agents/. Evidence: corresponding handler and internal/server/server.go route; workflow redirect tests."
+  },
+  {
+    "rule": "G710",
+    "file": "internal/handler/release.go",
+    "line": "321",
+    "source_sha256": "2166f273d05553c8e9ac8d2bd0493f3b1e3575df1dd0a057222b0ea3da9f53ce",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Destination has a fixed same-origin path prefix; project/release IDs are parsed integers. Agent routes retain /admin/agents/. Evidence: corresponding handler and internal/server/server.go route; workflow redirect tests."
+  },
+  {
+    "rule": "G710",
+    "file": "internal/handler/release.go",
+    "line": "209",
+    "source_sha256": "2166f273d05553c8e9ac8d2bd0493f3b1e3575df1dd0a057222b0ea3da9f53ce",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Destination has a fixed same-origin path prefix; project/release IDs are parsed integers. Agent routes retain /admin/agents/. Evidence: corresponding handler and internal/server/server.go route; workflow redirect tests."
+  },
+  {
+    "rule": "G710",
+    "file": "internal/handler/project_members.go",
+    "line": "231",
+    "source_sha256": "98a9ed2749302f35fcf7f756e83983c14f8c788be993ef4d209950b2928ba48c",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Destination has a fixed same-origin path prefix; project/release IDs are parsed integers. Agent routes retain /admin/agents/. Evidence: corresponding handler and internal/server/server.go route; workflow redirect tests."
+  },
+  {
+    "rule": "G710",
+    "file": "internal/handler/project_members.go",
+    "line": "183",
+    "source_sha256": "98a9ed2749302f35fcf7f756e83983c14f8c788be993ef4d209950b2928ba48c",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Destination has a fixed same-origin path prefix; project/release IDs are parsed integers. Agent routes retain /admin/agents/. Evidence: corresponding handler and internal/server/server.go route; workflow redirect tests."
+  },
+  {
+    "rule": "G710",
+    "file": "internal/handler/project_members.go",
+    "line": "109",
+    "source_sha256": "98a9ed2749302f35fcf7f756e83983c14f8c788be993ef4d209950b2928ba48c",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Destination has a fixed same-origin path prefix; project/release IDs are parsed integers. Agent routes retain /admin/agents/. Evidence: corresponding handler and internal/server/server.go route; workflow redirect tests."
+  },
+  {
+    "rule": "G710",
+    "file": "internal/handler/project.go",
+    "line": "627",
+    "source_sha256": "d61ba71b007b6fb51d7e135fc2ec9a9b527fb4244a7f5137dbe63232954545db",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Destination has a fixed same-origin path prefix; project/release IDs are parsed integers. Agent routes retain /admin/agents/. Evidence: corresponding handler and internal/server/server.go route; workflow redirect tests."
+  },
+  {
+    "rule": "G710",
+    "file": "internal/handler/project.go",
+    "line": "242",
+    "source_sha256": "d61ba71b007b6fb51d7e135fc2ec9a9b527fb4244a7f5137dbe63232954545db",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Destination has a fixed same-origin path prefix; project/release IDs are parsed integers. Agent routes retain /admin/agents/. Evidence: corresponding handler and internal/server/server.go route; workflow redirect tests."
+  },
+  {
+    "rule": "G710",
+    "file": "internal/handler/agents.go",
+    "line": "213",
+    "source_sha256": "6c1a9d11479bcbd4bfa5b15bf75e7c240d8cafcde69c8a39f40f02334d3033cb",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Destination has a fixed same-origin path prefix; project/release IDs are parsed integers. Agent routes retain /admin/agents/. Evidence: corresponding handler and internal/server/server.go route; workflow redirect tests."
+  },
+  {
+    "rule": "G710",
+    "file": "internal/handler/agents.go",
+    "line": "182",
+    "source_sha256": "6c1a9d11479bcbd4bfa5b15bf75e7c240d8cafcde69c8a39f40f02334d3033cb",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Destination has a fixed same-origin path prefix; project/release IDs are parsed integers. Agent routes retain /admin/agents/. Evidence: corresponding handler and internal/server/server.go route; workflow redirect tests."
+  },
+  {
+    "rule": "G710",
+    "file": "internal/handler/agents.go",
+    "line": "131",
+    "source_sha256": "6c1a9d11479bcbd4bfa5b15bf75e7c240d8cafcde69c8a39f40f02334d3033cb",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Destination has a fixed same-origin path prefix; project/release IDs are parsed integers. Agent routes retain /admin/agents/. Evidence: corresponding handler and internal/server/server.go route; workflow redirect tests."
+  },
+  {
+    "rule": "G710",
+    "file": "internal/handler/agent_environment_labels.go",
+    "line": "94",
+    "source_sha256": "c216f97d2545f503e7dad91a19b9fc7d93d1cf6fe190bd03c861751bd7f21767",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Destination has a fixed same-origin path prefix; project/release IDs are parsed integers. Agent routes retain /admin/agents/. Evidence: corresponding handler and internal/server/server.go route; workflow redirect tests."
+  },
+  {
+    "rule": "G710",
+    "file": "internal/handler/agent_environment_labels.go",
+    "line": "58",
+    "source_sha256": "c216f97d2545f503e7dad91a19b9fc7d93d1cf6fe190bd03c861751bd7f21767",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Destination has a fixed same-origin path prefix; project/release IDs are parsed integers. Agent routes retain /admin/agents/. Evidence: corresponding handler and internal/server/server.go route; workflow redirect tests."
+  },
+  {
+    "rule": "G710",
+    "file": "internal/handler/agent_drain.go",
+    "line": "54",
+    "source_sha256": "a2fe10b4cede47b6894b768b4f8a11535366722084bd6c10a765bf3c5e1336c7",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "Destination has a fixed same-origin path prefix; project/release IDs are parsed integers. Agent routes retain /admin/agents/. Evidence: corresponding handler and internal/server/server.go route; workflow redirect tests."
+  },
+  {
+    "rule": "G117",
+    "file": "internal/oidc/oidctest/fixture_token.go",
+    "line": "38",
+    "source_sha256": "adcf39d85fd9c104b3b7d61653eaa92e527a073cd6007834d930bed2bb6e045e",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "OAuth access_token serialization is the protocol of an isolated generated-key oidctest TLS fixture, imported only by tests/browser fixtures. Evidence: internal/oidc/oidctest/fixture.go and fixture_protocol.go."
+  },
+  {
+    "rule": "G117",
+    "file": "internal/oidc/oidctest/fixture_token.go",
+    "line": "28",
+    "source_sha256": "adcf39d85fd9c104b3b7d61653eaa92e527a073cd6007834d930bed2bb6e045e",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "OAuth access_token serialization is the protocol of an isolated generated-key oidctest TLS fixture, imported only by tests/browser fixtures. Evidence: internal/oidc/oidctest/fixture.go and fixture_protocol.go."
+  },
+  {
+    "rule": "G117",
+    "file": "internal/oidc/oidctest/fixture_token.go",
+    "line": "25",
+    "source_sha256": "adcf39d85fd9c104b3b7d61653eaa92e527a073cd6007834d930bed2bb6e045e",
+    "owner": "DeveloperDurp",
+    "expires": "2027-01-01",
+    "reason": "OAuth access_token serialization is the protocol of an isolated generated-key oidctest TLS fixture, imported only by tests/browser fixtures. Evidence: internal/oidc/oidctest/fixture.go and fixture_protocol.go."
+  }
+]

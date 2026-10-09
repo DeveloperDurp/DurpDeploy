@@ -3,6 +3,8 @@ package handler_test
 import (
 	"os"
 	"testing"
+
+	"durpdeploy/internal/testenv"
 )
 
 func TestMain(m *testing.M) {
@@ -12,5 +14,5 @@ func TestMain(m *testing.M) {
 	); err != nil {
 		panic(err)
 	}
-	os.Exit(m.Run())
+	os.Exit(testenv.Run(m))
 }

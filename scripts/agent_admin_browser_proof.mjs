@@ -3,7 +3,7 @@ import { spawn } from "node:child_process";
 import { chmod, copyFile, mkdir, mkdtemp, readlink, rm, writeFile } from "node:fs/promises";
 import net from "node:net";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 
@@ -17,12 +17,12 @@ const faultFlag = process.argv.indexOf("--fault-scenario");
 const lifecycle = process.argv.includes("--lifecycle");
 const mixedInterpreter = process.argv.includes("--mixed-interpreter");
 const faultScenario = faultFlag >= 0 ? process.argv[faultFlag + 1] : "";
+const runDir = await mkdtemp(join(tmpdir(), "durpdeploy-agent-browser-"));
 const evidenceDir = resolve(
 	evidenceFlag >= 0 ? process.argv[evidenceFlag + 1] :
-		join(root, ".omo/evidence/continue-remote-agent-rollout/browser"),
+		join(root, ".omo/evidence/continue-remote-agent-rollout/browser", basename(runDir)),
 );
 const agentRoot = resolve(process.env.DURPDEPLOY_AGENT_WORKTREE || defaultAgentRoot);
-const runDir = await mkdtemp(join(tmpdir(), "durpdeploy-agent-browser-"));
 const agentContainer = `durpdeploy-agent-e2e-${process.pid}`;
 const agentStateVolume = `${agentContainer}-state`;
 const hostAgent = process.env.DURPDEPLOY_AGENT_E2E_HOST_PROCESS === "1";
@@ -225,6 +225,7 @@ async function main() {
 		LANG: "ddp-server-execution-sentinel",
 		PATH: `${sentinelDir}:${process.env.PATH}`,
 		DURPDEPLOY_ADDR: browserReservation.address,
+		DURPDEPLOY_CONTAINER_NAMESPACE: `agent_${nonce}`,
 		DURPDEPLOY_AGENT_IDENTITY_DIR: join(runDir, "server-identity"),
 		DURPDEPLOY_AGENT_LISTEN_ADDR: listenerReservation.address,
 		DURPDEPLOY_AGENT_PUBLIC_URL: listenerURL,
