@@ -17,7 +17,7 @@ make security-scan
 go test -count=1 ./internal/cicontract
 ```
 
-Requirements: Go (able to download the official 1.26.8 toolchain), npm,
+Requirements: Go (able to download the official 1.26.9 toolchain), npm,
 jq, git, tar, sha256sum, and OpenSSL for fixtures. The Makefile prepares
 templ and Swagger assets before Go analysis. Tools live in ignored
 `bin/security/`; scanner module versions are verified before every scan.

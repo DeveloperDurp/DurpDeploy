@@ -349,9 +349,9 @@ sonar-issues:
 .PHONY: security-tools security-scan security-scan-test
 security-tools:
 	mkdir -p bin/security
-	GOTOOLCHAIN=go1.26.8 GOBIN="$(CURDIR)/bin/security" go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
-	GOTOOLCHAIN=go1.26.8 GOBIN="$(CURDIR)/bin/security" go install github.com/securego/gosec/v2/cmd/gosec@v2.29.0
-	GOTOOLCHAIN=go1.26.8 GOBIN="$(CURDIR)/bin/security" go install github.com/zricethezav/gitleaks/v8@v8.30.1
+	GOTOOLCHAIN=go1.26.9 GOBIN="$(CURDIR)/bin/security" go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
+	GOTOOLCHAIN=go1.26.9 GOBIN="$(CURDIR)/bin/security" go install github.com/securego/gosec/v2/cmd/gosec@v2.29.0
+	GOTOOLCHAIN=go1.26.9 GOBIN="$(CURDIR)/bin/security" go install github.com/zricethezav/gitleaks/v8@v8.30.1
 
 security-scan: templ-generate swagger-ui-copy
 	@result=0; for scanner in govulncheck gosec gitleaks; do \

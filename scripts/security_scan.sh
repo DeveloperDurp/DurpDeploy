@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 umask 077
-export GOTOOLCHAIN=go1.26.8
+export GOTOOLCHAIN=go1.26.9
 
 root=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 scanner=${1:?usage: security_scan.sh govulncheck|gosec|gitleaks [directory]}
