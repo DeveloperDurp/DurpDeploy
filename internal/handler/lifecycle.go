@@ -223,9 +223,12 @@ func (h *LifecycleHandler) SaveLifecycle(
 		if err != nil {
 			if IsUniqueViolation(err) {
 				lc := db.Lifecycle{
-					ID:          id,
-					Name:        name,
-					Description: sql.NullString{String: desc, Valid: desc != ""},
+					ID:   id,
+					Name: name,
+					Description: sql.NullString{
+						String: desc,
+						Valid:  desc != "",
+					},
 				}
 				if err := h.writeLifecycleDetailError(
 					w,

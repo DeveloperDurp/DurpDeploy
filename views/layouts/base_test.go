@@ -38,12 +38,17 @@ func TestBaseLayoutUsesSingleAlpineEntryPoint(t *testing.T) {
 
 	// Then
 	if count := strings.Count(rendered, `/static/js/app.bundle.js`); count != 1 {
-		t.Fatalf("base layout references active Alpine entry %d times, want 1", count)
+		t.Fatalf(
+			"base layout references active Alpine entry %d times, want 1",
+			count,
+		)
 	}
 	if strings.Contains(rendered, `/static/js/alpine.bundle.js`) {
 		t.Fatal("base layout references orphan Alpine entry")
 	}
-	if _, err := os.Stat("../../static/js/alpine.bundle.js"); !os.IsNotExist(err) {
+	if _, err := os.Stat("../../static/js/alpine.bundle.js"); !os.IsNotExist(
+		err,
+	) {
 		t.Fatalf("orphan Alpine bundle still exists: %v", err)
 	}
 	if !strings.Contains(
@@ -56,7 +61,10 @@ func TestBaseLayoutUsesSingleAlpineEntryPoint(t *testing.T) {
 	if themeBootstrap < 0 {
 		t.Fatal("theme bootstrap marker is missing")
 	}
-	activeEntry := strings.Index(rendered, `<script src="/static/js/app.bundle.js"`)
+	activeEntry := strings.Index(
+		rendered,
+		`<script src="/static/js/app.bundle.js"`,
+	)
 	if activeEntry < 0 {
 		t.Fatal("active Alpine entry marker is missing")
 	}

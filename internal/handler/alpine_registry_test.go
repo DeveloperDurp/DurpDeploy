@@ -51,8 +51,18 @@ func TestAlpineRegistryDefinesComplianceComponents(t *testing.T) {
 		{
 			name:        "stepFormHost",
 			constructor: `\(\)`,
-			members:     []string{"afterRequest", "add", "cancel", "handleEvent"},
-			methods:     []string{"afterRequest", "add", "cancel", "handleEvent"},
+			members: []string{
+				"afterRequest",
+				"add",
+				"cancel",
+				"handleEvent",
+			},
+			methods: []string{
+				"afterRequest",
+				"add",
+				"cancel",
+				"handleEvent",
+			},
 			events: []string{
 				"step-form-add", "step-form-cancel", "step-form-edit",
 			},
@@ -99,10 +109,16 @@ func TestAlpineRegistryDefinesComplianceComponents(t *testing.T) {
 			)
 			factory := factoryPattern.FindString(source)
 			if factory == "" {
-				t.Fatalf("registry does not define %s with constructor %s", contract.name, contract.constructor)
+				t.Fatalf(
+					"registry does not define %s with constructor %s",
+					contract.name,
+					contract.constructor,
+				)
 			}
 			for _, member := range contract.members {
-				memberPattern := regexp.MustCompile(`(?m)^\t(?:get )?` + member + `(?:\(|:)`)
+				memberPattern := regexp.MustCompile(
+					`(?m)^\t(?:get )?` + member + `(?:\(|:)`,
+				)
 				if !memberPattern.MatchString(factory) {
 					t.Errorf("%s does not expose %s", contract.name, member)
 				}
@@ -130,7 +146,11 @@ func TestAlpineRegistryDefinesComplianceComponents(t *testing.T) {
 			}
 			for _, cleanup := range contract.cleanup {
 				if !strings.Contains(factory, cleanup) {
-					t.Errorf("%s destroy contract lacks %q", contract.name, cleanup)
+					t.Errorf(
+						"%s destroy contract lacks %q",
+						contract.name,
+						cleanup,
+					)
 				}
 			}
 			if !strings.Contains(bundle, contract.name) {
