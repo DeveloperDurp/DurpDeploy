@@ -7,6 +7,8 @@ The release workflow calls the same scanner workflow for PRs, main pushes,
 all release tags, and manual dispatch. Docker image and Helm chart publication
 require that scan to succeed. Standalone and called scans have separate
 concurrency groups so they cannot cancel each other on the same ref.
+The scanner fixture suite and API-token regression test run only on PRs;
+the production scans still run for every supported event.
 
 Install the pinned, task-local tools and reproduce the gates:
 

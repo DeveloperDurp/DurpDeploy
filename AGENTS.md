@@ -128,7 +128,7 @@ CI stage order: `lint` (`go vet ./...` + `gofmt -l .` must be empty) → `test` 
 
 ## SonarCloud and Codex
 
-SonarCloud runs on pushes to `main`/`master` and on pull requests. It reports
+SonarCloud and all CI test suites run only on pull requests. SonarCloud reports
 Go coverage and waits for the Quality Gate, so a failed gate fails the GitHub
 check. Before declaring pull-request work complete, inspect the SonarCloud
 check and address valid new-code findings. With a local `SONAR_TOKEN`, use:

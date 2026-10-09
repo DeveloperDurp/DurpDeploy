@@ -15,8 +15,6 @@ name: test
 on:
   pull_request:
     types: [opened, synchronize, reopened]
-  push:
-    branches: [main]
 
 # Cancel any in-flight run for the same ref when a new commit lands
 # (same policy as release.yml).
