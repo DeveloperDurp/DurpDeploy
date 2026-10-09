@@ -97,7 +97,10 @@ func TestRemoteStepLogsRedactSplitSecret(t *testing.T) {
 	)
 	if err != nil || len(logs) != 2 ||
 		logs[0].Line+logs[1].Line != "[REDACTED]" ||
-		!logs[0].StepName.Valid {
+		!logs[0].StepName.Valid ||
+		!logs[0].StepIndex.Valid ||
+		logs[0].StepIndex.Int64 != 0 ||
+		logs[0].StepState.Valid {
 		t.Fatalf("stored step logs=%+v error=%v", logs, err)
 	}
 	var streamed strings.Builder

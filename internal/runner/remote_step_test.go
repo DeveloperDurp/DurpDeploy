@@ -169,6 +169,34 @@ finished_at=unixepoch() WHERE deployment_id=? AND step_index=1`,
 	if err != nil || len(runs) != 1 || runs[0].State != terminalState {
 		t.Fatalf("remote runs = %+v, error = %v", runs, err)
 	}
+	logs, err := repo.Queries.ListDeploymentLogsByDeployment(
+		ctx,
+		created.Deployment.ID,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	states := make(map[int64][]string)
+	for _, log := range logs {
+		if log.StepState.Valid {
+			if !log.StepIndex.Valid {
+				t.Fatal("step lifecycle event has no release step index")
+			}
+			states[log.StepIndex.Int64] = append(
+				states[log.StepIndex.Int64],
+				log.StepState.String,
+			)
+		}
+	}
+	// The query returns newest rows first.
+	remoteState := "succeeded"
+	if terminalState == "cleanup_unconfirmed" {
+		remoteState = "failed"
+	}
+	if strings.Join(states[0], ",") != "succeeded,running" ||
+		strings.Join(states[1], ",") != remoteState+",running,waiting" {
+		t.Fatalf("local/agent lifecycle states=%v", states)
+	}
 	if terminalState == "cleanup_unconfirmed" {
 		if deployment.ContainerNamespace.Valid {
 			t.Fatal("successful local cleanup left a namespace blocker")

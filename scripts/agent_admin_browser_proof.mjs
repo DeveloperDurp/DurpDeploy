@@ -425,7 +425,7 @@ async function main() {
 	await page.locator('input[name="name"]').fill("Todo 12 browser environment");
 	await Promise.all([
 		page.waitForURL(`${baseURL}/environments`),
-		page.getByRole("button", { name: "Create" }).click(),
+		page.getByRole("button", { name: "Save", exact: true }).click(),
 	]);
 	for (let attempt = 0; attempt < 100; attempt += 1) {
 		await page.goto(`${baseURL}/admin/agents/${pairedAgentID}`);

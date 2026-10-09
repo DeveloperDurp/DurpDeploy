@@ -11,7 +11,7 @@ import (
 )
 
 const createDeploymentLog = `-- name: CreateDeploymentLog :one
-INSERT INTO deployment_logs (deployment_id, step_name, line) VALUES (?, ?, ?) RETURNING id, deployment_id, step_name, line, created_at
+INSERT INTO deployment_logs (deployment_id, step_name, line) VALUES (?, ?, ?) RETURNING id, deployment_id, step_name, line, created_at, step_index, step_state
 `
 
 type CreateDeploymentLogParams struct {
@@ -29,6 +29,8 @@ func (q *Queries) CreateDeploymentLog(ctx context.Context, arg CreateDeploymentL
 		&i.StepName,
 		&i.Line,
 		&i.CreatedAt,
+		&i.StepIndex,
+		&i.StepState,
 	)
 	return i, err
 }
@@ -59,7 +61,7 @@ func (q *Queries) CreateDeploymentLogScope(ctx context.Context, arg CreateDeploy
 
 const createRemoteDeploymentLog = `-- name: CreateRemoteDeploymentLog :one
 INSERT INTO deployment_logs (deployment_id, step_name, line, created_at)
-VALUES (?, NULL, ?, ?) RETURNING id, deployment_id, step_name, line, created_at
+VALUES (?, NULL, ?, ?) RETURNING id, deployment_id, step_name, line, created_at, step_index, step_state
 `
 
 type CreateRemoteDeploymentLogParams struct {
@@ -77,6 +79,42 @@ func (q *Queries) CreateRemoteDeploymentLog(ctx context.Context, arg CreateRemot
 		&i.StepName,
 		&i.Line,
 		&i.CreatedAt,
+		&i.StepIndex,
+		&i.StepState,
+	)
+	return i, err
+}
+
+const createStepDeploymentLog = `-- name: CreateStepDeploymentLog :one
+INSERT INTO deployment_logs (deployment_id, step_name, line, step_index, step_state)
+VALUES (?, ?, ?, ?, ?) RETURNING id, deployment_id, step_name, line, created_at, step_index, step_state
+`
+
+type CreateStepDeploymentLogParams struct {
+	DeploymentID int64          `json:"deployment_id"`
+	StepName     sql.NullString `json:"step_name"`
+	Line         string         `json:"line"`
+	StepIndex    sql.NullInt64  `json:"step_index"`
+	StepState    sql.NullString `json:"step_state"`
+}
+
+func (q *Queries) CreateStepDeploymentLog(ctx context.Context, arg CreateStepDeploymentLogParams) (DeploymentLog, error) {
+	row := q.db.QueryRowContext(ctx, createStepDeploymentLog,
+		arg.DeploymentID,
+		arg.StepName,
+		arg.Line,
+		arg.StepIndex,
+		arg.StepState,
+	)
+	var i DeploymentLog
+	err := row.Scan(
+		&i.ID,
+		&i.DeploymentID,
+		&i.StepName,
+		&i.Line,
+		&i.CreatedAt,
+		&i.StepIndex,
+		&i.StepState,
 	)
 	return i, err
 }
@@ -91,7 +129,7 @@ func (q *Queries) DeleteDeploymentLog(ctx context.Context, id int64) error {
 }
 
 const getDeploymentLog = `-- name: GetDeploymentLog :one
-SELECT id, deployment_id, step_name, line, created_at FROM deployment_logs WHERE id = ?
+SELECT id, deployment_id, step_name, line, created_at, step_index, step_state FROM deployment_logs WHERE id = ?
 `
 
 func (q *Queries) GetDeploymentLog(ctx context.Context, id int64) (DeploymentLog, error) {
@@ -103,6 +141,8 @@ func (q *Queries) GetDeploymentLog(ctx context.Context, id int64) (DeploymentLog
 		&i.StepName,
 		&i.Line,
 		&i.CreatedAt,
+		&i.StepIndex,
+		&i.StepState,
 	)
 	return i, err
 }
@@ -120,7 +160,7 @@ func (q *Queries) GetLastRemoteDeploymentLogSequence(ctx context.Context, deploy
 }
 
 const getRemoteDeploymentLogBySequence = `-- name: GetRemoteDeploymentLogBySequence :one
-SELECT l.id, l.deployment_id, l.step_name, l.line, l.created_at FROM deployment_logs l
+SELECT l.id, l.deployment_id, l.step_name, l.line, l.created_at, l.step_index, l.step_state FROM deployment_logs l
 JOIN deployment_log_scopes s ON s.log_id = l.id AND s.deployment_id = l.deployment_id
 WHERE s.deployment_id = ? AND s.step_index IS NULL AND s.attempt IS NULL
     AND s.sequence = ?
@@ -140,12 +180,14 @@ func (q *Queries) GetRemoteDeploymentLogBySequence(ctx context.Context, arg GetR
 		&i.StepName,
 		&i.Line,
 		&i.CreatedAt,
+		&i.StepIndex,
+		&i.StepState,
 	)
 	return i, err
 }
 
 const getScopedDeploymentLog = `-- name: GetScopedDeploymentLog :one
-SELECT l.id, l.deployment_id, l.step_name, l.line, l.created_at FROM deployment_logs l JOIN deployment_log_scopes s ON s.log_id = l.id AND s.deployment_id = l.deployment_id
+SELECT l.id, l.deployment_id, l.step_name, l.line, l.created_at, l.step_index, l.step_state FROM deployment_logs l JOIN deployment_log_scopes s ON s.log_id = l.id AND s.deployment_id = l.deployment_id
 WHERE s.deployment_id = ? AND s.step_index = ? AND s.attempt = ? AND s.sequence = ?
 `
 
@@ -170,12 +212,55 @@ func (q *Queries) GetScopedDeploymentLog(ctx context.Context, arg GetScopedDeplo
 		&i.StepName,
 		&i.Line,
 		&i.CreatedAt,
+		&i.StepIndex,
+		&i.StepState,
 	)
 	return i, err
 }
 
+const listDeploymentLogsAfter = `-- name: ListDeploymentLogsAfter :many
+SELECT id, deployment_id, step_name, line, created_at, step_index, step_state FROM deployment_logs WHERE deployment_id = ? AND id > ?
+ORDER BY id LIMIT 256
+`
+
+type ListDeploymentLogsAfterParams struct {
+	DeploymentID int64 `json:"deployment_id"`
+	ID           int64 `json:"id"`
+}
+
+func (q *Queries) ListDeploymentLogsAfter(ctx context.Context, arg ListDeploymentLogsAfterParams) ([]DeploymentLog, error) {
+	rows, err := q.db.QueryContext(ctx, listDeploymentLogsAfter, arg.DeploymentID, arg.ID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DeploymentLog
+	for rows.Next() {
+		var i DeploymentLog
+		if err := rows.Scan(
+			&i.ID,
+			&i.DeploymentID,
+			&i.StepName,
+			&i.Line,
+			&i.CreatedAt,
+			&i.StepIndex,
+			&i.StepState,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listDeploymentLogsByDeployment = `-- name: ListDeploymentLogsByDeployment :many
-SELECT l.id, l.deployment_id, l.step_name, l.line, l.created_at FROM deployment_logs l
+SELECT l.id, l.deployment_id, l.step_name, l.line, l.created_at, l.step_index, l.step_state FROM deployment_logs l
 LEFT JOIN deployment_log_scopes s ON s.log_id = l.id
 WHERE l.deployment_id = ?
 ORDER BY CASE
@@ -202,6 +287,8 @@ func (q *Queries) ListDeploymentLogsByDeployment(ctx context.Context, deployment
 			&i.StepName,
 			&i.Line,
 			&i.CreatedAt,
+			&i.StepIndex,
+			&i.StepState,
 		); err != nil {
 			return nil, err
 		}
@@ -216,8 +303,21 @@ func (q *Queries) ListDeploymentLogsByDeployment(ctx context.Context, deployment
 	return items, nil
 }
 
+const lockDeploymentLogStream = `-- name: LockDeploymentLogStream :execrows
+UPDATE deployment_step_sources SET steps_json = steps_json -- NOSONAR: intentional write lock
+WHERE deployment_id = ?
+`
+
+func (q *Queries) LockDeploymentLogStream(ctx context.Context, deploymentID int64) (int64, error) {
+	result, err := q.db.ExecContext(ctx, lockDeploymentLogStream, deploymentID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const updateDeploymentLog = `-- name: UpdateDeploymentLog :one
-UPDATE deployment_logs SET deployment_id = ?, step_name = ?, line = ? WHERE id = ? RETURNING id, deployment_id, step_name, line, created_at
+UPDATE deployment_logs SET deployment_id = ?, step_name = ?, line = ? WHERE id = ? RETURNING id, deployment_id, step_name, line, created_at, step_index, step_state
 `
 
 type UpdateDeploymentLogParams struct {
@@ -241,6 +341,8 @@ func (q *Queries) UpdateDeploymentLog(ctx context.Context, arg UpdateDeploymentL
 		&i.StepName,
 		&i.Line,
 		&i.CreatedAt,
+		&i.StepIndex,
+		&i.StepState,
 	)
 	return i, err
 }

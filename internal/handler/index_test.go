@@ -110,4 +110,27 @@ func TestIndex_DashboardMetrics(t *testing.T) {
 			t.Errorf("body missing %q", want)
 		}
 	}
+	rec = httptest.NewRecorder()
+	h.RefreshDeployments(
+		rec,
+		httptest.NewRequest(http.MethodGet, "/dashboard/deployments", nil),
+	)
+	if rec.Code != http.StatusOK ||
+		rec.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf(
+			"running refresh status/cache=%d/%q",
+			rec.Code,
+			rec.Header().Get("Cache-Control"),
+		)
+	}
+	fragment := rec.Body.String()
+	for _, want := range []string{"demo", `hx-trigger="every 5s"`, `id="home-latest"`, `id="home-recent"`, `hx-swap-oob="innerHTML:#home-running-count .stat-value"`, `hx-swap-oob="innerHTML:#home-today-count .stat-value"`} {
+		if !strings.Contains(fragment, want) {
+			t.Errorf("running refresh missing %q", want)
+		}
+	}
+	if strings.Contains(fragment, "<html") ||
+		strings.Contains(fragment, "data-home-charts") {
+		t.Fatal("running refresh rendered the full page")
+	}
 }

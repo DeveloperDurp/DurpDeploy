@@ -4,11 +4,15 @@ deployment_staging_e2e() {
     local project env release variable producer consumer payload code dep path state logs
     local -r json_id='import json,sys; print(json.load(sys.stdin)["id"])'
     local prefix="stage-handoff-$(date +%s)-$$"
+    [[ -z "${E2E_RUN_ID:-}" ]] || prefix=stage-handoff
     echo "=== Deployment file handoff ==="
     # Given: two container steps explicitly publish and consume a shared file.
     project=$(api_post "{\"name\":\"$prefix\"}" "$BASE/api/v1/projects" | python3 -c "$json_id")
     echo "  Project: $prefix ($BASE/projects/$project)"
-    env=$(api_post "{\"name\":\"$prefix\"}" "$BASE/api/v1/environments" | python3 -c "$json_id")
+    env=${ENV_ID:-}
+    if [[ -z "$env" ]]; then
+        env=$(api_post "{\"name\":\"$prefix\"}" "$BASE/api/v1/environments" | python3 -c "$json_id")
+    fi
     variable=$(api_post '{"name":"LIMITED","value":"selected"}' "$BASE/api/v1/projects/$project/variables" | python3 -c "$json_id")
     code=$(api_post_code '{"name":"DURPDEPLOY_STAGE_DIR","value":"/override"}' "$BASE/api/v1/projects/$project/variables")
     [[ "$code" == 422 ]] || { echo "FAIL: API staging override got $code"; return 1; }

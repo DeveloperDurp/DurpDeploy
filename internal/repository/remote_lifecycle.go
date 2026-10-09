@@ -33,16 +33,20 @@ func (r *Repository) StartRemoteDeployment(
 			if err != nil {
 				return err
 			}
-			if err := advanceEnvironmentQueue(ctx, q, d.EnvironmentID); err != nil {
+			if err := advanceEnvironmentQueue(
+				ctx,
+				q,
+				d.EnvironmentID,
+			); err != nil {
 				return err
 			}
-			owner, err := q.GetEnvironmentDeploymentSlot(ctx, d.EnvironmentID)
+			owner, err := q.GetDeploymentSlot(ctx, d.ID)
 			if err != nil || owner != d.ID {
 				return ErrRemoteLifecycleConflict
 			}
-			blockers, err := q.ListEnvironmentQueueBlockers(
+			blockers, err := q.ListDeploymentQueueBlockers(
 				ctx,
-				d.EnvironmentID,
+				d.ID,
 			)
 			if err != nil {
 				return err

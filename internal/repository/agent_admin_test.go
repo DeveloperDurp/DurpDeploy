@@ -261,7 +261,7 @@ func TestRevocationAfterStartMarksLost(t *testing.T) {
 	if err != nil || started {
 		t.Fatalf("local admission after lost agent=%v: %v", started, err)
 	}
-	owner, err := repo.Queries.GetEnvironmentDeploymentSlot(t.Context(), 1)
+	owner, err := repo.Queries.GetDeploymentSlot(t.Context(), 1)
 	if err != nil || owner != deployment.ID {
 		t.Fatalf("lost environment owner=%d: %v", owner, err)
 	}

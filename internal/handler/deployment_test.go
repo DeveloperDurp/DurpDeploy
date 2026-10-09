@@ -550,7 +550,7 @@ func TestWebRedeployRejectsUnconfirmedCleanup(t *testing.T) {
 	}
 }
 
-func TestReleasesPage_OnlyShowsDeployableEnvsByDefault(t *testing.T) {
+func TestDeployPage_OnlyShowsDeployableEnvsByDefault(t *testing.T) {
 	h := newHarness(t)
 	hc := h.setupProjectWithLifecycle(t, []string{"Alpha", "Beta"})
 	rel := hc.makeRelease(t, "1.0.0", "exit 0")
@@ -558,7 +558,7 @@ func TestReleasesPage_OnlyShowsDeployableEnvsByDefault(t *testing.T) {
 	// ponytail: use authedClient so the session cookie is sent; bare
 	// http.Get gets 303-redirected to /login by the auth middleware.
 	resp, err := h.authedClient().Get(
-		fmt.Sprintf("%s/projects/%d/releases", h.server.URL, hc.project.ID),
+		fmt.Sprintf("%s/projects/%d/deploy?release_id=%d", h.server.URL, hc.project.ID, rel.ID),
 	)
 	if err != nil {
 		t.Fatalf("GET: %v", err)
@@ -584,13 +584,12 @@ func TestReleasesPage_OnlyShowsDeployableEnvsByDefault(t *testing.T) {
 			"Beta should be in the 'forceable' optgroup; missing data-gate-group",
 		)
 	}
-	if !strings.Contains(body, `>Force<`) {
-		t.Errorf("Force checkbox label should be rendered; missing '>Force<'")
+	if !strings.Contains(body, `name="force_check"`) {
+		t.Errorf("Force checkbox should be rendered")
 	}
-	_ = rel
 }
 
-func TestReleasesPage_HidesNonLifecycleEnvs(t *testing.T) {
+func TestDeployPage_HidesNonLifecycleEnvs(t *testing.T) {
 	h := newHarness(t)
 	hc := h.setupProjectWithLifecycle(t, []string{"Alpha", "Beta"})
 
@@ -603,7 +602,7 @@ func TestReleasesPage_HidesNonLifecycleEnvs(t *testing.T) {
 	rel := hc.makeRelease(t, "1.0.0", "exit 0")
 
 	resp, err := h.authedClient().Get(
-		fmt.Sprintf("%s/projects/%d/releases", h.server.URL, hc.project.ID),
+		fmt.Sprintf("%s/projects/%d/deploy?release_id=%d", h.server.URL, hc.project.ID, rel.ID),
 	)
 	if err != nil {
 		t.Fatalf("GET: %v", err)
@@ -621,7 +620,6 @@ func TestReleasesPage_HidesNonLifecycleEnvs(t *testing.T) {
 	if !strings.Contains(body, `>Alpha<`) {
 		t.Errorf("Alpha should appear")
 	}
-	_ = rel
 }
 
 func TestGate_RenderError_ContainsReasonText(t *testing.T) {
@@ -738,7 +736,7 @@ func TestNewDeploymentPage_RendersForm(t *testing.T) {
 		`action="/projects/` + fmt.Sprintf("%d", proj.ID) + `/deploy"`,
 		`>Deploy<`,
 		fmt.Sprintf(
-			`<a href="/projects/%d" class="btn btn-ghost btn-sm">Back</a>`,
+			`<a href="/projects/%d" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>`,
 			proj.ID,
 		),
 		fmt.Sprintf(
@@ -754,7 +752,7 @@ func TestNewDeploymentPage_RendersForm(t *testing.T) {
 		t,
 		body,
 		fmt.Sprintf(
-			`(?s)<div class="flex justify-between items-center">\s*<h1 class="text-3xl font-bold">Deploy .*?</h1>\s*<div class="flex gap-2">\s*<a href="/projects/%d" class="btn btn-ghost btn-sm">Back</a>`,
+			`(?s)<div class="page-header">\s*<h1 class="text-3xl font-bold">Deploy .*?</h1>\s*<div class="flex gap-2">\s*<a href="/projects/%d" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>`,
 			proj.ID,
 		),
 	)
@@ -832,7 +830,7 @@ func TestDeploymentPageUsesAlpineOwnedState(t *testing.T) {
 	}
 }
 
-func TestReleaseRowsUseAlpineOwnedState(t *testing.T) {
+func TestReleaseRowsHaveNoDeploymentControls(t *testing.T) {
 	// Given
 	h := newHarness(t)
 	hc := h.setupProjectWithLifecycle(t, []string{"Row-Dev", "Row-Prod"})
@@ -854,21 +852,17 @@ func TestReleaseRowsUseAlpineOwnedState(t *testing.T) {
 	// Then
 	markup := string(body)
 	for _, marker := range []string{
-		`x-data="releaseDeployRow()"`,
-		`x-model="forceChecked"`,
-		`x-bind:hidden="!forceChecked"`,
-		`x-bind:disabled="!forceChecked"`,
-		`<input type="hidden" name="force" value="true" :disabled="!forceChecked">`,
+		`name="environment_id"`, `name="release_id"`, `name="force"`,
+		`>Deploy</th>`, `>Deploy</button>`, `releaseDeployRow`,
 	} {
-		if !strings.Contains(markup, marker) {
-			t.Errorf("release row missing Alpine marker %q", marker)
+		if strings.Contains(markup, marker) {
+			t.Errorf("release row retained deployment control %q", marker)
 		}
 	}
-	if strings.Contains(markup, "toggleDeployForce") {
-		t.Error("release row still calls undefined toggleDeployForce")
-	}
-	if strings.Contains(markup, ` onchange=`) {
-		t.Error("release row retained an ordinary onchange handler")
+	for _, marker := range []string{`>row-1.0.0</a>`, `>Created At</th>`, `>Actions</th>`, `>Delete</button>`} {
+		if !strings.Contains(markup, marker) {
+			t.Errorf("release row lost release control %q", marker)
+		}
 	}
 }
 
@@ -930,14 +924,16 @@ func TestReleaseAndDeploymentPages_RenderBackControls(t *testing.T) {
 		name          string
 		path          string
 		backHref      string
+		backClass     string
 		headerPattern string
 	}{
 		{
-			name:     "releases",
-			path:     fmt.Sprintf("/projects/%d/releases", hc.project.ID),
-			backHref: fmt.Sprintf("/projects/%d", hc.project.ID),
+			name:      "releases",
+			path:      fmt.Sprintf("/projects/%d/releases", hc.project.ID),
+			backHref:  fmt.Sprintf("/projects/%d", hc.project.ID),
+			backClass: "btn btn-ghost btn-sm",
 			headerPattern: fmt.Sprintf(
-				`(?s)<div class="flex justify-between items-center">\s*<h1 class="text-3xl font-bold">Releases.*?</h1>\s*<div class="flex gap-2">\s*<a href="/projects/%d" class="btn btn-ghost btn-sm">Back</a>`,
+				`(?s)<div class="page-header">\s*<h1 class="text-3xl font-bold">Releases.*?</h1>\s*<div class="flex gap-2">\s*<a href="/projects/%d" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>`,
 				hc.project.ID,
 			),
 		},
@@ -948,9 +944,10 @@ func TestReleaseAndDeploymentPages_RenderBackControls(t *testing.T) {
 				hc.project.ID,
 				release.ID,
 			),
-			backHref: fmt.Sprintf("/projects/%d/releases", hc.project.ID),
+			backHref:  fmt.Sprintf("/projects/%d/releases", hc.project.ID),
+			backClass: "btn btn-ghost btn-sm",
 			headerPattern: fmt.Sprintf(
-				`(?s)<form[^>]*action="/projects/%d/releases/%d/refresh"[^>]*>.*?Refresh.*?</form>\s*<a href="/projects/%d/releases" class="btn btn-ghost btn-sm">Back</a>`,
+				`(?s)<form[^>]*action="/projects/%d/releases/%d/refresh"[^>]*>.*?Refresh.*?</form>\s*<a href="/projects/%d/releases" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>`,
 				hc.project.ID,
 				release.ID,
 				hc.project.ID,
@@ -964,11 +961,12 @@ func TestReleaseAndDeploymentPages_RenderBackControls(t *testing.T) {
 				hc.project.ID,
 				release.ID,
 			),
+			backClass: "btn btn-ghost sm:btn-sm",
 			headerPattern: fmt.Sprintf(
-				`(?s)<div class="flex flex-wrap items-center gap-2 ml-auto">\s*<div id="deployment-actions" class="flex flex-wrap items-center gap-2">\s*<a href="/deployments/%d/logs.txt" class="btn btn-sm btn-ghost">Export</a>.*?<a href="/projects/%d/releases/%d" class="btn btn-ghost btn-sm">Back</a>`,
-				deployment.ID,
+				`(?s)<div class="space-y-4">.*?<h1[^>]*>Deployment.*?</h1>.*?<a href="/projects/%d/releases/%d" class="btn btn-ghost sm:btn-sm" x-data="backNavigation" @click="back">Back</a>.*?<details[^>]*data-focus-menu[^>]*>\s*<summary[^>]*>More</summary>.*?<a href="/deployments/%d/logs.txt"[^>]*>Export logs</a>`,
 				hc.project.ID,
 				release.ID,
+				deployment.ID,
 			),
 		},
 	}
@@ -991,8 +989,9 @@ func TestReleaseAndDeploymentPages_RenderBackControls(t *testing.T) {
 
 			// Then
 			want := fmt.Sprintf(
-				`<a href="%s" class="btn btn-ghost btn-sm">Back</a>`,
+				`<a href="%s" class="%s" x-data="backNavigation" @click="back">Back</a>`,
 				page.backHref,
+				page.backClass,
 			)
 			if got := strings.Count(string(body), want); got != 1 {
 				t.Errorf("back control count = %d, want 1 for %q", got, want)
@@ -1529,12 +1528,9 @@ func (h *projectHarness) waitForDeploymentToSucceed(
 // /deployments filter + pagination tests
 // ---------------------------------------------------------------------------
 
-// rowCount counts the deployment data rows in a page response. Each data
-// row renders exactly one "View" button; the thead has no such button,
-// the Export link uses a different label, and the OOB region (in HX
-// responses) uses hx-get, not an anchor.
+// rowCount counts deployments in full pages and appended HTMX fragments.
 func rowCount(body string) int {
-	return strings.Count(body, ">View</a>")
+	return strings.Count(body, `data-deployment-id="`)
 }
 
 func TestListDeployments_FilterAndPaginate(t *testing.T) {

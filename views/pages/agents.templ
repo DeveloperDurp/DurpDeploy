@@ -49,113 +49,115 @@ templ AgentsPage(agents []db.Agent, interpreters map[string][]string, health map
 		)
 	} else {
 		@layouts.Base("Agents", currentPath) {
-		<div class="space-y-6">
-			<div>
-				<h1 class="text-3xl font-bold">Agents</h1>
-				<p class="mt-1 opacity-70">Pair and monitor remote deployment agents.</p>
-			</div>
-			<div class="card bg-base-200 shadow">
-				<div class="card-body">
-					<h2 class="card-title">Pair a new agent</h2>
-					<p class="opacity-70">Enter the agent address and one-time pairing code. You will confirm its certificate fingerprint next.</p>
-					if formError != "" {
-						<div role="alert" class="alert alert-error">
-							<span>{ formError }. Enter the pairing values again.</span>
-						</div>
-					}
-					<form method="post" action="/admin/agents/pair" class="grid gap-4 lg:grid-cols-3">
-						<label class="form-control">
-							<span class="label"><span class="label-text">Agent name</span></span>
-							<input class="input input-bordered" name="name" maxlength="255" placeholder="e.g. Production runner" required/>
-						</label>
-						<label class="form-control">
-							<span class="label"><span class="label-text">Agent address</span></span>
-							<input class="input input-bordered" type="text" inputmode="url" name="address" placeholder="agent.example:9443" aria-describedby="agent-address-help" required/>
-							<span id="agent-address-help" class="label-text-alt opacity-70">HTTPS is added automatically.</span>
-						</label>
-						<label class="form-control">
-							<span class="label"><span class="label-text">Pairing code</span></span>
-							<input class="input input-bordered font-mono" type="password" name="code" autocomplete="off" required/>
-						</label>
-						<div class="lg:col-span-3">
-							<button type="submit" class="btn btn-primary">Continue</button>
-						</div>
-					</form>
+			<div class="space-y-6">
+				<div class="page-header">
+					<div>
+						<h1 class="text-3xl font-bold">Agents</h1>
+						<p class="mt-1 opacity-70">Pair and monitor remote deployment agents.</p>
+					</div>
 				</div>
-			</div>
-			if len(agents) == 0 {
-				<div class="card bg-base-200 p-8 text-center">
-					<p class="opacity-70">No agents paired yet.</p>
+				<div class="card bg-base-200 shadow">
+					<div class="card-body">
+						<h2 class="card-title">Pair a new agent</h2>
+						<p class="opacity-70">Enter the agent address and one-time pairing code. You will confirm its certificate fingerprint next.</p>
+						if formError != "" {
+							<div role="alert" class="alert alert-error">
+								<span>{ formError }. Enter the pairing values again.</span>
+							</div>
+						}
+						<form method="post" action="/admin/agents/pair" class="grid gap-4 lg:grid-cols-3">
+							<label class="form-control">
+								<span class="label"><span class="label-text">Agent name</span></span>
+								<input class="input input-bordered" name="name" maxlength="255" placeholder="e.g. Production runner" required/>
+							</label>
+							<label class="form-control">
+								<span class="label"><span class="label-text">Agent address</span></span>
+								<input class="input input-bordered" type="text" inputmode="url" name="address" placeholder="agent.example:9443" aria-describedby="agent-address-help" required/>
+								<span id="agent-address-help" class="label-text-alt opacity-70">HTTPS is added automatically.</span>
+							</label>
+							<label class="form-control">
+								<span class="label"><span class="label-text">Pairing code</span></span>
+								<input class="input input-bordered font-mono" type="password" name="code" autocomplete="off" required/>
+							</label>
+							<div class="lg:col-span-3">
+								<button type="submit" class="btn btn-primary">Continue</button>
+							</div>
+						</form>
+					</div>
 				</div>
-			} else {
-				<div class="overflow-x-auto">
-					<table class="table table-zebra table-fixed w-full">
-						<thead>
-							<tr>
-								<th class="w-1/4 lg:w-1/5">Agent</th>
-								<th class="w-auto lg:w-2/5">Status</th>
-								<th class="hidden lg:table-cell lg:w-1/5">Transport</th>
-								<th class="w-1/4 lg:w-1/5">Actions</th>
-							</tr>
-						</thead>
-						<tbody>
-							for _, agent := range agents {
+				if len(agents) == 0 {
+					<div class="card bg-base-200 p-8 text-center">
+						<p class="opacity-70">No agents paired yet.</p>
+					</div>
+				} else {
+					<div class="overflow-x-auto">
+						<table class="table table-zebra table-fixed w-full">
+							<thead>
 								<tr>
-									<td class="truncate">
-										<span class="font-medium">{ agent.Name }</span>
-										<div class="truncate font-mono text-xs opacity-60">{ agent.ID }</div>
-										<div class="mt-1 text-xs opacity-70 whitespace-normal">
-											<span class="block">{ fmt.Sprint(len(health[agent.ID].CurrentWork)) } current</span>
-											<span class="block">{ fmt.Sprint(health[agent.ID].QueuedWork) } queued</span>
-										</div>
-										<div class="mt-1 flex flex-wrap gap-1 whitespace-normal">
-											if len(interpreters[agent.ID]) == 0 {
-												<span class="text-xs opacity-60">Interpreters not reported</span>
-											} else {
-												for _, interpreter := range interpreters[agent.ID] {
-													<span class="badge badge-outline badge-sm">{ interpreter }</span>
+									<th class="w-1/4 lg:w-1/5">Agent</th>
+									<th class="w-auto lg:w-2/5">Status</th>
+									<th class="hidden lg:table-cell lg:w-1/5">Transport</th>
+									<th class="w-1/4 lg:w-1/5">Actions</th>
+								</tr>
+							</thead>
+							<tbody>
+								for _, agent := range agents {
+									<tr>
+										<td class="truncate">
+											<span class="font-medium">{ agent.Name }</span>
+											<div class="truncate font-mono text-xs opacity-60">{ agent.ID }</div>
+											<div class="mt-1 text-xs opacity-70 whitespace-normal">
+												<span class="block">{ fmt.Sprint(len(health[agent.ID].CurrentWork)) } current</span>
+												<span class="block">{ fmt.Sprint(health[agent.ID].QueuedWork) } queued</span>
+											</div>
+											<div class="mt-1 flex flex-wrap gap-1 whitespace-normal">
+												if len(interpreters[agent.ID]) == 0 {
+													<span class="text-xs opacity-60">Interpreters not reported</span>
+												} else {
+													for _, interpreter := range interpreters[agent.ID] {
+														<span class="badge badge-outline badge-sm">{ interpreter }</span>
+													}
 												}
-											}
-										</div>
-									</td>
-									<td>
-										<div class="flex flex-col items-start gap-1">
-											<span class={ "badge badge-sm " + agentBadgeClass(health[agent.ID].AdministrativeStatus) }>{ health[agent.ID].AdministrativeStatus }</span>
-											<span class={ "badge badge-sm " + agentBadgeClass(health[agent.ID].Health) }>{ health[agent.ID].Health }</span>
-										</div>
-									</td>
-									<td class="hidden lg:table-cell truncate font-mono text-sm">{ agent.Endpoint }</td>
-									<td>
+											</div>
+										</td>
+										<td>
+											<div class="flex flex-col items-start gap-1">
+												<span class={ "badge badge-sm " + agentBadgeClass(health[agent.ID].AdministrativeStatus) }>{ health[agent.ID].AdministrativeStatus }</span>
+												<span class={ "badge badge-sm " + agentBadgeClass(health[agent.ID].Health) }>{ health[agent.ID].Health }</span>
+											</div>
+										</td>
+										<td class="hidden lg:table-cell truncate font-mono text-sm">{ agent.Endpoint }</td>
+										<td>
 											<div class="flex flex-col items-start gap-1 sm:flex-row sm:flex-wrap">
-											<a class="btn btn-ghost btn-xs" href={ templ.SafeURL("/admin/agents/" + agent.ID) }>Edit</a>
-											@AgentDrainControl(agent, "btn-xs", "/admin/agents")
-											if CanWrite(ctx) {
-												if agent.Status != "revoked" {
+												<a class="btn btn-ghost btn-xs" href={ templ.SafeURL("/admin/agents/" + agent.ID) }>Edit</a>
+												@AgentDrainControl(agent, "btn-xs", "/admin/agents")
+												if CanWrite(ctx) {
+													if agent.Status != "revoked" {
+														<button
+															class="btn btn-error btn-xs"
+															hx-post={ "/admin/agents/" + agent.ID + "/revoke" }
+															hx-confirm={ "Revoke agent " + agent.Name + " (" + agent.ID + ")? Active remote work will be terminated." }
+														>
+															Revoke
+														</button>
+													}
 													<button
 														class="btn btn-error btn-xs"
-														hx-post={ "/admin/agents/" + agent.ID + "/revoke" }
-														hx-confirm={ "Revoke agent " + agent.Name + " (" + agent.ID + ")? Active remote work will be terminated." }
+														hx-post={ "/admin/agents/" + agent.ID + "/delete" }
+														hx-confirm={ "Delete agent " + agent.Name + " (" + agent.ID + ")? It will be removed from the inventory and lose access. Deployment history is retained." }
 													>
-														Revoke
+														Delete
 													</button>
 												}
-												<button
-													class="btn btn-error btn-xs"
-													hx-post={ "/admin/agents/" + agent.ID + "/delete" }
-													hx-confirm={ "Delete agent " + agent.Name + " (" + agent.ID + ")? It will be removed from the inventory and lose access. Deployment history is retained." }
-												>
-													Delete
-												</button>
-											}
-										</div>
-									</td>
-								</tr>
-							}
-						</tbody>
-					</table>
-				</div>
-			}
-		</div>
+											</div>
+										</td>
+									</tr>
+								}
+							</tbody>
+						</table>
+					</div>
+				}
+			</div>
 		}
 	}
 }
@@ -177,7 +179,7 @@ templ AgentPairingConfirmationPage(challenge agentserver.PairingChallenge, curre
 						<h1 class="text-3xl font-bold">Confirm agent fingerprint</h1>
 						<p class="mt-1 opacity-70">Compare this fingerprint with the one shown by the agent before you approve it.</p>
 					</div>
-					<a class="btn btn-ghost btn-sm" href="/admin/agents">Back</a>
+					<a class="btn btn-ghost btn-sm" href="/admin/agents" x-data="backNavigation" @click="back">Back</a>
 				</div>
 				<div role="alert" class="alert alert-warning">
 					<span>Approve only when every fingerprint character matches. A mismatch can indicate the wrong agent or an intercepted connection.</span>
@@ -218,135 +220,137 @@ templ AgentDetailPage(agent db.Agent, labels []string, interpreters []string, en
 		)
 	} else {
 		@layouts.Base("Agent "+agent.Name, currentPath) {
-		<div class="space-y-6">
-			<div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
-				<div class="min-w-0 flex-1">
-					<h1 class="break-words text-3xl font-bold">{ agent.Name }</h1>
-					<p class="break-all font-mono text-sm opacity-60">{ agent.ID }</p>
-				</div>
-				<div class="flex flex-wrap items-center gap-2">
-					if agent.Status != "revoked" {
-					@AgentDrainControl(agent, "btn-sm", "/admin/agents/" + agent.ID)
-					}
-					if CanWrite(ctx) {
-					if agent.Status != "revoked" {
-					<button
-						class="btn btn-error btn-sm"
-						hx-post={ "/admin/agents/" + agent.ID + "/revoke" }
-						hx-confirm={ "Revoke agent " + agent.Name + " (" + agent.ID + ")? Active remote work will be terminated." }
-					>
-						Revoke agent
-					</button>
-					}
-					<button
-						class="btn btn-error btn-sm"
-						hx-post={ "/admin/agents/" + agent.ID + "/delete" }
-						hx-confirm={ "Delete agent " + agent.Name + " (" + agent.ID + ")? It will be removed from the inventory and lose access. Deployment history is retained." }
-					>
-						Delete agent
-					</button>
-					}
-					<a class="btn btn-ghost btn-sm" href="/admin/agents">Back</a>
-				</div>
-			</div>
-			if agent.Draining != 0 && agent.Status == "active" {
-				<div role="status" class="alert alert-warning">
-					if health.AdministrativeStatus == "drained" {
-						<span>Drained: no issued work remains. Queued work and later remote steps wait until Resume.</span>
-					} else {
-						<span>Draining: issued work can finish. Queued work and later remote steps wait until Resume.</span>
-					}
-				</div>
-			}
-			if agent.Status != "revoked" {
-				<div class="card bg-base-200 shadow">
-					<div class="card-body">
-						<h2 class="card-title">Agent name</h2>
-						<p class="opacity-70">Use a recognizable name. The agent GUID remains unchanged.</p>
-						<form method="post" action={ templ.SafeURL("/admin/agents/" + agent.ID + "/name") } class="flex flex-wrap items-end gap-2">
-							<label class="form-control min-w-48 flex-1">
-								<span class="label"><span class="label-text">Name</span></span>
-								<input class="input input-bordered" name="name" value={ agent.Name } maxlength="255" required/>
-							</label>
-							<button type="submit" class="btn btn-primary">Save name</button>
-						</form>
+			<div class="space-y-6">
+				<div class="page-header">
+					<div class="min-w-0 w-full sm:w-auto sm:flex-1">
+						<h1 class="break-words text-3xl font-bold">{ agent.Name }</h1>
+						<p class="break-all font-mono text-sm opacity-60">{ agent.ID }</p>
+					</div>
+					<div class="flex flex-wrap items-center gap-2">
+						if agent.Status != "revoked" {
+							@AgentDrainControl(agent, "btn-sm", "/admin/agents/"+agent.ID)
+						}
+						if CanWrite(ctx) {
+							if agent.Status != "revoked" {
+								<button
+									class="btn btn-error btn-sm"
+									hx-post={ "/admin/agents/" + agent.ID + "/revoke" }
+									hx-confirm={ "Revoke agent " + agent.Name + " (" + agent.ID + ")? Active remote work will be terminated." }
+								>
+									Revoke agent
+								</button>
+							}
+							<button
+								class="btn btn-error btn-sm"
+								hx-post={ "/admin/agents/" + agent.ID + "/delete" }
+								hx-confirm={ "Delete agent " + agent.Name + " (" + agent.ID + ")? It will be removed from the inventory and lose access. Deployment history is retained." }
+							>
+								Delete agent
+							</button>
+						}
+						<a class="btn btn-ghost btn-sm" href="/admin/agents" x-data="backNavigation" @click="back">Back</a>
 					</div>
 				</div>
-			}
-			<div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-				<div class="stat rounded-box bg-base-200">
-					<div class="stat-title">Status</div>
-					<div class="stat-value text-lg"><span class={ "badge " + agentBadgeClass(health.AdministrativeStatus) }>{ health.AdministrativeStatus }</span></div>
-				</div>
-				<div class="stat rounded-box bg-base-200">
-					<div class="stat-title">Health</div>
-					<div class="stat-value text-lg"><span class={ "badge " + agentBadgeClass(health.Health) }>{ health.Health }</span></div>
-				</div>
-				<div class="stat rounded-box bg-base-200">
-					<div class="stat-title">Version</div>
-					<div class="text-sm break-all">{ agent.AgentVersion.String }</div>
-				</div>
-				<div class="stat rounded-box bg-base-200">
-					<div class="stat-title">Last heartbeat</div>
-					<div class="stat-value text-base text-base-content">
-						if agent.LastHeartbeatAt.Valid {
-							{ formatUnixTime(agent.LastHeartbeatAt.Int64) }
+				if agent.Draining != 0 && agent.Status == "active" {
+					<div role="status" class="alert alert-warning">
+						if health.AdministrativeStatus == "drained" {
+							<span>Drained: no issued work remains. Queued work and later remote steps wait until Resume.</span>
 						} else {
-							never
+							<span>Draining: issued work can finish. Queued work and later remote steps wait until Resume.</span>
+						}
+					</div>
+				}
+				if agent.Status != "revoked" {
+					<div class="card bg-base-200 shadow">
+						<div class="card-body">
+							<h2 class="card-title">Agent name</h2>
+							<p class="opacity-70">Use a recognizable name. The agent GUID remains unchanged.</p>
+							<form method="post" action={ templ.SafeURL("/admin/agents/" + agent.ID + "/name") } class="flex flex-wrap items-end gap-2">
+								<label class="form-control min-w-48 flex-1">
+									<span class="label"><span class="label-text">Name</span></span>
+									<input class="input input-bordered" name="name" value={ agent.Name } maxlength="255" required/>
+								</label>
+								<button type="submit" class="btn btn-primary">Save name</button>
+							</form>
+						</div>
+					</div>
+				}
+				<div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+					<div class="stat rounded-box bg-base-200">
+						<div class="stat-title">Status</div>
+						<div class="stat-value text-lg"><span class={ "badge " + agentBadgeClass(health.AdministrativeStatus) }>{ health.AdministrativeStatus }</span></div>
+					</div>
+					<div class="stat rounded-box bg-base-200">
+						<div class="stat-title">Health</div>
+						<div class="stat-value text-lg"><span class={ "badge " + agentBadgeClass(health.Health) }>{ health.Health }</span></div>
+					</div>
+					<div class="stat rounded-box bg-base-200">
+						<div class="stat-title">Version</div>
+						<div class="text-sm break-all">{ agent.AgentVersion.String }</div>
+					</div>
+					<div class="stat rounded-box bg-base-200">
+						<div class="stat-title">Last heartbeat</div>
+						<div class="stat-value whitespace-normal text-base text-base-content">
+							if agent.LastHeartbeatAt.Valid {
+								{ formatUnixTime(agent.LastHeartbeatAt.Int64) }
+							} else {
+								never
+							}
+						</div>
+					</div>
+				</div>
+				@AgentWorkload(health)
+				<div class="card bg-base-200 shadow">
+					<div class="card-body">
+						<h2 class="card-title">Interpreters</h2>
+						<p class="opacity-70">Capabilities reported by the agent during its latest poll.</p>
+						if len(health.ExecutionModes) == 0 {
+							<p class="text-sm">Execution modes not reported</p>
+						} else {
+							<p class="text-sm">Execution modes: { strings.Join(health.ExecutionModes, ", ") }</p>
+						}
+						if len(health.ContainerRuntimes) > 0 {
+							<p class="text-sm">Ready container runtimes: { strings.Join(health.ContainerRuntimes, ", ") }</p>
+							<p class="text-sm">Container interpreters: { strings.Join(health.ContainerInterpreters, ", ") }</p>
+						}
+						if len(interpreters) == 0 {
+							<p class="text-sm opacity-60">No interpreter capabilities reported.</p>
+						} else {
+							<div class="flex flex-wrap gap-2">
+								for _, interpreter := range interpreters {
+									<span class="badge badge-outline">{ interpreter }</span>
+								}
+							</div>
 						}
 					</div>
 				</div>
-			</div>
-			@AgentWorkload(health)
-			<div class="card bg-base-200 shadow">
-				<div class="card-body">
-					<h2 class="card-title">Interpreters</h2>
-					<p class="opacity-70">Capabilities reported by the agent during its latest poll.</p>
-					if len(health.ExecutionModes) == 0 {
-						<p class="text-sm">Execution modes not reported</p>
-					} else {
-						<p class="text-sm">Execution modes: { strings.Join(health.ExecutionModes, ", ") }</p>
-					}
-					if len(health.ContainerRuntimes) > 0 {
-						<p class="text-sm">Ready container runtimes: { strings.Join(health.ContainerRuntimes, ", ") }</p>
-						<p class="text-sm">Container interpreters: { strings.Join(health.ContainerInterpreters, ", ") }</p>
-					}
-					if len(interpreters) == 0 {
-						<p class="text-sm opacity-60">No interpreter capabilities reported.</p>
-					} else {
-						<div class="flex flex-wrap gap-2">
-							for _, interpreter := range interpreters {
-								<span class="badge badge-outline">{ interpreter }</span>
-							}
-						</div>
-					}
-				</div>
-			</div>
-			<div class="card bg-base-200 shadow">
-				<div class="card-body">
-					<h2 class="card-title">Transport</h2>
-					<dl class="grid gap-3 md:grid-cols-[12rem_1fr]">
-						<dt class="font-medium">Endpoint</dt><dd class="break-all font-mono">{ agent.Endpoint }</dd>
-						<dt class="font-medium">Certificate fingerprint</dt><dd class="break-all font-mono">{ agent.CertificateFingerprint.String }</dd>
-					</dl>
-				</div>
-			</div>
-			if agent.Status == "pending" || agent.Status == "revoked" {
 				<div class="card bg-base-200 shadow">
 					<div class="card-body">
-						<h2 class="card-title">Retry pairing</h2>
-						<form method="post" action={ templ.SafeURL("/admin/agents/" + agent.ID + "/retry-pair") } class="grid gap-4 lg:grid-cols-3">
-							<input class="input input-bordered" type="url" name="address" aria-label="HTTPS address" placeholder="https://agent.example:9443" required/>
-							<input class="input input-bordered font-mono" type="password" name="code" aria-label="Pairing code" autocomplete="off" required/>
-							<input class="input input-bordered font-mono" name="fingerprint" aria-label="Certificate fingerprint" autocomplete="off" required/>
-							<button class="btn btn-primary lg:col-span-3 lg:w-fit" type="submit">Retry pairing</button>
-						</form>
+						<h2 class="card-title">Transport</h2>
+						<dl class="grid gap-3 md:grid-cols-[12rem_1fr]">
+							<dt class="font-medium">Endpoint</dt>
+							<dd class="break-all font-mono">{ agent.Endpoint }</dd>
+							<dt class="font-medium">Certificate fingerprint</dt>
+							<dd class="break-all font-mono">{ agent.CertificateFingerprint.String }</dd>
+						</dl>
 					</div>
 				</div>
-			}
-			@AgentLabels(agent, labels)
-			@AgentEnvironmentLabels(agent, environmentLabels, availableEnvironments)
-		</div>
+				if agent.Status == "pending" || agent.Status == "revoked" {
+					<div class="card bg-base-200 shadow">
+						<div class="card-body">
+							<h2 class="card-title">Retry pairing</h2>
+							<form method="post" action={ templ.SafeURL("/admin/agents/" + agent.ID + "/retry-pair") } class="grid gap-4 lg:grid-cols-3">
+								<input class="input input-bordered" type="url" name="address" aria-label="HTTPS address" placeholder="https://agent.example:9443" required/>
+								<input class="input input-bordered font-mono" type="password" name="code" aria-label="Pairing code" autocomplete="off" required/>
+								<input class="input input-bordered font-mono" name="fingerprint" aria-label="Certificate fingerprint" autocomplete="off" required/>
+								<button class="btn btn-primary lg:col-span-3 lg:w-fit" type="submit">Retry pairing</button>
+							</form>
+						</div>
+					</div>
+				}
+				@AgentLabels(agent, labels)
+				@AgentEnvironmentLabels(agent, environmentLabels, availableEnvironments)
+			</div>
 		}
 	}
 }
@@ -362,22 +366,24 @@ templ AgentWorkload(health repository.AgentHealthReport) {
 						No current work
 					} else {
 						for _, work := range health.CurrentWork {
-							<div><a class="link" href={ templ.SafeURL(fmt.Sprintf("/deployments/%d", work.DeploymentID)) }>Deployment #{ fmt.Sprint(work.DeploymentID) }</a> · { work.State }
+							<div>
+								<a class="link" href={ templ.SafeURL(fmt.Sprintf("/deployments/%d", work.DeploymentID)) }>Deployment #{ fmt.Sprint(work.DeploymentID) }</a> · { work.State }
 								if work.StepIndex >= 0 {
-									 · step { fmt.Sprint(work.StepIndex + 1) }
+									· step { fmt.Sprint(work.StepIndex + 1) }
 								}
 							</div>
 						}
 					}
 				</dd>
-				<dt class="font-medium">Queued work</dt><dd>{ fmt.Sprint(health.QueuedWork) } waiting claims</dd>
+				<dt class="font-medium">Queued work</dt>
+				<dd>{ fmt.Sprint(health.QueuedWork) } waiting claims</dd>
 				<dt class="font-medium">Last successful deployment</dt>
 				<dd>
 					if health.LastSuccessfulDeployment == nil {
 						No successful deployments
 					} else {
 						<a class="link" href={ templ.SafeURL(fmt.Sprintf("/deployments/%d", health.LastSuccessfulDeployment.DeploymentID)) }>Deployment #{ fmt.Sprint(health.LastSuccessfulDeployment.DeploymentID) }</a>
-						 · { formatUnixTime(health.LastSuccessfulDeployment.FinishedAt.Int64) }
+						· { formatUnixTime(health.LastSuccessfulDeployment.FinishedAt.Int64) }
 					}
 				</dd>
 				<dt class="font-medium">Last error</dt>
@@ -386,13 +392,16 @@ templ AgentWorkload(health repository.AgentHealthReport) {
 						No recorded errors
 					} else {
 						<a class="link" href={ templ.SafeURL(fmt.Sprintf("/deployments/%d", health.LastError.DeploymentID)) }>Deployment #{ fmt.Sprint(health.LastError.DeploymentID) }</a>
-						 · { health.LastError.Reason } · { formatUnixTime(health.LastError.FinishedAt.Int64) }
+						· { health.LastError.Reason } · { formatUnixTime(health.LastError.FinishedAt.Int64) }
 						<p class="text-sm opacity-70">Open the deployment for redacted logs.</p>
 					}
 				</dd>
-				<dt class="font-medium">Server version</dt><dd class="break-all font-mono text-sm">{ health.ServerVersion }</dd>
-				<dt class="font-medium">Recommended agent version</dt><dd class="break-all font-mono text-sm">{ health.RecommendedAgentVersion }</dd>
-				<dt class="font-medium">Compatibility</dt><dd>{ health.Compatibility }</dd>
+				<dt class="font-medium">Server version</dt>
+				<dd class="break-all font-mono text-sm">{ health.ServerVersion }</dd>
+				<dt class="font-medium">Recommended agent version</dt>
+				<dd class="break-all font-mono text-sm">{ health.RecommendedAgentVersion }</dd>
+				<dt class="font-medium">Compatibility</dt>
+				<dd>{ health.Compatibility }</dd>
 			</dl>
 		</div>
 	</div>

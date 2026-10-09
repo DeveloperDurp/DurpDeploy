@@ -301,8 +301,25 @@ type listDeploymentsQueryParam struct {
 	Offset int64 `json:"offset"`
 }
 
-// swagger:parameters streamLogs streamRunbookLogs
+// swagger:parameters streamLogs
 type streamLogsQueryParam struct {
+	// Format is sse, ndjson, or structured (SSE with step metadata).
+	//
+	// in: query
+	Format string `json:"format"`
+	// Replay events with an ID greater than this cursor (structured only).
+	//
+	// in: query
+	// minimum: 0
+	After int64 `json:"after"`
+	// Reconnection cursor; overrides after (structured only).
+	//
+	// in: header
+	LastEventID string `json:"Last-Event-ID"`
+}
+
+// swagger:parameters streamRunbookLogs
+type streamRunbookLogsQueryParam struct {
 	// Format is either sse or ndjson.
 	//
 	// in: query

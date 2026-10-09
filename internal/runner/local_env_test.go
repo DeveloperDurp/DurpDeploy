@@ -23,12 +23,7 @@ esac
 		step: deploymentStep{
 			ContainerImage: "example.com/worker:1",
 		},
-		logWriter: &broadcastWriter{
-			ctx:      t.Context(),
-			repo:     repo,
-			broker:   r.broker,
-			scrubber: NewScrubber(nil),
-		},
+		logWriter: attemptLogWriter(t, r, repo, 0),
 		environment: map[string]string{
 			"DOCKER_HOST": "tcp://attacker.invalid",
 			"MODE":        "deploy",
@@ -67,12 +62,7 @@ esac
 			ContainerImage: "example.com/worker:1",
 			VariableNames:  []string{"TOKEN"},
 		},
-		logWriter: &broadcastWriter{
-			ctx:      t.Context(),
-			repo:     repo,
-			broker:   r.broker,
-			scrubber: NewScrubber(nil),
-		},
+		logWriter:   attemptLogWriter(t, r, repo, 0),
 		environment: map[string]string{"TOKEN": "first\x00second"},
 	})
 	// Then
@@ -99,12 +89,7 @@ esac
 			Interpreter:    "pwsh",
 			ScriptBody:     "Get-Host",
 		},
-		logWriter: &broadcastWriter{
-			ctx:      t.Context(),
-			repo:     repo,
-			broker:   r.broker,
-			scrubber: NewScrubber(nil),
-		},
+		logWriter: attemptLogWriter(t, r, repo, 0),
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -336,55 +336,55 @@
     "rule": "G710",
     "file": "internal/handler/variable.go",
     "line": "424",
-    "source_sha256": "be73260ca439fab081ce24fa8135d33e53635e81ec60c8db1dc6730b80e30a75",
+    "source_sha256": "4ba94ee342d43fbca43f3cdfbb34f59f39539fd84928b032a712729b91689ba8",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
-    "reason": "Destination has a fixed same-origin path prefix; project/release IDs are parsed integers. Agent routes retain /admin/agents/. Evidence: corresponding handler and internal/server/server.go route; workflow redirect tests."
+    "reason": "Redirect retains a fixed /projects/ path prefix and an ID validated as int64 by parseProjectID. UI-only changes moved these existing redirects; corresponding handler and redirect/E2E tests confirm same-origin destinations."
   },
   {
     "rule": "G710",
     "file": "internal/handler/variable.go",
     "line": "225",
-    "source_sha256": "be73260ca439fab081ce24fa8135d33e53635e81ec60c8db1dc6730b80e30a75",
+    "source_sha256": "4ba94ee342d43fbca43f3cdfbb34f59f39539fd84928b032a712729b91689ba8",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
-    "reason": "Destination has a fixed same-origin path prefix; project/release IDs are parsed integers. Agent routes retain /admin/agents/. Evidence: corresponding handler and internal/server/server.go route; workflow redirect tests."
+    "reason": "Redirect retains a fixed /projects/ path prefix and an ID validated as int64 by parseProjectID. UI-only changes moved these existing redirects; corresponding handler and redirect/E2E tests confirm same-origin destinations."
   },
   {
     "rule": "G710",
     "file": "internal/handler/scheduled_deployment.go",
     "line": "726",
-    "source_sha256": "0319d2893515eddbf5cb74723c02100b56a3361e33dac75eeb435fa207db729d",
+    "source_sha256": "9777ab0df9e07b72e54a5926ceed03e9ccd8291becf9d9cb71a206e5f52d0ffe",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
-    "reason": "Destination has a fixed same-origin path prefix; project/release IDs are parsed integers. Agent routes retain /admin/agents/. Evidence: corresponding handler and internal/server/server.go route; workflow redirect tests."
+    "reason": "Redirect retains a fixed /projects/ path prefix and an ID validated as int64 by parseProjectID. UI-only changes moved these existing redirects; corresponding handler and redirect/E2E tests confirm same-origin destinations."
   },
   {
     "rule": "G710",
     "file": "internal/handler/scheduled_deployment.go",
     "line": "596",
-    "source_sha256": "0319d2893515eddbf5cb74723c02100b56a3361e33dac75eeb435fa207db729d",
+    "source_sha256": "9777ab0df9e07b72e54a5926ceed03e9ccd8291becf9d9cb71a206e5f52d0ffe",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
-    "reason": "Destination has a fixed same-origin path prefix; project/release IDs are parsed integers. Agent routes retain /admin/agents/. Evidence: corresponding handler and internal/server/server.go route; workflow redirect tests."
+    "reason": "Redirect retains a fixed /projects/ path prefix and an ID validated as int64 by parseProjectID. UI-only changes moved these existing redirects; corresponding handler and redirect/E2E tests confirm same-origin destinations."
   },
   {
     "rule": "G710",
     "file": "internal/handler/scheduled_deployment.go",
     "line": "545",
-    "source_sha256": "0319d2893515eddbf5cb74723c02100b56a3361e33dac75eeb435fa207db729d",
+    "source_sha256": "9777ab0df9e07b72e54a5926ceed03e9ccd8291becf9d9cb71a206e5f52d0ffe",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
-    "reason": "Destination has a fixed same-origin path prefix; project/release IDs are parsed integers. Agent routes retain /admin/agents/. Evidence: corresponding handler and internal/server/server.go route; workflow redirect tests."
+    "reason": "Redirect retains a fixed /projects/ path prefix and an ID validated as int64 by parseProjectID. UI-only changes moved these existing redirects; corresponding handler and redirect/E2E tests confirm same-origin destinations."
   },
   {
     "rule": "G710",
     "file": "internal/handler/scheduled_deployment.go",
     "line": "293",
-    "source_sha256": "0319d2893515eddbf5cb74723c02100b56a3361e33dac75eeb435fa207db729d",
+    "source_sha256": "9777ab0df9e07b72e54a5926ceed03e9ccd8291becf9d9cb71a206e5f52d0ffe",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
-    "reason": "Destination has a fixed same-origin path prefix; project/release IDs are parsed integers. Agent routes retain /admin/agents/. Evidence: corresponding handler and internal/server/server.go route; workflow redirect tests."
+    "reason": "Redirect retains a fixed /projects/ path prefix and an ID validated as int64 by parseProjectID. UI-only changes moved these existing redirects; corresponding handler and redirect/E2E tests confirm same-origin destinations."
   },
   {
     "rule": "G710",
@@ -407,65 +407,65 @@
   {
     "rule": "G710",
     "file": "internal/handler/release.go",
-    "line": "321",
-    "source_sha256": "2166f273d05553c8e9ac8d2bd0493f3b1e3575df1dd0a057222b0ea3da9f53ce",
+    "line": "301",
+    "source_sha256": "883023735ce7572d18d92ec067c1bfc14738be5f025e073a9d824e4dcb9c0858",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
-    "reason": "Destination has a fixed same-origin path prefix; project/release IDs are parsed integers. Agent routes retain /admin/agents/. Evidence: corresponding handler and internal/server/server.go route; workflow redirect tests."
+    "reason": "Redirect retains a fixed /projects/ path prefix and an ID validated as int64 by parseProjectID. UI-only changes moved these existing redirects; corresponding handler and redirect/E2E tests confirm same-origin destinations."
   },
   {
     "rule": "G710",
     "file": "internal/handler/release.go",
-    "line": "209",
-    "source_sha256": "2166f273d05553c8e9ac8d2bd0493f3b1e3575df1dd0a057222b0ea3da9f53ce",
+    "line": "189",
+    "source_sha256": "883023735ce7572d18d92ec067c1bfc14738be5f025e073a9d824e4dcb9c0858",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
-    "reason": "Destination has a fixed same-origin path prefix; project/release IDs are parsed integers. Agent routes retain /admin/agents/. Evidence: corresponding handler and internal/server/server.go route; workflow redirect tests."
+    "reason": "Redirect retains a fixed /projects/ path prefix and an ID validated as int64 by parseProjectID. UI-only changes moved these existing redirects; corresponding handler and redirect/E2E tests confirm same-origin destinations."
   },
   {
     "rule": "G710",
     "file": "internal/handler/project_members.go",
-    "line": "231",
-    "source_sha256": "98a9ed2749302f35fcf7f756e83983c14f8c788be993ef4d209950b2928ba48c",
+    "line": "233",
+    "source_sha256": "907acfe2b1d5342c445088bed5969aad2463d88c5a4147c6de2282509b526f44",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
-    "reason": "Destination has a fixed same-origin path prefix; project/release IDs are parsed integers. Agent routes retain /admin/agents/. Evidence: corresponding handler and internal/server/server.go route; workflow redirect tests."
+    "reason": "Redirect retains a fixed /projects/ path prefix and an ID validated as int64 by parseProjectID. UI-only changes moved these existing redirects; corresponding handler and redirect/E2E tests confirm same-origin destinations."
   },
   {
     "rule": "G710",
     "file": "internal/handler/project_members.go",
-    "line": "183",
-    "source_sha256": "98a9ed2749302f35fcf7f756e83983c14f8c788be993ef4d209950b2928ba48c",
+    "line": "184",
+    "source_sha256": "907acfe2b1d5342c445088bed5969aad2463d88c5a4147c6de2282509b526f44",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
-    "reason": "Destination has a fixed same-origin path prefix; project/release IDs are parsed integers. Agent routes retain /admin/agents/. Evidence: corresponding handler and internal/server/server.go route; workflow redirect tests."
+    "reason": "Redirect retains a fixed /projects/ path prefix and an ID validated as int64 by parseProjectID. UI-only changes moved these existing redirects; corresponding handler and redirect/E2E tests confirm same-origin destinations."
   },
   {
     "rule": "G710",
     "file": "internal/handler/project_members.go",
     "line": "109",
-    "source_sha256": "98a9ed2749302f35fcf7f756e83983c14f8c788be993ef4d209950b2928ba48c",
+    "source_sha256": "907acfe2b1d5342c445088bed5969aad2463d88c5a4147c6de2282509b526f44",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
-    "reason": "Destination has a fixed same-origin path prefix; project/release IDs are parsed integers. Agent routes retain /admin/agents/. Evidence: corresponding handler and internal/server/server.go route; workflow redirect tests."
+    "reason": "Redirect retains a fixed /projects/ path prefix and an ID validated as int64 by parseProjectID. UI-only changes moved these existing redirects; corresponding handler and redirect/E2E tests confirm same-origin destinations."
   },
   {
     "rule": "G710",
     "file": "internal/handler/project.go",
-    "line": "627",
-    "source_sha256": "d61ba71b007b6fb51d7e135fc2ec9a9b527fb4244a7f5137dbe63232954545db",
+    "line": "670",
+    "source_sha256": "cdfb4e8cd3941c30dc4975425ccac804aa452aeee35c0f59e9cbee113be14f45",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
-    "reason": "Destination has a fixed same-origin path prefix; project/release IDs are parsed integers. Agent routes retain /admin/agents/. Evidence: corresponding handler and internal/server/server.go route; workflow redirect tests."
+    "reason": "Redirect retains a fixed /projects/ path prefix and an ID validated as int64 by parseProjectID. UI-only changes moved these existing redirects; corresponding handler and redirect/E2E tests confirm same-origin destinations."
   },
   {
     "rule": "G710",
     "file": "internal/handler/project.go",
-    "line": "242",
-    "source_sha256": "d61ba71b007b6fb51d7e135fc2ec9a9b527fb4244a7f5137dbe63232954545db",
+    "line": "261",
+    "source_sha256": "cdfb4e8cd3941c30dc4975425ccac804aa452aeee35c0f59e9cbee113be14f45",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
-    "reason": "Destination has a fixed same-origin path prefix; project/release IDs are parsed integers. Agent routes retain /admin/agents/. Evidence: corresponding handler and internal/server/server.go route; workflow redirect tests."
+    "reason": "Redirect retains a fixed /projects/ path prefix and an ID validated as int64 by parseProjectID. UI-only changes moved these existing redirects; corresponding handler and redirect/E2E tests confirm same-origin destinations."
   },
   {
     "rule": "G710",

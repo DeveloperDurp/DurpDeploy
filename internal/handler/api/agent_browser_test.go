@@ -148,15 +148,19 @@ func TestAgentFleetBrowserE2E(t *testing.T) {
 			"deviceScaleFactor": 1,
 			"mobile":            false,
 		}, &struct{}{})
-		for _, page := range []struct{ name, path, back string }{
-			{"list", "/admin/agents", ""},
-			{"detail", "/admin/agents/active", "/admin/agents"},
-			{"draining", "/admin/agents/draining", "/admin/agents"},
-			{"drained", "/admin/agents/drained", "/admin/agents"},
-			{"revoked", "/admin/agents/revoked", "/admin/agents"},
-			{"pairing", "/admin/agents/pair/fixture", "/admin/agents"},
-			{"reference", "/admin/notifications/settings", "/admin/notifications"},
+		for _, page := range []struct {
+			name, path string
+			back       bool
+		}{
+			{"list", "/admin/agents", false},
+			{"detail", "/admin/agents/active", true},
+			{"draining", "/admin/agents/draining", true},
+			{"drained", "/admin/agents/drained", true},
+			{"revoked", "/admin/agents/revoked", true},
+			{"pairing", "/admin/agents/pair/fixture", true},
+			{"reference", "/admin/notifications/settings", true},
 		} {
+			previous := browser.evaluate(t, `location.pathname`)
 			fleetBrowserNavigate(t, browser, srv.URL+page.path)
 			if page.name == "draining" {
 				browser.wait(
@@ -176,14 +180,16 @@ func TestAgentFleetBrowserE2E(t *testing.T) {
 				t,
 				fmt.Sprintf("fleet-%d-%s", width, page.name),
 			)
-			if page.back != "" {
+			if page.back {
 				browser.wire.events = nil
 				browser.evaluate(t, `Array.from(document.querySelectorAll('a'))
 					.find(a => a.textContent.trim() === 'Back').click(); true`)
-				fleetBrowserLoaded(t, browser)
 				browser.wait(
 					t,
-					fmt.Sprintf(`location.pathname === %q`, page.back),
+					fmt.Sprintf(
+						`location.pathname === %s && document.readyState === 'complete' && window.Alpine && document.querySelector('h1')`,
+						previous,
+					),
 				)
 			}
 		}

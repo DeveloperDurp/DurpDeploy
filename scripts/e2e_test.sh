@@ -8,6 +8,19 @@ ROOT_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
 source "$SCRIPT_DIR/e2e_wait.sh"
 source "$SCRIPT_DIR/e2e_lifecycle.sh"
 
+if [[ "${DURPDEPLOY_E2E_RUNNING_SUITE:-0}" == "1" ]]; then
+    if [[ "$CLIENT_ONLY" == "1" ]]; then
+        echo "FAIL: use make e2e-test for a caller-owned running instance" >&2
+        exit 1
+    fi
+    # CI starts one app with the existing lifecycle, then runs the same
+    # client-only suite used against make dev. The suite starts no app server.
+    E2E_ADMIN_EMAIL="$ADMIN_EMAIL" E2E_ADMIN_PASSWORD="$ADMIN_PASS" \
+    DURPDEPLOY_E2E_CLI="$TMP/durpdeploy" DURPDEPLOY_DB="$DB_DSN" \
+    DURPDEPLOY_BASE_URL="$BASE" bash "$SCRIPT_DIR/e2e_db_test.sh" sqlite
+    exit 0
+fi
+
 if [[ "${DURPDEPLOY_AUTH_MFA_HTTP_MATRIX:-0}" == "1" ]]; then
     if [[ "$CLIENT_ONLY" == "1" ]]; then
         echo "FAIL: the auth/MFA HTTP matrix requires the isolated E2E lifecycle" >&2
@@ -366,17 +379,17 @@ for E in "$LC_DEV" "$LC_TEST" "$LC_PROD" "$LC_OUT"; do
   CODE=$(curl_silent -X POST -d "name=$E&csrf_token=$CSRF" "$BASE/environments")
   [[ "$CODE" == "303" ]] || { echo "FAIL: create env $E got $CODE"; exit 1; }
 done
-LC_DEV_ID=$(curl_body "$BASE/environments" | python3 -c "import sys,re; html=sys.stdin.read(); m=re.search(r'<td class=\"truncate\">$LC_DEV</td>.*?href=\"/environments/(\d+)/edit\"', html, re.S); print(m.group(1) if m else '')")
-LC_TEST_ID=$(curl_body "$BASE/environments" | python3 -c "import sys,re; html=sys.stdin.read(); m=re.search(r'<td class=\"truncate\">$LC_TEST</td>.*?href=\"/environments/(\d+)/edit\"', html, re.S); print(m.group(1) if m else '')")
-LC_PROD_ID=$(curl_body "$BASE/environments" | python3 -c "import sys,re; html=sys.stdin.read(); m=re.search(r'<td class=\"truncate\">$LC_PROD</td>.*?href=\"/environments/(\d+)/edit\"', html, re.S); print(m.group(1) if m else '')")
-LC_OUT_ID=$(curl_body "$BASE/environments" | python3 -c "import sys,re; html=sys.stdin.read(); m=re.search(r'<td class=\"truncate\">$LC_OUT</td>.*?href=\"/environments/(\d+)/edit\"', html, re.S); print(m.group(1) if m else '')")
+LC_DEV_ID=$(api_item_id_by_name "$BASE/api/v1/environments" "$LC_DEV")
+LC_TEST_ID=$(api_item_id_by_name "$BASE/api/v1/environments" "$LC_TEST")
+LC_PROD_ID=$(api_item_id_by_name "$BASE/api/v1/environments" "$LC_PROD")
+LC_OUT_ID=$(api_item_id_by_name "$BASE/api/v1/environments" "$LC_OUT")
 echo "Env IDs: dev=$LC_DEV_ID test=$LC_TEST_ID prod=$LC_PROD_ID out=$LC_OUT_ID"
 
 # Lifecycle: Dev -> Test -> Prod
 LC_LIFECYCLE_NAME="LC-$LC_TS"
 CODE=$(curl_silent -X POST -d "name=$LC_LIFECYCLE_NAME&csrf_token=$CSRF" "$BASE/lifecycles")
 [[ "$CODE" == "303" ]] || { echo "FAIL: create lifecycle got $CODE"; exit 1; }
-LC_LIFECYCLE_ID=$(curl_body "$BASE/lifecycles" | grep -oP 'href="/lifecycles/\K[0-9]+(?=" class="btn btn-sm btn-ghost">Edit)' | sort -n | tail -1)
+LC_LIFECYCLE_ID=$(api_item_id_by_name "$BASE/api/v1/lifecycles" "$LC_LIFECYCLE_NAME")
 echo "Lifecycle ID: $LC_LIFECYCLE_ID"
 
 for EID in "$LC_DEV_ID" "$LC_TEST_ID" "$LC_PROD_ID"; do

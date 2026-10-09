@@ -24,11 +24,14 @@ templ RunbooksPage(project db.Project, books []db.Runbook, executions []db.ListR
 			{Label: "Runbooks"},
 		})
 		<div class="space-y-6">
-			<div class="flex flex-wrap justify-between items-center gap-2">
+			<div class="page-header">
 				<h1 class="text-3xl font-bold">Runbooks — { project.Name }</h1>
-				if CanWrite(ctx) {
-					<a class="btn btn-primary btn-sm" href={ fmt.Sprintf("/projects/%d/runbooks/new", project.ID) }>New runbook</a>
-				}
+				<div class="flex flex-wrap items-center gap-2">
+					if CanWrite(ctx) {
+						<a class="btn btn-primary btn-sm" href={ fmt.Sprintf("/projects/%d/runbooks/new", project.ID) }>New runbook</a>
+					}
+					<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>
+				</div>
 			</div>
 			<div class="card bg-base-200 p-4">
 				<h2 class="text-xl font-bold mb-3">Saved procedures</h2>
@@ -81,7 +84,8 @@ templ RunbookFormPage(project db.Project, book db.Runbook, stepsJSON string, art
 				{Label: "Runbooks", Href: fmt.Sprintf("/projects/%d/runbooks", project.ID)},
 				{Label: "Edit"},
 			})
-			<div class="space-y-6">
+			<div class="space-y-6" x-data="runbookEditor" data-steps={ stepsJSON }>
+				<div class="page-header">
 				<h1 class="text-3xl font-bold">
 					if book.ID == 0 {
 						New runbook
@@ -89,10 +93,12 @@ templ RunbookFormPage(project db.Project, book db.Runbook, stepsJSON string, art
 						New version of { book.Name }
 					}
 				</h1>
+				<div class="flex gap-2"><button type="submit" form="runbook-version-form" class="btn btn-primary btn-sm">Create new version</button><a class="btn btn-ghost btn-sm" href={ fmt.Sprintf("/projects/%d/runbooks", project.ID) } x-data="backNavigation" @click="back">Back</a></div>
+				</div>
 				if errorMessage != "" {
 					<div class="alert alert-error">{ errorMessage }</div>
 				}
-				<form method="post" action={ runbookSaveURL(project.ID, book.ID) } class="space-y-4" x-data={ fmt.Sprintf("runbookForm(%s)", stepsJSON) }>
+				<form method="post" action={ runbookSaveURL(project.ID, book.ID) } id="runbook-version-form" class="space-y-4">
 					<label class="form-control"><span class="label-text">Package from project release</span><select name="artifact_release_id" class="select select-bordered"><option value="0" selected?={ selectedArtifactReleaseID==0 }>No package</option>
 					if selectedArtifactReleaseID==-1 {
 						<option value="-1" selected>Keep current pinned package (source release deleted)</option>
@@ -106,32 +112,54 @@ templ RunbookFormPage(project db.Project, book db.Runbook, stepsJSON string, art
 						<label class="form-control"><span class="label-text">Name</span><input name="name" class="input input-bordered" required/></label>
 						<label class="form-control"><span class="label-text">Description</span><input name="description" class="input input-bordered"/></label>
 					}
-					<template x-for="(step, index) in steps" :key="index">
-						<div class="card bg-base-200 p-4 space-y-3">
-							<div class="flex justify-between items-center"><h2 class="font-bold" x-text="`Step ${index + 1}`"></h2><div class="flex gap-2"><button type="button" class="btn btn-xs" aria-label="Move step up" x-on:click="[steps[index - 1], steps[index]] = [steps[index], steps[index - 1]]" x-bind:disabled="index === 0">↑</button><button type="button" class="btn btn-xs" aria-label="Move step down" x-on:click="[steps[index], steps[index + 1]] = [steps[index + 1], steps[index]]" x-bind:disabled="index === steps.length - 1">↓</button><button type="button" class="btn btn-xs btn-error" x-on:click="steps.splice(index, 1)" x-bind:disabled="steps.length === 1">Remove</button></div></div>
-							<label class="form-control"><span class="label-text">Step name</span><input name="step_name" class="input input-bordered" x-model="step.name" required/></label>
-							<label class="form-control"><span class="label-text">Script</span><textarea name="step_script" class="textarea textarea-bordered font-mono min-h-36" x-model="step.script_body" required></textarea></label>
-							<div class="grid grid-cols-1 md:grid-cols-4 gap-3">
-								<label class="form-control"><span class="label-text">Interpreter</span><select name="step_interpreter" class="select select-bordered" x-model="step.interpreter"><option value="bash">Bash</option><option value="pwsh">PowerShell</option><option value="python3">Python</option></select></label>
-								<label class="form-control"><span class="label-text">Timeout (seconds)</span><input name="step_timeout" type="number" min="0" class="input input-bordered" x-model="step.timeout_seconds"/></label>
-								<label class="form-control"><span class="label-text">Retries</span><input name="step_retries" type="number" min="0" class="input input-bordered" x-model="step.max_retries"/></label>
-								<label class="form-control"><span class="label-text">Execution target</span><select name="step_target" class="select select-bordered" x-model="step.execution_target" x-on:change="changeTarget(step)"><option value="local">Server container</option><option value="agent">Agent</option></select></label>
-							</div>
-							<label class="form-control" x-show="step.execution_target === 'agent'"><span class="label-text">Agent labels (comma separated)</span><input name="step_selectors" class="input input-bordered" x-model="step.agent_selectors_text" x-bind:disabled="step.execution_target !== 'agent'"/></label>
-							<input name="step_selectors" type="hidden" value="" x-bind:disabled="step.execution_target === 'agent'"/>
-							<label class="form-control" x-show="step.execution_target === 'agent'"><span class="label-text">Agent execution mode</span><select name="step_agent_mode" class="select select-bordered" x-model="step.agent_execution_mode" x-bind:disabled="step.execution_target !== 'agent'"><option value="host">Host</option><option value="container">Container</option></select></label>
-							<p class="text-sm opacity-70" x-show="step.execution_target === 'agent'">Containers require agent/3 and a ready Docker or Podman runtime.</p>
-							<input name="step_agent_mode" type="hidden" value="host" x-bind:disabled="step.execution_target === 'agent'"/>
-							<label class="form-control" x-show="usesContainer(step)"><span class="label-text">Container image</span><input name="step_image" class="input input-bordered" x-model="step.container_image" x-bind:disabled="!usesContainer(step)" x-bind:required="usesContainer(step)"/></label>
-							<input name="step_image" type="hidden" value="" x-bind:disabled="usesContainer(step)"/>
-							<label class="form-control" x-show="step.execution_target === 'local'"><span class="label-text">Container network</span><select name="step_network" class="select select-bordered" x-model="step.network_mode" x-bind:disabled="step.execution_target !== 'local'"><option value="">Isolated (default)</option><option value="none">Isolated</option><option value="bridge">Network access</option></select></label>
-							<input name="step_network" type="hidden" value="" x-bind:disabled="step.execution_target === 'local'"/>
-							<label class="form-control"><span class="label-text">Limit variables (optional)</span><input name="step_variable_names" class="input input-bordered" x-model="step.variable_names_text" placeholder="Empty passes all; or DB_HOST, API_TOKEN"/></label>
+					<template x-for="(step, index) in steps" :key="step.editorID">
+						<div class="card bg-base-200 p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+							<div class="flex-1 min-w-0"><h2 class="font-bold break-words" x-text="step.name || `Step ${index + 1}`"></h2><p class="text-sm opacity-70" x-text="step.interpreter"></p></div>
+							<div class="flex gap-2"><button type="button" class="btn btn-xs" aria-label="Move step up" @click="moveStep(index, -1)" :disabled="index === 0">↑</button><button type="button" class="btn btn-xs" aria-label="Move step down" @click="moveStep(index, 1)" :disabled="index === steps.length - 1">↓</button><button type="button" class="btn btn-secondary btn-sm" @click="editStep(step)">Edit</button></div>
+							<input type="hidden" name="step_name" :value="step.name"/>
+							<input type="hidden" name="step_script" :value="step.script_body"/>
+							<input type="hidden" name="step_interpreter" :value="step.interpreter"/>
+							<input type="hidden" name="step_timeout" :value="step.timeout_seconds"/>
+							<input type="hidden" name="step_retries" :value="step.max_retries"/>
+							<input type="hidden" name="step_target" :value="step.execution_target"/>
+							<input type="hidden" name="step_agent_mode" :value="step.agent_execution_mode"/>
+							<input type="hidden" name="step_selectors" :value="step.execution_target === 'agent' ? step.agent_selectors_text : ''"/>
+							<input type="hidden" name="step_image" :value="usesContainer(step) ? step.container_image : ''"/>
+							<input type="hidden" name="step_network" :value="step.execution_target === 'local' ? step.network_mode : ''"/>
+							<input type="hidden" name="step_variable_names" :value="step.variable_names_text"/>
 						</div>
 					</template>
-					<button type="button" class="btn btn-secondary" x-on:click="addStep">Add step</button>
-					<div><button type="submit" class="btn btn-primary">Save immutable version</button><a class="btn btn-ghost" href={ fmt.Sprintf("/projects/%d/runbooks", project.ID) }>Cancel</a></div>
+					<button type="button" class="btn btn-secondary" @click="addStep">Add step</button>
 				</form>
+				<dialog x-ref="stepDialog" class="modal" aria-labelledby="runbook-step-title" @close="stepClosed">
+					<div class="modal-box w-11/12 max-w-5xl p-6">
+						<template x-if="draft">
+							<form class="space-y-4" @submit.prevent="saveStep">
+								<div class="page-header sticky -top-6 z-10 bg-base-200 py-2">
+									<h2 id="runbook-step-title" class="text-xl font-bold" x-text="editingID === null ? 'Add Step' : 'Edit Step'"></h2>
+									<div class="flex gap-2"><button type="submit" class="btn btn-primary md:btn-sm">Save</button><button type="button" class="btn btn-ghost md:btn-sm" @click="$refs.stepDialog.close()">Cancel</button></div>
+								</div>
+							<label class="form-control"><span class="label-text">Step name</span><input name="step_name" class="input input-bordered" x-model="draft.name" required/></label>
+							<label class="form-control"><span class="label-text">Script</span><textarea name="step_script" class="textarea textarea-bordered font-mono min-h-36" x-model="draft.script_body" required></textarea></label>
+							<div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+								<label class="form-control"><span class="label-text">Interpreter</span><select name="step_interpreter" class="select select-bordered" x-model="draft.interpreter"><option value="bash">Bash</option><option value="pwsh">PowerShell</option><option value="python3">Python</option></select></label>
+								<label class="form-control"><span class="label-text">Timeout (seconds)</span><input name="step_timeout" type="number" min="0" class="input input-bordered" x-model="draft.timeout_seconds"/></label>
+								<label class="form-control"><span class="label-text">Retries</span><input name="step_retries" type="number" min="0" class="input input-bordered" x-model="draft.max_retries"/></label>
+								<label class="form-control"><span class="label-text">Execution target</span><select name="step_target" class="select select-bordered" x-model="draft.execution_target" @change="changeTarget"><option value="local">Server container</option><option value="agent">Agent</option></select></label>
+							</div>
+							<label class="form-control" x-show="draft.execution_target === 'agent'"><span class="label-text">Agent labels (comma separated)</span><input name="step_selectors" class="input input-bordered" x-model="draft.agent_selectors_text" x-bind:disabled="draft.execution_target !== 'agent'"/></label>
+							<input name="step_selectors" type="hidden" value="" x-bind:disabled="draft.execution_target === 'agent'"/>
+							<label class="form-control" x-show="draft.execution_target === 'agent'"><span class="label-text">Agent execution mode</span><select name="step_agent_mode" class="select select-bordered" x-model="draft.agent_execution_mode" :disabled="draft.execution_target !== 'agent'"><option value="host">Host</option><option value="container">Container</option></select></label>
+							<p class="text-sm opacity-70" x-show="draft.execution_target === 'agent'">Containers require agent/3 and a ready Docker or Podman runtime.</p>
+							<label class="form-control" x-show="usesContainer(draft)"><span class="label-text">Container image</span><input name="step_image" class="input input-bordered" x-model="draft.container_image" :disabled="!usesContainer(draft)" :required="usesContainer(draft)"/></label>
+							<label class="form-control" x-show="draft.execution_target === 'local'"><span class="label-text">Container network</span><select name="step_network" class="select select-bordered" x-model="draft.network_mode" :disabled="draft.execution_target !== 'local'"><option value="">Isolated (default)</option><option value="none">Isolated</option><option value="bridge">Network access</option></select></label>
+							<label class="form-control"><span class="label-text">Limit variables (optional)</span><input name="step_variable_names" class="input input-bordered" x-model="draft.variable_names_text" placeholder="Empty passes all; or DB_HOST, API_TOKEN"/></label>
+								<div x-show="editingID !== null" class="border-t border-base-300 pt-4"><button type="button" class="btn btn-error btn-sm" @click="deleteStep" :disabled="steps.length === 1">Remove step</button></div>
+							</form>
+						</template>
+					</div>
+					<form method="dialog" class="modal-backdrop"><button type="submit" aria-label="Cancel step form"></button></form>
+				</dialog>
 			</div>
 		}
 	}

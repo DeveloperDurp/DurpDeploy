@@ -12,7 +12,9 @@ import (
 	"durpdeploy/views/pages"
 )
 
-func TestLifecycleListRow_renders_plain_name_and_merged_edit_action(t *testing.T) {
+func TestLifecycleListRow_renders_plain_name_and_full_card_navigation(
+	t *testing.T,
+) {
 	// Given
 	request, err := http.NewRequest(http.MethodGet, "/lifecycles", nil)
 	if err != nil {
@@ -20,7 +22,11 @@ func TestLifecycleListRow_renders_plain_name_and_merged_edit_action(t *testing.T
 	}
 	request = auth.SetUser(request, &db.User{Role: "writer"})
 	row := pages.LifecycleRow{
-		Lifecycle:  db.Lifecycle{ID: 42, Name: "release flow", Description: sql.NullString{}},
+		Lifecycle: db.Lifecycle{
+			ID:          42,
+			Name:        "release flow",
+			Description: sql.NullString{},
+		},
 		StageCount: 3,
 	}
 	var rendered bytes.Buffer
@@ -39,15 +45,20 @@ func TestLifecycleListRow_renders_plain_name_and_merged_edit_action(t *testing.T
 	if strings.Contains(body, `href="/lifecycles/42">release flow`) {
 		t.Errorf("lifecycle name still links to detail: %s", body)
 	}
-	if !strings.Contains(body, `<a href="/lifecycles/42" class="btn btn-sm btn-ghost">Edit</a>`) {
-		t.Errorf("writer Edit link missing: %s", body)
+	if !strings.Contains(
+		body,
+		`<a href="/lifecycles/42" class="absolute inset-0`,
+	) {
+		t.Errorf("full card link missing: %s", body)
 	}
 	if strings.Contains(body, `/lifecycles/42/edit`) {
 		t.Errorf("writer Edit link still opens separate page: %s", body)
 	}
 }
 
-func TestLifecycleDetail_renders_settings_and_environment_assignment(t *testing.T) {
+func TestLifecycleDetail_renders_settings_and_environment_assignment(
+	t *testing.T,
+) {
 	// Given
 	request, err := http.NewRequest(http.MethodGet, "/lifecycles/42", nil)
 	if err != nil {
@@ -80,7 +91,11 @@ func TestLifecycleDetail_renders_settings_and_environment_assignment(t *testing.
 	}
 	promotionOrder := strings.Index(body, `>Promotion order</h2>`)
 	lifecycleSettings := strings.Index(body, `>Lifecycle settings</h2>`)
-	if promotionOrder < 0 || lifecycleSettings < 0 || promotionOrder > lifecycleSettings {
-		t.Errorf("promotion order must appear before lifecycle settings: %s", body)
+	if promotionOrder < 0 || lifecycleSettings < 0 ||
+		promotionOrder > lifecycleSettings {
+		t.Errorf(
+			"promotion order must appear before lifecycle settings: %s",
+			body,
+		)
 	}
 }

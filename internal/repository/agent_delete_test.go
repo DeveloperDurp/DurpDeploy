@@ -161,7 +161,7 @@ func TestAgentDeleteAllowsConfirmedCleanup(t *testing.T) {
 	if err != nil || unconfirmed != 0 {
 		t.Fatalf("cleanup blocked=%d error=%v", unconfirmed, err)
 	}
-	blockers, err := repo.Queries.ListEnvironmentQueueBlockers(t.Context(), 1)
+	blockers, err := repo.Queries.ListDeploymentQueueBlockers(t.Context(), 1)
 	if err != nil || len(blockers) != 0 {
 		t.Fatalf("environment blockers=%v error=%v", blockers, err)
 	}

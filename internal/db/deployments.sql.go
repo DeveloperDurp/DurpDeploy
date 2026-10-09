@@ -175,6 +175,63 @@ func (q *Queries) DeleteDeployment(ctx context.Context, id int64) error {
 	return err
 }
 
+const deploymentActivity = `-- name: DeploymentActivity :many
+SELECT CAST(d.created_at / 86400 AS INTEGER) AS day,
+       d.status, COUNT(*) AS count
+FROM deployments d
+JOIN releases r ON r.id = d.release_id
+WHERE d.kind = 'deployment'
+  AND d.created_at >= ?1
+  AND d.created_at < ?2
+  AND (CAST(?3 AS INTEGER) = 1 OR EXISTS (
+      SELECT 1 FROM project_members pm
+      WHERE pm.project_id = r.project_id AND pm.user_id = ?4
+  ))
+GROUP BY CAST(d.created_at / 86400 AS INTEGER), d.status
+ORDER BY day, d.status
+`
+
+type DeploymentActivityParams struct {
+	FromUnix int64 `json:"from_unix"`
+	ToUnix   int64 `json:"to_unix"`
+	IsAdmin  int64 `json:"is_admin"`
+	UserID   int64 `json:"user_id"`
+}
+
+type DeploymentActivityRow struct {
+	Day    int64  `json:"day"`
+	Status string `json:"status"`
+	Count  int64  `json:"count"`
+}
+
+func (q *Queries) DeploymentActivity(ctx context.Context, arg DeploymentActivityParams) ([]DeploymentActivityRow, error) {
+	rows, err := q.db.QueryContext(ctx, deploymentActivity,
+		arg.FromUnix,
+		arg.ToUnix,
+		arg.IsAdmin,
+		arg.UserID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DeploymentActivityRow
+	for rows.Next() {
+		var i DeploymentActivityRow
+		if err := rows.Scan(&i.Day, &i.Status, &i.Count); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const failDeploymentsWithTerminalRemoteStepRuns = `-- name: FailDeploymentsWithTerminalRemoteStepRuns :execrows
 UPDATE deployments SET status = CASE WHEN EXISTS (
     SELECT 1 FROM remote_step_runs r WHERE r.deployment_id = deployments.id
@@ -356,6 +413,75 @@ func (q *Queries) HasUnconfirmedContainerCleanup(ctx context.Context, deployment
 	var column_1 int64
 	err := row.Scan(&column_1)
 	return column_1, err
+}
+
+const listActiveDeploymentsWithRefs = `-- name: ListActiveDeploymentsWithRefs :many
+SELECT
+    d.id, d.release_id, d.environment_id, d.status,
+    d.started_at, d.finished_at, d.created_at, d.forced, d.note,
+    d.assigned_agent_id,
+    p.name AS project_name,
+    r.version AS release_version,
+    e.name AS environment_name
+FROM deployments d
+JOIN releases r ON d.release_id = r.id
+JOIN projects p ON r.project_id = p.id
+JOIN environments e ON d.environment_id = e.id
+WHERE d.kind = 'deployment' AND d.status IN ('queued', 'pending', 'running', 'publishing_artifact', 'pending_approval', 'awaiting_artifact_approval')
+ORDER BY d.created_at DESC
+`
+
+type ListActiveDeploymentsWithRefsRow struct {
+	ID              int64          `json:"id"`
+	ReleaseID       int64          `json:"release_id"`
+	EnvironmentID   int64          `json:"environment_id"`
+	Status          string         `json:"status"`
+	StartedAt       sql.NullInt64  `json:"started_at"`
+	FinishedAt      sql.NullInt64  `json:"finished_at"`
+	CreatedAt       int64          `json:"created_at"`
+	Forced          int64          `json:"forced"`
+	Note            sql.NullString `json:"note"`
+	AssignedAgentID sql.NullString `json:"assigned_agent_id"`
+	ProjectName     string         `json:"project_name"`
+	ReleaseVersion  string         `json:"release_version"`
+	EnvironmentName string         `json:"environment_name"`
+}
+
+func (q *Queries) ListActiveDeploymentsWithRefs(ctx context.Context) ([]ListActiveDeploymentsWithRefsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listActiveDeploymentsWithRefs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListActiveDeploymentsWithRefsRow
+	for rows.Next() {
+		var i ListActiveDeploymentsWithRefsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ReleaseID,
+			&i.EnvironmentID,
+			&i.Status,
+			&i.StartedAt,
+			&i.FinishedAt,
+			&i.CreatedAt,
+			&i.Forced,
+			&i.Note,
+			&i.AssignedAgentID,
+			&i.ProjectName,
+			&i.ReleaseVersion,
+			&i.EnvironmentName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listDeployments = `-- name: ListDeployments :many
@@ -823,75 +949,6 @@ func (q *Queries) ListRecentDeploymentsForEnv(ctx context.Context, arg ListRecen
 			&i.Kind,
 			&i.ContainerNamespace,
 			&i.CleanupConfirmedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listRunningDeploymentsWithRefs = `-- name: ListRunningDeploymentsWithRefs :many
-SELECT
-    d.id, d.release_id, d.environment_id, d.status,
-    d.started_at, d.finished_at, d.created_at, d.forced, d.note,
-    d.assigned_agent_id,
-    p.name AS project_name,
-    r.version AS release_version,
-    e.name AS environment_name
-FROM deployments d
-JOIN releases r ON d.release_id = r.id
-JOIN projects p ON r.project_id = p.id
-JOIN environments e ON d.environment_id = e.id
-WHERE d.kind = 'deployment' AND d.status IN ('pending', 'running', 'publishing_artifact', 'awaiting_artifact_approval')
-ORDER BY d.created_at DESC
-`
-
-type ListRunningDeploymentsWithRefsRow struct {
-	ID              int64          `json:"id"`
-	ReleaseID       int64          `json:"release_id"`
-	EnvironmentID   int64          `json:"environment_id"`
-	Status          string         `json:"status"`
-	StartedAt       sql.NullInt64  `json:"started_at"`
-	FinishedAt      sql.NullInt64  `json:"finished_at"`
-	CreatedAt       int64          `json:"created_at"`
-	Forced          int64          `json:"forced"`
-	Note            sql.NullString `json:"note"`
-	AssignedAgentID sql.NullString `json:"assigned_agent_id"`
-	ProjectName     string         `json:"project_name"`
-	ReleaseVersion  string         `json:"release_version"`
-	EnvironmentName string         `json:"environment_name"`
-}
-
-func (q *Queries) ListRunningDeploymentsWithRefs(ctx context.Context) ([]ListRunningDeploymentsWithRefsRow, error) {
-	rows, err := q.db.QueryContext(ctx, listRunningDeploymentsWithRefs)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListRunningDeploymentsWithRefsRow
-	for rows.Next() {
-		var i ListRunningDeploymentsWithRefsRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.ReleaseID,
-			&i.EnvironmentID,
-			&i.Status,
-			&i.StartedAt,
-			&i.FinishedAt,
-			&i.CreatedAt,
-			&i.Forced,
-			&i.Note,
-			&i.AssignedAgentID,
-			&i.ProjectName,
-			&i.ReleaseVersion,
-			&i.EnvironmentName,
 		); err != nil {
 			return nil, err
 		}

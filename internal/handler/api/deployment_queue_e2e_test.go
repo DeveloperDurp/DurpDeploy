@@ -69,6 +69,38 @@ func TestEnvironmentQueueAPIWebE2E(t *testing.T) {
 		!strings.Contains(page, fmt.Sprintf("Active work #%d", head.ID)) {
 		t.Fatal("web queue state is missing")
 	}
+	// Other projects in this environment and this project in other
+	// environments must execute while the original lane stays occupied.
+	other := *f
+	var created struct {
+		ID int64 `json:"id"`
+	}
+	if err := json.Unmarshal(f.api(t, "POST", "/api/v1/projects",
+		map[string]string{"name": "Independent project"}, 201),
+		&created); err != nil {
+		t.Fatal(err)
+	}
+	other.project.ID = created.ID
+	other.api(t, "POST", other.base()+"/steps", map[string]string{
+		"name": "Independent work", "script_body": "echo independent",
+		"container_image": "docker.io/library/bash:5.2",
+	}, 201)
+	independent := verificationDeploy(t, &other,
+		verificationRelease(t, &other, "independent"))
+	if independent.Status == "queued" {
+		t.Fatal("a different project queued behind the occupied environment")
+	}
+	other.completion(t, independent.ID, events.DeploymentSucceeded)
+	other = *f
+	if err := json.Unmarshal(f.api(t, "POST", "/api/v1/environments",
+		map[string]string{"name": "Independent environment"}, 201),
+		&created); err != nil {
+		t.Fatal(err)
+	}
+	other.environment.ID = created.ID
+	independent = verificationDeploy(t, &other, fast)
+	other.completion(t, independent.ID, events.DeploymentSucceeded)
+	waitVerificationStatus(t, f, head.ID, "running")
 	// When: queued work is cancelled in the web UI, then active work through API.
 	f.web(
 		t,
@@ -163,6 +195,10 @@ func TestEnvironmentQueueViewerAndProjectBoundaryE2E(t *testing.T) {
 	}
 	var privateRelease db.Release
 	privateBase := fmt.Sprintf("/api/v1/projects/%d", privateProject.ID)
+	f.api(t, "POST", privateBase+"/steps", map[string]string{
+		"name": "Private work", "script_body": "sleep 120",
+		"container_image": "docker.io/library/bash:5.2",
+	}, 201)
 	if err := json.Unmarshal(f.api(
 		t,
 		"POST",
@@ -190,8 +226,15 @@ func TestEnvironmentQueueViewerAndProjectBoundaryE2E(t *testing.T) {
 	_, f.token = seedAPIToken(t, f.h.repo, outsider.ID)
 	privatePath := fmt.Sprintf("/api/v1/deployments/%d", privateQueue.ID)
 	privateState := f.api(t, "GET", privatePath+"/status", nil, 200)
-	if strings.Contains(string(privateState), "active_deployment_id") ||
-		strings.Contains(string(privateState), "active_work_url") {
+	var privateStatus struct {
+		Status             string `json:"status"`
+		ActiveDeploymentID int64  `json:"active_deployment_id"`
+	}
+	if err := json.Unmarshal(privateState, &privateStatus); err != nil {
+		t.Fatal(err)
+	}
+	if privateStatus.Status == "queued" ||
+		privateStatus.ActiveDeploymentID != privateQueue.ID {
 		t.Fatalf("another project's active work leaked: %s", privateState)
 	}
 	f.api(t, "POST", privatePath+"/cancel", nil, 200)

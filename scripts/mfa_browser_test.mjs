@@ -82,7 +82,7 @@ async function accountContract(page, url, role, tokensVisible, artifactDir) {
 				`${role} account summary fits horizontally and vertically at ${width}px`,
 			);
 		}
-		await check(await menu.locator('a[href="/settings/security"]').isVisible(), `${role} lacks Security`);
+		await menu.locator('a[href="/settings/security"]').waitFor({ state: "visible" });
 		await check((await menu.locator('a[href="/settings/tokens"]').count()) === (tokensVisible ? 1 : 0), `${role} token visibility is wrong`);
 		await check(await menu.locator('button[type="submit"]', { hasText: "Logout" }).isVisible(), `${role} lacks Logout`);
 		const labels = await menu.locator("a, button").allTextContents();

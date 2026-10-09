@@ -48,7 +48,9 @@ func (q *Queries) CancelWaitingQueuedRemoteClaim(ctx context.Context, deployment
 }
 
 const createEnvironmentDeploymentSlot = `-- name: CreateEnvironmentDeploymentSlot :exec
-INSERT INTO environment_deployment_slots (environment_id, deployment_id) VALUES (?, ?)
+INSERT INTO environment_deployment_slots (environment_id, project_id, deployment_id)
+SELECT ?1, r.project_id, d.id FROM deployments d
+JOIN releases r ON r.id=d.release_id WHERE d.id=?2
 `
 
 type CreateEnvironmentDeploymentSlotParams struct {
@@ -61,12 +63,12 @@ func (q *Queries) CreateEnvironmentDeploymentSlot(ctx context.Context, arg Creat
 	return err
 }
 
-const deleteEnvironmentDeploymentSlot = `-- name: DeleteEnvironmentDeploymentSlot :exec
-DELETE FROM environment_deployment_slots WHERE environment_id = ?
+const deleteDeploymentSlot = `-- name: DeleteDeploymentSlot :exec
+DELETE FROM environment_deployment_slots WHERE deployment_id = ?
 `
 
-func (q *Queries) DeleteEnvironmentDeploymentSlot(ctx context.Context, environmentID int64) error {
-	_, err := q.db.ExecContext(ctx, deleteEnvironmentDeploymentSlot, environmentID)
+func (q *Queries) DeleteDeploymentSlot(ctx context.Context, deploymentID int64) error {
+	_, err := q.db.ExecContext(ctx, deleteDeploymentSlot, deploymentID)
 	return err
 }
 
@@ -75,11 +77,15 @@ SELECT d.status,
     (SELECT COUNT(*) FROM deployments ahead
      WHERE d.status = 'queued' AND ahead.environment_id = d.environment_id
        AND ahead.status = 'queued'
+       AND EXISTS (SELECT 1 FROM releases ahead_release JOIN releases own_release
+           ON own_release.project_id=ahead_release.project_id
+           WHERE ahead_release.id=ahead.release_id AND own_release.id=d.release_id)
        AND (ahead.created_at < d.created_at OR (ahead.created_at = d.created_at AND ahead.id <= d.id))) AS queue_position,
     active.id AS active_deployment_id, active.kind, r.project_id,
     x.id AS runbook_execution_id
 FROM deployments d
-LEFT JOIN environment_deployment_slots s ON s.environment_id = d.environment_id
+JOIN releases own_release ON own_release.id=d.release_id
+LEFT JOIN environment_deployment_slots s ON s.environment_id = d.environment_id AND s.project_id=own_release.project_id
 LEFT JOIN deployments active ON active.id = s.deployment_id
     AND (CAST(?1 AS INTEGER) = 1 OR EXISTS (
         SELECT 1 FROM releases visible JOIN project_members m ON m.project_id = visible.project_id
@@ -118,27 +124,81 @@ func (q *Queries) GetDeploymentQueueState(ctx context.Context, arg GetDeployment
 	return i, err
 }
 
-const getEnvironmentDeploymentSlot = `-- name: GetEnvironmentDeploymentSlot :one
-SELECT deployment_id FROM environment_deployment_slots WHERE environment_id = ?
+const getDeploymentSlot = `-- name: GetDeploymentSlot :one
+SELECT s.deployment_id FROM environment_deployment_slots s
+JOIN deployments d ON d.environment_id=s.environment_id
+JOIN releases r ON r.id=d.release_id AND r.project_id=s.project_id
+WHERE d.id = ?
 `
 
-func (q *Queries) GetEnvironmentDeploymentSlot(ctx context.Context, environmentID int64) (int64, error) {
-	row := q.db.QueryRowContext(ctx, getEnvironmentDeploymentSlot, environmentID)
+func (q *Queries) GetDeploymentSlot(ctx context.Context, id int64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, getDeploymentSlot, id)
 	var deployment_id int64
 	err := row.Scan(&deployment_id)
 	return deployment_id, err
 }
 
 const getNextQueuedDeployment = `-- name: GetNextQueuedDeployment :one
-SELECT id FROM deployments WHERE environment_id = ? AND status = 'queued'
-ORDER BY created_at, id LIMIT 1
+SELECT d.id FROM deployments d JOIN releases r ON r.id=d.release_id
+JOIN deployments scope ON scope.environment_id=d.environment_id
+JOIN releases scope_release ON scope_release.id=scope.release_id AND scope_release.project_id=r.project_id
+WHERE scope.id = ? AND d.status = 'queued'
+ORDER BY d.created_at, d.id LIMIT 1
 `
 
-func (q *Queries) GetNextQueuedDeployment(ctx context.Context, environmentID int64) (int64, error) {
-	row := q.db.QueryRowContext(ctx, getNextQueuedDeployment, environmentID)
-	var id int64
-	err := row.Scan(&id)
-	return id, err
+func (q *Queries) GetNextQueuedDeployment(ctx context.Context, id int64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, getNextQueuedDeployment, id)
+	var id_2 int64
+	err := row.Scan(&id_2)
+	return id_2, err
+}
+
+const listDeploymentQueueBlockers = `-- name: ListDeploymentQueueBlockers :many
+SELECT d.id FROM deployments d JOIN releases r ON r.id=d.release_id
+JOIN deployments scope ON scope.environment_id=d.environment_id
+JOIN releases scope_release ON scope_release.id=scope.release_id AND scope_release.project_id=r.project_id
+WHERE scope.id = ? AND (
+    d.status IN ('pending', 'running', 'publishing_artifact', 'awaiting_artifact_approval')
+    OR (d.status = 'cleanup_unconfirmed'
+        AND (d.container_namespace IS NOT NULL OR (
+        d.cleanup_confirmed_at IS NULL AND
+        NOT EXISTS (SELECT 1 FROM remote_deployment_claims c
+            WHERE c.deployment_id = d.id AND c.state = 'cleanup_unconfirmed')
+        AND NOT EXISTS (SELECT 1 FROM remote_step_runs s
+            WHERE s.deployment_id = d.id AND s.state = 'cleanup_unconfirmed'))))
+    OR EXISTS (SELECT 1 FROM remote_deployment_claims c WHERE c.deployment_id = d.id
+        AND c.state = 'cleanup_unconfirmed' AND c.cleanup_confirmed_at IS NULL)
+    OR EXISTS (SELECT 1 FROM remote_step_runs s WHERE s.deployment_id = d.id
+        AND s.state = 'cleanup_unconfirmed' AND s.cleanup_confirmed_at IS NULL)
+    OR EXISTS (SELECT 1 FROM remote_deployment_claims c WHERE c.deployment_id = d.id
+        AND c.state IN ('claimed', 'started', 'cancel_requested', 'lost', 'cancel_unconfirmed'))
+    OR EXISTS (SELECT 1 FROM remote_step_runs s WHERE s.deployment_id = d.id
+        AND s.state IN ('claimed', 'started', 'cancel_requested', 'lost', 'cancel_unconfirmed'))
+)
+ORDER BY d.created_at, d.id
+`
+
+func (q *Queries) ListDeploymentQueueBlockers(ctx context.Context, id int64) ([]int64, error) {
+	rows, err := q.db.QueryContext(ctx, listDeploymentQueueBlockers, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listDeploymentQueueEnvironments = `-- name: ListDeploymentQueueEnvironments :many
@@ -170,42 +230,28 @@ func (q *Queries) ListDeploymentQueueEnvironments(ctx context.Context) ([]int64,
 	return items, nil
 }
 
-const listEnvironmentQueueBlockers = `-- name: ListEnvironmentQueueBlockers :many
-SELECT d.id FROM deployments d
-WHERE d.environment_id = ? AND (
-    d.status IN ('pending', 'running', 'publishing_artifact', 'awaiting_artifact_approval')
-    OR (d.status = 'cleanup_unconfirmed'
-        AND (d.container_namespace IS NOT NULL OR (
-        d.cleanup_confirmed_at IS NULL AND
-        NOT EXISTS (SELECT 1 FROM remote_deployment_claims c
-            WHERE c.deployment_id = d.id AND c.state = 'cleanup_unconfirmed')
-        AND NOT EXISTS (SELECT 1 FROM remote_step_runs s
-            WHERE s.deployment_id = d.id AND s.state = 'cleanup_unconfirmed'))))
-    OR EXISTS (SELECT 1 FROM remote_deployment_claims c WHERE c.deployment_id = d.id
-        AND c.state = 'cleanup_unconfirmed' AND c.cleanup_confirmed_at IS NULL)
-    OR EXISTS (SELECT 1 FROM remote_step_runs s WHERE s.deployment_id = d.id
-        AND s.state = 'cleanup_unconfirmed' AND s.cleanup_confirmed_at IS NULL)
-    OR EXISTS (SELECT 1 FROM remote_deployment_claims c WHERE c.deployment_id = d.id
-        AND c.state IN ('claimed', 'started', 'cancel_requested', 'lost', 'cancel_unconfirmed'))
-    OR EXISTS (SELECT 1 FROM remote_step_runs s WHERE s.deployment_id = d.id
-        AND s.state IN ('claimed', 'started', 'cancel_requested', 'lost', 'cancel_unconfirmed'))
-)
-ORDER BY d.created_at, d.id
+const listEnvironmentQueueProjects = `-- name: ListEnvironmentQueueProjects :many
+SELECT CAST(MIN(d.id) AS INTEGER) AS deployment_id FROM deployments d
+JOIN releases r ON r.id=d.release_id
+WHERE d.environment_id = ?
+AND (d.status IN ('queued','pending','running','publishing_artifact','awaiting_artifact_approval','cleanup_unconfirmed')
+    OR EXISTS (SELECT 1 FROM environment_deployment_slots s WHERE s.deployment_id=d.id))
+GROUP BY r.project_id ORDER BY r.project_id
 `
 
-func (q *Queries) ListEnvironmentQueueBlockers(ctx context.Context, environmentID int64) ([]int64, error) {
-	rows, err := q.db.QueryContext(ctx, listEnvironmentQueueBlockers, environmentID)
+func (q *Queries) ListEnvironmentQueueProjects(ctx context.Context, environmentID int64) ([]int64, error) {
+	rows, err := q.db.QueryContext(ctx, listEnvironmentQueueProjects, environmentID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	var items []int64
 	for rows.Next() {
-		var id int64
-		if err := rows.Scan(&id); err != nil {
+		var deployment_id int64
+		if err := rows.Scan(&deployment_id); err != nil {
 			return nil, err
 		}
-		items = append(items, id)
+		items = append(items, deployment_id)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err

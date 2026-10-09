@@ -43,6 +43,13 @@ This produces a single `durpdeploy` binary.
 
 Server starts on `http://localhost:8080`. A `durpdeploy.db` SQLite file is created automatically on first run.
 
+For local development, `make dev` reuses the encryption key from `.env` or
+`DURPDEPLOY_SECRET_KEY`. When neither is configured, it creates a private,
+gitignored `.local/dev-secret-key` once and reuses it across restarts. Keep this
+file with the development database; losing it makes encrypted values unreadable.
+An existing `/etc/durpdeploy/key` remains the server's first choice. This change
+cannot recover values encrypted with a previously discarded temporary key.
+
 ## Usage
 
 1. **Create a project** - Navigate to Projects → New Project
@@ -168,6 +175,16 @@ make build
 make dev
 ```
 
+The asset build uses Tailwind CSS 4 and DaisyUI 5. Sources and both custom
+themes live in `static/css/input.css`; there is no JavaScript Tailwind config.
+`make tailwind-build` runs `@tailwindcss/cli` and bundles the MIT license
+notices in `static/css/tailwind.licenses.txt`. The UI requires Safari 16.4+,
+Chrome 111+, or Firefox 128+.
+
+Tailwind and its CLI are pinned to 4.3.0 because CLI 4.3.3 pins an older
+Parcel watcher that pulls in vulnerable `braces`. Check `npm audit` and the
+resolved watcher dependencies before upgrading the CLI.
+
 `make dev`, `make dev-postgres`, and `make dev-mssql` keep the app on
 `http://localhost:8080` and expose it through `https://localhost:8443`. The
 proxy creates a temporary local CA and one certificate for `localhost`, the
@@ -237,6 +254,21 @@ The harness builds the existing pinned Terraform test image on the server's
 container engine. Set `DURPDEPLOY_CONTAINER_RUNTIME` and
 `DURPDEPLOY_CONTAINER_URL` to match the server when it uses a non-default engine
 or socket. The project, release, and deployment history remain after expiry.
+
+The running-instance suite includes API and web CRUD, roles and CSRF,
+templates and interpreters, step file handoff, deployment lists and exports,
+request validation, secret masking, verification and rollback, and runbook
+creation, execution, immutable versions, retry, and schedules. It also uses a
+real browser against that same server to check resource create/edit/delete
+dialogs, step dialogs, runbook version creation, home charts, both themes, and
+mobile layouts. Browser
+checks require a working Docker or Podman engine. Test runbooks and deployment
+fixtures remain available for inspection; test schedules are disabled.
+
+Startup/recovery, other database engines, external package repositories, OIDC
+providers, and remote-agent protocols have dedicated fixture suites. A test
+against one running instance does not replace those configuration-specific
+checks.
 
 ## Production Deploy
 

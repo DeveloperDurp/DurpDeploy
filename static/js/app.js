@@ -4,6 +4,18 @@ import htmx from 'htmx.org'
 window.Alpine = Alpine
 window.htmx = htmx
 
+function focusFormField(field) {
+	// Touch users choose when to open the on-screen keyboard.
+	if (!matchMedia('(pointer: coarse)').matches) field?.focus();
+}
+
+document.addEventListener('htmx:beforeTransition', (event) => {
+	if (event.target.id === 'home-deployments' &&
+		matchMedia('(prefers-reduced-motion: reduce)').matches) {
+		event.preventDefault();
+	}
+});
+
 document.addEventListener('htmx:beforeSwap', (event) => {
 	if (event.detail.xhr.status === 422 &&
 		event.detail.xhr.getResponseHeader('HX-Retarget')) {
@@ -24,6 +36,196 @@ document.addEventListener('htmx:afterRequest', (event) => {
 			'Resource changes could not be loaded. Reload this page to retry.';
 	}
 });
+
+let chartLibrary;
+function loadChartLibrary(src) {
+	if (!chartLibrary) {
+		chartLibrary = new Promise((resolve, reject) => {
+			const script = document.createElement('script');
+			script.src = src;
+			script.onload = () => resolve(window.DashboardChart);
+			script.onerror = () => {
+				script.remove();
+				chartLibrary = null;
+				reject(new Error('Chart bundle could not be loaded'));
+			};
+			document.head.appendChild(script);
+		});
+	}
+	return chartLibrary;
+}
+
+Alpine.data('homeCharts', () => {
+	// Keep Chart instances outside Alpine's reactive proxy.
+	let charts = [], observer, request, Chart;
+	let destroyed = false;
+	return {
+		days: [], totals: [], loading: true, error: false, ready: false, empty: false,
+		init() { return this.load(); },
+		label(status) {
+			return ({ succeeded: 'Succeeded', failed: 'Failed', cancelled: 'Cancelled',
+				running: 'Running', pending: 'Pending', pending_approval: 'Awaiting approval',
+				queued: 'Queued', publishing_artifact: 'Publishing artifact',
+				awaiting_artifact_approval: 'Awaiting artifact approval',
+				rejected: 'Rejected', expired: 'Expired',
+				cleanup_unconfirmed: 'Cleanup unconfirmed' })[status] || status;
+		},
+		daySummary(day) {
+			return Object.entries(day.counts).map(([status, count]) =>
+				`${this.label(status)}: ${count}`).join(', ') || 'No deployments';
+		},
+		async load() {
+			request?.abort();
+			request = new AbortController();
+			this.loading = this.days.length === 0;
+			this.error = false;
+			try {
+				const response = await fetch('/dashboard/activity', {
+					signal: request.signal, headers: { Accept: 'application/json' },
+				});
+				if (!response.ok) throw new Error('Activity could not be loaded');
+				const days = await response.json();
+				if (destroyed) return;
+				if ((this.ready || this.empty) && JSON.stringify(days) === JSON.stringify(this.days)) return;
+				this.days = days;
+				const counts = {};
+				for (const day of days) for (const [status, count] of Object.entries(day.counts)) {
+					counts[status] = (counts[status] || 0) + count;
+				}
+				this.totals = Object.entries(counts).map(([status, count]) =>
+					({ status, count, label: this.label(status) }));
+				this.empty = this.totals.length === 0;
+				if (this.empty) { this.ready = false; return; }
+				Chart = await loadChartLibrary(this.$el.dataset.chartSrc);
+				if (destroyed) return;
+				this.ready = true;
+				await this.$nextTick();
+				if (destroyed) return;
+				this.render();
+				observer ??= new MutationObserver(() => this.render());
+				observer.observe(document.documentElement, {
+					attributes: true, attributeFilter: ['data-theme'],
+				});
+			} catch (error) {
+				if (!destroyed && error.name !== 'AbortError') this.error = true;
+			} finally {
+				if (!destroyed) this.loading = false;
+			}
+		},
+		render() {
+			if (destroyed || !this.$el.isConnected) return;
+			const ink = getComputedStyle(this.$el).color;
+			const colors = this.totals.map(item => {
+				const token = this.$el.querySelector(`[data-chart-color="${item.status}"]`);
+				return token ? getComputedStyle(token).color : ink;
+			});
+			const options = {
+				responsive: true, maintainAspectRatio: false, animation: false,
+				color: ink, plugins: { legend: { position: 'bottom',
+					labels: { color: ink, boxWidth: 12, boxHeight: 12 } } },
+			};
+			const configs = [{
+				type: 'doughnut', options,
+				data: {
+					labels: this.totals.map(item => item.label),
+					datasets: [{ data: this.totals.map(item => item.count),
+						backgroundColor: colors, borderWidth: 0 }],
+				},
+			}, {
+				type: 'bar',
+				options: { ...options, scales: {
+					x: { stacked: true, grid: { display: false },
+						ticks: { color: ink, maxRotation: 0, maxTicksLimit: 7 } },
+					y: { stacked: true, beginAtZero: true,
+						ticks: { color: ink, precision: 0 }, grid: { color:
+							getComputedStyle(this.$refs.gridColor).color } },
+				} },
+				data: {
+					labels: this.days.map(day => day.date.slice(5)),
+					datasets: this.totals.map((item, index) => ({
+						label: item.label, backgroundColor: colors[index],
+						data: this.days.map(day => day.counts[item.status] || 0),
+					})),
+				},
+			}];
+			configs.forEach((config, index) => {
+				if (charts[index]) {
+					charts[index].data = config.data;
+					charts[index].options = config.options;
+					charts[index].update('none');
+				} else {
+					const canvas = index === 0 ? this.$refs.outcomes : this.$refs.activity;
+					charts[index] = new Chart(canvas, config);
+				}
+			});
+		},
+		destroy() {
+			destroyed = true;
+			request?.abort();
+			observer?.disconnect();
+			charts.forEach(chart => chart.destroy());
+		},
+	};
+});
+
+// Re-fetch history entries rather than storing protected page content.
+htmx.config.historyCacheSize = 0;
+htmx.config.historyRestoreAsHxRequest = false;
+
+htmx.onLoad((root) => {
+	if (!document.querySelector('meta[name="csrf-token"]')) return;
+	const links = [...root.querySelectorAll('a[href]')];
+	if (root.matches?.('a[href]')) links.push(root);
+	for (const link of links) {
+		if (!link.getAttribute('href').startsWith('/') || link.origin !== location.origin ||
+			link.hash || link.target || link.hasAttribute('download') ||
+			link.closest('[hx-boost], [data-hx-boost], [x-data="backNavigation"]') ||
+			link.matches('[hx-get], [hx-post], [hx-put], [hx-patch], [hx-delete]') ||
+			/^\/(login|logout|auth|api|static|swagger|healthz|\.well-known)(\/|$)/.test(link.pathname) ||
+			link.pathname === '/settings/security/reauth/oidc' ||
+			link.pathname.endsWith('/logs.txt')) continue;
+		link.setAttribute('hx-boost', 'true');
+		link.setAttribute('hx-target', '#page-content');
+		link.setAttribute('hx-select', '#page-content');
+		link.setAttribute('hx-select-oob', '#app-navbar');
+		link.setAttribute('hx-swap', 'outerHTML show:window:top');
+		link.setAttribute('hx-sync', 'body:replace');
+		htmx.process(link);
+	}
+});
+
+document.addEventListener('htmx:afterSwap', (event) => {
+	if (event.target.id === 'page-content' && event.detail.requestConfig?.boosted) {
+		document.getElementById('page-content')?.focus({ preventScroll: true });
+	}
+});
+document.addEventListener('htmx:beforeSwap', (event) => {
+	if (event.detail.requestConfig?.boosted && event.detail.xhr.status >= 400) {
+		event.preventDefault();
+		location.assign(event.detail.xhr.responseURL);
+	}
+});
+document.addEventListener('htmx:historyCacheMissLoadError', (event) => {
+	const redirect = event.detail.xhr.getResponseHeader('HX-Redirect');
+	if (redirect) location.replace(redirect);
+});
+
+Alpine.data('backNavigation', () => ({
+	back(event) {
+		if (event.defaultPrevented || event.button !== 0 || event.ctrlKey ||
+			event.metaKey || event.shiftKey || event.altKey) return;
+		const navigation = window.navigation;
+		// Navigation entries omit other origins. Only fall back when the
+		// browser proves there is no previous entry; otherwise use real history.
+		event.preventDefault();
+		if (history.length === 1 || (navigation && !navigation.canGoBack &&
+			navigation.entries().length === history.length)) {
+			location.replace(event.currentTarget.href);
+			return;
+		}
+		history.back();
+	},
+}));
 
 Alpine.data('toast', () => ({
 	visible: false,
@@ -169,10 +371,6 @@ Alpine.data('deploymentForm', ({ releaseID, environmentID }) => ({
 	},
 }));
 
-Alpine.data('releaseDeployRow', () => ({
-	forceChecked: false,
-}));
-
 Alpine.data('stepPlacement', (executionTarget = 'local', agentLabel = '', agentExecutionMode = 'host') => ({
 	executionTarget,
 	agentLabel,
@@ -182,37 +380,179 @@ Alpine.data('stepPlacement', (executionTarget = 'local', agentLabel = '', agentE
 	},
 }));
 
-Alpine.data('runbookForm', (steps) => ({
-	steps,
+Alpine.data('runbookEditor', () => ({
+	steps: [],
+	nextStepID: 0,
+	draft: null,
+	editingID: null,
+	opener: null,
 	init() {
-		this.steps.forEach(step => {
+		this.steps = JSON.parse(this.$el.dataset.steps);
+		for (const step of this.steps) {
+			step.editorID = this.nextStepID++;
+			step.network_mode ||= '';
 			step.agent_execution_mode ||= 'host';
 			step.agent_selectors_text = (step.agent_selectors || []).join(', ');
 			step.variable_names_text = (step.variable_names || []).join(', ');
-		});
+		}
+	},
+	moveStep(index, offset) {
+		const other = index + offset;
+		[this.steps[index], this.steps[other]] = [this.steps[other], this.steps[index]];
+	},
+	removeStep(index) {
+		this.steps.splice(index, 1);
 	},
 	usesContainer(step) {
 		return step.execution_target === 'local' || step.agent_execution_mode === 'container';
 	},
-	changeTarget(step) {
-		step.network_mode = '';
-		if (step.execution_target === 'local') step.agent_execution_mode = 'host';
+	changeTarget() {
+		this.draft.network_mode = '';
+		if (this.draft.execution_target === 'local') this.draft.agent_execution_mode = 'host';
 	},
 	addStep() {
-		this.steps.push({name: '', script_body: '', interpreter: 'bash',
-			timeout_seconds: 0, max_retries: 0, execution_target: 'local',
-			agent_execution_mode: 'host', agent_selectors_text: '',
-			container_image: '', variable_names_text: ''});
+		this.openStep({
+			editorID: this.nextStepID++,
+			name: '', script_body: '', interpreter: 'bash', timeout_seconds: 0,
+			max_retries: 0, execution_target: 'local', agent_selectors_text: '',
+			agent_execution_mode: 'host',
+			container_image: '', network_mode: '', variable_names_text: '',
+		});
+	},
+	editStep(step) { this.openStep({ ...step }, step.editorID); },
+	openStep(draft, editingID = null) {
+		this.draft = draft;
+		this.editingID = editingID;
+		this.opener = document.activeElement;
+		this.$nextTick(() => {
+			this.$refs.stepDialog.showModal();
+			focusFormField(this.$refs.stepDialog.querySelector('input'));
+		});
+	},
+	saveStep() {
+		const step = { ...this.draft };
+		if (!this.usesContainer(step)) step.container_image = '';
+		if (step.execution_target === 'agent') step.network_mode = '';
+		else { step.agent_selectors_text = ''; step.agent_execution_mode = 'host'; }
+		if (this.editingID === null) this.steps.push(step);
+		else this.steps.splice(this.steps.findIndex(item => item.editorID === this.editingID), 1, step);
+		this.$refs.stepDialog.close();
+	},
+	deleteStep() {
+		if (!confirm('Remove this step from the new version?')) return;
+		this.removeStep(this.steps.findIndex(step => step.editorID === this.editingID));
+		this.$refs.stepDialog.close();
+	},
+	stepClosed() { if (!this.$refs.stepDialog.open) this.opener?.focus(); },
+	destroy() { this.$refs.stepDialog?.close(); },
+}));
+
+Alpine.data('projectMenu', () => ({
+	closingAnimation: null,
+	open() {
+		this.closingAnimation?.cancel();
+		this.closingAnimation = null;
+		this.alignWithNavbar();
+		this.$refs.menu.showModal();
+	},
+	alignWithNavbar() {
+		const bottom = document.getElementById('app-navbar').getBoundingClientRect().bottom;
+		this.$refs.menu.style.setProperty('--project-menu-top', `${Math.max(0, bottom)}px`);
+	},
+	close() {
+		const dialog = this.$refs.menu;
+		if (!dialog.open || this.closingAnimation) return;
+		if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
+			dialog.close();
+			return;
+		}
+		const panel = dialog.querySelector('.project-menu-panel');
+		this.closingAnimation = panel.animate([
+			{ transform: getComputedStyle(panel).transform },
+			{ transform: 'translateX(100%)' },
+		], { duration: 180, easing: 'ease-in' });
+		this.closingAnimation.addEventListener('finish', () => {
+			this.closingAnimation = null;
+			dialog.close();
+		}, { once: true });
+	},
+	closeForLink(event) {
+		if (event.target.closest('a')) this.close();
+	},
+	destroy() {
+		this.closingAnimation?.cancel();
+		this.$refs.menu.close();
 	},
 }));
 
+Alpine.data('formDialogHost', () => ({
+	opener: null,
+	rememberOpener(event) { this.opener = event.currentTarget; },
+	afterSettle(event) {
+		if (event.detail?.target?.id !== 'project-edit-content') return;
+		const title = this.$refs.content.querySelector('.page-header h1')?.textContent.trim();
+		if (title) this.$refs.dialog.setAttribute('aria-label', title);
+		if (!this.$refs.dialog.open) this.$refs.dialog.showModal();
+		focusFormField(this.$refs.content.querySelector('input[name="name"]'));
+	},
+	beforeSwap(event) {
+		if (!this.$refs.dialog?.open || event.detail.xhr.status !== 422) return;
+		event.detail.target = this.$refs.content;
+		event.detail.swapOverride = 'innerHTML';
+		event.detail.shouldSwap = true;
+		event.detail.isError = false;
+	},
+	backClicked(event) {
+		if (!event.target.closest('[x-data="backNavigation"]')) return;
+		event.preventDefault();
+		event.stopImmediatePropagation();
+		this.$refs.dialog.close();
+	},
+	closed() {
+		for (const child of this.$refs.content.children) Alpine.destroyTree(child);
+		this.$refs.content.replaceChildren();
+		(this.opener?.isConnected ? this.opener : this.$refs.editButton)?.focus();
+		this.opener = null;
+	},
+	saved() { this.$refs.editButton?.focus(); },
+	destroy() { this.$refs.dialog?.close(); },
+}));
+
 Alpine.data('stepFormHost', () => ({
-	afterRequest(event) {
-		const source = event.detail?.elt;
-		if (!(source instanceof Element) || !event.detail.successful) return;
-		const form = source.closest('form[data-step-add-form]');
-		if (!(form instanceof HTMLFormElement)) return;
-		this.cancel(form);
+	editOpener: null,
+	beforeSwap(event) {
+		if (event.detail.xhr.status !== 422 ||
+			event.detail.xhr.getResponseHeader('HX-Retarget') !== '#step-edit-content') return;
+		event.detail.shouldSwap = true;
+		event.detail.isError = false;
+	},
+	afterSwap(event) {
+		if (event.detail?.target?.id === 'step-list' && this.$refs.stepEditDialog?.open) {
+			this.$refs.stepEditDialog.close();
+		}
+	},
+	afterSettle(event) {
+		if (event.detail?.target?.id !== 'step-edit-content') return;
+		const dialog = this.$refs.stepEditDialog;
+		if (this.$refs.stepEditContent.querySelector('[data-step-add-form]')) {
+			this.editOpener = this.$refs.addStepButton;
+		}
+		if (!dialog.open) dialog.showModal();
+		this.$nextTick(() => focusFormField(this.$refs.stepEditContent.querySelector('input[name="name"]')));
+	},
+	editClosed(event) {
+		if (event.target !== this.$refs.stepEditDialog || this.$refs.stepEditDialog.open) return;
+		const content = this.$refs.stepEditContent;
+		if (!content.hasChildNodes()) return;
+		for (const child of content.children) Alpine.destroyTree(child);
+		content.replaceChildren();
+		const opener = this.editOpener;
+		this.editOpener = null;
+		const replacement = [...this.$root.querySelectorAll('[data-step-action="edit"]')]
+			.find(button => button.getAttribute('hx-get') === opener?.getAttribute('hx-get') && button.getClientRects().length);
+		(opener?.isConnected ? opener : replacement ||
+			[...this.$root.querySelectorAll('[data-step-action="edit"]')].find(button => button.getClientRects().length) ||
+			this.$refs.addStepButton)?.focus();
 	},
 	add(event) {
 		if (event.detail?.listURL) {
@@ -222,14 +562,6 @@ Alpine.data('stepFormHost', () => ({
 			});
 		}
 	},
-	cancel(form) {
-		const host = this.$refs.addStepForm;
-		const target = form || host?.querySelector('form');
-		if (!(target instanceof HTMLFormElement)) return;
-		const editor = target.querySelector('[x-data="stepEditor"]');
-		if (editor) Alpine.destroyTree(editor);
-		if (host?.contains(target)) host.replaceChildren();
-	},
 	// step-form-add, step-form-cancel, and step-form-edit are the host contract.
 	handleEvent(event) {
 		switch (event.type) {
@@ -237,8 +569,13 @@ Alpine.data('stepFormHost', () => ({
 				this.add(event);
 				break;
 			case 'step-form-cancel':
+				if (event.target.closest('#step-edit-dialog')) {
+					this.$refs.stepEditDialog.close();
+					break;
+				}
+				break;
 			case 'step-form-edit':
-				this.cancel(event.target.closest('form'));
+				this.editOpener = event.target;
 				break;
 		}
 	},
@@ -299,7 +636,7 @@ Alpine.data('stepEditor', () => ({
 		this.modalOpen = true;
 		this.$nextTick(() => {
 			this.$refs.modal.showModal();
-			this.$refs.modalTextarea.focus();
+			focusFormField(this.$refs.modalTextarea);
 		});
 	},
 	destroy() {
@@ -321,14 +658,14 @@ Alpine.data('variablesPage', () => ({
 		const nameInput = form.querySelector('input[name="name"]');
 		const environment = form.querySelector('select[name="environment_id"]');
 		if (nameInput) nameInput.value = button.dataset.overrideFor;
-		if (environment) environment.focus();
+		focusFormField(environment);
 		form.scrollIntoView({ behavior: 'smooth', block: 'start' });
 	},
 	focusAfterSwap(event) {
 		const target = event.detail?.target;
 		if (!(target instanceof Element) || !this.$el.contains(target)) return;
 		const input = target.querySelector('input[name="name"]');
-		if (input) input.focus();
+		focusFormField(input);
 	},
 	init() {
 		this.afterSwap = this.focusAfterSwap.bind(this);
@@ -370,6 +707,119 @@ Alpine.data('deploymentStream', ({ url }) => ({
 	destroy() {
 		this.destroyed = true;
 		if (this.source) this.source.close();
+		this.source = null;
+	},
+}));
+
+function renderLogLine(element, line = element.textContent) {
+	const fragment = document.createDocumentFragment();
+	let color = /^\s*[-+]\/[-+]/.test(line) ? 'text-warning'
+		: ({ '+': 'text-success', '-': 'text-error', '~': 'text-warning' })[line.trimStart().match(/^([+~-])\s/)?.[1]] || '';
+	let bold = false;
+	const append = text => {
+		if (!text) return;
+		const span = document.createElement('span');
+		span.className = [color, bold ? 'font-bold' : ''].filter(Boolean).join(' ');
+		span.textContent = text;
+		fragment.append(span);
+	};
+	let offset = 0;
+	for (const match of line.matchAll(/\x1b\[([0-9;]*)m/g)) {
+		append(line.slice(offset, match.index));
+		for (const code of match[1].split(';').map(Number)) {
+			if (code === 0) { color = ''; bold = false; }
+			else if (code === 1) bold = true;
+			else if (code === 22) bold = false;
+			else if (code === 39) color = '';
+			else if ([31, 91].includes(code)) color = 'text-error';
+			else if ([32, 92].includes(code)) color = 'text-success';
+			else if ([33, 93].includes(code)) color = 'text-warning';
+		}
+		offset = match.index + match[0].length;
+	}
+	append(line.slice(offset));
+	element.replaceChildren(fragment);
+}
+
+Alpine.data('deploymentStepLogs', ({ url, status, view }) => ({
+	renderLogLine,
+	renderEntry(element, entry) {
+		renderLogLine(element, entry.line);
+		if (entry.step.includes(' @ ')) element.prepend(`[${entry.step}] `);
+	},
+	url,
+	deploymentStatus: status,
+	panels: view.panels,
+	lastID: view.lastID,
+	source: null,
+	init() {
+		// Cancellation can set terminal status before the runner writes final logs.
+		const address = new URL(this.url, location.href);
+		address.searchParams.set('after', this.lastID);
+		this.source = new EventSource(address);
+		this.source.addEventListener('log', event => this.message(event));
+		this.source.addEventListener('complete', event => {
+			this.finish(JSON.parse(event.data).status);
+			this.source?.close();
+			this.source = null;
+		});
+	},
+	terminal() {
+		return ['succeeded', 'failed', 'cancelled', 'rejected', 'expired', 'cleanup_unconfirmed'].includes(this.deploymentStatus);
+	},
+	message(event) {
+		const entry = JSON.parse(event.data);
+		if (entry.id <= this.lastID) return;
+		this.lastID = entry.id;
+		let panel = this.panels.find(item => item.index === entry.step_index);
+		if (!panel && entry.step) {
+			const matches = this.panels.filter(item => item.index >= 0 &&
+				(entry.step === item.name || entry.step.startsWith(`${item.name} @ `)));
+			if (matches.length === 1) panel = matches[0];
+		}
+		panel ??= this.panels.find(item => item.index === -1);
+		panel.live.push(entry);
+		if (entry.state) {
+			panel.state = entry.state;
+			if (['running', 'waiting', 'failed'].includes(entry.state)) {
+				this.$el.querySelector(`[data-step-index="${panel.index}"]`).open = true;
+			}
+		} else if (panel.state === 'pending') {
+			panel.state = 'unknown';
+		}
+	},
+	stateLabel(state) {
+		return ({ waiting: 'Waiting for agents', running: 'Running',
+			succeeded: 'Succeeded', failed: 'Failed', cancelled: 'Cancelled',
+			not_run: 'Not run', unknown: 'State unavailable' })[state] ?? 'Pending';
+	},
+	activeStepText() {
+		if (['queued', 'publishing_artifact', 'awaiting_artifact_approval'].includes(this.deploymentStatus)) {
+			return this.deploymentStatus.replaceAll('_', ' ');
+		}
+		const active = this.panels.find(panel => panel.index >= 0 && ['running', 'waiting'].includes(panel.state));
+		if (active) return `${this.stateLabel(active.state)}: Step ${active.index + 1} — ${active.name}`;
+		if (this.terminal()) return `Deployment ${this.deploymentStatus.replaceAll('_', ' ')}`;
+		if (this.deploymentStatus === 'running') return 'Current step unavailable';
+		return 'Waiting to start';
+	},
+	statusChanged(event) {
+		const target = event.target instanceof Element ? event.target : event.detail?.target;
+		if (!(target instanceof Element) || target.id !== 'status-badge') return;
+		this.deploymentStatus = target.dataset.deploymentStatus || target.textContent.trim();
+		// The stream drains final logs before sending its complete event.
+	},
+	finish(status) {
+		this.deploymentStatus = status;
+		for (const panel of this.panels) {
+			if (panel.state === 'pending') panel.state = 'unknown';
+			if (['running', 'waiting'].includes(panel.state)) {
+				panel.state = 'unknown';
+			}
+		}
+	},
+	destroy() {
+		this.source?.close();
 		this.source = null;
 	},
 }));

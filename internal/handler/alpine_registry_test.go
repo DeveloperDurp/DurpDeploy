@@ -44,15 +44,20 @@ func TestAlpineRegistryDefinesComplianceComponents(t *testing.T) {
 			},
 		},
 		{
-			name:        "releaseDeployRow",
-			constructor: `\(\)`,
-			members:     []string{"forceChecked"},
-		},
-		{
 			name:        "stepFormHost",
 			constructor: `\(\)`,
-			members:     []string{"afterRequest", "add", "cancel", "handleEvent"},
-			methods:     []string{"afterRequest", "add", "cancel", "handleEvent"},
+			members: []string{
+				"add",
+				"handleEvent",
+			},
+			methods: []string{
+				"beforeSwap",
+				"afterSwap",
+				"afterSettle",
+				"editClosed",
+				"add",
+				"handleEvent",
+			},
 			events: []string{
 				"step-form-add", "step-form-cancel", "step-form-edit",
 			},
@@ -99,10 +104,16 @@ func TestAlpineRegistryDefinesComplianceComponents(t *testing.T) {
 			)
 			factory := factoryPattern.FindString(source)
 			if factory == "" {
-				t.Fatalf("registry does not define %s with constructor %s", contract.name, contract.constructor)
+				t.Fatalf(
+					"registry does not define %s with constructor %s",
+					contract.name,
+					contract.constructor,
+				)
 			}
 			for _, member := range contract.members {
-				memberPattern := regexp.MustCompile(`(?m)^\t(?:get )?` + member + `(?:\(|:)`)
+				memberPattern := regexp.MustCompile(
+					`(?m)^\t(?:get )?` + member + `(?:\(|:)`,
+				)
 				if !memberPattern.MatchString(factory) {
 					t.Errorf("%s does not expose %s", contract.name, member)
 				}
@@ -130,7 +141,11 @@ func TestAlpineRegistryDefinesComplianceComponents(t *testing.T) {
 			}
 			for _, cleanup := range contract.cleanup {
 				if !strings.Contains(factory, cleanup) {
-					t.Errorf("%s destroy contract lacks %q", contract.name, cleanup)
+					t.Errorf(
+						"%s destroy contract lacks %q",
+						contract.name,
+						cleanup,
+					)
 				}
 			}
 			if !strings.Contains(bundle, contract.name) {
@@ -160,7 +175,7 @@ func TestAlpineRegistryDefinesComplianceComponents(t *testing.T) {
 		t.Error("production app source must not contain debug console logging")
 	}
 	registryOrder := []string{
-		"toast", "navbar", "deploymentForm", "releaseDeployRow",
+		"toast", "navbar", "deploymentForm",
 		"stepFormHost", "stepEditor", "variablesPage", "deploymentStream",
 	}
 	previous := strings.Index(source, "window.htmx = htmx")
@@ -183,8 +198,8 @@ func TestAlpineRegistryDefinesComplianceComponents(t *testing.T) {
 		`(?ms)Alpine\.data\('stepFormHost'.*?^\}\)\);`,
 	)
 	host := hostPattern.FindString(source)
-	destroyEditor := strings.Index(host, "Alpine.destroyTree(editor)")
-	removeForm := strings.Index(host, "replaceChildren()")
+	destroyEditor := strings.Index(host, "Alpine.destroyTree(child)")
+	removeForm := strings.LastIndex(host, "replaceChildren()")
 	if destroyEditor < 0 || removeForm < 0 || destroyEditor > removeForm {
 		t.Error(
 			"stepFormHost must synchronously destroy editors before removing the form",

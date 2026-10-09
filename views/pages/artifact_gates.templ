@@ -5,7 +5,6 @@ import "strconv"
 import "time"
 import "durpdeploy/internal/auth"
 import "durpdeploy/internal/artifact"
-import "strings"
 
 templ ArtifactGatePanel(deploymentID int64, gates []ArtifactGateInfo, poll bool) {
 	<div
@@ -31,9 +30,9 @@ templ ArtifactGates(gates []ArtifactGateInfo) {
 				<p class="text-sm">Review the generated changes before continuing. Sensitive values in this review are masked.</p>
 				<p class="text-sm"><strong>Unverified summary supplied by the deployment step.</strong> The server does not verify that these counts describe the artifact. Download and independently inspect the exact artifact before approval; checksums identify bytes, not their meaning.</p>
 				<dl class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-					<div><dt>Create</dt><dd class="text-xl font-semibold">{ strconv.FormatInt(gate.Review.Create, 10) }</dd></div>
-					<div><dt>Update</dt><dd class="text-xl font-semibold">{ strconv.FormatInt(gate.Review.Update, 10) }</dd></div>
-					<div><dt>Delete</dt><dd class="text-xl font-semibold">{ strconv.FormatInt(gate.Review.Delete, 10) }</dd></div>
+					<div class="text-success"><dt>+ Create</dt><dd class="text-xl font-semibold">{ strconv.FormatInt(gate.Review.Create, 10) }</dd></div>
+					<div class="text-warning"><dt>~ Update</dt><dd class="text-xl font-semibold">{ strconv.FormatInt(gate.Review.Update, 10) }</dd></div>
+					<div class="text-error"><dt>− Delete</dt><dd class="text-xl font-semibold">{ strconv.FormatInt(gate.Review.Delete, 10) }</dd></div>
 					<div><dt>Read</dt><dd class="text-xl font-semibold">{ strconv.FormatInt(gate.Review.Read, 10) }</dd></div>
 				</dl>
 				if CanWrite(ctx) && gate.ReviewFormat == "terraform" && gate.ExpiresAt > time.Now().Unix() {
@@ -62,7 +61,7 @@ templ ArtifactGates(gates []ArtifactGateInfo) {
 				if CanWrite(ctx) {
 					<div class="flex flex-wrap gap-2">
 						if gate.ExpiresAt > time.Now().Unix() {
-							<a class="btn btn-sm btn-ghost" href={ fmt.Sprintf("/deployments/%d/artifact-gates/%d/artifact", gate.DeploymentID, gate.StepIndex) }>Download sensitive artifact</a>
+							<a class="btn sm:btn-sm btn-ghost" href={ fmt.Sprintf("/deployments/%d/artifact-gates/%d/artifact", gate.DeploymentID, gate.StepIndex) }>Download sensitive artifact</a>
 						}
 						if CanManageAgents(ctx) && gate.Status == "awaiting" && gate.ExpiresAt > time.Now().Unix() {
 							for _, action := range []string{"approve", "reject"} {
@@ -74,9 +73,9 @@ templ ArtifactGates(gates []ArtifactGateInfo) {
 									<input type="hidden" name="revision" value={ strconv.FormatInt(gate.Revision, 10) }/>
 									<input type="hidden" name="sha256" value={ gate.SHA256 }/>
 									if action == "approve" {
-<button class="btn btn-sm btn-success" type="submit">Approve and continue</button>
+<button class="btn sm:btn-sm btn-success" type="submit">Approve and continue</button>
 } else {
-<button class="btn btn-sm btn-error" type="submit">Reject</button>
+<button class="btn sm:btn-sm btn-error" type="submit">Reject</button>
 }
 								</form>
 							}
@@ -97,11 +96,22 @@ templ TerraformPlanView(resources []artifact.TerraformResourceChange) {
 			<section class="space-y-2" aria-label={ resource.Address }>
 				<div class="flex flex-wrap items-center gap-2">
 					<h3 class="font-mono text-sm break-all">{ resource.Address }</h3>
-					<span class="badge badge-outline">{ strings.Join(resource.Actions, " → ") }</span>
+					for _, action := range resource.Actions {
+						switch action {
+							case "create":
+								<span class="badge badge-success">+ Add</span>
+							case "delete":
+								<span class="badge badge-error">− Remove</span>
+							case "update":
+								<span class="badge badge-warning">~ Modify</span>
+							default:
+								<span class="badge badge-outline">{ action }</span>
+						}
+					}
 				</div>
 				<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-					<div class="min-w-0"><h4 class="text-sm font-semibold mb-2">Before</h4><pre class="font-mono text-xs whitespace-pre-wrap break-all rounded bg-base-200 p-4">{ resource.Before }</pre></div>
-					<div class="min-w-0"><h4 class="text-sm font-semibold mb-2">After</h4><pre class="font-mono text-xs whitespace-pre-wrap break-all rounded bg-base-200 p-4">{ resource.After }</pre></div>
+					<div class="min-w-0"><h4 class="text-sm font-semibold mb-2 text-error">− Before</h4><pre class="font-mono text-xs whitespace-pre-wrap break-all rounded bg-base-200 border-l-2 border-error p-4">{ resource.Before }</pre></div>
+					<div class="min-w-0"><h4 class="text-sm font-semibold mb-2 text-success">+ After</h4><pre class="font-mono text-xs whitespace-pre-wrap break-all rounded bg-base-200 border-l-2 border-success p-4">{ resource.After }</pre></div>
 				</div>
 			</section>
 		}
