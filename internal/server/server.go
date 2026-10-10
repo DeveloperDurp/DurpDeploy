@@ -206,13 +206,15 @@ func newRouter(
 		pr.Get("/lifecycles/{id}", lifecycleH.GetLifecycle)
 		pr.Get("/lifecycles/{id}/edit", lifecycleH.EditLifecycle)
 		pr.Post("/lifecycles/{id}", lifecycleH.SaveLifecycle)
-		pr.Post("/lifecycles/{id}/stages", lifecycleH.AddStage)
-		pr.Post("/lifecycles/{id}/stages/reorder", lifecycleH.ReorderStage)
-		pr.Patch(
+		pr.With(auth.RequireRole("admin")).
+			Post("/lifecycles/{id}/stages", lifecycleH.AddStage)
+		pr.With(auth.RequireRole("admin")).
+			Post("/lifecycles/{id}/stages/reorder", lifecycleH.ReorderStage)
+		pr.With(auth.RequireRole("admin")).Patch(
 			"/lifecycles/{id}/stages/{stageId}",
 			lifecycleH.UpdateLifecycleStage,
 		)
-		pr.Post(
+		pr.With(auth.RequireRole("admin")).Post(
 			"/lifecycles/{id}/stages/{stageId}/delete",
 			lifecycleH.DeleteStage,
 		)
@@ -668,10 +670,13 @@ func newRouter(
 		ar.With(auth.RequireRole("admin")).
 			Delete("/lifecycles/{id}", api.EmptyBody(apiLcH.DeleteLifecycle))
 		ar.Post("/lifecycles/{id}/save", apiLcH.SaveLifecycle)
-		ar.Post("/lifecycles/{id}/stages", apiLcH.AddStage)
-		ar.Post("/lifecycles/{id}/stages/reorder", apiLcH.ReorderStages)
-		ar.Patch("/lifecycles/{id}/stages/{stageId}", apiLcH.UpdateStage)
-		ar.Post(
+		ar.With(auth.RequireRole("admin")).
+			Post("/lifecycles/{id}/stages", apiLcH.AddStage)
+		ar.With(auth.RequireRole("admin")).
+			Post("/lifecycles/{id}/stages/reorder", apiLcH.ReorderStages)
+		ar.With(auth.RequireRole("admin")).
+			Patch("/lifecycles/{id}/stages/{stageId}", apiLcH.UpdateStage)
+		ar.With(auth.RequireRole("admin")).Post(
 			"/lifecycles/{id}/stages/{stageId}/delete",
 			api.EmptyBody(apiLcH.DeleteStage),
 		)

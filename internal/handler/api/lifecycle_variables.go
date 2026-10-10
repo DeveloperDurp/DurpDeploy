@@ -97,7 +97,7 @@ func respondLifecycleVariableError(w http.ResponseWriter, err error) {
 //	  401: body:UnauthorizedError
 //	  403: body:ForbiddenError
 //	  404: body:NotFoundError
-//	  422: body:UnprocessableEntityError
+//	  422: body:ValidationError
 //	  500: body:ServerError
 func (h *LifecycleVariableHandler) List(
 	w http.ResponseWriter,
@@ -140,7 +140,7 @@ func (h *LifecycleVariableHandler) List(
 //	  401: body:UnauthorizedError
 //	  403: body:ForbiddenError
 //	  404: body:NotFoundError
-//	  422: body:UnprocessableEntityError
+//	  422: body:ValidationError
 //	  500: body:ServerError
 func (h *LifecycleVariableHandler) Get(w http.ResponseWriter, r *http.Request) {
 	ids, ok := lifecycleVariableIDs(w, r)
@@ -174,7 +174,7 @@ func (h *LifecycleVariableHandler) Get(w http.ResponseWriter, r *http.Request) {
 //	  401: body:UnauthorizedError
 //	  403: body:ForbiddenError
 //	  404: body:NotFoundError
-//	  422: body:UnprocessableEntityError
+//	  422: body:ValidationError
 //	  500: body:ServerError
 func (h *LifecycleVariableHandler) Create(
 	w http.ResponseWriter,
@@ -202,7 +202,7 @@ func (h *LifecycleVariableHandler) Create(
 //	  401: body:UnauthorizedError
 //	  403: body:ForbiddenError
 //	  404: body:NotFoundError
-//	  422: body:UnprocessableEntityError
+//	  422: body:ValidationError
 //	  500: body:ServerError
 func (h *LifecycleVariableHandler) Update(
 	w http.ResponseWriter,
@@ -285,7 +285,7 @@ func (h *LifecycleVariableHandler) save(
 //	  401: body:UnauthorizedError
 //	  403: body:ForbiddenError
 //	  404: body:NotFoundError
-//	  422: body:UnprocessableEntityError
+//	  422: body:ValidationError
 //	  500: body:ServerError
 func (h *LifecycleVariableHandler) Delete(
 	w http.ResponseWriter,

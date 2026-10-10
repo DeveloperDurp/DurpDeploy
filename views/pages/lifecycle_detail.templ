@@ -59,7 +59,7 @@ templ LifecycleStageList(lc db.Lifecycle, stages []LifecycleStageView, available
 				}
 			</ol>
 		}
-		if CanWrite(ctx) {
+		if CanWrite(ctx) && CanManageLifecycleVariables(ctx) {
 			if len(availableEnvs) > 0 {
 				@LifecycleAddStageForm(lc, availableEnvs)
 			} else {
@@ -74,7 +74,7 @@ templ LifecycleStageRow(lc db.Lifecycle, index int, total int, s LifecycleStageV
 		<td>{ strconv.Itoa(index + 1) }</td>
 		<td class="font-medium truncate">{ s.Environment.Name }</td>
 		<td>
-			if CanWrite(ctx) {
+			if CanWrite(ctx) && CanManageLifecycleVariables(ctx) {
 				<label class="cursor-pointer flex flex-wrap items-center gap-1">
 					<input
 						type="checkbox"
@@ -99,7 +99,7 @@ templ LifecycleStageRow(lc db.Lifecycle, index int, total int, s LifecycleStageV
 			}
 		</td>
 		<td class="flex flex-nowrap gap-2 whitespace-nowrap">
-			if CanWrite(ctx) {
+			if CanWrite(ctx) && CanManageLifecycleVariables(ctx) {
 				if index == 0 {
 					<span class="btn btn-xs invisible" aria-hidden="true">↑</span>
 				} else {
@@ -137,7 +137,7 @@ templ LifecycleStageMobileRecord(lc db.Lifecycle, index int, total int, s Lifecy
 				<h3 class="font-medium break-words">{ s.Environment.Name }</h3>
 			</div>
 			<div>
-				if CanWrite(ctx) {
+				if CanWrite(ctx) && CanManageLifecycleVariables(ctx) {
 					<label class="cursor-pointer flex items-center gap-1">
 						<input
 							type="checkbox"
@@ -159,7 +159,7 @@ templ LifecycleStageMobileRecord(lc db.Lifecycle, index int, total int, s Lifecy
 				}
 			</div>
 		</div>
-		if CanWrite(ctx) {
+		if CanWrite(ctx) && CanManageLifecycleVariables(ctx) {
 			<div class="flex flex-nowrap justify-start gap-2 whitespace-nowrap">
 				if index > 0 {
 					<form method="post" action={ templ.SafeURL("/lifecycles/" + strconv.FormatInt(lc.ID, 10) + "/stages/reorder") } hx-post={ "/lifecycles/" + strconv.FormatInt(lc.ID, 10) + "/stages/reorder" } hx-target="[data-create-form]" hx-select="[data-create-form]" hx-swap="outerHTML">

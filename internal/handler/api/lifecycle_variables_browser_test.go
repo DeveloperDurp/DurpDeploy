@@ -224,10 +224,10 @@ func TestLifecycleVariablesBrowserE2E(t *testing.T) {
 	if string(
 		b.evaluate(
 			t,
-			`!document.querySelector('input[name=_method][value=delete]')`,
+			`!document.querySelector('input[name=_method][value=delete]') && !document.querySelector('[data-lifecycle-stage-action]') && !document.querySelector('[data-lifecycle-environment-assignment]')`,
 		),
 	) != "true" {
-		t.Fatal("deployer has lifecycle delete control")
+		t.Fatal("deployer has lifecycle delete or stage write controls")
 	}
 	b.captureNavigation(t, "lifecycle-deployer")
 	b.navigateBackTest(

@@ -27,6 +27,10 @@ administrators create or change an assignment. Project administrators can retain
 or remove an existing assignment and manage project overrides.
 Review the lifecycle's project list before you add shared secrets.
 
+Only global administrators change lifecycle stages or delete lifecycles and
+environments. Restoring a removed environment reactivates its retained shared
+values for projects that use the lifecycle.
+
 ## Viewer self-security exception
 
 A viewer may manage only their own Security settings after the normal session,

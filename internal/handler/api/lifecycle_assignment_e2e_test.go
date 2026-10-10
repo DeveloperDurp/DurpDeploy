@@ -44,6 +44,7 @@ func assertLifecycleAssignmentAccess(
 	}
 	setRole("deployer")
 	defer setRole("admin")
+	assertLifecycleStageAccess(t, f, lifecycleID, setRole)
 	f.api(
 		t,
 		"DELETE",

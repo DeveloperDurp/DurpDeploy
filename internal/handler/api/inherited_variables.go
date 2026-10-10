@@ -28,7 +28,7 @@ type inheritedVariableResponse struct {
 //	  401: body:UnauthorizedError
 //	  403: body:ForbiddenError
 //	  404: body:NotFoundError
-//	  422: body:UnprocessableEntityError
+//	  422: body:ValidationError
 //	  500: body:ServerError
 func (h *LifecycleVariableHandler) Inherited(
 	w http.ResponseWriter,

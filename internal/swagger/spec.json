@@ -3714,6 +3714,17 @@
         ],
         "summary": "Delete a lifecycle and its shared variables. Global admin only.",
         "operationId": "deleteLifecycle",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "description": "The resource ID.",
+            "name": "id",
+            "in": "path",
+            "required": true
+          }
+        ],
         "responses": {
           "204": {
             "description": "EmptyResponse is returned for no-content endpoints.",
@@ -3725,6 +3736,12 @@
             "description": "Bad request error response.",
             "schema": {
               "$ref": "#/definitions/BadRequestError"
+            }
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
             }
           },
           "403": {
@@ -3851,7 +3868,7 @@
         "tags": [
           "lifecycles"
         ],
-        "summary": "Add a stage to a lifecycle.",
+        "summary": "Add a stage to a lifecycle. Global admin only.",
         "operationId": "addLifecycleStage",
         "parameters": [
           {
@@ -3890,6 +3907,12 @@
             "description": "Unauthorized error response.",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
             }
           },
           "409": {
@@ -3933,7 +3956,7 @@
         "tags": [
           "lifecycles"
         ],
-        "summary": "Reorder lifecycle stages.",
+        "summary": "Reorder lifecycle stages. Global admin only.",
         "operationId": "reorderLifecycleStages",
         "parameters": [
           {
@@ -3974,6 +3997,12 @@
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
           "413": {
             "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
             "schema": {
@@ -4009,7 +4038,7 @@
         "tags": [
           "lifecycles"
         ],
-        "summary": "Update a lifecycle stage.",
+        "summary": "Update a lifecycle stage. Global admin only.",
         "operationId": "updateLifecycleStage",
         "parameters": [
           {
@@ -4059,6 +4088,12 @@
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
           "404": {
             "description": "Not found error response.",
             "schema": {
@@ -4094,7 +4129,7 @@
         "tags": [
           "lifecycles"
         ],
-        "summary": "Delete a lifecycle stage.",
+        "summary": "Delete a lifecycle stage. Global admin only.",
         "operationId": "deleteLifecycleStage",
         "parameters": [
           {
@@ -4133,6 +4168,12 @@
             "description": "Unauthorized error response.",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
             }
           },
           "413": {
@@ -4207,9 +4248,9 @@
             }
           },
           "422": {
-            "description": "Unprocessable Entity",
+            "description": "Validation error response.",
             "schema": {
-              "$ref": "#/definitions/UnprocessableEntityError"
+              "$ref": "#/definitions/ValidationError"
             }
           },
           "500": {
@@ -4288,9 +4329,9 @@
             }
           },
           "422": {
-            "description": "Unprocessable Entity",
+            "description": "Validation error response.",
             "schema": {
-              "$ref": "#/definitions/UnprocessableEntityError"
+              "$ref": "#/definitions/ValidationError"
             }
           },
           "500": {
@@ -4367,9 +4408,9 @@
             }
           },
           "422": {
-            "description": "Unprocessable Entity",
+            "description": "Validation error response.",
             "schema": {
-              "$ref": "#/definitions/UnprocessableEntityError"
+              "$ref": "#/definitions/ValidationError"
             }
           },
           "500": {
@@ -4456,9 +4497,9 @@
             }
           },
           "422": {
-            "description": "Unprocessable Entity",
+            "description": "Validation error response.",
             "schema": {
-              "$ref": "#/definitions/UnprocessableEntityError"
+              "$ref": "#/definitions/ValidationError"
             }
           },
           "500": {
@@ -4533,9 +4574,9 @@
             }
           },
           "422": {
-            "description": "Unprocessable Entity",
+            "description": "Validation error response.",
             "schema": {
-              "$ref": "#/definitions/UnprocessableEntityError"
+              "$ref": "#/definitions/ValidationError"
             }
           },
           "500": {
@@ -8354,9 +8395,9 @@
             }
           },
           "422": {
-            "description": "Unprocessable Entity",
+            "description": "Validation error response.",
             "schema": {
-              "$ref": "#/definitions/UnprocessableEntityError"
+              "$ref": "#/definitions/ValidationError"
             }
           },
           "500": {

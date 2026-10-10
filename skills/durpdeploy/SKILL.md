@@ -397,6 +397,9 @@ Enforced identically on web and API (source: `internal/gate/gate.go`):
   only because deletion also removes scoped/shared variables. Lifecycle
   deletion is `DELETE /api/v1/lifecycles/$ID` and returns `204`; projects
   using it become unassigned while existing snapshots remain intact.
+- **Lifecycle stages**: adding, updating, reordering, or removing stages is
+  global-admin only (`403` otherwise). Restoring a removed stage reactivates
+  its retained scoped shared values for assigned projects.
 - **Cross-project release**: deploying a release id under the wrong
   project → `400`.
 
