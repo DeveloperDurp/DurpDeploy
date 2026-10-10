@@ -207,7 +207,7 @@ jobs:
 
       # CI's exact command — keep this in sync with AGENTS.md.
       - name: go test
-        run: go test -v -count=1 -timeout=20m ./...
+        run: bash scripts/go_test.sh -v -count=1 -timeout=20m ./...
 
   # ----- E2E contract checks -----------------------------------------------
   e2e:

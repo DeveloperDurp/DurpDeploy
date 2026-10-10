@@ -8,6 +8,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 
 	generated "durpdeploy/internal/db"
+	"durpdeploy/internal/testutil"
 )
 
 func TestPostgres_WebAuthnCredentialCRUD(t *testing.T) {
@@ -20,10 +21,10 @@ func TestPostgres_WebAuthnCredentialCRUD(t *testing.T) {
 		postgres.WithPassword("postgres"),
 		postgres.BasicWaitStrategies(),
 	)
+	testutil.CleanupContainer(t, ctr)
 	if err != nil {
 		t.Skipf("could not start postgres container: %v", err)
 	}
-	t.Cleanup(func() { _ = ctr.Terminate(context.Background()) })
 	dsn, err := ctr.ConnectionString(ctx, "sslmode=disable")
 	if err != nil {
 		t.Fatalf("connection string: %v", err)

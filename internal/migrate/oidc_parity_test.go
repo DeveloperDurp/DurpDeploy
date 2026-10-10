@@ -10,6 +10,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/testutil"
 )
 
 func TestPostgres_OIDCSchemaParity(t *testing.T) {
@@ -21,10 +22,10 @@ func TestPostgres_OIDCSchemaParity(t *testing.T) {
 		postgres.WithPassword("postgres"),
 		postgres.BasicWaitStrategies(),
 	)
+	testutil.CleanupContainer(t, container)
 	if err != nil {
 		t.Skipf("PostgreSQL container unavailable: %v", err)
 	}
-	t.Cleanup(func() { _ = container.Terminate(context.Background()) })
 	dsn, err := container.ConnectionString(ctx, "sslmode=disable")
 	if err != nil {
 		t.Fatalf("PostgreSQL DSN: %v", err)

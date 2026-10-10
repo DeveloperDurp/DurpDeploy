@@ -36,7 +36,7 @@ jobs:
       - name: Test with coverage
         env:
           DURPDEPLOY_CONTAINER_RUNTIME: docker
-        run: go test -tags=e2e -count=1 -timeout=20m -covermode=atomic -coverpkg=./... -coverprofile=coverage.out ./...
+        run: bash scripts/go_test.sh -tags=e2e -count=1 -timeout=20m -covermode=atomic -coverpkg=./... -coverprofile=coverage.out ./...
       - name: SonarQube Scan
         if: >-
           github.event.pull_request.head.repo.full_name == github.repository &&
