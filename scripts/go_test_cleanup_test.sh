@@ -132,8 +132,12 @@ wait "$second_pid"
 
 # Podman must target the same provider socket used by Testcontainers.
 mv "$test_dir/bin/docker" "$test_dir/bin/podman"
+# Keep a host Docker CLI from winning provider discovery in this fixture.
+for tool in bash mktemp mv rm mkdir touch; do
+    ln -s "$(command -v "$tool")" "$test_dir/bin/$tool"
+done
 mkdir -p "$test_dir/podman"
-PATH="$test_dir/bin:$PATH" CASE_DIR="$test_dir/podman" SCENARIO=success \
+PATH="$test_dir/bin" CASE_DIR="$test_dir/podman" SCENARIO=success \
     DOCKER_HOST='unix:///tmp/fixture provider.sock' \
     bash "$root/scripts/go_test.sh" -count=1 ./fixture
 if compgen -G "$test_dir/podman/resources/*" >/dev/null; then exit 1; fi
