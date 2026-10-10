@@ -32,44 +32,8 @@ func TestCleanupConcurrentRemoval(t *testing.T) {
 			// Given: both owned and unrelated containers in the API response.
 			session := "durpdeploy-go-test.fixture"
 			var inspections, deletions atomic.Int32
-			server := httptest.NewServer(http.HandlerFunc(
-				func(w http.ResponseWriter, r *http.Request) {
-					w.Header().Set("Content-Type", "application/json")
-					switch {
-					case strings.HasSuffix(r.URL.Path, "/containers/json"):
-						json.NewEncoder(w).Encode([]map[string]any{
-							{"Id": "owned", "Labels": map[string]string{
-								"org.testcontainers":           "true",
-								"org.testcontainers.sessionId": session,
-							}},
-							{"Id": "unrelated", "Labels": map[string]string{
-								"org.testcontainers":           "true",
-								"org.testcontainers.sessionId": "another-run",
-							}},
-						})
-					case r.Method == http.MethodDelete:
-						deletions.Add(1)
-						if !strings.HasSuffix(r.URL.Path, "/containers/owned") {
-							t.Errorf(
-								"removed unrelated container: %s",
-								r.URL.Path,
-							)
-						}
-						w.WriteHeader(scenario.status)
-						json.NewEncoder(w).Encode(map[string]string{
-							"message": "removal is already in progress",
-						})
-					case strings.HasSuffix(r.URL.Path, "/containers/owned/json"):
-						count := inspections.Add(1)
-						if scenario.disappears && count > 1 {
-							w.WriteHeader(http.StatusNotFound)
-						}
-						json.NewEncoder(w).Encode(map[string]string{})
-					default:
-						t.Errorf("unexpected API request: %s", r.URL.Path)
-						w.WriteHeader(http.StatusBadRequest)
-					}
-				}))
+			server := httptest.NewServer(removalHandler(t, scenario.status,
+				scenario.disappears, &inspections, &deletions))
 			defer server.Close()
 			api, err := client.New(client.WithHost(server.URL),
 				client.WithAPIVersion("1.44"))
@@ -94,5 +58,48 @@ func TestCleanupConcurrentRemoval(t *testing.T) {
 			}
 			require.Equal(t, int32(1), deletions.Load())
 		})
+	}
+}
+
+func removalHandler(t *testing.T, status int, disappears bool,
+	inspections, deletions *atomic.Int32,
+) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		var response any
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/containers/json"):
+			response = []map[string]any{
+				{"Id": "owned", "Labels": map[string]string{
+					"org.testcontainers":           "true",
+					"org.testcontainers.sessionId": "durpdeploy-go-test.fixture",
+				}},
+				{"Id": "unrelated", "Labels": map[string]string{
+					"org.testcontainers":           "true",
+					"org.testcontainers.sessionId": "another-run",
+				}},
+			}
+		case r.Method == http.MethodDelete:
+			deletions.Add(1)
+			if !strings.HasSuffix(r.URL.Path, "/containers/owned") {
+				t.Errorf("removed unrelated container: %s", r.URL.Path)
+			}
+			w.WriteHeader(status)
+			response = map[string]string{
+				"message": "removal is already in progress",
+			}
+		case strings.HasSuffix(r.URL.Path, "/containers/owned/json"):
+			count := inspections.Add(1)
+			if disappears && count > 1 {
+				w.WriteHeader(http.StatusNotFound)
+			}
+			response = map[string]string{}
+		default:
+			t.Errorf("unexpected API request: %s", r.URL.Path)
+			w.WriteHeader(http.StatusBadRequest)
+		}
+		if err := json.NewEncoder(w).Encode(response); err != nil {
+			t.Errorf("write API response: %v", err)
+		}
 	}
 }
