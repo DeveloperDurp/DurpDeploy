@@ -163,12 +163,13 @@ type DeploymentApproval struct {
 }
 
 type DeploymentArtifact struct {
-	DeploymentID int64  `json:"deployment_id"`
-	RepositoryID int64  `json:"repository_id"`
-	Url          string `json:"url"`
-	Version      string `json:"version"`
-	Sha256       string `json:"sha256"`
-	Size         int64  `json:"size"`
+	DeploymentID  int64  `json:"deployment_id"`
+	RepositoryID  int64  `json:"repository_id"`
+	Url           string `json:"url"`
+	Version       string `json:"version"`
+	Sha256        string `json:"sha256"`
+	Size          int64  `json:"size"`
+	ResolutionKey string `json:"resolution_key"`
 }
 
 type DeploymentDispatch struct {
@@ -427,6 +428,7 @@ type ReleaseArtifact struct {
 	Sha256          string        `json:"sha256"`
 	Size            int64         `json:"size"`
 	SourceReleaseID sql.NullInt64 `json:"source_release_id"`
+	ResolutionKey   string        `json:"resolution_key"`
 }
 
 type ReleaseVariable struct {

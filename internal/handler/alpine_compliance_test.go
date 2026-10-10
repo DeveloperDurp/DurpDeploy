@@ -195,7 +195,7 @@ func TestAlpineCompliancePolicy(t *testing.T) {
 				},
 			},
 			{
-				"views/pages/releases.templ",
+				"views/pages/release_form.templ",
 				[]string{
 					`hx-target="#releases-content"`,
 					`hx-swap="outerHTML"`,

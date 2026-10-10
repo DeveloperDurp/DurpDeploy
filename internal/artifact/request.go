@@ -2,6 +2,7 @@ package artifact
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/url"
 )
@@ -42,7 +43,13 @@ func (c *Client) request(
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
-		return nil, ErrFetch
+		var fetchErr *FetchError
+		if errors.As(err, &fetchErr) {
+			return nil, fetchErr
+		}
+		return nil, &FetchError{
+			"could not download from the package repository; check network access, TLS trust and redirects",
+		}
 	}
 	return response, nil
 }

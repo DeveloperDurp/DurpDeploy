@@ -103,13 +103,7 @@ test "$(wc -c < "$DURPDEPLOY_STAGE_DIR/package-copy")" -eq 7
 		422,
 	)
 	f.changePackage("metadata-heavy")
-	quotaError := f.api(
-		t,
-		"POST",
-		base+"/releases",
-		map[string]string{"version": "metadata-rejected"},
-		422,
-	)
+	quotaError := rejectInvalidArtifactPull(t, f, "metadata-rejected")
 	if !strings.Contains(string(quotaError), "metadata") {
 		t.Fatalf("metadata rejection not explained: %s", quotaError)
 	}
@@ -143,8 +137,8 @@ test "$(wc -c < "$DURPDEPLOY_STAGE_DIR/package-copy")" -eq 7
 		nil,
 		200,
 	)
-	if !strings.Contains(page, "Pinned ZIP package") {
-		t.Fatal("web pin missing")
+	if !strings.Contains(page, "data-package-pending") {
+		t.Fatal("web pending attachment missing")
 	}
 	// When: deployment steps consume the package through the public API.
 	data = f.api(

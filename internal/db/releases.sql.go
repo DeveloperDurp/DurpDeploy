@@ -21,7 +21,8 @@ func (q *Queries) CountReleasesByProject(ctx context.Context, projectID int64) (
 }
 
 const createRelease = `-- name: CreateRelease :one
-INSERT INTO releases (project_id, version, steps_json) VALUES (?, ?, ?) RETURNING id, project_id, version, steps_json, created_at, kind, snapshot_locked
+INSERT INTO releases (project_id, version, steps_json)
+VALUES (?, ?, ?) RETURNING id, project_id, version, steps_json, created_at, kind, snapshot_locked
 `
 
 type CreateReleaseParams struct {
@@ -239,7 +240,8 @@ func (q *Queries) LockRelease(ctx context.Context, id int64) (int64, error) {
 }
 
 const updateRelease = `-- name: UpdateRelease :one
-UPDATE releases SET project_id = ?, version = ?, steps_json = ? WHERE id = ? RETURNING id, project_id, version, steps_json, created_at, kind, snapshot_locked
+UPDATE releases SET project_id = ?, version = ?, steps_json = ?
+WHERE id = ? RETURNING id, project_id, version, steps_json, created_at, kind, snapshot_locked
 `
 
 type UpdateReleaseParams struct {

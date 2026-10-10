@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/go-chi/chi/v5"
 
@@ -86,113 +85,6 @@ func buildReleaseViews(
 		}
 	}
 	return views, nil
-}
-
-func (h *ReleaseHandler) CreateRelease(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	projectID, err := parseProjectID(r)
-	if err != nil {
-		http.Error(w, "Invalid project ID", http.StatusBadRequest)
-		return
-	}
-
-	version := strings.TrimSpace(r.FormValue("version"))
-
-	if version == "" {
-		project, _ := h.repo.Queries.GetProject(r.Context(), projectID)
-		releases, _ := h.repo.Queries.ListReleasesByProject(
-			r.Context(),
-			projectID,
-		)
-		views, _ := buildReleaseViews(r.Context(), h.repo, releases)
-		WriteFormError(
-			w,
-			r,
-			pages.ReleaseForm(projectID, "Version is required"),
-			pages.ReleasesPage(
-				project,
-				views,
-				"Version is required",
-				r.URL.Path,
-			),
-		)
-		return
-	}
-
-	_, err = CreateReleaseSnapshot(r.Context(), h.repo, projectID, version)
-	if err != nil {
-		if writeArtifactError(w, err) {
-			return
-		}
-		if IsUniqueViolation(err) {
-			project, _ := h.repo.Queries.GetProject(r.Context(), projectID)
-			releases, _ := h.repo.Queries.ListReleasesByProject(
-				r.Context(),
-				projectID,
-			)
-			views, _ := buildReleaseViews(
-				r.Context(),
-				h.repo,
-				releases,
-			)
-			WriteFormError(
-				w,
-				r,
-				pages.ReleaseForm(
-					projectID,
-					"A release with this version already exists",
-				),
-				pages.ReleasesPage(
-					project,
-					views,
-					"A release with this version already exists",
-					r.URL.Path,
-				),
-			)
-			return
-		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	if r.Header.Get("HX-Request") == "true" {
-		releases, err := h.repo.Queries.ListReleasesByProject(
-			r.Context(),
-			projectID,
-		)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-
-		project, err := h.repo.Queries.GetProject(r.Context(), projectID)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-
-		views, err := buildReleaseViews(r.Context(), h.repo, releases)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-
-		if err := pages.ReleasesFragment(project, views, "").
-			Render(r.Context(), w); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-	} else {
-		http.Redirect(
-			w,
-			r,
-			fmt.Sprintf("/projects/%d/releases", projectID),
-			http.StatusSeeOther,
-		)
-	}
 }
 
 func (h *ReleaseHandler) GetRelease(w http.ResponseWriter, r *http.Request) {

@@ -487,6 +487,7 @@ type swaggerVariableResponse struct {
 // ReleaseRequest is the body for create release.
 // swagger:model ReleaseRequest
 type swaggerReleaseRequest struct {
+	// Attached packages are downloaded and pinned on the first deployment pull.
 	Version string `json:"version"`
 }
 

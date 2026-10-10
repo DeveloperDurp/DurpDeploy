@@ -118,31 +118,6 @@ templ ReleasesFragment(project db.Project, releases []ReleaseView, errorMsg stri
 	</div>
 }
 
-templ ReleaseForm(projectID int64, errorMsg string) {
-	<div class="card bg-base-200 p-4 mb-6">
-		<h3 class="text-lg font-bold mb-4">Create Release</h3>
-		<form
-			hx-post={ fmt.Sprintf("/projects/%d/releases", projectID) }
-			hx-target="#releases-content"
-			hx-swap="outerHTML"
-			data-toast-success="Release created"
-			data-toast-error="Failed to create release"
-			class="flex flex-wrap gap-4 items-end"
-		>
-			<div class="form-control flex-1 min-w-[200px]">
-				<label class="label">
-					<span class="label-text">Version</span>
-				</label>
-				<input type="text" name="version" class="input input-bordered" placeholder="e.g. 1.0.0" required/>
-				if errorMsg != "" {
-					<span class="text-error text-sm mt-1">{ errorMsg }</span>
-				}
-			</div>
-			<button type="submit" class="btn btn-primary">Create Release</button>
-		</form>
-	</div>
-}
-
 templ ReleasesTable(project db.Project, releases []ReleaseView) {
 	<table class="table table-zebra table-fixed w-full">
 		<thead>
@@ -168,8 +143,10 @@ templ ReleasesTable(project db.Project, releases []ReleaseView) {
 
 templ ReleaseRow(projectID int64, rv ReleaseView) {
 	<tr id={ fmt.Sprintf("release-row-%d", rv.Release.ID) }>
-		<td class="font-medium truncate">
-			<a href={ fmt.Sprintf("/projects/%d/releases/%d", projectID, rv.Release.ID) } class="link link-primary">{ rv.Release.Version }</a>
+		<td class="font-medium">
+			<div class="truncate">
+				<a href={ fmt.Sprintf("/projects/%d/releases/%d", projectID, rv.Release.ID) } class="link link-primary">{ rv.Release.Version }</a>
+			</div>
 			if releaseNeedsRecreation(parseReleaseSteps(rv.Release.StepsJson)) {
 				<span class="badge badge-warning badge-xs ml-1 align-middle" data-release-needs-recreation title="This release contains legacy local steps without a container image. Recreate those steps and snap a new release before deploying.">recreate</span>
 			}
@@ -209,7 +186,11 @@ templ ReleaseDetail(project db.Project, release db.Release, variables []db.Relea
 						method="post"
 						action={ fmt.Sprintf("/projects/%d/releases/%d/refresh", project.ID, release.ID) }
 						hx-boost="true"
-						hx-confirm="Refresh this release with the latest steps and variables?"
+						if artifact.ReleaseID != 0 {
+							hx-confirm="Refresh this release with the latest steps and variables, download its package again, and replace its checksum for future deployments? Existing deployments and re-runs keep their original package pin."
+						} else {
+							hx-confirm="Refresh this release with the latest steps and variables?"
+						}
 					>
 						<button type="submit" class="btn btn-outline btn-warning btn-sm">Refresh</button>
 					</form>
@@ -221,7 +202,7 @@ templ ReleaseDetail(project db.Project, release db.Release, variables []db.Relea
 			</div>
 		</div>
 		if artifact.ReleaseID!=0 {
-			<div class="card bg-base-200 p-4 space-y-3"><h2 class="text-xl font-bold">Pinned ZIP package</h2><p class="break-all">{ artifact.Url }</p><p>Version: { artifact.Version }</p><p class="font-mono break-all">SHA-256: { artifact.Sha256 }</p><p>Size: { strconv.FormatInt(artifact.Size,10) } bytes</p><p class="text-sm opacity-70">Steps receive ARTIFACT_PATH. Files are read-only; direct execution is blocked.</p></div>
+			@ReleasePackageAttachment(artifact)
 		}
 		<div class="card bg-base-200 p-4">
 			<h2 class="text-xl font-bold mb-4">Snapshotted Steps</h2>

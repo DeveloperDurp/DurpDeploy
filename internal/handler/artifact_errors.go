@@ -11,6 +11,10 @@ import (
 )
 
 func ArtifactErrorStatus(err error) int {
+	var missing *repository.PackageMissingError
+	if errors.As(err, &missing) {
+		return http.StatusUnprocessableEntity
+	}
 	switch {
 	case errors.Is(err, artifact.ErrGateConfig),
 		errors.Is(err, artifact.ErrInvalid),
