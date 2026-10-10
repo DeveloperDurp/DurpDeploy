@@ -4,7 +4,15 @@ set -euo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 runner=${RUNNER_PATH_OVERRIDE:-$root/scripts/go_test.sh}
 test_dir=$(mktemp -d)
-trap 'rm -rf -- "$test_dir"' EXIT
+cleanup_fixture() {
+    if [[ -n ${case_dir:-} && -f $case_dir/child ]]; then
+        read -r child < "$case_dir/child" || true
+        kill -KILL -- "-$child" 2>/dev/null || true
+        kill -KILL "$child" 2>/dev/null || true
+    fi
+    rm -rf -- "$test_dir"
+}
+trap cleanup_fixture EXIT
 mkdir -p "$test_dir/bin"
 
 # Given: a provider that has both run-owned and unrelated containers.
@@ -61,6 +69,24 @@ nested-child)
     kill -TERM "$OUTER_RUNNER_PID"
     wait
     ;;
+late-nested)
+    SCENARIO=late-child bash "$RUNNER_PATH" -count=1 ./fixture &
+    while [[ ! -f $CASE_DIR/late-ready ]]; do sleep 0.01; done
+    kill -TERM "$PPID"
+    wait
+    ;;
+late-child)
+    touch "$CASE_DIR/late-ready"
+    while [[ ! -f $CASE_DIR/snapshot ]]; do sleep 0.01; done
+    SCENARIO=late-grandchild bash "$RUNNER_PATH" -count=1 ./fixture &
+    wait
+    ;;
+late-grandchild)
+    printf '%s\n' "$$" > "$CASE_DIR/child"
+    touch "$CASE_DIR/grandchild-created"
+    sleep 300 &
+    wait
+    ;;
 INT | TERM | HUP)
     # A child must be stopped before resource removal begins.
     sleep 300 &
@@ -81,12 +107,27 @@ if [[ ${SCENARIO:-} == startup-child && $1 == */process-group.tmp ]]; then
 fi
 exec "$REAL_MV" "$@"
 MV
+cat > "$test_dir/bin/find" <<'FIND'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ ${SCENARIO:-} == late-nested && ! -f $CASE_DIR/snapshot ]]; then
+    # Publish another detached group after the cleanup scan takes its snapshot.
+    "$REAL_FIND" "$@" > "$CASE_DIR/find-snapshot"
+    touch "$CASE_DIR/snapshot"
+    while [[ ! -f $CASE_DIR/grandchild-created ]]; do sleep 0.01; done
+    cat "$CASE_DIR/find-snapshot"
+else
+    exec "$REAL_FIND" "$@"
+fi
+FIND
 chmod +x "$test_dir/cleanup" "$test_dir/bin/go"
 chmod +x "$test_dir/bin/mv"
+chmod +x "$test_dir/bin/find"
 export FAKE_CLEANUP="$test_dir/cleanup"
 export REAL_MV=$(command -v mv)
+export REAL_FIND=$(command -v find)
 
-for scenario in success failure timeout INT TERM HUP nested startup-race removal-failure failure-removal list-failure no-provider provider-lost; do
+for scenario in success failure timeout INT TERM HUP nested startup-race late-nested removal-failure failure-removal list-failure no-provider provider-lost; do
     case_dir="$test_dir/$scenario"
     mkdir -p "$case_dir"
     touch "$case_dir/unrelated"
@@ -101,7 +142,7 @@ for scenario in success failure timeout INT TERM HUP nested startup-race removal
     success | no-provider) expected=0 ;;
     failure | timeout | failure-removal) expected=42 ;;
     INT) expected=130 ;;
-    TERM | nested | startup-race) expected=143 ;;
+    TERM | nested | startup-race | late-nested) expected=143 ;;
     HUP) expected=129 ;;
     removal-failure | list-failure | provider-lost) expected=1 ;;
     *) echo "FAIL: unexpected scenario $scenario" >&2; exit 1 ;;
@@ -163,7 +204,7 @@ wait "$second_pid"
 [[ $(cat "$test_dir/first/session") != "$(cat "$test_dir/second/session")" ]]
 
 # A healthy provider needs no Docker/Podman CLI or Bash 4 features.
-for tool in bash dirname mktemp rm mkdir touch cp find sleep; do
+for tool in bash dirname mktemp rm mkdir touch cp sleep; do
     ln -s "$(command -v "$tool")" "$test_dir/bin/$tool"
 done
 cat > "$test_dir/bash3-env" <<'BASH3'
