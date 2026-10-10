@@ -1,367 +1,105 @@
 # DurpDeploy
 
-A single-binary deployment tool for running bash scripts against environments. Define projects, write deployment steps, manage environment-scoped variables, create immutable releases, and deploy them with live log streaming in the browser.
+A single-binary deployment tool for Bash, PowerShell, and Python scripts.
+Organize projects and environments, capture releases, and deploy with live logs.
 
 ![Main Screen](screenshots/main_screen.png)
 
-## Features
+## What it does
 
-- **Projects** - Organize deployments into projects
-- **Environments** - Define deployment targets (dev, staging, prod) with tags
-- **Steps** - Ordered bash scripts that run sequentially during deployment
-- **Variables** - Key/value pairs scoped to environments, resolved at deploy time
-- **Releases** - Immutable snapshots of steps + variables with version numbers
-- **Deployments** - Execute releases against environments with live SSE log streaming
-- **Approvals** - Manual gate for production deployments requiring admin sign-off
-- **Notifications** - Event-driven Slack, Email, Gotify, and Discord alerts for deployment status
-- **Cancel** - Stop running deployments mid-execution
-- **Remote agents** - Fan out remote steps to every environment- and capability-matched agent over pinned mTLS
+- Ordered script steps, environment-scoped variables, and secret masking.
+- Release snapshots of steps and variables. Refresh affects future deployments;
+  existing deployment snapshots stay frozen.
+- Deployment approvals, cancellation, verification, rollback, and schedules.
+- Remote agent fan-out over pinned mTLS, with environment and capability routing.
+- Reusable templates, runbooks, package repositories, and artifact approval.
+- Slack, email, Gotify, and Discord notifications.
+- Browser sessions, optional MFA/OIDC, bearer API tokens, and an audit log.
 
-## Quick Start
+## Local quick start
 
-### Prerequisites
-
-- Go 1.26+
-- Node.js (for Tailwind CSS build)
-- [templ CLI](https://templ.guide/quick-start/installation)
-- [sqlc](https://docs.sqlc.dev/en/latest/overview/install.html) (only if modifying queries)
-
-### Build
+Install Go 1.26+, Node.js, the [templ CLI](https://templ.guide/quick-start/installation),
+and Docker or Podman. Build and start the development HTTPS proxy:
 
 ```bash
-npm install
+npm ci
 make build
-```
-
-This produces a single `durpdeploy` binary.
-
-### Run
-
-```bash
-./durpdeploy
-```
-
-Server starts on `http://localhost:8080`. A `durpdeploy.db` SQLite file is created automatically on first run.
-
-For local development, `make dev` reuses the encryption key from `.env` or
-`DURPDEPLOY_SECRET_KEY`. When neither is configured, it creates a private,
-gitignored `.local/dev-secret-key` once and reuses it across restarts. Keep this
-file with the development database; losing it makes encrypted values unreadable.
-An existing `/etc/durpdeploy/key` remains the server's first choice. This change
-cannot recover values encrypted with a previously discarded temporary key.
-
-## Usage
-
-1. **Create a project** - Navigate to Projects → New Project
-2. **Add steps** - On the project detail page, add bash script steps in order
-3. **Create environments** - Navigate to Environments → New Environment (e.g., "Production" with tag `prod`)
-4. **Add variables** - On the project detail page, click Variables. Add key/value pairs scoped to environments
-5. **Create a release** - On the project detail page, click Releases. Enter a version (e.g., `1.0.0`)
-6. **Deploy** - On the release, select an environment and click Deploy. Watch logs stream in real time.
-
-## API
-
-DurpDeploy exposes a JSON REST API at `/api/v1/*`. All requests must authenticate with a bearer token:
-
-```bash
-curl -H "Authorization: Bearer ddp_pat_<token>" http://localhost:8080/api/v1/projects
-```
-
-API tokens are created per-user from the `/settings/tokens` page or via the CLI:
-
-```bash
-durpdeploy tokens create --user admin@example.com --name ci
-```
-
-Browser MFA protects browser sessions only. API tokens remain single bearer
-credentials and are not MFA-protected; an MFA reset does not revoke them.
-
-### Optional OIDC sign-in
-
-OIDC is optional. Enable it only with the complete configuration below:
-
-```text
-DURPDEPLOY_URL=https://<public-host>
-DURPDEPLOY_OIDC_ISSUER=https://<issuer-host>
-DURPDEPLOY_OIDC_CLIENT_ID=<client-id>
-DURPDEPLOY_OIDC_CLIENT_SECRET=<secret>
-DURPDEPLOY_OIDC_ADMIN_GROUP=<admin-group>
-DURPDEPLOY_OIDC_DEPLOYER_GROUP=<deployer-group>
-DURPDEPLOY_OIDC_VIEWER_GROUP=<viewer-group>
-DURPDEPLOY_OIDC_DISPLAY_NAME=<display-name>
-DURPDEPLOY_OIDC_GROUP_CLAIM=<claim-name>
-DURPDEPLOY_OIDC_REQUIRE_EMAIL_VERIFIED=<true|false>
-```
-
-The issuer and public URL must be HTTPS origins. Register the exact redirect URI
-`DURPDEPLOY_URL + /login/oidc/callback` with the provider. The requested scopes
-are `openid`, `profile`, and `email`. The local password form remains available
-alongside OIDC, and password login uses the most recently stored local role.
-
-When unset, or set to `true`, the callback requires the ID token to contain the
-literal JSON boolean `email_verified: true`. Explicit lowercase
-`DURPDEPLOY_OIDC_REQUIRE_EMAIL_VERIFIED=false` accepts a present literal JSON
-boolean `email_verified: true` or `email_verified: false`, after normal ID token
-signature, issuer, audience, and nonce verification. Missing, null, string, and
-numeric claims remain rejected. This weakens identity assurance, so use it only
-where Authentik independently establishes address ownership. The first email match links to
-the one local account with that email. If no account matches, OIDC creates a
-user with an empty password, so that user must continue using OIDC.
-Configured groups map to roles with admin, then deployer, then viewer precedence.
-Each successful OIDC login synchronizes the stored name, email, and role. A role
-change deletes that user's browser sessions. Removing a group is observed on the
-next OIDC login only. There is no SCIM or provider back-channel deprovisioning.
-
-OIDC reauthentication is handled by the identity provider, while the application
-binds the result to the existing local session and OIDC identity. Logout is local
-only: it clears the DurpDeploy browser session and does not log out of the
-provider. DurpDeploy does not persist provider tokens, authorization codes, or
-raw claims, and OIDC does not authenticate API tokens. If the provider is down,
-the password login, existing sessions, health endpoint, and bearer API remain
-available. An OIDC-created account can be recovered by an administrator through
-the normal local user recovery process; there is no self-service password reset.
-
-The full API reference is available at `/api/swagger/` in a running server (no auth required).
-
-### Agent skills
-
-DurpDeploy serves an Agent Skills discovery index so your AI agents can
-learn to drive your instance. Two ways to install it:
-
-1. In your opencode config, add
-   `skills: { urls: ["https://your-durpdeploy-host/.well-known/skills/"] }`
-   (cached under `~/.cache/opencode/skills/`), or copy the served
-   `SKILL.md` to `~/.config/opencode/skills/durpdeploy/SKILL.md`.
-2. Generic agents: fetch `/.well-known/skills/index.json`, then the
-   listed `SKILL.md`, and follow it.
-
-Remote agents use the backward-compatible `agent/1` and `agent/2` protocols.
-The `v0.1.0` agent source tag remains compatible for Bash-only work. Protocol
-v2 agents report Bash, PowerShell, and Python capabilities so the control plane
-can dispatch each remote step only to compatible agents. Keep the paired state
-directory when upgrading.
-
-## Architecture
-
-```
-cmd/server/main.go        Entry point
-internal/
-  handler/                HTTP handlers (chi routes)
-  repository/             Thin wrapper around sqlc-generated queries
-  runner/                 Deployment execution engine + SSE log broker
-  server/                 Router setup
-  migrate/                Goose migration runner
-migrations/               SQL schema migrations
-queries/                  sqlc query definitions
-views/                    Templ templates (pages, components, layouts)
-static/                   Embedded static assets (JS, CSS)
-```
-
-**Stack:** Go + chi + SQLite (modernc.org/sqlite) + sqlc + goose + Templ + HTMX + Alpine.js + Tailwind CSS + DaisyUI
-
-## Development
-
-```bash
-# Generate templ files
-make templ-generate
-
-# Build Tailwind CSS
-make tailwind-build
-
-# Full build
-make build
-
-# Run with hot-reload behind an ephemeral Caddy HTTPS proxy (requires Docker or Podman)
 make dev
 ```
 
-The asset build uses Tailwind CSS 4 and DaisyUI 5. Sources and both custom
-themes live in `static/css/input.css`; there is no JavaScript Tailwind config.
-`make tailwind-build` runs `@tailwindcss/cli` and bundles the MIT license
-notices in `static/css/tailwind.licenses.txt`. The UI requires Safari 16.4+,
-Chrome 111+, or Firefox 128+.
-
-Tailwind and its CLI are pinned to 4.3.0 because CLI 4.3.3 pins an older
-Parcel watcher that pulls in vulnerable `braces`. Check `npm audit` and the
-resolved watcher dependencies before upgrading the CLI.
-
-`make dev`, `make dev-postgres`, and `make dev-mssql` keep the app on
-`http://localhost:8080` and expose it through `https://localhost:8443`. The
-proxy creates a temporary local CA and one certificate for `localhost`, the
-loopback addresses, and every host IP reported at startup. Accept the local
-browser warning, import the printed CA certificate into your browser, or use
-`curl -k`. The proxy and certificate files are removed when the dev command
-exits.
-
-Configure the ephemeral proxy without installing Caddy on the host:
+In another terminal, create the first administrator:
 
 ```bash
-DEV_HTTPS_PROXY_CONTAINER=my-dev-proxy \
-DEV_HTTPS_PROXY_PORT=9443 \
-DEV_HTTPS_PROXY_BACKEND=host.docker.internal:8080 make dev
+./durpdeploy admin create --email admin@example.com --password '<strong-password>'
 ```
 
-The container engine must support `host-gateway`; startup fails clearly if the
-host backend cannot be reached through that mapping. Docker is preferred when
-available, with a healthy Podman engine used otherwise.
+Open `https://localhost:8443`. Trust the temporary CA printed by `make dev`.
+The backend listens on `http://localhost:8080` and uses `durpdeploy.db` by default.
+Keep the development encryption key with that database.
+See [development and testing](docs/development.md) for other databases,
+proxy options, generated assets, and test commands. Use `make demo` for a populated
+instance with a paired agent and retained manual-test fixtures.
 
-For a populated demo, run `make demo`. It starts a server on a random local
-HTTPS port at `citadel.durp.loc`, creates `admin@durp.info` with a generated
-simple password, pairs an agent with host and container execution, verifies
-remote Bash/Python/PowerShell containers, and runs `make e2e-test`. Start the
-local engine's Unix socket first (`systemctl --user start podman.socket` on
-Citadel). The command prints the URL,
-credentials and stop command, then leaves the app and agent running. Each
-demo has separate data and resources. See [manual demo checks](docs/manual-e2e.md)
-for requirements, retained examples and teardown.
-After server/template/asset changes, run `make demo-refresh DEMO_DIR=/old/demo/path`
-to rebuild and restart only the server, preserving its URL, login, database
-and paired agent. Database changes require
-`make demo-refresh-full DEMO_DIR=/old/demo/path`, which creates a fresh populated
-demo and retains the old data. Use full refresh for agent/startup configuration
-changes too. Stop it with
-`make demo-stop DEMO_DIR=/new/demo/path` after workloads have finished.
+## Deployment workflow
 
-`make e2e-test` exercises the SQLite database of an already-running server; it
-does not build or start one. Override the target with
-`DURPDEPLOY_BASE_URL=https://localhost:8443 make e2e-test` (the local internal
-CA is accepted automatically) or set `DURPDEPLOY_DB` when the running SQLite
-server uses a non-default database path. The harness expects the configured
-`E2E_ADMIN_EMAIL` to already be an `admin`; if it is missing, it will use
-`durpdeploy admin create` through `DURPDEPLOY_E2E_CLI` (defaulting to
-`./durpdeploy` when that binary is executable). If the CLI path is unavailable,
-build DurpDeploy first and set `DURPDEPLOY_E2E_CLI` to an executable binary.
-Bare SQLite paths use WAL, foreign keys, and a 5-second `busy_timeout` by
-default. Explicit DSN query options are preserved. Use
-`make e2e-test-isolated` for the previous clean-room build-and-start workflow
-used by CI.
+1. Create a project and its ordered script steps.
+2. Create environments and add environment-scoped variables.
+3. Create a release to capture the project configuration.
+4. Select an environment and deploy the release.
+5. Follow logs and approvals, then inspect verification results.
 
-Both suites test file handoff between deployment steps through the API and
-web form. `make e2e-test` prints the `stage-handoff-…` project URL and leaves
-that project in the running server's database for inspection. The isolated
-suite removes its temporary database after the run.
+Server steps require a container image and a ready Docker/Podman runtime.
+Step containers receive no runtime socket or control-plane mount. A remote step
+runs on every matching active agent; there is no local fallback.
 
-`make e2e-test` also leaves a `terraform-approval-…` project with real Terraform
-plan/apply steps and three deployments: approved, rejected, and awaiting your
-approval. It prints their URLs. The demo uses Terraform's built-in
-`terraform_data` resource and creates no cloud resources. The pending plan
-expires after 24 hours; re-run the deployment to generate a fresh plan.
-All scenarios from this command remain repeatable manually. See
-[the manual E2E checklist](docs/manual-e2e.md) for retained examples, test
-accounts, API checks, and expected results. The command prints project links
-and leaves a lifecycle approval waiting for review as well.
-The harness builds the existing pinned Terraform test image on the server's
-container engine. Set `DURPDEPLOY_CONTAINER_RUNTIME` and
-`DURPDEPLOY_CONTAINER_URL` to match the server when it uses a non-default engine
-or socket. The project, release, and deployment history remain after expiry.
+## API and agents
 
-The running-instance suite includes API and web CRUD, roles and CSRF,
-templates and interpreters, step file handoff, deployment lists and exports,
-request validation, secret masking, verification and rollback, and runbook
-creation, execution, immutable versions, retry, and schedules. It also uses a
-real browser against that same server to check resource create/edit/delete
-dialogs, step dialogs, runbook version creation, home charts, both themes, and
-mobile layouts. Browser
-checks require a working Docker or Podman engine. Test runbooks and deployment
-fixtures remain available for inspection; test schedules are disabled.
-
-Startup/recovery, other database engines, external package repositories, OIDC
-providers, and remote-agent protocols have dedicated fixture suites. A test
-against one running instance does not replace those configuration-specific
-checks.
-
-## Production Deploy
-
-For a small team deployment, DurpDeploy runs as a single Go process behind
-Caddy, which terminates HTTPS and reverse-proxies to `localhost:8080`. The
-binary ships with argon2id password hashing, DB-backed session auth, CSRF
-protection on every state-changing request, and an audit log. See
-[`docs/deploy.md`](docs/deploy.md) for the full runbook — provisioning a fresh
-Debian 12 VM end to end takes about 20 minutes.
-
-The first admin user is created with a one-shot CLI command (no server running
-required). The password is hashed with argon2id and stored in the `users`
-table; nothing in the DB is plaintext:
+The JSON API lives at `/api/v1`. Create a user token in **Settings → Tokens**
+or with the CLI, then send it as a bearer credential:
 
 ```bash
-durpdeploy admin create --email admin@example.com --password '<strong-password>'
+./durpdeploy tokens create --user admin@example.com --name ci
+curl -H 'Authorization: Bearer ddp_pat_<token>' http://localhost:8080/api/v1/projects
 ```
 
-The database path is configurable via the `DURPDEPLOY_DB` env var; it defaults
-to `durpdeploy.db` in the current directory for local dev. Production sets it
-to `/var/lib/durpdeploy/durpdeploy.db` via the systemd unit.
+Browser MFA protects browser sessions only. API tokens remain single bearer
+credentials; an MFA reset does not revoke them. The public Swagger reference
+is at `/api/swagger/` on a running server.
 
-Set `DURPDEPLOY_URL=https://durpdeploy.example.com` in production. This is the
-fixed browser origin and passkey RP identity; changing its hostname or origin
-invalidates existing passkeys. Users can optionally enroll browser MFA from
-Security and must store one-time recovery codes securely when displayed.
+External agents can discover the shipped [operator skill](skills/durpdeploy/SKILL.md)
+at `/.well-known/skills/index.json` or `/.well-known/agent-skills/`.
+For opencode, add `skills: { urls: ["https://your-host/.well-known/skills/"] }`,
+or copy the served skill into `~/.config/opencode/skills/durpdeploy/SKILL.md`.
 
-## Roles
+Remote agents support `agent/1`, `agent/2`, and `agent/3`. The `v0.1.0` source tag
+remains Bash-only compatible. Container steps require `agent/3`; older protocols
+are host-only. Preserve paired state when upgrading.
 
-Three roles, set at user-creation time and stored in `users.role`:
+## Guides
 
-| Role       | Reads                          | Writes                                                | Sees audit log |
-|------------|--------------------------------|-------------------------------------------------------|----------------|
-| `admin`    | Everything                     | Everything                                            | Yes (`/admin/audit`) |
-| `deployer` | Everything                     | Everything — same writes as `admin`                   | No             |
-| `viewer`   | Everything                     | Nothing — every POST/PUT/PATCH/DELETE returns 403     | No             |
+| Task | Guide |
+| --- | --- |
+| Install with Compose | [Deployment](docs/deploy.md) |
+| Install on Kubernetes | [Helm chart](charts/durpdeploy/README.md) |
+| Configure remote agents | [Agent operations](docs/agents.md) and [protocol](docs/agent-protocol.md) |
+| Back up, restore, or prune audit logs | [Backup and maintenance](docs/backup-restore.md) |
+| Set up optional OIDC | [OIDC / Authentik](docs/authentik-oidc.md) |
+| Assign user permissions | [Roles](docs/roles.md) |
+| Configure notifications | [Notifications](docs/notifications.md) |
+| Review generated plans | [Artifact approval](docs/artifact-approval.md) |
+| Understand security boundaries | [Security](docs/security.md) and [attack drill](docs/attack-drill.md) |
+| Reproduce CI security gates | [Security scanning](docs/security-scanning.md) |
+| Build and test | [Development](docs/development.md), [manual E2E](docs/manual-e2e.md), [mobile CI](docs/mobile-browser-ci.md) |
+| Change the UI | [Design system](DESIGN.md) |
 
-**Per-project authorization is enforced** — every project has a `project_members`
-row for each user who can read or write to it. Global admins bypass the
-check; non-admins must be a member. A non-member hitting a project-scoped
-route gets 404 (to hide existence) or 403 (depending on the route). The
-practical "least privilege" is to make non-admins `viewer` if they don't
-need to trigger deploys. Full details in [`docs/roles.md`](docs/roles.md).
+## Limits
 
-## Security
+- No SSH-based deployment targets.
+- No parallel step execution or CI/build pipeline.
+- No Kubernetes-native execution backend. The chart hosts the server;
+  use standalone agents for executable steps.
+- Container execution shares the runtime host's kernel. Runtime socket access
+  grants host authority. Trust script authors and isolate execution hosts.
 
-Pinned Go vulnerability, source-analysis, and secret-scanning gates run in CI.
-See [local commands, blocking policy, and reviewed baseline](docs/security-scanning.md).
-
-The threat model — what DurpDeploy defends against, what it doesn't, and the
-five-minute hands-on attack drill — is documented in
-[`docs/attack-drill.md`](docs/attack-drill.md). The summary:
-
-- **Defends against:** unauthenticated deploys, CSRF on a teammate's browser,
-  password DB leak (argon2id, per-user salt, ~100ms per guess), cross-project
-  write access (per-project `project_members` — P1-1), secret-at-rest
-  exposure (AES-256-GCM for `variables` and `release_variables.value` —
-  P1-3), deployment scripts (minimal environment, zero capabilities,
-  read-only service paths, and service cgroup limits — P1-4), containerized
-  agent boundaries (read-only root, private writable paths, zero capabilities, NoNewPrivs,
-  cgroups, and no host or control-plane mounts), naive log redaction
-  (regex-based scrubber for literal secrets,
-  common credential patterns, and split writes — P1-5), unrecoverable
-  data loss (Litestream continuous WAL replication + monthly restore drill
-  — P1-6), and unauthorized approval of `pending_approval` deployments
-  (admin-only gate on `/deployments/{id}/approve` — P2-1; the stored
-  `required_approver_role` is descriptive only, the real gate is the handler
-  check).
-- **Partially defends against:** backup monitoring (P2-4 — the binary polls
-  a user-supplied check command and fires `BackupUnhealthy` on failure,
-  but does not enforce the originally planned 36h age threshold). Audit
-  retention (P2-5 — `audit prune --days N` ships and preserves rows tied
-  to live deployments/releases, but the default 180-day window and the
-  daily systemd timer are operator-deployed, not auto-installed).
-
-Server-side steps require a container image and use the embedded agent through
-a local Docker or Podman socket. The Compose stack configures Docker by default;
-`compose.podman.yml` selects the rootless Podman socket. Step containers receive
-no runtime socket or control-plane mount, and there is no host-execution
-fallback. Set `DURPDEPLOY_EMBEDDED_AGENT_ENABLED=false` to disable this path.
-Kubernetes-native execution is not implemented yet; use standalone agents for
-executable steps from a Kubernetes installation. See
-[the deployment runbook](docs/deploy.md) for setup and isolation limits.
-
-## What It Does Not Do
-
-- No SSH-based deployment targets
-- No local fallback: a remote step with no matching agent fails the deployment
-- No parallel step execution
-- No CI/build features
-- No Kubernetes or cloud integrations
-- No PowerShell support (bash only)
-
-## License
-
-MIT
+**Stack:** Go, chi, SQLite/PostgreSQL/SQL Server, sqlc, goose, templ,
+HTMX, Alpine.js, Tailwind CSS, and DaisyUI. **License:** MIT.

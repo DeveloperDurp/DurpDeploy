@@ -1,25 +1,28 @@
 # Agent protocol
 
-`agent/1`, `agent/2`, and `agent/3` are the outbound-only JSON contracts
-between DurpDeploy and a remote agent. Version 1 is Bash-only host execution.
+`agent/1`, `agent/2`, and `agent/3` are the JSON contracts between DurpDeploy
+and a remote agent. Paired operation uses outbound agent connections; pairing
+uses a temporary inbound callback listener on the agent. Version 1 is Bash-only host execution.
 Version 2 adds fixed host interpreter reporting. Version 3 adds explicit
 host/container modes and ready Docker/Podman container capabilities.
 
 ## Endpoints and payloads
 
-All JSON requests are exactly one object and require a present, non-null
+Regular protocol JSON requests are exactly one object and require a present, non-null
 `protocol` of `agent/1`, `agent/2`, or `agent/3`. They reject unknown fields, trailing JSON
 values, malformed JSON, and every other protocol value. Pairing remains
 `agent/1` so existing identities can upgrade without re-pairing.
 
 | Endpoint | Request contract | Notes |
 | --- | --- | --- |
-| `POST /agent/v1/pairings/server-init` | `PairRequest` | Server-side pairing completion over mTLS. The first call uses `completion_ack: false`; after durable confirmation the same request is retried with `completion_ack: true` to perform listener cleanup. |
+| `POST /agent/v1/pairings/server-init` | `PairRequest` | Server-initiated pairing completion on the agent's temporary mTLS listener. The first call uses `completion_ack: false`; after durable confirmation the same request is retried with `completion_ack: true` to perform listener cleanup. |
 | `POST /agent/v1/poll` | `PollRequest` | Version 1 sends protocol and agent version and is recorded as Bash-only. Version 2 also requires `supported_interpreters`, containing only `bash`, `pwsh`, or `python3`. A no-work response has no deployment payload. |
 | `POST /agent/v1/deployments/{id}/start` | `StartRequest` | Acknowledges that the claimed work started. |
 | `POST /agent/v1/deployments/{id}/heartbeat` | `HeartbeatRequest` | Response carries cancellation state and staged server fingerprints. |
 | `POST /agent/v1/deployments/{id}/logs` | `LogBatchRequest` | Ordered line events. |
 | `POST /agent/v1/deployments/{id}/result` | `ResultRequest` | Result is `succeeded` or `failed`; v3 also accepts `cleanup_unconfirmed`. |
+| `POST /agent/v1/deployments/{id}/cancelled` | `CancelledRequest` | Cancellation acknowledgement is distinct from a normal result. |
+| `POST /agent/v1/deployments/{id}/artifact` | Object containing `claim_token` | Server-side ZIP download contract on the mTLS listener; requires the assigned agent's live step claim. No `protocol` field. The pinned agent executor does not yet use this endpoint. |
 
 Version 3 polls require all four capability arrays:
 `supported_interpreters`, `execution_modes`, `container_runtimes`, and
@@ -43,7 +46,6 @@ success. The environment and agent remain blocked while cleanup is unresolved.
 After local reconciliation, a ready authenticated v3 poll records
 `cleanup_confirmed_at` separately and releases the queue. Older polls cannot
 confirm cleanup. Pairing reactivation cannot clear this obligation.
-| `POST /agent/v1/deployments/{id}/cancelled` | `CancelledRequest` | Cancellation acknowledgement is distinct from a normal result. |
 
 The endpoint route, active mTLS identity, and later persistence checks bind a
 claim to one agent. This contract deliberately does not document credential
@@ -53,7 +55,8 @@ material, certificate bodies, or secret values.
 
 | Contract | Fixed value |
 | --- | --- |
-| Any request body | 1 MiB |
+| Regular protocol JSON request body | 1 MiB |
+| Artifact download request body | 4 KiB |
 | Log batch | 100 events and 256 KiB |
 | Log line | 16 KiB UTF-8 bytes |
 | Poll interval / maximum long poll | 25 seconds |

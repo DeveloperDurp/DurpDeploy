@@ -1,80 +1,40 @@
 # Notifications
 
-DurpDeploy supports event-driven notifications for deployment start, success, and failure. Every event is recorded in the internal notification history (visible to admins at `/admin/notifications`), and can optionally be delivered to external services.
+Deployment start, success, and failure events appear at `/admin/notifications`.
+External delivery uses project settings or administrator-managed global channels:
 
-Notifications are configured in two parts:
-1. **Server-wide settings**: Configured via environment variables (primarily for Email/SMTP).
-2. **Project-specific settings**: Configure these settings in **Project** → **Notifications**.
+- Project events: **Project menu → Settings → Notifications**.
+- System events, including backup and agent health: `/admin/notifications/settings`.
+- SMTP transport: server environment variables, shared by email delivery.
 
----
+## Delivery channels
 
-## Email (SMTP)
+Create the provider credential, enter the settings below, and save the changes.
 
-Email notifications use a server-wide SMTP configuration. Individual projects then define which email addresses must receive notifications.
+| Channel | Settings |
+| --- | --- |
+| Email | Comma-separated recipient addresses; SMTP must be configured on the server |
+| Slack | Incoming Webhook URL |
+| Discord | Channel webhook URL from **Integrations → Webhooks** |
+| Gotify | Server URL and application token |
 
-### 1. Server-wide Configuration
+## SMTP
 
-Set the environment variables that follow for the DurpDeploy process:
+| Variable | Purpose |
+| --- | --- |
+| `DURPDEPLOY_SMTP_HOST` | Hostname; required to enable email |
+| `DURPDEPLOY_SMTP_PORT` | Port; required with the hostname, no default |
+| `DURPDEPLOY_SMTP_FROM` | Sender address |
+| `DURPDEPLOY_SMTP_USER` | Username, when authentication is required |
+| `DURPDEPLOY_SMTP_PASS` | Password, when authentication is required |
 
-| Variable | Description | Example |
-|---|---|---|
-| `DURPDEPLOY_SMTP_HOST` | **Necessary to enable email.** The SMTP server hostname. | `smtp.gmail.com` |
-| `DURPDEPLOY_SMTP_PORT` | The SMTP server port. Defaults to `25` if omitted. | `587` |
-| `DURPDEPLOY_SMTP_FROM` | The "From" address for notification emails. | `deploy@example.com` |
-| `DURPDEPLOY_SMTP_USER` | The SMTP username (if authentication is necessary). | `deploy@example.com` |
-| `DURPDEPLOY_SMTP_PASS` | The SMTP password (if authentication is necessary). | `app-specific-password` |
+The Go SMTP client attempts STARTTLS when the server advertises it.
+Keep passwords, tokens, and webhook URLs out of source control.
 
-**Note on Security:** `smtp.SendMail` (used by DurpDeploy) will attempt to use `STARTTLS` if the server advertises it.
+## Delivery history
 
-### 2. Project Configuration
+Administrators inspect delivery status at `/admin/notifications`:
 
-Once the server-wide SMTP host is configured:
-
-1. Navigate to your project in the DurpDeploy UI.
-2. Click the **Notifications** button in the header.
-3. In the **Email** card, enter one or more email addresses separated by commas.
-4. Click **Save Changes**.
-
----
-
-## Slack
-
-Slack notifications use Incoming Webhooks. Configuration is per-project only.
-
-1. Create an **Incoming Webhook** in your Slack workspace.
-2. Navigate to your project in DurpDeploy → **Notifications**.
-3. In the **Slack** card, paste the Webhook URL.
-4. Click **Save Changes**.
-
----
-
-## Discord
-
-Discord notifications use Webhooks and are per-project.
-
-1. In your Discord channel settings, go to **Integrations** → **Webhooks** and create a new webhook.
-2. Copy the **Webhook URL**.
-3. Navigate to your project in DurpDeploy → **Notifications**.
-4. In the **Discord** card, paste the Webhook URL.
-5. Click **Save Changes**.
-
----
-
-## Gotify
-
-Gotify notifications are per-project, allowing each project to point to a different Gotify server or application.
-
-1. Create an application in your Gotify instance to get an **App Token**.
-2. Navigate to your project in DurpDeploy → **Notifications**.
-3. In the **Gotify** card, enter your Gotify server URL (e.g., `https://gotify.example.com`) and the App Token.
-4. Click **Save Changes**.
-
----
-
-## Observability
-
-Admins can view the delivery status of all notification events at `/admin/notifications`.
-
-- **Success (Green)**: The provider accepted the message.
-- **Failed (Red)**: The provider returned an error (e.g., 404, invalid credentials, SMTP timeout). Hover or click the row to see the error details.
-- **Skipped (Gray)**: The provider was not configured for this project or (in the case of Email) the server-wide SMTP host is not set.
+- **Success:** the provider accepted the message.
+- **Failed:** delivery returned an error; inspect the row details.
+- **Skipped:** the channel or required SMTP configuration is absent.

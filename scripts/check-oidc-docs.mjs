@@ -95,16 +95,23 @@ function checkDocuments(documentRoot) {
 	if (variables.length !== expectedVariableCount) {
 		fail(`expected ${expectedVariableCount} OIDC variables, found ${variables.length}`);
 	}
+	const configurationFile = "docs/authentik-oidc.md";
+	const configuration = documents.find(({ file }) => file === configurationFile);
+	for (const variable of variables) {
+		if (!configuration.text.includes(variable)) {
+			fail(`missing ${variable} in ${configurationFile}`);
+		}
+	}
 	for (const { file, text } of documents) {
-		if (!text.includes("DURPDEPLOY_OIDC_REQUIRE_EMAIL_VERIFIED")) {
-			fail(`missing DURPDEPLOY_OIDC_REQUIRE_EMAIL_VERIFIED in ${file}`);
+		if (file !== configurationFile && !text.includes("authentik-oidc.md")) {
+			fail(`missing OIDC configuration link in ${file}`);
 		}
 	}
 	for (const [pattern, description] of [
 		[/\/login\/oidc\/callback/g, "exact callback path"],
 		[/verified email[^\n.]{0,100}(?:links|match)/i, "verified-email linking"],
 		[/logout[^\n.]{0,100}local only/i, "local-only logout"],
-		[/tokens?[\s\S]{0,150}(?:not|never|does not) (?:persist|store)/i, "no token persistence"],
+		[/tokens?[\s\S]{0,150}(?:not|never|does not)\s+(?:persist|store)|(?:not|never|does not)\s+(?:persist|store)[\s\S]{0,120}tokens?/i, "no token persistence"],
 		[/next OIDC login/i, "next-SSO-login deprovision timing"],
 		[/unset[\s\S]{0,180}literal JSON boolean `email_verified: true`/i, "strict default email verification"],
 		[/DURPDEPLOY_OIDC_REQUIRE_EMAIL_VERIFIED=false/i, "explicit lowercase false setting"],

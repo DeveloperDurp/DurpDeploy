@@ -14,9 +14,8 @@ spec:
   template:
     metadata:
       annotations:
-        # Force pod restart when the secret-key Secret content changes.
-        # The binary reads the key on every boot, so a key rotation
-        # becomes a rolling restart.
+        # Helm value changes to the rendered Secret update this checksum.
+        # Manual live Secret changes require an explicit Deployment restart.
         checksum/secret-key: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
         # Same trick for the Postgres password — pgx reads it on every
         # new connection but the binary opens a pool once at boot, so
@@ -113,8 +112,7 @@ spec:
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           # /tmp is needed by the runner for tmp files; /data is a
-          # historical volume for SQLite (unused on Postgres but kept
-          # for parity with the systemd unit).
+          # historical SQLite volume retained for compatibility on Postgres.
           volumeMounts:
             - name: tmp
               mountPath: /tmp

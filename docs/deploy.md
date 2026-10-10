@@ -1,14 +1,9 @@
-# DurpDeploy — Production Deploy Runbook (Debian 12)
+# Production deployment
 
-This walks through provisioning a fresh Debian 12 VM to run DurpDeploy behind
-Caddy with automatic HTTPS. At the end you will have:
-
-- A `durpdeploy` system user that runs the Go binary with systemd.
-- Caddy in front, terminating TLS and reverse-proxying to `localhost:8080`.
-- A first admin user created via the CLI.
-- The dashboard reachable at `https://<your-host>/`.
-
-**Time:** ~20 minutes on a fresh VM, assuming DNS is already pointed.
+Run DurpDeploy with Docker Compose behind Caddy for HTTPS. The stack includes
+SQLite storage, an embedded container executor, and a Litestream backup sidecar.
+You need Docker with Compose, a DNS name pointing to the host, and inbound
+ports 80 and 443. Restrict the separate agent port 10943 to agent networks.
 
 ## HTTP connection limits
 
@@ -54,26 +49,28 @@ are the official upstream images.
 # 1. Clone and prep
 git clone <repo> durpdeploy && cd durpdeploy
 cp compose.example.yml compose.yml
-cp deploy/litestream.example.yml deploy/litestream.yml
-$EDITOR deploy/litestream.yml   # fill in S3 bucket, path, region, etc.
+$EDITOR deploy/litestream.example.yml   # fill in S3 bucket, path, region, etc.
 
 # 2. Generate the encryption key (32 random bytes, base64)
 mkdir -p secrets
 openssl rand -base64 32 > secrets/durpdeploy_key
 chmod 0600 secrets/durpdeploy_key
+# Rootful Docker: file-backed secrets retain host ownership.
+sudo chown 10001:10001 secrets/durpdeploy_key
+# For rootless Podman, use instead of sudo chown:
+# podman unshare chown 10001:10001 secrets/durpdeploy_key
 
 # 3. Create compose env files
 cat > compose.caddy.env <<'EOF'
 DURPDEPLOY_URL=https://durpdeploy.example.com
-# Optional backend override (default: app:8080 in compose)
-# BACKEND=app:8080
+BACKEND=app:8080
 EOF
 
 cat > compose.app.env <<'EOF'
 # Optional OIDC block (omit all variables if you do not need SSO)
 # DURPDEPLOY_OIDC_ISSUER=https://idp.example.com/realms/example
 # DURPDEPLOY_OIDC_CLIENT_ID=durpdeploy-example
-# DURPDEPLOY_OIDC_CLIENT_SECRET=REPLACE_WITH_CLIENT_SECRET
+# DURPDEPLOY_OIDC_CLIENT_SECRET=<secret>
 # DURPDEPLOY_OIDC_ADMIN_GROUP=durpdeploy-admin
 # DURPDEPLOY_OIDC_DEPLOYER_GROUP=durpdeploy-deployer
 # DURPDEPLOY_OIDC_VIEWER_GROUP=durpdeploy-viewer
@@ -81,7 +78,7 @@ cat > compose.app.env <<'EOF'
 # DURPDEPLOY_OIDC_GROUP_CLAIM=groups
 # DURPDEPLOY_OIDC_REQUIRE_EMAIL_VERIFIED=false  # default true
 
-# Include any other app env your deployment needs, e.g. SMTP or secret key.
+# Include any other app env your deployment needs, e.g. SMTP.
 EOF
 
 cat > compose.litestream.env <<'EOF'
@@ -90,21 +87,40 @@ AWS_ACCESS_KEY_ID=AKIA...
 AWS_SECRET_ACCESS_KEY=...
 EOF
 
-# Keep root .env out of the runtime path for compose app container env to avoid
-# leaking AWS credentials into the application process.
+# Compose uses .env for interpolation of its explicit public listener setting.
+cat > .env <<'EOF'
+DURPDEPLOY_AGENT_PUBLIC_URL=https://durpdeploy.example.com:10943
+EOF
+chmod 0600 compose.app.env compose.caddy.env compose.litestream.env
+# Keep AWS credentials in compose.litestream.env, not .env or compose.app.env.
 
-# 4. Cache the staging helper in the execution runtime, then build and start
+# 4. Build and verify key access without printing the key
+docker compose build app
+docker compose run --rm --no-deps --entrypoint /bin/sh app -ec \
+  'su-exec 10001:10001 test -r /etc/durpdeploy/key'
+
+# 5. Cache the staging helper in the execution runtime, then start
 STAGING_HELPER_IMAGE=docker.io/library/alpine@sha256:ce64758a109eb420d874a118f87920e625e12d3634e03b4a5573fd9f6e5d3507
 docker pull "$STAGING_HELPER_IMAGE"
-docker compose up -d --build
+docker compose up -d
 # With rootless Podman, use instead:
 # podman pull "$STAGING_HELPER_IMAGE"
 # podman compose -f compose.yml -f compose.podman.yml up -d --build
 
-# 5. Bootstrap the first admin
-docker compose exec app admin create \
+# 6. Bootstrap the first admin
+docker compose run --rm --no-deps app admin create \
   --email admin@example.com --password '<strong-password>'
 ```
+
+Docker Compose [file-backed secrets](https://docs.docker.com/reference/compose-file/services/#secrets)
+ignore the declared `uid`, `gid`, and `mode`. The key must be readable by
+container UID 10001 without granting other users access. Rootless engines and
+user-namespace remapping require the corresponding mapped host ownership;
+the Podman command above applies ownership inside its user namespace.
+For Podman, use `podman compose -f compose.yml -f compose.podman.yml` for all
+Compose commands, including the build, key-access check, and admin creation.
+Keep `BACKEND=app:8080` in Caddy's environment; its default `localhost:8080`
+is for a reverse proxy on the same host as a bare server binary.
 
 ### Remote agent control plane
 
@@ -138,30 +154,10 @@ boundary is:
   DURPDEPLOY_AGENT_VERSION=<agent-version>
   ```
 
-The standalone agent repository provides a co-located Compose demonstration
-and validation path. Containerized agent execution does not use a per-step
-`chroot`. The container has a read-only root, private writable state and `/tmp`,
-one preselected service and script UID `10001`, zero capabilities, `NoNewPrivs`,
-service-owned cgroup limits, and no
-host or control-plane mounts. The operator or user remains responsible for the
-contents of every script run in the container, the secrets supplied to it, its
-network access, and its effects inside that container. Read-only does not stop
-scripts from reading visible files or exfiltrating supplied secrets.
-
-Co-location is compatible with these boundaries, but production agents should
-run remotely on the host where the deployment commands belong. The standalone
-service has a private state volume and no server database, server key, Docker
-socket, or inbound port. From the standalone agent checkout, use either:
-
-```bash
-docker compose -f /path/to/durpdeploy-agent/compose.yml up -d --build agent
-podman compose -f /path/to/durpdeploy-agent/compose.yml up -d --build agent
-```
-
-Do not run both commands for the same agent. For systemd, install
-`systemd/durpdeploy-agent.service`, use a dedicated `durpdeploy-agent` user,
-keep `/etc/durpdeploy-agent.env` mode `0600`, and use the commands in
-[`docs/agents.md`](agents.md) for start, status, logs, restart, and stop.
+Agent host-mode execution does not use a per-step `chroot`; scripts share the
+service account. The operator or user remains responsible for scripts, supplied secrets,
+network access, and their effects. Read-only filesystems do not prevent secret
+exfiltration. Install standalone agents using [the agent runbook](agents.md).
 
 DNS must be pointed at the host (port 80/443 open inbound) before the first
 `docker compose up` — Caddy issues Let's Encrypt certs on first request.
@@ -189,54 +185,10 @@ tokens, which are separate single-bearer credentials.
 
 ### Optional OIDC sign-in
 
-OIDC is disabled unless an OIDC-specific variable is set. When enabled, all
-necessary values must be present. Use placeholders for deployment-specific
-values, never a client secret in documentation:
-
-```ini
-DURPDEPLOY_URL=https://<public-host>
-DURPDEPLOY_OIDC_ISSUER=https://<issuer-host>
-DURPDEPLOY_OIDC_CLIENT_ID=<client-id>
-DURPDEPLOY_OIDC_CLIENT_SECRET=<secret>
-DURPDEPLOY_OIDC_ADMIN_GROUP=<admin-group>
-DURPDEPLOY_OIDC_DEPLOYER_GROUP=<deployer-group>
-DURPDEPLOY_OIDC_VIEWER_GROUP=<viewer-group>
-DURPDEPLOY_OIDC_DISPLAY_NAME=<display-name>
-DURPDEPLOY_OIDC_GROUP_CLAIM=<claim-name>
-DURPDEPLOY_OIDC_REQUIRE_EMAIL_VERIFIED=<true|false>
-```
-
-The issuer and `DURPDEPLOY_URL` must be HTTPS origins. Register exactly
-`DURPDEPLOY_URL + /login/oidc/callback` at the provider. The application asks
-for `openid`, `profile`, and `email`. The password login remains beside the SSO
-link, and password login uses the most recently stored local role.
-
-When unset, or set to `true`, the callback requires the ID token to contain the
-literal JSON boolean `email_verified: true`. Explicit lowercase
-`DURPDEPLOY_OIDC_REQUIRE_EMAIL_VERIFIED=false` accepts a present literal JSON
-boolean `email_verified: true` or `email_verified: false`, after normal ID token
-signature, issuer, audience, and nonce verification. Missing, null, string, and
-numeric claims remain rejected. This weakens identity assurance, so use it only
-where Authentik independently establishes address ownership. The first matching email links
-exactly one local account. An email with no match is JIT-created with an empty
-password. Groups map to admin, deployer, or
-viewer, in that precedence order, and each successful OIDC login synchronizes
-name, email, and role. A role change invalidates that user's browser sessions.
-Group removal takes effect on the next OIDC login. There is no SCIM or provider
-back-channel deprovisioning, and no instant deprovisioning between logins.
-
-OIDC reauthentication is completed by the provider and then bound to the local
-session and stored OIDC identity. Local logout clears only the DurpDeploy
-session, not the provider session. The application does not persist provider
-tokens, authorization codes, or raw claims, and OIDC does not issue or protect
-API tokens. If provider discovery or login is unavailable, password login,
-existing sessions, health checks, and bearer API authentication continue to work.
-An OIDC-created empty-password account is recovered by an administrator through
-the existing local user recovery process. There is no self-service password reset.
-
-Use the Debian 12 bare-metal procedure if you must control the host. The
-provided systemd unit applies service-level cgroup and filesystem boundaries.
-Compose is sufficient for most small teams.
+Follow the [OIDC configuration and Authentik guide](authentik-oidc.md).
+It lists the required variables, callback URL, role mapping, and recovery limits.
+For Compose, put the app-specific settings in `compose.app.env`.
+Keep the client secret private and restart the service after changes.
 
 ### Plain Docker (binary distribution only)
 
@@ -300,103 +252,7 @@ hostname change still requires passkey re-enrollment.
 
 ---
 
-## Prerequisites
-
-- A Debian 12 VM with a **public IP** and root/sudo access.
-- A **DNS A record** pointing your hostname (e.g. `durpdeploy.example.com`)
-  at that IP. Caddy cannot get a certificate from Let's Encrypt without it.
-- Ports **80 and 443 open inbound**. The Go server listens on `localhost:8080`
-  only — it is never exposed directly.
-
-### Firewall (ufw)
-
-```bash
-sudo apt update && sudo apt install -y ufw
-sudo ufw default deny incoming
-sudo ufw default allow outgoing
-sudo ufw allow 22/tcp        # SSH — restrict to your IP in production
-sudo ufw allow 80/tcp        # Caddy HTTP (redirect + ACME challenge)
-sudo ufw allow 443/tcp      # Caddy HTTPS
-sudo ufw enable
-sudo ufw status verbose
-```
-
----
-
-## Step 1 — Install Caddy
-
-```bash
-sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https curl
-curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' \
-  | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' \
-  | sudo tee /etc/apt/sources.list.d/caddy-stable.list
-sudo apt update
-sudo apt install -y caddy
-```
-
-Verify:
-
-```bash
-caddy version
-```
-
----
-
-## Step 2 — Create the durpdeploy user and directories
-
-```bash
-sudo useradd --system --shell /usr/sbin/nologin --home /var/lib/durpdeploy durpdeploy
-sudo install -d -o durpdeploy -g durpdeploy -m 0750 /var/lib/durpdeploy
-sudo install -d -o root  -g root  -m 0750 /var/log/caddy
-```
-
-`/var/lib/durpdeploy` holds the SQLite database (and WAL/SHM). The `durpdeploy`
-user owns it. No other account can read it. `/var/log/caddy` is owned by root
-because Caddy initially operates as root. It changes to the `caddy` user for
-the listener. It writes the log file as configured.
-
----
-
-## Step 3 — Build and install the durpdeploy binary
-
-Build on your **workstation** (not the VM — keeps the Go toolchain off prod):
-
-```bash
-# on your workstation, in the durpdeploy checkout
-make build                       # produces ./durpdeploy
-rsync -avz ./durpdeploy user@<vm-host>:/tmp/durpdeploy
-```
-
-Then on the VM:
-
-```bash
-sudo install -m 0755 /tmp/durpdeploy /usr/local/bin/durpdeploy
-/usr/local/bin/durpdeploy version   # should print: durpdeploy dev
-```
-
----
-
-## Step 4 — Generate the secret encryption key
-
-`variables`/`release_variables.value` is encrypted at rest (AES-256-GCM,
-see `docs/security.md`). The server **refuses to boot** without a key, so
-this has to exist before the first start:
-
-```bash
-sudo install -d -o durpdeploy -g durpdeploy -m 0750 /etc/durpdeploy
-openssl rand -base64 32 | sudo -u durpdeploy tee /etc/durpdeploy/key >/dev/null
-sudo chmod 0600 /etc/durpdeploy/key
-```
-
-As an alternative, set `DURPDEPLOY_SECRET_KEY` to the same base64, 32-byte value
-in the systemd unit's `Environment=`. If the file and variable are present, the
-server uses the file. If you lose this key, you cannot decrypt the stored
-secrets. Back up the key with the database.
-
----
-
-## Step 5 — Set up server-side container execution
+## Server-side container execution
 
 Every new server-side step (`execution_target: "local"`) requires a
 `container_image`. The control plane never executes its script on the host.
@@ -414,12 +270,6 @@ The Podman override disables SELinux labelling for the control-plane container
 so it can connect to the host user's socket; step containers retain their own
 security options and receive no socket mount.
 
-For a native systemd installation, give the `durpdeploy` service identity
-permission to access the chosen socket and set `DURPDEPLOY_CONTAINER_RUNTIME`
-to `docker` or `podman`. Set `DURPDEPLOY_CONTAINER_URL` only when the socket is
-not the client's default, for example `unix:///run/podman/podman.sock`. The
-shipped system service hides `/run/user`, so use the system Podman socket rather
-than a rootless user's socket with that unit.
 `DURPDEPLOY_CONTAINER_NAMESPACE` defaults to `durpdeploy`.
 
 Local deployments also require the digest-pinned Alpine staging helper from
@@ -483,45 +333,7 @@ an actionable `last_error`. Agent steps retain host execution on their agent.
 
 ---
 
-## Step 6 — Install the systemd unit
-
-```bash
-sudo install -m 0644 ./systemd/durpdeploy.service /etc/systemd/system/durpdeploy.service
-sudo systemctl daemon-reload
-sudo systemctl enable --now durpdeploy
-sudo systemctl status durpdeploy --no-pager
-```
-
-You must see `active (running)`. If it fails, check the logs:
-
-```bash
-sudo journalctl -u durpdeploy -n 50 --no-pager
-```
-
-The service sets `DURPDEPLOY_DB=/var/lib/durpdeploy/durpdeploy.db`, so the
-database is created in the right place on first start (migrations auto-run).
-
----
-
-## Step 7 — Install the Caddyfile
-
-Edit `./Caddyfile` on your workstation and replace
-`durpdeploy.example.com` with your real hostname, then:
-
-```bash
-rsync -avz ./Caddyfile user@<vm-host>:/tmp/Caddyfile
-# on the VM
-sudo install -m 0644 /tmp/Caddyfile /etc/caddy/Caddyfile
-sudo systemctl reload caddy
-sudo systemctl status caddy --no-pager
-```
-
-Caddy will obtain a Let's Encrypt certificate on the first request — watch the
-logs if TLS setup fails (DNS not propagated, port 443 blocked, etc.):
-
-```bash
-sudo journalctl -u caddy -n 50 --no-pager
-```
+## Reverse proxy trust
 
 DurpDeploy applies login rate limits itself. It trusts forwarding headers from
 loopback proxies by default. If Caddy or another trusted proxy is on a different
@@ -538,198 +350,45 @@ private ranges: every configured address is authorized to speak for clients.
 
 ---
 
-## Step 8 — Create the first admin user
+## Verify the installation
 
-Run the CLI as the `durpdeploy` user so the DB file permissions stay correct:
-
-```bash
-# Generate a strong random password first:
-openssl rand -base64 24
-# Then create the admin (single-quote the password so the shell cannot
-# interpret special characters — `$`, `!`, backticks, etc.):
-sudo -u durpdeploy DURPDEPLOY_DB=/var/lib/durpdeploy/durpdeploy.db \
-    /usr/local/bin/durpdeploy admin create \
-        --email admin@example.com \
-        --password '<paste-the-generated-password-here>'
-```
-
-Expected output:
-
-```
-Created admin user: admin@example.com
-```
-
-Keep the password somewhere safe (a password manager). There is no password
-reset without DB access — see Troubleshooting below.
-
----
-
-## Step 9 — Configure notifications (optional)
-
-DurpDeploy supports event-driven Slack, Email, Gotify, and Discord notifications.
-
-See [**`docs/notifications.md`**](notifications.md) for the full configuration guide, environment variables, and per-project setup steps.
-
----
-
-## Step 10 — Verify
-
-From your workstation:
+Open your public URL, sign in with the admin account, and confirm the dashboard
+loads. Configure optional [notifications](notifications.md) through the UI.
+If startup or TLS fails, check:
 
 ```bash
-curl -I https://durpdeploy.example.com
-# Expect: HTTP/2 303 with Location: /login  (unauthenticated users are
-# redirected to the login page)
-```
-
-Then in a browser:
-
-1. Open `https://durpdeploy.example.com` → must redirect to `/login`.
-2. Log in with the admin email + password you just created.
-3. The dashboard renders.
-
-If anything fails, check the audit log + server logs:
-
-```bash
-sudo journalctl -u durpdeploy -n 100 --no-pager
-# The audit log is in the SQLite DB:
-sudo -u durpdeploy sqlite3 /var/lib/durpdeploy/durpdeploy.db \
-    'SELECT created_at, user_id, action FROM audit_log ORDER BY id DESC LIMIT 20;'
+docker compose ps
+docker compose logs --tail=100 app caddy litestream
 ```
 
 ---
 
 ## Maintenance
 
-### Audit Log Pruning
-
-The `audit_log` table can grow large on busy instances. Use the CLI to prune logs older than a specified number of days:
-
-```bash
-# Prune logs older than 90 days
-sudo -u durpdeploy /usr/local/bin/durpdeploy audit prune --days 90
-```
-
-You can automate this with a daily cron job:
-
-```bash
-# /etc/cron.d/durpdeploy-prune
-0 4 * * * durpdeploy /usr/local/bin/durpdeploy audit prune --days 90
-```
-
-### Backup Health Monitoring (Litestream)
-
-If you use Litestream, you can enable an automatic health check. The check sends
-a notification if replication stops or has a delay. It supports Slack,
-Discord, Gotify, and email.
-
-1. Configure the check command and interval via environment variables in your systemd unit or environment file:
-
-   ```ini
-   # This command should exit with code 0 if healthy.
-   # The example below checks if 'litestream ltx' returns any replication files.
-   Environment=DURPDEPLOY_LITESTREAM_CHECK_COMMAND="litestream ltx -config /etc/litestream.yml /var/lib/durpdeploy/durpdeploy.db | grep -q ."
-   Environment=DURPDEPLOY_LITESTREAM_CHECK_INTERVAL=1h
-   ```
-
-2. Reload and restart:
-
-   ```bash
-   sudo systemctl daemon-reload
-   sudo systemctl restart durpdeploy
-   ```
-
-When the check command fails, a `backup_unhealthy` event is published to all projects that have notifications configured. A `backup_healthy` event is published once the command succeeds again. All health check events are also visible to admins at `/admin/notifications`.
-
----
-
-## Backup
-
-SQLite WAL mode permits a live `sqlite3 .backup` operation. The operation makes
-a consistent snapshot without a server stop. Refer to
-[`docs/backup-restore.md`](backup-restore.md) for setup, verification, and
-restore instructions. It also describes the systemd templates and the
-`scripts/test-backup-restore.sh` acceptance
-test. The short version:
-
-### Option A — daily cron with `sqlite3 .backup` (simplest)
-
-```bash
-sudo install -d -o durpdeploy -g durpdeploy -m 0750 /var/backups/durpdeploy
-# as root:
-echo '0 3 * * * durpdeploy sqlite3 /var/lib/durpdeploy/durpdeploy.db ".backup /var/backups/durpdeploy/durpdeploy-$(date +\%F).db"' \
-    | sudo tee /etc/cron.d/durpdeploy-backup
-```
-
-Then rsync `/var/backups/durpdeploy/` offsite (to S3, a NAS, another VM).
-Keep at least 7 days of retention.
-
-### Option B — litestream (continuous, point-in-time restore) — recommended
-
-Litestream streams the SQLite WAL to S3-compatible storage continuously, so
-you lose at most a few seconds of data on a crash. This is the recommended
-path for a team deployment — follow the "Litestream" section of
-[`docs/backup-restore.md`](backup-restore.md) for install, configuration,
-verification (`litestream ltx`), and restore (`litestream restore`)
-steps.
+For backups, restore drills, audit pruning, and Litestream health alerts,
+follow [backup and maintenance](backup-restore.md). Back up the matching
+server encryption key and agent-listener identity with the database.
 
 ---
 
 ## Troubleshooting
 
-### Caddy cannot read the Caddyfile
-
-```
-Error: loading config: open /etc/caddy/Caddyfile: permission denied
-```
-
-AppArmor or SELinux is blocking it. On Debian, AppArmor is the usual suspect.
-Check with `sudo aa-status`. If Caddy's AppArmor profile is in enforce mode,
-either set it to complain mode while you debug:
-
-```bash
-sudo aa-complain /usr/bin/caddy
-sudo systemctl restart caddy
-```
-
-or adjust the profile to allow reading `/etc/caddy/Caddyfile`.
-
-### `durpdeploy` user cannot write to its DB
-
-```
-migration failed: attempt to write a readonly database
-```
-
-The `WorkingDirectory=/var/lib/durpdeploy` does not exist or is not owned by
-the `durpdeploy` user. Re-run Step 2 — specifically the `install -d` line
-that creates `/var/lib/durpdeploy` with the right ownership.
-
-### Let's Encrypt rate limit
-
-```
-rate limited: too many certificates already issued for exact set of domains
-```
-
-Let's Encrypt allows 5 duplicate certificates per week. If you have been
-reprovisioning the VM repeatedly, either:
-
-- Use the staging endpoint during tests. Add `acme_ca https://acme-staging-v02.api.letsencrypt.org/directory` to the global options in the Caddyfile.
-- Wait a week, or
-- Reuse the certificate from a previous VM (copy `/var/lib/caddy/.local/share/caddy/certificates/`).
-
 ### Forgot the admin password
 
-There is no email-reset flow. Reset via the CLI on the VM:
+There is no email-reset flow. Another administrator can reset the password
+through **Admin → Users → Edit**, preserving the account's role and memberships.
+If no administrator can log in, create a separate recovery administrator using
+an unused email:
 
 ```bash
-sudo -u durpdeploy sqlite3 /var/lib/durpdeploy/durpdeploy.db \
-    "DELETE FROM users WHERE email='admin@example.com';"
-sudo -u durpdeploy /usr/local/bin/durpdeploy admin create \
-    --email admin@example.com --password '<new-password>'
+docker compose run --rm --no-deps app admin create \
+    --email recovery-admin@example.com --password '<new-password>'
 ```
 
-(Deleting the user invalidates their sessions via the `sessions.user_id` foreign
-key `ON DELETE CASCADE`.)
+Log in as the recovery administrator and edit the original account. Password
+changes invalidate that user's browser sessions and pending challenges; revoke
+leaked API tokens separately. Remove the temporary recovery account afterward.
+Deleting and recreating the original user loses memberships and token records.
 
 ### The dashboard loads but deploys fail
 

@@ -25,9 +25,14 @@ Before approval, download and independently inspect the exact artifact using
 trusted tools. For Terraform, run `terraform show` with a trusted toolchain and
 providers, then compare the result with the review. Checksums bind immutable
 bytes; they do not establish that the summary accurately describes those bytes.
-Secret-key rotation re-encrypts retained artifact chunks in the same
-transaction as other encrypted data. `--plaintext` cannot migrate encrypted
-artifact gates. Stop the server for rotation, then restart with the new key.
+The rotation CLI re-encrypts retained artifact chunks in the same transaction
+as variables, package credentials, and verification targets. It currently skips
+TOTP seeds, stored agent identity ciphertext, and remote log scrub buffers;
+do not rotate instances containing those records. See the
+[rotation limitation](security.md#key-rotation-runbook).
+`--plaintext` cannot migrate encrypted artifact gates, package credentials,
+or verification targets. Eligible instances must stop the server for rotation
+and install the exact CLI-generated key before restarting.
 Generation and continuation scripts, container images, and credentials belong
 to the existing trusted-team deployment model. Gates do not constrain a
 malicious script to only plan, or prove that it applies the approved artifact.

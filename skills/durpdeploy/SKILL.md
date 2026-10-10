@@ -15,20 +15,20 @@ against environments. It exposes three surfaces an agent may use:
   HTML form semantics, redirect status codes.
 - **CLI subcommands** on the `durpdeploy` binary (user/token admin).
 
-The authoritative endpoint reference is the Swagger UI at `/api/swagger/`
-(no auth) on a running server. Everything here is verified, current
-behavior; when in doubt, check swagger.
+The endpoint reference is the Swagger UI at `/api/swagger/`
+(no auth) on a running server. Use it alongside this workflow guide.
 
 ## Base URL
 
 Replace `$BASE` (e.g. `https://durpdeploy.example.com` or
 `http://localhost:8080`) throughout. The server listens on `:8080` by
-default behind a reverse proxy in production. `/healthz` is the public
-liveness check — use it to confirm reachability first.
+default behind a reverse proxy in production. `/healthz` is public and checks
+database connectivity, returning 503 when unavailable. `/api/v1/healthz` is a
+public API liveness probe returning `{"ok":true}` without a database check.
 
 ## CLI
 
-Run on the host with the server's database (matches `DURPDEPLOY_DB`:
+Run on the host with the server's database (matching `DURPDEPLOY_DB`):
 
 ```bash
 durpdeploy admin create --email X --password Y   # first admin, runs migrations
@@ -76,8 +76,9 @@ Token placement rules:
 - POST/PUT/PATCH: append `csrf_token=$CSRF` to the form body.
 - DELETE: pass the header `X-CSRF-Token: $CSRF` — Go does not parse form
   bodies on DELETE, so a body-only token 403s.
-- Status contract: `303` = success (id or path in the `Location` header),
-  `422` = validation failure, `403` = missing CSRF or viewer write.
+- Status contract: `303` = success (id or path in `Location`), `422` = validation
+  failure, `403` = invalid CSRF. Viewer application writes return `200` with an
+  `HX-Trigger` toast for HTMX, or a styled `403` for native requests.
 
 ## Agent fleet (admin only)
 
@@ -277,7 +278,7 @@ done
    - `pending_approval` → an admin `POST /api/v1/deployments/$DID/approve`
      with an empty body or `{}` unblocks it. The authenticated admin is
      recorded as the approver. Non-admin tokens get 403.
-   - failure → `GET /api/v1/deployments/$DID/logs` (JSON lines, secrets are
+   - failure → `GET /api/v1/deployments/$DID/logs` (JSON array, secrets are
       redacted) and `GET /.../logs.txt`; fix and create a new release, then redeploy with
      `POST /api/v1/deployments/$DID/redeploy`.
     - `POST /api/v1/deployments/$DID/cancel` cancels queued work or requests
@@ -677,8 +678,10 @@ subdirectory and reclaims stale ZIP, extraction, and tar files at startup.
 Concurrent server instances must use separate `TMPDIR` directories.
 
 Artifact-bearing deployments currently require local steps; agent steps are
-rejected before dispatch. The future agent download contract is
+rejected before dispatch. The server already exposes the agent download contract:
 `POST /agent/v1/deployments/{id}/artifact` with JSON `{"claim_token":"..."}`
 on the separate mTLS listener. It requires the assigned agent's live step claim,
 returns verified ZIP bytes with `X-Artifact-SHA256` and `X-Artifact-Size`, and
-never sends repository credentials. Agent executor support is a separate change.
+never sends repository credentials. Its request body is limited to 4 KiB and
+does not accept a `protocol` field. The pinned agent executor does not yet
+consume this endpoint, so it does not enable artifact-bearing agent deployments.

@@ -9,7 +9,10 @@ The drills assume you have a running instance reachable at
 `https://durpdeploy.example.com` and you have shell access to the server's
 SQLite database (via `sudo -u durpdeploy sqlite3 ...`). The server-side
 queries in drill 4 require shell access to the box. Drills 1, 2 and 3 only
-need `curl`.
+need `curl` for requests; drill 2 also reads the CSRF token from the server's
+SQLite database. Use a disposable project with valid release and environment
+IDs for deployment drills. Complete browser MFA when enrolled before copying
+the session cookie from the browser.
 
 ---
 
@@ -26,15 +29,14 @@ for i in $(seq 1 20); do
 done
 ```
 
-**Expected.** Every attempt returns `422` and takes roughly **100 ms** of
-server time. The `time_total` you see is mostly network on localhost and
-mostly the argon2id hash on the server.
+**Expected.** Wrong-password attempts return `422`. The first five attempts for
+the same normalized email and client IP in a 15-minute window reach password
+verification; later attempts are throttled, still return `422`, and include
+`Retry-After: 900`. Timing depends on the host and network.
 
 **What defends.** `internal/auth/auth.go:HashPassword` uses argon2id with
-`time=2, memory=64MB, threads=2`. Each wrong-password guess costs the
-attacker ~100 ms of server CPU *and* ~64 MB of memory for the duration of
-the guess. At 10 attempts/sec, 1 vCPU is fully saturated and the server
-stops responding to other requests.
+`time=2, memory=64MB, threads=2`. Attempts that reach verification incur the
+Argon2id CPU and memory cost; throttled attempts do not compute the hash.
 
 **Detection.** Failed logins are deliberately **not** written to the
 `audit_log` table. This is a privacy decision, so attackers cannot enumerate
@@ -42,11 +44,12 @@ which emails are real by counting rows. They DO appear in the
 `request`-level slog output on the server:
 
 ```bash
-sudo journalctl -u durpdeploy --since "5 min ago" | grep '"path":"/login".*"status":422'
+docker compose logs --since 5m app | grep '"path":"/login".*"status":422'
 ```
 
 A sudden spike in 422s on `/login` is the right alerting signal. Wire that
-to whatever you use (Promtail, Loki, Slack via the P2 notifier).
+to your monitoring system. Throttled requests also emit an
+`authentication request throttled` warning.
 
 The application limits password attempts by client IP and by normalized
 email-plus-IP, and applies separate IP limits to MFA and OIDC initiation. The
@@ -69,7 +72,13 @@ cross-site form cannot know this token.
 ```bash
 BASE=https://durpdeploy.example.com
 
-# 1. Log in via the UI (or grab a cookie from your browser dev tools).
+# Use IDs from a valid release and a deployment environment in this project.
+PROJECT_ID=1
+RELEASE_ID=1
+ENVIRONMENT_ID=1
+
+# 1. Log in via the UI and copy its cookie when MFA is enrolled.
+# This curl login is sufficient only for an account without MFA.
 COOKIES=$(mktemp)
 curl -s -c $COOKIES -o /dev/null -X POST \
   -d "email=admin@example.com&password=YOUR-PASSWORD" "$BASE/login"
@@ -77,7 +86,7 @@ curl -s -c $COOKIES -o /dev/null -X POST \
 # 2. Try to deploy without the CSRF token. This is what a cross-site
 # form would send.
 curl -s -b $COOKIES -o /dev/null -w "Status: %{http_code}\n" -X POST \
-  -d "release_id=1&environment_id=1" "$BASE/deployments"
+  -d "release_id=$RELEASE_ID&environment_id=$ENVIRONMENT_ID" "$BASE/projects/$PROJECT_ID/deploy"
 
 # 3. Now send the same request WITH the CSRF token from your session.
 # This should succeed (303 redirect to the deployment page).
@@ -85,10 +94,12 @@ SESSION_ID=$(awk '$6 == "session" { print $7 }' $COOKIES)
 CSRF=$(sudo -u durpdeploy sqlite3 /var/lib/durpdeploy/durpdeploy.db \
   "SELECT csrf_token FROM sessions WHERE id='$SESSION_ID';")
 curl -s -b $COOKIES -o /dev/null -w "Status: %{http_code}\n" -X POST \
-  -d "release_id=1&environment_id=1&csrf_token=$CSRF" "$BASE/deployments"
+  -d "release_id=$RELEASE_ID&environment_id=$ENVIRONMENT_ID&csrf_token=$CSRF" "$BASE/projects/$PROJECT_ID/deploy"
 ```
 
-**Expected.** Step 2 returns `403`. Step 3 returns `303`. The cross-site
+**Expected.** Step 2 returns `403` with a valid writer session. Step 3 returns
+`303` when the selected release and environment pass deployment validation.
+The cross-site
 form, which has the session cookie but not the CSRF token, cannot
 trigger a state change.
 
@@ -102,7 +113,7 @@ Like failed logins, these are NOT written to `audit_log` — only successful
 state changes are audited. They show up in the slog request log:
 
 ```bash
-sudo journalctl -u durpdeploy --since "5 min ago" | grep '"status":403'
+docker compose logs --since 5m app | grep '"status":403'
 ```
 
 A handful of 403s from a single IP is normal (cancelled form submits,
@@ -127,13 +138,15 @@ BASE=https://durpdeploy.example.com
 # List projects
 curl -s -H "Authorization: Bearer $TOKEN" "$BASE/api/v1/projects"
 
-# Trigger a deployment
+# Trigger a deployment using valid IDs in a disposable project.
 curl -s -X POST -H "Authorization: Bearer $TOKEN" \
-  -d "release_id=1&environment_id=1" "$BASE/api/v1/deployments"
+  -H "Content-Type: application/json" \
+  -d '{"release_id":1,"environment_id":1}' "$BASE/api/v1/projects/1/deployments"
 ```
 
-**Expected.** The token works until it is revoked. There is no automatic
-expiration.
+**Expected.** A valid token works within its user's role, scope, and project
+access until revocation or its configured expiry. CLI-created tokens have no
+expiry; API/web creation can set one.
 
 Browser MFA does not add a factor to this API request: API tokens are single
 bearer factors. MFA reset does not revoke API tokens. Revoke the token itself
@@ -145,8 +158,10 @@ if its bearer value is exposed.
    ```bash
    durpdeploy tokens revoke <prefix>
    ```
-2. Rotate the server secret key (`durpdeploy secret-key rotate`) if the
-   leaked token had access to encrypted variables.
+2. Rotate deployment credentials the token could read or expose. Server-key
+   rotation does not revoke tokens or undo plaintext disclosure. Use it only
+   for exposure of the server key, after addressing the
+   [current rotation limitation](security.md#key-rotation-runbook).
 3. Audit the user's actions in `/admin/audit` between the token creation and
    revocation.
 
@@ -196,24 +211,15 @@ the encrypted values in `release_variables.value`, but an attacker who also
 gets the matching server key can decrypt them. Audit log retention remains an
 operational policy.
 
-**Detection.** If you suspect a backup or the live DB leaked, rotate
-every user's password immediately:
+**Response.** If a backup or the live database leaked, reset affected passwords
+through **Admin → Users → Edit**, retaining each account's role and memberships.
+Password changes invalidate browser sessions and pending challenges. Revoke
+exposed API tokens separately. `admin create` cannot reset an existing user;
+deleting and recreating the account loses memberships, tokens, and audit-user
+links. For administrator lockout, use the separate recovery-account procedure
+in [the deployment runbook](deploy.md#forgot-the-admin-password).
 
-```bash
-# For each user:
-sudo -u durpdeploy /usr/local/bin/durpdeploy admin create \
-  --email user@example.com --password '<new-strong-password>'
-# (this errors with "user already exists" if the email is taken — that's
-# expected. Use the `user reset` flow once it ships, or for now:
-sudo -u durpdeploy sqlite3 /var/lib/durpdeploy/durpdeploy.db \
-  "DELETE FROM users WHERE email='user@example.com';"
-# (the ON DELETE CASCADE on sessions kills their active sessions too)
-sudo -u durpdeploy /usr/local/bin/durpdeploy admin create \
-  --email user@example.com --password '<new-strong-password>'
-```
-
-Then check the audit log for the new user ID. Also check actions by the old ID
-between the compromise and the rotation. Investigate these actions.
+Inspect the affected user's audit entries between compromise and recovery.
 
 ---
 
@@ -230,29 +236,16 @@ the provider. Provider tokens, authorization codes, and raw claims are not
 persisted. OIDC does not authenticate API tokens, and an OIDC-created
 empty-password account has no self-service password reset.
 
-**What defends.** When unset, or set to `true`, OIDC requires the literal JSON
-boolean `email_verified: true`. Explicit lowercase
-`DURPDEPLOY_OIDC_REQUIRE_EMAIL_VERIFIED=false` accepts a present literal JSON
-boolean `email_verified: true` or `email_verified: false` after normal ID token
-signature, issuer, audience, and nonce verification. Missing, null, string, and
-numeric claims remain rejected. This weakens identity assurance and is
-appropriate only where Authentik independently
-establishes address ownership. OIDC links the first exact email match and
-otherwise JIT-creates an empty-password account. Group mapping
-uses admin, deployer, viewer precedence. A changed role invalidates the user's
-browser sessions. Reauthentication is handled by the provider and bound to the
-current local session and OIDC identity. There is no SCIM or provider
-back-channel deprovisioning, so deprovisioning is not instant.
-
-**Configuration contract.** OIDC requires the HTTPS `DURPDEPLOY_URL`, the
-redirect URI `DURPDEPLOY_URL + /login/oidc/callback`, and the OIDC variables documented in the deployment runbook. Never put a live issuer,
-client value, secret, token, or claim in this document.
+**Verify.** Use the [OIDC guide's checklist](authentik-oidc.md#5-verify-the-complete-path).
+Test role removal, local logout, and provider outage on a disposable instance.
+A role change must invalidate existing browser sessions. Use a separate local
+administrator for recovery; revoke leaked API tokens independently.
 
 ---
 
 ## What this drill does not cover
 
-These attacks are out of scope for P0:
+These attacks are outside the application boundary:
 
 - **Compromised teammate's laptop** — if the attacker has a teammate's
   actual cookie + CSRF token, they are that teammate. No defense
