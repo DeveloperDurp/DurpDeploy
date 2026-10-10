@@ -49,7 +49,7 @@ cp "$tmp/global-hooks/pre-commit" "$tmp/global-hook-before"
 cp "$hook" scripts/pre-commit
 git config core.hooksPath "$tmp/global-hooks"
 
-# When: install the project hook with core.hooksPath configured globally.
+# When: install the project hook with core.hooksPath pointing at shared hooks.
 make --no-print-directory -f "$root/Makefile" install-hooks
 
 # Then: preserve the global dispatcher and install in the common git directory.

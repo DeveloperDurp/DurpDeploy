@@ -167,4 +167,4 @@ DURPDEPLOY_LIVE_SESSION="$SESSION_ID" \
 DURPDEPLOY_LIVE_API_TOKEN="$API_TOKEN" \
 DURPDEPLOY_LIVE_RUNBOOK_EDITOR="/projects/$API_PROJECT_ID/runbooks/$RUNBOOK_ID/edit" \
     go test -tags=e2e,packagebrowser -count=1 -timeout=5m \
-    -run '^TestRunningServerBrowserE2E$' ./internal/handler/api
+    -v -run '^Test(RunningServer|VariableScopesBeforeDeployment)BrowserE2E$' ./internal/handler/api

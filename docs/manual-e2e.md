@@ -179,6 +179,11 @@ remain in immutable release snapshots: deploy the named release to repeat
 them. Temporary cookies and plaintext API tokens are removed. Stage files
 are temporary execution data; rerun the release to reproduce file handoff.
 
+The variable-scope browser checks retain separate `variable-before-deploy-*`
+projects and a `variable-scopes-*` lifecycle on each run, and print links to
+their Variables pages. These projects have no deployments; keep them that way
+when repeating issue #159. Each has a `first-scoped-release` snapshot.
+
 For API checks, create your own token at `/settings/tokens`. Open
 `/api/swagger/index.html`, use **Authorize**, and use **Try it out** with IDs
 from the printed projects. API paths below start with `/api/v1`. Web checks
@@ -195,6 +200,7 @@ Use only the disposable E2E examples for edits and deletion checks.
 | Rejoin deleted agent (#143) | Stop the disposable deleted agent after reconciling work. Move only its private `state.json` aside, keep its identity keys, and restart. Try an incorrect code, then pair from Admin > Agents with the current code and unchanged fingerprint; repeat through `POST /api/v1/admin/agents/pair`. | The listener rejects incorrect codes. Approved pairing creates a new registration and agent ID and allows polling again. The old ID remains absent; historical deployments remain with agent references cleared. |
 | Login, sessions, and CSRF (F0) | Sign out and request `/` without following redirects; sign in with the E2E admin. Submit POST `/projects` with the session cookie but omit the CSRF token (edit the request in developer tools). | Anonymous GET redirects to login (303); login redirects to the app; protected pages load; missing CSRF rejected (403). |
 | Happy path, steps page, scoped variables (F3.1) | `TestProject`, release `1.0.0`, environment `dev`. Deploy it and open Steps and live logs. | Success; logs contain `default-variable=hello`. |
+| Variable scopes before deployment (#159) | Open a printed `variable-before-deploy-*` project with zero deployments. In Variables, create a variable, edit its environment, and use Override on `DEFAULT`. Repeat on desktop and phone, through a direct link and the project's Variables menu. Use the lifecycle's stage environment for bound projects. Inspect `first-scoped-release` through `GET /projects/{id}/releases/{release_id}` and the mutable `API_VALUE`. | Eligible scopes are selectable in all three forms. API create/update accept eligible scopes before deployment and reject environments outside a bound lifecycle. `NEW`, `EDIT_ME`, `DEFAULT`, and `API_VALUE` retain their scoped values in the first release; its `API_VALUE` remains `snapshotted` while the mutable value is `changed`. |
 | Deployment detail without step definitions (#154) | Open a retained deployment on desktop and phone; inspect its step logs, status, actions, and verification results. Reload after completion, then open its release link and project Steps page. GET `/deployments/{id}`, `/deployments/{id}/logs`, and `/projects/{id}/releases/{relId}` through the API. | Deployment detail has no bottom Steps table, script cards, or step-definition empty message. Step log panels and controls remain usable; the release page and API `steps_json` retain the scripts. |
 | Deployment notes (F3.1b) | Inspect the original and `smoke-test-audit` deployments; submit another `1.0.0` deployment with a note. | Only the deployment given a note shows it. |
 | Dashboard deployment navigation | Open `/`. Click a status or date in any deployment entry, then return and use Tab and Enter. Repeat on a phone and resize the page. | Phone entries are separate rounded cards with all fields visible. Desktop entries use the existing table. The whole card or row opens its deployment; hover and keyboard focus highlight it. Text stays plain, with no added buttons. |
