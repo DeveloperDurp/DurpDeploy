@@ -291,7 +291,8 @@ js-build: npm-install
 # Reformat Go source to 80-char width. Skips sqlc- and templ-generated files.
 .PHONY: install-hooks pre-commit-test
 install-hooks:
-	install -D -m 755 scripts/pre-commit "$$(git rev-parse --git-common-dir)/hooks/pre-commit"
+	mkdir -p "$$(git rev-parse --git-common-dir)/hooks"
+	install -m 755 scripts/pre-commit "$$(git rev-parse --git-common-dir)/hooks/pre-commit"
 
 pre-commit-test:
 	bash scripts/pre-commit_test.sh
