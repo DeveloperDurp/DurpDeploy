@@ -60,11 +60,21 @@ fi
 # Bash job control gives go and its test binaries their own process group.
 set -m
 bash -c '
-    printf "%s\n" "$$" > "$DURPDEPLOY_GO_TEST_DIRECTORY/process-group.tmp"
-    mv "$DURPDEPLOY_GO_TEST_DIRECTORY/process-group.tmp" "$DURPDEPLOY_GO_TEST_DIRECTORY/process-group"
+    runner_pid=$1
+    shift
+    attempts=0
+    # Tests cannot start until the parent has published this detached group.
+    # If it dies before registration, this child exits without creating resources.
+    while [[ ! -f $DURPDEPLOY_GO_TEST_DIRECTORY/process-group ]]; do
+        if ! kill -0 "$runner_pid" 2>/dev/null || ((attempts >= 100)); then exit 1; fi
+        sleep 0.05
+        attempts=$((attempts + 1))
+    done
     exec go test "$@"
-' bash "$@" &
+' bash "$$" "$@" &
 test_pid=$!
+printf '%s\n' "$test_pid" > "$session_dir/process-group.tmp"
+mv "$session_dir/process-group.tmp" "$session_dir/process-group"
 status=0
 wait "$test_pid" || status=$?
 exit "$status"

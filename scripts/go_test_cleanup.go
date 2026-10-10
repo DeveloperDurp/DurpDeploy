@@ -64,18 +64,37 @@ func cleanup(ctx context.Context, api *testcontainers.DockerClient,
 				container.Labels["org.testcontainers.sessionId"] != session {
 				continue
 			}
-			_, err := api.ContainerRemove(ctx, container.ID,
-				client.ContainerRemoveOptions{Force: true, RemoveVolumes: true})
-			if err != nil && !errdefs.IsNotFound(err) {
-				// Ryuk may have removed the container after our listing.
-				_, inspectErr := api.ContainerInspect(ctx, container.ID,
-					client.ContainerInspectOptions{})
-				if !errdefs.IsNotFound(inspectErr) {
-					failures = append(failures,
-						fmt.Errorf("remove %s: %w", container.ID, err))
-				}
+			if err := remove(ctx, api, container.ID); err != nil {
+				failures = append(failures,
+					fmt.Errorf("remove %s: %w", container.ID, err))
 			}
 		}
 	}
 	return errors.Join(failures...)
+}
+
+func remove(ctx context.Context, api *testcontainers.DockerClient,
+	id string,
+) error {
+	_, err := api.ContainerRemove(ctx, id,
+		client.ContainerRemoveOptions{Force: true, RemoveVolumes: true})
+	if err == nil || errdefs.IsNotFound(err) {
+		return nil
+	}
+	for {
+		// Ryuk can finish deletion after our listing or be deleting it now.
+		_, inspectErr := api.ContainerInspect(ctx, id,
+			client.ContainerInspectOptions{})
+		if errdefs.IsNotFound(inspectErr) {
+			return nil
+		}
+		if inspectErr != nil || !errdefs.IsConflict(err) {
+			return errors.Join(err, inspectErr)
+		}
+		select {
+		case <-ctx.Done():
+			return errors.Join(err, ctx.Err())
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
 }

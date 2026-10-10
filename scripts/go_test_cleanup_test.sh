@@ -2,6 +2,7 @@
 set -euo pipefail
 
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+runner=${RUNNER_PATH_OVERRIDE:-$root/scripts/go_test.sh}
 test_dir=$(mktemp -d)
 trap 'rm -rf -- "$test_dir"' EXIT
 mkdir -p "$test_dir/bin"
@@ -47,8 +48,10 @@ if [[ ${SCENARIO:-} == no-provider ]]; then
 fi
 case ${SCENARIO:-} in
 failure | timeout | failure-removal) exit 42 ;;
-nested)
-    OUTER_RUNNER_PID=$PPID SCENARIO=nested-child \
+nested | startup-race)
+    child_scenario=nested-child
+    if [[ $SCENARIO == startup-race ]]; then child_scenario=startup-child; fi
+    OUTER_RUNNER_PID=$PPID SCENARIO="$child_scenario" \
         bash "$RUNNER_PATH" -count=1 ./fixture &
     wait
     ;;
@@ -68,25 +71,37 @@ INT | TERM | HUP)
 *) exit 0 ;;
 esac
 GO
+cat > "$test_dir/bin/mv" <<'MV'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ ${SCENARIO:-} == startup-child && $1 == */process-group.tmp ]]; then
+    cat "$1" > "$CASE_DIR/child"
+    kill -TERM "$OUTER_RUNNER_PID"
+    sleep 300
+fi
+exec "$REAL_MV" "$@"
+MV
 chmod +x "$test_dir/cleanup" "$test_dir/bin/go"
+chmod +x "$test_dir/bin/mv"
 export FAKE_CLEANUP="$test_dir/cleanup"
+export REAL_MV=$(command -v mv)
 
-for scenario in success failure timeout INT TERM HUP nested removal-failure failure-removal list-failure no-provider provider-lost; do
+for scenario in success failure timeout INT TERM HUP nested startup-race removal-failure failure-removal list-failure no-provider provider-lost; do
     case_dir="$test_dir/$scenario"
     mkdir -p "$case_dir"
     touch "$case_dir/unrelated"
     status=0
     # When: the runner succeeds, fails, or is interrupted.
     PATH="$test_dir/bin:$PATH" CASE_DIR="$case_dir" SCENARIO="$scenario" \
-        RUNNER_PATH="$root/scripts/go_test.sh" \
+        RUNNER_PATH="$runner" \
         TESTCONTAINERS_SESSION_ID=caller-session \
-        bash "$root/scripts/go_test.sh" -count=1 ./fixture \
+        bash "$runner" -count=1 ./fixture \
         > "$case_dir/stdout" 2> "$case_dir/output" || status=$?
     case $scenario in
     success | no-provider) expected=0 ;;
     failure | timeout | failure-removal) expected=42 ;;
     INT) expected=130 ;;
-    TERM | nested) expected=143 ;;
+    TERM | nested | startup-race) expected=143 ;;
     HUP) expected=129 ;;
     removal-failure | list-failure | provider-lost) expected=1 ;;
     *) echo "FAIL: unexpected scenario $scenario" >&2; exit 1 ;;
@@ -111,10 +126,27 @@ for scenario in success failure timeout INT TERM HUP nested removal-failure fail
         echo "FAIL: cleanup polluted test output ($scenario)" >&2
         exit 1
     }
+    if [[ $scenario == startup-race ]]; then
+        # A child stopped before its startup handshake must exit without
+        # running tests, even if its parent was killed before registration.
+        for attempt in {1..120}; do
+            child=$(cat "$case_dir/child")
+            if ! kill -0 "$child" 2>/dev/null; then break; fi
+            state=$(ps -o stat= -p "$child" || true)
+            if [[ $state == Z* ]]; then break; fi
+            sleep 0.05
+        done
+    fi
     if [[ -f $case_dir/child ]] && kill -0 "$(cat "$case_dir/child")" 2>/dev/null; then
         # A killed child may briefly remain as a zombie until init reaps it.
         state=$(ps -o stat= -p "$(cat "$case_dir/child")")
-        [[ $state == Z* ]] || { echo "FAIL: child survived $scenario" >&2; exit 1; }
+        if [[ $state != Z* ]]; then
+            child=$(cat "$case_dir/child")
+            kill -KILL -- "-$child" 2>/dev/null || true
+            kill -KILL "$child" 2>/dev/null || true
+            echo "FAIL: child survived $scenario" >&2
+            exit 1
+        fi
     fi
 done
 
@@ -122,7 +154,7 @@ done
 for invocation in first second; do
     mkdir -p "$test_dir/$invocation"
     PATH="$test_dir/bin:$PATH" CASE_DIR="$test_dir/$invocation" SCENARIO=success \
-        bash "$root/scripts/go_test.sh" -count=1 ./fixture \
+        bash "$runner" -count=1 ./fixture \
         > "$test_dir/$invocation/output" 2>&1 &
     if [[ $invocation == first ]]; then first_pid=$!; else second_pid=$!; fi
 done
@@ -131,7 +163,7 @@ wait "$second_pid"
 [[ $(cat "$test_dir/first/session") != "$(cat "$test_dir/second/session")" ]]
 
 # A healthy provider needs no Docker/Podman CLI or Bash 4 features.
-for tool in bash dirname mktemp mv rm mkdir touch cp find; do
+for tool in bash dirname mktemp rm mkdir touch cp find sleep; do
     ln -s "$(command -v "$tool")" "$test_dir/bin/$tool"
 done
 cat > "$test_dir/bash3-env" <<'BASH3'
@@ -145,6 +177,6 @@ mkdir -p "$test_dir/no-cli"
 PATH="$test_dir/bin" CASE_DIR="$test_dir/no-cli" SCENARIO=success \
     BASH_ENV="$test_dir/bash3-env" \
     DOCKER_HOST='unix:///tmp/fixture provider.sock' \
-    bash "$root/scripts/go_test.sh" -count=1 ./fixture
+    bash "$runner" -count=1 ./fixture
 if compgen -G "$test_dir/no-cli/resources/*" >/dev/null; then exit 1; fi
 echo 'Go test container ownership, failures, interruption and isolation: PASS'
