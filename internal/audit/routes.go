@@ -10,6 +10,7 @@ var actionMap = map[string]string{
 	"POST /api/v1/lifecycles/{id}/variables":                           "create_lifecycle_variable",
 	"PUT /api/v1/lifecycles/{id}/variables/{varId}":                    "update_lifecycle_variable",
 	"DELETE /api/v1/lifecycles/{id}/variables/{varId}":                 "delete_lifecycle_variable",
+	"DELETE /api/v1/lifecycles/{id}":                                   "delete_lifecycle",
 	"POST /deployments/{id}/artifact-gates/{stepIndex}/approve":        "approve_artifact",
 	"POST /deployments/{id}/artifact-gates/{stepIndex}/reject":         "reject_artifact",
 	"POST /api/v1/deployments/{id}/artifact-gates/{stepIndex}/approve": "approve_artifact",

@@ -14,6 +14,10 @@ var ErrLifecycleAssignmentForbidden = errors.New(
 	"Only a global admin can assign a lifecycle to a project",
 )
 
+var ErrLifecycleRemovalForbidden = errors.New(
+	"Only a project admin can remove a lifecycle assignment",
+)
+
 // Lifecycle assignment grants access to shared values through execution.
 // Project admins may retain or remove that grant, but cannot acquire one.
 func AuthorizeLifecycleSelection(
@@ -22,7 +26,8 @@ func AuthorizeLifecycleSelection(
 	projectID, lifecycleID int64,
 ) error {
 	user := auth.UserFromContext(ctx)
-	if lifecycleID <= 0 || (user != nil && user.Role == "admin") {
+	if (projectID == 0 && lifecycleID <= 0) ||
+		(user != nil && user.Role == "admin") {
 		return nil
 	}
 	if projectID == 0 {
@@ -34,6 +39,13 @@ func AuthorizeLifecycleSelection(
 	}
 	if project.LifecycleID.Valid && project.LifecycleID.Int64 == lifecycleID {
 		return nil
+	}
+	if lifecycleID <= 0 {
+		if !project.LifecycleID.Valid ||
+			CanManageProject(ctx, repo, user, projectID) {
+			return nil
+		}
+		return ErrLifecycleRemovalForbidden
 	}
 	return ErrLifecycleAssignmentForbidden
 }
@@ -50,7 +62,8 @@ func (h *ProjectHandler) authorizeLifecycleForm(
 	if err == nil {
 		return true
 	}
-	if errors.Is(err, ErrLifecycleAssignmentForbidden) {
+	if errors.Is(err, ErrLifecycleAssignmentForbidden) ||
+		errors.Is(err, ErrLifecycleRemovalForbidden) {
 		http.Error(w, err.Error(), http.StatusForbidden)
 	} else {
 		http.Error(

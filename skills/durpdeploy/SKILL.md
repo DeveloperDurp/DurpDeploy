@@ -393,6 +393,10 @@ Enforced identically on web and API (source: `internal/gate/gate.go`):
   or remove an existing assignment. Assignment grants execution access to
   the lifecycle's shared variables, including secrets; unauthorized attempts
   return `403` before project creation or edits.
+- **Parent deletion**: deleting environments or lifecycles is global-admin
+  only because deletion also removes scoped/shared variables. Lifecycle
+  deletion is `DELETE /api/v1/lifecycles/$ID` and returns `204`; projects
+  using it become unassigned while existing snapshots remain intact.
 - **Cross-project release**: deploying a release id under the wrong
   project → `400`.
 

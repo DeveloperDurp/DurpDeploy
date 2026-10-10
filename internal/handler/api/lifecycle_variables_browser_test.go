@@ -200,14 +200,59 @@ func TestLifecycleVariablesBrowserE2E(t *testing.T) {
 	if string(
 		b.evaluate(
 			t,
-			`!document.querySelector('select[name=lifecycle_id]') && document.querySelector('input[name=lifecycle_id]').value !== ''`,
+			`[...document.querySelectorAll('select[name=lifecycle_id] option')].filter(o=>o.value !== '').length === 1`,
 		),
 	) != "true" {
 		t.Fatal("nonadmin can assign a lifecycle")
 	}
 	b.captureNavigation(t, "project-assignment-readonly")
+	b.evaluate(
+		t,
+		`document.querySelector('select[name=lifecycle_id]').value=''; document.querySelector('[data-project-form] form').requestSubmit(); true`,
+	)
+	b.wait(
+		t,
+		fmt.Sprintf(
+			`location.pathname === '/projects/%d' && !document.querySelector('[data-inherited-variables]')`,
+			f.project.ID,
+		),
+	)
+	b.captureNavigation(t, "project-assignment-removed")
 	b.navigateBackTest(t, f.baseURL+"/projects/new")
 	b.captureNavigation(t, "project-assignment-new-readonly")
+	b.navigateBackTest(t, fmt.Sprintf("%s/lifecycles/%d", f.baseURL, lc.ID))
+	if string(
+		b.evaluate(
+			t,
+			`!document.querySelector('input[name=_method][value=delete]')`,
+		),
+	) != "true" {
+		t.Fatal("deployer has lifecycle delete control")
+	}
+	b.captureNavigation(t, "lifecycle-deployer")
+	b.navigateBackTest(
+		t,
+		fmt.Sprintf("%s/environments/%d/edit", f.baseURL, f.environment.ID),
+	)
+	if string(
+		b.evaluate(t, `!document.querySelector('button[hx-delete]')`),
+	) != "true" {
+		t.Fatal("deployer has environment delete control")
+	}
+	b.captureNavigation(t, "environment-deployer")
+	if err := f.h.repo.Queries.UpdateUser(
+		t.Context(),
+		db.UpdateUserParams{ID: user.ID, Name: user.Name, Role: "admin"},
+	); err != nil {
+		t.Fatal(err)
+	}
+	f.api(
+		t,
+		"PUT",
+		f.base(),
+		map[string]any{"name": f.project.Name, "lifecycle_id": lc.ID},
+		200,
+	)
 	if err := f.h.repo.Queries.UpdateUser(
 		t.Context(),
 		db.UpdateUserParams{ID: user.ID, Name: user.Name, Role: "viewer"},

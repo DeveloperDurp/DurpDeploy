@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/repository"
 	"durpdeploy/views/pages"
@@ -179,6 +180,17 @@ func (h *LifecycleHandler) SaveLifecycle(
 
 	switch r.FormValue("_method") {
 	case "delete":
+		if user := auth.UserFromContext(
+			r.Context(),
+		); user == nil ||
+			user.Role != "admin" {
+			http.Error(
+				w,
+				"Only a global admin can delete a lifecycle",
+				http.StatusForbidden,
+			)
+			return
+		}
 		if err := h.repo.Queries.DeleteLifecycle(r.Context(), id); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return

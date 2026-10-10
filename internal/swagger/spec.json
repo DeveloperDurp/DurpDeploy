@@ -3416,6 +3416,7 @@
         ]
       },
       "delete": {
+        "description": "Delete an environment.",
         "schemes": [
           "http",
           "https"
@@ -3423,7 +3424,7 @@
         "tags": [
           "environments"
         ],
-        "summary": "Delete an environment.",
+        "summary": "Global admin only; deletion also removes scoped shared variables.",
         "operationId": "deleteEnvironment",
         "parameters": [
           {
@@ -3706,6 +3707,45 @@
             "bearer": []
           }
         ]
+      },
+      "delete": {
+        "tags": [
+          "lifecycles"
+        ],
+        "summary": "Delete a lifecycle and its shared variables. Global admin only.",
+        "operationId": "deleteLifecycle",
+        "responses": {
+          "204": {
+            "description": "EmptyResponse is returned for no-content endpoints.",
+            "schema": {
+              "$ref": "#/definitions/EmptyResponse"
+            }
+          },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "500": {
+            "description": "Server error response.",
+            "schema": {
+              "$ref": "#/definitions/ServerError"
+            }
+          }
+        }
       }
     },
     "/lifecycles/{id}/save": {

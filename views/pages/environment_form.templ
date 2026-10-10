@@ -109,7 +109,7 @@ templ EnvironmentFormContent(env *db.Environment, isNew bool, errorMsg string) {
 				}
 			</div>
 		</form>
-		if !isNew && CanWrite(ctx) {
+		if !isNew && CanWrite(ctx) && CanManageLifecycleVariables(ctx) {
 			<div class="mt-6 pt-4 border-t border-base-300 flex flex-wrap items-center justify-between gap-4">
 				<div class="font-medium">Delete this environment</div>
 				<button

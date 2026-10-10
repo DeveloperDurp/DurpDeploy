@@ -65,7 +65,8 @@ templ LifecycleDetail(workspace LifecycleWorkspace) {
 						<textarea id="lifecycle-description" name="description" class="textarea textarea-bordered w-full" rows="3">{ lc.Description.String }</textarea>
 					</div>
 				</form>
-				<div class="mt-6 pt-4 border-t border-base-300 flex flex-wrap items-center justify-between gap-4">
+				if CanManageLifecycleVariables(ctx) {
+					<div class="mt-6 pt-4 border-t border-base-300 flex flex-wrap items-center justify-between gap-4">
 					<div>
 						<div class="font-medium">Delete this lifecycle</div>
 						<p class="text-sm opacity-70">Projects using it will be unset.</p>
@@ -84,7 +85,8 @@ templ LifecycleDetail(workspace LifecycleWorkspace) {
 						<input type="hidden" name="_method" value="delete"/>
 						<button type="submit" class="btn btn-error">Delete lifecycle</button>
 					</form>
-				</div>
+					</div>
+				}
 			</div>
 		} else if lc.Description.Valid {
 			<p class="text-gray-400">{ lc.Description.String }</p>

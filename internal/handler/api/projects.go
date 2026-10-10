@@ -592,7 +592,8 @@ func (h *ProjectHandler) authorizeLifecycle(
 	if err == nil {
 		return true
 	}
-	if errors.Is(err, handler.ErrLifecycleAssignmentForbidden) {
+	if errors.Is(err, handler.ErrLifecycleAssignmentForbidden) ||
+		errors.Is(err, handler.ErrLifecycleRemovalForbidden) {
 		RespondError(w, http.StatusForbidden, err.Error())
 	} else {
 		RespondError(

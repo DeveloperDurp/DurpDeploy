@@ -14,6 +14,39 @@ type LifecycleHandler struct {
 	repo *repository.Repository
 }
 
+// swagger:route DELETE /lifecycles/{id} lifecycles deleteLifecycle
+// Delete a lifecycle and its shared variables. Global admin only.
+//
+// Responses:
+// 204: body:EmptyResponse
+// 400: body:BadRequestError
+// 403: body:ForbiddenError
+// 404: body:NotFoundError
+// 500: body:ServerError
+func (h *LifecycleHandler) DeleteLifecycle(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	id, err := parseParamInt(r, "id")
+	if err != nil || id <= 0 {
+		RespondError(w, http.StatusBadRequest, "Invalid lifecycle ID")
+		return
+	}
+	if _, err := h.repo.Queries.GetLifecycle(r.Context(), id); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			RespondError(w, http.StatusNotFound, "Lifecycle not found")
+		} else {
+			RespondError(w, 500, "Could not read lifecycle")
+		}
+		return
+	}
+	if err := h.repo.Queries.DeleteLifecycle(r.Context(), id); err != nil {
+		RespondError(w, 500, "Could not delete lifecycle")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func NewLifecycleHandler(repo *repository.Repository) *LifecycleHandler {
 	return &LifecycleHandler{repo: repo}
 }

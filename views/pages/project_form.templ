@@ -96,10 +96,21 @@ templ ProjectForm(project db.Project, isEdit bool, errorMsg string, lifecycles [
 					</select>
 				} else {
 					if project.LifecycleID.Valid {
-						<input type="hidden" name="lifecycle_id" value={ strconv.FormatInt(project.LifecycleID.Int64, 10) }/>
-						for _, lc := range lifecycles {
-							if lc.ID == project.LifecycleID.Int64 {
-							<p>{ lc.Name }</p>
+						if canManage {
+							<select name="lifecycle_id" class="select select-bordered">
+								for _, lc := range lifecycles {
+									if lc.ID == project.LifecycleID.Int64 {
+										<option value={ strconv.FormatInt(lc.ID, 10) } selected>{ lc.Name }</option>
+									}
+								}
+								<option value="">— Remove lifecycle assignment —</option>
+							</select>
+						} else {
+							<input type="hidden" name="lifecycle_id" value={ strconv.FormatInt(project.LifecycleID.Int64, 10) }/>
+							for _, lc := range lifecycles {
+								if lc.ID == project.LifecycleID.Int64 {
+									<p>{ lc.Name }</p>
+								}
 							}
 						}
 					}

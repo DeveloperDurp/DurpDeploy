@@ -185,7 +185,8 @@ func newRouter(
 		pr.Post("/environments", envHandler.CreateEnvironment)
 		pr.Get("/environments/{id}/edit", envHandler.EditEnvironment)
 		pr.Put("/environments/{id}", envHandler.UpdateEnvironment)
-		pr.Delete("/environments/{id}", envHandler.DeleteEnvironment)
+		pr.With(auth.RequireRole("admin")).
+			Delete("/environments/{id}", envHandler.DeleteEnvironment)
 
 		lifecycleH := handler.NewLifecycleHandler(repo)
 		lifecycleVariablesH := handler.NewLifecycleVariableHandler(repo)
@@ -644,7 +645,7 @@ func newRouter(
 		ar.Post("/environments", apiEnvH.CreateEnvironment)
 		ar.Get("/environments/{id}", apiEnvH.GetEnvironment)
 		ar.Put("/environments/{id}", apiEnvH.UpdateEnvironment)
-		ar.Delete(
+		ar.With(auth.RequireRole("admin")).Delete(
 			"/environments/{id}",
 			api.EmptyBody(apiEnvH.DeleteEnvironment),
 		)
@@ -664,6 +665,8 @@ func newRouter(
 		ar.Get("/lifecycles", apiLcH.ListLifecycles)
 		ar.Post("/lifecycles", apiLcH.CreateLifecycle)
 		ar.Get("/lifecycles/{id}", apiLcH.GetLifecycle)
+		ar.With(auth.RequireRole("admin")).
+			Delete("/lifecycles/{id}", api.EmptyBody(apiLcH.DeleteLifecycle))
 		ar.Post("/lifecycles/{id}/save", apiLcH.SaveLifecycle)
 		ar.Post("/lifecycles/{id}/stages", apiLcH.AddStage)
 		ar.Post("/lifecycles/{id}/stages/reorder", apiLcH.ReorderStages)
