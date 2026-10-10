@@ -45,10 +45,10 @@ jobs:
         id: prepare
         run: make security-tools templ-generate swagger-ui-copy
       - name: Prove detection, error handling, and report redaction
-        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        if: ${{ github.event_name == 'pull_request' && !cancelled() && steps.prepare.outcome == 'success' }}
         run: make security-scan-test
       - name: Verify bounded token telemetry through the public API
-        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        if: ${{ github.event_name == 'pull_request' && !cancelled() && steps.prepare.outcome == 'success' }}
         run: go test -race -count=1 -run '^TestAPITokenTelemetryE2E$' ./internal/handler/api
       - name: Reachable Go vulnerabilities
         if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}

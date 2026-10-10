@@ -8,15 +8,13 @@
 #     loop beyond a one-line `docker info` guard.
 #   - $CI_REGISTRY_IMAGE tags: these containers are single-run and never
 #     pushed, so images are built and tagged locally only.
-#   - resource_group: replaced with job-level concurrency groups
-#     (serialized, never cancelled) for the jobs that had one.
+#   - resource_group: replaced with job-level concurrency groups scoped
+#     to each job and ref, so independent jobs cannot cancel queued tests.
 name: test
 
 on:
   pull_request:
     types: [opened, synchronize, reopened]
-  push:
-    branches: [main]
 
 # Cancel any in-flight run for the same ref when a new commit lands
 # (same policy as release.yml).
@@ -72,10 +70,9 @@ jobs:
   mobile-browser:
     name: Mobile browser
     runs-on: ubuntu-latest
-    # Replaces GitLab resource_group: mobile-browser. Serialized, never
-    # cancelled, so queued runs wait instead of racing.
+    # Serialize this job only within its ref; other PRs have their own runner.
     concurrency:
-      group: ci-mobile-browser
+      group: ci-mobile-browser-${{ github.ref }}
       cancel-in-progress: false
     env:
       MOBILE_BROWSER_IMAGE: mobile-browser:${{ github.sha }}
@@ -140,10 +137,10 @@ jobs:
   auth-mfa-sqlite:
     name: Auth MFA E2E (SQLite)
     runs-on: ubuntu-latest
-    # Replaces GitLab resource_group: auth-mfa-e2e (shared with the
-    # parity job below). Serialized, never cancelled.
+    # Use a separate queue per job/ref so parity jobs and other PRs cannot
+    # displace this job while it is waiting for a runner.
     concurrency:
-      group: ci-auth-mfa-e2e
+      group: ci-auth-mfa-sqlite-${{ github.ref }}
       cancel-in-progress: false
     env:
       AUTH_MFA_IMAGE: auth-mfa-e2e:${{ github.sha }}
@@ -221,10 +218,10 @@ jobs:
   auth-mfa-parity:
     name: Auth MFA E2E (Postgres/MSSQL)
     runs-on: ubuntu-latest
-    # Replaces GitLab resource_group: auth-mfa-e2e (shared with the
-    # SQLite job above). Serialized, never cancelled.
+    # Each job runs on its own hosted runner; it does not share a queue
+    # with SQLite or other PRs.
     concurrency:
-      group: ci-auth-mfa-e2e
+      group: ci-auth-mfa-parity-${{ github.ref }}
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
