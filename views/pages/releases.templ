@@ -201,6 +201,7 @@ templ ReleaseDetail(project db.Project, release db.Release, variables []db.Relea
 				}
 			</div>
 		</div>
+		<div id="release-refresh-error" role="alert"></div>
 		if artifact.ReleaseID!=0 {
 			@ReleasePackageAttachment(artifact)
 		}

@@ -301,6 +301,17 @@ deployment history, and runbook versions remain available. Each run leaves a
 fresh pending example for manual approval checks.
 # Shared lifecycle variables
 
+On a release with a deployment awaiting approval, click **Refresh** and accept
+the confirmation. The release page must remain open and show **Unable to
+refresh this release**, with the snapshot lock reason, cancellation/completion,
+cleanup and log sync guidance, and a **View project deployments** link.
+The API refresh must return `409` while that deployment is active. Cancel a
+disposable deployment or let it complete, then retry: the API returns `200`
+and the web refresh returns to the release page with the error cleared.
+The retained demo has a disposable pending-approval case at
+`/projects/24/releases/36`, with `/deployments/46` awaiting approval; check its
+current status before retrying. Keep its release/history after testing.
+
 `make e2e-test` retains a `shared-lifecycle-<run>` lifecycle and two
 `shared-project-<run>` projects. The suite prints their editor, variables,
 release and deployment links. On `/lifecycles`, tap the lifecycle card to open

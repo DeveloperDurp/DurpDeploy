@@ -1,6 +1,7 @@
 import Alpine from 'alpinejs'
 import htmx from 'htmx.org'
 import { createVariablesPage } from './variables.js'
+import { handleBoostedError } from './navigation.js'
 
 window.Alpine = Alpine
 window.htmx = htmx
@@ -18,7 +19,7 @@ document.addEventListener('htmx:beforeTransition', (event) => {
 });
 
 document.addEventListener('htmx:beforeSwap', (event) => {
-	if (event.detail.xhr.status === 422 &&
+	if (event.detail.xhr.status >= 400 && event.detail.xhr.status < 500 &&
 		event.detail.xhr.getResponseHeader('HX-Retarget')) {
 		event.detail.shouldSwap = true;
 	}
@@ -200,12 +201,7 @@ document.addEventListener('htmx:afterSwap', (event) => {
 		document.getElementById('page-content')?.focus({ preventScroll: true });
 	}
 });
-document.addEventListener('htmx:beforeSwap', (event) => {
-	if (event.detail.requestConfig?.boosted && event.detail.xhr.status >= 400) {
-		event.preventDefault();
-		location.assign(event.detail.xhr.responseURL);
-	}
-});
+document.addEventListener('htmx:beforeSwap', handleBoostedError);
 document.addEventListener('htmx:historyCacheMissLoadError', (event) => {
 	const redirect = event.detail.xhr.getResponseHeader('HX-Redirect');
 	if (redirect) location.replace(redirect);
