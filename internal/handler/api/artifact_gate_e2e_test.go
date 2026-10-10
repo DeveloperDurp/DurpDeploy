@@ -169,7 +169,7 @@ func TestArtifactGateApproveExactBytesE2E(t *testing.T) {
 		strings.Contains(page, gateBytes) {
 		t.Fatal("sensitive content leaked")
 	}
-	assertNormalGateOutput(t, f, deployment.ID, logs)
+	assertNormalGateOutput(t, f, deployment, logs)
 	if data := f.api(
 		t,
 		"GET",
@@ -203,16 +203,24 @@ func TestArtifactGateApproveExactBytesE2E(t *testing.T) {
 func assertNormalGateOutput(
 	t *testing.T,
 	f *artifactE2E,
-	id int64,
+	deployment db.Deployment,
 	logs string,
 ) {
 	t.Helper()
 	if !strings.Contains(logs, "generation-output-visible") {
 		t.Fatal("artifact gate suppressed normal step output")
 	}
-	detail := f.web(t, "GET", fmt.Sprintf("/deployments/%d", id), nil, 200)
-	if strings.Contains(detail, "Sensitive script hidden") ||
-		!strings.Contains(detail, "printf") {
+	detail := f.web(t, "GET",
+		fmt.Sprintf("/deployments/%d", deployment.ID), nil, 200)
+	if !strings.Contains(detail, "generation-output-visible") ||
+		strings.Contains(detail, `aria-label="Step definitions"`) {
+		t.Fatal("deployment lost normal output or still shows definitions")
+	}
+	release := f.web(t, "GET", fmt.Sprintf(
+		"/projects/%d/releases/%d", f.project.ID, deployment.ReleaseID,
+	), nil, 200)
+	if strings.Contains(release, "Sensitive script hidden") ||
+		!strings.Contains(release, "printf") {
 		t.Fatal("artifact gate suppressed script source")
 	}
 }

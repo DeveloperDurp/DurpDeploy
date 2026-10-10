@@ -131,8 +131,12 @@ SCRIPT
             echo 'FAIL: Terraform approval controls missing from web page' >&2; return 1;
         }
         page=$(curl_body "$BASE/deployments/$deployment")
+        [[ "$page" != *'aria-label="Step definitions"'* && "$page" == *'Step logs'* ]] || {
+            echo 'FAIL: Terraform deployment lost logs or shows definitions' >&2; return 1;
+        }
+        page=$(curl_body "$BASE/projects/$project/releases/$release")
         [[ "$page" != *'Sensitive script hidden'* && "$page" == *'set -eu'* ]] || {
-            echo 'FAIL: Terraform script source hidden on deployment page' >&2; return 1;
+            echo 'FAIL: Terraform script source hidden on release page' >&2; return 1;
         }
         api_get "$BASE/api/v1/deployments/$deployment/logs.txt" | python3 -c 'import sys; text=sys.stdin.read(); assert "Terraform will perform the following actions" in text; assert "terraform-e2e-sensitive-value" not in text'
         api_get "$BASE/api/v1/deployments/$deployment/artifact-gates/0/review" | python3 -c '

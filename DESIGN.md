@@ -150,12 +150,12 @@ keep `overflow-x-auto` and `table table-zebra table-fixed w-full`.
 ### Deployment detail on narrow screens
 - Use a vertical stack with document scrolling. Status and the active step sit
   with the title; labeled metadata wraps long values in `text-sm`.
-- Live step logs precede verification and step definitions in source order.
+- Live step logs precede verification in source order.
   Disabled verification is a compact `text-sm` line, not a card.
 - Primary actions and Back use `btn` on narrow screens and `sm:btn-sm` above
   that breakpoint. Export and Rollback use the existing native dropdown.
-- Step definitions use native expandable cards below `sm`, with full names and
-  wrapped scripts; the existing fixed table remains above `sm`.
+- Step definitions stay on the project and release pages. Deployment details
+  show execution logs without a second list of scripts at any screen size.
 - Action groups use the [cluster pattern](https://github.com/changeroa/StyleGallery/blob/main/patterns/in-line-grouping/cluster.md):
   `flex flex-wrap gap-2`, with no internal scroll container. Summary controls
   use `min-h-12` from the existing spacing scale for touch access.

@@ -195,6 +195,7 @@ Use only the disposable E2E examples for edits and deletion checks.
 | Rejoin deleted agent (#143) | Stop the disposable deleted agent after reconciling work. Move only its private `state.json` aside, keep its identity keys, and restart. Try an incorrect code, then pair from Admin > Agents with the current code and unchanged fingerprint; repeat through `POST /api/v1/admin/agents/pair`. | The listener rejects incorrect codes. Approved pairing creates a new registration and agent ID and allows polling again. The old ID remains absent; historical deployments remain with agent references cleared. |
 | Login, sessions, and CSRF (F0) | Sign out and request `/` without following redirects; sign in with the E2E admin. Submit POST `/projects` with the session cookie but omit the CSRF token (edit the request in developer tools). | Anonymous GET redirects to login (303); login redirects to the app; protected pages load; missing CSRF rejected (403). |
 | Happy path, steps page, scoped variables (F3.1) | `TestProject`, release `1.0.0`, environment `dev`. Deploy it and open Steps and live logs. | Success; logs contain `default-variable=hello`. |
+| Deployment detail without step definitions (#154) | Open a retained deployment on desktop and phone; inspect its step logs, status, actions, and verification results. Reload after completion, then open its release link and project Steps page. GET `/deployments/{id}`, `/deployments/{id}/logs`, and `/projects/{id}/releases/{relId}` through the API. | Deployment detail has no bottom Steps table, script cards, or step-definition empty message. Step log panels and controls remain usable; the release page and API `steps_json` retain the scripts. |
 | Deployment notes (F3.1b) | Inspect the original and `smoke-test-audit` deployments; submit another `1.0.0` deployment with a note. | Only the deployment given a note shows it. |
 | Dashboard deployment navigation | Open `/`. Click a status or date in any deployment entry, then return and use Tab and Enter. Repeat on a phone and resize the page. | Phone entries are separate rounded cards with all fields visible. Desktop entries use the existing table. The whole card or row opens its deployment; hover and keyboard focus highlight it. Text stays plain, with no added buttons. |
 | Cancel (F3.2) | Deploy `TestProject` release `1.0.1`; click Cancel while running. | Cancelled; the retained snapshot still contains `LongStep`. |
@@ -233,7 +234,9 @@ masked token, and `(known after apply)` values. The same data is available at
 `GET /api/v1/deployments/{id}/artifact-gates/0/review`. Viewers must receive
 403 for this endpoint and must not see the disclosure. No displayed value
 should contain the demo's `TF_VAR_demo_secret` project secret.
-The Steps table must show normal script previews. Logs must include Terraform's
+The release page's Steps table must show normal script previews. Deployment
+details show step logs and verification without a Steps definitions section.
+Logs must include Terraform's
 plan output, with green additions, red removals, and yellow modifications,
 both live and after a reload. The resource review uses matching Add/Remove/Modify
 badges and red/green Before/After borders. Sensitive values remain masked by

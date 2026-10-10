@@ -102,14 +102,10 @@ func TestMobile_RenderedHTML_includes_responsive_classes_when_authenticated(
 			},
 		},
 		{
-			name: "deployment detail step cards and table",
+			name: "deployment detail step log panels",
 			path: fmt.Sprintf("/deployments/%d", fixture.deployment.ID),
 			patterns: []string{
-				fmt.Sprintf(
-					`(?s)<table[^>]*%s`,
-					breakpointClassPattern("hidden", "sm:table"),
-				),
-				`(?s)<div[^>]*class="[^"]*sm:hidden[^"]*"[^>]*>\s*<details[^>]*>\s*<summary[^>]*>.*?Step 1: deploy.*?</summary>\s*<pre[^>]*>echo deploy</pre>`,
+				`(?s)<section[^>]*aria-label="Step logs"[^>]*>.*?<details[^>]*data-step-index="0"[^>]*>\s*<summary[^>]*class="[^"]*break-words[^"]*"[^>]*>.*?Step 1:.*?deploy.*?</summary>`,
 			},
 		},
 		{

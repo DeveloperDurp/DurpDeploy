@@ -1139,8 +1139,9 @@ assert "bash-e2e" in lines and "python-e2e=container-value" in lines, lines
 '
 INTERPRETER_DEPLOYMENT_PAGE=$(curl_body \
     "$BASE/deployments/$INTERPRETER_DEPLOYMENT_ID")
-grep -q '>python3<' <<<"$INTERPRETER_DEPLOYMENT_PAGE" || {
-    echo "FAIL: deployment page did not display python3"; exit 1;
+grep -q 'python-e2e=container-value' <<<"$INTERPRETER_DEPLOYMENT_PAGE" && \
+    ! grep -q 'aria-label="Step definitions"' <<<"$INTERPRETER_DEPLOYMENT_PAGE" || {
+    echo "FAIL: deployment page lost interpreter logs or shows definitions"; exit 1;
 }
 echo "  Real Bash/Python containers and default variables: OK"
 
@@ -1230,11 +1231,12 @@ assert "powershell-e2e" not in lines, lines
 '
 INTERPRETER_REDEPLOY_PAGE=$(curl_body \
     "$BASE/deployments/$INTERPRETER_REDEPLOY_ID")
-grep -q '>python3<' <<<"$INTERPRETER_REDEPLOY_PAGE" || {
-    echo "FAIL: redeployment page did not display frozen python3"; exit 1;
+grep -q 'python-e2e=container-value' <<<"$INTERPRETER_REDEPLOY_PAGE" && \
+    ! grep -q 'aria-label="Step definitions"' <<<"$INTERPRETER_REDEPLOY_PAGE" || {
+    echo "FAIL: redeployment page lost frozen Python logs or shows definitions"; exit 1;
 }
-if grep -q '>pwsh<' <<<"$INTERPRETER_REDEPLOY_PAGE"; then
-    echo "FAIL: redeployment page displayed refreshed pwsh"; exit 1
+if grep -q 'powershell-e2e' <<<"$INTERPRETER_REDEPLOY_PAGE"; then
+    echo "FAIL: redeployment page displayed refreshed PowerShell output"; exit 1
 fi
 echo "  Interpreter validation and immutable redeploy snapshot: OK"
 

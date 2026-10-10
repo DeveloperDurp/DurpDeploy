@@ -456,51 +456,5 @@ templ DeploymentDetail(project db.Project, release db.Release, environment db.En
 			}
 		</section>
 		<div hx-get={ fmt.Sprintf("/deployments/%d/verification", deployment.ID) } hx-trigger="load" hx-swap="outerHTML" aria-live="polite"></div>
-		<section class="card bg-base-200 p-4" aria-label="Step definitions">
-			<h2 class="text-xl font-bold mb-4">Steps</h2>
-			if len(parseReleaseSteps(release.StepsJson)) == 0 {
-				<p class="opacity-70 italic">No steps in this release.</p>
-			} else {
-				<div class="space-y-2 sm:hidden">
-					for index, step := range parseReleaseSteps(release.StepsJson) {
-						<details class="bg-base-100 rounded-box p-4">
-							<summary class="cursor-pointer font-medium break-words min-h-12">
-								Step { strconv.Itoa(index+1) }: { step.Name }
-								<span class="badge badge-outline ml-2">{ releaseStepInterpreter(step) }</span>
-							</summary>
-							<pre class="font-mono text-sm whitespace-pre-wrap break-all mt-2">{ step.ScriptBody }</pre>
-						</details>
-					}
-				</div>
-				<table class="table table-zebra table-fixed w-full hidden! sm:table!">
-					<thead>
-						<tr>
-							<th class="w-16">Order</th>
-							<th class="w-1/4">Name</th>
-							<th class="w-24">Interpreter</th>
-							<th class="w-auto">Script</th>
-						</tr>
-					</thead>
-					<tbody>
-						for _, step := range parseReleaseSteps(release.StepsJson) {
-							<tr>
-								<td>{ strconv.FormatInt(step.SortOrder, 10) }</td>
-								<td class="font-medium truncate">{ step.Name }</td>
-								<td class="whitespace-nowrap">{ releaseStepInterpreter(step) }</td>
-								<td class="truncate">
-									<code class="text-sm bg-base-300 px-2 py-1 rounded">
-										if len(step.ScriptBody) > 60 {
-											{ step.ScriptBody[:60] + "..." }
-										} else {
-											{ step.ScriptBody }
-										}
-									</code>
-								</td>
-							</tr>
-						}
-					</tbody>
-				</table>
-			}
-		</section>
 	</div>
 }
