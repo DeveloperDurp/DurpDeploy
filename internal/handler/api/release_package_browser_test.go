@@ -3,6 +3,7 @@
 package api_test
 
 import (
+	"encoding/json"
 	"fmt"
 	"testing"
 )
@@ -51,12 +52,18 @@ func TestReleaseDeferredPackageBrowserE2E(t *testing.T) {
 	f.changePackage("package")
 	browser.evaluate(
 		t,
-		"window.confirm = () => true; document.querySelector('form[action$=\"/refresh\"] button').click(); true",
+		"window.confirm = message => { window.refreshConfirmation = message; return true; }; document.querySelector('form[action$=\"/refresh\"] button').click(); true",
 	)
 	browser.wait(
 		t,
 		"document.querySelector('[data-package-pending]') === null && document.body.textContent.includes('Pinned ZIP package')",
 	)
+	var confirmed bool
+	if err := json.Unmarshal(browser.evaluate(t,
+		"window.refreshConfirmation.includes('replace its checksum')"),
+		&confirmed); err != nil || !confirmed {
+		t.Fatalf("checksum replacement confirmation missing: %v", err)
+	}
 	captureReleaseState(t, browser, "release-pinned-detail")
 }
 

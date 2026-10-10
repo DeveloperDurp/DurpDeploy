@@ -189,7 +189,11 @@ templ ReleaseDetail(project db.Project, release db.Release, variables []db.Relea
 						method="post"
 						action={ fmt.Sprintf("/projects/%d/releases/%d/refresh", project.ID, release.ID) }
 						hx-boost="true"
-						hx-confirm="Refresh this release with the latest steps and variables?"
+						if artifact.ReleaseID != 0 {
+							hx-confirm="Refresh this release with the latest steps and variables, download its package again, and replace its checksum for future deployments? Existing deployments and re-runs keep their original package pin."
+						} else {
+							hx-confirm="Refresh this release with the latest steps and variables?"
+						}
 					>
 						<button type="submit" class="btn btn-outline btn-warning btn-sm">Refresh</button>
 					</form>

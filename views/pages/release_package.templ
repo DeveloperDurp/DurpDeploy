@@ -14,6 +14,7 @@ templ ReleasePackageAttachment(artifact db.ReleaseArtifact) {
 			<h2 class="text-xl font-bold">Pinned ZIP package</h2>
 			<p class="font-mono break-all">SHA-256: { artifact.Sha256 }</p>
 			<p>Size: { strconv.FormatInt(artifact.Size,10) } bytes</p>
+			<p class="text-sm opacity-70">Refresh downloads the package again and replaces its checksum for future deployments. Existing deployments and re-runs keep their original package pin.</p>
 		}
 		<p class="break-all">{ artifact.Url }</p><p>Version: { artifact.Version }</p>
 		<p class="text-sm opacity-70">Steps receive ARTIFACT_PATH. Files are read-only; direct execution is blocked.</p>
