@@ -334,21 +334,21 @@ Choose **Override**, enter a project value and save to recreate the example.
 Global admins manage shared values; project deployers can override their own
 values and viewers see no write controls. Unassigned projects inherit nothing.
 
-The refreshed demo is `https://citadel.durp.loc:37293`, with data in
-`tmp/demo.pX7hhv` and its temporary certificate at `tls/cert.pem`.
+The refreshed demo is `https://citadel.durp.loc:45465`, with data in
+`tmp/demo.zU6HfZ` and its temporary certificate at `tls/cert.pem`.
 Credentials are in that directory's `login.txt`. Stop only this demo with
-`make demo-stop DEMO_DIR=/absolute/path/to/tmp/demo.pX7hhv`.
-The previous `tmp/demo.ugv3mx` history is retained on disk.
+`make demo-stop DEMO_DIR=/absolute/path/to/tmp/demo.zU6HfZ`.
+Previous `tmp/demo.ugv3mx` and `tmp/demo.pX7hhv` histories are retained on disk.
 
 The hands-on scope-change example is lifecycle
-[`Live scope manual`](https://citadel.durp.loc:37293/lifecycles/6), project
-[`Live scope manual`](https://citadel.durp.loc:37293/projects/24), and release
-[`before-scope-edit`](https://citadel.durp.loc:37293/projects/24/releases/36).
-Deployment [42](https://citadel.durp.loc:37293/deployments/42) prints
+[`Live scope manual`](https://citadel.durp.loc:45465/lifecycles/6), project
+[`Live scope manual`](https://citadel.durp.loc:45465/projects/24), and release
+[`before-scope-edit`](https://citadel.durp.loc:45465/projects/24/releases/36).
+Deployment [42](https://citadel.durp.loc:45465/deployments/42) prints
 `LIVE=all-stages` before the shared edit. The same release then prints
 `LIVE=unset` in prod in deployment
-[43](https://citadel.durp.loc:37293/deployments/43), and `LIVE=dev-only` in dev in
-deployment [44](https://citadel.durp.loc:37293/deployments/44).
+[43](https://citadel.durp.loc:45465/deployments/43), and `LIVE=dev-only` in dev in
+deployment [44](https://citadel.durp.loc:45465/deployments/44).
 The TOKEN output is redacted. Repeat by editing LIVE on the lifecycle page and
 deploying release 36 to Live scope prod or Live scope dev, without refreshing it.
 These examples create no schedules; all retained schedules remain disabled.
