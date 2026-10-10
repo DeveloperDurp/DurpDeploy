@@ -244,9 +244,18 @@ func (b *packageBrowser) captureNavigation(
 				},
 				&struct{}{},
 			)
+			b.evaluate(
+				t,
+				`document.fonts.ready.then(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve(true)))))`,
+			)
 			for _, action := range prepare {
 				action()
 			}
+			// Continuous status pulses must not block screenshots.
+			b.wait(
+				t,
+				`!document.querySelector('.htmx-settling') && document.getAnimations().every(a => a.playState !== 'running' || a.effect.getTiming().iterations === Infinity)`,
+			)
 			if string(
 				b.evaluate(
 					t,
@@ -257,12 +266,13 @@ func (b *packageBrowser) captureNavigation(
 					t,
 					"overflow-"+name+"-"+theme+"-"+fmt.Sprint(width),
 				)
-				t.Fatal("navigation overflows viewport")
+				t.Fatalf(
+					"navigation %s %s %d overflows viewport",
+					name,
+					theme,
+					width,
+				)
 			}
-			b.wait(
-				t,
-				`!document.querySelector('.htmx-settling') && document.getAnimations().every(a => a.playState !== 'running')`,
-			)
 			b.screenshot(
 				t,
 				fmt.Sprintf("navigation-%s-%s-%d", name, theme, width),

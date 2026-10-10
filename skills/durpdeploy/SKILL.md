@@ -435,10 +435,14 @@ An operator's reverse proxy may impose additional limits.
 Deployment logs also support structured SSE at
 `GET /api/v1/deployments/$DID/logs/stream?format=structured`. Each `log`
 event has an SSE `id` and JSON fields `id`, `line`, `step`, `step_index`
-(nullable for legacy/unassigned output), `created_at`, and optional `state`
+(nullable for legacy/unassigned output), `created_at`, `display_timestamp`,
+and optional `state`
 (`waiting`, `running`, `succeeded`, `failed`, or `cancelled`). Step indices
 are zero-based snapshot positions; duplicate names remain separate. State
-events are trusted lifecycle records, not parsed script output. Resume with
+events are trusted lifecycle records, not parsed script output. `created_at`
+is the persisted Unix time in seconds. `display_timestamp` formats that time
+as `YYYY-MM-DD HH:mm:ss` in the server's local timezone, matching timestamps
+on the deployment page before and after refresh. Resume with
 `Last-Event-ID` or an initial `after` query parameter. A terminal deployment
 drains its logs, sends `event: complete` with JSON `status`, then closes;
 clients should close their EventSource on that event. Default SSE/NDJSON and

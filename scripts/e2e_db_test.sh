@@ -738,6 +738,15 @@ echo "$SCHED_LIST" | grep -qF "* * * * *" || { echo "FAIL: schedule missing from
 echo "$SCHED_LIST" | grep -q "On" || { echo "FAIL: schedule not enabled"; exit 1; }
 echo "  Schedule list shows enabled schedule with future next_run_at: OK"
 
+# Stop this recurring schedule before later queue and browser checks.
+SCHEDULE_ID=$(db_query "SELECT id FROM scheduled_deployments WHERE note='$SCHEDULE_NOTE';")
+CODE=$(curl_silent -X POST -d "csrf_token=$CSRF" \
+    "$BASE/projects/$PROJECT_ID/schedules/$SCHEDULE_ID/toggle")
+[[ "$CODE" == 303 ]] || { echo "FAIL: disable retained schedule=$CODE"; exit 1; }
+[[ $(db_query "SELECT enabled FROM scheduled_deployments WHERE id=$SCHEDULE_ID;") == 0 ]] \
+    || { echo "FAIL: retained schedule still enabled"; exit 1; }
+echo "  Retained schedule disabled before later checks: OK"
+
 echo "=== F3.12: User Management (P1-2) ==="
 # List the seed admin in /admin/users.
 CODE=$(curl_silent "$BASE/admin/users")

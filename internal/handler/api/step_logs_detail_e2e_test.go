@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"durpdeploy/internal/db"
 )
@@ -41,10 +42,24 @@ func TestDeploymentStepLogsAPIWebE2E(t *testing.T) {
 		deployment.ID,
 	)
 	logs := f.readStepLogs(t, path, "")
+	var storedLogs []db.DeploymentLog
+	decodeStepLogTest(t, f.api(t, "GET", fmt.Sprintf(
+		"/api/v1/deployments/%d/logs", deployment.ID,
+	), nil, 200), &storedLogs)
+	storedByID := make(map[int64]db.DeploymentLog, len(storedLogs))
+	for _, log := range storedLogs {
+		storedByID[log.ID] = log
+	}
 	states := map[int64][]string{}
 	spoof := false
 	var previous int64
 	for _, log := range logs {
+		stored, ok := storedByID[log.ID]
+		if !ok || log.CreatedAt != stored.CreatedAt ||
+			log.DisplayTimestamp != time.Unix(stored.CreatedAt, 0).
+				Format("2006-01-02 15:04:05") {
+			t.Fatalf("stream timestamp differs from stored log: %+v", log)
+		}
 		if log.ID <= previous || log.StepIndex == nil {
 			t.Fatalf("invalid ordered step event: %+v", log)
 		}
@@ -67,6 +82,13 @@ func TestDeploymentStepLogsAPIWebE2E(t *testing.T) {
 	resumed := f.readStepLogs(t, path+"&after=0", fmt.Sprint(logs[1].ID))
 	if len(resumed) != len(logs)-2 || resumed[0].ID != logs[2].ID {
 		t.Fatal("resumed stream duplicated or omitted events")
+	}
+	for index, log := range resumed {
+		original := logs[index+2]
+		if log.CreatedAt != original.CreatedAt ||
+			log.DisplayTimestamp != original.DisplayTimestamp {
+			t.Fatal("resumed stream changed a persisted timestamp")
+		}
 	}
 	for _, failure := range []struct {
 		path   string

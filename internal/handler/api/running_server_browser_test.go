@@ -23,6 +23,8 @@ func TestRunningServerBrowserE2E(t *testing.T) {
 		release := seedRelease(t, f.h.repo, f.project.ID)
 		seedDeployment(t, f.h.repo, release.ID,
 			f.environment.ID, "succeeded")
+		seedDeployment(t, f.h.repo, release.ID,
+			f.environment.ID, "running")
 	}
 	if session == "" || token == "" {
 		t.Fatal("running browser suite requires its test session and API token")
