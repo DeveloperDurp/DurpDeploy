@@ -471,7 +471,7 @@ func (h *ProjectHandler) applyLifecycleSelection(
 ) error {
 	lifecycleStr := strings.TrimSpace(r.FormValue("lifecycle_id"))
 	if lifecycleStr == "" {
-		return h.repo.Queries.ClearProjectLifecycle(r.Context(), projectID)
+		return ApplyLifecycleSelection(r.Context(), h.repo, projectID, 0)
 	}
 	id, err := strconv.ParseInt(lifecycleStr, 10, 64)
 	if err != nil {
@@ -488,6 +488,25 @@ func ApplyLifecycleSelection(
 	projectID int64,
 	lifecycleID int64,
 ) error {
+	user := auth.UserFromContext(ctx)
+	if lifecycleID <= 0 && (user == nil || user.Role != "admin") {
+		project, err := repo.Queries.GetProject(ctx, projectID)
+		if err != nil {
+			return err
+		}
+		if !project.LifecycleID.Valid {
+			return nil
+		}
+		if !CanManageProject(ctx, repo, user, projectID) {
+			return ErrLifecycleRemovalForbidden
+		}
+		_, err = repo.Queries.ClearProjectLifecycleIfAssigned(
+			ctx, db.ClearProjectLifecycleIfAssignedParams{
+				ID: projectID, LifecycleID: project.LifecycleID,
+			},
+		)
+		return err
+	}
 	if err := AuthorizeLifecycleSelection(
 		ctx, repo, projectID, lifecycleID,
 	); err != nil {
