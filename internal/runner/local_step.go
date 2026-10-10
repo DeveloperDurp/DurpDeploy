@@ -167,13 +167,6 @@ func (r *DeploymentRunner) runStepAttempt(
 	if r.engine.kind == "podman" {
 		timeoutFlag = "--timeout="
 	}
-	memoryLimit := "--memory=256m"
-	if request.handoff.volume != "" {
-		// The writing attempt is charged for shared tmpfs pages.
-		memoryLimit = fmt.Sprintf(
-			"--memory=%d", artifactStagingCapacity()+(256<<20),
-		)
-	}
 	network := request.step.NetworkMode
 	tmpfs := "--tmpfs=/tmp:rw,nosuid,size=64m"
 	if request.step.ApprovalArtifactPath != "" ||
@@ -197,7 +190,7 @@ func (r *DeploymentRunner) runStepAttempt(
 		"--security-opt=no-new-privileges", "--user=65534:65534",
 		tmpfs,
 		"--env=HOME=/tmp", "--env=TERM=dumb",
-		"--pids-limit=128", memoryLimit, "--cpus=1")
+		"--pids-limit=128")
 	if r.engine.kind == "podman" {
 		args = append(args, "--image-volume=ignore", "--http-proxy=false")
 	}

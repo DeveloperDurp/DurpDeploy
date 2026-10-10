@@ -1,5 +1,45 @@
 # Manual checks after `make e2e-test`
 
+## Server step resource policy
+
+Server-side deployment steps have no DurpDeploy-imposed RAM ceiling or CPU
+quota. PID limits, temporary-filesystem bounds, and other isolation remain.
+Helper/infrastructure containers and remote agents retain their existing
+resource policy; the agent follow-up is
+[issue #14](https://github.com/DeveloperDurp/durpdeploy-agent/issues/14).
+
+For a manual check on a running instance, create a disposable project through
+`POST /api/v1/projects`, add a local Bash step using
+`docker.io/library/bash:5.2` through `POST /api/v1/projects/$PID/steps`, and use
+`printf payload > "$DURPDEPLOY_STAGE_DIR/data"; sleep 120` as its script.
+Create its release and deployment through the corresponding project API
+endpoints. During execution, inspect its `durpdeploy-$DID-*` step container:
+
+```bash
+podman inspect --format '{{json .HostConfig}}' STEP_CONTAINER
+```
+
+Use `docker inspect` on Docker hosts. Expect `Memory` and `NanoCpus` to be `0`,
+`CpuQuota` to be `0` or `-1`, `PidsLimit` to be `128`, and `ReadonlyRootfs` to
+be `true`. Check step containers rather than the staging keeper. External
+host/cgroup limits can still constrain execution. Add a second step that reads
+`"$DURPDEPLOY_STAGE_DIR/data"` to repeat the check with artifact handoff.
+Let each deployment finish, or cancel through
+`POST /api/v1/deployments/$DID/cancel` and wait for confirmed cleanup. Retain
+the project, release, and history for repeat checks; no schedule is needed.
+
+The isolated API regression check exercises live containers and both steps:
+
+```bash
+go tool templ generate
+make swagger-ui-copy
+DURPDEPLOY_CONTAINER_RUNTIME=podman \
+DURPDEPLOY_CONTAINER_URL="unix://${XDG_RUNTIME_DIR}/podman/podman.sock" \
+go test -tags=e2e -race -count=1 -run '^TestDeploymentStepResourcesE2E$' ./internal/handler/api
+```
+
+## Populated demo
+
 For a complete local demo, run `make demo` (or ask a coding agent to run it).
 The launcher builds the server, serves `https://citadel.durp.loc:<random-port>`
 through Caddy with a certificate for that hostname, pairs a

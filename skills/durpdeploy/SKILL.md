@@ -156,6 +156,13 @@ while this flag is true; polling updates it automatically.
 
 `local` means mandatory server-container execution; specify an image with
 `bash`, `pwsh`, or `python3` installed. `agent` runs on matching remote agents.
+Local step containers have no DurpDeploy-imposed RAM ceiling or CPU quota,
+including when sharing deployment artifacts. Host/runtime resource policy
+still applies; account for workloads consuming more RAM and CPU. PID limits,
+temporary-filesystem bounds, and other container isolation remain enforced.
+Remote-agent resource limits depend on the installed agent version; the
+matching change is tracked in
+[agent issue #14](https://github.com/DeveloperDurp/durpdeploy-agent/issues/14).
 `agent_execution_mode` defaults to `host`, which rejects a container image.
 For remote containers, set `execution_target: "agent"`,
 `agent_execution_mode: "container"`, and a valid `container_image`.
@@ -505,9 +512,9 @@ The staging and approved paths are reserved: variable create/update requests
 return 422 for `DURPDEPLOY_STAGE_DIR` and `DURPDEPLOY_APPROVED_DIR`, including
 blank-secret updates. Step variable selections cannot include them. Staging
 is writable, noexec, nosuid, and nodev, backed by a bounded temporary volume
-(512 MiB plus 10,000 host pages, 20,000 inodes). Local attempts have a combined
-memory ceiling of that staging capacity plus 256 MiB; process memory and
-`/tmp` share this allowance with staging writes. It is removed on success,
+(512 MiB plus 10,000 host pages, 20,000 inodes). These filesystem bounds do
+not impose a RAM ceiling or CPU quota on local step containers. The staging
+helper retains its own resource limits. The volume is removed on success,
 failure, cancellation, or shutdown; startup reclaims orphaned volumes within
 the configured runtime namespace. Unconfirmed removal yields
 `cleanup_unconfirmed` and blocks retry until a successful startup runtime sweep
