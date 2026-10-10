@@ -1,12 +1,11 @@
 apiVersion: v2
 name: durpdeploy
-description: Single-binary deploy runner for bash scripts against environments.
+description: Single-binary deployment server for Bash, PowerShell, and Python steps.
 type: application
 # Chart version — bump on any change to templates/values.
 version: 0.1.0
-# App version — matches the binary's `durpdeploy version` output.
-# "dev" matches what `make build` produces; operators overriding
-# image.tag should also override this.
+# Default image tag and application-version label. The release pipeline
+# updates this value; image.tag can override the selected image tag.
 appVersion: "dev"
 keywords:
   - deploy

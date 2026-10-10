@@ -1,6 +1,7 @@
 # DurpDeploy agent operator runbook
 
-This runbook configures a DurpDeploy server and one outbound-only remote agent.
+This runbook configures a server and a remote agent. Paired runtime traffic is
+outbound; initial pairing uses a temporary agent listener.
 It covers the server listener, admin pairing, agent installation, routing,
 maintenance, and recovery.
 
@@ -93,9 +94,10 @@ stay on the server. The agent never receives the SQLite database,
 `DURPDEPLOY_SECRET_KEY`,
 or the server's control-plane state directory.
 
-The **agent has no database**. Its private state directory contains only the
-agent identity certificate and key, paired server identity state, and a
-temporary hash-only current-claim marker. Keep that directory private and
+The **agent has no database**. Its private state directory contains the
+agent identity certificate and key, paired server identity state, and durable
+claim recovery state, including container cleanup metadata and encrypted
+terminal reports awaiting acknowledgement. Keep that directory private and
 back it up only if preserving the enrolled identity is intentional.
 
 Agents initiate runtime connections, but pairing needs a temporary unpaired agent
@@ -172,32 +174,21 @@ persists the direct listener URL for the agent. Operators do not enter it on
 the agent host. Each variable can be overridden independently; an omitted
 variable keeps its default.
 
-On a systemd server, put those variables in the root-owned server environment
-file referenced by the unit, for example:
+For Compose, apply listener overrides in the app service's `environment` block
+in `compose.yml`; these entries take precedence over `compose.app.env`.
+Recreate the app with `docker compose up -d app` after changing them. Keep the
+identity volume across restarts, owned by the app user and mode `0700` or
+stricter. Do not copy its private key to an agent. Check the listener and server
+logs before pairing:
 
 ```bash
-sudo install -d -o durpdeploy -g durpdeploy -m 0750 /var/lib/durpdeploy/agent-identity
-sudo install -m 0600 /tmp/durpdeploy.env /etc/durpdeploy/durpdeploy.env
-sudo systemctl daemon-reload
-sudo systemctl restart durpdeploy
-sudo systemctl status durpdeploy --no-pager
-```
-
-The server unit already permits writes below `/var/lib/durpdeploy`. Keep the
-identity directory owned by `durpdeploy`, mode `0700` or stricter, and do not
-copy its private key to an agent. Check the listener and server logs before
-pairing:
-
-```bash
-sudo journalctl -u durpdeploy -n 100 --no-pager
+docker compose logs --tail=100 app
 sudo ss -ltn '( sport = :10943 )'
 ```
 
-For Compose, add the same three variables to `compose.app.env`. Mount a private
-server identity directory at the configured path. Publish the direct listener
-port only to the necessary agent network. The stock Compose files publish
-only Caddy's 80 and 443, so port 10943 is intentionally not exposed by
-default. Do not put the server identity directory in the agent service.
+The stock Compose files publish port 10943 directly and preserve the server
+identity in a private volume. Restrict that port to the necessary agent network.
+Do not put the server identity directory in the agent service.
 
 ## Admin UI pairing workflow
 
@@ -419,20 +410,14 @@ authority. The filesystem restrictions do not contain that access.
 Container-mode steps run in separate restricted containers without that socket
 or the supervisor's private state volume.
 
-In the default socket-free profile, these controls reduce the agent container's
-access to its host. They do not
-turn deployment scripts into trusted code, restrict the network destinations
-available to the container, or prevent scripts from using secrets and files
-that the operator makes available. Co-locating the agent with the control
-plane is compatible with this contract when the container mounts remain
-private, but a remote host is still the preferred placement for production
-deployments.
+These limits do not restrict host-mode network destinations or prevent use of
+supplied secrets. Prefer remote hosts for production. Co-location requires
+private mounts and trusted scripts.
 
-The supplied systemd unit provides the equivalent service-level read-only and
-private mount boundary. A direct foreground agent does not and is reserved for
-initial pairing. The control-plane server permits an unisolated foreground
-runner only with the explicit `DURPDEPLOY_EXECUTION_BOUNDARY=development`
-opt-in; an unset marker fails deployment execution. See `docs/deploy.md`.
+The standalone agent's systemd unit supplies read-only and private mount boundaries.
+A foreground agent lacks these boundaries and is reserved for initial pairing.
+Server steps still require containers, including development runs. See
+[server execution](deploy.md#server-side-container-execution).
 
 ## Direct binary installation
 
@@ -572,11 +557,13 @@ contains agent identity, not SQLite or a server backup.
 
 ## systemd installation and operations
 
-Install the unit shipped in the repository after installing the binary and
-environment file:
+Install the unit from your standalone `durpdeploy-agent` checkout after
+installing its binary and environment file. This unit belongs to the
+[agent repository](https://github.com/DeveloperDurp/durpdeploy-agent), not the
+DurpDeploy server repository:
 
 ```bash
-sudo install -m 0644 systemd/durpdeploy-agent.service \
+sudo install -m 0644 /path/to/durpdeploy-agent/systemd/durpdeploy-agent.service \
   /etc/systemd/system/durpdeploy-agent.service
 sudo systemctl daemon-reload
 sudo systemctl enable --now durpdeploy-agent
@@ -717,8 +704,10 @@ is not a database, and restoring it to another host transfers the identity.
 
 Do not route port 10943 through Caddy. Do not use a central CA, trust-on-first-
 use, SSH, a trust-all TLS setting, inbound agent ports, or a shared agent state
-directory. Do not give an agent the server database, server secret key, Docker
-socket, or control-plane state directory.
+directory. Never give an agent the server database, server secret key, or
+control-plane state directory. The default profile is socket-free. Opt-in
+container execution exposes a local runtime socket to the supervisor only;
+host-mode scripts then inherit runtime authority. Workload containers get no socket.
 
 For protocol details and fixed timing limits, see
 [`agent-protocol.md`](agent-protocol.md). For server deployment and backup

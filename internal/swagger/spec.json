@@ -2005,10 +2005,7 @@
         ],
         "responses": {
           "200": {
-            "description": "OK",
-            "schema": {
-              "$ref": "#/definitions/ArtifactGateListResponse"
-            }
+            "$ref": "#/responses/ArtifactGateListResponse"
           },
           "403": {
             "description": "Forbidden error response.",
@@ -3482,6 +3479,35 @@
             "bearer": []
           }
         ]
+      }
+    },
+    "/healthz": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Public API liveness probe. This does not check database connectivity.",
+        "operationId": "healthzAPI",
+        "responses": {
+          "200": {
+            "description": "The HTTP API is running.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "ok": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Unexpected request body."
+          },
+          "413": {
+            "description": "Request body exceeds the encoded byte ceiling."
+          }
+        },
+        "security": []
       }
     },
     "/lifecycles": {
@@ -9371,10 +9397,6 @@
         "active_work_url": {
           "type": "string",
           "x-go-name": "ActiveWorkURL"
-        },
-        "id": {
-          "type": "string",
-          "x-go-name": "ID"
         },
         "queue_position": {
           "type": "integer",

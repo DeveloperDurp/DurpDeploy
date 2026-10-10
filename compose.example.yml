@@ -14,11 +14,12 @@
 #        mkdir -p secrets
 #        openssl rand -base64 32 > secrets/durpdeploy_key
 #        chmod 0600 secrets/durpdeploy_key
-#   4. Create a Litestream config at deploy/litestream.example.yml (see
-#      systemd/litestream.yml for a starting template). At minimum set the
-#      S3 bucket, path, region, and credentials.
-#   5. If your Caddyfile still proxies to `localhost:8080`, change the
-#      `reverse_proxy` line to `app:8080` so Caddy can reach the app container.
+#      For rootful Docker, set host ownership to the app's container identity:
+#        sudo chown 10001:10001 secrets/durpdeploy_key
+#      For rootless Podman, use podman unshare chown 10001:10001 instead.
+#   4. Edit deploy/litestream.example.yml, which the sidecar mounts directly.
+#      Set the S3 bucket, path, region, and credentials.
+#   5. Set BACKEND=app:8080 in compose.caddy.env so Caddy reaches the app.
 #   6. Build and start the stack:
 #        docker compose up -d --build
 #
@@ -176,11 +177,9 @@ services:
     depends_on:
       app:
         condition: service_healthy
-    # Note: Litestream 0.3's `replicate` command does not expose an HTTP monitor
-    # by default. If you want DURPDEPLOY_LITESTREAM_CHECK_COMMAND to poll live
-    # status, run `litestream monitor -http :9720` as a second command in the
-    # litestream service (or set up a separate sidecar). The default empty value
-    # means the app skips backup health checks.
+    # Backup health checks are disabled by default. To enable them, supply a
+    # trusted DURPDEPLOY_LITESTREAM_CHECK_COMMAND executable inside the app
+    # container; see docs/backup-restore.md. The app image has no Litestream CLI.
     security_opt:
       - no-new-privileges:true
     cap_drop: [ALL]
@@ -206,4 +205,6 @@ networks:
 
 secrets:
   durpdeploy_key:
-    file: ./secrets/durpdeploy_key  # operator creates this file with: openssl rand -base64 32 > secrets/durpdeploy_key && chmod 0600 secrets/durpdeploy_key
+    # Create with openssl rand -base64 32, mode 0600, and mapped UID 10001
+    # ownership as described above. File-backed secrets preserve host ownership.
+    file: ./secrets/durpdeploy_key

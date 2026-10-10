@@ -1,10 +1,9 @@
 # Default values for durpdeploy.
 # Override per-install with `-f my-values.yaml` or `--set key=value`.
 
-# -- Number of pod replicas. The in-process runner and the startup recovery
-# path have a non-atomic claim (see cmd/server/main.go
-# comment on recoverPendingDeployments) — keep this at 1 unless you
-# understand the deploy-creation race.
+# -- Number of pod replicas. Keep at 1: schedulers, live log brokers, and
+# cancellation tracking are process-local. Transactional deployment admission
+# alone does not coordinate multiple server instances.
 replicaCount: 1
 
 image:
@@ -35,10 +34,9 @@ serviceAccount:
 # -- Pod-level annotations.
 podAnnotations: {}
 # --- Autoscaling ---------------------------------------------------------
-# Disabled by default. The in-process runner and startup recovery path have a
-# non-atomic claim — scaling up introduces
-# deploy-creation races. Only enable if you have moved the queue out
-# of the process.
+# Disabled by default. Multiple schedulers can duplicate scheduled work and
+# live log delivery is not shared across pods. Leave disabled until the
+# process-local components support coordinated operation.
 autoscaling:
   enabled: false
   minReplicas: 1
@@ -132,8 +130,8 @@ postgres:
   # If set, the chart does not render its own Secret and uses this one.
   existingSecret: ""
   # -- Used only when the chart renders the Secret (no existingSecret).
-  # Leave empty — the operator MUST set it after install. Stored in
-  # stringData (not data), so it can be applied verbatim.
+  # Configure before startup, or use existingSecret to keep the password
+  # out of Helm values. Stored in stringData when the chart renders it.
   password: ""
 
 # -- Postgres connection. The DSN is built from these fields and exposed
@@ -174,23 +172,22 @@ oidc:
     key: client-secret
 
 # --- Encryption key ------------------------------------------------------
-# The chart renders a Secret durpdeploy-secret-key with a key the
-# operator fills in. Encryption uses AES-256-GCM (see internal/secret);
+# The chart can render a Secret <fullname>-secret-key with an operator-supplied
+# key. Encryption uses AES-256-GCM (see internal/secret);
 # the key is read from DURPDEPLOY_SECRET_KEY, which is populated from
-# this Secret at boot. The chart will refuse to start with an empty
-# value — the Secret is rendered but the pod's startup probe will
-# fail and Helm will surface it.
+# this Secret at boot. The binary refuses to start with an empty value.
+# Use helm install --wait to wait for readiness and detect startup failure.
 secretKey:
-  # -- When true, render a Secret named durpdeploy-secret-key. Set
+  # -- When true, render a Secret named <fullname>-secret-key. Set
   # existingSecret to bring your own.
   create: true
-  # -- Use an existing Secret with key `secret-key`. Mutually exclusive
-  # with secretKey.create.
+  # -- Use an existing Secret with key `secret-key`. Takes precedence
+  # over secretKey.create and disables rendering the chart-managed Secret.
   existingSecret: ""
-  # -- Optional pre-filled key (base64, 32 bytes). Leave empty — the
-  # operator must generate it post-install:
+  # -- Optional pre-filled key (base64, 32 bytes). Configure before startup
+  # or use existingSecret. Generate a key with:
   #   openssl rand -base64 32
-  # and `kubectl patch secret` or `kubectl edit secret` it in.
+  # Manual Secret updates require an explicit Deployment restart.
   value: ""
 
 # --- Ingress -------------------------------------------------------------

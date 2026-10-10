@@ -6,20 +6,27 @@ Namespace:    {{ .Release.Namespace }}
 ================================================================
 STEP 1 — Encryption key
 ================================================================
-The chart rendered a Secret named {{ include "durpdeploy.secretKeyName" . }}.
+The Deployment requires Secret {{ include "durpdeploy.secretKeyName" . }}
+in namespace {{ .Release.Namespace }} with key `secret-key`.
 The durpdeploy binary refuses to start without a valid 32-byte key.
 
 If you brought your own Secret (secretKey.existingSecret), skip this step.
 
 Otherwise, generate one and patch it in:
 
-  openssl rand -base64 32 | kubectl create secret generic \
+  KEY=$(openssl rand -base64 32)
+  kubectl create secret generic \
     {{ include "durpdeploy.secretKeyName" . }} \
-    --from-literal=secret-key=/dev/stdin \
+    -n {{ .Release.Namespace }} --from-literal=secret-key="$KEY" \
     --dry-run=client -o yaml | kubectl apply -f -
+  unset KEY
 
-The Deployment has a checksum annotation on the Secret, so the pod will
-roll automatically.
+After manually updating a Secret, restart the Deployment explicitly:
+
+  kubectl rollout restart deploy/{{ include "durpdeploy.fullname" . }} -n {{ .Release.Namespace }}
+
+The checksum annotation triggers rollout only when Helm renders changed values.
+Back up the matching encryption key separately from the database.
 
 ================================================================
 STEP 2 — Postgres
@@ -38,14 +45,28 @@ holding the password. Set the same password in your Postgres server, then
 restart the Deployment:
 
   PGPASSWORD=$(kubectl get secret {{ include "durpdeploy.postgresSecretName" . }} \
-    -o jsonpath='{.data.password}' | base64 -d)
+    -n {{ .Release.Namespace }} -o jsonpath='{.data.password}' | base64 -d)
   # ... configure Postgres with that password
-  kubectl rollout restart deploy/{{ include "durpdeploy.fullname" . }}
+  kubectl rollout restart deploy/{{ include "durpdeploy.fullname" . }} -n {{ .Release.Namespace }}
 {{- else if .Values.postgres.existingSecret }}
 
 The chart is using existing Secret {{ .Values.postgres.existingSecret }} for
 the Postgres password. Make sure it contains a key named `password`.
+{{- else }}
+
+The chart does not create a Postgres password Secret with the default values.
+Create the required Secret in this release's namespace and configure Postgres
+with the same password:
+
+  PG_PASSWORD=$(openssl rand -hex 32)
+  kubectl create secret generic {{ include "durpdeploy.postgresSecretName" . }} \
+    -n {{ .Release.Namespace }} --from-literal=password="$PG_PASSWORD"
+  # ... configure Postgres with that password, then unset PG_PASSWORD
 {{- end }}
+
+Current chart limitation: the assembled database URI references the password
+before its environment variable is defined. Supply a complete DURPDEPLOY_DB
+through extraEnv using a Secret reference as shown in the chart README.
 
 ================================================================
 STEP 3 — Create the first admin user
@@ -72,7 +93,7 @@ Ingress enabled. Visit:
 
 Ingress is not enabled. To reach the UI from outside the cluster:
 
-  kubectl port-forward svc/{{ include "durpdeploy.fullname" . }} 8080:{{ .Values.service.port }}
+  kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "durpdeploy.fullname" . }} 8080:{{ .Values.service.port }}
   open http://localhost:8080
 {{- end }}
 

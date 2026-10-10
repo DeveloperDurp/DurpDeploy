@@ -12,7 +12,7 @@ import (
 // Security:
 //   bearer:
 // Responses:
-//   200: body:ArtifactGateListResponse
+//   200: ArtifactGateListResponse
 //   403: body:ForbiddenError
 
 // swagger:route GET /deployments/{id}/artifact-gates/{stepIndex}/artifact deployments downloadArtifactGate
