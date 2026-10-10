@@ -13,8 +13,9 @@ test_pid=
 provider_ready=0
 
 cleanup() {
-    local status=$? directory child_pid cleanup_status=0
-    local -a directories=() sessions=()
+    local status=$? directory child_pid session changed cleanup_status=0
+    local known_sessions=' ' known_groups=" $test_pid "
+    local -a sessions=()
     trap - EXIT HUP INT TERM
     if [[ -n $test_pid ]]; then
         # Stop the whole test process group before removing its containers.
@@ -23,17 +24,33 @@ cleanup() {
     fi
     # Nested runners live beneath this run's directory. Their process groups
     # and sessions also belong to this run if interruption skips their traps.
-    while IFS= read -r -d '' directory; do
-        directories+=("$directory")
-    done < <(find "$session_dir" -type d -name 'durpdeploy-go-test.*' -print0)
-    for directory in "${directories[@]}"; do
-        if [[ -f $directory/process-group ]]; then
-            read -r child_pid < "$directory/process-group"
-            kill -KILL -- "-$child_pid" 2>/dev/null || true
-        fi
-    done
-    for directory in "${directories[@]}"; do
-        sessions+=("${directory##*/}")
+    # A detached nested group can create another runner during discovery.
+    # Rescan after stopping new groups until no unprocessed sessions/groups remain.
+    while :; do
+        changed=0
+        while IFS= read -r -d '' directory; do
+            session=${directory##*/}
+            case $known_sessions in
+            *" $session "*) ;;
+            *)
+                sessions+=("$session")
+                known_sessions+="$session "
+                changed=1
+                ;;
+            esac
+            if [[ -f $directory/process-group ]] && \
+                read -r child_pid < "$directory/process-group"; then
+                case $known_groups in
+                *" $child_pid "*) ;;
+                *)
+                    known_groups+="$child_pid "
+                    changed=1
+                    kill -KILL -- "-$child_pid" 2>/dev/null || true
+                    ;;
+                esac
+            fi
+        done < <(find "$session_dir" -type d -name 'durpdeploy-go-test.*' -print0)
+        if ((changed == 0)); then break; fi
     done
     if [[ -x $session_dir/cleanup ]]; then
         "$session_dir/cleanup" "${sessions[@]}" >&2 || cleanup_status=$?
