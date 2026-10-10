@@ -162,7 +162,7 @@ func TestResourceEditModalBrowserE2E(t *testing.T) {
 	f := newArtifactE2E(t)
 	b := startPackageBrowser(t)
 	b.setBackTestSession(t, f.baseURL, f.session)
-	for _, resource := range []string{"environments", "lifecycles", "templates"} {
+	for _, resource := range []string{"environments", "templates"} {
 		t.Run(resource, func(t *testing.T) {
 			api := "/api/v1/" + resource
 			payload := map[string]string{"name": "original-" + resource}
@@ -176,10 +176,7 @@ func TestResourceEditModalBrowserE2E(t *testing.T) {
 			payload["name"] = "duplicate-" + resource
 			f.api(t, "POST", api, payload, 201)
 			apiPath := fmt.Sprintf("%s/%d", api, created.ID)
-			href := fmt.Sprintf("/%s/%d", resource, created.ID)
-			if resource != "lifecycles" {
-				href += "/edit"
-			}
+			href := fmt.Sprintf("/%s/%d/edit", resource, created.ID)
 			b.navigateBackTest(t, f.baseURL+"/"+resource)
 			open := func() {
 				b.wait(
@@ -228,9 +225,6 @@ func TestResourceEditModalBrowserE2E(t *testing.T) {
 				Stages    []struct{ ID int64 }
 			}
 			decodeStepLogTest(t, f.api(t, "GET", apiPath, nil, 200), &saved)
-			if resource == "lifecycles" {
-				saved.Name = saved.Lifecycle.Name
-			}
 			if saved.Name != "original-"+resource {
 				t.Fatal("canceling persisted an edit")
 			}
@@ -239,39 +233,6 @@ func TestResourceEditModalBrowserE2E(t *testing.T) {
 				t,
 				`!document.querySelector('.htmx-settling, .htmx-request')`,
 			)
-			if resource == "lifecycles" {
-				b.evaluate(
-					t,
-					fmt.Sprintf(
-						`const form = document.querySelector('#project-edit-content [data-lifecycle-environment-assignment]'); form.querySelector('select').value = %q; form.querySelector('button').click(); true`,
-						fmt.Sprint(f.environment.ID),
-					),
-				)
-				b.wait(
-					t,
-					`document.querySelector('#project-edit-dialog').open && document.querySelector('#project-edit-content [data-lifecycle-stage-action="delete"]')`,
-				)
-				decodeStepLogTest(t, f.api(t, "GET", apiPath, nil, 200), &saved)
-				if len(saved.Stages) != 1 {
-					t.Fatal("stage addition did not persist inside modal")
-				}
-				b.wait(
-					t,
-					`!document.querySelector('.htmx-settling, .htmx-request')`,
-				)
-				b.evaluate(
-					t,
-					`window.confirm = () => true; [...document.querySelectorAll('#project-edit-content [data-lifecycle-stage-action="delete"]')].find(b => b.getClientRects().length).click(); true`,
-				)
-				b.wait(
-					t,
-					`document.querySelector('#project-edit-dialog').open && !document.querySelector('#project-edit-content [data-lifecycle-stage-action="delete"]')`,
-				)
-				decodeStepLogTest(t, f.api(t, "GET", apiPath, nil, 200), &saved)
-				if len(saved.Stages) != 0 {
-					t.Fatal("stage removal did not persist inside modal")
-				}
-			}
 			b.wait(
 				t,
 				`!document.querySelector('.htmx-settling, .htmx-request')`,
@@ -326,9 +287,6 @@ func TestResourceEditModalBrowserE2E(t *testing.T) {
 				t.Fatal("editing navigated or reloaded the document")
 			}
 			decodeStepLogTest(t, f.api(t, "GET", apiPath, nil, 200), &saved)
-			if resource == "lifecycles" {
-				saved.Name = saved.Lifecycle.Name
-			}
 			if saved.Name != name {
 				t.Fatal("Save missing from API")
 			}
@@ -337,7 +295,7 @@ func TestResourceEditModalBrowserE2E(t *testing.T) {
 				t,
 				`!document.querySelector('.htmx-settling, .htmx-request')`,
 			)
-			const deletion = `document.querySelector('#project-edit-content button[hx-delete], #project-edit-content form[hx-confirm^="Delete this lifecycle"] button')`
+			const deletion = `document.querySelector('#project-edit-content button[hx-delete]')`
 			b.evaluate(
 				t,
 				`window.confirm = () => false; `+deletion+`.click(); true`,

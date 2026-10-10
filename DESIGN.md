@@ -52,11 +52,17 @@ Use labelled native controls and existing form wrappers. Validation uses
 colors, full-width fields, and 48px default controls. Hide initial Alpine forms
 with `x-cloak`; keep directive expressions short and methods in the shared bundle.
 
-Create/edit Project, Environment, Lifecycle, Template, and Step in native dialogs.
+Create and edit Project, Environment, Template, and Step in native dialogs.
+Create Lifecycle in a native dialog.
 Keep Save and Back/Cancel in a sticky header. Validation retains submitted values
 inside the dialog. Success refreshes the relevant list/detail and closes it.
 Cancel, Back, Escape, and backdrop clicks discard drafts and restore focus.
 Preserve standalone URLs and native form submissions. Deployments use their pages.
+
+Lifecycle cards open the full workspace page. Keep promotion stages, shared
+variables for global administrators, and lifecycle settings together.
+Back returns to the list. Save and Delete return there after they persist changes.
+Keep Delete last and preserve read-only viewer pages.
 
 Delete is the final edit section, after settings and members, with confirmation.
 No Delete control appears on creation forms or viewer pages. Step deletion returns

@@ -154,7 +154,7 @@ func TestMainPagePatternBrowserE2E(t *testing.T) {
 			"code":                  "Enter",
 			"windowsVirtualKeyCode": 13,
 		}, &struct{}{})
-		if card.list == "/projects" {
+		if card.list == "/projects" || card.list == "/lifecycles" {
 			b.wait(t, fmt.Sprintf(`location.pathname === %q`, card.destination))
 		} else {
 			b.wait(

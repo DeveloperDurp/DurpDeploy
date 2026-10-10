@@ -303,7 +303,10 @@ fresh pending example for manual approval checks.
 
 `make e2e-test` retains a `shared-lifecycle-<run>` lifecycle and two
 `shared-project-<run>` projects. The suite prints their editor, variables,
-release and deployment links. Open the lifecycle's **Shared variables** section
+release and deployment links. On `/lifecycles`, tap the lifecycle card to open
+its full page, then find **Shared variables** below **Promotion order**. Existing
+lifecycles open the page instead of a settings modal on every screen size.
+Open the lifecycle's **Shared variables** section
 to add an unscoped value or an override for one of its stages. Secret values
 show a mask; leaving an existing secret blank keeps its saved value.
 
