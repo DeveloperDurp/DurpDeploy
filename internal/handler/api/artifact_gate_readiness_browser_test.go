@@ -85,38 +85,7 @@ func TestArtifactGateReadinessBrowserE2E(t *testing.T) {
 				t.Fatal("decision conflict left the deployment page")
 			}
 		}
-		for _, theme := range []string{"light", "mocha"} {
-			browser.evaluate(
-				t,
-				fmt.Sprintf(
-					`document.documentElement.setAttribute('data-theme', %q)`,
-					theme,
-				),
-			)
-			for _, width := range []int{375, 768, 1280} {
-				browser.call(
-					t,
-					"Emulation.setDeviceMetricsOverride",
-					map[string]any{
-						"width": width, "height": 900, "deviceScaleFactor": 1,
-						"mobile": false,
-					},
-					&struct{}{},
-				)
-				if string(
-					browser.evaluate(
-						t,
-						`document.documentElement.scrollWidth <= innerWidth`,
-					),
-				) != "true" {
-					t.Fatal("artifact decision state overflows viewport")
-				}
-				browser.screenshot(
-					t,
-					fmt.Sprintf("artifact-%s-%s-%d", state, theme, width),
-				)
-			}
-		}
+		captureArtifactDecisionState(t, browser, state)
 	}
 	// The fresh form can still approve and execute the immutable saved plan.
 	browser.evaluate(
@@ -128,4 +97,44 @@ func TestArtifactGateReadinessBrowserE2E(t *testing.T) {
 		t,
 		`document.querySelector('#status-badge')?.innerText.includes('succeeded') && !document.querySelector('form[action$="/approve"]')`,
 	)
+}
+
+func captureArtifactDecisionState(
+	t *testing.T,
+	browser *packageBrowser,
+	state string,
+) {
+	t.Helper()
+	for _, theme := range []string{"light", "mocha"} {
+		browser.evaluate(
+			t,
+			fmt.Sprintf(
+				`document.documentElement.setAttribute('data-theme', %q)`,
+				theme,
+			),
+		)
+		for _, width := range []int{375, 768, 1280} {
+			browser.call(
+				t,
+				"Emulation.setDeviceMetricsOverride",
+				map[string]any{
+					"width": width, "height": 900, "deviceScaleFactor": 1,
+					"mobile": false,
+				},
+				&struct{}{},
+			)
+			if string(
+				browser.evaluate(
+					t,
+					`document.documentElement.scrollWidth <= innerWidth`,
+				),
+			) != "true" {
+				t.Fatal("artifact decision state overflows viewport")
+			}
+			browser.screenshot(
+				t,
+				fmt.Sprintf("artifact-%s-%s-%d", state, theme, width),
+			)
+		}
+	}
 }
