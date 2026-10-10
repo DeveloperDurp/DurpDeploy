@@ -47,7 +47,7 @@ templ SharedLifecycleVariables(data LifecycleVariables) {
 			if len(data.Variables) == 0 {
 				<p class="text-sm opacity-70">No shared variables yet.</p>
 			} else {
-				<table class="hidden md:table table-zebra table-fixed w-full">
+				<table class="table hidden md:table table-zebra table-fixed w-full">
 					<thead><tr><th class="w-1/4">Name</th><th class="w-auto">Value</th><th class="w-1/4">Environment</th><th class="w-48">Actions</th></tr></thead>
 					<tbody>
 						for _, variable := range data.Variables {
@@ -145,11 +145,11 @@ templ SharedVariableForm(data LifecycleVariables) {
 		</div>
 		<div class="form-control">
 			<label for="shared-environment" class="label">Environment</label>
-			<select id="shared-environment" name="environment_id" class="select select-bordered w-full">
-				<option value="">All stages</option>
+			<select id="shared-environment" name="environment_id" class="select select-bordered w-full" required>
 				if sharedVariableOutsideStages(data) {
-					<option value={ strconv.FormatInt(data.Editing.EnvironmentID.Int64, 10) } selected disabled>Removed stage — choose a scope</option>
+					<option value="" selected disabled>Removed stage — choose a scope</option>
 				}
+				<option value="all">All stages</option>
 				for _, env := range data.Options {
 					<option value={ strconv.FormatInt(env.ID, 10) } selected?={ data.Editing.EnvironmentID.Valid && data.Editing.EnvironmentID.Int64 == env.ID }>{ env.Name }</option>
 				}

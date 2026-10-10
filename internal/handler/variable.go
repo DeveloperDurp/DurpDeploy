@@ -388,39 +388,6 @@ func (h *VariableHandler) UpdateVariable(
 	}
 }
 
-func (h *VariableHandler) DeleteVariable(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
-	projectID, err := parseProjectID(r)
-	if err != nil {
-		http.Error(w, "Invalid project ID", http.StatusBadRequest)
-		return
-	}
-
-	varIDStr := chi.URLParam(r, "varId")
-	varID, err := strconv.ParseInt(varIDStr, 10, 64)
-	if err != nil {
-		http.Error(w, "Invalid variable ID", http.StatusBadRequest)
-		return
-	}
-	if _, err := h.getProjectVariable(r, projectID, varID); err != nil {
-		if err == sql.ErrNoRows {
-			http.NotFound(w, r)
-			return
-		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	if err := h.repo.Queries.DeleteVariable(r.Context(), varID); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	h.renderVariablesFragment(w, r, projectID)
-}
-
 func (h *VariableHandler) renderVariablesFragment(
 	w http.ResponseWriter,
 	r *http.Request,

@@ -201,6 +201,7 @@ func TestLifecycleVariablesAPIWebE2E(t *testing.T) {
 		t.Fatal("project inheritance UI missing or exposes secret")
 	}
 	assertLifecycleRunbookSnapshots(t, f, lc.ID)
+	assertLifecycleRetainedScopeAndDuplicateReset(t, f, lc.ID)
 	assertLifecycleAssignmentAccess(t, f, lc.ID)
 }
 

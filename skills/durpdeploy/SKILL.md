@@ -514,7 +514,11 @@ Project members can read `GET /api/v1/projects/{id}/variables/inherited` for
 the lifecycle source and any same-scope project override. The existing project
 variables endpoint continues to return only project-owned rows. To override,
 create a project variable with the same name and environment scope. Delete that
-project variable to reset inheritance. From highest to lowest priority:
+project variable with `DELETE /api/v1/projects/{id}/variables/{varId}?reset=inherit`
+to reset inheritance. This removes all matching local rows in that name/scope,
+including legacy unscoped duplicates, while retaining other scopes. Ordinary
+DELETE without the query parameter removes only the selected row.
+From highest to lowest priority:
 project environment, lifecycle environment, project unscoped, lifecycle
 unscoped. Removing a lifecycle stage excludes its scoped shared values from
 future snapshots. New releases, explicit refreshes, and new runbook versions

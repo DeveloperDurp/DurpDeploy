@@ -16,7 +16,7 @@ templ InheritedVariablesSection(projectID int64, inherited repository.VariableIn
 					<a class="link text-sm" href={ fmt.Sprintf("/lifecycles/%d#shared-variables", inherited.Lifecycle.ID) }>Manage lifecycle variables</a>
 				}
 			</div>
-			<table class="hidden lg:table table-zebra table-fixed w-full">
+			<table class="table hidden lg:table table-zebra table-fixed w-full">
 				<thead><tr><th class="w-1/5">Name</th><th class="w-1/5">Value</th><th class="w-1/5">Environment</th><th class="w-auto">Source</th>
 					if actions && CanWrite(ctx) {
 						<th class="w-48">Action</th>
@@ -75,7 +75,7 @@ templ InheritedVariableSource(variable repository.InheritedVariable, lifecycleNa
 templ InheritedVariableAction(projectID int64, variable repository.InheritedVariable, actions bool) {
 	if actions && CanWrite(ctx) {
 		if variable.Override != nil {
-			<button type="button" class="btn btn-xs whitespace-nowrap" hx-delete={ fmt.Sprintf("/projects/%d/variables/%d", projectID, variable.Override.ID) } hx-target="#variables-content" hx-swap="outerHTML" hx-confirm={ "Remove the project override for " + variable.Name + " and inherit the lifecycle value?" }>Reset to inherited</button>
+			<button type="button" class="btn btn-xs whitespace-nowrap" hx-delete={ fmt.Sprintf("/projects/%d/variables/%d?reset=inherit", projectID, variable.Override.ID) } hx-target="#variables-content" hx-swap="outerHTML" hx-confirm={ "Remove the project override for " + variable.Name + " and inherit the lifecycle value?" }>Reset to inherited</button>
 		} else {
 			<button type="button" class="btn btn-primary btn-xs whitespace-nowrap" data-override-for={ variable.Name } data-override-environment={ inheritedVariableEnvironment(variable) } data-override-secret={ strconv.FormatBool(variable.Secret != 0) }>Override</button>
 		}

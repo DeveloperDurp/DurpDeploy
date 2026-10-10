@@ -30,6 +30,12 @@ UPDATE variables SET name = ?, environment_id = ?, secret = ? WHERE id = ? RETUR
 -- name: DeleteVariable :exec
 DELETE FROM variables WHERE id = ?;
 
+-- name: DeleteVariableOverrides :exec
+DELETE FROM variables
+WHERE project_id = sqlc.arg(project_id) AND name = sqlc.arg(name)
+  AND (environment_id = sqlc.narg(environment_id)
+       OR (environment_id IS NULL AND sqlc.narg(environment_id) IS NULL));
+
 -- name: ListAllVariables :many
 SELECT * FROM variables ORDER BY id;
 

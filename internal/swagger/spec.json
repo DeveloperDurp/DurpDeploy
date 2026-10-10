@@ -8599,6 +8599,16 @@
         "operationId": "deleteVariable",
         "parameters": [
           {
+            "enum": [
+              "inherit"
+            ],
+            "type": "string",
+            "x-go-name": "Reset",
+            "description": "Set to inherit to remove every project value with this name and scope,\nincluding legacy duplicate unscoped rows. Other scopes are retained.",
+            "name": "reset",
+            "in": "query"
+          },
+          {
             "type": "integer",
             "format": "int64",
             "x-go-name": "ID",

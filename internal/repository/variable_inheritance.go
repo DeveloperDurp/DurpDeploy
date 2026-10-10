@@ -23,6 +23,25 @@ type variableScope struct {
 	environment sql.NullInt64
 }
 
+// DeleteProjectVariable resets every legacy duplicate in the selected scope
+// when requested; ordinary deletion still removes only the selected row.
+func (r *Repository) DeleteProjectVariable(
+	ctx context.Context,
+	variable db.Variable,
+	reset bool,
+) error {
+	if !reset {
+		return r.Queries.DeleteVariable(ctx, variable.ID)
+	}
+	return r.Queries.DeleteVariableOverrides(
+		ctx,
+		db.DeleteVariableOverridesParams{
+			ProjectID: variable.ProjectID, Name: variable.Name,
+			EnvironmentID: variable.EnvironmentID,
+		},
+	)
+}
+
 // InheritedVariables includes only scopes still in the assigned lifecycle.
 // Project overrides win within the same scope; environment specificity is
 // applied later by the existing release-variable resolver.

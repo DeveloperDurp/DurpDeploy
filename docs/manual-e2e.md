@@ -310,6 +310,12 @@ show a mask; leaving an existing secret blank keeps its saved value.
 Open the first project's Variables page: REGION shows **Project override**
 with its lifecycle default, while the second project inherits the shared value.
 Choose **Reset to inherited** in the first project to remove only its override.
+Reset removes all local rows with that name and scope, including legacy
+unscoped duplicates; other scopes and projects keep their values. The public
+API supports the same action with `DELETE /api/v1/projects/{id}/variables/{varId}?reset=inherit`.
+After removing a lifecycle stage, edit one of its retained variables: Save
+must wait for an explicit **All stages** or current-stage selection. A blank
+secret field still preserves the saved secret after choosing the scope.
 Choose **Override**, enter a project value and save to recreate the example.
 Global admins manage shared values; project deployers can override their own
 values and viewers see no write controls. Unassigned projects inherit nothing.
