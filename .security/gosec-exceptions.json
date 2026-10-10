@@ -407,20 +407,20 @@
   {
     "rule": "G710",
     "file": "internal/handler/release.go",
-    "line": "301",
-    "source_sha256": "883023735ce7572d18d92ec067c1bfc14738be5f025e073a9d824e4dcb9c0858",
+    "line": "193",
+    "source_sha256": "dca9136b3fdef09dacff2851b920b6c3bf39edbd1fb90a1e90e139afde624ffa",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
-    "reason": "Redirect retains a fixed /projects/ path prefix and an ID validated as int64 by parseProjectID. UI-only changes moved these existing redirects; corresponding handler and redirect/E2E tests confirm same-origin destinations."
+    "reason": "Existing delete redirect retains a fixed /projects/ path prefix and an ID validated as int64 by parseProjectID. Extracting release creation moved this redirect without changing its destination. Evidence: release.go DeleteRelease, project.go parseProjectID, release deletion/E2E tests."
   },
   {
     "rule": "G710",
-    "file": "internal/handler/release.go",
-    "line": "189",
-    "source_sha256": "883023735ce7572d18d92ec067c1bfc14738be5f025e073a9d824e4dcb9c0858",
+    "file": "internal/handler/release_create.go",
+    "line": "101",
+    "source_sha256": "c1bf5f5a907c95d899fdf8c6fa05c1383cb4875e8909e2a55f939e636d3132c6",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
-    "reason": "Redirect retains a fixed /projects/ path prefix and an ID validated as int64 by parseProjectID. UI-only changes moved these existing redirects; corresponding handler and redirect/E2E tests confirm same-origin destinations."
+    "reason": "Extracted creation redirect retains the existing fixed /projects/ path prefix and an ID validated as int64 by parseProjectID. No user-controlled host or path is accepted. Evidence: release_create.go CreateRelease, project.go parseProjectID, TestReleaseMissingPackageAPIWebE2E."
   },
   {
     "rule": "G710",
