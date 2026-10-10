@@ -56,8 +56,8 @@
   {
     "rule": "G101",
     "file": "internal/audit/routes.go",
-    "line": "6-174",
-    "source_sha256": "300d1d831c9615f641e9737e8778b6cc752a2f228c361649e21d6c100943b480",
+    "line": "6-180",
+    "source_sha256": "1d99c7ebef8351f982d10705d2917671841b885e60c7bc0d1a6995db23540292",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Cookie name or audit action/route metadata, not a credential value. Evidence: passkey binding readers/setters or internal/audit/audit.go consumers."
@@ -335,8 +335,8 @@
   {
     "rule": "G710",
     "file": "internal/handler/variable.go",
-    "line": "424",
-    "source_sha256": "4ba94ee342d43fbca43f3cdfbb34f59f39539fd84928b032a712729b91689ba8",
+    "line": "382",
+    "source_sha256": "76039a5080388645d54e68fe2532cb26cb926fcd41da8ed400ea99f3df225065",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Redirect retains a fixed /projects/ path prefix and an ID validated as int64 by parseProjectID. UI-only changes moved these existing redirects; corresponding handler and redirect/E2E tests confirm same-origin destinations."
@@ -344,8 +344,8 @@
   {
     "rule": "G710",
     "file": "internal/handler/variable.go",
-    "line": "225",
-    "source_sha256": "4ba94ee342d43fbca43f3cdfbb34f59f39539fd84928b032a712729b91689ba8",
+    "line": "183",
+    "source_sha256": "76039a5080388645d54e68fe2532cb26cb926fcd41da8ed400ea99f3df225065",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Redirect retains a fixed /projects/ path prefix and an ID validated as int64 by parseProjectID. UI-only changes moved these existing redirects; corresponding handler and redirect/E2E tests confirm same-origin destinations."
@@ -452,8 +452,8 @@
   {
     "rule": "G710",
     "file": "internal/handler/project.go",
-    "line": "670",
-    "source_sha256": "cdfb4e8cd3941c30dc4975425ccac804aa452aeee35c0f59e9cbee113be14f45",
+    "line": "457",
+    "source_sha256": "5ba92924905b3509303246e471f2a48efa95f3b6744d2c74ab8f3190302199dd",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Redirect retains a fixed /projects/ path prefix and an ID validated as int64 by parseProjectID. UI-only changes moved these existing redirects; corresponding handler and redirect/E2E tests confirm same-origin destinations."
@@ -462,7 +462,7 @@
     "rule": "G710",
     "file": "internal/handler/project.go",
     "line": "261",
-    "source_sha256": "cdfb4e8cd3941c30dc4975425ccac804aa452aeee35c0f59e9cbee113be14f45",
+    "source_sha256": "5ba92924905b3509303246e471f2a48efa95f3b6744d2c74ab8f3190302199dd",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Redirect retains a fixed /projects/ path prefix and an ID validated as int64 by parseProjectID. UI-only changes moved these existing redirects; corresponding handler and redirect/E2E tests confirm same-origin destinations."
