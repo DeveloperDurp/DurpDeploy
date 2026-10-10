@@ -383,6 +383,7 @@ func (h *EnvironmentHandler) UpdateEnvironment(
 //	  204: body:EmptyResponse
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
+//	  403: body:ForbiddenError
 //	  409: body:ConflictError
 //	  500: body:ServerError
 func (h *EnvironmentHandler) DeleteEnvironment(

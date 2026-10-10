@@ -189,6 +189,11 @@ func (f *artifactE2E) api(
 			result,
 		)
 	}
+	if want == http.StatusForbidden &&
+		(!strings.HasPrefix(response.Header.Get("Content-Type"),
+			"application/json") || !json.Valid(result)) {
+		t.Fatalf("%s %s: invalid 403 JSON: %s", method, path, result)
+	}
 	return result
 }
 

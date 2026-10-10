@@ -3456,6 +3456,12 @@
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
           "409": {
             "description": "Conflict error response.",
             "schema": {
