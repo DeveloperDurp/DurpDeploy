@@ -17,9 +17,8 @@ type PackageMissingError struct {
 func (e *PackageMissingError) Error() string {
 	return fmt.Sprintf("Package version %q was not found in this project's "+
 		"package repository (HTTP 404). The release version selects the "+
-		"package to download and validate. Create the release anyway to "+
-		"omit the package; deployments will have no ARTIFACT_PATH. "+
-		"Publish the package and explicitly refresh the release to pin it.",
+		"package to download and validate. Publish the package before "+
+		"refreshing the release checksum or deploying it.",
 		e.Version)
 }
 

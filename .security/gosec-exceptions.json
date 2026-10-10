@@ -416,11 +416,11 @@
   {
     "rule": "G710",
     "file": "internal/handler/release_create.go",
-    "line": "83",
-    "source_sha256": "f6ee1eda69f359cc9c166e813720b147eed6d5e147f7580d70341d1da4e0e3c5",
+    "line": "58",
+    "source_sha256": "9b00858d5dd1913192a83c8f86fe5fdc8f1727a6eee57429d18e4ea20316ef40",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
-    "reason": "Extracted creation redirect retains the existing fixed /projects/ path prefix and an ID validated as int64 by parseProjectID. No user-controlled host or path is accepted. Evidence: release_create.go CreateRelease/renderCreatedRelease, project.go parseProjectID, TestReleaseMissingPackageAPIWebE2E."
+    "reason": "Creation redirect retains the existing fixed /projects/ path prefix and an ID validated as int64 by parseProjectID. No user-controlled host or path is accepted. Evidence: release_create.go CreateRelease/renderCreatedRelease, project.go parseProjectID, TestReleaseDeferredPackageAPIWebE2E."
   },
   {
     "rule": "G710",

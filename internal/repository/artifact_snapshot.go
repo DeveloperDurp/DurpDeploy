@@ -128,7 +128,7 @@ func (r *Repository) DownloadDeploymentArtifact(
 	if err != nil {
 		return artifact.Download{}, err
 	}
-	return r.ArtifactClient.Fetch(
+	download, err := r.ArtifactClient.Fetch(
 		ctx,
 		PackageSource(source),
 		artifact.Pin{
@@ -138,4 +138,11 @@ func (r *Repository) DownloadDeploymentArtifact(
 			Size:    row.Size,
 		},
 	)
+	if err != nil || row.Sha256 != "" {
+		return download, err
+	}
+	if err := r.resolveDeploymentArtifact(ctx, row, download); err != nil {
+		return artifact.Download{}, errors.Join(err, os.Remove(download.Path))
+	}
+	return download, nil
 }

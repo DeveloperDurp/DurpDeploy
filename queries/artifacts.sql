@@ -35,8 +35,8 @@ DELETE FROM project_artifact_repositories WHERE project_id = ?;
 INSERT INTO project_artifact_repositories (project_id, repository_id) VALUES (?, ?);
 
 -- name: CreateReleaseArtifact :exec
-INSERT INTO release_artifacts (release_id, repository_id, url, version, sha256, size, source_release_id)
-VALUES (?, ?, ?, ?, ?, ?, ?);
+INSERT INTO release_artifacts (release_id, repository_id, url, version, sha256, size, source_release_id, resolution_key)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: GetReleaseArtifact :one
 SELECT * FROM release_artifacts WHERE release_id = ?;
@@ -51,20 +51,26 @@ UPDATE release_artifacts SET source_release_id = NULL WHERE source_release_id = 
 SELECT * FROM deployment_artifacts WHERE deployment_id = ?;
 
 -- name: CopyReleaseArtifactToDeployment :exec
-INSERT INTO deployment_artifacts (deployment_id, repository_id, url, version, sha256, size)
-SELECT ?, r.repository_id, r.url, r.version, r.sha256, r.size FROM release_artifacts r WHERE r.release_id = ?;
+INSERT INTO deployment_artifacts (deployment_id, repository_id, url, version, sha256, size, resolution_key)
+SELECT ?, r.repository_id, r.url, r.version, r.sha256, r.size, r.resolution_key FROM release_artifacts r WHERE r.release_id = ?;
 
 -- name: CopyDeploymentArtifact :exec
-INSERT INTO deployment_artifacts (deployment_id, repository_id, url, version, sha256, size)
-SELECT ?, d.repository_id, d.url, d.version, d.sha256, d.size FROM deployment_artifacts d WHERE d.deployment_id = ?;
+INSERT INTO deployment_artifacts (deployment_id, repository_id, url, version, sha256, size, resolution_key)
+SELECT ?, d.repository_id, d.url, d.version, d.sha256, d.size, d.resolution_key FROM deployment_artifacts d WHERE d.deployment_id = ?;
 
 -- name: CopyReleaseArtifactToRunbook :execrows
-INSERT INTO release_artifacts (release_id, repository_id, url, version, sha256, size, source_release_id)
-SELECT ?, r.repository_id, r.url, r.version, r.sha256, r.size, r.release_id FROM release_artifacts r WHERE r.release_id = ?;
+INSERT INTO release_artifacts (release_id, repository_id, url, version, sha256, size, source_release_id, resolution_key)
+SELECT ?, r.repository_id, r.url, r.version, r.sha256, r.size, r.release_id, r.resolution_key FROM release_artifacts r WHERE r.release_id = ?;
 
 -- name: CopyRunbookArtifact :execrows
-INSERT INTO release_artifacts (release_id, repository_id, url, version, sha256, size, source_release_id)
-SELECT ?, r.repository_id, r.url, r.version, r.sha256, r.size, r.source_release_id FROM release_artifacts r WHERE r.release_id = ?;
+INSERT INTO release_artifacts (release_id, repository_id, url, version, sha256, size, source_release_id, resolution_key)
+SELECT ?, r.repository_id, r.url, r.version, r.sha256, r.size, r.source_release_id, r.resolution_key FROM release_artifacts r WHERE r.release_id = ?;
+
+-- name: ResolveReleaseArtifacts :exec
+UPDATE release_artifacts SET sha256 = ?, size = ? WHERE resolution_key = ? AND sha256 = '';
+
+-- name: ResolveDeploymentArtifacts :exec
+UPDATE deployment_artifacts SET sha256 = ?, size = ? WHERE resolution_key = ? AND sha256 = '';
 
 -- name: DeleteDeploymentArtifact :exec
 DELETE FROM deployment_artifacts WHERE deployment_id = ?;

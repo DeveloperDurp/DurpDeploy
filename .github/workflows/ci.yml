@@ -291,7 +291,7 @@ jobs:
       - name: Verify ZIP artifact API, web forms, and container mounts
         env:
           DURPDEPLOY_CONTAINER_RUNTIME: docker
-        run: go test -tags=e2e -count=1 -run '^(TestReleaseMissingPackageAPIWebE2E|TestArtifactsAPIWebContainerE2E|TestArtifactCredentialRotationE2E|TestArtifactSourceReplacementE2E|TestDeploymentStagingCleanupE2E|TestDeploymentStepResourcesE2E|TestDeploymentStagingFailureAPIWebE2E|TestDeploymentStepLogsAPIWebE2E|TestDeploymentStepLogOutcomesAPIWebE2E|TestPageNavigationHTTPAPIWebE2E)$' ./internal/handler/api
+        run: go test -tags=e2e -count=1 -run '^(TestReleaseDeferredPackageAPIWebE2E|TestArtifactsAPIWebContainerE2E|TestArtifactCredentialRotationE2E|TestArtifactSourceReplacementE2E|TestDeploymentStagingCleanupE2E|TestDeploymentStepResourcesE2E|TestDeploymentStagingFailureAPIWebE2E|TestDeploymentStepLogsAPIWebE2E|TestDeploymentStepLogOutcomesAPIWebE2E|TestPageNavigationHTTPAPIWebE2E)$' ./internal/handler/api
 
       - name: Verify generated artifact approvals and live Terraform
         env:

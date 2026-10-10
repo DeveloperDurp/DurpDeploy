@@ -50,8 +50,7 @@ func (h *ReleaseHandler) CreateRelease(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body struct {
-		Version             string `json:"version"`
-		AllowMissingPackage bool   `json:"allow_missing_package"`
+		Version string `json:"version"`
 	}
 	if !readJSONBool(w, r, &body) {
 		return
@@ -61,11 +60,8 @@ func (h *ReleaseHandler) CreateRelease(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	release, err := handler.CreateReleaseSnapshotWithPackage(
-		r.Context(), h.repo, handler.ReleaseSnapshotRequest{
-			ProjectID: projectID, Version: body.Version,
-			AllowMissingPackage: body.AllowMissingPackage,
-		},
+	release, err := handler.CreateReleaseSnapshot(
+		r.Context(), h.repo, projectID, body.Version,
 	)
 	if err != nil {
 		if writeArtifactError(w, err) {

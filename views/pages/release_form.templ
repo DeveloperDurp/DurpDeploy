@@ -11,7 +11,6 @@ type ReleaseFormState struct {
 	ProjectID int64
 	Version string
 	Error string
-	PackageMissing bool
 }
 
 templ ReleaseForm(projectID int64, errorMsg string) {
@@ -21,6 +20,7 @@ templ ReleaseForm(projectID int64, errorMsg string) {
 templ ReleaseCreationForm(state ReleaseFormState) {
 	<div class="card bg-base-200 p-4 mb-6">
 		<h3 class="text-lg font-bold mb-4">Create Release</h3>
+		<p class="text-sm opacity-70 mb-4">Attached packages are pulled when deploying. A failed pull stops the deployment before any steps run; the first valid pull locks the package checksum.</p>
 		<form
 			hx-post={ fmt.Sprintf("/projects/%d/releases", state.ProjectID) }
 			hx-target="#releases-content"
@@ -39,9 +39,6 @@ templ ReleaseCreationForm(state ReleaseFormState) {
 				}
 			</div>
 			<button type="submit" class="btn btn-primary">Create Release</button>
-			if state.PackageMissing {
-				<button type="submit" name="allow_missing_package" value="true" class="btn btn-warning" data-create-release-anyway>Create release anyway</button>
-			}
 		</form>
 	</div>
 }

@@ -3,10 +3,12 @@
 package api_test
 
 import (
+	"encoding/json"
 	"fmt"
 	"testing"
 
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/events"
 )
 
 func (f *artifactE2E) verifyRemoteSnapshotRejection(
@@ -23,13 +25,7 @@ func (f *artifactE2E) verifyRemoteSnapshotRejection(
 		)
 	}
 	f.changePackage("long-name")
-	f.api(
-		t,
-		"POST",
-		f.base()+"/releases",
-		map[string]string{"version": "path-rejected"},
-		422,
-	)
+	rejectInvalidArtifactPull(t, f, "path-rejected")
 	f.changePackage("package")
 	// Use a separate release for malformed-package refresh validation.
 	unused := verificationRelease(t, f, "refresh-validation")
@@ -68,4 +64,38 @@ func (f *artifactE2E) verifyRemoteSnapshotRejection(
 	); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func rejectInvalidArtifactPull(
+	t *testing.T,
+	f *artifactE2E,
+	version string,
+) []byte {
+	t.Helper()
+	body := f.api(
+		t,
+		"POST",
+		f.base()+"/releases",
+		map[string]string{"version": version},
+		201,
+	)
+	var release db.Release
+	if err := json.Unmarshal(body, &release); err != nil {
+		t.Fatal(err)
+	}
+	body = f.api(t, "POST", f.base()+"/deployments", map[string]int64{
+		"release_id": release.ID, "environment_id": f.environment.ID,
+	}, 201)
+	var deployment db.Deployment
+	if err := json.Unmarshal(body, &deployment); err != nil {
+		t.Fatal(err)
+	}
+	f.completion(t, deployment.ID, events.DeploymentFailed)
+	return f.api(
+		t,
+		"GET",
+		fmt.Sprintf("/api/v1/deployments/%d/logs", deployment.ID),
+		nil,
+		200,
+	)
 }

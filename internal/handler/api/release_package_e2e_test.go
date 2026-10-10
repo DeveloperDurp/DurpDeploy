@@ -13,7 +13,7 @@ import (
 	"durpdeploy/internal/events"
 )
 
-func TestReleaseMissingPackageAPIWebE2E(t *testing.T) {
+func TestReleaseDeferredPackageAPIWebE2E(t *testing.T) {
 	f := newArtifactE2E(t)
 	base := f.base()
 	webBase := strings.TrimPrefix(base, "/api/v1")
@@ -22,92 +22,148 @@ func TestReleaseMissingPackageAPIWebE2E(t *testing.T) {
 		"auth_type":    "bearer", "credential": "artifact-secret",
 	}, 200)
 	f.api(t, "POST", base+"/steps", map[string]any{
-		"name": "without-package", "script_body": `test -z "${ARTIFACT_PATH+x}"; test "$SNAPSHOT" = saved`,
+		"name":            "with-package",
+		"script_body":     `printf step-executed; test -f "$ARTIFACT_PATH/app.txt"; test "$SNAPSHOT" = saved`,
 		"container_image": "docker.io/library/bash:5.2",
 	}, 201)
 	f.api(t, "POST", base+"/variables", map[string]string{
 		"name": "SNAPSHOT", "value": "saved",
 	}, 201)
 	f.changePackage("missing")
-	// A normal request explains the missing version and saves nothing.
-	failure := f.api(t, "POST", base+"/releases",
-		map[string]any{"version": "2.0.0"}, 422)
-	if !strings.Contains(string(failure), "2.0.0") ||
-		!strings.Contains(string(failure), "HTTP 404") {
-		t.Fatalf("unexplained failure: %s", failure)
-	}
-	page := f.web(t, "POST", webBase+"/releases",
-		url.Values{"version": {"2.0.0"}}, 422)
-	if !strings.Contains(page, `value="2.0.0"`) ||
-		!strings.Contains(page, "data-create-release-anyway") {
-		t.Fatal("web failure lost version or override")
-	}
-	// Both public surfaces support the explicit override.
-	f.web(t, "POST", webBase+"/releases", url.Values{
-		"version": {"web-missing"}, "allow_missing_package": {"true"},
-	}, 303)
-	body := f.api(t, "POST", base+"/releases", map[string]any{
-		"version": "2.0.0", "allow_missing_package": true,
-	}, 201)
+	f.web(t, "POST", webBase+"/releases",
+		url.Values{"version": {"web-deferred"}}, 303)
+	body := f.api(t, "POST", base+"/releases",
+		map[string]string{"version": "2.0.0"}, 201)
 	var release db.Release
 	if err := json.Unmarshal(body, &release); err != nil {
 		t.Fatal(err)
 	}
-	if release.PackageOmitted != 1 ||
-		!strings.Contains(release.StepsJson, "without-package") {
-		t.Fatalf("incomplete release snapshot: %s", body)
+	if release.PackageOmitted != 0 ||
+		!strings.Contains(release.StepsJson, "with-package") {
+		t.Fatalf("attachment or steps omitted: %s", body)
 	}
 	releasePath := fmt.Sprintf("%s/releases/%d", base, release.ID)
-	detail := f.api(t, "GET", releasePath, nil, 200)
-	if !strings.Contains(string(detail), `"package_omitted":1`) ||
-		!strings.Contains(string(detail), "saved") {
-		t.Fatalf("incomplete API detail: %s", detail)
+	var pin struct {
+		Pending bool   `json:"pending"`
+		SHA256  string `json:"sha256"`
+		Size    int64  `json:"size"`
 	}
-	page = f.web(t, "GET", strings.TrimPrefix(releasePath, "/api/v1"), nil, 200)
-	if !strings.Contains(page, "data-package-omitted") ||
-		!strings.Contains(page, "ARTIFACT_PATH") {
-		t.Fatal("release omitted-package warning missing")
+	readPin := func() {
+		t.Helper()
+		if err := json.Unmarshal(
+			f.api(t, "GET", releasePath+"/artifact", nil, 200),
+			&pin,
+		); err != nil {
+			t.Fatal(err)
+		}
 	}
-	f.api(t, "POST", base+"/releases", map[string]any{
-		"version": "2.0.0", "allow_missing_package": true,
-	}, 409)
-	f.api(t, "POST", releasePath+"/refresh", nil, 422)
-	// Publishing later does not mutate the release or add a deployment pin.
+	readPin()
+	if !pin.Pending || pin.SHA256 != "" || pin.Size != 0 {
+		t.Fatalf("new package unexpectedly pinned: %+v", pin)
+	}
+	page := f.web(
+		t,
+		"GET",
+		strings.TrimPrefix(releasePath, "/api/v1"),
+		nil,
+		200,
+	)
+	if !strings.Contains(page, "data-package-pending") ||
+		strings.Contains(page, "data-package-omitted") {
+		t.Fatal("web pending attachment state missing")
+	}
+	deploy := func(want events.Type) int64 {
+		t.Helper()
+		body := f.api(t, "POST", base+"/deployments", map[string]int64{
+			"release_id": release.ID, "environment_id": f.environment.ID,
+		}, 201)
+		var deployment db.Deployment
+		if err := json.Unmarshal(body, &deployment); err != nil {
+			t.Fatal(err)
+		}
+		f.completion(t, deployment.ID, want)
+		logs := string(
+			f.api(
+				t,
+				"GET",
+				fmt.Sprintf("/api/v1/deployments/%d/logs", deployment.ID),
+				nil,
+				200,
+			),
+		)
+		if strings.Contains(
+			logs,
+			"step-executed",
+		) != (want == events.DeploymentSucceeded) {
+			t.Fatalf(
+				"deployment %d steps ran before a valid pull: %s",
+				deployment.ID,
+				logs,
+			)
+		}
+		if want == events.DeploymentFailed &&
+			!strings.Contains(logs, "Artifact staging failed:") {
+			t.Fatalf("pull failure explanation missing: %s", logs)
+		}
+		return deployment.ID
+	}
+	deploy(events.DeploymentFailed)
+	f.changePackage("invalid")
+	deploy(events.DeploymentFailed)
 	f.changePackage("package")
-	if pin := f.api(t, "GET", releasePath+"/artifact", nil, 200); strings.TrimSpace(
-		string(pin),
-	) != "null" {
-		t.Fatalf("unexpected package pin: %s", pin)
+	f.changeCredential("rotated-secret")
+	deploy(events.DeploymentFailed)
+	readPin()
+	if !pin.Pending {
+		t.Fatal("failed pulls established a checksum")
 	}
-	body = f.api(t, "POST", base+"/deployments", map[string]int64{
-		"release_id": release.ID, "environment_id": f.environment.ID,
-	}, 201)
-	var deployment db.Deployment
-	if err := json.Unmarshal(body, &deployment); err != nil {
+	f.changeCredential("artifact-secret")
+	originalDeployment := deploy(events.DeploymentSucceeded)
+	readPin()
+	if pin.Pending || pin.SHA256 == "" || pin.Size == 0 {
+		t.Fatal("first valid pull did not persist its checksum")
+	}
+	originalHash := pin.SHA256
+	f.changePackage("changed-package")
+	deploy(events.DeploymentFailed)
+	// Refresh replaces the release checksum while existing deployment pins stay fixed.
+	f.web(
+		t,
+		"POST",
+		strings.TrimPrefix(releasePath, "/api/v1")+"/refresh",
+		nil,
+		303,
+	)
+	readPin()
+	if pin.Pending || pin.SHA256 == originalHash {
+		t.Fatal("refresh did not replace the release checksum")
+	}
+	deploy(events.DeploymentSucceeded)
+	body = f.api(
+		t,
+		"POST",
+		fmt.Sprintf("/api/v1/deployments/%d/redeploy", originalDeployment),
+		nil,
+		201,
+	)
+	var retry db.Deployment
+	if err := json.Unmarshal(body, &retry); err != nil {
 		t.Fatal(err)
 	}
-	f.completion(t, deployment.ID, events.DeploymentSucceeded)
-	// An explicit refresh pins the now-existing package and clears the warning.
-	body = f.api(t, "POST", releasePath+"/refresh", nil, 200)
+	f.completion(t, retry.ID, events.DeploymentFailed)
+	// DNS failure permits creation, but fails during deployment pull.
+	f.api(t, "PUT", base+"/package-repository", map[string]string{
+		"url_template": "https://asdf/{version}", "auth_type": "noauth",
+	}, 200)
+	body = f.api(
+		t,
+		"POST",
+		base+"/releases",
+		map[string]string{"version": "unreachable"},
+		201,
+	)
 	if err := json.Unmarshal(body, &release); err != nil {
 		t.Fatal(err)
 	}
-	if release.PackageOmitted != 0 {
-		t.Fatal("refresh did not clear package omission")
-	}
-	if pin := f.api(t, "GET", releasePath+"/artifact", nil, 200); !strings.Contains(
-		string(pin),
-		`"sha256"`,
-	) {
-		t.Fatal("refresh did not pin package")
-	}
-	// An override still rejects malformed ZIPs and authentication failures.
-	f.changePackage("invalid")
-	f.api(t, "POST", base+"/releases", map[string]any{
-		"version": "invalid", "allow_missing_package": true,
-	}, 422)
-	f.changeCredential("rotated-fixture-secret")
-	f.api(t, "POST", base+"/releases", map[string]any{
-		"version": "unauthorized", "allow_missing_package": true,
-	}, 502)
+	deploy(events.DeploymentFailed)
 }

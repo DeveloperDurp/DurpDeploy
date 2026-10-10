@@ -2,49 +2,25 @@ package handler
 
 import (
 	"context"
-	"errors"
 
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/repository"
 )
 
-type ReleaseSnapshotRequest struct {
-	ProjectID           int64
-	Version             string
-	AllowMissingPackage bool
-}
-
-// CreateReleaseSnapshot is the strict path shared by existing callers.
 func CreateReleaseSnapshot(
 	ctx context.Context,
 	repo *repository.Repository,
 	projectID int64,
 	version string,
 ) (db.Release, error) {
-	return CreateReleaseSnapshotWithPackage(ctx, repo, ReleaseSnapshotRequest{
-		ProjectID: projectID, Version: version,
-	})
-}
-
-func CreateReleaseSnapshotWithPackage(
-	ctx context.Context,
-	repo *repository.Repository,
-	request ReleaseSnapshotRequest,
-) (db.Release, error) {
-	snapshot, err := buildReleaseSnapshot(ctx, repo, request.ProjectID)
+	snapshot, err := buildReleaseSnapshot(ctx, repo, projectID)
 	if err != nil {
 		return db.Release{}, err
 	}
-	snapshot.artifact, err = repo.ResolveProjectArtifact(
-		ctx, request.ProjectID, request.Version,
+	snapshot.artifact, err = repo.CaptureProjectArtifact(
+		ctx, projectID, version,
 	)
-	var missing *repository.PackageMissingError
-	packageOmitted := int64(0)
-	if request.AllowMissingPackage && errors.As(err, &missing) {
-		// Keep the source identity so Insert checks concurrent source edits.
-		snapshot.artifact = &repository.ArtifactSnapshot{Source: missing.Source}
-		packageOmitted = 1
-	} else if err != nil {
+	if err != nil {
 		return db.Release{}, err
 	}
 	if snapshot.artifact != nil && snapshot.artifact.Row.RepositoryID != 0 &&
@@ -58,8 +34,8 @@ func CreateReleaseSnapshotWithPackage(
 	defer tx.Rollback()
 	queries := repo.Queries.WithTx(tx)
 	release, err := queries.CreateRelease(ctx, db.CreateReleaseParams{
-		ProjectID: request.ProjectID, Version: request.Version,
-		StepsJson: snapshot.stepsJSON, PackageOmitted: packageOmitted,
+		ProjectID: projectID, Version: version,
+		StepsJson: snapshot.stepsJSON,
 	})
 	if err != nil {
 		return db.Release{}, err

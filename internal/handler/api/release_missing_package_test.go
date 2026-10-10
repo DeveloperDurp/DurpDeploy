@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/robfig/cron/v3"
@@ -15,12 +16,17 @@ import (
 	"durpdeploy/internal/server"
 )
 
-func TestReleaseMissingPackageOverride(t *testing.T) {
+func TestReleaseDefersMissingPackagePull(t *testing.T) {
 	h := newAPIHarness(t)
 	user := seedAPIUser(t, h.repo, "missing-package@example.com", "admin")
 	_, token := seedAPIToken(t, h.repo, user.ID)
 	project := seedProject(t, h.repo)
-	upstream := httptest.NewTLSServer(http.NotFoundHandler())
+	var requests atomic.Int64
+	upstream := httptest.NewTLSServer(http.HandlerFunc(
+		func(w http.ResponseWriter, r *http.Request) {
+			requests.Add(1)
+			http.NotFound(w, r)
+		}))
 	t.Cleanup(upstream.Close)
 	h.repo.ArtifactClient = &artifact.Client{HTTP: upstream.Client()}
 	if _, err := h.repo.SaveProjectPackageRepository(t.Context(), project.ID,
@@ -35,7 +41,7 @@ func TestReleaseMissingPackageOverride(t *testing.T) {
 		cron.NewParser(cron.Minute|cron.Hour|cron.Dom|cron.Month|cron.Dow),
 		handler.NewAuthHandler(h.repo))
 	req := httptest.NewRequest("POST", path,
-		strings.NewReader(`{"version":"2.0.0","allow_missing_package":true}`))
+		strings.NewReader(`{"version":"2.0.0"}`))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
@@ -50,7 +56,10 @@ func TestReleaseMissingPackageOverride(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &release); err != nil {
 		t.Fatal(err)
 	}
-	if release.ID == 0 || release.PackageOmitted != 1 {
-		t.Fatalf("missing persisted omission state: %s", response.Body.String())
+	if release.ID == 0 || release.PackageOmitted != 0 {
+		t.Fatalf("package attachment was omitted: %s", response.Body.String())
+	}
+	if requests.Load() != 0 {
+		t.Fatal("release creation contacted the package server")
 	}
 }

@@ -488,9 +488,8 @@ type swaggerVariableResponse struct {
 // ReleaseRequest is the body for create release.
 // swagger:model ReleaseRequest
 type swaggerReleaseRequest struct {
-	// Create without a package only when its upstream returns HTTP 404.
-	AllowMissingPackage bool   `json:"allow_missing_package"`
-	Version             string `json:"version"`
+	// Attached packages are downloaded and pinned on the first deployment pull.
+	Version string `json:"version"`
 }
 
 // ReleaseWithVariablesResponse is the detailed release payload.

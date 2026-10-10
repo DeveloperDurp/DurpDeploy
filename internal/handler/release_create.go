@@ -1,13 +1,10 @@
 package handler
 
 import (
-	"errors"
 	"fmt"
 	"net/http"
-	"strconv"
 	"strings"
 
-	"durpdeploy/internal/repository"
 	"durpdeploy/views/pages"
 )
 
@@ -32,30 +29,8 @@ func (h *ReleaseHandler) CreateRelease(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	allowMissing := false
-	if value := r.FormValue("allow_missing_package"); value != "" {
-		allowMissing, err = strconv.ParseBool(value)
-		if err != nil {
-			http.Error(
-				w,
-				"Invalid allow_missing_package",
-				http.StatusBadRequest,
-			)
-			return
-		}
-	}
-	_, err = CreateReleaseSnapshotWithPackage(r.Context(), h.repo,
-		ReleaseSnapshotRequest{ProjectID: projectID, Version: version,
-			AllowMissingPackage: allowMissing})
+	_, err = CreateReleaseSnapshot(r.Context(), h.repo, projectID, version)
 	if err != nil {
-		var missing *repository.PackageMissingError
-		if errors.As(err, &missing) {
-			h.renderReleaseCreateError(w, r, pages.ReleaseFormState{
-				ProjectID: projectID, Version: version,
-				Error: missing.Error(), PackageMissing: true,
-			})
-			return
-		}
 		if writeArtifactError(w, err) {
 			return
 		}

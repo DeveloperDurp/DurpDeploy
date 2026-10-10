@@ -1,5 +1,25 @@
 package pages
 
+import (
+	"durpdeploy/internal/db"
+	"strconv"
+)
+
+templ ReleasePackageAttachment(artifact db.ReleaseArtifact) {
+	<div class="card bg-base-200 p-4 space-y-3" data-release-package>
+		if artifact.Sha256 == "" {
+			<h2 class="text-xl font-bold">Package awaiting first pull</h2>
+			<p role="status" data-package-pending>The package will be pulled and validated when deploying. Pull failures stop deployment before any steps run. The first successful pull locks the checksum; Refresh downloads the package again to replace it.</p>
+		} else {
+			<h2 class="text-xl font-bold">Pinned ZIP package</h2>
+			<p class="font-mono break-all">SHA-256: { artifact.Sha256 }</p>
+			<p>Size: { strconv.FormatInt(artifact.Size,10) } bytes</p>
+		}
+		<p class="break-all">{ artifact.Url }</p><p>Version: { artifact.Version }</p>
+		<p class="text-sm opacity-70">Steps receive ARTIFACT_PATH. Files are read-only; direct execution is blocked.</p>
+	</div>
+}
+
 templ ReleasePackageOmittedNotice() {
 	<div class="alert alert-warning text-sm" role="status" data-package-omitted>
 		<p>This release was created without its package because that version was missing. Deployments run without a package or ARTIFACT_PATH. Publishing the package later does not change this release. After publishing it, explicitly Refresh this release to validate and pin the package; Refresh also updates its steps and variables.</p>

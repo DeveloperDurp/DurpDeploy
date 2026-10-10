@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestReleaseMissingPackageBrowserE2E(t *testing.T) {
+func TestReleaseDeferredPackageBrowserE2E(t *testing.T) {
 	f := newArtifactE2E(t)
 	f.api(t, "PUT", f.base()+"/package-repository", map[string]any{
 		"url_template": f.upstream + "/{version}.zip",
@@ -36,32 +36,18 @@ func TestReleaseMissingPackageBrowserE2E(t *testing.T) {
 	)
 	browser.wait(
 		t,
-		"document.querySelector('[data-create-release-anyway]') !== null",
+		"document.querySelector('#releases-content tbody a') !== null",
 	)
-	if string(
-		browser.evaluate(t, "document.querySelector('[name=version]').value"),
-	) != `"2.0.0"` {
-		t.Fatal("failed creation lost the release version")
-	}
-	captureReleaseState(t, browser, "release-missing")
-	browser.evaluate(
-		t,
-		"document.querySelector('[data-create-release-anyway]').click(); true",
-	)
-	browser.wait(
-		t,
-		"document.querySelector('#releases-content [data-package-omitted]') !== null",
-	)
-	captureReleaseState(t, browser, "release-omitted-list")
+	captureReleaseState(t, browser, "release-deferred-list")
 	browser.evaluate(
 		t,
 		"document.querySelector('#releases-content tbody a').click(); true",
 	)
 	browser.wait(
 		t,
-		"document.querySelector('[data-package-omitted][role=status]') !== null",
+		"document.querySelector('[data-package-pending][role=status]') !== null",
 	)
-	captureReleaseState(t, browser, "release-omitted-detail")
+	captureReleaseState(t, browser, "release-deferred-detail")
 	f.changePackage("package")
 	browser.evaluate(
 		t,
@@ -69,7 +55,7 @@ func TestReleaseMissingPackageBrowserE2E(t *testing.T) {
 	)
 	browser.wait(
 		t,
-		"document.querySelector('[data-package-omitted]') === null && document.body.textContent.includes('Pinned ZIP package')",
+		"document.querySelector('[data-package-pending]') === null && document.body.textContent.includes('Pinned ZIP package')",
 	)
 	captureReleaseState(t, browser, "release-pinned-detail")
 }
