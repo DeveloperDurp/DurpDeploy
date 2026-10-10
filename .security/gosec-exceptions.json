@@ -110,8 +110,8 @@
   {
     "rule": "G118",
     "file": "internal/handler/artifact_gate.go",
-    "line": "179",
-    "source_sha256": "6e0c3c1872bf0722fd2b8e0b91cc7e294da545e4017fb620da8da3a253de11d3",
+    "line": "170",
+    "source_sha256": "9531c079946a691d44a00ffe2b47e9b32c0b4040bea36fb258eca69181dc9323",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Detached persisted deployment must outlive its HTTP/scheduler/startup request. DeploymentRunner.Run owns cancel registration; Cancel and KillAll cancel/drain work. Evidence: runner_control.go, shutdown_test.go, runbook_cancel_test.go."

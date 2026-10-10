@@ -376,6 +376,9 @@ templ DeploymentDetailPage(project db.Project, release db.Release, environment d
 templ DeploymentDetail(project db.Project, release db.Release, environment db.Environment, deployment db.Deployment, logs []db.DeploymentLog, waitingForAgents bool) {
 	{{ logView := deploymentLogPanels(release, deployment, logs) }}
 	<div class="space-y-6" x-data={ fmt.Sprintf("deploymentStepLogs({ url: '/deployments/%d/logs/stream?format=structured', status: %q, view: %s })", deployment.ID, deployment.Status, deploymentLogConfig(logView)) } x-on:htmx:after-swap.camel.window="statusChanged($event)">
+		if warning := artifactDecisionWarning(ctx); warning != "" {
+			<div class="alert alert-warning" role="alert" data-artifact-decision-warning>{ warning }</div>
+		}
 		<div class="space-y-4">
 			<div class="page-header">
 				<div class="flex flex-wrap items-center gap-2 min-w-0">

@@ -542,6 +542,8 @@ supported; runbooks and agent steps cannot use gates. Both approval paths and
 an explicit review format are required together; an empty format is rejected.
 `GET /api/v1/deployments/{id}/artifact-gates` returns counts, checksums,
 revision, expiry, status, and approver metadata, including
+`decision_ready` (true only while the deployment is waiting for a decision
+and this gate is awaiting and unexpired),
 `review_format` (`terraform` or `summary`), `review_source: "step_output"`
 and `review_verified: false`: counts are
 unverified producer claims, not an independent analysis of the artifact.
@@ -561,6 +563,10 @@ resources. Expired or unavailable reviews return 409. The deployment UI's
 Administrator-only
 `/{stepIndex}/approve` and `/{stepIndex}/reject` accept
 `{"revision":1,"sha256":"..."}`. Stale or duplicate decisions return 409.
+Wait for `decision_ready: true` before submitting a decision. A gate can be
+published while container cleanup is still finishing; its status alone does
+not imply readiness. Readiness is advisory; decisions still validate identity,
+expiry, deployment state, and artifact integrity at submission time.
 Approved context is read-only at `DURPDEPLOY_APPROVED_DIR`; apply the saved
 artifact exactly, never regenerate it. Gated scripts and logs remain visible
 under normal permissions and secret-variable log redaction. Keep Terraform
