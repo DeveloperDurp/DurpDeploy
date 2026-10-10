@@ -398,8 +398,8 @@
   {
     "rule": "G710",
     "file": "internal/handler/release_refresh.go",
-    "line": "66",
-    "source_sha256": "5f2dcc48fd54d368f7972f740714327f0e4de13b21b237f84636d95b66d3ea86",
+    "line": "89",
+    "source_sha256": "558afd600f23448494f2712490e1a118d81fe989cab62402e823bca4466db3ff",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Destination has a fixed same-origin path prefix; project/release IDs are parsed integers. Agent routes retain /admin/agents/. Evidence: corresponding handler and internal/server/server.go route; workflow redirect tests."
