@@ -517,72 +517,15 @@ func isTruthy(s string) bool {
 	return false
 }
 
-func (h *DeploymentHandler) GetDeploymentStatus(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
-	idStr := chi.URLParam(r, "id")
-	id, err := strconv.ParseInt(idStr, 10, 64)
-	if err != nil {
-		http.Error(w, "Invalid deployment ID", http.StatusBadRequest)
-		return
-	}
-
-	deployment, err := h.repo.Queries.GetDeployment(r.Context(), id)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			http.Error(w, "Deployment not found", http.StatusNotFound)
-			return
-		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	waiting, err := h.repo.Queries.DeploymentWaitingForAgents(r.Context(), id)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	queueCtx, err := pages.DeploymentQueueContext(
-		r.Context(),
-		h.repo,
-		id,
-		&deployment.Status,
-	)
-	if err != nil {
-		http.Error(
-			w,
-			"Cannot read deployment queue",
-			http.StatusInternalServerError,
-		)
-		return
-	}
-	if err := pages.DeploymentStatusUpdate(deployment, waiting != 0).
-		Render(queueCtx, w); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
-}
-
 func (h *DeploymentHandler) CancelDeployment(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	idStr := chi.URLParam(r, "id")
-	id, err := strconv.ParseInt(idStr, 10, 64)
-	if err != nil {
-		http.Error(w, "Invalid deployment ID", http.StatusBadRequest)
+	deployment, ok := h.deploymentFromRequest(w, r)
+	if !ok {
 		return
 	}
-
-	deployment, err := h.repo.Queries.GetDeployment(r.Context(), id)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			http.Error(w, "Deployment not found", http.StatusNotFound)
-			return
-		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+	id := deployment.ID
 
 	if deployment.Status == "queued" ||
 		!deployment.AssignedAgentID.Valid &&
@@ -641,7 +584,7 @@ func (h *DeploymentHandler) CancelDeployment(
 		}
 	}
 
-	deployment, err = h.repo.Queries.GetDeployment(r.Context(), id)
+	deployment, err := h.repo.Queries.GetDeployment(r.Context(), id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -669,22 +612,11 @@ func (h *DeploymentHandler) ApproveDeployment(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	idStr := chi.URLParam(r, "id")
-	id, err := strconv.ParseInt(idStr, 10, 64)
-	if err != nil {
-		http.Error(w, "Invalid deployment ID", http.StatusBadRequest)
+	deployment, ok := h.deploymentFromRequest(w, r)
+	if !ok {
 		return
 	}
-
-	deployment, err := h.repo.Queries.GetDeployment(r.Context(), id)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			http.Error(w, "Deployment not found", http.StatusNotFound)
-			return
-		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+	id := deployment.ID
 
 	if deployment.Status != "pending_approval" {
 		http.Error(w, "Deployment is not pending approval", http.StatusConflict)
