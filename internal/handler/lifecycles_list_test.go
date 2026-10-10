@@ -64,13 +64,13 @@ func TestLifecycleDetail_renders_settings_and_environment_assignment(
 	if err != nil {
 		t.Fatalf("create request: %v", err)
 	}
-	request = auth.SetUser(request, &db.User{Role: "writer"})
+	request = auth.SetUser(request, &db.User{Role: "admin"})
 	lifecycle := db.Lifecycle{ID: 42, Name: "release flow"}
 	available := []db.Environment{{ID: 7, Name: "production"}}
 	var rendered bytes.Buffer
 
 	// When
-	err = pages.LifecycleDetail(lifecycle, nil, available, "").
+	err = pages.LifecycleDetail(pages.LifecycleWorkspace{Lifecycle: lifecycle, AvailableEnvironments: available}).
 		Render(request.Context(), &rendered)
 	if err != nil {
 		t.Fatalf("render lifecycle detail: %v", err)

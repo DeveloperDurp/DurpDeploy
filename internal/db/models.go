@@ -258,6 +258,11 @@ type DeploymentStepSource struct {
 	CreatedAt              int64  `json:"created_at"`
 }
 
+type DeploymentVariableSnapshot struct {
+	DeploymentID int64  `json:"deployment_id"`
+	Value        string `json:"value"`
+}
+
 type DeploymentVerification struct {
 	DeploymentID   int64         `json:"deployment_id"`
 	Type           string        `json:"type"`
@@ -315,6 +320,16 @@ type LifecycleStage struct {
 	EnvironmentID    int64 `json:"environment_id"`
 	SortOrder        int64 `json:"sort_order"`
 	RequiresApproval int64 `json:"requires_approval"`
+}
+
+type LifecycleVariable struct {
+	ID            int64          `json:"id"`
+	LifecycleID   int64          `json:"lifecycle_id"`
+	Name          string         `json:"name"`
+	Value         sql.NullString `json:"value"`
+	EnvironmentID sql.NullInt64  `json:"environment_id"`
+	Secret        int64          `json:"secret"`
+	CreatedAt     int64          `json:"created_at"`
 }
 
 type MfaChallenge struct {

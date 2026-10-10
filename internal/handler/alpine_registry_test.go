@@ -103,6 +103,25 @@ func TestAlpineRegistryDefinesComplianceComponents(t *testing.T) {
 					contract.constructor + `\s*=>\s*\(\{.*?^\}\)\);`,
 			)
 			factory := factoryPattern.FindString(source)
+			if contract.name == "variablesPage" {
+				if !strings.Contains(source,
+					"import { createVariablesPage } from './variables.js'",
+				) || !strings.Contains(
+					source,
+					"Alpine.data('variablesPage', () => createVariablesPage(focusFormField))",
+				) {
+					t.Fatal(
+						"variablesPage module is not wired into the registry",
+					)
+				}
+				module, err := os.ReadFile(filepath.Join(
+					"..", "..", "static", "js", "variables.js",
+				))
+				if err != nil {
+					t.Fatal(err)
+				}
+				factory = strings.ReplaceAll(string(module), "\n\t\t", "\n\t")
+			}
 			if factory == "" {
 				t.Fatalf(
 					"registry does not define %s with constructor %s",

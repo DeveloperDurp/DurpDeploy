@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"context"
 	"database/sql"
 	"fmt"
 	"net/http"
@@ -10,6 +9,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/repository"
 	"durpdeploy/views/pages"
@@ -141,38 +141,6 @@ func (h *LifecycleHandler) CreateLifecycle(
 	http.Redirect(w, r, lifecyclesPath, http.StatusSeeOther)
 }
 
-func (h *LifecycleHandler) GetLifecycle(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
-	id, err := parseLifecycleID(r)
-	if err != nil {
-		http.Error(w, "Invalid lifecycle ID", http.StatusBadRequest)
-		return
-	}
-
-	lc, err := h.repo.Queries.GetLifecycle(r.Context(), id)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			http.Error(w, "Lifecycle not found", http.StatusNotFound)
-			return
-		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	stageViews, availableEnvs, err := h.lifecycleWorkspace(r.Context(), id)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	if err := pages.LifecycleDetailPage(lc, stageViews, availableEnvs, "", r.URL.Path).
-		Render(r.Context(), w); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
-}
-
 func (h *LifecycleHandler) EditLifecycle(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -212,6 +180,17 @@ func (h *LifecycleHandler) SaveLifecycle(
 
 	switch r.FormValue("_method") {
 	case "delete":
+		if user := auth.UserFromContext(
+			r.Context(),
+		); user == nil ||
+			user.Role != "admin" {
+			http.Error(
+				w,
+				"Only a global admin can delete a lifecycle",
+				http.StatusForbidden,
+			)
+			return
+		}
 		if err := h.repo.Queries.DeleteLifecycle(r.Context(), id); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -280,69 +259,6 @@ func (h *LifecycleHandler) SaveLifecycle(
 	default:
 		http.Error(w, "Unknown method", http.StatusBadRequest)
 	}
-}
-
-func (h *LifecycleHandler) lifecycleWorkspace(
-	ctx context.Context,
-	lifecycleID int64,
-) ([]pages.LifecycleStageView, []db.Environment, error) {
-	stages, err := h.repo.Queries.ListLifecycleStages(ctx, lifecycleID)
-	if err != nil {
-		return nil, nil, fmt.Errorf("list lifecycle stages: %w", err)
-	}
-	environments, err := h.repo.Queries.ListEnvironments(ctx)
-	if err != nil {
-		return nil, nil, fmt.Errorf("list environments: %w", err)
-	}
-
-	envsByID := make(map[int64]db.Environment, len(environments))
-	for _, env := range environments {
-		envsByID[env.ID] = env
-	}
-	used := make(map[int64]bool, len(stages))
-	stageViews := make([]pages.LifecycleStageView, len(stages))
-	for i, stage := range stages {
-		used[stage.EnvironmentID] = true
-		stageViews[i] = pages.LifecycleStageView{
-			Stage:       stage,
-			Environment: envsByID[stage.EnvironmentID],
-		}
-	}
-
-	availableEnvs := make([]db.Environment, 0, len(environments)-len(used))
-	for _, env := range environments {
-		if !used[env.ID] {
-			availableEnvs = append(availableEnvs, env)
-		}
-	}
-	return stageViews, availableEnvs, nil
-}
-
-func (h *LifecycleHandler) writeLifecycleDetailError(
-	w http.ResponseWriter,
-	r *http.Request,
-	lifecycle db.Lifecycle,
-	message string,
-) error {
-	stages, availableEnvs, err := h.lifecycleWorkspace(
-		r.Context(), lifecycle.ID,
-	)
-	if err != nil {
-		return err
-	}
-	WriteFormError(
-		w,
-		r,
-		pages.LifecycleDetail(lifecycle, stages, availableEnvs, message),
-		pages.LifecycleDetailPage(
-			lifecycle,
-			stages,
-			availableEnvs,
-			message,
-			r.URL.Path,
-		),
-	)
-	return nil
 }
 
 func (h *LifecycleHandler) AddStage(w http.ResponseWriter, r *http.Request) {

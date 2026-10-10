@@ -7,58 +7,6 @@ import (
 	"fmt"
 )
 
-type LifecyclePanel struct {
-	Lifecycle db.Lifecycle
-	Stages    []LifecyclePanelStage
-}
-
-type LifecyclePanelStage struct {
-	Stage            db.LifecycleStage
-	Environment      db.Environment
-	LatestDeployment *db.Deployment
-	LatestVersion    string
-	LatestAttempt    *db.Deployment
-	AttemptVersion   string
-	RecentAttempts   []db.Deployment
-}
-
-// variablesPreviewCap is the max number of variable rows shown per
-// sub-table in the project overview. Keeps the page from scrolling forever
-// when a project has dozens of variables; full list is on /variables.
-const variablesPreviewCap = 6
-
-templ ProjectDetail(project db.Project, panel LifecyclePanel, vars []db.Variable, envs []db.Environment) {
-	<div id="project-detail" x-data="projectMenu">
-		<div x-data="formDialogHost" x-on:htmx:after-settle.camel="afterSettle" x-on:htmx:before-swap.camel="beforeSwap" x-on:form-saved="saved">
-			<div class="page-header">
-				<h1 class="text-3xl font-bold">{ project.Name }</h1>
-				<div class="flex gap-2 ml-auto">
-					<button type="button" class="btn btn-outline btn-sm" @click="open" aria-haspopup="dialog" aria-controls="project-menu-dialog">Project menu</button>
-					if CanWrite(ctx) {
-						<a href={ fmt.Sprintf("/projects/%d/deploy", project.ID) } class="btn btn-primary btn-sm">Deploy</a>
-						<a href={ fmt.Sprintf("/projects/%d/edit", project.ID) } hx-get={ fmt.Sprintf("/projects/%d/edit", project.ID) } hx-target="#project-edit-content" hx-select="[data-project-form]" hx-swap="innerHTML" hx-push-url="false" hx-boost="false" x-ref="editButton" class="btn btn-secondary btn-sm">Edit</a>
-					}
-					<a href="/projects" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>
-				</div>
-			</div>
-			<p class="mb-6 text-gray-400">
-				if project.Description.Valid {
-					{ project.Description.String }
-				} else {
-					<span>No description</span>
-				}
-			</p>
-			@LifecyclePanelSection(project, panel)
-			@VariablesPreviewSection(project, vars, envs)
-			if CanWrite(ctx) {
-				@ResourceFormDialog("Edit Project", "[data-project-form]")
-			}
-		</div>
-		@ProjectMenuDialog(project)
-	</div>
-}
-
-// Keep the drawer inside the detail fragment so navigation removes it too.
 templ ProjectMenuDialog(project db.Project) {
 	<dialog
 		id="project-menu-dialog"

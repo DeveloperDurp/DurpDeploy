@@ -617,6 +617,11 @@ async function cleanupPhase(name, action, errors) {
   }
 }
 
+function readOnlyTarget(target) {
+  return process.env.MOBILE_ROLE === "viewer" ||
+    (target.name === "lifecycle-stages" && process.env.MOBILE_ROLE !== "admin");
+}
+
 function assertGeometry(target, viewport, geometry) {
   const violations = [];
 	const mobileLayout = usesMobileLayout(target, viewport);
@@ -659,13 +664,13 @@ function assertGeometry(target, viewport, geometry) {
     violations.push(`${target.name} account summary is too tall at ${viewport.width}px`);
   }
   if (
-    process.env.MOBILE_ROLE === "viewer" &&
+    readOnlyTarget(target) &&
     geometry.visibleWriterControlCount > 0
   ) {
-    violations.push(`${target.name} exposes controls to a viewer at ${viewport.width}px`);
+    violations.push(`${target.name} exposes unauthorized controls at ${viewport.width}px`);
   }
   if (
-    process.env.MOBILE_ROLE !== "viewer" &&
+    !readOnlyTarget(target) &&
     target.writerControlCount !== undefined &&
     geometry.visibleWriterControlCount !== target.writerControlCount
   ) {
@@ -674,7 +679,7 @@ function assertGeometry(target, viewport, geometry) {
     );
   }
   if (
-    process.env.MOBILE_ROLE !== "viewer" &&
+    !readOnlyTarget(target) &&
     target.writerActions &&
     geometry.writerControlActions.join(",") !== target.writerActions.join(",")
   ) {
@@ -800,6 +805,11 @@ async function mobileInteractionFailure(page, target, viewport) {
 			if ((await settings.count()) !== 0 || (await assignment.count()) !== 0) {
 				return "viewer received lifecycle write controls";
 			}
+		} else if (config.role !== "admin") {
+			if ((await settings.count()) !== 1 || !(await settings.isVisible()) ||
+				(await assignment.count()) !== 0) {
+				return "deployer lifecycle settings or stage restrictions are incorrect";
+			}
 		} else if (
 			(await settings.count()) !== 1 ||
 			!(await settings.isVisible()) ||
@@ -849,7 +859,7 @@ async function mobileInteractionFailure(page, target, viewport) {
       return "steps desktop edit did not render a visible modal form";
     }
   }
-  if (viewport.name !== "phone" || config.role === "viewer") {
+  if (viewport.name !== "phone" || readOnlyTarget(target)) {
     return null;
   }
   if (target.name === "steps") {

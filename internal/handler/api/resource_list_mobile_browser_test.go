@@ -342,7 +342,7 @@ func TestResourceListMobileBrowserE2E(t *testing.T) {
 	))
 	b.wait(
 		t,
-		`document.querySelector('#project-edit-dialog').matches(':modal') && document.querySelector('main form[hx-confirm^="Delete this lifecycle"]') !== null`,
+		`!document.querySelector('dialog[open]') && !!document.querySelector('#shared-variables') && document.querySelector('main form[hx-confirm^="Delete this lifecycle"]') !== null`,
 	)
 	b.captureNavigation(t, "mobile-lifecycle-edit", func() {
 		assertEditDeleteControl(

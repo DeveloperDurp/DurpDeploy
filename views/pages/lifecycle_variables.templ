@@ -1,0 +1,182 @@
+package pages
+
+import (
+	"durpdeploy/internal/db"
+	"durpdeploy/views/layouts"
+	"fmt"
+	"strconv"
+)
+
+type LifecycleVariables struct {
+	Lifecycle    db.Lifecycle
+	Variables    []db.LifecycleVariable
+	Environments []db.Environment
+	Options      []db.Environment
+	Projects     []db.ListProjectsByLifecycleRow
+	Editing      db.LifecycleVariable
+	Error        string
+}
+
+func sharedVariableURL(data LifecycleVariables) string {
+	if data.Editing.ID != 0 {
+		return fmt.Sprintf("/lifecycles/%d/variables/%d", data.Lifecycle.ID, data.Editing.ID)
+	}
+	return fmt.Sprintf("/lifecycles/%d/variables", data.Lifecycle.ID)
+}
+
+templ LifecycleVariablesPage(data LifecycleVariables, currentPath string) {
+	@layouts.Base("Shared variables — "+data.Lifecycle.Name, currentPath) {
+		<div class="page-header"><h1 class="text-3xl font-bold break-words">{ data.Lifecycle.Name }</h1><a href={ fmt.Sprintf("/lifecycles/%d", data.Lifecycle.ID) } class="btn btn-ghost">Back</a></div>
+		@SharedLifecycleVariables(data)
+	}
+}
+
+templ SharedLifecycleVariables(data LifecycleVariables) {
+	if data.Lifecycle.ID != 0 && CanWrite(ctx) && CanManageLifecycleVariables(ctx) {
+		<section id="shared-variables" class="card bg-base-200 p-4 space-y-4" aria-labelledby="shared-variables-title">
+			<div class="flex flex-wrap items-center justify-between gap-4"><div><h2 id="shared-variables-title" class="text-xl font-bold">Shared variables</h2><p class="text-sm opacity-70">Inherited by every project using this lifecycle.</p></div></div>
+			<p class="text-sm">
+				Used by { strconv.Itoa(len(data.Projects)) } projects:
+				for i, project := range data.Projects {
+					if i > 0 {
+						<span>, </span>
+					}
+					<a class="link" href={ fmt.Sprintf("/projects/%d", project.ID) }>{ project.Name }</a>
+				}
+			</p>
+			if len(data.Variables) == 0 {
+				<p class="text-sm opacity-70">No shared variables yet.</p>
+			} else {
+				<table class="hidden! md:table! table table-zebra table-fixed w-full">
+					<thead><tr><th class="w-1/4">Name</th><th class="w-auto">Value</th><th class="w-1/4">Environment</th><th class="w-48">Actions</th></tr></thead>
+					<tbody>
+						for _, variable := range data.Variables {
+							<tr data-shared-variable={ variable.Name }>
+								<td class="truncate font-mono" title={ variable.Name }>{ variable.Name }</td>
+								<td class="truncate">
+									@SharedVariableValue(variable)
+								</td>
+								<td class="truncate">
+									@SharedVariableScope(variable, data.Environments)
+								</td>
+								<td>
+									@SharedVariableActions(data.Lifecycle.ID, variable)
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+				<ul class="md:hidden space-y-3" aria-label="Shared variables">
+					for _, variable := range data.Variables {
+						<li class="rounded-box bg-base-100 p-4 space-y-2" data-shared-variable={ variable.Name }>
+							<h3 class="font-bold font-mono break-all">{ variable.Name }</h3>
+							<p class="break-all">
+								<span>Value: </span>@SharedVariableValue(variable)
+							</p>
+							<p>
+								<span>Environment: </span>@SharedVariableScope(variable, data.Environments)
+							</p>
+							@SharedVariableActions(data.Lifecycle.ID, variable)
+						</li>
+					}
+				</ul>
+			}
+			<details class="border-t border-base-300 pt-4" open?={ data.Editing.ID != 0 || data.Error != "" }>
+				<summary class="cursor-pointer font-semibold py-2">
+					if data.Editing.ID != 0 {
+						Edit shared variable
+					} else {
+						Add variable
+					}
+				</summary>
+				@SharedVariableForm(data)
+			</details>
+			<p class="text-sm opacity-70">Changes apply to the next deployment or runbook execution, including existing releases. Environment overrides take precedence; project values win within the same scope.</p>
+		</section>
+	}
+}
+
+templ SharedVariableValue(variable db.LifecycleVariable) {
+	if variable.Secret != 0 {
+		<span aria-label="Masked secret">••••••••</span> <span class="badge badge-sm">Secret</span>
+	} else if variable.Value.Valid {
+		{ variable.Value.String }
+	} else {
+		<span class="opacity-70">(empty)</span>
+	}
+}
+
+templ SharedVariableScope(variable db.LifecycleVariable, envs []db.Environment) {
+	if variable.EnvironmentID.Valid {
+		{ envNameForID(envs, variable.EnvironmentID.Int64) }
+	} else {
+		All stages
+	}
+}
+
+templ SharedVariableActions(lifecycleID int64, variable db.LifecycleVariable) {
+	<div class="flex flex-wrap gap-2">
+		<a class="btn btn-xs whitespace-nowrap" href={ fmt.Sprintf("/lifecycles/%d/variables/%d/edit", lifecycleID, variable.ID) } hx-get={ fmt.Sprintf("/lifecycles/%d/variables/%d/edit", lifecycleID, variable.ID) } hx-target="#shared-variables" hx-swap="outerHTML" hx-boost="false" aria-label={ "Edit shared variable " + variable.Name }>Edit</a>
+		<button class="btn btn-error btn-xs whitespace-nowrap" hx-delete={ fmt.Sprintf("/lifecycles/%d/variables/%d", lifecycleID, variable.ID) } hx-target="#shared-variables" hx-swap="outerHTML" hx-confirm={ "Delete " + variable.Name + " for all projects using this lifecycle? New deployments will stop receiving this shared value. Active deployments keep their captured values." } aria-label={ "Delete shared variable " + variable.Name }>Delete</button>
+	</div>
+}
+
+templ SharedVariableForm(data LifecycleVariables) {
+	<form
+		class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-4"
+		method="post"
+		action={ templ.SafeURL(sharedVariableURL(data)) }
+		hx-target="#shared-variables"
+		hx-swap="outerHTML"
+		data-shared-variable-form
+		if data.Editing.ID != 0 {
+			hx-put={ sharedVariableURL(data) }
+		} else {
+			hx-post={ sharedVariableURL(data) }
+		}
+		x-data={ fmt.Sprintf("{ secret: %t }", data.Editing.Secret != 0) }
+	>
+		<div class="form-control"><label for="shared-name" class="label">Name</label><input id="shared-name" name="name" class="input input-bordered w-full" value={ data.Editing.Name } pattern="[A-Za-z_][A-Za-z0-9_]*" maxlength="255" required/></div>
+		<div class="form-control">
+			<label for="shared-value" class="label">Value</label><input id="shared-value" name="value" class="input input-bordered w-full" :type="secret ? 'password' : 'text'" autocomplete="off" value={ sharedVariableEditValue(data.Editing) }/>
+			if data.Editing.Secret != 0 {
+				<p class="text-sm opacity-70">Leave blank to keep the saved secret.</p>
+			}
+		</div>
+		<div class="form-control">
+			<label for="shared-environment" class="label">Environment</label>
+			<select id="shared-environment" name="environment_id" class="select select-bordered w-full" required>
+				if sharedVariableOutsideStages(data) {
+					<option value="" selected disabled>Removed stage — choose a scope</option>
+				}
+				<option value="all">All stages</option>
+				for _, env := range data.Options {
+					<option value={ strconv.FormatInt(env.ID, 10) } selected?={ data.Editing.EnvironmentID.Valid && data.Editing.EnvironmentID.Int64 == env.ID }>{ env.Name }</option>
+				}
+			</select>
+		</div>
+		<div class="flex flex-wrap items-end gap-3 pb-1"><label class="flex items-center gap-2 min-h-12"><input type="checkbox" class="checkbox checkbox-sm" name="secret" checked?={ data.Editing.Secret != 0 } x-model="secret"/>Secret</label><button class="btn btn-primary" type="submit">Save variable</button><a class="btn btn-ghost" href={ fmt.Sprintf("/lifecycles/%d", data.Lifecycle.ID) } hx-get={ fmt.Sprintf("/lifecycles/%d/variables", data.Lifecycle.ID) } hx-target="#shared-variables" hx-swap="outerHTML" hx-boost="false">Cancel</a></div>
+		if data.Error != "" {
+			<p class="text-error md:col-span-2 lg:col-span-4" role="alert">{ data.Error }</p>
+		}
+	</form>
+}
+
+func sharedVariableEditValue(variable db.LifecycleVariable) string {
+	if variable.Secret != 0 {
+		return ""
+	}
+	return variable.Value.String
+}
+
+func sharedVariableOutsideStages(data LifecycleVariables) bool {
+	if !data.Editing.EnvironmentID.Valid {
+		return false
+	}
+	for _, env := range data.Options {
+		if env.ID == data.Editing.EnvironmentID.Int64 {
+			return false
+		}
+	}
+	return true
+}

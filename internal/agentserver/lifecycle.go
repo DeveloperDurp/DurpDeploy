@@ -243,8 +243,8 @@ func (s *Server) remoteLogScrubber(
 		}
 		return nil, err
 	}
-	variables, err := s.repository.ListReleaseVariablesByRelease(
-		ctx, deployment.ReleaseID,
+	variables, err := s.repository.ListDeploymentVariables(
+		ctx, deployment.ID,
 	)
 	if err != nil {
 		return nil, err

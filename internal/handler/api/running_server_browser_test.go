@@ -34,6 +34,17 @@ func TestRunningServerBrowserE2E(t *testing.T) {
 		map[string]bool{"ignore": true}, &struct{}{})
 	b.setBackTestSession(t, base, session)
 	b.navigateBackTest(t, base+"/")
+	if lifecycle := os.Getenv("DURPDEPLOY_LIVE_LIFECYCLE"); lifecycle != "" {
+		b.navigateBackTest(t, base+lifecycle)
+		b.wait(t, `!!document.querySelector('[data-shared-variable="REGION"]')`)
+		b.captureNavigation(t, "live-lifecycle-shared")
+		b.navigateBackTest(t, base+os.Getenv("DURPDEPLOY_LIVE_INHERITED"))
+		b.wait(
+			t,
+			`document.querySelector('[data-inherited-variables]')?.textContent.includes('Project override')`,
+		)
+		b.captureNavigation(t, "live-project-inherited")
+	}
 	api := func(t *testing.T, path string, status int) json.RawMessage {
 		t.Helper()
 		var response struct {
@@ -173,7 +184,7 @@ func TestRunningServerBrowserE2E(t *testing.T) {
 			deleteSelector := fmt.Sprintf(
 				"#project-edit-content button[hx-delete=%q]", path)
 			if resource == "lifecycles" {
-				deleteSelector = `#project-edit-content form:has(input[name="_method"][value="delete"]) button`
+				deleteSelector = `main form:has(input[name="_method"][value="delete"]) button`
 			}
 			if resource == "projects" {
 				b.navigateBackTest(t, base+path+"/steps-page")
@@ -257,12 +268,12 @@ func TestRunningServerBrowserE2E(t *testing.T) {
 						`!document.querySelector('.htmx-settling, .htmx-request')`,
 					)
 					b.evaluate(t, fmt.Sprintf(
-						`document.querySelector('a[hx-get=%q]').click(); true`,
+						`document.querySelector('a[href=%q]').click(); true`,
 						editPath))
 				}
 				b.wait(
 					t,
-					`document.querySelector('#project-edit-dialog')?.matches(':modal') && document.querySelector('#project-edit-content input[name="name"]')`,
+					`document.querySelector('#project-edit-dialog')?.matches(':modal') || (!!document.querySelector('#lifecycle-settings-form') && !!document.querySelector('#shared-variables'))`,
 				)
 			}
 			openEdit()
@@ -270,14 +281,14 @@ func TestRunningServerBrowserE2E(t *testing.T) {
 			b.evaluate(
 				t,
 				fmt.Sprintf(
-					`document.querySelector('#project-edit-content input[name=name]').value = %q; document.querySelector('#project-edit-content button[form]').click(); true`,
+					`document.querySelector('#lifecycle-name, #project-edit-content input[name=name]').value = %q; document.querySelector('button[form="lifecycle-settings-form"], #project-edit-content button[form]').click(); true`,
 					name+"-edited",
 				),
 			)
 			b.wait(
 				t,
 				fmt.Sprintf(
-					`!document.querySelector('#project-edit-dialog').open && document.querySelector('main').textContent.includes(%q)`,
+					`!document.querySelector('#project-edit-dialog')?.open && document.querySelector('main').textContent.includes(%q)`,
 					name+"-edited",
 				),
 			)

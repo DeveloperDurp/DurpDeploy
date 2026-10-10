@@ -19,6 +19,12 @@ func rotateStoredCredentials(
 	q *db.Queries,
 	rotation secretKeyRotation,
 ) error {
+	if err := rotateDeploymentVariables(ctx, q, rotation); err != nil {
+		return err
+	}
+	if err := rotateLifecycleVariables(ctx, q, rotation); err != nil {
+		return err
+	}
 	if err := rotateArtifactGateChunks(ctx, q, rotation); err != nil {
 		return err
 	}

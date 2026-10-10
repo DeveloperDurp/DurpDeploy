@@ -3416,6 +3416,7 @@
         ]
       },
       "delete": {
+        "description": "Delete an environment.",
         "schemes": [
           "http",
           "https"
@@ -3423,7 +3424,7 @@
         "tags": [
           "environments"
         ],
-        "summary": "Delete an environment.",
+        "summary": "Global admin only; deletion also removes scoped shared variables.",
         "operationId": "deleteEnvironment",
         "parameters": [
           {
@@ -3453,6 +3454,12 @@
             "description": "Unauthorized error response.",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
             }
           },
           "409": {
@@ -3706,6 +3713,62 @@
             "bearer": []
           }
         ]
+      },
+      "delete": {
+        "tags": [
+          "lifecycles"
+        ],
+        "summary": "Delete a lifecycle and its shared variables. Global admin only.",
+        "operationId": "deleteLifecycle",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "description": "The resource ID.",
+            "name": "id",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "EmptyResponse is returned for no-content endpoints.",
+            "schema": {
+              "$ref": "#/definitions/EmptyResponse"
+            }
+          },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "500": {
+            "description": "Server error response.",
+            "schema": {
+              "$ref": "#/definitions/ServerError"
+            }
+          }
+        }
       }
     },
     "/lifecycles/{id}/save": {
@@ -3811,7 +3874,7 @@
         "tags": [
           "lifecycles"
         ],
-        "summary": "Add a stage to a lifecycle.",
+        "summary": "Add a stage to a lifecycle. Global admin only.",
         "operationId": "addLifecycleStage",
         "parameters": [
           {
@@ -3850,6 +3913,12 @@
             "description": "Unauthorized error response.",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
             }
           },
           "409": {
@@ -3893,7 +3962,7 @@
         "tags": [
           "lifecycles"
         ],
-        "summary": "Reorder lifecycle stages.",
+        "summary": "Reorder lifecycle stages. Global admin only.",
         "operationId": "reorderLifecycleStages",
         "parameters": [
           {
@@ -3934,6 +4003,12 @@
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
           "413": {
             "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
             "schema": {
@@ -3969,7 +4044,7 @@
         "tags": [
           "lifecycles"
         ],
-        "summary": "Update a lifecycle stage.",
+        "summary": "Update a lifecycle stage. Global admin only.",
         "operationId": "updateLifecycleStage",
         "parameters": [
           {
@@ -4019,6 +4094,12 @@
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
           "404": {
             "description": "Not found error response.",
             "schema": {
@@ -4054,7 +4135,7 @@
         "tags": [
           "lifecycles"
         ],
-        "summary": "Delete a lifecycle stage.",
+        "summary": "Delete a lifecycle stage. Global admin only.",
         "operationId": "deleteLifecycleStage",
         "parameters": [
           {
@@ -4095,10 +4176,413 @@
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
           "413": {
             "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
             "schema": {
               "$ref": "#/definitions/RequestEntityTooLargeError"
+            }
+          },
+          "500": {
+            "description": "Server error response.",
+            "schema": {
+              "$ref": "#/definitions/ServerError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/lifecycles/{id}/variables": {
+      "get": {
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "variables"
+        ],
+        "summary": "List shared lifecycle variables. Global admin only.",
+        "operationId": "listLifecycleVariables",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "name": "id",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/LifecycleVariableList"
+            }
+          },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "422": {
+            "description": "Validation error response.",
+            "schema": {
+              "$ref": "#/definitions/ValidationError"
+            }
+          },
+          "500": {
+            "description": "Server error response.",
+            "schema": {
+              "$ref": "#/definitions/ServerError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "post": {
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "variables"
+        ],
+        "summary": "Create a shared lifecycle variable. Global admin only.",
+        "operationId": "createLifecycleVariable",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "x-go-name": "Body",
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/VariableRequest"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Created",
+            "schema": {
+              "$ref": "#/definitions/LifecycleVariable"
+            }
+          },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "422": {
+            "description": "Validation error response.",
+            "schema": {
+              "$ref": "#/definitions/ValidationError"
+            }
+          },
+          "500": {
+            "description": "Server error response.",
+            "schema": {
+              "$ref": "#/definitions/ServerError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/lifecycles/{id}/variables/{varId}": {
+      "get": {
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "variables"
+        ],
+        "summary": "Get a masked shared lifecycle variable. Global admin only.",
+        "operationId": "getLifecycleVariable",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "name": "varId",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/LifecycleVariable"
+            }
+          },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "422": {
+            "description": "Validation error response.",
+            "schema": {
+              "$ref": "#/definitions/ValidationError"
+            }
+          },
+          "500": {
+            "description": "Server error response.",
+            "schema": {
+              "$ref": "#/definitions/ServerError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "put": {
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "variables"
+        ],
+        "summary": "Update a shared lifecycle variable. Blank values preserve existing secrets. Global admin only.",
+        "operationId": "updateLifecycleVariable",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "name": "varId",
+            "in": "path",
+            "required": true
+          },
+          {
+            "x-go-name": "Body",
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/VariableRequest"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/LifecycleVariable"
+            }
+          },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "422": {
+            "description": "Validation error response.",
+            "schema": {
+              "$ref": "#/definitions/ValidationError"
+            }
+          },
+          "500": {
+            "description": "Server error response.",
+            "schema": {
+              "$ref": "#/definitions/ServerError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "delete": {
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "variables"
+        ],
+        "summary": "Delete a shared variable. Future deployments stop inheriting it; active deployments retain captured values. Global admin only.",
+        "operationId": "deleteLifecycleVariable",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "name": "varId",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "EmptyResponse is returned for no-content endpoints.",
+            "schema": {
+              "$ref": "#/definitions/EmptyResponse"
+            }
+          },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "422": {
+            "description": "Validation error response.",
+            "schema": {
+              "$ref": "#/definitions/ValidationError"
             }
           },
           "500": {
@@ -4185,7 +4669,7 @@
         "tags": [
           "projects"
         ],
-        "summary": "Create a new project.",
+        "summary": "Create a new project. Lifecycle assignment requires a global admin.",
         "operationId": "createProject",
         "parameters": [
           {
@@ -4215,6 +4699,12 @@
             "description": "Unauthorized error response.",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
             }
           },
           "409": {
@@ -4326,7 +4816,7 @@
         "tags": [
           "projects"
         ],
-        "summary": "Update a project.",
+        "summary": "Update a project. Only a global admin can assign a different lifecycle.",
         "operationId": "updateProject",
         "parameters": [
           {
@@ -4365,6 +4855,12 @@
             "description": "Unauthorized error response.",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
             }
           },
           "404": {
@@ -7853,6 +8349,77 @@
         ]
       }
     },
+    "/projects/{id}/variables/inherited": {
+      "get": {
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "variables"
+        ],
+        "summary": "List inherited lifecycle variables and project overrides. Requires project membership; secret values are masked.",
+        "operationId": "listInheritedVariables",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "name": "id",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/InheritedVariableList"
+            }
+          },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "422": {
+            "description": "Validation error response.",
+            "schema": {
+              "$ref": "#/definitions/ValidationError"
+            }
+          },
+          "500": {
+            "description": "Server error response.",
+            "schema": {
+              "$ref": "#/definitions/ServerError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/projects/{id}/variables/{varId}": {
       "get": {
         "produces": [
@@ -8037,6 +8604,16 @@
         "summary": "Delete a project variable.",
         "operationId": "deleteVariable",
         "parameters": [
+          {
+            "enum": [
+              "inherit"
+            ],
+            "type": "string",
+            "x-go-name": "Reset",
+            "description": "Set to inherit to remove every project value with this name and scope,\nincluding legacy duplicate unscoped rows. Other scopes are retained.",
+            "name": "reset",
+            "in": "query"
+          },
           {
             "type": "integer",
             "format": "int64",
@@ -9650,6 +10227,62 @@
       "x-go-name": "swaggerGlobalNotificationRequest",
       "x-go-package": "durpdeploy/internal/handler/api"
     },
+    "InheritedVariable": {
+      "type": "object",
+      "properties": {
+        "created_at": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "CreatedAt"
+        },
+        "environment_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "EnvironmentID"
+        },
+        "id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "ID"
+        },
+        "lifecycle_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "LifecycleID"
+        },
+        "lifecycle_name": {
+          "type": "string",
+          "x-go-name": "LifecycleName"
+        },
+        "name": {
+          "type": "string",
+          "x-go-name": "Name"
+        },
+        "override": {
+          "$ref": "#/definitions/VariableResponse"
+        },
+        "secret": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Secret"
+        },
+        "value": {
+          "description": "Empty when Secret is 1.",
+          "type": "string",
+          "x-go-name": "Value"
+        }
+      },
+      "x-go-name": "swaggerInheritedVariable",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "InheritedVariableList": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/InheritedVariable"
+      },
+      "x-go-name": "swaggerInheritedVariableList",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
     "Lifecycle": {
       "type": "object",
       "title": "Lifecycle represents a deployment promotion pipeline.",
@@ -9781,6 +10414,55 @@
         }
       },
       "x-go-name": "swaggerLifecycleStageRequest",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "LifecycleVariable": {
+      "type": "object",
+      "properties": {
+        "created_at": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "CreatedAt"
+        },
+        "environment_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "EnvironmentID"
+        },
+        "id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "ID"
+        },
+        "lifecycle_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "LifecycleID"
+        },
+        "name": {
+          "type": "string",
+          "x-go-name": "Name"
+        },
+        "secret": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Secret"
+        },
+        "value": {
+          "description": "Empty when Secret is 1.",
+          "type": "string",
+          "x-go-name": "Value"
+        }
+      },
+      "x-go-name": "swaggerLifecycleVariable",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "LifecycleVariableList": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/LifecycleVariable"
+      },
+      "x-go-name": "swaggerLifecycleVariableList",
       "x-go-package": "durpdeploy/internal/handler/api"
     },
     "LogEntry": {

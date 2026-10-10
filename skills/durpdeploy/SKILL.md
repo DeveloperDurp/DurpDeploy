@@ -388,6 +388,18 @@ Enforced identically on web and API (source: `internal/gate/gate.go`):
   instead of running. Approve is admin-only.
 - **Membership**: non-admin tokens need to be in the project; unknown or
   forbidden projects return `404`/`403`.
+- **Lifecycle assignment**: only a global admin can attach a lifecycle on
+  project creation or change its assignment. Other project admins can retain
+  or remove an existing assignment. Assignment grants execution access to
+  the lifecycle's shared variables, including secrets; unauthorized attempts
+  return `403` before project creation or edits.
+- **Parent deletion**: deleting environments or lifecycles is global-admin
+  only because deletion also removes scoped/shared variables. Lifecycle
+  deletion is `DELETE /api/v1/lifecycles/$ID` and returns `204`; projects
+  using it become unassigned while existing snapshots remain intact.
+- **Lifecycle stages**: adding, updating, reordering, or removing stages is
+  global-admin only (`403` otherwise). Restoring a removed stage reactivates
+  its retained scoped shared values for assigned projects.
 - **Cross-project release**: deploying a release id under the wrong
   project → `400`.
 
@@ -489,12 +501,42 @@ Once deployments are terminal, environment deletion removes their history.
 
 ## Endpoint cheat sheet
 
+Lifecycle variables are shared by every project assigned to that lifecycle.
+Global admins manage them with `GET/POST /api/v1/lifecycles/{id}/variables`
+and `GET/PUT/DELETE /api/v1/lifecycles/{id}/variables/{varId}`. The write body
+uses the same `name`, `value`, optional `environment_id`, and boolean `secret`
+fields as project variables. Names must be shell identifiers of at most 255
+characters. A scoped environment must be a current lifecycle stage. Secret
+values are masked in responses; a blank value on an existing secret preserves
+it. Reserved artifact and container variable names are rejected.
+
+Project members can read `GET /api/v1/projects/{id}/variables/inherited` for
+the lifecycle source and any same-scope project override. The existing project
+variables endpoint continues to return only project-owned rows. To override,
+create a project variable with the same name and environment scope. Delete that
+project variable with `DELETE /api/v1/projects/{id}/variables/{varId}?reset=inherit`
+to reset inheritance. This removes all matching local rows in that name/scope,
+including legacy unscoped duplicates, while retaining other scopes. Ordinary
+DELETE without the query parameter removes only the selected row.
+From highest to lowest priority:
+project environment, lifecycle environment, project unscoped, lifecycle
+unscoped. Removing a lifecycle stage excludes its scoped shared values from
+future deployments. Releases and runbook versions snapshot only project-owned
+variables. Each new deployment, re-run, rollback and runbook execution resolves
+the project's current lifecycle variables and scope, then captures encrypted
+values for that execution. No release refresh is needed after a shared edit.
+Queued, approval-waiting and active executions retain their captured values,
+including secrets for consistent log redaction. Historical releases that already
+contain merged values are not migrated; recreate them when upgrading.
+
 | Resource | Endpoints |
 |----------|-----------|
 | Projects | `GET/POST /api/v1/projects`, `GET/PUT/DELETE /projects/{id}` |
 | Environments | same shape under `/environments` |
 | Steps | `/api/v1/projects/{id}/steps[/{stepId}]` (`POST/GET/PUT/DELETE`, `PATCH /steps/reorder`) |
 | Variables | `/api/v1/projects/{id}/variables[/{varId}]` |
+| Inherited variables | `GET /api/v1/projects/{id}/variables/inherited` |
+| Shared lifecycle variables | `/api/v1/lifecycles/{id}/variables[/{varId}]` (global admin) |
 | Releases | `/api/v1/projects/{id}/releases[/{relId}]` (`GET/POST/DELETE`), `POST .../refresh` |
 | Deployments | `POST /api/v1/projects/{id}/deployments`, `GET /api/v1/deployments` (member projects; global admins see all; optional positive `project_id` filter) |
 | Deployment detail | `GET /deployments/{id}`, `/status`, `/logs`, `/logs/{logId}` |

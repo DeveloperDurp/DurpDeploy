@@ -19,6 +19,23 @@ func (q *Queries) ClearProjectLifecycle(ctx context.Context, id int64) error {
 	return err
 }
 
+const clearProjectLifecycleIfAssigned = `-- name: ClearProjectLifecycleIfAssigned :execrows
+UPDATE projects SET lifecycle_id = NULL WHERE id = ? AND lifecycle_id = ?
+`
+
+type ClearProjectLifecycleIfAssignedParams struct {
+	ID          int64         `json:"id"`
+	LifecycleID sql.NullInt64 `json:"lifecycle_id"`
+}
+
+func (q *Queries) ClearProjectLifecycleIfAssigned(ctx context.Context, arg ClearProjectLifecycleIfAssignedParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, clearProjectLifecycleIfAssigned, arg.ID, arg.LifecycleID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const countProjects = `-- name: CountProjects :one
 SELECT COUNT(*) FROM projects
 `

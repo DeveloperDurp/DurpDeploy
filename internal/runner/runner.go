@@ -159,7 +159,7 @@ func (r *DeploymentRunner) Run(
 		return
 	}
 
-	vars, err := r.repo.ListReleaseVariablesByRelease(ctx, releaseID)
+	vars, err := r.repo.ListDeploymentVariables(ctx, deploymentID)
 	if err != nil {
 		r.failUnlessCancelled(ctx, runCtx, deploymentID)
 		return

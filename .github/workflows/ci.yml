@@ -291,7 +291,7 @@ jobs:
       - name: Verify ZIP artifact API, web forms, and container mounts
         env:
           DURPDEPLOY_CONTAINER_RUNTIME: docker
-        run: go test -tags=e2e -count=1 -run '^(TestReleaseDeferredPackageAPIWebE2E|TestArtifactsAPIWebContainerE2E|TestArtifactCredentialRotationE2E|TestArtifactSourceReplacementE2E|TestDeploymentStagingCleanupE2E|TestDeploymentStepResourcesE2E|TestDeploymentStagingFailureAPIWebE2E|TestDeploymentStepLogsAPIWebE2E|TestDeploymentStepLogOutcomesAPIWebE2E|TestPageNavigationHTTPAPIWebE2E)$' ./internal/handler/api
+        run: go test -tags=e2e -count=1 -run '^(TestReleaseDeferredPackageAPIWebE2E|TestArtifactsAPIWebContainerE2E|TestArtifactCredentialRotationE2E|TestArtifactSourceReplacementE2E|TestDeploymentStagingCleanupE2E|TestDeploymentStepResourcesE2E|TestDeploymentStagingFailureAPIWebE2E|TestDeploymentStepLogsAPIWebE2E|TestDeploymentStepLogOutcomesAPIWebE2E|TestPageNavigationHTTPAPIWebE2E|TestLifecycleVariablesAPIWebE2E|TestLifecycleVariableScopeChangesApplyToExistingReleaseE2E)$' ./internal/handler/api
 
       - name: Verify generated artifact approvals and live Terraform
         env:
@@ -354,7 +354,7 @@ jobs:
   package-browser:
     name: Package repository browser
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     env:
       DURPDEPLOY_CONTAINER_RUNTIME: docker
       DURPDEPLOY_PACKAGE_UI_EVIDENCE: ${{ github.workspace }}/artifacts/package-ui
@@ -371,11 +371,11 @@ jobs:
           go tool templ generate
           make swagger-ui-copy
       - name: Verify navigation, caching, and package repositories
-        run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^Test(ReleaseDeferredPackage|ThemeStyles|PackageRepository|PackageRepositoryBack|BackNavigation|BackHistory|PageNavigation|PageNavigationExpiredSession|OIDCNavigation)BrowserE2E$' ./internal/handler/api
+        run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^Test(ReleaseDeferredPackage|ReleaseRefreshConflictStaysOnPage|ThemeStyles|PackageRepository|PackageRepositoryBack|BackNavigation|BackHistory|PageNavigation|PageNavigationExpiredSession|OIDCNavigation)BrowserE2E$' ./internal/handler/api
       - name: Verify mobile lists and dashboard updates
         run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^Test(DeploymentMobile|DeploymentListMobile|ResourceListMobile|HomeMobile|HomeRunningPoll|MainPagePattern)BrowserE2E$' ./internal/handler/api
       - name: Verify forms and dialogs
-        run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^Test(ProjectEditModal|ResourceCreateModal|ResourceEditModal|StepEditModal|StepAddModal|MobileFormFocus|RunbookEditor|AlpineEditForms|AlpineDialogs|RunningServer|VariableScopesBeforeDeployment)BrowserE2E$' ./internal/handler/api
+        run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^Test(ProjectEditModal|ResourceCreateModal|ResourceEditModal|StepEditModal|StepAddModal|MobileFormFocus|RunbookEditor|AlpineEditForms|AlpineDialogs|LifecycleVariables|LifecycleLiveScope|LifecyclePageNavigation|RunningServer|VariableScopesBeforeDeployment)BrowserE2E$' ./internal/handler/api
       - name: Verify deployment step logs
         run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^Test(DeploymentStepLogs|DeploymentStepLogsHistoricalQuiet|DeploymentStagingFailure)BrowserE2E$' ./internal/handler/api
       - name: Verify verification forms, polling, and rollback in Chromium

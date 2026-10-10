@@ -180,7 +180,7 @@ func (h *ProjectHandler) ListProjects(w http.ResponseWriter, r *http.Request) {
 
 // swagger:route POST /projects projects createProject
 //
-// Create a new project.
+// Create a new project. Lifecycle assignment requires a global admin.
 //
 //	Consumes:
 //	- application/json
@@ -198,6 +198,7 @@ func (h *ProjectHandler) ListProjects(w http.ResponseWriter, r *http.Request) {
 //	  201: body:ProjectResponse
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
+//	  403: body:ForbiddenError
 //	  409: body:ConflictError
 //	  500: body:ServerError
 func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
@@ -209,6 +210,9 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 	name := trimSpace(req.Name)
 	if name == "" {
 		RespondError(w, http.StatusBadRequest, "Name is required")
+		return
+	}
+	if !h.authorizeLifecycle(w, r, 0, req.LifecycleID) {
 		return
 	}
 
@@ -314,7 +318,7 @@ func (h *ProjectHandler) GetProject(w http.ResponseWriter, r *http.Request) {
 
 // swagger:route PUT /projects/{id} projects updateProject
 //
-// Update a project.
+// Update a project. Only a global admin can assign a different lifecycle.
 //
 //	Consumes:
 //	- application/json
@@ -333,6 +337,7 @@ func (h *ProjectHandler) GetProject(w http.ResponseWriter, r *http.Request) {
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
 //	  404: body:NotFoundError
+//	  403: body:ForbiddenError
 //	  409: body:ConflictError
 //	  500: body:ServerError
 func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
@@ -344,6 +349,9 @@ func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 
 	var req projectRequest
 	if !readJSONBool(w, r, &req) {
+		return
+	}
+	if !h.authorizeLifecycle(w, r, id, req.LifecycleID) {
 		return
 	}
 
@@ -571,4 +579,28 @@ func validateNotificationURLs(urls ...string) error {
 		}
 	}
 	return nil
+}
+
+func (h *ProjectHandler) authorizeLifecycle(
+	w http.ResponseWriter,
+	r *http.Request,
+	projectID, lifecycleID int64,
+) bool {
+	err := handler.AuthorizeLifecycleSelection(
+		r.Context(), h.repo, projectID, lifecycleID,
+	)
+	if err == nil {
+		return true
+	}
+	if errors.Is(err, handler.ErrLifecycleAssignmentForbidden) ||
+		errors.Is(err, handler.ErrLifecycleRemovalForbidden) {
+		RespondError(w, http.StatusForbidden, err.Error())
+	} else {
+		RespondError(
+			w,
+			http.StatusInternalServerError,
+			"Could not check lifecycle access",
+		)
+	}
+	return false
 }

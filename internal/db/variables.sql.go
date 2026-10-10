@@ -72,6 +72,24 @@ func (q *Queries) DeleteVariable(ctx context.Context, id int64) error {
 	return err
 }
 
+const deleteVariableOverrides = `-- name: DeleteVariableOverrides :exec
+DELETE FROM variables
+WHERE project_id = ?1 AND name = ?2
+  AND (environment_id = ?3
+       OR (environment_id IS NULL AND ?3 IS NULL))
+`
+
+type DeleteVariableOverridesParams struct {
+	ProjectID     int64         `json:"project_id"`
+	Name          string        `json:"name"`
+	EnvironmentID sql.NullInt64 `json:"environment_id"`
+}
+
+func (q *Queries) DeleteVariableOverrides(ctx context.Context, arg DeleteVariableOverridesParams) error {
+	_, err := q.db.ExecContext(ctx, deleteVariableOverrides, arg.ProjectID, arg.Name, arg.EnvironmentID)
+	return err
+}
+
 const getVariable = `-- name: GetVariable :one
 SELECT id, project_id, name, value, environment_id, created_at, secret FROM variables WHERE id = ?
 `

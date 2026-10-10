@@ -299,3 +299,72 @@ creates this example after its execution checks. Approval waits in earlier
 projects no longer block the new run's projects; release snapshots,
 deployment history, and runbook versions remain available. Each run leaves a
 fresh pending example for manual approval checks.
+# Shared lifecycle variables
+
+On a release with a deployment awaiting approval, click **Refresh** and accept
+the confirmation. The release page must remain open and show **Unable to
+refresh this release**, with the snapshot lock reason, cancellation/completion,
+cleanup and log sync guidance, and a **View project deployments** link.
+The API refresh must return `409` while that deployment is active. Cancel a
+disposable deployment or let it complete, then retry: the API returns `200`
+and the web refresh returns to the release page with the error cleared.
+The retained demo has a disposable pending-approval case at
+`/projects/4/releases/9`, with `/deployments/25` awaiting approval; check its
+current status before retrying. Keep its release/history after testing.
+
+`make e2e-test` retains a `shared-lifecycle-<run>` lifecycle and two
+`shared-project-<run>` projects. The suite prints their editor, variables,
+release and deployment links. On `/lifecycles`, tap the lifecycle card to open
+its full page, then find **Shared variables** below **Promotion order**. Existing
+lifecycles open the page instead of a settings modal on every screen size.
+Open the lifecycle's **Shared variables** section
+to add an unscoped value or an override for one of its stages. Secret values
+show a mask; leaving an existing secret blank keeps its saved value.
+
+Open the first project's Variables page: REGION shows **Project override**
+with its lifecycle default, while the second project inherits the shared value.
+Choose **Reset to inherited** in the first project to remove only its override.
+Reset removes all local rows with that name and scope, including legacy
+unscoped duplicates; other scopes and projects keep their values. The public
+API supports the same action with `DELETE /api/v1/projects/{id}/variables/{varId}?reset=inherit`.
+After removing a lifecycle stage, edit one of its retained variables: Save
+must wait for an explicit **All stages** or current-stage selection. A blank
+secret field still preserves the saved secret after choosing the scope.
+Choose **Override**, enter a project value and save to recreate the example.
+Global admins manage shared values; project deployers can override their own
+values and viewers see no write controls. Unassigned projects inherit nothing.
+
+The refreshed demo is `https://citadel.durp.loc:45465`, with data in
+`tmp/demo.zU6HfZ` and its temporary certificate at `tls/cert.pem`.
+Credentials are in that directory's `login.txt`. Stop only this demo with
+`make demo-stop DEMO_DIR=/absolute/path/to/tmp/demo.zU6HfZ`.
+Previous `tmp/demo.ugv3mx` and `tmp/demo.pX7hhv` histories are retained on disk.
+
+The hands-on scope-change example is lifecycle
+[`Live scope manual`](https://citadel.durp.loc:45465/lifecycles/6), project
+[`Live scope manual`](https://citadel.durp.loc:45465/projects/24), and release
+[`before-scope-edit`](https://citadel.durp.loc:45465/projects/24/releases/36).
+Deployment [42](https://citadel.durp.loc:45465/deployments/42) prints
+`LIVE=all-stages` before the shared edit. The same release then prints
+`LIVE=unset` in prod in deployment
+[43](https://citadel.durp.loc:45465/deployments/43), and `LIVE=dev-only` in dev in
+deployment [44](https://citadel.durp.loc:45465/deployments/44).
+The TOKEN output is redacted. Repeat by editing LIVE on the lifecycle page and
+deploying release 36 to Live scope prod or Live scope dev, without refreshing it.
+These examples create no schedules; all retained schedules remain disabled.
+
+Both retained `shared-v1` releases contain only project-owned variables. Their
+successful deployments use `shared-updated`, which the suite set after creating
+the releases. Change a shared variable from All stages to dev, then deploy the
+same release to another stage: the variable must be absent there. Deploy to dev:
+its current value must appear. No release refresh is needed. Re-runs, rollbacks
+and saved runbook versions also resolve current lifecycle variables when creating
+a new execution. Queued and active executions retain their captured values.
+Inspect the logs: the shared secret is redacted. To check
+environment precedence, add a lifecycle REGION override for the stage; it wins
+over an unscoped project override, while a project override for that same stage
+wins over the lifecycle value. These examples have no enabled schedules.
+Lifecycle assignment grants execution access to shared secrets. Only global
+admins can attach a lifecycle to a project; project admins can retain or
+remove an existing assignment. As a deployer, creating or updating a project
+with a new lifecycle ID returns 403 without changing the project.

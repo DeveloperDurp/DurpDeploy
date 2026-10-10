@@ -2,8 +2,6 @@ package pages
 
 import (
 	"durpdeploy/internal/db"
-	"durpdeploy/views/components"
-	"durpdeploy/views/layouts"
 	"fmt"
 	"strconv"
 )
@@ -54,49 +52,6 @@ func variableScopeAvailable(variable db.Variable, environments []db.Environment)
 		}
 	}
 	return false
-}
-
-type VariableEnvironments struct {
-	All     []db.Environment
-	Options []db.Environment
-}
-
-templ VariablesPage(project db.Project, variables []db.Variable, environments VariableEnvironments, errorMsg string, currentPath string) {
-	@layouts.Base("Variables", currentPath) {
-		@components.Breadcrumbs([]components.Crumb{
-			{Label: "Home", Href: "/"},
-			{Label: "Projects", Href: "/projects"},
-			{Label: project.Name, Href: fmt.Sprintf("/projects/%d", project.ID)},
-			{Label: "Variables"},
-		})
-		@VariablesContent(project, variables, environments, errorMsg)
-	}
-}
-
-templ VariablesContent(project db.Project, variables []db.Variable, environments VariableEnvironments, errorMsg string) {
-	<div class="space-y-6">
-		<div class="page-header">
-			<h1 class="min-w-0 w-full break-words sm:w-auto sm:flex-1 text-3xl font-bold">Variables — { project.Name }</h1>
-			<div class="flex gap-2">
-				<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>
-			</div>
-		</div>
-		@VariablesFragment(project, variables, environments, errorMsg)
-	</div>
-}
-
-templ VariablesFragment(project db.Project, variables []db.Variable, environments VariableEnvironments, errorMsg string) {
-	<div
-		id="variables-content"
-		x-data="variablesPage"
-		x-init="focusAfterSwap({ detail: { target: $root } })"
-		x-on:click="override($event)"
-	>
-		if CanWrite(ctx) {
-			@VariableForm(project.ID, environments, errorMsg)
-		}
-		@VariablesTable(project, variables, environments)
-	</div>
 }
 
 templ VariableForm(projectID int64, environments VariableEnvironments, errorMsg string) {

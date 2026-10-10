@@ -118,9 +118,9 @@ func (h *ArtifactGateHandler) artifactReviewSecrets(
 	if err != nil {
 		return nil, err
 	}
-	variables, err := h.repo.ListReleaseVariablesByRelease(
+	variables, err := h.repo.ListDeploymentVariables(
 		ctx,
-		deployment.ReleaseID,
+		deployment.ID,
 	)
 	if err != nil {
 		return nil, err
