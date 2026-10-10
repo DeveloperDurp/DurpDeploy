@@ -417,6 +417,7 @@ type Release struct {
 	CreatedAt      int64  `json:"created_at"`
 	Kind           string `json:"kind"`
 	SnapshotLocked int64  `json:"snapshot_locked"`
+	PackageOmitted int64  `json:"package_omitted"`
 }
 
 type ReleaseArtifact struct {

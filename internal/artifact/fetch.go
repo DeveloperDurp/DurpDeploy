@@ -108,12 +108,21 @@ func (c *Client) Fetch(
 	}
 	var temporaryPath string
 	defer func() {
-		err = errors.Join(err, response.Body.Close())
+		closeErr := response.Body.Close()
+		if closeErr != nil && errors.Is(err, ErrNotFound) {
+			// A failed response cleanup is not a missing-package override.
+			err = errors.Join(ErrFetch, closeErr)
+		} else {
+			err = errors.Join(err, closeErr)
+		}
 		if err != nil && temporaryPath != "" {
 			err = errors.Join(err, os.Remove(temporaryPath))
 			result = Download{}
 		}
 	}()
+	if response.StatusCode == http.StatusNotFound {
+		return result, ErrNotFound
+	}
 	if response.StatusCode != http.StatusOK ||
 		response.ContentLength > MaxDownload {
 		return result, ErrFetch

@@ -23,12 +23,13 @@ func NewReleaseHandler(repo *repository.Repository) *ReleaseHandler {
 
 // releaseWithVariables is the JSON shape returned by GetRelease.
 type releaseWithVariables struct {
-	ID        int64                 `json:"id"`
-	ProjectID int64                 `json:"project_id"`
-	Version   string                `json:"version"`
-	StepsJSON string                `json:"steps_json"`
-	CreatedAt int64                 `json:"created_at"`
-	Variables []releaseVariableJSON `json:"variables"`
+	ID             int64                 `json:"id"`
+	PackageOmitted int64                 `json:"package_omitted"`
+	ProjectID      int64                 `json:"project_id"`
+	Version        string                `json:"version"`
+	StepsJSON      string                `json:"steps_json"`
+	CreatedAt      int64                 `json:"created_at"`
+	Variables      []releaseVariableJSON `json:"variables"`
 }
 
 type releaseVariableJSON struct {
@@ -109,82 +110,6 @@ func (h *ReleaseHandler) ListReleases(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// swagger:route POST /projects/{id}/releases releases createRelease
-//
-// Create a release snapshot for a project.
-//
-//	Consumes:
-//	- application/json
-//
-//	Produces:
-//	- application/json
-//
-//	Schemes: http, https
-//
-//	Security:
-//	  bearer:
-//
-//	Responses:
-//	  413: body:RequestEntityTooLargeError
-//	  201: body:Release
-//	  400: body:BadRequestError
-//	  401: body:UnauthorizedError
-//	  404: body:NotFoundError
-//	  409: body:ConflictError
-//	  422: body:ValidationError
-//	  500: body:ServerError
-func (h *ReleaseHandler) CreateRelease(w http.ResponseWriter, r *http.Request) {
-	projectID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
-	if err != nil {
-		RespondError(w, http.StatusBadRequest, "Invalid project ID")
-		return
-	}
-
-	if _, err := h.repo.Queries.GetProject(r.Context(), projectID); err != nil {
-		if err == sql.ErrNoRows {
-			RespondError(w, http.StatusNotFound, "Project not found")
-			return
-		}
-		RespondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	var body struct {
-		Version string `json:"version"`
-	}
-	if !readJSONBool(w, r, &body) {
-		return
-	}
-	if body.Version == "" {
-		RespondError(w, http.StatusUnprocessableEntity, "version is required")
-		return
-	}
-
-	release, err := handler.CreateReleaseSnapshot(
-		r.Context(),
-		h.repo,
-		projectID,
-		body.Version,
-	)
-	if err != nil {
-		if writeArtifactError(w, err) {
-			return
-		}
-		if handler.IsUniqueViolation(err) {
-			RespondError(
-				w,
-				http.StatusConflict,
-				"A release with this version already exists",
-			)
-			return
-		}
-		RespondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	RespondJSON(w, http.StatusCreated, release)
-}
-
 // swagger:route GET /projects/{id}/releases/{relId} releases getRelease
 //
 // Get a release with its variable snapshots.
@@ -255,12 +180,13 @@ func (h *ReleaseHandler) GetRelease(w http.ResponseWriter, r *http.Request) {
 	}
 
 	RespondJSON(w, http.StatusOK, releaseWithVariables{
-		ID:        release.ID,
-		ProjectID: release.ProjectID,
-		Version:   release.Version,
-		StepsJSON: release.StepsJson,
-		CreatedAt: release.CreatedAt,
-		Variables: varsJSON,
+		ID:             release.ID,
+		PackageOmitted: release.PackageOmitted,
+		ProjectID:      release.ProjectID,
+		Version:        release.Version,
+		StepsJSON:      release.StepsJson,
+		CreatedAt:      release.CreatedAt,
+		Variables:      varsJSON,
 	})
 }
 

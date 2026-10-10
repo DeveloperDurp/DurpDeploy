@@ -40,6 +40,9 @@ func (r *Repository) ResolveProjectArtifact(
 		PackageSource(source),
 		artifact.Pin{URL: url, Version: version},
 	)
+	if errors.Is(err, artifact.ErrNotFound) {
+		return nil, &PackageMissingError{Version: version, Source: selected}
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -82,6 +85,9 @@ func (s *ArtifactSnapshot) Insert(
 	}
 	row := s.Row
 	row.ReleaseID = releaseID
+	if row.RepositoryID == 0 {
+		return nil // An explicitly omitted package has no artifact pin.
+	}
 	return q.CreateReleaseArtifact(ctx, row)
 }
 

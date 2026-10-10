@@ -1,5 +1,33 @@
 # Manual checks after `make e2e-test`
 
+## Releases with a missing package version
+
+1. Attach a package repository to a disposable project. Use a valid version
+   whose package URL returns HTTP 404.
+2. On Releases, enter that version and click **Create Release**. Expect an
+   explanation of the missing version and package pinning, the preserved version,
+   and **Create release anyway**. No release should exist yet.
+3. Click **Create release anyway**. The list and detail show **package omitted**.
+   The project still has its repository. Deployments have no package or
+   `ARTIFACT_PATH`; use steps that do not require the package to check success.
+4. Repeat via `POST /api/v1/projects/{id}/releases`: `{"version":"missing"}`
+   returns `422`; `{"version":"missing","allow_missing_package":true}` returns
+   `201` with `package_omitted: 1`. Release detail keeps its steps and variables;
+   `GET /api/v1/projects/{id}/releases/{releaseId}/artifact` returns `null`.
+5. Publish the package. The saved release remains unchanged until **Refresh**
+   (or `POST /api/v1/projects/{id}/releases/{releaseId}/refresh`). After refresh,
+   expect a validated SHA-256/size pin and `package_omitted: 0`. Refresh also
+   re-snapshots current steps and variables and refuses active deployments.
+6. Authentication failures, timeouts, blocked destinations, and invalid ZIPs
+   remain errors even with the override. Test them separately from HTTP 404.
+
+Retain the disposable project, releases, and deployment history for repeat
+checks. Keep any schedules disabled. Automated API/web/container coverage is
+`TestReleaseMissingPackageAPIWebE2E` (`-tags=e2e`); rendered browser coverage is
+`TestReleaseMissingPackageBrowserE2E` (`-tags=e2e,packagebrowser`). Both reuse
+isolated HTTPS/runtime fixtures. `scripts/e2e_artifacts.sh` runs the API flow.
+
+
 ## Server step resource policy
 
 Server-side deployment steps have no DurpDeploy-imposed RAM ceiling or CPU

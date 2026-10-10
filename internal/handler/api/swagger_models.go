@@ -104,11 +104,12 @@ type swaggerStepTemplateVersion struct {
 // Release is a refreshable snapshot of project steps and variables.
 // swagger:model Release
 type swaggerRelease struct {
-	ID        int64  `json:"id"`
-	ProjectID int64  `json:"project_id"`
-	Version   string `json:"version"`
-	StepsJSON string `json:"steps_json"`
-	CreatedAt int64  `json:"created_at"`
+	PackageOmitted int64  `json:"package_omitted"`
+	ID             int64  `json:"id"`
+	ProjectID      int64  `json:"project_id"`
+	Version        string `json:"version"`
+	StepsJSON      string `json:"steps_json"`
+	CreatedAt      int64  `json:"created_at"`
 	// Deprecated: retained for compatibility; does not prevent refresh.
 	SnapshotLocked int64 `json:"snapshot_locked"`
 }
@@ -487,18 +488,21 @@ type swaggerVariableResponse struct {
 // ReleaseRequest is the body for create release.
 // swagger:model ReleaseRequest
 type swaggerReleaseRequest struct {
-	Version string `json:"version"`
+	// Create without a package only when its upstream returns HTTP 404.
+	AllowMissingPackage bool   `json:"allow_missing_package"`
+	Version             string `json:"version"`
 }
 
 // ReleaseWithVariablesResponse is the detailed release payload.
 // swagger:model ReleaseWithVariablesResponse
 type swaggerReleaseWithVariablesResponse struct {
-	ID        int64                            `json:"id"`
-	ProjectID int64                            `json:"project_id"`
-	Version   string                           `json:"version"`
-	StepsJSON string                           `json:"steps_json"`
-	CreatedAt int64                            `json:"created_at"`
-	Variables []swaggerReleaseVariableResponse `json:"variables"`
+	PackageOmitted int64                            `json:"package_omitted"`
+	ID             int64                            `json:"id"`
+	ProjectID      int64                            `json:"project_id"`
+	Version        string                           `json:"version"`
+	StepsJSON      string                           `json:"steps_json"`
+	CreatedAt      int64                            `json:"created_at"`
+	Variables      []swaggerReleaseVariableResponse `json:"variables"`
 }
 
 // ReleaseVariableResponse is a variable snapshot in a release.

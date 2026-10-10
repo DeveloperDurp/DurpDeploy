@@ -1,0 +1,26 @@
+package repository
+
+import (
+	"fmt"
+
+	"durpdeploy/internal/artifact"
+	"durpdeploy/internal/db"
+)
+
+// PackageMissingError retains the source identity for the creation transaction.
+// It exposes only the release version in user-facing errors.
+type PackageMissingError struct {
+	Version string
+	Source  db.PackageRepository
+}
+
+func (e *PackageMissingError) Error() string {
+	return fmt.Sprintf("Package version %q was not found in this project's "+
+		"package repository (HTTP 404). The release version selects the "+
+		"package to download and validate. Create the release anyway to "+
+		"omit the package; deployments will have no ARTIFACT_PATH. "+
+		"Publish the package and explicitly refresh the release to pin it.",
+		e.Version)
+}
+
+func (e *PackageMissingError) Unwrap() error { return artifact.ErrNotFound }

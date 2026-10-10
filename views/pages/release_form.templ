@@ -1,0 +1,74 @@
+package pages
+
+import (
+	"fmt"
+	"durpdeploy/internal/db"
+	"durpdeploy/views/components"
+	"durpdeploy/views/layouts"
+)
+
+type ReleaseFormState struct {
+	ProjectID int64
+	Version string
+	Error string
+	PackageMissing bool
+}
+
+templ ReleaseForm(projectID int64, errorMsg string) {
+	@ReleaseCreationForm(ReleaseFormState{ProjectID: projectID, Error: errorMsg})
+}
+
+templ ReleaseCreationForm(state ReleaseFormState) {
+	<div class="card bg-base-200 p-4 mb-6">
+		<h3 class="text-lg font-bold mb-4">Create Release</h3>
+		<form
+			hx-post={ fmt.Sprintf("/projects/%d/releases", state.ProjectID) }
+			hx-target="#releases-content"
+			hx-swap="outerHTML"
+			method="post"
+			action={ fmt.Sprintf("/projects/%d/releases", state.ProjectID) }
+			data-toast-success="Release created"
+			data-toast-error="Failed to create release"
+			class="flex flex-wrap gap-4 items-end"
+		>
+			<div class="form-control flex-1 min-w-[200px]">
+				<label class="label" for="release-version"><span class="label-text">Version</span></label>
+				<input id="release-version" type="text" name="version" value={ state.Version } class="input input-bordered" placeholder="e.g. 1.0.0" required aria-describedby="release-create-error"/>
+				if state.Error != "" {
+					<p id="release-create-error" class="text-error text-sm mt-1 break-words" role="alert">{ state.Error }</p>
+				}
+			</div>
+			<button type="submit" class="btn btn-primary">Create Release</button>
+			if state.PackageMissing {
+				<button type="submit" name="allow_missing_package" value="true" class="btn btn-warning" data-create-release-anyway>Create release anyway</button>
+			}
+		</form>
+	</div>
+}
+
+templ ReleaseCreateErrorFragment(project db.Project, releases []ReleaseView, state ReleaseFormState) {
+	<div id="releases-content">
+		if CanWrite(ctx) {
+			@ReleaseCreationForm(state)
+		}
+		@ReleasesTable(project, releases)
+	</div>
+}
+
+templ ReleaseCreateErrorPage(project db.Project, releases []ReleaseView, state ReleaseFormState) {
+	@layouts.Base("Releases", fmt.Sprintf("/projects/%d/releases", project.ID)) {
+		@components.Breadcrumbs([]components.Crumb{
+			{Label: "Home", Href: "/"},
+			{Label: "Projects", Href: "/projects"},
+			{Label: project.Name, Href: fmt.Sprintf("/projects/%d", project.ID)},
+			{Label: "Releases"},
+		})
+		<div class="space-y-6">
+			<div class="page-header">
+				<h1 class="text-3xl font-bold">Releases — { project.Name }</h1>
+				<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost btn-sm">Back</a>
+			</div>
+			@ReleaseCreateErrorFragment(project, releases, state)
+		</div>
+	}
+}

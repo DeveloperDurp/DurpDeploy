@@ -5563,6 +5563,12 @@
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
+          },
+          "502": {
+            "description": "Server error response.",
+            "schema": {
+              "$ref": "#/definitions/ServerError"
+            }
           }
         },
         "security": [
@@ -10314,6 +10320,11 @@
           "format": "int64",
           "x-go-name": "ID"
         },
+        "package_omitted": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "PackageOmitted"
+        },
         "project_id": {
           "type": "integer",
           "format": "int64",
@@ -10390,6 +10401,11 @@
       "type": "object",
       "title": "ReleaseRequest is the body for create release.",
       "properties": {
+        "allow_missing_package": {
+          "description": "Create without a package only when its upstream returns HTTP 404.",
+          "type": "boolean",
+          "x-go-name": "AllowMissingPackage"
+        },
         "version": {
           "type": "string",
           "x-go-name": "Version"
@@ -10446,6 +10462,11 @@
           "type": "integer",
           "format": "int64",
           "x-go-name": "ID"
+        },
+        "package_omitted": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "PackageOmitted"
         },
         "project_id": {
           "type": "integer",

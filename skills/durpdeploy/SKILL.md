@@ -227,6 +227,18 @@ or refresh; recreate their steps and create a new release (`409` on launch).
    without a lifecycle can use any environment.
 5. **Release** (snapshot of current steps + variables)
    `POST /api/v1/projects/$PID/releases` `{"version":"1.2.0"}` → `id`.
+   With an attached package repository, the release version selects the ZIP
+   to download, validate, and pin. An upstream `404` returns `422` with an
+   explanation and creates nothing. To explicitly create without that missing
+   package, retry with `{"version":"1.2.0","allow_missing_package":true}`.
+   This override applies only to `404`; authentication, network, and ZIP
+   validation failures still block creation. Responses and release detail
+   include `package_omitted` (`1` when omitted, `0` otherwise); the artifact
+   endpoint returns `null` for an omitted package. The project retains its
+   repository. Deployments run without a package or `ARTIFACT_PATH`, so steps
+   requiring it can fail. Publishing later does not alter this release.
+   Explicitly refresh after publishing to validate and pin the package and
+   clear the omission marker; refresh also updates steps and variables.
    Later step edits do NOT affect it; `POST /projects/$PID/releases/$RID/refresh`
    re-snapshots the release, including after failed or successful deployments.
    Active or unconfirmed deployments and buffered agent logs return `409`;
