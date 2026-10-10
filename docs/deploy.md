@@ -451,13 +451,18 @@ standalone agents for executable steps in Kubernetes.
 
 Each attempt runs as non-root with a read-only root filesystem, no network by
 default (`network_mode: "bridge"` explicitly enables networking for local steps),
-no capabilities, no new privileges, bounded memory and process count, and no
+no capabilities, no new privileges, a bounded process count, and no
 host mounts. A 64 MiB temporary filesystem at `/tmp` supplies its writable
-home; artifact-gated steps use 364 MiB to preserve provider context. Attempts
-sharing `/stage` have a combined memory ceiling of the staging
-capacity plus 256 MiB, so staging writes fit alongside the script process.
-This is a shared ceiling for process memory, `/tmp`, and staging pages;
-it does not reserve separate memory budgets. `TERM=dumb` keeps non-interactive
+home; artifact-gated steps use 364 MiB to preserve provider context.
+DurpDeploy imposes no per-step RAM ceiling or CPU quota, including on attempts
+sharing `/stage`. Applicable host/runtime limits still govern execution;
+operators must account for scripts consuming more host RAM and CPU. Limits on
+the control plane do not automatically constrain sibling step containers
+started through the runtime socket. The staging helper retains its own RAM
+and CPU limits, and temporary-filesystem byte/inode bounds remain in place.
+Remote-agent container limits are tracked separately in
+[agent issue #14](https://github.com/DeveloperDurp/durpdeploy-agent/issues/14).
+`TERM=dumb` keeps non-interactive
 logs free of terminal control codes.
 It receives its script on stdin and all compatible resolved release
 variables by default; `variable_names` restricts the step when it is non-empty.
