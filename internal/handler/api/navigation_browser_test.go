@@ -259,9 +259,10 @@ func (b *packageBrowser) captureNavigation(
 				)
 				t.Fatal("navigation overflows viewport")
 			}
+			// Continuous status pulses must not block screenshots.
 			b.wait(
 				t,
-				`!document.querySelector('.htmx-settling') && document.getAnimations().every(a => a.playState !== 'running')`,
+				`!document.querySelector('.htmx-settling') && document.getAnimations().every(a => a.playState !== 'running' || a.effect.getTiming().iterations === Infinity)`,
 			)
 			b.screenshot(
 				t,
