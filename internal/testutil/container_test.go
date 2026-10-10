@@ -14,6 +14,7 @@ import (
 )
 
 func TestCleanupContainerRemovesFailedStartup(t *testing.T) {
+	testcontainers.SkipIfProviderIsNotHealthy(t)
 	// Given: a database that starts but fails its readiness check.
 	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
 	defer cancel()
@@ -50,6 +51,7 @@ func TestCleanupContainerRemovesFailedStartup(t *testing.T) {
 func TestCleanupContainerRemovesContainerAfterContextCancellation(
 	t *testing.T,
 ) {
+	testcontainers.SkipIfProviderIsNotHealthy(t)
 	// Given: a started database and a context canceled before teardown.
 	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
 	defer cancel()

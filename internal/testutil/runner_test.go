@@ -15,6 +15,7 @@ import (
 )
 
 func TestGoTestRunnerRemovesContainerAfterTimeout(t *testing.T) {
+	testcontainers.SkipIfProviderIsNotHealthy(t)
 	// Given: a subprocess fixture that loses t.Cleanup on Go's timeout panic.
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Minute)
 	defer cancel()
