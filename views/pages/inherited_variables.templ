@@ -16,19 +16,26 @@ templ InheritedVariablesSection(projectID int64, inherited repository.VariableIn
 					<a class="link text-sm" href={ fmt.Sprintf("/lifecycles/%d#shared-variables", inherited.Lifecycle.ID) }>Manage lifecycle variables</a>
 				}
 			</div>
-			<table class="hidden md:table table-zebra table-fixed w-full">
-				<thead><tr><th class="w-1/5">Name</th><th class="w-1/5">Value</th><th class="w-1/5">Environment</th><th class="w-auto">Source</th><th class="w-48">Action</th></tr></thead>
+			<table class="hidden lg:table table-zebra table-fixed w-full">
+				<thead><tr><th class="w-1/5">Name</th><th class="w-1/5">Value</th><th class="w-1/5">Environment</th><th class="w-auto">Source</th>
+					if actions && CanWrite(ctx) {
+						<th class="w-48">Action</th>
+					}
+				</tr></thead>
 				<tbody>
 					for _, variable := range inherited.Variables {
 						<tr data-inherited-variable={ variable.Name }><td class="truncate font-mono" title={ variable.Name }>{ variable.Name }</td><td class="truncate">@InheritedVariableValue(variable)
 </td><td class="truncate">@SharedVariableScope(variable.LifecycleVariable, envs)
 </td><td class="truncate">@InheritedVariableSource(variable, inherited.Lifecycle.Name)
-</td><td>@InheritedVariableAction(projectID, variable, actions)
-</td></tr>
+</td>
+							if actions && CanWrite(ctx) {
+								<td>@InheritedVariableAction(projectID, variable, actions)</td>
+							}
+						</tr>
 					}
 				</tbody>
 			</table>
-			<ul class="md:hidden space-y-3" aria-label="Inherited variables">
+			<ul class="lg:hidden space-y-3" aria-label="Inherited variables">
 				for _, variable := range inherited.Variables {
 					<li class="bg-base-100 rounded-box p-4 space-y-2" data-inherited-variable={ variable.Name }>
 						<h3 class="font-mono font-bold break-all">{ variable.Name }</h3>

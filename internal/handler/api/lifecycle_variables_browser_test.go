@@ -92,13 +92,21 @@ func TestLifecycleVariablesBrowserE2E(t *testing.T) {
 	)
 	b.evaluate(
 		t,
-		`document.querySelector('#shared-variables details').open=true; document.getElementById('shared-name').value='REGION'; document.querySelector('[data-shared-variable-form]').requestSubmit(); true`,
+		`document.querySelector('#shared-variables details').open=true; document.getElementById('shared-name').value='REGION'; document.getElementById('shared-value').value='keep-on-error'; document.querySelector('[data-shared-variable-form]').requestSubmit(); true`,
 	)
 	b.wait(
 		t,
 		`document.querySelector('#shared-variables [role=alert]')?.textContent.includes('already exists')`,
 	)
 	b.captureNavigation(t, "lifecycle-validation")
+	if string(
+		b.evaluate(
+			t,
+			`document.getElementById('shared-value').value === 'keep-on-error'`,
+		),
+	) != "true" {
+		t.Fatal("validation lost the submitted nonsecret value")
+	}
 	b.evaluate(
 		t,
 		`document.querySelector('[data-shared-variable="REGION"] a').click(); true`,
@@ -165,10 +173,20 @@ func TestLifecycleVariablesBrowserE2E(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := f.h.repo.Queries.AddProjectMember(t.Context(), db.AddProjectMemberParams{ProjectID: f.project.ID, UserID: user.ID, Role: "deployer"}); err != nil {
+	if err := f.h.repo.Queries.AddProjectMember(
+		t.Context(),
+		db.AddProjectMemberParams{
+			ProjectID: f.project.ID,
+			UserID:    user.ID,
+			Role:      "deployer",
+		},
+	); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.h.repo.Queries.UpdateUser(t.Context(), db.UpdateUserParams{ID: user.ID, Name: user.Name, Role: "viewer"}); err != nil {
+	if err := f.h.repo.Queries.UpdateUser(
+		t.Context(),
+		db.UpdateUserParams{ID: user.ID, Name: user.Name, Role: "viewer"},
+	); err != nil {
 		t.Fatal(err)
 	}
 	b.navigateBackTest(

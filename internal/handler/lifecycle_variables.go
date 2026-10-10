@@ -210,6 +210,11 @@ func (h *LifecycleVariableHandler) Save(
 				EnvironmentID: env,
 				Secret:        secret,
 			}
+			if secret == 0 {
+				data.Editing.Value = sql.NullString{
+					String: r.FormValue("value"), Valid: true,
+				}
+			}
 			if r.Header.Get("HX-Request") == "true" {
 				w.Header().Set("HX-Retarget", "#shared-variables")
 				w.Header().Set("HX-Reswap", "outerHTML")
