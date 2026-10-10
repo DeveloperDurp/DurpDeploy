@@ -102,7 +102,8 @@ See `values.yaml`. Notable knobs:
 - `secretKey.existingSecret` / `postgres.existingSecret` — bring your
   own Secrets to integrate with External Secrets / Sealed Secrets / SOPS.
 - `ingress.enabled` — front with cert-manager + your IngressController
-  for TLS.
+  for TLS. Set `ingress.trustedProxies` to the controller pod or node IPs/CIDRs;
+  the chart requires it so authentication rate limits distinguish clients.
 - `extraEnv` — pass through `DURPDEPLOY_SMTP_*`, `DURPDEPLOY_DISCORD_*`,
   etc. without forking the chart.
 - `embeddedAgent.enabled` — keep disabled until native Kubernetes Job

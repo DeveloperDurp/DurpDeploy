@@ -76,6 +76,10 @@ spec:
               value: {{ .Values.agent.identityDir | quote }}
             - name: DURPDEPLOY_EMBEDDED_AGENT_ENABLED
               value: {{ ternary "true" "false" .Values.embeddedAgent.enabled | quote }}
+            {{- if .Values.ingress.enabled }}
+            - name: DURPDEPLOY_TRUSTED_PROXIES
+              value: {{ required "ingress.trustedProxies is required when ingress is enabled" (.Values.ingress.trustedProxies | trim) | quote }}
+            {{- end }}
             {{- if .Values.oidc.enabled }}
             - name: DURPDEPLOY_URL
               value: {{ required "oidc.publicURL is required when OIDC is enabled" .Values.oidc.publicURL | quote }}
