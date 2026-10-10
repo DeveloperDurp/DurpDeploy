@@ -104,12 +104,11 @@ type swaggerStepTemplateVersion struct {
 // Release is a refreshable snapshot of project steps and variables.
 // swagger:model Release
 type swaggerRelease struct {
-	PackageOmitted int64  `json:"package_omitted"`
-	ID             int64  `json:"id"`
-	ProjectID      int64  `json:"project_id"`
-	Version        string `json:"version"`
-	StepsJSON      string `json:"steps_json"`
-	CreatedAt      int64  `json:"created_at"`
+	ID        int64  `json:"id"`
+	ProjectID int64  `json:"project_id"`
+	Version   string `json:"version"`
+	StepsJSON string `json:"steps_json"`
+	CreatedAt int64  `json:"created_at"`
 	// Deprecated: retained for compatibility; does not prevent refresh.
 	SnapshotLocked int64 `json:"snapshot_locked"`
 }
@@ -495,13 +494,12 @@ type swaggerReleaseRequest struct {
 // ReleaseWithVariablesResponse is the detailed release payload.
 // swagger:model ReleaseWithVariablesResponse
 type swaggerReleaseWithVariablesResponse struct {
-	PackageOmitted int64                            `json:"package_omitted"`
-	ID             int64                            `json:"id"`
-	ProjectID      int64                            `json:"project_id"`
-	Version        string                           `json:"version"`
-	StepsJSON      string                           `json:"steps_json"`
-	CreatedAt      int64                            `json:"created_at"`
-	Variables      []swaggerReleaseVariableResponse `json:"variables"`
+	ID        int64                            `json:"id"`
+	ProjectID int64                            `json:"project_id"`
+	Version   string                           `json:"version"`
+	StepsJSON string                           `json:"steps_json"`
+	CreatedAt int64                            `json:"created_at"`
+	Variables []swaggerReleaseVariableResponse `json:"variables"`
 }
 
 // ReleaseVariableResponse is a variable snapshot in a release.

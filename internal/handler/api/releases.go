@@ -23,13 +23,12 @@ func NewReleaseHandler(repo *repository.Repository) *ReleaseHandler {
 
 // releaseWithVariables is the JSON shape returned by GetRelease.
 type releaseWithVariables struct {
-	ID             int64                 `json:"id"`
-	PackageOmitted int64                 `json:"package_omitted"`
-	ProjectID      int64                 `json:"project_id"`
-	Version        string                `json:"version"`
-	StepsJSON      string                `json:"steps_json"`
-	CreatedAt      int64                 `json:"created_at"`
-	Variables      []releaseVariableJSON `json:"variables"`
+	ID        int64                 `json:"id"`
+	ProjectID int64                 `json:"project_id"`
+	Version   string                `json:"version"`
+	StepsJSON string                `json:"steps_json"`
+	CreatedAt int64                 `json:"created_at"`
+	Variables []releaseVariableJSON `json:"variables"`
 }
 
 type releaseVariableJSON struct {
@@ -180,13 +179,12 @@ func (h *ReleaseHandler) GetRelease(w http.ResponseWriter, r *http.Request) {
 	}
 
 	RespondJSON(w, http.StatusOK, releaseWithVariables{
-		ID:             release.ID,
-		PackageOmitted: release.PackageOmitted,
-		ProjectID:      release.ProjectID,
-		Version:        release.Version,
-		StepsJSON:      release.StepsJson,
-		CreatedAt:      release.CreatedAt,
-		Variables:      varsJSON,
+		ID:        release.ID,
+		ProjectID: release.ProjectID,
+		Version:   release.Version,
+		StepsJSON: release.StepsJson,
+		CreatedAt: release.CreatedAt,
+		Variables: varsJSON,
 	})
 }
 

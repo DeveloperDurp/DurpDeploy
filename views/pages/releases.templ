@@ -147,9 +147,6 @@ templ ReleaseRow(projectID int64, rv ReleaseView) {
 			<div class="truncate">
 				<a href={ fmt.Sprintf("/projects/%d/releases/%d", projectID, rv.Release.ID) } class="link link-primary">{ rv.Release.Version }</a>
 			</div>
-			if rv.Release.PackageOmitted != 0 {
-				<span class="badge badge-warning badge-xs mt-1 max-w-full h-auto whitespace-normal" title="Created without the missing package; deployments have no ARTIFACT_PATH" data-package-omitted>package omitted</span>
-			}
 			if releaseNeedsRecreation(parseReleaseSteps(rv.Release.StepsJson)) {
 				<span class="badge badge-warning badge-xs ml-1 align-middle" data-release-needs-recreation title="This release contains legacy local steps without a container image. Recreate those steps and snap a new release before deploying.">recreate</span>
 			}
@@ -204,9 +201,6 @@ templ ReleaseDetail(project db.Project, release db.Release, variables []db.Relea
 				}
 			</div>
 		</div>
-		if release.PackageOmitted != 0 {
-			@ReleasePackageOmittedNotice()
-		}
 		if artifact.ReleaseID!=0 {
 			@ReleasePackageAttachment(artifact)
 		}

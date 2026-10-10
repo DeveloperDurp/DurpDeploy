@@ -343,7 +343,7 @@ func (q *Queries) HasLiveArtifactClaim(ctx context.Context, arg HasLiveArtifactC
 }
 
 const listArtifactReleases = `-- name: ListArtifactReleases :many
-SELECT r.id, r.project_id, r.version, r.steps_json, r.created_at, r.kind, r.snapshot_locked, r.package_omitted FROM releases r JOIN release_artifacts a ON a.release_id = r.id
+SELECT r.id, r.project_id, r.version, r.steps_json, r.created_at, r.kind, r.snapshot_locked FROM releases r JOIN release_artifacts a ON a.release_id = r.id
 WHERE r.project_id = ? AND r.kind = 'deployment' ORDER BY r.created_at DESC, r.id DESC
 `
 
@@ -364,7 +364,6 @@ func (q *Queries) ListArtifactReleases(ctx context.Context, projectID int64) ([]
 			&i.CreatedAt,
 			&i.Kind,
 			&i.SnapshotLocked,
-			&i.PackageOmitted,
 		); err != nil {
 			return nil, err
 		}

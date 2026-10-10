@@ -50,14 +50,13 @@ func TestReleaseDefersMissingPackagePull(t *testing.T) {
 		t.Fatalf("override=%d: %s", response.Code, response.Body.String())
 	}
 	var release struct {
-		ID             int64 `json:"id"`
-		PackageOmitted int64 `json:"package_omitted"`
+		ID int64 `json:"id"`
 	}
 	if err := json.Unmarshal(response.Body.Bytes(), &release); err != nil {
 		t.Fatal(err)
 	}
-	if release.ID == 0 || release.PackageOmitted != 0 {
-		t.Fatalf("package attachment was omitted: %s", response.Body.String())
+	if release.ID == 0 {
+		t.Fatalf("release was not created: %s", response.Body.String())
 	}
 	if requests.Load() != 0 {
 		t.Fatal("release creation contacted the package server")

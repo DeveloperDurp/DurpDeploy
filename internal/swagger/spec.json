@@ -5563,12 +5563,6 @@
             "schema": {
               "$ref": "#/definitions/ServerError"
             }
-          },
-          "502": {
-            "description": "Server error response.",
-            "schema": {
-              "$ref": "#/definitions/ServerError"
-            }
           }
         },
         "security": [
@@ -10320,11 +10314,6 @@
           "format": "int64",
           "x-go-name": "ID"
         },
-        "package_omitted": {
-          "type": "integer",
-          "format": "int64",
-          "x-go-name": "PackageOmitted"
-        },
         "project_id": {
           "type": "integer",
           "format": "int64",
@@ -10462,11 +10451,6 @@
           "type": "integer",
           "format": "int64",
           "x-go-name": "ID"
-        },
-        "package_omitted": {
-          "type": "integer",
-          "format": "int64",
-          "x-go-name": "PackageOmitted"
         },
         "project_id": {
           "type": "integer",

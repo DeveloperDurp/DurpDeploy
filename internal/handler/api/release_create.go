@@ -32,7 +32,6 @@ import (
 //	  409: body:ConflictError
 //	  422: body:ValidationError
 //	  500: body:ServerError
-//	  502: body:ServerError
 func (h *ReleaseHandler) CreateRelease(w http.ResponseWriter, r *http.Request) {
 	projectID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {

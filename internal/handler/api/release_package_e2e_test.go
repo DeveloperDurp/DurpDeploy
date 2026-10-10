@@ -38,8 +38,7 @@ func TestReleaseDeferredPackageAPIWebE2E(t *testing.T) {
 	if err := json.Unmarshal(body, &release); err != nil {
 		t.Fatal(err)
 	}
-	if release.PackageOmitted != 0 ||
-		!strings.Contains(release.StepsJson, "with-package") {
+	if !strings.Contains(release.StepsJson, "with-package") {
 		t.Fatalf("attachment or steps omitted: %s", body)
 	}
 	releasePath := fmt.Sprintf("%s/releases/%d", base, release.ID)
