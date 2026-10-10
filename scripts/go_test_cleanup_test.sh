@@ -7,50 +7,33 @@ trap 'rm -rf -- "$test_dir"' EXIT
 mkdir -p "$test_dir/bin"
 
 # Given: a provider that has both run-owned and unrelated containers.
-cat > "$test_dir/bin/docker" <<'ENGINE'
+cat > "$test_dir/cleanup" <<'ENGINE'
 #!/usr/bin/env bash
 set -euo pipefail
-if [[ ${0##*/} == podman ]]; then
-    [[ $1 == --remote && $2 == --url && $3 == "$DOCKER_HOST" ]] || exit 64
-    shift 3
-else
-    [[ $1 == --host && $2 == "$DOCKER_HOST" ]] || {
-        echo 'FAIL: cleanup queried the default daemon instead of Testcontainers' >&2
-        exit 64
-    }
-    shift 2
+if [[ $1 == --host ]]; then
+    if [[ ${SCENARIO:-} == no-provider ]]; then exit 2; fi
+    printf '%s\n' "${DOCKER_HOST:-unix:///fixture/rootless/docker.sock}"
+    exit 0
 fi
-case $1 in
-ps)
-    session=
-    for argument in "$@"; do
-        case $argument in
-        label=org.testcontainers.sessionId=*) session=${argument#*=*=} ;;
-        esac
-    done
-    [[ $session == durpdeploy-go-test.* && $* == *'label=org.testcontainers=true'* ]] || exit 65
+if [[ ${SCENARIO:-} == no-provider || ${SCENARIO:-} == provider-lost ]]; then exit 2; fi
+for session in "$@"; do
+    [[ $session == durpdeploy-go-test.* ]] || exit 65
     if [[ ${SCENARIO:-} == list-failure ]]; then exit 43; fi
-    if [[ -f $CASE_DIR/resources/$session ]]; then echo "$session"; fi
-    ;;
-rm)
-    [[ $2 == -f && $3 == -v && $4 == durpdeploy-go-test.* && $# == 4 ]] || exit 66
     case ${SCENARIO:-} in
     removal-failure | failure-removal) exit 44 ;;
     esac
-    rm "$CASE_DIR/resources/$4"
-    echo "$4"
-    if [[ ${SCENARIO:-} == reaper-race ]]; then exit 44; fi
-    ;;
-*) exit 67 ;;
-esac
+    if [[ -f $CASE_DIR/resources/$session ]]; then
+        rm "$CASE_DIR/resources/$session"
+        echo "$session"
+    fi
+done
 ENGINE
 
 cat > "$test_dir/bin/go" <<'GO'
 #!/usr/bin/env bash
 set -euo pipefail
-if [[ $1 == run ]]; then
-    # Testcontainers may discover a rootless endpoint without DOCKER_HOST.
-    printf '%s\n' "${DOCKER_HOST:-unix:///fixture/rootless/docker.sock}"
+if [[ $1 == build && $2 == -o ]]; then
+    cp "$FAKE_CLEANUP" "$3"
     exit 0
 fi
 [[ $1 == test && $2 == -count=1 && $3 == ./fixture ]] || exit 68
@@ -58,6 +41,9 @@ fi
 printf '%s\n' "$TESTCONTAINERS_SESSION_ID" >> "$CASE_DIR/session"
 mkdir -p "$CASE_DIR/resources"
 touch "$CASE_DIR/resources/$TESTCONTAINERS_SESSION_ID"
+if [[ ${SCENARIO:-} == no-provider ]]; then
+    rm "$CASE_DIR/resources/$TESTCONTAINERS_SESSION_ID"
+fi
 case ${SCENARIO:-} in
 failure | timeout | failure-removal) exit 42 ;;
 nested)
@@ -81,9 +67,10 @@ INT | TERM | HUP)
 *) exit 0 ;;
 esac
 GO
-chmod +x "$test_dir/bin/docker" "$test_dir/bin/go"
+chmod +x "$test_dir/cleanup" "$test_dir/bin/go"
+export FAKE_CLEANUP="$test_dir/cleanup"
 
-for scenario in success failure timeout INT TERM HUP nested removal-failure failure-removal reaper-race list-failure; do
+for scenario in success failure timeout INT TERM HUP nested removal-failure failure-removal list-failure no-provider provider-lost; do
     case_dir="$test_dir/$scenario"
     mkdir -p "$case_dir"
     touch "$case_dir/unrelated"
@@ -100,7 +87,7 @@ for scenario in success failure timeout INT TERM HUP nested removal-failure fail
     INT) expected=130 ;;
     TERM | nested) expected=143 ;;
     HUP) expected=129 ;;
-    removal-failure | list-failure) expected=1 ;;
+    removal-failure | list-failure | provider-lost) expected=1 ;;
     esac
     # Then: status is preserved, owned resources are removed, others survive.
     if [[ $status != "$expected" ]]; then
@@ -109,7 +96,7 @@ for scenario in success failure timeout INT TERM HUP nested removal-failure fail
         exit 1
     fi
     case $scenario in
-    removal-failure | failure-removal | list-failure) ;;
+    removal-failure | failure-removal | list-failure | provider-lost) ;;
     *)
         if compgen -G "$case_dir/resources/*" >/dev/null; then
             echo "FAIL: $scenario leaked" >&2
@@ -141,15 +128,21 @@ wait "$first_pid"
 wait "$second_pid"
 [[ $(cat "$test_dir/first/session") != "$(cat "$test_dir/second/session")" ]]
 
-# Podman must target the same provider socket used by Testcontainers.
-mv "$test_dir/bin/docker" "$test_dir/bin/podman"
-# Keep a host Docker CLI from winning provider discovery in this fixture.
-for tool in bash dirname mktemp mv rm mkdir touch; do
+# A healthy provider needs no Docker/Podman CLI or Bash 4 features.
+for tool in bash dirname mktemp mv rm mkdir touch cp find; do
     ln -s "$(command -v "$tool")" "$test_dir/bin/$tool"
 done
-mkdir -p "$test_dir/podman"
-PATH="$test_dir/bin" CASE_DIR="$test_dir/podman" SCENARIO=success \
+cat > "$test_dir/bash3-env" <<'BASH3'
+unset BASHPID
+shopt() {
+    case "$*" in *globstar*) return 1 ;; esac
+    builtin shopt "$@"
+}
+BASH3
+mkdir -p "$test_dir/no-cli"
+PATH="$test_dir/bin" CASE_DIR="$test_dir/no-cli" SCENARIO=success \
+    BASH_ENV="$test_dir/bash3-env" \
     DOCKER_HOST='unix:///tmp/fixture provider.sock' \
     bash "$root/scripts/go_test.sh" -count=1 ./fixture
-if compgen -G "$test_dir/podman/resources/*" >/dev/null; then exit 1; fi
+if compgen -G "$test_dir/no-cli/resources/*" >/dev/null; then exit 1; fi
 echo 'Go test container ownership, failures, interruption and isolation: PASS'
