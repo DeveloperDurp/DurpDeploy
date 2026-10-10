@@ -65,7 +65,9 @@ func TestLifecycleVariablesBrowserE2E(t *testing.T) {
 		t,
 		`!!document.querySelector('[data-shared-variable="REGION"]') && !document.querySelector('.htmx-request')`,
 	)
-	b.captureNavigation(t, "lifecycle-populated")
+	b.captureNavigation(t, "lifecycle-populated", func() {
+		b.assertVariableTableVisibility(t)
+	})
 	b.evaluate(
 		t,
 		`[...document.querySelectorAll('[data-shared-variable="TOKEN"] a')].find(e=>e.getClientRects().length).click(); true`,
@@ -123,7 +125,9 @@ func TestLifecycleVariablesBrowserE2E(t *testing.T) {
 		t,
 		fmt.Sprintf("%s/projects/%d/variables", f.baseURL, f.project.ID),
 	)
-	b.captureNavigation(t, "project-inherited")
+	b.captureNavigation(t, "project-inherited", func() {
+		b.assertVariableTableVisibility(t)
+	})
 	b.evaluate(
 		t,
 		`[...document.querySelectorAll('[data-override-for="TOKEN"]')].find(e=>e.getClientRects().length).click(); true`,

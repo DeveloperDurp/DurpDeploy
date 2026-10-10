@@ -63,3 +63,18 @@ func (b *packageBrowser) assertRetainedScope(
 		"environment_id": f.environment.ID,
 	}, 201)
 }
+
+func (b *packageBrowser) assertVariableTableVisibility(t *testing.T) {
+	t.Helper()
+	if string(b.evaluate(t, `(() => {
+		const section = document.querySelector('#shared-variables, [data-inherited-variables]');
+		const table = section?.querySelector('table');
+		if (!table) return false;
+		const breakpoint = section.id === 'shared-variables' ? 768 : 1024;
+		return (getComputedStyle(table).display !== 'none') === (innerWidth >= breakpoint);
+	})()`)) != "true" {
+		t.Fatal(
+			"variable table visibility does not match its responsive breakpoint",
+		)
+	}
+}

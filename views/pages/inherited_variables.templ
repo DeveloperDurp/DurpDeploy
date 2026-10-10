@@ -16,7 +16,7 @@ templ InheritedVariablesSection(projectID int64, inherited repository.VariableIn
 					<a class="link text-sm" href={ fmt.Sprintf("/lifecycles/%d#shared-variables", inherited.Lifecycle.ID) }>Manage lifecycle variables</a>
 				}
 			</div>
-			<table class="table hidden lg:table table-zebra table-fixed w-full">
+			<table class="hidden! lg:table! table table-zebra table-fixed w-full">
 				<thead><tr><th class="w-1/5">Name</th><th class="w-1/5">Value</th><th class="w-1/5">Environment</th><th class="w-auto">Source</th>
 					if actions && CanWrite(ctx) {
 						<th class="w-48">Action</th>
