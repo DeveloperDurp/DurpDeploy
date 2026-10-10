@@ -10,7 +10,7 @@ CLI creates a new administrator; it does not update an existing account.
 | Role       | Reads                                         | Writes                                                  | Sees audit log |
 |------------|-----------------------------------------------|---------------------------------------------------------|----------------|
 | `admin`    | Everything                                    | Everything (projects, steps, releases, deployments, …) | Yes (`/admin/audit`) |
-| `deployer` | Shared resources and projects they belong to | Project operations, except admin-only approvals and settings; member management requires project admin | No |
+| `deployer` | Shared resources and projects they belong to | Project operations allowed by membership. Member management requires project admin. Lifecycle assignment and shared variables require global administrators. | No |
 | `viewer` | Shared resources and projects they belong to | Their own Security settings and logout; application writes are blocked | No |
 
 ## Permission checks
@@ -20,6 +20,12 @@ project to read or write its resources. Only global or project administrators
 can manage its members. Deployment and artifact approvals require a global admin.
 The browser and bearer API enforce these checks separately.
 See [security](security.md#authorization) for middleware and implementation details.
+
+Only global administrators manage shared lifecycle variables. Lifecycle assignment
+grants a project access to shared values, including secrets. Only global
+administrators create or change an assignment. Project administrators can retain
+or remove an existing assignment and manage project overrides.
+Review the lifecycle's project list before you add shared secrets.
 
 ## Viewer self-security exception
 

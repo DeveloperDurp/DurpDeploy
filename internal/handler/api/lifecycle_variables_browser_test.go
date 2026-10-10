@@ -165,6 +165,11 @@ func TestLifecycleVariablesBrowserE2E(t *testing.T) {
 		fmt.Sprintf("%s/projects/%d", f.baseURL, f.project.ID),
 	)
 	b.captureNavigation(t, "project-overview")
+	b.navigateBackTest(
+		t,
+		fmt.Sprintf("%s/projects/%d/edit", f.baseURL, f.project.ID),
+	)
+	b.captureNavigation(t, "project-assignment-admin")
 	// Viewer inherits the values but cannot see either write affordance.
 	user, err := f.h.repo.Queries.GetUserByEmail(
 		t.Context(),
@@ -178,11 +183,31 @@ func TestLifecycleVariablesBrowserE2E(t *testing.T) {
 		db.AddProjectMemberParams{
 			ProjectID: f.project.ID,
 			UserID:    user.ID,
-			Role:      "deployer",
+			Role:      "admin",
 		},
 	); err != nil {
 		t.Fatal(err)
 	}
+	if err := f.h.repo.Queries.UpdateUser(t.Context(),
+		db.UpdateUserParams{ID: user.ID, Name: user.Name, Role: "deployer"},
+	); err != nil {
+		t.Fatal(err)
+	}
+	b.navigateBackTest(
+		t,
+		fmt.Sprintf("%s/projects/%d/edit", f.baseURL, f.project.ID),
+	)
+	if string(
+		b.evaluate(
+			t,
+			`!document.querySelector('select[name=lifecycle_id]') && document.querySelector('input[name=lifecycle_id]').value !== ''`,
+		),
+	) != "true" {
+		t.Fatal("nonadmin can assign a lifecycle")
+	}
+	b.captureNavigation(t, "project-assignment-readonly")
+	b.navigateBackTest(t, f.baseURL+"/projects/new")
+	b.captureNavigation(t, "project-assignment-new-readonly")
 	if err := f.h.repo.Queries.UpdateUser(
 		t.Context(),
 		db.UpdateUserParams{ID: user.ID, Name: user.Name, Role: "viewer"},
