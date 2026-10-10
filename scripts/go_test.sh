@@ -11,9 +11,16 @@ if [[ -z $engine_path ]]; then
     fi
     exec go test "$@"
 fi
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+provider_host=$(go run "$script_dir/go_test_provider.go")
+export DOCKER_HOST=$provider_host
+# Testcontainers does not use Docker CLI contexts. Pin cleanup to its endpoint.
+unset DOCKER_CONTEXT
 engine=("$engine_path")
-if [[ ${engine_path##*/} == podman && -n ${DOCKER_HOST:-} ]]; then
-    engine+=(--remote --url "$DOCKER_HOST")
+if [[ ${engine_path##*/} == podman ]]; then
+    engine+=(--remote --url "$provider_host")
+else
+    engine+=(--host "$provider_host")
 fi
 
 session_dir=$(mktemp -d \

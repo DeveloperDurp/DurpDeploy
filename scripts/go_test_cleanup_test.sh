@@ -10,9 +10,15 @@ mkdir -p "$test_dir/bin"
 cat > "$test_dir/bin/docker" <<'ENGINE'
 #!/usr/bin/env bash
 set -euo pipefail
-if [[ ${0##*/} == podman && -n ${DOCKER_HOST:-} ]]; then
+if [[ ${0##*/} == podman ]]; then
     [[ $1 == --remote && $2 == --url && $3 == "$DOCKER_HOST" ]] || exit 64
     shift 3
+else
+    [[ $1 == --host && $2 == "$DOCKER_HOST" ]] || {
+        echo 'FAIL: cleanup queried the default daemon instead of Testcontainers' >&2
+        exit 64
+    }
+    shift 2
 fi
 case $1 in
 ps)
@@ -42,6 +48,11 @@ ENGINE
 cat > "$test_dir/bin/go" <<'GO'
 #!/usr/bin/env bash
 set -euo pipefail
+if [[ $1 == run ]]; then
+    # Testcontainers may discover a rootless endpoint without DOCKER_HOST.
+    printf '%s\n' "${DOCKER_HOST:-unix:///fixture/rootless/docker.sock}"
+    exit 0
+fi
 [[ $1 == test && $2 == -count=1 && $3 == ./fixture ]] || exit 68
 [[ -n $TESTCONTAINERS_SESSION_ID && $TESTCONTAINERS_SESSION_ID != caller-session ]] || exit 69
 printf '%s\n' "$TESTCONTAINERS_SESSION_ID" >> "$CASE_DIR/session"
@@ -133,7 +144,7 @@ wait "$second_pid"
 # Podman must target the same provider socket used by Testcontainers.
 mv "$test_dir/bin/docker" "$test_dir/bin/podman"
 # Keep a host Docker CLI from winning provider discovery in this fixture.
-for tool in bash mktemp mv rm mkdir touch; do
+for tool in bash dirname mktemp mv rm mkdir touch; do
     ln -s "$(command -v "$tool")" "$test_dir/bin/$tool"
 done
 mkdir -p "$test_dir/podman"
