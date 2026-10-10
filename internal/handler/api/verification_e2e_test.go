@@ -214,11 +214,19 @@ func checkHTTPVerificationScenario(t *testing.T, scenario string) {
 	if !strings.Contains(audit, "verification_"+wantStatus) {
 		t.Fatalf("verification audit=%s", audit)
 	}
-	notifications := string(
-		f.api(t, "GET", "/api/v1/admin/notifications", nil, 200),
-	)
-	if !strings.Contains(notifications, string(wantEvent)) {
-		t.Fatalf("verification notification history=%s", notifications)
+	// Notifiers run before the event bus persists notification history.
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		notifications := string(
+			f.api(t, "GET", "/api/v1/admin/notifications", nil, 200),
+		)
+		if strings.Contains(notifications, string(wantEvent)) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("verification notification history=%s", notifications)
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 	f.web(t, "GET", path+"/verification", nil, 200)
 }
