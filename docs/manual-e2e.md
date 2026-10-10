@@ -321,3 +321,7 @@ new runbook versions. Inspect the logs: the shared secret is redacted. To check
 environment precedence, add a lifecycle REGION override for the stage; it wins
 over an unscoped project override, while a project override for that same stage
 wins over the lifecycle value. These examples have no enabled schedules.
+Lifecycle assignment grants execution access to shared secrets. Only global
+admins can attach a lifecycle to a project; project admins can retain or
+remove an existing assignment. As a deployer, creating or updating a project
+with a new lifecycle ID returns 403 without changing the project.

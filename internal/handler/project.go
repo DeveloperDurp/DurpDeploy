@@ -100,6 +100,9 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 	); parseErr == nil {
 		submitted.LifecycleID = sql.NullInt64{Int64: lifecycleID, Valid: true}
 	}
+	if !h.authorizeLifecycleForm(w, r, 0) {
+		return
+	}
 
 	if name == "" {
 		lifecycles, _ := h.repo.Queries.ListLifecycles(r.Context())
@@ -344,6 +347,9 @@ func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	if !h.authorizeLifecycleForm(w, r, id) {
+		return
+	}
 
 	name := strings.TrimSpace(r.FormValue("name"))
 	desc := r.FormValue("description")
@@ -482,8 +488,17 @@ func ApplyLifecycleSelection(
 	projectID int64,
 	lifecycleID int64,
 ) error {
+	if err := AuthorizeLifecycleSelection(
+		ctx, repo, projectID, lifecycleID,
+	); err != nil {
+		return err
+	}
 	if lifecycleID <= 0 {
 		return repo.Queries.ClearProjectLifecycle(ctx, projectID)
+	}
+	if user := auth.UserFromContext(ctx); user == nil || user.Role != "admin" {
+		// Retaining a grant must not restore one revoked by a concurrent edit.
+		return nil
 	}
 	return repo.Queries.SetProjectLifecycle(
 		ctx,

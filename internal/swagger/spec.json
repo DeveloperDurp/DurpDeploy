@@ -4582,7 +4582,7 @@
         "tags": [
           "projects"
         ],
-        "summary": "Create a new project.",
+        "summary": "Create a new project. Lifecycle assignment requires a global admin.",
         "operationId": "createProject",
         "parameters": [
           {
@@ -4612,6 +4612,12 @@
             "description": "Unauthorized error response.",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
             }
           },
           "409": {
@@ -4723,7 +4729,7 @@
         "tags": [
           "projects"
         ],
-        "summary": "Update a project.",
+        "summary": "Update a project. Only a global admin can assign a different lifecycle.",
         "operationId": "updateProject",
         "parameters": [
           {
@@ -4762,6 +4768,12 @@
             "description": "Unauthorized error response.",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
             }
           },
           "404": {

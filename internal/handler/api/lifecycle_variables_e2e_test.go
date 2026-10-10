@@ -200,6 +200,7 @@ func TestLifecycleVariablesAPIWebE2E(t *testing.T) {
 		strings.Contains(page, "lifecycle-secret-sentinel") {
 		t.Fatal("project inheritance UI missing or exposes secret")
 	}
+	assertLifecycleAssignmentAccess(t, f, lc.ID)
 }
 
 func decodeLifecycleTest(t *testing.T, data []byte, target any) {

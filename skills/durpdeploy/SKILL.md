@@ -388,6 +388,11 @@ Enforced identically on web and API (source: `internal/gate/gate.go`):
   instead of running. Approve is admin-only.
 - **Membership**: non-admin tokens need to be in the project; unknown or
   forbidden projects return `404`/`403`.
+- **Lifecycle assignment**: only a global admin can attach a lifecycle on
+  project creation or change its assignment. Other project admins can retain
+  or remove an existing assignment. Assignment grants execution access to
+  the lifecycle's shared variables, including secrets; unauthorized attempts
+  return `403` before project creation or edits.
 - **Cross-project release**: deploying a release id under the wrong
   project → `400`.
 

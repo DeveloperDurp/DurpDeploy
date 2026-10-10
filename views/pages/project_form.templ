@@ -79,8 +79,9 @@ templ ProjectForm(project db.Project, isEdit bool, errorMsg string, lifecycles [
 				<label class="label">
 					<span class="label-text">Lifecycle</span>
 				</label>
-				<p class="text-sm opacity-70 mb-2">Optional. Gates deployments to environments in order.</p>
-				<select name="lifecycle_id" class="select select-bordered">
+				<p class="text-sm opacity-70 mb-2">Optional. Gates deployments to environments in order and grants access to shared variables.</p>
+				if CanManageLifecycleVariables(ctx) {
+					<select name="lifecycle_id" class="select select-bordered">
 					<option value="">— No lifecycle —</option>
 					for _, lc := range lifecycles {
 						<option
@@ -92,7 +93,18 @@ templ ProjectForm(project db.Project, isEdit bool, errorMsg string, lifecycles [
 							{ lc.Name }
 						</option>
 					}
-				</select>
+					</select>
+				} else {
+					if project.LifecycleID.Valid {
+						<input type="hidden" name="lifecycle_id" value={ strconv.FormatInt(project.LifecycleID.Int64, 10) }/>
+						for _, lc := range lifecycles {
+							if lc.ID == project.LifecycleID.Int64 {
+							<p>{ lc.Name }</p>
+							}
+						}
+					}
+					<p class="text-sm opacity-70">A global admin manages lifecycle assignment.</p>
+				}
 			</div>
 		</form>
 		if isEdit {
