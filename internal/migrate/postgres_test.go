@@ -10,6 +10,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 
 	generated "durpdeploy/internal/db"
+	"durpdeploy/internal/testutil"
 )
 
 // TestPostgres_MigrationsRun verifies migrations apply cleanly against a
@@ -24,14 +25,10 @@ func TestPostgres_MigrationsRun(t *testing.T) {
 		postgres.WithPassword("postgres"),
 		postgres.BasicWaitStrategies(),
 	)
+	testutil.CleanupContainer(t, ctr)
 	if err != nil {
 		t.Skipf("could not start postgres container: %v", err)
 	}
-	t.Cleanup(func() {
-		if err := ctr.Terminate(context.Background()); err != nil {
-			t.Logf("terminate container: %v", err)
-		}
-	})
 
 	dsn, err := ctr.ConnectionString(ctx, "sslmode=disable")
 	if err != nil {
