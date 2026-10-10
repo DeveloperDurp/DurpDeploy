@@ -71,38 +71,42 @@ func (h *ReleaseHandler) CreateRelease(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if r.Header.Get("HX-Request") == "true" {
-		releases, err := h.repo.Queries.ListReleasesByProject(
-			r.Context(),
-			projectID,
-		)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
+	h.renderCreatedRelease(w, r, projectID)
+}
 
-		project, err := h.repo.Queries.GetProject(r.Context(), projectID)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-
-		views, err := buildReleaseViews(r.Context(), h.repo, releases)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-
-		if err := pages.ReleasesFragment(project, views, "").
-			Render(r.Context(), w); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-	} else {
+func (h *ReleaseHandler) renderCreatedRelease(
+	w http.ResponseWriter,
+	r *http.Request,
+	projectID int64,
+) {
+	if r.Header.Get("HX-Request") != "true" {
 		http.Redirect(
 			w,
 			r,
 			fmt.Sprintf("/projects/%d/releases", projectID),
 			http.StatusSeeOther,
 		)
+		return
+	}
+	releases, err := h.repo.Queries.ListReleasesByProject(
+		r.Context(), projectID,
+	)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	project, err := h.repo.Queries.GetProject(r.Context(), projectID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	views, err := buildReleaseViews(r.Context(), h.repo, releases)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err := pages.ReleasesFragment(project, views, "").
+		Render(r.Context(), w); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }

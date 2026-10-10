@@ -108,13 +108,7 @@ func (c *Client) Fetch(
 	}
 	var temporaryPath string
 	defer func() {
-		closeErr := response.Body.Close()
-		if closeErr != nil && errors.Is(err, ErrNotFound) {
-			// A failed response cleanup is not a missing-package override.
-			err = errors.Join(ErrFetch, closeErr)
-		} else {
-			err = errors.Join(err, closeErr)
-		}
+		err = closeArtifactResponse(response.Body, err)
 		if err != nil && temporaryPath != "" {
 			err = errors.Join(err, os.Remove(temporaryPath))
 			result = Download{}
@@ -157,4 +151,13 @@ func (c *Client) Fetch(
 		return result, err
 	}
 	return Download{Path: file.Name(), SHA256: digest, Size: size}, nil
+}
+
+func closeArtifactResponse(body io.Closer, fetchErr error) error {
+	closeErr := body.Close()
+	if closeErr != nil && errors.Is(fetchErr, ErrNotFound) {
+		// A failed response cleanup is not a missing-package override.
+		return errors.Join(ErrFetch, closeErr)
+	}
+	return errors.Join(fetchErr, closeErr)
 }
