@@ -309,7 +309,7 @@ The API refresh must return `409` while that deployment is active. Cancel a
 disposable deployment or let it complete, then retry: the API returns `200`
 and the web refresh returns to the release page with the error cleared.
 The retained demo has a disposable pending-approval case at
-`/projects/24/releases/36`, with `/deployments/46` awaiting approval; check its
+`/projects/4/releases/9`, with `/deployments/25` awaiting approval; check its
 current status before retrying. Keep its release/history after testing.
 
 `make e2e-test` retains a `shared-lifecycle-<run>` lifecycle and two
@@ -333,6 +333,25 @@ secret field still preserves the saved secret after choosing the scope.
 Choose **Override**, enter a project value and save to recreate the example.
 Global admins manage shared values; project deployers can override their own
 values and viewers see no write controls. Unassigned projects inherit nothing.
+
+The refreshed demo is `https://citadel.durp.loc:37293`, with data in
+`tmp/demo.pX7hhv` and its temporary certificate at `tls/cert.pem`.
+Credentials are in that directory's `login.txt`. Stop only this demo with
+`make demo-stop DEMO_DIR=/absolute/path/to/tmp/demo.pX7hhv`.
+The previous `tmp/demo.ugv3mx` history is retained on disk.
+
+The hands-on scope-change example is lifecycle
+[`Live scope manual`](https://citadel.durp.loc:37293/lifecycles/6), project
+[`Live scope manual`](https://citadel.durp.loc:37293/projects/24), and release
+[`before-scope-edit`](https://citadel.durp.loc:37293/projects/24/releases/36).
+Deployment [42](https://citadel.durp.loc:37293/deployments/42) prints
+`LIVE=all-stages` before the shared edit. The same release then prints
+`LIVE=unset` in prod in deployment
+[43](https://citadel.durp.loc:37293/deployments/43), and `LIVE=dev-only` in dev in
+deployment [44](https://citadel.durp.loc:37293/deployments/44).
+The TOKEN output is redacted. Repeat by editing LIVE on the lifecycle page and
+deploying release 36 to Live scope prod or Live scope dev, without refreshing it.
+These examples create no schedules; all retained schedules remain disabled.
 
 Both retained `shared-v1` releases contain only project-owned variables. Their
 successful deployments use `shared-updated`, which the suite set after creating
