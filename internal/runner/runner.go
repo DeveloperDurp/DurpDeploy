@@ -202,6 +202,15 @@ func (r *DeploymentRunner) Run(
 	}
 	stage, err := r.stageArtifact(runCtx, deploymentID)
 	if err != nil {
+		message := "Artifact staging failed: " + err.Error()
+		writer := &broadcastWriter{
+			broker: r.broker, repo: r.repo, deploymentID: deploymentID,
+			ctx: ctx, scrubber: scrubber,
+		}
+		if _, logErr := writer.Write([]byte(message + "\n")); logErr != nil {
+			slog.Error("persist artifact pull failure", "error", logErr)
+		}
+		writer.Flush()
 		r.failStep(
 			ctx,
 			runCtx,
@@ -210,7 +219,7 @@ func (r *DeploymentRunner) Run(
 				DeploymentID:  deploymentID,
 				ProjectID:     release.ProjectID,
 				EnvironmentID: environmentID,
-				Message:       "Artifact staging failed: " + err.Error(),
+				Message:       message,
 			},
 			true,
 		)

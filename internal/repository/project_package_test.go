@@ -57,6 +57,13 @@ func TestProjectPackageReplacementPreservesOldDeploymentSource(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if _, err := handler.RefreshReleaseSnapshot(
+		t.Context(),
+		f.repo,
+		release,
+	); err != nil {
+		t.Fatal(err)
+	}
 	created, err := f.repo.CreateDeployment(
 		t.Context(),
 		db.CreateDeploymentParams{

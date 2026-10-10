@@ -1,5 +1,34 @@
 # Manual checks after `make e2e-test`
 
+## Releases with a deferred package pull
+
+1. Attach a package repository to a disposable project. Use a missing version
+   or an unreachable repository such as `https://asdf/{version}`.
+2. Enter a version and click **Create Release**. Creation succeeds without a
+   network request. Release detail shows **Package awaiting first pull**.
+3. Deploy the release. A missing package, DNS/TLS/authentication failure or
+   invalid ZIP fails the deployment before any steps execute. Inspect its logs.
+4. Repeat via `POST /api/v1/projects/{id}/releases` with
+   `{"version":"missing"}`: expect `201`, with the package still attached.
+   `GET /api/v1/projects/{id}/releases/{releaseId}/artifact` returns
+   `pending: true`, empty `sha256`, and `size: 0`.
+5. Publish the package and deploy again. The first valid pull locks its
+   checksum and size before steps start; the artifact API reports
+   `pending: false`. Repeated pulls reject different bytes at that URL.
+6. Replace the package bytes and click **Refresh** (or
+   `POST /api/v1/projects/{id}/releases/{releaseId}/refresh`).
+   Refresh validates and replaces the release checksum, updates steps/variables,
+   and refuses active/unconfirmed deployments. New deployments use the refreshed
+   pin; re-runs and rollback retain the original deployment pin.
+7. Save a runbook from a pending release to check shared first-pull pinning.
+   Refreshing or deleting the source release preserves the copied generation.
+
+Retain the project, releases, runbooks and deployment history for repeat checks.
+Keep schedules disabled. Automated API/web/container coverage is
+`TestReleaseDeferredPackageAPIWebE2E`; rendered browser coverage is
+`TestReleaseDeferredPackageBrowserE2E`. Run `scripts/e2e_artifacts.sh` for API checks.
+
+
 ## Server step resource policy
 
 Server-side deployment steps have no DurpDeploy-imposed RAM ceiling or CPU

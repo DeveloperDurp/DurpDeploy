@@ -107,5 +107,13 @@ func (f *artifactE2E) createArtifactRelease(
 	if err := json.Unmarshal(body, &release); err != nil {
 		t.Fatal(err)
 	}
+	// These scenarios start with a validated pin, independent of lazy creation.
+	f.api(
+		t,
+		"POST",
+		fmt.Sprintf("%s/releases/%d/refresh", f.base(), release.ID),
+		nil,
+		200,
+	)
 	return source, release
 }

@@ -5731,7 +5731,7 @@
         "tags": [
           "artifacts"
         ],
-        "summary": "Read a release's pinned ZIP; null means no artifact.",
+        "summary": "Read a release's attached ZIP; pending means no validated pull yet.",
         "operationId": "getReleaseArtifact",
         "parameters": [
           {
@@ -10341,6 +10341,10 @@
     "ReleaseArtifactResponse": {
       "type": "object",
       "properties": {
+        "pending": {
+          "type": "boolean",
+          "x-go-name": "Pending"
+        },
         "release_id": {
           "type": "integer",
           "format": "int64",
@@ -10391,6 +10395,7 @@
       "title": "ReleaseRequest is the body for create release.",
       "properties": {
         "version": {
+          "description": "Attached packages are downloaded and pinned on the first deployment pull.",
           "type": "string",
           "x-go-name": "Version"
         }

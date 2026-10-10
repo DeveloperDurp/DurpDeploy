@@ -22,6 +22,7 @@ const (
 var (
 	ErrInvalid       = errors.New("invalid artifact repository or ZIP")
 	ErrFetch         = errors.New("artifact download failed")
+	ErrNotFound      = fmt.Errorf("artifact package not found: %w", ErrFetch)
 	ErrChecksum      = errors.New("artifact checksum mismatch")
 	ErrMetadataLimit = fmt.Errorf(
 		"ZIP metadata reads exceed 16 MiB: %w",

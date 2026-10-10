@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -42,8 +43,15 @@ func dialRepository(
 		return nil, ErrFetch
 	}
 	ips, err := net.DefaultResolver.LookupIPAddr(ctx, host)
-	if err != nil || validateRepositoryIPs(ips) != nil {
-		return nil, ErrFetch
+	if err != nil {
+		return nil, &FetchError{
+			"package repository hostname could not be resolved",
+		}
+	}
+	if validateRepositoryIPs(ips) != nil {
+		return nil, &FetchError{
+			"package repository destination is not permitted",
+		}
 	}
 	var dialer net.Dialer
 	dialer.Timeout = 30 * time.Second
@@ -57,7 +65,7 @@ func dialRepository(
 			return conn, nil
 		}
 	}
-	return nil, ErrFetch
+	return nil, &FetchError{"could not connect to the package repository"}
 }
 
 func validateRepositoryIPs(ips []net.IPAddr) error {
@@ -108,15 +116,21 @@ func (c *Client) Fetch(
 	}
 	var temporaryPath string
 	defer func() {
-		err = errors.Join(err, response.Body.Close())
+		err = closeArtifactResponse(response.Body, err)
 		if err != nil && temporaryPath != "" {
 			err = errors.Join(err, os.Remove(temporaryPath))
 			result = Download{}
 		}
 	}()
-	if response.StatusCode != http.StatusOK ||
-		response.ContentLength > MaxDownload {
-		return result, ErrFetch
+	if response.StatusCode == http.StatusNotFound {
+		return result, ErrNotFound
+	}
+	if response.StatusCode != http.StatusOK {
+		return result, &FetchError{fmt.Sprintf(
+			"package repository returned HTTP %d", response.StatusCode)}
+	}
+	if response.ContentLength > MaxDownload {
+		return result, &FetchError{"package exceeds the download size limit"}
 	}
 	file, err := os.CreateTemp(c.TempDir, "durpdeploy-artifact-*.zip")
 	if err != nil {
@@ -148,4 +162,13 @@ func (c *Client) Fetch(
 		return result, err
 	}
 	return Download{Path: file.Name(), SHA256: digest, Size: size}, nil
+}
+
+func closeArtifactResponse(body io.Closer, fetchErr error) error {
+	closeErr := body.Close()
+	if closeErr != nil && errors.Is(fetchErr, ErrNotFound) {
+		// A failed response cleanup is not a missing-package override.
+		return errors.Join(ErrFetch, closeErr)
+	}
+	return errors.Join(fetchErr, closeErr)
 }

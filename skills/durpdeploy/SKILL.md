@@ -227,6 +227,17 @@ or refresh; recreate their steps and create a new release (`409` on launch).
    without a lifecycle can use any environment.
 5. **Release** (snapshot of current steps + variables)
    `POST /api/v1/projects/$PID/releases` `{"version":"1.2.0"}` → `id`.
+   With an attached package repository, creation freezes its source, URL and
+   version without downloading. Missing versions and unreachable repositories
+   do not block creation. The artifact endpoint returns `pending: true`, an
+   empty `sha256` and `size: 0` until the first validated deployment pull.
+   Deployment pull failures stop execution before any steps run. The first
+   successful validated pull locks SHA-256 and size across all copies of that
+   package generation; later deployments reject changed bytes. The package is
+   retained, not omitted. Refresh downloads and validates again, replacing the
+   release checksum and size for future deployments while existing deployment
+   and runbook copies retain their original generation. Refresh also updates
+   steps and variables and refuses active or unconfirmed deployments.
    Later step edits do NOT affect it; `POST /projects/$PID/releases/$RID/refresh`
    re-snapshots the release, including after failed or successful deployments.
    Active or unconfirmed deployments and buffered agent logs return `409`;
@@ -620,14 +631,19 @@ and compressed ZIP `size`. Invalid versions/ZIPs return 422; missing configurati
 returns 404; upstream fetch failures return 502 and do not claim the package is
 absent. Generic templates do not provide version discovery or listing.
 
-Release creation/refresh downloads and validates the ZIP, then pins its URL,
-version, SHA-256, and size. Deployment creation freezes that pin. Re-runs keep
-the original deployment pin even after release refresh. Deployments use current
-repository credentials and reject content that no longer matches the pin.
+Release creation captures the repository, URL and version without a pull.
+Deployment creation copies that package generation; the first successful ZIP
+pull validates and atomically records SHA-256/size on every pending copy before
+any step runs. Concurrent pulls with different bytes produce one winning pin
+and a checksum failure. Re-runs retain the original generation even after
+release refresh. Refresh explicitly downloads and validates the current package
+and replaces only the release pin. Deployments use current credentials for
+their captured repository and reject content that no longer matches their pin.
 
 Runbook create/save accepts `artifact_release_id`, selecting an existing release
-in the same project that has a package pin. It is required while a project
-repository is selected. The runbook version copies that pin; later refreshes of
+in the same project that has a package attachment, including a pending pull.
+It is required while a project repository is selected. The runbook version
+copies that package generation; later refreshes of
 the source release do not change it. Runbook version responses include
 `artifact` (the copied pin or `null`).
 
