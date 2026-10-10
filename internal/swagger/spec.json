@@ -8920,6 +8920,10 @@
           "format": "int64",
           "x-go-name": "CreatedAt"
         },
+        "decision_ready": {
+          "type": "boolean",
+          "x-go-name": "DecisionReady"
+        },
         "deployment_id": {
           "type": "integer",
           "format": "int64",

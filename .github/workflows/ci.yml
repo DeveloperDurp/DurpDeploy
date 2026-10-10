@@ -383,7 +383,7 @@ jobs:
       - name: Verify environment queue position, permissions, and cancellation
         run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^TestEnvironmentQueueBrowserE2E$' ./internal/handler/api
       - name: Verify artifact approval controls in Chromium
-        run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^Test(ArtifactGate|TerraformPlanColors)BrowserE2E$' ./internal/handler/api
+        run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^Test(ArtifactGate.*|TerraformPlanColors)BrowserE2E$' ./internal/handler/api
 
       - name: Verify the running-instance API and browser suite
         env:

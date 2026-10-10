@@ -63,6 +63,10 @@ func (h *ArtifactGateHandler) artifactGateInfo(
 	ctx context.Context,
 	deploymentID int64,
 ) ([]pages.ArtifactGateInfo, error) {
+	deployment, err := h.repo.Queries.GetDeployment(ctx, deploymentID)
+	if err != nil {
+		return nil, err
+	}
 	gates, err := h.repo.Queries.ListArtifactGates(ctx, deploymentID)
 	if err != nil {
 		return nil, err
@@ -75,8 +79,16 @@ func (h *ArtifactGateHandler) artifactGateInfo(
 	if err != nil {
 		return nil, err
 	}
+	now, err := h.repo.Queries.CurrentUnixTime(ctx)
+	if err != nil {
+		return nil, err
+	}
 	for _, gate := range gates {
 		item := pages.NewArtifactGateInfo(gate)
+		item.DecisionReady = deployment.Status == "awaiting_artifact_approval" &&
+			gate.Status == "awaiting" &&
+			gate.ExpiresAt > now
+		item.Publishing = deployment.Status == "publishing_artifact"
 		if gate.StepIndex >= 0 && gate.StepIndex < int64(len(steps)) {
 			item.ReviewFormat = steps[gate.StepIndex].ReviewFormat
 		}

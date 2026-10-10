@@ -81,9 +81,17 @@ The bundle is limited to 300 MiB; review JSON is limited to 1 MiB. Unsafe
 archive entries, missing files, and altered ciphertext or checksums fail closed.
 
 An administrator reviews and approves the exact revision and SHA-256 in the
-deployment page or API. Project members with write access can download the
-sensitive artifact; viewers can see the count summary only. Approval expires
-after 24 hours. Rejection, cancellation, and expiry stop the deployment.
+deployment page or API once `decision_ready` is true. A saved gate can have
+status `awaiting` while its deployment is still `publishing_artifact` and
+cleaning up containers. The decision buttons appear only after cleanup has
+finished and the deployment is `awaiting_artifact_approval`. The panel polls
+every three seconds, so no manual refresh is needed. Failed web decisions
+return to deployment details with a warning and current gate state; failed
+decisions do not create successful approval/rejection audit entries.
+
+Approval expires after 24 hours. Project members with write access can download
+the sensitive artifact; viewers can see the count summary only.
+Rejection, cancellation, and expiry stop the deployment.
 The minute worker records expiry and advances queues; polling reads state only.
 Expired artifacts and decisions are blocked immediately, before that worker runs.
 Terminal bundle chunks are deleted after seven days. Audit records retain the

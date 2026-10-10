@@ -63,7 +63,10 @@ templ ArtifactGates(gates []ArtifactGateInfo) {
 						if gate.ExpiresAt > time.Now().Unix() {
 							<a class="btn sm:btn-sm btn-ghost" href={ fmt.Sprintf("/deployments/%d/artifact-gates/%d/artifact", gate.DeploymentID, gate.StepIndex) }>Download sensitive artifact</a>
 						}
-						if CanManageAgents(ctx) && gate.Status == "awaiting" && gate.ExpiresAt > time.Now().Unix() {
+						if CanManageAgents(ctx) && gate.Status == "awaiting" && gate.Publishing {
+							<p role="status" data-artifact-publishing>Preparing the artifact for approval. Decision buttons will appear automatically when it is ready.</p>
+						}
+						if CanManageAgents(ctx) && gate.DecisionReady && gate.ExpiresAt > time.Now().Unix() {
 							for _, action := range []string{"approve", "reject"} {
 								<form method="post" action={ fmt.Sprintf("/deployments/%d/artifact-gates/%d/%s", gate.DeploymentID, gate.StepIndex, action) }>
 									if sess := auth.SessionFromContext(ctx); sess != nil {

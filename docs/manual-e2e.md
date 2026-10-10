@@ -238,10 +238,19 @@ plan output, with green additions, red removals, and yellow modifications,
 both live and after a reload. The resource review uses matching Add/Remove/Modify
 badges and red/green Before/After borders. Sensitive values remain masked by
 Terraform and DurpDeploy's project-secret scrubber, including old values of removed resources.
-Pending artifact approvals expire after 24 hours. Their
-release stays available for a fresh plan. Use the same container runtime and
-image store as the server when running the harness. No retained schedule
-should run unattended after manual checks.
+Pending artifact approvals expire after 24 hours. Their release stays
+available for a fresh plan. Use the same container runtime and image store as
+the server when running the harness. No retained schedule should run unattended
+after manual checks.
+
+Decision buttons appear automatically once artifact publication and container
+cleanup finish; the review panel polls every three seconds. During publication,
+expect a preparing message and no Approve/Reject controls. The public gate
+metadata reports `decision_ready: false` until decisions are available.
+To check stale-form recovery, open the same pending deployment in two tabs,
+approve or reject in one, then submit the older form in the other. The older
+submission returns to deployment details with a warning and refreshed gate
+state, without recording a second successful decision in the audit log.
 
 The pending Terraform example owns its project's `dev` execution slot. New dev
 deployments and runbooks for that project queue until you approve, reject, or
