@@ -21,6 +21,7 @@ for session in "$@"; do
     if [[ ${SCENARIO:-} == list-failure ]]; then exit 43; fi
     case ${SCENARIO:-} in
     removal-failure | failure-removal) exit 44 ;;
+    *) ;;
     esac
     if [[ -f $CASE_DIR/resources/$session ]]; then
         rm "$CASE_DIR/resources/$session"
@@ -81,13 +82,14 @@ for scenario in success failure timeout INT TERM HUP nested removal-failure fail
         TESTCONTAINERS_SESSION_ID=caller-session \
         bash "$root/scripts/go_test.sh" -count=1 ./fixture \
         > "$case_dir/stdout" 2> "$case_dir/output" || status=$?
-    expected=0
     case $scenario in
+    success | no-provider) expected=0 ;;
     failure | timeout | failure-removal) expected=42 ;;
     INT) expected=130 ;;
     TERM | nested) expected=143 ;;
     HUP) expected=129 ;;
     removal-failure | list-failure | provider-lost) expected=1 ;;
+    *) echo "FAIL: unexpected scenario $scenario" >&2; exit 1 ;;
     esac
     # Then: status is preserved, owned resources are removed, others survive.
     if [[ $status != "$expected" ]]; then
@@ -135,7 +137,7 @@ done
 cat > "$test_dir/bash3-env" <<'BASH3'
 unset BASHPID
 shopt() {
-    case "$*" in *globstar*) return 1 ;; esac
+    case "$*" in *globstar*) return 1 ;; *) ;; esac
     builtin shopt "$@"
 }
 BASH3

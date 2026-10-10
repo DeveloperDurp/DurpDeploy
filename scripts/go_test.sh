@@ -39,8 +39,8 @@ cleanup() {
         "$session_dir/cleanup" "${sessions[@]}" >&2 || cleanup_status=$?
         # Unit-only runs can work without a provider. A provider that was
         # reachable before testing must remain reachable for cleanup.
-        if ((cleanup_status != 0 && (cleanup_status != 2 || provider_ready))); then
-            if ((status == 0)); then status=1; fi
+        if ((status == 0 && cleanup_status != 0 && (cleanup_status != 2 || provider_ready))); then
+            status=1
         fi
     fi
     rm -rf -- "$session_dir"
