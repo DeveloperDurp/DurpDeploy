@@ -21,7 +21,8 @@ What we defend against:
 - Accidental writes by a viewer (UI gating + CSRF gate)
 - Cross-project access by a non-member (per-project authorization middleware)
 - Roster tampering by a non-admin project member (per-project admin gate on member add/remove)
-- A leaked `variables`/`release_variables` DB file, on its own, does not disclose secret values (AES-256-GCM at rest)
+- A database leak alone does not disclose encrypted project, release, lifecycle,
+  or deployment variable values (AES-256-GCM at rest)
 - The server sends remote agents neither its database nor its encryption key
 - Paired agent transport uses outbound mTLS with pinned peer fingerprints;
   pairing uses a temporary inbound callback on the agent
@@ -241,8 +242,8 @@ Do not reorder or skip any of these.
 
 **Implementation:** `internal/secret/secret.go`, `internal/repository/repository.go`
 
-The `value` column of both `variables` and `release_variables` is
-AES-256-GCM encrypted before it ever reaches SQLite:
+The `value` columns in `variables`, `release_variables`, `lifecycle_variables`,
+and `deployment_variable_snapshots` use AES-256-GCM encryption before database storage:
 
 - **Key source:** `/etc/durpdeploy/key` (file, checked first) or
   `DURPDEPLOY_SECRET_KEY` (env, base64-encoded 32 bytes). The server calls
@@ -254,19 +255,29 @@ AES-256-GCM encrypted before it ever reaches SQLite:
   variable's value via `Repository.EncryptValue` before writing the
   `release_variables` row (values are never round-tripped through the DB
   in plaintext).
+  Lifecycle variable writes encrypt each value. Deployment creation encrypts
+  the complete resolved variable capture, including shared values and project snapshots.
 - **Decrypt path:** The repository decrypts a value into a temporary Go string.
   It does not write plaintext to the database or a log. It does not put
   plaintext in an error message. `secret.Box.Decrypt` returns only fixed error
   text.
-  - **Runner:** `DeploymentRunner.Run` receives plaintext from
-    `ListReleaseVariablesByRelease`. A server step receives all compatible
-    resolved variables by default; a non-empty frozen `variable_names` list
-    restricts what reaches the execution runtime. The scrubber still considers
-    the resolved secret values before logs are stored or streamed.
-- **Acceptance check:** `sqlite3 durpdeploy.db 'select * from variables'`
-  shows only base64 ciphertext in `value`. The app reads/writes normally
-  through the UI because the repository layer decrypts/encrypts
-  transparently.
+  - **Runner:** Each execution reads its decrypted deployment variable capture.
+    New executions resolve current lifecycle values with frozen project values.
+    Queued and active executions retain their capture.
+    A frozen `variable_names` list restricts values passed to the execution runtime.
+    The scrubber uses captured secret values before log storage or streaming.
+- **Acceptance check:** Run this read-only query against the database:
+
+  ```bash
+  sqlite3 durpdeploy.db '
+  SELECT value FROM variables
+  UNION ALL SELECT value FROM release_variables
+  UNION ALL SELECT value FROM lifecycle_variables
+  UNION ALL SELECT value FROM deployment_variable_snapshots;'
+  ```
+
+  Each returned value must be base64 ciphertext. Verify normal variable reads
+  and a deployment through the UI or API after rotation.
 
 ### Key rotation runbook
 
@@ -295,11 +306,11 @@ This one-shot command (`cmd/server/main.go: runSecretKey`):
 1. Loads the **current** key via `secret.LoadKey()` (same file/env lookup
    the server uses).
 2. Generates a fresh random 32-byte key.
-3. In one transaction, re-encrypts variables, release variables,
-   package-repository credentials, environment and deployment verification
-   targets, and retained artifact-gate chunks. A failure rolls back the
-   transaction. Other encrypted records listed in the limitation above are
-   not migrated by this command.
+3. In one transaction, re-encrypts project variables, release variables,
+   lifecycle variables, deployment variable captures, package-repository credentials,
+   verification targets, and retained artifact-gate chunks.
+   A failure rolls back the transaction. The command does not migrate records
+   listed in the limitation above.
 4. Prints the new key (base64) to stdout.
 
 After successful rotation, write the exact printed key to the key source used

@@ -28,8 +28,9 @@ or remove an existing assignment and manage project overrides.
 Review the lifecycle's project list before you add shared secrets.
 
 Only global administrators change lifecycle stages or delete lifecycles and
-environments. Restoring a removed environment reactivates its retained shared
-values for projects that use the lifecycle.
+environments. Restoring a removed lifecycle stage reactivates its retained shared
+values for projects that use the lifecycle. Deleting an environment deletes its
+scoped shared variables.
 
 ## Viewer self-security exception
 
