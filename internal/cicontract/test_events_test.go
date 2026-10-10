@@ -18,6 +18,25 @@ func TestTestWorkflowsRunOnlyOnPullRequests(t *testing.T) {
 	}
 }
 
+func TestIndependentCIJobsCannotCancelEachOther(t *testing.T) {
+	config := readWorkflow(t, "ci")
+	groups := make(map[string]string)
+	for name, job := range config.Jobs {
+		group := job.Concurrency.Group
+		if group == "" {
+			continue
+		}
+		if !strings.Contains(group, "${{ github.ref }}") {
+			t.Errorf("%s can cancel jobs on another ref: %s", name, group)
+		}
+		group = strings.ReplaceAll(group, "${{ github.job }}", name)
+		if other, exists := groups[group]; exists {
+			t.Errorf("%s and %s share the queue %s", name, other, group)
+		}
+		groups[group] = name
+	}
+}
+
 func TestReleaseTestsRunOnlyOnPullRequests(t *testing.T) {
 	release := readWorkflow(t, "release")
 	for _, name := range []string{"test", "e2e"} {

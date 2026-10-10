@@ -22,7 +22,10 @@ type workflowJob struct {
 	Needs           []string `yaml:"needs"`
 	If              string   `yaml:"if"`
 	ContinueOnError bool     `yaml:"continue-on-error"`
-	Steps           []struct {
+	Concurrency     struct {
+		Group string `yaml:"group"`
+	} `yaml:"concurrency"`
+	Steps []struct {
 		Run string `yaml:"run"`
 		If  string `yaml:"if"`
 	} `yaml:"steps"`
