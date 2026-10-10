@@ -34,6 +34,17 @@ func TestRunningServerBrowserE2E(t *testing.T) {
 		map[string]bool{"ignore": true}, &struct{}{})
 	b.setBackTestSession(t, base, session)
 	b.navigateBackTest(t, base+"/")
+	if lifecycle := os.Getenv("DURPDEPLOY_LIVE_LIFECYCLE"); lifecycle != "" {
+		b.navigateBackTest(t, base+lifecycle)
+		b.wait(t, `!!document.querySelector('[data-shared-variable="REGION"]')`)
+		b.captureNavigation(t, "live-lifecycle-shared")
+		b.navigateBackTest(t, base+os.Getenv("DURPDEPLOY_LIVE_INHERITED"))
+		b.wait(
+			t,
+			`document.querySelector('[data-inherited-variables]')?.textContent.includes('Project override')`,
+		)
+		b.captureNavigation(t, "live-project-inherited")
+	}
 	api := func(t *testing.T, path string, status int) json.RawMessage {
 		t.Helper()
 		var response struct {

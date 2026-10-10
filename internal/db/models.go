@@ -317,6 +317,16 @@ type LifecycleStage struct {
 	RequiresApproval int64 `json:"requires_approval"`
 }
 
+type LifecycleVariable struct {
+	ID            int64          `json:"id"`
+	LifecycleID   int64          `json:"lifecycle_id"`
+	Name          string         `json:"name"`
+	Value         sql.NullString `json:"value"`
+	EnvironmentID sql.NullInt64  `json:"environment_id"`
+	Secret        int64          `json:"secret"`
+	CreatedAt     int64          `json:"created_at"`
+}
+
 type MfaChallenge struct {
 	TokenHash    []byte         `json:"token_hash"`
 	UserID       int64          `json:"user_id"`

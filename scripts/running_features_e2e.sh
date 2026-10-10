@@ -162,7 +162,10 @@ echo "  Parallel project: $BASE/deployments/$QUEUE_OTHER_ID"
 echo "  Parallel environment: $BASE/deployments/$QUEUE_OTHER_ENV_ID"
 
 echo "=== Running-server browser checks ==="
+source "$SCRIPT_DIR/lifecycle_variables_e2e.sh"
 DURPDEPLOY_LIVE_BASE="$BASE" \
+DURPDEPLOY_LIVE_LIFECYCLE="/lifecycles/$SHARED_LC_ID" \
+DURPDEPLOY_LIVE_INHERITED="/projects/${SHARED_PROJECT_IDS[0]}/variables" \
 DURPDEPLOY_LIVE_SESSION="$SESSION_ID" \
 DURPDEPLOY_LIVE_API_TOKEN="$API_TOKEN" \
 DURPDEPLOY_LIVE_RUNBOOK_EDITOR="/projects/$API_PROJECT_ID/runbooks/$RUNBOOK_ID/edit" \

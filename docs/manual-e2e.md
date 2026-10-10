@@ -299,3 +299,25 @@ creates this example after its execution checks. Approval waits in earlier
 projects no longer block the new run's projects; release snapshots,
 deployment history, and runbook versions remain available. Each run leaves a
 fresh pending example for manual approval checks.
+# Shared lifecycle variables
+
+`make e2e-test` retains a `shared-lifecycle-<run>` lifecycle and two
+`shared-project-<run>` projects. The suite prints their editor, variables,
+release and deployment links. Open the lifecycle's **Shared variables** section
+to add an unscoped value or an override for one of its stages. Secret values
+show a mask; leaving an existing secret blank keeps its saved value.
+
+Open the first project's Variables page: REGION shows **Project override**
+with its lifecycle default, while the second project inherits the shared value.
+Choose **Reset to inherited** in the first project to remove only its override.
+Choose **Override**, enter a project value and save to recreate the example.
+Global admins manage shared values; project deployers can override their own
+values and viewers see no write controls. Unassigned projects inherit nothing.
+
+Both retained `shared-v1` releases and successful deployments contain the
+original value even though the suite changed the lifecycle value before
+deployment. Shared changes affect new releases, explicit release refreshes and
+new runbook versions. Inspect the logs: the shared secret is redacted. To check
+environment precedence, add a lifecycle REGION override for the stage; it wins
+over an unscoped project override, while a project override for that same stage
+wins over the lifecycle value. These examples have no enabled schedules.

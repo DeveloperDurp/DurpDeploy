@@ -489,12 +489,33 @@ Once deployments are terminal, environment deletion removes their history.
 
 ## Endpoint cheat sheet
 
+Lifecycle variables are shared by every project assigned to that lifecycle.
+Global admins manage them with `GET/POST /api/v1/lifecycles/{id}/variables`
+and `GET/PUT/DELETE /api/v1/lifecycles/{id}/variables/{varId}`. The write body
+uses the same `name`, `value`, optional `environment_id`, and boolean `secret`
+fields as project variables. Names must be shell identifiers of at most 255
+characters. A scoped environment must be a current lifecycle stage. Secret
+values are masked in responses; a blank value on an existing secret preserves
+it. Reserved artifact and container variable names are rejected.
+
+Project members can read `GET /api/v1/projects/{id}/variables/inherited` for
+the lifecycle source and any same-scope project override. The existing project
+variables endpoint continues to return only project-owned rows. To override,
+create a project variable with the same name and environment scope. Delete that
+project variable to reset inheritance. From highest to lowest priority:
+project environment, lifecycle environment, project unscoped, lifecycle
+unscoped. Removing a lifecycle stage excludes its scoped shared values from
+future snapshots. New releases, explicit refreshes, and new runbook versions
+snapshot the merged values; later shared edits never change existing snapshots.
+
 | Resource | Endpoints |
 |----------|-----------|
 | Projects | `GET/POST /api/v1/projects`, `GET/PUT/DELETE /projects/{id}` |
 | Environments | same shape under `/environments` |
 | Steps | `/api/v1/projects/{id}/steps[/{stepId}]` (`POST/GET/PUT/DELETE`, `PATCH /steps/reorder`) |
 | Variables | `/api/v1/projects/{id}/variables[/{varId}]` |
+| Inherited variables | `GET /api/v1/projects/{id}/variables/inherited` |
+| Shared lifecycle variables | `/api/v1/lifecycles/{id}/variables[/{varId}]` (global admin) |
 | Releases | `/api/v1/projects/{id}/releases[/{relId}]` (`GET/POST/DELETE`), `POST .../refresh` |
 | Deployments | `POST /api/v1/projects/{id}/deployments`, `GET /api/v1/deployments` (member projects; global admins see all; optional positive `project_id` filter) |
 | Deployment detail | `GET /deployments/{id}`, `/status`, `/logs`, `/logs/{logId}` |

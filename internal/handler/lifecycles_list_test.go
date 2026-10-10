@@ -70,7 +70,7 @@ func TestLifecycleDetail_renders_settings_and_environment_assignment(
 	var rendered bytes.Buffer
 
 	// When
-	err = pages.LifecycleDetail(lifecycle, nil, available, "").
+	err = pages.LifecycleDetail(pages.LifecycleWorkspace{Lifecycle: lifecycle, AvailableEnvironments: available}).
 		Render(request.Context(), &rendered)
 	if err != nil {
 		t.Fatalf("render lifecycle detail: %v", err)
