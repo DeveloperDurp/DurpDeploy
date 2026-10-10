@@ -271,7 +271,7 @@ func (h *LifecycleVariableHandler) save(
 
 // swagger:route DELETE /lifecycles/{id}/variables/{varId} variables deleteLifecycleVariable
 //
-// Delete a shared variable. Existing release snapshots remain unchanged. Global admin only.
+// Delete a shared variable. Future deployments stop inheriting it; active deployments retain captured values. Global admin only.
 //
 //	Produces:
 //	- application/json

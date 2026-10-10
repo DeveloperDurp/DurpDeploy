@@ -102,7 +102,7 @@ func buildReleaseSnapshot(
 	if err != nil {
 		return releaseSnapshotData{}, err
 	}
-	variables, err := repo.ProjectSnapshotVariables(ctx, projectID)
+	variables, err := repo.ListVariablesByProject(ctx, projectID)
 	if err != nil {
 		return releaseSnapshotData{}, err
 	}

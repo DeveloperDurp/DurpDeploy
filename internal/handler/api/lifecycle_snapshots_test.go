@@ -66,7 +66,7 @@ func TestLifecycleVariableAPI_SnapshotInheritance(t *testing.T) {
 		)
 		return release.ID
 	}
-	first := assertRelease("first", "lifecycle-env")
+	first := assertRelease("first", "project-global")
 	assertLifecycleReleaseValue(t, f.h.repo, first, 0, "project-global")
 	localResponse := f.request(
 		t,
@@ -90,7 +90,7 @@ func TestLifecycleVariableAPI_SnapshotInheritance(t *testing.T) {
 		f.h.repo,
 		first,
 		f.environment.ID,
-		"lifecycle-env",
+		"project-global",
 	)
 	f.request(
 		t,
@@ -107,7 +107,7 @@ func TestLifecycleVariableAPI_SnapshotInheritance(t *testing.T) {
 		f.h.repo,
 		first,
 		f.environment.ID,
-		"lifecycle-env",
+		"project-global",
 	)
 	f.request(
 		t,
@@ -130,7 +130,7 @@ func TestLifecycleVariableAPI_SnapshotInheritance(t *testing.T) {
 		"",
 		204,
 	)
-	assertRelease("reset-to-inherited", "edited-lifecycle-env")
+	assertRelease("reset-to-inherited", "project-global")
 	f.request(t, "DELETE", fmt.Sprintf("%s/%d", path, shared.ID), "", 204)
 	assertLifecycleReleaseValue(
 		t,

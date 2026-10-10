@@ -49,7 +49,7 @@ templ InheritedVariablesSection(projectID int64, inherited repository.VariableIn
 					</li>
 				}
 			</ul>
-			<p class="text-sm opacity-70">Environment overrides take precedence; project values win within the same scope. Overrides affect only this project. Existing releases keep their saved values.</p>
+			<p class="text-sm opacity-70">Environment overrides take precedence; project values win within the same scope. Overrides affect only this project. Project overrides are saved in releases; lifecycle defaults are resolved for each new deployment.</p>
 		</section>
 	}
 }

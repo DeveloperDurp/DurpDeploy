@@ -88,7 +88,7 @@ func TestLifecycleVariablesAPIWebE2E(t *testing.T) {
 			base+"/steps",
 			map[string]any{
 				"name":            "shared",
-				"script_body":     `test "$REGION" = shared-env; test "$TOKEN" = lifecycle-secret-sentinel; printf '%s %s\n' "$REGION" "$TOKEN"`,
+				"script_body":     `test "$REGION" = edited-env; test "$TOKEN" = lifecycle-secret-sentinel; printf '%s %s\n' "$REGION" "$TOKEN"`,
 				"container_image": "docker.io/library/bash:5.2",
 			},
 			201,
@@ -105,7 +105,7 @@ func TestLifecycleVariablesAPIWebE2E(t *testing.T) {
 			),
 			&release,
 		)
-		// Shared edits cannot change this already-created release.
+		// Shared edits apply to the next deployment without a release refresh.
 		f.api(
 			t,
 			"PUT",
@@ -140,7 +140,7 @@ func TestLifecycleVariablesAPIWebE2E(t *testing.T) {
 			nil,
 			200,
 		)
-		if !strings.Contains(string(logs), "shared-env") ||
+		if !strings.Contains(string(logs), "edited-env") ||
 			strings.Contains(string(logs), "lifecycle-secret-sentinel") {
 			t.Fatal(
 				"shared variables not resolved or secret leaked",
@@ -154,13 +154,13 @@ func TestLifecycleVariablesAPIWebE2E(t *testing.T) {
 			nil,
 			200,
 		)
-		assertLifecycleReleaseValue(
-			t,
-			f.h.repo,
+		variables, err := f.h.repo.ListReleaseVariablesByRelease(
+			t.Context(),
 			release.ID,
-			f.environment.ID,
-			"edited-env",
 		)
+		if err != nil || len(variables) != 0 {
+			t.Fatal("shared variables leaked into release snapshot", err)
+		}
 		f.api(
 			t,
 			"PUT",

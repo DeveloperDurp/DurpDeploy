@@ -27,6 +27,7 @@ func TestLifecycleVariablesRotateAtomically(t *testing.T) {
 		t.Fatal(err)
 	}
 	repo.SetSecretBox(oldBox)
+	snapshot := seedVariableRotationSnapshot(t, repo, oldBox)
 	key := make([]byte, 32)
 	key[0] = 1
 	newBox, err := secret.NewBox(key)
@@ -89,11 +90,21 @@ func TestLifecycleVariablesRotateAtomically(t *testing.T) {
 	if err := rotate(false); err == nil {
 		t.Fatal("corrupt ciphertext rotation succeeded")
 	}
+	savedSnapshot, err := repo.Queries.GetDeploymentVariableSnapshot(
+		t.Context(),
+		snapshot.DeploymentID,
+	)
+	if err != nil || savedSnapshot.Value != snapshot.Value {
+		t.Fatal("failed rotation changed deployment snapshot", err)
+	}
 	after, err := repo.Queries.GetLifecycleVariable(t.Context(), ids)
 	if err != nil || before.Value != after.Value {
 		t.Fatal("failed rotation changed earlier row", err)
 	}
-	if _, err := repo.Queries.DeleteLifecycleVariable(t.Context(), db.DeleteLifecycleVariableParams{ID: corrupt.ID, LifecycleID: lc.ID}); err != nil {
+	if _, err := repo.Queries.DeleteLifecycleVariable(
+		t.Context(),
+		db.DeleteLifecycleVariableParams{ID: corrupt.ID, LifecycleID: lc.ID},
+	); err != nil {
 		t.Fatal(err)
 	}
 	if err := rotate(true); err == nil {
@@ -101,6 +112,20 @@ func TestLifecycleVariablesRotateAtomically(t *testing.T) {
 	}
 	if err := rotate(false); err != nil {
 		t.Fatal(err)
+	}
+	savedSnapshot, err = repo.Queries.GetDeploymentVariableSnapshot(
+		t.Context(),
+		snapshot.DeploymentID,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshotPlain, err := newBox.Decrypt(savedSnapshot.Value)
+	if err != nil || snapshotPlain != "deployment-secret" {
+		t.Fatal("new key cannot recover deployment snapshot", err)
+	}
+	if _, err := oldBox.Decrypt(savedSnapshot.Value); err == nil {
+		t.Fatal("old key still decrypts deployment snapshot")
 	}
 	after, err = repo.Queries.GetLifecycleVariable(t.Context(), ids)
 	if err != nil {

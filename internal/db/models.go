@@ -258,6 +258,11 @@ type DeploymentStepSource struct {
 	CreatedAt              int64  `json:"created_at"`
 }
 
+type DeploymentVariableSnapshot struct {
+	DeploymentID int64  `json:"deployment_id"`
+	Value        string `json:"value"`
+}
+
 type DeploymentVerification struct {
 	DeploymentID   int64         `json:"deployment_id"`
 	Type           string        `json:"type"`

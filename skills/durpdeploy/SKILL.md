@@ -521,8 +521,13 @@ DELETE without the query parameter removes only the selected row.
 From highest to lowest priority:
 project environment, lifecycle environment, project unscoped, lifecycle
 unscoped. Removing a lifecycle stage excludes its scoped shared values from
-future snapshots. New releases, explicit refreshes, and new runbook versions
-snapshot the merged values; later shared edits never change existing snapshots.
+future deployments. Releases and runbook versions snapshot only project-owned
+variables. Each new deployment, re-run, rollback and runbook execution resolves
+the project's current lifecycle variables and scope, then captures encrypted
+values for that execution. No release refresh is needed after a shared edit.
+Queued, approval-waiting and active executions retain their captured values,
+including secrets for consistent log redaction. Historical releases that already
+contain merged values are not migrated; recreate them when upgrading.
 
 | Resource | Endpoints |
 |----------|-----------|

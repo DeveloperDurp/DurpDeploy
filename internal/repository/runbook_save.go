@@ -15,7 +15,7 @@ func (r *Repository) SaveRunbook(
 	ctx context.Context,
 	arg RunbookSave,
 ) (db.Runbook, db.RunbookVersion, error) {
-	variables, err := r.ProjectSnapshotVariables(ctx, arg.ProjectID)
+	variables, err := r.ListVariablesByProject(ctx, arg.ProjectID)
 	if err != nil {
 		return db.Runbook{}, db.RunbookVersion{}, fmt.Errorf(
 			"list variables: %w",

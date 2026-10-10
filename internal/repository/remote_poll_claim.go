@@ -230,18 +230,12 @@ func (r *Repository) remotePayloadSnapshot(
 	if err != nil {
 		return RemotePayloadSnapshot{}, fmt.Errorf("list claim steps: %w", err)
 	}
-	variables, err := q.ListReleaseVariablesByRelease(ctx, release.ID)
+	variables, err := r.deploymentVariables(ctx, q, deploymentID)
 	if err != nil {
 		return RemotePayloadSnapshot{}, fmt.Errorf(
 			"list claim variables: %w",
 			err,
 		)
-	}
-	for index := range variables {
-		variables[index], err = r.decryptReleaseVariable(variables[index])
-		if err != nil {
-			return RemotePayloadSnapshot{}, err
-		}
 	}
 	return RemotePayloadSnapshot{
 		Agent:            agent,

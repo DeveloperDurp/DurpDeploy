@@ -91,7 +91,7 @@ templ SharedLifecycleVariables(data LifecycleVariables) {
 				</summary>
 				@SharedVariableForm(data)
 			</details>
-			<p class="text-sm opacity-70">Changes apply to new releases and explicit refreshes. Environment overrides take precedence; project values win within the same scope.</p>
+			<p class="text-sm opacity-70">Changes apply to the next deployment or runbook execution, including existing releases. Environment overrides take precedence; project values win within the same scope.</p>
 		</section>
 	}
 }
@@ -117,7 +117,7 @@ templ SharedVariableScope(variable db.LifecycleVariable, envs []db.Environment) 
 templ SharedVariableActions(lifecycleID int64, variable db.LifecycleVariable) {
 	<div class="flex flex-wrap gap-2">
 		<a class="btn btn-xs whitespace-nowrap" href={ fmt.Sprintf("/lifecycles/%d/variables/%d/edit", lifecycleID, variable.ID) } hx-get={ fmt.Sprintf("/lifecycles/%d/variables/%d/edit", lifecycleID, variable.ID) } hx-target="#shared-variables" hx-swap="outerHTML" hx-boost="false" aria-label={ "Edit shared variable " + variable.Name }>Edit</a>
-		<button class="btn btn-error btn-xs whitespace-nowrap" hx-delete={ fmt.Sprintf("/lifecycles/%d/variables/%d", lifecycleID, variable.ID) } hx-target="#shared-variables" hx-swap="outerHTML" hx-confirm={ "Delete " + variable.Name + " for all projects using this lifecycle? Existing releases keep their saved value." } aria-label={ "Delete shared variable " + variable.Name }>Delete</button>
+		<button class="btn btn-error btn-xs whitespace-nowrap" hx-delete={ fmt.Sprintf("/lifecycles/%d/variables/%d", lifecycleID, variable.ID) } hx-target="#shared-variables" hx-swap="outerHTML" hx-confirm={ "Delete " + variable.Name + " for all projects using this lifecycle? New deployments will stop receiving this shared value. Active deployments keep their captured values." } aria-label={ "Delete shared variable " + variable.Name }>Delete</button>
 	</div>
 }
 

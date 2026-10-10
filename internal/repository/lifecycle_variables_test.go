@@ -2,6 +2,7 @@ package repository_test
 
 import (
 	"database/sql"
+	"strings"
 	"testing"
 
 	"durpdeploy/internal/db"
@@ -31,7 +32,13 @@ func TestLifecycleVariablesRunbookSnapshots(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := repo.Queries.SetProjectLifecycle(t.Context(), db.SetProjectLifecycleParams{ID: project.ID, LifecycleID: sql.NullInt64{Int64: lc.ID, Valid: true}}); err != nil {
+	if err := repo.Queries.SetProjectLifecycle(
+		t.Context(),
+		db.SetProjectLifecycleParams{
+			ID:          project.ID,
+			LifecycleID: sql.NullInt64{Int64: lc.ID, Valid: true},
+		},
+	); err != nil {
 		t.Fatal(err)
 	}
 	env, err := repo.Queries.CreateEnvironment(
@@ -92,36 +99,72 @@ func TestLifecycleVariablesRunbookSnapshots(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, test := range []struct {
-		release int64
-		want    string
-	}{{first.ReleaseID, "first-secret"}, {second.ReleaseID, "second-secret"}} {
+	var captured []int64
+	for _, releaseID := range []int64{first.ReleaseID, second.ReleaseID} {
 		stored, err := repo.Queries.ListReleaseVariablesByRelease(
 			t.Context(),
-			test.release,
+			releaseID,
 		)
-		if err != nil || len(stored) != 1 ||
-			stored[0].Value.String == test.want {
-			t.Fatal("snapshot ciphertext absent", err)
+		if err != nil || len(stored) != 0 {
+			t.Fatal("lifecycle variables saved in release", err)
 		}
-		plain, err := repo.ListReleaseVariablesByRelease(
+		result, err := repo.CreateDeployment(
 			t.Context(),
-			test.release,
+			db.CreateDeploymentParams{
+				ReleaseID: releaseID, EnvironmentID: env.ID, Status: "pending",
+			},
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		captured = append(captured, result.Deployment.ID)
+		snapshot, err := repo.Queries.GetDeploymentVariableSnapshot(
+			t.Context(),
+			result.Deployment.ID,
+		)
+		if err != nil || strings.Contains(snapshot.Value, "second-secret") {
+			t.Fatal("deployment snapshot not encrypted", err)
+		}
+		plain, err := repo.ListDeploymentVariables(
+			t.Context(),
+			result.Deployment.ID,
 		)
 		if err != nil {
 			t.Fatal(err)
 		}
 		resolved, err := runner.ResolveReleaseVariables(plain, env.ID)
-		if err != nil || len(resolved) != 1 || resolved[0].Value != test.want ||
+		if err != nil || len(resolved) != 1 ||
+			resolved[0].Value != "second-secret" ||
 			!resolved[0].Secret {
-			t.Fatal("snapshot changed", err)
+			t.Fatal(
+				"runbook execution did not resolve current shared value",
+				err,
+			)
 		}
 	}
-	if err := repo.Queries.DeleteLifecycleStage(t.Context(), stage.ID); err != nil {
+	input.Value.String = "third-secret"
+	if _, err := repo.SaveLifecycleVariable(t.Context(), input); err != nil {
 		t.Fatal(err)
 	}
-	merged, err := repo.ProjectSnapshotVariables(t.Context(), project.ID)
-	if err != nil || len(merged) != 0 {
+	for _, id := range captured {
+		plain, err := repo.ListDeploymentVariables(t.Context(), id)
+		if err != nil || len(plain) != 1 ||
+			plain[0].Value.String != "second-secret" {
+			t.Fatal("active execution changed after a shared edit", err)
+		}
+	}
+	if err := repo.Queries.DeleteLifecycleStage(
+		t.Context(),
+		stage.ID,
+	); err != nil {
+		t.Fatal(err)
+	}
+	merged, err := repo.InheritedVariables(
+		t.Context(),
+		db.Project{LifecycleID: sql.NullInt64{Int64: lc.ID, Valid: true}},
+		nil,
+	)
+	if err != nil || len(merged.Variables) != 0 {
 		t.Fatal("removed stage still inherited", err)
 	}
 	if _, err := repo.SaveLifecycleVariable(t.Context(), input); err == nil {

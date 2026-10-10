@@ -64,6 +64,11 @@ variables for global administrators, and lifecycle settings together.
 Back returns to the list. Save and Delete return there after they persist changes.
 Keep Delete last and preserve read-only viewer pages.
 
+Lifecycle variable edits apply to each new deployment or runbook execution,
+including existing releases. Project values remain release and runbook snapshots.
+Queued and active executions keep captured values.
+Explain this boundary in the editor and release page.
+
 Delete is the final edit section, after settings and members, with confirmation.
 No Delete control appears on creation forms or viewer pages. Step deletion returns
 focus to another Edit button or Add Step. The fullscreen script editor has no

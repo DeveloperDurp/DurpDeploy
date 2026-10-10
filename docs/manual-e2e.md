@@ -334,10 +334,14 @@ Choose **Override**, enter a project value and save to recreate the example.
 Global admins manage shared values; project deployers can override their own
 values and viewers see no write controls. Unassigned projects inherit nothing.
 
-Both retained `shared-v1` releases and successful deployments contain the
-original value even though the suite changed the lifecycle value before
-deployment. Shared changes affect new releases, explicit release refreshes and
-new runbook versions. Inspect the logs: the shared secret is redacted. To check
+Both retained `shared-v1` releases contain only project-owned variables. Their
+successful deployments use `shared-updated`, which the suite set after creating
+the releases. Change a shared variable from All stages to dev, then deploy the
+same release to another stage: the variable must be absent there. Deploy to dev:
+its current value must appear. No release refresh is needed. Re-runs, rollbacks
+and saved runbook versions also resolve current lifecycle variables when creating
+a new execution. Queued and active executions retain their captured values.
+Inspect the logs: the shared secret is redacted. To check
 environment precedence, add a lifecycle REGION override for the stage; it wins
 over an unscoped project override, while a project override for that same stage
 wins over the lifecycle value. These examples have no enabled schedules.

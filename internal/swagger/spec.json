@@ -4522,7 +4522,7 @@
         "tags": [
           "variables"
         ],
-        "summary": "Delete a shared variable. Existing release snapshots remain unchanged. Global admin only.",
+        "summary": "Delete a shared variable. Future deployments stop inheriting it; active deployments retain captured values. Global admin only.",
         "operationId": "deleteLifecycleVariable",
         "parameters": [
           {

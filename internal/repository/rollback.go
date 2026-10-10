@@ -146,7 +146,7 @@ func (r *Repository) CreateRollback(
 				if preview.RequiresApproval {
 					status = "pending_approval"
 				}
-				result, err = createDeploymentFromDeployment(ctx, q,
+				result, err = r.createDeploymentFromDeployment(ctx, q,
 					db.CreateDeploymentParams{
 						ReleaseID:     preview.TargetReleaseID,
 						EnvironmentID: preview.EnvironmentID, Status: status,

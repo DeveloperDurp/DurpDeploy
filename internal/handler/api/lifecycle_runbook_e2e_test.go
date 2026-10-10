@@ -129,8 +129,8 @@ printf 'snapshot=%s secret=%s\n' "$REGION" "$TOKEN"`
 		id    int64
 		value string
 	}{
-		{first.Version.ID, "shared-env"},
-		{second.Version.ID, "runbook-api"},
+		{first.Version.ID, "runbook-web"},
+		{second.Version.ID, "runbook-web"},
 		{webVersionID, "runbook-web"},
 	} {
 		var execution db.RunbookExecution

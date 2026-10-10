@@ -93,34 +93,3 @@ func (r *Repository) InheritedVariables(
 	}
 	return result, nil
 }
-
-// ProjectSnapshotVariables merges both owners without changing legacy local
-// ordering or reading shared values at deployment time.
-func (r *Repository) ProjectSnapshotVariables(
-	ctx context.Context,
-	projectID int64,
-) ([]db.Variable, error) {
-	project, err := r.Queries.GetProject(ctx, projectID)
-	if err != nil {
-		return nil, fmt.Errorf("get variable project: %w", err)
-	}
-	local, err := r.ListVariablesByProject(ctx, projectID)
-	if err != nil {
-		return nil, err
-	}
-	inherited, err := r.InheritedVariables(ctx, project, local)
-	if err != nil {
-		return nil, err
-	}
-	result := make([]db.Variable, 0, len(local)+len(inherited.Variables))
-	for _, variable := range inherited.Variables {
-		if variable.Override != nil {
-			continue
-		}
-		result = append(result, db.Variable{
-			ProjectID: projectID, Name: variable.Name, Value: variable.Value,
-			EnvironmentID: variable.EnvironmentID, Secret: variable.Secret,
-		})
-	}
-	return append(result, local...), nil
-}
