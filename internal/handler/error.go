@@ -3,12 +3,15 @@ package handler
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
 
 	"github.com/a-h/templ"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/jackc/pgx/v5/pgconn"
+	mssql "github.com/microsoft/go-mssqldb"
 
 	"durpdeploy/internal/httpstream"
 	"durpdeploy/views/pages"
@@ -134,6 +137,14 @@ func InternalErrorMiddleware(next http.Handler) http.Handler {
 }
 
 func IsUniqueViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return pgErr.Code == "23505"
+	}
+	var msErr mssql.Error
+	if errors.As(err, &msErr) {
+		return msErr.Number == 2601 || msErr.Number == 2627
+	}
 	return err != nil &&
 		strings.Contains(err.Error(), "UNIQUE constraint failed")
 }
