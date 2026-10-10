@@ -14,6 +14,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 
+	"durpdeploy/internal/testutil"
 	"durpdeploy/migrations"
 )
 
@@ -58,14 +59,8 @@ func newRemoteClaimTestDB(t *testing.T, name string) remoteClaimTestDB {
 			postgres.WithPassword("fixture-only"),
 			postgres.BasicWaitStrategies(),
 		)
+		testutil.CleanupContainer(t, container)
 		requireNoError(t, err, "start required PostgreSQL backend")
-		t.Cleanup(func() {
-			requireNoError(
-				t,
-				container.Terminate(context.Background()),
-				"remove PostgreSQL container",
-			)
-		})
 		dsn, err := container.ConnectionString(ctx, "sslmode=disable")
 		requireNoError(t, err, "PostgreSQL connection string")
 		return remoteClaimTestDB{
@@ -93,14 +88,8 @@ func newRemoteClaimTestDB(t *testing.T, name string) remoteClaimTestDB {
 				Started: true,
 			},
 		)
+		testutil.CleanupContainer(t, container)
 		requireNoError(t, err, "start required SQL Server backend")
-		t.Cleanup(func() {
-			requireNoError(
-				t,
-				container.Terminate(context.Background()),
-				"remove SQL Server container",
-			)
-		})
 		host, err := container.Host(ctx)
 		requireNoError(t, err, "SQL Server host")
 		port, err := container.MappedPort(ctx, "1433/tcp")

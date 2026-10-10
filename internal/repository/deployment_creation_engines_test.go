@@ -61,14 +61,10 @@ func newDeploymentCreationEngine(
 			postgres.WithPassword("fixture-only"),
 			postgres.BasicWaitStrategies(),
 		)
+		testutil.CleanupContainer(t, container)
 		if err != nil {
 			t.Fatalf("start required PostgreSQL backend: %v", err)
 		}
-		t.Cleanup(func() {
-			if err := container.Terminate(context.Background()); err != nil {
-				t.Errorf("remove PostgreSQL container: %v", err)
-			}
-		})
 		dsn, err := container.ConnectionString(ctx, "sslmode=disable")
 		if err != nil {
 			t.Fatal(err)

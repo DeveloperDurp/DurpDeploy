@@ -97,6 +97,16 @@ All applicable Go and end-to-end tests must pass before work is complete. Run
 the full relevant suites only at final verification; use focused tests while
 working. Do not treat focused tests as a substitute for final verification.
 
+Database fixtures must register `testutil.CleanupContainer(t, container)`
+immediately after creation, before checking its error: Testcontainers can
+return a live container together with a startup error. Cleanup uses its own
+bounded context and fails the test if removal fails. Use `make test` or
+`bash scripts/go_test.sh [go test arguments]` for local Go tests. The runner
+removes only its unique Testcontainers session on success, failure, timeout,
+or HUP/INT/TERM, including when Ryuk is disabled on rootless Podman. Plain
+`go test` relies on Ryuk for process-level cleanup; SIGKILL or machine failure
+cannot run shell traps. Running-server E2E examples and demos remain retained.
+
 Every scenario in `make e2e-test` must remain available for manual checks
 after the command exits. Retain its projects, environments, release snapshots,
 deployment history, templates, and test accounts. For destructive checks,
@@ -119,8 +129,8 @@ documented there changes, update that file in the same change.
 
 ```bash
 ./durpdeploy                       # listens on :8080 (hardcoded), creates durpdeploy.db in CWD
-go test -v -count=1 -timeout=20m ./...          # CI's exact command
-go test -run TestName ./internal/handler/...   # single test, single package
+bash scripts/go_test.sh -v -count=1 -timeout=20m ./...
+bash scripts/go_test.sh -run TestName ./internal/handler/...
 ./scripts/e2e_test.sh              # bash end-to-end: builds, runs server, curl happy/cancel/validation paths (~10s+)
 ```
 

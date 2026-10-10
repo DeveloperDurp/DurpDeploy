@@ -331,17 +331,22 @@ clean:
 
 # Go unit/integration tests (mirrors CI's exact command).
 # Fresh per-test SQL Server fixtures can exceed Go's default 10-minute limit.
-test: templ-generate
-	go test -v -count=1 -timeout=20m ./...
+test: templ-generate swagger-ui-copy
+	bash scripts/go_test.sh -v -count=1 -timeout=20m ./...
+
+.PHONY: go-test-cleanup-test
+go-test-cleanup-test:
+	bash scripts/go_test_cleanup_test.sh
+	bash scripts/go_test.sh -count=1 scripts/go_test_cleanup.go scripts/go_test_cleanup_test.go
 
 # One-command pre-push gate: repo-wide 80-col check, go vet, the full
 # test suite, and the clean-room E2E contracts. Engine tests only need
 # a working container provider; on rootless Podman set
 # XDG_RUNTIME_DIR to a directory whose docker.sock symlinks the podman
 # socket and export TESTCONTAINERS_RYUK_DISABLED=true.
-verify: golines-check templ-generate swagger-ui-copy e2e-test-isolated
+verify: golines-check templ-generate swagger-ui-copy e2e-test-isolated go-test-cleanup-test
 	go vet ./...
-	go test -count=1 -timeout=20m ./...
+	bash scripts/go_test.sh -count=1 -timeout=20m ./...
 
 # Read unresolved SonarCloud findings for a pull request. Requires SONAR_TOKEN.
 sonar-issues:
