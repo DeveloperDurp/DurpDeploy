@@ -17,18 +17,21 @@ import (
 
 // StepLog is the opt-in structured SSE payload; text streams keep their format.
 type StepLog struct {
-	ID        int64  `json:"id"`
-	Line      string `json:"line"`
-	Step      string `json:"step"`
-	StepIndex *int64 `json:"step_index"`
-	State     string `json:"state,omitempty"`
-	CreatedAt int64  `json:"created_at"`
+	ID               int64  `json:"id"`
+	Line             string `json:"line"`
+	Step             string `json:"step"`
+	StepIndex        *int64 `json:"step_index"`
+	State            string `json:"state,omitempty"`
+	CreatedAt        int64  `json:"created_at"`
+	DisplayTimestamp string `json:"display_timestamp"`
 }
 
 func StepLogFromRow(log db.DeploymentLog) StepLog {
 	event := StepLog{
 		ID: log.ID, Line: log.Line, Step: log.StepName.String,
 		State: log.StepState.String, CreatedAt: log.CreatedAt,
+		DisplayTimestamp: time.Unix(log.CreatedAt, 0).
+			Format("2006-01-02 15:04:05"),
 	}
 	if log.StepIndex.Valid {
 		event.StepIndex = &log.StepIndex.Int64

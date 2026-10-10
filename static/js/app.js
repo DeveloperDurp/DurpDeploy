@@ -745,7 +745,16 @@ Alpine.data('deploymentStepLogs', ({ url, status, view }) => ({
 	renderLogLine,
 	renderEntry(element, entry) {
 		renderLogLine(element, entry.line);
-		if (entry.step.includes(' @ ')) element.prepend(`[${entry.step}] `);
+		if (entry.step.includes(' @ ')) {
+			const step = document.createElement('span');
+			step.className = 'text-accent';
+			step.textContent = `[${entry.step}] `;
+			element.prepend(step);
+		}
+		const timestamp = document.createElement('span');
+		timestamp.className = 'text-gray-500';
+		timestamp.textContent = `[${entry.display_timestamp}] `;
+		element.prepend(timestamp);
 	},
 	url,
 	deploymentStatus: status,

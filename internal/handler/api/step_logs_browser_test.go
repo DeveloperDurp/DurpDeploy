@@ -17,7 +17,7 @@ func TestDeploymentStepLogsBrowserE2E(t *testing.T) {
 	f := newArtifactE2E(t)
 	for _, script := range []string{
 		"printf '<img src=x onerror=alert(1)>\\nfirst-only\\n'; sleep 8",
-		"sleep 8; printf 'second-only\\n'",
+		"printf 'second-only\\n'; sleep 8",
 	} {
 		f.api(t, "POST", f.base()+"/steps", map[string]any{
 			"name": "Same step name", "script_body": script,
@@ -78,6 +78,7 @@ func TestDeploymentStepLogsBrowserE2E(t *testing.T) {
 		t.Fatal("output escaped its step panel or became HTML")
 	}
 	browser.captureStepLogs(t, "second-running")
+	f.verifyStreamingLogTimestamp(t, browser, deployment)
 	browser.evaluate(
 		t,
 		`document.querySelector('[data-step-index="1"] summary').focus(); true`,
