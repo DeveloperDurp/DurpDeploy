@@ -76,7 +76,10 @@ func TestDeploymentStagingTransferAPIE2E(t *testing.T) {
 				t,
 				"POST",
 				base+"/variables",
-				map[string]string{"name": "SELECTED", "value": "selected"},
+				map[string]any{
+					"name": "SELECTED", "value": "selected",
+					"secret": scenario == "conflict",
+				},
 				201,
 			)
 			s.api(
@@ -132,7 +135,7 @@ func TestDeploymentStagingTransferAPIE2E(t *testing.T) {
 					case "identical":
 						script = `printf identical > "$DURPDEPLOY_STAGE_DIR/shared"`
 					case "conflict":
-						script = `printf "$LANG" > "$DURPDEPLOY_STAGE_DIR/shared"`
+						script = `mkdir -p "$DURPDEPLOY_STAGE_DIR/$SELECTED"; printf "$LANG" > "$DURPDEPLOY_STAGE_DIR/$SELECTED/shared"`
 					case "failure":
 						script = `printf partial > "$DURPDEPLOY_STAGE_DIR/partial"; exit 7`
 					case "assertion":
@@ -230,6 +233,9 @@ func TestDeploymentStagingTransferAPIE2E(t *testing.T) {
 			if scenario == "conflict" &&
 				!strings.Contains(logs, "conflicting staging changes") {
 				t.Fatalf("conflict missing in logs: %s", logs)
+			}
+			if scenario == "conflict" {
+				s.assertConflictNotificationsRedacted(t, deployment.ID, logs)
 			}
 			if want == "succeeded" && scenario != "isolation" &&
 				!strings.Contains(logs, "transfer-ok") {

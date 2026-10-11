@@ -15,6 +15,7 @@ import (
 
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/events"
 	"durpdeploy/internal/handler"
 	"durpdeploy/internal/runner"
 	"durpdeploy/internal/secret"
@@ -26,10 +27,11 @@ import (
 )
 
 type stagingE2E struct {
-	f           agentFixture
-	app         *httptest.Server
-	token       string
-	directories []string
+	f             agentFixture
+	app           *httptest.Server
+	token         string
+	directories   []string
+	notifications <-chan events.Event
 }
 
 func newStagingE2E(t *testing.T) *stagingE2E {
@@ -68,6 +70,10 @@ func newStagingE2EWithRuntime(t *testing.T, runtimeBinary string) *stagingE2E {
 		r = runner.NewWithPodmanBinaryForTest(f.repo, f.broker, runtimeBinary)
 	}
 	t.Cleanup(r.KillAll)
+	notifications := make(chan events.Event, 64)
+	bus := events.NewBus(f.repo)
+	bus.Register(stagingEventRecorder{notifications})
+	r.SetEventBus(bus)
 	if !r.ContainerRuntimeReady() {
 		t.Fatal("server container runtime is required")
 	}
@@ -109,7 +115,7 @@ func newStagingE2EWithRuntime(t *testing.T, runtimeBinary string) *stagingE2E {
 		),
 	)
 	t.Cleanup(app.Close)
-	s := &stagingE2E{f: f, app: app, token: token}
+	s := &stagingE2E{f: f, app: app, token: token, notifications: notifications}
 	s.startAgent(t, binary, "test-agent", f.identityDir)
 	directory := t.TempDir()
 	identity, err := agenttls.LoadOrCreate(directory, "https://second-agent")

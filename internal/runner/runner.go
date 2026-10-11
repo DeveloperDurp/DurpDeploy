@@ -222,7 +222,7 @@ func (r *DeploymentRunner) Run(
 				DeploymentID:  deploymentID,
 				ProjectID:     release.ProjectID,
 				EnvironmentID: environmentID,
-				Message:       message,
+				Message:       scrubber.Scrub(message),
 			},
 			true,
 		)
@@ -371,10 +371,10 @@ func (r *DeploymentRunner) Run(
 				r.failStep(ctx, runCtx, events.Event{
 					Type: events.DeploymentFailed, DeploymentID: deploymentID,
 					ProjectID: release.ProjectID, EnvironmentID: environmentID,
-					Message: fmt.Sprintf(
+					Message: scrubber.Scrub(fmt.Sprintf(
 						"Deployment #%d failed on %s: %v",
 						deploymentID, envName, err,
-					),
+					)),
 				}, false)
 				return
 			}
@@ -456,8 +456,8 @@ func (r *DeploymentRunner) Run(
 					DeploymentID:  deploymentID,
 					ProjectID:     release.ProjectID,
 					EnvironmentID: environmentID,
-					Message: "Deployment staging failed: " + errors.Join(err, writeErr).
-						Error(),
+					Message: scrubber.Scrub("Deployment staging failed: " +
+						errors.Join(err, writeErr).Error()),
 				}, true)
 				return
 			}
