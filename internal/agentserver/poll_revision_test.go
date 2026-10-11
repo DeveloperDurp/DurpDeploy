@@ -191,6 +191,23 @@ func TestWaitingPollCannotBorrowStagingCapability(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("stale unstaged poll did not return")
 	}
+	// A later unstaged request must not destroy the queued staged claim.
+	staleCtx, stopStale := context.WithCancel(t.Context())
+	stale := startConcurrentPoll(t, f, concurrentPollCall{
+		ctx:  staleCtx,
+		body: `{"protocol":"agent/1","agent_version":"stale-staging"}`,
+	})
+	waitPollVersion(t, f, "stale-staging")
+	stopStale()
+	<-stale
+	var waiting int
+	if err := f.repo.DB.QueryRowContext(
+		t.Context(),
+		"SELECT COUNT(*) FROM remote_step_runs WHERE deployment_id=? AND state='waiting'",
+		id,
+	).Scan(&waiting); err != nil || waiting != 1 {
+		t.Fatalf("stale poll invalidated staged queue: %d %v", waiting, err)
+	}
 	poll := decodePollResponse(
 		t,
 		postAgentStaging(t, f, agentproto.PollPath, pollBody),
