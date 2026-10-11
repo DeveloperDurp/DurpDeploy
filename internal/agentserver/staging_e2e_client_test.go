@@ -63,7 +63,10 @@ func (s *stagingE2E) wait(t *testing.T, id int64, want string) {
 	deadline := time.Now().Add(3 * time.Minute)
 	for {
 		var deployment struct{ Status string }
-		if err := json.Unmarshal(s.api(t, "GET", fmt.Sprintf("/deployments/%d", id), nil, 200), &deployment); err != nil {
+		if err := json.Unmarshal(
+			s.api(t, "GET", fmt.Sprintf("/deployments/%d", id), nil, 200),
+			&deployment,
+		); err != nil {
 			t.Fatal(err)
 		}
 		if deployment.Status == want {
@@ -88,4 +91,30 @@ func (s *stagingE2E) wait(t *testing.T, id int64, want string) {
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
+}
+
+func (s *stagingE2E) cancelRunningStaging(t *testing.T, deploymentID int64) {
+	t.Helper()
+	deadline := time.Now().Add(time.Minute)
+	for {
+		var started int
+		if err := s.f.repo.DB.QueryRow("SELECT COUNT(*) FROM remote_step_runs WHERE deployment_id=? AND state='started'", deploymentID).
+			Scan(&started); err != nil {
+			t.Fatal(err)
+		}
+		if started == 2 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("agents did not start")
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	s.api(
+		t,
+		"POST",
+		fmt.Sprintf("/deployments/%d/cancel", deploymentID),
+		nil,
+		200,
+	)
 }
