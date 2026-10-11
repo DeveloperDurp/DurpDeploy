@@ -29,6 +29,12 @@ Deploy the release and confirm that the detached process stops before the next s
 Repeat with a double-forked child and with deployment cancellation.
 Confirm that all logged child process IDs are absent after completion.
 
+Add a host step that moves its workspace outside the staging root.
+Confirm that publication fails and the moved directory contains no files.
+Repeat with a step that moves the entire staging root.
+If supervisor confirmation fails, restart the agent through its service manager.
+Confirm that restart cleanup purges moved staging directories before it sends the saved failed result.
+
 ## Releases with a deferred package pull
 
 1. Attach a package repository to a disposable project. Use a missing version
