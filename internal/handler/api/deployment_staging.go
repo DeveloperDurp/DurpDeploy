@@ -17,6 +17,7 @@ import (
 // Responses:
 //
 //	200: StagingListResponse
+//	400: body:BadRequestError
 //	401: body:UnauthorizedError
 //	403: body:ForbiddenError
 //	404: body:NotFoundError

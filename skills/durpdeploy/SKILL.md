@@ -569,6 +569,7 @@ Each snapshot permits 512 MiB of file content and 20,000 file and directory entr
 File modes and ownership are normalized during transfer.
 The server encrypts transfer snapshots at rest and restricts downloads to the assigned agent's live claim.
 Use `GET /api/v1/deployments/{id}/staging` to list active transfer metadata without file contents.
+Invalid deployment IDs return HTTP 400.
 This endpoint returns an empty array after cleanup.
 
 Each deployment starts with an empty directory. Files survive step completion

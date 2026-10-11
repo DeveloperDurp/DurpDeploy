@@ -3003,6 +3003,12 @@
           "200": {
             "$ref": "#/responses/StagingListResponse"
           },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
           "401": {
             "description": "Unauthorized error response.",
             "schema": {
