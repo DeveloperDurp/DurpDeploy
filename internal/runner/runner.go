@@ -361,7 +361,8 @@ func (r *DeploymentRunner) Run(
 						"cleanup_unconfirmed", false)
 					return
 				}
-				if errors.Is(err, errDeploymentCancelled) {
+				if errors.Is(err, errDeploymentCancelled) ||
+					(stagingFailed && runCtx.Err() != nil) {
 					r.finalizeCancellation(ctx, deploymentID)
 					return
 				}
