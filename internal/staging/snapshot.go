@@ -104,7 +104,7 @@ func Read(ctx context.Context, file *os.File) (Snapshot, error) {
 		total += header.Size
 		count.remaining = header.Size
 		hash := sha256.New()
-		if _, err := io.Copy(hash, reader); err != nil {
+		if _, err := io.CopyN(hash, reader, header.Size); err != nil {
 			return Snapshot{}, fmt.Errorf("read staging content: %w", err)
 		}
 		if !entry.Directory {

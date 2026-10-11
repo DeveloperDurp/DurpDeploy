@@ -22,6 +22,7 @@ import (
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/handler"
 	"durpdeploy/internal/runner"
+	"durpdeploy/internal/secret"
 	"durpdeploy/internal/server"
 	agentstate "github.com/DeveloperDurp/durpdeploy-agent/state"
 	agenttls "github.com/DeveloperDurp/durpdeploy-agent/transport"
@@ -47,6 +48,11 @@ func TestAgentContainerAPIE2E(t *testing.T) {
 	)
 	f := newAgentFixtureWithDSN(t, filepath.Join(t.TempDir(), "agent.db")+
 		"?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)", nil)
+	box, err := secret.NewBox(make([]byte, 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.repo.SetSecretBox(box)
 	state, err := agentstate.New(
 		f.server.URL,
 		[]agenttls.Fingerprint{f.serverIdentity.Fingerprint},
@@ -92,7 +98,8 @@ func TestAgentContainerAPIE2E(t *testing.T) {
 		args = append(args, fmt.Sprintf("--group-add=%d", stat.Gid))
 	}
 	args = append(args, image)
-	if output, err := exec.Command(runtime, args...).CombinedOutput(); err != nil {
+	if output, err := exec.Command(runtime, args...).
+		CombinedOutput(); err != nil {
 		t.Fatalf("start agent: %v: %s", err, output)
 	}
 	t.Cleanup(func() {
@@ -101,7 +108,8 @@ func TestAgentContainerAPIE2E(t *testing.T) {
 				CombinedOutput()
 			t.Logf("agent: %s", output)
 		}
-		if output, err := exec.Command(runtime, append(clientArgs, "rm", "--force", "--volumes", name)...).CombinedOutput(); err != nil {
+		if output, err := exec.Command(runtime, append(clientArgs, "rm", "--force", "--volumes", name)...).
+			CombinedOutput(); err != nil {
 			t.Errorf("remove agent: %v: %s", err, output)
 		}
 	})
@@ -120,7 +128,10 @@ func TestAgentContainerAPIE2E(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 	user, err := f.repo.Queries.CreateUser(t.Context(), db.CreateUserParams{
-		Email: "container@test.local", Name: "Container E2E", PasswordHash: "unused", Role: "admin",
+		Email:        "container@test.local",
+		Name:         "Container E2E",
+		PasswordHash: "unused",
+		Role:         "admin",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -129,9 +140,17 @@ func TestAgentContainerAPIE2E(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.repo.Queries.CreateApiToken(t.Context(), db.CreateApiTokenParams{
-		ID: "container-e2e", UserID: user.ID, Name: "container-e2e", TokenPrefix: prefix, TokenHash: hash, Scope: "global",
-	}); err != nil {
+	if _, err := f.repo.Queries.CreateApiToken(
+		t.Context(),
+		db.CreateApiTokenParams{
+			ID:          "container-e2e",
+			UserID:      user.ID,
+			Name:        "container-e2e",
+			TokenPrefix: prefix,
+			TokenHash:   hash,
+			Scope:       "global",
+		},
+	); err != nil {
 		t.Fatal(err)
 	}
 	deploymentRunner := runner.New(f.repo, f.broker)
@@ -185,15 +204,34 @@ func TestAgentContainerAPIE2E(t *testing.T) {
 		return data
 	}
 	var project, environment struct{ ID int64 }
-	if err := json.Unmarshal(request("POST", "/projects", map[string]string{"name": "remote-container"}, 201), &project); err != nil {
+	if err := json.Unmarshal(
+		request(
+			"POST",
+			"/projects",
+			map[string]string{"name": "remote-container"},
+			201,
+		),
+		&project,
+	); err != nil {
 		t.Fatal(err)
 	}
-	if err := json.Unmarshal(request("POST", "/environments", map[string]string{"name": "remote-container"}, 201), &environment); err != nil {
+	if err := json.Unmarshal(
+		request(
+			"POST",
+			"/environments",
+			map[string]string{"name": "remote-container"},
+			201,
+		),
+		&environment,
+	); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.repo.Queries.AddAgentEnvironmentLabel(t.Context(), db.AddAgentEnvironmentLabelParams{
-		AgentID: "test-agent", EnvironmentID: environment.ID,
-	}); err != nil {
+	if _, err := f.repo.Queries.AddAgentEnvironmentLabel(
+		t.Context(),
+		db.AddAgentEnvironmentLabelParams{
+			AgentID: "test-agent", EnvironmentID: environment.ID,
+		},
+	); err != nil {
 		t.Fatal(err)
 	}
 	base := fmt.Sprintf("/projects/%d", project.ID)
@@ -219,24 +257,48 @@ func TestAgentContainerAPIE2E(t *testing.T) {
 		{"bash", "docker.io/library/bash:5.2", `test "$SELECTED" = selected; test "$UNRELATED" = unrelated; printf 'all-ok\n'`, []string{}},
 	} {
 		request("POST", base+"/steps", map[string]any{
-			"name": step.interpreter, "script_body": step.script, "interpreter": step.interpreter,
-			"execution_target": "agent", "agent_execution_mode": "container", "container_image": step.image,
-			"variable_names": step.variables, "timeout_seconds": 120,
+			"name":                 step.interpreter,
+			"script_body":          step.script,
+			"interpreter":          step.interpreter,
+			"execution_target":     "agent",
+			"agent_execution_mode": "container",
+			"container_image":      step.image,
+			"variable_names":       step.variables,
+			"timeout_seconds":      120,
 		}, 201)
 	}
 	var release, deployment struct{ ID int64 }
-	if err := json.Unmarshal(request("POST", base+"/releases", map[string]string{"version": "v1"}, 201), &release); err != nil {
+	if err := json.Unmarshal(
+		request(
+			"POST",
+			base+"/releases",
+			map[string]string{"version": "v1"},
+			201,
+		),
+		&release,
+	); err != nil {
 		t.Fatal(err)
 	}
-	if err := json.Unmarshal(request("POST", base+"/deployments", map[string]int64{
-		"release_id": release.ID, "environment_id": environment.ID,
-	}, 201), &deployment); err != nil {
+	if err := json.Unmarshal(
+		request("POST", base+"/deployments", map[string]int64{
+			"release_id": release.ID, "environment_id": environment.ID,
+		}, 201),
+		&deployment,
+	); err != nil {
 		t.Fatal(err)
 	}
 	deadline = time.Now().Add(4 * time.Minute)
 	for {
 		var result struct{ Status string }
-		if err := json.Unmarshal(request("GET", fmt.Sprintf("/deployments/%d", deployment.ID), nil, 200), &result); err != nil {
+		if err := json.Unmarshal(
+			request(
+				"GET",
+				fmt.Sprintf("/deployments/%d", deployment.ID),
+				nil,
+				200,
+			),
+			&result,
+		); err != nil {
 			t.Fatal(err)
 		}
 		if result.Status == "succeeded" {
@@ -245,7 +307,17 @@ func TestAgentContainerAPIE2E(t *testing.T) {
 		if result.Status == "failed" ||
 			result.Status == "cleanup_unconfirmed" ||
 			time.Now().After(deadline) {
-			t.Fatalf("container deployment status=%s", result.Status)
+			logs := request(
+				"GET",
+				fmt.Sprintf("/deployments/%d/logs.txt", deployment.ID),
+				nil,
+				200,
+			)
+			t.Fatalf(
+				"container deployment status=%s logs=%s",
+				result.Status,
+				logs,
+			)
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
