@@ -47,6 +47,8 @@ jobs:
         run: make dev-secret-key-test
       - name: Test demo lifecycle safety
         run: make demo-test
+      - name: Test Go test container cleanup
+        run: make go-test-cleanup-test
 
   # ----- Dockerfile lint ---------------------------------------------------
   lint-dockerfile:

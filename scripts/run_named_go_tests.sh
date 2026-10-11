@@ -80,7 +80,7 @@ events=$(mktemp "${TMPDIR:-/tmp}/durpdeploy-go-test-events.XXXXXX")
 trap 'rm -f "$events"' EXIT
 
 set +e
-go test -json -v -count=1 "${race_flag[@]}" \
+bash "$repo_root/scripts/go_test.sh" -json -v -count=1 "${race_flag[@]}" \
 	-run "^(${tests_value})$" "${packages[@]}" | tee "$events"
 go_status=${PIPESTATUS[0]}
 set -e

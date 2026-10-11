@@ -37,17 +37,10 @@ func SQLServerDSN(t *testing.T) string {
 			},
 			Started: true,
 		})
+	CleanupContainer(t, container)
 	if err != nil {
 		t.Fatalf("start required SQL Server backend: %v", err)
 	}
-	t.Cleanup(func() {
-		cleanupCtx, cleanupCancel := context.WithTimeout(
-			context.Background(), time.Minute)
-		defer cleanupCancel()
-		if err := container.Terminate(cleanupCtx); err != nil {
-			t.Errorf("remove SQL Server container: %v", err)
-		}
-	})
 	host, err := container.Host(ctx)
 	if err != nil {
 		t.Fatal(err)

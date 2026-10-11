@@ -9,6 +9,7 @@ import (
 
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/migrate"
+	"durpdeploy/internal/testutil"
 )
 
 // TestPostgres_RepositoryWithTx verifies the repository (including
@@ -24,14 +25,10 @@ func TestPostgres_RepositoryWithTx(t *testing.T) {
 		postgres.WithPassword("postgres"),
 		postgres.BasicWaitStrategies(),
 	)
+	testutil.CleanupContainer(t, ctr)
 	if err != nil {
 		t.Skipf("could not start postgres container: %v", err)
 	}
-	t.Cleanup(func() {
-		if err := ctr.Terminate(context.Background()); err != nil {
-			t.Logf("terminate container: %v", err)
-		}
-	})
 
 	dsn, err := ctr.ConnectionString(ctx, "sslmode=disable")
 	if err != nil {
