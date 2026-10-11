@@ -72,6 +72,10 @@ func (r *DeploymentRunner) runRemoteStep(
 	ticker := time.NewTicker(250 * time.Millisecond)
 	defer ticker.Stop()
 	remaining := make(map[string]time.Duration)
+	transferred := make(map[string]time.Duration)
+	defer r.repo.ClearStagingTransfers(db.ListRemoteStepRunsForRunnerParams{
+		DeploymentID: request.deploymentID, StepIndex: request.stepIndex,
+	})
 	lastChecked := time.Now()
 	timedOut := false
 	operatorCancelled := false
@@ -151,7 +155,19 @@ func (r *DeploymentRunner) runRemoteStep(
 				}
 				// Maintenance pauses waiting targets, not issued execution.
 				if run.State != "waiting" || run.Draining == 0 {
-					budget -= elapsed
+					transferTime := r.repo.StagingTransferDuration(
+						db.GetStagingSnapshotParams{
+							DeploymentID: request.deploymentID,
+							StepIndex:    request.stepIndex,
+							Producer:     run.AgentID,
+						},
+						now,
+					)
+					budget -= max(
+						0,
+						elapsed-(transferTime-transferred[run.AgentID]),
+					)
+					transferred[run.AgentID] = transferTime
 				}
 				remaining[run.AgentID] = budget
 				if budget <= 0 {

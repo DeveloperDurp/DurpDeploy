@@ -564,6 +564,7 @@ Read the file through the same variable in a later step.
 The server automatically transfers all staging files between jobs, including jobs on different agents.
 Upgrade each participating agent to a build that reports `X-DurpDeploy-Staging: staging/1`.
 Older agents cannot receive these deployment jobs.
+Active staging requests do not consume the assigned run's step timeout.
 Each agent in a parallel step receives the same input snapshot.
 The server combines independent changes and deletions after every agent succeeds.
 Identical changes are accepted, but conflicting changes fail the deployment.

@@ -2,6 +2,15 @@
 
 ## Deployment staging transfer
 
+Run the transfer timeout API checks with the current server and agent builds:
+
+```bash
+AGENT_TEST_SOCKET=unix:///run/user/1000/podman/podman.sock DURPDEPLOY_AGENT_E2E_BINARY=/absolute/path/to/durpdeploy-agent bash scripts/go_test.sh -tags 'e2e agentstaging' -count=1 -timeout=5m -v -run '^TestDeploymentStagingTransferPausesStepTimeoutAPIE2E$' ./internal/agentserver
+```
+
+The download and upload checks delay transfers beyond the three-second step timeout.
+Both deployments must succeed. The slow script must fail. All three checks must confirm staging cleanup.
+
 Build both the server and a staging-capable agent.
 Assign two agents to the test environment.
 Give each agent a distinct selector label.

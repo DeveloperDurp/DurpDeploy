@@ -55,6 +55,14 @@ func (s *Server) DownloadStaging(w http.ResponseWriter, r *http.Request) {
 		writeStagingError(w, err)
 		return
 	}
+	finishTransfer := s.repository.BeginStagingTransfer(
+		db.GetStagingSnapshotParams{
+			DeploymentID: run.DeploymentID,
+			StepIndex:    run.StepIndex,
+			Producer:     run.AgentID,
+		},
+	)
+	defer finishTransfer()
 	stream, err := newStagingIO(w, r)
 	if err != nil {
 		slog.WarnContext(r.Context(), "configure staging transfer", "err", err)
@@ -113,6 +121,14 @@ func (s *Server) UploadStaging(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, staging.MaxArchive)
+	finishTransfer := s.repository.BeginStagingTransfer(
+		db.GetStagingSnapshotParams{
+			DeploymentID: run.DeploymentID,
+			StepIndex:    run.StepIndex,
+			Producer:     run.AgentID,
+		},
+	)
+	defer finishTransfer()
 	stream, err := newStagingIO(w, r)
 	if err != nil {
 		slog.WarnContext(r.Context(), "configure staging transfer", "err", err)

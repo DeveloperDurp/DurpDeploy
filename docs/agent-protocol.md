@@ -74,9 +74,11 @@ An upload returns `204` and accepts identical retries.
 A changed retry or expired claim returns `409`.
 An invalid TAR returns `422`, and an oversized body returns `413`.
 Only regular files and directories are accepted.
+The TAR root marker must be an empty directory.
 Each snapshot permits 512 MiB of contents, 20,000 entries, and a 544 MiB TAR body.
 The entry limit includes parent directories omitted from TAR headers.
 Staging transfers have no fixed total network deadline.
+Staging requests pause the assigned run's step timeout while they remain active.
 Both peers stop transfers after five minutes without network I/O progress.
 Each staging read and write receives a fresh socket deadline.
 

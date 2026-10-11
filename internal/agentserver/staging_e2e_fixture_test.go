@@ -5,6 +5,7 @@ package agentserver_test
 import (
 	"encoding/pem"
 	"fmt"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"os/exec"
@@ -39,6 +40,12 @@ func newStagingE2E(t *testing.T) *stagingE2E {
 }
 
 func newStagingE2EWithRuntime(t *testing.T, runtimeBinary string) *stagingE2E {
+	return newStagingE2EWithTransfers(t, runtimeBinary, nil)
+}
+
+func newStagingE2EWithTransfers(
+	t *testing.T, runtimeBinary string, wrap func(http.Handler) http.Handler,
+) *stagingE2E {
 	t.Helper()
 	binary := os.Getenv("DURPDEPLOY_AGENT_E2E_BINARY")
 	if binary == "" {
@@ -116,6 +123,9 @@ func newStagingE2EWithRuntime(t *testing.T, runtimeBinary string) *stagingE2E {
 	)
 	t.Cleanup(app.Close)
 	s := &stagingE2E{f: f, app: app, token: token, notifications: notifications}
+	if wrap != nil {
+		f.server.Config.Handler = wrap(f.server.Config.Handler)
+	}
 	s.startAgent(t, binary, "test-agent", f.identityDir)
 	directory := t.TempDir()
 	identity, err := agenttls.LoadOrCreate(directory, "https://second-agent")
