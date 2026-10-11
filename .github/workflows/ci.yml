@@ -357,7 +357,7 @@ jobs:
           go build -o "$RUNNER_TEMP/durpdeploy-staging-agent" github.com/DeveloperDurp/durpdeploy-agent/cmd/agent
           DURPDEPLOY_AGENT_E2E_BINARY="$RUNNER_TEMP/durpdeploy-staging-agent" \
             bash scripts/go_test.sh -tags 'e2e agentstaging' -count=1 \
-            -timeout=10m -v -run '^TestDeploymentStaging(Transfer|ImportFailure|TransferPausesStepTimeout)APIE2E$' ./internal/agentserver
+            -timeout=10m -v -run '^TestDeploymentStaging(Transfer|ImportFailure|TransferPausesStepTimeout|Audit)APIE2E$' ./internal/agentserver
 
   # ----- Artifact crash recovery and capacity ----------------------------------
   package-browser:

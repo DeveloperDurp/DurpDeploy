@@ -26,6 +26,9 @@ Repeat with identical changes and confirm that the deployment succeeds.
 Repeat with different file names and confirm that the next step receives both files.
 
 After success, failure, or cancellation, request `GET /api/v1/deployments/{id}/staging`.
+Request `GET /api/v1/admin/audit?action=publish_staging` with an administrator token.
+Read `details.String` as JSON.
+Check its `agent_id` for each agent that published staging.
 Confirm that the endpoint returns `[]`.
 Confirm that agent staging directories and deployment staging volumes are empty.
 Start another deployment and confirm that its staging directory contains no previous files.

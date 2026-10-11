@@ -71,6 +71,8 @@ Uploads also require the `started` state.
 Downloads return `Content-Length` and `X-Artifact-SHA256`.
 
 An upload returns `204` and accepts identical retries.
+Successful upload audits record the authenticated agent ID in the audit details JSON field `agent_id`.
+These records remain available after terminal staging cleanup.
 A changed retry or expired claim returns `409`.
 An invalid TAR returns `422`, and an oversized body returns `413`.
 Only regular files and directories are accepted.

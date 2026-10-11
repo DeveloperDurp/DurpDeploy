@@ -17,7 +17,13 @@ import (
 )
 
 func (s *Server) AuditWrites(next http.Handler) http.Handler {
-	return audit.Middleware(s.repository)(next)
+	return audit.Middleware(s.repository)(http.HandlerFunc(
+		func(w http.ResponseWriter, r *http.Request) {
+			agentID, _ := AgentIDFromContext(r.Context())
+			audit.SetAgentActor(r, agentID)
+			next.ServeHTTP(w, r)
+		},
+	))
 }
 
 func (s *Server) stagingClaim(

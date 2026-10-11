@@ -576,6 +576,8 @@ The server encrypts transfer snapshots at rest and restricts downloads to the as
 Use `GET /api/v1/deployments/{id}/staging` to list active transfer metadata without file contents.
 Invalid deployment IDs return HTTP 400.
 This endpoint returns an empty array after cleanup.
+Use `GET /api/v1/admin/audit?action=publish_staging` to identify staging publishers after cleanup.
+Each successful upload audit records the authenticated agent ID in its details JSON field `agent_id`.
 
 Each deployment starts with an empty directory. Files survive step completion
 and retries; failed attempts can leave partial files. Publish completed outputs
