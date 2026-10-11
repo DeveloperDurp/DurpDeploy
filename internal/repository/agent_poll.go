@@ -15,6 +15,15 @@ func (r *Repository) RecordAgentPoll(
 	heartbeat db.HeartbeatAgentParams,
 	request agentproto.PollRequest,
 ) (int64, error) {
+	return r.RecordAgentPollWithStaging(ctx, heartbeat, request, false)
+}
+
+func (r *Repository) RecordAgentPollWithStaging(
+	ctx context.Context,
+	heartbeat db.HeartbeatAgentParams,
+	request agentproto.PollRequest,
+	stagingSupported bool,
+) (int64, error) {
 	interpreters := request.SupportedInterpreters
 	modes := request.ExecutionModes
 	if request.Protocol == agentproto.AgentV1 {
@@ -35,6 +44,14 @@ func (r *Repository) RecordAgentPoll(
 			}
 			if changed == 0 {
 				return nil
+			}
+			if err := q.ClearAgentStagingCapability(ctx, heartbeat.ID); err != nil {
+				return err
+			}
+			if stagingSupported {
+				if err := q.AddAgentStagingCapability(ctx, heartbeat.ID); err != nil {
+					return err
+				}
 			}
 			if err := q.SetAgentProtocol(ctx, db.SetAgentProtocolParams{
 				ID: heartbeat.ID,

@@ -2982,6 +2982,59 @@
         ]
       }
     },
+    "/deployments/{id}/staging": {
+      "get": {
+        "tags": [
+          "deployments"
+        ],
+        "summary": "List active staging transfer metadata. File contents are omitted.",
+        "operationId": "listDeploymentStaging",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "name": "id",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/responses/StagingListResponse"
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "500": {
+            "description": "Server error response.",
+            "schema": {
+              "$ref": "#/definitions/ServerError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/deployments/{id}/status": {
       "get": {
         "produces": [
@@ -9962,6 +10015,35 @@
       "x-go-name": "swaggerDeploymentScheduleRequest",
       "x-go-package": "durpdeploy/internal/handler/api"
     },
+    "DeploymentStagingSnapshot": {
+      "type": "object",
+      "properties": {
+        "deployment_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "DeploymentID"
+        },
+        "producer": {
+          "type": "string",
+          "x-go-name": "Producer"
+        },
+        "sha256": {
+          "type": "string",
+          "x-go-name": "Sha256"
+        },
+        "size": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Size"
+        },
+        "step_index": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "StepIndex"
+        }
+      },
+      "x-go-package": "durpdeploy/internal/db"
+    },
     "DeploymentStatusResponse": {
       "type": "object",
       "title": "DeploymentStatusResponse is the status payload for GetDeploymentStatus.",
@@ -12875,6 +12957,15 @@
       "description": "",
       "schema": {
         "$ref": "#/definitions/TerraformReviewResponse"
+      }
+    },
+    "StagingListResponse": {
+      "description": "",
+      "schema": {
+        "type": "array",
+        "items": {
+          "$ref": "#/definitions/DeploymentStagingSnapshot"
+        }
       }
     }
   },

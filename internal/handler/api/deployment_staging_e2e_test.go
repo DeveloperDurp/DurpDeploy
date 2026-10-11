@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"durpdeploy/internal/artifact"
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/staging"
 )
 
 func stagingRuntime(t *testing.T, args ...string) string {
@@ -80,7 +80,7 @@ func TestDeploymentStagingCleanupE2E(t *testing.T) {
 stat -f -c '%%S %%b %%c' "$DURPDEPLOY_STAGE_DIR" | awk '{ if ($1 * $2 != %d || $3 != %d) exit 1 }'
 printf staged > "$DURPDEPLOY_STAGE_DIR/file"
 printf 'stage-ready\n'
-`, artifact.MaxExtracted+int64(artifact.MaxFiles)*int64(os.Getpagesize()), artifact.MaxStagingNodes+1)
+			`, staging.MaxBytes+int64(staging.MaxFiles)*int64(os.Getpagesize()), 2*(staging.MaxFiles+1))
 			switch terminal {
 			case "failed":
 				script += "exit 7\n"

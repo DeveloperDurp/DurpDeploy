@@ -8,13 +8,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
-
 	"durpdeploy/internal/migrate"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/testutil"
+
+	"github.com/testcontainers/testcontainers-go"
+	"github.com/testcontainers/testcontainers-go/modules/postgres"
+	"github.com/testcontainers/testcontainers-go/wait"
 )
 
 func TestDispatchDatabaseParity(t *testing.T) {
@@ -106,6 +106,7 @@ func TestDispatchDatabaseParity(t *testing.T) {
 			runRemoteAtomicity(t, r)
 			runRemoteStepStartEligibility(t, r)
 			runProjectMembershipIntegerContract(t, r)
+			runStagingStorageParity(t, r)
 		})
 	}
 }

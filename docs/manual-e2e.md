@@ -1,5 +1,28 @@
 # Manual checks after `make e2e-test`
 
+## Deployment staging transfer
+
+Build both the server and a staging-capable agent.
+Assign two agents to the test environment.
+Give each agent a distinct selector label.
+Create a deployment with a server container step that writes a file under `DURPDEPLOY_STAGE_DIR`.
+Add an agent host step that reads this file and writes another file.
+Add a container step on the second agent that reads both files.
+Add a server container step that reads the final staging files.
+Deploy the release and confirm that every step succeeds.
+
+Create a parallel agent step that changes the same file differently on each agent.
+Deploy this release and confirm that the deployment fails with `conflicting staging changes` in its logs.
+Repeat with identical changes and confirm that the deployment succeeds.
+Repeat with different file names and confirm that the next step receives both files.
+
+After success, failure, or cancellation, request `GET /api/v1/deployments/{id}/staging`.
+Confirm that the endpoint returns `[]`.
+Confirm that agent staging directories and deployment staging volumes are empty.
+Start another deployment and confirm that its staging directory contains no previous files.
+
+Use the isolated API suite in `docs/deploy.md` to repeat these checks automatically.
+
 ## Releases with a deferred package pull
 
 1. Attach a package repository to a disposable project. Use a missing version

@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"durpdeploy/internal/runner"
+
 	"github.com/DeveloperDurp/durpdeploy-agent/executor"
 	agentpayload "github.com/DeveloperDurp/durpdeploy-agent/payload"
 	agentproto "github.com/DeveloperDurp/durpdeploy-agent/protocol"
@@ -18,6 +19,7 @@ type Payload struct {
 }
 
 type ReleaseSnapshot struct {
+	Staging   bool            `json:"staging,omitempty"`
 	ID        int64           `json:"id"`
 	ProjectID int64           `json:"project_id"`
 	Version   string          `json:"version"`

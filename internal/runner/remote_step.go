@@ -31,10 +31,12 @@ func (r *DeploymentRunner) runRemoteStep(
 		return err
 	}
 	defer func() {
-		request.logWriter.finishState(
-			result,
-			errors.Is(result, errDeploymentCancelled),
-		)
+		if result != nil {
+			request.logWriter.finishState(
+				result,
+				errors.Is(result, errDeploymentCancelled),
+			)
+		}
 	}()
 	created, err := r.repo.QueueRemoteStepRuns(
 		ctx, request.deploymentID, request.stepIndex,
@@ -48,7 +50,7 @@ func (r *DeploymentRunner) runRemoteStep(
 			selectedInterpreter = "bash"
 		}
 		message := fmt.Sprintf(
-			"step %q: no compatible agents support interpreter %q and match the environment and labels",
+			"step %q: no compatible agents support interpreter %q and match the environment, labels, and staging/1 capability; upgrade participating agents",
 			request.step.Name,
 			selectedInterpreter,
 		)

@@ -13,6 +13,7 @@ import (
 )
 
 type RemotePayloadSnapshot struct {
+	Staging               bool
 	Agent                 db.Agent
 	Deployment            db.Deployment
 	Release               db.Release
