@@ -35,7 +35,7 @@ WHERE s.execution_target = 'agent' AND NOT EXISTS (
       AND NOT EXISTS (SELECT 1 FROM agent_labels owned
           WHERE owned.agent_id = a.id AND lower(owned.label) = lower(wanted.label))
 ) AND (NOT EXISTS (SELECT 1 FROM deployment_staging_snapshots stage
-    WHERE stage.deployment_id = s.deployment_id AND stage.step_index = s.step_index AND stage.producer = '')
+    WHERE stage.deployment_id = s.deployment_id AND stage.step_index = s.step_index AND length(stage.producer) = 0)
     OR EXISTS (SELECT 1 FROM agent_staging_capabilities stage WHERE stage.agent_id = a.id));
 
 -- +goose Down
