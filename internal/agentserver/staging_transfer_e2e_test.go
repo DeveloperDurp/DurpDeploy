@@ -146,7 +146,7 @@ func TestDeploymentStagingTransferAPIE2E(t *testing.T) {
 					case "renamed-root":
 						script = `root=$(dirname "$(dirname "$DURPDEPLOY_STAGE_DIR")"); mv "$root" "$(dirname "$root")/retained"`
 					case "escaped-root-workspace":
-						script = `root=$(dirname "$(dirname "$DURPDEPLOY_STAGE_DIR")"); mv "$DURPDEPLOY_STAGE_DIR" "$(dirname "$root")/retained"`
+						script = `root=$(dirname "$(dirname "$DURPDEPLOY_STAGE_DIR")"); mv "$DURPDEPLOY_STAGE_DIR" "$(dirname "$root")/retained-workspace"`
 					case "background-writer":
 						script = `(sleep 2; mkdir -p "$DURPDEPLOY_STAGE_DIR"; printf retained > "$DURPDEPLOY_STAGE_DIR/retained") >/dev/null 2>&1 &`
 					case "detached-writer":

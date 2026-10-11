@@ -68,8 +68,12 @@ func (s *stagingE2E) assertTransferPurged(
 		}
 		if scenario == "renamed-root" ||
 			scenario == "escaped-root-workspace" {
+			retained := "retained"
+			if scenario == "escaped-root-workspace" {
+				retained = "retained-workspace"
+			}
 			entries, err := os.ReadDir(
-				filepath.Join(directory, "retained"),
+				filepath.Join(directory, retained),
 			)
 			if os.IsNotExist(err) {
 				continue
