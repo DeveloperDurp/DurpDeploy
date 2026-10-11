@@ -55,6 +55,17 @@ func (s *Server) DownloadStaging(w http.ResponseWriter, r *http.Request) {
 		writeStagingError(w, err)
 		return
 	}
+	stream, err := newStagingIO(w, r)
+	if err != nil {
+		slog.WarnContext(r.Context(), "configure staging transfer", "err", err)
+		writeStagingError(w, err)
+		return
+	}
+	defer func() {
+		if err := stream.finish(); err != nil {
+			slog.WarnContext(r.Context(), "finish staging transfer", "err", err)
+		}
+	}()
 	key := db.GetStagingSnapshotParams{
 		DeploymentID: run.DeploymentID,
 		StepIndex:    run.StepIndex,
@@ -78,7 +89,7 @@ func (s *Server) DownloadStaging(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Content-Length", strconv.FormatInt(meta.Size, 10))
 	w.Header().Set("X-Artifact-SHA256", meta.Sha256)
-	if _, err := io.Copy(w, file); err != nil {
+	if _, err := io.Copy(stream, file); err != nil {
 		slog.WarnContext(r.Context(), "send staging snapshot", "err", err)
 	}
 }
@@ -101,14 +112,25 @@ func (s *Server) UploadStaging(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(413)
 		return
 	}
+	r.Body = http.MaxBytesReader(w, r.Body, staging.MaxArchive)
+	stream, err := newStagingIO(w, r)
+	if err != nil {
+		slog.WarnContext(r.Context(), "configure staging transfer", "err", err)
+		writeStagingError(w, err)
+		return
+	}
+	defer func() {
+		if err := stream.finish(); err != nil {
+			slog.WarnContext(r.Context(), "finish staging transfer", "err", err)
+		}
+	}()
 	file, err := artifact.OpenGateSpool()
 	if err != nil {
 		writeStagingError(w, err)
 		return
 	}
 	defer file.Close()
-	r.Body = http.MaxBytesReader(w, r.Body, staging.MaxArchive)
-	if _, err := io.Copy(file, r.Body); err != nil {
+	if _, err := io.Copy(file, stream); err != nil {
 		var tooLarge *http.MaxBytesError
 		if errors.As(err, &tooLarge) {
 			w.WriteHeader(413)
