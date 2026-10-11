@@ -14,7 +14,7 @@ import (
 
 func TestDeploymentStagingTransferAPIE2E(t *testing.T) {
 	s := newStagingE2E(t)
-	for _, scenario := range []string{"handoff", "fanout", "identical", "conflict", "failure", "cancel", "isolation", "assertion", "permissions", "capacity"} {
+	for _, scenario := range []string{"handoff", "fanout", "identical", "conflict", "failure", "cancel", "isolation", "assertion", "permissions", "renamed-directory", "capacity"} {
 		t.Run(scenario, func(t *testing.T) {
 			var project, environment struct{ ID int64 }
 			decode := func(data []byte, target any) {
@@ -109,10 +109,25 @@ func TestDeploymentStagingTransferAPIE2E(t *testing.T) {
 					`test ! -e "$DURPDEPLOY_STAGE_DIR/seed"; test ! -e "$DURPDEPLOY_STAGE_DIR/from-agent"; echo isolated`,
 				)
 			} else {
-				add("local", "", "", `printf seed > "$DURPDEPLOY_STAGE_DIR/seed"; printf delete > "$DURPDEPLOY_STAGE_DIR/delete-me"`)
+				add(
+					"local",
+					"",
+					"",
+					`printf seed > "$DURPDEPLOY_STAGE_DIR/seed"; printf delete > "$DURPDEPLOY_STAGE_DIR/delete-me"`,
+				)
 				if scenario == "handoff" {
-					add("agent", "host", "test-agent", `test "$SELECTED" = selected; test "${UNRELATED-unset}" = unset; test "$(cat "$DURPDEPLOY_STAGE_DIR/seed")" = seed; printf agent > "$DURPDEPLOY_STAGE_DIR/from-agent"; rm "$DURPDEPLOY_STAGE_DIR/delete-me"`)
-					add("agent", "container", "second-agent", `test "$(cat "$DURPDEPLOY_STAGE_DIR/from-agent")" = agent; test ! -e "$DURPDEPLOY_STAGE_DIR/delete-me"; printf container > "$DURPDEPLOY_STAGE_DIR/from-container"`)
+					add(
+						"agent",
+						"host",
+						"test-agent",
+						`test "$SELECTED" = selected; test "${UNRELATED-unset}" = unset; test "$(cat "$DURPDEPLOY_STAGE_DIR/seed")" = seed; printf agent > "$DURPDEPLOY_STAGE_DIR/from-agent"; rm "$DURPDEPLOY_STAGE_DIR/delete-me"`,
+					)
+					add(
+						"agent",
+						"container",
+						"second-agent",
+						`test "$(cat "$DURPDEPLOY_STAGE_DIR/from-agent")" = agent; test ! -e "$DURPDEPLOY_STAGE_DIR/delete-me"; printf container > "$DURPDEPLOY_STAGE_DIR/from-container"`,
+					)
 				} else {
 					script := `test "$(cat "$DURPDEPLOY_STAGE_DIR/seed")" = seed; printf "$LANG" > "$DURPDEPLOY_STAGE_DIR/$LANG"`
 					switch scenario {
@@ -126,6 +141,8 @@ func TestDeploymentStagingTransferAPIE2E(t *testing.T) {
 						script = `test "$(cat "$DURPDEPLOY_STAGE_DIR/seed")" = wrong; echo assertion-missed`
 					case "permissions":
 						script = `mkdir -p "$DURPDEPLOY_STAGE_DIR/locked/nested"; printf secret > "$DURPDEPLOY_STAGE_DIR/locked/nested/data"; chmod 000 "$DURPDEPLOY_STAGE_DIR/locked/nested" "$DURPDEPLOY_STAGE_DIR/locked"; exit 7`
+					case "renamed-directory":
+						script = `mv "$DURPDEPLOY_STAGE_DIR" "$DURPDEPLOY_STAGE_DIR-renamed"; mkdir "$DURPDEPLOY_STAGE_DIR"; printf replacement > "$DURPDEPLOY_STAGE_DIR/seed"`
 					case "cancel":
 						script = `printf partial > "$DURPDEPLOY_STAGE_DIR/partial"; sleep 90`
 					}
@@ -170,14 +187,15 @@ func TestDeploymentStagingTransferAPIE2E(t *testing.T) {
 			want := "succeeded"
 			if scenario == "conflict" || scenario == "failure" ||
 				scenario == "assertion" ||
-				scenario == "permissions" {
+				scenario == "permissions" || scenario == "renamed-directory" {
 				want = "failed"
 			}
 			if scenario == "cancel" {
 				deadline := time.Now().Add(time.Minute)
 				for {
 					var started int
-					if err := s.f.repo.DB.QueryRow("SELECT COUNT(*) FROM remote_step_runs WHERE deployment_id=? AND state='started'", deployment.ID).Scan(&started); err != nil {
+					if err := s.f.repo.DB.QueryRow("SELECT COUNT(*) FROM remote_step_runs WHERE deployment_id=? AND state='started'", deployment.ID).
+						Scan(&started); err != nil {
 						t.Fatal(err)
 					}
 					if started == 2 {
@@ -220,7 +238,15 @@ func TestDeploymentStagingTransferAPIE2E(t *testing.T) {
 				!strings.Contains(logs, "transfer-ok") {
 				t.Fatalf("final step missing: %s", logs)
 			}
-			if data := string(s.api(t, "GET", fmt.Sprintf("/deployments/%d/staging", deployment.ID), nil, 200)); strings.TrimSpace(
+			if data := string(
+				s.api(
+					t,
+					"GET",
+					fmt.Sprintf("/deployments/%d/staging", deployment.ID),
+					nil,
+					200,
+				),
+			); strings.TrimSpace(
 				data,
 			) != "[]" {
 				t.Fatalf("staging retained: %s", data)
