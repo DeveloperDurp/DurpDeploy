@@ -82,7 +82,8 @@ func Read(ctx context.Context, file *os.File) (Snapshot, error) {
 			header.Size == 0 {
 			continue
 		}
-		if !fs.ValidPath(name) || strings.ContainsAny(name, "\\\x00") ||
+		if name == "." || !fs.ValidPath(name) ||
+			strings.ContainsAny(name, "\\\x00") ||
 			len(name) > 4096 ||
 			seen[name] {
 			return Snapshot{}, ErrInvalid
