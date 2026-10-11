@@ -596,6 +596,8 @@ contract for local execution.
 
 The server purges transfer snapshots when the deployment succeeds, fails, or is canceled.
 Agents remove their private staging files before reporting completion or cancellation.
+Host jobs stop all remaining descendants before transfer, retry, or cleanup, including detached processes.
+If process cleanup cannot be confirmed, the agent retains staging and exits for service-wide cleanup.
 Staging is not shared between deployments or runbooks.
 Existing local staging remains available within a runbook execution.
 Staging is not durable storage for an approval pause or restart.

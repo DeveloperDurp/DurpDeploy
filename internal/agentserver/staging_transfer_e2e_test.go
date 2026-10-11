@@ -7,14 +7,18 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
+
+	agentexec "github.com/DeveloperDurp/durpdeploy-agent/executor"
 )
 
 func TestDeploymentStagingTransferAPIE2E(t *testing.T) {
 	s := newStagingE2E(t)
-	for _, scenario := range []string{"handoff", "fanout", "identical", "conflict", "failure", "cancel", "isolation", "assertion", "permissions", "renamed-directory", "escaped-directory", "background-writer", "cleanup-recovery", "capacity"} {
+	for _, scenario := range []string{"handoff", "fanout", "identical", "conflict", "failure", "cancel", "isolation", "assertion", "permissions", "renamed-directory", "escaped-directory", "background-writer", "detached-writer", "cleanup-recovery", "capacity"} {
 		t.Run(scenario, func(t *testing.T) {
 			var project, environment struct{ ID int64 }
 			decode := func(data []byte, target any) {
@@ -147,6 +151,8 @@ func TestDeploymentStagingTransferAPIE2E(t *testing.T) {
 						script = `mv "$DURPDEPLOY_STAGE_DIR" "$(dirname "$(dirname "$DURPDEPLOY_STAGE_DIR")")/retained"`
 					case "background-writer":
 						script = `(sleep 2; mkdir -p "$DURPDEPLOY_STAGE_DIR"; printf retained > "$DURPDEPLOY_STAGE_DIR/retained") >/dev/null 2>&1 &`
+					case "detached-writer":
+						script = `setsid bash -c 'echo $$ > "$DURPDEPLOY_STAGE_DIR/group"; (echo "$BASHPID" > "$DURPDEPLOY_STAGE_DIR/child"; sleep 30) &' >/dev/null 2>&1 & while test ! -s "$DURPDEPLOY_STAGE_DIR/group" || test ! -s "$DURPDEPLOY_STAGE_DIR/child"; do sleep 0.01; done; echo "detached-group=$(cat "$DURPDEPLOY_STAGE_DIR/group")"; echo "detached-child=$(cat "$DURPDEPLOY_STAGE_DIR/child")"; rm "$DURPDEPLOY_STAGE_DIR/group" "$DURPDEPLOY_STAGE_DIR/child"`
 					case "cleanup-recovery":
 						script = `printf retained > "$DURPDEPLOY_STAGE_DIR/retained"; chmod 000 "$(dirname "$(dirname "$DURPDEPLOY_STAGE_DIR")")"; exit 7`
 					case "cancel":
@@ -237,6 +243,32 @@ func TestDeploymentStagingTransferAPIE2E(t *testing.T) {
 					200,
 				),
 			)
+			if scenario == "detached-writer" {
+				groups := regexp.MustCompile(`detached-group=([0-9]+)`).
+					FindAllStringSubmatch(logs, -1)
+				for _, group := range groups {
+					pid, err := strconv.Atoi(group[1])
+					if err != nil || pid <= 0 {
+						t.Fatal("invalid detached group", group)
+					}
+					t.Cleanup(func() { agentexec.KillProcessGroup(pid) })
+				}
+				children := regexp.MustCompile(`detached-child=([0-9]+)`).
+					FindAllStringSubmatch(logs, -1)
+				if len(children) != 2 || len(groups) != 2 {
+					t.Fatalf("missing detached child evidence: %s", logs)
+				}
+				for _, child := range children {
+					_, err := os.Stat("/proc/" + child[1] + "/stat")
+					if !os.IsNotExist(err) {
+						t.Fatalf(
+							"completed deployment retained detached child: %s %v",
+							child[1],
+							err,
+						)
+					}
+				}
+			}
 			if scenario == "assertion" &&
 				strings.Contains(logs, "assertion-missed") {
 				t.Fatal("failed assertion was ignored")

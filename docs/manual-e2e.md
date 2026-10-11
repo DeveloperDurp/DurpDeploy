@@ -23,6 +23,12 @@ Start another deployment and confirm that its staging directory contains no prev
 
 Use the isolated API suite in `docs/deploy.md` to repeat these checks automatically.
 
+Add a host step that starts a detached writer with `setsid` and then exits.
+Log the detached child's process ID before the step exits.
+Deploy the release and confirm that the detached process stops before the next step starts.
+Repeat with a double-forked child and with deployment cancellation.
+Confirm that all logged child process IDs are absent after completion.
+
 ## Releases with a deferred package pull
 
 1. Attach a package repository to a disposable project. Use a missing version
