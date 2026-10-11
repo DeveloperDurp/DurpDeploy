@@ -350,7 +350,9 @@ func (r *DeploymentRunner) Run(
 			}
 			if err != nil {
 				if stagingFailed {
-					if _, logErr := logWriter.Write([]byte(fmt.Sprintf("step %q: %v\n", step.Name, err))); logErr != nil {
+					if _, logErr := logWriter.Write(
+						[]byte(fmt.Sprintf("step %q: %v\n", step.Name, err)),
+					); logErr != nil {
 						slog.Error("persist staging failure", "err", logErr)
 					}
 					logWriter.Flush()
@@ -448,13 +450,7 @@ func (r *DeploymentRunner) Run(
 		if handoff.volume == "" {
 			handoff, err = r.stageDeployment(runCtx, deploymentID, envMap)
 			if err != nil {
-				_, writeErr := logWriter.Write([]byte(fmt.Sprintf(
-					"step %q: staging failed before execution: %v\n",
-					step.Name,
-					err,
-				)))
-				logWriter.Flush()
-				logWriter.finishState(err, runCtx.Err() != nil)
+				writeErr := logWriter.failStaging(err, runCtx.Err() != nil)
 				r.failStep(ctx, runCtx, events.Event{
 					Type:          events.DeploymentFailed,
 					DeploymentID:  deploymentID,
@@ -468,7 +464,12 @@ func (r *DeploymentRunner) Run(
 		}
 		maxAttempts := int(step.MaxRetries) + 1
 		if transferred != nil {
-			if err := r.importRemoteStaging(runCtx, handoff, transferred); err != nil {
+			if err := r.importRemoteStaging(
+				runCtx,
+				handoff,
+				transferred,
+			); err != nil {
+				_ = logWriter.failStaging(err, runCtx.Err() != nil)
 				r.failUnlessCancelled(ctx, runCtx, deploymentID)
 				return
 			}

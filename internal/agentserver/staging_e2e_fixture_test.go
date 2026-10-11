@@ -33,6 +33,10 @@ type stagingE2E struct {
 }
 
 func newStagingE2E(t *testing.T) *stagingE2E {
+	return newStagingE2EWithRuntime(t, "")
+}
+
+func newStagingE2EWithRuntime(t *testing.T, runtimeBinary string) *stagingE2E {
 	t.Helper()
 	binary := os.Getenv("DURPDEPLOY_AGENT_E2E_BINARY")
 	if binary == "" {
@@ -60,6 +64,9 @@ func newStagingE2E(t *testing.T) *stagingE2E {
 	}
 	f.repo.SetSecretBox(box)
 	r := runner.New(f.repo, f.broker)
+	if runtimeBinary != "" {
+		r = runner.NewWithPodmanBinaryForTest(f.repo, f.broker, runtimeBinary)
+	}
 	t.Cleanup(r.KillAll)
 	if !r.ContainerRuntimeReady() {
 		t.Fatal("server container runtime is required")
@@ -80,7 +87,17 @@ func newStagingE2E(t *testing.T) *stagingE2E {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.repo.Queries.CreateApiToken(t.Context(), db.CreateApiTokenParams{ID: "staging-e2e", UserID: user.ID, Name: "staging-e2e", TokenPrefix: prefix, TokenHash: hash, Scope: "global"}); err != nil {
+	if _, err := f.repo.Queries.CreateApiToken(
+		t.Context(),
+		db.CreateApiTokenParams{
+			ID:          "staging-e2e",
+			UserID:      user.ID,
+			Name:        "staging-e2e",
+			TokenPrefix: prefix,
+			TokenHash:   hash,
+			Scope:       "global",
+		},
+	); err != nil {
 		t.Fatal(err)
 	}
 	app := httptest.NewServer(
@@ -107,10 +124,21 @@ func newStagingE2E(t *testing.T) *stagingE2E {
 			},
 		),
 	)
-	if _, err := f.repo.DB.ExecContext(t.Context(), `INSERT INTO agents(id,name,endpoint,status,certificate_pem,certificate_fingerprint,encrypted_identity) VALUES('second-agent','second','https://second-agent','active',?,?,'fixture')`, cert, identity.Fingerprint.String()); err != nil {
+	if _, err := f.repo.DB.ExecContext(
+		t.Context(),
+		`INSERT INTO agents(id,name,endpoint,status,certificate_pem,certificate_fingerprint,encrypted_identity) VALUES('second-agent','second','https://second-agent','active',?,?,'fixture')`,
+		cert,
+		identity.Fingerprint.String(),
+	); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.repo.DB.ExecContext(t.Context(), `INSERT INTO agent_pairings(agent_id,pairing_code_hash,agent_public_identity,agent_pin,state,expires_at,paired_at,server_public_identity,server_pin,encrypted_identity) VALUES('second-agent',randomblob(32),?,?,'paired',1,1,'fixture',?,'fixture')`, cert, identity.Fingerprint.String(), f.serverIdentity.Fingerprint.String()); err != nil {
+	if _, err := f.repo.DB.ExecContext(
+		t.Context(),
+		`INSERT INTO agent_pairings(agent_id,pairing_code_hash,agent_public_identity,agent_pin,state,expires_at,paired_at,server_public_identity,server_pin,encrypted_identity) VALUES('second-agent',randomblob(32),?,?,'paired',1,1,'fixture',?,'fixture')`,
+		cert,
+		identity.Fingerprint.String(),
+		f.serverIdentity.Fingerprint.String(),
+	); err != nil {
 		t.Fatal(err)
 	}
 	s.startAgent(t, binary, "second-agent", directory)
@@ -118,7 +146,8 @@ func newStagingE2E(t *testing.T) *stagingE2E {
 		deadline := time.Now().Add(time.Minute)
 		for {
 			var count int
-			if err := f.repo.DB.QueryRowContext(t.Context(), "SELECT COUNT(*) FROM agent_staging_capabilities WHERE agent_id=?", id).Scan(&count); err != nil {
+			if err := f.repo.DB.QueryRowContext(t.Context(), "SELECT COUNT(*) FROM agent_staging_capabilities WHERE agent_id=?", id).
+				Scan(&count); err != nil {
 				t.Fatal(err)
 			}
 			if count == 1 {
