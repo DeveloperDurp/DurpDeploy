@@ -12,6 +12,13 @@ operators. Global roles and project memberships restrict application access.
 Agent host-mode scripts run with the agent's account authority; container
 execution has the limits described below.
 
+The server owner is responsible for deployment scripts and their effects.
+Deployment cleanup covers managed staging and normal job descendants.
+Deliberate supervisor sabotage and script-created copies outside staging are outside this cleanup guarantee.
+The agent stops polling when it cannot confirm process or staging cleanup.
+Recovery requires operator action when recorded staging is missing or replaced.
+Staging transfer adds no per-job cgroup or delegation requirement.
+
 What we defend against:
 
 - Unauthenticated deploys
