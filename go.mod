@@ -3,7 +3,7 @@ module durpdeploy
 go 1.26.0
 
 require (
-	github.com/DeveloperDurp/durpdeploy-agent v0.1.1-0.20261011183104-3d0da320f31f
+	github.com/DeveloperDurp/durpdeploy-agent v0.1.1-0.20261011184247-aec11e6af062
 	github.com/a-h/templ v0.3.1020
 	github.com/containerd/errdefs v1.0.0
 	github.com/coreos/go-oidc/v3 v3.21.0
