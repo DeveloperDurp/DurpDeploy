@@ -31,10 +31,12 @@ func (r *DeploymentRunner) runRemoteStep(
 		return err
 	}
 	defer func() {
-		request.logWriter.finishState(
-			result,
-			errors.Is(result, errDeploymentCancelled),
-		)
+		if result != nil {
+			request.logWriter.finishState(
+				result,
+				errors.Is(result, errDeploymentCancelled),
+			)
+		}
 	}()
 	created, err := r.repo.QueueRemoteStepRuns(
 		ctx, request.deploymentID, request.stepIndex,
@@ -48,7 +50,7 @@ func (r *DeploymentRunner) runRemoteStep(
 			selectedInterpreter = "bash"
 		}
 		message := fmt.Sprintf(
-			"step %q: no compatible agents support interpreter %q and match the environment and labels",
+			"step %q: no compatible agents support interpreter %q and match the environment, labels, and staging/1 capability; upgrade participating agents",
 			request.step.Name,
 			selectedInterpreter,
 		)
@@ -70,6 +72,10 @@ func (r *DeploymentRunner) runRemoteStep(
 	ticker := time.NewTicker(250 * time.Millisecond)
 	defer ticker.Stop()
 	remaining := make(map[string]time.Duration)
+	transferred := make(map[string]time.Duration)
+	defer r.repo.ClearStagingTransfers(db.ListRemoteStepRunsForRunnerParams{
+		DeploymentID: request.deploymentID, StepIndex: request.stepIndex,
+	})
 	lastChecked := time.Now()
 	timedOut := false
 	operatorCancelled := false
@@ -149,7 +155,19 @@ func (r *DeploymentRunner) runRemoteStep(
 				}
 				// Maintenance pauses waiting targets, not issued execution.
 				if run.State != "waiting" || run.Draining == 0 {
-					budget -= elapsed
+					transferTime := r.repo.StagingTransferDuration(
+						db.GetStagingSnapshotParams{
+							DeploymentID: request.deploymentID,
+							StepIndex:    request.stepIndex,
+							Producer:     run.AgentID,
+						},
+						now,
+					)
+					budget -= max(
+						0,
+						elapsed-(transferTime-transferred[run.AgentID]),
+					)
+					transferred[run.AgentID] = transferTime
 				}
 				remaining[run.AgentID] = budget
 				if budget <= 0 {

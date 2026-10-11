@@ -165,6 +165,12 @@ New state-changing routes **must** be added to the `actionMap` in `internal/audi
 
 Use `docs/roles.md` for current project and global authorization, and `docs/security.md` for execution boundaries. Agent host-mode scripts run with the agent operator's authority; server and agent containers share the runtime host's kernel. Trust scripts accordingly.
 
+The server owner is responsible for deployment scripts and their effects.
+Staging cleanup covers managed staging and normal job descendants.
+Deliberate supervisor sabotage and script-created copies outside managed staging are outside this cleanup guarantee.
+Do not add per-job cgroups or cgroup delegation requirements for staging transfer.
+Keep polling blocked when process or staging cleanup cannot be confirmed.
+
 **Do not "simplify" by:** removing the CSRF check, inlining `VerifyPassword`, replacing argon2id with bcrypt/SHA, putting the session token in a URL parameter, skipping the `audit_log` insert on a new route, or merging `audit.Record` into a handler without going through the middleware. Each of these is a documented attack vector in `docs/attack-drill.md`.
 
 ## UI design — table layout conventions

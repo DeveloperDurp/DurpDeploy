@@ -15,6 +15,15 @@ func (r *Repository) RecordAgentPoll(
 	heartbeat db.HeartbeatAgentParams,
 	request agentproto.PollRequest,
 ) (int64, error) {
+	return r.RecordAgentPollWithStaging(ctx, heartbeat, request, false)
+}
+
+func (r *Repository) RecordAgentPollWithStaging(
+	ctx context.Context,
+	heartbeat db.HeartbeatAgentParams,
+	request agentproto.PollRequest,
+	stagingSupported bool,
+) (int64, error) {
 	interpreters := request.SupportedInterpreters
 	modes := request.ExecutionModes
 	if request.Protocol == agentproto.AgentV1 {
@@ -35,6 +44,21 @@ func (r *Repository) RecordAgentPoll(
 			}
 			if changed == 0 {
 				return nil
+			}
+			if stagingSupported {
+				// Request-local downgrades cannot invalidate queued staged work.
+				if err := q.ClearAgentStagingCapability(
+					ctx,
+					heartbeat.ID,
+				); err != nil {
+					return err
+				}
+				if err := q.AddAgentStagingCapability(
+					ctx,
+					heartbeat.ID,
+				); err != nil {
+					return err
+				}
 			}
 			if err := q.SetAgentProtocol(ctx, db.SetAgentProtocolParams{
 				ID: heartbeat.ID,
@@ -59,23 +83,32 @@ func (r *Repository) RecordAgentPoll(
 				}
 			}
 			for _, mode := range modes {
-				if err := q.AddAgentExecutionMode(ctx, db.AddAgentExecutionModeParams{
-					AgentID: heartbeat.ID, ExecutionMode: string(mode),
-				}); err != nil {
+				if err := q.AddAgentExecutionMode(
+					ctx,
+					db.AddAgentExecutionModeParams{
+						AgentID: heartbeat.ID, ExecutionMode: string(mode),
+					},
+				); err != nil {
 					return fmt.Errorf("record execution mode: %w", err)
 				}
 			}
 			for _, runtime := range request.ContainerRuntimes {
-				if err := q.AddAgentContainerRuntime(ctx, db.AddAgentContainerRuntimeParams{
-					AgentID: heartbeat.ID, Runtime: string(runtime),
-				}); err != nil {
+				if err := q.AddAgentContainerRuntime(
+					ctx,
+					db.AddAgentContainerRuntimeParams{
+						AgentID: heartbeat.ID, Runtime: string(runtime),
+					},
+				); err != nil {
 					return fmt.Errorf("record container runtime: %w", err)
 				}
 			}
 			for _, interpreter := range request.ContainerInterpreters {
-				if err := q.AddAgentContainerInterpreter(ctx, db.AddAgentContainerInterpreterParams{
-					AgentID: heartbeat.ID, Interpreter: string(interpreter),
-				}); err != nil {
+				if err := q.AddAgentContainerInterpreter(
+					ctx,
+					db.AddAgentContainerInterpreterParams{
+						AgentID: heartbeat.ID, Interpreter: string(interpreter),
+					},
+				); err != nil {
 					return fmt.Errorf(
 						"record container interpreter: %w",
 						err,
@@ -84,17 +117,23 @@ func (r *Repository) RecordAgentPoll(
 			}
 			if request.Protocol == agentproto.AgentV3 &&
 				len(request.ContainerRuntimes) > 0 {
-				if err := q.ConfirmRemoteStepCleanup(ctx, db.ConfirmRemoteStepCleanupParams{
-					Now: heartbeat.Now, AgentID: heartbeat.ID,
-				}); err != nil {
+				if err := q.ConfirmRemoteStepCleanup(
+					ctx,
+					db.ConfirmRemoteStepCleanupParams{
+						Now: heartbeat.Now, AgentID: heartbeat.ID,
+					},
+				); err != nil {
 					return fmt.Errorf(
 						"confirm remote step cleanup: %w",
 						err,
 					)
 				}
-				if err := q.ConfirmRemoteDeploymentCleanup(ctx, db.ConfirmRemoteDeploymentCleanupParams{
-					Now: heartbeat.Now, AgentID: heartbeat.ID,
-				}); err != nil {
+				if err := q.ConfirmRemoteDeploymentCleanup(
+					ctx,
+					db.ConfirmRemoteDeploymentCleanupParams{
+						Now: heartbeat.Now, AgentID: heartbeat.ID,
+					},
+				); err != nil {
 					return fmt.Errorf(
 						"confirm remote deployment cleanup: %w",
 						err,

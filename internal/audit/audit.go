@@ -53,48 +53,6 @@ func Record(ctx context.Context, repo *repository.Repository, e Entry) {
 	}
 }
 
-// actionMap maps "METHOD /route/pattern" → audit action. Patterns use
-type requestStateKey struct{}
-
-type requestState struct {
-	suppress           bool
-	overridden         *actionOverride
-	agentLabel         string
-	agentEnvironmentID int64
-}
-
-// SetAgentAssignment retains parsed JSON values for the middleware audit.
-func SetAgentAssignment(r *http.Request, label string, environmentID int64) {
-	if state, ok := r.Context().Value(requestStateKey{}).(*requestState); ok {
-		state.agentLabel = label
-		state.agentEnvironmentID = environmentID
-	}
-}
-
-type actionOverride struct {
-	action     string
-	entityType string
-	entityID   sql.NullInt64
-	reason     string
-}
-
-func Suppress(r *http.Request) {
-	if state, ok := r.Context().Value(requestStateKey{}).(*requestState); ok {
-		state.suppress = true
-	}
-}
-
-func SetMFAAdminReset(r *http.Request, targetID int64, reason string) {
-	if state, ok := r.Context().Value(requestStateKey{}).(*requestState); ok {
-		state.overridden = &actionOverride{
-			action:     "mfa_admin_reset",
-			entityType: "admin_reset",
-			entityID:   sql.NullInt64{Int64: targetID, Valid: true},
-			reason:     reason,
-		}
-	}
-}
-
 // entityIDRe captures the first numeric path segment, e.g. /projects/42
 // → 42. Used to populate entity_id when the route references one.
 var entityIDRe = regexp.MustCompile(`^/\w+/(\d+)`)
@@ -179,7 +137,9 @@ func Middleware(repo *repository.Repository) func(http.Handler) http.Handler {
 				Action:     action,
 				EntityType: entityType,
 				EntityID:   entityID,
-				Details:    buildDetails(r, ww.Status(), action, reason),
+				Details: buildDetails(r, requestOutcome{
+					status: ww.Status(), action: action, reason: reason,
+				}),
 			})
 		})
 	}
@@ -272,24 +232,19 @@ func singularize(seg string) string {
 // variable values and passwords are never logged here. If a future
 // route puts a secret in a field literally named "name", gate it in
 // actionMap instead.
-func buildDetails(
-	r *http.Request,
-	status int,
-	action string,
-	canonicalReason string,
-) string {
+func buildDetails(r *http.Request, outcome requestOutcome) string {
 	ip := requestmeta.ClientIP(r)
 	details := map[string]any{
 		"ip":         ip,
 		"user_agent": r.UserAgent(),
-		"status":     status,
+		"status":     outcome.status,
 		"method":     r.Method,
 		"path":       r.URL.Path,
 	}
 	if name := r.FormValue("name"); name != "" {
 		details["name"] = name
 	}
-	if strings.Contains(action, "agent") {
+	if strings.Contains(outcome.action, "agent") {
 		details["agent_id"] = chi.URLParam(r, "id")
 		if state, ok := r.Context().Value(requestStateKey{}).(*requestState); ok {
 			if state.agentLabel != "" {
@@ -300,8 +255,12 @@ func buildDetails(
 			}
 		}
 	}
-	if action == "mfa_admin_reset" {
-		reason := canonicalReason
+	if state, ok := r.Context().Value(requestStateKey{}).(*requestState); ok &&
+		state.agentActor != "" {
+		details["agent_id"] = state.agentActor
+	}
+	if outcome.action == "mfa_admin_reset" {
+		reason := outcome.reason
 		if reason == "" {
 			reason = r.PostFormValue("reason")
 		}

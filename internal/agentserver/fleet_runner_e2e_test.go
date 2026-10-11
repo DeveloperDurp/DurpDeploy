@@ -7,12 +7,21 @@ import (
 	"time"
 
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/secret"
 	agentproto "github.com/DeveloperDurp/durpdeploy-agent/protocol"
 )
 
 func TestAgentFleetDrainPausesRunnerTimeoutE2E(t *testing.T) {
 	// Given: a real API deployment with two one-second remote steps.
 	f := newAgentFixture(t)
+	box, err := secret.NewBox(make([]byte, 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.repo.SetSecretBox(box)
+	if err := f.repo.Queries.AddAgentStagingCapability(t.Context(), "test-agent"); err != nil {
+		t.Fatal(err)
+	}
 	srv := fleetAdminServer(t, f)
 	project, err := f.repo.Queries.CreateProject(
 		t.Context(),
@@ -112,14 +121,14 @@ func TestAgentFleetDrainPausesRunnerTimeoutE2E(t *testing.T) {
 		fleetRequest(t, srv, "POST", base+"/resume", "admin", "", 204)
 		poll := decodePollResponse(
 			t,
-			postAgent(t, f, agentproto.PollPath, pollBody),
+			postAgentStaging(t, f, agentproto.PollPath, pollBody),
 		)
 		if int64(poll.DeploymentID) != deployment.ID {
 			t.Fatalf("claimed deployment=%d", poll.DeploymentID)
 		}
 		claim := fmt.Sprintf(
 			`{"protocol":"agent/1","claim_token":%q}`,
-			poll.ClaimToken,
+			string(poll.ClaimToken),
 		)
 		if response := postAgent(
 			t,
@@ -135,6 +144,24 @@ func TestAgentFleetDrainPausesRunnerTimeoutE2E(t *testing.T) {
 			t.Fatalf("issued step %d state=%+v", step, state)
 		}
 		assertWaiting(false)
+		input := stageRequest(
+			t,
+			f,
+			deployment.ID,
+			string(poll.ClaimToken),
+			"download",
+			nil,
+			200,
+		)
+		stageRequest(
+			t,
+			f,
+			deployment.ID,
+			string(poll.ClaimToken),
+			"upload",
+			input,
+			204,
+		)
 		result := fmt.Sprintf(
 			`{"protocol":"agent/1","claim_token":%q,"state":"succeeded"}`,
 			poll.ClaimToken,

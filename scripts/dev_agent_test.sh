@@ -20,6 +20,12 @@ python3 -c 'import socket,sys
 with socket.socket(socket.AF_UNIX) as listener:
     listener.bind(sys.argv[1])' "$tmp/runtime.sock"
 
+agent_version=$(awk '$1 == "github.com/DeveloperDurp/durpdeploy-agent" { print $2 }' "$root/go.mod")
+agent_revision=${agent_version##*-}
+[[ $agent_revision =~ ^[0-9a-f]{12}$ ]]
+expected_tag=${agent_revision:0:7}
+expected_image="ghcr.io/developerdurp/durpdeploy-agent:$expected_tag"
+
 run_make() {
 	make --no-print-directory -C "$root" "$@" \
 		DEV_CONTAINER_ENGINE="$engine" \
@@ -30,6 +36,12 @@ run_make() {
 for engine in "$tmp/docker" "$tmp/podman"; do
     : >"$DEV_AGENT_TEST_LOG"
     run_make dev-agent
+    if ! grep -Fxq "pull $expected_image" "$DEV_AGENT_TEST_LOG" ||
+        ! grep -Fq -- "--env DURPDEPLOY_AGENT_VERSION=$expected_tag $expected_image" "$DEV_AGENT_TEST_LOG"; then
+        printf 'FAIL: default agent must use source pin %s\n' "$expected_image" >&2
+        cat "$DEV_AGENT_TEST_LOG" >&2
+        exit 1
+    fi
     if grep -q 'DURPDEPLOY_AGENT_CONTAINER_ENABLED\|/run/durpdeploy/runtime.sock' "$DEV_AGENT_TEST_LOG"; then
         echo 'FAIL: default dev agent received runtime access' >&2; exit 1
     fi
@@ -48,6 +60,11 @@ for engine in "$tmp/docker" "$tmp/podman"; do
     else
         grep -Fq -- "--group-add=$(stat -c %g "$tmp/runtime.sock")" "$DEV_AGENT_TEST_LOG"
     fi
+	# An operator-selected image takes precedence over the default pin.
+	: >"$DEV_AGENT_TEST_LOG"
+	run_make dev-agent DEV_AGENT_IMAGE=localhost/operator-agent:override
+	grep -Fxq 'pull localhost/operator-agent:override' "$DEV_AGENT_TEST_LOG"
+	grep -Fq -- '--env DURPDEPLOY_AGENT_VERSION=override localhost/operator-agent:override' "$DEV_AGENT_TEST_LOG"
 	# A failed pull must leave any existing container and state untouched.
 	: >"$DEV_AGENT_TEST_LOG"
 	if DEV_AGENT_TEST_FAIL_PULL=31 run_make dev-agent; then

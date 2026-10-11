@@ -100,6 +100,10 @@ All paths below use the `/api/v1` prefix and require an admin token.
 - `POST` or `DELETE /admin/agents/$ID/environments` accepts
   `{"environment_id":N}` and returns `204`; invalid IDs return `400`,
   missing resources return `404`. Repeated add is harmless.
+- Before a downgrade without staging support, drain the agent and wait for its jobs to finish.
+  Revoke the agent through `POST /admin/agents/$ID/revoke` before the downgrade.
+  Re-pair the agent after the downgrade.
+  Revocation and re-pairing clear its previous staging capability.
 - Capability label changes use `POST` or `DELETE /admin/agents/$ID/labels`
   with `{"label":"linux"}`. Routing changes and Drain/Resume are audited.
 
@@ -550,12 +554,30 @@ contain merged values are not migrated; recreate them when upgrading.
 - Server docs: <https://github.com/DeveloperDurp/durpdeploy>.
 ## Passing files between deployment steps
 
-Local container steps receive `DURPDEPLOY_STAGE_DIR=/stage`, even with a
-`variable_names` restriction. Write or copy files into this directory to pass
-them to later local steps of the same deployment. For example, a producing step
-runs `cp build.tar "$DURPDEPLOY_STAGE_DIR/build.tar"`; a later step reads that
-file at the same path. This works with the existing step, release, deployment,
-and runbook endpoints; no artifact publication request is needed.
+Deployment steps receive `DURPDEPLOY_STAGE_DIR`, even with a `variable_names` restriction.
+Write or copy files into this directory to pass them to later steps in the same deployment.
+Server containers and agent containers use `/stage`.
+Agent host steps use a private directory on that agent.
+For example, run `cp build.tar "$DURPDEPLOY_STAGE_DIR/build.tar"` in a producing step.
+Read the file through the same variable in a later step.
+
+The server automatically transfers all staging files between jobs, including jobs on different agents.
+Upgrade each participating agent to a build that reports `X-DurpDeploy-Staging: staging/1`.
+Older agents cannot receive these deployment jobs.
+Active staging requests do not consume the assigned run's step timeout.
+Each agent in a parallel step receives the same input snapshot.
+The server combines independent changes and deletions after every agent succeeds.
+Identical changes are accepted, but conflicting changes fail the deployment.
+
+Only regular files and directories transfer.
+Each snapshot permits 512 MiB of file content and 20,000 file and directory entries.
+File modes and ownership are normalized during transfer.
+The server encrypts transfer snapshots at rest and restricts downloads to the assigned agent's live claim.
+Use `GET /api/v1/deployments/{id}/staging` to list active transfer metadata without file contents.
+Invalid deployment IDs return HTTP 400.
+This endpoint returns an empty array after cleanup.
+Use `GET /api/v1/admin/audit?action=publish_staging` to identify staging publishers after cleanup.
+Each successful upload audit records the authenticated agent ID in its details JSON field `agent_id`.
 
 Each deployment starts with an empty directory. Files survive step completion
 and retries; failed attempts can leave partial files. Publish completed outputs
@@ -570,7 +592,7 @@ The staging and approved paths are reserved: variable create/update requests
 return 422 for `DURPDEPLOY_STAGE_DIR` and `DURPDEPLOY_APPROVED_DIR`, including
 blank-secret updates. Step variable selections cannot include them. Staging
 is writable, noexec, nosuid, and nodev, backed by a bounded temporary volume
-(512 MiB plus 10,000 host pages, 20,000 inodes). These filesystem bounds do
+(512 MiB plus 20,000 host pages, 40,002 inode units). These filesystem bounds do
 not impose a RAM ceiling or CPU quota on local step containers. The staging
 helper retains its own resource limits. The volume is removed on success,
 failure, cancellation, or shutdown; startup reclaims orphaned volumes within
@@ -580,9 +602,13 @@ changes the deployment to `failed`, even if a later cleanup attempt removed
 the remaining resources. This preserves the existing conservative recovery
 contract for local execution.
 
-Only local Docker/Podman container steps share these files. Remote agent steps
-do not receive the staging directory or transferred files. Staging is neither
-a cross-deployment cache nor durable storage for an approval pause or restart.
+The server purges transfer snapshots when the deployment succeeds, fails, or is canceled.
+Agents remove their private staging files before reporting completion or cancellation.
+Host jobs stop all remaining descendants before transfer, retry, or cleanup, including detached processes.
+If process cleanup cannot be confirmed, the agent retains staging and exits for service-wide cleanup.
+Staging is not shared between deployments or runbooks.
+Existing local staging remains available within a runbook execution.
+Staging is not durable storage for an approval pause or restart.
 Pinned release packages remain read-only at `ARTIFACT_PATH=/artifacts`.
 
 Local steps accept `network_mode` (`none` by default, or `bridge`). Artifact

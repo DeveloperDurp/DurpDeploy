@@ -299,6 +299,22 @@ embedded agent because native Kubernetes Job execution is tracked in
 [issue #98](https://github.com/DeveloperDurp/DurpDeploy/issues/98); use
 standalone agents for executable steps in Kubernetes.
 
+Deployment staging also transfers automatically between server containers, agent containers, and agent host steps.
+Write files under `DURPDEPLOY_STAGE_DIR` and read them through that variable in later steps.
+Upgrade participating agents to a build that reports the `staging/1` capability.
+The server transfers regular files and directories within one deployment.
+Parallel agents receive the same input, and conflicting changes fail the deployment.
+Successful, failed, and canceled deployments purge transfer snapshots and runtime staging.
+
+Run the public API transfer suite with a staging-capable agent binary:
+
+```bash
+AGENT_TEST_SOCKET="unix://${XDG_RUNTIME_DIR}/podman/podman.sock" \
+DURPDEPLOY_AGENT_E2E_BINARY=/absolute/path/durpdeploy-agent \
+bash scripts/go_test.sh -tags 'e2e agentstaging' -count=1 \
+  -timeout=10m -run '^TestDeploymentStagingTransferAPIE2E$' ./internal/agentserver
+```
+
 Each attempt runs as non-root with a read-only root filesystem, no network by
 default (`network_mode: "bridge"` explicitly enables networking for local steps),
 no capabilities, no new privileges, a bounded process count, and no

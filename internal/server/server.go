@@ -6,10 +6,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
-	"github.com/robfig/cron/v3"
-
 	"durpdeploy/internal/agentserver"
 	"durpdeploy/internal/audit"
 	"durpdeploy/internal/auth"
@@ -21,6 +17,9 @@ import (
 	"durpdeploy/static"
 
 	agentproto "github.com/DeveloperDurp/durpdeploy-agent/protocol"
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+	"github.com/robfig/cron/v3"
 )
 
 func NewAgentRouter(agents *agentserver.Server) http.Handler {
@@ -33,6 +32,12 @@ func NewAgentRouter(agents *agentserver.Server) http.Handler {
 	r.Post(agentproto.ResultPath, agents.Result)
 	r.Post(agentproto.CancelledPath, agents.Cancelled)
 	r.Post("/agent/v1/deployments/{id}/artifact", agents.Artifact)
+	r.Post(
+		"/agent/v1/deployments/{id}/staging/download",
+		agents.DownloadStaging,
+	)
+	r.With(agents.AuditWrites).
+		Post("/agent/v1/deployments/{id}/staging/upload", agents.UploadStaging)
 	return r
 }
 
@@ -72,6 +77,7 @@ func NewRouterWithAgentManagement(
 	return newRouter(repo, rnr, parser, authHandler, pairing, oidcEnabled)
 }
 
+// allow: SIZE_OK — route groups share the protected middleware and handler composition.
 func newRouter(
 	repo *repository.Repository,
 	rnr *runner.DeploymentRunner,
@@ -706,6 +712,7 @@ func newRouter(
 
 			dar.Get("/deployments/{id}", apiDepH.GetDeployment)
 			dar.Get("/deployments/{id}/status", apiDepH.GetDeploymentStatus)
+			dar.Get("/deployments/{id}/staging", apiDepH.ListStaging)
 			dar.Get("/deployments/{id}/artifact-gates", artifactGateH.List)
 			dar.Get(
 				"/deployments/{id}/artifact-gates/{stepIndex}/review",

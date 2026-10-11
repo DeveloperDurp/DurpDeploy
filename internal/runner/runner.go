@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"sync"
 	"time"
 
@@ -26,6 +27,7 @@ type DeploymentRunner struct {
 	engine    containerEndpoint
 	localErr  error
 	staging   map[int64][]artifactStage
+	transfers map[int64]*os.File
 	stopping  bool
 	localWork sync.WaitGroup
 	// bus publishes deployment_started/succeeded/failed events for the
@@ -61,6 +63,7 @@ func (r *DeploymentRunner) ContainerRuntimeReady() bool {
 	return r.localErr == nil
 }
 
+// allow: SIZE_OK — sequential deployment states share cancellation and staging ownership.
 func (r *DeploymentRunner) Run(
 	ctx context.Context,
 	deploymentID, releaseID, environmentID int64,
@@ -219,13 +222,14 @@ func (r *DeploymentRunner) Run(
 				DeploymentID:  deploymentID,
 				ProjectID:     release.ProjectID,
 				EnvironmentID: environmentID,
-				Message:       message,
+				Message:       scrubber.Scrub(message),
 			},
 			true,
 		)
 		return
 	}
 	var handoff artifactStage
+	var transferred *os.File
 	if stage.volume == "" {
 		r.localWork.Done()
 		artifactWork = false
@@ -310,37 +314,71 @@ func (r *DeploymentRunner) Run(
 		}
 		switch step.ExecutionTarget {
 		case "agent":
+			stageKey := db.GetStagingSnapshotParams{
+				DeploymentID: deploymentID,
+				StepIndex:    int64(stepIndex),
+			}
+			stageErr := r.prepareRemoteStaging(
+				runCtx,
+				remoteStagingInput{
+					key:     stageKey,
+					volume:  handoff,
+					current: transferred,
+				},
+			)
 			// Shutdown drains local resources without waiting for agent ACKs.
 			if artifactWork {
 				r.localWork.Done()
 				artifactWork = false
 			}
-			err := r.runRemoteStep(ctx, runCtx, remoteStepRequest{
-				deploymentID: deploymentID,
-				stepIndex:    int64(stepIndex),
-				step:         step,
-				logWriter:    logWriter,
-			})
+			err := stageErr
+			stagingFailed := stageErr != nil
+			if err == nil {
+				err = r.runRemoteStep(ctx, runCtx, remoteStepRequest{
+					deploymentID: deploymentID,
+					stepIndex:    int64(stepIndex),
+					step:         step,
+					logWriter:    logWriter,
+				})
+			}
+			if err == nil {
+				var next *os.File
+				next, err = r.mergeRemoteStaging(runCtx, stageKey)
+				err = errors.Join(err, r.replaceTransfer(deploymentID, next))
+				transferred = next
+				stagingFailed = err != nil
+			}
 			if err != nil {
+				if stagingFailed {
+					if _, logErr := logWriter.Write(
+						[]byte(fmt.Sprintf("step %q: %v\n", step.Name, err)),
+					); logErr != nil {
+						slog.Error("persist staging failure", "err", logErr)
+					}
+					logWriter.Flush()
+					logWriter.finishState(err, runCtx.Err() != nil)
+				}
 				if errors.Is(err, errContainerCleanup) {
 					r.persistCompletion(ctx, runCtx, deploymentID,
 						"cleanup_unconfirmed", false)
 					return
 				}
-				if errors.Is(err, errDeploymentCancelled) {
+				if errors.Is(err, errDeploymentCancelled) ||
+					(stagingFailed && runCtx.Err() != nil) {
 					r.finalizeCancellation(ctx, deploymentID)
 					return
 				}
 				r.failStep(ctx, runCtx, events.Event{
 					Type: events.DeploymentFailed, DeploymentID: deploymentID,
 					ProjectID: release.ProjectID, EnvironmentID: environmentID,
-					Message: fmt.Sprintf(
+					Message: scrubber.Scrub(fmt.Sprintf(
 						"Deployment #%d failed on %s: %v",
 						deploymentID, envName, err,
-					),
+					)),
 				}, false)
 				return
 			}
+			logWriter.finishState(nil, false)
 			continue
 		case "", "local":
 			if !artifactWork {
@@ -412,25 +450,35 @@ func (r *DeploymentRunner) Run(
 		if handoff.volume == "" {
 			handoff, err = r.stageDeployment(runCtx, deploymentID, envMap)
 			if err != nil {
-				_, writeErr := logWriter.Write([]byte(fmt.Sprintf(
-					"step %q: staging failed before execution: %v\n",
-					step.Name,
-					err,
-				)))
-				logWriter.Flush()
-				logWriter.finishState(err, runCtx.Err() != nil)
+				writeErr := logWriter.failStaging(err, runCtx.Err() != nil)
 				r.failStep(ctx, runCtx, events.Event{
 					Type:          events.DeploymentFailed,
 					DeploymentID:  deploymentID,
 					ProjectID:     release.ProjectID,
 					EnvironmentID: environmentID,
-					Message: "Deployment staging failed: " + errors.Join(err, writeErr).
-						Error(),
+					Message: scrubber.Scrub("Deployment staging failed: " +
+						errors.Join(err, writeErr).Error()),
 				}, true)
 				return
 			}
 		}
 		maxAttempts := int(step.MaxRetries) + 1
+		if transferred != nil {
+			if err := r.importRemoteStaging(
+				runCtx,
+				handoff,
+				transferred,
+			); err != nil {
+				_ = logWriter.failStaging(err, runCtx.Err() != nil)
+				r.failUnlessCancelled(ctx, runCtx, deploymentID)
+				return
+			}
+			if err := r.replaceTransfer(deploymentID, nil); err != nil {
+				r.failUnlessCancelled(ctx, runCtx, deploymentID)
+				return
+			}
+			transferred = nil
+		}
 		for attempt := 1; attempt <= maxAttempts; attempt++ {
 			lastErr = r.runStepAttempt(runCtx, localStepAttempt{
 				deploymentID: deploymentID,

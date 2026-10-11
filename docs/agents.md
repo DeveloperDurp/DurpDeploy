@@ -283,7 +283,7 @@ the socket URL to the mounted path. Container-mode workloads receive no runtime
 socket. Host-mode scripts run inside the supervisor and inherit socket access
 and the operator's runtime authority; use only scripts trusted with that account.
 Do not grant socket permissions automatically or configure TCP/SSH endpoints.
-See the pinned agent's [container setup](https://github.com/DeveloperDurp/durpdeploy-agent/blob/59413429c31bebf7e828e691ccc5e329f0b29dc4/docs/agents.md#container-step-execution-agent3).
+See the pinned agent's [container setup](https://github.com/DeveloperDurp/durpdeploy-agent/blob/6dee72a66c7b3a3f9743ee5c71d63a7a7c5f9f28/docs/agents.md#container-step-execution-agent3).
 
 Remote steps use `agent_execution_mode: "host"` by default. Select
 `"container"` and an image to opt in. Labels still route the step, and only
@@ -332,7 +332,7 @@ With `make dev` running in another terminal, start the published agent image:
 make dev-agent
 ```
 
-This pulls `ghcr.io/developerdurp/durpdeploy-agent:5941342` and runs it in the
+This pulls `ghcr.io/developerdurp/durpdeploy-agent:6dee72a` and runs it in the
 foreground using Docker or Podman. In **Admin > Agents > Pair agent**, enter
 `https://127.0.0.1:10944`, the terminal's pairing code, and fingerprint, then
 compare the fingerprint and approve. The development server advertises
@@ -365,7 +365,7 @@ The image supplies Bash; this image does not install Python or PowerShell.
 Override the image, host pairing port, or container name when needed:
 
 ```bash
-make dev-agent DEV_AGENT_IMAGE=ghcr.io/developerdurp/durpdeploy-agent:5941342 DEV_AGENT_PORT=10945
+make dev-agent DEV_AGENT_IMAGE=ghcr.io/developerdurp/durpdeploy-agent:6dee72a DEV_AGENT_PORT=10945
 ```
 
 `DEV_AGENT_CONTAINER` also determines the default state-volume name. Supply
@@ -451,7 +451,7 @@ fail closed if a tag was rewritten:
 ```bash
 set -euo pipefail
 AGENT_MODULE=github.com/DeveloperDurp/durpdeploy-agent
-AGENT_VERSION=v0.1.1-0.20261007133227-59413429c31b # use the value recorded from the server checkout
+AGENT_VERSION=v0.1.1-0.20261011201824-6dee72a66c7b # use the value recorded from the server checkout
 AGENT_SUM='h1:...' # use the value recorded from the server checkout
 AGENT_COMMIT=... # use the value recorded from the server checkout
 AGENT_DOWNLOAD=$(go mod download -json "$AGENT_MODULE@$AGENT_VERSION")

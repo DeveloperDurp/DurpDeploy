@@ -53,6 +53,43 @@ material, certificate bodies, or secret values.
 
 ## Bounds and timing
 
+Deployment staging uses an optional capability within the existing protocols.
+Agents send `X-DurpDeploy-Staging: staging/1` on each poll.
+Missing poll headers cannot invalidate queued staging work from overlapping requests.
+Before downgrading an agent without staging support, drain it and wait for its jobs to finish.
+Revoke the agent before the downgrade.
+Re-pair the agent after the downgrade.
+Revocation and re-pairing clear its previous staging capability.
+The encrypted release object contains `staging: true` for staging-enabled jobs.
+These jobs contain one step and require staging-capable agents.
+
+Send `POST /agent/v1/deployments/{id}/staging/download` to obtain the frozen input TAR.
+Send `POST /agent/v1/deployments/{id}/staging/upload` with the final TAR before reporting success.
+Include the claim token in `X-DurpDeploy-Claim` on both requests.
+Both endpoints require the assigned agent's active mTLS identity and live step claim.
+Uploads also require the `started` state.
+Downloads return `Content-Length` and `X-Artifact-SHA256`.
+
+An upload returns `204` and accepts identical retries.
+Successful upload audits record the authenticated agent ID in the audit details JSON field `agent_id`.
+These records remain available after terminal staging cleanup.
+A changed retry or expired claim returns `409`.
+An invalid TAR returns `422`, and an oversized body returns `413`.
+Only regular files and directories are accepted.
+The TAR root marker must be an empty directory.
+Each snapshot permits 512 MiB of contents, 20,000 entries, and a 544 MiB TAR body.
+The entry limit includes parent directories omitted from TAR headers.
+Staging transfers have no fixed total network deadline.
+Staging requests pause the assigned run's step timeout while they remain active.
+Both peers stop transfers after five minutes without network I/O progress.
+Each staging read and write receives a fresh socket deadline.
+
+Agents keep heartbeats active during transfers and purge local staging before reporting their outcome.
+The server encrypts snapshots at rest and merges all successful agent outputs against the same input.
+Conflicting changes fail the deployment.
+Terminal deployment transactions purge transfer snapshots and encrypted chunks.
+The public `GET /api/v1/deployments/{id}/staging` endpoint exposes metadata through deployment access checks.
+
 | Contract | Fixed value |
 | --- | --- |
 | Regular protocol JSON request body | 1 MiB |
