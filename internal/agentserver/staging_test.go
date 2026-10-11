@@ -48,7 +48,14 @@ func stageArchive(t *testing.T, files map[string]string) []byte {
 	var buffer bytes.Buffer
 	writer := tar.NewWriter(&buffer)
 	for name, data := range files {
-		if err := writer.WriteHeader(&tar.Header{Name: name, Mode: 0600, Size: int64(len(data)), Typeflag: tar.TypeReg}); err != nil {
+		if err := writer.WriteHeader(
+			&tar.Header{
+				Name:     name,
+				Mode:     0600,
+				Size:     int64(len(data)),
+				Typeflag: tar.TypeReg,
+			},
+		); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := writer.Write([]byte(data)); err != nil {
@@ -72,7 +79,13 @@ func seedStageInput(t *testing.T, f agentFixture, id int64) []byte {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := f.repo.Queries.CreateDeploymentVariableSnapshot(t.Context(), db.CreateDeploymentVariableSnapshotParams{DeploymentID: id, Value: snapshot}); err != nil {
+	if err := f.repo.Queries.CreateDeploymentVariableSnapshot(
+		t.Context(),
+		db.CreateDeploymentVariableSnapshotParams{
+			DeploymentID: id,
+			Value:        snapshot,
+		},
+	); err != nil {
 		t.Fatal(err)
 	}
 	data := stageArchive(t, map[string]string{"seed": "staging-secret"})
@@ -84,7 +97,13 @@ func seedStageInput(t *testing.T, f agentFixture, id int64) []byte {
 	if _, err := file.Write(data); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.repo.SaveStaging(t.Context(), repository.StagingWrite{Key: db.GetStagingSnapshotParams{DeploymentID: id}, Source: file}); err != nil {
+	if err := f.repo.SaveStaging(
+		t.Context(),
+		repository.StagingWrite{
+			Key:    db.GetStagingSnapshotParams{DeploymentID: id},
+			Source: file,
+		},
+	); err != nil {
 		t.Fatal(err)
 	}
 	return data
@@ -183,7 +202,8 @@ func TestAgentStagingRequiresPublicationBeforeSuccessAndPurges(t *testing.T) {
 	output := stageArchive(t, map[string]string{"result": "published"})
 	stageRequest(t, f, id, identity.Token, "upload", output, 204)
 	var auditCount int
-	if err := f.repo.DB.QueryRow("SELECT COUNT(*) FROM audit_log WHERE action='publish_staging' AND entity_id=?", id).Scan(&auditCount); err != nil ||
+	if err := f.repo.DB.QueryRow("SELECT COUNT(*) FROM audit_log WHERE action='publish_staging' AND entity_id=?", id).
+		Scan(&auditCount); err != nil ||
 		auditCount != 1 {
 		t.Fatalf("staging audit count=%d err=%v", auditCount, err)
 	}
@@ -198,7 +218,8 @@ func TestAgentStagingRequiresPublicationBeforeSuccessAndPurges(t *testing.T) {
 		409,
 	)
 	var plaintext string
-	if err := f.repo.DB.QueryRow("SELECT ciphertext FROM deployment_staging_chunks WHERE producer=''").Scan(&plaintext); err != nil {
+	if err := f.repo.DB.QueryRow("SELECT ciphertext FROM deployment_staging_chunks WHERE producer=''").
+		Scan(&plaintext); err != nil {
 		t.Fatal(err)
 	}
 	if bytes.Contains([]byte(plaintext), []byte("staging-secret")) {
@@ -214,14 +235,22 @@ func TestAgentStagingRequiresPublicationBeforeSuccessAndPurges(t *testing.T) {
 	if response.StatusCode != 204 {
 		t.Fatal(response.StatusCode)
 	}
-	if err := f.repo.WithDeploymentTx(t.Context(), id, func(ctx context.Context, q *db.Queries) error {
-		return q.UpdateDeploymentStatus(ctx, db.UpdateDeploymentStatusParams{ID: id, Status: "succeeded"})
-	}); err != nil {
+	if err := f.repo.WithDeploymentTx(
+		t.Context(),
+		id,
+		func(ctx context.Context, q *db.Queries) error {
+			return q.UpdateDeploymentStatus(
+				ctx,
+				db.UpdateDeploymentStatusParams{ID: id, Status: "succeeded"},
+			)
+		},
+	); err != nil {
 		t.Fatal(err)
 	}
 	for _, table := range []string{"deployment_staging_snapshots", "deployment_staging_chunks"} {
 		var count int
-		if err := f.repo.DB.QueryRow("SELECT COUNT(*) FROM " + table).Scan(&count); err != nil {
+		if err := f.repo.DB.QueryRow("SELECT COUNT(*) FROM " + table).
+			Scan(&count); err != nil {
 			t.Fatal(err)
 		}
 		if count != 0 {
@@ -258,6 +287,8 @@ func TestAgentStagingRejectsUnsafeUpload(t *testing.T) {
 		stageArchive(t, map[string]string{"../escape": "bad"}),
 		422,
 	)
+	truncated := stageArchive(t, map[string]string{"file": strings.Repeat("x", 2048)})[:1024]
+	stageRequest(t, f, id, identity.Token, "upload", truncated, 422)
 	rows, err := f.repo.Queries.ListStagingSnapshots(t.Context(), id)
 	if err != nil || len(rows) != 1 {
 		t.Fatalf("snapshots=%v error=%v", rows, err)

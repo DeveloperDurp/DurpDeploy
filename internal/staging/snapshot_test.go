@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"testing"
@@ -23,7 +24,14 @@ func snapshotFixture(t *testing.T, files map[string]string) Snapshot {
 	})
 	writer := tar.NewWriter(file)
 	for name, data := range files {
-		if err := writer.WriteHeader(&tar.Header{Name: name, Mode: 0644, Size: int64(len(data)), Typeflag: tar.TypeReg}); err != nil {
+		if err := writer.WriteHeader(
+			&tar.Header{
+				Name:     name,
+				Mode:     0644,
+				Size:     int64(len(data)),
+				Typeflag: tar.TypeReg,
+			},
+		); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := writer.Write([]byte(data)); err != nil {
@@ -177,5 +185,34 @@ func TestSnapshotHonorsCancellation(t *testing.T) {
 		context.Canceled,
 	) {
 		t.Fatalf("write error = %v", err)
+	}
+}
+
+func TestSnapshotRejectsTruncatedContent(t *testing.T) {
+	for _, size := range []int{0, 512} {
+		t.Run(fmt.Sprint(size), func(t *testing.T) {
+			file, err := os.CreateTemp(t.TempDir(), "truncated")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer file.Close()
+			writer := tar.NewWriter(file)
+			for _, header := range []*tar.Header{
+				{Name: "empty", Typeflag: tar.TypeReg},
+				{Name: "truncated", Typeflag: tar.TypeReg, Size: 2048},
+			} {
+				if err := writer.WriteHeader(header); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if _, err := writer.Write(
+				bytes.Repeat([]byte("x"), size),
+			); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := Read(t.Context(), file); !errors.Is(err, ErrInvalid) {
+				t.Fatalf("truncated content error = %v", err)
+			}
+		})
 	}
 }
