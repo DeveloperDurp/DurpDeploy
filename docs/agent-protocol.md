@@ -55,6 +55,11 @@ material, certificate bodies, or secret values.
 
 Deployment staging uses an optional capability within the existing protocols.
 Agents send `X-DurpDeploy-Staging: staging/1` on each poll.
+Missing poll headers cannot invalidate queued staging work from overlapping requests.
+Before downgrading an agent without staging support, drain it and wait for its jobs to finish.
+Revoke the agent before the downgrade.
+Re-pair the agent after the downgrade.
+Revocation and re-pairing clear its previous staging capability.
 The encrypted release object contains `staging: true` for staging-enabled jobs.
 These jobs contain one step and require staging-capable agents.
 

@@ -100,6 +100,10 @@ All paths below use the `/api/v1` prefix and require an admin token.
 - `POST` or `DELETE /admin/agents/$ID/environments` accepts
   `{"environment_id":N}` and returns `204`; invalid IDs return `400`,
   missing resources return `404`. Repeated add is harmless.
+- Before a downgrade without staging support, drain the agent and wait for its jobs to finish.
+  Revoke the agent through `POST /admin/agents/$ID/revoke` before the downgrade.
+  Re-pair the agent after the downgrade.
+  Revocation and re-pairing clear its previous staging capability.
 - Capability label changes use `POST` or `DELETE /admin/agents/$ID/labels`
   with `{"label":"linux"}`. Routing changes and Drain/Resume are audited.
 
