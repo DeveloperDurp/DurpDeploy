@@ -351,6 +351,13 @@ jobs:
         run: make -C "$AGENT_SOURCE" container-executor-contract
       - name: Verify public API through a socket-mounted agent container
         run: go test -tags=e2e,agentcontainer -race -count=1 -timeout=8m -v -run '^TestAgentContainerAPIE2E$' ./internal/agentserver
+      - name: Verify deployment staging transfer across agents
+        if: matrix.runtime == 'podman'
+        run: |
+          go build -o "$RUNNER_TEMP/durpdeploy-staging-agent" github.com/DeveloperDurp/durpdeploy-agent/cmd/agent
+          DURPDEPLOY_AGENT_E2E_BINARY="$RUNNER_TEMP/durpdeploy-staging-agent" \
+            bash scripts/go_test.sh -tags 'e2e agentstaging' -count=1 \
+            -timeout=10m -v -run '^TestDeploymentStagingTransferAPIE2E$' ./internal/agentserver
 
   # ----- Artifact crash recovery and capacity ----------------------------------
   package-browser:
