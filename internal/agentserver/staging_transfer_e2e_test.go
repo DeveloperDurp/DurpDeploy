@@ -18,7 +18,7 @@ import (
 
 func TestDeploymentStagingTransferAPIE2E(t *testing.T) {
 	s := newStagingE2E(t)
-	for _, scenario := range []string{"handoff", "fanout", "identical", "conflict", "failure", "cancel", "isolation", "assertion", "permissions", "renamed-directory", "escaped-directory", "background-writer", "detached-writer", "cleanup-recovery", "capacity"} {
+	for _, scenario := range []string{"handoff", "fanout", "identical", "conflict", "failure", "cancel", "isolation", "assertion", "permissions", "renamed-directory", "escaped-directory", "renamed-root", "background-writer", "detached-writer", "cleanup-recovery", "capacity"} {
 		t.Run(scenario, func(t *testing.T) {
 			var project, environment struct{ ID int64 }
 			decode := func(data []byte, target any) {
@@ -149,6 +149,8 @@ func TestDeploymentStagingTransferAPIE2E(t *testing.T) {
 						script = `mv "$DURPDEPLOY_STAGE_DIR" "$DURPDEPLOY_STAGE_DIR-renamed"; mkdir "$DURPDEPLOY_STAGE_DIR"; printf replacement > "$DURPDEPLOY_STAGE_DIR/seed"`
 					case "escaped-directory":
 						script = `mv "$DURPDEPLOY_STAGE_DIR" "$(dirname "$(dirname "$DURPDEPLOY_STAGE_DIR")")/retained"`
+					case "renamed-root":
+						script = `root=$(dirname "$(dirname "$DURPDEPLOY_STAGE_DIR")"); mv "$root" "$(dirname "$root")/retained"`
 					case "background-writer":
 						script = `(sleep 2; mkdir -p "$DURPDEPLOY_STAGE_DIR"; printf retained > "$DURPDEPLOY_STAGE_DIR/retained") >/dev/null 2>&1 &`
 					case "detached-writer":
@@ -200,7 +202,7 @@ func TestDeploymentStagingTransferAPIE2E(t *testing.T) {
 			if scenario == "conflict" || scenario == "failure" ||
 				scenario == "assertion" ||
 				scenario == "permissions" || scenario == "renamed-directory" ||
-				scenario == "escaped-directory" ||
+				scenario == "escaped-directory" || scenario == "renamed-root" ||
 				scenario == "cleanup-recovery" {
 				want = "failed"
 			}
@@ -294,11 +296,31 @@ func TestDeploymentStagingTransferAPIE2E(t *testing.T) {
 			) != "[]" {
 				t.Fatalf("staging retained: %s", data)
 			}
+			movedRoots := 0
 			for _, directory := range s.directories {
 				entries, err := os.ReadDir(filepath.Join(directory, "staging"))
 				if err != nil || len(entries) != 0 {
 					t.Fatalf("staging directory retained: %v %v", entries, err)
 				}
+				if scenario == "renamed-root" {
+					entries, err := os.ReadDir(
+						filepath.Join(directory, "retained"),
+					)
+					if os.IsNotExist(err) {
+						continue
+					}
+					if err != nil || len(entries) != 0 {
+						t.Fatalf(
+							"renamed staging root retained files: %v %v",
+							entries,
+							err,
+						)
+					}
+					movedRoots++
+				}
+			}
+			if scenario == "renamed-root" && movedRoots == 0 {
+				t.Fatal("agents did not rename the staging root")
 			}
 		})
 	}
