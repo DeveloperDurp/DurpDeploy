@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/dispatch"
 	"durpdeploy/internal/staging"
 
 	agentproto "github.com/DeveloperDurp/durpdeploy-agent/protocol"
@@ -20,6 +21,9 @@ func (s *Server) Poll(w http.ResponseWriter, r *http.Request) {
 	fingerprint := agenttls.FingerprintOf(
 		r.TLS.PeerCertificates[0].Raw,
 	).String()
+	stagingSupported := r.Header.Get(
+		staging.CapabilityHeader,
+	) == staging.Capability
 	changed, err := s.repository.RecordAgentPollWithStaging(
 		r.Context(),
 		db.HeartbeatAgentParams{
@@ -31,12 +35,18 @@ func (s *Server) Poll(w http.ResponseWriter, r *http.Request) {
 			CertificateFingerprint: nullableString(fingerprint),
 		},
 		request,
-		r.Header.Get(staging.CapabilityHeader) == staging.Capability,
+		stagingSupported,
 	)
 	if !writeTransitionStatus(w, changed, err) {
 		return
 	}
-	response, claimed, err := s.dispatcher.Poll(r.Context(), agentID, request)
+	response, claimed, err := s.dispatcher.Poll(
+		r.Context(),
+		agentID,
+		dispatch.PollRequest{
+			PollRequest: request, Staging: stagingSupported,
+		},
+	)
 	if err != nil {
 		if r.Context().Err() == nil {
 			writePollErrorStatus(w, err)

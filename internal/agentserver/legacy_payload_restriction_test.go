@@ -28,7 +28,8 @@ func TestLegacyDifferingRestrictionsFailBeforeClaimWithoutPoisoningPoll(
 	recordFixturePoll(t, f, request)
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
-	_, claimed, err := dispatch.New(f.repo).Poll(ctx, "test-agent", request)
+	_, claimed, err := dispatch.New(f.repo).
+		Poll(ctx, "test-agent", dispatch.PollRequest{PollRequest: request})
 	if claimed || !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("claimed=%v error=%v", claimed, err)
 	}
@@ -42,7 +43,7 @@ func TestLegacyDifferingRestrictionsFailBeforeClaimWithoutPoisoningPoll(
 	assertDeploymentStatus(t, f, id, "failed")
 	next := seedPollPayload(t, f, "pending", "test-agent")
 	response, claimed, err := dispatch.New(f.repo).
-		Poll(t.Context(), "test-agent", request)
+		Poll(t.Context(), "test-agent", dispatch.PollRequest{PollRequest: request})
 	if err != nil || !claimed || int64(response.DeploymentID) != next {
 		t.Fatalf(
 			"healthy claim=%v response=%+v error=%v",
@@ -56,8 +57,11 @@ func TestLegacyDifferingRestrictionsFailBeforeClaimWithoutPoisoningPoll(
 func TestLegacyEqualRestrictionsRemainRepresentable(t *testing.T) {
 	f := newAgentFixture(t)
 	id := seedPollPayload(t, f, "pending", "test-agent")
-	if _, err := f.repo.DB.ExecContext(t.Context(),
-		`UPDATE deployment_steps SET variable_names='["MODE"]' WHERE deployment_id=?`, id); err != nil {
+	if _, err := f.repo.DB.ExecContext(
+		t.Context(),
+		`UPDATE deployment_steps SET variable_names='["MODE"]' WHERE deployment_id=?`,
+		id,
+	); err != nil {
 		t.Fatal(err)
 	}
 	request := agentproto.PollRequest{
@@ -67,7 +71,7 @@ func TestLegacyEqualRestrictionsRemainRepresentable(t *testing.T) {
 	}
 	recordFixturePoll(t, f, request)
 	_, claimed, err := dispatch.New(f.repo).
-		Poll(t.Context(), "test-agent", request)
+		Poll(t.Context(), "test-agent", dispatch.PollRequest{PollRequest: request})
 	if err != nil || !claimed {
 		t.Fatalf("claim=%v error=%v", claimed, err)
 	}

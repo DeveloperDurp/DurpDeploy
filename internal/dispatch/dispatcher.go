@@ -18,6 +18,12 @@ type Dispatcher struct {
 	repository *repository.Repository
 }
 
+// PollRequest includes capabilities reported outside the JSON envelope.
+type PollRequest struct {
+	agentproto.PollRequest
+	Staging bool
+}
+
 func New(repo *repository.Repository) *Dispatcher {
 	return &Dispatcher{repository: repo}
 }
@@ -25,7 +31,7 @@ func New(repo *repository.Repository) *Dispatcher {
 func (d *Dispatcher) Poll(
 	ctx context.Context,
 	agentID agentproto.AgentID,
-	request agentproto.PollRequest,
+	request PollRequest,
 ) (agentproto.PollResponse, bool, error) {
 	response, claimed, err := d.claim(ctx, agentID, request)
 	if errors.Is(err, errStaleAgentPoll) {
@@ -64,7 +70,7 @@ func (d *Dispatcher) Poll(
 func (d *Dispatcher) claim(
 	ctx context.Context,
 	agentID agentproto.AgentID,
-	request agentproto.PollRequest,
+	request PollRequest,
 ) (agentproto.PollResponse, bool, error) {
 	prepare := func(snapshot repository.RemotePayloadSnapshot) (repository.RemotePreparedClaim, error) {
 		if !pollCapabilitiesMatch(request, snapshot) {
