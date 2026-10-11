@@ -14,7 +14,7 @@ import (
 
 func TestDeploymentStagingTransferAPIE2E(t *testing.T) {
 	s := newStagingE2E(t)
-	for _, scenario := range []string{"handoff", "fanout", "identical", "conflict", "failure", "cancel", "isolation", "assertion", "permissions", "renamed-directory", "escaped-directory", "cleanup-recovery", "capacity"} {
+	for _, scenario := range []string{"handoff", "fanout", "identical", "conflict", "failure", "cancel", "isolation", "assertion", "permissions", "renamed-directory", "escaped-directory", "background-writer", "cleanup-recovery", "capacity"} {
 		t.Run(scenario, func(t *testing.T) {
 			var project, environment struct{ ID int64 }
 			decode := func(data []byte, target any) {
@@ -145,6 +145,8 @@ func TestDeploymentStagingTransferAPIE2E(t *testing.T) {
 						script = `mv "$DURPDEPLOY_STAGE_DIR" "$DURPDEPLOY_STAGE_DIR-renamed"; mkdir "$DURPDEPLOY_STAGE_DIR"; printf replacement > "$DURPDEPLOY_STAGE_DIR/seed"`
 					case "escaped-directory":
 						script = `mv "$DURPDEPLOY_STAGE_DIR" "$(dirname "$(dirname "$DURPDEPLOY_STAGE_DIR")")/retained"`
+					case "background-writer":
+						script = `(sleep 2; mkdir -p "$DURPDEPLOY_STAGE_DIR"; printf retained > "$DURPDEPLOY_STAGE_DIR/retained") >/dev/null 2>&1 &`
 					case "cleanup-recovery":
 						script = `printf retained > "$DURPDEPLOY_STAGE_DIR/retained"; chmod 000 "$(dirname "$(dirname "$DURPDEPLOY_STAGE_DIR")")"; exit 7`
 					case "cancel":
@@ -222,6 +224,9 @@ func TestDeploymentStagingTransferAPIE2E(t *testing.T) {
 				want = "cancelled"
 			}
 			s.wait(t, deployment.ID, want)
+			if scenario == "background-writer" {
+				time.Sleep(3 * time.Second)
+			}
 			s.assertRuntimeStagingPurged(t)
 			logs := string(
 				s.api(
