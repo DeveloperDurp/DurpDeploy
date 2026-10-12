@@ -2,9 +2,7 @@ package api
 
 import (
 	"database/sql"
-	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strconv"
 	"time"
@@ -83,77 +81,7 @@ func (h *LogHandler) streamDeploymentLogs(
 		return
 	}
 
-	if _, err := h.repo.Queries.GetDeployment(r.Context(), depID); err != nil {
-		if err == sql.ErrNoRows {
-			RespondError(w, http.StatusNotFound, "Deployment not found")
-			return
-		}
-		RespondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	if ndjson {
-		w.Header().Set("Content-Type", "application/x-ndjson")
-	} else {
-		w.Header().Set("Content-Type", "text/event-stream")
-		w.Header().Set("Cache-Control", "no-cache")
-		w.Header().Set("Connection", "keep-alive")
-		w.Header().Set("X-Accel-Buffering", "no")
-	}
-
-	stream, err := httpstream.New(w)
-	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "Streaming unsupported")
-		return
-	}
-
-	if err := h.repo.ForEachDeploymentLogByDeploymentAsc(
-		r.Context(),
-		depID,
-		func(log db.DeploymentLog) error {
-			return h.writeLogLine(stream, log, ndjson)
-		},
-	); err != nil {
-		return
-	}
-
-	ch := h.broker.Subscribe(depID)
-	defer h.broker.Unsubscribe(depID, ch)
-
-	for {
-		select {
-		case <-r.Context().Done():
-			return
-		case line := <-ch:
-			var err error
-			if ndjson {
-				_, err = fmt.Fprintf(stream, `{"line":%q,"step":""}`+"\n", line)
-			} else {
-				_, err = fmt.Fprintf(stream, "data: %s\n\n", line)
-			}
-			if err != nil {
-				return
-			}
-		}
-	}
-}
-
-func (h *LogHandler) writeLogLine(
-	w io.Writer,
-	log db.DeploymentLog,
-	ndjson bool,
-) error {
-	if ndjson {
-		step := ""
-		if log.StepName.Valid {
-			step = log.StepName.String
-		}
-		return json.NewEncoder(w).Encode(
-			map[string]string{"line": log.Line, "step": step},
-		)
-	}
-	_, err := fmt.Fprintf(w, "data: %s\n\n", log.Line)
-	return err
+	httpstream.StreamTextLogs(w, r, h.repo, h.broker, depID, ndjson)
 }
 
 // ExportLogs returns deployment logs as a plain text file.

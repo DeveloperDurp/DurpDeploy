@@ -657,22 +657,15 @@ Alpine.data('deploymentStream', ({ url }) => ({
 		this.started = true;
 		this.source = new EventSource(this.url);
 		this.source.onmessage = (event) => this.message(event);
+		this.source.addEventListener('complete', () => {
+			this.source?.close();
+			this.source = null;
+		});
 	},
 	message(event) {
 		if (this.destroyed) return;
 		this.$refs.noLogs?.remove();
 		this.$refs.logs.textContent += `${event.data}\n`;
-	},
-	// 'htmx:afterSwap' supplies the replacement #status-badge to status().
-	status(event) {
-		const target = event.target instanceof Element
-			? event.target
-			: event.detail?.target;
-		if (!(target instanceof Element) || target.id !== 'status-badge') return;
-		const status = target.textContent.trim();
-		if (!['succeeded', 'failed', 'cancelled', 'rejected', 'expired'].includes(status)) return;
-		if (this.source) this.source.close();
-		this.source = null;
 	},
 	destroy() {
 		this.destroyed = true;

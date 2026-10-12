@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/httpstream"
 
@@ -22,6 +23,7 @@ func TestAgentTerminalCommitsBufferedTailAtomically(t *testing.T) {
 				fmt.Sprintf("step=%t/cancelled=%t", step, cancelled),
 				func(t *testing.T) {
 					f := newAgentFixture(t)
+					session := terminalStreamSession(t, f.repo)
 					id, claim := int64(
 						1,
 					), `{"protocol":"agent/1","claim_token":"claim-one"}`
@@ -184,17 +186,31 @@ func TestAgentTerminalCommitsBufferedTailAtomically(t *testing.T) {
 							t.Fatal(err)
 						}
 					}
-					server := httptest.NewServer(
+					server := httptest.NewServer(auth.AuthMiddleware(f.repo)(
 						http.HandlerFunc(
 							func(w http.ResponseWriter, r *http.Request) { httpstream.StreamStepLogs(w, r, f.repo, f.broker, id) },
 						),
-					)
+					))
 					defer server.Close()
-					response, err := http.Get(server.URL)
+					request, err := http.NewRequestWithContext(
+						t.Context(), http.MethodGet, server.URL, nil)
+					if err != nil {
+						t.Fatal(err)
+					}
+					request.AddCookie(
+						&http.Cookie{Name: "session", Value: session},
+					)
+					response, err := server.Client().Do(request)
 					if err != nil {
 						t.Fatal(err)
 					}
 					defer response.Body.Close()
+					if response.StatusCode != http.StatusOK {
+						t.Fatalf(
+							"authenticated log stream status=%d",
+							response.StatusCode,
+						)
+					}
 					data, err := io.ReadAll(response.Body)
 					if err != nil {
 						t.Fatal(err)
