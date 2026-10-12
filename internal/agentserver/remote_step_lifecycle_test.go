@@ -95,7 +95,7 @@ func TestRemoteStepLogsRedactSplitSecret(t *testing.T) {
 	logs, err := fixture.repo.Queries.ListDeploymentLogsByDeployment(
 		t.Context(), deploymentID,
 	)
-	if err != nil || len(logs) != 2 ||
+	if err != nil || len(logs) != 3 ||
 		logs[0].Line+logs[1].Line != "[REDACTED]" ||
 		!logs[0].StepName.Valid ||
 		!logs[0].StepIndex.Valid ||

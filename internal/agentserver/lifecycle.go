@@ -15,30 +15,6 @@ import (
 	agentproto "github.com/DeveloperDurp/durpdeploy-agent/protocol"
 )
 
-func (s *Server) Start(w http.ResponseWriter, r *http.Request) {
-	request, ok := decodeRequest[agentproto.StartRequest](w, r)
-	if !ok {
-		return
-	}
-	deploymentID, ok := deploymentID(w, r)
-	if !ok {
-		return
-	}
-	agentID, _ := AgentIDFromContext(r.Context())
-	claim := repository.RemoteLifecycleClaim{
-		DeploymentID:   deploymentID,
-		AgentID:        string(agentID),
-		ClaimTokenHash: claimTokenHash(request.ClaimToken),
-	}
-	handled, err := s.repository.StartRemoteStep(r.Context(), claim)
-	if err == nil && !handled {
-		err = s.repository.StartRemoteDeployment(r.Context(), claim)
-	}
-	if writeLifecycleStatus(w, err) {
-		w.WriteHeader(http.StatusNoContent)
-	}
-}
-
 func (s *Server) Heartbeat(w http.ResponseWriter, r *http.Request) {
 	request, ok := decodeRequest[agentproto.HeartbeatRequest](w, r)
 	if !ok {
