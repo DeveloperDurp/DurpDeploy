@@ -5,6 +5,30 @@ outbound; initial pairing uses a temporary agent listener.
 It covers the server listener, admin pairing, agent installation, routing,
 maintenance, and recovery.
 
+## Execution location in step logs
+
+Each accepted remote step records the agent name and ID before script output.
+Each execution attempt records the physical hostname, execution mode, interpreter, and attempt number.
+Container attempts also record the runtime, container name, and resolved image ID.
+Retries and fan-out retain separate entries.
+
+Container execution uses the physical hostname reported by Docker or Podman.
+Host execution uses this runtime information when available.
+Native host agents otherwise use the operating system hostname.
+Unavailable physical hostnames appear as `unknown`.
+
+For a containerized host agent without runtime information, set `DURPDEPLOY_AGENT_HOSTNAME` to the physical machine hostname.
+This setting overrides automatic hostname detection.
+The setting does not grant runtime socket access.
+
+```sh
+DURPDEPLOY_AGENT_HOSTNAME=app-server-02
+```
+
+Read these entries in live step logs, saved logs, public log APIs, and log downloads.
+Older agents can provide their identity without hostname or container details.
+Historical logs retain their original information.
+
 ## Fleet maintenance and health
 
 **Delete** removes the agent's server registration, pairing credentials, and
@@ -457,7 +481,7 @@ fail closed if a tag was rewritten:
 ```bash
 set -euo pipefail
 AGENT_MODULE=github.com/DeveloperDurp/durpdeploy-agent
-AGENT_VERSION=v0.1.1-0.20261012024048-3f3083fb8dbc # use the value recorded from the server checkout
+AGENT_VERSION=v0.1.1-0.20261012151927-fae2b695a3e8 # use the value recorded from the server checkout
 AGENT_SUM='h1:...' # use the value recorded from the server checkout
 AGENT_COMMIT=... # use the value recorded from the server checkout
 AGENT_DOWNLOAD=$(go mod download -json "$AGENT_MODULE@$AGENT_VERSION")

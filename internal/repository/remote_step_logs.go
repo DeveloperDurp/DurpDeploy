@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
+	"strings"
 
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/logscrub"
@@ -98,6 +100,14 @@ func (r *Repository) appendRemoteStepLogs(
 		if !errors.Is(err, sql.ErrNoRows) {
 			return nil, err
 		}
+		line := event.Line
+		if strings.HasPrefix(line, "Execution location:") {
+			line = fmt.Sprintf(
+				"%s agent_id=%q",
+				line,
+				scrubber.Scrub(run.AgentID),
+			)
+		}
 		log, err := q.CreateStepDeploymentLog(
 			ctx,
 			db.CreateStepDeploymentLogParams{
@@ -106,7 +116,7 @@ func (r *Repository) appendRemoteStepLogs(
 					String: steps[run.StepIndex].Name + " @ " + run.AgentID,
 					Valid:  true,
 				},
-				Line:      event.Line,
+				Line:      line,
 				StepIndex: sql.NullInt64{Int64: run.StepIndex, Valid: true},
 			},
 		)

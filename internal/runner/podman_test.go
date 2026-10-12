@@ -248,7 +248,7 @@ esac
 		t.Fatalf("script %q: %v", script, err)
 	}
 	var line string
-	if err := repo.DB.QueryRowContext(t.Context(), "SELECT line FROM deployment_logs WHERE deployment_id=? AND step_state IS NULL", dep.ID).
+	if err := repo.DB.QueryRowContext(t.Context(), "SELECT line FROM deployment_logs WHERE deployment_id=? AND step_state IS NULL ORDER BY id DESC LIMIT 1", dep.ID).
 		Scan(&line); err != nil ||
 		strings.Contains(line, "topsecret") ||
 		!strings.Contains(line, "[REDACTED]") {

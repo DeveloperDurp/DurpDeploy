@@ -1,5 +1,42 @@
 # Manual checks after `make e2e-test`
 
+## Step execution locations
+
+Create a release with a server container step, an agent host step, and an agent container step.
+Assign the agents to the deployment environment.
+Use distinct step names and a short delay to inspect live output.
+Deploy the release through the public API or web form.
+
+Check the execution location entry before each step's script output.
+Confirm that the physical hostname matches the machine that runs the step.
+Confirm that server steps identify their container name and image.
+Confirm that agent steps identify the selected agent and distinguish `container` from `host/shell`.
+
+Configure one retry.
+Repeat the deployment.
+Confirm that each attempt has its own location entry and container name.
+Assign two matching agents to one remote step.
+Confirm that the fan-out logs identify both agents and execution locations.
+
+Reload the deployment page after completion.
+Read `GET /api/v1/deployments/{id}/logs`.
+Download `/deployments/{id}/logs.txt`.
+Confirm that both surfaces retain the same execution locations.
+Repeat the check with a viewer account.
+
+For a containerized host agent without runtime information, set `DURPDEPLOY_AGENT_HOSTNAME` before starting the agent.
+Confirm that the configured physical hostname appears in its logs.
+Without this setting, an unavailable physical hostname appears as `unknown`.
+
+Retain the project, release, environment, deployments, and agent assignments for repeat checks.
+Keep schedules disabled.
+Automated API and web coverage uses `TestExecutionLocationAPIWebE2E`.
+Rendered browser coverage uses `TestDeploymentStepLogsBrowserE2E`.
+
+```bash
+AGENT_TEST_SOCKET=unix:///run/user/1000/podman/podman.sock DURPDEPLOY_AGENT_E2E_BINARY=/absolute/path/to/durpdeploy-agent bash scripts/go_test.sh -tags 'e2e agentstaging' -race -count=1 -timeout=5m -run '^TestExecutionLocationAPIWebE2E$' ./internal/agentserver
+```
+
 ## Deployment staging transfer
 
 Run the transfer timeout API checks with the current server and agent builds:

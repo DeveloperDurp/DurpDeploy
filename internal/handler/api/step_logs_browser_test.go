@@ -47,6 +47,10 @@ func TestDeploymentStepLogsBrowserE2E(t *testing.T) {
 		`document.querySelector('[data-step-index="0"] .badge').textContent === 'Running' && document.querySelector('[role="status"]').textContent.includes('Step 1')`,
 	)
 	browser.captureStepLogs(t, "first-running")
+	browser.wait(
+		t,
+		`document.querySelector('[data-step-index="0"]').textContent.includes('mode=container') && document.querySelector('[data-step-index="0"]').textContent.includes('host=')`,
+	)
 	// Reload and explicitly reconnect while the first step is active.
 	browser.wire.events = nil
 	browser.call(t, "Page.reload", struct{}{}, &struct{}{})
@@ -131,6 +135,14 @@ func TestDeploymentStepLogsBrowserE2E(t *testing.T) {
 	) != "true" {
 		t.Fatal("viewer logs missing or write controls exposed")
 	}
+	browser.evaluate(
+		t,
+		`(() => { document.querySelectorAll('details[data-step-index]').forEach(panel => { if (!panel.open) panel.querySelector('summary').click(); }); return true; })()`,
+	)
+	browser.wait(
+		t,
+		`document.querySelector('[data-step-index="1"]').textContent.includes('mode=container') && document.querySelector('[data-step-index="1"]').textContent.includes('container=')`,
+	)
 	browser.captureStepLogs(t, "viewer-completed")
 }
 
@@ -191,67 +203,4 @@ func TestDeploymentStepLogsHistoricalQuietBrowserE2E(t *testing.T) {
 		t,
 		`document.querySelector('[data-step-index="0"] .badge').textContent === 'State unavailable' && Alpine.$data(document.querySelector('[x-data^="deploymentStepLogs"]')).source === null`,
 	)
-}
-
-func (b *packageBrowser) setStepLogSession(
-	t *testing.T,
-	address, session string,
-) {
-	t.Helper()
-	var result struct {
-		Success bool `json:"success"`
-	}
-	b.call(
-		t,
-		"Network.setCookie",
-		map[string]any{
-			"name":     "session",
-			"value":    session,
-			"url":      address,
-			"httpOnly": true,
-		},
-		&result,
-	)
-	if !result.Success {
-		t.Fatal("browser session missing")
-	}
-}
-
-func (b *packageBrowser) openStepLogPage(t *testing.T, address string) {
-	t.Helper()
-	b.wire.events = nil
-	b.call(t, "Page.navigate", map[string]string{"url": address}, &struct{}{})
-	if err := b.wire.waitEvent("Page.frameStoppedLoading", b.session); err != nil {
-		t.Fatal(err)
-	}
-	b.wait(
-		t,
-		fmt.Sprintf(
-			`location.href === %q && document.readyState === 'complete' && window.Alpine && document.querySelector('[x-data^="deploymentStepLogs"]')`,
-			address,
-		),
-	)
-}
-
-func (b *packageBrowser) captureStepLogs(t *testing.T, name string) {
-	t.Helper()
-	for _, width := range []int{375, 768, 1280} {
-		b.call(
-			t,
-			"Emulation.setDeviceMetricsOverride",
-			map[string]any{
-				"width":             width,
-				"height":            1100,
-				"deviceScaleFactor": 1,
-				"mobile":            false,
-			},
-			&struct{}{},
-		)
-		if string(
-			b.evaluate(t, `document.documentElement.scrollWidth <= innerWidth`),
-		) != "true" {
-			t.Fatal("step panels overflow viewport")
-		}
-		b.screenshot(t, fmt.Sprintf("step-logs-%s-%d", name, width))
-	}
 }

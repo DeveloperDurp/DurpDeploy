@@ -4,11 +4,9 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"sort"
 	"strings"
 	"time"
 
@@ -47,18 +45,8 @@ func (r *DeploymentRunner) runStepAttempt(
 	defer func() {
 		request.logWriter.finishState(result, runCtx.Err() != nil)
 	}()
-	if request.step.ContainerImage == "" {
-		return fmt.Errorf(
-			"step %q has no container image (legacy local steps cannot run on the host)",
-			request.step.Name,
-		)
-	}
-	if strings.HasPrefix(request.step.ContainerImage, "-") ||
-		strings.ContainsAny(request.step.ContainerImage, " \t\r\n\x00") {
-		return fmt.Errorf(
-			"step %q has an invalid container image",
-			request.step.Name,
-		)
+	if err := request.step.validateLocalContainerImage(); err != nil {
+		return err
 	}
 	if r.localErr != nil {
 		err := fmt.Errorf("initialize container execution: %w", r.localErr)
@@ -110,48 +98,9 @@ func (r *DeploymentRunner) runStepAttempt(
 			return err
 		}
 	}
-	variableNames := request.step.VariableNames
-	if len(variableNames) == 0 {
-		variableNames = make([]string, 0, len(request.environment))
-		for name := range request.environment {
-			if request.validExecutionVariable(name) {
-				variableNames = append(variableNames, name)
-			}
-		}
-		sort.Strings(variableNames)
-	}
-	var selectedEnv []string
-	var envArgs []string
-	for _, name := range variableNames {
-		value, exists := request.environment[name]
-		if !request.validExecutionVariable(name) || !exists ||
-			strings.ContainsRune(value, '\x00') {
-			return fmt.Errorf(
-				"invalid or unavailable selected variable %q",
-				name,
-			)
-		}
-		selectedEnv = append(selectedEnv, name+"="+value)
-		envArgs = append(envArgs, "--env", name)
-	}
-
-	if request.artifact.volume != "" {
-		selectedEnv = append(selectedEnv, "ARTIFACT_PATH="+artifactMount)
-		envArgs = append(envArgs, "--env", "ARTIFACT_PATH")
-	}
-	if request.handoff.volume != "" {
-		selectedEnv = append(
-			selectedEnv,
-			containerenv.StageVariable+"="+deploymentStageMount,
-		)
-		envArgs = append(envArgs, "--env", containerenv.StageVariable)
-	}
-	if request.approved.volume != "" {
-		selectedEnv = append(
-			selectedEnv,
-			"DURPDEPLOY_APPROVED_DIR="+approvedMount,
-		)
-		envArgs = append(envArgs, "--env", "DURPDEPLOY_APPROVED_DIR")
+	selectedEnv, envArgs, err := request.containerEnvironment()
+	if err != nil {
+		return err
 	}
 	nonce := make([]byte, 12)
 	if _, err := rand.Read(nonce); err != nil {
@@ -221,6 +170,13 @@ func (r *DeploymentRunner) runStepAttempt(
 		)
 	case interpreter.Python:
 		args = append(args, "-")
+	}
+	if _, err := io.WriteString(request.logWriter, fmt.Sprintf(
+		"Execution location: target=server host=%q mode=container runtime=%q container=%q image=%q interpreter=%q attempt=%d\n",
+		request.logWriter.scrubber.Scrub(r.engine.hostname(stepCtx)),
+		r.engine.kind, name, request.step.ContainerImage, selected, request.attempt,
+	)); err != nil {
+		return fmt.Errorf("record execution location: %w", err)
 	}
 	cmd := r.engine.command(stepCtx, args...)
 	cmd.Env = append(cmd.Env, selectedEnv...)
@@ -294,69 +250,4 @@ func (r *DeploymentRunner) runStepAttempt(
 		}
 	}
 	return err
-}
-
-// Existing immutable snapshots may contain this name from before packages.
-// New-write validation stays reserved; a mounted package owns the variable.
-func (request localStepAttempt) validExecutionVariable(name string) bool {
-	if request.verification {
-		if strings.HasPrefix(name, "LD_") {
-			return false
-		}
-		switch name {
-		case "BASH_ENV", "ENV", "SHELLOPTS", "BASHOPTS", "CDPATH",
-			"GLOBIGNORE", "PS4", "GCONV_PATH", "GLIBC_TUNABLES":
-			return false
-		}
-	}
-	if name == "ARTIFACT_PATH" && request.artifact.volume == "" {
-		return true
-	}
-	return containerenv.ValidateName(name, true) == nil
-}
-
-func (r *DeploymentRunner) rejectDockerImageVolumes(
-	ctx context.Context,
-	image string,
-) error {
-	inspect := func() ([]byte, error) {
-		return r.engine.command(
-			ctx,
-			"image", "inspect", "--format={{json .Config.Volumes}}", image,
-		).CombinedOutput()
-	}
-	output, err := inspect()
-	if err != nil {
-		pullOutput, pullErr := r.engine.command(
-			ctx, "pull", "--quiet", image,
-		).CombinedOutput()
-		if pullErr != nil {
-			return fmt.Errorf(
-				"pull container image: %w: %s",
-				pullErr,
-				strings.TrimSpace(string(pullOutput)),
-			)
-		}
-		output, err = inspect()
-		if err != nil {
-			return fmt.Errorf(
-				"inspect container image: %w: %s",
-				err,
-				strings.TrimSpace(string(output)),
-			)
-		}
-	}
-	var volumes map[string]json.RawMessage
-	if err := json.Unmarshal(output, &volumes); err != nil {
-		return fmt.Errorf(
-			"inspect container image volume metadata: %w",
-			err,
-		)
-	}
-	if len(volumes) != 0 {
-		return errors.New(
-			"container image declares writable volumes, which Docker cannot disable",
-		)
-	}
-	return nil
 }
