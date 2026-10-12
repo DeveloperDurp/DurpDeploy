@@ -61,34 +61,12 @@ func (r *Repository) RecordAgentPollCapabilities(
 			if changed == 0 {
 				return nil
 			}
-			if request.Staging {
-				// Request-local downgrades cannot invalidate queued staged work.
-				if err := q.ClearAgentStagingCapability(
-					ctx,
-					heartbeat.ID,
-				); err != nil {
-					return err
-				}
-				if err := q.AddAgentStagingCapability(
-					ctx,
-					heartbeat.ID,
-				); err != nil {
-					return err
-				}
-			}
-			if err := q.ClearAgentArtifactCapability(
+			if err := request.recordTransferCapabilities(
 				ctx,
+				q,
 				heartbeat.ID,
 			); err != nil {
 				return err
-			}
-			if request.Artifact {
-				if err := q.AddAgentArtifactCapability(
-					ctx,
-					heartbeat.ID,
-				); err != nil {
-					return err
-				}
 			}
 			if err := q.SetAgentProtocol(ctx, db.SetAgentProtocolParams{
 				ID: heartbeat.ID,

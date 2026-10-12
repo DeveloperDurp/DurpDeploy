@@ -76,16 +76,7 @@ func (s *Server) Artifact(w http.ResponseWriter, r *http.Request) {
 	}()
 	download, err := s.repository.DownloadDeploymentArtifact(r.Context(), id)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			w.WriteHeader(404)
-			return
-		}
-		if errors.Is(err, artifact.ErrInvalid) ||
-			errors.Is(err, artifact.ErrChecksum) {
-			w.WriteHeader(422)
-			return
-		}
-		w.WriteHeader(502)
+		w.WriteHeader(artifactDownloadErrorStatus(err))
 		return
 	}
 	defer func() {
@@ -109,6 +100,18 @@ func (s *Server) Artifact(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Artifact-SHA256", download.SHA256)
 	w.Header().Set("X-Artifact-Size", strconv.FormatInt(download.Size, 10))
 	http.ServeFile(stream, r, download.Path)
+}
+
+func artifactDownloadErrorStatus(err error) int {
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return http.StatusNotFound
+	case errors.Is(err, artifact.ErrInvalid),
+		errors.Is(err, artifact.ErrChecksum):
+		return http.StatusUnprocessableEntity
+	default:
+		return http.StatusBadGateway
+	}
 }
 
 func (s *Server) artifactClaimLive(

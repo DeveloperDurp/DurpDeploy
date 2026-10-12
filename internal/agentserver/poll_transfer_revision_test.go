@@ -90,49 +90,8 @@ func testWaitingPollCannotBorrowTransferCapability(
 	case <-time.After(3 * time.Second):
 		t.Fatal("stale unstaged poll did not return")
 	}
-	if withdraw {
-		// A fresh poll withdraws package support. Staging support stays sticky.
-		ctx, stop := context.WithCancel(t.Context())
-		fresh := startConcurrentPoll(t, f, concurrentPollCall{
-			ctx:     ctx,
-			body:    `{"protocol":"agent/1","agent_version":"withdrawn-package"}`,
-			staging: packaged,
-		})
-		waitPollVersion(t, f, "withdrawn-package")
-		stop()
-		<-fresh
-		runs, err := f.repo.Queries.ListRemoteStepRuns(t.Context(),
-			db.ListRemoteStepRunsParams{DeploymentID: id, StepIndex: 0})
-		if err != nil || len(runs) != 1 {
-			t.Fatalf("waiting runs=%v error=%v", runs, err)
-		}
-		if packaged {
-			if runs[0].State != "failed" || !runs[0].FinishedAt.Valid {
-				t.Fatalf(
-					"withdrawn package capability retained waiting work: %+v",
-					runs[0],
-				)
-			}
-			var eligible int
-			if err := f.repo.DB.QueryRowContext(
-				t.Context(),
-				"SELECT COUNT(*) FROM eligible_remote_step_agents WHERE deployment_id=? AND step_index=0",
-				id,
-			).Scan(&eligible); err != nil || eligible != 0 {
-				t.Fatalf(
-					"withdrawn package capability remained eligible: %d %v",
-					eligible,
-					err,
-				)
-			}
-			return
-		}
-		if runs[0].State != "waiting" {
-			t.Fatalf(
-				"fresh unstaged poll invalidated staged queue: %+v",
-				runs[0],
-			)
-		}
+	if withdraw && f.checkTransferWithdrawal(t, id, packaged) {
+		return
 	}
 	request, err := http.NewRequestWithContext(t.Context(), "POST",
 		f.server.URL+agentproto.PollPath, strings.NewReader(pollBody))
@@ -156,4 +115,55 @@ func testWaitingPollCannotBorrowTransferCapability(
 	if int64(poll.DeploymentID) != id {
 		t.Fatalf("staged poll deployment=%d want=%d", poll.DeploymentID, id)
 	}
+}
+
+func (f agentFixture) checkTransferWithdrawal(
+	t *testing.T,
+	id int64,
+	packaged bool,
+) bool {
+	t.Helper()
+	// A fresh poll withdraws package support. Staging support stays sticky.
+	ctx, stop := context.WithCancel(t.Context())
+	fresh := startConcurrentPoll(t, f, concurrentPollCall{
+		ctx:     ctx,
+		body:    `{"protocol":"agent/1","agent_version":"withdrawn-package"}`,
+		staging: packaged,
+	})
+	waitPollVersion(t, f, "withdrawn-package")
+	stop()
+	<-fresh
+	runs, err := f.repo.Queries.ListRemoteStepRuns(t.Context(),
+		db.ListRemoteStepRunsParams{DeploymentID: id, StepIndex: 0})
+	if err != nil || len(runs) != 1 {
+		t.Fatalf("waiting runs=%v error=%v", runs, err)
+	}
+	if packaged {
+		if runs[0].State != "failed" || !runs[0].FinishedAt.Valid {
+			t.Fatalf(
+				"withdrawn package capability retained waiting work: %+v",
+				runs[0],
+			)
+		}
+		var eligible int
+		if err := f.repo.DB.QueryRowContext(
+			t.Context(),
+			"SELECT COUNT(*) FROM eligible_remote_step_agents WHERE deployment_id=? AND step_index=0",
+			id,
+		).Scan(&eligible); err != nil || eligible != 0 {
+			t.Fatalf(
+				"withdrawn package capability remained eligible: %d %v",
+				eligible,
+				err,
+			)
+		}
+		return true
+	}
+	if runs[0].State != "waiting" {
+		t.Fatalf(
+			"fresh unstaged poll invalidated staged queue: %+v",
+			runs[0],
+		)
+	}
+	return false
 }
