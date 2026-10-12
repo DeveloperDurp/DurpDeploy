@@ -109,6 +109,7 @@ else
         sqlite) command -v sqlite3 >/dev/null || { echo "FAIL: sqlite3 is required" >&2; exit 1; } ;;
         postgres) command -v psql >/dev/null || { echo "FAIL: psql is required" >&2; exit 1; } ;;
         mssql) command -v sqlcmd >/dev/null || { echo "FAIL: sqlcmd is required" >&2; exit 1; } ;;
+        *) echo "FAIL: unsupported database client: $DB_CLIENT" >&2; exit 1 ;;
     esac
 fi
 
@@ -140,6 +141,7 @@ db_query() {
                     -Q "SET NOCOUNT ON; $query"
             fi | sed '/^[[:space:]]*$/d; s/^[[:space:]]*//; s/[[:space:]]*$//'
             ;;
+        *) echo "FAIL: unsupported database client: $DB_CLIENT" >&2; return 1 ;;
     esac
 }
 
@@ -324,15 +326,25 @@ CANCEL_STATE=${CANCEL_STATE:-unknown}
 }
 CODE=$(curl_silent -X POST -d "csrf_token=$CSRF" "$BASE/deployments/$CANCEL_DEP/cancel")
 [[ "$CODE" == "303" ]] || { echo "FAIL: cancel got $CODE"; exit 1; }
+for i in {1..150}; do
+  CANCEL_STATUS=$(curl_body "$BASE/deployments/$CANCEL_DEP/status")
+  CANCEL_STATE=$(printf '%s' "$CANCEL_STATUS" | \
+      grep -oP 'data-deployment-status="\K[a-z_]+' | head -1 || true)
+  [[ "$CANCEL_STATE" == "cancelled" ]] && break
+  sleep 0.2
+done
+[[ "$CANCEL_STATE" == "cancelled" ]] || {
+  echo "FAIL: cancel deployment did not finish (last state=$CANCEL_STATE)" >&2
+  exit 1
+}
 
 echo "=== F3.2b: Per-Step Timeout ==="
 # A step with a 1-second timeout running a 10-second sleep should fail
 # instead of hanging for the 5-minute default. We delete the LongStep
 # from the cancel path so this test doesn't first run a 10s sleep.
-# The runner's pre-existing cleanup (cmd.WaitDelay=15s + a 10s goroutine
-# sleep) means the deployment status flips to 'failed' ~15s after the
-# 1s timeout fires; we poll for 20s and assert < 25s elapsed (still
-# well under the 5-minute default).
+# Cancellation must finish before this deployment can acquire the queue slot.
+# Poll through the step timeout and bounded container cleanup, still well
+# under the 5-minute default.
 STEPS_PAGE=$(curl_body "$BASE/projects/$PROJECT_ID/steps-page")
 LONG_STEP_ID=$(echo "$STEPS_PAGE" | grep -oP 'step-row-\K[0-9]+' | sort -n | tail -1)
 if [[ -n "$LONG_STEP_ID" ]]; then

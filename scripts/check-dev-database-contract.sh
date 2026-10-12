@@ -11,6 +11,7 @@ for target in postgres mssql; do
     case "$target" in
     postgres) port=5432; dsn=postgres://localhost/fixture ;;
     mssql) port=1433; dsn='sqlserver://localhost?database=fixture' ;;
+    *) echo "FAIL: unexpected database target: $target" >&2; exit 1 ;;
     esac
     output=$(make --silent --dry-run -C "$root" -o dev \
         "dev-$target" DEV_CONTAINER_ENGINE=podman)
