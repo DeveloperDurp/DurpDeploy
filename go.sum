@@ -16,8 +16,8 @@ github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c h1:udKWzYgxTojEK
 github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c/go.mod h1:xomTg63KZ2rFqZQzSB4Vz2SUXa1BpHTVz9L5PTmPC4E=
 github.com/AzureAD/microsoft-authentication-library-for-go v1.9.0 h1:MDT4FxAPve5FnYn6vOL1r7RCRDG+l9cI7a5LlCuHsqA=
 github.com/AzureAD/microsoft-authentication-library-for-go v1.9.0/go.mod h1:Y33QHnf0FfdVewFFISOGe20mkZbxX4H839o955/PoeI=
-github.com/DeveloperDurp/durpdeploy-agent v0.1.1-0.20261012020530-ed56db7bd1dd h1:LxtKG9/AS1t6BRaaH1Dq4UTCPeqgMMbGI2aH0odCUUY=
-github.com/DeveloperDurp/durpdeploy-agent v0.1.1-0.20261012020530-ed56db7bd1dd/go.mod h1:GjvYh0EVVCngIKUh1v2MLb3WyZCHlrqE9ID2meUAJTQ=
+github.com/DeveloperDurp/durpdeploy-agent v0.1.1-0.20261012023121-8632d6871771 h1:Da8bGDaeKCjfOrpJErKu078u23Qe6lu/jSs1gawG4pI=
+github.com/DeveloperDurp/durpdeploy-agent v0.1.1-0.20261012023121-8632d6871771/go.mod h1:GjvYh0EVVCngIKUh1v2MLb3WyZCHlrqE9ID2meUAJTQ=
 github.com/Microsoft/go-winio v0.6.2 h1:F2VQgta7ecxGYO8k3ZZz3RS8fVIXVxONVUPlNERoyfY=
 github.com/Microsoft/go-winio v0.6.2/go.mod h1:yd8OoFMLzJbo9gZq8j5qaps8bJ9aShtEA8Ipt1oGCvU=
 github.com/a-h/parse v0.0.0-20250122154542-74294addb73e h1:HjVbSQHy+dnlS6C3XajZ69NYAb5jbGNfHanvm1+iYlo=
