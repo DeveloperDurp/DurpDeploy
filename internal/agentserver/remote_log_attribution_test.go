@@ -47,7 +47,7 @@ func TestRemoteOutputAttributesMultilineCredentialTail(t *testing.T) {
 				t.Fatalf("result status=%d", response.StatusCode)
 			}
 
-			// Then: saved and broadcast output bind both lines to this agent.
+			// Then: saved and broadcast output bind one escaped event to this agent.
 			logs, err := f.repo.Queries.ListDeploymentLogsByDeployment(
 				t.Context(),
 				id,
@@ -62,7 +62,8 @@ func TestRemoteOutputAttributesMultilineCredentialTail(t *testing.T) {
 				}
 			}
 			lines := strings.Split(output, "\n")
-			if len(lines) != 2 {
+			if len(lines) != 1 ||
+				!strings.Contains(output, `spoof\r\nlast token=`) {
 				t.Fatalf("rendered lines=%q", output)
 			}
 			for _, line := range lines {

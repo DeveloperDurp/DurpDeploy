@@ -16,6 +16,11 @@ type RemoteLogEvent struct {
 	Line     string `json:"line"`
 }
 
+var remoteLogLineEscaper = strings.NewReplacer(
+	"\n", `\n`, "\r", `\r`, "\v", `\v`, "\f", `\f`,
+	"\u0085", `\u0085`, "\u2028", `\u2028`, "\u2029", `\u2029`,
+)
+
 func (r *Repository) AppendRemoteDeploymentLogs(
 	ctx context.Context,
 	identity RemoteLifecycleClaim,
@@ -125,16 +130,10 @@ func attributedRemoteLog(
 	agentID string,
 	scrubber *logscrub.Scrubber,
 ) string {
-	// Scrub before appending so incomplete credential markers cannot eat the ID.
-	line = scrubber.Scrub(line)
-	line = strings.ReplaceAll(
-		strings.ReplaceAll(line, "\r\n", "\n"),
-		"\r",
-		"\n",
-	)
-	line = scrubber.Scrub(line)
+	// Keep one visible line per event without changing raw redaction boundaries.
+	line = scrubber.Scrub(remoteLogLineEscaper.Replace(scrubber.Scrub(line)))
 	suffix := fmt.Sprintf(" agent_id=%q", scrubber.Scrub(agentID))
-	return strings.ReplaceAll(line, "\n", suffix+"\n") + suffix
+	return line + suffix
 }
 
 func (r *Repository) FlushRemoteDeploymentLogs(
