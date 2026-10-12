@@ -91,31 +91,6 @@ func (s *ArtifactSnapshot) Insert(
 	return q.CreateReleaseArtifact(ctx, row)
 }
 
-func ValidateArtifactSteps(steps []DeploymentStepSnapshot) error {
-	for _, step := range steps {
-		if step.ExecutionTarget == "agent" {
-			return ErrRemoteArtifactsUnsupported
-		}
-	}
-	return nil
-}
-
-func validateDeploymentArtifact(
-	ctx context.Context,
-	q *db.Queries,
-	deploymentID int64,
-	steps []DeploymentStepSnapshot,
-) error {
-	_, err := q.GetDeploymentArtifact(ctx, deploymentID)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	return ValidateArtifactSteps(steps)
-}
-
 func (r *Repository) DownloadDeploymentArtifact(
 	ctx context.Context,
 	deploymentID int64,

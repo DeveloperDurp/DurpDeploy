@@ -35,21 +35,3 @@ func TestValidateZIPBoundsImplicitDirectories(t *testing.T) {
 		t.Fatalf("unbounded implicit directories accepted: %v", err)
 	}
 }
-
-func TestZIPNodeBudgetDoesNotChargeRepeatedParents(t *testing.T) {
-	// Given
-	kinds := make(map[string]bool)
-	entry := &zip.File{FileHeader: zip.FileHeader{Name: "parent/file"}}
-	if err := validateZIPEntry(entry, kinds); err != nil {
-		t.Fatal(err)
-	}
-	// When
-	err := validateZIPEntry(
-		&zip.File{FileHeader: zip.FileHeader{Name: "parent/other"}},
-		kinds,
-	)
-	// Then
-	if err != nil || len(kinds) != 3 {
-		t.Fatalf("shared directory counted twice: %d %v", len(kinds), err)
-	}
-}

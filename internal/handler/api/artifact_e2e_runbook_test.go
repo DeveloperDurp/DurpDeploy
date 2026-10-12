@@ -96,6 +96,7 @@ func (f *artifactE2E) verifyRunbookPackage(
 		},
 		303,
 	)
+	f.verifyRemoteRunbookPackage(t, releaseID)
 	return saved.Version
 }
 

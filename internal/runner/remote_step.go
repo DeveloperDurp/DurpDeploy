@@ -45,14 +45,27 @@ func (r *DeploymentRunner) runRemoteStep(
 		return err
 	}
 	if created == 0 {
+		capabilities := "staging/1"
+		if _, err := r.repo.Queries.GetDeploymentArtifact(
+			ctx,
+			request.deploymentID,
+		); err == nil {
+			capabilities += " and artifact/1"
+		} else if !errors.Is(
+			err,
+			sql.ErrNoRows,
+		) {
+			return err
+		}
 		selectedInterpreter := request.step.Interpreter
 		if selectedInterpreter == "" {
 			selectedInterpreter = "bash"
 		}
 		message := fmt.Sprintf(
-			"step %q: no compatible agents support interpreter %q and match the environment, labels, and staging/1 capability; upgrade participating agents",
+			"step %q: no compatible agents support interpreter %q and match the environment, labels, and %s capabilities; upgrade participating agents",
 			request.step.Name,
 			selectedInterpreter,
+			capabilities,
 		)
 		_, _ = request.logWriter.Write([]byte(message + "\n"))
 		request.logWriter.Flush()

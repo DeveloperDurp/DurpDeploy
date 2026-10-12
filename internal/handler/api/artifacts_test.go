@@ -133,9 +133,10 @@ func TestArtifactWebViewerCannotSeeRepositoryForm(t *testing.T) {
 	}
 }
 
-func TestArtifactAPIRemoteDeploymentReturnsValidationError(t *testing.T) {
+func TestArtifactAPIRemoteDeploymentAcceptsPinnedPackage(t *testing.T) {
 	// Given
 	h := newAPIHarness(t, fakePodman(t))
+	t.Cleanup(h.runner.KillAll)
 	admin := seedAPIUser(
 		t,
 		h.repo,
@@ -174,7 +175,7 @@ func TestArtifactAPIRemoteDeploymentReturnsValidationError(t *testing.T) {
 			RepositoryID: source.ID,
 			Url:          "https://repo.example/1.zip",
 			Version:      "1",
-			Sha256:       "pinned",
+			Sha256:       strings.Repeat("a", 64),
 			Size:         123,
 		},
 	); err != nil {
@@ -197,7 +198,7 @@ func TestArtifactAPIRemoteDeploymentReturnsValidationError(t *testing.T) {
 	// When
 	newMaskingRouter(h).ServeHTTP(response, request)
 	// Then
-	if response.Code != 422 {
+	if response.Code != http.StatusCreated {
 		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
 	}
 }

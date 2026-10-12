@@ -41,27 +41,46 @@ func (r *DeploymentRunner) stageArtifact(
 	if err != nil {
 		return result, err
 	}
-	if r.localErr != nil {
+	steps, err := r.repo.Queries.ListDeploymentSteps(ctx, deploymentID)
+	if err != nil {
+		return result, fmt.Errorf("load frozen package steps: %w", err)
+	}
+	local := false
+	for _, step := range steps {
+		if step.ExecutionTarget != "agent" {
+			local = true
+			break
+		}
+	}
+	if local && r.localErr != nil {
 		return result, r.localErr
 	}
-	recorded, err := r.repo.Queries.RecordContainerNamespace(
-		ctx,
-		db.RecordContainerNamespaceParams{
-			DeploymentID: deploymentID,
-			Namespace:    sql.NullString{String: r.engine.scope(), Valid: true},
-		},
-	)
-	if err != nil {
-		return result, err
-	}
-	if recorded != 1 {
-		return result, errContainerCleanup
+	if local {
+		recorded, err := r.repo.Queries.RecordContainerNamespace(
+			ctx,
+			db.RecordContainerNamespaceParams{
+				DeploymentID: deploymentID,
+				Namespace: sql.NullString{
+					String: r.engine.scope(),
+					Valid:  true,
+				},
+			},
+		)
+		if err != nil {
+			return result, err
+		}
+		if recorded != 1 {
+			return result, errContainerCleanup
+		}
 	}
 	download, err := r.repo.DownloadDeploymentArtifact(ctx, deploymentID)
 	if err != nil {
 		return result, err
 	}
 	defer func() { err = errors.Join(err, os.Remove(download.Path)) }()
+	if !local {
+		return result, nil
+	}
 	directory, err := artifact.ExtractZIP(ctx, download.Path)
 	if err != nil {
 		return result, err

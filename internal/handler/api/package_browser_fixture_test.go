@@ -156,7 +156,7 @@ func (b *packageBrowser) evaluate(
 		&result,
 	)
 	if len(result.Exception) != 0 {
-		t.Fatal("browser evaluation failed")
+		t.Fatalf("browser evaluation failed: %s", result.Exception)
 	}
 	return result.Result.Value
 }

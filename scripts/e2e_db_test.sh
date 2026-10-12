@@ -80,13 +80,15 @@ case "$DB_KIND" in
         ;;
     postgres|postgresql)
         DB_KIND=postgres
-        DB_DSN="${DURPDEPLOY_DB:-postgres://durpdeploy:durpdeploy@localhost:5432/durpdeploy?sslmode=disable}"
+        DB_DSN="${DURPDEPLOY_DB:?Set DURPDEPLOY_DB to the PostgreSQL test database DSN}"
         DB_CLIENT="postgres"
         ;;
     mssql|sqlserver)
         DB_KIND=mssql
-        DB_DSN="${DURPDEPLOY_DB:-sqlserver://sa:DurpDeploy%21Dev123@localhost:1433?database=master&encrypt=false&trustservercertificate=true}"
+        DB_DSN="${DURPDEPLOY_DB:?Set DURPDEPLOY_DB to the SQL Server test database DSN}"
         DB_CLIENT="mssql"
+        SQLCMDPASSWORD="${SQLCMDPASSWORD:-${MSSQL_PASSWORD:-}}"
+        export SQLCMDPASSWORD="${SQLCMDPASSWORD:?Set SQLCMDPASSWORD or MSSQL_PASSWORD for the SQL Server test client}"
         ;;
     *)
         echo "Usage: $0 {sqlite|postgres|mssql}"
@@ -107,6 +109,7 @@ else
         sqlite) command -v sqlite3 >/dev/null || { echo "FAIL: sqlite3 is required" >&2; exit 1; } ;;
         postgres) command -v psql >/dev/null || { echo "FAIL: psql is required" >&2; exit 1; } ;;
         mssql) command -v sqlcmd >/dev/null || { echo "FAIL: sqlcmd is required" >&2; exit 1; } ;;
+        *) echo "FAIL: unsupported database client: $DB_CLIENT" >&2; exit 1 ;;
     esac
 fi
 
@@ -123,21 +126,22 @@ db_query() {
             ;;
         mssql)
             if [[ -n "$DB_CONTAINER" ]]; then
-                docker exec "$DB_CONTAINER" /opt/mssql-tools18/bin/sqlcmd -C \
+                docker exec -e SQLCMDPASSWORD "$DB_CONTAINER" /opt/mssql-tools18/bin/sqlcmd -C \
                     -b -h -1 -r 1 -S localhost -U sa \
-                    -P 'DurpDeploy!Dev123' -d master \
+                    -d master \
                     -Q "SET NOCOUNT ON; $query" 2>/dev/null || \
-                docker exec "$DB_CONTAINER" /opt/mssql-tools/bin/sqlcmd \
+                docker exec -e SQLCMDPASSWORD "$DB_CONTAINER" /opt/mssql-tools/bin/sqlcmd \
                     -b -h -1 -r 1 -S localhost -U sa \
-                    -P 'DurpDeploy!Dev123' -d master \
+                    -d master \
                     -Q "SET NOCOUNT ON; $query"
             else
                 sqlcmd -C -b -h -1 -r 1 -S "${MSSQL_SERVER:-localhost,1433}" \
-                    -U "${MSSQL_USER:-sa}" -P "${MSSQL_PASSWORD:-DurpDeploy!Dev123}" \
+                    -U "${MSSQL_USER:-sa}" \
                     -d "${MSSQL_DATABASE:-master}" \
                     -Q "SET NOCOUNT ON; $query"
             fi | sed '/^[[:space:]]*$/d; s/^[[:space:]]*//; s/[[:space:]]*$//'
             ;;
+        *) echo "FAIL: unsupported database client: $DB_CLIENT" >&2; return 1 ;;
     esac
 }
 
@@ -322,15 +326,25 @@ CANCEL_STATE=${CANCEL_STATE:-unknown}
 }
 CODE=$(curl_silent -X POST -d "csrf_token=$CSRF" "$BASE/deployments/$CANCEL_DEP/cancel")
 [[ "$CODE" == "303" ]] || { echo "FAIL: cancel got $CODE"; exit 1; }
+for i in {1..150}; do
+  CANCEL_STATUS=$(curl_body "$BASE/deployments/$CANCEL_DEP/status")
+  CANCEL_STATE=$(printf '%s' "$CANCEL_STATUS" | \
+      grep -oP 'data-deployment-status="\K[a-z_]+' | head -1 || true)
+  [[ "$CANCEL_STATE" == "cancelled" ]] && break
+  sleep 0.2
+done
+[[ "$CANCEL_STATE" == "cancelled" ]] || {
+  echo "FAIL: cancel deployment did not finish (last state=$CANCEL_STATE)" >&2
+  exit 1
+}
 
 echo "=== F3.2b: Per-Step Timeout ==="
 # A step with a 1-second timeout running a 10-second sleep should fail
 # instead of hanging for the 5-minute default. We delete the LongStep
 # from the cancel path so this test doesn't first run a 10s sleep.
-# The runner's pre-existing cleanup (cmd.WaitDelay=15s + a 10s goroutine
-# sleep) means the deployment status flips to 'failed' ~15s after the
-# 1s timeout fires; we poll for 20s and assert < 25s elapsed (still
-# well under the 5-minute default).
+# Cancellation must finish before this deployment can acquire the queue slot.
+# Poll through the step timeout and bounded container cleanup, still well
+# under the 5-minute default.
 STEPS_PAGE=$(curl_body "$BASE/projects/$PROJECT_ID/steps-page")
 LONG_STEP_ID=$(echo "$STEPS_PAGE" | grep -oP 'step-row-\K[0-9]+' | sort -n | tail -1)
 if [[ -n "$LONG_STEP_ID" ]]; then

@@ -306,6 +306,20 @@ The server transfers regular files and directories within one deployment.
 Parallel agents receive the same input, and conflicting changes fail the deployment.
 Successful, failed, and canceled deployments purge transfer snapshots and runtime staging.
 
+Release packages also support agent host and container jobs.
+Upgrade these agents to a build that reports both `artifact/1` and `staging/1` capabilities.
+Each job receives the pinned package through `ARTIFACT_PATH`, including jobs with variable allowlists.
+Container jobs mount this package read-only at `/artifacts` with noexec enabled.
+Host jobs receive a private package directory with read-only file permissions.
+The server owner remains responsible for trusted host scripts and their effects.
+
+Copy package files into `DURPDEPLOY_STAGE_DIR` before changing them.
+For host copies, add owner write permission to copied files before changing them.
+The server transfers these outputs between server and agent jobs within the deployment.
+The original package directory stays separate from writable staging.
+Agents verify the authenticated checksum and size before extracting the package.
+Managed package files and volumes follow the staging cleanup barrier.
+
 Run the public API transfer suite with a staging-capable agent binary:
 
 ```bash

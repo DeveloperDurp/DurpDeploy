@@ -6,8 +6,10 @@ import (
 
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/dispatch"
+	"durpdeploy/internal/repository"
 	"durpdeploy/internal/staging"
 
+	agentartifact "github.com/DeveloperDurp/durpdeploy-agent/artifact"
 	agentproto "github.com/DeveloperDurp/durpdeploy-agent/protocol"
 	agenttls "github.com/DeveloperDurp/durpdeploy-agent/transport"
 )
@@ -24,7 +26,10 @@ func (s *Server) Poll(w http.ResponseWriter, r *http.Request) {
 	stagingSupported := r.Header.Get(
 		staging.CapabilityHeader,
 	) == staging.Capability
-	changed, err := s.repository.RecordAgentPollWithStaging(
+	artifactSupported := r.Header.Get(
+		agentartifact.CapabilityHeader,
+	) == agentartifact.Capability
+	changed, err := s.repository.RecordAgentPollCapabilities(
 		r.Context(),
 		db.HeartbeatAgentParams{
 			Now: nullableInt64(time.Now().Unix()),
@@ -34,8 +39,11 @@ func (s *Server) Poll(w http.ResponseWriter, r *http.Request) {
 			ID:                     string(agentID),
 			CertificateFingerprint: nullableString(fingerprint),
 		},
-		request,
-		stagingSupported,
+		repository.AgentPollCapabilities{
+			PollRequest: request,
+			Staging:     stagingSupported,
+			Artifact:    artifactSupported,
+		},
 	)
 	if !writeTransitionStatus(w, changed, err) {
 		return
@@ -44,7 +52,9 @@ func (s *Server) Poll(w http.ResponseWriter, r *http.Request) {
 		r.Context(),
 		agentID,
 		dispatch.PollRequest{
-			PollRequest: request, Staging: stagingSupported,
+			PollRequest: request,
+			Staging:     stagingSupported,
+			Artifact:    artifactSupported,
 		},
 	)
 	if err != nil {

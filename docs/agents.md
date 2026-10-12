@@ -340,6 +340,12 @@ compare the fingerprint and approve. The development server advertises
 The server's agent listener must be reachable from the container; `make dev`
 sets its listen address to `0.0.0.0:10943` by default.
 
+The published development image pin can differ from the agent module revision under review.
+The agent reports the image commit tag as its version.
+The current `6dee72a` image supports staging transfer and does not support release package jobs.
+Use an agent build with `artifact/1` and `staging/1` capabilities for package jobs.
+Update the development image pin after that agent image is published.
+
 `make dev` reloads the server when watched Go, templ, or SQL files change.
 Server restart recovery cancels in-flight remote steps; an agent can finish
 its script before it receives that cancellation. Avoid source edits during
@@ -451,7 +457,7 @@ fail closed if a tag was rewritten:
 ```bash
 set -euo pipefail
 AGENT_MODULE=github.com/DeveloperDurp/durpdeploy-agent
-AGENT_VERSION=v0.1.1-0.20261011201824-6dee72a66c7b # use the value recorded from the server checkout
+AGENT_VERSION=v0.1.1-0.20261012024048-3f3083fb8dbc # use the value recorded from the server checkout
 AGENT_SUM='h1:...' # use the value recorded from the server checkout
 AGENT_COMMIT=... # use the value recorded from the server checkout
 AGENT_DOWNLOAD=$(go mod download -json "$AGENT_MODULE@$AGENT_VERSION")

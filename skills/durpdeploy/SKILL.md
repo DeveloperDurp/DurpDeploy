@@ -658,10 +658,17 @@ The server purges transfer snapshots when the deployment succeeds, fails, or is 
 Agents remove their private staging files before reporting completion or cancellation.
 Host jobs stop all remaining descendants before transfer, retry, or cleanup, including detached processes.
 If process cleanup cannot be confirmed, the agent retains staging and exits for service-wide cleanup.
+
 Staging is not shared between deployments or runbooks.
 Existing local staging remains available within a runbook execution.
 Staging is not durable storage for an approval pause or restart.
-Pinned release packages remain read-only at `ARTIFACT_PATH=/artifacts`.
+
+Pinned release packages use `ARTIFACT_PATH` outside writable staging.
+Container jobs mount this package at `/artifacts` with read-only access.
+Host jobs receive a private package directory with read-only file permissions.
+If an agent withdraws `artifact/1`, incompatible waiting package jobs fail before dispatch.
+Bash post-deployment verification receives the package in a server container, including releases with only agent steps.
+If Bash verification is configured, keep server container execution enabled.
 
 Local steps accept `network_mode` (`none` by default, or `bridge`). Artifact
 gates use `approval_artifact_path`, `approval_review_path`, and
@@ -776,10 +783,15 @@ directly, including when its source release has been deleted. This cannot be
 combined with `artifact_release_id` and is not valid for creating a new runbook.
 The web edit form defaults to "Keep current pinned package" for deleted sources.
 
-Every local step receives `ARTIFACT_PATH=/artifacts`, including steps with a
-variable allowlist. This variable is reserved. Extracted files are mounted
-read-only and noexec. Direct execution and writes are blocked; interpreters can
-still read files, and steps can copy them elsewhere. ZIP paths, links, and
+Every package-bearing step receives `ARTIFACT_PATH`, including steps with a variable allowlist.
+Container steps use `/artifacts` with a read-only, noexec mount.
+Host steps use a private directory with read-only file permissions.
+The server owner remains responsible for trusted host scripts and their effects.
+Copy package files into `DURPDEPLOY_STAGE_DIR` to share changed outputs with later jobs.
+For host copies, add owner write permission to copied files before changing them.
+The agent excludes the original package directory from staging uploads.
+This variable is reserved. Interpreters can read package files.
+ZIP paths, links, and
 special files are rejected. Limits are 300 MiB downloaded, 512 MiB extracted,
 10,000 ZIP entries, 19,999 total distinct files/directories (including implicit
 parents), a fixed 16 MiB ZIP metadata-read budget, and a five-minute
@@ -797,11 +809,18 @@ The server holds an exclusive lease on a private `durpdeploy-artifacts`
 subdirectory and reclaims stale ZIP, extraction, and tar files at startup.
 Concurrent server instances must use separate `TMPDIR` directories.
 
-Artifact-bearing deployments currently require local steps; agent steps are
-rejected before dispatch. The server already exposes the agent download contract:
+Package-bearing deployments and runbooks support server containers, agent containers, and agent host jobs.
+Agents must report `X-DurpDeploy-Artifact: artifact/1` and `X-DurpDeploy-Staging: staging/1` when polling.
+The encrypted job payload contains the pinned package checksum and size.
+
+The agent downloads each package through the existing contract:
 `POST /agent/v1/deployments/{id}/artifact` with JSON `{"claim_token":"..."}`
 on the separate mTLS listener. It requires the assigned agent's live step claim,
 returns verified ZIP bytes with `X-Artifact-SHA256` and `X-Artifact-Size`, and
 never sends repository credentials. Its request body is limited to 4 KiB and
-does not accept a `protocol` field. The pinned agent executor does not yet
-consume this endpoint, so it does not enable artifact-bearing agent deployments.
+does not accept a `protocol` field.
+
+Invalid packages or changed pinned bytes return `422`.
+Package transfers keep heartbeats active and pause the remote step timeout during authenticated HTTP transfer.
+Transfers stop after five minutes without progress.
+Managed package files and volumes follow the same cleanup barrier as writable staging.

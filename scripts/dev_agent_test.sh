@@ -20,11 +20,11 @@ python3 -c 'import socket,sys
 with socket.socket(socket.AF_UNIX) as listener:
     listener.bind(sys.argv[1])' "$tmp/runtime.sock"
 
-agent_version=$(awk '$1 == "github.com/DeveloperDurp/durpdeploy-agent" { print $2 }' "$root/go.mod")
-agent_revision=${agent_version##*-}
-[[ $agent_revision =~ ^[0-9a-f]{12}$ ]]
-expected_tag=${agent_revision:0:7}
-expected_image="ghcr.io/developerdurp/durpdeploy-agent:$expected_tag"
+# Source-based PR checks can precede image publication. Report the image's
+# actual commit tag rather than the newer module revision under review.
+expected_image=$(awk '$1 == "DEV_AGENT_IMAGE" && $2 == "?=" {print $3}' "$root/Makefile")
+[[ $expected_image =~ ^ghcr.io/developerdurp/durpdeploy-agent:[0-9a-f]{7}$ ]]
+expected_tag=${expected_image##*:}
 
 run_make() {
 	make --no-print-directory -C "$root" "$@" \
@@ -38,7 +38,7 @@ for engine in "$tmp/docker" "$tmp/podman"; do
     run_make dev-agent
     if ! grep -Fxq "pull $expected_image" "$DEV_AGENT_TEST_LOG" ||
         ! grep -Fq -- "--env DURPDEPLOY_AGENT_VERSION=$expected_tag $expected_image" "$DEV_AGENT_TEST_LOG"; then
-        printf 'FAIL: default agent must use source pin %s\n' "$expected_image" >&2
+        printf 'FAIL: default agent must report published image pin %s\n' "$expected_image" >&2
         cat "$DEV_AGENT_TEST_LOG" >&2
         exit 1
     fi

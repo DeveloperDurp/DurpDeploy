@@ -37,6 +37,14 @@ func (stream *stagingIO) Read(data []byte) (int, error) {
 	return stream.body.Read(data)
 }
 
+func (stream *stagingIO) Header() http.Header {
+	return stream.output.Header()
+}
+
+func (stream *stagingIO) WriteHeader(status int) {
+	stream.output.WriteHeader(status)
+}
+
 func (stream *stagingIO) Write(data []byte) (int, error) {
 	if err := stream.controller.SetWriteDeadline(
 		time.Now().Add(stream.timeout),

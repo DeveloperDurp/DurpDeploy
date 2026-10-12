@@ -14,10 +14,6 @@ var ErrArtifactRepositoryPinned = errors.New(
 	"repository is referenced by artifact pins",
 )
 
-var ErrRemoteArtifactsUnsupported = errors.New(
-	"artifact packages require local steps until agent support is available",
-)
-
 var ErrArtifactPathReserved = errors.New(
 	"ARTIFACT_PATH is reserved for deployment artifacts",
 )

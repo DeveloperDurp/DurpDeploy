@@ -10,7 +10,9 @@ import (
 	"os"
 	"strconv"
 
+	"durpdeploy/internal/artifact"
 	"durpdeploy/internal/db"
+	agentartifact "github.com/DeveloperDurp/durpdeploy-agent/artifact"
 	"github.com/DeveloperDurp/durpdeploy-agent/protocol"
 )
 
@@ -26,9 +28,7 @@ func (s *Server) Artifact(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(401)
 		return
 	}
-	var request struct {
-		ClaimToken agentproto.ClaimToken `json:"claim_token"`
-	}
+	var request agentartifact.DownloadRequest
 	r.Body = http.MaxBytesReader(w, r.Body, 4096)
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
@@ -48,13 +48,35 @@ func (s *Server) Artifact(w http.ResponseWriter, r *http.Request) {
 	if !s.artifactClaimLive(w, r, claim) {
 		return
 	}
+	run, err := s.repository.Queries.GetRemoteStepRunByClaim(
+		r.Context(), db.GetRemoteStepRunByClaimParams{
+			DeploymentID: id, AgentID: string(agentID),
+			ClaimTokenHash: claim.ClaimTokenHash,
+		},
+	)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		w.WriteHeader(500)
+		return
+	}
+	if err == nil {
+		finish := s.repository.BeginStagingTransfer(db.GetStagingSnapshotParams{
+			DeploymentID: id, StepIndex: run.StepIndex, Producer: run.AgentID,
+		})
+		defer finish()
+	}
+	stream, err := newStagingIO(w, r)
+	if err != nil {
+		w.WriteHeader(500)
+		return
+	}
+	defer func() {
+		if err := stream.finish(); err != nil {
+			slog.WarnContext(r.Context(), "finish package transfer", "err", err)
+		}
+	}()
 	download, err := s.repository.DownloadDeploymentArtifact(r.Context(), id)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			w.WriteHeader(404)
-			return
-		}
-		w.WriteHeader(502)
+		w.WriteHeader(artifactDownloadErrorStatus(err))
 		return
 	}
 	defer func() {
@@ -77,7 +99,19 @@ func (s *Server) Artifact(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Artifact-SHA256", download.SHA256)
 	w.Header().Set("X-Artifact-Size", strconv.FormatInt(download.Size, 10))
-	http.ServeFile(w, r, download.Path)
+	http.ServeFile(stream, r, download.Path)
+}
+
+func artifactDownloadErrorStatus(err error) int {
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return http.StatusNotFound
+	case errors.Is(err, artifact.ErrInvalid),
+		errors.Is(err, artifact.ErrChecksum):
+		return http.StatusUnprocessableEntity
+	default:
+		return http.StatusBadGateway
+	}
 }
 
 func (s *Server) artifactClaimLive(
