@@ -33,7 +33,7 @@ UPDATE projects SET lifecycle_id = NULL WHERE id = ?;
 UPDATE projects SET lifecycle_id = NULL WHERE id = ? AND lifecycle_id = ?;
 
 -- name: UpdateProjectNotifications :exec
-UPDATE projects SET slack_webhook_url = ?, notify_emails = ?, gotify_url = ?, gotify_token = ?, discord_webhook_url = ? WHERE id = ?;
+UPDATE projects SET slack_webhook_url = CASE WHEN CAST(sqlc.arg(clear_slack_webhook_url) AS INTEGER) = 1 THEN NULL WHEN COALESCE(CAST(sqlc.narg(slack_webhook_url) AS TEXT), '') = '' THEN slack_webhook_url ELSE CAST(sqlc.narg(slack_webhook_url) AS TEXT) END, notify_emails = sqlc.narg(notify_emails), gotify_url = sqlc.narg(gotify_url), gotify_token = CASE WHEN CAST(sqlc.arg(clear_gotify_token) AS INTEGER) = 1 THEN NULL WHEN COALESCE(CAST(sqlc.narg(gotify_token) AS TEXT), '') = '' THEN gotify_token ELSE CAST(sqlc.narg(gotify_token) AS TEXT) END, discord_webhook_url = CASE WHEN CAST(sqlc.arg(clear_discord_webhook_url) AS INTEGER) = 1 THEN NULL WHEN COALESCE(CAST(sqlc.narg(discord_webhook_url) AS TEXT), '') = '' THEN discord_webhook_url ELSE CAST(sqlc.narg(discord_webhook_url) AS TEXT) END WHERE id = sqlc.arg(id);
 
 -- name: ListProjectDeploymentIDs :many
 SELECT d.id FROM deployments d JOIN releases r ON r.id = d.release_id

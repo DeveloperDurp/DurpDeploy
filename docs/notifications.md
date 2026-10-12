@@ -11,6 +11,21 @@ External delivery uses project settings or administrator-managed global channels
 
 Create the provider credential, enter the settings below, and save the changes.
 
+Slack and Discord webhook URLs and Gotify tokens are write-only, including for administrators.
+Project and global settings show whether each credential is configured.
+The server retains each credential for notification delivery.
+
+Leave a credential field blank to keep its stored value.
+Enter a new value to replace it.
+Select **Clear credential** to remove it.
+Email recipients and Gotify server URLs remain readable.
+
+API responses return empty credential fields and corresponding `*_configured` Boolean fields.
+Blank or omitted credential fields preserve stored values in `PUT` requests.
+Set `clear_slack_webhook_url`, `clear_gotify_token`, or `clear_discord_webhook_url` to `true` to clear that credential.
+A clear flag takes precedence over a replacement value.
+Delivery history shows failure status without credential-bearing provider errors, including retained historical errors.
+
 | Channel | Settings |
 | --- | --- |
 | Email | Comma-separated recipient addresses; SMTP must be configured on the server |

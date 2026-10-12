@@ -19,6 +19,14 @@ var (
 	}
 )
 
+// CredentialValue applies an explicit clear before validating a replacement.
+func CredentialValue(raw string, clear bool) string {
+	if clear {
+		return ""
+	}
+	return strings.TrimSpace(raw)
+}
+
 // ValidateEndpointURL rejects blank-tolerant notification endpoints that can
 // trivially target local services. Delivery uses NewHTTPClient too, so DNS names
 // that resolve privately later are still blocked at dial time.
@@ -28,7 +36,7 @@ func ValidateEndpointURL(raw string) error {
 	}
 	u, err := url.Parse(raw)
 	if err != nil {
-		return fmt.Errorf("invalid URL: %w", err)
+		return errors.New("invalid notification URL")
 	}
 	if u.Scheme != "http" && u.Scheme != "https" {
 		return fmt.Errorf("URL scheme must be http or https")

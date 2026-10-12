@@ -874,8 +874,8 @@ func TestProject_UpdateNotifications(t *testing.T) {
 	}
 
 	notifPage := h.getProjectNotificationsPage(proj.ID)
-	if !strings.Contains(notifPage, "https://hooks.slack.example/abc") {
-		t.Errorf("notifications page should show the saved webhook URL")
+	if strings.Contains(notifPage, "https://hooks.slack.example/abc") {
+		t.Errorf("notifications page disclosed the saved webhook URL")
 	}
 	if !strings.Contains(notifPage, "a@example.com, b@example.com") {
 		t.Errorf("notifications page should show the saved notify emails")
@@ -883,11 +883,11 @@ func TestProject_UpdateNotifications(t *testing.T) {
 	if !strings.Contains(notifPage, "https://gotify.example.com") {
 		t.Errorf("notifications page should show the saved Gotify URL")
 	}
-	if !strings.Contains(notifPage, "tok123") {
-		t.Errorf("notifications page should show the saved Gotify token")
+	if strings.Contains(notifPage, "tok123") {
+		t.Errorf("notifications page disclosed the saved Gotify token")
 	}
-	if !strings.Contains(notifPage, "https://discord.com/api/webhooks/xyz") {
-		t.Errorf("notifications page should show the saved Discord webhook URL")
+	if strings.Contains(notifPage, "https://discord.com/api/webhooks/xyz") {
+		t.Errorf("notifications page disclosed the saved Discord webhook URL")
 	}
 	for _, section := range []string{"Slack", "Email", "Gotify", "Discord"} {
 		if !strings.Contains(notifPage, ">"+section+"<") {
