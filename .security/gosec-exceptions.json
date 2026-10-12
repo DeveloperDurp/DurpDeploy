@@ -83,8 +83,8 @@
   {
     "rule": "G118",
     "file": "internal/handler/runbook_web_execution.go",
-    "line": "232",
-    "source_sha256": "97705135369624866a0577ede55f7659966e713da46aa03d3a03221dd1c5284e",
+    "line": "248",
+    "source_sha256": "eb6d0b1f8f538eeb762b8b88d2c4346afb98ed10245c2eb66636e96418e70dc6",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Detached persisted deployment must outlive its HTTP/scheduler/startup request. DeploymentRunner.Run owns cancel registration; Cancel and KillAll cancel/drain work. Evidence: runner_control.go, shutdown_test.go, runbook_cancel_test.go."
@@ -92,8 +92,8 @@
   {
     "rule": "G118",
     "file": "internal/handler/runbook_web_execution.go",
-    "line": "181",
-    "source_sha256": "97705135369624866a0577ede55f7659966e713da46aa03d3a03221dd1c5284e",
+    "line": "197",
+    "source_sha256": "eb6d0b1f8f538eeb762b8b88d2c4346afb98ed10245c2eb66636e96418e70dc6",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Detached persisted deployment must outlive its HTTP/scheduler/startup request. DeploymentRunner.Run owns cancel registration; Cancel and KillAll cancel/drain work. Evidence: runner_control.go, shutdown_test.go, runbook_cancel_test.go."
@@ -146,8 +146,8 @@
   {
     "rule": "G118",
     "file": "cmd/server/main.go",
-    "line": "436",
-    "source_sha256": "34663a4e59c86d837809d054bd41f73c30a7a92e6c92ba8f00d0a9c3a55f0574",
+    "line": "438",
+    "source_sha256": "2a0bcc68d079e92dc9f757ad05ed774abaa087802e0b4ff1c0afab69b80d7a0e",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Detached persisted deployment must outlive its HTTP/scheduler/startup request. DeploymentRunner.Run owns cancel registration; Cancel and KillAll cancel/drain work. Evidence: runner_control.go, shutdown_test.go, runbook_cancel_test.go."
@@ -164,11 +164,11 @@
   {
     "rule": "G702",
     "file": "internal/maintenance/litestream.go",
-    "line": "84",
-    "source_sha256": "04a79ae3b5390be2901dd5cc09ab0daf0b82a09cecfe2be1fca7b86e99580f74",
+    "line": "95",
+    "source_sha256": "dbb14be5da9314119365c0a467d22c3ed1b18912c4ea42e1d6f5b6d659206efa",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
-    "reason": "Explicit operator environment command, documented to execute through /bin/sh; sole caller is startup, no HTTP/DB/deployment-variable source. Evidence: cmd/server/main.go and docs/deploy.md. No dedicated runtime test."
+    "reason": "Explicit operator environment command, documented to execute through /bin/sh; sole caller is startup, no HTTP/DB/deployment-variable source. Execution has a 30-second deadline and bounded output. Evidence: cmd/server/main.go, docs/backup-restore.md, internal/maintenance/litestream_test.go, check_process_linux_test.go, and notification_bounds_e2e_test.go."
   },
   {
     "rule": "G124",
@@ -281,11 +281,11 @@
   {
     "rule": "G204",
     "file": "internal/maintenance/litestream.go",
-    "line": "84",
-    "source_sha256": "04a79ae3b5390be2901dd5cc09ab0daf0b82a09cecfe2be1fca7b86e99580f74",
+    "line": "95",
+    "source_sha256": "dbb14be5da9314119365c0a467d22c3ed1b18912c4ea42e1d6f5b6d659206efa",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
-    "reason": "Explicit operator environment command, documented to execute through /bin/sh; sole caller is startup, no HTTP/DB/deployment-variable source. Evidence: cmd/server/main.go and docs/deploy.md. No dedicated runtime test."
+    "reason": "Explicit operator environment command, documented to execute through /bin/sh; sole caller is startup, no HTTP/DB/deployment-variable source. Execution has a 30-second deadline and bounded output. Evidence: cmd/server/main.go, docs/backup-restore.md, internal/maintenance/litestream_test.go, check_process_linux_test.go, and notification_bounds_e2e_test.go."
   },
   {
     "rule": "G204",

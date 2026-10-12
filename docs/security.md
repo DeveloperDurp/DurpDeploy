@@ -60,6 +60,11 @@ frozen `variable_names` list restricts the variables passed. A missing
 runtime fails closed. The socket grants the control plane broad authority over
 the container host, so use a dedicated host or standalone agent when that
 boundary is required. A container shares its host kernel and is not a VM.
+Only trusted operators may administer runtime sockets or host-mode agents.
+Use separate hosts or virtual machines for workloads with different trust levels.
+Host-mode scripts inherit the supervisor account's runtime authority.
+Set host resource limits separately from log redaction and application authorization.
+DurpDeploy does not impose per-step CPU or RAM quotas.
 Agent steps still execute on their agent hosts, which must be isolated from
 control-plane state if their scripts are untrusted. Historical image-less
 server releases remain readable but cannot execute; issue #28's old same-UID
@@ -268,6 +273,9 @@ and `deployment_variable_snapshots` use AES-256-GCM encryption before database s
   It does not write plaintext to the database or a log. It does not put
   plaintext in an error message. `secret.Box.Decrypt` returns only fixed error
   text.
+  API reads skip decryption for masked secret variables and omitted environment verification targets.
+  Unreadable hidden values do not prevent metadata reads.
+  Execution and snapshot operations still require readable values.
   - **Runner:** Each execution reads its decrypted deployment variable capture.
     New executions resolve current lifecycle values with frozen project values.
     Queued and active executions retain their capture.
