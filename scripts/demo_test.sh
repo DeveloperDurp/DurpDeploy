@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 root=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+bash "$root/scripts/demo_local_test.sh"
 tmp=$(mktemp -d)
 pid=
 cleanup() {

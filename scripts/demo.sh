@@ -58,6 +58,12 @@ case "${1:-start}" in
     *) echo "Usage: $0 [start] | stop DEMO_DIRECTORY" >&2; exit 2 ;;
 esac
 
+local_only=${DEMO_LOCAL_ONLY-0}
+[[ "$local_only" == 0 || "$local_only" == 1 ]] || {
+    echo 'DEMO_LOCAL_ONLY must be 0 or 1.' >&2
+    exit 2
+}
+
 for tool in go make npm openssl python3 sqlite3 curl nohup setsid; do
     command -v "$tool" >/dev/null || { echo "Missing prerequisite: $tool" >&2; exit 1; }
 done
@@ -74,8 +80,27 @@ fi
     echo 'A working local Podman or Docker runtime is required.' >&2
     exit 1
 }
+if [[ "$local_only" == 1 && "$runtime" != podman ]]; then
+    echo 'DEMO_LOCAL_ONLY=1 requires rootless Podman.' >&2
+    exit 1
+fi
 engine=$(command -v "$runtime")
 "$engine" info >/dev/null
+if [[ "$local_only" == 1 && $("$engine" info --format '{{.Host.Security.Rootless}}') != true ]]; then
+    echo 'DEMO_LOCAL_ONLY=1 requires rootless Podman.' >&2
+    exit 1
+fi
+
+public_host=citadel.durp.loc
+certificate_san=DNS:citadel.durp.loc
+https_publish=:8443
+control_host=0.0.0.0
+if [[ "$local_only" == 1 ]]; then
+    public_host=127.0.0.1
+    certificate_san=IP:127.0.0.1,DNS:localhost
+    https_publish=127.0.0.1::8443
+    control_host=127.0.0.1
+fi
 
 # Never inherit a production database, encryption key, identity or SSO settings.
 for variable in ${!DURPDEPLOY_@}; do unset "$variable"; done
@@ -140,7 +165,7 @@ printf 'Email: admin@durp.info\nPassword: %s\n' "$password" >"$directory/login.t
 # cookies and WebAuthn use the exact public origin from the first request.
 mkdir "$directory/tls"
 openssl req -x509 -newkey rsa:2048 -sha256 -nodes -days 7 \
-    -subj '/CN=citadel.durp.loc' -addext 'subjectAltName=DNS:citadel.durp.loc' \
+    -subj "/CN=$public_host" -addext "subjectAltName=$certificate_san" \
     -keyout "$directory/tls/key.pem" -out "$directory/tls/cert.pem" \
     >>"$directory/bootstrap.log" 2>&1
 printf ':8443 {\n tls /demo/cert.pem /demo/key.pem\n respond "Demo starting" 503\n}\n' \
@@ -161,12 +186,12 @@ fi
     --read-only --cap-drop=ALL --cap-add=NET_BIND_SERVICE \
     --security-opt=no-new-privileges:true \
     --tmpfs /data:size=64m --tmpfs /config:size=64m --tmpfs /tmp:size=64m \
-    --publish :8443 --volume "$directory/tls:/demo:ro,Z" \
+    --publish "$https_publish" --volume "$directory/tls:/demo:ro,Z" \
     docker.io/library/caddy:2-alpine \
     caddy run --config /demo/Caddyfile --adapter caddyfile \
     >"$directory/proxy.log" 2>&1
 https_address=$("$engine" port "$proxy" 8443/tcp | head -1)
-export DURPDEPLOY_URL="https://citadel.durp.loc:${https_address##*:}"
+export DURPDEPLOY_URL="https://$public_host:${https_address##*:}"
 
 # HTTP and the container-published agent port use kernel-assigned ports. The
 # advertised TLS pull endpoint needs its port before launch; retry a bind race.
@@ -176,11 +201,11 @@ export DURPDEPLOY_EXECUTION_BOUNDARY=service
 export DURPDEPLOY_AGENT_IDENTITY_DIR="$directory/server-identity"
 export DURPDEPLOY_ADDR="$http_host:0"
 for attempt in {1..5}; do
-    control_port=$(python3 -c 'import socket
+    control_port=$(python3 -c 'import socket,sys
 with socket.socket() as listener:
-    listener.bind(("0.0.0.0", 0))
-    print(listener.getsockname()[1])')
-    export DURPDEPLOY_AGENT_LISTEN_ADDR="0.0.0.0:$control_port"
+    listener.bind((sys.argv[1], 0))
+    print(listener.getsockname()[1])' "$control_host")
+    export DURPDEPLOY_AGENT_LISTEN_ADDR="$control_host:$control_port"
     export DURPDEPLOY_AGENT_PUBLIC_URL="https://host.containers.internal:$control_port"
     (
         cd "$directory"
@@ -216,7 +241,7 @@ curl --cacert "$directory/tls/cert.pem" -fsS --max-time 5 \
     "$DURPDEPLOY_BASE_URL/healthz" >/dev/null
 
 # Optional one-time administrator setup enables passwordless expiring access.
-if [[ -x /usr/local/libexec/durpdeploy-demo-firewall ]]; then
+if [[ "$local_only" == 0 && -x /usr/local/libexec/durpdeploy-demo-firewall ]]; then
     nohup setsid bash "$ROOT/scripts/demo-firewall-watch.sh" "$directory" \
         >"$directory/firewall.log" 2>&1 </dev/null &
     firewall_pid=$!
