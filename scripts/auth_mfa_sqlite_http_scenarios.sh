@@ -263,7 +263,7 @@ matrix_pending_mfa_isolation_and_cancel() {
 }
 
 matrix_challenge_binding_expiry_replay_throttle() {
-    local first_session_count
+    local first_session_count expired_query expired_count cleanup_deadline
 
     matrix_scenario_init challenge-binding-expiry-replay-throttle
     matrix_create_mfa_user challenge-attack
@@ -272,12 +272,21 @@ matrix_challenge_binding_expiry_replay_throttle() {
     auth_mfa_assert_header_contains Cache-Control no-store
     matrix_assert_no_final_session
     auth_mfa_assert_audit_count mfa_login_factor 0 "$MATRIX_USER_ID"
+    MATRIX_TOTP_CODE=$(matrix_next_totp_code "$MATRIX_TOTP_SEED")
     matrix_db_query "UPDATE mfa_challenges SET expires_at = 0 WHERE user_id = $MATRIX_USER_ID AND purpose = 'login_mfa'"
     matrix_factor_request /login/mfa/totp "$MATRIX_TOTP_CODE"
     auth_mfa_assert_status 422
     matrix_assert_no_final_session
-    auth_mfa_assert_db_count "expired challenge is discarded" 0 \
-        "SELECT COUNT(*) FROM mfa_challenges WHERE user_id = $MATRIX_USER_ID AND purpose = 'login_mfa'"
+    auth_mfa_assert_db_count "expired challenge cannot remain active" 0 \
+        "SELECT COUNT(*) FROM mfa_challenges WHERE user_id = $MATRIX_USER_ID AND purpose = 'login_mfa' AND expires_at > 0"
+    expired_query="SELECT COUNT(*) FROM mfa_challenges WHERE user_id = $MATRIX_USER_ID AND purpose = 'login_mfa'"
+    cleanup_deadline=$((SECONDS + 75))
+    while ((SECONDS < cleanup_deadline)); do
+        expired_count=$(matrix_db_query "$expired_query")
+        [[ $expired_count == 0 ]] && break
+        sleep 1
+    done
+    auth_mfa_assert_db_count "maintenance discards expired challenges" 0 "$expired_query"
     matrix_create_mfa_user challenge-replay
     MATRIX_TOTP_CODE=$(matrix_next_totp_code "$MATRIX_TOTP_SEED")
     matrix_concurrent_factor_requests /login/mfa/totp "$MATRIX_TOTP_CODE"
