@@ -441,6 +441,19 @@ creates this example after its execution checks. Approval waits in earlier
 projects no longer block the new run's projects; release snapshots,
 deployment history, and runbook versions remain available. Each run leaves a
 fresh pending example for manual approval checks.
+# SMTP delivery warnings
+
+Configure the server to use a disposable SMTP relay without STARTTLS.
+Set the project's email recipients in **Settings → Notifications**.
+Run a deployment that publishes a notification.
+Open `/admin/notifications` as an administrator.
+Expect `email: ok: sent without TLS` with a warning badge.
+Open the event details and confirm the same warning.
+Request `GET /api/v1/admin/notifications` with an administrator API token.
+Expect the email result to contain `ok: sent without TLS`.
+If the relay uses verified STARTTLS, expect `ok` instead.
+If TLS certificate verification fails, expect `failed: delivery failed` without a plaintext retry.
+
 # Shared lifecycle variables
 
 On a release with a deployment awaiting approval, click **Refresh** and accept

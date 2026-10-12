@@ -120,6 +120,12 @@ the observed supported protocol, while agent versions remain unverified.
 
 ## Deploy flow (the common ask)
 
+Administrators can read delivery history with `GET /api/v1/admin/notifications`.
+Each `results` field contains a JSON string that maps channels to delivery statuses.
+Email status `ok: sent without TLS` means delivery succeeded over plaintext.
+Treat this status as a transport warning, not a delivery failure.
+Verified STARTTLS delivery returns `ok`.
+
 Deployments and runbook executions share a durable FIFO queue per project and
 environment pair. Only one item owns that pair, including while it waits for agents or
 verification. Later eligible items have status `queued`; approval waits do not

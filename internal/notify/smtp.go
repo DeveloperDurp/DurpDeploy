@@ -7,6 +7,8 @@ import (
 	"net"
 	"net/smtp"
 	"time"
+
+	"durpdeploy/internal/events"
 )
 
 func (e *EmailNotifier) sendMail(
@@ -73,6 +75,9 @@ func (e *EmailNotifier) sendMail(
 	}
 	if err := client.Quit(); err != nil {
 		return fmt.Errorf("close SMTP session: %w", err)
+	}
+	if _, secure := client.TLSConnectionState(); !secure {
+		return events.SMTPPlaintextWarning{}
 	}
 	return nil
 }

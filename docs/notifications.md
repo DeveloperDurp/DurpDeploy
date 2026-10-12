@@ -47,6 +47,10 @@ The Go SMTP client attempts STARTTLS when the server advertises it.
 SMTP delivery has a 10-second total timeout, including connection and TLS negotiation.
 Cancellation closes the connection.
 TLS certificate verification remains enabled.
+If STARTTLS is unavailable, SMTP delivery uses plaintext.
+Successful plaintext delivery shows `ok: sent without TLS` with a warning badge in `/admin/notifications`.
+The `GET /api/v1/admin/notifications` response includes the same status in `results`.
+Failed TLS negotiation stops delivery without a plaintext retry.
 Keep passwords, tokens, and webhook URLs out of source control.
 
 ## Delivery history
@@ -54,5 +58,6 @@ Keep passwords, tokens, and webhook URLs out of source control.
 Administrators inspect delivery status at `/admin/notifications`:
 
 - **Success:** the provider accepted the message.
+- **Warning:** the SMTP provider accepted the message without TLS.
 - **Failed:** delivery returned an error; inspect the row details.
 - **Skipped:** the channel or required SMTP configuration is absent.

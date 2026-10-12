@@ -76,8 +76,8 @@ func TestEmailNotifier_SendsMailWithConfiguredRecipients(t *testing.T) {
 		Message:      "Deployment #1 succeeded",
 		NotifyEmails: []string{"a@example.com", "b@example.com"},
 	})
-	if err != nil {
-		t.Fatalf("notify: %v", err)
+	if err != (events.SMTPPlaintextWarning{}) {
+		t.Fatalf("plaintext delivery warning = %v", err)
 	}
 	if skipped {
 		t.Fatal("expected skipped=false when SMTP and recipients are set")
