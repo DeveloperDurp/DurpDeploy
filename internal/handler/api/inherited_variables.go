@@ -43,12 +43,7 @@ func (h *LifecycleVariableHandler) Inherited(
 		respondLifecycleVariableError(w, err)
 		return
 	}
-	local, err := h.repo.ListVariablesByProject(r.Context(), projectID)
-	if err != nil {
-		respondLifecycleVariableError(w, err)
-		return
-	}
-	inherited, err := h.repo.InheritedVariables(r.Context(), project, local)
+	inherited, err := h.repo.InheritedVariablesForDisplay(r.Context(), project)
 	if err != nil {
 		respondLifecycleVariableError(w, err)
 		return

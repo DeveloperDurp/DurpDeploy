@@ -50,6 +50,15 @@ func (r *Repository) InheritedVariables(
 	project db.Project,
 	local []db.Variable,
 ) (VariableInheritance, error) {
+	return r.inheritedVariables(ctx, project, local, false)
+}
+
+func (r *Repository) inheritedVariables(
+	ctx context.Context,
+	project db.Project,
+	local []db.Variable,
+	display bool,
+) (VariableInheritance, error) {
 	var result VariableInheritance
 	if !project.LifecycleID.Valid {
 		return result, nil
@@ -62,7 +71,15 @@ func (r *Repository) InheritedVariables(
 	if err != nil {
 		return result, fmt.Errorf("get variable lifecycle: %w", err)
 	}
-	shared, err := r.ListLifecycleVariables(ctx, result.Lifecycle.ID)
+	var shared []db.LifecycleVariable
+	if display {
+		shared, err = r.ListLifecycleVariablesForDisplay(
+			ctx,
+			result.Lifecycle.ID,
+		)
+	} else {
+		shared, err = r.ListLifecycleVariables(ctx, result.Lifecycle.ID)
+	}
 	if err != nil {
 		return result, err
 	}

@@ -98,12 +98,13 @@ func (h *EnvironmentHandler) ListEnvironments(
 		return
 	}
 
-	envs, err := h.repo.ListEnvironmentsPaginated(
+	envs, err := h.repo.ListEnvironmentsForDisplay(
 		r.Context(),
 		db.ListEnvironmentsPaginatedParams{
 			Limit:  limit,
 			Offset: offset,
 		},
+		auth.RoleFromContext(r.Context()) == "admin",
 	)
 	if err != nil {
 		RespondError(w, http.StatusInternalServerError, err.Error())
@@ -244,7 +245,9 @@ func (h *EnvironmentHandler) GetEnvironment(
 		return
 	}
 
-	env, err := h.repo.GetEnvironment(r.Context(), id)
+	env, err := h.repo.GetEnvironmentForDisplay(
+		r.Context(), id, auth.RoleFromContext(r.Context()) == "admin",
+	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			RespondError(w, http.StatusNotFound, "Environment not found")

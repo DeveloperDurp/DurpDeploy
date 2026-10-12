@@ -153,7 +153,7 @@ func (h *ReleaseHandler) GetRelease(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	variables, err := h.repo.ListReleaseVariablesByRelease(
+	variables, err := h.repo.ListReleaseVariablesForDisplay(
 		r.Context(),
 		releaseID,
 	)
