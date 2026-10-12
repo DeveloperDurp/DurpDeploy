@@ -3,7 +3,6 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
-	"strings"
 
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/mfa"
@@ -46,9 +45,9 @@ func (h *AuthHandler) SecurityPasskeyBeginPost(
 		h.writePasskeyError(w, err)
 		return
 	}
-	name := strings.TrimSpace(r.PostFormValue("name"))
-	if name == "" {
-		h.writePasskeyError(w, mfa.ErrMFAFactorOperation)
+	name, err := mfa.NormalizePasskeyName(r.PostFormValue("name"))
+	if err != nil {
+		h.writePasskeyError(w, err)
 		return
 	}
 	credentials, err := h.repo.Queries.ListWebAuthnCredentialsByUserID(
@@ -208,5 +207,5 @@ func (h *AuthHandler) SecurityPasskeyFinishPost(
 }
 
 func (h *AuthHandler) writePasskeyError(w http.ResponseWriter, err error) {
-	http.Error(w, securityActionError, securityErrorStatus(err))
+	h.writeFactorError(w, err)
 }

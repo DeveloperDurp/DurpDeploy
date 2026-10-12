@@ -300,6 +300,18 @@ async function securityDisableConfirmationContract(page, url, token, artifactDir
 
 async function enrollPasskey(page, url, name, authenticator, artifactDir) {
 	await reauthenticate(page, url);
+	const nameInput = page.locator("#passkey-name");
+	check(await nameInput.getAttribute("maxlength") === "255", "passkey name lacks the shared browser limit");
+	await nameInput.fill("a".repeat(256));
+	check((await nameInput.inputValue()).length === 255, "passkey name accepts excess typed characters");
+	const csrf = await page.locator('meta[name="csrf-token"]').getAttribute("content");
+	for (const invalidName of ["a".repeat(256), "🔑".repeat(128)]) {
+		const response = await page.request.post(url + "/settings/security/passkeys/begin", {
+			form: { name: invalidName, csrf_token: csrf },
+		});
+		check(response.status() === 422, "passkey enrollment API accepts an oversized name");
+		check((await response.text()).includes("1 to 255"), "passkey enrollment API hides the name error");
+	}
 	if (authenticator) {
 		// Chrome allows one internal virtual authenticator; remove its first
 		// credential after reauthentication to model enrolling a second device.
@@ -368,6 +380,29 @@ async function passkeyLogin(page, url) {
 
 async function configuredPasskeyContract(page, url) {
 	await reauthenticate(page, url);
+	const rename = page.locator('form[action="/settings/security/passkeys/rename"]').first();
+	const nameInput = rename.locator('[name="name"]');
+	const originalName = await nameInput.inputValue();
+	check(await nameInput.getAttribute("maxlength") === "255", "passkey rename lacks the shared browser limit");
+	const credentialID = await rename.locator('[name="credential_id"]').inputValue();
+	const csrf = await page.locator('meta[name="csrf-token"]').getAttribute("content");
+	const rejected = await page.request.post(url + "/settings/security/passkeys/rename", {
+		form: { credential_id: credentialID, name: "🔑".repeat(128), csrf_token: csrf },
+	});
+	check(rejected.status() === 422, "passkey rename API accepts an oversized name");
+	await page.reload();
+	check(await nameInput.inputValue() === originalName, "invalid rename changed the credential");
+	const boundaryName = "🔑".repeat(127) + "a";
+	await nameInput.fill(boundaryName);
+	await Promise.all([
+		page.waitForResponse(response => response.status() === 303 &&
+			new URL(response.url()).pathname === "/settings/security/passkeys/rename"),
+		page.waitForURL(url + "/login"),
+		rename.getByRole("button", { name: "Rename" }).click(),
+	]);
+	await passkeyLogin(page, url);
+	await page.goto(url + "/settings/security");
+	check(await nameInput.inputValue() === boundaryName, "valid boundary name was not saved");
 	for (const width of [375, 768, 1280]) {
 		await page.setViewportSize({ height: 900, width });
 		await page.goto(`${url}/settings/security`);
