@@ -143,6 +143,28 @@ func testRunnerMixedLocalAndAgentSteps(t *testing.T, terminalState string) {
 			contents,
 		)
 	}
+	if terminalState == "succeeded" {
+		// The simulated agent publishes its unchanged workspace before success.
+		input, err := repo.LoadStaging(
+			ctx,
+			db.GetStagingSnapshotParams{
+				DeploymentID: created.Deployment.ID,
+				StepIndex:    1,
+			},
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := repo.SaveStaging(ctx, repository.StagingWrite{
+			Key: db.GetStagingSnapshotParams{DeploymentID: created.Deployment.ID, StepIndex: 1, Producer: "agent-a"}, Source: input,
+		}); err != nil {
+			input.Close()
+			t.Fatal(err)
+		}
+		if err := input.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if _, err := repo.DB.ExecContext(ctx, `
 UPDATE remote_step_runs SET state=?, started_at=unixepoch(),
 finished_at=unixepoch() WHERE deployment_id=? AND step_index=1`,
@@ -346,6 +368,22 @@ INSERT INTO agent_environment_labels(agent_id,environment_id) VALUES(?,?)`,
 	)
 	if err != nil || len(runs) != 2 {
 		t.Fatalf("remote runs = %+v, error = %v", runs, err)
+	}
+	base, err := repo.LoadStaging(
+		ctx,
+		db.GetStagingSnapshotParams{
+			DeploymentID: created.Deployment.ID,
+			StepIndex:    1,
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer base.Close()
+	for _, run := range runs {
+		if err := repo.SaveStaging(ctx, repository.StagingWrite{Key: db.GetStagingSnapshotParams{DeploymentID: created.Deployment.ID, StepIndex: 1, Producer: run.AgentID}, Source: base}); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if _, err := repo.DB.ExecContext(ctx, `
 UPDATE remote_step_runs SET state='succeeded', started_at=unixepoch(),

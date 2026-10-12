@@ -73,6 +73,10 @@ type AgentPairing struct {
 	ServerPullEndpoint   sql.NullString `json:"server_pull_endpoint"`
 }
 
+type AgentStagingCapability struct {
+	AgentID string `json:"agent_id"`
+}
+
 type AgentStepCapability struct {
 	AgentID       string `json:"agent_id"`
 	ExecutionMode string `json:"execution_mode"`
@@ -205,6 +209,22 @@ type DeploymentRollback struct {
 	TargetDeploymentID int64  `json:"target_deployment_id"`
 	SourceVersion      string `json:"source_version"`
 	TargetVersion      string `json:"target_version"`
+}
+
+type DeploymentStagingChunk struct {
+	DeploymentID int64  `json:"deployment_id"`
+	StepIndex    int64  `json:"step_index"`
+	Producer     string `json:"producer"`
+	ChunkIndex   int64  `json:"chunk_index"`
+	Ciphertext   string `json:"ciphertext"`
+}
+
+type DeploymentStagingSnapshot struct {
+	DeploymentID int64  `json:"deployment_id"`
+	StepIndex    int64  `json:"step_index"`
+	Producer     string `json:"producer"`
+	Sha256       string `json:"sha256"`
+	Size         int64  `json:"size"`
 }
 
 type DeploymentStep struct {

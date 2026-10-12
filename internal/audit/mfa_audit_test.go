@@ -95,7 +95,9 @@ func TestMFAAuditDetailsRedactsProtocolFields(t *testing.T) {
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	// When
-	got := buildDetails(req, http.StatusSeeOther, "mfa_admin_reset", "")
+	got := buildDetails(req, requestOutcome{
+		status: http.StatusSeeOther, action: "mfa_admin_reset",
+	})
 
 	// Then
 	var details struct {
@@ -121,7 +123,9 @@ func TestAuditDetailsUsesTrustedForwardedClientIP(t *testing.T) {
 	var got string
 	handler := requestmeta.Middleware("192.0.2.0/24")(
 		http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-			got = buildDetails(r, http.StatusSeeOther, "update_project", "")
+			got = buildDetails(r, requestOutcome{
+				status: http.StatusSeeOther, action: "update_project",
+			})
 		}),
 	)
 

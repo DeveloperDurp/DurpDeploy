@@ -6,10 +6,12 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"fmt"
+	"os"
 
 	"durpdeploy/internal/artifact"
 	"durpdeploy/internal/containerenv"
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/staging"
 )
 
 const deploymentStageMount = "/stage"
@@ -56,6 +58,16 @@ func (r *DeploymentRunner) createStagingVolume(
 	name := fmt.Sprintf("durpdeploy-artifact-%d-%s", deploymentID,
 		hex.EncodeToString(nonce[:]))
 	stage := artifactStage{volume: name, keeper: name + "-keeper"}
+	capacity, nodes := artifactStagingCapacity(), artifact.MaxStagingNodes
+	if mount == deploymentStageMount {
+		capacity = staging.MaxBytes + int64(
+			staging.MaxFiles,
+		)*int64(
+			os.Getpagesize(),
+		)
+		// tmpfs charges security attributes to its inode quota too.
+		nodes = 2*(staging.MaxFiles+1) - 1
+	}
 	r.mu.Lock()
 	r.staging[deploymentID] = append(r.staging[deploymentID], stage)
 	r.mu.Unlock()
@@ -67,8 +79,8 @@ func (r *DeploymentRunner) createStagingVolume(
 		args = append(args, "--driver=local", "--opt=type=tmpfs",
 			"--opt=device=tmpfs", fmt.Sprintf(
 				"--opt=o=noexec,nosuid,nodev,size=%d,nr_inodes=%d,uid=65534,gid=65534,mode=0755",
-				artifactStagingCapacity(),
-				artifact.MaxStagingNodes+1,
+				capacity,
+				nodes+1,
 			))
 	}
 	args = append(args, stage.volume)
@@ -90,7 +102,7 @@ func (r *DeploymentRunner) createStagingVolume(
 		"--network=none", "--read-only", "--cap-drop=ALL",
 		"--security-opt=no-new-privileges", "--user=65534:65534",
 		"--pids-limit=32",
-		fmt.Sprintf("--memory=%d", artifactStagingCapacity()+(128<<20)),
+		fmt.Sprintf("--memory=%d", capacity+(128<<20)),
 		"--cpus=1", "--volume=" + keeperMount,
 		"--entrypoint=/usr/bin/tail", artifactHelperImage,
 		"-f", "/dev/null",

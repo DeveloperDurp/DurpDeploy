@@ -110,6 +110,15 @@ func (w *broadcastWriter) finishState(result error, cancelled bool) {
 	}
 }
 
+func (w *broadcastWriter) failStaging(result error, cancelled bool) error {
+	_, err := w.Write([]byte(fmt.Sprintf(
+		"step %q: staging failed before execution: %v\n", w.stepName, result,
+	)))
+	w.Flush()
+	w.finishState(result, cancelled)
+	return err
+}
+
 func (w *broadcastWriter) writeLine(line, state string) error {
 	_, err := w.repo.CreateStepDeploymentLog(
 		w.ctx,

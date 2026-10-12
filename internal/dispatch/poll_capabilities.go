@@ -12,7 +12,7 @@ var errStaleAgentPoll = errors.New("agent poll capabilities changed")
 
 // Compare under the claim's agent lock, before issuing a token or ciphertext.
 func pollCapabilitiesMatch(
-	request agentproto.PollRequest,
+	request PollRequest,
 	snapshot repository.RemotePayloadSnapshot,
 ) bool {
 	protocol := snapshot.Agent.AgentProtocol.String
@@ -26,7 +26,8 @@ func pollCapabilitiesMatch(
 	if request.Protocol != agentproto.AgentV3 {
 		modes = []agentproto.ExecutionMode{agentproto.ExecutionHost}
 	}
-	return protocol == string(request.Protocol) &&
+	return (!snapshot.Staging || request.Staging) &&
+		protocol == string(request.Protocol) &&
 		sameCapabilities(host, snapshot.HostInterpreters) &&
 		sameCapabilities(modes, snapshot.ExecutionModes) &&
 		sameCapabilities(

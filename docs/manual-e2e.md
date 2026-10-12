@@ -1,5 +1,52 @@
 # Manual checks after `make e2e-test`
 
+## Deployment staging transfer
+
+Run the transfer timeout API checks with the current server and agent builds:
+
+```bash
+AGENT_TEST_SOCKET=unix:///run/user/1000/podman/podman.sock DURPDEPLOY_AGENT_E2E_BINARY=/absolute/path/to/durpdeploy-agent bash scripts/go_test.sh -tags 'e2e agentstaging' -count=1 -timeout=5m -v -run '^TestDeploymentStagingTransferPausesStepTimeoutAPIE2E$' ./internal/agentserver
+```
+
+The download and upload checks delay transfers beyond the three-second step timeout.
+Both deployments must succeed. The slow script must fail. All three checks must confirm staging cleanup.
+
+Build both the server and a staging-capable agent.
+Assign two agents to the test environment.
+Give each agent a distinct selector label.
+Create a deployment with a server container step that writes a file under `DURPDEPLOY_STAGE_DIR`.
+Add an agent host step that reads this file and writes another file.
+Add a container step on the second agent that reads both files.
+Add a server container step that reads the final staging files.
+Deploy the release and confirm that every step succeeds.
+
+Create a parallel agent step that changes the same file differently on each agent.
+Deploy this release and confirm that the deployment fails with `conflicting staging changes` in its logs.
+Repeat with identical changes and confirm that the deployment succeeds.
+Repeat with different file names and confirm that the next step receives both files.
+
+After success, failure, or cancellation, request `GET /api/v1/deployments/{id}/staging`.
+Confirm that the endpoint returns `[]`.
+Request `GET /api/v1/admin/audit?action=publish_staging` with an administrator token.
+Read `details.String` as JSON.
+Check its `agent_id` for each agent that published staging.
+Confirm that agent staging directories and deployment staging volumes are empty.
+Start another deployment and confirm that its staging directory contains no previous files.
+
+Use the isolated API suite in `docs/deploy.md` to repeat these checks automatically.
+
+Add a host step that starts a detached writer with `setsid` and then exits.
+Log the detached child's process ID before the step exits.
+Deploy the release and confirm that the detached process stops before the next step starts.
+Repeat with a double-forked child and with deployment cancellation.
+Confirm that all logged child process IDs are absent after completion.
+
+Add a host step that moves its workspace outside the staging root.
+Confirm that publication fails and the moved directory contains no files.
+Repeat with a step that moves the entire staging root.
+If supervisor confirmation fails, restart the agent through its service manager.
+Confirm that restart cleanup purges moved staging directories before it sends the saved failed result.
+
 ## Releases with a deferred package pull
 
 1. Attach a package repository to a disposable project. Use a missing version
