@@ -17,25 +17,13 @@ PG_PASSWORD=$(openssl rand -hex 32)
 kubectl create secret generic durpdeploy-secret-key -n durpdeploy \
   --from-literal=secret-key="$KEY"
 kubectl create secret generic durpdeploy-postgres -n durpdeploy \
-  --from-literal=password="$PG_PASSWORD" \
-  --from-literal=dsn="postgres://durpdeploy:$PG_PASSWORD@my-rds.example.com:5432/durpdeploy?sslmode=require"
+  --from-literal=password="$PG_PASSWORD"
 # Configure your Postgres server with that same password before continuing.
 unset KEY PG_PASSWORD
 
-# 3. Use the complete DSN to work around the current env ordering limitation.
-cat > postgres-values.yaml <<'EOF'
-extraEnv:
-  - name: DURPDEPLOY_DB
-    valueFrom:
-      secretKeyRef:
-        name: durpdeploy-postgres
-        key: dsn
-EOF
-
-# 4. Install with the existing secrets.
+# 3. Install with the existing secrets.
 helm install durpdeploy ./charts/durpdeploy \
   --namespace durpdeploy \
-  -f postgres-values.yaml \
   --set secretKey.existingSecret=durpdeploy-secret-key \
   --set postgres.existingSecret=durpdeploy-postgres \
   --set externalPostgres.host=my-rds.example.com \
@@ -43,12 +31,12 @@ helm install durpdeploy ./charts/durpdeploy \
   --set externalPostgres.database=durpdeploy \
   --set externalPostgres.username=durpdeploy
 
-# 5. Create the first admin (the pod must be Running).
+# 4. Create the first admin (the pod must be Running).
 ADMIN_PASS='change-me-strong'
 kubectl exec deploy/durpdeploy -n durpdeploy -- \
   durpdeploy admin create --email admin@example.com --password "$ADMIN_PASS"
 
-# 6. Port-forward and log in.
+# 5. Port-forward and log in.
 kubectl port-forward -n durpdeploy svc/durpdeploy 8080:80
 open http://localhost:8080
 ```
@@ -59,14 +47,30 @@ These names assume the release name `durpdeploy` and default name overrides.
 Use the names printed by Helm for another release name. Keep the encryption
 key in restricted backup storage with the matching database backup.
 
-The current Deployment template defines its assembled `DURPDEPLOY_DB` before
-`DURPDEPLOY_PG_PASSWORD`. Kubernetes resolves dependent variables in order,
-so the assembled URI retains the unresolved password reference. The complete
-DSN Secret and `extraEnv` override above avoid that limitation. See
-[Kubernetes dependent environment variables](https://kubernetes.io/docs/tasks/inject-data-application/define-interdependent-environment-variables/).
+The Deployment loads the password Secret into `PGPASSWORD` before `DURPDEPLOY_DB`.
+The pgx driver reads this password separately from the DSN.
+The chart percent-encodes connection fields and does not interpolate the password into the URL.
 The default `postgres.enabled: false` does not create a password Secret;
 operators must supply one. Manual Secret changes require a Deployment restart;
 the checksum annotation changes only when Helm renders changed values.
+
+For additional connection options, supply a complete DSN through `externalPostgres.dsnSecret`.
+This Secret replaces the connection fields and the password Secret reference.
+Percent-encode reserved characters in each DSN value, including the username and password.
+Encode spaces as `%20`.
+For example, a synthetic password `p@ss:word` becomes `p%40ss%3Aword`.
+
+```yaml
+externalPostgres:
+  dsnSecret:
+    name: durpdeploy-connection
+    key: dsn
+```
+
+Create this Secret in the release namespace with a `dsn` key containing the complete PostgreSQL URI.
+Keep credentials out of committed values files.
+Existing `extraEnv` overrides for `DURPDEPLOY_DB` remain supported.
+Use `dsnSecret` for new configurations to avoid duplicate environment entries.
 
 | ✓ Renders                                       | ✗ Does not                                       |
 |-------------------------------------------------|--------------------------------------------------|
@@ -119,7 +123,7 @@ in the main repo for the S3-compatible approach when using SQLite.
 See `values.yaml`. Notable knobs:
 
 - `replicaCount` — keep at 1 unless you've read the comment above.
-- `externalPostgres.*` — required.
+- `externalPostgres.*` — connection fields, or `externalPostgres.dsnSecret` for a complete DSN.
 - `secretKey.existingSecret` / `postgres.existingSecret` — bring your
   own Secrets to integrate with External Secrets / Sealed Secrets / SOPS.
 - `ingress.enabled` — front with cert-manager + your IngressController

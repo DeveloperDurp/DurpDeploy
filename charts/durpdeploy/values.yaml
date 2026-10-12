@@ -126,7 +126,7 @@ postgres:
   # -- When true, the chart renders a Secret holding the Postgres
   # password. You still need to point externalPostgres at a real server.
   enabled: false
-  # -- Existing Secret containing POSTGRES_PASSWORD (key: password).
+  # -- Existing Secret containing the Postgres password (key: password).
   # If set, the chart does not render its own Secret and uses this one.
   existingSecret: ""
   # -- Used only when the chart renders the Secret (no existingSecret).
@@ -135,8 +135,13 @@ postgres:
   password: ""
 
 # -- Postgres connection. The DSN is built from these fields and exposed
-# to the pod as DURPDEPLOY_DB. Required.
+# to the pod as DURPDEPLOY_DB. The password uses PGPASSWORD separately.
 externalPostgres:
+  # -- Optional Secret containing a complete, URL-escaped Postgres DSN.
+  # Overrides the connection fields and postgres password Secret reference.
+  dsnSecret:
+    name: ""
+    key: dsn
   host: postgres
   port: 5432
   database: durpdeploy
@@ -144,8 +149,8 @@ externalPostgres:
   # -- SSL mode passed to pgx. Default `require` encrypts the connection
   # but does not verify the server certificate. For production against
   # a managed Postgres with a public CA, use `verify-full` and set
-  # `sslrootcert` via extraEnv (DURPDEPLOY_DB accepts the full DSN, so
-  # you can override it directly if you need stricter checks).
+  # PGSSLROOTCERT via extraEnv with the mounted CA certificate path.
+  # Use dsnSecret for a complete DSN with additional connection settings.
   sslmode: require
 
 # --- OIDC SSO --------------------------------------------------------------
