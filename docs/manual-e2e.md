@@ -444,6 +444,7 @@ fresh pending example for manual approval checks.
 # SMTP delivery warnings
 
 Configure the server to use a disposable SMTP relay without STARTTLS.
+Clear `DURPDEPLOY_SMTP_USER` for this unauthenticated relay.
 Set the project's email recipients in **Settings → Notifications**.
 Run a deployment that publishes a notification.
 Open `/admin/notifications` as an administrator.
