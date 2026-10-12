@@ -420,6 +420,9 @@ func TestDockerImageInspectionUsesStepTimeout(t *testing.T) {
 	dir := t.TempDir()
 	binary := filepath.Join(dir, "docker")
 	if err := os.WriteFile(binary, []byte(`#!/bin/sh
+case " $* " in
+*" info "*) printf '{"Name":"physical-runtime"}'; exit 0;;
+esac
 exec sleep 5
 `), 0o700); err != nil {
 		t.Fatal(err)

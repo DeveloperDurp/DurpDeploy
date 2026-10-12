@@ -250,9 +250,10 @@ esac
 		t.Context(),
 		created.Deployment.ID,
 	)
-	if err != nil || len(logs) != 3 || logs[0].StepState.String != "failed" ||
+	if err != nil || len(logs) != 4 || logs[0].StepState.String != "failed" ||
 		!strings.Contains(logs[1].Line, "container cleanup unconfirmed") ||
-		logs[2].StepState.String != "running" {
+		!strings.HasPrefix(logs[2].Line, "Execution location:") ||
+		logs[3].StepState.String != "running" {
 		t.Fatalf("unconfirmed cleanup logs = %+v: %v", logs, err)
 	}
 }
