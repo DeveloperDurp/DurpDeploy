@@ -77,13 +77,14 @@ func TestAgentArtifactRecoversAfterUpstreamFailure(t *testing.T) {
 		if status == http.StatusBadGateway && len(contents) != 0 {
 			t.Fatalf("upstream failure exposed response bytes: %q", contents)
 		}
-		files, err := os.ReadDir(workspace)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if len(files) != 0 {
-			t.Fatalf("artifact request retained temporary files: %v", files)
-		}
 		available.Store(true)
+	}
+	f.server.Close() // Wait for handler defers after the streamed response.
+	files, err := os.ReadDir(workspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 0 {
+		t.Fatalf("artifact requests retained temporary files: %v", files)
 	}
 }
