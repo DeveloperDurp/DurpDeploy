@@ -273,7 +273,7 @@ func (s *Scheduler) fireOne(ctx context.Context, row db.ScheduledDeployment) {
 
 	// create deployment
 	note := fmt.Sprintf("Scheduled: %d - %s", row.ID, row.Note.String)
-	result, err := s.repo.CreateDeployment(
+	result, err := s.repo.CreateScheduledOccurrence(
 		ctx,
 		db.CreateDeploymentParams{
 			ReleaseID:     row.ReleaseID,
@@ -284,8 +284,14 @@ func (s *Scheduler) fireOne(ctx context.Context, row db.ScheduledDeployment) {
 			Forced:        0,
 			Note:          sql.NullString{String: note, Valid: true},
 		},
+		repository.ScheduledOccurrence{
+			Schedule: row, NextRunAt: next.Unix(), FiredAt: s.now().Unix(),
+		},
 	)
 	if err != nil {
+		if errors.Is(err, repository.ErrScheduleOccurrenceChanged) {
+			return
+		}
 		if errors.Is(err, repository.ErrLegacyServerStep) ||
 			errors.Is(err, artifact.ErrGateConfig) ||
 			errors.Is(err, verification.ErrInvalid) {
@@ -315,17 +321,7 @@ func (s *Scheduler) fireOne(ctx context.Context, row db.ScheduledDeployment) {
 			"error",
 			err,
 		)
-		if err := s.advance(ctx, row, next); err != nil {
-			s.log.Error(
-				"advance failed",
-				"schedule_id",
-				row.ID,
-				"project_id",
-				row.ProjectID,
-				"error",
-				err,
-			)
-		}
+
 		return
 	}
 
@@ -352,17 +348,6 @@ func (s *Scheduler) fireOne(ctx context.Context, row db.ScheduledDeployment) {
 		)
 	}
 
-	if err := s.advance(ctx, row, next); err != nil {
-		s.log.Error(
-			"advance failed",
-			"schedule_id",
-			row.ID,
-			"project_id",
-			row.ProjectID,
-			"error",
-			err,
-		)
-	}
 }
 
 func (s *Scheduler) park(

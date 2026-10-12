@@ -10,6 +10,41 @@ import (
 	"database/sql"
 )
 
+const advanceScheduledDeploymentOccurrence = `-- name: AdvanceScheduledDeploymentOccurrence :execrows
+UPDATE scheduled_deployments SET next_run_at = ?1, last_fired_at = ?2, updated_at = unixepoch()
+WHERE id = ?3 AND enabled = 1 AND next_run_at = ?4
+AND release_id = ?5 AND environment_id = ?6
+AND cron = ?7 AND COALESCE(note, '') = COALESCE(?8, '')
+`
+
+type AdvanceScheduledDeploymentOccurrenceParams struct {
+	NextRunAt     int64          `json:"next_run_at"`
+	FiredAt       sql.NullInt64  `json:"fired_at"`
+	ID            int64          `json:"id"`
+	ObservedRunAt int64          `json:"observed_run_at"`
+	ReleaseID     int64          `json:"release_id"`
+	EnvironmentID int64          `json:"environment_id"`
+	Cron          string         `json:"cron"`
+	Note          sql.NullString `json:"note"`
+}
+
+func (q *Queries) AdvanceScheduledDeploymentOccurrence(ctx context.Context, arg AdvanceScheduledDeploymentOccurrenceParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, advanceScheduledDeploymentOccurrence,
+		arg.NextRunAt,
+		arg.FiredAt,
+		arg.ID,
+		arg.ObservedRunAt,
+		arg.ReleaseID,
+		arg.EnvironmentID,
+		arg.Cron,
+		arg.Note,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const countScheduledDeploymentsByProject = `-- name: CountScheduledDeploymentsByProject :one
 SELECT COUNT(*) FROM scheduled_deployments WHERE project_id = ?
 `
