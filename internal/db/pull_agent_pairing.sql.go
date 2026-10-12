@@ -260,6 +260,34 @@ func (q *Queries) GetAgentPairing(ctx context.Context, agentID string) (AgentPai
 	return i, err
 }
 
+const getRegisteredAgentPairing = `-- name: GetRegisteredAgentPairing :one
+SELECT p.agent_id, p.pairing_code_hash, p.agent_public_identity, p.agent_pin, p.server_public_identity, p.server_pin, p.encrypted_identity, p.state, p.expires_at, p.paired_at, p.created_at, p.updated_at, p.server_pull_endpoint FROM agent_pairings p JOIN agents a ON a.id = p.agent_id
+WHERE p.agent_id = ? AND p.state = 'paired' -- NOSONAR: schema-constrained sqlc state literals; PL/SQL constants are not portable
+  AND a.status IN ('active', 'disabled')
+  AND a.certificate_fingerprint = p.agent_pin
+`
+
+func (q *Queries) GetRegisteredAgentPairing(ctx context.Context, agentID string) (AgentPairing, error) {
+	row := q.db.QueryRowContext(ctx, getRegisteredAgentPairing, agentID)
+	var i AgentPairing
+	err := row.Scan(
+		&i.AgentID,
+		&i.PairingCodeHash,
+		&i.AgentPublicIdentity,
+		&i.AgentPin,
+		&i.ServerPublicIdentity,
+		&i.ServerPin,
+		&i.EncryptedIdentity,
+		&i.State,
+		&i.ExpiresAt,
+		&i.PairedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ServerPullEndpoint,
+	)
+	return i, err
+}
+
 const listAgentPairingRecoveryCandidates = `-- name: ListAgentPairingRecoveryCandidates :many
 SELECT p.agent_id, p.pairing_code_hash, p.agent_public_identity, p.agent_pin, p.server_public_identity, p.server_pin, p.encrypted_identity, p.state, p.expires_at, p.paired_at, p.created_at, p.updated_at, p.server_pull_endpoint, a.endpoint
 FROM agent_pairings p

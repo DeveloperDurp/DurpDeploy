@@ -113,6 +113,13 @@ func waitVerificationStatus(
 	want string,
 ) {
 	t.Helper()
+	waitExecutionStatus(t, f, fmt.Sprintf(
+		"/api/v1/deployments/%d/status", id,
+	), want)
+}
+
+func waitExecutionStatus(t *testing.T, f *artifactE2E, path, want string) {
+	t.Helper()
 	deadline := time.NewTimer(30 * time.Second)
 	defer deadline.Stop()
 	ticker := time.NewTicker(50 * time.Millisecond)
@@ -124,10 +131,7 @@ func waitVerificationStatus(
 		if err := json.Unmarshal(f.api(
 			t,
 			"GET",
-			fmt.Sprintf(
-				"/api/v1/deployments/%d/status",
-				id,
-			),
+			path,
 			nil,
 			200,
 		), &result); err != nil {
@@ -139,8 +143,8 @@ func waitVerificationStatus(
 		select {
 		case <-deadline.C:
 			t.Fatalf(
-				"deployment %d status=%s, want=%s",
-				id,
+				"execution %s status=%s, want=%s",
+				path,
 				result.Status,
 				want,
 			)

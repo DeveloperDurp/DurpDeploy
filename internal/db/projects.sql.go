@@ -19,6 +19,23 @@ func (q *Queries) ClearProjectLifecycle(ctx context.Context, id int64) error {
 	return err
 }
 
+const clearProjectLifecycleIfAssigned = `-- name: ClearProjectLifecycleIfAssigned :execrows
+UPDATE projects SET lifecycle_id = NULL WHERE id = ? AND lifecycle_id = ?
+`
+
+type ClearProjectLifecycleIfAssignedParams struct {
+	ID          int64         `json:"id"`
+	LifecycleID sql.NullInt64 `json:"lifecycle_id"`
+}
+
+func (q *Queries) ClearProjectLifecycleIfAssigned(ctx context.Context, arg ClearProjectLifecycleIfAssignedParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, clearProjectLifecycleIfAssigned, arg.ID, arg.LifecycleID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const countProjects = `-- name: CountProjects :one
 SELECT COUNT(*) FROM projects
 `
@@ -92,11 +109,20 @@ const hasActiveProjectDeployment = `-- name: HasActiveProjectDeployment :one
 SELECT CASE WHEN EXISTS (
     SELECT 1 FROM deployments d JOIN releases r ON r.id = d.release_id
     WHERE r.project_id = ?1
-      AND (d.status IN ('queued', 'pending', 'running', 'pending_approval', 'publishing_artifact', 'awaiting_artifact_approval', 'cleanup_unconfirmed')
+      AND (d.status IN ('queued', 'pending', 'running', 'pending_approval', 'publishing_artifact', 'awaiting_artifact_approval')
+        OR (d.status = 'cleanup_unconfirmed'
+            AND (d.container_namespace IS NOT NULL OR (
+            d.cleanup_confirmed_at IS NULL AND
+            NOT EXISTS (SELECT 1 FROM remote_step_runs s
+                WHERE s.deployment_id = d.id AND s.state = 'cleanup_unconfirmed')
+            AND NOT EXISTS (SELECT 1 FROM remote_deployment_claims c
+                WHERE c.deployment_id = d.id AND c.state = 'cleanup_unconfirmed'))))
         OR EXISTS (SELECT 1 FROM remote_deployment_claims c WHERE c.deployment_id = d.id
-            AND c.state IN ('claimed', 'started', 'cancel_requested', 'lost', 'cancel_unconfirmed'))
+            AND (c.state IN ('claimed', 'started', 'cancel_requested', 'lost', 'cancel_unconfirmed')
+                OR (c.state = 'cleanup_unconfirmed' AND c.cleanup_confirmed_at IS NULL)))
         OR EXISTS (SELECT 1 FROM remote_step_runs s WHERE s.deployment_id = d.id
-            AND s.state IN ('claimed', 'started', 'cancel_requested', 'lost', 'cancel_unconfirmed')))
+            AND (s.state IN ('claimed', 'started', 'cancel_requested', 'lost', 'cancel_unconfirmed')
+                OR (s.state = 'cleanup_unconfirmed' AND s.cleanup_confirmed_at IS NULL))))
 ) THEN 1 ELSE 0 END
 `
 
@@ -274,24 +300,36 @@ func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (P
 }
 
 const updateProjectNotifications = `-- name: UpdateProjectNotifications :exec
-UPDATE projects SET slack_webhook_url = ?, notify_emails = ?, gotify_url = ?, gotify_token = ?, discord_webhook_url = ? WHERE id = ?
+UPDATE projects SET
+    slack_webhook_url = CASE WHEN CAST(?1 AS INTEGER) = 1 THEN NULL ELSE COALESCE(NULLIF(CAST(?2 AS TEXT), ''), slack_webhook_url) END,
+    notify_emails = ?3,
+    gotify_url = ?4,
+    gotify_token = CASE WHEN CAST(?5 AS INTEGER) = 1 THEN NULL ELSE COALESCE(NULLIF(CAST(?6 AS TEXT), ''), gotify_token) END,
+    discord_webhook_url = CASE WHEN CAST(?7 AS INTEGER) = 1 THEN NULL ELSE COALESCE(NULLIF(CAST(?8 AS TEXT), ''), discord_webhook_url) END
+WHERE id = ?9
 `
 
 type UpdateProjectNotificationsParams struct {
-	SlackWebhookUrl   sql.NullString `json:"slack_webhook_url"`
-	NotifyEmails      sql.NullString `json:"notify_emails"`
-	GotifyUrl         sql.NullString `json:"gotify_url"`
-	GotifyToken       sql.NullString `json:"gotify_token"`
-	DiscordWebhookUrl sql.NullString `json:"discord_webhook_url"`
-	ID                int64          `json:"id"`
+	ClearSlackWebhookUrl   int64          `json:"clear_slack_webhook_url"`
+	SlackWebhookUrl        sql.NullString `json:"slack_webhook_url"`
+	NotifyEmails           sql.NullString `json:"notify_emails"`
+	GotifyUrl              sql.NullString `json:"gotify_url"`
+	ClearGotifyToken       int64          `json:"clear_gotify_token"`
+	GotifyToken            sql.NullString `json:"gotify_token"`
+	ClearDiscordWebhookUrl int64          `json:"clear_discord_webhook_url"`
+	DiscordWebhookUrl      sql.NullString `json:"discord_webhook_url"`
+	ID                     int64          `json:"id"`
 }
 
 func (q *Queries) UpdateProjectNotifications(ctx context.Context, arg UpdateProjectNotificationsParams) error {
 	_, err := q.db.ExecContext(ctx, updateProjectNotifications,
+		arg.ClearSlackWebhookUrl,
 		arg.SlackWebhookUrl,
 		arg.NotifyEmails,
 		arg.GotifyUrl,
+		arg.ClearGotifyToken,
 		arg.GotifyToken,
+		arg.ClearDiscordWebhookUrl,
 		arg.DiscordWebhookUrl,
 		arg.ID,
 	)

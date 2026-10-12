@@ -1,258 +1,146 @@
-# DurpDeploy — Backup & Restore Runbook (P1-6)
+# Backup, restore, and maintenance
 
-DurpDeploy's SQLite database (`durpdeploy.db`, WAL mode) is the source of truth
-for projects, releases, deployments, variables, and the audit log. Remote agent
-state is separate and includes the agent certificate, server fingerprints, and
-claim marker. Back up the agent state directory only when you need to preserve
-that enrolled identity. There is no durable database copy unless you set one up.
-This runbook covers two
-options:
+The database contains projects, releases, deployments, credentials, MFA state,
+and the audit log. Back it up with its matching server encryption key and the
+server agent-listener identity directory. A database without its matching key
+cannot recover encrypted state. Preserve the identity when agents must retain
+their existing server trust pin. Keep keys separately with restricted access,
+including old keys needed by pre-rotation backups. See the
+[current rotation limitation](security.md#key-rotation-runbook).
 
-1. **Litestream** (recommended) — continuous WAL streaming to S3-compatible
-   storage. Point-in-time recovery, seconds of data loss at most.
-2. **Cron fallback** — a daily `sqlite3 .backup` + `rsync` if you do not want
-   to manage an S3 bucket.
+In Compose, these are the `durpdeploy-data` and `durpdeploy-agent-identity`
+volumes and `secrets/durpdeploy_key`. Remote agent state is separate: back up
+its private state directory when you need to preserve that enrolled identity.
+Never delete a volume as a recovery shortcut.
 
-Pick one. Litestream is strictly better if you already have (or can create)
-an S3-compatible bucket (AWS S3, MinIO, Backblaze B2, Cloudflare R2, etc).
-
----
+This guide covers SQLite. PostgreSQL and SQL Server need their own native
+backup procedures, alongside the same key and identity backups.
 
 ## Option 1 — Litestream (continuous replication)
 
-Litestream reads the SQLite WAL and streams changed pages to object storage
-when SQLite writes them. It runs as its own systemd service, alongside — not
-inside — the `durpdeploy` service.
+The [Compose stack](deploy.md) runs Litestream as a separate sidecar sharing
+`/data/durpdeploy.db` with the app. It uses **Litestream 0.3**. Use that version's
+configuration and commands; newer LTX commands do not apply to this image.
+Replication is asynchronous: recovery reaches the latest successfully uploaded
+data, and an unavailable replica can increase data loss.
 
-### Install
+### Configure and verify
 
-```bash
-curl -L https://github.com/benbjohnson/litestream/releases/download/v0.5.14/litestream-0.5.14-linux-x86_64.tar.gz \
-  | sudo tar -xz -C /usr/local/bin litestream
-litestream version
-```
-
-Pin an exact version rather than trusting the "latest" redirect in a real
-provisioning script — the download URL above will need bumping when you
-upgrade. Debian/Ubuntu also has a `.deb` release asset if you prefer
-`dpkg -i`. Check the
-[releases page](https://github.com/benbjohnson/litestream/releases) for
-the current version and the right asset for your architecture (`x86_64` vs
-`arm64`).
-
-### Configure
-
-Copy the template from this repo and fill in your bucket:
+Edit [`deploy/litestream.example.yml`](../deploy/litestream.example.yml), the
+file mounted at `/etc/litestream.yml`. Set the bucket, unique replica prefix,
+region, and optional S3-compatible endpoint. Put `AWS_ACCESS_KEY_ID`,
+`AWS_SECRET_ACCESS_KEY`, and `LITESTREAM_S3_BUCKET` in `compose.litestream.env`.
+Keep that file private. Start the stack using the deployment guide, then check:
 
 ```bash
-sudo install -d -m 0750 -o durpdeploy -g durpdeploy /etc/litestream
-sudo install -m 0640 -o root -g durpdeploy systemd/litestream.yml /etc/litestream.yml
-sudo $EDITOR /etc/litestream.yml   # fill in bucket, endpoint, credentials
+docker compose logs --tail=100 litestream
+docker compose run --rm --no-deps litestream snapshots \
+  -config /etc/litestream.yml /data/durpdeploy.db
+docker compose run --rm --no-deps litestream wal \
+  -config /etc/litestream.yml /data/durpdeploy.db
 ```
 
-See `systemd/litestream.yml` in this repo for the full commented template.
-At minimum you need to set:
-
-- `dbs[0].path` — defaults to `/var/lib/durpdeploy/durpdeploy.db` (matches
-  `systemd/durpdeploy.service`'s `WorkingDirectory` + `DURPDEPLOY_DB`).
-- `dbs[0].replicas[0].bucket` / `path` — your S3 (or S3-compatible) bucket
-  and key prefix.
-- `dbs[0].replicas[0].endpoint` — only needed for non-AWS S3-compatible
-  stores (MinIO, R2, B2). Omit for real AWS S3.
-- Credentials — via `access-key-id` / `secret-access-key` in the file, or
-  (preferred) `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` env vars in the
-  systemd unit so the key never sits in a plaintext YAML file.
-
-### Run as a systemd service
-
-```bash
-sudo install -m 0644 systemd/litestream.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now litestream
-sudo systemctl status litestream
-```
-
-### Verify replication is healthy
-
-```bash
-sudo -u durpdeploy litestream ltx -config /etc/litestream.yml /var/lib/durpdeploy/durpdeploy.db
-```
-
-This lists the LTX (transaction) files currently held in the replica. A
-healthy setup shows entries with a `max_txid` that keeps advancing every
-time you re-run the command. An empty list, or a `max_txid` that stops
-advancing, means replication is stuck — check `journalctl -u litestream`
-first. (Older Litestream releases, pre-v0.4, called this command
-`snapshots`. This runbook targets the current `ltx`/LTX-based CLI.)
-
-```bash
-journalctl -u litestream -n 50 --no-pager
-```
-
-Run the `snapshots` check as a periodic cron/monitoring job (e.g. hourly) so
-a stalled replica pages someone instead of being discovered during an actual
-outage.
-
-### Restore (disaster recovery)
-
-On a fresh VM (or after wiping a corrupted local DB):
-
-```bash
-sudo systemctl stop durpdeploy
-sudo -u durpdeploy litestream restore -config /etc/litestream.yml \
-  -o /var/lib/durpdeploy/durpdeploy.db \
-  /var/lib/durpdeploy/durpdeploy.db
-sudo systemctl start durpdeploy
-```
-
-To restore to a specific point in time instead of "latest":
-
-```bash
-sudo -u durpdeploy litestream restore -config /etc/litestream.yml \
-  -timestamp 2026-07-18T12:00:00Z \
-  -o /var/lib/durpdeploy/durpdeploy.db \
-  /var/lib/durpdeploy/durpdeploy.db
-```
-
-`litestream restore` writes to a temporary file and renames it into place. Thus,
-an interrupted restore does not leave a corrupt
-`durpdeploy.db`. The restore does not change the original file until the
-operation is successful.
-
-**Do this test each month.** Start a temporary VM. Do the restore steps with a
-copy of the production `litestream.yml`. Read-only credentials are sufficient.
-Open the restored `durpdeploy.db`. Make sure that the row counts are correct.
-
-The `scripts/test-backup-restore.sh` script does this test with a local replica
-directory. The test does not require an S3 bucket. Refer to the script for the
-command sequence.
-
----
-
-## Option 2 — Cron alternative (no S3 necessary)
-
-If you do not want to run Litestream or manage a bucket, a daily
-`sqlite3 .backup` plus offsite copy is a reasonable minimum. This gives you
-daily-granularity recovery (worst case: lose up to 24h of data) rather than
-Litestream's near-continuous replication.
-
-### Backup script
-
-```bash
-sudo tee /usr/local/bin/durpdeploy-backup.sh >/dev/null <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-SRC=/var/lib/durpdeploy/durpdeploy.db
-DEST_DIR=/var/backups/durpdeploy
-DATE=$(date +%F)
-
-install -d -m 0750 -o durpdeploy -g durpdeploy "$DEST_DIR"
-sqlite3 "$SRC" ".backup '$DEST_DIR/durpdeploy-$DATE.db'"
-
-# Keep 14 days locally.
-find "$DEST_DIR" -name 'durpdeploy-*.db' -mtime +14 -delete
-
-# Ship offsite. Replace with your own destination (rsync, rclone, S3, etc).
-# rsync -av "$DEST_DIR/durpdeploy-$DATE.db" backup-host:/backups/durpdeploy/
-EOF
-sudo chmod +x /usr/local/bin/durpdeploy-backup.sh
-```
-
-`sqlite3 .backup` uses SQLite's online backup API — it is safe to run while
-`durpdeploy` is live and writing to the WAL. It does not require stopping
-the service.
-
-### Cron entry
-
-```bash
-sudo crontab -u durpdeploy -e
-# add:
-0 3 * * * /usr/local/bin/durpdeploy-backup.sh >> /var/log/durpdeploy-backup.log 2>&1
-```
+The [0.3 snapshots](https://litestream.io/v0.3/reference/snapshots/) and
+[WAL commands](https://litestream.io/v0.3/reference/wal/) list replica data.
+Check that uploaded WAL entries advance after a known database write; an idle
+database need not advance. A successful command or table header alone does
+not prove freshness. Alert on replication errors and periodically test a restore.
 
 ### Restore
 
+Finish or cancel deployments and wait for confirmed remote cleanup before
+stopping the app. Keep the old database and sidecars for investigation.
+Restore to a new path first:
+
 ```bash
-sudo systemctl stop durpdeploy
-sudo -u durpdeploy cp /var/backups/durpdeploy/durpdeploy-2026-07-18.db \
-  /var/lib/durpdeploy/durpdeploy.db
-sudo rm -f /var/lib/durpdeploy/durpdeploy.db-shm /var/lib/durpdeploy/durpdeploy.db-wal
-sudo systemctl start durpdeploy
+docker compose stop app litestream
+docker compose run --rm --no-deps --user 10001:10001 litestream restore \
+  -config /etc/litestream.yml -o /data/durpdeploy-restored.db \
+  /data/durpdeploy.db
 ```
 
-Remove the stale `-shm` and `-wal` sidecar files. They belong to the old
-database. Old sidecar files can cause an incorrect SQLite WAL recovery.
+The [0.3 restore command](https://litestream.io/v0.3/reference/restore/) refuses
+an existing output path. Choose another unused output filename for each retry.
+For point-in-time recovery, add `-timestamp <RFC3339-time>` before the database
+path; the requested time must be covered by retained replica data.
 
----
+Before promoting the restored file, use a SQLite tool or an isolated recovery
+instance to check integrity and expected records. With all database writers
+still stopped, archive the original `durpdeploy.db`, `durpdeploy.db-wal`, and
+`durpdeploy.db-shm` together outside the live database path. Move the verified
+restored file to `/data/durpdeploy.db`, retaining ownership `10001:10001`.
+Restore the matching key and server identity, then recreate the app:
 
-## Which one must I use?
+```bash
+docker compose up -d --force-recreate app litestream
+docker compose logs --tail=100 app litestream
+```
 
-| | Litestream | Cron fallback |
-|---|---|---|
-| Data loss on crash | Seconds | Up to 24h |
-| Requires S3 bucket | Yes | No |
-| Point-in-time restore | Yes (`-timestamp`) | Daily granularity only |
-| Setup effort | Moderate (bucket + credentials) | Low |
+Keep the public origin unchanged to preserve passkey validity. Check login,
+projects, release snapshots, deployment history, and agent trust before
+resuming deployments. A database restore does not recover files created by
+scripts on deployment targets.
 
-Use Litestream for a production installation. Use the cron alternative when
-you cannot supply an S3-compatible bucket. This alternative gives one backup
-each day.
+Test recovery monthly in an isolated environment with read-only replica
+credentials. Keep the recovered server disconnected from production agents
+and execution runtimes, disable schedules before starting it, and prevent
+outbound notifications. Compare expected records before declaring recovery
+successful. Never test by deleting production data.
 
-## Edge cases
+## Option 2 — Scheduled SQLite backup
 
-- **Empty database**: both options work fine on a freshly-migrated,
-  empty `durpdeploy.db` — Litestream just replicates an (almost) empty WAL,
-  and `sqlite3 .backup` produces a tiny file. No special-casing needed.
-- **WAL checkpoints**: durpdeploy opens SQLite with `journal_mode=WAL`
-  (see `cmd/server/main.go`'s DSN). Litestream is designed around WAL mode
-  and handles checkpoints (including ones triggered by the Go server's own
-  connection pool). Litestream sends WAL frames before SQLite removes them
-  during a checkpoint.
-  no configuration is needed on the durpdeploy side.
-- **Interrupted restore**: `litestream restore` restores to a temp path and
-  renames atomically, so a killed/interrupted restore never leaves a
-  half-written `durpdeploy.db` in place. For the cron fallback, `cp` is not
-  atomic — if you interrupt a restore mid-`cp`, re-run the `cp` from a known
-  good backup file before starting the service.
+For a host-managed database, SQLite's online backup command can create a
+consistent backup while the app is writing:
 
----
+```bash
+umask 077
+sqlite3 /absolute/path/durpdeploy.db \
+  ".backup '/absolute/backup/path/durpdeploy-backup.db'"
+```
+
+Install the SQLite CLI separately and run this as an account with access to
+the database, WAL, and backup directory. In Compose, the database is inside
+a named volume and the app image has no SQLite CLI; supply a backup tool
+with access to that volume rather than running the command inside the app.
+Do not copy only a live database file: committed data may still be in its WAL.
+
+Schedule backups with your host's scheduler, alert on failures, and copy them
+offsite. A daily schedule can lose up to a day's writes when backups succeed;
+failed backups extend that window. Keep dated backups and their matching keys,
+and test restores. For recovery, stop every database writer and replication
+process, verify the backup, and follow the same archive-and-promote procedure
+above. Never reuse the old WAL or SHM with the restored database.
+
+## Backup health monitoring
+
+DurpDeploy optionally runs `DURPDEPLOY_LITESTREAM_CHECK_COMMAND` through
+`/bin/sh -c` as the app account. A zero exit status means healthy. Set
+`DURPDEPLOY_LITESTREAM_CHECK_INTERVAL` to a positive Go duration (default `1h`).
+An empty command disables checks.
+
+The app image has no Litestream binary and cannot run commands inside the
+sidecar by itself. Supply a trusted check executable and its required tools
+inside the app's execution environment before enabling this feature. For
+Compose, set these variables in `compose.app.env` and recreate the app with
+`docker compose up -d app`. The check must return nonzero for missing or stale
+replica data; listing output alone is insufficient.
+
+Failed checks publish `backup_unhealthy`; the first successful check after a
+failure publishes `backup_healthy`. Configure their global channels at
+`/admin/notifications/settings` and inspect delivery at `/admin/notifications`.
 
 ## Audit log retention
 
-The `audit_log` table grows forever unless something prunes it. `durpdeploy
-audit prune` deletes rows older than a retention period (default 180 days)
-while preserving rows tied to live deployments/releases (P2-5). A systemd
-timer runs it daily at 03:17.
-
-### Install the timer
+Audit rows accumulate until you prune them. Run the CLI against the same
+database as the app:
 
 ```bash
-sudo install -m 0644 systemd/durpdeploy-audit-prune.{service,timer} /etc/systemd/system/ \
-  && sudo systemctl daemon-reload \
-  && sudo systemctl enable --now durpdeploy-audit-prune.timer
+docker compose exec -T app su-exec 10001:10001 \
+  /usr/local/bin/durpdeploy audit prune --days 90
 ```
 
-### Override the default retention
-
-The prune resolves retention in this order: `--days N` flag (if passed),
-`DURPDEPLOY_AUDIT_RETENTION_DAYS` env var, then 180. To override on the
-systemd unit, set the env var in the shared env file the service reads:
-
-```bash
-# /etc/durpdeploy/durpdeploy.env
-DURPDEPLOY_AUDIT_RETENTION_DAYS=90
-```
-
-The service unit loads this file via `EnvironmentFile=-/etc/durpdeploy/durpdeploy.env`
-(the leading `-` means a missing file is OK). The same file can hold
-`DURPDEPLOY_DB` if you want the main `durpdeploy.service` to share it.
-
-### Verify the timer is active
-
-```bash
-systemctl list-timers durpdeploy-audit-prune.timer
-```
-
-You must see the next trigger (03:17 on the next day) and the last run.
-`journalctl -u durpdeploy-audit-prune.service` shows the prune output
-(rows pruned + cutoff timestamp).
+Pruning preserves rows linked to live deployments or releases. Retention is
+resolved from `--days N`, then `DURPDEPLOY_AUDIT_RETENTION_DAYS`, then the
+180-day default. The command prints the retention period and cutoff. Schedule
+it with your own host scheduler, from the stack's working directory, and
+monitor failures. The repository does not install a pruning schedule.

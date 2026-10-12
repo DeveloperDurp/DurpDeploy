@@ -6,10 +6,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
-	"github.com/robfig/cron/v3"
-
 	"durpdeploy/internal/agentserver"
 	"durpdeploy/internal/audit"
 	"durpdeploy/internal/auth"
@@ -21,6 +17,9 @@ import (
 	"durpdeploy/static"
 
 	agentproto "github.com/DeveloperDurp/durpdeploy-agent/protocol"
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+	"github.com/robfig/cron/v3"
 )
 
 func NewAgentRouter(agents *agentserver.Server) http.Handler {
@@ -33,6 +32,12 @@ func NewAgentRouter(agents *agentserver.Server) http.Handler {
 	r.Post(agentproto.ResultPath, agents.Result)
 	r.Post(agentproto.CancelledPath, agents.Cancelled)
 	r.Post("/agent/v1/deployments/{id}/artifact", agents.Artifact)
+	r.Post(
+		"/agent/v1/deployments/{id}/staging/download",
+		agents.DownloadStaging,
+	)
+	r.With(agents.AuditWrites).
+		Post("/agent/v1/deployments/{id}/staging/upload", agents.UploadStaging)
 	return r
 }
 
@@ -72,6 +77,7 @@ func NewRouterWithAgentManagement(
 	return newRouter(repo, rnr, parser, authHandler, pairing, oidcEnabled)
 }
 
+// allow: SIZE_OK — route groups share the protected middleware and handler composition.
 func newRouter(
 	repo *repository.Repository,
 	rnr *runner.DeploymentRunner,
@@ -91,7 +97,7 @@ func newRouter(
 	// Serve static files from embedded assets (public).
 	r.Handle(
 		"/static/*",
-		http.StripPrefix("/static/", http.FileServer(http.FS(static.Assets))),
+		static.Handler(),
 	)
 	r.Get("/favicon.ico", func(w http.ResponseWriter, req *http.Request) {
 		http.Redirect(
@@ -174,6 +180,9 @@ func newRouter(
 		// Home page
 		indexHandler := handler.NewIndexHandler(repo)
 		pr.Get("/", indexHandler.Index)
+		pr.Get("/dashboard/deployments", indexHandler.RefreshDeployments)
+		pr.Get("/dashboard/activity",
+			api.NewDeploymentHandler(repo, rnr).DeploymentActivity)
 		pr.Post("/logout", authHandler.LogoutPost)
 
 		envHandler := handler.NewEnvironmentHandler(repo)
@@ -182,22 +191,36 @@ func newRouter(
 		pr.Post("/environments", envHandler.CreateEnvironment)
 		pr.Get("/environments/{id}/edit", envHandler.EditEnvironment)
 		pr.Put("/environments/{id}", envHandler.UpdateEnvironment)
-		pr.Delete("/environments/{id}", envHandler.DeleteEnvironment)
+		pr.With(auth.RequireRole("admin")).
+			Delete("/environments/{id}", envHandler.DeleteEnvironment)
 
 		lifecycleH := handler.NewLifecycleHandler(repo)
+		lifecycleVariablesH := handler.NewLifecycleVariableHandler(repo)
+		pr.With(auth.RequireRole("admin")).
+			Get("/lifecycles/{id}/variables", lifecycleVariablesH.List)
+		pr.With(auth.RequireRole("admin")).
+			Post("/lifecycles/{id}/variables", lifecycleVariablesH.Save)
+		pr.With(auth.RequireRole("admin")).
+			Get("/lifecycles/{id}/variables/{varId}/edit", lifecycleVariablesH.Edit)
+		pr.With(auth.RequireRole("admin")).
+			Put("/lifecycles/{id}/variables/{varId}", lifecycleVariablesH.Save)
+		pr.With(auth.RequireRole("admin")).
+			Delete("/lifecycles/{id}/variables/{varId}", lifecycleVariablesH.Delete)
 		pr.Get("/lifecycles", lifecycleH.ListLifecycles)
 		pr.Get("/lifecycles/new", lifecycleH.NewLifecycle)
 		pr.Post("/lifecycles", lifecycleH.CreateLifecycle)
 		pr.Get("/lifecycles/{id}", lifecycleH.GetLifecycle)
 		pr.Get("/lifecycles/{id}/edit", lifecycleH.EditLifecycle)
 		pr.Post("/lifecycles/{id}", lifecycleH.SaveLifecycle)
-		pr.Post("/lifecycles/{id}/stages", lifecycleH.AddStage)
-		pr.Post("/lifecycles/{id}/stages/reorder", lifecycleH.ReorderStage)
-		pr.Patch(
+		pr.With(auth.RequireRole("admin")).
+			Post("/lifecycles/{id}/stages", lifecycleH.AddStage)
+		pr.With(auth.RequireRole("admin")).
+			Post("/lifecycles/{id}/stages/reorder", lifecycleH.ReorderStage)
+		pr.With(auth.RequireRole("admin")).Patch(
 			"/lifecycles/{id}/stages/{stageId}",
 			lifecycleH.UpdateLifecycleStage,
 		)
-		pr.Post(
+		pr.With(auth.RequireRole("admin")).Post(
 			"/lifecycles/{id}/stages/{stageId}/delete",
 			lifecycleH.DeleteStage,
 		)
@@ -492,6 +515,7 @@ func newRouter(
 			ar.Post("/admin/agents/{id}/name", agentsH.UpdateName)
 			ar.Post("/admin/agents/{id}/retry-pair", agentsH.RetryPair)
 			ar.Post("/admin/agents/{id}/revoke", agentsH.Revoke)
+			ar.Post("/admin/agents/{id}/delete", agentsH.Delete)
 			ar.Post("/admin/agents/{id}/drain", agentsH.Drain)
 			ar.Post("/admin/agents/{id}/resume", agentsH.Resume)
 			ar.Post("/admin/agents/{id}/labels", agentsH.AddLabel)
@@ -557,6 +581,10 @@ func newRouter(
 			aar.Get("/admin/agents", agentsH.ListAgents)
 			aar.Post("/admin/agents/pair", agentsH.PairAgent)
 			aar.Get("/admin/agents/{id}", agentsH.GetAgent)
+			aar.Delete(
+				"/admin/agents/{id}",
+				api.EmptyBody(agentsH.DeleteAgent),
+			)
 			aar.Post(
 				"/admin/agents/{id}/retry-pair",
 				agentsH.RetryPairAgent,
@@ -625,20 +653,36 @@ func newRouter(
 		ar.Post("/environments", apiEnvH.CreateEnvironment)
 		ar.Get("/environments/{id}", apiEnvH.GetEnvironment)
 		ar.Put("/environments/{id}", apiEnvH.UpdateEnvironment)
-		ar.Delete(
+		ar.With(auth.RequireRole("admin")).Delete(
 			"/environments/{id}",
 			api.EmptyBody(apiEnvH.DeleteEnvironment),
 		)
 
 		apiLcH := api.NewLifecycleHandler(repo)
+		apiLcVariablesH := api.NewLifecycleVariableHandler(repo)
+		ar.With(auth.RequireRole("admin")).
+			Get("/lifecycles/{id}/variables", apiLcVariablesH.List)
+		ar.With(auth.RequireRole("admin")).
+			Post("/lifecycles/{id}/variables", apiLcVariablesH.Create)
+		ar.With(auth.RequireRole("admin")).
+			Get("/lifecycles/{id}/variables/{varId}", apiLcVariablesH.Get)
+		ar.With(auth.RequireRole("admin")).
+			Put("/lifecycles/{id}/variables/{varId}", apiLcVariablesH.Update)
+		ar.With(auth.RequireRole("admin")).
+			Delete("/lifecycles/{id}/variables/{varId}", api.EmptyBody(apiLcVariablesH.Delete))
 		ar.Get("/lifecycles", apiLcH.ListLifecycles)
 		ar.Post("/lifecycles", apiLcH.CreateLifecycle)
 		ar.Get("/lifecycles/{id}", apiLcH.GetLifecycle)
+		ar.With(auth.RequireRole("admin")).
+			Delete("/lifecycles/{id}", api.EmptyBody(apiLcH.DeleteLifecycle))
 		ar.Post("/lifecycles/{id}/save", apiLcH.SaveLifecycle)
-		ar.Post("/lifecycles/{id}/stages", apiLcH.AddStage)
-		ar.Post("/lifecycles/{id}/stages/reorder", apiLcH.ReorderStages)
-		ar.Patch("/lifecycles/{id}/stages/{stageId}", apiLcH.UpdateStage)
-		ar.Post(
+		ar.With(auth.RequireRole("admin")).
+			Post("/lifecycles/{id}/stages", apiLcH.AddStage)
+		ar.With(auth.RequireRole("admin")).
+			Post("/lifecycles/{id}/stages/reorder", apiLcH.ReorderStages)
+		ar.With(auth.RequireRole("admin")).
+			Patch("/lifecycles/{id}/stages/{stageId}", apiLcH.UpdateStage)
+		ar.With(auth.RequireRole("admin")).Post(
 			"/lifecycles/{id}/stages/{stageId}/delete",
 			api.EmptyBody(apiLcH.DeleteStage),
 		)
@@ -660,6 +704,7 @@ func newRouter(
 
 		// Non-scoped deployment list (filtered by query params).
 		ar.Get("/deployments", apiDepH.ListDeployments)
+		ar.Get("/deployments/activity", apiDepH.DeploymentActivity)
 
 		// Deployment-scoped sub-group (deployment → release → project).
 		ar.Group(func(dar chi.Router) {
@@ -667,6 +712,7 @@ func newRouter(
 
 			dar.Get("/deployments/{id}", apiDepH.GetDeployment)
 			dar.Get("/deployments/{id}/status", apiDepH.GetDeploymentStatus)
+			dar.Get("/deployments/{id}/staging", apiDepH.ListStaging)
 			dar.Get("/deployments/{id}/artifact-gates", artifactGateH.List)
 			dar.Get(
 				"/deployments/{id}/artifact-gates/{stepIndex}/review",
@@ -755,6 +801,10 @@ func newRouter(
 				artifactH.ReleasePin,
 			)
 			par.Get("/projects/{id}/variables", apiVarH.ListVariables)
+			par.Get(
+				"/projects/{id}/variables/inherited",
+				apiLcVariablesH.Inherited,
+			)
 			par.Post("/projects/{id}/variables", apiVarH.CreateVariable)
 			par.Get("/projects/{id}/variables/{varId}", apiVarH.GetVariable)
 			par.Put("/projects/{id}/variables/{varId}", apiVarH.UpdateVariable)

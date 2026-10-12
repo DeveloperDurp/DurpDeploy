@@ -3,6 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
 import { spawn } from "node:child_process";
+import { createServer } from "node:net";
+import { createInterface } from "node:readline";
 
 export function check(condition, message) {
 	if (!condition) throw new Error(message);
@@ -23,32 +25,61 @@ export async function startApp(root) {
 	const dir = await mkdtemp(join(tmpdir(), "durpdeploy-mfa-browser-"));
 	const binary = join(dir, "durpdeploy");
 	const db = join(dir, "durpdeploy.db");
-	const url = "http://localhost:8081";
-	const env = {
-		...process.env,
-		DURPDEPLOY_ADDR: "127.0.0.1:8081",
-		DURPDEPLOY_DB: db,
-		DURPDEPLOY_SECRET_KEY: randomBytes(32).toString("base64"),
-		DURPDEPLOY_URL: url,
-	};
-	await run("go", ["build", "-o", binary, "./cmd/server"], { cwd: root, env });
-	await run(binary, ["admin", "create", "--email", "admin@mfa.test", "--password", "admin-password-1234"], { env });
-	const server = spawn(binary, [], { env, stdio: "ignore" });
-	for (let attempt = 0; attempt < 50; attempt += 1) {
-		try {
-			const response = await fetch(`${url}/healthz`);
-			if (response.ok) return { dir, server, url };
-		} catch {
+	const reservation = createServer();
+	let server;
+	try {
+		await new Promise((resolve, reject) => {
+			reservation.once("error", reject);
+			reservation.listen(0, "127.0.0.1", resolve);
+		});
+		const port = reservation.address().port;
+		const url = `http://localhost:${port}`;
+		const env = {
+			...process.env,
+			DURPDEPLOY_ADDR: `127.0.0.1:${port}`,
+			DURPDEPLOY_AGENT_LISTEN_ADDR: "127.0.0.1:0",
+			DURPDEPLOY_AGENT_PUBLIC_URL: "https://localhost",
+			DURPDEPLOY_AGENT_IDENTITY_DIR: join(dir, "agent-identity"),
+			DURPDEPLOY_CONTAINER_NAMESPACE: `mfa_${randomBytes(16).toString("hex")}`,
+			DURPDEPLOY_DB: db,
+			DURPDEPLOY_SECRET_KEY: randomBytes(32).toString("base64"),
+			DURPDEPLOY_URL: url,
+			TMPDIR: dir,
+		};
+		await run("go", ["build", "-o", binary, "./cmd/server"], { cwd: root, env });
+		await run(binary, ["admin", "create", "--email", "admin@mfa.test", "--password", "admin-password-1234"], { env });
+		await new Promise((resolve, reject) => reservation.close((error) => error ? reject(error) : resolve()));
+		server = spawn(binary, [], { env, stdio: ["ignore", "pipe", "ignore"] });
+		let ready = false;
+		let startupError;
+		server.once("error", (error) => { startupError = error; });
+		const logs = createInterface({ input: server.stdout });
+		logs.on("line", (line) => {
+			if (!line.startsWith("{")) return;
+			const record = JSON.parse(line);
+			if (record.msg === "server starting" && record.addr === env.DURPDEPLOY_ADDR) ready = true;
+		});
+		for (let attempt = 0; attempt < 100; attempt += 1) {
+			if (startupError) throw startupError;
+			if (server.exitCode !== null || server.signalCode !== null) break;
+			if (ready) {
+				const response = await fetch(`${url}/healthz`, { signal: AbortSignal.timeout(2000) });
+				if (response.ok) return { dir, server, url };
+			}
 			await new Promise((resolve) => setTimeout(resolve, 100));
 		}
+		throw new Error("isolated MFA server did not become ready");
+	} catch (error) {
+		if (server) await stopApp({ dir, server });
+		else await rm(dir, { force: true, recursive: true });
+		throw error;
+	} finally {
+		if (reservation.listening) await new Promise((resolve) => reservation.close(resolve));
 	}
-	server.kill();
-	await rm(dir, { force: true, recursive: true });
-	throw new Error("isolated MFA server did not become ready");
 }
 
 export async function stopApp(app) {
-	if (app.server.exitCode === null && app.server.signalCode === null) {
+	if (app.server.pid && app.server.exitCode === null && app.server.signalCode === null) {
 		const exited = new Promise((resolve) => app.server.once("exit", resolve));
 		app.server.kill("SIGTERM");
 		await exited;

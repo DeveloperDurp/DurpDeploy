@@ -39,19 +39,19 @@ type swaggerLifecycleStage struct {
 // Step is an executable script step within a project.
 // swagger:model Step
 type swaggerStep struct {
-	ID              int64    `json:"id"`
-	ProjectID       int64    `json:"project_id"`
-	Name            string   `json:"name"`
-	ScriptBody      string   `json:"script_body"`
-	Interpreter     string   `json:"interpreter"`
-	SortOrder       int64    `json:"sort_order"`
-	CreatedAt       int64    `json:"created_at"`
-	TimeoutSeconds  int64    `json:"timeout_seconds"`
-	MaxRetries      int64    `json:"max_retries"`
-	ExecutionTarget string   `json:"execution_target"`
-	AgentSelectors  []string `json:"agent_selectors"`
-	// Container image the step runs in on the server; mandatory for
-	// local steps and rejected for agent steps.
+	ID                 int64    `json:"id"`
+	ProjectID          int64    `json:"project_id"`
+	Name               string   `json:"name"`
+	ScriptBody         string   `json:"script_body"`
+	Interpreter        string   `json:"interpreter"`
+	SortOrder          int64    `json:"sort_order"`
+	CreatedAt          int64    `json:"created_at"`
+	TimeoutSeconds     int64    `json:"timeout_seconds"`
+	MaxRetries         int64    `json:"max_retries"`
+	ExecutionTarget    string   `json:"execution_target"`
+	AgentExecutionMode string   `json:"agent_execution_mode"`
+	AgentSelectors     []string `json:"agent_selectors"`
+	// Container image required for local steps and agent container mode.
 	ContainerImage       string `json:"container_image"`
 	NetworkMode          string `json:"network_mode"`
 	ApprovalArtifactPath string `json:"approval_artifact_path"`
@@ -70,6 +70,7 @@ type swaggerStepTemplate struct {
 	Interpreter          string   `json:"interpreter"`
 	CreatedAt            int64    `json:"created_at"`
 	ExecutionTarget      string   `json:"execution_target"`
+	AgentExecutionMode   string   `json:"agent_execution_mode"`
 	AgentSelectors       []string `json:"agent_selectors"`
 	ContainerImage       string   `json:"container_image"`
 	NetworkMode          string   `json:"network_mode"`
@@ -90,6 +91,7 @@ type swaggerStepTemplateVersion struct {
 	Interpreter          string   `json:"interpreter"`
 	CreatedAt            int64    `json:"created_at"`
 	ExecutionTarget      string   `json:"execution_target"`
+	AgentExecutionMode   string   `json:"agent_execution_mode"`
 	AgentSelectors       []string `json:"agent_selectors"`
 	ContainerImage       string   `json:"container_image"`
 	NetworkMode          string   `json:"network_mode"`
@@ -99,15 +101,16 @@ type swaggerStepTemplateVersion struct {
 	VariableNames        []string `json:"variable_names"`
 }
 
-// Release is an immutable snapshot of project steps and variables.
+// Release is a refreshable snapshot of project steps and variables.
 // swagger:model Release
 type swaggerRelease struct {
-	ID             int64  `json:"id"`
-	ProjectID      int64  `json:"project_id"`
-	Version        string `json:"version"`
-	StepsJSON      string `json:"steps_json"`
-	CreatedAt      int64  `json:"created_at"`
-	SnapshotLocked int64  `json:"snapshot_locked"`
+	ID        int64  `json:"id"`
+	ProjectID int64  `json:"project_id"`
+	Version   string `json:"version"`
+	StepsJSON string `json:"steps_json"`
+	CreatedAt int64  `json:"created_at"`
+	// Deprecated: retained for compatibility; does not prevent refresh.
+	SnapshotLocked int64 `json:"snapshot_locked"`
 }
 
 // Deployment represents a release executing against an environment.
@@ -156,7 +159,6 @@ type swaggerDeploymentListResponse struct {
 // DeploymentStatusResponse is the status payload for GetDeploymentStatus.
 // swagger:model DeploymentStatusResponse
 type swaggerDeploymentStatusResponse struct {
-	ID                 string `json:"id"`
 	Status             string `json:"status"`
 	WaitingForAgents   bool   `json:"waiting_for_agents"`
 	QueuePosition      int64  `json:"queue_position"`
@@ -230,13 +232,16 @@ type swaggerUser struct {
 // GlobalNotification holds the global notification settings.
 // swagger:model GlobalNotification
 type swaggerGlobalNotification struct {
-	ID                int64   `json:"id"`
-	SlackWebhookURL   *string `json:"slack_webhook_url"`
-	NotifyEmails      *string `json:"notify_emails"`
-	GotifyURL         *string `json:"gotify_url"`
-	GotifyToken       *string `json:"gotify_token"`
-	DiscordWebhookURL *string `json:"discord_webhook_url"`
-	UpdatedAt         int64   `json:"updated_at"`
+	SlackWebhookURLConfigured   bool    `json:"slack_webhook_url_configured"`
+	GotifyTokenConfigured       bool    `json:"gotify_token_configured"`
+	DiscordWebhookURLConfigured bool    `json:"discord_webhook_url_configured"`
+	ID                          int64   `json:"id"`
+	SlackWebhookURL             *string `json:"slack_webhook_url"`
+	NotifyEmails                *string `json:"notify_emails"`
+	GotifyURL                   *string `json:"gotify_url"`
+	GotifyToken                 *string `json:"gotify_token"`
+	DiscordWebhookURL           *string `json:"discord_webhook_url"`
+	UpdatedAt                   int64   `json:"updated_at"`
 }
 
 // Variable is a project or environment-scoped variable.
@@ -259,10 +264,10 @@ type swaggerLogEntry struct {
 	Line string `json:"line"`
 }
 
-// LogStreamParams controls the format of StreamLogs.
+// LogStreamParams controls the log stream format.
 // swagger:model LogStreamParams
 type swaggerLogStreamParams struct {
-	// Format is either sse or ndjson.
+	// Format is sse or ndjson; deployment streams also support structured SSE.
 	//
 	// in: query
 	Format string `json:"format"`
@@ -319,40 +324,49 @@ type swaggerProjectListResponse []swaggerProjectResponse
 // ProjectResponse is the JSON shape for a project.
 // swagger:model ProjectResponse
 type swaggerProjectResponse struct {
-	ID                int64  `json:"id"`
-	Name              string `json:"name"`
-	Description       string `json:"description"`
-	CreatedAt         int64  `json:"created_at"`
-	LifecycleID       *int64 `json:"lifecycle_id"`
-	SlackWebhookURL   string `json:"slack_webhook_url"`
-	NotifyEmails      string `json:"notify_emails"`
-	GotifyURL         string `json:"gotify_url"`
-	GotifyToken       string `json:"gotify_token"`
-	DiscordWebhookURL string `json:"discord_webhook_url"`
+	SlackWebhookURLConfigured   bool   `json:"slack_webhook_url_configured"`
+	GotifyTokenConfigured       bool   `json:"gotify_token_configured"`
+	DiscordWebhookURLConfigured bool   `json:"discord_webhook_url_configured"`
+	ID                          int64  `json:"id"`
+	Name                        string `json:"name"`
+	Description                 string `json:"description"`
+	CreatedAt                   int64  `json:"created_at"`
+	LifecycleID                 *int64 `json:"lifecycle_id"`
+	SlackWebhookURL             string `json:"slack_webhook_url"`
+	NotifyEmails                string `json:"notify_emails"`
+	GotifyURL                   string `json:"gotify_url"`
+	GotifyToken                 string `json:"gotify_token"`
+	DiscordWebhookURL           string `json:"discord_webhook_url"`
 }
 
 // ProjectNotificationResponse is the notification settings for a project.
 // swagger:model ProjectNotificationResponse
 type swaggerProjectNotificationResponse struct {
-	ID                int64  `json:"id"`
-	Name              string `json:"name"`
-	Description       string `json:"description"`
-	SlackWebhookURL   string `json:"slack_webhook_url"`
-	NotifyEmails      string `json:"notify_emails"`
-	GotifyURL         string `json:"gotify_url"`
-	GotifyToken       string `json:"gotify_token"`
-	DiscordWebhookURL string `json:"discord_webhook_url"`
-	CreatedAt         int64  `json:"created_at"`
+	SlackWebhookURLConfigured   bool   `json:"slack_webhook_url_configured"`
+	GotifyTokenConfigured       bool   `json:"gotify_token_configured"`
+	DiscordWebhookURLConfigured bool   `json:"discord_webhook_url_configured"`
+	ID                          int64  `json:"id"`
+	Name                        string `json:"name"`
+	Description                 string `json:"description"`
+	SlackWebhookURL             string `json:"slack_webhook_url"`
+	NotifyEmails                string `json:"notify_emails"`
+	GotifyURL                   string `json:"gotify_url"`
+	GotifyToken                 string `json:"gotify_token"`
+	DiscordWebhookURL           string `json:"discord_webhook_url"`
+	CreatedAt                   int64  `json:"created_at"`
 }
 
 // ProjectNotificationRequest updates a project's notification settings.
 // swagger:model ProjectNotificationRequest
 type swaggerProjectNotificationRequest struct {
-	SlackWebhookURL   string `json:"slack_webhook_url"`
-	NotifyEmails      string `json:"notify_emails"`
-	GotifyURL         string `json:"gotify_url"`
-	GotifyToken       string `json:"gotify_token"`
-	DiscordWebhookURL string `json:"discord_webhook_url"`
+	ClearSlackWebhookURL   bool   `json:"clear_slack_webhook_url"`
+	ClearGotifyToken       bool   `json:"clear_gotify_token"`
+	ClearDiscordWebhookURL bool   `json:"clear_discord_webhook_url"`
+	SlackWebhookURL        string `json:"slack_webhook_url"`
+	NotifyEmails           string `json:"notify_emails"`
+	GotifyURL              string `json:"gotify_url"`
+	GotifyToken            string `json:"gotify_token"`
+	DiscordWebhookURL      string `json:"discord_webhook_url"`
 }
 
 // ProjectRequest is the body for create/update project.
@@ -405,16 +419,16 @@ type swaggerReorderStagesRequest struct {
 // StepRequest is the body for create/update step.
 // swagger:model StepRequest
 type swaggerStepRequest struct {
-	Name            string   `json:"name"`
-	ScriptBody      string   `json:"script_body"`
-	Interpreter     string   `json:"interpreter"`
-	SortOrder       int64    `json:"sort_order"`
-	TimeoutSeconds  int64    `json:"timeout_seconds"`
-	MaxRetries      int64    `json:"max_retries"`
-	ExecutionTarget string   `json:"execution_target"`
-	AgentSelectors  []string `json:"agent_selectors"`
-	// Container image the step runs in on the server; mandatory for
-	// local steps and rejected for agent steps.
+	Name               string   `json:"name"`
+	ScriptBody         string   `json:"script_body"`
+	Interpreter        string   `json:"interpreter"`
+	SortOrder          int64    `json:"sort_order"`
+	TimeoutSeconds     int64    `json:"timeout_seconds"`
+	MaxRetries         int64    `json:"max_retries"`
+	ExecutionTarget    string   `json:"execution_target"`
+	AgentExecutionMode string   `json:"agent_execution_mode"`
+	AgentSelectors     []string `json:"agent_selectors"`
+	// Required for local steps and agent container mode; rejected for agent host mode.
 	ContainerImage       string `json:"container_image"`
 	NetworkMode          string `json:"network_mode"`
 	ApprovalArtifactPath string `json:"approval_artifact_path"`
@@ -434,13 +448,13 @@ type swaggerReorderStepsRequest struct {
 // StepTemplateRequest is the body for create/update step template.
 // swagger:model StepTemplateRequest
 type swaggerStepTemplateRequest struct {
-	Name            string   `json:"name"`
-	ScriptBody      string   `json:"script_body"`
-	Interpreter     string   `json:"interpreter"`
-	ExecutionTarget string   `json:"execution_target"`
-	AgentSelectors  []string `json:"agent_selectors"`
-	// Container image the step runs in on the server; mandatory for
-	// local steps and rejected for agent steps.
+	Name               string   `json:"name"`
+	ScriptBody         string   `json:"script_body"`
+	Interpreter        string   `json:"interpreter"`
+	ExecutionTarget    string   `json:"execution_target"`
+	AgentExecutionMode string   `json:"agent_execution_mode"`
+	AgentSelectors     []string `json:"agent_selectors"`
+	// Required for local steps and agent container mode; rejected for agent host mode.
 	ContainerImage       string `json:"container_image"`
 	NetworkMode          string `json:"network_mode"`
 	ApprovalArtifactPath string `json:"approval_artifact_path"`
@@ -484,6 +498,7 @@ type swaggerVariableResponse struct {
 // ReleaseRequest is the body for create release.
 // swagger:model ReleaseRequest
 type swaggerReleaseRequest struct {
+	// Attached packages are downloaded and pinned on the first deployment pull.
 	Version string `json:"version"`
 }
 
@@ -575,11 +590,14 @@ type swaggerUserListResponse []swaggerUserResponse
 // GlobalNotificationRequest is the body for global notification settings.
 // swagger:model GlobalNotificationRequest
 type swaggerGlobalNotificationRequest struct {
-	SlackWebhookURL   string `json:"slack_webhook_url"`
-	NotifyEmails      string `json:"notify_emails"`
-	GotifyURL         string `json:"gotify_url"`
-	GotifyToken       string `json:"gotify_token"`
-	DiscordWebhookURL string `json:"discord_webhook_url"`
+	ClearSlackWebhookURL   bool   `json:"clear_slack_webhook_url"`
+	ClearGotifyToken       bool   `json:"clear_gotify_token"`
+	ClearDiscordWebhookURL bool   `json:"clear_discord_webhook_url"`
+	SlackWebhookURL        string `json:"slack_webhook_url"`
+	NotifyEmails           string `json:"notify_emails"`
+	GotifyURL              string `json:"gotify_url"`
+	GotifyToken            string `json:"gotify_token"`
+	DiscordWebhookURL      string `json:"discord_webhook_url"`
 }
 
 // EmptyResponse is returned for no-content endpoints.
@@ -715,6 +733,9 @@ type swaggerAgent struct {
 	CreatedAt                int64                 `json:"created_at"`
 	UpdatedAt                int64                 `json:"updated_at"`
 	Interpreters             []string              `json:"interpreters"`
+	ExecutionModes           []string              `json:"execution_modes"`
+	ContainerRuntimes        []string              `json:"container_runtimes"`
+	ContainerInterpreters    []string              `json:"container_interpreters"`
 }
 
 type swaggerSQLNullString struct {
@@ -789,6 +810,7 @@ type swaggerRunbookStep struct {
 	TimeoutSeconds       int64    `json:"timeout_seconds"`
 	MaxRetries           int64    `json:"max_retries"`
 	ExecutionTarget      string   `json:"execution_target"`
+	AgentExecutionMode   string   `json:"agent_execution_mode"`
 	AgentSelectors       []string `json:"agent_selectors"`
 	ContainerImage       string   `json:"container_image"`
 	NetworkMode          string   `json:"network_mode"`

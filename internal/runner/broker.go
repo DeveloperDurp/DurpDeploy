@@ -5,10 +5,37 @@ import "sync"
 type LogBroker struct {
 	mu      sync.RWMutex
 	clients map[int64]map[chan string]struct{} // deploymentID -> clients
+	active  map[int64]int
 }
 
 func NewLogBroker() *LogBroker {
-	return &LogBroker{clients: make(map[int64]map[chan string]struct{})}
+	return &LogBroker{
+		clients: make(map[int64]map[chan string]struct{}),
+		active:  make(map[int64]int),
+	}
+}
+
+func (b *LogBroker) beginDeployment(id int64) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.active[id]++
+}
+
+func (b *LogBroker) endDeployment(id int64) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.active[id]--
+	if b.active[id] == 0 {
+		delete(b.active, id)
+	}
+}
+
+// DeploymentActive includes cancellation and cleanup, which can emit final
+// logs after the deployment's HTTP status has already become terminal.
+func (b *LogBroker) DeploymentActive(id int64) bool {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	return b.active[id] > 0
 }
 
 func (b *LogBroker) Subscribe(deploymentID int64) chan string {

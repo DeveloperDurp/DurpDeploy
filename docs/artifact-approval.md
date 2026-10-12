@@ -25,9 +25,14 @@ Before approval, download and independently inspect the exact artifact using
 trusted tools. For Terraform, run `terraform show` with a trusted toolchain and
 providers, then compare the result with the review. Checksums bind immutable
 bytes; they do not establish that the summary accurately describes those bytes.
-Secret-key rotation re-encrypts retained artifact chunks in the same
-transaction as other encrypted data. `--plaintext` cannot migrate encrypted
-artifact gates. Stop the server for rotation, then restart with the new key.
+The rotation CLI re-encrypts retained artifact chunks in the same transaction
+as variables, package credentials, and verification targets. It currently skips
+TOTP seeds, stored agent identity ciphertext, and remote log scrub buffers;
+do not rotate instances containing those records. See the
+[rotation limitation](security.md#key-rotation-runbook).
+`--plaintext` cannot migrate encrypted artifact gates, package credentials,
+or verification targets. Eligible instances must stop the server for rotation
+and install the exact CLI-generated key before restarting.
 Generation and continuation scripts, container images, and credentials belong
 to the existing trusted-team deployment model. Gates do not constrain a
 malicious script to only plan, or prove that it applies the approved artifact.
@@ -81,16 +86,26 @@ The bundle is limited to 300 MiB; review JSON is limited to 1 MiB. Unsafe
 archive entries, missing files, and altered ciphertext or checksums fail closed.
 
 An administrator reviews and approves the exact revision and SHA-256 in the
-deployment page or API. Project members with write access can download the
-sensitive artifact; viewers can see the count summary only. Approval expires
-after 24 hours. Rejection, cancellation, and expiry stop the deployment.
+deployment page or API once `decision_ready` is true. A saved gate can have
+status `awaiting` while its deployment is still `publishing_artifact` and
+cleaning up containers. The decision buttons appear only after cleanup has
+finished and the deployment is `awaiting_artifact_approval`. The panel polls
+every three seconds, so no manual refresh is needed. Failed web decisions
+return to deployment details with a warning and current gate state; failed
+decisions do not create successful approval/rejection audit entries.
+
+Approval expires after 24 hours. Project members with write access can download
+the sensitive artifact; viewers can see the count summary only.
+Rejection, cancellation, and expiry stop the deployment.
 The minute worker records expiry and advances queues; polling reads state only.
 Expired artifacts and decisions are blocked immediately, before that worker runs.
 Terminal bundle chunks are deleted after seven days. Audit records retain the
 decision, and gate records retain checksums, counts, times, and approver ID.
 
-An active gated deployment reserves its environment, including while waiting.
-Later deployments enter the environment's FIFO queue. Approval resumes the
+An active gated deployment reserves its project/environment pair, including
+while waiting. Later jobs for that pair enter its FIFO queue. Other projects
+can deploy to the same environment concurrently, and that project can deploy
+to other environments concurrently. Approval resumes the
 same deployment without giving up its slot; rejection, cancellation, or expiry
 releases the slot for the next deployment. Gates
 require local steps with no automatic retries, a later continuation step, and

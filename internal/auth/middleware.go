@@ -45,9 +45,12 @@ func AuthMiddleware(
 ) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Cache-Control", "no-store")
+			w.Header().
+				Add("Vary", "HX-Request, HX-Boosted, HX-History-Restore-Request")
 			cookie, err := r.Cookie("session")
 			if err != nil {
-				http.Redirect(w, r, "/login", http.StatusSeeOther)
+				redirectToLogin(w, r)
 				return
 			}
 
@@ -59,7 +62,7 @@ func AuthMiddleware(
 				},
 			)
 			if err != nil {
-				http.Redirect(w, r, "/login", http.StatusSeeOther)
+				redirectToLogin(w, r)
 				return
 			}
 
@@ -92,4 +95,18 @@ func AuthMiddleware(
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+func redirectToLogin(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("HX-History-Restore-Request") == "true" {
+		w.Header().Set("HX-Redirect", "/login")
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+	if r.Header.Get("HX-Boosted") == "true" {
+		w.Header().Set("HX-Redirect", "/login")
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	http.Redirect(w, r, "/login", http.StatusSeeOther)
 }

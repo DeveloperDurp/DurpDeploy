@@ -3,7 +3,7 @@ set -euo pipefail
 
 engine=${1:-}
 required=${DURPDEPLOY_AUTH_MFA_PARITY_REQUIRED:-0}
-artifact_root=${AUTH_MFA_ARTIFACT_DIR:-artifacts/auth-mfa}
+artifact_root=${AUTH_MFA_ARTIFACT_DIR:-"artifacts/auth-mfa/parity-$(openssl rand -hex 12)"}
 tmp=
 
 cleanup() {
@@ -109,7 +109,9 @@ if [[ ${DURPDEPLOY_AUTH_MFA_PARITY_FORCE_FAILURE:-0} == 1 ]]; then
     exit 1
 fi
 
-run container-parity go test -v -count=1 -run "$tests" "${packages[@]}"
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+run container-parity bash "$script_dir/go_test.sh" \
+    -v -count=1 -timeout=20m -run "$tests" "${packages[@]}"
 
 if [[ $engine == mssql ]]; then
     if [[ -z ${DURPDEPLOY_MSSQL_TEST_DSN:-} ]]; then
@@ -119,7 +121,8 @@ if [[ $engine == mssql ]]; then
     else
         run configured-dsn-parity env \
             DURPDEPLOY_MSSQL_TEST_DSN="$DURPDEPLOY_MSSQL_TEST_DSN" \
-            go test -v -count=1 -run '^TestMSSQL_ChallengeGuardedConsume$' \
+            bash "$script_dir/go_test.sh" -v -count=1 \
+            -run '^TestMSSQL_ChallengeGuardedConsume$' \
             ./internal/mfa
     fi
 fi

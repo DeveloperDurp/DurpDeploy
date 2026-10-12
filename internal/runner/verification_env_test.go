@@ -23,10 +23,7 @@ esac
 					ContainerImage: "example.com/worker:1",
 					VariableNames:  []string{name},
 				},
-				logWriter: &broadcastWriter{
-					ctx: t.Context(), repo: repo, broker: r.broker,
-					scrubber: NewScrubber(nil),
-				},
+				logWriter: attemptLogWriter(t, r, repo, 1),
 				environment: map[string]string{
 					name: "untrusted",
 				},

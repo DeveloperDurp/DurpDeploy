@@ -4,12 +4,15 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"database/sql"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"durpdeploy/internal/agentserver"
+	"durpdeploy/internal/db"
 	"durpdeploy/internal/dispatch"
 	"durpdeploy/internal/events"
 	"durpdeploy/internal/secret"
@@ -27,12 +30,26 @@ func TestRemoteLogsRedactSplitSecretBeforeStorageAndBroadcast(t *testing.T) {
 		t.Fatal(err)
 	}
 	fixture.repo.SetSecretBox(box)
-	encrypted, err := box.Encrypt("top-secret")
+	snapshot, err := json.Marshal([]db.ReleaseVariable{
+		{
+			Name:   "TOKEN",
+			Value:  sql.NullString{String: "top-secret", Valid: true},
+			Secret: 1,
+		},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := fixture.repo.DB.Exec(`INSERT INTO release_variables
-		(release_id,name,value,secret) VALUES (1,'TOKEN',?,1)`, encrypted); err != nil {
+	encrypted, err := box.Encrypt(string(snapshot))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := fixture.repo.Queries.CreateDeploymentVariableSnapshot(
+		t.Context(),
+		db.CreateDeploymentVariableSnapshotParams{
+			DeploymentID: 1, Value: encrypted,
+		},
+	); err != nil {
 		t.Fatal(err)
 	}
 	startLifecycle(t, fixture, http.StatusNoContent)
@@ -136,7 +153,8 @@ func TestRemoteLogsRedactCommonPatternSplitAcrossEvents(t *testing.T) {
 	logs, err := fixture.repo.Queries.ListDeploymentLogsByDeployment(
 		t.Context(), 1,
 	)
-	if err != nil || len(logs) != 2 || logs[0].Line+logs[1].Line != "[REDACTED]" {
+	if err != nil || len(logs) != 2 ||
+		logs[0].Line+logs[1].Line != "[REDACTED]" {
 		t.Fatalf("stored logs=%+v error=%v", logs, err)
 	}
 	var streamed strings.Builder

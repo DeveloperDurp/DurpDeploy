@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 
+	"durpdeploy/internal/agentexecution"
 	"durpdeploy/internal/artifact"
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
@@ -28,6 +29,7 @@ type stepRequest struct {
 	TimeoutSeconds       int64    `json:"timeout_seconds"`
 	MaxRetries           int64    `json:"max_retries"`
 	ExecutionTarget      string   `json:"execution_target"`
+	AgentExecutionMode   string   `json:"agent_execution_mode"`
 	AgentSelectors       []string `json:"agent_selectors"`
 	ContainerImage       string   `json:"container_image"`
 	NetworkMode          string   `json:"network_mode"`
@@ -185,10 +187,10 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	image, variableNames, ok := validateContainerConfig(
-		w,
-		target,
-		req.ContainerImage,
-		req.VariableNames,
+		w, agentexecution.Config{
+			Target: target, Mode: req.AgentExecutionMode,
+			Image: req.ContainerImage, VariableNames: req.VariableNames,
+		},
 	)
 	if !ok {
 		return
@@ -215,6 +217,7 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 			MaxRetries:           req.MaxRetries,
 			Interpreter:          selectedInterpreter,
 			ContainerImage:       image,
+			AgentExecutionMode:   req.AgentExecutionMode,
 			NetworkMode:          req.NetworkMode,
 			ApprovalArtifactPath: req.ApprovalArtifactPath,
 			ApprovalReviewPath:   req.ApprovalReviewPath,
@@ -396,10 +399,10 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	image, variableNames, ok := validateContainerConfig(
-		w,
-		target,
-		req.ContainerImage,
-		req.VariableNames,
+		w, agentexecution.Config{
+			Target: target, Mode: req.AgentExecutionMode,
+			Image: req.ContainerImage, VariableNames: req.VariableNames,
+		},
 	)
 	if !ok {
 		return
@@ -416,6 +419,7 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 			MaxRetries:           req.MaxRetries,
 			Interpreter:          selectedInterpreter,
 			ContainerImage:       image,
+			AgentExecutionMode:   req.AgentExecutionMode,
 			NetworkMode:          req.NetworkMode,
 			ApprovalArtifactPath: req.ApprovalArtifactPath,
 			ApprovalReviewPath:   req.ApprovalReviewPath,
@@ -583,6 +587,7 @@ func (h *StepHandler) ReorderSteps(w http.ResponseWriter, r *http.Request) {
 			MaxRetries:           s.MaxRetries,
 			Interpreter:          s.Interpreter,
 			ContainerImage:       s.ContainerImage,
+			AgentExecutionMode:   s.AgentExecutionMode,
 			NetworkMode:          s.NetworkMode,
 			ApprovalArtifactPath: s.ApprovalArtifactPath,
 			ApprovalReviewPath:   s.ApprovalReviewPath,

@@ -2,10 +2,11 @@ package handler_test
 
 import (
 	"bytes"
-	"context"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
 	"durpdeploy/views/pages"
 )
@@ -17,8 +18,12 @@ func renderLifecycleStageList(
 	t.Helper()
 
 	var rendered bytes.Buffer
+	request := auth.SetUser(
+		httptest.NewRequest("GET", "/lifecycles/1", nil),
+		&db.User{Role: "admin"},
+	)
 	err := pages.LifecycleStageList(db.Lifecycle{ID: 1}, stages, nil).
-		Render(context.Background(), &rendered)
+		Render(request.Context(), &rendered)
 	if err != nil {
 		t.Fatalf("render lifecycle stages: %v", err)
 	}

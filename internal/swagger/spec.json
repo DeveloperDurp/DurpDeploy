@@ -186,6 +186,77 @@
             "bearer": []
           }
         ]
+      },
+      "delete": {
+        "tags": [
+          "admin-agents"
+        ],
+        "summary": "Delete an agent from the inventory, retaining deployment history.",
+        "operationId": "deleteAgent",
+        "parameters": [
+          {
+            "type": "string",
+            "x-go-name": "ID",
+            "name": "id",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "EmptyResponse is returned for no-content endpoints.",
+            "schema": {
+              "$ref": "#/definitions/EmptyResponse"
+            }
+          },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "409": {
+            "description": "Conflict error response.",
+            "schema": {
+              "$ref": "#/definitions/ConflictError"
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
+            }
+          },
+          "500": {
+            "description": "Server error response.",
+            "schema": {
+              "$ref": "#/definitions/ServerError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
       }
     },
     "/admin/agents/{id}/drain": {
@@ -1742,6 +1813,43 @@
         ]
       }
     },
+    "/deployments/activity": {
+      "get": {
+        "tags": [
+          "deployments"
+        ],
+        "summary": "Deployment counts for the last 14 UTC calendar days, including today.",
+        "operationId": "deploymentActivity",
+        "responses": {
+          "200": {
+            "description": "DeploymentActivityDay contains counts by current status for one UTC date.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/DeploymentActivityDay"
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "500": {
+            "description": "Server error response.",
+            "schema": {
+              "$ref": "#/definitions/ServerError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/deployments/{id}": {
       "get": {
         "produces": [
@@ -1897,10 +2005,7 @@
         ],
         "responses": {
           "200": {
-            "description": "OK",
-            "schema": {
-              "$ref": "#/definitions/ArtifactGateListResponse"
-            }
+            "$ref": "#/responses/ArtifactGateListResponse"
           },
           "403": {
             "description": "Forbidden error response.",
@@ -2423,6 +2528,7 @@
     },
     "/deployments/{id}/logs/stream": {
       "get": {
+        "description": "Stream deployment logs. The format=structured SSE option emits indexed\nstep logs and lifecycle states, supports after and Last-Event-ID cursors,\nand ends with a complete event. Default SSE and NDJSON remain text streams.",
         "produces": [
           "text/event-stream",
           "application/x-ndjson"
@@ -2434,7 +2540,6 @@
         "tags": [
           "logs"
         ],
-        "summary": "Stream deployment logs.",
         "operationId": "streamLogs",
         "parameters": [
           {
@@ -2449,9 +2554,25 @@
           {
             "type": "string",
             "x-go-name": "Format",
-            "description": "Format is either sse or ndjson.",
+            "description": "Format is sse, ndjson, or structured (SSE with step metadata).",
             "name": "format",
             "in": "query"
+          },
+          {
+            "minimum": 0,
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "After",
+            "description": "Replay events with an ID greater than this cursor (structured only).",
+            "name": "after",
+            "in": "query"
+          },
+          {
+            "type": "string",
+            "x-go-name": "LastEventID",
+            "description": "Reconnection cursor; overrides after (structured only).",
+            "name": "Last-Event-ID",
+            "in": "header"
           }
         ],
         "responses": {
@@ -2845,6 +2966,65 @@
             "description": "Validation error response.",
             "schema": {
               "$ref": "#/definitions/ValidationError"
+            }
+          },
+          "500": {
+            "description": "Server error response.",
+            "schema": {
+              "$ref": "#/definitions/ServerError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/deployments/{id}/staging": {
+      "get": {
+        "tags": [
+          "deployments"
+        ],
+        "summary": "List active staging transfer metadata. File contents are omitted.",
+        "operationId": "listDeploymentStaging",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "name": "id",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/responses/StagingListResponse"
+          },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
             }
           },
           "500": {
@@ -3295,6 +3475,7 @@
         ]
       },
       "delete": {
+        "description": "Delete an environment.",
         "schemes": [
           "http",
           "https"
@@ -3302,7 +3483,7 @@
         "tags": [
           "environments"
         ],
-        "summary": "Delete an environment.",
+        "summary": "Global admin only; deletion also removes scoped shared variables.",
         "operationId": "deleteEnvironment",
         "parameters": [
           {
@@ -3334,6 +3515,12 @@
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
           "409": {
             "description": "Conflict error response.",
             "schema": {
@@ -3358,6 +3545,35 @@
             "bearer": []
           }
         ]
+      }
+    },
+    "/healthz": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Public API liveness probe. This does not check database connectivity.",
+        "operationId": "healthzAPI",
+        "responses": {
+          "200": {
+            "description": "The HTTP API is running.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "ok": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Unexpected request body."
+          },
+          "413": {
+            "description": "Request body exceeds the encoded byte ceiling."
+          }
+        },
+        "security": []
       }
     },
     "/lifecycles": {
@@ -3556,6 +3772,62 @@
             "bearer": []
           }
         ]
+      },
+      "delete": {
+        "tags": [
+          "lifecycles"
+        ],
+        "summary": "Delete a lifecycle and its shared variables. Global admin only.",
+        "operationId": "deleteLifecycle",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "description": "The resource ID.",
+            "name": "id",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "EmptyResponse is returned for no-content endpoints.",
+            "schema": {
+              "$ref": "#/definitions/EmptyResponse"
+            }
+          },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "500": {
+            "description": "Server error response.",
+            "schema": {
+              "$ref": "#/definitions/ServerError"
+            }
+          }
+        }
       }
     },
     "/lifecycles/{id}/save": {
@@ -3661,7 +3933,7 @@
         "tags": [
           "lifecycles"
         ],
-        "summary": "Add a stage to a lifecycle.",
+        "summary": "Add a stage to a lifecycle. Global admin only.",
         "operationId": "addLifecycleStage",
         "parameters": [
           {
@@ -3700,6 +3972,12 @@
             "description": "Unauthorized error response.",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
             }
           },
           "409": {
@@ -3743,7 +4021,7 @@
         "tags": [
           "lifecycles"
         ],
-        "summary": "Reorder lifecycle stages.",
+        "summary": "Reorder lifecycle stages. Global admin only.",
         "operationId": "reorderLifecycleStages",
         "parameters": [
           {
@@ -3784,6 +4062,12 @@
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
           "413": {
             "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
             "schema": {
@@ -3819,7 +4103,7 @@
         "tags": [
           "lifecycles"
         ],
-        "summary": "Update a lifecycle stage.",
+        "summary": "Update a lifecycle stage. Global admin only.",
         "operationId": "updateLifecycleStage",
         "parameters": [
           {
@@ -3869,6 +4153,12 @@
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
           "404": {
             "description": "Not found error response.",
             "schema": {
@@ -3904,7 +4194,7 @@
         "tags": [
           "lifecycles"
         ],
-        "summary": "Delete a lifecycle stage.",
+        "summary": "Delete a lifecycle stage. Global admin only.",
         "operationId": "deleteLifecycleStage",
         "parameters": [
           {
@@ -3945,10 +4235,413 @@
               "$ref": "#/definitions/UnauthorizedError"
             }
           },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
           "413": {
             "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
             "schema": {
               "$ref": "#/definitions/RequestEntityTooLargeError"
+            }
+          },
+          "500": {
+            "description": "Server error response.",
+            "schema": {
+              "$ref": "#/definitions/ServerError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/lifecycles/{id}/variables": {
+      "get": {
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "variables"
+        ],
+        "summary": "List shared lifecycle variables. Global admin only.",
+        "operationId": "listLifecycleVariables",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "name": "id",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/LifecycleVariableList"
+            }
+          },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "422": {
+            "description": "Validation error response.",
+            "schema": {
+              "$ref": "#/definitions/ValidationError"
+            }
+          },
+          "500": {
+            "description": "Server error response.",
+            "schema": {
+              "$ref": "#/definitions/ServerError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "post": {
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "variables"
+        ],
+        "summary": "Create a shared lifecycle variable. Global admin only.",
+        "operationId": "createLifecycleVariable",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "x-go-name": "Body",
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/VariableRequest"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Created",
+            "schema": {
+              "$ref": "#/definitions/LifecycleVariable"
+            }
+          },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "422": {
+            "description": "Validation error response.",
+            "schema": {
+              "$ref": "#/definitions/ValidationError"
+            }
+          },
+          "500": {
+            "description": "Server error response.",
+            "schema": {
+              "$ref": "#/definitions/ServerError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/lifecycles/{id}/variables/{varId}": {
+      "get": {
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "variables"
+        ],
+        "summary": "Get a masked shared lifecycle variable. Global admin only.",
+        "operationId": "getLifecycleVariable",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "name": "varId",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/LifecycleVariable"
+            }
+          },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "422": {
+            "description": "Validation error response.",
+            "schema": {
+              "$ref": "#/definitions/ValidationError"
+            }
+          },
+          "500": {
+            "description": "Server error response.",
+            "schema": {
+              "$ref": "#/definitions/ServerError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "put": {
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "variables"
+        ],
+        "summary": "Update a shared lifecycle variable. Blank values preserve existing secrets. Global admin only.",
+        "operationId": "updateLifecycleVariable",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "name": "varId",
+            "in": "path",
+            "required": true
+          },
+          {
+            "x-go-name": "Body",
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/VariableRequest"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/LifecycleVariable"
+            }
+          },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "422": {
+            "description": "Validation error response.",
+            "schema": {
+              "$ref": "#/definitions/ValidationError"
+            }
+          },
+          "500": {
+            "description": "Server error response.",
+            "schema": {
+              "$ref": "#/definitions/ServerError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "delete": {
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "variables"
+        ],
+        "summary": "Delete a shared variable. Future deployments stop inheriting it; active deployments retain captured values. Global admin only.",
+        "operationId": "deleteLifecycleVariable",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "name": "varId",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "EmptyResponse is returned for no-content endpoints.",
+            "schema": {
+              "$ref": "#/definitions/EmptyResponse"
+            }
+          },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "422": {
+            "description": "Validation error response.",
+            "schema": {
+              "$ref": "#/definitions/ValidationError"
             }
           },
           "500": {
@@ -4035,7 +4728,7 @@
         "tags": [
           "projects"
         ],
-        "summary": "Create a new project.",
+        "summary": "Create a new project. Lifecycle assignment requires a global admin.",
         "operationId": "createProject",
         "parameters": [
           {
@@ -4065,6 +4758,12 @@
             "description": "Unauthorized error response.",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
             }
           },
           "409": {
@@ -4176,7 +4875,7 @@
         "tags": [
           "projects"
         ],
-        "summary": "Update a project.",
+        "summary": "Update a project. Only a global admin can assign a different lifecycle.",
         "operationId": "updateProject",
         "parameters": [
           {
@@ -4215,6 +4914,12 @@
             "description": "Unauthorized error response.",
             "schema": {
               "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
             }
           },
           "404": {
@@ -5393,7 +6098,7 @@
         ],
         "responses": {
           "201": {
-            "description": "Release is an immutable snapshot of project steps and variables.",
+            "description": "Release is a refreshable snapshot of project steps and variables.",
             "schema": {
               "$ref": "#/definitions/Release"
             }
@@ -5607,7 +6312,7 @@
         "tags": [
           "artifacts"
         ],
-        "summary": "Read a release's pinned ZIP; null means no artifact.",
+        "summary": "Read a release's attached ZIP; pending means no validated pull yet.",
         "operationId": "getReleaseArtifact",
         "parameters": [
           {
@@ -5679,7 +6384,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Release is an immutable snapshot of project steps and variables.",
+            "description": "Release is a refreshable snapshot of project steps and variables.",
             "schema": {
               "$ref": "#/definitions/Release"
             }
@@ -7703,6 +8408,77 @@
         ]
       }
     },
+    "/projects/{id}/variables/inherited": {
+      "get": {
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "variables"
+        ],
+        "summary": "List inherited lifecycle variables and project overrides. Requires project membership; secret values are masked.",
+        "operationId": "listInheritedVariables",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "name": "id",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/InheritedVariableList"
+            }
+          },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "422": {
+            "description": "Validation error response.",
+            "schema": {
+              "$ref": "#/definitions/ValidationError"
+            }
+          },
+          "500": {
+            "description": "Server error response.",
+            "schema": {
+              "$ref": "#/definitions/ServerError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/projects/{id}/variables/{varId}": {
       "get": {
         "produces": [
@@ -7887,6 +8663,16 @@
         "summary": "Delete a project variable.",
         "operationId": "deleteVariable",
         "parameters": [
+          {
+            "enum": [
+              "inherit"
+            ],
+            "type": "string",
+            "x-go-name": "Reset",
+            "description": "Set to inherit to remove every project value with this name and scope,\nincluding legacy duplicate unscoped rows. Other scopes are retained.",
+            "name": "reset",
+            "in": "query"
+          },
           {
             "type": "integer",
             "format": "int64",
@@ -8616,6 +9402,20 @@
           "type": "string",
           "x-go-name": "Compatibility"
         },
+        "container_interpreters": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "x-go-name": "ContainerInterpreters"
+        },
+        "container_runtimes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "x-go-name": "ContainerRuntimes"
+        },
         "created_at": {
           "type": "integer",
           "format": "int64",
@@ -8635,6 +9435,13 @@
         "endpoint": {
           "type": "string",
           "x-go-name": "Endpoint"
+        },
+        "execution_modes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "x-go-name": "ExecutionModes"
         },
         "health": {
           "type": "string",
@@ -8774,6 +9581,10 @@
           "type": "integer",
           "format": "int64",
           "x-go-name": "CreatedAt"
+        },
+        "decision_ready": {
+          "type": "boolean",
+          "x-go-name": "DecisionReady"
         },
         "deployment_id": {
           "type": "integer",
@@ -9031,6 +9842,26 @@
       "x-go-name": "swaggerDeployment",
       "x-go-package": "durpdeploy/internal/handler/api"
     },
+    "DeploymentActivityDay": {
+      "type": "object",
+      "title": "DeploymentActivityDay contains counts by current status for one UTC date.",
+      "properties": {
+        "counts": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "x-go-name": "Counts"
+        },
+        "date": {
+          "type": "string",
+          "x-go-name": "Date"
+        }
+      },
+      "x-go-name": "deploymentActivityDay",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
     "DeploymentListItem": {
       "type": "object",
       "title": "DeploymentListItem is the enriched row returned by ListDeployments.",
@@ -9190,6 +10021,35 @@
       "x-go-name": "swaggerDeploymentScheduleRequest",
       "x-go-package": "durpdeploy/internal/handler/api"
     },
+    "DeploymentStagingSnapshot": {
+      "type": "object",
+      "properties": {
+        "deployment_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "DeploymentID"
+        },
+        "producer": {
+          "type": "string",
+          "x-go-name": "Producer"
+        },
+        "sha256": {
+          "type": "string",
+          "x-go-name": "Sha256"
+        },
+        "size": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Size"
+        },
+        "step_index": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "StepIndex"
+        }
+      },
+      "x-go-package": "durpdeploy/internal/db"
+    },
     "DeploymentStatusResponse": {
       "type": "object",
       "title": "DeploymentStatusResponse is the status payload for GetDeploymentStatus.",
@@ -9202,10 +10062,6 @@
         "active_work_url": {
           "type": "string",
           "x-go-name": "ActiveWorkURL"
-        },
-        "id": {
-          "type": "string",
-          "x-go-name": "ID"
         },
         "queue_position": {
           "type": "integer",
@@ -9401,9 +10257,17 @@
           "type": "string",
           "x-go-name": "DiscordWebhookURL"
         },
+        "discord_webhook_url_configured": {
+          "type": "boolean",
+          "x-go-name": "DiscordWebhookURLConfigured"
+        },
         "gotify_token": {
           "type": "string",
           "x-go-name": "GotifyToken"
+        },
+        "gotify_token_configured": {
+          "type": "boolean",
+          "x-go-name": "GotifyTokenConfigured"
         },
         "gotify_url": {
           "type": "string",
@@ -9422,6 +10286,10 @@
           "type": "string",
           "x-go-name": "SlackWebhookURL"
         },
+        "slack_webhook_url_configured": {
+          "type": "boolean",
+          "x-go-name": "SlackWebhookURLConfigured"
+        },
         "updated_at": {
           "type": "integer",
           "format": "int64",
@@ -9435,6 +10303,18 @@
       "type": "object",
       "title": "GlobalNotificationRequest is the body for global notification settings.",
       "properties": {
+        "clear_discord_webhook_url": {
+          "type": "boolean",
+          "x-go-name": "ClearDiscordWebhookURL"
+        },
+        "clear_gotify_token": {
+          "type": "boolean",
+          "x-go-name": "ClearGotifyToken"
+        },
+        "clear_slack_webhook_url": {
+          "type": "boolean",
+          "x-go-name": "ClearSlackWebhookURL"
+        },
         "discord_webhook_url": {
           "type": "string",
           "x-go-name": "DiscordWebhookURL"
@@ -9457,6 +10337,62 @@
         }
       },
       "x-go-name": "swaggerGlobalNotificationRequest",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "InheritedVariable": {
+      "type": "object",
+      "properties": {
+        "created_at": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "CreatedAt"
+        },
+        "environment_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "EnvironmentID"
+        },
+        "id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "ID"
+        },
+        "lifecycle_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "LifecycleID"
+        },
+        "lifecycle_name": {
+          "type": "string",
+          "x-go-name": "LifecycleName"
+        },
+        "name": {
+          "type": "string",
+          "x-go-name": "Name"
+        },
+        "override": {
+          "$ref": "#/definitions/VariableResponse"
+        },
+        "secret": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Secret"
+        },
+        "value": {
+          "description": "Empty when Secret is 1.",
+          "type": "string",
+          "x-go-name": "Value"
+        }
+      },
+      "x-go-name": "swaggerInheritedVariable",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "InheritedVariableList": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/InheritedVariable"
+      },
+      "x-go-name": "swaggerInheritedVariableList",
       "x-go-package": "durpdeploy/internal/handler/api"
     },
     "Lifecycle": {
@@ -9592,6 +10528,55 @@
       "x-go-name": "swaggerLifecycleStageRequest",
       "x-go-package": "durpdeploy/internal/handler/api"
     },
+    "LifecycleVariable": {
+      "type": "object",
+      "properties": {
+        "created_at": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "CreatedAt"
+        },
+        "environment_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "EnvironmentID"
+        },
+        "id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "ID"
+        },
+        "lifecycle_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "LifecycleID"
+        },
+        "name": {
+          "type": "string",
+          "x-go-name": "Name"
+        },
+        "secret": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Secret"
+        },
+        "value": {
+          "description": "Empty when Secret is 1.",
+          "type": "string",
+          "x-go-name": "Value"
+        }
+      },
+      "x-go-name": "swaggerLifecycleVariable",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "LifecycleVariableList": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/LifecycleVariable"
+      },
+      "x-go-name": "swaggerLifecycleVariableList",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
     "LogEntry": {
       "type": "object",
       "title": "LogEntry is a single line of deployment log output.",
@@ -9624,10 +10609,10 @@
     },
     "LogStreamParams": {
       "type": "object",
-      "title": "LogStreamParams controls the format of StreamLogs.",
+      "title": "LogStreamParams controls the log stream format.",
       "properties": {
         "format": {
-          "description": "Format is either sse or ndjson.",
+          "description": "Format is sse or ndjson; deployment streams also support structured SSE.",
           "type": "string",
           "x-go-name": "Format"
         }
@@ -9989,6 +10974,18 @@
       "type": "object",
       "title": "ProjectNotificationRequest updates a project's notification settings.",
       "properties": {
+        "clear_discord_webhook_url": {
+          "type": "boolean",
+          "x-go-name": "ClearDiscordWebhookURL"
+        },
+        "clear_gotify_token": {
+          "type": "boolean",
+          "x-go-name": "ClearGotifyToken"
+        },
+        "clear_slack_webhook_url": {
+          "type": "boolean",
+          "x-go-name": "ClearSlackWebhookURL"
+        },
         "discord_webhook_url": {
           "type": "string",
           "x-go-name": "DiscordWebhookURL"
@@ -10030,9 +11027,17 @@
           "type": "string",
           "x-go-name": "DiscordWebhookURL"
         },
+        "discord_webhook_url_configured": {
+          "type": "boolean",
+          "x-go-name": "DiscordWebhookURLConfigured"
+        },
         "gotify_token": {
           "type": "string",
           "x-go-name": "GotifyToken"
+        },
+        "gotify_token_configured": {
+          "type": "boolean",
+          "x-go-name": "GotifyTokenConfigured"
         },
         "gotify_url": {
           "type": "string",
@@ -10054,6 +11059,10 @@
         "slack_webhook_url": {
           "type": "string",
           "x-go-name": "SlackWebhookURL"
+        },
+        "slack_webhook_url_configured": {
+          "type": "boolean",
+          "x-go-name": "SlackWebhookURLConfigured"
         }
       },
       "x-go-name": "swaggerProjectNotificationResponse",
@@ -10097,9 +11106,17 @@
           "type": "string",
           "x-go-name": "DiscordWebhookURL"
         },
+        "discord_webhook_url_configured": {
+          "type": "boolean",
+          "x-go-name": "DiscordWebhookURLConfigured"
+        },
         "gotify_token": {
           "type": "string",
           "x-go-name": "GotifyToken"
+        },
+        "gotify_token_configured": {
+          "type": "boolean",
+          "x-go-name": "GotifyTokenConfigured"
         },
         "gotify_url": {
           "type": "string",
@@ -10126,6 +11143,10 @@
         "slack_webhook_url": {
           "type": "string",
           "x-go-name": "SlackWebhookURL"
+        },
+        "slack_webhook_url_configured": {
+          "type": "boolean",
+          "x-go-name": "SlackWebhookURLConfigured"
         }
       },
       "x-go-name": "swaggerProjectResponse",
@@ -10133,7 +11154,7 @@
     },
     "Release": {
       "type": "object",
-      "title": "Release is an immutable snapshot of project steps and variables.",
+      "title": "Release is a refreshable snapshot of project steps and variables.",
       "properties": {
         "created_at": {
           "type": "integer",
@@ -10151,8 +11172,10 @@
           "x-go-name": "ProjectID"
         },
         "snapshot_locked": {
+          "description": "Deprecated: retained for compatibility; does not prevent refresh.",
           "type": "integer",
           "format": "int64",
+          "x-deprecated": true,
           "x-go-name": "SnapshotLocked"
         },
         "steps_json": {
@@ -10170,6 +11193,10 @@
     "ReleaseArtifactResponse": {
       "type": "object",
       "properties": {
+        "pending": {
+          "type": "boolean",
+          "x-go-name": "Pending"
+        },
         "release_id": {
           "type": "integer",
           "format": "int64",
@@ -10220,6 +11247,7 @@
       "title": "ReleaseRequest is the body for create release.",
       "properties": {
         "version": {
+          "description": "Attached packages are downloaded and pinned on the first deployment pull.",
           "type": "string",
           "x-go-name": "Version"
         }
@@ -10772,6 +11800,10 @@
     "RunbookStep": {
       "type": "object",
       "properties": {
+        "agent_execution_mode": {
+          "type": "string",
+          "x-go-name": "AgentExecutionMode"
+        },
         "agent_selectors": {
           "type": "array",
           "items": {
@@ -11065,6 +12097,10 @@
       "type": "object",
       "title": "Step is an executable script step within a project.",
       "properties": {
+        "agent_execution_mode": {
+          "type": "string",
+          "x-go-name": "AgentExecutionMode"
+        },
         "agent_selectors": {
           "type": "array",
           "items": {
@@ -11085,7 +12121,7 @@
           "x-go-name": "ApprovalReviewPath"
         },
         "container_image": {
-          "description": "Container image the step runs in on the server; mandatory for\nlocal steps and rejected for agent steps.",
+          "description": "Container image required for local steps and agent container mode.",
           "type": "string",
           "x-go-name": "ContainerImage"
         },
@@ -11164,6 +12200,10 @@
       "type": "object",
       "title": "StepRequest is the body for create/update step.",
       "properties": {
+        "agent_execution_mode": {
+          "type": "string",
+          "x-go-name": "AgentExecutionMode"
+        },
         "agent_selectors": {
           "type": "array",
           "items": {
@@ -11184,7 +12224,7 @@
           "x-go-name": "ApprovalReviewPath"
         },
         "container_image": {
-          "description": "Container image the step runs in on the server; mandatory for\nlocal steps and rejected for agent steps.",
+          "description": "Required for local steps and agent container mode; rejected for agent host mode.",
           "type": "string",
           "x-go-name": "ContainerImage"
         },
@@ -11239,6 +12279,10 @@
       "type": "object",
       "title": "StepTemplate is a reusable step template.",
       "properties": {
+        "agent_execution_mode": {
+          "type": "string",
+          "x-go-name": "AgentExecutionMode"
+        },
         "agent_selectors": {
           "type": "array",
           "items": {
@@ -11316,6 +12360,10 @@
       "type": "object",
       "title": "StepTemplateRequest is the body for create/update step template.",
       "properties": {
+        "agent_execution_mode": {
+          "type": "string",
+          "x-go-name": "AgentExecutionMode"
+        },
         "agent_selectors": {
           "type": "array",
           "items": {
@@ -11336,7 +12384,7 @@
           "x-go-name": "ApprovalReviewPath"
         },
         "container_image": {
-          "description": "Container image the step runs in on the server; mandatory for\nlocal steps and rejected for agent steps.",
+          "description": "Required for local steps and agent container mode; rejected for agent host mode.",
           "type": "string",
           "x-go-name": "ContainerImage"
         },
@@ -11376,6 +12424,10 @@
       "type": "object",
       "title": "StepTemplateVersion is a historical version of a step template.",
       "properties": {
+        "agent_execution_mode": {
+          "type": "string",
+          "x-go-name": "AgentExecutionMode"
+        },
         "agent_selectors": {
           "type": "array",
           "items": {
@@ -11971,6 +13023,15 @@
       "description": "",
       "schema": {
         "$ref": "#/definitions/TerraformReviewResponse"
+      }
+    },
+    "StagingListResponse": {
+      "description": "",
+      "schema": {
+        "type": "array",
+        "items": {
+          "$ref": "#/definitions/DeploymentStagingSnapshot"
+        }
       }
     }
   },

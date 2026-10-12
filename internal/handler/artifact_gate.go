@@ -142,7 +142,7 @@ func (h *ArtifactGateHandler) decide(
 	if approve {
 		deployment, err = h.repo.Queries.GetDeployment(r.Context(), id)
 		if err != nil {
-			gateHTTPError(w, r, 500, "Continuation lookup failed")
+			artifactDecisionError(w, r, err)
 			return
 		}
 		err = h.repo.ApproveArtifact(
@@ -163,16 +163,7 @@ func (h *ArtifactGateHandler) decide(
 		)
 	}
 	if err != nil {
-		status := http.StatusInternalServerError
-		if errors.Is(err, repository.ErrArtifactGate) {
-			status = http.StatusConflict
-		}
-		gateHTTPError(
-			w,
-			r,
-			status,
-			"Artifact decision failed; refresh and review the current gate",
-		)
+		artifactDecisionError(w, r, err)
 		return
 	}
 	if approve {

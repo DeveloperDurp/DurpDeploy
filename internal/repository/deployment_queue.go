@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log/slog"
 
 	"durpdeploy/internal/db"
 )
@@ -81,11 +80,30 @@ func (r *Repository) WithDeploymentTx(
 func advanceEnvironmentQueue(
 	ctx context.Context, q *db.Queries, environmentID int64,
 ) error {
-	blockers, err := q.ListEnvironmentQueueBlockers(ctx, environmentID)
+	projects, err := q.ListEnvironmentQueueProjects(ctx, environmentID)
+	if err != nil {
+		return err
+	}
+	for _, deploymentID := range projects {
+		if err := advanceDeploymentQueue(ctx, q, deploymentID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func advanceDeploymentQueue(
+	ctx context.Context, q *db.Queries, deploymentID int64,
+) error {
+	d, err := q.GetDeployment(ctx, deploymentID)
+	if err != nil {
+		return err
+	}
+	blockers, err := q.ListDeploymentQueueBlockers(ctx, deploymentID)
 	if err != nil {
 		return fmt.Errorf("read environment blockers: %w", err)
 	}
-	owner, err := q.GetEnvironmentDeploymentSlot(ctx, environmentID)
+	owner, err := q.GetDeploymentSlot(ctx, deploymentID)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return err
 	}
@@ -93,21 +111,21 @@ func advanceEnvironmentQueue(
 		if errors.Is(err, sql.ErrNoRows) {
 			return q.CreateEnvironmentDeploymentSlot(ctx,
 				db.CreateEnvironmentDeploymentSlotParams{
-					EnvironmentID: environmentID, DeploymentID: blockers[0],
+					EnvironmentID: d.EnvironmentID, DeploymentID: blockers[0],
 				})
 		}
 		return nil
 	}
 	if err == nil {
-		if err := q.DeleteEnvironmentDeploymentSlot(
+		if err := q.DeleteDeploymentSlot(
 			ctx,
-			environmentID,
+			owner,
 		); err != nil {
 			return err
 		}
 		queueAudit(ctx, owner, "deployment_queue_released")
 	}
-	next, err := q.GetNextQueuedDeployment(ctx, environmentID)
+	next, err := q.GetNextQueuedDeployment(ctx, deploymentID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil
 	}
@@ -116,7 +134,7 @@ func advanceEnvironmentQueue(
 	}
 	if err := q.CreateEnvironmentDeploymentSlot(ctx,
 		db.CreateEnvironmentDeploymentSlotParams{
-			EnvironmentID: environmentID, DeploymentID: next,
+			EnvironmentID: d.EnvironmentID, DeploymentID: next,
 		}); err != nil {
 		return err
 	}
@@ -127,37 +145,6 @@ func advanceEnvironmentQueue(
 	return nil
 }
 
-type queueAuditKey struct{}
-
-// Audit after commit so an unavailable audit table cannot undo execution state.
-func (r *Repository) withQueueTx(
-	ctx context.Context, fn func(context.Context, *db.Queries) error,
-) error {
-	var entries []db.CreateAuditLogParams
-	ctx = context.WithValue(ctx, queueAuditKey{}, &entries)
-	if err := r.WithTx(ctx, func(q *db.Queries) error {
-		return fn(ctx, q)
-	}); err != nil {
-		return err
-	}
-	for _, entry := range entries {
-		if _, err := r.Queries.CreateAuditLog(ctx, entry); err != nil {
-			slog.Warn("queue audit insert failed", "action", entry.Action,
-				"err", err)
-		}
-	}
-	return nil
-}
-
-func queueAudit(ctx context.Context, id int64, action string) {
-	entries := ctx.Value(queueAuditKey{}).(*[]db.CreateAuditLogParams)
-	*entries = append(*entries, db.CreateAuditLogParams{
-		Action: action, EntityType: "deployment",
-		EntityID: sql.NullInt64{Int64: id, Valid: true},
-	})
-}
-
-// ReconcileDeploymentQueues repairs missed wakeups; the database is the queue.
 func (r *Repository) ReconcileDeploymentQueues(ctx context.Context) error {
 	environments, err := r.Queries.ListDeploymentQueueEnvironments(ctx)
 	if err != nil {
@@ -216,9 +203,9 @@ func startLocalDeployment(
 	); err != nil {
 		return false, err
 	}
-	blockers, err := q.ListEnvironmentQueueBlockers(
+	blockers, err := q.ListDeploymentQueueBlockers(
 		ctx,
-		d.EnvironmentID,
+		d.ID,
 	)
 	if err != nil {
 		return false, err

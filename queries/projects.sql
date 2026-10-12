@@ -29,8 +29,17 @@ UPDATE projects SET lifecycle_id = ? WHERE id = ?;
 -- name: ClearProjectLifecycle :exec
 UPDATE projects SET lifecycle_id = NULL WHERE id = ?;
 
+-- name: ClearProjectLifecycleIfAssigned :execrows
+UPDATE projects SET lifecycle_id = NULL WHERE id = ? AND lifecycle_id = ?;
+
 -- name: UpdateProjectNotifications :exec
-UPDATE projects SET slack_webhook_url = ?, notify_emails = ?, gotify_url = ?, gotify_token = ?, discord_webhook_url = ? WHERE id = ?;
+UPDATE projects SET
+    slack_webhook_url = CASE WHEN CAST(sqlc.arg(clear_slack_webhook_url) AS INTEGER) = 1 THEN NULL ELSE COALESCE(NULLIF(CAST(sqlc.narg(slack_webhook_url) AS TEXT), ''), slack_webhook_url) END,
+    notify_emails = sqlc.narg(notify_emails),
+    gotify_url = sqlc.narg(gotify_url),
+    gotify_token = CASE WHEN CAST(sqlc.arg(clear_gotify_token) AS INTEGER) = 1 THEN NULL ELSE COALESCE(NULLIF(CAST(sqlc.narg(gotify_token) AS TEXT), ''), gotify_token) END,
+    discord_webhook_url = CASE WHEN CAST(sqlc.arg(clear_discord_webhook_url) AS INTEGER) = 1 THEN NULL ELSE COALESCE(NULLIF(CAST(sqlc.narg(discord_webhook_url) AS TEXT), ''), discord_webhook_url) END
+WHERE id = sqlc.arg(id);
 
 -- name: ListProjectDeploymentIDs :many
 SELECT d.id FROM deployments d JOIN releases r ON r.id = d.release_id
@@ -40,9 +49,18 @@ WHERE r.project_id = ?;
 SELECT CASE WHEN EXISTS (
     SELECT 1 FROM deployments d JOIN releases r ON r.id = d.release_id
     WHERE r.project_id = sqlc.arg(project_id)
-      AND (d.status IN ('queued', 'pending', 'running', 'pending_approval', 'publishing_artifact', 'awaiting_artifact_approval', 'cleanup_unconfirmed')
+      AND (d.status IN ('queued', 'pending', 'running', 'pending_approval', 'publishing_artifact', 'awaiting_artifact_approval')
+        OR (d.status = 'cleanup_unconfirmed'
+            AND (d.container_namespace IS NOT NULL OR (
+            d.cleanup_confirmed_at IS NULL AND
+            NOT EXISTS (SELECT 1 FROM remote_step_runs s
+                WHERE s.deployment_id = d.id AND s.state = 'cleanup_unconfirmed')
+            AND NOT EXISTS (SELECT 1 FROM remote_deployment_claims c
+                WHERE c.deployment_id = d.id AND c.state = 'cleanup_unconfirmed'))))
         OR EXISTS (SELECT 1 FROM remote_deployment_claims c WHERE c.deployment_id = d.id
-            AND c.state IN ('claimed', 'started', 'cancel_requested', 'lost', 'cancel_unconfirmed'))
+            AND (c.state IN ('claimed', 'started', 'cancel_requested', 'lost', 'cancel_unconfirmed')
+                OR (c.state = 'cleanup_unconfirmed' AND c.cleanup_confirmed_at IS NULL)))
         OR EXISTS (SELECT 1 FROM remote_step_runs s WHERE s.deployment_id = d.id
-            AND s.state IN ('claimed', 'started', 'cancel_requested', 'lost', 'cancel_unconfirmed')))
+            AND (s.state IN ('claimed', 'started', 'cancel_requested', 'lost', 'cancel_unconfirmed')
+                OR (s.state = 'cleanup_unconfirmed' AND s.cleanup_confirmed_at IS NULL))))
 ) THEN 1 ELSE 0 END;

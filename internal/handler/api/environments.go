@@ -369,6 +369,7 @@ func (h *EnvironmentHandler) UpdateEnvironment(
 }
 
 // swagger:route DELETE /environments/{id} environments deleteEnvironment
+// Global admin only; deletion also removes scoped shared variables.
 //
 // Delete an environment.
 //
@@ -382,6 +383,7 @@ func (h *EnvironmentHandler) UpdateEnvironment(
 //	  204: body:EmptyResponse
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
+//	  403: body:ForbiddenError
 //	  409: body:ConflictError
 //	  500: body:ServerError
 func (h *EnvironmentHandler) DeleteEnvironment(

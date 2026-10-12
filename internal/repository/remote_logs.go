@@ -21,13 +21,17 @@ func (r *Repository) AppendRemoteDeploymentLogs(
 	scrubber *logscrub.Scrubber,
 ) ([]db.DeploymentLog, error) {
 	inserted := make([]db.DeploymentLog, 0, len(events))
-	err := r.WithTx(ctx, func(q *db.Queries) error {
-		var err error
-		inserted, err = r.appendRemoteDeploymentLogs(
-			ctx, q, identity, events, scrubber, false,
-		)
-		return err
-	})
+	err := r.withDeploymentLogTx(
+		ctx,
+		identity.DeploymentID,
+		func(q *db.Queries) error {
+			var err error
+			inserted, err = r.appendRemoteDeploymentLogs(
+				ctx, q, identity, events, scrubber, false,
+			)
+			return err
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -119,13 +123,17 @@ func (r *Repository) FlushRemoteDeploymentLogs(
 	scrubber *logscrub.Scrubber,
 ) ([]db.DeploymentLog, error) {
 	var inserted []db.DeploymentLog
-	err := r.WithTx(ctx, func(q *db.Queries) error {
-		var err error
-		inserted, err = r.appendRemoteDeploymentLogs(
-			ctx, q, identity, nil, scrubber, true,
-		)
-		return err
-	})
+	err := r.withDeploymentLogTx(
+		ctx,
+		identity.DeploymentID,
+		func(q *db.Queries) error {
+			var err error
+			inserted, err = r.appendRemoteDeploymentLogs(
+				ctx, q, identity, nil, scrubber, true,
+			)
+			return err
+		},
+	)
 	return inserted, err
 }
 

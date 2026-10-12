@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"time"
 
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/events"
@@ -14,55 +13,7 @@ import (
 	"durpdeploy/internal/runner"
 
 	agentproto "github.com/DeveloperDurp/durpdeploy-agent/protocol"
-	agenttls "github.com/DeveloperDurp/durpdeploy-agent/transport"
 )
-
-func (s *Server) Poll(w http.ResponseWriter, r *http.Request) {
-	request, ok := decodeRequest[agentproto.PollRequest](w, r)
-	if !ok {
-		return
-	}
-	agentID, _ := AgentIDFromContext(r.Context())
-	fingerprint := agenttls.FingerprintOf(
-		r.TLS.PeerCertificates[0].Raw,
-	).String()
-	interpreters := make([]string, 0, len(request.SupportedInterpreters))
-	if request.Protocol == agentproto.AgentV1 {
-		interpreters = append(interpreters, string(agentproto.InterpreterBash))
-	} else {
-		for _, value := range request.SupportedInterpreters {
-			interpreters = append(interpreters, string(value))
-		}
-	}
-	changed, err := s.repository.RecordAgentPoll(
-		r.Context(),
-		db.HeartbeatAgentParams{
-			Now: nullableInt64(time.Now().Unix()),
-			AgentVersion: nullableString(
-				string(request.AgentVersion),
-			),
-			ID:                     string(agentID),
-			CertificateFingerprint: nullableString(fingerprint),
-		},
-		interpreters,
-		string(request.Protocol),
-	)
-	if !writeTransitionStatus(w, changed, err) {
-		return
-	}
-	response, claimed, err := s.dispatcher.Poll(r.Context(), agentID)
-	if err != nil {
-		if r.Context().Err() == nil {
-			writePollErrorStatus(w, err)
-		}
-		return
-	}
-	if !claimed {
-		w.WriteHeader(http.StatusNoContent)
-		return
-	}
-	writeJSON(w, response)
-}
 
 func (s *Server) Start(w http.ResponseWriter, r *http.Request) {
 	request, ok := decodeRequest[agentproto.StartRequest](w, r)
@@ -188,23 +139,13 @@ func (s *Server) Result(w http.ResponseWriter, r *http.Request) {
 	if !writeLifecycleStatus(w, err) {
 		return
 	}
-	handled, err := s.repository.FinishRemoteStep(
-		r.Context(), claim, string(request.State),
+	inserted, handled, err := s.repository.FinishRemoteStepWithLogs(
+		r.Context(), claim, string(request.State), scrubber,
 	)
 	result := repository.RemoteTerminalResult{}
 	if err == nil && !handled {
-		result, err = s.repository.FinishRemoteDeploymentLifecycle(
-			r.Context(), claim, string(request.State),
-		)
-	}
-	var inserted []db.DeploymentLog
-	if err == nil && handled {
-		inserted, _, err = s.repository.FlushRemoteStepLogs(
-			r.Context(), claim, scrubber,
-		)
-	} else if err == nil {
-		inserted, err = s.repository.FlushRemoteDeploymentLogs(
-			r.Context(), claim, scrubber,
+		inserted, result, err = s.repository.FinishRemoteDeploymentWithLogs(
+			r.Context(), claim, string(request.State), scrubber,
 		)
 	}
 	if !writeLifecycleStatus(w, err) {
@@ -236,22 +177,12 @@ func (s *Server) Cancelled(w http.ResponseWriter, r *http.Request) {
 	if !writeLifecycleStatus(w, err) {
 		return
 	}
-	_, handled, err := s.repository.AcknowledgeRemoteStepCancellation(
-		r.Context(), claim,
+	inserted, handled, err := s.repository.FinishRemoteStepWithLogs(
+		r.Context(), claim, "cancelled", scrubber,
 	)
 	if err == nil && !handled {
-		_, err = s.repository.AcknowledgeRemoteCancellation(
-			r.Context(), claim,
-		)
-	}
-	var inserted []db.DeploymentLog
-	if err == nil && handled {
-		inserted, _, err = s.repository.FlushRemoteStepLogs(
-			r.Context(), claim, scrubber,
-		)
-	} else if err == nil {
-		inserted, err = s.repository.FlushRemoteDeploymentLogs(
-			r.Context(), claim, scrubber,
+		inserted, _, err = s.repository.FinishRemoteDeploymentWithLogs(
+			r.Context(), claim, "cancelled", scrubber,
 		)
 	}
 	if !writeLifecycleStatus(w, err) {
@@ -272,8 +203,8 @@ func (s *Server) remoteLogScrubber(
 		}
 		return nil, err
 	}
-	variables, err := s.repository.ListReleaseVariablesByRelease(
-		ctx, deployment.ReleaseID,
+	variables, err := s.repository.ListDeploymentVariables(
+		ctx, deployment.ID,
 	)
 	if err != nil {
 		return nil, err
@@ -318,13 +249,20 @@ func (s *Server) publishRemoteResult(
 		result.DeploymentID,
 		result.EnvironmentName,
 	)
-	if result.State == "failed" {
+	if result.State != "succeeded" {
 		typ = events.DeploymentFailed
 		message = fmt.Sprintf(
 			"Deployment #%d failed on %s",
 			result.DeploymentID,
 			result.EnvironmentName,
 		)
+		if result.State == "cleanup_unconfirmed" {
+			message = fmt.Sprintf(
+				"Deployment #%d container cleanup is unconfirmed on %s; restore agent runtime access",
+				result.DeploymentID,
+				result.EnvironmentName,
+			)
+		}
 	}
 	s.eventBus.Publish(r.Context(), events.Event{
 		Type:          typ,

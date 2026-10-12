@@ -321,7 +321,11 @@ func (h *VariableHandler) GetVariable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	variable, err := h.repo.GetVariable(r.Context(), varID)
+	projectID, ok := requireProjectFromContext(w, r)
+	if !ok {
+		return
+	}
+	variable, err := h.repo.GetProjectVariable(r.Context(), projectID, varID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			RespondError(w, http.StatusNotFound, "Variable not found")
@@ -334,10 +338,6 @@ func (h *VariableHandler) GetVariable(w http.ResponseWriter, r *http.Request) {
 	// R2: refuse to serve a variable that belongs to a different
 	// project than the URL {id}. The decrypted value is the secret
 	// the whole IDOR is about, so this is the must-pass check.
-	projectID, ok := requireProjectFromContext(w, r)
-	if !ok {
-		return
-	}
 	if variable.ProjectID != projectID {
 		RespondError(w, http.StatusNotFound, "Variable not found")
 		return
@@ -478,58 +478,4 @@ func respondVariableUpdateError(w http.ResponseWriter, err error) {
 		status = http.StatusInternalServerError
 	}
 	RespondError(w, status, err.Error())
-}
-
-// swagger:route DELETE /projects/{id}/variables/{varId} variables deleteVariable
-//
-// Delete a project variable.
-//
-//	Schemes: http, https
-//
-//	Security:
-//	  bearer:
-//
-//	Responses:
-//	  413: body:RequestEntityTooLargeError
-//	  204: body:EmptyResponse
-//	  400: body:BadRequestError
-//	  401: body:UnauthorizedError
-//	  500: body:ServerError
-func (h *VariableHandler) DeleteVariable(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
-	varID, err := parseParamInt(r, "varId")
-	if err != nil {
-		RespondError(w, http.StatusBadRequest, "Invalid variable ID")
-		return
-	}
-
-	// R2: refuse to delete a variable that belongs to a different
-	// project than the URL {id}. Without this check, a project-A
-	// member could destroy project-B secrets by guessing IDs.
-	existing, err := h.repo.Queries.GetVariable(r.Context(), varID)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			RespondError(w, http.StatusNotFound, "Variable not found")
-			return
-		}
-		RespondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	projectID, ok := requireProjectFromContext(w, r)
-	if !ok {
-		return
-	}
-	if existing.ProjectID != projectID {
-		RespondError(w, http.StatusNotFound, "Variable not found")
-		return
-	}
-
-	if err := h.repo.Queries.DeleteVariable(r.Context(), varID); err != nil {
-		RespondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	w.WriteHeader(http.StatusNoContent)
 }

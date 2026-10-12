@@ -16,6 +16,7 @@ import (
 	"durpdeploy/internal/mssqldriver"
 	"durpdeploy/internal/pgdriver"
 	"durpdeploy/internal/repository"
+	"durpdeploy/internal/testutil"
 
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
@@ -47,14 +48,10 @@ func provisionLifecycleEngine(t *testing.T, name string) lifecycleEngine {
 			postgres.WithUsername("lifecycle"),
 			postgres.WithPassword("fixture-only"),
 			postgres.BasicWaitStrategies())
+		testutil.CleanupContainer(t, container)
 		if err != nil {
 			t.Fatalf("start required PostgreSQL backend: %v", err)
 		}
-		t.Cleanup(func() {
-			if err := container.Terminate(context.Background()); err != nil {
-				t.Errorf("remove PostgreSQL container: %v", err)
-			}
-		})
 		dsn, err := container.ConnectionString(ctx, "sslmode=disable")
 		if err != nil {
 			t.Fatal(err)
@@ -87,14 +84,10 @@ func provisionSQLServerLifecycleEngine(t *testing.T) lifecycleEngine {
 			},
 			Started: true,
 		})
+	testutil.CleanupContainer(t, container)
 	if err != nil {
 		t.Fatalf("start required SQL Server backend: %v", err)
 	}
-	t.Cleanup(func() {
-		if err := container.Terminate(context.Background()); err != nil {
-			t.Errorf("remove SQL Server container: %v", err)
-		}
-	})
 	host, err := container.Host(ctx)
 	if err != nil {
 		t.Fatal(err)

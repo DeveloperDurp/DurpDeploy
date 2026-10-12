@@ -5,6 +5,7 @@ package api_test
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -120,6 +121,13 @@ func TestPackageRepositoryBrowserE2E(t *testing.T) {
 		t,
 		"document.querySelector('form[hx-post$=\"/package-repository/test\"]') !== null",
 	)
+	// The save redirect keeps the edit form as the previous page.
+	repositoryURL := strings.TrimSuffix(formURL, "/edit")
+	browser.clickBackTest(t)
+	browser.waitBackTestURL(t, formURL)
+	browser.evaluate(t, "history.forward(); true")
+	browser.waitBackTestURL(t, repositoryURL)
+	beforeTest := browser.evaluate(t, "history.length")
 	// Then: the test control is immediately available and its HTMX response swaps in.
 	browser.evaluate(
 		t,
@@ -129,6 +137,9 @@ func TestPackageRepositoryBrowserE2E(t *testing.T) {
 		t,
 		"document.querySelector('#package-test-result [data-package-test=success]') !== null",
 	)
+	if string(browser.evaluate(t, "history.length")) != string(beforeTest) {
+		t.Fatal("HTMX package test introduced a history entry")
+	}
 	for _, width := range []int{375, 768, 1280} {
 		browser.call(
 			t,
@@ -161,4 +172,6 @@ func TestPackageRepositoryBrowserE2E(t *testing.T) {
 		"document.querySelector('#package-test-result [role=alert]') !== null",
 	)
 	browser.screenshot(t, "result-error")
+	browser.clickBackTest(t)
+	browser.waitBackTestURL(t, formURL)
 }

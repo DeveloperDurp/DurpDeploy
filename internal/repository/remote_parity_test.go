@@ -8,12 +8,13 @@ import (
 	"testing"
 	"time"
 
+	"durpdeploy/internal/migrate"
+	"durpdeploy/internal/repository"
+	"durpdeploy/internal/testutil"
+
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
-
-	"durpdeploy/internal/migrate"
-	"durpdeploy/internal/repository"
 )
 
 func TestDispatchDatabaseParity(t *testing.T) {
@@ -40,6 +41,7 @@ func TestDispatchDatabaseParity(t *testing.T) {
 					),
 					postgres.BasicWaitStrategies(),
 				)
+				testutil.CleanupContainer(t, pg)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -64,6 +66,7 @@ func TestDispatchDatabaseParity(t *testing.T) {
 								WithStartupTimeout(2 * time.Minute),
 						}, Started: true,
 					})
+				testutil.CleanupContainer(t, ctr)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -80,12 +83,6 @@ func TestDispatchDatabaseParity(t *testing.T) {
 					RawQuery: "database=master&encrypt=false&trustservercertificate=true",
 				}).String()
 			}
-			t.Cleanup(func() {
-				if err := ctr.Terminate(context.Background()); err != nil {
-					t.Error(err)
-				}
-				t.Log("cleanup: isolated database container removed")
-			})
 			var conn *sql.DB
 			var err error
 			for attempt := 0; attempt < 15; attempt++ {
@@ -109,6 +106,7 @@ func TestDispatchDatabaseParity(t *testing.T) {
 			runRemoteAtomicity(t, r)
 			runRemoteStepStartEligibility(t, r)
 			runProjectMembershipIntegerContract(t, r)
+			runStagingStorageParity(t, r)
 		})
 	}
 }

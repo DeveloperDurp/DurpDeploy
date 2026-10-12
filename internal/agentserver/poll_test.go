@@ -209,7 +209,8 @@ WHERE deployment_id = ? AND step_index = 1;
 INSERT INTO agent_environment_labels(agent_id,environment_id)
 VALUES('test-agent',?);
 INSERT INTO agent_interpreters(agent_id,interpreter)
-VALUES('test-agent','python3');`, deploymentID, deploymentID, deploymentID,
+VALUES('test-agent','python3');
+UPDATE agents SET agent_protocol = 'agent/2' WHERE id = 'test-agent';`, deploymentID, deploymentID, deploymentID,
 		deployment.EnvironmentID); err != nil {
 		t.Fatal(err)
 	}

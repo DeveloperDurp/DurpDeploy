@@ -29,8 +29,8 @@ func (q *Queries) ClearArtifactSourceReleaseByRelease(ctx context.Context, sourc
 }
 
 const copyDeploymentArtifact = `-- name: CopyDeploymentArtifact :exec
-INSERT INTO deployment_artifacts (deployment_id, repository_id, url, version, sha256, size)
-SELECT ?, d.repository_id, d.url, d.version, d.sha256, d.size FROM deployment_artifacts d WHERE d.deployment_id = ?
+INSERT INTO deployment_artifacts (deployment_id, repository_id, url, version, sha256, size, resolution_key)
+SELECT ?, d.repository_id, d.url, d.version, d.sha256, d.size, d.resolution_key FROM deployment_artifacts d WHERE d.deployment_id = ?
 `
 
 type CopyDeploymentArtifactParams struct {
@@ -44,8 +44,8 @@ func (q *Queries) CopyDeploymentArtifact(ctx context.Context, arg CopyDeployment
 }
 
 const copyReleaseArtifactToDeployment = `-- name: CopyReleaseArtifactToDeployment :exec
-INSERT INTO deployment_artifacts (deployment_id, repository_id, url, version, sha256, size)
-SELECT ?, r.repository_id, r.url, r.version, r.sha256, r.size FROM release_artifacts r WHERE r.release_id = ?
+INSERT INTO deployment_artifacts (deployment_id, repository_id, url, version, sha256, size, resolution_key)
+SELECT ?, r.repository_id, r.url, r.version, r.sha256, r.size, r.resolution_key FROM release_artifacts r WHERE r.release_id = ?
 `
 
 type CopyReleaseArtifactToDeploymentParams struct {
@@ -59,8 +59,8 @@ func (q *Queries) CopyReleaseArtifactToDeployment(ctx context.Context, arg CopyR
 }
 
 const copyReleaseArtifactToRunbook = `-- name: CopyReleaseArtifactToRunbook :execrows
-INSERT INTO release_artifacts (release_id, repository_id, url, version, sha256, size, source_release_id)
-SELECT ?, r.repository_id, r.url, r.version, r.sha256, r.size, r.release_id FROM release_artifacts r WHERE r.release_id = ?
+INSERT INTO release_artifacts (release_id, repository_id, url, version, sha256, size, source_release_id, resolution_key)
+SELECT ?, r.repository_id, r.url, r.version, r.sha256, r.size, r.release_id, r.resolution_key FROM release_artifacts r WHERE r.release_id = ?
 `
 
 type CopyReleaseArtifactToRunbookParams struct {
@@ -77,8 +77,8 @@ func (q *Queries) CopyReleaseArtifactToRunbook(ctx context.Context, arg CopyRele
 }
 
 const copyRunbookArtifact = `-- name: CopyRunbookArtifact :execrows
-INSERT INTO release_artifacts (release_id, repository_id, url, version, sha256, size, source_release_id)
-SELECT ?, r.repository_id, r.url, r.version, r.sha256, r.size, r.source_release_id FROM release_artifacts r WHERE r.release_id = ?
+INSERT INTO release_artifacts (release_id, repository_id, url, version, sha256, size, source_release_id, resolution_key)
+SELECT ?, r.repository_id, r.url, r.version, r.sha256, r.size, r.source_release_id, r.resolution_key FROM release_artifacts r WHERE r.release_id = ?
 `
 
 type CopyRunbookArtifactParams struct {
@@ -131,8 +131,8 @@ func (q *Queries) CreatePackageRepository(ctx context.Context, arg CreatePackage
 }
 
 const createReleaseArtifact = `-- name: CreateReleaseArtifact :exec
-INSERT INTO release_artifacts (release_id, repository_id, url, version, sha256, size, source_release_id)
-VALUES (?, ?, ?, ?, ?, ?, ?)
+INSERT INTO release_artifacts (release_id, repository_id, url, version, sha256, size, source_release_id, resolution_key)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type CreateReleaseArtifactParams struct {
@@ -143,6 +143,7 @@ type CreateReleaseArtifactParams struct {
 	Sha256          string        `json:"sha256"`
 	Size            int64         `json:"size"`
 	SourceReleaseID sql.NullInt64 `json:"source_release_id"`
+	ResolutionKey   string        `json:"resolution_key"`
 }
 
 func (q *Queries) CreateReleaseArtifact(ctx context.Context, arg CreateReleaseArtifactParams) error {
@@ -154,6 +155,7 @@ func (q *Queries) CreateReleaseArtifact(ctx context.Context, arg CreateReleaseAr
 		arg.Sha256,
 		arg.Size,
 		arg.SourceReleaseID,
+		arg.ResolutionKey,
 	)
 	return err
 }
@@ -227,7 +229,7 @@ func (q *Queries) DeleteReleaseArtifact(ctx context.Context, releaseID int64) er
 }
 
 const getDeploymentArtifact = `-- name: GetDeploymentArtifact :one
-SELECT deployment_id, repository_id, url, version, sha256, size FROM deployment_artifacts WHERE deployment_id = ?
+SELECT deployment_id, repository_id, url, version, sha256, size, resolution_key FROM deployment_artifacts WHERE deployment_id = ?
 `
 
 func (q *Queries) GetDeploymentArtifact(ctx context.Context, deploymentID int64) (DeploymentArtifact, error) {
@@ -240,6 +242,7 @@ func (q *Queries) GetDeploymentArtifact(ctx context.Context, deploymentID int64)
 		&i.Version,
 		&i.Sha256,
 		&i.Size,
+		&i.ResolutionKey,
 	)
 	return i, err
 }
@@ -284,7 +287,7 @@ func (q *Queries) GetProjectArtifactRepository(ctx context.Context, projectID in
 }
 
 const getReleaseArtifact = `-- name: GetReleaseArtifact :one
-SELECT release_id, repository_id, url, version, sha256, size, source_release_id FROM release_artifacts WHERE release_id = ?
+SELECT release_id, repository_id, url, version, sha256, size, source_release_id, resolution_key FROM release_artifacts WHERE release_id = ?
 `
 
 func (q *Queries) GetReleaseArtifact(ctx context.Context, releaseID int64) (ReleaseArtifact, error) {
@@ -298,6 +301,7 @@ func (q *Queries) GetReleaseArtifact(ctx context.Context, releaseID int64) (Rele
 		&i.Sha256,
 		&i.Size,
 		&i.SourceReleaseID,
+		&i.ResolutionKey,
 	)
 	return i, err
 }
@@ -517,6 +521,36 @@ func (q *Queries) PackageRepositoryHasPins(ctx context.Context, arg PackageRepos
 	var column_1 int64
 	err := row.Scan(&column_1)
 	return column_1, err
+}
+
+const resolveDeploymentArtifacts = `-- name: ResolveDeploymentArtifacts :exec
+UPDATE deployment_artifacts SET sha256 = ?, size = ? WHERE resolution_key = ? AND sha256 = ''
+`
+
+type ResolveDeploymentArtifactsParams struct {
+	Sha256        string `json:"sha256"`
+	Size          int64  `json:"size"`
+	ResolutionKey string `json:"resolution_key"`
+}
+
+func (q *Queries) ResolveDeploymentArtifacts(ctx context.Context, arg ResolveDeploymentArtifactsParams) error {
+	_, err := q.db.ExecContext(ctx, resolveDeploymentArtifacts, arg.Sha256, arg.Size, arg.ResolutionKey)
+	return err
+}
+
+const resolveReleaseArtifacts = `-- name: ResolveReleaseArtifacts :exec
+UPDATE release_artifacts SET sha256 = ?, size = ? WHERE resolution_key = ? AND sha256 = ''
+`
+
+type ResolveReleaseArtifactsParams struct {
+	Sha256        string `json:"sha256"`
+	Size          int64  `json:"size"`
+	ResolutionKey string `json:"resolution_key"`
+}
+
+func (q *Queries) ResolveReleaseArtifacts(ctx context.Context, arg ResolveReleaseArtifactsParams) error {
+	_, err := q.db.ExecContext(ctx, resolveReleaseArtifacts, arg.Sha256, arg.Size, arg.ResolutionKey)
+	return err
 }
 
 const selectProjectArtifactRepository = `-- name: SelectProjectArtifactRepository :exec

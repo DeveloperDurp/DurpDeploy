@@ -36,7 +36,11 @@ func (q *Queries) CancelOrphanedRemoteStepRuns(ctx context.Context, now int64) (
 }
 
 const confirmContainerCleanup = `-- name: ConfirmContainerCleanup :execrows
-UPDATE deployments SET status = 'failed', finished_at = COALESCE(finished_at, ?1)
+UPDATE deployments SET status = CASE WHEN EXISTS (
+    SELECT 1 FROM remote_step_runs s WHERE s.deployment_id = deployments.id
+      AND s.state = 'cleanup_unconfirmed'
+) THEN status ELSE 'failed' END,
+    container_namespace = NULL, finished_at = COALESCE(finished_at, ?1)
 WHERE status IN ('running', 'publishing_artifact', 'cleanup_unconfirmed')
   AND container_namespace = ?2
 `
@@ -52,6 +56,17 @@ func (q *Queries) ConfirmContainerCleanup(ctx context.Context, arg ConfirmContai
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+const confirmRemoteDeploymentLocalCleanup = `-- name: ConfirmRemoteDeploymentLocalCleanup :exec
+UPDATE deployments SET container_namespace = NULL WHERE id = ?
+AND EXISTS (SELECT 1 FROM remote_step_runs s
+    WHERE s.deployment_id = deployments.id AND s.state = 'cleanup_unconfirmed')
+`
+
+func (q *Queries) ConfirmRemoteDeploymentLocalCleanup(ctx context.Context, id int64) error {
+	_, err := q.db.ExecContext(ctx, confirmRemoteDeploymentLocalCleanup, id)
+	return err
 }
 
 const countDeploymentsToday = `-- name: CountDeploymentsToday :one
@@ -107,7 +122,7 @@ func (q *Queries) CountDeploymentsWithRefsFiltered(ctx context.Context, arg Coun
 
 const createDeployment = `-- name: CreateDeployment :one
 INSERT INTO deployments (release_id, environment_id, status, started_at, finished_at, forced, note, assigned_agent_id)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id, release_id, environment_id, status, started_at, finished_at, created_at, forced, note, assigned_agent_id, kind, container_namespace
+VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id, release_id, environment_id, status, started_at, finished_at, created_at, forced, note, assigned_agent_id, kind, container_namespace, cleanup_confirmed_at
 `
 
 type CreateDeploymentParams struct {
@@ -146,6 +161,7 @@ func (q *Queries) CreateDeployment(ctx context.Context, arg CreateDeploymentPara
 		&i.AssignedAgentID,
 		&i.Kind,
 		&i.ContainerNamespace,
+		&i.CleanupConfirmedAt,
 	)
 	return i, err
 }
@@ -159,13 +175,75 @@ func (q *Queries) DeleteDeployment(ctx context.Context, id int64) error {
 	return err
 }
 
+const deploymentActivity = `-- name: DeploymentActivity :many
+SELECT CAST(d.created_at / 86400 AS INTEGER) AS day,
+       d.status, COUNT(*) AS count
+FROM deployments d
+JOIN releases r ON r.id = d.release_id
+WHERE d.kind = 'deployment'
+  AND d.created_at >= ?1
+  AND d.created_at < ?2
+  AND (CAST(?3 AS INTEGER) = 1 OR EXISTS (
+      SELECT 1 FROM project_members pm
+      WHERE pm.project_id = r.project_id AND pm.user_id = ?4
+  ))
+GROUP BY CAST(d.created_at / 86400 AS INTEGER), d.status
+ORDER BY day, d.status
+`
+
+type DeploymentActivityParams struct {
+	FromUnix int64 `json:"from_unix"`
+	ToUnix   int64 `json:"to_unix"`
+	IsAdmin  int64 `json:"is_admin"`
+	UserID   int64 `json:"user_id"`
+}
+
+type DeploymentActivityRow struct {
+	Day    int64  `json:"day"`
+	Status string `json:"status"`
+	Count  int64  `json:"count"`
+}
+
+func (q *Queries) DeploymentActivity(ctx context.Context, arg DeploymentActivityParams) ([]DeploymentActivityRow, error) {
+	rows, err := q.db.QueryContext(ctx, deploymentActivity,
+		arg.FromUnix,
+		arg.ToUnix,
+		arg.IsAdmin,
+		arg.UserID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DeploymentActivityRow
+	for rows.Next() {
+		var i DeploymentActivityRow
+		if err := rows.Scan(&i.Day, &i.Status, &i.Count); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const failDeploymentsWithTerminalRemoteStepRuns = `-- name: FailDeploymentsWithTerminalRemoteStepRuns :execrows
-UPDATE deployments SET status = 'failed', finished_at = ?1
-WHERE status = 'running' AND assigned_agent_id IS NULL
+UPDATE deployments SET status = CASE WHEN EXISTS (
+    SELECT 1 FROM remote_step_runs r WHERE r.deployment_id = deployments.id
+      AND r.state = 'cleanup_unconfirmed') THEN 'cleanup_unconfirmed' ELSE 'failed' END,
+    finished_at = ?1
+WHERE (status = 'running' OR (status = 'failed' AND EXISTS (
+    SELECT 1 FROM remote_step_runs r WHERE r.deployment_id = deployments.id
+      AND r.state = 'cleanup_unconfirmed'))) AND assigned_agent_id IS NULL
   AND EXISTS (
       SELECT 1 FROM remote_step_runs r
       WHERE r.deployment_id = deployments.id
-        AND (r.state IN ('failed', 'lost', 'cancel_unconfirmed')
+        AND (r.state IN ('failed', 'lost', 'cancel_unconfirmed', 'cleanup_unconfirmed')
           OR (r.state = 'cancelled' AND r.recovery_cancelled = 1))
   )
   AND NOT EXISTS (
@@ -202,7 +280,7 @@ func (q *Queries) FailOrphanedDeployments(ctx context.Context, now sql.NullInt64
 }
 
 const getDeployment = `-- name: GetDeployment :one
-SELECT id, release_id, environment_id, status, started_at, finished_at, created_at, forced, note, assigned_agent_id, kind, container_namespace FROM deployments WHERE id = ?
+SELECT id, release_id, environment_id, status, started_at, finished_at, created_at, forced, note, assigned_agent_id, kind, container_namespace, cleanup_confirmed_at FROM deployments WHERE id = ?
 `
 
 func (q *Queries) GetDeployment(ctx context.Context, id int64) (Deployment, error) {
@@ -221,12 +299,13 @@ func (q *Queries) GetDeployment(ctx context.Context, id int64) (Deployment, erro
 		&i.AssignedAgentID,
 		&i.Kind,
 		&i.ContainerNamespace,
+		&i.CleanupConfirmedAt,
 	)
 	return i, err
 }
 
 const getLatestDeploymentForReleaseEnv = `-- name: GetLatestDeploymentForReleaseEnv :one
-SELECT id, release_id, environment_id, status, started_at, finished_at, created_at, forced, note, assigned_agent_id, kind, container_namespace FROM deployments WHERE release_id = ? AND environment_id = ? ORDER BY created_at DESC LIMIT 1
+SELECT id, release_id, environment_id, status, started_at, finished_at, created_at, forced, note, assigned_agent_id, kind, container_namespace, cleanup_confirmed_at FROM deployments WHERE release_id = ? AND environment_id = ? ORDER BY created_at DESC LIMIT 1
 `
 
 type GetLatestDeploymentForReleaseEnvParams struct {
@@ -250,12 +329,13 @@ func (q *Queries) GetLatestDeploymentForReleaseEnv(ctx context.Context, arg GetL
 		&i.AssignedAgentID,
 		&i.Kind,
 		&i.ContainerNamespace,
+		&i.CleanupConfirmedAt,
 	)
 	return i, err
 }
 
 const getLatestSuccessfulDeploymentForEnv = `-- name: GetLatestSuccessfulDeploymentForEnv :one
-SELECT id, release_id, environment_id, status, started_at, finished_at, created_at, forced, note, assigned_agent_id, kind, container_namespace FROM deployments WHERE environment_id = ? AND status = 'succeeded' AND kind = 'deployment' ORDER BY created_at DESC LIMIT 1
+SELECT id, release_id, environment_id, status, started_at, finished_at, created_at, forced, note, assigned_agent_id, kind, container_namespace, cleanup_confirmed_at FROM deployments WHERE environment_id = ? AND status = 'succeeded' AND kind = 'deployment' ORDER BY created_at DESC LIMIT 1
 `
 
 func (q *Queries) GetLatestSuccessfulDeploymentForEnv(ctx context.Context, environmentID int64) (Deployment, error) {
@@ -274,12 +354,13 @@ func (q *Queries) GetLatestSuccessfulDeploymentForEnv(ctx context.Context, envir
 		&i.AssignedAgentID,
 		&i.Kind,
 		&i.ContainerNamespace,
+		&i.CleanupConfirmedAt,
 	)
 	return i, err
 }
 
 const getLatestSuccessfulDeploymentForReleaseEnv = `-- name: GetLatestSuccessfulDeploymentForReleaseEnv :one
-SELECT id, release_id, environment_id, status, started_at, finished_at, created_at, forced, note, assigned_agent_id, kind, container_namespace FROM deployments WHERE release_id = ? AND environment_id = ? AND status = 'succeeded' ORDER BY created_at DESC LIMIT 1
+SELECT id, release_id, environment_id, status, started_at, finished_at, created_at, forced, note, assigned_agent_id, kind, container_namespace, cleanup_confirmed_at FROM deployments WHERE release_id = ? AND environment_id = ? AND status = 'succeeded' ORDER BY created_at DESC LIMIT 1
 `
 
 type GetLatestSuccessfulDeploymentForReleaseEnvParams struct {
@@ -303,12 +384,108 @@ func (q *Queries) GetLatestSuccessfulDeploymentForReleaseEnv(ctx context.Context
 		&i.AssignedAgentID,
 		&i.Kind,
 		&i.ContainerNamespace,
+		&i.CleanupConfirmedAt,
 	)
 	return i, err
 }
 
+const hasUnconfirmedContainerCleanup = `-- name: HasUnconfirmedContainerCleanup :one
+SELECT CASE WHEN EXISTS (
+    SELECT 1 FROM deployments d WHERE d.id = ?1
+      AND d.status = 'cleanup_unconfirmed'
+      AND (d.container_namespace IS NOT NULL OR (
+      d.cleanup_confirmed_at IS NULL AND
+      NOT EXISTS (SELECT 1 FROM remote_step_runs s
+          WHERE s.deployment_id = d.id AND s.state = 'cleanup_unconfirmed')
+      AND NOT EXISTS (SELECT 1 FROM remote_deployment_claims c
+          WHERE c.deployment_id = d.id AND c.state = 'cleanup_unconfirmed')))
+) OR EXISTS (
+    SELECT 1 FROM remote_step_runs s WHERE s.deployment_id = ?1
+      AND s.state = 'cleanup_unconfirmed' AND s.cleanup_confirmed_at IS NULL
+) OR EXISTS (
+    SELECT 1 FROM remote_deployment_claims c WHERE c.deployment_id = ?1
+      AND c.state = 'cleanup_unconfirmed' AND c.cleanup_confirmed_at IS NULL
+) THEN 1 ELSE 0 END
+`
+
+func (q *Queries) HasUnconfirmedContainerCleanup(ctx context.Context, deploymentID int64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, hasUnconfirmedContainerCleanup, deploymentID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const listActiveDeploymentsWithRefs = `-- name: ListActiveDeploymentsWithRefs :many
+SELECT
+    d.id, d.release_id, d.environment_id, d.status,
+    d.started_at, d.finished_at, d.created_at, d.forced, d.note,
+    d.assigned_agent_id,
+    p.name AS project_name,
+    r.version AS release_version,
+    e.name AS environment_name
+FROM deployments d
+JOIN releases r ON d.release_id = r.id
+JOIN projects p ON r.project_id = p.id
+JOIN environments e ON d.environment_id = e.id
+WHERE d.kind = 'deployment' AND d.status IN ('queued', 'pending', 'running', 'publishing_artifact', 'pending_approval', 'awaiting_artifact_approval')
+ORDER BY d.created_at DESC
+`
+
+type ListActiveDeploymentsWithRefsRow struct {
+	ID              int64          `json:"id"`
+	ReleaseID       int64          `json:"release_id"`
+	EnvironmentID   int64          `json:"environment_id"`
+	Status          string         `json:"status"`
+	StartedAt       sql.NullInt64  `json:"started_at"`
+	FinishedAt      sql.NullInt64  `json:"finished_at"`
+	CreatedAt       int64          `json:"created_at"`
+	Forced          int64          `json:"forced"`
+	Note            sql.NullString `json:"note"`
+	AssignedAgentID sql.NullString `json:"assigned_agent_id"`
+	ProjectName     string         `json:"project_name"`
+	ReleaseVersion  string         `json:"release_version"`
+	EnvironmentName string         `json:"environment_name"`
+}
+
+func (q *Queries) ListActiveDeploymentsWithRefs(ctx context.Context) ([]ListActiveDeploymentsWithRefsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listActiveDeploymentsWithRefs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListActiveDeploymentsWithRefsRow
+	for rows.Next() {
+		var i ListActiveDeploymentsWithRefsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ReleaseID,
+			&i.EnvironmentID,
+			&i.Status,
+			&i.StartedAt,
+			&i.FinishedAt,
+			&i.CreatedAt,
+			&i.Forced,
+			&i.Note,
+			&i.AssignedAgentID,
+			&i.ProjectName,
+			&i.ReleaseVersion,
+			&i.EnvironmentName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listDeployments = `-- name: ListDeployments :many
-SELECT id, release_id, environment_id, status, started_at, finished_at, created_at, forced, note, assigned_agent_id, kind, container_namespace FROM deployments WHERE kind = 'deployment' ORDER BY created_at DESC
+SELECT id, release_id, environment_id, status, started_at, finished_at, created_at, forced, note, assigned_agent_id, kind, container_namespace, cleanup_confirmed_at FROM deployments WHERE kind = 'deployment' ORDER BY created_at DESC
 `
 
 func (q *Queries) ListDeployments(ctx context.Context) ([]Deployment, error) {
@@ -333,6 +510,7 @@ func (q *Queries) ListDeployments(ctx context.Context) ([]Deployment, error) {
 			&i.AssignedAgentID,
 			&i.Kind,
 			&i.ContainerNamespace,
+			&i.CleanupConfirmedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -348,7 +526,7 @@ func (q *Queries) ListDeployments(ctx context.Context) ([]Deployment, error) {
 }
 
 const listDeploymentsByRelease = `-- name: ListDeploymentsByRelease :many
-SELECT id, release_id, environment_id, status, started_at, finished_at, created_at, forced, note, assigned_agent_id, kind, container_namespace FROM deployments WHERE release_id = ? AND kind = 'deployment' ORDER BY created_at DESC
+SELECT id, release_id, environment_id, status, started_at, finished_at, created_at, forced, note, assigned_agent_id, kind, container_namespace, cleanup_confirmed_at FROM deployments WHERE release_id = ? AND kind = 'deployment' ORDER BY created_at DESC
 `
 
 func (q *Queries) ListDeploymentsByRelease(ctx context.Context, releaseID int64) ([]Deployment, error) {
@@ -373,6 +551,7 @@ func (q *Queries) ListDeploymentsByRelease(ctx context.Context, releaseID int64)
 			&i.AssignedAgentID,
 			&i.Kind,
 			&i.ContainerNamespace,
+			&i.CleanupConfirmedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -698,7 +877,7 @@ func (q *Queries) ListPendingDeployments(ctx context.Context) ([]ListPendingDepl
 }
 
 const listRecentDeployments = `-- name: ListRecentDeployments :many
-SELECT id, release_id, environment_id, status, started_at, finished_at, created_at, forced, note, assigned_agent_id, kind, container_namespace FROM deployments WHERE kind = 'deployment' ORDER BY created_at DESC LIMIT ?
+SELECT id, release_id, environment_id, status, started_at, finished_at, created_at, forced, note, assigned_agent_id, kind, container_namespace, cleanup_confirmed_at FROM deployments WHERE kind = 'deployment' ORDER BY created_at DESC LIMIT ?
 `
 
 func (q *Queries) ListRecentDeployments(ctx context.Context, limit int64) ([]Deployment, error) {
@@ -723,6 +902,7 @@ func (q *Queries) ListRecentDeployments(ctx context.Context, limit int64) ([]Dep
 			&i.AssignedAgentID,
 			&i.Kind,
 			&i.ContainerNamespace,
+			&i.CleanupConfirmedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -738,7 +918,7 @@ func (q *Queries) ListRecentDeployments(ctx context.Context, limit int64) ([]Dep
 }
 
 const listRecentDeploymentsForEnv = `-- name: ListRecentDeploymentsForEnv :many
-SELECT id, release_id, environment_id, status, started_at, finished_at, created_at, forced, note, assigned_agent_id, kind, container_namespace FROM deployments WHERE environment_id = ? AND kind = 'deployment' ORDER BY created_at DESC LIMIT ?
+SELECT id, release_id, environment_id, status, started_at, finished_at, created_at, forced, note, assigned_agent_id, kind, container_namespace, cleanup_confirmed_at FROM deployments WHERE environment_id = ? AND kind = 'deployment' ORDER BY created_at DESC LIMIT ?
 `
 
 type ListRecentDeploymentsForEnvParams struct {
@@ -768,75 +948,7 @@ func (q *Queries) ListRecentDeploymentsForEnv(ctx context.Context, arg ListRecen
 			&i.AssignedAgentID,
 			&i.Kind,
 			&i.ContainerNamespace,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listRunningDeploymentsWithRefs = `-- name: ListRunningDeploymentsWithRefs :many
-SELECT
-    d.id, d.release_id, d.environment_id, d.status,
-    d.started_at, d.finished_at, d.created_at, d.forced, d.note,
-    d.assigned_agent_id,
-    p.name AS project_name,
-    r.version AS release_version,
-    e.name AS environment_name
-FROM deployments d
-JOIN releases r ON d.release_id = r.id
-JOIN projects p ON r.project_id = p.id
-JOIN environments e ON d.environment_id = e.id
-WHERE d.kind = 'deployment' AND d.status IN ('pending', 'running', 'publishing_artifact', 'awaiting_artifact_approval')
-ORDER BY d.created_at DESC
-`
-
-type ListRunningDeploymentsWithRefsRow struct {
-	ID              int64          `json:"id"`
-	ReleaseID       int64          `json:"release_id"`
-	EnvironmentID   int64          `json:"environment_id"`
-	Status          string         `json:"status"`
-	StartedAt       sql.NullInt64  `json:"started_at"`
-	FinishedAt      sql.NullInt64  `json:"finished_at"`
-	CreatedAt       int64          `json:"created_at"`
-	Forced          int64          `json:"forced"`
-	Note            sql.NullString `json:"note"`
-	AssignedAgentID sql.NullString `json:"assigned_agent_id"`
-	ProjectName     string         `json:"project_name"`
-	ReleaseVersion  string         `json:"release_version"`
-	EnvironmentName string         `json:"environment_name"`
-}
-
-func (q *Queries) ListRunningDeploymentsWithRefs(ctx context.Context) ([]ListRunningDeploymentsWithRefsRow, error) {
-	rows, err := q.db.QueryContext(ctx, listRunningDeploymentsWithRefs)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListRunningDeploymentsWithRefsRow
-	for rows.Next() {
-		var i ListRunningDeploymentsWithRefsRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.ReleaseID,
-			&i.EnvironmentID,
-			&i.Status,
-			&i.StartedAt,
-			&i.FinishedAt,
-			&i.CreatedAt,
-			&i.Forced,
-			&i.Note,
-			&i.AssignedAgentID,
-			&i.ProjectName,
-			&i.ReleaseVersion,
-			&i.EnvironmentName,
+			&i.CleanupConfirmedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -893,7 +1005,7 @@ func (q *Queries) RecordContainerNamespace(ctx context.Context, arg RecordContai
 }
 
 const updateDeployment = `-- name: UpdateDeployment :one
-UPDATE deployments SET release_id = ?, environment_id = ?, status = ?, started_at = ?, finished_at = ?, note = ? WHERE id = ? RETURNING id, release_id, environment_id, status, started_at, finished_at, created_at, forced, note, assigned_agent_id, kind, container_namespace
+UPDATE deployments SET release_id = ?, environment_id = ?, status = ?, started_at = ?, finished_at = ?, note = ? WHERE id = ? RETURNING id, release_id, environment_id, status, started_at, finished_at, created_at, forced, note, assigned_agent_id, kind, container_namespace, cleanup_confirmed_at
 `
 
 type UpdateDeploymentParams struct {
@@ -930,6 +1042,7 @@ func (q *Queries) UpdateDeployment(ctx context.Context, arg UpdateDeploymentPara
 		&i.AssignedAgentID,
 		&i.Kind,
 		&i.ContainerNamespace,
+		&i.CleanupConfirmedAt,
 	)
 	return i, err
 }

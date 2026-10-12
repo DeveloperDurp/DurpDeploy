@@ -151,7 +151,7 @@ func TestRollbackAPIWebContainerE2E(t *testing.T) {
 		"POST",
 		fmt.Sprintf("%s/releases/%d/refresh", f.base(), v1.ID),
 		nil,
-		409,
+		200,
 	)
 }
 

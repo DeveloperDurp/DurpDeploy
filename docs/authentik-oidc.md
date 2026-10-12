@@ -85,7 +85,7 @@ so the ID token contains:
 * `email`, the user's email address.
 * `email_verified`, the boolean value `true` for accounts your policy permits
   to sign in.
-* `DURPDEPLOY_OIDC_REQUIRE_EMAIL_VERIFIED` is optional and defaults to `true` in DurpDeploy. When unset, or set to `true`, the ID token must contain the literal JSON boolean `email_verified: true`. Explicit lowercase `false` accepts a present literal JSON boolean `email_verified: true` or `email_verified: false` after normal ID token signature, issuer, audience, and nonce verification. Missing, null, string, and numeric claims remain rejected. This weakens identity assurance and is appropriate only where Authentik independently establishes address ownership.
+* Email verification follows the policy below.
 * `name`, when you want Authentik to supply the display name.
 * `groups`, an array of strings containing the exact configured group names.
 
@@ -101,17 +101,16 @@ flag only from an enrollment or directory rule that your organization trusts.
 Do not set `email_verified` to true merely because the user has an Authentik
 account.
 
-After saving the mapping, inspect the provider's token preview or a test
-login with the applicable Authentik tools. Verify the claims without
-copying tokens or full claim payloads into logs or tickets. When unset, or set
-to `true`, DurpDeploy requires the callback ID token to contain the literal
-boolean `email_verified: true`. Explicit lowercase
-`DURPDEPLOY_OIDC_REQUIRE_EMAIL_VERIFIED=false` accepts a present literal JSON
-boolean `email_verified: true` or `email_verified: false` after normal ID token
-signature, issuer, audience, and nonce verification. Missing, null, string, and
-numeric claims remain rejected. This weakens
-identity assurance and is appropriate only where Authentik independently
-establishes address ownership.
+After saving the mapping, inspect a token preview or test login with Authentik's
+tools. Check claims without copying tokens or full payloads into logs or tickets.
+
+When unset, or set to `true`, `DURPDEPLOY_OIDC_REQUIRE_EMAIL_VERIFIED` requires the
+literal JSON boolean `email_verified: true`. Explicit lowercase
+`DURPDEPLOY_OIDC_REQUIRE_EMAIL_VERIFIED=false` accepts a
+present literal JSON boolean `email_verified: true` or `email_verified: false`
+after normal ID token signature, issuer, audience, and nonce verification.
+Missing, null, string, and numeric claims remain rejected. This weakens identity assurance
+and is appropriate only where Authentik independently establishes address ownership.
 
 ## 3. Create and assign the role groups
 
@@ -146,20 +145,14 @@ DURPDEPLOY_OIDC_GROUP_CLAIM=groups
 DURPDEPLOY_OIDC_REQUIRE_EMAIL_VERIFIED=<true|false>
 ```
 
-The necessary values are `DURPDEPLOY_URL`, the issuer, client ID, client
-secret, and all three role group variables. `DURPDEPLOY_OIDC_REQUIRE_EMAIL_VERIFIED`
-defaults to `true`. Set it to explicit lowercase `false` only where Authentik
-independently establishes address ownership. This weakens identity assurance
-and accepts a present literal JSON boolean `email_verified: true` or
-`email_verified: false` claim. Missing, null, string, and numeric claims remain
-rejected. `DURPDEPLOY_OIDC_DISPLAY_NAME`
-defaults to `SSO`.
-`DURPDEPLOY_OIDC_GROUP_CLAIM` defaults to `groups`.
+Required: `DURPDEPLOY_URL`, issuer, client ID, client secret, and all three role
+groups. Defaults: `DURPDEPLOY_OIDC_DISPLAY_NAME=SSO`,
+`DURPDEPLOY_OIDC_GROUP_CLAIM=groups`, and email verification enabled.
+Use lowercase `false` only under [the email-assurance policy](#2-configure-scopes-and-claims).
 
-For systemd, put the values in a root-owned environment file readable only by
-the service, or use the existing deployment mechanism. For Compose, keep the
-secret in the environment or secret store and reference it from the service.
-Do not paste the client secret into a shell history, unit committed to git, or
+For Compose, put these values in `compose.app.env` and restrict its permissions.
+For other installations, use a protected environment file or secret store.
+Do not paste the client secret into shell history, source control, or
 public issue. Restart DurpDeploy after changing the provider settings or
 environment values. Discovery is lazy, so a startup that succeeds does not
 prove the issuer is reachable.
@@ -181,7 +174,7 @@ Use a test account before changing production group membership.
       `deployer`, and a viewer user becomes `viewer`.
 - [ ] A user in multiple configured groups receives the highest-precedence
       role, admin over deployer over viewer.
-- [ ] An email matching one local account links to that account. When unset or `true`, the ID token has literal JSON boolean `email_verified: true`. With explicit lowercase `false`, it has a present literal JSON boolean `email_verified: true` or `email_verified: false`. Missing, null, string, and numeric claims are rejected.
+- [ ] An email matching one local account links to it; email verification follows the policy above.
 - [ ] A verified email with no local match creates a JIT user with an empty
       password.
 - [ ] Password login still works when the provider is unavailable.
@@ -251,9 +244,9 @@ provider tokens, authorization codes, or raw claims. OIDC does not use UserInfo,
 does not authenticate API tokens, and does not assert local MFA.
 
 Logout is local only. It clears the DurpDeploy session, not the Authentik
-session, and there is no upstream logout. Close the browser or use the
-provider's own logout is separate from DurpDeploy logout.
+session, and there is no upstream logout. Use Authentik's own logout to end
+the provider session.
 
 These limits are part of the current behavior. Review [`docs/security.md`](security.md),
 [`docs/roles.md`](roles.md), and [`docs/attack-drill.md`](attack-drill.md) before
-use group membership as an emergency access control.
+using group membership as an emergency access control.

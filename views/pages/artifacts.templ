@@ -13,17 +13,20 @@ templ ArtifactRepositoryPage(project db.Project, source db.PackageRepository, re
 	@layouts.Base("Package repository", currentPath) {
 		@components.Breadcrumbs([]components.Crumb{{Label: "Projects", Href: "/projects"}, {Label: project.Name, Href: fmt.Sprintf("/projects/%d", project.ID)}, {Label: "Package repository"}})
 		<div class="space-y-6">
-			<div class="flex flex-wrap items-center justify-between gap-4">
+			<div class="page-header">
 				<h1 class="text-3xl font-bold">Package repository — { project.Name }</h1>
-				if CanWrite(ctx) {
-					<a href={ fmt.Sprintf("/projects/%d/package-repository/edit", project.ID) } class="btn btn-primary btn-sm">
-						if source.ID == 0 {
-							Configure repository
-						} else {
-							Edit repository
-						}
-					</a>
-				}
+				<div class="flex flex-wrap gap-2 ml-auto">
+					if CanWrite(ctx) {
+						<a href={ fmt.Sprintf("/projects/%d/package-repository/edit", project.ID) } class="btn btn-primary btn-sm">
+							if source.ID == 0 {
+								Configure repository
+							} else {
+								Edit repository
+							}
+						</a>
+					}
+					<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>
+				</div>
 			</div>
 			<div class="card bg-base-200 shadow"><div class="card-body space-y-4">
 				<h2 class="card-title">Release package</h2>

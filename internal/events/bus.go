@@ -157,7 +157,7 @@ func (b *Bus) Publish(ctx context.Context, evt Event) {
 		case skipped:
 			results[n.Name()] = "skipped"
 		case err != nil:
-			results[n.Name()] = "failed: " + err.Error()
+			results[n.Name()] = "failed: delivery failed"
 		default:
 			results[n.Name()] = "ok"
 		}

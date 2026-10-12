@@ -1,0 +1,95 @@
+package repository
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+
+	"durpdeploy/internal/db"
+)
+
+type InheritedVariable struct {
+	db.LifecycleVariable
+	Override *db.Variable
+}
+
+type VariableInheritance struct {
+	Lifecycle db.Lifecycle
+	Variables []InheritedVariable
+}
+
+type variableScope struct {
+	name        string
+	environment sql.NullInt64
+}
+
+// DeleteProjectVariable resets every legacy duplicate in the selected scope
+// when requested; ordinary deletion still removes only the selected row.
+func (r *Repository) DeleteProjectVariable(
+	ctx context.Context,
+	variable db.Variable,
+	reset bool,
+) error {
+	if !reset {
+		return r.Queries.DeleteVariable(ctx, variable.ID)
+	}
+	return r.Queries.DeleteVariableOverrides(
+		ctx,
+		db.DeleteVariableOverridesParams{
+			ProjectID: variable.ProjectID, Name: variable.Name,
+			EnvironmentID: variable.EnvironmentID,
+		},
+	)
+}
+
+// InheritedVariables includes only scopes still in the assigned lifecycle.
+// Project overrides win within the same scope; environment specificity is
+// applied later by the existing release-variable resolver.
+func (r *Repository) InheritedVariables(
+	ctx context.Context,
+	project db.Project,
+	local []db.Variable,
+) (VariableInheritance, error) {
+	var result VariableInheritance
+	if !project.LifecycleID.Valid {
+		return result, nil
+	}
+	var err error
+	result.Lifecycle, err = r.Queries.GetLifecycle(
+		ctx,
+		project.LifecycleID.Int64,
+	)
+	if err != nil {
+		return result, fmt.Errorf("get variable lifecycle: %w", err)
+	}
+	shared, err := r.ListLifecycleVariables(ctx, result.Lifecycle.ID)
+	if err != nil {
+		return result, err
+	}
+	stages, err := r.Queries.ListLifecycleStageEnvironmentIDs(
+		ctx,
+		result.Lifecycle.ID,
+	)
+	if err != nil {
+		return result, fmt.Errorf("get variable stages: %w", err)
+	}
+	allowed := make(map[int64]bool, len(stages))
+	for _, id := range stages {
+		allowed[id] = true
+	}
+	overrides := make(map[variableScope]*db.Variable, len(local))
+	for i := range local {
+		overrides[variableScope{local[i].Name, local[i].EnvironmentID}] = &local[i]
+	}
+	for _, variable := range shared {
+		if variable.EnvironmentID.Valid &&
+			!allowed[variable.EnvironmentID.Int64] {
+			continue
+		}
+		result.Variables = append(result.Variables, InheritedVariable{
+			LifecycleVariable: variable,
+			Override:          overrides[variableScope{variable.Name, variable.EnvironmentID}],
+		})
+	}
+	return result, nil
+}

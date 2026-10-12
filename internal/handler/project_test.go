@@ -562,9 +562,9 @@ func TestProjectPages_RenderExpectedBackControls(t *testing.T) {
 	); err != nil {
 		t.Fatalf("add viewer project member: %v", err)
 	}
-	projectBack := `<a href="/projects" class="btn btn-ghost btn-sm">Back</a>`
+	projectBack := `<a href="/projects" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>`
 	notificationBack := fmt.Sprintf(
-		`<a href="/projects/%d" class="btn btn-ghost btn-sm">Back</a>`,
+		`<a href="/projects/%d" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>`,
 		proj.ID,
 	)
 
@@ -585,7 +585,7 @@ func TestProjectPages_RenderExpectedBackControls(t *testing.T) {
 	requireHTMLPattern(
 		t,
 		projectPage,
-		`(?s)<div class="flex flex-wrap justify-between items-center gap-2 mb-4">\s*<h1 class="text-3xl font-bold">back-controls</h1>\s*<div class="flex gap-2 ml-auto">.*?`+projectBack,
+		`(?s)<div class="page-header">\s*<h1 class="text-3xl font-bold">back-controls</h1>\s*<div class="flex gap-2 ml-auto">.*?`+projectBack,
 	)
 	if strings.Count(notificationPage, notificationBack) != 1 {
 		t.Errorf(
@@ -600,7 +600,7 @@ func TestProjectPages_RenderExpectedBackControls(t *testing.T) {
 	requireHTMLPattern(
 		t,
 		notificationPage,
-		`(?s)<div class="flex justify-between items-center mb-4">\s*<h1 class="text-3xl font-bold">Notifications</h1>\s*<div class="flex gap-2">\s*<button type="submit" class="btn btn-primary btn-sm">Save</button>\s*`+notificationBack,
+		`(?s)<div class="page-header">\s*<h1 class="text-3xl font-bold">Notifications</h1>\s*<div class="flex gap-2">\s*<button type="submit" class="btn btn-primary btn-sm">Save</button>\s*`+notificationBack,
 	)
 	if strings.Count(viewerNotificationPage, notificationBack) != 1 {
 		t.Errorf(
@@ -615,7 +615,7 @@ func TestProjectPages_RenderExpectedBackControls(t *testing.T) {
 	requireHTMLPattern(
 		t,
 		viewerNotificationPage,
-		`(?s)<div class="flex justify-between items-center mb-4">\s*<h1 class="text-3xl font-bold">Notifications</h1>\s*<div class="flex gap-2">\s*`+notificationBack,
+		`(?s)<div class="page-header">\s*<h1 class="text-3xl font-bold">Notifications</h1>\s*<div class="flex gap-2">\s*`+notificationBack,
 	)
 }
 
@@ -649,7 +649,7 @@ func TestStepsPage_RendersFullPage(t *testing.T) {
 		"second-step", "echo+b",
 		"Add Step", "Insert from Template",
 		fmt.Sprintf(
-			`<a href="/projects/%d" class="btn btn-ghost btn-sm">Back</a>`,
+			`<a href="/projects/%d" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>`,
 			proj.ID,
 		),
 	} {
@@ -661,7 +661,7 @@ func TestStepsPage_RendersFullPage(t *testing.T) {
 		t,
 		body,
 		fmt.Sprintf(
-			`(?s)<div class="flex justify-between items-center">\s*<h1 class="text-3xl font-bold">Steps for .*?</h1>\s*<div class="flex gap-2">\s*<a href="/projects/%d" class="btn btn-ghost btn-sm">Back</a>`,
+			`(?s)<div class="page-header">\s*<h1 class="min-w-0 w-full break-words sm:w-auto sm:flex-1 text-3xl font-bold">Steps for .*?</h1>\s*<div class="flex gap-2">\s*<a href="/projects/%d" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>`,
 			proj.ID,
 		),
 	)
@@ -751,14 +751,14 @@ func makeVariableGlobal(
 }
 
 // TestUpdateProject_AfterSubmitLandsOnProject verifies the two navigation
-// paths out of the edit form: Cancel returns the user to the project
-// page, and Update also returns the user to the project page (not the
+// paths out of the edit form: Back falls back to the project
+// page, and Save also returns the user to the project page (not the
 // projects list, which was the bug).
 func TestUpdateProject_AfterSubmitLandsOnProject(t *testing.T) {
 	h := newProjectHarness(t)
 	proj := h.makeProject("nav-redirect")
 
-	// Cancel link on the edit form should point to the project's detail page.
+	// Back keeps a working fallback to the project's detail page.
 	editPage, err := h.authedClient().Get(
 		fmt.Sprintf("%s/projects/%d/edit", h.server.URL, proj.ID),
 	)
@@ -774,8 +774,9 @@ func TestUpdateProject_AfterSubmitLandsOnProject(t *testing.T) {
 	if !strings.Contains(body, cancelHref) {
 		t.Errorf("edit form Cancel link should contain %s", cancelHref)
 	}
-	if !strings.Contains(body, `>Cancel</a>`) {
-		t.Error("edit form Cancel control should remain distinct from Back")
+	if !strings.Contains(body, `>Back</a>`) ||
+		!strings.Contains(body, `@click="back"`) {
+		t.Error("edit form should use the shared Back navigation control")
 	}
 
 	wantRedirect := fmt.Sprintf("/projects/%d", proj.ID)
@@ -873,8 +874,8 @@ func TestProject_UpdateNotifications(t *testing.T) {
 	}
 
 	notifPage := h.getProjectNotificationsPage(proj.ID)
-	if !strings.Contains(notifPage, "https://hooks.slack.example/abc") {
-		t.Errorf("notifications page should show the saved webhook URL")
+	if strings.Contains(notifPage, "https://hooks.slack.example/abc") {
+		t.Errorf("notifications page disclosed the saved webhook URL")
 	}
 	if !strings.Contains(notifPage, "a@example.com, b@example.com") {
 		t.Errorf("notifications page should show the saved notify emails")
@@ -882,11 +883,11 @@ func TestProject_UpdateNotifications(t *testing.T) {
 	if !strings.Contains(notifPage, "https://gotify.example.com") {
 		t.Errorf("notifications page should show the saved Gotify URL")
 	}
-	if !strings.Contains(notifPage, "tok123") {
-		t.Errorf("notifications page should show the saved Gotify token")
+	if strings.Contains(notifPage, "tok123") {
+		t.Errorf("notifications page disclosed the saved Gotify token")
 	}
-	if !strings.Contains(notifPage, "https://discord.com/api/webhooks/xyz") {
-		t.Errorf("notifications page should show the saved Discord webhook URL")
+	if strings.Contains(notifPage, "https://discord.com/api/webhooks/xyz") {
+		t.Errorf("notifications page disclosed the saved Discord webhook URL")
 	}
 	for _, section := range []string{"Slack", "Email", "Gotify", "Discord"} {
 		if !strings.Contains(notifPage, ">"+section+"<") {

@@ -7,7 +7,6 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"sync"
 	"time"
@@ -235,29 +234,4 @@ func (service *PairingService) activate(
 		return ErrPairingConflict
 	}
 	return nil
-}
-
-func (service *PairingService) cleanup(
-	ctx context.Context,
-	connection pairingConnection,
-	request agentproto.PairRequest,
-	result PairingResult,
-) (PairingResult, error) {
-	status, err := connection.Post(ctx, request)
-	if err != nil {
-		slog.Warn(
-			"paired agent cleanup acknowledgement failed",
-			"agent_id", result.AgentID,
-			"err", err,
-		)
-		return result, nil
-	}
-	if status != http.StatusNoContent {
-		slog.Warn(
-			"paired agent cleanup acknowledgement rejected",
-			"agent_id", result.AgentID,
-			"status", status,
-		)
-	}
-	return result, nil
 }

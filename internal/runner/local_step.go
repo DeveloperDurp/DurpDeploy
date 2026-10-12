@@ -38,6 +38,15 @@ func (r *DeploymentRunner) runStepAttempt(
 		return context.Canceled
 	}
 	defer r.localWork.Done()
+	if request.logWriter.outputFailed {
+		return errPendingLogLimit
+	}
+	if err := request.logWriter.state("running"); err != nil {
+		return err
+	}
+	defer func() {
+		request.logWriter.finishState(result, runCtx.Err() != nil)
+	}()
 	if request.step.ContainerImage == "" {
 		return fmt.Errorf(
 			"step %q has no container image (legacy local steps cannot run on the host)",
@@ -85,6 +94,7 @@ func (r *DeploymentRunner) runStepAttempt(
 		timeout = time.Duration(request.step.TimeoutSeconds) * time.Second
 	}
 	stepCtx, cancel := context.WithTimeout(runCtx, timeout)
+	request.logWriter.cancelAttempt = cancel
 	defer cancel()
 	if r.engine.kind == "docker" {
 		err = r.rejectDockerImageVolumes(
@@ -161,13 +171,6 @@ func (r *DeploymentRunner) runStepAttempt(
 	if r.engine.kind == "podman" {
 		timeoutFlag = "--timeout="
 	}
-	memoryLimit := "--memory=256m"
-	if request.handoff.volume != "" {
-		// The writing attempt is charged for shared tmpfs pages.
-		memoryLimit = fmt.Sprintf(
-			"--memory=%d", artifactStagingCapacity()+(256<<20),
-		)
-	}
 	network := request.step.NetworkMode
 	tmpfs := "--tmpfs=/tmp:rw,nosuid,size=64m"
 	if request.step.ApprovalArtifactPath != "" ||
@@ -191,7 +194,7 @@ func (r *DeploymentRunner) runStepAttempt(
 		"--security-opt=no-new-privileges", "--user=65534:65534",
 		tmpfs,
 		"--env=HOME=/tmp", "--env=TERM=dumb",
-		"--pids-limit=128", memoryLimit, "--cpus=1")
+		"--pids-limit=128")
 	if r.engine.kind == "podman" {
 		args = append(args, "--image-volume=ignore", "--http-proxy=false")
 	}
@@ -236,6 +239,7 @@ func (r *DeploymentRunner) runStepAttempt(
 			cleanupCtx, r.engine.removeArgs(name)...,
 		).
 			CombinedOutput()
+		request.logWriter.Flush()
 		if err = r.engine.removalError(output, err); err != nil {
 			result = errors.Join(
 				result,
@@ -247,18 +251,25 @@ func (r *DeploymentRunner) runStepAttempt(
 					strings.TrimSpace(string(output)),
 				),
 			)
-			_, _ = io.WriteString(
-				request.logWriter,
-				fmt.Sprintf(
-					"step %q: container cleanup unconfirmed: %v\n",
-					request.step.Name,
-					err,
-				),
-			)
+			line := request.logWriter.scrubber.Scrub(fmt.Sprintf(
+				"step %q: container cleanup unconfirmed: %v",
+				request.step.Name,
+				err,
+			))
+			if persistErr := request.logWriter.writeLine(
+				line,
+				"",
+			); persistErr != nil {
+				result = errors.Join(result, fmt.Errorf(
+					"persist container cleanup diagnostic: %w", persistErr,
+				))
+			}
 		}
-		request.logWriter.Flush()
 	}()
 	err = cmd.Run()
+	if request.logWriter.outputFailed {
+		return errors.Join(errPendingLogLimit, err)
+	}
 	if err != nil {
 		if stepCtx.Err() == context.DeadlineExceeded {
 			_, _ = io.WriteString(

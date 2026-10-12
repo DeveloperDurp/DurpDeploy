@@ -51,7 +51,7 @@ func (h *ProjectHandler) renderProjectsList(
 		}
 		panels[i] = panel
 	}
-	if r.Header.Get("HX-Request") == "true" {
+	if isFragmentRequest(r) {
 		return pages.ProjectsList(projects, panels).Render(r.Context(), w)
 	}
 	return pages.ProjectsListPage(projects, panels, r.URL.Path).
@@ -89,6 +89,20 @@ func (h *ProjectHandler) NewProject(w http.ResponseWriter, r *http.Request) {
 func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimSpace(r.FormValue("name"))
 	desc := r.FormValue("description")
+	submitted := db.Project{
+		Name:        name,
+		Description: sql.NullString{String: desc, Valid: desc != ""},
+	}
+	if lifecycleID, parseErr := strconv.ParseInt(
+		r.FormValue("lifecycle_id"),
+		10,
+		64,
+	); parseErr == nil {
+		submitted.LifecycleID = sql.NullInt64{Int64: lifecycleID, Valid: true}
+	}
+	if !h.authorizeLifecycleForm(w, r, 0) {
+		return
+	}
 
 	if name == "" {
 		lifecycles, _ := h.repo.Queries.ListLifecycles(r.Context())
@@ -96,14 +110,14 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 			w,
 			r,
 			pages.ProjectForm(
-				db.Project{},
+				submitted,
 				false,
 				"Name is required",
 				lifecycles,
 				nil, nil, false,
 			),
 			pages.ProjectFormPage(
-				db.Project{},
+				submitted,
 				false,
 				"Name is required",
 				lifecycles,
@@ -152,14 +166,14 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 				w,
 				r,
 				pages.ProjectForm(
-					db.Project{Name: name},
+					submitted,
 					false,
 					"A project with this name already exists",
 					lifecycles,
 					nil, nil, false,
 				),
 				pages.ProjectFormPage(
-					db.Project{Name: name},
+					submitted,
 					false,
 					"A project with this name already exists",
 					lifecycles,
@@ -178,13 +192,21 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if retargetFormDialog(w, r, "#projects-list") {
+		h.ListProjects(w, r)
+		return
+	}
+	if r.Header.Get("HX-Request") == "true" {
+		w.Header().Set("HX-Redirect", "/projects")
+		return
+	}
 	http.Redirect(w, r, "/projects", http.StatusSeeOther)
 }
 
 // UpdateProjectNotifications saves the project's Slack webhook URL,
 // comma-separated notify_emails list, Gotify server URL/token, and/or
-// Discord webhook URL. Any field may be blank to disable that
-// notifier. Notification URLs are validated before storage so deploy events
+// Discord webhook URL. Blank credentials preserve their stored values.
+// Explicit clear flags remove credentials. URLs are validated so deploy events
 // cannot make server-side POSTs to local or private-network services.
 func (h *ProjectHandler) UpdateProjectNotifications(
 	w http.ResponseWriter,
@@ -196,11 +218,11 @@ func (h *ProjectHandler) UpdateProjectNotifications(
 		return
 	}
 
-	webhook := strings.TrimSpace(r.FormValue("slack_webhook_url"))
+	webhook := notificationCredential(r, "slack_webhook_url")
 	emails := strings.TrimSpace(r.FormValue("notify_emails"))
 	gotifyURL := strings.TrimSpace(r.FormValue("gotify_url"))
 	gotifyToken := strings.TrimSpace(r.FormValue("gotify_token"))
-	discordWebhook := strings.TrimSpace(r.FormValue("discord_webhook_url"))
+	discordWebhook := notificationCredential(r, "discord_webhook_url")
 
 	if err := validateNotificationURLs(
 		webhook,
@@ -214,6 +236,18 @@ func (h *ProjectHandler) UpdateProjectNotifications(
 	err = h.repo.Queries.UpdateProjectNotifications(
 		r.Context(),
 		db.UpdateProjectNotificationsParams{
+			ClearSlackWebhookUrl: notificationClearFlag(
+				r,
+				"clear_slack_webhook_url",
+			),
+			ClearGotifyToken: notificationClearFlag(
+				r,
+				"clear_gotify_token",
+			),
+			ClearDiscordWebhookUrl: notificationClearFlag(
+				r,
+				"clear_discord_webhook_url",
+			),
 			SlackWebhookUrl: sql.NullString{
 				String: webhook,
 				Valid:  webhook != "",
@@ -235,7 +269,11 @@ func (h *ProjectHandler) UpdateProjectNotifications(
 		},
 	)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(
+			w,
+			"could not save notification settings",
+			http.StatusInternalServerError,
+		)
 		return
 	}
 
@@ -274,219 +312,6 @@ func (h *ProjectHandler) GetProjectNotifications(
 		Render(r.Context(), w); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
-}
-
-func (h *ProjectHandler) GetProject(w http.ResponseWriter, r *http.Request) {
-	id, err := parseProjectID(r)
-	if err != nil {
-		http.Error(w, "Invalid project ID", http.StatusBadRequest)
-		return
-	}
-
-	project, err := h.repo.Queries.GetProject(r.Context(), id)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			http.Error(w, "Project not found", http.StatusNotFound)
-			return
-		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	variables, err := h.repo.ListVariablesByProject(r.Context(), id)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	environments, err := h.repo.Queries.ListEnvironments(r.Context())
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	panel, err := h.buildPanelForProject(r, project, false)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	if r.Header.Get("HX-Request") == "true" {
-		if err := pages.ProjectDetail(project, panel, variables, environments).
-			Render(r.Context(), w); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-	} else {
-		if err := pages.ProjectDetailPage(project, panel, variables, environments, r.URL.Path).
-			Render(r.Context(), w); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-	}
-}
-
-// buildPanelForProject returns the lifecycle/env panel data for any project.
-// filterEmpty=true drops envs with no deployments from free-floating projects —
-// used by the projects list page so the at-a-glance strip stays signal-rich
-// even when the system has many envs. The project detail page uses
-// filterEmpty=false so users can see the full list of lifecycle stages or
-// every env, including untouched ones, when picking a deployment target.
-func (h *ProjectHandler) buildPanelForProject(
-	r *http.Request,
-	project db.Project,
-	filterEmpty bool,
-) (pages.LifecyclePanel, error) {
-	envsByID, err := h.envsByID(r)
-	if err != nil {
-		return pages.LifecyclePanel{}, err
-	}
-	releasesByID, err := h.releasesByID(r, project.ID)
-	if err != nil {
-		return pages.LifecyclePanel{}, err
-	}
-
-	if !project.LifecycleID.Valid {
-		return h.buildFreeFloatingPanel(
-			r,
-			project,
-			envsByID,
-			releasesByID,
-			filterEmpty,
-		)
-	}
-
-	lc, err := h.repo.Queries.GetLifecycle(
-		r.Context(),
-		project.LifecycleID.Int64,
-	)
-	if err != nil {
-		return pages.LifecyclePanel{}, err
-	}
-	stages, err := h.repo.Queries.ListLifecycleStages(r.Context(), lc.ID)
-	if err != nil {
-		return pages.LifecyclePanel{}, err
-	}
-	views := make([]pages.LifecyclePanelStage, len(stages))
-	for i, s := range stages {
-		views[i] = h.populateStageView(r, pages.LifecyclePanelStage{
-			Stage:       s,
-			Environment: envsByID[s.EnvironmentID],
-		}, releasesByID)
-	}
-	return pages.LifecyclePanel{Lifecycle: lc, Stages: views}, nil
-}
-
-// buildFreeFloatingPanel renders one row per env, ordered by env ID. When
-// filterEmpty is true, envs the project has not deployed to are dropped —
-// the projects list page uses this so the dot strip stays signal-rich.
-func (h *ProjectHandler) buildFreeFloatingPanel(
-	r *http.Request,
-	project db.Project,
-	envsByID map[int64]db.Environment,
-	releasesByID map[int64]db.Release,
-	filterEmpty bool,
-) (pages.LifecyclePanel, error) {
-	allEnvs, err := h.repo.Queries.ListEnvironments(r.Context())
-	if err != nil {
-		return pages.LifecyclePanel{}, err
-	}
-	views := make([]pages.LifecyclePanelStage, 0, len(allEnvs))
-	for _, e := range allEnvs {
-		stage := h.populateStageView(r, pages.LifecyclePanelStage{
-			Stage: db.LifecycleStage{
-				EnvironmentID: e.ID,
-				SortOrder:     e.ID,
-			},
-			Environment: e,
-		}, releasesByID)
-		if filterEmpty && stage.LatestAttempt == nil {
-			continue
-		}
-		views = append(views, stage)
-	}
-	_ = project
-	return pages.LifecyclePanel{Stages: views}, nil
-}
-
-// populateStageView fills the latest-deploy / latest-attempt / streak fields
-// for a single stage view. Shared by lifecycle and free-floating paths.
-//
-// ponytail: the per-env queries return deployments from any project, so we
-// filter by releasesByID to scope the result to this project. Without this
-// filter, project A's panel would show project B's deployments when they
-// share an environment. Upgrade path: add project_id to deployments and
-// pass it into the queries.
-func (h *ProjectHandler) populateStageView(
-	r *http.Request,
-	v pages.LifecyclePanelStage,
-	releasesByID map[int64]db.Release,
-) pages.LifecyclePanelStage {
-	ctx := r.Context()
-	if dep, err := h.repo.Queries.GetLatestSuccessfulDeploymentForEnv(
-		ctx,
-		v.Environment.ID,
-	); err == nil &&
-		dep.ReleaseID != 0 {
-		if rel, ok := releasesByID[dep.ReleaseID]; ok {
-			d := dep
-			v.LatestDeployment = &d
-			v.LatestVersion = rel.Version
-		}
-	}
-	recents, err := h.repo.Queries.ListRecentDeploymentsForEnv(
-		ctx,
-		db.ListRecentDeploymentsForEnvParams{
-			EnvironmentID: v.Environment.ID,
-			Limit:         5,
-		},
-	)
-	if err == nil && len(recents) > 0 {
-		// Filter to deployments of releases owned by this project. If none
-		// match, the env has no project-relevant history.
-		var projectRecents []db.Deployment
-		for _, d := range recents {
-			if _, ok := releasesByID[d.ReleaseID]; ok {
-				projectRecents = append(projectRecents, d)
-			}
-		}
-		if len(projectRecents) > 0 {
-			latest := projectRecents[0]
-			v.LatestAttempt = &latest
-			if rel, ok := releasesByID[latest.ReleaseID]; ok {
-				v.AttemptVersion = rel.Version
-			}
-			v.RecentAttempts = projectRecents
-		}
-	}
-	return v
-}
-
-func (h *ProjectHandler) envsByID(
-	r *http.Request,
-) (map[int64]db.Environment, error) {
-	envs, err := h.repo.Queries.ListEnvironments(r.Context())
-	if err != nil {
-		return nil, err
-	}
-	m := make(map[int64]db.Environment, len(envs))
-	for _, e := range envs {
-		m[e.ID] = e
-	}
-	return m, nil
-}
-
-func (h *ProjectHandler) releasesByID(
-	r *http.Request,
-	projectID int64,
-) (map[int64]db.Release, error) {
-	rels, err := h.repo.Queries.ListReleasesByProject(r.Context(), projectID)
-	if err != nil {
-		return nil, err
-	}
-	m := make(map[int64]db.Release, len(rels))
-	for _, rel := range rels {
-		m[rel.ID] = rel
-	}
-	return m, nil
 }
 
 func (h *ProjectHandler) EditProject(w http.ResponseWriter, r *http.Request) {
@@ -538,12 +363,23 @@ func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	if !h.authorizeLifecycleForm(w, r, id) {
+		return
+	}
 
 	name := strings.TrimSpace(r.FormValue("name"))
 	desc := r.FormValue("description")
 
 	if name == "" {
 		project := db.Project{ID: id, Name: name}
+		project.Description = sql.NullString{String: desc, Valid: desc != ""}
+		if lifecycleID, parseErr := strconv.ParseInt(
+			r.FormValue("lifecycle_id"),
+			10,
+			64,
+		); parseErr == nil {
+			project.LifecycleID = sql.NullInt64{Int64: lifecycleID, Valid: true}
+		}
 		lifecycles, _ := h.repo.Queries.ListLifecycles(r.Context())
 		members, available, canManage := h.loadMembersContext(r, id)
 		WriteFormError(
@@ -582,6 +418,17 @@ func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 	if _, err = h.repo.Queries.UpdateProject(r.Context(), params); err != nil {
 		if IsUniqueViolation(err) {
 			project := db.Project{ID: id, Name: name}
+			project.Description = params.Description
+			if lifecycleID, parseErr := strconv.ParseInt(
+				r.FormValue("lifecycle_id"),
+				10,
+				64,
+			); parseErr == nil {
+				project.LifecycleID = sql.NullInt64{
+					Int64: lifecycleID,
+					Valid: true,
+				}
+			}
 			lifecycles, _ := h.repo.Queries.ListLifecycles(r.Context())
 			members, available, canManage := h.loadMembersContext(r, id)
 			WriteFormError(
@@ -614,6 +461,11 @@ func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if retargetFormDialog(w, r, "#project-detail") {
+		h.GetProject(w, r)
+		return
+	}
+
 	if r.Header.Get("HX-Request") == "true" {
 		// After an HTMX edit, navigate the browser back to the project's
 		// detail page so the user sees the updated lifecycle / env panel.
@@ -635,7 +487,7 @@ func (h *ProjectHandler) applyLifecycleSelection(
 ) error {
 	lifecycleStr := strings.TrimSpace(r.FormValue("lifecycle_id"))
 	if lifecycleStr == "" {
-		return h.repo.Queries.ClearProjectLifecycle(r.Context(), projectID)
+		return ApplyLifecycleSelection(r.Context(), h.repo, projectID, 0)
 	}
 	id, err := strconv.ParseInt(lifecycleStr, 10, 64)
 	if err != nil {
@@ -652,8 +504,36 @@ func ApplyLifecycleSelection(
 	projectID int64,
 	lifecycleID int64,
 ) error {
+	user := auth.UserFromContext(ctx)
+	if lifecycleID <= 0 && (user == nil || user.Role != "admin") {
+		project, err := repo.Queries.GetProject(ctx, projectID)
+		if err != nil {
+			return err
+		}
+		if !project.LifecycleID.Valid {
+			return nil
+		}
+		if !CanManageProject(ctx, repo, user, projectID) {
+			return ErrLifecycleRemovalForbidden
+		}
+		_, err = repo.Queries.ClearProjectLifecycleIfAssigned(
+			ctx, db.ClearProjectLifecycleIfAssignedParams{
+				ID: projectID, LifecycleID: project.LifecycleID,
+			},
+		)
+		return err
+	}
+	if err := AuthorizeLifecycleSelection(
+		ctx, repo, projectID, lifecycleID,
+	); err != nil {
+		return err
+	}
 	if lifecycleID <= 0 {
 		return repo.Queries.ClearProjectLifecycle(ctx, projectID)
+	}
+	if user := auth.UserFromContext(ctx); user == nil || user.Role != "admin" {
+		// Retaining a grant must not restore one revoked by a concurrent edit.
+		return nil
 	}
 	return repo.Queries.SetProjectLifecycle(
 		ctx,

@@ -32,6 +32,7 @@ if command -v helm >/dev/null 2>&1; then
 	helm template contract "$root/charts/durpdeploy" \
 		| grep -A1 -F 'name: DURPDEPLOY_EMBEDDED_AGENT_ENABLED' \
 		| grep -Fq 'value: "false"'
+	(cd "$root" && bash scripts/go_test.sh -race -count=1 ./charts/durpdeploy)
 fi
 
 printf '%s\n' 'agent Helm contract: PASS'

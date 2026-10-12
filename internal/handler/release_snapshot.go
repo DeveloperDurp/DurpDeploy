@@ -18,62 +18,11 @@ type releaseSnapshotData struct {
 	hasAgentSteps bool
 }
 
-// CreateReleaseSnapshot snapshots the project's current steps and variables
-// into a new release. Exported so the JSON API handler can reuse the same
-// transaction logic as the web form handler.
-func CreateReleaseSnapshot(
-	ctx context.Context,
-	repo *repository.Repository,
-	projectID int64,
-	version string,
-) (db.Release, error) {
-	snapshot, err := buildReleaseSnapshot(ctx, repo, projectID)
-	if err != nil {
-		return db.Release{}, err
-	}
-	snapshot.artifact, err = repo.ResolveProjectArtifact(
-		ctx,
-		projectID,
-		version,
-	)
-	if err != nil {
-		return db.Release{}, err
-	}
-	if snapshot.artifact != nil && snapshot.hasAgentSteps {
-		return db.Release{}, repository.ErrRemoteArtifactsUnsupported
-	}
-	tx, err := repo.DB.BeginTx(ctx, nil)
-	if err != nil {
-		return db.Release{}, err
-	}
-	defer tx.Rollback()
-	queries := repo.Queries.WithTx(tx)
-	release, err := queries.CreateRelease(ctx, db.CreateReleaseParams{
-		ProjectID: projectID, Version: version, StepsJson: snapshot.stepsJSON,
-	})
-	if err != nil {
-		return db.Release{}, err
-	}
-	if err := snapshot.insertVariables(ctx, queries, release.ID); err != nil {
-		return db.Release{}, err
-	}
-	if err := snapshot.artifact.Insert(ctx, queries, release.ID); err != nil {
-		return db.Release{}, err
-	}
-	if err := tx.Commit(); err != nil {
-		return db.Release{}, err
-	}
-	return release, nil
-}
-
 func RefreshReleaseSnapshot(
 	ctx context.Context,
 	repo *repository.Repository,
 	release db.Release,
 ) (db.Release, error) {
-	if release.SnapshotLocked != 0 {
-		return db.Release{}, ErrReleaseSnapshotLocked
-	}
 	if err := repo.ValidateExecutableRelease(ctx, release.ID); err != nil {
 		return db.Release{}, err
 	}
@@ -98,7 +47,7 @@ func RefreshReleaseSnapshot(
 	}
 	defer tx.Rollback()
 	queries := repo.Queries.WithTx(tx)
-	if err := lockRefreshableRelease(ctx, queries, release); err != nil {
+	if err := lockReleaseForRefresh(ctx, queries, release); err != nil {
 		return db.Release{}, err
 	}
 	updated, err := queries.UpdateRelease(ctx, db.UpdateReleaseParams{
@@ -204,6 +153,7 @@ type releaseStepSnapshot struct {
 	TimeoutSeconds       int64    `json:"timeout_seconds"`
 	MaxRetries           int64    `json:"max_retries"`
 	ExecutionTarget      string   `json:"execution_target"`
+	AgentExecutionMode   string   `json:"agent_execution_mode"`
 	AgentSelectors       []string `json:"agent_selectors,omitempty"`
 	ContainerImage       string   `json:"container_image"`
 	NetworkMode          string   `json:"network_mode"`
@@ -254,6 +204,7 @@ func releaseStepSnapshots(
 			TimeoutSeconds:       step.TimeoutSeconds,
 			MaxRetries:           step.MaxRetries,
 			ExecutionTarget:      step.ExecutionTarget,
+			AgentExecutionMode:   step.AgentExecutionMode,
 			AgentSelectors:       selectors,
 			ContainerImage:       step.ContainerImage,
 			NetworkMode:          step.NetworkMode,

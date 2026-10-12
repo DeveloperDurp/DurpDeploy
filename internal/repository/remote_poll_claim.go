@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -12,12 +13,17 @@ import (
 )
 
 type RemotePayloadSnapshot struct {
-	Agent       db.Agent
-	Deployment  db.Deployment
-	Release     db.Release
-	Environment db.Environment
-	Steps       []db.DeploymentStep
-	Variables   []db.ReleaseVariable
+	Staging               bool
+	Agent                 db.Agent
+	Deployment            db.Deployment
+	Release               db.Release
+	Environment           db.Environment
+	Steps                 []db.DeploymentStep
+	Variables             []db.ReleaseVariable
+	HostInterpreters      []string
+	ExecutionModes        []string
+	ContainerRuntimes     []string
+	ContainerInterpreters []string
 }
 
 type RemotePreparedClaim struct {
@@ -32,6 +38,8 @@ type RemoteClaim struct {
 	Ciphertext   []byte
 }
 
+// ClaimRemoteDeploymentPayload may repeat prepare after a rolled-back claim.
+// The callback must only prepare the payload, without external side effects.
 func (r *Repository) ClaimRemoteDeploymentPayload(
 	ctx context.Context,
 	agentID string,
@@ -39,7 +47,7 @@ func (r *Repository) ClaimRemoteDeploymentPayload(
 ) (RemoteClaim, bool, error) {
 	var result RemoteClaim
 	claimed := false
-	err := withSQLiteBusyRetry(ctx, func() error {
+	err := withPollClaimRetry(ctx, func() error {
 		result = RemoteClaim{}
 		claimed = false
 		waiting, err := r.Queries.ListWaitingRemoteDeploymentClaims(
@@ -120,6 +128,21 @@ func (r *Repository) ClaimRemoteDeploymentPayload(
 				}
 				prepared, err := prepare(snapshot)
 				if err != nil {
+					if errors.Is(err, agentproto.ErrUnsupportedProtocol) {
+						if err := q.FailWaitingRemotePayload(ctx, db.FailWaitingRemotePayloadParams{
+							DeploymentID: candidate, AgentID: agentID,
+							Now: sql.NullInt64{Int64: now, Valid: true},
+						}); err != nil {
+							return err
+						}
+						return q.FailUnsupportedRemoteDeploymentStatus(ctx,
+							db.FailUnsupportedRemoteDeploymentStatusParams{
+								Now: sql.NullInt64{
+									Int64: now,
+									Valid: true,
+								}, AgentID: agentID,
+							})
+					}
 					return err
 				}
 				changed, err := q.ClaimRemoteDeployment(
@@ -170,6 +193,22 @@ func (r *Repository) remotePayloadSnapshot(
 	if err != nil {
 		return RemotePayloadSnapshot{}, fmt.Errorf("get claim agent: %w", err)
 	}
+	host, err := q.ListAgentInterpreters(ctx, agentID)
+	if err != nil {
+		return RemotePayloadSnapshot{}, err
+	}
+	modes, err := q.ListAgentExecutionModes(ctx, agentID)
+	if err != nil {
+		return RemotePayloadSnapshot{}, err
+	}
+	runtimes, err := q.ListAgentContainerRuntimes(ctx, agentID)
+	if err != nil {
+		return RemotePayloadSnapshot{}, err
+	}
+	container, err := q.ListAgentContainerInterpreters(ctx, agentID)
+	if err != nil {
+		return RemotePayloadSnapshot{}, err
+	}
 	deployment, err := q.GetDeployment(ctx, deploymentID)
 	if err != nil {
 		return RemotePayloadSnapshot{}, fmt.Errorf(
@@ -192,25 +231,21 @@ func (r *Repository) remotePayloadSnapshot(
 	if err != nil {
 		return RemotePayloadSnapshot{}, fmt.Errorf("list claim steps: %w", err)
 	}
-	variables, err := q.ListReleaseVariablesByRelease(ctx, release.ID)
+	variables, err := r.deploymentVariables(ctx, q, deploymentID)
 	if err != nil {
 		return RemotePayloadSnapshot{}, fmt.Errorf(
 			"list claim variables: %w",
 			err,
 		)
 	}
-	for index := range variables {
-		variables[index], err = r.decryptReleaseVariable(variables[index])
-		if err != nil {
-			return RemotePayloadSnapshot{}, err
-		}
-	}
 	return RemotePayloadSnapshot{
-		Agent:       agent,
-		Deployment:  deployment,
-		Release:     release,
-		Environment: environment,
-		Steps:       steps,
-		Variables:   variables,
+		Agent:            agent,
+		Deployment:       deployment,
+		Release:          release,
+		Environment:      environment,
+		Steps:            steps,
+		Variables:        variables,
+		HostInterpreters: host, ExecutionModes: modes,
+		ContainerRuntimes: runtimes, ContainerInterpreters: container,
 	}, nil
 }

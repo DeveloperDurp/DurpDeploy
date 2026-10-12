@@ -149,6 +149,14 @@ esac
 	if err != nil || stored.Status != "failed" || len(r.staging) != 0 {
 		t.Fatalf("deployment=%+v staging=%v: %v", stored, r.staging, err)
 	}
+	logs, err := repo.Queries.ListDeploymentLogsByDeployment(
+		t.Context(),
+		dep.ID,
+	)
+	if err != nil || len(logs) != 2 || logs[0].StepState.String != "failed" ||
+		!logs[0].StepIndex.Valid || logs[0].StepIndex.Int64 != 0 {
+		t.Fatalf("staging failure logs=%+v: %v", logs, err)
+	}
 	removed, err := os.ReadFile(trace)
 	if err != nil ||
 		!strings.HasPrefix(string(removed), "durpdeploy-artifact-") {

@@ -99,6 +99,9 @@ func seedRemoteLifecycle(
 	if err != nil {
 		t.Fatal(err)
 	}
+	if _, err := repo.DB.ExecContext(ctx, `INSERT INTO deployment_step_sources(deployment_id,steps_json) VALUES(?,'[]')`, deployment.ID); err != nil {
+		t.Fatal(err)
+	}
 	if changed, err := repo.Queries.CreateRemoteDeploymentClaim(
 		ctx, deployment.ID,
 	); err != nil || changed != 1 {

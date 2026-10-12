@@ -17,9 +17,9 @@ require_text docs/agent-protocol.md 'agent/1' 'protocol version is missing'
 require_text docs/agent-protocol.md 'agent/2' 'capability protocol version is missing'
 require_text docs/agent-protocol.md 'supported_interpreters' 'interpreter capability contract is missing'
 require_text docs/agents.md 'does **not** use a per-step `chroot`' 'container mode still promises per-step chroot'
-require_text docs/agents.md 'operator or user is responsible' 'script responsibility warning is missing'
-require_text docs/agents.md 'shares the agent UID' 'shared agent identity tradeoff is missing'
-require_text docs/deploy.md 'local step can read or change' 'shared server identity tradeoff is missing'
+require_text docs/agents.md 'user is responsible for every' 'script responsibility warning is missing'
+require_text docs/agents.md 'share the agent UID' 'shared agent identity tradeoff is missing'
+require_text docs/deploy.md 'no direct host execution or development-mode fallback' 'server container boundary is missing'
 require_text docs/agents.md 'NoNewPrivs' 'container privilege boundary is missing'
 require_text docs/agents.md 'no host or control-plane database' 'container mount boundary is missing'
 require_text docs/deploy.md 'does not use a per-step' 'control-plane deployment summary omits no-chroot mode'
@@ -27,5 +27,5 @@ if grep -Eq 'chroot.d|scratch chroot|chroot/namespaces' README.md docs/agents.md
 	printf '%s\n' 'agent documentation contract: obsolete chroot claim found' >&2
 	exit 1
 fi
-require_text docs/deploy.md 'operator is responsible' 'direct runner responsibility warning is missing'
+require_text docs/deploy.md 'operator or user remains responsible' 'script responsibility warning is missing'
 printf '%s\n' 'agent documentation contract: PASS'

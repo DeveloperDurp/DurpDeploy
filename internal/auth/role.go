@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"net/http"
+	"strings"
 )
 
 // RoleFromContext returns the authenticated user's role, or "" if no
@@ -32,7 +33,12 @@ func RequireRole(roles ...string) func(http.Handler) http.Handler {
 				return
 			}
 			if _, ok := allowed[u.Role]; !ok {
-				RenderUnauthorized(w, r)
+				if strings.HasPrefix(r.URL.Path, "/api/v1/") {
+					RenderJSONError(w, http.StatusForbidden,
+						unauthorizedMessage)
+				} else {
+					RenderUnauthorized(w, r)
+				}
 				return
 			}
 			next.ServeHTTP(w, r)

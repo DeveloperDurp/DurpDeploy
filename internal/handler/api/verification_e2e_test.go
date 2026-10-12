@@ -13,9 +13,80 @@ import (
 	"testing"
 	"time"
 
+	"durpdeploy/internal/db"
 	"durpdeploy/internal/events"
 	"durpdeploy/internal/verification"
 )
+
+func TestRefreshReleaseAPIWebWaitsForDeploymentE2E(t *testing.T) {
+	f := newVerificationE2E(t)
+	release := verificationRelease(t, f, "refresh-after-attempt")
+	// Hold a pending deployment without starting its runner.
+	pending, err := f.h.repo.CreateDeployment(t.Context(),
+		db.CreateDeploymentParams{
+			ReleaseID: release.ID, EnvironmentID: f.environment.ID,
+			Status: "pending",
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := fmt.Sprintf(
+		"/projects/%d/releases/%d/refresh",
+		f.project.ID,
+		release.ID,
+	)
+	f.api(t, "POST", "/api/v1"+path, nil, http.StatusConflict)
+	f.web(t, "POST", path, url.Values{}, http.StatusConflict)
+	if err := f.h.repo.Queries.UpdateDeploymentStatus(t.Context(),
+		db.UpdateDeploymentStatusParams{
+			ID: pending.Deployment.ID, Status: "failed",
+		}); err != nil {
+		t.Fatal(err)
+	}
+	// A failed parent can still have an agent waiting to confirm cleanup.
+	if _, err := f.h.repo.DB.ExecContext(t.Context(),
+		`INSERT INTO agents(id, name, endpoint)
+VALUES('cleanup-agent', 'Cleanup', 'https://agent.example')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.h.repo.DB.ExecContext(
+		t.Context(),
+		`INSERT INTO remote_step_runs(deployment_id, step_index, agent_id, state)
+VALUES(?, 0, 'cleanup-agent', 'cleanup_unconfirmed')`,
+		pending.Deployment.ID,
+	); err != nil {
+		t.Fatal(err)
+	}
+	f.api(t, "POST", "/api/v1"+path, nil, http.StatusConflict)
+	f.web(t, "POST", path, url.Values{}, http.StatusConflict)
+	if err := f.h.repo.Queries.UpdateDeploymentStatus(t.Context(),
+		db.UpdateDeploymentStatusParams{
+			ID: pending.Deployment.ID, Status: "cleanup_unconfirmed",
+		}); err != nil {
+		t.Fatal(err)
+	}
+	f.api(t, "POST", "/api/v1"+path, nil, http.StatusConflict)
+	f.web(t, "POST", path, url.Values{}, http.StatusConflict)
+	if _, err := f.h.repo.DB.ExecContext(
+		t.Context(),
+		"UPDATE remote_step_runs SET cleanup_confirmed_at=1 WHERE deployment_id=?",
+		pending.Deployment.ID,
+	); err != nil {
+		t.Fatal(err)
+	}
+	f.api(t, "POST", "/api/v1"+path, nil, http.StatusOK)
+	f.web(t, "POST", path, url.Values{}, http.StatusSeeOther)
+	deployment, err := f.h.repo.Queries.GetDeployment(
+		t.Context(),
+		pending.Deployment.ID,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if deployment.Status != "cleanup_unconfirmed" {
+		t.Fatalf("refresh changed recorded result: %s", deployment.Status)
+	}
+}
 
 func TestVerificationHTTPTransportTimeoutPreservesDeadline(t *testing.T) {
 	for _, phase := range []string{"headers", "body"} {
@@ -83,7 +154,7 @@ func TestVerificationAPIWebContainerE2E(t *testing.T) {
 		"POST",
 		fmt.Sprintf("%s/releases/%d/refresh", f.base(), release.ID),
 		nil,
-		409,
+		200,
 	)
 }
 
@@ -143,11 +214,19 @@ func checkHTTPVerificationScenario(t *testing.T, scenario string) {
 	if !strings.Contains(audit, "verification_"+wantStatus) {
 		t.Fatalf("verification audit=%s", audit)
 	}
-	notifications := string(
-		f.api(t, "GET", "/api/v1/admin/notifications", nil, 200),
-	)
-	if !strings.Contains(notifications, string(wantEvent)) {
-		t.Fatalf("verification notification history=%s", notifications)
+	// Notifiers run before the event bus persists notification history.
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		notifications := string(
+			f.api(t, "GET", "/api/v1/admin/notifications", nil, 200),
+		)
+		if strings.Contains(notifications, string(wantEvent)) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("verification notification history=%s", notifications)
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 	f.web(t, "GET", path+"/verification", nil, 200)
 }

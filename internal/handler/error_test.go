@@ -3,6 +3,7 @@ package handler
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -10,7 +11,37 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/jackc/pgx/v5/pgconn"
+	mssql "github.com/microsoft/go-mssqldb"
 )
+
+func TestIsUniqueViolation(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"nil", nil, false},
+		{"SQLite", errors.New("UNIQUE constraint failed: variables.name"), true},
+		{"PostgreSQL", &pgconn.PgError{Code: "23505"}, true},
+		{"SQLServer index", mssql.Error{Number: 2601}, true},
+		{"SQLServer constraint", mssql.Error{Number: 2627}, true},
+		{"PostgreSQL foreign key", &pgconn.PgError{Code: "23503"}, false},
+		{"SQLServer foreign key", mssql.Error{Number: 547}, false},
+		{"other", errors.New("connection failed"), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := IsUniqueViolation(tc.err); got != tc.want {
+				t.Fatalf("got %v, want %v", got, tc.want)
+			}
+			if tc.err != nil && IsUniqueViolation(
+				fmt.Errorf("save variable: %w", tc.err),
+			) != tc.want {
+				t.Fatal("wrapped error classified differently")
+			}
+		})
+	}
+}
 
 func TestInternalErrorMiddlewareSanitizesWebResponseAndLogsDetail(
 	t *testing.T,

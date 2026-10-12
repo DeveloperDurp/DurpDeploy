@@ -98,7 +98,7 @@ func seedPollPayload(
 					TimeoutSeconds:  30,
 					MaxRetries:      1,
 					ExecutionTarget: "agent",
-					VariableNames:   `["MODE"]`,
+					VariableNames:   `[]`,
 				},
 			},
 			{
@@ -107,7 +107,7 @@ func seedPollPayload(
 					ScriptBody:      "echo second",
 					TimeoutSeconds:  60,
 					ExecutionTarget: "agent",
-					VariableNames:   `["TOKEN"]`,
+					VariableNames:   `[]`,
 				},
 			},
 		},

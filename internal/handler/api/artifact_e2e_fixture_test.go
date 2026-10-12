@@ -62,7 +62,7 @@ func (n artifactNotifier) Notify(
 	return true, nil
 }
 
-func newArtifactE2E(t *testing.T) *artifactE2E {
+func newArtifactE2E(t *testing.T, binary ...string) *artifactE2E {
 	t.Helper()
 	if os.Getenv("DURPDEPLOY_CONTAINER_RUNTIME") == "" {
 		kind := "docker"
@@ -72,23 +72,11 @@ func newArtifactE2E(t *testing.T) *artifactE2E {
 		t.Setenv("DURPDEPLOY_CONTAINER_RUNTIME", kind)
 	}
 	t.Setenv("DURPDEPLOY_CONTAINER_NAMESPACE", "artifact-e2e-"+uuid.NewString())
-	h := newAPIHarness(t)
+	h := newAPIHarness(t, binary...)
 	if !h.runner.ContainerRuntimeReady() {
 		t.Fatal("a working container endpoint is required for artifact E2E")
 	}
-	t.Cleanup(func() {
-		h.runner.KillAll()
-		// Test-owned references may outlive an awaiting fixture.
-		ids := stagingRuntime(t, "ps", "--all", "--quiet",
-			"--filter=label=io.durpdeploy.namespace="+
-				os.Getenv("DURPDEPLOY_CONTAINER_RUNTIME")+":"+
-				os.Getenv("DURPDEPLOY_CONTAINER_NAMESPACE")+":gate-images",
-			"--filter=label=io.durpdeploy.gate-image")
-		if ids != "" {
-			stagingRuntime(t, append([]string{"rm", "--force", "--volumes"},
-				strings.Fields(ids)...)...)
-		}
-	})
+	cleanupArtifactRuntime(t, h, binary...)
 	box, err := secret.NewBox(make([]byte, 32))
 	if err != nil {
 		t.Fatal(err)
@@ -201,6 +189,11 @@ func (f *artifactE2E) api(
 			result,
 		)
 	}
+	if want == http.StatusForbidden &&
+		(!strings.HasPrefix(response.Header.Get("Content-Type"),
+			"application/json") || !json.Valid(result)) {
+		t.Fatalf("%s %s: invalid 403 JSON: %s", method, path, result)
+	}
 	return result
 }
 
@@ -225,6 +218,7 @@ func (f *artifactE2E) web(
 		t.Fatal(err)
 	}
 	req.AddCookie(&http.Cookie{Name: "session", Value: f.session})
+	req.Header.Set("X-CSRF-Token", f.csrf)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	response, err := f.client.Do(req)
 	if err != nil {

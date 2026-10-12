@@ -138,12 +138,16 @@ func TestVerificationRollbackBrowserE2E(t *testing.T) {
 	// When: the operator configures verification through the actual HTMX form.
 	browser.evaluate(t, `(() => {
  const form = document.querySelector('form[hx-put]');
+ window.environmentFormBeforeSave = form;
  form.querySelector('[name=verification_type]').value = 'bash';
  form.querySelector('[name=verification_target]').value = 'echo browser-verified';
  form.querySelector('[name=verification_timeout_seconds]').value = '5';
  form.requestSubmit(); return true;
 })()`)
-	browser.wait(t, "document.querySelector('form[hx-put]') === null")
+	browser.wait(
+		t,
+		"document.querySelector('form[hx-put]') !== window.environmentFormBeforeSave && document.querySelector('[name=verification_type]').value === 'bash'",
+	)
 	configured := string(
 		f.api(
 			t,
@@ -171,10 +175,40 @@ func TestVerificationRollbackBrowserE2E(t *testing.T) {
 	first := verificationDeploy(t, f, v1)
 	f.completion(t, first.ID, events.DeploymentSucceeded)
 	capture(
-		"release-locked",
+		"release-used",
 		releasePath,
-		"document.querySelector('form[action$=refresh]') === null && document.body.innerText.includes('snapshot is immutable')",
+		"document.querySelector('form[action$=refresh]') !== null && !document.body.innerText.includes('snapshot is immutable')",
 	)
+	steps, err := f.h.repo.Queries.ListStepsByProject(t.Context(), f.project.ID)
+	if err != nil || len(steps) != 1 {
+		t.Fatalf("project steps=%+v error=%v", steps, err)
+	}
+	f.api(t, "PUT", fmt.Sprintf("%s/steps/%d", f.base(), steps[0].ID),
+		map[string]any{
+			"name": "Deploy", "script_body": "echo refreshed-release-step",
+			"interpreter": "bash", "container_image": "docker.io/library/bash:5.2",
+		}, 200)
+	// When: the operator refreshes a deployed release through the HTMX form.
+	browser.evaluate(t, `(() => {
+ window.confirm = () => true;
+ document.querySelector('form[action$=refresh]').requestSubmit();
+ return true;
+})()`)
+	browser.wait(
+		t,
+		"document.body.innerText.includes('refreshed-release-step')",
+	)
+	capture("release-refreshed", releasePath,
+		"document.body.innerText.includes('refreshed-release-step')")
+	// Then: the refreshed release and the original deployment have distinct steps.
+	historical, err := f.h.repo.Queries.ListDeploymentSteps(
+		t.Context(),
+		first.ID,
+	)
+	if err != nil || len(historical) != 2 ||
+		historical[0].ScriptBody != steps[0].ScriptBody {
+		t.Fatalf("historical steps=%+v error=%v", historical, err)
+	}
 	capture(
 		"succeeded",
 		fmt.Sprintf("/deployments/%d", first.ID),
@@ -344,6 +378,13 @@ func TestVerificationRollbackBrowserE2E(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.completion(t, latest.ID, events.DeploymentSucceeded)
+	rollbackLogs := string(
+		f.api(t, "GET", "/api/v1"+currentPath+"/logs", nil, 200),
+	)
+	if !strings.Contains(rollbackLogs, "deployment-step-complete") ||
+		strings.Contains(rollbackLogs, "refreshed-release-step") {
+		t.Fatal("rollback did not execute the original deployment steps")
+	}
 	capture(
 		"rolled-back",
 		fmt.Sprintf("/deployments/%d", latest.ID),

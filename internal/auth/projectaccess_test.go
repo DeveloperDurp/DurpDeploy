@@ -3,8 +3,10 @@ package auth_test
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -14,6 +16,59 @@ import (
 	"durpdeploy/internal/migrate"
 	"durpdeploy/internal/repository"
 )
+
+func TestDeploymentAccessErrorFormats(t *testing.T) {
+	for _, prefix := range []string{"/api/v1", ""} {
+		for _, test := range []struct {
+			name, id string
+			loggedIn bool
+			status   int
+		}{
+			{"unauthenticated", "1", false, http.StatusUnauthorized},
+			{"malformed id", "invalid", true, http.StatusBadRequest},
+			{"missing deployment", "1", true, http.StatusNotFound},
+		} {
+			t.Run(prefix+"/"+test.name, func(t *testing.T) {
+				// Given: an API or web request rejected before its handler.
+				repo := newAccessTestRepo(t)
+				router := chi.NewRouter()
+				router.With(auth.RequireDeploymentProjectAccess(repo)).Get(
+					prefix+"/deployments/{id}",
+					func(http.ResponseWriter, *http.Request) {
+						t.Error("rejected request reached the handler")
+					})
+				req := httptest.NewRequest(http.MethodGet,
+					prefix+"/deployments/"+test.id, nil)
+				if test.loggedIn {
+					req = auth.SetUser(req,
+						seedUser(t, repo, "access@example.com", "admin"))
+				}
+				rec := httptest.NewRecorder()
+
+				// When: deployment access is checked.
+				router.ServeHTTP(rec, req)
+
+				// Then: API errors are JSON; web errors remain plain text.
+				if rec.Code != test.status {
+					t.Fatalf("status=%d, want=%d", rec.Code, test.status)
+				}
+				if prefix != "" {
+					var envelope map[string]string
+					if err := json.Unmarshal(rec.Body.Bytes(), &envelope); err != nil {
+						t.Fatal(err)
+					}
+					if envelope["error"] == "" || !strings.HasPrefix(
+						rec.Header().Get("Content-Type"), "application/json") {
+						t.Fatal("missing JSON error response")
+					}
+				} else if !strings.HasPrefix(rec.Header().Get("Content-Type"),
+					"text/plain") || rec.Body.Len() == 0 {
+					t.Fatal("web error response changed")
+				}
+			})
+		}
+	}
+}
 
 // newAccessTestRepo boots an in-memory SQLite, runs all migrations, and
 // returns a Repository wrapping it. Schema comes from migrate.Run — no

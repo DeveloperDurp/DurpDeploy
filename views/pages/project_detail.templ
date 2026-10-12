@@ -7,59 +7,47 @@ import (
 	"fmt"
 )
 
-type LifecyclePanel struct {
-	Lifecycle db.Lifecycle
-	Stages    []LifecyclePanelStage
-}
-
-type LifecyclePanelStage struct {
-	Stage           db.LifecycleStage
-	Environment     db.Environment
-	LatestDeployment *db.Deployment
-	LatestVersion    string
-	LatestAttempt    *db.Deployment
-	AttemptVersion   string
-	RecentAttempts   []db.Deployment
-}
-
-// variablesPreviewCap is the max number of variable rows shown per
-// sub-table in the project overview. Keeps the page from scrolling forever
-// when a project has dozens of variables; full list is on /variables.
-const variablesPreviewCap = 6
-
-templ ProjectDetail(project db.Project, panel LifecyclePanel, vars []db.Variable, envs []db.Environment) {
-	<div id="project-detail">
-		<div class="flex flex-wrap justify-between items-center gap-2 mb-4">
-			<h1 class="text-3xl font-bold">{ project.Name }</h1>
-			<div class="flex gap-2 ml-auto">
-				if CanWrite(ctx) {
-					<a href={ fmt.Sprintf("/projects/%d/edit", project.ID) } class="btn btn-secondary btn-sm">Edit</a>
-				}
-				<a href="/projects" class="btn btn-ghost btn-sm">Back</a>
+templ ProjectMenuDialog(project db.Project) {
+	<dialog
+		id="project-menu-dialog"
+		x-ref="menu"
+		class="modal project-menu-dialog"
+		aria-labelledby="project-menu-title"
+		@cancel.prevent="close"
+		@resize.window="alignWithNavbar"
+	>
+		<div class="modal-box project-menu-panel">
+			<div class="sticky top-0 z-10 bg-base-100 border-b border-base-300 p-6">
+				<div class="flex items-center justify-between gap-4">
+					<h2 id="project-menu-title" class="text-xl font-bold">Project menu</h2>
+					<button type="button" class="btn btn-ghost" @click="close" aria-label="Close project menu">Close</button>
+				</div>
+				<p class="mt-2 text-sm opacity-70 break-words">{ project.Name }</p>
 			</div>
+			<nav aria-label="Project sections" @click="closeForLink" class="p-4 space-y-4" hx-boost="true" hx-target="#page-content" hx-select="#page-content" hx-select-oob="#app-navbar" hx-swap="outerHTML show:window:top" hx-sync="body:replace">
+				<ul class="menu w-full">
+					<li class="menu-title">Configuration</li>
+					<li><a href={ fmt.Sprintf("/projects/%d/steps-page", project.ID) }>Steps</a></li>
+					<li><a href={ fmt.Sprintf("/projects/%d/variables", project.ID) }>Variables</a></li>
+					<li><a href={ fmt.Sprintf("/projects/%d/package-repository", project.ID) }>Packages</a></li>
+				</ul>
+				<ul class="menu w-full">
+					<li class="menu-title">Operations</li>
+					<li><a href={ fmt.Sprintf("/projects/%d/releases", project.ID) }>Releases</a></li>
+					<li><a href={ fmt.Sprintf("/deployments?project_id=%d", project.ID) }>Deployment history</a></li>
+					<li><a href={ fmt.Sprintf("/projects/%d/runbooks", project.ID) }>Runbooks</a></li>
+					if CanWrite(ctx) {
+						<li><a href={ fmt.Sprintf("/projects/%d/schedules", project.ID) }>Schedules</a></li>
+					}
+				</ul>
+				<ul class="menu w-full">
+					<li class="menu-title">Settings</li>
+					<li><a href={ fmt.Sprintf("/projects/%d/notifications", project.ID) }>Notifications</a></li>
+				</ul>
+			</nav>
 		</div>
-		<p class="mb-6 text-gray-400">
-			if project.Description.Valid {
-				{ project.Description.String }
-			} else {
-				<span>No description</span>
-			}
-		</p>
-		<div class="flex gap-4 flex-wrap">
-			<a href={ fmt.Sprintf("/projects/%d/steps-page", project.ID) } class="btn btn-primary">Steps</a>
-			<a href={ fmt.Sprintf("/projects/%d/variables", project.ID) } class="btn btn-secondary">Variables</a>
-			<a href={ fmt.Sprintf("/projects/%d/package-repository", project.ID) } class="btn btn-secondary">Packages</a>
-			<a href={ fmt.Sprintf("/projects/%d/releases", project.ID) } class="btn btn-accent">Releases</a>
-			<a href={ fmt.Sprintf("/projects/%d/runbooks", project.ID) } class="btn btn-secondary">Runbooks</a>
-			<a href={ fmt.Sprintf("/projects/%d/notifications", project.ID) } class="btn btn-secondary">Notifications</a>
-			if CanWrite(ctx) {
-				<a href={ fmt.Sprintf("/projects/%d/deploy", project.ID) } class="btn btn-primary">Deploy</a>
-				<a href={ fmt.Sprintf("/projects/%d/schedules", project.ID) } class="btn btn-secondary">Schedules</a>
-			}
-		</div>
-		@LifecyclePanelSection(project, panel)
-		@VariablesPreviewSection(project, vars, envs)
-	</div>
+		<form method="dialog" class="modal-backdrop" @submit.prevent="close"><button type="submit" aria-label="Dismiss project menu"></button></form>
+	</dialog>
 }
 
 // NotificationSettingsSection renders the Slack/Email/Gotify/Discord cards
@@ -88,13 +76,7 @@ templ SlackNotificationCard(project db.Project) {
 				<label class="label">
 					<span class="label-text">Webhook URL</span>
 				</label>
-				<input
-					type="text"
-					name="slack_webhook_url"
-					value={ project.SlackWebhookUrl.String }
-					placeholder="https://hooks.slack.com/services/..."
-					class="input input-bordered input-sm w-full"
-				/>
+				@NotificationCredentialInput("slack_webhook_url", "Slack webhook URL", project.SlackWebhookUrl.String != "")
 			</div>
 		} else {
 			<p class="text-sm text-gray-400">
@@ -156,13 +138,7 @@ templ GotifyNotificationCard(project db.Project) {
 				<label class="label">
 					<span class="label-text">App token</span>
 				</label>
-				<input
-					type="text"
-					name="gotify_token"
-					value={ project.GotifyToken.String }
-					placeholder="AbCdEf123..."
-					class="input input-bordered input-sm w-full"
-				/>
+				@NotificationCredentialInput("gotify_token", "Gotify app token", project.GotifyToken.String != "")
 			</div>
 		} else {
 			<p class="text-sm text-gray-400">
@@ -184,13 +160,7 @@ templ DiscordNotificationCard(project db.Project) {
 				<label class="label">
 					<span class="label-text">Webhook URL</span>
 				</label>
-				<input
-					type="text"
-					name="discord_webhook_url"
-					value={ project.DiscordWebhookUrl.String }
-					placeholder="https://discord.com/api/webhooks/..."
-					class="input input-bordered input-sm w-full"
-				/>
+				@NotificationCredentialInput("discord_webhook_url", "Discord webhook URL", project.DiscordWebhookUrl.String != "")
 			</div>
 		} else {
 			<p class="text-sm text-gray-400">
@@ -421,21 +391,26 @@ templ ProjectNotificationsPage(project db.Project, currentPath string) {
 			<form
 				method="post"
 				action={ templ.SafeURL(fmt.Sprintf("/projects/%d/notifications", project.ID)) }
+				hx-boost="true"
+				hx-target="#page-content"
+				hx-select="#page-content"
+				hx-swap="outerHTML"
+				data-toast-success="Notification settings saved"
 			>
-				<div class="flex justify-between items-center mb-4">
+				<div class="page-header">
 					<h1 class="text-3xl font-bold">Notifications</h1>
 					<div class="flex gap-2">
 						<button type="submit" class="btn btn-primary btn-sm">Save</button>
-						<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost btn-sm">Back</a>
+						<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>
 					</div>
 				</div>
 				@NotificationSettingsSection(project)
 			</form>
 		} else {
-			<div class="flex justify-between items-center mb-4">
+			<div class="page-header">
 				<h1 class="text-3xl font-bold">Notifications</h1>
 				<div class="flex gap-2">
-					<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost btn-sm">Back</a>
+					<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>
 				</div>
 			</div>
 			@NotificationSettingsSection(project)

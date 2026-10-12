@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"durpdeploy/internal/agentserver"
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/handler"
@@ -17,7 +18,11 @@ import (
 	"github.com/robfig/cron/v3"
 )
 
-func fleetAdminServer(t *testing.T, f agentFixture) *httptest.Server {
+func fleetAdminServer(
+	t *testing.T,
+	f agentFixture,
+	pairing ...agentserver.PairingManager,
+) *httptest.Server {
 	t.Helper()
 	// SQLite :memory: belongs to one connection shared by both listeners.
 	f.repo.DB.SetMaxOpenConns(1)
@@ -57,11 +62,17 @@ func fleetAdminServer(t *testing.T, f agentFixture) *httptest.Server {
 		}
 	}
 	rnr := runner.New(f.repo, f.broker)
-	srv := httptest.NewServer(server.NewRouter(
+	var manager agentserver.PairingManager
+	if len(pairing) > 0 {
+		manager = pairing[0]
+	}
+	srv := httptest.NewServer(server.NewRouterWithAgentManagement(
 		f.repo,
 		rnr,
 		cron.NewParser(cron.Minute|cron.Hour|cron.Dom|cron.Month|cron.Dow),
 		handler.NewAuthHandler(f.repo),
+		manager,
+		false,
 	))
 	t.Cleanup(srv.Close)
 	return srv

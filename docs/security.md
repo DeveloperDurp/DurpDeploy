@@ -1,14 +1,23 @@
 # DurpDeploy — Security Reference
 
-Consolidated security findings, threat model, and known gaps. Updated 2026-07-15.
+Current security boundaries, controls, and known gaps. Reviewed against the
+implementation on 2026-10-10. See [the attack drill](attack-drill.md) for live checks.
 
 ---
 
 ## Threat model
 
-DurpDeploy is a small-team internal deploy tool. The practical threat model is
-**"the same access as you"** — a malicious authenticated teammate has the same
-power as the operator. The defenses below are calibrated for that scope.
+DurpDeploy is a small-team internal deploy tool with trusted script authors and
+operators. Global roles and project memberships restrict application access.
+Agent host-mode scripts run with the agent's account authority; container
+execution has the limits described below.
+
+The server owner is responsible for deployment scripts and their effects.
+Deployment cleanup covers managed staging and normal job descendants.
+Deliberate supervisor sabotage and script-created copies outside staging are outside this cleanup guarantee.
+The agent stops polling when it cannot confirm process or staging cleanup.
+Recovery requires operator action when recorded staging is missing or replaced.
+Staging transfer adds no per-job cgroup or delegation requirement.
 
 What we defend against:
 
@@ -19,9 +28,11 @@ What we defend against:
 - Accidental writes by a viewer (UI gating + CSRF gate)
 - Cross-project access by a non-member (per-project authorization middleware)
 - Roster tampering by a non-admin project member (per-project admin gate on member add/remove)
-- A leaked `variables`/`release_variables` DB file, on its own, does not disclose secret values (AES-256-GCM at rest)
-- Remote agents do not receive the server database, server encryption key, or Docker socket
-- Agent transport uses outbound-only mTLS with pinned peer fingerprints and one-time pairing
+- A database leak alone does not disclose encrypted project, release, lifecycle,
+  or deployment variable values (AES-256-GCM at rest)
+- The server sends remote agents neither its database nor its encryption key
+- Paired agent transport uses outbound mTLS with pinned peer fingerprints;
+  pairing uses a temporary inbound callback on the agent
 
 Each remote step creates one run for every active, paired agent that matches the
 deployment environment and all required capability labels. Each pre-start claim
@@ -31,56 +42,21 @@ lost after 45 seconds. A cancel needs an agent acknowledgement within 30
 seconds, otherwise the result is `cancel_unconfirmed` and requires host
 inspection before a new deployment.
 
-### OIDC boundary and threat model
+### OIDC boundary
 
-OIDC is an optional login factor, not a replacement for local authentication.
-The approved variables are `DURPDEPLOY_OIDC_ISSUER`,
-`DURPDEPLOY_OIDC_CLIENT_ID`, `DURPDEPLOY_OIDC_CLIENT_SECRET`,
-`DURPDEPLOY_OIDC_ADMIN_GROUP`, `DURPDEPLOY_OIDC_DEPLOYER_GROUP`,
-`DURPDEPLOY_OIDC_VIEWER_GROUP`, `DURPDEPLOY_OIDC_DISPLAY_NAME`,
-`DURPDEPLOY_OIDC_GROUP_CLAIM`, and
-`DURPDEPLOY_OIDC_REQUIRE_EMAIL_VERIFIED` (default `true`). It also requires the HTTPS canonical
-`DURPDEPLOY_URL`. The provider redirect URI is exactly
-`DURPDEPLOY_URL + /login/oidc/callback`. Scopes are `openid`, `profile`, and
-`email`.
+OIDC adds browser sign-in; local password login and bearer API authentication
+remain separate. Provider group removal takes effect on the next OIDC login.
+Logout is local only. Use [the OIDC guide](authentik-oidc.md) for identity linking,
+email verification, provider outage, and administrator recovery requirements.
 
-The provider is authoritative for a successful OIDC login's verified identity
-and mapped group role. When unset, or set to `true`, the ID token must contain
-the literal JSON boolean `email_verified: true`. With explicit lowercase
-`DURPDEPLOY_OIDC_REQUIRE_EMAIL_VERIFIED=false`, a present literal JSON boolean
-`email_verified: true` or `email_verified: false` is accepted after normal ID
-token signature, issuer, audience, and nonce verification. Missing, null,
-string, and numeric claims remain rejected. This weakens identity assurance and
-is appropriate only where
-Authentik independently establishes address ownership. The first email match
-links exactly one local account. Without a match, the application JIT-creates a user with an empty
-password. Group precedence is admin, then deployer, then viewer. Each successful
-OIDC login synchronizes the local name, email, and role. A role change deletes
-the user's browser sessions. Removing a group is observed on the next OIDC
-login only. There is no SCIM or provider back-channel deprovisioning, so this is
-not instant deprovisioning.
-
-Password login remains available and uses the most recently stored local role.
-OIDC reauthentication is handled by the provider, then bound to the current
-local session and stored OIDC identity. Logout is local only and clears the
-DurpDeploy session, not the provider session. Provider tokens, authorization
-codes, and raw claims are not persisted. OIDC does not authenticate API tokens,
-and local MFA is not asserted by an OIDC login.
-
-Provider outage is isolated from local authentication: password login, existing
-sessions, health checks, and bearer API authentication remain usable. An
-OIDC-created empty-password account has no self-service password reset. An
-administrator must use the existing local user recovery process.
-
-What we do **not** defend against yet (see Known Gaps):
-
-- Audit log retention / tamper-proofing
+### Execution boundary
 
 Server-side steps run only in containers managed through the embedded agent's
 local Docker or Podman socket. No step receives that socket or a control-plane mount;
 the root filesystem is read-only, network is disabled by default (local steps
 can explicitly opt into `network_mode: "bridge"`), capabilities are
-dropped, and only step-selected resolved variables are passed. A missing
+dropped. Steps receive all compatible resolved variables by default; a nonempty
+frozen `variable_names` list restricts the variables passed. A missing
 runtime fails closed. The socket grants the control plane broad authority over
 the container host, so use a dedicated host or standalone agent when that
 boundary is required. A container shares its host kernel and is not a VM.
@@ -89,6 +65,11 @@ control-plane state if their scripts are untrusted. Historical image-less
 server releases remain readable but cannot execute; issue #28's old same-UID
 host execution is not a supported path for new work.
 
+Deployments outlive their initiating HTTP request. Cancel through the API or UI;
+cancel and shutdown ask the runtime to remove the step container. Startup
+reconciles orphaned attempts. Killing the container client does not confirm
+cleanup. An unconfirmed outcome requires inspection before retrying.
+
 ---
 
 ## Authentication
@@ -96,7 +77,7 @@ host execution is not a supported path for new work.
 **Implementation:** `internal/auth/auth.go`
 
 - Session cookie (`session` key, `HttpOnly`, `SameSite=Lax`).
-- `AuthMiddleware` validates the cookie on every protected route. Redirects to
+- `AuthMiddleware` validates the cookie on session-authenticated browser routes. Redirects to
   `/login` on miss.
 - Passwords hashed with **argon2id** (`time=2, memory=64 MB, threads=2`).
   Each wrong-password guess costs ~100 ms of server CPU and ~64 MB of RAM.
@@ -148,8 +129,10 @@ browser ceremony end-to-end proof is tracked separately from this document.
 
 **Implementation:** `internal/auth/csrf.go`
 
-- Every `POST`/`PUT`/`PATCH`/`DELETE` requires a valid `csrf_token` form field
-  or `X-CSRF-Token` header.
+- Session-authenticated browser writes require a valid `csrf_token` form field
+  or `X-CSRF-Token` header. `/api/lint` is a read-only session action exempt
+  from CSRF. Public login ceremonies have their own checks; `/api/v1` uses
+  bearer authentication instead of browser CSRF.
 - Token is per-session, random 16 bytes, stored in the `sessions` table.
 - Viewer rejections (read-only role attempting a write):
   - HTMX requests → `200` + `HX-Trigger: makeToast` (red toast, page stays).
@@ -172,7 +155,7 @@ Per-project member roles are `admin`, `deployer`
 
 Two-layer defense for viewer read-only enforcement:
 
-1. **CSRF middleware** — rejects any state-changing request from a viewer at
+1. **CSRF middleware** — rejects application writes from a viewer at
    the protocol layer (always fires on the actual write attempt).
 2. **CanWrite templ guard** — hides write affordances in the UI so a viewer
    never sees a useless form. `pages.CanWrite(ctx)` / `components.canWrite(ctx)`
@@ -181,7 +164,7 @@ Two-layer defense for viewer read-only enforcement:
 Both layers are necessary. Without the templ guard, the user interface has dead-end controls.
 skipping the middleware leaves a security hole.
 
-The narrow exception is self-security: a viewer may manage only their own
+Logout is allowed with CSRF protection. A viewer may manage only their own
 Security settings after the normal session, CSRF, and fresh-reauthentication
 checks. A viewer cannot manage another user, deployments, projects, or tokens.
 
@@ -189,9 +172,11 @@ checks. A viewer cannot manage another user, deployments, projects, or tokens.
 
 **Implementation:** `internal/auth/projectaccess.go`
 
-- `RequireProjectAccess` middleware: An administrator can bypass this check.
-  A missing project causes a 404 response. A non-member gets a 403 response.
-  A member gets a 200 response.
+- `RequireProjectAccess` middleware: A global administrator bypasses membership
+  checks and still receives the project ID in context. For other users, a
+  missing project returns 404. A non-member gets 403 on API/native requests or
+  a 200 response with an unauthorized toast on browser HTMX requests. Members proceed to
+  the handler; its validation and result determine the response status.
 - `CreateProject` auto-adds the creator as project admin.
 - `ListProjects` filters by membership for non-admins.
 
@@ -200,19 +185,21 @@ checks. A viewer cannot manage another user, deployments, projects, or tokens.
 **Implementation:** `internal/handler/project_members.go`
 
 `RequireProjectAccess` only enforces a **binary** "is a member" check — it
-admits any member (per-project admin, deployer, or viewer) to every
-`/projects/{id}/...` route. The finer-grained "is a per-project admin" rule
+admits any member (per-project admin or deployer), including a global viewer
+who has membership, to the project route handler. The finer-grained
+"is a per-project admin" rule
 for member add/remove is enforced **at the handler level** via
-`canManageProject(ctx, repo, user, projectID)`:
+`CanManageProject(ctx, repo, user, projectID)`:
 
 - Returns `true` for a global `admin` or a project member whose per-project
   `role` is `admin`.
-- `AddMember` / `RemoveMember` return `403` when it returns `false`.
+- When it returns `false`, `AddMember` / `RemoveMember` return `403` for
+  native requests or `200` with an unauthorized toast for browser HTMX requests.
 
-This keeps per-project deployers/viewers from editing the roster while still
-letting them access the other project routes. `canManageProject` also gates the
-Members section of the project edit page (UI layer), mirroring the
-CanWrite two-layer pattern.
+This keeps project deployers and global viewers from editing the roster while still
+letting them access the other project routes. `CanManageProject` also gates the
+add/remove controls in the Members section of the project edit page (UI layer),
+mirroring the CanWrite two-layer pattern.
 
 ### Admin-only routes
 
@@ -225,10 +212,13 @@ Routes in `/admin/users/*` are gated by `RequireRole("admin")`. The
 
 **Implementation:** `internal/audit/audit.go`, `audit.Middleware`
 
-- Records every **successful** state change to the `audit_log` table.
-- CSRF rejections and 4xx responses are **not** audited (intentional).
+- Records successful state changes unless the handler suppresses or records
+  the event directly. Audit insertion failures are logged without blocking
+  the request.
+- The middleware does not audit CSRF rejections or 4xx responses; authentication
+  handlers can record separate security events directly.
 - Every new state-changing route must be added to `actionMap` in
-  `internal/audit/audit.go` for a stable action name. The fallback heuristic
+  `internal/audit/routes.go` for a stable action name. The fallback heuristic
   (method + first path segment) is lossy.
 - The `actionMap` covers the user-management routes
   (`create_user`, `update_user`, `delete_user`) and the project-member routes
@@ -236,114 +226,31 @@ Routes in `/admin/users/*` are gated by `RequireRole("admin")`. The
 
 ---
 
-## Middleware stack (protected routes)
+## Middleware stacks
 
-All protected routes in `internal/server/server.go` go through these three
-middleware in order:
+Session-authenticated browser routes in `internal/server/server.go` use:
 
 1. `auth.AuthMiddleware(repo)` — session → user in context.
-2. `auth.CSRFMiddleware()` — token check + viewer gate.
-3. `audit.Middleware(repo)` — records successful state changes.
+2. `webRequestBodyLimit` — form validation and bounds before CSRF parsing.
+3. `auth.CSRFMiddleware()` — token check + viewer gate, with the exceptions above.
+4. `audit.Middleware(repo)` — records successful state changes unless a handler
+   suppresses or records them directly.
+
+The `/api/v1` group uses `auth.ApiTokenMiddleware(repo)`,
+`auth.WriteBlockMiddleware()`, `api.RequestBodyLimit`, and audit middleware.
+Project and admin gates apply inside each group. The dedicated agent listener
+uses mTLS agent authentication and claim checks.
 
 Do not reorder or skip any of these.
 
 ---
 
-## Findings from code review (2026-07-15)
-
-### [RESOLVED] Plaintext password in redirect URL
-
-**File:** `internal/handler/users.go`
-
-Resolved on 2026-09-02. Admin-created and reset passwords are no longer
-redisplayed. Both forms require matching password and confirmation fields, and
-successful requests redirect to `/admin/users` without a query string.
-
----
-
-### [CRITICAL] Admin context missing project ID for `RequireProjectAccess`
-
-**File:** `internal/auth/projectaccess.go:55–60`
-
-For a global administrator, `RequireProjectAccess` calls `next.ServeHTTP`
-without a project ID in `projectAccessKey{}`. Thus,
-`auth.ProjectIDFromContext` returns `(0, false)`. A handler that uses this value
-can give an incorrect result.
-
-**Recommended fix:** Inject the project ID into context for admins the same
-way it is injected for members, before calling `next.ServeHTTP`.
-
----
-
-### [RESOLVED] Unvalidated query parameters rendered in password banner
-
-**File:** `internal/handler/users.go`
-
-Resolved on 2026-09-02 by removing the password banner and all credential query
-parameter handling from the users page.
-
----
-
-### [MEDIUM] `ApproveDeployment` accepts arbitrary `approved_by` string
-
-**File:** `internal/handler/deployment.go` (`ApproveDeployment`)
-
-The approver identity is taken directly from the form:
-
-```go
-approvedBy := strings.TrimSpace(r.FormValue("approved_by"))
-if approvedBy == "" {
-    approvedBy = "anonymous"
-}
-```
-
-Any authenticated user can submit any string as the approver name, including
-impersonating another user. The actual authenticated user identity is already
-available in context via `auth.UserFromContext`.
-
-**Recommended fix:** Ignore the `approved_by` form field. Use
-`auth.UserFromContext(r.Context()).Email` (or `.ID`) as the canonical approver
-identity.
-
----
-
-### [LOW] `RedeployDeployment` skips the promotion gate
-
-**File:** `internal/handler/deployment.go` (`RedeployDeployment`)
-
-Re-running a deployment creates a new deployment record and dispatches the
-runner without calling `checkPromotionGate`. A user can re-run a failed
-production deployment even if the lifecycle gate would normally block it.
-
-**Recommended fix:** Call `checkPromotionGate` in `RedeployDeployment` the
-same way `ScheduleDeployment` and `CreateDeployment` do, or document this as
-an intentional bypass (force-equivalent) and record `Forced=1` on the new
-deployment row.
-
----
-
-### [LOW] Runner uses `context.Background()` — cancellation is best-effort
-
-**File:** `internal/handler/deployment.go` (all `go h.runner.Run(...)` calls)
-
-The runner is dispatched with `context.Background()` rather than the request
-context. This is intentional (the deploy must outlive the HTTP request), but
-it means the only cancellation path is `runner.Cancel(id)`.
-
-**Current behavior:** A server step has a runtime-enforced maximum duration;
-cancel and shutdown ask the runtime to remove its labelled container. Startup
-reconciles orphaned attempts before new server work. Killing the container client
-alone is not proof the container stopped. If runtime cleanup cannot be
-confirmed, the deployment fails and requires inspection before a retry.
-
----
-
-## Secret encryption at rest (P1-3)
+## Secret encryption at rest
 
 **Implementation:** `internal/secret/secret.go`, `internal/repository/repository.go`
 
-The `value` column of both `variables` and `release_variables` is
-AES-256-GCM encrypted before it ever reaches SQLite:
+The `value` columns in `variables`, `release_variables`, `lifecycle_variables`,
+and `deployment_variable_snapshots` use AES-256-GCM encryption before database storage:
 
 - **Key source:** `/etc/durpdeploy/key` (file, checked first) or
   `DURPDEPLOY_SECRET_KEY` (env, base64-encoded 32 bytes). The server calls
@@ -355,70 +262,92 @@ AES-256-GCM encrypted before it ever reaches SQLite:
   variable's value via `Repository.EncryptValue` before writing the
   `release_variables` row (values are never round-tripped through the DB
   in plaintext).
+  Lifecycle variable writes encrypt each value. Deployment creation encrypts
+  the complete resolved variable capture, including shared values and project snapshots.
 - **Decrypt path:** The repository decrypts a value into a temporary Go string.
   It does not write plaintext to the database or a log. It does not put
   plaintext in an error message. `secret.Box.Decrypt` returns only fixed error
   text.
-  - **Runner:** `DeploymentRunner.Run` receives plaintext from
-    `ListReleaseVariablesByRelease`. A server step receives all compatible
-    resolved variables by default; a non-empty frozen `variable_names` list
-    restricts what reaches the execution runtime. The scrubber still considers
-    the resolved secret values before logs are stored or streamed.
-- **Acceptance check:** `sqlite3 durpdeploy.db 'select * from variables'`
-  shows only base64 ciphertext in `value`. The app reads/writes normally
-  through the UI because the repository layer decrypts/encrypts
-  transparently.
+  - **Runner:** Each execution reads its decrypted deployment variable capture.
+    New executions resolve current lifecycle values with frozen project values.
+    Queued and active executions retain their capture.
+    A frozen `variable_names` list restricts values passed to the execution runtime.
+    The scrubber uses captured secret values before log storage or streaming.
+- **Acceptance check:** Run this read-only query against the database:
+
+  ```bash
+  sqlite3 durpdeploy.db '
+  SELECT value FROM variables
+  UNION ALL SELECT value FROM release_variables
+  UNION ALL SELECT value FROM lifecycle_variables
+  UNION ALL SELECT value FROM deployment_variable_snapshots;'
+  ```
+
+  Each returned value must be base64 ciphertext. Verify normal variable reads
+  and a deployment through the UI or API after rotation.
 
 ### Key rotation runbook
 
+First finish deployments and confirm remote cleanup.
+The command rejects both rotation modes while encrypted deployment staging chunks remain.
+If rotation rejects staging chunks, finish deployment cleanup before retrying.
+Back up the database, matching key, and server identity. Stop all server and
+replication processes; an active server keeps the old key and can write
+old-key ciphertext after the rotation transaction. For Compose:
+
 ```bash
-# 1. Back up the DB first (see Backup below) — rotation is transactional
-#    but a backup is cheap insurance.
-sudo -u durpdeploy /usr/local/bin/durpdeploy secret-key rotate
+docker compose stop app litestream
+docker compose run --rm --no-deps app secret-key rotate
 ```
+
+The one-off container uses the app's configured database and current key.
+Keep the printed replacement key private and available until it is installed.
 
 This one-shot command (`cmd/server/main.go: runSecretKey`):
 
 1. Loads the **current** key via `secret.LoadKey()` (same file/env lookup
    the server uses).
 2. Generates a fresh random 32-byte key.
-3. Inside a single DB transaction, decrypts every `variables` and
-   `release_variables` row with the old key and re-encrypts it with the
-   new one (`ListAllVariables`/`UpdateVariableValue`,
-   `ListAllReleaseVariables`/`UpdateReleaseVariableValue`). A failure at
-   any row rolls back the whole transaction — the DB is left entirely on
-   the old key, never half-migrated.
+3. In one transaction, re-encrypts project variables, release variables,
+   lifecycle variables, deployment variable captures, package-repository credentials,
+   verification targets, retained artifact-gate chunks, TOTP seeds, pending TOTP enrollment seeds,
+   stored agent identities, pairing identities, and remote log scrub buffers.
+   A failure rolls back the transaction.
 4. Prints the new key (base64) to stdout.
 
-After it prints successfully:
+After successful rotation, write the exact printed key to the key source used
+by the app. In the supplied Compose stack, replace `secrets/durpdeploy_key`
+and keep mode `0600` and ownership readable by container UID 10001. For rootful
+Docker, use `sudo chown 10001:10001 secrets/durpdeploy_key`; for rootless Podman,
+use `podman unshare chown 10001:10001 secrets/durpdeploy_key`. Preserve the
+appropriate user-namespace mapping for other engines. Repeat the
+[key-readability check](deploy.md#quick-start-docker-compose-recommended-for-self-hosting)
+before restarting. The mounted `/etc/durpdeploy/key` file takes precedence
+over `DURPDEPLOY_SECRET_KEY`; changing only the environment variable would
+leave the old file key in use. Recreate the app and resume replication:
 
 ```bash
-# install the new key (pick one)
-echo '<printed-key>' | sudo -u durpdeploy tee /etc/durpdeploy/key >/dev/null
-sudo chmod 0600 /etc/durpdeploy/key
-# — or —
-# update DURPDEPLOY_SECRET_KEY=<printed-key> in the systemd unit / env file
-
-sudo systemctl restart durpdeploy
+docker compose up -d --force-recreate app litestream
 ```
 
-**Do not discard the old key before the server restart.** The rotate command
-encrypts all rows with the new key. The active server still has the old key in
-memory. Thus, it cannot decrypt a new value. Restart the server immediately
-after a successful rotation.
+Keep the old key with pre-rotation backups. Install the exact key printed by
+the CLI before starting the server; an independently generated key cannot
+decrypt the rotated data.
+
+Restart pending OIDC login flows after rotation. Their encrypted browser cookies
+use the old key and cannot be migrated by the database transaction.
+Agent dispatch payloads use agent certificates and do not require server-key rotation.
+The `--plaintext` option migrates legacy project and release variables.
+The command rejects this option when populated encrypted-only stores exist.
 
 ---
 
-## Log redaction (P1-5)
+## Log redaction
 
 **Implementation:** `internal/logscrub/scrubber.go`,
 `internal/runner/runner.go`, `internal/agentserver/lifecycle.go`
 
 DurpDeploy scrubs deployment logs before an SSE broadcast or a database write.
-The old scrubber used `strings.ReplaceAll` for each line and secret. It did not
-find some credential formats. It also did not find a secret in two writes or
-a secret that contained a newline.
-
 `broadcastWriter` now delegates to a `Scrubber` (`internal/runner/scrubber.go`),
 built once per deployment run from that environment's secret variable
 values:
@@ -457,18 +386,13 @@ values:
   paste secrets into your script body. Use environment variables marked
   Secret.**
 
-## Known gaps (P1 / future work)
+## Known gaps
 
 | Gap | Risk | Planned |
 |-----|------|---------|
-| ~~**Secret encryption at rest**~~ | ~~`release_variables.value` is plaintext. A DB read leaks secrets~~ | **shipped (P1-3)** |
-| ~~**Runner orphan cleanup**~~ | ~~Killed/restarted server left orphaned bash children~~ | **shipped** |
-| ~~**Log redaction hardening**~~ | ~~Naive per-line `strings.ReplaceAll` missed common credential formats and multi-line/split secrets~~ | **shipped (P1-5)** |
 | **Container runtime compromise** | The embedded agent's socket can control the Docker or Podman host; container escape remains possible on a shared kernel | Use a dedicated host or disable the embedded agent and use standalone agents |
-| ~~**Login rate limiting**~~ | ~~Password, MFA, and OIDC login surfaces lacked application limits~~ | **shipped** |
-| **Audit log retention** | No retention policy or tamper-proofing on `audit_log` | P2-5 |
-| **Password reset flow** | No self-service reset. Admin must delete + recreate the user | P2 |
-| **Session invalidation on password change** | Changing a user's password does not invalidate existing sessions | P2 |
+| **Audit log retention / integrity** | Pruning is opt-in through `audit prune` and an operator-managed schedule; no tamper-proofing | Operator setup; integrity remains future work |
+| **Password reset flow** | No self-service reset. Administrators reset passwords through Admin → Users → Edit | Self-service recovery remains future work |
 
 ---
 

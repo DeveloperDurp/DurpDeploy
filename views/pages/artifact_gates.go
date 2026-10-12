@@ -1,6 +1,7 @@
 package pages
 
 import (
+	"context"
 	"encoding/json"
 
 	"durpdeploy/internal/artifact"
@@ -12,6 +13,8 @@ type ArtifactGateInfo struct {
 	StepIndex      int64               `json:"step_index"`
 	Revision       int64               `json:"revision"`
 	Status         string              `json:"status"`
+	DecisionReady  bool                `json:"decision_ready"`
+	Publishing     bool                `json:"-"`
 	SHA256         string              `json:"sha256"`
 	BundleSHA256   string              `json:"bundle_sha256"`
 	BundleSize     int64               `json:"bundle_size"`
@@ -23,6 +26,27 @@ type ArtifactGateInfo struct {
 	ExpiresAt      int64               `json:"expires_at"`
 	ApprovedBy     int64               `json:"approved_by,omitempty"`
 	ApprovedAt     int64               `json:"approved_at,omitempty"`
+}
+
+type artifactDecisionWarningKey struct{}
+
+func WithArtifactDecisionWarning(
+	ctx context.Context,
+	code string,
+) context.Context {
+	return context.WithValue(ctx, artifactDecisionWarningKey{}, code)
+}
+
+func artifactDecisionWarning(ctx context.Context) string {
+	code, _ := ctx.Value(artifactDecisionWarningKey{}).(string)
+	switch code {
+	case "conflict":
+		return "The artifact decision was not accepted. Review the current gate below; it may still be preparing, have changed, or have expired."
+	case "error":
+		return "The artifact decision could not be saved. Check the current gate below before trying again."
+	default:
+		return ""
+	}
 }
 
 func artifactGateBadge(status string) string {

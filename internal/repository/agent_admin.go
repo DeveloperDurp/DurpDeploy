@@ -89,6 +89,9 @@ func revokeAgent(
 	}); err != nil {
 		return false, err
 	}
+	if err := q.ClearAgentStagingCapability(ctx, agentID); err != nil {
+		return false, err
+	}
 	now, err := q.CurrentUnixTime(ctx)
 	if err != nil {
 		return false, err

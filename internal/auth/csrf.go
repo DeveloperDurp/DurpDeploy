@@ -121,12 +121,8 @@ func blockViewerWrite(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		return
 	}
-	// Non-HTMX: render a self-contained 403 page. The back link uses
-	// history.back() so the user returns to whatever page they were
-	// on. The inline toast on load is best-effort — the toast system
-	// lives in the protected-route pages, not the bare auth page, so
-	// most viewers will never hit this path (the buttons that would
-	// have triggered it are hidden by views/pages.CanWrite).
+	// Non-HTMX: render a standalone 403 page with the shared Back behavior.
+	// Most viewers never hit this path because CanWrite hides write controls.
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusForbidden)
 	_, _ = w.Write([]byte(viewerForbiddenHTML))
@@ -137,6 +133,7 @@ const viewerForbiddenHTML = `<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <title>Forbidden</title>
+<script src="/static/js/app.bundle.js" defer></script>
 <style>
 body { font-family: system-ui, sans-serif; background: #1e1e2e; color: #cdd6f4; margin: 0; padding: 4rem 1rem; display: flex; justify-content: center; }
 .card { max-width: 32rem; background: #313244; border-radius: 0.5rem; padding: 2rem; }
@@ -150,7 +147,7 @@ a:hover { text-decoration: underline; }
 <div class="card">
 <h1>Forbidden</h1>
 <p>Viewers cannot perform write operations. If you need to make changes, ask an admin to change your role on the <a href="/admin/users">Users</a> page.</p>
-<a href="javascript:history.back()">Go back</a>
+<a href="/projects" x-data="backNavigation" @click="back">Go back</a>
 </div>
 </body>
 </html>

@@ -15,20 +15,20 @@ against environments. It exposes three surfaces an agent may use:
   HTML form semantics, redirect status codes.
 - **CLI subcommands** on the `durpdeploy` binary (user/token admin).
 
-The authoritative endpoint reference is the Swagger UI at `/api/swagger/`
-(no auth) on a running server. Everything here is verified, current
-behavior; when in doubt, check swagger.
+The endpoint reference is the Swagger UI at `/api/swagger/`
+(no auth) on a running server. Use it alongside this workflow guide.
 
 ## Base URL
 
 Replace `$BASE` (e.g. `https://durpdeploy.example.com` or
 `http://localhost:8080`) throughout. The server listens on `:8080` by
-default behind a reverse proxy in production. `/healthz` is the public
-liveness check — use it to confirm reachability first.
+default behind a reverse proxy in production. `/healthz` is public and checks
+database connectivity, returning 503 when unavailable. `/api/v1/healthz` is a
+public API liveness probe returning `{"ok":true}` without a database check.
 
 ## CLI
 
-Run on the host with the server's database (matches `DURPDEPLOY_DB`:
+Run on the host with the server's database (matching `DURPDEPLOY_DB`):
 
 ```bash
 durpdeploy admin create --email X --password Y   # first admin, runs migrations
@@ -76,8 +76,9 @@ Token placement rules:
 - POST/PUT/PATCH: append `csrf_token=$CSRF` to the form body.
 - DELETE: pass the header `X-CSRF-Token: $CSRF` — Go does not parse form
   bodies on DELETE, so a body-only token 403s.
-- Status contract: `303` = success (id or path in the `Location` header),
-  `422` = validation failure, `403` = missing CSRF or viewer write.
+- Status contract: `303` = success (id or path in `Location`), `422` = validation
+  failure, `403` = invalid CSRF. Viewer application writes return `200` with an
+  `HX-Trigger` toast for HTMX, or a styled `403` for native requests.
 
 ## Agent fleet (admin only)
 
@@ -99,6 +100,10 @@ All paths below use the `/api/v1` prefix and require an admin token.
 - `POST` or `DELETE /admin/agents/$ID/environments` accepts
   `{"environment_id":N}` and returns `204`; invalid IDs return `400`,
   missing resources return `404`. Repeated add is harmless.
+- Before a downgrade without staging support, drain the agent and wait for its jobs to finish.
+  Revoke the agent through `POST /admin/agents/$ID/revoke` before the downgrade.
+  Re-pair the agent after the downgrade.
+  Revocation and re-pairing clear its previous staging capability.
 - Capability label changes use `POST` or `DELETE /admin/agents/$ID/labels`
   with `{"label":"linux"}`. Routing changes and Drain/Resume are audited.
 
@@ -115,11 +120,12 @@ the observed supported protocol, while agent versions remain unverified.
 
 ## Deploy flow (the common ask)
 
-Deployments and runbook executions share a durable FIFO queue per environment.
-Only one item owns the environment, including while it waits for agents or
+Deployments and runbook executions share a durable FIFO queue per project and
+environment pair. Only one item owns that pair, including while it waits for agents or
 verification. Later eligible items have status `queued`; approval waits do not
 own a slot. Approval makes work eligible in original creation order without
-preempting active work. Different environments can execute independently.
+preempting active work. Different projects in the same environment and the
+same project in different environments can execute independently.
 
 Deployment GET/status responses and runbook execution GET responses include
 `queue_position` (1-based for queued work, otherwise 0), plus
@@ -130,7 +136,7 @@ deployment. Server restart preserves order and repairs missed launches.
 Queued runbook cancellation returns `status: "cancelled"`; active runbook
 cancellation returns `status: "cancellation_requested"` while stopping work.
 Unconfirmed container cleanup, lost agents, or unacknowledged cancellation
-keep the environment blocked: a timeout is not proof that execution stopped.
+keep that project/environment pair blocked: a timeout is not proof that execution stopped.
 
 `GET /api/v1/deployments/$ID/status` includes `waiting_for_agents`. It is
 `true` while remote work is queued with no issued claim, and `false` once
@@ -154,12 +160,63 @@ while this flag is true; polling updates it automatically.
 ```
 
 `local` means mandatory server-container execution; specify an image with
-`bash`, `pwsh`, or `python3` installed. `agent` runs on matching remote agents
-without a container image. API requests may use `powershell`; DurpDeploy
+`bash`, `pwsh`, or `python3` installed. `agent` runs on matching remote agents.
+Local step containers have no DurpDeploy-imposed RAM ceiling or CPU quota,
+including when sharing deployment artifacts. Host/runtime resource policy
+still applies; account for workloads consuming more RAM and CPU. PID limits,
+temporary-filesystem bounds, and other container isolation remain enforced.
+Remote-agent resource limits depend on the installed agent version; the
+matching change is tracked in
+[agent issue #14](https://github.com/DeveloperDurp/durpdeploy-agent/issues/14).
+`agent_execution_mode` defaults to `host`, which rejects a container image.
+For remote containers, set `execution_target: "agent"`,
+`agent_execution_mode: "container"`, and a valid `container_image`.
+This requires an `agent/3` agent reporting a ready Docker or Podman runtime
+and support for the selected container interpreter. API requests may use `powershell`; DurpDeploy
 normalizes it to `pwsh`. All resolved release variables enter a step by
 default; set `variable_names` only to restrict the step to those names. Local
 steps exclude container/SSH client configuration names such as `PATH`, `HOME`,
-`SSH_AUTH_SOCK`, or `XDG_*`; agent steps retain their host variable support.
+`SSH_AUTH_SOCK`, or `XDG_*`; agent-host steps retain their host variable support.
+Agent-container steps apply the same reserved-name restrictions as local containers.
+Steps, template versions, releases, and runbook versions preserve these fields.
+An empty `variable_names` list passes all resolved variables; a non-empty
+list restricts that step, including remote host steps.
+The admin agent API reports `execution_modes`, `container_runtimes`, and
+`container_interpreters` from the last valid poll.
+Upgrade the server before enabling agent containers. Keep old agents on host
+steps. Do not downgrade the server while container work is pending or cleanup
+is unresolved. Downgrading an agent clears its container capabilities and
+fails its incompatible waiting work before claim.
+An agent result of `cleanup_unconfirmed` blocks the environment queue, retry,
+and project/environment deletion until that agent reconciles its containers
+and reports a ready v3 poll.
+The original terminal result remains visible after confirmation.
+Re-pairing a revoked agent returns `409` while its remote execution or cleanup
+remains unconfirmed. Reconcile its workloads before revocation; a replacement
+installation cannot confirm cleanup for the old installation.
+Administrators may remove an agent from inventory with
+`DELETE /api/v1/admin/agents/{id}` (empty body or `{}`). Success is `204`; an
+unknown/deleted agent returns `404`; unresolved execution, cleanup, or buffered
+logs return `409` and leave the agent unchanged. Drain and reconcile workloads
+and log delivery first.
+Deletion removes the server registration, credentials, and configuration.
+Deployments, snapshots, logs, and step attempts remain with agent references
+cleared; agent-owned remote protocol state is removed. The same identity can
+pair through `POST /api/v1/admin/agents/pair` as a new registration with a new ID
+and default configuration; no tombstone blocks it. Stop the reconciled idle
+agent, move only `state.json` out of its
+private state directory, preserve its identity keys, and restart to obtain a
+fresh code. The bootstrap listener validates that code; an incorrect code does
+not restore the deleted registration. The existing
+`POST /api/v1/admin/agents/{id}/revoke` keeps the agent visible for later re-pairing.
+Pairing and recovery recheck the registration after the agent's completion
+acknowledgement using a separate bounded context, including after an ACK timeout.
+If deletion or revocation wins during that exchange, pairing returns `409`
+instead of reporting the removed registration as paired.
+After a heartbeat or cancellation timeout, the same paired agent can replay
+its durable terminal report with the original claim token. This resolves the
+remote uncertainty without changing a failed deployment to success. A late
+`cleanup_unconfirmed` report still requires a ready v3 poll before retry.
 The embedded agent pulls an image when it is missing. Container steps default
 to no network; local steps can opt into `network_mode: "bridge"`. They have no
 host mounts. A mutable image tag does not
@@ -173,11 +230,26 @@ or refresh; recreate their steps and create a new release (`409` on launch).
    `null`) for Unscoped. On projects bound to a lifecycle, create and update
    accept only its stage environments; other IDs return `422`. Projects
    without a lifecycle can use any environment.
-5. **Release** (immutable snapshot of current steps + variables)
+5. **Release** (snapshot of current steps + variables)
    `POST /api/v1/projects/$PID/releases` `{"version":"1.2.0"}` → `id`.
+   With an attached package repository, creation freezes its source, URL and
+   version without downloading. Missing versions and unreachable repositories
+   do not block creation. The artifact endpoint returns `pending: true`, an
+   empty `sha256` and `size: 0` until the first validated deployment pull.
+   Deployment pull failures stop execution before any steps run. The first
+   successful validated pull locks SHA-256 and size across all copies of that
+   package generation; later deployments reject changed bytes. The package is
+   retained, not omitted. Refresh downloads and validates again, replacing the
+   release checksum and size for future deployments while existing deployment
+   and runbook copies retain their original generation. Refresh also updates
+   steps and variables and refuses active or unconfirmed deployments.
    Later step edits do NOT affect it; `POST /projects/$PID/releases/$RID/refresh`
-   re-snapshots an unused release. Once any deployment is created, refresh
-   returns `409`; create a new release to change its variables or steps.
+   re-snapshots the release, including after failed or successful deployments.
+   Active or unconfirmed deployments and buffered agent logs return `409`;
+   wait for completion and log flushing, then retry.
+   Existing deployment steps and pinned artifacts stay unchanged. New
+   deployments use the refreshed release; re-runs use the original deployment
+   steps and artifact pin, with the release's current variables.
    Refresh also cannot upgrade an old image-less release.
    `DELETE /api/v1/projects/$PID/releases/$RID` returns `204` when removed,
    `404` if absent or in another project, and `409` if it has active or
@@ -210,16 +282,26 @@ done
    - `pending_approval` → an admin `POST /api/v1/deployments/$DID/approve`
      with an empty body or `{}` unblocks it. The authenticated admin is
      recorded as the approver. Non-admin tokens get 403.
-   - failure → `GET /api/v1/deployments/$DID/logs` (JSON lines, secrets are
+   - failure → `GET /api/v1/deployments/$DID/logs` (JSON array, secrets are
       redacted) and `GET /.../logs.txt`; fix and create a new release, then redeploy with
      `POST /api/v1/deployments/$DID/redeploy`.
     - `POST /api/v1/deployments/$DID/cancel` cancels queued work or requests
       cancellation of a running deploy.
     - `cleanup_unconfirmed` means container removal failed. Retry and redeploy
-      return `409`; do not re-execute until a successful startup runtime sweep
-      changes the deployment to `failed`.
+      return `409` while cleanup remains unconfirmed. For local execution, a
+      successful startup runtime sweep changes the deployment to `failed`.
+      For agent execution, a ready v3 poll confirms cleanup and permits retry
+      or redeploy while preserving the original terminal result.
 
 ## Post-deployment verification and rollback
+
+`GET /api/v1/deployments/activity` returns 14 UTC calendar days, including
+today, in ascending order: `[{"date":"2026-10-04","counts":{"succeeded":2}}]`.
+Each `counts` object groups deployments by their current status; dates with
+no deployments have `{}`. Only accessible projects are counted (all projects
+for global admins). Runbook executions are excluded. The home-page charts use
+these counts. The API requires a bearer token; the equivalent
+`GET /dashboard/activity` endpoint uses the authenticated web session.
 
 Only global admins can configure verification, because environments are
 shared across projects. `POST /api/v1/environments` and
@@ -291,10 +373,11 @@ stale confirmation, or an overlapping submission returns `409`; a lifecycle
 gate returns `422`. Rollback cannot force a gate. Viewers cannot submit it;
 project authorization and admin-only approval still apply. The new deployment
 reuses the prior successful deployment's frozen steps and package pin and the
-release's frozen variables, then runs the environment's current verification.
-It records rollback provenance and an audit entry. Migration locks releases
-already used by historical deployments; values overwritten by a refresh
-before this feature cannot be reconstructed. Mutable container image tags
+release's current snapshot of variables, then runs the environment's current
+verification. An explicit release refresh replaces those variables for future
+deployments, re-runs, and rollbacks; historical variable values cannot be
+reconstructed. It records rollback provenance and an audit entry.
+Mutable container image tags
 also remain mutable; use digests when exact image contents matter.
 
 ## Gates (know the 422s)
@@ -309,6 +392,18 @@ Enforced identically on web and API (source: `internal/gate/gate.go`):
   instead of running. Approve is admin-only.
 - **Membership**: non-admin tokens need to be in the project; unknown or
   forbidden projects return `404`/`403`.
+- **Lifecycle assignment**: only a global admin can attach a lifecycle on
+  project creation or change its assignment. Other project admins can retain
+  or remove an existing assignment. Assignment grants execution access to
+  the lifecycle's shared variables, including secrets; unauthorized attempts
+  return `403` before project creation or edits.
+- **Parent deletion**: deleting environments or lifecycles is global-admin
+  only because deletion also removes scoped/shared variables. Lifecycle
+  deletion is `DELETE /api/v1/lifecycles/$ID` and returns `204`; projects
+  using it become unassigned while existing snapshots remain intact.
+- **Lifecycle stages**: adding, updating, reordering, or removing stages is
+  global-admin only (`403` otherwise). Restoring a removed stage reactivates
+  its retained scoped shared values for assigned projects.
 - **Cross-project release**: deploying a release id under the wrong
   project → `400`.
 
@@ -365,11 +460,57 @@ have no total lifetime limit, but each event write/flush must finish within
 60 seconds. Consume streams continuously and reconnect after disconnects.
 An operator's reverse proxy may impose additional limits.
 
+Deployment logs also support structured SSE at
+`GET /api/v1/deployments/$DID/logs/stream?format=structured`. Each `log`
+event has an SSE `id` and JSON fields `id`, `line`, `step`, `step_index`
+(nullable for legacy/unassigned output), `created_at`, `display_timestamp`,
+and optional `state`
+(`waiting`, `running`, `succeeded`, `failed`, or `cancelled`). Step indices
+are zero-based snapshot positions; duplicate names remain separate. State
+events are trusted lifecycle records, not parsed script output. `created_at`
+is the persisted Unix time in seconds. `display_timestamp` formats that time
+as `YYYY-MM-DD HH:mm:ss` in the server's local timezone, matching timestamps
+on the deployment page before and after refresh. Resume with
+`Last-Event-ID` or an initial `after` query parameter. A terminal deployment
+drains its logs, sends `event: complete` with JSON `status`, then closes;
+clients should close their EventSource on that event. Default SSE/NDJSON and
+plain-text export retain their formats.
+
+Default text SSE also emits `complete` after terminal log replay.
+Close its EventSource on that event.
+Initial text replay preserves remote sequence order and checkpoints its cursor after replay.
+Subsequent text events use persisted log IDs.
+Resume text SSE with `Last-Event-ID` or `after`.
+An interrupted initial replay repeats history instead of skipping out-of-order rows.
+NDJSON retains `line` and `step` fields and closes after terminal replay.
+Live NDJSON keeps its existing empty `step` field.
+All stream formats recover missed broker notifications from persisted logs.
+Open streams recheck credentials, current roles, and project membership each second.
+Revocation ends responsive streams within approximately two seconds.
+A blocked consumer can delay closure up to 62 seconds because event writes retain their 60-second deadline.
+Authorization failures and database errors close the stream.
+Runbook streams use the execution's project membership.
+Errors before a structured stream starts use the usual JSON `error` envelope,
+including invalid cursors, missing deployments, and startup failures.
+
+Project and global notification credentials are write-only, including for administrators.
+GET and PUT responses return empty `slack_webhook_url`, `gotify_token`, and `discord_webhook_url` fields.
+The corresponding `*_configured` fields report whether stored credentials exist.
+Blank or omitted credential fields preserve stored values in PUT requests.
+Set `clear_slack_webhook_url`, `clear_gotify_token`, or `clear_discord_webhook_url` to `true` to clear a credential.
+Clear flags take precedence over replacements.
+The server retains credentials for delivery.
+Existing write permissions still apply.
+Email recipients and Gotify server URLs remain readable.
+Notification history omits provider error details that can contain credentials.
+
 Execution actions are `POST .../$XID/cancel`, `/approve` (admin only),
 and `/retry` (after a terminal status). Retry returns `409` while the source
 execution has a lost or unconfirmed remote outcome; inspect the agent before
-retrying. Retry also returns `409` for `cleanup_unconfirmed` until the next
-successful startup runtime sweep changes the deployment to `failed`.
+retrying. Retry also returns `409` while container cleanup remains unconfirmed.
+Local cleanup requires a successful startup runtime sweep; agent cleanup
+requires a ready v3 poll. Confirmed agent cleanup permits retry without
+changing the historical `cleanup_unconfirmed` result.
 
 `GET /api/v1/projects/$PID/runbook-executions?limit=100&offset=0`
 returns `{items, total, limit, offset}`. The default page has 100 items;
@@ -390,12 +531,42 @@ Once deployments are terminal, environment deletion removes their history.
 
 ## Endpoint cheat sheet
 
+Lifecycle variables are shared by every project assigned to that lifecycle.
+Global admins manage them with `GET/POST /api/v1/lifecycles/{id}/variables`
+and `GET/PUT/DELETE /api/v1/lifecycles/{id}/variables/{varId}`. The write body
+uses the same `name`, `value`, optional `environment_id`, and boolean `secret`
+fields as project variables. Names must be shell identifiers of at most 255
+characters. A scoped environment must be a current lifecycle stage. Secret
+values are masked in responses; a blank value on an existing secret preserves
+it. Reserved artifact and container variable names are rejected.
+
+Project members can read `GET /api/v1/projects/{id}/variables/inherited` for
+the lifecycle source and any same-scope project override. The existing project
+variables endpoint continues to return only project-owned rows. To override,
+create a project variable with the same name and environment scope. Delete that
+project variable with `DELETE /api/v1/projects/{id}/variables/{varId}?reset=inherit`
+to reset inheritance. This removes all matching local rows in that name/scope,
+including legacy unscoped duplicates, while retaining other scopes. Ordinary
+DELETE without the query parameter removes only the selected row.
+From highest to lowest priority:
+project environment, lifecycle environment, project unscoped, lifecycle
+unscoped. Removing a lifecycle stage excludes its scoped shared values from
+future deployments. Releases and runbook versions snapshot only project-owned
+variables. Each new deployment, re-run, rollback and runbook execution resolves
+the project's current lifecycle variables and scope, then captures encrypted
+values for that execution. No release refresh is needed after a shared edit.
+Queued, approval-waiting and active executions retain their captured values,
+including secrets for consistent log redaction. Historical releases that already
+contain merged values are not migrated; recreate them when upgrading.
+
 | Resource | Endpoints |
 |----------|-----------|
 | Projects | `GET/POST /api/v1/projects`, `GET/PUT/DELETE /projects/{id}` |
 | Environments | same shape under `/environments` |
 | Steps | `/api/v1/projects/{id}/steps[/{stepId}]` (`POST/GET/PUT/DELETE`, `PATCH /steps/reorder`) |
 | Variables | `/api/v1/projects/{id}/variables[/{varId}]` |
+| Inherited variables | `GET /api/v1/projects/{id}/variables/inherited` |
+| Shared lifecycle variables | `/api/v1/lifecycles/{id}/variables[/{varId}]` (global admin) |
 | Releases | `/api/v1/projects/{id}/releases[/{relId}]` (`GET/POST/DELETE`), `POST .../refresh` |
 | Deployments | `POST /api/v1/projects/{id}/deployments`, `GET /api/v1/deployments` (member projects; global admins see all; optional positive `project_id` filter) |
 | Deployment detail | `GET /deployments/{id}`, `/status`, `/logs`, `/logs/{logId}` |
@@ -409,12 +580,30 @@ Once deployments are terminal, environment deletion removes their history.
 - Server docs: <https://github.com/DeveloperDurp/durpdeploy>.
 ## Passing files between deployment steps
 
-Local container steps receive `DURPDEPLOY_STAGE_DIR=/stage`, even with a
-`variable_names` restriction. Write or copy files into this directory to pass
-them to later local steps of the same deployment. For example, a producing step
-runs `cp build.tar "$DURPDEPLOY_STAGE_DIR/build.tar"`; a later step reads that
-file at the same path. This works with the existing step, release, deployment,
-and runbook endpoints; no artifact publication request is needed.
+Deployment steps receive `DURPDEPLOY_STAGE_DIR`, even with a `variable_names` restriction.
+Write or copy files into this directory to pass them to later steps in the same deployment.
+Server containers and agent containers use `/stage`.
+Agent host steps use a private directory on that agent.
+For example, run `cp build.tar "$DURPDEPLOY_STAGE_DIR/build.tar"` in a producing step.
+Read the file through the same variable in a later step.
+
+The server automatically transfers all staging files between jobs, including jobs on different agents.
+Upgrade each participating agent to a build that reports `X-DurpDeploy-Staging: staging/1`.
+Older agents cannot receive these deployment jobs.
+Active staging requests do not consume the assigned run's step timeout.
+Each agent in a parallel step receives the same input snapshot.
+The server combines independent changes and deletions after every agent succeeds.
+Identical changes are accepted, but conflicting changes fail the deployment.
+
+Only regular files and directories transfer.
+Each snapshot permits 512 MiB of file content and 20,000 file and directory entries.
+File modes and ownership are normalized during transfer.
+The server encrypts transfer snapshots at rest and restricts downloads to the assigned agent's live claim.
+Use `GET /api/v1/deployments/{id}/staging` to list active transfer metadata without file contents.
+Invalid deployment IDs return HTTP 400.
+This endpoint returns an empty array after cleanup.
+Use `GET /api/v1/admin/audit?action=publish_staging` to identify staging publishers after cleanup.
+Each successful upload audit records the authenticated agent ID in its details JSON field `agent_id`.
 
 Each deployment starts with an empty directory. Files survive step completion
 and retries; failed attempts can leave partial files. Publish completed outputs
@@ -429,9 +618,9 @@ The staging and approved paths are reserved: variable create/update requests
 return 422 for `DURPDEPLOY_STAGE_DIR` and `DURPDEPLOY_APPROVED_DIR`, including
 blank-secret updates. Step variable selections cannot include them. Staging
 is writable, noexec, nosuid, and nodev, backed by a bounded temporary volume
-(512 MiB plus 10,000 host pages, 20,000 inodes). Local attempts have a combined
-memory ceiling of that staging capacity plus 256 MiB; process memory and
-`/tmp` share this allowance with staging writes. It is removed on success,
+(512 MiB plus 20,000 host pages, 40,002 inode units). These filesystem bounds do
+not impose a RAM ceiling or CPU quota on local step containers. The staging
+helper retains its own resource limits. The volume is removed on success,
 failure, cancellation, or shutdown; startup reclaims orphaned volumes within
 the configured runtime namespace. Unconfirmed removal yields
 `cleanup_unconfirmed` and blocks retry until a successful startup runtime sweep
@@ -439,22 +628,32 @@ changes the deployment to `failed`, even if a later cleanup attempt removed
 the remaining resources. This preserves the existing conservative recovery
 contract for local execution.
 
-Only local Docker/Podman container steps share these files. Remote agent steps
-do not receive the staging directory or transferred files. Staging is neither
-a cross-deployment cache nor durable storage for an approval pause or restart.
+The server purges transfer snapshots when the deployment succeeds, fails, or is canceled.
+Agents remove their private staging files before reporting completion or cancellation.
+Host jobs stop all remaining descendants before transfer, retry, or cleanup, including detached processes.
+If process cleanup cannot be confirmed, the agent retains staging and exits for service-wide cleanup.
+Staging is not shared between deployments or runbooks.
+Existing local staging remains available within a runbook execution.
+Staging is not durable storage for an approval pause or restart.
 Pinned release packages remain read-only at `ARTIFACT_PATH=/artifacts`.
 
 Local steps accept `network_mode` (`none` by default, or `bridge`). Artifact
 gates use `approval_artifact_path`, `approval_review_path`, and
 `approval_review_format` (`summary` or `terraform`), relative to
 `DURPDEPLOY_STAGE_DIR`. A gated deployment pauses before the next step and
-reserves its environment; later deployments queue until it completes, is
+reserves its project/environment slot; later deployments and runbooks for that
+same project and environment queue until it completes, is
 rejected, is cancelled, or expires. Artifact approval retains its queue slot.
+Other projects can deploy to that environment concurrently. The same project
+can also deploy to other environments concurrently. Queue positions and active
+work links refer only to the deployment's project/environment pair.
 Only local deployment steps without retries are
 supported; runbooks and agent steps cannot use gates. Both approval paths and
 an explicit review format are required together; an empty format is rejected.
 `GET /api/v1/deployments/{id}/artifact-gates` returns counts, checksums,
 revision, expiry, status, and approver metadata, including
+`decision_ready` (true only while the deployment is waiting for a decision
+and this gate is awaiting and unexpired),
 `review_format` (`terraform` or `summary`), `review_source: "step_output"`
 and `review_verified: false`: counts are
 unverified producer claims, not an independent analysis of the artifact.
@@ -474,6 +673,10 @@ resources. Expired or unavailable reviews return 409. The deployment UI's
 Administrator-only
 `/{stepIndex}/approve` and `/{stepIndex}/reject` accept
 `{"revision":1,"sha256":"..."}`. Stale or duplicate decisions return 409.
+Wait for `decision_ready: true` before submitting a decision. A gate can be
+published while container cleanup is still finishing; its status alone does
+not imply readiness. Readiness is advisory; decisions still validate identity,
+expiry, deployment state, and artifact integrity at submission time.
 Approved context is read-only at `DURPDEPLOY_APPROVED_DIR`; apply the saved
 artifact exactly, never regenerate it. Gated scripts and logs remain visible
 under normal permissions and secret-variable log redaction. Keep Terraform
@@ -523,14 +726,19 @@ and compressed ZIP `size`. Invalid versions/ZIPs return 422; missing configurati
 returns 404; upstream fetch failures return 502 and do not claim the package is
 absent. Generic templates do not provide version discovery or listing.
 
-Release creation/refresh downloads and validates the ZIP, then pins its URL,
-version, SHA-256, and size. Deployment creation freezes that pin. Re-runs keep
-the original deployment pin even after release refresh. Deployments use current
-repository credentials and reject content that no longer matches the pin.
+Release creation captures the repository, URL and version without a pull.
+Deployment creation copies that package generation; the first successful ZIP
+pull validates and atomically records SHA-256/size on every pending copy before
+any step runs. Concurrent pulls with different bytes produce one winning pin
+and a checksum failure. Re-runs retain the original generation even after
+release refresh. Refresh explicitly downloads and validates the current package
+and replaces only the release pin. Deployments use current credentials for
+their captured repository and reject content that no longer matches their pin.
 
 Runbook create/save accepts `artifact_release_id`, selecting an existing release
-in the same project that has a package pin. It is required while a project
-repository is selected. The runbook version copies that pin; later refreshes of
+in the same project that has a package attachment, including a pending pull.
+It is required while a project repository is selected. The runbook version
+copies that package generation; later refreshes of
 the source release do not change it. Runbook version responses include
 `artifact` (the copied pin or `null`).
 
@@ -564,8 +772,10 @@ subdirectory and reclaims stale ZIP, extraction, and tar files at startup.
 Concurrent server instances must use separate `TMPDIR` directories.
 
 Artifact-bearing deployments currently require local steps; agent steps are
-rejected before dispatch. The future agent download contract is
+rejected before dispatch. The server already exposes the agent download contract:
 `POST /agent/v1/deployments/{id}/artifact` with JSON `{"claim_token":"..."}`
 on the separate mTLS listener. It requires the assigned agent's live step claim,
 returns verified ZIP bytes with `X-Artifact-SHA256` and `X-Artifact-Size`, and
-never sends repository credentials. Agent executor support is a separate change.
+never sends repository credentials. Its request body is limited to 4 KiB and
+does not accept a `protocol` field. The pinned agent executor does not yet
+consume this endpoint, so it does not enable artifact-bearing agent deployments.

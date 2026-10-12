@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 
@@ -23,6 +24,8 @@ import (
 // here for tests and for the project-scoped handlers in the api
 // package that read it via ProjectIDFromContext.
 type ProjectAccessKey struct{}
+
+const deploymentNotFoundMessage = "404 page not found"
 
 // ProjectIDFromContext returns the project id injected by
 // RequireProjectAccess, or 0 (and false) if absent.
@@ -103,14 +106,24 @@ func RequireDeploymentProjectAccess(
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			user := UserFromContext(r.Context())
 			if user == nil {
-				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				RenderRequestError(
+					w,
+					r,
+					http.StatusUnauthorized,
+					"Unauthorized",
+				)
 				return
 			}
 
 			idStr := chi.URLParam(r, "id")
 			deploymentID, err := strconv.ParseInt(idStr, 10, 64)
 			if err != nil || deploymentID <= 0 {
-				http.Error(w, "Invalid deployment id", http.StatusBadRequest)
+				RenderRequestError(
+					w,
+					r,
+					http.StatusBadRequest,
+					"Invalid deployment id",
+				)
 				return
 			}
 
@@ -121,11 +134,21 @@ func RequireDeploymentProjectAccess(
 				deploymentID,
 			)
 			if err != nil {
-				http.NotFound(w, r)
+				RenderRequestError(
+					w,
+					r,
+					http.StatusNotFound,
+					deploymentNotFoundMessage,
+				)
 				return
 			}
 			if deployment.Kind != "deployment" {
-				http.NotFound(w, r)
+				RenderRequestError(
+					w,
+					r,
+					http.StatusNotFound,
+					deploymentNotFoundMessage,
+				)
 				return
 			}
 			if user.Role == "admin" {
@@ -137,7 +160,12 @@ func RequireDeploymentProjectAccess(
 				deployment.ReleaseID,
 			)
 			if err != nil {
-				http.NotFound(w, r)
+				RenderRequestError(
+					w,
+					r,
+					http.StatusNotFound,
+					deploymentNotFoundMessage,
+				)
 				return
 			}
 
@@ -165,11 +193,16 @@ func checkProjectMembership(
 		},
 	)
 	if err != nil {
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		RenderRequestError(w, r, http.StatusInternalServerError,
+			"Internal server error")
 		return false
 	}
 	if member != 1 {
-		RenderUnauthorized(w, r)
+		if strings.HasPrefix(r.URL.Path, "/api/v1/") {
+			RenderJSONError(w, http.StatusForbidden, unauthorizedMessage)
+		} else {
+			RenderUnauthorized(w, r)
+		}
 		return false
 	}
 	return true

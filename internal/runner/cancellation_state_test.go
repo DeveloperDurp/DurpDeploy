@@ -148,7 +148,7 @@ func TestAcceptedCancelCannotRaceTerminalSuccess(t *testing.T) {
 			defer wait.Done()
 			<-start
 			_, _ = deploymentRunner.completeDeployment(
-				t.Context(), cancelCtx, deployment.ID, "succeeded", true,
+				t.Context(), cancelCtx, deployment.ID, "succeeded", true, false,
 			)
 		}()
 		close(start)
@@ -173,6 +173,14 @@ func TestAcceptedCancelCannotRaceTerminalSuccess(t *testing.T) {
 }
 
 func TestTerminalPersistenceFailureRetriesDurably(t *testing.T) {
+	for _, status := range []string{"succeeded", "cleanup_unconfirmed"} {
+		t.Run(status, func(t *testing.T) {
+			testTerminalPersistenceFailure(t, status)
+		})
+	}
+}
+
+func testTerminalPersistenceFailure(t *testing.T, terminalStatus string) {
 	connection, err := migrate.Run(":memory:?_pragma=foreign_keys(1)")
 	if err != nil {
 		t.Fatal(err)
@@ -212,10 +220,24 @@ func TestTerminalPersistenceFailureRetriesDurably(t *testing.T) {
 		t.Fatal(err)
 	}
 	deploymentRunner := New(repo, NewLogBroker())
+	if terminalStatus == "cleanup_unconfirmed" {
+		if _, err := connection.Exec(
+			`UPDATE deployments SET container_namespace='local-stage';
+INSERT INTO agents(id,name,endpoint) VALUES('a','a','https://agent.example');
+INSERT INTO deployment_steps(deployment_id,step_index,name,script_body,execution_target)
+VALUES(?,0,'step','true','agent');
+INSERT INTO remote_step_runs(deployment_id,step_index,agent_id,state)
+VALUES(?,0,'a','cleanup_unconfirmed')`,
+			deployment.ID,
+			deployment.ID,
+		); err != nil {
+			t.Fatal(err)
+		}
+	}
 	persistCtx, cancelPersist := context.WithCancel(t.Context())
 	cancelPersist()
 	if _, persisted := deploymentRunner.persistCompletion(
-		persistCtx, context.Background(), deployment.ID, "succeeded", true,
+		persistCtx, context.Background(), deployment.ID, terminalStatus, true,
 	); persisted {
 		t.Fatal(
 			"terminal write unexpectedly succeeded with a cancelled context",
@@ -231,7 +253,8 @@ func TestTerminalPersistenceFailureRetriesDurably(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if stored.Status == "succeeded" && stored.FinishedAt.Valid {
+		if stored.Status == terminalStatus && stored.FinishedAt.Valid &&
+			!stored.ContainerNamespace.Valid {
 			return
 		}
 		select {

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -28,8 +29,8 @@ func seedAgentWithInterpreter(
 	fingerprint := strings.Repeat(agentID[len(agentID)-1:], 64)
 	if _, err := repo.DB.ExecContext(ctx, `INSERT INTO agents(
 		id,name,endpoint,status,certificate_pem,certificate_fingerprint,
-		encrypted_identity)
-		VALUES(?,?,?,'active','certificate',?,'identity')`,
+		encrypted_identity,agent_protocol)
+		VALUES(?,?,?,'active','certificate',?,'identity','agent/2')`,
 		agentID, agentID, "https://agent.invalid", fingerprint,
 	); err != nil {
 		t.Fatal(err)
@@ -62,6 +63,14 @@ func seedAgentWithInterpreter(
 }
 
 func TestRunnerMixedLocalAndAgentStepsSucceedInOrder(t *testing.T) {
+	for _, state := range []string{"succeeded", "cleanup_unconfirmed"} {
+		t.Run(state, func(t *testing.T) {
+			testRunnerMixedLocalAndAgentSteps(t, state)
+		})
+	}
+}
+
+func testRunnerMixedLocalAndAgentSteps(t *testing.T, terminalState string) {
 	ctx := context.Background()
 	repo, rnr, _ := setupRunnerHarness(t)
 	repo.DB.SetMaxOpenConns(1)
@@ -134,9 +143,32 @@ func TestRunnerMixedLocalAndAgentStepsSucceedInOrder(t *testing.T) {
 			contents,
 		)
 	}
+	if terminalState == "succeeded" {
+		// The simulated agent publishes its unchanged workspace before success.
+		input, err := repo.LoadStaging(
+			ctx,
+			db.GetStagingSnapshotParams{
+				DeploymentID: created.Deployment.ID,
+				StepIndex:    1,
+			},
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := repo.SaveStaging(ctx, repository.StagingWrite{
+			Key: db.GetStagingSnapshotParams{DeploymentID: created.Deployment.ID, StepIndex: 1, Producer: "agent-a"}, Source: input,
+		}); err != nil {
+			input.Close()
+			t.Fatal(err)
+		}
+		if err := input.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if _, err := repo.DB.ExecContext(ctx, `
-UPDATE remote_step_runs SET state='succeeded', started_at=unixepoch(),
+UPDATE remote_step_runs SET state=?, started_at=unixepoch(),
 finished_at=unixepoch() WHERE deployment_id=? AND step_index=1`,
+		terminalState,
 		created.Deployment.ID,
 	); err != nil {
 		t.Fatal(err)
@@ -147,7 +179,7 @@ finished_at=unixepoch() WHERE deployment_id=? AND step_index=1`,
 		t.Fatal("deployment did not finish after the agent step succeeded")
 	}
 	deployment, err := repo.Queries.GetDeployment(ctx, created.Deployment.ID)
-	if err != nil || deployment.Status != "succeeded" {
+	if err != nil || deployment.Status != terminalState {
 		t.Fatalf("deployment = %+v, error = %v", deployment, err)
 	}
 	runs, err := repo.Queries.ListRemoteStepRuns(
@@ -156,8 +188,61 @@ finished_at=unixepoch() WHERE deployment_id=? AND step_index=1`,
 			DeploymentID: created.Deployment.ID, StepIndex: 1,
 		},
 	)
-	if err != nil || len(runs) != 1 || runs[0].State != "succeeded" {
+	if err != nil || len(runs) != 1 || runs[0].State != terminalState {
 		t.Fatalf("remote runs = %+v, error = %v", runs, err)
+	}
+	logs, err := repo.Queries.ListDeploymentLogsByDeployment(
+		ctx,
+		created.Deployment.ID,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	states := make(map[int64][]string)
+	for _, log := range logs {
+		if log.StepState.Valid {
+			if !log.StepIndex.Valid {
+				t.Fatal("step lifecycle event has no release step index")
+			}
+			states[log.StepIndex.Int64] = append(
+				states[log.StepIndex.Int64],
+				log.StepState.String,
+			)
+		}
+	}
+	// The query returns newest rows first.
+	remoteState := "succeeded"
+	if terminalState == "cleanup_unconfirmed" {
+		remoteState = "failed"
+	}
+	if strings.Join(states[0], ",") != "succeeded,running" ||
+		strings.Join(states[1], ",") != remoteState+",running,waiting" {
+		t.Fatalf("local/agent lifecycle states=%v", states)
+	}
+	if terminalState == "cleanup_unconfirmed" {
+		if deployment.ContainerNamespace.Valid {
+			t.Fatal("successful local cleanup left a namespace blocker")
+		}
+		if err := repo.Queries.ConfirmRemoteStepCleanup(
+			ctx,
+			db.ConfirmRemoteStepCleanupParams{
+				AgentID: "agent-a",
+				Now:     sql.NullInt64{Int64: time.Now().Unix(), Valid: true},
+			},
+		); err != nil {
+			t.Fatal(err)
+		}
+		blocked, err := repo.Queries.HasUnconfirmedContainerCleanup(
+			ctx,
+			deployment.ID,
+		)
+		if err != nil || blocked != 0 {
+			t.Fatalf(
+				"reconciled cleanup remains blocked=%d error=%v",
+				blocked,
+				err,
+			)
+		}
 	}
 	contents, err = os.ReadFile(marker)
 	if err != nil {
@@ -283,6 +368,22 @@ INSERT INTO agent_environment_labels(agent_id,environment_id) VALUES(?,?)`,
 	)
 	if err != nil || len(runs) != 2 {
 		t.Fatalf("remote runs = %+v, error = %v", runs, err)
+	}
+	base, err := repo.LoadStaging(
+		ctx,
+		db.GetStagingSnapshotParams{
+			DeploymentID: created.Deployment.ID,
+			StepIndex:    1,
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer base.Close()
+	for _, run := range runs {
+		if err := repo.SaveStaging(ctx, repository.StagingWrite{Key: db.GetStagingSnapshotParams{DeploymentID: created.Deployment.ID, StepIndex: 1, Producer: run.AgentID}, Source: base}); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if _, err := repo.DB.ExecContext(ctx, `
 UPDATE remote_step_runs SET state='succeeded', started_at=unixepoch(),

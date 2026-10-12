@@ -9,7 +9,7 @@ import (
 )
 
 // swagger:route GET /projects/{id}/releases/{relId}/artifact artifacts getReleaseArtifact
-// Read a release's pinned ZIP; null means no artifact.
+// Read a release's attached ZIP; pending means no validated pull yet.
 // Responses:
 // 200: body:ReleaseArtifactResponse
 // 404: body:NotFoundError
@@ -44,6 +44,7 @@ func (h *ArtifactHandler) ReleasePin(w http.ResponseWriter, r *http.Request) {
 
 // swagger:model ReleaseArtifactResponse
 type releaseArtifactResponse struct {
+	Pending         bool   `json:"pending"`
 	ReleaseID       int64  `json:"release_id"`
 	RepositoryID    int64  `json:"repository_id"`
 	URL             string `json:"url"`
@@ -59,6 +60,7 @@ func publicReleaseArtifact(row db.ReleaseArtifact) releaseArtifactResponse {
 		sourceReleaseID = &row.SourceReleaseID.Int64
 	}
 	return releaseArtifactResponse{
+		row.Sha256 == "",
 		row.ReleaseID,
 		row.RepositoryID,
 		row.Url,

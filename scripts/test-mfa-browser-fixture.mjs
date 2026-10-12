@@ -6,7 +6,7 @@ import { startBrowserFixture } from "./mfa_browser_fixture.mjs";
 
 const root = new URL("..", import.meta.url).pathname;
 const scenario = "fixture-forced-selector-failure";
-const artifact = join(root, "artifacts", "auth-mfa", "browser", scenario);
+let artifact;
 let enrollmentSeed = "";
 let screenshotSanitized = false;
 const users = {
@@ -25,8 +25,8 @@ async function exists(path) {
 }
 
 async function run() {
-	await rm(artifact, { force: true, recursive: true });
 	const fixture = await startBrowserFixture(root);
+	artifact = join(fixture.artifactRoot, scenario);
 	try {
 		const roles = await fixture.namedUsers(users);
 		await fixture.addAuthenticator(roles.deployer.context, roles.deployer.page, { isUserVerified: false });

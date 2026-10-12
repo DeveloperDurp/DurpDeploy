@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"context"
 	"database/sql"
 	"fmt"
 	"net/http"
@@ -28,59 +27,11 @@ func (h *VariableHandler) getProjectVariable(
 	r *http.Request,
 	projectID, variableID int64,
 ) (db.Variable, error) {
-	variable, err := h.repo.Queries.GetVariable(r.Context(), variableID)
-	if err != nil || variable.ProjectID != projectID {
-		if err == nil {
-			err = sql.ErrNoRows
-		}
-		return db.Variable{}, err
-	}
-	return h.repo.GetVariable(r.Context(), variableID)
+	return h.repo.GetProjectVariable(r.Context(), projectID, variableID)
 }
 
 func NewVariableHandler(repo *repository.Repository) *VariableHandler {
 	return &VariableHandler{repo: repo}
-}
-
-func (h *VariableHandler) variableEnvironments(
-	ctx context.Context,
-	project db.Project,
-) (pages.VariableEnvironments, error) {
-	all, options, err := h.repo.VariableEnvironments(ctx, project)
-	return pages.VariableEnvironments{All: all, Options: options}, err
-}
-
-func (h *VariableHandler) variableEnvironmentScope(
-	w http.ResponseWriter,
-	r *http.Request,
-	projectID int64,
-	requestedID string,
-) (sql.NullInt64, bool) {
-	var environmentID sql.NullInt64
-	if requestedID != "" {
-		id, err := strconv.ParseInt(requestedID, 10, 64)
-		if err != nil || id <= 0 {
-			http.Error(w, "Invalid environment ID", http.StatusBadRequest)
-			return environmentID, false
-		}
-		environmentID = sql.NullInt64{Int64: id, Valid: true}
-	}
-	allowed, err := h.repo.VariableEnvironmentAllowed(
-		r.Context(), projectID, environmentID,
-	)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return environmentID, false
-	}
-	if !allowed {
-		http.Error(
-			w,
-			"Environment is not in project lifecycle",
-			http.StatusUnprocessableEntity,
-		)
-		return environmentID, false
-	}
-	return environmentID, true
 }
 
 func (h *VariableHandler) ListVariables(
@@ -118,7 +69,7 @@ func (h *VariableHandler) ListVariables(
 		return
 	}
 
-	if r.Header.Get("HX-Request") == "true" {
+	if isFragmentRequest(r) {
 		pages.VariablesFragment(project, variables, environments, "").
 			Render(r.Context(), w)
 	} else {
@@ -428,39 +379,6 @@ func (h *VariableHandler) UpdateVariable(
 			http.StatusSeeOther,
 		)
 	}
-}
-
-func (h *VariableHandler) DeleteVariable(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
-	projectID, err := parseProjectID(r)
-	if err != nil {
-		http.Error(w, "Invalid project ID", http.StatusBadRequest)
-		return
-	}
-
-	varIDStr := chi.URLParam(r, "varId")
-	varID, err := strconv.ParseInt(varIDStr, 10, 64)
-	if err != nil {
-		http.Error(w, "Invalid variable ID", http.StatusBadRequest)
-		return
-	}
-	if _, err := h.getProjectVariable(r, projectID, varID); err != nil {
-		if err == sql.ErrNoRows {
-			http.NotFound(w, r)
-			return
-		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	if err := h.repo.Queries.DeleteVariable(r.Context(), varID); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	h.renderVariablesFragment(w, r, projectID)
 }
 
 func (h *VariableHandler) renderVariablesFragment(

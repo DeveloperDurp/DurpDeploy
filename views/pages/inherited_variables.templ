@@ -1,0 +1,90 @@
+package pages
+
+import (
+	"durpdeploy/internal/db"
+	"durpdeploy/internal/repository"
+	"fmt"
+	"strconv"
+)
+
+templ InheritedVariablesSection(projectID int64, inherited repository.VariableInheritance, envs []db.Environment, actions bool) {
+	if inherited.Lifecycle.ID != 0 && len(inherited.Variables) > 0 {
+		<section class="card bg-base-200 p-4 mb-6 space-y-3" aria-labelledby="inherited-variables-title" data-inherited-variables>
+			<div class="flex flex-wrap items-center justify-between gap-3">
+				<div><h2 id="inherited-variables-title" class="text-xl font-bold">Inherited variables</h2><p class="text-sm opacity-70">Lifecycle: { inherited.Lifecycle.Name }</p></div>
+				if CanWrite(ctx) && CanManageLifecycleVariables(ctx) {
+					<a class="link text-sm" href={ fmt.Sprintf("/lifecycles/%d#shared-variables", inherited.Lifecycle.ID) }>Manage lifecycle variables</a>
+				}
+			</div>
+			<table class="hidden! lg:table! table table-zebra table-fixed w-full">
+				<thead><tr><th class="w-1/5">Name</th><th class="w-1/5">Value</th><th class="w-1/5">Environment</th><th class="w-auto">Source</th>
+					if actions && CanWrite(ctx) {
+						<th class="w-48">Action</th>
+					}
+				</tr></thead>
+				<tbody>
+					for _, variable := range inherited.Variables {
+						<tr data-inherited-variable={ variable.Name }><td class="truncate font-mono" title={ variable.Name }>{ variable.Name }</td><td class="truncate">@InheritedVariableValue(variable)
+</td><td class="truncate">@SharedVariableScope(variable.LifecycleVariable, envs)
+</td><td class="truncate">@InheritedVariableSource(variable, inherited.Lifecycle.Name)
+</td>
+							if actions && CanWrite(ctx) {
+								<td>@InheritedVariableAction(projectID, variable, actions)</td>
+							}
+						</tr>
+					}
+				</tbody>
+			</table>
+			<ul class="lg:hidden space-y-3" aria-label="Inherited variables">
+				for _, variable := range inherited.Variables {
+					<li class="bg-base-100 rounded-box p-4 space-y-2" data-inherited-variable={ variable.Name }>
+						<h3 class="font-mono font-bold break-all">{ variable.Name }</h3>
+						<p class="break-all"><span>Value: </span>@InheritedVariableValue(variable)
+</p>
+						<p><span>Environment: </span>@SharedVariableScope(variable.LifecycleVariable, envs)
+</p>
+						<div class="break-words"><span>Source: </span>@InheritedVariableSource(variable, inherited.Lifecycle.Name)
+</div>
+						@InheritedVariableAction(projectID, variable, actions)
+					</li>
+				}
+			</ul>
+			<p class="text-sm opacity-70">Environment overrides take precedence; project values win within the same scope. Overrides affect only this project. Project values are saved in releases; lifecycle defaults are resolved for each new deployment.</p>
+		</section>
+	}
+}
+
+templ InheritedVariableValue(variable repository.InheritedVariable) {
+	if variable.Override != nil {
+		@SharedVariableValue(db.LifecycleVariable{Value: variable.Override.Value, Secret: variable.Override.Secret})
+	} else {
+		@SharedVariableValue(variable.LifecycleVariable)
+	}
+}
+
+templ InheritedVariableSource(variable repository.InheritedVariable, lifecycleName string) {
+	if variable.Override != nil {
+		<span class="badge badge-success badge-sm">Project override</span>
+		<div class="text-xs opacity-70"><span>Lifecycle default: </span>@SharedVariableValue(variable.LifecycleVariable)
+</div>
+	} else {
+		<span class="text-sm">Inherited · { lifecycleName }</span>
+	}
+}
+
+templ InheritedVariableAction(projectID int64, variable repository.InheritedVariable, actions bool) {
+	if actions && CanWrite(ctx) {
+		if variable.Override != nil {
+			<button type="button" class="btn btn-xs whitespace-nowrap" hx-delete={ fmt.Sprintf("/projects/%d/variables/%d?reset=inherit", projectID, variable.Override.ID) } hx-target="#variables-content" hx-swap="outerHTML" hx-confirm={ "Remove the project override for " + variable.Name + " and inherit the lifecycle value?" }>Reset to inherited</button>
+		} else {
+			<button type="button" class="btn btn-primary btn-xs whitespace-nowrap" data-override-for={ variable.Name } data-override-environment={ inheritedVariableEnvironment(variable) } data-override-secret={ strconv.FormatBool(variable.Secret != 0) }>Override</button>
+		}
+	}
+}
+
+func inheritedVariableEnvironment(variable repository.InheritedVariable) string {
+	if variable.EnvironmentID.Valid {
+		return strconv.FormatInt(variable.EnvironmentID.Int64, 10)
+	}
+	return ""
+}

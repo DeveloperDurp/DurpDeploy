@@ -33,7 +33,7 @@ async function run() {
 		check(forbidden.status === 403, "viewer form write did not return 403");
 		check(forbidden.contentType?.includes("text/html"), "viewer form write was not HTML");
 		check(forbidden.body.includes("<h1>Forbidden</h1>"), "viewer form write was not styled");
-		check(forbidden.body.includes("javascript:history.back()"), "viewer form write omitted back link");
+		check(forbidden.body.includes('href="/projects" x-data="backNavigation" @click="back"'), "viewer form write omitted back link");
 
 		await viewer.page.goto(`${fixture.app.url}/projects/new`);
 		check(await viewer.page.getByText("Viewers cannot create a project.").isVisible(), "viewer form guard missing");

@@ -99,13 +99,13 @@ templ RunbookDetailPage(project db.Project, book db.Runbook, versions []db.Runbo
 			{Label: book.Name},
 		})
 		<div class="space-y-6">
-			<div class="flex flex-wrap justify-between items-center gap-2">
+			<div class="page-header">
 				<div><h1 class="text-3xl font-bold">{ book.Name }</h1><p class="opacity-70">{ book.Description }</p></div>
 				<div class="flex gap-2">
-					<a class="btn btn-ghost btn-sm" href={ fmt.Sprintf("/projects/%d/runbooks", project.ID) }>Back</a>
 					if CanWrite(ctx) {
-						<a class="btn btn-primary btn-sm" href={ fmt.Sprintf("/projects/%d/runbooks/%d/edit", project.ID, book.ID) }>Save new version</a>
+						<a class="btn btn-primary btn-sm" href={ fmt.Sprintf("/projects/%d/runbooks/%d/edit", project.ID, book.ID) }>Create new version</a>
 					}
+					<a class="btn btn-ghost btn-sm" href={ fmt.Sprintf("/projects/%d/runbooks", project.ID) } x-data="backNavigation" @click="back">Back</a>
 				</div>
 			</div>
 			<div class="card bg-base-200 p-4">
@@ -266,20 +266,20 @@ templ RunbookExecutionPage(project db.Project, book db.Runbook, execution db.Get
 			{Label: fmt.Sprintf("Execution #%d", execution.ID)},
 		})
 		<div class="space-y-6">
-			<div class="flex flex-wrap justify-between items-center gap-2">
+			<div class="page-header">
 				<div><h1 class="text-3xl font-bold">{ book.Name } execution #{ strconv.FormatInt(execution.ID, 10) }</h1><p class="opacity-70">Version { strconv.FormatInt(execution.Version, 10) } · { execution.EnvironmentName }</p></div>
 				<div class="flex gap-2 items-center">
 					<span role="status" aria-live="polite" aria-atomic="true">
 						@RunbookExecutionStatus(project.ID, execution)
 					</span>
 					@RunbookExecutionActions(project.ID, execution, false)
+					<a href={ fmt.Sprintf("/projects/%d/runbooks/%d", project.ID, book.ID) } class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>
 				</div>
 			</div>
 			<div
 				class="card bg-base-200 p-4"
 				if execution.Status == "running" || execution.Status == "pending" || execution.Status == "pending_approval" || execution.Status == "queued" {
 					x-data={ fmt.Sprintf("deploymentStream({ url: '/projects/%d/runbooks/executions/%d/logs/stream' })", project.ID, execution.ID) }
-					x-on:htmx:after-swap.camel.window="status($event)"
 				}
 			>
 				<h2 class="text-xl font-bold mb-3">Live logs</h2>
@@ -334,7 +334,7 @@ templ RunbookExecutionActions(projectID int64, execution db.GetRunbookExecutionR
 			if execution.Status == "running" || execution.Status == "queued" || execution.Status == "pending" || execution.Status == "pending_approval" {
 				<form method="post" action={ fmt.Sprintf("/projects/%d/runbooks/executions/%d/cancel", projectID, execution.ID) }><button class="btn btn-error btn-sm" type="submit">Cancel</button></form>
 			}
-			if execution.Status == "failed" || execution.Status == "cancelled" || execution.Status == "succeeded" {
+			if execution.Status == "failed" || execution.Status == "cancelled" || execution.Status == "succeeded" || execution.Status == "cleanup_unconfirmed" {
 				<form method="post" action={ fmt.Sprintf("/projects/%d/runbooks/executions/%d/retry", projectID, execution.ID) }><button class="btn btn-primary btn-sm" type="submit">Retry</button></form>
 			}
 		}

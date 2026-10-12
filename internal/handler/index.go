@@ -3,82 +3,98 @@ package handler
 import (
 	"net/http"
 
+	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/repository"
 	"durpdeploy/views/pages"
 )
 
-type IndexHandler struct {
-	repo *repository.Repository
-}
+type IndexHandler struct{ repo *repository.Repository }
 
-func NewIndexHandler(repo *repository.Repository) *IndexHandler {
+func NewIndexHandler(
+	repo *repository.Repository,
+) *IndexHandler {
 	return &IndexHandler{repo: repo}
 }
 
 func (h *IndexHandler) Index(w http.ResponseWriter, r *http.Request) {
-	projects, err := h.repo.Queries.ListProjects(r.Context())
+	admin, userID := dashboardScope(r)
+	projects, err := h.repo.Queries.CountDashboardProjects(
+		r.Context(),
+		db.CountDashboardProjectsParams{IsAdmin: admin, UserID: userID},
+	)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
-	envs, err := h.repo.Queries.ListEnvironments(r.Context())
+	envs, err := h.repo.Queries.CountEnvironments(r.Context())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
-	deployments, err := h.repo.Queries.ListRecentDeployments(r.Context(), 5)
+	data, err := h.deployments(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	if err := pages.IndexPage(r.URL.Path, int(projects), int(envs), data).
+		Render(r.Context(), w); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
 
-	items := make([]pages.DeploymentListItem, len(deployments))
-	for i, d := range deployments {
-		release, err := h.repo.Queries.GetRelease(r.Context(), d.ReleaseID)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		project, err := h.repo.Queries.GetProject(
-			r.Context(),
-			release.ProjectID,
-		)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		env, err := h.repo.Queries.GetEnvironment(r.Context(), d.EnvironmentID)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
+func (h *IndexHandler) RefreshDeployments(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	data, err := h.deployments(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("HX-Trigger-After-Swap", "home-deployments-refreshed")
+	if err := pages.HomeDeploymentsRefresh(data).
+		Render(r.Context(), w); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func dashboardScope(r *http.Request) (int64, int64) {
+	user := auth.UserFromContext(r.Context())
+	if user == nil {
+		return 0, 0
+	}
+	if user.Role == "admin" {
+		return 1, user.ID
+	}
+	return 0, user.ID
+}
+
+func (h *IndexHandler) dashboardRows(
+	r *http.Request,
+	section string,
+) ([]pages.DeploymentListItem, error) {
+	admin, userID := dashboardScope(r)
+	limit := int64(2147483647)
+	if section == "recent" {
+		limit = 5
+	}
+	rows, err := h.repo.Queries.ListDashboardDeployments(
+		r.Context(),
+		db.ListDashboardDeploymentsParams{
+			IsAdmin:  admin,
+			UserID:   userID,
+			Section:  section,
+			RowLimit: limit,
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]pages.DeploymentListItem, len(rows))
+	for i, row := range rows {
 		items[i] = pages.DeploymentListItem{
-			Deployment:      d,
-			ProjectName:     project.Name,
-			ReleaseVersion:  release.Version,
-			EnvironmentName: env.Name,
-		}
-	}
-
-	deploymentsToday, err := h.repo.Queries.CountDeploymentsToday(r.Context())
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	runningRows, err := h.repo.Queries.ListRunningDeploymentsWithRefs(
-		r.Context(),
-	)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	runningDeployments := make([]pages.DeploymentListItem, len(runningRows))
-	for i, row := range runningRows {
-		runningDeployments[i] = pages.DeploymentListItem{
 			Deployment: db.Deployment{
 				ID:            row.ID,
 				ReleaseID:     row.ReleaseID,
@@ -95,43 +111,38 @@ func (h *IndexHandler) Index(w http.ResponseWriter, r *http.Request) {
 			EnvironmentName: row.EnvironmentName,
 		}
 	}
+	return items, nil
+}
 
-	latestRows, err := h.repo.Queries.ListLatestDeploymentPerReleaseEnv(
+func (h *IndexHandler) deployments(
+	r *http.Request,
+) (pages.HomeDeploymentsView, error) {
+	var data pages.HomeDeploymentsView
+	var err error
+	admin, userID := dashboardScope(r)
+	data.Today, err = h.repo.Queries.CountDashboardDeploymentsToday(
 		r.Context(),
+		db.CountDashboardDeploymentsTodayParams{IsAdmin: admin, UserID: userID},
 	)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return data, err
 	}
-	latestPerReleaseEnv := make([]pages.DeploymentListItem, len(latestRows))
-	for i, row := range latestRows {
-		latestPerReleaseEnv[i] = pages.DeploymentListItem{
-			Deployment: db.Deployment{
-				ID:            row.ID,
-				ReleaseID:     row.ReleaseID,
-				EnvironmentID: row.EnvironmentID,
-				Status:        row.Status,
-				StartedAt:     row.StartedAt,
-				FinishedAt:    row.FinishedAt,
-				CreatedAt:     row.CreatedAt,
-				Forced:        row.Forced,
-				Note:          row.Note,
-			},
-			ProjectName:     row.ProjectName,
-			ReleaseVersion:  row.ReleaseVersion,
-			EnvironmentName: row.EnvironmentName,
+	data.Recent, err = h.dashboardRows(r, "recent")
+	if err != nil {
+		return data, err
+	}
+	active, err := h.dashboardRows(r, "active")
+	if err != nil {
+		return data, err
+	}
+	for _, item := range active {
+		switch item.Deployment.Status {
+		case "queued", "pending_approval", "awaiting_artifact_approval":
+			data.Waiting = append(data.Waiting, item)
+		default:
+			data.Running = append(data.Running, item)
 		}
 	}
-
-	if err := pages.IndexPage(
-		r.URL.Path,
-		len(projects),
-		len(envs),
-		deploymentsToday,
-		items,
-		runningDeployments,
-		latestPerReleaseEnv,
-	).Render(r.Context(), w); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
+	data.Latest, err = h.dashboardRows(r, "latest")
+	return data, err
 }

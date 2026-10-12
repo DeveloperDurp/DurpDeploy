@@ -1,25 +1,51 @@
 # Agent protocol
 
-`agent/1` and `agent/2` are the outbound-only JSON contracts between DurpDeploy
-and a remote agent. Version 2 adds fixed interpreter capability reporting while
-the server continues to accept version 1 as Bash-only.
+`agent/1`, `agent/2`, and `agent/3` are the JSON contracts between DurpDeploy
+and a remote agent. Paired operation uses outbound agent connections; pairing
+uses a temporary inbound callback listener on the agent. Version 1 is Bash-only host execution.
+Version 2 adds fixed host interpreter reporting. Version 3 adds explicit
+host/container modes and ready Docker/Podman container capabilities.
 
 ## Endpoints and payloads
 
-All JSON requests are exactly one object and require a present, non-null
-`protocol` of `agent/1` or `agent/2`. They reject unknown fields, trailing JSON
+Regular protocol JSON requests are exactly one object and require a present, non-null
+`protocol` of `agent/1`, `agent/2`, or `agent/3`. They reject unknown fields, trailing JSON
 values, malformed JSON, and every other protocol value. Pairing remains
 `agent/1` so existing identities can upgrade without re-pairing.
 
 | Endpoint | Request contract | Notes |
 | --- | --- | --- |
-| `POST /agent/v1/pairings/server-init` | `PairRequest` | Server-side pairing completion over mTLS. The first call uses `completion_ack: false`; after durable confirmation the same request is retried with `completion_ack: true` to perform listener cleanup. |
+| `POST /agent/v1/pairings/server-init` | `PairRequest` | Server-initiated pairing completion on the agent's temporary mTLS listener. The first call uses `completion_ack: false`; after durable confirmation the same request is retried with `completion_ack: true` to perform listener cleanup. |
 | `POST /agent/v1/poll` | `PollRequest` | Version 1 sends protocol and agent version and is recorded as Bash-only. Version 2 also requires `supported_interpreters`, containing only `bash`, `pwsh`, or `python3`. A no-work response has no deployment payload. |
 | `POST /agent/v1/deployments/{id}/start` | `StartRequest` | Acknowledges that the claimed work started. |
 | `POST /agent/v1/deployments/{id}/heartbeat` | `HeartbeatRequest` | Response carries cancellation state and staged server fingerprints. |
 | `POST /agent/v1/deployments/{id}/logs` | `LogBatchRequest` | Ordered line events. |
-| `POST /agent/v1/deployments/{id}/result` | `ResultRequest` | Result state is only `succeeded` or `failed`. |
+| `POST /agent/v1/deployments/{id}/result` | `ResultRequest` | Result is `succeeded` or `failed`; v3 also accepts `cleanup_unconfirmed`. |
 | `POST /agent/v1/deployments/{id}/cancelled` | `CancelledRequest` | Cancellation acknowledgement is distinct from a normal result. |
+| `POST /agent/v1/deployments/{id}/artifact` | Object containing `claim_token` | Server-side ZIP download contract on the mTLS listener; requires the assigned agent's live step claim. No `protocol` field. The pinned agent executor does not yet use this endpoint. |
+
+Version 3 polls require all four capability arrays:
+`supported_interpreters`, `execution_modes`, `container_runtimes`, and
+`container_interpreters`. Values are fixed: modes `host`/`container`,
+runtimes `docker`/`podman`, interpreters `bash`/`pwsh`/`python3`.
+Host-only and container-only reports are valid. Missing/null arrays, duplicates,
+unknown values, or container readiness without container mode are rejected.
+A failed capability report changes no heartbeat or stored capabilities.
+
+Encrypted v3 steps carry `execution_mode`, `container_image`, and
+`variable_names`. The server matches mode, interpreter, runtime readiness,
+environment, and selector labels before fan-out and checks eligibility again
+before claim. Legacy payloads omit v3 fields. A single restricted legacy step
+receives a server-filtered variable set. A legacy multi-step payload is safe
+only when every step receives the same resolved variables; otherwise it fails
+before claim with `remote_payload_requires_agent_3`.
+
+A cleanup-uncertain result is terminal and idempotent only for the same
+authenticated claim and outcome. It never restarts execution or changes to
+success. The environment and agent remain blocked while cleanup is unresolved.
+After local reconciliation, a ready authenticated v3 poll records
+`cleanup_confirmed_at` separately and releases the queue. Older polls cannot
+confirm cleanup. Pairing reactivation cannot clear this obligation.
 
 The endpoint route, active mTLS identity, and later persistence checks bind a
 claim to one agent. This contract deliberately does not document credential
@@ -27,9 +53,47 @@ material, certificate bodies, or secret values.
 
 ## Bounds and timing
 
+Deployment staging uses an optional capability within the existing protocols.
+Agents send `X-DurpDeploy-Staging: staging/1` on each poll.
+Missing poll headers cannot invalidate queued staging work from overlapping requests.
+Before downgrading an agent without staging support, drain it and wait for its jobs to finish.
+Revoke the agent before the downgrade.
+Re-pair the agent after the downgrade.
+Revocation and re-pairing clear its previous staging capability.
+The encrypted release object contains `staging: true` for staging-enabled jobs.
+These jobs contain one step and require staging-capable agents.
+
+Send `POST /agent/v1/deployments/{id}/staging/download` to obtain the frozen input TAR.
+Send `POST /agent/v1/deployments/{id}/staging/upload` with the final TAR before reporting success.
+Include the claim token in `X-DurpDeploy-Claim` on both requests.
+Both endpoints require the assigned agent's active mTLS identity and live step claim.
+Uploads also require the `started` state.
+Downloads return `Content-Length` and `X-Artifact-SHA256`.
+
+An upload returns `204` and accepts identical retries.
+Successful upload audits record the authenticated agent ID in the audit details JSON field `agent_id`.
+These records remain available after terminal staging cleanup.
+A changed retry or expired claim returns `409`.
+An invalid TAR returns `422`, and an oversized body returns `413`.
+Only regular files and directories are accepted.
+The TAR root marker must be an empty directory.
+Each snapshot permits 512 MiB of contents, 20,000 entries, and a 544 MiB TAR body.
+The entry limit includes parent directories omitted from TAR headers.
+Staging transfers have no fixed total network deadline.
+Staging requests pause the assigned run's step timeout while they remain active.
+Both peers stop transfers after five minutes without network I/O progress.
+Each staging read and write receives a fresh socket deadline.
+
+Agents keep heartbeats active during transfers and purge local staging before reporting their outcome.
+The server encrypts snapshots at rest and merges all successful agent outputs against the same input.
+Conflicting changes fail the deployment.
+Terminal deployment transactions purge transfer snapshots and encrypted chunks.
+The public `GET /api/v1/deployments/{id}/staging` endpoint exposes metadata through deployment access checks.
+
 | Contract | Fixed value |
 | --- | --- |
-| Any request body | 1 MiB |
+| Regular protocol JSON request body | 1 MiB |
+| Artifact download request body | 4 KiB |
 | Log batch | 100 events and 256 KiB |
 | Log line | 16 KiB UTF-8 bytes |
 | Poll interval / maximum long poll | 25 seconds |
@@ -94,11 +158,19 @@ and are sent only to compatible `agent/2` agents.
 | `claimed` | `started`, `cancel_requested` | The agent starts, or cancellation overlays the claim. |
 | `started` | `succeeded`, `failed`, `cancelled`, `lost`, `cancel_requested` | Started work reaches a terminal state, becomes lost after missed heartbeats, or receives cancellation. |
 | `cancel_requested` | `cancelled`, `cancel_unconfirmed`, `lost` | The agent acknowledges cancellation, misses the 30-second acknowledgement deadline, or is lost. |
+| `lost`, `cancel_unconfirmed` | `succeeded`, `failed`, `cleanup_unconfirmed` | The same authenticated claim reports its durable outcome after recovery; a failed deployment stays failed unless cleanup is uncertain. |
+| `cancel_unconfirmed` | `cancelled` | The same authenticated claim replays its durable cancellation acknowledgement; the deployment stays failed. |
 
 All other edges, including `started` to `waiting`, are invalid. A pre-start
 claim may be reclaimed, but started work is never automatically replayed or
 requeued and does not fall back to local execution. Recovery is an explicit new
 deployment.
+
+Terminal reports are idempotent for the same claim token and outcome. A changed
+outcome is rejected. Cleanup uncertainty remains blocked until the same paired
+agent reconciles containers and sends a ready v3 poll; that confirmation does
+not change the reported terminal outcome. A waiting poll whose protocol or
+capabilities have changed receives no work and must poll again.
 
 ## Transport trust
 

@@ -1,8 +1,17 @@
 // allow: SIZE_OK — swagger parameter structs for the generated OpenAPI spec.
 package api
 
+// swagger:parameters deleteVariable
+type deleteVariableResetParam struct {
+	// Set to inherit to remove every project value with this name and scope,
+	// including legacy duplicate unscoped rows. Other scopes are retained.
+	// in: query
+	// enum: inherit
+	Reset string `json:"reset"`
+}
+
 // ID path parameter. Linked to every operation whose path contains an {id} segment.
-// swagger:parameters addLifecycleStage addMember adminDeleteUser adminGetUser adminUpdateUser approveDeployment cancelDeployment createDeployment createRelease createSchedule createStep createVariable deleteEnvironment deleteLifecycleStage deleteProject deleteRelease deleteSchedule deleteStep deleteTemplate deleteVariable deploymentEvents exportLogs getDeployment getDeploymentStatus getEnvironment getLifecycle getLog getProject getProjectNotifications getRelease getSchedule getStep getTemplate getTemplateHistory getVariable listDeploymentLogs listDeployments listMembers listReleases listSchedules listSteps listVariables redeployDeployment refreshRelease removeMember reorderLifecycleStages reorderSteps retryDeployment revokeAnyToken revokeToken saveLifecycle streamLogs templatesPicker toggleSchedule updateEnvironment updateLifecycleStage updateMemberRole updateProject updateProjectNotifications updateSchedule updateStep updateTemplate updateVariable listRunbooks createRunbook getRunbook saveRunbookVersion getRunbookVersion executeRunbook listRunbookExecutions getRunbookExecution listRunbookLogs streamRunbookLogs cancelRunbookExecution approveRunbookExecution retryRunbookExecution listRunbookSchedules createRunbookSchedule disableRunbookSchedule getDeploymentVerification previewRollback rollbackDeployment
+// swagger:parameters addLifecycleStage addMember adminDeleteUser adminGetUser adminUpdateUser approveDeployment cancelDeployment createDeployment createRelease createSchedule createStep createVariable deleteEnvironment deleteLifecycle deleteLifecycleStage deleteProject deleteRelease deleteSchedule deleteStep deleteTemplate deleteVariable deploymentEvents exportLogs getDeployment getDeploymentStatus getEnvironment getLifecycle getLog getProject getProjectNotifications getRelease getSchedule getStep getTemplate getTemplateHistory getVariable listDeploymentLogs listDeployments listMembers listReleases listSchedules listSteps listVariables redeployDeployment refreshRelease removeMember reorderLifecycleStages reorderSteps retryDeployment revokeAnyToken revokeToken saveLifecycle streamLogs templatesPicker toggleSchedule updateEnvironment updateLifecycleStage updateMemberRole updateProject updateProjectNotifications updateSchedule updateStep updateTemplate updateVariable listRunbooks createRunbook getRunbook saveRunbookVersion getRunbookVersion executeRunbook listRunbookExecutions getRunbookExecution listRunbookLogs streamRunbookLogs cancelRunbookExecution approveRunbookExecution retryRunbookExecution listRunbookSchedules createRunbookSchedule disableRunbookSchedule getDeploymentVerification previewRollback rollbackDeployment
 type idPathParam struct {
 	// The resource ID.
 	//
@@ -132,7 +141,7 @@ type tokenIDPathParam struct {
 	TokenID string `json:"id"`
 }
 
-// swagger:parameters getAgent retryPairAgent revokeAgent drainAgent resumeAgent addAgentLabel deleteAgentLabel addAgentEnvironment deleteAgentEnvironment
+// swagger:parameters getAgent retryPairAgent revokeAgent deleteAgent drainAgent resumeAgent addAgentLabel deleteAgentLabel addAgentEnvironment deleteAgentEnvironment
 type agentIDPathParam struct {
 	// in: path
 	// required: true
@@ -301,8 +310,25 @@ type listDeploymentsQueryParam struct {
 	Offset int64 `json:"offset"`
 }
 
-// swagger:parameters streamLogs streamRunbookLogs
+// swagger:parameters streamLogs
 type streamLogsQueryParam struct {
+	// Format is sse, ndjson, or structured (SSE with step metadata).
+	//
+	// in: query
+	Format string `json:"format"`
+	// Replay events with an ID greater than this cursor (structured only).
+	//
+	// in: query
+	// minimum: 0
+	After int64 `json:"after"`
+	// Reconnection cursor; overrides after (structured only).
+	//
+	// in: header
+	LastEventID string `json:"Last-Event-ID"`
+}
+
+// swagger:parameters streamRunbookLogs
+type streamRunbookLogsQueryParam struct {
 	// Format is either sse or ndjson.
 	//
 	// in: query

@@ -1,4 +1,4 @@
-.PHONY: build dev dev-server dev-postgres dev-mssql e2e-test e2e-test-isolated e2e-postgres e2e-mssql check-openssl templ-generate tailwind-build js-build npm-install golines golines-check clean test sonar-issues mfa-e2e-test auth-mfa-e2e-go-prepare auth-mfa-e2e-browser-prepare auth-mfa-e2e-sqlite-http auth-mfa-e2e-sqlite-browser auth-mfa-e2e-postgres auth-mfa-e2e-mssql auth-mfa-e2e swagger-spec mobile-browser-container agent-documentation-contract agent-compose-contract agent-helm-contract agent-systemd-contract agent-systemd-contract-test runner-container-contract runner-container-contract-test agent-ci-contract agent-e2e-sqlite agent-rollout-gate agent-smoke-test verify
+.PHONY: build dev dev-server dev-postgres dev-mssql e2e-test e2e-test-isolated e2e-postgres e2e-mssql check-openssl templ-generate tailwind-build js-build npm-install golines golines-check clean test sonar-issues mfa-e2e-test auth-mfa-e2e-go-prepare auth-mfa-e2e-browser-prepare auth-mfa-e2e-sqlite-http auth-mfa-e2e-sqlite-browser auth-mfa-e2e-postgres auth-mfa-e2e-mssql auth-mfa-e2e swagger-spec mobile-browser-container agent-documentation-contract agent-compose-contract agent-helm-contract runner-container-contract runner-container-contract-test agent-ci-contract agent-e2e-sqlite agent-rollout-gate agent-smoke-test verify
 
 BINARY_NAME=durpdeploy
 MAIN_PATH=./cmd/server
@@ -7,9 +7,10 @@ DEV_POSTGRES_IMAGE ?= postgres:16-alpine
 DEV_MSSQL_CONTAINER ?= durpdeploy-dev-mssql
 DEV_MSSQL_IMAGE ?= mcr.microsoft.com/mssql/server:2022-latest
 DEV_AGENT_CONTAINER ?= durpdeploy-dev-agent
-DEV_AGENT_IMAGE ?= ghcr.io/developerdurp/durpdeploy-agent:ec04223
+DEV_AGENT_IMAGE ?= ghcr.io/developerdurp/durpdeploy-agent:6dee72a
 DEV_AGENT_PORT ?= 10944
 DEV_AGENT_STATE_VOLUME ?= $(DEV_AGENT_CONTAINER)-state
+DEV_AGENT_RUNTIME_SOCKET ?=
 DEV_HTTPS_PROXY_CONTAINER ?= durpdeploy-dev-https
 DEV_HTTPS_PROXY_PORT ?= 8443
 DEV_HTTPS_PROXY_BACKEND ?= host.docker.internal:8080
@@ -23,8 +24,7 @@ build: swagger-ui-copy templ-generate tailwind-build js-build
 # Hot-reload dev server. Watches .go/.templ/.sql in cmd, internal, views, migrations.
 # Reads the shell-compatible DURPDEPLOY_SECRET_KEY assignment from ENV_FILE
 # (default repository/.env), then uses inherited DURPDEPLOY_SECRET_KEY, then
-# generates a throwaway key if needed. Other .env assignments stay in the
-# subshell.
+# creates a persistent private key in .local/dev-secret-key if needed.
 # ponytail: CSS/JS source changes need a separate `make tailwind-build && make js-build`
 # and the air build to retrigger. Add a second air include_dir entry when that hurts.
 MAKEFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
@@ -37,12 +37,10 @@ dev: check-openssl
 	DURPDEPLOY_URL="$${DURPDEPLOY_URL:-https://localhost:$(DEV_HTTPS_PROXY_PORT)}" \
 	./scripts/dev_https_proxy.sh "$${MAKE:-make}" --no-print-directory dev-server
 
+dev-server: SHELL := /bin/bash
 dev-server:
-	env_secret_key=$$(unset DURPDEPLOY_SECRET_KEY; \
-		if [ -f "$(ENV_FILE)" ]; then . "$(ENV_FILE)"; fi; \
-		printf '%s' "$${DURPDEPLOY_SECRET_KEY:-}"); \
-	if [ -n "$$env_secret_key" ]; then DURPDEPLOY_SECRET_KEY="$$env_secret_key"; fi; \
-	if [ -f "$(ENV_FILE)" ]; then . "$(ENV_FILE)"; fi; \
+	DURPDEPLOY_ENV_FILE="$(ENV_FILE)"; \
+	. ./scripts/dev_secret_key.sh || exit 1; \
 	DURPDEPLOY_AGENT_LISTEN_ADDR=$${DURPDEPLOY_AGENT_LISTEN_ADDR:-0.0.0.0:10943}; \
 	DURPDEPLOY_AGENT_PUBLIC_URL=$${DURPDEPLOY_AGENT_PUBLIC_URL:-https://host.containers.internal:10943}; \
 	DURPDEPLOY_AGENT_IDENTITY_DIR=$${DURPDEPLOY_AGENT_IDENTITY_DIR:-$(MAKEFILE_DIR)tmp/dev-agent-identity}; \
@@ -58,19 +56,49 @@ dev-server:
 	if [ "$${DURPDEPLOY_OIDC_DISPLAY_NAME+x}" != "" ]; then export DURPDEPLOY_OIDC_DISPLAY_NAME; fi; \
 	if [ "$${DURPDEPLOY_OIDC_GROUP_CLAIM+x}" != "" ]; then export DURPDEPLOY_OIDC_GROUP_CLAIM; fi; \
 	if [ "$${DURPDEPLOY_OIDC_REQUIRE_EMAIL_VERIFIED+x}" != "" ]; then export DURPDEPLOY_OIDC_REQUIRE_EMAIL_VERIFIED; fi; \
-	DURPDEPLOY_SECRET_KEY=$${DURPDEPLOY_SECRET_KEY:-$$(openssl rand -base64 32)} \
 	DURPDEPLOY_EXECUTION_BOUNDARY=development \
 	DURPDEPLOY_ENV_FILE="$(ENV_FILE)" go run github.com/air-verse/air@latest
 
+.PHONY: dev-secret-key-test
+dev-secret-key-test:
+	bash scripts/dev_secret_key_test.sh
+
 .PHONY: dev-agent dev-agent-down dev-agent-reset dev-agent-test
+.PHONY: demo demo-stop demo-refresh demo-refresh-full demo-test
+
+# Persistent, isolated demo for coding agents and manual testing.
+demo:
+	./scripts/demo.sh
+
+demo-stop:
+	./scripts/demo.sh stop "$(DEMO_DIR)"
+
+# Rebuild only the server, retaining the URL, database, login and paired agent.
+demo-refresh:
+	bash scripts/demo-server-refresh.sh "$(DEMO_DIR)"
+
+# Database changes require rebuilding and populating a fresh demo.
+demo-refresh-full: demo-stop
+	./scripts/demo.sh
+
+demo-test:
+	bash scripts/demo_test.sh
+	bash scripts/demo-firewall-test.sh
+
 # Foreground pairing output stays on the terminal, outside container logs.
 dev-agent:
 	@test -n "$(DEV_CONTAINER_ENGINE)" || { echo 'Docker or Podman is unavailable.' >&2; exit 1; }
+	@if [ -n '$(DEV_AGENT_RUNTIME_SOCKET)' ]; then \
+		case '$(DEV_AGENT_RUNTIME_SOCKET)' in /*) ;; *) echo 'Agent runtime socket must be an absolute path.' >&2; exit 1 ;; esac; \
+		test -S '$(DEV_AGENT_RUNTIME_SOCKET)' || { echo 'Agent runtime Unix socket is unavailable.' >&2; exit 1; }; \
+	fi
 	$(DEV_CONTAINER_ENGINE) pull '$(DEV_AGENT_IMAGE)'
 	@printf '%s\n' \
 		'Pair this agent at /admin/agents using https://127.0.0.1:$(DEV_AGENT_PORT).' \
 		'Compare the fingerprint and approve. Ctrl-C or make dev-agent-down stops it.'
 	@network_args='--add-host=host.containers.internal:host-gateway'; \
+	state_volume='$(DEV_AGENT_STATE_VOLUME):/var/lib/durpdeploy-agent'; \
+	set --; \
 	if [ '$(notdir $(DEV_CONTAINER_ENGINE))' = podman ]; then \
 		if command -v slirp4netns >/dev/null 2>&1; then \
 			network_args='--network=slirp4netns:allow_host_loopback=true'; \
@@ -78,13 +106,26 @@ dev-agent:
 			network_args='--network=pasta:--map-host-loopback,169.254.1.2'; \
 		fi; \
 	fi; \
+	if [ -n '$(DEV_AGENT_RUNTIME_SOCKET)' ]; then \
+		runtime='$(notdir $(DEV_CONTAINER_ENGINE))'; \
+		case "$$runtime" in \
+			podman) set -- --userns=keep-id:uid=10001,gid=10001; state_volume="$$state_volume:U" ;; \
+			docker) set -- --group-add=$$(stat -c %g '$(DEV_AGENT_RUNTIME_SOCKET)') ;; \
+			*) echo 'Agent containers require Docker or Podman.' >&2; exit 1 ;; \
+		esac; \
+		set -- "$$@" --security-opt=label=disable \
+			--volume '$(DEV_AGENT_RUNTIME_SOCKET):/run/durpdeploy/runtime.sock:ro' \
+			--env DURPDEPLOY_AGENT_CONTAINER_ENABLED=true \
+			--env "DURPDEPLOY_AGENT_CONTAINER_RUNTIME=$$runtime" \
+			--env DURPDEPLOY_AGENT_CONTAINER_SOCKET=unix:///run/durpdeploy/runtime.sock; \
+	fi; \
 	$(DEV_CONTAINER_ENGINE) run --rm --name '$(DEV_AGENT_CONTAINER)' \
-		$$network_args --log-driver=none --read-only --user=10001:10001 \
+		$$network_args "$$@" --log-driver=none --read-only --user=10001:10001 \
 		--publish '127.0.0.1:$(DEV_AGENT_PORT):10943' \
 		--cap-drop=ALL --security-opt=no-new-privileges:true \
 		--memory=512m --cpus=1 --pids-limit=128 \
 		--tmpfs /tmp:size=64m,mode=1777 \
-		--volume '$(DEV_AGENT_STATE_VOLUME):/var/lib/durpdeploy-agent' \
+		--volume "$$state_volume" \
 		--env DURPDEPLOY_AGENT_STATE_DIR=/var/lib/durpdeploy-agent \
 		--env DURPDEPLOY_AGENT_LISTEN_ADDR=0.0.0.0:10943 \
 		--env 'DURPDEPLOY_AGENT_VERSION=$(lastword $(subst :, ,$(DEV_AGENT_IMAGE)))' \
@@ -200,12 +241,6 @@ agent-compose-contract:
 agent-helm-contract:
 	bash scripts/check-agent-helm-contract.sh
 
-agent-systemd-contract:
-	bash scripts/check-agent-systemd-contract.sh
-
-agent-systemd-contract-test:
-	bash scripts/check-agent-systemd-contract_test.sh
-
 runner-container-contract:
 	bash scripts/check-runner-container-contract.sh
 
@@ -237,15 +272,19 @@ npm-install:
 	npm ci --ignore-scripts
 
 tailwind-build: npm-install
-	npx tailwindcss -i static/css/input.css -o static/css/tailwind.min.css --minify
+	npx @tailwindcss/cli -i static/css/input.css -o static/css/tailwind.min.css --minify
+	cat node_modules/tailwindcss/LICENSE node_modules/daisyui/LICENSE > static/css/tailwind.licenses.txt
 
 js-build: npm-install
 	npx esbuild static/js/app.js --bundle --minify --outfile=static/js/app.bundle.js
+	npx esbuild static/js/charts.js --bundle --minify --outfile=static/js/charts.bundle.js
+	cat node_modules/chart.js/LICENSE.md node_modules/@kurkle/color/LICENSE.md > static/js/charts.licenses.txt
 
 # Reformat Go source to 80-char width. Skips sqlc- and templ-generated files.
 .PHONY: install-hooks pre-commit-test
 install-hooks:
-	install -m 755 scripts/pre-commit "$$(git rev-parse --git-path hooks)/pre-commit"
+	mkdir -p "$$(git rev-parse --git-common-dir)/hooks"
+	install -m 755 scripts/pre-commit "$$(git rev-parse --git-common-dir)/hooks/pre-commit"
 
 pre-commit-test:
 	bash scripts/pre-commit_test.sh
@@ -283,25 +322,47 @@ clean:
 	-podman rm -f $(DEV_POSTGRES_CONTAINER) $(DEV_MSSQL_CONTAINER)
 
 # Go unit/integration tests (mirrors CI's exact command).
-test: templ-generate
-	go test -v -count=1 ./...
+# Fresh per-test SQL Server fixtures can exceed Go's default 10-minute limit.
+test: templ-generate swagger-ui-copy
+	bash scripts/go_test.sh -v -count=1 -timeout=20m ./...
+
+.PHONY: go-test-cleanup-test
+go-test-cleanup-test:
+	bash scripts/go_test_cleanup_test.sh
+	bash scripts/go_test.sh -count=1 scripts/go_test_cleanup.go scripts/go_test_cleanup_test.go
 
 # One-command pre-push gate: repo-wide 80-col check, go vet, the full
 # test suite, and the clean-room E2E contracts. Engine tests only need
 # a working container provider; on rootless Podman set
 # XDG_RUNTIME_DIR to a directory whose docker.sock symlinks the podman
 # socket and export TESTCONTAINERS_RYUK_DISABLED=true.
-verify: golines-check templ-generate swagger-ui-copy e2e-test-isolated
+verify: golines-check templ-generate swagger-ui-copy e2e-test-isolated go-test-cleanup-test
 	go vet ./...
-	go test -count=1 ./...
+	bash scripts/go_test.sh -count=1 -timeout=20m ./...
 
 # Read unresolved SonarCloud findings for a pull request. Requires SONAR_TOKEN.
 sonar-issues:
 	./scripts/sonar_issues.sh $(PR)
 
-# Running-server E2E checks. Start `make dev` (or the matching database dev
-# target) in another terminal first; this target never starts another server.
-e2e-test:
+# Task-local binaries; Go's checksum database verifies pinned modules.
+.PHONY: security-tools security-scan security-scan-test
+security-tools:
+	mkdir -p bin/security
+	GOTOOLCHAIN=go1.26.9 GOBIN="$(CURDIR)/bin/security" go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
+	GOTOOLCHAIN=go1.26.9 GOBIN="$(CURDIR)/bin/security" go install github.com/securego/gosec/v2/cmd/gosec@v2.29.0
+	GOTOOLCHAIN=go1.26.9 GOBIN="$(CURDIR)/bin/security" go install github.com/zricethezav/gitleaks/v8@v8.30.1
+
+security-scan: templ-generate swagger-ui-copy
+	@result=0; for scanner in govulncheck gosec gitleaks; do \
+		bash scripts/security_scan.sh $$scanner || result=1; \
+	done; exit $$result
+
+security-scan-test:
+	bash scripts/security_scan_test.sh
+
+# API, web, and browser E2E checks against the running server. Start `make dev`
+# first; this target never starts another app server. Browser tests use Podman.
+e2e-test: templ-generate swagger-ui-copy
 	DURPDEPLOY_BASE_URL="$${DURPDEPLOY_BASE_URL:-http://localhost:8080}" \
 	DURPDEPLOY_DB="$${DURPDEPLOY_DB:-durpdeploy.db}" ./scripts/e2e_db_test.sh sqlite
 
@@ -358,16 +419,31 @@ auth-mfa-e2e:
 
 # Runs the strict Playwright browser contract in the shared CI image. The source checkout
 # and secret-free evidence directory stay on the host; Docker owns the browser.
-MOBILE_BROWSER_IMAGE ?= durpdeploy-mobile-browser:local
+MOBILE_BROWSER_IMAGE ?=
 MOBILE_BROWSER_RUN_ID ?= local-$$(date -u +%Y%m%dT%H%M%SZ)-$$$$
 
 mobile-browser-container:
-	mkdir -p artifacts/mobile
-	docker build -f Dockerfile.mobile-browser -t $(MOBILE_BROWSER_IMAGE) .
+	run_id="$(MOBILE_BROWSER_RUN_ID)"; \
+	image="$(MOBILE_BROWSER_IMAGE)"; \
+	owned_image=0; \
+	if [ -z "$$image" ]; then \
+		image="durpdeploy-mobile-browser:$$run_id"; owned_image=1; \
+	fi; \
+	cleanup() { \
+		result=$$?; trap - EXIT INT TERM; \
+		if [ "$$owned_image" = 1 ]; then \
+			docker image rm "$$image" >/dev/null || \
+				echo "Could not remove mobile browser image $$image" >&2; \
+		fi; \
+		exit "$$result"; \
+	}; \
+	trap cleanup EXIT; trap 'exit 130' INT; trap 'exit 143' TERM; \
+	mkdir -p artifacts/mobile && \
+	docker build -f Dockerfile.mobile-browser -t "$$image" . && \
 	docker run --rm --init \
 		--entrypoint /usr/local/bin/mobile-browser-container \
-		-e MOBILE_RUN_ID="$(MOBILE_BROWSER_RUN_ID)" \
+		-e MOBILE_RUN_ID="$$run_id" \
 		-e MOBILE_ARTIFACT_DIR=/artifacts \
 		-v "$(CURDIR):/workspace" \
 		-v "$(CURDIR)/artifacts/mobile:/artifacts" \
-		$(MOBILE_BROWSER_IMAGE)
+		"$$image"

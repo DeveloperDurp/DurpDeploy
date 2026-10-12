@@ -13,6 +13,8 @@ func TestAgentDrainSerializesWithStepClaim(t *testing.T) {
 	repo := remoteFixture(t)
 	for _, statement := range []string{
 		`UPDATE deployments SET status='running' WHERE id=3`,
+		`INSERT INTO agent_labels VALUES ('a','other')`,
+		`INSERT INTO agent_environment_labels(agent_id,environment_id) VALUES ('a',2)`,
 		`INSERT INTO remote_step_runs
 		 (deployment_id,step_index,agent_id) VALUES (3,0,'a')`,
 	} {

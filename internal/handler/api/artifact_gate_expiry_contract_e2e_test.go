@@ -25,7 +25,7 @@ func TestArtifactGateExpiryDecisionContractE2E(t *testing.T) {
 				action,
 			),
 			url.Values{"revision": {"1"}, "sha256": {gate.SHA256}},
-			409,
+			303,
 		)
 	}
 	if _, err := f.h.repo.DB.Exec(

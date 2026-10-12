@@ -5,6 +5,12 @@ VALUES (?, ?, ?, ?, ?) RETURNING *;
 -- name: GetAgentPairing :one
 SELECT * FROM agent_pairings WHERE agent_id = ?;
 
+-- name: GetRegisteredAgentPairing :one
+SELECT p.* FROM agent_pairings p JOIN agents a ON a.id = p.agent_id
+WHERE p.agent_id = ? AND p.state = 'paired' -- NOSONAR: schema-constrained sqlc state literals; PL/SQL constants are not portable
+  AND a.status IN ('active', 'disabled')
+  AND a.certificate_fingerprint = p.agent_pin;
+
 -- name: ListAgentPairingRecoveryCandidates :many
 SELECT p.*, a.endpoint
 FROM agent_pairings p

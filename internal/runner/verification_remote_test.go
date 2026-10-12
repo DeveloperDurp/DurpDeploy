@@ -104,6 +104,19 @@ func checkRemoteVerificationIsolation(t *testing.T, legacy bool) {
 		t.Fatalf("routing=%+v err=%v", runs, err)
 	}
 	assertRemoteVerificationPayload(t, repo)
+	input, err := repo.LoadStaging(
+		ctx,
+		db.GetStagingSnapshotParams{DeploymentID: created.ID},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer input.Close()
+	if err := repo.SaveStaging(ctx, repository.StagingWrite{
+		Key: db.GetStagingSnapshotParams{DeploymentID: created.ID, Producer: "verification-a"}, Source: input,
+	}); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := repo.DB.ExecContext(
 		ctx,
 		"UPDATE remote_step_runs SET state=? WHERE deployment_id=? AND step_index=?",

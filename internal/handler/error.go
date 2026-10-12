@@ -3,12 +3,15 @@ package handler
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
 
 	"github.com/a-h/templ"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/jackc/pgx/v5/pgconn"
+	mssql "github.com/microsoft/go-mssqldb"
 
 	"durpdeploy/internal/httpstream"
 	"durpdeploy/views/pages"
@@ -17,6 +20,13 @@ import (
 const internalErrorMessage = "Internal server error"
 
 const safeErrorHeader = "X-DurpDeploy-Safe-Error"
+
+// Page navigation needs the complete document for its title and shell.
+func isFragmentRequest(r *http.Request) bool {
+	return r.Header.Get("HX-Request") == "true" &&
+		!(r.Method == http.MethodGet && (r.Header.Get("HX-Boosted") == "true" ||
+			r.Header.Get("HX-History-Restore-Request") == "true"))
+}
 
 func markSafeErrorResponse(w http.ResponseWriter) {
 	w.Header().Set(safeErrorHeader, "true")
@@ -127,8 +137,32 @@ func InternalErrorMiddleware(next http.Handler) http.Handler {
 }
 
 func IsUniqueViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return pgErr.Code == "23505"
+	}
+	var msErr mssql.Error
+	if errors.As(err, &msErr) {
+		return msErr.Number == 2601 || msErr.Number == 2627
+	}
 	return err != nil &&
 		strings.Contains(err.Error(), "UNIQUE constraint failed")
+}
+
+func retargetFormDialog(
+	w http.ResponseWriter,
+	r *http.Request,
+	target string,
+) bool {
+	if r.Header.Get("HX-Request") != "true" ||
+		r.Header.Get("X-Form-Dialog") != "true" {
+		return false
+	}
+	w.Header().Set("HX-Retarget", target)
+	w.Header().Set("HX-Reswap", "outerHTML")
+	w.Header().Set("HX-Reselect", target)
+	w.Header().Set("HX-Trigger-After-Settle", "form-saved")
+	return true
 }
 
 func WriteFormError(
@@ -143,6 +177,9 @@ func WriteFormError(
 		}
 		if w.Header().Get("HX-Reswap") == "" {
 			w.Header().Set("HX-Reswap", "innerHTML")
+		}
+		if r.Header.Get("X-Form-Dialog") == "true" {
+			w.Header().Set("HX-Retarget", "#project-edit-content")
 		}
 		w.WriteHeader(http.StatusUnprocessableEntity)
 		if err := fragment.Render(r.Context(), w); err != nil {

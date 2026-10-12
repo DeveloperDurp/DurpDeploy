@@ -7,7 +7,7 @@ group. It builds `Dockerfile.mobile-browser` and runs
 and build jobs in `release.yml` do not run this suite.
 
 The image stays pinned to `mcr.microsoft.com/playwright:v1.61.1-noble`, which
-matches the committed Playwright 1.61.1 lockfile. It copies Go 1.26.8, installs
+matches the committed Playwright 1.61.1 lockfile. It copies Go 1.26.9, installs
 `templ@v0.3.1020` with `GOBIN=/usr/local/bin`, runs `npm ci`, and supplies the
 locked Chromium and its OS dependencies. Keep the image and lockfile versions
 aligned when changing Playwright.

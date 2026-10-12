@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"durpdeploy/internal/testutil"
+
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
@@ -35,12 +37,8 @@ func newSQLServerTestDB(t *testing.T, fixtureFS ...fs.FS) *sql.DB {
 			Started: true,
 		},
 	)
+	testutil.CleanupContainer(t, ctr)
 	requireNoError(t, err, "start SQL Server container")
-	t.Cleanup(func() {
-		if err := ctr.Terminate(context.Background()); err != nil {
-			t.Logf("terminate container: %v", err)
-		}
-	})
 
 	host, err := ctr.Host(ctx)
 	requireNoError(t, err, "get container host")

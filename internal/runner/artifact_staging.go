@@ -115,15 +115,16 @@ func (r *DeploymentRunner) artifactMountArgs(stage artifactStage) []string {
 }
 
 func (r *DeploymentRunner) cleanupArtifact(deploymentID int64) error {
+	transferErr := r.replaceTransfer(deploymentID, nil)
 	r.mu.Lock()
 	stages, exists := r.staging[deploymentID]
 	r.mu.Unlock()
 	if !exists {
-		return nil
+		return transferErr
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	var cleanupErr error
+	cleanupErr := transferErr
 	for _, stage := range stages {
 		output, err := r.engine.command(ctx, r.engine.removeArgs(stage.keeper)...).
 			CombinedOutput()

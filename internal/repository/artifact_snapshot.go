@@ -40,6 +40,9 @@ func (r *Repository) ResolveProjectArtifact(
 		PackageSource(source),
 		artifact.Pin{URL: url, Version: version},
 	)
+	if errors.Is(err, artifact.ErrNotFound) {
+		return nil, &PackageMissingError{Version: version, Source: selected}
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -82,6 +85,9 @@ func (s *ArtifactSnapshot) Insert(
 	}
 	row := s.Row
 	row.ReleaseID = releaseID
+	if row.RepositoryID == 0 {
+		return nil // An explicitly omitted package has no artifact pin.
+	}
 	return q.CreateReleaseArtifact(ctx, row)
 }
 
@@ -122,7 +128,7 @@ func (r *Repository) DownloadDeploymentArtifact(
 	if err != nil {
 		return artifact.Download{}, err
 	}
-	return r.ArtifactClient.Fetch(
+	download, err := r.ArtifactClient.Fetch(
 		ctx,
 		PackageSource(source),
 		artifact.Pin{
@@ -132,4 +138,11 @@ func (r *Repository) DownloadDeploymentArtifact(
 			Size:    row.Size,
 		},
 	)
+	if err != nil || row.Sha256 != "" {
+		return download, err
+	}
+	if err := r.resolveDeploymentArtifact(ctx, row, download); err != nil {
+		return artifact.Download{}, errors.Join(err, os.Remove(download.Path))
+	}
+	return download, nil
 }

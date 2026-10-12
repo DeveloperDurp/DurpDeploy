@@ -14,6 +14,40 @@ type LifecycleHandler struct {
 	repo *repository.Repository
 }
 
+// swagger:route DELETE /lifecycles/{id} lifecycles deleteLifecycle
+// Delete a lifecycle and its shared variables. Global admin only.
+//
+// Responses:
+// 204: body:EmptyResponse
+// 400: body:BadRequestError
+// 401: body:UnauthorizedError
+// 403: body:ForbiddenError
+// 404: body:NotFoundError
+// 500: body:ServerError
+func (h *LifecycleHandler) DeleteLifecycle(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	id, err := parseParamInt(r, "id")
+	if err != nil || id <= 0 {
+		RespondError(w, http.StatusBadRequest, "Invalid lifecycle ID")
+		return
+	}
+	if _, err := h.repo.Queries.GetLifecycle(r.Context(), id); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			RespondError(w, http.StatusNotFound, "Lifecycle not found")
+		} else {
+			RespondError(w, 500, "Could not read lifecycle")
+		}
+		return
+	}
+	if err := h.repo.Queries.DeleteLifecycle(r.Context(), id); err != nil {
+		RespondError(w, 500, "Could not delete lifecycle")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func NewLifecycleHandler(repo *repository.Repository) *LifecycleHandler {
 	return &LifecycleHandler{repo: repo}
 }
@@ -309,7 +343,7 @@ func (h *LifecycleHandler) SaveLifecycle(
 
 // swagger:route POST /lifecycles/{id}/stages lifecycles addLifecycleStage
 //
-// Add a stage to a lifecycle.
+// Add a stage to a lifecycle. Global admin only.
 //
 //	Consumes:
 //	- application/json
@@ -325,6 +359,7 @@ func (h *LifecycleHandler) SaveLifecycle(
 //	Responses:
 //	  413: body:RequestEntityTooLargeError
 //	  201: body:LifecycleStage
+//	  403: body:ForbiddenError
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
 //	  409: body:ConflictError
@@ -394,7 +429,7 @@ func (h *LifecycleHandler) AddStage(w http.ResponseWriter, r *http.Request) {
 
 // swagger:route POST /lifecycles/{id}/stages/reorder lifecycles reorderLifecycleStages
 //
-// Reorder lifecycle stages.
+// Reorder lifecycle stages. Global admin only.
 //
 //	Consumes:
 //	- application/json
@@ -410,6 +445,7 @@ func (h *LifecycleHandler) AddStage(w http.ResponseWriter, r *http.Request) {
 //	Responses:
 //	  413: body:RequestEntityTooLargeError
 //	  200: body:LifecycleStageListResponse
+//	  403: body:ForbiddenError
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
 //	  500: body:ServerError
@@ -521,7 +557,7 @@ func (h *LifecycleHandler) ReorderStages(
 
 // swagger:route PATCH /lifecycles/{id}/stages/{stageId} lifecycles updateLifecycleStage
 //
-// Update a lifecycle stage.
+// Update a lifecycle stage. Global admin only.
 //
 //	Consumes:
 //	- application/json
@@ -539,6 +575,7 @@ func (h *LifecycleHandler) ReorderStages(
 //	  200: body:LifecycleStage
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
+//	  403: body:ForbiddenError
 //	  404: body:NotFoundError
 //	  500: body:ServerError
 func (h *LifecycleHandler) UpdateStage(w http.ResponseWriter, r *http.Request) {
@@ -598,7 +635,7 @@ func (h *LifecycleHandler) UpdateStage(w http.ResponseWriter, r *http.Request) {
 
 // swagger:route POST /lifecycles/{id}/stages/{stageId}/delete lifecycles deleteLifecycleStage
 //
-// Delete a lifecycle stage.
+// Delete a lifecycle stage. Global admin only.
 //
 //	Schemes: http, https
 //
@@ -610,6 +647,7 @@ func (h *LifecycleHandler) UpdateStage(w http.ResponseWriter, r *http.Request) {
 //	  204: body:EmptyResponse
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
+//	  403: body:ForbiddenError
 //	  500: body:ServerError
 func (h *LifecycleHandler) DeleteStage(w http.ResponseWriter, r *http.Request) {
 	stageID, err := parseParamInt(r, "stageId")

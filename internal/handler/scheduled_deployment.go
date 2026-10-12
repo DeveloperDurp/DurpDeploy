@@ -80,7 +80,7 @@ func (h *ScheduledDeploymentHandler) List(
 		return
 	}
 
-	if r.Header.Get("HX-Request") == "true" {
+	if isFragmentRequest(r) {
 		if err := pages.ScheduledDeploymentsList(project, items).
 			Render(r.Context(), w); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -132,7 +132,7 @@ func (h *ScheduledDeploymentHandler) NewForm(
 		return
 	}
 
-	if r.Header.Get("HX-Request") == "true" {
+	if isFragmentRequest(r) {
 		if err := pages.ScheduledDeploymentForm(
 			project, releases, envs, nil, "",
 		).Render(r.Context(), w); err != nil {
@@ -358,7 +358,7 @@ func (h *ScheduledDeploymentHandler) EditForm(
 		return
 	}
 
-	if r.Header.Get("HX-Request") == "true" {
+	if isFragmentRequest(r) {
 		if err := pages.ScheduledDeploymentForm(
 			project, releases, envs, &schedule, "",
 		).Render(r.Context(), w); err != nil {

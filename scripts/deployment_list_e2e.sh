@@ -4,11 +4,19 @@ deployment_list_e2e() {
     local owned foreign env foreign_env release foreign_release user jar token csrf
     local prefix="list-access-$(date +%s)-$$" password="list-access-password-1234"
     local owned_dep foreign_dep role query body code
+    local project_prefix=$prefix
+    [[ -z "${E2E_RUN_ID:-}" ]] || project_prefix=list-access
     echo "=== Deployment list authorization ==="
-    owned=$(api_post "{\"name\":\"$prefix-owned\"}" "$BASE/api/v1/projects" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
-    foreign=$(api_post "{\"name\":\"$prefix-foreign\"}" "$BASE/api/v1/projects" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
-    env=$(api_post "{\"name\":\"$prefix-env\"}" "$BASE/api/v1/environments" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
-    foreign_env=$(api_post "{\"name\":\"$prefix-foreign-env\"}" "$BASE/api/v1/environments" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
+    owned=$(api_post "{\"name\":\"$project_prefix-owned\"}" "$BASE/api/v1/projects" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
+    foreign=$(api_post "{\"name\":\"$project_prefix-foreign\"}" "$BASE/api/v1/projects" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
+    env=${ENV_ID:-}
+    foreign_env=${LC_TEST_ID:-}
+    if [[ -z "$env" ]]; then
+        env=$(api_post "{\"name\":\"$prefix-env\"}" "$BASE/api/v1/environments" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
+    fi
+    if [[ -z "$foreign_env" ]]; then
+        foreign_env=$(api_post "{\"name\":\"$prefix-foreign-env\"}" "$BASE/api/v1/environments" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
+    fi
     release=$(api_post '{"version":"1.0"}' "$BASE/api/v1/projects/$owned/releases" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
     foreign_release=$(api_post '{"version":"1.0"}' "$BASE/api/v1/projects/$foreign/releases" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
     owned_dep=$(api_post "{\"release_id\":$release,\"environment_id\":$env}" "$BASE/api/v1/projects/$owned/deployments" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
@@ -28,7 +36,7 @@ result=json.load(sys.stdin)
 assert result["total"] == 0 and result["items"] == []
 '
     body=$(curl -fsS -b "$jar" "$BASE/deployments")
-    [[ "$body" != *"$prefix-owned"* && "$body" != *"$prefix-foreign"* ]] || {
+    [[ "$body" != *"$project_prefix-owned"* && "$body" != *"$project_prefix-foreign"* ]] || {
         echo "FAIL: nonmember web list exposes projects"; return 1;
     }
     api_post "{\"user_id\":$user,\"role\":\"deployer\"}" "$BASE/api/v1/projects/$owned/members" >/dev/null
@@ -53,8 +61,8 @@ assert result["total"] == (1 if sys.argv[1].startswith("limit=") else 0)
         done
         # Then the full web page and HTMX rows expose no foreign metadata/counts.
         body=$(curl -fsS -b "$jar" "$BASE/deployments?limit=1")
-        [[ "$body" == *"$prefix-owned"* && "$body" == *"$prefix-env"* &&
-           "$body" != *"$prefix-foreign"* && "$body" != *'Load more'* ]] || {
+        [[ "$body" == *"$project_prefix-owned"* && "$body" == *"value=\"$env\""* &&
+           "$body" != *"$project_prefix-foreign"* && "$body" != *'Load more'* ]] || {
             echo "FAIL: $role web list/dropdowns leak or omit metadata"; return 1;
         }
         body=$(curl -fsS -b "$jar" -H 'HX-Request: true' "$BASE/deployments?limit=1&offset=1")
@@ -62,7 +70,7 @@ assert result["total"] == (1 if sys.argv[1].startswith("limit=") else 0)
             echo "FAIL: $role HTMX pagination includes foreign rows"; return 1;
         }
         body=$(curl -fsS -b "$jar" "$BASE/deployments?project_id=$foreign")
-        [[ "$body" != *'href="/deployments/'* && "$body" != *"$prefix-foreign"* ]] || {
+        [[ "$body" != *'href="/deployments/'* && "$body" != *"$project_prefix-foreign"* ]] || {
             echo "FAIL: $role foreign project filter reveals deployments"; return 1;
         }
     done
@@ -73,7 +81,7 @@ result=json.load(sys.stdin)
 assert result["total"] == 1 and result["items"][0]["id"] == int(sys.argv[1])
 ' "$foreign_dep"
     body=$(curl_body "$BASE/deployments")
-    [[ "$body" == *"$prefix-owned"* && "$body" == *"$prefix-foreign"* ]] || {
+    [[ "$body" == *"$project_prefix-owned"* && "$body" == *"$project_prefix-foreign"* ]] || {
         echo "FAIL: admin dropdowns lost global view"; return 1;
     }
     echo "  Nonmember, deployer, viewer, filters, totals, HTMX, and admin: OK"

@@ -20,13 +20,7 @@ templ GlobalNotificationCards(global db.GlobalNotification) {
 						<label class="label">
 							<span class="label-text">Webhook URL</span>
 						</label>
-						<input
-							type="text"
-							name="slack_webhook_url"
-							value={ global.SlackWebhookUrl.String }
-							placeholder="https://hooks.slack.com/services/..."
-							class="input input-bordered input-sm w-full"
-						/>
+						@NotificationCredentialInput("slack_webhook_url", "Slack webhook URL", global.SlackWebhookUrl.String != "")
 					</div>
 				} else {
 					<p class="text-sm text-gray-400">
@@ -82,13 +76,7 @@ templ GlobalNotificationCards(global db.GlobalNotification) {
 						<label class="label">
 							<span class="label-text">App token</span>
 						</label>
-						<input
-							type="text"
-							name="gotify_token"
-							value={ global.GotifyToken.String }
-							placeholder="AbCdEf123..."
-							class="input input-bordered input-sm w-full"
-						/>
+						@NotificationCredentialInput("gotify_token", "Gotify app token", global.GotifyToken.String != "")
 					</div>
 				} else {
 					<p class="text-sm text-gray-400">
@@ -107,13 +95,7 @@ templ GlobalNotificationCards(global db.GlobalNotification) {
 						<label class="label">
 							<span class="label-text">Webhook URL</span>
 						</label>
-						<input
-							type="text"
-							name="discord_webhook_url"
-							value={ global.DiscordWebhookUrl.String }
-							placeholder="https://discord.com/api/webhooks/..."
-							class="input input-bordered input-sm w-full"
-						/>
+						@NotificationCredentialInput("discord_webhook_url", "Discord webhook URL", global.DiscordWebhookUrl.String != "")
 					</div>
 				} else {
 					<p class="text-sm text-gray-400">
@@ -140,21 +122,29 @@ templ GlobalNotificationsPage(global db.GlobalNotification, currentPath string) 
 			{Label: "Notification Settings"},
 		})
 		if CanWrite(ctx) {
-			<form method="post" action="/admin/notifications/settings">
-				<div class="flex justify-between items-center mb-4">
+			<form
+				method="post"
+				action="/admin/notifications/settings"
+				hx-boost="true"
+				hx-target="#page-content"
+				hx-select="#page-content"
+				hx-swap="outerHTML"
+				data-toast-success="Notification settings saved"
+			>
+				<div class="page-header">
 					<h1 class="text-3xl font-bold">Notification Settings</h1>
 					<div class="flex gap-2">
 						<button type="submit" class="btn btn-primary btn-sm">Save</button>
-						<a href="/admin/notifications" class="btn btn-ghost btn-sm">Back</a>
+						<a href="/admin/notifications" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>
 					</div>
 				</div>
 				@GlobalNotificationCards(global)
 			</form>
 		} else {
-			<div class="flex justify-between items-center mb-4">
+			<div class="page-header">
 				<h1 class="text-3xl font-bold">Notification Settings</h1>
 				<div class="flex gap-2">
-					<a href="/admin/notifications" class="btn btn-ghost btn-sm">Back</a>
+					<a href="/admin/notifications" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>
 				</div>
 			</div>
 			@GlobalNotificationCards(global)

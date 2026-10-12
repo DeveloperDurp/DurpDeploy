@@ -124,6 +124,7 @@ func TestRemoteStepFanoutRequiresSnapshotInterpreterCapability(t *testing.T) {
 	if _, err := r.DB.ExecContext(ctx, `
 INSERT INTO agent_environment_labels(agent_id, environment_id) VALUES('a', 2);
 INSERT INTO agent_interpreters(agent_id, interpreter) VALUES('b', 'python3');
+UPDATE agents SET agent_protocol = 'agent/2' WHERE id = 'b';
 UPDATE deployments SET status = 'running' WHERE id = 3;
 UPDATE deployment_steps SET interpreter = 'python3'
 WHERE deployment_id = 3 AND step_index = 0;`); err != nil {
@@ -146,6 +147,7 @@ func TestRemoteStepClaimRechecksInterpreterCapability(t *testing.T) {
 	if _, err := r.DB.ExecContext(ctx, `
 INSERT INTO agent_environment_labels(agent_id, environment_id) VALUES('a', 2);
 INSERT INTO agent_interpreters(agent_id, interpreter) VALUES('a', 'python3');
+UPDATE agents SET agent_protocol = 'agent/2' WHERE id = 'a';
 INSERT INTO agent_labels(agent_id, label) VALUES('a', 'other');
 UPDATE deployments SET status = 'running' WHERE id = 3;
 UPDATE deployment_steps SET interpreter = 'python3'

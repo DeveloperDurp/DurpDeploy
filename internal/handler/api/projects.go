@@ -27,24 +27,30 @@ type projectRequest struct {
 }
 
 type projectNotificationsRequest struct {
-	SlackWebhookURL   string `json:"slack_webhook_url"`
-	NotifyEmails      string `json:"notify_emails"`
-	GotifyURL         string `json:"gotify_url"`
-	GotifyToken       string `json:"gotify_token"`
-	DiscordWebhookURL string `json:"discord_webhook_url"`
+	ClearSlackWebhookURL   bool   `json:"clear_slack_webhook_url"`
+	ClearGotifyToken       bool   `json:"clear_gotify_token"`
+	ClearDiscordWebhookURL bool   `json:"clear_discord_webhook_url"`
+	SlackWebhookURL        string `json:"slack_webhook_url"`
+	NotifyEmails           string `json:"notify_emails"`
+	GotifyURL              string `json:"gotify_url"`
+	GotifyToken            string `json:"gotify_token"`
+	DiscordWebhookURL      string `json:"discord_webhook_url"`
 }
 
 type projectResponse struct {
-	ID                int64  `json:"id"`
-	Name              string `json:"name"`
-	Description       string `json:"description"`
-	CreatedAt         int64  `json:"created_at"`
-	LifecycleID       *int64 `json:"lifecycle_id"`
-	SlackWebhookURL   string `json:"slack_webhook_url"`
-	NotifyEmails      string `json:"notify_emails"`
-	GotifyURL         string `json:"gotify_url"`
-	GotifyToken       string `json:"gotify_token"`
-	DiscordWebhookURL string `json:"discord_webhook_url"`
+	SlackWebhookURLConfigured   bool   `json:"slack_webhook_url_configured"`
+	GotifyTokenConfigured       bool   `json:"gotify_token_configured"`
+	DiscordWebhookURLConfigured bool   `json:"discord_webhook_url_configured"`
+	ID                          int64  `json:"id"`
+	Name                        string `json:"name"`
+	Description                 string `json:"description"`
+	CreatedAt                   int64  `json:"created_at"`
+	LifecycleID                 *int64 `json:"lifecycle_id"`
+	SlackWebhookURL             string `json:"slack_webhook_url"`
+	NotifyEmails                string `json:"notify_emails"`
+	GotifyURL                   string `json:"gotify_url"`
+	GotifyToken                 string `json:"gotify_token"`
+	DiscordWebhookURL           string `json:"discord_webhook_url"`
 }
 
 func toProjectResponse(p db.Project) projectResponse {
@@ -53,42 +59,51 @@ func toProjectResponse(p db.Project) projectResponse {
 		lcID = &p.LifecycleID.Int64
 	}
 	return projectResponse{
-		ID:                p.ID,
-		Name:              p.Name,
-		Description:       p.Description.String,
-		CreatedAt:         p.CreatedAt,
-		LifecycleID:       lcID,
-		SlackWebhookURL:   p.SlackWebhookUrl.String,
-		NotifyEmails:      p.NotifyEmails.String,
-		GotifyURL:         p.GotifyUrl.String,
-		GotifyToken:       p.GotifyToken.String,
-		DiscordWebhookURL: p.DiscordWebhookUrl.String,
+		ID:                          p.ID,
+		Name:                        p.Name,
+		Description:                 p.Description.String,
+		CreatedAt:                   p.CreatedAt,
+		LifecycleID:                 lcID,
+		SlackWebhookURL:             "",
+		SlackWebhookURLConfigured:   p.SlackWebhookUrl.String != "",
+		NotifyEmails:                p.NotifyEmails.String,
+		GotifyURL:                   p.GotifyUrl.String,
+		GotifyToken:                 "",
+		GotifyTokenConfigured:       p.GotifyToken.String != "",
+		DiscordWebhookURL:           "",
+		DiscordWebhookURLConfigured: p.DiscordWebhookUrl.String != "",
 	}
 }
 
 type projectNotificationResponse struct {
-	ID                int64  `json:"id"`
-	Name              string `json:"name"`
-	Description       string `json:"description"`
-	SlackWebhookURL   string `json:"slack_webhook_url"`
-	NotifyEmails      string `json:"notify_emails"`
-	GotifyURL         string `json:"gotify_url"`
-	GotifyToken       string `json:"gotify_token"`
-	DiscordWebhookURL string `json:"discord_webhook_url"`
-	CreatedAt         int64  `json:"created_at"`
+	SlackWebhookURLConfigured   bool   `json:"slack_webhook_url_configured"`
+	GotifyTokenConfigured       bool   `json:"gotify_token_configured"`
+	DiscordWebhookURLConfigured bool   `json:"discord_webhook_url_configured"`
+	ID                          int64  `json:"id"`
+	Name                        string `json:"name"`
+	Description                 string `json:"description"`
+	SlackWebhookURL             string `json:"slack_webhook_url"`
+	NotifyEmails                string `json:"notify_emails"`
+	GotifyURL                   string `json:"gotify_url"`
+	GotifyToken                 string `json:"gotify_token"`
+	DiscordWebhookURL           string `json:"discord_webhook_url"`
+	CreatedAt                   int64  `json:"created_at"`
 }
 
 func toProjectNotificationResponse(p db.Project) projectNotificationResponse {
 	return projectNotificationResponse{
-		ID:                p.ID,
-		Name:              p.Name,
-		Description:       p.Description.String,
-		SlackWebhookURL:   p.SlackWebhookUrl.String,
-		NotifyEmails:      p.NotifyEmails.String,
-		GotifyURL:         p.GotifyUrl.String,
-		GotifyToken:       p.GotifyToken.String,
-		DiscordWebhookURL: p.DiscordWebhookUrl.String,
-		CreatedAt:         p.CreatedAt,
+		ID:                          p.ID,
+		Name:                        p.Name,
+		Description:                 p.Description.String,
+		SlackWebhookURL:             "",
+		SlackWebhookURLConfigured:   p.SlackWebhookUrl.String != "",
+		NotifyEmails:                p.NotifyEmails.String,
+		GotifyURL:                   p.GotifyUrl.String,
+		GotifyToken:                 "",
+		GotifyTokenConfigured:       p.GotifyToken.String != "",
+		DiscordWebhookURL:           "",
+		DiscordWebhookURLConfigured: p.DiscordWebhookUrl.String != "",
+		CreatedAt:                   p.CreatedAt,
 	}
 }
 
@@ -180,7 +195,7 @@ func (h *ProjectHandler) ListProjects(w http.ResponseWriter, r *http.Request) {
 
 // swagger:route POST /projects projects createProject
 //
-// Create a new project.
+// Create a new project. Lifecycle assignment requires a global admin.
 //
 //	Consumes:
 //	- application/json
@@ -198,6 +213,7 @@ func (h *ProjectHandler) ListProjects(w http.ResponseWriter, r *http.Request) {
 //	  201: body:ProjectResponse
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
+//	  403: body:ForbiddenError
 //	  409: body:ConflictError
 //	  500: body:ServerError
 func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
@@ -209,6 +225,9 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 	name := trimSpace(req.Name)
 	if name == "" {
 		RespondError(w, http.StatusBadRequest, "Name is required")
+		return
+	}
+	if !h.authorizeLifecycle(w, r, 0, req.LifecycleID) {
 		return
 	}
 
@@ -314,7 +333,7 @@ func (h *ProjectHandler) GetProject(w http.ResponseWriter, r *http.Request) {
 
 // swagger:route PUT /projects/{id} projects updateProject
 //
-// Update a project.
+// Update a project. Only a global admin can assign a different lifecycle.
 //
 //	Consumes:
 //	- application/json
@@ -333,6 +352,7 @@ func (h *ProjectHandler) GetProject(w http.ResponseWriter, r *http.Request) {
 //	  400: body:BadRequestError
 //	  401: body:UnauthorizedError
 //	  404: body:NotFoundError
+//	  403: body:ForbiddenError
 //	  409: body:ConflictError
 //	  500: body:ServerError
 func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
@@ -344,6 +364,9 @@ func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 
 	var req projectRequest
 	if !readJSONBool(w, r, &req) {
+		return
+	}
+	if !h.authorizeLifecycle(w, r, id, req.LifecycleID) {
 		return
 	}
 
@@ -512,9 +535,15 @@ func (h *ProjectHandler) UpdateProjectNotifications(
 		return
 	}
 
-	webhook := trimSpace(req.SlackWebhookURL)
+	webhook := notify.CredentialValue(
+		req.SlackWebhookURL,
+		req.ClearSlackWebhookURL,
+	)
 	gotifyURL := trimSpace(req.GotifyURL)
-	discordWebhook := trimSpace(req.DiscordWebhookURL)
+	discordWebhook := notify.CredentialValue(
+		req.DiscordWebhookURL,
+		req.ClearDiscordWebhookURL,
+	)
 	if err := validateNotificationURLs(
 		webhook,
 		gotifyURL,
@@ -527,6 +556,9 @@ func (h *ProjectHandler) UpdateProjectNotifications(
 	err = h.repo.Queries.UpdateProjectNotifications(
 		r.Context(),
 		db.UpdateProjectNotificationsParams{
+			ClearSlackWebhookUrl:   boolInt(req.ClearSlackWebhookURL),
+			ClearGotifyToken:       boolInt(req.ClearGotifyToken),
+			ClearDiscordWebhookUrl: boolInt(req.ClearDiscordWebhookURL),
 			SlackWebhookUrl: sql.NullString{
 				String: webhook,
 				Valid:  webhook != "",
@@ -551,7 +583,11 @@ func (h *ProjectHandler) UpdateProjectNotifications(
 		},
 	)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, err.Error())
+		RespondError(
+			w,
+			http.StatusInternalServerError,
+			"could not save notification settings",
+		)
 		return
 	}
 
@@ -571,4 +607,28 @@ func validateNotificationURLs(urls ...string) error {
 		}
 	}
 	return nil
+}
+
+func (h *ProjectHandler) authorizeLifecycle(
+	w http.ResponseWriter,
+	r *http.Request,
+	projectID, lifecycleID int64,
+) bool {
+	err := handler.AuthorizeLifecycleSelection(
+		r.Context(), h.repo, projectID, lifecycleID,
+	)
+	if err == nil {
+		return true
+	}
+	if errors.Is(err, handler.ErrLifecycleAssignmentForbidden) ||
+		errors.Is(err, handler.ErrLifecycleRemovalForbidden) {
+		RespondError(w, http.StatusForbidden, err.Error())
+	} else {
+		RespondError(
+			w,
+			http.StatusInternalServerError,
+			"Could not check lifecycle access",
+		)
+	}
+	return false
 }

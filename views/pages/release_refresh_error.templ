@@ -1,0 +1,15 @@
+package pages
+
+import "fmt"
+
+const ReleaseRefreshConflictMessage = "This release has active or unconfirmed deployments. Its steps, variables and package snapshot cannot change while a deployment still uses them. Cancel the active deployment or wait for it to finish, then retry Refresh. If cleanup is unconfirmed, inspect the deployment and confirm runtime recovery first. Buffered agent logs must finish syncing before refresh is allowed."
+
+templ ReleaseRefreshConflict(projectID int64) {
+	<div id="release-refresh-error" class="alert alert-error" role="alert">
+		<div class="space-y-2 min-w-0">
+			<p class="font-bold">Unable to refresh this release</p>
+			<p>{ ReleaseRefreshConflictMessage }</p>
+			<a class="link font-semibold" href={ fmt.Sprintf("/deployments?project_id=%d", projectID) }>View project deployments</a>
+		</div>
+	</div>
+}

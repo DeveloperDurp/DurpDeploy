@@ -134,6 +134,10 @@ func TestRunbookWeb_CreateAndExecuteMultiStep(t *testing.T) {
 			strings.Index(string(body), "second step") {
 		t.Fatalf("execution page missing step logs: %s", body)
 	}
+	if !strings.Contains(string(body), `x-data="backNavigation"`) ||
+		!strings.Contains(string(body), `>Back</a>`) {
+		t.Fatal("execution page missing the standard Back button")
+	}
 }
 
 func TestRunbookWeb_ViewerReadsButCannotEdit(t *testing.T) {
@@ -203,7 +207,7 @@ func TestRunbookWeb_ViewerReadsButCannotEdit(t *testing.T) {
 	}
 	if form.StatusCode != http.StatusOK ||
 		!strings.Contains(string(body), "Viewers cannot edit a runbook") ||
-		strings.Contains(string(body), "Save immutable version") {
+		strings.Contains(string(body), "Create new version") {
 		t.Fatalf("viewer form status=%d body=%s", form.StatusCode, body)
 	}
 	write, err := viewer.client.PostForm(h.server.URL+base,

@@ -12,6 +12,13 @@ fi
 grep -Fq 'FROM remote_step_runs' "$ROOT/scripts/agent_lifecycle_faults.mjs"
 
 tests=(
+	TestAgentV3CleanupBlocksQueueUntilReadyPoll
+	TestAgentV3EncryptedPayloadKeepsStepRestriction
+	TestAgentV3MixedFleetAndClaimRecheck
+	TestPollPersistsContainerOnlyCapabilities
+	TestLegacyPollClearsContainerCapabilities
+	TestLegacyDifferingRestrictionsFailBeforeClaimWithoutPoisoningPoll
+	TestLegacyEqualRestrictionsRemainRepresentable
 	TestAgentFleetDrainE2E
 	TestAgentFleetDrainPausesRunnerTimeoutE2E
 	TestRunnerPreservesOriginalFailureWhileCancellingSiblings

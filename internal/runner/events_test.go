@@ -13,6 +13,7 @@ import (
 	"durpdeploy/internal/migrate"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/runner"
+	"durpdeploy/internal/secret"
 )
 
 type recordingNotifier struct {
@@ -41,6 +42,11 @@ info) printf '{"host":{"security":{"rootless":true}}}';;
 ps) ;;
 rm) ;;
 inspect) printf 'true\n';;
+exec)
+  case "$*" in
+    *"tar -cf"*) tar -cf - --files-from /dev/null;;
+    *"sh -c"*) cat >/dev/null;;
+  esac;;
 run)
   for arg do case "$arg" in --detach) exit 0;; esac; done
   script=$(cat)
@@ -74,6 +80,11 @@ esac
 	t.Cleanup(func() { dbConn.Close() })
 
 	repo := repository.New(dbConn)
+	box, err := secret.NewBox(make([]byte, 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo.SetSecretBox(box)
 	rec := &recordingNotifier{}
 	bus := events.NewBus(repo)
 	bus.Register(rec)
@@ -92,6 +103,12 @@ func addAgentInterpreter(
 	interpreter string,
 ) {
 	t.Helper()
+	if err := repo.Queries.ClearAgentStagingCapability(t.Context(), agentID); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.Queries.AddAgentStagingCapability(t.Context(), agentID); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := repo.Queries.AddAgentInterpreter(
 		t.Context(),
 		db.AddAgentInterpreterParams{
@@ -419,10 +436,12 @@ func TestRunner_FailsWhenNoAgentSupportsInterpreter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(logs) != 1 || !strings.Contains(
-		logs[0].Line,
-		`no compatible agents support interpreter "python3"`,
-	) {
+	if len(logs) != 3 || logs[0].StepState.String != "failed" ||
+		logs[2].StepState.String != "waiting" ||
+		!strings.Contains(
+			logs[1].Line,
+			`no compatible agents support interpreter "python3"`,
+		) {
 		t.Fatalf("deployment logs = %+v", logs)
 	}
 	runs, err := repo.Queries.ListRemoteStepRuns(
@@ -484,10 +503,12 @@ func TestRunner_RemoteStepWithoutInterpreterDefaultsToBash(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(logs) != 1 || !strings.Contains(
-		logs[0].Line,
-		`no compatible agents support interpreter "bash"`,
-	) {
+	if len(logs) != 3 || logs[0].StepState.String != "failed" ||
+		logs[2].StepState.String != "waiting" ||
+		!strings.Contains(
+			logs[1].Line,
+			`no compatible agents support interpreter "bash"`,
+		) {
 		t.Fatalf("deployment logs = %+v", logs)
 	}
 }
@@ -525,12 +546,20 @@ func TestRunner_RedactsSecretsInLocalPython3Logs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	box, err := secret.NewBox(make([]byte, 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+	encrypted, err := box.Encrypt("s3cr3t-value")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, err := repo.Queries.CreateReleaseVariable(
 		ctx,
 		db.CreateReleaseVariableParams{
 			ReleaseID: release.ID,
 			Name:      "API_TOKEN",
-			Value:     sql.NullString{String: "s3cr3t-value", Valid: true},
+			Value:     sql.NullString{String: encrypted, Valid: true},
 			Secret:    1,
 		},
 	); err != nil {

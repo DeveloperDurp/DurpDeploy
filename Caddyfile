@@ -26,7 +26,7 @@
 {$DURPDEPLOY_URL:http://localhost} {
 	# Proxy to the Go server. The Go process listens on port 8080
 	# (HTTP, no TLS — Caddy terminates TLS here). The default backend is
-	# `localhost:8080`, which matches the systemd deploy (Go binary on
+	# `localhost:8080`, for a host installation (Go binary on
 	# the same host as Caddy). In the Docker Compose stack, the Caddy
 	# service sets `BACKEND=app:8080` so the reverse proxy reaches the
 	# app over the compose network rather than its own loopback.

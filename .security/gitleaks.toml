@@ -1,0 +1,29 @@
+title = "DurpDeploy secret scanning"
+# Exception owner: DeveloperDurp
+# Exceptions expire: 2027-01-01
+
+[extend]
+useDefault = true
+
+# Exact inert canaries used to prove HTTP hostname/stream redaction.
+# AND is essential: other values in these test files still fail.
+[[allowlists]]
+description = "Reviewed redaction-test hostname canaries; no issued credentials"
+condition = "AND"
+targetRules = ["generic-api-key"]
+paths = ['''^internal/(handler/api/verification_encryption_e2e_test|runner/verification_http_scrubber_test)\.go$''']
+regexes = ['''(?i)^(api\.apikey-123456789|apikey-123456789|key-123456789)$''']
+
+[[allowlists]]
+description = "Reviewed fixed bearer canary in the scrubber regression test"
+condition = "AND"
+targetRules = ["curl-auth-header"]
+paths = ['''^internal/runner/scrubber_test\.go$''']
+regexes = ['''^abc\.123-XYZ_456=$''']
+
+[[allowlists]]
+description = "Reviewed alphabetic AWS-format canary in historical scrubber test"
+condition = "AND"
+targetRules = ["aws-access-token"]
+paths = ['''^internal/runner/scrubber_test\.go$''']
+regexes = ['''^AKIAABCDEFGHIJKLMNOP$''']

@@ -8,15 +8,13 @@
 #     loop beyond a one-line `docker info` guard.
 #   - $CI_REGISTRY_IMAGE tags: these containers are single-run and never
 #     pushed, so images are built and tagged locally only.
-#   - resource_group: replaced with job-level concurrency groups
-#     (serialized, never cancelled) for the jobs that had one.
+#   - resource_group: replaced with job-level concurrency groups scoped
+#     to each job and ref, so independent jobs cannot cancel queued tests.
 name: test
 
 on:
   pull_request:
     types: [opened, synchronize, reopened]
-  push:
-    branches: [main]
 
 # Cancel any in-flight run for the same ref when a new commit lands
 # (same policy as release.yml).
@@ -37,7 +35,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version: '1.26.8'
+          go-version: '1.26.9'
           cache: true
       - name: Test staged-content hook
         run: make pre-commit-test
@@ -45,6 +43,12 @@ jobs:
           GOFLAGS: -mod=readonly
       - name: Test development agent lifecycle
         run: make dev-agent-test
+      - name: Test development encryption key persistence
+        run: make dev-secret-key-test
+      - name: Test demo lifecycle safety
+        run: make demo-test
+      - name: Test Go test container cleanup
+        run: make go-test-cleanup-test
 
       - name: Check development database boundaries
         run: bash scripts/check-dev-database-contract.sh
@@ -71,10 +75,9 @@ jobs:
   mobile-browser:
     name: Mobile browser
     runs-on: ubuntu-latest
-    # Replaces GitLab resource_group: mobile-browser. Serialized, never
-    # cancelled, so queued runs wait instead of racing.
+    # Serialize this job only within its ref; other PRs have their own runner.
     concurrency:
-      group: ci-mobile-browser
+      group: ci-mobile-browser-${{ github.ref }}
       cancel-in-progress: false
       queue: max
     env:
@@ -140,10 +143,10 @@ jobs:
   auth-mfa-sqlite:
     name: Auth MFA E2E (SQLite)
     runs-on: ubuntu-latest
-    # Replaces GitLab resource_group: auth-mfa-e2e (shared with the
-    # parity job below). Serialized, never cancelled.
+    # Use a separate queue per job/ref so parity jobs and other PRs cannot
+    # displace this job while it is waiting for a runner.
     concurrency:
-      group: ci-auth-mfa-e2e
+      group: ci-auth-mfa-sqlite-${{ github.ref }}
       cancel-in-progress: false
       queue: max
     env:
@@ -222,10 +225,10 @@ jobs:
   auth-mfa-parity:
     name: Auth MFA E2E (Postgres/MSSQL)
     runs-on: ubuntu-latest
-    # Replaces GitLab resource_group: auth-mfa-e2e (shared with the
-    # SQLite job above). Serialized, never cancelled.
+    # Each job runs on its own hosted runner; it does not share a queue
+    # with SQLite or other PRs.
     concurrency:
-      group: ci-auth-mfa-e2e
+      group: ci-auth-mfa-parity-${{ github.ref }}
       cancel-in-progress: false
       queue: max
     steps:
@@ -235,7 +238,7 @@ jobs:
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version: '1.26.8'
+          go-version: '1.26.9'
           cache: true
 
       - name: Generate templ files
@@ -278,7 +281,7 @@ jobs:
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version: '1.26.8'
+          go-version: '1.26.9'
           cache: true
 
       - name: Generate templ files
@@ -296,7 +299,7 @@ jobs:
       - name: Verify ZIP artifact API, web forms, and container mounts
         env:
           DURPDEPLOY_CONTAINER_RUNTIME: docker
-        run: go test -tags=e2e -count=1 -run '^(TestArtifactsAPIWebContainerE2E|TestArtifactCredentialRotationE2E|TestArtifactSourceReplacementE2E|TestDeploymentStagingCleanupE2E)$' ./internal/handler/api
+        run: go test -tags=e2e -count=1 -run '^(TestReleaseDeferredPackageAPIWebE2E|TestArtifactsAPIWebContainerE2E|TestArtifactCredentialRotationE2E|TestArtifactSourceReplacementE2E|TestDeploymentStagingCleanupE2E|TestDeploymentStepResourcesE2E|TestDeploymentStagingFailureAPIWebE2E|TestDeploymentStepLogsAPIWebE2E|TestDeploymentStepLogOutcomesAPIWebE2E|TestPageNavigationHTTPAPIWebE2E|TestLifecycleVariablesAPIWebE2E|TestLifecycleVariableScopeChangesApplyToExistingReleaseE2E)$' ./internal/handler/api
 
       - name: Verify generated artifact approvals and live Terraform
         env:
@@ -313,11 +316,60 @@ jobs:
           DURPDEPLOY_CONTAINER_RUNTIME: docker
         run: go test -tags=e2e -race -count=1 -timeout=5m -run '^TestEnvironmentQueue.*E2E$' ./internal/handler/api
 
+  agent-container:
+    name: Agent container API (${{ matrix.runtime }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        runtime: [docker, podman]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: '1.26.9'
+          cache: true
+      - name: Prepare generated assets
+        run: |
+          go tool templ generate
+          make swagger-ui-copy
+      - name: Build the pinned agent for the local engine
+        env:
+          ENGINE: ${{ matrix.runtime }}
+        run: |
+          go mod download github.com/DeveloperDurp/durpdeploy-agent
+          agent_source=$(go list -m -f '{{.Dir}}' github.com/DeveloperDurp/durpdeploy-agent)
+          image=localhost/durpdeploy-agent:issue99
+          if [ "$ENGINE" = docker ]; then
+            socket=unix:///var/run/docker.sock
+            docker build -t "$image" "$agent_source"
+          else
+            systemctl --user start podman.socket
+            socket="unix://$XDG_RUNTIME_DIR/podman/podman.sock"
+            podman build -t "$image" "$agent_source"
+          fi
+          printf 'AGENT_TEST_RUNTIME=%s\nAGENT_TEST_SOCKET=%s\nAGENT_TEST_IMAGE=%s\nAGENT_SOURCE=%s\n' \
+            "$ENGINE" "$socket" "$image" "$agent_source" >> "$GITHUB_ENV"
+      - name: Verify real engine execution and crash recovery
+        run: make -C "$AGENT_SOURCE" container-executor-contract
+      - name: Verify public API through a socket-mounted agent container
+        run: go test -tags=e2e,agentcontainer -race -count=1 -timeout=8m -v -run '^TestAgentContainerAPIE2E$' ./internal/agentserver
+      - name: Verify deployment staging transfer across agents
+        if: matrix.runtime == 'podman'
+        run: |
+          go build -o "$RUNNER_TEMP/durpdeploy-staging-agent" github.com/DeveloperDurp/durpdeploy-agent/cmd/agent
+          DURPDEPLOY_AGENT_E2E_BINARY="$RUNNER_TEMP/durpdeploy-staging-agent" \
+            bash scripts/go_test.sh -tags 'e2e agentstaging' -count=1 \
+            -timeout=10m -v -run '^TestDeploymentStaging(Transfer|ImportFailure|TransferPausesStepTimeout|Audit)APIE2E$' ./internal/agentserver
+
   # ----- Artifact crash recovery and capacity ----------------------------------
   package-browser:
     name: Package repository browser
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 30
     env:
       DURPDEPLOY_CONTAINER_RUNTIME: docker
       DURPDEPLOY_PACKAGE_UI_EVIDENCE: ${{ github.workspace }}/artifacts/package-ui
@@ -327,22 +379,36 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version: '1.26.8'
+          go-version: '1.26.9'
           cache: true
       - name: Prepare generated assets
         run: |
           go tool templ generate
           make swagger-ui-copy
-      - name: Verify singleton setup, authentication fields, and version test
-        run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^TestPackageRepositoryBrowserE2E$' ./internal/handler/api
+      - name: Verify navigation, caching, and package repositories
+        run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^Test(ReleaseDeferredPackage|ReleaseRefreshConflictStaysOnPage|ThemeStyles|PackageRepository|PackageRepositoryBack|BackNavigation|BackHistory|PageNavigation|PageNavigationExpiredSession|OIDCNavigation)BrowserE2E$' ./internal/handler/api
+      - name: Verify mobile lists and dashboard updates
+        run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^Test(DeploymentMobile|DeploymentListMobile|ResourceListMobile|HomeMobile|HomeRunningPoll|MainPagePattern)BrowserE2E$' ./internal/handler/api
+      - name: Verify forms and dialogs
+        run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^Test(ProjectEditModal|ResourceCreateModal|ResourceEditModal|StepEditModal|StepAddModal|MobileFormFocus|RunbookEditor|AlpineEditForms|AlpineDialogs|LifecycleVariables|LifecycleLiveScope|LifecyclePageNavigation|RunningServer|VariableScopesBeforeDeployment|NotificationCredentialForms|NotificationValidationPreservesForm)BrowserE2E$' ./internal/handler/api
+      - name: Verify deployment step logs
+        run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^Test(DeploymentStepLogs|DeploymentStepLogsHistoricalQuiet|DeploymentStagingFailure|LegacyRunbookStreamDrainsAfterTerminalBadge)BrowserE2E$' ./internal/handler/api
       - name: Verify verification forms, polling, and rollback in Chromium
-        run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^TestVerification(Rollback|Polling)BrowserE2E$' ./internal/handler/api
+        run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^TestVerification(Rollback|Polling|CleanupRetry)BrowserE2E$' ./internal/handler/api
       - name: Verify environment queue position, permissions, and cancellation
         run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^TestEnvironmentQueueBrowserE2E$' ./internal/handler/api
       - name: Verify artifact approval controls in Chromium
-        run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^TestArtifactGateBrowserE2E$' ./internal/handler/api
+        run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^Test(ArtifactGate.*|TerraformPlanColors)BrowserE2E$' ./internal/handler/api
+
+      - name: Verify the running-instance API and browser suite
+        env:
+          DURPDEPLOY_E2E_RUNNING_SUITE: '1'
+          DURPDEPLOY_E2E_PORT: '18087'
+        run: bash scripts/e2e_test.sh
       - name: Verify agent fleet controls and responsive health pages
-        run: go test -tags=e2e,agentbrowser -race -count=1 -timeout=5m -v -run '^(TestAgentFleetBrowserE2E|TestDeploymentWaitingForAgentsBrowserE2E)$' ./internal/handler/api
+        run: go test -tags=e2e,agentbrowser -race -count=1 -timeout=5m -v -run '^(TestAgentFleetBrowserE2E|TestAgentDeleteBrowserE2E|TestDeploymentWaitingForAgentsBrowserE2E)$' ./internal/handler/api
+      - name: Verify agent container step, template, and runbook forms
+        run: go test -tags=e2e,agentbrowser -race -count=1 -timeout=5m -v -run '^TestAgentContainerBrowserE2E$' ./internal/handler/api
       - name: Upload package UI evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -365,7 +431,7 @@ jobs:
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version: '1.26.8'
+          go-version: '1.26.9'
           cache: true
 
       - name: Check runtime and workspace capacity

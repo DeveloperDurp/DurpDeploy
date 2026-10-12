@@ -657,8 +657,9 @@ func TestProject_UpdateNotifications(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode body: %v", err)
 	}
-	if resp["slack_webhook_url"] != "https://example.com/hook" {
-		t.Fatalf("expected slack webhook, got %v", resp["slack_webhook_url"])
+	if resp["slack_webhook_url"] != "" ||
+		resp["slack_webhook_url_configured"] != true {
+		t.Fatalf("expected masked configured webhook, got %v", resp)
 	}
 }
 
@@ -1631,8 +1632,9 @@ func TestAdmin_NotificationsAndSettings(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode settings: %v", err)
 	}
-	if resp["slack_webhook_url"] != "https://hooks.slack.com/test" {
-		t.Fatalf("expected slack webhook, got %v", resp["slack_webhook_url"])
+	if resp["slack_webhook_url"] != "" ||
+		resp["slack_webhook_url_configured"] != true {
+		t.Fatalf("expected masked configured slack webhook, got %v", resp)
 	}
 	if resp["notify_emails"] != "ops@example.com" {
 		t.Fatalf("expected notify_emails, got %v", resp["notify_emails"])

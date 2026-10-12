@@ -4,6 +4,14 @@ package audit
 // registered in server.go. New routes need one map entry; the fallback
 // heuristic catches anything missed with a lossy name.
 var actionMap = map[string]string{
+	"POST /agent/v1/deployments/{id}/staging/upload":                   "publish_staging",
+	"POST /lifecycles/{id}/variables":                                  "create_lifecycle_variable",
+	"PUT /lifecycles/{id}/variables/{varId}":                           "update_lifecycle_variable",
+	"DELETE /lifecycles/{id}/variables/{varId}":                        "delete_lifecycle_variable",
+	"POST /api/v1/lifecycles/{id}/variables":                           "create_lifecycle_variable",
+	"PUT /api/v1/lifecycles/{id}/variables/{varId}":                    "update_lifecycle_variable",
+	"DELETE /api/v1/lifecycles/{id}/variables/{varId}":                 "delete_lifecycle_variable",
+	"DELETE /api/v1/lifecycles/{id}":                                   "delete_lifecycle",
 	"POST /deployments/{id}/artifact-gates/{stepIndex}/approve":        "approve_artifact",
 	"POST /deployments/{id}/artifact-gates/{stepIndex}/reject":         "reject_artifact",
 	"POST /api/v1/deployments/{id}/artifact-gates/{stepIndex}/approve": "approve_artifact",
@@ -40,6 +48,7 @@ var actionMap = map[string]string{
 	"POST /admin/agents/{id}/name":                                            "rename_agent",
 	"POST /admin/agents/{id}/retry-pair":                                      "retry_pair_agent",
 	"POST /admin/agents/{id}/revoke":                                          "revoke_agent",
+	"POST /admin/agents/{id}/delete":                                          "delete_agent",
 	"POST /admin/agents/{id}/labels":                                          "add_agent_label",
 	"POST /admin/agents/{id}/labels/delete":                                   "delete_agent_label",
 	"POST /admin/agents/{id}/environments":                                    "add_agent_environment_label",
@@ -89,6 +98,7 @@ var actionMap = map[string]string{
 	"POST /api/v1/admin/agents/pair":                                                 "pair_agent",
 	"POST /api/v1/admin/agents/{id}/retry-pair":                                      "retry_pair_agent",
 	"POST /api/v1/admin/agents/{id}/revoke":                                          "revoke_agent",
+	"DELETE /api/v1/admin/agents/{id}":                                               "delete_agent",
 	"POST /api/v1/admin/agents/{id}/labels":                                          "add_agent_label",
 	"DELETE /api/v1/admin/agents/{id}/labels":                                        "delete_agent_label",
 	"POST /api/v1/admin/maintenance":                                                 "",

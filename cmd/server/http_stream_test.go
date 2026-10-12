@@ -26,6 +26,7 @@ import (
 )
 
 type streamFixture struct {
+	repo   *repository.Repository
 	router http.Handler
 	broker *runner.LogBroker
 	paths  []streamRoute
@@ -104,27 +105,41 @@ func newStreamFixture(t *testing.T) streamFixture {
 	rnr := runner.New(repo, broker)
 	router := server.NewRouter(repo, rnr, cron.NewParser(cron.Minute),
 		handler.NewAuthHandler(repo))
-	return streamFixture{router: router, broker: broker, paths: []streamRoute{
-		{fmt.Sprintf("/deployments/%d/logs/stream", id), id},
-		{fmt.Sprintf("/api/v1/deployments/%d/logs/stream", id), id},
-		{
-			fmt.Sprintf("/api/v1/deployments/%d/logs/stream?format=ndjson", id),
-			id,
+	return streamFixture{
+		repo:   repo,
+		router: router,
+		broker: broker,
+		paths: []streamRoute{
+			{fmt.Sprintf("/deployments/%d/logs/stream", id), id},
+			{fmt.Sprintf("/api/v1/deployments/%d/logs/stream", id), id},
+			{
+				fmt.Sprintf(
+					"/api/v1/deployments/%d/logs/stream?format=ndjson",
+					id,
+				),
+				id,
+			},
+			{fmt.Sprintf("/api/v1/deployments/%d/events", id), id},
+			{fmt.Sprintf("/projects/%d/runbooks/executions/%d/logs/stream",
+				project.ID, execution.ID), runbookID},
+			{
+				fmt.Sprintf(
+					"/api/v1/projects/%d/runbook-executions/%d/logs/stream",
+					project.ID,
+					execution.ID,
+				),
+				runbookID,
+			},
+			{
+				fmt.Sprintf(
+					"/api/v1/projects/%d/runbook-executions/%d/logs/stream?format=ndjson",
+					project.ID,
+					execution.ID,
+				),
+				runbookID,
+			},
 		},
-		{fmt.Sprintf("/api/v1/deployments/%d/events", id), id},
-		{fmt.Sprintf("/projects/%d/runbooks/executions/%d/logs/stream",
-			project.ID, execution.ID), runbookID},
-		{fmt.Sprintf("/api/v1/projects/%d/runbook-executions/%d/logs/stream",
-			project.ID, execution.ID), runbookID},
-		{
-			fmt.Sprintf(
-				"/api/v1/projects/%d/runbook-executions/%d/logs/stream?format=ndjson",
-				project.ID,
-				execution.ID,
-			),
-			runbookID,
-		},
-	}}
+	}
 }
 
 func TestHTTPStreamsSurviveOrdinaryWriteTimeout(t *testing.T) {
@@ -171,6 +186,14 @@ func TestHTTPStreamsSurviveOrdinaryWriteTimeout(t *testing.T) {
 			timer := time.NewTimer(200 * time.Millisecond)
 			defer timer.Stop()
 			<-timer.C
+			_, err = f.repo.Queries.CreateDeploymentLog(
+				t.Context(),
+				db.CreateDeploymentLogParams{
+					DeploymentID: route.id,
+					Line:         "after-timeout",
+				},
+			)
+			require.NoError(t, err)
 			f.broker.Broadcast(route.id, "after-timeout")
 			// Then: a new event still reaches the client.
 			for scanner.Scan() {
@@ -246,6 +269,14 @@ func TestHTTPStreamsExitOnFlushFailure(t *testing.T) {
 						timer := time.NewTimer(200 * time.Millisecond)
 						defer timer.Stop()
 						<-timer.C
+						_, err := f.repo.Queries.CreateDeploymentLog(
+							t.Context(),
+							db.CreateDeploymentLogParams{
+								DeploymentID: route.id,
+								Line:         "flush-fails",
+							},
+						)
+						require.NoError(t, err)
 						f.broker.Broadcast(route.id, "flush-fails")
 					}
 					// Then: the handler exits and its deferred unsubscribe runs.

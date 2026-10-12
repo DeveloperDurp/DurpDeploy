@@ -18,14 +18,17 @@ templ TemplatesList(templates []db.StepTemplate, currentPath string) {
 }
 
 templ TemplatesListContent(templates []db.StepTemplate) {
-	<div id="templates-content" class="space-y-4">
-		<div class="flex justify-between items-center">
+	<div id="templates-content" class="space-y-4" x-data="formDialogHost" x-on:htmx:after-settle.camel="afterSettle" x-on:htmx:before-swap.camel="beforeSwap" x-on:form-saved="saved">
+		<div class="page-header">
 			<h1 class="text-3xl font-bold">Templates</h1>
 			if CanWrite(ctx) {
-				<a href="/templates/new" class="btn btn-primary">New Template</a>
+				@NewResourceButton("/templates/new", "New Template")
 			}
 		</div>
 		@TemplatesListFragment(templates)
+		if CanWrite(ctx) {
+			@ResourceFormDialog("New Template", "[data-create-form]")
+		}
 	</div>
 }
 
@@ -35,73 +38,28 @@ templ TemplatesListFragment(templates []db.StepTemplate) {
 			<div class="card bg-base-200 p-8 text-center">
 				<p class="text-gray-400 mb-4">No templates yet. Create your first template to reuse deployment steps.</p>
 				if CanWrite(ctx) {
-					<a href="/templates/new" class="btn btn-primary">New Template</a>
+					@NewResourceButton("/templates/new", "New Template")
 				}
 			</div>
 		} else {
-			<table class="hidden lg:table table-zebra table-fixed w-full">
-				<thead>
-					<tr>
-						<th class="w-auto">Name</th>
-						<th class="w-64 text-left">Actions</th>
-					</tr>
-				</thead>
-				<tbody>
-					for _, tpl := range templates {
-						@TemplateRow(tpl)
-					}
-				</tbody>
-			</table>
-			<ol class="space-y-3 lg:hidden" data-mobile-template-list>
+			<div class="space-y-3">
 				for _, tpl := range templates {
-					<li class="card bg-base-200 p-4 space-y-3">
-						<p class="break-words font-medium">{ tpl.Name }</p>
-						<p class="text-xs text-gray-400">{ "Interpreter: " + tpl.Interpreter }</p>
-						<details class="text-sm" data-disclosure={ "template-script-mobile-" + strconv.FormatInt(tpl.ID, 10) }>
-							<summary class="cursor-pointer text-primary">View full script</summary>
-							<pre class="mt-2 max-w-full overflow-x-auto whitespace-pre-wrap break-words rounded bg-base-100 p-3 text-xs"><code>{ tpl.ScriptBody }</code></pre>
-						</details>
-						@TemplateActions(tpl)
-					</li>
+					if CanWrite(ctx) {
+						@ResourceDialogCard(tpl.Name, "/templates/" + strconv.FormatInt(tpl.ID, 10) + "/edit") {
+							@TemplateCardDetails(tpl)
+						}
+					} else {
+						@ResourceCard(tpl.Name, "/templates/" + strconv.FormatInt(tpl.ID, 10) + "/history") {
+							@TemplateCardDetails(tpl)
+						}
+					}
 				}
-			</ol>
+			</div>
 		}
 	</div>
 }
 
-templ TemplateRow(tpl db.StepTemplate) {
-	<tr>
-		<td class="min-w-0">
-			<p class="break-words">{ tpl.Name }</p>
-			<p class="text-xs text-gray-400">{ "Interpreter: " + tpl.Interpreter }</p>
-			<details class="mt-1 text-sm" data-disclosure={ "template-script-" + strconv.FormatInt(tpl.ID, 10) }>
-				<summary class="cursor-pointer text-primary">View full script</summary>
-				<pre class="mt-2 whitespace-pre-wrap break-words rounded bg-base-100 p-3 text-xs"><code>{ tpl.ScriptBody }</code></pre>
-			</details>
-		</td>
-		<td class="align-top text-left">
-			@TemplateActions(tpl)
-		</td>
-	</tr>
-}
-
-templ TemplateActions(tpl db.StepTemplate) {
-	<div class="flex flex-nowrap justify-start gap-2 whitespace-nowrap">
-			if CanWrite(ctx) {
-				<a data-template-action="edit" href={ templ.SafeURL("/templates/" + strconv.FormatInt(tpl.ID, 10) + "/edit") } class="btn btn-sm btn-ghost whitespace-nowrap">Edit</a>
-				<button
-					data-template-action="delete"
-					hx-delete={ "/templates/" + strconv.FormatInt(tpl.ID, 10) }
-					hx-target="#form-container"
-					hx-swap="innerHTML"
-					hx-confirm="Delete this template?"
-					class="btn btn-sm btn-error whitespace-nowrap"
-					data-toast-success="Template deleted"
-					data-toast-error="Failed to delete template"
-				>
-					Delete
-				</button>
-			}
-			<a data-template-action="history" href={ templ.SafeURL("/templates/" + strconv.FormatInt(tpl.ID, 10) + "/history") } class="btn btn-xs whitespace-nowrap">History</a>
-	</div>
+templ TemplateCardDetails(tpl db.StepTemplate) {
+	<p class="opacity-70">{ "Interpreter: " + tpl.Interpreter }</p>
+	<pre class="line-clamp-2 whitespace-pre-wrap break-all font-mono text-xs opacity-70">{ tpl.ScriptBody }</pre>
 }

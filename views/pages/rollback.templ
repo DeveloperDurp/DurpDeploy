@@ -21,7 +21,7 @@ templ RollbackConfirmation(preview repository.RollbackPreview, currentPath strin
 							<div><dt class="text-sm opacity-70">Source release</dt><dd class="font-mono break-all">{ preview.SourceVersion }</dd></div>
 							<div><dt class="text-sm opacity-70">Target release</dt><dd class="font-mono break-all">{ preview.TargetVersion }</dd></div>
 						</dl>
-						<p class="text-sm opacity-70">Creates a new deployment from successful deployment #{ strconv.FormatInt(preview.TargetDeploymentID, 10) }. The frozen steps, variables, and package pin are reused. Environment verification applies again.</p>
+						<p class="text-sm opacity-70">Creates a new deployment from successful deployment #{ strconv.FormatInt(preview.TargetDeploymentID, 10) }. Its steps and package pin are reused with the release’s current variables. Environment verification applies again.</p>
 						if preview.Blocked {
 							<div class="alert alert-warning" role="status">{ preview.Reason }</div>
 						} else {

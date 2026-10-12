@@ -65,8 +65,7 @@ func formatUnixTime(ts int64) string {
 	return time.Unix(ts, 0).Format("2006-01-02 15:04:05")
 }
 
-// AvailableEnv is the per-env data the releases table needs. Exported so the
-// handler can build the same shape.
+// AvailableEnv holds environment choices for deployment and schedule forms.
 type AvailableEnv struct {
 	Environment db.Environment
 	State       GateState
@@ -76,14 +75,13 @@ type GateState struct {
 	Deployable       bool
 	Reason           string
 	Bypassable       bool
-	AlreadyDeployed  bool // true = this env already has this release; caller hides the row
+	AlreadyDeployed  bool // true = this environment already has this release
 	RequiresApproval bool // true = the target lifecycle stage requires manual approval before running
 }
 
 // ReleaseView is the per-row data for the releases table.
 type ReleaseView struct {
 	Release db.Release
-	Envs    []AvailableEnv
 	Active  bool
 }
 
@@ -101,10 +99,10 @@ templ ReleasesPage(project db.Project, releases []ReleaseView, errorMsg string, 
 
 templ ReleasesContent(project db.Project, releases []ReleaseView, errorMsg string) {
 	<div class="space-y-6">
-		<div class="flex justify-between items-center">
+		<div class="page-header">
 			<h1 class="text-3xl font-bold">Releases — { project.Name }</h1>
 			<div class="flex gap-2">
-				<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost btn-sm">Back</a>
+				<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>
 			</div>
 		</div>
 		@ReleasesFragment(project, releases, errorMsg)
@@ -120,45 +118,19 @@ templ ReleasesFragment(project db.Project, releases []ReleaseView, errorMsg stri
 	</div>
 }
 
-templ ReleaseForm(projectID int64, errorMsg string) {
-	<div class="card bg-base-200 p-4 mb-6">
-		<h3 class="text-lg font-bold mb-4">Create Release</h3>
-		<form
-			hx-post={ fmt.Sprintf("/projects/%d/releases", projectID) }
-			hx-target="#releases-content"
-			hx-swap="outerHTML"
-			data-toast-success="Release created"
-			data-toast-error="Failed to create release"
-			class="flex flex-wrap gap-4 items-end"
-		>
-			<div class="form-control flex-1 min-w-[200px]">
-				<label class="label">
-					<span class="label-text">Version</span>
-				</label>
-				<input type="text" name="version" class="input input-bordered" placeholder="e.g. 1.0.0" required/>
-				if errorMsg != "" {
-					<span class="text-error text-sm mt-1">{ errorMsg }</span>
-				}
-			</div>
-			<button type="submit" class="btn btn-primary">Create Release</button>
-		</form>
-	</div>
-}
-
 templ ReleasesTable(project db.Project, releases []ReleaseView) {
 	<table class="table table-zebra table-fixed w-full">
 		<thead>
 			<tr>
-				<th class="w-1/5">Version</th>
-				<th class="w-1/5">Created At</th>
-				<th class="w-2/5">Deploy</th>
-				<th class="w-1/5">Actions</th>
+				<th class="w-1/4">Version</th>
+				<th class="w-auto">Created At</th>
+				<th class="w-1/4">Actions</th>
 			</tr>
 		</thead>
 		<tbody>
 			if len(releases) == 0 {
 				<tr>
-					<td colspan="4" class="text-gray-500 italic text-center py-4">No releases yet.</td>
+					<td colspan="3" class="text-gray-500 italic text-center py-4">No releases yet.</td>
 				</tr>
 			} else {
 				for _, rv := range releases {
@@ -171,48 +143,15 @@ templ ReleasesTable(project db.Project, releases []ReleaseView) {
 
 templ ReleaseRow(projectID int64, rv ReleaseView) {
 	<tr id={ fmt.Sprintf("release-row-%d", rv.Release.ID) }>
-		<td class="font-medium truncate">
-			<a href={ fmt.Sprintf("/projects/%d/releases/%d", projectID, rv.Release.ID) } class="link link-primary">{ rv.Release.Version }</a>
+		<td class="font-medium">
+			<div class="truncate">
+				<a href={ fmt.Sprintf("/projects/%d/releases/%d", projectID, rv.Release.ID) } class="link link-primary">{ rv.Release.Version }</a>
+			</div>
 			if releaseNeedsRecreation(parseReleaseSteps(rv.Release.StepsJson)) {
 				<span class="badge badge-warning badge-xs ml-1 align-middle" data-release-needs-recreation title="This release contains legacy local steps without a container image. Recreate those steps and snap a new release before deploying.">recreate</span>
 			}
 		</td>
 		<td class="whitespace-nowrap">{ formatUnixTime(rv.Release.CreatedAt) }</td>
-		<td>
-			if len(rv.Envs) == 0 {
-				<span class="text-gray-500 italic text-sm">No envs available</span>
-			} else if CanWrite(ctx) {
-				<form method="post" action={ fmt.Sprintf("/projects/%d/deploy", projectID) } class="flex flex-wrap gap-2 items-center" x-data="releaseDeployRow()">
-					<input type="hidden" name="release_id" value={ strconv.FormatInt(rv.Release.ID, 10) }/>
-					<input type="hidden" name="note" value=""/>
-					<select name="environment_id" class="select select-bordered select-xs" required>
-						<option value="">Select env</option>
-						for _, e := range rv.Envs {
-							if e.State.Deployable {
-								<option value={ strconv.FormatInt(e.Environment.ID, 10) }>{ e.Environment.Name }</option>
-							}
-						}
-						if hasForceableEnvs(rv.Envs) {
-							<optgroup label="Needs force" data-gate-group="forceable" x-bind:hidden="!forceChecked">
-								for _, e := range rv.Envs {
-									if !e.State.Deployable && e.State.Bypassable {
-										<option value={ strconv.FormatInt(e.Environment.ID, 10) } data-gate="forceable" title={ e.State.Reason } x-bind:disabled="!forceChecked">{ e.Environment.Name }</option>
-									}
-								}
-							</optgroup>
-						}
-					</select>
-					if hasForceableEnvs(rv.Envs) {
-						<label class="label cursor-pointer gap-1">
-							<input type="checkbox" name="force_check" value="true" class="checkbox checkbox-xs" x-model="forceChecked"/>
-							<span class="label-text text-xs">Force</span>
-						</label>
-						<input type="hidden" name="force" value="true" :disabled="!forceChecked"/>
-					}
-					<button type="submit" class="btn btn-primary btn-xs">Deploy</button>
-				</form>
-			}
-		</td>
 		<td>
 			if CanWrite(ctx) {
 				@ReleaseDeleteControl(projectID, rv.Release, rv.Active, "btn-xs")
@@ -236,33 +175,35 @@ templ ReleaseDetailPage(project db.Project, release db.Release, variables []db.R
 
 templ ReleaseDetail(project db.Project, release db.Release, variables []db.ReleaseVariable, environments []db.Environment, artifact db.ReleaseArtifact, active bool) {
 	<div class="space-y-6">
-		<div class="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center">
+		<div class="page-header">
 			<div class="min-w-0">
 				<h1 class="text-3xl font-bold break-all">Release { release.Version }</h1>
 				<p class="text-gray-400">Project: { project.Name }</p>
 			</div>
 			<div class="flex flex-wrap shrink-0 gap-2">
-				if CanWrite(ctx) && release.SnapshotLocked == 0 {
+				if CanWrite(ctx) {
 					<form
 						method="post"
 						action={ fmt.Sprintf("/projects/%d/releases/%d/refresh", project.ID, release.ID) }
 						hx-boost="true"
-						hx-confirm="Refresh this release with the latest steps and variables?"
+						if artifact.ReleaseID != 0 {
+							hx-confirm="Refresh this release with the latest steps and variables, download its package again, and replace its checksum for future deployments? Existing deployments and re-runs keep their original package pin."
+						} else {
+							hx-confirm="Refresh this release with the latest steps and variables?"
+						}
 					>
 						<button type="submit" class="btn btn-outline btn-warning btn-sm">Refresh</button>
 					</form>
 				}
-				<a href={ fmt.Sprintf("/projects/%d/releases", project.ID) } class="btn btn-ghost btn-sm">Back</a>
+				<a href={ fmt.Sprintf("/projects/%d/releases", project.ID) } class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>
 				if CanWrite(ctx) {
 					@ReleaseDeleteControl(project.ID, release, active, "btn-sm")
 				}
 			</div>
 		</div>
-		if release.SnapshotLocked != 0 {
-			<p class="alert alert-info text-sm">This release has been deployed. Its snapshot is immutable; create a new release to change steps or variables.</p>
-		}
+		<div id="release-refresh-error" role="alert"></div>
 		if artifact.ReleaseID!=0 {
-			<div class="card bg-base-200 p-4 space-y-3"><h2 class="text-xl font-bold">Pinned ZIP package</h2><p class="break-all">{ artifact.Url }</p><p>Version: { artifact.Version }</p><p class="font-mono break-all">SHA-256: { artifact.Sha256 }</p><p>Size: { strconv.FormatInt(artifact.Size,10) } bytes</p><p class="text-sm opacity-70">Steps receive ARTIFACT_PATH. Files are read-only; direct execution is blocked.</p></div>
+			@ReleasePackageAttachment(artifact)
 		}
 		<div class="card bg-base-200 p-4">
 			<h2 class="text-xl font-bold mb-4">Snapshotted Steps</h2>
@@ -315,6 +256,7 @@ templ ReleaseDetail(project db.Project, release db.Release, variables []db.Relea
 		</div>
 		<div class="card bg-base-200 p-4">
 			<h2 class="text-xl font-bold mb-4">Snapshotted Variables</h2>
+			<p class="text-sm opacity-70 mb-4">Project variables are saved here. Lifecycle variables use their current values and scope when a deployment is created; refreshing this release is not required.</p>
 			<table class="table table-zebra table-fixed w-full">
 				<thead>
 					<tr>

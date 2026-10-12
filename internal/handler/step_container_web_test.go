@@ -142,7 +142,10 @@ func TestStepWebCreateAgentRejectsContainerImage(t *testing.T) {
 		t.Fatalf("status=%d, want 422", response.StatusCode)
 	}
 	body := readBody(t, response)
-	if !strings.Contains(body, "Agent steps cannot use a container image") {
+	if !strings.Contains(
+		body,
+		"container image is not valid for agent-host steps",
+	) {
 		t.Fatalf(
 			"422 body missing image-rejection message; got: %s",
 			body,

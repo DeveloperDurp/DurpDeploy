@@ -9,7 +9,6 @@ files=(
 	docs/roles.md
 	docs/attack-drill.md
 	compose.example.yml
-	systemd/durpdeploy.service
 )
 
 require_text() {
@@ -49,11 +48,13 @@ require_text docs/attack-drill.md 'MFA reset does not revoke API tokens.' \
 	'admin-reset API token survival is missing'
 require_text README.md 'Browser MFA protects browser sessions only.' \
 	'README browser/API MFA boundary is missing'
-require_text compose.example.yml 'DURPDEPLOY_URL: ${DURPDEPLOY_URL:?}' \
-	'Compose does not pass DURPDEPLOY_URL to the app'
-require_text systemd/durpdeploy.service \
-	'Environment=DURPDEPLOY_URL=https://durpdeploy.example.com' \
-	'systemd DURPDEPLOY_URL example is missing'
+app_config=$(sed -n '/^  app:/,/^  [a-z].*:/p' "$root/compose.example.yml")
+if ! grep -Fq -- '- ./compose.caddy.env' <<<"$app_config"; then
+	echo 'MFA documentation contract: app does not load the canonical URL environment file' >&2
+	exit 1
+fi
+require_text compose.example.yml '#   DURPDEPLOY_URL=https://durpdeploy.example.com' \
+	'Compose canonical URL example is missing'
 
 reject_pattern 'DURPDEPLOY_PUBLIC_URL' 'legacy public URL variable is documented'
 reject_pattern 'otpauth://|totp[[:space:]_-]*(seed|secret)[[:space:]]*[:=]|recovery[[:space:]_-]*code[[:space:]]*[:=]' \

@@ -18,14 +18,17 @@ templ EnvironmentsList(environments []db.Environment, currentPath string) {
 }
 
 templ EnvironmentsListContent(environments []db.Environment) {
-	<div id="environments-content" class="space-y-4">
-		<div class="flex flex-wrap justify-between items-center gap-2">
+	<div id="environments-content" class="space-y-4" x-data="formDialogHost" x-on:htmx:after-settle.camel="afterSettle" x-on:htmx:before-swap.camel="beforeSwap" x-on:form-saved="saved">
+		<div class="page-header">
 			<h1 class="text-3xl font-bold">Environments</h1>
 			if CanWrite(ctx) {
-				<a href="/environments/new" class="btn btn-primary">New Environment</a>
+				@NewResourceButton("/environments/new", "New Environment")
 			}
 		</div>
 		@EnvironmentsListFragment(environments)
+		if CanWrite(ctx) {
+			@ResourceFormDialog("New Environment", "[data-create-form]")
+		}
 	</div>
 }
 
@@ -35,53 +38,36 @@ templ EnvironmentsListFragment(environments []db.Environment) {
 			<div class="card bg-base-200 p-8 text-center">
 				if CanWrite(ctx) {
 					<p class="text-gray-400 mb-4">No environments yet. Create your first environment to define deployment targets.</p>
-					<a href="/environments/new" class="btn btn-primary">New Environment</a>
+					@NewResourceButton("/environments/new", "New Environment")
 				} else {
 					<p class="text-gray-400">No environments are available.</p>
 				}
 			</div>
 		} else {
-			<table class="table table-zebra table-fixed w-full">
-				<thead>
-					<tr>
-						<th class="w-1/4">Name</th>
-						<th class="hidden lg:table-cell w-2/5">Description</th>
-						<th class="hidden md:table-cell w-1/5">Tags</th>
-						if CanWrite(ctx) {
-							<th class="w-1/5">Actions</th>
-						}
-					</tr>
-				</thead>
-				<tbody>
-					for _, environment := range environments {
-						@EnvironmentRow(environment)
-					}
-				</tbody>
-			</table>
+			<div class="space-y-3">
+				for _, environment := range environments {
+					@EnvironmentRow(environment)
+				}
+			</div>
 		}
 	</div>
 }
 
 templ EnvironmentRow(environment db.Environment) {
-	<tr>
-		<td class="truncate">{ environment.Name }</td>
-		<td class="hidden lg:table-cell truncate">{ environment.Description.String }</td>
-		<td class="hidden md:table-cell truncate">{ environment.Tags.String }</td>
-		if CanWrite(ctx) {
-			<td class="flex flex-wrap gap-2">
-				<a href={ templ.SafeURL("/environments/" + strconv.FormatInt(environment.ID, 10) + "/edit") } class="btn btn-sm btn-ghost">Edit</a>
-				<button
-					hx-delete={ "/environments/" + strconv.FormatInt(environment.ID, 10) }
-					hx-target="#form-container"
-					hx-swap="innerHTML"
-					hx-confirm="Delete this environment?"
-					class="btn btn-sm btn-error"
-					data-toast-success="Environment deleted"
-					data-toast-error="Failed to delete environment"
-				>
-					Delete
-				</button>
-			</td>
+	if CanWrite(ctx) {
+		@ResourceDialogCard(environment.Name, "/environments/" + strconv.FormatInt(environment.ID, 10) + "/edit") {
+			@EnvironmentCardDetails(environment)
 		}
-	</tr>
+	} else {
+		@ResourceCard(environment.Name, "") {
+			@EnvironmentCardDetails(environment)
+		}
+	}
+}
+
+templ EnvironmentCardDetails(environment db.Environment) {
+	<p class="opacity-70">{ environment.Description.String }</p>
+	if environment.Tags.String != "" {
+		<p><span class="opacity-70">Tags: </span>{ environment.Tags.String }</p>
+	}
 }

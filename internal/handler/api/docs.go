@@ -28,6 +28,24 @@
 // swagger:meta
 package api
 
+// swagger:operation GET /healthz health healthzAPI
+//
+// Public API liveness probe. This does not check database connectivity.
+// ---
+// security: []
+// responses:
+//   '200':
+//     description: The HTTP API is running.
+//     schema:
+//       type: object
+//       properties:
+//         ok:
+//           type: boolean
+//   '400':
+//     description: Unexpected request body.
+//   '413':
+//     description: Request body exceeds the encoded byte ceiling.
+
 // Generic error response.
 // swagger:model ErrorResponse
 type swaggerErrorResponse struct {

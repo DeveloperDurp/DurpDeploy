@@ -5,8 +5,8 @@ umask 077
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 RUN_DIR=$(mktemp -d "${TMPDIR:-/tmp}/durpdeploy-agent-e2e.XXXXXX")
-EVIDENCE_DIR=${AGENT_E2E_EVIDENCE_DIR:-"$ROOT/.omo/evidence/continue-remote-agent-rollout"}
-AGENT_SOURCE_REV=a63b344bf6ebd2a714351f5e86032b58cf4b5a39
+EVIDENCE_DIR=${AGENT_E2E_EVIDENCE_DIR:-"$ROOT/.omo/evidence/continue-remote-agent-rollout/${RUN_DIR##*/}"}
+AGENT_SOURCE_REV=6dee72a66c7b3a3f9743ee5c71d63a7a7c5f9f28
 EVENTS="$RUN_DIR/events.txt"
 : >"$EVENTS"
 MODE=happy
