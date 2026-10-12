@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/logscrub"
@@ -89,9 +90,7 @@ func (r *Repository) appendRemoteDeploymentLogs(
 		if event.Sequence < 0 {
 			return nil, ErrInvalidRemoteLog
 		}
-		event.Line = scrubber.Scrub(fmt.Sprintf(
-			"%s agent_id=%q", event.Line, scrubber.Scrub(identity.AgentID),
-		))
+		event.Line = attributedRemoteLog(event.Line, identity.AgentID, scrubber)
 		log, created, err := appendRemoteDeploymentLog(
 			ctx, q, identity.DeploymentID, now, event,
 		)
@@ -119,6 +118,23 @@ func (r *Repository) appendRemoteDeploymentLogs(
 		return nil, transitionError(err)
 	}
 	return inserted, nil
+}
+
+func attributedRemoteLog(
+	line string,
+	agentID string,
+	scrubber *logscrub.Scrubber,
+) string {
+	// Scrub before appending so incomplete credential markers cannot eat the ID.
+	line = scrubber.Scrub(line)
+	line = strings.ReplaceAll(
+		strings.ReplaceAll(line, "\r\n", "\n"),
+		"\r",
+		"\n",
+	)
+	line = scrubber.Scrub(line)
+	suffix := fmt.Sprintf(" agent_id=%q", scrubber.Scrub(agentID))
+	return strings.ReplaceAll(line, "\n", suffix+"\n") + suffix
 }
 
 func (r *Repository) FlushRemoteDeploymentLogs(

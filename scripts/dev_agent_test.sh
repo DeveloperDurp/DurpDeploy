@@ -12,6 +12,7 @@ printf '%s\n' "$*" >>"$DEV_AGENT_TEST_LOG"
 case "$1" in
 pull) exit "${DEV_AGENT_TEST_FAIL_PULL:-0}" ;;
 stop) exit "${DEV_AGENT_TEST_FAIL_STOP:-0}" ;;
+run) printf 'hostname=%s\n' "${DURPDEPLOY_AGENT_HOSTNAME:-}" >>"$DEV_AGENT_TEST_LOG" ;;
 esac
 ENGINE
 chmod 0755 "$tmp/docker"
@@ -45,6 +46,13 @@ for engine in "$tmp/docker" "$tmp/podman"; do
     if grep -q 'DURPDEPLOY_AGENT_CONTAINER_ENABLED\|/run/durpdeploy/runtime.sock' "$DEV_AGENT_TEST_LOG"; then
         echo 'FAIL: default dev agent received runtime access' >&2; exit 1
     fi
+    : >"$DEV_AGENT_TEST_LOG"
+    run_make dev-agent DURPDEPLOY_AGENT_HOSTNAME=physical-host
+    grep -Fq -- '--env DURPDEPLOY_AGENT_HOSTNAME' "$DEV_AGENT_TEST_LOG"
+    grep -Fxq 'hostname=physical-host' "$DEV_AGENT_TEST_LOG"
+    : >"$DEV_AGENT_TEST_LOG"
+    DURPDEPLOY_AGENT_HOSTNAME=environment-host run_make dev-agent
+    grep -Fxq 'hostname=environment-host' "$DEV_AGENT_TEST_LOG"
     : >"$DEV_AGENT_TEST_LOG"
     if run_make dev-agent DEV_AGENT_RUNTIME_SOCKET="$tmp/missing.sock"; then
         echo 'FAIL: missing runtime socket accepted' >&2; exit 1

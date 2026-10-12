@@ -505,7 +505,7 @@ plain-text export retain their formats.
 Execution location entries appear in the existing `line` field before script output.
 Server container attempts identify the physical host, runtime, container name, image reference, interpreter, and attempt number.
 Remote steps also record the selected agent name and ID.
-Remote log entries include the authenticated `agent_id` to distinguish interleaved fan-out output.
+Each rendered remote output line includes the authenticated `agent_id` to distinguish interleaved fan-out output.
 Agent attempts distinguish `container` from `host/shell` and record each retry and fan-out target.
 
 Unavailable physical hostnames appear as `unknown`.

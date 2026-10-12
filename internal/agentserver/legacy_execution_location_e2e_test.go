@@ -24,7 +24,7 @@ func TestLegacyExecutionLocationAPIWebE2E(t *testing.T) {
 	response := postAgent(t, s.f,
 		strings.ReplaceAll(agentproto.LogsPath, "{id}", "1"),
 		`{"protocol":"agent/1","claim_token":"claim-one",`+
-			`"events":[{"sequence":1,"line":"legacy-output agent_id=\"spoof\""}]}`,
+			`"events":[{"sequence":1,"line":"legacy-output agent_id=\"spoof\"\nunfinished token="}]}`,
 	)
 	if response.StatusCode != http.StatusNoContent {
 		t.Fatalf("legacy log status=%d", response.StatusCode)
@@ -47,6 +47,11 @@ func TestLegacyExecutionLocationAPIWebE2E(t *testing.T) {
 		!strings.Contains(logs[0].Line, `agent="test" id="test-agent"`) ||
 		!strings.HasSuffix(logs[1].Line, ` agent_id="test-agent"`) {
 		t.Fatalf("legacy public logs lost attribution: %+v", logs)
+	}
+	for _, line := range strings.Split(logs[1].Line, "\n") {
+		if !strings.HasSuffix(line, ` agent_id="test-agent"`) {
+			t.Fatalf("legacy public line lost attribution: %q", line)
+		}
 	}
 	for _, surface := range []string{
 		"/logs.txt", "/logs/stream?format=structured", "/logs/stream?format=ndjson",
