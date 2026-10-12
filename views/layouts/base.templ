@@ -71,49 +71,26 @@ templ Base(title string, currentPath string) {
 								</svg>
 							</summary>
 									<ul class="dropdown-content menu bg-base-200 rounded-box z-[1] max-h-[calc(100vh-2rem)] w-80 max-w-[calc(100vw-2rem)] overflow-y-auto p-2 shadow">
-								<li><a href="/projects" class={ activeClass(currentPath, "/projects") }>Projects</a></li>
-								<li><a href="/environments" class={ activeClass(currentPath, "/environments") }>Environments</a></li>
-								<li><a href="/lifecycles" class={ activeClass(currentPath, "/lifecycles") }>Lifecycles</a></li>
-								<li><a href="/deployments" class={ activeClass(currentPath, "/deployments") }>Deployments</a></li>
-								<li><a href="/templates" class={ activeClass(currentPath, "/templates") }>Templates</a></li>
+								@PrimaryNavLinks(currentPath)
 								if user := auth.UserFromContext(ctx); user != nil && user.Role == "admin" {
 									<li>
 										<details data-focus-menu>
 											<summary>Admin</summary>
 											<ul>
-												<li><a href="/admin/audit">Audit log</a></li>
-												<li><a href="/admin/agents">Agents</a></li>
-												<li><a href="/admin/notifications">Notifications</a></li>
-												<li><a href="/admin/tokens">API tokens</a></li>
-												<li><a href="/admin/users">Users</a></li>
+												@AdminNavLinks()
 											</ul>
 										</details>
 									</li>
 								}
 								<li>
-									<button class="btn btn-ghost btn-sm w-full justify-start" @click="theme = theme === 'mocha' ? 'light' : 'mocha'">
-										<span class="theme-dark">☀️</span>
-										<span class="theme-light">🌙</span>
-									</button>
+									@ThemeToggle("btn btn-ghost btn-sm w-full justify-start")
 								</li>
 								if user := auth.UserFromContext(ctx); user != nil {
 									<li>
 									<details data-account-menu data-focus-menu class="dropdown dropdown-end w-full min-w-0">
 										<summary class={ "btn btn-ghost btn-sm h-8 min-h-0 w-full min-w-0 justify-start overflow-hidden whitespace-nowrap text-left " + activeClass(currentPath, "/settings") } title={ user.Name + " (" + user.Role + ")" } aria-label={ user.Name + " (" + user.Role + ")" }><span class="min-w-0 truncate">{ user.Name } ({ user.Role })</span></summary>
 											<ul class="menu bg-base-200 rounded-box p-2">
-												<li><a href="/settings/security" class={ activeClass(currentPath, "/settings/security") }>Security</a></li>
-												if user.Role != "viewer" {
-													<li><a href="/settings/tokens" class={ activeClass(currentPath, "/settings/tokens") }>Tokens</a></li>
-												}
-												<li class="menu-title"><hr/></li>
-												<li>
-													<form method="post" action="/logout">
-														if sess := auth.SessionFromContext(ctx); sess != nil && sess.CsrfToken != "" {
-															<input type="hidden" name="csrf_token" value={ sess.CsrfToken }/>
-														}
-														<button type="submit" class="btn btn-ghost btn-sm w-full justify-start">Logout</button>
-													</form>
-												</li>
+												@AccountMenuItems(currentPath, user.Role)
 											</ul>
 										</details>
 									</li>
@@ -124,27 +101,16 @@ templ Base(title string, currentPath string) {
 						</details>
 						<div class="hidden shrink-0 items-center xl:flex">
 							<ul class="menu menu-horizontal flex-nowrap whitespace-nowrap px-1">
-								<li><a href="/projects" class={ activeClass(currentPath, "/projects") }>Projects</a></li>
-								<li><a href="/environments" class={ activeClass(currentPath, "/environments") }>Environments</a></li>
-								<li><a href="/lifecycles" class={ activeClass(currentPath, "/lifecycles") }>Lifecycles</a></li>
-								<li><a href="/deployments" class={ activeClass(currentPath, "/deployments") }>Deployments</a></li>
-								<li><a href="/templates" class={ activeClass(currentPath, "/templates") }>Templates</a></li>
+								@PrimaryNavLinks(currentPath)
 							</ul>
 						</div>
 						<div class="ml-auto hidden min-w-0 flex-none items-center justify-end gap-2 xl:flex">
-							<button class="btn btn-ghost btn-sm" @click="theme = theme === 'mocha' ? 'light' : 'mocha'">
-								<span class="theme-dark">☀️</span>
-								<span class="theme-light">🌙</span>
-							</button>
+							@ThemeToggle("btn btn-ghost btn-sm")
 							if user := auth.UserFromContext(ctx); user != nil && user.Role == "admin" {
 								<details data-focus-menu class="dropdown dropdown-end shrink-0 self-center">
 									<summary class="btn btn-ghost btn-sm">Admin</summary>
 									<ul class="dropdown-content menu bg-base-200 rounded-box z-[1] w-44 p-2 shadow">
-										<li><a href="/admin/audit">Audit log</a></li>
-										<li><a href="/admin/agents">Agents</a></li>
-										<li><a href="/admin/notifications">Notifications</a></li>
-										<li><a href="/admin/tokens">API tokens</a></li>
-										<li><a href="/admin/users">Users</a></li>
+										@AdminNavLinks()
 									</ul>
 								</details>
 							}
@@ -152,19 +118,7 @@ templ Base(title string, currentPath string) {
 								<details data-account-menu data-focus-menu class="dropdown dropdown-end min-w-0 max-w-[min(28rem,40vw)]">
 									<summary class={ "btn btn-ghost btn-sm h-8 min-h-0 min-w-0 max-w-full justify-start overflow-hidden whitespace-nowrap text-left " + activeClass(currentPath, "/settings") } title={ user.Name + " (" + user.Role + ")" } aria-label={ user.Name + " (" + user.Role + ")" }><span class="min-w-0 truncate">{ user.Name } ({ user.Role })</span></summary>
 									<ul class="dropdown-content menu bg-base-200 rounded-box z-[1] w-52 p-2 shadow">
-										<li><a href="/settings/security" class={ activeClass(currentPath, "/settings/security") }>Security</a></li>
-										if user.Role != "viewer" {
-											<li><a href="/settings/tokens" class={ activeClass(currentPath, "/settings/tokens") }>Tokens</a></li>
-										}
-										<li class="menu-title"><hr/></li>
-										<li>
-											<form method="post" action="/logout">
-												if sess := auth.SessionFromContext(ctx); sess != nil && sess.CsrfToken != "" {
-													<input type="hidden" name="csrf_token" value={ sess.CsrfToken }/>
-												}
-												<button type="submit" class="btn btn-ghost btn-sm w-full justify-start">Logout</button>
-											</form>
-										</li>
+										@AccountMenuItems(currentPath, user.Role)
 									</ul>
 								</details>
 							} else {
@@ -197,4 +151,43 @@ templ Base(title string, currentPath string) {
 			</div>
 		</body>
 	</html>
+}
+
+templ PrimaryNavLinks(currentPath string) {
+	<li><a href="/projects" class={ activeClass(currentPath, "/projects") }>Projects</a></li>
+	<li><a href="/environments" class={ activeClass(currentPath, "/environments") }>Environments</a></li>
+	<li><a href="/lifecycles" class={ activeClass(currentPath, "/lifecycles") }>Lifecycles</a></li>
+	<li><a href="/deployments" class={ activeClass(currentPath, "/deployments") }>Deployments</a></li>
+	<li><a href="/templates" class={ activeClass(currentPath, "/templates") }>Templates</a></li>
+}
+
+templ AdminNavLinks() {
+	<li><a href="/admin/audit">Audit log</a></li>
+	<li><a href="/admin/agents">Agents</a></li>
+	<li><a href="/admin/notifications">Notifications</a></li>
+	<li><a href="/admin/tokens">API tokens</a></li>
+	<li><a href="/admin/users">Users</a></li>
+}
+
+templ AccountMenuItems(currentPath string, role string) {
+	<li><a href="/settings/security" class={ activeClass(currentPath, "/settings/security") }>Security</a></li>
+	if role != "viewer" {
+		<li><a href="/settings/tokens" class={ activeClass(currentPath, "/settings/tokens") }>Tokens</a></li>
+	}
+	<li class="menu-title"><hr/></li>
+	<li>
+		<form method="post" action="/logout">
+			if sess := auth.SessionFromContext(ctx); sess != nil && sess.CsrfToken != "" {
+				<input type="hidden" name="csrf_token" value={ sess.CsrfToken }/>
+			}
+			<button type="submit" class="btn btn-ghost btn-sm w-full justify-start">Logout</button>
+		</form>
+	</li>
+}
+
+templ ThemeToggle(classes string) {
+	<button class={ classes } aria-label="Toggle theme" @click="theme = theme === 'mocha' ? 'light' : 'mocha'">
+		<span class="theme-dark">☀️</span>
+		<span class="theme-light">🌙</span>
+	</button>
 }
