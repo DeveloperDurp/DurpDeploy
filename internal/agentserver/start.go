@@ -31,7 +31,9 @@ func (s *Server) Start(w http.ResponseWriter, r *http.Request) {
 		r.Context(), claim, scrubber,
 	)
 	if err == nil && !handled {
-		err = s.repository.StartRemoteDeployment(r.Context(), claim)
+		inserted, err = s.repository.StartRemoteDeploymentWithLogs(
+			r.Context(), claim, scrubber,
+		)
 	}
 	if writeLifecycleStatus(w, err) {
 		s.broadcastLogs(deploymentID, inserted)

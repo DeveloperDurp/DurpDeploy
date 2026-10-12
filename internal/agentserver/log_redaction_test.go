@@ -72,8 +72,9 @@ func TestRemoteLogsRedactSplitSecretBeforeStorageAndBroadcast(t *testing.T) {
 		t.Fatal("durable buffer stored plaintext")
 	}
 	var count int
-	if err := fixture.repo.DB.QueryRow(`SELECT COUNT(*) FROM deployment_logs
-		WHERE deployment_id=1`).Scan(&count); err != nil || count != 0 {
+	if err := fixture.repo.DB.QueryRow(`SELECT COUNT(*) FROM deployment_log_scopes
+		WHERE deployment_id=1`).Scan(&count); err != nil ||
+		count != 0 {
 		t.Fatalf("premature stored logs=%d error=%v", count, err)
 	}
 	select {
@@ -112,17 +113,24 @@ func TestRemoteLogsRedactSplitSecretBeforeStorageAndBroadcast(t *testing.T) {
 	}
 	var stored strings.Builder
 	for _, log := range logs {
-		stored.WriteString(log.Line)
+		if strings.HasPrefix(log.Line, "Execution agent:") {
+			continue
+		}
+		stored.WriteString(
+			strings.TrimSuffix(log.Line, ` agent_id="test-agent"`),
+		)
 	}
 	if got := stored.String(); got != "[REDACTED] appears" {
 		t.Fatalf("stored logs=%q", got)
 	}
 
 	var streamed strings.Builder
-	for range len(logs) {
+	for range len(logs) - 1 {
 		select {
 		case line := <-stream:
-			streamed.WriteString(line)
+			streamed.WriteString(
+				strings.TrimSuffix(line, ` agent_id="test-agent"`),
+			)
 		default:
 			t.Fatal("stored log was not broadcast")
 		}
@@ -153,15 +161,21 @@ func TestRemoteLogsRedactCommonPatternSplitAcrossEvents(t *testing.T) {
 	logs, err := fixture.repo.Queries.ListDeploymentLogsByDeployment(
 		t.Context(), 1,
 	)
-	if err != nil || len(logs) != 2 ||
-		logs[0].Line+logs[1].Line != "[REDACTED]" {
+	if err != nil || len(logs) != 3 ||
+		strings.TrimSuffix(logs[1].Line, ` agent_id="test-agent"`)+
+			strings.TrimSuffix(
+				logs[2].Line,
+				` agent_id="test-agent"`,
+			) != "[REDACTED]" {
 		t.Fatalf("stored logs=%+v error=%v", logs, err)
 	}
 	var streamed strings.Builder
 	for range 2 {
 		select {
 		case line := <-stream:
-			streamed.WriteString(line)
+			streamed.WriteString(
+				strings.TrimSuffix(line, ` agent_id="test-agent"`),
+			)
 		default:
 			t.Fatal("stored log was not broadcast")
 		}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/logscrub"
@@ -88,6 +89,9 @@ func (r *Repository) appendRemoteDeploymentLogs(
 		if event.Sequence < 0 {
 			return nil, ErrInvalidRemoteLog
 		}
+		event.Line = scrubber.Scrub(fmt.Sprintf(
+			"%s agent_id=%q", event.Line, scrubber.Scrub(identity.AgentID),
+		))
 		log, created, err := appendRemoteDeploymentLog(
 			ctx, q, identity.DeploymentID, now, event,
 		)

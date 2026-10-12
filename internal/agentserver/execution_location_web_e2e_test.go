@@ -14,7 +14,9 @@ import (
 	"durpdeploy/internal/db"
 )
 
-func (s *stagingE2E) assertExecutionLocationWeb(t *testing.T, id int64) {
+func (s *stagingE2E) assertExecutionLocationWeb(
+	t *testing.T, id int64, locations, identities int,
+) {
 	t.Helper()
 	user, err := s.f.repo.Queries.GetUserByEmail(
 		t.Context(),
@@ -48,8 +50,8 @@ func (s *stagingE2E) assertExecutionLocationWeb(t *testing.T, id int64) {
 	if err != nil || response.StatusCode != 200 {
 		t.Fatalf("web logs status=%d error=%v", response.StatusCode, err)
 	}
-	if strings.Count(string(data), "Execution location:") != 6 ||
-		strings.Count(string(data), "Execution agent:") != 4 {
+	if strings.Count(string(data), "Execution location:") != locations ||
+		strings.Count(string(data), "Execution agent:") != identities {
 		t.Fatalf("saved locations missing from step panels: %s", data)
 	}
 }

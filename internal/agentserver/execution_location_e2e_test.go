@@ -146,5 +146,5 @@ func TestExecutionLocationAPIWebE2E(t *testing.T) {
 		t.Logf("Public log surface: %s locations=%d", suffix,
 			strings.Count(data, "Execution location:"))
 	}
-	s.assertExecutionLocationWeb(t, deployment.ID)
+	s.assertExecutionLocationWeb(t, deployment.ID, 6, 4)
 }
