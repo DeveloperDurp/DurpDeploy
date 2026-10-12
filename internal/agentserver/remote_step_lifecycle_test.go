@@ -95,8 +95,12 @@ func TestRemoteStepLogsRedactSplitSecret(t *testing.T) {
 	logs, err := fixture.repo.Queries.ListDeploymentLogsByDeployment(
 		t.Context(), deploymentID,
 	)
+	identity := ` agent_id="test-agent"`
 	if err != nil || len(logs) != 3 ||
-		logs[0].Line+logs[1].Line != "[REDACTED]" ||
+		strings.TrimSuffix(logs[0].Line, identity)+
+			strings.TrimSuffix(logs[1].Line, identity) != "[REDACTED]" ||
+		!strings.HasSuffix(logs[0].Line, identity) ||
+		!strings.HasSuffix(logs[1].Line, identity) ||
 		!logs[0].StepName.Valid ||
 		!logs[0].StepIndex.Valid ||
 		logs[0].StepIndex.Int64 != 0 ||
@@ -107,7 +111,10 @@ func TestRemoteStepLogsRedactSplitSecret(t *testing.T) {
 	for range 2 {
 		select {
 		case line := <-stream:
-			streamed.WriteString(line)
+			if !strings.HasSuffix(line, identity) {
+				t.Fatalf("streamed line lost authenticated identity: %q", line)
+			}
+			streamed.WriteString(strings.TrimSuffix(line, identity))
 		default:
 			t.Fatal("stored step log was not broadcast")
 		}

@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"strings"
 
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/logscrub"
@@ -71,16 +70,6 @@ func (r *Repository) appendRemoteStepLogs(
 	if err != nil {
 		return nil, err
 	}
-	locations := make(map[int64]bool)
-	marker := scrubber.Scrub("Execution location:")
-	for _, batch := range [][]RemoteLogEvent{pending, events} {
-		for _, event := range batch {
-			if strings.HasPrefix(event.Line, "Execution location:") ||
-				strings.HasPrefix(event.Line, marker) {
-				locations[event.Sequence] = true
-			}
-		}
-	}
 	ready, remaining, err := prepareRemoteLogEvents(
 		pending, events, lastSequence, scrubber, flush,
 	)
@@ -110,14 +99,9 @@ func (r *Repository) appendRemoteStepLogs(
 		if !errors.Is(err, sql.ErrNoRows) {
 			return nil, err
 		}
-		line := event.Line
-		if locations[event.Sequence] {
-			line = scrubber.Scrub(fmt.Sprintf(
-				"%s agent_id=%q",
-				line,
-				scrubber.Scrub(run.AgentID),
-			))
-		}
+		line := scrubber.Scrub(fmt.Sprintf(
+			"%s agent_id=%q", event.Line, scrubber.Scrub(run.AgentID),
+		))
 		log, err := q.CreateStepDeploymentLog(
 			ctx,
 			db.CreateStepDeploymentLogParams{

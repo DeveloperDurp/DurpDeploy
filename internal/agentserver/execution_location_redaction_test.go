@@ -12,11 +12,11 @@ import (
 )
 
 func TestRemoteStepLocationKeepsIdentityWhenMarkerIsSecret(t *testing.T) {
-	for _, secret := range []string{"Execution", "Execution location: target=agent"} {
+	for _, secret := range []string{
+		"Execution", "Execution location: target=agent",
+		`Execution location: target=agent host="physical-host" mode=host/shell attempt=1`,
+	} {
 		for _, alreadyRedacted := range []bool{false, true} {
-			if alreadyRedacted && secret != "Execution" {
-				continue
-			}
 			t.Run(
 				fmt.Sprintf("%s/agent-redacted=%t", secret, alreadyRedacted),
 				func(t *testing.T) {
