@@ -21,7 +21,6 @@ func ArtifactErrorStatus(err error) int {
 		errors.Is(err, verification.ErrInvalid),
 		errors.Is(err, containerenv.ErrReserved),
 		errors.Is(err, artifact.ErrChecksum),
-		errors.Is(err, repository.ErrRemoteArtifactsUnsupported),
 		errors.Is(err, repository.ErrArtifactPathReserved):
 		return http.StatusUnprocessableEntity
 	case errors.Is(err, repository.ErrArtifactRepositoryPinned):

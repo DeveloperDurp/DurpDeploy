@@ -3,7 +3,6 @@ package artifact
 import (
 	"archive/zip"
 	"bytes"
-	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -80,19 +79,6 @@ func TestValidateZIPRejectsSizeAndTreeCollisions(t *testing.T) {
 				t.Fatalf("accepted invalid ZIP: %v", err)
 			}
 		})
-	}
-}
-
-func TestEntryHonorsCancellationDuringRead(t *testing.T) {
-	// Given
-	ctx, cancel := context.WithCancel(t.Context())
-	reader := contextReader{ctx: ctx, reader: strings.NewReader("contents")}
-	cancel()
-	// When
-	_, err := reader.Read(make([]byte, 8))
-	// Then
-	if !errors.Is(err, context.Canceled) {
-		t.Fatalf("expected cancellation, got %v", err)
 	}
 }
 

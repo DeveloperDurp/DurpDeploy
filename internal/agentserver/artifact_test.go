@@ -226,3 +226,24 @@ func TestAgentArtifactReturnsNotFoundWithoutPin(t *testing.T) {
 		t.Fatalf("status=%d", response.StatusCode)
 	}
 }
+
+func TestAgentArtifactRejectsChangedPinWithoutRetry(t *testing.T) {
+	f := newAgentFixture(t)
+	id, claim := claimedRemoteStep(t, f)
+	seedAgentArtifact(t, f, id, nil)
+	if _, err := f.repo.DB.ExecContext(t.Context(),
+		"UPDATE deployment_artifacts SET sha256=? WHERE deployment_id=?",
+		strings.Repeat("0", 64), id,
+	); err != nil {
+		t.Fatal(err)
+	}
+	response := postAgent(
+		t,
+		f,
+		fmt.Sprintf("/agent/v1/deployments/%d/artifact", id),
+		artifactClaimBody(t, claim),
+	)
+	if response.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("changed package status=%d want=422", response.StatusCode)
+	}
+}

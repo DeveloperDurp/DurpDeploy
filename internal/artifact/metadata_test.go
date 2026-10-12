@@ -2,7 +2,6 @@ package artifact
 
 import (
 	"archive/zip"
-	"bytes"
 	"context"
 	"encoding/binary"
 	"errors"
@@ -129,28 +128,5 @@ func TestValidateZIPCancellationDuringMetadataParsing(t *testing.T) {
 	// Then
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancellation lost during parser initialization: %v", err)
-	}
-}
-
-func TestMetadataReaderKeepsFailureAndCancellation(t *testing.T) {
-	// Given
-	ctx, cancel := context.WithCancel(t.Context())
-	reader := &metadataReader{
-		ctx:       ctx,
-		reader:    bytes.NewReader([]byte("data")),
-		remaining: 1,
-	}
-	// When
-	_, err := reader.ReadAt(make([]byte, 2), 0)
-	_, nextErr := reader.ReadAt(make([]byte, 1), 0)
-	cancel()
-	_, cancelErr := reader.ReadAt(make([]byte, 1), 0)
-	// Then
-	if !errors.Is(err, ErrMetadataLimit) ||
-		!errors.Is(nextErr, ErrMetadataLimit) {
-		t.Fatalf("quota failure was lost: %v %v", err, nextErr)
-	}
-	if !errors.Is(cancelErr, context.Canceled) {
-		t.Fatalf("cancellation was lost: %v", cancelErr)
 	}
 }

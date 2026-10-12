@@ -3,7 +3,6 @@ package repository_test
 import (
 	"archive/zip"
 	"bytes"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -161,7 +160,7 @@ func TestRunbookCopiesSelectedReleaseArtifact(t *testing.T) {
 	}
 }
 
-func TestArtifactDeploymentRejectsRemoteSteps(t *testing.T) {
+func TestArtifactDeploymentAcceptsRemoteSteps(t *testing.T) {
 	// Given
 	f := newArtifactFixture(t)
 	release, err := handler.CreateReleaseSnapshot(
@@ -185,7 +184,7 @@ func TestArtifactDeploymentRejectsRemoteSteps(t *testing.T) {
 		t.Fatal(err)
 	}
 	// When
-	_, err = f.repo.CreateDeployment(
+	deployment, err := f.repo.CreateDeployment(
 		t.Context(),
 		db.CreateDeploymentParams{
 			ReleaseID:     release.ID,
@@ -194,7 +193,14 @@ func TestArtifactDeploymentRejectsRemoteSteps(t *testing.T) {
 		},
 	)
 	// Then
-	if !errors.Is(err, repository.ErrRemoteArtifactsUnsupported) {
-		t.Fatalf("remote artifact accepted: %v", err)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pin, err := f.repo.Queries.GetDeploymentArtifact(
+		t.Context(),
+		deployment.Deployment.ID,
+	)
+	if err != nil || pin.Version != release.Version {
+		t.Fatalf("deployment package pin=%+v error=%v", pin, err)
 	}
 }

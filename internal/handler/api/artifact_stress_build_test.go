@@ -15,10 +15,58 @@ func buildArtifactServer(t *testing.T) string {
 	t.Helper()
 	directory := t.TempDir()
 	binary := filepath.Join(directory, "durpdeploy")
-	source, err := filepath.Abs("../../../internal/artifact/zip.go")
+	module := exec.CommandContext(
+		t.Context(),
+		"go",
+		"list",
+		"-m",
+		"-f",
+		"{{.Dir}}",
+		"github.com/DeveloperDurp/durpdeploy-agent",
+	)
+	moduleDirectory, err := module.Output()
 	if err != nil {
 		t.Fatal(err)
 	}
+	moduleCopy := filepath.Join(directory, "agent")
+	if err := os.CopyFS(
+		moduleCopy,
+		os.DirFS(strings.TrimSpace(string(moduleDirectory))),
+	); err != nil {
+		t.Fatal(err)
+	}
+	modfile := filepath.Join(directory, "go.mod")
+	for _, name := range []string{"go.mod", "go.sum"} {
+		contents, err := os.ReadFile(filepath.Join("../../..", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(
+			filepath.Join(directory, name),
+			contents,
+			0600,
+		); err != nil {
+			t.Fatal(err)
+		}
+	}
+	edit := exec.CommandContext(
+		t.Context(),
+		"go",
+		"mod",
+		"edit",
+		"-modfile",
+		modfile,
+		"-replace",
+		"github.com/DeveloperDurp/durpdeploy-agent="+moduleCopy,
+	)
+	if output, err := edit.CombinedOutput(); err != nil {
+		t.Fatalf("prepare test module: %v\n%s", err, output)
+	}
+	source := filepath.Join(
+		moduleCopy,
+		"artifact",
+		"zip.go",
+	)
 	contents, err := os.ReadFile(source)
 	if err != nil {
 		t.Fatal(err)
@@ -66,6 +114,8 @@ func buildArtifactServer(t *testing.T) string {
 		t.Context(),
 		"go",
 		"build",
+		"-modfile",
+		modfile,
 		"-overlay",
 		overlayPath,
 		"-o",

@@ -49,6 +49,22 @@ Confirm that restart cleanup purges moved staging directories before it sends th
 
 ## Releases with a deferred package pull
 
+Repeat the staging transfer checks with an HTTPS ZIP repository attached to the project.
+Read the package through `ARTIFACT_PATH` in each server and agent job.
+Copy its files into `DURPDEPLOY_STAGE_DIR` before modifying them.
+Confirm that agent host jobs and agent container jobs receive the same pinned package.
+Confirm that containers reject writes to `/artifacts`.
+Confirm that later jobs receive staging outputs from each execution location.
+
+Check cleanup after success, failure, cancellation, and conflicting parallel changes.
+Replace the upstream ZIP after pinning and confirm that the deployment fails.
+
+Run the package transfer API checks against the current agent binary:
+
+```bash
+AGENT_TEST_SOCKET=unix:///run/user/1000/podman/podman.sock DURPDEPLOY_AGENT_E2E_BINARY=/absolute/path/to/durpdeploy-agent bash scripts/go_test.sh -tags 'e2e agentstaging' -count=1 -timeout=5m -v -run '^TestDeploymentStagingPackageAPIE2E$' ./internal/agentserver
+```
+
 1. Attach a package repository to a disposable project. Use a missing version
    or an unreachable repository such as `https://asdf/{version}`.
 2. Enter a version and click **Create Release**. Creation succeeds without a

@@ -65,8 +65,8 @@
   {
     "rule": "G703",
     "file": "internal/agentserver/artifact.go",
-    "line": "61",
-    "source_sha256": "ac510a2cd7d888792e2bb1ae3b4064f49ce869c484585807a39fd77edeebfe7e",
+    "line": "83",
+    "source_sha256": "23aa24b2fc463c07ed5694be0e10ea1c137e34f4cd09e3bb489c3a971aa9aeeb",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Removed path is returned by os.CreateTemp inside the private artifact workspace, not a request path. Evidence: repository/artifact_snapshot.go, artifact/fetch.go, agentserver/artifact_test.go."

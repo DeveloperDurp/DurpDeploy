@@ -99,7 +99,11 @@ func (r *Repository) PrepareAgentPairing(
 				); err != nil {
 					return err
 				}
-				return q.ClearAgentStagingCapability(ctx, tuple.ExpectedAgentID)
+				return clearAgentTransferCapabilities(
+					ctx,
+					q,
+					tuple.ExpectedAgentID,
+				)
 			}
 			if len(candidates) != 1 {
 				return ErrPairingTupleConflict

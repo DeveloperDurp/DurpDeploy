@@ -7,6 +7,8 @@ DEV_POSTGRES_IMAGE ?= postgres:16-alpine
 DEV_MSSQL_CONTAINER ?= durpdeploy-dev-mssql
 DEV_MSSQL_IMAGE ?= mcr.microsoft.com/mssql/server:2022-latest
 DEV_AGENT_CONTAINER ?= durpdeploy-dev-agent
+# Keep the published image pin separate from agent module revisions under review.
+# Update this pin after the matching agent image is published.
 DEV_AGENT_IMAGE ?= ghcr.io/developerdurp/durpdeploy-agent:6dee72a
 DEV_AGENT_PORT ?= 10944
 DEV_AGENT_STATE_VOLUME ?= $(DEV_AGENT_CONTAINER)-state

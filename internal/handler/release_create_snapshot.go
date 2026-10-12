@@ -23,10 +23,6 @@ func CreateReleaseSnapshot(
 	if err != nil {
 		return db.Release{}, err
 	}
-	if snapshot.artifact != nil && snapshot.artifact.Row.RepositoryID != 0 &&
-		snapshot.hasAgentSteps {
-		return db.Release{}, repository.ErrRemoteArtifactsUnsupported
-	}
 	tx, err := repo.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return db.Release{}, err

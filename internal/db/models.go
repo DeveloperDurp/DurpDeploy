@@ -26,6 +26,10 @@ type Agent struct {
 	AgentProtocol          sql.NullString `json:"agent_protocol"`
 }
 
+type AgentArtifactCapability struct {
+	AgentID string `json:"agent_id"`
+}
+
 type AgentContainerInterpreter struct {
 	AgentID     string `json:"agent_id"`
 	Interpreter string `json:"interpreter"`

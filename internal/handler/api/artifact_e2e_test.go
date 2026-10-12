@@ -129,7 +129,7 @@ test "$(wc -c < "$DURPDEPLOY_STAGE_DIR/package-copy")" -eq 7
 	if !strings.Contains(string(pin), `"sha256"`) {
 		t.Fatal("release pin missing")
 	}
-	f.verifyRemoteSnapshotRejection(t)
+	f.verifyRemoteSnapshotAcceptance(t)
 	page := f.web(
 		t,
 		"GET",

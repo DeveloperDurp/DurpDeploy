@@ -6,28 +6,27 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+
+	agentartifact "github.com/DeveloperDurp/durpdeploy-agent/artifact"
 )
 
 const (
 	versionPlaceholder = "{version}"
-	MaxDownload        = int64(300 << 20)
-	MaxExtracted       = int64(512 << 20)
-	MaxFiles           = 10000
+	MaxDownload        = agentartifact.MaxDownload
+	MaxExtracted       = agentartifact.MaxExtracted
+	MaxFiles           = agentartifact.MaxFiles
 	// One additional inode is needed for the staging mount's root.
-	MaxStagingNodes = 19999
-	MaxMetadata     = int64(16 << 20)
-	PathVariable    = "ARTIFACT_PATH"
+	MaxStagingNodes = agentartifact.MaxStagingNodes
+	MaxMetadata     = agentartifact.MaxMetadata
+	PathVariable    = agentartifact.PathVariable
 )
 
 var (
-	ErrInvalid       = errors.New("invalid artifact repository or ZIP")
+	ErrInvalid       = agentartifact.ErrInvalid
 	ErrFetch         = errors.New("artifact download failed")
 	ErrNotFound      = fmt.Errorf("artifact package not found: %w", ErrFetch)
-	ErrChecksum      = errors.New("artifact checksum mismatch")
-	ErrMetadataLimit = fmt.Errorf(
-		"ZIP metadata reads exceed 16 MiB: %w",
-		ErrInvalid,
-	)
+	ErrChecksum      = agentartifact.ErrChecksum
+	ErrMetadataLimit = agentartifact.ErrMetadataLimit
 )
 
 type Repository struct {
