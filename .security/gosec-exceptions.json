@@ -74,8 +74,8 @@
   {
     "rule": "G118",
     "file": "internal/scheduler/scheduler.go",
-    "line": "347",
-    "source_sha256": "174c6ac07ca0e8aa135bcbe7860e9285356f7eb1719b61b784c2f38b31243d8b",
+    "line": "343",
+    "source_sha256": "eee70c62d43ae73aaa2dfd3b7762f8fed9492de9aadc90cdbc9e2819eae1eb87",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Detached persisted deployment must outlive its HTTP/scheduler/startup request. DeploymentRunner.Run owns cancel registration; Cancel and KillAll cancel/drain work. Evidence: runner_control.go, shutdown_test.go, runbook_cancel_test.go."
@@ -147,7 +147,7 @@
     "rule": "G118",
     "file": "cmd/server/main.go",
     "line": "436",
-    "source_sha256": "3cebf1dfd1dbe29021094e2b995f7d2b18ede6609183a564820137b199bf2e4a",
+    "source_sha256": "34663a4e59c86d837809d054bd41f73c30a7a92e6c92ba8f00d0a9c3a55f0574",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Detached persisted deployment must outlive its HTTP/scheduler/startup request. DeploymentRunner.Run owns cancel registration; Cancel and KillAll cancel/drain work. Evidence: runner_control.go, shutdown_test.go, runbook_cancel_test.go."
@@ -335,20 +335,20 @@
   {
     "rule": "G710",
     "file": "internal/handler/variable.go",
-    "line": "382",
-    "source_sha256": "838d47f202f234daf6aa247b78b7ef1a2b14eeb84c8c0b14b9b0c083566ab627",
+    "line": "375",
+    "source_sha256": "f00648c8a4e6fc1b8d502cfcab0244ba58a59e5a195c9a3ed9778049ad1da943",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
-    "reason": "Redirect retains a fixed /projects/ path prefix and an ID validated as int64 by parseProjectID. UI-only changes moved these existing redirects; corresponding handler and redirect/E2E tests confirm same-origin destinations."
+    "reason": "The redirect uses a fixed /projects/ path prefix and an ID parsed as int64 by parseProjectID. The destination remains on the same origin. Evidence: VariableHandler.UpdateVariable and parseProjectID."
   },
   {
     "rule": "G710",
     "file": "internal/handler/variable.go",
-    "line": "183",
-    "source_sha256": "838d47f202f234daf6aa247b78b7ef1a2b14eeb84c8c0b14b9b0c083566ab627",
+    "line": "176",
+    "source_sha256": "f00648c8a4e6fc1b8d502cfcab0244ba58a59e5a195c9a3ed9778049ad1da943",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
-    "reason": "Redirect retains a fixed /projects/ path prefix and an ID validated as int64 by parseProjectID. UI-only changes moved these existing redirects; corresponding handler and redirect/E2E tests confirm same-origin destinations."
+    "reason": "The redirect uses a fixed /projects/ path prefix and an ID parsed as int64 by parseProjectID. The destination remains on the same origin. Evidence: VariableHandler.CreateVariable and parseProjectID."
   },
   {
     "rule": "G710",
@@ -452,20 +452,20 @@
   {
     "rule": "G710",
     "file": "internal/handler/project.go",
-    "line": "463",
-    "source_sha256": "8b66d41d65cd1f9fdb8f4e42a8d7c41dad8df9033643cd60cfb25d99bc302f2a",
+    "line": "479",
+    "source_sha256": "e8ba2cf5b39cef7874579d46c7307fbcc9dc5f3ad2a5e09edf73118ac0f307af",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
-    "reason": "Redirect retains a fixed /projects/ path prefix and an ID validated as int64 by parseProjectID. UI-only changes moved these existing redirects; corresponding handler and redirect/E2E tests confirm same-origin destinations."
+    "reason": "The redirect uses a fixed /projects/ path prefix and an ID parsed as int64 by parseProjectID. The destination remains on the same origin. Evidence: ProjectHandler.UpdateProject and parseProjectID."
   },
   {
     "rule": "G710",
     "file": "internal/handler/project.go",
-    "line": "264",
-    "source_sha256": "8b66d41d65cd1f9fdb8f4e42a8d7c41dad8df9033643cd60cfb25d99bc302f2a",
+    "line": "280",
+    "source_sha256": "e8ba2cf5b39cef7874579d46c7307fbcc9dc5f3ad2a5e09edf73118ac0f307af",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
-    "reason": "Redirect retains a fixed /projects/ path prefix and an ID validated as int64 by parseProjectID. UI-only changes moved these existing redirects; corresponding handler and redirect/E2E tests confirm same-origin destinations."
+    "reason": "The redirect uses a fixed /projects/ path prefix and an ID parsed as int64 by parseProjectID. The destination remains on the same origin. Evidence: ProjectHandler.UpdateProjectNotifications and parseProjectID."
   },
   {
     "rule": "G710",
