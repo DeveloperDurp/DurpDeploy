@@ -88,6 +88,7 @@ demo-test:
 	bash scripts/demo-firewall-test.sh
 
 # Foreground pairing output stays on the terminal, outside container logs.
+dev-agent: export DURPDEPLOY_AGENT_HOSTNAME ?=
 dev-agent:
 	@test -n "$(DEV_CONTAINER_ENGINE)" || { echo 'Docker or Podman is unavailable.' >&2; exit 1; }
 	@if [ -n '$(DEV_AGENT_RUNTIME_SOCKET)' ]; then \
@@ -130,6 +131,7 @@ dev-agent:
 		--volume "$$state_volume" \
 		--env DURPDEPLOY_AGENT_STATE_DIR=/var/lib/durpdeploy-agent \
 		--env DURPDEPLOY_AGENT_LISTEN_ADDR=0.0.0.0:10943 \
+		--env DURPDEPLOY_AGENT_HOSTNAME \
 		--env 'DURPDEPLOY_AGENT_VERSION=$(lastword $(subst :, ,$(DEV_AGENT_IMAGE)))' \
 		'$(DEV_AGENT_IMAGE)'
 

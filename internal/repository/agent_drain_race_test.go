@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"durpdeploy/internal/logscrub"
 	"durpdeploy/internal/repository"
 )
 
@@ -71,7 +72,9 @@ func TestAgentDrainSerializesWithStepClaim(t *testing.T) {
 	identity := repository.RemoteLifecycleClaim{
 		DeploymentID: 3, AgentID: "a", ClaimTokenHash: make([]byte, 32),
 	}
-	if _, err := repo.StartRemoteStep(ctx, identity); err != nil {
+	if _, _, err := repo.StartRemoteStep(
+		ctx, identity, logscrub.New(nil),
+	); err != nil {
 		t.Fatal(err)
 	}
 	if rows, err := repo.ClaimRemoteDeployment(

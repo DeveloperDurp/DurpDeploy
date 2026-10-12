@@ -28,12 +28,12 @@ func TestDuplicateLogBatchIsIdempotent(t *testing.T) {
 	var count int
 	if err := fixture.repo.DB.QueryRow(
 		"SELECT COUNT(*) FROM deployment_logs WHERE deployment_id=1",
-	).Scan(&count); err != nil || count != 1 {
+	).Scan(&count); err != nil || count != 2 {
 		t.Fatalf("persisted logs=%d error=%v", count, err)
 	}
 	select {
 	case line := <-logs:
-		if line != "one durable line" {
+		if line != `one durable line agent_id="test-agent"` {
 			t.Fatalf("broadcast line=%q", line)
 		}
 	default:
@@ -66,8 +66,10 @@ func TestRemoteLogsOrderBySequence(t *testing.T) {
 	logs, err := fixture.repo.Queries.ListDeploymentLogsByDeployment(
 		t.Context(), 1,
 	)
-	if err != nil || len(logs) != 2 || logs[0].Line != "first" ||
-		logs[1].Line != "second" {
+	if err != nil || len(logs) != 3 ||
+		!strings.HasPrefix(logs[0].Line, "Execution agent:") ||
+		logs[1].Line != `first agent_id="test-agent"` ||
+		logs[2].Line != `second agent_id="test-agent"` {
 		t.Fatalf("ordered logs=%+v error=%v", logs, err)
 	}
 }

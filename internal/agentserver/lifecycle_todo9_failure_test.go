@@ -111,7 +111,7 @@ func assertNoDeploymentLogs(t *testing.T, fixture agentFixture) {
 	t.Helper()
 	var count int
 	if err := fixture.repo.DB.QueryRow(
-		"SELECT COUNT(*) FROM deployment_logs WHERE deployment_id=1",
+		"SELECT COUNT(*) FROM deployment_log_scopes WHERE deployment_id=1",
 	).Scan(&count); err != nil || count != 0 {
 		t.Fatalf("deployment logs=%d error=%v", count, err)
 	}

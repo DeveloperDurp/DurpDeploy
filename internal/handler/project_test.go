@@ -53,6 +53,7 @@ func newProjectHarness(t *testing.T) *projectHarness {
 	repo := repository.New(conn)
 	broker := runner.NewLogBroker()
 	rnr := runner.NewWithPodmanBinaryForTest(repo, broker, binary)
+	t.Cleanup(rnr.KillAll)
 	parser := cron.NewParser(
 		cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow,
 	)

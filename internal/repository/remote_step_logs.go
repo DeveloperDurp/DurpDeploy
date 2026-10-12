@@ -98,6 +98,7 @@ func (r *Repository) appendRemoteStepLogs(
 		if !errors.Is(err, sql.ErrNoRows) {
 			return nil, err
 		}
+		line := attributedRemoteLog(event.Line, run.AgentID, scrubber)
 		log, err := q.CreateStepDeploymentLog(
 			ctx,
 			db.CreateStepDeploymentLogParams{
@@ -106,7 +107,7 @@ func (r *Repository) appendRemoteStepLogs(
 					String: steps[run.StepIndex].Name + " @ " + run.AgentID,
 					Valid:  true,
 				},
-				Line:      event.Line,
+				Line:      line,
 				StepIndex: sql.NullInt64{Int64: run.StepIndex, Valid: true},
 			},
 		)

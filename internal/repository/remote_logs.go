@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
+	"strings"
 
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/logscrub"
@@ -13,6 +15,11 @@ type RemoteLogEvent struct {
 	Sequence int64  `json:"sequence"`
 	Line     string `json:"line"`
 }
+
+var remoteLogLineEscaper = strings.NewReplacer(
+	"\n", `\n`, "\r", `\r`, "\v", `\v`, "\f", `\f`,
+	"\u0085", `\u0085`, "\u2028", `\u2028`, "\u2029", `\u2029`,
+)
 
 func (r *Repository) AppendRemoteDeploymentLogs(
 	ctx context.Context,
@@ -88,6 +95,7 @@ func (r *Repository) appendRemoteDeploymentLogs(
 		if event.Sequence < 0 {
 			return nil, ErrInvalidRemoteLog
 		}
+		event.Line = attributedRemoteLog(event.Line, identity.AgentID, scrubber)
 		log, created, err := appendRemoteDeploymentLog(
 			ctx, q, identity.DeploymentID, now, event,
 		)
@@ -115,6 +123,17 @@ func (r *Repository) appendRemoteDeploymentLogs(
 		return nil, transitionError(err)
 	}
 	return inserted, nil
+}
+
+func attributedRemoteLog(
+	line string,
+	agentID string,
+	scrubber *logscrub.Scrubber,
+) string {
+	// Keep one visible line per event without changing raw redaction boundaries.
+	line = scrubber.Scrub(remoteLogLineEscaper.Replace(scrubber.Scrub(line)))
+	suffix := fmt.Sprintf(" agent_id=%q", scrubber.Scrub(agentID))
+	return line + suffix
 }
 
 func (r *Repository) FlushRemoteDeploymentLogs(

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/logscrub"
 	"durpdeploy/internal/repository"
 )
 
@@ -129,7 +130,9 @@ func TestAgentDrainPreservesIssuedStep(t *testing.T) {
 	}
 
 	// Then: the existing step can finish.
-	if _, err := repo.StartRemoteStep(t.Context(), identity); err != nil {
+	if _, _, err := repo.StartRemoteStep(
+		t.Context(), identity, logscrub.New(nil),
+	); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, err := repo.HeartbeatRemoteStep(
