@@ -153,7 +153,11 @@ func seedLogPageRows(t *testing.T, f *artifactE2E, deploymentID int64) {
 func assertLogPages(t *testing.T, f *artifactE2E, apiPath, webPath string) {
 	t.Helper()
 	var page repository.LogPage
-	decodeStepLogTest(t, f.api(t, "GET", apiPath+"/page", nil, 200), &page)
+	body := f.api(t, "GET", apiPath+"/page", nil, 200)
+	if strings.Contains(string(body), "is_step_metadata") {
+		t.Fatal("internal metadata marker escaped the public log API")
+	}
+	decodeStepLogTest(t, body, &page)
 	if len(page.Items) != 500 || page.NextBefore != page.Items[0].ID ||
 		page.LastID != page.Items[499].ID || page.Items[0].Line != "history-0010" {
 		t.Fatal("latest log page has invalid boundaries")

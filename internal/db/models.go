@@ -186,13 +186,14 @@ type DeploymentDispatch struct {
 }
 
 type DeploymentLog struct {
-	ID           int64          `json:"id"`
-	DeploymentID int64          `json:"deployment_id"`
-	StepName     sql.NullString `json:"step_name"`
-	Line         string         `json:"line"`
-	CreatedAt    int64          `json:"created_at"`
-	StepIndex    sql.NullInt64  `json:"step_index"`
-	StepState    sql.NullString `json:"step_state"`
+	ID             int64          `json:"id"`
+	DeploymentID   int64          `json:"deployment_id"`
+	StepName       sql.NullString `json:"step_name"`
+	Line           string         `json:"line"`
+	CreatedAt      int64          `json:"created_at"`
+	StepIndex      sql.NullInt64  `json:"step_index"`
+	StepState      sql.NullString `json:"step_state"`
+	IsStepMetadata int64          `json:"-"`
 }
 
 type DeploymentLogScope struct {

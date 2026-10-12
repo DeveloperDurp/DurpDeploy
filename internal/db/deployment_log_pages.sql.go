@@ -13,16 +13,12 @@ import (
 const listDeploymentLogStateMetadata = `-- name: ListDeploymentLogStateMetadata :many
 SELECT l.id, l.step_index, l.step_name, l.step_state FROM deployment_logs l
 WHERE l.deployment_id = ?1 AND l.id <= ?2
-  AND (l.id IN (
+  AND l.is_step_metadata = 1 AND l.id IN (
     SELECT MAX(id) FROM deployment_logs
     WHERE deployment_id = ?1 AND id <= ?2
+      AND is_step_metadata = 1
     GROUP BY step_index, step_name
-  ) OR l.id IN (
-    SELECT MAX(id) FROM deployment_logs
-    WHERE deployment_id = ?1 AND id <= ?2
-      AND step_state IS NOT NULL
-    GROUP BY step_index, step_name
-  ))
+  )
 ORDER BY l.id
 `
 
@@ -67,7 +63,7 @@ func (q *Queries) ListDeploymentLogStateMetadata(ctx context.Context, arg ListDe
 }
 
 const listDeploymentLogsBefore = `-- name: ListDeploymentLogsBefore :many
-SELECT id, deployment_id, step_name, line, created_at, step_index, step_state FROM deployment_logs
+SELECT id, deployment_id, step_name, line, created_at, step_index, step_state, is_step_metadata FROM deployment_logs
 WHERE deployment_id = ?1
   AND (CAST(?2 AS BIGINT) = 0 OR id < CAST(?2 AS BIGINT))
 ORDER BY id DESC LIMIT ?3
@@ -96,6 +92,7 @@ func (q *Queries) ListDeploymentLogsBefore(ctx context.Context, arg ListDeployme
 			&i.CreatedAt,
 			&i.StepIndex,
 			&i.StepState,
+			&i.IsStepMetadata,
 		); err != nil {
 			return nil, err
 		}

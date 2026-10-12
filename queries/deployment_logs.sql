@@ -14,11 +14,30 @@ l.created_at DESC, l.id DESC;
 SELECT * FROM deployment_logs WHERE id = ?;
 
 -- name: CreateDeploymentLog :one
-INSERT INTO deployment_logs (deployment_id, step_name, line) VALUES (?, ?, ?) RETURNING *;
+INSERT INTO deployment_logs (deployment_id, step_name, line, is_step_metadata)
+VALUES (sqlc.arg(deployment_id), sqlc.narg(step_name), sqlc.arg(line),
+    CASE WHEN NOT EXISTS (
+        SELECT 1 FROM deployment_logs
+        WHERE deployment_id = sqlc.arg(deployment_id) AND is_step_metadata = 1
+          AND step_index IS NULL
+          AND (step_name = sqlc.narg(step_name)
+            OR (step_name IS NULL AND sqlc.narg(step_name) IS NULL))
+    ) THEN 1 ELSE 0 END
+) RETURNING *;
 
 -- name: CreateStepDeploymentLog :one
-INSERT INTO deployment_logs (deployment_id, step_name, line, step_index, step_state)
-VALUES (?, ?, ?, ?, ?) RETURNING *;
+INSERT INTO deployment_logs (deployment_id, step_name, line, step_index, step_state, is_step_metadata)
+VALUES (sqlc.arg(deployment_id), sqlc.narg(step_name), sqlc.arg(line),
+    sqlc.narg(step_index), sqlc.narg(step_state),
+    CASE WHEN CAST(sqlc.narg(step_state) AS TEXT) IS NOT NULL OR NOT EXISTS (
+        SELECT 1 FROM deployment_logs
+        WHERE deployment_id = sqlc.arg(deployment_id) AND is_step_metadata = 1
+          AND (step_index = sqlc.narg(step_index)
+            OR (step_index IS NULL AND sqlc.narg(step_index) IS NULL))
+          AND (step_name = sqlc.narg(step_name)
+            OR (step_name IS NULL AND sqlc.narg(step_name) IS NULL))
+    ) THEN 1 ELSE 0 END
+) RETURNING *;
 
 -- name: LockDeploymentLogStream :execrows
 UPDATE deployment_step_sources SET steps_json = steps_json -- NOSONAR: intentional write lock
@@ -29,8 +48,14 @@ SELECT * FROM deployment_logs WHERE deployment_id = ? AND id > ?
 ORDER BY id LIMIT 256;
 
 -- name: CreateRemoteDeploymentLog :one
-INSERT INTO deployment_logs (deployment_id, step_name, line, created_at)
-VALUES (?, NULL, ?, ?) RETURNING *;
+INSERT INTO deployment_logs (deployment_id, step_name, line, created_at, is_step_metadata)
+VALUES (sqlc.arg(deployment_id), NULL, sqlc.arg(line), sqlc.arg(created_at),
+    CASE WHEN NOT EXISTS (
+        SELECT 1 FROM deployment_logs
+        WHERE deployment_id = sqlc.arg(deployment_id) AND is_step_metadata = 1
+          AND step_index IS NULL AND step_name IS NULL
+    ) THEN 1 ELSE 0 END
+) RETURNING *;
 
 -- name: UpdateDeploymentLog :one
 UPDATE deployment_logs SET deployment_id = ?, step_name = ?, line = ? WHERE id = ? RETURNING *;

@@ -96,8 +96,8 @@ func TestLogPagesAcrossDatabases(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(states) != 2 || states[0].StepState.String != "running" ||
-			states[1].ID != page.LastID {
+		if len(states) != 1 || states[0].StepState.String != "running" ||
+			states[0].ID != state.ID {
 			t.Fatalf("state metadata = %+v", states)
 		}
 	})

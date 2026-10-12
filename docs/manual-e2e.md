@@ -78,6 +78,9 @@ Keep schedules disabled. Automated API/web/container coverage is
 
 ## Bounded log history
 
+Startup indexes step metadata and backfills existing log history once.
+Allow extra startup time for databases with large log histories.
+
 Create a disposable project with a Bash container step.
 Use this script to produce more than two pages of output:
 
