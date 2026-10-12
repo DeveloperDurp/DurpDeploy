@@ -24,6 +24,22 @@ func (r *Repository) RecordAgentPollWithStaging(
 	request agentproto.PollRequest,
 	stagingSupported bool,
 ) (int64, error) {
+	return r.RecordAgentPollCapabilities(ctx, heartbeat, AgentPollCapabilities{
+		PollRequest: request, Staging: stagingSupported,
+	})
+}
+
+type AgentPollCapabilities struct {
+	agentproto.PollRequest
+	Staging  bool
+	Artifact bool
+}
+
+func (r *Repository) RecordAgentPollCapabilities(
+	ctx context.Context,
+	heartbeat db.HeartbeatAgentParams,
+	request AgentPollCapabilities,
+) (int64, error) {
 	interpreters := request.SupportedInterpreters
 	modes := request.ExecutionModes
 	if request.Protocol == agentproto.AgentV1 {
@@ -45,7 +61,7 @@ func (r *Repository) RecordAgentPollWithStaging(
 			if changed == 0 {
 				return nil
 			}
-			if stagingSupported {
+			if request.Staging {
 				// Request-local downgrades cannot invalidate queued staged work.
 				if err := q.ClearAgentStagingCapability(
 					ctx,
@@ -54,6 +70,20 @@ func (r *Repository) RecordAgentPollWithStaging(
 					return err
 				}
 				if err := q.AddAgentStagingCapability(
+					ctx,
+					heartbeat.ID,
+				); err != nil {
+					return err
+				}
+			}
+			if request.Artifact {
+				if err := q.ClearAgentArtifactCapability(
+					ctx,
+					heartbeat.ID,
+				); err != nil {
+					return err
+				}
+				if err := q.AddAgentArtifactCapability(
 					ctx,
 					heartbeat.ID,
 				); err != nil {
@@ -182,4 +212,15 @@ func clearAgentCapabilities(
 		return fmt.Errorf("clear container interpreters: %w", err)
 	}
 	return nil
+}
+
+func clearAgentTransferCapabilities(
+	ctx context.Context,
+	q *db.Queries,
+	agentID string,
+) error {
+	if err := q.ClearAgentStagingCapability(ctx, agentID); err != nil {
+		return err
+	}
+	return q.ClearAgentArtifactCapability(ctx, agentID)
 }

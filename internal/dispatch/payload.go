@@ -6,6 +6,7 @@ import (
 
 	"durpdeploy/internal/runner"
 
+	agentartifact "github.com/DeveloperDurp/durpdeploy-agent/artifact"
 	"github.com/DeveloperDurp/durpdeploy-agent/executor"
 	agentpayload "github.com/DeveloperDurp/durpdeploy-agent/payload"
 	agentproto "github.com/DeveloperDurp/durpdeploy-agent/protocol"
@@ -19,11 +20,12 @@ type Payload struct {
 }
 
 type ReleaseSnapshot struct {
-	Staging   bool            `json:"staging,omitempty"`
-	ID        int64           `json:"id"`
-	ProjectID int64           `json:"project_id"`
-	Version   string          `json:"version"`
-	Steps     []executor.Step `json:"steps"`
+	Artifact  *agentartifact.Pin `json:"artifact,omitempty"`
+	Staging   bool               `json:"staging,omitempty"`
+	ID        int64              `json:"id"`
+	ProjectID int64              `json:"project_id"`
+	Version   string             `json:"version"`
+	Steps     []executor.Step    `json:"steps"`
 }
 
 type EnvironmentSnapshot struct {

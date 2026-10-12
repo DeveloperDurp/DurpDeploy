@@ -15,10 +15,24 @@ func buildArtifactServer(t *testing.T) string {
 	t.Helper()
 	directory := t.TempDir()
 	binary := filepath.Join(directory, "durpdeploy")
-	source, err := filepath.Abs("../../../internal/artifact/zip.go")
+	module := exec.CommandContext(
+		t.Context(),
+		"go",
+		"list",
+		"-m",
+		"-f",
+		"{{.Dir}}",
+		"github.com/DeveloperDurp/durpdeploy-agent",
+	)
+	moduleDirectory, err := module.Output()
 	if err != nil {
 		t.Fatal(err)
 	}
+	source := filepath.Join(
+		strings.TrimSpace(string(moduleDirectory)),
+		"artifact",
+		"zip.go",
+	)
 	contents, err := os.ReadFile(source)
 	if err != nil {
 		t.Fatal(err)

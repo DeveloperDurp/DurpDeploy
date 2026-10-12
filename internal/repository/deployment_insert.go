@@ -75,12 +75,7 @@ func (r *Repository) createDeploymentFromDeployment(
 	}); err != nil {
 		return DeploymentResult{}, err
 	}
-	return result, validateDeploymentArtifact(
-		ctx,
-		q,
-		result.Deployment.ID,
-		steps,
-	)
+	return result, nil
 }
 
 func (r *Repository) createDeployment(
@@ -118,12 +113,7 @@ func (r *Repository) createDeployment(
 	); err != nil {
 		return DeploymentResult{}, err
 	}
-	return result, validateDeploymentArtifact(
-		ctx,
-		q,
-		result.Deployment.ID,
-		steps,
-	)
+	return result, nil
 }
 
 func (r *Repository) createDeploymentWithSteps(

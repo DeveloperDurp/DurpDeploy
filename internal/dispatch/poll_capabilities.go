@@ -27,6 +27,7 @@ func pollCapabilitiesMatch(
 		modes = []agentproto.ExecutionMode{agentproto.ExecutionHost}
 	}
 	return (!snapshot.Staging || request.Staging) &&
+		(snapshot.Artifact == nil || request.Artifact) &&
 		protocol == string(request.Protocol) &&
 		sameCapabilities(host, snapshot.HostInterpreters) &&
 		sameCapabilities(modes, snapshot.ExecutionModes) &&

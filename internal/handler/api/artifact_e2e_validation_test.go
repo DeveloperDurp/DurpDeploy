@@ -5,13 +5,14 @@ package api_test
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"testing"
 
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/events"
 )
 
-func (f *artifactE2E) verifyRemoteSnapshotRejection(
+func (f *artifactE2E) verifyRemoteSnapshotAcceptance(
 	t *testing.T,
 ) {
 	t.Helper()
@@ -27,7 +28,7 @@ func (f *artifactE2E) verifyRemoteSnapshotRejection(
 	f.changePackage("long-name")
 	rejectInvalidArtifactPull(t, f, "path-rejected")
 	f.changePackage("package")
-	// Use a separate release for malformed-package refresh validation.
+	// Keep the previously executed release snapshot frozen.
 	unused := verificationRelease(t, f, "refresh-validation")
 	steps, err := f.h.repo.Queries.ListStepsByProject(t.Context(), f.project.ID)
 	if err != nil || len(steps) == 0 {
@@ -36,6 +37,13 @@ func (f *artifactE2E) verifyRemoteSnapshotRejection(
 	placement := db.SetStepExecutionTargetParams{
 		ID:              steps[0].ID,
 		ExecutionTarget: "agent",
+	}
+	if _, err := f.h.repo.DB.ExecContext(
+		t.Context(),
+		"UPDATE steps SET agent_execution_mode='container' WHERE id=?",
+		steps[0].ID,
+	); err != nil {
+		t.Fatal(err)
 	}
 	if _, err := f.h.repo.Queries.SetStepExecutionTarget(
 		t.Context(),
@@ -47,20 +55,40 @@ func (f *artifactE2E) verifyRemoteSnapshotRejection(
 		t,
 		"POST",
 		f.base()+"/releases",
-		map[string]string{"version": "remote-rejected"},
-		422,
+		map[string]string{"version": "remote-accepted"},
+		201,
 	)
 	f.api(
 		t,
 		"POST",
 		fmt.Sprintf("%s/releases/%d/refresh", f.base(), unused.ID),
 		nil,
-		422,
+		200,
+	)
+	webBase := fmt.Sprintf("/projects/%d", f.project.ID)
+	f.web(
+		t,
+		"POST",
+		webBase+"/releases",
+		url.Values{"version": {"web-remote-accepted"}},
+		303,
+	)
+	f.web(
+		t,
+		"POST",
+		fmt.Sprintf("%s/releases/%d/refresh", webBase, unused.ID),
+		nil,
+		303,
 	)
 	placement.ExecutionTarget = "local"
 	if _, err := f.h.repo.Queries.SetStepExecutionTarget(
 		t.Context(),
 		placement,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.h.repo.DB.ExecContext(t.Context(),
+		"UPDATE steps SET agent_execution_mode='host' WHERE id=?", steps[0].ID,
 	); err != nil {
 		t.Fatal(err)
 	}

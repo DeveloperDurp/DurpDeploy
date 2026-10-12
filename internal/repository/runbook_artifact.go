@@ -37,11 +37,8 @@ func validateRunbookArtifact(
 			}
 			return err
 		}
-		steps, err := deploymentStepsFromRelease(arg.StepsJSON)
-		if err != nil {
-			return err
-		}
-		return ValidateArtifactSteps(steps)
+		_, err = deploymentStepsFromRelease(arg.StepsJSON)
+		return err
 	}
 	if arg.ArtifactReleaseID == 0 {
 		_, err := q.GetProjectArtifactRepository(ctx, arg.ProjectID)
@@ -66,9 +63,6 @@ func validateRunbookArtifact(
 		}
 		return err
 	}
-	steps, err := deploymentStepsFromRelease(arg.StepsJSON)
-	if err != nil {
-		return err
-	}
-	return ValidateArtifactSteps(steps)
+	_, err = deploymentStepsFromRelease(arg.StepsJSON)
+	return err
 }

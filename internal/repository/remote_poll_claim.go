@@ -12,20 +12,6 @@ import (
 	agentproto "github.com/DeveloperDurp/durpdeploy-agent/protocol"
 )
 
-type RemotePayloadSnapshot struct {
-	Staging               bool
-	Agent                 db.Agent
-	Deployment            db.Deployment
-	Release               db.Release
-	Environment           db.Environment
-	Steps                 []db.DeploymentStep
-	Variables             []db.ReleaseVariable
-	HostInterpreters      []string
-	ExecutionModes        []string
-	ContainerRuntimes     []string
-	ContainerInterpreters []string
-}
-
 type RemotePreparedClaim struct {
 	Token      string
 	TokenHash  []byte
@@ -129,10 +115,13 @@ func (r *Repository) ClaimRemoteDeploymentPayload(
 				prepared, err := prepare(snapshot)
 				if err != nil {
 					if errors.Is(err, agentproto.ErrUnsupportedProtocol) {
-						if err := q.FailWaitingRemotePayload(ctx, db.FailWaitingRemotePayloadParams{
-							DeploymentID: candidate, AgentID: agentID,
-							Now: sql.NullInt64{Int64: now, Valid: true},
-						}); err != nil {
+						if err := q.FailWaitingRemotePayload(
+							ctx,
+							db.FailWaitingRemotePayloadParams{
+								DeploymentID: candidate, AgentID: agentID,
+								Now: sql.NullInt64{Int64: now, Valid: true},
+							},
+						); err != nil {
 							return err
 						}
 						return q.FailUnsupportedRemoteDeploymentStatus(ctx,
@@ -181,71 +170,4 @@ func (r *Repository) ClaimRemoteDeploymentPayload(
 		return RemoteClaim{}, false, err
 	}
 	return result, claimed, nil
-}
-
-func (r *Repository) remotePayloadSnapshot(
-	ctx context.Context,
-	q *db.Queries,
-	agentID string,
-	deploymentID int64,
-) (RemotePayloadSnapshot, error) {
-	agent, err := q.GetAgent(ctx, agentID)
-	if err != nil {
-		return RemotePayloadSnapshot{}, fmt.Errorf("get claim agent: %w", err)
-	}
-	host, err := q.ListAgentInterpreters(ctx, agentID)
-	if err != nil {
-		return RemotePayloadSnapshot{}, err
-	}
-	modes, err := q.ListAgentExecutionModes(ctx, agentID)
-	if err != nil {
-		return RemotePayloadSnapshot{}, err
-	}
-	runtimes, err := q.ListAgentContainerRuntimes(ctx, agentID)
-	if err != nil {
-		return RemotePayloadSnapshot{}, err
-	}
-	container, err := q.ListAgentContainerInterpreters(ctx, agentID)
-	if err != nil {
-		return RemotePayloadSnapshot{}, err
-	}
-	deployment, err := q.GetDeployment(ctx, deploymentID)
-	if err != nil {
-		return RemotePayloadSnapshot{}, fmt.Errorf(
-			"get claim deployment: %w",
-			err,
-		)
-	}
-	release, err := q.GetRelease(ctx, deployment.ReleaseID)
-	if err != nil {
-		return RemotePayloadSnapshot{}, fmt.Errorf("get claim release: %w", err)
-	}
-	environment, err := q.GetEnvironment(ctx, deployment.EnvironmentID)
-	if err != nil {
-		return RemotePayloadSnapshot{}, fmt.Errorf(
-			"get claim environment: %w",
-			err,
-		)
-	}
-	steps, err := q.ListDeploymentSteps(ctx, deploymentID)
-	if err != nil {
-		return RemotePayloadSnapshot{}, fmt.Errorf("list claim steps: %w", err)
-	}
-	variables, err := r.deploymentVariables(ctx, q, deploymentID)
-	if err != nil {
-		return RemotePayloadSnapshot{}, fmt.Errorf(
-			"list claim variables: %w",
-			err,
-		)
-	}
-	return RemotePayloadSnapshot{
-		Agent:            agent,
-		Deployment:       deployment,
-		Release:          release,
-		Environment:      environment,
-		Steps:            steps,
-		Variables:        variables,
-		HostInterpreters: host, ExecutionModes: modes,
-		ContainerRuntimes: runtimes, ContainerInterpreters: container,
-	}, nil
 }

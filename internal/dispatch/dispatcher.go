@@ -21,7 +21,8 @@ type Dispatcher struct {
 // PollRequest includes capabilities reported outside the JSON envelope.
 type PollRequest struct {
 	agentproto.PollRequest
-	Staging bool
+	Staging  bool
+	Artifact bool
 }
 
 func New(repo *repository.Repository) *Dispatcher {

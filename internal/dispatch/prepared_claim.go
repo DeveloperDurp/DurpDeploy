@@ -22,6 +22,10 @@ import (
 func prepareRemoteClaim(
 	snapshot repository.RemotePayloadSnapshot,
 ) (repository.RemotePreparedClaim, error) {
+	if snapshot.Artifact != nil &&
+		(!snapshot.Staging || len(snapshot.Steps) != 1) {
+		return repository.RemotePreparedClaim{}, agentproto.ErrUnsupportedProtocol
+	}
 	resolved, err := runner.ResolveReleaseVariables(
 		snapshot.Variables,
 		snapshot.Environment.ID,
@@ -46,7 +50,10 @@ func prepareRemoteClaim(
 	for index, step := range snapshot.Steps {
 		var names []string
 		if step.VariableNames != "" {
-			if err := json.Unmarshal([]byte(step.VariableNames), &names); err != nil {
+			if err := json.Unmarshal(
+				[]byte(step.VariableNames),
+				&names,
+			); err != nil {
 				return repository.RemotePreparedClaim{}, fmt.Errorf(
 					"decode step variables: %w",
 					err,
@@ -82,6 +89,7 @@ func prepareRemoteClaim(
 	payload := Payload{
 		DeploymentID: agentproto.DeploymentID(snapshot.Deployment.ID),
 		Release: ReleaseSnapshot{
+			Artifact:  snapshot.Artifact,
 			Staging:   snapshot.Staging,
 			ID:        snapshot.Release.ID,
 			ProjectID: snapshot.Release.ProjectID,
