@@ -8,6 +8,7 @@ import (
 
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/httpstream"
+	"durpdeploy/internal/repository"
 )
 
 type deploymentLogPanel struct {
@@ -20,8 +21,11 @@ type deploymentLogPanel struct {
 }
 
 type deploymentLogView struct {
-	Panels []deploymentLogPanel `json:"panels"`
-	LastID int64                `json:"lastID"`
+	Panels      []deploymentLogPanel `json:"panels"`
+	LastID      int64                `json:"lastID"`
+	Historical  bool                 `json:"historical"`
+	OlderBefore int64                `json:"olderBefore"`
+	Limit       int64                `json:"limit"`
 }
 
 func deploymentLogPanels(
@@ -30,7 +34,10 @@ func deploymentLogPanels(
 	logs []db.DeploymentLog,
 ) deploymentLogView {
 	steps := parseReleaseSteps(release.StepsJson)
-	view := deploymentLogView{Panels: make([]deploymentLogPanel, len(steps)+1)}
+	view := deploymentLogView{
+		Panels: make([]deploymentLogPanel, len(steps)+1),
+		Limit:  repository.LogPageLimit,
+	}
 	for index, step := range steps {
 		view.Panels[index] = deploymentLogPanel{
 			Index: index,
@@ -60,7 +67,8 @@ func deploymentLogPanels(
 			// Legacy rows are grouped by name only when the match is unambiguous.
 			match := -1
 			for index, step := range steps {
-				if log.StepName.String == step.Name || strings.HasPrefix(log.StepName.String, step.Name+" @ ") {
+				if log.StepName.String == step.Name ||
+					strings.HasPrefix(log.StepName.String, step.Name+" @ ") {
 					if match != -1 {
 						match = -1
 						break

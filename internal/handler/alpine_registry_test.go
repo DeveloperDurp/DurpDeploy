@@ -11,17 +11,12 @@ import (
 
 func TestAlpineRegistryDefinesComplianceComponents(t *testing.T) {
 	// Given
-	sourcePath := filepath.Join("..", "..", "static", "js", "app.js")
 	bundlePath := filepath.Join("..", "..", "static", "js", "app.bundle.js")
-	sourceBytes, err := os.ReadFile(sourcePath)
-	if err != nil {
-		t.Fatalf("read Alpine registry source: %v", err)
-	}
 	bundleBytes, err := os.ReadFile(bundlePath)
 	if err != nil {
 		t.Fatalf("read Alpine registry bundle: %v", err)
 	}
-	source := string(sourceBytes)
+	source := readComplianceRegistry(t, filepath.Join("..", ".."))
 	bundle := string(bundleBytes)
 
 	contracts := []struct {
@@ -87,7 +82,7 @@ func TestAlpineRegistryDefinesComplianceComponents(t *testing.T) {
 		},
 		{
 			name:        "deploymentStream",
-			constructor: `\(\{ url \}\)`,
+			constructor: `\(\{ url, after, limit, olderBefore \}\)`,
 			members:     []string{"init", "message", "destroy"},
 			methods:     []string{"init", "message", "destroy"},
 			events:      []string{"complete"},

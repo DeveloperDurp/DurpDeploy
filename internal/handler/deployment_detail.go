@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"database/sql"
+	"math"
 	"net/http"
 	"strconv"
 
@@ -53,16 +54,36 @@ func (h *DeploymentHandler) GetDeployment(
 		return
 	}
 
-	logs, err := h.repo.Queries.ListDeploymentLogsByDeployment(r.Context(), id)
+	before, err := LogPageCursor(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	page, err := h.repo.ReadLogPage(r.Context(), id, before)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	stateThrough := page.LastID
+	if before != 0 {
+		// Historical output still shows current deployment and step states.
+		stateThrough = math.MaxInt64
+	}
+	states, err := h.repo.Queries.ListDeploymentLogStateMetadata(r.Context(),
+		db.ListDeploymentLogStateMetadataParams{
+			DeploymentID: id, LastID: stateThrough,
+		})
+	if err != nil {
+		http.Error(w, "Cannot read step states", http.StatusInternalServerError)
+		return
+	}
+	logs := page.Items
 
 	queueCtx, waiting, ok := h.deploymentQueueState(w, r, &deployment)
 	if !ok {
 		return
 	}
+	queueCtx = pages.WithLogHistory(queueCtx, page, states)
 	queueCtx = pages.WithArtifactDecisionWarning(
 		queueCtx,
 		r.URL.Query().Get("artifact_decision"),

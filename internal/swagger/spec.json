@@ -2526,6 +2526,72 @@
         ]
       }
     },
+    "/deployments/{id}/logs/page": {
+      "get": {
+        "tags": [
+          "logs"
+        ],
+        "summary": "Read up to 500 log rows, ordered by increasing ID. Use next_before for older rows.",
+        "operationId": "pageDeploymentLogs",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "minimum": 1,
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "Before",
+            "description": "Return rows older than this ID. Omit to read the latest page.",
+            "name": "before",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "LogPage contains a bounded history window in increasing log-ID order.",
+            "schema": {
+              "$ref": "#/definitions/LogPage"
+            }
+          },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "500": {
+            "description": "Server error response.",
+            "schema": {
+              "$ref": "#/definitions/ServerError"
+            }
+          }
+        }
+      }
+    },
     "/deployments/{id}/logs/stream": {
       "get": {
         "description": "Stream deployment logs. The format=structured SSE option emits indexed\nstep logs and lifecycle states, supports after and Last-Event-ID cursors,\nand ends with a complete event. Default SSE and NDJSON remain text streams.",
@@ -6649,6 +6715,142 @@
         }
       }
     },
+    "/projects/{id}/runbook-executions/{executionId}/logs.txt": {
+      "get": {
+        "produces": [
+          "text/plain"
+        ],
+        "tags": [
+          "runbooks"
+        ],
+        "summary": "Export all persisted runbook logs as text.",
+        "operationId": "exportRunbookLogs",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ExecutionID",
+            "name": "executionId",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "TextResponse is a plain text response.",
+            "schema": {
+              "$ref": "#/definitions/TextResponse"
+            }
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "500": {
+            "description": "Server error response.",
+            "schema": {
+              "$ref": "#/definitions/ServerError"
+            }
+          }
+        }
+      }
+    },
+    "/projects/{id}/runbook-executions/{executionId}/logs/page": {
+      "get": {
+        "tags": [
+          "runbooks"
+        ],
+        "summary": "Read a bounded runbook log page. Use next_before for older rows.",
+        "operationId": "pageRunbookLogs",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ExecutionID",
+            "name": "executionId",
+            "in": "path",
+            "required": true
+          },
+          {
+            "minimum": 1,
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "Before",
+            "description": "Return rows older than this ID. Omit to read the latest page.",
+            "name": "before",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "LogPage contains a bounded history window in increasing log-ID order.",
+            "schema": {
+              "$ref": "#/definitions/LogPage"
+            }
+          },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "500": {
+            "description": "Server error response.",
+            "schema": {
+              "$ref": "#/definitions/ServerError"
+            }
+          }
+        }
+      }
+    },
     "/projects/{id}/runbook-executions/{executionId}/logs/stream": {
       "get": {
         "produces": [
@@ -10607,6 +10809,81 @@
       "x-go-name": "swaggerLogLineListResponse",
       "x-go-package": "durpdeploy/internal/handler/api"
     },
+    "LogPage": {
+      "type": "object",
+      "title": "LogPage contains a bounded history window in increasing log-ID order.",
+      "properties": {
+        "before": {
+          "description": "Requested exclusive upper ID. Zero selects the latest page.",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Before"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/LogPageEntry"
+          },
+          "x-go-name": "Items"
+        },
+        "last_id": {
+          "description": "Highest returned ID. Use this as the live stream's after cursor.",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "LastID"
+        },
+        "limit": {
+          "description": "Maximum number of returned rows (500).",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Limit"
+        },
+        "next_before": {
+          "description": "Exclusive cursor for the next older page. Zero means no older rows.",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "NextBefore"
+        }
+      },
+      "x-go-name": "swaggerLogPage",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "LogPageEntry": {
+      "type": "object",
+      "title": "LogPageEntry is a persisted log row, including nullable step metadata.",
+      "properties": {
+        "created_at": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "CreatedAt"
+        },
+        "deployment_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "DeploymentID"
+        },
+        "id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "ID"
+        },
+        "line": {
+          "type": "string",
+          "x-go-name": "Line"
+        },
+        "step_index": {
+          "$ref": "#/definitions/NullInt64"
+        },
+        "step_name": {
+          "$ref": "#/definitions/NullString"
+        },
+        "step_state": {
+          "$ref": "#/definitions/NullString"
+        }
+      },
+      "x-go-name": "swaggerLogPageEntry",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
     "LogStreamParams": {
       "type": "object",
       "title": "LogStreamParams controls the log stream format.",
@@ -10694,6 +10971,20 @@
         "Int64": {
           "type": "integer",
           "format": "int64"
+        },
+        "Valid": {
+          "type": "boolean"
+        }
+      },
+      "x-go-package": "database/sql"
+    },
+    "NullString": {
+      "description": "var s NullString\nerr := db.QueryRow(\"SELECT name FROM foo WHERE id=?\", id).Scan(\u0026s)\n...\nif s.Valid {\nuse s.String\n} else {\nNULL value\n}",
+      "type": "object",
+      "title": "NullString represents a string that may be null.\nNullString implements the [Scanner] interface so\nit can be used as a scan destination:",
+      "properties": {
+        "String": {
+          "type": "string"
         },
         "Valid": {
           "type": "boolean"

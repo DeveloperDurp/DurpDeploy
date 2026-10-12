@@ -1,0 +1,186 @@
+export function registerLogComponents(Alpine) {
+	const initialRows = element => [...element.querySelectorAll('[data-log-id]')]
+		.map(node => ({ id: Number(node.dataset.logId), node }))
+		.sort((a, b) => a.id - b.id);
+	const retain = (component, row) => {
+		component.retained.push(row);
+		while (component.retained.length > component.limit) {
+			const removed = component.retained.shift();
+			if (removed.node) removed.node.remove();
+			else removed.panel.live.shift();
+			component.olderBefore = component.retained[0].id;
+		}
+	};
+	const olderLogsURL = function () {
+		return `${location.pathname}?before=${this.olderBefore}`;
+	};
+	Alpine.data('deploymentStream', ({ url, after, limit, olderBefore }) => ({
+		url,
+		lastID: after,
+		limit,
+		olderBefore,
+		olderLogsURL,
+		retained: [],
+		source: null,
+		started: false,
+		destroyed: false,
+		init() {
+			if (this.started) return;
+			this.started = true;
+			this.retained = initialRows(this.$el);
+			const address = new URL(this.url, location.href);
+			address.searchParams.set('after', this.lastID);
+			this.source = new EventSource(address);
+			this.source.addEventListener('log', event => this.message(event));
+			this.source.addEventListener('complete', () => {
+				this.source?.close();
+				this.source = null;
+			});
+		},
+		message(event) {
+			if (this.destroyed) return;
+			const entry = JSON.parse(event.data);
+			if (entry.id <= this.lastID) return;
+			this.lastID = entry.id;
+			const node = document.createElement('div');
+			node.dataset.logId = entry.id;
+			node.textContent = entry.line;
+			this.$refs.logs.append(node);
+			retain(this, { id: entry.id, node });
+		},
+		destroy() {
+			this.destroyed = true;
+			if (this.source) this.source.close();
+			this.source = null;
+		},
+	}));
+
+	function renderLogLine(element, line = element.textContent) {
+		const fragment = document.createDocumentFragment();
+		let color = /^\s*[-+]\/[-+]/.test(line) ? 'text-warning'
+			: ({ '+': 'text-success', '-': 'text-error', '~': 'text-warning' })[line.trimStart().match(/^([+~-])\s/)?.[1]] || '';
+		let bold = false;
+		const append = text => {
+			if (!text) return;
+			const span = document.createElement('span');
+			span.className = [color, bold ? 'font-bold' : ''].filter(Boolean).join(' ');
+			span.textContent = text;
+			fragment.append(span);
+		};
+		let offset = 0;
+		for (const match of line.matchAll(/\x1b\[([0-9;]*)m/g)) {
+			append(line.slice(offset, match.index));
+			for (const code of match[1].split(';').map(Number)) {
+				if (code === 0) { color = ''; bold = false; }
+				else if (code === 1) bold = true;
+				else if (code === 22) bold = false;
+				else if (code === 39) color = '';
+				else if ([31, 91].includes(code)) color = 'text-error';
+				else if ([32, 92].includes(code)) color = 'text-success';
+				else if ([33, 93].includes(code)) color = 'text-warning';
+			}
+			offset = match.index + match[0].length;
+		}
+		append(line.slice(offset));
+		element.replaceChildren(fragment);
+	}
+
+	Alpine.data('deploymentStepLogs', ({ url, status, view }) => ({
+		renderLogLine,
+		renderEntry(element, entry) {
+			renderLogLine(element, entry.line);
+			if (entry.step.includes(' @ ')) {
+				const step = document.createElement('span');
+				step.className = 'text-accent';
+				step.textContent = `[${entry.step}] `;
+				element.prepend(step);
+			}
+			const timestamp = document.createElement('span');
+			timestamp.className = 'text-gray-500';
+			timestamp.textContent = `[${entry.display_timestamp}] `;
+			element.prepend(timestamp);
+		},
+		url,
+		deploymentStatus: status,
+		panels: view.panels,
+		lastID: view.lastID,
+		limit: view.limit,
+		olderBefore: view.olderBefore,
+		olderLogsURL,
+		retained: [],
+		source: null,
+		init() {
+			this.retained = initialRows(this.$el);
+			if (view.historical) return;
+			// Cancellation can set terminal status before the runner writes final logs.
+			const address = new URL(this.url, location.href);
+			address.searchParams.set('after', this.lastID);
+			this.source = new EventSource(address);
+			this.source.addEventListener('log', event => this.message(event));
+			this.source.addEventListener('complete', event => {
+				this.finish(JSON.parse(event.data).status);
+				this.source?.close();
+				this.source = null;
+			});
+		},
+		terminal() {
+			return ['succeeded', 'failed', 'cancelled', 'rejected', 'expired', 'cleanup_unconfirmed'].includes(this.deploymentStatus);
+		},
+		message(event) {
+			const entry = JSON.parse(event.data);
+			if (entry.id <= this.lastID) return;
+			this.lastID = entry.id;
+			let panel = this.panels.find(item => item.index === entry.step_index);
+			if (!panel && entry.step) {
+				const matches = this.panels.filter(item => item.index >= 0 &&
+					(entry.step === item.name || entry.step.startsWith(`${item.name} @ `)));
+				if (matches.length === 1) panel = matches[0];
+			}
+			panel ??= this.panels.find(item => item.index === -1);
+			panel.live.push(entry);
+			retain(this, { id: entry.id, panel });
+			if (entry.state) {
+				panel.state = entry.state;
+				if (['running', 'waiting', 'failed'].includes(entry.state)) {
+					this.$el.querySelector(`[data-step-index="${panel.index}"]`).open = true;
+				}
+			} else if (panel.state === 'pending') {
+				panel.state = 'unknown';
+			}
+		},
+		stateLabel(state) {
+			return ({ waiting: 'Waiting for agents', running: 'Running',
+				succeeded: 'Succeeded', failed: 'Failed', cancelled: 'Cancelled',
+				not_run: 'Not run', unknown: 'State unavailable' })[state] ?? 'Pending';
+		},
+		activeStepText() {
+			if (['queued', 'publishing_artifact', 'awaiting_artifact_approval'].includes(this.deploymentStatus)) {
+				return this.deploymentStatus.replaceAll('_', ' ');
+			}
+			const active = this.panels.find(panel => panel.index >= 0 && ['running', 'waiting'].includes(panel.state));
+			if (active) return `${this.stateLabel(active.state)}: Step ${active.index + 1} — ${active.name}`;
+			if (this.terminal()) return `Deployment ${this.deploymentStatus.replaceAll('_', ' ')}`;
+			if (this.deploymentStatus === 'running') return 'Current step unavailable';
+			return 'Waiting to start';
+		},
+		statusChanged(event) {
+			const target = event.target instanceof Element ? event.target : event.detail?.target;
+			if (!(target instanceof Element) || target.id !== 'status-badge') return;
+			this.deploymentStatus = target.dataset.deploymentStatus || target.textContent.trim();
+			// The stream drains final logs before sending its complete event.
+		},
+		finish(status) {
+			this.deploymentStatus = status;
+			for (const panel of this.panels) {
+				if (panel.state === 'pending') panel.state = 'unknown';
+				if (['running', 'waiting'].includes(panel.state)) {
+					panel.state = 'unknown';
+				}
+			}
+		},
+		destroy() {
+			this.source?.close();
+			this.source = null;
+		},
+	}));
+}

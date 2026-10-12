@@ -453,6 +453,26 @@ underlying `deployment_id`. Read the execution at
 `/api/v1/projects/$PID/runbook-executions/$XID`, logs at `/logs`, and live
 logs at `/logs/stream` (SSE by default, `?format=ndjson` for NDJSON).
 
+Use `GET /api/v1/deployments/$DID/logs/page` for bounded history.
+Runbooks support `GET /api/v1/projects/$PID/runbook-executions/$XID/logs/page`.
+Responses contain `items`, `next_before`, `last_id`, `limit`, and `before`.
+Each page contains at most 500 entries, ordered by increasing persisted ID.
+The limit counts entries, not bytes. Individual lines remain complete.
+Omit `before` for the newest page.
+Pass a nonzero `next_before` as `?before=ID` to retrieve the preceding page.
+A zero `next_before` means no older page remains.
+Explicit zero, negative, malformed, or overflowing cursors return `400`.
+Resume structured streams after `last_id`.
+The existing `/logs` endpoints retain their complete JSON arrays.
+Runbooks also support `/logs.txt` for complete text export.
+
+Deployment and runbook pages retain at most 500 displayed log entries.
+Use **Older logs** to view earlier output with live updates paused.
+Use **Latest logs** to resume live updates.
+Use **Export all logs** to download complete history.
+Deployment step states remain available when their output leaves the displayed window.
+Older output pages show current step states.
+
 HTTP headers must arrive within 5 seconds, and the complete request body
 within 30 seconds from the start of the request read. Ordinary responses
 have a 60-second write budget. Deployment/runbook SSE and NDJSON streams

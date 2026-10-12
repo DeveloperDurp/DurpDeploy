@@ -459,6 +459,10 @@ func newRouter(
 				"/projects/{id}/runbooks/executions/{executionId}/logs/stream",
 				runbookH.StreamLogs,
 			)
+			ppr.Get(
+				"/projects/{id}/runbooks/executions/{executionId}/logs.txt",
+				runbookH.ExportLogs,
+			)
 			ppr.Post(
 				"/projects/{id}/runbooks/executions/{executionId}/cancel",
 				runbookH.Cancel,
@@ -732,6 +736,7 @@ func newRouter(
 			)
 			dar.Get("/deployments/{id}/verification", apiDepH.GetVerification)
 			dar.Get("/deployments/{id}/logs", apiDepH.ListDeploymentLogs)
+			dar.Get("/deployments/{id}/logs/page", apiLogH.Page)
 			dar.Get("/deployments/{id}/logs/stream", apiLogH.StreamLogs)
 			dar.Get("/deployments/{id}/logs.txt", apiLogH.ExportLogs)
 			dar.Get("/deployments/{id}/logs/{logId}", apiLogH.GetLog)
@@ -876,6 +881,14 @@ func newRouter(
 			par.Get(
 				"/projects/{id}/runbook-executions/{executionId}/logs",
 				apiRunbookH.Logs,
+			)
+			par.Get(
+				"/projects/{id}/runbook-executions/{executionId}/logs/page",
+				apiRunbookH.LogPage,
+			)
+			par.Get(
+				"/projects/{id}/runbook-executions/{executionId}/logs.txt",
+				apiRunbookH.ExportLogs,
 			)
 			par.Get(
 				"/projects/{id}/runbook-executions/{executionId}/logs/stream",
