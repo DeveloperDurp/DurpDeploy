@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/handler"
 	"durpdeploy/internal/migrate"
@@ -89,6 +90,7 @@ func TestIndex_DashboardMetrics(t *testing.T) {
 	h := handler.NewIndexHandler(repo)
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req = auth.SetUser(req, &db.User{ID: 1, Role: "admin"})
 	rec := httptest.NewRecorder()
 	h.Index(rec, req)
 
@@ -113,7 +115,10 @@ func TestIndex_DashboardMetrics(t *testing.T) {
 	rec = httptest.NewRecorder()
 	h.RefreshDeployments(
 		rec,
-		httptest.NewRequest(http.MethodGet, "/dashboard/deployments", nil),
+		auth.SetUser(
+			httptest.NewRequest(http.MethodGet, "/dashboard/deployments", nil),
+			&db.User{ID: 1, Role: "admin"},
+		),
 	)
 	if rec.Code != http.StatusOK ||
 		rec.Header().Get("Cache-Control") != "no-store" {
