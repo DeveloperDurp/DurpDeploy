@@ -289,6 +289,8 @@ and `deployment_variable_snapshots` use AES-256-GCM encryption before database s
 ### Key rotation runbook
 
 First finish deployments and confirm remote cleanup.
+The command rejects both rotation modes while encrypted deployment staging chunks remain.
+If rotation rejects staging chunks, finish deployment cleanup before retrying.
 Back up the database, matching key, and server identity. Stop all server and
 replication processes; an active server keeps the old key and can write
 old-key ciphertext after the rotation transaction. For Compose:

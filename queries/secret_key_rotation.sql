@@ -1,3 +1,6 @@
+-- name: CountStagingChunks :one
+SELECT COUNT(*) FROM deployment_staging_chunks;
+
 -- name: ListTOTPRotationKeys :many
 SELECT user_id FROM mfa_totp ORDER BY user_id;
 

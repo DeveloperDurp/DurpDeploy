@@ -10,6 +10,17 @@ import (
 	"database/sql"
 )
 
+const countStagingChunks = `-- name: CountStagingChunks :one
+SELECT COUNT(*) FROM deployment_staging_chunks
+`
+
+func (q *Queries) CountStagingChunks(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countStagingChunks)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const getAgentIdentityRotationValue = `-- name: GetAgentIdentityRotationValue :one
 SELECT encrypted_identity FROM agents WHERE id = ?
 `
