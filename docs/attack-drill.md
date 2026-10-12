@@ -160,8 +160,8 @@ if its bearer value is exposed.
    ```
 2. Rotate deployment credentials the token could read or expose. Server-key
    rotation does not revoke tokens or undo plaintext disclosure. Use it only
-   for exposure of the server key, after addressing the
-   [current rotation limitation](security.md#key-rotation-runbook).
+   for exposure of the server key. Follow the
+   [key rotation procedure](security.md#key-rotation-runbook).
 3. Audit the user's actions in `/admin/audit` between the token creation and
    revocation.
 

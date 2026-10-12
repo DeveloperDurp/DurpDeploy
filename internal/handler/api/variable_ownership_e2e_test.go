@@ -54,7 +54,9 @@ func TestVariableOwnershipBeforeDecryptionAPIWebE2E(t *testing.T) {
 			if fixture.name == "missing" {
 				apiMissing, webMissing = apiBody, webBody
 			} else if apiBody != apiMissing || webBody != webMissing {
-				t.Fatal("foreign variable existence changed the not-found response")
+				t.Fatal(
+					"foreign variable existence changed the not-found response",
+				)
 			}
 			if strings.Contains(apiBody+webBody, "ownership-secret-sentinel") ||
 				strings.Contains(apiBody+webBody, "invalid-ciphertext!") {
@@ -62,7 +64,17 @@ func TestVariableOwnershipBeforeDecryptionAPIWebE2E(t *testing.T) {
 			}
 		})
 	}
-	// A matching owner still reaches decryption, so corrupt storage is not hidden.
-	f.api(t, "GET", fmt.Sprintf("/api/v1/projects/%d/variables/%d",
-		foreign.ID, corrupt.ID), nil, 500)
+	// A matching owner can read masked metadata without decrypting the secret.
+	body := f.api(t, "GET", fmt.Sprintf("/api/v1/projects/%d/variables/%d",
+		foreign.ID, corrupt.ID), nil, 200)
+	var variable struct {
+		ID     int64  `json:"id"`
+		Value  string `json:"value"`
+		Secret int64  `json:"secret"`
+	}
+	decodeStepLogTest(t, body, &variable)
+	if variable.ID != corrupt.ID || variable.Value != "" ||
+		variable.Secret != 1 {
+		t.Fatal("owner metadata read did not preserve secret masking")
+	}
 }

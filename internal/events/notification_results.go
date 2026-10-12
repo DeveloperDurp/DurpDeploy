@@ -10,6 +10,9 @@ func PublicNotificationResults(raw string) string {
 		return "{}"
 	}
 	for channel, status := range results {
+		if channel == "email" && status == SMTPPlaintextStatus {
+			continue
+		}
 		switch status {
 		case "ok", "skipped":
 		default:

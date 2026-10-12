@@ -56,6 +56,14 @@ func (h *LogHandler) ExportLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.exportDeploymentLogs(w, r, deploymentID)
+}
+
+func (h *LogHandler) exportDeploymentLogs(
+	w http.ResponseWriter,
+	r *http.Request,
+	deploymentID int64,
+) {
 	deployment, err := h.repo.Queries.GetDeployment(r.Context(), deploymentID)
 	if err != nil {
 		if err == sql.ErrNoRows {

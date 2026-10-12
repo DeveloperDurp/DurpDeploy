@@ -258,6 +258,7 @@ templ RunbookVersionSelect(versions []db.RunbookVersion, latestLabel string) {
 }
 
 templ RunbookExecutionPage(project db.Project, book db.Runbook, execution db.GetRunbookExecutionRow, logs []db.DeploymentLog, currentPath string) {
+	{{ page := logHistoryPage(ctx) }}
 	@layouts.Base("Runbook execution", currentPath) {
 		@components.Breadcrumbs([]components.Crumb{
 			{Label: "Home", Href: "/"},
@@ -278,18 +279,17 @@ templ RunbookExecutionPage(project db.Project, book db.Runbook, execution db.Get
 			</div>
 			<div
 				class="card bg-base-200 p-4"
-				if execution.Status == "running" || execution.Status == "pending" || execution.Status == "pending_approval" || execution.Status == "queued" {
-					x-data={ fmt.Sprintf("deploymentStream({ url: '/projects/%d/runbooks/executions/%d/logs/stream' })", project.ID, execution.ID) }
+				if page.Before == 0 {
+					x-data={ fmt.Sprintf("deploymentStream({ url: '/projects/%d/runbooks/executions/%d/logs/stream?format=structured', after: '%d', limit: %d, olderBefore: '%d' })", project.ID, execution.ID, page.LastID, page.Limit, page.NextBefore) }
 				}
 			>
 				<h2 class="text-xl font-bold mb-3">Live logs</h2>
+				@LogHistoryNavigation(currentPath, currentPath + "/logs.txt")
 				<div class="bg-base-300 p-4 rounded overflow-x-auto font-mono text-sm space-y-1">
-					if execution.Status != "running" && execution.Status != "pending" && execution.Status != "pending_approval" && execution.Status != "queued" {
-						for _, log := range logs {
-							<div class="whitespace-pre-wrap">{ log.Line }</div>
-						}
+					for _, log := range logs {
+						<div class="whitespace-pre-wrap" data-log-id={ strconv.FormatInt(log.ID, 10) }>{ log.Line }</div>
 					}
-					<pre x-ref="logs" class="whitespace-pre-wrap"></pre>
+					<div x-ref="logs" class="whitespace-pre-wrap"></div>
 				</div>
 			</div>
 		</div>

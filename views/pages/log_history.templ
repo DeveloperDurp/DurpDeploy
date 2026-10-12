@@ -1,0 +1,36 @@
+package pages
+
+import "durpdeploy/internal/repository"
+import "strconv"
+
+templ LogHistoryNavigation(base, exportURL string) {
+	{{ page := logHistoryPage(ctx) }}
+	<div class="flex flex-wrap items-center gap-2" aria-label="Log history">
+		<p class="text-sm opacity-70 grow">
+			if page.Before != 0 {
+				Older log page. Live updates are paused.
+			} else {
+				Showing up to { strconv.FormatInt(repository.LogPageLimit, 10) } recent entries.
+			}
+		</p>
+		if page.NextBefore != 0 || page.Before == 0 {
+			<a
+				class="btn btn-ghost sm:btn-sm"
+				href={ logHistoryURL(base, page.NextBefore) }
+				data-older-logs
+				hx-boost="false"
+				if page.Before == 0 {
+					x-show="olderBefore !== '0'"
+					x-bind:href="olderLogsURL()"
+					if page.NextBefore == 0 {
+						style="display:none"
+					}
+				}
+			>Older logs</a>
+		}
+		if page.Before != 0 {
+			<a class="btn btn-ghost sm:btn-sm" href={ base } data-latest-logs>Latest logs</a>
+		}
+		<a class="btn btn-ghost sm:btn-sm" href={ exportURL } hx-boost="false">Export all logs</a>
+	</div>
+}

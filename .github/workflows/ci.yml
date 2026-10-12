@@ -390,9 +390,13 @@ jobs:
       - name: Verify mobile lists and dashboard updates
         run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^Test(DeploymentMobile|DeploymentListMobile|ResourceListMobile|HomeMobile|HomeRunningPoll|MainPagePattern)BrowserE2E$' ./internal/handler/api
       - name: Verify forms and dialogs
-        run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^Test(ProjectEditModal|ResourceCreateModal|ResourceEditModal|StepEditModal|StepAddModal|MobileFormFocus|RunbookEditor|AlpineEditForms|AlpineDialogs|LifecycleVariables|LifecycleLiveScope|LifecyclePageNavigation|RunningServer|VariableScopesBeforeDeployment|NotificationCredentialForms|NotificationValidationPreservesForm)BrowserE2E$' ./internal/handler/api
+        run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^Test(ProjectEditModal|ResourceCreateModal|ResourceEditModal|StepEditModal|StepAddModal|MobileFormFocus|RunbookEditor|AlpineEditForms|AlpineDialogs|RunningServer)BrowserE2E$' ./internal/handler/api
+      - name: Verify variables and notification forms
+        run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^Test(LifecycleVariables|LifecycleLiveScope|LifecyclePageNavigation|VariableScopesBeforeDeployment|NotificationCredentialForms|NotificationValidationPreservesForm|SMTPPlaintextWarning)BrowserE2E$' ./internal/handler/api
       - name: Verify deployment step logs
-        run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^Test(DeploymentStepLogs|DeploymentStepLogsHistoricalQuiet|DeploymentStagingFailure|LegacyRunbookStreamDrainsAfterTerminalBadge)BrowserE2E$' ./internal/handler/api
+        run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^Test(DeploymentStepLogs|DeploymentStepLogsHistoricalQuiet|DeploymentLogHistory|RunbookLogHistory|RunbookLogRevocation|DeploymentStagingFailure|LegacyRunbookStreamDrainsAfterTerminalBadge)BrowserE2E$' ./internal/handler/api
+      - name: Verify log pages and bounded background checks through HTTP
+        run: go test -tags=e2e -race -count=1 -timeout=3m -run '^Test((Deployment|Runbook)LogHistoryPages|OpenLogStreamRevocation|StalledSMTPDelivery|SMTPPlaintextWarning|BackupHealthRecovery)APIWebE2E$' ./internal/handler/api
       - name: Verify verification forms, polling, and rollback in Chromium
         run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^TestVerification(Rollback|Polling|CleanupRetry)BrowserE2E$' ./internal/handler/api
       - name: Verify environment queue position, permissions, and cancellation

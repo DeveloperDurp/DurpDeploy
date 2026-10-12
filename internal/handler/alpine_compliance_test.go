@@ -112,7 +112,7 @@ func TestAlpineCompliancePolicy(t *testing.T) {
 	})
 
 	t.Run("registry and generated assets comply", func(t *testing.T) {
-		app := readComplianceFile(t, repositoryRoot, "static/js/app.js")
+		app := readComplianceRegistry(t, repositoryRoot)
 		order := []string{
 			"toast", "navbar", "deploymentForm",
 			"stepFormHost", "stepEditor", "variablesPage", "deploymentStream",
@@ -282,6 +282,21 @@ func readComplianceFile(t *testing.T, root, path string) string {
 		t.Fatalf("read %s: %v", path, err)
 	}
 	return string(content)
+}
+
+func readComplianceRegistry(t *testing.T, root string) string {
+	t.Helper()
+	app := readComplianceFile(t, root, "static/js/app.js")
+	const registration = "registerLogComponents(Alpine);"
+	if strings.Count(app, registration) != 1 ||
+		!strings.Contains(app,
+			"import { registerLogComponents } from './deployment-logs.js'") {
+		t.Fatal("log components must be imported and registered exactly once")
+	}
+	module := readComplianceFile(t, root, "static/js/deployment-logs.js")
+	// Expand the imported registration at its call site for policy checks.
+	module = strings.ReplaceAll(module, "\n\t", "\n")
+	return strings.Replace(app, registration, module, 1)
 }
 
 func assertContains(t *testing.T, content, marker string) {

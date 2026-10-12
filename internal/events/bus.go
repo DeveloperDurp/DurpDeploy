@@ -54,6 +54,7 @@ type Event struct {
 // Notifier delivers an Event through one channel (Slack, email, ...).
 // Skipped=true means the notifier isn't configured for this event (e.g. no
 // webhook URL set) and is recorded as "skipped" rather than "failed".
+// An exact SMTPPlaintextWarning means email delivery succeeded without TLS.
 type Notifier interface {
 	Name() string
 	Notify(ctx context.Context, event Event) (skipped bool, err error)
@@ -156,6 +157,8 @@ func (b *Bus) Publish(ctx context.Context, evt Event) {
 		switch {
 		case skipped:
 			results[n.Name()] = "skipped"
+		case n.Name() == "email" && err == (SMTPPlaintextWarning{}):
+			results[n.Name()] = SMTPPlaintextStatus
 		case err != nil:
 			results[n.Name()] = "failed: delivery failed"
 		default:

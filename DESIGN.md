@@ -134,6 +134,10 @@ the active step even when quiet. Show unattributed history as deployment message
 Render terminal colors/bold as escaped spans, including plain plan diff markers.
 In the light theme, mix semantic log colors with 55% `base-content` for contrast.
 
+Log views retain 500 entries. Use Older logs and Latest logs for history navigation.
+Pause live updates on older pages. Keep complete output available through Export all logs.
+Keep step states visible when their output leaves the display window.
+
 Use native Server container / Agent and Host / Container selects. Show only
 applicable fields; require images for container paths and retain variable controls.
 Agent containers require `agent/3` and a ready Docker/Podman runtime.

@@ -56,9 +56,15 @@ func (h *RunbookHandler) Execution(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Cannot read runbook", http.StatusInternalServerError)
 		return
 	}
-	logs, err := h.repo.ListRunbookLogs(
+	before, err := LogPageCursor(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	page, err := h.repo.ReadLogPage(
 		r.Context(),
 		execution.DeploymentID,
+		before,
 	)
 	if err != nil {
 		http.Error(w, "Cannot read logs", http.StatusInternalServerError)
@@ -78,7 +84,8 @@ func (h *RunbookHandler) Execution(w http.ResponseWriter, r *http.Request) {
 		)
 		return
 	}
-	if err := pages.RunbookExecutionPage(project, book, execution, logs, r.URL.Path).
+	queueCtx = pages.WithLogHistory(queueCtx, page, nil)
+	if err := pages.RunbookExecutionPage(project, book, execution, page.Items, r.URL.Path).
 		Render(queueCtx, w); err != nil {
 		http.Error(w, "Cannot render execution", http.StatusInternalServerError)
 	}
@@ -117,6 +124,15 @@ func (h *RunbookHandler) StreamLogs(w http.ResponseWriter, r *http.Request) {
 	if ok {
 		NewLogHandler(h.runner.Broker(), h.repo).streamDeploymentLogs(
 			w, r, execution.DeploymentID)
+	}
+}
+
+func (h *RunbookHandler) ExportLogs(w http.ResponseWriter, r *http.Request) {
+	execution, ok := h.execution(w, r)
+	if ok {
+		NewLogHandler(h.runner.Broker(), h.repo).exportDeploymentLogs(
+			w, r, execution.DeploymentID,
+		)
 	}
 }
 

@@ -92,6 +92,46 @@ Keep schedules disabled. Automated API/web/container coverage is
 `TestReleaseDeferredPackageBrowserE2E`. Run `scripts/e2e_artifacts.sh` for API checks.
 
 
+## Bounded log history
+
+Startup indexes step metadata and backfills existing log history once.
+Allow extra startup time for databases with large log histories.
+
+Create a disposable project with a Bash container step.
+Use this script to produce more than two pages of output:
+
+```bash
+for i in $(seq 1 1200); do
+    printf 'history-%04d\n' "$i"
+done
+```
+
+Deploy the release and open its deployment page.
+Expand the step panel.
+Confirm that the page shows at most 500 recent entries.
+Select **Older logs** and confirm that earlier entries appear.
+Confirm that the page states that live updates are paused.
+Confirm that completed step states remain visible on older pages.
+Select **Latest logs** to return to recent output.
+Select **Export all logs** and confirm that both `history-0001` and `history-1200` appear.
+Repeat these checks with a runbook containing the same step.
+Repeat navigation with the keyboard and a narrow browser window.
+
+Request `GET /api/v1/deployments/{id}/logs/page`.
+Confirm that `items` contains at most 500 entries with increasing IDs.
+Pass `next_before` as `?before=ID` to read an older page.
+Confirm that pages do not overlap.
+Repeat with `/api/v1/projects/{id}/runbook-executions/{executionId}/logs/page`.
+Confirm that the existing `/logs` endpoint still returns complete history.
+Use a nonmember account and confirm that page and export requests return `403`.
+
+Retain the project, release, runbook, and execution history.
+Keep schedules disabled.
+Automated checks include `TestDeploymentLogHistoryPagesAPIWebE2E` and `TestRunbookLogHistoryPagesAPIWebE2E`.
+Browser checks include `TestDeploymentLogHistoryBrowserE2E` and `TestRunbookLogHistoryBrowserE2E`.
+`TestOpenLogStreamRevocationAPIWebE2E` checks open streams after session or token revocation.
+`TestRunbookLogRevocationBrowserE2E` checks browser access after project membership removal.
+
 ## Server step resource policy
 
 Server-side deployment steps have no DurpDeploy-imposed RAM ceiling or CPU
@@ -417,6 +457,20 @@ creates this example after its execution checks. Approval waits in earlier
 projects no longer block the new run's projects; release snapshots,
 deployment history, and runbook versions remain available. Each run leaves a
 fresh pending example for manual approval checks.
+# SMTP delivery warnings
+
+Configure the server to use a disposable SMTP relay without STARTTLS.
+Clear `DURPDEPLOY_SMTP_USER` for this unauthenticated relay.
+Set the project's email recipients in **Settings → Notifications**.
+Run a deployment that publishes a notification.
+Open `/admin/notifications` as an administrator.
+Expect `email: ok: sent without TLS` with a warning badge.
+Open the event details and confirm the same warning.
+Request `GET /api/v1/admin/notifications` with an administrator API token.
+Expect the email result to contain `ok: sent without TLS`.
+If the relay uses verified STARTTLS, expect `ok` instead.
+If TLS certificate verification fails, expect `failed: delivery failed` without a plaintext retry.
+
 # Shared lifecycle variables
 
 On a release with a deployment awaiting approval, click **Refresh** and accept

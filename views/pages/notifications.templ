@@ -2,6 +2,7 @@ package pages
 
 import (
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/events"
 	"durpdeploy/views/layouts"
 	"encoding/json"
 	"fmt"
@@ -218,6 +219,8 @@ func deliveryBadgeClass(status string) string {
 		return "badge-success"
 	case status == "skipped":
 		return "badge-ghost"
+	case status == events.SMTPPlaintextStatus:
+		return "badge-warning"
 	default:
 		return "badge-error"
 	}

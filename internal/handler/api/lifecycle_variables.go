@@ -112,7 +112,7 @@ func (h *LifecycleVariableHandler) List(
 		respondLifecycleVariableError(w, err)
 		return
 	}
-	variables, err := h.repo.ListLifecycleVariables(r.Context(), id)
+	variables, err := h.repo.ListLifecycleVariablesForDisplay(r.Context(), id)
 	if err != nil {
 		respondLifecycleVariableError(w, err)
 		return
@@ -147,7 +147,7 @@ func (h *LifecycleVariableHandler) Get(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	v, err := h.repo.GetLifecycleVariable(r.Context(), ids)
+	v, err := h.repo.GetLifecycleVariableForDisplay(r.Context(), ids)
 	if err != nil {
 		respondLifecycleVariableError(w, err)
 		return
@@ -248,7 +248,8 @@ func (h *LifecycleVariableHandler) save(
 	v, err := h.repo.SaveLifecycleVariable(
 		r.Context(),
 		repository.LifecycleVariableInput{
-			ID: id, CreateLifecycleVariableParams: db.CreateLifecycleVariableParams{
+			ID: id,
+			CreateLifecycleVariableParams: db.CreateLifecycleVariableParams{
 				LifecycleID: lifecycleID, Name: req.Name,
 				Value: sql.NullString{
 					String: req.Value,

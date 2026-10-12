@@ -72,8 +72,9 @@ immediately after creation, before checking its error: Testcontainers can
 return a live container together with a startup error. Cleanup uses its own
 bounded context and fails the test if removal fails. Use `make test` or
 `bash scripts/go_test.sh [go test arguments]` for local Go tests. The runner
-removes only its unique Testcontainers session on success, failure, timeout,
-or HUP/INT/TERM, including when Ryuk is disabled on rootless Podman. Plain
+assigns each package binary a separate Testcontainers session. It removes only
+owned sessions on success, failure, timeout, or HUP/INT/TERM. Cleanup also runs
+when Ryuk is disabled on rootless Podman. Plain
 `go test` relies on Ryuk for process-level cleanup; SIGKILL or machine failure
 cannot run shell traps. Running-server E2E examples and demos remain retained.
 

@@ -21,19 +21,19 @@ func (f *artifactE2E) verifyStreamingLogTimestamp(
 		t,
 		`Alpine.$data(document.querySelector('[x-data^="deploymentStepLogs"]')).panels[1].live.some(entry => entry.line === 'second-only')`,
 	)
-	var logID int64
+	var logID string
 	decodeStepLogTest(t, browser.evaluate(
 		t,
 		`Alpine.$data(document.querySelector('[x-data^="deploymentStepLogs"]')).panels[1].live.find(entry => entry.line === 'second-only').id`,
 	), &logID)
 	var stored db.DeploymentLog
 	decodeStepLogTest(t, f.api(t, "GET", fmt.Sprintf(
-		"/api/v1/deployments/%d/logs/%d", deployment.ID, logID,
+		"/api/v1/deployments/%d/logs/%s", deployment.ID, logID,
 	), nil, 200), &stored)
 	timestamp := "[" + time.Unix(stored.CreatedAt, 0).
 		Format("2006-01-02 15:04:05") + "] "
 	assertion := fmt.Sprintf(
-		`document.querySelector('[data-log-id="%d"] .text-gray-500')?.textContent === %q`,
+		`document.querySelector('[data-log-id="%s"] .text-gray-500')?.textContent === %q`,
 		logID,
 		timestamp,
 	)
@@ -58,7 +58,7 @@ func (f *artifactE2E) verifyStreamingLogTimestamp(
 	)
 	// Then: the timestamp remains unchanged and replay does not duplicate it.
 	if string(browser.evaluate(t, fmt.Sprintf(
-		`%s && document.querySelectorAll('[data-log-id="%d"]').length === 1`,
+		`%s && document.querySelectorAll('[data-log-id="%s"]').length === 1`,
 		assertion, logID,
 	))) != "true" {
 		t.Fatal("refresh/reconnect changed or duplicated the log timestamp")

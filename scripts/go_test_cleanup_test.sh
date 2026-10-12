@@ -46,7 +46,9 @@ if [[ $1 == build && $2 == -o ]]; then
     cp "$FAKE_CLEANUP" "$3"
     exit 0
 fi
-[[ $1 == test && $2 == -count=1 && $3 == ./fixture ]] || exit 68
+[[ $1 == test && $2 == -exec ]] || exit 68
+shift 3
+[[ $1 == -count=1 && $2 == ./fixture ]] || exit 68
 [[ -n $TESTCONTAINERS_SESSION_ID && $TESTCONTAINERS_SESSION_ID != caller-session ]] || exit 69
 printf '%s\n' "$TESTCONTAINERS_SESSION_ID" >> "$CASE_DIR/session"
 mkdir -p "$CASE_DIR/resources"

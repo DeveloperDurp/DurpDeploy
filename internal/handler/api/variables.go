@@ -164,7 +164,7 @@ func (h *VariableHandler) ListVariables(
 		fSecretArg = fSecretOnly.Int64
 	}
 
-	variables, err := h.repo.ListVariablesByProjectPaginated(
+	variables, err := h.repo.ListVariablesForDisplay(
 		r.Context(),
 		db.ListVariablesByProjectPaginatedParams{
 			ProjectID:      projectID,
@@ -325,7 +325,9 @@ func (h *VariableHandler) GetVariable(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	variable, err := h.repo.GetProjectVariable(r.Context(), projectID, varID)
+	variable, err := h.repo.GetProjectVariableForDisplay(
+		r.Context(), projectID, varID,
+	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			RespondError(w, http.StatusNotFound, "Variable not found")

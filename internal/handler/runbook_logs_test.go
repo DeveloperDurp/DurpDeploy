@@ -41,15 +41,16 @@ func TestRunbookWeb_ReplaysExistingLogsOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 	const line = "STREAM_REPLAY_ONLY_123"
-	if _, err := h.repo.Queries.CreateDeploymentLog(ctx,
+	log, err := h.repo.Queries.CreateDeploymentLog(ctx,
 		db.CreateDeploymentLogParams{
 			DeploymentID: deployment.Deployment.ID, Line: line,
-		}); err != nil {
+		})
+	if err != nil {
 		t.Fatal(err)
 	}
 	pageURL := fmt.Sprintf("%s/projects/%d/runbooks/executions/%d",
 		h.server.URL, project.ID, execution.ID)
-	checkPage := func(status string, wantLine bool) {
+	checkPage := func(status string) {
 		t.Helper()
 		if err := h.repo.Queries.UpdateDeploymentStatus(ctx,
 			db.UpdateDeploymentStatusParams{
@@ -66,11 +67,19 @@ func TestRunbookWeb_ReplaysExistingLogsOnce(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if strings.Contains(string(body), line) != wantLine {
-			t.Fatalf("status=%s rendered log=%t, want %t", status,
-				strings.Contains(string(body), line), wantLine)
+		if strings.Count(string(body), line) != 1 {
+			t.Fatalf(
+				"status=%s: initial history must render exactly once",
+				status,
+			)
+		}
+		if !strings.Contains(
+			string(body),
+			fmt.Sprintf("after: &#39;%d&#39;", log.ID),
+		) {
+			t.Fatal("live stream does not resume after rendered history")
 		}
 	}
-	checkPage("running", false)
-	checkPage("succeeded", true)
+	checkPage("running")
+	checkPage("succeeded")
 }

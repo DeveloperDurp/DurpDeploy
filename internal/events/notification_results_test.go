@@ -21,3 +21,17 @@ func TestNotificationHistoryHidesLegacyCredentialErrors(t *testing.T) {
 		t.Fatal(results)
 	}
 }
+
+func TestNotificationHistoryOnlyAllowsExactEmailWarning(t *testing.T) {
+	raw := `{"email":"ok: sent without TLS","slack":"ok: sent without TLS","gotify":"ok: sent without TLS provider-secret"}`
+	var results map[string]string
+	if err := json.Unmarshal([]byte(PublicNotificationResults(raw)),
+		&results); err != nil {
+		t.Fatal(err)
+	}
+	if results["email"] != SMTPPlaintextStatus ||
+		results["slack"] != "failed: delivery failed" ||
+		results["gotify"] != "failed: delivery failed" {
+		t.Fatal(results)
+	}
+}
