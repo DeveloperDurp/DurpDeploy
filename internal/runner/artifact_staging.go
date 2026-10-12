@@ -33,7 +33,6 @@ type artifactStage struct{ volume, keeper string }
 func (r *DeploymentRunner) stageArtifact(
 	ctx context.Context,
 	deploymentID int64,
-	steps []deploymentStep,
 ) (result artifactStage, err error) {
 	_, err = r.repo.Queries.GetDeploymentArtifact(ctx, deploymentID)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -41,6 +40,10 @@ func (r *DeploymentRunner) stageArtifact(
 	}
 	if err != nil {
 		return result, err
+	}
+	steps, err := r.repo.Queries.ListDeploymentSteps(ctx, deploymentID)
+	if err != nil {
+		return result, fmt.Errorf("load frozen package steps: %w", err)
 	}
 	local := false
 	for _, step := range steps {

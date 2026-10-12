@@ -641,6 +641,8 @@ Pinned release packages use `ARTIFACT_PATH` outside writable staging.
 Container jobs mount this package at `/artifacts` with read-only access.
 Host jobs receive a private package directory with read-only file permissions.
 If an agent withdraws `artifact/1`, incompatible waiting package jobs fail before dispatch.
+Bash post-deployment verification receives the package in a server container, including releases with only agent steps.
+If Bash verification is configured, keep server container execution enabled.
 
 Local steps accept `network_mode` (`none` by default, or `bridge`). Artifact
 gates use `approval_artifact_path`, `approval_review_path`, and

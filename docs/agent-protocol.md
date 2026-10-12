@@ -31,6 +31,8 @@ Each job receives `ARTIFACT_PATH` independently from writable `DURPDEPLOY_STAGE_
 Containers mount the package read-only at `/artifacts` with noexec enabled.
 Host jobs use private package files with read-only permissions within the trusted operator boundary.
 Managed package cleanup follows the existing staging recovery barrier.
+Bash post-deployment verification receives the package in a server container, including releases with only agent steps.
+If Bash verification is configured, keep server container execution enabled.
 
 Regular protocol JSON requests are exactly one object and require a present, non-null
 `protocol` of `agent/1`, `agent/2`, or `agent/3`. They reject unknown fields, trailing JSON
