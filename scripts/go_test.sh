@@ -78,7 +78,8 @@ fi
 set -m
 bash -c '
     runner_pid=$1
-    shift
+    exec_script=$2
+    shift 2
     attempts=0
     # Tests cannot start until the parent has published this detached group.
     # If it dies before registration, this child exits without creating resources.
@@ -87,8 +88,8 @@ bash -c '
         sleep 0.05
         attempts=$((attempts + 1))
     done
-    exec go test "$@"
-' bash "$$" "$@" &
+    exec go test -exec "bash \"$exec_script\"" "$@"
+' bash "$$" "$script_dir/go_test_exec.sh" "$@" &
 test_pid=$!
 printf '%s\n' "$test_pid" > "$session_dir/process-group.tmp"
 mv "$session_dir/process-group.tmp" "$session_dir/process-group"
