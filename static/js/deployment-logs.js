@@ -1,3 +1,37 @@
+function olderLogsURL() {
+	return `${location.pathname}?before=${this.olderBefore}`;
+}
+
+function renderLogLine(element, line = element.textContent) {
+	const fragment = document.createDocumentFragment();
+	let color = /^\s*[-+]\/[-+]/.test(line) ? 'text-warning'
+		: ({ '+': 'text-success', '-': 'text-error', '~': 'text-warning' })[line.trimStart().match(/^([+~-])\s/)?.[1]] || '';
+	let bold = false;
+	const append = text => {
+		if (!text) return;
+		const span = document.createElement('span');
+		span.className = [color, bold ? 'font-bold' : ''].filter(Boolean).join(' ');
+		span.textContent = text;
+		fragment.append(span);
+	};
+	let offset = 0;
+	for (const match of line.matchAll(/\x1b\[([0-9;]*)m/g)) {
+		append(line.slice(offset, match.index));
+		for (const code of match[1].split(';').map(Number)) {
+			if (code === 0) { color = ''; bold = false; }
+			else if (code === 1) bold = true;
+			else if (code === 22) bold = false;
+			else if (code === 39) color = '';
+			else if ([31, 91].includes(code)) color = 'text-error';
+			else if ([32, 92].includes(code)) color = 'text-success';
+			else if ([33, 93].includes(code)) color = 'text-warning';
+		}
+		offset = match.index + match[0].length;
+	}
+	append(line.slice(offset));
+	element.replaceChildren(fragment);
+}
+
 export function registerLogComponents(Alpine) {
 	const initialRows = element => [...element.querySelectorAll('[data-log-id]')]
 		.map(node => ({ id: Number(node.dataset.logId), node }))
@@ -10,9 +44,6 @@ export function registerLogComponents(Alpine) {
 			else removed.panel.live.shift();
 			component.olderBefore = component.retained[0].id;
 		}
-	};
-	const olderLogsURL = function () {
-		return `${location.pathname}?before=${this.olderBefore}`;
 	};
 	Alpine.data('deploymentStream', ({ url, after, limit, olderBefore }) => ({
 		url,
@@ -55,35 +86,6 @@ export function registerLogComponents(Alpine) {
 		},
 	}));
 
-	function renderLogLine(element, line = element.textContent) {
-		const fragment = document.createDocumentFragment();
-		let color = /^\s*[-+]\/[-+]/.test(line) ? 'text-warning'
-			: ({ '+': 'text-success', '-': 'text-error', '~': 'text-warning' })[line.trimStart().match(/^([+~-])\s/)?.[1]] || '';
-		let bold = false;
-		const append = text => {
-			if (!text) return;
-			const span = document.createElement('span');
-			span.className = [color, bold ? 'font-bold' : ''].filter(Boolean).join(' ');
-			span.textContent = text;
-			fragment.append(span);
-		};
-		let offset = 0;
-		for (const match of line.matchAll(/\x1b\[([0-9;]*)m/g)) {
-			append(line.slice(offset, match.index));
-			for (const code of match[1].split(';').map(Number)) {
-				if (code === 0) { color = ''; bold = false; }
-				else if (code === 1) bold = true;
-				else if (code === 22) bold = false;
-				else if (code === 39) color = '';
-				else if ([31, 91].includes(code)) color = 'text-error';
-				else if ([32, 92].includes(code)) color = 'text-success';
-				else if ([33, 93].includes(code)) color = 'text-warning';
-			}
-			offset = match.index + match[0].length;
-		}
-		append(line.slice(offset));
-		element.replaceChildren(fragment);
-	}
 
 	Alpine.data('deploymentStepLogs', ({ url, status, view }) => ({
 		renderLogLine,

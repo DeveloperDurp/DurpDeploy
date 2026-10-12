@@ -88,16 +88,14 @@ func (h *DeploymentHandler) GetDeployment(
 		queueCtx,
 		r.URL.Query().Get("artifact_decision"),
 	)
+	content := pages.DeploymentDetailPage(project, release, environment,
+		deployment, logs, waiting != 0, r.URL.Path)
 	if isFragmentRequest(r) {
-		if err := pages.DeploymentDetail(project, release, environment, deployment, logs, waiting != 0).
-			Render(queueCtx, w); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-	} else {
-		if err := pages.DeploymentDetailPage(project, release, environment, deployment, logs, waiting != 0, r.URL.Path).
-			Render(queueCtx, w); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
+		content = pages.DeploymentDetail(project, release, environment,
+			deployment, logs, waiting != 0)
+	}
+	if err := content.Render(queueCtx, w); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 

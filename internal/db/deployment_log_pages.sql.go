@@ -19,7 +19,7 @@ WHERE l.deployment_id = ?1 AND l.id <= ?2
       AND is_step_metadata = 1
     GROUP BY step_index, step_name
   )
-ORDER BY l.id
+ORDER BY l.id ASC
 `
 
 type ListDeploymentLogStateMetadataParams struct {

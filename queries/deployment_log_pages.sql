@@ -13,4 +13,4 @@ WHERE l.deployment_id = sqlc.arg(deployment_id) AND l.id <= sqlc.arg(last_id)
       AND is_step_metadata = 1
     GROUP BY step_index, step_name
   )
-ORDER BY l.id;
+ORDER BY l.id ASC;

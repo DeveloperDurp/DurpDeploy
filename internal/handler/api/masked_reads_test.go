@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -98,18 +99,7 @@ func TestMaskedReadsIgnoreUnreadableSecrets(t *testing.T) {
 				token,
 				"",
 			)
-			// Then: an unreadable hidden value cannot fail or escape the response.
-			if response.Code != http.StatusOK {
-				t.Fatalf(
-					"status=%d body=%s",
-					response.Code,
-					response.Body.String(),
-				)
-			}
-			if strings.Contains(response.Body.String(), "enc:") ||
-				strings.Contains(response.Body.String(), "broken") {
-				t.Fatal("masked response exposed stored ciphertext")
-			}
+			assertMaskedRead(t, response)
 			if path == base+"/variables" &&
 				!strings.Contains(response.Body.String(), "visible-value") {
 				t.Fatal("public variable was not decrypted")
@@ -120,6 +110,22 @@ func TestMaskedReadsIgnoreUnreadableSecrets(t *testing.T) {
 				t.Fatal("inherited metadata or project override was lost")
 			}
 		})
+	}
+}
+
+func assertMaskedRead(t *testing.T, response *httptest.ResponseRecorder) {
+	t.Helper()
+	// Then: an unreadable hidden value cannot fail or escape the response.
+	if response.Code != http.StatusOK {
+		t.Fatalf(
+			"status=%d body=%s",
+			response.Code,
+			response.Body.String(),
+		)
+	}
+	if strings.Contains(response.Body.String(), "enc:") ||
+		strings.Contains(response.Body.String(), "broken") {
+		t.Fatal("masked response exposed stored ciphertext")
 	}
 }
 
