@@ -38,6 +38,7 @@ func TestDeploymentLogHistoryPagesAPIWebE2E(t *testing.T) {
 			Line:      "quiet-start"}); err != nil {
 		t.Fatal(err)
 	}
+	seedLargeLogCursor(t, f, deployment.ID)
 	seedLogPageRows(t, f, deployment.ID)
 	apiPath := fmt.Sprintf("/api/v1/deployments/%d/logs", deployment.ID)
 	webPath := fmt.Sprintf("/deployments/%d", deployment.ID)
@@ -102,6 +103,7 @@ func TestRunbookLogHistoryPagesAPIWebE2E(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	seedLargeLogCursor(t, f, result.Deployment.ID)
 	seedLogPageRows(t, f, result.Deployment.ID)
 	apiPath := fmt.Sprintf(
 		"%s/runbook-executions/%d/logs",
@@ -124,6 +126,17 @@ func TestRunbookLogHistoryPagesAPIWebE2E(t *testing.T) {
 			!strings.Contains(body, "history-0509") {
 			t.Fatal("runbook export omitted older or latest output")
 		}
+	}
+}
+
+func seedLargeLogCursor(t *testing.T, f *artifactE2E, deploymentID int64) {
+	t.Helper()
+	// Start above JavaScript's exact integer range, including odd IDs.
+	if _, err := f.h.repo.DB.ExecContext(t.Context(),
+		`INSERT INTO deployment_logs (id, deployment_id, line)
+		 VALUES (9007199254740993, ?, 'large-cursor-start')`,
+		deploymentID); err != nil {
+		t.Fatal(err)
 	}
 }
 

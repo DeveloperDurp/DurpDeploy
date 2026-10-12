@@ -61,6 +61,7 @@ func assertBrowserLogHistory(
 ) {
 	t.Helper()
 	// Given: initial history exceeds the browser window.
+	seedLargeLogCursor(t, f, deploymentID)
 	seedLogPageRows(t, f, deploymentID)
 	b := startPackageBrowser(t)
 	b.setStepLogSession(t, f.baseURL, f.session)
@@ -84,6 +85,13 @@ func assertBrowserLogHistory(
 		t,
 		`(() => { const rows = [...document.querySelectorAll('[data-log-id]')]; return rows.length === 500 && new Set(rows.map(row => row.dataset.logId)).size === 500 && !document.querySelector('img[src=x]'); })()`,
 	)
+	oldestID := last.ID - 499
+	b.wait(t, fmt.Sprintf(
+		`[...document.querySelectorAll('[data-log-id]')].every(row => BigInt(row.dataset.logId) >= BigInt('%d') && BigInt(row.dataset.logId) <= BigInt('%d')) && new URL(document.querySelector('[data-older-logs]').href).searchParams.get('before') === '%d'`,
+		oldestID,
+		last.ID,
+		oldestID,
+	))
 	if component == "deploymentStepLogs" {
 		b.wait(
 			t,
@@ -95,8 +103,13 @@ func assertBrowserLogHistory(
 	b.evaluate(t, `document.querySelector('[data-older-logs]').click(); true`)
 	b.wait(
 		t,
-		`location.search.includes('before=') && document.body.textContent.includes('Live updates are paused')`,
+		`document.readyState === 'complete' && location.search.includes('before=') && document.body.textContent.includes('Live updates are paused')`,
 	)
+	b.wait(t, fmt.Sprintf(
+		`document.querySelector('[data-log-id="%d"]') && !document.querySelector('[data-log-id="%d"]')`,
+		oldestID-1,
+		oldestID,
+	))
 	if string(
 		b.evaluate(
 			t,
@@ -117,7 +130,7 @@ func assertBrowserLogHistory(
 	b.wait(
 		t,
 		fmt.Sprintf(
-			`location.search === '' && document.querySelector('[data-log-id="%d"]')`,
+			`document.readyState === 'complete' && location.search === '' && document.querySelector('[data-log-id="%d"]')`,
 			last.ID,
 		),
 	)

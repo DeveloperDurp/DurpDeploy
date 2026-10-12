@@ -18,8 +18,9 @@ templ LogHistoryNavigation(base, exportURL string) {
 				class="btn btn-ghost sm:btn-sm"
 				href={ logHistoryURL(base, page.NextBefore) }
 				data-older-logs
+				hx-boost="false"
 				if page.Before == 0 {
-					x-show="olderBefore > 0"
+					x-show="olderBefore !== '0'"
 					x-bind:href="olderLogsURL()"
 					if page.NextBefore == 0 {
 						style="display:none"

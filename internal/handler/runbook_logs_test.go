@@ -73,7 +73,10 @@ func TestRunbookWeb_ReplaysExistingLogsOnce(t *testing.T) {
 				status,
 			)
 		}
-		if !strings.Contains(string(body), fmt.Sprintf("after: %d", log.ID)) {
+		if !strings.Contains(
+			string(body),
+			fmt.Sprintf("after: &#39;%d&#39;", log.ID),
+		) {
 			t.Fatal("live stream does not resume after rendered history")
 		}
 	}

@@ -34,8 +34,8 @@ function renderLogLine(element, line = element.textContent) {
 
 export function registerLogComponents(Alpine) {
 	const initialRows = element => [...element.querySelectorAll('[data-log-id]')]
-		.map(node => ({ id: Number(node.dataset.logId), node }))
-		.sort((a, b) => a.id - b.id);
+		.map(node => ({ id: node.dataset.logId, node }))
+		.sort((a, b) => a.id.length - b.id.length || a.id.localeCompare(b.id));
 	const retain = (component, row) => {
 		component.retained.push(row);
 		while (component.retained.length > component.limit) {
@@ -71,7 +71,9 @@ export function registerLogComponents(Alpine) {
 		message(event) {
 			if (this.destroyed) return;
 			const entry = JSON.parse(event.data);
-			if (entry.id <= this.lastID) return;
+			// SSE IDs are exact decimal strings, including beyond Number's range.
+			entry.id = event.lastEventId;
+			if (BigInt(entry.id) <= BigInt(this.lastID)) return;
 			this.lastID = entry.id;
 			const node = document.createElement('div');
 			node.dataset.logId = entry.id;
@@ -130,7 +132,8 @@ export function registerLogComponents(Alpine) {
 		},
 		message(event) {
 			const entry = JSON.parse(event.data);
-			if (entry.id <= this.lastID) return;
+			entry.id = event.lastEventId;
+			if (BigInt(entry.id) <= BigInt(this.lastID)) return;
 			this.lastID = entry.id;
 			let panel = this.panels.find(item => item.index === entry.step_index);
 			if (!panel && entry.step) {

@@ -22,9 +22,9 @@ type deploymentLogPanel struct {
 
 type deploymentLogView struct {
 	Panels      []deploymentLogPanel `json:"panels"`
-	LastID      int64                `json:"lastID"`
+	LastID      int64                `json:"lastID,string"`
 	Historical  bool                 `json:"historical"`
-	OlderBefore int64                `json:"olderBefore"`
+	OlderBefore int64                `json:"olderBefore,string"`
 	Limit       int64                `json:"limit"`
 }
 
