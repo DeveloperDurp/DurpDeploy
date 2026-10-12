@@ -27,14 +27,7 @@ func (h *VariableHandler) getProjectVariable(
 	r *http.Request,
 	projectID, variableID int64,
 ) (db.Variable, error) {
-	variable, err := h.repo.Queries.GetVariable(r.Context(), variableID)
-	if err != nil || variable.ProjectID != projectID {
-		if err == nil {
-			err = sql.ErrNoRows
-		}
-		return db.Variable{}, err
-	}
-	return h.repo.GetVariable(r.Context(), variableID)
+	return h.repo.GetProjectVariable(r.Context(), projectID, variableID)
 }
 
 func NewVariableHandler(repo *repository.Repository) *VariableHandler {
