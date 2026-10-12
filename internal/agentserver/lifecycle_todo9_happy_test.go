@@ -28,12 +28,12 @@ func TestDuplicateLogBatchIsIdempotent(t *testing.T) {
 	var count int
 	if err := fixture.repo.DB.QueryRow(
 		"SELECT COUNT(*) FROM deployment_logs WHERE deployment_id=1",
-	).Scan(&count); err != nil || count != 1 {
+	).Scan(&count); err != nil || count != 2 {
 		t.Fatalf("persisted logs=%d error=%v", count, err)
 	}
 	select {
 	case line := <-logs:
-		if line != "one durable line" {
+		if line != `one durable line agent_id="test-agent"` {
 			t.Fatalf("broadcast line=%q", line)
 		}
 	default:

@@ -143,7 +143,7 @@ func TestRemoteTerminalFlushSurvivesAgentRevocation(t *testing.T) {
 	logs, err = repo.FlushRemoteDeploymentLogs(
 		t.Context(), identity, scrubber,
 	)
-	if err != nil || len(logs) != 1 || logs[0].Line != "top-" {
+	if err != nil || len(logs) != 1 || logs[0].Line != `top- agent_id="a"` {
 		t.Fatalf("flushed logs=%+v error=%v", logs, err)
 	}
 	claimRow, err := repo.Queries.GetRemoteDeploymentClaim(t.Context(), 1)
