@@ -67,6 +67,46 @@ DURPDEPLOY_CONTAINER_URL="unix://${XDG_RUNTIME_DIR}/podman/podman.sock" \
 go test -tags=e2e -race -count=1 -run '^TestDeploymentStepResourcesE2E$' ./internal/handler/api
 ```
 
+## Phase 1 regression checks
+
+Create two projects with different members.
+Sign in as each member and inspect `/` and `/dashboard/deployments`.
+Verify every deployment section and count excludes the other project.
+Sign in as an administrator and verify both projects remain visible.
+
+Open deployment and runbook log streams with browser sessions and API tokens.
+Remove the stream user's project membership through the API.
+Verify responsive streams close within approximately two seconds.
+Verify reconnect requests fail and new output does not appear.
+A stalled consumer can delay closure up to 62 seconds.
+
+Configure project and global notification credentials through their API endpoints.
+Inspect GET and PUT responses and both settings pages.
+Verify credential fields remain empty and configured indicators remain visible.
+Save blank fields to preserve credentials.
+Enter replacements to update credentials.
+Use clear flags or **Clear credential** controls to remove credentials.
+Verify delivery history does not expose provider credential URLs or tokens.
+
+On each settings page, enter a Gotify URL without `http://` or `https://`.
+Select **Save**.
+Verify an error toast appears and all entered values remain.
+Correct the URL.
+Select **Save**.
+Verify the **Notification settings saved** toast appears.
+
+Enter an invalid Slack or Discord webhook URL.
+Select its **Clear credential** control.
+Select **Save**.
+Verify the credential shows **not configured**.
+
+Deploy a trusted disposable script that exceeds one MiB of output without a newline.
+Verify the attempt fails, reports its pending-output limit, and removes its container.
+Verify raw pending output does not appear in stored or streamed logs.
+
+Keep retained schedule examples disabled after checks.
+Enable a disposable schedule through its existing toggle control to repeat scheduling checks.
+
 ## Populated demo
 
 For a complete local demo, run `make demo` (or ask a coding agent to run it).
@@ -94,6 +134,21 @@ make, OpenSSL,
 Python 3, SQLite CLI, curl, and working local Podman or Docker. The existing development agent
 image is pulled by `make dev-agent`; Caddy uses the existing development
 proxy image `docker.io/library/caddy:2-alpine`.
+
+### Loopback-only demo
+
+Start the rootless Podman socket before launch.
+Run `DEMO_LOCAL_ONLY=1 DURPDEPLOY_CONTAINER_RUNTIME=podman make demo` for access from this computer only.
+The HTTPS URL uses `https://127.0.0.1:<random-port>`.
+The HTTPS proxy, HTTP backend, and agent listeners bind to loopback.
+The certificate includes the `127.0.0.1` IP address and `localhost` name.
+The launcher skips the firewall watcher, even when its helper is installed.
+Docker and rootful Podman are unsupported in this mode.
+Set `DEMO_LOCAL_ONLY` to `0` or `1`.
+Server-only refresh preserves the listener addresses and URL.
+For full refresh, use `DEMO_LOCAL_ONLY=1 DURPDEPLOY_CONTAINER_RUNTIME=podman make demo-refresh-full DEMO_DIR=/absolute/demo/path`.
+
+### Optional firewall access
 
 Optional firewalld access: install `scripts/demo-firewall-helper.sh` root-owned
 at `/usr/local/libexec/durpdeploy-demo-firewall` (mode 0755), and authorize only

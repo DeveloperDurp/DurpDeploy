@@ -471,8 +471,34 @@ on the deployment page before and after refresh. Resume with
 drains its logs, sends `event: complete` with JSON `status`, then closes;
 clients should close their EventSource on that event. Default SSE/NDJSON and
 plain-text export retain their formats.
+
+Default text SSE also emits `complete` after terminal log replay.
+Close its EventSource on that event.
+Initial text replay preserves remote sequence order and checkpoints its cursor after replay.
+Subsequent text events use persisted log IDs.
+Resume text SSE with `Last-Event-ID` or `after`.
+An interrupted initial replay repeats history instead of skipping out-of-order rows.
+NDJSON retains `line` and `step` fields and closes after terminal replay.
+Live NDJSON keeps its existing empty `step` field.
+All stream formats recover missed broker notifications from persisted logs.
+Open streams recheck credentials, current roles, and project membership each second.
+Revocation ends responsive streams within approximately two seconds.
+A blocked consumer can delay closure up to 62 seconds because event writes retain their 60-second deadline.
+Authorization failures and database errors close the stream.
+Runbook streams use the execution's project membership.
 Errors before a structured stream starts use the usual JSON `error` envelope,
 including invalid cursors, missing deployments, and startup failures.
+
+Project and global notification credentials are write-only, including for administrators.
+GET and PUT responses return empty `slack_webhook_url`, `gotify_token`, and `discord_webhook_url` fields.
+The corresponding `*_configured` fields report whether stored credentials exist.
+Blank or omitted credential fields preserve stored values in PUT requests.
+Set `clear_slack_webhook_url`, `clear_gotify_token`, or `clear_discord_webhook_url` to `true` to clear a credential.
+Clear flags take precedence over replacements.
+The server retains credentials for delivery.
+Existing write permissions still apply.
+Email recipients and Gotify server URLs remain readable.
+Notification history omits provider error details that can contain credentials.
 
 Execution actions are `POST .../$XID/cancel`, `/approve` (admin only),
 and `/retry` (after a terminal status). Retry returns `409` while the source
