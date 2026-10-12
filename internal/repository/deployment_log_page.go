@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"math"
 	"slices"
 
 	"durpdeploy/internal/db"
@@ -26,9 +27,13 @@ func (r *Repository) ReadLogPage(
 	if before < 0 {
 		return LogPage{}, errors.New("log cursor must be non-negative")
 	}
+	through := int64(math.MaxInt64)
+	if before > 0 {
+		through = before - 1
+	}
 	rows, err := r.Queries.ListDeploymentLogsBefore(ctx,
 		db.ListDeploymentLogsBeforeParams{
-			DeploymentID: deploymentID, BeforeID: before,
+			DeploymentID: deploymentID, ThroughID: through,
 			PageLimit: LogPageLimit + 1,
 		})
 	if err != nil {

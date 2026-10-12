@@ -65,18 +65,18 @@ func (q *Queries) ListDeploymentLogStateMetadata(ctx context.Context, arg ListDe
 const listDeploymentLogsBefore = `-- name: ListDeploymentLogsBefore :many
 SELECT id, deployment_id, step_name, line, created_at, step_index, step_state, is_step_metadata FROM deployment_logs
 WHERE deployment_id = ?1
-  AND (CAST(?2 AS BIGINT) = 0 OR id < CAST(?2 AS BIGINT))
+  AND id <= CAST(?2 AS BIGINT)
 ORDER BY id DESC LIMIT ?3
 `
 
 type ListDeploymentLogsBeforeParams struct {
 	DeploymentID int64 `json:"deployment_id"`
-	BeforeID     int64 `json:"before_id"`
+	ThroughID    int64 `json:"through_id"`
 	PageLimit    int64 `json:"page_limit"`
 }
 
 func (q *Queries) ListDeploymentLogsBefore(ctx context.Context, arg ListDeploymentLogsBeforeParams) ([]DeploymentLog, error) {
-	rows, err := q.db.QueryContext(ctx, listDeploymentLogsBefore, arg.DeploymentID, arg.BeforeID, arg.PageLimit)
+	rows, err := q.db.QueryContext(ctx, listDeploymentLogsBefore, arg.DeploymentID, arg.ThroughID, arg.PageLimit)
 	if err != nil {
 		return nil, err
 	}
