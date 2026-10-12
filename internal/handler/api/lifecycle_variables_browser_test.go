@@ -40,6 +40,11 @@ func TestLifecycleVariablesBrowserE2E(t *testing.T) {
 	b := startPackageBrowser(t)
 	b.setBackTestSession(t, f.baseURL, f.session)
 	b.navigateBackTest(t, fmt.Sprintf("%s/lifecycles/%d", f.baseURL, lc.ID))
+	// A validation response can render before the page bundle initializes.
+	b.evaluate(
+		t,
+		`const pendingAlpine = window.Alpine; window.Alpine = undefined; setTimeout(() => { window.Alpine = pendingAlpine; }, 250); true`,
+	)
 	b.captureNavigation(t, "lifecycle-empty")
 	f.api(
 		t,
@@ -88,7 +93,7 @@ func TestLifecycleVariablesBrowserE2E(t *testing.T) {
 	)
 	b.wait(
 		t,
-		`!document.querySelector('[data-shared-variable-form]').hasAttribute('hx-put')`,
+		`!document.querySelector('[data-shared-variable-form]').hasAttribute('hx-put') && !document.querySelector('.htmx-settling')`,
 	)
 	b.evaluate(
 		t,

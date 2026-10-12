@@ -220,6 +220,10 @@ func (b *packageBrowser) captureNavigation(
 	prepare ...func(),
 ) {
 	t.Helper()
+	b.wait(
+		t,
+		`document.readyState === 'complete' && window.Alpine && document.getElementById('app-navbar')?._x_dataStack?.length && !document.querySelector('.htmx-settling')`,
+	)
 	for _, theme := range []string{"mocha", "light"} {
 		b.evaluate(
 			t,
