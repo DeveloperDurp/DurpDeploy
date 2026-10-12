@@ -97,7 +97,7 @@ func (r *Repository) MaintainRemoteLifecycle(ctx context.Context) error {
 
 func (r *Repository) maintainRemoteClaim(
 	ctx context.Context,
-	candidate db.RemoteDeploymentClaim,
+	candidate db.ListRemoteLifecycleClaimsRow,
 ) error {
 	return r.WithDeploymentTx(
 		ctx,

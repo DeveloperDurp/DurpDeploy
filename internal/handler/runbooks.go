@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -221,32 +220,4 @@ func (h *RunbookHandler) Save(w http.ResponseWriter, r *http.Request) {
 		fmt.Sprintf("/projects/%d/runbooks/%d", projectID, book.ID),
 		http.StatusSeeOther,
 	)
-}
-
-func (h *RunbookHandler) environments(
-	ctx context.Context,
-	project db.Project,
-) ([]db.Environment, error) {
-	all, err := h.repo.Queries.ListEnvironments(ctx)
-	if err != nil || !project.LifecycleID.Valid {
-		return all, err
-	}
-	stages, err := h.repo.Queries.ListLifecycleStages(
-		ctx,
-		project.LifecycleID.Int64,
-	)
-	if err != nil {
-		return nil, err
-	}
-	allowed := make(map[int64]bool, len(stages))
-	for _, stage := range stages {
-		allowed[stage.EnvironmentID] = true
-	}
-	visible := make([]db.Environment, 0, len(all))
-	for _, environment := range all {
-		if allowed[environment.ID] {
-			visible = append(visible, environment)
-		}
-	}
-	return visible, nil
 }

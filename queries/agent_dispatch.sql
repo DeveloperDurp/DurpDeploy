@@ -29,7 +29,7 @@ WHERE deployment_id = sqlc.arg(deployment_id)
   AND agent_id = sqlc.arg(agent_id);
 
 -- name: ListRemoteLifecycleClaims :many
-SELECT * FROM remote_deployment_claims
+SELECT deployment_id, agent_id FROM remote_deployment_claims
 WHERE state IN ('claimed', 'started', 'cancel_requested')
 ORDER BY agent_id, deployment_id;
 

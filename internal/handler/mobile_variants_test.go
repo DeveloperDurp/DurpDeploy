@@ -188,7 +188,7 @@ func TestMobile_RenderedHTML_renders_project_back_controls_when_authenticated(
 			name: "schedules",
 			path: fmt.Sprintf("/projects/%d/schedules", fixture.project.ID),
 			headerPattern: fmt.Sprintf(
-				`(?s)<div class="page-header">\s*<h1 class="text-3xl font-bold">Schedules.*?</h1>\s*<div class="flex gap-2 ml-auto">\s*<a href="/projects/%d/schedules/new" class="btn btn-primary btn-sm">New Schedule</a>\s*<a href="/projects/%d" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>`,
+				`(?s)<div class="page-header">\s*<h1 class="text-3xl font-bold">Schedules.*?</h1>\s*<div class="flex gap-2 ml-auto">\s*<a href="/projects/%d/schedules/new\?offset=0" class="btn btn-primary btn-sm">New Schedule</a>\s*<a href="/projects/%d" class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>`,
 				fixture.project.ID,
 				fixture.project.ID,
 			),

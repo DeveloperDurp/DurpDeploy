@@ -84,16 +84,9 @@ func (h *RunbookHandler) Detail(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Cannot list schedules", http.StatusInternalServerError)
 		return
 	}
-	environments, err := h.environments(r.Context(), project)
-	if err != nil {
-		http.Error(
-			w,
-			"Cannot list environments",
-			http.StatusInternalServerError,
-		)
-		return
-	}
-	scheduleEnvironments, err := h.repo.Queries.ListEnvironments(r.Context())
+	scheduleEnvironments, environments, err := h.repo.VariableEnvironments(
+		r.Context(), project,
+	)
 	if err != nil {
 		http.Error(
 			w,
@@ -118,7 +111,7 @@ func (h *RunbookHandler) parseExecutionEnvironment(
 		http.Error(w, "Invalid environment", http.StatusUnprocessableEntity)
 		return 0, false
 	}
-	environments, err := h.environments(r.Context(), project)
+	_, environments, err := h.repo.VariableEnvironments(r.Context(), project)
 	if err != nil {
 		http.Error(
 			w,

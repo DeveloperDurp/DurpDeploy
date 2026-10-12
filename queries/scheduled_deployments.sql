@@ -8,7 +8,17 @@ SELECT * FROM scheduled_deployments WHERE id = ?;
 SELECT * FROM scheduled_deployments WHERE project_id = ? ORDER BY created_at DESC;
 
 -- name: ListScheduledDeploymentsByProjectPaginated :many
-SELECT * FROM scheduled_deployments WHERE project_id = ? ORDER BY created_at DESC
+SELECT * FROM scheduled_deployments WHERE project_id = ? ORDER BY created_at DESC, id DESC
+LIMIT ? OFFSET ?;
+
+-- name: ListScheduledDeploymentDetails :many
+SELECT sqlc.embed(scheduled_deployments), releases.version AS release_version,
+       environments.name AS environment_name
+FROM scheduled_deployments
+JOIN releases ON releases.id = scheduled_deployments.release_id
+JOIN environments ON environments.id = scheduled_deployments.environment_id
+WHERE scheduled_deployments.project_id = ?
+ORDER BY scheduled_deployments.created_at DESC, scheduled_deployments.id DESC
 LIMIT ? OFFSET ?;
 
 -- name: CountScheduledDeploymentsByProject :one

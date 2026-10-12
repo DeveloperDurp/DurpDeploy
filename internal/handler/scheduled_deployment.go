@@ -1,10 +1,8 @@
 package handler
 
 import (
-	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -35,6 +33,11 @@ func (h *ScheduledDeploymentHandler) List(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
+	_, err := scheduleOffset(r)
+	if err != nil {
+		http.Error(w, "Invalid offset", http.StatusBadRequest)
+		return
+	}
 	projectID, err := parseProjectID(r)
 	if err != nil {
 		http.Error(w, "Invalid project ID", http.StatusBadRequest)
@@ -51,37 +54,14 @@ func (h *ScheduledDeploymentHandler) List(
 		return
 	}
 
-	schedules, err := h.repo.Queries.ListScheduledDeploymentsByProject(
-		r.Context(),
-		projectID,
-	)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	releases, err := h.repo.Queries.ListReleasesByProject(
-		r.Context(),
-		projectID,
-	)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	items, err := h.buildScheduleListItems(
-		r.Context(),
-		projectID,
-		schedules,
-		releases,
-	)
+	page, err := h.loadSchedulePage(r, projectID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	if isFragmentRequest(r) {
-		if err := pages.ScheduledDeploymentsList(project, items).
+		if err := pages.ScheduledDeploymentsList(project, page).
 			Render(r.Context(), w); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
@@ -89,7 +69,7 @@ func (h *ScheduledDeploymentHandler) List(
 	}
 	if err := pages.ScheduledDeploymentsListPage(
 		project,
-		items,
+		page,
 		r.URL.Path,
 	).Render(r.Context(), w); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -101,6 +81,11 @@ func (h *ScheduledDeploymentHandler) NewForm(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
+	offset, err := scheduleOffset(r)
+	if err != nil {
+		http.Error(w, "Invalid offset", http.StatusBadRequest)
+		return
+	}
 	projectID, err := parseProjectID(r)
 	if err != nil {
 		http.Error(w, "Invalid project ID", http.StatusBadRequest)
@@ -134,14 +119,14 @@ func (h *ScheduledDeploymentHandler) NewForm(
 
 	if isFragmentRequest(r) {
 		if err := pages.ScheduledDeploymentForm(
-			project, releases, envs, nil, "",
+			project, releases, envs, nil, "", offset,
 		).Render(r.Context(), w); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 		return
 	}
 	if err := pages.ScheduledDeploymentFormPage(
-		project, releases, envs, nil, "", r.URL.Path,
+		project, releases, envs, nil, "", offset, r.URL.Path,
 	).Render(r.Context(), w); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -152,6 +137,11 @@ func (h *ScheduledDeploymentHandler) Create(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
+	offset, err := scheduleOffset(r)
+	if err != nil {
+		http.Error(w, "Invalid offset", http.StatusBadRequest)
+		return
+	}
 	projectID, err := parseProjectID(r)
 	if err != nil {
 		http.Error(w, "Invalid project ID", http.StatusBadRequest)
@@ -293,7 +283,7 @@ func (h *ScheduledDeploymentHandler) Create(
 	http.Redirect(
 		w,
 		r,
-		fmt.Sprintf("/projects/%d/schedules", projectID),
+		pages.ScheduleListURL(projectID, offset),
 		http.StatusSeeOther,
 	)
 }
@@ -303,6 +293,11 @@ func (h *ScheduledDeploymentHandler) EditForm(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
+	offset, err := scheduleOffset(r)
+	if err != nil {
+		http.Error(w, "Invalid offset", http.StatusBadRequest)
+		return
+	}
 	projectID, err := parseProjectID(r)
 	if err != nil {
 		http.Error(w, "Invalid project ID", http.StatusBadRequest)
@@ -360,14 +355,14 @@ func (h *ScheduledDeploymentHandler) EditForm(
 
 	if isFragmentRequest(r) {
 		if err := pages.ScheduledDeploymentForm(
-			project, releases, envs, &schedule, "",
+			project, releases, envs, &schedule, "", offset,
 		).Render(r.Context(), w); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 		return
 	}
 	if err := pages.ScheduledDeploymentFormPage(
-		project, releases, envs, &schedule, "", r.URL.Path,
+		project, releases, envs, &schedule, "", offset, r.URL.Path,
 	).Render(r.Context(), w); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -378,6 +373,11 @@ func (h *ScheduledDeploymentHandler) Update(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
+	offset, err := scheduleOffset(r)
+	if err != nil {
+		http.Error(w, "Invalid offset", http.StatusBadRequest)
+		return
+	}
 	projectID, err := parseProjectID(r)
 	if err != nil {
 		http.Error(w, "Invalid project ID", http.StatusBadRequest)
@@ -545,7 +545,7 @@ func (h *ScheduledDeploymentHandler) Update(
 	http.Redirect(
 		w,
 		r,
-		fmt.Sprintf("/projects/%d/schedules", projectID),
+		pages.ScheduleListURL(projectID, offset),
 		http.StatusSeeOther,
 	)
 }
@@ -555,6 +555,11 @@ func (h *ScheduledDeploymentHandler) Delete(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
+	offset, err := scheduleOffset(r)
+	if err != nil {
+		http.Error(w, "Invalid offset", http.StatusBadRequest)
+		return
+	}
 	projectID, err := parseProjectID(r)
 	if err != nil {
 		http.Error(w, "Invalid project ID", http.StatusBadRequest)
@@ -596,7 +601,7 @@ func (h *ScheduledDeploymentHandler) Delete(
 	http.Redirect(
 		w,
 		r,
-		fmt.Sprintf("/projects/%d/schedules", projectID),
+		pages.ScheduleListURL(projectID, offset),
 		http.StatusSeeOther,
 	)
 }
@@ -606,6 +611,11 @@ func (h *ScheduledDeploymentHandler) Toggle(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
+	offset, err := scheduleOffset(r)
+	if err != nil {
+		http.Error(w, "Invalid offset", http.StatusBadRequest)
+		return
+	}
 	projectID, err := parseProjectID(r)
 	if err != nil {
 		http.Error(w, "Invalid project ID", http.StatusBadRequest)
@@ -683,50 +693,14 @@ func (h *ScheduledDeploymentHandler) Toggle(
 	}
 
 	if r.Header.Get("HX-Request") == "true" {
-		project, err := h.repo.Queries.GetProject(r.Context(), projectID)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		schedules, err := h.repo.Queries.ListScheduledDeploymentsByProject(
-			r.Context(),
-			projectID,
-		)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		releases, err := h.repo.Queries.ListReleasesByProject(
-			r.Context(),
-			projectID,
-		)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		items, err := h.buildScheduleListItems(
-			r.Context(),
-			projectID,
-			schedules,
-			releases,
-		)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		if err := pages.ScheduledDeploymentsList(
-			project,
-			items,
-		).Render(r.Context(), w); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
+		h.List(w, r)
 		return
 	}
 
 	http.Redirect(
 		w,
 		r,
-		fmt.Sprintf("/projects/%d/schedules", projectID),
+		pages.ScheduleListURL(projectID, offset),
 		http.StatusSeeOther,
 	)
 }
@@ -739,6 +713,7 @@ func (h *ScheduledDeploymentHandler) renderFormError(
 	schedule *db.ScheduledDeployment,
 	errorMsg string,
 ) {
+	offset, _ := scheduleOffset(r)
 	project, err := h.repo.Queries.GetProject(r.Context(), projectID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -766,9 +741,10 @@ func (h *ScheduledDeploymentHandler) renderFormError(
 			envs,
 			schedule,
 			errorMsg,
+			offset,
 		),
 		pages.ScheduledDeploymentFormPage(
-			project, releases, envs, schedule, errorMsg, r.URL.Path,
+			project, releases, envs, schedule, errorMsg, offset, r.URL.Path,
 		),
 	)
 }
@@ -781,33 +757,4 @@ func (h *ScheduledDeploymentHandler) availableEnvsForDeployPage(
 ) ([]pages.AvailableEnv, error) {
 	dh := NewDeploymentHandler(h.repo, nil)
 	return dh.availableEnvsForDeployPage(r, project, release)
-}
-
-func (h *ScheduledDeploymentHandler) buildScheduleListItems(
-	ctx context.Context,
-	projectID int64,
-	schedules []db.ScheduledDeployment,
-	releases []db.Release,
-) ([]pages.ScheduledDeploymentListItem, error) {
-	envs, err := h.repo.Queries.ListEnvironments(ctx)
-	if err != nil {
-		return nil, err
-	}
-	envName := make(map[int64]string, len(envs))
-	for _, e := range envs {
-		envName[e.ID] = e.Name
-	}
-	relVer := make(map[int64]string, len(releases))
-	for _, r := range releases {
-		relVer[r.ID] = r.Version
-	}
-	items := make([]pages.ScheduledDeploymentListItem, 0, len(schedules))
-	for _, s := range schedules {
-		items = append(items, pages.ScheduledDeploymentListItem{
-			Schedule:        s,
-			ReleaseVersion:  relVer[s.ReleaseID],
-			EnvironmentName: envName[s.EnvironmentID],
-		})
-	}
-	return items, nil
 }

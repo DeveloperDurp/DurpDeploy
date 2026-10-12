@@ -174,12 +174,16 @@ func releaseStepSnapshots(
 	queries *db.Queries,
 	steps []db.Step,
 ) ([]releaseStepSnapshot, error) {
+	ids := make([]int64, len(steps))
+	for index, step := range steps {
+		ids[index] = step.ID
+	}
+	selectors, err := repository.StepSelectors(ctx, queries, ids)
+	if err != nil {
+		return nil, err
+	}
 	snapshots := make([]releaseStepSnapshot, len(steps))
 	for index, step := range steps {
-		selectors, err := queries.ListStepAgentSelectors(ctx, step.ID)
-		if err != nil {
-			return nil, err
-		}
 		variableNames, err := decodeStepVariableNames(step.VariableNames)
 		if err != nil {
 			return nil, err
@@ -193,7 +197,7 @@ func releaseStepSnapshots(
 			MaxRetries:           step.MaxRetries,
 			ExecutionTarget:      step.ExecutionTarget,
 			AgentExecutionMode:   step.AgentExecutionMode,
-			AgentSelectors:       selectors,
+			AgentSelectors:       selectors[step.ID],
 			ContainerImage:       step.ContainerImage,
 			NetworkMode:          step.NetworkMode,
 			ApprovalArtifactPath: step.ApprovalArtifactPath,

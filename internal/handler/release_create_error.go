@@ -16,14 +16,7 @@ func (h *ReleaseHandler) renderReleaseCreateError(
 		http.Error(w, "Cannot read project", http.StatusInternalServerError)
 		return
 	}
-	releases, err := h.repo.Queries.ListReleasesByProject(
-		r.Context(), state.ProjectID,
-	)
-	if err != nil {
-		http.Error(w, "Cannot read releases", http.StatusInternalServerError)
-		return
-	}
-	views, err := buildReleaseViews(r.Context(), h.repo, releases)
+	views, err := loadReleaseViews(r.Context(), h.repo, state.ProjectID)
 	if err != nil {
 		http.Error(
 			w,

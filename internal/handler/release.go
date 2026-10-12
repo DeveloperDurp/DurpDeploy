@@ -40,16 +40,7 @@ func (h *ReleaseHandler) ListReleases(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	releases, err := h.repo.Queries.ListReleasesByProject(
-		r.Context(),
-		projectID,
-	)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	views, err := buildReleaseViews(r.Context(), h.repo, releases)
+	views, err := loadReleaseViews(r.Context(), h.repo, projectID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -68,20 +59,24 @@ func (h *ReleaseHandler) ListReleases(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// buildReleaseViews turns a list of releases into the per-row data the releases table needs.
-func buildReleaseViews(
+func loadReleaseViews(
 	ctx context.Context,
 	repo *repository.Repository,
-	releases []db.Release,
+	projectID int64,
 ) ([]pages.ReleaseView, error) {
+	releases, err := repo.Queries.ListReleasesWithActivity(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
 	views := make([]pages.ReleaseView, len(releases))
 	for i, rel := range releases {
-		active, err := repo.Queries.HasActiveReleaseDeployment(ctx, rel.ID)
-		if err != nil {
-			return nil, err
-		}
 		views[i] = pages.ReleaseView{
-			Release: rel, Active: active != 0,
+			Release: db.Release{
+				ID: rel.ID, ProjectID: rel.ProjectID, Version: rel.Version,
+				StepsJson: rel.StepsJson, CreatedAt: rel.CreatedAt, Kind: rel.Kind,
+				SnapshotLocked: rel.SnapshotLocked,
+			},
+			Active: rel.Active != 0,
 		}
 	}
 	return views, nil

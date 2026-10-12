@@ -188,6 +188,33 @@ func (q *Queries) GetAgent(ctx context.Context, id string) (Agent, error) {
 	return i, err
 }
 
+const getAgentByCertificateFingerprint = `-- name: GetAgentByCertificateFingerprint :one
+SELECT id, name, endpoint, status, agent_version, certificate_pem, certificate_fingerprint, encrypted_identity, last_heartbeat_at, revoked_at, created_at, updated_at, draining, health_state, agent_protocol FROM agents WHERE certificate_fingerprint = ?
+`
+
+func (q *Queries) GetAgentByCertificateFingerprint(ctx context.Context, certificateFingerprint sql.NullString) (Agent, error) {
+	row := q.db.QueryRowContext(ctx, getAgentByCertificateFingerprint, certificateFingerprint)
+	var i Agent
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Endpoint,
+		&i.Status,
+		&i.AgentVersion,
+		&i.CertificatePem,
+		&i.CertificateFingerprint,
+		&i.EncryptedIdentity,
+		&i.LastHeartbeatAt,
+		&i.RevokedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Draining,
+		&i.HealthState,
+		&i.AgentProtocol,
+	)
+	return i, err
+}
+
 const heartbeatAgent = `-- name: HeartbeatAgent :execrows
 UPDATE agents SET last_heartbeat_at = ?1, agent_version = ?2,
     updated_at = ?1

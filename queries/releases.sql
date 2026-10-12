@@ -8,6 +8,31 @@ LIMIT ? OFFSET ?;
 -- name: CountReleasesByProject :one
 SELECT COUNT(*) FROM releases WHERE project_id = ? AND kind = 'deployment';
 
+-- name: ListReleasesWithActivity :many
+SELECT releases.*, CASE WHEN EXISTS (
+    SELECT 1 FROM deployments d WHERE d.release_id = releases.id
+      AND (d.status IN ('queued', 'pending', 'running', 'pending_approval', 'publishing_artifact', 'awaiting_artifact_approval')
+        OR (d.status = 'cleanup_unconfirmed'
+            AND (d.container_namespace IS NOT NULL OR (
+            d.cleanup_confirmed_at IS NULL AND
+            NOT EXISTS (SELECT 1 FROM remote_step_runs s
+                WHERE s.deployment_id = d.id AND s.state = 'cleanup_unconfirmed')
+            AND NOT EXISTS (SELECT 1 FROM remote_deployment_claims c
+                WHERE c.deployment_id = d.id AND c.state = 'cleanup_unconfirmed'))))
+        OR EXISTS (SELECT 1 FROM remote_deployment_claims c
+                   WHERE c.deployment_id = d.id
+                     AND (c.state IN ('claimed', 'started', 'cancel_requested', 'lost', 'cancel_unconfirmed')
+                       OR (c.state = 'cleanup_unconfirmed'
+                           AND c.cleanup_confirmed_at IS NULL)))
+        OR EXISTS (SELECT 1 FROM remote_step_runs s
+                   WHERE s.deployment_id = d.id
+                     AND (s.state IN ('claimed', 'started', 'cancel_requested', 'lost', 'cancel_unconfirmed')
+                       OR (s.state = 'cleanup_unconfirmed'
+                           AND s.cleanup_confirmed_at IS NULL))))
+) THEN 1 ELSE 0 END AS active
+FROM releases WHERE project_id = ? AND kind = 'deployment'
+ORDER BY created_at DESC;
+
 -- name: GetRelease :one
 SELECT * FROM releases WHERE id = ?;
 

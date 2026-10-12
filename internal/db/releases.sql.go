@@ -226,6 +226,75 @@ func (q *Queries) ListReleasesByProjectPaginated(ctx context.Context, arg ListRe
 	return items, nil
 }
 
+const listReleasesWithActivity = `-- name: ListReleasesWithActivity :many
+SELECT releases.id, releases.project_id, releases.version, releases.steps_json, releases.created_at, releases.kind, releases.snapshot_locked, CASE WHEN EXISTS (
+    SELECT 1 FROM deployments d WHERE d.release_id = releases.id
+      AND (d.status IN ('queued', 'pending', 'running', 'pending_approval', 'publishing_artifact', 'awaiting_artifact_approval')
+        OR (d.status = 'cleanup_unconfirmed'
+            AND (d.container_namespace IS NOT NULL OR (
+            d.cleanup_confirmed_at IS NULL AND
+            NOT EXISTS (SELECT 1 FROM remote_step_runs s
+                WHERE s.deployment_id = d.id AND s.state = 'cleanup_unconfirmed')
+            AND NOT EXISTS (SELECT 1 FROM remote_deployment_claims c
+                WHERE c.deployment_id = d.id AND c.state = 'cleanup_unconfirmed'))))
+        OR EXISTS (SELECT 1 FROM remote_deployment_claims c
+                   WHERE c.deployment_id = d.id
+                     AND (c.state IN ('claimed', 'started', 'cancel_requested', 'lost', 'cancel_unconfirmed')
+                       OR (c.state = 'cleanup_unconfirmed'
+                           AND c.cleanup_confirmed_at IS NULL)))
+        OR EXISTS (SELECT 1 FROM remote_step_runs s
+                   WHERE s.deployment_id = d.id
+                     AND (s.state IN ('claimed', 'started', 'cancel_requested', 'lost', 'cancel_unconfirmed')
+                       OR (s.state = 'cleanup_unconfirmed'
+                           AND s.cleanup_confirmed_at IS NULL))))
+) THEN 1 ELSE 0 END AS active
+FROM releases WHERE project_id = ? AND kind = 'deployment'
+ORDER BY created_at DESC
+`
+
+type ListReleasesWithActivityRow struct {
+	ID             int64  `json:"id"`
+	ProjectID      int64  `json:"project_id"`
+	Version        string `json:"version"`
+	StepsJson      string `json:"steps_json"`
+	CreatedAt      int64  `json:"created_at"`
+	Kind           string `json:"kind"`
+	SnapshotLocked int64  `json:"snapshot_locked"`
+	Active         int64  `json:"active"`
+}
+
+func (q *Queries) ListReleasesWithActivity(ctx context.Context, projectID int64) ([]ListReleasesWithActivityRow, error) {
+	rows, err := q.db.QueryContext(ctx, listReleasesWithActivity, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListReleasesWithActivityRow
+	for rows.Next() {
+		var i ListReleasesWithActivityRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.Version,
+			&i.StepsJson,
+			&i.CreatedAt,
+			&i.Kind,
+			&i.SnapshotLocked,
+			&i.Active,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockRelease = `-- name: LockRelease :execrows
 UPDATE releases SET version = version -- NOSONAR: intentional write lock
 WHERE id = ?

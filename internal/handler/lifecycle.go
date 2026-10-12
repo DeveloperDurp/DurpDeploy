@@ -29,7 +29,7 @@ func (h *LifecycleHandler) ListLifecycles(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	lifecycles, err := h.repo.Queries.ListLifecycles(r.Context())
+	lifecycles, err := h.repo.Queries.ListLifecyclesWithStageCounts(r.Context())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -37,14 +37,12 @@ func (h *LifecycleHandler) ListLifecycles(
 
 	rows := make([]pages.LifecycleRow, len(lifecycles))
 	for i, lc := range lifecycles {
-		stages, err := h.repo.Queries.ListLifecycleStages(r.Context(), lc.ID)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
 		rows[i] = pages.LifecycleRow{
-			Lifecycle:  lc,
-			StageCount: int64(len(stages)),
+			Lifecycle: db.Lifecycle{
+				ID: lc.ID, Name: lc.Name,
+				Description: lc.Description, CreatedAt: lc.CreatedAt,
+			},
+			StageCount: lc.StageCount,
 		}
 	}
 

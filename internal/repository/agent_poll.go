@@ -40,13 +40,15 @@ func (r *Repository) RecordAgentPollCapabilities(
 	heartbeat db.HeartbeatAgentParams,
 	request AgentPollCapabilities,
 ) (int64, error) {
-	interpreters := request.SupportedInterpreters
-	modes := request.ExecutionModes
 	if request.Protocol == agentproto.AgentV1 {
-		interpreters = []agentproto.Interpreter{agentproto.InterpreterBash}
+		request.SupportedInterpreters = []agentproto.Interpreter{
+			agentproto.InterpreterBash,
+		}
 	}
 	if request.Protocol != agentproto.AgentV3 {
-		modes = []agentproto.ExecutionMode{agentproto.ExecutionHost}
+		request.ExecutionModes = []agentproto.ExecutionMode{
+			agentproto.ExecutionHost,
+		}
 	}
 	var changed int64
 	err := r.WithQueueMaintenanceTx(
@@ -61,66 +63,76 @@ func (r *Repository) RecordAgentPollCapabilities(
 			if changed == 0 {
 				return nil
 			}
-			if err := request.recordTransferCapabilities(
+			unchanged, err := request.matchesStoredCapabilities(
 				ctx,
 				q,
 				heartbeat.ID,
-			); err != nil {
+			)
+			if err != nil {
 				return err
 			}
-			if err := q.SetAgentProtocol(ctx, db.SetAgentProtocolParams{
-				ID: heartbeat.ID,
-				AgentProtocol: sql.NullString{
-					String: string(request.Protocol), Valid: true,
-				},
-			}); err != nil {
-				return fmt.Errorf("record agent protocol: %w", err)
-			}
-			if err := clearAgentCapabilities(ctx, q, heartbeat.ID); err != nil {
-				return fmt.Errorf("replace agent interpreters: %w", err)
-			}
-			for _, value := range interpreters {
-				if _, err := q.AddAgentInterpreter(
+			if !unchanged {
+				if err := request.recordTransferCapabilities(
 					ctx,
-					db.AddAgentInterpreterParams{
-						AgentID:     heartbeat.ID,
-						Interpreter: string(value),
-					},
+					q,
+					heartbeat.ID,
 				); err != nil {
-					return fmt.Errorf("record agent interpreter: %w", err)
+					return err
 				}
-			}
-			for _, mode := range modes {
-				if err := q.AddAgentExecutionMode(
-					ctx,
-					db.AddAgentExecutionModeParams{
-						AgentID: heartbeat.ID, ExecutionMode: string(mode),
+				if err := q.SetAgentProtocol(ctx, db.SetAgentProtocolParams{
+					ID: heartbeat.ID,
+					AgentProtocol: sql.NullString{
+						String: string(request.Protocol), Valid: true,
 					},
-				); err != nil {
-					return fmt.Errorf("record execution mode: %w", err)
+				}); err != nil {
+					return fmt.Errorf("record agent protocol: %w", err)
 				}
-			}
-			for _, runtime := range request.ContainerRuntimes {
-				if err := q.AddAgentContainerRuntime(
-					ctx,
-					db.AddAgentContainerRuntimeParams{
-						AgentID: heartbeat.ID, Runtime: string(runtime),
-					},
-				); err != nil {
-					return fmt.Errorf("record container runtime: %w", err)
+				if err := clearAgentCapabilities(ctx, q, heartbeat.ID); err != nil {
+					return fmt.Errorf("replace agent interpreters: %w", err)
 				}
-			}
-			for _, interpreter := range request.ContainerInterpreters {
-				if err := q.AddAgentContainerInterpreter(
-					ctx,
-					db.AddAgentContainerInterpreterParams{
-						AgentID: heartbeat.ID, Interpreter: string(interpreter),
-					},
-				); err != nil {
-					return fmt.Errorf(
-						"record container interpreter: %w",
-						err,
-					)
+				for _, value := range request.SupportedInterpreters {
+					if _, err := q.AddAgentInterpreter(
+						ctx,
+						db.AddAgentInterpreterParams{
+							AgentID:     heartbeat.ID,
+							Interpreter: string(value),
+						},
+					); err != nil {
+						return fmt.Errorf("record agent interpreter: %w", err)
+					}
+				}
+				for _, mode := range request.ExecutionModes {
+					if err := q.AddAgentExecutionMode(
+						ctx,
+						db.AddAgentExecutionModeParams{
+							AgentID: heartbeat.ID, ExecutionMode: string(mode),
+						},
+					); err != nil {
+						return fmt.Errorf("record execution mode: %w", err)
+					}
+				}
+				for _, runtime := range request.ContainerRuntimes {
+					if err := q.AddAgentContainerRuntime(
+						ctx,
+						db.AddAgentContainerRuntimeParams{
+							AgentID: heartbeat.ID, Runtime: string(runtime),
+						},
+					); err != nil {
+						return fmt.Errorf("record container runtime: %w", err)
+					}
+				}
+				for _, interpreter := range request.ContainerInterpreters {
+					if err := q.AddAgentContainerInterpreter(
+						ctx,
+						db.AddAgentContainerInterpreterParams{
+							AgentID: heartbeat.ID, Interpreter: string(interpreter),
+						},
+					); err != nil {
+						return fmt.Errorf(
+							"record container interpreter: %w",
+							err,
+						)
+					}
 				}
 			}
 			if request.Protocol == agentproto.AgentV3 &&

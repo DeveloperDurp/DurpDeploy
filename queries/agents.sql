@@ -4,6 +4,9 @@ INSERT INTO agents (id, name, endpoint) VALUES (?, ?, ?) RETURNING *;
 -- name: GetAgent :one
 SELECT * FROM agents WHERE id = ?;
 
+-- name: GetAgentByCertificateFingerprint :one
+SELECT * FROM agents WHERE certificate_fingerprint = ?;
+
 -- name: LockRevocableAgent :execrows
 UPDATE agents SET updated_at = updated_at -- NOSONAR: intentional write lock
 WHERE id = ? AND status IN ('pending', 'active', 'disabled');

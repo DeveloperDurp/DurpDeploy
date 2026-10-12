@@ -4,6 +4,7 @@ package agentserver
 import (
 	"context"
 	"crypto/tls"
+	"database/sql"
 	"errors"
 	"net/http"
 	"sync"
@@ -84,34 +85,35 @@ func (s *Server) authenticate(
 	}
 	peer := state.PeerCertificates[0]
 	pin := agenttls.FingerprintOf(peer.Raw)
-	agents, err := s.repository.Queries.ListAgents(ctx)
+	agent, err := s.repository.Queries.GetAgentByCertificateFingerprint(
+		ctx, sql.NullString{String: pin.String(), Valid: true},
+	)
+	if errors.Is(err, sql.ErrNoRows) ||
+		(err == nil && agent.Status != "active") {
+		return db.Agent{}, errors.New(
+			"agent certificate is not active and pinned",
+		)
+	}
 	if err != nil {
 		return db.Agent{}, err
 	}
-	for _, agent := range agents {
-		if agent.Status != "active" || !agent.CertificateFingerprint.Valid ||
-			agent.CertificateFingerprint.String != pin.String() {
-			continue
-		}
-		pairing, err := s.repository.Queries.GetAgentPairing(ctx, agent.ID)
-		if err != nil || pairing.State != "paired" ||
-			pairing.AgentPin != pin.String() || !pairing.ServerPin.Valid ||
-			pairing.ServerPin.String != s.identity.Fingerprint.String() {
-			return db.Agent{}, errors.New("agent pairing is not committed")
-		}
-		verify, err := agenttls.NewPairingBootstrapClientConfig(
-			"https://agent",
-			pin,
-		)
-		if err != nil {
-			return db.Agent{}, err
-		}
-		if err := verify.VerifyConnection(state); err != nil {
-			return db.Agent{}, err
-		}
-		return agent, nil
+	pairing, err := s.repository.Queries.GetAgentPairing(ctx, agent.ID)
+	if err != nil || pairing.State != "paired" ||
+		pairing.AgentPin != pin.String() || !pairing.ServerPin.Valid ||
+		pairing.ServerPin.String != s.identity.Fingerprint.String() {
+		return db.Agent{}, errors.New("agent pairing is not committed")
 	}
-	return db.Agent{}, errors.New("agent certificate is not active and pinned")
+	verify, err := agenttls.NewPairingBootstrapClientConfig(
+		"https://agent",
+		pin,
+	)
+	if err != nil {
+		return db.Agent{}, err
+	}
+	if err := verify.VerifyConnection(state); err != nil {
+		return db.Agent{}, err
+	}
+	return agent, nil
 }
 
 // Authenticated rechecks durable status on every request, including keep-alive.
