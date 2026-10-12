@@ -34,14 +34,6 @@ func TestExecutionLocationAPIWebE2E(t *testing.T) {
 	if host == "" {
 		t.Fatal("test runtime did not report its physical hostname")
 	}
-	rawImage, err := exec.CommandContext(t.Context(), "podman", "--remote",
-		"--url="+os.Getenv("AGENT_TEST_SOCKET"), "image", "inspect",
-		"docker.io/library/bash:5.2", "--format", "{{.Id}}",
-	).Output()
-	if err != nil {
-		t.Fatal(err)
-	}
-	image := strings.TrimSpace(string(rawImage))
 	s := newStagingE2E(t)
 	decode := func(data []byte, value any) {
 		t.Helper()
@@ -81,6 +73,14 @@ func TestExecutionLocationAPIWebE2E(t *testing.T) {
 		"release_id": release.ID, "environment_id": environment.ID,
 	}, 201), &deployment)
 	s.wait(t, deployment.ID, "succeeded")
+	rawImage, err := exec.CommandContext(t.Context(), "podman", "--remote",
+		"--url="+os.Getenv("AGENT_TEST_SOCKET"), "image", "inspect",
+		"docker.io/library/bash:5.2", "--format", "{{.Id}}",
+	).Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	image := strings.TrimSpace(string(rawImage))
 
 	// Then: all attempts and fan-out targets keep their location in public logs.
 	path := fmt.Sprintf("/deployments/%d", deployment.ID)

@@ -77,6 +77,7 @@ func (r *DeploymentRunner) runStepAttempt(
 	if err != nil {
 		return err
 	}
+	host := r.engine.hostname(runCtx)
 	timeout := defaultStepTimeout
 	if request.step.TimeoutSeconds > 0 {
 		timeout = time.Duration(request.step.TimeoutSeconds) * time.Second
@@ -173,7 +174,7 @@ func (r *DeploymentRunner) runStepAttempt(
 	}
 	if _, err := io.WriteString(request.logWriter, fmt.Sprintf(
 		"Execution location: target=server host=%q mode=container runtime=%q container=%q image=%q interpreter=%q attempt=%d\n",
-		request.logWriter.scrubber.Scrub(r.engine.hostname(stepCtx)),
+		request.logWriter.scrubber.Scrub(host),
 		r.engine.kind, name, request.step.ContainerImage, selected, request.attempt,
 	)); err != nil {
 		return fmt.Errorf("record execution location: %w", err)

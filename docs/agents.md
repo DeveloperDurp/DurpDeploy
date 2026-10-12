@@ -9,7 +9,9 @@ maintenance, and recovery.
 
 Each accepted remote step records the agent name and ID before script output.
 Each execution attempt records the physical hostname, execution mode, interpreter, and attempt number.
-Container attempts also record the runtime, container name, and resolved image ID.
+Container attempts also record the runtime, container name, and image.
+Server containers record the image reference.
+Agent containers record the resolved image ID.
 Retries and fan-out retain separate entries.
 
 Container execution uses the physical hostname reported by Docker or Podman.
