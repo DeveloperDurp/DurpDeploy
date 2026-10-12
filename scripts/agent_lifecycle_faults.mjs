@@ -207,14 +207,14 @@ export async function runLifecycleFault(context) {
 		const gate = await gatePromise;
 		checkpoint = await waitFor(
 			() => readOnly(`SELECT COUNT(*) FROM deployment_logs ` +
-				`WHERE deployment_id=${deployment.id} AND line='LOG_MARKER';`),
+				`WHERE deployment_id=${deployment.id} AND line GLOB 'LOG_MARKER agent_id="*"';`),
 			(value) => value === "1",
 			"committed log batch",
 		);
 		gate.drop();
 		await waitStatus(deployment.id, "succeeded");
 		check((await readOnly(`SELECT COUNT(*) FROM deployment_logs ` +
-			`WHERE deployment_id=${deployment.id} AND line='LOG_MARKER';`)).trim() === "1",
+			`WHERE deployment_id=${deployment.id} AND line GLOB 'LOG_MARKER agent_id="*"';`)).trim() === "1",
 		"lost log response duplicated a durable line");
 	} else if (scenario === "lost-result-response") {
 		const deployment = await createDeployment("sleep 2; echo RESULT_MARKER");

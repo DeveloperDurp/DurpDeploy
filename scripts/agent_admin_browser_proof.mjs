@@ -477,6 +477,7 @@ async function main() {
 		const agentDetail = await api("GET", `/admin/agents/${pairedAgentID}`);
 		check(agentDetail.agent.interpreters.includes("bash"),
 			`agent API omitted capabilities: ${JSON.stringify(agentDetail)}`);
+		const attribution = ` agent_id=${JSON.stringify(pairedAgentID)}`;
 		const streamLogs = async (deploymentID) => {
 			const controller = new AbortController();
 			const timer = setTimeout(() => controller.abort(), 30000);
@@ -500,7 +501,7 @@ async function main() {
 						pending = pending.slice(newline + 1);
 						if (line) streamed.push(JSON.parse(line).line);
 					}
-					if (streamed.includes("remote-agent-ok")) {
+					if (streamed.includes(`remote-agent-ok${attribution}`)) {
 						await reader.cancel();
 						return streamed;
 					}
@@ -557,9 +558,9 @@ async function main() {
 		]);
 		const logs = await api("GET", `/deployments/${deployment.id}/logs`);
 		const lines = logs.map((entry) => entry.line);
-		const markerIndex = streamed.indexOf(`AGENT_EXECUTION_MARKER:${nonce}`);
-		const redactedIndex = streamed.indexOf("[REDACTED]");
-		const successIndex = streamed.indexOf("remote-agent-ok");
+		const markerIndex = streamed.indexOf(`AGENT_EXECUTION_MARKER:${nonce}${attribution}`);
+		const redactedIndex = streamed.indexOf(`[REDACTED]${attribution}`);
+		const successIndex = streamed.indexOf(`remote-agent-ok${attribution}`);
 		check(markerIndex >= 0 && markerIndex < redactedIndex &&
 			redactedIndex < successIndex,
 		`ordered redacted stream was ${JSON.stringify(streamed)}`);
