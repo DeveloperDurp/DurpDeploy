@@ -32,30 +32,36 @@ func (q *Queries) GetGlobalNotifications(ctx context.Context) (GlobalNotificatio
 const updateGlobalNotifications = `-- name: UpdateGlobalNotifications :one
 UPDATE global_notifications
 SET
-    slack_webhook_url = ?,
-    notify_emails = ?,
-    gotify_url = ?,
-    gotify_token = ?,
-    discord_webhook_url = ?,
+    slack_webhook_url = CASE WHEN CAST(?1 AS INTEGER) = 1 THEN NULL ELSE COALESCE(NULLIF(CAST(?2 AS TEXT), ''), slack_webhook_url) END,
+    notify_emails = ?3,
+    gotify_url = ?4,
+    gotify_token = CASE WHEN CAST(?5 AS INTEGER) = 1 THEN NULL ELSE COALESCE(NULLIF(CAST(?6 AS TEXT), ''), gotify_token) END,
+    discord_webhook_url = CASE WHEN CAST(?7 AS INTEGER) = 1 THEN NULL ELSE COALESCE(NULLIF(CAST(?8 AS TEXT), ''), discord_webhook_url) END,
     updated_at = unixepoch()
 WHERE id = 1
 RETURNING id, slack_webhook_url, notify_emails, gotify_url, gotify_token, discord_webhook_url, updated_at
 `
 
 type UpdateGlobalNotificationsParams struct {
-	SlackWebhookUrl   sql.NullString `json:"slack_webhook_url"`
-	NotifyEmails      sql.NullString `json:"notify_emails"`
-	GotifyUrl         sql.NullString `json:"gotify_url"`
-	GotifyToken       sql.NullString `json:"gotify_token"`
-	DiscordWebhookUrl sql.NullString `json:"discord_webhook_url"`
+	ClearSlackWebhookUrl   int64          `json:"clear_slack_webhook_url"`
+	SlackWebhookUrl        sql.NullString `json:"slack_webhook_url"`
+	NotifyEmails           sql.NullString `json:"notify_emails"`
+	GotifyUrl              sql.NullString `json:"gotify_url"`
+	ClearGotifyToken       int64          `json:"clear_gotify_token"`
+	GotifyToken            sql.NullString `json:"gotify_token"`
+	ClearDiscordWebhookUrl int64          `json:"clear_discord_webhook_url"`
+	DiscordWebhookUrl      sql.NullString `json:"discord_webhook_url"`
 }
 
 func (q *Queries) UpdateGlobalNotifications(ctx context.Context, arg UpdateGlobalNotificationsParams) (GlobalNotification, error) {
 	row := q.db.QueryRowContext(ctx, updateGlobalNotifications,
+		arg.ClearSlackWebhookUrl,
 		arg.SlackWebhookUrl,
 		arg.NotifyEmails,
 		arg.GotifyUrl,
+		arg.ClearGotifyToken,
 		arg.GotifyToken,
+		arg.ClearDiscordWebhookUrl,
 		arg.DiscordWebhookUrl,
 	)
 	var i GlobalNotification

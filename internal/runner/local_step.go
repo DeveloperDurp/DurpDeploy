@@ -38,6 +38,9 @@ func (r *DeploymentRunner) runStepAttempt(
 		return context.Canceled
 	}
 	defer r.localWork.Done()
+	if request.logWriter.outputFailed {
+		return errPendingLogLimit
+	}
 	if err := request.logWriter.state("running"); err != nil {
 		return err
 	}
@@ -91,6 +94,7 @@ func (r *DeploymentRunner) runStepAttempt(
 		timeout = time.Duration(request.step.TimeoutSeconds) * time.Second
 	}
 	stepCtx, cancel := context.WithTimeout(runCtx, timeout)
+	request.logWriter.cancelAttempt = cancel
 	defer cancel()
 	if r.engine.kind == "docker" {
 		err = r.rejectDockerImageVolumes(
@@ -235,6 +239,7 @@ func (r *DeploymentRunner) runStepAttempt(
 			cleanupCtx, r.engine.removeArgs(name)...,
 		).
 			CombinedOutput()
+		request.logWriter.Flush()
 		if err = r.engine.removalError(output, err); err != nil {
 			result = errors.Join(
 				result,
@@ -246,18 +251,25 @@ func (r *DeploymentRunner) runStepAttempt(
 					strings.TrimSpace(string(output)),
 				),
 			)
-			_, _ = io.WriteString(
-				request.logWriter,
-				fmt.Sprintf(
-					"step %q: container cleanup unconfirmed: %v\n",
-					request.step.Name,
-					err,
-				),
-			)
+			line := request.logWriter.scrubber.Scrub(fmt.Sprintf(
+				"step %q: container cleanup unconfirmed: %v",
+				request.step.Name,
+				err,
+			))
+			if persistErr := request.logWriter.writeLine(
+				line,
+				"",
+			); persistErr != nil {
+				result = errors.Join(result, fmt.Errorf(
+					"persist container cleanup diagnostic: %w", persistErr,
+				))
+			}
 		}
-		request.logWriter.Flush()
 	}()
 	err = cmd.Run()
+	if request.logWriter.outputFailed {
+		return errors.Join(errPendingLogLimit, err)
+	}
 	if err != nil {
 		if stepCtx.Err() == context.DeadlineExceeded {
 			_, _ = io.WriteString(

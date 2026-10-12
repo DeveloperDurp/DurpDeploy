@@ -10257,9 +10257,17 @@
           "type": "string",
           "x-go-name": "DiscordWebhookURL"
         },
+        "discord_webhook_url_configured": {
+          "type": "boolean",
+          "x-go-name": "DiscordWebhookURLConfigured"
+        },
         "gotify_token": {
           "type": "string",
           "x-go-name": "GotifyToken"
+        },
+        "gotify_token_configured": {
+          "type": "boolean",
+          "x-go-name": "GotifyTokenConfigured"
         },
         "gotify_url": {
           "type": "string",
@@ -10278,6 +10286,10 @@
           "type": "string",
           "x-go-name": "SlackWebhookURL"
         },
+        "slack_webhook_url_configured": {
+          "type": "boolean",
+          "x-go-name": "SlackWebhookURLConfigured"
+        },
         "updated_at": {
           "type": "integer",
           "format": "int64",
@@ -10291,6 +10303,18 @@
       "type": "object",
       "title": "GlobalNotificationRequest is the body for global notification settings.",
       "properties": {
+        "clear_discord_webhook_url": {
+          "type": "boolean",
+          "x-go-name": "ClearDiscordWebhookURL"
+        },
+        "clear_gotify_token": {
+          "type": "boolean",
+          "x-go-name": "ClearGotifyToken"
+        },
+        "clear_slack_webhook_url": {
+          "type": "boolean",
+          "x-go-name": "ClearSlackWebhookURL"
+        },
         "discord_webhook_url": {
           "type": "string",
           "x-go-name": "DiscordWebhookURL"
@@ -10950,6 +10974,18 @@
       "type": "object",
       "title": "ProjectNotificationRequest updates a project's notification settings.",
       "properties": {
+        "clear_discord_webhook_url": {
+          "type": "boolean",
+          "x-go-name": "ClearDiscordWebhookURL"
+        },
+        "clear_gotify_token": {
+          "type": "boolean",
+          "x-go-name": "ClearGotifyToken"
+        },
+        "clear_slack_webhook_url": {
+          "type": "boolean",
+          "x-go-name": "ClearSlackWebhookURL"
+        },
         "discord_webhook_url": {
           "type": "string",
           "x-go-name": "DiscordWebhookURL"
@@ -10991,9 +11027,17 @@
           "type": "string",
           "x-go-name": "DiscordWebhookURL"
         },
+        "discord_webhook_url_configured": {
+          "type": "boolean",
+          "x-go-name": "DiscordWebhookURLConfigured"
+        },
         "gotify_token": {
           "type": "string",
           "x-go-name": "GotifyToken"
+        },
+        "gotify_token_configured": {
+          "type": "boolean",
+          "x-go-name": "GotifyTokenConfigured"
         },
         "gotify_url": {
           "type": "string",
@@ -11015,6 +11059,10 @@
         "slack_webhook_url": {
           "type": "string",
           "x-go-name": "SlackWebhookURL"
+        },
+        "slack_webhook_url_configured": {
+          "type": "boolean",
+          "x-go-name": "SlackWebhookURLConfigured"
         }
       },
       "x-go-name": "swaggerProjectNotificationResponse",
@@ -11058,9 +11106,17 @@
           "type": "string",
           "x-go-name": "DiscordWebhookURL"
         },
+        "discord_webhook_url_configured": {
+          "type": "boolean",
+          "x-go-name": "DiscordWebhookURLConfigured"
+        },
         "gotify_token": {
           "type": "string",
           "x-go-name": "GotifyToken"
+        },
+        "gotify_token_configured": {
+          "type": "boolean",
+          "x-go-name": "GotifyTokenConfigured"
         },
         "gotify_url": {
           "type": "string",
@@ -11087,6 +11143,10 @@
         "slack_webhook_url": {
           "type": "string",
           "x-go-name": "SlackWebhookURL"
+        },
+        "slack_webhook_url_configured": {
+          "type": "boolean",
+          "x-go-name": "SlackWebhookURLConfigured"
         }
       },
       "x-go-name": "swaggerProjectResponse",

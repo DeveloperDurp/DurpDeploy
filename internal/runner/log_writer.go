@@ -13,15 +13,21 @@ import (
 	"durpdeploy/internal/repository"
 )
 
+const maxPendingLogBytes = 1024 * 1024
+
+var errPendingLogLimit = errors.New("pending log output exceeded safety limit")
+
 type broadcastWriter struct {
-	broker       *LogBroker
-	repo         *repository.Repository
-	deploymentID int64
-	stepName     string
-	stepIndex    sql.NullInt64
-	ctx          context.Context
-	buf          bytes.Buffer
-	scrubber     *Scrubber
+	broker        *LogBroker
+	repo          *repository.Repository
+	deploymentID  int64
+	stepName      string
+	stepIndex     sql.NullInt64
+	ctx           context.Context
+	buf           bytes.Buffer
+	scrubber      *Scrubber
+	cancelAttempt context.CancelFunc
+	outputFailed  bool
 }
 
 // Write buffers output and scrubs everything up to the last newline before
@@ -29,6 +35,20 @@ type broadcastWriter struct {
 // line at a time) lets the Scrubber catch secrets that span multiple Write
 // calls or contain embedded newlines (e.g. a multi-line SSH key).
 func (w *broadcastWriter) Write(p []byte) (n int, err error) {
+	if w.outputFailed {
+		return 0, errPendingLogLimit
+	}
+	if len(p) > maxPendingLogBytes-w.buf.Len() {
+		w.outputFailed = true
+		w.buf.Reset()
+		if w.cancelAttempt != nil {
+			w.cancelAttempt()
+		}
+		if err := w.writeLine(errPendingLogLimit.Error(), ""); err != nil {
+			return 0, errors.Join(errPendingLogLimit, err)
+		}
+		return 0, errPendingLogLimit
+	}
 	w.buf.Write(p)
 	data := w.buf.Bytes()
 	safeEnd := len(data) - w.scrubber.PendingBytes(string(data))
@@ -59,6 +79,9 @@ func (w *broadcastWriter) Write(p []byte) (n int, err error) {
 }
 
 func (w *broadcastWriter) Flush() {
+	if w.outputFailed {
+		return
+	}
 	remaining := w.buf.String()
 	if remaining != "" {
 		remaining = w.scrubber.Scrub(remaining)

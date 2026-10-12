@@ -76,13 +76,7 @@ templ SlackNotificationCard(project db.Project) {
 				<label class="label">
 					<span class="label-text">Webhook URL</span>
 				</label>
-				<input
-					type="text"
-					name="slack_webhook_url"
-					value={ project.SlackWebhookUrl.String }
-					placeholder="https://hooks.slack.com/services/..."
-					class="input input-bordered input-sm w-full"
-				/>
+				@NotificationCredentialInput("slack_webhook_url", "Slack webhook URL", project.SlackWebhookUrl.String != "")
 			</div>
 		} else {
 			<p class="text-sm text-gray-400">
@@ -144,13 +138,7 @@ templ GotifyNotificationCard(project db.Project) {
 				<label class="label">
 					<span class="label-text">App token</span>
 				</label>
-				<input
-					type="text"
-					name="gotify_token"
-					value={ project.GotifyToken.String }
-					placeholder="AbCdEf123..."
-					class="input input-bordered input-sm w-full"
-				/>
+				@NotificationCredentialInput("gotify_token", "Gotify app token", project.GotifyToken.String != "")
 			</div>
 		} else {
 			<p class="text-sm text-gray-400">
@@ -172,13 +160,7 @@ templ DiscordNotificationCard(project db.Project) {
 				<label class="label">
 					<span class="label-text">Webhook URL</span>
 				</label>
-				<input
-					type="text"
-					name="discord_webhook_url"
-					value={ project.DiscordWebhookUrl.String }
-					placeholder="https://discord.com/api/webhooks/..."
-					class="input input-bordered input-sm w-full"
-				/>
+				@NotificationCredentialInput("discord_webhook_url", "Discord webhook URL", project.DiscordWebhookUrl.String != "")
 			</div>
 		} else {
 			<p class="text-sm text-gray-400">
@@ -409,6 +391,11 @@ templ ProjectNotificationsPage(project db.Project, currentPath string) {
 			<form
 				method="post"
 				action={ templ.SafeURL(fmt.Sprintf("/projects/%d/notifications", project.ID)) }
+				hx-boost="true"
+				hx-target="#page-content"
+				hx-select="#page-content"
+				hx-swap="outerHTML"
+				data-toast-success="Notification settings saved"
 			>
 				<div class="page-header">
 					<h1 class="text-3xl font-bold">Notifications</h1>

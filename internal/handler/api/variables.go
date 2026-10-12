@@ -321,7 +321,11 @@ func (h *VariableHandler) GetVariable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	variable, err := h.repo.GetVariable(r.Context(), varID)
+	projectID, ok := requireProjectFromContext(w, r)
+	if !ok {
+		return
+	}
+	variable, err := h.repo.GetProjectVariable(r.Context(), projectID, varID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			RespondError(w, http.StatusNotFound, "Variable not found")
@@ -334,10 +338,6 @@ func (h *VariableHandler) GetVariable(w http.ResponseWriter, r *http.Request) {
 	// R2: refuse to serve a variable that belongs to a different
 	// project than the URL {id}. The decrypted value is the secret
 	// the whole IDOR is about, so this is the must-pass check.
-	projectID, ok := requireProjectFromContext(w, r)
-	if !ok {
-		return
-	}
 	if variable.ProjectID != projectID {
 		RespondError(w, http.StatusNotFound, "Variable not found")
 		return

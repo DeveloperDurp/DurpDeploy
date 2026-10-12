@@ -640,9 +640,9 @@ func runAudit(args []string) int {
 }
 
 // runSecretKey implements `durpdeploy secret-key rotate [--plaintext]`. It
-// generates a fresh 32-byte key, decrypts variable rows, repository credentials,
-// and verification targets with the current key, and re-encrypts them
-// with the new one — all inside a single transaction, so a crash mid-rotation
+// generates a fresh 32-byte key and re-encrypts all persisted server-key
+// ciphertext, including nested TOTP enrollment seeds, with the new key
+// inside a single transaction, so a crash mid-rotation
 // leaves the DB entirely on the old key, never half-migrated. The new key
 // is printed to stdout; the operator must install it (file or env) and
 // restart the server before the old key can be discarded. See
@@ -651,7 +651,7 @@ func runAudit(args []string) int {
 // --plaintext migrates a pre-P1-2 database whose variables/release_variables
 // values were stored unencrypted: it skips the oldBox.Decrypt step and
 // treats the stored value itself as the plaintext to encrypt. No oldKey is
-// required or loaded in that mode.
+// required or loaded in that mode. Populated encrypted-only stores reject it.
 func runSecretKey(args []string) int {
 	fs := flag.NewFlagSet("secret-key", flag.ExitOnError)
 	plaintext := fs.Bool(
@@ -659,7 +659,16 @@ func runSecretKey(args []string) int {
 		false,
 		"treat existing values as unencrypted plaintext (first-time migration to encryption at rest)",
 	)
-	_ = fs.Parse(args)
+	// flag stops parsing at a positional argument. Accept the documented
+	// command-first form as well as the legacy flag-first form.
+	flagArgs := args
+	if len(args) > 0 && args[0] == "rotate" {
+		flagArgs = append([]string{}, args[1:]...)
+		flagArgs = append(flagArgs, "rotate")
+	}
+	if err := fs.Parse(flagArgs); err != nil {
+		return 1
+	}
 
 	if fs.NArg() == 0 || fs.Arg(0) != "rotate" {
 		fmt.Fprintln(

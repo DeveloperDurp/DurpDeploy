@@ -961,48 +961,5 @@ func (h *DeploymentHandler) DeploymentEvents(
 		return
 	}
 
-	if _, err := h.repo.Queries.GetDeployment(r.Context(), depID); err != nil {
-		if err == sql.ErrNoRows {
-			RespondError(w, http.StatusNotFound, "Deployment not found")
-			return
-		}
-		RespondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("X-Accel-Buffering", "no")
-
-	stream, err := httpstream.New(w)
-	if err != nil {
-		RespondError(w, http.StatusInternalServerError, "Streaming unsupported")
-		return
-	}
-
-	if err := h.repo.ForEachDeploymentLogByDeploymentAsc(
-		r.Context(),
-		depID,
-		func(log db.DeploymentLog) error {
-			_, err := fmt.Fprintf(stream, "data: %s\n\n", log.Line)
-			return err
-		},
-	); err != nil {
-		return
-	}
-
-	ch := h.runner.Broker().Subscribe(depID)
-	defer h.runner.Broker().Unsubscribe(depID, ch)
-
-	for {
-		select {
-		case <-r.Context().Done():
-			return
-		case line := <-ch:
-			if _, err := fmt.Fprintf(stream, "data: %s\n\n", line); err != nil {
-				return
-			}
-		}
-	}
+	httpstream.StreamTextLogs(w, r, h.repo, h.runner.Broker(), depID, false)
 }

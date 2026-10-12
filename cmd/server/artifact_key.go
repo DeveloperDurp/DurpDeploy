@@ -19,6 +19,16 @@ func rotateStoredCredentials(
 	q *db.Queries,
 	rotation secretKeyRotation,
 ) error {
+	staging, err := q.CountStagingChunks(ctx)
+	if err != nil {
+		return err
+	}
+	if staging > 0 {
+		return errors.New(
+			"cannot rotate while deployment staging remains; " +
+				"finish deployments and confirm cleanup before retrying",
+		)
+	}
 	if err := rotateDeploymentVariables(ctx, q, rotation); err != nil {
 		return err
 	}
@@ -57,7 +67,18 @@ func rotateStoredCredentials(
 			return err
 		}
 	}
-	return rotateVerificationTargets(ctx, q, rotation)
+	if err := rotateVerificationTargets(ctx, q, rotation); err != nil {
+		return err
+	}
+	for _, rotate := range []func(context.Context, *db.Queries, secretKeyRotation) error{
+		rotateMFAState, rotateAgentIdentity, rotatePairingIdentity,
+		rotateRemoteClaimLogBuffer, rotateRemoteStepLogBuffer,
+	} {
+		if err := rotate(ctx, q, rotation); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func rotateArtifactGateChunks(

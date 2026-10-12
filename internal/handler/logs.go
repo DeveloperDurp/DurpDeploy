@@ -45,42 +45,7 @@ func (h *LogHandler) streamDeploymentLogs(
 		httpstream.StreamStepLogs(w, r, h.repo, h.broker, deploymentID)
 		return
 	}
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("X-Accel-Buffering", "no")
-
-	stream, err := httpstream.New(w)
-	if err != nil {
-		http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
-		return
-	}
-
-	// Replay historical logs first.
-	if err := h.repo.ForEachDeploymentLogByDeploymentAsc(
-		r.Context(),
-		deploymentID,
-		func(log db.DeploymentLog) error {
-			_, err := fmt.Fprintf(stream, "data: %s\n\n", log.Line)
-			return err
-		},
-	); err != nil {
-		return
-	}
-
-	ch := h.broker.Subscribe(deploymentID)
-	defer h.broker.Unsubscribe(deploymentID, ch)
-
-	for {
-		select {
-		case <-r.Context().Done():
-			return
-		case line := <-ch:
-			if _, err := fmt.Fprintf(stream, "data: %s\n\n", line); err != nil {
-				return
-			}
-		}
-	}
+	httpstream.StreamTextLogs(w, r, h.repo, h.broker, deploymentID, false)
 }
 
 func (h *LogHandler) ExportLogs(w http.ResponseWriter, r *http.Request) {

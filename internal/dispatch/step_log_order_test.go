@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/httpstream"
 	"durpdeploy/internal/runner"
@@ -18,6 +19,23 @@ func TestStepLogCursorFollowsCommitOrder(t *testing.T) {
 	first, second := openLifecycleEngine(t, engine)
 	identity := seedRemoteLifecycle(t, first, 201)
 	ctx := t.Context()
+	user, err := first.Queries.CreateUser(ctx, db.CreateUserParams{
+		Email: "log-order@example.test", Name: "Log order reader",
+		PasswordHash: "unused", Role: "admin",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	session, csrf, err := auth.NewSessionToken()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := first.Queries.CreateSession(ctx, db.CreateSessionParams{
+		ID: session, UserID: user.ID, CsrfToken: csrf,
+		ExpiresAt: time.Now().Add(time.Hour).Unix(),
+	}); err != nil {
+		t.Fatal(err)
+	}
 	tx, err := first.DB.BeginTx(ctx, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -47,7 +65,7 @@ func TestStepLogCursorFollowsCommitOrder(t *testing.T) {
 	case <-time.After(100 * time.Millisecond):
 	}
 	broker := runner.NewLogBroker()
-	server := httptest.NewServer(
+	server := httptest.NewServer(auth.AuthMiddleware(first)(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			httpstream.StreamStepLogs(
 				w,
@@ -57,13 +75,26 @@ func TestStepLogCursorFollowsCommitOrder(t *testing.T) {
 				identity.DeploymentID,
 			)
 		}),
-	)
+	))
 	defer server.Close()
-	response, err := http.Get(server.URL)
+	request, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodGet,
+		server.URL,
+		nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.AddCookie(&http.Cookie{Name: "session", Value: session})
+	response, err := server.Client().Do(request)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("authenticated log stream status=%d", response.StatusCode)
+	}
 	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}

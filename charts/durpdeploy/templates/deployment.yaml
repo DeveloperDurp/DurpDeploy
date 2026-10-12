@@ -50,17 +50,24 @@ spec:
               protocol: TCP
           env:
             # --- Database (Postgres DSN) ---
-            # postgres://user:password@host:port/db?sslmode=...
-            # ponytail: assembled inline rather than via a Secret+envFrom
-            # because pgx accepts the full DSN as a single string and we
-            # already pay the cost of building it once.
+            # pgx reads PGPASSWORD separately, so reserved password characters
+            # never enter URL interpolation.
+            {{- if .Values.externalPostgres.dsnSecret.name }}
             - name: DURPDEPLOY_DB
-              value: "postgres://{{ .Values.externalPostgres.username }}:$(DURPDEPLOY_PG_PASSWORD)@{{ .Values.externalPostgres.host }}:{{ .Values.externalPostgres.port }}/{{ .Values.externalPostgres.database }}?sslmode={{ .Values.externalPostgres.sslmode }}"
-            - name: DURPDEPLOY_PG_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalPostgres.dsnSecret.name | quote }}
+                  key: {{ .Values.externalPostgres.dsnSecret.key | quote }}
+            {{- else }}
+            - name: PGPASSWORD
               valueFrom:
                 secretKeyRef:
                   name: {{ include "durpdeploy.postgresSecretName" . }}
                   key: password
+            - name: DURPDEPLOY_DB
+              # pgx follows libpq: spaces use %20, not form-encoded +.
+              value: {{ printf "postgres://?host=%s&port=%v&dbname=%s&user=%s&sslmode=%s" (.Values.externalPostgres.host | urlquery) .Values.externalPostgres.port (.Values.externalPostgres.database | urlquery) (.Values.externalPostgres.username | urlquery) (.Values.externalPostgres.sslmode | urlquery) | replace "+" "%20" | quote }}
+            {{- end }}
             # --- Encryption key ---
             - name: DURPDEPLOY_SECRET_KEY
               valueFrom:

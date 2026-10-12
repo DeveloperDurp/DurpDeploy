@@ -849,14 +849,14 @@ TEMPLATE_ID=$(api_item_id_by_name "$BASE/api/v1/templates" bare-path-template)
 echo "  Bare-path API step, variable, and template writes: OK"
 
 # Exercise streams through the running binary's real middleware stack.
-# Curl's timeout is expected: these endpoints stay open after replay.
+# Completed deployments close their streams after replay.
 assert_log_stream() {
     local path="$1" marker="$2" content_type="${3:-text/event-stream}" code status=0
     code=$(curl -sS -N -m 2 -b "$COOKIES" \
         -H "Authorization: Bearer $API_TOKEN" \
         -D "$TMP/stream-headers" -o "$TMP/stream-body" -w '%{http_code}' \
         "$BASE$path" 2>/dev/null) || status=$?
-    [[ "$status" == "28" && "$code" == "200" ]] || {
+    [[ "$status" == "0" && "$code" == "200" ]] || {
         echo "FAIL: stream $path returned code=$code curl=$status"; exit 1
     }
     grep -qi "^content-type: $content_type" "$TMP/stream-headers" || {
@@ -865,6 +865,11 @@ assert_log_stream() {
     grep -q "$marker" "$TMP/stream-body" || {
         echo "FAIL: stream $path did not replay expected log"; exit 1
     }
+    if [[ "$content_type" == "text/event-stream" ]]; then
+        grep -q '^event: complete$' "$TMP/stream-body" || {
+            echo "FAIL: stream $path did not signal completion"; exit 1
+        }
+    fi
 }
 
 echo "=== Runbook API and web contracts ==="

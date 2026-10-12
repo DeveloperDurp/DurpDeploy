@@ -99,6 +99,7 @@ func TestStreamLogs_ReplaysHistoricalLogs(t *testing.T) {
 	}
 
 	r := chi.NewRouter()
+	r.Use(streamTestAuth(t, repo))
 	r.Get("/deployments/{id}/logs/stream", h.StreamLogs)
 	srv := httptest.NewServer(r)
 	defer srv.Close()
@@ -130,7 +131,7 @@ func TestStreamLogs_ReplaysHistoricalLogs(t *testing.T) {
 	var lines []string
 	for scanner.Scan() {
 		line := scanner.Text()
-		if line != "" {
+		if strings.HasPrefix(line, "data: ") {
 			lines = append(lines, line)
 		}
 		if len(lines) >= 2 {
@@ -155,6 +156,16 @@ func TestStreamLogs_ReplaysHistoricalLogs(t *testing.T) {
 
 	go func() {
 		time.Sleep(50 * time.Millisecond)
+		if _, err := repo.Queries.CreateDeploymentLog(
+			t.Context(),
+			db.CreateDeploymentLogParams{
+				DeploymentID: deployment.ID,
+				Line:         "live log",
+			},
+		); err != nil {
+			t.Error(err)
+			return
+		}
 		broker.Broadcast(deployment.ID, "live log")
 	}()
 
@@ -208,9 +219,17 @@ func TestStreamLogs_BadID(t *testing.T) {
 func TestStreamLogs_RealServer(t *testing.T) {
 	broker := runner.NewLogBroker()
 	repo := setupTestRepo(t)
+	seedStreamTestDeployment(t, repo)
+	if _, err := repo.Queries.CreateDeploymentLog(
+		t.Context(),
+		db.CreateDeploymentLogParams{DeploymentID: 1, Line: "real server log"},
+	); err != nil {
+		t.Fatal(err)
+	}
 	h := NewLogHandler(broker, repo)
 
 	r := chi.NewRouter()
+	r.Use(streamTestAuth(t, repo))
 	r.Get("/deployments/{id}/logs/stream", h.StreamLogs)
 	srv := httptest.NewServer(r)
 	defer srv.Close()
@@ -272,6 +291,7 @@ func TestStreamLogs_RealServer(t *testing.T) {
 func TestStreamLogs_ClientDisconnect(t *testing.T) {
 	broker := runner.NewLogBroker()
 	repo := setupTestRepo(t)
+	seedStreamTestDeployment(t, repo)
 	h := NewLogHandler(broker, repo)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -279,11 +299,16 @@ func TestStreamLogs_ClientDisconnect(t *testing.T) {
 	started := make(chan struct{})
 	done := make(chan struct{})
 	srv := httptest.NewServer(
-		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			close(started)
-			h.streamDeploymentLogs(w, r, 1)
-			close(done)
-		}),
+		streamTestAuth(
+			t,
+			repo,
+		)(
+			http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				close(started)
+				h.streamDeploymentLogs(w, r, 1)
+				close(done)
+			}),
+		),
 	)
 	defer srv.Close()
 	defer srv.CloseClientConnections()

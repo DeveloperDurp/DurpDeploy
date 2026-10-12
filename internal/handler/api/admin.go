@@ -8,6 +8,8 @@ import (
 	"strconv"
 
 	"durpdeploy/internal/db"
+	eventbus "durpdeploy/internal/events"
+	"durpdeploy/internal/notify"
 	"durpdeploy/internal/repository"
 )
 
@@ -122,6 +124,11 @@ func (h *AdminHandler) ListNotifications(
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	for i := range events {
+		events[i].Results = eventbus.PublicNotificationResults(
+			events[i].Results,
+		)
+	}
 	RespondJSON(w, http.StatusOK, events)
 }
 
@@ -154,26 +161,33 @@ func (h *AdminHandler) GetNotificationSettings(
 }
 
 type notificationSettingsResponse struct {
-	ID                int64   `json:"id"`
-	SlackWebhookURL   *string `json:"slack_webhook_url"`
-	NotifyEmails      *string `json:"notify_emails"`
-	GotifyURL         *string `json:"gotify_url"`
-	GotifyToken       *string `json:"gotify_token"`
-	DiscordWebhookURL *string `json:"discord_webhook_url"`
-	UpdatedAt         int64   `json:"updated_at"`
+	SlackWebhookURLConfigured   bool    `json:"slack_webhook_url_configured"`
+	GotifyTokenConfigured       bool    `json:"gotify_token_configured"`
+	DiscordWebhookURLConfigured bool    `json:"discord_webhook_url_configured"`
+	ID                          int64   `json:"id"`
+	SlackWebhookURL             *string `json:"slack_webhook_url"`
+	NotifyEmails                *string `json:"notify_emails"`
+	GotifyURL                   *string `json:"gotify_url"`
+	GotifyToken                 *string `json:"gotify_token"`
+	DiscordWebhookURL           *string `json:"discord_webhook_url"`
+	UpdatedAt                   int64   `json:"updated_at"`
 }
 
 func newNotificationSettingsResponse(
 	s db.GlobalNotification,
 ) notificationSettingsResponse {
+	empty := ""
 	return notificationSettingsResponse{
-		ID:                s.ID,
-		SlackWebhookURL:   nullStringPtr(s.SlackWebhookUrl),
-		NotifyEmails:      nullStringPtr(s.NotifyEmails),
-		GotifyURL:         nullStringPtr(s.GotifyUrl),
-		GotifyToken:       nullStringPtr(s.GotifyToken),
-		DiscordWebhookURL: nullStringPtr(s.DiscordWebhookUrl),
-		UpdatedAt:         s.UpdatedAt,
+		ID:                          s.ID,
+		SlackWebhookURL:             &empty,
+		SlackWebhookURLConfigured:   s.SlackWebhookUrl.String != "",
+		NotifyEmails:                nullStringPtr(s.NotifyEmails),
+		GotifyURL:                   nullStringPtr(s.GotifyUrl),
+		GotifyToken:                 &empty,
+		GotifyTokenConfigured:       s.GotifyToken.String != "",
+		DiscordWebhookURL:           &empty,
+		DiscordWebhookURLConfigured: s.DiscordWebhookUrl.String != "",
+		UpdatedAt:                   s.UpdatedAt,
 	}
 }
 
@@ -203,19 +217,28 @@ func (h *AdminHandler) UpdateNotificationSettings(
 	r *http.Request,
 ) {
 	var req struct {
-		SlackWebhookURL   string `json:"slack_webhook_url"`
-		NotifyEmails      string `json:"notify_emails"`
-		GotifyURL         string `json:"gotify_url"`
-		GotifyToken       string `json:"gotify_token"`
-		DiscordWebhookURL string `json:"discord_webhook_url"`
+		ClearSlackWebhookURL   bool   `json:"clear_slack_webhook_url"`
+		ClearGotifyToken       bool   `json:"clear_gotify_token"`
+		ClearDiscordWebhookURL bool   `json:"clear_discord_webhook_url"`
+		SlackWebhookURL        string `json:"slack_webhook_url"`
+		NotifyEmails           string `json:"notify_emails"`
+		GotifyURL              string `json:"gotify_url"`
+		GotifyToken            string `json:"gotify_token"`
+		DiscordWebhookURL      string `json:"discord_webhook_url"`
 	}
 	if !readJSONBool(w, r, &req) {
 		return
 	}
 
-	webhook := trimSpace(req.SlackWebhookURL)
+	webhook := notify.CredentialValue(
+		req.SlackWebhookURL,
+		req.ClearSlackWebhookURL,
+	)
 	gotifyURL := trimSpace(req.GotifyURL)
-	discordWebhook := trimSpace(req.DiscordWebhookURL)
+	discordWebhook := notify.CredentialValue(
+		req.DiscordWebhookURL,
+		req.ClearDiscordWebhookURL,
+	)
 	if err := validateNotificationURLs(
 		webhook,
 		gotifyURL,
@@ -228,6 +251,9 @@ func (h *AdminHandler) UpdateNotificationSettings(
 	settings, err := h.repo.Queries.UpdateGlobalNotifications(
 		r.Context(),
 		db.UpdateGlobalNotificationsParams{
+			ClearSlackWebhookUrl:   boolInt(req.ClearSlackWebhookURL),
+			ClearGotifyToken:       boolInt(req.ClearGotifyToken),
+			ClearDiscordWebhookUrl: boolInt(req.ClearDiscordWebhookURL),
 			SlackWebhookUrl: sql.NullString{
 				String: webhook,
 				Valid:  webhook != "",
@@ -251,7 +277,11 @@ func (h *AdminHandler) UpdateNotificationSettings(
 		},
 	)
 	if err != nil {
-		RespondError(w, http.StatusInternalServerError, err.Error())
+		RespondError(
+			w,
+			http.StatusInternalServerError,
+			"could not save notification settings",
+		)
 		return
 	}
 	RespondJSON(w, http.StatusOK, newNotificationSettingsResponse(settings))

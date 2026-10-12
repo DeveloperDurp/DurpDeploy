@@ -8,6 +8,7 @@ import (
 
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/events"
 	"durpdeploy/internal/repository"
 	"durpdeploy/views/pages"
 )
@@ -70,6 +71,11 @@ func (h *AdminHandler) ListNotifications(
 	}
 
 	user := auth.UserFromContext(r.Context())
+	for i := range entries {
+		entries[i].Results = events.PublicNotificationResults(
+			entries[i].Results,
+		)
+	}
 	if err := pages.NotificationsPage(entries, r.URL.Path, user).
 		Render(r.Context(), w); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -98,16 +104,17 @@ func (h *AdminHandler) GetNotificationSettings(
 
 // UpdateNotificationSettings saves the global Slack webhook URL,
 // comma-separated notify_emails list, Gotify server URL/token, and/or
-// Discord webhook URL. Any field may be blank to disable that notifier.
+// Discord webhook URL. Blank credentials preserve their stored values.
+// Explicit clear flags remove credentials.
 func (h *AdminHandler) UpdateNotificationSettings(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	webhook := strings.TrimSpace(r.FormValue("slack_webhook_url"))
+	webhook := notificationCredential(r, "slack_webhook_url")
 	emails := strings.TrimSpace(r.FormValue("notify_emails"))
 	gotifyURL := strings.TrimSpace(r.FormValue("gotify_url"))
 	gotifyToken := strings.TrimSpace(r.FormValue("gotify_token"))
-	discordWebhook := strings.TrimSpace(r.FormValue("discord_webhook_url"))
+	discordWebhook := notificationCredential(r, "discord_webhook_url")
 
 	if err := validateNotificationURLs(
 		webhook,
@@ -121,6 +128,18 @@ func (h *AdminHandler) UpdateNotificationSettings(
 	_, err := h.repo.Queries.UpdateGlobalNotifications(
 		r.Context(),
 		db.UpdateGlobalNotificationsParams{
+			ClearSlackWebhookUrl: notificationClearFlag(
+				r,
+				"clear_slack_webhook_url",
+			),
+			ClearGotifyToken: notificationClearFlag(
+				r,
+				"clear_gotify_token",
+			),
+			ClearDiscordWebhookUrl: notificationClearFlag(
+				r,
+				"clear_discord_webhook_url",
+			),
 			SlackWebhookUrl: sql.NullString{
 				String: webhook,
 				Valid:  webhook != "",
@@ -141,7 +160,11 @@ func (h *AdminHandler) UpdateNotificationSettings(
 		},
 	)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(
+			w,
+			"could not save notification settings",
+			http.StatusInternalServerError,
+		)
 		return
 	}
 

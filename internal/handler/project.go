@@ -205,8 +205,8 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 
 // UpdateProjectNotifications saves the project's Slack webhook URL,
 // comma-separated notify_emails list, Gotify server URL/token, and/or
-// Discord webhook URL. Any field may be blank to disable that
-// notifier. Notification URLs are validated before storage so deploy events
+// Discord webhook URL. Blank credentials preserve their stored values.
+// Explicit clear flags remove credentials. URLs are validated so deploy events
 // cannot make server-side POSTs to local or private-network services.
 func (h *ProjectHandler) UpdateProjectNotifications(
 	w http.ResponseWriter,
@@ -218,11 +218,11 @@ func (h *ProjectHandler) UpdateProjectNotifications(
 		return
 	}
 
-	webhook := strings.TrimSpace(r.FormValue("slack_webhook_url"))
+	webhook := notificationCredential(r, "slack_webhook_url")
 	emails := strings.TrimSpace(r.FormValue("notify_emails"))
 	gotifyURL := strings.TrimSpace(r.FormValue("gotify_url"))
 	gotifyToken := strings.TrimSpace(r.FormValue("gotify_token"))
-	discordWebhook := strings.TrimSpace(r.FormValue("discord_webhook_url"))
+	discordWebhook := notificationCredential(r, "discord_webhook_url")
 
 	if err := validateNotificationURLs(
 		webhook,
@@ -236,6 +236,18 @@ func (h *ProjectHandler) UpdateProjectNotifications(
 	err = h.repo.Queries.UpdateProjectNotifications(
 		r.Context(),
 		db.UpdateProjectNotificationsParams{
+			ClearSlackWebhookUrl: notificationClearFlag(
+				r,
+				"clear_slack_webhook_url",
+			),
+			ClearGotifyToken: notificationClearFlag(
+				r,
+				"clear_gotify_token",
+			),
+			ClearDiscordWebhookUrl: notificationClearFlag(
+				r,
+				"clear_discord_webhook_url",
+			),
 			SlackWebhookUrl: sql.NullString{
 				String: webhook,
 				Valid:  webhook != "",
@@ -257,7 +269,11 @@ func (h *ProjectHandler) UpdateProjectNotifications(
 		},
 	)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(
+			w,
+			"could not save notification settings",
+			http.StatusInternalServerError,
+		)
 		return
 	}
 

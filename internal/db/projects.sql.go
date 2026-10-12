@@ -300,24 +300,36 @@ func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (P
 }
 
 const updateProjectNotifications = `-- name: UpdateProjectNotifications :exec
-UPDATE projects SET slack_webhook_url = ?, notify_emails = ?, gotify_url = ?, gotify_token = ?, discord_webhook_url = ? WHERE id = ?
+UPDATE projects SET
+    slack_webhook_url = CASE WHEN CAST(?1 AS INTEGER) = 1 THEN NULL ELSE COALESCE(NULLIF(CAST(?2 AS TEXT), ''), slack_webhook_url) END,
+    notify_emails = ?3,
+    gotify_url = ?4,
+    gotify_token = CASE WHEN CAST(?5 AS INTEGER) = 1 THEN NULL ELSE COALESCE(NULLIF(CAST(?6 AS TEXT), ''), gotify_token) END,
+    discord_webhook_url = CASE WHEN CAST(?7 AS INTEGER) = 1 THEN NULL ELSE COALESCE(NULLIF(CAST(?8 AS TEXT), ''), discord_webhook_url) END
+WHERE id = ?9
 `
 
 type UpdateProjectNotificationsParams struct {
-	SlackWebhookUrl   sql.NullString `json:"slack_webhook_url"`
-	NotifyEmails      sql.NullString `json:"notify_emails"`
-	GotifyUrl         sql.NullString `json:"gotify_url"`
-	GotifyToken       sql.NullString `json:"gotify_token"`
-	DiscordWebhookUrl sql.NullString `json:"discord_webhook_url"`
-	ID                int64          `json:"id"`
+	ClearSlackWebhookUrl   int64          `json:"clear_slack_webhook_url"`
+	SlackWebhookUrl        sql.NullString `json:"slack_webhook_url"`
+	NotifyEmails           sql.NullString `json:"notify_emails"`
+	GotifyUrl              sql.NullString `json:"gotify_url"`
+	ClearGotifyToken       int64          `json:"clear_gotify_token"`
+	GotifyToken            sql.NullString `json:"gotify_token"`
+	ClearDiscordWebhookUrl int64          `json:"clear_discord_webhook_url"`
+	DiscordWebhookUrl      sql.NullString `json:"discord_webhook_url"`
+	ID                     int64          `json:"id"`
 }
 
 func (q *Queries) UpdateProjectNotifications(ctx context.Context, arg UpdateProjectNotificationsParams) error {
 	_, err := q.db.ExecContext(ctx, updateProjectNotifications,
+		arg.ClearSlackWebhookUrl,
 		arg.SlackWebhookUrl,
 		arg.NotifyEmails,
 		arg.GotifyUrl,
+		arg.ClearGotifyToken,
 		arg.GotifyToken,
+		arg.ClearDiscordWebhookUrl,
 		arg.DiscordWebhookUrl,
 		arg.ID,
 	)

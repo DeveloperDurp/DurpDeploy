@@ -31,8 +31,16 @@ Back up the matching encryption key separately from the database.
 ================================================================
 STEP 2 — Postgres
 ================================================================
-The chart does NOT install Postgres. You are responsible for a working
-server reachable as:
+The chart does not install Postgres. Supply a reachable server.
+Configure the connection as follows:
+
+{{- if .Values.externalPostgres.dsnSecret.name }}
+
+The Deployment loads its complete DSN from Secret
+{{ .Values.externalPostgres.dsnSecret.name }} with key
+{{ .Values.externalPostgres.dsnSecret.key }} in namespace {{ .Release.Namespace }}.
+This replaces the connection fields and password Secret reference.
+{{- else }}
 
   {{ .Values.externalPostgres.host }}:{{ .Values.externalPostgres.port }}
   database: {{ .Values.externalPostgres.database }}
@@ -64,9 +72,10 @@ with the same password:
   # ... configure Postgres with that password, then unset PG_PASSWORD
 {{- end }}
 
-Current chart limitation: the assembled database URI references the password
-before its environment variable is defined. Supply a complete DURPDEPLOY_DB
-through extraEnv using a Secret reference as shown in the chart README.
+The Deployment loads this Secret into PGPASSWORD before its database DSN.
+The driver reads the password separately, without URL interpolation.
+For additional connection options, use externalPostgres.dsnSecret.
+{{- end }}
 
 ================================================================
 STEP 3 — Create the first admin user

@@ -232,13 +232,16 @@ type swaggerUser struct {
 // GlobalNotification holds the global notification settings.
 // swagger:model GlobalNotification
 type swaggerGlobalNotification struct {
-	ID                int64   `json:"id"`
-	SlackWebhookURL   *string `json:"slack_webhook_url"`
-	NotifyEmails      *string `json:"notify_emails"`
-	GotifyURL         *string `json:"gotify_url"`
-	GotifyToken       *string `json:"gotify_token"`
-	DiscordWebhookURL *string `json:"discord_webhook_url"`
-	UpdatedAt         int64   `json:"updated_at"`
+	SlackWebhookURLConfigured   bool    `json:"slack_webhook_url_configured"`
+	GotifyTokenConfigured       bool    `json:"gotify_token_configured"`
+	DiscordWebhookURLConfigured bool    `json:"discord_webhook_url_configured"`
+	ID                          int64   `json:"id"`
+	SlackWebhookURL             *string `json:"slack_webhook_url"`
+	NotifyEmails                *string `json:"notify_emails"`
+	GotifyURL                   *string `json:"gotify_url"`
+	GotifyToken                 *string `json:"gotify_token"`
+	DiscordWebhookURL           *string `json:"discord_webhook_url"`
+	UpdatedAt                   int64   `json:"updated_at"`
 }
 
 // Variable is a project or environment-scoped variable.
@@ -321,40 +324,49 @@ type swaggerProjectListResponse []swaggerProjectResponse
 // ProjectResponse is the JSON shape for a project.
 // swagger:model ProjectResponse
 type swaggerProjectResponse struct {
-	ID                int64  `json:"id"`
-	Name              string `json:"name"`
-	Description       string `json:"description"`
-	CreatedAt         int64  `json:"created_at"`
-	LifecycleID       *int64 `json:"lifecycle_id"`
-	SlackWebhookURL   string `json:"slack_webhook_url"`
-	NotifyEmails      string `json:"notify_emails"`
-	GotifyURL         string `json:"gotify_url"`
-	GotifyToken       string `json:"gotify_token"`
-	DiscordWebhookURL string `json:"discord_webhook_url"`
+	SlackWebhookURLConfigured   bool   `json:"slack_webhook_url_configured"`
+	GotifyTokenConfigured       bool   `json:"gotify_token_configured"`
+	DiscordWebhookURLConfigured bool   `json:"discord_webhook_url_configured"`
+	ID                          int64  `json:"id"`
+	Name                        string `json:"name"`
+	Description                 string `json:"description"`
+	CreatedAt                   int64  `json:"created_at"`
+	LifecycleID                 *int64 `json:"lifecycle_id"`
+	SlackWebhookURL             string `json:"slack_webhook_url"`
+	NotifyEmails                string `json:"notify_emails"`
+	GotifyURL                   string `json:"gotify_url"`
+	GotifyToken                 string `json:"gotify_token"`
+	DiscordWebhookURL           string `json:"discord_webhook_url"`
 }
 
 // ProjectNotificationResponse is the notification settings for a project.
 // swagger:model ProjectNotificationResponse
 type swaggerProjectNotificationResponse struct {
-	ID                int64  `json:"id"`
-	Name              string `json:"name"`
-	Description       string `json:"description"`
-	SlackWebhookURL   string `json:"slack_webhook_url"`
-	NotifyEmails      string `json:"notify_emails"`
-	GotifyURL         string `json:"gotify_url"`
-	GotifyToken       string `json:"gotify_token"`
-	DiscordWebhookURL string `json:"discord_webhook_url"`
-	CreatedAt         int64  `json:"created_at"`
+	SlackWebhookURLConfigured   bool   `json:"slack_webhook_url_configured"`
+	GotifyTokenConfigured       bool   `json:"gotify_token_configured"`
+	DiscordWebhookURLConfigured bool   `json:"discord_webhook_url_configured"`
+	ID                          int64  `json:"id"`
+	Name                        string `json:"name"`
+	Description                 string `json:"description"`
+	SlackWebhookURL             string `json:"slack_webhook_url"`
+	NotifyEmails                string `json:"notify_emails"`
+	GotifyURL                   string `json:"gotify_url"`
+	GotifyToken                 string `json:"gotify_token"`
+	DiscordWebhookURL           string `json:"discord_webhook_url"`
+	CreatedAt                   int64  `json:"created_at"`
 }
 
 // ProjectNotificationRequest updates a project's notification settings.
 // swagger:model ProjectNotificationRequest
 type swaggerProjectNotificationRequest struct {
-	SlackWebhookURL   string `json:"slack_webhook_url"`
-	NotifyEmails      string `json:"notify_emails"`
-	GotifyURL         string `json:"gotify_url"`
-	GotifyToken       string `json:"gotify_token"`
-	DiscordWebhookURL string `json:"discord_webhook_url"`
+	ClearSlackWebhookURL   bool   `json:"clear_slack_webhook_url"`
+	ClearGotifyToken       bool   `json:"clear_gotify_token"`
+	ClearDiscordWebhookURL bool   `json:"clear_discord_webhook_url"`
+	SlackWebhookURL        string `json:"slack_webhook_url"`
+	NotifyEmails           string `json:"notify_emails"`
+	GotifyURL              string `json:"gotify_url"`
+	GotifyToken            string `json:"gotify_token"`
+	DiscordWebhookURL      string `json:"discord_webhook_url"`
 }
 
 // ProjectRequest is the body for create/update project.
@@ -578,11 +590,14 @@ type swaggerUserListResponse []swaggerUserResponse
 // GlobalNotificationRequest is the body for global notification settings.
 // swagger:model GlobalNotificationRequest
 type swaggerGlobalNotificationRequest struct {
-	SlackWebhookURL   string `json:"slack_webhook_url"`
-	NotifyEmails      string `json:"notify_emails"`
-	GotifyURL         string `json:"gotify_url"`
-	GotifyToken       string `json:"gotify_token"`
-	DiscordWebhookURL string `json:"discord_webhook_url"`
+	ClearSlackWebhookURL   bool   `json:"clear_slack_webhook_url"`
+	ClearGotifyToken       bool   `json:"clear_gotify_token"`
+	ClearDiscordWebhookURL bool   `json:"clear_discord_webhook_url"`
+	SlackWebhookURL        string `json:"slack_webhook_url"`
+	NotifyEmails           string `json:"notify_emails"`
+	GotifyURL              string `json:"gotify_url"`
+	GotifyToken            string `json:"gotify_token"`
+	DiscordWebhookURL      string `json:"discord_webhook_url"`
 }
 
 // EmptyResponse is returned for no-content endpoints.

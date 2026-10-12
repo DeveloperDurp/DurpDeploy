@@ -1149,6 +1149,34 @@ func TestToggleSchedule(t *testing.T) {
 	}
 }
 
+func (h *harness) authenticatedStreamRequest(
+	t *testing.T, req *http.Request, user *db.User,
+) *http.Request {
+	t.Helper()
+	token, _, hash, err := auth.MintApiToken()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = h.repo.Queries.CreateApiToken(t.Context(), db.CreateApiTokenParams{
+		ID: uuid.NewString(), UserID: user.ID, TokenHash: hash,
+		Name: "Stream", Scope: "global",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	var authenticated *http.Request
+	auth.ApiTokenMiddleware(h.repo)(
+		http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+			authenticated = r
+		}),
+	).ServeHTTP(httptest.NewRecorder(), req)
+	if authenticated == nil {
+		t.Fatal("stream fixture authentication failed")
+	}
+	return authenticated
+}
+
 func TestStreamLogs_SSE(t *testing.T) {
 	h := newAPIHarness(t)
 	u := seedAPIUser(t, h.repo, "admin@example.com", "admin")
@@ -1176,7 +1204,7 @@ func TestStreamLogs_SSE(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/deployments/%d/logs/stream", d.ID), nil).
 		WithContext(ctx)
-	req = withAPIUser(req, u)
+	req = h.authenticatedStreamRequest(t, req, u)
 	req = withAPIURLParam(req, "id", fmt.Sprint(d.ID))
 	srv := httptest.NewServer(
 		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -1209,6 +1237,7 @@ func TestStreamLogs_SSE(t *testing.T) {
 
 func TestStreamLogs_StructuredReplayAcrossBatchBoundary(t *testing.T) {
 	h := newAPIHarness(t)
+	u := seedAPIUser(t, h.repo, "stream@example.com", "admin")
 	p := seedProject(t, h.repo)
 	e := seedEnv(t, h.repo)
 	r := seedRelease(t, h.repo, p.ID)
@@ -1218,11 +1247,13 @@ func TestStreamLogs_StructuredReplayAcrossBatchBoundary(t *testing.T) {
 		log, err := h.repo.Queries.CreateStepDeploymentLog(
 			t.Context(),
 			db.CreateStepDeploymentLogParams{
-				DeploymentID: d.ID, StepName: sql.NullString{String: "duplicate", Valid: true},
+				DeploymentID: d.ID,
+				StepName:     sql.NullString{String: "duplicate", Valid: true},
 				StepIndex: sql.NullInt64{
 					Int64: 1,
 					Valid: true,
-				}, Line: fmt.Sprintf("line-%d", i),
+				},
+				Line: fmt.Sprintf("line-%d", i),
 			},
 		)
 		if err != nil {
@@ -1252,6 +1283,7 @@ func TestStreamLogs_StructuredReplayAcrossBatchBoundary(t *testing.T) {
 			)
 			req = withAPIURLParam(req, "id", fmt.Sprint(d.ID))
 			req.Header.Set("Last-Event-ID", test.header)
+			req = h.authenticatedStreamRequest(t, req, u)
 			server := httptest.NewServer(
 				http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 					api.NewLogHandler(h.broker, h.repo).StreamLogs(w, req)
@@ -1334,7 +1366,7 @@ func TestStreamLogs_NDJSON(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/deployments/%d/logs/stream?format=ndjson", d.ID), nil).
 		WithContext(ctx)
-	req = withAPIUser(req, u)
+	req = h.authenticatedStreamRequest(t, req, u)
 	req = withAPIURLParam(req, "id", fmt.Sprint(d.ID))
 	srv := httptest.NewServer(
 		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
