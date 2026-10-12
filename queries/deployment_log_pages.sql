@@ -1,7 +1,7 @@
 -- name: ListDeploymentLogsBefore :many
 SELECT * FROM deployment_logs
 WHERE deployment_id = sqlc.arg(deployment_id)
-  AND (CAST(sqlc.arg(before_id) AS INTEGER) = 0 OR id < CAST(sqlc.arg(before_id) AS INTEGER))
+  AND (CAST(sqlc.arg(before_id) AS BIGINT) = 0 OR id < CAST(sqlc.arg(before_id) AS BIGINT))
 ORDER BY id DESC LIMIT sqlc.arg(page_limit);
 
 -- name: ListDeploymentLogStateMetadata :many

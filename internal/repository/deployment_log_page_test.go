@@ -2,6 +2,7 @@ package repository
 
 import (
 	"database/sql"
+	"math"
 	"testing"
 
 	"durpdeploy/internal/db"
@@ -75,6 +76,15 @@ func TestLogPagesAcrossDatabases(t *testing.T) {
 		if len(page.Items) != 500 || len(older.Items) != 2 ||
 			older.NextBefore != 0 || older.LastID >= page.Items[0].ID {
 			t.Fatal("invalid page boundaries")
+		}
+		for _, cursor := range []int64{math.MaxInt32 + 1, math.MaxInt64} {
+			large, err := repo.ReadLogPage(t.Context(), deployment.ID, cursor)
+			if err != nil {
+				t.Fatalf("read 64-bit cursor %d: %v", cursor, err)
+			}
+			if len(large.Items) != 500 || large.LastID != page.LastID {
+				t.Fatalf("incorrect page for 64-bit cursor %d", cursor)
+			}
 		}
 		states, err := repo.Queries.ListDeploymentLogStateMetadata(
 			t.Context(),

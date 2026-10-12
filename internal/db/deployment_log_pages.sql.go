@@ -69,7 +69,7 @@ func (q *Queries) ListDeploymentLogStateMetadata(ctx context.Context, arg ListDe
 const listDeploymentLogsBefore = `-- name: ListDeploymentLogsBefore :many
 SELECT id, deployment_id, step_name, line, created_at, step_index, step_state FROM deployment_logs
 WHERE deployment_id = ?1
-  AND (CAST(?2 AS INTEGER) = 0 OR id < CAST(?2 AS INTEGER))
+  AND (CAST(?2 AS BIGINT) = 0 OR id < CAST(?2 AS BIGINT))
 ORDER BY id DESC LIMIT ?3
 `
 
