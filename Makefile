@@ -265,7 +265,7 @@ agent-smoke-test:
 	bash scripts/agent_smoke_test.sh
 
 swagger-ui-copy: npm-install
-	bash scripts/copy_swagger_ui.sh node_modules/swagger-ui-dist static/swagger-ui
+	sh scripts/copy_swagger_ui.sh node_modules/swagger-ui-dist static/swagger-ui
 
 npm-install:
 	npm ci --ignore-scripts

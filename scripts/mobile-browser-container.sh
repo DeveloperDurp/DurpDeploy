@@ -20,7 +20,7 @@ trap copy_receipt EXIT
 
 mkdir -p "$evidence_dir"
 templ generate
-bash scripts/copy_swagger_ui.sh \
+sh scripts/copy_swagger_ui.sh \
 	/opt/mobile-browser/node_modules/swagger-ui-dist static/swagger-ui
 
 MOBILE_EVIDENCE_DIR="$evidence_dir" \

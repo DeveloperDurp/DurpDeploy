@@ -181,7 +181,7 @@ jobs:
           docker exec -e NODE_PATH=/opt/mobile-browser/node_modules \
             "$AUTH_MFA_CONTAINER" sh -ec '
             ln -s /opt/mobile-browser/node_modules node_modules &&
-            bash scripts/copy_swagger_ui.sh \
+            sh scripts/copy_swagger_ui.sh \
               /opt/mobile-browser/node_modules/swagger-ui-dist static/swagger-ui &&
             make auth-mfa-e2e-sqlite'
 

@@ -1,7 +1,7 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/sh
+set -eu
 
-if [[ $# -ne 2 ]]; then
+if [ "$#" -ne 2 ]; then
 	echo "Usage: $0 SOURCE_DIR DESTINATION_DIR" >&2
 	exit 2
 fi
