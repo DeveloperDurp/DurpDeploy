@@ -9,6 +9,9 @@ host/container modes and ready Docker/Podman container capabilities.
 ## Endpoints and payloads
 
 Release packages require the optional `X-DurpDeploy-Artifact: artifact/1` poll capability.
+Each accepted poll replaces the stored package capability.
+If a fresh poll omits this header, the server removes package eligibility and fails incompatible waiting jobs.
+
 Package jobs also require `X-DurpDeploy-Staging: staging/1`.
 The encrypted release object includes `artifact: {"sha256":"...","size":123}`.
 The server selects package-capable agents before it queues these jobs.

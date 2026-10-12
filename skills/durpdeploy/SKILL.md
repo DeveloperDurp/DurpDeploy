@@ -632,12 +632,15 @@ The server purges transfer snapshots when the deployment succeeds, fails, or is 
 Agents remove their private staging files before reporting completion or cancellation.
 Host jobs stop all remaining descendants before transfer, retry, or cleanup, including detached processes.
 If process cleanup cannot be confirmed, the agent retains staging and exits for service-wide cleanup.
+
 Staging is not shared between deployments or runbooks.
 Existing local staging remains available within a runbook execution.
 Staging is not durable storage for an approval pause or restart.
+
 Pinned release packages use `ARTIFACT_PATH` outside writable staging.
 Container jobs mount this package at `/artifacts` with read-only access.
 Host jobs receive a private package directory with read-only file permissions.
+If an agent withdraws `artifact/1`, incompatible waiting package jobs fail before dispatch.
 
 Local steps accept `network_mode` (`none` by default, or `bridge`). Artifact
 gates use `approval_artifact_path`, `approval_review_path`, and

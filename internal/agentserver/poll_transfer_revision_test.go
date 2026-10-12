@@ -8,22 +8,28 @@ import (
 	"testing"
 	"time"
 
+	"durpdeploy/internal/db"
 	"durpdeploy/internal/staging"
 	agentartifact "github.com/DeveloperDurp/durpdeploy-agent/artifact"
 	agentproto "github.com/DeveloperDurp/durpdeploy-agent/protocol"
 )
 
 func TestWaitingPollCannotBorrowStagingCapability(t *testing.T) {
-	testWaitingPollCannotBorrowTransferCapability(t, false)
+	testWaitingPollCannotBorrowTransferCapability(t, false, true)
 }
 
 func TestWaitingPollCannotBorrowArtifactCapability(t *testing.T) {
-	testWaitingPollCannotBorrowTransferCapability(t, true)
+	testWaitingPollCannotBorrowTransferCapability(t, true, false)
+}
+
+func TestArtifactCapabilityWithdrawalFailsWaitingPackage(t *testing.T) {
+	testWaitingPollCannotBorrowTransferCapability(t, true, true)
 }
 
 func testWaitingPollCannotBorrowTransferCapability(
 	t *testing.T,
 	packaged bool,
+	withdraw bool,
 ) {
 	f := newAgentFixtureWithDSN(
 		t,
@@ -84,23 +90,49 @@ func testWaitingPollCannotBorrowTransferCapability(
 	case <-time.After(3 * time.Second):
 		t.Fatal("stale unstaged poll did not return")
 	}
-	// A later unstaged request must not destroy the queued staged claim.
-	staleCtx, stopStale := context.WithCancel(t.Context())
-	stale := startConcurrentPoll(t, f, concurrentPollCall{
-		ctx:     staleCtx,
-		body:    `{"protocol":"agent/1","agent_version":"stale-staging"}`,
-		staging: packaged,
-	})
-	waitPollVersion(t, f, "stale-staging")
-	stopStale()
-	<-stale
-	var waiting int
-	if err := f.repo.DB.QueryRowContext(
-		t.Context(),
-		"SELECT COUNT(*) FROM remote_step_runs WHERE deployment_id=? AND state='waiting'",
-		id,
-	).Scan(&waiting); err != nil || waiting != 1 {
-		t.Fatalf("stale poll invalidated staged queue: %d %v", waiting, err)
+	if withdraw {
+		// A fresh poll withdraws package support. Staging support stays sticky.
+		ctx, stop := context.WithCancel(t.Context())
+		fresh := startConcurrentPoll(t, f, concurrentPollCall{
+			ctx:     ctx,
+			body:    `{"protocol":"agent/1","agent_version":"withdrawn-package"}`,
+			staging: packaged,
+		})
+		waitPollVersion(t, f, "withdrawn-package")
+		stop()
+		<-fresh
+		runs, err := f.repo.Queries.ListRemoteStepRuns(t.Context(),
+			db.ListRemoteStepRunsParams{DeploymentID: id, StepIndex: 0})
+		if err != nil || len(runs) != 1 {
+			t.Fatalf("waiting runs=%v error=%v", runs, err)
+		}
+		if packaged {
+			if runs[0].State != "failed" || !runs[0].FinishedAt.Valid {
+				t.Fatalf(
+					"withdrawn package capability retained waiting work: %+v",
+					runs[0],
+				)
+			}
+			var eligible int
+			if err := f.repo.DB.QueryRowContext(
+				t.Context(),
+				"SELECT COUNT(*) FROM eligible_remote_step_agents WHERE deployment_id=? AND step_index=0",
+				id,
+			).Scan(&eligible); err != nil || eligible != 0 {
+				t.Fatalf(
+					"withdrawn package capability remained eligible: %d %v",
+					eligible,
+					err,
+				)
+			}
+			return
+		}
+		if runs[0].State != "waiting" {
+			t.Fatalf(
+				"fresh unstaged poll invalidated staged queue: %+v",
+				runs[0],
+			)
+		}
 	}
 	request, err := http.NewRequestWithContext(t.Context(), "POST",
 		f.server.URL+agentproto.PollPath, strings.NewReader(pollBody))

@@ -76,13 +76,13 @@ func (r *Repository) RecordAgentPollCapabilities(
 					return err
 				}
 			}
+			if err := q.ClearAgentArtifactCapability(
+				ctx,
+				heartbeat.ID,
+			); err != nil {
+				return err
+			}
 			if request.Artifact {
-				if err := q.ClearAgentArtifactCapability(
-					ctx,
-					heartbeat.ID,
-				); err != nil {
-					return err
-				}
 				if err := q.AddAgentArtifactCapability(
 					ctx,
 					heartbeat.ID,
