@@ -281,14 +281,7 @@ and `deployment_variable_snapshots` use AES-256-GCM encryption before database s
 
 ### Key rotation runbook
 
-**Current limitation:** the CLI does not rotate encrypted TOTP seeds, stored
-agent identity ciphertext, or remote log scrub buffers. Installing its new key
-leaves those records encrypted with the old key and breaks TOTP verification.
-Do not use it on an instance containing these records until rotation covers
-them. Preserve the matching key with each database backup. This is an
-implementation gap, not a database-recovery procedure.
-
-For an eligible instance, first finish deployments and confirm remote cleanup.
+First finish deployments and confirm remote cleanup.
 Back up the database, matching key, and server identity. Stop all server and
 replication processes; an active server keeps the old key and can write
 old-key ciphertext after the rotation transaction. For Compose:
@@ -308,9 +301,9 @@ This one-shot command (`cmd/server/main.go: runSecretKey`):
 2. Generates a fresh random 32-byte key.
 3. In one transaction, re-encrypts project variables, release variables,
    lifecycle variables, deployment variable captures, package-repository credentials,
-   verification targets, and retained artifact-gate chunks.
-   A failure rolls back the transaction. The command does not migrate records
-   listed in the limitation above.
+   verification targets, retained artifact-gate chunks, TOTP seeds, pending TOTP enrollment seeds,
+   stored agent identities, pairing identities, and remote log scrub buffers.
+   A failure rolls back the transaction.
 4. Prints the new key (base64) to stdout.
 
 After successful rotation, write the exact printed key to the key source used
@@ -331,6 +324,12 @@ docker compose up -d --force-recreate app litestream
 Keep the old key with pre-rotation backups. Install the exact key printed by
 the CLI before starting the server; an independently generated key cannot
 decrypt the rotated data.
+
+Restart pending OIDC login flows after rotation. Their encrypted browser cookies
+use the old key and cannot be migrated by the database transaction.
+Agent dispatch payloads use agent certificates and do not require server-key rotation.
+The `--plaintext` option migrates legacy project and release variables.
+The command rejects this option when populated encrypted-only stores exist.
 
 ---
 
@@ -385,7 +384,6 @@ values:
 | **Container runtime compromise** | The embedded agent's socket can control the Docker or Podman host; container escape remains possible on a shared kernel | Use a dedicated host or disable the embedded agent and use standalone agents |
 | **Audit log retention / integrity** | Pruning is opt-in through `audit prune` and an operator-managed schedule; no tamper-proofing | Operator setup; integrity remains future work |
 | **Password reset flow** | No self-service reset. Administrators reset passwords through Admin → Users → Edit | Self-service recovery remains future work |
-| **Incomplete server-key rotation** | TOTP seeds, stored agent identity ciphertext, and remote log scrub buffers are not re-encrypted by the CLI | Extend rotation before using it on instances containing these records |
 
 ---
 

@@ -57,7 +57,18 @@ func rotateStoredCredentials(
 			return err
 		}
 	}
-	return rotateVerificationTargets(ctx, q, rotation)
+	if err := rotateVerificationTargets(ctx, q, rotation); err != nil {
+		return err
+	}
+	for _, rotate := range []func(context.Context, *db.Queries, secretKeyRotation) error{
+		rotateMFAState, rotateAgentIdentity, rotatePairingIdentity,
+		rotateRemoteClaimLogBuffer, rotateRemoteStepLogBuffer,
+	} {
+		if err := rotate(ctx, q, rotation); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func rotateArtifactGateChunks(
