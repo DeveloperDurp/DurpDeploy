@@ -20,8 +20,8 @@ var (
 )
 
 // CredentialValue applies an explicit clear before validating a replacement.
-func CredentialValue(raw string, clear bool) string {
-	if clear {
+func CredentialValue(raw string, clearRequested bool) string {
+	if clearRequested {
 		return ""
 	}
 	return strings.TrimSpace(raw)

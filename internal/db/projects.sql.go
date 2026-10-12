@@ -300,7 +300,13 @@ func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (P
 }
 
 const updateProjectNotifications = `-- name: UpdateProjectNotifications :exec
-UPDATE projects SET slack_webhook_url = CASE WHEN CAST(?1 AS INTEGER) = 1 THEN NULL WHEN COALESCE(CAST(?2 AS TEXT), '') = '' THEN slack_webhook_url ELSE CAST(?2 AS TEXT) END, notify_emails = ?3, gotify_url = ?4, gotify_token = CASE WHEN CAST(?5 AS INTEGER) = 1 THEN NULL WHEN COALESCE(CAST(?6 AS TEXT), '') = '' THEN gotify_token ELSE CAST(?6 AS TEXT) END, discord_webhook_url = CASE WHEN CAST(?7 AS INTEGER) = 1 THEN NULL WHEN COALESCE(CAST(?8 AS TEXT), '') = '' THEN discord_webhook_url ELSE CAST(?8 AS TEXT) END WHERE id = ?9
+UPDATE projects SET
+    slack_webhook_url = CASE WHEN CAST(?1 AS INTEGER) = 1 THEN NULL ELSE COALESCE(NULLIF(CAST(?2 AS TEXT), ''), slack_webhook_url) END,
+    notify_emails = ?3,
+    gotify_url = ?4,
+    gotify_token = CASE WHEN CAST(?5 AS INTEGER) = 1 THEN NULL ELSE COALESCE(NULLIF(CAST(?6 AS TEXT), ''), gotify_token) END,
+    discord_webhook_url = CASE WHEN CAST(?7 AS INTEGER) = 1 THEN NULL ELSE COALESCE(NULLIF(CAST(?8 AS TEXT), ''), discord_webhook_url) END
+WHERE id = ?9
 `
 
 type UpdateProjectNotificationsParams struct {
