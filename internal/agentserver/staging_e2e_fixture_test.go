@@ -46,7 +46,25 @@ func newStagingE2EWithRuntime(t *testing.T, runtimeBinary string) *stagingE2E {
 func newStagingE2EWithTransfers(
 	t *testing.T, runtimeBinary string, wrap func(http.Handler) http.Handler,
 ) *stagingE2E {
+	return newStagingE2EConfigured(t, stagingFixtureConfig{
+		runtimeBinary: runtimeBinary, wrap: wrap, serverContainers: true,
+	})
+}
+
+type stagingFixtureConfig struct {
+	runtimeBinary    string
+	wrap             func(http.Handler) http.Handler
+	serverContainers bool
+}
+
+func newStagingE2EConfigured(
+	t *testing.T,
+	config stagingFixtureConfig,
+) *stagingE2E {
 	t.Helper()
+	if !config.serverContainers {
+		t.Setenv("DURPDEPLOY_EMBEDDED_AGENT_ENABLED", "false")
+	}
 	binary := os.Getenv("DURPDEPLOY_AGENT_E2E_BINARY")
 	if binary == "" {
 		t.Fatal(
@@ -73,15 +91,19 @@ func newStagingE2EWithTransfers(
 	}
 	f.repo.SetSecretBox(box)
 	r := runner.New(f.repo, f.broker)
-	if runtimeBinary != "" {
-		r = runner.NewWithPodmanBinaryForTest(f.repo, f.broker, runtimeBinary)
+	if config.runtimeBinary != "" {
+		r = runner.NewWithPodmanBinaryForTest(
+			f.repo,
+			f.broker,
+			config.runtimeBinary,
+		)
 	}
 	t.Cleanup(r.KillAll)
 	notifications := make(chan events.Event, 64)
 	bus := events.NewBus(f.repo)
 	bus.Register(stagingEventRecorder{notifications})
 	r.SetEventBus(bus)
-	if !r.ContainerRuntimeReady() {
+	if config.serverContainers && !r.ContainerRuntimeReady() {
 		t.Fatal("server container runtime is required")
 	}
 	user, err := f.repo.Queries.CreateUser(
@@ -123,8 +145,8 @@ func newStagingE2EWithTransfers(
 	)
 	t.Cleanup(app.Close)
 	s := &stagingE2E{f: f, app: app, token: token, notifications: notifications}
-	if wrap != nil {
-		f.server.Config.Handler = wrap(f.server.Config.Handler)
+	if config.wrap != nil {
+		f.server.Config.Handler = config.wrap(f.server.Config.Handler)
 	}
 	s.startAgent(t, binary, "test-agent", f.identityDir)
 	directory := t.TempDir()

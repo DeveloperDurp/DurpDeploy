@@ -19,6 +19,7 @@ Send JSON `{"claim_token":"..."}` without a `protocol` field.
 The server checks the agent identity and live claim before serving verified ZIP bytes.
 The response includes `X-Artifact-SHA256`, `X-Artifact-Size`, and `Content-Length`.
 The agent verifies these values against its authenticated payload pin.
+
 Invalid packages or changed pinned bytes return `422`.
 Authenticated package transfers pause the remote step timeout and keep heartbeats active.
 Transfers stop after five minutes without progress.
@@ -42,7 +43,7 @@ values, malformed JSON, and every other protocol value. Pairing remains
 | `POST /agent/v1/deployments/{id}/logs` | `LogBatchRequest` | Ordered line events. |
 | `POST /agent/v1/deployments/{id}/result` | `ResultRequest` | Result is `succeeded` or `failed`; v3 also accepts `cleanup_unconfirmed`. |
 | `POST /agent/v1/deployments/{id}/cancelled` | `CancelledRequest` | Cancellation acknowledgement is distinct from a normal result. |
-| `POST /agent/v1/deployments/{id}/artifact` | Object containing `claim_token` | Server-side ZIP download contract on the mTLS listener; requires the assigned agent's live step claim. No `protocol` field. The pinned agent executor does not yet use this endpoint. |
+| `POST /agent/v1/deployments/{id}/artifact` | Object containing `claim_token` | Claim-bound ZIP download for package-capable agents on the mTLS listener. No `protocol` field. |
 
 Version 3 polls require all four capability arrays:
 `supported_interpreters`, `execution_modes`, `container_runtimes`, and

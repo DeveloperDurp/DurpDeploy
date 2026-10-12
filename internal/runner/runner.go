@@ -203,7 +203,7 @@ func (r *DeploymentRunner) Run(
 			return
 		}
 	}
-	stage, err := r.stageArtifact(runCtx, deploymentID)
+	stage, err := r.stageArtifact(runCtx, deploymentID, steps)
 	if err != nil {
 		message := "Artifact staging failed: " + err.Error()
 		writer := &broadcastWriter{

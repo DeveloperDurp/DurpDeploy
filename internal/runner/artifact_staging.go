@@ -33,6 +33,7 @@ type artifactStage struct{ volume, keeper string }
 func (r *DeploymentRunner) stageArtifact(
 	ctx context.Context,
 	deploymentID int64,
+	steps []deploymentStep,
 ) (result artifactStage, err error) {
 	_, err = r.repo.Queries.GetDeploymentArtifact(ctx, deploymentID)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -41,27 +42,42 @@ func (r *DeploymentRunner) stageArtifact(
 	if err != nil {
 		return result, err
 	}
-	if r.localErr != nil {
+	local := false
+	for _, step := range steps {
+		if step.ExecutionTarget != "agent" {
+			local = true
+			break
+		}
+	}
+	if local && r.localErr != nil {
 		return result, r.localErr
 	}
-	recorded, err := r.repo.Queries.RecordContainerNamespace(
-		ctx,
-		db.RecordContainerNamespaceParams{
-			DeploymentID: deploymentID,
-			Namespace:    sql.NullString{String: r.engine.scope(), Valid: true},
-		},
-	)
-	if err != nil {
-		return result, err
-	}
-	if recorded != 1 {
-		return result, errContainerCleanup
+	if local {
+		recorded, err := r.repo.Queries.RecordContainerNamespace(
+			ctx,
+			db.RecordContainerNamespaceParams{
+				DeploymentID: deploymentID,
+				Namespace: sql.NullString{
+					String: r.engine.scope(),
+					Valid:  true,
+				},
+			},
+		)
+		if err != nil {
+			return result, err
+		}
+		if recorded != 1 {
+			return result, errContainerCleanup
+		}
 	}
 	download, err := r.repo.DownloadDeploymentArtifact(ctx, deploymentID)
 	if err != nil {
 		return result, err
 	}
 	defer func() { err = errors.Join(err, os.Remove(download.Path)) }()
+	if !local {
+		return result, nil
+	}
 	directory, err := artifact.ExtractZIP(ctx, download.Path)
 	if err != nil {
 		return result, err

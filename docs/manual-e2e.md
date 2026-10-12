@@ -55,6 +55,7 @@ Copy its files into `DURPDEPLOY_STAGE_DIR` before modifying them.
 Confirm that agent host jobs and agent container jobs receive the same pinned package.
 Confirm that containers reject writes to `/artifacts`.
 Confirm that later jobs receive staging outputs from each execution location.
+
 Check cleanup after success, failure, cancellation, and conflicting parallel changes.
 Replace the upstream ZIP after pinning and confirm that the deployment fails.
 

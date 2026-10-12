@@ -780,12 +780,14 @@ Concurrent server instances must use separate `TMPDIR` directories.
 Package-bearing deployments and runbooks support server containers, agent containers, and agent host jobs.
 Agents must report `X-DurpDeploy-Artifact: artifact/1` and `X-DurpDeploy-Staging: staging/1` when polling.
 The encrypted job payload contains the pinned package checksum and size.
+
 The agent downloads each package through the existing contract:
 `POST /agent/v1/deployments/{id}/artifact` with JSON `{"claim_token":"..."}`
 on the separate mTLS listener. It requires the assigned agent's live step claim,
 returns verified ZIP bytes with `X-Artifact-SHA256` and `X-Artifact-Size`, and
 never sends repository credentials. Its request body is limited to 4 KiB and
 does not accept a `protocol` field.
+
 Invalid packages or changed pinned bytes return `422`.
 Package transfers keep heartbeats active and pause the remote step timeout during authenticated HTTP transfer.
 Transfers stop after five minutes without progress.
