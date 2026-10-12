@@ -12,6 +12,7 @@ Each execution attempt records the physical hostname, execution mode, interprete
 Container attempts also record the runtime, container name, and image.
 Server containers record the image reference.
 Agent containers record the resolved image ID.
+
 Retries and fan-out retain separate entries.
 Each remote log entry includes the authenticated agent ID.
 This ID distinguishes interleaved fan-out output after secret redaction.

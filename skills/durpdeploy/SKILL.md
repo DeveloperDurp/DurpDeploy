@@ -507,6 +507,7 @@ Server container attempts identify the physical host, runtime, container name, i
 Remote steps also record the selected agent name and ID.
 Remote log entries include the authenticated `agent_id` to distinguish interleaved fan-out output.
 Agent attempts distinguish `container` from `host/shell` and record each retry and fan-out target.
+
 Unavailable physical hostnames appear as `unknown`.
 Containerized host agents without runtime information can set `DURPDEPLOY_AGENT_HOSTNAME` to the physical machine hostname.
 Historical logs retain their original information.
