@@ -44,6 +44,9 @@ Delivery history shows failure status without credential-bearing provider errors
 | `DURPDEPLOY_SMTP_PASS` | Password, when authentication is required |
 
 The Go SMTP client attempts STARTTLS when the server advertises it.
+SMTP delivery has a 10-second total timeout, including connection and TLS negotiation.
+Cancellation closes the connection.
+TLS certificate verification remains enabled.
 Keep passwords, tokens, and webhook URLs out of source control.
 
 ## Delivery history

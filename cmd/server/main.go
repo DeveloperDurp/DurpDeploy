@@ -288,7 +288,9 @@ func runServer() {
 		"addr",
 		agentRuntime.listener.Addr().String(),
 	)
-	maintenance.StartLitestreamCheck(ctx, bus)
+	if err := maintenance.StartLitestreamCheck(ctx, bus); err != nil {
+		log.Fatalf("backup health check: %v", err)
+	}
 	r := server.NewRouterWithAgentManagement(
 		repo,
 		rnr,

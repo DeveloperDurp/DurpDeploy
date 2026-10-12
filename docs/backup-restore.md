@@ -6,7 +6,7 @@ server agent-listener identity directory. A database without its matching key
 cannot recover encrypted state. Preserve the identity when agents must retain
 their existing server trust pin. Keep keys separately with restricted access,
 including old keys needed by pre-rotation backups. See the
-[current rotation limitation](security.md#key-rotation-runbook).
+[key rotation procedure](security.md#key-rotation-runbook).
 
 In Compose, these are the `durpdeploy-data` and `durpdeploy-agent-identity`
 volumes and `secrets/durpdeploy_key`. Remote agent state is separate: back up
@@ -117,6 +117,11 @@ DurpDeploy optionally runs `DURPDEPLOY_LITESTREAM_CHECK_COMMAND` through
 `/bin/sh -c` as the app account. A zero exit status means healthy. Set
 `DURPDEPLOY_LITESTREAM_CHECK_INTERVAL` to a positive Go duration (default `1h`).
 An empty command disables checks.
+An invalid or nonpositive interval prevents startup when checks are enabled.
+Each check has a 30-second timeout.
+On Unix systems, cancellation terminates the check's process group.
+Failure messages retain only the last 4 KiB of command output.
+Shutdown cancellation does not publish a backup failure.
 
 The app image has no Litestream binary and cannot run commands inside the
 sidecar by itself. Supply a trusted check executable and its required tools

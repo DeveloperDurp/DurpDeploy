@@ -3,7 +3,6 @@ package notify
 import (
 	"context"
 	"fmt"
-	"net/smtp"
 	"os"
 	"strings"
 	"time"
@@ -40,12 +39,10 @@ func LoadSMTPConfigFromEnv() SMTPConfig {
 // configured server-wide or the project has no recipients.
 type EmailNotifier struct {
 	cfg SMTPConfig
-	// sendMail is swapped out in tests; defaults to smtp.SendMail.
-	sendMail func(addr string, a smtp.Auth, from string, to []string, msg []byte) error
 }
 
 func NewEmailNotifier(cfg SMTPConfig) *EmailNotifier {
-	return &EmailNotifier{cfg: cfg, sendMail: smtp.SendMail}
+	return &EmailNotifier{cfg: cfg}
 }
 
 func (e *EmailNotifier) Name() string { return "email" }
@@ -56,15 +53,6 @@ func (e *EmailNotifier) Notify(
 ) (bool, error) {
 	if e.cfg.Host == "" || len(event.NotifyEmails) == 0 {
 		return true, nil
-	}
-
-	addr := e.cfg.Host
-	if e.cfg.Port != "" {
-		addr = e.cfg.Host + ":" + e.cfg.Port
-	}
-	var auth smtp.Auth
-	if e.cfg.User != "" {
-		auth = smtp.PlainAuth("", e.cfg.User, e.cfg.Pass, e.cfg.Host)
 	}
 
 	msg := fmt.Sprintf(
@@ -83,13 +71,7 @@ func (e *EmailNotifier) Notify(
 		event.Message,
 	)
 
-	if err := e.sendMail(
-		addr,
-		auth,
-		e.cfg.From,
-		event.NotifyEmails,
-		[]byte(msg),
-	); err != nil {
+	if err := e.sendMail(ctx, event.NotifyEmails, []byte(msg)); err != nil {
 		return false, err
 	}
 	return false, nil
