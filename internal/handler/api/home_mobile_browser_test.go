@@ -300,6 +300,9 @@ func TestHomeRunningPollBrowserE2E(t *testing.T) {
 		`document.querySelector('#home-running').textContent.includes('live-home') && document.querySelector('#home-running-count .stat-value').textContent === '1'`,
 	)
 	b.wait(t, `!document.querySelector('#home-deployments.htmx-settling')`)
+	// Charts have their own 30-second cadence. Refresh explicitly while
+	// checking the faster deployment panel transitions.
+	b.evaluate(t, `Alpine.$data(originalCharts).load().then(() => true)`)
 	b.wait(
 		t,
 		`window.DashboardChart && document.querySelector('#home-latest .badge').textContent === 'running' && document.querySelector('#home-recent .badge').textContent === 'running' && document.querySelector('#home-today-count .stat-value').textContent === '1' && Object.keys(DashboardChart.instances).length === 2`,
@@ -329,6 +332,7 @@ func TestHomeRunningPollBrowserE2E(t *testing.T) {
 		t,
 		`document.querySelector('#home-running').textContent.includes('No deployments in progress.') && document.querySelector('#home-running-count .stat-value').textContent === '0'`,
 	)
+	b.evaluate(t, `Alpine.$data(originalCharts).load().then(() => true)`)
 	b.wait(
 		t,
 		`document.querySelector('#home-latest .badge').textContent === 'succeeded' && document.querySelector('#home-recent .badge').textContent === 'succeeded' && Alpine.$data(originalCharts).totals.some(item => item.status === 'succeeded' && item.count === 1) && !Alpine.$data(originalCharts).totals.some(item => item.status === 'running')`,

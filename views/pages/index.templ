@@ -49,7 +49,7 @@ templ IndexPage(
 }
 
 templ HomeCharts() {
-	<section x-data="homeCharts" @home-deployments-refreshed.window="load" @htmx:before-cleanup-element.camel.self="destroy" data-home-charts data-chart-src={ static.URL("js/charts.bundle.js") } aria-label="Deployment charts" class="space-y-4">
+	<section x-data="homeCharts" @htmx:before-cleanup-element.camel.self="destroy" data-home-charts data-chart-src={ static.URL("js/charts.bundle.js") } aria-label="Deployment charts" class="space-y-4">
 		<p x-show="loading" role="status" class="text-sm opacity-70">Loading deployment charts…</p>
 		<p x-show="error" x-cloak role="alert" class="text-error">Charts could not be loaded. <button type="button" class="btn btn-ghost btn-sm" @click="load">Retry</button></p>
 		<p x-show="empty" x-cloak class="text-sm opacity-70">No deployments in the last 14 days.</p>

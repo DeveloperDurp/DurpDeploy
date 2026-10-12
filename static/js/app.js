@@ -60,11 +60,14 @@ function loadChartLibrary(src) {
 
 Alpine.data('homeCharts', () => {
 	// Keep Chart instances outside Alpine's reactive proxy.
-	let charts = [], observer, request, Chart;
+	let charts = [], observer, request, Chart, refreshTimer;
 	let destroyed = false;
 	return {
 		days: [], totals: [], loading: true, error: false, ready: false, empty: false,
-		init() { return this.load(); },
+		init() {
+			refreshTimer = setInterval(() => this.load(), 30000);
+			return this.load();
+		},
 		label(status) {
 			return ({ succeeded: 'Succeeded', failed: 'Failed', cancelled: 'Cancelled',
 				running: 'Running', pending: 'Pending', pending_approval: 'Awaiting approval',
@@ -78,6 +81,7 @@ Alpine.data('homeCharts', () => {
 				`${this.label(status)}: ${count}`).join(', ') || 'No deployments';
 		},
 		async load() {
+			if (destroyed) return;
 			request?.abort();
 			request = new AbortController();
 			this.loading = this.days.length === 0;
@@ -164,6 +168,7 @@ Alpine.data('homeCharts', () => {
 		},
 		destroy() {
 			destroyed = true;
+			clearInterval(refreshTimer);
 			request?.abort();
 			observer?.disconnect();
 			charts.forEach(chart => chart.destroy());
