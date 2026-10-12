@@ -261,6 +261,51 @@ func (q *Queries) ListLifecyclesPaginated(ctx context.Context, arg ListLifecycle
 	return items, nil
 }
 
+const listLifecyclesWithStageCounts = `-- name: ListLifecyclesWithStageCounts :many
+SELECT lifecycles.id, lifecycles.name, lifecycles.description, lifecycles.created_at, (
+    SELECT COUNT(*) FROM lifecycle_stages
+    WHERE lifecycle_id = lifecycles.id
+) AS stage_count
+FROM lifecycles ORDER BY name
+`
+
+type ListLifecyclesWithStageCountsRow struct {
+	ID          int64          `json:"id"`
+	Name        string         `json:"name"`
+	Description sql.NullString `json:"description"`
+	CreatedAt   int64          `json:"created_at"`
+	StageCount  int64          `json:"stage_count"`
+}
+
+func (q *Queries) ListLifecyclesWithStageCounts(ctx context.Context) ([]ListLifecyclesWithStageCountsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listLifecyclesWithStageCounts)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListLifecyclesWithStageCountsRow
+	for rows.Next() {
+		var i ListLifecyclesWithStageCountsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Description,
+			&i.CreatedAt,
+			&i.StageCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateLifecycle = `-- name: UpdateLifecycle :one
 UPDATE lifecycles SET name = ?, description = ? WHERE id = ? RETURNING id, name, description, created_at
 `

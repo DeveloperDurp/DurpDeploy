@@ -53,7 +53,7 @@ func TestMobile_RenderedHTML_hides_write_controls_and_secret_values_when_viewer(
 			readMarker: `data-mobile-schedule="`,
 			writeMarkers: []string{
 				fmt.Sprintf(
-					`href="/projects/%d/schedules/new"`,
+					`href="/projects/%d/schedules/new`,
 					fixture.project.ID,
 				),
 				`data-schedule-action="edit"`,

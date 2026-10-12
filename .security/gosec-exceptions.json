@@ -101,8 +101,8 @@
   {
     "rule": "G118",
     "file": "internal/handler/runbook_web_actions.go",
-    "line": "193",
-    "source_sha256": "e554eb262a632f6909f309acb45ae928d428ac5681b8f177555af40cff8d7dbb",
+    "line": "186",
+    "source_sha256": "ed4fa80419537f4238994aff2027b2288dc19b9fbb8eff772f212fc65f287bc0",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Detached persisted deployment must outlive its HTTP/scheduler/startup request. DeploymentRunner.Run owns cancel registration; Cancel and KillAll cancel/drain work. Evidence: runner_control.go, shutdown_test.go, runbook_cancel_test.go."
@@ -147,7 +147,7 @@
     "rule": "G118",
     "file": "cmd/server/main.go",
     "line": "438",
-    "source_sha256": "2a0bcc68d079e92dc9f757ad05ed774abaa087802e0b4ff1c0afab69b80d7a0e",
+    "source_sha256": "a1f46407ed4a1c94d9fa0f7f6ab1b294919553c07095e0e5c5992030976bc6a5",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Detached persisted deployment must outlive its HTTP/scheduler/startup request. DeploymentRunner.Run owns cancel registration; Cancel and KillAll cancel/drain work. Evidence: runner_control.go, shutdown_test.go, runbook_cancel_test.go."
@@ -353,44 +353,44 @@
   {
     "rule": "G710",
     "file": "internal/handler/scheduled_deployment.go",
-    "line": "726",
-    "source_sha256": "9777ab0df9e07b72e54a5926ceed03e9ccd8291becf9d9cb71a206e5f52d0ffe",
+    "line": "700",
+    "source_sha256": "a6d5bceb3d248d0a7fca52be62010a9ef5ef13c81f8808afcce1d287779192d5",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
-    "reason": "Redirect retains a fixed /projects/ path prefix and an ID validated as int64 by parseProjectID. UI-only changes moved these existing redirects; corresponding handler and redirect/E2E tests confirm same-origin destinations."
+    "reason": "Redirect uses pages.ScheduleListURL with a fixed /projects/ path prefix. parseProjectID and scheduleOffset parse IDs and offsets as int64. No user-controlled host or path is accepted. Evidence: scheduled_deployment.go, scheduled_deployment_list.go, scheduled_deployments.templ, TestSchedulePagesBrowserE2E."
   },
   {
     "rule": "G710",
     "file": "internal/handler/scheduled_deployment.go",
-    "line": "596",
-    "source_sha256": "9777ab0df9e07b72e54a5926ceed03e9ccd8291becf9d9cb71a206e5f52d0ffe",
+    "line": "601",
+    "source_sha256": "a6d5bceb3d248d0a7fca52be62010a9ef5ef13c81f8808afcce1d287779192d5",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
-    "reason": "Redirect retains a fixed /projects/ path prefix and an ID validated as int64 by parseProjectID. UI-only changes moved these existing redirects; corresponding handler and redirect/E2E tests confirm same-origin destinations."
+    "reason": "Redirect uses pages.ScheduleListURL with a fixed /projects/ path prefix. parseProjectID and scheduleOffset parse IDs and offsets as int64. No user-controlled host or path is accepted. Evidence: scheduled_deployment.go, scheduled_deployment_list.go, scheduled_deployments.templ, TestSchedulePagesBrowserE2E."
   },
   {
     "rule": "G710",
     "file": "internal/handler/scheduled_deployment.go",
     "line": "545",
-    "source_sha256": "9777ab0df9e07b72e54a5926ceed03e9ccd8291becf9d9cb71a206e5f52d0ffe",
+    "source_sha256": "a6d5bceb3d248d0a7fca52be62010a9ef5ef13c81f8808afcce1d287779192d5",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
-    "reason": "Redirect retains a fixed /projects/ path prefix and an ID validated as int64 by parseProjectID. UI-only changes moved these existing redirects; corresponding handler and redirect/E2E tests confirm same-origin destinations."
+    "reason": "Redirect uses pages.ScheduleListURL with a fixed /projects/ path prefix. parseProjectID and scheduleOffset parse IDs and offsets as int64. No user-controlled host or path is accepted. Evidence: scheduled_deployment.go, scheduled_deployment_list.go, scheduled_deployments.templ, TestSchedulePagesBrowserE2E."
   },
   {
     "rule": "G710",
     "file": "internal/handler/scheduled_deployment.go",
-    "line": "293",
-    "source_sha256": "9777ab0df9e07b72e54a5926ceed03e9ccd8291becf9d9cb71a206e5f52d0ffe",
+    "line": "283",
+    "source_sha256": "a6d5bceb3d248d0a7fca52be62010a9ef5ef13c81f8808afcce1d287779192d5",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
-    "reason": "Redirect retains a fixed /projects/ path prefix and an ID validated as int64 by parseProjectID. UI-only changes moved these existing redirects; corresponding handler and redirect/E2E tests confirm same-origin destinations."
+    "reason": "Redirect uses pages.ScheduleListURL with a fixed /projects/ path prefix. parseProjectID and scheduleOffset parse IDs and offsets as int64. No user-controlled host or path is accepted. Evidence: scheduled_deployment.go, scheduled_deployment_list.go, scheduled_deployments.templ, TestSchedulePagesBrowserE2E."
   },
   {
     "rule": "G710",
     "file": "internal/handler/runbooks.go",
-    "line": "218",
-    "source_sha256": "9476f628c2440d828f9ef8d2cd3c48dca6c5c22e9942d3db231c4aeffa87214f",
+    "line": "217",
+    "source_sha256": "98ab495bd98e1087cf919b29accb5da1128c68013bea06063163211c5f3ebb59",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Destination has a fixed same-origin path prefix; project/release IDs are parsed integers. Agent routes retain /admin/agents/. Evidence: corresponding handler and internal/server/server.go route; workflow redirect tests."
@@ -407,8 +407,8 @@
   {
     "rule": "G710",
     "file": "internal/handler/release.go",
-    "line": "193",
-    "source_sha256": "dca9136b3fdef09dacff2851b920b6c3bf39edbd1fb90a1e90e139afde624ffa",
+    "line": "188",
+    "source_sha256": "0a218afff24d4624adca4ca0e0f2ef31012259c7094263703e22bd61cc91dbd6",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Existing delete redirect retains a fixed /projects/ path prefix and an ID validated as int64 by parseProjectID. Extracting release creation moved this redirect without changing its destination. Evidence: release.go DeleteRelease, project.go parseProjectID, release deletion/E2E tests."
@@ -417,7 +417,7 @@
     "rule": "G710",
     "file": "internal/handler/release_create.go",
     "line": "58",
-    "source_sha256": "9b00858d5dd1913192a83c8f86fe5fdc8f1727a6eee57429d18e4ea20316ef40",
+    "source_sha256": "3c0f40e944787c2021c41d8e1a66a6d012dcd5b07593f642ea2f067b821d7a97",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Creation redirect retains the existing fixed /projects/ path prefix and an ID validated as int64 by parseProjectID. No user-controlled host or path is accepted. Evidence: release_create.go CreateRelease/renderCreatedRelease, project.go parseProjectID, TestReleaseDeferredPackageAPIWebE2E."
@@ -425,8 +425,8 @@
   {
     "rule": "G710",
     "file": "internal/handler/project_members.go",
-    "line": "233",
-    "source_sha256": "907acfe2b1d5342c445088bed5969aad2463d88c5a4147c6de2282509b526f44",
+    "line": "204",
+    "source_sha256": "fb8290d0666189d15d88c3afc593b44be1083e5f1b0f848c1d2ba71c1e144af9",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Redirect retains a fixed /projects/ path prefix and an ID validated as int64 by parseProjectID. UI-only changes moved these existing redirects; corresponding handler and redirect/E2E tests confirm same-origin destinations."
@@ -434,8 +434,8 @@
   {
     "rule": "G710",
     "file": "internal/handler/project_members.go",
-    "line": "184",
-    "source_sha256": "907acfe2b1d5342c445088bed5969aad2463d88c5a4147c6de2282509b526f44",
+    "line": "156",
+    "source_sha256": "fb8290d0666189d15d88c3afc593b44be1083e5f1b0f848c1d2ba71c1e144af9",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Redirect retains a fixed /projects/ path prefix and an ID validated as int64 by parseProjectID. UI-only changes moved these existing redirects; corresponding handler and redirect/E2E tests confirm same-origin destinations."
@@ -443,8 +443,8 @@
   {
     "rule": "G710",
     "file": "internal/handler/project_members.go",
-    "line": "109",
-    "source_sha256": "907acfe2b1d5342c445088bed5969aad2463d88c5a4147c6de2282509b526f44",
+    "line": "82",
+    "source_sha256": "fb8290d0666189d15d88c3afc593b44be1083e5f1b0f848c1d2ba71c1e144af9",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Redirect retains a fixed /projects/ path prefix and an ID validated as int64 by parseProjectID. UI-only changes moved these existing redirects; corresponding handler and redirect/E2E tests confirm same-origin destinations."
@@ -453,7 +453,7 @@
     "rule": "G710",
     "file": "internal/handler/project.go",
     "line": "479",
-    "source_sha256": "e8ba2cf5b39cef7874579d46c7307fbcc9dc5f3ad2a5e09edf73118ac0f307af",
+    "source_sha256": "f37d50dcbf57a5134582609a349960beb2665aa3a54a02f8ed10450b553c6e9c",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "The redirect uses a fixed /projects/ path prefix and an ID parsed as int64 by parseProjectID. The destination remains on the same origin. Evidence: ProjectHandler.UpdateProject and parseProjectID."
@@ -462,7 +462,7 @@
     "rule": "G710",
     "file": "internal/handler/project.go",
     "line": "280",
-    "source_sha256": "e8ba2cf5b39cef7874579d46c7307fbcc9dc5f3ad2a5e09edf73118ac0f307af",
+    "source_sha256": "f37d50dcbf57a5134582609a349960beb2665aa3a54a02f8ed10450b553c6e9c",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "The redirect uses a fixed /projects/ path prefix and an ID parsed as int64 by parseProjectID. The destination remains on the same origin. Evidence: ProjectHandler.UpdateProjectNotifications and parseProjectID."

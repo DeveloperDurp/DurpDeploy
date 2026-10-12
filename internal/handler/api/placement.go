@@ -99,13 +99,9 @@ func newStepResponses(
 	for index, step := range steps {
 		ids[index] = step.ID
 	}
-	rows, err := repo.Queries.ListStepAgentSelectorsByStepIDs(ctx, ids)
+	selectors, err := repository.StepSelectors(ctx, repo.Queries, ids)
 	if err != nil {
 		return nil, err
-	}
-	selectors := make(map[int64][]string, len(steps))
-	for _, row := range rows {
-		selectors[row.StepID] = append(selectors[row.StepID], row.Label)
 	}
 	responses := make([]stepResponse, len(steps))
 	for index, step := range steps {

@@ -1,6 +1,13 @@
 -- name: ListLifecycles :many
 SELECT * FROM lifecycles ORDER BY name;
 
+-- name: ListLifecyclesWithStageCounts :many
+SELECT lifecycles.*, (
+    SELECT COUNT(*) FROM lifecycle_stages
+    WHERE lifecycle_id = lifecycles.id
+) AS stage_count
+FROM lifecycles ORDER BY name;
+
 -- name: ListLifecyclesPaginated :many
 SELECT * FROM lifecycles ORDER BY name
 LIMIT ? OFFSET ?;

@@ -115,6 +115,8 @@ Keep the page and summary cards mounted; update counts and charts in place.
 Chart.js cards sit below summaries, one column on phones and two at `lg`.
 Use fixed-height responsive canvases, semantic colors, visible status labels,
 exact totals, and screen-reader daily counts. Load the chart bundle only with data.
+Refresh chart data every 30 seconds, independently of deployment panels.
+Stop the chart timer on removal.
 Destroy chart instances and theme observers on removal. Avoid animation/redraw for
 unchanged activity. Native view transitions animate deployment sections for 200ms;
 keep header/charts outside them and respect reduced motion and unsupported browsers.

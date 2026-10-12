@@ -66,11 +66,14 @@ func TestArtifactGateReadinessBrowserE2E(t *testing.T) {
 			// A stale open form must recover to fresh gate state and an alert.
 			browser.evaluate(
 				t,
-				`document.querySelector('form[action$="/approve"] [name="revision"]').value='99'`,
-			)
-			browser.evaluate(
-				t,
-				`document.querySelector('form[action$="/approve"] button').click()`,
+				`(() => {
+ const form = document.querySelector('form[action$="/approve"]');
+ const button = form.querySelector('button');
+ button.focus();
+ form.querySelector('[name="revision"]').value = '99';
+ button.click();
+ return true;
+})()`,
 			)
 			browser.wait(
 				t,

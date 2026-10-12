@@ -265,12 +265,7 @@ agent-smoke-test:
 	bash scripts/agent_smoke_test.sh
 
 swagger-ui-copy: npm-install
-	@mkdir -p static/swagger-ui
-	cp node_modules/swagger-ui-dist/swagger-ui-bundle.js static/swagger-ui/
-	cp node_modules/swagger-ui-dist/swagger-ui-standalone-preset.js static/swagger-ui/
-	cp node_modules/swagger-ui-dist/swagger-ui.css static/swagger-ui/
-	cp node_modules/swagger-ui-dist/favicon-32x32.png static/swagger-ui/
-	cp node_modules/swagger-ui-dist/favicon-16x16.png static/swagger-ui/
+	sh scripts/copy_swagger_ui.sh node_modules/swagger-ui-dist static/swagger-ui
 
 npm-install:
 	npm ci --ignore-scripts

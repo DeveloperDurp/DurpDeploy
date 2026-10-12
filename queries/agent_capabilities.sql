@@ -26,3 +26,26 @@ DELETE FROM agent_container_interpreters WHERE agent_id = ?;
 -- name: ListAgentContainerInterpreters :many
 SELECT interpreter FROM agent_container_interpreters
 WHERE agent_id = ? ORDER BY interpreter;
+
+-- name: ListAgentPollCapabilities :many
+SELECT 'host' AS category, interpreter AS capability
+FROM agent_interpreters WHERE agent_interpreters.agent_id = sqlc.arg(agent_id)
+UNION ALL
+SELECT 'mode', execution_mode FROM agent_execution_modes
+WHERE agent_execution_modes.agent_id = sqlc.arg(agent_id)
+UNION ALL
+SELECT 'runtime', runtime FROM agent_container_runtimes
+WHERE agent_container_runtimes.agent_id = sqlc.arg(agent_id)
+UNION ALL
+SELECT 'container', interpreter FROM agent_container_interpreters
+WHERE agent_container_interpreters.agent_id = sqlc.arg(agent_id)
+UNION ALL
+SELECT 'staging', '' FROM agent_staging_capabilities
+WHERE agent_staging_capabilities.agent_id = sqlc.arg(agent_id)
+UNION ALL
+SELECT 'artifact', '' FROM agent_artifact_capabilities
+WHERE agent_artifact_capabilities.agent_id = sqlc.arg(agent_id)
+UNION ALL
+SELECT 'protocol', COALESCE(agent_protocol, '') FROM agents
+WHERE agents.id = sqlc.arg(agent_id)
+ORDER BY category, capability;

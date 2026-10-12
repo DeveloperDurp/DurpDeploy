@@ -2,6 +2,7 @@ package handler_test
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,6 +14,71 @@ import (
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/repository"
 )
+
+func TestRunbookDetailSeparatesEligibleAndHistoricalEnvironments(t *testing.T) {
+	h := newHarness(t)
+	ctx := t.Context()
+	lifecycle, err := h.repo.Queries.CreateLifecycle(ctx,
+		db.CreateLifecycleParams{Name: "runbook scope"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	project, err := h.repo.Queries.CreateProject(ctx, db.CreateProjectParams{
+		Name: "runbook scope",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h.repo.Queries.SetProjectLifecycle(ctx, db.SetProjectLifecycleParams{
+		ID: project.ID, LifecycleID: sql.NullInt64{Int64: lifecycle.ID, Valid: true},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	eligible, err := h.repo.Queries.CreateEnvironment(ctx,
+		db.CreateEnvironmentParams{Name: "Eligible environment"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	historical, err := h.repo.Queries.CreateEnvironment(ctx,
+		db.CreateEnvironmentParams{Name: "Historical environment"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.repo.Queries.CreateLifecycleStage(ctx,
+		db.CreateLifecycleStageParams{
+			LifecycleID: lifecycle.ID, EnvironmentID: eligible.ID,
+		}); err != nil {
+		t.Fatal(err)
+	}
+	book, _, err := h.repo.SaveRunbook(ctx, repository.RunbookSave{
+		ProjectID: project.ID, Name: "maintenance", StepsJSON: "[]",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.repo.Queries.CreateRunbookSchedule(ctx,
+		db.CreateRunbookScheduleParams{
+			RunbookID: book.ID, EnvironmentID: historical.ID,
+			Cron: "0 0 * * *", NextRunAt: 4_000_000_000,
+		}); err != nil {
+		t.Fatal(err)
+	}
+	response, err := h.authedClient().Get(fmt.Sprintf(
+		"%s/projects/%d/runbooks/%d", h.server.URL, project.ID, book.ID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil || response.StatusCode != http.StatusOK {
+		t.Fatalf("detail status=%d error=%v", response.StatusCode, err)
+	}
+	if !strings.Contains(string(body), "Historical environment") ||
+		!strings.Contains(string(body), ">Eligible environment</option>") ||
+		strings.Contains(string(body), ">Historical environment</option>") {
+		t.Fatal("historical schedule names and eligible choices were mixed")
+	}
+}
 
 func TestRunbookWeb_RejectsInvalidScheduleCron(t *testing.T) {
 	h := newHarness(t)

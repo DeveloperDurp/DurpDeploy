@@ -88,7 +88,8 @@ func TestMobile_Navbar_keeps_account_controls_in_right_aligned_menu(
 	requireHTMLPattern(
 		t,
 		adminBody,
-		`(?s)<button class="btn btn-ghost btn-sm" @click=`+
+		`(?s)<button class="btn btn-ghost btn-sm" `+
+			`aria-label="Toggle theme" @click=`+
 			`"theme = theme === 'mocha' \? 'light' : 'mocha'"`,
 	)
 	if !regexp.MustCompile(`data-mobile-nav="true"`).MatchString(adminBody) {

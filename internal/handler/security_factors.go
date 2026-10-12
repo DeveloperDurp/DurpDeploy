@@ -4,7 +4,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"net/http"
-	"strings"
 
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
@@ -140,9 +139,9 @@ func securityPasskeyForm(r *http.Request) ([]byte, string, error) {
 	if err != nil {
 		return nil, "", err
 	}
-	name := strings.TrimSpace(r.FormValue("name"))
-	if name == "" {
-		return nil, "", mfa.ErrMFAFactorOperation
+	name, err := mfa.NormalizePasskeyName(r.PostFormValue("name"))
+	if err != nil {
+		return nil, "", err
 	}
 	return credentialID, name, nil
 }
@@ -160,7 +159,11 @@ func securityCredentialID(r *http.Request) ([]byte, error) {
 }
 
 func (h *AuthHandler) writeFactorError(w http.ResponseWriter, err error) {
-	http.Error(w, securityActionError, securityErrorStatus(err))
+	message := securityActionError
+	if errors.Is(err, mfa.ErrPasskeyName) {
+		message = mfa.ErrPasskeyName.Error()
+	}
+	http.Error(w, message, securityErrorStatus(err))
 }
 
 func (h *AuthHandler) writePasskeyDeleteError(

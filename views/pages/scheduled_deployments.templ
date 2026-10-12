@@ -15,9 +15,10 @@ type ScheduledDeploymentListItem struct {
 	Schedule        db.ScheduledDeployment
 	ReleaseVersion  string
 	EnvironmentName string
+	Offset          int64
 }
 
-templ ScheduledDeploymentsListPage(project db.Project, items []ScheduledDeploymentListItem, currentPath string) {
+templ ScheduledDeploymentsListPage(project db.Project, page ScheduleListPage, currentPath string) {
 	@layouts.Base("Schedules - "+project.Name, currentPath) {
 		@components.Breadcrumbs([]components.Crumb{
 			{Label: "Home", Href: "/"},
@@ -25,28 +26,28 @@ templ ScheduledDeploymentsListPage(project db.Project, items []ScheduledDeployme
 			{Label: project.Name, Href: fmt.Sprintf("/projects/%d", project.ID)},
 			{Label: "Schedules"},
 		})
-		@ScheduledDeploymentsContent(project, items)
+		@ScheduledDeploymentsContent(project, page)
 	}
 }
 
-templ ScheduledDeploymentsContent(project db.Project, items []ScheduledDeploymentListItem) {
+templ ScheduledDeploymentsContent(project db.Project, page ScheduleListPage) {
 	<div class="space-y-6">
 		<div class="page-header">
 			<h1 class="text-3xl font-bold">Schedules — { project.Name }</h1>
 			<div class="flex gap-2 ml-auto">
 				if CanWrite(ctx) {
-					<a href={ fmt.Sprintf("/projects/%d/schedules/new", project.ID) } class="btn btn-primary btn-sm">New Schedule</a>
+					<a href={ fmt.Sprintf("/projects/%d/schedules/new?offset=%d", project.ID, page.Offset) } class="btn btn-primary btn-sm">New Schedule</a>
 				}
 				<a href={ fmt.Sprintf("/projects/%d", project.ID) } class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Back</a>
 			</div>
 		</div>
-		@ScheduledDeploymentsList(project, items)
+		@ScheduledDeploymentsList(project, page)
 	</div>
 }
 
-templ ScheduledDeploymentsList(project db.Project, items []ScheduledDeploymentListItem) {
-	<div id="schedules-content">
-		if len(items) == 0 {
+templ ScheduledDeploymentsList(project db.Project, page ScheduleListPage) {
+	<div id="schedules-content" data-schedule-offset={ strconv.FormatInt(page.Offset, 10) }>
+		if len(page.Items) == 0 {
 			<div class="card bg-base-200 p-8 text-center">
 				<p class="text-gray-400">No schedules yet. Create one to run a release on a cron.</p>
 			</div>
@@ -62,16 +63,27 @@ templ ScheduledDeploymentsList(project db.Project, items []ScheduledDeploymentLi
 					</tr>
 				</thead>
 				<tbody>
-					for _, item := range items {
+					for _, item := range page.Items {
 						@ScheduledDeploymentRow(project.ID, item)
 					}
 				</tbody>
 			</table>
 			<ul class="space-y-3 md:hidden" aria-label="Schedules" data-mobile-schedule-list>
-				for _, item := range items {
+				for _, item := range page.Items {
 					@ScheduledDeploymentMobileRecord(project.ID, item)
 				}
 			</ul>
+		}
+		if page.Total > page.Limit {
+			<nav class="flex flex-wrap items-center gap-4 mt-4" aria-label="Schedule pages">
+				<span class="text-sm">{ fmt.Sprintf("%d–%d of %d", page.Offset+1, page.Offset+int64(len(page.Items)), page.Total) }</span>
+				if page.Offset > 0 {
+					<a class="link" href={ ScheduleListURL(project.ID, max(0, page.Offset-page.Limit)) }>Previous</a>
+				}
+				if page.Offset+int64(len(page.Items)) < page.Total {
+					<a class="link" href={ ScheduleListURL(project.ID, page.Offset+page.Limit) }>Next</a>
+				}
+			</nav>
 		}
 	</div>
 }
@@ -99,7 +111,7 @@ templ ScheduledDeploymentRow(projectID int64, item ScheduledDeploymentListItem) 
 						class="btn btn-xs btn-ghost"
 						data-schedule-action="edit"
 						x-on:click.capture="editing = true; $event.stopImmediatePropagation()"
-						hx-get={ fmt.Sprintf("/projects/%d/schedules/%d/edit", projectID, item.Schedule.ID) }
+						hx-get={ fmt.Sprintf("/projects/%d/schedules/%d/edit?offset=%d", projectID, item.Schedule.ID, item.Offset) }
 						hx-target={ fmt.Sprintf("#schedule-row-%d", item.Schedule.ID) }
 						hx-swap="outerHTML"
 					>
@@ -108,7 +120,7 @@ templ ScheduledDeploymentRow(projectID int64, item ScheduledDeploymentListItem) 
 					<button
 						class="btn btn-xs btn-primary"
 						data-schedule-action="toggle"
-						hx-post={ fmt.Sprintf("/projects/%d/schedules/%d/toggle", projectID, item.Schedule.ID) }
+						hx-post={ fmt.Sprintf("/projects/%d/schedules/%d/toggle?offset=%d", projectID, item.Schedule.ID, item.Offset) }
 						hx-target="#schedules-content"
 						hx-swap="outerHTML"
 						data-toast-success="Schedule toggled"
@@ -123,7 +135,7 @@ templ ScheduledDeploymentRow(projectID int64, item ScheduledDeploymentListItem) 
 					<button
 						class="btn btn-xs btn-error"
 						data-schedule-action="delete"
-						hx-delete={ fmt.Sprintf("/projects/%d/schedules/%d", projectID, item.Schedule.ID) }
+						hx-delete={ fmt.Sprintf("/projects/%d/schedules/%d?offset=%d", projectID, item.Schedule.ID, item.Offset) }
 						hx-target="#schedules-content"
 						hx-swap="outerHTML"
 						hx-confirm="Delete this schedule?"
@@ -154,7 +166,7 @@ templ ScheduledDeploymentRow(projectID int64, item ScheduledDeploymentListItem) 
 
 templ ScheduledDeploymentQuickEditForm(projectID int64, item ScheduledDeploymentListItem) {
 	<form
-		hx-put={ fmt.Sprintf("/projects/%d/schedules/%d", projectID, item.Schedule.ID) }
+		hx-put={ fmt.Sprintf("/projects/%d/schedules/%d?offset=%d", projectID, item.Schedule.ID, item.Offset) }
 		hx-target="#schedules-content"
 		hx-swap="outerHTML"
 		data-toast-success="Schedule updated"
@@ -216,7 +228,7 @@ templ ScheduledDeploymentMobileRecord(projectID int64, item ScheduledDeploymentL
 					class="btn btn-xs btn-ghost"
 					data-schedule-action="edit"
 					x-on:click.capture="editing = true; $event.stopImmediatePropagation()"
-					hx-get={ fmt.Sprintf("/projects/%d/schedules/%d/edit", projectID, item.Schedule.ID) }
+					hx-get={ fmt.Sprintf("/projects/%d/schedules/%d/edit?offset=%d", projectID, item.Schedule.ID, item.Offset) }
 					hx-target={ fmt.Sprintf("#schedule-row-%d", item.Schedule.ID) }
 					hx-swap="outerHTML"
 				>
@@ -225,7 +237,7 @@ templ ScheduledDeploymentMobileRecord(projectID int64, item ScheduledDeploymentL
 				<button
 					class="btn btn-xs btn-primary"
 					data-schedule-action="toggle"
-					hx-post={ fmt.Sprintf("/projects/%d/schedules/%d/toggle", projectID, item.Schedule.ID) }
+					hx-post={ fmt.Sprintf("/projects/%d/schedules/%d/toggle?offset=%d", projectID, item.Schedule.ID, item.Offset) }
 					hx-target="#schedules-content"
 					hx-swap="outerHTML"
 					data-toast-success="Schedule toggled"
@@ -240,7 +252,7 @@ templ ScheduledDeploymentMobileRecord(projectID int64, item ScheduledDeploymentL
 				<button
 					class="btn btn-xs btn-error"
 					data-schedule-action="delete"
-					hx-delete={ fmt.Sprintf("/projects/%d/schedules/%d", projectID, item.Schedule.ID) }
+					hx-delete={ fmt.Sprintf("/projects/%d/schedules/%d?offset=%d", projectID, item.Schedule.ID, item.Offset) }
 					hx-target="#schedules-content"
 					hx-swap="outerHTML"
 					hx-confirm="Delete this schedule?"
@@ -262,13 +274,13 @@ templ ScheduledDeploymentMobileRecord(projectID int64, item ScheduledDeploymentL
 	</li>
 }
 
-templ ScheduledDeploymentFormPage(project db.Project, releases []db.Release, envs []AvailableEnv, schedule *db.ScheduledDeployment, errorMsg string, currentPath string) {
+templ ScheduledDeploymentFormPage(project db.Project, releases []db.Release, envs []AvailableEnv, schedule *db.ScheduledDeployment, errorMsg string, offset int64, currentPath string) {
 	if !CanWrite(ctx) {
 		@ViewerForbiddenMessage(
 			scheduleFormPageTitle(schedule),
 			scheduleFormPageVerb(schedule),
 			"a schedule",
-			fmt.Sprintf("/projects/%d/schedules", project.ID),
+			ScheduleListURL(project.ID, offset),
 			currentPath,
 		)
 	} else {
@@ -277,10 +289,10 @@ templ ScheduledDeploymentFormPage(project db.Project, releases []db.Release, env
 				{Label: "Home", Href: "/"},
 				{Label: "Projects", Href: "/projects"},
 				{Label: project.Name, Href: fmt.Sprintf("/projects/%d", project.ID)},
-				{Label: "Schedules", Href: fmt.Sprintf("/projects/%d/schedules", project.ID)},
+				{Label: "Schedules", Href: ScheduleListURL(project.ID, offset)},
 				{Label: scheduleLabel(schedule)},
 			})
-			@ScheduledDeploymentForm(project, releases, envs, schedule, errorMsg)
+			@ScheduledDeploymentForm(project, releases, envs, schedule, errorMsg, offset)
 		}
 	}
 }
@@ -299,13 +311,13 @@ func scheduleFormPageVerb(schedule *db.ScheduledDeployment) string {
 	return "edit"
 }
 
-templ ScheduledDeploymentForm(project db.Project, releases []db.Release, envs []AvailableEnv, schedule *db.ScheduledDeployment, errorMsg string) {
+templ ScheduledDeploymentForm(project db.Project, releases []db.Release, envs []AvailableEnv, schedule *db.ScheduledDeployment, errorMsg string, offset int64) {
 	<div id="form-container" class="card bg-base-200 p-4">
 		<h3 class="text-lg font-bold mb-4">{ scheduleHeading(schedule) }</h3>
 		if errorMsg != "" {
 			<div class="alert alert-error mb-4">{ errorMsg }</div>
 		}
-		<form method="post" action={ scheduleFormAction(project, schedule) } class="space-y-4">
+		<form method="post" action={ fmt.Sprintf("%s?offset=%d", scheduleFormAction(project, schedule), offset) } class="space-y-4">
 			<div class="form-control">
 				<label class="label"><span class="label-text">Release</span></label>
 				<select name="release_id" class="select select-bordered" required>
@@ -362,7 +374,7 @@ templ ScheduledDeploymentForm(project db.Project, releases []db.Release, envs []
 				</label>
 			</div>
 			<div class="flex gap-2 justify-end">
-				<a href={ fmt.Sprintf("/projects/%d/schedules", project.ID) } class="btn btn-ghost">Cancel</a>
+				<a href={ ScheduleListURL(project.ID, offset) } class="btn btn-ghost">Cancel</a>
 				<button type="submit" class="btn btn-primary">Save</button>
 			</div>
 		</form>
@@ -385,7 +397,7 @@ templ ScheduledDeploymentEditRow(projectID int64, item ScheduledDeploymentListIt
 		<td>
 			<form
 				id={ fmt.Sprintf("schedule-edit-form-%d", item.Schedule.ID) }
-				hx-put={ fmt.Sprintf("/projects/%d/schedules/%d", projectID, item.Schedule.ID) }
+				hx-put={ fmt.Sprintf("/projects/%d/schedules/%d?offset=%d", projectID, item.Schedule.ID, item.Offset) }
 				hx-target="#schedules-content"
 				hx-swap="outerHTML"
 				data-toast-success="Schedule updated"
@@ -434,7 +446,7 @@ templ ScheduledDeploymentEditRow(projectID int64, item ScheduledDeploymentListIt
 			</label>
 		</td>
 		<td class="flex flex-wrap gap-2">
-			<button type="button" class="btn btn-ghost btn-xs" hx-get={ fmt.Sprintf("/projects/%d/schedules", projectID) } hx-target="#schedules-content" hx-swap="outerHTML">Cancel</button>
+			<button type="button" class="btn btn-ghost btn-xs" hx-get={ ScheduleListURL(projectID, item.Offset) } hx-target="#schedules-content" hx-swap="outerHTML">Cancel</button>
 			<button type="submit" form={ fmt.Sprintf("schedule-edit-form-%d", item.Schedule.ID) } class="btn btn-primary btn-xs">Save</button>
 		</td>
 	</tr>
@@ -471,4 +483,18 @@ func scheduleNoteValue(schedule *db.ScheduledDeployment) string {
 		return schedule.Note.String
 	}
 	return ""
+}
+
+type ScheduleListPage struct {
+	Items  []ScheduledDeploymentListItem
+	Offset int64
+	Limit  int64
+	Total  int64
+}
+
+func ScheduleListURL(projectID, offset int64) string {
+	if offset == 0 {
+		return fmt.Sprintf("/projects/%d/schedules", projectID)
+	}
+	return fmt.Sprintf("/projects/%d/schedules?offset=%d", projectID, offset)
 }

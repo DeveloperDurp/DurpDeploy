@@ -181,13 +181,8 @@ jobs:
           docker exec -e NODE_PATH=/opt/mobile-browser/node_modules \
             "$AUTH_MFA_CONTAINER" sh -ec '
             ln -s /opt/mobile-browser/node_modules node_modules &&
-            mkdir -p static/swagger-ui &&
-            for f in swagger-ui-bundle.js \
-              swagger-ui-standalone-preset.js swagger-ui.css \
-              favicon-32x32.png favicon-16x16.png; do
-              cp /opt/mobile-browser/node_modules/swagger-ui-dist/"$f" \
-                static/swagger-ui/
-            done &&
+            sh scripts/copy_swagger_ui.sh \
+              /opt/mobile-browser/node_modules/swagger-ui-dist static/swagger-ui &&
             make auth-mfa-e2e-sqlite'
 
       - name: Failure diagnostics
@@ -388,7 +383,7 @@ jobs:
       - name: Verify navigation, caching, and package repositories
         run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^Test(ReleaseDeferredPackage|ReleaseRefreshConflictStaysOnPage|ThemeStyles|PackageRepository|PackageRepositoryBack|BackNavigation|BackHistory|PageNavigation|PageNavigationExpiredSession|OIDCNavigation)BrowserE2E$' ./internal/handler/api
       - name: Verify mobile lists and dashboard updates
-        run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^Test(DeploymentMobile|DeploymentListMobile|ResourceListMobile|HomeMobile|HomeRunningPoll|MainPagePattern)BrowserE2E$' ./internal/handler/api
+        run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^Test(DeploymentMobile|DeploymentListMobile|ResourceListMobile|HomeMobile|HomeRunningPoll|HomeChartTimer|SchedulePages|MainPagePattern)BrowserE2E$' ./internal/handler/api
       - name: Verify forms and dialogs
         run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^Test(ProjectEditModal|ResourceCreateModal|ResourceEditModal|StepEditModal|StepAddModal|MobileFormFocus|RunbookEditor|AlpineEditForms|AlpineDialogs|RunningServer)BrowserE2E$' ./internal/handler/api
       - name: Verify variables and notification forms

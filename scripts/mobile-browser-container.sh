@@ -18,18 +18,10 @@ copy_receipt() {
 
 trap copy_receipt EXIT
 
-mkdir -p "$evidence_dir" static/swagger-ui
+mkdir -p "$evidence_dir"
 templ generate
-cp /opt/mobile-browser/node_modules/swagger-ui-dist/swagger-ui-bundle.js \
-	static/swagger-ui/
-cp /opt/mobile-browser/node_modules/swagger-ui-dist/swagger-ui-standalone-preset.js \
-	static/swagger-ui/
-cp /opt/mobile-browser/node_modules/swagger-ui-dist/swagger-ui.css \
-	static/swagger-ui/
-cp /opt/mobile-browser/node_modules/swagger-ui-dist/favicon-32x32.png \
-	static/swagger-ui/
-cp /opt/mobile-browser/node_modules/swagger-ui-dist/favicon-16x16.png \
-	static/swagger-ui/
+sh scripts/copy_swagger_ui.sh \
+	/opt/mobile-browser/node_modules/swagger-ui-dist static/swagger-ui
 
 MOBILE_EVIDENCE_DIR="$evidence_dir" \
 MOBILE_EVIDENCE_FILE="$receipt_name" \

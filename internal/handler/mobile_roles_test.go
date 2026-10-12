@@ -108,7 +108,7 @@ func TestMobile_RenderedHTML_renders_writer_controls_when_authorized(
 			),
 			markers: []string{
 				fmt.Sprintf(
-					`href="/projects/%d/schedules/new"`,
+					`href="/projects/%d/schedules/new\?offset=0"`,
 					fixture.project.ID,
 				),
 				`data-schedule-action="edit"`,

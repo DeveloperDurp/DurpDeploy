@@ -192,6 +192,67 @@ func (q *Queries) ListDueScheduledDeployments(ctx context.Context, nextRunAt int
 	return items, nil
 }
 
+const listScheduledDeploymentDetails = `-- name: ListScheduledDeploymentDetails :many
+SELECT scheduled_deployments.id, scheduled_deployments.project_id, scheduled_deployments.release_id, scheduled_deployments.environment_id, scheduled_deployments.cron, scheduled_deployments.next_run_at, scheduled_deployments.enabled, scheduled_deployments.last_fired_at, scheduled_deployments.note, scheduled_deployments.created_at, scheduled_deployments.updated_at, scheduled_deployments.last_error, releases.version AS release_version,
+       environments.name AS environment_name
+FROM scheduled_deployments
+JOIN releases ON releases.id = scheduled_deployments.release_id
+JOIN environments ON environments.id = scheduled_deployments.environment_id
+WHERE scheduled_deployments.project_id = ?
+ORDER BY scheduled_deployments.created_at DESC, scheduled_deployments.id DESC
+LIMIT ? OFFSET ?
+`
+
+type ListScheduledDeploymentDetailsParams struct {
+	ProjectID int64 `json:"project_id"`
+	Limit     int64 `json:"limit"`
+	Offset    int64 `json:"offset"`
+}
+
+type ListScheduledDeploymentDetailsRow struct {
+	ScheduledDeployment ScheduledDeployment `json:"scheduled_deployment"`
+	ReleaseVersion      string              `json:"release_version"`
+	EnvironmentName     string              `json:"environment_name"`
+}
+
+func (q *Queries) ListScheduledDeploymentDetails(ctx context.Context, arg ListScheduledDeploymentDetailsParams) ([]ListScheduledDeploymentDetailsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listScheduledDeploymentDetails, arg.ProjectID, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListScheduledDeploymentDetailsRow
+	for rows.Next() {
+		var i ListScheduledDeploymentDetailsRow
+		if err := rows.Scan(
+			&i.ScheduledDeployment.ID,
+			&i.ScheduledDeployment.ProjectID,
+			&i.ScheduledDeployment.ReleaseID,
+			&i.ScheduledDeployment.EnvironmentID,
+			&i.ScheduledDeployment.Cron,
+			&i.ScheduledDeployment.NextRunAt,
+			&i.ScheduledDeployment.Enabled,
+			&i.ScheduledDeployment.LastFiredAt,
+			&i.ScheduledDeployment.Note,
+			&i.ScheduledDeployment.CreatedAt,
+			&i.ScheduledDeployment.UpdatedAt,
+			&i.ScheduledDeployment.LastError,
+			&i.ReleaseVersion,
+			&i.EnvironmentName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listScheduledDeploymentsByProject = `-- name: ListScheduledDeploymentsByProject :many
 SELECT id, project_id, release_id, environment_id, cron, next_run_at, enabled, last_fired_at, note, created_at, updated_at, last_error FROM scheduled_deployments WHERE project_id = ? ORDER BY created_at DESC
 `
@@ -233,7 +294,7 @@ func (q *Queries) ListScheduledDeploymentsByProject(ctx context.Context, project
 }
 
 const listScheduledDeploymentsByProjectPaginated = `-- name: ListScheduledDeploymentsByProjectPaginated :many
-SELECT id, project_id, release_id, environment_id, cron, next_run_at, enabled, last_fired_at, note, created_at, updated_at, last_error FROM scheduled_deployments WHERE project_id = ? ORDER BY created_at DESC
+SELECT id, project_id, release_id, environment_id, cron, next_run_at, enabled, last_fired_at, note, created_at, updated_at, last_error FROM scheduled_deployments WHERE project_id = ? ORDER BY created_at DESC, id DESC
 LIMIT ? OFFSET ?
 `
 

@@ -83,7 +83,11 @@ func CredentialToDB(
 	userID int64,
 	name string,
 ) (db.CreateWebAuthnCredentialParams, error) {
-	if userID <= 0 || name == "" || len(credential.ID) == 0 ||
+	name, err := NormalizePasskeyName(name)
+	if err != nil {
+		return db.CreateWebAuthnCredentialParams{}, err
+	}
+	if userID <= 0 || len(credential.ID) == 0 ||
 		len(credential.PublicKey) == 0 {
 		return db.CreateWebAuthnCredentialParams{}, ErrWebAuthnCredential
 	}

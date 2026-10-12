@@ -63,19 +63,12 @@ func (h *ReleaseHandler) renderCreatedRelease(
 		)
 		return
 	}
-	releases, err := h.repo.Queries.ListReleasesByProject(
-		r.Context(), projectID,
-	)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
 	project, err := h.repo.Queries.GetProject(r.Context(), projectID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	views, err := buildReleaseViews(r.Context(), h.repo, releases)
+	views, err := loadReleaseViews(r.Context(), h.repo, projectID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

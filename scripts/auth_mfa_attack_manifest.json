@@ -124,7 +124,7 @@
       "covered_routes": [{ "method": "POST", "route": "/login/mfa/totp" }],
       "attacker_state": "invalid-code, expired, or concurrently replayed pending TOTP challenge",
       "protocol": "invalid or expired TOTP fails without a final session; concurrent valid submissions have one winner",
-      "durable_state": "expired challenges are removed and a valid one-shot TOTP challenge creates exactly one final session",
+      "durable_state": "periodic maintenance removes expired challenges and a valid one-shot TOTP challenge creates exactly one final session",
       "audit": "invalid TOTP creates no successful factor audit action",
       "layer": "http",
       "engine": "sqlite",

@@ -70,9 +70,6 @@ func (s *ChallengeService) ResolveBound(
 		return ResolvedChallenge{}, ErrChallengeInvalid
 	}
 	now := s.clock().Unix()
-	if err := cleanExpiredChallenges(ctx, s.repo.Queries, now); err != nil {
-		return ResolvedChallenge{}, err
-	}
 	challenge, err := s.activeChallenge(ctx, s.repo.Queries, binding)
 	if err != nil {
 		return ResolvedChallenge{}, err
@@ -202,9 +199,6 @@ func (s *ChallengeService) resolvePendingLogin(
 	csrf string,
 ) (db.MfaChallenge, error) {
 	now := s.clock().Unix()
-	if err := cleanExpiredChallenges(ctx, s.repo.Queries, now); err != nil {
-		return db.MfaChallenge{}, err
-	}
 	challenge, err := s.repo.Queries.GetActiveMFAChallenge(
 		ctx,
 		db.GetActiveMFAChallengeParams{

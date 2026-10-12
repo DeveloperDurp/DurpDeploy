@@ -109,9 +109,6 @@ func (s *ChallengeService) RecordFailure(
 	binding ChallengeBinding,
 ) error {
 	now := s.clock().Unix()
-	if err := cleanExpiredChallenges(ctx, s.repo.Queries, now); err != nil {
-		return err
-	}
 	return s.repo.WithTx(ctx, func(queries *db.Queries) error {
 		if err := lockMFAUser(ctx, queries, binding.UserID); err != nil {
 			return err

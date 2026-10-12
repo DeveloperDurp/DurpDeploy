@@ -160,3 +160,55 @@ func (q *Queries) ListAgentExecutionModes(ctx context.Context, agentID string) (
 	}
 	return items, nil
 }
+
+const listAgentPollCapabilities = `-- name: ListAgentPollCapabilities :many
+SELECT 'host' AS category, interpreter AS capability
+FROM agent_interpreters WHERE agent_interpreters.agent_id = ?1
+UNION ALL
+SELECT 'mode', execution_mode FROM agent_execution_modes
+WHERE agent_execution_modes.agent_id = ?1
+UNION ALL
+SELECT 'runtime', runtime FROM agent_container_runtimes
+WHERE agent_container_runtimes.agent_id = ?1
+UNION ALL
+SELECT 'container', interpreter FROM agent_container_interpreters
+WHERE agent_container_interpreters.agent_id = ?1
+UNION ALL
+SELECT 'staging', '' FROM agent_staging_capabilities
+WHERE agent_staging_capabilities.agent_id = ?1
+UNION ALL
+SELECT 'artifact', '' FROM agent_artifact_capabilities
+WHERE agent_artifact_capabilities.agent_id = ?1
+UNION ALL
+SELECT 'protocol', COALESCE(agent_protocol, '') FROM agents
+WHERE agents.id = ?1
+ORDER BY category, capability
+`
+
+type ListAgentPollCapabilitiesRow struct {
+	Category   string `json:"category"`
+	Capability string `json:"capability"`
+}
+
+func (q *Queries) ListAgentPollCapabilities(ctx context.Context, agentID string) ([]ListAgentPollCapabilitiesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listAgentPollCapabilities, agentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAgentPollCapabilitiesRow
+	for rows.Next() {
+		var i ListAgentPollCapabilitiesRow
+		if err := rows.Scan(&i.Category, &i.Capability); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

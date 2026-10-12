@@ -92,7 +92,7 @@ templ SecurityPage(
 						<form method="post" action="/settings/security/passkeys/begin" data-webauthn-register data-webauthn-finish="/settings/security/passkeys/finish" class="flex flex-wrap gap-2 items-end">
 							<div class="form-control flex-1">
 								<label class="label" for="passkey-name"><span class="label-text">Passkey name</span></label>
-								<input id="passkey-name" type="text" name="name" class="input input-bordered" placeholder="e.g. Work laptop" required/>
+								<input id="passkey-name" type="text" name="name" maxlength="255" class="input input-bordered" placeholder="e.g. Work laptop" required/>
 							</div>
 							if hasPasskeys {
 								<button type="submit" class="btn btn-primary btn-sm" disabled aria-describedby="passkey-enrollment-state">Add passkey</button>
@@ -118,7 +118,7 @@ templ SecurityPage(
 										<input type="hidden" name="credential_id" value={ securityCredentialID(credential.CredentialID) }/>
 										<div class="form-control flex-1">
 											<label class="label"><span class="label-text">Passkey name</span></label>
-											<input type="text" name="name" value={ credential.Name } class="input input-bordered input-sm" required/>
+											<input type="text" name="name" value={ credential.Name } maxlength="255" class="input input-bordered input-sm" required/>
 										</div>
 										<button type="submit" class="btn btn-ghost btn-sm">Rename</button>
 									</form>

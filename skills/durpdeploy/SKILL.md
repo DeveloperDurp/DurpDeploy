@@ -308,6 +308,8 @@ no deployments have `{}`. Only accessible projects are counted (all projects
 for global admins). Runbook executions are excluded. The home-page charts use
 these counts. The API requires a bearer token; the equivalent
 `GET /dashboard/activity` endpoint uses the authenticated web session.
+Home charts refresh every 30 seconds.
+Deployment panels refresh every five seconds.
 
 Only global admins can configure verification, because environments are
 shared across projects. `POST /api/v1/environments` and

@@ -72,6 +72,12 @@ func (s *ChallengeService) Issue(
 	return PendingChallenge{Token: token, CSRF: csrf}, nil
 }
 
+// CleanupExpired removes expired ordinary challenges during server maintenance.
+// Reset continuations keep their separate acknowledgement lifecycle.
+func (s *ChallengeService) CleanupExpired(ctx context.Context) error {
+	return cleanExpiredChallenges(ctx, s.repo.Queries, s.clock().Unix())
+}
+
 func cleanExpiredChallenges(
 	ctx context.Context,
 	queries *db.Queries,

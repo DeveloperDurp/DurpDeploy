@@ -478,37 +478,26 @@ func (q *Queries) HeartbeatRemoteDeployment(ctx context.Context, arg HeartbeatRe
 }
 
 const listRemoteLifecycleClaims = `-- name: ListRemoteLifecycleClaims :many
-SELECT deployment_id, agent_id, state, reason, claim_token_hash, ciphertext, claim_expires_at, last_heartbeat_at, started_at, finished_at, cancel_requested_at, created_at, updated_at, log_buffer_ciphertext, cleanup_confirmed_at FROM remote_deployment_claims
+SELECT deployment_id, agent_id FROM remote_deployment_claims
 WHERE state IN ('claimed', 'started', 'cancel_requested')
 ORDER BY agent_id, deployment_id
 `
 
-func (q *Queries) ListRemoteLifecycleClaims(ctx context.Context) ([]RemoteDeploymentClaim, error) {
+type ListRemoteLifecycleClaimsRow struct {
+	DeploymentID int64  `json:"deployment_id"`
+	AgentID      string `json:"agent_id"`
+}
+
+func (q *Queries) ListRemoteLifecycleClaims(ctx context.Context) ([]ListRemoteLifecycleClaimsRow, error) {
 	rows, err := q.db.QueryContext(ctx, listRemoteLifecycleClaims)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []RemoteDeploymentClaim
+	var items []ListRemoteLifecycleClaimsRow
 	for rows.Next() {
-		var i RemoteDeploymentClaim
-		if err := rows.Scan(
-			&i.DeploymentID,
-			&i.AgentID,
-			&i.State,
-			&i.Reason,
-			&i.ClaimTokenHash,
-			&i.Ciphertext,
-			&i.ClaimExpiresAt,
-			&i.LastHeartbeatAt,
-			&i.StartedAt,
-			&i.FinishedAt,
-			&i.CancelRequestedAt,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.LogBufferCiphertext,
-			&i.CleanupConfirmedAt,
-		); err != nil {
+		var i ListRemoteLifecycleClaimsRow
+		if err := rows.Scan(&i.DeploymentID, &i.AgentID); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

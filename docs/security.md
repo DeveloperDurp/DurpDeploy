@@ -97,6 +97,12 @@ phishing-resistant. Passkeys are bound to the single origin and RP ID derived
 from `DURPDEPLOY_URL`. Changing its hostname or origin invalidates the stored
 credential relationship and requires passkey re-enrollment.
 
+Passkey names must contain 1 to 255 UTF-16 code units after whitespace trimming.
+Registration, credential storage, and renaming use the same limit.
+The server removes expired ordinary MFA challenges during periodic maintenance.
+Each authentication operation also enforces challenge expiry and one-use consumption.
+Administrator reset continuations use their separate acknowledgement lifecycle.
+
 Recovery codes are one-time values. They are displayed only when first
 generated or regenerated, and only their hashes are stored. Users must keep
 the displayed values in approved protected storage. MFA ceremony and secret
@@ -187,14 +193,14 @@ checks. A viewer cannot manage another user, deployments, projects, or tokens.
 
 ### Per-project member management
 
-**Implementation:** `internal/handler/project_members.go`
+**Implementation:** `internal/auth/project_permissions.go`
 
 `RequireProjectAccess` only enforces a **binary** "is a member" check — it
 admits any member (per-project admin or deployer), including a global viewer
 who has membership, to the project route handler. The finer-grained
 "is a per-project admin" rule
 for member add/remove is enforced **at the handler level** via
-`CanManageProject(ctx, repo, user, projectID)`:
+`auth.CanManageProject(ctx, repo, projectID)`:
 
 - Returns `true` for a global `admin` or a project member whose per-project
   `role` is `admin`.

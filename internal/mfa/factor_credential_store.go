@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"strings"
 
 	"durpdeploy/internal/db"
 )
@@ -15,6 +14,10 @@ func (s *FactorStore) CreateCredential(
 ) (CredentialActivation, error) {
 	var activation CredentialActivation
 	var err error
+	credential.Name, err = NormalizePasskeyName(credential.Name)
+	if err != nil {
+		return CredentialActivation{}, err
+	}
 	err = s.repo.WithTx(ctx, func(queries *db.Queries) error {
 		if err := s.lockUser(ctx, queries, credential.UserID); err != nil {
 			return err
@@ -33,6 +36,11 @@ func (s *FactorStore) CreateCredentialWith(
 	queries *db.Queries,
 	credential db.CreateWebAuthnCredentialParams,
 ) (CredentialActivation, error) {
+	name, err := NormalizePasskeyName(credential.Name)
+	if err != nil {
+		return CredentialActivation{}, err
+	}
+	credential.Name = name
 	factors, err := queries.CountMFAFactors(ctx, credential.UserID)
 	if err != nil {
 		return CredentialActivation{}, err
@@ -181,17 +189,21 @@ func (s *FactorStore) RenameCredential(
 	credentialID []byte,
 	name string,
 ) error {
-	if len(credentialID) == 0 || strings.TrimSpace(name) == "" {
+	name, err := NormalizePasskeyName(name)
+	if err != nil {
+		return err
+	}
+	if len(credentialID) == 0 {
 		return ErrMFAFactorOperation
 	}
-	err := s.repo.WithTx(ctx, func(queries *db.Queries) error {
+	err = s.repo.WithTx(ctx, func(queries *db.Queries) error {
 		if err := s.lockUser(ctx, queries, userID); err != nil {
 			return err
 		}
 		updated, err := queries.RenameWebAuthnCredentialByUserID(
 			ctx,
 			db.RenameWebAuthnCredentialByUserIDParams{
-				Name:         strings.TrimSpace(name),
+				Name:         name,
 				CredentialID: credentialID,
 				UserID:       userID,
 			},

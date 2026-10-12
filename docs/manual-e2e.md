@@ -247,6 +247,43 @@ Verify raw pending output does not appear in stored or streamed logs.
 Keep retained schedule examples disabled after checks.
 Enable a disposable schedule through its existing toggle control to repeat scheduling checks.
 
+## List and authentication checks
+
+Schedules show 50 entries per page.
+Create 51 disabled schedules in a disposable project.
+Open the second page with **Next**.
+Select **New Schedule**.
+Select **Cancel**.
+Confirm that the second page remains selected.
+Edit one schedule and select **Save**.
+Confirm that the second page remains selected.
+Toggle the schedule twice to leave it disabled.
+Delete the last entry on the last page.
+Confirm that the list shows the preceding page.
+Compare the list with `GET /api/v1/projects/{id}/schedules?limit=50&offset=50`.
+
+Home deployment panels refresh every five seconds.
+Home charts refresh every 30 seconds.
+Open browser network tools and filter requests by `/dashboard/activity`.
+Confirm that deployment panel refreshes do not send extra chart requests.
+Open **Projects** and confirm that chart requests stop.
+Return to Home and confirm that chart requests resume.
+
+Passkey names use a limit of 255 UTF-16 code units after whitespace trimming.
+Most characters use one unit.
+Some symbols, including many emoji, use two units.
+Open **Security** and enter a passkey name.
+Confirm that the field limits input to 255 units.
+Submit an oversized name through the session-authenticated registration or rename endpoint.
+Confirm that the response is `422` and the credential remains unchanged.
+
+Open navigation at phone, tablet, and desktop widths.
+Check **Security**, role-dependent **Tokens**, theme switching, and **Logout**.
+Open a lifecycle with multiple stages.
+Move a stage and confirm that keyboard focus remains usable.
+Confirm that boundary stages show only their available move controls.
+Use a viewer account and confirm that write controls remain hidden.
+
 ## Populated demo
 
 For a complete local demo, run `make demo` (or ask a coding agent to run it).
@@ -289,6 +326,12 @@ Server-only refresh preserves the listener addresses and URL.
 For full refresh, use `DEMO_LOCAL_ONLY=1 DURPDEPLOY_CONTAINER_RUNTIME=podman make demo-refresh-full DEMO_DIR=/absolute/demo/path`.
 
 ### Optional firewall access
+
+The helper trusts the authorized local operator to select ports.
+This scope intentionally permits any TCP port from 32768 through 60999.
+The helper does not maintain an administrator-approved list of demo ports.
+Grant this permission only to operators trusted to expose services in that range.
+Leases expire after 120 seconds without renewal.
 
 Optional firewalld access: install `scripts/demo-firewall-helper.sh` root-owned
 at `/usr/local/libexec/durpdeploy-demo-firewall` (mode 0755), and authorize only
