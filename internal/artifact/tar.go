@@ -69,3 +69,15 @@ func WriteTar(
 		},
 	)
 }
+
+type contextReader struct {
+	ctx    context.Context // io.Reader cannot accept a context parameter.
+	reader io.Reader
+}
+
+func (r contextReader) Read(buffer []byte) (int, error) {
+	if err := r.ctx.Err(); err != nil {
+		return 0, err
+	}
+	return r.reader.Read(buffer)
+}
