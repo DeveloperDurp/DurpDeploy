@@ -757,6 +757,7 @@ Container steps use `/artifacts` with a read-only, noexec mount.
 Host steps use a private directory with read-only file permissions.
 The server owner remains responsible for trusted host scripts and their effects.
 Copy package files into `DURPDEPLOY_STAGE_DIR` to share changed outputs with later jobs.
+For host copies, add owner write permission to copied files before changing them.
 The agent excludes the original package directory from staging uploads.
 This variable is reserved. Interpreters can read package files.
 ZIP paths, links, and

@@ -457,7 +457,7 @@ fail closed if a tag was rewritten:
 ```bash
 set -euo pipefail
 AGENT_MODULE=github.com/DeveloperDurp/durpdeploy-agent
-AGENT_VERSION=v0.1.1-0.20261012013706-258bd98e9f39 # use the value recorded from the server checkout
+AGENT_VERSION=v0.1.1-0.20261012020530-ed56db7bd1dd # use the value recorded from the server checkout
 AGENT_SUM='h1:...' # use the value recorded from the server checkout
 AGENT_COMMIT=... # use the value recorded from the server checkout
 AGENT_DOWNLOAD=$(go mod download -json "$AGENT_MODULE@$AGENT_VERSION")

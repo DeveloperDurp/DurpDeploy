@@ -314,6 +314,7 @@ Host jobs receive a private package directory with read-only file permissions.
 The server owner remains responsible for trusted host scripts and their effects.
 
 Copy package files into `DURPDEPLOY_STAGE_DIR` before changing them.
+For host copies, add owner write permission to copied files before changing them.
 The server transfers these outputs between server and agent jobs within the deployment.
 The original package directory stays separate from writable staging.
 Agents verify the authenticated checksum and size before extracting the package.
