@@ -42,7 +42,7 @@ func AuthorizeLifecycleSelection(
 	}
 	if lifecycleID <= 0 {
 		if !project.LifecycleID.Valid ||
-			CanManageProject(ctx, repo, user, projectID) {
+			auth.CanManageProject(ctx, repo, projectID) {
 			return nil
 		}
 		return ErrLifecycleRemovalForbidden

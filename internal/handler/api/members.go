@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"database/sql"
 	"net/http"
 	"strconv"
@@ -12,25 +11,6 @@ import (
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/repository"
 )
-
-func canManageMembers(
-	ctx context.Context,
-	repo *repository.Repository,
-	userID, projectID int64,
-) bool {
-	user := auth.UserFromContext(ctx)
-	if user != nil && user.Role == "admin" {
-		return true
-	}
-	member, err := repo.Queries.GetProjectMember(ctx, db.GetProjectMemberParams{
-		ProjectID: projectID,
-		UserID:    userID,
-	})
-	if err != nil {
-		return false
-	}
-	return member.Role == "admin"
-}
 
 type MemberHandler struct {
 	repo *repository.Repository
@@ -175,7 +155,7 @@ func (h *MemberHandler) AddMember(w http.ResponseWriter, r *http.Request) {
 		RespondError(w, http.StatusUnauthorized, "Not authenticated")
 		return
 	}
-	if !canManageMembers(r.Context(), h.repo, user.ID, projectID) {
+	if !auth.CanManageProject(r.Context(), h.repo, projectID) {
 		RespondError(w, http.StatusForbidden, "Admin access required")
 		return
 	}
@@ -259,7 +239,7 @@ func (h *MemberHandler) RemoveMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !canManageMembers(r.Context(), h.repo, user.ID, projectID) {
+	if !auth.CanManageProject(r.Context(), h.repo, projectID) {
 		RespondError(w, http.StatusForbidden, "Admin access required")
 		return
 	}
@@ -320,7 +300,7 @@ func (h *MemberHandler) UpdateMemberRole(
 		return
 	}
 
-	if !canManageMembers(r.Context(), h.repo, user.ID, projectID) {
+	if !auth.CanManageProject(r.Context(), h.repo, projectID) {
 		RespondError(w, http.StatusForbidden, "Admin access required")
 		return
 	}

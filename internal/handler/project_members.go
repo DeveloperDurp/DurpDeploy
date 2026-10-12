@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"context"
 	"database/sql"
 	"fmt"
 	"net/http"
@@ -28,31 +27,6 @@ func NewProjectMembersHandler(
 	return &ProjectMembersHandler{repo: repo}
 }
 
-// CanManageProject returns true if the user is a global admin or a
-// per-project admin of the given project. Used by both the project
-// form (to gate the UI) and the members handlers (to gate writes).
-func CanManageProject(
-	ctx context.Context,
-	repo *repository.Repository,
-	user *db.User,
-	projectID int64,
-) bool {
-	if user == nil {
-		return false
-	}
-	if user.Role == "admin" {
-		return true
-	}
-	member, err := repo.Queries.GetProjectMember(ctx, db.GetProjectMemberParams{
-		ProjectID: projectID,
-		UserID:    user.ID,
-	})
-	if err != nil {
-		return false
-	}
-	return member.Role == "admin"
-}
-
 // loadMembersContext loads the member roster, the users not yet on it,
 // and the canManage flag for the project form. Errors are swallowed
 // (rendered as empty slices / false) so a transient DB hiccup doesn't
@@ -61,8 +35,7 @@ func (h *ProjectHandler) loadMembersContext(
 	r *http.Request,
 	projectID int64,
 ) ([]db.ListProjectMembersRow, []db.ListUsersRow, bool) {
-	user := auth.UserFromContext(r.Context())
-	canManage := CanManageProject(r.Context(), h.repo, user, projectID)
+	canManage := auth.CanManageProject(r.Context(), h.repo, projectID)
 
 	members, err := h.repo.Queries.ListProjectMembers(r.Context(), projectID)
 	if err != nil {
@@ -128,8 +101,7 @@ func (h *ProjectMembersHandler) AddMember(
 		return
 	}
 
-	user := auth.UserFromContext(r.Context())
-	if !CanManageProject(r.Context(), h.repo, user, id) {
+	if !auth.CanManageProject(r.Context(), h.repo, id) {
 		auth.RenderUnauthorized(w, r)
 		return
 	}
@@ -199,8 +171,7 @@ func (h *ProjectMembersHandler) RemoveMember(
 		return
 	}
 
-	user := auth.UserFromContext(r.Context())
-	if !CanManageProject(r.Context(), h.repo, user, id) {
+	if !auth.CanManageProject(r.Context(), h.repo, id) {
 		auth.RenderUnauthorized(w, r)
 		return
 	}

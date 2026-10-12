@@ -513,7 +513,7 @@ func ApplyLifecycleSelection(
 		if !project.LifecycleID.Valid {
 			return nil
 		}
-		if !CanManageProject(ctx, repo, user, projectID) {
+		if !auth.CanManageProject(ctx, repo, projectID) {
 			return ErrLifecycleRemovalForbidden
 		}
 		_, err = repo.Queries.ClearProjectLifecycleIfAssigned(
