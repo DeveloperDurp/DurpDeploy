@@ -59,6 +59,21 @@ for runtime in '' invalid; do
     fi
 done
 
+for script in test-backup-restore.sh test-backup-restore-cleanup.sh; do
+    if RESTORE_TEST_OS=Linux RESTORE_TEST_ARCH=x86_64 \
+        DURPDEPLOY_CONTAINER_RUNTIME=podman DURPDEPLOY_CONTAINER_URL='' DOCKER_HOST='' \
+        PATH="$test_dir/bin:$PATH" \
+        /usr/bin/bash "$root/scripts/$script" > "$test_dir/output" 2>&1; then
+        echo 'FAIL: Podman without a selected socket passed.' >&2
+        exit 1
+    fi
+    grep -q 'select the Podman socket' "$test_dir/output"
+    if grep -q 'make called' "$test_dir/output"; then
+        echo 'FAIL: missing Podman socket started the drill.' >&2
+        exit 1
+    fi
+done
+
 cat > "$test_dir/bin/go" <<'GO'
 #!/bin/sh
 printf '%s\n' "${DOCKER_HOST:-unix:///discovered/runtime.sock}"
@@ -73,7 +88,7 @@ chmod +x "$test_dir/bin/go" "$test_dir/bin/podman"
 cp "$test_dir/bin/podman" "$test_dir/bin/docker"
 
 for selection in configured provider discovered; do
-    configured='' provider='' expected=unix:///discovered/runtime.sock
+    configured='' provider='' expected=unix:///discovered/runtime.sock runtime=podman
     if [[ $selection == configured ]]; then
         configured=unix:///configured/runtime.sock
         provider=unix:///other/runtime.sock
@@ -81,16 +96,22 @@ for selection in configured provider discovered; do
     elif [[ $selection == provider ]]; then
         provider=unix:///provider/runtime.sock
         expected=$provider
+    else
+        runtime=docker
     fi
     status=0
     DURPDEPLOY_CONTAINER_URL=$configured DOCKER_HOST=$provider \
-        DURPDEPLOY_CONTAINER_RUNTIME=podman \
+        DURPDEPLOY_CONTAINER_RUNTIME=$runtime \
         RESTORE_TEST_ENGINE_LOG="$test_dir/engine" PATH="$test_dir/bin:$PATH" \
         /usr/bin/bash "$root/scripts/test-backup-restore-cleanup.sh" || status=$?
     [[ $status == 64 ]]
     grep -Fxq "provider=$expected application=$expected" "$test_dir/engine"
-    grep -Fxq -- '--remote' "$test_dir/engine"
-    grep -Fxq -- "--url=$expected" "$test_dir/engine"
+    if [[ $runtime == podman ]]; then
+        grep -Fxq -- '--remote' "$test_dir/engine"
+        grep -Fxq -- "--url=$expected" "$test_dir/engine"
+    else
+        grep -Fxq -- "--host=$expected" "$test_dir/engine"
+    fi
 done
 test_status=0
 DURPDEPLOY_CONTAINER_URL='' DOCKER_HOST=unix:///docker/runtime.sock \

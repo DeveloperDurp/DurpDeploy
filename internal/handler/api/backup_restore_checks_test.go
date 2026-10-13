@@ -158,7 +158,20 @@ func (f *restoreFixture) exerciseSchedule(
 				saved.NextRunAt <= saved.LastFiredAt.Int64 {
 				t.Fatal("restored schedule did not advance or remain disabled")
 			}
-			id := listed.Items[0].ID
+			var id int64
+			note := fmt.Sprintf(
+				"Scheduled: %d - %s",
+				schedule.ID,
+				schedule.Note.String,
+			)
+			for _, deployment := range listed.Items {
+				if deployment.Note.String == note {
+					id = deployment.ID
+				}
+			}
+			if id == 0 {
+				t.Fatal("restored scheduler deployment was not present")
+			}
 			f.assertExecution(t, id)
 			f.assertDelivery(t, id)
 			return

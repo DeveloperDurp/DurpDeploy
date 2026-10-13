@@ -122,6 +122,14 @@ DURPDEPLOY_CONTAINER_RUNTIME=docker make backup-restore-test
 Start the selected Docker or Podman socket before the drill.
 If you use Podman, set `DURPDEPLOY_CONTAINER_RUNTIME=podman`.
 Always select the runtime explicitly.
+If you use Podman, select its socket with `DURPDEPLOY_CONTAINER_URL` or `DOCKER_HOST`.
+
+For a rootless Podman socket, run:
+
+```bash
+export DURPDEPLOY_CONTAINER_URL="unix://${XDG_RUNTIME_DIR}/podman/podman.sock"
+DURPDEPLOY_CONTAINER_RUNTIME=podman make backup-restore-test
+```
 
 Use a test host without `/etc/durpdeploy/key`.
 The drill refuses that installed key to prevent access to operator secrets.

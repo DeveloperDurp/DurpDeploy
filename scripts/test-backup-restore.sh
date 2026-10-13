@@ -15,6 +15,10 @@ case ${DURPDEPLOY_CONTAINER_RUNTIME:-} in
     docker|podman) ;;
     *) echo 'ERROR: set DURPDEPLOY_CONTAINER_RUNTIME to docker or podman.' >&2; exit 1 ;;
 esac
+if [[ $DURPDEPLOY_CONTAINER_RUNTIME == podman && -z ${DURPDEPLOY_CONTAINER_URL:-} && -z ${DOCKER_HOST:-} ]]; then
+    echo 'ERROR: select the Podman socket with DURPDEPLOY_CONTAINER_URL or DOCKER_HOST.' >&2
+    exit 1
+fi
 if [[ -n ${DURPDEPLOY_CONTAINER_URL:-} ]]; then
     export DOCKER_HOST=$DURPDEPLOY_CONTAINER_URL
 fi
