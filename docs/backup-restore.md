@@ -125,6 +125,7 @@ The drill refuses that installed key to prevent access to operator secrets.
 The drill requires Go, npm, and a working container runtime.
 Missing tools or runtime access fail the check.
 Other architectures fail before the drill creates resources.
+
 If `DURPDEPLOY_CONTAINER_URL` is set, the drill uses that socket for application execution, backup containers, and cleanup.
 Otherwise, the cleanup checks use the Testcontainers provider selected through `DOCKER_HOST` or default discovery.
 
