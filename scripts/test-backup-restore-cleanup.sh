@@ -46,7 +46,7 @@ fi
 
 unrelated=$(engine run --detach --network=none \
     --label "io.durpdeploy.namespace=restore-unrelated-${work_dir##*/}" \
-    docker.io/library/bash:5.2 sleep 300)
+    docker.io/library/bash:5.2 sleep 1800)
 
 for mode in timeout TERM; do
     log_file="$work_dir/$mode.log"
