@@ -158,20 +158,7 @@ func (f *restoreFixture) exerciseSchedule(
 				saved.NextRunAt <= saved.LastFiredAt.Int64 {
 				t.Fatal("restored schedule did not advance or remain disabled")
 			}
-			var id int64
-			note := fmt.Sprintf(
-				"Scheduled: %d - %s",
-				schedule.ID,
-				schedule.Note.String,
-			)
-			for _, deployment := range listed.Items {
-				if deployment.Note.String == note {
-					id = deployment.ID
-				}
-			}
-			if id == 0 {
-				t.Fatal("restored scheduler deployment was not present")
-			}
+			id := restoredScheduleDeployment(t, listed.Items, schedule)
 			f.assertExecution(t, id)
 			f.assertDelivery(t, id)
 			return
@@ -181,4 +168,23 @@ func (f *restoreFixture) exerciseSchedule(
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
+}
+
+func restoredScheduleDeployment(
+	t *testing.T,
+	deployments []db.Deployment,
+	schedule db.ScheduledDeployment,
+) int64 {
+	t.Helper()
+	var id int64
+	note := fmt.Sprintf("Scheduled: %d - %s", schedule.ID, schedule.Note.String)
+	for _, deployment := range deployments {
+		if deployment.Note.String == note {
+			id = deployment.ID
+		}
+	}
+	if id == 0 {
+		t.Fatal("restored scheduler deployment was not present")
+	}
+	return id
 }
