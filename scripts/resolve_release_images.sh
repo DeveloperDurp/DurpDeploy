@@ -33,17 +33,22 @@ gh api --paginate \
 		| select(.status == "completed" and .conclusion == "success")
 	' > "$scratch/run.json"
 run=$(jq -er '.id | select(type == "number" and . > 0)' "$scratch/run.json")
-attempt=$(jq -er '.run_attempt | select(type == "number" and . > 0)' "$scratch/run.json")
-gh api --paginate "repos/$repository/actions/runs/$run/attempts/$attempt/jobs?per_page=100" |
+latest_attempt=$(jq -er '.run_attempt | select(type == "number" and . > 0)' "$scratch/run.json")
+gh api --paginate "repos/$repository/actions/runs/$run/jobs?filter=all&per_page=100" |
 	jq -s '[.[].jobs[]]' > "$scratch/jobs.json"
 gh api --paginate "repos/$repository/actions/runs/$run/artifacts?per_page=100" |
 	jq -s '[.[].artifacts[]]' > "$scratch/artifacts.json"
 
 for arch in amd64 arm64; do
-	jq -e --arg name "Image scan ($arch)" '
-		[.[] | select(.name == $name)] | length == 1 and
-		all(.[]; .status == "completed" and .conclusion == "success")
-	' "$scratch/jobs.json" > /dev/null
+	# Partial reruns keep successful jobs from earlier attempts in the same run.
+	attempt=$(jq -er --arg name "Image scan ($arch)" --argjson latest "$latest_attempt" '
+		[.[] | select(.name == $name)]
+		| (max_by(.run_attempt).run_attempt) as $attempt
+		| [.[] | select(.run_attempt == $attempt)]
+		| if length == 1 then .[0] else error("No unique latest image job") end
+		| select(.status == "completed" and .conclusion == "success")
+		| .run_attempt | select(type == "number" and . > 0 and . <= $latest)
+	' "$scratch/jobs.json")
 	jq -e --arg name "release-image-$arch-$attempt" --arg head "$head" \
 		--argjson run "$run" '
 		[.[] | select(.name == $name)]
@@ -90,4 +95,4 @@ for arch in amd64 arm64; do
 done
 [[ "$(jq -r '.commit' "$destination/amd64/source.json")" == \
 	"$(jq -r '.commit' "$destination/arm64/source.json")" ]]
-printf 'Verified PR images from run %s, attempt %s, source tree %s.\n' "$run" "$attempt" "$tree"
+printf 'Verified PR images from run %s, source tree %s.\n' "$run" "$tree"

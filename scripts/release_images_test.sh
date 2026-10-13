@@ -38,10 +38,11 @@ path=${*: -1}
 case "$path" in
   */pulls\?*) cat "$FIXTURE_DIR/pr.json" ;;
   */release.yml/runs\?*) cat "$FIXTURE_DIR/run.json" ;;
-  */attempts/*/jobs\?*) cat "$FIXTURE_DIR/jobs.json" ;;
+  */runs/*/jobs\?*) cat "$FIXTURE_DIR/jobs.json" ;;
   */runs/*/artifacts\?*) cat "$FIXTURE_DIR/artifacts.json" ;;
   */artifacts/101/zip) cat "$FIXTURE_DIR/amd64.zip" ;;
   */artifacts/102/zip) cat "$FIXTURE_DIR/arm64.zip" ;;
+  */artifacts/103/zip) cat "$FIXTURE_DIR/arm64-rerun.zip" ;;
   */git/commits/*) cat "$FIXTURE_DIR/commit.json" ;;
   *) printf 'Unexpected GitHub request: %s\n' "$path" >&2; exit 1 ;;
 esac
@@ -57,7 +58,7 @@ jq -n --arg head "$head" '
     repository:{full_name:"fixture/project"},path:".github/workflows/release.yml@refs/pull/1/merge",
     status:"completed",conclusion:"success"}]}
 ' > "$FIXTURE_DIR/run.json"
-printf '%s\n' '{"jobs":[{"name":"Image scan (amd64)","status":"completed","conclusion":"success"},{"name":"Image scan (arm64)","status":"completed","conclusion":"success"}]}' > "$FIXTURE_DIR/jobs.json"
+printf '%s\n' '{"jobs":[{"id":11,"run_attempt":1,"name":"Image scan (amd64)","status":"completed","conclusion":"success"},{"id":12,"run_attempt":1,"name":"Image scan (arm64)","status":"completed","conclusion":"success"}]}' > "$FIXTURE_DIR/jobs.json"
 jq -n --arg tree "$tree" --arg base "$base" --arg head "$head" \
 	'{tree:{sha:$tree},parents:[{sha:$base},{sha:$head}]}' > "$FIXTURE_DIR/commit.json"
 for arch in amd64 arm64; do
@@ -118,13 +119,39 @@ bash "$root/scripts/resolve_release_images.sh" "$work/offline-verified" > "$work
 git remote set-url origin "$work/origin"
 echo 'PASS: resolve with checkout refs when the Git remote is unavailable'
 
+# Given only E2E was rerun, both verified image jobs stay at attempt one.
+jq '.workflow_runs[0].run_attempt=2' "$work/good-api/run.json" > "$FIXTURE_DIR/run.json"
+bash "$root/scripts/resolve_release_images.sh" "$work/partial-verified" > "$work/partial.log" 2>&1
+echo 'PASS: reuse verified image jobs after a partial E2E rerun'
+
+# Given ARM64 alone was rebuilt, each artifact must match its own latest job.
+mkdir -p "$work/arm64-rerun"
+cp "$work/arm64/artifact/image.tar" "$work/arm64-rerun/image.tar"
+jq '.attempt=2' "$work/arm64/artifact/source.json" > "$work/arm64-rerun/source.json"
+(cd "$work/arm64-rerun" && zip -q "$FIXTURE_DIR/arm64-rerun.zip" image.tar source.json)
+jq '.jobs[1].conclusion="failure" | .jobs += [(.jobs[0] | .id=13 | .name="Image scan (arm64)" | .run_attempt=2)]' \
+	"$work/good-api/jobs.json" > "$FIXTURE_DIR/jobs.json"
+jq --arg digest "sha256:$(sha256sum "$FIXTURE_DIR/arm64-rerun.zip" | cut -d ' ' -f 1)" '
+	.artifacts = [.artifacts[0], (.artifacts[1] | .id=103 | .name="release-image-arm64-2" | .digest=$digest)]
+' "$work/good-api/artifacts.json" > "$FIXTURE_DIR/artifacts.json"
+bash "$root/scripts/resolve_release_images.sh" "$work/mixed-verified" > "$work/mixed.log" 2>&1
+jq -e '.attempt==1' "$work/mixed-verified/amd64/source.json" > /dev/null
+jq -e '.attempt==2' "$work/mixed-verified/arm64/source.json" > /dev/null
+echo 'PASS: retain AMD64 while accepting a successful ARM64 rerun'
+cp "$work/good-api/"* "$FIXTURE_DIR/"
+
 # Each boundary failure must stop before any registry publication is possible.
 jq '.workflow_runs[0].conclusion="failure"' "$work/good-api/run.json" > "$FIXTURE_DIR/run.json"
 expect_rejection 'failed workflow'
 jq '.jobs[1].conclusion="failure"' "$work/good-api/jobs.json" > "$FIXTURE_DIR/jobs.json"
 expect_rejection 'failed ARM64 scan'
 jq '.workflow_runs[0].run_attempt=2' "$work/good-api/run.json" > "$FIXTURE_DIR/run.json"
-expect_rejection 'artifacts from an earlier attempt'
+jq '.jobs[].run_attempt=2' "$work/good-api/jobs.json" > "$FIXTURE_DIR/jobs.json"
+expect_rejection 'artifacts from before the latest image job attempt'
+jq '.workflow_runs[0].run_attempt=2' "$work/good-api/run.json" > "$FIXTURE_DIR/run.json"
+jq '.jobs += [(.jobs[0] | .id=13 | .run_attempt=2 | .conclusion="failure")]' \
+	"$work/good-api/jobs.json" > "$FIXTURE_DIR/jobs.json"
+expect_rejection 'a failed latest image job despite an older successful scan'
 jq '.artifacts[1].expired=true' "$work/good-api/artifacts.json" > "$FIXTURE_DIR/artifacts.json"
 expect_rejection 'expired image'
 jq '.artifacts |= .[:1]' "$work/good-api/artifacts.json" > "$FIXTURE_DIR/artifacts.json"

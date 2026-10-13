@@ -89,7 +89,7 @@ func TestPublishersRequireChecksThatRunOutsidePullRequests(t *testing.T) {
 			checkDependencies = func(name string) {
 				job, ok := release.Jobs[name]
 				if !ok || (job.If != "" &&
-					!(name == "docker" && job.If == publisher.If)) {
+					(name != "docker" || job.If != publisher.If)) {
 					t.Fatalf(
 						"publishing depends on missing/conditional job %s",
 						name,

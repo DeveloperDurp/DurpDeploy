@@ -20,7 +20,8 @@ The scan report stays on the runner and is not uploaded.
 The `Image verification` check requires both image scans, Go tests, E2E tests, and source security checks.
 
 After merge, publication downloads images from the matching successful pull-request run.
-It checks the run attempt, archive digests, source tree, merge parents, and platform metadata.
+It checks each image job's attempt, archive digests, source tree, merge parents, and platform metadata.
+Partial reruns reuse the verified artifact from each architecture's latest completed image job.
 Squash merges can have different commit identifiers but must have the same source tree.
 Publication uses the scanned platform manifests without rebuilding or rescanning.
 Helm publication requires successful image publication.
