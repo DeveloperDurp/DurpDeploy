@@ -69,6 +69,60 @@ func cleanup(ctx context.Context, api *testcontainers.DockerClient,
 					fmt.Errorf("remove %s: %w", container.ID, err))
 			}
 		}
+		failures = append(failures, cleanupRecoveryRuntime(ctx, api, session))
+	}
+	return errors.Join(failures...)
+}
+
+// Recovery tests use this session-derived namespace for application-created
+// containers and named staging volumes, which have no Testcontainers labels.
+func cleanupRecoveryRuntime(
+	ctx context.Context,
+	api *testcontainers.DockerClient,
+	session string,
+) error {
+	var failures []error
+	for _, kind := range []string{"docker", "podman"} {
+		namespace := kind + ":" + strings.ReplaceAll(
+			session,
+			".",
+			"-",
+		) + "-restore"
+		filters := make(client.Filters)
+		filters.Add("label", "io.durpdeploy.namespace="+namespace)
+		containers, err := api.ContainerList(ctx, client.ContainerListOptions{
+			All: true, Filters: filters,
+		})
+		if err != nil {
+			failures = append(failures, err)
+			continue
+		}
+		for _, resource := range containers.Items {
+			if resource.Labels["io.durpdeploy.namespace"] != namespace {
+				continue
+			}
+			if err := remove(ctx, api, resource.ID); err != nil {
+				failures = append(failures, err)
+			}
+		}
+		volumes, err := api.VolumeList(
+			ctx,
+			client.VolumeListOptions{Filters: filters},
+		)
+		if err != nil {
+			failures = append(failures, err)
+			continue
+		}
+		for _, resource := range volumes.Items {
+			if resource.Labels["io.durpdeploy.namespace"] != namespace {
+				continue
+			}
+			_, err := api.VolumeRemove(ctx, resource.Name,
+				client.VolumeRemoveOptions{Force: true})
+			if err != nil && !errdefs.IsNotFound(err) {
+				failures = append(failures, err)
+			}
+		}
 	}
 	return errors.Join(failures...)
 }

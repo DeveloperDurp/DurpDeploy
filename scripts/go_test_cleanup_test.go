@@ -61,6 +61,62 @@ func TestCleanupConcurrentRemoval(t *testing.T) {
 	}
 }
 
+func TestCleanupRecoveryRuntimeOwnership(t *testing.T) {
+	session := "durpdeploy-go-test.fixture"
+	namespace := "docker:" + strings.ReplaceAll(session, ".", "-") + "-restore"
+	deleted := make(chan string, 4)
+	server := httptest.NewServer(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			var response any
+			switch {
+			case strings.HasSuffix(r.URL.Path, "/containers/json"):
+				response = []map[string]any{
+					{"Id": "owned-container", "Labels": map[string]string{
+						"io.durpdeploy.namespace": namespace,
+					}},
+					{"Id": "other-container", "Labels": map[string]string{
+						"io.durpdeploy.namespace": namespace + "-other",
+					}},
+				}
+			case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/volumes"):
+				response = map[string]any{"Volumes": []map[string]any{
+					{"Name": "owned-volume", "Labels": map[string]string{
+						"io.durpdeploy.namespace": namespace,
+					}},
+					{"Name": "other-volume", "Labels": map[string]string{
+						"io.durpdeploy.namespace": namespace + "-other",
+					}},
+				}}
+			case r.Method == http.MethodDelete:
+				deleted <- r.URL.Path
+				w.WriteHeader(http.StatusNoContent)
+				return
+			default:
+				t.Errorf("unexpected cleanup request: %s", r.URL.Path)
+				w.WriteHeader(http.StatusBadRequest)
+			}
+			if err := json.NewEncoder(w).Encode(response); err != nil {
+				t.Errorf("encode cleanup response: %v", err)
+			}
+		}),
+	)
+	defer server.Close()
+	api, err := client.New(
+		client.WithHost(server.URL),
+		client.WithAPIVersion("1.44"),
+	)
+	require.NoError(t, err)
+	defer func() { require.NoError(t, api.Close()) }()
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	require.NoError(t, cleanupRecoveryRuntime(ctx,
+		&testcontainers.DockerClient{Client: api}, session))
+	require.Len(t, deleted, 2)
+	require.True(t, strings.HasSuffix(<-deleted, "/containers/owned-container"))
+	require.True(t, strings.HasSuffix(<-deleted, "/volumes/owned-volume"))
+}
+
 func removalHandler(t *testing.T, status int, disappears bool,
 	inspections, deletions *atomic.Int32,
 ) http.HandlerFunc {
@@ -79,6 +135,8 @@ func removalHandler(t *testing.T, status int, disappears bool,
 					"org.testcontainers.sessionId": "another-run",
 				}},
 			}
+		case strings.HasSuffix(r.URL.Path, "/volumes"):
+			response = map[string]any{"Volumes": []any{}}
 		case r.Method == http.MethodDelete:
 			deletions.Add(1)
 			if !strings.HasSuffix(r.URL.Path, "/containers/owned") {

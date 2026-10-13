@@ -53,6 +53,27 @@ jobs:
       - name: Check development database boundaries
         run: bash scripts/check-dev-database-contract.sh
 
+  # ----- Backup restore ---------------------------------------------------
+  backup-restore:
+    name: Backup restore
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GOFLAGS: -mod=readonly
+      DURPDEPLOY_CONTAINER_RUNTIME: docker
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: '1.26.9'
+          cache: true
+      - name: Check container runtime
+        run: docker info >/dev/null
+      - name: Verify restored application through its API and web routes
+        run: make backup-restore-test
+
   # ----- Dockerfile lint ---------------------------------------------------
   lint-dockerfile:
     name: Lint Dockerfile

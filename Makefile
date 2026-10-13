@@ -333,6 +333,10 @@ clean:
 test: templ-generate swagger-ui-copy
 	bash scripts/go_test.sh -v -count=1 -timeout=20m ./...
 
+.PHONY: backup-restore-test
+backup-restore-test:
+	bash scripts/test-backup-restore.sh
+
 .PHONY: go-test-cleanup-test
 go-test-cleanup-test:
 	bash scripts/go_test_cleanup_test.sh
