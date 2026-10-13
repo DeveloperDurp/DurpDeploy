@@ -18,16 +18,21 @@ type workflow struct {
 }
 
 type workflowJob struct {
-	Uses            string   `yaml:"uses"`
-	Needs           []string `yaml:"needs"`
-	If              string   `yaml:"if"`
-	ContinueOnError bool     `yaml:"continue-on-error"`
+	Permissions     map[string]string `yaml:"permissions"`
+	Uses            string            `yaml:"uses"`
+	Needs           []string          `yaml:"needs"`
+	If              string            `yaml:"if"`
+	ContinueOnError bool              `yaml:"continue-on-error"`
 	Concurrency     struct {
 		Group string `yaml:"group"`
 	} `yaml:"concurrency"`
 	Steps []struct {
-		Run string `yaml:"run"`
-		If  string `yaml:"if"`
+		Name string            `yaml:"name"`
+		Run  string            `yaml:"run"`
+		If   string            `yaml:"if"`
+		Uses string            `yaml:"uses"`
+		With map[string]string `yaml:"with"`
+		Env  map[string]string `yaml:"env"`
 	} `yaml:"steps"`
 }
 
