@@ -35,10 +35,7 @@ func TestRunCheckCleansOrphanedOutput(t *testing.T) {
 				t.Fatal("invalid child PID")
 			}
 			t.Cleanup(func() {
-				if err := syscall.Kill(pid, syscall.SIGKILL); err != nil &&
-					!errors.Is(err, syscall.ESRCH) {
-					t.Errorf("kill test child: %v", err)
-				}
+				killTestChild(t, pid)
 			})
 			// Then: the child is gone or waiting to be reaped, never running.
 			deadline := time.Now().Add(time.Second)
@@ -55,5 +52,13 @@ func TestRunCheckCleansOrphanedOutput(t *testing.T) {
 			}
 			t.Fatal("check left its child running")
 		})
+	}
+}
+
+func killTestChild(t *testing.T, pid int) {
+	t.Helper()
+	if err := syscall.Kill(pid, syscall.SIGKILL); err != nil &&
+		!errors.Is(err, syscall.ESRCH) {
+		t.Errorf("kill test child: %v", err)
 	}
 }

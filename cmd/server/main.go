@@ -720,7 +720,9 @@ func runSecretKey(args []string) int {
 		fmt.Fprintf(os.Stderr, "error: begin transaction: %v\n", err)
 		return 1
 	}
-	defer repository.RollbackOnExit(tx)
+	defer func() {
+		repository.LogRollbackError(tx.Rollback())
+	}()
 	qtx := q.WithTx(tx)
 
 	vars, err := qtx.ListAllVariables(ctx)

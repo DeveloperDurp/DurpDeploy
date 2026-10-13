@@ -41,7 +41,9 @@ func RefreshReleaseSnapshot(
 	if err != nil {
 		return db.Release{}, err
 	}
-	defer repository.RollbackOnExit(tx)
+	defer func() {
+		repository.LogRollbackError(tx.Rollback())
+	}()
 	queries := repo.Queries.WithTx(tx)
 	if err := lockReleaseForRefresh(ctx, queries, release); err != nil {
 		return db.Release{}, err

@@ -27,7 +27,9 @@ func CreateReleaseSnapshot(
 	if err != nil {
 		return db.Release{}, err
 	}
-	defer repository.RollbackOnExit(tx)
+	defer func() {
+		repository.LogRollbackError(tx.Rollback())
+	}()
 	queries := repo.Queries.WithTx(tx)
 	release, err := queries.CreateRelease(ctx, db.CreateReleaseParams{
 		ProjectID: projectID, Version: version,

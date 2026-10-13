@@ -20,7 +20,8 @@ esac
 temporary=$(mktemp -d)
 trap 'rm -rf "$temporary"' EXIT
 archive="golangci-lint-$version-$platform.tar.gz"
-curl --fail --silent --show-error --location \
+curl --proto '=https' --proto-redir '=https' \
+  --fail --silent --show-error --location \
   "https://github.com/golangci/golangci-lint/releases/download/v$version/$archive" \
   --output "$temporary/$archive"
 if command -v sha256sum >/dev/null; then

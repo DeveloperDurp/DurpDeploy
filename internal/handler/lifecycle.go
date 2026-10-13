@@ -412,7 +412,9 @@ func (h *LifecycleHandler) ReorderStage(
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	defer repository.RollbackOnExit(tx)
+	defer func() {
+		repository.LogRollbackError(tx.Rollback())
+	}()
 	qtx := h.repo.Queries.WithTx(tx)
 
 	a := stages[targetIdx]
@@ -504,46 +506,46 @@ func (h *LifecycleHandler) UpdateLifecycleStage(
 	}
 	stage.RequiresApproval = reqApproval
 
-	if r.Header.Get("HX-Request") == "true" {
-		lc, err := h.repo.Queries.GetLifecycle(r.Context(), stage.LifecycleID)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		stages, err := h.repo.Queries.ListLifecycleStages(
-			r.Context(), lc.ID,
+	if r.Header.Get("HX-Request") != "true" {
+		http.Redirect(
+			w, r,
+			fmt.Sprintf("/lifecycles/%d", stage.LifecycleID),
+			http.StatusSeeOther,
 		)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		idx := 0
-		for i, s := range stages {
-			if s.ID == id {
-				idx = i
-				break
-			}
-		}
-		env, err := h.repo.Queries.GetEnvironment(
-			r.Context(),
-			stage.EnvironmentID,
-		)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		view := pages.LifecycleStageView{Stage: stage, Environment: env}
-		if err := pages.LifecycleStageRow(lc, idx, len(stages), view).
-			Render(r.Context(), w); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
 		return
 	}
-	http.Redirect(
-		w, r,
-		fmt.Sprintf("/lifecycles/%d", stage.LifecycleID),
-		http.StatusSeeOther,
+	lc, err := h.repo.Queries.GetLifecycle(r.Context(), stage.LifecycleID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	stages, err := h.repo.Queries.ListLifecycleStages(
+		r.Context(), lc.ID,
 	)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	idx := 0
+	for i, s := range stages {
+		if s.ID == id {
+			idx = i
+			break
+		}
+	}
+	env, err := h.repo.Queries.GetEnvironment(
+		r.Context(),
+		stage.EnvironmentID,
+	)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	view := pages.LifecycleStageView{Stage: stage, Environment: env}
+	if err := pages.LifecycleStageRow(lc, idx, len(stages), view).
+		Render(r.Context(), w); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }
 
 func parseLifecycleID(r *http.Request) (int64, error) {

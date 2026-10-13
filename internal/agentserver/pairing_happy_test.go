@@ -59,6 +59,24 @@ func TestPairingServerInitCompletes(t *testing.T) {
 	assertRealPairingCompletes(t)
 }
 
+func TestPairingBeginDoesNotCreateChallengeAfterConnectionFailure(
+	t *testing.T,
+) {
+	fixture := newPairingFixture(t)
+	fixture.connectErr = errTestInterruption
+	input, err := ParsePairingStartInput(
+		"Offline runner", "agent.test:10943", fixture.code,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	challenge, err := fixture.service.Begin(t.Context(), input)
+	if !errors.Is(err, errTestInterruption) || challenge.ID != "" ||
+		len(fixture.service.challenges) != 0 {
+		t.Fatalf("challenge=%+v error=%v", challenge, err)
+	}
+}
+
 func TestPairingRequiresFingerprintApprovalBeforePersistence(t *testing.T) {
 	fixture := newPairingFixture(t)
 	input, err := ParsePairingStartInput(

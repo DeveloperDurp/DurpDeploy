@@ -2,6 +2,7 @@ package server
 
 import (
 	"io"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -9,6 +10,24 @@ import (
 
 type observedRequestBody struct {
 	reads int
+}
+
+func TestWebRequestBodyRejectsOversizedFormBeforeHandler(t *testing.T) {
+	called := false
+	h := webRequestBodyLimit(http.HandlerFunc(
+		func(http.ResponseWriter, *http.Request) { called = true },
+	))
+	req := httptest.NewRequest(
+		http.MethodPost, "/settings/package-repository",
+		strings.NewReader(strings.Repeat("x", (64<<10)+1)),
+	)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if called || rec.Code != http.StatusRequestEntityTooLarge ||
+		rec.Body.String() != "Request body too large\n" {
+		t.Fatalf("called=%v status=%d body=%q", called, rec.Code, rec.Body)
+	}
 }
 
 func (b *observedRequestBody) Read([]byte) (int, error) {

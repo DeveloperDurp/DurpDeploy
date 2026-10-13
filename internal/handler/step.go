@@ -955,7 +955,9 @@ func (h *StepHandler) ReorderStep(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	defer repository.RollbackOnExit(tx)
+	defer func() {
+		repository.LogRollbackError(tx.Rollback())
+	}()
 
 	qtx := h.repo.Queries.WithTx(tx)
 
