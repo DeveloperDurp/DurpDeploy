@@ -86,6 +86,9 @@ func TestDeploymentLogHistoryPagesAPIWebE2E(t *testing.T) {
 		!strings.Contains(historical, ">Succeeded</span>") {
 		t.Fatal("historical output lost the current step state")
 	}
+	f.assertLogByteBudget(t, logHistoryTarget{
+		DeploymentID: deployment.ID, APIPath: apiPath, WebPath: webPath,
+	})
 }
 
 func TestRunbookLogHistoryPagesAPIWebE2E(t *testing.T) {
@@ -127,6 +130,9 @@ func TestRunbookLogHistoryPagesAPIWebE2E(t *testing.T) {
 			t.Fatal("runbook export omitted older or latest output")
 		}
 	}
+	f.assertLogByteBudget(t, logHistoryTarget{
+		DeploymentID: result.Deployment.ID, APIPath: apiPath, WebPath: webPath,
+	})
 }
 
 func seedLargeLogCursor(t *testing.T, f *artifactE2E, deploymentID int64) {

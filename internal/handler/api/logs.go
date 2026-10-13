@@ -33,6 +33,7 @@ func NewLogHandler(
 // Stream deployment logs. The format=structured SSE option emits indexed
 // step logs and lifecycle states, supports after and Last-Event-ID cursors,
 // and ends with a complete event. Default SSE and NDJSON remain text streams.
+// Add preview=true to structured streams for marked 16 KiB display previews.
 //
 //	Produces:
 //	- text/event-stream
@@ -65,6 +66,10 @@ func (h *LogHandler) streamDeploymentLogs(
 	format := r.URL.Query().Get("format")
 	if format == "structured" {
 		if _, err := httpstream.LogCursor(r); err != nil {
+			RespondError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if _, err := httpstream.LogPreviewRequested(r); err != nil {
 			RespondError(w, http.StatusBadRequest, err.Error())
 			return
 		}

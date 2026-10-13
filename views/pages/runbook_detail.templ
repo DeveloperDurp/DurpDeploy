@@ -280,7 +280,7 @@ templ RunbookExecutionPage(project db.Project, book db.Runbook, execution db.Get
 			<div
 				class="card bg-base-200 p-4"
 				if page.Before == 0 {
-					x-data={ fmt.Sprintf("deploymentStream({ url: '/projects/%d/runbooks/executions/%d/logs/stream?format=structured', after: '%d', limit: %d, olderBefore: '%d' })", project.ID, execution.ID, page.LastID, page.Limit, page.NextBefore) }
+					x-data={ fmt.Sprintf("deploymentStream({ url: '/projects/%d/runbooks/executions/%d/logs/stream?format=structured&preview=true', after: '%d', limit: %d, byteLimit: %d, olderBefore: '%d' })", project.ID, execution.ID, page.LastID, page.Limit, page.ByteLimit, page.NextBefore) }
 				}
 			>
 				<h2 class="text-xl font-bold mb-3">Live logs</h2>

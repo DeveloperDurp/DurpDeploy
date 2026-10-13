@@ -146,6 +146,7 @@ done
 Deploy the release and open its deployment page.
 Expand the step panel.
 Confirm that the page shows at most 500 recent entries.
+Confirm that the viewer retains at most 1 MiB of previews.
 Select **Older logs** and confirm that earlier entries appear.
 Confirm that the page states that live updates are paused.
 Confirm that completed step states remain visible on older pages.
@@ -156,11 +157,31 @@ Repeat navigation with the keyboard and a narrow browser window.
 
 Request `GET /api/v1/deployments/{id}/logs/page`.
 Confirm that `items` contains at most 500 entries with increasing IDs.
+Confirm that the JSON response contains at most 1 MiB, including its envelope.
+Check `byte_limit` and `line_byte_limit` for the documented limits.
 Pass `next_before` as `?before=ID` to read an older page.
 Confirm that pages do not overlap.
 Repeat with `/api/v1/projects/{id}/runbook-executions/{executionId}/logs/page`.
 Confirm that the existing `/logs` endpoint still returns complete history.
 Use a nonmember account and confirm that page and export requests return `403`.
+
+Repeat the deployment and runbook checks with oversized lines:
+
+```bash
+line=$(printf '%020000d' 0)
+for i in $(seq 1 180); do
+    printf 'long-%03d:%s:complete-tail-%03d\n' "$i" "$line" "$i"
+done
+```
+
+Confirm that oversized lines show a truncation marker.
+Confirm that the viewer can retain fewer than 500 entries because of the byte budget.
+Check that previews contain at most 16 KiB per text field, including their markers.
+Confirm that shortened API entries contain `truncated: true`.
+Page through the history and confirm that each persisted ID appears once.
+Export all logs and confirm that every `complete-tail-*` marker remains present.
+Use `format=structured&preview=true` to request bounded live previews through the public API.
+Omit `preview` and confirm that the full stream preserves complete lines.
 
 Retain the project, release, runbook, and execution history.
 Keep schedules disabled.

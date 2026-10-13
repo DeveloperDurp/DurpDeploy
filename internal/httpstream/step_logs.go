@@ -6,84 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strconv"
 	"time"
 
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/repository"
-	"durpdeploy/internal/runner"
 )
-
-// StepLog is the opt-in structured SSE payload; text streams keep their format.
-type StepLog struct {
-	ID               int64  `json:"id"`
-	Line             string `json:"line"`
-	Step             string `json:"step"`
-	StepIndex        *int64 `json:"step_index"`
-	State            string `json:"state,omitempty"`
-	CreatedAt        int64  `json:"created_at"`
-	DisplayTimestamp string `json:"display_timestamp"`
-}
-
-func StepLogFromRow(log db.DeploymentLog) StepLog {
-	event := StepLog{
-		ID: log.ID, Line: log.Line, Step: log.StepName.String,
-		State: log.StepState.String, CreatedAt: log.CreatedAt,
-		DisplayTimestamp: time.Unix(log.CreatedAt, 0).
-			Format("2006-01-02 15:04:05"),
-	}
-	if log.StepIndex.Valid {
-		event.StepIndex = &log.StepIndex.Int64
-	}
-	return event
-}
-
-// StreamStepLogs uses broker notifications to wake up and persisted IDs to
-// replay. Periodic reads recover dropped notifications without losing output.
-func StreamStepLogs(
-	w http.ResponseWriter, r *http.Request, repo *repository.Repository,
-	broker *runner.LogBroker, deploymentID int64,
-) {
-	after, err := LogCursor(r)
-	if err != nil {
-		auth.RenderRequestError(
-			w,
-			r,
-			http.StatusBadRequest,
-			"Invalid log cursor",
-		)
-		return
-	}
-	streamLogs(
-		w,
-		r,
-		logStream{
-			repo:         repo,
-			broker:       broker,
-			deploymentID: deploymentID,
-			after:        after,
-			format:       "structured",
-		},
-	)
-}
-
-func LogCursor(r *http.Request) (int64, error) {
-	cursor := r.URL.Query().Get("after")
-	if last := r.Header.Get("Last-Event-ID"); last != "" {
-		cursor = last
-	}
-	var after int64
-	if cursor != "" {
-		var err error
-		after, err = strconv.ParseInt(cursor, 10, 64)
-		if err != nil || after < 0 {
-			//nolint:staticcheck // Preserve the public validation message.
-			return 0, errors.New("Invalid log cursor")
-		}
-	}
-	return after, nil
-}
 
 func streamLogs(w http.ResponseWriter, r *http.Request, options logStream) {
 	r, cancel := watchLogAccess(r, options)
@@ -183,13 +111,7 @@ func streamLogs(w http.ResponseWriter, r *http.Request, options logStream) {
 			return
 		}
 		authorizedAt = time.Now()
-		logs, err := repo.Queries.ListDeploymentLogsAfter(
-			r.Context(),
-			db.ListDeploymentLogsAfterParams{
-				DeploymentID: deploymentID,
-				ID:           after,
-			},
-		)
+		logs, err := options.readLogs(r.Context(), after)
 		if err != nil {
 			return
 		}
@@ -197,17 +119,13 @@ func streamLogs(w http.ResponseWriter, r *http.Request, options logStream) {
 			if !authorize() {
 				return
 			}
-			if err := writeStreamLog(
-				stream,
-				log,
-				options.format,
-				true,
-			); err != nil {
+			if err := options.writeLog(stream, log); err != nil {
 				return
 			}
 			after = log.ID
 		}
-		if len(logs) == 256 {
+		if len(logs) == 256 ||
+			(options.preview && len(logs) == repository.LogPreviewBatchLimit) {
 			continue
 		}
 		deployment, err := repo.Queries.GetDeployment(r.Context(), deploymentID)
@@ -226,13 +144,7 @@ func streamLogs(w http.ResponseWriter, r *http.Request, options logStream) {
 			}
 			// Re-read after observing terminal status: a final log may have
 			// committed between the previous read and this status read.
-			remaining, err := repo.Queries.ListDeploymentLogsAfter(
-				r.Context(),
-				db.ListDeploymentLogsAfterParams{
-					DeploymentID: deploymentID,
-					ID:           after,
-				},
-			)
+			remaining, err := options.readLogs(r.Context(), after)
 			if err != nil {
 				return
 			}

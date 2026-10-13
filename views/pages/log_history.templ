@@ -10,8 +10,9 @@ templ LogHistoryNavigation(base, exportURL string) {
 			if page.Before != 0 {
 				Older log page. Live updates are paused.
 			} else {
-				Showing up to { strconv.FormatInt(repository.LogPageLimit, 10) } recent entries.
+				Showing up to { strconv.FormatInt(repository.LogPageLimit, 10) } recent entries and 1 MiB of previews.
 			}
+			Lines over 16 KiB are shortened. Export all logs includes complete output.
 		</p>
 		if page.NextBefore != 0 || page.Before == 0 {
 			<a

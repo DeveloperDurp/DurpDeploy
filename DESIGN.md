@@ -136,7 +136,9 @@ the active step even when quiet. Show unattributed history as deployment message
 Render terminal colors/bold as escaped spans, including plain plan diff markers.
 In the light theme, mix semantic log colors with 55% `base-content` for contrast.
 
-Log views retain 500 entries. Use Older logs and Latest logs for history navigation.
+Log views retain up to 500 entries and 1 MiB of previews.
+Shorten oversized lines to 16 KiB at UTF-8 boundaries and show an explicit truncation marker.
+Use Older logs and Latest logs for history navigation.
 Pause live updates on older pages. Keep complete output available through Export all logs.
 Keep step states visible when their output leaves the display window.
 

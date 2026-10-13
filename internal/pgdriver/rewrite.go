@@ -39,6 +39,15 @@ var (
 // RewriteSQL translates a single SQLite-flavored SQL statement into
 // PostgreSQL-compatible SQL, renumbering `?` placeholders in the process.
 func RewriteSQL(query string) string {
+	// Preview slices must preserve SQLite NUL bytes without PostgreSQL bytea casts.
+	if strings.HasPrefix(query, "-- name: ListDeploymentLogsBefore") ||
+		strings.HasPrefix(query, "-- name: ListDeploymentLogPreviewsAfter") {
+		for _, column := range []string{"line", "step_name", "step_state"} {
+			query = strings.ReplaceAll(query,
+				"substr(CAST("+column+" AS BLOB), 1,",
+				"substr("+column+", 1,")
+		}
+	}
 	if strings.Contains(strings.ToUpper(query), "INTEGER") {
 		query = autoIncrementRe.ReplaceAllString(query, "BIGSERIAL PRIMARY KEY")
 		query = integerRe.ReplaceAllString(query, "BIGINT")

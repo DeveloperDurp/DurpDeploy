@@ -2528,10 +2528,11 @@
     },
     "/deployments/{id}/logs/page": {
       "get": {
+        "description": "Text fields over 16 KiB are shortened. Use next_before for older rows.",
         "tags": [
           "logs"
         ],
-        "summary": "Read up to 500 log rows, ordered by increasing ID. Use next_before for older rows.",
+        "summary": "Read log previews within 500 rows and 1 MiB, ordered by increasing ID.",
         "operationId": "pageDeploymentLogs",
         "parameters": [
           {
@@ -2594,7 +2595,7 @@
     },
     "/deployments/{id}/logs/stream": {
       "get": {
-        "description": "Stream deployment logs. The format=structured SSE option emits indexed\nstep logs and lifecycle states, supports after and Last-Event-ID cursors,\nand ends with a complete event. Default SSE and NDJSON remain text streams.",
+        "description": "Stream deployment logs. The format=structured SSE option emits indexed\nstep logs and lifecycle states, supports after and Last-Event-ID cursors,\nand ends with a complete event. Default SSE and NDJSON remain text streams.\nAdd preview=true to structured streams for marked 16 KiB display previews.",
         "produces": [
           "text/event-stream",
           "application/x-ndjson"
@@ -2639,6 +2640,13 @@
             "description": "Reconnection cursor; overrides after (structured only).",
             "name": "Last-Event-ID",
             "in": "header"
+          },
+          {
+            "type": "boolean",
+            "x-go-name": "Preview",
+            "description": "Bound structured display text to 16 KiB. Defaults to false.",
+            "name": "preview",
+            "in": "query"
           }
         ],
         "responses": {
@@ -6883,8 +6891,15 @@
           {
             "type": "string",
             "x-go-name": "Format",
-            "description": "Format is either sse or ndjson.",
+            "description": "Format is sse, ndjson, or structured.",
             "name": "format",
+            "in": "query"
+          },
+          {
+            "type": "boolean",
+            "x-go-name": "Preview",
+            "description": "Bound structured display text to 16 KiB. Defaults to false.",
+            "name": "preview",
             "in": "query"
           }
         ],
@@ -10819,6 +10834,12 @@
           "format": "int64",
           "x-go-name": "Before"
         },
+        "byte_limit": {
+          "description": "Maximum JSON response size in bytes, including the envelope (1048576).",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "ByteLimit"
+        },
         "items": {
           "type": "array",
           "items": {
@@ -10837,6 +10858,12 @@
           "type": "integer",
           "format": "int64",
           "x-go-name": "Limit"
+        },
+        "line_byte_limit": {
+          "description": "Maximum UTF-8 bytes per displayed text field, including markers (16384).",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "LineByteLimit"
         },
         "next_before": {
           "description": "Exclusive cursor for the next older page. Zero means no older rows.",
@@ -10879,6 +10906,11 @@
         },
         "step_state": {
           "$ref": "#/definitions/NullString"
+        },
+        "truncated": {
+          "description": "True when display text was shortened. Full output remains in exports.",
+          "type": "boolean",
+          "x-go-name": "Truncated"
         }
       },
       "x-go-name": "swaggerLogPageEntry",

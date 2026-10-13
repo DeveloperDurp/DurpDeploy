@@ -22,6 +22,7 @@ type logStream struct {
 	deploymentID int64
 	after        int64
 	format       string
+	preview      bool
 }
 
 // StreamTextLogs shares durable replay, completion and authorization with the

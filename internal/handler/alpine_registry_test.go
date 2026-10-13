@@ -82,7 +82,7 @@ func TestAlpineRegistryDefinesComplianceComponents(t *testing.T) {
 		},
 		{
 			name:        "deploymentStream",
-			constructor: `\(\{ url, after, limit, olderBefore \}\)`,
+			constructor: `\(\{ url, after, limit, byteLimit, olderBefore \}\)`,
 			members:     []string{"init", "message", "destroy"},
 			methods:     []string{"init", "message", "destroy"},
 			events:      []string{"complete"},

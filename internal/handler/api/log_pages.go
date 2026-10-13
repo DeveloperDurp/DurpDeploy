@@ -7,7 +7,8 @@ import (
 )
 
 // swagger:route GET /deployments/{id}/logs/page logs pageDeploymentLogs
-// Read up to 500 log rows, ordered by increasing ID. Use next_before for older rows.
+// Read log previews within 500 rows and 1 MiB, ordered by increasing ID.
+// Text fields over 16 KiB are shortened. Use next_before for older rows.
 //
 // Responses:
 // 200: body:LogPage

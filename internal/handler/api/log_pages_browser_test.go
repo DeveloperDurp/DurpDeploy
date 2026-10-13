@@ -151,4 +151,7 @@ func assertBrowserLogHistory(
 			component,
 		),
 	)
+	f.assertBrowserLogBytes(t, b, logHistoryTarget{
+		DeploymentID: deploymentID, WebPath: path, Component: component,
+	})
 }

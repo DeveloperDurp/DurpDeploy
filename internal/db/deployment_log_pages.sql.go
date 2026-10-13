@@ -10,6 +10,73 @@ import (
 	"database/sql"
 )
 
+const listDeploymentLogPreviewsAfter = `-- name: ListDeploymentLogPreviewsAfter :many
+SELECT id, deployment_id,
+    CAST(COALESCE(substr(CAST(step_name AS BLOB), 1, ?1), '') AS TEXT) AS step_name,
+    CAST(CASE WHEN step_name IS NULL THEN 0 ELSE 1 END AS INTEGER) AS step_name_valid,
+    CAST(COALESCE(substr(CAST(line AS BLOB), 1, ?1), '') AS TEXT) AS line,
+    created_at, step_index,
+    CAST(COALESCE(substr(CAST(step_state AS BLOB), 1, ?1), '') AS TEXT) AS step_state,
+    CAST(CASE WHEN step_state IS NULL THEN 0 ELSE 1 END AS INTEGER) AS step_state_valid,
+    is_step_metadata
+FROM deployment_logs
+WHERE deployment_id = ?2 AND id > ?3
+ORDER BY id LIMIT 64
+`
+
+type ListDeploymentLogPreviewsAfterParams struct {
+	PreviewLimit int64 `json:"preview_limit"`
+	DeploymentID int64 `json:"deployment_id"`
+	AfterID      int64 `json:"after_id"`
+}
+
+type ListDeploymentLogPreviewsAfterRow struct {
+	ID             int64         `json:"id"`
+	DeploymentID   int64         `json:"deployment_id"`
+	StepName       string        `json:"step_name"`
+	StepNameValid  int64         `json:"step_name_valid"`
+	Line           string        `json:"line"`
+	CreatedAt      int64         `json:"created_at"`
+	StepIndex      sql.NullInt64 `json:"step_index"`
+	StepState      string        `json:"step_state"`
+	StepStateValid int64         `json:"step_state_valid"`
+	IsStepMetadata int64         `json:"-"`
+}
+
+func (q *Queries) ListDeploymentLogPreviewsAfter(ctx context.Context, arg ListDeploymentLogPreviewsAfterParams) ([]ListDeploymentLogPreviewsAfterRow, error) {
+	rows, err := q.db.QueryContext(ctx, listDeploymentLogPreviewsAfter, arg.PreviewLimit, arg.DeploymentID, arg.AfterID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDeploymentLogPreviewsAfterRow
+	for rows.Next() {
+		var i ListDeploymentLogPreviewsAfterRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.DeploymentID,
+			&i.StepName,
+			&i.StepNameValid,
+			&i.Line,
+			&i.CreatedAt,
+			&i.StepIndex,
+			&i.StepState,
+			&i.StepStateValid,
+			&i.IsStepMetadata,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listDeploymentLogStateMetadata = `-- name: ListDeploymentLogStateMetadata :many
 SELECT l.id, l.step_index, l.step_name, l.step_state FROM deployment_logs l
 WHERE l.deployment_id = ?1 AND l.id <= ?2
@@ -63,35 +130,64 @@ func (q *Queries) ListDeploymentLogStateMetadata(ctx context.Context, arg ListDe
 }
 
 const listDeploymentLogsBefore = `-- name: ListDeploymentLogsBefore :many
-SELECT id, deployment_id, step_name, line, created_at, step_index, step_state, is_step_metadata FROM deployment_logs
-WHERE deployment_id = ?1
-  AND id <= CAST(?2 AS BIGINT)
-ORDER BY id DESC LIMIT ?3
+SELECT id, deployment_id,
+    CAST(COALESCE(substr(CAST(step_name AS BLOB), 1, ?1), '') AS TEXT) AS step_name,
+    CAST(CASE WHEN step_name IS NULL THEN 0 ELSE 1 END AS INTEGER) AS step_name_valid,
+    CAST(COALESCE(substr(CAST(line AS BLOB), 1, ?1), '') AS TEXT) AS line,
+    created_at, step_index,
+    CAST(COALESCE(substr(CAST(step_state AS BLOB), 1, ?1), '') AS TEXT) AS step_state,
+    CAST(CASE WHEN step_state IS NULL THEN 0 ELSE 1 END AS INTEGER) AS step_state_valid,
+    is_step_metadata
+FROM deployment_logs
+WHERE deployment_id = ?2
+  AND id <= CAST(?3 AS BIGINT)
+ORDER BY id DESC LIMIT ?4
 `
 
 type ListDeploymentLogsBeforeParams struct {
+	PreviewLimit int64 `json:"preview_limit"`
 	DeploymentID int64 `json:"deployment_id"`
 	ThroughID    int64 `json:"through_id"`
 	PageLimit    int64 `json:"page_limit"`
 }
 
-func (q *Queries) ListDeploymentLogsBefore(ctx context.Context, arg ListDeploymentLogsBeforeParams) ([]DeploymentLog, error) {
-	rows, err := q.db.QueryContext(ctx, listDeploymentLogsBefore, arg.DeploymentID, arg.ThroughID, arg.PageLimit)
+type ListDeploymentLogsBeforeRow struct {
+	ID             int64         `json:"id"`
+	DeploymentID   int64         `json:"deployment_id"`
+	StepName       string        `json:"step_name"`
+	StepNameValid  int64         `json:"step_name_valid"`
+	Line           string        `json:"line"`
+	CreatedAt      int64         `json:"created_at"`
+	StepIndex      sql.NullInt64 `json:"step_index"`
+	StepState      string        `json:"step_state"`
+	StepStateValid int64         `json:"step_state_valid"`
+	IsStepMetadata int64         `json:"-"`
+}
+
+func (q *Queries) ListDeploymentLogsBefore(ctx context.Context, arg ListDeploymentLogsBeforeParams) ([]ListDeploymentLogsBeforeRow, error) {
+	rows, err := q.db.QueryContext(ctx, listDeploymentLogsBefore,
+		arg.PreviewLimit,
+		arg.DeploymentID,
+		arg.ThroughID,
+		arg.PageLimit,
+	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []DeploymentLog
+	var items []ListDeploymentLogsBeforeRow
 	for rows.Next() {
-		var i DeploymentLog
+		var i ListDeploymentLogsBeforeRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.DeploymentID,
 			&i.StepName,
+			&i.StepNameValid,
 			&i.Line,
 			&i.CreatedAt,
 			&i.StepIndex,
 			&i.StepState,
+			&i.StepStateValid,
 			&i.IsStepMetadata,
 		); err != nil {
 			return nil, err

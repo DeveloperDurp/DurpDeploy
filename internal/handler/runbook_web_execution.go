@@ -85,7 +85,7 @@ func (h *RunbookHandler) Execution(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	queueCtx = pages.WithLogHistory(queueCtx, page, nil)
-	if err := pages.RunbookExecutionPage(project, book, execution, page.Items, r.URL.Path).
+	if err := pages.RunbookExecutionPage(project, book, execution, page.Logs(), r.URL.Path).
 		Render(queueCtx, w); err != nil {
 		http.Error(w, "Cannot render execution", http.StatusInternalServerError)
 	}

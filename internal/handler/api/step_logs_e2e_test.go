@@ -158,6 +158,7 @@ func (f *artifactE2E) readStepLogs(
 	complete := false
 	event := ""
 	scanner := bufio.NewScanner(response.Body)
+	scanner.Buffer(make([]byte, 4096), 1<<20)
 	for scanner.Scan() {
 		line := scanner.Text()
 		if value, ok := strings.CutPrefix(line, "event: "); ok {

@@ -463,9 +463,13 @@ logs at `/logs/stream` (SSE by default, `?format=ndjson` for NDJSON).
 
 Use `GET /api/v1/deployments/$DID/logs/page` for bounded history.
 Runbooks support `GET /api/v1/projects/$PID/runbook-executions/$XID/logs/page`.
-Responses contain `items`, `next_before`, `last_id`, `limit`, and `before`.
+Responses contain `items`, `next_before`, `last_id`, `limit`, `before`, `byte_limit`, and `line_byte_limit`.
 Each page contains at most 500 entries, ordered by increasing persisted ID.
-The limit counts entries, not bytes. Individual lines remain complete.
+The JSON response also has a 1 MiB byte budget, including its envelope.
+Display text fields have a 16 KiB UTF-8 budget, including truncation markers.
+Shortened entries include `truncated: true`.
+Byte limits can reduce the number of entries on a page.
+Complete persisted output remains available through full streams and exports.
 Omit `before` for the newest page.
 Pass a nonzero `next_before` as `?before=ID` to retrieve the preceding page.
 A zero `next_before` means no older page remains.
@@ -474,7 +478,7 @@ Resume structured streams after `last_id`.
 The existing `/logs` endpoints retain their complete JSON arrays.
 Runbooks also support `/logs.txt` for complete text export.
 
-Deployment and runbook pages retain at most 500 displayed log entries.
+Deployment and runbook pages retain at most 500 displayed entries and 1 MiB of previews.
 Use **Older logs** to view earlier output with live updates paused.
 Use **Latest logs** to resume live updates.
 Use **Export all logs** to download complete history.
@@ -503,6 +507,12 @@ on the deployment page before and after refresh. Resume with
 drains its logs, sends `event: complete` with JSON `status`, then closes;
 clients should close their EventSource on that event. Default SSE/NDJSON and
 plain-text export retain their formats.
+
+Add `preview=true` to a structured deployment or runbook stream to receive bounded display text.
+Shortened events include `truncated: true` and a visible truncation marker.
+Omit `preview`, or use `preview=false`, to receive complete text.
+Invalid `preview` values return `400` before the stream starts.
+Preview streams preserve persisted IDs, lifecycle states, replay cursors, and the final completion event.
 
 Execution location entries appear in the existing `line` field before script output.
 Server container attempts identify the physical host, runtime, container name, image reference, interpreter, and attempt number.

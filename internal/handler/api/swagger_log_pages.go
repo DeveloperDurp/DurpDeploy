@@ -16,6 +16,10 @@ type swaggerLogPage struct {
 	Limit int64 `json:"limit"`
 	// Requested exclusive upper ID. Zero selects the latest page.
 	Before int64 `json:"before"`
+	// Maximum JSON response size in bytes, including the envelope (1048576).
+	ByteLimit int `json:"byte_limit"`
+	// Maximum UTF-8 bytes per displayed text field, including markers (16384).
+	LineByteLimit int `json:"line_byte_limit"`
 }
 
 // LogPageEntry is a persisted log row, including nullable step metadata.
@@ -30,6 +34,8 @@ type swaggerLogPageEntry struct {
 	StepIndex    sql.NullInt64  `json:"step_index"`
 	StepName     sql.NullString `json:"step_name"`
 	StepState    sql.NullString `json:"step_state"`
+	// True when display text was shortened. Full output remains in exports.
+	Truncated bool `json:"truncated,omitempty"`
 }
 
 // swagger:parameters pageDeploymentLogs
