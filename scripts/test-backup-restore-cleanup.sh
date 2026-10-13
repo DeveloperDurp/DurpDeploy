@@ -15,12 +15,6 @@ if [[ -z $runtime ]]; then
     if command -v podman >/dev/null 2>&1; then runtime=podman; fi
 fi
 runtime_args=()
-if [[ -n ${DURPDEPLOY_CONTAINER_URL:-} ]]; then
-    runtime_args=("--host=$DURPDEPLOY_CONTAINER_URL")
-    if [[ $runtime == podman ]]; then
-        runtime_args=(--remote "--url=$DURPDEPLOY_CONTAINER_URL")
-    fi
-fi
 engine() { "$runtime" "${runtime_args[@]}" "$@"; }
 cleanup() {
     local status=$?
@@ -37,6 +31,14 @@ trap cleanup EXIT
 trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
+
+# Discover once through the same SDK used by the runner, including its defaults.
+provider_host=$(go run scripts/go_test_cleanup.go --host)
+export DOCKER_HOST=$provider_host DURPDEPLOY_CONTAINER_URL=$provider_host
+runtime_args=("--host=$provider_host")
+if [[ $runtime == podman ]]; then
+    runtime_args=(--remote "--url=$provider_host")
+fi
 
 unrelated=$(engine run --detach --network=none \
     --label "io.durpdeploy.namespace=restore-unrelated-${work_dir##*/}" \

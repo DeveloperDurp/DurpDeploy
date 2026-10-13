@@ -43,3 +43,37 @@ RESTORE_TEST_OS=Linux RESTORE_TEST_ARCH=x86_64 \
 grep -q '^make called$' "$test_dir/output"
 [[ $(grep -c '^runtime=unix:///configured/runtime.sock provider=unix:///configured/runtime.sock$' "$test_dir/output") == 2 ]]
 echo 'Recovery platform rejection and selected runtime: PASS'
+
+cat > "$test_dir/bin/go" <<'GO'
+#!/bin/sh
+printf '%s\n' "${DOCKER_HOST:-unix:///discovered/runtime.sock}"
+GO
+cat > "$test_dir/bin/podman" <<'PODMAN'
+#!/bin/sh
+printf 'provider=%s application=%s\n' "$DOCKER_HOST" "$DURPDEPLOY_CONTAINER_URL" > "$RESTORE_TEST_ENGINE_LOG"
+printf '%s\n' "$@" >> "$RESTORE_TEST_ENGINE_LOG"
+exit 64
+PODMAN
+chmod +x "$test_dir/bin/go" "$test_dir/bin/podman"
+
+for selection in configured provider discovered; do
+    configured= provider= expected=unix:///discovered/runtime.sock
+    if [[ $selection == configured ]]; then
+        configured=unix:///configured/runtime.sock
+        provider=unix:///other/runtime.sock
+        expected=$configured
+    elif [[ $selection == provider ]]; then
+        provider=unix:///provider/runtime.sock
+        expected=$provider
+    fi
+    status=0
+    DURPDEPLOY_CONTAINER_URL=$configured DOCKER_HOST=$provider \
+        DURPDEPLOY_CONTAINER_RUNTIME=podman \
+        RESTORE_TEST_ENGINE_LOG="$test_dir/engine" PATH="$test_dir/bin:$PATH" \
+        /usr/bin/bash "$root/scripts/test-backup-restore-cleanup.sh" || status=$?
+    [[ $status == 64 ]]
+    grep -Fxq "provider=$expected application=$expected" "$test_dir/engine"
+    grep -Fxq -- '--remote' "$test_dir/engine"
+    grep -Fxq -- "--url=$expected" "$test_dir/engine"
+done
+echo 'Cleanup runtime selection and SDK discovery: PASS'
