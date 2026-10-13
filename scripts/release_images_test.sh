@@ -59,6 +59,10 @@ jq -n --arg head "$head" '
     status:"completed",conclusion:"success"}]}
 ' > "$FIXTURE_DIR/run.json"
 printf '%s\n' '{"jobs":[{"id":11,"run_attempt":1,"name":"Image scan (amd64)","status":"completed","conclusion":"success"},{"id":12,"run_attempt":1,"name":"Image scan (arm64)","status":"completed","conclusion":"success"}]}' > "$FIXTURE_DIR/jobs.json"
+jq '.jobs[] |= (. + {started_at:"2026-10-13T00:00:00Z",completed_at:"2026-10-13T00:00:10Z",
+  steps:[{name:"Scan image archive",status:"completed",conclusion:"success",started_at:"2026-10-13T00:00:00Z",completed_at:"2026-10-13T00:00:10Z"}]})' \
+  "$FIXTURE_DIR/jobs.json" > "$work/jobs-with-times.json"
+mv "$work/jobs-with-times.json" "$FIXTURE_DIR/jobs.json"
 jq -n --arg tree "$tree" --arg base "$base" --arg head "$head" \
 	'{tree:{sha:$tree},parents:[{sha:$base},{sha:$head}]}' > "$FIXTURE_DIR/commit.json"
 for arch in amd64 arm64; do
@@ -121,6 +125,7 @@ echo 'PASS: resolve with checkout refs when the Git remote is unavailable'
 
 # Given only E2E was rerun, both verified image jobs stay at attempt one.
 jq '.workflow_runs[0].run_attempt=2' "$work/good-api/run.json" > "$FIXTURE_DIR/run.json"
+jq '.jobs += [.jobs[] | .id+=10 | .run_attempt=2]' "$work/good-api/jobs.json" > "$FIXTURE_DIR/jobs.json"
 bash "$root/scripts/resolve_release_images.sh" "$work/partial-verified" > "$work/partial.log" 2>&1
 echo 'PASS: reuse verified image jobs after a partial E2E rerun'
 
@@ -129,7 +134,10 @@ mkdir -p "$work/arm64-rerun"
 cp "$work/arm64/artifact/image.tar" "$work/arm64-rerun/image.tar"
 jq '.attempt=2' "$work/arm64/artifact/source.json" > "$work/arm64-rerun/source.json"
 (cd "$work/arm64-rerun" && zip -q "$FIXTURE_DIR/arm64-rerun.zip" image.tar source.json)
-jq '.jobs[1].conclusion="failure" | .jobs += [(.jobs[0] | .id=13 | .name="Image scan (arm64)" | .run_attempt=2)]' \
+jq '.jobs[1].conclusion="failure" | .jobs += [(.jobs[0] | .id=21 | .run_attempt=2),
+  (.jobs[0] | .id=13 | .name="Image scan (arm64)" | .run_attempt=2
+    | .started_at="2026-10-13T00:01:00Z" | .completed_at="2026-10-13T00:01:10Z"
+    | .steps[].started_at="2026-10-13T00:01:00Z" | .steps[].completed_at="2026-10-13T00:01:10Z")]' \
 	"$work/good-api/jobs.json" > "$FIXTURE_DIR/jobs.json"
 jq --arg digest "sha256:$(sha256sum "$FIXTURE_DIR/arm64-rerun.zip" | cut -d ' ' -f 1)" '
 	.artifacts = [.artifacts[0], (.artifacts[1] | .id=103 | .name="release-image-arm64-2" | .digest=$digest)]
@@ -137,7 +145,7 @@ jq --arg digest "sha256:$(sha256sum "$FIXTURE_DIR/arm64-rerun.zip" | cut -d ' ' 
 bash "$root/scripts/resolve_release_images.sh" "$work/mixed-verified" > "$work/mixed.log" 2>&1
 jq -e '.attempt==1' "$work/mixed-verified/amd64/source.json" > /dev/null
 jq -e '.attempt==2' "$work/mixed-verified/arm64/source.json" > /dev/null
-echo 'PASS: retain AMD64 while accepting a successful ARM64 rerun'
+echo 'PASS: match copied AMD64 job records while accepting a successful ARM64 rerun'
 cp "$work/good-api/"* "$FIXTURE_DIR/"
 
 # Each boundary failure must stop before any registry publication is possible.
@@ -146,7 +154,10 @@ expect_rejection 'failed workflow'
 jq '.jobs[1].conclusion="failure"' "$work/good-api/jobs.json" > "$FIXTURE_DIR/jobs.json"
 expect_rejection 'failed ARM64 scan'
 jq '.workflow_runs[0].run_attempt=2' "$work/good-api/run.json" > "$FIXTURE_DIR/run.json"
-jq '.jobs[].run_attempt=2' "$work/good-api/jobs.json" > "$FIXTURE_DIR/jobs.json"
+jq '.jobs += [.jobs[] | .id+=10 | .run_attempt=2
+  | .started_at="2026-10-13T00:01:00Z" | .completed_at="2026-10-13T00:01:10Z"
+  | .steps[].started_at="2026-10-13T00:01:00Z" | .steps[].completed_at="2026-10-13T00:01:10Z"]' \
+  "$work/good-api/jobs.json" > "$FIXTURE_DIR/jobs.json"
 expect_rejection 'artifacts from before the latest image job attempt'
 jq '.workflow_runs[0].run_attempt=2' "$work/good-api/run.json" > "$FIXTURE_DIR/run.json"
 jq '.jobs += [(.jobs[0] | .id=13 | .run_attempt=2 | .conclusion="failure")]' \

@@ -21,10 +21,13 @@ The `Image verification` check requires both image scans, Go tests, E2E tests, a
 
 After merge, publication downloads images from the matching successful pull-request run.
 It checks each image job's attempt, archive digests, source tree, merge parents, and platform metadata.
-Partial reruns reuse the verified artifact from each architecture's latest completed image job.
 Squash merges can have different commit identifiers but must have the same source tree.
 Publication uses the scanned platform manifests without rebuilding or rescanning.
 Helm publication requires successful image publication.
+
+Partial reruns reuse verified artifacts for unchanged image jobs.
+GitHub can copy completed job records into new attempts.
+Publication matches copied records to their original execution.
 
 GitHub retains image artifacts for 30 days.
 Missing, expired, failed, or mismatched artifacts stop publication.

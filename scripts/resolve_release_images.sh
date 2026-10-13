@@ -49,6 +49,20 @@ for arch in amd64 arm64; do
 		| select(.status == "completed" and .conclusion == "success")
 		| .run_attempt | select(type == "number" and . > 0 and . <= $latest)
 	' "$scratch/jobs.json")
+	# GitHub copies reused job records, preserving their execution times/steps.
+	# The original execution produced the archive, not its later copied record.
+	attempt=$(jq -er --arg name "Image scan ($arch)" --argjson attempt "$attempt" '
+		[.[] | select(.name == $name)] as $jobs
+		| ($jobs[] | select(.run_attempt == $attempt)) as $latest
+		| select(($latest.started_at | type) == "string"
+			and ($latest.completed_at | type) == "string"
+			and ($latest.steps | type) == "array" and ($latest.steps | length) > 0)
+		| [$jobs[] | select(.status == "completed" and .conclusion == "success"
+			and .started_at == $latest.started_at and .completed_at == $latest.completed_at
+			and .steps == $latest.steps)]
+		| min_by(.run_attempt).run_attempt
+		| select(type == "number" and . > 0 and . <= $attempt)
+	' "$scratch/jobs.json")
 	jq -e --arg name "release-image-$arch-$attempt" --arg head "$head" \
 		--argjson run "$run" '
 		[.[] | select(.name == $name)]
