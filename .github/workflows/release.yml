@@ -301,7 +301,10 @@ jobs:
           tar -xf "$RUNNER_TEMP/release-image/image.tar" -C "$RUNNER_TEMP/image-scan-layout"
       - name: Scan image archive
         uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        env:
+          TRIVY_IGNOREFILE: /dev/null
         with:
+          trivy-config: /dev/null
           input: ${{ runner.temp }}/image-scan-layout
           scanners: vuln
           format: json

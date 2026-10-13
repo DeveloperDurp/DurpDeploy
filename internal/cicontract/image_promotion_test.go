@@ -136,6 +136,12 @@ func TestImagePublicationUsesVerifiedPRArtifacts(t *testing.T) {
 				step.With["input"] == "" || step.If != "" {
 				t.Fatal("archive scan must block on findings or errors")
 			}
+			if step.With["trivy-config"] != "/dev/null" ||
+				step.Env["TRIVY_IGNOREFILE"] != "/dev/null" {
+				t.Fatal(
+					"checkout policy files must not suppress image findings",
+				)
+			}
 		case strings.HasPrefix(step.Uses, "actions/upload-artifact@"):
 			retain = index
 			if step.If != "" {
