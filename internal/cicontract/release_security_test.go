@@ -26,8 +26,10 @@ type workflowJob struct {
 		Group string `yaml:"group"`
 	} `yaml:"concurrency"`
 	Steps []struct {
-		Run string `yaml:"run"`
-		If  string `yaml:"if"`
+		Run  string            `yaml:"run"`
+		If   string            `yaml:"if"`
+		Uses string            `yaml:"uses"`
+		With map[string]string `yaml:"with"`
 	} `yaml:"steps"`
 }
 

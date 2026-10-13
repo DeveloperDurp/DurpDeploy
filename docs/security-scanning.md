@@ -10,6 +10,51 @@ concurrency groups so they cannot cancel each other on the same ref.
 The scanner fixture suite and API-token regression test run only on PRs;
 the production scans still run for every supported event.
 
+## Image verification and publication
+
+Pull requests build separate Linux AMD64 and ARM64 images on native runners.
+Trivy scans each OCI archive before GitHub retains it as a workflow artifact.
+The image policy blocks fixable HIGH and CRITICAL vulnerabilities and scanner errors.
+The scan report stays on the runner and is not uploaded.
+The `Image verification` check requires both image scans, Go tests, E2E tests, and source security checks.
+
+After merge, publication downloads images from the matching successful pull-request run.
+It checks the run attempt, archive digests, source tree, merge parents, and platform metadata.
+Squash merges can have different commit identifiers but must have the same source tree.
+Publication uses the scanned platform manifests without rebuilding or rescanning.
+Helm publication requires successful image publication.
+
+GitHub retains image artifacts for 30 days.
+Missing, expired, failed, or mismatched artifacts stop publication.
+For an expired artifact, rerun the complete original pull-request release workflow before retrying publication.
+Commits without matching pull-request artifacts cannot use this publication path.
+This includes releases built before this workflow was introduced.
+
+Image publishing jobs share one queue.
+Separate release runs keep their own workflow and source-scan concurrency groups.
+Version tags cannot replace different images.
+Image tags replace SemVer build metadata's `+` separator with `-`.
+Helm uses that image tag for `appVersion` and preserves the original chart version.
+An older or unrelated source revision cannot replace `latest`.
+The image labels identify the original tested merge revision.
+The published image index identifies the final merged revision.
+
+After the new workflow reports successfully, add `Image verification` to main's required GitHub Actions checks.
+Preserve the existing required checks and administrator enforcement.
+Update other open pull requests from main before merging them.
+
+Run the artifact and isolated registry checks with:
+
+```bash
+DURPDEPLOY_CONTAINER_RUNTIME=podman bash scripts/release_images_test.sh
+bash scripts/go_test.sh -race -count=1 ./internal/cicontract
+```
+
+The shell suite requires Git, jq, ZIP tools, Skopeo, curl, and Docker or Podman.
+It uses disposable source repositories, synthetic images, and a loopback-only registry.
+The Podman path runs the Docker CLI in a pinned disposable container.
+Both paths remove their registry container when the suite exits.
+
 Install the pinned, task-local tools and reproduce the gates:
 
 ```bash
