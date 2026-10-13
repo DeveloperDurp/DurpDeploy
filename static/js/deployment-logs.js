@@ -33,32 +33,49 @@ function renderLogLine(element, line = element.textContent) {
 }
 
 export function registerLogComponents(Alpine) {
+	const encoder = new TextEncoder();
 	const initialRows = element => [...element.querySelectorAll('[data-log-id]')]
-		.map(node => ({ id: node.dataset.logId, node }))
+		.map(node => ({ id: node.dataset.logId, node,
+			bytes: encoder.encode(node.textContent).length }))
 		.sort((a, b) => a.id.length - b.id.length || a.id.localeCompare(b.id));
-	const retain = (component, row) => {
-		component.retained.push(row);
-		while (component.retained.length > component.limit) {
+	const trim = component => {
+		while (component.retained.length > component.limit ||
+			component.retainedBytes > component.byteLimit) {
 			const removed = component.retained.shift();
+			component.retainedBytes -= removed.bytes;
 			if (removed.node) removed.node.remove();
 			else removed.panel.live.shift();
-			component.olderBefore = component.retained[0].id;
+			component.olderBefore = component.retained[0]?.id ||
+				(BigInt(removed.id) + 1n).toString();
 		}
 	};
-	Alpine.data('deploymentStream', ({ url, after, limit, olderBefore }) => ({
+	const initialize = component => {
+		component.retained = initialRows(component.$el);
+		component.retainedBytes = component.retained.reduce((sum, row) => sum + row.bytes, 0);
+		trim(component);
+	};
+	const retain = (component, row, entry) => {
+		row.bytes = encoder.encode(JSON.stringify(entry)).length;
+		component.retained.push(row);
+		component.retainedBytes += row.bytes;
+		trim(component);
+	};
+	Alpine.data('deploymentStream', ({ url, after, limit, byteLimit, olderBefore }) => ({
 		url,
 		lastID: after,
 		limit,
+		byteLimit,
 		olderBefore,
 		olderLogsURL,
 		retained: [],
+		retainedBytes: 0,
 		source: null,
 		started: false,
 		destroyed: false,
 		init() {
 			if (this.started) return;
 			this.started = true;
-			this.retained = initialRows(this.$el);
+			initialize(this);
 			const address = new URL(this.url, location.href);
 			address.searchParams.set('after', this.lastID);
 			this.source = new EventSource(address);
@@ -79,7 +96,7 @@ export function registerLogComponents(Alpine) {
 			node.dataset.logId = entry.id;
 			node.textContent = entry.line;
 			this.$refs.logs.append(node);
-			retain(this, { id: entry.id, node });
+			retain(this, { id: entry.id, node }, entry);
 		},
 		destroy() {
 			this.destroyed = true;
@@ -109,12 +126,14 @@ export function registerLogComponents(Alpine) {
 		panels: view.panels,
 		lastID: view.lastID,
 		limit: view.limit,
+		byteLimit: view.byteLimit,
 		olderBefore: view.olderBefore,
 		olderLogsURL,
 		retained: [],
+		retainedBytes: 0,
 		source: null,
 		init() {
-			this.retained = initialRows(this.$el);
+			initialize(this);
 			if (view.historical) return;
 			// Cancellation can set terminal status before the runner writes final logs.
 			const address = new URL(this.url, location.href);
@@ -143,7 +162,7 @@ export function registerLogComponents(Alpine) {
 			}
 			panel ??= this.panels.find(item => item.index === -1);
 			panel.live.push(entry);
-			retain(this, { id: entry.id, panel });
+			retain(this, { id: entry.id, panel }, entry);
 			if (entry.state) {
 				panel.state = entry.state;
 				if (['running', 'waiting', 'failed'].includes(entry.state)) {

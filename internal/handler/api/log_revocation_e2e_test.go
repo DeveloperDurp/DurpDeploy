@@ -15,7 +15,7 @@ import (
 
 func TestOpenLogStreamRevocationAPIWebE2E(t *testing.T) {
 	for _, surface := range []string{"api", "web"} {
-		for _, format := range []string{"sse", "structured", "ndjson"} {
+		for _, format := range []string{"sse", "structured", "ndjson", "structured&preview=true"} {
 			t.Run(surface+"/"+format, func(t *testing.T) {
 				checkOpenLogStreamRevocation(t, surface, format)
 			})

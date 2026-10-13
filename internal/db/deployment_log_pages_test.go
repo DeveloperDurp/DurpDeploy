@@ -62,7 +62,7 @@ func TestLogHistoryUsesCursorRange(t *testing.T) {
 	// When: SQLite plans a deep history cursor.
 	rows, err := conn.QueryContext(t.Context(),
 		"EXPLAIN QUERY PLAN "+listDeploymentLogsBefore,
-		int64(1), int64(10), int64(501))
+		int64(16385), int64(1), int64(10), int64(501))
 	if err != nil {
 		t.Fatal(err)
 	}

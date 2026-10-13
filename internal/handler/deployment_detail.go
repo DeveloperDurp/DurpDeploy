@@ -77,7 +77,7 @@ func (h *DeploymentHandler) GetDeployment(
 		http.Error(w, "Cannot read step states", http.StatusInternalServerError)
 		return
 	}
-	logs := page.Items
+	logs := page.Logs()
 
 	queueCtx, waiting, ok := h.deploymentQueueState(w, r, &deployment)
 	if !ok {

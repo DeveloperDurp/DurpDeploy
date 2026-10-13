@@ -31,7 +31,7 @@ func TestDeploymentDetailsOwnsEventSourceLifecycle(t *testing.T) {
 	// Then
 	body := rendered.String()
 	markers := []string{
-		`x-data="deploymentStepLogs({ url: &#39;/deployments/42/logs/stream?format=structured&#39;`,
+		`x-data="deploymentStepLogs({ url: &#39;/deployments/42/logs/stream?format=structured&amp;preview=true&#39;`,
 		`x-on:htmx:after-swap.camel.window="statusChanged($event)"`,
 		`aria-label="Step logs"`,
 		`data-step-index="-1"`,

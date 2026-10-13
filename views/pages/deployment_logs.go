@@ -26,6 +26,7 @@ type deploymentLogView struct {
 	Historical  bool                 `json:"historical"`
 	OlderBefore int64                `json:"olderBefore,string"`
 	Limit       int64                `json:"limit"`
+	ByteLimit   int                  `json:"byteLimit"`
 }
 
 func deploymentLogPanels(
@@ -35,8 +36,9 @@ func deploymentLogPanels(
 ) deploymentLogView {
 	steps := parseReleaseSteps(release.StepsJson)
 	view := deploymentLogView{
-		Panels: make([]deploymentLogPanel, len(steps)+1),
-		Limit:  repository.LogPageLimit,
+		Panels:    make([]deploymentLogPanel, len(steps)+1),
+		Limit:     repository.LogPageLimit,
+		ByteLimit: repository.LogPageByteLimit,
 	}
 	for index, step := range steps {
 		view.Panels[index] = deploymentLogPanel{

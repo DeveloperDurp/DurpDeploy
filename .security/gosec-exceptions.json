@@ -84,7 +84,7 @@
     "rule": "G118",
     "file": "internal/handler/runbook_web_execution.go",
     "line": "248",
-    "source_sha256": "eb6d0b1f8f538eeb762b8b88d2c4346afb98ed10245c2eb66636e96418e70dc6",
+    "source_sha256": "0f339b4ae8126eb18c37bac3e382bc9aa98533a2e8541455e4104a21119aef17",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Detached persisted deployment must outlive its HTTP/scheduler/startup request. DeploymentRunner.Run owns cancel registration; Cancel and KillAll cancel/drain work. Evidence: runner_control.go, shutdown_test.go, runbook_cancel_test.go."
@@ -93,7 +93,7 @@
     "rule": "G118",
     "file": "internal/handler/runbook_web_execution.go",
     "line": "197",
-    "source_sha256": "eb6d0b1f8f538eeb762b8b88d2c4346afb98ed10245c2eb66636e96418e70dc6",
+    "source_sha256": "0f339b4ae8126eb18c37bac3e382bc9aa98533a2e8541455e4104a21119aef17",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Detached persisted deployment must outlive its HTTP/scheduler/startup request. DeploymentRunner.Run owns cancel registration; Cancel and KillAll cancel/drain work. Evidence: runner_control.go, shutdown_test.go, runbook_cancel_test.go."

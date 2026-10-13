@@ -401,16 +401,22 @@ type streamLogsQueryParam struct {
 	//
 	// in: header
 	LastEventID string `json:"Last-Event-ID"`
+	// Bound structured display text to 16 KiB. Defaults to false.
+	// in: query
+	Preview bool `json:"preview"`
 }
 
 // swagger:parameters streamRunbookLogs
 //
 //nolint:unused // Used by Swagger specification generation.
 type streamRunbookLogsQueryParam struct {
-	// Format is either sse or ndjson.
+	// Format is sse, ndjson, or structured.
 	//
 	// in: query
 	Format string `json:"format"`
+	// Bound structured display text to 16 KiB. Defaults to false.
+	// in: query
+	Preview bool `json:"preview"`
 }
 
 // swagger:parameters listRunbookExecutions

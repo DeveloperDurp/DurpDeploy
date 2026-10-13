@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
@@ -22,6 +23,8 @@ type logStream struct {
 	deploymentID int64
 	after        int64
 	format       string
+	preview      bool
+	authorizedAt time.Time
 }
 
 // StreamTextLogs shares durable replay, completion and authorization with the
