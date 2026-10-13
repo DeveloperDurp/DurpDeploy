@@ -15,7 +15,7 @@ func (f *restoreFixture) login(t *testing.T) {
 	t.Helper()
 	form := url.Values{
 		"email":    {"restore@example.test"},
-		"password": {"testpass"},
+		"password": {f.password},
 	}
 	req, err := http.NewRequestWithContext(t.Context(), "POST",
 		f.api.baseURL+"/login", strings.NewReader(form.Encode()))
