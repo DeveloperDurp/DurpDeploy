@@ -57,7 +57,7 @@ PODMAN
 chmod +x "$test_dir/bin/go" "$test_dir/bin/podman"
 
 for selection in configured provider discovered; do
-    configured= provider= expected=unix:///discovered/runtime.sock
+    configured='' provider='' expected=unix:///discovered/runtime.sock
     if [[ $selection == configured ]]; then
         configured=unix:///configured/runtime.sock
         provider=unix:///other/runtime.sock
