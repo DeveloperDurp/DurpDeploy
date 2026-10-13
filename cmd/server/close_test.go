@@ -12,7 +12,7 @@ import (
 
 type serverCleanupCloser func() error
 
-func (close serverCleanupCloser) Close() error { return close() }
+func (resource serverCleanupCloser) Close() error { return resource() }
 
 func TestCloseOnExitReportsUnexpectedErrors(t *testing.T) {
 	var logs bytes.Buffer
