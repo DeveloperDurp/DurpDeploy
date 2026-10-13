@@ -3,6 +3,7 @@ package db_test
 import (
 	"context"
 	"database/sql"
+	"durpdeploy/internal/testutil"
 	"errors"
 	"strings"
 	"sync"
@@ -199,7 +200,7 @@ func TestOIDCSchema_TransactionExpiryAndConsumeAllowOneWinner(t *testing.T) {
 	if err != nil {
 		t.Fatalf("inspect OIDC transaction columns: %v", err)
 	}
-	defer rows.Close()
+	defer testutil.Close(t, rows)
 	var columns []string
 	for rows.Next() {
 		var (

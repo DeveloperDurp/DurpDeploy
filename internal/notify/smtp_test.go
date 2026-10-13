@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"durpdeploy/internal/testutil"
 	"errors"
 	"fmt"
 	"net"
@@ -31,7 +32,7 @@ func smtpTestServer(
 			done <- err
 			return
 		}
-		defer conn.Close()
+		defer testutil.Close(t, conn)
 		if err := conn.SetDeadline(
 			time.Now().Add(3 * time.Second),
 		); err != nil {
@@ -41,7 +42,7 @@ func smtpTestServer(
 		done <- serve(textproto.NewConn(conn))
 	}()
 	t.Cleanup(func() {
-		listener.Close()
+		testutil.Close(t, listener)
 		if err := <-done; err != nil {
 			t.Errorf("SMTP peer: %v", err)
 		}
@@ -72,7 +73,7 @@ func TestEmailNotifier_RejectsUntrustedTLS(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer listener.Close()
+	defer testutil.Close(t, listener)
 	done := make(chan error, 1)
 	go func() {
 		conn, err := listener.Accept()
@@ -80,7 +81,7 @@ func TestEmailNotifier_RejectsUntrustedTLS(t *testing.T) {
 			done <- err
 			return
 		}
-		defer conn.Close()
+		defer testutil.Close(t, conn)
 		proto := textproto.NewConn(conn)
 		if err := proto.PrintfLine("220 smtp.example.com"); err != nil {
 			done <- err

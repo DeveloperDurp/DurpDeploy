@@ -1,6 +1,7 @@
 package handler_test
 
 import (
+	"durpdeploy/internal/testutil"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -16,7 +17,7 @@ func TestHealthz_200(t *testing.T) {
 	if err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	defer dbConn.Close()
+	defer testutil.Close(t, dbConn)
 
 	repo := repository.New(dbConn)
 	h := handler.NewHealthHandler(repo)
@@ -50,7 +51,7 @@ func TestHealthz_503(t *testing.T) {
 		t.Fatalf("migrate: %v", err)
 	}
 	// Close the DB to simulate probe failure.
-	dbConn.Close()
+	testutil.Close(t, dbConn)
 
 	repo := repository.New(dbConn)
 	h := handler.NewHealthHandler(repo)
@@ -83,7 +84,7 @@ func TestHealthz_503RemainsSafeJSONThroughMiddleware(t *testing.T) {
 	if err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	dbConn.Close()
+	testutil.Close(t, dbConn)
 
 	repo := repository.New(dbConn)
 	health := handler.NewHealthHandler(repo)

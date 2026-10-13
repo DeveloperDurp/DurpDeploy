@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
+	"durpdeploy/internal/testutil"
 	"errors"
 	"fmt"
 	"io"
@@ -153,7 +154,7 @@ func TestSnapshotRejectsUnsafeArchives(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer file.Close()
+			defer testutil.Close(t, file)
 			writer := tar.NewWriter(file)
 			for _, header := range scenario.headers {
 				if err := writer.WriteHeader(header); err != nil {
@@ -195,7 +196,7 @@ func TestSnapshotRejectsTruncatedContent(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer file.Close()
+			defer testutil.Close(t, file)
 			writer := tar.NewWriter(file)
 			for _, header := range []*tar.Header{
 				{Name: "empty", Typeflag: tar.TypeReg},

@@ -155,7 +155,7 @@ func (h *LogHandler) exportDeploymentLogs(
 	)
 	w.WriteHeader(http.StatusOK)
 
-	fmt.Fprintf(
+	if _, err := fmt.Fprintf(
 		w,
 		"=== deployment #%d | project=%s | release=%s | env=%s | status=%s ===\n",
 		depID,
@@ -163,7 +163,9 @@ func (h *LogHandler) exportDeploymentLogs(
 		release.Version,
 		environment.Name,
 		deployment.Status,
-	)
+	); err != nil {
+		return
+	}
 	err = h.repo.ForEachDeploymentLogByDeploymentAsc(
 		r.Context(),
 		depID,
@@ -247,6 +249,8 @@ func (h *LogHandler) GetLog(w http.ResponseWriter, r *http.Request) {
 
 // TextResponse is a plain text response.
 // swagger:model TextResponse
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerTextResponse struct {
 	Body string
 }

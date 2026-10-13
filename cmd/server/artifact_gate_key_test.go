@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"database/sql"
+	"durpdeploy/internal/testutil"
 	"encoding/hex"
 	"path/filepath"
 	"testing"
@@ -71,7 +72,7 @@ func TestRecoverPendingDeploymentsCancelsPublishedGate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer conn.Close()
+	defer testutil.Close(t, conn)
 	repo := repository.New(conn)
 	box, err := secret.NewBox(make([]byte, 32))
 	if err != nil {
@@ -135,7 +136,7 @@ func TestArtifactGateKeyRotationFailureIsAtomic(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer conn.Close()
+			defer testutil.Close(t, conn)
 			repo := repository.New(conn)
 			oldBox, err := secret.NewBox(make([]byte, 32))
 			if err != nil {

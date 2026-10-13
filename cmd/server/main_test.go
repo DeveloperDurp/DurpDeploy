@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"durpdeploy/internal/testutil"
 	"encoding/base64"
 	"io"
 	"os"
@@ -95,7 +96,7 @@ func TestRunAdminCreate_success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reopen db: %v", err)
 	}
-	defer conn.Close()
+	defer testutil.Close(t, conn)
 	repo := repository.New(conn)
 	user, err := repo.Queries.GetUserByEmail(ctx, email)
 	if err != nil {
@@ -207,7 +208,7 @@ func TestRunAdminCreate_shortPasswordWarnsButSucceeds(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reopen db: %v", err)
 	}
-	defer conn.Close()
+	defer testutil.Close(t, conn)
 	repo := repository.New(conn)
 	if _, err := repo.Queries.GetUserByEmail(
 		context.Background(),
@@ -240,7 +241,7 @@ func captureStdout(t *testing.T, fn func()) string {
 	}
 	os.Stdout = w
 	fn()
-	w.Close()
+	testutil.Close(t, w)
 	os.Stdout = origStdout
 	var out bytes.Buffer
 	if _, err := io.Copy(&out, r); err != nil {
@@ -271,7 +272,7 @@ func TestRunTokensCreate_success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reopen db: %v", err)
 	}
-	defer conn.Close()
+	defer testutil.Close(t, conn)
 	repo := repository.New(conn)
 	ctx := context.Background()
 
@@ -402,7 +403,7 @@ func TestRunTokensRevoke_successAndNoMatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reopen db: %v", err)
 	}
-	defer conn.Close()
+	defer testutil.Close(t, conn)
 	repo := repository.New(conn)
 	ctx := context.Background()
 
@@ -444,7 +445,7 @@ func TestRecoverPendingDeployments_launchesRunnerForOrphanedDeployment(
 	if err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	defer conn.Close()
+	defer testutil.Close(t, conn)
 	repo := repository.New(conn)
 	ctx := context.Background()
 
@@ -528,7 +529,7 @@ func TestRecoverPendingDeploymentsFailsOrphanedRunningDeployment(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer conn.Close()
+	defer testutil.Close(t, conn)
 	repo := repository.New(conn)
 	ctx := t.Context()
 	for _, statement := range []string{
@@ -588,7 +589,7 @@ esac
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer conn.Close()
+	defer testutil.Close(t, conn)
 	repo := repository.New(conn)
 	ctx := t.Context()
 	project, err := repo.Queries.CreateProject(
@@ -769,7 +770,7 @@ func TestRecoverPendingDeploymentsCancelsActiveRemoteStepBeforeFailure(
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer conn.Close()
+	defer testutil.Close(t, conn)
 	repo := repository.New(conn)
 	ctx := t.Context()
 	fingerprint := strings.Repeat("a", 64)
@@ -958,7 +959,7 @@ func TestRunSecretKeyRotate_reencryptsAllRowsWithoutDataLoss(t *testing.T) {
 		t.Fatalf("CreateReleaseVariable: %v", err)
 	}
 	gate, bundle := seedRotationGate(t, repo)
-	conn.Close()
+	testutil.Close(t, conn)
 
 	// When: the key is rotated. Capture stdout to recover the newly
 	// generated key the operator would install.
@@ -969,7 +970,7 @@ func TestRunSecretKeyRotate_reencryptsAllRowsWithoutDataLoss(t *testing.T) {
 	}
 	os.Stdout = w
 	code := runSecretKey([]string{"rotate"})
-	w.Close()
+	testutil.Close(t, w)
 	os.Stdout = origStdout
 	var out bytes.Buffer
 	if _, err := io.Copy(&out, r); err != nil {
@@ -995,7 +996,7 @@ func TestRunSecretKeyRotate_reencryptsAllRowsWithoutDataLoss(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reopen db: %v", err)
 	}
-	defer conn2.Close()
+	defer testutil.Close(t, conn2)
 	q := db.New(conn2)
 	rotatedRepo := repository.New(conn2)
 	rotatedRepo.SetSecretBox(oldBox)
@@ -1073,7 +1074,7 @@ func TestPruneAuditLogs_preservesLiveDeploymentAndReleaseRows(t *testing.T) {
 	if err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	defer conn.Close()
+	defer testutil.Close(t, conn)
 	repo := repository.New(conn)
 	ctx := context.Background()
 
@@ -1203,7 +1204,7 @@ func TestRecoverPendingDeployments_noopWhenNonePending(t *testing.T) {
 	if err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	defer conn.Close()
+	defer testutil.Close(t, conn)
 	repo := repository.New(conn)
 	ctx := context.Background()
 

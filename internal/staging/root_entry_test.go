@@ -2,6 +2,7 @@ package staging
 
 import (
 	"archive/tar"
+	"durpdeploy/internal/testutil"
 	"errors"
 	"os"
 	"testing"
@@ -15,7 +16,7 @@ func TestSnapshotRootMustBeEmptyDirectory(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				defer file.Close()
+				defer testutil.Close(t, file)
 				writer := tar.NewWriter(file)
 				if err := writer.WriteHeader(&tar.Header{
 					Name: name, Typeflag: kind, Mode: 0700,

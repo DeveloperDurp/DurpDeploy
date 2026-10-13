@@ -3,6 +3,7 @@ package runner_test
 import (
 	"context"
 	"database/sql"
+	"durpdeploy/internal/testutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -77,7 +78,7 @@ esac
 	if err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	t.Cleanup(func() { dbConn.Close() })
+	t.Cleanup(func() { testutil.Close(t, dbConn) })
 
 	repo := repository.New(dbConn)
 	box, err := secret.NewBox(make([]byte, 32))

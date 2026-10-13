@@ -508,7 +508,7 @@ func (h *LifecycleHandler) ReorderStages(
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	defer tx.Rollback()
+	defer repository.RollbackOnExit(tx)
 	qtx := h.repo.Queries.WithTx(tx)
 
 	for i, sid := range req.StageIDs {

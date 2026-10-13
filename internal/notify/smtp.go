@@ -26,17 +26,22 @@ func (e *EmailNotifier) sendMail(
 	if err != nil {
 		return fmt.Errorf("connect SMTP: %w", err)
 	}
+	//nolint:errcheck // SMTP operations and Quit report errors before cleanup.
 	defer conn.Close()
 	deadline, _ := ctx.Deadline()
 	if err := conn.SetDeadline(deadline); err != nil {
 		return fmt.Errorf("set SMTP deadline: %w", err)
 	}
-	stop := context.AfterFunc(ctx, func() { conn.Close() })
+	stop := context.AfterFunc(ctx, func() {
+		// Cancellation closes the transport; the SMTP operation reports failure.
+		_ = conn.Close()
+	})
 	defer stop()
 	client, err := smtp.NewClient(conn, e.cfg.Host)
 	if err != nil {
 		return fmt.Errorf("read SMTP greeting: %w", err)
 	}
+	//nolint:errcheck // A successful Quit has already closed the SMTP connection.
 	defer client.Close()
 	if err := client.Hello("localhost"); err != nil {
 		return fmt.Errorf("send SMTP greeting: %w", err)

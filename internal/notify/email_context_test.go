@@ -2,6 +2,7 @@ package notify
 
 import (
 	"context"
+	"durpdeploy/internal/testutil"
 	"net"
 	"testing"
 	"time"
@@ -18,7 +19,7 @@ func TestEmailNotifier_StopsSilentPeer(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				t.Cleanup(func() { listener.Close() })
+				t.Cleanup(func() { testutil.Close(t, listener) })
 				accepted := make(chan net.Conn, 1)
 				go func() {
 					conn, err := listener.Accept()
@@ -50,7 +51,7 @@ func TestEmailNotifier_StopsSilentPeer(t *testing.T) {
 				var conn net.Conn
 				select {
 				case conn = <-accepted:
-					defer conn.Close()
+					defer testutil.Close(t, conn)
 				case <-time.After(2 * time.Second):
 					t.Fatal("SMTP connection was not accepted")
 				}
@@ -65,7 +66,7 @@ func TestEmailNotifier_StopsSilentPeer(t *testing.T) {
 						t.Fatal("silent SMTP peer unexpectedly succeeded")
 					}
 				case <-time.After(time.Second):
-					conn.Close()
+					testutil.Close(t, conn)
 					<-result
 					t.Fatal("SMTP delivery ignored cancellation")
 				}

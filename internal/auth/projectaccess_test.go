@@ -3,6 +3,7 @@ package auth_test
 import (
 	"context"
 	"database/sql"
+	"durpdeploy/internal/testutil"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -79,7 +80,7 @@ func newAccessTestRepo(t *testing.T) *repository.Repository {
 	if err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	t.Cleanup(func() { conn.Close() })
+	t.Cleanup(func() { testutil.Close(t, conn) })
 	return repository.New(conn)
 }
 

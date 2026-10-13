@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"durpdeploy/internal/testutil"
 	"encoding/json"
 	"path/filepath"
 	"testing"
@@ -177,7 +178,7 @@ func rotationMetadata(t *testing.T, conn *sql.DB, query string) []any {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer rows.Close()
+	defer testutil.Close(t, rows)
 	columns, err := rows.Columns()
 	if err != nil {
 		t.Fatal(err)

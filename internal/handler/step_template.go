@@ -558,7 +558,9 @@ func (h *StepTemplateHandler) InsertTemplate(
 		return
 	}
 
-	components.StepList(steps, projectID).Render(r.Context(), w)
+	if err := components.StepList(steps, projectID).Render(r.Context(), w); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }
 
 func (h *StepTemplateHandler) SaveStepAsTemplate(
@@ -685,5 +687,7 @@ func (h *StepTemplateHandler) TemplatesPicker(
 		return
 	}
 
-	components.TemplatePicker(templates, projectID).Render(r.Context(), w)
+	if err := components.TemplatePicker(templates, projectID).Render(r.Context(), w); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }

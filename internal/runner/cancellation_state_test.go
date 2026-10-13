@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"durpdeploy/internal/testutil"
 	"errors"
 	"sync"
 	"testing"
@@ -17,7 +18,7 @@ func TestSetupFailureAfterCancellationFinalizesCancelled(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { connection.Close() })
+	t.Cleanup(func() { testutil.Close(t, connection) })
 	connection.SetMaxOpenConns(1)
 	repo := repository.New(connection)
 	project, err := repo.Queries.CreateProject(
@@ -98,7 +99,7 @@ func TestAcceptedCancelCannotRaceTerminalSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { connection.Close() })
+	t.Cleanup(func() { testutil.Close(t, connection) })
 	repo := repository.New(connection)
 	project, err := repo.Queries.CreateProject(
 		t.Context(), db.CreateProjectParams{Name: "cancel-race"},
@@ -185,7 +186,7 @@ func testTerminalPersistenceFailure(t *testing.T, terminalStatus string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { connection.Close() })
+	t.Cleanup(func() { testutil.Close(t, connection) })
 	connection.SetMaxOpenConns(1)
 	repo := repository.New(connection)
 	project, err := repo.Queries.CreateProject(

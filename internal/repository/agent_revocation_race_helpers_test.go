@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"database/sql"
+	"durpdeploy/internal/testutil"
 	"encoding/hex"
 	"strings"
 	"testing"
@@ -141,7 +142,7 @@ func runRevocationFirst(
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer tx.Rollback()
+	defer testutil.Rollback(t, tx)
 	if changed, err := revokeAgent(
 		ctx, revocationRepo.Queries.WithTx(tx), fixture.agentID,
 	); err != nil || !changed {
@@ -180,7 +181,7 @@ func runOperationFirst(
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer tx.Rollback()
+	defer testutil.Rollback(t, tx)
 	wrote, err := operation.runTx(
 		ctx, operationRepo, operationRepo.Queries.WithTx(tx), fixture,
 	)

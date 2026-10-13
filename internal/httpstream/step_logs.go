@@ -78,6 +78,7 @@ func LogCursor(r *http.Request) (int64, error) {
 		var err error
 		after, err = strconv.ParseInt(cursor, 10, 64)
 		if err != nil || after < 0 {
+			//nolint:staticcheck // Preserve the public validation message.
 			return 0, errors.New("Invalid log cursor")
 		}
 	}

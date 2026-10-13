@@ -1,6 +1,7 @@
 package httpstream
 
 import (
+	"durpdeploy/internal/testutil"
 	"errors"
 	"io"
 	"net"
@@ -26,8 +27,8 @@ func TestWriterTerminatesBlockedWrite(t *testing.T) {
 	// Given: a client that does not read, behind the same chi wrapper used
 	// by request logging and auditing.
 	server, client := net.Pipe()
-	defer server.Close()
-	defer client.Close()
+	defer testutil.Close(t, server)
+	defer testutil.Close(t, client)
 	w := &pipeWriter{Conn: server, header: make(http.Header)}
 	stream, err := New(middleware.NewWrapResponseWriter(w, 1))
 	require.NoError(t, err)
@@ -50,8 +51,8 @@ func (w *failingFlushWriter) Flush()            {}
 func TestWriterReturnsFlushErrorThroughChi(t *testing.T) {
 	// Given: an error-aware transport behind two legacy chi wrappers.
 	server, client := net.Pipe()
-	defer server.Close()
-	defer client.Close()
+	defer testutil.Close(t, server)
+	defer testutil.Close(t, client)
 	w := &failingFlushWriter{
 		&pipeWriter{Conn: server, header: make(http.Header)},
 	}

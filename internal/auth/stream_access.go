@@ -25,7 +25,8 @@ func CanStreamDeployment(
 	if user == nil {
 		return false
 	}
-	userID, role := user.ID, user.Role
+	userID := user.ID
+	var role string
 	if session := SessionFromContext(r.Context()); session != nil {
 		current, err := repo.Queries.GetSession(
 			r.Context(),

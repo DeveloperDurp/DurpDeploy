@@ -3,6 +3,7 @@ package migrate
 import (
 	"bytes"
 	"database/sql"
+	"durpdeploy/internal/testutil"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -12,13 +13,15 @@ import (
 	"durpdeploy/migrations"
 )
 
-func TestAgentInterpretersMigrationConstrainsReportedCapabilities(t *testing.T) {
+func TestAgentInterpretersMigrationConstrainsReportedCapabilities(
+	t *testing.T,
+) {
 	// Given
 	conn, err := Run(":memory:?_pragma=foreign_keys(1)")
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer conn.Close()
+	defer testutil.Close(t, conn)
 	if _, err := conn.Exec(
 		"INSERT INTO agents(id, name, endpoint) VALUES('agent', 'Agent', 'https://agent')",
 	); err != nil {
@@ -49,7 +52,7 @@ func TestAgentInterpretersMigrationBackfillsBashForPairedAgents(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer conn.Close()
+	defer testutil.Close(t, conn)
 	goose.SetBaseFS(migrations.FS)
 	if err := goose.SetDialect("sqlite3"); err != nil {
 		t.Fatal(err)

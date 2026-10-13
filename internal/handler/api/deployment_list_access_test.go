@@ -87,9 +87,10 @@ func TestGlobalDeploymentList_ProjectAccess(t *testing.T) {
 			for _, tc := range cases {
 				t.Run(tc.name, func(t *testing.T) {
 					wantTotal, wantRows := tc.total, tc.rows
-					if role == "nonmember" {
+					switch role {
+					case "nonmember":
 						wantTotal, wantRows = 0, 0
-					} else if role == "admin" {
+					case "admin":
 						switch tc.name {
 						case "all", "dates":
 							wantTotal, wantRows = 4, 4

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"durpdeploy/internal/testutil"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -568,7 +569,7 @@ func TestDeployPage_OnlyShowsDeployableEnvsByDefault(t *testing.T) {
 		t.Fatalf("status: %d", resp.StatusCode)
 	}
 	buf := new(bytes.Buffer)
-	buf.ReadFrom(resp.Body)
+	testutil.ReadFrom(t, buf, resp.Body)
 	body := buf.String()
 
 	// Alpha is deployable (first stage), so it appears as a plain <option>.
@@ -594,10 +595,12 @@ func TestDeployPage_HidesNonLifecycleEnvs(t *testing.T) {
 	hc := h.setupProjectWithLifecycle(t, []string{"Alpha", "Beta"})
 
 	// "Outside" env is not in the lifecycle.
-	h.repo.Queries.CreateEnvironment(
+	if _, err := h.repo.Queries.CreateEnvironment(
 		context.Background(),
 		db.CreateEnvironmentParams{Name: "Outside"},
-	)
+	); err != nil {
+		t.Fatalf("create outside environment: %v", err)
+	}
 
 	rel := hc.makeRelease(t, "1.0.0", "exit 0")
 
@@ -609,7 +612,7 @@ func TestDeployPage_HidesNonLifecycleEnvs(t *testing.T) {
 	}
 	defer resp.Body.Close()
 	buf := new(bytes.Buffer)
-	buf.ReadFrom(resp.Body)
+	testutil.ReadFrom(t, buf, resp.Body)
 	body := buf.String()
 
 	if strings.Contains(body, `>Outside<`) {
@@ -643,44 +646,11 @@ func TestGate_RenderError_ContainsReasonText(t *testing.T) {
 		t.Fatalf("status: got %d, want 422", resp.StatusCode)
 	}
 	buf := new(bytes.Buffer)
-	buf.ReadFrom(resp.Body)
+	testutil.ReadFrom(t, buf, resp.Body)
 	body := buf.String()
 	if !strings.Contains(body, "has not been successfully deployed to Alpha") {
 		t.Errorf("error body missing gate reason; got: %s", body)
 	}
-}
-
-// firstDeployment finds the most recent deployment matching release+env. Used
-// to look up the ID we just created so we can wait for its status.
-func firstDeployment(
-	t *testing.T,
-	h *testHarness,
-	releaseID, envID int64,
-) int64 {
-	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
-	var lastErr error
-	for time.Now().Before(deadline) {
-		dep, err := h.repo.Queries.GetLatestDeploymentForReleaseEnv(
-			context.Background(),
-			db.GetLatestDeploymentForReleaseEnvParams{
-				ReleaseID:     releaseID,
-				EnvironmentID: envID,
-			},
-		)
-		if err == nil {
-			return dep.ID
-		}
-		lastErr = err
-		time.Sleep(20 * time.Millisecond)
-	}
-	t.Fatalf(
-		"get latest deployment (release=%d env=%d): %v",
-		releaseID,
-		envID,
-		lastErr,
-	)
-	return 0
 }
 
 // ---------------------------------------------------------------------------
@@ -725,7 +695,7 @@ func TestNewDeploymentPage_RendersForm(t *testing.T) {
 		t.Fatalf("status %d", resp.StatusCode)
 	}
 	buf := new(bytes.Buffer)
-	buf.ReadFrom(resp.Body)
+	testutil.ReadFrom(t, buf, resp.Body)
 	body := buf.String()
 
 	for _, marker := range []string{
@@ -1013,7 +983,7 @@ func TestNewDeploymentPage_NoReleasesShowsEmptyState(t *testing.T) {
 	}
 	defer resp.Body.Close()
 	buf := new(bytes.Buffer)
-	buf.ReadFrom(resp.Body)
+	testutil.ReadFrom(t, buf, resp.Body)
 	body := buf.String()
 
 	if !strings.Contains(body, "No releases yet") {
@@ -1059,7 +1029,7 @@ func TestNewDeploymentPage_LifecycleFiltersEnvs(t *testing.T) {
 	}
 	defer resp.Body.Close()
 	buf := new(bytes.Buffer)
-	buf.ReadFrom(resp.Body)
+	testutil.ReadFrom(t, buf, resp.Body)
 	body := buf.String()
 
 	if !strings.Contains(body, "LFA") || !strings.Contains(body, "LFB") {
@@ -1277,7 +1247,7 @@ func TestNewDeploymentPage_LifecycleOrdersEnvsInStageOrder(t *testing.T) {
 			idxProd,
 		)
 	}
-	if !(idxDev < idxTest && idxTest < idxProd) {
+	if idxDev >= idxTest || idxTest >= idxProd {
 		t.Errorf(
 			"envs not in lifecycle order: dev@%d test@%d prod@%d",
 			idxDev,
@@ -1301,10 +1271,7 @@ func TestNewDeploymentPage_LifecycleOnlyShowsEmptyStateWhenNoStages(
 	makeStepGlobal(t, h, proj.ID, "s", "true")
 	h.makeRelease(proj.ID, "1.0.0", "true")
 
-	page := h.getProjectPage(proj.ID)
-	// This is the project page, not the deploy page. But the user said
-	// "I still see all environments" which we read as the deploy page.
-	// Check the deploy page directly.
+	// Check the deployment form when the lifecycle has no stages.
 	resp, err := h.authedClient().Get(
 		fmt.Sprintf("%s/projects/%d/deploy", h.server.URL, proj.ID),
 	)
@@ -1313,8 +1280,8 @@ func TestNewDeploymentPage_LifecycleOnlyShowsEmptyStateWhenNoStages(
 	}
 	defer resp.Body.Close()
 	buf := new(bytes.Buffer)
-	buf.ReadFrom(resp.Body)
-	page = buf.String()
+	testutil.ReadFrom(t, buf, resp.Body)
+	page := buf.String()
 
 	if !strings.Contains(page, "No environments available") {
 		t.Errorf("empty-state message missing for lifecycle with no stages")
@@ -1364,7 +1331,7 @@ func TestNewDeploymentPage_ReleaseAwareGateState(t *testing.T) {
 	}
 	defer resp.Body.Close()
 	buf := new(bytes.Buffer)
-	buf.ReadFrom(resp.Body)
+	testutil.ReadFrom(t, buf, resp.Body)
 	page = buf.String()
 
 	if !strings.Contains(page, "1.0.0") {
@@ -1414,7 +1381,7 @@ func TestNewDeploymentPage_ReleaseAwareGateState(t *testing.T) {
 	}
 	defer resp.Body.Close()
 	buf = new(bytes.Buffer)
-	buf.ReadFrom(resp.Body)
+	testutil.ReadFrom(t, buf, resp.Body)
 	page = buf.String()
 	for i := 0; i < len(page); i++ {
 		if i+8 <= len(page) && page[i:i+8] == `value="1"` {
@@ -1472,16 +1439,6 @@ func envSelectFromPage(page string) string {
 		return ""
 	}
 	return page[start : start+end]
-}
-
-// helpers used by the test above; defined here to avoid touching the
-// existing harness or hand-rolling HTTP plumbing.
-func envIDByName(body, name string) int64 {
-	// not actually used; the test asserts presence by pattern only.
-	// kept for future extension.
-	_ = body
-	_ = name
-	return 0
 }
 
 func (h *projectHarness) postDeployRelease(
@@ -1576,7 +1533,7 @@ func TestListDeployments_FilterAndPaginate(t *testing.T) {
 		t.Fatalf("status: got %d, want 200", resp1.StatusCode)
 	}
 	buf := new(bytes.Buffer)
-	buf.ReadFrom(resp1.Body)
+	testutil.ReadFrom(t, buf, resp1.Body)
 	page1 := buf.String()
 
 	if !strings.Contains(page1, "filter-proj") {
@@ -1609,7 +1566,7 @@ func TestListDeployments_FilterAndPaginate(t *testing.T) {
 		t.Fatalf("status: got %d, want 200", resp2.StatusCode)
 	}
 	buf.Reset()
-	buf.ReadFrom(resp2.Body)
+	testutil.ReadFrom(t, buf, resp2.Body)
 	page2 := buf.String()
 
 	if got := rowCount(page2); got != 1 {
@@ -1857,7 +1814,7 @@ func TestListDeployments_HTMXPartialReturnsRowsAndOOBButton(t *testing.T) {
 		t.Fatalf("status: got %d, want 200", resp.StatusCode)
 	}
 	buf := new(bytes.Buffer)
-	buf.ReadFrom(resp.Body)
+	testutil.ReadFrom(t, buf, resp.Body)
 	body := buf.String()
 
 	if got := rowCount(body); got != 2 {

@@ -51,6 +51,30 @@ func TestSwagger_UIRenders(t *testing.T) {
 	if body[0] != '<' {
 		t.Fatal("expected UI to start with <")
 	}
+	config := regexp.MustCompile(`url:\s*'([^']*)'`).FindStringSubmatch(body)
+	if len(config) != 2 {
+		t.Fatal("Swagger UI omits its specification URL")
+	}
+	var specURL string
+	if err := json.Unmarshal([]byte(`"`+config[1]+`"`), &specURL); err != nil {
+		t.Fatalf("decode specification URL: %v", err)
+	}
+	if specURL != "/api/swagger/spec" {
+		t.Errorf("specification URL = %q", specURL)
+	}
+	for _, expected := range []string{
+		"/static/swagger-ui/swagger-ui-bundle.js",
+		"/static/swagger-ui/swagger-ui-standalone-preset.js",
+		"/static/swagger-ui/swagger-ui.css",
+		"durpdeployAuthInterceptor",
+	} {
+		if !strings.Contains(body, expected) {
+			t.Errorf("Swagger UI omits %q", expected)
+		}
+	}
+	if strings.Contains(body, "https://unpkg.com/") {
+		t.Error("Swagger UI must use the bundled assets")
+	}
 }
 
 func TestSwagger(t *testing.T) {

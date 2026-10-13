@@ -1,6 +1,7 @@
 package artifact
 
 import (
+	"durpdeploy/internal/testutil"
 	"errors"
 	"os"
 	"path/filepath"
@@ -46,7 +47,7 @@ func TestWorkspaceReclaimsStaleFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer workspace.Close()
+	defer testutil.Close(t, workspace)
 
 	// Then: only artifact paths within the dedicated directory are removed.
 	entries, err := os.ReadDir(directory)
@@ -72,7 +73,7 @@ func TestWorkspaceRejectsActiveLease(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer first.Close()
+	defer testutil.Close(t, first)
 	active := filepath.Join(first.Directory, "durpdeploy-artifact-active.zip")
 	if err := os.WriteFile(active, []byte("active"), 0600); err != nil {
 		t.Fatal(err)
@@ -81,7 +82,7 @@ func TestWorkspaceRejectsActiveLease(t *testing.T) {
 	// When: another server attempts startup with the same TMPDIR.
 	second, err := OpenWorkspace(base)
 	if second != nil {
-		defer second.Close()
+		defer testutil.Close(t, second)
 	}
 
 	// Then: it fails without touching active work.
@@ -112,7 +113,7 @@ func TestWorkspaceReopensAfterLeaseRelease(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer second.Close()
+	defer testutil.Close(t, second)
 
 	// Then: the stale lease file does not prevent startup.
 	if second.Directory != first.Directory {
@@ -144,7 +145,7 @@ func TestWorkspaceRejectsSymlink(t *testing.T) {
 			// When: startup opens the workspace.
 			workspace, err := OpenWorkspace(base)
 			if workspace != nil {
-				defer workspace.Close()
+				defer testutil.Close(t, workspace)
 			}
 
 			// Then: it rejects the substituted path before cleanup.

@@ -85,5 +85,6 @@ func writeJSON[T agentproto.HeartbeatResponse | agentproto.PollResponse](
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	w.Write(payload)
+	// The status is committed; a disconnected client cannot receive an error.
+	_, _ = w.Write(payload)
 }

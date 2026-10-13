@@ -2,6 +2,7 @@ package db_test
 
 import (
 	"context"
+	"durpdeploy/internal/testutil"
 	"testing"
 
 	"durpdeploy/internal/db"
@@ -15,7 +16,7 @@ func TestSteps_ContainerMetadataRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	defer dbConn.Close()
+	defer testutil.Close(t, dbConn)
 	queries := db.New(dbConn)
 
 	project, err := queries.CreateProject(
@@ -78,7 +79,7 @@ func TestSteps_ContainerMetadataDefaultsOnExistingShape(t *testing.T) {
 	if err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	defer dbConn.Close()
+	defer testutil.Close(t, dbConn)
 
 	project, err := db.New(dbConn).
 		CreateProject(ctx, db.CreateProjectParams{Name: "default-project"})

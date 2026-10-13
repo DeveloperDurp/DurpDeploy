@@ -252,7 +252,7 @@ func assertOIDCSchemaParity(t *testing.T, conn *sql.DB, schema string) {
 	if err != nil {
 		t.Fatalf("list OIDC transaction columns: %v", err)
 	}
-	defer rows.Close()
+	defer testutil.Close(t, rows)
 	var columns []string
 	for rows.Next() {
 		var column string

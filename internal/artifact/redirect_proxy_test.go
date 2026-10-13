@@ -1,6 +1,7 @@
 package artifact
 
 import (
+	"durpdeploy/internal/testutil"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -77,7 +78,7 @@ func TestProductionClientEnforcesRedirectBoundary(t *testing.T) {
 				Credential:  "test-credential",
 			}, Pin{URL: server.URL + "/1.zip"})
 			if download.Path != "" {
-				defer os.Remove(download.Path)
+				defer testutil.Remove(t, download.Path)
 			}
 			// Then: only bounded same-origin HTTPS redirects receive credentials.
 			if test.allowed {
@@ -182,7 +183,7 @@ func TestProductionClientIgnoresEnvironmentProxies(t *testing.T) {
 		URLTemplate: server.URL + "/{version}.zip", AuthType: "noauth",
 	}, Pin{URL: server.URL + "/1.zip"})
 	if download.Path != "" {
-		defer os.Remove(download.Path)
+		defer testutil.Remove(t, download.Path)
 	}
 	// Then: the direct connection succeeds without contacting the proxy.
 	if err != nil || reachedProxy.Load() {

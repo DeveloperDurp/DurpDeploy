@@ -37,6 +37,7 @@ func CheckHTTP(ctx context.Context, settings Settings, output io.Writer) error {
 	if err != nil {
 		return httpFailure(ctx, err)
 	}
+	//nolint:errcheck // Verification checks read failures before body cleanup.
 	defer response.Body.Close()
 	if _, err := fmt.Fprintf(output, "HTTP status: %d\n",
 		response.StatusCode); err != nil {

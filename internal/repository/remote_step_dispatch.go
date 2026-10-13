@@ -101,9 +101,7 @@ func (r *Repository) ClaimRemoteStepPayload(
 					snapshot.Steps = snapshot.Steps[candidate.StepIndex : candidate.StepIndex+1]
 					stage, err := q.HasStagingInput(
 						ctx,
-						db.HasStagingInputParams{
-							DeploymentID: candidate.DeploymentID, StepIndex: candidate.StepIndex,
-						},
+						db.HasStagingInputParams(candidate),
 					)
 					if err != nil {
 						return err

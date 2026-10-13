@@ -3,6 +3,7 @@ package events_test
 import (
 	"context"
 	"database/sql"
+	"durpdeploy/internal/testutil"
 	"encoding/json"
 	"fmt"
 	"testing"
@@ -42,7 +43,7 @@ func newTestRepo(t *testing.T) *repository.Repository {
 	if err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	t.Cleanup(func() { dbConn.Close() })
+	t.Cleanup(func() { testutil.Close(t, dbConn) })
 	return repository.New(dbConn)
 }
 

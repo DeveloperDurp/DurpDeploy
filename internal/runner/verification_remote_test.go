@@ -1,6 +1,7 @@
 package runner_test
 
 import (
+	"durpdeploy/internal/testutil"
 	"fmt"
 	"testing"
 	"time"
@@ -111,7 +112,7 @@ func checkRemoteVerificationIsolation(t *testing.T, legacy bool) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer input.Close()
+	defer testutil.Close(t, input)
 	if err := repo.SaveStaging(ctx, repository.StagingWrite{
 		Key: db.GetStagingSnapshotParams{DeploymentID: created.ID, Producer: "verification-a"}, Source: input,
 	}); err != nil {

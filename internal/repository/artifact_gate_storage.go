@@ -26,7 +26,7 @@ func (r *Repository) SaveArtifactGate(
 	ctx context.Context,
 	gate db.CreateArtifactGateParams,
 	source io.ReadSeeker,
-) error {
+) (result error) {
 	if r.secrets == nil || gate.BundleSize <= 0 ||
 		gate.BundleSize > artifact.MaxDownload {
 		return ErrArtifactGate
@@ -35,7 +35,7 @@ func (r *Repository) SaveArtifactGate(
 	if err != nil {
 		return err
 	}
-	defer spool.Close()
+	defer func() { result = errors.Join(result, spool.Close()) }()
 	// Preparation never holds a database writer while reading or encrypting.
 	return withSQLiteBusyRetry(ctx, func() error {
 		if _, err := source.Seek(0, io.SeekStart); err != nil {

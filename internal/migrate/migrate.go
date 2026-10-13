@@ -2,6 +2,7 @@ package migrate
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"io/fs"
 	"net/url"
@@ -111,10 +112,6 @@ func isPostgres(dsn string) bool {
 		strings.Contains(dsn, "user=")
 }
 
-func run(dsn, driverName, gooseDialect string) (*sql.DB, error) {
-	return runMigrations(dsn, driverName, gooseDialect, migrations.FS)
-}
-
 func runMigrations(
 	dsn, driverName, gooseDialect string, migrationFS fs.FS,
 ) (*sql.DB, error) {
@@ -124,18 +121,19 @@ func runMigrations(
 	}
 
 	if err := db.Ping(); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("ping db: %w", err)
+		return nil, errors.Join(fmt.Errorf("ping db: %w", err), db.Close())
 	}
 
 	goose.SetBaseFS(migrationFS)
 	if err := goose.SetDialect(gooseDialect); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("set Goose dialect: %w", err)
+		return nil, errors.Join(
+			fmt.Errorf("set Goose dialect: %w", err), db.Close(),
+		)
 	}
 	if err := goose.Up(db, "."); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("run migrations: %w", err)
+		return nil, errors.Join(
+			fmt.Errorf("run migrations: %w", err), db.Close(),
+		)
 	}
 
 	return db, nil

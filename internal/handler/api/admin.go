@@ -399,6 +399,7 @@ func (h *AdminHandler) DbTables(w http.ResponseWriter, r *http.Request) {
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	//nolint:errcheck // Early error exits retain the primary error below.
 	defer rows.Close()
 
 	var tables []string
@@ -411,6 +412,10 @@ func (h *AdminHandler) DbTables(w http.ResponseWriter, r *http.Request) {
 		tables = append(tables, name)
 	}
 	if err := rows.Err(); err != nil {
+		RespondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if err := rows.Close(); err != nil {
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}

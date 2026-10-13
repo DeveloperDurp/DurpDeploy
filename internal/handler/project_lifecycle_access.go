@@ -10,10 +10,12 @@ import (
 	"durpdeploy/internal/repository"
 )
 
+//nolint:staticcheck // Preserve the public validation message.
 var ErrLifecycleAssignmentForbidden = errors.New(
 	"Only a global admin can assign a lifecycle to a project",
 )
 
+//nolint:staticcheck // Preserve the public validation message.
 var ErrLifecycleRemovalForbidden = errors.New(
 	"Only a project admin can remove a lifecycle assignment",
 )

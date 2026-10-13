@@ -63,6 +63,8 @@ import (
 //   409: body:ConflictError
 
 // swagger:parameters listArtifactGates downloadArtifactGate reviewArtifactGate approveArtifactGate rejectArtifactGate
+//
+//nolint:unused // Used by Swagger specification generation.
 type artifactGatePathParam struct {
 	// in: path
 	// required: true
@@ -70,6 +72,8 @@ type artifactGatePathParam struct {
 }
 
 // swagger:parameters downloadArtifactGate reviewArtifactGate approveArtifactGate rejectArtifactGate
+//
+//nolint:unused // Used by Swagger specification generation.
 type artifactGateStepParam struct {
 	// Zero-based generation step index.
 	// in: path
@@ -78,6 +82,8 @@ type artifactGateStepParam struct {
 }
 
 // swagger:parameters approveArtifactGate rejectArtifactGate
+//
+//nolint:unused // Used by Swagger specification generation.
 type artifactGateDecisionParam struct {
 	// in: body
 	// required: true
@@ -90,12 +96,16 @@ type artifactGateDecisionParam struct {
 }
 
 // swagger:response ArtifactGateListResponse
+//
+//nolint:unused // Used by Swagger specification generation.
 type artifactGateListResponse struct {
 	// in: body
 	Body []pages.ArtifactGateInfo
 }
 
 // swagger:response ArtifactGateReviewResponse
+//
+//nolint:unused // Used by Swagger specification generation.
 type artifactGateReviewResponse struct {
 	// in: body
 	Body artifact.TerraformReviewResponse

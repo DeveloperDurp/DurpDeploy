@@ -27,6 +27,7 @@ func snapshotVerification(
 	index := int64(len(steps))
 	if environment.VerificationType == string(verification.Bash) {
 		if len(steps) == 0 {
+			//nolint:staticcheck // Preserve the public validation message.
 			return nil, fmt.Errorf(
 				"Bash verification needs a deployment step: %w",
 				verification.ErrInvalid,

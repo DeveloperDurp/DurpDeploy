@@ -207,6 +207,7 @@ func ValidateStepPlacement(
 		target = "local"
 	}
 	if target != "local" && target != "agent" {
+		//nolint:staticcheck // Preserve the public validation message.
 		return "", nil, errors.New("Run step on must be Local or Agent")
 	}
 	if target == "local" {
@@ -225,6 +226,7 @@ func ValidateStepPlacement(
 		}
 		label, ok := canonical[selector]
 		if !ok {
+			//nolint:staticcheck // Preserve the public validation message.
 			return "", nil, errors.New("Select an available agent label")
 		}
 		key := strings.ToLower(label)
@@ -250,7 +252,9 @@ func (h *StepHandler) ListSteps(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	components.StepList(steps, projectID).Render(r.Context(), w)
+	if err := components.StepList(steps, projectID).Render(r.Context(), w); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }
 
 // StepsPage renders the dedicated full page for a project's steps. The
@@ -299,8 +303,10 @@ func (h *StepHandler) NewStepForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	step := db.Step{ProjectID: projectID, ExecutionTarget: "local"}
-	components.StepForm(step, projectID, true, labels, "", "").
-		Render(r.Context(), w)
+	if err := components.StepForm(step, projectID, true, labels, "", "").
+		Render(r.Context(), w); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }
 
 func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
@@ -495,7 +501,9 @@ func (h *StepHandler) CreateStep(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	components.StepList(steps, projectID).Render(r.Context(), w)
+	if err := components.StepList(steps, projectID).Render(r.Context(), w); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }
 
 // writeStepFormError centralizes the StepForm/StepEditRow re-render path
@@ -601,13 +609,17 @@ func (h *StepHandler) EditStepForm(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.URL.Query().Get("dialog") == "1" ||
 		r.URL.Query().Get("mobile") == "1" {
-		components.StepForm(
+		if err := components.StepForm(
 			step, projectID, false, labels, selectedLabel, "",
-		).Render(r.Context(), w)
+		).Render(r.Context(), w); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 		return
 	}
-	components.StepEditRow(step, projectID, labels, selectedLabel, "").
-		Render(r.Context(), w)
+	if err := components.StepEditRow(step, projectID, labels, selectedLabel, "").
+		Render(r.Context(), w); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }
 
 func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
@@ -839,7 +851,9 @@ func (h *StepHandler) UpdateStep(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	components.StepList(steps, projectID).Render(r.Context(), w)
+	if err := components.StepList(steps, projectID).Render(r.Context(), w); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }
 
 func (h *StepHandler) DeleteStep(w http.ResponseWriter, r *http.Request) {
@@ -879,7 +893,9 @@ func (h *StepHandler) DeleteStep(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	components.StepList(steps, projectID).Render(r.Context(), w)
+	if err := components.StepList(steps, projectID).Render(r.Context(), w); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }
 
 func (h *StepHandler) ReorderStep(w http.ResponseWriter, r *http.Request) {
@@ -928,7 +944,9 @@ func (h *StepHandler) ReorderStep(w http.ResponseWriter, r *http.Request) {
 
 	oldOrder := target.SortOrder
 	if oldOrder == newOrder {
-		components.StepList(steps, projectID).Render(r.Context(), w)
+		if err := components.StepList(steps, projectID).Render(r.Context(), w); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 		return
 	}
 
@@ -937,7 +955,7 @@ func (h *StepHandler) ReorderStep(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	defer tx.Rollback()
+	defer repository.RollbackOnExit(tx)
 
 	qtx := h.repo.Queries.WithTx(tx)
 
@@ -1031,5 +1049,7 @@ func (h *StepHandler) ReorderStep(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	components.StepList(steps, projectID).Render(r.Context(), w)
+	if err := components.StepList(steps, projectID).Render(r.Context(), w); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }

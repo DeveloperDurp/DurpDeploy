@@ -89,6 +89,7 @@ func (s *Server) DownloadStaging(w http.ResponseWriter, r *http.Request) {
 		writeStagingError(w, err)
 		return
 	}
+	//nolint:errcheck // Read-only temporary file; publication already succeeded.
 	defer file.Close()
 	meta, err := s.repository.Queries.GetStagingSnapshot(r.Context(), key)
 	if err != nil {
@@ -151,7 +152,11 @@ func (s *Server) UploadStaging(w http.ResponseWriter, r *http.Request) {
 		writeStagingError(w, err)
 		return
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			slog.WarnContext(r.Context(), "close staging spool", "err", err)
+		}
+	}()
 	if _, err := io.Copy(file, stream); err != nil {
 		var tooLarge *http.MaxBytesError
 		if errors.As(err, &tooLarge) {

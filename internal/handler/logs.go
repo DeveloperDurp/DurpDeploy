@@ -102,7 +102,7 @@ func (h *LogHandler) exportDeploymentLogs(
 	)
 	w.WriteHeader(http.StatusOK)
 
-	fmt.Fprintf(
+	if _, err := fmt.Fprintf(
 		w,
 		"=== deployment #%d | project=%s | release=%s | env=%s | status=%s ===\n",
 		deploymentID,
@@ -110,7 +110,9 @@ func (h *LogHandler) exportDeploymentLogs(
 		release.Version,
 		environment.Name,
 		deployment.Status,
-	)
+	); err != nil {
+		return
+	}
 	err = h.repo.ForEachDeploymentLogByDeploymentAsc(
 		r.Context(),
 		deploymentID,

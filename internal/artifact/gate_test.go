@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
+	"durpdeploy/internal/testutil"
 	"errors"
 	"io"
 	"os"
@@ -15,7 +16,7 @@ func TestGateSpoolHasNoNamedSensitiveFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer file.Close()
+	defer testutil.Close(t, file)
 	if _, err := os.Stat(file.Name()); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("named spool remains: %v", err)
 	}

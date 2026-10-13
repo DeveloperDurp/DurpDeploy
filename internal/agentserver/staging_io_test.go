@@ -1,6 +1,7 @@
 package agentserver
 
 import (
+	"durpdeploy/internal/testutil"
 	"errors"
 	"fmt"
 	"io"
@@ -38,7 +39,7 @@ func TestStagingIOBoundsStalls(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer connection.Close()
+			defer testutil.Close(t, connection)
 			if err := connection.(*net.TCPConn).SetReadBuffer(
 				1024,
 			); err != nil {
@@ -65,7 +66,7 @@ func TestStagingIOBoundsStalls(t *testing.T) {
 					t.Fatalf("stalled %s error=%v", direction, err)
 				}
 			case <-time.After(3 * time.Second):
-				connection.Close()
+				testutil.Close(t, connection)
 				t.Fatal("stalled transfer did not stop")
 			}
 		})

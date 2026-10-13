@@ -412,7 +412,7 @@ func (h *LifecycleHandler) ReorderStage(
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	defer tx.Rollback()
+	defer repository.RollbackOnExit(tx)
 	qtx := h.repo.Queries.WithTx(tx)
 
 	a := stages[targetIdx]
@@ -533,8 +533,10 @@ func (h *LifecycleHandler) UpdateLifecycleStage(
 			return
 		}
 		view := pages.LifecycleStageView{Stage: stage, Environment: env}
-		pages.LifecycleStageRow(lc, idx, len(stages), view).
-			Render(r.Context(), w)
+		if err := pages.LifecycleStageRow(lc, idx, len(stages), view).
+			Render(r.Context(), w); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 		return
 	}
 	http.Redirect(

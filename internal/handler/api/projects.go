@@ -376,7 +376,7 @@ func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	updated, err := h.repo.Queries.UpdateProject(
+	_, err = h.repo.Queries.UpdateProject(
 		r.Context(),
 		db.UpdateProjectParams{
 			ID:   id,
@@ -410,7 +410,7 @@ func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	updated, err = h.repo.Queries.GetProject(r.Context(), id)
+	updated, err := h.repo.Queries.GetProject(r.Context(), id)
 	if err != nil {
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return

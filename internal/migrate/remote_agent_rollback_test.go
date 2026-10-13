@@ -2,6 +2,7 @@ package migrate
 
 import (
 	"database/sql"
+	"durpdeploy/internal/testutil"
 	"fmt"
 	"testing"
 
@@ -15,7 +16,7 @@ func TestRemoteAgentRollbackRefusal(t *testing.T) {
 		t.Run(fmt.Sprint(version), func(t *testing.T) {
 			conn, err := sql.Open("sqlite", ":memory:?_pragma=foreign_keys(1)")
 			requireNoError(t, err, "open isolated database")
-			defer conn.Close()
+			defer testutil.Close(t, conn)
 			goose.SetBaseFS(migrations.FS)
 			requireNoError(t, goose.SetDialect("sqlite3"), "dialect")
 			requireNoError(t, goose.UpTo(conn, ".", version), "up")
@@ -43,7 +44,7 @@ func TestRemoteAgentRollbackRefusal(t *testing.T) {
 func TestRemoteAgentMigrationFailureIsAtomic(t *testing.T) {
 	conn, err := sql.Open("sqlite", ":memory:?_pragma=foreign_keys(1)")
 	requireNoError(t, err, "open isolated database")
-	defer conn.Close()
+	defer testutil.Close(t, conn)
 	goose.SetBaseFS(migrations.FS)
 	requireNoError(t, goose.SetDialect("sqlite3"), "dialect")
 	requireNoError(t, goose.UpTo(conn, ".", 24), "legacy schema")

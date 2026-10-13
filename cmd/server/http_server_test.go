@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"crypto/tls"
+	"durpdeploy/internal/testutil"
 	"fmt"
 	"io"
 	"net"
@@ -81,7 +82,7 @@ func TestHTTPServerTerminatesStalledInput(t *testing.T) {
 					)
 				}
 				require.NoError(t, err)
-				defer conn.Close()
+				defer testutil.Close(t, conn)
 				require.NoError(
 					t,
 					conn.SetDeadline(time.Now().Add(2*time.Second)),

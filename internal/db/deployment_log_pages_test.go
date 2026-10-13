@@ -1,6 +1,7 @@
 package db
 
 import (
+	"durpdeploy/internal/testutil"
 	"math"
 	"strings"
 	"testing"
@@ -14,7 +15,7 @@ func TestLogMetadataUsesSparseIndex(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer conn.Close()
+	defer testutil.Close(t, conn)
 	// When: SQLite plans the metadata lookup independently of page output.
 	rows, err := conn.QueryContext(t.Context(),
 		"EXPLAIN QUERY PLAN "+listDeploymentLogStateMetadata,
@@ -22,7 +23,7 @@ func TestLogMetadataUsesSparseIndex(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer rows.Close()
+	defer testutil.Close(t, rows)
 	indexed := false
 	for rows.Next() {
 		var id, parent, unused int
@@ -57,7 +58,7 @@ func TestLogHistoryUsesCursorRange(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer conn.Close()
+	defer testutil.Close(t, conn)
 	// When: SQLite plans a deep history cursor.
 	rows, err := conn.QueryContext(t.Context(),
 		"EXPLAIN QUERY PLAN "+listDeploymentLogsBefore,
@@ -65,7 +66,7 @@ func TestLogHistoryUsesCursorRange(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer rows.Close()
+	defer testutil.Close(t, rows)
 	bounded := false
 	for rows.Next() {
 		var id, parent, unused int

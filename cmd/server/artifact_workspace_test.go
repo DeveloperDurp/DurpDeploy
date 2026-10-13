@@ -1,6 +1,7 @@
 package main
 
 import (
+	"durpdeploy/internal/testutil"
 	"errors"
 	"os"
 	"testing"
@@ -41,7 +42,7 @@ func TestArtifactWorkspaceStartup(t *testing.T) {
 	}
 	other, err := artifact.OpenWorkspace(base)
 	if other != nil {
-		defer other.Close()
+		defer testutil.Close(t, other)
 	}
 	if !errors.Is(err, artifact.ErrWorkspaceBusy) {
 		t.Fatalf("startup did not retain lease: %v", err)

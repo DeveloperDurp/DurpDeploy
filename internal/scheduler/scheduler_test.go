@@ -246,10 +246,6 @@ func (f *testFixture) createDeployment(
 	return d
 }
 
-func (f *testFixture) advanceNow(d time.Duration) {
-	f.now = f.now.Add(d)
-}
-
 func (f *testFixture) captureRunCalls() chan runCall {
 	f.t.Helper()
 	calls := make(chan runCall, 1)

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"durpdeploy/internal/testutil"
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
@@ -156,7 +157,7 @@ func assertRealPairingCompletes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer connection.Close()
+	defer testutil.Close(t, connection)
 	box, err := secret.NewBox(bytes.Repeat([]byte{4}, 32))
 	if err != nil {
 		t.Fatal(err)

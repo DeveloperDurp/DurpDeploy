@@ -2,6 +2,7 @@ package runner
 
 import (
 	"database/sql"
+	"durpdeploy/internal/testutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -96,7 +97,7 @@ esac
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { conn.Close() })
+	t.Cleanup(func() { testutil.Close(t, conn) })
 	conn.SetMaxOpenConns(1)
 	repo := repository.New(conn)
 	project, err := repo.Queries.CreateProject(
@@ -219,7 +220,7 @@ esac
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { conn.Close() })
+	t.Cleanup(func() { testutil.Close(t, conn) })
 	conn.SetMaxOpenConns(1)
 	repo := repository.New(conn)
 	project, err := repo.Queries.CreateProject(

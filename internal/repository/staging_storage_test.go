@@ -3,6 +3,7 @@ package repository_test
 import (
 	"archive/tar"
 	"context"
+	"durpdeploy/internal/testutil"
 	"errors"
 	"io"
 	"os"
@@ -48,7 +49,7 @@ func runStagingStorageParity(t *testing.T, r *repository.Repository) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer file.Close()
+	defer testutil.Close(t, file)
 	writer := tar.NewWriter(file)
 	content := strings.Repeat("encrypted-staging-content", 20000)
 	if err := writer.WriteHeader(&tar.Header{Name: "nested/output", Size: int64(len(content)), Typeflag: tar.TypeReg, Mode: 0600}); err != nil {

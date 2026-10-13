@@ -3,6 +3,7 @@ package handler_test
 import (
 	"context"
 	"database/sql"
+	"durpdeploy/internal/testutil"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -20,7 +21,7 @@ func TestIndex_DashboardMetrics(t *testing.T) {
 	if err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	defer dbConn.Close()
+	defer testutil.Close(t, dbConn)
 
 	repo := repository.New(dbConn)
 	q := repo.Queries

@@ -2,6 +2,7 @@ package migrate
 
 import (
 	"database/sql"
+	"durpdeploy/internal/testutil"
 	"path/filepath"
 	"testing"
 
@@ -14,7 +15,7 @@ func TestRemoteAgentSchemaFreshUpgradeRollback(t *testing.T) {
 	t.Run("fresh", func(t *testing.T) {
 		conn, err := Run(":memory:?_pragma=foreign_keys(1)")
 		requireNoError(t, err, "fresh migrations")
-		defer conn.Close()
+		defer testutil.Close(t, conn)
 		assertRemoteTables(t, conn)
 	})
 	// Given an isolated database containing the schema shipped at version 24.

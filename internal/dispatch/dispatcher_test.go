@@ -2,6 +2,7 @@ package dispatch
 
 import (
 	"context"
+	"durpdeploy/internal/testutil"
 	"strings"
 	"testing"
 
@@ -54,7 +55,7 @@ func TestRuntimeMaintenanceExpiresPairings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer conn.Close()
+	defer testutil.Close(t, conn)
 	repo := repository.New(conn)
 	ctx := context.Background()
 	_, err = repo.Queries.CreateAgent(ctx, db.CreateAgentParams{

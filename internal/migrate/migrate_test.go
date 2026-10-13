@@ -3,6 +3,7 @@ package migrate
 import (
 	"context"
 	"database/sql"
+	"durpdeploy/internal/testutil"
 	"io/fs"
 	"net/url"
 	"path/filepath"
@@ -152,18 +153,18 @@ func TestRun_BareSQLitePathGetsConcurrencyAndIntegrityPragmas(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	defer pool.Close()
+	defer testutil.Close(t, pool)
 	ctx := context.Background()
 	first, err := pool.Conn(ctx)
 	if err != nil {
 		t.Fatalf("first connection: %v", err)
 	}
-	defer first.Close()
+	defer testutil.Close(t, first)
 	second, err := pool.Conn(ctx)
 	if err != nil {
 		t.Fatalf("second connection: %v", err)
 	}
-	defer second.Close()
+	defer testutil.Close(t, second)
 
 	// Then each connection has the same settings as the default DSN.
 	for name, conn := range map[string]*sql.Conn{"first": first, "second": second} {
@@ -202,7 +203,7 @@ func TestRun_BareSQLitePathPreservesExplicitBusyTimeoutZero(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	defer dbConn.Close()
+	defer testutil.Close(t, dbConn)
 
 	// Then the explicit zero is preserved, not overwritten by the default.
 	var got string
@@ -240,5 +241,5 @@ func TestRun_PreservesExistingGooseMigrationHistory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("second migration run: %v", err)
 	}
-	defer second.Close()
+	defer testutil.Close(t, second)
 }

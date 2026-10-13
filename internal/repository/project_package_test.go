@@ -2,8 +2,8 @@ package repository_test
 
 import (
 	"database/sql"
+	"durpdeploy/internal/testutil"
 	"errors"
-	"os"
 	"testing"
 
 	"durpdeploy/internal/artifact"
@@ -118,7 +118,7 @@ func TestProjectPackageReplacementPreservesOldDeploymentSource(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Remove(download.Path)
+	defer testutil.Remove(t, download.Path)
 	if download.SHA256 != oldPin.Sha256 || download.Size != oldPin.Size {
 		t.Fatal("old pinned package no longer resolves")
 	}

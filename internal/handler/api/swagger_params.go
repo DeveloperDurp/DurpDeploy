@@ -2,6 +2,8 @@
 package api
 
 // swagger:parameters deleteVariable
+//
+//nolint:unused // Used by Swagger specification generation.
 type deleteVariableResetParam struct {
 	// Set to inherit to remove every project value with this name and scope,
 	// including legacy duplicate unscoped rows. Other scopes are retained.
@@ -12,6 +14,8 @@ type deleteVariableResetParam struct {
 
 // ID path parameter. Linked to every operation whose path contains an {id} segment.
 // swagger:parameters addLifecycleStage addMember adminDeleteUser adminGetUser adminUpdateUser approveDeployment cancelDeployment createDeployment createRelease createSchedule createStep createVariable deleteEnvironment deleteLifecycle deleteLifecycleStage deleteProject deleteRelease deleteSchedule deleteStep deleteTemplate deleteVariable deploymentEvents exportLogs getDeployment getDeploymentStatus getEnvironment getLifecycle getLog getProject getProjectNotifications getRelease getSchedule getStep getTemplate getTemplateHistory getVariable listDeploymentLogs listDeployments listMembers listReleases listSchedules listSteps listVariables redeployDeployment refreshRelease removeMember reorderLifecycleStages reorderSteps retryDeployment revokeAnyToken revokeToken saveLifecycle streamLogs templatesPicker toggleSchedule updateEnvironment updateLifecycleStage updateMemberRole updateProject updateProjectNotifications updateSchedule updateStep updateTemplate updateVariable listRunbooks createRunbook getRunbook saveRunbookVersion getRunbookVersion executeRunbook listRunbookExecutions getRunbookExecution listRunbookLogs streamRunbookLogs cancelRunbookExecution approveRunbookExecution retryRunbookExecution listRunbookSchedules createRunbookSchedule disableRunbookSchedule getDeploymentVerification previewRollback rollbackDeployment
+//
+//nolint:unused // Used by Swagger specification generation.
 type idPathParam struct {
 	// The resource ID.
 	//
@@ -21,6 +25,8 @@ type idPathParam struct {
 }
 
 // swagger:parameters getRunbook saveRunbookVersion getRunbookVersion executeRunbook listRunbookSchedules createRunbookSchedule disableRunbookSchedule
+//
+//nolint:unused // Used by Swagger specification generation.
 type runbookIDPathParam struct {
 	// in: path
 	// required: true
@@ -28,6 +34,8 @@ type runbookIDPathParam struct {
 }
 
 // swagger:parameters getRunbookExecution listRunbookLogs streamRunbookLogs cancelRunbookExecution approveRunbookExecution retryRunbookExecution
+//
+//nolint:unused // Used by Swagger specification generation.
 type runbookExecutionIDPathParam struct {
 	// in: path
 	// required: true
@@ -35,6 +43,8 @@ type runbookExecutionIDPathParam struct {
 }
 
 // swagger:parameters getRunbookVersion
+//
+//nolint:unused // Used by Swagger specification generation.
 type runbookVersionIDPathParam struct {
 	// in: path
 	// required: true
@@ -42,6 +52,8 @@ type runbookVersionIDPathParam struct {
 }
 
 // swagger:parameters disableRunbookSchedule
+//
+//nolint:unused // Used by Swagger specification generation.
 type runbookScheduleIDPathParam struct {
 	// in: path
 	// required: true
@@ -50,6 +62,8 @@ type runbookScheduleIDPathParam struct {
 
 // stepId path parameter.
 // swagger:parameters getStep updateStep deleteStep
+//
+//nolint:unused // Used by Swagger specification generation.
 type stepIDPathParam struct {
 	// The step ID.
 	//
@@ -60,6 +74,8 @@ type stepIDPathParam struct {
 
 // relId path parameter.
 // swagger:parameters getRelease refreshRelease deleteRelease
+//
+//nolint:unused // Used by Swagger specification generation.
 type relIDPathParam struct {
 	// The release ID.
 	//
@@ -70,6 +86,8 @@ type relIDPathParam struct {
 
 // schedId path parameter.
 // swagger:parameters getSchedule updateSchedule deleteSchedule toggleSchedule
+//
+//nolint:unused // Used by Swagger specification generation.
 type schedIDPathParam struct {
 	// The schedule ID.
 	//
@@ -80,6 +98,8 @@ type schedIDPathParam struct {
 
 // varId path parameter.
 // swagger:parameters getVariable updateVariable deleteVariable
+//
+//nolint:unused // Used by Swagger specification generation.
 type varIDPathParam struct {
 	// The variable ID.
 	//
@@ -93,6 +113,8 @@ type varIDPathParam struct {
 // family. The router no longer serves that family, so the parameter
 // is not currently linked to any operation. Re-add the swagger:parameters
 // line if/when a project-scoped route is mounted.
+//
+//nolint:unused // Used by Swagger specification generation.
 type depIDPathParam struct {
 	// The deployment ID.
 	//
@@ -103,6 +125,8 @@ type depIDPathParam struct {
 
 // logId path parameter.
 // swagger:parameters getLog
+//
+//nolint:unused // Used by Swagger specification generation.
 type logIDPathParam struct {
 	// The log entry ID.
 	//
@@ -113,6 +137,8 @@ type logIDPathParam struct {
 
 // userId path parameter.
 // swagger:parameters removeMember updateMemberRole
+//
+//nolint:unused // Used by Swagger specification generation.
 type userIDPathParam struct {
 	// The user ID.
 	//
@@ -123,6 +149,8 @@ type userIDPathParam struct {
 
 // stageId path parameter.
 // swagger:parameters updateLifecycleStage deleteLifecycleStage
+//
+//nolint:unused // Used by Swagger specification generation.
 type stageIDPathParam struct {
 	// The lifecycle stage ID.
 	//
@@ -133,6 +161,8 @@ type stageIDPathParam struct {
 
 // tokenId path parameter.
 // swagger:parameters revokeToken revokeAnyToken
+//
+//nolint:unused // Used by Swagger specification generation.
 type tokenIDPathParam struct {
 	// The API token ID.
 	//
@@ -142,6 +172,8 @@ type tokenIDPathParam struct {
 }
 
 // swagger:parameters getAgent retryPairAgent revokeAgent deleteAgent drainAgent resumeAgent addAgentLabel deleteAgentLabel addAgentEnvironment deleteAgentEnvironment
+//
+//nolint:unused // Used by Swagger specification generation.
 type agentIDPathParam struct {
 	// in: path
 	// required: true
@@ -151,6 +183,8 @@ type agentIDPathParam struct {
 // Body parameter structs.
 
 // swagger:parameters createProject updateProject
+//
+//nolint:unused // Used by Swagger specification generation.
 type projectBodyParam struct {
 	// in: body
 	// required: true
@@ -158,6 +192,8 @@ type projectBodyParam struct {
 }
 
 // swagger:parameters updateProjectNotifications
+//
+//nolint:unused // Used by Swagger specification generation.
 type projectNotificationBodyParam struct {
 	// in: body
 	// required: true
@@ -165,6 +201,8 @@ type projectNotificationBodyParam struct {
 }
 
 // swagger:parameters createEnvironment updateEnvironment
+//
+//nolint:unused // Used by Swagger specification generation.
 type environmentBodyParam struct {
 	// in: body
 	// required: true
@@ -172,6 +210,8 @@ type environmentBodyParam struct {
 }
 
 // swagger:parameters createLifecycle saveLifecycle
+//
+//nolint:unused // Used by Swagger specification generation.
 type lifecycleBodyParam struct {
 	// in: body
 	// required: true
@@ -179,6 +219,8 @@ type lifecycleBodyParam struct {
 }
 
 // swagger:parameters addLifecycleStage updateLifecycleStage
+//
+//nolint:unused // Used by Swagger specification generation.
 type lifecycleStageBodyParam struct {
 	// in: body
 	// required: true
@@ -186,6 +228,8 @@ type lifecycleStageBodyParam struct {
 }
 
 // swagger:parameters reorderLifecycleStages
+//
+//nolint:unused // Used by Swagger specification generation.
 type reorderStagesBodyParam struct {
 	// in: body
 	// required: true
@@ -193,6 +237,8 @@ type reorderStagesBodyParam struct {
 }
 
 // swagger:parameters createStep updateStep
+//
+//nolint:unused // Used by Swagger specification generation.
 type stepBodyParam struct {
 	// in: body
 	// required: true
@@ -200,6 +246,8 @@ type stepBodyParam struct {
 }
 
 // swagger:parameters reorderSteps
+//
+//nolint:unused // Used by Swagger specification generation.
 type reorderStepsBodyParam struct {
 	// in: body
 	// required: true
@@ -207,6 +255,8 @@ type reorderStepsBodyParam struct {
 }
 
 // swagger:parameters createTemplate updateTemplate
+//
+//nolint:unused // Used by Swagger specification generation.
 type stepTemplateBodyParam struct {
 	// in: body
 	// required: true
@@ -214,6 +264,8 @@ type stepTemplateBodyParam struct {
 }
 
 // swagger:parameters createVariable updateVariable
+//
+//nolint:unused // Used by Swagger specification generation.
 type variableBodyParam struct {
 	// in: body
 	// required: true
@@ -221,6 +273,8 @@ type variableBodyParam struct {
 }
 
 // swagger:parameters createRelease
+//
+//nolint:unused // Used by Swagger specification generation.
 type releaseBodyParam struct {
 	// in: body
 	// required: true
@@ -228,6 +282,8 @@ type releaseBodyParam struct {
 }
 
 // swagger:parameters createDeployment
+//
+//nolint:unused // Used by Swagger specification generation.
 type deploymentBodyParam struct {
 	// in: body
 	// required: true
@@ -235,6 +291,8 @@ type deploymentBodyParam struct {
 }
 
 // swagger:parameters createSchedule updateSchedule
+//
+//nolint:unused // Used by Swagger specification generation.
 type scheduleBodyParam struct {
 	// in: body
 	// required: true
@@ -242,6 +300,8 @@ type scheduleBodyParam struct {
 }
 
 // swagger:parameters addMember
+//
+//nolint:unused // Used by Swagger specification generation.
 type projectMemberBodyParam struct {
 	// in: body
 	// required: true
@@ -249,6 +309,8 @@ type projectMemberBodyParam struct {
 }
 
 // swagger:parameters updateMemberRole
+//
+//nolint:unused // Used by Swagger specification generation.
 type projectMemberRoleBodyParam struct {
 	// in: body
 	// required: true
@@ -256,6 +318,8 @@ type projectMemberRoleBodyParam struct {
 }
 
 // swagger:parameters adminCreateUser adminUpdateUser
+//
+//nolint:unused // Used by Swagger specification generation.
 type userBodyParam struct {
 	// in: body
 	// required: true
@@ -263,6 +327,8 @@ type userBodyParam struct {
 }
 
 // swagger:parameters pairAgent retryPairAgent
+//
+//nolint:unused // Used by Swagger specification generation.
 type pairAgentBodyParam struct {
 	// in: body
 	// required: true
@@ -270,6 +336,8 @@ type pairAgentBodyParam struct {
 }
 
 // swagger:parameters addAgentEnvironment deleteAgentEnvironment
+//
+//nolint:unused // Used by Swagger specification generation.
 type agentEnvironmentBodyParam struct {
 	// in: body
 	// required: true
@@ -277,6 +345,8 @@ type agentEnvironmentBodyParam struct {
 }
 
 // swagger:parameters addAgentLabel deleteAgentLabel
+//
+//nolint:unused // Used by Swagger specification generation.
 type agentLabelBodyParam struct {
 	// in: body
 	// required: true
@@ -284,6 +354,8 @@ type agentLabelBodyParam struct {
 }
 
 // swagger:parameters createToken
+//
+//nolint:unused // Used by Swagger specification generation.
 type createTokenBodyParam struct {
 	// in: body
 	// required: true
@@ -293,6 +365,8 @@ type createTokenBodyParam struct {
 // Query parameter structs.
 
 // swagger:parameters listDeployments
+//
+//nolint:unused // Used by Swagger specification generation.
 type listDeploymentsQueryParam struct {
 	// in: query
 	ProjectID int64 `json:"project_id"`
@@ -311,6 +385,8 @@ type listDeploymentsQueryParam struct {
 }
 
 // swagger:parameters streamLogs
+//
+//nolint:unused // Used by Swagger specification generation.
 type streamLogsQueryParam struct {
 	// Format is sse, ndjson, or structured (SSE with step metadata).
 	//
@@ -328,6 +404,8 @@ type streamLogsQueryParam struct {
 }
 
 // swagger:parameters streamRunbookLogs
+//
+//nolint:unused // Used by Swagger specification generation.
 type streamRunbookLogsQueryParam struct {
 	// Format is either sse or ndjson.
 	//
@@ -336,6 +414,8 @@ type streamRunbookLogsQueryParam struct {
 }
 
 // swagger:parameters listRunbookExecutions
+//
+//nolint:unused // Used by Swagger specification generation.
 type listRunbookExecutionsQueryParam struct {
 	// in: query
 	Limit int64 `json:"limit"`
@@ -344,6 +424,8 @@ type listRunbookExecutionsQueryParam struct {
 }
 
 // swagger:parameters auditLog
+//
+//nolint:unused // Used by Swagger specification generation.
 type listAuditLogsQueryParam struct {
 	// in: query
 	Limit int64 `json:"limit"`
@@ -356,6 +438,8 @@ type listAuditLogsQueryParam struct {
 }
 
 // swagger:parameters listTokens listAllTokens
+//
+//nolint:unused // Used by Swagger specification generation.
 type listTokensQueryParam struct {
 	// in: query
 	UserID int64 `json:"user_id"`
@@ -366,6 +450,8 @@ type listTokensQueryParam struct {
 }
 
 // swagger:parameters listVariables
+//
+//nolint:unused // Used by Swagger specification generation.
 type listVariablesQueryParam struct {
 	// in: query
 	EnvironmentID int64 `json:"environment_id"`
@@ -378,6 +464,8 @@ type listVariablesQueryParam struct {
 }
 
 // swagger:parameters listReleases
+//
+//nolint:unused // Used by Swagger specification generation.
 type listReleasesQueryParam struct {
 	// in: query
 	Limit int64 `json:"limit"`
@@ -386,6 +474,8 @@ type listReleasesQueryParam struct {
 }
 
 // swagger:parameters listProjects
+//
+//nolint:unused // Used by Swagger specification generation.
 type listProjectsQueryParam struct {
 	// in: query
 	Limit int64 `json:"limit"`
@@ -394,6 +484,8 @@ type listProjectsQueryParam struct {
 }
 
 // swagger:parameters adminListUsers
+//
+//nolint:unused // Used by Swagger specification generation.
 type listUsersQueryParam struct {
 	// in: query
 	Limit int64 `json:"limit"`
@@ -402,6 +494,8 @@ type listUsersQueryParam struct {
 }
 
 // swagger:parameters listEnvironments
+//
+//nolint:unused // Used by Swagger specification generation.
 type listEnvironmentsQueryParam struct {
 	// in: query
 	Limit int64 `json:"limit"`
@@ -410,6 +504,8 @@ type listEnvironmentsQueryParam struct {
 }
 
 // swagger:parameters listLifecycles
+//
+//nolint:unused // Used by Swagger specification generation.
 type listLifecyclesQueryParam struct {
 	// in: query
 	Limit int64 `json:"limit"`
@@ -418,6 +514,8 @@ type listLifecyclesQueryParam struct {
 }
 
 // swagger:parameters listSteps
+//
+//nolint:unused // Used by Swagger specification generation.
 type listStepsQueryParam struct {
 	// in: query
 	Limit int64 `json:"limit"`
@@ -426,6 +524,8 @@ type listStepsQueryParam struct {
 }
 
 // swagger:parameters listTemplates
+//
+//nolint:unused // Used by Swagger specification generation.
 type listTemplatesQueryParam struct {
 	// in: query
 	Limit int64 `json:"limit"`
@@ -434,6 +534,8 @@ type listTemplatesQueryParam struct {
 }
 
 // swagger:parameters listSchedules
+//
+//nolint:unused // Used by Swagger specification generation.
 type listSchedulesQueryParam struct {
 	// in: query
 	Limit int64 `json:"limit"`
@@ -442,6 +544,8 @@ type listSchedulesQueryParam struct {
 }
 
 // swagger:parameters listMembers
+//
+//nolint:unused // Used by Swagger specification generation.
 type listMembersQueryParam struct {
 	// in: query
 	Limit int64 `json:"limit"`
@@ -450,6 +554,8 @@ type listMembersQueryParam struct {
 }
 
 // swagger:parameters listDeploymentLogs
+//
+//nolint:unused // Used by Swagger specification generation.
 type listDeploymentLogsQueryParam struct {
 	// in: query
 	Limit int64 `json:"limit"`
@@ -458,6 +564,8 @@ type listDeploymentLogsQueryParam struct {
 }
 
 // swagger:parameters createRunbook saveRunbookVersion
+//
+//nolint:unused // Used by Swagger specification generation.
 type runbookSaveBodyParam struct {
 	// in: body
 	// required: true
@@ -465,6 +573,8 @@ type runbookSaveBodyParam struct {
 }
 
 // swagger:parameters executeRunbook
+//
+//nolint:unused // Used by Swagger specification generation.
 type runbookExecuteBodyParam struct {
 	// in: body
 	// required: true
@@ -472,6 +582,8 @@ type runbookExecuteBodyParam struct {
 }
 
 // swagger:parameters createRunbookSchedule
+//
+//nolint:unused // Used by Swagger specification generation.
 type runbookScheduleBodyParam struct {
 	// in: body
 	// required: true

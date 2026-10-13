@@ -32,7 +32,9 @@ func (h *EnvironmentHandler) ListEnvironments(
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	pages.EnvironmentsList(envs, r.URL.Path).Render(r.Context(), w)
+	if err := pages.EnvironmentsList(envs, r.URL.Path).Render(r.Context(), w); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }
 
 func (h *EnvironmentHandler) NewEnvironment(
@@ -40,11 +42,15 @@ func (h *EnvironmentHandler) NewEnvironment(
 	r *http.Request,
 ) {
 	if isFragmentRequest(r) {
-		pages.EnvironmentFormFragment(&db.Environment{}, true, "").
-			Render(r.Context(), w)
+		if err := pages.EnvironmentFormFragment(&db.Environment{}, true, "").
+			Render(r.Context(), w); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 	} else {
-		pages.EnvironmentForm(&db.Environment{}, true, "", r.URL.Path).
-			Render(r.Context(), w)
+		if err := pages.EnvironmentForm(&db.Environment{}, true, "", r.URL.Path).
+			Render(r.Context(), w); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 	}
 }
 
@@ -162,10 +168,14 @@ func (h *EnvironmentHandler) EditEnvironment(
 	}
 
 	if isFragmentRequest(r) {
-		pages.EnvironmentFormFragment(&env, false, "").Render(r.Context(), w)
+		if err := pages.EnvironmentFormFragment(&env, false, "").Render(r.Context(), w); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 	} else {
-		pages.EnvironmentForm(&env, false, "", r.URL.Path).
-			Render(r.Context(), w)
+		if err := pages.EnvironmentForm(&env, false, "", r.URL.Path).
+			Render(r.Context(), w); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 	}
 }
 
@@ -260,7 +270,9 @@ func (h *EnvironmentHandler) UpdateEnvironment(
 		return
 	}
 	if r.Header.Get("HX-Request") == "true" {
-		pages.EnvironmentFormFragment(&env, false, "").Render(r.Context(), w)
+		if err := pages.EnvironmentFormFragment(&env, false, "").Render(r.Context(), w); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 	} else {
 		http.Redirect(w, r, "/environments", http.StatusSeeOther)
 	}
@@ -292,5 +304,7 @@ func (h *EnvironmentHandler) DeleteEnvironment(
 		return
 	}
 	retargetFormDialog(w, r, "#environments-content")
-	pages.EnvironmentsListContent(envs).Render(r.Context(), w)
+	if err := pages.EnvironmentsListContent(envs).Render(r.Context(), w); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }

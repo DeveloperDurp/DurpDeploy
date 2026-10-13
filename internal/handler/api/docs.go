@@ -48,6 +48,8 @@ package api
 
 // Generic error response.
 // swagger:model ErrorResponse
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerErrorResponse struct {
 	// in: body
 	Error string `json:"error"`
@@ -55,6 +57,8 @@ type swaggerErrorResponse struct {
 
 // Unauthorized error response.
 // swagger:model UnauthorizedError
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerUnauthorizedError struct {
 	// in: body
 	Error string `json:"error"`
@@ -62,6 +66,8 @@ type swaggerUnauthorizedError struct {
 
 // Forbidden error response.
 // swagger:model ForbiddenError
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerForbiddenError struct {
 	// in: body
 	Error string `json:"error"`
@@ -69,6 +75,8 @@ type swaggerForbiddenError struct {
 
 // Not found error response.
 // swagger:model NotFoundError
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerNotFoundError struct {
 	// in: body
 	Error string `json:"error"`
@@ -76,6 +84,8 @@ type swaggerNotFoundError struct {
 
 // Bad request error response.
 // swagger:model BadRequestError
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerBadRequestError struct {
 	// in: body
 	Error string `json:"error"`
@@ -83,6 +93,8 @@ type swaggerBadRequestError struct {
 
 // Request body exceeds the 4 MiB encoded byte ceiling.
 // swagger:model RequestEntityTooLargeError
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerRequestEntityTooLargeError struct {
 	// in: body
 	Error string `json:"error"`
@@ -90,6 +102,8 @@ type swaggerRequestEntityTooLargeError struct {
 
 // Validation error response.
 // swagger:model ValidationError
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerValidationError struct {
 	// in: body
 	Error string `json:"error"`
@@ -97,6 +111,8 @@ type swaggerValidationError struct {
 
 // Conflict error response.
 // swagger:model ConflictError
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerConflictError struct {
 	// in: body
 	Error string `json:"error"`
@@ -104,6 +120,8 @@ type swaggerConflictError struct {
 
 // Server error response.
 // swagger:model ServerError
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerServerError struct {
 	// in: body
 	Error string `json:"error"`
@@ -111,6 +129,8 @@ type swaggerServerError struct {
 
 // Status message response.
 // swagger:model StatusResponse
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerStatusResponse struct {
 	// in: body
 	Status string `json:"status"`
@@ -118,6 +138,8 @@ type swaggerStatusResponse struct {
 
 // Paginated list envelope.
 // swagger:model PaginatedResponse
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerPaginatedResponse struct {
 	// in: body
 	Items  []map[string]any `json:"items"`
