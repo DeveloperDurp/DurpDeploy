@@ -1,6 +1,11 @@
 package artifact
 
-import "os"
+import (
+	"context"
+	"errors"
+	"log/slog"
+	"os"
+)
 
 // OpenGateSpool removes the directory entry before sensitive bytes are written.
 // Closing the descriptor, including on process exit, releases the artifact.
@@ -14,4 +19,19 @@ func OpenGateSpool() (*os.File, error) {
 		return nil, err
 	}
 	return file, nil
+}
+
+// SpoolCleanupError preserves completed work and reports cleanup failures.
+func SpoolCleanupError(
+	ctx context.Context,
+	result, closeErr error,
+) error {
+	if closeErr == nil {
+		return result
+	}
+	if result == nil {
+		slog.WarnContext(ctx, "close temporary spool", "err", closeErr)
+		return nil
+	}
+	return errors.Join(result, closeErr)
 }

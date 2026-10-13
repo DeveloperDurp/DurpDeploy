@@ -40,7 +40,9 @@ func (r *Repository) SaveStaging(
 	if err != nil {
 		return err
 	}
-	defer func() { result = errors.Join(result, canonical.Close()) }()
+	defer func() {
+		result = artifact.SpoolCleanupError(ctx, result, canonical.Close())
+	}()
 	hash := sha256.New()
 	if err := snapshot.Write(ctx, io.MultiWriter(canonical, hash)); err != nil {
 		return err
@@ -58,7 +60,9 @@ func (r *Repository) SaveStaging(
 	if err != nil {
 		return err
 	}
-	defer func() { result = errors.Join(result, encrypted.Close()) }()
+	defer func() {
+		result = artifact.SpoolCleanupError(ctx, result, encrypted.Close())
+	}()
 	encoder := json.NewEncoder(encrypted)
 	buffer := make([]byte, gateChunkSize)
 	for index, remaining := int64(0), size; remaining > 0; index++ {

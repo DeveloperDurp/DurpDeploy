@@ -35,7 +35,9 @@ func (r *Repository) SaveArtifactGate(
 	if err != nil {
 		return err
 	}
-	defer func() { result = errors.Join(result, spool.Close()) }()
+	defer func() {
+		result = artifact.SpoolCleanupError(ctx, result, spool.Close())
+	}()
 	// Preparation never holds a database writer while reading or encrypting.
 	return withSQLiteBusyRetry(ctx, func() error {
 		if _, err := source.Seek(0, io.SeekStart); err != nil {

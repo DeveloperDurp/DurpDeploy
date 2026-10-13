@@ -27,7 +27,9 @@ func (r *DeploymentRunner) captureArtifactGate(
 	if err != nil {
 		return err
 	}
-	defer func() { result = errors.Join(result, file.Close()) }()
+	defer func() {
+		result = artifact.SpoolCleanupError(ctx, result, file.Close())
+	}()
 	command := r.engine.command(
 		ctx,
 		"exec",
@@ -130,7 +132,9 @@ func (r *DeploymentRunner) restoreArtifactGate(
 	if err != nil {
 		return stage, err
 	}
-	defer func() { result = errors.Join(result, file.Close()) }()
+	defer func() {
+		result = artifact.SpoolCleanupError(ctx, result, file.Close())
+	}()
 	if err := r.repo.WriteArtifactGateBundle(
 		ctx,
 		r.repo.Queries,

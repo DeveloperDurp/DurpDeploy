@@ -3,6 +3,7 @@ package api
 import (
 	"database/sql"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -267,6 +268,7 @@ func (h *AgentHandler) pair(
 		case errors.Is(err, agentserver.ErrPairingFingerprint):
 			RespondError(w, http.StatusUnprocessableEntity, err.Error())
 		default:
+			slog.WarnContext(r.Context(), "agent pairing failed", "err", err)
 			RespondError(
 				w,
 				http.StatusServiceUnavailable,
