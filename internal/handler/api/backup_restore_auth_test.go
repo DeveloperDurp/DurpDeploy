@@ -9,10 +9,39 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"durpdeploy/internal/auth"
+	"durpdeploy/internal/db"
+	"durpdeploy/internal/repository"
+	"github.com/google/uuid"
 )
+
+func (f *restoreFixture) seedAuth(
+	t *testing.T,
+	repo *repository.Repository,
+) string {
+	t.Helper()
+	f.password = uuid.NewString()
+	hash, err := auth.HashPassword(f.password)
+	if err != nil {
+		t.Fatal(err)
+	}
+	user, err := repo.Queries.CreateUser(t.Context(), db.CreateUserParams{
+		Email: "restore@example.test", PasswordHash: hash,
+		Name: "Recovery admin", Role: "admin",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, token := seedAPIToken(t, repo, user.ID)
+	return token
+}
 
 func (f *restoreFixture) login(t *testing.T) {
 	t.Helper()
+	f.api.web(t, "POST", "/login", url.Values{
+		"email": {"restore@example.test"}, "password": {"testpass"},
+	}, http.StatusUnprocessableEntity)
 	form := url.Values{
 		"email":    {"restore@example.test"},
 		"password": {f.password},

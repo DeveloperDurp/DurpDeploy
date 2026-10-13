@@ -15,8 +15,6 @@ import (
 	"testing"
 	"time"
 
-	"durpdeploy/internal/auth"
-	"durpdeploy/internal/db"
 	"durpdeploy/internal/migrate"
 	"durpdeploy/internal/repository"
 	"durpdeploy/internal/secret"
@@ -105,19 +103,7 @@ func newRestoreFixture(t *testing.T) *restoreFixture {
 	}()
 	repo := repository.New(conn)
 	// Bootstrap only authentication. All application fixtures use public APIs.
-	f.password = uuid.NewString()
-	hash, err := auth.HashPassword(f.password)
-	if err != nil {
-		t.Fatal(err)
-	}
-	user, err := repo.Queries.CreateUser(t.Context(), db.CreateUserParams{
-		Email: "restore@example.test", PasswordHash: hash,
-		Name: "Recovery admin", Role: "admin",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, token := seedAPIToken(t, repo, user.ID)
+	token := f.seedAuth(t, repo)
 	f.api = &artifactE2E{token: token, client: &http.Client{
 		Timeout: 10 * time.Second,
 		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
