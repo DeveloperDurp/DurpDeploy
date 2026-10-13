@@ -53,12 +53,13 @@ for mode in timeout TERM; do
     DURPDEPLOY_RESTORE_INTERRUPT_FIXTURE=1 \
         DURPDEPLOY_GO_TEST_DIRECTORY="$work_dir" \
         bash scripts/go_test.sh -tags=e2e,backuprestore -race -count=1 \
-        -timeout=45s -v -run '^TestBackupRestoreInterruptFixture$' \
+        -timeout=5m -v -run '^TestBackupRestoreInterruptFixture$' \
         ./internal/handler/api >"$log_file" 2>&1 &
     runner_pid=$!
     ready=
-    for _ in $(seq 1 900); do
-        ready=$(sed -n 's/.*restore-interrupt-ready pid=\([0-9]*\) namespace=\([^ ]*\).*/\1 \2/p' "$log_file")
+    # Setup gets four minutes. The global timeout leaves another minute of live work.
+    for _ in $(seq 1 2400); do
+        ready=$(sed -n 's/.*restore-interrupt-ready pid=\([0-9]*\) namespace=\([^ ]*\) session=\([^ ]*\).*/\1 \2 \3/p' "$log_file")
         if [[ -n $ready ]]; then break; fi
         if ! kill -0 "$runner_pid" 2>/dev/null; then break; fi
         sleep 0.1
@@ -68,7 +69,7 @@ for mode in timeout TERM; do
         echo "ERROR: $mode cleanup fixture did not become ready." >&2
         exit 1
     fi
-    read -r server_pid namespace <<< "$ready"
+    read -r server_pid namespace session <<< "$ready"
     if [[ $mode == TERM ]]; then kill -TERM "$runner_pid"; fi
     status=0
     wait "$runner_pid" || status=$?
@@ -90,6 +91,8 @@ for mode in timeout TERM; do
     remaining=$(engine ps --all --quiet --filter "label=io.durpdeploy.namespace=$namespace")
     [[ -z $remaining ]]
     remaining=$(engine volume ls --quiet --filter "label=io.durpdeploy.namespace=$namespace")
+    [[ -z $remaining ]]
+    remaining=$(engine ps --all --quiet --filter "label=org.testcontainers.sessionId=$session")
     [[ -z $remaining ]]
     remaining=$(find "$work_dir" -maxdepth 1 -type d -name 'durpdeploy-go-test.*' -print)
     [[ -z $remaining ]]

@@ -51,16 +51,13 @@ func TestBackupRestoreInterruptFixture(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	t.Logf(
-		"restore-interrupt-ready pid=%d namespace=%s:%s",
+		"restore-interrupt-ready pid=%d namespace=%s:%s session=%s",
 		p.command.Process.Pid,
 		os.Getenv(
 			"DURPDEPLOY_CONTAINER_RUNTIME",
 		),
 		os.Getenv("DURPDEPLOY_CONTAINER_NAMESPACE"),
+		os.Getenv("TESTCONTAINERS_SESSION_ID"),
 	)
-	select {
-	case <-t.Context().Done():
-	case <-time.After(2 * time.Minute):
-		t.Fatal("interruption fixture was not interrupted")
-	}
+	<-t.Context().Done()
 }

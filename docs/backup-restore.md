@@ -146,6 +146,9 @@ The backup container has no network access.
 Both server listeners and the SMTP receiver bind to loopback.
 The drill uses generated test credentials and excludes operator application settings.
 
+The interruption checks allow four minutes for setup and use a five-minute global test timeout.
+They check application namespace labels and Testcontainers session labels after interruption.
+
 The drill checks these recovery results:
 
 - Replica data includes the final committed API write.
