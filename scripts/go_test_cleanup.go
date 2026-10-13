@@ -40,7 +40,9 @@ func cleanup(ctx context.Context, api *testcontainers.DockerClient,
 		_, err := fmt.Println(api.DaemonHost())
 		return err
 	}
-	var failures []error
+	// ponytail: one deadline. Use phase deadlines for larger test batches.
+	// Remove application resources before Testcontainers can exhaust it.
+	failures := []error{cleanupRecoverySessions(ctx, api, sessions)}
 	for _, session := range sessions {
 		if !strings.HasPrefix(session, "durpdeploy-go-test.") {
 			failures = append(
@@ -68,6 +70,18 @@ func cleanup(ctx context.Context, api *testcontainers.DockerClient,
 				failures = append(failures,
 					fmt.Errorf("remove %s: %w", container.ID, err))
 			}
+		}
+	}
+	return errors.Join(failures...)
+}
+
+func cleanupRecoverySessions(ctx context.Context,
+	api *testcontainers.DockerClient, sessions []string,
+) error {
+	var failures []error
+	for _, session := range sessions {
+		if !strings.HasPrefix(session, "durpdeploy-go-test.") {
+			continue
 		}
 		failures = append(failures, cleanupRecoveryRuntime(ctx, api, session))
 	}
