@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"durpdeploy/internal/testutil"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -16,7 +17,7 @@ func TestPairingDisabledListenerReturns503NoState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer conn.Close()
+	defer testutil.Close(t, conn)
 	nextCalled := false
 	handler := InternalErrorMiddleware(PairingPOSTHandler(
 		nil,

@@ -17,7 +17,7 @@ const (
 	MaxFormBodyBytes int64 = 16 << 20
 )
 
-var errInvalidJSONBody = errors.New("Invalid JSON body")
+var errInvalidJSONBody = errors.New("invalid JSON body")
 
 // ReadRequestBody checks the entire body before any mutation or decoding.
 // Reading through MaxBytesReader also bounds unknown-length requests.

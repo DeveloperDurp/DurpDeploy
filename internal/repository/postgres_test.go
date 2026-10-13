@@ -39,7 +39,7 @@ func TestPostgres_RepositoryWithTx(t *testing.T) {
 	if err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	defer conn.Close()
+	defer testutil.Close(t, conn)
 
 	repo := New(conn)
 

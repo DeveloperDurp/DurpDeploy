@@ -374,9 +374,9 @@ func hasWordSuffixFold(text string, suffix string) bool {
 		return true
 	}
 	previous := text[start-1]
-	return !((previous >= 'a' && previous <= 'z') ||
-		(previous >= 'A' && previous <= 'Z') ||
-		(previous >= '0' && previous <= '9') || previous == '_')
+	return (previous < 'a' || previous > 'z') &&
+		(previous < 'A' || previous > 'Z') &&
+		(previous < '0' || previous > '9') && previous != '_'
 }
 
 func hasWordSuffix(text string, suffix string) bool {
@@ -388,9 +388,9 @@ func hasWordSuffix(text string, suffix string) bool {
 		return true
 	}
 	previous := text[start-1]
-	return !((previous >= 'a' && previous <= 'z') ||
-		(previous >= 'A' && previous <= 'Z') ||
-		(previous >= '0' && previous <= '9') || previous == '_')
+	return (previous < 'a' || previous > 'z') &&
+		(previous < 'A' || previous > 'Z') &&
+		(previous < '0' || previous > '9') && previous != '_'
 }
 
 var commonPendingPatterns = []*regexp.Regexp{

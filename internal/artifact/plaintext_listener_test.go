@@ -23,7 +23,8 @@ func (l *artifactProtocolListener) Accept() (net.Conn, error) {
 		reader := bufio.NewReader(conn)
 		first, err := reader.Peek(1)
 		if err != nil {
-			conn.Close()
+			// The probe can disconnect before sending a complete request.
+			_ = conn.Close()
 			continue
 		}
 		if first[0] == 22 {
@@ -37,11 +38,13 @@ func (l *artifactProtocolListener) Accept() (net.Conn, error) {
 				conn,
 				"HTTP/1.1 204 No Content\r\nConnection: close\r\n\r\n",
 			); err != nil {
-				conn.Close()
+				// The probe already disconnected during the response write.
+				_ = conn.Close()
 				continue
 			}
 		}
-		conn.Close()
+		// This fixture only observes the protocol before dropping the connection.
+		_ = conn.Close()
 	}
 }
 

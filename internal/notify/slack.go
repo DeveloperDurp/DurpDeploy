@@ -57,6 +57,7 @@ func (s *SlackNotifier) Notify(
 	if err != nil {
 		return false, err
 	}
+	//nolint:errcheck // Delivery status is checked before read-only body cleanup.
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
 		return false, fmt.Errorf(

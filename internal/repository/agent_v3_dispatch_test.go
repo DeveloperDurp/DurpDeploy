@@ -1,7 +1,6 @@
 package repository_test
 
 import (
-	"fmt"
 	"testing"
 
 	"durpdeploy/internal/db"
@@ -105,13 +104,11 @@ func TestAgentV3MixedFleetAndClaimRecheck(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			t.Log(
-				fmt.Sprintf(
-					"%s %s routed to %d compatible agents",
-					test.mode,
-					test.interpreter,
-					created,
-				),
+			t.Logf(
+				"%s %s routed to %d compatible agents",
+				test.mode,
+				test.interpreter,
+				created,
 			)
 		})
 	}

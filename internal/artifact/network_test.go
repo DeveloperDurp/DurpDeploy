@@ -2,6 +2,7 @@ package artifact
 
 import (
 	"context"
+	"durpdeploy/internal/testutil"
 	"errors"
 	"net"
 	"strings"
@@ -59,7 +60,7 @@ func TestRepositoryDialRejectsReachableLoopback(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer listener.Close()
+	defer testutil.Close(t, listener)
 	_, port, err := net.SplitHostPort(listener.Addr().String())
 	if err != nil {
 		t.Fatal(err)
@@ -73,11 +74,11 @@ func TestRepositoryDialRejectsReachableLoopback(t *testing.T) {
 			if err != nil {
 				t.Fatalf("fixture is unreachable: %v", err)
 			}
-			probe.Close()
+			testutil.Close(t, probe)
 			// When: the production boundary receives the same reachable address.
 			conn, err := dialRepository(ctx, "tcp", address)
 			if conn != nil {
-				conn.Close()
+				testutil.Close(t, conn)
 			}
 			// Then: it blocks access even though an ordinary dial succeeds.
 			if !errors.Is(err, ErrFetch) {
@@ -111,7 +112,7 @@ func checkRepositoryMixedDNSAnswers(t *testing.T, blocked string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer listener.Close()
+	defer testutil.Close(t, listener)
 	_, port, err := net.SplitHostPort(listener.Addr().String())
 	if err != nil {
 		t.Fatal(err)
@@ -119,7 +120,7 @@ func checkRepositoryMixedDNSAnswers(t *testing.T, blocked string) {
 	// When: a repository hostname resolves to mixed answers.
 	conn, err := dialRepository(t.Context(), "tcp", "repo.invalid:"+port)
 	if conn != nil {
-		conn.Close()
+		testutil.Close(t, conn)
 	}
 	// Then: the whole answer set is rejected, not just the unsafe entry.
 	if !errors.Is(err, ErrFetch) || lookups.Load() == 0 {
@@ -144,7 +145,7 @@ func TestRepositoryDialPinsValidatedIPAcrossRebinding(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer listener.Close()
+	defer testutil.Close(t, listener)
 	_, port, err := net.SplitHostPort(listener.Addr().String())
 	if err != nil {
 		t.Fatal(err)
@@ -154,7 +155,7 @@ func TestRepositoryDialPinsValidatedIPAcrossRebinding(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer conn.Close()
+	defer testutil.Close(t, conn)
 	// Then: it connects to the validated IP without another DNS lookup.
 	if !strings.HasPrefix(conn.RemoteAddr().String(), ip.String()+":") ||
 		lookups.Load() != 1 {

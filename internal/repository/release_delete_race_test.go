@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"durpdeploy/internal/testutil"
 	"errors"
 	"testing"
 	"time"
@@ -62,7 +63,7 @@ func TestReleaseDeleteSerializesCreationAcrossDatabases(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer tx.Rollback()
+			defer testutil.Rollback(t, tx)
 			if err := lockRelease(
 				ctx,
 				first.Queries.WithTx(tx),

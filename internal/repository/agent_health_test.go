@@ -2,6 +2,7 @@ package repository_test
 
 import (
 	"database/sql"
+	"durpdeploy/internal/testutil"
 	"path/filepath"
 	"testing"
 
@@ -50,7 +51,7 @@ func TestAgentDrainAndHealthSurviveDatabaseRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { conn.Close() })
+	t.Cleanup(func() { testutil.Close(t, conn) })
 	repo = repository.New(conn)
 
 	// Then: drain remains set and offline transitions are not repeated.
@@ -97,7 +98,7 @@ func TestAgentHealthSkipsWritesForUnchangedAgents(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { conn.Close() })
+	t.Cleanup(func() { testutil.Close(t, conn) })
 	repo := repository.New(conn)
 	seedRemoteFixture(t, repo)
 	if _, err := conn.Exec(`UPDATE agents SET health_state='offline'

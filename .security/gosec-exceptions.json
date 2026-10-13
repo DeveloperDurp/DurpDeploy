@@ -3,7 +3,7 @@
     "rule": "G115",
     "file": "internal/logscrub/scrubber.go",
     "line": "352",
-    "source_sha256": "640d83b7d32fa86ad57589123ae70519c4d6b95301af7833afa676cf61c8db73",
+    "source_sha256": "196e7064b08e655b9f7cb2051f47e5e68a0fba51dbffcee6f5860f37b90a49aa",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Arg is narrowed only for compiler-created InstEmptyWidth, whose standard-library EmptyOp bitmask fits uint8. Evidence: regexp/syntax compiler; scrubber_test.go boundary/streaming coverage."
@@ -12,7 +12,7 @@
     "rule": "G115",
     "file": "internal/logscrub/scrubber.go",
     "line": "289",
-    "source_sha256": "640d83b7d32fa86ad57589123ae70519c4d6b95301af7833afa676cf61c8db73",
+    "source_sha256": "196e7064b08e655b9f7cb2051f47e5e68a0fba51dbffcee6f5860f37b90a49aa",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Instruction index is produced exclusively by successful regexp/syntax.Compile and fits its uint32 program addresses. Evidence: scrubber.go compile path; scrubber_test.go streaming-pattern coverage."
@@ -147,7 +147,7 @@
     "rule": "G118",
     "file": "cmd/server/main.go",
     "line": "438",
-    "source_sha256": "a1f46407ed4a1c94d9fa0f7f6ab1b294919553c07095e0e5c5992030976bc6a5",
+    "source_sha256": "33fb67e8df4a7f261e332b02d0322c1b92f9c8df11c406db6b568cbabbf08a08",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Detached persisted deployment must outlive its HTTP/scheduler/startup request. DeploymentRunner.Run owns cancel registration; Cancel and KillAll cancel/drain work. Evidence: runner_control.go, shutdown_test.go, runbook_cancel_test.go."
@@ -272,8 +272,8 @@
   {
     "rule": "G120",
     "file": "internal/server/request_body_limit.go",
-    "line": "63",
-    "source_sha256": "555340b0816cbdd0104dd1a19add7f072880a600f5c3d121d3a0acf93a0a9012",
+    "line": "68",
+    "source_sha256": "24b48158e05b502848b831616447be113db4d8991d84711f5feae8a9da8321b1",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Entire encoded body is capped (16MiB or 64KiB) before ParseMultipartForm, including unknown lengths; temporary files removed. Evidence: server/request_body_limit.go and handler/request_body_web_test.go."
@@ -317,8 +317,8 @@
   {
     "rule": "G110",
     "file": "internal/handler/artifact_gate_download.go",
-    "line": "117",
-    "source_sha256": "f11ac74ba0b4aa1cc779b1e7d91bd86dfbdd3d4a35f84c1c280241b51f1c0bdc",
+    "line": "120",
+    "source_sha256": "699de8d8dd4caac5af91cd5a64fdfa5b2e1bc435b291f5d1da8baefb72cd52e1",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Reading uncompressed tar from a bounded (300MiB), authenticated and checksum-verified spool; tar.Reader limits entry reads. Evidence: repository/artifact_gate_storage.go, artifact/gate_bundle.go and artifact_gate_failures_e2e_test.go."
@@ -326,8 +326,8 @@
   {
     "rule": "G110",
     "file": "internal/handler/artifact_gate_download.go",
-    "line": "91-94",
-    "source_sha256": "f11ac74ba0b4aa1cc779b1e7d91bd86dfbdd3d4a35f84c1c280241b51f1c0bdc",
+    "line": "94-97",
+    "source_sha256": "699de8d8dd4caac5af91cd5a64fdfa5b2e1bc435b291f5d1da8baefb72cd52e1",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Reading uncompressed tar from a bounded (300MiB), authenticated and checksum-verified spool; tar.Reader limits entry reads. Evidence: repository/artifact_gate_storage.go, artifact/gate_bundle.go and artifact_gate_failures_e2e_test.go."
@@ -335,8 +335,8 @@
   {
     "rule": "G710",
     "file": "internal/handler/variable.go",
-    "line": "375",
-    "source_sha256": "f00648c8a4e6fc1b8d502cfcab0244ba58a59e5a195c9a3ed9778049ad1da943",
+    "line": "381",
+    "source_sha256": "6aa193eada071d804c299ef62f696aaae395339bdfc9f1fde94212c620fead60",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "The redirect uses a fixed /projects/ path prefix and an ID parsed as int64 by parseProjectID. The destination remains on the same origin. Evidence: VariableHandler.UpdateVariable and parseProjectID."
@@ -344,8 +344,8 @@
   {
     "rule": "G710",
     "file": "internal/handler/variable.go",
-    "line": "176",
-    "source_sha256": "f00648c8a4e6fc1b8d502cfcab0244ba58a59e5a195c9a3ed9778049ad1da943",
+    "line": "180",
+    "source_sha256": "6aa193eada071d804c299ef62f696aaae395339bdfc9f1fde94212c620fead60",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "The redirect uses a fixed /projects/ path prefix and an ID parsed as int64 by parseProjectID. The destination remains on the same origin. Evidence: VariableHandler.CreateVariable and parseProjectID."
@@ -389,8 +389,8 @@
   {
     "rule": "G710",
     "file": "internal/handler/runbooks.go",
-    "line": "217",
-    "source_sha256": "98ab495bd98e1087cf919b29accb5da1128c68013bea06063163211c5f3ebb59",
+    "line": "221",
+    "source_sha256": "a3da0165e151fb49394ea052d2d069532db1864c89eee86cdff2ca1e3af2e91b",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Destination has a fixed same-origin path prefix; project/release IDs are parsed integers. Agent routes retain /admin/agents/. Evidence: corresponding handler and internal/server/server.go route; workflow redirect tests."

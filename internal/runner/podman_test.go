@@ -3,6 +3,7 @@ package runner
 import (
 	"context"
 	"database/sql"
+	"durpdeploy/internal/testutil"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -89,7 +90,7 @@ esac
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { conn.Close() })
+	t.Cleanup(func() { testutil.Close(t, conn) })
 	conn.SetMaxOpenConns(1)
 	repo := repository.New(conn)
 	r := NewWithPodmanBinaryForTest(repo, NewLogBroker(), binary)

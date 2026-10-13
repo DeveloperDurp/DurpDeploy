@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"database/sql"
+	"durpdeploy/internal/testutil"
 	"net/http/httptest"
 	"testing"
 
@@ -18,7 +19,7 @@ func TestNestedObjectsMustBelongToURLProject(t *testing.T) {
 	if err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	t.Cleanup(func() { dbConn.Close() })
+	t.Cleanup(func() { testutil.Close(t, dbConn) })
 	repo := repository.New(dbConn)
 
 	projectA, err := repo.Queries.CreateProject(ctx, db.CreateProjectParams{

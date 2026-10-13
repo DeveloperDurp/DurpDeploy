@@ -58,11 +58,13 @@ func (h *ArtifactGateHandler) openGateBundle(
 		gate,
 		file,
 	); err != nil {
+		//nolint:errcheck // Preserve the primary validation error for this read file.
 		file.Close()
 		gateHTTPError(w, r, 409, "Artifact is unavailable or changed")
 		return nil, db.ArtifactGate{}
 	}
 	if _, err := file.Seek(0, 0); err != nil {
+		//nolint:errcheck // Preserve the primary seek error for this read file.
 		file.Close()
 		gateHTTPError(w, r, 500, "Artifact storage unavailable")
 		return nil, db.ArtifactGate{}
@@ -75,6 +77,7 @@ func (h *ArtifactGateHandler) Download(w http.ResponseWriter, r *http.Request) {
 	if file == nil {
 		return
 	}
+	//nolint:errcheck // The approved artifact is already durable; this is a read handle.
 	defer file.Close()
 	reader := tar.NewReader(file)
 	for {

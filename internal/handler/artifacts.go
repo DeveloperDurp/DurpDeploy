@@ -111,7 +111,7 @@ func (h *ArtifactHandler) Save(w http.ResponseWriter, r *http.Request) {
 		w,
 		r,
 		fmt.Sprintf("/projects/%d/package-repository", project.ID),
-		303,
+		http.StatusSeeOther,
 	)
 }
 
@@ -131,7 +131,7 @@ func (h *ArtifactHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		w,
 		r,
 		fmt.Sprintf("/projects/%d/package-repository", project.ID),
-		303,
+		http.StatusSeeOther,
 	)
 }
 

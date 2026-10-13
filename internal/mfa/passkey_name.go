@@ -6,6 +6,7 @@ import (
 	"unicode/utf8"
 )
 
+//nolint:staticcheck // Preserve the public validation message.
 var ErrPasskeyName = errors.New(
 	"Enter a passkey name of 1 to 255 characters. Some symbols count as two characters.",
 )

@@ -6,6 +6,13 @@ Use Go 1.26+, Node.js, and the templ CLI. Install sqlc only when changing querie
 Run `make install-hooks` once per clone. Read [AGENTS.md](../AGENTS.md) for generated
 code, migrations, authorization, and required verification rules.
 
+Run `make lint` to check all Go packages and tests with `golangci-lint`.
+The target generates required templates and Swagger assets before analysis.
+It downloads the version pinned in `Makefile` into ignored `bin/lint/`.
+The installer verifies the release checksum and retains its license.
+Linux and macOS support `amd64` and `arm64` binaries.
+CI runs the same target before the dependent Go and E2E jobs.
+
 ## Build and local HTTPS
 
 ```bash

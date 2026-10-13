@@ -3,6 +3,7 @@ package repository_test
 import (
 	"bytes"
 	"context"
+	"durpdeploy/internal/testutil"
 	"testing"
 	"time"
 
@@ -25,7 +26,7 @@ func TestRemoteStepLockSerializesTerminalTransition(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer tx.Rollback()
+	defer testutil.Rollback(t, tx)
 	locked, err := repo.Queries.WithTx(tx).LockRemoteStepRun(
 		t.Context(),
 		db.LockRemoteStepRunParams{
@@ -112,7 +113,7 @@ func runRemoteStepStartEligibility(
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer tx.Rollback()
+			defer testutil.Rollback(t, tx)
 			queries := repo.Queries.WithTx(tx)
 			tokenHash := bytes.Repeat([]byte{1}, 32)
 			_, err = tx.Exec(`INSERT INTO remote_step_runs

@@ -350,12 +350,15 @@ func TestLogin_Post_UnknownEmail(t *testing.T) {
 
 func TestLogin_Post_PasswordlessAccountRejectsDummyPassword(t *testing.T) {
 	h := newAuthHarness(t)
-	_, err := h.repo.Queries.CreateUser(context.Background(), db.CreateUserParams{
-		Email:        "oidc@example.com",
-		PasswordHash: "",
-		Name:         "OIDC User",
-		Role:         "deployer",
-	})
+	_, err := h.repo.Queries.CreateUser(
+		context.Background(),
+		db.CreateUserParams{
+			Email:        "oidc@example.com",
+			PasswordHash: "",
+			Name:         "OIDC User",
+			Role:         "deployer",
+		},
+	)
 	if err != nil {
 		t.Fatalf("create passwordless user: %v", err)
 	}
@@ -559,6 +562,7 @@ func TestLogout_AllRolesWithValidCSRF(t *testing.T) {
 			}
 			if deletionCookie == nil {
 				t.Fatal("session deletion cookie missing")
+				return
 			}
 			if deletionCookie.Value != "" {
 				t.Fatalf(

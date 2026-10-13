@@ -105,7 +105,7 @@ func provisionSQLServerLifecycleEngine(t *testing.T) lifecycleEngine {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer probe.Close()
+	defer testutil.Close(t, probe)
 	for {
 		if err := probe.PingContext(ctx); err == nil {
 			break

@@ -200,7 +200,7 @@ func runServer() {
 	if err != nil {
 		log.Fatalf("migration failed: %v", err)
 	}
-	defer dbConn.Close()
+	defer closeOnExit(dbConn)
 	slog.Info("database ready")
 
 	repo := repository.New(dbConn)
@@ -261,7 +261,7 @@ func runServer() {
 	if err != nil {
 		log.Fatalf("browser listener: %v", err)
 	}
-	defer browserListener.Close()
+	defer closeOnExit(browserListener)
 	pairingService, err := agentserver.NewPairingService(
 		agentserver.PairingConfig{
 			Repository: repo, Identity: agentConfig.identity,
@@ -279,7 +279,7 @@ func runServer() {
 			broker: broker, eventBus: bus,
 		})
 	if err != nil {
-		browserListener.Close()
+		closeOnExit(browserListener)
 		cancel()
 		log.Fatalf("agent listener: %v", err)
 	}
@@ -514,7 +514,7 @@ func runAdmin(args []string) int {
 		fmt.Fprintf(os.Stderr, "error: open database: %v\n", err)
 		return 1
 	}
-	defer dbConn.Close()
+	defer closeOnExit(dbConn)
 
 	repo := repository.New(dbConn)
 
@@ -623,7 +623,7 @@ func runAudit(args []string) int {
 		fmt.Fprintf(os.Stderr, "error: open database: %v\n", err)
 		return 1
 	}
-	defer dbConn.Close()
+	defer closeOnExit(dbConn)
 
 	repo := repository.New(dbConn)
 	cutoff := time.Now().AddDate(0, 0, -days).Unix()
@@ -711,7 +711,7 @@ func runSecretKey(args []string) int {
 		fmt.Fprintf(os.Stderr, "error: open database: %v\n", err)
 		return 1
 	}
-	defer dbConn.Close()
+	defer closeOnExit(dbConn)
 
 	q := db.New(dbConn)
 
@@ -720,7 +720,9 @@ func runSecretKey(args []string) int {
 		fmt.Fprintf(os.Stderr, "error: begin transaction: %v\n", err)
 		return 1
 	}
-	defer tx.Rollback()
+	defer func() {
+		repository.LogRollbackError(tx.Rollback())
+	}()
 	qtx := q.WithTx(tx)
 
 	vars, err := qtx.ListAllVariables(ctx)
@@ -869,7 +871,7 @@ func runTokens(args []string) int {
 		fmt.Fprintf(os.Stderr, "error: open database: %v\n", err)
 		return 1
 	}
-	defer dbConn.Close()
+	defer closeOnExit(dbConn)
 	repo := repository.New(dbConn)
 
 	fmtTime := func(ts int64) string {

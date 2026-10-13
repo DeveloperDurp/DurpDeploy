@@ -69,19 +69,6 @@ func nullInt64Ptr(n sql.NullInt64) *int64 {
 	return &v
 }
 
-func apiTokenFromRow(row db.ListApiTokensByUserRow) tokenResponse {
-	return tokenResponse{
-		ID:         row.ID,
-		Name:       row.Name,
-		Prefix:     row.TokenPrefix,
-		Scope:      row.Scope,
-		LastUsedAt: nullInt64Ptr(row.LastUsedAt),
-		ExpiresAt:  nullInt64Ptr(row.ExpiresAt),
-		CreatedAt:  row.CreatedAt,
-		RevokedAt:  nullInt64Ptr(row.RevokedAt),
-	}
-}
-
 func apiTokenFromPaginatedRow(
 	row db.ListApiTokensByUserPaginatedRow,
 ) tokenResponse {
@@ -97,41 +84,9 @@ func apiTokenFromPaginatedRow(
 	}
 }
 
-func apiTokenFromAdminRow(row db.ListAllApiTokensRow) tokenResponse {
-	return tokenResponse{
-		ID:         row.ID,
-		Name:       row.Name,
-		Prefix:     row.TokenPrefix,
-		Scope:      row.Scope,
-		UserID:     row.UserID,
-		Email:      row.Email,
-		UserName:   row.UserName,
-		LastUsedAt: nullInt64Ptr(row.LastUsedAt),
-		ExpiresAt:  nullInt64Ptr(row.ExpiresAt),
-		CreatedAt:  row.CreatedAt,
-		RevokedAt:  nullInt64Ptr(row.RevokedAt),
-	}
-}
-
 func apiTokenFromAdminPaginatedRow(
 	row db.ListAllApiTokensPaginatedRow,
 ) tokenResponse {
-	return tokenResponse{
-		ID:         row.ID,
-		Name:       row.Name,
-		Prefix:     row.TokenPrefix,
-		Scope:      row.Scope,
-		UserID:     row.UserID,
-		Email:      row.Email,
-		UserName:   row.UserName,
-		LastUsedAt: nullInt64Ptr(row.LastUsedAt),
-		ExpiresAt:  nullInt64Ptr(row.ExpiresAt),
-		CreatedAt:  row.CreatedAt,
-		RevokedAt:  nullInt64Ptr(row.RevokedAt),
-	}
-}
-
-func apiTokenFromAdminUserRow(row db.ListAllApiTokensByUserRow) tokenResponse {
 	return tokenResponse{
 		ID:         row.ID,
 		Name:       row.Name,

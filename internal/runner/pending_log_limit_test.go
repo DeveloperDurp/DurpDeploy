@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"durpdeploy/internal/testutil"
 	"errors"
 	"strings"
 	"testing"
@@ -17,7 +18,7 @@ func TestPendingLogLimitDropsAmbiguousOutputAndKeepsState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { conn.Close() })
+	t.Cleanup(func() { testutil.Close(t, conn) })
 	repo := repository.New(conn)
 	project, err := repo.Queries.CreateProject(
 		t.Context(),

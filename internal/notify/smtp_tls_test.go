@@ -2,6 +2,7 @@ package notify
 
 import (
 	"crypto/tls"
+	"durpdeploy/internal/testutil"
 	"encoding/pem"
 	"io"
 	"net"
@@ -45,7 +46,7 @@ func TestEmailNotifier_VerifiedTLSHasNoWarning(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer listener.Close()
+	defer testutil.Close(t, listener)
 	done := make(chan error, 1)
 	go func() {
 		conn, err := listener.Accept()
@@ -53,7 +54,7 @@ func TestEmailNotifier_VerifiedTLSHasNoWarning(t *testing.T) {
 			done <- err
 			return
 		}
-		defer conn.Close()
+		defer testutil.Close(t, conn)
 		if err := conn.SetDeadline(
 			time.Now().Add(3 * time.Second),
 		); err != nil {

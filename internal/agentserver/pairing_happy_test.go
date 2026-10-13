@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"durpdeploy/internal/testutil"
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
@@ -56,6 +57,24 @@ func TestPairingServerInitCompletes(t *testing.T) {
 		t.Fatalf("pairing=%+v agent=%+v", pairing, agent)
 	}
 	assertRealPairingCompletes(t)
+}
+
+func TestPairingBeginDoesNotCreateChallengeAfterConnectionFailure(
+	t *testing.T,
+) {
+	fixture := newPairingFixture(t)
+	fixture.connectErr = errTestInterruption
+	input, err := ParsePairingStartInput(
+		"Offline runner", "agent.test:10943", fixture.code,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	challenge, err := fixture.service.Begin(t.Context(), input)
+	if !errors.Is(err, errTestInterruption) || challenge.ID != "" ||
+		len(fixture.service.challenges) != 0 {
+		t.Fatalf("challenge=%+v error=%v", challenge, err)
+	}
 }
 
 func TestPairingRequiresFingerprintApprovalBeforePersistence(t *testing.T) {
@@ -156,7 +175,7 @@ func assertRealPairingCompletes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer connection.Close()
+	defer testutil.Close(t, connection)
 	box, err := secret.NewBox(bytes.Repeat([]byte{4}, 32))
 	if err != nil {
 		t.Fatal(err)

@@ -476,39 +476,6 @@ func (h *DeploymentHandler) checkPromotionGate(
 	}, true
 }
 
-// availableEnvironmentsForProject returns the envs a project may deploy to:
-// lifecycle stages if it has a lifecycle, otherwise all envs.
-func (h *DeploymentHandler) availableEnvironmentsForProject(
-	r *http.Request,
-	project db.Project,
-) ([]db.Environment, error) {
-	all, err := h.repo.Queries.ListEnvironments(r.Context())
-	if err != nil {
-		return nil, err
-	}
-	if !project.LifecycleID.Valid {
-		return all, nil
-	}
-	stages, err := h.repo.Queries.ListLifecycleStages(
-		r.Context(),
-		project.LifecycleID.Int64,
-	)
-	if err != nil {
-		return nil, err
-	}
-	idSet := make(map[int64]bool, len(stages))
-	for _, s := range stages {
-		idSet[s.EnvironmentID] = true
-	}
-	out := make([]db.Environment, 0, len(stages))
-	for _, e := range all {
-		if idSet[e.ID] {
-			out = append(out, e)
-		}
-	}
-	return out, nil
-}
-
 func isTruthy(s string) bool {
 	switch s {
 	case "true", "1", "on", "yes":

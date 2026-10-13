@@ -22,7 +22,8 @@ func (h *HealthHandler) Healthz(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		markSafeErrorResponse(w)
 		w.WriteHeader(http.StatusServiceUnavailable)
-		json.NewEncoder(w).Encode(map[string]string{
+		// The status is committed; disconnects cannot receive another response.
+		_ = json.NewEncoder(w).Encode(map[string]string{
 			"status": "down",
 			"db":     "unavailable",
 		})
@@ -30,7 +31,8 @@ func (h *HealthHandler) Healthz(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{
+	// The status is committed; disconnects cannot receive another response.
+	_ = json.NewEncoder(w).Encode(map[string]string{
 		"status": "ok",
 		"db":     "ok",
 	})

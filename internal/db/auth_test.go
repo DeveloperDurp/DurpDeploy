@@ -3,6 +3,7 @@ package db_test
 import (
 	"context"
 	"database/sql"
+	"durpdeploy/internal/testutil"
 	"errors"
 	"testing"
 
@@ -19,7 +20,7 @@ func newAuthTestDB(t *testing.T) (*db.Queries, *sql.DB) {
 	if err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	t.Cleanup(func() { conn.Close() })
+	t.Cleanup(func() { testutil.Close(t, conn) })
 	return db.New(conn), conn
 }
 

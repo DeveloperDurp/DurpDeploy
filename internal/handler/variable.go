@@ -70,11 +70,15 @@ func (h *VariableHandler) ListVariables(
 	}
 
 	if isFragmentRequest(r) {
-		pages.VariablesFragment(project, variables, environments, "").
-			Render(r.Context(), w)
+		if err := pages.VariablesFragment(project, variables, environments, "").
+			Render(r.Context(), w); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 	} else {
-		pages.VariablesPage(project, variables, environments, "", r.URL.Path).
-			Render(r.Context(), w)
+		if err := pages.VariablesPage(project, variables, environments, "", r.URL.Path).
+			Render(r.Context(), w); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 	}
 }
 
@@ -217,8 +221,10 @@ func (h *VariableHandler) EditVariable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pages.VariableEditRow(projectID, variable, environments, "").
-		Render(r.Context(), w)
+	if err := pages.VariableEditRow(projectID, variable, environments, "").
+		Render(r.Context(), w); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }
 
 func (h *VariableHandler) UpdateVariable(
@@ -407,6 +413,8 @@ func (h *VariableHandler) renderVariablesFragment(
 		return
 	}
 
-	pages.VariablesFragment(project, variables, environments, "").
-		Render(r.Context(), w)
+	if err := pages.VariablesFragment(project, variables, environments, "").
+		Render(r.Context(), w); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }

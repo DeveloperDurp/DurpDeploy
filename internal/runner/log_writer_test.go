@@ -2,6 +2,7 @@ package runner
 
 import (
 	"database/sql"
+	"durpdeploy/internal/testutil"
 	"testing"
 
 	"durpdeploy/internal/db"
@@ -20,7 +21,7 @@ func TestBroadcastWriterHoldsMultilineSecretPrefixAcrossWrites(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			t.Cleanup(func() { connection.Close() })
+			t.Cleanup(func() { testutil.Close(t, connection) })
 			repo := repository.New(connection)
 			project, err := repo.Queries.CreateProject(
 				t.Context(), db.CreateProjectParams{Name: "logs"},

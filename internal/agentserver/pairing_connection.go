@@ -100,6 +100,7 @@ func (connection *tlsPairingConnection) Post(
 	if err != nil {
 		return 0, fmt.Errorf("read agent pairing response: %w", err)
 	}
+	//nolint:errcheck // The response body is read-only; read failures are checked.
 	defer response.Body.Close()
 	if _, err := io.Copy(io.Discard, io.LimitReader(
 		response.Body,

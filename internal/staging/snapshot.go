@@ -95,6 +95,7 @@ func Read(ctx context.Context, file *os.File) (Snapshot, error) {
 			offset:    count.offset,
 			file:      file,
 		}
+		//nolint:staticcheck // Accept legacy regular-file tar headers.
 		if header.Typeflag != tar.TypeReg && header.Typeflag != tar.TypeRegA &&
 			!entry.Directory ||
 			header.Size < 0 ||

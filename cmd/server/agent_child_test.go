@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"durpdeploy/internal/testutil"
 	"errors"
 	"net"
 	"os"
@@ -35,7 +36,7 @@ func testAgentChildFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	addr := port.Addr().String()
-	port.Close()
+	testutil.Close(t, port)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(
@@ -61,7 +62,7 @@ func testAgentChildFailure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("agent port remains bound: %v", err)
 	}
-	rebound.Close()
+	testutil.Close(t, rebound)
 	entries, err := os.ReadDir(cmd.Dir)
 	if err != nil || len(entries) != 0 {
 		t.Fatal("startup touched child working directory before validation")

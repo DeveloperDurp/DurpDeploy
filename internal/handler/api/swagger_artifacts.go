@@ -1,6 +1,8 @@
 package api
 
 // swagger:parameters getPackageRepository removePackageRepository
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerArtifactProjectParams struct {
 	// in: path
 	// required: true
@@ -8,6 +10,8 @@ type swaggerArtifactProjectParams struct {
 }
 
 // swagger:parameters savePackageRepository
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerArtifactSaveParams struct {
 	// in: path
 	// required: true
@@ -18,6 +22,8 @@ type swaggerArtifactSaveParams struct {
 }
 
 // swagger:parameters testPackageRepository
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerArtifactTestParams struct {
 	// in: path
 	// required: true
@@ -28,6 +34,8 @@ type swaggerArtifactTestParams struct {
 }
 
 // swagger:parameters getReleaseArtifact
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerArtifactPinParams struct {
 	// in: path
 	// required: true

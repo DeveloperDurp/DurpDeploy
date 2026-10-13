@@ -180,7 +180,7 @@ func (f *Fixture) serveJWKS(w http.ResponseWriter) {
 		Use:     "sig",
 		Alg:     "RS256",
 		N: base64.RawURLEncoding.EncodeToString(
-			privateKey.PublicKey.N.Bytes(),
+			privateKey.N.Bytes(),
 		),
 		E: base64.RawURLEncoding.EncodeToString(
 			big.NewInt(int64(privateKey.PublicKey.E)).Bytes(),

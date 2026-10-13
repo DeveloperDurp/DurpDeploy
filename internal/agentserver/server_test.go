@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/tls"
+	"durpdeploy/internal/testutil"
 	"encoding/json"
 	"encoding/pem"
 	"io"
@@ -55,7 +56,7 @@ func newAgentFixtureWithDSN(
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { conn.Close() })
+	t.Cleanup(func() { testutil.Close(t, conn) })
 	repo := repository.New(conn)
 	broker := runner.NewLogBroker()
 	bus := events.NewBus(repo)
@@ -115,7 +116,7 @@ func newAgentFixtureWithDSN(
 	if err != nil {
 		t.Fatal(err)
 	}
-	var handler http.Handler = server.NewAgentRouter(agents)
+	var handler = server.NewAgentRouter(agents)
 	if requestStarted != nil {
 		handler = agents.Authenticated(
 			http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -2,6 +2,7 @@ package migrate
 
 import (
 	"database/sql"
+	"durpdeploy/internal/testutil"
 	"path/filepath"
 	"testing"
 
@@ -22,7 +23,7 @@ func TestRunbookScheduleIndexUpgrade(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer conn.Close()
+			defer testutil.Close(t, conn)
 			goose.SetBaseFS(migrations.FS)
 			if err := goose.SetDialect("sqlite3"); err != nil {
 				t.Fatal(err)

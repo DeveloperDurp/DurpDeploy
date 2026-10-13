@@ -71,11 +71,10 @@ func (r *DeploymentRunner) runRemoteStep(
 		request.logWriter.Flush()
 		return errors.New(message)
 	}
-	_, _ = request.logWriter.Write([]byte(fmt.Sprintf(
+	_, _ = fmt.Fprintf(request.logWriter,
 		"step %q: queued for %d matching agent(s)\n",
 		request.step.Name,
-		created,
-	)))
+		created)
 	request.logWriter.Flush()
 
 	timeout := defaultStepTimeout

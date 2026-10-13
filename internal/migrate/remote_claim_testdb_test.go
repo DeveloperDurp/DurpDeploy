@@ -142,11 +142,3 @@ func (fixture remoteClaimTestDB) openBaseline(t *testing.T) *sql.DB {
 	)
 	return conn
 }
-
-func (fixture remoteClaimTestDB) openRaw(t *testing.T) *sql.DB {
-	t.Helper()
-	conn, err := sql.Open(fixture.driverName, fixture.dsn)
-	requireNoError(t, err, "reopen "+fixture.name)
-	requireNoError(t, conn.Ping(), "reping "+fixture.name)
-	return conn
-}

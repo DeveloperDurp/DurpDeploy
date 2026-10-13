@@ -2,6 +2,7 @@ package migrate
 
 import (
 	"database/sql"
+	"durpdeploy/internal/testutil"
 	"path/filepath"
 	"testing"
 
@@ -15,7 +16,7 @@ func TestProjectEnvironmentQueueUpgradePreservesOwner(t *testing.T) {
 		filepath.Join(t.TempDir(), "queue.db")+"?_pragma=foreign_keys(1)",
 	)
 	requireNoError(t, err, "open fixture")
-	defer conn.Close()
+	defer testutil.Close(t, conn)
 	goose.SetBaseFS(migrations.FS)
 	requireNoError(t, goose.SetDialect("sqlite3"), "dialect")
 	requireNoError(t, goose.UpTo(conn, ".", 53), "old queue schema")

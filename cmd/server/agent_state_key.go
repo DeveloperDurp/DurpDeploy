@@ -142,11 +142,7 @@ func rotateRemoteStepLogBuffer(
 	for _, key := range keys {
 		stored, err := q.GetRemoteStepLogBufferRotationValue(
 			ctx,
-			db.GetRemoteStepLogBufferRotationValueParams{
-				DeploymentID: key.DeploymentID,
-				StepIndex:    key.StepIndex,
-				AgentID:      key.AgentID,
-			},
+			db.GetRemoteStepLogBufferRotationValueParams(key),
 		)
 		if err != nil {
 			return err

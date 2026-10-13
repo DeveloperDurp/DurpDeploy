@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/stretchr/testify/require"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -549,11 +550,6 @@ func (h *testHarness) adminToken(t *testing.T) string {
 	return h.seedToken(t, h.seedUser(t, "admin@example.com", "admin"))
 }
 
-func (h *testHarness) deployerToken(t *testing.T) string {
-	u := h.seedUser(t, "deployer@example.com", "deployer")
-	return h.seedToken(t, u)
-}
-
 func (h *testHarness) viewerToken(t *testing.T) string {
 	u := h.seedUser(t, "viewer@example.com", "viewer")
 	return h.seedToken(t, u)
@@ -907,8 +903,8 @@ func TestLifecycle_ReorderStages(t *testing.T) {
 	h.assertStatus(t, s2, http.StatusCreated)
 
 	var stage1, stage2 map[string]any
-	json.Unmarshal(s1.Body.Bytes(), &stage1)
-	json.Unmarshal(s2.Body.Bytes(), &stage2)
+	require.NoError(t, json.Unmarshal(s1.Body.Bytes(), &stage1))
+	require.NoError(t, json.Unmarshal(s2.Body.Bytes(), &stage2))
 
 	rec := h.request(
 		t,

@@ -78,6 +78,7 @@ func (service *PairingService) Pair(
 	if err != nil {
 		return PairingResult{}, fmt.Errorf("observe agent certificate: %w", err)
 	}
+	//nolint:errcheck // Pairing operations report errors before transport cleanup.
 	defer connection.Close()
 	observedDER := connection.CertificateDER()
 	observedPin := agenttls.FingerprintOf(observedDER)

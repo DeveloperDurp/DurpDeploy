@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 
 	"durpdeploy/internal/artifact"
@@ -270,8 +271,7 @@ func (r *Repository) WithTx(
 		return err
 	}
 	if err := fn(r.Queries.WithTx(tx)); err != nil {
-		tx.Rollback()
-		return err
+		return errors.Join(err, tx.Rollback())
 	}
 	return tx.Commit()
 }

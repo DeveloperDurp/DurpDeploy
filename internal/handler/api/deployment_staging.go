@@ -43,6 +43,8 @@ func (h *DeploymentHandler) ListStaging(
 }
 
 // swagger:parameters listDeploymentStaging
+//
+//nolint:unused // Used by Swagger specification generation.
 type stagingPathParam struct {
 	// in: path
 	// required: true
@@ -50,6 +52,8 @@ type stagingPathParam struct {
 }
 
 // swagger:response StagingListResponse
+//
+//nolint:unused // Used by Swagger specification generation.
 type stagingListResponse struct {
 	// in: body
 	Body []db.DeploymentStagingSnapshot

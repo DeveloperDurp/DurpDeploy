@@ -2,6 +2,7 @@ package oidc
 
 import (
 	"context"
+	"durpdeploy/internal/testutil"
 	"path/filepath"
 	"testing"
 
@@ -43,7 +44,7 @@ func newConcurrentIdentityRepositories(
 	}
 	second, err := migrate.Run(dsn)
 	if err != nil {
-		first.Close()
+		testutil.Close(t, first)
 		t.Fatalf("migrate second database handle: %v", err)
 	}
 	first.SetMaxOpenConns(1)

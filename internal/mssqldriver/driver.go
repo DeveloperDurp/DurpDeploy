@@ -145,6 +145,7 @@ func (c *wrappedConn) BeginTx(
 	if b, ok := c.Conn.(driver.ConnBeginTx); ok {
 		return b.BeginTx(ctx, opts)
 	}
+	//nolint:staticcheck // Required fallback for drivers without ConnBeginTx.
 	return c.Conn.Begin()
 }
 

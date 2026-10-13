@@ -3,6 +3,7 @@ package db_test
 import (
 	"context"
 	"database/sql"
+	"durpdeploy/internal/testutil"
 	"testing"
 
 	"durpdeploy/internal/db"
@@ -16,7 +17,7 @@ func TestSmoke(t *testing.T) {
 	if err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	defer dbConn.Close()
+	defer testutil.Close(t, dbConn)
 
 	queries := db.New(dbConn)
 

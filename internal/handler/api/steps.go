@@ -573,7 +573,9 @@ func (h *StepHandler) ReorderSteps(w http.ResponseWriter, r *http.Request) {
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	defer tx.Rollback()
+	defer func() {
+		repository.LogRollbackError(tx.Rollback())
+	}()
 	qtx := h.repo.Queries.WithTx(tx)
 
 	for i, sid := range req.StepIDs {

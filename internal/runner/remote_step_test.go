@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"database/sql"
+	"durpdeploy/internal/testutil"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -158,7 +159,7 @@ func testRunnerMixedLocalAndAgentSteps(t *testing.T, terminalState string) {
 		if err := repo.SaveStaging(ctx, repository.StagingWrite{
 			Key: db.GetStagingSnapshotParams{DeploymentID: created.Deployment.ID, StepIndex: 1, Producer: "agent-a"}, Source: input,
 		}); err != nil {
-			input.Close()
+			testutil.Close(t, input)
 			t.Fatal(err)
 		}
 		if err := input.Close(); err != nil {
@@ -379,7 +380,7 @@ INSERT INTO agent_environment_labels(agent_id,environment_id) VALUES(?,?)`,
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer base.Close()
+	defer testutil.Close(t, base)
 	for _, run := range runs {
 		if err := repo.SaveStaging(ctx, repository.StagingWrite{Key: db.GetStagingSnapshotParams{DeploymentID: created.Deployment.ID, StepIndex: 1, Producer: run.AgentID}, Source: base}); err != nil {
 			t.Fatal(err)

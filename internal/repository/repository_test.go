@@ -3,6 +3,7 @@ package repository_test
 import (
 	"context"
 	"database/sql"
+	"durpdeploy/internal/testutil"
 	"errors"
 	"fmt"
 	"strings"
@@ -117,7 +118,7 @@ l.created_at ASC, l.id ASC`, deploymentID)
 	if err != nil {
 		t.Fatalf("reference query: %v", err)
 	}
-	defer rows.Close()
+	defer testutil.Close(t, rows)
 	var ids []int64
 	for rows.Next() {
 		var id int64
@@ -461,7 +462,7 @@ func TestVariables_ListPaginatedDecryptsAndFilters(t *testing.T) {
 		t.Fatal("expected decryption error for corrupt ciphertext")
 	}
 
-	repo.DB.Close()
+	testutil.Close(t, repo.DB)
 	if _, err := repo.ListVariablesByProjectPaginated(
 		ctx, base,
 	); err == nil {
@@ -515,7 +516,7 @@ func TestVariables_ListPaginated_ErrorPaths(t *testing.T) {
 	repo := newTestRepo(t)
 
 	// Query error: close the DB so the query fails.
-	repo.DB.Close()
+	testutil.Close(t, repo.DB)
 	_, err := repo.ListVariablesByProjectPaginated(
 		context.Background(),
 		db.ListVariablesByProjectPaginatedParams{},

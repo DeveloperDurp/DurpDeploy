@@ -350,9 +350,8 @@ func (r *DeploymentRunner) Run(
 			}
 			if err != nil {
 				if stagingFailed {
-					if _, logErr := logWriter.Write(
-						[]byte(fmt.Sprintf("step %q: %v\n", step.Name, err)),
-					); logErr != nil {
+					if _, logErr := fmt.Fprintf(logWriter,
+						"step %q: %v\n", step.Name, err); logErr != nil {
 						slog.Error("persist staging failure", "err", logErr)
 					}
 					logWriter.Flush()
@@ -507,16 +506,19 @@ func (r *DeploymentRunner) Run(
 			}
 
 			if attempt < maxAttempts {
-				logWriter.Write(
-					[]byte(
-						fmt.Sprintf(
-							"step %q: retrying (attempt %d of %d)\n",
-							step.Name,
-							attempt+1,
-							maxAttempts,
-						),
-					),
-				)
+				if _, err := fmt.Fprintf(logWriter,
+					"step %q: retrying (attempt %d of %d)\n",
+					step.Name,
+					attempt+1,
+					maxAttempts); err != nil {
+					slog.Error(
+						"persist retry message",
+						"deployment_id",
+						deploymentID,
+						"err",
+						err,
+					)
+				}
 				logWriter.Flush()
 			}
 		}

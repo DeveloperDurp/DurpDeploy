@@ -106,7 +106,7 @@ jobs:
           echo "is_release=$IS_RELEASE" >> "$GITHUB_OUTPUT"
 
   # ----- Lint ------------------------------------------------------------
-  # Mirrors the GitLab lint stage: go vet + gofmt + hadolint.
+  # Gate Go analysis, formatting, and Dockerfile checks before tests.
   lint:
     name: Lint
     runs-on: ubuntu-latest
@@ -130,6 +130,9 @@ jobs:
 
       - name: go vet
         run: go tool templ generate && go vet ./...
+
+      - name: golangci-lint
+        run: make lint
 
       - name: gofmt
         run: |

@@ -34,7 +34,7 @@ func TestPostgres_InterpreterDefaultsAndConstraints(t *testing.T) {
 	if err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	defer dbConn.Close()
+	defer testutil.Close(t, dbConn)
 	queries := db.New(dbConn)
 
 	project, err := queries.CreateProject(

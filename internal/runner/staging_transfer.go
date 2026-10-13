@@ -49,7 +49,9 @@ func (r *DeploymentRunner) prepareRemoteStaging(
 		if err != nil {
 			return err
 		}
-		defer func() { result = errors.Join(result, file.Close()) }()
+		defer func() {
+			result = artifact.SpoolCleanupError(ctx, result, file.Close())
+		}()
 		if input.volume.volume == "" {
 			if err := tar.NewWriter(file).Close(); err != nil {
 				return err

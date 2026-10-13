@@ -188,7 +188,11 @@ func (h *RunbookHandler) Save(w http.ResponseWriter, r *http.Request) {
 	if raw := r.FormValue("artifact_release_id"); raw != "" {
 		artifactReleaseID, err = strconv.ParseInt(raw, 10, 64)
 		if err != nil || artifactReleaseID < -1 {
-			http.Error(w, "Invalid package release", 422)
+			http.Error(
+				w,
+				"Invalid package release",
+				http.StatusUnprocessableEntity,
+			)
 			return
 		}
 	}

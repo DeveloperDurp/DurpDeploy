@@ -35,6 +35,7 @@ func OpenWorkspace(base string) (*Workspace, error) {
 	if err != nil {
 		return nil, err
 	}
+	//nolint:errcheck // Closing the directory handle does not persist file data.
 	defer root.Close()
 	opened, err := root.Open(".")
 	if err != nil {

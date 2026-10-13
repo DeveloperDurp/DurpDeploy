@@ -60,7 +60,7 @@ func finishRemoteDeploymentLifecycle(
 	}
 	if (state != "succeeded" && state != "failed" && state != "cleanup_unconfirmed") ||
 		(claim.State != "started" && claim.State != "lost" && claim.State != "cancel_unconfirmed" &&
-			!(claim.State == "cancel_requested" && state == "cleanup_unconfirmed")) ||
+			(claim.State != "cancel_requested" || state != "cleanup_unconfirmed")) ||
 		(deployment.Status != "running" && deployment.Status != "failed") {
 		return RemoteTerminalResult{}, ErrRemoteLifecycleConflict
 	}

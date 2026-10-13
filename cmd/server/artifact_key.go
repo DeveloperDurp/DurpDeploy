@@ -96,11 +96,7 @@ func rotateArtifactGateChunks(
 	for _, key := range keys {
 		// Fetch one bounded chunk at a time; retain its full identity prefix.
 		ciphertext, err := q.GetArtifactGateChunk(ctx,
-			db.GetArtifactGateChunkParams{
-				DeploymentID: key.DeploymentID,
-				StepIndex:    key.StepIndex,
-				ChunkIndex:   key.ChunkIndex,
-			})
+			db.GetArtifactGateChunkParams(key))
 		if err != nil {
 			return err
 		}

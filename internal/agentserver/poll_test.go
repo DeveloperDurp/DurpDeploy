@@ -3,6 +3,7 @@ package agentserver_test
 import (
 	"bytes"
 	"crypto/sha256"
+	"durpdeploy/internal/testutil"
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
@@ -126,7 +127,7 @@ func assertAgentInterpreters(
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer rows.Close()
+	defer testutil.Close(t, rows)
 	got := make([]string, 0, len(want))
 	for rows.Next() {
 		var interpreter string

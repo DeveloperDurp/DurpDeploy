@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"durpdeploy/internal/testutil"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -154,15 +155,6 @@ func (h *projectHarness) makeLifecycle(
 			h.t.Fatalf("create stage: %v", err)
 		}
 	}
-	if err := h.repo.Queries.SetProjectLifecycle(
-		context.Background(),
-		db.SetProjectLifecycleParams{
-			LifecycleID: sql.NullInt64{Int64: lc.ID, Valid: true},
-			ID:          lc.ID, // not used; we override below
-		},
-	); err != nil {
-		// ignore: the helper is wrong for project_id, the caller does it
-	}
 	return lc
 }
 
@@ -235,8 +227,13 @@ func (h *projectHarness) postDeploy(
 	}
 	defer resp.Body.Close()
 	depID := int64(0)
-	if loc := resp.Header.Get("Location"); loc != "" {
-		fmt.Sscanf(loc, "/deployments/%d", &depID)
+	if loc := resp.Header.Get("Location"); strings.HasPrefix(
+		loc,
+		"/deployments/",
+	) {
+		if _, err := fmt.Sscanf(loc, "/deployments/%d", &depID); err != nil {
+			h.t.Fatalf("parse deployment redirect: %v", err)
+		}
 	}
 	return resp.StatusCode, depID
 }
@@ -269,7 +266,7 @@ func (h *projectHarness) getProjectPage(projectID int64) string {
 		h.t.Fatalf("status %d", resp.StatusCode)
 	}
 	buf := new(bytes.Buffer)
-	buf.ReadFrom(resp.Body)
+	testutil.ReadFrom(h.t, buf, resp.Body)
 	return buf.String()
 }
 
@@ -286,7 +283,7 @@ func (h *projectHarness) getProjectNotificationsPage(projectID int64) string {
 		h.t.Fatalf("status %d", resp.StatusCode)
 	}
 	buf := new(bytes.Buffer)
-	buf.ReadFrom(resp.Body)
+	testutil.ReadFrom(h.t, buf, resp.Body)
 	return buf.String()
 }
 
@@ -521,7 +518,7 @@ func (h *projectHarness) getProjectsList() string {
 		h.t.Fatalf("status %d", resp.StatusCode)
 	}
 	buf := new(bytes.Buffer)
-	buf.ReadFrom(resp.Body)
+	testutil.ReadFrom(h.t, buf, resp.Body)
 	return buf.String()
 }
 func TestProjectPanel_FreeFloating(t *testing.T) {
@@ -642,7 +639,7 @@ func TestStepsPage_RendersFullPage(t *testing.T) {
 		t.Fatalf("status %d", resp.StatusCode)
 	}
 	buf := new(bytes.Buffer)
-	buf.ReadFrom(resp.Body)
+	testutil.ReadFrom(t, buf, resp.Body)
 	body := buf.String()
 
 	for _, marker := range []string{
@@ -768,7 +765,7 @@ func TestUpdateProject_AfterSubmitLandsOnProject(t *testing.T) {
 	}
 	defer editPage.Body.Close()
 	buf := new(bytes.Buffer)
-	buf.ReadFrom(editPage.Body)
+	testutil.ReadFrom(t, buf, editPage.Body)
 	body := buf.String()
 
 	cancelHref := fmt.Sprintf(`href="/projects/%d"`, proj.ID)
@@ -936,7 +933,7 @@ func TestProjectPage_EditOnDetailDeleteOnEditForm(t *testing.T) {
 		t.Fatalf("edit status %d", editPage.StatusCode)
 	}
 	editBuf := new(bytes.Buffer)
-	editBuf.ReadFrom(editPage.Body)
+	testutil.ReadFrom(t, editBuf, editPage.Body)
 	editBody := editBuf.String()
 
 	if !strings.Contains(

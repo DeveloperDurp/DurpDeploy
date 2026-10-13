@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
+	"durpdeploy/internal/testutil"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -93,7 +94,7 @@ func seedStageInput(t *testing.T, f agentFixture, id int64) []byte {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer file.Close()
+	defer testutil.Close(t, file)
 	if _, err := file.Write(data); err != nil {
 		t.Fatal(err)
 	}

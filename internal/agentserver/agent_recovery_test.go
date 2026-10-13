@@ -1,6 +1,7 @@
 package agentserver_test
 
 import (
+	"durpdeploy/internal/testutil"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -117,7 +118,7 @@ func TestAgentDurableOutcomeAfterMaintenanceAndRestart(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					t.Cleanup(func() { conn.Close() })
+					t.Cleanup(func() { testutil.Close(t, conn) })
 					*f.repo = *repository.New(conn)
 					if err := f.repo.ReconcileDeploymentQueues(t.Context()); err != nil {
 						t.Fatal(err)

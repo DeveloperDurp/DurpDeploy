@@ -39,7 +39,7 @@ func TestPostgres_MigrationsRun(t *testing.T) {
 	if err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	defer db.Close()
+	defer testutil.Close(t, db)
 
 	rows, err := db.Query(
 		"SELECT table_name FROM information_schema.tables WHERE table_schema='public' ORDER BY table_name",
@@ -47,7 +47,7 @@ func TestPostgres_MigrationsRun(t *testing.T) {
 	if err != nil {
 		t.Fatalf("query: %v", err)
 	}
-	defer rows.Close()
+	defer testutil.Close(t, rows)
 	for rows.Next() {
 		var name string
 		if err := rows.Scan(&name); err != nil {

@@ -1,6 +1,8 @@
 package api
 
 // swagger:model LifecycleVariable
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerLifecycleVariable struct {
 	ID          int64  `json:"id"`
 	LifecycleID int64  `json:"lifecycle_id"`
@@ -13,9 +15,13 @@ type swaggerLifecycleVariable struct {
 }
 
 // swagger:model LifecycleVariableList
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerLifecycleVariableList []swaggerLifecycleVariable
 
 // swagger:model InheritedVariable
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerInheritedVariable struct {
 	swaggerLifecycleVariable
 	LifecycleName string                   `json:"lifecycle_name"`
@@ -23,9 +29,13 @@ type swaggerInheritedVariable struct {
 }
 
 // swagger:model InheritedVariableList
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerInheritedVariableList []swaggerInheritedVariable
 
 // swagger:parameters listLifecycleVariables createLifecycleVariable getLifecycleVariable updateLifecycleVariable deleteLifecycleVariable
+//
+//nolint:unused // Used by Swagger specification generation.
 type lifecycleVariableLifecycleParam struct {
 	// in: path
 	// required: true
@@ -33,6 +43,8 @@ type lifecycleVariableLifecycleParam struct {
 }
 
 // swagger:parameters getLifecycleVariable updateLifecycleVariable deleteLifecycleVariable
+//
+//nolint:unused // Used by Swagger specification generation.
 type lifecycleVariableIDParam struct {
 	// in: path
 	// required: true
@@ -40,6 +52,8 @@ type lifecycleVariableIDParam struct {
 }
 
 // swagger:parameters listInheritedVariables
+//
+//nolint:unused // Used by Swagger specification generation.
 type inheritedVariableProjectParam struct {
 	// in: path
 	// required: true
@@ -47,6 +61,8 @@ type inheritedVariableProjectParam struct {
 }
 
 // swagger:parameters createLifecycleVariable updateLifecycleVariable
+//
+//nolint:unused // Used by Swagger specification generation.
 type lifecycleVariableBodyParam struct {
 	// in: body
 	// required: true

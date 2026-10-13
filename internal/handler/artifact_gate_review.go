@@ -18,6 +18,7 @@ func (h *ArtifactGateHandler) Review(w http.ResponseWriter, r *http.Request) {
 	if file == nil {
 		return
 	}
+	//nolint:errcheck // The approved artifact is already durable; this is a read handle.
 	defer file.Close()
 	steps, err := h.artifactReviewSteps(r.Context(), gate.DeploymentID)
 	if err != nil ||

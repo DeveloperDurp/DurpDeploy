@@ -4,6 +4,8 @@ import "database/sql"
 
 // LogPage contains a bounded history window in increasing log-ID order.
 // swagger:model LogPage
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerLogPage struct {
 	Items []swaggerLogPageEntry `json:"items"`
 	// Exclusive cursor for the next older page. Zero means no older rows.
@@ -18,6 +20,8 @@ type swaggerLogPage struct {
 
 // LogPageEntry is a persisted log row, including nullable step metadata.
 // swagger:model LogPageEntry
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerLogPageEntry struct {
 	ID           int64          `json:"id"`
 	DeploymentID int64          `json:"deployment_id"`
@@ -29,6 +33,8 @@ type swaggerLogPageEntry struct {
 }
 
 // swagger:parameters pageDeploymentLogs
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerDeploymentLogPageParams struct {
 	// in: path
 	// required: true
@@ -40,6 +46,8 @@ type swaggerDeploymentLogPageParams struct {
 }
 
 // swagger:parameters pageRunbookLogs exportRunbookLogs
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerRunbookLogPageParams struct {
 	// in: path
 	// required: true
@@ -50,6 +58,8 @@ type swaggerRunbookLogPageParams struct {
 }
 
 // swagger:parameters pageRunbookLogs
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerRunbookLogCursorParams struct {
 	// Return rows older than this ID. Omit to read the latest page.
 	// in: query

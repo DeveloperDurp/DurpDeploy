@@ -4,7 +4,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/go-openapi/runtime/middleware"
+	"github.com/go-openapi/runtime/server-middleware/docui"
 
 	"durpdeploy/internal/swagger"
 )
@@ -26,7 +26,8 @@ func (h *SwaggerHandler) Spec(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.Write(spec)
+	// The response is committed; a disconnected client cannot receive an error.
+	_, _ = w.Write(spec)
 }
 
 const swaggerUITemplate = `<!DOCTYPE html>
@@ -79,22 +80,26 @@ const swaggerUITemplate = `<!DOCTYPE html>
 
 // UI serves the swagger-ui HTML page.
 func (h *SwaggerHandler) UI(w http.ResponseWriter, r *http.Request) {
-	middleware.SwaggerUI(middleware.SwaggerUIOpts{
-		BasePath:         "/api/swagger",
-		Path:             "index.html",
-		SpecURL:          "/api/swagger/spec",
-		Title:            "DurpDeploy API",
-		Template:         swaggerUITemplate,
-		SwaggerURL:       "/static/swagger-ui/swagger-ui-bundle.js",
-		SwaggerPresetURL: "/static/swagger-ui/swagger-ui-standalone-preset.js",
-		SwaggerStylesURL: "/static/swagger-ui/swagger-ui.css",
-		Favicon32:        "/static/swagger-ui/favicon-32x32.png",
-		Favicon16:        "/static/swagger-ui/favicon-16x16.png",
-	}, nil).ServeHTTP(w, r)
+	docui.SwaggerUI(nil,
+		docui.WithUIBasePath("/api/swagger"),
+		docui.WithUIPath("index.html"),
+		docui.WithSpecURL("/api/swagger/spec"),
+		docui.WithUITitle("DurpDeploy API"),
+		docui.WithUITemplate(swaggerUITemplate),
+		docui.WithUIAssetsURL("/static/swagger-ui/swagger-ui-bundle.js"),
+		docui.WithSwaggerUIOptions(docui.SwaggerUIOptions{
+			SwaggerPresetURL: "/static/swagger-ui/swagger-ui-standalone-preset.js",
+			SwaggerStylesURL: "/static/swagger-ui/swagger-ui.css",
+			Favicon32:        "/static/swagger-ui/favicon-32x32.png",
+			Favicon16:        "/static/swagger-ui/favicon-16x16.png",
+		}),
+	).ServeHTTP(w, r)
 }
 
 // SpecResponse is the raw OpenAPI JSON spec.
 // swagger:model SpecResponse
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerSpecResponse struct {
 	// swagger:ignore
 	Body []byte
@@ -102,6 +107,8 @@ type swaggerSpecResponse struct {
 
 // SwaggerUIResponse is the swagger-ui HTML page.
 // swagger:model SwaggerUIResponse
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerUIResponse struct {
 	// swagger:ignore
 	Body string

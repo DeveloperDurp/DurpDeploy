@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"log/slog"
 	"mime"
 	"net/http"
 	"strings"
@@ -47,7 +48,11 @@ func webRequestBodyLimit(next http.Handler) http.Handler {
 		if err != nil {
 			var tooLarge *http.MaxBytesError
 			if errors.As(err, &tooLarge) {
-				http.Error(w, "Request body too large", 413)
+				http.Error(
+					w,
+					"Request body too large",
+					http.StatusRequestEntityTooLarge,
+				)
 			} else {
 				http.Error(w, "Invalid request body", 400)
 			}
@@ -62,7 +67,16 @@ func webRequestBodyLimit(next http.Handler) http.Handler {
 		if mediaType == "multipart/form-data" {
 			err = r.ParseMultipartForm(limit)
 			if r.MultipartForm != nil {
-				defer r.MultipartForm.RemoveAll()
+				defer func() {
+					if err := r.MultipartForm.RemoveAll(); err != nil {
+						slog.WarnContext(
+							r.Context(),
+							"remove multipart files",
+							"err",
+							err,
+						)
+					}
+				}()
 			}
 		} else {
 			err = r.ParseForm()

@@ -1,6 +1,7 @@
 package audit
 
 import (
+	"durpdeploy/internal/testutil"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -17,7 +18,7 @@ func TestReleaseDeleteAuditUsesReleaseID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer conn.Close()
+	defer testutil.Close(t, conn)
 	repo := repository.New(conn)
 	for _, path := range []string{
 		"/projects/{id}/releases/{releaseId}",

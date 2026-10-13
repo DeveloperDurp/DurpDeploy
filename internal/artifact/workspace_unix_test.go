@@ -3,6 +3,7 @@
 package artifact
 
 import (
+	"durpdeploy/internal/testutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -25,7 +26,7 @@ func TestWorkspaceRejectsForeignOwner(t *testing.T) {
 	// When: the server attempts startup.
 	workspace, err := OpenWorkspace(base)
 	if workspace != nil {
-		defer workspace.Close()
+		defer testutil.Close(t, workspace)
 	}
 
 	// Then: it rejects the foreign-owned workspace rather than using its files.

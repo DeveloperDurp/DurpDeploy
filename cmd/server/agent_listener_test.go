@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"durpdeploy/internal/testutil"
 	"net"
 	"testing"
 	"time"
@@ -48,7 +49,7 @@ func TestRuntimeAgentShutdownRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer conn.Close()
+	defer testutil.Close(t, conn)
 	repo := repository.New(conn)
 	dispatcher := dispatch.New(repo)
 	for range 2 {
@@ -72,7 +73,7 @@ func TestRuntimeAgentShutdownRestart(t *testing.T) {
 				dispatcher: dispatcher,
 			},
 		); err == nil {
-			extra.shutdown(context.Background())
+			require.NoError(t, extra.shutdown(context.Background()))
 			t.Fatal("occupied port accepted")
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -90,7 +91,7 @@ func TestRuntimeAgentShutdownRestart(t *testing.T) {
 		if err != nil {
 			t.Fatalf("listener leaked: %v", err)
 		}
-		rebound.Close()
+		testutil.Close(t, rebound)
 		t.Logf("shutdown joined serve/maintenance; rebound %s", addr)
 	}
 }

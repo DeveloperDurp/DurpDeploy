@@ -5,6 +5,8 @@ package api
 
 // Environment represents a deployment target.
 // swagger:model Environment
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerEnvironment struct {
 	ID               int64   `json:"id"`
 	Name             string  `json:"name"`
@@ -19,6 +21,8 @@ type swaggerEnvironment struct {
 
 // Lifecycle represents a deployment promotion pipeline.
 // swagger:model Lifecycle
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerLifecycle struct {
 	ID          int64   `json:"id"`
 	Name        string  `json:"name"`
@@ -28,6 +32,8 @@ type swaggerLifecycle struct {
 
 // LifecycleStage is a single stage in a lifecycle.
 // swagger:model LifecycleStage
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerLifecycleStage struct {
 	ID               int64 `json:"id"`
 	LifecycleID      int64 `json:"lifecycle_id"`
@@ -38,6 +44,8 @@ type swaggerLifecycleStage struct {
 
 // Step is an executable script step within a project.
 // swagger:model Step
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerStep struct {
 	ID                 int64    `json:"id"`
 	ProjectID          int64    `json:"project_id"`
@@ -63,6 +71,8 @@ type swaggerStep struct {
 
 // StepTemplate is a reusable step template.
 // swagger:model StepTemplate
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerStepTemplate struct {
 	ID                   int64    `json:"id"`
 	Name                 string   `json:"name"`
@@ -82,6 +92,8 @@ type swaggerStepTemplate struct {
 
 // StepTemplateVersion is a historical version of a step template.
 // swagger:model StepTemplateVersion
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerStepTemplateVersion struct {
 	ID                   int64    `json:"id"`
 	TemplateID           int64    `json:"template_id"`
@@ -103,6 +115,8 @@ type swaggerStepTemplateVersion struct {
 
 // Release is a refreshable snapshot of project steps and variables.
 // swagger:model Release
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerRelease struct {
 	ID        int64  `json:"id"`
 	ProjectID int64  `json:"project_id"`
@@ -115,6 +129,8 @@ type swaggerRelease struct {
 
 // Deployment represents a release executing against an environment.
 // swagger:model Deployment
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerDeployment struct {
 	QueuePosition      int64   `json:"queue_position"`
 	ActiveDeploymentID int64   `json:"active_deployment_id,omitempty"`
@@ -132,6 +148,8 @@ type swaggerDeployment struct {
 
 // DeploymentListItem is the enriched row returned by ListDeployments.
 // swagger:model DeploymentListItem
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerDeploymentListItem struct {
 	ID              int64   `json:"id"`
 	ReleaseID       int64   `json:"release_id"`
@@ -149,6 +167,8 @@ type swaggerDeploymentListItem struct {
 
 // DeploymentListResponse is the paginated envelope for ListDeployments.
 // swagger:model DeploymentListResponse
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerDeploymentListResponse struct {
 	Items  []swaggerDeploymentListItem `json:"items"`
 	Total  int64                       `json:"total"`
@@ -158,6 +178,8 @@ type swaggerDeploymentListResponse struct {
 
 // DeploymentStatusResponse is the status payload for GetDeploymentStatus.
 // swagger:model DeploymentStatusResponse
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerDeploymentStatusResponse struct {
 	Status             string `json:"status"`
 	WaitingForAgents   bool   `json:"waiting_for_agents"`
@@ -168,6 +190,8 @@ type swaggerDeploymentStatusResponse struct {
 
 // ScheduledDeployment is a cron-driven deployment configuration.
 // swagger:model ScheduledDeployment
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerScheduledDeployment struct {
 	ID            int64   `json:"id"`
 	ProjectID     int64   `json:"project_id"`
@@ -185,6 +209,8 @@ type swaggerScheduledDeployment struct {
 
 // AuditLog is a recorded state-changing action.
 // swagger:model AuditLog
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerAuditLog struct {
 	ID         int64   `json:"id"`
 	UserID     *int64  `json:"user_id"`
@@ -197,6 +223,8 @@ type swaggerAuditLog struct {
 
 // NotificationEvent is a fired notification record.
 // swagger:model NotificationEvent
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerNotificationEvent struct {
 	ID            int64  `json:"id"`
 	EventType     string `json:"event_type"`
@@ -210,6 +238,8 @@ type swaggerNotificationEvent struct {
 
 // ProjectMember is a single user membership on a project.
 // swagger:model ProjectMember
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerProjectMember struct {
 	ProjectID int64  `json:"project_id"`
 	UserID    int64  `json:"user_id"`
@@ -219,6 +249,8 @@ type swaggerProjectMember struct {
 
 // User is a user account.
 // swagger:model User
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerUser struct {
 	ID          int64  `json:"id"`
 	Email       string `json:"email"`
@@ -231,6 +263,8 @@ type swaggerUser struct {
 
 // GlobalNotification holds the global notification settings.
 // swagger:model GlobalNotification
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerGlobalNotification struct {
 	SlackWebhookURLConfigured   bool    `json:"slack_webhook_url_configured"`
 	GotifyTokenConfigured       bool    `json:"gotify_token_configured"`
@@ -246,6 +280,8 @@ type swaggerGlobalNotification struct {
 
 // Variable is a project or environment-scoped variable.
 // swagger:model Variable
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerVariable struct {
 	ID            int64   `json:"id"`
 	ProjectID     int64   `json:"project_id"`
@@ -258,6 +294,8 @@ type swaggerVariable struct {
 
 // LogEntry is a single line of deployment log output.
 // swagger:model LogEntry
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerLogEntry struct {
 	TS   int64  `json:"ts"`
 	Step string `json:"step"`
@@ -266,6 +304,8 @@ type swaggerLogEntry struct {
 
 // LogStreamParams controls the log stream format.
 // swagger:model LogStreamParams
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerLogStreamParams struct {
 	// Format is sse or ndjson; deployment streams also support structured SSE.
 	//
@@ -275,6 +315,8 @@ type swaggerLogStreamParams struct {
 
 // AuditLogParams filters the audit log list.
 // swagger:model AuditLogParams
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerAuditLogParams struct {
 	// in: query
 	Limit int64 `json:"limit"`
@@ -288,6 +330,8 @@ type swaggerAuditLogParams struct {
 
 // TokenResponse is the token representation returned by list endpoints.
 // swagger:model TokenResponse
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerTokenResponse struct {
 	ID         string `json:"id"`
 	Name       string `json:"name"`
@@ -304,6 +348,8 @@ type swaggerTokenResponse struct {
 
 // CreateTokenResponse returns the plaintext token once.
 // swagger:model CreateTokenResponse
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerCreateTokenResponse struct {
 	ID        string `json:"id"`
 	Name      string `json:"name"`
@@ -313,16 +359,22 @@ type swaggerCreateTokenResponse struct {
 
 // CreateTokenRequest is the body for CreateToken.
 // swagger:model CreateTokenRequest
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerCreateTokenRequest struct {
 	Name string `json:"name"`
 }
 
 // ProjectListResponse is a list of projects.
 // swagger:model ProjectListResponse
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerProjectListResponse []swaggerProjectResponse
 
 // ProjectResponse is the JSON shape for a project.
 // swagger:model ProjectResponse
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerProjectResponse struct {
 	SlackWebhookURLConfigured   bool   `json:"slack_webhook_url_configured"`
 	GotifyTokenConfigured       bool   `json:"gotify_token_configured"`
@@ -341,6 +393,8 @@ type swaggerProjectResponse struct {
 
 // ProjectNotificationResponse is the notification settings for a project.
 // swagger:model ProjectNotificationResponse
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerProjectNotificationResponse struct {
 	SlackWebhookURLConfigured   bool   `json:"slack_webhook_url_configured"`
 	GotifyTokenConfigured       bool   `json:"gotify_token_configured"`
@@ -358,6 +412,8 @@ type swaggerProjectNotificationResponse struct {
 
 // ProjectNotificationRequest updates a project's notification settings.
 // swagger:model ProjectNotificationRequest
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerProjectNotificationRequest struct {
 	ClearSlackWebhookURL   bool   `json:"clear_slack_webhook_url"`
 	ClearGotifyToken       bool   `json:"clear_gotify_token"`
@@ -371,6 +427,8 @@ type swaggerProjectNotificationRequest struct {
 
 // ProjectRequest is the body for create/update project.
 // swagger:model ProjectRequest
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerProjectRequest struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
@@ -379,6 +437,8 @@ type swaggerProjectRequest struct {
 
 // EnvironmentRequest is the body for create/update environment.
 // swagger:model EnvironmentRequest
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerEnvironmentRequest struct {
 	Name                       string `json:"name"`
 	Description                string `json:"description"`
@@ -390,6 +450,8 @@ type swaggerEnvironmentRequest struct {
 
 // LifecycleRequest is the body for create/update lifecycle.
 // swagger:model LifecycleRequest
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerLifecycleRequest struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
@@ -397,6 +459,8 @@ type swaggerLifecycleRequest struct {
 
 // LifecycleResponse is the detailed lifecycle payload.
 // swagger:model LifecycleResponse
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerLifecycleResponse struct {
 	Lifecycle swaggerLifecycle        `json:"lifecycle"`
 	Stages    []swaggerLifecycleStage `json:"stages"`
@@ -404,6 +468,8 @@ type swaggerLifecycleResponse struct {
 
 // LifecycleStageRequest is the body for add/update lifecycle stage.
 // swagger:model LifecycleStageRequest
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerLifecycleStageRequest struct {
 	EnvironmentID    *int64 `json:"environment_id"`
 	SortOrder        *int64 `json:"sort_order"`
@@ -412,12 +478,16 @@ type swaggerLifecycleStageRequest struct {
 
 // ReorderStagesRequest reorders lifecycle stages.
 // swagger:model ReorderStagesRequest
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerReorderStagesRequest struct {
 	StageIDs []int64 `json:"stage_ids"`
 }
 
 // StepRequest is the body for create/update step.
 // swagger:model StepRequest
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerStepRequest struct {
 	Name               string   `json:"name"`
 	ScriptBody         string   `json:"script_body"`
@@ -441,12 +511,16 @@ type swaggerStepRequest struct {
 
 // ReorderStepsRequest reorders project steps.
 // swagger:model ReorderStepsRequest
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerReorderStepsRequest struct {
 	StepIDs []int64 `json:"step_ids"`
 }
 
 // StepTemplateRequest is the body for create/update step template.
 // swagger:model StepTemplateRequest
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerStepTemplateRequest struct {
 	Name               string   `json:"name"`
 	ScriptBody         string   `json:"script_body"`
@@ -472,6 +546,8 @@ type swaggerStepTemplateRequest struct {
 // read-back unchanged); set secret=false to clear it.
 //
 // swagger:model VariableRequest
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerVariableRequest struct {
 	Name          string `json:"name"`
 	Value         string `json:"value"`
@@ -485,6 +561,8 @@ type swaggerVariableRequest struct {
 // never return secret plaintext (issue #29).
 //
 // swagger:model VariableResponse
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerVariableResponse struct {
 	ID            int64  `json:"id"`
 	ProjectID     int64  `json:"project_id"`
@@ -497,6 +575,8 @@ type swaggerVariableResponse struct {
 
 // ReleaseRequest is the body for create release.
 // swagger:model ReleaseRequest
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerReleaseRequest struct {
 	// Attached packages are downloaded and pinned on the first deployment pull.
 	Version string `json:"version"`
@@ -504,6 +584,8 @@ type swaggerReleaseRequest struct {
 
 // ReleaseWithVariablesResponse is the detailed release payload.
 // swagger:model ReleaseWithVariablesResponse
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerReleaseWithVariablesResponse struct {
 	ID        int64                            `json:"id"`
 	ProjectID int64                            `json:"project_id"`
@@ -520,6 +602,8 @@ type swaggerReleaseWithVariablesResponse struct {
 // return secret plaintext (issue #29).
 //
 // swagger:model ReleaseVariableResponse
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerReleaseVariableResponse struct {
 	ID            int64                 `json:"id"`
 	ReleaseID     int64                 `json:"release_id"`
@@ -531,6 +615,8 @@ type swaggerReleaseVariableResponse struct {
 
 // ScheduleRequest is the body for create/update scheduled deployment.
 // swagger:model ScheduleRequest
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerScheduleRequest struct {
 	ReleaseID     int64  `json:"release_id"`
 	EnvironmentID int64  `json:"environment_id"`
@@ -545,6 +631,8 @@ type swaggerScheduleRequest struct {
 
 // ProjectMemberRequest is the body for adding a project member.
 // swagger:model ProjectMemberRequest
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerProjectMemberRequest struct {
 	UserID int64  `json:"user_id"`
 	Role   string `json:"role"`
@@ -552,6 +640,8 @@ type swaggerProjectMemberRequest struct {
 
 // ProjectMemberResponse is the JSON shape for project membership.
 // swagger:model ProjectMemberResponse
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerProjectMemberResponse struct {
 	ProjectID int64  `json:"project_id"`
 	UserID    int64  `json:"user_id"`
@@ -563,6 +653,8 @@ type swaggerProjectMemberResponse struct {
 
 // UserRequest is the body for create/update user.
 // swagger:model UserRequest
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerUserRequest struct {
 	Email    string `json:"email"`
 	Name     string `json:"name"`
@@ -572,6 +664,8 @@ type swaggerUserRequest struct {
 
 // UserResponse is the JSON shape for a user.
 // swagger:model UserResponse
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerUserResponse struct {
 	ID              int64  `json:"id"`
 	Email           string `json:"email"`
@@ -585,10 +679,14 @@ type swaggerUserResponse struct {
 
 // UserListResponse is a list of users.
 // swagger:model UserListResponse
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerUserListResponse []swaggerUserResponse
 
 // GlobalNotificationRequest is the body for global notification settings.
 // swagger:model GlobalNotificationRequest
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerGlobalNotificationRequest struct {
 	ClearSlackWebhookURL   bool   `json:"clear_slack_webhook_url"`
 	ClearGotifyToken       bool   `json:"clear_gotify_token"`
@@ -602,10 +700,14 @@ type swaggerGlobalNotificationRequest struct {
 
 // EmptyResponse is returned for no-content endpoints.
 // swagger:model EmptyResponse
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerEmptyResponse struct{}
 
 // DeploymentScheduleRequest is the body for scheduling a deployment.
 // swagger:model DeploymentScheduleRequest
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerDeploymentScheduleRequest struct {
 	ReleaseID     int64  `json:"release_id"`
 	EnvironmentID int64  `json:"environment_id"`
@@ -617,62 +719,92 @@ type swaggerDeploymentScheduleRequest struct {
 
 // TokenListResponse is a list of API tokens.
 // swagger:model TokenListResponse
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerTokenListResponse []swaggerTokenResponse
 
 // EnvironmentListResponse is a list of environments.
 // swagger:model EnvironmentListResponse
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerEnvironmentListResponse []swaggerEnvironment
 
 // LifecycleListResponse is a list of lifecycles.
 // swagger:model LifecycleListResponse
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerLifecycleListResponse []swaggerLifecycle
 
 // LifecycleStageListResponse is a list of lifecycle stages.
 // swagger:model LifecycleStageListResponse
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerLifecycleStageListResponse []swaggerLifecycleStage
 
 // StepListResponse is a list of project steps.
 // swagger:model StepListResponse
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerStepListResponse []swaggerStep
 
 // StepTemplateListResponse is a list of step templates.
 // swagger:model StepTemplateListResponse
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerStepTemplateListResponse []swaggerStepTemplate
 
 // StepTemplateVersionListResponse is a list of step template versions.
 // swagger:model StepTemplateVersionListResponse
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerStepTemplateVersionListResponse []swaggerStepTemplateVersion
 
 // ReleaseListResponse is a list of releases.
 // swagger:model ReleaseListResponse
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerReleaseListResponse []swaggerRelease
 
 // VariableListResponse is a list of variables.
 // swagger:model VariableListResponse
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerVariableListResponse []swaggerVariableResponse
 
 // ScheduledDeploymentListResponse is a list of scheduled deployments.
 // swagger:model ScheduledDeploymentListResponse
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerScheduledDeploymentListResponse []swaggerScheduledDeployment
 
 // AuditLogListResponse is a list of audit log entries.
 // swagger:model AuditLogListResponse
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerAuditLogListResponse []swaggerAuditLog
 
 // NotificationEventListResponse is a list of notification events.
 // swagger:model NotificationEventListResponse
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerNotificationEventListResponse []swaggerNotificationEvent
 
 // ProjectMemberListResponse is a list of project members.
 // swagger:model ProjectMemberListResponse
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerProjectMemberListResponse []swaggerProjectMemberResponse
 
 // LogLineListResponse is a list of streamed log lines.
 // swagger:model LogLineListResponse
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerLogLineListResponse []swaggerLogEntry
 
 // DeploymentLog is a single step log entry.
 // swagger:model DeploymentLog
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerDeploymentLog struct {
 	ID           int64  `json:"id"`
 	DeploymentID int64  `json:"deployment_id"`
@@ -683,16 +815,22 @@ type swaggerDeploymentLog struct {
 
 // DeploymentLogListResponse is a list of deployment log entries.
 // swagger:model DeploymentLogListResponse
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerDeploymentLogListResponse []swaggerDeploymentLog
 
 // ProjectMemberRoleRequest updates a member's role.
 // swagger:model ProjectMemberRoleRequest
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerProjectMemberRoleRequest struct {
 	Role string `json:"role"`
 }
 
 // ServerStatsResponse contains aggregate counts.
 // swagger:model ServerStatsResponse
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerServerStatsResponse struct {
 	Users       int64 `json:"users"`
 	Projects    int64 `json:"projects"`
@@ -701,15 +839,21 @@ type swaggerServerStatsResponse struct {
 
 // DbTableListResponse is a list of SQLite table names.
 // swagger:model DbTableListResponse
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerDbTableListResponse []string
 
 // StreamResponse is a server-sent event stream.
 // swagger:model StreamResponse
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerStreamResponse struct {
 	Data string `json:"data"`
 }
 
 // swagger:model Agent
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerAgent struct {
 	AdministrativeStatus     string                `json:"administrative_status"`
 	Draining                 bool                  `json:"draining"`
@@ -738,37 +882,46 @@ type swaggerAgent struct {
 	ContainerInterpreters    []string              `json:"container_interpreters"`
 }
 
+//nolint:unused // Used by Swagger schema declarations.
 type swaggerSQLNullString struct {
 	String string `json:"String"`
 	Valid  bool   `json:"Valid"`
 }
 
+//nolint:unused // Used by Swagger schema declarations.
 type swaggerSQLNullInteger struct {
 	Int64 int64 `json:"Int64"`
 	Valid bool  `json:"Valid"`
 }
 
 // swagger:model AgentListResponse
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerAgentListResponse []swaggerAgent
 
 // swagger:model AgentDetailResponse
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerAgentDetailResponse struct {
 	Agent             swaggerAgent         `json:"agent"`
 	Labels            []string             `json:"labels"`
 	EnvironmentLabels []swaggerEnvironment `json:"environment_labels"`
 }
 
+//nolint:unused // Used by Swagger schema declarations.
 type swaggerAgentWork struct {
 	DeploymentID int64  `json:"deployment_id"`
 	StepIndex    int64  `json:"step_index"`
 	State        string `json:"state"`
 }
 
+//nolint:unused // Used by Swagger schema declarations.
 type swaggerAgentSuccess struct {
 	DeploymentID int64                 `json:"deployment_id"`
 	FinishedAt   swaggerSQLNullInteger `json:"finished_at"`
 }
 
+//nolint:unused // Used by Swagger schema declarations.
 type swaggerAgentError struct {
 	DeploymentID int64                 `json:"deployment_id"`
 	StepIndex    int64                 `json:"step_index"`
@@ -778,11 +931,15 @@ type swaggerAgentError struct {
 }
 
 // swagger:model AgentEnvironmentRequest
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerAgentEnvironmentRequest struct {
 	EnvironmentID int64 `json:"environment_id"`
 }
 
 // swagger:model PairAgentRequest
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerPairAgentRequest struct {
 	Address     string `json:"address"`
 	Code        string `json:"code"`
@@ -790,18 +947,24 @@ type swaggerPairAgentRequest struct {
 }
 
 // swagger:model PairAgentResponse
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerPairAgentResponse struct {
 	AgentID string `json:"agent_id"`
 	State   string `json:"state"`
 }
 
 // swagger:model AgentLabelRequest
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerAgentLabelRequest struct {
 	Label string `json:"label"`
 }
 
 // swagger:model RunbookStep
 // RunbookStep is one script in an immutable runbook version.
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerRunbookStep struct {
 	Name                 string   `json:"name"`
 	ScriptBody           string   `json:"script_body"`
@@ -822,6 +985,8 @@ type swaggerRunbookStep struct {
 
 // swagger:model RunbookSaveRequest
 // RunbookSaveRequest creates a runbook or saves its next version.
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerRunbookSaveRequest struct {
 	KeepArtifactPin   bool                 `json:"keep_artifact_pin"`
 	ArtifactReleaseID int64                `json:"artifact_release_id"`
@@ -832,6 +997,8 @@ type swaggerRunbookSaveRequest struct {
 
 // swagger:model Runbook
 // Runbook is a named collection of immutable versions.
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerRunbook struct {
 	ID          int64  `json:"id"`
 	ProjectID   int64  `json:"project_id"`
@@ -842,6 +1009,8 @@ type swaggerRunbook struct {
 
 // swagger:model RunbookVersion
 // RunbookVersion identifies a release-backed snapshot.
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerRunbookVersion struct {
 	ID        int64 `json:"id"`
 	RunbookID int64 `json:"runbook_id"`
@@ -852,6 +1021,8 @@ type swaggerRunbookVersion struct {
 
 // swagger:model RunbookSaveResponse
 // RunbookSaveResponse contains the named runbook and saved version.
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerRunbookSaveResponse struct {
 	Runbook swaggerRunbook        `json:"runbook"`
 	Version swaggerRunbookVersion `json:"version"`
@@ -859,6 +1030,8 @@ type swaggerRunbookSaveResponse struct {
 
 // swagger:model RunbookExecuteRequest
 // RunbookExecuteRequest chooses an environment and optional pinned version.
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerRunbookExecuteRequest struct {
 	EnvironmentID int64 `json:"environment_id"`
 	VersionID     int64 `json:"version_id"`
@@ -866,6 +1039,8 @@ type swaggerRunbookExecuteRequest struct {
 
 // swagger:model RunbookExecution
 // RunbookExecution records the concrete version behind a deployment.
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerRunbookExecution struct {
 	ID               int64                 `json:"id"`
 	RunbookVersionID int64                 `json:"runbook_version_id"`
@@ -877,6 +1052,8 @@ type swaggerRunbookExecution struct {
 
 // swagger:model RunbookScheduleRequest
 // RunbookScheduleRequest pins a version or follows the latest version.
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerRunbookScheduleRequest struct {
 	EnvironmentID int64  `json:"environment_id"`
 	VersionID     int64  `json:"version_id"`
@@ -885,6 +1062,8 @@ type swaggerRunbookScheduleRequest struct {
 
 // swagger:model RunbookSchedule
 // RunbookSchedule is a saved cron trigger for a runbook.
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerRunbookSchedule struct {
 	ID            int64                 `json:"id"`
 	RunbookID     int64                 `json:"runbook_id"`
@@ -899,15 +1078,21 @@ type swaggerRunbookSchedule struct {
 }
 
 // swagger:model RunbookListResponse
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerRunbookListResponse []swaggerRunbook
 
 // swagger:model RunbookDetailResponse
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerRunbookDetailResponse struct {
 	Runbook  swaggerRunbook          `json:"runbook"`
 	Versions []swaggerRunbookVersion `json:"versions"`
 }
 
 // swagger:model RunbookVersionResponse
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerRunbookVersionResponse struct {
 	Artifact *releaseArtifactResponse `json:"artifact"`
 	Version  swaggerRunbookVersion    `json:"version"`
@@ -915,6 +1100,8 @@ type swaggerRunbookVersionResponse struct {
 }
 
 // swagger:model RunbookExecutionDetail
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerRunbookExecutionDetail struct {
 	QueuePosition      int64                 `json:"queue_position"`
 	ActiveDeploymentID int64                 `json:"active_deployment_id,omitempty"`
@@ -937,6 +1124,8 @@ type swaggerRunbookExecutionDetail struct {
 }
 
 // swagger:model RunbookExecutionListResponse
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerRunbookExecutionListResponse struct {
 	Items  []swaggerRunbookExecutionDetail `json:"items"`
 	Total  int64                           `json:"total"`
@@ -945,14 +1134,20 @@ type swaggerRunbookExecutionListResponse struct {
 }
 
 // swagger:model RunbookScheduleListResponse
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerRunbookScheduleListResponse []swaggerRunbookSchedule
 
 // swagger:model RunbookStateResponse
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerRunbookStateResponse struct {
 	Status string `json:"status"`
 }
 
 // swagger:model RunbookScheduleStateResponse
+//
+//nolint:unused // Used by Swagger specification generation.
 type swaggerRunbookScheduleStateResponse struct {
 	Enabled bool `json:"enabled"`
 }

@@ -1,6 +1,7 @@
 package dispatch
 
 import (
+	"durpdeploy/internal/testutil"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -40,7 +41,7 @@ func TestStepLogCursorFollowsCommitOrder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer tx.Rollback()
+	defer testutil.Rollback(t, tx)
 	q := first.Queries.WithTx(tx)
 	if _, err := q.LockDeploymentLogStream(ctx, identity.DeploymentID); err != nil {
 		t.Fatal(err)

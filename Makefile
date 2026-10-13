@@ -2,6 +2,7 @@
 
 BINARY_NAME=durpdeploy
 MAIN_PATH=./cmd/server
+GOLANGCI_LINT_VERSION=2.11.3
 DEV_POSTGRES_CONTAINER ?= durpdeploy-dev-postgres
 DEV_POSTGRES_IMAGE ?= postgres:16-alpine
 DEV_MSSQL_CONTAINER ?= durpdeploy-dev-mssql
@@ -291,6 +292,13 @@ pre-commit-test:
 golines:
 	go tool golines --max-len=80 --ignore-generated -w .
 
+.PHONY: lint-tools lint
+lint-tools:
+	bash scripts/install_golangci_lint.sh $(GOLANGCI_LINT_VERSION)
+
+lint: lint-tools templ-generate swagger-ui-copy
+	./bin/lint/golangci-lint run ./...
+
 # Fail if any Go file the branch or working tree touches needs the
 # 80-col reformat (same tool the pre-commit hook uses). Scoped to the
 # branch diff plus staged/unstaged/untracked Go files. The recipe is
@@ -336,7 +344,7 @@ go-test-cleanup-test:
 # a working container provider; on rootless Podman set
 # XDG_RUNTIME_DIR to a directory whose docker.sock symlinks the podman
 # socket and export TESTCONTAINERS_RYUK_DISABLED=true.
-verify: golines-check templ-generate swagger-ui-copy e2e-test-isolated go-test-cleanup-test
+verify: lint golines-check templ-generate swagger-ui-copy e2e-test-isolated go-test-cleanup-test
 	go vet ./...
 	bash scripts/go_test.sh -count=1 -timeout=20m ./...
 

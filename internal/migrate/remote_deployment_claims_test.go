@@ -3,6 +3,7 @@ package migrate
 import (
 	"bytes"
 	"database/sql"
+	"durpdeploy/internal/testutil"
 	"strings"
 	"testing"
 )
@@ -12,7 +13,7 @@ func TestRemoteDeploymentClaimMigrationBaseline(t *testing.T) {
 		t,
 		func(t *testing.T, fixture remoteClaimTestDB) {
 			conn := fixture.openBaseline(t)
-			defer conn.Close()
+			defer testutil.Close(t, conn)
 			fixture.seedRemoteClaimPrerequisites(t, conn, true)
 
 			var count int
@@ -37,7 +38,7 @@ func TestRemoteDeploymentClaimMigration(t *testing.T) {
 
 			conn, err := Run(fixture.dsn)
 			requireNoError(t, err, "run remote claim migration")
-			defer conn.Close()
+			defer testutil.Close(t, conn)
 
 			var assigned sql.NullString
 			err = conn.QueryRow(
@@ -126,7 +127,7 @@ func (fixture remoteClaimTestDB) seedRemoteClaimPrerequisites(
 	t.Helper()
 	tx, err := conn.Begin()
 	requireNoError(t, err, "begin remote claim baseline seed")
-	defer tx.Rollback()
+	defer testutil.Rollback(t, tx)
 	for _, seed := range []struct {
 		table string
 		query string
@@ -176,7 +177,7 @@ func assertRemoteClaimSchemaAbsent(t *testing.T, conn *sql.DB) {
 		`SELECT deployment_id FROM remote_deployment_claims WHERE 1=0`,
 	} {
 		if rows, err := conn.Query(query); err == nil {
-			rows.Close()
+			testutil.Close(t, rows)
 			t.Fatalf("schema mutation exists before migration: %s", query)
 		}
 	}
