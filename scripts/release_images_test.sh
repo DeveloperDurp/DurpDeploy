@@ -54,7 +54,7 @@ jq -n --arg target "$GITHUB_SHA" --arg head "$head" '
 ' > "$FIXTURE_DIR/pr.json"
 jq -n --arg head "$head" '
   {workflow_runs:[{id:42,run_attempt:1,event:"pull_request",head_sha:$head,
-    repository:{full_name:"fixture/project"},path:".github/workflows/release.yml",
+    repository:{full_name:"fixture/project"},path:".github/workflows/release.yml@refs/pull/1/merge",
     status:"completed",conclusion:"success"}]}
 ' > "$FIXTURE_DIR/run.json"
 printf '%s\n' '{"jobs":[{"name":"Image scan (amd64)","status":"completed","conclusion":"success"},{"name":"Image scan (arm64)","status":"completed","conclusion":"success"}]}' > "$FIXTURE_DIR/jobs.json"
@@ -111,6 +111,12 @@ for arch in amd64 arm64; do
 	cmp "$work/$arch/artifact/image.tar" "$work/verified/$arch/image.tar"
 done
 echo 'PASS: promote the matching squash-merge artifacts'
+
+# Given a full checkout, resolution needs no later authenticated Git fetch.
+git remote set-url origin "$work/unavailable-origin"
+bash "$root/scripts/resolve_release_images.sh" "$work/offline-verified" > "$work/offline.log" 2>&1
+git remote set-url origin "$work/origin"
+echo 'PASS: resolve with checkout refs when the Git remote is unavailable'
 
 # Each boundary failure must stop before any registry publication is possible.
 jq '.workflow_runs[0].conclusion="failure"' "$work/good-api/run.json" > "$FIXTURE_DIR/run.json"

@@ -13,7 +13,6 @@ destination=$(cd "$destination" && pwd)
 scratch=$(mktemp -d)
 trap 'rm -rf "$scratch"' EXIT
 
-git fetch --no-tags origin main
 git merge-base --is-ancestor "$target" origin/main || {
 	echo 'Release source must belong to main.' >&2
 	exit 1
@@ -29,7 +28,7 @@ gh api --paginate \
 	"repos/$repository/actions/workflows/release.yml/runs?event=pull_request&head_sha=$head&per_page=100" |
 	jq -s --arg head "$head" --arg repository "$repository" '
 		[.[].workflow_runs[] | select(.head_sha == $head
-			and .event == "pull_request" and .path == ".github/workflows/release.yml"
+			and .event == "pull_request"
 			and .repository.full_name == $repository)] | sort_by(.id) | last
 		| select(.status == "completed" and .conclusion == "success")
 	' > "$scratch/run.json"

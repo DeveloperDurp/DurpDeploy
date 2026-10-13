@@ -26,16 +26,19 @@ Helm publication requires successful image publication.
 
 GitHub retains image artifacts for 30 days.
 Missing, expired, failed, or mismatched artifacts stop publication.
-For an expired artifact, rerun the complete original pull-request release workflow before retrying publication.
+If artifacts expire, the original commit cannot use this promotion path.
+Create a new pull request for a new verified release revision.
 Commits without matching pull-request artifacts cannot use this publication path.
 This includes releases built before this workflow was introduced.
 
 Image publishing jobs share one queue.
 Separate release runs keep their own workflow and source-scan concurrency groups.
 Version tags cannot replace different images.
+An older or unrelated source revision cannot replace `latest`.
+
 Image tags replace SemVer build metadata's `+` separator with `_` to prevent collisions with prerelease tags.
 Helm uses that image tag for `appVersion` and preserves the original chart version.
-An older or unrelated source revision cannot replace `latest`.
+
 The image labels identify the original tested merge revision.
 The published image index identifies the final merged revision.
 
