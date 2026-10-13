@@ -26,6 +26,7 @@ type workflowJob struct {
 		Group string `yaml:"group"`
 	} `yaml:"concurrency"`
 	Steps []struct {
+		Name string            `yaml:"name"`
 		Run  string            `yaml:"run"`
 		If   string            `yaml:"if"`
 		Uses string            `yaml:"uses"`

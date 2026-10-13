@@ -9,6 +9,58 @@ import (
 	"testing"
 )
 
+func TestPRImageScanReadsExportedOCILayout(t *testing.T) {
+	// Given an OCI archive, the scan input must expose its original index.
+	release := readWorkflow(t, "release")
+	directory := t.TempDir()
+	archiveDir := filepath.Join(directory, "release-image")
+	fixture := t.TempDir()
+	if err := os.Mkdir(archiveDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	index := []byte(`{"schemaVersion":2,"manifests":[]}`)
+	if err := os.WriteFile(filepath.Join(fixture, "index.json"), index, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	archive := filepath.Join(archiveDir, "image.tar")
+	if data, err := exec.Command("tar", "-cf", archive, "-C", fixture, ".").CombinedOutput(); err != nil {
+		t.Fatalf("create OCI fixture: %v\n%s", err, data)
+	}
+	original, err := os.ReadFile(archive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	prepared := false
+	for _, step := range release.Jobs["images"].Steps {
+		if step.Name == "Prepare OCI scan layout" {
+			command := exec.Command("bash", "-euc", step.Run)
+			command.Env = append(os.Environ(), "RUNNER_TEMP="+directory)
+			if data, err := command.CombinedOutput(); err != nil {
+				t.Fatalf("prepare scan layout: %v\n%s", err, data)
+			}
+			prepared = true
+		}
+		if strings.HasPrefix(step.Uses, "aquasecurity/trivy-action@") {
+			if !prepared {
+				t.Fatal("OCI layout must be prepared before scanning")
+			}
+			input := strings.ReplaceAll(
+				step.With["input"],
+				"${{ runner.temp }}",
+				directory,
+			)
+			actual, err := os.ReadFile(filepath.Join(input, "index.json"))
+			if err != nil || string(actual) != string(index) {
+				t.Fatalf("scan input must contain exported OCI index: %v", err)
+			}
+		}
+	}
+	retained, err := os.ReadFile(archive)
+	if err != nil || string(retained) != string(original) {
+		t.Fatal("scan preparation must preserve the retained archive")
+	}
+}
+
 func TestReleaseVersionSupportsBuildMetadata(t *testing.T) {
 	release := readWorkflow(t, "release")
 	output := filepath.Join(t.TempDir(), "output")

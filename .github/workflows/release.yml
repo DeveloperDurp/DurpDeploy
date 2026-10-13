@@ -295,10 +295,14 @@ jobs:
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
+      - name: Prepare OCI scan layout
+        run: |
+          mkdir -p "$RUNNER_TEMP/image-scan-layout"
+          tar -xf "$RUNNER_TEMP/release-image/image.tar" -C "$RUNNER_TEMP/image-scan-layout"
       - name: Scan image archive
         uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
         with:
-          input: ${{ runner.temp }}/release-image/image.tar
+          input: ${{ runner.temp }}/image-scan-layout
           scanners: vuln
           format: json
           output: ${{ runner.temp }}/image-scan.json

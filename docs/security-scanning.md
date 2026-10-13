@@ -13,7 +13,7 @@ the production scans still run for every supported event.
 ## Image verification and publication
 
 Pull requests build separate Linux AMD64 and ARM64 images on native runners.
-Trivy scans each OCI archive before GitHub retains it as a workflow artifact.
+Trivy scans each exported OCI image layout before GitHub retains the original archive as a workflow artifact.
 The image policy blocks fixable HIGH and CRITICAL vulnerabilities and scanner errors.
 The scan report stays on the runner and is not uploaded.
 The `Image verification` check requires both image scans, Go tests, E2E tests, and source security checks.
