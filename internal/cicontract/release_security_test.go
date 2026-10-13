@@ -18,10 +18,11 @@ type workflow struct {
 }
 
 type workflowJob struct {
-	Uses            string   `yaml:"uses"`
-	Needs           []string `yaml:"needs"`
-	If              string   `yaml:"if"`
-	ContinueOnError bool     `yaml:"continue-on-error"`
+	Permissions     map[string]string `yaml:"permissions"`
+	Uses            string            `yaml:"uses"`
+	Needs           []string          `yaml:"needs"`
+	If              string            `yaml:"if"`
+	ContinueOnError bool              `yaml:"continue-on-error"`
 	Concurrency     struct {
 		Group string `yaml:"group"`
 	} `yaml:"concurrency"`

@@ -167,4 +167,7 @@ func TestImagePublicationUsesVerifiedPRArtifacts(t *testing.T) {
 	if release.Jobs["docker"].Concurrency.Group != "release-image-publication" {
 		t.Fatal("image publishers must share one serialization group")
 	}
+	if release.Jobs["docker"].Permissions["pull-requests"] != "read" {
+		t.Fatal("PR association lookup requires pull-requests read permission")
+	}
 }
