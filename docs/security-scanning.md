@@ -33,7 +33,7 @@ This includes releases built before this workflow was introduced.
 Image publishing jobs share one queue.
 Separate release runs keep their own workflow and source-scan concurrency groups.
 Version tags cannot replace different images.
-Image tags replace SemVer build metadata's `+` separator with `-`.
+Image tags replace SemVer build metadata's `+` separator with `_` to prevent collisions with prerelease tags.
 Helm uses that image tag for `appVersion` and preserves the original chart version.
 An older or unrelated source revision cannot replace `latest`.
 The image labels identify the original tested merge revision.

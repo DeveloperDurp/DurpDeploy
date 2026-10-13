@@ -103,13 +103,19 @@ done
 echo 'PASS: real registry retains both scanned platform digests'
 
 # Given a normalized SemVer build tag, publish the same scanned manifests.
-bash "$root/scripts/publish_release_images.sh" "$work/verified" v1.0.0-build.4
-skopeo inspect --raw docker://ghcr.io/fixture/project:v1.0.0-build.4 > "$transport/build.json"
+bash "$root/scripts/publish_release_images.sh" "$work/verified" v1.0.0_build.4
+skopeo inspect --raw docker://ghcr.io/fixture/project:v1.0.0_build.4 > "$transport/build.json"
 cmp "$transport/index.json" "$transport/build.json"
 echo 'PASS: normalized SemVer build metadata publishes the scanned images'
 
 # Given a newer release already exists, an older publisher cannot replace latest.
 export GITHUB_SHA="$newer"
+bash "$root/scripts/publish_release_images.sh" "$work/verified" v1.0.0-build.4
+skopeo inspect --raw docker://ghcr.io/fixture/project:v1.0.0-build.4 |
+	jq -e --arg newer "$newer" '.annotations["org.opencontainers.image.revision"] == $newer' > /dev/null
+skopeo inspect --raw docker://ghcr.io/fixture/project:v1.0.0_build.4 |
+	jq -e --arg older "$older" '.annotations["org.opencontainers.image.revision"] == $older' > /dev/null
+echo 'PASS: build metadata and prerelease tags publish separate source revisions'
 bash "$root/scripts/publish_release_images.sh" "$work/verified" v2.0.0
 export GITHUB_SHA="$older"
 bash "$root/scripts/publish_release_images.sh" "$work/verified" v1.1.0

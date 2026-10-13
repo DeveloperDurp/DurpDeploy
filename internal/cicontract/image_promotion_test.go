@@ -63,29 +63,41 @@ func TestPRImageScanReadsExportedOCILayout(t *testing.T) {
 
 func TestReleaseVersionSupportsBuildMetadata(t *testing.T) {
 	release := readWorkflow(t, "release")
-	output := filepath.Join(t.TempDir(), "output")
-	command := exec.Command(
-		"bash",
-		"-euc",
-		release.Jobs["version"].Steps[0].Run,
-	)
-	command.Env = append(os.Environ(),
-		"REF_TYPE=tag", "REF_NAME=v1.2.3+build.4", "GITHUB_OUTPUT="+output)
-	if data, err := command.CombinedOutput(); err != nil {
-		t.Fatalf("compute release version: %v\n%s", err, data)
-	}
-	data, err := os.ReadFile(output)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, expected := range []string{
-		"version=v1.2.3-build.4\n",
-		"chart_version=1.2.3+build.4\n",
-		"is_release=true\n",
+	for _, fixture := range []struct{ tag, image string }{
+		{"v1.2.3+build.4", "v1.2.3_build.4"},
+		{"v1.2.3-build.4", "v1.2.3-build.4"},
+		{"v1.2.3-alpha.1+build.4", "v1.2.3-alpha.1_build.4"},
 	} {
-		if !strings.Contains(string(data), expected) {
-			t.Errorf("missing %q in %s", expected, data)
-		}
+		t.Run(fixture.tag, func(t *testing.T) {
+			output := filepath.Join(t.TempDir(), "output")
+			command := exec.Command(
+				"bash",
+				"-euc",
+				release.Jobs["version"].Steps[0].Run,
+			)
+			command.Env = append(
+				os.Environ(),
+				"REF_TYPE=tag",
+				"REF_NAME="+fixture.tag,
+				"GITHUB_OUTPUT="+output,
+			)
+			if data, err := command.CombinedOutput(); err != nil {
+				t.Fatalf("compute release version: %v\n%s", err, data)
+			}
+			data, err := os.ReadFile(output)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, expected := range []string{
+				"version=" + fixture.image + "\n",
+				"chart_version=" + strings.TrimPrefix(fixture.tag, "v") + "\n",
+				"is_release=true\n",
+			} {
+				if !strings.Contains(string(data), expected) {
+					t.Errorf("missing %q in %s", expected, data)
+				}
+			}
+		})
 	}
 }
 

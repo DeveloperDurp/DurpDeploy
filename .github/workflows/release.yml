@@ -92,7 +92,7 @@ jobs:
             CHART_VERSION="0.0.0-${VERSION}"
           fi
           # OCI tags cannot contain '+'. Use the same tag for Helm appVersion.
-          echo "version=${VERSION//+/-}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION//+/_}" >> "$GITHUB_OUTPUT"
           echo "chart_version=$CHART_VERSION" >> "$GITHUB_OUTPUT"
           echo "is_release=$IS_RELEASE" >> "$GITHUB_OUTPUT"
 
