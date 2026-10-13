@@ -37,6 +37,8 @@ func TestLogPreviewText(t *testing.T) {
 	}
 }
 
+const logPreviewRowCount = 80
+
 func TestLogByteBudgetsAcrossDatabases(t *testing.T) {
 	forEachDeploymentCreationEngine(t, func(t *testing.T, name string) {
 		repo, _ := openDeploymentCreationEngine(t,
@@ -53,82 +55,96 @@ func TestLogByteBudgetsAcrossDatabases(t *testing.T) {
 		if name == "SQLite" {
 			line = "before\x00after" + line
 		}
-		const count = 80
-		for i := range count {
-			_, err := repo.Queries.CreateStepDeploymentLog(t.Context(),
-				db.CreateStepDeploymentLogParams{
-					DeploymentID: deployment.ID, Line: line,
-					StepName: sql.NullString{Valid: i%2 == 0},
-				})
-			if err != nil {
-				t.Fatal(err)
-			}
+		log := db.CreateStepDeploymentLogParams{
+			DeploymentID: deployment.ID, Line: line,
 		}
-		// When: newest-to-oldest pages and a live preview batch are read.
-		seen := make(map[int64]bool)
-		before := int64(0)
-		for {
-			page, err := repo.ReadLogPage(t.Context(), deployment.ID, before)
-			if err != nil {
-				t.Fatal(err)
-			}
-			encoded, err := json.Marshal(page)
-			if err != nil {
-				t.Fatal(err)
-			}
-			// Then: JSON stays bounded and each persisted ID appears once.
-			if len(encoded)+1 > LogPageByteLimit || len(page.Items) == 0 {
-				t.Fatalf(
-					"invalid page: bytes=%d rows=%d",
-					len(encoded),
-					len(page.Items),
-				)
-			}
-			for i, row := range page.Items {
-				if seen[row.ID] || !row.Truncated ||
-					!utf8.ValidString(row.Line) ||
-					len(row.Line) > LogLineByteLimit ||
-					row.StepState.Valid ||
-					(i > 0 && page.Items[i-1].ID >= row.ID) {
-					t.Fatalf("invalid preview row %d", row.ID)
-				}
-				seen[row.ID] = true
-			}
-			if page.NextBefore == 0 {
-				break
-			}
-			if page.NextBefore != page.Items[0].ID {
-				t.Fatal("byte-limited cursor skipped output")
-			}
-			before = page.NextBefore
-		}
-		if len(seen) != count {
-			t.Fatalf("read %d of %d persisted rows", len(seen), count)
-		}
-		previews, err := repo.ReadLogPreviewsAfter(
-			t.Context(),
-			deployment.ID,
-			0,
-		)
-		if err != nil || len(previews) != LogPreviewBatchLimit {
-			t.Fatalf("preview batch: rows=%d err=%v", len(previews), err)
-		}
-		for i, preview := range previews {
-			if preview.StepName.Valid != (i%2 == 0) ||
-				!strings.HasPrefix(preview.Line, line[:16]) {
-				t.Fatal(
-					"preview lost nullability, NUL bytes, or Unicode prefix",
-				)
-			}
-			original, err := repo.Queries.GetDeploymentLog(
-				t.Context(),
-				preview.ID,
-			)
-			if err != nil || original.Line != line {
-				t.Fatalf("persisted output changed: %v", err)
-			}
-		}
+		seedLargeLogPreviews(t, repo, log)
+		// When / Then: history and live previews preserve their bounds.
+		assertLogBytePages(t, repo, deployment.ID)
+		assertLogPreviewBatch(t, repo, log)
 	})
+}
+
+func seedLargeLogPreviews(
+	t *testing.T,
+	repo *Repository,
+	log db.CreateStepDeploymentLogParams,
+) {
+	t.Helper()
+	for i := range logPreviewRowCount {
+		log.StepName = sql.NullString{Valid: i%2 == 0}
+		if _, err := repo.Queries.CreateStepDeploymentLog(t.Context(), log); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func assertLogBytePages(t *testing.T, repo *Repository, deploymentID int64) {
+	t.Helper()
+	seen := make(map[int64]bool)
+	before := int64(0)
+	for {
+		page, err := repo.ReadLogPage(t.Context(), deploymentID, before)
+		if err != nil {
+			t.Fatal(err)
+		}
+		encoded, err := json.Marshal(page)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(encoded)+1 > LogPageByteLimit || len(page.Items) == 0 {
+			t.Fatalf(
+				"invalid page: bytes=%d rows=%d",
+				len(encoded),
+				len(page.Items),
+			)
+		}
+		assertLogPreviewPageRows(t, page, seen)
+		if page.NextBefore == 0 {
+			break
+		}
+		if page.NextBefore != page.Items[0].ID {
+			t.Fatal("byte-limited cursor skipped output")
+		}
+		before = page.NextBefore
+	}
+	if len(seen) != logPreviewRowCount {
+		t.Fatalf("read %d of %d persisted rows", len(seen), logPreviewRowCount)
+	}
+}
+
+func assertLogPreviewPageRows(t *testing.T, page LogPage, seen map[int64]bool) {
+	t.Helper()
+	for i, row := range page.Items {
+		if seen[row.ID] || !row.Truncated || !utf8.ValidString(row.Line) ||
+			len(row.Line) > LogLineByteLimit || row.StepState.Valid ||
+			(i > 0 && page.Items[i-1].ID >= row.ID) {
+			t.Fatalf("invalid preview row %d", row.ID)
+		}
+		seen[row.ID] = true
+	}
+}
+
+func assertLogPreviewBatch(
+	t *testing.T,
+	repo *Repository,
+	log db.CreateStepDeploymentLogParams,
+) {
+	t.Helper()
+	previews, err := repo.ReadLogPreviewsAfter(t.Context(), log.DeploymentID, 0)
+	if err != nil || len(previews) != LogPreviewBatchLimit {
+		t.Fatalf("preview batch: rows=%d err=%v", len(previews), err)
+	}
+	for i, preview := range previews {
+		if preview.StepName.Valid != (i%2 == 0) ||
+			!strings.HasPrefix(preview.Line, log.Line[:16]) {
+			t.Fatal("preview lost nullability, NUL bytes, or Unicode prefix")
+		}
+		original, err := repo.Queries.GetDeploymentLog(t.Context(), preview.ID)
+		if err != nil || original.Line != log.Line {
+			t.Fatalf("persisted output changed: %v", err)
+		}
+	}
 }
 
 func TestEmptyLogPreviewsAcrossDatabases(t *testing.T) {
