@@ -148,6 +148,8 @@ The drill uses generated test credentials and excludes operator application sett
 
 The interruption checks allow four minutes for setup and use a five-minute global test timeout.
 They check application namespace labels and Testcontainers session labels after interruption.
+Each cleanup operation has an independent one-minute deadline.
+Cleanup errors fail the check.
 
 The drill checks these recovery results:
 

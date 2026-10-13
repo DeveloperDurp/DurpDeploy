@@ -59,7 +59,7 @@ jobs:
   backup-restore:
     name: Backup restore
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 90
     env:
       GOFLAGS: -mod=readonly
       DURPDEPLOY_CONTAINER_RUNTIME: docker

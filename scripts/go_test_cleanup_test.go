@@ -111,7 +111,7 @@ func TestCleanupRecoveryRuntimeOwnership(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
 	defer cancel()
 	require.NoError(t, cleanupRecoveryRuntime(ctx,
-		&testcontainers.DockerClient{Client: api}, session))
+		&testcontainers.DockerClient{Client: api}, session, time.Second))
 	require.Len(t, deleted, 2)
 	require.True(t, strings.HasSuffix(<-deleted, "/containers/owned-container"))
 	require.True(t, strings.HasSuffix(<-deleted, "/volumes/owned-volume"))

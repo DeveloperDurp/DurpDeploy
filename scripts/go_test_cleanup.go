@@ -25,7 +25,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "test container provider unavailable:", err)
 		os.Exit(2)
 	}
-	err = cleanup(ctx, api, os.Args[1:])
+	err = cleanup(context.Background(), api, os.Args[1:])
 	err = errors.Join(err, api.Close())
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "test container cleanup:", err)
@@ -40,9 +40,10 @@ func cleanup(ctx context.Context, api *testcontainers.DockerClient,
 		_, err := fmt.Println(api.DaemonHost())
 		return err
 	}
-	// ponytail: one deadline. Use phase deadlines for larger test batches.
-	// Remove application resources before Testcontainers can exhaust it.
-	failures := []error{cleanupRecoverySessions(ctx, api, sessions)}
+	// Snapshot the budget before an operation can consume its deadline.
+	timeout := cleanupTimeout(ctx)
+	ctx = context.WithoutCancel(ctx)
+	failures := []error{cleanupRecoverySessions(ctx, api, sessions, timeout)}
 	for _, session := range sessions {
 		if !strings.HasPrefix(session, "durpdeploy-go-test.") {
 			failures = append(
@@ -54,9 +55,14 @@ func cleanup(ctx context.Context, api *testcontainers.DockerClient,
 		filters := make(client.Filters)
 		filters.Add("label", "org.testcontainers=true",
 			"org.testcontainers.sessionId="+session)
-		containers, err := api.ContainerList(ctx, client.ContainerListOptions{
-			All: true, Filters: filters,
-		})
+		callCtx, cancel := context.WithTimeout(ctx, timeout)
+		containers, err := api.ContainerList(
+			callCtx,
+			client.ContainerListOptions{
+				All: true, Filters: filters,
+			},
+		)
+		cancel()
 		if err != nil {
 			failures = append(failures, fmt.Errorf("list %s: %w", session, err))
 			continue
@@ -66,7 +72,7 @@ func cleanup(ctx context.Context, api *testcontainers.DockerClient,
 				container.Labels["org.testcontainers.sessionId"] != session {
 				continue
 			}
-			if err := remove(ctx, api, container.ID); err != nil {
+			if err := remove(ctx, api, container.ID, timeout); err != nil {
 				failures = append(failures,
 					fmt.Errorf("remove %s: %w", container.ID, err))
 			}
@@ -75,15 +81,25 @@ func cleanup(ctx context.Context, api *testcontainers.DockerClient,
 	return errors.Join(failures...)
 }
 
+func cleanupTimeout(ctx context.Context) time.Duration {
+	if deadline, ok := ctx.Deadline(); ok {
+		return min(time.Minute, time.Until(deadline))
+	}
+	return time.Minute
+}
+
 func cleanupRecoverySessions(ctx context.Context,
-	api *testcontainers.DockerClient, sessions []string,
+	api *testcontainers.DockerClient, sessions []string, timeout time.Duration,
 ) error {
 	var failures []error
 	for _, session := range sessions {
 		if !strings.HasPrefix(session, "durpdeploy-go-test.") {
 			continue
 		}
-		failures = append(failures, cleanupRecoveryRuntime(ctx, api, session))
+		failures = append(
+			failures,
+			cleanupRecoveryRuntime(ctx, api, session, timeout),
+		)
 	}
 	return errors.Join(failures...)
 }
@@ -94,32 +110,34 @@ func cleanupRecoveryRuntime(
 	ctx context.Context,
 	api *testcontainers.DockerClient,
 	session string,
+	timeout time.Duration,
 ) error {
 	var failures []error
+	suffix := strings.ReplaceAll(session, ".", "-") + "-restore"
 	for _, kind := range []string{"docker", "podman"} {
-		namespace := kind + ":" + strings.ReplaceAll(
-			session,
-			".",
-			"-",
-		) + "-restore"
+		namespace := kind + ":" + suffix
 		failures = append(
 			failures,
-			cleanupRecoveryNamespace(ctx, api, namespace),
+			cleanupRecoveryContainers(ctx, api, namespace, timeout),
+			cleanupRecoveryVolumes(ctx, api, namespace, timeout),
 		)
 	}
 	return errors.Join(failures...)
 }
 
-func cleanupRecoveryNamespace(
+func cleanupRecoveryContainers(
 	ctx context.Context,
 	api *testcontainers.DockerClient,
 	namespace string,
+	timeout time.Duration,
 ) error {
 	filters := make(client.Filters)
 	filters.Add("label", "io.durpdeploy.namespace="+namespace)
-	containers, err := api.ContainerList(ctx, client.ContainerListOptions{
+	callCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), timeout)
+	containers, err := api.ContainerList(callCtx, client.ContainerListOptions{
 		All: true, Filters: filters,
 	})
+	cancel()
 	if err != nil {
 		return err
 	}
@@ -128,23 +146,39 @@ func cleanupRecoveryNamespace(
 		if resource.Labels["io.durpdeploy.namespace"] != namespace {
 			continue
 		}
-		if err := remove(ctx, api, resource.ID); err != nil {
+		if err := remove(ctx, api, resource.ID, timeout); err != nil {
 			failures = append(failures, err)
 		}
 	}
+	return errors.Join(failures...)
+}
+
+func cleanupRecoveryVolumes(ctx context.Context,
+	api *testcontainers.DockerClient, namespace string, timeout time.Duration,
+) error {
+	filters := make(client.Filters)
+	filters.Add("label", "io.durpdeploy.namespace="+namespace)
+	callCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), timeout)
 	volumes, err := api.VolumeList(
-		ctx,
+		callCtx,
 		client.VolumeListOptions{Filters: filters},
 	)
+	cancel()
 	if err != nil {
-		return errors.Join(append(failures, err)...)
+		return err
 	}
+	var failures []error
 	for _, resource := range volumes.Items {
 		if resource.Labels["io.durpdeploy.namespace"] != namespace {
 			continue
 		}
-		_, err := api.VolumeRemove(ctx, resource.Name,
+		callCtx, cancel := context.WithTimeout(
+			context.WithoutCancel(ctx),
+			timeout,
+		)
+		_, err := api.VolumeRemove(callCtx, resource.Name,
 			client.VolumeRemoveOptions{Force: true})
+		cancel()
 		if err != nil && !errdefs.IsNotFound(err) {
 			failures = append(failures, err)
 		}
@@ -153,8 +187,10 @@ func cleanupRecoveryNamespace(
 }
 
 func remove(ctx context.Context, api *testcontainers.DockerClient,
-	id string,
+	id string, timeout time.Duration,
 ) error {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), timeout)
+	defer cancel()
 	_, err := api.ContainerRemove(ctx, id,
 		client.ContainerRemoveOptions{Force: true, RemoveVolumes: true})
 	if err == nil || errdefs.IsNotFound(err) {
