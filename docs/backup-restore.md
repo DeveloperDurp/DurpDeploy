@@ -113,7 +113,7 @@ above. Never reuse the old WAL or SHM with the restored database.
 
 ## Automated recovery drill
 
-Run the isolated recovery drill on Linux:
+Run the isolated recovery drill on Linux amd64:
 
 ```bash
 make backup-restore-test
@@ -124,6 +124,8 @@ Use a test host without `/etc/durpdeploy/key`.
 The drill refuses that installed key to prevent access to operator secrets.
 The drill requires Go, npm, and a working container runtime.
 Missing tools or runtime access fail the check.
+Other architectures fail before the drill creates resources.
+If `DURPDEPLOY_CONTAINER_URL` is set, the drill uses that socket for application execution, backup containers, and cleanup.
 
 The drill builds the server and uses disposable SQLite data.
 It runs a digest-pinned Litestream 0.3.13 container with a local file replica.

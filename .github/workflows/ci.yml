@@ -49,6 +49,8 @@ jobs:
         run: make demo-test
       - name: Test Go test container cleanup
         run: make go-test-cleanup-test
+      - name: Test recovery drill platform and runtime selection
+        run: make backup-restore-script-test
 
       - name: Check development database boundaries
         run: bash scripts/check-dev-database-contract.sh

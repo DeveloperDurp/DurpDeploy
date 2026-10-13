@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -30,6 +31,18 @@ type restoreFixture struct {
 
 func newRestoreFixture(t *testing.T) *restoreFixture {
 	t.Helper()
+	if runtime.GOARCH != "amd64" {
+		t.Fatal("recovery drill requires Linux amd64")
+	}
+	provider := os.Getenv("DOCKER_HOST")
+	configured := os.Getenv("DURPDEPLOY_CONTAINER_URL")
+	if provider == "" || (configured != "" && configured != provider) {
+		t.Fatal(
+			"run scripts/test-backup-restore.sh to align the runtime and cleanup provider",
+		)
+	}
+	// Applications, backup containers, and interruption cleanup use one daemon.
+	t.Setenv("DURPDEPLOY_CONTAINER_URL", provider)
 	// LoadKey prefers this fixed path. Never use an operator's installed key.
 	if _, err := os.Stat(secret.KeyFilePath); !os.IsNotExist(err) {
 		t.Fatal("recovery drill requires an absent /etc/durpdeploy/key")

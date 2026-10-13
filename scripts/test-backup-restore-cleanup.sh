@@ -2,6 +2,9 @@
 # Exercise the shell runner's cleanup while a real restored-app fixture runs.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+if [[ -n ${DURPDEPLOY_CONTAINER_URL:-} ]]; then
+    export DOCKER_HOST=$DURPDEPLOY_CONTAINER_URL
+fi
 
 work_dir=$(mktemp -d)
 runner_pid=

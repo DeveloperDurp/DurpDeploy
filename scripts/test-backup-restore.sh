@@ -7,6 +7,13 @@ if [[ $(uname -s) != Linux ]]; then
     echo 'ERROR: the backup restore drill requires Linux.' >&2
     exit 1
 fi
+if [[ $(uname -m) != x86_64 ]]; then
+    echo 'ERROR: the backup restore drill requires Linux amd64.' >&2
+    exit 1
+fi
+if [[ -n ${DURPDEPLOY_CONTAINER_URL:-} ]]; then
+    export DOCKER_HOST=$DURPDEPLOY_CONTAINER_URL
+fi
 make templ-generate swagger-ui-copy
 bash scripts/go_test.sh -tags=e2e,backuprestore -race -count=1 \
     -timeout=8m -v -run '^TestBackupRestoreAPIWebE2E$' ./internal/handler/api
