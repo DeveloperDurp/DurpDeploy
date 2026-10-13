@@ -105,7 +105,12 @@ bash scripts/go_test.sh -run TestName ./internal/handler/...
 ./scripts/e2e_test.sh              # bash end-to-end: builds, runs server, curl happy/cancel/validation paths (~10s+)
 ```
 
-GitHub release-workflow PR checks run lint before Go tests and E2E checks. Other security, browser, and backend checks run in separate jobs. Lint requires `go vet ./...` and empty `gofmt -l .` output. Image/chart publication runs on push or manual dispatch after its dependencies.
+GitHub release-workflow PR checks run lint before Go tests and E2E checks.
+Run `make lint` for the pinned `golangci-lint` checks across packages and tests.
+The target generates required assets and installs a checksum-verified tool in `bin/lint/`.
+CI also requires `go vet ./...`, clean `gofmt` and `golines` output, and `hadolint`.
+Other security, browser, and backend checks run in separate jobs.
+Image/chart publication runs on push or manual dispatch after its dependencies.
 
 ## SonarCloud and Codex
 
