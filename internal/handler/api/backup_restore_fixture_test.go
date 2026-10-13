@@ -48,13 +48,9 @@ func newRestoreFixture(t *testing.T) *restoreFixture {
 		t.Fatal("recovery drill requires an absent /etc/durpdeploy/key")
 	}
 	kind := os.Getenv("DURPDEPLOY_CONTAINER_RUNTIME")
-	if kind == "" {
-		kind = "docker"
-		if _, err := exec.LookPath("podman"); err == nil {
-			kind = "podman"
-		}
+	if kind != "docker" && kind != "podman" {
+		t.Fatal("set DURPDEPLOY_CONTAINER_RUNTIME to docker or podman")
 	}
-	t.Setenv("DURPDEPLOY_CONTAINER_RUNTIME", kind)
 	session := os.Getenv("TESTCONTAINERS_SESSION_ID")
 	if !strings.HasPrefix(session, "durpdeploy-go-test.") {
 		t.Fatal("run the recovery drill with scripts/go_test.sh")

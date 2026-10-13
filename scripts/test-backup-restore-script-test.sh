@@ -37,12 +37,27 @@ for platform in Darwin:x86_64 Linux:aarch64; do
 done
 
 RESTORE_TEST_OS=Linux RESTORE_TEST_ARCH=x86_64 \
+    DURPDEPLOY_CONTAINER_RUNTIME=docker \
     DURPDEPLOY_CONTAINER_URL=unix:///configured/runtime.sock \
     DOCKER_HOST=unix:///other/runtime.sock PATH="$test_dir/bin:$PATH" \
     /usr/bin/bash "$root/scripts/test-backup-restore.sh" > "$test_dir/output" 2>&1
 grep -q '^make called$' "$test_dir/output"
 [[ $(grep -c '^runtime=unix:///configured/runtime.sock provider=unix:///configured/runtime.sock$' "$test_dir/output") == 2 ]]
 echo 'Recovery platform rejection and selected runtime: PASS'
+
+for runtime in '' invalid; do
+    if RESTORE_TEST_OS=Linux RESTORE_TEST_ARCH=x86_64 \
+        DURPDEPLOY_CONTAINER_RUNTIME=$runtime PATH="$test_dir/bin:$PATH" \
+        /usr/bin/bash "$root/scripts/test-backup-restore.sh" > "$test_dir/output" 2>&1; then
+        echo 'FAIL: unspecified or invalid runtime passed.' >&2
+        exit 1
+    fi
+    grep -q 'set DURPDEPLOY_CONTAINER_RUNTIME' "$test_dir/output"
+    if grep -q 'make called' "$test_dir/output"; then
+        echo 'FAIL: invalid runtime started the drill.' >&2
+        exit 1
+    fi
+done
 
 cat > "$test_dir/bin/go" <<'GO'
 #!/bin/sh
@@ -55,6 +70,7 @@ printf '%s\n' "$@" >> "$RESTORE_TEST_ENGINE_LOG"
 exit 64
 PODMAN
 chmod +x "$test_dir/bin/go" "$test_dir/bin/podman"
+cp "$test_dir/bin/podman" "$test_dir/bin/docker"
 
 for selection in configured provider discovered; do
     configured='' provider='' expected=unix:///discovered/runtime.sock
@@ -76,4 +92,15 @@ for selection in configured provider discovered; do
     grep -Fxq -- '--remote' "$test_dir/engine"
     grep -Fxq -- "--url=$expected" "$test_dir/engine"
 done
+test_status=0
+DURPDEPLOY_CONTAINER_URL='' DOCKER_HOST=unix:///docker/runtime.sock \
+    DURPDEPLOY_CONTAINER_RUNTIME=docker \
+    RESTORE_TEST_ENGINE_LOG="$test_dir/engine" PATH="$test_dir/bin:$PATH" \
+    /usr/bin/bash "$root/scripts/test-backup-restore-cleanup.sh" || test_status=$?
+[[ $test_status == 64 ]]
+grep -Fxq -- '--host=unix:///docker/runtime.sock' "$test_dir/engine"
+if grep -Fxq -- '--remote' "$test_dir/engine"; then
+    echo 'FAIL: Docker selection invoked Podman arguments.' >&2
+    exit 1
+fi
 echo 'Cleanup runtime selection and SDK discovery: PASS'

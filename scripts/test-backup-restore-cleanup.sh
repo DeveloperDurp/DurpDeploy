@@ -6,14 +6,14 @@ if [[ -n ${DURPDEPLOY_CONTAINER_URL:-} ]]; then
     export DOCKER_HOST=$DURPDEPLOY_CONTAINER_URL
 fi
 
+runtime=${DURPDEPLOY_CONTAINER_RUNTIME:-}
+case $runtime in
+    docker|podman) ;;
+    *) echo 'ERROR: set DURPDEPLOY_CONTAINER_RUNTIME to docker or podman.' >&2; exit 1 ;;
+esac
 work_dir=$(mktemp -d)
 runner_pid=
 unrelated=
-runtime=${DURPDEPLOY_CONTAINER_RUNTIME:-}
-if [[ -z $runtime ]]; then
-    runtime=docker
-    if command -v podman >/dev/null 2>&1; then runtime=podman; fi
-fi
 runtime_args=()
 engine() { "$runtime" "${runtime_args[@]}" "$@"; }
 cleanup() {

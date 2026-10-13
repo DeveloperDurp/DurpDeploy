@@ -116,10 +116,13 @@ above. Never reuse the old WAL or SHM with the restored database.
 Run the isolated recovery drill on Linux amd64:
 
 ```bash
-make backup-restore-test
+DURPDEPLOY_CONTAINER_RUNTIME=docker make backup-restore-test
 ```
 
 Start the selected Docker or Podman socket before the drill.
+If you use Podman, set `DURPDEPLOY_CONTAINER_RUNTIME=podman`.
+Always select the runtime explicitly.
+
 Use a test host without `/etc/durpdeploy/key`.
 The drill refuses that installed key to prevent access to operator secrets.
 The drill requires Go, npm, and a working container runtime.
