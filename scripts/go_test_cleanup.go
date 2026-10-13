@@ -88,40 +88,51 @@ func cleanupRecoveryRuntime(
 			".",
 			"-",
 		) + "-restore"
-		filters := make(client.Filters)
-		filters.Add("label", "io.durpdeploy.namespace="+namespace)
-		containers, err := api.ContainerList(ctx, client.ContainerListOptions{
-			All: true, Filters: filters,
-		})
-		if err != nil {
-			failures = append(failures, err)
-			continue
-		}
-		for _, resource := range containers.Items {
-			if resource.Labels["io.durpdeploy.namespace"] != namespace {
-				continue
-			}
-			if err := remove(ctx, api, resource.ID); err != nil {
-				failures = append(failures, err)
-			}
-		}
-		volumes, err := api.VolumeList(
-			ctx,
-			client.VolumeListOptions{Filters: filters},
+		failures = append(
+			failures,
+			cleanupRecoveryNamespace(ctx, api, namespace),
 		)
-		if err != nil {
-			failures = append(failures, err)
+	}
+	return errors.Join(failures...)
+}
+
+func cleanupRecoveryNamespace(
+	ctx context.Context,
+	api *testcontainers.DockerClient,
+	namespace string,
+) error {
+	filters := make(client.Filters)
+	filters.Add("label", "io.durpdeploy.namespace="+namespace)
+	containers, err := api.ContainerList(ctx, client.ContainerListOptions{
+		All: true, Filters: filters,
+	})
+	if err != nil {
+		return err
+	}
+	var failures []error
+	for _, resource := range containers.Items {
+		if resource.Labels["io.durpdeploy.namespace"] != namespace {
 			continue
 		}
-		for _, resource := range volumes.Items {
-			if resource.Labels["io.durpdeploy.namespace"] != namespace {
-				continue
-			}
-			_, err := api.VolumeRemove(ctx, resource.Name,
-				client.VolumeRemoveOptions{Force: true})
-			if err != nil && !errdefs.IsNotFound(err) {
-				failures = append(failures, err)
-			}
+		if err := remove(ctx, api, resource.ID); err != nil {
+			failures = append(failures, err)
+		}
+	}
+	volumes, err := api.VolumeList(
+		ctx,
+		client.VolumeListOptions{Filters: filters},
+	)
+	if err != nil {
+		return errors.Join(append(failures, err)...)
+	}
+	for _, resource := range volumes.Items {
+		if resource.Labels["io.durpdeploy.namespace"] != namespace {
+			continue
+		}
+		_, err := api.VolumeRemove(ctx, resource.Name,
+			client.VolumeRemoveOptions{Force: true})
+		if err != nil && !errdefs.IsNotFound(err) {
+			failures = append(failures, err)
 		}
 	}
 	return errors.Join(failures...)
