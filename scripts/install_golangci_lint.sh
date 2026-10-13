@@ -8,7 +8,7 @@ if [[ -x "$target" ]] && "$target" --version | grep -Fq "version $version "; the
   exit 0
 fi
 
-platform="$(go env GOOS)-$(go env GOARCH)"
+platform="$(go env GOHOSTOS)-$(go env GOHOSTARCH)"
 case "$version-$platform" in
   2.11.3-linux-amd64) digest=87bb8cddbcc825d5778b64e8a91b46c0526b247f4e2f2904dea74ec7450475d1 ;;
   2.11.3-linux-arm64) digest=ee3d95f301359e7d578e6d99c8ad5aeadbabc5a13009a30b2b0df11c8058afe9 ;;
