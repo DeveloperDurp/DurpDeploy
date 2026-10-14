@@ -156,10 +156,10 @@ func readTerraformGateReview(
 		if header.Name != path {
 			continue
 		}
-		if header.Typeflag != tar.TypeReg || header.Size > 1<<20 {
+		if header.Typeflag != tar.TypeReg {
 			return nil, artifact.ErrGateConfig
 		}
-		raw, err := io.ReadAll(io.LimitReader(reader, (1<<20)+1))
+		raw, err := io.ReadAll(reader)
 		if err != nil {
 			return nil, err
 		}

@@ -49,14 +49,10 @@ func (r *DeploymentRunner) captureArtifactGate(
 		return err
 	}
 	hash := sha256.New()
-	limited := &gateBoundedWriter{
-		target:    io.MultiWriter(file, hash),
-		remaining: artifact.MaxDownload,
-	}
 	checksum, review, copyErr := artifact.CopyGateBundle(
 		ctx,
 		stdout,
-		limited,
+		io.MultiWriter(file, hash),
 		step.ApprovalArtifactPath,
 		step.ApprovalReviewPath,
 		step.ApprovalReviewFormat,
@@ -64,9 +60,13 @@ func (r *DeploymentRunner) captureArtifactGate(
 	closeErr := stdout.Close()
 	waitErr := command.Wait()
 	if err := errors.Join(copyErr, closeErr, waitErr); err != nil {
-		return repository.ErrArtifactGate
+		return errors.Join(repository.ErrArtifactGate, err)
 	}
 	if _, err := file.Seek(0, 0); err != nil {
+		return err
+	}
+	info, err := file.Stat()
+	if err != nil {
 		return err
 	}
 	encoded, err := json.Marshal(review)
@@ -85,25 +85,11 @@ func (r *DeploymentRunner) captureArtifactGate(
 		BundleSha256: hex.EncodeToString(
 			hash.Sum(nil),
 		),
-		BundleSize: artifact.MaxDownload - limited.remaining,
+		BundleSize: info.Size(),
 		Review:     string(encoded),
 		CreatedAt:  now,
 		ExpiresAt:  now + 24*60*60,
 	}, file)
-}
-
-type gateBoundedWriter struct {
-	target    io.Writer
-	remaining int64
-}
-
-func (w *gateBoundedWriter) Write(data []byte) (int, error) {
-	if int64(len(data)) > w.remaining {
-		return 0, artifact.ErrInvalid
-	}
-	n, err := w.target.Write(data)
-	w.remaining -= int64(n)
-	return n, err
 }
 
 func (r *DeploymentRunner) restoreArtifactGate(

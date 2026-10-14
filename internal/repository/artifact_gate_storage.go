@@ -27,8 +27,7 @@ func (r *Repository) SaveArtifactGate(
 	gate db.CreateArtifactGateParams,
 	source io.ReadSeeker,
 ) (result error) {
-	if r.secrets == nil || gate.BundleSize <= 0 ||
-		gate.BundleSize > artifact.MaxDownload {
+	if r.secrets == nil || gate.BundleSize <= 0 {
 		return ErrArtifactGate
 	}
 	spool, err := artifact.OpenGateSpool()
@@ -54,6 +53,9 @@ func (r *Repository) SaveArtifactGate(
 		buffer := make([]byte, gateChunkSize)
 		remaining := gate.BundleSize
 		for index := int64(0); remaining > 0; index++ {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
 			n, err := io.ReadFull(
 				source,
 				buffer[:min(int64(len(buffer)), remaining)],
@@ -134,8 +136,7 @@ func (r *Repository) WriteArtifactGateBundle(
 	gate db.ArtifactGate,
 	target io.Writer,
 ) error {
-	if r.secrets == nil || gate.BundleSize <= 0 ||
-		gate.BundleSize > artifact.MaxDownload {
+	if r.secrets == nil || gate.BundleSize <= 0 {
 		return ErrArtifactGate
 	}
 	remaining := gate.BundleSize

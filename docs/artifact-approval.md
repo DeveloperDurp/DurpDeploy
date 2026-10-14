@@ -82,8 +82,13 @@ the references after terminal decisions. Explicit container removal can remove
 these references; image pruning alone preserves them.
 It encrypts the whole staging context in authenticated database chunks.
 Unlinked temporary descriptors are used during capture, restore, and download.
-The bundle is limited to 300 MiB; review JSON is limited to 1 MiB. Unsafe
-archive entries, missing files, and altered ciphertext or checksums fail closed.
+Approval bundles and review JSON have no application byte limits.
+Runtime staging capacity, scratch capacity, disk space, and memory still constrain execution.
+Unsafe archive entries, missing files, and altered ciphertext or checksums fail closed.
+If capture, publication, or cleanup fails, the generation step reports `failed`.
+Deployment logs include an `Artifact approval failed:` diagnostic.
+Read this diagnostic in the deployment page or `GET /api/v1/deployments/{id}/logs.txt`.
+Diagnostics do not include review contents or archive entry names.
 
 An administrator reviews and approves the exact revision and SHA-256 in the
 deployment page or API once `decision_ready` is true. A saved gate can have
