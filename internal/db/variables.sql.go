@@ -13,8 +13,8 @@ import (
 const countVariablesByProject = `-- name: CountVariablesByProject :one
 SELECT COUNT(*) FROM variables
 WHERE project_id = ?1
-  AND (CAST(?2 AS INTEGER) IS NULL OR environment_id = ?2)
-  AND (CAST(?3 AS INTEGER) IS NULL OR secret = ?3)
+  AND (CAST(?2 AS BIGINT) IS NULL OR environment_id = ?2)
+  AND (CAST(?3 AS BIGINT) IS NULL OR secret = ?3)
 `
 
 type CountVariablesByProjectParams struct {
@@ -182,8 +182,8 @@ func (q *Queries) ListVariablesByProject(ctx context.Context, projectID int64) (
 const listVariablesByProjectPaginated = `-- name: ListVariablesByProjectPaginated :many
 SELECT id, project_id, name, value, environment_id, created_at, secret FROM variables
 WHERE project_id = ?1
-  AND (CAST(?2 AS INTEGER) IS NULL OR environment_id = ?2)
-  AND (CAST(?3 AS INTEGER) IS NULL OR secret = ?3)
+  AND (CAST(?2 AS BIGINT) IS NULL OR environment_id = ?2)
+  AND (CAST(?3 AS BIGINT) IS NULL OR secret = ?3)
 ORDER BY created_at DESC
 LIMIT ?5 OFFSET ?4
 `

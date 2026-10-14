@@ -4,16 +4,16 @@ SELECT * FROM variables WHERE project_id = ? ORDER BY created_at DESC;
 -- name: ListVariablesByProjectPaginated :many
 SELECT * FROM variables
 WHERE project_id = sqlc.arg(project_id)
-  AND (CAST(sqlc.narg('f_environment_id') AS INTEGER) IS NULL OR environment_id = sqlc.narg('f_environment_id'))
-  AND (CAST(sqlc.narg('f_secret_only') AS INTEGER) IS NULL OR secret = sqlc.narg('f_secret_only'))
+  AND (CAST(sqlc.narg('f_environment_id') AS BIGINT) IS NULL OR environment_id = sqlc.narg('f_environment_id'))
+  AND (CAST(sqlc.narg('f_secret_only') AS BIGINT) IS NULL OR secret = sqlc.narg('f_secret_only'))
 ORDER BY created_at DESC
 LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
 
 -- name: CountVariablesByProject :one
 SELECT COUNT(*) FROM variables
 WHERE project_id = sqlc.arg(project_id)
-  AND (CAST(sqlc.narg('f_environment_id') AS INTEGER) IS NULL OR environment_id = sqlc.narg('f_environment_id'))
-  AND (CAST(sqlc.narg('f_secret_only') AS INTEGER) IS NULL OR secret = sqlc.narg('f_secret_only'));
+  AND (CAST(sqlc.narg('f_environment_id') AS BIGINT) IS NULL OR environment_id = sqlc.narg('f_environment_id'))
+  AND (CAST(sqlc.narg('f_secret_only') AS BIGINT) IS NULL OR secret = sqlc.narg('f_secret_only'));
 
 -- name: GetVariable :one
 SELECT * FROM variables WHERE id = ?;

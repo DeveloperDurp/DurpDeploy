@@ -17,6 +17,7 @@ func TestBackupRestoreAPIWebE2E(t *testing.T) {
 	process := f.start(t)
 	f.login(t)
 	f.seed(t)
+	f.assertLargeEnvironmentFilter(t)
 	f.api.api(t, "GET", f.api.base()+"/variables", nil, 200)
 	before := f.deploy(t)
 	f.assertDelivery(t, before.ID)
