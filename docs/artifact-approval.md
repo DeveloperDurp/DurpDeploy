@@ -85,6 +85,7 @@ Unlinked temporary descriptors are used during capture, restore, and download.
 Approval bundles and review JSON have no application byte limits.
 Runtime staging capacity, scratch capacity, disk space, and memory still constrain execution.
 Unsafe archive entries, missing files, and altered ciphertext or checksums fail closed.
+Sparse staging files are rejected before export because tar can expand holes beyond the allocated staging space.
 If capture, publication, or cleanup fails, the generation step reports `failed`.
 Deployment logs include an `Artifact approval failed:` diagnostic.
 Read this diagnostic in the deployment page or `GET /api/v1/deployments/{id}/logs.txt`.

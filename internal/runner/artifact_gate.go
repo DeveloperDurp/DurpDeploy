@@ -22,6 +22,9 @@ func (r *DeploymentRunner) captureArtifactGate(
 	step deploymentStep,
 	stage artifactStage,
 ) (result error) {
+	if err := r.validateArtifactGateExport(ctx, stage.keeper); err != nil {
+		return err
+	}
 	file, err := artifact.OpenGateSpool()
 	if err != nil {
 		return err

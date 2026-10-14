@@ -707,6 +707,7 @@ Only local deployment steps without retries are
 supported; runbooks and agent steps cannot use gates. Both approval paths and
 an explicit review format are required together; an empty format is rejected.
 Approval bundles and review JSON have no application byte limits.
+Sparse staging files are rejected before export.
 Runtime staging capacity, scratch capacity, disk space, and memory still constrain execution.
 If approval publication fails, the generation step reports `failed`.
 Read the `Artifact approval failed:` diagnostic in `GET /api/v1/deployments/{id}/logs.txt`.

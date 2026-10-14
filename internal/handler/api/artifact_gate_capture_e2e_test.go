@@ -22,14 +22,21 @@ dd if=/dev/zero of="$DURPDEPLOY_STAGE_DIR/review" bs=1048576 count=2`},
 		{"linked-context", `printf plan > "$DURPDEPLOY_STAGE_DIR/plan"
 printf '{"create":1}' > "$DURPDEPLOY_STAGE_DIR/review"
 ln -s /tmp/private-review-content "$DURPDEPLOY_STAGE_DIR/private-review-content"`},
+		{"sparse-context", `printf plan > "$DURPDEPLOY_STAGE_DIR/plan"
+printf '{"create":1}' > "$DURPDEPLOY_STAGE_DIR/review"
+truncate -s 1048576 "$DURPDEPLOY_STAGE_DIR/private-review-content"`},
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
-			artifactGateCaptureFailure(t, scenario.script)
+			logs := artifactGateCaptureFailure(t, scenario.script)
+			if scenario.name == "sparse-context" &&
+				!strings.Contains(logs, "sparse files") {
+				t.Fatal("sparse context did not report export rejection")
+			}
 		})
 	}
 }
 
-func artifactGateCaptureFailure(t *testing.T, script string) {
+func artifactGateCaptureFailure(t *testing.T, script string) string {
 	t.Helper()
 	// Given: successful generation with an invalid approval context.
 	f := newArtifactE2E(t)
@@ -69,4 +76,5 @@ func artifactGateCaptureFailure(t *testing.T, script string) {
 			logs,
 		)
 	}
+	return logs
 }
