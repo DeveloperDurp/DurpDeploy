@@ -6952,6 +6952,12 @@
               "$ref": "#/definitions/BadRequestError"
             }
           },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
+            }
+          },
           "409": {
             "description": "Conflict error response.",
             "schema": {

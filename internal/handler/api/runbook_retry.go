@@ -16,6 +16,7 @@ import (
 // 400: body:BadRequestError
 // 413: body:RequestEntityTooLargeError
 // 201: body:RunbookExecution
+// 404: body:NotFoundError
 // 409: body:ConflictError
 func (h *RunbookHandler) Retry(w http.ResponseWriter, r *http.Request) {
 	execution, ok := h.execution(w, r)

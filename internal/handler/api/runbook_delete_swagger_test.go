@@ -55,4 +55,8 @@ func TestSwagger_RunbookDeletionContract(t *testing.T) {
 	if _, ok := spec.Security[0]["bearer"]; !ok {
 		t.Fatalf("missing bearer auth: %+v", spec.Security)
 	}
+	retry := spec.Paths["/projects/{id}/runbook-executions/{executionId}/retry"]["post"]
+	if _, ok := retry.Responses["404"]; !ok {
+		t.Fatal("retry omits the deleted runbook response")
+	}
 }
