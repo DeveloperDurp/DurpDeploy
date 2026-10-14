@@ -5,12 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"net/url"
+	"log/slog"
 	"strings"
 
 	"github.com/pressly/goose/v3"
 	_ "modernc.org/sqlite"
 
+	"durpdeploy/internal/dbconfig"
 	"durpdeploy/internal/mssqldriver"
 	_ "durpdeploy/internal/pgdriver"
 	"durpdeploy/migrations"
@@ -20,6 +21,17 @@ import (
 // DSN uses internal/mssqldriver with the embedded native SQL Server migrations.
 // PostgreSQL DSNs use internal/pgdriver, and all other DSNs are SQLite paths.
 func Run(dsn string) (*sql.DB, error) {
+	security, err := dbconfig.InspectConnectionSecurity(dsn)
+	if err != nil {
+		return nil, err
+	}
+	if security.Warning != "" {
+		slog.Warn("database transport security warning",
+			"backend", security.Backend,
+			"policy", security.Policy,
+			"warning", security.Warning,
+		)
+	}
 	if isSQLServer(dsn) {
 		config, err := migrationConfig(dsn)
 		if err != nil {
@@ -73,43 +85,15 @@ func migrationConfig(dsn string) (migrationSettings, error) {
 }
 
 func isSQLServer(dsn string) bool {
-	return strings.HasPrefix(
-		strings.ToLower(strings.TrimSpace(dsn)),
-		"sqlserver://",
-	)
+	return dbconfig.IsSQLServer(dsn)
 }
 
 func dsnWithSecureDefaults(dsn string) string {
-	parsedDSN := strings.TrimSpace(dsn)
-	u, err := url.Parse(parsedDSN)
-	if err != nil {
-		return parsedDSN
-	}
-	q := u.Query()
-	if !hasQueryOption(q, "encrypt") {
-		q.Set("encrypt", "true")
-	}
-	if !hasQueryOption(q, "trustservercertificate") {
-		q.Set("trustservercertificate", "false")
-	}
-	u.RawQuery = q.Encode()
-	return u.String()
-}
-
-func hasQueryOption(values url.Values, key string) bool {
-	for existing := range values {
-		if strings.EqualFold(existing, key) {
-			return true
-		}
-	}
-	return false
+	return dbconfig.SQLServerDSN(dsn)
 }
 
 func isPostgres(dsn string) bool {
-	return strings.HasPrefix(dsn, "postgres://") ||
-		strings.HasPrefix(dsn, "postgresql://") ||
-		strings.Contains(dsn, "host=") ||
-		strings.Contains(dsn, "user=")
+	return dbconfig.IsPostgres(dsn)
 }
 
 func runMigrations(

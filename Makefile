@@ -334,6 +334,10 @@ test: templ-generate swagger-ui-copy
 	bash scripts/go_test.sh -v -count=1 -timeout=20m ./...
 
 .PHONY: backup-restore-test backup-restore-script-test
+.PHONY: database-tls-test
+database-tls-test:
+	bash scripts/test-database-tls.sh
+
 backup-restore-test:
 	bash scripts/test-backup-restore.sh
 

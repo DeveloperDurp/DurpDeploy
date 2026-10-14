@@ -929,6 +929,53 @@
         ]
       }
     },
+    "/admin/database-security": {
+      "get": {
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "http",
+          "https"
+        ],
+        "tags": [
+          "admin"
+        ],
+        "summary": "Get configured database transport security and warnings.",
+        "operationId": "databaseSecurity",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/DatabaseSecurityResponse"
+            }
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "500": {
+            "description": "Server error response.",
+            "schema": {
+              "$ref": "#/definitions/ServerError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/admin/db-tables": {
       "get": {
         "produces": [
@@ -10063,6 +10110,25 @@
         }
       },
       "x-go-name": "swaggerCreateTokenResponse",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "DatabaseSecurityResponse": {
+      "type": "object",
+      "properties": {
+        "backend": {
+          "type": "string",
+          "x-go-name": "Backend"
+        },
+        "policy": {
+          "type": "string",
+          "x-go-name": "Policy"
+        },
+        "warning": {
+          "type": "string",
+          "x-go-name": "Warning"
+        }
+      },
+      "x-go-name": "swaggerDatabaseSecurityResponse",
       "x-go-package": "durpdeploy/internal/handler/api"
     },
     "DbTableListResponse": {

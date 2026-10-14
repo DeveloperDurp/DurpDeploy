@@ -586,6 +586,10 @@ func newRouter(
 		// Admin-only sub-group.
 		ar.Group(func(aar chi.Router) {
 			aar.Use(auth.RequireRole("admin"))
+			databaseSecurityH := api.NewDatabaseSecurityHandler(
+				os.Getenv("DURPDEPLOY_DB"),
+			)
+			aar.Get("/admin/database-security", databaseSecurityH.Get)
 			agentsH := api.NewAgentHandler(repo, pairing)
 			aar.Get("/admin/agents", agentsH.ListAgents)
 			aar.Post("/admin/agents/pair", agentsH.PairAgent)

@@ -153,6 +153,7 @@ externalPostgres:
   # a managed Postgres with a public CA, use `verify-full` and set
   # PGSSLROOTCERT via extraEnv with the mounted CA certificate path.
   # Use dsnSecret for a complete DSN with additional connection settings.
+  # The app warns when plaintext or incomplete server verification is allowed.
   sslmode: require
 
 # --- OIDC SSO --------------------------------------------------------------

@@ -72,6 +72,13 @@ Keep credentials out of committed values files.
 Existing `extraEnv` overrides for `DURPDEPLOY_DB` remain supported.
 Use `dsnSecret` for new configurations to avoid duplicate environment entries.
 
+The default `externalPostgres.sslmode: require` encrypts connections without verifying the server identity.
+The application produces a startup warning for this policy.
+Use `verify-full` with a trusted CA for certificate and hostname verification.
+Set `PGSSLROOTCERT` through `extraEnv` to the mounted CA certificate path.
+Explicit unverified TLS and plaintext policies remain supported with warnings.
+See [database TLS settings](../../docs/deploy.md#database-tls-and-permitted-exceptions) for connection options and administrator API checks.
+
 | ✓ Renders                                       | ✗ Does not                                       |
 |-------------------------------------------------|--------------------------------------------------|
 | Deployment (single replica, non-root, RO root)  | A Postgres server (bring your own)               |
