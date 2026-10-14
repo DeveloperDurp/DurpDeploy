@@ -118,6 +118,8 @@ func blockViewerWrite(w http.ResponseWriter, r *http.Request) {
 		}
 		data, _ := json.Marshal(event)
 		w.Header().Set("HX-Trigger", string(data))
+		w.Header().Set("HX-Reswap", "none")
+		w.Header().Set("HX-Push-Url", "false")
 		w.WriteHeader(http.StatusOK)
 		return
 	}
@@ -168,6 +170,8 @@ func RenderUnauthorized(w http.ResponseWriter, r *http.Request) {
 		}
 		data, _ := json.Marshal(event)
 		w.Header().Set("HX-Trigger", string(data))
+		w.Header().Set("HX-Reswap", "none")
+		w.Header().Set("HX-Push-Url", "false")
 		w.WriteHeader(http.StatusOK)
 		return
 	}
