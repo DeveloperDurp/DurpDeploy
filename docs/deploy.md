@@ -233,8 +233,8 @@ MSSQL migrations and uses the same generated query API.
 # SQLite (default)
 export DURPDEPLOY_DB=/var/lib/durpdeploy/durpdeploy.db
 
-# PostgreSQL
-export DURPDEPLOY_DB="postgres://durpdeploy:<password>@localhost:5432/durpdeploy?sslmode=disable"
+# PostgreSQL (verify the certificate and hostname)
+export DURPDEPLOY_DB="postgres://durpdeploy:<password>@postgres.example.com:5432/durpdeploy?sslmode=verify-full&sslrootcert=/etc/durpdeploy/db-ca.pem"
 
 # SQL Server (TLS is necessary by default; use a certificate trusted by the host)
 export DURPDEPLOY_DB="sqlserver://durpdeploy:<password>@sqlserver.example.com:1433?database=durpdeploy"
@@ -243,6 +243,49 @@ export DURPDEPLOY_DB="sqlserver://durpdeploy:<password>@sqlserver.example.com:14
 Migrations run automatically on startup against whichever database
 `DURPDEPLOY_DB` points at. There is no dump/import path between database
 engines — pick one per environment.
+
+### Database TLS and permitted exceptions
+
+Use verified TLS for network database connections.
+Mount the trusted CA certificate inside the application container when necessary.
+Use `sslmode=verify-full` with `sslrootcert` for PostgreSQL.
+For SQL Server, keep `encrypt=true` and `trustservercertificate=false`.
+Use `certificate=/etc/durpdeploy/db-ca.pem` when SQL Server needs a private CA.
+The certificate must match the configured database hostname.
+Verified mode rejects invalid certificates without retrying with weaker TLS settings.
+
+Operators can explicitly allow these exceptions:
+
+| Database | Connection options | Result |
+| --- | --- | --- |
+| PostgreSQL | `sslmode=require` without a CA | TLS without server certificate verification. |
+| PostgreSQL | `sslmode=verify-ca&sslrootcert=/path/to/ca.pem` | Certificate authority verification without hostname verification. |
+| PostgreSQL | `sslmode=disable` | Unencrypted network connection. |
+| PostgreSQL | `sslmode=prefer` or `sslmode=allow` | Connection policy permits plaintext fallback. |
+| SQL Server | `encrypt=true&trustservercertificate=true` | TLS without server certificate verification. |
+| SQL Server | `encrypt=true&servercertificate=/path/to/server.pem` | Exact certificate pinning without hostname, expiration, or certificate authority checks. |
+| SQL Server | `encrypt=false&trustservercertificate=true` | Policy permits unencrypted application data. Login traffic can still use TLS. |
+| SQL Server | `encrypt=disable` | Client encryption is disabled. Server policy can reject the connection. |
+
+The application logs a startup warning when the configured network policy permits plaintext or incomplete server verification.
+Explicit exceptions remain supported.
+Existing defaults remain unchanged.
+PostgreSQL defaults to `prefer` when the driver receives no overriding SSL configuration.
+The Helm chart uses `require` by default and produces a warning without server verification.
+SQL Server defaults to verified TLS.
+SQLite and PostgreSQL Unix sockets use local transport and produce no TLS warning.
+
+Administrators can inspect the configured policy through `GET /api/v1/admin/database-security` with a bearer token.
+The response contains `backend`, `policy`, and an optional `warning`.
+It omits connection strings, database addresses, certificate paths, and credentials.
+The response describes startup configuration, not the encryption of every live pooled connection.
+Optional policies can establish TLS when the server requires encryption.
+
+Database TLS checks run during pull requests for PostgreSQL 16 and SQL Server 2022.
+They verify trusted TLS, certificate rejection, supported exceptions, startup warnings, and authenticated API access.
+Run `DURPDEPLOY_TLS_BACKEND=postgres make database-tls-test` or `DURPDEPLOY_TLS_BACKEND=mssql make database-tls-test` on Linux.
+SQL Server checks require amd64.
+The tests use disposable databases with loopback-only ports and remove their owned containers.
 
 Back up and restore the database together with the server secret key. MFA
 records, browser sessions, recovery-code hashes, and encrypted TOTP material
