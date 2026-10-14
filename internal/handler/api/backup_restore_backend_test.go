@@ -5,10 +5,12 @@ package api_test
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/mssqldriver"
 )
 
 type restoreBackend string
@@ -16,6 +18,7 @@ type restoreBackend string
 const (
 	restoreSQLiteBackend   restoreBackend = "sqlite"
 	restorePostgresBackend restoreBackend = "postgres"
+	restoreMSSQLBackend    restoreBackend = "mssql"
 )
 
 func selectedRestoreBackend(t *testing.T) restoreBackend {
@@ -25,10 +28,10 @@ func selectedRestoreBackend(t *testing.T) restoreBackend {
 		return restoreSQLiteBackend
 	}
 	switch backend := restoreBackend(value); backend {
-	case restoreSQLiteBackend, restorePostgresBackend:
+	case restoreSQLiteBackend, restorePostgresBackend, restoreMSSQLBackend:
 		return backend
 	default:
-		t.Fatal("set DURPDEPLOY_RESTORE_BACKEND to sqlite or postgres")
+		t.Fatal("set DURPDEPLOY_RESTORE_BACKEND to sqlite, postgres, or mssql")
 		return ""
 	}
 }
@@ -41,6 +44,17 @@ type restoreBackup interface {
 
 func (f *restoreFixture) backup(t *testing.T) restoreBackup {
 	t.Helper()
+	key, err := os.ReadFile(f.key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(f.root, "backup", "key"),
+		key,
+		0600,
+	); err != nil {
+		t.Fatal(err)
+	}
 	switch f.backend {
 	case restoreSQLiteBackend:
 		missing := f.litestreamContainer(t, "restore", "-o",
@@ -51,6 +65,8 @@ func (f *restoreFixture) backup(t *testing.T) restoreBackup {
 		return f.replicate(t)
 	case restorePostgresBackend:
 		return &restorePostgresBackup{fixture: f}
+	case restoreMSSQLBackend:
+		return &restoreMSSQLBackup{fixture: f}
 	default:
 		t.Fatal("unsupported recovery backend")
 		return nil
@@ -59,7 +75,21 @@ func (f *restoreFixture) backup(t *testing.T) restoreBackup {
 
 func (f *restoreFixture) assertNativeRestored(t *testing.T, id int64) {
 	t.Helper()
-	conn := restoreOpen(t, "pgx-qmark", f.dsn)
+	var driver, constraints string
+	switch f.backend {
+	case restorePostgresBackend:
+		driver = "pgx-qmark"
+		constraints = "SELECT COUNT(*) FROM pg_constraint WHERE contype = 'f' AND convalidated " +
+			"AND connamespace = 'public'::regnamespace"
+	case restoreMSSQLBackend:
+		driver = mssqldriver.DriverName
+		constraints = "SELECT COUNT(*) FROM sys.foreign_keys WHERE is_disabled = 0 AND is_not_trusted = 0"
+	case restoreSQLiteBackend:
+		t.Fatal("SQLite uses its replica integrity check")
+	default:
+		t.Fatal("unsupported recovery backend")
+	}
+	conn := restoreOpen(t, driver, f.dsn)
 	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
 	defer cancel()
 	for _, table := range []string{"goose_db_version", "users", "releases",
@@ -82,6 +112,11 @@ func (f *restoreFixture) assertNativeRestored(t *testing.T, id int64) {
 		db.ListVariablesByProjectPaginatedParams{ProjectID: f.api.project.ID,
 			PageLimit: 20}); err != nil {
 		t.Fatalf("read restored variables as application role: %v", err)
+	}
+	if err := conn.QueryRowContext(ctx, constraints).
+		Scan(&count); err != nil ||
+		count == 0 {
+		t.Fatalf("restore lost validated foreign-key constraints: %v", err)
 	}
 	if err := conn.Close(); err != nil {
 		t.Fatal(err)

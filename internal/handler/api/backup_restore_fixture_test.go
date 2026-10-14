@@ -3,6 +3,7 @@
 package api_test
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"net"
@@ -91,6 +92,9 @@ func newRestoreFixture(t *testing.T) *restoreFixture {
 	case restorePostgresBackend:
 		f.native = restorePostgres(t)
 		f.dsn = f.native.appDSN
+	case restoreMSSQLBackend:
+		f.native = restoreMSSQL(t, true)
+		f.dsn = f.native.appDSN
 	default:
 		t.Fatal("unsupported recovery backend")
 	}
@@ -124,7 +128,9 @@ func newRestoreFixture(t *testing.T) *restoreFixture {
 	}}
 	f.smtp = restoreSMTPFixture(t)
 	f.binary = filepath.Join(f.root, "durpdeploy")
-	command := exec.CommandContext(t.Context(), "go", "build", "-race",
+	buildCtx, cancel := context.WithTimeout(t.Context(), 2*time.Minute)
+	defer cancel()
+	command := exec.CommandContext(buildCtx, "go", "build", "-race",
 		"-o", f.binary, "../../../cmd/server")
 	if output, err := command.CombinedOutput(); err != nil {
 		t.Fatalf("build recovery server: %v\n%s", err, output)

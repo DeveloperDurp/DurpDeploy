@@ -14,8 +14,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/moby/moby/api/types/container"
-	"github.com/moby/moby/api/types/network"
 	"github.com/testcontainers/testcontainers-go"
 	tcexec "github.com/testcontainers/testcontainers-go/exec"
 )
@@ -25,11 +23,25 @@ type restoreNativeDB struct {
 	adminDSN, appDSN, password string
 }
 
-func restoreLoopback(config *container.HostConfig) {
-	for port := range config.PortBindings {
-		config.PortBindings[port] = []network.PortBinding{{
-			HostIP: netip.MustParseAddr("127.0.0.1"),
-		}}
+func restorePrivatePort(t *testing.T, c testcontainers.Container) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
+	defer cancel()
+	info, err := c.Inspect(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	count := 0
+	for _, bindings := range info.NetworkSettings.Ports {
+		for _, binding := range bindings {
+			if binding.HostIP != netip.MustParseAddr("127.0.0.1") {
+				t.Fatal("recovery database port is not private")
+			}
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatal("expected one private database port")
 	}
 }
 
@@ -92,12 +104,12 @@ func restoreSQL(t *testing.T, conn *sql.DB, statement string) {
 	}
 }
 
-func restoreExec(t *testing.T, c testcontainers.Container, args []string,
+func (db *restoreNativeDB) command(t *testing.T, args []string,
 	options ...tcexec.ProcessOption) int {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
 	defer cancel()
-	code, reader, err := c.Exec(ctx, args, options...)
+	code, reader, err := db.container.Exec(ctx, args, options...)
 	if err != nil {
 		t.Fatal(err)
 	}

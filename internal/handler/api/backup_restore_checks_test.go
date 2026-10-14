@@ -39,7 +39,7 @@ func (f *restoreFixture) assertRestored(
 				t.Fatal("restored secret response lost masking")
 			}
 		case "RESTORE_PUBLIC":
-			if variable.Value != "retained-public-value" {
+			if variable.Value != restorePublicValue {
 				t.Fatal("restore changed the public variable")
 			}
 		default:

@@ -6,12 +6,15 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
+	"net/netip"
 	"net/url"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"durpdeploy/internal/testutil"
+	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/network"
 	"github.com/testcontainers/testcontainers-go"
 	tcexec "github.com/testcontainers/testcontainers-go/exec"
 	"github.com/testcontainers/testcontainers-go/wait"
@@ -33,7 +36,13 @@ func restorePostgres(t *testing.T) *restoreNativeDB {
 				Env: map[string]string{
 					"POSTGRES_PASSWORD": password,
 				},
-				HostConfigModifier: restoreLoopback,
+				HostConfigModifier: func(config *container.HostConfig) {
+					config.PortBindings = network.PortMap{
+						network.MustParsePort("5432/tcp"): {
+							{HostIP: netip.MustParseAddr("127.0.0.1")},
+						},
+					}
+				},
 				WaitingFor: wait.ForLog("database system is ready to accept connections").
 					WithOccurrence(2).
 					WithStartupTimeout(2 * time.Minute),
@@ -43,6 +52,7 @@ func restorePostgres(t *testing.T) *restoreNativeDB {
 	if err != nil {
 		t.Fatalf("start recovery PostgreSQL: %v", err)
 	}
+	restorePrivatePort(t, c)
 	dsn := (&url.URL{Scheme: "postgres", User: url.UserPassword("postgres", password),
 		Host: restoreEndpoint(t, c, "5432/tcp"), Path: "/postgres",
 		RawQuery: "sslmode=disable"}).String()
@@ -71,9 +81,8 @@ func (b *restorePostgresBackup) awaitFresh(t *testing.T, id int64) {
 	t.Helper()
 	b.watermark = id
 	db := b.fixture.native
-	if code := restoreExec(
+	if code := db.command(
 		t,
-		db.container,
 		[]string{
 			"pg_dump",
 			"-h",
@@ -134,9 +143,8 @@ func restorePostgresArchive(
 	path string,
 ) int {
 	t.Helper()
-	return restoreExec(
+	return db.command(
 		t,
-		db.container,
 		[]string{"pg_restore", "-h", "127.0.0.1",
 			"-U", "restore_app", "-d", "restore_app", "--single-transaction",
 			"--exit-on-error", "--no-owner", "--no-acl", path},
