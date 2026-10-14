@@ -598,7 +598,7 @@ func (q *Queries) HasUnconfirmedRunbookRemoteOutcome(ctx context.Context, source
 const listDueRunbookSchedules = `-- name: ListDueRunbookSchedules :many
 SELECT id, runbook_id, version_id, environment_id, cron, next_run_at, enabled, last_fired_at, created_at, last_error FROM runbook_schedules WHERE enabled = 1 AND next_run_at <= ?
 AND EXISTS (SELECT 1 FROM runbooks b WHERE b.id = runbook_id AND b.deleted_at IS NULL)
-ORDER BY next_run_at, id
+ORDER BY next_run_at ASC, id ASC
 `
 
 func (q *Queries) ListDueRunbookSchedules(ctx context.Context, nextRunAt int64) ([]RunbookSchedule, error) {

@@ -46,24 +46,11 @@ func TestRunbookDeletionPermissionsAPIWebE2E(t *testing.T) {
 	var writerID int64
 	var writerToken string
 	for _, role := range []string{"viewer", "deployer"} {
-		user := seedAPIUser(t, f.h.repo, role+"-delete@example.test", role)
-		_, token := seedAPIToken(t, f.h.repo, user.ID)
-		session, csrf, err := auth.NewSessionToken()
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err := f.h.repo.Queries.CreateSession(t.Context(), db.CreateSessionParams{
-			ID: session, UserID: user.ID, CsrfToken: csrf,
-			ExpiresAt: time.Now().Add(time.Hour).Unix(),
-		}); err != nil {
-			t.Fatal(err)
-		}
-		member := *f
-		member.token, member.session, member.csrf = token, session, csrf
+		member, userID := newDeletionMember(t, f, role)
 		// When: unauthorized users attempt deletion at each HTTP boundary.
 		if role == "viewer" {
 			if err := f.h.repo.Queries.AddProjectMember(t.Context(), db.AddProjectMemberParams{
-				ProjectID: f.project.ID, UserID: user.ID, Role: "deployer",
+				ProjectID: f.project.ID, UserID: userID, Role: "deployer",
 			}); err != nil {
 				t.Fatal(err)
 			}
@@ -74,7 +61,7 @@ func TestRunbookDeletionPermissionsAPIWebE2E(t *testing.T) {
 				t.Fatal("viewer sees deletion action")
 			}
 		} else {
-			writerID, writerToken = user.ID, token
+			writerID, writerToken = userID, member.token
 			member.api(t, "DELETE", path, nil, http.StatusNotFound)
 			member.web(t, "POST", webPath+"/delete", nil, http.StatusNotFound)
 		}
@@ -89,27 +76,7 @@ func TestRunbookDeletionPermissionsAPIWebE2E(t *testing.T) {
 		map[string]string{"name": "forged"},
 		http.StatusBadRequest,
 	)
-	request, err := http.NewRequestWithContext(
-		t.Context(),
-		"POST",
-		f.baseURL+webPath+"/delete",
-		nil,
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	request.AddCookie(&http.Cookie{Name: "session", Value: f.session})
-	response, err := f.client.Do(request)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusForbidden {
-		t.Fatalf("missing CSRF status=%d", response.StatusCode)
-	}
-	if _, err := io.Copy(io.Discard, response.Body); err != nil {
-		t.Fatal(err)
-	}
+	assertDeletionMissingCSRF(t, f, webPath)
 	// Then: no unauthorized operation changes the runbook or records deletion.
 	f.api(t, "GET", path, nil, http.StatusOK)
 	var count int
@@ -126,4 +93,49 @@ func TestRunbookDeletionPermissionsAPIWebE2E(t *testing.T) {
 	writer := *f
 	writer.token = writerToken
 	writer.api(t, "DELETE", path, nil, http.StatusNoContent)
+}
+
+func newDeletionMember(
+	t *testing.T, f *artifactE2E, role string,
+) (artifactE2E, int64) {
+	t.Helper()
+	user := seedAPIUser(t, f.h.repo, role+"-delete@example.test", role)
+	_, token := seedAPIToken(t, f.h.repo, user.ID)
+	session, csrf, err := auth.NewSessionToken()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.h.repo.Queries.CreateSession(t.Context(), db.CreateSessionParams{
+		ID: session, UserID: user.ID, CsrfToken: csrf,
+		ExpiresAt: time.Now().Add(time.Hour).Unix(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	member := *f
+	member.token, member.session, member.csrf = token, session, csrf
+	return member, user.ID
+}
+
+func assertDeletionMissingCSRF(
+	t *testing.T, f *artifactE2E, webPath string,
+) {
+	t.Helper()
+	request, err := http.NewRequestWithContext(
+		t.Context(), "POST", f.baseURL+webPath+"/delete", nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.AddCookie(&http.Cookie{Name: "session", Value: f.session})
+	response, err := f.client.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusForbidden {
+		t.Fatalf("missing CSRF status=%d", response.StatusCode)
+	}
+	if _, err := io.Copy(io.Discard, response.Body); err != nil {
+		t.Fatal(err)
+	}
 }

@@ -94,7 +94,7 @@ SELECT * FROM runbook_schedules WHERE runbook_id = ? ORDER BY id DESC;
 -- name: ListDueRunbookSchedules :many
 SELECT * FROM runbook_schedules WHERE enabled = 1 AND next_run_at <= ?
 AND EXISTS (SELECT 1 FROM runbooks b WHERE b.id = runbook_id AND b.deleted_at IS NULL)
-ORDER BY next_run_at, id;
+ORDER BY next_run_at ASC, id ASC;
 
 -- name: AdvanceRunbookSchedule :execrows
 UPDATE runbook_schedules SET next_run_at = ?, last_fired_at = ?

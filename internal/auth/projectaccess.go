@@ -67,54 +67,64 @@ func requireProjectAccess(
 ) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			user := UserFromContext(r.Context())
-			if user == nil {
-				http.Error(w, "Unauthorized", http.StatusUnauthorized)
-				return
-			}
-
-			// Defensive: the route pattern is /projects/{id}, so chi
-			// should always populate this. 400 keeps the contract honest
-			// if a route is misconfigured.
-			idStr := chi.URLParam(r, "id")
-			projectID, err := strconv.ParseInt(idStr, 10, 64)
-			if err != nil || projectID <= 0 {
-				http.Error(w, "Invalid project id", http.StatusBadRequest)
-				return
-			}
-
-			// Global admin bypasses the membership check, but the
-			// project id is still injected into the context so handlers
-			// can uniformly use ProjectIDFromContext instead of re-parsing.
-			if user.Role != "admin" {
-				// 404 (not 403) on a missing project hides the project's
-				// existence from non-members.
-				if _, err := repo.Queries.GetProject(
-					r.Context(),
-					projectID,
-				); err != nil {
-					http.NotFound(w, r)
-					return
-				}
-
-				if !checkProjectMembershipStatus(
-					w,
-					r,
-					repo,
-					db.IsProjectMemberParams{
-						UserID:    user.ID,
-						ProjectID: projectID,
-					},
-					deniedStatus,
-				) {
-					return
-				}
-			}
-
-			ctx := context.WithValue(r.Context(), ProjectAccessKey{}, projectID)
-			next.ServeHTTP(w, r.WithContext(ctx))
+			serveProjectAccess(w, r, next, repo, deniedStatus)
 		})
 	}
+}
+
+func serveProjectAccess(
+	w http.ResponseWriter,
+	r *http.Request,
+	next http.Handler,
+	repo *repository.Repository,
+	deniedStatus int,
+) {
+	user := UserFromContext(r.Context())
+	if user == nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	// Defensive: the route pattern is /projects/{id}, so chi
+	// should always populate this. 400 keeps the contract honest
+	// if a route is misconfigured.
+	idStr := chi.URLParam(r, "id")
+	projectID, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil || projectID <= 0 {
+		http.Error(w, "Invalid project id", http.StatusBadRequest)
+		return
+	}
+
+	// Global admin bypasses the membership check, but the
+	// project id is still injected into the context so handlers
+	// can uniformly use ProjectIDFromContext instead of re-parsing.
+	if user.Role != "admin" {
+		// 404 (not 403) on a missing project hides the project's
+		// existence from non-members.
+		if _, err := repo.Queries.GetProject(
+			r.Context(),
+			projectID,
+		); err != nil {
+			http.NotFound(w, r)
+			return
+		}
+
+		if !checkProjectMembershipStatus(
+			w,
+			r,
+			repo,
+			db.IsProjectMemberParams{
+				UserID:    user.ID,
+				ProjectID: projectID,
+			},
+			deniedStatus,
+		) {
+			return
+		}
+	}
+
+	ctx := context.WithValue(r.Context(), ProjectAccessKey{}, projectID)
+	next.ServeHTTP(w, r.WithContext(ctx))
 }
 
 // RequireDeploymentProjectAccess is like RequireProjectAccess, but for
