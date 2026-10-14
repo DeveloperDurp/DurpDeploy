@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"durpdeploy/internal/repository"
 )
 
 func (step deploymentStep) validateLocalContainerImage() error {
@@ -61,4 +63,29 @@ func (r *DeploymentRunner) rejectDockerImageVolumes(
 		)
 	}
 	return nil
+}
+
+func (r *DeploymentRunner) artifactGateImageID(
+	ctx context.Context,
+	image string,
+) (string, error) {
+	inspect := func() ([]byte, error) {
+		return r.engine.command(ctx, "image", "inspect", "--format={{.Id}}", image).
+			Output()
+	}
+	output, err := inspect()
+	if err != nil {
+		if _, err := r.engine.command(ctx, "pull", "--quiet", image).Output(); err != nil {
+			return "", repository.ErrArtifactGate
+		}
+		output, err = inspect()
+		if err != nil {
+			return "", repository.ErrArtifactGate
+		}
+	}
+	id := strings.TrimSpace(string(output))
+	if id == "" {
+		return "", repository.ErrArtifactGate
+	}
+	return id, nil
 }

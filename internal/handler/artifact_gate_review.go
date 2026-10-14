@@ -27,14 +27,17 @@ func (h *ArtifactGateHandler) Review(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	step := steps[gate.StepIndex]
-	resources := []artifact.TerraformResourceChange{}
+	preview := artifact.TerraformReviewResponse{
+		Resources:    []artifact.TerraformResourceChange{},
+		ReviewSource: "step_output",
+	}
 	if step.ReviewFormat == "terraform" {
 		secrets, err := h.artifactReviewSecrets(r.Context(), gate.DeploymentID)
 		if err != nil {
 			gateHTTPError(w, r, 500, "Review variables unavailable")
 			return
 		}
-		resources, err = readTerraformGateReview(file, step.ReviewPath, secrets)
+		preview, err = readTerraformGateReview(file, step.ReviewPath, secrets)
 		if err != nil {
 			gateHTTPError(w, r, 409, "Review unavailable")
 			return
@@ -42,14 +45,12 @@ func (h *ArtifactGateHandler) Review(w http.ResponseWriter, r *http.Request) {
 	}
 	if strings.HasPrefix(r.URL.Path, "/api/v1/") {
 		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(artifact.TerraformReviewResponse{
-			Resources: resources, ReviewSource: "step_output",
-		}); err != nil {
+		if err := json.NewEncoder(w).Encode(preview); err != nil {
 			return
 		}
 		return
 	}
-	if err := pages.TerraformPlanView(resources).
+	if err := pages.TerraformPlanView(preview).
 		Render(r.Context(), w); err != nil {
 		gateHTTPError(w, r, 500, "Review rendering failed")
 	}
@@ -146,23 +147,19 @@ func readTerraformGateReview(
 	file io.Reader,
 	path string,
 	secrets []string,
-) ([]artifact.TerraformResourceChange, error) {
+) (artifact.TerraformReviewResponse, error) {
 	reader := tar.NewReader(file)
 	for {
 		header, err := reader.Next()
 		if err != nil {
-			return nil, err
+			return artifact.TerraformReviewResponse{}, err
 		}
 		if header.Name != path {
 			continue
 		}
-		if header.Typeflag != tar.TypeReg || header.Size > 1<<20 {
-			return nil, artifact.ErrGateConfig
+		if header.Typeflag != tar.TypeReg {
+			return artifact.TerraformReviewResponse{}, artifact.ErrGateConfig
 		}
-		raw, err := io.ReadAll(io.LimitReader(reader, (1<<20)+1))
-		if err != nil {
-			return nil, err
-		}
-		return artifact.TerraformReview(raw, secrets)
+		return artifact.TerraformPreviewReader(reader, secrets)
 	}
 }

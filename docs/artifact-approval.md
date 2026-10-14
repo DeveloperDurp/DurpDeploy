@@ -82,8 +82,21 @@ the references after terminal decisions. Explicit container removal can remove
 these references; image pruning alone preserves them.
 It encrypts the whole staging context in authenticated database chunks.
 Unlinked temporary descriptors are used during capture, restore, and download.
-The bundle is limited to 300 MiB; review JSON is limited to 1 MiB. Unsafe
-archive entries, missing files, and altered ciphertext or checksums fail closed.
+Approval bundles and review JSON have no application byte limits.
+API and browser previews show up to 100 resources and 1 MiB of resource text.
+Each value or sensitivity field uses a 64 KiB input budget and 64 nesting levels.
+Addresses use a 4 KiB input budget. Each action list shows up to 16 actions.
+Oversized values are omitted in full. Oversized sensitivity metadata omits the affected side.
+The API reports `preview_truncated`, `resources_omitted`, and per-resource `omitted_fields`.
+The browser shows an omission notice. Preview bounds do not change approval counts, stored context, or artifact downloads.
+Download and independently inspect the exact artifact before approval.
+Runtime staging capacity, scratch capacity, disk space, and memory still constrain execution.
+Unsafe archive entries, missing files, and altered ciphertext or checksums fail closed.
+Sparse staging files are rejected before export because tar can expand holes beyond the allocated staging space.
+If capture, publication, or cleanup fails, the generation step reports `failed`.
+Deployment logs include an `Artifact approval failed:` diagnostic.
+Read this diagnostic in the deployment page or `GET /api/v1/deployments/{id}/logs.txt`.
+Diagnostics do not include review contents or archive entry names.
 
 An administrator reviews and approves the exact revision and SHA-256 in the
 deployment page or API once `decision_ready` is true. A saved gate can have

@@ -568,6 +568,14 @@ func (r *DeploymentRunner) Run(
 				r.mu.Unlock()
 			}
 			if err != nil {
+				if _, logErr := fmt.Fprintf(logWriter,
+					"Artifact approval failed: %v\n", err); logErr != nil {
+					slog.Error(
+						"persist artifact approval failure", "err", logErr,
+					)
+				}
+				logWriter.Flush()
+				logWriter.finishState(err, runCtx.Err() != nil)
 				r.failUnlessCancelled(ctx, runCtx, deploymentID)
 				return
 			}

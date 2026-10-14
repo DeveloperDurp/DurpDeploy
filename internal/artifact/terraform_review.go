@@ -3,8 +3,9 @@ package artifact
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
+	"io"
 	"maps"
-	"strings"
 
 	"durpdeploy/internal/logscrub"
 )
@@ -12,74 +13,61 @@ import (
 const terraformRedacted = "[REDACTED]"
 
 type TerraformReviewResponse struct {
-	Resources      []TerraformResourceChange `json:"resources"`
-	ReviewSource   string                    `json:"review_source"`
-	ReviewVerified bool                      `json:"review_verified"`
+	Resources        []TerraformResourceChange `json:"resources"`
+	ReviewSource     string                    `json:"review_source"`
+	ReviewVerified   bool                      `json:"review_verified"`
+	PreviewTruncated bool                      `json:"preview_truncated"`
+	ResourcesOmitted int64                     `json:"resources_omitted"`
 }
 
 type TerraformResourceChange struct {
-	Address string   `json:"address"`
-	Actions []string `json:"actions"`
-	Before  string   `json:"before"`
-	After   string   `json:"after"`
+	Address       string   `json:"address"`
+	Actions       []string `json:"actions"`
+	Before        string   `json:"before"`
+	After         string   `json:"after"`
+	OmittedFields []string `json:"omitted_fields,omitempty"`
 }
 
 // TerraformReview exposes only resource changes, never configuration or outputs.
 func TerraformReview(
 	raw []byte, secrets []string,
 ) ([]TerraformResourceChange, error) {
-	var plan struct {
-		FormatVersion string `json:"format_version"`
-		Resources     []struct {
-			Address string `json:"address"`
-			Change  struct {
-				Actions         []string `json:"actions"`
-				Before          any      `json:"before"`
-				After           any      `json:"after"`
-				BeforeSensitive any      `json:"before_sensitive"`
-				AfterSensitive  any      `json:"after_sensitive"`
-				AfterUnknown    any      `json:"after_unknown"`
-			} `json:"change"`
-		} `json:"resource_changes"`
-	}
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.UseNumber()
-	if err := decoder.Decode(&plan); err != nil ||
-		!strings.HasPrefix(plan.FormatVersion, "1.") {
-		return nil, ErrGateConfig
-	}
-	if _, err := ParseGateReview(raw, "terraform"); err != nil {
-		return nil, err
-	}
+	return TerraformReviewReader(bytes.NewReader(raw), secrets)
+}
+
+// TerraformReviewReader discards state and configuration before rendering each resource.
+func TerraformReviewReader(
+	reader io.Reader, secrets []string,
+) ([]TerraformResourceChange, error) {
+	preview, err := TerraformPreviewReader(reader, secrets)
+	return preview.Resources, err
+}
+
+// TerraformPreviewReader bounds display details without limiting retained artifacts.
+func TerraformPreviewReader(
+	reader io.Reader,
+	secrets []string,
+) (TerraformReviewResponse, error) {
+	s := newReviewJSON(reader)
+	s.preview = &terraformPreview{}
 	scrubber := logscrub.New(secrets)
-	changes := make([]TerraformResourceChange, 0, len(plan.Resources))
-	for _, resource := range plan.Resources {
-		change := resource.Change
-		before := terraformValue(change.Before, change.BeforeSensitive, nil)
-		after := terraformValue(change.After, change.AfterSensitive,
-			change.AfterUnknown)
-		beforeJSON, err := json.MarshalIndent(
-			scrubTerraformValue(before, scrubber),
-			"",
-			"  ",
-		)
-		if err != nil {
-			return nil, ErrGateConfig
-		}
-		afterJSON, err := json.MarshalIndent(
-			scrubTerraformValue(after, scrubber),
-			"",
-			"  ",
-		)
-		if err != nil {
-			return nil, ErrGateConfig
-		}
-		changes = append(changes, TerraformResourceChange{
-			Address: scrubber.Scrub(resource.Address), Actions: change.Actions,
-			Before: string(beforeJSON), After: string(afterJSON),
-		})
+	_, changes, err := s.terraform(
+		func(change terraformResource) (TerraformResourceChange, error) {
+			return renderTerraformResource(change, scrubber)
+		},
+	)
+	if err == nil {
+		err = s.finish()
 	}
-	return changes, nil
+	if err != nil {
+		return TerraformReviewResponse{}, errors.Join(ErrGateConfig, err)
+	}
+	return TerraformReviewResponse{
+		Resources:        changes,
+		ReviewSource:     "step_output",
+		PreviewTruncated: s.preview.truncated,
+		ResourcesOmitted: s.preview.omitted,
+	}, nil
 }
 
 // Missing or malformed sensitivity metadata fails closed for that subtree.
