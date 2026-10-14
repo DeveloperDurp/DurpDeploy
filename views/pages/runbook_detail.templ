@@ -230,7 +230,7 @@ templ RunbookDeleteAction(project db.Project, book db.Runbook) {
 			<h2 class="text-xl font-bold mb-3">Delete runbook</h2>
 			<p class="text-sm mb-3">Deletion disables schedules and prevents future execution and retry. Saved versions, package pins, completed executions, and logs remain for history. The runbook name remains reserved.</p>
 			<form method="post" action={ fmt.Sprintf("/projects/%d/runbooks/%d/delete", project.ID, book.ID) } hx-post={ fmt.Sprintf("/projects/%d/runbooks/%d/delete", project.ID, book.ID) } hx-swap="none" hx-confirm={ fmt.Sprintf("Delete runbook %s (#%d)? Schedules will be disabled. Future execution and retry will be blocked. Saved versions, package pins, completed executions, and logs will remain for history. The name will remain reserved.", book.Name, book.ID) }>
-				<button class="btn btn-error btn-sm" type="submit">Delete runbook</button>
+				<button class="btn btn-error md:btn-sm" type="submit">Delete runbook</button>
 			</form>
 		</div>
 	}
