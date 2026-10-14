@@ -429,7 +429,7 @@ func TestVariables_ListPaginatedDecryptsAndFilters(t *testing.T) {
 	// Secret-only filter keeps masked values out of the response while
 	// the stored values still decrypt for the runner.
 	secretOnly := base
-	secretOnly.FSecretOnly = 1
+	secretOnly.FSecretOnly = sql.NullInt64{Int64: 1, Valid: true}
 	list, err = repo.ListVariablesByProjectPaginated(ctx, secretOnly)
 	if err != nil {
 		t.Fatalf("secret-only list: %v", err)
@@ -440,7 +440,7 @@ func TestVariables_ListPaginatedDecryptsAndFilters(t *testing.T) {
 	}
 
 	envFiltered := base
-	envFiltered.FEnvironmentID = env.ID
+	envFiltered.FEnvironmentID = sql.NullInt64{Int64: env.ID, Valid: true}
 	list, err = repo.ListVariablesByProjectPaginated(ctx, envFiltered)
 	if err != nil {
 		t.Fatalf("env-filtered list: %v", err)

@@ -25,6 +25,8 @@ type restoreFixture struct {
 	api                 *artifactE2E
 	root, database, key string
 	dsn                 string
+	backend             restoreBackend
+	native              *restoreNativeDB
 	binary, secret      string
 	password            string
 	releaseID           int64
@@ -33,6 +35,7 @@ type restoreFixture struct {
 
 func newRestoreFixture(t *testing.T) *restoreFixture {
 	t.Helper()
+	backend := selectedRestoreBackend(t)
 	if runtime.GOARCH != "amd64" {
 		t.Fatal("recovery drill requires Linux amd64")
 	}
@@ -70,7 +73,7 @@ func newRestoreFixture(t *testing.T) *restoreFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f := &restoreFixture{root: root}
+	f := &restoreFixture{root: root, backend: backend}
 	t.Cleanup(func() {
 		if err := os.RemoveAll(root); err != nil {
 			t.Error(err)
@@ -83,6 +86,14 @@ func newRestoreFixture(t *testing.T) *restoreFixture {
 	}
 	f.database = filepath.Join(f.root, "source", "app.db")
 	f.dsn = restoreSQLiteDSN(f.database)
+	switch backend {
+	case restoreSQLiteBackend:
+	case restorePostgresBackend:
+		f.native = restorePostgres(t)
+		f.dsn = f.native.appDSN
+	default:
+		t.Fatal("unsupported recovery backend")
+	}
 	f.key = filepath.Join(f.root, "source", "key")
 	key := make([]byte, 32)
 	if _, err := rand.Read(key); err != nil {

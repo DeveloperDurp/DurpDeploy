@@ -19,6 +19,7 @@ func TestBackupRestoreAPIWebE2E(t *testing.T) {
 	process := f.start(t)
 	f.login(t)
 	f.seed(t)
+	f.api.api(t, "GET", f.api.base()+"/variables", nil, 200)
 	before := f.deploy(t)
 	f.assertDelivery(t, before.ID)
 	releasePath := fmt.Sprintf("%s/releases/%d", f.api.base(), f.releaseID)
@@ -32,12 +33,6 @@ func TestBackupRestoreAPIWebE2E(t *testing.T) {
 			"cron": "* * * * *", "enabled": false, "note": "restore-schedule",
 		}, 201), &schedule)
 
-	// A missing replica must fail rather than create a fresh, empty database.
-	missing := f.litestreamContainer(t, "restore", "-o",
-		"/recovery/backup/missing.db", "file:///recovery/backup/absent")
-	if restoreContainerExit(t, missing) == 0 {
-		t.Fatal("restore accepted an absent replica")
-	}
 	key, err := os.ReadFile(f.key)
 	if err != nil {
 		t.Fatal(err)
@@ -45,7 +40,7 @@ func TestBackupRestoreAPIWebE2E(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(f.root, "backup", "key"), key, 0600); err != nil {
 		t.Fatal(err)
 	}
-	replica := f.replicate(t)
+	replica := f.backup(t)
 	var watermark struct{ ID int64 }
 	decodeStepLogTest(t, f.api.api(t, "POST", "/api/v1/projects",
 		map[string]string{"name": "backup-watermark"}, 201), &watermark)
@@ -54,6 +49,7 @@ func TestBackupRestoreAPIWebE2E(t *testing.T) {
 	process.stop(t)
 	replica.recover(t)
 	t.Log("replica recovered the final write after source database loss")
+	f.assertWrongKey(t)
 
 	restarted := f.start(t)
 	f.login(t)
