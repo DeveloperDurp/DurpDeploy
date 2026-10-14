@@ -71,7 +71,6 @@ func TestGateBundleRejectsUnsafeEntries(t *testing.T) {
 		{Name: "../plan", Typeflag: tar.TypeReg},
 		{Name: "plan", Typeflag: tar.TypeSymlink, Linkname: "/etc/passwd"},
 		{Name: "plan", Typeflag: tar.TypeLink, Linkname: "other"},
-		{Name: "plan", Typeflag: tar.TypeReg, Size: MaxDownload + 1},
 	} {
 		t.Run(header.Name+string(header.Typeflag), func(t *testing.T) {
 			// Given: an untrusted archive header.

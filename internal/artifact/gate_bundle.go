@@ -6,13 +6,14 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"strings"
 )
 
 // CopyGateBundle rejects links, devices, traversal, duplicate entries and
-// oversized trees. Canonical metadata prevents container-supplied ownership.
+// excessive entry counts. Canonical metadata prevents container-supplied ownership.
 func CopyGateBundle(
 	ctx context.Context,
 	source io.Reader,
@@ -24,7 +25,6 @@ func CopyGateBundle(
 	var result GateReview
 	var checksum string
 	seen := make(map[string]bool)
-	var total int64
 	for {
 		if err := ctx.Err(); err != nil {
 			return "", result, err
@@ -47,12 +47,14 @@ func CopyGateBundle(
 		}
 		seen[name] = true
 		if header.Typeflag != tar.TypeDir && header.Typeflag != tar.TypeReg {
+			return "", result, fmt.Errorf(
+				"approval context contains a link or special file: %w",
+				ErrInvalid,
+			)
+		}
+		if header.Size < 0 {
 			return "", result, ErrInvalid
 		}
-		if header.Size < 0 || header.Size > MaxDownload-total {
-			return "", result, ErrInvalid
-		}
-		total += header.Size
 		canonical := &tar.Header{
 			Name:     name,
 			Mode:     0644,
@@ -76,22 +78,28 @@ func CopyGateBundle(
 		}
 		var content io.Reader = reader
 		if name == reviewPath {
-			if header.Typeflag != tar.TypeReg || header.Size > 1<<20 {
-				return "", result, ErrInvalid
+			if header.Typeflag != tar.TypeReg {
+				return "", result, fmt.Errorf(
+					"approval review must be a regular file: %w", ErrInvalid)
 			}
-			raw, err := io.ReadAll(io.LimitReader(reader, (1<<20)+1))
+			result, err = ParseGateReviewReader(
+				io.TeeReader(reader, writer),
+				format,
+			)
 			if err != nil {
-				return "", result, err
+				return "", result, fmt.Errorf(
+					"parse approval review JSON: %w",
+					err,
+				)
 			}
-			result, err = ParseGateReview(raw, format)
-			if err != nil {
-				return "", result, err
-			}
-			content = strings.NewReader(string(raw))
+			continue
 		}
 		if name == artifactPath {
 			if header.Typeflag != tar.TypeReg || header.Size == 0 {
-				return "", result, ErrInvalid
+				return "", result, fmt.Errorf(
+					"approval artifact must be a nonempty regular file: %w",
+					ErrInvalid,
+				)
 			}
 			hash := sha256.New()
 			if _, err := io.Copy(
@@ -105,8 +113,17 @@ func CopyGateBundle(
 			return "", result, err
 		}
 	}
-	if checksum == "" || !seen[reviewPath] {
-		return "", result, ErrInvalid
+	if checksum == "" {
+		return "", result, fmt.Errorf(
+			"approval artifact file is missing: %w",
+			ErrInvalid,
+		)
+	}
+	if !seen[reviewPath] {
+		return "", result, fmt.Errorf(
+			"approval review file is missing: %w",
+			ErrInvalid,
+		)
 	}
 	return checksum, result, writer.Close()
 }

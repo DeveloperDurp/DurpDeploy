@@ -706,6 +706,15 @@ work links refer only to the deployment's project/environment pair.
 Only local deployment steps without retries are
 supported; runbooks and agent steps cannot use gates. Both approval paths and
 an explicit review format are required together; an empty format is rejected.
+Approval bundles and review JSON have no application byte limits.
+API and browser previews show at most 100 resources and 1 MiB of resource text.
+Oversized values or sensitivity metadata omit the affected side in full.
+The API reports `preview_truncated`, `resources_omitted`, and per-resource `omitted_fields`.
+Preview bounds do not change approval counts, stored context, or artifact downloads.
+Sparse staging files are rejected before export.
+Runtime staging capacity, scratch capacity, disk space, and memory still constrain execution.
+If approval publication fails, the generation step reports `failed`.
+Read the `Artifact approval failed:` diagnostic in `GET /api/v1/deployments/{id}/logs.txt`.
 `GET /api/v1/deployments/{id}/artifact-gates` returns counts, checksums,
 revision, expiry, status, and approver metadata, including
 `decision_ready` (true only while the deployment is waiting for a decision

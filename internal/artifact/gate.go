@@ -1,7 +1,6 @@
 package artifact
 
 import (
-	"encoding/json"
 	"errors"
 	"io/fs"
 	"strings"
@@ -44,70 +43,4 @@ type GateReview struct {
 	Update int64 `json:"update"`
 	Delete int64 `json:"delete"`
 	Read   int64 `json:"read"`
-}
-
-func ParseGateReview(raw []byte, format string) (GateReview, error) {
-	var result GateReview
-	if format == "terraform" {
-		var plan struct {
-			ResourceChanges []struct {
-				Change struct {
-					Actions []string `json:"actions"`
-				} `json:"change"`
-			} `json:"resource_changes"`
-			FormatVersion string `json:"format_version"`
-		}
-		if err := json.Unmarshal(
-			raw,
-			&plan,
-		); err != nil ||
-			plan.FormatVersion == "" {
-			return result, ErrGateConfig
-		}
-		for _, resource := range plan.ResourceChanges {
-			for _, action := range resource.Change.Actions {
-				switch action {
-				case "create":
-					result.Create++
-				case "update":
-					result.Update++
-				case "delete":
-					result.Delete++
-				case "read":
-					result.Read++
-				case "no-op":
-				default:
-					return GateReview{}, ErrGateConfig
-				}
-			}
-		}
-	} else {
-		var counts map[string]*int64
-		if err := json.Unmarshal(raw, &counts); err != nil || len(counts) == 0 {
-			return result, ErrGateConfig
-		}
-		for name, count := range counts {
-			if count == nil {
-				return GateReview{}, ErrGateConfig
-			}
-			switch name {
-			case "create":
-				result.Create = *count
-			case "update":
-				result.Update = *count
-			case "delete":
-				result.Delete = *count
-			case "read":
-				result.Read = *count
-			default:
-				return GateReview{}, ErrGateConfig
-			}
-		}
-	}
-	for _, count := range []int64{result.Create, result.Update, result.Delete, result.Read} {
-		if count < 0 {
-			return GateReview{}, ErrGateConfig
-		}
-	}
-	return result, nil
 }
