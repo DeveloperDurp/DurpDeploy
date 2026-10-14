@@ -57,12 +57,23 @@ jobs:
 
   # ----- Backup restore ---------------------------------------------------
   backup-restore:
-    name: Backup restore
+    name: ${{ matrix.check }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - backend: sqlite
+            check: Backup restore
+          - backend: postgres
+            check: Backup restore (PostgreSQL)
+          - backend: mssql
+            check: Backup restore (SQL Server)
     env:
       GOFLAGS: -mod=readonly
       DURPDEPLOY_CONTAINER_RUNTIME: docker
+      DURPDEPLOY_RESTORE_BACKEND: ${{ matrix.backend }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:

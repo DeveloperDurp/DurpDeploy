@@ -19,6 +19,8 @@ MAKE
 cat > "$test_dir/bin/bash" <<'BASH'
 #!/bin/sh
 printf 'runtime=%s provider=%s\n' "$DURPDEPLOY_CONTAINER_URL" "$DOCKER_HOST"
+printf 'backend=%s\n' "$DURPDEPLOY_RESTORE_BACKEND"
+printf '%s\n' "$@"
 BASH
 chmod +x "$test_dir/bin/"*
 
@@ -44,6 +46,30 @@ RESTORE_TEST_OS=Linux RESTORE_TEST_ARCH=x86_64 \
 grep -q '^make called$' "$test_dir/output"
 [[ $(grep -c '^runtime=unix:///configured/runtime.sock provider=unix:///configured/runtime.sock$' "$test_dir/output") == 2 ]]
 echo 'Recovery platform rejection and selected runtime: PASS'
+
+for backend in sqlite postgres mssql; do
+    RESTORE_TEST_OS=Linux RESTORE_TEST_ARCH=x86_64 \
+        DURPDEPLOY_RESTORE_BACKEND=$backend DURPDEPLOY_CONTAINER_RUNTIME=docker \
+        DURPDEPLOY_CONTAINER_URL=unix:///configured/runtime.sock \
+        PATH="$test_dir/bin:$PATH" \
+        /usr/bin/bash "$root/scripts/test-backup-restore.sh" > "$test_dir/output" 2>&1
+    [[ $(grep -c "^backend=$backend$" "$test_dir/output") == 2 ]]
+    expected_timeout=20m
+    if [[ $backend == sqlite ]]; then expected_timeout=8m; fi
+    grep -Fxq -- "-timeout=$expected_timeout" "$test_dir/output"
+done
+for script in test-backup-restore.sh test-backup-restore-cleanup.sh; do
+    if DURPDEPLOY_RESTORE_BACKEND=invalid PATH="$test_dir/bin:$PATH" \
+        /usr/bin/bash "$root/scripts/$script" > "$test_dir/output" 2>&1; then
+        echo 'FAIL: invalid recovery backend passed.' >&2
+        exit 1
+    fi
+    if grep -q 'make called' "$test_dir/output"; then
+        echo 'FAIL: invalid backend started the drill.' >&2
+        exit 1
+    fi
+done
+echo 'Recovery backend selection and early rejection: PASS'
 
 for runtime in '' invalid; do
     if RESTORE_TEST_OS=Linux RESTORE_TEST_ARCH=x86_64 \

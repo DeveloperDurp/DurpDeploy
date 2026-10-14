@@ -2,6 +2,12 @@
 # Exercise the shell runner's cleanup while a real restored-app fixture runs.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+export DURPDEPLOY_RESTORE_BACKEND=${DURPDEPLOY_RESTORE_BACKEND:-sqlite}
+case $DURPDEPLOY_RESTORE_BACKEND in
+    sqlite) test_timeout=5m; setup_polls=2400 ;;
+    postgres|mssql) test_timeout=10m; setup_polls=5400 ;;
+    *) echo 'ERROR: set DURPDEPLOY_RESTORE_BACKEND to sqlite, postgres, or mssql.' >&2; exit 1 ;;
+esac
 if [[ -n ${DURPDEPLOY_CONTAINER_URL:-} ]]; then
     export DOCKER_HOST=$DURPDEPLOY_CONTAINER_URL
 fi
@@ -53,12 +59,13 @@ for mode in timeout TERM; do
     DURPDEPLOY_RESTORE_INTERRUPT_FIXTURE=1 \
         DURPDEPLOY_GO_TEST_DIRECTORY="$work_dir" \
         bash scripts/go_test.sh -tags=e2e,backuprestore -race -count=1 \
-        -timeout=5m -v -run '^TestBackupRestoreInterruptFixture$' \
+        "-timeout=$test_timeout" -v -run '^TestBackupRestoreInterruptFixture$' \
         ./internal/handler/api >"$log_file" 2>&1 &
     runner_pid=$!
     ready=
-    # Setup gets four minutes. The global timeout leaves another minute of live work.
-    for _ in $(seq 1 2400); do
+    # Native startup, migration, build, and backup get nine minutes.
+    # Each global timeout leaves another minute of live work.
+    for _ in $(seq 1 "$setup_polls"); do
         ready=$(sed -n 's/.*restore-interrupt-ready pid=\([0-9]*\) namespace=\([^ ]*\) session=\([^ ]*\).*/\1 \2 \3/p' "$log_file")
         if [[ -n $ready ]]; then break; fi
         if ! kill -0 "$runner_pid" 2>/dev/null; then break; fi
@@ -70,6 +77,12 @@ for mode in timeout TERM; do
         exit 1
     fi
     read -r server_pid namespace session <<< "$ready"
+    database_containers=$(engine ps --all --quiet --filter "label=org.testcontainers.sessionId=$session")
+    database_volumes=
+    for id in $database_containers; do
+        mounts=$(engine inspect --format '{{range .Mounts}}{{if eq .Type "volume"}}{{println .Name}}{{end}}{{end}}' "$id")
+        database_volumes+=" $mounts"
+    done
     if [[ $mode == TERM ]]; then kill -TERM "$runner_pid"; fi
     status=0
     wait "$runner_pid" || status=$?
@@ -94,6 +107,13 @@ for mode in timeout TERM; do
     [[ -z $remaining ]]
     remaining=$(engine ps --all --quiet --filter "label=org.testcontainers.sessionId=$session")
     [[ -z $remaining ]]
+    available_volumes=$(engine volume ls --format '{{.Name}}')
+    for volume in $database_volumes; do
+        if grep -Fxq -- "$volume" <<< "$available_volumes"; then
+            echo "ERROR: $mode left an owned database volume." >&2
+            exit 1
+        fi
+    done
     remaining=$(find "$work_dir" -maxdepth 1 -type d -name 'durpdeploy-go-test.*' -print)
     [[ -z $remaining ]]
     unrelated_running=$(engine inspect --format '{{.State.Running}}' "$unrelated")

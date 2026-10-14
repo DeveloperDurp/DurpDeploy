@@ -13,8 +13,8 @@ volumes and `secrets/durpdeploy_key`. Remote agent state is separate: back up
 its private state directory when you need to preserve that enrolled identity.
 Never delete a volume as a recovery shortcut.
 
-This guide covers SQLite. PostgreSQL and SQL Server need their own native
-backup procedures, alongside the same key and identity backups.
+This guide covers SQLite backup procedures and automated recovery checks for all supported databases.
+PostgreSQL and SQL Server use native backup tools alongside the same key and identity backups.
 
 ## Option 1 — Litestream (continuous replication)
 
@@ -119,6 +119,17 @@ Run the isolated recovery drill on Linux amd64:
 DURPDEPLOY_CONTAINER_RUNTIME=docker make backup-restore-test
 ```
 
+The default database is SQLite.
+Select PostgreSQL or SQL Server with `DURPDEPLOY_RESTORE_BACKEND`:
+
+```bash
+DURPDEPLOY_CONTAINER_RUNTIME=docker DURPDEPLOY_RESTORE_BACKEND=postgres make backup-restore-test
+DURPDEPLOY_CONTAINER_RUNTIME=docker DURPDEPLOY_RESTORE_BACKEND=mssql make backup-restore-test
+```
+
+The accepted values are `sqlite`, `postgres`, and `mssql`.
+An unsupported value fails before resource creation.
+
 Start the selected Docker or Podman socket before the drill.
 If you use Podman, set `DURPDEPLOY_CONTAINER_RUNTIME=podman`.
 Always select the runtime explicitly.
@@ -140,21 +151,27 @@ Other architectures fail before the drill creates resources.
 If `DURPDEPLOY_CONTAINER_URL` is set, the drill uses that socket for application execution, backup containers, and cleanup.
 Otherwise, the cleanup checks use the Testcontainers provider selected through `DOCKER_HOST` or default discovery.
 
-The drill builds the server and uses disposable SQLite data.
-It runs a digest-pinned Litestream 0.3.13 container with a local file replica.
-The backup container has no network access.
+The drill builds the server and uses disposable database data.
+SQLite uses a digest-pinned Litestream 0.3.13 container with a local file replica.
+The SQLite backup container has no network access.
+PostgreSQL 16 and SQL Server 2022 use separate, digest-pinned source and target containers.
+Published database ports bind to loopback.
 Both server listeners and the SMTP receiver bind to loopback.
 The drill uses generated test credentials and excludes operator application settings.
+Archive files and matching keys stay inside the runner-owned private directory.
 
-The interruption checks allow four minutes for setup and use a five-minute global test timeout.
+SQLite interruption checks allow four minutes for setup and use a five-minute global test timeout.
+Native database interruption checks allow nine minutes for setup and use a ten-minute global test timeout.
+The active workload has a thirty-minute timeout.
 They check application namespace labels and Testcontainers session labels after interruption.
+They also check removal of owned anonymous database volumes.
 Each cleanup operation has an independent one-minute deadline.
 Cleanup errors fail the check.
 
 The drill checks these recovery results:
 
-- Replica data includes the final committed API write.
-- Recovery succeeds after removal of the source database and its sidecars.
+- Backup data includes the final committed API write.
+- Recovery succeeds after removal of the source database and its storage.
 - The restored database passes its integrity check.
 - The restored password permits a new browser login.
 - The saved API token permits application reads and writes.
@@ -164,16 +181,67 @@ The drill checks these recovery results:
 - API and web notification history show the delivery result.
 - A restored schedule creates a deployment and advances its next occurrence.
 - The schedule remains disabled after the check.
-- An absent replica causes restore failure.
+- Missing and truncated backups cause restore failure on disposable destinations.
+- A valid but mismatched application key prevents an encrypted-data API read.
+- The matching key restores successful application operation.
+- Restored sequences or identity counters allow new application writes.
+- Existing and new Unicode data remain readable.
 - Test timeout and interruption remove owned processes, containers, volumes, and temporary data.
 - Cleanup preserves an unrelated container.
 
-PR CI runs the same command in the `Backup restore` job.
+PR CI runs the same command in three independent jobs.
+Their names are `Backup restore`, `Backup restore (PostgreSQL)`, and `Backup restore (SQL Server)`.
 The drill removes its temporary data, processes, and containers after completion.
 It does not use production backup storage or external notification services.
 Continue the monthly isolated drill to verify actual backup access and deployment settings.
-This check covers SQLite recovery with Litestream 0.3.
-Use separate recovery drills for PostgreSQL and SQL Server.
+The interruption checkpoint retains a completed backup, source database, and active application workload.
+It verifies interrupted-drill cleanup.
+It does not verify crash consistency during every internal backup phase.
+
+### PostgreSQL native recovery
+
+The fixture gives a separate application role ownership of its application database.
+It creates a custom-format archive with `pg_dump -Fc` after the final committed API write.
+It copies the archive through the container SDK.
+It removes the source container before creating any restore destination.
+
+The destination contains an empty database owned by a newly provisioned application role.
+The fixture restores as that role with `pg_restore --single-transaction --exit-on-error --no-owner --no-acl`.
+It checks migration records, seeded tables, validated foreign keys, and the watermark before application startup.
+It does not migrate the empty destination before restore.
+
+This check covers one application database.
+Cluster roles, tablespaces, extensions, and production privilege policies require separate procedures.
+See the PostgreSQL [backup](https://www.postgresql.org/docs/16/app-pgdump.html) and [restore](https://www.postgresql.org/docs/16/app-pgrestore.html) documentation.
+
+### SQL Server native recovery
+
+The fixture creates a separate application database.
+It grants its application user database-scoped `db_owner` membership for migration DDL.
+The application login has no instance `sysadmin` membership.
+An administrator connection performs provisioning, native backup, native restore, and integrity checks.
+
+The fixture runs `BACKUP DATABASE` with `COPY_ONLY`, `CHECKSUM`, and `STOP_ON_ERROR`.
+It copies the archive through the container SDK.
+It removes the source container before creating any restore destination.
+It gives the destination database process read access to its copied archive.
+
+The fixture reads `RESTORE FILELISTONLY` and maps the expected data and log files with `WITH MOVE`.
+It restores with checksum validation and `STOP_ON_ERROR`.
+It runs `DBCC CHECKDB` after the actual restore.
+It does not perform automatic corruption repair.
+
+The destination login has a new SID and a generated password.
+The fixture requires an application connection failure before remapping the restored database user.
+It remaps that user with `ALTER USER ... WITH LOGIN`.
+It checks restored `db_owner` membership and application reads and writes.
+
+These local fixtures disable database connection encryption inside their isolated loopback setup.
+Production database TLS checks and production login privileges require separate validation.
+See the Microsoft [container restore](https://learn.microsoft.com/en-us/sql/linux/migrate/tutorial-restore-backup-sql-server-container?view=sql-server-ver16)
+and [login mapping](https://learn.microsoft.com/en-us/sql/sql-server/failover-clusters/troubleshoot-orphaned-users-sql-server?view=sql-server-ver16) documentation.
+
+All three checks exclude production backup storage, point-in-time recovery, cross-version upgrades, and restored agent trust.
 
 ## Backup health monitoring
 

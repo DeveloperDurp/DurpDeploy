@@ -21,11 +21,18 @@ func TestBackupRestoreInterruptFixture(t *testing.T) {
 	p := f.start(t)
 	f.login(t)
 	f.seed(t)
-	f.replicate(t)
-	f.api.api(t, "POST", f.api.base()+"/steps", map[string]string{
-		"name": "Interrupted work", "script_body": "echo interrupt-ready; sleep 300",
-		"interpreter": "bash", "execution_target": "local",
-		"container_image": "docker.io/library/bash:5.2",
+	backup := f.backup(t)
+	var watermark struct{ ID int64 }
+	decodeStepLogTest(t, f.api.api(t, "POST", "/api/v1/projects",
+		map[string]string{"name": "backup-watermark"}, 201), &watermark)
+	backup.awaitFresh(t, watermark.ID)
+	f.api.api(t, "POST", f.api.base()+"/steps", map[string]any{
+		"name":             "Interrupted work",
+		"script_body":      "echo interrupt-ready; sleep 1800",
+		"interpreter":      "bash",
+		"execution_target": "local",
+		"container_image":  "docker.io/library/bash:5.2",
+		"timeout_seconds":  1800,
 	}, 201)
 	var release db.Release
 	decodeStepLogTest(t, f.api.api(t, "POST", f.api.base()+"/releases",
