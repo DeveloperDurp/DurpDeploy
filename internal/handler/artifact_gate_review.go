@@ -159,10 +159,6 @@ func readTerraformGateReview(
 		if header.Typeflag != tar.TypeReg {
 			return nil, artifact.ErrGateConfig
 		}
-		raw, err := io.ReadAll(reader)
-		if err != nil {
-			return nil, err
-		}
-		return artifact.TerraformReview(raw, secrets)
+		return artifact.TerraformReviewReader(reader, secrets)
 	}
 }

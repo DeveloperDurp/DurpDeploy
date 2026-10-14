@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"strings"
 
 	"durpdeploy/internal/artifact"
 	"durpdeploy/internal/db"
@@ -177,22 +176,9 @@ func (r *DeploymentRunner) pinArtifactGateImages(
 		if !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
-		output, err := r.engine.command(ctx, "image", "inspect", "--format={{.Id}}", step.ContainerImage).
-			Output()
+		id, err = r.artifactGateImageID(ctx, step.ContainerImage)
 		if err != nil {
-			if _, err := r.engine.command(ctx, "pull", "--quiet", step.ContainerImage).
-				Output(); err != nil {
-				return repository.ErrArtifactGate
-			}
-			output, err = r.engine.command(ctx, "image", "inspect", "--format={{.Id}}", step.ContainerImage).
-				Output()
-			if err != nil {
-				return repository.ErrArtifactGate
-			}
-		}
-		id = strings.TrimSpace(string(output))
-		if id == "" {
-			return repository.ErrArtifactGate
+			return err
 		}
 		if err := r.retainArtifactGateImage(ctx, deploymentID,
 			int64(index), id); err != nil {

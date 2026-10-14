@@ -82,18 +82,17 @@ func CopyGateBundle(
 				return "", result, fmt.Errorf(
 					"approval review must be a regular file: %w", ErrInvalid)
 			}
-			raw, err := io.ReadAll(reader)
-			if err != nil {
-				return "", result, err
-			}
-			result, err = ParseGateReview(raw, format)
+			result, err = ParseGateReviewReader(
+				io.TeeReader(reader, writer),
+				format,
+			)
 			if err != nil {
 				return "", result, fmt.Errorf(
 					"parse approval review JSON: %w",
 					err,
 				)
 			}
-			content = strings.NewReader(string(raw))
+			continue
 		}
 		if name == artifactPath {
 			if header.Typeflag != tar.TypeReg || header.Size == 0 {

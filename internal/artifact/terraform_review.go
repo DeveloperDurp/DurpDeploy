@@ -3,8 +3,9 @@ package artifact
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
+	"io"
 	"maps"
-	"strings"
 
 	"durpdeploy/internal/logscrub"
 )
@@ -28,56 +29,52 @@ type TerraformResourceChange struct {
 func TerraformReview(
 	raw []byte, secrets []string,
 ) ([]TerraformResourceChange, error) {
-	var plan struct {
-		FormatVersion string `json:"format_version"`
-		Resources     []struct {
-			Address string `json:"address"`
-			Change  struct {
-				Actions         []string `json:"actions"`
-				Before          any      `json:"before"`
-				After           any      `json:"after"`
-				BeforeSensitive any      `json:"before_sensitive"`
-				AfterSensitive  any      `json:"after_sensitive"`
-				AfterUnknown    any      `json:"after_unknown"`
-			} `json:"change"`
-		} `json:"resource_changes"`
-	}
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.UseNumber()
-	if err := decoder.Decode(&plan); err != nil ||
-		!strings.HasPrefix(plan.FormatVersion, "1.") {
-		return nil, ErrGateConfig
-	}
-	if _, err := ParseGateReview(raw, "terraform"); err != nil {
-		return nil, err
-	}
+	return TerraformReviewReader(bytes.NewReader(raw), secrets)
+}
+
+// TerraformReviewReader discards state and configuration before rendering each resource.
+func TerraformReviewReader(
+	reader io.Reader, secrets []string,
+) ([]TerraformResourceChange, error) {
+	s := newReviewJSON(reader)
 	scrubber := logscrub.New(secrets)
-	changes := make([]TerraformResourceChange, 0, len(plan.Resources))
-	for _, resource := range plan.Resources {
-		change := resource.Change
-		before := terraformValue(change.Before, change.BeforeSensitive, nil)
-		after := terraformValue(change.After, change.AfterSensitive,
-			change.AfterUnknown)
-		beforeJSON, err := json.MarshalIndent(
-			scrubTerraformValue(before, scrubber),
-			"",
-			"  ",
-		)
-		if err != nil {
-			return nil, ErrGateConfig
-		}
-		afterJSON, err := json.MarshalIndent(
-			scrubTerraformValue(after, scrubber),
-			"",
-			"  ",
-		)
-		if err != nil {
-			return nil, ErrGateConfig
-		}
-		changes = append(changes, TerraformResourceChange{
-			Address: scrubber.Scrub(resource.Address), Actions: change.Actions,
-			Before: string(beforeJSON), After: string(afterJSON),
-		})
+	_, changes, err := s.terraform(
+		func(change terraformResource) (TerraformResourceChange, error) {
+			before := terraformValue(change.Before, change.BeforeSensitive, nil)
+			after := terraformValue(
+				change.After,
+				change.AfterSensitive,
+				change.AfterUnknown,
+			)
+			beforeJSON, err := json.MarshalIndent(
+				scrubTerraformValue(before, scrubber),
+				"",
+				"  ",
+			)
+			if err != nil {
+				return TerraformResourceChange{}, ErrGateConfig
+			}
+			afterJSON, err := json.MarshalIndent(
+				scrubTerraformValue(after, scrubber),
+				"",
+				"  ",
+			)
+			if err != nil {
+				return TerraformResourceChange{}, ErrGateConfig
+			}
+			return TerraformResourceChange{
+				Address: scrubber.Scrub(
+					change.Address,
+				), Actions: change.Actions,
+				Before: string(beforeJSON), After: string(afterJSON),
+			}, nil
+		},
+	)
+	if err == nil {
+		err = s.finish()
+	}
+	if err != nil {
+		return nil, errors.Join(ErrGateConfig, err)
 	}
 	return changes, nil
 }
