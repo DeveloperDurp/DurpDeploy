@@ -8,10 +8,22 @@ import (
 	"strconv"
 	"strings"
 
+	"durpdeploy/internal/db"
 	"durpdeploy/internal/repository"
 )
 
 const gateImageLabel = "io.durpdeploy.gate-image"
+
+func (r *DeploymentRunner) saveArtifactGateImage(
+	ctx context.Context,
+	image db.CreateArtifactGateImageParams,
+) error {
+	if err := r.retainArtifactGateImage(ctx, image.DeploymentID,
+		image.StepIndex, image.ImageID); err != nil {
+		return err
+	}
+	return r.repo.Queries.CreateArtifactGateImage(ctx, image)
+}
 
 func (r *DeploymentRunner) retainArtifactGateImage(
 	ctx context.Context, deploymentID, stepIndex int64, imageID string,

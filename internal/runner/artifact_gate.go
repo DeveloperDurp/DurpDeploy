@@ -186,11 +186,7 @@ func (r *DeploymentRunner) pinArtifactGateImages(
 		if err != nil {
 			return err
 		}
-		if err := r.retainArtifactGateImage(ctx, deploymentID,
-			int64(index), id); err != nil {
-			return err
-		}
-		if err := r.repo.Queries.CreateArtifactGateImage(
+		if err := r.saveArtifactGateImage(
 			ctx,
 			db.CreateArtifactGateImageParams{
 				DeploymentID: deploymentID,
