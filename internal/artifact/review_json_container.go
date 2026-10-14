@@ -8,14 +8,14 @@ func (s *reviewJSON) array(item func() error) error {
 	return s.container('[', ']', item)
 }
 
-func (s *reviewJSON) container(open, close byte, item func() error) error {
+func (s *reviewJSON) container(start, end byte, item func() error) error {
 	if err := s.space(); err != nil {
 		return err
 	}
 	if b, _ := s.peek(); b == 'n' {
 		return s.literal("null")
 	}
-	if err := s.expect(open); err != nil {
+	if err := s.expect(start); err != nil {
 		return err
 	}
 	if err := s.enter(); err != nil {
@@ -25,21 +25,21 @@ func (s *reviewJSON) container(open, close byte, item func() error) error {
 	if err := s.space(); err != nil {
 		return err
 	}
-	if b, _ := s.peek(); b == close {
-		return s.expect(close)
+	if b, _ := s.peek(); b == end {
+		return s.expect(end)
 	}
 	for {
 		if err := item(); err != nil {
 			return err
 		}
-		done, err := s.separator(close)
+		done, err := s.separator(end)
 		if err != nil || done {
 			return err
 		}
 	}
 }
 
-func (s *reviewJSON) separator(close byte) (bool, error) {
+func (s *reviewJSON) separator(end byte) (bool, error) {
 	if err := s.space(); err != nil {
 		return false, err
 	}
@@ -47,7 +47,7 @@ func (s *reviewJSON) separator(close byte) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	if b == close {
+	if b == end {
 		return true, nil
 	}
 	if b != ',' {

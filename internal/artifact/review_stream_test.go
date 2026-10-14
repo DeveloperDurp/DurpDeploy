@@ -34,46 +34,54 @@ func paddedTerraformReview(size int64) io.Reader {
 func TestTerraformReviewIgnoredStateAllocations(t *testing.T) {
 	// The source generates padding without retaining it in the test heap.
 	const padding = 32 << 20
-	for _, detailed := range []bool{false, true} {
-		t.Run(
-			map[bool]string{false: "counts", true: "details"}[detailed],
-			func(t *testing.T) {
-				reader := paddedTerraformReview(padding)
-				runtime.GC()
-				var before, after runtime.MemStats
-				runtime.ReadMemStats(&before)
-				var err error
-				if detailed {
-					var changes []TerraformResourceChange
-					changes, err = TerraformReviewReader(reader, nil)
-					if err == nil && (len(changes) != 1 ||
-						!strings.Contains(changes[0].After, "shown") ||
-						strings.Contains(changes[0].After, "secret")) {
-						t.Fatal("review lost masking or resource data")
-					}
-				} else {
-					var counts GateReview
-					counts, err = ParseGateReviewReader(reader, "terraform")
-					if err == nil && counts != (GateReview{Create: 1}) {
-						t.Fatalf("counts=%+v", counts)
-					}
-				}
-				runtime.ReadMemStats(&after)
-				if err != nil {
-					t.Fatal(err)
-				}
-				if allocated := after.TotalAlloc - before.TotalAlloc; allocated > padding/4 {
-					t.Fatalf(
-						"ignored %d bytes allocated %d bytes",
-						padding,
-						allocated,
-					)
-				} else {
-					t.Logf("ignored %d bytes allocated %d bytes", padding, allocated)
-				}
-			},
-		)
+	for _, scenario := range []struct {
+		name  string
+		parse func(*testing.T, io.Reader) error
+	}{
+		{"counts", checkStreamedReviewCounts},
+		{"details", checkStreamedReviewDetails},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			reader := paddedTerraformReview(padding)
+			runtime.GC()
+			var before, after runtime.MemStats
+			runtime.ReadMemStats(&before)
+			err := scenario.parse(t, reader)
+			runtime.ReadMemStats(&after)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if allocated := after.TotalAlloc - before.TotalAlloc; allocated > padding/4 {
+				t.Fatalf(
+					"ignored %d bytes allocated %d bytes",
+					padding,
+					allocated,
+				)
+			} else {
+				t.Logf("ignored %d bytes allocated %d bytes", padding, allocated)
+			}
+		})
 	}
+}
+
+func checkStreamedReviewCounts(t *testing.T, reader io.Reader) error {
+	t.Helper()
+	counts, err := ParseGateReviewReader(reader, "terraform")
+	if err == nil && counts != (GateReview{Create: 1}) {
+		t.Fatalf("counts=%+v", counts)
+	}
+	return err
+}
+
+func checkStreamedReviewDetails(t *testing.T, reader io.Reader) error {
+	t.Helper()
+	changes, err := TerraformReviewReader(reader, nil)
+	if err == nil && (len(changes) != 1 ||
+		!strings.Contains(changes[0].After, "shown") ||
+		strings.Contains(changes[0].After, "secret")) {
+		t.Fatal("review lost masking or resource data")
+	}
+	return err
 }
 
 func TestTerraformReviewDuplicateFieldsAndNull(t *testing.T) {
