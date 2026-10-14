@@ -111,6 +111,70 @@ and test restores. For recovery, stop every database writer and replication
 process, verify the backup, and follow the same archive-and-promote procedure
 above. Never reuse the old WAL or SHM with the restored database.
 
+## Automated recovery drill
+
+Run the isolated recovery drill on Linux amd64:
+
+```bash
+DURPDEPLOY_CONTAINER_RUNTIME=docker make backup-restore-test
+```
+
+Start the selected Docker or Podman socket before the drill.
+If you use Podman, set `DURPDEPLOY_CONTAINER_RUNTIME=podman`.
+Always select the runtime explicitly.
+If you use Podman, select its socket with `DURPDEPLOY_CONTAINER_URL` or `DOCKER_HOST`.
+
+For a rootless Podman socket, run:
+
+```bash
+export DURPDEPLOY_CONTAINER_URL="unix://${XDG_RUNTIME_DIR}/podman/podman.sock"
+DURPDEPLOY_CONTAINER_RUNTIME=podman make backup-restore-test
+```
+
+Use a test host without `/etc/durpdeploy/key`.
+The drill refuses that installed key to prevent access to operator secrets.
+The drill requires Go, npm, and a working container runtime.
+Missing tools or runtime access fail the check.
+Other architectures fail before the drill creates resources.
+
+If `DURPDEPLOY_CONTAINER_URL` is set, the drill uses that socket for application execution, backup containers, and cleanup.
+Otherwise, the cleanup checks use the Testcontainers provider selected through `DOCKER_HOST` or default discovery.
+
+The drill builds the server and uses disposable SQLite data.
+It runs a digest-pinned Litestream 0.3.13 container with a local file replica.
+The backup container has no network access.
+Both server listeners and the SMTP receiver bind to loopback.
+The drill uses generated test credentials and excludes operator application settings.
+
+The interruption checks allow four minutes for setup and use a five-minute global test timeout.
+They check application namespace labels and Testcontainers session labels after interruption.
+Each cleanup operation has an independent one-minute deadline.
+Cleanup errors fail the check.
+
+The drill checks these recovery results:
+
+- Replica data includes the final committed API write.
+- Recovery succeeds after removal of the source database and its sidecars.
+- The restored database passes its integrity check.
+- The restored password permits a new browser login.
+- The saved API token permits application reads and writes.
+- Project variables, release snapshots, and deployment logs remain available.
+- A restored encrypted variable permits successful container execution.
+- A local SMTP receiver receives successful deployment notifications.
+- API and web notification history show the delivery result.
+- A restored schedule creates a deployment and advances its next occurrence.
+- The schedule remains disabled after the check.
+- An absent replica causes restore failure.
+- Test timeout and interruption remove owned processes, containers, volumes, and temporary data.
+- Cleanup preserves an unrelated container.
+
+PR CI runs the same command in the `Backup restore` job.
+The drill removes its temporary data, processes, and containers after completion.
+It does not use production backup storage or external notification services.
+Continue the monthly isolated drill to verify actual backup access and deployment settings.
+This check covers SQLite recovery with Litestream 0.3.
+Use separate recovery drills for PostgreSQL and SQL Server.
+
 ## Backup health monitoring
 
 DurpDeploy optionally runs `DURPDEPLOY_LITESTREAM_CHECK_COMMAND` through

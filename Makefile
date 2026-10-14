@@ -333,11 +333,18 @@ clean:
 test: templ-generate swagger-ui-copy
 	bash scripts/go_test.sh -v -count=1 -timeout=20m ./...
 
+.PHONY: backup-restore-test backup-restore-script-test
+backup-restore-test:
+	bash scripts/test-backup-restore.sh
+
+backup-restore-script-test:
+	bash scripts/test-backup-restore-script-test.sh
+
 .PHONY: go-test-cleanup-test
 go-test-cleanup-test:
 	bash scripts/go_test_cleanup_test.sh
 	bash scripts/go_test_exec_test.sh
-	bash scripts/go_test.sh -count=1 scripts/go_test_cleanup.go scripts/go_test_cleanup_test.go
+	bash scripts/go_test.sh -count=1 scripts/go_test_cleanup.go scripts/go_test_cleanup*_test.go
 
 # One-command pre-push gate: repo-wide 80-col check, go vet, the full
 # test suite, and the clean-room E2E contracts. Engine tests only need
