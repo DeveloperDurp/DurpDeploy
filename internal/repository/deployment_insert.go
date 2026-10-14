@@ -148,7 +148,7 @@ func (r *Repository) createDeploymentWithSteps(
 			return DeploymentResult{}, artifact.ErrGateConfig
 		}
 		for i, step := range steps {
-			if step.ExecutionTarget != "local" || step.MaxRetries != 0 {
+			if step.MaxRetries != 0 {
 				return DeploymentResult{}, artifact.ErrGateConfig
 			}
 			if i == len(steps)-1 && step.ApprovalArtifactPath != "" {

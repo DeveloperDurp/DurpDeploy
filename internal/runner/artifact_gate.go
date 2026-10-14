@@ -162,6 +162,9 @@ func (r *DeploymentRunner) pinArtifactGateImages(
 	steps []deploymentStep,
 ) error {
 	for index, step := range steps {
+		if step.ExecutionTarget == "agent" {
+			continue
+		}
 		id, err := r.repo.Queries.GetArtifactGateImage(
 			ctx,
 			db.GetArtifactGateImageParams{
