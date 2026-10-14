@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"fmt"
+	"io/fs"
 	"math"
 	"strings"
 	"testing"
@@ -12,13 +13,15 @@ import (
 	"github.com/pressly/goose/v3"
 
 	"durpdeploy/internal/db"
+	"durpdeploy/migrations"
 )
 
 func TestLogMetadataMigrationAcrossDatabases(t *testing.T) {
 	forEachDeploymentCreationEngine(t, func(t *testing.T, name string) {
-		repo, _ := openDeploymentCreationEngine(t,
-			newDeploymentCreationEngine(t, name))
-		deploymentID, legacyName := seedPreMigrationLogMetadata(t, repo, name)
+		repo, provider := openPreLogMetadataEngine(t, name)
+		deploymentID, legacyName := seedPreMigrationLogMetadata(
+			t, repo, provider, name,
+		)
 		step := db.CreateStepDeploymentLogParams{
 			DeploymentID: deploymentID, Line: "new output",
 			StepIndex: sql.NullInt64{Int64: 0, Valid: true},
@@ -78,8 +81,46 @@ func TestLogMetadataMigrationAcrossDatabases(t *testing.T) {
 	})
 }
 
+func openPreLogMetadataEngine(
+	t *testing.T, name string,
+) (*Repository, *goose.Provider) {
+	t.Helper()
+	engine := newDeploymentCreationEngine(t, name)
+	conn, err := sql.Open(engine.driver, engine.dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := conn.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	dialect, target := goose.DialectSQLite3, int64(60)
+	var migrationFS fs.FS = migrations.FS
+	switch name {
+	case "PostgreSQL":
+		dialect = goose.DialectPostgres
+	case "SQLServer":
+		dialect, target = goose.DialectMSSQL, 45
+		migrationFS, err = fs.Sub(migrations.MSSQLFS, "mssql")
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	provider, err := goose.NewProvider(dialect, conn, migrationFS)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := provider.UpTo(t.Context(), target); err != nil {
+		t.Fatal(err)
+	}
+	repo := New(conn)
+	seedDeploymentCreationRace(t, repo)
+	return repo, provider
+}
+
 func seedPreMigrationLogMetadata(
-	t *testing.T, repo *Repository, name string,
+	t *testing.T, repo *Repository, provider *goose.Provider, name string,
 ) (int64, string) {
 	t.Helper()
 	deployment, err := repo.Queries.CreateDeployment(t.Context(),
@@ -90,9 +131,6 @@ func seedPreMigrationLogMetadata(
 		t.Fatal(err)
 	}
 	// Given: pre-migration logs with indexed, legacy, NULL, and empty scopes.
-	if err := goose.Down(repo.DB, "."); err != nil {
-		t.Fatal(err)
-	}
 	legacyName := "legacy @ agent"
 	if name != "SQLServer" {
 		// These backends allow names wider than a PostgreSQL index key.
@@ -126,7 +164,7 @@ func seedPreMigrationLogMetadata(
 		}
 	}
 	// When: the backfill runs and all supported writers append ordinary output.
-	if err := goose.Up(repo.DB, "."); err != nil {
+	if _, err := provider.Up(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	return deployment.ID, legacyName
