@@ -527,11 +527,12 @@ type RemoteStepRun struct {
 }
 
 type Runbook struct {
-	ID          int64  `json:"id"`
-	ProjectID   int64  `json:"project_id"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	CreatedAt   int64  `json:"created_at"`
+	ID          int64         `json:"id"`
+	ProjectID   int64         `json:"project_id"`
+	Name        string        `json:"name"`
+	Description string        `json:"description"`
+	CreatedAt   int64         `json:"created_at"`
+	DeletedAt   sql.NullInt64 `json:"deleted_at"`
 }
 
 type RunbookExecution struct {

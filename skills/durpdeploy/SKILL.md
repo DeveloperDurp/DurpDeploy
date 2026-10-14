@@ -461,6 +461,27 @@ underlying `deployment_id`. Read the execution at
 `/api/v1/projects/$PID/runbook-executions/$XID`, logs at `/logs`, and live
 logs at `/logs/stream` (SSE by default, `?format=ndjson` for NDJSON).
 
+Delete a runbook with `DELETE /api/v1/projects/$PID/runbooks/$BID`.
+Send an empty body.
+Successful deletion returns `204` without a response body.
+Missing, deleted, or inaccessible runbooks return `404`.
+Viewers receive `403` for API writes.
+Unfinished executions or unconfirmed cancellation and cleanup return `409` with an explanation.
+Finish or cancel executions before deletion.
+Confirm cleanup before you repeat deletion.
+
+Deletion removes the runbook from active lists and disables all its schedules.
+Deletion prevents new executions, retries, saved versions, and schedules.
+Saved versions, backing releases, artifact pins, completed executions, and logs remain for history.
+Deleted runbook names remain reserved within the project.
+Deletion does not provide restoration or permanent history removal.
+Existing project and environment deletion policies still apply to retained history.
+
+Read retained executions and logs through the existing runbook execution endpoints.
+The `runbook_deleted_at` field uses the existing nullable integer format.
+Its `Valid` field is `true` when the runbook is deleted.
+Runbook definition and version endpoints return `404` after deletion.
+
 Use `GET /api/v1/deployments/$DID/logs/page` for bounded history.
 Runbooks support `GET /api/v1/projects/$PID/runbook-executions/$XID/logs/page`.
 Responses contain `items`, `next_before`, `last_id`, `limit`, `before`, `byte_limit`, and `line_byte_limit`.

@@ -50,7 +50,7 @@ func (q *Queries) CountRunbookExecutions(ctx context.Context, projectID int64) (
 }
 
 const createRunbook = `-- name: CreateRunbook :one
-INSERT INTO runbooks (project_id, name, description) VALUES (?, ?, ?) RETURNING id, project_id, name, description, created_at
+INSERT INTO runbooks (project_id, name, description) VALUES (?, ?, ?) RETURNING id, project_id, name, description, created_at, deleted_at
 `
 
 type CreateRunbookParams struct {
@@ -68,6 +68,7 @@ func (q *Queries) CreateRunbook(ctx context.Context, arg CreateRunbookParams) (R
 		&i.Name,
 		&i.Description,
 		&i.CreatedAt,
+		&i.DeletedAt,
 	)
 	return i, err
 }
@@ -318,6 +319,38 @@ func (q *Queries) DisableRunbookScheduleWithReason(ctx context.Context, arg Disa
 	return result.RowsAffected()
 }
 
+const disableRunbookSchedules = `-- name: DisableRunbookSchedules :exec
+UPDATE runbook_schedules SET enabled = 0 WHERE runbook_id = ?
+`
+
+func (q *Queries) DisableRunbookSchedules(ctx context.Context, runbookID int64) error {
+	_, err := q.db.ExecContext(ctx, disableRunbookSchedules, runbookID)
+	return err
+}
+
+const getHistoricalRunbook = `-- name: GetHistoricalRunbook :one
+SELECT id, project_id, name, description, created_at, deleted_at FROM runbooks WHERE id = ? AND project_id = ?
+`
+
+type GetHistoricalRunbookParams struct {
+	ID        int64 `json:"id"`
+	ProjectID int64 `json:"project_id"`
+}
+
+func (q *Queries) GetHistoricalRunbook(ctx context.Context, arg GetHistoricalRunbookParams) (Runbook, error) {
+	row := q.db.QueryRowContext(ctx, getHistoricalRunbook, arg.ID, arg.ProjectID)
+	var i Runbook
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Description,
+		&i.CreatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
 const getLatestRunbookVersion = `-- name: GetLatestRunbookVersion :one
 SELECT id, runbook_id, version, release_id, created_at FROM runbook_versions WHERE runbook_id = ?
 ORDER BY version DESC LIMIT 1
@@ -337,7 +370,7 @@ func (q *Queries) GetLatestRunbookVersion(ctx context.Context, runbookID int64) 
 }
 
 const getRunbook = `-- name: GetRunbook :one
-SELECT id, project_id, name, description, created_at FROM runbooks WHERE id = ? AND project_id = ?
+SELECT id, project_id, name, description, created_at, deleted_at FROM runbooks WHERE id = ? AND project_id = ? AND deleted_at IS NULL
 `
 
 type GetRunbookParams struct {
@@ -354,12 +387,13 @@ func (q *Queries) GetRunbook(ctx context.Context, arg GetRunbookParams) (Runbook
 		&i.Name,
 		&i.Description,
 		&i.CreatedAt,
+		&i.DeletedAt,
 	)
 	return i, err
 }
 
 const getRunbookByID = `-- name: GetRunbookByID :one
-SELECT id, project_id, name, description, created_at FROM runbooks WHERE id = ?
+SELECT id, project_id, name, description, created_at, deleted_at FROM runbooks WHERE id = ? AND deleted_at IS NULL
 `
 
 func (q *Queries) GetRunbookByID(ctx context.Context, id int64) (Runbook, error) {
@@ -371,13 +405,14 @@ func (q *Queries) GetRunbookByID(ctx context.Context, id int64) (Runbook, error)
 		&i.Name,
 		&i.Description,
 		&i.CreatedAt,
+		&i.DeletedAt,
 	)
 	return i, err
 }
 
 const getRunbookExecution = `-- name: GetRunbookExecution :one
 SELECT x.id, x.runbook_version_id, x.deployment_id, x.actor_user_id, x.schedule_id, x.created_at, d.environment_id, d.status, d.started_at, d.finished_at,
-    v.runbook_id, v.version, b.project_id, b.name AS runbook_name,
+    v.runbook_id, v.version, b.project_id, b.name AS runbook_name, b.deleted_at AS runbook_deleted_at,
     e.name AS environment_name
 FROM runbook_executions x
 JOIN runbook_versions v ON v.id = x.runbook_version_id
@@ -407,6 +442,7 @@ type GetRunbookExecutionRow struct {
 	Version          int64         `json:"version"`
 	ProjectID        int64         `json:"project_id"`
 	RunbookName      string        `json:"runbook_name"`
+	RunbookDeletedAt sql.NullInt64 `json:"runbook_deleted_at"`
 	EnvironmentName  string        `json:"environment_name"`
 }
 
@@ -428,6 +464,7 @@ func (q *Queries) GetRunbookExecution(ctx context.Context, arg GetRunbookExecuti
 		&i.Version,
 		&i.ProjectID,
 		&i.RunbookName,
+		&i.RunbookDeletedAt,
 		&i.EnvironmentName,
 	)
 	return i, err
@@ -560,7 +597,8 @@ func (q *Queries) HasUnconfirmedRunbookRemoteOutcome(ctx context.Context, source
 
 const listDueRunbookSchedules = `-- name: ListDueRunbookSchedules :many
 SELECT id, runbook_id, version_id, environment_id, cron, next_run_at, enabled, last_fired_at, created_at, last_error FROM runbook_schedules WHERE enabled = 1 AND next_run_at <= ?
-ORDER BY next_run_at, id
+AND EXISTS (SELECT 1 FROM runbooks b WHERE b.id = runbook_id AND b.deleted_at IS NULL)
+ORDER BY next_run_at ASC, id ASC
 `
 
 func (q *Queries) ListDueRunbookSchedules(ctx context.Context, nextRunAt int64) ([]RunbookSchedule, error) {
@@ -599,7 +637,7 @@ func (q *Queries) ListDueRunbookSchedules(ctx context.Context, nextRunAt int64) 
 
 const listRunbookExecutions = `-- name: ListRunbookExecutions :many
 SELECT x.id, x.runbook_version_id, x.deployment_id, x.actor_user_id, x.schedule_id, x.created_at, d.environment_id, d.status, d.started_at, d.finished_at,
-    v.runbook_id, v.version, b.project_id, b.name AS runbook_name,
+    v.runbook_id, v.version, b.project_id, b.name AS runbook_name, b.deleted_at AS runbook_deleted_at,
     e.name AS environment_name
 FROM runbook_executions x
 JOIN runbook_versions v ON v.id = x.runbook_version_id
@@ -631,6 +669,7 @@ type ListRunbookExecutionsRow struct {
 	Version          int64         `json:"version"`
 	ProjectID        int64         `json:"project_id"`
 	RunbookName      string        `json:"runbook_name"`
+	RunbookDeletedAt sql.NullInt64 `json:"runbook_deleted_at"`
 	EnvironmentName  string        `json:"environment_name"`
 }
 
@@ -658,6 +697,7 @@ func (q *Queries) ListRunbookExecutions(ctx context.Context, arg ListRunbookExec
 			&i.Version,
 			&i.ProjectID,
 			&i.RunbookName,
+			&i.RunbookDeletedAt,
 			&i.EnvironmentName,
 		); err != nil {
 			return nil, err
@@ -745,7 +785,7 @@ func (q *Queries) ListRunbookVersions(ctx context.Context, runbookID int64) ([]R
 }
 
 const listRunbooks = `-- name: ListRunbooks :many
-SELECT id, project_id, name, description, created_at FROM runbooks WHERE project_id = ? ORDER BY name, id
+SELECT id, project_id, name, description, created_at, deleted_at FROM runbooks WHERE project_id = ? AND deleted_at IS NULL ORDER BY name, id
 `
 
 func (q *Queries) ListRunbooks(ctx context.Context, projectID int64) ([]Runbook, error) {
@@ -763,6 +803,7 @@ func (q *Queries) ListRunbooks(ctx context.Context, projectID int64) ([]Runbook,
 			&i.Name,
 			&i.Description,
 			&i.CreatedAt,
+			&i.DeletedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -775,6 +816,20 @@ func (q *Queries) ListRunbooks(ctx context.Context, projectID int64) ([]Runbook,
 		return nil, err
 	}
 	return items, nil
+}
+
+const markRunbookDeleted = `-- name: MarkRunbookDeleted :exec
+UPDATE runbooks SET deleted_at = unixepoch() WHERE id = ? AND project_id = ?
+`
+
+type MarkRunbookDeletedParams struct {
+	ID        int64 `json:"id"`
+	ProjectID int64 `json:"project_id"`
+}
+
+func (q *Queries) MarkRunbookDeleted(ctx context.Context, arg MarkRunbookDeletedParams) error {
+	_, err := q.db.ExecContext(ctx, markRunbookDeleted, arg.ID, arg.ProjectID)
+	return err
 }
 
 const setRunbookDeploymentKind = `-- name: SetRunbookDeploymentKind :exec

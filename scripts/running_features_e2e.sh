@@ -54,6 +54,8 @@ CODE=$(api_post_code '{}' "$BASE/api/v1/projects/$API_PROJECT_ID/runbooks/$RUNBO
 [[ "$CODE" == 200 ]] || { echo "FAIL: disable runbook schedule=$CODE"; exit 1; }
 echo "  Immutable versions, pinned retry, and schedule disable: OK"
 
+source "$SCRIPT_DIR/runbook_deletion_e2e.sh"
+
 echo "=== Verification and rollback ==="
 VERIFY_PROJECT=$(api_post "{\"name\":\"e2e-verify\"}" "$BASE/api/v1/projects")
 VERIFY_PROJECT_ID=$(echo "$VERIFY_PROJECT" | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')
@@ -169,6 +171,12 @@ DURPDEPLOY_LIVE_INHERITED="/projects/${SHARED_PROJECT_IDS[0]}/variables" \
 DURPDEPLOY_LIVE_SESSION="$SESSION_ID" \
 DURPDEPLOY_LIVE_API_TOKEN="$API_TOKEN" \
 DURPDEPLOY_LIVE_RUNBOOK_EDITOR="/projects/$API_PROJECT_ID/runbooks/$RUNBOOK_ID/edit" \
+DURPDEPLOY_LIVE_RUNBOOK_DELETE="$RUNBOOK_DELETE_BROWSER_PATH" \
+DURPDEPLOY_LIVE_RUNBOOK_DELETE_HISTORY="$RUNBOOK_DELETE_BROWSER_HISTORY" \
 SSL_CERT_FILE="${DURPDEPLOY_E2E_CA_FILE:-${SSL_CERT_FILE:-}}" \
     go test -tags=e2e,packagebrowser -count=1 -timeout=5m \
-    -v -run '^Test(RunningServer|VariableScopesBeforeDeployment)BrowserE2E$' ./internal/handler/api
+    -v -run '^Test(RunningServer|VariableScopesBeforeDeployment|RunbookDeletion)BrowserE2E$' ./internal/handler/api
+
+CODE=$(api_get_code "$BASE/api/v1$RUNBOOK_DELETE_BROWSER_PATH")
+[[ "$CODE" == 404 ]] || { echo "FAIL: browser runbook deletion=$CODE"; exit 1; }
+echo "  Browser deletion history: $BASE$RUNBOOK_DELETE_BROWSER_HISTORY"
