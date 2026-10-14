@@ -32,6 +32,13 @@ func TestArtifactGatePreviewOmissionBrowserE2E(t *testing.T) {
 		fmt.Sprintf("%s/deployments/%d", f.baseURL, deployment.ID),
 	)
 	b.wait(t, `document.querySelector('[data-terraform-review]') !== null`)
+	b.evaluate(t, `new Promise(resolve => {
+ document.body.addEventListener('htmx:afterSettle', function settled(event) {
+  if (!event.target.matches('[data-artifact-gates]')) return;
+  document.body.removeEventListener('htmx:afterSettle', settled);
+  resolve(true);
+ });
+})`)
 	b.evaluate(
 		t,
 		`document.querySelector('[data-terraform-review]').open = true; true`,
