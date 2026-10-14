@@ -461,6 +461,27 @@ underlying `deployment_id`. Read the execution at
 `/api/v1/projects/$PID/runbook-executions/$XID`, logs at `/logs`, and live
 logs at `/logs/stream` (SSE by default, `?format=ndjson` for NDJSON).
 
+Delete a runbook with `DELETE /api/v1/projects/$PID/runbooks/$BID`.
+Send an empty body.
+Successful deletion returns `204` without a response body.
+Missing, deleted, or inaccessible runbooks return `404`.
+Viewers receive `403` for API writes.
+Unfinished executions or unconfirmed cancellation and cleanup return `409` with an explanation.
+Finish or cancel executions before deletion.
+Confirm cleanup before you repeat deletion.
+
+Deletion removes the runbook from active lists and disables all its schedules.
+Deletion prevents new executions, retries, saved versions, and schedules.
+Saved versions, backing releases, artifact pins, completed executions, and logs remain for history.
+Deleted runbook names remain reserved within the project.
+Deletion does not provide restoration or permanent history removal.
+Existing project and environment deletion policies still apply to retained history.
+
+Read retained executions and logs through the existing runbook execution endpoints.
+The `runbook_deleted_at` field uses the existing nullable integer format.
+Its `Valid` field is `true` when the runbook is deleted.
+Runbook definition and version endpoints return `404` after deletion.
+
 Use `GET /api/v1/deployments/$DID/logs/page` for bounded history.
 Runbooks support `GET /api/v1/projects/$PID/runbook-executions/$XID/logs/page`.
 Responses contain `items`, `next_before`, `last_id`, `limit`, `before`, `byte_limit`, and `line_byte_limit`.
@@ -703,8 +724,14 @@ rejected, is cancelled, or expires. Artifact approval retains its queue slot.
 Other projects can deploy to that environment concurrently. The same project
 can also deploy to other environments concurrently. Queue positions and active
 work links refer only to the deployment's project/environment pair.
-Only local deployment steps without retries are
-supported; runbooks and agent steps cannot use gates. Both approval paths and
+
+Gate producers must run locally in deployment releases.
+Gated deployments can include agent steps, but cannot use automatic retries.
+Runbooks and agent steps cannot produce approval gates.
+Local steps receive approved artifacts through the read-only `DURPDEPLOY_APPROVED_DIR` directory.
+If agent delivery needs apply results, write those files to `DURPDEPLOY_STAGE_DIR` in the local apply step.
+
+Both approval paths and
 an explicit review format are required together; an empty format is rejected.
 Approval bundles and review JSON have no application byte limits.
 API and browser previews show at most 100 resources and 1 MiB of resource text.

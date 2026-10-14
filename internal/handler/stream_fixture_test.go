@@ -1,13 +1,52 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
 	"testing"
+	"time"
 
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/migrate"
 	"durpdeploy/internal/repository"
 )
+
+// setupTestRepo uses real migrations and waits for SQLite connections to
+// close before TempDir removes their files.
+func setupTestRepo(t *testing.T) *repository.Repository {
+	t.Helper()
+	dir := t.TempDir()
+	dsn := fmt.Sprintf(
+		"file:%s/test.db?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)",
+		dir,
+	)
+	sqlDB, err := migrate.Run(dsn)
+	if err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := sqlDB.Close(); err != nil {
+			t.Errorf("close log database: %v", err)
+		}
+		// Close prevents new queries but active connections remain until
+		// their owners finish. Token telemetry has a five-second deadline.
+		deadline := time.NewTimer(6 * time.Second)
+		defer deadline.Stop()
+		ticker := time.NewTicker(time.Millisecond)
+		defer ticker.Stop()
+		for sqlDB.Stats().OpenConnections != 0 {
+			select {
+			case <-ticker.C:
+			case <-deadline.C:
+				t.Errorf("log database connections did not close: %+v",
+					sqlDB.Stats())
+				return
+			}
+		}
+	})
+	return repository.New(sqlDB)
+}
 
 func streamTestAuth(
 	t *testing.T,

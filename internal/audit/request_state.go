@@ -4,12 +4,15 @@ import (
 	"database/sql"
 	"net/http"
 
+	"durpdeploy/internal/db"
+
 	agentproto "github.com/DeveloperDurp/durpdeploy-agent/protocol"
 )
 
 type requestStateKey struct{}
 
 type requestState struct {
+	deletedRunbook     db.Runbook
 	suppress           bool
 	overridden         *actionOverride
 	agentLabel         string

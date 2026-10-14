@@ -2,13 +2,22 @@
 INSERT INTO runbooks (project_id, name, description) VALUES (?, ?, ?) RETURNING *;
 
 -- name: GetRunbook :one
+SELECT * FROM runbooks WHERE id = ? AND project_id = ? AND deleted_at IS NULL;
+
+-- name: GetHistoricalRunbook :one
 SELECT * FROM runbooks WHERE id = ? AND project_id = ?;
 
 -- name: GetRunbookByID :one
-SELECT * FROM runbooks WHERE id = ?;
+SELECT * FROM runbooks WHERE id = ? AND deleted_at IS NULL;
 
 -- name: ListRunbooks :many
-SELECT * FROM runbooks WHERE project_id = ? ORDER BY name, id;
+SELECT * FROM runbooks WHERE project_id = ? AND deleted_at IS NULL ORDER BY name, id;
+
+-- name: MarkRunbookDeleted :exec
+UPDATE runbooks SET deleted_at = unixepoch() WHERE id = ? AND project_id = ?;
+
+-- name: DisableRunbookSchedules :exec
+UPDATE runbook_schedules SET enabled = 0 WHERE runbook_id = ?;
 
 -- name: CreateRunbookVersion :one
 INSERT INTO runbook_versions (runbook_id, version, release_id)
@@ -37,7 +46,7 @@ VALUES (?, ?, ?, ?) RETURNING *;
 
 -- name: GetRunbookExecution :one
 SELECT x.*, d.environment_id, d.status, d.started_at, d.finished_at,
-    v.runbook_id, v.version, b.project_id, b.name AS runbook_name,
+    v.runbook_id, v.version, b.project_id, b.name AS runbook_name, b.deleted_at AS runbook_deleted_at,
     e.name AS environment_name
 FROM runbook_executions x
 JOIN runbook_versions v ON v.id = x.runbook_version_id
@@ -48,7 +57,7 @@ WHERE x.id = ? AND b.project_id = ?;
 
 -- name: ListRunbookExecutions :many
 SELECT x.*, d.environment_id, d.status, d.started_at, d.finished_at,
-    v.runbook_id, v.version, b.project_id, b.name AS runbook_name,
+    v.runbook_id, v.version, b.project_id, b.name AS runbook_name, b.deleted_at AS runbook_deleted_at,
     e.name AS environment_name
 FROM runbook_executions x
 JOIN runbook_versions v ON v.id = x.runbook_version_id
@@ -84,7 +93,8 @@ SELECT * FROM runbook_schedules WHERE runbook_id = ? ORDER BY id DESC;
 
 -- name: ListDueRunbookSchedules :many
 SELECT * FROM runbook_schedules WHERE enabled = 1 AND next_run_at <= ?
-ORDER BY next_run_at, id;
+AND EXISTS (SELECT 1 FROM runbooks b WHERE b.id = runbook_id AND b.deleted_at IS NULL)
+ORDER BY next_run_at ASC, id ASC;
 
 -- name: AdvanceRunbookSchedule :execrows
 UPDATE runbook_schedules SET next_run_at = ?, last_fired_at = ?

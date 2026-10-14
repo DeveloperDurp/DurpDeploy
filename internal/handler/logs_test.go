@@ -13,8 +13,6 @@ import (
 	"time"
 
 	"durpdeploy/internal/db"
-	"durpdeploy/internal/migrate"
-	"durpdeploy/internal/repository"
 	"durpdeploy/internal/runner"
 	"github.com/go-chi/chi/v5"
 )
@@ -177,25 +175,6 @@ func TestStreamLogs_ReplaysHistoricalLogs(t *testing.T) {
 	}
 
 	t.Fatal("did not receive live log after historical logs")
-}
-
-// setupTestRepo opens a temp-file SQLite, runs the real migrations via the
-// goose migration runner, and returns a Repository pointing at it. Using
-// migrate.Run keeps the schema in lockstep with the rest of the app so adding
-// a column to migrations/003_*.sql doesn't require editing every test.
-func setupTestRepo(t *testing.T) *repository.Repository {
-	t.Helper()
-	dir := t.TempDir()
-	dsn := fmt.Sprintf(
-		"file:%s/test.db?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)",
-		dir,
-	)
-	sqlDB, err := migrate.Run(dsn)
-	if err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
-	t.Cleanup(func() { _ = sqlDB.Close() })
-	return repository.New(sqlDB)
 }
 
 func TestStreamLogs_BadID(t *testing.T) {

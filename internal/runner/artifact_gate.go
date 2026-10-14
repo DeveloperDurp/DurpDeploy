@@ -162,6 +162,9 @@ func (r *DeploymentRunner) pinArtifactGateImages(
 	steps []deploymentStep,
 ) error {
 	for index, step := range steps {
+		if step.ExecutionTarget == "agent" {
+			continue
+		}
 		id, err := r.repo.Queries.GetArtifactGateImage(
 			ctx,
 			db.GetArtifactGateImageParams{
@@ -183,11 +186,7 @@ func (r *DeploymentRunner) pinArtifactGateImages(
 		if err != nil {
 			return err
 		}
-		if err := r.retainArtifactGateImage(ctx, deploymentID,
-			int64(index), id); err != nil {
-			return err
-		}
-		if err := r.repo.Queries.CreateArtifactGateImage(
+		if err := r.saveArtifactGateImage(
 			ctx,
 			db.CreateArtifactGateImageParams{
 				DeploymentID: deploymentID,

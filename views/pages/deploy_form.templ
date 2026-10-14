@@ -52,6 +52,8 @@ templ DeployFormPage(project db.Project, releases []db.Release, selectedRelease 
 				<form
 					method="post"
 					action={ fmt.Sprintf("/projects/%d/deploy", project.ID) }
+					hx-boost="true"
+					hx-push-url="true"
 					class="space-y-4"
 					if selectedRelease != nil {
 						x-data={ fmt.Sprintf("deploymentForm({releaseID: '%d', environmentID: ''})", selectedRelease.ID) }

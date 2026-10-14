@@ -1,3 +1,4 @@
+// allow: SIZE_OK — centralized route registration required by AGENTS.md.
 package server
 
 import (
@@ -373,6 +374,10 @@ func newRouter(
 			dpr.Get("/deployments/{id}/logs/stream", lh.StreamLogs)
 			dpr.Get("/deployments/{id}/logs.txt", lh.ExportLogs)
 		})
+
+		pr.With(auth.RequireProjectAccessNotFound(repo)).Post(
+			"/projects/{id}/runbooks/{runbookId}/delete", runbookH.Delete,
+		)
 
 		// Project-scoped routes: every /projects/{id}/... request must
 		// pass the per-project membership check (global admins bypass).
@@ -764,6 +769,10 @@ func newRouter(
 				)
 			})
 		})
+
+		ar.With(auth.RequireProjectAccessNotFound(repo)).Delete(
+			"/projects/{id}/runbooks/{runbookId}", api.EmptyBody(apiRunbookH.Delete),
+		)
 
 		// Project-scoped sub-group.
 		ar.Group(func(par chi.Router) {

@@ -381,7 +381,7 @@ jobs:
           go build -o "$RUNNER_TEMP/durpdeploy-staging-agent" github.com/DeveloperDurp/durpdeploy-agent/cmd/agent
           DURPDEPLOY_AGENT_E2E_BINARY="$RUNNER_TEMP/durpdeploy-staging-agent" \
             bash scripts/go_test.sh -tags 'e2e agentstaging' -count=1 \
-            -timeout=10m -v -run '^(TestDeploymentStaging(Transfer|ImportFailure|TransferPausesStepTimeout|Audit|Package|PackageAgentOnly|PackageLegacyAgent)APIE2E|TestExecutionLocationAPIWebE2E|TestLegacyExecutionLocationAPIWebE2E)$' ./internal/agentserver
+            -timeout=10m -v -run '^(TestDeploymentStaging(Transfer|ImportFailure|TransferPausesStepTimeout|Audit|ArtifactGate|Package|PackageAgentOnly|PackageLegacyAgent)APIE2E|TestExecutionLocationAPIWebE2E|TestLegacyExecutionLocationAPIWebE2E)$' ./internal/agentserver
 
   # ----- Artifact crash recovery and capacity ----------------------------------
   package-browser:
@@ -408,7 +408,9 @@ jobs:
       - name: Verify mobile lists and dashboard updates
         run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^Test(DeploymentMobile|DeploymentListMobile|ResourceListMobile|HomeMobile|HomeRunningPoll|HomeChartTimer|SchedulePages|MainPagePattern)BrowserE2E$' ./internal/handler/api
       - name: Verify forms and dialogs
-        run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^Test(ProjectEditModal|ResourceCreateModal|ResourceEditModal|StepEditModal|StepAddModal|MobileFormFocus|RunbookEditor|AlpineEditForms|AlpineDialogs|RunningServer)BrowserE2E$' ./internal/handler/api
+        run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^Test(ProjectEditModal|ResourceCreateModal|ResourceEditModal|StepEditModal|StepAddModal|MobileFormFocus|RunbookEditor|RunbookDeletion|AlpineEditForms|AlpineDialogs|RunningServer)BrowserE2E$' ./internal/handler/api
+      - name: Verify runbook deletion and retained history
+        run: bash scripts/go_test.sh -tags=e2e -race -count=1 -timeout=5m -v -run '^TestRunbookDeletion.*APIWebE2E$' ./internal/handler/api
       - name: Verify variables and notification forms
         run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^Test(LifecycleVariables|LifecycleLiveScope|LifecyclePageNavigation|VariableScopesBeforeDeployment|NotificationCredentialForms|NotificationValidationPreservesForm|SMTPPlaintextWarning)BrowserE2E$' ./internal/handler/api
       - name: Verify deployment step logs

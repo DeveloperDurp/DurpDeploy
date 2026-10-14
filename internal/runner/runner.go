@@ -285,7 +285,7 @@ func (r *DeploymentRunner) Run(
 		if gated && int64(stepIndex) < gateRun.NextStep {
 			continue
 		}
-		if gated {
+		if gated && step.ExecutionTarget != "agent" {
 			imageID, err := r.repo.Queries.GetArtifactGateImage(
 				ctx,
 				db.GetArtifactGateImageParams{

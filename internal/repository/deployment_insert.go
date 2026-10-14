@@ -137,25 +137,9 @@ func (r *Repository) createDeploymentWithSteps(
 			return DeploymentResult{}, containerenv.ErrReserved
 		}
 	}
-	gated := false
-	for _, step := range steps {
-		if step.ApprovalArtifactPath != "" {
-			gated = true
-		}
-	}
-	if gated {
-		if releaseKind.Kind != "deployment" {
-			return DeploymentResult{}, artifact.ErrGateConfig
-		}
-		for i, step := range steps {
-			if step.ExecutionTarget != "local" || step.MaxRetries != 0 {
-				return DeploymentResult{}, artifact.ErrGateConfig
-			}
-			if i == len(steps)-1 && step.ApprovalArtifactPath != "" {
-				return DeploymentResult{}, artifact.ErrGateConfig
-			}
-		}
-
+	gated, err := validateDeploymentArtifactGate(releaseKind.Kind, steps)
+	if err != nil {
+		return DeploymentResult{}, err
 	}
 	arg.AssignedAgentID = sql.NullString{}
 	if arg.Status == "pending" {
@@ -192,4 +176,29 @@ func (r *Repository) createDeploymentWithSteps(
 	}
 	deployment, err = q.GetDeployment(ctx, deployment.ID)
 	return DeploymentResult{Deployment: deployment, Mode: ExecutionLocal}, err
+}
+
+func validateDeploymentArtifactGate(
+	kind string,
+	steps []DeploymentStepSnapshot,
+) (bool, error) {
+	gated := false
+	for _, step := range steps {
+		if step.ApprovalArtifactPath != "" {
+			gated = true
+		}
+	}
+	if !gated {
+		return false, nil
+	}
+	if kind != "deployment" ||
+		steps[len(steps)-1].ApprovalArtifactPath != "" {
+		return true, artifact.ErrGateConfig
+	}
+	for _, step := range steps {
+		if step.MaxRetries != 0 {
+			return true, artifact.ErrGateConfig
+		}
+	}
+	return true, nil
 }

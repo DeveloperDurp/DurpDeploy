@@ -4,6 +4,8 @@ package audit
 // registered in server.go. New routes need one map entry; the fallback
 // heuristic catches anything missed with a lossy name.
 var actionMap = map[string]string{
+	"POST /projects/{id}/runbooks/{runbookId}/delete":                  "delete_runbook",
+	"DELETE /api/v1/projects/{id}/runbooks/{runbookId}":                "delete_runbook",
 	"POST /agent/v1/deployments/{id}/staging/upload":                   "publish_staging",
 	"POST /lifecycles/{id}/variables":                                  "create_lifecycle_variable",
 	"PUT /lifecycles/{id}/variables/{varId}":                           "update_lifecycle_variable",

@@ -1000,11 +1000,12 @@ type swaggerRunbookSaveRequest struct {
 //
 //nolint:unused // Used by Swagger specification generation.
 type swaggerRunbook struct {
-	ID          int64  `json:"id"`
-	ProjectID   int64  `json:"project_id"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	CreatedAt   int64  `json:"created_at"`
+	DeletedAt   swaggerSQLNullInteger `json:"deleted_at"`
+	ID          int64                 `json:"id"`
+	ProjectID   int64                 `json:"project_id"`
+	Name        string                `json:"name"`
+	Description string                `json:"description"`
+	CreatedAt   int64                 `json:"created_at"`
 }
 
 // swagger:model RunbookVersion
@@ -1103,6 +1104,7 @@ type swaggerRunbookVersionResponse struct {
 //
 //nolint:unused // Used by Swagger specification generation.
 type swaggerRunbookExecutionDetail struct {
+	RunbookDeletedAt   swaggerSQLNullInteger `json:"runbook_deleted_at"`
 	QueuePosition      int64                 `json:"queue_position"`
 	ActiveDeploymentID int64                 `json:"active_deployment_id,omitempty"`
 	ActiveWorkURL      string                `json:"active_work_url,omitempty"`
