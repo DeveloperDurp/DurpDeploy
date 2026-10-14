@@ -4,8 +4,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 export DURPDEPLOY_RESTORE_BACKEND=${DURPDEPLOY_RESTORE_BACKEND:-sqlite}
 case $DURPDEPLOY_RESTORE_BACKEND in
-    sqlite) test_timeout=5m; setup_polls=2400 ;;
-    postgres|mssql) test_timeout=10m; setup_polls=5400 ;;
+    sqlite) test_timeout=5m; setup_seconds=240 ;;
+    postgres|mssql) test_timeout=10m; setup_seconds=540 ;;
     *) echo 'ERROR: set DURPDEPLOY_RESTORE_BACKEND to sqlite, postgres, or mssql.' >&2; exit 1 ;;
 esac
 if [[ -n ${DURPDEPLOY_CONTAINER_URL:-} ]]; then
@@ -56,6 +56,7 @@ unrelated=$(engine run --detach --network=none \
 
 for mode in timeout TERM; do
     log_file="$work_dir/$mode.log"
+    setup_deadline=$((SECONDS + setup_seconds))
     DURPDEPLOY_RESTORE_INTERRUPT_FIXTURE=1 \
         DURPDEPLOY_GO_TEST_DIRECTORY="$work_dir" \
         bash scripts/go_test.sh -tags=e2e,backuprestore -race -count=1 \
@@ -65,7 +66,7 @@ for mode in timeout TERM; do
     ready=
     # Native startup, migration, build, and backup get nine minutes.
     # Each global timeout leaves another minute of live work.
-    for _ in $(seq 1 "$setup_polls"); do
+    while ((SECONDS < setup_deadline)); do
         ready=$(sed -n 's/.*restore-interrupt-ready pid=\([0-9]*\) namespace=\([^ ]*\) session=\([^ ]*\).*/\1 \2 \3/p' "$log_file")
         if [[ -n $ready ]]; then break; fi
         if ! kill -0 "$runner_pid" 2>/dev/null; then break; fi
