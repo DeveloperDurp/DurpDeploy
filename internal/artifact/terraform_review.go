@@ -13,16 +13,19 @@ import (
 const terraformRedacted = "[REDACTED]"
 
 type TerraformReviewResponse struct {
-	Resources      []TerraformResourceChange `json:"resources"`
-	ReviewSource   string                    `json:"review_source"`
-	ReviewVerified bool                      `json:"review_verified"`
+	Resources        []TerraformResourceChange `json:"resources"`
+	ReviewSource     string                    `json:"review_source"`
+	ReviewVerified   bool                      `json:"review_verified"`
+	PreviewTruncated bool                      `json:"preview_truncated"`
+	ResourcesOmitted int64                     `json:"resources_omitted"`
 }
 
 type TerraformResourceChange struct {
-	Address string   `json:"address"`
-	Actions []string `json:"actions"`
-	Before  string   `json:"before"`
-	After   string   `json:"after"`
+	Address       string   `json:"address"`
+	Actions       []string `json:"actions"`
+	Before        string   `json:"before"`
+	After         string   `json:"after"`
+	OmittedFields []string `json:"omitted_fields,omitempty"`
 }
 
 // TerraformReview exposes only resource changes, never configuration or outputs.
@@ -36,47 +39,35 @@ func TerraformReview(
 func TerraformReviewReader(
 	reader io.Reader, secrets []string,
 ) ([]TerraformResourceChange, error) {
+	preview, err := TerraformPreviewReader(reader, secrets)
+	return preview.Resources, err
+}
+
+// TerraformPreviewReader bounds display details without limiting retained artifacts.
+func TerraformPreviewReader(
+	reader io.Reader,
+	secrets []string,
+) (TerraformReviewResponse, error) {
 	s := newReviewJSON(reader)
+	s.preview = &terraformPreview{}
 	scrubber := logscrub.New(secrets)
 	_, changes, err := s.terraform(
 		func(change terraformResource) (TerraformResourceChange, error) {
-			before := terraformValue(change.Before, change.BeforeSensitive, nil)
-			after := terraformValue(
-				change.After,
-				change.AfterSensitive,
-				change.AfterUnknown,
-			)
-			beforeJSON, err := json.MarshalIndent(
-				scrubTerraformValue(before, scrubber),
-				"",
-				"  ",
-			)
-			if err != nil {
-				return TerraformResourceChange{}, ErrGateConfig
-			}
-			afterJSON, err := json.MarshalIndent(
-				scrubTerraformValue(after, scrubber),
-				"",
-				"  ",
-			)
-			if err != nil {
-				return TerraformResourceChange{}, ErrGateConfig
-			}
-			return TerraformResourceChange{
-				Address: scrubber.Scrub(
-					change.Address,
-				), Actions: change.Actions,
-				Before: string(beforeJSON), After: string(afterJSON),
-			}, nil
+			return renderTerraformResource(change, scrubber)
 		},
 	)
 	if err == nil {
 		err = s.finish()
 	}
 	if err != nil {
-		return nil, errors.Join(ErrGateConfig, err)
+		return TerraformReviewResponse{}, errors.Join(ErrGateConfig, err)
 	}
-	return changes, nil
+	return TerraformReviewResponse{
+		Resources:        changes,
+		ReviewSource:     "step_output",
+		PreviewTruncated: s.preview.truncated,
+		ResourcesOmitted: s.preview.omitted,
+	}, nil
 }
 
 // Missing or malformed sensitivity metadata fails closed for that subtree.

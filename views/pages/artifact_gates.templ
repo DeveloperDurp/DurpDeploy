@@ -90,12 +90,15 @@ templ ArtifactGates(gates []ArtifactGateInfo) {
 	}
 }
 
-templ TerraformPlanView(resources []artifact.TerraformResourceChange) {
+templ TerraformPlanView(preview artifact.TerraformReviewResponse) {
 	<div data-terraform-plan class="space-y-4">
-		if len(resources) == 0 {
+		if preview.PreviewTruncated {
+			<p data-terraform-preview-truncated role="status" class="alert alert-warning">Some resource changes or values are omitted from this preview. Download and independently inspect the exact artifact before approval.</p>
+		}
+		if len(preview.Resources) == 0 && preview.ResourcesOmitted == 0 {
 			<p class="text-sm">No Terraform resource changes are available in this review.</p>
 		}
-		for _, resource := range resources {
+		for _, resource := range preview.Resources {
 			<section class="space-y-2" aria-label={ resource.Address }>
 				<div class="flex flex-wrap items-center gap-2">
 					<h3 class="font-mono text-sm break-all">{ resource.Address }</h3>

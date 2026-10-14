@@ -65,8 +65,12 @@ func (s *reviewJSON) resources(
 		changes = make([]TerraformResourceChange, 0)
 	}
 	var invalid bool
+	if s.preview != nil {
+		*s.preview = terraformPreview{}
+	}
 	err := s.array(func() error {
-		resource, count, bad, err := s.resource(render != nil)
+		details := render != nil && s.preview.canRetain(len(changes))
+		resource, count, bad, err := s.resource(details)
 		if err != nil {
 			return err
 		}
@@ -78,8 +82,13 @@ func (s *reviewJSON) resources(
 		if render == nil {
 			return nil
 		}
+		if !details {
+			s.preview.omitted++
+			s.preview.truncated = true
+			return nil
+		}
 		change, err := render(resource)
-		if err == nil {
+		if err == nil && s.preview.retain(change) {
 			changes = append(changes, change)
 		}
 		return err
@@ -91,6 +100,7 @@ type terraformResource struct {
 	Address                                                      string
 	Actions                                                      []string
 	Before, After, BeforeSensitive, AfterSensitive, AfterUnknown any
+	omitted                                                      map[string]bool
 }
 
 func (s *reviewJSON) resource(
@@ -103,13 +113,14 @@ func (s *reviewJSON) resource(
 		switch reviewField(key, "address", "change") {
 		case "address":
 			if details {
-				return s.decode(&resource.Address)
+				return s.resourceAddress(&resource)
 			}
 		case "change":
 			return s.object(func(key string) error {
 				if reviewField(key, "actions") == "actions" {
-					var err error
-					resource.Actions, counts, invalid, err = s.actions(details)
+					actions, err := s.actions(details)
+					resource.Actions, counts, invalid = actions.list, actions.counts, !actions.valid
+					resource.markOmitted("actions", actions.omitted)
 					return err
 				}
 				if details {
@@ -123,58 +134,53 @@ func (s *reviewJSON) resource(
 	return resource, counts, invalid, err
 }
 
-func (s *reviewJSON) actions(details bool) ([]string, GateReview, bool, error) {
-	var actions []string
-	if err := s.space(); err != nil {
-		return nil, GateReview{}, false, err
-	}
-	if b, _ := s.peek(); details && b == '[' {
-		actions = make([]string, 0)
-	}
-	var counts GateReview
-	var invalid bool
-	err := s.array(func() error {
-		var action string
-		if err := s.version(&action); err != nil {
-			return err
-		}
-		switch action {
-		case "create":
-			counts.Create++
-		case "update":
-			counts.Update++
-		case "delete":
-			counts.Delete++
-		case "read":
-			counts.Read++
-		case "no-op":
-		default:
-			invalid = true
-		}
-		if details {
-			actions = append(actions, action)
-		}
-		return nil
-	})
-	return actions, counts, invalid, err
-}
-
 func (s *reviewJSON) resourceValue(
 	resource *terraformResource,
 	key string,
 ) error {
-	switch reviewField(key, "before", "after", "before_sensitive", "after_sensitive", "after_unknown") {
+	field := reviewField(
+		key,
+		"before",
+		"after",
+		"before_sensitive",
+		"after_sensitive",
+		"after_unknown",
+	)
+	var target *any
+	switch field {
 	case "before":
-		return s.decode(&resource.Before)
+		target = &resource.Before
 	case "after":
-		return s.decode(&resource.After)
+		target = &resource.After
 	case "before_sensitive":
-		return s.decode(&resource.BeforeSensitive)
+		target = &resource.BeforeSensitive
 	case "after_sensitive":
-		return s.decode(&resource.AfterSensitive)
+		target = &resource.AfterSensitive
 	case "after_unknown":
-		return s.decode(&resource.AfterUnknown)
+		target = &resource.AfterUnknown
 	default:
 		return s.skip()
 	}
+	*target = nil
+	omitted, err := s.decodePreview(target, previewValueBytes)
+	resource.markOmitted(field, omitted)
+	return err
+}
+
+func (s *reviewJSON) resourceAddress(resource *terraformResource) error {
+	if err := s.space(); err != nil {
+		return err
+	}
+	if b, _ := s.peek(); b == 'n' {
+		return s.literal("null")
+	}
+	if b, _ := s.peek(); b != '"' {
+		return ErrGateConfig
+	}
+	omitted, err := s.decodePreview(&resource.Address, previewAddressBytes)
+	resource.markOmitted("address", omitted)
+	if omitted {
+		resource.Address = terraformOmitted
+	}
+	return err
 }

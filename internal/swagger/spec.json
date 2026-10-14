@@ -12873,6 +12873,13 @@
         "before": {
           "type": "string",
           "x-go-name": "Before"
+        },
+        "omitted_fields": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "x-go-name": "OmittedFields"
         }
       },
       "x-go-package": "durpdeploy/internal/artifact"
@@ -12880,12 +12887,21 @@
     "TerraformReviewResponse": {
       "type": "object",
       "properties": {
+        "preview_truncated": {
+          "type": "boolean",
+          "x-go-name": "PreviewTruncated"
+        },
         "resources": {
           "type": "array",
           "items": {
             "$ref": "#/definitions/TerraformResourceChange"
           },
           "x-go-name": "Resources"
+        },
+        "resources_omitted": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "ResourcesOmitted"
         },
         "review_source": {
           "type": "string",

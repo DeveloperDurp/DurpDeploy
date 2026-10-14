@@ -83,6 +83,13 @@ these references; image pruning alone preserves them.
 It encrypts the whole staging context in authenticated database chunks.
 Unlinked temporary descriptors are used during capture, restore, and download.
 Approval bundles and review JSON have no application byte limits.
+API and browser previews show up to 100 resources and 1 MiB of resource text.
+Each value or sensitivity field uses a 64 KiB input budget and 64 nesting levels.
+Addresses use a 4 KiB input budget. Each action list shows up to 16 actions.
+Oversized values are omitted in full. Oversized sensitivity metadata omits the affected side.
+The API reports `preview_truncated`, `resources_omitted`, and per-resource `omitted_fields`.
+The browser shows an omission notice. Preview bounds do not change approval counts, stored context, or artifact downloads.
+Download and independently inspect the exact artifact before approval.
 Runtime staging capacity, scratch capacity, disk space, and memory still constrain execution.
 Unsafe archive entries, missing files, and altered ciphertext or checksums fail closed.
 Sparse staging files are rejected before export because tar can expand holes beyond the allocated staging space.

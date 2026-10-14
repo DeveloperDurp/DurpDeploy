@@ -10,11 +10,13 @@ import (
 // reviewJSON validates skipped values without retaining large strings or numbers.
 // encoding/json.Decoder buffers a complete value even when its fields are ignored.
 type reviewJSON struct {
-	reader    *bufio.Reader
-	output    *bytes.Buffer
-	limit     int
-	truncated bool
-	depth     int
+	reader      *bufio.Reader
+	output      *bytes.Buffer
+	limit       int
+	truncated   bool
+	depth       int
+	outputDepth int
+	preview     *terraformPreview
 }
 
 func newReviewJSON(reader io.Reader) *reviewJSON {
@@ -23,7 +25,7 @@ func newReviewJSON(reader io.Reader) *reviewJSON {
 
 func (s *reviewJSON) read() (byte, error) {
 	b, err := s.reader.ReadByte()
-	if err == nil && s.output != nil {
+	if err == nil && s.output != nil && !s.truncated {
 		if s.limit == 0 || s.output.Len() < s.limit {
 			s.output.WriteByte(b)
 		} else {
@@ -75,6 +77,9 @@ func (s *reviewJSON) literal(word string) error {
 
 func (s *reviewJSON) enter() error {
 	s.depth++
+	if s.outputDepth > 0 && s.depth > s.outputDepth {
+		s.truncated = true
+	}
 	// Match encoding/json's existing nesting ceiling, independent of byte size.
 	if s.depth > 10000 {
 		return ErrGateConfig
@@ -109,20 +114,27 @@ func (s *reviewJSON) skip() error {
 	}
 }
 
-func (s *reviewJSON) decode(target any) error {
+func (s *reviewJSON) decodePreview(target any, limit int) (bool, error) {
+	if err := s.space(); err != nil {
+		return false, err
+	}
 	var raw bytes.Buffer
-	s.output = &raw
+	s.output, s.limit = &raw, limit
+	s.outputDepth, s.truncated = s.depth+64, false
 	err := s.skip()
-	s.output = nil
+	s.output, s.limit, s.outputDepth = nil, 0, 0
 	if err != nil {
-		return err
+		return false, err
+	}
+	if s.truncated {
+		return true, nil
 	}
 	decoder := json.NewDecoder(&raw)
 	decoder.UseNumber()
 	if err := decoder.Decode(target); err != nil {
-		return ErrGateConfig
+		return false, ErrGateConfig
 	}
-	return nil
+	return false, nil
 }
 
 func (s *reviewJSON) integer(target *int64) error {
