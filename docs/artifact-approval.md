@@ -120,11 +120,19 @@ while waiting. Later jobs for that pair enter its FIFO queue. Other projects
 can deploy to the same environment concurrently, and that project can deploy
 to other environments concurrently. Approval resumes the
 same deployment without giving up its slot; rejection, cancellation, or expiry
-releases the slot for the next deployment. Gates
-require local steps with no automatic retries, a later continuation step, and
-a deployment release. Runbooks, remote agents, and mixed execution are excluded.
-Restart resumes a waiting review or an approved pending continuation; a crash
-during execution fails the run rather than replaying an uncertain apply.
+releases the slot for the next deployment.
+
+Gate producers must run locally and have a later continuation step in a deployment release.
+Gated deployments cannot use automatic retries or runbook releases.
+Gated deployments can include agent steps before or after local approval steps.
+The server pins images for local steps only.
+
+Local steps receive approved artifacts through the read-only `DURPDEPLOY_APPROVED_DIR` directory.
+Agent steps receive shared files through `DURPDEPLOY_STAGE_DIR`.
+If agent delivery needs apply results, write those files to `DURPDEPLOY_STAGE_DIR` in the local apply step.
+
+Restart resumes a waiting review or an approved pending continuation.
+A crash during execution fails the run and does not replay an uncertain apply.
 
 API routes under `/api/v1/deployments/{id}/artifact-gates`:
 
