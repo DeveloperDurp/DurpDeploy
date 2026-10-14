@@ -3,6 +3,12 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
+export DURPDEPLOY_RESTORE_BACKEND=${DURPDEPLOY_RESTORE_BACKEND:-sqlite}
+case $DURPDEPLOY_RESTORE_BACKEND in
+    sqlite) test_timeout=8m ;;
+    postgres|mssql) test_timeout=20m ;;
+    *) echo 'ERROR: set DURPDEPLOY_RESTORE_BACKEND to sqlite, postgres, or mssql.' >&2; exit 1 ;;
+esac
 if [[ $(uname -s) != Linux ]]; then
     echo 'ERROR: the backup restore drill requires Linux.' >&2
     exit 1
@@ -24,5 +30,5 @@ if [[ -n ${DURPDEPLOY_CONTAINER_URL:-} ]]; then
 fi
 make templ-generate swagger-ui-copy
 bash scripts/go_test.sh -tags=e2e,backuprestore -race -count=1 \
-    -timeout=8m -v -run '^TestBackupRestoreAPIWebE2E$' ./internal/handler/api
+    "-timeout=$test_timeout" -v -run '^TestBackupRestoreAPIWebE2E$' ./internal/handler/api
 bash scripts/test-backup-restore-cleanup.sh

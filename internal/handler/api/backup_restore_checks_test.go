@@ -18,6 +18,7 @@ func (f *restoreFixture) assertRestored(
 	schedule db.ScheduledDeployment,
 ) {
 	t.Helper()
+	f.assertLargeEnvironmentFilter(t)
 	var variables struct {
 		Items []struct {
 			Name, Value string
@@ -39,7 +40,7 @@ func (f *restoreFixture) assertRestored(
 				t.Fatal("restored secret response lost masking")
 			}
 		case "RESTORE_PUBLIC":
-			if variable.Value != "retained-public-value" {
+			if variable.Value != restorePublicValue {
 				t.Fatal("restore changed the public variable")
 			}
 		default:
@@ -68,6 +69,25 @@ func (f *restoreFixture) assertRestored(
 	page = f.api.web(t, "GET", "/environments", nil, 200)
 	if !strings.Contains(page, "Recovery environment") {
 		t.Fatal("restored environment was not available through the web")
+	}
+}
+
+func (f *restoreFixture) assertLargeEnvironmentFilter(t *testing.T) {
+	t.Helper()
+	var response struct {
+		Items []struct{ ID int64 } `json:"items"`
+		Total int64                `json:"total"`
+	}
+	path := fmt.Sprintf(
+		"%s/variables?environment_id=%d",
+		f.api.base(),
+		int64(1)<<31,
+	)
+	decodeStepLogTest(t, f.api.api(t, "GET", path, nil, 200), &response)
+	if len(response.Items) != 0 || response.Total != 0 {
+		t.Fatal(
+			"large unassigned environment filter returned project variables",
+		)
 	}
 }
 

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
+make_marker='make called'
 test_dir=$(mktemp -d)
 trap 'rm -rf -- "$test_dir"' EXIT
 mkdir "$test_dir/bin"
@@ -19,6 +20,8 @@ MAKE
 cat > "$test_dir/bin/bash" <<'BASH'
 #!/bin/sh
 printf 'runtime=%s provider=%s\n' "$DURPDEPLOY_CONTAINER_URL" "$DOCKER_HOST"
+printf 'backend=%s\n' "$DURPDEPLOY_RESTORE_BACKEND"
+printf '%s\n' "$@"
 BASH
 chmod +x "$test_dir/bin/"*
 
@@ -30,7 +33,7 @@ for platform in Darwin:x86_64 Linux:aarch64; do
         exit 1
     fi
     grep -q 'requires Linux' "$test_dir/output"
-    if grep -q 'make called' "$test_dir/output"; then
+    if grep -Fq "$make_marker" "$test_dir/output"; then
         echo 'FAIL: unsupported platform started the drill.' >&2
         exit 1
     fi
@@ -45,6 +48,30 @@ grep -q '^make called$' "$test_dir/output"
 [[ $(grep -c '^runtime=unix:///configured/runtime.sock provider=unix:///configured/runtime.sock$' "$test_dir/output") == 2 ]]
 echo 'Recovery platform rejection and selected runtime: PASS'
 
+for backend in sqlite postgres mssql; do
+    RESTORE_TEST_OS=Linux RESTORE_TEST_ARCH=x86_64 \
+        DURPDEPLOY_RESTORE_BACKEND=$backend DURPDEPLOY_CONTAINER_RUNTIME=docker \
+        DURPDEPLOY_CONTAINER_URL=unix:///configured/runtime.sock \
+        PATH="$test_dir/bin:$PATH" \
+        /usr/bin/bash "$root/scripts/test-backup-restore.sh" > "$test_dir/output" 2>&1
+    [[ $(grep -c "^backend=$backend$" "$test_dir/output") == 2 ]]
+    expected_timeout=20m
+    if [[ $backend == sqlite ]]; then expected_timeout=8m; fi
+    grep -Fxq -- "-timeout=$expected_timeout" "$test_dir/output"
+done
+for script in test-backup-restore.sh test-backup-restore-cleanup.sh; do
+    if DURPDEPLOY_RESTORE_BACKEND=invalid PATH="$test_dir/bin:$PATH" \
+        /usr/bin/bash "$root/scripts/$script" > "$test_dir/output" 2>&1; then
+        echo 'FAIL: invalid recovery backend passed.' >&2
+        exit 1
+    fi
+    if grep -Fq "$make_marker" "$test_dir/output"; then
+        echo 'FAIL: invalid backend started the drill.' >&2
+        exit 1
+    fi
+done
+echo 'Recovery backend selection and early rejection: PASS'
+
 for runtime in '' invalid; do
     if RESTORE_TEST_OS=Linux RESTORE_TEST_ARCH=x86_64 \
         DURPDEPLOY_CONTAINER_RUNTIME=$runtime PATH="$test_dir/bin:$PATH" \
@@ -53,7 +80,7 @@ for runtime in '' invalid; do
         exit 1
     fi
     grep -q 'set DURPDEPLOY_CONTAINER_RUNTIME' "$test_dir/output"
-    if grep -q 'make called' "$test_dir/output"; then
+    if grep -Fq "$make_marker" "$test_dir/output"; then
         echo 'FAIL: invalid runtime started the drill.' >&2
         exit 1
     fi
@@ -68,7 +95,7 @@ for script in test-backup-restore.sh test-backup-restore-cleanup.sh; do
         exit 1
     fi
     grep -q 'select the Podman socket' "$test_dir/output"
-    if grep -q 'make called' "$test_dir/output"; then
+    if grep -Fq "$make_marker" "$test_dir/output"; then
         echo 'FAIL: missing Podman socket started the drill.' >&2
         exit 1
     fi

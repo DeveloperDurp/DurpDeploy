@@ -13,14 +13,14 @@ import (
 const countVariablesByProject = `-- name: CountVariablesByProject :one
 SELECT COUNT(*) FROM variables
 WHERE project_id = ?1
-  AND (?2 IS NULL OR environment_id = ?2)
-  AND (?3 IS NULL OR secret = ?3)
+  AND (CAST(?2 AS BIGINT) IS NULL OR environment_id = ?2)
+  AND (CAST(?3 AS BIGINT) IS NULL OR secret = ?3)
 `
 
 type CountVariablesByProjectParams struct {
-	ProjectID      int64       `json:"project_id"`
-	FEnvironmentID interface{} `json:"f_environment_id"`
-	FSecretOnly    interface{} `json:"f_secret_only"`
+	ProjectID      int64         `json:"project_id"`
+	FEnvironmentID sql.NullInt64 `json:"f_environment_id"`
+	FSecretOnly    sql.NullInt64 `json:"f_secret_only"`
 }
 
 func (q *Queries) CountVariablesByProject(ctx context.Context, arg CountVariablesByProjectParams) (int64, error) {
@@ -182,18 +182,18 @@ func (q *Queries) ListVariablesByProject(ctx context.Context, projectID int64) (
 const listVariablesByProjectPaginated = `-- name: ListVariablesByProjectPaginated :many
 SELECT id, project_id, name, value, environment_id, created_at, secret FROM variables
 WHERE project_id = ?1
-  AND (?2 IS NULL OR environment_id = ?2)
-  AND (?3 IS NULL OR secret = ?3)
+  AND (CAST(?2 AS BIGINT) IS NULL OR environment_id = ?2)
+  AND (CAST(?3 AS BIGINT) IS NULL OR secret = ?3)
 ORDER BY created_at DESC
 LIMIT ?5 OFFSET ?4
 `
 
 type ListVariablesByProjectPaginatedParams struct {
-	ProjectID      int64       `json:"project_id"`
-	FEnvironmentID interface{} `json:"f_environment_id"`
-	FSecretOnly    interface{} `json:"f_secret_only"`
-	PageOffset     int64       `json:"page_offset"`
-	PageLimit      int64       `json:"page_limit"`
+	ProjectID      int64         `json:"project_id"`
+	FEnvironmentID sql.NullInt64 `json:"f_environment_id"`
+	FSecretOnly    sql.NullInt64 `json:"f_secret_only"`
+	PageOffset     int64         `json:"page_offset"`
+	PageLimit      int64         `json:"page_limit"`
 }
 
 func (q *Queries) ListVariablesByProjectPaginated(ctx context.Context, arg ListVariablesByProjectPaginatedParams) ([]Variable, error) {

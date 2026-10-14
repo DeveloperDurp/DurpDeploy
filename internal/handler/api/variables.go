@@ -155,21 +155,12 @@ func (h *VariableHandler) ListVariables(
 		}
 	}
 
-	var fEnvArg any
-	if fEnvID.Valid {
-		fEnvArg = fEnvID.Int64
-	}
-	var fSecretArg any
-	if fSecretOnly.Valid {
-		fSecretArg = fSecretOnly.Int64
-	}
-
 	variables, err := h.repo.ListVariablesForDisplay(
 		r.Context(),
 		db.ListVariablesByProjectPaginatedParams{
 			ProjectID:      projectID,
-			FEnvironmentID: fEnvArg,
-			FSecretOnly:    fSecretArg,
+			FEnvironmentID: fEnvID,
+			FSecretOnly:    fSecretOnly,
 			PageOffset:     offset,
 			PageLimit:      limit,
 		},
@@ -183,8 +174,8 @@ func (h *VariableHandler) ListVariables(
 		r.Context(),
 		db.CountVariablesByProjectParams{
 			ProjectID:      projectID,
-			FEnvironmentID: fEnvArg,
-			FSecretOnly:    fSecretArg,
+			FEnvironmentID: fEnvID,
+			FSecretOnly:    fSecretOnly,
 		},
 	)
 	if err != nil {

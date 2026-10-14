@@ -3,6 +3,7 @@
 package api_test
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"net"
@@ -24,6 +25,9 @@ import (
 type restoreFixture struct {
 	api                 *artifactE2E
 	root, database, key string
+	dsn                 string
+	backend             restoreBackend
+	native              *restoreNativeDB
 	binary, secret      string
 	password            string
 	releaseID           int64
@@ -32,6 +36,7 @@ type restoreFixture struct {
 
 func newRestoreFixture(t *testing.T) *restoreFixture {
 	t.Helper()
+	backend := selectedRestoreBackend(t)
 	if runtime.GOARCH != "amd64" {
 		t.Fatal("recovery drill requires Linux amd64")
 	}
@@ -69,7 +74,7 @@ func newRestoreFixture(t *testing.T) *restoreFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f := &restoreFixture{root: root}
+	f := &restoreFixture{root: root, backend: backend}
 	t.Cleanup(func() {
 		if err := os.RemoveAll(root); err != nil {
 			t.Error(err)
@@ -81,6 +86,18 @@ func newRestoreFixture(t *testing.T) *restoreFixture {
 		}
 	}
 	f.database = filepath.Join(f.root, "source", "app.db")
+	f.dsn = restoreSQLiteDSN(f.database)
+	switch backend {
+	case restoreSQLiteBackend:
+	case restorePostgresBackend:
+		f.native = restorePostgres(t)
+		f.dsn = f.native.appDSN
+	case restoreMSSQLBackend:
+		f.native = restoreMSSQL(t, true)
+		f.dsn = f.native.appDSN
+	default:
+		t.Fatal("unsupported recovery backend")
+	}
 	f.key = filepath.Join(f.root, "source", "key")
 	key := make([]byte, 32)
 	if _, err := rand.Read(key); err != nil {
@@ -91,8 +108,7 @@ func newRestoreFixture(t *testing.T) *restoreFixture {
 		t.Fatal(err)
 	}
 	f.secret = uuid.NewString()
-	conn, err := migrate.Run(f.database +
-		"?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)")
+	conn, err := migrate.Run(f.dsn)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +128,9 @@ func newRestoreFixture(t *testing.T) *restoreFixture {
 	}}
 	f.smtp = restoreSMTPFixture(t)
 	f.binary = filepath.Join(f.root, "durpdeploy")
-	command := exec.CommandContext(t.Context(), "go", "build", "-race",
+	buildCtx, cancel := context.WithTimeout(t.Context(), 2*time.Minute)
+	defer cancel()
+	command := exec.CommandContext(buildCtx, "go", "build", "-race",
 		"-o", f.binary, "../../../cmd/server")
 	if output, err := command.CombinedOutput(); err != nil {
 		t.Fatalf("build recovery server: %v\n%s", err, output)
@@ -156,8 +174,7 @@ func (f *restoreFixture) environment(t *testing.T) []string {
 		t.Fatal(err)
 	}
 	return append(env,
-		"DURPDEPLOY_DB="+f.database+
-			"?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)",
+		"DURPDEPLOY_DB="+f.dsn,
 		"DURPDEPLOY_SECRET_KEY="+string(key),
 		"DURPDEPLOY_ADDR=127.0.0.1:0",
 		"DURPDEPLOY_URL=http://localhost",
@@ -170,4 +187,9 @@ func (f *restoreFixture) environment(t *testing.T) []string {
 		"DURPDEPLOY_SMTP_FROM=sender@example.test",
 		"TMPDIR="+filepath.Join(f.root, "tmp"),
 	)
+}
+
+func restoreSQLiteDSN(path string) string {
+	return path + "?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)" +
+		"&_pragma=busy_timeout(5000)"
 }

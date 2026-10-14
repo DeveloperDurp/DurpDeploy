@@ -142,9 +142,11 @@ func restoredWatermark(t *testing.T, path string, id int64) bool {
 		}
 	}()
 	var count int
-	if err := conn.QueryRowContext(t.Context(),
+	if err := conn.QueryRowContext(
+		t.Context(),
 		"SELECT COUNT(*) FROM projects WHERE id = ? AND name = 'backup-watermark'",
-		id).Scan(&count); err != nil {
+		id,
+	).Scan(&count); err != nil {
 		t.Fatal(err)
 	}
 	return count == 1
@@ -158,13 +160,8 @@ func (r *restoreReplica) recover(t *testing.T) {
 		t.Fatal(err)
 	}
 	f := r.fixture
-	key, err := os.ReadFile(filepath.Join(f.root, "backup", "key"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.RemoveAll(filepath.Join(f.root, "source")); err != nil {
-		t.Fatal(err)
-	}
+	f.assertSQLiteCorrupt(t)
+	f.recoverKey(t)
 	// The database and its sidecars are gone. Only replica data can recover it.
 	restored := f.litestreamContainer(t, "restore", "-config",
 		"/recovery/litestream.yml", "-o", "/recovery/restored/app.db",
@@ -173,10 +170,7 @@ func (r *restoreReplica) recover(t *testing.T) {
 		t.Fatalf("restore failed with exit %d", code)
 	}
 	f.database = filepath.Join(f.root, "restored", "app.db")
-	f.key = filepath.Join(f.root, "restored", "key")
-	if err := os.WriteFile(f.key, key, 0600); err != nil {
-		t.Fatal(err)
-	}
+	f.dsn = restoreSQLiteDSN(f.database)
 	conn, err := sql.Open("sqlite", "file:"+f.database+"?mode=ro")
 	if err != nil {
 		t.Fatal(err)
