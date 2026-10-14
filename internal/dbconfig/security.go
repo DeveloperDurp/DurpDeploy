@@ -26,23 +26,11 @@ func InspectConnectionSecurity(dsn string) (ConnectionSecurity, error) {
 	switch {
 	case IsSQLServer(dsn):
 		security.Backend = "sqlserver"
-		config, err := msdsn.Parse(SQLServerDSN(dsn))
+		policy, err := sqlServerPolicy(dsn)
 		if err != nil {
-			return ConnectionSecurity{}, ErrConnectionSecurity
+			return ConnectionSecurity{}, err
 		}
-		switch config.Encryption {
-		case msdsn.EncryptionRequired, msdsn.EncryptionStrict:
-			security.Policy = "tls_verified"
-			if config.Parameters[msdsn.ServerCertificate] != "" {
-				security.Policy = "tls_pinned"
-			} else if config.TrustServerCertificate {
-				security.Policy = "tls_unverified"
-			}
-		case msdsn.EncryptionOff, msdsn.EncryptionDisabled:
-			security.Policy = "plaintext_allowed"
-		default:
-			return ConnectionSecurity{}, ErrConnectionSecurity
-		}
+		security.Policy = policy
 	case IsPostgres(dsn):
 		security.Backend = "postgres"
 		config, err := pgx.ParseConfig(dsn)
@@ -69,6 +57,27 @@ func InspectConnectionSecurity(dsn string) (ConnectionSecurity, error) {
 		security.Warning = "Database TLS pins the server certificate without checking its hostname, expiration, or certificate authority."
 	}
 	return security, nil
+}
+
+func sqlServerPolicy(dsn string) (string, error) {
+	config, err := msdsn.Parse(SQLServerDSN(dsn))
+	if err != nil {
+		return "", ErrConnectionSecurity
+	}
+	switch config.Encryption {
+	case msdsn.EncryptionRequired, msdsn.EncryptionStrict:
+		if config.Parameters[msdsn.ServerCertificate] != "" {
+			return "tls_pinned", nil
+		}
+		if config.TrustServerCertificate {
+			return "tls_unverified", nil
+		}
+		return "tls_verified", nil
+	case msdsn.EncryptionOff, msdsn.EncryptionDisabled:
+		return "plaintext_allowed", nil
+	default:
+		return "", ErrConnectionSecurity
+	}
 }
 
 func postgresPolicy(host string, config *tls.Config) string {

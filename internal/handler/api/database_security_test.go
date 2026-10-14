@@ -23,8 +23,16 @@ func TestDatabaseSecurityAPIAuthorization(t *testing.T) {
 		handler.NewAuthHandler(h.repo))
 	srv := httptest.NewServer(router)
 	t.Cleanup(srv.Close)
-	for _, role := range []string{"anonymous", "viewer", "deployer", "admin"} {
-		t.Run(role, func(t *testing.T) {
+	for _, tc := range []struct {
+		role   string
+		status int
+	}{
+		{"anonymous", http.StatusUnauthorized},
+		{"viewer", http.StatusForbidden},
+		{"deployer", http.StatusForbidden},
+		{"admin", http.StatusOK},
+	} {
+		t.Run(tc.role, func(t *testing.T) {
 			request, err := http.NewRequest(
 				http.MethodGet,
 				srv.URL+"/api/v1/admin/database-security",
@@ -33,21 +41,10 @@ func TestDatabaseSecurityAPIAuthorization(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			want := http.StatusUnauthorized
-			if role != "anonymous" {
-				user := seedAPIUser(
-					t,
-					h.repo,
-					role+"@database-security.test",
-					role,
-				)
-				_, token := seedAPIToken(t, h.repo, user.ID)
-				request.Header.Set("Authorization", "Bearer "+token)
-				want = http.StatusForbidden
-				if role == "admin" {
-					want = http.StatusOK
-				}
-			}
+			request.Header.Set(
+				"Authorization",
+				databaseSecurityAuthorization(t, h, tc.role),
+			)
 			response, err := srv.Client().Do(request)
 			if err != nil {
 				t.Fatal(err)
@@ -56,21 +53,35 @@ func TestDatabaseSecurityAPIAuthorization(t *testing.T) {
 			if err := response.Body.Close(); err != nil {
 				t.Fatal(err)
 			}
-			if readErr != nil || response.StatusCode != want {
+			if readErr != nil || response.StatusCode != tc.status {
 				t.Fatalf(
 					"status=%d want=%d read=%v",
 					response.StatusCode,
-					want,
+					tc.status,
 					readErr,
 				)
 			}
 			if strings.Contains(string(body), "private") {
 				t.Fatal("response exposes connection details")
 			}
-			if role == "admin" &&
+			if tc.role == "admin" &&
 				!strings.Contains(string(body), "plaintext_allowed") {
 				t.Fatal("administrator response lacks the configured warning")
 			}
 		})
 	}
+}
+
+func databaseSecurityAuthorization(
+	t *testing.T,
+	h *harness,
+	role string,
+) string {
+	t.Helper()
+	if role == "anonymous" {
+		return ""
+	}
+	user := seedAPIUser(t, h.repo, role+"@database-security.test", role)
+	_, token := seedAPIToken(t, h.repo, user.ID)
+	return "Bearer " + token
 }

@@ -136,21 +136,30 @@ func (tc databaseTLSCase) assertAPI(t *testing.T, conn *sql.DB, dsn string) {
 			)
 		}
 		if path == "/api/v1/admin/database-security" {
-			var security dbconfig.ConnectionSecurity
-			mustDecode(t, strings.NewReader(string(data)), &security)
-			if security.Policy != tc.policy ||
-				(security.Warning != "") != (tc.policy != "tls_verified") {
-				t.Fatalf("unexpected API security response: %+v", security)
-			}
-			u, err := url.Parse(dsn)
-			if err != nil {
-				t.Fatal(err)
-			}
-			password, _ := u.User.Password()
-			if strings.Contains(string(data), password) ||
-				strings.Contains(string(data), u.Host) {
-				t.Fatal("security API exposes database connection details")
-			}
+			tc.assertSecurityResponse(t, dsn, data)
 		}
+	}
+}
+
+func (tc databaseTLSCase) assertSecurityResponse(
+	t *testing.T,
+	dsn string,
+	data []byte,
+) {
+	t.Helper()
+	var security dbconfig.ConnectionSecurity
+	mustDecode(t, strings.NewReader(string(data)), &security)
+	if security.Policy != tc.policy ||
+		(security.Warning != "") != (tc.policy != "tls_verified") {
+		t.Fatalf("unexpected API security response: %+v", security)
+	}
+	u, err := url.Parse(dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	password, _ := u.User.Password()
+	if strings.Contains(string(data), password) ||
+		strings.Contains(string(data), u.Host) {
+		t.Fatal("security API exposes database connection details")
 	}
 }
