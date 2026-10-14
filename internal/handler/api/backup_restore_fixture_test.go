@@ -24,6 +24,7 @@ import (
 type restoreFixture struct {
 	api                 *artifactE2E
 	root, database, key string
+	dsn                 string
 	binary, secret      string
 	password            string
 	releaseID           int64
@@ -81,6 +82,7 @@ func newRestoreFixture(t *testing.T) *restoreFixture {
 		}
 	}
 	f.database = filepath.Join(f.root, "source", "app.db")
+	f.dsn = restoreSQLiteDSN(f.database)
 	f.key = filepath.Join(f.root, "source", "key")
 	key := make([]byte, 32)
 	if _, err := rand.Read(key); err != nil {
@@ -91,8 +93,7 @@ func newRestoreFixture(t *testing.T) *restoreFixture {
 		t.Fatal(err)
 	}
 	f.secret = uuid.NewString()
-	conn, err := migrate.Run(f.database +
-		"?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)")
+	conn, err := migrate.Run(f.dsn)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,8 +157,7 @@ func (f *restoreFixture) environment(t *testing.T) []string {
 		t.Fatal(err)
 	}
 	return append(env,
-		"DURPDEPLOY_DB="+f.database+
-			"?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)",
+		"DURPDEPLOY_DB="+f.dsn,
 		"DURPDEPLOY_SECRET_KEY="+string(key),
 		"DURPDEPLOY_ADDR=127.0.0.1:0",
 		"DURPDEPLOY_URL=http://localhost",
@@ -170,4 +170,9 @@ func (f *restoreFixture) environment(t *testing.T) []string {
 		"DURPDEPLOY_SMTP_FROM=sender@example.test",
 		"TMPDIR="+filepath.Join(f.root, "tmp"),
 	)
+}
+
+func restoreSQLiteDSN(path string) string {
+	return path + "?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)" +
+		"&_pragma=busy_timeout(5000)"
 }

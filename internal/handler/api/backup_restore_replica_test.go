@@ -173,6 +173,7 @@ func (r *restoreReplica) recover(t *testing.T) {
 		t.Fatalf("restore failed with exit %d", code)
 	}
 	f.database = filepath.Join(f.root, "restored", "app.db")
+	f.dsn = restoreSQLiteDSN(f.database)
 	f.key = filepath.Join(f.root, "restored", "key")
 	if err := os.WriteFile(f.key, key, 0600); err != nil {
 		t.Fatal(err)
