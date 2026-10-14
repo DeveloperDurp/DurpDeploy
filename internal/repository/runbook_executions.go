@@ -40,6 +40,9 @@ func (r *Repository) CreateRunbookExecution(
 		return r.withQueueTx(
 			ctx,
 			func(ctx context.Context, q *db.Queries) error {
+				if err := lockRunbookAdmission(ctx, q, arg); err != nil {
+					return err
+				}
 				if arg.RetrySourceDeploymentID != 0 {
 					source, err := q.GetDeployment(
 						ctx,
@@ -69,11 +72,6 @@ func (r *Repository) CreateRunbookExecution(
 					if active != 0 {
 						return ErrRunbookRemoteOutcomeUnconfirmed
 					}
-				}
-				if _, err := q.GetRunbook(ctx, db.GetRunbookParams{
-					ID: arg.RunbookID, ProjectID: arg.ProjectID,
-				}); err != nil {
-					return err
 				}
 				if arg.ScheduleID.Valid {
 					changed, err := q.AdvanceRunbookSchedule(ctx,

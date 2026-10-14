@@ -190,6 +190,39 @@ Browser checks include `TestDeploymentLogHistoryBrowserE2E` and `TestRunbookLogH
 `TestOpenLogStreamRevocationAPIWebE2E` checks open streams after session or token revocation.
 `TestRunbookLogRevocationBrowserE2E` checks browser access after project membership removal.
 
+### Runbook deletion
+
+Use disposable runbooks for deletion checks.
+Retain the corresponding project, completed executions, and logs.
+Retain a second runbook with the same steps for repeat checks.
+Keep schedules disabled after testing.
+
+1. Create a runbook with two saved versions.
+2. Execute the first version and wait for completion.
+3. Create a schedule for the runbook.
+4. Open the runbook detail page and select **Delete runbook**.
+5. Check the runbook identity and deletion effects in the confirmation.
+6. Cancel confirmation and check that the runbook remains available.
+7. Repeat confirmation and accept deletion.
+8. Check that the runbook leaves the active list.
+9. Open the retained execution and check its original logs.
+10. Check that Retry is absent.
+
+Repeat deletion with `DELETE /api/v1/projects/{id}/runbooks/{runbookId}` and an empty body.
+Expect `204` without a response body.
+Expect `404` for repeated deletion and inaccessible runbooks.
+Expect `409` while executions or cleanup remain unfinished.
+Expect `403` for viewer API writes.
+Check that viewer pages omit the Delete action.
+Check that web writes without valid CSRF tokens fail.
+
+Deletion retains saved versions, backing releases, artifact pins, completed executions, and logs.
+Deletion disables schedules and prevents future execution, retry, version saving, and schedule creation.
+Deleted names remain reserved within the project.
+Existing project and environment deletion policies still apply to retained history.
+
+Automated checks include `TestRunbookDeletionAPIWebE2E` and `TestRunbookDeletionBrowserE2E`.
+
 ## Server step resource policy
 
 Server-side deployment steps have no DurpDeploy-imposed RAM ceiling or CPU

@@ -51,6 +51,20 @@ func ProjectIDFromContext(ctx context.Context) (int64, bool) {
 func RequireProjectAccess(
 	repo *repository.Repository,
 ) func(http.Handler) http.Handler {
+	return requireProjectAccess(repo, http.StatusForbidden)
+}
+
+// RequireProjectAccessNotFound hides inaccessible deletion targets.
+func RequireProjectAccessNotFound(
+	repo *repository.Repository,
+) func(http.Handler) http.Handler {
+	return requireProjectAccess(repo, http.StatusNotFound)
+}
+
+func requireProjectAccess(
+	repo *repository.Repository,
+	deniedStatus int,
+) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			user := UserFromContext(r.Context())
@@ -83,7 +97,16 @@ func RequireProjectAccess(
 					return
 				}
 
-				if !checkProjectMembership(w, r, repo, user.ID, projectID) {
+				if !checkProjectMembershipStatus(
+					w,
+					r,
+					repo,
+					db.IsProjectMemberParams{
+						UserID:    user.ID,
+						ProjectID: projectID,
+					},
+					deniedStatus,
+				) {
 					return
 				}
 			}
@@ -185,12 +208,21 @@ func checkProjectMembership(
 	repo *repository.Repository,
 	userID, projectID int64,
 ) bool {
+	return checkProjectMembershipStatus(w, r, repo,
+		db.IsProjectMemberParams{UserID: userID, ProjectID: projectID},
+		http.StatusForbidden)
+}
+
+func checkProjectMembershipStatus(
+	w http.ResponseWriter,
+	r *http.Request,
+	repo *repository.Repository,
+	memberParams db.IsProjectMemberParams,
+	deniedStatus int,
+) bool {
 	member, err := repo.Queries.IsProjectMember(
 		r.Context(),
-		db.IsProjectMemberParams{
-			ProjectID: projectID,
-			UserID:    userID,
-		},
+		memberParams,
 	)
 	if err != nil {
 		RenderRequestError(w, r, http.StatusInternalServerError,
@@ -198,6 +230,10 @@ func checkProjectMembership(
 		return false
 	}
 	if member != 1 {
+		if deniedStatus == http.StatusNotFound {
+			RenderRequestError(w, r, http.StatusNotFound, "Runbook not found")
+			return false
+		}
 		if strings.HasPrefix(r.URL.Path, "/api/v1/") {
 			RenderJSONError(w, http.StatusForbidden, unauthorizedMessage)
 		} else {

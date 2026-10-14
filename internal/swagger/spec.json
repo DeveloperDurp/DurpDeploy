@@ -7161,6 +7161,80 @@
             }
           }
         }
+      },
+      "delete": {
+        "description": "Saved versions, backing releases, artifact pins, completed executions, and\nlogs remain for history. Future execution and retry are blocked.\nDeleted names remain reserved. Finish or cancel unfinished executions and\nconfirm cleanup before deletion. A repeated deletion returns 404.",
+        "tags": [
+          "runbooks"
+        ],
+        "summary": "Delete a runbook from active lists and disable its schedules.",
+        "operationId": "deleteRunbook",
+        "parameters": [
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "ID",
+            "description": "The resource ID.",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "integer",
+            "format": "int64",
+            "x-go-name": "RunbookID",
+            "name": "runbookId",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Runbook deleted"
+          },
+          "400": {
+            "description": "Bad request error response.",
+            "schema": {
+              "$ref": "#/definitions/BadRequestError"
+            }
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "409": {
+            "description": "Conflict error response.",
+            "schema": {
+              "$ref": "#/definitions/ConflictError"
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
+            "schema": {
+              "$ref": "#/definitions/RequestEntityTooLargeError"
+            }
+          },
+          "500": {
+            "description": "Server error response.",
+            "schema": {
+              "$ref": "#/definitions/ServerError"
+            }
+          }
+        }
       }
     },
     "/projects/{id}/runbooks/{runbookId}/executions": {
@@ -11763,6 +11837,9 @@
           "format": "int64",
           "x-go-name": "CreatedAt"
         },
+        "deleted_at": {
+          "$ref": "#/definitions/swaggerSQLNullInteger"
+        },
         "description": {
           "type": "string",
           "x-go-name": "Description"
@@ -11903,6 +11980,9 @@
           "type": "integer",
           "format": "int64",
           "x-go-name": "QueuePosition"
+        },
+        "runbook_deleted_at": {
+          "$ref": "#/definitions/swaggerSQLNullInteger"
         },
         "runbook_id": {
           "type": "integer",

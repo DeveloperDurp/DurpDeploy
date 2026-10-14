@@ -129,12 +129,16 @@ func (h *RunbookHandler) CreateSchedule(
 		)
 		return
 	}
-	schedule, err := h.repo.Queries.CreateRunbookSchedule(r.Context(),
+	schedule, err := h.repo.CreateRunbookSchedule(r.Context(), projectID,
 		db.CreateRunbookScheduleParams{
 			RunbookID: id, VersionID: version,
 			EnvironmentID: req.EnvironmentID,
 			Cron:          req.Cron, NextRunAt: parsed.Next(time.Now()).Unix(),
 		})
+	if errors.Is(err, sql.ErrNoRows) {
+		RespondError(w, http.StatusNotFound, "Runbook or version not found")
+		return
+	}
 	if err != nil {
 		RespondError(
 			w,

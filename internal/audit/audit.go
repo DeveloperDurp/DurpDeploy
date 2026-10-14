@@ -244,6 +244,7 @@ func buildDetails(r *http.Request, outcome requestOutcome) string {
 	if name := r.FormValue("name"); name != "" {
 		details["name"] = name
 	}
+	addRunbookDeletionDetails(r, details)
 	if strings.Contains(outcome.action, "agent") {
 		details["agent_id"] = chi.URLParam(r, "id")
 		if state, ok := r.Context().Value(requestStateKey{}).(*requestState); ok {

@@ -49,9 +49,12 @@ func (h *RunbookHandler) Execution(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Cannot read project", http.StatusInternalServerError)
 		return
 	}
-	book, err := h.repo.Queries.GetRunbook(r.Context(), db.GetRunbookParams{
-		ID: execution.RunbookID, ProjectID: execution.ProjectID,
-	})
+	book, err := h.repo.Queries.GetHistoricalRunbook(
+		r.Context(),
+		db.GetHistoricalRunbookParams{
+			ID: execution.RunbookID, ProjectID: execution.ProjectID,
+		},
+	)
 	if err != nil {
 		http.Error(w, "Cannot read runbook", http.StatusInternalServerError)
 		return
@@ -223,6 +226,10 @@ func (h *RunbookHandler) Retry(w http.ResponseWriter, r *http.Request) {
 			ActorUserID:             actor,
 			RetrySourceDeploymentID: execution.DeploymentID,
 		})
+	if errors.Is(err, sql.ErrNoRows) {
+		http.NotFound(w, r)
+		return
+	}
 	if errors.Is(err, repository.ErrRunbookRemoteOutcomeUnconfirmed) ||
 		errors.Is(err, repository.ErrContainerCleanupUnconfirmed) {
 		http.Error(w, err.Error(), http.StatusConflict)
