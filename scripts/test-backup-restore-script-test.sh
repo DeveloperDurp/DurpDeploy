@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
+make_marker='make called'
 test_dir=$(mktemp -d)
 trap 'rm -rf -- "$test_dir"' EXIT
 mkdir "$test_dir/bin"
@@ -32,7 +33,7 @@ for platform in Darwin:x86_64 Linux:aarch64; do
         exit 1
     fi
     grep -q 'requires Linux' "$test_dir/output"
-    if grep -q 'make called' "$test_dir/output"; then
+    if grep -Fq "$make_marker" "$test_dir/output"; then
         echo 'FAIL: unsupported platform started the drill.' >&2
         exit 1
     fi
@@ -64,7 +65,7 @@ for script in test-backup-restore.sh test-backup-restore-cleanup.sh; do
         echo 'FAIL: invalid recovery backend passed.' >&2
         exit 1
     fi
-    if grep -q 'make called' "$test_dir/output"; then
+    if grep -Fq "$make_marker" "$test_dir/output"; then
         echo 'FAIL: invalid backend started the drill.' >&2
         exit 1
     fi
@@ -79,7 +80,7 @@ for runtime in '' invalid; do
         exit 1
     fi
     grep -q 'set DURPDEPLOY_CONTAINER_RUNTIME' "$test_dir/output"
-    if grep -q 'make called' "$test_dir/output"; then
+    if grep -Fq "$make_marker" "$test_dir/output"; then
         echo 'FAIL: invalid runtime started the drill.' >&2
         exit 1
     fi
@@ -94,7 +95,7 @@ for script in test-backup-restore.sh test-backup-restore-cleanup.sh; do
         exit 1
     fi
     grep -q 'select the Podman socket' "$test_dir/output"
-    if grep -q 'make called' "$test_dir/output"; then
+    if grep -Fq "$make_marker" "$test_dir/output"; then
         echo 'FAIL: missing Podman socket started the drill.' >&2
         exit 1
     fi

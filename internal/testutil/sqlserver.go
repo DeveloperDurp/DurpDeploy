@@ -19,6 +19,8 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
+const sqlServerPort = "1433/tcp"
+
 // SQLServerDSN owns a fresh container with a random password and host port.
 // Only this container is terminated when the test completes.
 func SQLServerDSN(t *testing.T) string {
@@ -43,13 +45,13 @@ func SQLServerContainer(
 		testcontainers.GenericContainerRequest{
 			ContainerRequest: testcontainers.ContainerRequest{
 				Image:        image,
-				ExposedPorts: []string{"1433/tcp"},
+				ExposedPorts: []string{sqlServerPort},
 				Env: map[string]string{
 					"ACCEPT_EULA": "Y", "MSSQL_SA_PASSWORD": password,
 				},
 				HostConfigModifier: func(config *container.HostConfig) {
 					config.PortBindings = network.PortMap{
-						network.MustParsePort("1433/tcp"): {
+						network.MustParsePort(sqlServerPort): {
 							{HostIP: netip.MustParseAddr("127.0.0.1")},
 						},
 					}
@@ -68,7 +70,7 @@ func SQLServerContainer(
 	if err != nil {
 		t.Fatal(err)
 	}
-	port, err := c.MappedPort(ctx, "1433/tcp")
+	port, err := c.MappedPort(ctx, sqlServerPort)
 	if err != nil {
 		t.Fatal(err)
 	}
