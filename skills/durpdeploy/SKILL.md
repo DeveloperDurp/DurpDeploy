@@ -724,8 +724,14 @@ rejected, is cancelled, or expires. Artifact approval retains its queue slot.
 Other projects can deploy to that environment concurrently. The same project
 can also deploy to other environments concurrently. Queue positions and active
 work links refer only to the deployment's project/environment pair.
-Only local deployment steps without retries are
-supported; runbooks and agent steps cannot use gates. Both approval paths and
+
+Gate producers must run locally in deployment releases.
+Gated deployments can include agent steps, but cannot use automatic retries.
+Runbooks and agent steps cannot produce approval gates.
+Local steps receive approved artifacts through the read-only `DURPDEPLOY_APPROVED_DIR` directory.
+If agent delivery needs apply results, write those files to `DURPDEPLOY_STAGE_DIR` in the local apply step.
+
+Both approval paths and
 an explicit review format are required together; an empty format is rejected.
 Approval bundles and review JSON have no application byte limits.
 API and browser previews show at most 100 resources and 1 MiB of resource text.

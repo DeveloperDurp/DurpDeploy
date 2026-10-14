@@ -89,6 +89,8 @@ Internal navigation uses HTMX to replace main content, update navbar/title, and
 push the existing URL. Focus moves to the main landmark. History restoration
 fetches fresh content without storing protected markup in browser storage.
 Forms, downloads, login/logout, external links, and modified clicks stay native.
+Deployment forms use HTMX to show validation errors as toasts and retain form values.
+Successful deployment submissions open the created deployment and update the URL.
 Removed Alpine components release streams and observers.
 
 Back uses native history with the existing parent URL as a direct-entry fallback.
