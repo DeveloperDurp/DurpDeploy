@@ -674,3 +674,42 @@ Lifecycle assignment grants execution access to shared secrets. Only global
 admins can attach a lifecycle to a project; project admins can retain or
 remove an existing assignment. As a deployer, creating or updating a project
 with a new lifecycle ID returns 403 without changing the project.
+
+## Database TLS policy
+
+Use a disposable database when changing TLS settings for this check.
+Keep the matching application encryption key.
+See [connection settings](deploy.md#database-tls-and-permitted-exceptions) for PostgreSQL and SQL Server options.
+
+1. Configure verified TLS with the trusted CA and matching database hostname.
+2. Start the application.
+3. Call `GET /api/v1/admin/database-security` with an administrator bearer token.
+4. Expect `policy: tls_verified` without a `warning` field.
+5. Create a disposable project through the API.
+6. Confirm that the project appears in the project list.
+7. Stop the disposable application.
+8. Configure an incorrect CA or hostname.
+9. Start the application and expect certificate validation to fail.
+10. Restore the correct settings before continuing.
+
+To check the supported exceptions, repeat startup with unverified TLS or plaintext settings.
+Expect a `database transport security warning` in the startup log.
+Expect `tls_unverified` or `plaintext_allowed` with a `warning` in the administrator API response.
+The application must still permit the disposable project operation.
+The warning must omit credentials, database addresses, and certificate paths.
+The API reports configured policy, not the encryption of each live connection.
+The public health endpoints must not expose this information.
+Anonymous API access returns `401`.
+Viewer and deployer tokens return `403`.
+
+Run the isolated native checks with the local runtime socket:
+
+```bash
+DOCKER_HOST=unix:///run/user/1000/podman/podman.sock \
+  DURPDEPLOY_TLS_BACKEND=postgres make database-tls-test
+DOCKER_HOST=unix:///run/user/1000/podman/podman.sock \
+  DURPDEPLOY_TLS_BACKEND=mssql make database-tls-test
+```
+
+These isolated checks remove their disposable databases and certificates.
+They do not modify retained demo projects or enable schedules.

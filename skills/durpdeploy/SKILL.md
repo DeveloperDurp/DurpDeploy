@@ -26,6 +26,13 @@ default behind a reverse proxy in production. `/healthz` is public and checks
 database connectivity, returning 503 when unavailable. `/api/v1/healthz` is a
 public API liveness probe returning `{"ok":true}` without a database check.
 
+Administrators can call `GET /api/v1/admin/database-security` with a bearer token.
+The response describes configured database transport policy, not a live TLS session.
+It contains `backend`, `policy`, and an optional `warning` without connection details or credentials.
+Treat `plaintext_allowed`, `tls_unverified`, `tls_ca_verified`, and `tls_pinned` as operator-approved exceptions with warnings.
+`tls_verified` requires server verification.
+`local` identifies SQLite or PostgreSQL Unix-socket transport.
+
 ## CLI
 
 Run on the host with the server's database (matching `DURPDEPLOY_DB`):

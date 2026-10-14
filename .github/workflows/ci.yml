@@ -87,6 +87,31 @@ jobs:
       - name: Verify restored application through its API and web routes
         run: make backup-restore-test
 
+  # ----- Database TLS -----------------------------------------------------
+  database-tls:
+    name: Database TLS (${{ matrix.backend }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: [postgres, mssql]
+    env:
+      GOFLAGS: -mod=readonly
+      DURPDEPLOY_TLS_BACKEND: ${{ matrix.backend }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: '1.26.9'
+          cache: true
+      - name: Check container runtime
+        run: docker info >/dev/null
+      - name: Verify TLS policy, warnings, and authenticated API access
+        run: make database-tls-test
+
   # ----- Dockerfile lint ---------------------------------------------------
   lint-dockerfile:
     name: Lint Dockerfile
