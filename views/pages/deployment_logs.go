@@ -104,9 +104,6 @@ func deploymentLogPanels(
 		if terminal && panel.State == "pending" {
 			panel.State = "unknown"
 		}
-		panel.Open = panel.State == "running" || panel.State == "waiting" ||
-			panel.State == "failed" ||
-			panel.State == "unknown"
 	}
 	return view
 }

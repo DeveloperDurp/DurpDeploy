@@ -20,6 +20,25 @@ Run `bash scripts/build_version_test.sh` to verify tagged and development execut
 Run `bash scripts/go_test.sh -run '^TestBuildInfoAPIWebE2E$' ./internal/handler/api` for API and web permissions.
 Run `bash scripts/go_test.sh -tags=e2e,agentbrowser -run '^TestBuildInfoBrowserE2E$' ./internal/handler/api` for rendered browser coverage.
 
+## Manual deployment step panels
+
+Open running, waiting, failed, and completed deployments.
+Confirm that each step panel starts collapsed.
+Confirm that step names, status badges, and the current-step summary remain visible.
+Select a step heading to expand its panel.
+Select the heading again to collapse its panel.
+Repeat with a keyboard and a phone.
+
+Keep one panel open and another panel closed while live logs arrive.
+Confirm that each panel keeps your selection through step changes, failure, and completion.
+Open the closed panel and confirm that it shows retained live output.
+Reload the page and confirm that each step panel starts collapsed again.
+Manual selections apply while the current page remains open.
+
+Retain the deployments and releases for repeat checks.
+Run `TestDeploymentStepPanelsBrowserE2E` for automated browser coverage.
+Run `TestDeploymentStepLogsAPIWebE2E` and `TestDeploymentStepLogOutcomesAPIWebE2E` for the existing API contracts.
+
 ## Step execution locations
 
 Create a release with a server container step, an agent host step, and an agent container step.

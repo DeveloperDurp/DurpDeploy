@@ -450,7 +450,7 @@ jobs:
       - name: Verify variables and notification forms
         run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^Test(LifecycleVariables|LifecycleLiveScope|LifecyclePageNavigation|VariableScopesBeforeDeployment|NotificationCredentialForms|NotificationValidationPreservesForm|SMTPPlaintextWarning)BrowserE2E$' ./internal/handler/api
       - name: Verify deployment step logs
-        run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^Test(DeploymentStepLogs|DeploymentStepLogsHistoricalQuiet|DeploymentLogHistory|RunbookLogHistory|RunbookLogRevocation|DeploymentStagingFailure|LegacyRunbookStreamDrainsAfterTerminalBadge)BrowserE2E$' ./internal/handler/api
+        run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^Test(DeploymentStepLogs|DeploymentStepPanels|DeploymentStepLogsHistoricalQuiet|DeploymentLogHistory|RunbookLogHistory|RunbookLogRevocation|DeploymentStagingFailure|LegacyRunbookStreamDrainsAfterTerminalBadge)BrowserE2E$' ./internal/handler/api
       - name: Verify log pages and bounded background checks through HTTP
         run: go test -tags=e2e -race -count=1 -timeout=3m -run '^Test((Deployment|Runbook)LogHistoryPages|OpenLogStreamRevocation|StalledSMTPDelivery|SMTPPlaintextWarning|BackupHealthRecovery)APIWebE2E$' ./internal/handler/api
       - name: Verify verification forms, polling, and rollback in Chromium
