@@ -15,7 +15,7 @@ import (
 )
 
 func TestProjectTokenQueriesSQLite(t *testing.T) {
-	conn, err := Run(":memory:")
+	conn, err := Run(t.TempDir() + "/tokens.db")
 	if err != nil {
 		t.Fatal(err)
 	}
