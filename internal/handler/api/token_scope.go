@@ -64,7 +64,7 @@ func (h *APITokenHandler) tokenItems(
 // swagger:route PATCH /tokens/{id} tokens updateTokenScope
 //
 // Replace an owned token's explicit scope, role, and project selection.
-// Scoped bearer tokens cannot manage tokens.
+// Scoped tokens and tokens with permission ceilings cannot manage tokens.
 //
 // Consumes:
 // - application/json

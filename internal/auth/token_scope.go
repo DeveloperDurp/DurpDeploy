@@ -46,14 +46,14 @@ func TokenAllowsProject(ctx context.Context, projectID int64) bool {
 
 func tokenRoleAllows(ctx context.Context, role string) bool {
 	token := TokenFromContext(ctx)
-	if token == nil || token.Scope == "global" {
+	if token == nil || token.Scope == "global" && token.Role == "" {
 		return true
 	}
 	ranks := map[string]int{"viewer": 1, "deployer": 2, "admin": 3}
 	return ranks[token.Role] >= ranks[role] && ranks[role] != 0
 }
 
-// loadTokenAccess reads a scoped role and its projects from one snapshot.
+// loadTokenAccess reads token permissions and selected projects from one snapshot.
 // Serializable also prevents mixed grants on SQL Server's locking reads.
 func loadTokenAccess(
 	ctx context.Context, repo *repository.Repository, hash string,
@@ -97,7 +97,9 @@ func loadTokenAccess(
 		) {
 			return row, grant, repository.ErrTokenScope
 		}
-	} else if grant.Scope != "global" || grant.Role != "" {
+	} else if grant.Scope != "global" || grant.Role != "" && !slices.Contains(
+		[]string{"viewer", "deployer", "admin"}, grant.Role,
+	) {
 		return row, grant, repository.ErrTokenScope
 	}
 	return row, grant, nil
@@ -115,11 +117,19 @@ func setTokenAccess(
 func TokenScopeMiddleware() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			path := strings.TrimPrefix(r.URL.Path, "/api/v1")
+			tokenPath := strings.TrimPrefix(path, "/admin")
+			if token := TokenFromContext(r.Context()); token != nil &&
+				token.Role != "" && (tokenPath == "/tokens" ||
+				strings.HasPrefix(tokenPath, "/tokens/")) {
+				RenderJSONError(w, http.StatusForbidden,
+					"tokens with a permission ceiling cannot manage API tokens")
+				return
+			}
 			if ScopedTokenID(r.Context()) == "" {
 				next.ServeHTTP(w, r)
 				return
 			}
-			path := strings.TrimPrefix(r.URL.Path, "/api/v1")
 			allowed := strings.HasPrefix(path, "/projects/") ||
 				strings.HasPrefix(path, "/deployments/")
 			if r.Method == http.MethodGet {

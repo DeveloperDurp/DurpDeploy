@@ -72,7 +72,9 @@ api_get "$BASE/api/v1/users/me"    # sanity check: who am I
 ```
 
 - No CSRF, no cookies. Errors are JSON envelopes (`400/401/404/422`).
-- Global tokens inherit the owner's current permissions.
+- Global tokens cover all projects available to the owner.
+- Both scopes support a `viewer`, `deployer`, or `admin` permission ceiling.
+- Legacy global tokens without a role inherit the owner's current permissions.
 - Scoped tokens also require a selected project and a `viewer`, `deployer`, or `admin` permission ceiling.
 - Viewer tokens cannot write, execute deployments, or approve operations.
 - Scoped `admin` tokens grant no instance administration.
@@ -92,13 +94,17 @@ The creation response returns the bearer value once in `id`.
 Store `token_id` as its non-secret management identifier.
 Token lists show `scope`, `role`, and `project_ids` without the bearer value.
 Name-only API requests and legacy web or CLI creation retain global access.
+The web form defaults to **All accessible projects**.
+The permission selector defaults to `viewer` for either scope.
+Select **Selected projects** to set a project selection.
+Use `{"name":"ci-reader","scope":"global","role":"viewer"}` to create an all-project reader through the API.
 Explicit scoped requests reject empty selections, invalid roles, and inaccessible projects.
 
 Replace scope with `PATCH /api/v1/tokens/{token_id}` using `scope`, `role`, and `project_ids`.
 Provide an explicit `scope` on updates.
 Use `{"scope":"global"}` only when you intend to remove restrictions.
 Use `DELETE /api/v1/tokens/{token_id}` to revoke the token.
-Scoped tokens cannot access token management APIs.
+Scoped tokens and tokens with a permission ceiling cannot access token management APIs.
 Use the owner's browser session or a global token for these operations.
 
 Scoped project lists, deployment lists, activity, and totals exclude unrelated projects.

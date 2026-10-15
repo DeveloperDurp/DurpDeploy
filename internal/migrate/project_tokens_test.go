@@ -169,4 +169,13 @@ func testProjectTokenQueries(t *testing.T, conn *sql.DB) {
 	if response.Code != http.StatusUnauthorized {
 		t.Fatal("empty backend grants did not fail closed")
 	}
+	_, err = repo.ReplaceTokenScope(ctx, token.ID,
+		repository.TokenScope{Scope: "global", Role: "viewer"})
+	requireNoError(t, err, "set all-project viewer ceiling")
+	response = httptest.NewRecorder()
+	middleware(next).ServeHTTP(response, request)
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("all-project backend token authentication: %d %s",
+			response.Code, response.Body.String())
+	}
 }

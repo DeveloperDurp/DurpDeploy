@@ -66,14 +66,66 @@ func TestProjectTokensBrowserE2E(t *testing.T) {
 	if string(
 		b.evaluate(
 			t,
-			`document.querySelector('#new-token-scope').value === 'scoped' && document.querySelector('#new-token-role').value === 'viewer' && document.querySelectorAll('#new-token-projects option:checked').length === 0`,
+			`document.querySelector('#new-token-scope').value === 'global' && document.querySelector('#new-token-role').value === 'viewer' && document.querySelectorAll('#new-token-projects option:checked').length === 0`,
 		),
 	) != "true" {
 		t.Fatal(
-			"new token form did not default to a viewer with no selected projects",
+			"new token form did not default to all accessible projects",
 		)
 	}
 	name := "scope-browser-" + uuid.NewString()
+	// All-project tokens retain a visible permission selector.
+	b.wait(t, `(() => {
+ const role = document.querySelector('#new-token-role');
+ const projects = document.querySelector('#new-token-projects');
+ return !role.disabled && role.getBoundingClientRect().width && projects.disabled && !projects.getBoundingClientRect().width;
+})()`)
+	b.evaluate(t, fmt.Sprintf(`(() => {
+ const form = document.querySelector('form[action="/settings/tokens"]');
+ form.elements.name.value = %q; form.requestSubmit(); return true;
+})()`, "global-"+name))
+	b.wait(t, `document.querySelector('.alert code')`)
+	b.evaluate(
+		t,
+		`document.querySelector('.alert a[href="/settings/tokens"]').click(); true`,
+	)
+	b.wait(
+		t,
+		`location.search === '' && !document.querySelector('.alert code')`,
+	)
+	globalRow := fmt.Sprintf(
+		`[...document.querySelectorAll('[data-token-record]')].find(row=>row.getBoundingClientRect().width && row.querySelector('[data-token-name]').textContent.trim()===%q)`,
+		"global-"+name,
+	)
+	if string(
+		b.evaluate(
+			t,
+			fmt.Sprintf(
+				`(%s)?.querySelector('[data-token-access]').textContent.includes('Global · viewer')`,
+				globalRow,
+			),
+		),
+	) != "true" {
+		t.Fatal("default all-project token did not retain its viewer ceiling")
+	}
+	b.evaluate(t, fmt.Sprintf(`(() => {
+ const row=%s; row.querySelector('summary').click();
+ const form=row.querySelector('form'); form.elements.role.value='deployer';
+ form.requestSubmit(); return true;
+})()`, globalRow))
+	b.wait(
+		t,
+		fmt.Sprintf(
+			`(%s)?.querySelector('[data-token-access]').textContent.includes('Global · deployer')`,
+			globalRow,
+		),
+	)
+	b.evaluate(t, `(() => {
+ const scope = document.querySelector('#new-token-scope');
+ scope.value = 'scoped'; scope.dispatchEvent(new Event('change', {bubbles:true}));
+ return true;
+})()`)
+	b.wait(t, `!document.querySelector('#new-token-projects').disabled`)
 	// Create a deployer token with two selected projects through the form.
 	b.evaluate(t, fmt.Sprintf(`(() => {
  const form = document.querySelector('form[action="/settings/tokens"]');
@@ -105,38 +157,61 @@ func TestProjectTokensBrowserE2E(t *testing.T) {
 		`location.search === '' && !document.querySelector('.alert code')`,
 	)
 	row := fmt.Sprintf(
-		`[...document.querySelectorAll('tbody tr')].find(row=>row.cells[0].textContent.trim()===%q)`,
+		`[...document.querySelectorAll('[data-token-record]')].find(row=>row.getBoundingClientRect().width && row.querySelector('[data-token-name]').textContent.trim()===%q)`,
 		name,
 	)
 	if string(
 		b.evaluate(
 			t,
 			fmt.Sprintf(
-				`(() => {const row=%s; return !!row && row.cells[1].textContent.includes('deployer') && row.querySelector('[name=scope]').value === 'scoped' && row.querySelectorAll('select[name=project_ids] option:checked').length === 2;})()`,
+				`(() => {const row=%s; return !!row && row.querySelector('[data-token-access]').textContent.includes('deployer') && row.querySelector('[name=scope]').value === 'scoped' && row.querySelectorAll('select[name=project_ids] option:checked').length === 2;})()`,
 				row,
 			),
 		),
 	) != "true" {
 		t.Fatal("token role or two-project scope missing from management view")
 	}
-	for _, width := range []int{375, 1280} {
+	for _, width := range []int{375, 430, 540, 768, 980, 1280} {
 		b.call(t, "Emulation.setDeviceMetricsOverride", map[string]any{
 			"width":             width,
 			"height":            900,
 			"deviceScaleFactor": 1,
-			"mobile":            false,
+			"mobile":            width < 768,
 		}, &struct{}{})
 		if string(
 			b.evaluate(t, `document.documentElement.scrollWidth <= innerWidth`),
 		) != "true" {
 			t.Fatalf("token page overflows at width %d", width)
 		}
+		if string(b.evaluate(t, fmt.Sprintf(`(() => {
+ const form = document.querySelector('form[action="/settings/tokens"]');
+ const fields = ['name','scope','role','project_ids'].map(name=>form.elements[name].getBoundingClientRect()).filter(field=>field.width);
+ const bounds = form.getBoundingClientRect();
+ const record = %s;
+ return fields.every((field,index)=>field.width >= bounds.width - 2 && field.left >= 0 && field.right <= innerWidth && (!index || field.top >= fields[index-1].bottom))
+   && record.tagName === (innerWidth < 1280 ? 'ARTICLE' : 'TR');
+})()`, row))) != "true" {
+			t.Fatalf(
+				"token controls are squeezed or overlap at width %d",
+				width,
+			)
+		}
 		b.screenshot(t, fmt.Sprintf("project-token-scope-%d", width))
 	}
+	// Exercise the card's edit form at phone width.
+	b.call(t, "Emulation.setDeviceMetricsOverride", map[string]any{
+		"width": 375, "height": 900, "deviceScaleFactor": 1, "mobile": true,
+	}, &struct{}{})
 	// Empty scoped selections return a validation message and retain input.
 	b.evaluate(t, `(() => {
  const form = document.querySelector('form[action="/settings/tokens"]');
  form.elements.name.value = 'empty-selection'; form.elements.scope.value = 'scoped';
+ form.elements.scope.dispatchEvent(new Event('change', {bubbles:true}));
+ return true;
+})()`)
+	b.wait(t, `!document.querySelector('#new-token-projects').disabled`)
+	b.evaluate(t, `(() => {
+ const form = document.querySelector('form[action="/settings/tokens"]');
  for (const option of form.elements.project_ids.options) option.selected = false;
  form.requestSubmit(); return true;
 })()`)
@@ -149,14 +224,32 @@ func TestProjectTokensBrowserE2E(t *testing.T) {
 	b.evaluate(
 		t,
 		fmt.Sprintf(`(() => {const row=%s; row.querySelector('summary').click();
- const form=row.querySelector('form[data-token-scope-edit]'); form.elements.role.value='viewer';
+ row.querySelector('form[data-token-scope-edit]').scrollIntoView({block:'center'});
+ return true;})()`, row),
+	)
+	if string(b.evaluate(t, fmt.Sprintf(`(() => {
+ const form=(%s).querySelector('form[data-token-scope-edit]');
+ const bounds=form.getBoundingClientRect();
+ return bounds.width > 250 && bounds.left >= 0 && bounds.right <= innerWidth
+   && [...form.querySelectorAll('select,button')].every(field=>field.getBoundingClientRect().width >= bounds.width - 26);
+})()`, row))) != "true" {
+		t.Fatal("scope edit controls are clipped or squeezed on mobile")
+	}
+	b.screenshot(t, "project-token-mobile-edit")
+	b.evaluate(
+		t,
+		fmt.Sprintf(
+			`(() => {const form=(%s).querySelector('form[data-token-scope-edit]'); form.elements.role.value='viewer';
  for (const option of form.elements.project_ids.options) option.selected = option.value === %q;
- form.requestSubmit(); return true;})()`, row, projects[1]),
+ form.requestSubmit(); return true;})()`,
+			row,
+			projects[1],
+		),
 	)
 	b.wait(
 		t,
 		fmt.Sprintf(
-			`(() => {const row=%s; return location.pathname==='/settings/tokens' && !document.querySelector('.alert-error') && row?.textContent.includes('viewer') && row.querySelectorAll('select[name=project_ids] option:checked').length===1;})()`,
+			`(() => {const row=%s; return location.pathname==='/settings/tokens' && !document.querySelector('.alert-error') && row?.querySelector('[data-token-access]').textContent.includes('viewer') && row.querySelectorAll('select[name=project_ids] option:checked').length===1;})()`,
 			row,
 		),
 	)

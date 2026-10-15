@@ -370,6 +370,7 @@ type swaggerCreateTokenResponse struct {
 type swaggerCreateTokenRequest struct {
 	Name string `json:"name"`
 	// Omit grant fields for legacy global creation. Scoped selections must be nonempty.
+	// Both global and scoped tokens support an explicit permission ceiling.
 	Scope string `json:"scope"`
 	// Viewer, deployer, or admin. This ceiling cannot increase owner permissions.
 	Role       string  `json:"role"`

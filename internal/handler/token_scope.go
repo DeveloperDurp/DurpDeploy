@@ -16,11 +16,11 @@ import (
 
 func tokenScopeForm(r *http.Request) (repository.TokenScope, error) {
 	grant := repository.TokenScope{Scope: r.FormValue("scope")}
-	if grant.Scope == "global" || grant.Scope == "" &&
+	grant.Role = r.FormValue("role")
+	if grant.Scope == "" &&
 		r.FormValue("role") == "" && r.PostForm["project_ids"] == nil {
 		return grant, nil
 	}
-	grant.Role = r.FormValue("role")
 	grant.ProjectIDs = []int64{}
 	for _, value := range r.PostForm["project_ids"] {
 		id, err := strconv.ParseInt(value, 10, 64)
@@ -85,7 +85,7 @@ func (h *TokensHandler) renderTokenSettings(
 	}
 	form, _ := tokenScopeForm(r)
 	if r.Method == http.MethodGet {
-		form = repository.TokenScope{Scope: "scoped", Role: "viewer"}
+		form = repository.TokenScope{Scope: "global", Role: "viewer"}
 	}
 	view := pages.TokenSettingsView{Projects: projects, Selections: selections,
 		Form: form, Name: r.FormValue("name")}

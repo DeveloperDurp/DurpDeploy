@@ -7,11 +7,11 @@ import (
 )
 
 // RoleFromContext intersects the owner's role with the token's ceiling.
-// Browser sessions and global tokens retain the owner's role.
+// Browser sessions and legacy tokens retain the owner's role.
 func RoleFromContext(ctx context.Context) string {
 	if u := UserFromContext(ctx); u != nil {
 		if token := TokenFromContext(ctx); token != nil &&
-			token.Scope == "scoped" && !tokenRoleAllows(ctx, u.Role) {
+			!tokenRoleAllows(ctx, u.Role) {
 			return token.Role
 		}
 		return u.Role

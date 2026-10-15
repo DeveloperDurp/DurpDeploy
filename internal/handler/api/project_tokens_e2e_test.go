@@ -218,6 +218,7 @@ func TestProjectTokensValidationAPIE2E(t *testing.T) {
 		{"scope": "scoped", "role": "viewer", "project_ids": []int64{999999}},
 		{"scope": "scoped", "role": "viewer", "project_ids": []int64{-1}},
 		{"scope": "global", "role": "admin", "project_ids": []int64{f.project.ID}},
+		{"scope": "global", "role": "root"},
 		{"role": "viewer", "project_ids": []int64{}},
 		{"project_ids": nil},
 		{"role": nil},

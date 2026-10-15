@@ -50,10 +50,10 @@ templ TokensSettings(
 				@NewTokenBanner(newToken, newName)
 			}
 			<div class="card bg-base-200 shadow mb-6">
-				<div class="card-body">
+				<div class="card-body p-4 sm:p-6">
 					<h2 class="card-title">New token</h2>
-					<form method="post" action="/settings/tokens" class="flex flex-wrap gap-2 items-end">
-						<div class="form-control flex-1">
+					<form method="post" action="/settings/tokens" class="grid min-w-0 gap-4">
+						<div class="form-control min-w-0">
 							<label class="label" for="token-name">
 								<span class="label-text">Name</span>
 							</label>
@@ -68,7 +68,9 @@ templ TokensSettings(
 							/>
 						</div>
 						@TokenGrantFields(view.Form, view.Projects, "new-token")
-						<button type="submit" class="btn btn-primary">Create token</button>
+						<div class="flex sm:justify-end">
+							<button type="submit" class="btn btn-primary w-full sm:w-auto">Create token</button>
+						</div>
 					</form>
 				</div>
 			</div>
@@ -77,7 +79,7 @@ templ TokensSettings(
 					<p class="text-gray-400">No tokens yet.</p>
 				</div>
 			} else {
-				<div class="overflow-x-auto">
+				<div class="hidden overflow-x-auto xl:block">
 					<table class="table table-zebra table-fixed w-full min-w-[80rem]">
 						<thead>
 							<tr>
@@ -98,15 +100,20 @@ templ TokensSettings(
 						</tbody>
 					</table>
 				</div>
+				<div class="grid min-w-0 gap-3 md:grid-cols-2 xl:hidden" aria-label="API tokens">
+					for _, t := range tokens {
+						@tokenMobileCard(t, view)
+					}
+				</div>
 			}
 		}
 	}
 }
 
 templ tokensSettingsRow(t db.ListApiTokensByUserRow, view TokenSettingsView) {
-	<tr>
-		<td class="truncate">{ t.Name }</td>
-		<td class="truncate">@TokenScopeLabel(t.Scope, t.TokenRole, view.Selections[t.ID], view.Projects)</td>
+	<tr data-token-record={ t.ID }>
+		<td class="truncate" data-token-name>{ t.Name }</td>
+		<td class="truncate" data-token-access>@TokenScopeLabel(t.Scope, t.TokenRole, view.Selections[t.ID], view.Projects)</td>
 		<td class="truncate font-mono text-sm">{ t.TokenPrefix }…</td>
 		<td class="truncate whitespace-nowrap text-sm" title={ formatUnixTime(t.CreatedAt) }>{ formatUnixTime(t.CreatedAt) }</td>
 		<td class="truncate whitespace-nowrap text-sm hidden md:table-cell">
@@ -131,28 +138,57 @@ templ tokensSettingsRow(t db.ListApiTokensByUserRow, view TokenSettingsView) {
 			}
 		</td>
 		<td class="whitespace-nowrap">
-			if CanWrite(ctx) {
-				if !t.RevokedAt.Valid {
-					<details class="block">
-						<summary class="btn btn-xs">Edit scope</summary>
-						<form method="post" action={ "/settings/tokens/" + t.ID + "/scope" } class="card bg-base-200 p-3 gap-3 mt-2 w-64 whitespace-normal" data-token-scope-edit={ t.ID }>
-							@TokenGrantFields(repository.TokenScope{Scope: t.Scope, Role: t.TokenRole, ProjectIDs: view.Selections[t.ID]}, view.Projects, t.ID)
-							<button type="submit" class="btn btn-primary btn-sm">Save scope</button>
-						</form>
-					</details>
-					<button
-						class="btn btn-error btn-xs"
-						hx-post={ "/settings/tokens/" + t.ID + "/revoke" }
-						hx-confirm={ "Revoke token " + t.Name + "? It can no longer be used." }
-						data-toast-success="Token revoked"
-						data-toast-error="Failed to revoke token"
-					>
-						Revoke
-					</button>
-				}
-			}
+			@tokenActions(t, view, t.ID)
 		</td>
 	</tr>
+}
+
+templ tokenMobileCard(t db.ListApiTokensByUserRow, view TokenSettingsView) {
+	<article class="min-w-0 rounded-box border border-base-300 bg-base-200 p-4 space-y-4" data-token-record={ t.ID }>
+		<div class="flex items-start justify-between gap-3">
+			<h2 class="min-w-0 break-all font-semibold" data-token-name>{ t.Name }</h2>
+			if t.RevokedAt.Valid {
+				<span class="badge badge-error badge-outline shrink-0">Revoked</span>
+			} else {
+				<span class="badge badge-success badge-outline shrink-0">Active</span>
+			}
+		</div>
+		<p class="break-all text-sm" data-token-access>@TokenScopeLabel(t.Scope, t.TokenRole, view.Selections[t.ID], view.Projects)</p>
+		<dl class="grid grid-cols-2 gap-3 text-xs">
+			<div class="min-w-0"><dt class="opacity-70">Prefix</dt><dd class="font-mono break-all">{ t.TokenPrefix }…</dd></div>
+			<div class="min-w-0"><dt class="opacity-70">Created</dt><dd>{ formatUnixTime(t.CreatedAt) }</dd></div>
+			if t.LastUsedAt.Valid {
+				<div class="min-w-0"><dt class="opacity-70">Last used</dt><dd>{ formatUnixTime(t.LastUsedAt.Int64) }</dd></div>
+			}
+			if t.ExpiresAt.Valid {
+				<div class="min-w-0"><dt class="opacity-70">Expires</dt><dd>{ formatUnixTime(t.ExpiresAt.Int64) }</dd></div>
+			}
+		</dl>
+		@tokenActions(t, view, "mobile-" + t.ID)
+	</article>
+}
+
+templ tokenActions(t db.ListApiTokensByUserRow, view TokenSettingsView, prefix string) {
+	if CanWrite(ctx) && !t.RevokedAt.Valid {
+		<div class="flex flex-wrap items-start gap-2">
+			<details class="open:w-full">
+				<summary class="btn btn-sm min-h-11 xl:btn-xs xl:min-h-0">Edit scope</summary>
+				<form method="post" action={ "/settings/tokens/" + t.ID + "/scope" } class="grid min-w-0 gap-4 rounded-lg bg-base-100 p-3 mt-3 whitespace-normal" data-token-scope-edit={ t.ID }>
+					@TokenGrantFields(repository.TokenScope{Scope: t.Scope, Role: t.TokenRole, ProjectIDs: view.Selections[t.ID]}, view.Projects, prefix)
+					<button type="submit" class="btn btn-primary btn-sm min-h-11 xl:min-h-0">Save scope</button>
+				</form>
+			</details>
+			<button
+				class="btn btn-error btn-outline btn-sm min-h-11 xl:btn-xs xl:min-h-0"
+				hx-post={ "/settings/tokens/" + t.ID + "/revoke" }
+				hx-confirm={ "Revoke token " + t.Name + "? It can no longer be used." }
+				data-toast-success="Token revoked"
+				data-toast-error="Failed to revoke token"
+			>
+				Revoke
+			</button>
+		</div>
+	}
 }
 
 // AdminTokensPage renders /admin/tokens — every API token across all
@@ -242,36 +278,45 @@ templ adminTokensRow(t db.ListAllApiTokensRow, view TokenSettingsView) {
 // ponytail: warning color + monospace makes the token unmissable.
 templ TokenScopeLabel(scope string, role string, ids []int64, projects []db.Project) {
 	if scope == "global" {
-		<span title="All projects available to the owner">Global · Owner permissions</span>
+		if role == "" {
+			<span title="All projects available to the owner">Global · Owner permissions</span>
+		} else {
+			<span title="All projects available to the owner">Global · { role }</span>
+		}
 	} else {
 		<span title={ tokenProjectNames(ids, projects) }>{ role } · { tokenProjectNames(ids, projects) }</span>
 	}
 }
 
 templ TokenGrantFields(grant repository.TokenScope, projects []db.Project, prefix string) {
-	<div class="form-control">
+	<div class="grid min-w-0 gap-4" x-data="{ scope: $el.dataset.scope || 'global' }" data-scope={ grant.Scope }>
+	<div class="form-control min-w-0">
 		<label class="label" for={ prefix + "-scope" }><span class="label-text">Scope</span></label>
-		<select id={ prefix + "-scope" } name="scope" class="select select-bordered">
+		<select id={ prefix + "-scope" } name="scope" class="select select-bordered" x-model="scope">
 			<option value="scoped" if grant.Scope == "scoped" { selected }>Selected projects</option>
 			<option value="global" if grant.Scope == "global" || grant.Scope == "" { selected }>All accessible projects</option>
 		</select>
 	</div>
-	<div class="form-control">
-		<label class="label" for={ prefix + "-role" }><span class="label-text">Token role</span></label>
-		<select id={ prefix + "-role" } name="role" class="select select-bordered">
-			for _, role := range []string{"viewer", "deployer", "admin"} {
-				<option value={ role } if grant.Role == role || grant.Role == "" && role == "viewer" { selected }>{ role }</option>
+		<div class="form-control min-w-0">
+			<label class="label" for={ prefix + "-role" }><span class="label-text">Token role</span></label>
+			<select id={ prefix + "-role" } name="role" class="select select-bordered">
+				if grant.Scope == "global" && grant.Role == "" {
+					<option value="" selected>Owner permissions</option>
+				}
+				for _, role := range []string{"viewer", "deployer", "admin"} {
+					<option value={ role } if grant.Role == role { selected }>{ role }</option>
 			}
 		</select>
 	</div>
-	<div class="form-control flex-1 min-w-48">
+	<div class="form-control min-w-0" x-cloak x-show="scope === 'scoped'">
 		<label class="label" for={ prefix + "-projects" }><span class="label-text">Projects</span></label>
-		<select id={ prefix + "-projects" } name="project_ids" multiple size="4" class="block w-full rounded-lg border border-base-300 bg-base-100 p-2 text-sm h-32" aria-describedby={ prefix + "-help" }>
+		<select id={ prefix + "-projects" } name="project_ids" multiple size="4" class="block w-full rounded-lg border border-base-300 bg-base-100 p-2 text-sm h-32" aria-describedby={ prefix + "-help" } x-bind:disabled="scope !== 'scoped'">
 			for _, project := range projects {
 				<option value={ strconv.FormatInt(project.ID, 10) } if slices.Contains(grant.ProjectIDs, project.ID) { selected }>{ project.Name }</option>
 			}
 		</select>
 		<p id={ prefix + "-help" } class="text-xs opacity-70 mt-1">For selected-project tokens, choose one or more projects. The role limits the owner's current permissions.</p>
+	</div>
 	</div>
 }
 

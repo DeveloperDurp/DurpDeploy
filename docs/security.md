@@ -254,6 +254,8 @@ uses mTLS agent authentication and claim checks.
 
 Project-scoped bearer tokens intersect selected projects, a token role, and the owner's current permissions.
 Global administrators remain subject to token scope and its role ceiling.
+All-project tokens can also apply a permission ceiling to the owner's current permissions.
+Tokens with an explicit permission ceiling cannot manage API tokens or remove that ceiling themselves.
 Scoped tokens cannot manage tokens, create projects, or use instance administration.
 Resource-ID routes resolve the owning project before they return data.
 Aggregate queries filter rows and totals to the same authorized projects.

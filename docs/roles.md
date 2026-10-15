@@ -37,7 +37,10 @@ scoped shared variables.
 API tokens can use `global` or `scoped` access.
 Existing global tokens retain their owner's current permissions.
 Name-only token creation through the API, CLI, or legacy web form remains global.
-The token settings page defaults to selected projects and the `viewer` role.
+The token settings page defaults to all accessible projects and the `viewer` role.
+Both scopes support a `viewer`, `deployer`, or `admin` permission ceiling.
+All-project tokens keep the owner's project coverage and limit operations to the selected role.
+Tokens with a permission ceiling cannot manage API tokens.
 
 Select one or more accessible projects for a scoped token.
 Select `viewer`, `deployer`, or `admin` as its permission ceiling.

@@ -9,7 +9,7 @@ import (
 	"durpdeploy/internal/db"
 )
 
-// TokenScope describes an explicit permission ceiling for selected projects.
+// TokenScope describes project coverage and an optional permission ceiling.
 // An empty scope without grants preserves legacy global token creation.
 type TokenScope struct {
 	Scope      string  `json:"scope"`
@@ -69,7 +69,11 @@ func (r *Repository) ValidateTokenScope(
 		}
 	}
 	if grant.Scope == "global" {
-		if grant.Role != "" || len(grant.ProjectIDs) != 0 {
+		if len(grant.ProjectIDs) != 0 || grant.Role != "" &&
+			!slices.Contains(
+				[]string{"viewer", "deployer", "admin"},
+				grant.Role,
+			) {
 			return grant, ErrTokenScope
 		}
 		grant.ProjectIDs = []int64{}

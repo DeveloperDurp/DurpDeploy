@@ -9,7 +9,11 @@ It also retains token metadata for all three roles and a revoked token.
 These scenarios create no schedules.
 
 Open `/settings/tokens` as an administrator.
-Confirm that a new token defaults to **Selected projects** and `viewer`.
+Confirm that a new token defaults to **All accessible projects**.
+Confirm that the permission selector defaults to `viewer` for either scope.
+Create an all-project token for each role and check the same permission limits.
+Confirm that permission-limited tokens cannot create or edit tokens through the API.
+Select **Selected projects**.
 Select the two printed selected projects.
 Create a token for each supported role.
 Copy each bearer value from its one-time banner.
@@ -20,6 +24,14 @@ Expect a validation message and no new token.
 Use **Edit scope** to change a token's role and project selection.
 Confirm that the list shows the saved role and projects.
 Confirm that editing scope does not display the bearer value again.
+
+Check the page at widths of 375, 430, 540, 768, 980, and 1280 pixels.
+Confirm that each form control fills its row without overlap.
+Below 1280 pixels, confirm that token cards show names, access details, and actions.
+Open **Edit scope** on a phone and save a changed selection.
+Select **All accessible projects** in the new token form.
+Confirm that the project control disappears and the permission selector stays visible.
+Select **Selected projects** and confirm that the project control returns.
 
 Call `GET /api/v1/projects` with each token.
 Expect only selected projects and matching pagination totals.

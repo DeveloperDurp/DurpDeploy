@@ -9683,7 +9683,7 @@
         ]
       },
       "patch": {
-        "description": "Scoped bearer tokens cannot manage tokens.",
+        "description": "Scoped tokens and tokens with permission ceilings cannot manage tokens.",
         "consumes": [
           "application/json"
         ],
@@ -10225,7 +10225,7 @@
           "x-go-name": "Role"
         },
         "scope": {
-          "description": "Omit grant fields for legacy global creation. Scoped selections must be nonempty.",
+          "description": "Omit grant fields for legacy global creation. Scoped selections must be nonempty.\nBoth global and scoped tokens support an explicit permission ceiling.",
           "type": "string",
           "x-go-name": "Scope"
         }
