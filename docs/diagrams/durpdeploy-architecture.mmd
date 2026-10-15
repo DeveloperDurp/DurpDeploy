@@ -1,0 +1,57 @@
+flowchart TB
+    Browser["Browser"]
+    Client["CLI / CI / API client"]
+
+    subgraph Server["DurpDeploy server"]
+        Web["Web UI + REST API<br/>Authentication, permissions, audit"]
+        Scheduler["Deployment scheduler"]
+        Runner["Deployment runner<br/>Ordered steps, approvals, cancellation"]
+        Queue["Remote dispatch<br/>Environment, labels, capabilities"]
+        AgentAPI["Dedicated agent listener<br/>Pinned mTLS · TLS 1.3 · port 10943"]
+        Logs["Secret redaction<br/>Saved logs + browser SSE"]
+        DB[("SQLite / PostgreSQL / SQL Server<br/>Configuration, snapshots, jobs, logs")]
+    end
+
+    subgraph ServerExecution["Server execution host"]
+        Local["Docker / Podman containers<br/>Bash / PowerShell / Python"]
+    end
+
+    subgraph Remote["Agent host — repeated across the fleet"]
+        Agent["DurpDeploy agent"]
+        State[("Private agent state<br/>Identity, pairing, recovery")]
+        HostScripts["Host execution<br/>Bash / PowerShell / Python"]
+        Containers["Docker / Podman containers<br/>Bash / PowerShell / Python"]
+    end
+
+    Browser -->|"Session authentication"| Web
+    Client -->|"Bearer token · /api/v1"| Web
+    Web -->|"Deploy / approve / cancel"| Runner
+    Scheduler --> Runner
+    Runner <-->|"Server persistence"| DB
+
+    Runner -->|"Server steps"| Local
+    Local -->|"Script output"| Logs
+    Runner <-->|"Remote steps and completion"| Queue
+    Queue <-->|"Claim handling"| AgentAPI
+
+    AgentAPI <-->|"Agent-initiated mTLS<br/>Polls, jobs, logs, results, cancellation"| Agent
+    AgentAPI -->|"Script output"| Logs
+    Agent <--> State
+    Agent -->|"Host mode"| HostScripts
+    Agent -->|"Container mode"| Containers
+
+    classDef client fill:#eff6ff,stroke:#60a5fa,color:#172554,stroke-width:1.5px
+    classDef control fill:#e0e7ff,stroke:#818cf8,color:#1e1b4b,stroke-width:1.5px
+    classDef agent fill:#f3e8ff,stroke:#c084fc,color:#3b0764,stroke-width:1.5px
+    classDef execution fill:#ccfbf1,stroke:#2dd4bf,color:#134e4a,stroke-width:1.5px
+    classDef storage fill:#fef3c7,stroke:#fbbf24,color:#78350f,stroke-width:1.5px
+    classDef logging fill:#e0f2fe,stroke:#38bdf8,color:#0c4a6e,stroke-width:1.5px
+    class Browser,Client client
+    class Web,Scheduler,Runner,Queue,AgentAPI control
+    class Agent agent
+    class Local,HostScripts,Containers execution
+    class DB,State storage
+    class Logs logging
+    style Server fill:#f8faff,stroke:#a5b4fc,stroke-width:2px
+    style ServerExecution fill:#f0fdfa,stroke:#5eead4,stroke-width:2px
+    style Remote fill:#fcfaff,stroke:#d8b4fe,stroke-width:2px
