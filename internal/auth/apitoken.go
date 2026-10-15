@@ -120,16 +120,7 @@ func ApiTokenMiddleware(
 
 			hash := HashApiToken(token)
 
-			row, err := repo.Queries.GetApiTokenByHash(
-				r.Context(),
-				db.GetApiTokenByHashParams{
-					TokenHash: hash,
-					ExpiresAt: sql.NullInt64{
-						Int64: time.Now().Unix(),
-						Valid: true,
-					},
-				},
-			)
+			row, grant, err := loadTokenAccess(r.Context(), repo, hash)
 			if err != nil {
 				RenderJSONError(
 					w,
@@ -146,6 +137,7 @@ func ApiTokenMiddleware(
 				Role:  row.Role,
 			}
 			r = SetUser(r, user)
+			r = setTokenAccess(r, row.ID, grant)
 
 			// Telemetry survives the request, but cannot wait indefinitely.
 			ctx, cancel := context.WithTimeout(

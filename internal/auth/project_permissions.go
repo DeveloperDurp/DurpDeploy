@@ -15,7 +15,8 @@ func CanManageProject(
 	projectID int64,
 ) bool {
 	user := UserFromContext(ctx)
-	if user == nil {
+	if user == nil || !TokenAllowsProject(ctx, projectID) ||
+		!tokenRoleAllows(ctx, "admin") {
 		return false
 	}
 	if user.Role == "admin" {

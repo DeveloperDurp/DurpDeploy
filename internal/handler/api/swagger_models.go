@@ -333,17 +333,19 @@ type swaggerAuditLogParams struct {
 //
 //nolint:unused // Used by Swagger specification generation.
 type swaggerTokenResponse struct {
-	ID         string `json:"id"`
-	Name       string `json:"name"`
-	Prefix     string `json:"prefix"`
-	Scope      string `json:"scope"`
-	UserID     int64  `json:"user_id,omitempty"`
-	Email      string `json:"email,omitempty"`
-	UserName   string `json:"user_name,omitempty"`
-	LastUsedAt *int64 `json:"last_used_at,omitempty"`
-	ExpiresAt  *int64 `json:"expires_at,omitempty"`
-	CreatedAt  int64  `json:"created_at"`
-	RevokedAt  *int64 `json:"revoked_at,omitempty"`
+	ID         string  `json:"id"`
+	Name       string  `json:"name"`
+	Prefix     string  `json:"prefix"`
+	Scope      string  `json:"scope"`
+	Role       string  `json:"role"`
+	ProjectIDs []int64 `json:"project_ids"`
+	UserID     int64   `json:"user_id,omitempty"`
+	Email      string  `json:"email,omitempty"`
+	UserName   string  `json:"user_name,omitempty"`
+	LastUsedAt *int64  `json:"last_used_at,omitempty"`
+	ExpiresAt  *int64  `json:"expires_at,omitempty"`
+	CreatedAt  int64   `json:"created_at"`
+	RevokedAt  *int64  `json:"revoked_at,omitempty"`
 }
 
 // CreateTokenResponse returns the plaintext token once.
@@ -351,10 +353,14 @@ type swaggerTokenResponse struct {
 //
 //nolint:unused // Used by Swagger specification generation.
 type swaggerCreateTokenResponse struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	Prefix    string `json:"prefix"`
-	CreatedAt int64  `json:"created_at"`
+	ID         string  `json:"id"`
+	Name       string  `json:"name"`
+	Prefix     string  `json:"prefix"`
+	CreatedAt  int64   `json:"created_at"`
+	TokenID    string  `json:"token_id"`
+	Scope      string  `json:"scope"`
+	Role       string  `json:"role"`
+	ProjectIDs []int64 `json:"project_ids"`
 }
 
 // CreateTokenRequest is the body for CreateToken.
@@ -363,6 +369,21 @@ type swaggerCreateTokenResponse struct {
 //nolint:unused // Used by Swagger specification generation.
 type swaggerCreateTokenRequest struct {
 	Name string `json:"name"`
+	// Omit grant fields for legacy global creation. Scoped selections must be nonempty.
+	Scope string `json:"scope"`
+	// Viewer, deployer, or admin. This ceiling cannot increase owner permissions.
+	Role       string  `json:"role"`
+	ProjectIDs []int64 `json:"project_ids"`
+}
+
+// TokenScopeResponse identifies a token's permission ceiling.
+// swagger:model TokenScopeResponse
+//
+//nolint:unused // Used by Swagger specification generation.
+type swaggerTokenScopeResponse struct {
+	Scope      string  `json:"scope"`
+	Role       string  `json:"role"`
+	ProjectIDs []int64 `json:"project_ids"`
 }
 
 // ProjectListResponse is a list of projects.

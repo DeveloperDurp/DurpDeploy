@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/repository"
 
 	agentproto "github.com/DeveloperDurp/durpdeploy-agent/protocol"
 )
@@ -18,6 +19,20 @@ type requestState struct {
 	agentLabel         string
 	agentEnvironmentID int64
 	agentActor         agentproto.AgentID
+	tokenID            string
+	tokenScope         repository.TokenScope
+	previousTokenScope *repository.TokenScope
+}
+
+// SetTokenChange records only non-secret token identifiers and grants.
+func SetTokenChange(r *http.Request, id string, grant repository.TokenScope,
+	previous *repository.TokenScope,
+) {
+	if state, ok := r.Context().Value(requestStateKey{}).(*requestState); ok {
+		state.tokenID = id
+		state.tokenScope = grant
+		state.previousTokenScope = previous
+	}
 }
 
 type requestOutcome struct {

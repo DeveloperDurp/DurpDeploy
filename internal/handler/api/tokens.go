@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"durpdeploy/internal/audit"
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/repository"
@@ -37,7 +38,10 @@ func NewAPITokenHandler(repo *repository.Repository) *APITokenHandler {
 }
 
 type createTokenRequest struct {
-	Name string `json:"name"`
+	Name       string          `json:"name"`
+	Scope      json.RawMessage `json:"scope"`
+	Role       json.RawMessage `json:"role"`
+	ProjectIDs json.RawMessage `json:"project_ids"`
 }
 
 type createTokenResponse struct {
@@ -45,20 +49,24 @@ type createTokenResponse struct {
 	Name      string `json:"name"`
 	Prefix    string `json:"prefix"`
 	CreatedAt int64  `json:"created_at"`
+	TokenID   string `json:"token_id"`
+	repository.TokenScope
 }
 
 type tokenResponse struct {
-	ID         string `json:"id"`
-	Name       string `json:"name"`
-	Prefix     string `json:"prefix"`
-	Scope      string `json:"scope"`
-	UserID     int64  `json:"user_id,omitempty"`
-	Email      string `json:"email,omitempty"`
-	UserName   string `json:"user_name,omitempty"`
-	LastUsedAt *int64 `json:"last_used_at,omitempty"`
-	ExpiresAt  *int64 `json:"expires_at,omitempty"`
-	CreatedAt  int64  `json:"created_at"`
-	RevokedAt  *int64 `json:"revoked_at,omitempty"`
+	ID         string  `json:"id"`
+	Name       string  `json:"name"`
+	Prefix     string  `json:"prefix"`
+	Scope      string  `json:"scope"`
+	Role       string  `json:"role"`
+	ProjectIDs []int64 `json:"project_ids"`
+	UserID     int64   `json:"user_id,omitempty"`
+	Email      string  `json:"email,omitempty"`
+	UserName   string  `json:"user_name,omitempty"`
+	LastUsedAt *int64  `json:"last_used_at,omitempty"`
+	ExpiresAt  *int64  `json:"expires_at,omitempty"`
+	CreatedAt  int64   `json:"created_at"`
+	RevokedAt  *int64  `json:"revoked_at,omitempty"`
 }
 
 func nullInt64Ptr(n sql.NullInt64) *int64 {
@@ -77,6 +85,7 @@ func apiTokenFromPaginatedRow(
 		Name:       row.Name,
 		Prefix:     row.TokenPrefix,
 		Scope:      row.Scope,
+		Role:       row.TokenRole,
 		LastUsedAt: nullInt64Ptr(row.LastUsedAt),
 		ExpiresAt:  nullInt64Ptr(row.ExpiresAt),
 		CreatedAt:  row.CreatedAt,
@@ -92,6 +101,7 @@ func apiTokenFromAdminPaginatedRow(
 		Name:       row.Name,
 		Prefix:     row.TokenPrefix,
 		Scope:      row.Scope,
+		Role:       row.TokenRole,
 		UserID:     row.UserID,
 		Email:      row.Email,
 		UserName:   row.UserName,
@@ -110,6 +120,7 @@ func apiTokenFromAdminUserPaginatedRow(
 		Name:       row.Name,
 		Prefix:     row.TokenPrefix,
 		Scope:      row.Scope,
+		Role:       row.TokenRole,
 		UserID:     row.UserID,
 		Email:      row.Email,
 		UserName:   row.UserName,
@@ -162,6 +173,17 @@ func (h *APITokenHandler) CreateToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	requested, err := req.tokenScope()
+	if err != nil {
+		RespondError(w, http.StatusUnprocessableEntity, "invalid token scope")
+		return
+	}
+	grant, err := h.repo.ValidateTokenScope(ctx, *user, requested)
+	if err != nil {
+		RespondError(w, http.StatusUnprocessableEntity,
+			"select a valid token role and accessible projects")
+		return
+	}
 	full, prefix, hash, err := auth.MintApiToken()
 	if err != nil {
 		RespondError(
@@ -173,14 +195,22 @@ func (h *APITokenHandler) CreateToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	id := uuid.NewString()
-	row, err := h.repo.Queries.CreateApiToken(ctx, db.CreateApiTokenParams{
-		ID:          id,
-		UserID:      user.ID,
-		Name:        name,
-		TokenPrefix: prefix,
-		TokenHash:   hash,
-		Scope:       "global",
-		ExpiresAt:   sql.NullInt64{Valid: false},
+	var row db.ApiToken
+	err = h.repo.WithTx(ctx, func(q *db.Queries) error {
+		var err error
+		row, err = q.CreateApiToken(ctx, db.CreateApiTokenParams{
+			ID:          id,
+			UserID:      user.ID,
+			Name:        name,
+			TokenPrefix: prefix,
+			TokenHash:   hash,
+			Scope:       grant.Scope,
+			ExpiresAt:   sql.NullInt64{Valid: false},
+		})
+		if err != nil {
+			return err
+		}
+		return repository.SaveTokenScope(ctx, q, id, grant)
 	})
 	if err != nil {
 		RespondError(
@@ -191,11 +221,14 @@ func (h *APITokenHandler) CreateToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	audit.SetTokenChange(r, id, grant, nil)
 	RespondJSON(w, http.StatusCreated, createTokenResponse{
-		ID:        full,
-		Name:      row.Name,
-		Prefix:    prefix,
-		CreatedAt: row.CreatedAt,
+		ID:         full,
+		Name:       row.Name,
+		Prefix:     prefix,
+		CreatedAt:  row.CreatedAt,
+		TokenID:    id,
+		TokenScope: grant,
 	})
 }
 
@@ -251,9 +284,14 @@ func (h *APITokenHandler) ListTokens(w http.ResponseWriter, r *http.Request) {
 	for _, row := range rows {
 		resp = append(resp, apiTokenFromPaginatedRow(row))
 	}
-	items := make([]any, len(resp))
-	for i, tr := range resp {
-		items[i] = tr
+	items, err := h.tokenItems(ctx, resp)
+	if err != nil {
+		RespondError(
+			w,
+			http.StatusInternalServerError,
+			"could not load token scopes",
+		)
+		return
 	}
 	RespondJSON(w, http.StatusOK, PaginatedResponse{
 		Items:  items,
@@ -304,6 +342,8 @@ func (h *APITokenHandler) RevokeToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	audit.SetTokenChange(r, id, repository.TokenScope{Scope: row.Scope,
+		Role: row.TokenRole}, nil)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -413,9 +453,14 @@ func (h *APITokenHandler) ListAllTokens(
 		}
 	}
 
-	items := make([]any, len(resp))
-	for i, tr := range resp {
-		items[i] = tr
+	items, err := h.tokenItems(ctx, resp)
+	if err != nil {
+		RespondError(
+			w,
+			http.StatusInternalServerError,
+			"could not load token scopes",
+		)
+		return
 	}
 	RespondJSON(w, http.StatusOK, PaginatedResponse{
 		Items:  items,
@@ -449,7 +494,8 @@ func (h *APITokenHandler) RevokeAnyToken(
 	ctx := r.Context()
 
 	id := chi.URLParam(r, "id")
-	if _, err := h.repo.Queries.GetApiTokenByID(ctx, id); err != nil {
+	row, err := h.repo.Queries.GetApiTokenByID(ctx, id)
+	if err != nil {
 		RespondError(w, http.StatusNotFound, "not found")
 		return
 	}
@@ -463,5 +509,7 @@ func (h *APITokenHandler) RevokeAnyToken(
 		return
 	}
 
+	audit.SetTokenChange(r, id, repository.TokenScope{Scope: row.Scope,
+		Role: row.TokenRole}, nil)
 	w.WriteHeader(http.StatusNoContent)
 }

@@ -140,7 +140,35 @@ func (h *ProjectHandler) ListProjects(w http.ResponseWriter, r *http.Request) {
 
 	var items []any
 	var total int64
-	if user.Role == "admin" {
+	if tokenID := auth.ScopedTokenID(r.Context()); tokenID != "" {
+		rows, err := h.repo.Queries.ListTokenProjectsPaginated(r.Context(),
+			db.ListTokenProjectsPaginatedParams{TokenID: tokenID,
+				UserID: user.ID, IsAdmin: tokenOwnerAdmin(r),
+				PageLimit: limit, PageOffset: offset})
+		if err != nil {
+			RespondError(
+				w,
+				http.StatusInternalServerError,
+				"could not list projects",
+			)
+			return
+		}
+		total, err = h.repo.Queries.CountTokenProjects(r.Context(),
+			db.CountTokenProjectsParams{TokenID: tokenID,
+				UserID: user.ID, IsAdmin: tokenOwnerAdmin(r)})
+		if err != nil {
+			RespondError(
+				w,
+				http.StatusInternalServerError,
+				"could not count projects",
+			)
+			return
+		}
+		items = make([]any, len(rows))
+		for i, project := range rows {
+			items[i] = toProjectResponse(project)
+		}
+	} else if user.Role == "admin" {
 		rows, err := h.repo.Queries.ListProjectsPaginated(
 			r.Context(),
 			db.ListProjectsPaginatedParams{

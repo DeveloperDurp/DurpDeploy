@@ -72,10 +72,47 @@ api_get "$BASE/api/v1/users/me"    # sanity check: who am I
 ```
 
 - No CSRF, no cookies. Errors are JSON envelopes (`400/401/404/422`).
-- Tokens inherit the owner's role. `viewer` tokens can read but never
-  write (writes are rejected); `deployer` and `admin` can write.
+- Global tokens inherit the owner's current permissions.
+- Scoped tokens also require a selected project and a `viewer`, `deployer`, or `admin` permission ceiling.
+- Viewer tokens cannot write, execute deployments, or approve operations.
+- Scoped `admin` tokens grant no instance administration.
+- Project membership and global-administrator approval requirements still apply to the owner.
 - Browser MFA protects web logins only — API tokens are single bearer
   credentials and keep working.
+
+Create a project-scoped token through the owner's browser session or an existing global token.
+Select one or more accessible projects and a role in `/settings/tokens`.
+Use this API request for the same operation:
+
+```bash
+api_post '{"name":"ci","scope":"scoped","role":"deployer","project_ids":[12,34]}' "$BASE/api/v1/tokens"
+```
+
+The creation response returns the bearer value once in `id`.
+Store `token_id` as its non-secret management identifier.
+Token lists show `scope`, `role`, and `project_ids` without the bearer value.
+Name-only API requests and legacy web or CLI creation retain global access.
+Explicit scoped requests reject empty selections, invalid roles, and inaccessible projects.
+
+Replace scope with `PATCH /api/v1/tokens/{token_id}` using `scope`, `role`, and `project_ids`.
+Provide an explicit `scope` on updates.
+Use `{"scope":"global"}` only when you intend to remove restrictions.
+Use `DELETE /api/v1/tokens/{token_id}` to revoke the token.
+Scoped tokens cannot access token management APIs.
+Use the owner's browser session or a global token for these operations.
+
+Scoped project lists, deployment lists, activity, and totals exclude unrelated projects.
+Shared lifecycle reads require assignment to a selected project.
+Environment reads follow selected projects' lifecycle eligibility and historical usage.
+Projects without a lifecycle retain access to all environments.
+Global templates, shared lifecycle variable administration, and shared-resource writes are unavailable to scoped tokens.
+Inherited project variables retain existing secret masking.
+
+Owner permission changes, token changes, expiry, and revocation affect new requests and existing log streams.
+These changes do not cancel work already accepted by the server.
+Creation, scope changes, and revocation record non-secret identifiers in the audit log.
+Existing scoped database rows without valid grants fail authentication.
+Migration rollback is refused because older applications ignore token restrictions.
 
 ### Web session + CSRF (only when driving the UI)
 

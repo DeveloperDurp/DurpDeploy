@@ -1,5 +1,53 @@
 # Manual checks after `make e2e-test`
 
+## Project-scoped API tokens
+
+Run `make e2e-test` against the running server.
+Keep the printed selected-project, denied-project, and token management links.
+The suite retains `e2e-token-a-*`, `e2e-token-b-*`, and `e2e-token-foreign-*` projects.
+It also retains token metadata for all three roles and a revoked token.
+These scenarios create no schedules.
+
+Open `/settings/tokens` as an administrator.
+Confirm that a new token defaults to **Selected projects** and `viewer`.
+Select the two printed selected projects.
+Create a token for each supported role.
+Copy each bearer value from its one-time banner.
+Return to the list and confirm that the bearer value disappears.
+
+Submit a selected-project token without any projects.
+Expect a validation message and no new token.
+Use **Edit scope** to change a token's role and project selection.
+Confirm that the list shows the saved role and projects.
+Confirm that editing scope does not display the bearer value again.
+
+Call `GET /api/v1/projects` with each token.
+Expect only selected projects and matching pagination totals.
+Request the denied project and its deployments, variables, releases, runbooks, packages, artifacts, and logs.
+Expect denial without unrelated metadata.
+Attempt a project write with the viewer token.
+Expect `403`.
+
+Deploy with the deployer token in a selected project.
+Expect the owner's existing membership and approval rules to apply.
+Request `/api/v1/admin/stats` or create another token with any scoped token.
+Expect `403`, including for administrator-owned tokens.
+Remove the owner's project membership and repeat the request.
+Expect denial unless the owner remains a global administrator.
+
+Open a log stream with a scoped token.
+Change its selection to remove that project through the owner's browser session or a global token.
+Expect the stream to close within the existing authorization recheck interval.
+Revoke the token and repeat an API request.
+Expect `401`.
+
+Run the isolated API and browser regressions with these commands:
+
+```bash
+bash scripts/go_test.sh -tags=e2e -race -count=1 -timeout=5m -run '^TestProjectTokens.*APIE2E$' ./internal/handler/api
+bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=5m -run '^TestProjectTokensBrowserE2E$' ./internal/handler/api
+```
+
 ## Software build identity
 
 Run `durpdeploy version`, `durpdeploy --version`, and `durpdeploy -v` without runtime configuration.

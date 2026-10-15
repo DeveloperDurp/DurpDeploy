@@ -95,6 +95,7 @@ var actionMap = map[string]string{
 
 	"GET /api/v1/deployments":                                                        "list_deployments",
 	"POST /api/v1/tokens":                                                            "create_api_token",
+	"PATCH /api/v1/tokens/{id}":                                                      "update_api_token_scope",
 	"DELETE /api/v1/tokens/{id}":                                                     "revoke_api_token",
 	"DELETE /api/v1/admin/tokens/{id}":                                               "revoke_any_token",
 	"POST /api/v1/admin/agents/pair":                                                 "pair_agent",
@@ -165,6 +166,7 @@ var actionMap = map[string]string{
 	"PUT /admin/users/{id}":                                "update_user",
 	"DELETE /admin/users/{id}":                             "delete_user",
 	"POST /settings/tokens":                                "create_api_token",
+	"POST /settings/tokens/{id}/scope":                     "update_api_token_scope",
 	"POST /settings/tokens/{id}/revoke":                    "revoke_api_token",
 	"POST /settings/security/reauth":                       "reauthenticate",
 	"POST /settings/security/reauth/totp":                  "reauthenticate",

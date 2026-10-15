@@ -47,6 +47,7 @@ func (h *DeploymentHandler) DeploymentActivity(
 	start := today.AddDate(0, 0, -13)
 	rows, err := h.repo.Queries.DeploymentActivity(
 		r.Context(), db.DeploymentActivityParams{
+			TokenID:  auth.ScopedTokenID(r.Context()),
 			FromUnix: start.Unix(),
 			ToUnix:   today.AddDate(0, 0, 1).Unix(),
 			IsAdmin:  isAdmin,

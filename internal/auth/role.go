@@ -6,10 +6,14 @@ import (
 	"strings"
 )
 
-// RoleFromContext returns the authenticated user's role, or "" if no
-// user is present in the context.
+// RoleFromContext intersects the owner's role with the token's ceiling.
+// Browser sessions and global tokens retain the owner's role.
 func RoleFromContext(ctx context.Context) string {
 	if u := UserFromContext(ctx); u != nil {
+		if token := TokenFromContext(ctx); token != nil &&
+			token.Scope == "scoped" && !tokenRoleAllows(ctx, u.Role) {
+			return token.Role
+		}
 		return u.Role
 	}
 	return ""
@@ -32,7 +36,7 @@ func RequireRole(roles ...string) func(http.Handler) http.Handler {
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)
 				return
 			}
-			if _, ok := allowed[u.Role]; !ok {
+			if _, ok := allowed[RoleFromContext(r.Context())]; !ok {
 				if strings.HasPrefix(r.URL.Path, "/api/v1/") {
 					RenderJSONError(w, http.StatusForbidden,
 						unauthorizedMessage)

@@ -312,6 +312,7 @@ func (h *DeploymentHandler) ListDeployments(
 	deployments, err := h.repo.Queries.ListDeploymentsWithRefsFiltered(
 		r.Context(),
 		db.ListDeploymentsWithRefsFilteredParams{
+			TokenID:    auth.ScopedTokenID(r.Context()),
 			UserID:     user.ID,
 			IsAdmin:    isAdmin,
 			FProjectID: fProjectID,
@@ -331,6 +332,7 @@ func (h *DeploymentHandler) ListDeployments(
 	total, err := h.repo.Queries.CountDeploymentsWithRefsFiltered(
 		r.Context(),
 		db.CountDeploymentsWithRefsFilteredParams{
+			TokenID:    auth.ScopedTokenID(r.Context()),
 			UserID:     user.ID,
 			IsAdmin:    isAdmin,
 			FProjectID: fProjectID,

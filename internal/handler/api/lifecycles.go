@@ -2,6 +2,7 @@ package api
 
 import (
 	"database/sql"
+	"durpdeploy/internal/auth"
 	"errors"
 	"net/http"
 
@@ -110,6 +111,10 @@ func (h *LifecycleHandler) ListLifecycles(
 ) {
 	limit, offset, ok := parsePagination(w, r)
 	if !ok {
+		return
+	}
+	if auth.ScopedTokenID(r.Context()) != "" {
+		h.listTokenLifecycles(w, r, limit, offset)
 		return
 	}
 
@@ -237,6 +242,10 @@ func (h *LifecycleHandler) GetLifecycle(
 		return
 	}
 
+	if auth.ScopedTokenID(r.Context()) != "" &&
+		!h.tokenLifecycleAllowed(w, r, id) {
+		return
+	}
 	lc, err := h.repo.Queries.GetLifecycle(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {

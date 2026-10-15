@@ -179,7 +179,9 @@ echo "  Parallel environment: $BASE/deployments/$QUEUE_OTHER_ENV_ID"
 
 echo "=== Running-server browser checks ==="
 source "$SCRIPT_DIR/lifecycle_variables_e2e.sh"
+source "$SCRIPT_DIR/project_tokens_e2e.sh"
 DURPDEPLOY_LIVE_BASE="$BASE" \
+DURPDEPLOY_LIVE_TOKEN_PROJECTS="$PROJECT_TOKEN_BROWSER_IDS" \
 DURPDEPLOY_LIVE_LIFECYCLE="/lifecycles/$SHARED_LC_ID" \
 DURPDEPLOY_LIVE_INHERITED="/projects/${SHARED_PROJECT_IDS[0]}/variables" \
 DURPDEPLOY_LIVE_SESSION="$SESSION_ID" \
@@ -189,7 +191,7 @@ DURPDEPLOY_LIVE_RUNBOOK_DELETE="$RUNBOOK_DELETE_BROWSER_PATH" \
 DURPDEPLOY_LIVE_RUNBOOK_DELETE_HISTORY="$RUNBOOK_DELETE_BROWSER_HISTORY" \
 SSL_CERT_FILE="${DURPDEPLOY_E2E_CA_FILE:-${SSL_CERT_FILE:-}}" \
     go test -tags=e2e,packagebrowser -count=1 -timeout=5m \
-    -v -run '^Test(RunningServer|VariableScopesBeforeDeployment|RunbookDeletion)BrowserE2E$' ./internal/handler/api
+    -v -run '^Test(RunningServer|VariableScopesBeforeDeployment|RunbookDeletion|ProjectTokens)BrowserE2E$' ./internal/handler/api
 
 CODE=$(api_get_code "$BASE/api/v1$RUNBOOK_DELETE_BROWSER_PATH")
 [[ "$CODE" == 404 ]] || { echo "FAIL: browser runbook deletion=$CODE"; exit 1; }

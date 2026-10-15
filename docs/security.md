@@ -248,9 +248,16 @@ Session-authenticated browser routes in `internal/server/server.go` use:
    suppresses or records them directly.
 
 The `/api/v1` group uses `auth.ApiTokenMiddleware(repo)`,
-`auth.WriteBlockMiddleware()`, `api.RequestBodyLimit`, and audit middleware.
+`auth.TokenScopeMiddleware()`, `auth.WriteBlockMiddleware()`, `api.RequestBodyLimit`, and audit middleware.
 Project and admin gates apply inside each group. The dedicated agent listener
 uses mTLS agent authentication and claim checks.
+
+Project-scoped bearer tokens intersect selected projects, a token role, and the owner's current permissions.
+Global administrators remain subject to token scope and its role ceiling.
+Scoped tokens cannot manage tokens, create projects, or use instance administration.
+Resource-ID routes resolve the owning project before they return data.
+Aggregate queries filter rows and totals to the same authorized projects.
+Open log streams recheck stored token grants, owner access, expiry, and revocation.
 
 Do not reorder or skip any of these.
 
