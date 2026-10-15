@@ -146,8 +146,8 @@
   {
     "rule": "G118",
     "file": "cmd/server/main.go",
-    "line": "440",
-    "source_sha256": "c6aa0db4aefbde890a4ba9968f10011224539169dea6972ad89343432f92f752",
+    "line": "441",
+    "source_sha256": "3911727efd075c32fba699d04d0f97f7609aa2f973b87de675a6ff1af7c2bcb1",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Detached persisted deployment must outlive its HTTP/scheduler/startup request. DeploymentRunner.Run owns cancel registration; Cancel and KillAll cancel/drain work. Evidence: runner_control.go, shutdown_test.go, runbook_cancel_test.go."
@@ -273,7 +273,7 @@
     "rule": "G120",
     "file": "internal/server/request_body_limit.go",
     "line": "68",
-    "source_sha256": "24b48158e05b502848b831616447be113db4d8991d84711f5feae8a9da8321b1",
+    "source_sha256": "2384074068f7c05d76a71b4d6b5243e71b97c406d719b274daf410c7d715d461",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Entire encoded body is capped (16MiB or 64KiB) before ParseMultipartForm, including unknown lengths; temporary files removed. Evidence: server/request_body_limit.go and handler/request_body_web_test.go."
@@ -318,7 +318,7 @@
     "rule": "G110",
     "file": "internal/handler/artifact_gate_download.go",
     "line": "120",
-    "source_sha256": "26380c529a263c0c2850b5cccb0eb22b028c419a657826a69b5da7a18e016d19",
+    "source_sha256": "601db185294dc5b2d24ec138cdd216f0001f4c5908b5e46832830afaeddf9b5a",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "This uncompressed tar comes from an authenticated canonical spool with a verified checksum. Capture rejects links, special files, and unsafe paths. tar.Reader restricts reads to each entry. Evidence: repository/artifact_gate_storage.go, artifact/gate_bundle.go and artifact_gate_failures_e2e_test.go."
@@ -327,7 +327,7 @@
     "rule": "G110",
     "file": "internal/handler/artifact_gate_download.go",
     "line": "94-97",
-    "source_sha256": "26380c529a263c0c2850b5cccb0eb22b028c419a657826a69b5da7a18e016d19",
+    "source_sha256": "601db185294dc5b2d24ec138cdd216f0001f4c5908b5e46832830afaeddf9b5a",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "This uncompressed tar comes from an authenticated canonical spool with a verified checksum. Capture rejects links, special files, and unsafe paths. tar.Reader restricts reads to each entry. Evidence: repository/artifact_gate_storage.go, artifact/gate_bundle.go and artifact_gate_failures_e2e_test.go."
@@ -425,8 +425,8 @@
   {
     "rule": "G710",
     "file": "internal/handler/project_members.go",
-    "line": "289",
-    "source_sha256": "714009613e3c4193c7ee9c406e140eed6a3016ff017052e9aa535597da286a87",
+    "line": "290",
+    "source_sha256": "7296433afd37695617a37b138f7b9a50d669bc340d3d01bc48f1a2edc2042dc2",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "These handlers redirect to the fixed /projects/ path prefix and an int64 ID from parseProjectID. Requests cannot set a destination host or path."
@@ -434,8 +434,8 @@
   {
     "rule": "G710",
     "file": "internal/handler/project_members.go",
-    "line": "241",
-    "source_sha256": "714009613e3c4193c7ee9c406e140eed6a3016ff017052e9aa535597da286a87",
+    "line": "242",
+    "source_sha256": "7296433afd37695617a37b138f7b9a50d669bc340d3d01bc48f1a2edc2042dc2",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "These handlers redirect to the fixed /projects/ path prefix and an int64 ID from parseProjectID. Requests cannot set a destination host or path."
@@ -443,8 +443,8 @@
   {
     "rule": "G710",
     "file": "internal/handler/project_members.go",
-    "line": "167",
-    "source_sha256": "714009613e3c4193c7ee9c406e140eed6a3016ff017052e9aa535597da286a87",
+    "line": "168",
+    "source_sha256": "7296433afd37695617a37b138f7b9a50d669bc340d3d01bc48f1a2edc2042dc2",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "These handlers redirect to the fixed /projects/ path prefix and an int64 ID from parseProjectID. Requests cannot set a destination host or path."
