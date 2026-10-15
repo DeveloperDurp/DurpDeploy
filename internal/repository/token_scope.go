@@ -6,6 +6,8 @@ import (
 	"errors"
 	"slices"
 
+	"github.com/jackc/pgx/v5/pgconn"
+
 	"durpdeploy/internal/db"
 )
 
@@ -23,9 +25,22 @@ var ErrTokenScope = errors.New("invalid token scope")
 func (r *Repository) ReplaceTokenScope(
 	ctx context.Context, id string, grant TokenScope,
 ) (TokenScope, error) {
-	return withSQLiteBusyRetryValue(ctx, func() (TokenScope, error) {
-		return r.replaceTokenScope(ctx, id, grant)
-	})
+	for attempt := 0; ; attempt++ {
+		previous, err := withSQLiteBusyRetryValue(
+			ctx,
+			func() (TokenScope, error) {
+				return r.replaceTokenScope(ctx, id, grant)
+			},
+		)
+		var conflict *pgconn.PgError
+		if attempt >= 2 || !errors.As(err, &conflict) ||
+			conflict.Code != "40001" {
+			return previous, err
+		}
+		if !waitForSQLiteBusyRetry(ctx, attempt) {
+			return TokenScope{}, ctx.Err()
+		}
+	}
 }
 
 func (r *Repository) replaceTokenScope(

@@ -43,11 +43,11 @@ func TestProjectTokensConcurrentScopeAuditAPIE2E(t *testing.T) {
 		t.Run(surface, func(t *testing.T) {
 			f := newArtifactE2E(t)
 			other := seedProject(t, f.h.repo)
-			token := mintProjectToken(t, f, "viewer", f.project.ID)
 			if _, err := f.h.repo.DB.ExecContext(t.Context(),
 				"PRAGMA journal_mode = WAL"); err != nil {
 				t.Fatal(err)
 			}
+			token := mintProjectToken(t, f, "viewer", f.project.ID)
 			changing := &changingTokenDB{
 				DBTX: f.h.repo.DB, id: token.TokenID,
 				change: func() {
@@ -100,12 +100,12 @@ func TestProjectTokensConcurrentScopeAuditAPIE2E(t *testing.T) {
 func TestProjectTokensConcurrentScopeEditAPIE2E(t *testing.T) {
 	f := newArtifactE2E(t)
 	other := seedProject(t, f.h.repo)
-	token := mintProjectToken(t, f, "admin", f.project.ID)
 	// WAL permits the owner edit while the initial token read is open.
 	if _, err := f.h.repo.DB.ExecContext(t.Context(),
 		"PRAGMA journal_mode = WAL"); err != nil {
 		t.Fatal(err)
 	}
+	token := mintProjectToken(t, f, "admin", f.project.ID)
 	changing := &changingTokenDB{
 		DBTX: f.h.repo.DB, hash: auth.HashApiToken(token.ID),
 		change: func() {
