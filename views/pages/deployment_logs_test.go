@@ -55,11 +55,42 @@ func TestDeploymentLogPanelsRetainQuietActiveStep(t *testing.T) {
 			},
 		},
 	)
-	if !view.Panels[0].Open ||
+	if view.Panels[0].Open ||
 		deploymentActiveStepLabel(
 			view,
 			"running",
 		) != "Running: Step 1 — quiet" {
 		t.Fatalf("quiet active panel=%+v", view)
+	}
+}
+
+func TestDeploymentLogPanelsStartCollapsed(t *testing.T) {
+	for _, state := range []string{
+		"pending", "running", "waiting", "failed", "succeeded",
+		"cancelled", "not_run", "unknown",
+	} {
+		t.Run(state, func(t *testing.T) {
+			status := state
+			if state == "waiting" {
+				status = "running"
+			}
+			view := deploymentLogPanels(
+				db.Release{StepsJson: `[{"name":"Step"}]`},
+				db.Deployment{Status: status},
+				[]db.DeploymentLog{{
+					ID:        1,
+					StepIndex: sql.NullInt64{Valid: true},
+					StepState: sql.NullString{String: state, Valid: true},
+					Line:      "retained output",
+				}},
+			)
+			panel := view.Panels[0]
+			if panel.Open || panel.State != state ||
+				len(
+					panel.Logs,
+				) != 1 || panel.Logs[0].Line != "retained output" {
+				t.Fatalf("initial step panel=%+v", panel)
+			}
+		})
 	}
 }
