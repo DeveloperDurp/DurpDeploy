@@ -85,7 +85,7 @@ func TestDeploymentStepLogsBrowserE2E(t *testing.T) {
 	f.verifyStreamingLogTimestamp(t, browser, deployment)
 	browser.evaluate(
 		t,
-		`document.querySelector('[data-step-index="1"] summary').focus(); true`,
+		`(() => { const summary = document.querySelector('[data-step-index="1"] summary'); summary.click(); summary.focus(); return true; })()`,
 	)
 	browser.captureStepLogs(t, "keyboard-focused")
 	for _, kind := range []string{"keyDown", "keyUp"} {
