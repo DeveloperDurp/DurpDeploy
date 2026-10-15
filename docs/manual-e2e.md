@@ -539,10 +539,14 @@ remain in immutable release snapshots: deploy the named release to repeat
 them. Temporary cookies and plaintext API tokens are removed. Stage files
 are temporary execution data; rerun the release to reproduce file handoff.
 
-The variable-scope browser checks retain separate `variable-before-deploy-*`
-projects and a `variable-scopes-*` lifecycle on each run, and print links to
-their Variables pages. These projects have no deployments; keep them that way
-when repeating issue #159. Each has a `first-scoped-release` snapshot.
+The variable-scope browser checks run in isolated CI fixtures.
+The populated demo does not run these checks or create their `variable-before-deploy-*` projects.
+
+For manual variable-scope checks, create a disposable project with zero deployments.
+Test direct links and the project's Variables menu.
+For lifecycle-bound projects, select a stage environment.
+Create `first-scoped-release` after you set the variable scopes.
+Inspect the release through `GET /projects/{id}/releases/{release_id}`.
 
 For API checks, create your own token at `/settings/tokens`. Open
 `/api/swagger/index.html`, use **Authorize**, and use **Try it out** with IDs
@@ -560,7 +564,7 @@ Use only the disposable E2E examples for edits and deletion checks.
 | Rejoin deleted agent (#143) | Stop the disposable deleted agent after reconciling work. Move only its private `state.json` aside, keep its identity keys, and restart. Try an incorrect code, then pair from Admin > Agents with the current code and unchanged fingerprint; repeat through `POST /api/v1/admin/agents/pair`. | The listener rejects incorrect codes. Approved pairing creates a new registration and agent ID and allows polling again. The old ID remains absent; historical deployments remain with agent references cleared. |
 | Login, sessions, and CSRF (F0) | Sign out and request `/` without following redirects; sign in with the E2E admin. Submit POST `/projects` with the session cookie but omit the CSRF token (edit the request in developer tools). | Anonymous GET redirects to login (303); login redirects to the app; protected pages load; missing CSRF rejected (403). |
 | Happy path, steps page, scoped variables (F3.1) | `TestProject`, release `1.0.0`, environment `dev`. Deploy it and open Steps and live logs. | Success; logs contain `default-variable=hello`. |
-| Variable scopes before deployment (#159) | Open a printed `variable-before-deploy-*` project with zero deployments. In Variables, create a variable, edit its environment, and use Override on `DEFAULT`. Repeat on desktop and phone, through a direct link and the project's Variables menu. Use the lifecycle's stage environment for bound projects. Inspect `first-scoped-release` through `GET /projects/{id}/releases/{release_id}` and the mutable `API_VALUE`. | Eligible scopes are selectable in all three forms. API create/update accept eligible scopes before deployment and reject environments outside a bound lifecycle. `NEW`, `EDIT_ME`, `DEFAULT`, and `API_VALUE` retain their scoped values in the first release; its `API_VALUE` remains `snapshotted` while the mutable value is `changed`. |
+| Variable scopes before deployment (#159) | Create a project with zero deployments. Add a global variable named `DEFAULT`. Create another variable with an environment scope. Edit that variable's environment scope. Select Override on `DEFAULT` to create a scoped override. Repeat on desktop and phone. | Eligible scopes are selectable in all three forms. The API accepts eligible scopes before deployment. For lifecycle-bound projects, the API rejects environments outside the lifecycle. The first release retains scoped values. Later variable edits do not change the release snapshot. |
 | Deployment detail without step definitions (#154) | Open a retained deployment on desktop and phone; inspect its step logs, status, actions, and verification results. Reload after completion, then open its release link and project Steps page. GET `/deployments/{id}`, `/deployments/{id}/logs`, and `/projects/{id}/releases/{relId}` through the API. | Deployment detail has no bottom Steps table, script cards, or step-definition empty message. Step log panels and controls remain usable; the release page and API `steps_json` retain the scripts. |
 | Live deployment log timestamps (#163) | Deploy a retained slow release, such as `TestProject` `1.0.1`, and keep its deployment page open while new logs arrive. Record a new entry's timestamp, refresh while running, and compare the same entry. Repeat on desktop and phone. Read `/api/v1/deployments/{id}/logs/stream?format=structured` and compare the entry with `/api/v1/deployments/{id}/logs/{logId}`. | Streamed entries immediately show `[YYYY-MM-DD HH:mm:ss]` in the same gray styling and server timezone as historical entries. Refresh/reconnect preserves timestamps and does not duplicate entries. SSE `created_at` matches the stored log; `display_timestamp` matches the page. Highlighting, step/agent labels, and keyboard disclosure controls remain usable. Cancel the slow example if needed and wait for confirmed cleanup. |
 | Deployment notes (F3.1b) | Inspect the original and `smoke-test-audit` deployments; submit another `1.0.0` deployment with a note. | Only the deployment given a note shows it. |
