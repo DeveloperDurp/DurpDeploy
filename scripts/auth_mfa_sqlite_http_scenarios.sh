@@ -135,7 +135,7 @@ matrix_concurrent_factor_requests() {
 }
 
 matrix_create_mfa_user() {
-    local scenario=$1 admin_jar admin_csrf admin_token user_jar user_csrf
+    local scenario=$1 role=${2:-deployer} admin_jar admin_csrf admin_token user_jar user_csrf
     local enrollment_csrf challenge_token challenge_csrf recovery_count
 
     admin_jar=$(auth_mfa_cookie_jar admin)
@@ -146,7 +146,7 @@ matrix_create_mfa_user() {
     admin_token=$(auth_mfa_mint_api_token "$admin_jar" "$admin_csrf" "$scenario")
     MATRIX_USER_EMAIL="$scenario@test.local"
     MATRIX_USER_PASSWORD="${scenario}-password-1234"
-    auth_mfa_create_user "$admin_token" user deployer "$MATRIX_USER_EMAIL" \
+    auth_mfa_create_user "$admin_token" user "$role" "$MATRIX_USER_EMAIL" \
         "$MATRIX_USER_PASSWORD"
     MATRIX_USER_ID=$(auth_mfa_user_id user)
     user_jar=$(auth_mfa_cookie_jar user)
@@ -395,7 +395,7 @@ matrix_admin_mfa_reset_continuation() {
     local admin_jar admin_csrf admin_token admin_id target_token target_csrf
 
     matrix_scenario_init admin-mfa-reset-continuation
-    matrix_create_mfa_user admin-reset-target
+    matrix_create_mfa_user admin-reset-target maintainer
     matrix_factor_request /login/mfa/recovery "$MATRIX_RECOVERY_CODE"
     auth_mfa_assert_status 303
     target_csrf=$(auth_mfa_csrf_from_cookies "$MATRIX_USER_JAR" /settings/security)
