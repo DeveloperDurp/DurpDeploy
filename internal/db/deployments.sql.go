@@ -87,15 +87,19 @@ JOIN releases r ON d.release_id = r.id
 JOIN projects p ON r.project_id = p.id
 JOIN environments e ON d.environment_id = e.id
 WHERE d.kind = 'deployment'
-  AND (CAST(?1 AS INTEGER) = 1 OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = ?2))
-  AND (CAST(?3 AS INTEGER) IS NULL OR d.release_id IN (SELECT id FROM releases WHERE project_id = CAST(?3 AS INTEGER)))
-  AND (CAST(?4     AS INTEGER) IS NULL OR d.environment_id = CAST(?4 AS INTEGER))
-  AND (CAST(?5     AS TEXT)    IS NULL OR d.status = CAST(?5 AS TEXT))
-  AND (CAST(?6  AS INTEGER) IS NULL OR d.created_at >= CAST(?6 AS INTEGER))
-  AND (CAST(?7    AS INTEGER) IS NULL OR d.created_at <= CAST(?7 AS INTEGER))
+  AND (CAST(?1 AS TEXT) = '' OR EXISTS (
+      SELECT 1 FROM api_token_projects tp
+      WHERE tp.project_id = p.id AND tp.token_id = ?1))
+  AND (CAST(?2 AS INTEGER) = 1 OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = ?3))
+  AND (CAST(?4 AS INTEGER) IS NULL OR d.release_id IN (SELECT id FROM releases WHERE project_id = CAST(?4 AS INTEGER)))
+  AND (CAST(?5     AS INTEGER) IS NULL OR d.environment_id = CAST(?5 AS INTEGER))
+  AND (CAST(?6     AS TEXT)    IS NULL OR d.status = CAST(?6 AS TEXT))
+  AND (CAST(?7  AS INTEGER) IS NULL OR d.created_at >= CAST(?7 AS INTEGER))
+  AND (CAST(?8    AS INTEGER) IS NULL OR d.created_at <= CAST(?8 AS INTEGER))
 `
 
 type CountDeploymentsWithRefsFilteredParams struct {
+	TokenID    string         `json:"token_id"`
 	IsAdmin    int64          `json:"is_admin"`
 	UserID     int64          `json:"user_id"`
 	FProjectID sql.NullInt64  `json:"f_project_id"`
@@ -107,6 +111,7 @@ type CountDeploymentsWithRefsFilteredParams struct {
 
 func (q *Queries) CountDeploymentsWithRefsFiltered(ctx context.Context, arg CountDeploymentsWithRefsFilteredParams) (int64, error) {
 	row := q.db.QueryRowContext(ctx, countDeploymentsWithRefsFiltered,
+		arg.TokenID,
 		arg.IsAdmin,
 		arg.UserID,
 		arg.FProjectID,
@@ -183,19 +188,23 @@ JOIN releases r ON r.id = d.release_id
 WHERE d.kind = 'deployment'
   AND d.created_at >= ?1
   AND d.created_at < ?2
-  AND (CAST(?3 AS INTEGER) = 1 OR EXISTS (
+  AND (CAST(?3 AS TEXT) = '' OR EXISTS (
+      SELECT 1 FROM api_token_projects tp
+      WHERE tp.project_id = r.project_id AND tp.token_id = ?3))
+  AND (CAST(?4 AS INTEGER) = 1 OR EXISTS (
       SELECT 1 FROM project_members pm
-      WHERE pm.project_id = r.project_id AND pm.user_id = ?4
+      WHERE pm.project_id = r.project_id AND pm.user_id = ?5
   ))
 GROUP BY CAST(d.created_at / 86400 AS INTEGER), d.status
 ORDER BY day, d.status
 `
 
 type DeploymentActivityParams struct {
-	FromUnix int64 `json:"from_unix"`
-	ToUnix   int64 `json:"to_unix"`
-	IsAdmin  int64 `json:"is_admin"`
-	UserID   int64 `json:"user_id"`
+	FromUnix int64  `json:"from_unix"`
+	ToUnix   int64  `json:"to_unix"`
+	TokenID  string `json:"token_id"`
+	IsAdmin  int64  `json:"is_admin"`
+	UserID   int64  `json:"user_id"`
 }
 
 type DeploymentActivityRow struct {
@@ -208,6 +217,7 @@ func (q *Queries) DeploymentActivity(ctx context.Context, arg DeploymentActivity
 	rows, err := q.db.QueryContext(ctx, deploymentActivity,
 		arg.FromUnix,
 		arg.ToUnix,
+		arg.TokenID,
 		arg.IsAdmin,
 		arg.UserID,
 	)
@@ -648,17 +658,21 @@ JOIN releases r ON d.release_id = r.id
 JOIN projects p ON r.project_id = p.id
 JOIN environments e ON d.environment_id = e.id
 WHERE d.kind = 'deployment'
-  AND (CAST(?1 AS INTEGER) = 1 OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = ?2))
-  AND (CAST(?3 AS INTEGER) IS NULL OR d.release_id IN (SELECT id FROM releases WHERE project_id = CAST(?3 AS INTEGER)))
-  AND (CAST(?4     AS INTEGER) IS NULL OR d.environment_id = CAST(?4 AS INTEGER))
-  AND (CAST(?5     AS TEXT)    IS NULL OR d.status = CAST(?5 AS TEXT))
-  AND (CAST(?6  AS INTEGER) IS NULL OR d.created_at >= CAST(?6 AS INTEGER))
-  AND (CAST(?7    AS INTEGER) IS NULL OR d.created_at <= CAST(?7 AS INTEGER))
+  AND (CAST(?1 AS TEXT) = '' OR EXISTS (
+      SELECT 1 FROM api_token_projects tp
+      WHERE tp.project_id = p.id AND tp.token_id = ?1))
+  AND (CAST(?2 AS INTEGER) = 1 OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = ?3))
+  AND (CAST(?4 AS INTEGER) IS NULL OR d.release_id IN (SELECT id FROM releases WHERE project_id = CAST(?4 AS INTEGER)))
+  AND (CAST(?5     AS INTEGER) IS NULL OR d.environment_id = CAST(?5 AS INTEGER))
+  AND (CAST(?6     AS TEXT)    IS NULL OR d.status = CAST(?6 AS TEXT))
+  AND (CAST(?7  AS INTEGER) IS NULL OR d.created_at >= CAST(?7 AS INTEGER))
+  AND (CAST(?8    AS INTEGER) IS NULL OR d.created_at <= CAST(?8 AS INTEGER))
 ORDER BY d.created_at DESC
-LIMIT ?9 OFFSET ?8
+LIMIT ?10 OFFSET ?9
 `
 
 type ListDeploymentsWithRefsFilteredParams struct {
+	TokenID    string         `json:"token_id"`
 	IsAdmin    int64          `json:"is_admin"`
 	UserID     int64          `json:"user_id"`
 	FProjectID sql.NullInt64  `json:"f_project_id"`
@@ -688,6 +702,7 @@ type ListDeploymentsWithRefsFilteredRow struct {
 
 func (q *Queries) ListDeploymentsWithRefsFiltered(ctx context.Context, arg ListDeploymentsWithRefsFilteredParams) ([]ListDeploymentsWithRefsFilteredRow, error) {
 	rows, err := q.db.QueryContext(ctx, listDeploymentsWithRefsFiltered,
+		arg.TokenID,
 		arg.IsAdmin,
 		arg.UserID,
 		arg.FProjectID,

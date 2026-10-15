@@ -44,7 +44,7 @@ func (q *Queries) CountApiTokensByUser(ctx context.Context, userID int64) (int64
 }
 
 const createApiToken = `-- name: CreateApiToken :one
-INSERT INTO api_tokens (id, user_id, name, token_prefix, token_hash, scope, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id, user_id, name, token_prefix, token_hash, scope, last_used_at, expires_at, created_at, revoked_at
+INSERT INTO api_tokens (id, user_id, name, token_prefix, token_hash, scope, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id, user_id, name, token_prefix, token_hash, scope, last_used_at, expires_at, created_at, revoked_at, token_role
 `
 
 type CreateApiTokenParams struct {
@@ -79,12 +79,13 @@ func (q *Queries) CreateApiToken(ctx context.Context, arg CreateApiTokenParams) 
 		&i.ExpiresAt,
 		&i.CreatedAt,
 		&i.RevokedAt,
+		&i.TokenRole,
 	)
 	return i, err
 }
 
 const getApiTokenByHash = `-- name: GetApiTokenByHash :one
-SELECT t.id, t.user_id, t.name, t.token_prefix, t.token_hash, t.scope, t.last_used_at, t.expires_at, t.created_at, t.revoked_at, u.email, u.name AS user_name, u.role FROM api_tokens t JOIN users u ON t.user_id = u.id WHERE t.token_hash = ? AND t.revoked_at IS NULL AND (t.expires_at IS NULL OR t.expires_at > ?)
+SELECT t.id, t.user_id, t.name, t.token_prefix, t.token_hash, t.scope, t.token_role, t.last_used_at, t.expires_at, t.created_at, t.revoked_at, u.email, u.name AS user_name, u.role FROM api_tokens t JOIN users u ON t.user_id = u.id WHERE t.token_hash = ? AND t.revoked_at IS NULL AND (t.expires_at IS NULL OR t.expires_at > ?)
 `
 
 type GetApiTokenByHashParams struct {
@@ -99,6 +100,7 @@ type GetApiTokenByHashRow struct {
 	TokenPrefix string        `json:"token_prefix"`
 	TokenHash   string        `json:"token_hash"`
 	Scope       string        `json:"scope"`
+	TokenRole   string        `json:"token_role"`
 	LastUsedAt  sql.NullInt64 `json:"last_used_at"`
 	ExpiresAt   sql.NullInt64 `json:"expires_at"`
 	CreatedAt   int64         `json:"created_at"`
@@ -118,6 +120,7 @@ func (q *Queries) GetApiTokenByHash(ctx context.Context, arg GetApiTokenByHashPa
 		&i.TokenPrefix,
 		&i.TokenHash,
 		&i.Scope,
+		&i.TokenRole,
 		&i.LastUsedAt,
 		&i.ExpiresAt,
 		&i.CreatedAt,
@@ -130,12 +133,26 @@ func (q *Queries) GetApiTokenByHash(ctx context.Context, arg GetApiTokenByHashPa
 }
 
 const getApiTokenByID = `-- name: GetApiTokenByID :one
-SELECT id, user_id, name, token_prefix, token_hash, scope, last_used_at, expires_at, created_at, revoked_at FROM api_tokens WHERE id = ? AND revoked_at IS NULL
+SELECT id, user_id, name, token_prefix, token_hash, scope, token_role, last_used_at, expires_at, created_at, revoked_at FROM api_tokens WHERE id = ? AND revoked_at IS NULL
 `
 
-func (q *Queries) GetApiTokenByID(ctx context.Context, id string) (ApiToken, error) {
+type GetApiTokenByIDRow struct {
+	ID          string        `json:"id"`
+	UserID      int64         `json:"user_id"`
+	Name        string        `json:"name"`
+	TokenPrefix string        `json:"token_prefix"`
+	TokenHash   string        `json:"token_hash"`
+	Scope       string        `json:"scope"`
+	TokenRole   string        `json:"token_role"`
+	LastUsedAt  sql.NullInt64 `json:"last_used_at"`
+	ExpiresAt   sql.NullInt64 `json:"expires_at"`
+	CreatedAt   int64         `json:"created_at"`
+	RevokedAt   sql.NullInt64 `json:"revoked_at"`
+}
+
+func (q *Queries) GetApiTokenByID(ctx context.Context, id string) (GetApiTokenByIDRow, error) {
 	row := q.db.QueryRowContext(ctx, getApiTokenByID, id)
-	var i ApiToken
+	var i GetApiTokenByIDRow
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
@@ -143,6 +160,7 @@ func (q *Queries) GetApiTokenByID(ctx context.Context, id string) (ApiToken, err
 		&i.TokenPrefix,
 		&i.TokenHash,
 		&i.Scope,
+		&i.TokenRole,
 		&i.LastUsedAt,
 		&i.ExpiresAt,
 		&i.CreatedAt,
@@ -152,7 +170,7 @@ func (q *Queries) GetApiTokenByID(ctx context.Context, id string) (ApiToken, err
 }
 
 const listAllApiTokens = `-- name: ListAllApiTokens :many
-SELECT t.id, t.token_prefix, t.name, t.user_id, u.email, u.name AS user_name, t.scope, t.last_used_at, t.expires_at, t.created_at, t.revoked_at FROM api_tokens t JOIN users u ON t.user_id = u.id ORDER BY t.created_at DESC
+SELECT t.id, t.token_prefix, t.name, t.user_id, u.email, u.name AS user_name, t.scope, t.token_role, t.last_used_at, t.expires_at, t.created_at, t.revoked_at FROM api_tokens t JOIN users u ON t.user_id = u.id ORDER BY t.created_at DESC
 `
 
 type ListAllApiTokensRow struct {
@@ -163,6 +181,7 @@ type ListAllApiTokensRow struct {
 	Email       string        `json:"email"`
 	UserName    string        `json:"user_name"`
 	Scope       string        `json:"scope"`
+	TokenRole   string        `json:"token_role"`
 	LastUsedAt  sql.NullInt64 `json:"last_used_at"`
 	ExpiresAt   sql.NullInt64 `json:"expires_at"`
 	CreatedAt   int64         `json:"created_at"`
@@ -186,6 +205,7 @@ func (q *Queries) ListAllApiTokens(ctx context.Context) ([]ListAllApiTokensRow, 
 			&i.Email,
 			&i.UserName,
 			&i.Scope,
+			&i.TokenRole,
 			&i.LastUsedAt,
 			&i.ExpiresAt,
 			&i.CreatedAt,
@@ -205,7 +225,7 @@ func (q *Queries) ListAllApiTokens(ctx context.Context) ([]ListAllApiTokensRow, 
 }
 
 const listAllApiTokensByUser = `-- name: ListAllApiTokensByUser :many
-SELECT t.id, t.token_prefix, t.name, t.user_id, u.email, u.name AS user_name, t.scope, t.last_used_at, t.expires_at, t.created_at, t.revoked_at FROM api_tokens t JOIN users u ON t.user_id = u.id WHERE t.user_id = ? ORDER BY t.created_at DESC
+SELECT t.id, t.token_prefix, t.name, t.user_id, u.email, u.name AS user_name, t.scope, t.token_role, t.last_used_at, t.expires_at, t.created_at, t.revoked_at FROM api_tokens t JOIN users u ON t.user_id = u.id WHERE t.user_id = ? ORDER BY t.created_at DESC
 `
 
 type ListAllApiTokensByUserRow struct {
@@ -216,6 +236,7 @@ type ListAllApiTokensByUserRow struct {
 	Email       string        `json:"email"`
 	UserName    string        `json:"user_name"`
 	Scope       string        `json:"scope"`
+	TokenRole   string        `json:"token_role"`
 	LastUsedAt  sql.NullInt64 `json:"last_used_at"`
 	ExpiresAt   sql.NullInt64 `json:"expires_at"`
 	CreatedAt   int64         `json:"created_at"`
@@ -239,6 +260,7 @@ func (q *Queries) ListAllApiTokensByUser(ctx context.Context, userID int64) ([]L
 			&i.Email,
 			&i.UserName,
 			&i.Scope,
+			&i.TokenRole,
 			&i.LastUsedAt,
 			&i.ExpiresAt,
 			&i.CreatedAt,
@@ -258,7 +280,7 @@ func (q *Queries) ListAllApiTokensByUser(ctx context.Context, userID int64) ([]L
 }
 
 const listAllApiTokensByUserPaginated = `-- name: ListAllApiTokensByUserPaginated :many
-SELECT t.id, t.token_prefix, t.name, t.user_id, u.email, u.name AS user_name, t.scope, t.last_used_at, t.expires_at, t.created_at, t.revoked_at FROM api_tokens t JOIN users u ON t.user_id = u.id WHERE t.user_id = ? ORDER BY t.created_at DESC
+SELECT t.id, t.token_prefix, t.name, t.user_id, u.email, u.name AS user_name, t.scope, t.token_role, t.last_used_at, t.expires_at, t.created_at, t.revoked_at FROM api_tokens t JOIN users u ON t.user_id = u.id WHERE t.user_id = ? ORDER BY t.created_at DESC
 LIMIT ? OFFSET ?
 `
 
@@ -276,6 +298,7 @@ type ListAllApiTokensByUserPaginatedRow struct {
 	Email       string        `json:"email"`
 	UserName    string        `json:"user_name"`
 	Scope       string        `json:"scope"`
+	TokenRole   string        `json:"token_role"`
 	LastUsedAt  sql.NullInt64 `json:"last_used_at"`
 	ExpiresAt   sql.NullInt64 `json:"expires_at"`
 	CreatedAt   int64         `json:"created_at"`
@@ -299,6 +322,7 @@ func (q *Queries) ListAllApiTokensByUserPaginated(ctx context.Context, arg ListA
 			&i.Email,
 			&i.UserName,
 			&i.Scope,
+			&i.TokenRole,
 			&i.LastUsedAt,
 			&i.ExpiresAt,
 			&i.CreatedAt,
@@ -318,7 +342,7 @@ func (q *Queries) ListAllApiTokensByUserPaginated(ctx context.Context, arg ListA
 }
 
 const listAllApiTokensPaginated = `-- name: ListAllApiTokensPaginated :many
-SELECT t.id, t.token_prefix, t.name, t.user_id, u.email, u.name AS user_name, t.scope, t.last_used_at, t.expires_at, t.created_at, t.revoked_at FROM api_tokens t JOIN users u ON t.user_id = u.id ORDER BY t.created_at DESC
+SELECT t.id, t.token_prefix, t.name, t.user_id, u.email, u.name AS user_name, t.scope, t.token_role, t.last_used_at, t.expires_at, t.created_at, t.revoked_at FROM api_tokens t JOIN users u ON t.user_id = u.id ORDER BY t.created_at DESC
 LIMIT ? OFFSET ?
 `
 
@@ -335,6 +359,7 @@ type ListAllApiTokensPaginatedRow struct {
 	Email       string        `json:"email"`
 	UserName    string        `json:"user_name"`
 	Scope       string        `json:"scope"`
+	TokenRole   string        `json:"token_role"`
 	LastUsedAt  sql.NullInt64 `json:"last_used_at"`
 	ExpiresAt   sql.NullInt64 `json:"expires_at"`
 	CreatedAt   int64         `json:"created_at"`
@@ -358,6 +383,7 @@ func (q *Queries) ListAllApiTokensPaginated(ctx context.Context, arg ListAllApiT
 			&i.Email,
 			&i.UserName,
 			&i.Scope,
+			&i.TokenRole,
 			&i.LastUsedAt,
 			&i.ExpiresAt,
 			&i.CreatedAt,
@@ -377,7 +403,7 @@ func (q *Queries) ListAllApiTokensPaginated(ctx context.Context, arg ListAllApiT
 }
 
 const listApiTokensByUser = `-- name: ListApiTokensByUser :many
-SELECT id, token_prefix, name, scope, last_used_at, expires_at, created_at, revoked_at FROM api_tokens WHERE user_id = ? ORDER BY created_at DESC
+SELECT id, token_prefix, name, scope, token_role, last_used_at, expires_at, created_at, revoked_at FROM api_tokens WHERE user_id = ? ORDER BY created_at DESC
 `
 
 type ListApiTokensByUserRow struct {
@@ -385,6 +411,7 @@ type ListApiTokensByUserRow struct {
 	TokenPrefix string        `json:"token_prefix"`
 	Name        string        `json:"name"`
 	Scope       string        `json:"scope"`
+	TokenRole   string        `json:"token_role"`
 	LastUsedAt  sql.NullInt64 `json:"last_used_at"`
 	ExpiresAt   sql.NullInt64 `json:"expires_at"`
 	CreatedAt   int64         `json:"created_at"`
@@ -405,6 +432,7 @@ func (q *Queries) ListApiTokensByUser(ctx context.Context, userID int64) ([]List
 			&i.TokenPrefix,
 			&i.Name,
 			&i.Scope,
+			&i.TokenRole,
 			&i.LastUsedAt,
 			&i.ExpiresAt,
 			&i.CreatedAt,
@@ -424,7 +452,7 @@ func (q *Queries) ListApiTokensByUser(ctx context.Context, userID int64) ([]List
 }
 
 const listApiTokensByUserPaginated = `-- name: ListApiTokensByUserPaginated :many
-SELECT id, token_prefix, name, scope, last_used_at, expires_at, created_at, revoked_at FROM api_tokens WHERE user_id = ? ORDER BY created_at DESC
+SELECT id, token_prefix, name, scope, token_role, last_used_at, expires_at, created_at, revoked_at FROM api_tokens WHERE user_id = ? ORDER BY created_at DESC
 LIMIT ? OFFSET ?
 `
 
@@ -439,6 +467,7 @@ type ListApiTokensByUserPaginatedRow struct {
 	TokenPrefix string        `json:"token_prefix"`
 	Name        string        `json:"name"`
 	Scope       string        `json:"scope"`
+	TokenRole   string        `json:"token_role"`
 	LastUsedAt  sql.NullInt64 `json:"last_used_at"`
 	ExpiresAt   sql.NullInt64 `json:"expires_at"`
 	CreatedAt   int64         `json:"created_at"`
@@ -459,6 +488,7 @@ func (q *Queries) ListApiTokensByUserPaginated(ctx context.Context, arg ListApiT
 			&i.TokenPrefix,
 			&i.Name,
 			&i.Scope,
+			&i.TokenRole,
 			&i.LastUsedAt,
 			&i.ExpiresAt,
 			&i.CreatedAt,

@@ -1,5 +1,74 @@
 # Manual checks after `make e2e-test`
 
+## Project-scoped API tokens
+
+Run `make e2e-test` against the running server.
+Keep the printed selected-project, denied-project, and token management links.
+The suite retains `e2e-token-a-*`, `e2e-token-b-*`, and `e2e-token-foreign-*` projects.
+It also retains token metadata for all three roles and a revoked token.
+These scenarios create no schedules.
+
+Open `/settings/tokens` as an administrator.
+Confirm that a new token defaults to **All accessible projects**.
+Confirm that the permission selector defaults to `viewer` for either scope.
+Create an all-project token for each role and check the same permission limits.
+Confirm that permission-limited tokens cannot create or edit tokens through the API.
+Select **Selected projects**.
+Select **Choose projects**.
+Search for each printed selected project and select its checkbox.
+Confirm that filtering preserves checked projects outside the current results.
+Select **Done** and confirm that both names appear below the picker button.
+Create a token for each supported role.
+Copy each bearer value from its one-time banner.
+Return to the list and confirm that the bearer value disappears.
+
+Submit a selected-project token without any projects.
+Expect a validation message and no new token.
+Use **Edit scope** to change a token's role and project selection.
+Confirm that the list shows the saved role and projects.
+Confirm that editing scope does not display the bearer value again.
+
+Check the page at widths of 375, 430, 540, 768, 980, and 1280 pixels.
+Confirm that each form control fills its row without overlap.
+Below 1280 pixels, confirm that token cards show names, access details, and actions.
+Open **Edit scope** on a phone and save a changed selection.
+Confirm that **Choose projects** opens a full-screen picker on the phone.
+Confirm that long project names wrap and each project row is easy to tap.
+Confirm that the selection count, **Clear selection**, and **Done** remain visible while scrolling.
+Search for an unmatched name and confirm that the picker shows an empty result message.
+Press Enter in the search field and confirm that the token form does not submit.
+Close the picker and confirm that focus returns to **Choose projects**.
+Select **All accessible projects** in the new token form.
+Confirm that the project control disappears and the permission selector stays visible.
+Select **Selected projects** and confirm that the project control returns.
+
+Call `GET /api/v1/projects` with each token.
+Expect only selected projects and matching pagination totals.
+Request the denied project and its deployments, variables, releases, runbooks, packages, artifacts, and logs.
+Expect denial without unrelated metadata.
+Attempt a project write with the viewer token.
+Expect `403`.
+
+Deploy with the deployer token in a selected project.
+Expect the owner's existing membership and approval rules to apply.
+Request `/api/v1/admin/stats` or create another token with any scoped token.
+Expect `403`, including for administrator-owned tokens.
+Remove the owner's project membership and repeat the request.
+Expect denial unless the owner remains a global administrator.
+
+Open a log stream with a scoped token.
+Change its selection to remove that project through the owner's browser session or a global token.
+Expect the stream to close within the existing authorization recheck interval.
+Revoke the token and repeat an API request.
+Expect `401`.
+
+Run the isolated API and browser regressions with these commands:
+
+```bash
+bash scripts/go_test.sh -tags=e2e -race -count=1 -timeout=5m -run '^TestProjectTokens.*APIE2E$' ./internal/handler/api
+bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=5m -run '^TestProjectTokensBrowserE2E$' ./internal/handler/api
+```
+
 ## Project member roles
 
 Open the printed **Member role editor** link as the global administrator or printed project administrator.

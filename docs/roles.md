@@ -32,6 +32,42 @@ environments. Restoring a removed lifecycle stage reactivates its retained share
 values for projects that use the lifecycle. Deleting an environment deletes its
 scoped shared variables.
 
+## Project-scoped API tokens
+
+API tokens can use `global` or `scoped` access.
+Existing global tokens retain their owner's current permissions.
+Name-only token creation through the API, CLI, or legacy web form remains global.
+The token settings page defaults to all accessible projects and the `viewer` role.
+Both scopes support a `viewer`, `deployer`, or `admin` permission ceiling.
+All-project tokens keep the owner's project coverage and limit operations to the selected role.
+Tokens with a permission ceiling cannot manage API tokens.
+
+Select one or more accessible projects for a scoped token.
+Select `viewer`, `deployer`, or `admin` as its permission ceiling.
+Effective access requires the selected project, token role, and owner's current permission.
+A scoped `admin` token grants no instance administration.
+Project membership management requires an `admin` token and an owner authorized to manage that project.
+Deployment and artifact approvals also require a global administrator as the owner.
+
+Scoped tokens cannot create projects, manage tokens, or change shared resources.
+Lifecycle assignment requires global credentials because it can grant access to shared secrets.
+Scoped tokens can retain or remove an existing assignment when the owner has the required permission.
+Scoped tokens can read their projects' assigned lifecycles and eligible environments.
+Eligible environments include lifecycle stages and historical deployment or runbook environments.
+Projects without a lifecycle retain access to all environments.
+
+Scoped tokens cannot read global templates or shared lifecycle variable administration endpoints.
+Project variable endpoints retain inherited values and existing secret masking.
+Project and deployment lists, totals, and activity include only authorized projects.
+The server rechecks owner permissions, revocation, expiry, and token scope on requests and open log streams.
+
+Use the owner's browser session or a global token to edit token scope.
+Use an explicit `global` scope to remove project restrictions.
+Empty scoped selections never become global access.
+Deleting the last selected project leaves the scoped token unusable.
+Legacy scoped rows without a valid role and projects also fail authentication.
+Migration rollback is refused because older applications ignore these restrictions.
+
 ## Viewer self-security exception
 
 A viewer may manage only their own Security settings after the normal session,

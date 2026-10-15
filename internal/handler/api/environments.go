@@ -39,7 +39,8 @@ func environmentForUser(
 	env db.Environment,
 ) environmentResponse {
 	response := environmentResponse{Environment: env}
-	if auth.RoleFromContext(r.Context()) == "admin" {
+	if auth.RoleFromContext(r.Context()) == "admin" &&
+		auth.ScopedTokenID(r.Context()) == "" {
 		response.VerificationTarget = &env.VerificationTarget
 	}
 	return response
@@ -95,6 +96,10 @@ func (h *EnvironmentHandler) ListEnvironments(
 ) {
 	limit, offset, ok := parsePagination(w, r)
 	if !ok {
+		return
+	}
+	if auth.ScopedTokenID(r.Context()) != "" {
+		h.listTokenEnvironments(w, r, limit, offset)
 		return
 	}
 
@@ -245,6 +250,10 @@ func (h *EnvironmentHandler) GetEnvironment(
 		return
 	}
 
+	if auth.ScopedTokenID(r.Context()) != "" {
+		h.getTokenEnvironment(w, r, id)
+		return
+	}
 	env, err := h.repo.GetEnvironmentForDisplay(
 		r.Context(), id, auth.RoleFromContext(r.Context()) == "admin",
 	)

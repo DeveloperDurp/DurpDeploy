@@ -98,6 +98,12 @@ type ApiToken struct {
 	ExpiresAt   sql.NullInt64 `json:"expires_at"`
 	CreatedAt   int64         `json:"created_at"`
 	RevokedAt   sql.NullInt64 `json:"revoked_at"`
+	TokenRole   string        `json:"token_role"`
+}
+
+type ApiTokenProject struct {
+	TokenID   string `json:"token_id"`
+	ProjectID int64  `json:"project_id"`
 }
 
 type ArtifactGate struct {

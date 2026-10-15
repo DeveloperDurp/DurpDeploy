@@ -56,8 +56,8 @@
   {
     "rule": "G101",
     "file": "internal/audit/routes.go",
-    "line": "6-185",
-    "source_sha256": "9a7096bb30060024d913c61d0c2528c046bf4e5c77143f310ec760294f2996f3",
+    "line": "6-187",
+    "source_sha256": "133db264f7fe2ab76add495f4f3ecde48797d71b21ae0ecdbaf5bb9934492aad",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Cookie name or audit action/route metadata, not a credential value. Evidence: passkey binding readers/setters or internal/audit/audit.go consumers."
@@ -111,7 +111,7 @@
     "rule": "G118",
     "file": "internal/handler/artifact_gate.go",
     "line": "170",
-    "source_sha256": "9531c079946a691d44a00ffe2b47e9b32c0b4040bea36fb258eca69181dc9323",
+    "source_sha256": "725fe2f90edffeaf81a1c6dd891bcbe87c9ce707f4123c5698290e74f6d3a5c9",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Detached persisted deployment must outlive its HTTP/scheduler/startup request. DeploymentRunner.Run owns cancel registration; Cancel and KillAll cancel/drain work. Evidence: runner_control.go, shutdown_test.go, runbook_cancel_test.go."
@@ -318,7 +318,7 @@
     "rule": "G110",
     "file": "internal/handler/artifact_gate_download.go",
     "line": "120",
-    "source_sha256": "699de8d8dd4caac5af91cd5a64fdfa5b2e1bc435b291f5d1da8baefb72cd52e1",
+    "source_sha256": "26380c529a263c0c2850b5cccb0eb22b028c419a657826a69b5da7a18e016d19",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "This uncompressed tar comes from an authenticated canonical spool with a verified checksum. Capture rejects links, special files, and unsafe paths. tar.Reader restricts reads to each entry. Evidence: repository/artifact_gate_storage.go, artifact/gate_bundle.go and artifact_gate_failures_e2e_test.go."
@@ -327,7 +327,7 @@
     "rule": "G110",
     "file": "internal/handler/artifact_gate_download.go",
     "line": "94-97",
-    "source_sha256": "699de8d8dd4caac5af91cd5a64fdfa5b2e1bc435b291f5d1da8baefb72cd52e1",
+    "source_sha256": "26380c529a263c0c2850b5cccb0eb22b028c419a657826a69b5da7a18e016d19",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "This uncompressed tar comes from an authenticated canonical spool with a verified checksum. Capture rejects links, special files, and unsafe paths. tar.Reader restricts reads to each entry. Evidence: repository/artifact_gate_storage.go, artifact/gate_bundle.go and artifact_gate_failures_e2e_test.go."

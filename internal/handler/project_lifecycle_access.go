@@ -29,7 +29,8 @@ func AuthorizeLifecycleSelection(
 ) error {
 	user := auth.UserFromContext(ctx)
 	if (projectID == 0 && lifecycleID <= 0) ||
-		(user != nil && user.Role == "admin") {
+		(user != nil && auth.RoleFromContext(ctx) == "admin" &&
+			auth.ScopedTokenID(ctx) == "") {
 		return nil
 	}
 	if projectID == 0 {

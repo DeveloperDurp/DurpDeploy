@@ -2,6 +2,9 @@ package pages
 
 import (
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/repository"
+	"slices"
+	"strconv"
 	"durpdeploy/views/layouts"
 )
 
@@ -21,6 +24,7 @@ templ TokensSettings(
 	newName string,
 	errorMsg string,
 	currentPath string,
+	view TokenSettingsView,
 ) {
 	if !CanWrite(ctx) {
 		@ViewerForbiddenMessage(
@@ -46,10 +50,10 @@ templ TokensSettings(
 				@NewTokenBanner(newToken, newName)
 			}
 			<div class="card bg-base-200 shadow mb-6">
-				<div class="card-body">
+				<div class="card-body p-4 sm:p-6">
 					<h2 class="card-title">New token</h2>
-					<form method="post" action="/settings/tokens" class="flex flex-wrap gap-2 items-end">
-						<div class="form-control flex-1">
+					<form method="post" action="/settings/tokens" class="grid min-w-0 gap-4">
+						<div class="form-control min-w-0">
 							<label class="label" for="token-name">
 								<span class="label-text">Name</span>
 							</label>
@@ -59,10 +63,14 @@ templ TokensSettings(
 								name="name"
 								class="input input-bordered"
 								placeholder="e.g. ci-deploy"
+								value={ view.Name }
 								required
 							/>
 						</div>
-						<button type="submit" class="btn btn-primary">Create token</button>
+						@TokenGrantFields(view.Form, view.Projects, "new-token")
+						<div class="flex sm:justify-end">
+							<button type="submit" class="btn btn-primary w-full sm:w-auto">Create token</button>
+						</div>
 					</form>
 				</div>
 			</div>
@@ -71,44 +79,51 @@ templ TokensSettings(
 					<p class="text-gray-400">No tokens yet.</p>
 				</div>
 			} else {
-				<div class="overflow-x-auto">
-					<table class="table table-zebra table-fixed w-full">
+				<div class="hidden overflow-x-auto xl:block">
+					<table class="table table-zebra table-fixed w-full min-w-[80rem]">
 						<thead>
 							<tr>
-								<th class="w-1/5">Name</th>
-								<th class="w-1/6">Prefix</th>
-								<th class="w-1/6">Created</th>
-								<th class="w-1/6 hidden md:table-cell">Last used</th>
-								<th class="w-1/6 hidden md:table-cell">Expires</th>
-								<th class="w-1/6">Status</th>
-								<th class="w-48">Actions</th>
+									<th class="w-1/6">Name</th>
+									<th class="w-1/6">Access</th>
+									<th class="w-1/12">Prefix</th>
+									<th class="w-1/12">Created</th>
+									<th class="w-1/12 hidden md:table-cell">Last used</th>
+									<th class="w-1/12 hidden md:table-cell">Expires</th>
+									<th class="w-1/12">Status</th>
+									<th class="w-80">Actions</th>
 							</tr>
 						</thead>
 						<tbody>
 							for _, t := range tokens {
-								@tokensSettingsRow(t)
+								@tokensSettingsRow(t, view)
 							}
 						</tbody>
 					</table>
+				</div>
+				<div class="grid min-w-0 gap-3 md:grid-cols-2 xl:hidden" aria-label="API tokens">
+					for _, t := range tokens {
+						@tokenMobileCard(t, view)
+					}
 				</div>
 			}
 		}
 	}
 }
 
-templ tokensSettingsRow(t db.ListApiTokensByUserRow) {
-	<tr>
-		<td class="truncate">{ t.Name }</td>
+templ tokensSettingsRow(t db.ListApiTokensByUserRow, view TokenSettingsView) {
+	<tr data-token-record={ t.ID }>
+		<td class="truncate" data-token-name>{ t.Name }</td>
+		<td class="truncate" data-token-access>@TokenScopeLabel(t.Scope, t.TokenRole, view.Selections[t.ID], view.Projects)</td>
 		<td class="truncate font-mono text-sm">{ t.TokenPrefix }…</td>
-		<td class="whitespace-nowrap text-sm">{ formatUnixTime(t.CreatedAt) }</td>
-		<td class="whitespace-nowrap text-sm hidden md:table-cell">
+		<td class="truncate whitespace-nowrap text-sm" title={ formatUnixTime(t.CreatedAt) }>{ formatUnixTime(t.CreatedAt) }</td>
+		<td class="truncate whitespace-nowrap text-sm hidden md:table-cell">
 			if t.LastUsedAt.Valid {
 				{ formatUnixTime(t.LastUsedAt.Int64) }
 			} else {
 				<span class="text-gray-500">never</span>
 			}
 		</td>
-		<td class="whitespace-nowrap text-sm hidden md:table-cell">
+		<td class="truncate whitespace-nowrap text-sm hidden md:table-cell">
 			if t.ExpiresAt.Valid {
 				{ formatUnixTime(t.ExpiresAt.Int64) }
 			} else {
@@ -123,21 +138,57 @@ templ tokensSettingsRow(t db.ListApiTokensByUserRow) {
 			}
 		</td>
 		<td class="whitespace-nowrap">
-			if CanWrite(ctx) {
-				if !t.RevokedAt.Valid {
-					<button
-						class="btn btn-error btn-xs"
-						hx-post={ "/settings/tokens/" + t.ID + "/revoke" }
-						hx-confirm={ "Revoke token " + t.Name + "? It can no longer be used." }
-						data-toast-success="Token revoked"
-						data-toast-error="Failed to revoke token"
-					>
-						Revoke
-					</button>
-				}
-			}
+			@tokenActions(t, view, t.ID)
 		</td>
 	</tr>
+}
+
+templ tokenMobileCard(t db.ListApiTokensByUserRow, view TokenSettingsView) {
+	<article class="min-w-0 rounded-box border border-base-300 bg-base-200 p-4 space-y-4" data-token-record={ t.ID }>
+		<div class="flex items-start justify-between gap-3">
+			<h2 class="min-w-0 break-all font-semibold" data-token-name>{ t.Name }</h2>
+			if t.RevokedAt.Valid {
+				<span class="badge badge-error badge-outline shrink-0">Revoked</span>
+			} else {
+				<span class="badge badge-success badge-outline shrink-0">Active</span>
+			}
+		</div>
+		<p class="break-all text-sm" data-token-access>@TokenScopeLabel(t.Scope, t.TokenRole, view.Selections[t.ID], view.Projects)</p>
+		<dl class="grid grid-cols-2 gap-3 text-xs">
+			<div class="min-w-0"><dt class="opacity-70">Prefix</dt><dd class="font-mono break-all">{ t.TokenPrefix }…</dd></div>
+			<div class="min-w-0"><dt class="opacity-70">Created</dt><dd>{ formatUnixTime(t.CreatedAt) }</dd></div>
+			if t.LastUsedAt.Valid {
+				<div class="min-w-0"><dt class="opacity-70">Last used</dt><dd>{ formatUnixTime(t.LastUsedAt.Int64) }</dd></div>
+			}
+			if t.ExpiresAt.Valid {
+				<div class="min-w-0"><dt class="opacity-70">Expires</dt><dd>{ formatUnixTime(t.ExpiresAt.Int64) }</dd></div>
+			}
+		</dl>
+		@tokenActions(t, view, "mobile-" + t.ID)
+	</article>
+}
+
+templ tokenActions(t db.ListApiTokensByUserRow, view TokenSettingsView, prefix string) {
+	if CanWrite(ctx) && !t.RevokedAt.Valid {
+		<div class="flex flex-wrap items-start gap-2">
+			<details class="open:w-full">
+				<summary class="btn btn-sm min-h-11 xl:btn-xs xl:min-h-0">Edit scope</summary>
+				<form method="post" action={ "/settings/tokens/" + t.ID + "/scope" } class="grid min-w-0 gap-4 rounded-lg bg-base-100 p-3 mt-3 whitespace-normal" data-token-scope-edit={ t.ID }>
+					@TokenGrantFields(repository.TokenScope{Scope: t.Scope, Role: t.TokenRole, ProjectIDs: view.Selections[t.ID]}, view.Projects, prefix)
+					<button type="submit" class="btn btn-primary btn-sm min-h-11 xl:min-h-0">Save scope</button>
+				</form>
+			</details>
+			<button
+				class="btn btn-error btn-outline btn-sm min-h-11 xl:btn-xs xl:min-h-0"
+				hx-post={ "/settings/tokens/" + t.ID + "/revoke" }
+				hx-confirm={ "Revoke token " + t.Name + "? It can no longer be used." }
+				data-toast-success="Token revoked"
+				data-toast-error="Failed to revoke token"
+			>
+				Revoke
+			</button>
+		</div>
+	}
 }
 
 // AdminTokensPage renders /admin/tokens — every API token across all
@@ -146,6 +197,7 @@ templ tokensSettingsRow(t db.ListApiTokensByUserRow) {
 templ AdminTokensPage(
 	tokens []db.ListAllApiTokensRow,
 	currentPath string,
+	view TokenSettingsView,
 ) {
 	@layouts.Base("API tokens (admin)", currentPath) {
 		<div class="flex justify-between items-center mb-4">
@@ -157,11 +209,12 @@ templ AdminTokensPage(
 			</div>
 		} else {
 			<div class="overflow-x-auto">
-				<table class="table table-zebra table-fixed w-full">
+				<table class="table table-zebra table-fixed w-full min-w-[72rem]">
 					<thead>
 						<tr>
 							<th class="w-1/6">Name</th>
-							<th class="w-1/6">Prefix</th>
+							<th class="w-1/4">Access</th>
+								<th class="w-1/6">Prefix</th>
 							<th class="w-1/4">User</th>
 							<th class="w-1/6">Created</th>
 							<th class="w-1/6 hidden md:table-cell">Last used</th>
@@ -171,7 +224,7 @@ templ AdminTokensPage(
 					</thead>
 					<tbody>
 						for _, t := range tokens {
-							@adminTokensRow(t)
+							@adminTokensRow(t, view)
 						}
 					</tbody>
 				</table>
@@ -180,13 +233,14 @@ templ AdminTokensPage(
 	}
 }
 
-templ adminTokensRow(t db.ListAllApiTokensRow) {
+templ adminTokensRow(t db.ListAllApiTokensRow, view TokenSettingsView) {
 	<tr>
 		<td class="truncate">{ t.Name }</td>
+		<td class="truncate">@TokenScopeLabel(t.Scope, t.TokenRole, view.Selections[t.ID], view.Projects)</td>
 		<td class="truncate font-mono text-sm">{ t.TokenPrefix }…</td>
 		<td class="truncate font-mono text-sm">{ t.Email }</td>
-		<td class="whitespace-nowrap text-sm">{ formatUnixTime(t.CreatedAt) }</td>
-		<td class="whitespace-nowrap text-sm hidden md:table-cell">
+		<td class="truncate whitespace-nowrap text-sm" title={ formatUnixTime(t.CreatedAt) }>{ formatUnixTime(t.CreatedAt) }</td>
+		<td class="truncate whitespace-nowrap text-sm hidden md:table-cell">
 			if t.LastUsedAt.Valid {
 				{ formatUnixTime(t.LastUsedAt.Int64) }
 			} else {
@@ -222,6 +276,81 @@ templ adminTokensRow(t db.ListAllApiTokensRow) {
 // Cache-Control: no-store, so the plaintext is never cached.
 //
 // ponytail: warning color + monospace makes the token unmissable.
+templ TokenScopeLabel(scope string, role string, ids []int64, projects []db.Project) {
+	if scope == "global" {
+		if role == "" {
+			<span title="All projects available to the owner">Global · Owner permissions</span>
+		} else {
+			<span title="All projects available to the owner">Global · { role }</span>
+		}
+	} else {
+		<span title={ tokenProjectNames(ids, projects) }>{ role } · { tokenProjectNames(ids, projects) }</span>
+	}
+}
+
+templ TokenGrantFields(grant repository.TokenScope, projects []db.Project, prefix string) {
+	<div class="grid min-w-0 gap-4" x-data="tokenGrantFields" data-scope={ grant.Scope }>
+	<div class="form-control min-w-0">
+		<label class="label" for={ prefix + "-scope" }><span class="label-text">Scope</span></label>
+		<select id={ prefix + "-scope" } name="scope" class="select select-bordered" x-model="scope">
+			<option value="scoped" if grant.Scope == "scoped" { selected }>Selected projects</option>
+			<option value="global" if grant.Scope == "global" || grant.Scope == "" { selected }>All accessible projects</option>
+		</select>
+	</div>
+		<div class="form-control min-w-0">
+			<label class="label" for={ prefix + "-role" }><span class="label-text">Token role</span></label>
+			<select id={ prefix + "-role" } name="role" class="select select-bordered">
+				if grant.Scope == "global" && grant.Role == "" {
+					<option value="" selected>Owner permissions</option>
+				}
+				for _, role := range []string{"viewer", "deployer", "admin"} {
+					<option value={ role } if grant.Role == role { selected }>{ role }</option>
+			}
+		</select>
+	</div>
+	<div class="form-control min-w-0" x-cloak x-show="scope === 'scoped'">
+		<label class="label" for={ prefix + "-projects" }><span class="label-text">Projects</span></label>
+		<button id={ prefix + "-projects" } type="button" class="btn btn-outline min-h-12 w-full justify-between" x-ref="projectButton" x-on:click="openProjects" x-bind:disabled="scope !== 'scoped'" aria-haspopup="dialog" aria-controls={ prefix + "-project-picker" } aria-describedby={ prefix + "-help" }>
+			<span>Choose projects</span>
+			<span class="badge badge-ghost" x-text="selectionLabel">{ strconv.Itoa(len(grant.ProjectIDs)) } selected</span>
+		</button>
+		<p class="mt-2 text-sm [overflow-wrap:anywhere]" data-token-project-summary x-text="selectedNames">{ tokenProjectNames(grant.ProjectIDs, projects) }</p>
+		<p id={ prefix + "-help" } class="text-xs opacity-70 mt-1">For selected-project tokens, choose one or more projects. The role limits the owner's current permissions.</p>
+		<dialog id={ prefix + "-project-picker" } class="modal p-0" x-ref="projectDialog" x-on:close="projectsClosed" aria-labelledby={ prefix + "-project-picker-title" } data-token-project-dialog>
+			<div class="modal-box flex h-dvh max-h-dvh w-full max-w-none flex-col gap-4 overflow-hidden rounded-none p-4 sm:h-auto sm:max-h-[85dvh] sm:max-w-lg sm:rounded-box sm:p-6">
+				<div class="flex shrink-0 items-center justify-between gap-4">
+					<h3 id={ prefix + "-project-picker-title" } class="text-lg font-semibold">Choose projects</h3>
+					<button type="button" class="btn btn-ghost min-h-11" x-on:click="closeProjects">Close</button>
+				</div>
+				<div class="form-control shrink-0">
+					<label class="label" for={ prefix + "-project-search" }><span class="label-text">Search projects</span></label>
+					<input id={ prefix + "-project-search" } type="search" class="input input-bordered w-full" placeholder="Search by project name" x-ref="projectSearch" x-model="query" x-on:keydown.enter.prevent autocomplete="off"/>
+				</div>
+				<div class="min-h-0 min-w-0 flex-1 overflow-y-auto rounded-lg border border-base-300" data-token-project-list>
+				<fieldset class="min-w-0" x-bind:disabled="scope !== 'scoped'">
+					<legend class="sr-only">Available projects</legend>
+					for _, project := range projects {
+						<label for={ prefix + "-project-" + strconv.FormatInt(project.ID, 10) } class="flex min-h-12 cursor-pointer items-start gap-3 border-b border-base-300 p-3 last:border-b-0 hover:bg-base-200" data-project-name={ project.Name } x-bind:hidden="!matches($el.dataset.projectName)">
+							<input id={ prefix + "-project-" + strconv.FormatInt(project.ID, 10) } type="checkbox" name="project_ids" value={ strconv.FormatInt(project.ID, 10) } checked?={ slices.Contains(grant.ProjectIDs, project.ID) } data-project-name={ project.Name } class="checkbox mt-0.5 shrink-0" x-model="selected" x-on:keydown.enter.prevent/>
+							<span class="min-w-0 text-sm [overflow-wrap:anywhere]">{ project.Name }</span>
+						</label>
+					}
+					<p class="p-4 text-sm opacity-70" x-cloak hidden x-bind:hidden="hasMatches">No projects match your search.</p>
+				</fieldset>
+				</div>
+				<div class="flex shrink-0 flex-wrap items-center justify-between gap-3">
+					<span class="text-sm" role="status" x-text="selectionLabel">{ strconv.Itoa(len(grant.ProjectIDs)) } selected</span>
+					<div class="flex gap-2">
+						<button type="button" class="btn btn-ghost min-h-12" x-on:click="clearProjects" x-bind:disabled="selected.length === 0">Clear selection</button>
+						<button type="button" class="btn btn-primary min-h-12" x-on:click="closeProjects" data-token-project-done>Done</button>
+					</div>
+				</div>
+			</div>
+		</dialog>
+	</div>
+	</div>
+}
+
 templ NewTokenBanner(token string, name string) {
 	<div class="alert alert-warning mb-4 flex-col items-start gap-2">
 		<div class="flex items-center gap-2 w-full">

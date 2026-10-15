@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"durpdeploy/internal/audit"
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/repository"
@@ -57,12 +58,7 @@ func (h *TokensHandler) MyTokens(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Referrer-Policy", "no-referrer")
 
-	tokens, err := h.repo.Queries.ListApiTokensByUser(r.Context(), user.ID)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
+	var err error
 	newToken, newName := "", ""
 	if flashID := r.URL.Query().Get("flash"); flashID != "" {
 		newToken, newName, err = h.consumeTokenFlash(r, flashID, user.ID)
@@ -74,15 +70,7 @@ func (h *TokensHandler) MyTokens(w http.ResponseWriter, r *http.Request) {
 		// renders the plain list — the token was already shown once.
 	}
 
-	if err := pages.TokensSettings(
-		tokens,
-		newToken,
-		newName,
-		"",
-		r.URL.Path,
-	).Render(r.Context(), w); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
+	h.renderTokenSettings(w, r, newToken, newName, "", http.StatusOK)
 }
 
 // consumeTokenFlash atomically reads and deletes the flash record for
@@ -139,6 +127,16 @@ func (h *TokensHandler) MyTokensPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	request, err := tokenScopeForm(r)
+	if err != nil {
+		h.renderCreateError(w, r, "Select valid projects")
+		return
+	}
+	grant, err := h.repo.ValidateTokenScope(r.Context(), *user, request)
+	if err != nil {
+		h.renderCreateError(w, r, "Select a valid role and accessible projects")
+		return
+	}
 	full, prefix, hash, err := auth.MintApiToken()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -157,18 +155,27 @@ func (h *TokensHandler) MyTokensPost(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unauthenticated", http.StatusUnauthorized)
 		return
 	}
+	id := uuid.NewString()
 	err = h.repo.WithTx(r.Context(), func(q *db.Queries) error {
 		if _, err := q.CreateApiToken(
 			r.Context(),
 			db.CreateApiTokenParams{
-				ID:          uuid.NewString(),
+				ID:          id,
 				UserID:      user.ID,
 				Name:        name,
 				TokenPrefix: prefix,
 				TokenHash:   hash,
-				Scope:       "global",
+				Scope:       grant.Scope,
 				ExpiresAt:   sql.NullInt64{},
 			},
+		); err != nil {
+			return err
+		}
+		if err := repository.SaveTokenScope(
+			r.Context(),
+			q,
+			id,
+			grant,
 		); err != nil {
 			return err
 		}
@@ -190,6 +197,7 @@ func (h *TokensHandler) MyTokensPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	audit.SetTokenChange(r, id, grant, nil)
 	redirect := "/settings/tokens?flash=" + url.QueryEscape(flashID)
 	if r.Header.Get("HX-Request") == "true" {
 		w.Header().Set("HX-Redirect", redirect)
@@ -212,21 +220,7 @@ func (h *TokensHandler) renderCreateError(
 	r *http.Request,
 	msg string,
 ) {
-	user := auth.UserFromContext(r.Context())
-	if user == nil {
-		http.Error(w, "unauthenticated", http.StatusUnauthorized)
-		return
-	}
-	tokens, err := h.repo.Queries.ListApiTokensByUser(r.Context(), user.ID)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.WriteHeader(http.StatusUnprocessableEntity)
-	if err := pages.TokensSettings(tokens, "", "", msg, r.URL.Path).
-		Render(r.Context(), w); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
+	h.renderTokenSettings(w, r, "", "", msg, http.StatusUnprocessableEntity)
 }
 
 // MyTokensRevoke handles POST /settings/tokens/{id}/revoke. Revokes
@@ -252,6 +246,8 @@ func (h *TokensHandler) MyTokensRevoke(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	audit.SetTokenChange(r, id, repository.TokenScope{Scope: row.Scope,
+		Role: row.TokenRole}, nil)
 	redirect := "/settings/tokens"
 	if r.Header.Get("HX-Request") == "true" {
 		w.Header().Set("HX-Redirect", redirect)
@@ -271,7 +267,22 @@ func (h *TokensHandler) AdminTokens(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := pages.AdminTokensPage(tokens, r.URL.Path).
+	ids := make([]string, 0, len(tokens))
+	for _, token := range tokens {
+		ids = append(ids, token.ID)
+	}
+	selections, err := h.tokenSelections(r.Context(), ids)
+	if err != nil {
+		http.Error(w, "Could not load token scope", 500)
+		return
+	}
+	projects, err := h.repo.Queries.ListProjects(r.Context())
+	if err != nil {
+		http.Error(w, "Could not load projects", 500)
+		return
+	}
+	view := pages.TokenSettingsView{Projects: projects, Selections: selections}
+	if err := pages.AdminTokensPage(tokens, r.URL.Path, view).
 		Render(r.Context(), w); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -284,7 +295,8 @@ func (h *TokensHandler) AdminTokensRevoke(
 	r *http.Request,
 ) {
 	id := chi.URLParam(r, "id")
-	if _, err := h.repo.Queries.GetApiTokenByID(r.Context(), id); err != nil {
+	row, err := h.repo.Queries.GetApiTokenByID(r.Context(), id)
+	if err != nil {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
@@ -294,6 +306,8 @@ func (h *TokensHandler) AdminTokensRevoke(
 		return
 	}
 
+	audit.SetTokenChange(r, id, repository.TokenScope{Scope: row.Scope,
+		Role: row.TokenRole}, nil)
 	redirect := "/admin/tokens"
 	if r.Header.Get("HX-Request") == "true" {
 		w.Header().Set("HX-Redirect", redirect)

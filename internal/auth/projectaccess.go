@@ -36,7 +36,7 @@ func ProjectIDFromContext(ctx context.Context) (int64, bool) {
 
 // RequireProjectAccess returns middleware that admits only users who are
 // members of the project named by the `{id}` chi route param. Global
-// admins bypass the membership check entirely.
+// admins bypass membership. Scoped tokens also require a selected project.
 //
 // Ordering: this middleware runs AFTER auth.AuthMiddleware (which injects
 // the user) and auth.CSRFMiddleware (which already blocks "viewer" from
@@ -95,6 +95,10 @@ func serveProjectAccess(
 		return
 	}
 
+	if !TokenAllowsProject(r.Context(), projectID) {
+		RenderRequestError(w, r, deniedStatus, "project access denied")
+		return
+	}
 	// Global admin bypasses the membership check, but the
 	// project id is still injected into the context so handlers
 	// can uniformly use ProjectIDFromContext instead of re-parsing.
@@ -123,6 +127,7 @@ func serveProjectAccess(
 		}
 	}
 
+	setTokenProject(r.Context(), projectID)
 	ctx := context.WithValue(r.Context(), ProjectAccessKey{}, projectID)
 	next.ServeHTTP(w, r.WithContext(ctx))
 }
@@ -184,15 +189,16 @@ func RequireDeploymentProjectAccess(
 				)
 				return
 			}
-			if user.Role == "admin" {
-				next.ServeHTTP(w, r)
-				return
-			}
 			release, err := repo.Queries.GetRelease(
 				r.Context(),
 				deployment.ReleaseID,
 			)
 			if err != nil {
+				// Preserve unrestricted admin access if release lookup fails.
+				if user.Role == "admin" && ScopedTokenID(r.Context()) == "" {
+					next.ServeHTTP(w, r)
+					return
+				}
 				RenderRequestError(
 					w,
 					r,
@@ -202,9 +208,22 @@ func RequireDeploymentProjectAccess(
 				return
 			}
 
-			if !checkProjectMembership(w, r, repo, user.ID, release.ProjectID) {
+			if !TokenAllowsProject(r.Context(), release.ProjectID) {
+				RenderRequestError(w, r, http.StatusForbidden,
+					"project access denied")
 				return
 			}
+			if user.Role != "admin" &&
+				!checkProjectMembership(
+					w,
+					r,
+					repo,
+					user.ID,
+					release.ProjectID,
+				) {
+				return
+			}
+			setTokenProject(r.Context(), release.ProjectID)
 			next.ServeHTTP(w, r)
 		})
 	}

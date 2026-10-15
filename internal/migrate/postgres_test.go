@@ -40,6 +40,7 @@ func TestPostgres_MigrationsRun(t *testing.T) {
 		t.Fatalf("migrate: %v", err)
 	}
 	defer testutil.Close(t, db)
+	testProjectTokenQueries(t, db)
 
 	rows, err := db.Query(
 		"SELECT table_name FROM information_schema.tables WHERE table_schema='public' ORDER BY table_name",
@@ -147,7 +148,9 @@ func TestPostgres_MigrationsRun(t *testing.T) {
 	publicKey := []byte{4, 5, 6}
 	attestationObject := []byte{7, 8, 9}
 	_, err = queries.CreateWebAuthnUser(ctx, generated.CreateWebAuthnUserParams{
-		UserID: userID, RpID: "example.test", UserHandle: bytes.Repeat([]byte{1}, 32),
+		UserID:     userID,
+		RpID:       "example.test",
+		UserHandle: bytes.Repeat([]byte{1}, 32),
 	})
 	if err != nil {
 		t.Fatalf("create WebAuthn user: %v", err)
@@ -186,7 +189,8 @@ func TestPostgres_MigrationsRun(t *testing.T) {
 	err = queries.MarkSessionReauthenticated(
 		ctx,
 		generated.MarkSessionReauthenticatedParams{
-			ID: "postgres-mfa-session", ReauthenticatedAt: sql.NullInt64{Int64: 1_700_000_001, Valid: true},
+			ID:                "postgres-mfa-session",
+			ReauthenticatedAt: sql.NullInt64{Int64: 1_700_000_001, Valid: true},
 		},
 	)
 	if err != nil {
@@ -204,7 +208,11 @@ func TestPostgres_MigrationsRun(t *testing.T) {
 	if _, err := queries.CreateWebAuthnCredential(
 		ctx,
 		generated.CreateWebAuthnCredentialParams{
-			CredentialID: credentialID, UserID: userID, Name: "duplicate", PublicKey: []byte{1}, TransportsJson: "[]",
+			CredentialID:   credentialID,
+			UserID:         userID,
+			Name:           "duplicate",
+			PublicKey:      []byte{1},
+			TransportsJson: "[]",
 		},
 	); err == nil {
 		t.Fatal("duplicate WebAuthn credential succeeded")
@@ -216,7 +224,11 @@ func TestPostgres_MigrationsRun(t *testing.T) {
 	rolledBackCredentialID := []byte{13}
 	_, err = queries.WithTx(tx).
 		CreateWebAuthnCredential(ctx, generated.CreateWebAuthnCredentialParams{
-			CredentialID: rolledBackCredentialID, UserID: userID, Name: "rolled-back", PublicKey: []byte{1}, TransportsJson: "[]",
+			CredentialID:   rolledBackCredentialID,
+			UserID:         userID,
+			Name:           "rolled-back",
+			PublicKey:      []byte{1},
+			TransportsJson: "[]",
 		})
 	if err != nil {
 		t.Fatalf("create transaction credential: %v", err)

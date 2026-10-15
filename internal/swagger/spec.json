@@ -9681,6 +9681,82 @@
             "bearer": []
           }
         ]
+      },
+      "patch": {
+        "description": "Scoped tokens and tokens with permission ceilings cannot manage tokens.",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "tokens"
+        ],
+        "summary": "Replace an owned token's explicit scope, role, and project selection.",
+        "operationId": "updateTokenScope",
+        "parameters": [
+          {
+            "type": "string",
+            "x-go-name": "TokenID",
+            "description": "The API token ID.",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "x-go-name": "Body",
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/TokenScopeResponse"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "TokenScopeResponse identifies a token's permission ceiling.",
+            "schema": {
+              "$ref": "#/definitions/TokenScopeResponse"
+            }
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          },
+          "403": {
+            "description": "Forbidden error response.",
+            "schema": {
+              "$ref": "#/definitions/ForbiddenError"
+            }
+          },
+          "404": {
+            "description": "Not found error response.",
+            "schema": {
+              "$ref": "#/definitions/NotFoundError"
+            }
+          },
+          "422": {
+            "description": "Validation error response.",
+            "schema": {
+              "$ref": "#/definitions/ValidationError"
+            }
+          },
+          "500": {
+            "description": "Server error response.",
+            "schema": {
+              "$ref": "#/definitions/ServerError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
       }
     },
     "/users/me": {
@@ -10134,6 +10210,24 @@
         "name": {
           "type": "string",
           "x-go-name": "Name"
+        },
+        "project_ids": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "x-go-name": "ProjectIDs"
+        },
+        "role": {
+          "description": "Viewer, deployer, or admin. This ceiling cannot increase owner permissions.",
+          "type": "string",
+          "x-go-name": "Role"
+        },
+        "scope": {
+          "description": "Omit grant fields for legacy global creation. Scoped selections must be nonempty.\nBoth global and scoped tokens support an explicit permission ceiling.",
+          "type": "string",
+          "x-go-name": "Scope"
         }
       },
       "x-go-name": "swaggerCreateTokenRequest",
@@ -10159,6 +10253,26 @@
         "prefix": {
           "type": "string",
           "x-go-name": "Prefix"
+        },
+        "project_ids": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "x-go-name": "ProjectIDs"
+        },
+        "role": {
+          "type": "string",
+          "x-go-name": "Role"
+        },
+        "scope": {
+          "type": "string",
+          "x-go-name": "Scope"
+        },
+        "token_id": {
+          "type": "string",
+          "x-go-name": "TokenID"
         }
       },
       "x-go-name": "swaggerCreateTokenResponse",
@@ -13173,10 +13287,22 @@
           "type": "string",
           "x-go-name": "Prefix"
         },
+        "project_ids": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "x-go-name": "ProjectIDs"
+        },
         "revoked_at": {
           "type": "integer",
           "format": "int64",
           "x-go-name": "RevokedAt"
+        },
+        "role": {
+          "type": "string",
+          "x-go-name": "Role"
         },
         "scope": {
           "type": "string",
@@ -13193,6 +13319,30 @@
         }
       },
       "x-go-name": "swaggerTokenResponse",
+      "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "TokenScopeResponse": {
+      "type": "object",
+      "title": "TokenScopeResponse identifies a token's permission ceiling.",
+      "properties": {
+        "project_ids": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "x-go-name": "ProjectIDs"
+        },
+        "role": {
+          "type": "string",
+          "x-go-name": "Role"
+        },
+        "scope": {
+          "type": "string",
+          "x-go-name": "Scope"
+        }
+      },
+      "x-go-name": "swaggerTokenScopeResponse",
       "x-go-package": "durpdeploy/internal/handler/api"
     },
     "UnauthorizedError": {

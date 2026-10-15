@@ -160,7 +160,7 @@ type stageIDPathParam struct {
 }
 
 // tokenId path parameter.
-// swagger:parameters revokeToken revokeAnyToken
+// swagger:parameters revokeToken revokeAnyToken updateTokenScope
 //
 //nolint:unused // Used by Swagger specification generation.
 type tokenIDPathParam struct {
@@ -360,6 +360,15 @@ type createTokenBodyParam struct {
 	// in: body
 	// required: true
 	Body swaggerCreateTokenRequest `json:"body"`
+}
+
+// swagger:parameters updateTokenScope
+//
+//nolint:unused // Used by Swagger specification generation.
+type updateTokenScopeBodyParam struct {
+	// in: body
+	// required: true
+	Body swaggerTokenScopeResponse `json:"body"`
 }
 
 // Query parameter structs.

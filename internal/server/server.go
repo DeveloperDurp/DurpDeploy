@@ -234,6 +234,7 @@ func newRouter(
 		tokensH := handler.NewTokensHandler(repo)
 		pr.Get("/settings/tokens", tokensH.MyTokens)
 		pr.Post("/settings/tokens", tokensH.MyTokensPost)
+		pr.Post("/settings/tokens/{id}/scope", tokensH.MyTokensScope)
 		pr.Post("/settings/tokens/{id}/revoke", tokensH.MyTokensRevoke)
 
 		pr.Get("/settings/security", authHandler.SecurityGet)
@@ -573,6 +574,7 @@ func newRouter(
 	// Healthz is mounted above on the root mux so it stays public.
 	r.Route("/api/v1", func(ar chi.Router) {
 		ar.Use(auth.ApiTokenMiddleware(repo))
+		ar.Use(auth.TokenScopeMiddleware())
 		ar.Use(auth.WriteBlockMiddleware())
 		ar.Use(api.RequestBodyLimit)
 		ar.Use(audit.Middleware(repo))
@@ -658,6 +660,7 @@ func newRouter(
 
 		ar.Post("/tokens", tokensH.CreateToken)
 		ar.Get("/tokens", tokensH.ListTokens)
+		ar.Patch("/tokens/{id}", tokensH.UpdateScope)
 		ar.Delete("/tokens/{id}", api.EmptyBody(tokensH.RevokeToken))
 
 		apiProjH := api.NewProjectHandler(repo)

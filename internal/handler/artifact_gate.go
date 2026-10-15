@@ -100,7 +100,7 @@ func (h *ArtifactGateHandler) decide(
 	approve bool,
 ) {
 	u := auth.UserFromContext(r.Context())
-	if u == nil || u.Role != "admin" {
+	if u == nil || auth.RoleFromContext(r.Context()) != "admin" {
 		gateHTTPError(w, r, 403, "Admin access required")
 		return
 	}

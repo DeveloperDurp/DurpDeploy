@@ -38,6 +38,23 @@ type Entry struct {
 // explicit: "do NOT block the request if the audit insert fails". If
 // audit volume ever needs backpressure, add a buffered queue here.
 func Record(ctx context.Context, repo *repository.Repository, e Entry) {
+	if token := auth.TokenFromContext(ctx); token != nil {
+		details := map[string]any{}
+		if e.Details != "" {
+			_ = json.Unmarshal([]byte(e.Details), &details)
+		}
+		if details == nil {
+			details = map[string]any{}
+		}
+		details["api_token_id"] = token.ID
+		if token.ProjectID != 0 {
+			details["project_id"] = token.ProjectID
+		}
+		encoded, err := json.Marshal(details)
+		if err == nil {
+			e.Details = string(encoded)
+		}
+	}
 	var details sql.NullString
 	if e.Details != "" {
 		details = sql.NullString{String: e.Details, Valid: true}
@@ -245,6 +262,16 @@ func buildDetails(r *http.Request, outcome requestOutcome) string {
 		details["name"] = name
 	}
 	addRunbookDeletionDetails(r, details)
+	if state, ok := r.Context().Value(requestStateKey{}).(*requestState); ok &&
+		state.tokenID != "" {
+		details["token_id"] = state.tokenID
+		details["scope"] = state.tokenScope.Scope
+		details["token_role"] = state.tokenScope.Role
+		details["project_ids"] = state.tokenScope.ProjectIDs
+		if state.previousTokenScope != nil {
+			details["previous_scope"] = state.previousTokenScope
+		}
+	}
 	if strings.Contains(outcome.action, "agent") {
 		details["agent_id"] = chi.URLParam(r, "id")
 		if state, ok := r.Context().Value(requestStateKey{}).(*requestState); ok {

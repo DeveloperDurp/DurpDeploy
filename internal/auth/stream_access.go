@@ -2,7 +2,6 @@ package auth
 
 import (
 	"context"
-	"database/sql"
 	"net/http"
 	"strings"
 	"time"
@@ -41,23 +40,21 @@ func CanStreamDeployment(
 		if !ok || !strings.HasPrefix(token, "ddp_pat_") || len(token) <= 8 {
 			return false
 		}
-		current, err := repo.Queries.GetApiTokenByHash(
-			r.Context(),
-			db.GetApiTokenByHashParams{
-				TokenHash: HashApiToken(token),
-				ExpiresAt: sql.NullInt64{Int64: time.Now().Unix(), Valid: true},
-			},
+		current, grant, err := loadTokenAccess(
+			r.Context(), repo, HashApiToken(token),
 		)
 		if err != nil || current.UserID != userID {
 			return false
 		}
 		role = current.Role
+		r = SetUser(r, &db.User{ID: userID, Role: current.Role})
+		r = setTokenAccess(r, current.ID, grant)
 	}
 	deployment, err := repo.Queries.GetDeployment(r.Context(), deploymentID)
 	if err != nil {
 		return false
 	}
-	if role == "admin" {
+	if role == "admin" && ScopedTokenID(r.Context()) == "" {
 		return true
 	}
 	var projectID int64
@@ -79,6 +76,12 @@ func CanStreamDeployment(
 			return false
 		}
 		projectID = release.ProjectID
+	}
+	if !TokenAllowsProject(r.Context(), projectID) {
+		return false
+	}
+	if role == "admin" {
+		return true
 	}
 	member, err := repo.Queries.IsProjectMember(
 		r.Context(),
