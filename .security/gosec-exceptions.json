@@ -425,8 +425,8 @@
   {
     "rule": "G710",
     "file": "internal/handler/project_members.go",
-    "line": "287",
-    "source_sha256": "7bcccc725ce614c8ffc8d80f331097756a89f492a6d3073096cd937189fccaa8",
+    "line": "289",
+    "source_sha256": "714009613e3c4193c7ee9c406e140eed6a3016ff017052e9aa535597da286a87",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "These handlers redirect to the fixed /projects/ path prefix and an int64 ID from parseProjectID. Requests cannot set a destination host or path."
@@ -434,8 +434,8 @@
   {
     "rule": "G710",
     "file": "internal/handler/project_members.go",
-    "line": "239",
-    "source_sha256": "7bcccc725ce614c8ffc8d80f331097756a89f492a6d3073096cd937189fccaa8",
+    "line": "241",
+    "source_sha256": "714009613e3c4193c7ee9c406e140eed6a3016ff017052e9aa535597da286a87",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "These handlers redirect to the fixed /projects/ path prefix and an int64 ID from parseProjectID. Requests cannot set a destination host or path."
@@ -443,8 +443,8 @@
   {
     "rule": "G710",
     "file": "internal/handler/project_members.go",
-    "line": "165",
-    "source_sha256": "7bcccc725ce614c8ffc8d80f331097756a89f492a6d3073096cd937189fccaa8",
+    "line": "167",
+    "source_sha256": "714009613e3c4193c7ee9c406e140eed6a3016ff017052e9aa535597da286a87",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "These handlers redirect to the fixed /projects/ path prefix and an int64 ID from parseProjectID. Requests cannot set a destination host or path."

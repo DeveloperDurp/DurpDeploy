@@ -14,6 +14,8 @@ import (
 	"durpdeploy/views/pages"
 )
 
+const invalidMemberUserID = "Invalid user ID"
+
 // ProjectMembersHandler manages the per-project membership roster. The
 // RequireProjectAccess middleware already admitted the request (the
 // caller is a member or a global admin); these handlers enforce the
@@ -89,8 +91,8 @@ func (h *ProjectMembersHandler) UpdateMemberRole(
 	}
 	userID, err := strconv.ParseInt(chi.URLParam(r, "userId"), 10, 64)
 	if err != nil || userID <= 0 {
-		SetToastError(w, "Invalid user ID")
-		http.Error(w, "Invalid user ID", http.StatusBadRequest)
+		SetToastError(w, invalidMemberUserID)
+		http.Error(w, invalidMemberUserID, http.StatusBadRequest)
 		return
 	}
 	if err := r.ParseForm(); err != nil {
@@ -124,7 +126,7 @@ func (h *ProjectMembersHandler) UpdateMemberRole(
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if r.Header.Get("HX-Request") != "true" {
+	if !isFragmentRequest(r) {
 		h.ListMembers(w, r)
 		return
 	}
@@ -196,7 +198,7 @@ func (h *ProjectMembersHandler) AddMember(
 
 	userID, err := strconv.ParseInt(r.FormValue("user_id"), 10, 64)
 	if err != nil {
-		http.Error(w, "Invalid user ID", http.StatusBadRequest)
+		http.Error(w, invalidMemberUserID, http.StatusBadRequest)
 		return
 	}
 
@@ -262,7 +264,7 @@ func (h *ProjectMembersHandler) RemoveMember(
 	userIDStr := chi.URLParam(r, "userId")
 	userID, err := strconv.ParseInt(userIDStr, 10, 64)
 	if err != nil {
-		http.Error(w, "Invalid user ID", http.StatusBadRequest)
+		http.Error(w, invalidMemberUserID, http.StatusBadRequest)
 		return
 	}
 
