@@ -185,6 +185,16 @@ func TestAgentFleetBrowserE2E(t *testing.T) {
 			) != "false" {
 				t.Fatalf("fleet page %s overflows at %d", page.path, width)
 			}
+			if page.name == "list" {
+				browser.wait(t, `(() => {
+					const versions = [...document.querySelectorAll(
+						'tbody td:first-child div'
+					)].filter(el => el.textContent.startsWith('Version: '));
+					return versions.length > 0 && versions.every(
+						el => el.clientWidth > 0 && el.scrollWidth <= el.clientWidth
+					);
+				})()`)
+			}
 			browser.screenshot(
 				t,
 				fmt.Sprintf("fleet-%d-%s", width, page.name),
