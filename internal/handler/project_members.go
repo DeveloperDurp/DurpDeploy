@@ -125,8 +125,7 @@ func (h *ProjectMembersHandler) UpdateMemberRole(
 		return
 	}
 	if r.Header.Get("HX-Request") != "true" {
-		http.Redirect(w, r, fmt.Sprintf("/projects/%d/edit", id),
-			http.StatusSeeOther)
+		h.ListMembers(w, r)
 		return
 	}
 	members, available, canManage, err := loadProjectMembersContext(

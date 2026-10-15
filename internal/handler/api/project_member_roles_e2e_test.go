@@ -133,9 +133,13 @@ func TestProjectMemberRolesAPIWebE2E(t *testing.T) {
 					}
 					add(project.ID, target.ID, before.Role)
 				}
-				request(t, path, "role="+role, "", session,
+				webResp, _ := request(t, path, "role="+role, "", session,
 					false, true, webStatus)
 				if tc.allowed {
+					if webResp.Header.Get("Location") !=
+						fmt.Sprintf("/projects/%d/edit", project.ID) {
+						t.Fatal("web redirect did not return to project edit")
+					}
 					if member(project.ID).Role != role {
 						t.Fatal("web request did not change the role")
 					}
