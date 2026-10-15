@@ -57,6 +57,7 @@ func TestAuditActionMap(t *testing.T) {
 		"POST /api/v1/admin/maintenance":                       "",
 		"POST /api/v1/deployments/{id}/retry":                  "retry_deployment",
 		"PUT /api/v1/projects/{id}/members/{userId}":           "update_project_member",
+		"PUT /projects/{id}/members/{userId}":                  "update_project_member",
 		"POST /api/v1/projects/{id}/deployments":               "create_deployment",
 	}
 

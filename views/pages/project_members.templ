@@ -7,42 +7,71 @@ import (
 
 // ProjectMembersSection renders the Members panel on the project edit
 // page. The member list is visible to all project members (the
-// RequireProjectAccess middleware already gated entry); the add/remove
+// RequireProjectAccess middleware already gated entry); the management
 // controls are only rendered when canManage is true (global admin or
 // per-project admin). Server-side enforcement lives in the handlers —
 // the UI gate is convenience, not security.
-templ ProjectMembersSection(project db.Project, members []db.ListProjectMembersRow, availableUsers []db.ListUsersRow, canManage bool) {
-	<div class="mt-8 pt-6 border-t border-base-300">
+// Keep x-show off forms with stable IDs because HTMX settles their styles.
+templ ProjectMembersSection(project db.Project, members []db.ListProjectMembersRow, availableUsers []db.ListUsersRow, canManage bool, successMessage string) {
+	<div id="project-members" class="mt-8 pt-6 border-t border-base-300">
 		<h2 class="text-xl font-bold mb-4">Members</h2>
+		if successMessage != "" {
+			<p role="status" class="text-success mb-4">{ successMessage }</p>
+		}
 		<div class="overflow-x-auto">
 			<table class="table table-zebra table-fixed w-full block! md:table!">
 				<thead class="hidden md:table-header-group">
 					<tr>
-						<th class="w-1/4">Name</th>
-						<th class="w-2/5">Email</th>
-						<th class="w-1/6">Role</th>
+						<th class="w-1/5">Name</th>
+						<th class="w-auto">Email</th>
+						<th class="w-1/5">Role</th>
 						<th class="w-48">Actions</th>
 					</tr>
 				</thead>
 				<tbody class="block md:table-row-group">
 					for _, m := range members {
-						<tr class="grid grid-cols-2 gap-3 md:table-row max-md:rounded-box max-md:bg-base-200 max-md:p-4 max-md:mb-3">
+						<tr data-member-id={ fmt.Sprint(m.UserID) } x-data="memberRoleEditor" @make-toast.camel="notify" class="grid grid-cols-2 gap-3 md:table-row max-md:rounded-box max-md:bg-base-200 max-md:p-4 max-md:mb-3">
 							<td class="col-span-2 min-w-0 break-all md:truncate"><span class="block md:hidden text-xs opacity-70 mb-1">Name</span>{ m.Name }</td>
 							<td class="col-span-2 min-w-0 break-all md:truncate"><span class="block md:hidden text-xs opacity-70 mb-1">Email</span>{ m.Email }</td>
-							<td><span class="block md:hidden text-xs opacity-70 mb-1">Role</span>{ m.Role }</td>
-					<td class="whitespace-nowrap">
-						if canManage && CanWrite(ctx) {
-							<button
-								class="btn btn-error md:btn-xs"
-								hx-delete={ fmt.Sprintf("/projects/%d/members/%d", project.ID, m.UserID) }
-								hx-confirm={ fmt.Sprintf("Remove %s from this project?", m.Name) }
-								data-toast-success="Member removed"
-								data-toast-error="Failed to remove member"
-							>
-								Remove
-							</button>
-						}
-					</td>
+							<td class="col-span-2">
+								<span class="block md:hidden text-xs opacity-70 mb-1">Role</span>
+								<span x-show="!editing" data-member-role>{ m.Role }</span>
+								if canManage && CanWrite(ctx) {
+									<div x-show="editing" x-cloak>
+										<form
+											id={ fmt.Sprintf("member-role-%d", m.UserID) }
+											x-ref="roleForm"
+											hx-put={ fmt.Sprintf("/projects/%d/members/%d", project.ID, m.UserID) }
+											hx-target="#project-members"
+											hx-select="#project-members"
+											hx-swap="outerHTML"
+										>
+											<select x-ref="role" name="role" aria-label={ "Project role for " + m.Name } class="select select-bordered md:select-sm w-full">
+												<option value="deployer" selected?={ m.Role == "deployer" }>deployer</option>
+												<option value="admin" selected?={ m.Role == "admin" }>admin</option>
+											</select>
+										</form>
+										<p x-show="error" x-text="error" x-cloak role="alert" class="text-error text-sm mt-1"></p>
+									</div>
+								}
+							</td>
+							<td class="col-span-2 whitespace-nowrap">
+								if canManage && CanWrite(ctx) {
+									<button type="button" x-ref="editButton" class="btn md:btn-xs" x-show="!editing" @click="edit">Edit role</button>
+									<button type="submit" class="btn btn-primary md:btn-xs" form={ fmt.Sprintf("member-role-%d", m.UserID) } x-show="editing" x-cloak>Save</button>
+									<button type="button" class="btn btn-ghost md:btn-xs" x-show="editing" x-cloak @click="cancel">Cancel</button>
+									<button
+										x-show="!editing"
+										class="btn btn-error md:btn-xs"
+										hx-delete={ fmt.Sprintf("/projects/%d/members/%d", project.ID, m.UserID) }
+										hx-confirm={ fmt.Sprintf("Remove %s from this project?", m.Name) }
+										data-toast-success="Member removed"
+										data-toast-error="Failed to remove member"
+									>
+										Remove
+									</button>
+								}
+							</td>
 						</tr>
 					}
 				</tbody>

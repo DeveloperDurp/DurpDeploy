@@ -56,8 +56,8 @@
   {
     "rule": "G101",
     "file": "internal/audit/routes.go",
-    "line": "6-184",
-    "source_sha256": "f29f1a400da420daed88f1e64b9f4d3246a913591d697f0d9b93b1a27120bc57",
+    "line": "6-185",
+    "source_sha256": "9a7096bb30060024d913c61d0c2528c046bf4e5c77143f310ec760294f2996f3",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Cookie name or audit action/route metadata, not a credential value. Evidence: passkey binding readers/setters or internal/audit/audit.go consumers."
@@ -425,29 +425,29 @@
   {
     "rule": "G710",
     "file": "internal/handler/project_members.go",
-    "line": "204",
-    "source_sha256": "fb8290d0666189d15d88c3afc593b44be1083e5f1b0f848c1d2ba71c1e144af9",
+    "line": "289",
+    "source_sha256": "714009613e3c4193c7ee9c406e140eed6a3016ff017052e9aa535597da286a87",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
-    "reason": "Redirect retains a fixed /projects/ path prefix and an ID validated as int64 by parseProjectID. UI-only changes moved these existing redirects; corresponding handler and redirect/E2E tests confirm same-origin destinations."
+    "reason": "These handlers redirect to the fixed /projects/ path prefix and an int64 ID from parseProjectID. Requests cannot set a destination host or path."
   },
   {
     "rule": "G710",
     "file": "internal/handler/project_members.go",
-    "line": "156",
-    "source_sha256": "fb8290d0666189d15d88c3afc593b44be1083e5f1b0f848c1d2ba71c1e144af9",
+    "line": "241",
+    "source_sha256": "714009613e3c4193c7ee9c406e140eed6a3016ff017052e9aa535597da286a87",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
-    "reason": "Redirect retains a fixed /projects/ path prefix and an ID validated as int64 by parseProjectID. UI-only changes moved these existing redirects; corresponding handler and redirect/E2E tests confirm same-origin destinations."
+    "reason": "These handlers redirect to the fixed /projects/ path prefix and an int64 ID from parseProjectID. Requests cannot set a destination host or path."
   },
   {
     "rule": "G710",
     "file": "internal/handler/project_members.go",
-    "line": "82",
-    "source_sha256": "fb8290d0666189d15d88c3afc593b44be1083e5f1b0f848c1d2ba71c1e144af9",
+    "line": "167",
+    "source_sha256": "714009613e3c4193c7ee9c406e140eed6a3016ff017052e9aa535597da286a87",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
-    "reason": "Redirect retains a fixed /projects/ path prefix and an ID validated as int64 by parseProjectID. UI-only changes moved these existing redirects; corresponding handler and redirect/E2E tests confirm same-origin destinations."
+    "reason": "These handlers redirect to the fixed /projects/ path prefix and an int64 ID from parseProjectID. Requests cannot set a destination host or path."
   },
   {
     "rule": "G710",

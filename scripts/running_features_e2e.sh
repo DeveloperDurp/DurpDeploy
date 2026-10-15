@@ -2,6 +2,7 @@
 # Sourced by e2e_db_test.sh. All writes target this run's own fixtures.
 
 source "$SCRIPT_DIR/request_body_e2e.sh"
+source "$SCRIPT_DIR/project_members_e2e.sh"
 source "$SCRIPT_DIR/deployment_list_e2e.sh"
 
 echo "=== Software build identity ==="
