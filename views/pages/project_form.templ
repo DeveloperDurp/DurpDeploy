@@ -119,7 +119,7 @@ templ ProjectForm(project db.Project, isEdit bool, errorMsg string, lifecycles [
 			</div>
 		</form>
 		if isEdit {
-			@ProjectMembersSection(project, members, availableUsers, canManage)
+			@ProjectMembersSection(project, members, availableUsers, canManage, "")
 			<div class="mt-8 pt-6 border-t border-base-300 flex flex-wrap items-center justify-between gap-4">
 				<div>
 					<div class="font-medium">Delete this project</div>

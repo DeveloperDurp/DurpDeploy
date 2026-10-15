@@ -488,6 +488,27 @@ Alpine.data('projectMenu', () => ({
 	},
 }));
 
+Alpine.data('memberRoleEditor', () => ({
+	editing: false,
+	error: '',
+	edit() {
+		this.error = '';
+		this.editing = true;
+		this.$nextTick(() => focusFormField(this.$refs.role));
+	},
+	cancel() {
+		this.editing = false;
+		this.error = '';
+		this.$refs.roleForm.reset();
+		this.$nextTick(() => this.$refs.editButton.focus());
+	},
+	notify(event) {
+		if (this.editing && event.detail.level === 'danger') {
+			this.error = event.detail.message;
+		}
+	},
+}));
+
 Alpine.data('formDialogHost', () => ({
 	opener: null,
 	rememberOpener(event) { this.opener = event.currentTarget; },
@@ -499,7 +520,8 @@ Alpine.data('formDialogHost', () => ({
 		focusFormField(this.$refs.content.querySelector('input[name="name"]'));
 	},
 	beforeSwap(event) {
-		if (!this.$refs.dialog?.open || event.detail.xhr.status !== 422) return;
+		if (!this.$refs.dialog?.open || event.detail.xhr.status !== 422 ||
+			event.detail.xhr.getResponseHeader('HX-Retarget') !== '#project-edit-content') return;
 		event.detail.target = this.$refs.content;
 		event.detail.swapOverride = 'innerHTML';
 		event.detail.shouldSwap = true;

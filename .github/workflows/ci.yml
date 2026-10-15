@@ -444,7 +444,7 @@ jobs:
       - name: Verify mobile lists and dashboard updates
         run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^Test(DeploymentMobile|DeploymentListMobile|ResourceListMobile|HomeMobile|HomeRunningPoll|HomeChartTimer|SchedulePages|MainPagePattern)BrowserE2E$' ./internal/handler/api
       - name: Verify forms and dialogs
-        run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^Test(ProjectEditModal|ResourceCreateModal|ResourceEditModal|StepEditModal|StepAddModal|MobileFormFocus|RunbookEditor|RunbookDeletion|AlpineEditForms|AlpineDialogs|RunningServer|ProjectTokens)BrowserE2E$' ./internal/handler/api
+        run: go test -tags=e2e,packagebrowser -race -count=1 -timeout=5m -v -run '^Test(ProjectMemberRoles|ProjectEditModal|ResourceCreateModal|ResourceEditModal|StepEditModal|StepAddModal|MobileFormFocus|RunbookEditor|RunbookDeletion|AlpineEditForms|AlpineDialogs|RunningServer|ProjectTokens)BrowserE2E$' ./internal/handler/api
       - name: Verify runbook deletion and retained history
         run: bash scripts/go_test.sh -tags=e2e -race -count=1 -timeout=5m -v -run '^TestRunbookDeletion.*APIWebE2E$' ./internal/handler/api
       - name: Verify project-scoped token permissions and stream reauthorization

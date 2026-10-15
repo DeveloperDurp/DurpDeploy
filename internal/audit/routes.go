@@ -158,6 +158,7 @@ var actionMap = map[string]string{
 	"PUT /api/v1/admin/notifications/settings":             "update_global_notifications",
 	"POST /projects/{id}/members":                          "add_project_member",
 	"DELETE /projects/{id}/members/{userId}":               "remove_project_member",
+	"PUT /projects/{id}/members/{userId}":                  "update_project_member",
 	"POST /templates":                                      "create_template",
 	"PUT /templates/{id}":                                  "update_template",
 	"DELETE /templates/{id}":                               "delete_template",

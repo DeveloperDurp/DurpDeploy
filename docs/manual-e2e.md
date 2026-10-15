@@ -60,6 +60,32 @@ bash scripts/go_test.sh -tags=e2e -race -count=1 -timeout=5m -run '^TestProjectT
 bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=5m -run '^TestProjectTokensBrowserE2E$' ./internal/handler/api
 ```
 
+## Project member roles
+
+Open the printed **Member role editor** link as the global administrator or printed project administrator.
+Select **Edit role** for an existing member.
+Confirm that the selector shows the current project role.
+Select another role, then select **Cancel**.
+Open the editor again and confirm that the saved role remains selected.
+
+Select `admin`, then select **Save**.
+Confirm that the role changes and a success message appears.
+Repeat with `deployer`.
+Repeat inside the project edit dialog and at a phone viewport width.
+Confirm that unsaved project settings remain unchanged.
+
+Read `GET /api/v1/projects/{id}/members` after each change.
+Use `PUT /api/v1/projects/{id}/members/{userId}` with a JSON `role` to repeat API changes.
+Confirm that the membership creation time, global application role, and second project membership remain unchanged.
+
+Use a project deployer, viewer, and user outside the project to repeat denied attempts.
+Confirm that role controls remain hidden and forged API or web requests cannot change the role.
+Use the printed viewer account from the retained checks.
+Keep all test accounts and project memberships for repeat checks.
+
+Run `bash scripts/go_test.sh -run '^TestProjectMemberRolesAPIWebE2E$' ./internal/handler/api` for API and web contracts.
+Run `bash scripts/go_test.sh -tags=e2e,packagebrowser -run '^TestProjectMemberRolesBrowserE2E$' ./internal/handler/api` for rendered browser coverage.
+
 ## Software build identity
 
 Run `durpdeploy version`, `durpdeploy --version`, and `durpdeploy -v` without runtime configuration.

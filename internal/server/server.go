@@ -500,6 +500,7 @@ func newRouter(
 			mh := handler.NewProjectMembersHandler(repo)
 			ppr.Get("/projects/{id}/members", mh.ListMembers)
 			ppr.Post("/projects/{id}/members", mh.AddMember)
+			ppr.Put("/projects/{id}/members/{userId}", mh.UpdateMemberRole)
 			ppr.Delete("/projects/{id}/members/{userId}", mh.RemoveMember)
 		})
 

@@ -11,12 +11,15 @@ import (
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/repository"
+	"durpdeploy/views/pages"
 )
+
+const invalidMemberUserID = "Invalid user ID"
 
 // ProjectMembersHandler manages the per-project membership roster. The
 // RequireProjectAccess middleware already admitted the request (the
 // caller is a member or a global admin); these handlers enforce the
-// finer-grained "per-project admin" rule for add/remove.
+// finer-grained "per-project admin" rule for member changes.
 type ProjectMembersHandler struct {
 	repo *repository.Repository
 }
@@ -35,16 +38,27 @@ func (h *ProjectHandler) loadMembersContext(
 	r *http.Request,
 	projectID int64,
 ) ([]db.ListProjectMembersRow, []db.ListUsersRow, bool) {
-	canManage := auth.CanManageProject(r.Context(), h.repo, projectID)
+	members, available, canManage, _ := loadProjectMembersContext(
+		r, h.repo, projectID,
+	)
+	return members, available, canManage
+}
 
-	members, err := h.repo.Queries.ListProjectMembers(r.Context(), projectID)
+func loadProjectMembersContext(
+	r *http.Request,
+	repo *repository.Repository,
+	projectID int64,
+) ([]db.ListProjectMembersRow, []db.ListUsersRow, bool, error) {
+	canManage := auth.CanManageProject(r.Context(), repo, projectID)
+
+	members, err := repo.Queries.ListProjectMembers(r.Context(), projectID)
 	if err != nil {
-		members = nil
+		return nil, nil, canManage, err
 	}
 
-	allUsers, err := h.repo.Queries.ListUsers(r.Context())
+	allUsers, err := repo.Queries.ListUsers(r.Context())
 	if err != nil {
-		allUsers = nil
+		return members, nil, canManage, err
 	}
 
 	memberIDs := make(map[int64]bool, len(members))
@@ -57,7 +71,78 @@ func (h *ProjectHandler) loadMembersContext(
 			available = append(available, u)
 		}
 	}
-	return members, available, canManage
+	return members, available, canManage, nil
+}
+
+// UpdateMemberRole changes an existing membership without replacing it.
+func (h *ProjectMembersHandler) UpdateMemberRole(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	SetToastError(w, "Failed to update member role")
+	id, err := parseProjectID(r)
+	if err != nil {
+		http.Error(w, "Invalid project ID", http.StatusBadRequest)
+		return
+	}
+	if !auth.CanManageProject(r.Context(), h.repo, id) {
+		auth.RenderUnauthorized(w, r)
+		return
+	}
+	userID, err := strconv.ParseInt(chi.URLParam(r, "userId"), 10, 64)
+	if err != nil || userID <= 0 {
+		SetToastError(w, invalidMemberUserID)
+		http.Error(w, invalidMemberUserID, http.StatusBadRequest)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		SetToastError(w, "Invalid form")
+		http.Error(w, "Invalid form", http.StatusBadRequest)
+		return
+	}
+	role := r.PostFormValue("role")
+	if role != "admin" && role != "deployer" {
+		SetToastError(w, "Role must be admin or deployer")
+		http.Error(w, "Role must be admin or deployer",
+			http.StatusUnprocessableEntity)
+		return
+	}
+	if _, err := h.repo.Queries.GetProjectMember(r.Context(),
+		db.GetProjectMemberParams{ProjectID: id, UserID: userID},
+	); err != nil {
+		if err == sql.ErrNoRows {
+			SetToastError(w, "Member not found")
+			http.Error(w, "Member not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err := h.repo.Queries.AddProjectMember(r.Context(),
+		db.AddProjectMemberParams{
+			ProjectID: id, UserID: userID, Role: role,
+		},
+	); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if !isFragmentRequest(r) {
+		h.ListMembers(w, r)
+		return
+	}
+	members, available, canManage, err := loadProjectMembersContext(
+		r, h.repo, id,
+	)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	SetToastSuccess(w, "Member role updated")
+	if err := pages.ProjectMembersSection(
+		db.Project{ID: id}, members, available, canManage, "Member role updated",
+	).Render(r.Context(), w); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }
 
 // ListMembers redirects to the project edit page, where the Members
@@ -113,7 +198,7 @@ func (h *ProjectMembersHandler) AddMember(
 
 	userID, err := strconv.ParseInt(r.FormValue("user_id"), 10, 64)
 	if err != nil {
-		http.Error(w, "Invalid user ID", http.StatusBadRequest)
+		http.Error(w, invalidMemberUserID, http.StatusBadRequest)
 		return
 	}
 
@@ -179,7 +264,7 @@ func (h *ProjectMembersHandler) RemoveMember(
 	userIDStr := chi.URLParam(r, "userId")
 	userID, err := strconv.ParseInt(userIDStr, 10, 64)
 	if err != nil {
-		http.Error(w, "Invalid user ID", http.StatusBadRequest)
+		http.Error(w, invalidMemberUserID, http.StatusBadRequest)
 		return
 	}
 
