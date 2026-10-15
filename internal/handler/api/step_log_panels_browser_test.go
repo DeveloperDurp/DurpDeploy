@@ -141,7 +141,7 @@ func TestDeploymentStepPanelsBrowserE2E(t *testing.T) {
 	f.h.runner.Broker().Broadcast(d.ID, "complete")
 	b.wait(
 		t,
-		`Alpine.$data(document.querySelector('[x-data^="deploymentStepLogs"]')).source === null && document.querySelector('[role="status"]').textContent === 'Deployment failed'`,
+		`Alpine.$data(document.querySelector('[x-data^="deploymentStepLogs"]')).source === null && document.querySelector('[role="status"]').textContent === 'Deployment failed' && document.querySelector('#status-badge').dataset.deploymentStatus === 'failed'`,
 	)
 	if string(b.evaluate(t, choices)) != "true" {
 		t.Fatal("completion changed a manual panel choice")
