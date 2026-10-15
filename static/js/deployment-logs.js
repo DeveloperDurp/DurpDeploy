@@ -165,9 +165,6 @@ export function registerLogComponents(Alpine) {
 			retain(this, { id: entry.id, panel }, entry);
 			if (entry.state) {
 				panel.state = entry.state;
-				if (['running', 'waiting', 'failed'].includes(entry.state)) {
-					this.$el.querySelector(`[data-step-index="${panel.index}"]`).open = true;
-				}
 			} else if (panel.state === 'pending') {
 				panel.state = 'unknown';
 			}
