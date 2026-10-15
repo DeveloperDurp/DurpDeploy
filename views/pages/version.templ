@@ -1,0 +1,40 @@
+package pages
+
+import (
+	"durpdeploy/internal/buildinfo"
+	"durpdeploy/views/layouts"
+)
+
+templ VersionPage(build buildinfo.Info, currentPath string) {
+	@layouts.Base("Version", currentPath) {
+		<div class="space-y-6">
+			<div class="page-header">
+				<div>
+					<h1 class="text-3xl font-bold">DurpDeploy version</h1>
+					<p class="mt-1 opacity-70">Use this build information for upgrades and support.</p>
+				</div>
+			</div>
+			<div class="card bg-base-200 shadow">
+				<div class="card-body">
+					<dl class="grid gap-3 sm:grid-cols-2">
+						<dt class="font-medium">Software version</dt>
+						<dd class="break-all font-mono" data-build-version>{ build.Version }</dd>
+						<dt class="font-medium">Build number</dt>
+						<dd class="break-all font-mono" data-build-number>{ build.BuildNumber }</dd>
+						<dt class="font-medium">Source commit</dt>
+						<dd class="break-all font-mono" data-build-commit>{ build.Commit }</dd>
+						<dt class="font-medium">Source changes</dt>
+						<dd>
+							if build.Modified {
+								Modified working tree
+							} else {
+								No reported changes
+							}
+						</dd>
+					</dl>
+					<p class="mt-3 text-sm opacity-70">Agent software versions appear on the Agents pages. Protocol identifiers describe capabilities separately.</p>
+				</div>
+			</div>
+		</div>
+	}
+}

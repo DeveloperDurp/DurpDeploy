@@ -11,7 +11,7 @@ FROM golang:1.26.9-alpine@sha256:cdfd4fe2da6b225d8b40c6b7a105736e548e83ff56d5d8f
 # and ca-certificates for Go module proxy / npm registry HTTPS fetches).
 # The Makefile runs templ from the version and checksums locked in go.mod/go.sum.
 # hadolint ignore=DL3018
-RUN apk add --no-cache ca-certificates git make npm
+RUN apk add --no-cache bash ca-certificates git make npm
 
 WORKDIR /build
 
@@ -27,6 +27,11 @@ RUN npm ci --ignore-scripts
 # Copy the full source tree (views, static, migrations, queries, etc.).
 COPY . .
 
+ARG BUILD_VERSION=dev
+ARG BUILD_COMMIT=unknown
+ARG BUILD_NUMBER=unknown
+ARG BUILD_MODIFIED=false
+
 # Generate templ files, build CSS/JS bundles + swagger-ui assets, then
 # compile the Go binary in the same layer. CGO_ENABLED=0 is required because
 # the project uses modernc.org/sqlite, which is pure Go and does not need
@@ -38,10 +43,18 @@ COPY . .
 # files at build time; the directory is .gitignore'd). tailwind-build and
 # js-build do not produce it.
 RUN make templ-generate tailwind-build js-build swagger-ui-copy && \
-    CGO_ENABLED=0 GOOS=linux go build -ldflags='-w -s' -trimpath -o /out/durpdeploy ./cmd/server
+    CGO_ENABLED=0 GOOS=linux bash scripts/build_server.sh -trimpath -o /out/durpdeploy && \
+    /out/durpdeploy version
 
 # Stage 2: runtime
 FROM alpine:3.20
+
+ARG BUILD_VERSION=dev
+ARG BUILD_COMMIT=unknown
+ARG BUILD_NUMBER=unknown
+LABEL org.opencontainers.image.version=$BUILD_VERSION \
+      org.opencontainers.image.revision=$BUILD_COMMIT \
+      info.durpdeploy.build-number=$BUILD_NUMBER
 
 # Install runtime essentials and socket clients. su-exec changes from the
 # short-lived entrypoint identity to the stable non-root application user.

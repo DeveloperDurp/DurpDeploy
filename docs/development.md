@@ -1,5 +1,8 @@
 # Development and testing
 
+Run `make build` to embed the software version, source commit, and commit-count build number.
+Read [software versioning](versioning.md) for tagged builds and development defaults.
+
 ## Tooling
 
 Use Go 1.26+, Node.js, and the templ CLI. Install sqlc only when changing queries.

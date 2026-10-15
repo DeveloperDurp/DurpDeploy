@@ -171,6 +171,7 @@ templ AdminNavLinks() {
 
 templ AccountMenuItems(currentPath string, role string) {
 	<li><a href="/settings/security" class={ activeClass(currentPath, "/settings/security") }>Security</a></li>
+	<li><a href="/settings/version" class={ activeClass(currentPath, "/settings/version") }>Version</a></li>
 	if role != "viewer" {
 		<li><a href="/settings/tokens" class={ activeClass(currentPath, "/settings/tokens") }>Tokens</a></li>
 	}

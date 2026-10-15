@@ -68,7 +68,11 @@ jq -n --arg tree "$tree" --arg base "$base" --arg head "$head" \
 for arch in amd64 arm64; do
 	layout="$work/$arch/layout"
 	mkdir -p "$layout/blobs/sha256" "$work/$arch/artifact"
-	jq -nc --arg arch "$arch" '{architecture:$arch,os:"linux",config:{},rootfs:{type:"layers",diff_ids:[]}}' > "$work/config"
+	jq -nc --arg arch "$arch" --arg commit "$GITHUB_SHA" \
+		'{architecture:$arch,os:"linux",config:{Labels:{
+		  "org.opencontainers.image.version":"v1.2.3+build.4",
+		  "org.opencontainers.image.revision":$commit,
+		  "info.durpdeploy.build-number":"742"}},rootfs:{type:"layers",diff_ids:[]}}' > "$work/config"
 	config_hash=$(sha256sum "$work/config" | cut -d ' ' -f 1)
 	cp "$work/config" "$layout/blobs/sha256/$config_hash"
 	jq -nc --arg digest "sha256:$config_hash" --argjson size "$(wc -c < "$work/config")" '
@@ -116,6 +120,45 @@ for arch in amd64 arm64; do
 	cmp "$work/$arch/artifact/image.tar" "$work/verified/$arch/image.tar"
 done
 echo 'PASS: promote the matching squash-merge artifacts'
+
+# Given stamped archives from this run, publication must preserve their identity.
+for arch in amd64 arm64; do
+	mkdir -p "$work/versioned/built-image-$arch"
+	cp "$work/$arch/artifact/image.tar" "$work/versioned/built-image-$arch/"
+	jq --arg commit "$GITHUB_SHA" \
+		'.commit=$commit | .version="v1.2.3+build.4" | .build_number="742" | .run=99' \
+		"$work/$arch/artifact/source.json" > "$work/versioned/built-image-$arch/source.json"
+done
+prepare_versioned() {
+	GITHUB_RUN_ID=99 GITHUB_RUN_ATTEMPT=2 BUILD_VERSION=v1.2.3+build.4 BUILD_NUMBER=742 \
+		bash "$root/scripts/prepare_versioned_images.sh" "$work/versioned" "$work/versioned-verified"
+}
+prepare_versioned
+for arch in amd64 arm64; do
+	cmp "$work/versioned/built-image-$arch/image.tar" "$work/versioned-verified/$arch/image.tar"
+done
+echo 'PASS: stamped images retain version, build number, revision, and scanned bytes across a partial rerun'
+cp "$work/versioned/built-image-arm64/source.json" "$work/versioned-source.json"
+for mutation in '.run=98' '.attempt=3' '.tree="wrong"' '.version="v9.9.9"' '.build_number="743"' '.sha256=("0"*64)'; do
+	jq "$mutation" "$work/versioned-source.json" > "$work/versioned/built-image-arm64/source.json"
+	if prepare_versioned > "$work/versioned-rejected.log" 2>&1; then
+		printf 'Unexpected versioned archive acceptance: %s\n' "$mutation" >&2
+		exit 1
+	fi
+done
+cp "$work/versioned-source.json" "$work/versioned/built-image-arm64/source.json"
+for arch in amd64 arm64; do
+	jq '.version="v9.9.9"' "$work/versioned/built-image-$arch/source.json" \
+		> "$work/versioned-label-source.json"
+	mv "$work/versioned-label-source.json" "$work/versioned/built-image-$arch/source.json"
+done
+if GITHUB_RUN_ID=99 GITHUB_RUN_ATTEMPT=2 BUILD_VERSION=v9.9.9 BUILD_NUMBER=742 \
+	bash "$root/scripts/prepare_versioned_images.sh" "$work/versioned" "$work/versioned-verified" \
+	> "$work/versioned-label.log" 2>&1; then
+	echo 'Versioned image accepted mismatched labels.' >&2
+	exit 1
+fi
+echo 'PASS: versioned images reject mismatched source, version, count, run, attempt, and archive hash'
 
 # Given a full checkout, resolution needs no later authenticated Git fetch.
 git remote set-url origin "$work/unavailable-origin"

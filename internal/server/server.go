@@ -237,6 +237,7 @@ func newRouter(
 		pr.Post("/settings/tokens/{id}/revoke", tokensH.MyTokensRevoke)
 
 		pr.Get("/settings/security", authHandler.SecurityGet)
+		pr.Get("/settings/version", handler.Version)
 		pr.Get("/settings/security/reauth", authHandler.SecurityReauthGet)
 		pr.Post("/settings/security/reauth", authHandler.SecurityReauthPost)
 		if registerOIDC {
@@ -582,6 +583,7 @@ func newRouter(
 		ar.MethodNotAllowed(api.MethodNotAllowedJSON)
 
 		tokensH := api.NewAPITokenHandler(repo)
+		ar.Get("/version", api.EmptyBody(api.Version))
 
 		// Admin-only sub-group.
 		ar.Group(func(aar chi.Router) {

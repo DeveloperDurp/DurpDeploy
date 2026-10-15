@@ -83,10 +83,12 @@ async function accountContract(page, url, role, tokensVisible, artifactDir) {
 			);
 		}
 		await menu.locator('a[href="/settings/security"]').waitFor({ state: "visible" });
+		await menu.locator('a[href="/settings/version"]').waitFor({ state: "visible" });
 		await check((await menu.locator('a[href="/settings/tokens"]').count()) === (tokensVisible ? 1 : 0), `${role} token visibility is wrong`);
 		await check(await menu.locator('button[type="submit"]', { hasText: "Logout" }).isVisible(), `${role} lacks Logout`);
 		const labels = await menu.locator("a, button").allTextContents();
-		check(labels.join("|").startsWith(tokensVisible ? "Security|Tokens|Logout" : "Security|Logout"), `${role} account order is wrong`);
+		const expectedOrder = tokensVisible ? "Security|Version|Tokens|Logout" : "Security|Version|Logout";
+		check(labels.join("|").startsWith(expectedOrder), `${role} account order is wrong`);
 		await page.keyboard.press("Escape");
 		await page.waitForFunction((element) => !element.parentElement?.open, summaryElement);
 		await page.waitForFunction((element) => document.activeElement === element, summaryElement);

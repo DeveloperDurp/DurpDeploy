@@ -1,5 +1,8 @@
 # Production deployment
 
+Run `durpdeploy version` before and after an upgrade to record the installed software identity.
+Read [software versioning](versioning.md) for build numbers, container tags, and API diagnostics.
+
 Run DurpDeploy with Docker Compose behind Caddy for HTTPS. The stack includes
 SQLite storage, an embedded container executor, and a Litestream backup sidecar.
 You need Docker with Compose, a DNS name pointing to the host, and inbound

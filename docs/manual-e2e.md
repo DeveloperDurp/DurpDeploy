@@ -1,5 +1,25 @@
 # Manual checks after `make e2e-test`
 
+## Software build identity
+
+Run `durpdeploy version`, `durpdeploy --version`, and `durpdeploy -v` without runtime configuration.
+Confirm that each command exits successfully with the same version, build number, and source commit.
+Call `GET /api/v1/version` with a bearer token.
+Confirm that the response matches the executable identity.
+Open **Version** in the account menu as an administrator and a viewer.
+Confirm that both users can read the same build information at `/settings/version`.
+Repeat at a mobile viewport width.
+
+Open the Agents list and an agent detail page.
+Confirm that the reported software version matches the fleet API.
+For an agent without a reported version, confirm that the page shows **Not reported**.
+Keep protocol identifiers separate from software versions.
+Retain the agents and accounts for repeat checks.
+
+Run `bash scripts/build_version_test.sh` to verify tagged and development executable output.
+Run `bash scripts/go_test.sh -run '^TestBuildInfoAPIWebE2E$' ./internal/handler/api` for API and web permissions.
+Run `bash scripts/go_test.sh -tags=e2e,agentbrowser -run '^TestBuildInfoBrowserE2E$' ./internal/handler/api` for rendered browser coverage.
+
 ## Step execution locations
 
 Create a release with a server container step, an agent host step, and an agent container step.

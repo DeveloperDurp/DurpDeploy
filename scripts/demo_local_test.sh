@@ -10,6 +10,7 @@ export DEMO_TEST_STATE="$fixture"
 # A missing mock runtime socket stops it before pairing and population.
 sed "s|/usr/local/libexec/durpdeploy-demo-firewall|$fixture/helper|g" \
     "$root/scripts/demo.sh" >"$fixture/scripts/demo.sh"
+cp "$root/scripts/build_server.sh" "$root/scripts/build_metadata.sh" "$fixture/scripts/"
 touch "$fixture/helper"
 chmod 0700 "$fixture/helper"
 cat >"$fixture/scripts/demo-firewall-watch.sh" <<'WATCH'
@@ -26,7 +27,11 @@ exec sleep 300
 SERVER
 cat >"$fixture/tools/go" <<'GO'
 #!/usr/bin/env bash
-cp "$DEMO_TEST_STATE/server" "$3"
+while (($#)); do
+    if [[ $1 == -o ]]; then cp "$DEMO_TEST_STATE/server" "$2"; exit; fi
+    shift
+done
+exit 1
 GO
 cat >"$fixture/tools/podman" <<'PODMAN'
 #!/usr/bin/env bash

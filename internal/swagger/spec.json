@@ -9723,6 +9723,34 @@
           }
         ]
       }
+    },
+    "/version": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Get the server executable's software version, build number, and source commit.",
+        "operationId": "getVersion",
+        "responses": {
+          "200": {
+            "description": "Info describes the executable, independently of agent wire protocols.",
+            "schema": {
+              "$ref": "#/definitions/BuildInfo"
+            }
+          },
+          "401": {
+            "description": "Unauthorized error response.",
+            "schema": {
+              "$ref": "#/definitions/UnauthorizedError"
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
     }
   },
   "definitions": {
@@ -10062,6 +10090,30 @@
       },
       "x-go-name": "swaggerBadRequestError",
       "x-go-package": "durpdeploy/internal/handler/api"
+    },
+    "BuildInfo": {
+      "type": "object",
+      "title": "Info describes the executable, independently of agent wire protocols.",
+      "properties": {
+        "build_number": {
+          "type": "string",
+          "x-go-name": "BuildNumber"
+        },
+        "commit": {
+          "type": "string",
+          "x-go-name": "Commit"
+        },
+        "modified": {
+          "type": "boolean",
+          "x-go-name": "Modified"
+        },
+        "version": {
+          "type": "string",
+          "x-go-name": "Version"
+        }
+      },
+      "x-go-name": "Info",
+      "x-go-package": "durpdeploy/internal/buildinfo"
     },
     "ConflictError": {
       "type": "object",

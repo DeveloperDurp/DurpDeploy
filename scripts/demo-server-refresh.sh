@@ -64,7 +64,7 @@ printf 'Building server in place. Logs: %s/server-refresh-build.log\n' "$directo
 cd "$ROOT"
 make --no-print-directory templ-generate swagger-ui-copy tailwind-build js-build \
     >"$directory/server-refresh-build.log" 2>&1
-go build -o "$directory/bin/durpdeploy.next" ./cmd/server \
+bash scripts/build_server.sh -o "$directory/bin/durpdeploy.next" \
     >>"$directory/server-refresh-build.log" 2>&1
 check_server
 

@@ -51,7 +51,7 @@ export DURPDEPLOY_CONTAINER_URL=unix:///var/run/docker.sock
 docker info >/dev/null
 
 cd "$root"
-go build -o "$tmp/durpdeploy" ./cmd/server
+bash scripts/build_server.sh -o "$tmp/durpdeploy"
 export DURPDEPLOY_SECRET_KEY
 DURPDEPLOY_SECRET_KEY=$(openssl rand -base64 32)
 

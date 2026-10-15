@@ -132,7 +132,11 @@ cat >"$tmp/tools/go" <<'GO'
 if [[ ${DEMO_TEST_BUSY_AFTER_BUILD:-0} == 1 ]]; then
     "$DEMO_TEST_SQLITE" "$DEMO_TEST_DB" "$DEMO_TEST_ADMIT_SQL"
 fi
-cp "$DEMO_TEST_SERVER_BINARY" "$3"
+while (($#)); do
+    if [[ $1 == -o ]]; then cp "$DEMO_TEST_SERVER_BINARY" "$2"; exit; fi
+    shift
+done
+exit 1
 GO
 cat >"$tmp/tools/nohup" <<'NOHUP'
 #!/usr/bin/env bash

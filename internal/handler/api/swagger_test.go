@@ -90,6 +90,38 @@ func TestSwagger(t *testing.T) {
 	}
 }
 
+func TestSwaggerBuildInfoContract(t *testing.T) {
+	spec, err := swagger.ReadSpec()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc struct {
+		Paths map[string]map[string]struct {
+			Security []map[string][]string `json:"security"`
+		} `json:"paths"`
+		Definitions map[string]struct {
+			Properties map[string]struct {
+				Type string `json:"type"`
+			} `json:"properties"`
+		} `json:"definitions"`
+	}
+	if err := json.Unmarshal(spec, &doc); err != nil {
+		t.Fatal(err)
+	}
+	security := doc.Paths["/version"]["get"].Security
+	if len(security) != 1 || security[0]["bearer"] == nil {
+		t.Fatal("version API must document bearer authentication")
+	}
+	for field, kind := range map[string]string{
+		"version": "string", "build_number": "string",
+		"commit": "string", "modified": "boolean",
+	} {
+		if doc.Definitions["BuildInfo"].Properties[field].Type != kind {
+			t.Fatalf("build information schema omitted %s (%s)", field, kind)
+		}
+	}
+}
+
 func TestSwagger_VerificationAndRollbackRequireBearerAuth(t *testing.T) {
 	// Given: the publicly served API contract.
 	rr := httptest.NewRecorder()

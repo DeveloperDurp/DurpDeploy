@@ -146,8 +146,8 @@
   {
     "rule": "G118",
     "file": "cmd/server/main.go",
-    "line": "438",
-    "source_sha256": "33fb67e8df4a7f261e332b02d0322c1b92f9c8df11c406db6b568cbabbf08a08",
+    "line": "440",
+    "source_sha256": "c6aa0db4aefbde890a4ba9968f10011224539169dea6972ad89343432f92f752",
     "owner": "DeveloperDurp",
     "expires": "2027-01-01",
     "reason": "Detached persisted deployment must outlive its HTTP/scheduler/startup request. DeploymentRunner.Run owns cancel registration; Cancel and KillAll cancel/drain work. Evidence: runner_control.go, shutdown_test.go, runbook_cancel_test.go."
