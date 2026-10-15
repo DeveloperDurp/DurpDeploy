@@ -23,6 +23,14 @@ var ErrTokenScope = errors.New("invalid token scope")
 func (r *Repository) ReplaceTokenScope(
 	ctx context.Context, id string, grant TokenScope,
 ) (TokenScope, error) {
+	return withSQLiteBusyRetryValue(ctx, func() (TokenScope, error) {
+		return r.replaceTokenScope(ctx, id, grant)
+	})
+}
+
+func (r *Repository) replaceTokenScope(
+	ctx context.Context, id string, grant TokenScope,
+) (TokenScope, error) {
 	tx, err := r.DB.BeginTx(ctx, &sql.TxOptions{
 		Isolation: sql.LevelSerializable,
 	})

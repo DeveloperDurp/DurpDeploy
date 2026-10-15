@@ -194,6 +194,11 @@ func RequireDeploymentProjectAccess(
 				deployment.ReleaseID,
 			)
 			if err != nil {
+				// Preserve unrestricted admin access if release lookup fails.
+				if user.Role == "admin" && ScopedTokenID(r.Context()) == "" {
+					next.ServeHTTP(w, r)
+					return
+				}
 				RenderRequestError(
 					w,
 					r,

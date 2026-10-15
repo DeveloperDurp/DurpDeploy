@@ -385,3 +385,29 @@ func TestProjectTokensScopeAuditAndRevocationAPIE2E(t *testing.T) {
 	f.token = empty.ID
 	f.api(t, "GET", "/api/v1/projects", nil, 401)
 }
+
+func TestProjectTokensBusyScopeEditAPIE2E(t *testing.T) {
+	f := newArtifactE2E(t)
+	token := mintProjectToken(t, f, "viewer", f.project.ID)
+	tx, err := f.h.repo.DB.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(t.Context(),
+		"UPDATE api_tokens SET last_used_at=last_used_at WHERE id=?",
+		token.TokenID); err != nil {
+		t.Fatal(err)
+	}
+	released := make(chan error, 1)
+	go func() {
+		time.Sleep(25 * time.Millisecond)
+		released <- tx.Rollback()
+	}()
+	f.api(t, "PATCH", "/api/v1/tokens/"+token.TokenID,
+		map[string]any{"scope": "scoped", "role": "deployer",
+			"project_ids": []int64{f.project.ID}}, 200)
+	if err := <-released; err != nil {
+		t.Fatal(err)
+	}
+}
