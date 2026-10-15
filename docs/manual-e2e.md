@@ -705,7 +705,7 @@ Use only the disposable E2E examples for edits and deletion checks.
 | API cancel/status (A7) | POST a deployment of e2e-api-project release `v1`, GET its status, POST `/deployments/{id}/cancel` while running. | Running → cancelled; cancel response 200. |
 | API log streaming (A8) | Deploy e2e-api-project `v2`; GET `/deployments/{id}/logs/stream?format=ndjson`. | Each replayed/live line is a JSON object with a `line` field. |
 | Project/environment queue isolation | Deploy e2e-api-project `queue-check` to dev, then deploy `v2` to dev. While the first runs, deploy TestProject `1.0.0` to dev and e2e-api-project `queue-check` to test. Cancel both slow deployments after inspection. | Only the second dev job in e2e-api-project queues. The other project and test job run independently. Cancelling the dev head admits its next queued job. Release snapshots and printed deployment links remain available. |
-| API failure paths (A9) | POST `/projects` without a token; GET a nonexistent project ID; sign in as the printed `e2e-viewer-…@test.local` (test password `e2e-viewer-pass-1234`). To repeat the API viewer check, promote that test user to deployer, mint its own token, then demote it to viewer before POST `/projects`. | No token: 401; missing project: 404; viewer write: 403. Admin changes invalidate sessions; sign in again for web checks. |
+| API failure paths (A9) | POST `/projects` without a token. GET a nonexistent project ID. Sign in as the printed `e2e-viewer-…@test.local` with password `e2e-viewer-pass-1234`. To repeat the API viewer check, promote that user to Maintainer. Mint its token. Demote the user to Viewer before POST `/projects`. | No token returns 401. A missing project returns 404. A Viewer write returns 403. Admin changes invalidate sessions. Sign in again for web checks. |
 | Swagger (A10) | Open `/api/swagger/`, `/api/swagger/index.html`, and `/api/swagger/spec` without authentication. Inspect verification/rollback security and environment error responses in the spec. | UI/spec 200; Swagger 2.0; verification and rollback require bearer auth; environment POST/PUT document 403 and 422. |
 | Terraform artifact approval | `terraform-approval`: inspect printed approved, rejected, and pending deployments. Open the pending review, download the plan, then approve or reject. Deploy `approval-demo` again to repeat either decision. | Real Terraform summary: one added, one modified, one removed resource, zero reads, unverified review label. Approval applies the saved plan, verifies the resulting state and no remaining changes, then succeeds; rejection prevents the saved-plan apply and ends rejected. Downloaded artifact SHA-256 matches the gate. |
 
@@ -793,8 +793,10 @@ After removing a lifecycle stage, edit one of its retained variables: Save
 must wait for an explicit **All stages** or current-stage selection. A blank
 secret field still preserves the saved secret after choosing the scope.
 Choose **Override**, enter a project value and save to recreate the example.
-Global admins manage shared values; project deployers can override their own
-values and viewers see no write controls. Unassigned projects inherit nothing.
+Global administrators manage shared values.
+Project Maintainers can override their own values.
+Viewers and Deployers see no write controls.
+Unassigned projects inherit nothing.
 
 The refreshed demo is `https://citadel.durp.loc:45465`, with data in
 `tmp/demo.zU6HfZ` and its temporary certificate at `tls/cert.pem`.
@@ -826,10 +828,11 @@ Inspect the logs: the shared secret is redacted. To check
 environment precedence, add a lifecycle REGION override for the stage; it wins
 over an unscoped project override, while a project override for that same stage
 wins over the lifecycle value. These examples have no enabled schedules.
-Lifecycle assignment grants execution access to shared secrets. Only global
-admins can attach a lifecycle to a project; project admins can retain or
-remove an existing assignment. As a deployer, creating or updating a project
-with a new lifecycle ID returns 403 without changing the project.
+Lifecycle assignment grants execution access to shared secrets.
+Only global administrators can attach a lifecycle to a project.
+Project administrators with global Maintainer permission can retain or remove an existing assignment.
+As a Maintainer, create or update a project with a new lifecycle ID.
+Confirm a 403 response without a project change.
 
 ## Database TLS policy
 
