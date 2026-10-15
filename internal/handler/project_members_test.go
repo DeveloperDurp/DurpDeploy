@@ -87,8 +87,8 @@ func seedSessionAs(
 func TestCreateProject_AutoAddsCreatorAsAdmin(t *testing.T) {
 	h := newProjectHarness(t)
 	// h.sess is an admin session — but the auto-add should fire for
-	// any role, so switch to a deployer to prove it's not admin-only.
-	h.setRole("deployer")
+	// authoring role, so use a maintainer to prove it is not admin-only.
+	h.setRole("maintainer")
 
 	form := url.Values{
 		"name":        {"auto-add-proj"},
@@ -339,7 +339,7 @@ func TestProjectMembers_PerProjectDeployerCannotManage(t *testing.T) {
 		h.repo,
 		h.server.URL,
 		"proj-admin@test.local",
-		"deployer",
+		"maintainer",
 	)
 	projDeployer := seedSessionAs(
 		t,

@@ -98,6 +98,10 @@ spec:
                   key: {{ required "oidc.clientSecret.key is required when OIDC is enabled" .Values.oidc.clientSecret.key | quote }}
             - name: DURPDEPLOY_OIDC_ADMIN_GROUP
               value: {{ .Values.oidc.adminGroup | quote }}
+            {{- if .Values.oidc.maintainerGroup }}
+            - name: DURPDEPLOY_OIDC_MAINTAINER_GROUP
+              value: {{ .Values.oidc.maintainerGroup | quote }}
+            {{- end }}
             - name: DURPDEPLOY_OIDC_DEPLOYER_GROUP
               value: {{ .Values.oidc.deployerGroup | quote }}
             - name: DURPDEPLOY_OIDC_VIEWER_GROUP

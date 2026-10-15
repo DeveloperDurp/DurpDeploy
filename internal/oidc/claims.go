@@ -18,9 +18,10 @@ const (
 type Role string
 
 const (
-	RoleAdmin    Role = "admin"
-	RoleDeployer Role = "deployer"
-	RoleViewer   Role = "viewer"
+	RoleAdmin      Role = "admin"
+	RoleMaintainer Role = "maintainer"
+	RoleDeployer   Role = "deployer"
+	RoleViewer     Role = "viewer"
 )
 
 type ClaimErrorReason string
@@ -45,10 +46,11 @@ func (e *ClaimError) Error() string {
 
 // GroupMapping maps the configured claim and exact group names to local roles.
 type GroupMapping struct {
-	ClaimName string
-	Admin     string
-	Deployer  string
-	Viewer    string
+	ClaimName  string
+	Admin      string
+	Maintainer string
+	Deployer   string
+	Viewer     string
 }
 
 // ClaimIdentity is the validated, provider-neutral identity from an ID token.
@@ -150,12 +152,18 @@ func claimDocument(raw []byte) (map[string]json.RawMessage, error) {
 // MapRole returns the highest local role represented by exact configured groups.
 func MapRole(groups []string, mapping GroupMapping) (Role, error) {
 	matchedAdmin := false
+	matchedMaintainer := false
 	matchedDeployer := false
 	matchedViewer := false
 	for _, group := range groups {
+		if group == "" {
+			continue
+		}
 		switch group {
 		case mapping.Admin:
 			matchedAdmin = true
+		case mapping.Maintainer:
+			matchedMaintainer = true
 		case mapping.Deployer:
 			matchedDeployer = true
 		case mapping.Viewer:
@@ -164,6 +172,9 @@ func MapRole(groups []string, mapping GroupMapping) (Role, error) {
 	}
 	if matchedAdmin {
 		return RoleAdmin, nil
+	}
+	if matchedMaintainer {
+		return RoleMaintainer, nil
 	}
 	if matchedDeployer {
 		return RoleDeployer, nil

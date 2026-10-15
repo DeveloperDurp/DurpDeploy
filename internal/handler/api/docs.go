@@ -5,6 +5,12 @@
 // trailing data return 400. Oversized bodies return 413 before mutation.
 // Control actions accept an empty body or an empty JSON object.
 //
+// Permission order: viewer < deployer < maintainer < admin.
+// Deployers can start existing releases, retry, re-run, and cancel deployments.
+// Maintainers can author content and execute runbooks within admin boundaries.
+// Project membership and token ceilings also limit each operation.
+// Explicit-role tokens cannot manage API tokens.
+//
 //	Schemes: http, https
 //	BasePath: /api/v1
 //	Version: 1.0.0

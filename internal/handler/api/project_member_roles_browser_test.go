@@ -30,7 +30,7 @@ func TestProjectMemberRolesBrowserE2E(t *testing.T) {
 	b := startPackageBrowser(t)
 	for _, actor := range []memberRoleActor{
 		{"global-admin", "admin", "", true},
-		{"project-admin", "deployer", "admin", true},
+		{"project-admin", "maintainer", "admin", true},
 		{"project-deployer", "deployer", "deployer", false},
 		{"viewer-project-admin", "viewer", "admin", false},
 		{"outsider", "deployer", "", false},
@@ -166,7 +166,7 @@ func (b *packageBrowser) checkMemberRoleWidth(
 	))) != "true" {
 		t.Fatal("Cancel retained the discarded selection")
 	}
-	for _, role := range []string{"admin", "deployer"} {
+	for _, role := range []string{"viewer", "maintainer", "admin", "deployer"} {
 		b.saveMemberRole(t, row, role, modal)
 	}
 	// Invalid input must keep the editor and unsaved settings.
@@ -177,7 +177,7 @@ func (b *packageBrowser) checkMemberRoleWidth(
  return true;
 })()`, row))
 	b.wait(t, fmt.Sprintf(
-		`document.querySelector(%q).querySelector('[role=alert]')?.textContent.includes('Role must be admin or deployer') && document.querySelector(%q).querySelector('[role=alert]').getClientRects().length > 0`,
+		`document.querySelector(%q).querySelector('[role=alert]')?.textContent.includes('Role must be viewer, deployer, maintainer, or admin') && document.querySelector(%q).querySelector('[role=alert]').getClientRects().length > 0`,
 		row,
 		row,
 	))

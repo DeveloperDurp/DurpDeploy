@@ -27,7 +27,7 @@ func ResolveIdentity(
 	identity ClaimIdentity,
 ) (db.User, error) {
 	switch identity.Role {
-	case RoleAdmin, RoleDeployer, RoleViewer:
+	case RoleAdmin, RoleMaintainer, RoleDeployer, RoleViewer:
 	default:
 		return db.User{}, ErrIdentityInvalid
 	}

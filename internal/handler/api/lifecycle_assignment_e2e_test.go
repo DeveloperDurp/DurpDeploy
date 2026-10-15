@@ -42,7 +42,7 @@ func assertLifecycleAssignmentAccess(
 			t.Fatal(err)
 		}
 	}
-	setRole("deployer")
+	setRole("maintainer")
 	defer setRole("admin")
 	assertLifecycleStageAccess(t, f, lifecycleID, setRole)
 	f.api(
@@ -145,7 +145,7 @@ func assertLifecycleAssignmentAccess(
 		db.AddProjectMemberParams{
 			ProjectID: f.project.ID,
 			UserID:    user.ID,
-			Role:      "deployer",
+			Role:      "maintainer",
 		},
 	); err != nil {
 		t.Fatal(err)
@@ -231,10 +231,10 @@ func assertLifecycleAssignmentAccess(
 		nil,
 		404,
 	)
-	setRole("deployer")
+	setRole("maintainer")
 	if err := f.h.repo.Queries.AddProjectMember(t.Context(),
 		db.AddProjectMemberParams{
-			ProjectID: unbound.ID, UserID: user.ID, Role: "deployer",
+			ProjectID: unbound.ID, UserID: user.ID, Role: "maintainer",
 		}); err != nil {
 		t.Fatal(err)
 	}
@@ -249,7 +249,7 @@ func assertLifecycleAssignmentAccess(
 	f.api(t, "PUT", path, map[string]any{
 		"name": unbound.Name, "lifecycle_id": 0,
 	}, 200)
-	setRole("deployer")
+	setRole("maintainer")
 	f.api(t, "PUT", path, map[string]any{"name": unbound.Name}, 200)
 	f.web(t, "PUT", fmt.Sprintf("/projects/%d", unbound.ID),
 		url.Values{"name": {unbound.Name}, "lifecycle_id": {""}}, 303)

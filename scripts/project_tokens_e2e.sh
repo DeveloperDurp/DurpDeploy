@@ -17,7 +17,7 @@ project_tokens_e2e() {
         python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
     foreign=$(api_post "{\"name\":\"e2e-token-foreign-$E2E_RUN_ID\"}" "$BASE/api/v1/projects" |
         python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
-    for role in viewer deployer admin; do
+    for role in viewer deployer maintainer admin; do
         created=$(api_post "{\"name\":\"e2e-project-$role-$E2E_RUN_ID\",\"scope\":\"scoped\",\"role\":\"$role\",\"project_ids\":[$first,$second]}" "$BASE/api/v1/tokens")
         scoped=$(printf '%s' "$created" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
         token_id=$(printf '%s' "$created" | python3 -c 'import json,sys; print(json.load(sys.stdin)["token_id"])')
@@ -30,7 +30,7 @@ project_tokens_e2e() {
         code=$(project_token_code "$scoped" POST /tokens '{"name":"escape"}')
         [[ "$code" == 403 ]] || { echo "FAIL: scoped token can mint another token"; return 1; }
         expected=201
-        [[ "$role" != viewer ]] || expected=403
+        [[ "$role" != viewer && "$role" != deployer ]] || expected=403
         code=$(project_token_code "$scoped" POST "/projects/$first/variables" \
             "{\"name\":\"TOKEN_$role\",\"value\":\"retained scope example\"}")
         [[ "$code" == "$expected" ]] || { echo "FAIL: $role write returned $code"; return 1; }

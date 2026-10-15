@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -891,6 +892,25 @@ func runTokens(args []string) int {
 		createCmd := flag.NewFlagSet("tokens create", flag.ExitOnError)
 		userEmail := createCmd.String("user", "", "user email")
 		name := createCmd.String("name", "", "token name")
+		scope := createCmd.String("scope", "", "global or scoped access")
+		role := createCmd.String(
+			"role",
+			"",
+			"viewer, deployer, maintainer, or admin ceiling",
+		)
+		var projectIDs []int64
+		createCmd.Func(
+			"project-id",
+			"selected project ID (repeatable)",
+			func(value string) error {
+				id, err := strconv.ParseInt(value, 10, 64)
+				if err != nil || id <= 0 {
+					return fmt.Errorf("invalid project ID")
+				}
+				projectIDs = append(projectIDs, id)
+				return nil
+			},
+		)
 		if err := createCmd.Parse(fs.Args()[1:]); err != nil {
 			return 1
 		}
@@ -917,22 +937,48 @@ func runTokens(args []string) int {
 			return 1
 		}
 
+		grant, err := repo.ValidateTokenScope(ctx, user, repository.TokenScope{
+			Scope: *scope, Role: *role, ProjectIDs: projectIDs,
+		})
+		if err != nil {
+			fmt.Fprintln(
+				os.Stderr,
+				"error: select a valid scope, role, and accessible projects",
+			)
+			return 1
+		}
 		full, prefix, hash, err := auth.MintApiToken()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: mint token: %v\n", err)
 			return 1
 		}
 
-		if _, err := repo.Queries.CreateApiToken(ctx, db.CreateApiTokenParams{
-			ID:          uuid.NewString(),
+		tx, err := repo.DB.BeginTx(ctx, nil)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: create token: %v\n", err)
+			return 1
+		}
+		defer tx.Rollback() //nolint:errcheck // Commit closes successful writes.
+		q := repo.Queries.WithTx(tx)
+		id := uuid.NewString()
+		if _, err := q.CreateApiToken(ctx, db.CreateApiTokenParams{
+			ID:          id,
 			UserID:      user.ID,
 			Name:        *name,
 			TokenPrefix: prefix,
 			TokenHash:   hash,
-			Scope:       "global",
+			Scope:       grant.Scope,
 			ExpiresAt:   sql.NullInt64{Valid: false},
 		}); err != nil {
 			fmt.Fprintf(os.Stderr, "error: create token: %v\n", err)
+			return 1
+		}
+		if err := repository.SaveTokenScope(ctx, q, id, grant); err != nil {
+			fmt.Fprintf(os.Stderr, "error: save token permissions: %v\n", err)
+			return 1
+		}
+		if err := tx.Commit(); err != nil {
+			fmt.Fprintf(os.Stderr, "error: commit token: %v\n", err)
 			return 1
 		}
 

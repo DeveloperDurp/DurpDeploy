@@ -13,14 +13,22 @@ func TestMapRole(t *testing.T) {
 		wantErr  ClaimErrorReason
 	}{
 		{name: "viewer", groups: []string{"durp-viewer"}, wantRole: RoleViewer},
+		{name: "maintainer beats deployer", groups: []string{
+			"durp-viewer", "durp-deployer", "durp-maintainer",
+		}, wantRole: RoleMaintainer},
 		{
 			name:     "deployer beats viewer",
 			groups:   []string{"durp-viewer", "durp-deployer"},
 			wantRole: RoleDeployer,
 		},
 		{
-			name:     "admin beats all",
-			groups:   []string{"durp-viewer", "durp-admin", "durp-deployer"},
+			name: "admin beats all",
+			groups: []string{
+				"durp-viewer",
+				"durp-admin",
+				"durp-deployer",
+				"durp-maintainer",
+			},
 			wantRole: RoleAdmin,
 		},
 		{

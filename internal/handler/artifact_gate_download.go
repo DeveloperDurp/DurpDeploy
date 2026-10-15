@@ -20,7 +20,7 @@ func (h *ArtifactGateHandler) openGateBundle(
 ) (*os.File, db.ArtifactGate) {
 	w.Header().Set("Cache-Control", "no-store")
 	u := auth.UserFromContext(r.Context())
-	if u == nil || auth.RoleFromContext(r.Context()) == "viewer" {
+	if u == nil || !auth.CanAuthor(r.Context()) {
 		gateHTTPError(w, r, 403, "Artifact download requires write access")
 		return nil, db.ArtifactGate{}
 	}

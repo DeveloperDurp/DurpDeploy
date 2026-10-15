@@ -89,7 +89,7 @@ func TestMember_AddMember_ProjectAdmin(t *testing.T) {
 	h := newHarness(t)
 	admin := h.seedUser(t, "admin@example.com", "admin")
 	p := h.seedProject(t, admin)
-	projAdmin := h.seedUser(t, "projadmin@example.com", "deployer")
+	projAdmin := h.seedUser(t, "projadmin@example.com", "maintainer")
 	seedProjectMember(t, h, p.ID, projAdmin.ID, "admin")
 	projAdminToken := h.seedToken(t, projAdmin)
 	deployer := h.seedUser(t, "deployer@example.com", "deployer")
@@ -104,7 +104,7 @@ func TestMember_AddMember_ProjectAdmin(t *testing.T) {
 	h.assertStatus(t, rec, http.StatusCreated)
 }
 
-func TestMember_AddMember_ViewerRoleRejected(t *testing.T) {
+func TestMember_AddMember_InvalidRoleRejected(t *testing.T) {
 	h := newHarness(t)
 	admin := h.seedUser(t, "admin@example.com", "admin")
 	token := h.seedToken(t, admin)
@@ -116,7 +116,7 @@ func TestMember_AddMember_ViewerRoleRejected(t *testing.T) {
 		http.MethodPost,
 		"/api/v1/projects/"+itoa(p.ID)+"/members",
 		token,
-		`{"user_id":`+itoa(viewer.ID)+`,"role":"viewer"}`,
+		`{"user_id":`+itoa(viewer.ID)+`,"role":"owner"}`,
 	)
 	h.assertStatus(t, rec, http.StatusUnprocessableEntity)
 }

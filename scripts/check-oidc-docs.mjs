@@ -27,13 +27,14 @@ const variables = [
 	"DURPDEPLOY_OIDC_CLIENT_ID",
 	"DURPDEPLOY_OIDC_CLIENT_SECRET",
 	"DURPDEPLOY_OIDC_ADMIN_GROUP",
+	"DURPDEPLOY_OIDC_MAINTAINER_GROUP",
 	"DURPDEPLOY_OIDC_DEPLOYER_GROUP",
 	"DURPDEPLOY_OIDC_VIEWER_GROUP",
 	"DURPDEPLOY_OIDC_DISPLAY_NAME",
 	"DURPDEPLOY_OIDC_GROUP_CLAIM",
 	"DURPDEPLOY_OIDC_REQUIRE_EMAIL_VERIFIED",
 ];
-const expectedVariableCount = 10;
+const expectedVariableCount = 11;
 
 function fail(message) {
 	throw new Error(`OIDC documentation contract: ${message}`);

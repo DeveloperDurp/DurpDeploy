@@ -15,7 +15,8 @@ func TestCanManageProject(t *testing.T) {
 	}{
 		{"anonymous", "", "", false},
 		{"global admin", "admin", "", true},
-		{"project admin", "deployer", "admin", true},
+		{"project admin", "maintainer", "admin", true},
+		{"restricted project admin", "deployer", "admin", false},
 		{"project deployer", "deployer", "deployer", false},
 		{"viewer", "viewer", "deployer", false},
 		{"nonmember", "deployer", "", false},
@@ -49,7 +50,7 @@ func TestCanManageProjectFailsClosedOnLookupError(t *testing.T) {
 	// Given: a project admin whose membership cannot be read.
 	repo := newAccessTestRepo(t)
 	projectID := seedProject(t, repo, "permissions")
-	user := seedUser(t, repo, "member@example.com", "deployer")
+	user := seedUser(t, repo, "member@example.com", "maintainer")
 	addMember(t, repo, projectID, user.ID, "admin")
 	req := auth.SetUser(httptest.NewRequest("GET", "/", nil), user)
 	ctx, cancel := context.WithCancel(req.Context())

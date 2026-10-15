@@ -10,6 +10,7 @@ import (
 
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/repository"
+	"durpdeploy/internal/roles"
 )
 
 type tokenAccessKey struct{}
@@ -49,8 +50,7 @@ func tokenRoleAllows(ctx context.Context, role string) bool {
 	if token == nil || token.Scope == "global" && token.Role == "" {
 		return true
 	}
-	ranks := map[string]int{"viewer": 1, "deployer": 2, "admin": 3}
-	return ranks[token.Role] >= ranks[role] && ranks[role] != 0
+	return roles.AtLeast(token.Role, role)
 }
 
 // loadTokenAccess reads token permissions and selected projects from one snapshot.
@@ -92,14 +92,10 @@ func loadTokenAccess(
 		}
 	}
 	if grant.Scope == "scoped" {
-		if len(grant.ProjectIDs) == 0 || !slices.Contains(
-			[]string{"viewer", "deployer", "admin"}, grant.Role,
-		) {
+		if len(grant.ProjectIDs) == 0 || !roles.Valid(grant.Role) {
 			return row, grant, repository.ErrTokenScope
 		}
-	} else if grant.Scope != "global" || grant.Role != "" && !slices.Contains(
-		[]string{"viewer", "deployer", "admin"}, grant.Role,
-	) {
+	} else if grant.Scope != "global" || grant.Role != "" && !roles.Valid(grant.Role) {
 		return row, grant, repository.ErrTokenScope
 	}
 	return row, grant, nil

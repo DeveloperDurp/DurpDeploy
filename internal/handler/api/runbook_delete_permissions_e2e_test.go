@@ -45,10 +45,10 @@ func TestRunbookDeletionPermissionsAPIWebE2E(t *testing.T) {
 	webPath := strings.TrimPrefix(path, "/api/v1")
 	var writerID int64
 	var writerToken string
-	for _, role := range []string{"viewer", "deployer"} {
+	for _, role := range []string{"viewer", "deployer", "maintainer"} {
 		member, userID := newDeletionMember(t, f, role)
 		// When: unauthorized users attempt deletion at each HTTP boundary.
-		if role == "viewer" {
+		if role != "maintainer" {
 			if err := f.h.repo.Queries.AddProjectMember(t.Context(), db.AddProjectMemberParams{
 				ProjectID: f.project.ID, UserID: userID, Role: "deployer",
 			}); err != nil {
@@ -86,7 +86,7 @@ func TestRunbookDeletionPermissionsAPIWebE2E(t *testing.T) {
 		t.Fatalf("rejected requests recorded deletion=%d error=%v", count, err)
 	}
 	if err := f.h.repo.Queries.AddProjectMember(t.Context(), db.AddProjectMemberParams{
-		ProjectID: f.project.ID, UserID: writerID, Role: "deployer",
+		ProjectID: f.project.ID, UserID: writerID, Role: "maintainer",
 	}); err != nil {
 		t.Fatal(err)
 	}

@@ -1,11 +1,29 @@
 # Manual checks after `make e2e-test`
 
+## Four permission levels
+
+Keep the printed **Permission role project**, release link, and four account logins.
+The suite retains deployment history and creates no schedules for these examples.
+Sign in with each printed account.
+Confirm that Viewer cannot deploy or edit content.
+Confirm that Deployer can deploy the existing release and read its logs.
+Confirm that Deployer cannot edit, delete, refresh, or create project content.
+Confirm that Maintainer can author content and execute runbooks.
+Confirm that Maintainer cannot approve deployments or manage global users.
+Retry and cancel a deployment with the Deployer account.
+Confirm that the retry retains the original deployment snapshots.
+Open each forbidden form through its direct URL.
+Confirm that it shows a permission message.
+Submit a forged configuration request through the browser or API.
+Expect a browser HTMX toast, a native browser `403`, or an API JSON `403`.
+Read [roles](roles.md) for membership ceilings and upgrade behavior.
+
 ## Project-scoped API tokens
 
 Run `make e2e-test` against the running server.
 Keep the printed selected-project, denied-project, and token management links.
 The suite retains `e2e-token-a-*`, `e2e-token-b-*`, and `e2e-token-foreign-*` projects.
-It also retains token metadata for all three roles and a revoked token.
+It also retains token metadata for all four roles and a revoked token.
 These scenarios create no schedules.
 
 Open `/settings/tokens` as an administrator.
@@ -46,7 +64,7 @@ Call `GET /api/v1/projects` with each token.
 Expect only selected projects and matching pagination totals.
 Request the denied project and its deployments, variables, releases, runbooks, packages, artifacts, and logs.
 Expect denial without unrelated metadata.
-Attempt a project write with the viewer token.
+Attempt project creation, editing, and deletion with Viewer and Deployer tokens.
 Expect `403`.
 
 Deploy with the deployer token in a selected project.
@@ -79,7 +97,7 @@ Open the editor again and confirm that the saved role remains selected.
 
 Select `admin`, then select **Save**.
 Confirm that the role changes and a success message appears.
-Repeat with `deployer`.
+Repeat with `viewer`, `deployer`, and `maintainer`.
 Repeat inside the project edit dialog and at a phone viewport width.
 Confirm that unsaved project settings remain unchanged.
 

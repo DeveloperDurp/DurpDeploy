@@ -1680,7 +1680,7 @@ echo "  404 missing project: OK"
 # 403 viewer write block.
 VIEWER_EMAIL="e2e-viewer@test.local"
 VIEWER_PASS="e2e-viewer-pass-1234"
-VIEWER_CREATE=$(api_post "{\"email\":\"$VIEWER_EMAIL\",\"name\":\"E2E Viewer\",\"role\":\"deployer\",\"password\":\"$VIEWER_PASS\"}" \
+VIEWER_CREATE=$(api_post "{\"email\":\"$VIEWER_EMAIL\",\"name\":\"E2E Viewer\",\"role\":\"maintainer\",\"password\":\"$VIEWER_PASS\"}" \
     "$BASE/api/v1/admin/users")
 VIEWER_USER_ID=$(echo "$VIEWER_CREATE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))")
 [[ -n "$VIEWER_USER_ID" ]] || { echo "FAIL: viewer user create did not return id: $VIEWER_CREATE"; exit 1; }

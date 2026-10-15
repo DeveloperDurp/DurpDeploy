@@ -26,11 +26,11 @@ func TestVerificationProjectImageIsolationE2E(t *testing.T) {
 		t,
 		f.h.repo,
 		"image-deployer@example.test",
-		"deployer",
+		"maintainer",
 	)
 	if err := f.h.repo.Queries.AddProjectMember(t.Context(),
 		db.AddProjectMemberParams{
-			ProjectID: f.project.ID, UserID: deployer.ID, Role: "deployer",
+			ProjectID: f.project.ID, UserID: deployer.ID, Role: "maintainer",
 		}); err != nil {
 		t.Fatal(err)
 	}

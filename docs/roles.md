@@ -1,97 +1,112 @@
-# DurpDeploy — Roles
+# DurpDeploy roles
 
-DurpDeploy has three roles. Every user has exactly one. The role is set at
-user-creation time and stored in `users.role`. Administrators can change roles
-and reset passwords through **Admin → Users → Edit**. The `durpdeploy admin create`
-CLI creates a new administrator; it does not update an existing account.
+DurpDeploy uses four permission levels: `viewer < deployer < maintainer < admin`.
+Each user has one global role.
+Administrators manage global roles through **Admin → Users** or the public user API.
 
-## The roles
+## Capabilities
 
-| Role       | Reads                                         | Writes                                                  | Sees audit log |
-|------------|-----------------------------------------------|---------------------------------------------------------|----------------|
-| `admin`    | Everything                                    | Everything (projects, steps, releases, deployments, …) | Yes (`/admin/audit`) |
-| `deployer` | Shared resources and projects they belong to | Project operations allowed by membership. Member management requires project admin. Lifecycle assignment and shared variables require global administrators. | No |
-| `viewer` | Shared resources and projects they belong to | Their own Security settings and logout; application writes are blocked | No |
+| Role | Read accessible data and logs | Deployment execution | Content authoring |
+|---|---|---|---|
+| `viewer` | Yes | No | No |
+| `deployer` | Yes | Start existing releases, retry, re-run, and cancel deployments | No |
+| `maintainer` | Yes | Yes, including runbooks and rollback | Yes, within existing administrator boundaries |
+| `admin` | All data | Yes | Yes, including instance administration |
 
-## Permission checks
+Deployment execution can create execution records.
+Deployers cannot create, edit, refresh, reorder, or delete project content.
+This restriction includes scripts, steps, runbooks, releases, variables, packages, templates, settings, notifications, and schedules.
+Deployers cannot execute, retry, or cancel runbooks.
+Deployers cannot request rollback or approve deployments and artifacts.
 
-Global administrators bypass project membership. Other users must belong to a
-project to read or write its resources. Only global or project administrators
-can manage its members. Deployment and artifact approvals require a global admin.
-The browser and bearer API enforce these checks separately.
-See [security](security.md#authorization) for middleware and implementation details.
+Viewers and Deployers can log out and manage their own Security settings.
+These browser actions require the existing CSRF and reauthentication checks.
+Only Maintainers and administrators can manage their own API tokens.
+The server CLI can provision tokens for restricted users.
 
-Only global administrators manage shared lifecycle variables. Lifecycle assignment
-grants a project access to shared values, including secrets. Only global
-administrators create or change an assignment. Project administrators can retain
-or remove an existing assignment and manage project overrides.
-Review the lifecycle's project list before you add shared secrets.
+## Project memberships
 
-Only global administrators change lifecycle stages or delete lifecycles and
-environments. Restoring a removed lifecycle stage reactivates its retained shared
-values for projects that use the lifecycle. Deleting an environment deletes its
-scoped shared variables.
+Global administrators bypass project membership.
+Other users need membership to read a project.
+Project memberships support all four roles.
 
-## Project-scoped API tokens
+Ordinary project operations require permission from the global role, project membership, and any explicit token ceiling.
+A lower permission at any layer restricts the operation.
+A `viewer` membership permits reads.
+A `deployer` membership also permits deployment execution.
+A `maintainer` membership also permits content authoring.
+An `admin` membership also permits member management when the user's global role permits authoring.
 
-API tokens can use `global` or `scoped` access.
-Existing global tokens retain their owner's current permissions.
-Name-only token creation through the API, CLI, or legacy web form remains global.
-The token settings page defaults to all accessible projects and the `viewer` role.
-Both scopes support a `viewer`, `deployer`, or `admin` permission ceiling.
-All-project tokens keep the owner's project coverage and limit operations to the selected role.
-Tokens with a permission ceiling cannot manage API tokens.
+Member management requires a global administrator or a project administrator with global Maintainer permission.
+An explicit token must also have an `admin` ceiling.
+Project administrators cannot grant global roles.
 
-Select one or more accessible projects for a scoped token.
-Select `viewer`, `deployer`, or `admin` as its permission ceiling.
-Effective access requires the selected project, token role, and owner's current permission.
-A scoped `admin` token grants no instance administration.
-Project membership management requires an `admin` token and an owner authorized to manage that project.
-Deployment and artifact approvals also require a global administrator as the owner.
+Deployment, runbook, and artifact approvals require a global administrator.
+Only global administrators manage shared lifecycle variables, lifecycle stages, environment verification, and lifecycle or environment deletion.
+Lifecycle assignment can expose shared secrets.
+Only global administrators create or change lifecycle assignments.
+Authorized project administrators can retain or remove an existing assignment.
 
-Scoped tokens cannot create projects, manage tokens, or change shared resources.
-Lifecycle assignment requires global credentials because it can grant access to shared secrets.
-Scoped tokens can retain or remove an existing assignment when the owner has the required permission.
-Scoped tokens can read their projects' assigned lifecycles and eligible environments.
-Eligible environments include lifecycle stages and historical deployment or runbook environments.
-Projects without a lifecycle retain access to all environments.
+## API tokens
 
+Both `global` and `scoped` tokens support all four permission ceilings.
+Global tokens cover projects available to the owner.
+Scoped tokens require one or more selected projects.
+The server checks the owner's current permissions for every request.
+A token cannot increase the owner's permissions.
+
+Legacy global tokens without a ceiling inherit the owner's current permissions.
+Name-only creation through the API, CLI, or legacy web form retains this behavior.
+The token settings page defaults to all accessible projects and a `viewer` ceiling.
+
+Tokens with explicit ceilings cannot access token management APIs.
+Scoped tokens cannot create projects, change shared resources, or access instance administration.
+A scoped `admin` token can manage authorized project memberships.
+Approval also requires a global administrator as the owner.
+
+Scoped reads include assigned lifecycles and eligible environments.
 Scoped tokens cannot read global templates or shared lifecycle variable administration endpoints.
-Project variable endpoints retain inherited values and existing secret masking.
-Project and deployment lists, totals, and activity include only authorized projects.
-The server rechecks owner permissions, revocation, expiry, and token scope on requests and open log streams.
+Existing secret masking, pagination, expiry, revocation, and log stream rechecks remain active.
+An empty project selection never becomes global access.
+Deleting the last selected project makes the token unusable.
 
-Use the owner's browser session or a global token to edit token scope.
+Use the owner's authorized browser session or a legacy global token to edit grants.
 Use an explicit `global` scope to remove project restrictions.
-Empty scoped selections never become global access.
-Deleting the last selected project leaves the scoped token unusable.
-Legacy scoped rows without a valid role and projects also fail authentication.
-Migration rollback is refused because older applications ignore these restrictions.
 
-## Viewer self-security exception
+Provision a token from the server host:
 
-A viewer may manage only their own Security settings after the normal session,
-CSRF, and fresh-reauthentication checks. This permits optional browser MFA
-enrollment, recovery-code regeneration, and MFA disablement without granting
-access to tokens or unrelated writes. A viewer may not manage another user's
-security state. Administrator MFA reset remains admin-only.
+```bash
+durpdeploy tokens create --user operator@example.com --name deploy \
+  --scope scoped --role deployer --project-id 12 --project-id 34
+durpdeploy tokens create --user engineer@example.com --name author \
+  --scope global --role maintainer
+```
 
-## Picking a role for a new user
+## Upgrade behavior
 
-| You want them to…                              | Pick     |
-|------------------------------------------------|----------|
-| Manage users + see the audit log               | `admin`  |
-| Deploy to projects, but not see the audit log  | `deployer` |
-| Just watch the dashboard (status, logs)        | `viewer` |
+Migration `064`, or SQL Server migration `049`, runs during startup.
+The migration changes existing Deployer users, project memberships, and explicit token ceilings to Maintainer.
+This change preserves their previous authoring capabilities.
+Viewer and administrator assignments remain unchanged.
+Legacy global tokens keep their empty ceiling and inherit the migrated owner's current role.
+Token project selections, credentials, identities, and history remain intact.
 
-`deployer` is the common day-to-day role for an engineer. `admin` is for the
-operator who owns the box and the user list. `viewer` is for stakeholders
-who want to follow deploys without the ability to trigger one.
+New Deployer assignments use the restricted execution permissions.
+An administrator can change migrated Maintainers to Deployer when execution access is sufficient.
+Database rollback is refused because older applications grant authoring permission to Deployers.
 
 ## OIDC role authority
 
-Successful OIDC login synchronizes the user's name, email, and role.
-Configured group precedence is `admin`, then `deployer`, then `viewer`.
-A role change invalidates browser sessions. Group removal is observed on the
-next OIDC login; password login uses the last stored role.
-See [OIDC configuration and recovery](authentik-oidc.md#security-limits-and-coexistence).
+OIDC precedence is `admin > maintainer > deployer > viewer`.
+Configure the optional `DURPDEPLOY_OIDC_MAINTAINER_GROUP` with a distinct group name.
+An absent Maintainer mapping grants no Maintainer access through OIDC.
+The existing Deployer group maps to the restricted Deployer role.
+
+Successful OIDC login synchronizes the user's name, email, and global role.
+This synchronization can replace a migrated Maintainer role with Deployer.
+Before upgrading, configure the Maintainer mapping for groups that need existing authoring access.
+Keep a distinct Deployer group for operators who need execution access.
+Role changes invalidate browser sessions.
+Group removal takes effect on the next OIDC login.
+Password login uses the last stored role.
+See [OIDC configuration and recovery](authentik-oidc.md).

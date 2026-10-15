@@ -198,7 +198,7 @@ func TestTokens_FlashBoundToSession(t *testing.T) {
 
 	// Different user: no token (and the flash is not consumed).
 	other := seedSessionAs(
-		t, h.repo, h.server.URL, "flash-other@example.com", "deployer",
+		t, h.repo, h.server.URL, "flash-other@example.com", "maintainer",
 	)
 	body, _ = getTokenBody(t, other.client, h.server.URL, loc)
 	if fullTokenRe.MatchString(body) {
@@ -372,7 +372,7 @@ func TestTokens_SelfRevokeOtherUser404(t *testing.T) {
 		h.repo,
 		h.server.URL,
 		"other@example.com",
-		"deployer",
+		"maintainer",
 	)
 
 	// The deployer tries to revoke the admin's token via the self path.

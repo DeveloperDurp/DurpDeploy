@@ -12,9 +12,9 @@ check_project_member_roles() {
     member_password=e2e-members-pass-1234
     project=$(api_post "{\"name\":\"member-roles-$E2E_RUN_ID\"}" "$BASE/api/v1/projects" | python3 -c "$json_id")
     other=$(api_post "{\"name\":\"member-roles-other-$E2E_RUN_ID\"}" "$BASE/api/v1/projects" | python3 -c "$json_id")
-    target=$(api_post "{\"email\":\"e2e-member-target-$E2E_RUN_ID@test.local\",\"name\":\"Role target\",\"role\":\"deployer\",\"password\":\"$member_password\"}" \
+    target=$(api_post "{\"email\":\"e2e-member-target-$E2E_RUN_ID@test.local\",\"name\":\"Role target\",\"role\":\"maintainer\",\"password\":\"$member_password\"}" \
         "$BASE/api/v1/admin/users" | python3 -c "$json_id")
-    manager=$(api_post "{\"email\":\"$manager_email\",\"name\":\"Project member administrator\",\"role\":\"deployer\",\"password\":\"$member_password\"}" \
+    manager=$(api_post "{\"email\":\"$manager_email\",\"name\":\"Project member administrator\",\"role\":\"maintainer\",\"password\":\"$member_password\"}" \
         "$BASE/api/v1/admin/users" | python3 -c "$json_id")
     api_post "{\"user_id\":$target,\"role\":\"deployer\"}" "$BASE/api/v1/projects/$project/members" >/dev/null
     api_post "{\"user_id\":$target,\"role\":\"admin\"}" "$BASE/api/v1/projects/$other/members" >/dev/null
@@ -31,12 +31,12 @@ check_project_member_roles() {
     csrf=$(csrf_from_cookies "$jar")
     token=$(mint_web_token "$jar" member-role-check "$csrf")
     [[ -n "$csrf" && -n "$token" ]] || { echo 'FAIL: member administrator credentials'; return 1; }
-    for role in deployer admin; do
+    for role in viewer deployer maintainer admin; do
         curl -fsS -H "Authorization: Bearer $token" -H "$json_header" \
             -X PUT -d "{\"role\":\"$role\"}" "$BASE/api/v1$path" \
             | python3 -c 'import json,sys; assert json.load(sys.stdin)["role"]==sys.argv[1]' "$role"
     done
-    for role in deployer admin; do
+    for role in viewer deployer maintainer admin; do
         code=$(curl -sS -b "$jar" -H "X-CSRF-Token: $csrf" -H 'HX-Request: true' \
             -H 'X-Form-Dialog: true' -X PUT -d "role=$role" \
             -D "$TMP/member-role-headers" -o "$TMP/member-role-body" -w "$http_status" "$BASE$path")
@@ -46,7 +46,7 @@ check_project_member_roles() {
         api_get "$BASE/api/v1/projects/$project/members" \
             | python3 -c 'import json,sys; m=next(m for m in json.load(sys.stdin)["items"] if m["user_id"]==int(sys.argv[1])); assert m["role"]==sys.argv[2] and str(m["created_at"])==sys.argv[3]' "$target" "$role" "$original"
     done
-    code=$(curl -sS -b "$jar" -H "X-CSRF-Token: $csrf" -X PUT -d 'role=viewer' \
+    code=$(curl -sS -b "$jar" -H "X-CSRF-Token: $csrf" -X PUT -d 'role=owner' \
         -o /dev/null -w "$http_status" "$BASE$path")
     [[ "$code" == 422 ]] || { echo "FAIL: invalid member role=$code"; return 1; }
     code=$(curl -sS -H "Authorization: Bearer $token" -H "$json_header" \
@@ -68,7 +68,7 @@ check_project_member_roles() {
     api_get "$BASE/api/v1/projects/$other/members" \
         | python3 -c 'import json,sys; assert next(m["role"] for m in json.load(sys.stdin)["items"] if m["user_id"]==int(sys.argv[1]))=="admin"' "$target"
     api_get "$BASE/api/v1/admin/users/$target" \
-        | python3 -c 'import json,sys; assert json.load(sys.stdin)["role"]=="deployer"'
+        | python3 -c 'import json,sys; assert json.load(sys.stdin)["role"]=="maintainer"'
     # Restore the retained account for manual checks.
     api_put '{"role":"admin"}' "$BASE/api/v1/projects/$project/members/$manager" >/dev/null
     echo "  Member role editor: $BASE/projects/$project/edit"

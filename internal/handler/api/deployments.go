@@ -790,6 +790,7 @@ func (h *DeploymentHandler) CancelDeployment(
 // swagger:route POST /deployments/{id}/retry deployments retryDeployment
 //
 // Retry a failed or cancelled deployment.
+// Recheck lifecycle promotion and approval gates before retrying.
 //
 //	Schemes: http, https
 //
@@ -803,6 +804,7 @@ func (h *DeploymentHandler) CancelDeployment(
 //	  401: body:UnauthorizedError
 //	  404: body:NotFoundError
 //	  409: body:ConflictError
+//	  422: body:ValidationError
 //	  500: body:ServerError
 func (h *DeploymentHandler) RetryDeployment(
 	w http.ResponseWriter,
@@ -834,12 +836,44 @@ func (h *DeploymentHandler) RetryDeployment(
 		return
 	}
 
+	release, err := h.repo.Queries.GetDeploymentRelease(
+		r.Context(),
+		deployment.ReleaseID,
+	)
+	if err != nil {
+		RespondError(w, http.StatusNotFound, "Release not found")
+		return
+	}
+	project, err := h.repo.Queries.GetProject(r.Context(), release.ProjectID)
+	if err != nil {
+		RespondError(w, http.StatusNotFound, "Project not found")
+		return
+	}
+	blocked, reason, requiresApproval, err := gate.CheckAndApproval(
+		r.Context(),
+		h.repo.Queries,
+		project,
+		release,
+		deployment.EnvironmentID,
+	)
+	if err != nil {
+		RespondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if blocked {
+		RespondError(w, http.StatusUnprocessableEntity, reason)
+		return
+	}
+	initialStatus := "pending"
+	if requiresApproval {
+		initialStatus = "pending_approval"
+	}
 	result, err := h.repo.CreateDeploymentFromDeployment(
 		r.Context(),
 		db.CreateDeploymentParams{
 			ReleaseID:     deployment.ReleaseID,
 			EnvironmentID: deployment.EnvironmentID,
-			Status:        "pending",
+			Status:        initialStatus,
 			Note: sql.NullString{
 				String: fmt.Sprintf("Retry of #%d", deployment.ID),
 				Valid:  true,

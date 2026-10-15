@@ -123,7 +123,7 @@ func TestMobile_RenderedHTML_renders_writer_controls_when_authorized(
 		session *authedSession
 	}{
 		{name: "admin", session: fixture.admin},
-		{name: "deployer", session: fixture.deployer},
+		{name: "maintainer", session: fixture.maintainer},
 	} {
 		t.Run(session.name, func(t *testing.T) {
 			for _, page := range pages {
@@ -133,14 +133,14 @@ func TestMobile_RenderedHTML_renders_writer_controls_when_authorized(
 
 					// Then
 					if page.name == "lifecycle stages" &&
-						session.name == "deployer" {
+						session.name == "maintainer" {
 						if strings.Contains(
 							body,
 							"data-lifecycle-stage-action=",
 						) ||
 							strings.Contains(body, `name="environment_id"`) {
 							t.Error(
-								"deployer received lifecycle stage controls",
+								"maintainer received lifecycle stage controls",
 							)
 						}
 						requireHTMLPattern(

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"durpdeploy/internal/roles"
 	"net/http"
 	"strconv"
 	"strings"
@@ -41,7 +42,7 @@ func isUniqueViolation(err error) bool {
 }
 
 func isValidRole(role string) bool {
-	return role == "admin" || role == "deployer" || role == "viewer"
+	return roles.Valid(role)
 }
 
 // NotFoundJSON is a chi-compatible 404 handler that returns JSON.

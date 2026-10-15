@@ -157,60 +157,40 @@ browser ceremony end-to-end proof is tracked separately from this document.
 
 ### Role-based access
 
-**Roles:** `admin`, `deployer`, `viewer` (global. Enforced by the
-`CHECK (role IN ('admin', 'deployer', 'viewer'))` constraint in
-`migrations/011_auth.sql` and by `validRoles` in `internal/handler/users.go`).
-Per-project member roles are `admin`, `deployer`
-(`migrations/013_project_members.sql`).  
-**Reference:** `docs/roles.md`
+Permission order is `viewer < deployer < maintainer < admin`.
+Global roles, membership roles, and token ceilings each limit project operations.
+Migration `064`, or SQL Server migration `049`, extends the database constraints.
+See [roles](roles.md) for the capability matrix and upgrade behavior.
 
-Two-layer defense for viewer read-only enforcement:
+The browser and API reject Viewer application writes.
+They also reject Deployer writes except existing-release deployment execution, retry, re-run, and cancellation.
+Logout and the user's own Security settings retain the existing CSRF and reauthentication checks.
 
-1. **CSRF middleware** — rejects application writes from a viewer at
-   the protocol layer (always fires on the actual write attempt).
-2. **CanWrite templ guard** — hides write affordances in the UI so a viewer
-   never sees a useless form. `pages.CanWrite(ctx)` / `components.canWrite(ctx)`
-   return `false` for viewers.
-
-Both layers are necessary. Without the templ guard, the user interface has dead-end controls.
-skipping the middleware leaves a security hole.
-
-Logout is allowed with CSRF protection. A viewer may manage only their own
-Security settings after the normal session, CSRF, and fresh-reauthentication
-checks. A viewer cannot manage another user, deployments, projects, or tokens.
+The UI uses `CanWrite` for authoring and `CanDeploy` for deployment execution.
+Both helpers include the current project membership ceiling.
+The middleware also rejects forged requests.
+Hidden controls do not replace authorization checks.
 
 ### Per-project authorization
 
-**Implementation:** `internal/auth/projectaccess.go`
+`RequireProjectAccess` checks project coverage and applies the membership permission ceiling.
+Global administrators bypass membership and remain subject to token restrictions.
+Other users need membership to read a project.
+A missing project returns `404`.
+A non-member receives `403`, or an unauthorized toast for browser HTMX requests.
 
-- `RequireProjectAccess` middleware: A global administrator bypasses membership
-  checks and still receives the project ID in context. For other users, a
-  missing project returns 404. A non-member gets 403 on API/native requests or
-  a 200 response with an unauthorized toast on browser HTMX requests. Members proceed to
-  the handler; its validation and result determine the response status.
-- `CreateProject` auto-adds the creator as project admin.
-- `ListProjects` filters by membership for non-admins.
+Viewer memberships permit reads.
+Deployer memberships also permit deployment execution.
+Maintainer memberships also permit authoring.
+Project creation adds the creator as a project administrator.
 
 ### Per-project member management
 
-**Implementation:** `internal/auth/project_permissions.go`
-
-`RequireProjectAccess` only enforces a **binary** "is a member" check — it
-admits any member (per-project admin or deployer), including a global viewer
-who has membership, to the project route handler. The finer-grained
-"is a per-project admin" rule
-for member add/remove is enforced **at the handler level** via
-`auth.CanManageProject(ctx, repo, projectID)`:
-
-- Returns `true` for a global `admin` or a project member whose per-project
-  `role` is `admin`.
-- When it returns `false`, `AddMember` / `RemoveMember` return `403` for
-  native requests or `200` with an unauthorized toast for browser HTMX requests.
-
-This keeps project deployers and global viewers from editing the roster while still
-letting them access the other project routes. `CanManageProject` also gates the
-add/remove controls in the Members section of the project edit page (UI layer),
-mirroring the CanWrite two-layer pattern.
+`auth.CanManageProject` permits global administrators and project administrators with global Maintainer permission.
+An explicit token must also have an `admin` ceiling.
+Restricted global users cannot gain authoring permission through an administrator membership.
+The handlers enforce member management checks.
+The UI uses the same permission check to hide member controls.
 
 ### Admin-only routes
 
@@ -243,7 +223,7 @@ Session-authenticated browser routes in `internal/server/server.go` use:
 
 1. `auth.AuthMiddleware(repo)` — session → user in context.
 2. `webRequestBodyLimit` — form validation and bounds before CSRF parsing.
-3. `auth.CSRFMiddleware()` — token check + viewer gate, with the exceptions above.
+3. `auth.CSRFMiddleware()` — token check + role gate, with the exceptions above.
 4. `audit.Middleware(repo)` — records successful state changes unless a handler
    suppresses or records them directly.
 

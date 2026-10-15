@@ -59,9 +59,8 @@ func RenderRequestError(
 	http.Error(w, msg, status)
 }
 
-// WriteBlockMiddleware blocks viewers from performing write operations.
-// Returns 403 JSON with {"error":"viewers cannot perform write operations"}.
-// This is the API counterpart to the CSRFMiddleware's viewer block.
+// WriteBlockMiddleware separates reads, deployment execution, and authoring.
+// It preserves Viewer errors and returns JSON for restricted Deployer writes.
 func WriteBlockMiddleware() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -75,6 +74,14 @@ func WriteBlockMiddleware() func(http.Handler) http.Handler {
 						w,
 						http.StatusForbidden,
 						"viewers cannot perform write operations",
+					)
+					return
+				}
+				if !projectWriteAllowed(r) {
+					RenderJSONError(
+						w,
+						http.StatusForbidden,
+						"maintainer permission is required for configuration writes",
 					)
 					return
 				}

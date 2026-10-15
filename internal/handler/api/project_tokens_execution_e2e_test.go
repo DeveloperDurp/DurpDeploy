@@ -43,7 +43,7 @@ func TestProjectTokensExecutionAPIE2E(t *testing.T) {
 	); err != nil {
 		t.Fatal(err)
 	}
-	for _, role := range []string{"viewer", "deployer", "admin"} {
+	for _, role := range []string{"viewer", "deployer", "maintainer", "admin"} {
 		f.token = owner
 		token := mintProjectToken(t, f, role, f.project.ID)
 		f.token = token.ID
@@ -71,11 +71,14 @@ func TestProjectTokensExecutionAPIE2E(t *testing.T) {
 				t.Fatal("deployment logs missing")
 			}
 		}
+		if role == "deployer" {
+			want = 403
+		}
 		data = f.api(t, "POST", fmt.Sprintf("%s/runbooks/%d/executions",
 			f.base(), runbook.Runbook.ID), map[string]any{
 			"environment_id": f.environment.ID,
 		}, want)
-		if role != "viewer" {
+		if role != "viewer" && role != "deployer" {
 			var execution db.RunbookExecution
 			if err := json.Unmarshal(data, &execution); err != nil {
 				t.Fatal(err)

@@ -60,7 +60,7 @@ func (q *Queries) CountUsers(ctx context.Context) (int64, error) {
 }
 
 const getProjectMember = `-- name: GetProjectMember :one
-SELECT project_id, user_id, role, created_at FROM project_members WHERE project_id = ? AND user_id = ?
+SELECT project_id, user_id, created_at, role FROM project_members WHERE project_id = ? AND user_id = ?
 `
 
 type GetProjectMemberParams struct {
@@ -74,8 +74,8 @@ func (q *Queries) GetProjectMember(ctx context.Context, arg GetProjectMemberPara
 	err := row.Scan(
 		&i.ProjectID,
 		&i.UserID,
-		&i.Role,
 		&i.CreatedAt,
+		&i.Role,
 	)
 	return i, err
 }

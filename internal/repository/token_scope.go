@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/roles"
 )
 
 // TokenScope describes project coverage and an optional permission ceiling.
@@ -85,17 +86,14 @@ func (r *Repository) ValidateTokenScope(
 	}
 	if grant.Scope == "global" {
 		if len(grant.ProjectIDs) != 0 || grant.Role != "" &&
-			!slices.Contains(
-				[]string{"viewer", "deployer", "admin"},
-				grant.Role,
-			) {
+			!roles.Valid(grant.Role) {
 			return grant, ErrTokenScope
 		}
 		grant.ProjectIDs = []int64{}
 		return grant, nil
 	}
 	if grant.Scope != "scoped" || len(grant.ProjectIDs) == 0 ||
-		!slices.Contains([]string{"viewer", "deployer", "admin"}, grant.Role) {
+		!roles.Valid(grant.Role) {
 		return grant, ErrTokenScope
 	}
 	grant.ProjectIDs = slices.Clone(grant.ProjectIDs)

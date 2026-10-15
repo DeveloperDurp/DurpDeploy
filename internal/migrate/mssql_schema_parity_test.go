@@ -132,7 +132,7 @@ func TestSQLServer_SchemaParityDefaultsAndIndexes(t *testing.T) {
 	requireNoError(t, err, "create project member with valid role")
 	_, err = dbConn.ExecContext(ctx, `
 		INSERT INTO project_members (project_id, user_id, role)
-		VALUES (@p1, @p2, @p3)`, project.ID, user.ID, "viewer")
+		VALUES (@p1, @p2, @p3)`, project.ID, user.ID, "owner")
 	if err == nil {
 		t.Fatal("create project member with invalid role succeeded")
 	}

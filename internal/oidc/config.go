@@ -19,6 +19,7 @@ type Config struct {
 	DisplayName          string
 	GroupClaim           string
 	AdminGroup           string
+	MaintainerGroup      string
 	DeployerGroup        string
 	ViewerGroup          string
 	AllowUnverifiedEmail bool
@@ -41,11 +42,18 @@ func LoadConfig() (Config, error) {
 	if err != nil {
 		return Config{}, ErrInvalidConfig
 	}
-	if !groupsAreDistinct(
+	groups := []string{
 		values.adminGroup.value,
 		values.deployerGroup.value,
 		values.viewerGroup.value,
-	) {
+	}
+	if values.maintainerGroup.set {
+		if strings.TrimSpace(values.maintainerGroup.value) == "" {
+			return Config{}, ErrInvalidConfig
+		}
+		groups = append(groups, values.maintainerGroup.value)
+	}
+	if !groupsAreDistinct(groups...) {
 		return Config{}, ErrInvalidConfig
 	}
 
@@ -78,6 +86,7 @@ func LoadConfig() (Config, error) {
 		DisplayName:          displayName,
 		GroupClaim:           groupClaim,
 		AdminGroup:           values.adminGroup.value,
+		MaintainerGroup:      values.maintainerGroup.value,
 		DeployerGroup:        values.deployerGroup.value,
 		ViewerGroup:          values.viewerGroup.value,
 		AllowUnverifiedEmail: allowUnverifiedEmail,
@@ -95,6 +104,7 @@ type oidcEnv struct {
 	clientID             envValue
 	clientSecret         envValue
 	adminGroup           envValue
+	maintainerGroup      envValue
 	deployerGroup        envValue
 	viewerGroup          envValue
 	displayName          envValue
@@ -109,6 +119,7 @@ func oidcEnvValues() oidcEnv {
 		clientID:             readEnv("DURPDEPLOY_OIDC_CLIENT_ID"),
 		clientSecret:         readEnv("DURPDEPLOY_OIDC_CLIENT_SECRET"),
 		adminGroup:           readEnv("DURPDEPLOY_OIDC_ADMIN_GROUP"),
+		maintainerGroup:      readEnv("DURPDEPLOY_OIDC_MAINTAINER_GROUP"),
 		deployerGroup:        readEnv("DURPDEPLOY_OIDC_DEPLOYER_GROUP"),
 		viewerGroup:          readEnv("DURPDEPLOY_OIDC_VIEWER_GROUP"),
 		displayName:          readEnv("DURPDEPLOY_OIDC_DISPLAY_NAME"),
@@ -124,7 +135,8 @@ func readEnv(key string) envValue {
 
 func (e oidcEnv) anySet() bool {
 	return e.issuer.set || e.clientID.set || e.clientSecret.set ||
-		e.adminGroup.set || e.deployerGroup.set || e.viewerGroup.set ||
+		e.adminGroup.set || e.maintainerGroup.set ||
+		e.deployerGroup.set || e.viewerGroup.set ||
 		e.displayName.set || e.groupClaim.set || e.requireEmailVerified.set
 }
 

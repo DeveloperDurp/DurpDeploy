@@ -31,7 +31,7 @@ func TestTokens_AdminPageListsAll(t *testing.T) {
 		h.repo,
 		h.server.URL,
 		"multi@example.com",
-		"deployer",
+		"maintainer",
 	)
 	form2 := url.Values{"name": {"multi-tok"}}
 	form2.Set("csrf_token", other.csrfToken)
@@ -71,7 +71,7 @@ func TestTokens_AdminRevoke(t *testing.T) {
 		h.repo,
 		h.server.URL,
 		"rev-me@example.com",
-		"deployer",
+		"maintainer",
 	)
 	form := url.Values{"name": {"rev-tok"}}
 	form.Set("csrf_token", other.csrfToken)
@@ -134,7 +134,7 @@ func TestTokens_AdminRevoke(t *testing.T) {
 // hitting /admin/tokens gets 403 from the RequireRole("admin")
 // middleware.
 func TestTokens_NonAdminCannotAccessAdminPage(t *testing.T) {
-	for _, role := range []string{"deployer", "viewer"} {
+	for _, role := range []string{"maintainer", "viewer"} {
 		t.Run(role, func(t *testing.T) {
 			h := newProjectHarness(t)
 			h.setRole(role)

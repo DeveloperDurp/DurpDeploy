@@ -38,16 +38,9 @@ func ProjectIDFromContext(ctx context.Context) (int64, bool) {
 // members of the project named by the `{id}` chi route param. Global
 // admins bypass membership. Scoped tokens also require a selected project.
 //
-// Ordering: this middleware runs AFTER auth.AuthMiddleware (which injects
-// the user) and auth.CSRFMiddleware (which already blocks "viewer" from
-// state-changing requests), and BEFORE the handler. It does not re-check
-// the global role for writes — that is the CSRF middleware's job.
-//
-// ponytail: finer-grained per-project role enforcement (e.g. "only a
-// per-project admin can edit project settings, not a per-project deployer")
-// is a follow-up that belongs in handler-level checks, not here. This
-// middleware treats ANY project_members row as authorized; the per-project
-// role column is captured for that future use.
+// This middleware runs after global authentication and write checks.
+// It applies the membership ceiling to writes and supplies it to templates.
+// Member management retains its additional administrator check in handlers.
 func RequireProjectAccess(
 	repo *repository.Repository,
 ) func(http.Handler) http.Handler {
@@ -129,7 +122,8 @@ func serveProjectAccess(
 
 	setTokenProject(r.Context(), projectID)
 	ctx := context.WithValue(r.Context(), ProjectAccessKey{}, projectID)
-	next.ServeHTTP(w, r.WithContext(ctx))
+	r = r.WithContext(ctx)
+	applyProjectPermission(w, r, repo, projectID, next)
 }
 
 // RequireDeploymentProjectAccess is like RequireProjectAccess, but for
@@ -224,9 +218,46 @@ func RequireDeploymentProjectAccess(
 				return
 			}
 			setTokenProject(r.Context(), release.ProjectID)
-			next.ServeHTTP(w, r)
+			applyProjectPermission(w, r, repo, release.ProjectID, next)
 		})
 	}
+}
+
+// applyProjectPermission also supplies the membership ceiling to templates.
+func applyProjectPermission(
+	w http.ResponseWriter, r *http.Request, repo *repository.Repository,
+	projectID int64, next http.Handler,
+) bool {
+	user := UserFromContext(r.Context())
+	if user.Role != "admin" {
+		member, err := repo.Queries.GetProjectMember(r.Context(),
+			db.GetProjectMemberParams{ProjectID: projectID, UserID: user.ID})
+		if err != nil {
+			RenderRequestError(
+				w,
+				r,
+				http.StatusForbidden,
+				"project access denied",
+			)
+			return false
+		}
+		r = r.WithContext(context.WithValue(r.Context(),
+			projectRoleKey{}, member.Role))
+	}
+	if !projectWriteAllowed(r) {
+		if strings.HasPrefix(r.URL.Path, "/api/v1/") {
+			RenderJSONError(
+				w,
+				http.StatusForbidden,
+				"project permission denied",
+			)
+		} else {
+			RenderUnauthorized(w, r)
+		}
+		return false
+	}
+	next.ServeHTTP(w, r)
+	return true
 }
 
 // checkProjectMembership writes an error response and returns false if

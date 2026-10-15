@@ -11,7 +11,7 @@ import (
 )
 
 const createUser = `-- name: CreateUser :one
-INSERT INTO users (email, password_hash, name, role) VALUES (?, ?, ?, ?) RETURNING id, email, password_hash, name, role, created_at, updated_at, last_login_at
+INSERT INTO users (email, password_hash, name, role) VALUES (?, ?, ?, ?) RETURNING id, email, password_hash, name, created_at, updated_at, last_login_at, role
 `
 
 type CreateUserParams struct {
@@ -34,10 +34,10 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.Email,
 		&i.PasswordHash,
 		&i.Name,
-		&i.Role,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.LastLoginAt,
+		&i.Role,
 	)
 	return i, err
 }
@@ -61,7 +61,7 @@ func (q *Queries) DeleteUser(ctx context.Context, id int64) error {
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, email, password_hash, name, role, created_at, updated_at, last_login_at FROM users WHERE email = ?
+SELECT id, email, password_hash, name, created_at, updated_at, last_login_at, role FROM users WHERE email = ?
 `
 
 func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error) {
@@ -72,16 +72,16 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 		&i.Email,
 		&i.PasswordHash,
 		&i.Name,
-		&i.Role,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.LastLoginAt,
+		&i.Role,
 	)
 	return i, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, email, password_hash, name, role, created_at, updated_at, last_login_at FROM users WHERE id = ?
+SELECT id, email, password_hash, name, created_at, updated_at, last_login_at, role FROM users WHERE id = ?
 `
 
 func (q *Queries) GetUserByID(ctx context.Context, id int64) (User, error) {
@@ -92,10 +92,10 @@ func (q *Queries) GetUserByID(ctx context.Context, id int64) (User, error) {
 		&i.Email,
 		&i.PasswordHash,
 		&i.Name,
-		&i.Role,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.LastLoginAt,
+		&i.Role,
 	)
 	return i, err
 }

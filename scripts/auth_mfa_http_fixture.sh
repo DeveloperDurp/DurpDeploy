@@ -744,7 +744,7 @@ auth_mfa_create_user() {
     local password=$5
     local payload user_id
 
-    if [[ ! "$label" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ || ! "$role" =~ ^(admin|deployer|viewer)$ ]]; then
+    if [[ ! "$label" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ || ! "$role" =~ ^(admin|maintainer|deployer|viewer)$ ]]; then
         auth_mfa_fail "user creation label or role is invalid"
         return 1
     fi

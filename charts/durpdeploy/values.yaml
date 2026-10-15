@@ -169,6 +169,8 @@ oidc:
   issuer: https://idp.example.com/realms/example
   clientID: durpdeploy-example
   adminGroup: durpdeploy-admin
+  # Optional exact group name for content authors.
+  maintainerGroup: ""
   deployerGroup: durpdeploy-deployer
   viewerGroup: durpdeploy-viewer
   displayName: SSO

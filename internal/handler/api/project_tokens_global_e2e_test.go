@@ -20,7 +20,7 @@ func TestProjectTokensGlobalRolesAPIE2E(t *testing.T) {
 		"global-role-member@example.test",
 		"deployer",
 	)
-	for _, role := range []string{"viewer", "deployer", "admin"} {
+	for _, role := range []string{"viewer", "deployer", "maintainer", "admin"} {
 		t.Run(role, func(t *testing.T) {
 			f.token = owner
 			var token projectToken
@@ -44,7 +44,7 @@ func TestProjectTokensGlobalRolesAPIE2E(t *testing.T) {
 				200,
 			)
 			writeStatus, adminStatus := 201, 403
-			if role == "viewer" {
+			if role == "viewer" || role == "deployer" {
 				writeStatus = 403
 			}
 			if role == "admin" {
@@ -101,7 +101,7 @@ func TestProjectTokensGlobalOwnerAccessAPIE2E(t *testing.T) {
 	f.api(t, "POST", f.base()+"/members", map[string]any{
 		"user_id": user.ID, "role": "admin",
 	}, 201)
-	for _, role := range []string{"deployer", "viewer"} {
+	for _, role := range []string{"maintainer", "deployer", "viewer"} {
 		f.token = admin
 		f.api(t, "PUT", fmt.Sprintf("/api/v1/admin/users/%d", user.ID),
 			map[string]string{"email": user.Email, "name": user.Name,
@@ -110,7 +110,7 @@ func TestProjectTokensGlobalOwnerAccessAPIE2E(t *testing.T) {
 		f.api(t, "GET", "/api/v1/admin/stats", nil, 403)
 		f.api(t, "GET", f.base(), nil, 200)
 		status := 201
-		if role == "viewer" {
+		if role == "viewer" || role == "deployer" {
 			status = 403
 		}
 		f.api(t, "POST", f.base()+"/variables", map[string]string{

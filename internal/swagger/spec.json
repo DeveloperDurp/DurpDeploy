@@ -11,7 +11,7 @@
   ],
   "swagger": "2.0",
   "info": {
-    "description": "JSON request bodies are limited to 4 MiB of encoded bytes and must contain\nexactly one object matching the endpoint schema. Unknown fields, null, and\ntrailing data return 400. Oversized bodies return 413 before mutation.\nControl actions accept an empty body or an empty JSON object.",
+    "description": "JSON request bodies are limited to 4 MiB of encoded bytes and must contain\nexactly one object matching the endpoint schema. Unknown fields, null, and\ntrailing data return 400. Oversized bodies return 413 before mutation.\nControl actions accept an empty body or an empty JSON object.\n\nPermission order: viewer \u003c deployer \u003c maintainer \u003c admin.\nDeployers can start existing releases, retry, re-run, and cancel deployments.\nMaintainers can author content and execute runbooks within admin boundaries.\nProject membership and token ceilings also limit each operation.\nExplicit-role tokens cannot manage API tokens.",
     "title": "durpdeploy REST API.",
     "version": "1.0.0"
   },
@@ -2876,6 +2876,7 @@
     },
     "/deployments/{id}/retry": {
       "post": {
+        "description": "Recheck lifecycle promotion and approval gates before retrying.",
         "schemes": [
           "http",
           "https"
@@ -2931,6 +2932,12 @@
             "description": "Request body exceeds the 4 MiB encoded byte ceiling.",
             "schema": {
               "$ref": "#/definitions/RequestEntityTooLargeError"
+            }
+          },
+          "422": {
+            "description": "Validation error response.",
+            "schema": {
+              "$ref": "#/definitions/ValidationError"
             }
           },
           "500": {
@@ -10220,7 +10227,7 @@
           "x-go-name": "ProjectIDs"
         },
         "role": {
-          "description": "Viewer, deployer, or admin. This ceiling cannot increase owner permissions.",
+          "description": "Viewer, deployer, maintainer, or admin. This ceiling cannot increase owner permissions.",
           "type": "string",
           "x-go-name": "Role"
         },

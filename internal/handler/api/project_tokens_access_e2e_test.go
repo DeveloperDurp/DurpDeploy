@@ -136,7 +136,7 @@ func TestProjectTokensOwnerAccessAPIE2E(t *testing.T) {
 	f := newArtifactE2E(t)
 	admin := f.token
 	other := seedProject(t, f.h.repo)
-	user := seedAPIUser(t, f.h.repo, "token-owner@example.test", "deployer")
+	user := seedAPIUser(t, f.h.repo, "token-owner@example.test", "maintainer")
 	_, global := seedAPIToken(t, f.h.repo, user.ID)
 	f.api(t, "POST", f.base()+"/members", map[string]any{
 		"user_id": user.ID, "role": "admin",
@@ -308,7 +308,7 @@ func TestProjectTokensScopeAuditAndRevocationAPIE2E(t *testing.T) {
 	owner := f.token
 	other := seedProject(t, f.h.repo)
 	token := mintProjectToken(t, f, "viewer", f.project.ID)
-	grant := map[string]any{"scope": "scoped", "role": "deployer",
+	grant := map[string]any{"scope": "scoped", "role": "maintainer",
 		"project_ids": []int64{other.ID}}
 	f.api(t, "PATCH", "/api/v1/tokens/"+token.TokenID, grant, 200)
 	var details string

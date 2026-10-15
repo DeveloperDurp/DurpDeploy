@@ -18,7 +18,7 @@ import (
 // implicit `ctx` that templ injects into component scope.
 func canWrite(ctx context.Context) bool {
 	u := auth.UserFromContext(ctx)
-	return u == nil || u.Role != "viewer"
+	return u == nil || auth.CanAuthor(ctx)
 }
 
 func stepExecutionTarget(step db.Step) string {
@@ -89,7 +89,11 @@ func StepPlacementData(step db.Step, selectedLabel string) string {
 // a standalone page.
 templ ViewerStepFormMessage() {
 	<div class="p-4 border border-base-300 rounded bg-base-200 text-sm text-gray-400 italic">
-		Viewers cannot create or edit steps.
+		if auth.RoleFromContext(ctx) == "viewer" {
+			Viewers cannot create or edit steps.
+		} else {
+			Your role cannot create or edit steps.
+		}
 	</div>
 }
 
