@@ -14,7 +14,10 @@ Confirm that the permission selector defaults to `viewer` for either scope.
 Create an all-project token for each role and check the same permission limits.
 Confirm that permission-limited tokens cannot create or edit tokens through the API.
 Select **Selected projects**.
-Select the two printed selected projects.
+Select **Choose projects**.
+Search for each printed selected project and select its checkbox.
+Confirm that filtering preserves checked projects outside the current results.
+Select **Done** and confirm that both names appear below the picker button.
 Create a token for each supported role.
 Copy each bearer value from its one-time banner.
 Return to the list and confirm that the bearer value disappears.
@@ -29,6 +32,12 @@ Check the page at widths of 375, 430, 540, 768, 980, and 1280 pixels.
 Confirm that each form control fills its row without overlap.
 Below 1280 pixels, confirm that token cards show names, access details, and actions.
 Open **Edit scope** on a phone and save a changed selection.
+Confirm that **Choose projects** opens a full-screen picker on the phone.
+Confirm that long project names wrap and each project row is easy to tap.
+Confirm that the selection count, **Clear selection**, and **Done** remain visible while scrolling.
+Search for an unmatched name and confirm that the picker shows an empty result message.
+Press Enter in the search field and confirm that the token form does not submit.
+Close the picker and confirm that focus returns to **Choose projects**.
 Select **All accessible projects** in the new token form.
 Confirm that the project control disappears and the permission selector stays visible.
 Select **Selected projects** and confirm that the project control returns.

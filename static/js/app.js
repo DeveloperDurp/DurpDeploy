@@ -488,6 +488,38 @@ Alpine.data('projectMenu', () => ({
 	},
 }));
 
+Alpine.data('tokenGrantFields', () => ({
+	scope: 'global',
+	projects: [],
+	selected: [],
+	query: '',
+	init() {
+		this.scope = this.$el.dataset.scope || 'global';
+		const inputs = [...this.$el.querySelectorAll('input[name="project_ids"]')];
+		this.projects = inputs.map(input => ({ id: input.value, name: input.dataset.projectName }));
+		this.selected = inputs.filter(input => input.checked).map(input => input.value);
+	},
+	get selectionLabel() { return `${this.selected.length} selected`; },
+	get selectedNames() {
+		return this.projects.filter(project => this.selected.includes(project.id))
+			.map(project => project.name).join(', ') || 'No projects selected.';
+	},
+	matches(name) { return name.toLowerCase().includes(this.query.trim().toLowerCase()); },
+	get hasMatches() { return this.projects.some(project => this.matches(project.name)); },
+	openProjects() {
+		this.query = '';
+		this.$refs.projectDialog.showModal();
+		focusFormField(this.$refs.projectSearch);
+	},
+	closeProjects() { this.$refs.projectDialog.close(); },
+	projectsClosed() {
+		this.query = '';
+		if (this.$refs.projectButton?.isConnected) this.$refs.projectButton.focus({ preventScroll: true });
+	},
+	clearProjects() { this.selected = []; },
+	destroy() { this.$refs.projectDialog?.close(); },
+}));
+
 Alpine.data('memberRoleEditor', () => ({
 	editing: false,
 	error: '',

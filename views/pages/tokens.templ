@@ -289,7 +289,7 @@ templ TokenScopeLabel(scope string, role string, ids []int64, projects []db.Proj
 }
 
 templ TokenGrantFields(grant repository.TokenScope, projects []db.Project, prefix string) {
-	<div class="grid min-w-0 gap-4" x-data="{ scope: $el.dataset.scope || 'global' }" data-scope={ grant.Scope }>
+	<div class="grid min-w-0 gap-4" x-data="tokenGrantFields" data-scope={ grant.Scope }>
 	<div class="form-control min-w-0">
 		<label class="label" for={ prefix + "-scope" }><span class="label-text">Scope</span></label>
 		<select id={ prefix + "-scope" } name="scope" class="select select-bordered" x-model="scope">
@@ -310,12 +310,43 @@ templ TokenGrantFields(grant repository.TokenScope, projects []db.Project, prefi
 	</div>
 	<div class="form-control min-w-0" x-cloak x-show="scope === 'scoped'">
 		<label class="label" for={ prefix + "-projects" }><span class="label-text">Projects</span></label>
-		<select id={ prefix + "-projects" } name="project_ids" multiple size="4" class="block w-full rounded-lg border border-base-300 bg-base-100 p-2 text-sm h-32" aria-describedby={ prefix + "-help" } x-bind:disabled="scope !== 'scoped'">
-			for _, project := range projects {
-				<option value={ strconv.FormatInt(project.ID, 10) } if slices.Contains(grant.ProjectIDs, project.ID) { selected }>{ project.Name }</option>
-			}
-		</select>
+		<button id={ prefix + "-projects" } type="button" class="btn btn-outline min-h-12 w-full justify-between" x-ref="projectButton" x-on:click="openProjects" x-bind:disabled="scope !== 'scoped'" aria-haspopup="dialog" aria-controls={ prefix + "-project-picker" } aria-describedby={ prefix + "-help" }>
+			<span>Choose projects</span>
+			<span class="badge badge-ghost" x-text="selectionLabel">{ strconv.Itoa(len(grant.ProjectIDs)) } selected</span>
+		</button>
+		<p class="mt-2 text-sm [overflow-wrap:anywhere]" data-token-project-summary x-text="selectedNames">{ tokenProjectNames(grant.ProjectIDs, projects) }</p>
 		<p id={ prefix + "-help" } class="text-xs opacity-70 mt-1">For selected-project tokens, choose one or more projects. The role limits the owner's current permissions.</p>
+		<dialog id={ prefix + "-project-picker" } class="modal p-0" x-ref="projectDialog" x-on:close="projectsClosed" aria-labelledby={ prefix + "-project-picker-title" } data-token-project-dialog>
+			<div class="modal-box flex h-dvh max-h-dvh w-full max-w-none flex-col gap-4 overflow-hidden rounded-none p-4 sm:h-auto sm:max-h-[85dvh] sm:max-w-lg sm:rounded-box sm:p-6">
+				<div class="flex shrink-0 items-center justify-between gap-4">
+					<h3 id={ prefix + "-project-picker-title" } class="text-lg font-semibold">Choose projects</h3>
+					<button type="button" class="btn btn-ghost min-h-11" x-on:click="closeProjects">Close</button>
+				</div>
+				<div class="form-control shrink-0">
+					<label class="label" for={ prefix + "-project-search" }><span class="label-text">Search projects</span></label>
+					<input id={ prefix + "-project-search" } type="search" class="input input-bordered w-full" placeholder="Search by project name" x-ref="projectSearch" x-model="query" x-on:keydown.enter.prevent autocomplete="off"/>
+				</div>
+				<div class="min-h-0 min-w-0 flex-1 overflow-y-auto rounded-lg border border-base-300" data-token-project-list>
+				<fieldset class="min-w-0" x-bind:disabled="scope !== 'scoped'">
+					<legend class="sr-only">Available projects</legend>
+					for _, project := range projects {
+						<label for={ prefix + "-project-" + strconv.FormatInt(project.ID, 10) } class="flex min-h-12 cursor-pointer items-start gap-3 border-b border-base-300 p-3 last:border-b-0 hover:bg-base-200" data-project-name={ project.Name } x-bind:hidden="!matches($el.dataset.projectName)">
+							<input id={ prefix + "-project-" + strconv.FormatInt(project.ID, 10) } type="checkbox" name="project_ids" value={ strconv.FormatInt(project.ID, 10) } checked?={ slices.Contains(grant.ProjectIDs, project.ID) } data-project-name={ project.Name } class="checkbox mt-0.5 shrink-0" x-model="selected" x-on:keydown.enter.prevent/>
+							<span class="min-w-0 text-sm [overflow-wrap:anywhere]">{ project.Name }</span>
+						</label>
+					}
+					<p class="p-4 text-sm opacity-70" x-cloak hidden x-bind:hidden="hasMatches">No projects match your search.</p>
+				</fieldset>
+				</div>
+				<div class="flex shrink-0 flex-wrap items-center justify-between gap-3">
+					<span class="text-sm" role="status" x-text="selectionLabel">{ strconv.Itoa(len(grant.ProjectIDs)) } selected</span>
+					<div class="flex gap-2">
+						<button type="button" class="btn btn-ghost min-h-12" x-on:click="clearProjects" x-bind:disabled="selected.length === 0">Clear selection</button>
+						<button type="button" class="btn btn-primary min-h-12" x-on:click="closeProjects" data-token-project-done>Done</button>
+					</div>
+				</div>
+			</div>
+		</dialog>
 	</div>
 	</div>
 }
