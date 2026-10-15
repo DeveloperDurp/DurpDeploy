@@ -188,11 +188,13 @@ func TestAgentFleetBrowserE2E(t *testing.T) {
 			if page.name == "list" {
 				browser.wait(t, `(() => {
 					const versions = [...document.querySelectorAll(
-						'tbody td:first-child div'
-					)].filter(el => el.textContent.startsWith('Version: '));
-					return versions.length > 0 && versions.every(
-						el => el.clientWidth > 0 && el.scrollWidth <= el.clientWidth
-					);
+						'[data-agent-version]'
+					)].filter(el => el.getClientRects().length > 0);
+					return versions.length === 6 && versions.every(el => {
+						const lineHeight = parseFloat(getComputedStyle(el).lineHeight);
+						return el.clientWidth > 0 && el.scrollWidth <= el.clientWidth
+							&& el.clientHeight <= 3 * lineHeight;
+					});
 				})()`)
 			}
 			browser.screenshot(
