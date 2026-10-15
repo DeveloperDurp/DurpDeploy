@@ -19,7 +19,7 @@ func (b *packageBrowser) assertLifecyclePermissions(
 		fmt.Sprintf("%s/projects/%d/edit", f.baseURL, f.project.ID),
 	)
 	b.captureNavigation(t, "project-assignment-admin")
-	// Viewer inherits the values but cannot see either write affordance.
+	// A Maintainer can remove an assignment but cannot grant a lifecycle.
 	user, err := f.h.repo.Queries.GetUserByEmail(
 		t.Context(),
 		"artifact-e2e@example.com",
@@ -38,7 +38,7 @@ func (b *packageBrowser) assertLifecyclePermissions(
 		t.Fatal(err)
 	}
 	if err := f.h.repo.Queries.UpdateUser(t.Context(),
-		db.UpdateUserParams{ID: user.ID, Name: user.Name, Role: "deployer"},
+		db.UpdateUserParams{ID: user.ID, Name: user.Name, Role: "maintainer"},
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -79,9 +79,9 @@ func (b *packageBrowser) assertLifecyclePermissions(
 			`!document.querySelector('input[name=_method][value=delete]') && !document.querySelector('[data-lifecycle-stage-action]') && !document.querySelector('[data-lifecycle-environment-assignment]')`,
 		),
 	) != "true" {
-		t.Fatal("deployer has lifecycle delete or stage write controls")
+		t.Fatal("maintainer has lifecycle delete or stage write controls")
 	}
-	b.captureNavigation(t, "lifecycle-deployer")
+	b.captureNavigation(t, "lifecycle-maintainer")
 	b.navigateBackTest(
 		t,
 		fmt.Sprintf("%s/environments/%d/edit", f.baseURL, f.environment.ID),
@@ -89,9 +89,9 @@ func (b *packageBrowser) assertLifecyclePermissions(
 	if string(
 		b.evaluate(t, `!document.querySelector('button[hx-delete]')`),
 	) != "true" {
-		t.Fatal("deployer has environment delete control")
+		t.Fatal("maintainer has environment delete control")
 	}
-	b.captureNavigation(t, "environment-deployer")
+	b.captureNavigation(t, "environment-maintainer")
 	if err := f.h.repo.Queries.UpdateUser(
 		t.Context(),
 		db.UpdateUserParams{ID: user.ID, Name: user.Name, Role: "admin"},
