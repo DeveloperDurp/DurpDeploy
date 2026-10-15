@@ -61,7 +61,7 @@ func assertLifecycleStageAccess(
 		`"environment_id":`+fmt.Sprint(f.environment.ID)) {
 		t.Fatal("removed stage still inherits scoped values")
 	}
-	setRole("deployer")
+	setRole("maintainer")
 	f.api(t, "POST", base,
 		map[string]int64{"environment_id": f.environment.ID}, 403)
 	f.web(t, "POST", web,
@@ -73,5 +73,5 @@ func assertLifecycleStageAccess(
 		`"environment_id":`+fmt.Sprint(f.environment.ID)) {
 		t.Fatal("admin stage restoration did not restore scoped inheritance")
 	}
-	setRole("deployer")
+	setRole("maintainer")
 }

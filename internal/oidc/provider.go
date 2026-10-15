@@ -139,10 +139,11 @@ func (p *Provider) Exchange(
 // configuration without exposing credentials to callback callers.
 func (p *Provider) ParseClaims(raw []byte) (ClaimIdentity, error) {
 	return ParseClaims(raw, p.config.Issuer, GroupMapping{
-		ClaimName: p.config.GroupClaim,
-		Admin:     p.config.AdminGroup,
-		Deployer:  p.config.DeployerGroup,
-		Viewer:    p.config.ViewerGroup,
+		ClaimName:  p.config.GroupClaim,
+		Admin:      p.config.AdminGroup,
+		Maintainer: p.config.MaintainerGroup,
+		Deployer:   p.config.DeployerGroup,
+		Viewer:     p.config.ViewerGroup,
 	}, p.config.AllowUnverifiedEmail)
 }
 

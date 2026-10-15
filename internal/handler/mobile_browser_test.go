@@ -110,17 +110,17 @@ func newMobileBrowserFixtures(t *testing.T) mobileBrowserFixtures {
 	variable := mustCreateVariable(t, ctx, repo, project, environment)
 	secretVar := mustCreateSecretVariable(t, ctx, repo, project)
 	sessions := map[string]*authedSession{
-		"admin":    seedSession(t, repo, srv.URL, "admin"),
-		"deployer": seedSession(t, repo, srv.URL, "deployer"),
-		"viewer":   seedSession(t, repo, srv.URL, "viewer"),
+		"admin":      seedSession(t, repo, srv.URL, "admin"),
+		"maintainer": seedSession(t, repo, srv.URL, "maintainer"),
+		"viewer":     seedSession(t, repo, srv.URL, "viewer"),
 	}
-	for _, role := range []string{"deployer", "viewer"} {
+	for _, role := range []string{"maintainer", "viewer"} {
 		if err := repo.Queries.AddProjectMember(
 			ctx,
 			db.AddProjectMemberParams{
 				ProjectID: project.ID,
 				UserID:    sessions[role].user.ID,
-				Role:      "deployer",
+				Role:      "maintainer",
 			},
 		); err != nil {
 			t.Fatalf("add %s project membership: %v", role, err)

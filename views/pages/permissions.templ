@@ -1,6 +1,7 @@
 package pages
 
 import "durpdeploy/views/layouts"
+import "durpdeploy/internal/auth"
 
 // ViewerForbiddenMessage is the standard "viewers can't do this"
 // page. Rendered in place of a form when a viewer navigates to a
@@ -19,7 +20,12 @@ templ ViewerForbiddenMessage(title string, action string, what string, backHref 
 				<div class="card-body">
 					<h1 class="card-title text-2xl">{ title }</h1>
 					<p>
-						Viewers cannot { action } { what }. Ask an admin to change your role on the
+						if auth.RoleFromContext(ctx) == "viewer" {
+							Viewers cannot { action } { what }.
+						} else {
+							Your role cannot { action } { what }.
+						}
+						Ask an admin to change your role on the
 						<a class="link" href="/admin/users">Users</a> page if you need write access.
 					</p>
 					<div class="card-actions justify-end">

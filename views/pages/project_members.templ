@@ -15,6 +15,7 @@ import (
 templ ProjectMembersSection(project db.Project, members []db.ListProjectMembersRow, availableUsers []db.ListUsersRow, canManage bool, successMessage string) {
 	<div id="project-members" class="mt-8 pt-6 border-t border-base-300">
 		<h2 class="text-xl font-bold mb-4">Members</h2>
+		<p class="text-sm opacity-70 mb-4">Project roles limit the user's global permissions. Deployer runs existing releases. Maintainer authors content. Admin also manages members.</p>
 		if successMessage != "" {
 			<p role="status" class="text-success mb-4">{ successMessage }</p>
 		}
@@ -47,7 +48,9 @@ templ ProjectMembersSection(project db.Project, members []db.ListProjectMembersR
 											hx-swap="outerHTML"
 										>
 											<select x-ref="role" name="role" aria-label={ "Project role for " + m.Name } class="select select-bordered md:select-sm w-full">
+												<option value="viewer" selected?={ m.Role == "viewer" }>viewer</option>
 												<option value="deployer" selected?={ m.Role == "deployer" }>deployer</option>
+												<option value="maintainer" selected?={ m.Role == "maintainer" }>maintainer</option>
 												<option value="admin" selected?={ m.Role == "admin" }>admin</option>
 											</select>
 										</form>
@@ -99,7 +102,9 @@ templ ProjectMembersSection(project db.Project, members []db.ListProjectMembersR
 						<span class="label-text">Role</span>
 					</label>
 					<select name="role" class="select select-bordered md:select-sm">
+						<option value="viewer">viewer</option>
 						<option value="deployer">deployer</option>
+						<option value="maintainer">maintainer</option>
 						<option value="admin">admin</option>
 					</select>
 				</div>

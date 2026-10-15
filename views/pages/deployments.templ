@@ -306,7 +306,7 @@ templ DeploymentActions(deployment db.Deployment, outOfBand bool) {
 			hx-swap-oob="outerHTML"
 		}
 	>
-		if CanWrite(ctx) {
+		if CanDeploy(ctx) {
 			if isTerminalStatus(deployment.Status) {
 				<button
 					class="btn btn-primary sm:btn-sm"
@@ -319,7 +319,7 @@ templ DeploymentActions(deployment db.Deployment, outOfBand bool) {
 					Re-run
 				</button>
 			}
-			if deployment.Status == "pending_approval" {
+			if deployment.Status == "pending_approval" && CanManageAgents(ctx) {
 				<button
 					class="btn btn-success sm:btn-sm"
 					hx-post={ fmt.Sprintf("/deployments/%d/approve", deployment.ID) }

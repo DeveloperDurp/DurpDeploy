@@ -12,6 +12,7 @@ import (
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/repository"
+	"durpdeploy/internal/roles"
 	"durpdeploy/views/pages"
 )
 
@@ -31,14 +32,6 @@ type UsersHandler struct {
 
 func NewUsersHandler(repo *repository.Repository) *UsersHandler {
 	return &UsersHandler{repo: repo}
-}
-
-// validRoles is the set of role values accepted by the create/update
-// forms. Matches the CHECK constraint in migrations/011_auth.sql.
-var validRoles = map[string]bool{
-	"admin":    true,
-	"deployer": true,
-	"viewer":   true,
 }
 
 // ListUsers renders /admin/users with every user in the system.
@@ -377,8 +370,8 @@ func validateUserFields(
 	if name == "" {
 		return "Name is required"
 	}
-	if !validRoles[role] {
-		return "Role must be admin, deployer, or viewer"
+	if !roles.Valid(role) {
+		return "Role must be viewer, deployer, maintainer, or admin"
 	}
 	if isNew {
 		if password == "" {

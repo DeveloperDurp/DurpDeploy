@@ -116,7 +116,7 @@ SET email = ?1,
     role = ?3,
     updated_at = unixepoch()
 WHERE id = ?4 AND role = ?5
-RETURNING id, email, password_hash, name, role, created_at, updated_at, last_login_at
+RETURNING id, email, password_hash, name, created_at, updated_at, last_login_at, role
 `
 
 type UpdateOIDCUserParams struct {
@@ -141,10 +141,10 @@ func (q *Queries) UpdateOIDCUser(ctx context.Context, arg UpdateOIDCUserParams) 
 		&i.Email,
 		&i.PasswordHash,
 		&i.Name,
-		&i.Role,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.LastLoginAt,
+		&i.Role,
 	)
 	return i, err
 }

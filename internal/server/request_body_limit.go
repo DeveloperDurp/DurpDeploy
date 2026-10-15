@@ -33,7 +33,7 @@ func webRequestBodyLimit(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		if auth.RejectViewerWrite(w, r) {
+		if auth.RejectRestrictedWrite(w, r) {
 			return
 		}
 		limit := handler.MaxFormBodyBytes

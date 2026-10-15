@@ -11,6 +11,7 @@ import (
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/repository"
+	"durpdeploy/internal/roles"
 	"durpdeploy/views/pages"
 )
 
@@ -101,9 +102,9 @@ func (h *ProjectMembersHandler) UpdateMemberRole(
 		return
 	}
 	role := r.PostFormValue("role")
-	if role != "admin" && role != "deployer" {
-		SetToastError(w, "Role must be admin or deployer")
-		http.Error(w, "Role must be admin or deployer",
+	if !roles.Valid(role) {
+		SetToastError(w, "Role must be viewer, deployer, maintainer, or admin")
+		http.Error(w, "Role must be viewer, deployer, maintainer, or admin",
 			http.StatusUnprocessableEntity)
 		return
 	}
@@ -203,7 +204,7 @@ func (h *ProjectMembersHandler) AddMember(
 	}
 
 	role := r.FormValue("role")
-	if role != "admin" && role != "deployer" {
+	if !roles.Valid(role) {
 		http.Error(w, "Invalid role", http.StatusBadRequest)
 		return
 	}

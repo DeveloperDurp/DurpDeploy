@@ -7,10 +7,11 @@ import (
 )
 
 var testGroupMapping = GroupMapping{
-	ClaimName: "groups",
-	Admin:     "durp-admin",
-	Deployer:  "durp-deployer",
-	Viewer:    "durp-viewer",
+	Maintainer: "durp-maintainer",
+	ClaimName:  "groups",
+	Admin:      "durp-admin",
+	Deployer:   "durp-deployer",
+	Viewer:     "durp-viewer",
 }
 
 const testIssuer = "https://id.example"

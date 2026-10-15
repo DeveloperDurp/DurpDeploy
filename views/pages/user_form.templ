@@ -115,6 +115,7 @@ templ UserFormContent(user *db.User, isNew bool) {
 					<option value={ role } if selectedRole(user) == role { selected }>{ role }</option>
 				}
 			</select>
+			<p class="text-xs opacity-70 mt-1">Viewer reads. Deployer runs existing releases. Maintainer authors content. Admin manages the instance.</p>
 		</div>
 		<div class="form-control">
 			<label class="label">
@@ -209,15 +210,17 @@ func userFormID(user *db.User, isNew bool) string {
 // after a validation failure) keeps the same ordering.
 func userRoleOptions(user *db.User) []string {
 	if user == nil {
-		return []string{"admin", "deployer", "viewer"}
+		return []string{"admin", "maintainer", "deployer", "viewer"}
 	}
 	switch user.Role {
+	case "maintainer":
+		return []string{"maintainer", "admin", "deployer", "viewer"}
 	case "deployer":
-		return []string{"deployer", "admin", "viewer"}
+		return []string{"deployer", "admin", "maintainer", "viewer"}
 	case "viewer":
-		return []string{"viewer", "admin", "deployer"}
+		return []string{"viewer", "admin", "maintainer", "deployer"}
 	}
-	return []string{"admin", "deployer", "viewer"}
+	return []string{"admin", "maintainer", "deployer", "viewer"}
 }
 
 // selectedRole is the role that should be marked selected. For a

@@ -74,7 +74,8 @@ func TestProjectMemberRolesAPIWebE2E(t *testing.T) {
 	)
 	for _, actor := range []memberRoleActor{
 		{"global-admin", "admin", "", true},
-		{"project-admin", "deployer", "admin", true},
+		{"project-admin", "maintainer", "admin", true},
+		{"restricted-project-admin", "deployer", "admin", false},
 		{"project-deployer", "deployer", "deployer", false},
 		{"viewer-project-admin", "viewer", "admin", false},
 		{"other-project-admin", "deployer", "", false},
@@ -164,7 +165,7 @@ func (f *memberRoleFixture) checkActor(t *testing.T, actor memberRoleActor) {
 	}
 	_, token := seedAPIToken(t, f.h.repo, user.ID)
 	session := memberRoleSession(t, f.h, user.ID)
-	for _, role := range []string{"admin", "deployer"} {
+	for _, role := range []string{"viewer", "deployer", "maintainer", "admin"} {
 		if actor.allowed {
 			f.checkAllowedRole(t, role, token, session)
 		} else {
@@ -243,7 +244,7 @@ func (f *memberRoleFixture) checkInvalidRequests(
 	path := fmt.Sprintf("/projects/%d/members/%d", f.project.ID, f.target.ID)
 	api := memberRoleAuth{token: token}
 	web := memberRoleAuth{session: session, hx: true, csrf: true}
-	for _, role := range []string{"", "viewer", "owner"} {
+	for _, role := range []string{"", "owner"} {
 		f.request(t, "/api/v1"+path, `{"role":"`+role+`"}`, api, 422)
 		f.request(t, path, "role="+role, web, 422)
 	}
@@ -260,7 +261,7 @@ func (f *memberRoleFixture) checkInvalidRequests(
 		f.request(t, "/api/v1"+missing, `{"role":"admin"}`, api, 404)
 		f.request(t, missing, "role=admin", web, 404)
 	}
-	if f.member(t, f.project.ID).Role != "deployer" {
+	if f.member(t, f.project.ID).Role != "admin" {
 		t.Fatal("invalid request changed the role")
 	}
 	var audited int
@@ -269,7 +270,7 @@ func (f *memberRoleFixture) checkInvalidRequests(
 		 WHERE user_id = ? AND action = 'update_project_member'`,
 		userID,
 	).Scan(&audited)
-	if err != nil || audited != 6 {
+	if err != nil || audited != 12 {
 		t.Fatalf("successful role changes audited=%d, error=%v", audited, err)
 	}
 }

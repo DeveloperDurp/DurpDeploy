@@ -16,13 +16,13 @@ func TestVerificationAdminConfigurationE2E(t *testing.T) {
 	f := newVerificationE2E(t)
 	configureVerification(t, f, "bash", "echo configured-check", 5)
 	adminToken := f.token
-	deployer := seedAPIUser(
+	maintainer := seedAPIUser(
 		t,
 		f.h.repo,
 		"outsider@verification.example",
-		"deployer",
+		"maintainer",
 	)
-	_, f.token = seedAPIToken(t, f.h.repo, deployer.ID)
+	_, f.token = seedAPIToken(t, f.h.repo, maintainer.ID)
 	path := fmt.Sprintf("/api/v1/environments/%d", f.environment.ID)
 	assertRedacted := func(response []byte) {
 		t.Helper()
@@ -31,15 +31,15 @@ func TestVerificationAdminConfigurationE2E(t *testing.T) {
 			t.Fatalf("non-admin received verification target: %s", response)
 		}
 	}
-	for _, role := range []string{"deployer", "viewer"} {
+	for _, role := range []string{"maintainer", "deployer", "viewer"} {
 		user := seedAPIUser(t, f.h.repo, role+"-read@example.test", role)
 		_, f.token = seedAPIToken(t, f.h.repo, user.ID)
 		assertRedacted(f.api(t, "GET", path, nil, 200))
 		assertRedacted(f.api(t, "GET", "/api/v1/environments", nil, 200))
 	}
-	_, f.token = seedAPIToken(t, f.h.repo, deployer.ID)
+	_, f.token = seedAPIToken(t, f.h.repo, maintainer.ID)
 
-	// When: a deployer tries to replace or disable the check through either surface.
+	// When: a maintainer tries to replace or disable the admin's check.
 	for _, kind := range []string{"bash", ""} {
 		f.api(t, "PUT", path, map[string]any{
 			"name":                f.environment.Name,
@@ -55,15 +55,15 @@ func TestVerificationAdminConfigurationE2E(t *testing.T) {
 	if _, err := f.h.repo.Queries.CreateSession(
 		t.Context(),
 		db.CreateSessionParams{
-			ID:        "verification-deployer-session",
-			UserID:    deployer.ID,
+			ID:        "verification-maintainer-session",
+			UserID:    maintainer.ID,
 			CsrfToken: f.csrf,
 			ExpiresAt: 4102444800,
 		},
 	); err != nil {
 		t.Fatal(err)
 	}
-	f.session = "verification-deployer-session"
+	f.session = "verification-maintainer-session"
 	query := "?verification_type=bash&verification_target=echo+injected"
 	f.web(
 		t,
@@ -91,7 +91,7 @@ func TestVerificationAdminConfigurationE2E(t *testing.T) {
 	}
 	page := f.web(t, "GET", webPath+"/edit", nil, 200)
 	if strings.Contains(page, `name="verification_target"`) {
-		t.Fatal("deployer sees configuration form")
+		t.Fatal("maintainer sees configuration form")
 	}
 
 	// Then: ordinary edits preserve the admin's check atomically.

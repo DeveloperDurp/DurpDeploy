@@ -48,6 +48,7 @@ Run on the host with the server's database (matching `DURPDEPLOY_DB`):
 ```bash
 durpdeploy admin create --email X --password Y   # first admin, runs migrations
 durpdeploy tokens create --user admin@example.com --name ci   # prints token ONCE
+durpdeploy tokens create --user admin@example.com --name author --scope scoped --role maintainer --project-id 12
 durpdeploy tokens list --user admin@example.com
 durpdeploy audit prune --days 180
 ```
@@ -73,16 +74,21 @@ api_get "$BASE/api/v1/users/me"    # sanity check: who am I
 
 - No CSRF, no cookies. Errors are JSON envelopes (`400/401/404/422`).
 - Global tokens cover all projects available to the owner.
-- Both scopes support a `viewer`, `deployer`, or `admin` permission ceiling.
+- Both scopes support a `viewer`, `deployer`, `maintainer`, or `admin` permission ceiling.
 - Legacy global tokens without a role inherit the owner's current permissions.
-- Scoped tokens also require a selected project and a `viewer`, `deployer`, or `admin` permission ceiling.
+- Scoped tokens also require a selected project and a `viewer`, `deployer`, `maintainer`, or `admin` permission ceiling.
 - Viewer tokens cannot write, execute deployments, or approve operations.
+- Deployer tokens can start existing releases, retry, re-run, and cancel deployments.
+- Retries and re-runs recheck lifecycle promotion and approval gates.
+- Deployer tokens cannot author content, manage schedules or tokens, run runbooks, request rollback, or approve operations.
+- Maintainer tokens permit authoring and runbook execution within existing administrator boundaries.
+- Global roles, project membership roles, and token ceilings each limit project operations.
 - Scoped `admin` tokens grant no instance administration.
 - Project membership and global-administrator approval requirements still apply to the owner.
 - Browser MFA protects web logins only — API tokens are single bearer
   credentials and keep working.
 
-Create a project-scoped token through the owner's browser session or an existing global token.
+Create a project-scoped token through an authorized Maintainer or administrator session, a legacy global token, or the server CLI.
 Select one or more accessible projects and a role in `/settings/tokens`.
 Use this API request for the same operation:
 
@@ -119,6 +125,9 @@ These changes do not cancel work already accepted by the server.
 Creation, scope changes, and revocation record non-secret identifiers in the audit log.
 Existing scoped database rows without valid grants fail authentication.
 Migration rollback is refused because older applications ignore token restrictions.
+The four-role upgrade migrates existing Deployer users, memberships, and explicit token ceilings to Maintainer.
+Legacy global tokens continue to inherit the owner's current role.
+Configure the OIDC Maintainer group to preserve authoring access on the next OIDC login.
 
 ### Web session + CSRF (only when driving the UI)
 

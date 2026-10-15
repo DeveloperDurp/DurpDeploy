@@ -76,6 +76,14 @@ func TestProjectTokensBrowserE2E(t *testing.T) {
 	if string(
 		b.evaluate(
 			t,
+			`[...document.querySelector('#new-token-role').options].map(option=>option.value).join(',') === 'viewer,deployer,maintainer,admin'`,
+		),
+	) != "true" {
+		t.Fatal("token selector omits a permission level")
+	}
+	if string(
+		b.evaluate(
+			t,
 			`document.querySelector('#new-token-scope').value === 'global' && document.querySelector('#new-token-role').value === 'viewer' && document.querySelectorAll('form[action="/settings/tokens"] input[name=project_ids]:checked').length === 0`,
 		),
 	) != "true" {

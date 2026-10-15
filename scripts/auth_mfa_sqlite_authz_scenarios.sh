@@ -55,7 +55,7 @@ matrix_csrf_viewer_role_write_rejection() {
     admin_token=$(auth_mfa_mint_api_token "$admin_jar" "$admin_csrf" authz-admin)
     admin_id=$(authz_db_query "SELECT id FROM users WHERE email = '$DURPDEPLOY_AUTH_MFA_ADMIN_EMAIL'")
 
-    authz_create_user "$admin_token" deployer deployer
+    authz_create_user "$admin_token" deployer maintainer
     authz_create_user "$admin_token" viewer viewer
     deployer_id=$(auth_mfa_user_id deployer)
     viewer_id=$(auth_mfa_user_id viewer)

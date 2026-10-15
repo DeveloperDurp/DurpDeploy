@@ -1785,8 +1785,8 @@ func TestR1_AdminCannotDeleteSelf(t *testing.T) {
 // decrypted secret value would be returned on a successful GET.
 func TestR2_VariableCrossProjectIDOR(t *testing.T) {
 	h := newAPIHarness(t)
-	ownerOfA := seedAPIUser(t, h.repo, "ownerA@example.com", "deployer")
-	ownerOfB := seedAPIUser(t, h.repo, "ownerB@example.com", "deployer")
+	ownerOfA := seedAPIUser(t, h.repo, "ownerA@example.com", "maintainer")
+	ownerOfB := seedAPIUser(t, h.repo, "ownerB@example.com", "maintainer")
 	_, tokenPlain := seedAPIToken(t, h.repo, ownerOfA.ID)
 
 	projectA := seedProject(t, h.repo)
@@ -1957,7 +1957,7 @@ func TestR2_VariableCrossProjectIDOR(t *testing.T) {
 // B's deployment logic.
 func TestR2_StepCrossProjectIDOR(t *testing.T) {
 	h := newAPIHarness(t)
-	ownerOfA := seedAPIUser(t, h.repo, "ownerA@example.com", "deployer")
+	ownerOfA := seedAPIUser(t, h.repo, "ownerA@example.com", "maintainer")
 	_, tokenPlain := seedAPIToken(t, h.repo, ownerOfA.ID)
 
 	projectA := seedProject(t, h.repo)

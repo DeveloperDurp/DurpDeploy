@@ -11,17 +11,18 @@ differs.
 
 ## Values used by this guide
 
-Choose three distinct Authentik group names. The examples below are placeholders
-only. The strings must match the groups emitted in the `groups` claim exactly.
+Choose distinct Authentik group names for the required roles and optional Maintainer role.
+The strings must match the groups emitted in the `groups` claim exactly.
 
 | DurpDeploy role | Authentik group string |
 | --- | --- |
 | Admin | `<durpdeploy-admin-group>` |
+| Maintainer | `<durpdeploy-maintainer-group>` |
 | Deployer | `<durpdeploy-deployer-group>` |
 | Viewer | `<durpdeploy-viewer-group>` |
 
 If a user belongs to more than one configured group, DurpDeploy applies this
-precedence: `admin`, then `deployer`, then `viewer`. A partial or similar group
+precedence: `admin`, then `maintainer`, then `deployer`, then `viewer`. A partial or similar group
 name does not match. Group names are role bindings, so protect membership in
 these groups as carefully as local administrator access.
 
@@ -114,14 +115,14 @@ and is appropriate only where Authentik independently establishes address owners
 
 ## 3. Create and assign the role groups
 
-Create the three groups if they do not exist. Use the exact strings selected
-above. Add test users to one group at a time first. Then assign the groups to
+Create the role groups that you need.
+Use the exact configured group names. Add test users to one group at a time first. Then assign the groups to
 the Authentik application or provider with the access policy or group policy
 mechanism available in your release.
 
 For an operator who belongs to both admin and deployer, DurpDeploy still stores
 `admin`. For a user who belongs to deployer and viewer, it stores `deployer`.
-Removing all three groups does not immediately remove access from an existing
+Removing all mapped groups does not immediately remove access from an existing
 local session. The changed mapping is applied on that user's next successful
 OIDC login.
 
@@ -138,6 +139,7 @@ DURPDEPLOY_OIDC_ISSUER=https://<authentik-issuer-host>
 DURPDEPLOY_OIDC_CLIENT_ID=<authentik-client-id>
 DURPDEPLOY_OIDC_CLIENT_SECRET=<authentik-client-secret>
 DURPDEPLOY_OIDC_ADMIN_GROUP=<durpdeploy-admin-group>
+DURPDEPLOY_OIDC_MAINTAINER_GROUP=<durpdeploy-maintainer-group>
 DURPDEPLOY_OIDC_DEPLOYER_GROUP=<durpdeploy-deployer-group>
 DURPDEPLOY_OIDC_VIEWER_GROUP=<durpdeploy-viewer-group>
 DURPDEPLOY_OIDC_DISPLAY_NAME=SSO
@@ -169,11 +171,12 @@ Use a test account before changing production group membership.
       control.
 - [ ] The requested scopes are exactly `openid profile email`.
 - [ ] The ID token contains `email`, `email_verified`, and `groups`.
-- [ ] The three configured group strings are exact and distinct.
+- [ ] All configured group strings are exact and distinct.
+- [ ] A user in the optional Maintainer group becomes `maintainer`.
 - [ ] A user in the admin group becomes `admin`, a deployer user becomes
       `deployer`, and a viewer user becomes `viewer`.
 - [ ] A user in multiple configured groups receives the highest-precedence
-      role, admin over deployer over viewer.
+      role, admin over maintainer over deployer over viewer.
 - [ ] An email matching one local account links to it; email verification follows the policy above.
 - [ ] A verified email with no local match creates a JIT user with an empty
       password.
@@ -211,8 +214,8 @@ values are strings and that the configured names match exactly.
 
 ### The user gets the wrong role
 
-Review all three group memberships and the configured values. DurpDeploy uses
-admin, then deployer, then viewer precedence. A role is synchronized only on a
+Review all configured group memberships and values. DurpDeploy uses
+admin, then maintainer, then deployer, then viewer precedence. A role is synchronized only on a
 successful OIDC login. A role change removes the user's DurpDeploy browser
 sessions, so the user must sign in again.
 
@@ -229,6 +232,17 @@ urgent response requires it.
 The OIDC attempt fails generically, but password login, existing DurpDeploy
 sessions, health checks, and bearer API authentication remain available. This
 is deliberate provider isolation, not a signal to disable TLS verification.
+
+## Maintainer upgrade mapping
+
+The Maintainer group mapping is optional.
+If configured, its name must differ from the other role groups.
+An empty configured group is invalid.
+The existing Deployer group now grants deployment execution permission.
+Configure `DURPDEPLOY_OIDC_MAINTAINER_GROUP` for existing authoring groups before upgrading.
+Keep a distinct Deployer group for execution-only operators.
+An OIDC login replaces the migrated global role with the current group mapping.
+See [role upgrade behavior](roles.md#upgrade-behavior).
 
 ## Security limits and coexistence
 

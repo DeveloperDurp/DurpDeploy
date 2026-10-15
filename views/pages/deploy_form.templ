@@ -13,7 +13,7 @@ import (
 // projects list. The inline deploy form on the releases page is still
 // available as a quick alternative.
 templ DeployFormPage(project db.Project, releases []db.Release, selectedRelease *db.Release, envs []AvailableEnv, currentPath string) {
-	if !CanWrite(ctx) {
+	if !CanDeploy(ctx) {
 		@ViewerForbiddenMessage(
 			"Deploy "+project.Name,
 			"create",

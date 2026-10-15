@@ -268,6 +268,7 @@ func clearOIDCEnv(t *testing.T) {
 		"DURPDEPLOY_OIDC_CLIENT_ID",
 		"DURPDEPLOY_OIDC_CLIENT_SECRET",
 		"DURPDEPLOY_OIDC_ADMIN_GROUP",
+		"DURPDEPLOY_OIDC_MAINTAINER_GROUP",
 		"DURPDEPLOY_OIDC_DEPLOYER_GROUP",
 		"DURPDEPLOY_OIDC_VIEWER_GROUP",
 		"DURPDEPLOY_OIDC_DISPLAY_NAME",
@@ -303,6 +304,7 @@ func equalConfig(got, want Config) bool {
 		got.DisplayName == want.DisplayName &&
 		got.GroupClaim == want.GroupClaim &&
 		got.AdminGroup == want.AdminGroup &&
+		got.MaintainerGroup == want.MaintainerGroup &&
 		got.DeployerGroup == want.DeployerGroup &&
 		got.ViewerGroup == want.ViewerGroup &&
 		got.AllowUnverifiedEmail == want.AllowUnverifiedEmail

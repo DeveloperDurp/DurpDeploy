@@ -514,7 +514,7 @@ async function run() {
 		monitorBrowserErrors(adminPage, browserErrors);
 		await passwordLogin(adminPage, app.url, "admin@mfa.test", passwords.admin);
 		const adminToken = await mintToken(adminPage, app.url);
-		const deployer = await createUser(adminPage, app.url, adminToken, { email: "deployer@mfa.test", name: longDeployerName, password: passwords.deployer, role: "deployer" });
+		const deployer = await createUser(adminPage, app.url, adminToken, { email: "deployer@mfa.test", name: longDeployerName, password: passwords.deployer, role: "maintainer" });
 		const viewer = await createUser(adminPage, app.url, adminToken, { email: "viewer@mfa.test", name: "Viewer", password: passwords.viewer, role: "viewer" });
 		await accountContract(adminPage, app.url, "admin", true, artifactDir);
 
@@ -523,7 +523,16 @@ async function run() {
 		monitorBrowserErrors(deployerPage, browserErrors);
 		await passwordLogin(deployerPage, app.url, "deployer@mfa.test", passwords.deployer);
 		const deployerToken = await mintToken(deployerPage, app.url);
-		await accountContract(deployerPage, app.url, "deployer", true, artifactDir);
+		await adminPage.evaluate(async ({ url, token, id, name }) => {
+			const response = await fetch(`${url}/api/v1/admin/users/${id}`, {
+				method: "PUT",
+				headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+				body: JSON.stringify({ name, role: "deployer" }),
+			});
+			if (!response.ok) throw new Error("Deployer role downgrade failed");
+		}, { url: app.url, token: adminToken, id: deployer.id, name: longDeployerName });
+		await passwordLogin(deployerPage, app.url, "deployer@mfa.test", passwords.deployer);
+		await accountContract(deployerPage, app.url, "deployer", false, artifactDir);
 		await addAuthenticator(deployerContext, deployerPage);
 		await enrollPasskey(
 			deployerPage,

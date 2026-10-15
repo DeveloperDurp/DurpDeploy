@@ -21,7 +21,7 @@ deployment_list_e2e() {
     foreign_release=$(api_post '{"version":"1.0"}' "$BASE/api/v1/projects/$foreign/releases" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
     owned_dep=$(api_post "{\"release_id\":$release,\"environment_id\":$env}" "$BASE/api/v1/projects/$owned/deployments" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
     foreign_dep=$(api_post "{\"release_id\":$foreign_release,\"environment_id\":$foreign_env}" "$BASE/api/v1/projects/$foreign/deployments" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
-    user=$(api_post "{\"email\":\"$prefix@test.local\",\"name\":\"List User\",\"password\":\"$password\",\"role\":\"deployer\"}" "$BASE/api/v1/admin/users" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
+    user=$(api_post "{\"email\":\"$prefix@test.local\",\"name\":\"List User\",\"password\":\"$password\",\"role\":\"maintainer\"}" "$BASE/api/v1/admin/users" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
     jar="$TMP/list-access-cookies"
     code=$(curl -sS -c "$jar" -o /dev/null -w '%{http_code}' -X POST \
         --data-urlencode "email=$prefix@test.local" --data-urlencode "password=$password" "$BASE/login")
@@ -41,10 +41,8 @@ assert result["total"] == 0 and result["items"] == []
     }
     api_post "{\"user_id\":$user,\"role\":\"deployer\"}" "$BASE/api/v1/projects/$owned/members" >/dev/null
 
-    for role in deployer viewer; do
-        if [[ "$role" == viewer ]]; then
-            api_put '{"name":"List User","role":"viewer"}' "$BASE/api/v1/admin/users/$user" >/dev/null
-        fi
+    for role in maintainer deployer viewer; do
+        api_put "{\"name\":\"List User\",\"role\":\"$role\"}" "$BASE/api/v1/admin/users/$user" >/dev/null
         # When listing with pagination, totals and IDs contain only owned rows.
         curl -fsS -H "Authorization: Bearer $token" "$BASE/api/v1/deployments?limit=1" | python3 -c '
 import json,sys

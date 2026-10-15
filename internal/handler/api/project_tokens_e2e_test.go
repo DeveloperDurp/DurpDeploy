@@ -52,7 +52,7 @@ func TestProjectTokensRolesAPIE2E(t *testing.T) {
 			release.ID, f.environment.ID, "succeeded"))
 	}
 	member := seedAPIUser(t, f.h.repo, "token-member@example.test", "deployer")
-	for _, role := range []string{"viewer", "deployer", "admin"} {
+	for _, role := range []string{"viewer", "deployer", "maintainer", "admin"} {
 		t.Run(role, func(t *testing.T) {
 			f.token = owner
 			token := mintProjectToken(
@@ -157,7 +157,7 @@ func TestProjectTokensRolesAPIE2E(t *testing.T) {
 				403,
 			)
 			writeStatus := 201
-			if role == "viewer" {
+			if role == "viewer" || role == "deployer" {
 				writeStatus = 403
 			}
 			f.api(

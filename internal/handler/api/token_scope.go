@@ -9,6 +9,7 @@ import (
 	"durpdeploy/internal/audit"
 	"durpdeploy/internal/auth"
 	"durpdeploy/internal/repository"
+	"durpdeploy/internal/roles"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -27,10 +28,7 @@ func (req createTokenRequest) tokenScope() (repository.TokenScope, error) {
 	}
 	if len(req.Role) != 0 {
 		if json.Unmarshal(req.Role, &grant.Role) != nil ||
-			!slices.Contains(
-				[]string{"viewer", "deployer", "admin"},
-				grant.Role,
-			) {
+			!roles.Valid(grant.Role) {
 			return grant, repository.ErrTokenScope
 		}
 	}

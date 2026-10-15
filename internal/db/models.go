@@ -452,8 +452,8 @@ type ProjectArtifactRepository struct {
 type ProjectMember struct {
 	ProjectID int64  `json:"project_id"`
 	UserID    int64  `json:"user_id"`
-	Role      string `json:"role"`
 	CreatedAt int64  `json:"created_at"`
+	Role      string `json:"role"`
 }
 
 type Release struct {
@@ -681,10 +681,10 @@ type User struct {
 	Email        string        `json:"email"`
 	PasswordHash string        `json:"password_hash"`
 	Name         string        `json:"name"`
-	Role         string        `json:"role"`
 	CreatedAt    int64         `json:"created_at"`
 	UpdatedAt    int64         `json:"updated_at"`
 	LastLoginAt  sql.NullInt64 `json:"last_login_at"`
+	Role         string        `json:"role"`
 }
 
 type Variable struct {

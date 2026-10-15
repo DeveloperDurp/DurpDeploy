@@ -808,7 +808,7 @@ async function mobileInteractionFailure(page, target, viewport) {
 		} else if (config.role !== "admin") {
 			if ((await settings.count()) !== 1 || !(await settings.isVisible()) ||
 				(await assignment.count()) !== 0) {
-				return "deployer lifecycle settings or stage restrictions are incorrect";
+				return "maintainer lifecycle settings or stage restrictions are incorrect";
 			}
 		} else if (
 			(await settings.count()) !== 1 ||

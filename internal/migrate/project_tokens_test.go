@@ -15,7 +15,7 @@ import (
 )
 
 func TestProjectTokenQueriesSQLite(t *testing.T) {
-	conn, err := Run(":memory:")
+	conn, err := Run(t.TempDir() + "/tokens.db")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,7 +51,7 @@ func TestProjectTokenUpgradeAndRollbackRefusal(t *testing.T) {
 	}
 	version, err := goose.GetDBVersion(conn)
 	requireNoError(t, err, "read version after refused rollback")
-	if version != 63 {
+	if version != 64 {
 		t.Fatal("refused rollback changed schema version")
 	}
 	_, err = db.New(conn).ListApiTokenProjectIDs(t.Context(), row.ID)

@@ -33,7 +33,7 @@ type mobileStructuralFixture struct {
 	notification db.NotificationEvent
 	auditDetails string
 	admin        *authedSession
-	deployer     *authedSession
+	maintainer   *authedSession
 	viewer       *authedSession
 }
 
@@ -121,22 +121,22 @@ func (f mobileStructuralFixture) withWriterControls(
 			},
 		)),
 	)
-	deployer := seedSession(t, f.repo, f.serverURL, "deployer")
+	maintainer := seedSession(t, f.repo, f.serverURL, "maintainer")
 	mustMobileStructuralErr(
 		t,
 		f.repo.Queries.AddProjectMember(
 			ctx,
 			db.AddProjectMemberParams{
 				ProjectID: f.project.ID,
-				UserID:    deployer.user.ID,
-				Role:      "deployer",
+				UserID:    maintainer.user.ID,
+				Role:      "maintainer",
 			},
 		),
 	)
 
 	f.secondStep = secondStep
 	f.secondStage = secondStage
-	f.deployer = deployer
+	f.maintainer = maintainer
 	return f
 }
 

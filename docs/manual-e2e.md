@@ -1,11 +1,29 @@
 # Manual checks after `make e2e-test`
 
+## Four permission levels
+
+Keep the printed **Permission role project**, release link, and four account logins.
+The suite retains deployment history and creates no schedules for these examples.
+Sign in with each printed account.
+Confirm that Viewer cannot deploy or edit content.
+Confirm that Deployer can deploy the existing release and read its logs.
+Confirm that Deployer cannot edit, delete, refresh, or create project content.
+Confirm that Maintainer can author content and execute runbooks.
+Confirm that Maintainer cannot approve deployments or manage global users.
+Retry and cancel a deployment with the Deployer account.
+Confirm that the retry retains the original deployment snapshots.
+Open each forbidden form through its direct URL.
+Confirm that it shows a permission message.
+Submit a forged configuration request through the browser or API.
+Expect a browser HTMX toast, a native browser `403`, or an API JSON `403`.
+Read [roles](roles.md) for membership ceilings and upgrade behavior.
+
 ## Project-scoped API tokens
 
 Run `make e2e-test` against the running server.
 Keep the printed selected-project, denied-project, and token management links.
 The suite retains `e2e-token-a-*`, `e2e-token-b-*`, and `e2e-token-foreign-*` projects.
-It also retains token metadata for all three roles and a revoked token.
+It also retains token metadata for all four roles and a revoked token.
 These scenarios create no schedules.
 
 Open `/settings/tokens` as an administrator.
@@ -46,7 +64,7 @@ Call `GET /api/v1/projects` with each token.
 Expect only selected projects and matching pagination totals.
 Request the denied project and its deployments, variables, releases, runbooks, packages, artifacts, and logs.
 Expect denial without unrelated metadata.
-Attempt a project write with the viewer token.
+Attempt project creation, editing, and deletion with Viewer and Deployer tokens.
 Expect `403`.
 
 Deploy with the deployer token in a selected project.
@@ -79,7 +97,7 @@ Open the editor again and confirm that the saved role remains selected.
 
 Select `admin`, then select **Save**.
 Confirm that the role changes and a success message appears.
-Repeat with `deployer`.
+Repeat with `viewer`, `deployer`, and `maintainer`.
 Repeat inside the project edit dialog and at a phone viewport width.
 Confirm that unsaved project settings remain unchanged.
 
@@ -687,7 +705,7 @@ Use only the disposable E2E examples for edits and deletion checks.
 | API cancel/status (A7) | POST a deployment of e2e-api-project release `v1`, GET its status, POST `/deployments/{id}/cancel` while running. | Running → cancelled; cancel response 200. |
 | API log streaming (A8) | Deploy e2e-api-project `v2`; GET `/deployments/{id}/logs/stream?format=ndjson`. | Each replayed/live line is a JSON object with a `line` field. |
 | Project/environment queue isolation | Deploy e2e-api-project `queue-check` to dev, then deploy `v2` to dev. While the first runs, deploy TestProject `1.0.0` to dev and e2e-api-project `queue-check` to test. Cancel both slow deployments after inspection. | Only the second dev job in e2e-api-project queues. The other project and test job run independently. Cancelling the dev head admits its next queued job. Release snapshots and printed deployment links remain available. |
-| API failure paths (A9) | POST `/projects` without a token; GET a nonexistent project ID; sign in as the printed `e2e-viewer-…@test.local` (test password `e2e-viewer-pass-1234`). To repeat the API viewer check, promote that test user to deployer, mint its own token, then demote it to viewer before POST `/projects`. | No token: 401; missing project: 404; viewer write: 403. Admin changes invalidate sessions; sign in again for web checks. |
+| API failure paths (A9) | POST `/projects` without a token. GET a nonexistent project ID. Sign in as the printed `e2e-viewer-…@test.local` with password `e2e-viewer-pass-1234`. To repeat the API viewer check, promote that user to Maintainer. Mint its token. Demote the user to Viewer before POST `/projects`. | No token returns 401. A missing project returns 404. A Viewer write returns 403. Admin changes invalidate sessions. Sign in again for web checks. |
 | Swagger (A10) | Open `/api/swagger/`, `/api/swagger/index.html`, and `/api/swagger/spec` without authentication. Inspect verification/rollback security and environment error responses in the spec. | UI/spec 200; Swagger 2.0; verification and rollback require bearer auth; environment POST/PUT document 403 and 422. |
 | Terraform artifact approval | `terraform-approval`: inspect printed approved, rejected, and pending deployments. Open the pending review, download the plan, then approve or reject. Deploy `approval-demo` again to repeat either decision. | Real Terraform summary: one added, one modified, one removed resource, zero reads, unverified review label. Approval applies the saved plan, verifies the resulting state and no remaining changes, then succeeds; rejection prevents the saved-plan apply and ends rejected. Downloaded artifact SHA-256 matches the gate. |
 
@@ -775,8 +793,10 @@ After removing a lifecycle stage, edit one of its retained variables: Save
 must wait for an explicit **All stages** or current-stage selection. A blank
 secret field still preserves the saved secret after choosing the scope.
 Choose **Override**, enter a project value and save to recreate the example.
-Global admins manage shared values; project deployers can override their own
-values and viewers see no write controls. Unassigned projects inherit nothing.
+Global administrators manage shared values.
+Project Maintainers can override their own values.
+Viewers and Deployers see no write controls.
+Unassigned projects inherit nothing.
 
 The refreshed demo is `https://citadel.durp.loc:45465`, with data in
 `tmp/demo.zU6HfZ` and its temporary certificate at `tls/cert.pem`.
@@ -808,10 +828,11 @@ Inspect the logs: the shared secret is redacted. To check
 environment precedence, add a lifecycle REGION override for the stage; it wins
 over an unscoped project override, while a project override for that same stage
 wins over the lifecycle value. These examples have no enabled schedules.
-Lifecycle assignment grants execution access to shared secrets. Only global
-admins can attach a lifecycle to a project; project admins can retain or
-remove an existing assignment. As a deployer, creating or updating a project
-with a new lifecycle ID returns 403 without changing the project.
+Lifecycle assignment grants execution access to shared secrets.
+Only global administrators can attach a lifecycle to a project.
+Project administrators with global Maintainer permission can retain or remove an existing assignment.
+As a Maintainer, create or update a project with a new lifecycle ID.
+Confirm a 403 response without a project change.
 
 ## Database TLS policy
 

@@ -141,11 +141,11 @@ func (h *MemberHandler) AddMember(w http.ResponseWriter, r *http.Request) {
 		)
 		return
 	}
-	if req.Role != "admin" && req.Role != "deployer" {
+	if !isValidRole(req.Role) {
 		RespondError(
 			w,
 			http.StatusUnprocessableEntity,
-			"role must be admin or deployer",
+			"role must be viewer, deployer, maintainer, or admin",
 		)
 		return
 	}
@@ -311,11 +311,11 @@ func (h *MemberHandler) UpdateMemberRole(
 	if !readJSONBool(w, r, &req) {
 		return
 	}
-	if req.Role != "admin" && req.Role != "deployer" {
+	if !isValidRole(req.Role) {
 		RespondError(
 			w,
 			http.StatusUnprocessableEntity,
-			"role must be admin or deployer",
+			"role must be viewer, deployer, maintainer, or admin",
 		)
 		return
 	}

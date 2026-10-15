@@ -21,13 +21,13 @@ func TestLifecycleVariableAPI_Permissions(t *testing.T) {
 		f.project.ID,
 	)
 	f.request(t, "GET", inherited, "", 403)
-	if err := f.h.repo.Queries.AddProjectMember(t.Context(), db.AddProjectMemberParams{ProjectID: f.project.ID, UserID: user.ID, Role: "deployer"}); err != nil {
+	if err := f.h.repo.Queries.AddProjectMember(t.Context(), db.AddProjectMemberParams{ProjectID: f.project.ID, UserID: user.ID, Role: "maintainer"}); err != nil {
 		t.Fatal(err)
 	}
 	f.request(t, "GET", inherited, "", 200)
 	local := fmt.Sprintf("/api/v1/projects/%d/variables", f.project.ID)
 	f.request(t, "POST", local, `{"name":"SHARED","value":"override"}`, 403)
-	if err := f.h.repo.Queries.UpdateUser(t.Context(), db.UpdateUserParams{ID: user.ID, Name: user.Name, Role: "deployer"}); err != nil {
+	if err := f.h.repo.Queries.UpdateUser(t.Context(), db.UpdateUserParams{ID: user.ID, Name: user.Name, Role: "maintainer"}); err != nil {
 		t.Fatal(err)
 	}
 	f.request(t, "POST", local, `{"name":"SHARED","value":"override"}`, 201)

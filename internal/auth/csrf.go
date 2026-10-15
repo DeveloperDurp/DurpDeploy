@@ -58,7 +58,7 @@ func CSRFMiddleware() func(http.Handler) http.Handler {
 				return
 			}
 
-			if RejectViewerWrite(w, r) {
+			if RejectRestrictedWrite(w, r) {
 				return
 			}
 
