@@ -1,5 +1,7 @@
 # DurpDeploy
 
+Read [software versions and build numbers](docs/versioning.md) for CLI, API, container, and upgrade diagnostics.
+
 A single-binary deployment tool for Bash, PowerShell, and Python scripts.
 Organize projects and environments, capture releases, and deploy with live logs.
 

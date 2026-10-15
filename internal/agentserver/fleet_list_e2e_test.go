@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"durpdeploy/internal/buildinfo"
 	"durpdeploy/internal/db"
 
 	agentproto "github.com/DeveloperDurp/durpdeploy-agent/protocol"
@@ -90,6 +91,17 @@ func TestAgentFleetListMatchesDetailsE2E(t *testing.T) {
 	items := readList()
 	reads := counter.reads.Load()
 	for _, item := range items {
+		if item["server_version"] != buildinfo.Current().String() {
+			t.Fatalf("fleet server build differs from CLI: %+v", item)
+		}
+		version := item["agent_version"].(map[string]any)
+		if item["id"] == "test-agent" {
+			if version["Valid"] != true || version["String"] != "test-v1" {
+				t.Fatalf("poll version missing from fleet API: %+v", item)
+			}
+		} else if version["Valid"] != false {
+			t.Fatalf("missing version was presented as known: %+v", item)
+		}
 		var detail struct {
 			Agent map[string]any `json:"agent"`
 		}

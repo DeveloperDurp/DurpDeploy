@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"runtime/debug"
 
+	"durpdeploy/internal/buildinfo"
 	"durpdeploy/internal/db"
 )
 
@@ -137,16 +138,8 @@ func agentCompatibility(agent db.Agent) string {
 }
 
 func fleetBuildVersions() (string, string) {
-	version, recommended := "dev", "unknown"
+	version, recommended := buildinfo.Current().String(), "unknown"
 	if build, ok := debug.ReadBuildInfo(); ok {
-		if build.Main.Version != "" && build.Main.Version != "(devel)" {
-			version = build.Main.Version
-		}
-		for _, setting := range build.Settings {
-			if setting.Key == "vcs.revision" && version == "dev" {
-				version += " (" + setting.Value + ")"
-			}
-		}
 		for _, dependency := range build.Deps {
 			if dependency.Path == "github.com/DeveloperDurp/durpdeploy-agent" {
 				recommended = dependency.Version

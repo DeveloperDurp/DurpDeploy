@@ -5,7 +5,7 @@ tmp_dir = "tmp"
 [build]
   args_bin = []
   bin = "tmp/durpdeploy"
-  cmd = "templ generate && go build -o tmp/durpdeploy ./cmd/server"
+  cmd = "templ generate && bash scripts/build_server.sh -o tmp/durpdeploy"
   entrypoint = ["tmp/durpdeploy"]
   delay = 1000
   exclude_dir = ["assets", "tmp", "vendor", "testdata", "node_modules", "static", "screenshots", ".git", ".idea", ".omo"]

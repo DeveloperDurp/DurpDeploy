@@ -26,6 +26,14 @@ default behind a reverse proxy in production. `/healthz` is public and checks
 database connectivity, returning 503 when unavailable. `/api/v1/healthz` is a
 public API liveness probe returning `{"ok":true}` without a database check.
 
+Call `GET /api/v1/version` with a bearer token to read the server executable identity.
+All authenticated roles can read `version`, `build_number`, `commit`, and `modified`.
+Unknown commits and build numbers use the string `unknown`.
+Open `/settings/version` to read the same values in the web UI.
+CI derives the build number from the source commit count.
+Untagged CI builds use a development version with the count and source SHA.
+Tagged releases preserve their semantic version separately from OCI image tag normalization.
+
 Administrators can call `GET /api/v1/admin/database-security` with a bearer token.
 The response describes configured database transport policy, not a live TLS session.
 It contains `backend`, `policy`, and an optional `warning` without connection details or credentials.
@@ -94,6 +102,8 @@ All paths below use the `/api/v1` prefix and require an admin token.
 - `GET /admin/agents` lists agents with `administrative_status`, `draining`, `health`, `current_work`,
   `queued_work`, `last_successful_deployment`, `last_error`, `server_version`,
   `recommended_agent_version`, and `compatibility`.
+  The nullable `agent_version` identifies agent-reported software separately from `agent_protocol`.
+  A missing version remains unknown until the agent supplies it through polling.
 - `GET /admin/agents/$ID` also includes capability `labels` and
   `environment_labels` (environment routing labels).
 - `POST /admin/agents/$ID/drain` and `POST /admin/agents/$ID/resume` return

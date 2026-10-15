@@ -73,12 +73,14 @@ func TestReleaseVersionSupportsBuildMetadata(t *testing.T) {
 			command := exec.Command(
 				"bash",
 				"-euc",
-				release.Jobs["version"].Steps[0].Run,
+				release.Jobs["version"].Steps[1].Run,
 			)
+			command.Dir = "../.."
 			command.Env = append(
 				os.Environ(),
-				"REF_TYPE=tag",
-				"REF_NAME="+fixture.tag,
+				"GITHUB_REF_TYPE=tag",
+				"GITHUB_REF_NAME="+fixture.tag,
+				"BUILD_MODIFIED=false",
 				"GITHUB_OUTPUT="+output,
 			)
 			if data, err := command.CombinedOutput(); err != nil {
@@ -89,6 +91,7 @@ func TestReleaseVersionSupportsBuildMetadata(t *testing.T) {
 				t.Fatal(err)
 			}
 			for _, expected := range []string{
+				"software_version=" + fixture.tag + "\n",
 				"version=" + fixture.image + "\n",
 				"chart_version=" + strings.TrimPrefix(fixture.tag, "v") + "\n",
 				"is_release=true\n",
@@ -114,17 +117,26 @@ func TestReleaseRunsCannotCancelOtherPublishers(t *testing.T) {
 }
 
 func TestImagePublicationUsesVerifiedPRArtifacts(t *testing.T) {
-	// Given the release graph, publication must consume retained PR images.
+	// Publication requires verified PR source and this run's scanned image bytes.
 	release := readWorkflow(t, "release")
 	images := release.Jobs["images"]
-	if images.If != "github.event_name == 'pull_request'" {
-		t.Fatal("image builds and scans must run on PRs")
+	if images.If != "" || !slices.Contains(images.Needs, "version") {
+		t.Fatal("all builds must scan images with computed build metadata")
 	}
 	build, scan, retain := -1, -1, -1
 	for index, step := range images.Steps {
 		switch {
 		case strings.HasPrefix(step.Uses, "docker/build-push-action@"):
 			build = index
+			for _, expected := range []string{
+				"BUILD_VERSION=${{ needs.version.outputs.software_version }}",
+				"BUILD_NUMBER=${{ needs.version.outputs.build_number }}",
+				"BUILD_COMMIT=${{ needs.version.outputs.commit }}",
+			} {
+				if !strings.Contains(step.With["build-args"], expected) {
+					t.Errorf("image build omitted %s", expected)
+				}
+			}
 			if step.With["push"] != "false" ||
 				!strings.HasPrefix(step.With["outputs"], "type=oci,") {
 				t.Fatal("PR builds must export OCI without publishing")
@@ -149,6 +161,9 @@ func TestImagePublicationUsesVerifiedPRArtifacts(t *testing.T) {
 			}
 		}
 	}
+	if !slices.Contains(release.Jobs["docker"].Needs, "images") {
+		t.Fatal("publication must require this build's scanned images")
+	}
 	if build < 0 || scan <= build || retain <= scan {
 		t.Fatal("images must be built, scanned, then retained")
 	}
@@ -164,7 +179,7 @@ func TestImagePublicationUsesVerifiedPRArtifacts(t *testing.T) {
 	for _, step := range release.Jobs["docker"].Steps {
 		if strings.Contains(step.Uses, "build-push-action") ||
 			strings.Contains(step.Uses, "trivy-action") {
-			t.Fatal("publisher must not rebuild or rescan PR images")
+			t.Fatal("publisher must not rebuild or rescan verified images")
 		}
 	}
 	if !slices.Contains(release.Jobs["helm"].Needs, "docker") {

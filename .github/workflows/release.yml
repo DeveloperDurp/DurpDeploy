@@ -1,9 +1,9 @@
-# Build and scan images on PRs. Promote matching artifacts after merge.
+# Build and scan versioned images. Require matching verified PR source to publish.
 # Tests run only on PRs. Publishing runs on main, tags, or dispatch.
 #
 # Versioning:
 #   - tag push  -> version = tag name (e.g. v1.2.3), chart version = 1.2.3
-#   - main push -> version = short commit SHA
+#   - main push -> development version with commit count and source SHA
 #
 # Registries (defaults to ghcr.io under the repo owner; override per-fork):
 #   - container: ghcr.io/<owner>/durpdeploy
@@ -60,41 +60,19 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.v.outputs.version }}
+      software_version: ${{ steps.v.outputs.software_version }}
+      build_number: ${{ steps.v.outputs.build_number }}
+      commit: ${{ steps.v.outputs.commit }}
       chart_version: ${{ steps.v.outputs.chart_version }}
       is_release: ${{ steps.v.outputs.is_release }}
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
       - id: v
-        env:
-          REF_NAME: ${{ github.ref_name }}
-          REF_TYPE: ${{ github.ref_type }}
         run: |
-          if [ "$REF_TYPE" = "tag" ]; then
-            if [[ ! "$REF_NAME" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(\.(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*))?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]; then
-              echo "Tag must be a valid SemVer with a v prefix" >&2
-              exit 1
-            fi
-            # Tag name is the source of truth on releases. Strip a leading
-            # 'v' for chart version (SemVer requires no v prefix).
-            VERSION="$REF_NAME"
-            CHART_VERSION="${VERSION#v}"
-            IS_RELEASE="true"
-          else
-            # main / branch push: short SHA. Chart version on a non-release
-            # is meaningless — pin to 0.0.0 so the helm package is valid
-            # but no operator would install a non-release chart.
-            VERSION="${GITHUB_SHA::7}"
-            CHART_VERSION="0.0.0"
-            IS_RELEASE="false"
-          fi
-          # Append -<sha> to chart version on non-release pushes so the
-          # same SemVer chart can be re-pushed without bumping it.
-          if [ "$IS_RELEASE" = "false" ]; then
-            CHART_VERSION="0.0.0-${VERSION}"
-          fi
-          # OCI tags cannot contain '+'. Use the same tag for Helm appVersion.
-          echo "version=${VERSION//+/_}" >> "$GITHUB_OUTPUT"
-          echo "chart_version=$CHART_VERSION" >> "$GITHUB_OUTPUT"
-          echo "is_release=$IS_RELEASE" >> "$GITHUB_OUTPUT"
+          bash scripts/build_metadata.sh >> "$GITHUB_OUTPUT"
 
   # ----- Lint ------------------------------------------------------------
   # Gate Go analysis, formatting, and Dockerfile checks before tests.
@@ -197,6 +175,9 @@ jobs:
       - name: go test
         run: bash scripts/go_test.sh -v -count=1 -timeout=20m ./...
 
+      - name: Verify tagged and development executables
+        run: bash scripts/build_version_test.sh
+
   # ----- E2E contract checks -----------------------------------------------
   e2e:
     name: E2E
@@ -252,6 +233,13 @@ jobs:
           shellcheck -S error scripts/mobile-browser-image-cleanup-test.sh
           bash scripts/mobile-browser-image-cleanup-test.sh
 
+      - name: Check build metadata shell scripts
+        run: |
+          for script in scripts/build_metadata.sh scripts/build_server.sh scripts/build_version_test.sh scripts/prepare_versioned_images.sh; do
+            bash -n "$script"
+          done
+          shellcheck -S error scripts/build_metadata.sh scripts/build_server.sh scripts/build_version_test.sh scripts/prepare_versioned_images.sh
+
       - name: Concurrent agent E2E isolation
         env:
           DURPDEPLOY_CONTAINER_RUNTIME: docker
@@ -265,7 +253,7 @@ jobs:
   # Build each platform on its native runner, without registry credentials.
   images:
     name: Image scan (${{ matrix.arch }})
-    if: github.event_name == 'pull_request'
+    needs: [version]
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     strategy:
@@ -287,6 +275,12 @@ jobs:
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: .
+          tags: ghcr.io/${{ env.REGISTRY_OWNER }}/${{ env.IMAGE_NAME }}:${{ needs.version.outputs.version }}
+          build-args: |
+            BUILD_VERSION=${{ needs.version.outputs.software_version }}
+            BUILD_NUMBER=${{ needs.version.outputs.build_number }}
+            BUILD_COMMIT=${{ needs.version.outputs.commit }}
+            BUILD_MODIFIED=false
           platforms: linux/${{ matrix.arch }}
           outputs: type=oci,dest=${{ runner.temp }}/release-image/image.tar
           provenance: false
@@ -294,7 +288,7 @@ jobs:
           push: false
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.revision=${{ needs.version.outputs.commit }}
       - name: Prepare OCI scan layout
         run: |
           mkdir -p "$RUNNER_TEMP/image-scan-layout"
@@ -319,17 +313,22 @@ jobs:
           ARCH: ${{ matrix.arch }}
           PR_HEAD: ${{ github.event.pull_request.head.sha }}
           PR_BASE: ${{ github.event.pull_request.base.sha }}
+          BUILD_VERSION: ${{ needs.version.outputs.software_version }}
+          BUILD_NUMBER: ${{ needs.version.outputs.build_number }}
+          BUILD_COMMIT: ${{ needs.version.outputs.commit }}
         run: |
-          jq -n --arg arch "$ARCH" --arg commit "$GITHUB_SHA" \
+          jq -n --arg arch "$ARCH" --arg commit "$BUILD_COMMIT" \
+            --arg version "$BUILD_VERSION" --arg build_number "$BUILD_NUMBER" \
             --arg tree "$(git rev-parse HEAD^{tree})" --arg head "$PR_HEAD" --arg base "$PR_BASE" \
             --arg sha256 "$(sha256sum "$RUNNER_TEMP/release-image/image.tar" | cut -d ' ' -f 1)" \
             --argjson run "$GITHUB_RUN_ID" --argjson attempt "$GITHUB_RUN_ATTEMPT" \
-            '{schema:1,arch:$arch,commit:$commit,tree:$tree,head:$head,base:$base,sha256:$sha256,run:$run,attempt:$attempt}' \
+            '{schema:1,arch:$arch,commit:$commit,version:$version,build_number:$build_number,tree:$tree,head:$head,base:$base,sha256:$sha256,run:$run,attempt:$attempt}' \
             > "$RUNNER_TEMP/release-image/source.json"
       - name: Retain scanned image
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: release-image-${{ matrix.arch }}-${{ github.run_attempt }}
+          name: ${{ github.event_name == 'pull_request' && format('release-image-{0}-{1}', matrix.arch, github.run_attempt) || format('built-image-{0}', matrix.arch) }}
+          overwrite: ${{ github.event_name != 'pull_request' }}
           path: ${{ runner.temp }}/release-image/
           if-no-files-found: error
           compression-level: 0
@@ -346,7 +345,7 @@ jobs:
           RESULTS: ${{ toJSON(needs) }}
         run: jq -e 'all(.[]; .result == "success")' <<< "$RESULTS"
 
-  # Promotion performs no build or image scan. All image bytes come from PR CI.
+  # Publish only scanned bytes after verifying the source passed PR CI.
   docker:
     name: Publish verified images
     if: >-
@@ -354,7 +353,7 @@ jobs:
       github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: [version, lint, security]
+    needs: [version, lint, security, images]
     concurrency:
       group: release-image-publication
       cancel-in-progress: false
@@ -376,7 +375,16 @@ jobs:
       - name: Resolve verified PR images
         env:
           GH_TOKEN: ${{ github.token }}
-        run: bash scripts/resolve_release_images.sh "$RUNNER_TEMP/verified-images"
+        run: bash scripts/resolve_release_images.sh "$RUNNER_TEMP/verified-pr-images"
+      - name: Download versioned images
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --pattern 'built-image-*' --dir "$RUNNER_TEMP/built-images"
+      - name: Verify versioned images
+        env:
+          BUILD_VERSION: ${{ needs.version.outputs.software_version }}
+          BUILD_NUMBER: ${{ needs.version.outputs.build_number }}
+        run: bash scripts/prepare_versioned_images.sh "$RUNNER_TEMP/built-images" "$RUNNER_TEMP/verified-images"
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
       - name: Log in to ghcr.io

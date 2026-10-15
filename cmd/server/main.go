@@ -25,6 +25,7 @@ import (
 
 	"durpdeploy/internal/agentserver"
 	"durpdeploy/internal/auth"
+	"durpdeploy/internal/buildinfo"
 	"durpdeploy/internal/db"
 	"durpdeploy/internal/dispatch"
 	"durpdeploy/internal/events"
@@ -116,7 +117,7 @@ func main() {
 		case "dev-agent-identity":
 			os.Exit(runDevAgentIdentity())
 		case "version", "--version", "-v":
-			fmt.Println("durpdeploy dev")
+			fmt.Println("durpdeploy " + buildinfo.Current().String())
 			os.Exit(0)
 		case "help", "--help", "-h":
 			fmt.Println(
@@ -171,6 +172,7 @@ func runServer() {
 			),
 		),
 	)
+	slog.Info("DurpDeploy build", "build", buildinfo.Current())
 
 	mfaConfig, err := mfa.LoadConfig()
 	if err != nil {

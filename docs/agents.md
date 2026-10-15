@@ -98,10 +98,12 @@ the deployment link for redacted logs. Error summaries use persisted outcome
 codes; richer diagnostics require
 [agent follow-up #10](https://github.com/DeveloperDurp/durpdeploy-agent/issues/10).
 
-Compatibility shows the observed `agent/1` (legacy Bash) or `agent/2` protocol,
-the server build revision, and the agent module version pinned by that build.
-Agent-reported version strings are unverified; an unknown version is not a
-compatibility guarantee. This view does not upgrade agents.
+Compatibility shows the observed `agent/1`, `agent/2`, or `agent/3` protocol.
+The fleet also shows the server build identity and the pinned agent module version.
+Agent-reported software versions remain unverified.
+The web page shows **Not reported** when the version is missing.
+Read [software versioning](versioning.md) for coordinated server and agent diagnostics.
+This view does not upgrade agents.
 
 Stale, offline, and recovered transitions use the existing notification bus
 and global notification settings. Maintenance persists the last health state

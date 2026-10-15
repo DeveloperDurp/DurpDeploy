@@ -149,7 +149,7 @@ trap 'exit 143' TERM
 printf 'Building demo server. Logs: %s\n' "$directory"
 cd "$ROOT"
 make --no-print-directory templ-generate swagger-ui-copy >"$directory/build.log" 2>&1
-go build -o "$directory/bin/durpdeploy" ./cmd/server >>"$directory/build.log" 2>&1
+bash scripts/build_server.sh -o "$directory/bin/durpdeploy" >>"$directory/build.log" 2>&1
 # Serialize writes before transactional reads so queue maintenance cannot
 # invalidate the pairing transaction's SQLite snapshot during startup.
 export DURPDEPLOY_DB="$directory/durpdeploy.db?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_txlock=immediate"

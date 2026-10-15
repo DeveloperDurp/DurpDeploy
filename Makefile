@@ -22,7 +22,7 @@ DEV_CONTAINER_ENGINE ?= $(shell for engine in docker podman; do \
 	$$engine info >/dev/null 2>&1 && { printf '%s' $$engine; break; }; done)
 
 build: swagger-ui-copy templ-generate tailwind-build js-build
-	go build -o $(BINARY_NAME) $(MAIN_PATH)
+	bash scripts/build_server.sh -o $(BINARY_NAME)
 
 # Hot-reload dev server. Watches .go/.templ/.sql in cmd, internal, views, migrations.
 # Reads the shell-compatible DURPDEPLOY_SECRET_KEY assignment from ENV_FILE

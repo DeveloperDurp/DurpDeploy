@@ -47,6 +47,11 @@ func TestAgentFleetBrowserE2E(t *testing.T) {
 		}
 	}
 	project := seedProject(t, h.repo)
+	if _, err := h.repo.DB.Exec(
+		"UPDATE agents SET agent_version=NULL WHERE id='disabled'",
+	); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := h.repo.DB.ExecContext(t.Context(), `
 		UPDATE agents SET agent_protocol='agent/3' WHERE id='active';
 		INSERT INTO agent_execution_modes VALUES ('active','host'),('active','container');
@@ -94,6 +99,10 @@ func TestAgentFleetBrowserE2E(t *testing.T) {
 	browser.wait(
 		t,
 		`document.body.innerText.includes('offline') && document.body.innerText.includes('disabled') && document.body.innerText.includes('revoked') && document.body.innerText.includes('drained')`,
+	)
+	browser.wait(
+		t,
+		`document.body.innerText.includes('Version: Not reported') && document.body.innerText.includes('Version: v0.0.0-20261002120000-123456789012')`,
 	)
 
 	// When: native Drain and Resume forms are submitted from the fleet list.

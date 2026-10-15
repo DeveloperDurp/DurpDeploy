@@ -4,6 +4,20 @@
 source "$SCRIPT_DIR/request_body_e2e.sh"
 source "$SCRIPT_DIR/deployment_list_e2e.sh"
 
+echo "=== Software build identity ==="
+BUILD_INFO=$(api_get "$BASE/api/v1/version")
+VERSION_PAGE=$(curl_body "$BASE/settings/version")
+printf '%s' "$VERSION_PAGE" | python3 -c '
+import html,json,sys
+build=json.loads(sys.argv[1])
+page=sys.stdin.read()
+for field in ("version", "build_number", "commit"):
+    assert isinstance(build[field], str) and build[field]
+    assert html.escape(build[field], quote=True) in page
+assert isinstance(build["modified"], bool)
+' "$BUILD_INFO"
+printf '  Build information matches API and web: %s/settings/version\n' "$BASE"
+
 echo "=== Dashboard and main-page contracts ==="
 ACTIVITY=$(api_get "$BASE/api/v1/deployments/activity")
 echo "$ACTIVITY" | python3 -c '
@@ -18,7 +32,7 @@ for i,day in enumerate(days):
 WEB_ACTIVITY=$(curl_body "$BASE/dashboard/activity")
 echo "$WEB_ACTIVITY" | python3 -c 'import json,sys; assert len(json.load(sys.stdin)) == 14'
 for MAIN_PATH in / /projects /environments /lifecycles /deployments /templates \
-    /settings/tokens /settings/security /admin/users /admin/agents /admin/audit \
+    /settings/tokens /settings/security /settings/version /admin/users /admin/agents /admin/audit \
     "/projects/$API_PROJECT_ID" "/projects/$API_PROJECT_ID/steps-page" \
     "/projects/$API_PROJECT_ID/variables" "/projects/$API_PROJECT_ID/releases" \
     "/projects/$API_PROJECT_ID/runbooks" "/projects/$API_PROJECT_ID/notifications" \

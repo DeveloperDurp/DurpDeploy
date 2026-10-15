@@ -81,7 +81,7 @@ else
     export DURPDEPLOY_SECRET_KEY
 
     echo "=== Building and starting server ==="
-    go build -o "$TMP/durpdeploy" ./cmd/server
+    bash scripts/build_server.sh -o "$TMP/durpdeploy"
 
     # Seed the first admin user via the CLI. The CLI runs migrations on its
     # own, so the server's startup migration is a no-op. This mirrors the
