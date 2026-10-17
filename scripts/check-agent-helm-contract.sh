@@ -25,6 +25,8 @@ grep -Fq 'targetPort: agent' "$service"
 grep -Fq 'kind: PersistentVolumeClaim' "$pvc"
 grep -Fq 'existingClaim:' "$values"
 grep -Fq 'size: 1Gi' "$values"
+grep -Fq 'port: 23187' "$values"
+grep -Fq 'listenAddress: 0.0.0.0:23187' "$values"
 
 if command -v helm >/dev/null 2>&1; then
 	helm lint "$root/charts/durpdeploy" >/dev/null

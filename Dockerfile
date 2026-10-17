@@ -85,7 +85,7 @@ ENV DURPDEPLOY_EXECUTION_BOUNDARY=service \
 USER 10001:10001
 
 # The application listens on port 8080 (hardcoded in cmd/server/main.go).
-EXPOSE 8080
+EXPOSE 8080 23187
 
 # Use ENTRYPOINT so the binary is the fixed executable for subcommands such as
 # `admin create`, `audit prune`, and `secret-key rotate`, as well as the default

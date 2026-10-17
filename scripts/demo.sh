@@ -287,7 +287,7 @@ grep -q '^Agent fingerprint: ' "$directory/agent.log" || {
     echo 'Agent did not publish a pairing offer; see agent.log.' >&2
     exit 1
 }
-agent_address=$("$engine" port "$container" 10943/tcp)
+agent_address=$("$engine" port "$container" 23187/tcp)
 code=$(sed -n 's/^Pairing code: //p' "$directory/agent.log" | head -1)
 fingerprint=$(sed -n 's/^Agent fingerprint: //p' "$directory/agent.log" | head -1)
 token=$("$directory/bin/durpdeploy" tokens create --user admin@durp.info \

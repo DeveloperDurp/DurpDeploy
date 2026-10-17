@@ -10,8 +10,8 @@ DEV_MSSQL_IMAGE ?= mcr.microsoft.com/mssql/server:2022-latest
 DEV_AGENT_CONTAINER ?= durpdeploy-dev-agent
 # Keep the published image pin separate from agent module revisions under review.
 # Update this pin after the matching agent image is published.
-DEV_AGENT_IMAGE ?= ghcr.io/developerdurp/durpdeploy-agent:6dee72a
-DEV_AGENT_PORT ?= 10944
+DEV_AGENT_IMAGE ?= ghcr.io/developerdurp/durpdeploy-agent:4110429
+DEV_AGENT_PORT ?= 23188
 DEV_AGENT_STATE_VOLUME ?= $(DEV_AGENT_CONTAINER)-state
 DEV_AGENT_RUNTIME_SOCKET ?=
 DEV_HTTPS_PROXY_CONTAINER ?= durpdeploy-dev-https
@@ -44,8 +44,8 @@ dev-server: SHELL := /bin/bash
 dev-server:
 	DURPDEPLOY_ENV_FILE="$(ENV_FILE)"; \
 	. ./scripts/dev_secret_key.sh || exit 1; \
-	DURPDEPLOY_AGENT_LISTEN_ADDR=$${DURPDEPLOY_AGENT_LISTEN_ADDR:-0.0.0.0:10943}; \
-	DURPDEPLOY_AGENT_PUBLIC_URL=$${DURPDEPLOY_AGENT_PUBLIC_URL:-https://host.containers.internal:10943}; \
+	DURPDEPLOY_AGENT_LISTEN_ADDR=$${DURPDEPLOY_AGENT_LISTEN_ADDR:-0.0.0.0:23187}; \
+	DURPDEPLOY_AGENT_PUBLIC_URL=$${DURPDEPLOY_AGENT_PUBLIC_URL:-https://host.containers.internal:23187}; \
 	DURPDEPLOY_AGENT_IDENTITY_DIR=$${DURPDEPLOY_AGENT_IDENTITY_DIR:-$(MAKEFILE_DIR)tmp/dev-agent-identity}; \
 	export DURPDEPLOY_AGENT_LISTEN_ADDR DURPDEPLOY_AGENT_PUBLIC_URL DURPDEPLOY_AGENT_IDENTITY_DIR; \
 	go run ./cmd/server dev-agent-identity; \
@@ -125,13 +125,13 @@ dev-agent:
 	fi; \
 	$(DEV_CONTAINER_ENGINE) run --rm --name '$(DEV_AGENT_CONTAINER)' \
 		$$network_args "$$@" --log-driver=none --read-only --user=10001:10001 \
-		--publish '127.0.0.1:$(DEV_AGENT_PORT):10943' \
+		--publish '127.0.0.1:$(DEV_AGENT_PORT):23187' \
 		--cap-drop=ALL --security-opt=no-new-privileges:true \
 		--memory=512m --cpus=1 --pids-limit=128 \
 		--tmpfs /tmp:size=64m,mode=1777 \
 		--volume "$$state_volume" \
 		--env DURPDEPLOY_AGENT_STATE_DIR=/var/lib/durpdeploy-agent \
-		--env DURPDEPLOY_AGENT_LISTEN_ADDR=0.0.0.0:10943 \
+		--env DURPDEPLOY_AGENT_LISTEN_ADDR=0.0.0.0:23187 \
 		--env DURPDEPLOY_AGENT_HOSTNAME \
 		--env 'DURPDEPLOY_AGENT_VERSION=$(lastword $(subst :, ,$(DEV_AGENT_IMAGE)))' \
 		'$(DEV_AGENT_IMAGE)'
