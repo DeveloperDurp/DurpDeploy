@@ -36,10 +36,10 @@ func loadAgentListenerConfig() (agentListenerConfig, error) {
 	publicURL := os.Getenv("DURPDEPLOY_AGENT_PUBLIC_URL")
 	dir := os.Getenv("DURPDEPLOY_AGENT_IDENTITY_DIR")
 	if addr == "" {
-		addr = "0.0.0.0:10943"
+		addr = "0.0.0.0:23187"
 	}
 	if publicURL == "" {
-		publicURL = "https://localhost:10943"
+		publicURL = "https://localhost:23187"
 	}
 	if dir == "" {
 		dir = ".agent-identity"

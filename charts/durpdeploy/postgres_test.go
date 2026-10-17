@@ -29,10 +29,19 @@ type environment struct {
 type chartResource struct {
 	Kind string `yaml:"kind"`
 	Spec struct {
+		Ports []struct {
+			Name       string `yaml:"name"`
+			Port       int    `yaml:"port"`
+			TargetPort string `yaml:"targetPort"`
+		} `yaml:"ports"`
 		Template struct {
 			Spec struct {
 				Containers []struct {
-					Env []environment `yaml:"env"`
+					Env   []environment `yaml:"env"`
+					Ports []struct {
+						Name string `yaml:"name"`
+						Port int    `yaml:"containerPort"`
+					} `yaml:"ports"`
 				} `yaml:"containers"`
 			} `yaml:"spec"`
 		} `yaml:"template"`

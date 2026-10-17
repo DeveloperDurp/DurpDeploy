@@ -168,7 +168,7 @@ docker run -d --name "$app_name" --user 0 --read-only \
 	-e DURPDEPLOY_CONTAINER_URL=unix:///var/run/durpdeploy-runtime.sock \
 	-e DURPDEPLOY_DB=/data/durpdeploy.db \
 	-e DURPDEPLOY_ADDR=0.0.0.0:8080 \
-	-e DURPDEPLOY_AGENT_LISTEN_ADDR=0.0.0.0:10943 \
+	-e DURPDEPLOY_AGENT_LISTEN_ADDR=0.0.0.0:23187 \
 	-e DURPDEPLOY_AGENT_PUBLIC_URL=https://localhost \
 	-e DURPDEPLOY_AGENT_IDENTITY_DIR=/var/lib/durpdeploy/agent-identity \
 	-e DURPDEPLOY_URL="$base" \

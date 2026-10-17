@@ -5,6 +5,7 @@ grep -Fq 'mkdir -p /var/lib/durpdeploy/agent-identity' Dockerfile
 grep -Fq '/data /var/lib/durpdeploy/agent-identity' Dockerfile
 grep -Fq 'chmod 0700 /data /var/lib/durpdeploy/agent-identity' Dockerfile
 grep -Fq 'ENTRYPOINT ["/usr/local/bin/container-entrypoint"]' Dockerfile
+grep -Fxq 'EXPOSE 8080 23187' Dockerfile
 
 for file in compose.yml compose.example.yml; do
 	app=$(awk '
@@ -18,14 +19,14 @@ for file in compose.yml compose.example.yml; do
 		in_caddy { print }
 	' "$file")
 	grep -Fq 'DURPDEPLOY_AGENT_LISTEN_ADDR' <<<"$app"
-	grep -Fq '0.0.0.0:10943' <<<"$app"
+	grep -Fq '0.0.0.0:23187' <<<"$app"
 	grep -Fq 'DURPDEPLOY_AGENT_PUBLIC_URL' <<<"$app"
-	grep -Fq 'https://localhost:10943' <<<"$app"
+	grep -Fq 'https://localhost:23187' <<<"$app"
 	grep -Fq 'DURPDEPLOY_AGENT_IDENTITY_DIR' <<<"$app"
 	grep -Fq '/var/lib/durpdeploy/agent-identity' <<<"$app"
-	grep -Fq '"10943:10943"' <<<"$app"
+	grep -Fq '"23187:23187"' <<<"$app"
 	grep -Fq 'durpdeploy-agent-identity:/var/lib/durpdeploy/agent-identity' <<<"$app"
-	if grep -Fq '10943' <<<"$caddy"; then
+	if grep -Fq '23187' <<<"$caddy"; then
 		printf 'agent compose contract: Caddy owns agent port in %s\n' "$file" >&2
 		exit 1
 	fi

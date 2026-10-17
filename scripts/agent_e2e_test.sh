@@ -157,6 +157,9 @@ run_happy() {
 	DURPDEPLOY_AGENT_WORKTREE="$agent_root" node \
 		scripts/agent_admin_browser_proof.mjs --lifecycle \
 		--evidence-dir "$EVIDENCE_DIR/browser"
+	DURPDEPLOY_AGENT_WORKTREE="$agent_root" node \
+		scripts/agent_admin_browser_proof.mjs --lifecycle --default-agent-port \
+		--evidence-dir "$EVIDENCE_DIR/default-agent-port"
 	printf '%s\n' 'agent E2E SQLite paired remote lifecycle: PASS'
 }
 

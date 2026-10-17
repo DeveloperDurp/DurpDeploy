@@ -16,6 +16,7 @@ const evidenceFlag = process.argv.indexOf("--evidence-dir");
 const faultFlag = process.argv.indexOf("--fault-scenario");
 const lifecycle = process.argv.includes("--lifecycle");
 const mixedInterpreter = process.argv.includes("--mixed-interpreter");
+const defaultAgentPort = process.argv.includes("--default-agent-port");
 const faultScenario = faultFlag >= 0 ? process.argv[faultFlag + 1] : "";
 const runDir = await mkdtemp(join(tmpdir(), "durpdeploy-agent-browser-"));
 const evidenceDir = resolve(
@@ -108,11 +109,11 @@ async function stop(child, field) {
 	cleanup[field] = !child || child.exitCode !== null;
 }
 
-async function reserveAddress() {
+async function reserveAddress(port = 0) {
 	const socket = net.createServer();
 	await new Promise((resolvePromise, reject) => {
 		socket.once("error", reject);
-		socket.listen(0, "127.0.0.1", resolvePromise);
+		socket.listen(port, "127.0.0.1", resolvePromise);
 	});
 	const address = socket.address();
 	check(address && typeof address !== "string", "failed to reserve dynamic address");
@@ -201,7 +202,8 @@ async function main() {
 	await rm(evidenceDir, { recursive: true, force: true });
 	await mkdir(evidenceDir, { recursive: true });
 	const browserReservation = await reserveAddress();
-	const listenerReservation = await reserveAddress();
+	check(!defaultAgentPort || !faultScenario, "default port proof does not inject proxy faults");
+	const listenerReservation = await reserveAddress(defaultAgentPort ? 23187 : 0);
 	const bootstrapReservation = await reserveAddress();
 	lifecycleProxy = await FaultProxy.start({
 		listenHost: "0.0.0.0",
@@ -209,9 +211,11 @@ async function main() {
 	});
 	pairingProxy = await FaultProxy.start({ upstreamAddress: bootstrapReservation.address });
 	const baseURL = `http://${browserReservation.address}`;
-	const listenerPort = lifecycleProxy.address.slice(lifecycleProxy.address.lastIndexOf(":") + 1);
+	const listenerPort = defaultAgentPort ? "23187" :
+		lifecycleProxy.address.slice(lifecycleProxy.address.lastIndexOf(":") + 1);
 	const lifecycleAddress = `127.0.0.1:${listenerPort}`;
-	const listenerURL = hostAgent ? `https://127.0.0.1:${listenerPort}` :
+	const listenerURL = hostAgent && defaultAgentPort ? "https://localhost:23187" :
+		hostAgent ? `https://127.0.0.1:${listenerPort}` :
 		`https://host.containers.internal:${listenerPort}`;
 	const bootstrapURL = `https://${pairingProxy.address}`;
 	const nonce = randomBytes(12).toString("hex");
@@ -227,8 +231,8 @@ async function main() {
 		DURPDEPLOY_ADDR: browserReservation.address,
 		DURPDEPLOY_CONTAINER_NAMESPACE: `agent_${nonce}`,
 		DURPDEPLOY_AGENT_IDENTITY_DIR: join(runDir, "server-identity"),
-		DURPDEPLOY_AGENT_LISTEN_ADDR: listenerReservation.address,
-		DURPDEPLOY_AGENT_PUBLIC_URL: listenerURL,
+		DURPDEPLOY_AGENT_LISTEN_ADDR: defaultAgentPort ? "" : listenerReservation.address,
+		DURPDEPLOY_AGENT_PUBLIC_URL: hostAgent && defaultAgentPort ? "" : listenerURL,
 		DURPDEPLOY_DB: `${database}?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)`,
 		DURPDEPLOY_EXECUTION_BOUNDARY: "service",
 		DURPDEPLOY_SECRET_KEY: randomBytes(32).toString("base64"),
@@ -295,7 +299,7 @@ async function main() {
 		"req", "-new", "-x509", "-key", join(serverIdentity, "identity.key"),
 		"-out", join(serverIdentity, "identity.crt"), "-days", "1",
 		"-subj", "/CN=host.containers.internal", "-addext",
-		"subjectAltName=DNS:host.containers.internal,IP:127.0.0.1",
+		"subjectAltName=DNS:localhost,DNS:host.containers.internal,IP:127.0.0.1",
 	]);
 	await command("go", ["build", "-buildvcs=false", "-o", serverBinary, "./cmd/server"], { cwd: root, env: serverEnvironment });
 	await command("go", ["build", "-buildvcs=false", "-o", agentBinary, "./cmd/agent"], {
@@ -418,6 +422,8 @@ async function main() {
 	}
 	const agentID = new URL(page.url()).pathname.split("/").at(-1);
 	const durableAgentID = (await readOnly("SELECT id FROM agents LIMIT 1;")).trim();
+	check((await readOnly("SELECT server_pull_endpoint FROM agent_pairings LIMIT 1;")).trim() === listenerURL,
+		"pairing did not persist the advertised agent endpoint");
 	check(durableAgentID, "paired agent ID was not durable");
 	let pairedAgentID = pairingScenarios.has(faultScenario) ? durableAgentID : agentID;
 	check(pairedAgentID, "paired agent ID was not present in redirect");
@@ -774,6 +780,8 @@ async function main() {
 	}, null, 2)}\n`);
 	await writeFile(join(evidenceDir, "proof.json"), `${JSON.stringify({
 		adminPairing: true,
+		defaultAgentPort,
+		listenerURL,
 		directAssignment: true,
 		processes: {
 			agent: await (async () => {

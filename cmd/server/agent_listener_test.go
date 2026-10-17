@@ -113,13 +113,32 @@ func TestServerAgentListenerDefaultsToActive(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if config.addr != "0.0.0.0:10943" {
+	if config.addr != "0.0.0.0:23187" {
 		t.Fatalf("default listener address = %q", config.addr)
 	}
-	if got := config.pullEndpoint.String(); got != "https://localhost:10943" {
+	if got := config.pullEndpoint.String(); got != "https://localhost:23187" {
 		t.Fatalf("default public URL = %q", got)
 	}
 	if _, err := agenttls.LoadExisting(".agent-identity"); err != nil {
 		t.Fatalf("load default identity: %v", err)
+	}
+}
+
+func TestServerAgentListenerPortOverridePreservesIdentity(t *testing.T) {
+	t.Setenv("DURPDEPLOY_AGENT_IDENTITY_DIR", t.TempDir())
+	var original []byte
+	for _, port := range []string{"10943", "23187", "24443"} {
+		t.Setenv("DURPDEPLOY_AGENT_LISTEN_ADDR", "127.0.0.1:"+port)
+		endpoint := "https://localhost:" + port
+		t.Setenv("DURPDEPLOY_AGENT_PUBLIC_URL", endpoint)
+		config, err := loadAgentListenerConfig()
+		require.NoError(t, err)
+		require.Equal(t, "127.0.0.1:"+port, config.addr)
+		require.Equal(t, endpoint, config.pullEndpoint.String())
+		certificate := config.identity.Certificate.Certificate[0]
+		if original == nil {
+			original = certificate
+		}
+		require.Equal(t, original, certificate)
 	}
 }

@@ -1,5 +1,22 @@
 # Manual checks after `make e2e-test`
 
+## Dedicated agent port
+
+Run `make agent-e2e-sqlite` to check explicit ports and the default dedicated port `23187`.
+Keep port `23187` available before running this isolated suite.
+The suite checks web pairing, API deployments, polling, and streamed logs with the pinned standalone agent source.
+Browser screenshots and request results appear under `.omo/evidence/continue-remote-agent-rollout/`.
+The isolated suite removes its temporary servers and databases.
+
+For an existing installation, follow the [port migration](agents.md#migrate-the-dedicated-agent-port) instructions.
+Open **Admin, Agents** and confirm that the existing agent returns to healthy status.
+Run a deployment against its environment through the web UI.
+Confirm that streamed logs arrive and the deployment succeeds.
+Repeat deployment through `POST /api/v1/projects/{id}/deployments`.
+Confirm that `GET /api/v1/deployments/{id}/status` reports success.
+Keep the deployment links for repeat checks.
+This port check creates no schedules.
+
 ## Four permission levels
 
 Keep the printed **Permission role project**, release link, and four account logins.
