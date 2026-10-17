@@ -293,21 +293,18 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/image-scan-layout"
           tar -xf "$RUNNER_TEMP/release-image/image.tar" -C "$RUNNER_TEMP/image-scan-layout"
+      - name: Install checksum-pinned Trivy
+        run: make trivy-tools
       - name: Scan image archive
-        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
-        env:
-          TRIVY_IGNOREFILE: /dev/null
+        run: bash scripts/container_scan.sh image "$RUNNER_TEMP/image-scan-layout" "$RUNNER_TEMP/image-evidence"
+      - name: Retain safe image evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          trivy-config: /dev/null
-          input: ${{ runner.temp }}/image-scan-layout
-          scanners: vuln
-          format: json
-          output: ${{ runner.temp }}/image-scan.json
-          exit-code: '1'
-          ignore-unfixed: true
-          vuln-type: os,library
-          severity: HIGH,CRITICAL
-          cache: false
+          name: image-evidence-${{ matrix.arch }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/image-evidence/
+          if-no-files-found: warn
+          retention-days: 7
       - name: Record verified source
         env:
           ARCH: ${{ matrix.arch }}
