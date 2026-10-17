@@ -315,7 +315,7 @@ the socket URL to the mounted path. Container-mode workloads receive no runtime
 socket. Host-mode scripts run inside the supervisor and inherit socket access
 and the operator's runtime authority; use only scripts trusted with that account.
 Do not grant socket permissions automatically or configure TCP/SSH endpoints.
-See the pinned agent's [container setup](https://github.com/DeveloperDurp/durpdeploy-agent/blob/6dee72a66c7b3a3f9743ee5c71d63a7a7c5f9f28/docs/agents.md#container-step-execution-agent3).
+See the pinned agent's [container setup](https://github.com/DeveloperDurp/durpdeploy-agent/blob/411042912a656acc579fe30bc792f266d398d08b/docs/agents.md#container-step-execution-agent3).
 
 Remote steps use `agent_execution_mode: "host"` by default. Select
 `"container"` and an image to opt in. Labels still route the step, and only
@@ -364,7 +364,7 @@ With `make dev` running in another terminal, start the published agent image:
 make dev-agent
 ```
 
-This pulls `ghcr.io/developerdurp/durpdeploy-agent:6dee72a` and runs it in the
+This pulls `ghcr.io/developerdurp/durpdeploy-agent:4110429` and runs it in the
 foreground using Docker or Podman. In **Admin > Agents > Pair agent**, enter
 `https://127.0.0.1:23188`, the terminal's pairing code, and fingerprint, then
 compare the fingerprint and approve. The development server advertises
@@ -374,9 +374,8 @@ sets its listen address to `0.0.0.0:23187` by default.
 
 The published development image pin can differ from the agent module revision under review.
 The agent reports the image commit tag as its version.
-The current `6dee72a` image supports staging transfer and does not support release package jobs.
-Use an agent build with `artifact/1` and `staging/1` capabilities for package jobs.
-Update the development image pin after that agent image is published.
+The pinned `4110429` image supports staging transfer and release package jobs.
+It provides the `artifact/1` and `staging/1` capabilities required for package jobs.
 
 `make dev` reloads the server when watched Go, templ, or SQL files change.
 Server restart recovery cancels in-flight remote steps; an agent can finish
@@ -403,7 +402,7 @@ The image supplies Bash; this image does not install Python or PowerShell.
 Override the image, host pairing port, or container name when needed:
 
 ```bash
-make dev-agent DEV_AGENT_IMAGE=ghcr.io/developerdurp/durpdeploy-agent:6dee72a DEV_AGENT_PORT=10945
+make dev-agent DEV_AGENT_IMAGE=ghcr.io/developerdurp/durpdeploy-agent:4110429 DEV_AGENT_PORT=10945
 ```
 
 `DEV_AGENT_CONTAINER` also determines the default state-volume name. Supply
@@ -489,7 +488,7 @@ fail closed if a tag was rewritten:
 ```bash
 set -euo pipefail
 AGENT_MODULE=github.com/DeveloperDurp/durpdeploy-agent
-AGENT_VERSION=v0.1.1-0.20261012151927-fae2b695a3e8 # use the value recorded from the server checkout
+AGENT_VERSION=v0.1.2-0.20261017113854-411042912a65 # use the value recorded from the server checkout
 AGENT_SUM='h1:...' # use the value recorded from the server checkout
 AGENT_COMMIT=... # use the value recorded from the server checkout
 AGENT_DOWNLOAD=$(go mod download -json "$AGENT_MODULE@$AGENT_VERSION")
