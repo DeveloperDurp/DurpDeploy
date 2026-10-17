@@ -42,11 +42,35 @@ func (f *artifactE2E) verifyStreamingLogTimestamp(
 		t.Fatal("streamed log timestamp differs from its persisted time")
 	}
 	browser.captureStepLogs(t, "timestamp-live")
+	selectionAssertion := fmt.Sprintf(`(() => {
+ const row = document.querySelector('[data-log-id="%s"]');
+ const panel = row.closest('details');
+ const wasOpen = panel.open;
+ panel.open = true;
+ const timestamp = row.querySelector('.text-gray-500');
+ const range = document.createRange();
+ range.setStart(row.parentElement.querySelector('[data-log-id]'), 0);
+ range.setEnd(row, row.childNodes.length);
+ const selection = window.getSelection();
+ selection.removeAllRanges();
+ selection.addRange(range);
+ const text = selection.toString();
+ selection.removeAllRanges();
+ panel.open = wasOpen;
+ return getComputedStyle(timestamp).userSelect === 'none' &&
+ text.includes('second-only') && !/\[\d{4}-\d{2}-\d{2} /.test(text);
+})()`, logID)
+	if string(browser.evaluate(t, selectionAssertion)) != "true" {
+		t.Fatal("live log selection includes timestamps or omits log text")
+	}
 	// When: refreshing and reconnecting while the second step is active.
 	browser.openStepLogPage(t, fmt.Sprintf(
 		"%s/deployments/%d", f.baseURL, deployment.ID,
 	))
 	browser.wait(t, assertion)
+	if string(browser.evaluate(t, selectionAssertion)) != "true" {
+		t.Fatal("saved log selection includes timestamps or omits log text")
+	}
 	browser.captureStepLogs(t, "timestamp-refreshed")
 	browser.evaluate(
 		t,

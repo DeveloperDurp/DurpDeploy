@@ -437,7 +437,7 @@ templ DeploymentDetail(project db.Project, release db.Release, environment db.En
 					<div class="mt-4 space-y-1 overflow-x-auto">
 						for _, log := range panel.Logs {
 							<div class="font-mono text-sm whitespace-pre-wrap break-words" data-log-id={ strconv.FormatInt(log.ID, 10) }>
-								<span class="text-gray-500">[{ formatUnixTime(log.CreatedAt) }] </span>
+								<span class="text-gray-500 select-none">[{ formatUnixTime(log.CreatedAt) }] </span>
 								if log.StepName.Valid && log.StepName.String != panel.Name {
 									<span class="text-accent">[{ log.StepName.String }] </span>
 								}

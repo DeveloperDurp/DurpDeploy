@@ -117,7 +117,7 @@ export function registerLogComponents(Alpine) {
 				element.prepend(step);
 			}
 			const timestamp = document.createElement('span');
-			timestamp.className = 'text-gray-500';
+			timestamp.className = 'text-gray-500 select-none';
 			timestamp.textContent = `[${entry.display_timestamp}] `;
 			element.prepend(timestamp);
 		},
