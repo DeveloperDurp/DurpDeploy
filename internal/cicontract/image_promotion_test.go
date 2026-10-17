@@ -40,15 +40,17 @@ func TestPRImageScanReadsExportedOCILayout(t *testing.T) {
 			}
 			prepared = true
 		}
-		if strings.HasPrefix(step.Uses, "aquasecurity/trivy-action@") {
+		if step.Name == "Scan image archive" {
 			if !prepared {
 				t.Fatal("OCI layout must be prepared before scanning")
 			}
-			input := strings.ReplaceAll(
-				step.With["input"],
-				"${{ runner.temp }}",
-				directory,
-			)
+			if !strings.Contains(
+				step.Run,
+				`scripts/container_scan.sh image "$RUNNER_TEMP/image-scan-layout"`,
+			) {
+				t.Fatal("scan must read the prepared OCI layout")
+			}
+			input := filepath.Join(directory, "image-scan-layout")
 			actual, err := os.ReadFile(filepath.Join(input, "index.json"))
 			if err != nil || string(actual) != string(index) {
 				t.Fatalf("scan input must contain exported OCI index: %v", err)
@@ -141,20 +143,16 @@ func TestImagePublicationUsesVerifiedPRArtifacts(t *testing.T) {
 				!strings.HasPrefix(step.With["outputs"], "type=oci,") {
 				t.Fatal("PR builds must export OCI without publishing")
 			}
-		case strings.HasPrefix(step.Uses, "aquasecurity/trivy-action@"):
+		case step.Name == "Scan image archive":
 			scan = index
-			if step.With["exit-code"] != "1" ||
-				step.With["severity"] != "HIGH,CRITICAL" ||
-				step.With["input"] == "" || step.If != "" {
+			if !strings.Contains(
+				step.Run,
+				`bash scripts/container_scan.sh image "$RUNNER_TEMP/image-scan-layout" "$RUNNER_TEMP/image-evidence"`,
+			) ||
+				step.If != "" {
 				t.Fatal("archive scan must block on findings or errors")
 			}
-			if step.With["trivy-config"] != "/dev/null" ||
-				step.Env["TRIVY_IGNOREFILE"] != "/dev/null" {
-				t.Fatal(
-					"checkout policy files must not suppress image findings",
-				)
-			}
-		case strings.HasPrefix(step.Uses, "actions/upload-artifact@"):
+		case step.Name == "Retain scanned image":
 			retain = index
 			if step.If != "" {
 				t.Fatal("artifact retention must require successful scans")

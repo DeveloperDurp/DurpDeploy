@@ -11,6 +11,7 @@ import (
 
 type workflow struct {
 	On          map[string]yaml.Node `yaml:"on"`
+	Permissions map[string]string    `yaml:"permissions"`
 	Concurrency struct {
 		Group string `yaml:"group"`
 	} `yaml:"concurrency"`
@@ -18,6 +19,7 @@ type workflow struct {
 }
 
 type workflowJob struct {
+	TimeoutMinutes  int               `yaml:"timeout-minutes"`
 	Permissions     map[string]string `yaml:"permissions"`
 	Uses            string            `yaml:"uses"`
 	Needs           []string          `yaml:"needs"`

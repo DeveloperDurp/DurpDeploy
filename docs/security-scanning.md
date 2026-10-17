@@ -17,7 +17,8 @@ Each build embeds its software version, source commit, and commit-count build nu
 Trivy scans each exported OCI image layout before GitHub retains the original archive as a workflow artifact.
 The image policy blocks fixable HIGH and CRITICAL vulnerabilities and scanner errors.
 The scanner ignores configuration and ignore files from the checkout.
-The scan report stays on the runner and is not uploaded.
+GitHub retains sanitized reports and CycloneDX SBOMs for seven days, including reports from blocked image scans.
+Reports identify the checkout commit, OCI manifest digests, scanner version, and vulnerability database version and timestamps.
 The `Image verification` check requires both image scans, Go tests, E2E tests, and source security checks.
 
 After merge, publication verifies artifacts from the matching successful pull-request run.
@@ -48,6 +49,96 @@ Helm uses that image tag for `appVersion` and preserves the original chart versi
 
 The image labels identify the source revision compiled into the executable.
 The published image index identifies the final merged revision.
+
+## Container and deployment scanning
+
+The release workflow scans both production image architectures before retaining promotion archives.
+Image evidence uses separate artifacts named `image-evidence-<architecture>-<attempt>`.
+Failed scans cannot retain promotion archives or publish images.
+Scanner failures leave an `incomplete` report when the scan runner starts.
+Missing artifacts also indicate missing evidence.
+
+The Security gates workflow scans the Dockerfile and Kubernetes resources rendered from the Helm chart.
+The renderer uses synthetic defaults and references external Secrets.
+It does not load operator values, cluster configuration, environment files, or live credentials.
+Reports retain check identifiers, severity, and status.
+Reports omit source snippets, messages, matches, environment values, and image configuration.
+Configuration reports identify the check bundle digest and download timestamp.
+
+Trivy evaluates root users, capability settings, mounts, resource limits, and secret configuration where its built-in checks support them.
+Trivy does not support Compose configuration scanning.
+The same job runs `scripts/check-agent-compose-contract.sh` for the existing Compose execution and privilege contracts.
+These checks do not certify arbitrary operator overrides or live deployments.
+The intentional runtime socket mount grants the embedded agent the operator's container authority.
+The Compose entrypoint briefly uses root with SETUID and SETGID, then starts the application as UID 10001.
+
+The job also scans `package-lock.json`, including transitive frontend and build dependencies.
+The production image scan covers OS packages and Go binary dependencies.
+Bundled JavaScript does not expose a reliable lockfile inventory inside the runtime image.
+The separate lockfile scan covers that gap without installing or executing scanned packages.
+
+Standalone scheduled and manual Security gates runs rebuild and scan both production image architectures with current vulnerability data.
+These builds use the selected checkout and the production Dockerfile.
+They do not publish images or change infrastructure.
+They evaluate fresh builds rather than the bytes of an existing registry tag.
+Each job has a 30-minute timeout.
+Each scanner invocation has a 10-minute timeout.
+
+### Policy and exceptions
+
+Image and frontend scans block HIGH and CRITICAL vulnerabilities that have a reported fixed version.
+Unfixed vulnerabilities and lower severities remain visible in the report.
+Configuration scans block every failed HIGH or CRITICAL check.
+Lower configuration severities remain advisory.
+Missing package inventories, absent configuration coverage, invalid reports, and scanner or database errors fail the check.
+This policy extends the existing fixable HIGH/CRITICAL image gate.
+
+No Trivy exceptions are enabled.
+The runner rejects inline configuration suppressions and ignores checkout ignore files.
+If a finding blocks CI, review its affected package or deployment path before changing the policy.
+Accept real risk only through an explicit maintainer decision.
+Record the exact check or vulnerability, target, affected version, owner, rationale, and expiry in a reviewed change.
+Do not suppress a whole directory, severity, or scanner to clear a finding.
+
+### Local reproduction and fixtures
+
+Install the checksum-pinned tool and run the configuration and dependency checks:
+
+```bash
+make trivy-tools
+bash scripts/container_scan.sh config . artifacts/container/config
+bash scripts/container_scan.sh dependencies . artifacts/container/dependencies
+bash scripts/check-agent-compose-contract.sh
+make container-scan-test
+```
+
+Requirements: Linux AMD64 or ARM64, Bash, curl, tar, sha256sum, jq, realpath, Git, OpenSSL, and Helm 4.2.2.
+The first scan downloads the public vulnerability database or check bundle.
+Task-local caches stay in ignored `bin/trivy-cache/`.
+Trivy 0.76.0 uses fixed SHA-256 archive checksums for each architecture.
+The installer retains the Apache-2.0 license and upstream notice beside the binary.
+The [exact release SBOM](https://github.com/aquasecurity/trivy/releases/download/v0.76.0/bom.json) lists open-source dependency licenses.
+The remaining unclassified dependency, `github.com/xi2/xz`, has a [public-domain license at its pinned revision](https://github.com/xi2/xz/blob/48954b6210f8/LICENSE).
+
+Scan an exported production OCI layout without publishing it:
+
+```bash
+mkdir -p artifacts/production-layout
+tar -xf /absolute/path/image.tar -C artifacts/production-layout
+bash scripts/container_scan.sh image artifacts/production-layout artifacts/container/image
+```
+
+The runner produces `scan.json` and `sbom.cdx.json` for completed image scans.
+The SBOM retains package identifiers and dependency relationships.
+It omits image configuration, file properties, and vulnerability descriptions.
+Exit code 0 means complete analysis without blocking findings.
+Exit code 1 means complete analysis with blocking findings.
+Exit code 2 means analysis or evidence failed.
+
+The Bash fixtures run real Trivy checks against an unsafe Dockerfile, rendered Kubernetes resources, and a vulnerable synthetic lockfile.
+They do not execute fixture workloads or publish images.
+Fault injection verifies image policy, SBOM retention, report sanitization, missing inventories, database metadata failures, and malformed outputs.
+Go CI contract tests verify publication barriers, bounded jobs, evidence separation, and scheduled scan wiring.
 
 After the new workflow reports successfully, add `Image verification` to main's required GitHub Actions checks.
 Preserve the existing required checks and administrator enforcement.
