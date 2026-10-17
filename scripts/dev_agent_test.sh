@@ -37,6 +37,8 @@ run_make() {
 for engine in "$tmp/docker" "$tmp/podman"; do
     : >"$DEV_AGENT_TEST_LOG"
     run_make dev-agent
+    grep -Fq -- '--publish 127.0.0.1:23188:23187' "$DEV_AGENT_TEST_LOG"
+    grep -Fq -- '--env DURPDEPLOY_AGENT_LISTEN_ADDR=0.0.0.0:23187' "$DEV_AGENT_TEST_LOG"
     if ! grep -Fxq "pull $expected_image" "$DEV_AGENT_TEST_LOG" ||
         ! grep -Fq -- "--env DURPDEPLOY_AGENT_VERSION=$expected_tag $expected_image" "$DEV_AGENT_TEST_LOG"; then
         printf 'FAIL: default agent must report published image pin %s\n' "$expected_image" >&2
@@ -50,6 +52,9 @@ for engine in "$tmp/docker" "$tmp/podman"; do
     run_make dev-agent DURPDEPLOY_AGENT_HOSTNAME=physical-host
     grep -Fq -- '--env DURPDEPLOY_AGENT_HOSTNAME' "$DEV_AGENT_TEST_LOG"
     grep -Fxq 'hostname=physical-host' "$DEV_AGENT_TEST_LOG"
+    : >"$DEV_AGENT_TEST_LOG"
+    run_make dev-agent DEV_AGENT_PORT=24443
+    grep -Fq -- '--publish 127.0.0.1:24443:23187' "$DEV_AGENT_TEST_LOG"
     : >"$DEV_AGENT_TEST_LOG"
     DURPDEPLOY_AGENT_HOSTNAME=environment-host run_make dev-agent
     grep -Fxq 'hostname=environment-host' "$DEV_AGENT_TEST_LOG"

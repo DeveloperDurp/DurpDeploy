@@ -26,8 +26,8 @@ services:
     environment:
       DURPDEPLOY_DB: /data/durpdeploy.db
       DURPDEPLOY_EXECUTION_BOUNDARY: service
-      DURPDEPLOY_AGENT_LISTEN_ADDR: 0.0.0.0:10943
-      DURPDEPLOY_AGENT_PUBLIC_URL: ${DURPDEPLOY_AGENT_PUBLIC_URL:-https://localhost:10943}
+      DURPDEPLOY_AGENT_LISTEN_ADDR: 0.0.0.0:23187
+      DURPDEPLOY_AGENT_PUBLIC_URL: ${DURPDEPLOY_AGENT_PUBLIC_URL:-https://localhost:23187}
       DURPDEPLOY_AGENT_IDENTITY_DIR: /var/lib/durpdeploy/agent-identity
       DURPDEPLOY_EMBEDDED_AGENT_ENABLED: ${DURPDEPLOY_EMBEDDED_AGENT_ENABLED:-true}
       DURPDEPLOY_CONTAINER_RUNTIME: docker
@@ -46,7 +46,7 @@ services:
       - durpdeploy-agent-identity:/var/lib/durpdeploy/agent-identity
       - /var/run/docker.sock:/var/run/durpdeploy-runtime.sock
     ports:
-      - "10943:10943"
+      - "23187:23187"
     secrets:
       - source: durpdeploy_key
         target: /etc/durpdeploy/key

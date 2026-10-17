@@ -270,10 +270,10 @@ grep -Fq 'trap cleanup EXIT' "$root/scripts/dev_https_proxy.sh"
 grep -Fq 'dev-agent-identity' "$root/Makefile"
 grep -Fq 'DURPDEPLOY_AGENT_IDENTITY_DIR' "$root/Makefile"
 grep -Fq \
-	'DURPDEPLOY_AGENT_LISTEN_ADDR=$${DURPDEPLOY_AGENT_LISTEN_ADDR:-0.0.0.0:10943}' \
+	'DURPDEPLOY_AGENT_LISTEN_ADDR=$${DURPDEPLOY_AGENT_LISTEN_ADDR:-0.0.0.0:23187}' \
 	"$root/Makefile"
 grep -Fq \
-	'DURPDEPLOY_AGENT_PUBLIC_URL=$${DURPDEPLOY_AGENT_PUBLIC_URL:-https://host.containers.internal:10943}' \
+	'DURPDEPLOY_AGENT_PUBLIC_URL=$${DURPDEPLOY_AGENT_PUBLIC_URL:-https://host.containers.internal:23187}' \
 	"$root/Makefile"
 grep -Fq \
 	'DURPDEPLOY_AGENT_IDENTITY_DIR=$${DURPDEPLOY_AGENT_IDENTITY_DIR:-$(MAKEFILE_DIR)tmp/dev-agent-identity}' \

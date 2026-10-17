@@ -6,7 +6,8 @@ Read [software versioning](versioning.md) for build numbers, container tags, and
 Run DurpDeploy with Docker Compose behind Caddy for HTTPS. The stack includes
 SQLite storage, an embedded container executor, and a Litestream backup sidecar.
 You need Docker with Compose, a DNS name pointing to the host, and inbound
-ports 80 and 443. Restrict the separate agent port 10943 to agent networks.
+ports 80 and 443. Restrict the separate agent port 23187 to agent networks.
+For existing installations, follow the [agent port migration](agents.md#migrate-the-dedicated-agent-port) instructions before changing ports.
 
 ## HTTP connection limits
 
@@ -92,7 +93,7 @@ EOF
 
 # Compose uses .env for interpolation of its explicit public listener setting.
 cat > .env <<'EOF'
-DURPDEPLOY_AGENT_PUBLIC_URL=https://durpdeploy.example.com:10943
+DURPDEPLOY_AGENT_PUBLIC_URL=https://durpdeploy.example.com:23187
 EOF
 chmod 0600 compose.app.env compose.caddy.env compose.litestream.env
 # Keep AWS credentials in compose.litestream.env, not .env or compose.app.env.
@@ -135,14 +136,14 @@ boundary is:
   server encryption key. An agent has no database and receives none of those
   files or secrets.
 * Caddy and Let's Encrypt serve browser and API HTTPS on ports 80 and 443.
-  The dedicated agent listener is direct TLS 1.3 mTLS on port 10943 and does
-  not route through Caddy. Publish 10943 separately and firewall it to agent
+  The dedicated agent listener is direct TLS 1.3 mTLS on port 23187 and does
+  not route through Caddy. Publish 23187 separately and firewall it to agent
   networks.
 * The server listener is always active and creates a local identity when
   needed. Production must override its localhost-oriented defaults:
 
   ```dotenv
-  DURPDEPLOY_AGENT_LISTEN_ADDR=0.0.0.0:10943
+  DURPDEPLOY_AGENT_LISTEN_ADDR=0.0.0.0:23187
   DURPDEPLOY_AGENT_PUBLIC_URL=https://<agent-control-host>
   DURPDEPLOY_AGENT_IDENTITY_DIR=/var/lib/durpdeploy/agent-identity
   ```
@@ -153,7 +154,7 @@ boundary is:
 
   ```dotenv
   DURPDEPLOY_AGENT_STATE_DIR=/var/lib/durpdeploy-agent
-  DURPDEPLOY_AGENT_LISTEN_ADDR=0.0.0.0:10943
+  DURPDEPLOY_AGENT_LISTEN_ADDR=0.0.0.0:23187
   DURPDEPLOY_AGENT_VERSION=<agent-version>
   ```
 

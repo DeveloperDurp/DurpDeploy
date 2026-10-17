@@ -149,6 +149,13 @@ Token placement rules:
 
 ## Agent fleet (admin only)
 
+The dedicated mTLS agent listener defaults to TCP port `23187`.
+The web listener remains on port `8080`.
+Pairing advertises `DURPDEPLOY_AGENT_PUBLIC_URL` to the agent.
+Explicit listener and public URL port overrides remain supported.
+Existing agents retain their stored server endpoint after an upgrade.
+Follow the port migration instructions in `docs/agents.md` before changing existing endpoints.
+
 All paths below use the `/api/v1` prefix and require an admin token.
 
 - `GET /admin/agents` lists agents with `administrative_status`, `draining`, `health`, `current_work`,
