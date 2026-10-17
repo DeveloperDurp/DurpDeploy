@@ -12,6 +12,19 @@ import (
 func TestPRImageScanReadsExportedOCILayout(t *testing.T) {
 	// Given an OCI archive, the scan input must expose its original index.
 	release := readWorkflow(t, "release")
+	prepare, prepareStep := findWorkflowStep(
+		t,
+		release.Jobs["images"],
+		"Prepare OCI scan layout",
+	)
+	scan, scanStep := findWorkflowStep(
+		t,
+		release.Jobs["images"],
+		"Scan image archive",
+	)
+	if scan <= prepare {
+		t.Fatal("OCI layout must be prepared before scanning")
+	}
 	directory := t.TempDir()
 	archiveDir := filepath.Join(directory, "release-image")
 	fixture := t.TempDir()
@@ -30,30 +43,21 @@ func TestPRImageScanReadsExportedOCILayout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	prepared := false
-	for _, step := range release.Jobs["images"].Steps {
-		if step.Name == "Prepare OCI scan layout" {
-			command := exec.Command("bash", "-euc", step.Run)
-			command.Env = append(os.Environ(), "RUNNER_TEMP="+directory)
-			if data, err := command.CombinedOutput(); err != nil {
-				t.Fatalf("prepare scan layout: %v\n%s", err, data)
-			}
-			prepared = true
-		}
-		if strings.HasPrefix(step.Uses, "aquasecurity/trivy-action@") {
-			if !prepared {
-				t.Fatal("OCI layout must be prepared before scanning")
-			}
-			input := strings.ReplaceAll(
-				step.With["input"],
-				"${{ runner.temp }}",
-				directory,
-			)
-			actual, err := os.ReadFile(filepath.Join(input, "index.json"))
-			if err != nil || string(actual) != string(index) {
-				t.Fatalf("scan input must contain exported OCI index: %v", err)
-			}
-		}
+	command := exec.Command("bash", "-euc", prepareStep.Run)
+	command.Env = append(os.Environ(), "RUNNER_TEMP="+directory)
+	if data, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("prepare scan layout: %v\n%s", err, data)
+	}
+	if !strings.Contains(
+		scanStep.Run,
+		`scripts/container_scan.sh image "$RUNNER_TEMP/image-scan-layout"`,
+	) {
+		t.Fatal("scan must read the prepared OCI layout")
+	}
+	input := filepath.Join(directory, "image-scan-layout")
+	actual, err := os.ReadFile(filepath.Join(input, "index.json"))
+	if err != nil || string(actual) != string(index) {
+		t.Fatalf("scan input must contain exported OCI index: %v", err)
 	}
 	retained, err := os.ReadFile(archive)
 	if err != nil || string(retained) != string(original) {
@@ -116,56 +120,55 @@ func TestReleaseRunsCannotCancelOtherPublishers(t *testing.T) {
 	}
 }
 
-func TestImagePublicationUsesVerifiedPRArtifacts(t *testing.T) {
-	// Publication requires verified PR source and this run's scanned image bytes.
-	release := readWorkflow(t, "release")
-	images := release.Jobs["images"]
+func TestPRImageBuildExportsStampedArchive(t *testing.T) {
+	images := readWorkflow(t, "release").Jobs["images"]
 	if images.If != "" || !slices.Contains(images.Needs, "version") {
 		t.Fatal("all builds must scan images with computed build metadata")
 	}
-	build, scan, retain := -1, -1, -1
-	for index, step := range images.Steps {
-		switch {
-		case strings.HasPrefix(step.Uses, "docker/build-push-action@"):
-			build = index
-			for _, expected := range []string{
-				"BUILD_VERSION=${{ needs.version.outputs.software_version }}",
-				"BUILD_NUMBER=${{ needs.version.outputs.build_number }}",
-				"BUILD_COMMIT=${{ needs.version.outputs.commit }}",
-			} {
-				if !strings.Contains(step.With["build-args"], expected) {
-					t.Errorf("image build omitted %s", expected)
-				}
-			}
-			if step.With["push"] != "false" ||
-				!strings.HasPrefix(step.With["outputs"], "type=oci,") {
-				t.Fatal("PR builds must export OCI without publishing")
-			}
-		case strings.HasPrefix(step.Uses, "aquasecurity/trivy-action@"):
-			scan = index
-			if step.With["exit-code"] != "1" ||
-				step.With["severity"] != "HIGH,CRITICAL" ||
-				step.With["input"] == "" || step.If != "" {
-				t.Fatal("archive scan must block on findings or errors")
-			}
-			if step.With["trivy-config"] != "/dev/null" ||
-				step.Env["TRIVY_IGNOREFILE"] != "/dev/null" {
-				t.Fatal(
-					"checkout policy files must not suppress image findings",
-				)
-			}
-		case strings.HasPrefix(step.Uses, "actions/upload-artifact@"):
-			retain = index
-			if step.If != "" {
-				t.Fatal("artifact retention must require successful scans")
-			}
+	_, build := findWorkflowStep(t, images, "Build image archive")
+	if !strings.HasPrefix(build.Uses, "docker/build-push-action@") {
+		t.Fatal("image archive must use the configured OCI builder")
+	}
+	for _, expected := range []string{
+		"BUILD_VERSION=${{ needs.version.outputs.software_version }}",
+		"BUILD_NUMBER=${{ needs.version.outputs.build_number }}",
+		"BUILD_COMMIT=${{ needs.version.outputs.commit }}",
+	} {
+		if !strings.Contains(build.With["build-args"], expected) {
+			t.Errorf("image build omitted %s", expected)
 		}
 	}
+	if build.With["push"] != "false" ||
+		!strings.HasPrefix(build.With["outputs"], "type=oci,") {
+		t.Fatal("PR builds must export OCI without publishing")
+	}
+}
+
+func TestImageScanPrecedesArchiveRetention(t *testing.T) {
+	images := readWorkflow(t, "release").Jobs["images"]
+	build, _ := findWorkflowStep(t, images, "Build image archive")
+	scan, scanStep := findWorkflowStep(t, images, "Scan image archive")
+	retain, retainStep := findWorkflowStep(t, images, "Retain scanned image")
+	if !strings.Contains(
+		scanStep.Run,
+		`bash scripts/container_scan.sh image "$RUNNER_TEMP/image-scan-layout" "$RUNNER_TEMP/image-evidence"`,
+	) ||
+		scanStep.If != "" {
+		t.Fatal("archive scan must block on findings or errors")
+	}
+	if retainStep.If != "" {
+		t.Fatal("artifact retention must require successful scans")
+	}
+	if scan <= build || retain <= scan {
+		t.Fatal("images must be built, scanned, then retained")
+	}
+}
+
+func TestImagePublicationUsesVerifiedPRArtifacts(t *testing.T) {
+	// Publication requires verified PR source and this run's scanned image bytes.
+	release := readWorkflow(t, "release")
 	if !slices.Contains(release.Jobs["docker"].Needs, "images") {
 		t.Fatal("publication must require this build's scanned images")
-	}
-	if build < 0 || scan <= build || retain <= scan {
-		t.Fatal("images must be built, scanned, then retained")
 	}
 	gate := release.Jobs["image-verification"]
 	for _, dependency := range []string{"images", "test", "e2e", "security"} {
