@@ -18,6 +18,89 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  containers:
+    name: Deployment configuration and frontend dependencies
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: azure/setup-helm@59b1c81c6280f5abebb1fb1bc585696daa7dfb42 # v5
+        with:
+          version: v4.2.2
+      - name: Install checksum-pinned Trivy
+        id: prepare
+        run: make trivy-tools
+      - name: Prove image and configuration failure reporting
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        run: make container-scan-test
+      - name: Scan Dockerfile and rendered Kubernetes configuration
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        run: bash scripts/container_scan.sh config . artifacts/container/config
+      - name: Verify existing Compose security contracts
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        run: bash scripts/check-agent-compose-contract.sh
+      - name: Scan frontend lockfile dependencies
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        run: bash scripts/container_scan.sh dependencies . artifacts/container/dependencies
+      - name: Publish safe container evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: container-reports
+          path: artifacts/container/
+          retention-days: 7
+          if-no-files-found: warn
+
+  image-rescan:
+    name: Fresh production image rescan (${{ matrix.arch }})
+    if: ${{ github.workflow == 'Security gates' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
+      - name: Build production image without publication
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: .
+          platforms: linux/${{ matrix.arch }}
+          build-args: |
+            BUILD_VERSION=security-rescan
+            BUILD_COMMIT=${{ github.sha }}
+            BUILD_NUMBER=${{ github.run_number }}
+            BUILD_MODIFIED=false
+          outputs: type=oci,dest=${{ runner.temp }}/image.tar
+          push: false
+          provenance: false
+          sbom: false
+      - name: Install checksum-pinned Trivy
+        run: make trivy-tools
+      - name: Scan fresh production image
+        run: |
+          mkdir -p "$RUNNER_TEMP/image-layout"
+          tar -xf "$RUNNER_TEMP/image.tar" -C "$RUNNER_TEMP/image-layout"
+          bash scripts/container_scan.sh image "$RUNNER_TEMP/image-layout" "$RUNNER_TEMP/image-evidence"
+      - name: Publish safe image evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: rescan-evidence-${{ matrix.arch }}
+          path: ${{ runner.temp }}/image-evidence/
+          retention-days: 7
+          if-no-files-found: warn
+
   scan:
     name: Go and secret scanning
     runs-on: ubuntu-latest

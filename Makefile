@@ -364,7 +364,13 @@ sonar-issues:
 	./scripts/sonar_issues.sh $(PR)
 
 # Task-local binaries; Go's checksum database verifies pinned modules.
-.PHONY: security-tools security-scan security-scan-test
+.PHONY: security-tools security-scan security-scan-test trivy-tools container-scan-test
+trivy-tools:
+	bash scripts/install_trivy.sh
+
+container-scan-test:
+	bash scripts/container_scan_test.sh
+
 security-tools:
 	mkdir -p bin/security
 	GOTOOLCHAIN=go1.26.9 GOBIN="$(CURDIR)/bin/security" go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
