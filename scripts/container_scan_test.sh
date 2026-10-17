@@ -120,6 +120,7 @@ for fault in tool database malformed inventory coverage sbom; do
     inventory) jq '.Results[0].Packages=[]' "$work/clean.json" >"$work/tool/raw.json" ;;
     coverage) jq '.Results[0].Type="unknown"' "$work/clean.json" >"$work/tool/raw.json" ;;
     sbom) printf '{}' >"$work/tool/sbom.json" ;;
+    *) printf 'Unknown fault fixture: %s\n' "$fault" >&2; exit 2 ;;
   esac
   expect_exit 2 env TRIVY_TOOL_DIR="$work/tool" bash "$runner" image "$work/layout" "$work/image"
   jq -e '.status == "incomplete"' "$work/image/scan.json" >/dev/null

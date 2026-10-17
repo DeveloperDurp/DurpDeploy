@@ -10,7 +10,8 @@ esac
 destination=${TRIVY_TOOL_DIR:-$root/bin/security}
 private=$(mktemp -d)
 trap 'rm -rf "$private"' EXIT
-curl --fail --silent --show-error --location --retry 3 --max-time 180 \
+curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' \
+  --retry 3 --max-time 180 \
   "https://github.com/aquasecurity/trivy/releases/download/v$version/trivy_${version}_Linux-$arch.tar.gz" \
   -o "$private/trivy.tar.gz"
 printf '%s  %s\n' "$digest" "$private/trivy.tar.gz" | sha256sum --check --status

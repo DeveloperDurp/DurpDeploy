@@ -28,14 +28,31 @@ type workflowJob struct {
 	Concurrency     struct {
 		Group string `yaml:"group"`
 	} `yaml:"concurrency"`
-	Steps []struct {
-		Name string            `yaml:"name"`
-		Run  string            `yaml:"run"`
-		If   string            `yaml:"if"`
-		Uses string            `yaml:"uses"`
-		With map[string]string `yaml:"with"`
-		Env  map[string]string `yaml:"env"`
-	} `yaml:"steps"`
+	Steps []workflowStep `yaml:"steps"`
+}
+
+type workflowStep struct {
+	Name string            `yaml:"name"`
+	Run  string            `yaml:"run"`
+	If   string            `yaml:"if"`
+	Uses string            `yaml:"uses"`
+	With map[string]string `yaml:"with"`
+	Env  map[string]string `yaml:"env"`
+}
+
+func findWorkflowStep(
+	t *testing.T,
+	job workflowJob,
+	name string,
+) (int, workflowStep) {
+	t.Helper()
+	for index, step := range job.Steps {
+		if step.Name == name {
+			return index, step
+		}
+	}
+	t.Fatalf("workflow step is missing: %s", name)
+	return -1, workflowStep{}
 }
 
 func readWorkflow(t *testing.T, name string) workflow {

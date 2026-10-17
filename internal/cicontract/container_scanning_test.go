@@ -28,6 +28,10 @@ func TestContainerChecksHaveNoPublishingAuthority(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestContainerConfigurationAndDependencyCommands(t *testing.T) {
+	security := readWorkflow(t, "security")
 	job := security.Jobs["containers"]
 	if job.If != "" {
 		t.Fatal("configuration and dependencies must run on every event")
@@ -47,6 +51,10 @@ func TestContainerChecksHaveNoPublishingAuthority(t *testing.T) {
 			t.Errorf("missing required container gate: %s", command)
 		}
 	}
+}
+
+func TestProductionImageRescanTriggers(t *testing.T) {
+	security := readWorkflow(t, "security")
 	rescan := security.Jobs["image-rescan"]
 	if !strings.Contains(rescan.If, "github.workflow == 'Security gates'") ||
 		!strings.Contains(rescan.If, "github.event_name == 'schedule'") ||
@@ -69,30 +77,25 @@ func TestImageEvidenceCannotPromoteFailedScans(t *testing.T) {
 	if images.TimeoutMinutes != 30 {
 		t.Fatal("production image checks must have an explicit timeout")
 	}
-	scan, evidence, source, archive := -1, -1, -1, -1
-	for index, step := range images.Steps {
-		switch step.Name {
-		case "Scan image archive":
-			scan = index
-		case "Retain safe image evidence":
-			evidence = index
-			if !strings.Contains(step.If, "always()") ||
-				step.With["path"] != "${{ runner.temp }}/image-evidence/" ||
-				step.With["retention-days"] != "7" {
-				t.Fatal("failed scans must retain only sanitized evidence")
-			}
-		case "Record verified source":
-			source = index
-			if step.If != "" {
-				t.Fatal("source verification must require scan success")
-			}
-		case "Retain scanned image":
-			archive = index
-			if step.If != "" ||
-				step.With["path"] != "${{ runner.temp }}/release-image/" {
-				t.Fatal("failed images must never become promotion artifacts")
-			}
-		}
+	scan, _ := findWorkflowStep(t, images, "Scan image archive")
+	evidence, evidenceStep := findWorkflowStep(
+		t,
+		images,
+		"Retain safe image evidence",
+	)
+	source, sourceStep := findWorkflowStep(t, images, "Record verified source")
+	archive, archiveStep := findWorkflowStep(t, images, "Retain scanned image")
+	if !strings.Contains(evidenceStep.If, "always()") ||
+		evidenceStep.With["path"] != "${{ runner.temp }}/image-evidence/" ||
+		evidenceStep.With["retention-days"] != "7" {
+		t.Fatal("failed scans must retain only sanitized evidence")
+	}
+	if sourceStep.If != "" {
+		t.Fatal("source verification must require scan success")
+	}
+	if archiveStep.If != "" ||
+		archiveStep.With["path"] != "${{ runner.temp }}/release-image/" {
+		t.Fatal("failed images must never become promotion artifacts")
 	}
 	if scan < 0 || evidence <= scan || source <= scan || archive <= source {
 		t.Fatal("scan evidence must precede successful source/image retention")
