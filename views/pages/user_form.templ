@@ -30,14 +30,9 @@ templ UserFormPage(user *db.User, errorMsg string, currentPath string, isNew boo
 		@layouts.Base(formTitle(isNew), currentPath) {
 			<div class="max-w-xl">
 				<h1 class="text-3xl font-bold mb-4">{ formTitle(isNew) }</h1>
-				if errorMsg != "" {
-					<div class="alert alert-error mb-4" id="form-error">
-						<span>{ errorMsg }</span>
-					</div>
-				}
 				<div class="card bg-base-200 shadow">
 					<div class="card-body">
-						@UserFormContent(user, isNew)
+						@UserFormContent(user, errorMsg, isNew)
 					</div>
 				</div>
 			</div>
@@ -58,10 +53,15 @@ func userFormAction(isNew bool) string {
 // UserFormFragment is the form-only view, used by HTMX 422 retargets
 // via WriteFormError. isNew picks the action URL and the submit label.
 templ UserFormFragment(user *db.User, errorMsg string, isNew bool) {
-	@UserFormContent(user, isNew)
+	@UserFormContent(user, errorMsg, isNew)
 }
 
-templ UserFormContent(user *db.User, isNew bool) {
+templ UserFormContent(user *db.User, errorMsg string, isNew bool) {
+	if errorMsg != "" {
+		<div class="alert alert-error mb-4" id="form-error" role="alert" aria-atomic="true" tabindex="-1" x-data x-init="$nextTick(() => $el.focus())">
+			<span>{ errorMsg }</span>
+		</div>
+	}
 	if !isNew && user != nil {
 		<div class="text-sm opacity-70 mb-2">
 			Editing <span class="font-mono">{ user.Email }</span>
@@ -69,6 +69,9 @@ templ UserFormContent(user *db.User, isNew bool) {
 	}
 	<form
 		id={ userFormID(user, isNew) }
+		if errorMsg != "" {
+			aria-describedby="form-error"
+		}
 		if isNew {
 			method="post"
 			action="/admin/users"
@@ -83,10 +86,11 @@ templ UserFormContent(user *db.User, isNew bool) {
 	>
 		if isNew {
 			<div class="form-control">
-				<label class="label">
+				<label class="label" for="user-email">
 					<span class="label-text">Email</span>
 				</label>
 				<input
+					id="user-email"
 					type="email"
 					name="email"
 					value={ fieldValue(user, "email") }
@@ -96,10 +100,11 @@ templ UserFormContent(user *db.User, isNew bool) {
 			</div>
 		}
 		<div class="form-control">
-			<label class="label">
+			<label class="label" for="user-name">
 				<span class="label-text">Name</span>
 			</label>
 			<input
+				id="user-name"
 				type="text"
 				name="name"
 				value={ fieldValue(user, "name") }
@@ -108,18 +113,18 @@ templ UserFormContent(user *db.User, isNew bool) {
 			/>
 		</div>
 		<div class="form-control">
-			<label class="label">
+			<label class="label" for="user-role">
 				<span class="label-text">Role</span>
 			</label>
-			<select name="role" class="select select-bordered" required>
+			<select id="user-role" name="role" class="select select-bordered" aria-describedby="user-role-help" required>
 				for _, role := range userRoleOptions(user) {
 					<option value={ role } if selectedRole(user) == role { selected }>{ role }</option>
 				}
 			</select>
-			<p class="text-xs opacity-70 mt-1">Viewer reads. Deployer runs existing releases. Maintainer authors content. Admin manages the instance.</p>
+			<p id="user-role-help" class="text-xs opacity-70 mt-1">Viewer reads. Deployer runs existing releases. Maintainer authors content. Admin manages the instance.</p>
 		</div>
 		<div class="form-control">
-			<label class="label">
+			<label class="label" for="user-password">
 				<span class="label-text">
 					if isNew {
 						Password
@@ -129,6 +134,7 @@ templ UserFormContent(user *db.User, isNew bool) {
 				</span>
 			</label>
 			<input
+				id="user-password"
 				type="password"
 				name="password"
 				class="input input-bordered"
@@ -139,7 +145,7 @@ templ UserFormContent(user *db.User, isNew bool) {
 			/>
 		</div>
 		<div class="form-control">
-			<label class="label">
+			<label class="label" for="user-password-confirmation">
 				<span class="label-text">
 					if isNew {
 						Confirm password
@@ -149,6 +155,7 @@ templ UserFormContent(user *db.User, isNew bool) {
 				</span>
 			</label>
 			<input
+				id="user-password-confirmation"
 				type="password"
 				name="password_confirmation"
 				class="input input-bordered"

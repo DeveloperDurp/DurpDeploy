@@ -5,7 +5,7 @@ case ${1:?usage: ci_test_shard.sh SUITE} in
   rollout-contracts)
     make agent-rollout-gate
     bash scripts/go_test.sh -race -count=1 ./internal/artifact
-    bash scripts/go_test.sh -tags=e2e -race -count=1 -timeout=3m -run '^Test(ProjectPanelScope|UsersPhone|UsersDefaultRole)APIWebE2E$' ./internal/handler/api
+    bash scripts/go_test.sh -tags=e2e -race -count=1 -timeout=3m -run '^Test(ProjectPanelScope|UsersPhone|UsersDefaultRole|UsersFormAccessibility)APIWebE2E$' ./internal/handler/api
     (
     export DURPDEPLOY_CONTAINER_RUNTIME=docker
     bash scripts/go_test.sh -tags=e2e -count=1 -run '^(TestReleaseDeferredPackageAPIWebE2E|TestArtifactsAPIWebContainerE2E|TestArtifactCredentialRotationE2E|TestArtifactSourceReplacementE2E|TestDeploymentStagingCleanupE2E|TestDeploymentStepResourcesE2E|TestDeploymentStagingFailureAPIWebE2E|TestDeploymentStepLogsAPIWebE2E|TestDeploymentStepLogOutcomesAPIWebE2E|TestPageNavigationHTTPAPIWebE2E|TestLifecycleVariablesAPIWebE2E|TestLifecycleVariableScopeChangesApplyToExistingReleaseE2E)$' ./internal/handler/api
@@ -37,7 +37,7 @@ case ${1:?usage: ci_test_shard.sh SUITE} in
     bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=10m -v -run '^Test(LifecycleVariables|LifecycleLiveScope|LifecyclePageNavigation|VariableScopesBeforeDeployment|NotificationCredentialForms|NotificationValidationPreservesForm|SMTPPlaintextWarning)BrowserE2E$' ./internal/handler/api
     ;;
   browser-resources)
-    bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=10m -v -run '^Test(UsersDefaultRole|UsersPhone|ProjectStaleSave|ProjectMemberRoles|ProjectPanelScope|ProjectEditModal|ResourceCreateModal|ResourceEditModal|StepEditModal|StepAddModal|MobileFormFocus|RunbookEditor|RunbookDeletion|AlpineEditForms|AlpineDialogs|RunningServer|ProjectTokens|RolePermissions)BrowserE2E$' ./internal/handler/api
+    bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -timeout=10m -v -run '^Test(UsersFormAccessibility|UsersDefaultRole|UsersPhone|ProjectStaleSave|ProjectMemberRoles|ProjectPanelScope|ProjectEditModal|ResourceCreateModal|ResourceEditModal|StepEditModal|StepAddModal|MobileFormFocus|RunbookEditor|RunbookDeletion|AlpineEditForms|AlpineDialogs|RunningServer|ProjectTokens|RolePermissions)BrowserE2E$' ./internal/handler/api
     bash scripts/go_test.sh -tags=e2e -race -count=1 -timeout=10m -v -run '^TestRunbookDeletion.*APIWebE2E$' ./internal/handler/api
     bash scripts/go_test.sh -tags=e2e -race -count=1 -timeout=10m -v -run '^Test(ProjectTokens.*|PermissionRolesExecution.*)APIE2E$' ./internal/handler/api
     bash scripts/go_test.sh -tags=e2e -race -count=1 -timeout=3m -run '^Test((Deployment|Runbook)LogHistoryPages|OpenLogStreamRevocation|StalledSMTPDelivery|SMTPPlaintextWarning|BackupHealthRecovery)APIWebE2E$' ./internal/handler/api
