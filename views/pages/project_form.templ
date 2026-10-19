@@ -161,7 +161,11 @@ templ ProjectFormPage(project db.Project, isEdit bool, errorMsg string, lifecycl
 			"a project",
 			projectFormBackHref(isEdit),
 			currentPath,
-		)
+		) {
+			if isEdit {
+				@ProjectMembersSection(project, members, nil, false, "")
+			}
+		}
 	} else {
 		@layouts.Base("Project Form", currentPath) {
 			@ProjectForm(project, isEdit, errorMsg, lifecycles, members, availableUsers, canManage)

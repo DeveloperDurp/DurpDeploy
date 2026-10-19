@@ -51,6 +51,10 @@ templ StepsContent(project db.Project, steps []db.Step) {
 					}
 				</span>
 			</div>
+			if !CanWrite(ctx) {
+				<p class="text-sm mb-4">Read-only: creating, editing, or deleting steps requires Maintainer or Admin access.</p>
+				@PermissionHelp("maintainer")
+			}
 			@components.StepList(steps, project.ID)
 			if CanWrite(ctx) {
 				<div class="mt-4 flex gap-2">

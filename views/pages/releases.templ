@@ -113,6 +113,9 @@ templ ReleasesFragment(project db.Project, releases []ReleaseView, errorMsg stri
 	<div id="releases-content">
 		if CanWrite(ctx) {
 			@ReleaseForm(project.ID, errorMsg)
+		} else {
+			<p class="text-sm mb-4">Read-only: creating, refreshing, or deleting releases requires Maintainer or Admin access.</p>
+			@PermissionHelp("maintainer")
 		}
 		@ReleasesTable(project, releases)
 	</div>
@@ -155,6 +158,8 @@ templ ReleaseRow(projectID int64, rv ReleaseView) {
 		<td>
 			if CanWrite(ctx) {
 				@ReleaseDeleteControl(projectID, rv.Release, rv.Active, "btn-xs")
+			} else {
+				<span class="text-sm">Read-only</span>
 			}
 		</td>
 	</tr>

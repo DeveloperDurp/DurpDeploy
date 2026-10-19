@@ -174,6 +174,8 @@ templ AccountMenuItems(currentPath string, role string) {
 	<li><a href="/settings/version" class={ activeClass(currentPath, "/settings/version") }>Version</a></li>
 	if role == "maintainer" || role == "admin" {
 		<li><a href="/settings/tokens" class={ activeClass(currentPath, "/settings/tokens") }>Tokens</a></li>
+	} else {
+		<li><p class="text-sm">API tokens require a global Maintainer or Admin role.</p></li>
 	}
 	<li class="menu-title"><hr/></li>
 	<li>

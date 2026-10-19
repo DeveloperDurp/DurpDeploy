@@ -165,7 +165,7 @@ func RenderUnauthorized(w http.ResponseWriter, r *http.Request) {
 		event := map[string]map[string]string{
 			"makeToast": {
 				"level":   "danger",
-				"message": unauthorizedMessage,
+				"message": permissionDeniedMessage(r),
 			},
 		}
 		data, _ := json.Marshal(event)
@@ -177,7 +177,7 @@ func RenderUnauthorized(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusForbidden)
-	_, _ = w.Write([]byte(unauthorizedHTML))
+	_, _ = w.Write([]byte(permissionDeniedHTML(r)))
 }
 
 const unauthorizedMessage = "You don't have access to this"

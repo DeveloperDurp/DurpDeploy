@@ -14,12 +14,13 @@ import (
 // available as a quick alternative.
 templ DeployFormPage(project db.Project, releases []db.Release, selectedRelease *db.Release, envs []AvailableEnv, currentPath string) {
 	if !CanDeploy(ctx) {
-		@ViewerForbiddenMessage(
+		@RoleForbiddenMessage(
 			"Deploy "+project.Name,
 			"create",
 			"a deployment",
 			fmt.Sprintf("/projects/%d", project.ID),
 			currentPath,
+			"deployer",
 		)
 	} else {
 		@layouts.Base("Deploy - "+project.Name, currentPath) {

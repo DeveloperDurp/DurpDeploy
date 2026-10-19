@@ -51,6 +51,7 @@ templ ProjectDetail(project db.Project, panel LifecyclePanel, vars []db.Variable
 					<span>No description</span>
 				}
 			</p>
+			@ProjectPermissionSummary()
 			@LifecyclePanelSection(project, panel)
 			@VariablesPreviewSection(project, vars, envs)
 			@InheritedVariablesSection(project.ID, panel.Inheritance, envs, false)

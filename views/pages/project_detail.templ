@@ -43,6 +43,10 @@ templ ProjectMenuDialog(project db.Project) {
 				<ul class="menu w-full">
 					<li class="menu-title">Settings</li>
 					<li><a href={ fmt.Sprintf("/projects/%d/notifications", project.ID) }>Notifications</a></li>
+					<li><a href={ fmt.Sprintf("/projects/%d/edit#project-members", project.ID) }>Members</a></li>
+					if !CanWrite(ctx) {
+						<li><p class="text-sm">Settings are read-only. Maintainer or Admin access is required to change them.</p></li>
+					}
 				</ul>
 			</nav>
 		</div>

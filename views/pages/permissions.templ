@@ -14,6 +14,12 @@ import "durpdeploy/internal/auth"
 // ponytail: one component instead of one-per-form so the message
 // wording stays consistent and the "Go back" affordance is uniform.
 templ ViewerForbiddenMessage(title string, action string, what string, backHref string, currentPath string) {
+	@RoleForbiddenMessage(title, action, what, backHref, currentPath, "maintainer") {
+		{ children... }
+	}
+}
+
+templ RoleForbiddenMessage(title string, action string, what string, backHref string, currentPath string, requiredRole string) {
 	@layouts.Base(title, currentPath) {
 		<div class="max-w-xl">
 			<div class="card bg-base-200 shadow">
@@ -25,14 +31,42 @@ templ ViewerForbiddenMessage(title string, action string, what string, backHref 
 						} else {
 							Your role cannot { action } { what }.
 						}
-						Ask an admin to change your role on the
-						<a class="link" href="/admin/users">Users</a> page if you need write access.
 					</p>
+					@PermissionHelp(requiredRole)
 					<div class="card-actions justify-end">
 						<a href={ templ.SafeURL(backHref) } class="btn btn-ghost btn-sm" x-data="backNavigation" @click="back">Go back</a>
 					</div>
 				</div>
 			</div>
+		</div>
+		{ children... }
+	}
+}
+
+templ PermissionHelp(requiredRole string) {
+	for _, help := range auth.RoleRecoveryHelp(ctx, requiredRole) {
+		<p class="text-sm">
+			{ help.Message } <a class="link" href={ templ.SafeURL(help.Href) }>{ help.Label }</a>.
+		</p>
+	}
+}
+
+templ ProjectPermissionSummary() {
+	if user := auth.UserFromContext(ctx); user != nil {
+		<div class="text-sm space-y-2 mb-4" data-project-permissions>
+			<p>Effective project role: <strong>{ auth.ProjectRoleFromContext(ctx) }</strong>.</p>
+			<p>
+				Global role: { user.Role }.
+				if member := auth.MembershipRoleFromContext(ctx); member != "" {
+					Project role: { member }. The lower role sets your project permissions.
+				} else if user.Role == "admin" {
+					Global administrators bypass project membership.
+				}
+			</p>
+			if !CanWrite(ctx) {
+				<p>Content authoring and project settings require Maintainer or Admin access at both levels.</p>
+				@PermissionHelp("maintainer")
+			}
 		</div>
 	}
 }

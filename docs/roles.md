@@ -32,6 +32,17 @@ Project memberships support all four roles.
 
 Ordinary project operations require permission from the global role, project membership, and any explicit token ceiling.
 A lower permission at any layer restricts the operation.
+
+The project overview shows the global role, project role, and effective project role.
+Steps, Releases, and the project menu explain unavailable authoring actions.
+The account menu explains the global role required for API tokens.
+For global-role restrictions, ask an administrator to use the Users page.
+For project-role restrictions, ask a project administrator to use Project member settings.
+Restricted members can read the Members section without gaining editing permission.
+
+Deployment recovery uses the Deployer requirement.
+Authoring and rollback recovery use the Maintainer requirement.
+
 A `viewer` membership permits reads.
 A `deployer` membership also permits deployment execution.
 A `maintainer` membership also permits content authoring.

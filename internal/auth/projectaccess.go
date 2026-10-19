@@ -121,8 +121,6 @@ func serveProjectAccess(
 	}
 
 	setTokenProject(r.Context(), projectID)
-	ctx := context.WithValue(r.Context(), ProjectAccessKey{}, projectID)
-	r = r.WithContext(ctx)
 	applyProjectPermission(w, r, repo, projectID, next)
 }
 
@@ -228,6 +226,8 @@ func applyProjectPermission(
 	w http.ResponseWriter, r *http.Request, repo *repository.Repository,
 	projectID int64, next http.Handler,
 ) bool {
+	r = r.WithContext(context.WithValue(r.Context(),
+		ProjectAccessKey{}, projectID))
 	user := UserFromContext(r.Context())
 	if user.Role != "admin" {
 		member, err := repo.Queries.GetProjectMember(r.Context(),
