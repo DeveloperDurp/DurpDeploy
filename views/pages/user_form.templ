@@ -2,6 +2,7 @@ package pages
 
 import (
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/roles"
 	"durpdeploy/views/layouts"
 	"fmt"
 	"strconv"
@@ -205,14 +206,11 @@ func userFormID(user *db.User, isNew bool) string {
 }
 
 // userRoleOptions returns the role values to render in the select.
-// For a new user we show "admin" first (sensible default); for an
+// For a new user we show "viewer" first. For an
 // existing user we show the existing role first so a 422 (re-render
 // after a validation failure) keeps the same ordering.
 func userRoleOptions(user *db.User) []string {
-	if user == nil {
-		return []string{"admin", "maintainer", "deployer", "viewer"}
-	}
-	switch user.Role {
+	switch selectedRole(user) {
 	case "maintainer":
 		return []string{"maintainer", "admin", "deployer", "viewer"}
 	case "deployer":
@@ -224,10 +222,10 @@ func userRoleOptions(user *db.User) []string {
 }
 
 // selectedRole is the role that should be marked selected. For a
-// new user with no submission yet, "admin" is the default.
+// new user or an invalid submitted role, "viewer" is the default.
 func selectedRole(user *db.User) string {
-	if user == nil {
-		return "admin"
+	if user == nil || !roles.Valid(user.Role) {
+		return "viewer"
 	}
 	return user.Role
 }
