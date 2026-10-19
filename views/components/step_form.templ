@@ -101,7 +101,7 @@ templ StepForm(step db.Step, projectID int64, isNew bool, labels []string, selec
 	if !canWrite(ctx) {
 		@ViewerStepFormMessage()
 	} else {
-	<div class="p-4 border border-base-300 rounded bg-base-200">
+	<div class="flex min-h-0 flex-col p-4 border border-base-300 rounded bg-base-200">
 		<form
 			x-data={ StepPlacementData(step, selectedLabel) }
 			if isNew {
@@ -119,9 +119,9 @@ templ StepForm(step db.Step, projectID int64, isNew bool, labels []string, selec
 				data-toast-success="Step updated"
 			}
 			data-toast-error="Failed to save step"
-			class="space-y-4"
+			class="flex min-h-0 flex-col"
 		>
-			<div class="page-header sticky -top-6 z-10 bg-base-200 py-2">
+			<div class="page-header shrink-0 bg-base-200 py-2">
 				<h2 id="step-edit-title" class="text-xl font-bold">
 					if isNew {
 						Add Step
@@ -134,6 +134,7 @@ templ StepForm(step db.Step, projectID int64, isNew bool, labels []string, selec
 					<button type="button" class="btn btn-ghost md:btn-sm" x-on:click="$dispatch('step-form-cancel')">Cancel</button>
 				</div>
 			</div>
+			<div class="min-h-0 overflow-y-auto space-y-4">
 			<div class="form-control">
 				<label class="label" for={ stepInputID(step, isNew, "name") }>
 					<span class="label-text">Name</span>
@@ -291,6 +292,7 @@ templ StepForm(step db.Step, projectID int64, isNew bool, labels []string, selec
 					hx-target="#step-list" hx-swap="innerHTML" hx-confirm="Delete this step?">Delete step</button>
 			</div>
 		}
+			</div>
 		</form>
 	</div>
 	}

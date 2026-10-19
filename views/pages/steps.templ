@@ -82,8 +82,8 @@ templ StepsContent(project db.Project, steps []db.Step) {
 		</div>
 		if CanWrite(ctx) {
 			<dialog id="step-edit-dialog" x-ref="stepEditDialog" class="modal" aria-labelledby="step-edit-title" x-on:close="editClosed">
-				<div class="modal-box w-full max-w-5xl">
-					<div id="step-edit-content" x-ref="stepEditContent"></div>
+				<div class="modal-box flex flex-col overflow-hidden w-full max-w-5xl max-h-[100dvh] sm:max-h-[calc(100dvh-5em)]">
+					<div id="step-edit-content" x-ref="stepEditContent" class="flex min-h-0 flex-col"></div>
 				</div>
 				<form method="dialog" class="modal-backdrop"><button type="submit" aria-label="Cancel step form"></button></form>
 			</dialog>

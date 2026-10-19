@@ -64,6 +64,29 @@ bash scripts/go_test.sh -tags=e2e -race -count=1 -run '^TestProjectPanelScopeAPI
 bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -run '^TestProjectPanelScopeBrowserE2E$' ./internal/handler/api
 ```
 
+## Reachable Step form actions (A09)
+
+Open a disposable project's Steps page at 375 × 844.
+Select Edit for a retained step.
+Scroll through the form.
+Confirm that Save and Cancel remain visible above the scrolling fields.
+Focus Container image, then scroll it toward the top of the fields.
+Confirm that the action header does not cover the field or its focus indicator.
+Repeat with a shortened viewport at 375 × 420.
+Repeat at desktop width and through Add Step.
+Change Timeout and Max retries, then select Cancel.
+Confirm that the API still returns the original values.
+Submit an empty Name with changed Timeout and Max retries.
+Confirm that validation keeps both lower fields.
+Correct Name, then select Save.
+Confirm that `GET /api/v1/projects/{id}/steps/{stepId}` returns the saved values.
+Keep the project and step for repeat checks.
+These checks create no executions or schedules.
+
+```bash
+bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -run '^TestStepFormActionsBrowserE2E$' ./internal/handler/api
+```
+
 ## Swagger request target
 
 Open `/api/swagger/` through the instance's HTTPS proxy on a non-default port.
