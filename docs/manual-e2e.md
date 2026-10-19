@@ -35,6 +35,38 @@ Submit a forged configuration request through the browser or API.
 Expect a browser HTMX toast, a native browser `403`, or an API JSON `403`.
 Read [roles](roles.md) for membership ceilings and upgrade behavior.
 
+## Project saves after permission changes
+
+Use a project Maintainer and an administrator in separate browser sessions.
+Open **Edit Project** as the Maintainer.
+Enter an unsaved description.
+
+In the administrator session, change the Maintainer's project membership to Viewer.
+Submit the open project form.
+Expect an error toast and a visible error message inside the form.
+Confirm that no success toast appears.
+Confirm that the form, description, and page URL remain unchanged.
+
+Read `GET /api/v1/projects/{id}` as the administrator.
+Confirm that the saved description remains unchanged.
+
+Restore the project membership to Maintainer.
+Save the retained form.
+Confirm that the description now appears on the project page and through the API.
+
+Repeat the check with a project Deployer downgrade.
+Repeat the check with global Viewer and Deployer downgrades.
+Restore both roles after each check.
+Repeat through the project edit dialog.
+These checks create no schedules.
+
+Run the focused API and browser regressions:
+
+```bash
+bash scripts/go_test.sh -count=1 -run '^TestProjectStaleSaveAPIWebE2E$' ./internal/handler/api
+bash scripts/go_test.sh -tags=e2e,packagebrowser -count=1 -run '^TestProjectStaleSaveBrowserE2E$' ./internal/handler/api
+```
+
 ## Project-scoped API tokens
 
 Run `make e2e-test` against the running server.

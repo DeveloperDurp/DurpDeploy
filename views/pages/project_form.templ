@@ -42,6 +42,8 @@ templ ProjectForm(project db.Project, isEdit bool, errorMsg string, lifecycles [
 			}
 		</div>
 		<form
+			x-data="projectSaveFeedback"
+			x-on:make-toast.camel="notify"
 			if isEdit {
 				id={ projectFormID(project, isEdit) }
 				hx-put={ fmt.Sprintf("/projects/%d", project.ID) }
@@ -60,6 +62,9 @@ templ ProjectForm(project db.Project, isEdit bool, errorMsg string, lifecycles [
 			}
 			class="space-y-4"
 		>
+			<template x-if="error">
+				<p x-text="error" class="text-error" role="alert"></p>
+			</template>
 			<div class="form-control">
 				<label class="label">
 					<span class="label-text">Name</span>

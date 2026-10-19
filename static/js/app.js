@@ -279,6 +279,9 @@ Alpine.data('toast', () => ({
 		this.afterRequestListener = (e) => {
 			const messages = this.requestToasts.get(e.detail.xhr) || {};
 			this.requestToasts.delete(e.detail.xhr);
+			// Server notifications also report denied writes with a 200 response.
+			const triggers = e.detail.xhr.getResponseHeader('HX-Trigger')?.trim();
+			if (triggers?.startsWith('{') && JSON.parse(triggers).makeToast) return;
 			const status = e.detail.xhr.status;
 			
 			if (status >= 200 && status < 400 && messages.success) {
@@ -312,6 +315,13 @@ Alpine.data('toast', () => ({
 		);
 		this.timeout = null;
 	}
+}));
+
+Alpine.data('projectSaveFeedback', () => ({
+	error: '',
+	notify(event) {
+		if (event.detail.level === 'danger') this.error = event.detail.message;
+	},
 }));
 
 window.showToast = (msg, type = 'success') => {
