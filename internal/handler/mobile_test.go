@@ -6,8 +6,6 @@ import (
 	"testing"
 )
 
-const mdTableCell = "md:table-cell"
-
 func breakpointClassPattern(first, second string) string {
 	return fmt.Sprintf(
 		`class="[^"]*(?:%s[^"]*%s|%s[^"]*%s)[^"]*"`,
@@ -15,20 +13,6 @@ func breakpointClassPattern(first, second string) string {
 		regexp.QuoteMeta(second),
 		regexp.QuoteMeta(second),
 		regexp.QuoteMeta(first),
-	)
-}
-
-func responsiveHeaderPattern(breakpoint string) string {
-	return fmt.Sprintf(
-		`(?s)<th[^>]*%s`,
-		breakpointClassPattern("hidden", breakpoint),
-	)
-}
-
-func responsiveCellPattern(breakpoint string) string {
-	return fmt.Sprintf(
-		`(?s)<td[^>]*%s`,
-		breakpointClassPattern("hidden", breakpoint),
 	)
 }
 
@@ -109,11 +93,14 @@ func TestMobile_RenderedHTML_includes_responsive_classes_when_authenticated(
 			},
 		},
 		{
-			name: "admin users last login column",
+			name: "admin users labeled phone cards",
 			path: "/admin/users",
 			patterns: []string{
-				responsiveHeaderPattern(mdTableCell),
-				responsiveCellPattern(mdTableCell),
+				`(?s)<thead class="hidden lg:table-header-group">`,
+				`(?s)<tr[^>]*class="[^"]*grid-cols-2[^"]*lg:table-row[^"]*"`,
+				`(?s)<td[^>]*class="[^"]*break-all[^"]*"[^>]*data-user-email`,
+				`(?s)<span[^>]*class="[^"]*lg:hidden[^"]*"[^>]*>Role</span>`,
+				`(?s)<span[^>]*class="[^"]*lg:hidden[^"]*"[^>]*>Last login</span>`,
 			},
 		},
 		{
