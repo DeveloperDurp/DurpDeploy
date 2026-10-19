@@ -92,16 +92,21 @@ Ask the runner administrator to enable user namespaces if the job reports this p
 
 Keep `runUntagged` enabled for this runner.
 Keep the existing privileged Kubernetes job setting for the nested runtimes.
-Use a registry cleanup policy for old `ci:pipeline-*` helper image tags.
-Apply the same retention policy to intermediate `ci-browser:pipeline-*` tags.
-Expire `ci-cache/mr-<number>` repositories after their merge requests close.
+Use the scheduled CI registry cleanup for old helper images, browser images, and closed merge request caches.
 
-### Scheduled MR cache cleanup
+### Scheduled CI registry cleanup
 
-The `cache-cleanup` job selects only this project's exact `ci-cache/mr-<number>` registry paths.
+The `cache-cleanup` job covers this project's `ci`, `ci-browser`, and exact `ci-cache/mr-<number>` registry paths.
 It preserves open merge requests and merge requests with active head pipelines.
 It waits 24 hours after a merge request closes or merges.
 Before deletion, it checks the merge request state again.
+
+For `ci` and `ci-browser`, it deletes only `pipeline-<number>` tags.
+It waits 24 hours after the corresponding pipeline finishes.
+It preserves active pipelines and the latest pipeline of each open merge request.
+Before deleting a tag, it checks the pipeline state again.
+It preserves unrelated repositories, release tags, and `latest` tags.
+
 GitLab deletes registry repositories asynchronously.
 The report records deletion requests, not completed storage reclamation.
 
@@ -112,16 +117,14 @@ Reports are available in `artifacts/cache-cleanup/report.json` for seven days.
 
 After merging, create a daily pipeline schedule targeting protected `main`.
 Set the schedule variable `CI_CACHE_CLEANUP` to `true`.
-Set `CI_CACHE_CLEANUP_DRY_RUN` to `true` for the first run.
-Inspect the report before enabling deletion.
-To enable deletion, set `CI_CACHE_CLEANUP_DRY_RUN` to `false` on that schedule.
+Set `CI_CACHE_CLEANUP_DRY_RUN` to `false` to enable deletion.
+For a preview without deletion, set `CI_CACHE_CLEANUP_DRY_RUN` to `true`.
 Use a schedule owner with permission to delete this project's registry repositories.
 Cleanup schedules run only `cache-cleanup`.
 Normal security schedules retain their existing jobs.
 
-Keep the built-in `pipeline-.*` cleanup policy for old pipeline image tags.
-The scheduled job preserves helper images, browser images, release images, and open merge request caches.
-Retain helper images while their pipelines remain available for retries.
+The scheduled job also covers old pipeline tags previously handled by the built-in `pipeline-.*` cleanup policy.
+If an old pipeline's helper image has expired, create a new pipeline instead of retrying its jobs.
 The source scan excludes `.cache/` from application analysis.
 
 ## Parallel test groups

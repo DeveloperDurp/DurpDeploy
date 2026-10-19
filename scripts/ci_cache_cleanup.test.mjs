@@ -68,7 +68,7 @@ test('MR reopening or a new active pipeline during recheck prevents deletion', a
 
 test('unrelated paths, pipeline images, and lookalike MR cache paths are never selected', async () => {
   const paths = [
-    'other/project/ci-cache/mr-64', `${options.projectPath}/ci`, `${options.projectPath}/ci-browser`,
+    'other/project/ci-cache/mr-64', `${options.projectPath}/releases`, `${options.projectPath}/ci-browser-extra`,
     `${repository.path}/nested`, `${repository.path}-extra`, `${options.projectPath}/ci-cache/mr-064`,
     `${options.projectPath}/ci-cache/mr-0`, `${options.projectPath}/ci-cache/mr-1/../mr-64`,
   ];
@@ -124,4 +124,86 @@ test('API requests paginate, use job-token headers, and reject redirects and HTT
   for (const base of ['http://gitlab.example', 'https://user:password@gitlab.example', 'https://gitlab.example/?token=x']) {
     assert.throws(() => createApi(base, 3, 'fixture'));
   }
+});
+
+function pipelineFixture(path = `${options.projectPath}/ci`, changes = {}) {
+  const repo = { ...repository, path };
+  const pipeline = { id: 42, project_id: 3, status: 'success', finished_at: '2026-10-18T12:00:00Z', ref: 'main', ...changes };
+  const calls = [];
+  let recheck;
+  const api = {
+    async list(endpoint) {
+      if (endpoint === 'registry/repositories') return [repo];
+      assert.equal(endpoint, 'registry/repositories/12/tags');
+      return ['pipeline-42', 'latest', 'v1.2.3', 'pipeline-042', 'pipeline-42/other'].map(name => ({ name }));
+    },
+    async request(method, endpoint) {
+      calls.push({ method, path: endpoint });
+      if (method === 'DELETE') return;
+      if (endpoint === 'merge_requests/64') return { ...merged, state: 'opened', head_pipeline: { id: 42 } };
+      assert.equal(endpoint, 'pipelines/42');
+      return calls.length > 1 && recheck ? { ...pipeline, ...recheck } : pipeline;
+    },
+  };
+  return { api, calls, recheck(change) { recheck = change; } };
+}
+
+test('both CI repositories expire only terminal pipeline tags after 24 hours', async () => {
+  for (const path of [`${options.projectPath}/ci`, `${options.projectPath}/ci-browser`]) {
+    const { api, calls } = pipelineFixture(path);
+    const report = await cleanup(api, { ...options, dryRun: false });
+    assert.equal(report.length, 1);
+    assert.equal(report[0].tag, 'pipeline-42');
+    assert.equal(report[0].action, 'DELETE_REQUESTED');
+    assert.deepEqual(calls.at(-1), { method: 'DELETE', path: 'registry/repositories/12/tags/pipeline-42' });
+    assert.equal(calls.filter(call => call.method === 'GET').length, 2);
+  }
+});
+
+test('CI image dry runs never delete tags', async () => {
+  const { api, calls } = pipelineFixture();
+  assert.equal((await cleanup(api, options))[0].action, 'WOULD_DELETE');
+  assert.equal(calls.length, 1);
+});
+
+test('active, unknown, and recent pipelines retain their images', async () => {
+  for (const change of [
+    ...['running', 'pending', 'manual', 'created', 'unknown'].map(status => ({ status })),
+    { finished_at: '2026-10-19T12:00:01Z' }, { finished_at: '2026-10-21T12:00:00Z' },
+    { ref: 'refs/merge-requests/64/head' },
+  ]) {
+    const { api, calls } = pipelineFixture(undefined, change);
+    assert.equal((await cleanup(api, { ...options, dryRun: false }))[0].action, 'KEEP');
+    assert.equal(calls.some(call => call.method === 'DELETE'), false);
+  }
+});
+
+test('pipeline retry during the final recheck protects its images', async () => {
+  const fixture = pipelineFixture();
+  fixture.recheck({ status: 'running' });
+  assert.equal((await cleanup(fixture.api, { ...options, dryRun: false }))[0].action, 'KEEP');
+  assert.equal(fixture.calls.some(call => call.method === 'DELETE'), false);
+});
+
+test('invalid pipeline identity or missing finish timestamp stops tag cleanup', async () => {
+  for (const change of [{ id: 99 }, { project_id: 4 }, { finished_at: null }]) {
+    const { api, calls } = pipelineFixture(undefined, change);
+    await assert.rejects(cleanup(api, { ...options, dryRun: false }));
+    assert.equal(calls.some(call => call.method === 'DELETE'), false);
+  }
+});
+
+test('a later API failure does not hide a completed tag deletion', async () => {
+  const { api } = pipelineFixture();
+  const list = api.list;
+  api.list = endpoint => endpoint.endsWith('/tags')
+    ? [{ name: 'pipeline-42' }, { name: 'pipeline-43' }] : list(endpoint);
+  const request = api.request;
+  api.request = (method, endpoint) => endpoint === 'pipelines/43'
+    ? Promise.reject(new Error('HTTP 404')) : request(method, endpoint);
+  const logged = [];
+  await assert.rejects(cleanup(api, { ...options, dryRun: false, log: line => logged.push(JSON.parse(line)) }), /HTTP 404/);
+  assert.equal(logged.length, 1);
+  assert.equal(logged[0].tag, 'pipeline-42');
+  assert.equal(logged[0].action, 'DELETE_REQUESTED');
 });
