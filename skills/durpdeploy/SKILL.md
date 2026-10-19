@@ -125,6 +125,11 @@ Inherited project variables retain existing secret masking.
 Owner permission changes, token changes, expiry, and revocation affect new requests and existing log streams.
 These changes do not cancel work already accepted by the server.
 Creation, scope changes, and revocation record non-secret identifiers in the audit log.
+Administrators can filter `GET /api/v1/admin/audit` with `user` for an exact current name or email.
+ASCII case is ignored.
+Combine `user` with `user_id`, `action`, or `entity_type` to narrow results.
+Each entry retains its IDs and adds `actor_name`, `actor_email`, and a relative `target_url`.
+An empty `target_url` means no unambiguous supported target record exists.
 Existing scoped database rows without valid grants fail authentication.
 Migration rollback is refused because older applications ignore token restrictions.
 The four-role upgrade migrates existing Deployer users, memberships, and explicit token ceilings to Maintainer.

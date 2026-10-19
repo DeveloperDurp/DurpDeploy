@@ -2,33 +2,40 @@ package pages
 
 import (
 	"durpdeploy/internal/db"
+	"durpdeploy/internal/repository"
 	"durpdeploy/views/layouts"
+	"net/url"
 	"strconv"
 )
 
-templ AuditLogPage(entries []db.AuditLog, currentPath string, currentUser *db.User) {
+templ AuditLogPage(entries []repository.AuditLogEntry, currentPath string, currentUser *db.User, filters url.Values) {
 	@layouts.Base("Audit Log", currentPath) {
 		<div class="flex justify-between items-center mb-4">
 			<h1 class="text-3xl font-bold">Audit Log</h1>
 		</div>
 		<form method="get" action="/admin/audit" class="flex flex-wrap gap-2 mb-4 items-end">
+			<div class="form-control min-w-0 max-w-full">
+				<label class="label" for="audit-user"><span class="label-text">User name or email</span></label>
+				<input id="audit-user" type="text" name="user" value={ filters.Get("user") } class="input input-bordered input-sm w-64 max-w-full" aria-describedby="audit-user-help"/>
+				<p id="audit-user-help" class="text-xs mt-1">Enter the current name or email exactly.</p>
+			</div>
 			<div class="form-control">
-				<label class="label">
+				<label class="label" for="audit-user-id">
 					<span class="label-text">User ID</span>
 				</label>
-				<input type="number" name="user_id" class="input input-bordered input-sm w-32"/>
+				<input id="audit-user-id" type="number" name="user_id" value={ filters.Get("user_id") } class="input input-bordered input-sm w-32"/>
 			</div>
 			<div class="form-control">
-				<label class="label">
+				<label class="label" for="audit-action">
 					<span class="label-text">Action</span>
 				</label>
-				<input type="text" name="action" class="input input-bordered input-sm w-40"/>
+				<input id="audit-action" type="text" name="action" value={ filters.Get("action") } class="input input-bordered input-sm w-40"/>
 			</div>
 			<div class="form-control">
-				<label class="label">
+				<label class="label" for="audit-entity-type">
 					<span class="label-text">Entity Type</span>
 				</label>
-				<input type="text" name="entity_type" class="input input-bordered input-sm w-40"/>
+				<input id="audit-entity-type" type="text" name="entity_type" value={ filters.Get("entity_type") } class="input input-bordered input-sm w-40"/>
 			</div>
 			<button type="submit" class="btn btn-primary btn-sm">Filter</button>
 			<a href="/admin/audit" class="btn btn-ghost btn-sm">Clear</a>
@@ -38,15 +45,15 @@ templ AuditLogPage(entries []db.AuditLog, currentPath string, currentUser *db.Us
 				<p class="text-gray-400">No audit entries match the filter.</p>
 			</div>
 		} else {
-			<table class="hidden lg:table table-zebra table-fixed w-full">
+			<div class="hidden lg:block">
+				<table class="table table-zebra table-fixed w-full" data-audit-table>
 					<thead>
 						<tr>
 							<th class="w-1/6">Time</th>
-							<th class="w-1/12">User</th>
+							<th class="w-1/4">User</th>
 							<th class="w-1/6">Action</th>
-							<th class="w-1/12 hidden sm:table-cell">Entity</th>
-							<th class="w-1/12 hidden md:table-cell">Entity ID</th>
-							<th class="w-1/3 min-w-[200px]">Details</th>
+							<th class="w-1/6">Target</th>
+							<th class="w-1/4">Details</th>
 						</tr>
 					</thead>
 					<tbody>
@@ -54,7 +61,8 @@ templ AuditLogPage(entries []db.AuditLog, currentPath string, currentUser *db.Us
 							@AuditLogRow(entry)
 						}
 					</tbody>
-			</table>
+				</table>
+			</div>
 			<ol class="space-y-3 lg:hidden" data-mobile-audit-list>
 				for _, entry := range entries {
 					@AuditLogMobileRecord(entry)
@@ -64,42 +72,59 @@ templ AuditLogPage(entries []db.AuditLog, currentPath string, currentUser *db.Us
 	}
 }
 
-templ AuditLogRow(entry db.AuditLog) {
+templ AuditLogRow(entry repository.AuditLogEntry) {
 	<tr>
 		<td class="whitespace-nowrap">{ formatUnixTime(entry.CreatedAt) }</td>
-		<td>
-			if entry.UserID.Valid {
-				{ strconv.FormatInt(entry.UserID.Int64, 10) }
-			} else {
-				<span class="text-gray-500">-</span>
-			}
-		</td>
+		<td class="min-w-0">@AuditActor(entry)</td>
 		<td class="truncate">{ entry.Action }</td>
-		<td class="truncate hidden sm:table-cell">{ entry.EntityType }</td>
-		<td class="hidden md:table-cell">
-			if entry.EntityID.Valid {
-				{ strconv.FormatInt(entry.EntityID.Int64, 10) }
-			} else {
-				<span class="text-gray-500">-</span>
-			}
-		</td>
-		<td class="w-1/3 align-top p-4">
-			@AuditDetails(entry)
+		<td class="break-words">@AuditTarget(entry)</td>
+		<td class="align-top p-4">
+			@AuditDetails(entry.AuditLog)
 		</td>
 	</tr>
 }
 
-templ AuditLogMobileRecord(entry db.AuditLog) {
+templ AuditLogMobileRecord(entry repository.AuditLogEntry) {
 	<li class="card bg-base-200 p-4 space-y-3">
 		<div class="flex items-start justify-between gap-4">
 			<div class="min-w-0">
 				<p class="font-medium break-words">{ entry.Action }</p>
-				<p class="text-sm text-gray-400">{ entry.EntityType }</p>
+				<p class="text-sm">@AuditTarget(entry)</p>
 			</div>
 			<time class="shrink-0 text-xs whitespace-nowrap">{ formatUnixTime(entry.CreatedAt) }</time>
 		</div>
-		@AuditDetails(entry)
+		<div class="min-w-0 text-sm">@AuditActor(entry)</div>
+		@AuditDetails(entry.AuditLog)
 	</li>
+}
+
+templ AuditActor(entry repository.AuditLogEntry) {
+	<div data-audit-actor class="space-y-1 break-words">
+		if entry.ActorName != "" {
+			<p class="font-medium">{ entry.ActorName }</p>
+		}
+		if entry.ActorEmail != "" {
+			<p class="text-sm break-all">{ entry.ActorEmail }</p>
+		}
+		if entry.UserID.Valid {
+			<p class="text-xs">User ID { strconv.FormatInt(entry.UserID.Int64, 10) }</p>
+		} else {
+			<p class="text-xs">No user ID</p>
+		}
+	</div>
+}
+
+templ AuditTarget(entry repository.AuditLogEntry) {
+	if entry.TargetURL != "" {
+		<a href={ templ.SafeURL(entry.TargetURL) } class="link link-primary" data-audit-target>{ entry.EntityType } { strconv.FormatInt(entry.EntityID.Int64, 10) }</a>
+	} else {
+		<span>
+			{ entry.EntityType }
+			if entry.EntityID.Valid {
+				{ strconv.FormatInt(entry.EntityID.Int64, 10) }
+			}
+		</span>
+	}
 }
 
 templ AuditDetails(entry db.AuditLog) {

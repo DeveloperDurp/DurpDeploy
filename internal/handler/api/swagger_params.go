@@ -442,6 +442,9 @@ type listRunbookExecutionsQueryParam struct {
 //
 //nolint:unused // Used by Swagger specification generation.
 type listAuditLogsQueryParam struct {
+	// Exact current actor name or email. ASCII case is ignored.
+	// in: query
+	User string `json:"user"`
 	// in: query
 	Limit int64 `json:"limit"`
 	// in: query

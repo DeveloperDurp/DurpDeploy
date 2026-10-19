@@ -861,6 +861,13 @@
         "operationId": "auditLog",
         "parameters": [
           {
+            "type": "string",
+            "x-go-name": "User",
+            "description": "Exact current actor name or email. ASCII case is ignored.",
+            "name": "user",
+            "in": "query"
+          },
+          {
             "type": "integer",
             "format": "int64",
             "x-go-name": "Limit",
@@ -9746,6 +9753,14 @@
           "type": "string",
           "x-go-name": "Action"
         },
+        "actor_email": {
+          "type": "string",
+          "x-go-name": "ActorEmail"
+        },
+        "actor_name": {
+          "type": "string",
+          "x-go-name": "ActorName"
+        },
         "created_at": {
           "type": "integer",
           "format": "int64",
@@ -9768,6 +9783,11 @@
           "type": "integer",
           "format": "int64",
           "x-go-name": "ID"
+        },
+        "target_url": {
+          "description": "Relative web URL. Empty without an unambiguous supported target record.",
+          "type": "string",
+          "x-go-name": "TargetURL"
         },
         "user_id": {
           "type": "integer",
@@ -9803,6 +9823,11 @@
           "type": "integer",
           "format": "int64",
           "x-go-name": "Limit"
+        },
+        "user": {
+          "description": "Exact current actor name or email. ASCII case is ignored.",
+          "type": "string",
+          "x-go-name": "User"
         },
         "user_id": {
           "type": "integer",

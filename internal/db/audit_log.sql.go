@@ -54,6 +54,89 @@ func (q *Queries) CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) 
 	return i, err
 }
 
+const listAuditLogEntries = `-- name: ListAuditLogEntries :many
+SELECT audit_log.id, audit_log.user_id, audit_log."action", audit_log.entity_type, audit_log.entity_id, audit_log.details, audit_log.created_at, COALESCE(actor.name, '') AS actor_name,
+    COALESCE(actor.email, '') AS actor_email,
+    COALESCE(target_user.id, project.id, environment.id, lifecycle.id,
+        template.id, deployment.id, release.id, runbook.id, 0) AS target_id,
+    COALESCE(release.project_id, runbook.project_id, 0) AS target_project_id
+FROM audit_log
+LEFT JOIN users actor ON actor.id = audit_log.user_id
+LEFT JOIN users target_user ON audit_log.entity_type = 'user' AND target_user.id = audit_log.entity_id
+LEFT JOIN projects project ON audit_log.entity_type = 'project' AND project.id = audit_log.entity_id
+LEFT JOIN environments environment ON audit_log.entity_type = 'environment' AND environment.id = audit_log.entity_id
+LEFT JOIN lifecycles lifecycle ON audit_log.entity_type = 'lifecycle' AND lifecycle.id = audit_log.entity_id
+LEFT JOIN step_templates template ON audit_log.entity_type = 'template' AND template.id = audit_log.entity_id
+LEFT JOIN deployments deployment ON audit_log.entity_type = 'deployment' AND deployment.id = audit_log.entity_id AND deployment.kind = 'deployment'
+LEFT JOIN releases release ON audit_log.entity_type = 'release' AND release.id = audit_log.entity_id AND release.kind = 'deployment'
+LEFT JOIN runbooks runbook ON audit_log.entity_type = 'runbook' AND runbook.id = audit_log.entity_id AND runbook.deleted_at IS NULL
+WHERE (CAST(?1 AS INTEGER) IS NULL OR audit_log.user_id = CAST(?1 AS INTEGER))
+  AND (CAST(?2 AS TEXT) IS NULL
+    OR LOWER(actor.name) = LOWER(CAST(?2 AS TEXT))
+    OR LOWER(actor.email) = LOWER(CAST(?2 AS TEXT)))
+  AND (CAST(?3 AS TEXT) IS NULL OR audit_log.action = CAST(?3 AS TEXT))
+  AND (CAST(?4 AS TEXT) IS NULL OR audit_log.entity_type = CAST(?4 AS TEXT))
+ORDER BY audit_log.created_at DESC, audit_log.id DESC
+LIMIT ?5
+`
+
+type ListAuditLogEntriesParams struct {
+	FUserID     sql.NullInt64  `json:"f_user_id"`
+	FUser       sql.NullString `json:"f_user"`
+	FAction     sql.NullString `json:"f_action"`
+	FEntityType sql.NullString `json:"f_entity_type"`
+	PageLimit   int64          `json:"page_limit"`
+}
+
+type ListAuditLogEntriesRow struct {
+	AuditLog        AuditLog `json:"audit_log"`
+	ActorName       string   `json:"actor_name"`
+	ActorEmail      string   `json:"actor_email"`
+	TargetID        int64    `json:"target_id"`
+	TargetProjectID int64    `json:"target_project_id"`
+}
+
+func (q *Queries) ListAuditLogEntries(ctx context.Context, arg ListAuditLogEntriesParams) ([]ListAuditLogEntriesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listAuditLogEntries,
+		arg.FUserID,
+		arg.FUser,
+		arg.FAction,
+		arg.FEntityType,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAuditLogEntriesRow
+	for rows.Next() {
+		var i ListAuditLogEntriesRow
+		if err := rows.Scan(
+			&i.AuditLog.ID,
+			&i.AuditLog.UserID,
+			&i.AuditLog.Action,
+			&i.AuditLog.EntityType,
+			&i.AuditLog.EntityID,
+			&i.AuditLog.Details,
+			&i.AuditLog.CreatedAt,
+			&i.ActorName,
+			&i.ActorEmail,
+			&i.TargetID,
+			&i.TargetProjectID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAuditLogs = `-- name: ListAuditLogs :many
 SELECT id, user_id, "action", entity_type, entity_id, details, created_at FROM audit_log ORDER BY created_at DESC, id DESC LIMIT ?
 `

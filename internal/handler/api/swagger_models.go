@@ -219,6 +219,10 @@ type swaggerAuditLog struct {
 	EntityID   *int64  `json:"entity_id"`
 	Details    *string `json:"details"`
 	CreatedAt  int64   `json:"created_at"`
+	ActorName  string  `json:"actor_name"`
+	ActorEmail string  `json:"actor_email"`
+	// Relative web URL. Empty without an unambiguous supported target record.
+	TargetURL string `json:"target_url"`
 }
 
 // NotificationEvent is a fired notification record.
@@ -318,6 +322,9 @@ type swaggerLogStreamParams struct {
 //
 //nolint:unused // Used by Swagger specification generation.
 type swaggerAuditLogParams struct {
+	// Exact current actor name or email. ASCII case is ignored.
+	// in: query
+	User string `json:"user"`
 	// in: query
 	Limit int64 `json:"limit"`
 	// in: query

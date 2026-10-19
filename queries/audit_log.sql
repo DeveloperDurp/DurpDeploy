@@ -18,6 +18,31 @@ LIMIT sqlc.arg(page_limit);
 -- name: CountAuditLogs :one
 SELECT COUNT(*) FROM audit_log;
 
+-- name: ListAuditLogEntries :many
+SELECT sqlc.embed(audit_log), COALESCE(actor.name, '') AS actor_name,
+    COALESCE(actor.email, '') AS actor_email,
+    COALESCE(target_user.id, project.id, environment.id, lifecycle.id,
+        template.id, deployment.id, release.id, runbook.id, 0) AS target_id,
+    COALESCE(release.project_id, runbook.project_id, 0) AS target_project_id
+FROM audit_log
+LEFT JOIN users actor ON actor.id = audit_log.user_id
+LEFT JOIN users target_user ON audit_log.entity_type = 'user' AND target_user.id = audit_log.entity_id
+LEFT JOIN projects project ON audit_log.entity_type = 'project' AND project.id = audit_log.entity_id
+LEFT JOIN environments environment ON audit_log.entity_type = 'environment' AND environment.id = audit_log.entity_id
+LEFT JOIN lifecycles lifecycle ON audit_log.entity_type = 'lifecycle' AND lifecycle.id = audit_log.entity_id
+LEFT JOIN step_templates template ON audit_log.entity_type = 'template' AND template.id = audit_log.entity_id
+LEFT JOIN deployments deployment ON audit_log.entity_type = 'deployment' AND deployment.id = audit_log.entity_id AND deployment.kind = 'deployment'
+LEFT JOIN releases release ON audit_log.entity_type = 'release' AND release.id = audit_log.entity_id AND release.kind = 'deployment'
+LEFT JOIN runbooks runbook ON audit_log.entity_type = 'runbook' AND runbook.id = audit_log.entity_id AND runbook.deleted_at IS NULL
+WHERE (CAST(sqlc.narg(f_user_id) AS INTEGER) IS NULL OR audit_log.user_id = CAST(sqlc.narg(f_user_id) AS INTEGER))
+  AND (CAST(sqlc.narg(f_user) AS TEXT) IS NULL
+    OR LOWER(actor.name) = LOWER(CAST(sqlc.narg(f_user) AS TEXT))
+    OR LOWER(actor.email) = LOWER(CAST(sqlc.narg(f_user) AS TEXT)))
+  AND (CAST(sqlc.narg(f_action) AS TEXT) IS NULL OR audit_log.action = CAST(sqlc.narg(f_action) AS TEXT))
+  AND (CAST(sqlc.narg(f_entity_type) AS TEXT) IS NULL OR audit_log.entity_type = CAST(sqlc.narg(f_entity_type) AS TEXT))
+ORDER BY audit_log.created_at DESC, audit_log.id DESC
+LIMIT sqlc.arg(page_limit);
+
 -- name: PruneAuditLogs :exec
 -- ponytail: preserve rows tied to live deployments/releases; entity_type is singular. Add more NOT EXISTS guards as the audit entity set grows.
 DELETE FROM audit_log

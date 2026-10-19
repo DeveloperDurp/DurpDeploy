@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"durpdeploy/internal/db"
 	eventbus "durpdeploy/internal/events"
@@ -45,8 +46,11 @@ func NewAdminHandler(repo *repository.Repository) *AdminHandler {
 //	  403: body:ForbiddenError
 //	  500: body:ServerError
 func (h *AdminHandler) AuditLog(w http.ResponseWriter, r *http.Request) {
-	params := db.ListAuditLogsFilteredParams{
+	params := db.ListAuditLogEntriesParams{
 		PageLimit: 1000,
+	}
+	if v := strings.TrimSpace(r.URL.Query().Get("user")); v != "" {
+		params.FUser = sql.NullString{String: v, Valid: true}
 	}
 
 	if v := r.URL.Query().Get("limit"); v != "" {
@@ -76,7 +80,7 @@ func (h *AdminHandler) AuditLog(w http.ResponseWriter, r *http.Request) {
 		params.FEntityType = sql.NullString{String: v, Valid: true}
 	}
 
-	entries, err := h.repo.Queries.ListAuditLogsFiltered(r.Context(), params)
+	entries, err := h.repo.ListAuditLogEntries(r.Context(), params)
 	if err != nil {
 		RespondError(w, http.StatusInternalServerError, err.Error())
 		return

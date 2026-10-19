@@ -23,12 +23,15 @@ func NewAdminHandler(repo *repository.Repository) *AdminHandler {
 }
 
 // ListAudit renders /admin/audit: the last 200 audit_log entries with
-// optional filters by user_id, action, and entity_type. Admin role
+// optional filters by actor name/email, user_id, action, and entity_type. Admin role
 // required — enforced by the RequireRole("admin") middleware mounted
 // on the /admin/* sub-group in server.go.
 func (h *AdminHandler) ListAudit(w http.ResponseWriter, r *http.Request) {
-	params := db.ListAuditLogsFilteredParams{
+	params := db.ListAuditLogEntriesParams{
 		PageLimit: 200,
+	}
+	if v := strings.TrimSpace(r.URL.Query().Get("user")); v != "" {
+		params.FUser = sql.NullString{String: v, Valid: true}
 	}
 
 	if v := r.URL.Query().Get("user_id"); v != "" {
@@ -43,14 +46,14 @@ func (h *AdminHandler) ListAudit(w http.ResponseWriter, r *http.Request) {
 		params.FEntityType = sql.NullString{String: v, Valid: true}
 	}
 
-	entries, err := h.repo.Queries.ListAuditLogsFiltered(r.Context(), params)
+	entries, err := h.repo.ListAuditLogEntries(r.Context(), params)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	user := auth.UserFromContext(r.Context())
-	if err := pages.AuditLogPage(entries, r.URL.Path, user).
+	if err := pages.AuditLogPage(entries, r.URL.Path, user, r.URL.Query()).
 		Render(r.Context(), w); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
