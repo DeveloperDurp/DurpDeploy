@@ -5,7 +5,7 @@ destination=${1:?usage: resolve_release_images.sh DESTINATION}
 [[ ${CI_PROJECT_ID:?} =~ ^[0-9]+$ ]]
 [[ ${CI_COMMIT_SHA:?} =~ ^[0-9a-f]{40}$ ]]
 [[ ${CI_API_V4_URL:?} == https://* ]]
-: "${GITLAB_READ_TOKEN:?set a protected read_api token scoped to production}"
+: "${CI_JOB_TOKEN:?GitLab must provide a CI job token}"
 target=$(git rev-parse "$CI_COMMIT_SHA^{commit}")
 tree=$(git rev-parse "$target^{tree}")
 git merge-base --is-ancestor "$target" "origin/${CI_DEFAULT_BRANCH:?}"
@@ -15,11 +15,11 @@ scratch=$(mktemp -d)
 trap 'rm -rf "$scratch"' EXIT
 
 api() {
-  # curl strips Authorization on redirects to another origin.
-  curl --fail --silent --show-error --location --max-time 180 \
+  # GitLab serves these same-origin artifact-file endpoints without redirects.
+  curl --fail --silent --show-error --max-time 180 \
     --proto '=https' --proto-redir '=https' \
     --max-filesize "${2:-2147483648}" \
-    --header "Authorization: Bearer $GITLAB_READ_TOKEN" \
+    --header "JOB-TOKEN: $CI_JOB_TOKEN" \
     "$CI_API_V4_URL/projects/$CI_PROJECT_ID/$1"
 }
 api_list() {
@@ -48,11 +48,10 @@ iid=$(jq -er '.iid | select(type == "number" and . > 0)' "$scratch/mr.json")
 api "merge_requests/$iid" 1048576 > "$scratch/mr.json"
 head=$(jq -er '.diff_refs.head_sha | select(test("^[0-9a-f]{40}$"))' "$scratch/mr.json")
 base=$(jq -er '.diff_refs.base_sha | select(test("^[0-9a-f]{40}$"))' "$scratch/mr.json")
-api_list "merge_requests/$iid/pipelines" |
-  jq -e --argjson project "$CI_PROJECT_ID" '
-    [.[] | select(.project_id == $project and .source == "merge_request_event")]
-    | max_by(.id) | select(.status == "success")
-  ' > "$scratch/pipeline.json"
+jq -e --argjson project "$CI_PROJECT_ID" '
+  .head_pipeline | select(.project_id == $project
+    and .source == "merge_request_event" and .status == "success")
+' "$scratch/mr.json" > "$scratch/pipeline.json"
 pipeline=$(jq -er '.id | select(type == "number" and . > 0)' "$scratch/pipeline.json")
 tested=$(jq -er '.sha | select(test("^[0-9a-f]{40}$"))' "$scratch/pipeline.json")
 if ! git cat-file -e "$tested^{commit}" 2>/dev/null; then git fetch --no-tags origin "$tested"; fi
@@ -65,7 +64,8 @@ latest_job() {
     | .id | select(type == "number" and . > 0)
   ' "$scratch/jobs.json"
 }
-for required in image-verification test e2e security-scan container-security; do
+for required in image-verification e2e security-scan container-security \
+  'test: [repository]' 'test: [database]' 'test: [handlers]' 'test: [core]'; do
   latest_job "$required" >/dev/null
 done
 image_job=$(latest_job images)

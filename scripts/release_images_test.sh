@@ -26,7 +26,7 @@ git switch -q main
 git merge --squash feature >/dev/null
 git commit -qm squash
 export CI_COMMIT_SHA CI_PROJECT_ID=3 CI_DEFAULT_BRANCH=main
-export CI_API_V4_URL=https://gitlab.example/api/v4 GITLAB_READ_TOKEN=fixture
+export CI_API_V4_URL=https://gitlab.example/api/v4 CI_JOB_TOKEN=fixture
 CI_COMMIT_SHA=$(git rev-parse HEAD)
 first_target=$CI_COMMIT_SHA
 git push -q origin main
@@ -40,11 +40,13 @@ case "$path" in
   *) exec "$REAL_CURL" "$@" ;;
 esac
 [[ ! -e "$FIXTURE_DIR/fail" ]] || exit 22
+[[ " $* " == *' --header JOB-TOKEN: fixture '* ]]
+[[ " $* " != *' --location '* ]]
 case "$path" in
   */commits/*/merge_requests\?*)
     if [[ $path == *'page=2' ]]; then cat "$FIXTURE_DIR/mrs-next.json"; else cat "$FIXTURE_DIR/mrs.json"; fi ;;
-  */merge_requests/1) cat "$FIXTURE_DIR/mr.json" ;;
-  */merge_requests/1/pipelines\?*) cat "$FIXTURE_DIR/pipelines.json" ;;
+  */merge_requests/1) jq --slurpfile pipelines "$FIXTURE_DIR/pipelines.json" \
+    '.head_pipeline=$pipelines[0][0]' "$FIXTURE_DIR/mr.json" ;;
   */pipelines/42/jobs\?*) cat "$FIXTURE_DIR/jobs.json" ;;
   */jobs/*/artifacts/artifacts/built-image-amd64/source.json) cat "$FIXTURE_DIR/source.json" ;;
   */jobs/*/artifacts/artifacts/built-image-amd64/image.tar) cat "$FIXTURE_DIR/image.tar" ;;
@@ -62,7 +64,8 @@ printf '[]\n' > "$FIXTURE_DIR/mrs-next.json"
 jq -n --arg head "$head" '
   [{id:42,project_id:3,source:"merge_request_event",status:"success",sha:$head}]
 ' > "$FIXTURE_DIR/pipelines.json"
-jq -n '["images","retain-image","image-verification","test","e2e","security-scan","container-security"]
+jq -n '["images","retain-image","image-verification","test: [repository]",
+  "test: [database]","test: [handlers]","test: [core]","e2e","security-scan","container-security"]
   | to_entries | map({id:(.key+11),name:.value,status:"success",allow_failure:false,
     pipeline:{id:42},erased_at:null,artifacts_file:{size:10000}})' > "$FIXTURE_DIR/jobs.json"
 layout="$work/layout"
@@ -102,6 +105,7 @@ expect_rejection() {
   printf 'PASS: reject %s\n' "$1"
   reset_api
 }
+CI_JOB_TOKEN= expect_rejection 'missing CI job token'
 bash "$root/scripts/resolve_release_images.sh" "$work/verified"
 cmp "$FIXTURE_DIR/image.tar" "$work/verified/amd64/image.tar"
 echo 'PASS: promote matching AMD64 squash-merge artifacts'
@@ -123,16 +127,24 @@ for mutation in '.[0].status="failed"' '.[0].project_id=99' '.[0].source="push"'
   jq "$mutation" "$work/good-api/pipelines.json" > "$FIXTURE_DIR/pipelines.json"
   expect_rejection "unverified pipeline: $mutation"
 done
-for name in images retain-image image-verification test e2e security-scan container-security; do
+printf '[]\n' > "$FIXTURE_DIR/pipelines.json"
+expect_rejection 'missing MR head pipeline'
+for name in images retain-image image-verification e2e security-scan container-security \
+  'test: [repository]' 'test: [database]' 'test: [handlers]' 'test: [core]'; do
   jq --arg name "$name" '. += [(.[] | select(.name == $name) | .id+=100 | .status="failed")]' \
     "$work/good-api/jobs.json" > "$FIXTURE_DIR/jobs.json"
   expect_rejection "failed latest $name job"
+done
+for name in 'test: [repository]' 'test: [database]' 'test: [handlers]' 'test: [core]'; do
+  jq --arg name "$name" 'map(select(.name != $name))' \
+    "$work/good-api/jobs.json" > "$FIXTURE_DIR/jobs.json"
+  expect_rejection "missing $name shard"
 done
 jq '. += [(.[] | select(.name == "images") | .id=111)]' "$work/good-api/jobs.json" > "$FIXTURE_DIR/jobs.json"
 expect_rejection 'artifact from before the latest image retry'
 for mutation in '.[] |= if .name == "retain-image" then .erased_at="expired" else . end' \
   '. |= map(select(.name != "retain-image"))' \
-  '.[] |= if .name == "test" then .allow_failure=true else . end'; do
+  '.[] |= if .name == "test: [core]" then .allow_failure=true else . end'; do
   jq "$mutation" "$work/good-api/jobs.json" > "$FIXTURE_DIR/jobs.json"
   expect_rejection "$mutation"
 done

@@ -167,7 +167,10 @@ Keep credential values out of repository files and command output.
 | `SONAR_TOKEN` | `sonar`, when supported | Mask the token. Allow analysis of trusted merge request source. |
 | `GHCR_USER` | `production` | Protect the variable. Use the GHCR publishing account. |
 | `GHCR_TOKEN` | `production` | Mask and protect the token. Allow package publication only. |
-| `GITLAB_READ_TOKEN` | `production` | Mask and protect the token. Grant `read_api` access to this project. |
+
+Publication uses GitLab's short-lived `CI_JOB_TOKEN` to read merge request metadata, job results, and image artifacts.
+Do not configure a separate GitLab read token.
+The E2E job checks these API permissions and downloads version metadata with its real job token.
 
 Production variables must remain unavailable to unprotected merge request pipelines.
 The `production` scope is used only by the two publication jobs.

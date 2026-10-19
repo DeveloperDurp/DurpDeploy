@@ -25,7 +25,7 @@ sonarcloud:
     entrypoint: [""]
   needs: [coverage]
   before_script:
-    - unset GHCR_TOKEN GHCR_USER GITLAB_READ_TOKEN
+    - unset GHCR_TOKEN GHCR_USER
   cache: []
   timeout: 15 minutes
   environment:

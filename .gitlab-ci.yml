@@ -44,7 +44,7 @@ default:
   interruptible: true
   before_script:
     - unset SONAR_TOKEN
-    - if [[ ${CI_ENVIRONMENT_NAME:-} != production ]]; then unset GHCR_TOKEN GHCR_USER GITLAB_READ_TOKEN; fi
+    - if [[ ${CI_ENVIRONMENT_NAME:-} != production ]]; then unset GHCR_TOKEN GHCR_USER; fi
     - bash scripts/ci_prepare.sh
   cache: []
   artifacts:
@@ -81,7 +81,7 @@ ci-runtime:
     DOCKER_HOST: tcp://127.0.0.1:2375
     DOCKER_TLS_CERTDIR: ""
   before_script:
-    - unset SONAR_TOKEN GHCR_TOKEN GHCR_USER GITLAB_READ_TOKEN
+    - unset SONAR_TOKEN GHCR_TOKEN GHCR_USER
     - apk add --no-cache bash jq=1.8.2-r0 oniguruma=6.9.10-r0
   cache: []
   timeout: 30 minutes
