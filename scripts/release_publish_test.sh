@@ -3,6 +3,7 @@
 set -euo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 work=${1:?}
+export RELEASE_PUBLISH_TEST_WORK="$work"
 older=${2:?}
 newer=${CI_COMMIT_SHA:?}
 engine=${DURPDEPLOY_CONTAINER_RUNTIME:-docker}
@@ -41,6 +42,7 @@ registry=$("$engine" run -d --user 0 --entrypoint /usr/bin/registry \
 	serve /config.yml)
 port=$("$engine" port "$registry" 5000/tcp | sed 's/.*://')
 export TEST_REGISTRY="localhost:$port/release-test"
+export TEST_GITLAB_REGISTRY="localhost:$port/gitlab-release-test"
 ready=false
 for _ in {1..50}; do
 	if curl -fsS "http://localhost:$port/v2/" > /dev/null 2>&1; then
@@ -64,7 +66,8 @@ operation=$1
 shift
 arguments=()
 for argument in "$@"; do
-	arguments+=("${argument//ghcr.io\/fixture\/project/$TEST_REGISTRY}")
+	argument=${argument//ghcr.io\/fixture\/project/$TEST_REGISTRY}
+	arguments+=("${argument//registry.gitlab.example\/fixture\/project/$TEST_GITLAB_REGISTRY}")
 done
 case "$operation" in
   copy) flags=(--src-tls-verify=false --dest-tls-verify=false) ;;
@@ -78,7 +81,8 @@ cat > "$transport/bin/docker" <<'SH'
 set -euo pipefail
 arguments=()
 for argument in "$@"; do
-	arguments+=("${argument//ghcr.io\/fixture\/project/$TEST_REGISTRY}")
+	argument=${argument//ghcr.io\/fixture\/project/$TEST_REGISTRY}
+	arguments+=("${argument//registry.gitlab.example\/fixture\/project/$TEST_GITLAB_REGISTRY}")
 done
 if [[ "$TEST_ENGINE" == docker ]]; then
 	exec "$TEST_DOCKER" "${arguments[@]}"
@@ -131,3 +135,39 @@ fi
 skopeo inspect --raw docker://ghcr.io/fixture/project:v2.0.0 |
 	jq -e --arg newer "$newer" '.annotations["org.opencontainers.image.revision"] == $newer' > /dev/null
 echo 'PASS: existing version tags reject different images'
+
+# The second registry receives the same verified platform and index bytes.
+export CI_REGISTRY_IMAGE=registry.gitlab.example/fixture/project
+bash "$root/scripts/publish_release_images.sh" "$work/verified" v1.0.0 "$CI_REGISTRY_IMAGE"
+skopeo inspect --raw "docker://$CI_REGISTRY_IMAGE:v1.0.0" > "$transport/gitlab.json"
+cmp "$transport/index.json" "$transport/gitlab.json"
+if bash "$root/scripts/publish_release_images.sh" "$work/verified" v1.0.0 registry.other.example/project \
+  > "$transport/unrelated.log" 2>&1; then
+	echo 'An unrelated publication target was accepted.' >&2
+	exit 1
+fi
+echo 'PASS: both registries retain identical verified image indexes'
+
+export TEST_HELM
+TEST_HELM=$(command -v helm3)
+cat > "$transport/bin/helm" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+arguments=()
+for argument in "$@"; do
+  argument=${argument//ghcr.io\/fixture\/charts/$TEST_REGISTRY\/charts}
+  arguments+=("${argument//registry.gitlab.example\/fixture\/project/$TEST_GITLAB_REGISTRY}")
+done
+case $1 in push|pull) arguments+=(--plain-http) ;; esac
+exec "$TEST_HELM" "${arguments[@]}"
+SH
+chmod +x "$transport/bin/helm"
+mkdir -p "$work/chart"
+printf 'apiVersion: v2\nname: durpdeploy\nversion: 1.2.3\n' > "$work/chart/Chart.yaml"
+helm package "$work/chart" --destination "$work"
+export CHART_REPO=charts
+bash "$root/scripts/publish_release_chart.sh" "$work/durpdeploy-1.2.3.tgz" 1.2.3
+printf 'apiVersion: v2\nname: durpdeploy\nversion: 1.2.3+build.4\n' > "$work/chart/Chart.yaml"
+helm package "$work/chart" --destination "$work"
+bash "$root/scripts/publish_release_chart.sh" "$work/durpdeploy-1.2.3+build.4.tgz" 1.2.3+build.4
+echo 'PASS: both registries retain identical Helm package bytes'

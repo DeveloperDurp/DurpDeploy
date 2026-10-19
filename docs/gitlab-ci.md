@@ -35,7 +35,12 @@ Merge request jobs never write shared protected caches.
 Protected and other pipelines do not import merge request caches.
 Builds check upstream base references before using cached layers.
 Build timing evidence records browser and helper build durations.
-Product images and charts remain in GHCR.
+
+Product images and charts are published to both the GitLab registry and GHCR.
+Application images use `$CI_REGISTRY_IMAGE` and `ghcr.io/developerdurp/durpdeploy`.
+Helm charts use `$CI_REGISTRY_IMAGE/charts/durpdeploy` and `ghcr.io/developerdurp/charts/durpdeploy`.
+The image publisher verifies the same scanned image digests in both registries.
+The chart publisher uploads one package and compares its downloaded bytes from each registry.
 
 The disposable CI images use root to prepare checkout ownership and test fixtures.
 The helper also starts its private Docker daemon and switches to the rootless Podman user.
@@ -199,6 +204,8 @@ Keep credential values out of repository files and command output.
 
 Publication uses GitLab's short-lived `CI_JOB_TOKEN` to read merge request metadata, job results, and image artifacts.
 Do not configure a separate GitLab read token.
+GitLab registry publication uses the automatic `CI_REGISTRY_USER` and `CI_REGISTRY_PASSWORD` credentials.
+GHCR publication requires the two production variables above.
 The E2E job checks these API permissions and downloads version metadata with its real job token.
 
 Production variables must remain unavailable to unprotected merge request pipelines.
@@ -228,7 +235,8 @@ Squash merge commit identifiers can differ when their source trees match.
 Missing, expired, failed, or mismatched artifacts stop publication.
 The publisher separately verifies the current pipeline archive and embedded build identity.
 It publishes the scanned image bytes without rebuilding them.
-Chart publication requires successful image publication.
+Image publication must succeed in both registries before chart publication starts.
+Chart publication must succeed in both registries before its job passes.
 
 ## Project settings and cutover
 

@@ -217,7 +217,7 @@ e2e:
   - docker pull harbor.durp.info/microsoft/playwright:v1.61.1-noble
   - go tool templ generate
   - make swagger-ui-copy
-  - shellcheck -S error scripts/resolve_release_images.sh scripts/release_images_test.sh scripts/release_job_token_test.sh
+  - shellcheck -S error scripts/resolve_release_images.sh scripts/release_images_test.sh scripts/release_job_token_test.sh scripts/ci_publish.sh scripts/publish_release_images.sh scripts/publish_release_chart.sh scripts/release_publish_test.sh
   - bash scripts/release_job_token_test.sh
   - bash scripts/release_images_test.sh
   - bash scripts/e2e_build_server_test.sh

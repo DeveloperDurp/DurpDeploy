@@ -2,12 +2,15 @@
 # Run only after resolve_release_images.sh, inside the serialized publisher.
 set -euo pipefail
 
-directory=${1:?usage: publish_release_images.sh DIRECTORY VERSION}
+directory=${1:?usage: publish_release_images.sh DIRECTORY VERSION [IMAGE]}
 version=${2:?}
 [[ "${CI_COMMIT_SHA:?}" =~ ^[0-9a-f]{40}$ ]]
 target=$(git rev-parse "${CI_COMMIT_SHA:?}^{commit}")
-image="ghcr.io/${REGISTRY_OWNER:?}/${IMAGE_NAME:?}"
-[[ "$image" =~ ^ghcr\.io/[a-z0-9_.-]+/[a-z0-9_.-]+$ ]]
+github_image="ghcr.io/${REGISTRY_OWNER:?}/${IMAGE_NAME:?}"
+[[ "$github_image" =~ ^ghcr\.io/[a-z0-9_.-]+/[a-z0-9_.-]+$ ]]
+image=${3:-$github_image}
+[[ "$image" == "$github_image" || ( -n ${CI_REGISTRY_IMAGE:-} && "$image" == "$CI_REGISTRY_IMAGE" ) ]]
+[[ "$image" =~ ^[a-z0-9.-]+(:[0-9]+)?/[a-z0-9_./-]+$ ]]
 [[ "$version" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]
 scratch=$(mktemp -d)
 trap 'rm -rf "$scratch"' EXIT
