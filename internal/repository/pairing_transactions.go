@@ -45,142 +45,186 @@ func (r *Repository) prepareAgentPairing(
 ) (db.AgentPairing, error) {
 	var pairing db.AgentPairing
 	err := r.WithTx(ctx, func(q *db.Queries) error {
-		candidates, err := q.ListAgentPairingRecoveryCandidates(
-			ctx,
-			db.ListAgentPairingRecoveryCandidatesParams{
-				PairingCodeHash: tuple.PairingCodeHash,
-				AgentPin:        tuple.AgentPin,
-				Endpoint:        tuple.Endpoint,
-			},
-		)
-		if err != nil {
-			return err
-		}
-		if tuple.ExpectedAgentID != "" {
-			agent, err := q.GetAgent(ctx, tuple.ExpectedAgentID)
-			if err != nil {
-				if errors.Is(err, sql.ErrNoRows) {
-					return ErrPairingTupleConflict
-				}
-				return err
-			}
-			for _, candidate := range candidates {
-				if candidate.AgentID != tuple.ExpectedAgentID {
-					return ErrPairingTupleConflict
-				}
-			}
-			if agent.Status == "revoked" {
-				pairing, err = q.ResetRevokedAgentPairing(
-					ctx,
-					db.ResetRevokedAgentPairingParams{
-						PairingCodeHash:     tuple.PairingCodeHash,
-						AgentPublicIdentity: tuple.AgentPublicIdentity,
-						AgentPin:            tuple.AgentPin,
-						ServerPublicIdentity: nullable(
-							tuple.ServerPublicIdentity,
-						),
-						ServerPin:         nullable(tuple.ServerPin),
-						EncryptedIdentity: nullable(tuple.EncryptedIdentity),
-						ExpiresAt:         tuple.ExpiresAt,
-						Now:               tuple.Now,
-						ServerPullEndpoint: nullable(
-							tuple.ServerPullEndpoint,
-						),
-						AgentID: tuple.ExpectedAgentID,
-					},
-				)
-				if err != nil {
-					return err
-				}
-				changed, err := q.ResetRevokedAgentForPairing(
-					ctx,
-					db.ResetRevokedAgentForPairingParams{
-						Endpoint: tuple.Endpoint,
-						ID:       tuple.ExpectedAgentID,
-					},
-				)
-				if err != nil {
-					return err
-				}
-				if changed != 1 {
-					return ErrPairingTupleConflict
-				}
-				if err := clearAgentCapabilities(
-					ctx,
-					q,
-					tuple.ExpectedAgentID,
-				); err != nil {
-					return err
-				}
-				return clearAgentTransferCapabilities(
-					ctx,
-					q,
-					tuple.ExpectedAgentID,
-				)
-			}
-			if len(candidates) != 1 {
-				return ErrPairingTupleConflict
-			}
-		}
-		if len(candidates) > 0 {
-			if len(candidates) != 1 {
-				return ErrPairingTupleConflict
-			}
-			candidate := candidates[0]
-			if candidate.State == "expired" &&
-				!samePairingCode(candidate, tuple) {
-				deleted, err := q.DeleteExpiredAgentPairing(
-					ctx,
-					candidate.AgentID,
-				)
-				if err != nil {
-					return err
-				}
-				if deleted != 1 {
-					return ErrPairingTupleConflict
-				}
-				deleted, err = q.DeletePendingAgent(ctx, candidate.AgentID)
-				if err != nil {
-					return err
-				}
-				if deleted != 1 {
-					return ErrPairingTupleConflict
-				}
-			} else if !samePairingTuple(
-				candidate,
-				tuple,
-			) ||
-				(candidate.State != "committing" && candidate.State != "paired") {
-				return ErrPairingTupleConflict
-			} else {
-				pairing = candidatePairing(candidate)
-				return nil
-			}
-		}
-		if _, err := q.CreateAgent(ctx, db.CreateAgentParams{
-			ID: tuple.AgentID, Name: tuple.AgentName, Endpoint: tuple.Endpoint,
-		}); err != nil {
-			return err
-		}
-		pairing, err = q.CreateCommittingAgentPairing(
-			ctx,
-			db.CreateCommittingAgentPairingParams{
-				AgentID: tuple.AgentID, PairingCodeHash: tuple.PairingCodeHash,
-				AgentPublicIdentity:  tuple.AgentPublicIdentity,
-				AgentPin:             tuple.AgentPin,
-				ServerPublicIdentity: nullable(tuple.ServerPublicIdentity),
-				ServerPin:            nullable(tuple.ServerPin),
-				EncryptedIdentity:    nullable(tuple.EncryptedIdentity),
-				ExpiresAt:            tuple.ExpiresAt, Now: tuple.Now,
-				ServerPullEndpoint: nullable(tuple.ServerPullEndpoint),
-			},
-		)
+		var err error
+		pairing, err = preparePairingTuple(ctx, q, tuple)
 		return err
 	})
 	if err != nil {
 		return db.AgentPairing{}, err
 	}
 	return pairing, nil
+}
+
+func preparePairingTuple(
+	ctx context.Context,
+	q *db.Queries,
+	tuple AgentPairingTuple,
+) (db.AgentPairing, error) {
+	candidates, err := q.ListAgentPairingRecoveryCandidates(
+		ctx,
+		db.ListAgentPairingRecoveryCandidatesParams{
+			PairingCodeHash: tuple.PairingCodeHash, AgentPin: tuple.AgentPin, Endpoint: tuple.Endpoint,
+		},
+	)
+	if err != nil {
+		return db.AgentPairing{}, err
+	}
+	if tuple.ExpectedAgentID != "" {
+		agent, err := expectedPairingAgent(
+			ctx,
+			q,
+			tuple.ExpectedAgentID,
+			candidates,
+		)
+		if err != nil {
+			return db.AgentPairing{}, err
+		}
+		if agent.Status == "revoked" {
+			return resetRevokedPairing(ctx, q, tuple)
+		}
+	}
+	if len(candidates) == 0 {
+		return createPairingTuple(ctx, q, tuple)
+	}
+	if len(candidates) != 1 {
+		return db.AgentPairing{}, ErrPairingTupleConflict
+	}
+	candidate := candidates[0]
+	if candidate.State == "expired" && !samePairingCode(candidate, tuple) {
+		if err := deleteExpiredPairing(ctx, q, candidate.AgentID); err != nil {
+			return db.AgentPairing{}, err
+		}
+		return createPairingTuple(ctx, q, tuple)
+	}
+	if !samePairingTuple(candidate, tuple) ||
+		(candidate.State != "committing" && candidate.State != "paired") {
+		return db.AgentPairing{}, ErrPairingTupleConflict
+	}
+	return candidatePairing(candidate), nil
+}
+
+func expectedPairingAgent(
+	ctx context.Context,
+	q *db.Queries,
+	id string,
+	candidates []db.ListAgentPairingRecoveryCandidatesRow,
+) (db.Agent, error) {
+	agent, err := q.GetAgent(ctx, id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return db.Agent{}, ErrPairingTupleConflict
+	}
+	if err != nil {
+		return db.Agent{}, err
+	}
+	for _, candidate := range candidates {
+		if candidate.AgentID != id {
+			return db.Agent{}, ErrPairingTupleConflict
+		}
+	}
+	if agent.Status != "revoked" && len(candidates) != 1 {
+		return db.Agent{}, ErrPairingTupleConflict
+	}
+	return agent, nil
+}
+
+func resetRevokedPairing(
+	ctx context.Context,
+	q *db.Queries,
+	tuple AgentPairingTuple,
+) (db.AgentPairing, error) {
+	pairing, err := q.ResetRevokedAgentPairing(
+		ctx,
+		db.ResetRevokedAgentPairingParams{
+			PairingCodeHash:     tuple.PairingCodeHash,
+			AgentPublicIdentity: tuple.AgentPublicIdentity,
+			AgentPin:            tuple.AgentPin,
+			ServerPublicIdentity: nullable(
+				tuple.ServerPublicIdentity,
+			),
+			ServerPin:         nullable(tuple.ServerPin),
+			EncryptedIdentity: nullable(tuple.EncryptedIdentity),
+			ExpiresAt:         tuple.ExpiresAt,
+			Now:               tuple.Now,
+			ServerPullEndpoint: nullable(
+				tuple.ServerPullEndpoint,
+			),
+			AgentID: tuple.ExpectedAgentID,
+		},
+	)
+	if err != nil {
+		return db.AgentPairing{}, err
+	}
+	changed, err := q.ResetRevokedAgentForPairing(
+		ctx,
+		db.ResetRevokedAgentForPairingParams{
+			Endpoint: tuple.Endpoint,
+			ID:       tuple.ExpectedAgentID,
+		},
+	)
+	if err != nil {
+		return db.AgentPairing{}, err
+	}
+	if changed != 1 {
+		return db.AgentPairing{}, ErrPairingTupleConflict
+	}
+	if err := clearAgentCapabilities(
+		ctx,
+		q,
+		tuple.ExpectedAgentID,
+	); err != nil {
+		return db.AgentPairing{}, err
+	}
+	if err := clearAgentTransferCapabilities(
+		ctx,
+		q,
+		tuple.ExpectedAgentID,
+	); err != nil {
+		return db.AgentPairing{}, err
+	}
+	return pairing, nil
+}
+
+func deleteExpiredPairing(ctx context.Context, q *db.Queries, id string) error {
+	deleted, err := q.DeleteExpiredAgentPairing(ctx, id)
+	if err != nil {
+		return err
+	}
+	if deleted != 1 {
+		return ErrPairingTupleConflict
+	}
+	deleted, err = q.DeletePendingAgent(ctx, id)
+	if err != nil {
+		return err
+	}
+	if deleted != 1 {
+		return ErrPairingTupleConflict
+	}
+	return nil
+}
+
+func createPairingTuple(
+	ctx context.Context,
+	q *db.Queries,
+	tuple AgentPairingTuple,
+) (db.AgentPairing, error) {
+	if _, err := q.CreateAgent(ctx, db.CreateAgentParams{
+		ID: tuple.AgentID, Name: tuple.AgentName, Endpoint: tuple.Endpoint,
+	}); err != nil {
+		return db.AgentPairing{}, err
+	}
+	return q.CreateCommittingAgentPairing(
+		ctx,
+		db.CreateCommittingAgentPairingParams{
+			AgentID: tuple.AgentID, PairingCodeHash: tuple.PairingCodeHash,
+			AgentPublicIdentity:  tuple.AgentPublicIdentity,
+			AgentPin:             tuple.AgentPin,
+			ServerPublicIdentity: nullable(tuple.ServerPublicIdentity),
+			ServerPin:            nullable(tuple.ServerPin),
+			EncryptedIdentity:    nullable(tuple.EncryptedIdentity),
+			ExpiresAt:            tuple.ExpiresAt, Now: tuple.Now,
+			ServerPullEndpoint: nullable(tuple.ServerPullEndpoint),
+		},
+	)
 }
 
 func samePairingTuple(
