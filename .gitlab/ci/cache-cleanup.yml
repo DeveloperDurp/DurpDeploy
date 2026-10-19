@@ -1,0 +1,21 @@
+cache-cleanup:
+  stage: prepare
+  image: harbor.durp.info/microsoft/playwright:v1.61.1-noble
+  needs: []
+  interruptible: false
+  resource_group: mr-cache-cleanup
+  timeout: 10 minutes
+  before_script:
+    - unset SONAR_TOKEN GHCR_TOKEN GHCR_USER
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      variables:
+        CI_CACHE_CLEANUP_DRY_RUN: "true"
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $CI_CACHE_CLEANUP == "true" && $CI_COMMIT_REF_PROTECTED == "true" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+  script:
+    - node --test scripts/ci_cache_cleanup.test.mjs
+    - node scripts/ci_cache_cleanup.mjs
+  artifacts:
+    when: always
+    expire_in: 7 days
+    paths: [artifacts/cache-cleanup/]

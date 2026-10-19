@@ -95,6 +95,32 @@ Keep the existing privileged Kubernetes job setting for the nested runtimes.
 Use a registry cleanup policy for old `ci:pipeline-*` helper image tags.
 Apply the same retention policy to intermediate `ci-browser:pipeline-*` tags.
 Expire `ci-cache/mr-<number>` repositories after their merge requests close.
+
+### Scheduled MR cache cleanup
+
+The `cache-cleanup` job selects only this project's exact `ci-cache/mr-<number>` registry paths.
+It preserves open merge requests and merge requests with active head pipelines.
+It waits 24 hours after a merge request closes or merges.
+Before deletion, it checks the merge request state again.
+GitLab deletes registry repositories asynchronously.
+The report records deletion requests, not completed storage reclamation.
+
+The job uses `CI_JOB_TOKEN` for registry and merge request API requests.
+It does not require a separate cleanup token.
+Merge request pipelines run its tests and a read-only dry run.
+Reports are available in `artifacts/cache-cleanup/report.json` for seven days.
+
+After merging, create a daily pipeline schedule targeting protected `main`.
+Set the schedule variable `CI_CACHE_CLEANUP` to `true`.
+Set `CI_CACHE_CLEANUP_DRY_RUN` to `true` for the first run.
+Inspect the report before enabling deletion.
+To enable deletion, set `CI_CACHE_CLEANUP_DRY_RUN` to `false` on that schedule.
+Use a schedule owner with permission to delete this project's registry repositories.
+Cleanup schedules run only `cache-cleanup`.
+Normal security schedules retain their existing jobs.
+
+Keep the built-in `pipeline-.*` cleanup policy for old pipeline image tags.
+The scheduled job preserves helper images, browser images, release images, and open merge request caches.
 Retain helper images while their pipelines remain available for retries.
 The source scan excludes `.cache/` from application analysis.
 
