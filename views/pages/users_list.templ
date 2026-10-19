@@ -25,18 +25,18 @@ templ UsersListPage(
 			</div>
 		} else {
 			<div class="overflow-x-auto">
-				<table class="table table-zebra table-fixed w-full">
-					<thead>
+				<table class="table table-zebra table-fixed w-full block! lg:table!">
+					<thead class="hidden lg:table-header-group">
 						<tr>
 							<th class="w-1/4">Email</th>
-							<th class="w-1/5">Name</th>
-							<th class="w-1/6">Role</th>
-							<th class="w-1/6 hidden sm:table-cell">Created</th>
-							<th class="w-1/6 hidden md:table-cell">Last login</th>
-							<th class="w-48">Actions</th>
+							<th class="w-1/8">Name</th>
+							<th class="w-1/8">Role</th>
+							<th class="w-1/8">Created</th>
+							<th class="w-1/8">Last login</th>
+							<th class="w-1/4">Actions</th>
 						</tr>
 					</thead>
-					<tbody>
+					<tbody class="block lg:table-row-group">
 						for _, u := range users {
 							@usersListRow(u, currentUser)
 						}
@@ -55,54 +55,65 @@ templ UsersListPage(
 }
 
 templ usersListRow(u db.ListUsersRow, currentUser *db.User) {
-	<tr>
-		<td class="truncate font-mono text-sm">{ u.Email }</td>
-		<td class="truncate">{ u.Name }</td>
-		<td>
+	<tr data-user-id={ fmt.Sprint(u.ID) } class="grid grid-cols-2 gap-3 lg:table-row max-lg:p-4 max-lg:mb-3 max-lg:rounded-box max-lg:bg-base-200">
+		<td class="col-span-2 min-w-0 break-all lg:truncate font-mono text-sm" title={ u.Email } data-user-email>
+			<span class="block lg:hidden font-sans text-xs opacity-70 mb-1">Email</span>
+			{ u.Email }
+		</td>
+		<td class="col-span-2 min-w-0 break-all lg:truncate" title={ u.Name } data-user-name>
+			<span class="block lg:hidden text-xs opacity-70 mb-1">Name</span>
+			{ u.Name }
+		</td>
+		<td class="col-span-2">
+			<span class="block lg:hidden text-xs opacity-70 mb-1">Role</span>
 			<span class="badge badge-outline">{ u.Role }</span>
 		</td>
-		<td class="whitespace-nowrap text-sm hidden sm:table-cell">
+		<td class="min-w-0 break-words lg:truncate lg:whitespace-nowrap text-sm" title={ formatUnixTime(u.CreatedAt) }>
+			<span class="block lg:hidden text-xs opacity-70 mb-1">Created</span>
 			{ formatUnixTime(u.CreatedAt) }
 		</td>
-		<td class="whitespace-nowrap text-sm hidden md:table-cell">
+		<td class="min-w-0 break-words lg:truncate lg:whitespace-nowrap text-sm">
+			<span class="block lg:hidden text-xs opacity-70 mb-1">Last login</span>
 			if u.LastLoginAt.Valid {
 				{ formatUnixTime(u.LastLoginAt.Int64) }
 			} else {
 				<span class="text-gray-500">never</span>
 			}
 		</td>
-		<td class="whitespace-nowrap">
+		<td class="col-span-2">
 			if CanWrite(ctx) {
-				<a href={ fmt.Sprintf("/admin/users/%d/edit", u.ID) } class="btn btn-ghost btn-xs">Edit</a>
-				if currentUser == nil || currentUser.ID != u.ID {
-					<form
-						method="post"
-						action={ fmt.Sprintf("/admin/users/%d/mfa-reset", u.ID) }
-						class="inline"
-						data-mfa-reset-dialog={ fmt.Sprintf("mfa-reset-dialog-%d", u.ID) }
-					>
-						if sess := auth.SessionFromContext(ctx); sess != nil && sess.CsrfToken != "" {
-							<input type="hidden" name="csrf_token" value={ sess.CsrfToken }/>
-						}
-						<input type="hidden" name="reason" value="administrative_reset"/>
-						<button
-							type="submit"
-							class="btn btn-warning btn-xs"
-							data-mfa-reset-opener
+				<div class="flex flex-wrap lg:flex-nowrap gap-2">
+					<a href={ fmt.Sprintf("/admin/users/%d/edit", u.ID) } class="btn btn-ghost btn-sm min-h-11 lg:btn-xs lg:min-h-0 whitespace-nowrap">Edit</a>
+					if currentUser == nil || currentUser.ID != u.ID {
+						<form
+							method="post"
+							action={ fmt.Sprintf("/admin/users/%d/mfa-reset", u.ID) }
+							class="inline"
+							data-mfa-reset-dialog={ fmt.Sprintf("mfa-reset-dialog-%d", u.ID) }
 						>
-							Reset MFA
+							if sess := auth.SessionFromContext(ctx); sess != nil && sess.CsrfToken != "" {
+								<input type="hidden" name="csrf_token" value={ sess.CsrfToken }/>
+							}
+							<input type="hidden" name="reason" value="administrative_reset"/>
+							<button
+								type="submit"
+								class="btn btn-warning btn-sm min-h-11 lg:btn-xs lg:min-h-0 whitespace-nowrap"
+								data-mfa-reset-opener
+							>
+								Reset MFA
+							</button>
+						</form>
+						<button
+							class="btn btn-error btn-sm min-h-11 lg:btn-xs lg:min-h-0 whitespace-nowrap"
+							hx-delete={ fmt.Sprintf("/admin/users/%d", u.ID) }
+							hx-confirm={ fmt.Sprintf("Delete user %s? They will be unable to log in.", u.Email) }
+							data-toast-success="User deleted"
+							data-toast-error="Failed to delete user"
+						>
+							Delete
 						</button>
-					</form>
-					<button
-						class="btn btn-error btn-xs"
-						hx-delete={ fmt.Sprintf("/admin/users/%d", u.ID) }
-						hx-confirm={ fmt.Sprintf("Delete user %s? They will be unable to log in.", u.Email) }
-						data-toast-success="User deleted"
-						data-toast-error="Failed to delete user"
-					>
-						Delete
-					</button>
-				}
+					}
+				</div>
 			}
 		</td>
 	</tr>
@@ -117,14 +128,14 @@ templ MFAResetConfirmationDialog(u db.ListUsersRow) {
 		data-mfa-reset-confirmation-dialog
 	>
 		<div class="modal-box w-11/12 max-w-lg bg-base-200">
-			<h2 id={ fmt.Sprintf("mfa-reset-title-%d", u.ID) } class="text-lg font-bold">
+			<h2 id={ fmt.Sprintf("mfa-reset-title-%d", u.ID) } class="text-lg font-bold break-all">
 				Reset MFA for { u.Name }
 			</h2>
 			<p id={ fmt.Sprintf("mfa-reset-description-%d", u.ID) } class="mt-2 text-sm opacity-70">
 				This removes the user's authenticator factors and recovery codes. They will need to enroll MFA again.
 			</p>
 			<p class="mt-4 text-sm">
-				Target: <span class="font-mono">{ u.Email }</span>
+				Target: <span class="font-mono break-all">{ u.Email }</span>
 			</p>
 			<form
 				id={ fmt.Sprintf("mfa-reset-confirm-form-%d", u.ID) }
