@@ -121,155 +121,7 @@ func TestProjectPanelScopeAPIWebE2E(t *testing.T) {
 		for _, role := range []string{"admin", "viewer", "deployer"} {
 			t.Run(fmt.Sprintf("%d/%s", lifecycleID, role), func(t *testing.T) {
 				f.token, f.session, f.csrf = adminToken, adminSession, adminCSRF
-				if role != "admin" {
-					user := seedAPIUser(
-						t,
-						f.h.repo,
-						fmt.Sprintf(
-							"panel-%d-%s@example.test",
-							lifecycleID,
-							role,
-						),
-						role,
-					)
-					if err := f.h.repo.Queries.AddProjectMember(t.Context(),
-						db.AddProjectMemberParams{
-							ProjectID: f.project.ID, UserID: user.ID, Role: "deployer",
-						}); err != nil {
-						t.Fatal(err)
-					}
-					_, f.token = seedAPIToken(t, f.h.repo, user.ID)
-					f.session = memberRoleSession(t, f.h, user.ID)
-					f.csrf = "member-role-csrf"
-					if err := f.h.repo.Queries.AddProjectMember(t.Context(),
-						db.AddProjectMemberParams{
-							ProjectID: p.empty.ID, UserID: user.ID, Role: "deployer",
-						}); err != nil {
-						t.Fatal(err)
-					}
-				}
-				path := fmt.Sprintf("/projects/%d", f.project.ID)
-				query := fmt.Sprintf("?env_id=%d", f.environment.ID)
-				var listed struct {
-					Items []db.Deployment `json:"items"`
-					Total int             `json:"total"`
-				}
-				decodeLifecycleTest(
-					t,
-					f.api(t, "GET", "/api/v1"+path+"/deployments"+query,
-						nil, 200),
-					&listed,
-				)
-				if listed.Total != 2 || len(listed.Items) != 2 ||
-					listed.Items[0].ID != p.attempt.ID || listed.Items[1].ID != p.success.ID {
-					t.Fatalf("project API lost or mixed history: %+v", listed)
-				}
-				for offset, want := range []int64{p.attempt.ID, p.success.ID} {
-					decodeLifecycleTest(t, f.api(t, "GET",
-						"/api/v1"+path+"/deployments"+query+
-							fmt.Sprintf(
-								"&limit=1&offset=%d",
-								offset,
-							), nil, 200),
-						&listed)
-					if listed.Total != 2 || len(listed.Items) != 1 ||
-						listed.Items[0].ID != want {
-						t.Fatalf(
-							"project API tie pagination: %+v, want %d",
-							listed,
-							want,
-						)
-					}
-				}
-				decodeLifecycleTest(
-					t,
-					f.api(
-						t,
-						"GET",
-						"/api/v1"+path+"/deployments"+query+"&status=succeeded",
-						nil,
-						200,
-					),
-					&listed,
-				)
-				if listed.Total != 1 || len(listed.Items) != 1 ||
-					listed.Items[0].ID != p.success.ID {
-					t.Fatalf("project API lost its older success: %+v", listed)
-				}
-				row := projectPanelEnvironmentRow(
-					t,
-					f.web(t, "GET", path, nil, 200),
-					f.environment.Name,
-				)
-				text := dashboardText(row)
-				if !strings.Contains(text, "own-success") ||
-					!strings.Contains(text, "own-attempt") ||
-					strings.Contains(text, "foreign-version") ||
-					strings.Contains(text, "No successful deploys") {
-					t.Fatalf("project detail lost or mixed history: %s", text)
-				}
-				dots := dashboardElements(row, "class", "w-2")
-				if len(dots) != 2 ||
-					len(dashboardElements(dots[0], "title", "failed")) != 1 ||
-					len(dashboardElements(dots[1], "title", "succeeded")) != 1 {
-					t.Fatal("project streak lost or reordered its attempts")
-				}
-				document := dashboardDocument(
-					t,
-					f.web(t, "GET", "/projects", nil, 200),
-				)
-				links := dashboardElements(document, "href", path)
-				if len(links) != 1 {
-					t.Fatal("project card missing")
-				}
-				card := dashboardText(links[0].Parent)
-				if !strings.Contains(card, "own-attempt") ||
-					!strings.Contains(card, f.environment.Name) ||
-					strings.Contains(card, "foreign-version") ||
-					strings.Contains(card, "No environments") {
-					t.Fatalf(
-						"project card lost its environment history: %s",
-						card,
-					)
-				}
-				emptyLinks := dashboardElements(
-					document,
-					"href",
-					fmt.Sprintf("/projects/%d", p.empty.ID),
-				)
-				if len(emptyLinks) != 1 ||
-					!strings.Contains(
-						dashboardText(emptyLinks[0].Parent),
-						"No deployments yet",
-					) {
-					t.Fatal(
-						"untouched project incorrectly claims no environments are available",
-					)
-				}
-				home := f.web(t, "GET", "/", nil, 200)
-				if !strings.Contains(home, "own-success") ||
-					!strings.Contains(home, "own-attempt") {
-					t.Fatal("dashboard disagrees with retained project history")
-				}
-				f.api(
-					t,
-					"GET",
-					fmt.Sprintf("/api/v1/deployments/%d", p.success.ID),
-					nil,
-					200,
-				)
-				if role != "admin" {
-					f.api(
-						t,
-						"GET",
-						fmt.Sprintf(
-							"/api/v1/projects/%d/deployments",
-							p.other.ID,
-						),
-						nil,
-						403,
-					)
-				}
+				p.checkAPIWeb(t, lifecycleID, role)
 			})
 		}
 	}
@@ -288,4 +140,182 @@ func projectPanelEnvironmentRow(
 	}
 	t.Fatalf("environment %q is missing from project detail", environment)
 	return nil
+}
+
+func (p projectPanelFixture) checkAPIWeb(
+	t *testing.T,
+	lifecycleID int64,
+	role string,
+) {
+	t.Helper()
+	f := p.f
+	if role != "admin" {
+		user := seedAPIUser(
+			t,
+			f.h.repo,
+			fmt.Sprintf(
+				"panel-%d-%s@example.test",
+				lifecycleID,
+				role,
+			),
+			role,
+		)
+		if err := f.h.repo.Queries.AddProjectMember(t.Context(),
+			db.AddProjectMemberParams{
+				ProjectID: f.project.ID, UserID: user.ID, Role: "deployer",
+			}); err != nil {
+			t.Fatal(err)
+		}
+		_, f.token = seedAPIToken(t, f.h.repo, user.ID)
+		f.session = memberRoleSession(t, f.h, user.ID)
+		f.csrf = "member-role-csrf"
+		if err := f.h.repo.Queries.AddProjectMember(t.Context(),
+			db.AddProjectMemberParams{
+				ProjectID: p.empty.ID, UserID: user.ID, Role: "deployer",
+			}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	p.checkDeploymentAPI(t)
+	p.checkDetail(t)
+	p.checkCards(t)
+	home := f.web(t, "GET", "/", nil, 200)
+	if !strings.Contains(home, "own-success") ||
+		!strings.Contains(home, "own-attempt") {
+		t.Fatal("dashboard disagrees with retained project history")
+	}
+	f.api(
+		t,
+		"GET",
+		fmt.Sprintf("/api/v1/deployments/%d", p.success.ID),
+		nil,
+		200,
+	)
+	if role != "admin" {
+		f.api(
+			t,
+			"GET",
+			fmt.Sprintf(
+				"/api/v1/projects/%d/deployments",
+				p.other.ID,
+			),
+			nil,
+			403,
+		)
+	}
+}
+
+func (p projectPanelFixture) checkDeploymentAPI(t *testing.T) {
+	t.Helper()
+	f := p.f
+	path := fmt.Sprintf("/projects/%d", f.project.ID)
+	query := fmt.Sprintf("?env_id=%d", f.environment.ID)
+	var listed struct {
+		Items []db.Deployment `json:"items"`
+		Total int             `json:"total"`
+	}
+	decodeLifecycleTest(
+		t,
+		f.api(t, "GET", "/api/v1"+path+"/deployments"+query,
+			nil, 200),
+		&listed,
+	)
+	if listed.Total != 2 || len(listed.Items) != 2 ||
+		listed.Items[0].ID != p.attempt.ID || listed.Items[1].ID != p.success.ID {
+		t.Fatalf("project API lost or mixed history: %+v", listed)
+	}
+	for offset, want := range []int64{p.attempt.ID, p.success.ID} {
+		decodeLifecycleTest(t, f.api(t, "GET",
+			"/api/v1"+path+"/deployments"+query+
+				fmt.Sprintf(
+					"&limit=1&offset=%d",
+					offset,
+				), nil, 200),
+			&listed)
+		if listed.Total != 2 || len(listed.Items) != 1 ||
+			listed.Items[0].ID != want {
+			t.Fatalf(
+				"project API tie pagination: %+v, want %d",
+				listed,
+				want,
+			)
+		}
+	}
+	decodeLifecycleTest(
+		t,
+		f.api(
+			t,
+			"GET",
+			"/api/v1"+path+"/deployments"+query+"&status=succeeded",
+			nil,
+			200,
+		),
+		&listed,
+	)
+	if listed.Total != 1 || len(listed.Items) != 1 ||
+		listed.Items[0].ID != p.success.ID {
+		t.Fatalf("project API lost its older success: %+v", listed)
+	}
+}
+
+func (p projectPanelFixture) checkDetail(t *testing.T) {
+	t.Helper()
+	f := p.f
+	path := fmt.Sprintf("/projects/%d", f.project.ID)
+	row := projectPanelEnvironmentRow(
+		t,
+		f.web(t, "GET", path, nil, 200),
+		f.environment.Name,
+	)
+	text := dashboardText(row)
+	if !strings.Contains(text, "own-success") ||
+		!strings.Contains(text, "own-attempt") ||
+		strings.Contains(text, "foreign-version") ||
+		strings.Contains(text, "No successful deploys") {
+		t.Fatalf("project detail lost or mixed history: %s", text)
+	}
+	dots := dashboardElements(row, "class", "w-2")
+	if len(dots) != 2 ||
+		len(dashboardElements(dots[0], "title", "failed")) != 1 ||
+		len(dashboardElements(dots[1], "title", "succeeded")) != 1 {
+		t.Fatal("project streak lost or reordered its attempts")
+	}
+}
+
+func (p projectPanelFixture) checkCards(t *testing.T) {
+	t.Helper()
+	f := p.f
+	path := fmt.Sprintf("/projects/%d", f.project.ID)
+	document := dashboardDocument(
+		t,
+		f.web(t, "GET", "/projects", nil, 200),
+	)
+	links := dashboardElements(document, "href", path)
+	if len(links) != 1 {
+		t.Fatal("project card missing")
+	}
+	card := dashboardText(links[0].Parent)
+	if !strings.Contains(card, "own-attempt") ||
+		!strings.Contains(card, f.environment.Name) ||
+		strings.Contains(card, "foreign-version") ||
+		strings.Contains(card, "No environments") {
+		t.Fatalf(
+			"project card lost its environment history: %s",
+			card,
+		)
+	}
+	emptyLinks := dashboardElements(
+		document,
+		"href",
+		fmt.Sprintf("/projects/%d", p.empty.ID),
+	)
+	if len(emptyLinks) != 1 ||
+		!strings.Contains(
+			dashboardText(emptyLinks[0].Parent),
+			"No deployments yet",
+		) {
+		t.Fatal(
+			"untouched project incorrectly claims no environments are available",
+		)
+	}
 }

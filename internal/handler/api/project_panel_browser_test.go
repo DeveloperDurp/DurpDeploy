@@ -49,16 +49,41 @@ func TestProjectPanelScopeBrowserE2E(t *testing.T) {
 				t.Run(
 					fmt.Sprintf("%d/%s/%d", lifecycleID, role, width),
 					func(t *testing.T) {
-						b.call(
+						checkProjectPanelBrowser(
 							t,
-							"Emulation.setDeviceMetricsOverride",
-							map[string]any{
-								"width": width, "height": 900, "deviceScaleFactor": 1, "mobile": false,
-							},
-							&struct{}{},
+							p,
+							b,
+							lifecycleID,
+							role,
+							width,
 						)
-						b.navigateBackTest(t, f.baseURL+"/projects")
-						if string(b.evaluate(t, fmt.Sprintf(`(() => {
+					},
+				)
+			}
+		}
+	}
+}
+
+func checkProjectPanelBrowser(
+	t *testing.T,
+	p projectPanelFixture,
+	b *packageBrowser,
+	lifecycleID int64,
+	role string,
+	width int,
+) {
+	t.Helper()
+	f := p.f
+	b.call(
+		t,
+		"Emulation.setDeviceMetricsOverride",
+		map[string]any{
+			"width": width, "height": 900, "deviceScaleFactor": 1, "mobile": false,
+		},
+		&struct{}{},
+	)
+	b.navigateBackTest(t, f.baseURL+"/projects")
+	if string(b.evaluate(t, fmt.Sprintf(`(() => {
  const link = document.querySelector('#projects-list article a[href="/projects/%d"]');
  const card = link?.closest('article');
  const grid = card?.querySelector('[data-project-environment-grid]');
@@ -68,28 +93,28 @@ func TestProjectPanelScopeBrowserE2E(t *testing.T) {
  untouched?.textContent.includes('No deployments yet') &&
  grid.querySelector('.bg-error') !== null;
 })()`, f.project.ID, p.empty.ID))) != "true" {
-							t.Fatal(
-								"rendered project card lost its failed attempt or environment",
-							)
-						}
-						b.screenshot(
-							t,
-							fmt.Sprintf(
-								"project-panel-list-%d-%s-%d",
-								lifecycleID,
-								role,
-								width,
-							),
-						)
-						b.navigateBackTest(
-							t,
-							fmt.Sprintf(
-								"%s/projects/%d",
-								f.baseURL,
-								f.project.ID,
-							),
-						)
-						if string(b.evaluate(t, fmt.Sprintf(`(() => {
+		t.Fatal(
+			"rendered project card lost its failed attempt or environment",
+		)
+	}
+	b.screenshot(
+		t,
+		fmt.Sprintf(
+			"project-panel-list-%d-%s-%d",
+			lifecycleID,
+			role,
+			width,
+		),
+	)
+	b.navigateBackTest(
+		t,
+		fmt.Sprintf(
+			"%s/projects/%d",
+			f.baseURL,
+			f.project.ID,
+		),
+	)
+	if string(b.evaluate(t, fmt.Sprintf(`(() => {
  const row = [...document.querySelectorAll('#project-detail tbody tr')]
    .find(row => row.querySelector('td.font-medium')?.textContent === %q);
  if (!row || !row.innerText.includes('own-success') || !row.innerText.includes('own-attempt') ||
@@ -98,22 +123,17 @@ func TestProjectPanelScopeBrowserE2E(t *testing.T) {
  return dots.join(',') === 'failed,succeeded' && row.querySelector('.badge')?.textContent.includes('failed') &&
  document.documentElement.scrollWidth <= innerWidth;
 })()`, f.environment.Name))) != "true" {
-							t.Fatal(
-								"rendered project detail lost its own success, failure, or streak",
-							)
-						}
-						b.screenshot(
-							t,
-							fmt.Sprintf(
-								"project-panel-detail-%d-%s-%d",
-								lifecycleID,
-								role,
-								width,
-							),
-						)
-					},
-				)
-			}
-		}
+		t.Fatal(
+			"rendered project detail lost its own success, failure, or streak",
+		)
 	}
+	b.screenshot(
+		t,
+		fmt.Sprintf(
+			"project-panel-detail-%d-%s-%d",
+			lifecycleID,
+			role,
+			width,
+		),
+	)
 }
