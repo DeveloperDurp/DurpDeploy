@@ -94,11 +94,16 @@ SELECT * FROM deployments WHERE release_id = ? AND environment_id = ? ORDER BY c
 -- name: GetLatestSuccessfulDeploymentForReleaseEnv :one
 SELECT * FROM deployments WHERE release_id = ? AND environment_id = ? AND status = 'succeeded' ORDER BY created_at DESC LIMIT 1;
 
--- name: GetLatestSuccessfulDeploymentForEnv :one
-SELECT * FROM deployments WHERE environment_id = ? AND status = 'succeeded' AND kind = 'deployment' ORDER BY created_at DESC LIMIT 1;
+-- name: GetLatestSuccessfulDeploymentForProjectEnv :one
+SELECT d.* FROM deployments d JOIN releases r ON r.id = d.release_id
+WHERE r.project_id = ? AND d.environment_id = ?
+  AND d.status = 'succeeded' AND d.kind = 'deployment'
+ORDER BY d.created_at DESC, d.id DESC LIMIT 1;
 
--- name: ListRecentDeploymentsForEnv :many
-SELECT * FROM deployments WHERE environment_id = ? AND kind = 'deployment' ORDER BY created_at DESC LIMIT ?;
+-- name: ListRecentDeploymentsForProjectEnv :many
+SELECT d.* FROM deployments d JOIN releases r ON r.id = d.release_id
+WHERE r.project_id = ? AND d.environment_id = ? AND d.kind = 'deployment'
+ORDER BY d.created_at DESC, d.id DESC LIMIT ?;
 
 -- name: CountDeploymentsToday :one
 SELECT COUNT(*) FROM deployments WHERE kind = 'deployment' AND created_at >= strftime('%s','now','start of day');
@@ -220,7 +225,7 @@ WHERE d.kind = 'deployment'
   AND (CAST(sqlc.narg(f_status)     AS TEXT)    IS NULL OR d.status = CAST(sqlc.narg(f_status) AS TEXT))
   AND (CAST(sqlc.narg(f_from_unix)  AS INTEGER) IS NULL OR d.created_at >= CAST(sqlc.narg(f_from_unix) AS INTEGER))
   AND (CAST(sqlc.narg(f_to_unix)    AS INTEGER) IS NULL OR d.created_at <= CAST(sqlc.narg(f_to_unix) AS INTEGER))
-ORDER BY d.created_at DESC
+ORDER BY d.created_at DESC, d.id DESC
 LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
 
 -- name: CountDeploymentsWithRefsFiltered :one

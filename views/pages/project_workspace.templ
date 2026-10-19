@@ -7,9 +7,10 @@ import (
 )
 
 type LifecyclePanel struct {
-	Lifecycle   db.Lifecycle
-	Stages      []LifecyclePanelStage
-	Inheritance repository.VariableInheritance
+	Lifecycle       db.Lifecycle
+	Stages          []LifecyclePanelStage
+	Inheritance     repository.VariableInheritance
+	HasEnvironments bool
 }
 
 type LifecyclePanelStage struct {

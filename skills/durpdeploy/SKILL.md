@@ -379,6 +379,11 @@ done
 
 ## Post-deployment verification and rollback
 
+`GET /api/v1/projects/$PID/deployments` returns deployments for that project.
+`GET /api/v1/deployments` returns deployments from accessible projects.
+Both lists sort by creation time, newest first.
+When creation times match, larger deployment IDs come first.
+
 `GET /api/v1/deployments/activity` returns 14 UTC calendar days, including
 today, in ascending order: `[{"date":"2026-10-04","counts":{"succeeded":2}}]`.
 Each `counts` object groups deployments by their current status; dates with

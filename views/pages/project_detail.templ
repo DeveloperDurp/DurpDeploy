@@ -258,6 +258,9 @@ templ LifecyclePanelRowImpl(index int, s LifecyclePanelStage, hasLifecycle bool)
 					}
 				</div>
 			}
+			if s.LatestDeployment != nil {
+				<div class="md:hidden text-xs mt-1 break-all">Last Deployed: { s.LatestVersion }</div>
+			}
 		</td>
 	</tr>
 }

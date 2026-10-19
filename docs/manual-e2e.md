@@ -35,6 +35,35 @@ Submit a forged configuration request through the browser or API.
 Expect a browser HTMX toast, a native browser `403`, or an API JSON `403`.
 Read [roles](roles.md) for membership ceilings and upgrade behavior.
 
+## Project deployment summaries
+
+Create two projects that share one environment.
+Deploy a release from the first project through `POST /api/v1/projects/{id}/deployments`.
+Wait for the deployment to succeed.
+Deploy six releases from the second project into the same environment.
+
+Read `GET /api/v1/projects/{id}/deployments?env_id={environment_id}` for the first project.
+Confirm that the API lists only that project's deployments, newest first.
+When creation times match, confirm that larger deployment IDs come first.
+
+Open the dashboard, project card, project environment table, and successful deployment detail.
+Confirm that each view shows the first project's own release and status.
+Repeat at desktop and phone widths.
+Repeat with a Viewer and a Deployer.
+Repeat with a lifecycle assigned to the project.
+
+Create another project without deployments.
+When an environment is available, expect **No deployments yet** on its card.
+When no environments are available, expect **No environments**.
+After a failed attempt, confirm that the environment table retains the earlier successful release.
+These checks require no schedules.
+
+```bash
+bash scripts/go_test.sh -race -count=1 -run '^TestProjectEnvironmentDeploymentHistory$' ./internal/repository
+bash scripts/go_test.sh -tags=e2e -race -count=1 -run '^TestProjectPanelScopeAPIWebE2E$' ./internal/handler/api
+bash scripts/go_test.sh -tags=e2e,packagebrowser -race -count=1 -run '^TestProjectPanelScopeBrowserE2E$' ./internal/handler/api
+```
+
 ## Swagger request target
 
 Open `/api/swagger/` through the instance's HTTPS proxy on a non-default port.

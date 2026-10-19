@@ -440,9 +440,11 @@ func TestGate_Force_BypassesGate(t *testing.T) {
 
 	// The deployment row should have forced=1.
 	hc.waitForDeploymentStatus(t, rel.ID, hc.envs["Beta"].ID, "succeeded")
-	deps, err := h.repo.Queries.GetLatestSuccessfulDeploymentForEnv(
+	deps, err := h.repo.Queries.GetLatestSuccessfulDeploymentForProjectEnv(
 		context.Background(),
-		hc.envs["Beta"].ID,
+		db.GetLatestSuccessfulDeploymentForProjectEnvParams{
+			ProjectID: hc.project.ID, EnvironmentID: hc.envs["Beta"].ID,
+		},
 	)
 	if err != nil {
 		t.Fatalf("get latest: %v", err)
@@ -1058,9 +1060,10 @@ func TestScheduleDeployment_Success(t *testing.T) {
 	}
 
 	// Deployment should be created and start running.
-	deps, err := h.repo.Queries.ListRecentDeploymentsForEnv(
+	deps, err := h.repo.Queries.ListRecentDeploymentsForProjectEnv(
 		context.Background(),
-		db.ListRecentDeploymentsForEnvParams{
+		db.ListRecentDeploymentsForProjectEnvParams{
+			ProjectID:     proj.ID,
 			EnvironmentID: envA.ID,
 			Limit:         1,
 		},
@@ -1140,9 +1143,11 @@ func TestScheduleDeployment_ForceBypasses(t *testing.T) {
 	}
 	// Wait for it to settle.
 	for i := 0; i < 50; i++ {
-		d, _ := h.repo.Queries.GetLatestSuccessfulDeploymentForEnv(
+		d, _ := h.repo.Queries.GetLatestSuccessfulDeploymentForProjectEnv(
 			context.Background(),
-			dev.ID,
+			db.GetLatestSuccessfulDeploymentForProjectEnvParams{
+				ProjectID: proj.ID, EnvironmentID: dev.ID,
+			},
 		)
 		if d.ReleaseID == rel.ID {
 			break

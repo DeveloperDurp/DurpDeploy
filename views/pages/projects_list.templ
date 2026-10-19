@@ -49,10 +49,14 @@ templ ProjectsListRow(p db.Project, panel LifecyclePanel) {
 // untouched) sits below. Lifecycle-bound projects show every stage in the
 // lifecycle, including untouched ones, so the user can see the full chain
 // at a glance. Free-floating projects show only envs with at least one
-// deployment. Empty projects show a muted "no envs" hint.
+// deployment. Empty projects distinguish missing history from missing environments.
 templ ProjectsListDeployments(panel LifecyclePanel) {
 	if len(panel.Stages) == 0 {
-		<span class="text-gray-500 italic text-sm">No environments</span>
+		if panel.HasEnvironments {
+			<span class="text-gray-500 italic text-sm">No deployments yet</span>
+		} else {
+			<span class="text-gray-500 italic text-sm">No environments</span>
+		}
 	} else {
 		<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 min-w-0" data-project-environment-grid>
 			for _, s := range panel.Stages {

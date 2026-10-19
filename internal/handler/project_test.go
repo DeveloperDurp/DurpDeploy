@@ -339,9 +339,10 @@ func TestProjectPanel_StreakStrip(t *testing.T) {
 	}
 	// Patch the 2nd-most-recent deployment's status to "failed" so we can
 	// verify the streak renders a red dot for it.
-	recents, err := h.repo.Queries.ListRecentDeploymentsForEnv(
+	recents, err := h.repo.Queries.ListRecentDeploymentsForProjectEnv(
 		context.Background(),
-		db.ListRecentDeploymentsForEnvParams{
+		db.ListRecentDeploymentsForProjectEnvParams{
+			ProjectID:     proj.ID,
 			EnvironmentID: dev.ID,
 			Limit:         5,
 		},
@@ -392,6 +393,9 @@ func TestProjectsList_ShowsPerEnvStatusDots(t *testing.T) {
 	// block. So we patch prod's status to "failed" directly to simulate a
 	// failed deploy without going through the gate.
 	projA := h.makeProject("A")
+	if !strings.Contains(h.getProjectsList(), "No environments") {
+		t.Fatal("project without available environments should say so")
+	}
 	envDev := h.makeEnv("dev")
 	envProd := h.makeEnv("prod")
 	lc := h.makeLifecycle("dp", envDev.ID, envProd.ID)
@@ -453,8 +457,8 @@ func TestProjectsList_ShowsPerEnvStatusDots(t *testing.T) {
 	if !strings.Contains(page, "bg-error") {
 		t.Errorf("expected bg-error class somewhere on the list page")
 	}
-	if !strings.Contains(page, "No environments") {
-		t.Errorf("project B (no envs) should show 'No environments' hint")
+	if !strings.Contains(page, "No deployments yet") {
+		t.Errorf("project B without history should show 'No deployments yet'")
 	}
 	if !strings.Contains(page, ">C-env<") {
 		t.Errorf("project C's env 'C-env' should appear")

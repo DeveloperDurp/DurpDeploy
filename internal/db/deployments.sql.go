@@ -344,12 +344,20 @@ func (q *Queries) GetLatestDeploymentForReleaseEnv(ctx context.Context, arg GetL
 	return i, err
 }
 
-const getLatestSuccessfulDeploymentForEnv = `-- name: GetLatestSuccessfulDeploymentForEnv :one
-SELECT id, release_id, environment_id, status, started_at, finished_at, created_at, forced, note, assigned_agent_id, kind, container_namespace, cleanup_confirmed_at FROM deployments WHERE environment_id = ? AND status = 'succeeded' AND kind = 'deployment' ORDER BY created_at DESC LIMIT 1
+const getLatestSuccessfulDeploymentForProjectEnv = `-- name: GetLatestSuccessfulDeploymentForProjectEnv :one
+SELECT d.id, d.release_id, d.environment_id, d.status, d.started_at, d.finished_at, d.created_at, d.forced, d.note, d.assigned_agent_id, d.kind, d.container_namespace, d.cleanup_confirmed_at FROM deployments d JOIN releases r ON r.id = d.release_id
+WHERE r.project_id = ? AND d.environment_id = ?
+  AND d.status = 'succeeded' AND d.kind = 'deployment'
+ORDER BY d.created_at DESC, d.id DESC LIMIT 1
 `
 
-func (q *Queries) GetLatestSuccessfulDeploymentForEnv(ctx context.Context, environmentID int64) (Deployment, error) {
-	row := q.db.QueryRowContext(ctx, getLatestSuccessfulDeploymentForEnv, environmentID)
+type GetLatestSuccessfulDeploymentForProjectEnvParams struct {
+	ProjectID     int64 `json:"project_id"`
+	EnvironmentID int64 `json:"environment_id"`
+}
+
+func (q *Queries) GetLatestSuccessfulDeploymentForProjectEnv(ctx context.Context, arg GetLatestSuccessfulDeploymentForProjectEnvParams) (Deployment, error) {
+	row := q.db.QueryRowContext(ctx, getLatestSuccessfulDeploymentForProjectEnv, arg.ProjectID, arg.EnvironmentID)
 	var i Deployment
 	err := row.Scan(
 		&i.ID,
@@ -667,7 +675,7 @@ WHERE d.kind = 'deployment'
   AND (CAST(?6     AS TEXT)    IS NULL OR d.status = CAST(?6 AS TEXT))
   AND (CAST(?7  AS INTEGER) IS NULL OR d.created_at >= CAST(?7 AS INTEGER))
   AND (CAST(?8    AS INTEGER) IS NULL OR d.created_at <= CAST(?8 AS INTEGER))
-ORDER BY d.created_at DESC
+ORDER BY d.created_at DESC, d.id DESC
 LIMIT ?10 OFFSET ?9
 `
 
@@ -932,17 +940,20 @@ func (q *Queries) ListRecentDeployments(ctx context.Context, limit int64) ([]Dep
 	return items, nil
 }
 
-const listRecentDeploymentsForEnv = `-- name: ListRecentDeploymentsForEnv :many
-SELECT id, release_id, environment_id, status, started_at, finished_at, created_at, forced, note, assigned_agent_id, kind, container_namespace, cleanup_confirmed_at FROM deployments WHERE environment_id = ? AND kind = 'deployment' ORDER BY created_at DESC LIMIT ?
+const listRecentDeploymentsForProjectEnv = `-- name: ListRecentDeploymentsForProjectEnv :many
+SELECT d.id, d.release_id, d.environment_id, d.status, d.started_at, d.finished_at, d.created_at, d.forced, d.note, d.assigned_agent_id, d.kind, d.container_namespace, d.cleanup_confirmed_at FROM deployments d JOIN releases r ON r.id = d.release_id
+WHERE r.project_id = ? AND d.environment_id = ? AND d.kind = 'deployment'
+ORDER BY d.created_at DESC, d.id DESC LIMIT ?
 `
 
-type ListRecentDeploymentsForEnvParams struct {
+type ListRecentDeploymentsForProjectEnvParams struct {
+	ProjectID     int64 `json:"project_id"`
 	EnvironmentID int64 `json:"environment_id"`
 	Limit         int64 `json:"limit"`
 }
 
-func (q *Queries) ListRecentDeploymentsForEnv(ctx context.Context, arg ListRecentDeploymentsForEnvParams) ([]Deployment, error) {
-	rows, err := q.db.QueryContext(ctx, listRecentDeploymentsForEnv, arg.EnvironmentID, arg.Limit)
+func (q *Queries) ListRecentDeploymentsForProjectEnv(ctx context.Context, arg ListRecentDeploymentsForProjectEnvParams) ([]Deployment, error) {
+	rows, err := q.db.QueryContext(ctx, listRecentDeploymentsForProjectEnv, arg.ProjectID, arg.EnvironmentID, arg.Limit)
 	if err != nil {
 		return nil, err
 	}

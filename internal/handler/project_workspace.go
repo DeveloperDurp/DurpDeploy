@@ -107,7 +107,7 @@ func (h *ProjectHandler) buildPanelForProject(
 	}
 	views := make([]pages.LifecyclePanelStage, len(stages))
 	for i, s := range stages {
-		views[i] = h.populateStageView(r, pages.LifecyclePanelStage{
+		views[i] = h.populateStageView(r, project.ID, pages.LifecyclePanelStage{
 			Stage:       s,
 			Environment: envsByID[s.EnvironmentID],
 		}, releasesByID)
@@ -131,7 +131,7 @@ func (h *ProjectHandler) buildFreeFloatingPanel(
 	}
 	views := make([]pages.LifecyclePanelStage, 0, len(allEnvs))
 	for _, e := range allEnvs {
-		stage := h.populateStageView(r, pages.LifecyclePanelStage{
+		stage := h.populateStageView(r, project.ID, pages.LifecyclePanelStage{
 			Stage: db.LifecycleStage{
 				EnvironmentID: e.ID,
 				SortOrder:     e.ID,
@@ -143,27 +143,25 @@ func (h *ProjectHandler) buildFreeFloatingPanel(
 		}
 		views = append(views, stage)
 	}
-	_ = project
-	return pages.LifecyclePanel{Stages: views}, nil
+	return pages.LifecyclePanel{
+		Stages: views, HasEnvironments: len(allEnvs) > 0,
+	}, nil
 }
 
 // populateStageView fills the latest-deploy / latest-attempt / streak fields
 // for a single stage view. Shared by lifecycle and free-floating paths.
-//
-// ponytail: the per-env queries return deployments from any project, so we
-// filter by releasesByID to scope the result to this project. Without this
-// filter, project A's panel would show project B's deployments when they
-// share an environment. Upgrade path: add project_id to deployments and
-// pass it into the queries.
 func (h *ProjectHandler) populateStageView(
 	r *http.Request,
+	projectID int64,
 	v pages.LifecyclePanelStage,
 	releasesByID map[int64]db.Release,
 ) pages.LifecyclePanelStage {
 	ctx := r.Context()
-	if dep, err := h.repo.Queries.GetLatestSuccessfulDeploymentForEnv(
+	if dep, err := h.repo.Queries.GetLatestSuccessfulDeploymentForProjectEnv(
 		ctx,
-		v.Environment.ID,
+		db.GetLatestSuccessfulDeploymentForProjectEnvParams{
+			ProjectID: projectID, EnvironmentID: v.Environment.ID,
+		},
 	); err == nil &&
 		dep.ReleaseID != 0 {
 		if rel, ok := releasesByID[dep.ReleaseID]; ok {
@@ -172,30 +170,21 @@ func (h *ProjectHandler) populateStageView(
 			v.LatestVersion = rel.Version
 		}
 	}
-	recents, err := h.repo.Queries.ListRecentDeploymentsForEnv(
+	recents, err := h.repo.Queries.ListRecentDeploymentsForProjectEnv(
 		ctx,
-		db.ListRecentDeploymentsForEnvParams{
+		db.ListRecentDeploymentsForProjectEnvParams{
+			ProjectID:     projectID,
 			EnvironmentID: v.Environment.ID,
 			Limit:         5,
 		},
 	)
 	if err == nil && len(recents) > 0 {
-		// Filter to deployments of releases owned by this project. If none
-		// match, the env has no project-relevant history.
-		var projectRecents []db.Deployment
-		for _, d := range recents {
-			if _, ok := releasesByID[d.ReleaseID]; ok {
-				projectRecents = append(projectRecents, d)
-			}
+		latest := recents[0]
+		v.LatestAttempt = &latest
+		if rel, ok := releasesByID[latest.ReleaseID]; ok {
+			v.AttemptVersion = rel.Version
 		}
-		if len(projectRecents) > 0 {
-			latest := projectRecents[0]
-			v.LatestAttempt = &latest
-			if rel, ok := releasesByID[latest.ReleaseID]; ok {
-				v.AttemptVersion = rel.Version
-			}
-			v.RecentAttempts = projectRecents
-		}
+		v.RecentAttempts = recents
 	}
 	return v
 }
