@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"reflect"
 	"testing"
 
 	"durpdeploy/internal/db"
@@ -187,4 +188,110 @@ func createProjectPanelDeployment(
 		t.Fatal(err)
 	}
 	return d
+}
+
+func TestDeploymentVisibilityAcrossEngines(t *testing.T) {
+	forEachDeploymentCreationEngine(t, func(t *testing.T, name string) {
+		repo, _ := openDeploymentCreationEngine(t,
+			newDeploymentCreationEngine(t, name))
+		userID := seedDeploymentVisibility(t, repo)
+		for _, fixture := range []struct {
+			name, token                    string
+			user, admin, succeeded, failed int64
+		}{
+			{"admin", "", 0, 1, 1, 1},
+			{"member", "", userID, 0, 1, 0},
+			{"nonmember", "", 0, 0, 0, 0},
+			{"scoped admin", "visibility", 0, 1, 1, 0},
+			{"scoped member", "visibility", userID, 0, 1, 0},
+			{"scope without membership", "visibility", 0, 0, 0, 0},
+			{"missing grant", "unknown-token", userID, 1, 0, 0},
+		} {
+			t.Run(fixture.name, func(t *testing.T) {
+				checkDeploymentVisibility(t, repo, fixture.token,
+					fixture.user, fixture.admin,
+					map[string]int64{"succeeded": fixture.succeeded,
+						"failed": fixture.failed})
+			})
+		}
+	})
+}
+
+func seedDeploymentVisibility(t *testing.T, repo *Repository) int64 {
+	t.Helper()
+	user, err := repo.Queries.CreateUser(t.Context(), db.CreateUserParams{
+		Email: "visibility@example.test", Name: "Visibility",
+		PasswordHash: "test-only", Role: "viewer",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.Queries.AddProjectMember(t.Context(),
+		db.AddProjectMemberParams{ProjectID: 1, UserID: user.ID,
+			Role: "viewer"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.Queries.CreateApiToken(t.Context(),
+		db.CreateApiTokenParams{ID: "visibility", UserID: user.ID,
+			Name: "Visibility", TokenPrefix: "test", TokenHash: "test-only",
+			Scope: "scoped"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.Queries.AddApiTokenProject(t.Context(),
+		db.AddApiTokenProjectParams{TokenID: "visibility", ProjectID: 1},
+	); err != nil {
+		t.Fatal(err)
+	}
+	other, err := repo.Queries.CreateProject(t.Context(),
+		db.CreateProjectParams{Name: "foreign visibility"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	release, err := repo.Queries.CreateRelease(t.Context(),
+		db.CreateReleaseParams{ProjectID: other.ID, Version: "foreign",
+			StepsJson: "[]"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	createProjectPanelDeployment(t, repo, 1, 1, 100, "succeeded")
+	createProjectPanelDeployment(t, repo, release.ID, 1, 200, "failed")
+	return user.ID
+}
+
+func checkDeploymentVisibility(t *testing.T, repo *Repository,
+	token string, user, admin int64, want map[string]int64,
+) {
+	t.Helper()
+	total, err := repo.Queries.CountDeploymentsWithRefsFiltered(t.Context(),
+		db.CountDeploymentsWithRefsFilteredParams{
+			TokenID: token, UserID: user, IsAdmin: admin})
+	if err != nil || total != want["succeeded"]+want["failed"] {
+		t.Fatalf("visible count=%d want=%v error=%v", total, want, err)
+	}
+	rows, err := repo.Queries.ListDeploymentsWithRefsFiltered(t.Context(),
+		db.ListDeploymentsWithRefsFilteredParams{
+			TokenID: token, UserID: user, IsAdmin: admin, PageLimit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	listed := map[string]int64{"succeeded": 0, "failed": 0}
+	for _, row := range rows {
+		listed[row.Status]++
+	}
+	if !reflect.DeepEqual(listed, want) {
+		t.Fatalf("visible list=%v want=%v", listed, want)
+	}
+	activity, err := repo.Queries.DeploymentActivity(t.Context(),
+		db.DeploymentActivityParams{TokenID: token, UserID: user,
+			IsAdmin: admin, FromUnix: 0, ToUnix: 86400})
+	if err != nil {
+		t.Fatal(err)
+	}
+	counts := map[string]int64{"succeeded": 0, "failed": 0}
+	for _, row := range activity {
+		counts[row.Status] += row.Count
+	}
+	if !reflect.DeepEqual(counts, want) {
+		t.Fatalf("visible activity=%v want=%v", counts, want)
+	}
 }

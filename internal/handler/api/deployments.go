@@ -18,6 +18,8 @@ import (
 	"durpdeploy/internal/runner"
 )
 
+const projectNotFoundMessage = "Project not found"
+
 type DeploymentHandler struct {
 	repo   *repository.Repository
 	runner *runner.DeploymentRunner
@@ -237,7 +239,7 @@ func (h *DeploymentHandler) ListDeployments(
 			projectID,
 		); err != nil {
 			if err == sql.ErrNoRows {
-				RespondError(w, http.StatusNotFound, "Project not found")
+				RespondError(w, http.StatusNotFound, projectNotFoundMessage)
 				return
 			}
 			RespondError(w, http.StatusInternalServerError, err.Error())
@@ -599,7 +601,7 @@ func (h *DeploymentHandler) RedeployDeployment(
 	}
 	project, err := h.repo.Queries.GetProject(r.Context(), release.ProjectID)
 	if err != nil {
-		RespondError(w, http.StatusNotFound, "Project not found")
+		RespondError(w, http.StatusNotFound, projectNotFoundMessage)
 		return
 	}
 	blocked, reason, requiresApproval, err := gate.CheckAndApproval(
@@ -833,7 +835,7 @@ func (h *DeploymentHandler) RetryDeployment(
 	}
 	project, err := h.repo.Queries.GetProject(r.Context(), release.ProjectID)
 	if err != nil {
-		RespondError(w, http.StatusNotFound, "Project not found")
+		RespondError(w, http.StatusNotFound, projectNotFoundMessage)
 		return
 	}
 	blocked, reason, requiresApproval, err := gate.CheckAndApproval(

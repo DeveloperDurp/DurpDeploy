@@ -87,10 +87,12 @@ JOIN releases r ON d.release_id = r.id
 JOIN projects p ON r.project_id = p.id
 JOIN environments e ON d.environment_id = e.id
 WHERE d.kind = 'deployment'
-  AND (CAST(?1 AS TEXT) = '' OR EXISTS (
-      SELECT 1 FROM api_token_projects tp
-      WHERE tp.project_id = p.id AND tp.token_id = ?1))
-  AND (CAST(?2 AS INTEGER) = 1 OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = ?3))
+  AND (CAST(?1 AS TEXT) = '' OR p.id IN (
+      SELECT tp.project_id FROM api_token_projects tp
+      WHERE tp.token_id = ?1))
+  AND (CAST(?2 AS INTEGER) = 1 OR p.id IN (
+      SELECT pm.project_id FROM project_members pm
+      WHERE pm.user_id = ?3))
   AND (CAST(?4 AS INTEGER) IS NULL OR d.release_id IN (SELECT id FROM releases WHERE project_id = CAST(?4 AS INTEGER)))
   AND (CAST(?5     AS INTEGER) IS NULL OR d.environment_id = CAST(?5 AS INTEGER))
   AND (CAST(?6     AS TEXT)    IS NULL OR d.status = CAST(?6 AS TEXT))
@@ -188,12 +190,12 @@ JOIN releases r ON r.id = d.release_id
 WHERE d.kind = 'deployment'
   AND d.created_at >= ?1
   AND d.created_at < ?2
-  AND (CAST(?3 AS TEXT) = '' OR EXISTS (
-      SELECT 1 FROM api_token_projects tp
-      WHERE tp.project_id = r.project_id AND tp.token_id = ?3))
-  AND (CAST(?4 AS INTEGER) = 1 OR EXISTS (
-      SELECT 1 FROM project_members pm
-      WHERE pm.project_id = r.project_id AND pm.user_id = ?5
+  AND (CAST(?3 AS TEXT) = '' OR r.project_id IN (
+      SELECT tp.project_id FROM api_token_projects tp
+      WHERE tp.token_id = ?3))
+  AND (CAST(?4 AS INTEGER) = 1 OR r.project_id IN (
+      SELECT pm.project_id FROM project_members pm
+      WHERE pm.user_id = ?5
   ))
 GROUP BY CAST(d.created_at / 86400 AS INTEGER), d.status
 ORDER BY day, d.status

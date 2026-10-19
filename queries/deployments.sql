@@ -235,10 +235,12 @@ JOIN releases r ON d.release_id = r.id
 JOIN projects p ON r.project_id = p.id
 JOIN environments e ON d.environment_id = e.id
 WHERE d.kind = 'deployment'
-  AND (CAST(sqlc.arg(token_id) AS TEXT) = '' OR EXISTS (
-      SELECT 1 FROM api_token_projects tp
-      WHERE tp.project_id = p.id AND tp.token_id = sqlc.arg(token_id)))
-  AND (CAST(sqlc.arg(is_admin) AS INTEGER) = 1 OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = sqlc.arg(user_id)))
+  AND (CAST(sqlc.arg(token_id) AS TEXT) = '' OR p.id IN (
+      SELECT tp.project_id FROM api_token_projects tp
+      WHERE tp.token_id = sqlc.arg(token_id)))
+  AND (CAST(sqlc.arg(is_admin) AS INTEGER) = 1 OR p.id IN (
+      SELECT pm.project_id FROM project_members pm
+      WHERE pm.user_id = sqlc.arg(user_id)))
   AND (CAST(sqlc.narg(f_project_id) AS INTEGER) IS NULL OR d.release_id IN (SELECT id FROM releases WHERE project_id = CAST(sqlc.narg(f_project_id) AS INTEGER)))
   AND (CAST(sqlc.narg(f_env_id)     AS INTEGER) IS NULL OR d.environment_id = CAST(sqlc.narg(f_env_id) AS INTEGER))
   AND (CAST(sqlc.narg(f_status)     AS TEXT)    IS NULL OR d.status = CAST(sqlc.narg(f_status) AS TEXT))
@@ -253,12 +255,12 @@ JOIN releases r ON r.id = d.release_id
 WHERE d.kind = 'deployment'
   AND d.created_at >= sqlc.arg(from_unix)
   AND d.created_at < sqlc.arg(to_unix)
-  AND (CAST(sqlc.arg(token_id) AS TEXT) = '' OR EXISTS (
-      SELECT 1 FROM api_token_projects tp
-      WHERE tp.project_id = r.project_id AND tp.token_id = sqlc.arg(token_id)))
-  AND (CAST(sqlc.arg(is_admin) AS INTEGER) = 1 OR EXISTS (
-      SELECT 1 FROM project_members pm
-      WHERE pm.project_id = r.project_id AND pm.user_id = sqlc.arg(user_id)
+  AND (CAST(sqlc.arg(token_id) AS TEXT) = '' OR r.project_id IN (
+      SELECT tp.project_id FROM api_token_projects tp
+      WHERE tp.token_id = sqlc.arg(token_id)))
+  AND (CAST(sqlc.arg(is_admin) AS INTEGER) = 1 OR r.project_id IN (
+      SELECT pm.project_id FROM project_members pm
+      WHERE pm.user_id = sqlc.arg(user_id)
   ))
 GROUP BY CAST(d.created_at / 86400 AS INTEGER), d.status
 ORDER BY day, d.status;

@@ -96,7 +96,7 @@ Alpine.data('homeCharts', () => {
 				if ((this.ready || this.empty) && JSON.stringify(days) === JSON.stringify(this.days)) return;
 				this.days = days;
 				const counts = {};
-				for (const day of days) for (const [status, count] of Object.entries(day.counts)) {
+				for (const [status, count] of days.flatMap(day => Object.entries(day.counts))) {
 					counts[status] = (counts[status] || 0) + count;
 				}
 				this.totals = Object.entries(counts).map(([status, count]) =>
