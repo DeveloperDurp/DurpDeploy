@@ -37,11 +37,10 @@ func TestStepFormActionsBrowserE2E(t *testing.T) {
 				b.navigateBackTest(t, fmt.Sprintf(
 					"%s/projects/%d/steps-page", f.baseURL, f.project.ID,
 				))
-				for _, add := range []bool{false, true} {
-					opener := "[data-step-action=edit]"
-					if add {
-						opener = "[x-ref=addStepButton]"
-					}
+				for _, opener := range []string{
+					"[data-step-action=edit]", "[x-ref=addStepButton]",
+				} {
+					add := opener == "[x-ref=addStepButton]"
 					b.evaluate(t, fmt.Sprintf(
 						`[...document.querySelectorAll(%q)].find(e => e.getClientRects().length).click(); true`,
 						opener,
